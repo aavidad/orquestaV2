@@ -1,6 +1,17 @@
 # Decisiones
 
 ```text
+Fecha: 2026-05-24
+Decision: Shutdown solo puede iniciarlo el Director.
+Motivo: Un agente puede estar bloqueado, confundido o sin vision global; permitir
+que pida shutdown convertiria una entrega parcial en parada del sistema.
+Impacto: `ShutdownServerV0` rechaza `requested_by` de agentes/subagentes/workers
+y solo acepta autoridad de Director. Los agentes siguen participando mediante
+checkpoint/ACK y el Director decide si espera o fuerza tras deadline.
+Estado: aceptada local
+```
+
+```text
 Fecha: 2026-05-13
 Decision: El apagado de servidor se modela como caso de uso separado, no como senal directa al PID.
 Motivo: El servidor no debe cortar agentes vivos. La secuencia correcta es RunControl -> supervisor/drain -> stats -> parada del proceso por borde externo.

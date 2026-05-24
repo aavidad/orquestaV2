@@ -53,6 +53,9 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureD
 		return nil, true, false, err
 	}
 	accepted := normalizeDomainWorkArtifactSubmissionRecordV0(records[0])
+	if !codexStackOperationalClosureOPESSubmissionIsCausalV0(accepted, record, deliveryRef) {
+		return nil, true, false, nil
+	}
 	refs := append([]string(nil), accepted.EvidenceRefs...)
 	refs = append(refs, accepted.ReceiptRef, "evidence-ref-opes-domain-work-accepted")
 	return codexStackOperationalClosureCompactRefsV0(refs), true, true, nil
@@ -85,4 +88,27 @@ func codexStackOperationalClosureRecordIsOPESV0(
 	}
 	return strings.TrimSpace(record.Request.ExternalWork.ProjectRef) == "opes" ||
 		strings.TrimSpace(record.Request.AppRef) == "opes"
+}
+
+func codexStackOperationalClosureOPESSubmissionIsCausalV0(
+	submission DomainWorkArtifactSubmissionRecordV0,
+	record orquestaappchange.AppChangeRecordV0,
+	deliveryRef string,
+) bool {
+	work := record.Request.ExternalWork
+	if work == nil {
+		return false
+	}
+	if submission.Status != DomainWorkArtifactSubmissionStatusAcceptedV0 ||
+		strings.TrimSpace(submission.ReceiptRef) == "" ||
+		!submission.CompleteJob {
+		return false
+	}
+	if strings.TrimSpace(submission.DeliveryRef) != strings.TrimSpace(deliveryRef) ||
+		strings.TrimSpace(submission.ArtifactRef) != strings.TrimSpace(deliveryRef) {
+		return false
+	}
+	return strings.TrimSpace(submission.DomainRef) == "opes" &&
+		strings.TrimSpace(submission.JobRef) == strings.TrimSpace(work.JobRef) &&
+		strings.TrimSpace(submission.ArtifactType) == domainWorkArtifactTypeForWorkKindV0(work.WorkKind)
 }

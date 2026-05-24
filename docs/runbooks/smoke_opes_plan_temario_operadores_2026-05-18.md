@@ -451,10 +451,15 @@ limite. El fake offline cubre tambien `run-until-assemble` y comprueba que
 Estado de cierre OPES real: la composicion Orquesta ya declara tests de dominio
 por job OPES, genera evidencia durable desde el ledger de `submit_artifact` y
 la fuente de cierre del stack solo cierra tareas OPES con review aceptada,
-`RequiredTestEvidenceV0` passed y receipt OPES aceptado. El smoke real completo
-de derivados sigue exigiendo OPES temporal vivo, cuota/modelo confirmados y
-evidencia de que cada derivado fue aceptado por OPES con refs causales
-suficientes; no se declara cerrado desde dry-run.
+`RequiredTestEvidenceV0` passed y receipt OPES aceptado. Desde el corte T18, el
+ledger de entrega conserva tambien `domain_ref=opes`, `job_ref`,
+`artifact_ref`, `artifact_type`, `complete_job` e idempotency key; el cierre no
+acepta receipts que no empaten con el job externo, la delivery revisada y el
+artefacto esperado (`assemble_topic -> assembled_topic`). El conector REST trata
+como invalido un receipt OPES con `job_id`, `artifact.type` o `job.status`
+incoherentes. El smoke real completo de derivados sigue exigiendo OPES temporal
+vivo, cuota/modelo confirmados y evidencia de que cada derivado fue aceptado por
+OPES con refs causales suficientes; no se declara cerrado desde dry-run.
 
 Bloqueo verificable T12 si no hay entorno temporal: ejecutar primero el smoke
 fake aislado y despues repetir el comando `run-until-assemble` anterior cuando

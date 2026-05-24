@@ -17,6 +17,10 @@ Orden correcto:
 3. esperar parada confirmada de agentes;
 4. parar el servidor.
 
+Autoridad: solo el Director puede iniciar shutdown. Los agentes no solicitan
+apagado; reciben la orden, preparan checkpoint/ACK y cierran dentro del plazo
+cooperativo.
+
 ## Cierre de un run
 
 Entrada canonica REST/MCP:

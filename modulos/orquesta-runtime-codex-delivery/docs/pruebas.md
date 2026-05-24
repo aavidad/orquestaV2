@@ -29,7 +29,8 @@ Cobertura:
 - detecta como `loop_detected` un log que sigue creciendo con el mismo diff
   compacto repetido y sin ACK;
 - no emite supervision si el ACK ya esta listo o si los logs compactos avanzan;
-- exige registro de proceso antes de construir supervision de progreso;
+- omite descriptors sin registro de proceso para no tumbar el tick completo y
+  sigue propagando errores de registro invalidos;
 - recupera heartbeats/reportes de `FileCodexProgressStateStoreV0` tras recrear
   instancia;
 - no filtra paths locales si el snapshot JSON del estado de progreso esta

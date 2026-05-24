@@ -28,8 +28,8 @@ func requestServerShutdownV0(addr string) error {
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(map[string]any{
 		"forced":          true,
-		"requested_by":    "orquesta-server",
-		"reason":          "apagado controlado solicitado por CLI",
+		"requested_by":    "orquesta-director",
+		"reason":          "apagado controlado solicitado por CLI al Director",
 		"idempotency_key": "idem-orquesta-server-stop",
 	}); err != nil {
 		return fmt.Errorf("shutdown_request_encode")

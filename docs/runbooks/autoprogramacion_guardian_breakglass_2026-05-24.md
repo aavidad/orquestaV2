@@ -67,6 +67,10 @@ agentes pueden escribir checkpoint/handoff y drenar. Si vence el timeout y no
 hay cierre suficiente, el guardian escala a `forced=true`. `--now` salta esa
 espera y pide forzado desde el principio.
 
+Autoridad: el shutdown se solicita como `orquesta-director`. Los agentes no
+pueden iniciar shutdown; solo preparan checkpoint/ACK y el Director decide si
+continua la espera o fuerza tras el deadline.
+
 Ejemplo:
 
 ```bash

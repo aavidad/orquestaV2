@@ -1,0 +1,83 @@
+package orquestaappcodexstack
+
+import (
+	"strings"
+
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
+	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+)
+
+func domainWorkRejectedSubmissionRecordV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	task orquestacoreworkflow.WorkflowTaskV0,
+	observation orquestacionnucleoapp.AgentDeliveryObservationV0,
+	submission orquestadomainwork.DomainWorkArtifactSubmissionV0,
+	result orquestamcp.MCPDomainWorkToolResultV0,
+	occurredAt string,
+) DomainWorkArtifactSubmissionRecordV0 {
+	record := domainWorkSubmissionRecordFromSubmissionV0(run, task, observation, submission, occurredAt)
+	record.Status = DomainWorkArtifactSubmissionStatusRejectedV0
+	record.EvidenceRefs = submission.EvidenceRefs
+	record.IssueRefs = domainWorkSubmitIssueRefsV0(result)
+	return record
+}
+
+func domainWorkAcceptedSubmissionRecordV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	task orquestacoreworkflow.WorkflowTaskV0,
+	observation orquestacionnucleoapp.AgentDeliveryObservationV0,
+	submission orquestadomainwork.DomainWorkArtifactSubmissionV0,
+	result orquestamcp.MCPDomainWorkToolResultV0,
+	occurredAt string,
+) DomainWorkArtifactSubmissionRecordV0 {
+	record := domainWorkSubmissionRecordFromSubmissionV0(run, task, observation, submission, occurredAt)
+	record.Status = DomainWorkArtifactSubmissionStatusAcceptedV0
+	record.ReceiptRef = result.Receipt.ReceiptRef
+	record.EvidenceRefs = compactStringsV0(append(
+		append(domainWorkAcceptedSubmissionEvidenceRefsV0(submission), submission.EvidenceRefs...),
+		result.Receipt.EvidenceRefs...,
+	))
+	return record
+}
+
+func domainWorkSubmissionRecordFromSubmissionV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	task orquestacoreworkflow.WorkflowTaskV0,
+	observation orquestacionnucleoapp.AgentDeliveryObservationV0,
+	submission orquestadomainwork.DomainWorkArtifactSubmissionV0,
+	occurredAt string,
+) DomainWorkArtifactSubmissionRecordV0 {
+	return DomainWorkArtifactSubmissionRecordV0{
+		IdempotencyKey: submission.IdempotencyKey,
+		RunRef:         run.RunID,
+		TaskRef:        task.TaskID,
+		DeliveryRef:    observation.DeliveryRef,
+		DomainRef:      submission.DomainRef,
+		JobRef:         submission.JobRef,
+		ArtifactRef:    submission.ArtifactRef,
+		ArtifactType:   submission.ArtifactType,
+		CompleteJob:    submission.CompleteJob,
+		RecordedAt:     occurredAt,
+	}
+}
+
+func domainWorkAcceptedSubmissionEvidenceRefsV0(
+	submission orquestadomainwork.DomainWorkArtifactSubmissionV0,
+) []string {
+	return []string{
+		"domain-work-domain-" + safeDomainWorkEvidenceRefV0(submission.DomainRef),
+		"domain-work-job-" + safeDomainWorkEvidenceRefV0(submission.JobRef),
+		"domain-work-artifact-" + safeDomainWorkEvidenceRefV0(submission.ArtifactType),
+		"domain-work-idempotency-" + safeDomainWorkEvidenceRefV0(submission.IdempotencyKey),
+	}
+}
+
+func safeDomainWorkEvidenceRefV0(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "empty"
+	}
+	return codexStackOperationalClosureSafeRefV0(value)
+}

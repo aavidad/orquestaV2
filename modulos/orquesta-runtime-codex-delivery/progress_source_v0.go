@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	orquestaagentprocessregistry "orquesta/modulos/orquesta-agent-process-registry"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
@@ -101,6 +102,9 @@ func (source CodexProgressObservationSourceV0) observationFromDescriptorV0(
 		strings.TrimSpace(descriptor.AgentRef),
 	)
 	if err != nil {
+		if codexProgressAgentProcessMissingV0(err) {
+			return orquestacionnucleoapp.AgentProgressObservationV0{}, false, nil
+		}
 		return orquestacionnucleoapp.AgentProgressObservationV0{}, false, err
 	}
 	snapshot, err := source.snapshotV0(record)
@@ -197,6 +201,20 @@ func codexProgressSnapshotMissingV0(err error) bool {
 	var runtimeErr orquestaruntime.ProcessRuntimeErrorV0
 	return errors.As(err, &runtimeErr) &&
 		runtimeErr.Code == orquestaruntime.ProcessRuntimeNoEncontradoV0
+}
+
+func codexProgressAgentProcessMissingV0(err error) bool {
+	var registryErr orquestaagentprocessregistry.ErrorV0
+	if errors.As(err, &registryErr) {
+		return registryErr.Code == orquestaagentprocessregistry.ErrAgentProcessRegistryNotFoundV0
+	}
+	var coreErr orquestacionnucleoapp.ErrorV0
+	if !errors.As(err, &coreErr) {
+		return false
+	}
+	return coreErr.Code == orquestacionnucleoapp.ErrNucleoOrquestacionStoreV0 &&
+		strings.TrimSpace(coreErr.Field) == "agent_process_registry" &&
+		strings.Contains(strings.ToLower(coreErr.Message), "no encontrado")
 }
 
 func stoppedCodexProgressSnapshotV0(

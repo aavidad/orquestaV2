@@ -47,6 +47,8 @@ Esto implica:
 - desde el 2026-05-24, `orquesta.project.roadmap.v0` y
   `orquesta.contracts.shared.v0` incluyen freshness y refs vivas al backlog para
   no presentar estados `pendiente_*` historicos como backlog actual;
+  el cierre T25 queda reflejado en el backlog con verificacion focal
+  `go test -count=1 ./modulos/orquesta-mcp`;
 - programacion, OPES y otros dominios son consumidores/composiciones;
 - los conectores traducen contratos de dominio a trabajo orquestable y devuelven
   artefactos al dominio propietario;

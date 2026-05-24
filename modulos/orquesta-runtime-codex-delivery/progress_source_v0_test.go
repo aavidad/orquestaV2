@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	orquestaagentprocessregistry "orquesta/modulos/orquesta-agent-process-registry"
 	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -343,6 +344,27 @@ func (stoppedSnapshotSourceForProgressTestV0) SnapshotV0(
 	}, nil
 }
 
+type failingProgressProcessRegistryV0 struct{}
+
+func (failingProgressProcessRegistryV0) RecordAgentProcessV0(
+	context.Context,
+	orquestaagentprocessregistry.AgentProcessRegistryRecordV0,
+) error {
+	return nil
+}
+
+func (failingProgressProcessRegistryV0) ResolveAgentProcessV0(
+	context.Context,
+	string,
+	string,
+) (orquestaagentprocessregistry.AgentProcessRegistryRecordV0, error) {
+	return orquestaagentprocessregistry.AgentProcessRegistryRecordV0{}, orquestaagentprocessregistry.ErrorV0{
+		Code:    orquestaagentprocessregistry.ErrAgentProcessRegistryInvalidV0,
+		Field:   "agent_process_registry",
+		Message: "agent_process conflict",
+	}
+}
+
 func TestCodexProgressObservationSourceV0OmiteSiACKYaEstaListo(t *testing.T) {
 	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
 	source := codexProgressSourceForTestV0(t, spec, ackPath)
@@ -362,7 +384,7 @@ func TestCodexProgressObservationSourceV0OmiteSiACKYaEstaListo(t *testing.T) {
 	}
 }
 
-func TestCodexProgressObservationSourceV0ExigeRegistroDeProceso(t *testing.T) {
+func TestCodexProgressObservationSourceV0OmiteRegistroDeProcesoFaltante(t *testing.T) {
 	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
 	store := NewInMemoryCodexReceiptDescriptorStoreV0(codexProgressDescriptorForTestV0(spec, ackPath))
 	source := CodexProgressObservationSourceV0{
@@ -372,12 +394,30 @@ func TestCodexProgressObservationSourceV0ExigeRegistroDeProceso(t *testing.T) {
 		Policy:          orquestaruntime.AgentProgressHeartbeatPolicyV0{StalledAfterNoProgressTicks: 1},
 	}
 
+	got, err := source.BuildAgentProgressObservationsV0(
+		context.Background(),
+		codexProgressRequestForTestV0(spec),
+	)
+	if err != nil || len(got) != 0 {
+		t.Fatalf("observations=%+v err=%v", got, err)
+	}
+}
+
+func TestCodexProgressObservationSourceV0PropagaRegistroInvalido(t *testing.T) {
+	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
+	source := CodexProgressObservationSourceV0{
+		Store:           NewInMemoryCodexReceiptDescriptorStoreV0(codexProgressDescriptorForTestV0(spec, ackPath)),
+		ProcessRegistry: failingProgressProcessRegistryV0{},
+		State:           NewInMemoryCodexProgressStateStoreV0(),
+		Policy:          orquestaruntime.AgentProgressHeartbeatPolicyV0{StalledAfterNoProgressTicks: 1},
+	}
+
 	_, err := source.BuildAgentProgressObservationsV0(
 		context.Background(),
 		codexProgressRequestForTestV0(spec),
 	)
 	if err == nil {
-		t.Fatalf("esperaba error por process registry vacio")
+		t.Fatalf("esperaba error por registro invalido")
 	}
 }
 

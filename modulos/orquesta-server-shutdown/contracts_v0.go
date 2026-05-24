@@ -18,6 +18,7 @@ const (
 	ServerShutdownStatusNoQueueReaderV0      = "queue_reader_required"
 	ServerShutdownStatusNoRunControlReaderV0 = "run_control_reader_required"
 	ServerShutdownStatusNoRunControlWriterV0 = "run_control_writer_required"
+	ServerShutdownStatusRequesterDeniedV0    = "requester_not_authorized"
 )
 
 type ServerShutdownCommandV0 struct {

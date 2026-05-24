@@ -2,6 +2,20 @@
 
 ```text
 Fecha: 2026-05-24
+Decision: Un descriptor sin registro de proceso se omite como inconsistencia
+recuperable de supervision, no como error fatal del tick.
+Motivo: si un launch falla tras registrar descriptor pero antes de registrar
+process_ref, el supervisor no debe bloquear toda la cola ni impedir ingerir ACKs
+de otros agentes. El Director podra replanificar o relanzar por el estado causal
+del run.
+Impacto: `CodexProgressObservationSourceV0` salta solo missing de
+`agent_process_registry`; conflictos o registros invalidos siguen propagando
+error. No se exponen paths, PID, HOME, proveedor, modelo ni logs.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-24
 Decision: El verificador de worktree conserva entregas con cambios fuera del
 write-set como rail blando.
 Motivo: `outside_write_set` producia falsos positivos terminales en entregas

@@ -186,12 +186,11 @@ func TestGuardianV0ShutdownServerUsaCooperativoPorDefecto(t *testing.T) {
 	config := mustGuardianConfigForTestV0(t, guardianConfigV0{
 		ProjectDir:         dir,
 		StateDir:           filepath.Join(dir, "guardian"),
-		CurrentBin:         filepath.Join(dir, "bin", "orquesta-server-latest"),
 		ServerAddr:         strings.TrimPrefix(server.URL, "http://"),
 		ShutdownTimeout:    time.Second,
 		ShutdownQueueLimit: 123,
 		OccurredAt:         time.Date(2026, 5, 24, 12, 4, 0, 0, time.UTC),
-	})
+	}, false)
 
 	result := runGuardianShutdownServerV0(context.Background(), config)
 	if result.Status != guardianStatusShutdownReadyV0 ||
@@ -199,7 +198,7 @@ func TestGuardianV0ShutdownServerUsaCooperativoPorDefecto(t *testing.T) {
 		!result.Shutdown.ShutdownReady {
 		t.Fatalf("result=%+v", result)
 	}
-	if received.Forced || received.RequestedBy != "orquesta-guardian" || received.QueueLimit != 123 {
+	if received.Forced || received.RequestedBy != "orquesta-director" || received.QueueLimit != 123 {
 		t.Fatalf("received=%+v", received)
 	}
 }
@@ -233,12 +232,11 @@ func TestGuardianV0ShutdownServerFuerzaTrasTimeoutCooperativo(t *testing.T) {
 	config := mustGuardianConfigForTestV0(t, guardianConfigV0{
 		ProjectDir:        dir,
 		StateDir:          filepath.Join(dir, "guardian"),
-		CurrentBin:        filepath.Join(dir, "bin", "orquesta-server-latest"),
 		ServerAddr:        strings.TrimPrefix(server.URL, "http://"),
 		ShutdownTimeout:   time.Millisecond,
 		ForceAfterTimeout: true,
 		OccurredAt:        time.Date(2026, 5, 24, 12, 5, 0, 0, time.UTC),
-	})
+	}, false)
 
 	result := runGuardianShutdownServerV0(context.Background(), config)
 	if result.Status != guardianStatusShutdownReadyV0 ||
@@ -251,9 +249,13 @@ func TestGuardianV0ShutdownServerFuerzaTrasTimeoutCooperativo(t *testing.T) {
 	}
 }
 
-func mustGuardianConfigForTestV0(t *testing.T, config guardianConfigV0) guardianConfigV0 {
+func mustGuardianConfigForTestV0(t *testing.T, config guardianConfigV0, requireCurrentBin ...bool) guardianConfigV0 {
 	t.Helper()
-	normalized, err := normalizeGuardianConfigV0(config)
+	require := true
+	if len(requireCurrentBin) > 0 {
+		require = requireCurrentBin[0]
+	}
+	normalized, err := normalizeGuardianConfigForCommandV0(config, require)
 	if err != nil {
 		t.Fatalf("normalize: %v", err)
 	}

@@ -36,12 +36,25 @@ type opesJobResponseV0 struct {
 }
 
 type opesArtifactResponseV0 struct {
-	ID             string            `json:"id"`
-	ArtifactID     string            `json:"artifact_id"`
-	JobID          string            `json:"job_id"`
-	CorrelationID  string            `json:"correlation_id"`
-	IdempotencyKey string            `json:"idempotency_key"`
-	ExternalRefs   map[string]string `json:"external_refs"`
+	ID             string             `json:"id"`
+	ArtifactID     string             `json:"artifact_id"`
+	JobID          string             `json:"job_id"`
+	CorrelationID  string             `json:"correlation_id"`
+	IdempotencyKey string             `json:"idempotency_key"`
+	ExternalRefs   map[string]string  `json:"external_refs"`
+	Artifact       opesArtifactInfoV0 `json:"artifact"`
+	Job            opesArtifactJobV0  `json:"job"`
+}
+
+type opesArtifactInfoV0 struct {
+	ID    string `json:"id"`
+	JobID string `json:"job_id"`
+	Type  string `json:"type"`
+}
+
+type opesArtifactJobV0 struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
 }
 
 func opesCreateJobPayloadV0(

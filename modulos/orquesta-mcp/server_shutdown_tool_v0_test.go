@@ -38,7 +38,7 @@ func TestMCPServerShutdownToolExecutorV0DrenaPorCasoDeUso(t *testing.T) {
 		RequestID:     "req-server-shutdown-001",
 		CorrelationID: "corr-server-shutdown-001",
 		Forced:        true,
-		RequestedBy:   "operator",
+		RequestedBy:   "orquesta-director",
 		Reason:        "apagado controlado",
 	})
 	if err != nil {
@@ -85,7 +85,7 @@ func TestMCPServerShutdownToolExecutorV0DrenaConAgentesEnVuelo(t *testing.T) {
 		RequestID:     "req-server-shutdown-live-001",
 		CorrelationID: "corr-server-shutdown-live-001",
 		Forced:        true,
-		RequestedBy:   "operator",
+		RequestedBy:   "orquesta-director",
 		Reason:        "apagado con agente en vuelo",
 	})
 	if err != nil {
@@ -97,6 +97,38 @@ func TestMCPServerShutdownToolExecutorV0DrenaConAgentesEnVuelo(t *testing.T) {
 		result.AgentsInFlight != 1 ||
 		supervisor.calls != 1 {
 		t.Fatalf("result=%+v supervisor=%+v", result, supervisor)
+	}
+}
+
+func TestMCPServerShutdownToolExecutorV0RechazaAgente(t *testing.T) {
+	control := &fakeMCPServerShutdownControlV0{
+		states: map[string]orquestaruncontrol.RunControlStateV0{},
+	}
+	executor := NewMCPServerShutdownToolExecutorV0(orquestaservershutdown.ServerShutdownDepsV0{
+		QueueReader: fakeMCPServerShutdownQueueV0{
+			candidates: []orquestarunqueue.RunSchedulingCandidateV0{{
+				RunRef: "run-ref-shutdown-agent-denied-001",
+				AppRef: "app-ref-shutdown-001",
+				Status: "ready",
+			}},
+		},
+		RunControlReader: control,
+		RunControlWriter: control,
+	})
+
+	result, err := executor.Execute(context.Background(), MCPServerShutdownToolInputV0{
+		RequestID:   "req-server-shutdown-agent-denied-001",
+		Forced:      true,
+		RequestedBy: "agent-ref-001",
+		Reason:      "agente no autorizado",
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPServerShutdownEstadoErrorV0 ||
+		result.Status != orquestaservershutdown.ServerShutdownStatusRequesterDeniedV0 ||
+		control.stop.RunRef != "" {
+		t.Fatalf("result=%+v stop=%+v", result, control.stop)
 	}
 }
 

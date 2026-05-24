@@ -934,7 +934,10 @@ Objetivo: sincronizar estado de backlog de autoprogramacion con evidencia
 durable para no relanzar secciones ya completadas ni depender solo de ACKs
 locales presentes en `.orquesta-runtime`.
 
-Estado: pendiente.
+Estado: completada localmente el 2026-05-24 para sincronizacion de estado de
+backlog. Evidencia focal: `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`.
+Contrato cerrado en
+`docs/runbooks/autoprogramacion_backlog_state_sync_2026-05-24.md`.
 
 Alcance:
 
@@ -960,7 +963,7 @@ Criterios:
 Objetivo: cerrar OPES temporal real de derivados/cierre con fuente causal de
 aceptacion por refs opacas, sin convertir OPES en producto base del nucleo.
 
-Estado: pendiente.
+Estado: completada 2026-05-24.
 
 Alcance:
 
@@ -1242,7 +1245,7 @@ Objetivo: sincronizar los recursos MCP de roadmap/contratos compartidos con la
 foto vigente y el backlog vivo para que una IA no consuma estado historico como
 pendiente actual.
 
-Estado: pendiente.
+Estado: completada 2026-05-24.
 
 Alcance:
 
@@ -1270,6 +1273,10 @@ Evidencia de cierre:
   lo historico queda como compatibilidad y lo abierto enlaza backlog/doc local.
 - OPES temporal de derivados/cierre queda visible como frente abierto separado
   con owner, guardas y runbook; no reabre Codex wave/recursion ni WaitAgentRefs.
+- Cierre verificado en `modulos/orquesta-mcp` con proyeccion estatica:
+  `resource_freshness_v0.go`, `project_roadmap_*_v0.go`,
+  `shared_contracts_*_v0.go` y docs locales MCP. La validacion focal de cierre
+  es `go test -count=1 ./modulos/orquesta-mcp`.
 
 ## T26 domain-work-quality-policy-port
 

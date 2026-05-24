@@ -16,6 +16,9 @@ func NormalizeServerShutdownCommandV0(
 	command.QueueRef = strings.TrimSpace(command.QueueRef)
 	command.AppRefs = compactServerShutdownStringsV0(command.AppRefs)
 	command.RequestedBy = strings.TrimSpace(command.RequestedBy)
+	if command.RequestedBy == "" {
+		command.RequestedBy = "orquesta-director"
+	}
 	command.Reason = strings.TrimSpace(command.Reason)
 	command.IdempotencyKey = strings.TrimSpace(command.IdempotencyKey)
 	command.EvidenceRefs = compactServerShutdownStringsV0(command.EvidenceRefs)

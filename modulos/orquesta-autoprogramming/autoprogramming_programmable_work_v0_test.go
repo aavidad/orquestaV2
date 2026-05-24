@@ -96,6 +96,31 @@ func TestBuildAutoprogrammingProgrammableWorkV0TransportaContratoExplicitoDeTare
 	}
 }
 
+func TestBuildAutoprogrammingProgrammableWorkV0NormalizaContextRefsNoCompactos(t *testing.T) {
+	request := validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.Tasks[0].ContextRefs = []string{
+			"doc-ref:autoprog-t29",
+			"backlog_input:write_set:`modulos/orquesta-runtime`+`cmd/orquesta-server`",
+			"backlog_output:tests:go test -count=1 ./cmd/orquesta-server",
+		}
+	})
+
+	result := BuildAutoprogrammingProgrammableWorkV0(request)
+
+	if !result.Accepted {
+		t.Fatalf("accepted=false issues=%+v", result.Issues)
+	}
+	task := result.Work.Tasks[0]
+	assertAutoprogrammingContextRefV0(t, task.ContextRefs, "doc-ref:autoprog-t29")
+	assertAutoprogrammingContextRefPrefixV0(t, task.ContextRefs, "context_ref:backlog-input-")
+	assertAutoprogrammingContextRefPrefixV0(t, task.ContextRefs, "context_ref:backlog-output-")
+	for _, ref := range task.ContextRefs {
+		if strings.ContainsAny(ref, " /\\\t\r\n") {
+			t.Fatalf("context_ref no compacto: %q refs=%v", ref, task.ContextRefs)
+		}
+	}
+}
+
 func TestBuildAutoprogrammingProgrammableWorkV0CompactaTextoLargoParaWorkflowTask(t *testing.T) {
 	longObjective := strings.Repeat("iterar pensar tareas agentes pruebas revision cierre ", 20)
 	request := validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
@@ -251,6 +276,16 @@ func assertAutoprogrammingContextRefV0(t *testing.T, refs []string, want string)
 		}
 	}
 	t.Fatalf("context ref %q no encontrado en %v", want, refs)
+}
+
+func assertAutoprogrammingContextRefPrefixV0(t *testing.T, refs []string, prefix string) {
+	t.Helper()
+	for _, ref := range refs {
+		if strings.HasPrefix(ref, prefix) {
+			return
+		}
+	}
+	t.Fatalf("context ref prefix %q no encontrado en %v", prefix, refs)
 }
 
 func assertStringsEqualV0(t *testing.T, got []string, want []string) {

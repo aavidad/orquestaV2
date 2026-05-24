@@ -157,7 +157,7 @@ func runMain(args []string, stdout io.Writer, stderr io.Writer) int {
 		}
 		return 0
 	case "shutdown-server":
-		config, err := parseGuardianConfigV0(args)
+		config, err := parseGuardianShutdownConfigV0(args)
 		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "orquesta-guardian: %v\n", err)
 			return 2
@@ -175,6 +175,14 @@ func runMain(args []string, stdout io.Writer, stderr io.Writer) int {
 }
 
 func parseGuardianConfigV0(args []string) (guardianConfigV0, error) {
+	return parseGuardianConfigForCommandV0(args, true)
+}
+
+func parseGuardianShutdownConfigV0(args []string) (guardianConfigV0, error) {
+	return parseGuardianConfigForCommandV0(args, false)
+}
+
+func parseGuardianConfigForCommandV0(args []string, requireCurrentBin bool) (guardianConfigV0, error) {
 	flags := flag.NewFlagSet("orquesta-guardian", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	var tests repeatedStringFlagV0
@@ -233,10 +241,17 @@ func parseGuardianConfigV0(args []string) (guardianConfigV0, error) {
 		return guardianConfigV0{}, err
 	}
 	config.TestCommands = compactStringsV0(tests)
-	return normalizeGuardianConfigV0(config)
+	return normalizeGuardianConfigForCommandV0(config, requireCurrentBin)
 }
 
 func normalizeGuardianConfigV0(config guardianConfigV0) (guardianConfigV0, error) {
+	return normalizeGuardianConfigForCommandV0(config, true)
+}
+
+func normalizeGuardianConfigForCommandV0(
+	config guardianConfigV0,
+	requireCurrentBin bool,
+) (guardianConfigV0, error) {
 	projectDir, err := filepath.Abs(strings.TrimSpace(config.ProjectDir))
 	if err != nil {
 		return guardianConfigV0{}, err
@@ -244,17 +259,20 @@ func normalizeGuardianConfigV0(config guardianConfigV0) (guardianConfigV0, error
 	config.ProjectDir = projectDir
 	config.StateDir = absPathFromBaseV0(config.ProjectDir, config.StateDir)
 	if config.CurrentBin == "" {
-		return guardianConfigV0{}, errors.New("current-bin requerido")
+		if requireCurrentBin {
+			return guardianConfigV0{}, errors.New("current-bin requerido")
+		}
+	} else {
+		config.CurrentBin = absPathFromBaseV0(config.ProjectDir, config.CurrentBin)
+		if config.CandidateBin == "" {
+			config.CandidateBin = filepath.Join(config.StateDir, "candidate", filepath.Base(config.CurrentBin))
+		}
+		config.CandidateBin = absPathFromBaseV0(config.ProjectDir, config.CandidateBin)
+		if config.LastGoodBin == "" {
+			config.LastGoodBin = filepath.Join(config.StateDir, "last_good", filepath.Base(config.CurrentBin))
+		}
+		config.LastGoodBin = absPathFromBaseV0(config.ProjectDir, config.LastGoodBin)
 	}
-	config.CurrentBin = absPathFromBaseV0(config.ProjectDir, config.CurrentBin)
-	if config.CandidateBin == "" {
-		config.CandidateBin = filepath.Join(config.StateDir, "candidate", filepath.Base(config.CurrentBin))
-	}
-	config.CandidateBin = absPathFromBaseV0(config.ProjectDir, config.CandidateBin)
-	if config.LastGoodBin == "" {
-		config.LastGoodBin = filepath.Join(config.StateDir, "last_good", filepath.Base(config.CurrentBin))
-	}
-	config.LastGoodBin = absPathFromBaseV0(config.ProjectDir, config.LastGoodBin)
 	if config.RepairCodexRuntimeDir == "" {
 		config.RepairCodexRuntimeDir = filepath.Join(config.StateDir, "repair-codex-runtime")
 	}
@@ -639,7 +657,7 @@ func requestGuardianServerShutdownV0(config guardianConfigV0) (guardianShutdownR
 	now := time.Now().UTC()
 	payload := map[string]any{
 		"forced":            config.ShutdownForced,
-		"requested_by":      "orquesta-guardian",
+		"requested_by":      "orquesta-director",
 		"reason":            guardianShutdownReasonV0(config),
 		"idempotency_key":   "idem-orquesta-guardian-shutdown",
 		"queue_limit":       config.ShutdownQueueLimit,
@@ -677,9 +695,9 @@ func requestGuardianServerShutdownV0(config guardianConfigV0) (guardianShutdownR
 
 func guardianShutdownReasonV0(config guardianConfigV0) string {
 	if config.ShutdownNow {
-		return "guardian forced shutdown now"
+		return "director forced shutdown now via guardian"
 	}
-	return "guardian controlled shutdown"
+	return "director controlled shutdown via guardian"
 }
 
 func signalGuardianProcessV0(pid int) error {

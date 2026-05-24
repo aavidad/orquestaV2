@@ -60,6 +60,11 @@ type DomainWorkArtifactSubmissionRecordV0 struct {
 	RunRef         string   `json:"run_ref,omitempty"`
 	TaskRef        string   `json:"task_ref,omitempty"`
 	DeliveryRef    string   `json:"delivery_ref,omitempty"`
+	DomainRef      string   `json:"domain_ref,omitempty"`
+	JobRef         string   `json:"job_ref,omitempty"`
+	ArtifactRef    string   `json:"artifact_ref,omitempty"`
+	ArtifactType   string   `json:"artifact_type,omitempty"`
+	CompleteJob    bool     `json:"complete_job,omitempty"`
 	ReceiptRef     string   `json:"receipt_ref,omitempty"`
 	EvidenceRefs   []string `json:"evidence_refs,omitempty"`
 	IssueRefs      []string `json:"issue_refs,omitempty"`
@@ -156,6 +161,10 @@ func normalizeDomainWorkArtifactSubmissionRecordV0(
 	record.RunRef = strings.TrimSpace(record.RunRef)
 	record.TaskRef = strings.TrimSpace(record.TaskRef)
 	record.DeliveryRef = strings.TrimSpace(record.DeliveryRef)
+	record.DomainRef = strings.TrimSpace(record.DomainRef)
+	record.JobRef = strings.TrimSpace(record.JobRef)
+	record.ArtifactRef = strings.TrimSpace(record.ArtifactRef)
+	record.ArtifactType = strings.TrimSpace(record.ArtifactType)
 	record.ReceiptRef = strings.TrimSpace(record.ReceiptRef)
 	record.EvidenceRefs = compactStringsV0(record.EvidenceRefs)
 	record.IssueRefs = compactStringsV0(record.IssueRefs)

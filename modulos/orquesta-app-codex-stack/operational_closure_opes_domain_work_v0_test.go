@@ -14,15 +14,8 @@ import (
 func TestOperationalClosureSourceV0CierraOPESDomainWorkConReceiptAceptado(t *testing.T) {
 	ctx := context.Background()
 	fixture := newOPESDomainWorkClosureFixtureForTestV0(t, "accepted")
-	if err := fixture.Ledger.RecordDomainWorkArtifactSubmissionV0(ctx, DomainWorkArtifactSubmissionRecordV0{
-		IdempotencyKey: "idem-opes-closure-accepted",
-		Status:         DomainWorkArtifactSubmissionStatusAcceptedV0,
-		RunRef:         fixture.Run.RunID,
-		TaskRef:        fixture.Task.TaskID,
-		DeliveryRef:    fixture.DeliveryRef,
-		ReceiptRef:     "receipt-ref-opes-closure-accepted",
-		EvidenceRefs:   []string{"opes-artifact-ref-accepted"},
-	}); err != nil {
+	record := opesAcceptedSubmissionRecordForFixtureV0(fixture, "accepted")
+	if err := fixture.Ledger.RecordDomainWorkArtifactSubmissionV0(ctx, record); err != nil {
 		t.Fatalf("record receipt: %v", err)
 	}
 
@@ -43,6 +36,51 @@ func TestOperationalClosureSourceV0CierraOPESDomainWorkConReceiptAceptado(t *tes
 	}
 }
 
+func TestOperationalClosureSourceV0NoCierraOPESConReceiptNoCausal(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(*DomainWorkArtifactSubmissionRecordV0)
+	}{
+		{
+			name: "job-ref-distinto",
+			mutate: func(record *DomainWorkArtifactSubmissionRecordV0) {
+				record.JobRef = "job-ref-otro"
+			},
+		},
+		{
+			name: "artifact-type-distinto",
+			mutate: func(record *DomainWorkArtifactSubmissionRecordV0) {
+				record.ArtifactType = "visual_asset"
+			},
+		},
+		{
+			name: "complete-job-falso",
+			mutate: func(record *DomainWorkArtifactSubmissionRecordV0) {
+				record.CompleteJob = false
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := newOPESDomainWorkClosureFixtureForTestV0(t, tc.name)
+			record := opesAcceptedSubmissionRecordForFixtureV0(fixture, tc.name)
+			tc.mutate(&record)
+			if err := fixture.Ledger.RecordDomainWorkArtifactSubmissionV0(context.Background(), record); err != nil {
+				t.Fatalf("record receipt: %v", err)
+			}
+			_, ok, err := fixture.Source.BuildOperationalDirectorClosureRequestV0(
+				context.Background(),
+				orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0{Run: fixture.Run},
+			)
+			if err != nil {
+				t.Fatalf("BuildOperationalDirectorClosureRequestV0: %v", err)
+			}
+			if ok {
+				t.Fatalf("no debe cerrar OPES con receipt no causal %+v", record)
+			}
+		})
+	}
+}
+
 func TestOperationalClosureSourceV0NoCierraOPESSinReceiptAceptado(t *testing.T) {
 	fixture := newOPESDomainWorkClosureFixtureForTestV0(t, "missing-receipt")
 
@@ -55,6 +93,26 @@ func TestOperationalClosureSourceV0NoCierraOPESSinReceiptAceptado(t *testing.T) 
 	}
 	if ok {
 		t.Fatalf("no debe cerrar OPES sin receipt aceptado de DomainWork")
+	}
+}
+
+func opesAcceptedSubmissionRecordForFixtureV0(
+	fixture opesDomainWorkClosureFixtureForTestV0,
+	suffix string,
+) DomainWorkArtifactSubmissionRecordV0 {
+	return DomainWorkArtifactSubmissionRecordV0{
+		IdempotencyKey: "idem-opes-closure-" + suffix,
+		Status:         DomainWorkArtifactSubmissionStatusAcceptedV0,
+		RunRef:         fixture.Run.RunID,
+		TaskRef:        fixture.Task.TaskID,
+		DeliveryRef:    fixture.DeliveryRef,
+		DomainRef:      "opes",
+		JobRef:         "job-ref-closure",
+		ArtifactRef:    fixture.DeliveryRef,
+		ArtifactType:   "content_block",
+		CompleteJob:    true,
+		ReceiptRef:     "receipt-ref-opes-closure-" + suffix,
+		EvidenceRefs:   []string{"opes-artifact-ref-" + suffix},
 	}
 }
 

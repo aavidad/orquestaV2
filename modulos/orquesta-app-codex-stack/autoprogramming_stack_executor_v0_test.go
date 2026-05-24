@@ -334,7 +334,7 @@ func TestCodexStackServerShutdownV0CierraRunPreparadaSinEntrarAlDirector(t *test
 		MaxTicks:       1,
 		MaxRunsPerTick: 1,
 		MaxExecutions:  1,
-		RequestedBy:    "orquesta-stack-api-test",
+		RequestedBy:    "orquesta-director",
 		Reason:         "shutdown de run preparada sin agentes vivos",
 	})
 	if shutdown.Estado != orquestamcp.MCPServerShutdownEstadoOKV0 ||

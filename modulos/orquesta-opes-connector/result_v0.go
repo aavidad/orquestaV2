@@ -29,6 +29,9 @@ func domainWorkArtifactReceiptFromOPESV0(
 	submission orquestadomainwork.DomainWorkArtifactSubmissionV0,
 	response opesArtifactResponseV0,
 ) orquestadomainwork.DomainWorkArtifactReceiptV0 {
+	if issues := validateOPESArtifactReceiptResponseV0(submission, response); len(issues) > 0 {
+		return invalidDomainWorkArtifactReceiptV0(submission, issues)
+	}
 	return orquestadomainwork.DomainWorkArtifactReceiptV0{
 		SchemaVersion:  orquestadomainwork.DomainWorkArtifactReceiptSchemaV0,
 		Status:         orquestadomainwork.DomainWorkStatusAcceptedV0,
@@ -40,6 +43,33 @@ func domainWorkArtifactReceiptFromOPESV0(
 		ExternalRefs:   externalRefsFromMapV0(response.ExternalRefs, submission.ExternalRefs),
 		EvidenceRefs:   []string{"opes-artifact-ref-" + firstNonEmptyV0(response.ID, response.ArtifactID, submission.ArtifactRef)},
 	}
+}
+
+func validateOPESArtifactReceiptResponseV0(
+	submission orquestadomainwork.DomainWorkArtifactSubmissionV0,
+	response opesArtifactResponseV0,
+) []orquestadomainwork.DomainWorkIssueV0 {
+	issues := []orquestadomainwork.DomainWorkIssueV0{}
+	if firstNonEmptyV0(response.ID, response.ArtifactID) == "" {
+		issues = append(issues, opesReceiptIssueV0(ErrOPESResponseInvalidV0, "artifact_id"))
+	}
+	if response.JobID != "" && response.JobID != submission.JobRef {
+		issues = append(issues, opesReceiptIssueV0(ErrOPESResponseInvalidV0, "job_id"))
+	}
+	if response.Artifact.JobID != "" && response.Artifact.JobID != submission.JobRef {
+		issues = append(issues, opesReceiptIssueV0(ErrOPESResponseInvalidV0, "artifact.job_id"))
+	}
+	if response.Artifact.Type != "" && response.Artifact.Type != submission.ArtifactType {
+		issues = append(issues, opesReceiptIssueV0(ErrOPESResponseInvalidV0, "artifact.type"))
+	}
+	if submission.CompleteJob && response.Job.Status != "" && response.Job.Status != "completed" {
+		issues = append(issues, opesReceiptIssueV0(ErrOPESResponseInvalidV0, "job.status"))
+	}
+	return issues
+}
+
+func opesReceiptIssueV0(code string, field string) orquestadomainwork.DomainWorkIssueV0 {
+	return orquestadomainwork.DomainWorkIssueV0{Code: code, Field: field}
 }
 
 func invalidDomainWorkJobV0(

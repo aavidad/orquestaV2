@@ -1,6 +1,8 @@
 package orquestaautoprogramming
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 )
@@ -110,12 +112,53 @@ func autoprogrammingContextRefsForGroupV0(
 	request AutoprogrammingRequestV0,
 	group AutoprogrammingTaskGroupV0,
 ) []string {
-	refs := autoprogrammingProgrammableContextRefsV0(request)
+	refs := autoprogrammingSafeWorkflowContextRefsV0(
+		autoprogrammingProgrammableContextRefsV0(request),
+	)
 	for _, task := range group.Tasks {
 		refs = append(refs, "source_task_ref:"+task.TaskRef)
-		refs = append(refs, task.ContextRefs...)
+		refs = append(refs, autoprogrammingSafeWorkflowContextRefsV0(task.ContextRefs)...)
 	}
 	return compactStringsV0(refs)
+}
+
+func autoprogrammingSafeWorkflowContextRefsV0(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if ref := autoprogrammingSafeWorkflowContextRefV0(value); ref != "" {
+			out = append(out, ref)
+		}
+	}
+	return compactStringsV0(out)
+}
+
+func autoprogrammingSafeWorkflowContextRefV0(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if autoprogrammingWorkflowContextRefIsCompactV0(value) {
+		return value
+	}
+	sum := sha256.Sum256([]byte(value))
+	prefix := autoprogrammingWorkflowContextRefPrefixV0(value)
+	return "context_ref:" + prefix + "-" + hex.EncodeToString(sum[:])[:12]
+}
+
+func autoprogrammingWorkflowContextRefIsCompactV0(value string) bool {
+	return len(value) <= 600 && !strings.ContainsAny(value, " /\\\t\r\n")
+}
+
+func autoprogrammingWorkflowContextRefPrefixV0(value string) string {
+	prefix := value
+	if before, _, ok := strings.Cut(value, ":"); ok {
+		prefix = before
+	}
+	prefix = normalizeAutoprogrammingTaskAreaV0(prefix)
+	if prefix == "" {
+		return "context"
+	}
+	return prefix
 }
 
 func autoprogrammingAcceptanceCriteriaForGroupV0(

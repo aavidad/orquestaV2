@@ -88,6 +88,7 @@ func MCPServerShutdownDescriptorV0() MCPServerShutdownToolDescriptorV0 {
 		Invariantes: []string{
 			"adaptador inbound fino",
 			"delega en orquesta-server-shutdown",
+			"solo el Director puede solicitar shutdown; los agentes solo preparan checkpoint/ACK",
 			"no para procesos ni toca runtime directamente",
 			"usa RunControl RunQueue Supervisor y stats por puertos",
 		},
@@ -142,7 +143,8 @@ func serverShutdownStatusIsErrorV0(status string) bool {
 	switch strings.TrimSpace(status) {
 	case orquestaservershutdown.ServerShutdownStatusNoQueueReaderV0,
 		orquestaservershutdown.ServerShutdownStatusNoRunControlReaderV0,
-		orquestaservershutdown.ServerShutdownStatusNoRunControlWriterV0:
+		orquestaservershutdown.ServerShutdownStatusNoRunControlWriterV0,
+		orquestaservershutdown.ServerShutdownStatusRequesterDeniedV0:
 		return true
 	default:
 		return false

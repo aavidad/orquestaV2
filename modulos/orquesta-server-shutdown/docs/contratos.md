@@ -18,6 +18,9 @@ Puertos:
 Invariantes:
 
 - no toca stores ni procesos directamente;
+- solo acepta shutdown solicitado por el Director (`requested_by` con autoridad
+  de director); los agentes no pueden iniciar apagado, solo responder con
+  checkpoint/ACK por puerto;
 - `forced=false` prepara checkpoint por puerto y registra ACK durable antes de
   solicitar `StopRunV0`; si falta ACK, no pide stop ni ejecuta drainer;
 - `forced=true` permite drenar agentes sin checkpoint previo;

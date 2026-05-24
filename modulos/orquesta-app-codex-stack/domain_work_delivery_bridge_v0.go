@@ -203,16 +203,7 @@ func (stack StackV0) submitDomainWorkArtifactForObservationV0(
 	if result.Estado != orquestamcp.MCPDomainWorkEstadoOKV0 || result.Receipt == nil {
 		if recordErr := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
 			ctx,
-			DomainWorkArtifactSubmissionRecordV0{
-				IdempotencyKey: submission.IdempotencyKey,
-				Status:         DomainWorkArtifactSubmissionStatusRejectedV0,
-				RunRef:         run.RunID,
-				TaskRef:        task.TaskID,
-				DeliveryRef:    observation.DeliveryRef,
-				EvidenceRefs:   submission.EvidenceRefs,
-				IssueRefs:      domainWorkSubmitIssueRefsV0(result),
-				RecordedAt:     request.OccurredAt,
-			},
+			domainWorkRejectedSubmissionRecordV0(run, task, observation, submission, result, request.OccurredAt),
 		); recordErr != nil {
 			return recordErr
 		}
@@ -220,19 +211,7 @@ func (stack StackV0) submitDomainWorkArtifactForObservationV0(
 	}
 	return stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
 		ctx,
-		DomainWorkArtifactSubmissionRecordV0{
-			IdempotencyKey: submission.IdempotencyKey,
-			Status:         DomainWorkArtifactSubmissionStatusAcceptedV0,
-			RunRef:         run.RunID,
-			TaskRef:        task.TaskID,
-			DeliveryRef:    observation.DeliveryRef,
-			ReceiptRef:     result.Receipt.ReceiptRef,
-			EvidenceRefs: compactStringsV0(append(
-				append([]string(nil), submission.EvidenceRefs...),
-				result.Receipt.EvidenceRefs...,
-			)),
-			RecordedAt: request.OccurredAt,
-		},
+		domainWorkAcceptedSubmissionRecordV0(run, task, observation, submission, result, request.OccurredAt),
 	)
 }
 

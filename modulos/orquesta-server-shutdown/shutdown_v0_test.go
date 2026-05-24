@@ -21,7 +21,7 @@ func TestShutdownServerV0SolicitaStopDrenaYQuedaReady(t *testing.T) {
 	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
 		QueueRef:      "global",
 		Forced:        true,
-		RequestedBy:   "operator",
+		RequestedBy:   "orquesta-director",
 		Reason:        "apagado controlado",
 		CorrelationID: "corr-shutdown-test-001",
 		OccurredAt:    time.Date(2026, 5, 13, 11, 0, 0, 0, time.UTC),
@@ -41,6 +41,27 @@ func TestShutdownServerV0SolicitaStopDrenaYQuedaReady(t *testing.T) {
 	}
 }
 
+func TestShutdownServerV0RechazaSolicitanteAgente(t *testing.T) {
+	deps := newServerShutdownDepsForTestV0([]orquestarunqueue.RunSchedulingCandidateV0{
+		{RunRef: "run-agent-denied", AppRef: "app-a", Status: "ready"},
+	})
+
+	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
+		Forced:      true,
+		RequestedBy: "agent-ref-001",
+		Reason:      "agente no puede pedir shutdown",
+	})
+	if err != nil {
+		t.Fatalf("ShutdownServerV0: %v", err)
+	}
+	if result.Status != ServerShutdownStatusRequesterDeniedV0 ||
+		result.ShutdownReady ||
+		len(deps.control.stopped) != 0 ||
+		deps.supervisor.calls != 0 {
+		t.Fatalf("result=%+v stopped=%v supervisor=%+v", result, deps.control.stopped, deps.supervisor)
+	}
+}
+
 func TestShutdownServerV0ReadyConRunActivoSinAgentesEnVuelo(t *testing.T) {
 	deps := newServerShutdownDepsForTestV0([]orquestarunqueue.RunSchedulingCandidateV0{
 		{RunRef: "run-active-no-live-agents", AppRef: "app-a", Status: "ready"},
@@ -54,7 +75,7 @@ func TestShutdownServerV0ReadyConRunActivoSinAgentesEnVuelo(t *testing.T) {
 
 	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
 		Forced:      true,
-		RequestedBy: "operator",
+		RequestedBy: "orquesta-director",
 		Reason:      "apagado con run activo sin agentes vivos",
 	})
 	if err != nil {
@@ -81,7 +102,7 @@ func TestShutdownServerV0NoPropagaSupervisorSiNoHayAgentesEnVuelo(t *testing.T) 
 
 	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
 		Forced:      true,
-		RequestedBy: "operator",
+		RequestedBy: "orquesta-director",
 		Reason:      "apagado con ciclo director invalido pero sin agentes vivos",
 	})
 	if err != nil {
@@ -108,7 +129,7 @@ func TestShutdownServerV0EsperaDrainConAgentesEnVuelo(t *testing.T) {
 
 	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
 		Forced:      true,
-		RequestedBy: "operator",
+		RequestedBy: "orquesta-director",
 		Reason:      "apagado con agente vivo",
 	})
 	if err != nil {
@@ -131,7 +152,7 @@ func TestShutdownServerV0NoDrenaSiFaltaCheckpoint(t *testing.T) {
 	deps.checkpoint.evidence["run-checkpoint"] = []string{"shutdown-checkpoint-issue-pending-agent_ack"}
 
 	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
-		RequestedBy: "operator",
+		RequestedBy: "orquesta-director",
 		Reason:      "apagado no forzado",
 	})
 	if err != nil {
@@ -162,7 +183,7 @@ func TestShutdownServerV0PreparaCheckpointAntesDeStopNoForzado(t *testing.T) {
 	deps.stats.stats["run-graceful"] = RunShutdownStatsV0{RunRef: "run-graceful"}
 
 	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
-		RequestedBy:   "operator",
+		RequestedBy:   "orquesta-director",
 		Reason:        "apagado graceful",
 		CorrelationID: "corr-shutdown-test-002",
 	})
@@ -195,7 +216,7 @@ func TestShutdownServerV0NoPideStopSiCheckpointNoEstaListo(t *testing.T) {
 	deps.checkpoint.pending["run-pending-before-stop"] = []string{"agent-ref-a"}
 
 	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
-		RequestedBy: "operator",
+		RequestedBy: "orquesta-director",
 		Reason:      "apagado no forzado",
 	})
 	if err != nil {
@@ -218,7 +239,7 @@ func TestShutdownServerV0FuerzaStopSiDeadlineCheckpointExpirado(t *testing.T) {
 	deps.stats.stats["run-deadline"] = RunShutdownStatsV0{RunRef: "run-deadline"}
 
 	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
-		RequestedBy:          "operator",
+		RequestedBy:          "orquesta-director",
 		Reason:               "apagado no forzado con deadline",
 		OccurredAt:           time.Date(2026, 5, 13, 12, 5, 0, 0, time.UTC),
 		CheckpointDeadlineAt: time.Date(2026, 5, 13, 12, 0, 0, 0, time.UTC),

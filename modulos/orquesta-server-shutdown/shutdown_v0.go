@@ -19,6 +19,14 @@ func ShutdownServerV0(
 		ctx = context.Background()
 	}
 	command = NormalizeServerShutdownCommandV0(command)
+	if !serverShutdownRequesterAuthorizedV0(command.RequestedBy) {
+		result := missingServerShutdownDepV0(ServerShutdownStatusRequesterDeniedV0)
+		result.EvidenceRefs = compactServerShutdownStringsV0(append(
+			command.EvidenceRefs,
+			"evidence-ref-shutdown-requester-not-director",
+		))
+		return result, nil
+	}
 	if deps.QueueReader == nil {
 		return missingServerShutdownDepV0(ServerShutdownStatusNoQueueReaderV0), nil
 	}
@@ -69,6 +77,19 @@ func ShutdownServerV0(
 		return ServerShutdownResultV0{}, err
 	}
 	return summarizeShutdownResultV0(result), nil
+}
+
+func serverShutdownRequesterAuthorizedV0(requestedBy string) bool {
+	value := strings.ToLower(strings.TrimSpace(requestedBy))
+	if value == "" {
+		return false
+	}
+	if strings.Contains(value, "agent") || strings.Contains(value, "agente") ||
+		strings.Contains(value, "worker") || strings.Contains(value, "subagent") ||
+		strings.Contains(value, "subagente") {
+		return false
+	}
+	return strings.Contains(value, "director")
 }
 
 func missingServerShutdownDepV0(status string) ServerShutdownResultV0 {
