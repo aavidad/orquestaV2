@@ -11,33 +11,6 @@ const (
 	maxVoteRequestEvidenceRefsV0 = 20
 )
 
-var forbiddenVoteRequestFragmentsV0 = []string{
-	"db",
-	"database",
-	"sql",
-	"dsn",
-	"runtime",
-	"provider",
-	"proveedor",
-	"model",
-	"modelo",
-	"home",
-	"oauth",
-	"codex",
-	"claude",
-	"ollama",
-	"vllm",
-	"adapter",
-	"adaptador",
-	"secret",
-	"secreto",
-	"token",
-	"password",
-	"credential",
-	"credencial",
-	"api_key",
-}
-
 type RequestVoteCommandPayloadV0 struct {
 	VoteRequestID              string                                `json:"vote_request_id"`
 	PhaseID                    string                                `json:"phase_id"`

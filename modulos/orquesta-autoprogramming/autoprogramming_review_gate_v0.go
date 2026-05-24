@@ -212,7 +212,8 @@ func autoprogrammingReviewGateWriteSetIssuesV0(
 			))
 			continue
 		}
-		if _, ok := allowedSet[path]; !ok {
+		if _, ok := allowedSet[path]; !ok &&
+			!autoprogrammingReviewGatePathAllowedByWriteSetV0(path, allowed) {
 			issues = append(issues, autoprogrammingReviewGateIssueV0(
 				"file_outside_write_set",
 				"files.path",

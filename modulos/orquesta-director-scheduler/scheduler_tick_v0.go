@@ -41,7 +41,9 @@ func BuildDirectorSchedulerTickV0(input DirectorSchedulerTickInputV0) (DirectorS
 			if err := collector.collectProgressSupervisionCandidateV0(progressCandidate); err != nil {
 				return DirectorSchedulerTickPlanV0{}, err
 			}
-			return collector.planV0(), nil
+			if collector.hasSchedulingEffectsV0() {
+				return collector.planV0(), nil
+			}
 		}
 	}
 	if schedulerHasBlockingQualityGateBeforeWorkV0(normalized) {

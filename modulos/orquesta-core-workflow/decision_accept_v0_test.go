@@ -124,7 +124,7 @@ func TestAcceptDecisionCommandV0RejectsNonCurrentPhase(t *testing.T) {
 
 func TestAcceptDecisionCommandV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validAcceptDecisionPayloadV0("decision-forbidden")
-	payload.Summary = "aceptar provider para Codex"
+	payload.Summary = "aceptar api_key=valor"
 
 	_, err := NewAcceptDecisionCommandV0(validCommandMetaV0("cmd-decision-forbidden", "idem-decision-forbidden"), payload)
 	var publicErr OrchestrationCommandErrorV0
@@ -138,7 +138,7 @@ func TestAcceptDecisionCommandV0RejectsForbiddenDetails(t *testing.T) {
 
 func TestArchitectureDecisionAcceptedEventV0RejectsForbiddenDetails(t *testing.T) {
 	payload := architectureDecisionAcceptedPayloadFromCommandV0(validAcceptDecisionPayloadV0("decision-event-forbidden"))
-	payload.Summary = "usar Claude"
+	payload.Summary = "usar authorization: bearer valor"
 
 	_, err := NewArchitectureDecisionAcceptedEventV0(reducerEventMetaV0("evt-decision-forbidden", 3), payload)
 	var publicErr OrchestrationEventErrorV0

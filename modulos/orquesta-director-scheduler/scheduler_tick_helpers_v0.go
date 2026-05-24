@@ -3,6 +3,8 @@ package orquestadirectorscheduler
 import (
 	"sort"
 	"strings"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func compactSchedulerStringsV0(values []string) []string {
@@ -68,6 +70,9 @@ func compactSchedulerWaitingReasonsV0(reasons []SchedulerWaitingReasonV0) []Sche
 }
 
 func schedulerContainsForbiddenDetailsV0(values []string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	for _, value := range values {
 		lower := strings.ToLower(value)
 		for _, forbidden := range forbiddenSchedulerFragmentsV0 {

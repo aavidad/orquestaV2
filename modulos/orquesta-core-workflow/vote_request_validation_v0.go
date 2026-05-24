@@ -139,15 +139,7 @@ func voteRequestHasLongStringV0(values []string) bool {
 }
 
 func voteRequestHasForbiddenDetailsV0(values []string) bool {
-	for _, value := range values {
-		lower := strings.ToLower(value)
-		for _, fragment := range forbiddenVoteRequestFragmentsV0 {
-			if containsForbiddenFragmentV0(lower, fragment) {
-				return true
-			}
-		}
-	}
-	return false
+	return textValuesContainForbiddenOperationalSensitiveDetailV0(values)
 }
 
 func voteRequestTextFieldsV0(payload RequestVoteCommandPayloadV0) []string {

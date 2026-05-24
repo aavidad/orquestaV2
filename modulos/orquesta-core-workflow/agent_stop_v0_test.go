@@ -169,7 +169,7 @@ func TestAgentStopOutboxPayloadDoesNotContainForbiddenDetails(t *testing.T) {
 		t.Fatalf("handle StopAgent: %v", err)
 	}
 	serialized := strings.ToLower(string(result.Outbox[0].Payload))
-	for _, forbidden := range []string{"provider", "proveedor", "model", "modelo", "runtime", "home", "oauth", "codex", "claude", "ollama", "vllm"} {
+	for _, forbidden := range operationalSensitiveFragmentsForTestV0() {
 		if strings.Contains(serialized, forbidden) {
 			t.Fatalf("outbox payload contains forbidden fragment %q: %s", forbidden, serialized)
 		}
@@ -178,7 +178,7 @@ func TestAgentStopOutboxPayloadDoesNotContainForbiddenDetails(t *testing.T) {
 
 func TestStopAgentCommandV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validStopAgentPayloadV0("agent-request-forbidden")
-	payload.Summary = "cerrar provider externo"
+	payload.Summary = "authorization: Bearer abc123"
 
 	_, err := NewStopAgentCommandV0(validCommandMetaV0("cmd-stop-forbidden", "idem-stop-forbidden"), payload)
 	var publicErr OrchestrationCommandErrorV0

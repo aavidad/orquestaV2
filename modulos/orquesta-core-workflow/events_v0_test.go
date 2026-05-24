@@ -65,7 +65,7 @@ func TestValidateOrchestrationEventV0RejectsForbiddenPayloadDetails(t *testing.T
 		ReasonCode: "consulta_director_requerida",
 		Summary:    "Bloqueado hasta recibir criterio de arquitectura.",
 	})
-	event.Payload = json.RawMessage(`{"blocker_id":"blocker-002","reason_code":"x","summary":"ver transcript completo"}`)
+	event.Payload = json.RawMessage(`{"blocker_id":"blocker-002","reason_code":"x","summary":"ver api_key=valor"}`)
 
 	err := ValidateOrchestrationEventV0(event)
 	var publicErr OrchestrationEventErrorV0
@@ -141,7 +141,7 @@ func mustEventV0(t *testing.T, event OrchestrationEventV0, err error) Orchestrat
 func assertNoForbiddenFragmentsV0(t *testing.T, serialized string) {
 	t.Helper()
 	lower := strings.ToLower(serialized)
-	for _, fragment := range forbiddenEventFragmentsV0 {
+	for _, fragment := range operationalSensitiveFragmentsForTestV0() {
 		if strings.Contains(lower, fragment) {
 			t.Fatalf("serialized event contains forbidden fragment %q: %s", fragment, serialized)
 		}

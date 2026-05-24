@@ -11,7 +11,10 @@ Write-set del corte:
 
 - `modulos/orquesta-mcp`
 - `modulos/orquesta-operator-mcp`
+- `modulos/orquesta-operator-mcp-client`
+- `cmd/orquesta-server`
 - `docs/runbooks/autoprogramacion_mcp_2026-05-23.md`
+- `docs/runbooks/smoke_mcp_real_transport_opt_in_2026-05-24.md`
 
 ## Contrato publico
 
@@ -48,6 +51,9 @@ Resources MCP relevantes:
 - `orquesta.operational.status.v0`
 - `orquesta.core_workflow.contracts.v0`
 - `orquesta.operator.operations.v0`
+- `orquesta-operator-mcp-client`: conector externo opt-in para operadores que
+  exponen tools MCP compatibles; implementa `OperatorMCPConnectorV0` sin
+  importar `orquesta-mcp` ni transporte local.
 
 ## Fronteras
 
@@ -56,11 +62,16 @@ Resources MCP relevantes:
 - `orquesta-operator-mcp` define capacidades operativas por refs opacas y
   conectores; no expone tablas, event-store, procesos, PID, prompts ni
   transcripts.
+- El conector de operador real queda fuera de `orquesta-mcp`: HTTP/MCP reciben
+  solo DTOs publicos, y `orquesta-operator-mcp-client` delega en un cliente MCP
+  generico configurado por nombres de tool y refs opacas.
 - `domain_work` y `external_work/run` transportan refs opacas y contratos de
   dominio. El dominio externo conserva datos, validadores, persistencia y
   ensamblado.
-- OPES, Codex, servidor MCP real, MCPO, red, filesystem productivo y runtime real
-  son adaptadores de composicion opt-in fuera de estos modulos.
+- OPES, Codex, MCPO, red productiva, filesystem productivo y runtime real son
+  adaptadores de composicion opt-in fuera de estos modulos. El smoke MCP real
+  disponible en `cmd/orquesta-server` solo usa JSON-RPC HTTP temporal en
+  loopback y no queda habilitado por defecto.
 - `operational_director.task_source: director_decision` pertenece a la cadena
   causal del Director Operativo y no se materializa desde MCP como contrato de
   producto.
@@ -70,7 +81,15 @@ Resources MCP relevantes:
 Ejecutar desde la raiz del repo:
 
 ```bash
-go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp
+go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-operator-mcp-client
+```
+
+Smoke opt-in del transporte MCP real de composicion:
+
+```bash
+ORQUESTA_MCP_REAL_SMOKE_CONFIRM=1 \
+GOCACHE=/tmp/orquesta-go-build-cache \
+go run ./cmd/orquesta-server mcp-real-smoke
 ```
 
 Criterios de aceptacion manual:
@@ -83,17 +102,138 @@ Criterios de aceptacion manual:
   publica sin perder la propuesta.
 - `human_work.review_plan` conserva el plan si falta el conector de consulta
   dirigida y devuelve `operator_mcp_port_unavailable` como reparacion publica.
+- El cliente MCP externo preserva errores publicos de operador, reduce fallos
+  opacos a `operator_mcp_port_error` y permite sustituir Hermes/OpenClaw u otro
+  operador sin acoplar el nucleo.
 - Las respuestas usan refs opacas, errores publicos y payloads compactos.
 - No hay imports de OPES, Codex runtime concreto, DB, HOME, OAuth, credenciales,
   proveedor ni modelo dentro de `orquesta-mcp` ni `orquesta-operator-mcp`.
 - La ruta de dominio externo conserva arquitectura hexagonal: Orquesta coordina;
   la app propietaria valida y ensambla.
+- El smoke MCP real temporal prueba una lectura de resource, una propuesta de
+  automejora no destructiva y el error publico
+  `operator_mcp_port_unavailable` cuando no hay operador inyectado.
+
+## Resultado 2026-05-24 T16
+
+Se anade transporte JSON-RPC HTTP opt-in en `cmd/orquesta-server` para cerrar el
+smoke temporal de servidor MCP real sin mover logica a MCP. El handler registra
+resources/tools por `RegisterMCPTransportV0`; el comando `mcp-real-smoke` exige
+`ORQUESTA_MCP_REAL_SMOKE_CONFIRM=1`, arranca loopback temporal y valida:
+
+- lectura de `orquesta.operator.operations.v0`;
+- `orquesta.autoprogramming.self_improvement.propose.v0` con propuesta no
+  destructiva y refs opacas preservadas;
+- `orquesta.operator.status.query.v0` sin operador real, normalizado como
+  `operator_mcp_port_unavailable`.
+
+Runbook focal: `docs/runbooks/smoke_mcp_real_transport_opt_in_2026-05-24.md`.
 
 ## Resultado 2026-05-23
 
 Validado con la bateria focal obligatoria del paquete:
 
 - `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp`
+- `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-operator-mcp-client`
 - `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-app-codex-stack`
 - `validar criterios de aceptacion del cambio`
 - `validar contrato externo de dominio`
+
+## Revision/rework request-ref-automejora-mcp-operador-004
+
+El rework acotado revisa solo la frontera MCP/HTTP de operador humano y
+automejora dentro del write-set:
+
+- `POST /api/v0/autoprogramming/status` delega en cola y stats por puertos
+  inyectados; si faltan puertos conserva diagnostico publico reparable.
+- `POST /api/v0/autoprogramming/supervise` delega en
+  `orquesta.runs.supervisor.v0`; sin `run_ref` deja al executor decidir cola
+  residente, sin abrir runtime desde MCP/HTTP.
+- `orquesta.autoprogramming.self_improvement.propose.v0` conserva evidencia de
+  fallo, genera automejora secundaria de baja prioridad y solo llama
+  `prepare-run` cuando `auto_prepare_run=true` y el executor existe.
+- `orquesta.director.human_work.review_plan.v0` conserva plan revisable aunque
+  falte puente humano; la consulta a operador es opt-in por
+  `OperatorMCPDirectedQueryPortV0`.
+- `orquesta.operator.operations.v0` publica capabilities compactas y el
+  transporte registra status, burst supervisado, outbox y consulta dirigida por
+  puertos o conector agregado, nunca por internals.
+- `operator_advice` en HTTP es observacion no bloqueante: se normalizan aliases
+  reparables de refs, accion y texto; no decide proveedor, runtime, cola ni
+  cierre.
+
+Refs opacas preservadas en la entrega: `task-ref-self-improvement-18eca7b1eae7`,
+`worktree-ref-orquesta-automejora-mcp-operador-004` y
+`trabajo-plataforma-agentes`. No se convierten en rutas ni nombres Git.
+
+Prueba focal obligatoria reejecutada:
+
+```bash
+go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-operator-mcp-client
+```
+
+Revalidacion `task-autoprogramming-18eca7b1eae7-g01`: sin cambios de codigo en
+la frontera tras revisar contrato y pruebas locales. La entrega conserva como
+refs opacas `task-ref-self-improvement-18eca7b1eae7`,
+`worktree-ref-orquesta-automejora-mcp-operador-004` y
+`trabajo-plataforma-agentes`; no se usan como rutas ni nombres Git.
+
+Rework focal `agent-ref-task-autoprogramming-18eca7b1eae7-g01-562352fb086c`:
+se refuerza la cobertura de contrato sin ampliar la frontera. Las pruebas
+locales verifican que `operator_advice` se conserva como observacion no
+bloqueante en `status` y `supervise`, incluso con puerto ausente, y que
+`self_improvement` lo inyecta como contexto/regla compacta de automejora sin
+decidir runtime, cola, proveedor ni cierre. Revalidado con:
+
+```bash
+go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-operator-mcp-client
+```
+
+Revalidacion `agent-ref-task-autoprogramming-18eca7b1eae7-g01-dd735cd48a5e`:
+se reviso de nuevo el conector MCP/HTTP de operador humano y automejora contra
+los contratos locales. No se amplio la frontera: `status`, `supervise`,
+`self_improvement`, `human_work.review_plan`, `operator.operations` y el cliente
+MCP externo siguen como adaptadores finos sobre puertos inyectados, refs opacas
+y errores publicos. El transporte real MCP, operadores concretos, red
+productiva y runtime real permanecen como composicion opt-in fuera del nucleo.
+Revalidado con:
+
+```bash
+go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-operator-mcp-client
+```
+
+Revalidacion `agent-ref-task-autoprogramming-18eca7b1eae7-g01-ca965c319ed5`:
+se revisa de nuevo la frontera MCP/HTTP de operador humano/automejora tras
+rework no aceptado. El contrato se mantiene acotado: `status` y `supervise`
+delegan en puertos inyectados, `operator_advice` sigue como observacion no
+bloqueante, `self_improvement` conserva evidencia y solo auto-prepara con
+opt-in, `human_work.review_plan` conserva el plan aunque falte operador y
+`operator.operations`/cliente MCP externo siguen usando refs opacas y errores
+publicos. Las refs `task-ref-self-improvement-18eca7b1eae7`,
+`worktree-ref-orquesta-automejora-mcp-operador-004` y
+`trabajo-plataforma-agentes` se preservan como refs opacas.
+
+Revalidado con:
+
+```bash
+go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-operator-mcp-client
+```
+
+Revalidacion `agent-ref-task-autoprogramming-18eca7b1eae7-g01-a84f653220c2`:
+se reviso la entrega rechazada contra el paquete de rework y los contratos
+locales. El cierre queda como contrato ya implementado y probado dentro del
+write-set: HTTP `status` y `supervise` conservan `operator_advice` como
+observacion no bloqueante, `self_improvement` preserva evidencia y solo
+auto-prepara por puerto inyectado, `human_work.review_plan` conserva plan aunque
+falte operador, `operator.operations` delega por puertos/ref opacas y el cliente
+MCP externo reduce fallos no publicos a `operator_mcp_port_error`. No se abre
+servidor MCP real, red productiva ni runtime concreto desde estos modulos.
+Refs opacas preservadas: `task-ref-self-improvement-18eca7b1eae7`,
+`worktree-ref-orquesta-automejora-mcp-operador-004` y
+`trabajo-plataforma-agentes`.
+
+Revalidado con:
+
+```bash
+go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-operator-mcp-client
+```

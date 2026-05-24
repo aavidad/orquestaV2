@@ -12,15 +12,16 @@ import (
 )
 
 type StackV0 struct {
-	Handler        http.Handler
-	Ports          orquestaappdirectorservice.StartAppDirectorPortsV0
-	Stores         StoresV0
-	RunQueue       RunQueueConfigV0
-	RunSupervisor  RunSupervisorConfigV0
-	DirectorLimits orquestaweb.WebArrancarDirectorAppLimitsV0
-	Clock          orquestafactoryhttp.AppSpecHTTPClockV0
-	DomainWork     orquestamcp.MCPDomainWorkExecutorPortV0
-	DomainDelivery DomainWorkDeliveryBridgeConfigV0
+	Handler                  http.Handler
+	Ports                    orquestaappdirectorservice.StartAppDirectorPortsV0
+	Stores                   StoresV0
+	RunQueue                 RunQueueConfigV0
+	RunSupervisor            RunSupervisorConfigV0
+	DirectorLimits           orquestaweb.WebArrancarDirectorAppLimitsV0
+	Clock                    orquestafactoryhttp.AppSpecHTTPClockV0
+	AutoprogrammingPromotion AutoprogrammingPromotionConfigV0
+	DomainWork               orquestamcp.MCPDomainWorkExecutorPortV0
+	DomainDelivery           DomainWorkDeliveryBridgeConfigV0
 }
 
 func BuildStackV0(config ConfigV0) (StackV0, error) {
@@ -32,14 +33,15 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 	queueConfig := normalizeRunQueueConfigV0(config.RunQueue)
 	supervisorConfig := normalizeRunSupervisorConfigV0(config.RunSupervisor)
 	stack := StackV0{
-		Ports:          ports,
-		Stores:         config.Stores,
-		RunQueue:       queueConfig,
-		RunSupervisor:  supervisorConfig,
-		DirectorLimits: config.DirectorLimits,
-		Clock:          config.Clock,
-		DomainWork:     config.DomainWork,
-		DomainDelivery: config.DomainDelivery,
+		Ports:                    ports,
+		Stores:                   config.Stores,
+		RunQueue:                 queueConfig,
+		RunSupervisor:            supervisorConfig,
+		DirectorLimits:           config.DirectorLimits,
+		Clock:                    config.Clock,
+		AutoprogrammingPromotion: config.AutoprogrammingPromotion,
+		DomainWork:               config.DomainWork,
+		DomainDelivery:           config.DomainDelivery,
 	}
 	stack.Handler = buildStackHTTPHandlerV0(config, ports, queueConfig, &stack)
 	return stack, nil
@@ -123,7 +125,7 @@ func buildDirectorPortsV0(
 		OperationalPlanStateWriter:  operationalPlanStateWriterV0(config),
 		OperationalPlanStateStore:   operationalPlanStateStoreV0(config),
 		RequiredTestEvidenceStore:   requiredTestEvidenceStoreV0(config),
-		RequiredTestRunner:          config.RequiredTests,
+		RequiredTestRunner:          requiredTestRunnerV0(config),
 		ExternalWaiter:              ackWaiterV0(config),
 		OperationalClosureSource:    operationalClosureSourceV0(config),
 		Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{

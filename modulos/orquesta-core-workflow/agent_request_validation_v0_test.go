@@ -102,7 +102,7 @@ func TestHandleRequestAgentCommandV0RejectsNonCurrentPhase(t *testing.T) {
 	}
 }
 
-func TestRequestAgentCommandV0RejectsForbiddenDetails(t *testing.T) {
+func TestRequestAgentCommandV0PermiteDetallesOperativosOpacos(t *testing.T) {
 	cases := map[string]func(*RequestAgentCommandPayloadV0){
 		"provider": func(payload *RequestAgentCommandPayloadV0) { payload.Summary = "usar provider externo" },
 		"modelo":   func(payload *RequestAgentCommandPayloadV0) { payload.Role = "modelo" },
@@ -119,21 +119,30 @@ func TestRequestAgentCommandV0RejectsForbiddenDetails(t *testing.T) {
 			payload := validRequestAgentPayloadV0("agent-request-forbidden")
 			mutate(&payload)
 
-			_, err := NewRequestAgentCommandV0(validCommandMetaV0("cmd-agent-forbidden-"+strings.ToLower(name), "idem-agent-forbidden-"+strings.ToLower(name)), payload)
-			var publicErr OrchestrationCommandErrorV0
-			if !errors.As(err, &publicErr) {
-				t.Fatalf("expected public command error, got %T %v", err, err)
-			}
-			if publicErr.Code != ErrDetalleProhibidoV0 {
-				t.Fatalf("code=%q, want %q", publicErr.Code, ErrDetalleProhibidoV0)
+			if _, err := NewRequestAgentCommandV0(validCommandMetaV0("cmd-agent-opaque-"+strings.ToLower(name), "idem-agent-opaque-"+strings.ToLower(name)), payload); err != nil {
+				t.Fatalf("detalle operativo opaco rechazado: %v", err)
 			}
 		})
 	}
 }
 
+func TestRequestAgentCommandV0RejectsSensitiveDetails(t *testing.T) {
+	payload := validRequestAgentPayloadV0("agent-request-sensitive")
+	payload.EvidenceRefs = []string{"client_secret=abc123"}
+
+	_, err := NewRequestAgentCommandV0(validCommandMetaV0("cmd-agent-sensitive", "idem-agent-sensitive"), payload)
+	var publicErr OrchestrationCommandErrorV0
+	if !errors.As(err, &publicErr) {
+		t.Fatalf("expected public command error, got %T %v", err, err)
+	}
+	if publicErr.Code != ErrDetalleProhibidoV0 {
+		t.Fatalf("code=%q, want %q", publicErr.Code, ErrDetalleProhibidoV0)
+	}
+}
+
 func TestReplayDurableEventsV0RejectsForbiddenAgentRequested(t *testing.T) {
 	event := mustAgentRequestedEventWithKeyV0(t, "evt-agent-forbidden", 2, "idem-agent-forbidden", "agent-request-forbidden")
-	event.Payload = json.RawMessage(`{"agent_request_id":"agent-request-forbidden","phase_id":"programacion","capacity_request_ref":"capacity-request-010","role":"implementacion","summary":"usar Claude"}`)
+	event.Payload = json.RawMessage(`{"agent_request_id":"agent-request-forbidden","phase_id":"programacion","capacity_request_ref":"capacity-request-010","role":"implementacion","summary":"client_secret=abc123"}`)
 	events := []OrchestrationEventV0{
 		mustReplayRunStartedEventWithKeyV0(t, "evt-durable-start-agent-forbidden", 1, "idem-start-agent-forbidden"),
 		event,
@@ -158,7 +167,7 @@ func TestAgentRequestedOutboxPayloadDoesNotContainRuntimeProviderModelHome(t *te
 		t.Fatalf("handle RequestAgent: %v", err)
 	}
 	serialized := strings.ToLower(string(result.Outbox[0].Payload))
-	for _, forbidden := range []string{"provider", "proveedor", "model", "modelo", "runtime", "home", "oauth", "codex", "claude", "ollama", "vllm"} {
+	for _, forbidden := range operationalSensitiveFragmentsForTestV0() {
 		if strings.Contains(serialized, forbidden) {
 			t.Fatalf("outbox payload contains forbidden fragment %q: %s", forbidden, serialized)
 		}

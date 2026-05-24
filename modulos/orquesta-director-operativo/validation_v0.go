@@ -1,6 +1,10 @@
 package orquestadirectoroperativo
 
-import "strings"
+import (
+	"strings"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
+)
 
 func validateOperationalDirectorRequestV0(
 	request OperationalDirectorRequestV0,
@@ -95,29 +99,7 @@ func validateOperationalDirectorWriteSetV0(
 }
 
 func operationalDirectorWriteSetPathSafeV0(path string) bool {
-	path = strings.TrimSpace(path)
-	if path == "" || strings.HasPrefix(path, "/") || strings.HasPrefix(path, "~") {
-		return false
-	}
-	if path == "." {
-		return true
-	}
-	if strings.Contains(path, "\x00") || strings.Contains(path, "\\") ||
-		strings.Contains(path, "://") || strings.Contains(path, "$") {
-		return false
-	}
-	for _, segment := range strings.Split(path, "/") {
-		if segment == "" || segment == "." || segment == ".." {
-			return false
-		}
-	}
-	lower := strings.ToLower(path)
-	for _, forbidden := range []string{"secret", "secreto", "token", "password", "credential", "credencial", "api_key"} {
-		if strings.Contains(lower, forbidden) {
-			return false
-		}
-	}
-	return true
+	return orquestarails.WorkspaceRelativePathAllowedV0(path, true)
 }
 
 func issueV0(code string, field string, message string) OperationalDirectorIssueV0 {

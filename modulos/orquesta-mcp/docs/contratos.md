@@ -34,9 +34,11 @@ Campos:
     run_ref: opcional; si existe limita la accion a esa run
     queue_ref: opcional; si no hay run_ref permite avanzar cola inyectada
     max_ticks, continue_message y limites acotados de drain/supervisor
+    operator_advice: observaciones de operador no bloqueantes
   output_ok:
     estado: ok
-    run_ref, stop_reason, ticks, last, history?, evidence_refs?
+    run_ref, stop_reason, ticks, last, history?, evidence_refs?,
+    operator_advice?, diagnostics?
   output_error:
     estado: error
     errores_publicos: issues compactos
@@ -46,6 +48,7 @@ Invariantes:
   - No conoce Codex, OPES, DB ni runtime concreto.
   - La composicion decide si el executor reentra por drain, cola global o
     supervisor residente.
+  - `operator_advice` se conserva como observacion; no decide runtime ni cierre.
 Pruebas de contrato:
   - HTTP delega en executor fake y preserva correlation id.
   - Transporte MCP queda opt-in y devuelve unbound si falta puerto.
@@ -1164,6 +1167,45 @@ Pruebas de contrato:
 ```
 
 ```text
+Nombre: mcp.tool.orquesta.autoprogramming.self_improvement.propose.v0
+Tipo: puerto_entrada
+Version: v0
+Propietario: orquesta-mcp
+Consumidores: cliente IA MCP, bridge HTTP local, operador humano y composiciones opt-in
+Campos:
+  descriptor:
+    name: orquesta.autoprogramming.self_improvement.propose.v0
+    resource_uri: orquesta://contracts/autoprogramming-self-improvement/v0
+  rest:
+    method: POST
+    path: /api/v0/autoprogramming/self-improvement
+  input:
+    request_id, correlation_id, auto_prepare_run?
+    proposal: AutoprogrammingSelfImprovementProposalV0 con refs opacas,
+      worktree aislada, write-set propio, tests requeridos y evidencia
+    operator_advice?: consejos humanos compactos, no bloqueantes; acepta
+      aliases reparables `subject_ref`, `target`, `ref`, `run`, `task`,
+      `kind`, `advice` y `text`
+  output_ok:
+    estado: ok
+    autoprogramming_request, priority_score, prepare_run, prepared_run?
+    operator_advice?: consejos normalizados con non_blocking=true
+    next_actions
+  output_error:
+    estado: error
+    errores_publicos y next_actions reparables sin descartar evidencia
+    operator_advice?: consejos normalizados si llegaron en la entrada
+Invariantes:
+  - Adaptador inbound fino.
+  - Convierte fallos observados en automejora de baja prioridad.
+  - Solo prepara run si `auto_prepare_run=true` y hay executor inyectado.
+  - `operator_advice` permite observar y aconsejar sin bloquear ni decidir
+    runtime, proveedor, cola, Codex, OPES, DB ni filesystem.
+  - El consejo normalizado se conserva como contexto/regla no bloqueante de la
+    request de automejora para que el agente vea la orientacion humana.
+```
+
+```text
 Nombre: mcp.tool.orquesta.autoprogramming.prepare_run.v0
 Tipo: puerto_entrada
 Version: v0
@@ -1224,14 +1266,26 @@ Campos:
   input:
     request_id, correlation_id, run_ref?, external_job_ref?, queue_ref?,
     app_refs?, queue_limit?, telemetry_flags?
+  rest_extension:
+    operator_advice?: consejos humanos compactos; el bridge HTTP normaliza
+      aliases reparables (`subject_ref`, `target`, `ref`, `run`, `task`,
+      `kind`, `advice`, `text`) y los devuelve sin alterar el resultado del
+      executor, incluso cuando el puerto inyectado falta o falla
   output_ok:
     estado: ok
     queue?: resultado compacto de orquesta.run_queue.priority.v0
     run?: resultado compacto de orquesta.director.stats.v0
-    diagnostics?: diagnostico publico de puertos/errores
+    diagnostics?: diagnostico publico de puertos/errores y consejo no bloqueante
+  output_error:
+    estado: error
+    errores_publicos reparables
+    operator_advice?: consejos normalizados si llegaron por bridge HTTP
+    diagnostics?: diagnostico publico, incluido consejo no bloqueante
 Invariantes:
   - Adaptador inbound fino.
   - Delega cola en `run_queue.priority` y run en `director.stats`.
+  - El bridge HTTP puede transportar consejo del operador como observacion no
+    bloqueante sin tocar el caso de uso.
   - No conoce stores, runtime, Codex, DB, filesystem ni proveedor.
 ```
 
@@ -1249,11 +1303,18 @@ Campos:
     method: POST
     path: /api/v0/autoprogramming/supervise
   input:
-    request_id, correlation_id, run_ref?, queue_ref?, max_ticks?, limits?
+    request_id, correlation_id, run_ref?, queue_ref?, max_ticks?, limits?,
+    operator_advice? por bridge HTTP con aliases reparables de refs, accion y
+    mensaje humano
   output_ok:
-    mismo resultado compacto de `orquesta.runs.supervisor.v0`
+    mismo resultado compacto de `orquesta.runs.supervisor.v0` y, por HTTP,
+    eco opcional de operator_advice no bloqueante
+  output_error:
+    mismo error publico reparable de `orquesta.runs.supervisor.v0` y, por HTTP,
+    eco opcional de operator_advice no bloqueante si el puerto falta o falla
 Invariantes:
   - Adaptador inbound fino.
   - Delega la supervision puntual en `runs.supervisor` inyectado.
+  - El consejo del operador no detiene ni reemplaza la decision del supervisor.
   - No conoce scheduler, runtime, Codex, DB, filesystem ni proveedor.
 ```

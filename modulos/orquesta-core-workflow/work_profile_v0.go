@@ -60,7 +60,7 @@ type WorkProfileErrorV0 struct {
 }
 
 func (err WorkProfileErrorV0) Error() string {
-	return err.Code
+	return codeFieldErrorTextV0(err.Code, err.Field)
 }
 
 func NewWorkProfileV0(profile WorkProfileV0) (WorkProfileV0, error) {

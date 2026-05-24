@@ -129,9 +129,9 @@ func (collector *schedulerTickCollectorV0) progressQuestionCommandAllowedV0(ques
 func (collector *schedulerTickCollectorV0) progressQuestionPendingV0(
 	input orquestadirector.AgentProgressSupervisionInputV0,
 ) bool {
-	questionRef := input.QuestionID
-	return schedulerProgressBudgetNeedsDirectorQuestionV0(input) &&
-		collector.progressAssessmentDoneV0(input.AssessmentRef) &&
-		collector.directorQuestions[questionRef] &&
-		!collector.directorAnsweredQuestions[questionRef]
+	// Las preguntas de supervision de progreso se emiten como advisory
+	// blocking=false. No deben parar el loop: si el director humano responde,
+	// esa respuesta se incorporara; si no, la orquestacion debe poder seguir
+	// reintentando, replanificando o cerrando segun la evidencia siguiente.
+	return false
 }

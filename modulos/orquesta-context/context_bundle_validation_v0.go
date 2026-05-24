@@ -1,12 +1,12 @@
 package orquestacontext
 
-import "strings"
+import (
+	"strings"
 
-var forbiddenContextBundleFragmentsV0 = []string{
-	"/home/", "\\home\\", "oauth", "token", "secret", "secreto", "password",
-	"credential", "credencial", "transcript", "prompt completo", "provider",
-	"proveedor", "sqlite", "postgres", "mysql", "mongodb", "mongo", "dsn",
-}
+	orquestarails "orquesta/modulos/orquesta-rails"
+)
+
+const contextBundleRequestRailBoundaryV0 = "context_bundle_request"
 
 func ValidateContextBundleRequestV0(request ContextBundleRequestV0) []ContextBundleIssueV0 {
 	request = normalizeContextBundleRequestV0(request)
@@ -94,15 +94,35 @@ func forbiddenContextDetailsV0(request ContextBundleRequestV0) []ContextBundleIs
 
 	var issues []ContextBundleIssueV0
 	for _, item := range values {
-		lower := strings.ToLower(item.value)
-		for _, forbidden := range forbiddenContextBundleFragmentsV0 {
-			if strings.Contains(lower, forbidden) {
-				issues = append(issues, contextBundleIssueV0(ErrContextBundleDetalleProhibidoV0, item.field, "detalle prohibido"))
-				break
-			}
+		if contextBundleRequestValueHasForbiddenDetailV0(item.field, item.value) {
+			issues = append(issues, contextBundleIssueV0(ErrContextBundleDetalleProhibidoV0, item.field, "detalle prohibido"))
 		}
 	}
 	return issues
+}
+
+func contextBundleRequestValueHasForbiddenDetailV0(field string, value string) bool {
+	if contextBundleRequestRawFieldV0(field) {
+		return orquestarails.TextContainsOperationalRawDetailForFieldV0(
+			contextBundleRequestRailBoundaryV0,
+			field,
+			value,
+		)
+	}
+	return orquestarails.TextContainsOperationalSensitiveDetailForFieldV0(
+		contextBundleRequestRailBoundaryV0,
+		field,
+		value,
+	)
+}
+
+func contextBundleRequestRawFieldV0(field string) bool {
+	switch field {
+	case "read_set", "write_set", "contract_refs", "cross_module_refs", "evidence_refs":
+		return true
+	default:
+		return false
+	}
 }
 
 func appendContextValuesV0(values []struct {

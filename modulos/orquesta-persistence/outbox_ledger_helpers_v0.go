@@ -8,6 +8,7 @@ import (
 	"time"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 const maxOutboxLedgerEvidenceRefsV0 = 20
@@ -185,6 +186,9 @@ func validateOutboxLedgerSafeTextV0(ack OutboxDispatchAckV0) []OutboxLedgerIssue
 }
 
 func outboxLedgerContainsForbiddenTermV0(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	normalized := strings.ToLower(trimV0(value))
 	for _, term := range forbiddenOutboxLedgerTermsV0 {
 		if containsSeparatedTermV0(normalized, term) {

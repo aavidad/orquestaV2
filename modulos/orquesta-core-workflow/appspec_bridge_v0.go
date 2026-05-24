@@ -4,34 +4,6 @@ import "strings"
 
 const ErrAppSpecRunDraftInvalidoV0 = "appspec_run_draft_invalido"
 
-var forbiddenAppSpecRunDraftFragmentsV0 = []string{
-	"secret",
-	"secreto",
-	"token",
-	"password",
-	"credential",
-	"credencial",
-	"api_key",
-	"oauth",
-	"db",
-	"database",
-	"sql",
-	"dsn",
-	"connection",
-	"conexion",
-	"table",
-	"tabla",
-	"runtime",
-	"provider",
-	"proveedor",
-	"home",
-	"tmux",
-	"docker",
-	"http",
-	"cli",
-	"mcp",
-}
-
 type AppSpecRunDraftV0 struct {
 	RunID          string `json:"run_id"`
 	ProjectRef     string `json:"project_ref"`
@@ -124,11 +96,5 @@ func appSpecRunDraftHasForbiddenDetailV0(draft AppSpecRunDraftV0) bool {
 }
 
 func appSpecRunDraftTextHasForbiddenDetailV0(value string) bool {
-	lower := strings.ToLower(value)
-	for _, fragment := range forbiddenAppSpecRunDraftFragmentsV0 {
-		if containsForbiddenFragmentV0(lower, fragment) {
-			return true
-		}
-	}
-	return false
+	return textContainsForbiddenOperationalSensitiveDetailV0(value)
 }

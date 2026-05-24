@@ -54,7 +54,7 @@ func TestReplanDecisionRecordedEventV0RejectsMissingSource(t *testing.T) {
 
 func TestRecordReplanDecisionCommandV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validReplanDecisionPayloadV0("replan-decision-forbidden")
-	payload.Summary = "usar provider externo"
+	payload.Summary = "usar api_key=valor"
 
 	_, err := NewRecordReplanDecisionCommandV0(validCommandMetaV0("cmd-record-replan-forbidden", "idem-record-replan-forbidden"), payload)
 	assertRecordReplanDecisionCommandErrorV0(t, err, ErrDetalleProhibidoV0)
@@ -69,7 +69,7 @@ func TestRecordReplanDecisionCommandV0RejectsProjectionSeparators(t *testing.T) 
 
 func TestReplanDecisionRecordedEventV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validReplanDecisionPayloadV0("replan-decision-event-forbidden")
-	payload.Summary = "usar Claude"
+	payload.Summary = "usar authorization: bearer valor"
 
 	_, err := NewReplanDecisionRecordedEventV0(reducerEventMetaV0("evt-record-replan-forbidden", 18), payload)
 	assertReplanDecisionRecordedEventErrorV0(t, err, ErrDetalleProhibidoV0)

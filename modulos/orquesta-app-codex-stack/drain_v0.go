@@ -17,6 +17,11 @@ type waitAgentRefsDeliverySourceV0 struct {
 	WaitAgentRefs []string
 }
 
+type waitAgentRefsProgressSourceV0 struct {
+	Inner         orquestacionnucleoapp.AgentProgressObservationProviderPortV0
+	WaitAgentRefs []string
+}
+
 func drainDeliverySourceForWaitAgentRefsV0(
 	inner orquestacionnucleoapp.AgentDeliveryObservationProviderPortV0,
 	waitAgentRefs []string,
@@ -39,6 +44,30 @@ func (source waitAgentRefsDeliverySourceV0) BuildAgentDeliveryObservationsV0(
 		return nil, err
 	}
 	return drainObservationsForWaitAgentRefsV0(observations, source.WaitAgentRefs), nil
+}
+
+func drainProgressSourceForWaitAgentRefsV0(
+	inner orquestacionnucleoapp.AgentProgressObservationProviderPortV0,
+	waitAgentRefs []string,
+) orquestacionnucleoapp.AgentProgressObservationProviderPortV0 {
+	if inner == nil || len(compactStringsV0(waitAgentRefs)) == 0 {
+		return inner
+	}
+	return waitAgentRefsProgressSourceV0{
+		Inner:         inner,
+		WaitAgentRefs: compactStringsV0(waitAgentRefs),
+	}
+}
+
+func (source waitAgentRefsProgressSourceV0) BuildAgentProgressObservationsV0(
+	ctx context.Context,
+	request orquestacionnucleoapp.AgentProgressObservationRequestV0,
+) ([]orquestacionnucleoapp.AgentProgressObservationV0, error) {
+	observations, err := source.Inner.BuildAgentProgressObservationsV0(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	return drainProgressObservationsForWaitAgentRefsV0(observations, source.WaitAgentRefs), nil
 }
 
 type DrainRunRequestV0 struct {
@@ -372,6 +401,23 @@ func drainObservationsForWaitAgentRefsV0(
 	return filtered
 }
 
+func drainProgressObservationsForWaitAgentRefsV0(
+	observations []orquestacionnucleoapp.AgentProgressObservationV0,
+	waitAgentRefs []string,
+) []orquestacionnucleoapp.AgentProgressObservationV0 {
+	waitAgentRefs = compactStringsV0(waitAgentRefs)
+	if len(waitAgentRefs) == 0 {
+		return observations
+	}
+	filtered := make([]orquestacionnucleoapp.AgentProgressObservationV0, 0, len(observations))
+	for _, observation := range observations {
+		if drainAgentRefMatchesWaitAgentRefsV0(observation.Report.AgentRequestID, waitAgentRefs) {
+			filtered = append(filtered, observation)
+		}
+	}
+	return filtered
+}
+
 func drainObservationMatchesWaitAgentRefsV0(
 	observation orquestacionnucleoapp.AgentDeliveryObservationV0,
 	waitAgentRefs []string,
@@ -380,5 +426,12 @@ func drainObservationMatchesWaitAgentRefsV0(
 	if len(waitAgentRefs) == 0 {
 		return true
 	}
-	return codexStackStringInSetV0(waitAgentRefs, observation.AgentRef)
+	return drainAgentRefMatchesWaitAgentRefsV0(observation.AgentRef, waitAgentRefs)
+}
+
+func drainAgentRefMatchesWaitAgentRefsV0(
+	agentRef string,
+	waitAgentRefs []string,
+) bool {
+	return codexStackStringInSetV0(compactStringsV0(waitAgentRefs), strings.TrimSpace(agentRef))
 }

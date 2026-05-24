@@ -31,6 +31,8 @@ func runMain(args []string, stdout io.Writer, stderr io.Writer) int {
 		return stopServerCommandV0(stdout, stderr)
 	case "opes-drain-once":
 		return opesDrainOnceCommandV0(stdout, stderr)
+	case "mcp-real-smoke":
+		return mcpRealSmokeCommandV0(stdout, stderr)
 	case "codex-launch-wave":
 		return codexLaunchWaveCommandV0(args[1:], stdout, stderr)
 	case "codex-launch-director-wave":
@@ -48,6 +50,7 @@ func runMain(args []string, stdout io.Writer, stderr io.Writer) int {
 }
 
 func runServerCommandV0(_ io.Writer, stderr io.Writer) int {
+	ensureServerDetailRailsDefaultV0()
 	serverConfig, err := serverConfigFromEnvV0()
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server: %v\n", err)

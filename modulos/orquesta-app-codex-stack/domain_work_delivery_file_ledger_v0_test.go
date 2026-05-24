@@ -18,10 +18,12 @@ func TestFileDomainWorkArtifactSubmissionLedgerV0PersisteYRecupera(t *testing.T)
 		context.Background(),
 		DomainWorkArtifactSubmissionRecordV0{
 			IdempotencyKey: "idem-001",
+			Status:         DomainWorkArtifactSubmissionStatusAcceptedV0,
 			RunRef:         "run-ref-001",
 			TaskRef:        "task-ref-001",
 			DeliveryRef:    "delivery-ref-001",
 			ReceiptRef:     "receipt-ref-001",
+			EvidenceRefs:   []string{"evidence-ref-001"},
 		},
 	); err != nil {
 		t.Fatalf("record: %v", err)
@@ -30,6 +32,18 @@ func TestFileDomainWorkArtifactSubmissionLedgerV0PersisteYRecupera(t *testing.T)
 	reopened := NewFileDomainWorkArtifactSubmissionLedgerV0(path)
 	if ok, err := reopened.HasDomainWorkArtifactSubmissionV0(context.Background(), " idem-001 "); err != nil || !ok {
 		t.Fatalf("has reopened ok=%v err=%v", ok, err)
+	}
+	records, err := reopened.ListDomainWorkArtifactSubmissionsV0(
+		context.Background(),
+		DomainWorkArtifactSubmissionRecordFilterV0{
+			RunRef:      "run-ref-001",
+			TaskRef:     "task-ref-001",
+			DeliveryRef: "delivery-ref-001",
+			Status:      DomainWorkArtifactSubmissionStatusAcceptedV0,
+		},
+	)
+	if err != nil || len(records) != 1 || records[0].ReceiptRef != "receipt-ref-001" {
+		t.Fatalf("records=%+v err=%v", records, err)
 	}
 }
 

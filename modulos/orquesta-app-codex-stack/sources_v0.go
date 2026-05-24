@@ -29,12 +29,16 @@ func deliverySourceV0(config ConfigV0) orquestacionnucleoapp.AgentDeliveryObserv
 	}
 }
 
-func reviewGateSourceV0(config ConfigV0) orquestaruntimecodexdelivery.CodexReviewGateObservationSourceV0 {
-	return orquestaruntimecodexdelivery.CodexReviewGateObservationSourceV0{
+func reviewGateSourceV0(config ConfigV0) orquestacionnucleoapp.ReviewGateObservationProviderPortV0 {
+	base := orquestaruntimecodexdelivery.CodexReviewGateObservationSourceV0{
 		Store:              config.Stores.ReceiptStore,
 		FileEvidenceResult: config.ReviewGate.FileEvidence,
 		MaxLinesPerFile:    config.ReviewGate.MaxLinesPerFile,
 		FailureStatus:      config.ReviewGate.FailureStatus,
+	}
+	return codexStackReviewGateRepairSourceV0{
+		Store: config.Stores.ReceiptStore,
+		Inner: base,
 	}
 }
 
@@ -104,6 +108,8 @@ func codexStackProgressPolicyV0(
 
 func directorDecisionSourceV0(config ConfigV0) orquestadirectoragentworkflow.DirectorAgentDecisionSourcePortV0 {
 	return compositeDirectorDecisionSourceV0{
+		AppChangeStore:       config.Stores.AppChangeStore,
+		DomainRequiredPolicy: config.DomainTests.Policy,
 		Sources: []orquestadirectoragentworkflow.DirectorAgentDecisionSourcePortV0{
 			directorDecisionFileSourceV0(config),
 			orquestaappchangedirectorsource.AppChangeDirectorDecisionSourceV0{

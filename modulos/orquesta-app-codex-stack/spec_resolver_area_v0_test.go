@@ -22,7 +22,7 @@ func TestCodexAreaV0ClasificaRolesNeutralesComoProgramacion(t *testing.T) {
 	}
 }
 
-func TestCodexProfileForAreaV0AplicaPermisosEspecificosDelDirector(t *testing.T) {
+func TestCodexProfileForAreaV0PermiteSandboxAmplioPorArea(t *testing.T) {
 	config := CodexRuntimeConfigV0{
 		Sandbox:                "workspace-write",
 		ApprovalPolicy:         "never",

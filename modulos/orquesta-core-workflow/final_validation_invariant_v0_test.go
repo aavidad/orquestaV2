@@ -37,7 +37,7 @@ func TestFinalValidationRegisteredEventV0RejectsMissingClosedTask(t *testing.T) 
 
 func TestRegisterFinalValidationCommandV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validRegisterFinalValidationPayloadV0("validation-forbidden")
-	payload.Summary = "usar provider externo"
+	payload.Summary = "usar api_key=valor"
 
 	_, err := NewRegisterFinalValidationCommandV0(validCommandMetaV0("cmd-final-validation-forbidden", "idem-final-validation-forbidden"), payload)
 	assertRegisterFinalValidationCommandErrorV0(t, err, ErrDetalleProhibidoV0)
@@ -45,7 +45,7 @@ func TestRegisterFinalValidationCommandV0RejectsForbiddenDetails(t *testing.T) {
 
 func TestFinalValidationRegisteredEventV0RejectsForbiddenDetails(t *testing.T) {
 	payload := finalValidationRegisteredPayloadFromCommandV0(validRegisterFinalValidationPayloadV0("validation-event-forbidden"))
-	payload.Summary = "usar Claude"
+	payload.Summary = "usar authorization: bearer valor"
 
 	_, err := NewFinalValidationRegisteredEventV0(reducerEventMetaV0("evt-final-validation-forbidden", 16), payload)
 	assertFinalValidationRegisteredEventErrorV0(t, err, ErrDetalleProhibidoV0)

@@ -72,6 +72,34 @@ func TestFileOutboxLedgerV0ReabreClaimSinAckTrasRecrearInstancia(t *testing.T) {
 	}
 }
 
+func TestFileOutboxLedgerV0LiberaClaimSinAckEnMismaInstancia(t *testing.T) {
+	ledger := newFileOutboxLedgerForTestV0(t, t.TempDir())
+	message := validLaunchMessageV0(t)
+	if _, issues := ledger.SavePending(context.Background(), []orquestacoreworkflow.OutboxMessageV0{message}); len(issues) != 0 {
+		t.Fatalf("save issues=%+v", issues)
+	}
+	claim := claimFromMessageV0(message)
+	if result, issues := ledger.ClaimOutboxDispatchV0(claim); len(issues) != 0 || !result.Claimed {
+		t.Fatalf("claim result=%+v issues=%+v", result, issues)
+	}
+	if issues := ledger.ReleaseOutboxDispatchClaimV0(claim); len(issues) != 0 {
+		t.Fatalf("release issues=%+v", issues)
+	}
+	reclaimed, issues := ledger.ClaimOutboxDispatchV0(claim)
+	if len(issues) != 0 || !reclaimed.Claimed || reclaimed.AlreadyClaimed {
+		t.Fatalf("reclaimed=%+v issues=%+v", reclaimed, issues)
+	}
+	if issues := ledger.AckOutboxDispatchV0(ackFromMessageV0(message, "dispatch-launch-001")); len(issues) != 0 {
+		t.Fatalf("ack issues=%+v", issues)
+	}
+	if issues := ledger.ReleaseOutboxDispatchClaimV0(claim); len(issues) != 0 {
+		t.Fatalf("release acked issues=%+v", issues)
+	}
+	if result, issues := ledger.ClaimOutboxDispatchV0(claim); len(issues) != 0 || !result.AlreadyClaimed {
+		t.Fatalf("acked claim result=%+v issues=%+v", result, issues)
+	}
+}
+
 func TestFileOutboxLedgerV0MantieneIdempotenciaYJSONEstructurado(t *testing.T) {
 	dir := t.TempDir()
 	ledger := newFileOutboxLedgerForTestV0(t, dir)

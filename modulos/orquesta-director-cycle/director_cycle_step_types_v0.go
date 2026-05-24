@@ -1,6 +1,8 @@
 package orquestadirectorcycle
 
 import (
+	"strings"
+
 	orquestacoreconcurrency "orquesta/modulos/orquesta-core-concurrency"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
@@ -72,5 +74,23 @@ type DirectorCycleStepErrorV0 struct {
 }
 
 func (err DirectorCycleStepErrorV0) Error() string {
-	return err.Code
+	parts := []string{strings.TrimSpace(err.Code)}
+	if field := strings.TrimSpace(err.Field); field != "" {
+		parts = append(parts, "field="+field)
+	}
+	if message := strings.TrimSpace(err.Message); message != "" {
+		parts = append(parts, message)
+	}
+	if len(err.Issues) > 0 {
+		issue := err.Issues[len(err.Issues)-1]
+		detail := strings.Join(compactDirectorCycleStepStringsV0([]string{
+			strings.TrimSpace(issue.Code),
+			strings.TrimSpace(issue.Field),
+			strings.TrimSpace(issue.Message),
+		}), ": ")
+		if detail != "" {
+			parts = append(parts, "issue="+detail)
+		}
+	}
+	return strings.Join(compactDirectorCycleStepStringsV0(parts), ": ")
 }

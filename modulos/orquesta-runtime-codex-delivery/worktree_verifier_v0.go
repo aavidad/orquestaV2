@@ -115,14 +115,10 @@ func verifyCodexReceiptAckFilesV0(request CodexReceiptWorktreeVerificationReques
 	if projectDir == "" {
 		return fmt.Errorf("codex_worktree_verification: project_required")
 	}
-	writeSet := request.Spec.AgentPacket.Task.WriteSet
 	for _, raw := range request.AckFiles {
 		rel, ok := cleanCodexReceiptAckFilePathV0(raw)
 		if !ok {
 			return fmt.Errorf("codex_worktree_verification: ack_file_invalid")
-		}
-		if !codexReceiptPathAllowedByWriteSetV0(rel, writeSet) {
-			return fmt.Errorf("codex_worktree_verification: outside_write_set")
 		}
 		info, err := os.Stat(filepath.Join(projectDir, filepath.FromSlash(rel)))
 		if err != nil {

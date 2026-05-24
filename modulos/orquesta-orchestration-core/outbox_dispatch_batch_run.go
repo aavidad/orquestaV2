@@ -23,6 +23,12 @@ type OutboxDispatchBatchExecutorPortV0 interface {
 	) ([]orquestaoutboxdispatch.OutboxDispatchAckObservationV0, error)
 }
 
+type outboxDispatchClaimReleaserPortV0 interface {
+	ReleaseOutboxDispatchClaimV0(
+		claim orquestaoutboxdispatch.OutboxDispatchClaimV0,
+	) []orquestaoutboxdispatch.DispatchIssueV0
+}
+
 type OutboxDispatchBatchRunRequestV0 struct {
 	RunRef      string
 	TargetPort  string
@@ -38,6 +44,7 @@ type OutboxDispatchBatchRunResultV0 struct {
 	Status            string
 	RunRef            string
 	TargetPort        string
+	MessageType       string
 	PlannedCount      int
 	AckedCount        int
 	PendingCount      int
@@ -79,6 +86,7 @@ func RunOutboxDispatchBatchV0(
 	acks, err := request.Executor.ExecuteOutboxDispatchBatchV0(ctx, plan.Intents)
 	if err != nil {
 		result.Status = OutboxDispatchBatchRunExecutionFailedV0
+		result.Issues += releaseBatchClaimsV0(request.Claimer, plan.Intents, nil)
 		return result, err
 	}
 	closure, err := RunOutboxDispatchBatchAckClosureV0(ctx, OutboxDispatchBatchAckRequestV0{
@@ -94,6 +102,7 @@ func RunOutboxDispatchBatchV0(
 	result.FailedCount = closure.FailedCount
 	result.Issues += closure.Issues
 	result.AckedMessages = append([]string(nil), closure.AckedMessages...)
+	result.Issues += releaseBatchClaimsV0(request.Claimer, plan.Intents, result.AckedMessages)
 	result.Status = batchRunStatusFromClosureV0(closure)
 	return result, nil
 }
@@ -103,10 +112,11 @@ func invalidBatchRunResultV0(
 	issues int,
 ) OutboxDispatchBatchRunResultV0 {
 	return OutboxDispatchBatchRunResultV0{
-		Status:     OutboxDispatchBatchRunInvalidV0,
-		RunRef:     request.RunRef,
-		TargetPort: request.TargetPort,
-		Issues:     issues,
+		Status:      OutboxDispatchBatchRunInvalidV0,
+		RunRef:      request.RunRef,
+		TargetPort:  request.TargetPort,
+		MessageType: request.MessageType,
+		Issues:      issues,
 	}
 }
 
@@ -117,6 +127,7 @@ func batchRunResultFromPlanV0(
 		Status:            batchRunStatusFromPlanV0(plan.Status),
 		RunRef:            plan.RunRef,
 		TargetPort:        plan.TargetPort,
+		MessageType:       plan.MessageType,
 		PlannedCount:      len(plan.Intents),
 		Issues:            plan.Issues,
 		ClaimedMessageIDs: append([]string(nil), plan.ClaimedMessageIDs...),
@@ -149,4 +160,27 @@ func batchRunStatusFromClosureV0(
 	default:
 		return OutboxDispatchBatchRunInvalidV0
 	}
+}
+
+func releaseBatchClaimsV0(
+	claimer orquestaoutboxdispatch.OutboxDispatchClaimerPortV0,
+	intents []orquestaoutboxdispatch.DispatchIntentV0,
+	ackedMessages []string,
+) int {
+	releaser, ok := claimer.(outboxDispatchClaimReleaserPortV0)
+	if !ok || len(intents) == 0 {
+		return 0
+	}
+	acked := map[string]bool{}
+	for _, messageID := range compactStringsV0(ackedMessages) {
+		acked[messageID] = true
+	}
+	issues := 0
+	for _, intent := range intents {
+		if acked[intent.MessageID] {
+			continue
+		}
+		issues += len(releaser.ReleaseOutboxDispatchClaimV0(batchPlanClaimFromIntentV0(intent)))
+	}
+	return issues
 }

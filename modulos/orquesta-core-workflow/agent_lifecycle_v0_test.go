@@ -128,7 +128,7 @@ func TestRegisterAgentStartedCommandV0RequiresRequestedAgent(t *testing.T) {
 
 func TestAgentLifecycleV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validRegisterAgentStartedPayloadV0("agent-request-forbidden")
-	payload.LaunchRef = "runtime-launch-ref"
+	payload.EvidenceRefs = []string{"client_secret=abc123"}
 
 	_, err := NewRegisterAgentStartedCommandV0(validCommandMetaV0("cmd-agent-started-forbidden", "idem-agent-started-forbidden"), payload)
 	var publicErr OrchestrationCommandErrorV0

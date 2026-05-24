@@ -5,37 +5,6 @@ import (
 	"strings"
 )
 
-var forbiddenDeliveryRegisterFragmentsV0 = []string{
-	"db",
-	"database",
-	"sql",
-	"dsn",
-	"runtime",
-	"provider",
-	"proveedor",
-	"model",
-	"modelo",
-	"home",
-	"oauth",
-	"codex",
-	"claude",
-	"ollama",
-	"vllm",
-	"adapter",
-	"adaptador",
-	"filesystem",
-	"git",
-	"docker",
-	"tmux",
-	"secret",
-	"secreto",
-	"token",
-	"password",
-	"credential",
-	"credencial",
-	"api_key",
-}
-
 func validateRegisterDeliveryCommandPayloadDataV0(payload RegisterDeliveryCommandPayloadV0) error {
 	if err := validateRegisterDeliveryRequiredV0(payload); err != nil {
 		return err
@@ -144,15 +113,7 @@ func deliveryRegisterHasLongStringV0(values []string) bool {
 }
 
 func deliveryRegisterHasForbiddenDetailsV0(values []string) bool {
-	for _, value := range values {
-		lower := strings.ToLower(value)
-		for _, fragment := range forbiddenDeliveryRegisterFragmentsV0 {
-			if containsForbiddenFragmentV0(lower, fragment) {
-				return true
-			}
-		}
-	}
-	return false
+	return textValuesContainForbiddenOperationalSensitiveDetailV0(values)
 }
 
 func registerDeliveryTextFieldsV0(payload RegisterDeliveryCommandPayloadV0) []string {

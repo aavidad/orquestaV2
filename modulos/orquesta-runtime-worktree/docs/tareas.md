@@ -51,6 +51,29 @@ Bloqueos:
 
 Estado: cerrada localmente el 2026-05-23.
 
+## RTWT-004 - Rail estricto de no borrado
+
+Objetivo: convertir los borrados detectados por snapshot en issue bloqueante
+`removed_path`, independiente de que el path pertenezca al write-set.
+
+Write-set:
+
+- `types_v0.go`
+- `verify_v0.go`
+- `worktree_v0_test.go`
+- `docs/*.md`
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-runtime-worktree`
+
+Bloqueos:
+
+- No borrar automaticamente ni revertir archivos.
+- No enviar rutas absolutas al nucleo.
+
+Estado: cerrado localmente el 2026-05-24.
+
 ## RTWT-003 - Revision Git read-only para AppVCS
 
 Objetivo: ampliar AppVCS con `review_repo` para inspeccionar una app/repo Git

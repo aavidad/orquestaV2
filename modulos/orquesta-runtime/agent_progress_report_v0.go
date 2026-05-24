@@ -3,6 +3,8 @@ package orquestaruntime
 import (
 	"fmt"
 	"strings"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 type AgentProgressStatusV0 string
@@ -196,6 +198,9 @@ func (v *agentProgressReportValidatorV0) add(code AgentProgressReportErrorCodeV0
 }
 
 func looksLikeProviderDetailV0(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	low := strings.ToLower(strings.TrimSpace(value))
 	return strings.Contains(low, "openai") ||
 		strings.Contains(low, "anthropic") ||

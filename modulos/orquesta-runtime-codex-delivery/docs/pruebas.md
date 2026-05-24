@@ -11,6 +11,8 @@ Cobertura:
 - omite descriptors ya reflejados antes de invocar el verificador de worktree;
 - omite un ACK con `status=failed` sin bloquear otros ACKs completados del
   mismo run;
+- no tira una entrega por artifact fuera de write-set si el ACK conserva
+  identidad, rutas seguras y tests requeridos;
 - propaga ACK invalido como error publico sin incluir la ruta local del ACK;
 - registra descriptors mediante `CodexReceiptRecordingSpecResolverV0`;
 - permite que el source lea posteriormente el descriptor registrado;
@@ -49,8 +51,11 @@ Cobertura:
 - rechaza un ACK valido si el diff real contiene cambios fuera del write-set;
 - convierte una entrega registrada en observacion de revision;
 - acepta la revision si ACK, tests, write-set y ficheros reales son validos;
-- pide cambios si falta un test obligatorio, falta un fichero o un fichero
-  supera el limite de lineas;
+- conserva rails pendientes de vocabulario operativo del ACK como advisory con
+  `gate-followup-required`, sin bloquear ni pedir otro padre;
+- pide cambios si falta un test obligatorio o falta un fichero material; si un
+  fichero supera el limite de lineas, conserva la entrega como rail blando con
+  follow-up no bloqueante;
 - sigue emitiendo la observacion de review gate tras `RequestReview` para que
   el scheduler pueda registrar resultado y pedir rework en ciclos posteriores;
 - sigue emitiendo la observacion de review gate si el agente ya esta parado y

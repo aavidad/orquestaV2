@@ -19,6 +19,7 @@ const (
 )
 
 func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
+	setDefaultStartupCleanupModeV0()
 	projectDir, err := projectDirFromEnvV0()
 	if err != nil {
 		return orquestaserver.ConfigV0{}, err
@@ -30,9 +31,29 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 	config := orquestaserver.ConfigV0{
 		Addr:           envOrDefaultV0("ORQUESTA_SERVER_ADDR", orquestaserver.DefaultAddrV0),
 		StateDir:       stateDir,
+		AuditFile:      envOrDefaultV0("ORQUESTA_SERVER_AUDIT_FILE", orquestaserver.DefaultAuditFileV0),
+		AuditDisabled:  boolEnvOrDefaultV0("ORQUESTA_SERVER_AUDIT_DISABLED", false),
 		ProjectWorkDir: projectDir,
 		RuntimeWorkDir: runtimeDir,
 		TickInterval:   time.Duration(intEnvOrDefaultV0("ORQUESTA_SERVER_TICK_INTERVAL_MS", 5000)) * time.Millisecond,
+		IdleSelfImprovementAfter: time.Duration(intEnvOrDefaultAllowZeroV0(
+			"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS",
+			int(orquestaserver.DefaultIdleSelfImprovementAfterV0/time.Second),
+		)) * time.Second,
+		IdleSelfImprovementDisabled:      strings.TrimSpace(os.Getenv("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS")) == "0",
+		IdleSelfImprovementProjectRef:    envOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PROJECT_REF", orquestaserver.DefaultIdleSelfImprovementProjectRefV0),
+		IdleSelfImprovementWorktreeRef:   envOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_WORKTREE_REF", orquestaserver.DefaultIdleSelfImprovementWorktreeRefV0),
+		IdleSelfImprovementBranchRef:     envOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_BRANCH_REF", orquestaserver.DefaultIdleSelfImprovementBranchRefV0),
+		IdleSelfImprovementSuggestedArea: envOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AREA", orquestaserver.DefaultIdleSelfImprovementSuggestedAreaV0),
+		IdleSelfImprovementWriteSet:      csvEnvOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_WRITE_SET", defaultIdleSelfImprovementWriteSetV0()),
+		IdleSelfImprovementRequiredTests: csvEnvOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_REQUIRED_TESTS", []string{orquestaserver.DefaultIdleSelfImprovementRequiredTestV0}),
+		IdleSelfImprovementContextRefs:   csvEnvOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_CONTEXT_REFS", nil),
+		IdleSelfImprovementEvidenceRefs:  csvEnvOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_EVIDENCE_REFS", nil),
+		IdleSelfImprovementAcceptance:    csvEnvOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_ACCEPTANCE", defaultIdleSelfImprovementAcceptanceV0()),
+		IdleSelfImprovementCompactRules:  csvEnvOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_COMPACT_RULES", defaultIdleSelfImprovementCompactRulesV0()),
+		IdleSelfImprovementPriorityScore: intEnvOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PRIORITY_SCORE", orquestaserver.DefaultIdleSelfImprovementPriorityScoreV0),
+		IdleSelfImprovementMaxRequests:   intEnvOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_MAX_REQUESTS", orquestaserver.DefaultIdleSelfImprovementMaxRequestsV0),
+		IdleSelfImprovementTargetQueue:   intEnvOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_TARGET_QUEUE", orquestaserver.DefaultIdleSelfImprovementTargetQueueV0),
 		SupervisorCommand: orquestarunsupervisor.RunSupervisorCommandV0{
 			QueueRef:          "global",
 			MaxRunsPerTick:    intEnvOrDefaultV0("ORQUESTA_SERVER_MAX_RUNS_PER_TICK", 2),
@@ -52,6 +73,43 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 		},
 	}
 	return orquestaserver.NormalizeConfigV0(config), orquestaserver.ValidateConfigV0(config)
+}
+
+func setDefaultStartupCleanupModeV0() {
+	if strings.TrimSpace(os.Getenv("ORQUESTA_STARTUP_CLEANUP_MODE")) != "" {
+		return
+	}
+	_ = os.Setenv("ORQUESTA_STARTUP_CLEANUP_MODE", "forced_stop")
+}
+
+func defaultIdleSelfImprovementWriteSetV0() []string {
+	return []string{
+		"modulos/orquesta-server/config_v0.go",
+		"modulos/orquesta-server/ports_v0.go",
+		"modulos/orquesta-server/supervisor_loop_v0.go",
+		"modulos/orquesta-server/status_tracker_v0.go",
+		"modulos/orquesta-server/supervisor_loop_v0_test.go",
+		"cmd/orquesta-server/config.go",
+		"cmd/orquesta-server/config_test.go",
+		"cmd/orquesta-server/stack.go",
+	}
+}
+
+func defaultIdleSelfImprovementAcceptanceV0() []string {
+	return []string{
+		"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS por defecto dispara tras 60 segundos sin ejecuciones",
+		"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS=0 desactiva automejora idle",
+		"el servidor prepara automejora cuando hay idle o capacidad libre por debajo de ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_TARGET_QUEUE",
+		"el planner salta tareas ya visibles en cola y puede crear una tarea scanner para descubrir nuevos huecos",
+		"usar evidencia del fallo y corregir la causa general si es posible",
+	}
+}
+
+func defaultIdleSelfImprovementCompactRulesV0() []string {
+	return []string{
+		"comunicacion compacta",
+		"trabajo secundario: no bloquear ni mezclar con el trabajo principal",
+	}
 }
 
 func serverSupervisorMaxExternalWaitsV0() int {
@@ -127,4 +185,31 @@ func intEnvOrDefaultV0(key string, fallback int) int {
 		return fallback
 	}
 	return parsed
+}
+
+func intEnvOrDefaultAllowZeroV0(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 0 {
+		return fallback
+	}
+	return parsed
+}
+
+func csvEnvOrDefaultV0(key string, fallback []string) []string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return append([]string(nil), fallback...)
+	}
+	var out []string
+	for _, item := range strings.Split(value, ",") {
+		item = strings.TrimSpace(item)
+		if item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
 }

@@ -223,8 +223,8 @@ func TestValidateWorkflowTaskV0RejectsUnsafeWriteSetPaths(t *testing.T) {
 		"url":              {path: "https://example.test/file.go", code: ErrWorkflowTaskInvalidaV0},
 		"env_ref":          {path: "$HOME/config.go", code: ErrWorkflowTaskInvalidaV0},
 		"tilde_ref":        {path: "~/repo/file.go", code: ErrWorkflowTaskInvalidaV0},
-		"secret":           {path: "config/secret.env", code: ErrDetalleProhibidoV0},
-		"access_token":     {path: "runtime/access-token.txt", code: ErrDetalleProhibidoV0},
+		"api_key":          {path: "config/api_key=valor.env", code: ErrDetalleProhibidoV0},
+		"access_token":     {path: "runtime/access_token=valor.txt", code: ErrDetalleProhibidoV0},
 	}
 
 	for name, tc := range cases {
@@ -256,10 +256,10 @@ func TestValidateWorkflowTaskV0RejectsEmptyRequiredTest(t *testing.T) {
 
 func TestValidateWorkflowTaskV0RejectsForbiddenDetails(t *testing.T) {
 	cases := map[string]func(*WorkflowTaskV0){
-		"secret":        func(task *WorkflowTaskV0) { task.TaskID = "task-secret" },
-		"access_token":  func(task *WorkflowTaskV0) { task.ContextRefs = []string{"access-token-ref-001"} },
-		"client_secret": func(task *WorkflowTaskV0) { task.FunctionContractRefs[0].ContractRef = "oauth-client-secret" },
-		"password":      func(task *WorkflowTaskV0) { task.AcceptanceCriteria = []string{"sin password"} },
+		"secret":        func(task *WorkflowTaskV0) { task.TaskID = "task-secret=valor" },
+		"access_token":  func(task *WorkflowTaskV0) { task.ContextRefs = []string{"access_token=valor"} },
+		"client_secret": func(task *WorkflowTaskV0) { task.FunctionContractRefs[0].ContractRef = "oauth-client_secret=valor" },
+		"password":      func(task *WorkflowTaskV0) { task.AcceptanceCriteria = []string{"sin password=valor"} },
 	}
 
 	for name, mutate := range cases {

@@ -9,7 +9,7 @@ import (
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
-func TestCodexStackV0ReviewChangesRequestedReplanificaYArrancaAgente(t *testing.T) {
+func TestCodexStackV0ReviewRailBlandoNoReplanificaNiArrancaSegundoPadre(t *testing.T) {
 	ctx := context.Background()
 	runtime := newDecisionWritingFakeCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)
@@ -50,7 +50,7 @@ func TestCodexStackV0ReviewChangesRequestedReplanificaYArrancaAgente(t *testing.
 		orquestacoreworkflow.OrchestrationPhaseRevisionV0,
 		"Revisar entrega de programacion.",
 	)
-	assertCodexStackReviewObservationForReworkV0(t, stack, run, deliveryRef)
+	assertCodexStackReviewObservationAcceptedWithSoftRailV0(t, stack, run, deliveryRef, "gate-issue:file_too_large")
 
 	drain, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
 		RunRef:               director.RunRef,
@@ -71,36 +71,118 @@ func TestCodexStackV0ReviewChangesRequestedReplanificaYArrancaAgente(t *testing.
 		)
 	}
 	run = mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
-	if run.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseProgramacionV0 ||
-		!codexStackRefsContainPartV0(run.Reviews, deliveryRef) ||
-		!codexStackRefsContainPartV0(run.ReviewResults, "#review_result:changes_requested") ||
-		!codexStackRefsContainPartV0(run.ReworkRequests, deliveryRef) ||
-		!codexStackRefsContainPartV0(run.ReplanDecisions, "#action:retry_task") ||
-		!codexStackRefsContainPartV0(run.CapacityDecisions, "#capacity_decision:") ||
-		!codexStackRefsContainPartV0(run.StartedAgents, "agent-ref-task-ref-stack-agenda-001-") ||
+	if !codexStackRefsContainPartV0(run.Reviews, deliveryRef) ||
+		!codexStackRefsContainPartV0(run.ReviewResults, "#review_result:accepted") ||
+		!codexStackRefsContainPartV0(run.AcceptedReviews, deliveryRef) ||
+		codexStackRefsContainPartV0(run.ReworkRequests, deliveryRef) ||
+		codexStackRefsContainPartV0(run.ReplanDecisions, "#action:retry_task") ||
+		codexStackRefsContainPartV0(run.StartedAgents, "agent-ref-task-ref-stack-agenda-001-") ||
 		codexStackRefsContainPartV0(run.StartedAgents, "agent-ref-rework-request-ref-") {
-		t.Fatalf("run sin retrabajo completo delivery=%s drain=%s phase=%s reviews=%v results=%v reworks=%v replan=%v capacity=%v started=%v",
+		t.Fatalf("rail blando no debe replanificar delivery=%s drain=%s phase=%s reviews=%v results=%v accepted=%v reworks=%v replan=%v capacity=%v started=%v",
 			deliveryRef,
 			drain.Status,
 			run.CurrentPhase,
 			run.Reviews,
 			run.ReviewResults,
+			run.AcceptedReviews,
 			run.ReworkRequests,
 			run.ReplanDecisions,
 			run.CapacityDecisions,
 			run.StartedAgents,
 		)
 	}
-	if codexStackRefsContainPartV0(run.AcceptedReviews, deliveryRef) {
-		t.Fatalf("entrega con cambios solicitados no debe aceptarse: accepted_reviews=%v", run.AcceptedReviews)
+}
+
+func TestCodexStackV0WriteSetFaltanteNoReplanificaNiArrancaSegundoPadre(t *testing.T) {
+	ctx := context.Background()
+	runtime := newDecisionWritingFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	director := postDirectorAPIV0(t, stack)
+
+	if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+		RunRef:               director.RunRef,
+		CorrelationID:        "corr-stack-review-rework-program-missing-001",
+		MaxBursts:            16,
+		MaxStepsPerBurst:     8,
+		MaxDispatchesPerWait: 8,
+		MaxExternalWaits:     1,
+	}); err != nil {
+		t.Fatalf("DrainRunV0 programacion: %v", err)
+	}
+	if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+		RunRef:               director.RunRef,
+		CorrelationID:        "corr-stack-review-rework-delivery-missing-001",
+		MaxBursts:            16,
+		MaxStepsPerBurst:     8,
+		MaxDispatchesPerWait: 8,
+		MaxExternalWaits:     1,
+	}); err != nil {
+		t.Fatalf("DrainRunV0 entrega: %v", err)
+	}
+
+	descriptor := mustCodexStackDescriptorByTaskRefV0(t, stack, "task-ref-stack-agenda-001")
+	descriptor.Spec.AgentPacket.Task.WriteSet = append(descriptor.Spec.AgentPacket.Task.WriteSet, "web")
+	if err := stack.Stores.ReceiptStore.RecordCodexReceiptDescriptorV0(ctx, descriptor); err != nil {
+		t.Fatalf("RecordCodexReceiptDescriptorV0: %v", err)
+	}
+	deliveryRef := descriptor.Spec.AgentPacket.DeliveryRefs.AckRef
+	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	openCodexStackPhaseForTestV0(
+		t,
+		stack,
+		director.RunRef,
+		orquestacoreworkflow.OrchestrationPhaseRevisionV0,
+		"Revisar entrega con destino de write-set faltante.",
+	)
+	assertCodexStackReviewObservationAcceptedWithSoftRailV0(t, stack, run, deliveryRef, "gate-issue:write_set_target_missing:web")
+
+	drain, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+		RunRef:               director.RunRef,
+		CorrelationID:        "corr-stack-review-rework-replan-missing-001",
+		MaxBursts:            24,
+		MaxStepsPerBurst:     8,
+		MaxDispatchesPerWait: 8,
+		MaxCommands:          20,
+		MaxOutboxPerCycle:    8,
+		MaxExternalWaits:     2,
+	})
+	if err != nil {
+		t.Fatalf("DrainRunV0 review/rework: %v issues=%+v status=%s final=%+v",
+			err,
+			codexStackBurstIssuesForErrorV0(err),
+			drain.Status,
+			drain.Final,
+		)
+	}
+	run = mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	if !codexStackRefsContainPartV0(run.Reviews, deliveryRef) ||
+		!codexStackRefsContainPartV0(run.ReviewResults, "#review_result:accepted") ||
+		!codexStackRefsContainPartV0(run.AcceptedReviews, deliveryRef) ||
+		codexStackRefsContainPartV0(run.ReworkRequests, deliveryRef) ||
+		codexStackRefsContainPartV0(run.ReplanDecisions, "#action:retry_task") ||
+		codexStackRefsContainPartV0(run.StartedAgents, "agent-ref-task-ref-stack-agenda-001-") ||
+		codexStackRefsContainPartV0(run.StartedAgents, "agent-ref-rework-request-ref-") {
+		t.Fatalf("write_set_target_missing no debe replanificar delivery=%s drain=%s phase=%s reviews=%v results=%v accepted=%v reworks=%v replan=%v capacity=%v started=%v",
+			deliveryRef,
+			drain.Status,
+			run.CurrentPhase,
+			run.Reviews,
+			run.ReviewResults,
+			run.AcceptedReviews,
+			run.ReworkRequests,
+			run.ReplanDecisions,
+			run.CapacityDecisions,
+			run.StartedAgents,
+		)
 	}
 }
 
-func assertCodexStackReviewObservationForReworkV0(
+func assertCodexStackReviewObservationAcceptedWithSoftRailV0(
 	t *testing.T,
 	stack StackV0,
 	run orquestacoreworkflow.OrchestrationRunV0,
 	deliveryRef string,
+	expectedIssue string,
 ) {
 	t.Helper()
 	observations, err := stack.Ports.ReviewGateSource.BuildReviewGateObservationsV0(
@@ -115,7 +197,9 @@ func assertCodexStackReviewObservationForReworkV0(
 		t.Fatalf("BuildReviewGateObservationsV0: %v", err)
 	}
 	if len(observations) != 1 ||
-		observations[0].Status != orquestacoreworkflow.ReviewResultStatusChangesRequestedV0 {
+		observations[0].Status != orquestacoreworkflow.ReviewResultStatusAcceptedV0 ||
+		observations[0].AcceptedReviewRef == "" ||
+		!codexStackRefsContainPartV0(observations[0].EvidenceRefs, expectedIssue) {
 		t.Fatalf("observations de revision invalidas delivery=%s run=%+v observations=%+v",
 			deliveryRef,
 			run,

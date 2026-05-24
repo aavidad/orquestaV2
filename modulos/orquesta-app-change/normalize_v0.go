@@ -50,13 +50,15 @@ func normalizeAppChangeExternalWorkV0(
 		WorkKind:      strings.TrimSpace(work.WorkKind),
 		WorkRefs:      compactAppChangeStringsV0(work.WorkRefs),
 		InputFields:   normalizeAppChangeExternalWorkFieldsV0(work.InputFields),
+		RequiredTests: normalizeAppChangeExternalWorkRequiredTestsV0(work.RequiredTests),
 	}
 	if normalized.ProjectRef == "" &&
 		normalized.JobRef == "" &&
 		len(normalized.InterfaceRefs) == 0 &&
 		normalized.WorkKind == "" &&
 		len(normalized.WorkRefs) == 0 &&
-		len(normalized.InputFields) == 0 {
+		len(normalized.InputFields) == 0 &&
+		len(normalized.RequiredTests) == 0 {
 		return nil
 	}
 	return &normalized
@@ -71,6 +73,17 @@ func normalizeAppChangeExternalWorkFieldsV0(
 		},
 	)
 	return request.InputFields
+}
+
+func normalizeAppChangeExternalWorkRequiredTestsV0(
+	tests []orquestadomainwork.DomainWorkRequiredTestV0,
+) []orquestadomainwork.DomainWorkRequiredTestV0 {
+	request := orquestadomainwork.NormalizeDomainWorkJobRequestV0(
+		orquestadomainwork.DomainWorkJobRequestV0{
+			RequiredTests: tests,
+		},
+	)
+	return request.RequiredTests
 }
 
 func compactAppChangeStringsV0(values []string) []string {

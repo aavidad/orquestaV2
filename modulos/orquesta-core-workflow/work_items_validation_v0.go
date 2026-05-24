@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-var forbiddenWorkflowTaskWriteSetFragmentsV0 = forbiddenWorkflowTaskSensitiveFragmentsV0
-
 func ValidateWorkflowTaskV0(task WorkflowTaskV0) error {
 	if err := validateWorkflowTaskRequiredFieldsV0(task); err != nil {
 		return err
@@ -230,13 +228,7 @@ func workflowTaskWriteSetPathIsSafeV0(repoPath string) bool {
 }
 
 func workflowTaskWriteSetPathHasForbiddenDetailV0(repoPath string) bool {
-	lower := strings.ToLower(repoPath)
-	for _, fragment := range forbiddenWorkflowTaskWriteSetFragmentsV0 {
-		if containsForbiddenFragmentV0(lower, fragment) {
-			return true
-		}
-	}
-	return false
+	return textContainsForbiddenOperationalSensitiveDetailV0(repoPath)
 }
 
 func validateWorkflowFunctionContractRefsV0(refs []WorkflowFunctionContractRefV0) error {
@@ -306,13 +298,7 @@ func workflowTaskStringsHaveForbiddenDetailV0(values []string) bool {
 }
 
 func workflowTaskStringHasForbiddenDetailV0(value string) bool {
-	lower := strings.ToLower(value)
-	for _, fragment := range forbiddenWorkflowTaskFragmentsV0 {
-		if containsForbiddenFragmentV0(lower, fragment) {
-			return true
-		}
-	}
-	return false
+	return textContainsForbiddenOperationalSensitiveDetailV0(value)
 }
 
 func workflowTaskErrorV0(code string, field string) WorkflowTaskErrorV0 {

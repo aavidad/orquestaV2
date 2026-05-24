@@ -201,23 +201,5 @@ func codexShutdownValueForbiddenV0(value string) bool {
 	if codexHasControlCharsV0(value) {
 		return true
 	}
-	lower := strings.ToLower(value)
-	for _, fragment := range []string{
-		"oauth",
-		"token",
-		"secret",
-		"password",
-		"api_key",
-		"apikey",
-		"$home",
-		"/home/",
-		"home=",
-		"code_home",
-		"codex_home",
-	} {
-		if strings.Contains(lower, fragment) {
-			return true
-		}
-	}
-	return false
+	return codexTextContainsSensitiveDetailIgnoringRailEnvV0(value)
 }

@@ -115,6 +115,21 @@ Riesgos: El servidor MCP real sigue pendiente; el resource y el tool son adaptad
 ```
 
 ```text
+Caso: MCP-SM-REAL-001 transporte MCP real opt-in en servidor
+Tipo: smoke
+Comando: go test -count=1 ./cmd/orquesta-server -run TestMCPRealTransportSmokeOptInV0
+Evidencia esperada: La composicion `cmd/orquesta-server` registra el transporte
+MCP por `RegisterMCPTransportV0`, levanta un servidor HTTP JSON-RPC temporal en
+loopback, ejecuta una lectura de `orquesta.operator.operations.v0`, ejecuta una
+propuesta no destructiva de `orquesta.autoprogramming.self_improvement.propose.v0`
+y normaliza la ausencia de operador real como `operator_mcp_port_unavailable`.
+Ultima ejecucion: 2026-05-24; pasa con bateria focal del paquete T16.
+Riesgos: El servidor MCP real sigue siendo opt-in de composicion; no se habilita
+en `run` por defecto ni lee stores, runtime, HOME, proveedor, DB, Git/worktrees
+o paths locales.
+```
+
+```text
 Caso: MCP-CT-025 registro de transporte MCP opt-in
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp
@@ -441,3 +456,22 @@ Evidencia esperada: el registro MCP publica
 devuelve `mcp_transport_tool_unbound`, con executor inyectado invoca el puerto
 fake, y el bridge HTTP `POST /api/v0/autoprogramming/prepare-run` delega sin
 conocer Codex, OPES, runtime, DB ni filesystem productivo.
+
+## Prueba automejora con consejo de operador 2026-05-23
+
+Comando:
+
+```bash
+go test -count=1 ./modulos/orquesta-mcp
+```
+
+Evidencia esperada: `orquesta.autoprogramming.self_improvement.propose.v0`,
+`/api/v0/autoprogramming/status` y `/api/v0/autoprogramming/supervise` aceptan
+`operator_advice` compacto, aceptan aliases reparables de refs, accion y texto,
+lo normalizan con `non_blocking=true` y no lo usan para bloquear, arrancar
+runtime ni decidir proveedor. En self-improvement, el consejo normalizado queda
+como contexto/regla no bloqueante de la request de automejora. Los puertos de
+cola, stats y supervisor siguen siendo inyectados; si falta un puerto o falla el
+executor, el error publico sigue siendo reparable y el bridge HTTP devuelve el
+consejo normalizado como observacion no bloqueante sin descartar evidencia de
+automejora.

@@ -582,11 +582,12 @@ printf '%s\n' "$input"
 			t.Fatalf("status inicial no ejecutable: %+v", node.agent)
 		}
 		codexDirectorAssertRegistryReadyForDrainReviewV0(t, node.launch)
-		stdoutText := mustReadFileStringV0(t, node.agent.StdoutPath)
-		if !strings.Contains(stdoutText, "Director Operativo Orquesta aprobo esta ola") &&
-			!strings.Contains(stdoutText, "Subagente Codex gobernado por Director Operativo Orquesta") {
-			t.Fatalf("stdout no contiene prompt ejecutado para %s:\n%s", node.agent.AgentRef, stdoutText)
-		}
+		waitForCodexDirectorTestFileContainsV0(
+			t,
+			node.agent.StdoutPath,
+			"Director Operativo Orquesta aprobo esta ola",
+			"Subagente Codex gobernado por Director Operativo Orquesta",
+		)
 	}
 	for _, launch := range codexDirectorCollectLaunchesForTestV0(summary) {
 		var statusOut bytes.Buffer

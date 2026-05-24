@@ -12,6 +12,9 @@ func codexReviewGateTerminalProjectedV0(
 	status orquestacoreworkflow.ReviewResultStatusV0,
 ) bool {
 	reviewResultRef := codexReviewGateReviewResultRefV0(deliveryRef)
+	if codexReviewGateReworkForDeliveryProjectedV0(run.ReworkRequests, deliveryRef) {
+		return true
+	}
 	switch status {
 	case orquestacoreworkflow.ReviewResultStatusAcceptedV0:
 		return stringInCodexDeliverySetV0(
@@ -20,7 +23,7 @@ func codexReviewGateTerminalProjectedV0(
 		)
 	case orquestacoreworkflow.ReviewResultStatusChangesRequestedV0,
 		orquestacoreworkflow.ReviewResultStatusRejectedV0:
-		return codexReviewGateReworkForDeliveryProjectedV0(run.ReworkRequests, deliveryRef)
+		return false
 	default:
 		return codexReviewGateResultRefInSetV0(run.ReviewResults, reviewResultRef)
 	}

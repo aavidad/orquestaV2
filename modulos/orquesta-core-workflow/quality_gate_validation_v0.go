@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-var forbiddenQualityGateFragmentsV0 = forbiddenReviewReworkFragmentsV0
-
 func validateRecordQualityGatePayloadDataV0(payload RecordQualityGateCommandPayloadV0) error {
 	if err := requireCommandPayloadFieldsV0(map[string]string{
 		"run_ref":     payload.RunRef,
@@ -126,15 +124,7 @@ func qualityGateHasLongStringV0(values []string) bool {
 }
 
 func qualityGateHasForbiddenDetailsV0(values []string) bool {
-	for _, value := range values {
-		lower := strings.ToLower(value)
-		for _, fragment := range forbiddenQualityGateFragmentsV0 {
-			if containsForbiddenFragmentV0(lower, fragment) {
-				return true
-			}
-		}
-	}
-	return false
+	return textValuesContainForbiddenOperationalSensitiveDetailV0(values)
 }
 
 func validateRecordQualityGatePayloadSizeV0(payload RecordQualityGateCommandPayloadV0) error {

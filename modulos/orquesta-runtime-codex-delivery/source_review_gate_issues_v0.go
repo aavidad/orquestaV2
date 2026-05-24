@@ -37,8 +37,24 @@ func codexReviewGateMergeConnectorIssuesV0(
 			}
 		}
 	}
-	result.Accepted = len(result.Issues) == 0
-	return result
+	return orquestaautoprogramming.AutoprogrammingReviewGateResultFromIssuesV0(result.Issues)
+}
+
+func codexReviewGateMergePendingRailEvidenceV0(
+	result orquestaautoprogramming.AutoprogrammingReviewGateResultV0,
+	ack orquestaruntimecodex.CodexAgentAckV0,
+) orquestaautoprogramming.AutoprogrammingReviewGateResultV0 {
+	for _, ref := range orquestaruntimecodex.CodexAgentAckPendingRailEvidenceRefsV0(ack) {
+		ref = strings.TrimSpace(ref)
+		if ref == "" || codexReviewGateResultHasIssueV0(result, ref) {
+			continue
+		}
+		result.Issues = append(result.Issues, orquestaautoprogramming.AutoprogrammingReviewGateIssueV0{
+			Code:  ref,
+			Field: "agent_ack",
+		})
+	}
+	return orquestaautoprogramming.AutoprogrammingReviewGateResultFromIssuesV0(result.Issues)
 }
 
 func codexReviewGateMergeGateIssuesV0(
@@ -51,8 +67,7 @@ func codexReviewGateMergeGateIssuesV0(
 			result.Issues = append(result.Issues, issue)
 		}
 	}
-	result.Accepted = len(result.Issues) == 0
-	return result
+	return orquestaautoprogramming.AutoprogrammingReviewGateResultFromIssuesV0(result.Issues)
 }
 
 func codexReviewGateResultHasIssueV0(

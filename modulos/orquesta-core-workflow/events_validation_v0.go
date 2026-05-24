@@ -7,36 +7,6 @@ import (
 	"strings"
 )
 
-var forbiddenEventFragmentsV0 = []string{
-	"secret",
-	"secreto",
-	"token",
-	"password",
-	"credential",
-	"credencial",
-	"api_key",
-	"oauth",
-	"transcript",
-	"prompt",
-	"completion",
-	"raw_text",
-	"full_text",
-	"runtime",
-	"sql",
-	"dsn",
-	"connection",
-	"conexion",
-	"table",
-	"tabla",
-	"provider",
-	"proveedor",
-	"model",
-	"home",
-	"tmux",
-	"docker",
-	"git",
-}
-
 func validateEventPayloadV0(event OrchestrationEventV0) error {
 	var decoded any
 	if err := json.Unmarshal(event.Payload, &decoded); err != nil {
@@ -212,13 +182,7 @@ func containsForbiddenEventDetailV0(value any) bool {
 }
 
 func containsForbiddenEventTextV0(value string) bool {
-	lower := strings.ToLower(value)
-	for _, fragment := range forbiddenEventFragmentsV0 {
-		if containsForbiddenFragmentV0(lower, fragment) {
-			return true
-		}
-	}
-	return false
+	return textContainsForbiddenOperationalSensitiveDetailV0(value)
 }
 
 func containsForbiddenFragmentV0(lowerValue string, fragment string) bool {
@@ -233,11 +197,23 @@ func containsForbiddenFragmentV0(lowerValue string, fragment string) bool {
 			return false
 		}
 		absolute := start + index
-		if hasTokenBoundaryV0(lowerValue, absolute, absolute+len(fragment)) {
+		if hasTokenBoundaryForFragmentV0(lowerValue, fragment, absolute, absolute+len(fragment)) {
 			return true
 		}
 		start = absolute + len(fragment)
 	}
+}
+
+func hasTokenBoundaryForFragmentV0(value string, fragment string, start int, end int) bool {
+	before := true
+	if len(fragment) > 0 && isAsciiLetterOrDigitV0(fragment[0]) {
+		before = start == 0 || !isAsciiLetterOrDigitV0(value[start-1])
+	}
+	after := true
+	if len(fragment) > 0 && isAsciiLetterOrDigitV0(fragment[len(fragment)-1]) {
+		after = end >= len(value) || !isAsciiLetterOrDigitV0(value[end])
+	}
+	return before && after
 }
 
 func hasTokenBoundaryV0(value string, start int, end int) bool {

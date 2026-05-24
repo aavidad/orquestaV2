@@ -61,6 +61,43 @@ func TestCheckOperationalDirectorReplayStateV0DetectaMetadataVivaIncompleta(t *t
 	}
 }
 
+func TestCheckOperationalDirectorReplayStateV0DetectaPlanStateSinScopeDeTask(t *testing.T) {
+	run, state, task, waitState := replayStateFixturesV0(t)
+	state.Steps[0].WaveRef = ""
+	state.Steps[0].CohortRef = ""
+	result, err := CheckOperationalDirectorReplayStateV0(context.Background(), OperationalDirectorReplayStateCheckRequestV0{
+		Run:            run,
+		PlanRef:        state.PlanRef,
+		PlanStateStore: NewInMemoryOperationalDirectorPlanStateStoreV0(state),
+		TaskStore:      NewInMemoryWorkflowTaskStoreV0(task),
+		WaitStateStore: NewInMemoryWorkflowTaskWaitStateStoreV0(waitState),
+	})
+	if err != nil {
+		t.Fatalf("CheckOperationalDirectorReplayStateV0: %v", err)
+	}
+	if result.Restored || !replayStateHasIssueFieldV0(result.Issues, "plan_state.wave_ref") {
+		t.Fatalf("issues=%+v", result.Issues)
+	}
+}
+
+func TestCheckOperationalDirectorReplayStateV0DetectaWaitStateSinAgentesPendientes(t *testing.T) {
+	run, state, task, waitState := replayStateFixturesV0(t)
+	waitState.PendingAgentRefs = nil
+	result, err := CheckOperationalDirectorReplayStateV0(context.Background(), OperationalDirectorReplayStateCheckRequestV0{
+		Run:            run,
+		PlanRef:        state.PlanRef,
+		PlanStateStore: NewInMemoryOperationalDirectorPlanStateStoreV0(state),
+		TaskStore:      NewInMemoryWorkflowTaskStoreV0(task),
+		WaitStateStore: NewInMemoryWorkflowTaskWaitStateStoreV0(waitState),
+	})
+	if err != nil {
+		t.Fatalf("CheckOperationalDirectorReplayStateV0: %v", err)
+	}
+	if result.Restored || !replayStateHasIssueFieldV0(result.Issues, "wait.pending_agent_refs") {
+		t.Fatalf("issues=%+v", result.Issues)
+	}
+}
+
 func replayStateFixturesV0(
 	t *testing.T,
 ) (

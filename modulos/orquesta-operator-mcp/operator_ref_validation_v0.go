@@ -1,6 +1,10 @@
 package orquestaoperatormcp
 
-import "strings"
+import (
+	"strings"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
+)
 
 func appendOpaqueRefIssueV0(issues []OperatorMCPIssueV0, field string, ref string) []OperatorMCPIssueV0 {
 	if strings.TrimSpace(ref) == "" {
@@ -21,25 +25,5 @@ func hasOpaqueRefLeakV0(ref string) bool {
 }
 
 func hasOperatorSensitiveMarkerV0(text string) bool {
-	for _, marker := range operatorForbiddenRefMarkersV0() {
-		if strings.Contains(text, marker) {
-			return true
-		}
-	}
-	return false
-}
-
-func operatorForbiddenRefMarkersV0() []string {
-	return []string{
-		"sec" + "ret",
-		"tok" + "en",
-		"pass" + "word",
-		"creden" + "tial",
-		"oa" + "uth",
-		"post" + "gres",
-		"sq" + "lite",
-		"provi" + "der=",
-		"mo" + "del=",
-		"home=",
-	}
+	return orquestarails.TextContainsOperationalDetailMarkerV0(text)
 }

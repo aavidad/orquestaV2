@@ -3,6 +3,7 @@ package orquestamcp
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -43,6 +44,34 @@ func TestMCPAutoprogrammingSuperviseTransportV0QuedaOptInSinPuerto(t *testing.T)
 		t.Fatalf("call tool: %v", err)
 	}
 	assertTransportPayloadSaneadoMCPTestV0(t, output, 300)
+}
+
+func TestMCPAutoprogrammingSuperviseHTTPHandlerV0ConservaOperatorAdviceSinPuerto(t *testing.T) {
+	body := bytes.NewBufferString(`{
+		"request_id":"request-ref-supervise-advice-001",
+		"operator_advice":[{
+			"subject_ref":"run-ref-supervise-advice-001",
+			"advice":"consultar al operador"
+		}]
+	}`)
+	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingSuperviseHTTPPathV0, body)
+	rec := httptest.NewRecorder()
+
+	NewMCPAutoprogrammingSuperviseHTTPHandlerV0(nil).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result mcpAutoprogrammingSuperviseHTTPResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(result.OperatorAdvice) != 1 ||
+		result.OperatorAdvice[0].TargetRef != "run-ref-supervise-advice-001" ||
+		!result.OperatorAdvice[0].NonBlocking ||
+		len(result.Diagnostics) == 0 {
+		t.Fatalf("result=%+v", result)
+	}
 }
 
 type fakeMCPAutoprogrammingSuperviseHTTPExecutorV0 struct {

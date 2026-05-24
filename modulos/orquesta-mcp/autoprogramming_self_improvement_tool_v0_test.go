@@ -94,6 +94,41 @@ func TestMCPAutoprogrammingSelfImprovementExecutorV0AutoPrepareRunSinPuertoRepar
 	}
 }
 
+func TestMCPAutoprogrammingSelfImprovementExecutorV0ConservaOperatorAdviceComoContexto(t *testing.T) {
+	result, err := MCPAutoprogrammingSelfImprovementToolExecutorV0{}.Execute(
+		context.Background(),
+		MCPAutoprogrammingSelfImprovementToolInputV0{
+			RequestID: "request-ref-self-improvement-advice-001",
+			OperatorAdvice: []MCPAutoprogrammingOperatorAdviceV0{{
+				Run:          "run-ref-advice-alias-001",
+				Task:         "task-ref-advice-alias-001",
+				Kind:         "observe",
+				Text:         "mantener automejora como trabajo secundario",
+				EvidenceRefs: []string{"evidence-ref-advice-001"},
+			}},
+			Proposal: validMCPSelfImprovementProposalV0(),
+		},
+	)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if len(result.OperatorAdvice) != 1 ||
+		result.OperatorAdvice[0].TargetRef != "run-ref-advice-alias-001" ||
+		result.OperatorAdvice[0].Action != "observe" ||
+		!result.OperatorAdvice[0].NonBlocking ||
+		result.AutoprogrammingRequest == nil ||
+		len(result.AutoprogrammingRequest.Tasks) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	task := result.AutoprogrammingRequest.Tasks[0]
+	if !stringsSliceContainsMCPHumanWorkV0(task.ContextRefs, "operator_advice_ref:run-ref-advice-alias-001") ||
+		!stringsSliceContainsMCPHumanWorkV0(task.ContextRefs, "operator_advice_ref:task-ref-advice-alias-001") ||
+		!stringsSliceContainsMCPHumanWorkV0(task.ContextRefs, "operator_advice_evidence_ref:evidence-ref-advice-001") ||
+		!stringsSliceContainsMCPHumanWorkV0(task.CompactRules, "operator_advice_non_blocking:observe:mantener automejora como trabajo secundario") {
+		t.Fatalf("task=%+v", task)
+	}
+}
+
 func TestMCPAutoprogrammingSelfImprovementExecutorV0ConservaEvidenciaSiFaltanRefs(t *testing.T) {
 	proposal := validMCPSelfImprovementProposalV0()
 	proposal.WorktreeRef = " "

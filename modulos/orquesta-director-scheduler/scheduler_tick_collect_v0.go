@@ -101,6 +101,14 @@ func (collector *schedulerTickCollectorV0) planV0() DirectorSchedulerTickPlanV0 
 	return collector.withSequenceDecisionsV0(schedulerQuiescentPlanV0(collector.input))
 }
 
+func (collector *schedulerTickCollectorV0) hasSchedulingEffectsV0() bool {
+	return len(collector.commands) > 0 ||
+		len(collector.waitingReasons) > 0 ||
+		len(collector.blockedRefs) > 0 ||
+		collector.needsDirector ||
+		collector.blocked
+}
+
 func (collector *schedulerTickCollectorV0) commandsPlanV0(blockedRefs []string) DirectorSchedulerTickPlanV0 {
 	if collector.hasReadyCommands {
 		return schedulerCommandsWithBlockedPlanV0(collector.input, collector.commands, blockedRefs)

@@ -105,7 +105,7 @@ type OrchestrationEventErrorV0 struct {
 }
 
 func (err OrchestrationEventErrorV0) Error() string {
-	return err.Code
+	return codeFieldErrorTextV0(err.Code, err.Field)
 }
 
 func NewRunStartedEventV0(meta OrchestrationEventMetaV0, payload RunStartedPayloadV0) (OrchestrationEventV0, error) {

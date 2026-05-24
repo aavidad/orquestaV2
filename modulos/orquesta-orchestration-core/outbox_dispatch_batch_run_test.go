@@ -73,6 +73,25 @@ func TestRunOutboxDispatchBatchV0KeepsPartialBatchVisible(t *testing.T) {
 	if len(issues) > 0 || len(pending) != 1 {
 		t.Fatalf("pending=%+v issues=%+v", pending, issues)
 	}
+
+	retry := recordingBatchExecutorV0{mode: "success"}
+	retried, err := RunOutboxDispatchBatchV0(context.Background(), OutboxDispatchBatchRunRequestV0{
+		RunRef:     "run-batch-plan-001",
+		TargetPort: orquestacoreworkflow.OutboxTargetAgentLauncherV0,
+		MaxReady:   2,
+		Reader:     ledger,
+		Claimer:    ledger,
+		Executor:   &retry,
+		Acker:      ledger,
+	})
+	if err != nil {
+		t.Fatalf("retry RunOutboxDispatchBatchV0: %v", err)
+	}
+	if retried.Status != OutboxDispatchBatchRunDispatchedV0 ||
+		retried.AckedCount != 1 ||
+		len(retried.AckedMessages) != 1 {
+		t.Fatalf("retried=%+v", retried)
+	}
 }
 
 func TestRunOutboxDispatchBatchV0RejectsMissingExecutor(t *testing.T) {
@@ -100,6 +119,23 @@ func TestRunOutboxDispatchBatchV0PropagatesExecutorError(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatalf("expected executor error")
+	}
+
+	retry := recordingBatchExecutorV0{mode: "success"}
+	result, err := RunOutboxDispatchBatchV0(context.Background(), OutboxDispatchBatchRunRequestV0{
+		RunRef:     "run-batch-plan-001",
+		TargetPort: orquestacoreworkflow.OutboxTargetAgentLauncherV0,
+		MaxReady:   1,
+		Reader:     ledger,
+		Claimer:    ledger,
+		Executor:   &retry,
+		Acker:      ledger,
+	})
+	if err != nil {
+		t.Fatalf("retry RunOutboxDispatchBatchV0: %v", err)
+	}
+	if result.Status != OutboxDispatchBatchRunDispatchedV0 || result.AckedCount != 1 {
+		t.Fatalf("retry result=%+v", result)
 	}
 }
 

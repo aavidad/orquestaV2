@@ -18,9 +18,15 @@
 - `cmd/orquesta-server` prueba que el supervisor residente expone
   `ORQUESTA_SERVER_SUPERVISOR_MAX_TICKS` y
   `ORQUESTA_SERVER_ALLOW_REPEATED_RUNS`.
+- `cmd/orquesta-server` prueba que el planner de automejora salta tareas ya
+  visibles en cola y anade una tarea scanner cuando hay capacidad libre para
+  descubrir nuevos huecos.
 - `modulos/orquesta-server` prueba que `NormalizeConfigV0` conserva
   `SupervisorCommand.MaxTicks` positivo y usa default solo para valores vacios o
   invalidos.
+- `modulos/orquesta-server` prueba que la automejora se prepara tambien por
+  capacidad libre con cola visible, y que no se prepara si la cola ya alcanzo el
+  objetivo configurado.
 - `modulos/orquesta-server` prueba que `StartupCheckPortV0` publica
   `startup_ready` con mensaje/evidencias y bloquea el arranque cuando la
   composicion no esta lista.

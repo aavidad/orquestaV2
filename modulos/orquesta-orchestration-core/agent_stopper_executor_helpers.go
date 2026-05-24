@@ -31,10 +31,11 @@ func (executor AgentStopperExecutorV0) agentStopConfirmedCommandV0(
 func (executor AgentStopperExecutorV0) agentStopConfirmedCommandMetaV0(
 	intent orquestaoutboxdispatch.DispatchIntentV0,
 ) orquestacoreworkflow.OrchestrationCommandMetaV0 {
+	messageRef := agentStopperOpaqueControlRefV0("agent-stop-message", intent.MessageID)
 	return orquestacoreworkflow.OrchestrationCommandMetaV0{
-		CommandID:      "cmd-agent-stop-confirmed-" + strings.TrimSpace(intent.MessageID),
+		CommandID:      "cmd-agent-stop-confirmed-" + messageRef,
 		RunID:          intent.RunID,
-		IdempotencyKey: "idem-agent-stop-confirmed-" + strings.TrimSpace(intent.MessageID),
+		IdempotencyKey: "idem-agent-stop-confirmed-" + messageRef,
 		CorrelationID:  agentStopperCorrelationIDV0(executor.CorrelationID, intent),
 		RequestedBy:    agentStopperRequestedByV0(executor.RequestedBy),
 		OccurredAt:     strings.TrimSpace(executor.ObservedAt),
@@ -88,9 +89,9 @@ func agentStopperCorrelationIDV0(
 	intent orquestaoutboxdispatch.DispatchIntentV0,
 ) string {
 	if strings.TrimSpace(configured) != "" {
-		return strings.TrimSpace(configured)
+		return agentStopperOpaqueControlRefV0("corr-agent-stop", configured)
 	}
-	return strings.TrimSpace(intent.CorrelationID)
+	return agentStopperOpaqueControlRefV0("corr-agent-stop", intent.CorrelationID)
 }
 
 func agentStopperRequestedByV0(requestedBy string) string {
@@ -98,4 +99,37 @@ func agentStopperRequestedByV0(requestedBy string) string {
 		return strings.TrimSpace(requestedBy)
 	}
 	return "orquesta-agent-stopper"
+}
+
+func agentStopperOpaqueControlRefV0(prefix string, value string) string {
+	trimmed := strings.TrimSpace(value)
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		prefix = "agent-stop-ref"
+	}
+	if trimmed == "" {
+		return prefix + "-empty"
+	}
+	if !agentStopperControlRefNeedsCompactionV0(trimmed) {
+		return trimmed
+	}
+	hash := fnv.New64a()
+	_, _ = hash.Write([]byte(trimmed))
+	return fmt.Sprintf("%s-%016x", prefix, hash.Sum64())
+}
+
+func agentStopperControlRefNeedsCompactionV0(value string) bool {
+	if len(value) < 3 || len(value) > 159 {
+		return true
+	}
+	for _, r := range value {
+		if (r >= 'A' && r <= 'Z') ||
+			(r >= 'a' && r <= 'z') ||
+			(r >= '0' && r <= '9') ||
+			r == '.' || r == '_' || r == ':' || r == '-' {
+			continue
+		}
+		return true
+	}
+	return false
 }

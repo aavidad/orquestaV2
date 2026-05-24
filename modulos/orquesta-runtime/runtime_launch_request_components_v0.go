@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	orquestacontext "orquesta/modulos/orquesta-context"
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func (v *runtimeLaunchRequestValidatorV0) validateFunctionContract(contract *RuntimeFunctionContractV0) {
@@ -130,7 +131,7 @@ func (v *runtimeLaunchRequestValidatorV0) validateWriteSet(paths []string) {
 	seen := map[string]bool{}
 	for i, path := range paths {
 		field := fmt.Sprintf("function_contract.write_set[%d]", i)
-		if seen[path] || !isRelativeContractPath(path) {
+		if seen[path] || !orquestarails.WorkspaceRelativePathAllowedV0(path, true) {
 			v.add(WriteSetInvalidoV0, field)
 		}
 		seen[path] = true

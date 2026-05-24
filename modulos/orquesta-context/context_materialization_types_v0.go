@@ -37,6 +37,7 @@ type ContextMaterializedBundleV0 struct {
 	TargetModule         string                          `json:"target_module"`
 	TotalBytes           int                             `json:"total_bytes"`
 	Entries              []ContextMaterializedEntryV0    `json:"entries"`
+	SanitizationEvidence []ContextSanitizationEvidenceV0 `json:"sanitization_evidence,omitempty"`
 	Issues               []ContextMaterializationIssueV0 `json:"issues,omitempty"`
 	DirectorQuestionHint string                          `json:"director_question_hint,omitempty"`
 }

@@ -74,6 +74,41 @@ func (ledger *FileOutboxLedgerV0) ClaimOutboxDispatchV0(
 	}, nil
 }
 
+func (ledger *FileOutboxLedgerV0) ReleaseOutboxDispatchClaimV0(
+	claim orquestaoutboxdispatch.OutboxDispatchClaimV0,
+) []orquestaoutboxdispatch.DispatchIssueV0 {
+	if ledger == nil {
+		return dispatchPersistenceIssueV0()
+	}
+	claim = normalizeClaimV0(claim)
+	if issues := validateClaimV0(claim); len(issues) > 0 {
+		return issues
+	}
+
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+
+	next := ledger.state.cloneV0()
+	record := next.recordsByMessageID[claim.MessageID]
+	if record == nil {
+		return []orquestaoutboxdispatch.DispatchIssueV0{
+			dispatchIssueV0(errPayloadInvalidV0, "message_id", "mensaje pendiente no encontrado"),
+		}
+	}
+	if issues := claimConflictsV0(record, claim); len(issues) > 0 {
+		return issues
+	}
+	if record.Ack != nil || record.Claim == nil {
+		return nil
+	}
+	record.Claim = nil
+	if err := persistOutboxLedgerStateV0(ledger.path, next); err != nil {
+		return dispatchPersistenceIssueV0()
+	}
+	ledger.state = next
+	return nil
+}
+
 func (ledger *FileOutboxLedgerV0) AckOutboxDispatchV0(
 	ack orquestaoutboxdispatch.OutboxDispatchAckV0,
 ) []orquestaoutboxdispatch.DispatchIssueV0 {

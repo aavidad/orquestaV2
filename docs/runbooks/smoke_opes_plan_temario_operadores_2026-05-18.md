@@ -360,13 +360,17 @@ bash -n scripts/smoke_opes_derivatives_rest.sh
 bash -n scripts/smoke_opes_plan_temario_operadores.sh
 ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER=1 \
   scripts/smoke_opes_derivatives_rest.sh
+scripts/smoke_opes_consumer_isolated.sh
 ORQUESTA_OPES_PLAN_TEMARIO_FAKE_SERVER=1 \
   scripts/smoke_opes_plan_temario_operadores.sh
 ```
 
 Estas pruebas no ejecutan Codex ni llaman a OPES real. El fake REST de
-derivados fuerza la secuencia hasta `assemble_topic` y rechaza consultas sin
-`job_type`, `status=pending`, `execution_mode=external` y `limit` esperado.
+derivados permite una lectura seca de la fase pendiente y el wrapper
+`smoke_opes_consumer_isolated.sh` recorre la secuencia completa hasta
+`assemble_topic` contra un fake HTTP local, supervisando cada `run_ref` sin
+Codex ni OPES real. El fake rechaza consultas sin `job_type`, `status=pending`,
+`execution_mode=external` y `limit` esperado.
 El smoke real de derivados sigue siendo opt-in, contra instancia temporal, y
 debe comprobar que OPES recibe artefactos validos y deduplica reintentos; en
 particular, `assemble_topic` debe entregar `artifact_type=assembled_topic`.
@@ -379,6 +383,13 @@ ORQUESTA_OPES_DERIVATIVES_REST_CONFIRM=1 \
 ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 scripts/smoke_opes_derivatives_rest.sh
 ```
+
+`scripts/smoke_opes_derivatives_real.sh` queda como wrapper compatible para los
+operadores y la matriz: acepta la guarda historica
+`ORQUESTA_OPES_DERIVATIVES_SMOKE_CONFIRM=1`, la traduce a
+`ORQUESTA_OPES_DERIVATIVES_REST_CONFIRM=1` y delega en
+`scripts/smoke_opes_derivatives_rest.sh`. La ruta canonica es el script REST,
+porque contiene tambien el modo fake aislado y el loop `run-until-assemble`.
 
 Ese modo es `dry-run-once`: consulta OPES temporal y muestra la primera fase
 pendiente de la secuencia sin crear runs en Orquesta. Si el OPES temporal no es
@@ -416,6 +427,20 @@ ORQUESTA_OPES_BRIDGE_MAX_TICKS=20 \
 scripts/smoke_opes_derivatives_rest.sh
 ```
 
+Comando equivalente por compatibilidad historica:
+
+```bash
+ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
+ORQUESTA_BASE_URL=http://127.0.0.1:<puerto-orquesta> \
+ORQUESTA_OPES_DERIVATIVES_SMOKE_CONFIRM=1 \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
+ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
+ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-assemble \
+ORQUESTA_OPES_BRIDGE_LIMIT=1 \
+ORQUESTA_OPES_BRIDGE_MAX_TICKS=20 \
+scripts/smoke_opes_derivatives_real.sh
+```
+
 El wrapper rechaza `ORQUESTA_OPES_BRIDGE_JOB_TYPE` y
 `ORQUESTA_OPES_BRIDGE_JOB_REF` para derivados porque la ruta segura aqui es la
 secuencia completa por fases. Cada ejecucion real debe revisar el JSON de salida
@@ -429,6 +454,13 @@ operativo completo de una composicion OPES real sigue pendiente hasta tener OPES
 temporal vivo, cuota/modelo confirmados y evidencia de que cada derivado fue
 aceptado por OPES con refs causales suficientes; no se declara cerrado desde
 pruebas offline ni desde un dry-run.
+
+Bloqueo verificable T12 si no hay entorno temporal: ejecutar primero el smoke
+fake aislado y despues repetir el comando `run-until-assemble` anterior cuando
+existan OPES temporal, servidor Orquesta temporal y cuota/modelo confirmados.
+La ausencia de `ORQUESTA_OPES_BASE_URL`, `ORQUESTA_BASE_URL`,
+`ORQUESTA_OPES_TEMPORAL_CONFIRM=1` u `ORQUESTA_OPES_DERIVATIVES_EXECUTE=1`
+debe tratarse como bloqueo operativo, no como fallo del conector.
 
 Wrapper operador para repetir el plan exacto `plan_temario` de Operario sin
 drenar colas amplias:

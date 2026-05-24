@@ -100,7 +100,7 @@ type OrchestrationCommandErrorV0 struct {
 }
 
 func (err OrchestrationCommandErrorV0) Error() string {
-	return err.Code
+	return codeFieldErrorTextV0(err.Code, err.Field)
 }
 
 func NewStartRunCommandV0(meta OrchestrationCommandMetaV0, payload StartRunCommandPayloadV0) (OrchestrationCommandV0, error) {

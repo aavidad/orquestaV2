@@ -191,7 +191,7 @@ func validDirectorQuestionV0() DirectorQuestionV0 {
 
 func assertOutboxNoForbiddenFragmentsV0(t *testing.T, serialized string) {
 	t.Helper()
-	forbidden := append([]string{}, forbiddenOutboxFragmentsV0...)
+	forbidden := append([]string{}, operationalSensitiveFragmentsForTestV0()...)
 	forbidden = append(forbidden, forbiddenOutboxPayloadKeysV0...)
 	forbidden = append(forbidden, "db", "database")
 

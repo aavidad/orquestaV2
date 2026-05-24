@@ -32,6 +32,7 @@ const (
 	ErrDomainWorkArtifactTypeRequiredV0 = "domain_work_artifact_type_required"
 	ErrDomainWorkFieldJSONInvalidV0     = "domain_work_field_json_invalid"
 	ErrDomainWorkRequiredTestRefV0      = "domain_work_required_test_ref_invalid"
+	ErrDomainWorkRequiredTestsMissingV0 = "domain_work_required_tests_missing"
 )
 
 type DomainWorkJobRequestV0 struct {

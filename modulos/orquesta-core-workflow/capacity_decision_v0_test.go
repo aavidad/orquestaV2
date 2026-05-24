@@ -130,7 +130,7 @@ func TestRegisterCapacityDecisionCommandV0RejectsMissingRequest(t *testing.T) {
 
 func TestRegisterCapacityDecisionCommandV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validRegisterCapacityDecisionPayloadV0("capacity-request-forbidden")
-	payload.Summary = "decidir provider externo"
+	payload.Summary = "client_secret=abc123"
 
 	_, err := NewRegisterCapacityDecisionCommandV0(validCommandMetaV0("cmd-capacity-decision-forbidden", "idem-capacity-decision-forbidden"), payload)
 	assertCapacityDecisionCommandErrorV0(t, err, ErrDetalleProhibidoV0, "payload")

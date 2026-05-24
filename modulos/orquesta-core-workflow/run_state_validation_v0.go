@@ -299,11 +299,5 @@ func refsContainForbiddenDetailsV0(values []string) bool {
 }
 
 func stringHasForbiddenRunDetailV0(value string) bool {
-	lower := strings.ToLower(value)
-	for _, fragment := range forbiddenEventFragmentsV0 {
-		if containsForbiddenFragmentV0(lower, fragment) {
-			return true
-		}
-	}
-	return false
+	return textContainsForbiddenOperationalSensitiveDetailV0(value)
 }

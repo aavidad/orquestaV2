@@ -88,7 +88,7 @@ func TestBuildDirectorSchedulerTickV0ProtectedDirectorBudgetNeverStops(t *testin
 	)
 }
 
-func TestBuildDirectorSchedulerTickV0OverBudgetButActiveQuestionPendingWaits(t *testing.T) {
+func TestBuildDirectorSchedulerTickV0OverBudgetButActiveQuestionPendingNoBloquea(t *testing.T) {
 	input := validSchedulerTickInputWithProgressV0(orquestaruntime.AgentProgressingV0)
 	input.ProgressSupervisionCandidates[0].SupervisionInput.Report.BudgetStatus =
 		orquestaruntime.AgentProgressBudgetOverBudgetButActiveV0
@@ -100,8 +100,8 @@ func TestBuildDirectorSchedulerTickV0OverBudgetButActiveQuestionPendingWaits(t *
 
 	plan := mustSchedulerTickPlanV0(t, input)
 
-	assertSchedulerPlanV0(t, plan, SchedulerTickStatusWaitingV0, 0)
-	assertSchedulerWaitingV0(t, plan, SchedulerWaitingDirectorQuestionPendingV0)
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 1)
+	assertSchedulerCommandTypesV0(t, plan, orquestacoreworkflow.OrchestrationCommandRequestCapacityV0)
 }
 
 func schedulerProgressBudgetBoolPtrV0(value bool) *bool {

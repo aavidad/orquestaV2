@@ -2,6 +2,7 @@ package orquestacionnucleoapp
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -129,6 +130,101 @@ func TestAgentStopperExecutorV0MarcaLostSiStopNoPuedeConfirmarProcess(t *testing
 	}
 }
 
+func TestAgentStopperExecutorV0ConsumeParadaObsoletaSiAgenteYaEntrego(t *testing.T) {
+	runRef := "run-nucleo-agent-stopper-delivered-001"
+	agentRef := "agent-ref-delivered-001"
+	run := mustActiveProgrammingRunV0(t, runRef)
+	run.Agents = []string{agentRef}
+	run.StartedAgents = []string{agentRef}
+	run.DeliveredAgents = []string{agentRef}
+	store := NewInMemoryRunStoreV0(run)
+	ledger := NewInMemoryOutboxLedgerV0()
+	sink := NewInMemoryEventSinkV0()
+	if _, issues := ledger.SavePending(context.Background(), []orquestacoreworkflow.OutboxMessageV0{
+		stopRuntimeAgentOutboxForStopperTestV0(runRef, agentRef),
+	}); len(issues) > 0 {
+		t.Fatalf("save stop outbox issues=%+v", issues)
+	}
+
+	dispatch, err := RunOutboxDispatchOnceV0(context.Background(), OutboxDispatchOnceRequestV0{
+		RunRef:     runRef,
+		TargetPort: orquestacoreworkflow.OutboxTargetAgentLauncherV0,
+		Reader:     ledger,
+		Claimer:    ledger,
+		Executor: AgentStopperExecutorV0{
+			RunStore:   store,
+			EventSink:  sink,
+			Stopper:    successfulAgentStopperForTestV0{},
+			ObservedAt: "2026-05-08T10:50:00Z",
+		},
+		Acker: ledger,
+	})
+	if err != nil {
+		t.Fatalf("dispatch obsolete stop: %v", err)
+	}
+	if dispatch.Status != "dispatched" || dispatch.DispatchRef == "" {
+		t.Fatalf("dispatch=%+v", dispatch)
+	}
+	if pending := pendingOutboxRefsForTargetV0(t, ledger, runRef, orquestacoreworkflow.OutboxTargetAgentLauncherV0); len(pending) != 0 {
+		t.Fatalf("pending agent_launcher=%v", pending)
+	}
+	finalRun, err := store.LoadRunV0(context.Background(), runRef)
+	if err != nil {
+		t.Fatalf("load final run: %v", err)
+	}
+	if containsNucleoRefV0(finalRun.ConfirmedStoppedAgents, agentRef) ||
+		containsNucleoRefV0(finalRun.LostAgents, agentRef) {
+		t.Fatalf("no debia mutar terminales: confirmed=%v lost=%v", finalRun.ConfirmedStoppedAgents, finalRun.LostAgents)
+	}
+}
+
+func TestAgentStopperExecutorV0ConsumeParadaObsoletaSiAgenteYaEntregoYRuntimeNoExiste(t *testing.T) {
+	runRef := "run-nucleo-agent-stopper-delivered-lost-001"
+	agentRef := "agent-ref-delivered-lost-001"
+	run := mustActiveProgrammingRunV0(t, runRef)
+	run.Agents = []string{agentRef}
+	run.StartedAgents = []string{agentRef}
+	run.DeliveredAgents = []string{agentRef}
+	store := NewInMemoryRunStoreV0(run)
+	ledger := NewInMemoryOutboxLedgerV0()
+	sink := NewInMemoryEventSinkV0()
+	if _, issues := ledger.SavePending(context.Background(), []orquestacoreworkflow.OutboxMessageV0{
+		stopRuntimeAgentOutboxForStopperTestV0(runRef, agentRef),
+	}); len(issues) > 0 {
+		t.Fatalf("save stop outbox issues=%+v", issues)
+	}
+
+	dispatch, err := RunOutboxDispatchOnceV0(context.Background(), OutboxDispatchOnceRequestV0{
+		RunRef:     runRef,
+		TargetPort: orquestacoreworkflow.OutboxTargetAgentLauncherV0,
+		Reader:     ledger,
+		Claimer:    ledger,
+		Executor: AgentStopperExecutorV0{
+			RunStore:   store,
+			EventSink:  sink,
+			Stopper:    lostAgentStopperForTestV0{},
+			ObservedAt: "2026-05-08T10:51:00Z",
+		},
+		Acker: ledger,
+	})
+	if err != nil {
+		t.Fatalf("dispatch obsolete lost stop: %v", err)
+	}
+	if dispatch.Status != "dispatched" || dispatch.DispatchRef == "" {
+		t.Fatalf("dispatch=%+v", dispatch)
+	}
+	if pending := pendingOutboxRefsForTargetV0(t, ledger, runRef, orquestacoreworkflow.OutboxTargetAgentLauncherV0); len(pending) != 0 {
+		t.Fatalf("pending agent_launcher=%v", pending)
+	}
+	finalRun, err := store.LoadRunV0(context.Background(), runRef)
+	if err != nil {
+		t.Fatalf("load final run: %v", err)
+	}
+	if containsNucleoRefV0(finalRun.LostAgents, agentRef) {
+		t.Fatalf("no debia marcar perdido un agente ya reflejado por entrega: lost=%v", finalRun.LostAgents)
+	}
+}
+
 func TestAgentStopperExecutorV0RejectsNonStopRuntimeAgentOutbox(t *testing.T) {
 	executor := AgentStopperExecutorV0{
 		RunStore:   NewInMemoryRunStoreV0(),
@@ -164,6 +260,41 @@ func TestAgentStopperExecutorV0KeepsWorkflowAgentRequestID(t *testing.T) {
 	}
 }
 
+func TestAgentStopperInboundFromIntentV0CompactaRefsInternasLargas(t *testing.T) {
+	intent := orquestacoreworkflowIntentV0(
+		orquestacoreworkflow.OutboxMessageStopRuntimeAgentV0,
+		orquestacoreworkflow.OutboxTargetAgentLauncherV0,
+	)
+	intent.MessageID = "outbox-stop-runtime-agent-" + strings.Repeat("x", 180)
+	intent.IdempotencyKey = "idem-progress-supervision-" + strings.Repeat("y", 180)
+	intent.CorrelationID = "corr-progress-supervision-" + strings.Repeat("z", 180)
+	intent.Payload = []byte(`{
+		"agent_request_id":"agent-ref-stopper-long-001",
+		"run_id":"run-test-agent-stopper-001",
+		"reason_code":"loop_detected",
+		"summary":"Parar agente solicitado por supervision.",
+		"evidence_refs":["evidence-ref-stop-agent-long-001"]
+	}`)
+
+	inbound, err := agentStopperInboundFromIntentV0(intent)
+	if err != nil {
+		t.Fatalf("agentStopperInboundFromIntentV0: %v", err)
+	}
+	if inbound.IdempotencyKey == intent.IdempotencyKey ||
+		inbound.CorrelationID == intent.CorrelationID ||
+		len(inbound.IdempotencyKey) > 159 ||
+		len(inbound.CorrelationID) > 159 {
+		t.Fatalf("refs stopper no compactadas: idem=%q corr=%q", inbound.IdempotencyKey, inbound.CorrelationID)
+	}
+	if issues := orquestaruntime.ValidateAgentStopperInboundV0(inbound); len(issues) > 0 {
+		t.Fatalf("inbound invalido: %+v", issues)
+	}
+	meta := (AgentStopperExecutorV0{}).agentStopConfirmedCommandMetaV0(intent)
+	if len(meta.CommandID) > 159 || len(meta.IdempotencyKey) > 159 {
+		t.Fatalf("meta stopper no compactada: %+v", meta)
+	}
+}
+
 type lostAgentStopperForTestV0 struct{}
 
 func (lostAgentStopperForTestV0) StopAgentV0(
@@ -176,6 +307,23 @@ func (lostAgentStopperForTestV0) StopAgentV0(
 		Field:      "process_ref",
 		Retryable:  false,
 	}
+}
+
+type successfulAgentStopperForTestV0 struct{}
+
+func (successfulAgentStopperForTestV0) StopAgentV0(
+	_ context.Context,
+	inbound orquestaruntime.AgentStopperInboundV0,
+) (AgentStopResultV0, error) {
+	agentRef := ""
+	if inbound.Payload != nil {
+		agentRef = strings.TrimSpace(inbound.Payload.AgentRequestID)
+	}
+	return AgentStopResultV0{
+		AgentRequestID:  agentRef,
+		ConfirmationRef: "agent-stop-confirmation-ref-delivered-001",
+		EvidenceRefs:    []string{"evidence-ref-stop-delivered-001"},
+	}, nil
 }
 
 func runProgressiveLoopWithFakeAgentRuntimeV0(
@@ -300,5 +448,23 @@ func orquestacoreworkflowIntentV0(
 		CorrelationID:  "corr-test-agent-stopper-001",
 		PayloadVersion: orquestacoreworkflow.OutboxPayloadVersionV0,
 		Payload:        []byte(`{}`),
+	}
+}
+
+func stopRuntimeAgentOutboxForStopperTestV0(
+	runRef string,
+	agentRef string,
+) orquestacoreworkflow.OutboxMessageV0 {
+	return orquestacoreworkflow.OutboxMessageV0{
+		MessageID:      "outbox-stopruntimeagent-test-" + agentRef,
+		MessageType:    orquestacoreworkflow.OutboxMessageStopRuntimeAgentV0,
+		RunID:          runRef,
+		IdempotencyKey: "idem-stopruntimeagent-test-" + agentRef,
+		CorrelationID:  "corr-stopruntimeagent-test-" + agentRef,
+		TargetPort:     orquestacoreworkflow.OutboxTargetAgentLauncherV0,
+		PayloadVersion: orquestacoreworkflow.OutboxPayloadVersionV0,
+		Payload: []byte(`{"agent_request_id":"` + agentRef + `","run_id":"` + runRef + `",` +
+			`"reason_code":"run_stop_requested","summary":"Parada obsoleta de agente ya reflejado.",` +
+			`"evidence_refs":["evidence-ref-stopruntimeagent-test"]}`),
 	}
 }

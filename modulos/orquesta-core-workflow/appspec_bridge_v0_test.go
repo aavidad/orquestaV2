@@ -56,12 +56,12 @@ func TestStartRunFromAppSpecV0RejectsEmptyRefs(t *testing.T) {
 	}
 }
 
-func TestStartRunFromAppSpecV0RejectsForbiddenInfrastructureDetails(t *testing.T) {
+func TestStartRunFromAppSpecV0RejectsSensitiveValueDetails(t *testing.T) {
 	cases := map[string]func(*AppSpecRunDraftV0){
-		"db":        func(draft *AppSpecRunDraftV0) { draft.ProjectRef = "project:db" },
-		"runtime":   func(draft *AppSpecRunDraftV0) { draft.RequestedBy = "runtime" },
-		"proveedor": func(draft *AppSpecRunDraftV0) { draft.CorrelationID = "corr-proveedor-remoto" },
-		"HOME":      func(draft *AppSpecRunDraftV0) { draft.AppSpecRef = "$HOME/appspec.json" },
+		"api_key":         func(draft *AppSpecRunDraftV0) { draft.ProjectRef = "project:api_key=valor" },
+		"authorization":   func(draft *AppSpecRunDraftV0) { draft.RequestedBy = "authorization: bearer valor" },
+		"client_secret":   func(draft *AppSpecRunDraftV0) { draft.CorrelationID = "corr-client_secret=valor" },
+		"private_key_pem": func(draft *AppSpecRunDraftV0) { draft.AppSpecRef = "-----BEGIN PRIVATE KEY-----" },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -101,7 +101,7 @@ func TestStartRunFromAppSpecV0SerializationStaysLocalAndCompact(t *testing.T) {
 	}
 
 	serialized := strings.ToLower(string(data))
-	for _, forbidden := range []string{"db", "runtime", "proveedor", "provider", "home"} {
+	for _, forbidden := range operationalSensitiveFragmentsForTestV0() {
 		if containsForbiddenFragmentV0(serialized, forbidden) {
 			t.Fatalf("serialized command contains forbidden detail %q: %s", forbidden, serialized)
 		}

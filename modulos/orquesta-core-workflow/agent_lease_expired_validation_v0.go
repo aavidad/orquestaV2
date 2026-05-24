@@ -8,8 +8,6 @@ import (
 
 const agentLeaseObservedAtLayoutV0 = "2006-01-02T15:04:05Z"
 
-var forbiddenAgentLeaseExpiredFragmentsV0 = forbiddenReviewReworkFragmentsV0
-
 func validateRegisterAgentLeaseExpiredPayloadDataV0(payload RegisterAgentLeaseExpiredCommandPayloadV0) error {
 	if err := validateRegisterAgentLeaseExpiredRequiredV0(payload); err != nil {
 		return err
@@ -123,15 +121,7 @@ func agentLeaseExpiredHasLongStringV0(values []string) bool {
 }
 
 func agentLeaseExpiredHasForbiddenDetailsV0(values []string) bool {
-	for _, value := range values {
-		lower := strings.ToLower(value)
-		for _, fragment := range forbiddenAgentLeaseExpiredFragmentsV0 {
-			if containsForbiddenFragmentV0(lower, fragment) {
-				return true
-			}
-		}
-	}
-	return false
+	return textValuesContainForbiddenOperationalSensitiveDetailV0(values)
 }
 
 func validateRegisterAgentLeaseExpiredPayloadSizeV0(payload RegisterAgentLeaseExpiredCommandPayloadV0) error {

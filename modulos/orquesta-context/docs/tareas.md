@@ -70,3 +70,28 @@ Validacion:
 - `git diff --check -- modulos/orquesta-context`
 
 Bloqueos: no transforma el contexto en prompt de proveedor; runtime/Codex/Ollama/vLLM deben consumir el materializado por adaptador futuro.
+
+## CTX-003
+
+Estado: completada ejecutable.
+
+Objetivo: definir puerto neutral de sanitizacion de contexto saliente y evidencia
+durable sin dato sensible.
+
+Write-set:
+
+- `context_sanitizer_types_v0.go`
+- `context_sanitizer_v0.go`
+- `context_materialization_v0.go`
+- `context_materialization_types_v0.go`
+- `context_materialization_v0_test.go`
+- docs locales
+
+Contrato: `ContextSanitizerPortV0`, `ContextSanitizationEvidenceV0`.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-context`
+
+Bloqueos: no implementa IA local, proveedor ni transporte; los adaptadores
+opt-in viven en composicion.

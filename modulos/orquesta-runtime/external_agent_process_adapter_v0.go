@@ -51,6 +51,11 @@ func LaunchExternalAgentProcessV0(
 			),
 		})
 	}
+	if issues := validateProcessRuntimeSnapshotV0(snapshot); len(issues) > 0 {
+		return externalAgentProcessBlockedV0(
+			externalAgentProcessSnapshotIssuesV0(spec.CorrelationID, issues),
+		)
+	}
 	return ExternalAgentProcessLaunchResultV0{
 		Status:   ExternalAgentProcessLaunchStartedV0,
 		Snapshot: snapshot,
@@ -118,6 +123,21 @@ func externalAgentProcessNormalizeIssuesV0(
 			issue.CorrelationID = correlationID
 		}
 		normalized = append(normalized, issue)
+	}
+	return normalized
+}
+
+func externalAgentProcessSnapshotIssuesV0(
+	correlationID string,
+	issues []ProcessRuntimeErrorV0,
+) []ExternalAgentConnectorErrorV0 {
+	normalized := make([]ExternalAgentConnectorErrorV0, 0, len(issues))
+	for _, issue := range issues {
+		normalized = append(normalized, externalAgentProcessIssueFromRuntimeErrorV0(
+			correlationID,
+			ExternalAgentRuntimeSnapshotInvalidaV0,
+			issue,
+		))
 	}
 	return normalized
 }

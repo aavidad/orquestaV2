@@ -58,19 +58,34 @@ func (drainer stackRunDrainerV0) DrainRunV0(
 ) (orquestaruncoordinator.RunDrainResultV0, error) {
 	result, err := drainer.stack.DrainRunV0(ctx, stackDrainRequestFromCoordinatorV0(request))
 	if err != nil {
-		return orquestaruncoordinator.RunDrainResultV0{}, err
+		return stackDrainCoordinatorResultV0(request, result, "error", "", err.Error()), err
 	}
 	queueStatus, err := drainer.stack.stackDrainQueueStatusForCoordinatorV0(ctx, result)
 	if err != nil {
-		return orquestaruncoordinator.RunDrainResultV0{}, err
+		return stackDrainCoordinatorResultV0(request, result, "error", "", err.Error()), err
+	}
+	return stackDrainCoordinatorResultV0(request, result, stackDrainOutcomeV0(result), queueStatus, ""), nil
+}
+
+func stackDrainCoordinatorResultV0(
+	request orquestaruncoordinator.RunDrainRequestV0,
+	result orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
+	outcome string,
+	queueStatus string,
+	errorMessage string,
+) orquestaruncoordinator.RunDrainResultV0 {
+	diagnostics := stackDrainDiagnosticsV0(result)
+	if strings.TrimSpace(errorMessage) != "" {
+		diagnostics = stackDrainDiagnosticsWithErrorV0(result, diagnostics, errorMessage)
 	}
 	return orquestaruncoordinator.RunDrainResultV0{
 		RunRef:       strings.TrimSpace(request.RunRef),
 		AppRef:       strings.TrimSpace(request.AppRef),
-		Outcome:      stackDrainOutcomeV0(result),
-		QueueStatus:  queueStatus,
+		Outcome:      strings.TrimSpace(outcome),
+		QueueStatus:  strings.TrimSpace(queueStatus),
 		EvidenceRefs: stackDrainEvidenceRefsV0(result),
-	}, nil
+		Diagnostics:  diagnostics,
+	}
 }
 
 func stackDrainRequestFromCoordinatorV0(

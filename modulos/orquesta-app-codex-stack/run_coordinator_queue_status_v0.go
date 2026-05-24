@@ -13,6 +13,13 @@ func (stack StackV0) stackDrainQueueStatusForCoordinatorV0(
 	result orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
 ) (string, error) {
 	status := stackDrainQueueStatusV0(result)
+	if status == orquestarunqueue.RunStatusClosedV0 {
+		complete, _, err := stack.maybePromoteClosedAutoprogrammingRunV0(ctx, result.Final.Run)
+		if err != nil || !complete {
+			return "", err
+		}
+		return status, nil
+	}
 	if status != orquestarunqueue.RunStatusDeliveredV0 {
 		return status, nil
 	}

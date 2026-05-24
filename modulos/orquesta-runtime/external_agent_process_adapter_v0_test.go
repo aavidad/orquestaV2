@@ -115,6 +115,32 @@ func TestExternalAgentProcessAdapterV0MapeaFalloRuntime(t *testing.T) {
 	}
 }
 
+func TestExternalAgentProcessAdapterV0BloqueaSnapshotRuntimeConDetalleOperacional(t *testing.T) {
+	spec := externalAgentLaunchSpecValidaV0(t)
+	req := processRuntimeLaunchRequestForTestV0(t, "exit")
+
+	result := LaunchExternalAgentProcessV0(
+		context.Background(),
+		spec,
+		fakeExternalAgentProcessResolverV0{req: req},
+		fakeExternalAgentProcessRuntimeV0{
+			snapshot: ProcessRuntimeSnapshotV0{
+				SchemaVersion: ProcessRuntimeConnectorVersionV0,
+				ProcessRef:    "/tmp/provider-process",
+				SessionRef:    "session-ref-v0-000001",
+				LaunchRef:     "launch-ref-v0-000001",
+				Status:        ProcessRuntimeRunningV0,
+			},
+		},
+	)
+
+	requireExternalAgentProcessStatusV0(t, result, ExternalAgentProcessLaunchBlockedV0)
+	requireExternalAgentResultCodeV0(t, result, ExternalAgentRuntimeSnapshotInvalidaV0)
+	if result.Snapshot.ProcessRef != "" {
+		t.Fatalf("snapshot invalido no debe exponerse: %+v", result.Snapshot)
+	}
+}
+
 type fakeExternalAgentProcessResolverV0 struct {
 	req    ProcessRuntimeLaunchRequestV0
 	issues []ExternalAgentConnectorErrorV0

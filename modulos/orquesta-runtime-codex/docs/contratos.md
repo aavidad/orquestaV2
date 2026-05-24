@@ -109,10 +109,12 @@ Receipt opt-in:
 - Un ACK `completed` debe correlacionar `request_id`, `correlation_id`,
   `target_module`, `task_ref` y `ack_ref` con `ExternalAgentLaunchSpecV0` y
   `AgentStartPacketV0`.
-- Un ACK `completed` debe declarar todos los artifacts exigidos por `write_set`
-  y no puede declarar artifacts fuera de ese write-set.
-- El receipt rechaza ACK corrupto, incompleto o con HOME real, token/secreto,
-  OAuth, prompt/completion o transcript completo.
+- Un ACK `completed` debe declarar evidencia concreta, pero puede ser parcial
+  dentro del `write_set` o traer ficheros fuera de alcance como rail blando si
+  conserva identidad, rutas seguras y tests requeridos.
+- El receipt rechaza ACK corrupto, incompleto, archivos de control, rutas
+  inseguras y valores sensibles efectivos como tokens, secretos o claves. Los
+  marcadores dudosos sin valor quedan como evidencia para review posterior.
 - Los fallos se devuelven como `ExternalAgentConnectorErrorV0` con
   `message_key` publico y evidencia compacta; no incluyen el secreto, HOME ni
   path rechazado.
@@ -138,8 +140,7 @@ Invariantes:
 - Usa `ack_ref` como `delivery_ref` para no inventar refs fuera del protocolo.
 - No incluye paths de artifacts, comandos de test, stdout/stderr, transcripts,
   HOME, OAuth, modelo, provider ni datos de DB.
-- Rechaza la observacion si cualquier ref compacta filtra detalles que el core
-  prohibe, incluido `codex`, `provider`, `runtime`, `home`, `oauth`, `sql`,
-  `docker`, `git`, `tmux`, secretos o tokens.
+- No convierte marcadores operativos genericos en rechazo duro; esos rails
+  quedan para review/rework externo cuando no contienen valores sensibles.
 - Este DTO sigue perteneciendo al conector; el nucleo solo recibe la version
   neutral por puerto.

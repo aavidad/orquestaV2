@@ -22,9 +22,11 @@ Rutas v0:
 - `/api/v0/apps/{app_ref}/changes`
 - `/api/v0/director/stats`
 - `/api/v0/autoprogramming/validate-request`
+- `/api/v0/autoprogramming/self-improvement`
 - `/api/v0/autoprogramming/prepare-run`
 - `/api/v0/autoprogramming/status`
 - `/api/v0/autoprogramming/supervise`
+- `/api/v0/director/human-work/review-plan`
 - `/api/v0/runs/control`
 - `/api/v0/runs/queue/priority`
 - `/api/v0/runs/supervise`

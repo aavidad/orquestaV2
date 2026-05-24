@@ -91,6 +91,44 @@ func TestBuildCodexDeliveryObservationV0AceptaACKCompletoNeutral(t *testing.T) {
 	}
 }
 
+func TestBuildCodexDeliveryObservationV0ConservaRailPendienteCompacto(t *testing.T) {
+	spec := codexNeutralSpecForDeliveryObservationTestV0()
+	ack := codexNeutralAckForDeliveryObservationTestV0(spec)
+	ack.Notes = EvidenceListV0{
+		"rail pendiente: token/provider/home/prompt solo para matriz externa",
+		"rail pendiente: access_token=redacted sin valor real",
+	}
+
+	observation, issues := BuildCodexDeliveryObservationV0(ack, spec)
+	if len(issues) > 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if !evidenceContainsCodexDeliveryObservationTestV0(
+		observation.EvidenceRefs,
+		CodexAgentAckPendingRailEvidenceRefV0,
+	) {
+		t.Fatalf("evidence_refs sin rail pendiente compacto: %v", observation.EvidenceRefs)
+	}
+}
+
+func TestBuildCodexDeliveryObservationV0ConservaRailsPendientesEnCamposACK(t *testing.T) {
+	spec := codexNeutralSpecForDeliveryObservationTestV0()
+	ack := codexNeutralAckForDeliveryObservationTestV0(spec)
+	ack.Files = EvidenceListV0{"README.md", "docs/prompt-policy.md"}
+	ack.Tests = EvidenceListV0{"go test ./...", "completion policy redacted"}
+
+	observation, issues := BuildCodexDeliveryObservationV0(ack, spec)
+	if len(issues) > 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if !evidenceContainsCodexDeliveryObservationTestV0(
+		observation.EvidenceRefs,
+		CodexAgentAckPendingRailEvidenceRefV0,
+	) {
+		t.Fatalf("evidence_refs sin rail pendiente compacto: %v", observation.EvidenceRefs)
+	}
+}
+
 func evidenceContainsCodexDeliveryObservationTestV0(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
@@ -109,14 +147,56 @@ func TestBuildCodexDeliveryObservationV0RechazaACKNoCompletado(t *testing.T) {
 	requireCodexIssueV0(t, issues, CodexConnectorAckInvalidV0)
 }
 
-func TestBuildCodexDeliveryObservationV0RechazaRefConDetalleProveedor(t *testing.T) {
+func TestBuildCodexDeliveryObservationV0AceptaRefConRailPendiente(t *testing.T) {
 	spec := codexNeutralSpecForDeliveryObservationTestV0()
 	spec.RequestID = "agent-codex-001"
 	spec.AgentPacket.RequestID = spec.RequestID
 	ack := codexNeutralAckForDeliveryObservationTestV0(spec)
 
-	_, issues := BuildCodexDeliveryObservationV0(ack, spec)
-	requireCodexIssueV0(t, issues, CodexConnectorAckForbiddenV0)
+	observation, issues := BuildCodexDeliveryObservationV0(ack, spec)
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if codexDeliveryObservationUnsafeForCoreV0(observation) {
+		t.Fatalf("rail pendiente corto observation=%+v", observation)
+	}
+	if !codexDeliveryObservationHasPendingRailV0(observation) {
+		t.Fatalf("rail pendiente no detecto observation=%+v", observation)
+	}
+}
+
+func TestBuildCodexDeliveryObservationV0MarcaSoloValorSensibleComoUnsafe(t *testing.T) {
+	observation := CodexDeliveryObservationV0{
+		DeliveryRef: "ack-ref-001",
+		PhaseID:     "programacion",
+		TaskID:      "task-ref-001",
+		AgentRef:    "agent-ref-001",
+		Summary:     "access_token=valor",
+	}
+
+	if !codexDeliveryObservationUnsafeForCoreV0(observation) {
+		t.Fatalf("detalle sensible no detectado: %+v", observation)
+	}
+	if codexDeliveryObservationHasPendingRailV0(observation) {
+		t.Fatalf("detalle sensible marcado como rail pendiente: %+v", observation)
+	}
+}
+
+func TestCodexDeliveryObservationV0ConservaValorRedactadoComoRailPendiente(t *testing.T) {
+	observation := CodexDeliveryObservationV0{
+		DeliveryRef: "ack-ref-001",
+		PhaseID:     "programacion",
+		TaskID:      "task-ref-001",
+		AgentRef:    "agent-ref-001",
+		Summary:     "access_token=redacted sin valor real",
+	}
+
+	if codexDeliveryObservationUnsafeForCoreV0(observation) {
+		t.Fatalf("rail blando redactado marcado unsafe: %+v", observation)
+	}
+	if !codexDeliveryObservationHasPendingRailV0(observation) {
+		t.Fatalf("rail blando no conservado como pendiente: %+v", observation)
+	}
 }
 
 func codexNeutralSpecForDeliveryObservationTestV0() orquestaruntime.ExternalAgentLaunchSpecV0 {

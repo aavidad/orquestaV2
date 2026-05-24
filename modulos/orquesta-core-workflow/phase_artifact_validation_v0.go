@@ -5,37 +5,6 @@ import (
 	"strings"
 )
 
-var forbiddenPhaseArtifactFragmentsV0 = []string{
-	"db",
-	"database",
-	"sql",
-	"dsn",
-	"runtime",
-	"provider",
-	"proveedor",
-	"model",
-	"modelo",
-	"home",
-	"oauth",
-	"codex",
-	"claude",
-	"ollama",
-	"vllm",
-	"adapter",
-	"adaptador",
-	"filesystem",
-	"git",
-	"docker",
-	"tmux",
-	"secret",
-	"secreto",
-	"token",
-	"password",
-	"credential",
-	"credencial",
-	"api_key",
-}
-
 func validateRegisterPhaseArtifactCommandPayloadDataV0(payload RegisterPhaseArtifactCommandPayloadV0) error {
 	if err := validateRegisterPhaseArtifactRequiredV0(payload); err != nil {
 		return err
@@ -150,15 +119,7 @@ func phaseArtifactHasLongStringV0(values []string) bool {
 }
 
 func phaseArtifactHasForbiddenDetailsV0(values []string) bool {
-	for _, value := range values {
-		lower := strings.ToLower(value)
-		for _, fragment := range forbiddenPhaseArtifactFragmentsV0 {
-			if containsForbiddenFragmentV0(lower, fragment) {
-				return true
-			}
-		}
-	}
-	return false
+	return textValuesContainForbiddenOperationalSensitiveDetailV0(values)
 }
 
 func registerPhaseArtifactTextFieldsV0(payload RegisterPhaseArtifactCommandPayloadV0) []string {

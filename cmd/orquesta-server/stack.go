@@ -1,25 +1,16 @@
 package main
 
 import (
-	"fmt"
-	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
-	orquestadomainworkfile "orquesta/modulos/orquesta-domain-work-file"
-	orquestadomainworkhttp "orquesta/modulos/orquesta-domain-work-http"
-	orquestamcp "orquesta/modulos/orquesta-mcp"
-	orquestaopesconnector "orquesta/modulos/orquesta-opes-connector"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestarunfile "orquesta/modulos/orquesta-run-file"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
-	orquestaruntimerequiredtest "orquesta/modulos/orquesta-runtime-required-test"
 	orquestaserver "orquesta/modulos/orquesta-server"
 	orquestastatefile "orquesta/modulos/orquesta-state-file"
 	orquestastatefileoutbox "orquesta/modulos/orquesta-state-file/outbox"
@@ -49,9 +40,13 @@ func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 	if err != nil {
 		return nil, err
 	}
+	supervisor := serverStackSupervisorV0{
+		stack:          &stack,
+		projectWorkDir: serverConfig.ProjectWorkDir,
+	}
 	return orquestaserver.NewRuntimeV0(serverConfig, orquestaserver.RuntimeDepsV0{
 		AppHandler:   stack.Handler,
-		Supervisor:   stack,
+		Supervisor:   supervisor,
 		StartupCheck: startupCheckFromEnvV0(stack, serverConfig),
 	})
 }
@@ -131,8 +126,9 @@ func buildStackFromEnvV0(
 		ReviewGate: orquestaappcodexstack.ReviewGateConfigV0{
 			FileEvidence: orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 		},
-		RequiredTests: requiredTestRunner,
-		DomainWork:    domainWorkExecutor,
+		RequiredTests:            requiredTestRunner,
+		AutoprogrammingPromotion: autoprogrammingPromotionConfigFromEnvV0(serverConfig),
+		DomainWork:               domainWorkExecutor,
 		DomainDelivery: orquestaappcodexstack.DomainWorkDeliveryBridgeConfigV0{
 			Enabled: domainWorkDeliveryEnabledFromEnvV0(),
 			Ledger:  domainDeliveryLedgerFromEnvV0(serverConfig),
@@ -229,9 +225,9 @@ func codexRuntimeConfigV0(
 			string(orquestacoreworkflow.OrchestrationCapacityXHighV0),
 		)),
 		Profile:        strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_PROFILE")),
-		Sandbox:        envOrDefaultV0("ORQUESTA_CODEX_SANDBOX", "workspace-write"),
+		Sandbox:        codexWorkspaceWriteSandboxV0(envOrDefaultV0("ORQUESTA_CODEX_SANDBOX", "danger-full-access")),
 		ApprovalPolicy: envOrDefaultV0("ORQUESTA_CODEX_APPROVAL_POLICY", "never"),
-		DirectorSandbox: strings.TrimSpace(
+		DirectorSandbox: codexOptionalWorkspaceWriteSandboxV0(
 			os.Getenv("ORQUESTA_CODEX_DIRECTOR_SANDBOX"),
 		),
 		DirectorApprovalPolicy: strings.TrimSpace(
@@ -256,219 +252,20 @@ func codexRuntimeConfigV0(
 	}
 }
 
-func codexCommandPathV0() string {
-	raw := strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_COMMAND"))
-	if raw == "" {
-		raw = "codex"
+func codexWorkspaceWriteSandboxV0(value string) string {
+	switch strings.TrimSpace(value) {
+	case "danger-full-access":
+		return "danger-full-access"
+	case "workspace-write":
+		return "workspace-write"
+	default:
+		return "danger-full-access"
 	}
-	if filepath.IsAbs(raw) {
-		return raw
-	}
-	path, err := exec.LookPath(raw)
-	if err != nil {
-		return raw
-	}
-	return path
 }
 
-func codeHomeDirV0() string {
-	value := strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_CODE_HOME"))
-	if value != "" {
-		return value
-	}
-	return filepath.Join(homeDirV0(), ".codex")
-}
-
-func homeDirV0() string {
-	value := strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_HOME"))
-	if value != "" {
-		return value
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
+func codexOptionalWorkspaceWriteSandboxV0(value string) string {
+	if strings.TrimSpace(value) == "" {
 		return ""
 	}
-	return home
-}
-
-func domainWorkExecutorFromEnvV0(
-	serverConfig orquestaserver.ConfigV0,
-) (orquestamcp.MCPDomainWorkExecutorPortV0, error) {
-	baseURL := firstNonEmptyEnvV0("ORQUESTA_OPES_BASE_URL", "OPES_BASE_URL")
-	httpBaseURL := strings.TrimSpace(os.Getenv("ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL"))
-	fileDir := strings.TrimSpace(os.Getenv("ORQUESTA_DOMAIN_WORK_FILE_DIR"))
-	fileEnabled := strings.TrimSpace(os.Getenv("ORQUESTA_DOMAIN_WORK_FILE_ENABLED")) == "1" ||
-		fileDir != ""
-	configuredBackends := 0
-	for _, enabled := range []bool{baseURL != "", httpBaseURL != "", fileEnabled} {
-		if enabled {
-			configuredBackends++
-		}
-	}
-	if configuredBackends > 1 {
-		return nil, fmt.Errorf("domain_work_backend_ambiguous")
-	}
-	if baseURL != "" {
-		client := orquestaopesconnector.NewRESTClientV0(orquestaopesconnector.RESTClientConfigV0{
-			BaseURL: baseURL,
-			HTTPClient: &http.Client{
-				Timeout: time.Duration(intEnvOrDefaultV0("ORQUESTA_OPES_TIMEOUT_SECONDS", 30)) * time.Second,
-			},
-			DefaultMaxAttempts: intEnvOrDefaultV0("ORQUESTA_OPES_DEFAULT_MAX_ATTEMPTS", 1),
-		})
-		return orquestamcp.NewMCPDomainWorkToolExecutorV0(client, client), nil
-	}
-	if httpBaseURL != "" {
-		client, err := orquestadomainworkhttp.NewClientV0(orquestadomainworkhttp.ConfigV0{
-			BaseURL:            httpBaseURL,
-			CreateJobPath:      strings.TrimSpace(os.Getenv("ORQUESTA_DOMAIN_WORK_HTTP_CREATE_PATH")),
-			SubmitArtifactPath: strings.TrimSpace(os.Getenv("ORQUESTA_DOMAIN_WORK_HTTP_SUBMIT_PATH")),
-			Timeout:            time.Duration(intEnvOrDefaultV0("ORQUESTA_DOMAIN_WORK_HTTP_TIMEOUT_SECONDS", 30)) * time.Second,
-		})
-		if err != nil {
-			return nil, err
-		}
-		return orquestamcp.NewMCPDomainWorkToolExecutorV0(client, client), nil
-	}
-	if !fileEnabled {
-		return nil, nil
-	}
-	if fileDir == "" {
-		fileDir = filepath.Join(serverConfig.StateDir, "domain-work-jobs")
-	}
-	fileDir, err := filepath.Abs(fileDir)
-	if err != nil {
-		return nil, fmt.Errorf("domain_work_file_dir_invalid")
-	}
-	creator, err := orquestadomainworkfile.NewFileDomainWorkJobCreatorV0(fileDir)
-	if err != nil {
-		return nil, err
-	}
-	return orquestamcp.NewMCPDomainWorkToolExecutorV0(creator, nil), nil
-}
-
-func domainWorkDeliveryEnabledFromEnvV0() bool {
-	return firstNonEmptyEnvV0("ORQUESTA_OPES_BASE_URL", "OPES_BASE_URL") != "" ||
-		strings.TrimSpace(os.Getenv("ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL")) != ""
-}
-
-func requiredTestRunnerFromEnvV0(
-	serverConfig orquestaserver.ConfigV0,
-	evidenceWriter orquestacionnucleoapp.RequiredTestEvidenceWriterPortV0,
-) (orquestacionnucleoapp.RequiredTestRunnerPortV0, error) {
-	if strings.TrimSpace(os.Getenv("ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED")) != "1" {
-		return nil, nil
-	}
-	if evidenceWriter == nil {
-		return nil, fmt.Errorf("required_test_evidence_writer_required")
-	}
-	allowed, err := requiredTestAllowedCommandsFromEnvV0()
-	if err != nil {
-		return nil, err
-	}
-	absOutputDir, err := requiredTestOutputDirFromEnvV0(serverConfig)
-	if err != nil {
-		return nil, err
-	}
-	env, err := requiredTestEnvFromEnvV0(allowed, absOutputDir)
-	if err != nil {
-		return nil, err
-	}
-	return orquestacionnucleoapp.RequiredTestRunnerV0{
-		Executor: orquestaruntimerequiredtest.LocalCommandExecutorV0{
-			ProjectWorkDir:  serverConfig.ProjectWorkDir,
-			OutputDir:       absOutputDir,
-			AllowedCommands: allowed,
-			Env:             env,
-			MaxOutputBytes:  int64(intEnvOrDefaultV0("ORQUESTA_REQUIRED_TEST_MAX_OUTPUT_BYTES", 1024*1024)),
-		},
-		EvidenceWriter: evidenceWriter,
-	}, nil
-}
-
-func requiredTestAllowedCommandsFromEnvV0() (map[string]string, error) {
-	allowed := map[string]string{}
-	if goCommand := strings.TrimSpace(os.Getenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND")); goCommand != "" {
-		abs, err := filepath.Abs(goCommand)
-		if err != nil {
-			return nil, fmt.Errorf("required_test_go_command_invalid")
-		}
-		allowed["go"] = abs
-	}
-	for _, item := range strings.Split(os.Getenv("ORQUESTA_REQUIRED_TEST_ALLOWED_COMMANDS"), ",") {
-		item = strings.TrimSpace(item)
-		if item == "" {
-			continue
-		}
-		name, path, ok := strings.Cut(item, "=")
-		if !ok || strings.TrimSpace(name) == "" || strings.TrimSpace(path) == "" {
-			return nil, fmt.Errorf("required_test_allowed_commands_invalid")
-		}
-		abs, err := filepath.Abs(strings.TrimSpace(path))
-		if err != nil {
-			return nil, fmt.Errorf("required_test_allowed_commands_invalid")
-		}
-		allowed[strings.TrimSpace(name)] = abs
-	}
-	if len(allowed) == 0 {
-		return nil, fmt.Errorf("required_test_allowed_commands_required")
-	}
-	return allowed, nil
-}
-
-func requiredTestOutputDirFromEnvV0(serverConfig orquestaserver.ConfigV0) (string, error) {
-	outputDir := strings.TrimSpace(os.Getenv("ORQUESTA_REQUIRED_TEST_OUTPUT_DIR"))
-	if outputDir == "" {
-		outputDir = filepath.Join(serverConfig.StateDir, "required-test-output")
-	}
-	absOutputDir, err := filepath.Abs(outputDir)
-	if err != nil {
-		return "", fmt.Errorf("required_test_output_dir_invalid")
-	}
-	return absOutputDir, nil
-}
-
-func requiredTestEnvFromEnvV0(
-	allowed map[string]string,
-	outputDir string,
-) ([]string, error) {
-	env := []string(nil)
-	provided := map[string]bool{}
-	for _, item := range strings.Split(os.Getenv("ORQUESTA_REQUIRED_TEST_ENV"), ",") {
-		item = strings.TrimSpace(item)
-		if item == "" {
-			continue
-		}
-		key, _, ok := strings.Cut(item, "=")
-		if !ok || strings.TrimSpace(key) == "" {
-			return nil, fmt.Errorf("required_test_env_invalid")
-		}
-		provided[strings.ToUpper(strings.TrimSpace(key))] = true
-		env = append(env, item)
-	}
-	if _, ok := allowed["go"]; ok {
-		goEnv := map[string]string{
-			"GOCACHE":    filepath.Join(outputDir, "go-build-cache"),
-			"GOPATH":     filepath.Join(outputDir, "go-path"),
-			"GOMODCACHE": filepath.Join(outputDir, "go-mod-cache"),
-		}
-		for _, key := range []string{"GOCACHE", "GOPATH", "GOMODCACHE"} {
-			if provided[key] {
-				continue
-			}
-			dir := goEnv[key]
-			if err := os.MkdirAll(dir, 0o700); err != nil {
-				return nil, fmt.Errorf("required_test_go_env_unavailable")
-			}
-			env = append(env, key+"="+dir)
-		}
-	}
-	return env, nil
-}
-
-func validateCodexCommandAvailableV0() error {
-	if !filepath.IsAbs(codexCommandPathV0()) {
-		return fmt.Errorf("codex_command_unavailable")
-	}
-	return nil
+	return codexWorkspaceWriteSandboxV0(value)
 }

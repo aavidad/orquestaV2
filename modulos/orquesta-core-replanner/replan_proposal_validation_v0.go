@@ -3,6 +3,8 @@ package orquestacorereplanner
 import (
 	"encoding/json"
 	"strings"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 const (
@@ -103,6 +105,9 @@ func replanProposalHasLongStringV0(values []string) bool {
 }
 
 func replanProposalHasForbiddenDetailsV0(values []string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	for _, value := range values {
 		lower := strings.ToLower(value)
 		for _, fragment := range forbiddenReplanProposalFragmentsV0 {

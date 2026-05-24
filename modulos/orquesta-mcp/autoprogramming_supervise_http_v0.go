@@ -18,6 +18,17 @@ type mcpAutoprogrammingSuperviseHTTPHandlerV0 struct {
 	executor MCPTransportRunSupervisorExecutorV0
 }
 
+type mcpAutoprogrammingSuperviseHTTPInputV0 struct {
+	MCPRunSupervisorToolInputV0
+	OperatorAdvice []MCPAutoprogrammingOperatorAdviceV0 `json:"operator_advice,omitempty"`
+}
+
+type mcpAutoprogrammingSuperviseHTTPResultV0 struct {
+	MCPRunSupervisorToolResultV0
+	OperatorAdvice []MCPAutoprogrammingOperatorAdviceV0 `json:"operator_advice,omitempty"`
+	Diagnostics    []MCPAutoprogrammingDiagnosticV0     `json:"diagnostics,omitempty"`
+}
+
 func (handler mcpAutoprogrammingSuperviseHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != MCPAutoprogrammingSuperviseHTTPPathV0 {
 		writeMCPAutoprogrammingSuperviseHTTPV0(w, http.StatusNotFound, newMCPAutoprogrammingSuperviseHTTPErrorV0(r, MCPRunSupervisorToolInputV0{}, "path", "ruta_no_soportada"))
@@ -28,25 +39,25 @@ func (handler mcpAutoprogrammingSuperviseHTTPHandlerV0) ServeHTTP(w http.Respons
 		writeMCPAutoprogrammingSuperviseHTTPV0(w, http.StatusMethodNotAllowed, newMCPAutoprogrammingSuperviseHTTPErrorV0(r, MCPRunSupervisorToolInputV0{}, "method", "metodo_no_permitido"))
 		return
 	}
-	if handler.executor == nil {
-		writeMCPAutoprogrammingSuperviseHTTPV0(w, http.StatusServiceUnavailable, newMCPAutoprogrammingSuperviseHTTPErrorV0(r, MCPRunSupervisorToolInputV0{}, "executor", "autoprogramming_supervise_no_configurado"))
-		return
-	}
-	var input MCPRunSupervisorToolInputV0
+	var input mcpAutoprogrammingSuperviseHTTPInputV0
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeMCPAutoprogrammingSuperviseHTTPV0(w, http.StatusBadRequest, newMCPAutoprogrammingSuperviseHTTPErrorV0(r, input, "body", "request_body_invalido"))
+		writeMCPAutoprogrammingSuperviseHTTPV0(w, http.StatusBadRequest, newMCPAutoprogrammingSuperviseHTTPErrorV0(r, input.MCPRunSupervisorToolInputV0, "body", "request_body_invalido"))
 		return
 	}
-	result, err := handler.executor.Execute(r.Context(), input)
+	if handler.executor == nil {
+		writeMCPAutoprogrammingSuperviseHTTPResultV0(w, http.StatusServiceUnavailable, newMCPAutoprogrammingSuperviseHTTPErrorV0(r, input.MCPRunSupervisorToolInputV0, "executor", "autoprogramming_supervise_no_configurado"), input.OperatorAdvice)
+		return
+	}
+	result, err := handler.executor.Execute(r.Context(), input.MCPRunSupervisorToolInputV0)
 	if err != nil {
-		writeMCPAutoprogrammingSuperviseHTTPV0(w, http.StatusInternalServerError, newMCPAutoprogrammingSuperviseHTTPErrorV0(r, input, "executor", "autoprogramming_supervise_error"))
+		writeMCPAutoprogrammingSuperviseHTTPResultV0(w, http.StatusInternalServerError, newMCPAutoprogrammingSuperviseHTTPErrorV0(r, input.MCPRunSupervisorToolInputV0, "executor", "autoprogramming_supervise_error"), input.OperatorAdvice)
 		return
 	}
 	status := http.StatusOK
 	if result.Estado == MCPRunSupervisorEstadoErrorV0 {
 		status = http.StatusBadRequest
 	}
-	writeMCPAutoprogrammingSuperviseHTTPV0(w, status, result)
+	writeMCPAutoprogrammingSuperviseHTTPResultV0(w, status, result, input.OperatorAdvice)
 }
 
 func newMCPAutoprogrammingSuperviseHTTPErrorV0(
@@ -71,4 +82,35 @@ func writeMCPAutoprogrammingSuperviseHTTPV0(
 	}
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(result)
+}
+
+func writeMCPAutoprogrammingSuperviseHTTPResultV0(
+	w http.ResponseWriter,
+	status int,
+	result MCPRunSupervisorToolResultV0,
+	advice []MCPAutoprogrammingOperatorAdviceV0,
+) {
+	normalizedAdvice := normalizeMCPAutoprogrammingOperatorAdviceV0(
+		advice,
+		firstNonEmptyMCPV0(result.RunRef, result.RequestID, result.CorrelationID),
+	)
+	if len(normalizedAdvice) == 0 {
+		writeMCPAutoprogrammingSuperviseHTTPV0(w, status, result)
+		return
+	}
+	payload := mcpAutoprogrammingSuperviseHTTPResultV0{
+		MCPRunSupervisorToolResultV0: result,
+		OperatorAdvice:               normalizedAdvice,
+		Diagnostics: []MCPAutoprogrammingDiagnosticV0{mcpAutoprogrammingDiagnosticV0(
+			"operator_advice_recorded_non_blocking",
+			"operator_advice",
+			"consejo de operador registrado sin bloquear supervisor",
+		)},
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if result.CorrelationID != "" {
+		w.Header().Set("X-Correlation-ID", result.CorrelationID)
+	}
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
 }

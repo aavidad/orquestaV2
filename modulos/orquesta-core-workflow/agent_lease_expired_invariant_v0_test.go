@@ -71,7 +71,7 @@ func TestApplyAgentLeaseExpiredEventV0RejectsConflictingLeaseRef(t *testing.T) {
 
 func TestRegisterAgentLeaseExpiredCommandV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validRegisterAgentLeaseExpiredPayloadV0("agent-request-forbidden", "lease-ref-forbidden")
-	payload.EvidenceRefs = []string{"provider-detail"}
+	payload.EvidenceRefs = []string{"api_key=valor"}
 
 	_, err := NewRegisterAgentLeaseExpiredCommandV0(validCommandMetaV0("cmd-lease-forbidden", "idem-lease-forbidden"), payload)
 	assertAgentLeaseExpiredCommandErrorV0(t, err, ErrDetalleProhibidoV0, "payload")

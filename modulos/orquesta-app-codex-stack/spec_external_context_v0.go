@@ -188,7 +188,23 @@ func externalContextRefPartV0(value string) string {
 	if value == "" {
 		return "field"
 	}
+	if externalContextRefPartHasSensitiveNameV0(value) {
+		return "field"
+	}
 	return value
+}
+
+func externalContextRefPartHasSensitiveNameV0(value string) bool {
+	for _, marker := range []string{
+		"access-token", "refresh-token", "api-key", "secret", "secreto",
+		"password", "credential", "credencial", "token", "prompt",
+		"transcript", "completion",
+	} {
+		if strings.Contains(value, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func externalWorkContextBudgetEntryV0(

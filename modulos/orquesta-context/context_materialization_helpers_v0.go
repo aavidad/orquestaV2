@@ -1,8 +1,13 @@
 package orquestacontext
 
-import "strings"
+import (
+	"strings"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
+)
 
 const maxContextMaterializedEntryBytesV0 = 12000
+const contextMaterializationRailBoundaryV0 = "context_materialization"
 
 func contextMaterializationIssueV0(
 	code ContextMaterializationIssueCodeV0,
@@ -81,15 +86,17 @@ func contextMaterializedContentV0(
 }
 
 func contextMaterializedContentHasForbiddenDetailV0(content string) bool {
-	lower := strings.ToLower(content)
-	for _, fragment := range []string{
-		"sk-", "bearer ", "access_token", "refresh_token", "secret=",
-		"postgres://", "mysql://", "mongodb://", "/home/", "\\home\\",
-		"c:\\users\\", "\\users\\",
-	} {
-		if strings.Contains(lower, fragment) {
-			return true
-		}
-	}
-	return false
+	return orquestarails.TextContainsOperationalRawDetailForFieldV0(
+		contextMaterializationRailBoundaryV0,
+		"content",
+		content,
+	)
+}
+
+func contextMaterializedRefHasForbiddenDetailV0(ref string) bool {
+	return orquestarails.TextContainsOperationalRawDetailForFieldV0(
+		contextMaterializationRailBoundaryV0,
+		"ref",
+		ref,
+	)
 }

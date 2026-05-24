@@ -2,6 +2,7 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"strings"
 
@@ -105,7 +106,7 @@ func (source AssessmentReplanSourceV0) planForAssessmentV0(
 	projection orquestacoreworkflow.AgentWorkAssessmentProjectionV0,
 	taskRef string,
 ) orquestacionnucleoapp.AgentAssessmentReplanPlanV0 {
-	suffix := assessmentReplanSafeRefV0(projection.AssessmentRef)
+	suffix := assessmentReplanSuffixV0(request.Run.RunID, projection, taskRef)
 	evidence := assessmentReplanEvidenceRefsV0(request, projection)
 	summary := "Reemplazar agente detenido tras evaluacion de progreso."
 	return orquestacionnucleoapp.AgentAssessmentReplanPlanV0{
@@ -185,5 +186,30 @@ func assessmentReplanSafeRefV0(value string) string {
 	if value == "" {
 		return "sin-ref"
 	}
+	if len(value) > 64 {
+		value = strings.Trim(value[:64], "-")
+	}
+	if value == "" {
+		return "sin-ref"
+	}
 	return value
+}
+
+func assessmentReplanSuffixV0(
+	runRef string,
+	projection orquestacoreworkflow.AgentWorkAssessmentProjectionV0,
+	taskRef string,
+) string {
+	base := assessmentReplanSafeRefV0(taskRef)
+	if base == "sin-ref" {
+		base = assessmentReplanSafeRefV0(projection.AgentRequestID)
+	}
+	return base + "-" + assessmentReplanShortHashV0(
+		runRef+"|"+projection.AssessmentRef+"|"+projection.AgentRequestID+"|"+taskRef,
+	)
+}
+
+func assessmentReplanShortHashV0(value string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(value)))
+	return fmt.Sprintf("%x", sum[:6])
 }

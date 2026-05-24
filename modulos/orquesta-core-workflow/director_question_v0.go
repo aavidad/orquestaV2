@@ -34,7 +34,7 @@ type DirectorQuestionErrorV0 struct {
 }
 
 func (err DirectorQuestionErrorV0) Error() string {
-	return err.Code
+	return codeFieldErrorTextV0(err.Code, err.Field)
 }
 
 func NewDirectorQuestionV0(question DirectorQuestionV0) (DirectorQuestionV0, error) {

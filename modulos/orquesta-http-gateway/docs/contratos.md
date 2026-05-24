@@ -36,7 +36,11 @@ Campos:
 - `RunSupervisor`;
 - `ServerShutdown`;
 - `AutoprogrammingValidateRequest`.
+- `AutoprogrammingSelfImprovement`.
 - `AutoprogrammingPrepareRun`.
+- `AutoprogrammingStatus`.
+- `AutoprogrammingSupervise`.
+- `HumanDirectorWorkReviewPlan`.
 - `DomainWork`.
 - `ExternalWorkRun`.
 
@@ -55,9 +59,11 @@ Campos:
 - `RouteRunQueuePriorityV0`: `/api/v0/runs/queue/priority`;
 - `RouteRunSupervisorV0`: `/api/v0/runs/supervise`;
 - `RouteAutoprogrammingValidateRequestV0`: `/api/v0/autoprogramming/validate-request`;
+- `RouteAutoprogrammingSelfImprovementV0`: `/api/v0/autoprogramming/self-improvement`;
 - `RouteAutoprogrammingPrepareRunV0`: `/api/v0/autoprogramming/prepare-run`;
 - `RouteAutoprogrammingStatusV0`: `/api/v0/autoprogramming/status`;
 - `RouteAutoprogrammingSuperviseV0`: `/api/v0/autoprogramming/supervise`;
+- `RouteHumanDirectorWorkReviewPlanV0`: `/api/v0/director/human-work/review-plan`;
 - `RouteServerShutdownV0`: `/api/v0/server/shutdown`.
 - `RouteDomainWorkV0`: `/api/v0/domain-work`.
 - `RouteExternalWorkRunV0`: `/api/v0/external-work/run`.
@@ -87,6 +93,14 @@ runs ni arranca agentes; solo monta el handler.
 `RouteAutoprogrammingStatusV0` y `RouteAutoprogrammingSuperviseV0` apuntan a
 contratos REST/MCP finos para estado/diagnostico y supervision puntual de
 autoprogramacion. El gateway solo registra handlers inyectados.
+
+`RouteAutoprogrammingSelfImprovementV0` apunta al contrato REST/MCP que convierte
+evidencia de fallo en automejora de baja prioridad. El gateway no prepara runs
+ni decide cola; solo registra el handler inyectado.
+
+`RouteHumanDirectorWorkReviewPlanV0` apunta al contrato REST/MCP de revision de
+trabajo humano. El gateway no conoce operadores concretos ni transporte MCP
+real; solo registra el handler inyectado.
 
 `RouteDomainWorkV0` apunta al contrato REST/MCP de trabajo de dominio externo.
 El gateway solo registra el handler inyectado; no conoce OPES, contratos de

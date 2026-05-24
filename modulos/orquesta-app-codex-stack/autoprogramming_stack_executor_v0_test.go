@@ -210,6 +210,78 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0EncolaYSupervisorGlobalArranca(
 	}
 }
 
+func TestCodexStackAutoprogrammingSupervisorGlobalSupervisaAgenteParado(t *testing.T) {
+	ctx := context.Background()
+	runtime := newPendingAckCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-autoprogramming-global-stopped-001",
+		CorrelationID:          "corr-autoprogramming-global-stopped-001",
+		OccurredAt:             "2026-05-22T11:35:00Z",
+		RequestedBy:            "orquesta-stack-api-test",
+		AutoprogrammingRequest: autoprogrammingBridgeRequestForTestV0(),
+		MaxBursts:              3,
+		MaxStepsPerBurst:       3,
+		MaxDispatchesPerWait:   3,
+		MaxCommands:            5,
+		MaxOutboxPerCycle:      5,
+	})
+	if !prepared.Accepted || len(prepared.WaitAgentRefs) != 1 {
+		t.Fatalf("prepared=%+v", prepared)
+	}
+	first := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:            "request-autoprogramming-global-stopped-supervisor-001",
+		CorrelationID:        "corr-autoprogramming-global-stopped-001",
+		QueueRef:             DefaultRunQueueRefV0,
+		MaxTicks:             1,
+		MaxRunsPerTick:       1,
+		MaxExecutions:        1,
+		MaxBursts:            3,
+		MaxStepsPerBurst:     3,
+		MaxDispatchesPerWait: 3,
+		MaxCommands:          5,
+		MaxOutboxPerCycle:    5,
+		AllowRepeatedRuns:    true,
+	})
+	if first.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 || runtime.launchCountV0() != 1 {
+		t.Fatalf("first=%+v launches=%d", first, runtime.launchCountV0())
+	}
+	agentRef := prepared.WaitAgentRefs[0]
+	record, err := stack.Stores.ProcessRegistry.ResolveAgentProcessV0(ctx, prepared.RunRef, agentRef)
+	if err != nil {
+		t.Fatalf("ResolveAgentProcessV0: %v", err)
+	}
+	runtime.markStoppedForTestV0(record.ProcessRef)
+
+	second := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:            "request-autoprogramming-global-stopped-supervisor-002",
+		CorrelationID:        "corr-autoprogramming-global-stopped-001",
+		QueueRef:             DefaultRunQueueRefV0,
+		MaxTicks:             1,
+		MaxRunsPerTick:       1,
+		MaxExecutions:        1,
+		MaxBursts:            8,
+		MaxStepsPerBurst:     6,
+		MaxDispatchesPerWait: 8,
+		MaxCommands:          20,
+		MaxOutboxPerCycle:    8,
+		AllowRepeatedRuns:    true,
+	})
+	if second.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 {
+		t.Fatalf("second=%+v", second)
+	}
+	run, err := stack.Ports.RunStore.LoadRunV0(ctx, prepared.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if !autoprogrammingBridgeStringInSetForTestV0(run.StoppedAgents, agentRef) ||
+		!autoprogrammingBridgeStringInSetForTestV0(run.ConfirmedStoppedAgents, agentRef) ||
+		!codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionStopAgentV0) {
+		t.Fatalf("supervisor global no activo supervision: stopped=%v confirmed=%v assessments=%v", run.StoppedAgents, run.ConfirmedStoppedAgents, run.AgentAssessments)
+	}
+}
+
 func TestCodexStackAutoprogrammingPrepareRunAPIV0RespetaPrioridadSolicitada(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 

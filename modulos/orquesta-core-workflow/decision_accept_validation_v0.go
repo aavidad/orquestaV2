@@ -5,33 +5,6 @@ import (
 	"strings"
 )
 
-var forbiddenDecisionAcceptFragmentsV0 = []string{
-	"db",
-	"database",
-	"sql",
-	"dsn",
-	"runtime",
-	"provider",
-	"proveedor",
-	"model",
-	"modelo",
-	"home",
-	"oauth",
-	"codex",
-	"claude",
-	"ollama",
-	"vllm",
-	"adapter",
-	"adaptador",
-	"secret",
-	"secreto",
-	"token",
-	"password",
-	"credential",
-	"credencial",
-	"api_key",
-}
-
 func validateAcceptDecisionCommandPayloadDataV0(payload AcceptDecisionCommandPayloadV0) error {
 	if err := validateAcceptDecisionRequiredV0(payload); err != nil {
 		return err
@@ -146,15 +119,7 @@ func decisionAcceptHasLongStringV0(values []string) bool {
 }
 
 func decisionAcceptHasForbiddenDetailsV0(values []string) bool {
-	for _, value := range values {
-		lower := strings.ToLower(value)
-		for _, fragment := range forbiddenDecisionAcceptFragmentsV0 {
-			if containsForbiddenFragmentV0(lower, fragment) {
-				return true
-			}
-		}
-	}
-	return false
+	return textValuesContainForbiddenOperationalSensitiveDetailV0(values)
 }
 
 func acceptDecisionTextFieldsV0(payload AcceptDecisionCommandPayloadV0) []string {

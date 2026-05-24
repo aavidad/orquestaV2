@@ -294,8 +294,8 @@ Write-set aplicado:
 - `buildDirectorPortsV0` inyecta `ReviewGateSource`;
 - `reviewGateSourceV0` compone `CodexReviewGateObservationSourceV0`;
 - el runtime fake de tests materializa ficheros reales declarados en ACK;
-- test de stack valida aceptacion con fichero real y `changes_requested` por
-  fichero de mas de 300 lineas.
+- test de stack valida aceptacion con fichero real y rail blando por fichero de
+  mas de 300 lineas, sin convertirlo en rework duro.
 
 Validacion:
 
@@ -751,3 +751,28 @@ Reglas cerradas:
 - no lanza Codex real por defecto;
 - no toca OPES ni core;
 - no declara cerrado OPES real.
+
+## APP-CODEX-STACK-025
+
+Objetivo: inyectar un sanitizador local opt-in antes de enviar contexto a
+agentes Codex premium/remotos.
+
+Estado: completada localmente.
+
+Trabajo aplicado:
+
+- `CodexRuntimeConfigV0.ContextSanitizer`;
+- `LocalSensitiveDataSanitizerV0`;
+- policies publicas de packet cuando hay evidencia o revision de saneamiento;
+- guardas de cierre cuando la evidencia exige revision humana/director;
+- tests de no fuga de token, secreto, HOME ni material privado ambiguo.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack`
+
+Reglas cerradas:
+
+- no hay sanitizador activo si la composicion no lo inyecta;
+- no se elige proveedor, modelo, HOME ni transporte desde el adaptador;
+- la evidencia no conserva el dato sensible.

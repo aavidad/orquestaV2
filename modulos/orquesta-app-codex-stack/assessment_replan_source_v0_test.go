@@ -2,6 +2,7 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -87,6 +88,46 @@ func TestAssessmentReplanSourceV0NoDuplicaSiReplacementYaExiste(t *testing.T) {
 	}
 	if len(plans) != 0 {
 		t.Fatalf("plan duplicado=%+v", plans)
+	}
+}
+
+func TestAssessmentReplanSourceV0GeneraRefsCompactasParaAssessmentAnidado(t *testing.T) {
+	runRef := "run-ref-assessment-replan-stack-compact-001"
+	oldAgentRef := "agent-ref-assessment-assessment-ref-agent-progress-report-ref-agent-ref-assessment-assessment-ref-agent-progress-report-ref-agent-ref-task-autoprogramming-d6f0b05f2e4d-g01-000088-000016"
+	taskRef := "task-autoprogramming-d6f0b05f2e4d-g01"
+	source := AssessmentReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(
+			assessmentReplanDescriptorForTestV0(runRef, oldAgentRef, taskRef),
+		),
+	}
+	request := assessmentReplanRequestForTestV0(runRef, oldAgentRef, taskRef, false)
+	request.Run.AgentAssessments = []string{
+		orquestacoreworkflow.AgentAssessmentProjectionRefV0(orquestacoreworkflow.AgentWorkAssessedPayloadV0{
+			AssessmentRef:  "assessment-ref-agent-progress-report-ref-" + oldAgentRef,
+			PhaseID:        string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			AgentRequestID: oldAgentRef,
+			TaskRef:        taskRef,
+			Verdict:        orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0,
+			Action:         orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
+			Severity:       orquestacoreworkflow.AgentAssessmentSeverityCriticalV0,
+		}),
+	}
+
+	plans, err := source.BuildAgentAssessmentReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildAgentAssessmentReplanPlansV0 compact: %v", err)
+	}
+	if len(plans) != 1 {
+		t.Fatalf("plans=%+v", plans)
+	}
+	if got := plans[0].AgentRequestID; len(got) > 120 ||
+		got == "" ||
+		strings.Contains(got, oldAgentRef) {
+		t.Fatalf("agent_request_id no compacto: %q len=%d", got, len(got))
+	}
+	again, err := source.BuildAgentAssessmentReplanPlansV0(context.Background(), request)
+	if err != nil || len(again) != 1 || again[0].AgentRequestID != plans[0].AgentRequestID {
+		t.Fatalf("agent_request_id no determinista: first=%+v again=%+v err=%v", plans, again, err)
 	}
 }
 

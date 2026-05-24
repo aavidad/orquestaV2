@@ -37,7 +37,7 @@ func TestCodexStackV0ReviewGateAceptaEntregaConEvidenciaReal(t *testing.T) {
 	}
 }
 
-func TestCodexStackV0ReviewGatePideCambiosSiFicheroEsDemasiadoGrande(t *testing.T) {
+func TestCodexStackV0ReviewGateAceptaFicheroGrandeComoAviso(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	spec := codexStackReviewGateSpecForTestV0("ack-ref-stack-review-big-001")
 	projectDir := t.TempDir()
@@ -52,8 +52,8 @@ func TestCodexStackV0ReviewGatePideCambiosSiFicheroEsDemasiadoGrande(t *testing.
 		t.Fatalf("BuildReviewGateObservationsV0: %v", err)
 	}
 	if len(observations) != 1 ||
-		observations[0].Status != orquestacoreworkflow.ReviewResultStatusChangesRequestedV0 ||
-		observations[0].AcceptedReviewRef != "" {
+		observations[0].Status != orquestacoreworkflow.ReviewResultStatusAcceptedV0 ||
+		observations[0].AcceptedReviewRef == "" {
 		t.Fatalf("observations=%+v", observations)
 	}
 	if !codexStackReviewGateHasEvidenceForTestV0(observations[0].EvidenceRefs, "gate-issue:file_too_large") {
@@ -61,7 +61,7 @@ func TestCodexStackV0ReviewGatePideCambiosSiFicheroEsDemasiadoGrande(t *testing.
 	}
 }
 
-func TestCodexStackV0ReviewGatePideCambiosSiFaltaDestinoWriteSet(t *testing.T) {
+func TestCodexStackV0ReviewGateAceptaDestinoWriteSetFaltanteComoAviso(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	spec := codexStackReviewGateSpecForTestV0("ack-ref-stack-review-missing-web-001")
 	spec.AgentPacket.Task.WriteSet = []string{"internal/api", "web"}
@@ -77,8 +77,8 @@ func TestCodexStackV0ReviewGatePideCambiosSiFaltaDestinoWriteSet(t *testing.T) {
 		t.Fatalf("BuildReviewGateObservationsV0: %v", err)
 	}
 	if len(observations) != 1 ||
-		observations[0].Status != orquestacoreworkflow.ReviewResultStatusChangesRequestedV0 ||
-		observations[0].AcceptedReviewRef != "" {
+		observations[0].Status != orquestacoreworkflow.ReviewResultStatusAcceptedV0 ||
+		observations[0].AcceptedReviewRef == "" {
 		t.Fatalf("observations=%+v", observations)
 	}
 	if !codexStackReviewGateHasEvidenceForTestV0(

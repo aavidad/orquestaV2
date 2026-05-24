@@ -19,8 +19,8 @@ func MCPAutoprogrammingSuperviseDescriptorV0() MCPAutoprogrammingSuperviseToolDe
 	return MCPAutoprogrammingSuperviseToolDescriptorV0{
 		Name:        MCPAutoprogrammingSuperviseToolNameV0,
 		Version:     MCPAutoprogrammingSuperviseToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,queue_ref?,resident_mode?,max_ticks?,limits?}",
-		Output:      "ok:{run_ref,stop_reason,ticks,last,history?,evidence_refs?}|error:{errores_publicos}",
+		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,queue_ref?,resident_mode?,max_ticks?,limits?,operator_advice?}",
+		Output:      "ok:{run_ref,stop_reason,ticks,last,history?,evidence_refs?,operator_advice?,diagnostics?}|error:{errores_publicos,operator_advice?,diagnostics?}",
 		ResourceURI: MCPAutoprogrammingSuperviseResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -28,6 +28,7 @@ func MCPAutoprogrammingSuperviseDescriptorV0() MCPAutoprogrammingSuperviseToolDe
 			"run_ref acota una run de autoprogramacion si se proporciona",
 			"sin run_ref delega la decision de cola al executor inyectado",
 			"resident_mode permite al executor seguir backlog durable hasta cierre o bloqueo",
+			"operator_advice se conserva como observacion no bloqueante",
 			"no conoce Codex runtime DB filesystem ni proveedor concreto",
 		},
 	}

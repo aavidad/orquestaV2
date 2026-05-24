@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func validAgentLeaseUTCInstantV0(value string) bool {
@@ -35,6 +37,9 @@ func validAgentLeaseUTCInstantV0(value string) bool {
 }
 
 func containsForbiddenAgentLeaseDetailV0(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	lower := strings.ToLower(strings.TrimSpace(value))
 	for _, fragment := range forbiddenAgentLeaseFragmentsV0 {
 		if strings.Contains(lower, fragment) {
@@ -77,7 +82,7 @@ func isAgentLeaseLeapYearV0(year int) bool {
 }
 
 var (
-	agentLeaseOpaqueRefPatternV0  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{2,159}$`)
+	agentLeaseOpaqueRefPatternV0  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{2,511}$`)
 	agentLeaseUTCInstantPatternV0 = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$`)
 	forbiddenAgentLeaseJSONKeysV0 = map[string]bool{
 		"db": true, "database": true, "home": true, "model": true, "modelo": true,

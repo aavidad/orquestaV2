@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
@@ -12,7 +11,7 @@ import (
 
 func TestRESTClientV0CreateDomainWorkJobCreaJobExterno(t *testing.T) {
 	var received opesCreateJobRequestV0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newRESTClientForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs" || r.Method != http.MethodPost {
 			t.Fatalf("request inesperada %s %s", r.Method, r.URL.Path)
 		}
@@ -35,9 +34,7 @@ func TestRESTClientV0CreateDomainWorkJobCreaJobExterno(t *testing.T) {
 			},
 		})
 	}))
-	defer server.Close()
 
-	client := NewRESTClientV0(RESTClientConfigV0{BaseURL: server.URL})
 	result, err := client.CreateDomainWorkJobV0(context.Background(), opesJobRequestForTestV0())
 
 	if err != nil {
@@ -70,7 +67,7 @@ func TestRESTClientV0CreateDomainWorkJobCreaJobExterno(t *testing.T) {
 
 func TestRESTClientV0SubmitDomainWorkArtifactEnviaArtefacto(t *testing.T) {
 	var received opesArtifactRequestV0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newRESTClientForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs/job-ref-opes-001/artifacts" || r.Method != http.MethodPost {
 			t.Fatalf("request inesperada %s %s", r.Method, r.URL.Path)
 		}
@@ -100,9 +97,7 @@ func TestRESTClientV0SubmitDomainWorkArtifactEnviaArtefacto(t *testing.T) {
 			},
 		})
 	}))
-	defer server.Close()
 
-	client := NewRESTClientV0(RESTClientConfigV0{BaseURL: server.URL})
 	result, err := client.SubmitDomainWorkArtifactV0(context.Background(), opesArtifactSubmissionForTestV0())
 
 	if err != nil {
@@ -125,7 +120,7 @@ func TestRESTClientV0SubmitDomainWorkArtifactEnviaArtefacto(t *testing.T) {
 
 func TestRESTClientV0SubmitDomainWorkArtifactEnviaVisualAsset(t *testing.T) {
 	var received opesArtifactRequestV0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newRESTClientForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs/job-ref-visual-001/artifacts" || r.Method != http.MethodPost {
 			t.Fatalf("request inesperada %s %s", r.Method, r.URL.Path)
 		}
@@ -141,9 +136,7 @@ func TestRESTClientV0SubmitDomainWorkArtifactEnviaVisualAsset(t *testing.T) {
 			"external_refs":   map[string]string{"delivery_ref": "delivery-ref-visual-001"},
 		})
 	}))
-	defer server.Close()
 
-	client := NewRESTClientV0(RESTClientConfigV0{BaseURL: server.URL})
 	result, err := client.SubmitDomainWorkArtifactV0(context.Background(), opesVisualArtifactSubmissionForTestV0())
 
 	if err != nil {
@@ -164,7 +157,7 @@ func TestRESTClientV0SubmitDomainWorkArtifactEnviaVisualAsset(t *testing.T) {
 
 func TestRESTClientV0SubmitDomainWorkArtifactEnviaDocumentPlan(t *testing.T) {
 	var received opesArtifactRequestV0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newRESTClientForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs/job-ref-plan-temario-001/artifacts" || r.Method != http.MethodPost {
 			t.Fatalf("request inesperada %s %s", r.Method, r.URL.Path)
 		}
@@ -180,9 +173,7 @@ func TestRESTClientV0SubmitDomainWorkArtifactEnviaDocumentPlan(t *testing.T) {
 			"external_refs":   map[string]string{"delivery_ref": "delivery-ref-plan-temario-001"},
 		})
 	}))
-	defer server.Close()
 
-	client := NewRESTClientV0(RESTClientConfigV0{BaseURL: server.URL})
 	result, err := client.SubmitDomainWorkArtifactV0(
 		context.Background(),
 		opesDocumentPlanArtifactSubmissionForTestV0(),
@@ -213,247 +204,4 @@ func TestRESTClientV0SubmitDomainWorkArtifactEnviaDocumentPlan(t *testing.T) {
 		received.PayloadJSON["plan_ref"] != "plan-ref-operadores-001" {
 		t.Fatalf("payload=%+v", received)
 	}
-}
-
-func TestRESTClientV0ListExternalJobsConsultaColaPublica(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
-			t.Fatalf("request inesperada %s %s", r.Method, r.URL.Path)
-		}
-		if r.URL.Query().Get("execution_mode") != "external" ||
-			r.URL.Query().Get("status") != "pending" ||
-			r.URL.Query().Get("job_type") != "summarize_topic" ||
-			r.URL.Query().Get("limit") != "3" {
-			t.Fatalf("query=%s", r.URL.RawQuery)
-		}
-		_ = json.NewEncoder(w).Encode([]map[string]any{{
-			"id":             "job-ref-summary-001",
-			"type":           "summarize_topic",
-			"status":         "pending",
-			"execution_mode": "external",
-			"payload_json":   `{"topic_id":"topic-ref-001"}`,
-			"requested_by":   "opes",
-		}})
-	}))
-	defer server.Close()
-
-	client := NewRESTClientV0(RESTClientConfigV0{BaseURL: server.URL})
-	jobs, err := client.ListExternalJobsV0(context.Background(), ExternalJobQueryV0{
-		ExecutionMode: "external",
-		Status:        "pending",
-		JobType:       "summarize_topic",
-		Limit:         3,
-	})
-
-	if err != nil {
-		t.Fatalf("ListExternalJobsV0: %v", err)
-	}
-	if len(jobs) != 1 ||
-		jobs[0].ID != "job-ref-summary-001" ||
-		jobs[0].Type != "summarize_topic" ||
-		jobs[0].PayloadJSON != `{"topic_id":"topic-ref-001"}` {
-		t.Fatalf("jobs=%+v", jobs)
-	}
-}
-
-func TestRESTClientV0ListExternalJobsFiltraRespuestaMixta(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/jobs/job-ref-plan-001" || r.Method != http.MethodGet {
-			t.Fatalf("request inesperada %s %s", r.Method, r.URL.Path)
-		}
-		if r.URL.RawQuery != "" {
-			t.Fatalf("query=%s", r.URL.RawQuery)
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id":             "job-ref-plan-001",
-			"type":           "plan_temario",
-			"status":         "pending",
-			"execution_mode": "external",
-		})
-	}))
-	defer server.Close()
-
-	client := NewRESTClientV0(RESTClientConfigV0{BaseURL: server.URL})
-	jobs, err := client.ListExternalJobsV0(context.Background(), ExternalJobQueryV0{
-		ExecutionMode: "external",
-		Status:        "pending",
-		JobType:       "plan_temario",
-		JobRef:        "job-ref-plan-001",
-		Limit:         1,
-	})
-
-	if err != nil {
-		t.Fatalf("ListExternalJobsV0: %v", err)
-	}
-	if len(jobs) != 1 ||
-		jobs[0].ID != "job-ref-plan-001" ||
-		jobs[0].Type != "plan_temario" ||
-		jobs[0].Status != "pending" ||
-		jobs[0].ExecutionMode != "external" {
-		t.Fatalf("jobs=%+v", jobs)
-	}
-}
-
-func TestRESTClientV0ListTopicBlocksUsaAPIPublica(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/topics/topic-ref-001/blocks" || r.Method != http.MethodGet {
-			t.Fatalf("request inesperada %s %s", r.Method, r.URL.Path)
-		}
-		_ = json.NewEncoder(w).Encode([]map[string]any{{
-			"ID":               "block-ref-001",
-			"StableID":         "stable-ref-001",
-			"CanonicalTopicID": "topic-ref-001",
-			"ChapterID":        "chapter-ref-001",
-			"Type":             "technical",
-			"Status":           "pendiente_revision",
-			"Title":            "Bloque 1",
-			"Markdown":         "Contenido del bloque.",
-			"LanguageCode":     "es",
-			"SourceRefs":       []string{"source-ref-001"},
-		}})
-	}))
-	defer server.Close()
-
-	client := NewRESTClientV0(RESTClientConfigV0{BaseURL: server.URL})
-	blocks, err := client.ListTopicBlocksV0(context.Background(), "topic-ref-001")
-
-	if err != nil {
-		t.Fatalf("ListTopicBlocksV0: %v", err)
-	}
-	if len(blocks) != 1 ||
-		blocks[0].ID != "block-ref-001" ||
-		blocks[0].StableID != "stable-ref-001" ||
-		blocks[0].Markdown != "Contenido del bloque." ||
-		len(blocks[0].SourceRefs) != 1 {
-		t.Fatalf("blocks=%+v", blocks)
-	}
-}
-
-func TestRESTClientV0EntradaInvalidaNoLlamaHTTP(t *testing.T) {
-	called := false
-	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-		called = true
-	}))
-	defer server.Close()
-	request := opesJobRequestForTestV0()
-	request.DomainRef = ""
-
-	client := NewRESTClientV0(RESTClientConfigV0{BaseURL: server.URL})
-	result, err := client.CreateDomainWorkJobV0(context.Background(), request)
-
-	if err != nil {
-		t.Fatalf("CreateDomainWorkJobV0: %v", err)
-	}
-	if called || result.Status != orquestadomainwork.DomainWorkStatusInvalidV0 {
-		t.Fatalf("called=%v result=%+v", called, result)
-	}
-}
-
-func opesJobRequestForTestV0() orquestadomainwork.DomainWorkJobRequestV0 {
-	return orquestadomainwork.NormalizeDomainWorkJobRequestV0(orquestadomainwork.DomainWorkJobRequestV0{
-		RequestID:      "req-opes-001",
-		CorrelationID:  "corr-opes-001",
-		IdempotencyKey: "idem-opes-001",
-		RequestedBy:    "orquesta",
-		DomainRef:      "opes",
-		InterfaceRefs:  []string{"opes-rest-v0"},
-		WorkKind:       "draft_content_block",
-		Objective:      "Crear bloque editorial.",
-		InputFields: []orquestadomainwork.DomainWorkFieldV0{
-			{Name: "program_id", Value: "program-ref-001"},
-			{Name: "topic_id", Value: "topic-ref-001"},
-			{Name: "chapter_id", Value: "chapter-ref-001"},
-			{Name: "level", Value: "A1/A2"},
-			{Name: "language_code", Value: "es"},
-			{Name: "block_position", ValueJSON: []byte(`{"chapter_order":1,"block_order":2}`)},
-			{Name: "source_refs", Values: []string{"boe-ref-001"}},
-		},
-		ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
-			{Kind: "run_ref", Ref: "run-ref-001"},
-			{Kind: "task_ref", Ref: "task-ref-001"},
-		},
-	})
-}
-
-func opesArtifactSubmissionForTestV0() orquestadomainwork.DomainWorkArtifactSubmissionV0 {
-	return orquestadomainwork.NormalizeDomainWorkArtifactSubmissionV0(orquestadomainwork.DomainWorkArtifactSubmissionV0{
-		RequestID:      "req-delivery-001",
-		CorrelationID:  "corr-opes-001",
-		IdempotencyKey: "idem-delivery-001",
-		RequestedBy:    "orquesta",
-		DomainRef:      "opes",
-		JobRef:         "job-ref-opes-001",
-		ArtifactRef:    "artifact-ref-001",
-		ArtifactType:   "content_block",
-		Summary:        "Bloque 1",
-		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
-			{Name: "title", Value: "Bloque 1"},
-			{Name: "body", Value: "Contenido producido por Orquesta."},
-		},
-		ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
-			{Kind: "delivery_ref", Ref: "delivery-ref-001"},
-		},
-		CompleteJob: true,
-	})
-}
-
-func opesVisualArtifactSubmissionForTestV0() orquestadomainwork.DomainWorkArtifactSubmissionV0 {
-	return orquestadomainwork.NormalizeDomainWorkArtifactSubmissionV0(orquestadomainwork.DomainWorkArtifactSubmissionV0{
-		RequestID:      "req-visual-delivery-001",
-		CorrelationID:  "corr-visual-001",
-		IdempotencyKey: "idem-visual-delivery-001",
-		RequestedBy:    "orquesta",
-		DomainRef:      "opes",
-		JobRef:         "job-ref-visual-001",
-		ArtifactRef:    "artifact-ref-visual-001",
-		ArtifactType:   "visual_asset",
-		Summary:        "Visual de red en estrella",
-		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
-			{Name: "topic_id", Value: "topic-ref-001"},
-			{Name: "chapter_id", Value: "chapter-ref-001"},
-			{Name: "asset_type", Value: "vignette"},
-			{Name: "format", Value: "svg"},
-			{Name: "title", Value: "Red en estrella"},
-			{Name: "caption", Value: "Topologia con nodo central."},
-			{Name: "alt_text", Value: "Switch central conectado a equipos cliente."},
-			{Name: "body", Value: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 420"></svg>`},
-		},
-		ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
-			{Kind: "delivery_ref", Ref: "delivery-ref-visual-001"},
-		},
-		CompleteJob: true,
-	})
-}
-
-func opesDocumentPlanArtifactSubmissionForTestV0() orquestadomainwork.DomainWorkArtifactSubmissionV0 {
-	return orquestadomainwork.NormalizeDomainWorkArtifactSubmissionV0(orquestadomainwork.DomainWorkArtifactSubmissionV0{
-		RequestID:      "req-plan-temario-delivery-001",
-		CorrelationID:  "corr-plan-temario-001",
-		IdempotencyKey: "idem-plan-temario-delivery-001",
-		RequestedBy:    "orquesta",
-		DomainRef:      "opes",
-		JobRef:         "job-ref-plan-temario-001",
-		ArtifactRef:    "artifact-ref-plan-temario-001",
-		ArtifactType:   orquestadomainwork.DomainDocumentPlanArtifactTypeV0,
-		Summary:        "Plan de temario operadores",
-		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
-			{Name: "schema_version", Value: orquestadomainwork.DomainDocumentPlanSchemaV0},
-			{Name: "artifact_type", Value: orquestadomainwork.DomainDocumentPlanArtifactTypeV0},
-			{Name: "plan_ref", Value: "plan-ref-operadores-001"},
-			{Name: "domain_ref", Value: "opes"},
-			{Name: "work_kind", Value: orquestadomainwork.DomainWorkKindPlanSyllabusV0},
-			{Name: "document_kind", Value: "temario_oposicion"},
-			{Name: "scope_ref", Value: "program-ref-operadores-001"},
-			{Name: "language_code", Value: "es"},
-			{Name: "title", Value: "Temario operadores"},
-			{Name: "objective", Value: "Planificar temario sin redactarlo."},
-			{Name: "sections", ValueJSON: []byte(`[{"section_ref":"section-operadores-001","order":1,"title":"Operadores","objective":"Cubrir operadores basicos.","work_kind":"draft_content_block"}]`)},
-			{Name: "deliverables", ValueJSON: []byte(`[{"deliverable_ref":"deliverable-operadores-001","artifact_type":"assembled_topic","title":"Temario ensamblado","required":true}]`)},
-			{Name: "quality_criteria", Values: []string{"derivacion desde maestro superior si existe", "sin placeholders"}},
-		},
-		ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
-			{Kind: "delivery_ref", Ref: "delivery-ref-plan-temario-001"},
-		},
-		CompleteJob: true,
-	})
 }

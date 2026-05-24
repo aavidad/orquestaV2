@@ -78,6 +78,19 @@ func TestValidateLaunchRuntimeAgentRequestV0RechazaReferenciasNoOpacas(t *testin
 	requireAgentLauncherCodeV0(t, ValidateLaunchRuntimeAgentRequestV0(req), AgentLauncherReferenciaNoOpacaV0)
 }
 
+func TestValidateLaunchRuntimeAgentRequestV0AceptaRefsInternasAnidadas(t *testing.T) {
+	req := launchRuntimeAgentRequestValidaV0()
+	req.AgentRequestID = "agent-ref-assessment-assessment-ref-agent-progress-report-ref-agent-ref-assessment-assessment-ref-agent-progress-report-ref-agent-ref-task-autoprogramming-d6f0b05f2e4d-g01-000088-000016"
+	req.CapacityRequestRef = "capacity-ref-assessment-assessment-ref-agent-progress-report-ref-agent-ref-assessment-assessment-ref-agent-progress-report-ref-agent-ref-task-autoprogramming-d6f0b05f2e4d-g01-000088-000016"
+	req.EvidenceRefs = []string{
+		"assessment-replan-signal-ref-assessment-ref-agent-progress-report-ref-agent-ref-assessment-assessment-ref-agent-progress-report-ref-agent-ref-task-autoprogramming-d6f0b05f2e4d-g01-000088-000016",
+	}
+
+	if issues := ValidateLaunchRuntimeAgentRequestV0(req); len(issues) != 0 {
+		t.Fatalf("refs internas anidadas rechazadas: %#v", issues)
+	}
+}
+
 func TestValidateLaunchRuntimeAgentRequestV0RechazaSecretos(t *testing.T) {
 	req := launchRuntimeAgentRequestValidaV0()
 	req.AgentRequestID = "sk-test-token"

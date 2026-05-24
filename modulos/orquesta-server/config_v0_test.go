@@ -31,3 +31,14 @@ func TestNormalizeConfigV0UsaMaxTicksSeguroPorDefectoV0(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeConfigV0AjustaObjetivoAutomejoraAlMaximoDeTandaV0(t *testing.T) {
+	config := NormalizeConfigV0(ConfigV0{
+		IdleSelfImprovementMaxRequests: 8,
+		IdleSelfImprovementTargetQueue: 3,
+	})
+
+	if config.IdleSelfImprovementTargetQueue != 8 {
+		t.Fatalf("target_queue=%d want=8", config.IdleSelfImprovementTargetQueue)
+	}
+}

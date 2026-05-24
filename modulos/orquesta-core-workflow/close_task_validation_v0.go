@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-var forbiddenCloseTaskFragmentsV0 = forbiddenReviewRequestFragmentsV0
-
 func validateCloseTaskCommandPayloadDataV0(payload CloseTaskCommandPayloadV0) error {
 	if err := validateCloseTaskRequiredV0(payload); err != nil {
 		return err
@@ -127,15 +125,7 @@ func closeTaskHasLongStringV0(values []string) bool {
 }
 
 func closeTaskHasForbiddenDetailsV0(values []string) bool {
-	for _, value := range values {
-		lower := strings.ToLower(value)
-		for _, fragment := range forbiddenCloseTaskFragmentsV0 {
-			if containsForbiddenFragmentV0(lower, fragment) {
-				return true
-			}
-		}
-	}
-	return false
+	return textValuesContainForbiddenOperationalSensitiveDetailV0(values)
 }
 
 func closeTaskTextFieldsV0(payload CloseTaskCommandPayloadV0) []string {

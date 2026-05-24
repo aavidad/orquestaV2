@@ -11,6 +11,7 @@ type RuntimeDepsV0 struct {
 	AppHandler   http.Handler
 	Supervisor   SupervisorPortV0
 	StateStore   StateStorePortV0
+	AuditSink    AuditSinkPortV0
 	StartupCheck StartupCheckPortV0
 	Clock        ClockPortV0
 }
@@ -21,6 +22,7 @@ type RuntimeV0 struct {
 	supervisor           SupervisorPortV0
 	supervisorTickActive int32
 	stateStore           StateStorePortV0
+	auditSink            AuditSinkPortV0
 	startupCheck         StartupCheckPortV0
 	clock                ClockPortV0
 	tracker              *StatusTrackerV0
@@ -41,11 +43,19 @@ func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
 		}
 		deps.StateStore = store
 	}
+	if deps.AuditSink == nil && !config.AuditDisabled {
+		sink, err := NewFileAuditSinkV0(AuditPathV0(config))
+		if err != nil {
+			return nil, err
+		}
+		deps.AuditSink = sink
+	}
 	return &RuntimeV0{
 		config:       config,
 		appHandler:   deps.AppHandler,
 		supervisor:   deps.Supervisor,
 		stateStore:   deps.StateStore,
+		auditSink:    deps.AuditSink,
 		startupCheck: deps.StartupCheck,
 		clock:        deps.Clock,
 		tracker:      NewStatusTrackerV0(config, deps.Clock.Now()),
@@ -53,10 +63,11 @@ func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
 }
 
 func (runtime *RuntimeV0) HandlerV0() http.Handler {
-	return NewHandlerV0(HandlerConfigV0{
+	handler := NewHandlerV0(HandlerConfigV0{
 		AppHandler: runtime.appHandler,
 		Tracker:    runtime.tracker,
 	})
+	return runtime.auditHTTPHandlerV0(handler)
 }
 
 func (runtime *RuntimeV0) RunV0(ctx context.Context) error {

@@ -154,7 +154,9 @@ func checkReplayStateMetadataV0(
 	for _, step := range state.Steps {
 		issues = append(issues, checkReplayStepTaskMetadataV0(step, taskByRef)...)
 		issues = append(issues, checkReplayStepWaitMetadataV0(step, waitByRef)...)
+		issues = append(issues, checkReplayStepScopeSnapshotV0(step, taskByRef, waitByRef)...)
 	}
+	issues = append(issues, checkReplayActiveScopeSnapshotV0(state)...)
 	return issues
 }
 

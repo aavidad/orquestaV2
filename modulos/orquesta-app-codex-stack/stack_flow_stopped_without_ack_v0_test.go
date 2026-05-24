@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -44,6 +45,45 @@ func TestDrainRunV0ProcesoParadoSinACKNoQuedaEsperandoIndefinido(t *testing.T) {
 	if len(compactStringsV0(run.StoppedAgents)) == 0 ||
 		len(compactStringsV0(run.ConfirmedStoppedAgents)) == 0 {
 		t.Fatalf("sin parada confirmada: stopped=%v confirmed=%v", run.StoppedAgents, run.ConfirmedStoppedAgents)
+	}
+}
+
+func TestDrainRunV0WaitAgentRefsProcesoParadoSinACKActivaSupervision(t *testing.T) {
+	ctx := context.Background()
+	runtime := newPendingAckCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	director := postDirectorAPIV0(t, stack)
+	agentRef := strings.TrimSpace(director.DirectorTask.AgentRequestID)
+	if agentRef == "" {
+		t.Fatalf("director sin agente: %+v", director)
+	}
+	record, err := stack.Stores.ProcessRegistry.ResolveAgentProcessV0(ctx, director.RunRef, agentRef)
+	if err != nil {
+		t.Fatalf("ResolveAgentProcessV0: %v", err)
+	}
+	runtime.markStoppedForTestV0(record.ProcessRef)
+
+	drain, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+		RunRef:               director.RunRef,
+		CorrelationID:        "corr-stack-stopped-scoped-no-ack-001",
+		WaitAgentRefs:        []string{agentRef},
+		MaxBursts:            8,
+		MaxStepsPerBurst:     6,
+		MaxDispatchesPerWait: 8,
+		MaxCommands:          20,
+		MaxOutboxPerCycle:    8,
+		MaxExternalWaits:     1,
+	})
+	if err != nil {
+		t.Fatalf("DrainRunV0: %v status=%s final=%+v", err, drain.Status, drain.Final)
+	}
+	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	if !codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionStopAgentV0) {
+		t.Fatalf("WaitAgentRefs no paso por supervision de progreso: assessments=%+v run=%+v", run.AgentAssessments, run)
+	}
+	if !codexStackHasRefV0(run.StoppedAgents, agentRef) ||
+		!codexStackHasRefV0(run.ConfirmedStoppedAgents, agentRef) {
+		t.Fatalf("agente acotado no quedo parado/confirmado: status=%s stopped=%v confirmed=%v", drain.Status, run.StoppedAgents, run.ConfirmedStoppedAgents)
 	}
 }
 
@@ -157,6 +197,14 @@ func newStoppedPendingAckCodexStackRuntimeV0() *stoppedPendingAckCodexStackRunti
 	return &stoppedPendingAckCodexStackRuntimeV0{
 		pendingAckCodexStackRuntimeV0: newPendingAckCodexStackRuntimeV0(),
 	}
+}
+
+func (runtime *pendingAckCodexStackRuntimeV0) markStoppedForTestV0(processRef string) {
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	stopped := runtime.snapshots[processRef]
+	stopped.Status = orquestaruntime.ProcessRuntimeStoppedV0
+	runtime.snapshots[processRef] = stopped
 }
 
 func (runtime *stoppedPendingAckCodexStackRuntimeV0) LaunchV0(

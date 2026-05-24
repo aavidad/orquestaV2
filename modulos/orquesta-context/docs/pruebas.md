@@ -39,3 +39,20 @@ Evidencia esperada:
 Ultima ejecucion: 2026-05-05, ejecutada correctamente.
 
 Riesgos: usa filesystem temporal de test; no genera prompt final ni arranca agente real.
+
+## CTX-P003 saneamiento local de contexto materializado
+
+Tipo: unit_contract
+
+Comando: `go test -count=1 ./modulos/orquesta-context`
+
+Evidencia esperada:
+
+- `MaterializeContextBundleWithSanitizerV0` permite inyectar
+  `ContextSanitizerPortV0`;
+- conserva `ContextSanitizationEvidenceV0` sin persistir token, secreto ni HOME;
+- si el sanitizador devuelve `review_required`, la entrada queda como `ref_only`
+  y el bundle exige `CONSULTA_AL_DIRECTOR`.
+
+Riesgos: el sanitizador real es adaptador de composicion; este modulo solo fija
+el puerto y el comportamiento neutral del bundle.

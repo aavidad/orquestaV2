@@ -170,6 +170,47 @@ func TestCodexReviewGateObservationSourceV0WaitAgentRefsFiltraScope(t *testing.T
 	}
 }
 
+func TestCodexReviewGateObservationSourceV0ReviewAceptaReemplazoSiWaitScopeQuedoViejo(t *testing.T) {
+	oldSpec := codexDeliverySpecWithRefsForTestV0("agent-ref-old-scope-001", "task-ref-replaced-001", "ack-ref-old-scope-001")
+	replacementSpec := codexDeliverySpecWithRefsForTestV0("agent-ref-replacement-001", "task-ref-replaced-001", "ack-ref-replacement-001")
+	store := NewInMemoryCodexReceiptDescriptorStoreV0(
+		CodexReceiptDescriptorV0{
+			DescriptorRef: "receipt-ref-old-scope-001",
+			RunID:         "run-ref-001",
+			AgentRef:      oldSpec.RequestID,
+			Spec:          oldSpec,
+			AckPath:       writeCodexDeliveryAckForTestV0(t, oldSpec, codexDeliveryAckForTestV0(oldSpec)),
+		},
+		CodexReceiptDescriptorV0{
+			DescriptorRef: "receipt-ref-replacement-001",
+			RunID:         "run-ref-001",
+			AgentRef:      replacementSpec.RequestID,
+			Spec:          replacementSpec,
+			AckPath:       writeCodexDeliveryAckForTestV0(t, replacementSpec, codexDeliveryAckForTestV0(replacementSpec)),
+		},
+	)
+	request := codexReviewGateRequestForTestV0(replacementSpec, nil)
+	request.Run.Agents = []string{oldSpec.RequestID, replacementSpec.RequestID}
+	request.Run.StartedAgents = []string{oldSpec.RequestID, replacementSpec.RequestID}
+	request.Run.StoppedAgents = []string{oldSpec.RequestID}
+	request.Run.LostAgents = []string{oldSpec.RequestID}
+	request.Run.DeliveredAgents = []string{replacementSpec.RequestID}
+	request.Run.Deliveries = []string{replacementSpec.AgentPacket.DeliveryRefs.AckRef}
+	request.WaitAgentRefs = []string{oldSpec.RequestID}
+
+	observations, err := (CodexReviewGateObservationSourceV0{Store: store}).
+		BuildReviewGateObservationsV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildReviewGateObservationsV0: %v", err)
+	}
+	if len(observations) != 1 {
+		t.Fatalf("observations=%+v", observations)
+	}
+	if observations[0].DeliveryRef != replacementSpec.AgentPacket.DeliveryRefs.AckRef {
+		t.Fatalf("no reviso entrega de reemplazo: %+v", observations[0])
+	}
+}
+
 func TestCodexReviewGateObservationSourceV0ContinuaTrasRequestReviewPendiente(t *testing.T) {
 	spec := codexDeliverySpecForTestV0()
 	ack := codexDeliveryAckForTestV0(spec)
@@ -259,7 +300,7 @@ func TestCodexReviewGateObservationSourceV0OmiteTrasReworkSolicitado(t *testing.
 	}
 }
 
-func TestCodexReviewGateObservationSourceV0RequiereRevisionPorFicheroGrande(t *testing.T) {
+func TestCodexReviewGateObservationSourceV0AceptaFicheroGrandeComoAviso(t *testing.T) {
 	spec := codexDeliverySpecForTestV0()
 	ack := codexDeliveryAckForTestV0(spec)
 	path := writeCodexDeliveryAckForTestV0(t, spec, ack)
@@ -286,7 +327,7 @@ func TestCodexReviewGateObservationSourceV0RequiereRevisionPorFicheroGrande(t *t
 	if err != nil {
 		t.Fatalf("BuildReviewGateObservationsV0: %v", err)
 	}
-	assertCodexReviewGateRejectedV0(t, observations, "gate-issue:file_too_large")
+	assertCodexReviewGateAcceptedWithEvidenceV0(t, observations, "gate-issue:file_too_large")
 }
 
 func TestCodexReviewGateObservationSourceV0RequiereRevisionPorTestObligatorioAusente(t *testing.T) {
@@ -357,6 +398,25 @@ func assertCodexReviewGateRejectedV0(
 	}
 	if got.AcceptedReviewRef != "" || got.QualityGateRef == "" {
 		t.Fatalf("observacion de fallo incompleta: %+v", got)
+	}
+	if !stringInCodexDeliverySetV0(got.EvidenceRefs, wantEvidence) {
+		t.Fatalf("evidence_refs=%v, want %q", got.EvidenceRefs, wantEvidence)
+	}
+}
+
+func assertCodexReviewGateAcceptedWithEvidenceV0(
+	t *testing.T,
+	observations []orquestacionnucleoapp.ReviewGateObservationV0,
+	wantEvidence string,
+) {
+	t.Helper()
+	if len(observations) != 1 {
+		t.Fatalf("observations=%d", len(observations))
+	}
+	got := observations[0]
+	if got.Status != orquestacoreworkflow.ReviewResultStatusAcceptedV0 ||
+		got.AcceptedReviewRef == "" || got.QualityGateRef == "" {
+		t.Fatalf("observacion aceptada incompleta: %+v", got)
 	}
 	if !stringInCodexDeliverySetV0(got.EvidenceRefs, wantEvidence) {
 		t.Fatalf("evidence_refs=%v, want %q", got.EvidenceRefs, wantEvidence)

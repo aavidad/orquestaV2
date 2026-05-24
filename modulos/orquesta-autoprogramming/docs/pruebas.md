@@ -26,10 +26,9 @@ Cobertura actual:
   causal;
 - rechaza trabajos vivos con refs imposibles o rutas inseguras;
 - review gate acepta ACK completado con tests verdes;
-- review gate rechaza ACK ausente, tests fallidos, tests ausentes, ficheros
-  grandes y ficheros fuera del `write_set`;
-- review gate marca como follow-up reutilizable una entrega con tests verdes y
-  ficheros fuera del `write_set`;
+- review gate rechaza ACK ausente, tests fallidos y tests ausentes;
+- review gate acepta como rail blando reutilizable una entrega con tests verdes,
+  ficheros grandes, ficheros fuera del `write_set` o destinos faltantes;
 - review gate mantiene ACK ausente o tests fallidos como bloqueo de cierre con
   evidencia compacta;
 - arquitectura impide importar core, runtime, DB, `cmd` o adaptadores.

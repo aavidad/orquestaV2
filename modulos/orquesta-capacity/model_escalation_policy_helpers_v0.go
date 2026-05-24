@@ -7,9 +7,14 @@ import (
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func detectForbiddenModelEscalationShapeV0(data []byte) []ModelEscalationPolicyIssueV0 {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return nil
+	}
 	var value any
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	if err := decoder.Decode(&value); err != nil {
@@ -115,7 +120,8 @@ func (v *modelEscalationPolicyValidatorV0) optionalSafeText(field, value string)
 	if value == "" {
 		return
 	}
-	if utf8.RuneCountInString(value) > 320 || forbiddenSafeTextPatternV0.MatchString(value) {
+	if utf8.RuneCountInString(value) > 320 ||
+		(orquestarails.DetailProhibitedRailsEnabledV0() && forbiddenSafeTextPatternV0.MatchString(value)) {
 		v.add(ErrModelEscalationPolicyInvalidaV0, field)
 	}
 }

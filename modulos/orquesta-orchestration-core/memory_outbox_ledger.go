@@ -122,6 +122,25 @@ func (ledger *InMemoryOutboxLedgerV0) ClaimOutboxDispatchV0(
 	}, nil
 }
 
+func (ledger *InMemoryOutboxLedgerV0) ReleaseOutboxDispatchClaimV0(
+	claim orquestaoutboxdispatch.OutboxDispatchClaimV0,
+) []orquestaoutboxdispatch.DispatchIssueV0 {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	ledger.ensureStateV0()
+	messageID := strings.TrimSpace(claim.MessageID)
+	if messageID == "" {
+		return []orquestaoutboxdispatch.DispatchIssueV0{
+			{Code: "invalid_claim", Field: "message_id", Message: "message_id requerido"},
+		}
+	}
+	if ledger.acked[messageID] {
+		return nil
+	}
+	delete(ledger.claimed, messageID)
+	return nil
+}
+
 func (ledger *InMemoryOutboxLedgerV0) AckOutboxDispatchV0(
 	ack orquestaoutboxdispatch.OutboxDispatchAckV0,
 ) []orquestaoutboxdispatch.DispatchIssueV0 {

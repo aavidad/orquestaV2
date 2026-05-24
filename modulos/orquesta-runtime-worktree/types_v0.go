@@ -10,6 +10,7 @@ const (
 	WorktreeIssueInvalidRequestV0  WorktreeIssueCodeV0 = "worktree_request_invalida"
 	WorktreeIssueFilesystemV0      WorktreeIssueCodeV0 = "worktree_filesystem_error"
 	WorktreeIssueOutsideWriteSetV0 WorktreeIssueCodeV0 = "outside_write_set"
+	WorktreeIssueRemovedPathV0     WorktreeIssueCodeV0 = "removed_path"
 )
 
 type WorktreeIssueV0 struct {

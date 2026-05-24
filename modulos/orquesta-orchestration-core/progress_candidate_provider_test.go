@@ -119,6 +119,78 @@ func TestProgressSupervisionCandidateProviderV0IgnoraStalledInformativo(t *testi
 	}
 }
 
+func TestProgressSupervisionCandidateProviderV0CompletaQuestionIDParaStoppedSinAck(t *testing.T) {
+	runRef := "run-nucleo-progress-stopped-sin-ack-001"
+	report := progressObservationReportWithIDV0(
+		runRef,
+		"agent-ref-stopped-sin-ack-001",
+		"report-stopped-sin-ack-001",
+		orquestaruntime.AgentStoppedV0,
+	)
+	report.DecisionRequired = true
+	provider := ProgressSupervisionCandidateProviderV0{
+		ProgressSource: staticAgentProgressObservationSourceV0{Observations: []AgentProgressObservationV0{
+			{
+				Report:       report,
+				TaskRef:      "task-ref-stopped-sin-ack-001",
+				EvidenceRefs: []string{"evidence-ref-artifact-without-ack-001"},
+			},
+		}},
+		RequestedBy: "orquestacion-nucleo",
+	}
+
+	candidates, err := provider.BuildSchedulerCandidatesV0(context.Background(), SchedulerCandidateRequestV0{
+		Run:        mustActiveProgrammingRunV0(t, runRef),
+		OccurredAt: "2026-05-09T12:10:00Z",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	if len(candidates.ProgressSupervisionCandidates) != 1 {
+		t.Fatalf("progress candidates=%+v", candidates.ProgressSupervisionCandidates)
+	}
+	candidate := candidates.ProgressSupervisionCandidates[0]
+	if candidate.SupervisionInput.QuestionID == "" {
+		t.Fatalf("question_id vacio para stopped sin ack: %+v", candidate.SupervisionInput)
+	}
+	if candidate.SupervisionInput.QuestionID != "question-ref-report-stopped-sin-ack-001" {
+		t.Fatalf("question_id=%s", candidate.SupervisionInput.QuestionID)
+	}
+}
+
+func TestProgressSupervisionCandidateProviderV0UsaRefsEstablesParaPreguntaAdvisory(t *testing.T) {
+	runRef := "run-nucleo-progress-advisory-estable-001"
+	agentRef := "agent-ref-advisory-estable-001"
+	first := progressObservationDecisionReportV0(runRef, agentRef, orquestaruntime.AgentStalledV0)
+	first.ReportID = "agent-progress-report-ref-advisory-estable-001"
+	second := first
+	second.ReportID = "agent-progress-report-ref-advisory-estable-002"
+
+	firstCandidate := progressCandidateFromSingleObservationForTestV0(t, runRef, AgentProgressObservationV0{
+		Report:  first,
+		TaskRef: "task-ref-advisory-estable-001",
+	})
+	secondCandidate := progressCandidateFromSingleObservationForTestV0(t, runRef, AgentProgressObservationV0{
+		Report:  second,
+		TaskRef: "task-ref-advisory-estable-001",
+	})
+
+	if firstCandidate.SupervisionInput.AssessmentRef == "" ||
+		firstCandidate.SupervisionInput.QuestionID == "" {
+		t.Fatalf("refs advisory vacias: %+v", firstCandidate.SupervisionInput)
+	}
+	if firstCandidate.SupervisionInput.AssessmentRef != secondCandidate.SupervisionInput.AssessmentRef ||
+		firstCandidate.SupervisionInput.QuestionID != secondCandidate.SupervisionInput.QuestionID {
+		t.Fatalf("refs advisory no estables: first=%+v second=%+v",
+			firstCandidate.SupervisionInput,
+			secondCandidate.SupervisionInput,
+		)
+	}
+	if firstCandidate.SupervisionInput.QuestionID == "question-ref-"+first.ReportID {
+		t.Fatalf("question_id sigue ligado al contador del reporte: %s", firstCandidate.SupervisionInput.QuestionID)
+	}
+}
+
 func TestProgressSupervisionCandidateProviderV0IgnoraObservacionesDeOtroRun(t *testing.T) {
 	runRef := "run-nucleo-progress-observacion-run-scope-001"
 	foreignRunRef := "run-nucleo-progress-observacion-run-scope-otro"
@@ -150,6 +222,31 @@ func TestProgressSupervisionCandidateProviderV0IgnoraObservacionesDeOtroRun(t *t
 	if got != "report-local-001" {
 		t.Fatalf("report id=%s", got)
 	}
+}
+
+func progressCandidateFromSingleObservationForTestV0(
+	t *testing.T,
+	runRef string,
+	observation AgentProgressObservationV0,
+) orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0 {
+	t.Helper()
+	provider := ProgressSupervisionCandidateProviderV0{
+		ProgressSource: staticAgentProgressObservationSourceV0{
+			Observations: []AgentProgressObservationV0{observation},
+		},
+		RequestedBy: "orquestacion-nucleo",
+	}
+	candidates, err := provider.BuildSchedulerCandidatesV0(context.Background(), SchedulerCandidateRequestV0{
+		Run:        mustActiveProgrammingRunV0(t, runRef),
+		OccurredAt: "2026-05-09T12:10:00Z",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	if len(candidates.ProgressSupervisionCandidates) != 1 {
+		t.Fatalf("progress candidates=%+v", candidates.ProgressSupervisionCandidates)
+	}
+	return candidates.ProgressSupervisionCandidates[0]
 }
 
 func TestProgressSupervisionCandidateProviderV0FiltraCandidatesBaseDeOtroRun(t *testing.T) {

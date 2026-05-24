@@ -108,6 +108,71 @@ func TestCoordinateRunsTickDefaultsRunningWhenControlStateMissingV0(t *testing.T
 	assertRunRefsV0(t, executionRefsV0(result.Executions), []string{"run-missing"})
 }
 
+func TestCoordinateRunsTickPropagaDiagnosticosDelDrainV0(t *testing.T) {
+	deps := coordinatorDepsV0([]orquestarunqueue.RunSchedulingCandidateV0{
+		candidateV0("run-diagnostics", "app", 9),
+	})
+	deps.Drainer.(*fakeDrainerV0).results = map[string]RunDrainResultV0{
+		"run-diagnostics": {
+			RunRef:  "run-diagnostics",
+			AppRef:  "app",
+			Outcome: "wait_unhandled_outbox",
+			Diagnostics: []RunDrainDiagnosticV0{{
+				Kind:               "drain_final",
+				Status:             "wait_unhandled_outbox",
+				PendingOutboxCount: 2,
+				PendingOutboxRefs:  []string{"outbox-ref-1", "outbox-ref-2"},
+			}},
+		},
+	}
+
+	result, err := CoordinateRunsTickV0(context.Background(), deps, tickCommandV0(1))
+	if err != nil {
+		t.Fatalf("coordinate tick: %v", err)
+	}
+	if len(result.Executions) != 1 ||
+		len(result.Executions[0].Diagnostics) != 1 ||
+		result.Executions[0].Diagnostics[0].PendingOutboxCount != 2 {
+		t.Fatalf("executions=%+v", result.Executions)
+	}
+}
+
+func TestCoordinateRunsTickConservaDiagnosticosSiDrainFallaV0(t *testing.T) {
+	deps := coordinatorDepsV0([]orquestarunqueue.RunSchedulingCandidateV0{
+		candidateV0("run-error", "app", 9),
+	})
+	deps.Drainer.(*fakeDrainerV0).results = map[string]RunDrainResultV0{
+		"run-error": {
+			RunRef:  "run-error",
+			AppRef:  "app",
+			Outcome: "error",
+			Diagnostics: []RunDrainDiagnosticV0{{
+				Kind:        "outbox_batch_dispatch_error",
+				Status:      "execution_failed",
+				RunRef:      "run-error",
+				TargetPort:  "agent_launcher",
+				MessageType: "LaunchRuntimeAgent",
+				MessageID:   "outbox-launch-error-001",
+				Error:       "transicion_invalida: payload.agent_request_id",
+			}},
+		},
+	}
+	deps.Drainer.(*fakeDrainerV0).errors = map[string]error{
+		"run-error": errors.New("transicion_invalida: payload.agent_request_id"),
+	}
+
+	result, err := CoordinateRunsTickV0(context.Background(), deps, tickCommandV0(1))
+	if err == nil {
+		t.Fatalf("expected drain error")
+	}
+	if len(result.Executions) != 1 ||
+		len(result.Executions[0].Diagnostics) != 1 ||
+		result.Executions[0].Diagnostics[0].MessageID != "outbox-launch-error-001" ||
+		result.Executions[0].Diagnostics[0].Error == "" {
+		t.Fatalf("result sin diagnostico parcial=%+v", result)
+	}
+}
+
 func TestCoordinateRunsTickAllowsMissingControlReaderV0(t *testing.T) {
 	deps := coordinatorDepsV0([]orquestarunqueue.RunSchedulingCandidateV0{
 		candidateV0("run-no-control", "app", 9),
@@ -370,6 +435,7 @@ func (fake *fakeControlReaderV0) ReadRunControlStateV0(
 type fakeDrainerV0 struct {
 	requests []RunDrainRequestV0
 	results  map[string]RunDrainResultV0
+	errors   map[string]error
 }
 
 func (fake *fakeDrainerV0) DrainRunV0(
@@ -381,7 +447,10 @@ func (fake *fakeDrainerV0) DrainRunV0(
 	}
 	fake.requests = append(fake.requests, request)
 	if result, ok := fake.results[request.RunRef]; ok {
-		return result, nil
+		return result, fake.errors[request.RunRef]
+	}
+	if err, ok := fake.errors[request.RunRef]; ok {
+		return RunDrainResultV0{RunRef: request.RunRef, AppRef: request.AppRef, Outcome: "error"}, err
 	}
 	return RunDrainResultV0{RunRef: request.RunRef, AppRef: request.AppRef, Outcome: "drained"}, nil
 }

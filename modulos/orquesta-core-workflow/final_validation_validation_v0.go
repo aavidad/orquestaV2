@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-var forbiddenFinalValidationFragmentsV0 = forbiddenReviewRequestFragmentsV0
-
 func validateRegisterFinalValidationCommandPayloadDataV0(payload RegisterFinalValidationCommandPayloadV0) error {
 	if err := validateRegisterFinalValidationRequiredV0(payload); err != nil {
 		return err
@@ -125,15 +123,7 @@ func finalValidationHasLongStringV0(values []string) bool {
 }
 
 func finalValidationHasForbiddenDetailsV0(values []string) bool {
-	for _, value := range values {
-		lower := strings.ToLower(value)
-		for _, fragment := range forbiddenFinalValidationFragmentsV0 {
-			if containsForbiddenFragmentV0(lower, fragment) {
-				return true
-			}
-		}
-	}
-	return false
+	return textValuesContainForbiddenOperationalSensitiveDetailV0(values)
 }
 
 func registerFinalValidationTextFieldsV0(payload RegisterFinalValidationCommandPayloadV0) []string {

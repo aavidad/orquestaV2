@@ -48,3 +48,19 @@ Validacion:
 - `ORQUESTA_OPES_BASE_URL` activa el executor REST OPES;
 - sin `ORQUESTA_OPES_BASE_URL`, el executor queda `nil`;
 - `go test -count=1 ./cmd/orquesta-server`.
+
+## SRV-TASK-006: automejora por capacidad libre
+
+Estado: hecho.
+
+Objetivo: el servidor residente no debe esperar a estar completamente idle para
+seguir pensando trabajo de automejora. Si la cola visible esta por debajo del
+objetivo configurado y no hay skips pendientes en el tick, pide al planner nuevas
+tareas sin duplicar las que ya estan en cola.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`;
+- el planner recibe `known_request_refs`/`known_run_refs`;
+- `cmd/orquesta-server` puede generar una tarea scanner para ampliar backlog
+  cuando no quedan tareas nuevas concretas.

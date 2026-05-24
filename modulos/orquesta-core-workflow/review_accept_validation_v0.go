@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-var forbiddenReviewAcceptFragmentsV0 = forbiddenReviewRequestFragmentsV0
-
 func validateAcceptReviewCommandPayloadDataV0(payload AcceptReviewCommandPayloadV0) error {
 	if err := validateAcceptReviewRequiredV0(payload); err != nil {
 		return err
@@ -127,15 +125,7 @@ func reviewAcceptHasLongStringV0(values []string) bool {
 }
 
 func reviewAcceptHasForbiddenDetailsV0(values []string) bool {
-	for _, value := range values {
-		lower := strings.ToLower(value)
-		for _, fragment := range forbiddenReviewAcceptFragmentsV0 {
-			if containsForbiddenFragmentV0(lower, fragment) {
-				return true
-			}
-		}
-	}
-	return false
+	return textValuesContainForbiddenOperationalSensitiveDetailV0(values)
 }
 
 func acceptReviewTextFieldsV0(payload AcceptReviewCommandPayloadV0) []string {

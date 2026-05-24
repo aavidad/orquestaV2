@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -22,7 +21,7 @@ func TestRunStatusCommandV0ConsultaStatsDelRunPersistido(t *testing.T) {
 	t.Setenv("ORQUESTA_CODEX_RUNTIME_WORKDIR", filepath.Join(t.TempDir(), "runtime"))
 
 	var received orquestamcp.MCPDirectorStatsToolInputV0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != orquestamcp.MCPDirectorStatsHTTPPathV0 {
 			t.Fatalf("request inesperada: %s %s", r.Method, r.URL.Path)
 		}

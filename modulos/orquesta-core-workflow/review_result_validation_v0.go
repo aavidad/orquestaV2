@@ -11,19 +11,6 @@ const (
 	maxReviewResultEvidenceRefsV0 = 20
 )
 
-var forbiddenReviewResultFragmentsV0 = []string{
-	"db", "database", "sql", "dsn", "runtime",
-	"provider", "providers", "proveedor", "proveedores",
-	"model", "models", "modelo", "modelos",
-	"home", "oauth", "prompt", "prompts",
-	"transcript", "transcripts", "completion",
-	"raw_text", "full_text", "codex", "claude",
-	"ollama", "vllm", "adapter", "adaptador",
-	"filesystem", "git", "docker", "tmux",
-	"secret", "secreto", "token", "password",
-	"credential", "credencial", "api_key",
-}
-
 func validateReviewResultRequiredFieldsV0(result ReviewResultV0) error {
 	fields := map[string]string{
 		"review_result_ref": result.ReviewResultRef,
@@ -85,15 +72,7 @@ func reviewResultHasLongStringV0(values []string) bool {
 }
 
 func reviewResultHasForbiddenDetailsV0(values []string) bool {
-	for _, value := range values {
-		lower := strings.ToLower(value)
-		for _, fragment := range forbiddenReviewResultFragmentsV0 {
-			if containsForbiddenFragmentV0(lower, fragment) {
-				return true
-			}
-		}
-	}
-	return false
+	return textValuesContainForbiddenOperationalSensitiveDetailV0(values)
 }
 
 func normalizeReviewResultStringsV0(values []string) []string {

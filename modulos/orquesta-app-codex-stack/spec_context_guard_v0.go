@@ -8,6 +8,8 @@ import (
 const (
 	externalContextTruncatedRequiredTestV0 = "validar contexto externo no truncado o justificar materializacion externa"
 	externalContextTruncatedDoneCriteriaV0 = "Si agent_packet.context tiene entradas required=true y truncated=true, no completar salvo que el trabajo sea resoluble con refs/materializacion externa; en ese caso incluir nota contexto_truncado_resuelto: ..."
+	externalContextSanitizedRequiredTestV0 = "validar evidencia de saneamiento de contexto o pedir revision al director"
+	externalContextSanitizedDoneCriteriaV0 = "Si agent_packet.context.sanitization_evidence tiene review_required=true, no completar salvo resolucion por director/revision humana documentada."
 )
 
 func taskWithContextGuardV0(
@@ -15,17 +17,32 @@ func taskWithContextGuardV0(
 	bundle orquestacontext.ContextMaterializedBundleV0,
 ) orquestaruntime.AgentStartTaskV0 {
 	if !contextBundleHasRequiredTruncatedEntryV0(bundle) {
-		return task
+		if !orquestacontext.ContextBundleRequiresSanitizationReviewV0(bundle) {
+			return task
+		}
 	}
-	task.RequiredTests = compactStringsV0(append(
-		task.RequiredTests,
-		externalContextTruncatedRequiredTestV0,
-	))
-	task.DoneCriteria = compactStringsV0(append(
-		task.DoneCriteria,
-		externalContextTruncatedDoneCriteriaV0,
-	))
+	if contextBundleHasRequiredTruncatedEntryV0(bundle) {
+		task.RequiredTests = compactStringsV0(append(task.RequiredTests, externalContextTruncatedRequiredTestV0))
+		task.DoneCriteria = compactStringsV0(append(task.DoneCriteria, externalContextTruncatedDoneCriteriaV0))
+	}
+	if orquestacontext.ContextBundleRequiresSanitizationReviewV0(bundle) {
+		task.RequiredTests = compactStringsV0(append(task.RequiredTests, externalContextSanitizedRequiredTestV0))
+		task.DoneCriteria = compactStringsV0(append(task.DoneCriteria, externalContextSanitizedDoneCriteriaV0))
+	}
 	return task
+}
+
+func packetPoliciesWithContextGuardV0(
+	policies []string,
+	bundle orquestacontext.ContextMaterializedBundleV0,
+) []string {
+	if len(bundle.SanitizationEvidence) > 0 {
+		policies = compactStringsV0(append(policies, "context_sanitization_evidence_present"))
+	}
+	if orquestacontext.ContextBundleRequiresSanitizationReviewV0(bundle) {
+		policies = compactStringsV0(append(policies, "ask_director_on_sanitization_review"))
+	}
+	return policies
 }
 
 func contextBundleHasRequiredTruncatedEntryV0(

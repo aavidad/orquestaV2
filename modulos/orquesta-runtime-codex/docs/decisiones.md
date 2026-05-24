@@ -119,6 +119,21 @@ cuando ese ACK exista, correle y no filtre detalles prohibidos.
 Estado: aceptada.
 ```
 
+## RTCODEX-DEC-010
+
+```text
+Fecha: 2026-05-24
+Decision: Un ACK `completed` con files fuera del write-set no se corta en el
+validador Codex si mantiene identidad, rutas seguras y tests requeridos.
+Motivo: ese rail genera falsos positivos operativos y debe llegar a review como
+evidencia blanda, no tirar la entrega ni relanzar otro padre sobre la misma
+tarea.
+Impacto: rutas invalidas, absolutas o de control siguen bloqueadas; el fuera de
+write-set queda para `AutoprogrammingReviewGateV0` como
+`file_outside_write_set` advisory.
+Estado: aceptada.
+```
+
 ## RTCODEX-DEC-008
 
 ```text

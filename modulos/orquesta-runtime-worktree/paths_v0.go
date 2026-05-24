@@ -1,32 +1,14 @@
 package orquestaruntimeworktree
 
 import (
-	"path/filepath"
 	"sort"
 	"strings"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func normalizeWorktreeRelPathV0(value string, allowRoot bool) (string, bool) {
-	value = strings.TrimSpace(value)
-	if value == "" ||
-		strings.Contains(value, "://") ||
-		strings.HasPrefix(value, "~") ||
-		strings.Contains(value, "$HOME") ||
-		filepath.IsAbs(value) ||
-		strings.ContainsAny(value, "\x00\r\n") {
-		return "", false
-	}
-	cleaned := filepath.ToSlash(filepath.Clean(value))
-	if cleaned == "." {
-		if allowRoot {
-			return cleaned, true
-		}
-		return "", false
-	}
-	if cleaned == ".." || strings.HasPrefix(cleaned, "../") {
-		return "", false
-	}
-	return cleaned, true
+	return orquestarails.NormalizeWorkspaceRelativePathV0(value, allowRoot)
 }
 
 func normalizeWorktreePathListV0(values []string, allowRoot bool) ([]string, []WorktreeIssueV0) {

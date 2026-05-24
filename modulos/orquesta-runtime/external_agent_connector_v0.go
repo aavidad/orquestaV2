@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func BuildExternalAgentLaunchSpecV0(
@@ -225,6 +227,9 @@ func externalAgentErrorsFromRuntimeLaunchV0(
 }
 
 func externalAgentPacketHasForbiddenDetailV0(packet AgentStartPacketV0) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	if agentStartPacketHasForbiddenOperationalDetailV0(packet) {
 		return true
 	}
@@ -236,6 +241,9 @@ func externalAgentPacketHasForbiddenDetailV0(packet AgentStartPacketV0) bool {
 }
 
 func externalAgentUnsafeValueV0(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	trimmed := strings.TrimSpace(value)
 	low := strings.ToLower(trimmed)
 	return looksLikeSecret(trimmed) ||
@@ -253,6 +261,9 @@ func externalAgentUnsafeValueV0(value string) bool {
 }
 
 func externalAgentUnsafeTextV0(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	low := strings.ToLower(strings.TrimSpace(value))
 	return strings.Contains(low, "transcript") ||
 		strings.Contains(low, "prompt=") ||

@@ -53,12 +53,13 @@ type AppChangeRequestV0 struct {
 }
 
 type AppChangeExternalWorkV0 struct {
-	ProjectRef    string                                 `json:"project_ref,omitempty"`
-	JobRef        string                                 `json:"job_ref,omitempty"`
-	InterfaceRefs []string                               `json:"interface_refs,omitempty"`
-	WorkKind      string                                 `json:"work_kind,omitempty"`
-	WorkRefs      []string                               `json:"work_refs,omitempty"`
-	InputFields   []orquestadomainwork.DomainWorkFieldV0 `json:"input_fields,omitempty"`
+	ProjectRef    string                                        `json:"project_ref,omitempty"`
+	JobRef        string                                        `json:"job_ref,omitempty"`
+	InterfaceRefs []string                                      `json:"interface_refs,omitempty"`
+	WorkKind      string                                        `json:"work_kind,omitempty"`
+	WorkRefs      []string                                      `json:"work_refs,omitempty"`
+	InputFields   []orquestadomainwork.DomainWorkFieldV0        `json:"input_fields,omitempty"`
+	RequiredTests []orquestadomainwork.DomainWorkRequiredTestV0 `json:"required_tests,omitempty"`
 }
 
 type AppChangeRecordV0 struct {

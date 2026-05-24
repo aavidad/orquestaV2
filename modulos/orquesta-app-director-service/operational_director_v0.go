@@ -360,11 +360,25 @@ func continueRequestWithOperationalDirectorPlanStateV0(
 			return ContinueAppDirectorRequestV0{}, err
 		}
 		canProgress = canProgress || canProgressClosureIssues
+		if !canProgress && operationalDirectorPlanStateBlockedRequiredTestsEvidenceMissingV0(state) {
+			return request, nil
+		}
 		if !canProgress {
 			return ContinueAppDirectorRequestV0{}, AppDirectorServiceIssueV0{Field: "operational_director_plan_state.active_step"}
 		}
 	}
 	return next, nil
+}
+
+func operationalDirectorPlanStateBlockedRequiredTestsEvidenceMissingV0(
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+) bool {
+	activeStep, ok := operationalDirectorPlanStateActiveStepV0(state)
+	return ok &&
+		state.Status == orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0 &&
+		activeStep.Kind == orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0 &&
+		activeStep.Status == orquestadirectoroperativo.OperationalDirectorStepBlockedV0 &&
+		activeStep.Reason == "required-tests-evidence-missing"
 }
 
 func ensureOperationalDirectorReviewPhaseV0(
@@ -598,6 +612,33 @@ func continueOperationalDirectorPlanStateAfterBlockedRequiredTestsEvidenceV0(
 		return state, false, err
 	}
 	testStatus := operationalDirectorPlanEvaluateRequiredTestEvidenceV0(request.RunRef, requiredTests, matches, evidence)
+	if !testStatus.Complete {
+		updatedStep, generated, err := operationalDirectorPlanRunRequiredTestsV0(
+			ctx,
+			request,
+			ports,
+			activeStep,
+			requiredTests,
+			matches,
+		)
+		if err != nil {
+			return state, false, err
+		}
+		if generated {
+			activeStep = updatedStep
+			evidence, err = operationalDirectorPlanRequiredTestEvidenceForMatchesV0(
+				ctx,
+				request.RunRef,
+				ports.RequiredTestEvidenceStore,
+				activeStep,
+				matches,
+			)
+			if err != nil {
+				return state, false, err
+			}
+			testStatus = operationalDirectorPlanEvaluateRequiredTestEvidenceV0(request.RunRef, requiredTests, matches, evidence)
+		}
+	}
 	if len(testStatus.FailedRefs) > 0 {
 		replanned, replannedChanged, err := operationalDirectorPlanStateAfterRequiredTestsReplanV0(
 			ctx,
@@ -614,10 +655,10 @@ func continueOperationalDirectorPlanStateAfterBlockedRequiredTestsEvidenceV0(
 		}
 		return operationalDirectorPlanStateWithRequiredTestsBlockedV0(request, state, activeStep, testStatus.FailedRefs)
 	}
-	if !testStatus.Complete {
-		return state, false, nil
+	if testStatus.Complete {
+		return operationalDirectorPlanStateWithRequiredTestsPassedV0(request, state, activeStep, testStatus.PassedRefs)
 	}
-	return operationalDirectorPlanStateWithRequiredTestsPassedV0(request, state, activeStep, testStatus.PassedRefs)
+	return state, false, nil
 }
 
 func continueOperationalDirectorPlanStateAfterReviewReworkReplanFollowupsV0(

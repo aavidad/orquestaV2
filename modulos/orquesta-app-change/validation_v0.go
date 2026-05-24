@@ -3,6 +3,8 @@ package orquestaappchange
 import (
 	"path"
 	"strings"
+
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 )
 
 func validateAppChangeRequestV0(request AppChangeRequestV0) []AppChangeIssueV0 {
@@ -80,7 +82,28 @@ func validateAppChangeExternalWorkV0(work *AppChangeExternalWorkV0) []AppChangeI
 			break
 		}
 	}
+	if domainIssues := orquestadomainwork.ValidateDomainWorkJobRequestV0(
+		orquestadomainwork.DomainWorkJobRequestV0{
+			RequestID:     "app-change-required-tests-validation",
+			DomainRef:     firstAppChangeExternalWorkValidationRefV0(work.ProjectRef),
+			WorkKind:      firstAppChangeExternalWorkValidationRefV0(work.WorkKind),
+			Objective:     "validar required_tests externos",
+			RequiredTests: work.RequiredTests,
+		},
+	); len(domainIssues) > 0 && len(work.RequiredTests) > 0 {
+		issues = append(issues, appChangeIssueV0(
+			ErrAppChangeExternalWorkRefV0,
+			"external_work.required_tests",
+		))
+	}
 	return issues
+}
+
+func firstAppChangeExternalWorkValidationRefV0(value string) string {
+	if strings.TrimSpace(value) != "" {
+		return value
+	}
+	return "domain-work-ref-validation"
 }
 
 func validateAppChangePortsV0(ports AppChangePortsV0) []AppChangeIssueV0 {

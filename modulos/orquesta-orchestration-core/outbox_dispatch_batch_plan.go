@@ -27,6 +27,7 @@ type OutboxDispatchBatchPlanResultV0 struct {
 	Status            string
 	RunRef            string
 	TargetPort        string
+	MessageType       string
 	Intents           []orquestaoutboxdispatch.DispatchIntentV0
 	ClaimedMessageIDs []string
 	Issues            int
@@ -44,9 +45,10 @@ func RunOutboxDispatchBatchPlanV0(
 	}
 	request = normalizeOutboxDispatchBatchPlanRequestV0(request)
 	result := OutboxDispatchBatchPlanResultV0{
-		Status:     OutboxDispatchBatchInvalidV0,
-		RunRef:     request.RunRef,
-		TargetPort: request.TargetPort,
+		Status:      OutboxDispatchBatchInvalidV0,
+		RunRef:      request.RunRef,
+		TargetPort:  request.TargetPort,
+		MessageType: request.MessageType,
 	}
 	if invalidIssues := countInvalidBatchPlanPortsV0(request); invalidIssues > 0 {
 		result.Issues = invalidIssues

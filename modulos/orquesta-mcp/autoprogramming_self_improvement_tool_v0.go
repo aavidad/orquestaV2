@@ -28,6 +28,7 @@ type MCPAutoprogrammingSelfImprovementToolInputV0 struct {
 	RequestID      string                                                           `json:"request_id,omitempty"`
 	CorrelationID  string                                                           `json:"correlation_id,omitempty"`
 	AutoPrepareRun bool                                                             `json:"auto_prepare_run,omitempty"`
+	OperatorAdvice []MCPAutoprogrammingOperatorAdviceV0                             `json:"operator_advice,omitempty"`
 	Proposal       orquestaautoprogramming.AutoprogrammingSelfImprovementProposalV0 `json:"proposal"`
 }
 
@@ -41,8 +42,29 @@ type MCPAutoprogrammingSelfImprovementToolResultV0 struct {
 	AutoprogrammingRequest *orquestaautoprogramming.AutoprogrammingRequestV0 `json:"autoprogramming_request,omitempty"`
 	PrepareRun             *MCPAutoprogrammingPrepareRunToolInputV0          `json:"prepare_run,omitempty"`
 	PreparedRun            *MCPAutoprogrammingPrepareRunToolResultV0         `json:"prepared_run,omitempty"`
+	OperatorAdvice         []MCPAutoprogrammingOperatorAdviceV0              `json:"operator_advice,omitempty"`
 	NextActions            []string                                          `json:"next_actions,omitempty"`
 	Errores                []MCPValidationIssueV0                            `json:"errores_publicos,omitempty"`
+}
+
+type MCPAutoprogrammingOperatorAdviceV0 struct {
+	AdviceRef    string   `json:"advice_ref,omitempty"`
+	OperatorRef  string   `json:"operator_ref,omitempty"`
+	TargetRef    string   `json:"target_ref,omitempty"`
+	SubjectRef   string   `json:"subject_ref,omitempty"`
+	Ref          string   `json:"ref,omitempty"`
+	Target       string   `json:"target,omitempty"`
+	RunRef       string   `json:"run_ref,omitempty"`
+	Run          string   `json:"run,omitempty"`
+	TaskRef      string   `json:"task_ref,omitempty"`
+	Task         string   `json:"task,omitempty"`
+	Action       string   `json:"action,omitempty"`
+	Kind         string   `json:"kind,omitempty"`
+	Message      string   `json:"message,omitempty"`
+	Advice       string   `json:"advice,omitempty"`
+	Text         string   `json:"text,omitempty"`
+	EvidenceRefs []string `json:"evidence_refs,omitempty"`
+	NonBlocking  bool     `json:"non_blocking"`
 }
 
 type MCPAutoprogrammingSelfImprovementToolExecutorV0 struct {
@@ -59,13 +81,14 @@ func MCPAutoprogrammingSelfImprovementDescriptorV0() MCPAutoprogrammingSelfImpro
 	return MCPAutoprogrammingSelfImprovementToolDescriptorV0{
 		Name:        MCPAutoprogrammingSelfImprovementToolNameV0,
 		Version:     MCPAutoprogrammingSelfImprovementToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,auto_prepare_run?,proposal:AutoprogrammingSelfImprovementProposalV0}",
-		Output:      "ok:{autoprogramming_request,priority_score,prepare_run,prepared_run?,next_actions}|error:{errores_publicos,next_actions}",
+		InputSchema: "envelope:{request_id?,correlation_id?,auto_prepare_run?,operator_advice?,proposal:AutoprogrammingSelfImprovementProposalV0}",
+		Output:      "ok:{autoprogramming_request,priority_score,prepare_run,prepared_run?,operator_advice?,next_actions}|error:{errores_publicos,operator_advice?,next_actions}",
 		ResourceURI: MCPAutoprogrammingSelfImprovementResourceURIV0,
 		Invariantes: []string{
 			"convierte fallos observados en automejora secundaria",
 			"solo prepara run si auto_prepare_run y executor inyectado existen",
 			"prioridad baja por defecto para no bloquear trabajo principal",
+			"operator_advice es observacion no bloqueante y no decide runtime",
 			"hexagonal: solo refs opacas, evidencia y write-set propio",
 		},
 	}
@@ -80,15 +103,24 @@ func (executor MCPAutoprogrammingSelfImprovementToolExecutorV0) Execute(
 	if strings.TrimSpace(proposal.RequestRef) == "" {
 		proposal.RequestRef = firstNonEmptyMCPV0(input.RequestID, input.CorrelationID)
 	}
+	operatorAdvice := normalizeMCPAutoprogrammingOperatorAdviceV0(
+		input.OperatorAdvice,
+		firstNonEmptyMCPV0(proposal.RequestRef, input.RequestID, input.CorrelationID),
+	)
+	proposal = withMCPAutoprogrammingOperatorAdviceV0(proposal, operatorAdvice)
 	result := orquestaautoprogramming.BuildAutoprogrammingSelfImprovementRequestV0(proposal)
 	out := MCPAutoprogrammingSelfImprovementToolResultV0{
-		Estado:        MCPAutoprogrammingSelfImprovementEstadoOKV0,
-		RequestID:     strings.TrimSpace(result.Request.RequestRef),
-		CorrelationID: firstNonEmptyMCPV0(input.CorrelationID, input.RequestID, proposal.RequestRef),
-		Accepted:      result.Accepted,
-		Background:    result.Background,
-		PriorityScore: result.PriorityScore,
-		NextActions:   compactStringsMCPV0(result.NextActions),
+		Estado:         MCPAutoprogrammingSelfImprovementEstadoOKV0,
+		RequestID:      strings.TrimSpace(result.Request.RequestRef),
+		CorrelationID:  firstNonEmptyMCPV0(input.CorrelationID, input.RequestID, proposal.RequestRef),
+		Accepted:       result.Accepted,
+		Background:     result.Background,
+		PriorityScore:  result.PriorityScore,
+		OperatorAdvice: operatorAdvice,
+		NextActions:    compactStringsMCPV0(result.NextActions),
+	}
+	if len(out.OperatorAdvice) > 0 {
+		out.NextActions = compactStringsMCPV0(append(out.NextActions, "operator_advice_recorded_non_blocking"))
 	}
 	if !result.Accepted {
 		out.Estado = MCPAutoprogrammingSelfImprovementEstadoErrorV0
@@ -164,4 +196,82 @@ func selfImprovementIssuesMCPV0(
 		return []MCPValidationIssueV0{}
 	}
 	return out
+}
+
+func withMCPAutoprogrammingOperatorAdviceV0(
+	proposal orquestaautoprogramming.AutoprogrammingSelfImprovementProposalV0,
+	advice []MCPAutoprogrammingOperatorAdviceV0,
+) orquestaautoprogramming.AutoprogrammingSelfImprovementProposalV0 {
+	for _, item := range advice {
+		for _, ref := range compactStringsMCPV0([]string{item.AdviceRef, item.OperatorRef, item.TargetRef, item.RunRef, item.TaskRef}) {
+			proposal.ContextRefs = append(proposal.ContextRefs, "operator_advice_ref:"+ref)
+		}
+		for _, ref := range item.EvidenceRefs {
+			proposal.ContextRefs = append(proposal.ContextRefs, "operator_advice_evidence_ref:"+ref)
+		}
+		if item.Message != "" || item.Action != "" {
+			proposal.CompactRules = append(proposal.CompactRules,
+				"operator_advice_non_blocking:"+firstNonEmptyMCPV0(item.Action, "advise")+":"+item.Message,
+			)
+		}
+	}
+	return proposal
+}
+
+func normalizeMCPAutoprogrammingOperatorAdviceV0(
+	input []MCPAutoprogrammingOperatorAdviceV0,
+	defaultTargetRef string,
+) []MCPAutoprogrammingOperatorAdviceV0 {
+	out := make([]MCPAutoprogrammingOperatorAdviceV0, 0, len(input))
+	for _, item := range input {
+		rawAction := firstNonEmptyMCPV0(item.Action, item.Kind)
+		advice := MCPAutoprogrammingOperatorAdviceV0{
+			AdviceRef:   strings.TrimSpace(item.AdviceRef),
+			OperatorRef: strings.TrimSpace(item.OperatorRef),
+			TargetRef: firstNonEmptyMCPV0(
+				item.TargetRef,
+				item.SubjectRef,
+				item.Target,
+				item.Ref,
+				item.RunRef,
+				item.Run,
+				item.TaskRef,
+				item.Task,
+				defaultTargetRef,
+			),
+			RunRef:       firstNonEmptyMCPV0(item.RunRef, item.Run),
+			TaskRef:      firstNonEmptyMCPV0(item.TaskRef, item.Task),
+			Action:       normalizeMCPAutoprogrammingAdviceActionV0(rawAction),
+			Message:      firstNonEmptyMCPV0(item.Message, item.Advice, item.Text),
+			EvidenceRefs: compactStringsMCPV0(item.EvidenceRefs),
+			NonBlocking:  true,
+		}
+		if advice.AdviceRef == "" &&
+			advice.TargetRef == "" &&
+			strings.TrimSpace(rawAction) == "" &&
+			advice.Message == "" &&
+			len(advice.EvidenceRefs) == 0 {
+			continue
+		}
+		out = append(out, advice)
+	}
+	if out == nil {
+		return []MCPAutoprogrammingOperatorAdviceV0{}
+	}
+	return out
+}
+
+func normalizeMCPAutoprogrammingAdviceActionV0(action string) string {
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case "", "advice", "advise", "suggest", "recommend", "recommendation", "consejo", "aconsejar":
+		return "advise"
+	case "observe", "watch", "status", "mirar", "observar":
+		return "observe"
+	case "review", "revise", "revisar":
+		return "review"
+	case "pause", "stop", "block", "hold", "pausar", "parar", "bloquear":
+		return "advise"
+	default:
+		return strings.TrimSpace(action)
+	}
 }

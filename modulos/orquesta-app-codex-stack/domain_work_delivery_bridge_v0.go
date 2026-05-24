@@ -201,19 +201,50 @@ func (stack StackV0) submitDomainWorkArtifactForObservationV0(
 		return err
 	}
 	if result.Estado != orquestamcp.MCPDomainWorkEstadoOKV0 || result.Receipt == nil {
+		if recordErr := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
+			ctx,
+			DomainWorkArtifactSubmissionRecordV0{
+				IdempotencyKey: submission.IdempotencyKey,
+				Status:         DomainWorkArtifactSubmissionStatusRejectedV0,
+				RunRef:         run.RunID,
+				TaskRef:        task.TaskID,
+				DeliveryRef:    observation.DeliveryRef,
+				EvidenceRefs:   submission.EvidenceRefs,
+				IssueRefs:      domainWorkSubmitIssueRefsV0(result),
+				RecordedAt:     request.OccurredAt,
+			},
+		); recordErr != nil {
+			return recordErr
+		}
 		return fmt.Errorf("domain_work_submit_artifact_failed")
 	}
 	return stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
 		ctx,
 		DomainWorkArtifactSubmissionRecordV0{
 			IdempotencyKey: submission.IdempotencyKey,
+			Status:         DomainWorkArtifactSubmissionStatusAcceptedV0,
 			RunRef:         run.RunID,
 			TaskRef:        task.TaskID,
 			DeliveryRef:    observation.DeliveryRef,
 			ReceiptRef:     result.Receipt.ReceiptRef,
-			RecordedAt:     request.OccurredAt,
+			EvidenceRefs: compactStringsV0(append(
+				append([]string(nil), submission.EvidenceRefs...),
+				result.Receipt.EvidenceRefs...,
+			)),
+			RecordedAt: request.OccurredAt,
 		},
 	)
+}
+
+func domainWorkSubmitIssueRefsV0(
+	result orquestamcp.MCPDomainWorkToolResultV0,
+) []string {
+	refs := make([]string, 0, len(result.Errores)+1)
+	refs = append(refs, "domain-work-submit-artifact-rejected")
+	for _, issue := range result.Errores {
+		refs = append(refs, issue.Code)
+	}
+	return compactStringsV0(refs)
 }
 
 func domainWorkTaskForObservationV0(

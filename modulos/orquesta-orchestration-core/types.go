@@ -99,5 +99,14 @@ type ErrorV0 struct {
 }
 
 func (err ErrorV0) Error() string {
-	return err.Code
+	if err.Field == "" && err.Message == "" {
+		return err.Code
+	}
+	if err.Message == "" {
+		return err.Code + ": " + err.Field
+	}
+	if err.Field == "" {
+		return err.Code + ": " + err.Message
+	}
+	return err.Code + ": " + err.Field + ": " + err.Message
 }

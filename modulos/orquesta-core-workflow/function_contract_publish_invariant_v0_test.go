@@ -37,7 +37,7 @@ func TestPublishFunctionContractCommandV0RejectsNonCurrentPhase(t *testing.T) {
 
 func TestPublishFunctionContractCommandV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validPublishFunctionContractPayloadV0("contract:function:forbidden:v0")
-	payload.Summary = "usar provider Codex"
+	payload.Summary = "usar api_key=valor"
 
 	_, err := NewPublishFunctionContractCommandV0(validCommandMetaV0("cmd-function-contract-forbidden", "idem-function-contract-forbidden"), payload)
 	assertPublishFunctionContractCommandErrorV0(t, err, ErrDetalleProhibidoV0)
@@ -45,7 +45,7 @@ func TestPublishFunctionContractCommandV0RejectsForbiddenDetails(t *testing.T) {
 
 func TestFunctionContractPublishedEventV0RejectsForbiddenDetails(t *testing.T) {
 	payload := functionContractPublishedPayloadFromCommandV0(validPublishFunctionContractPayloadV0("contract:function:event-forbidden:v0"))
-	payload.Summary = "usar Claude"
+	payload.Summary = "usar authorization: bearer valor"
 
 	_, err := NewFunctionContractPublishedEventV0(reducerEventMetaV0("evt-function-contract-forbidden", 5), payload)
 	var publicErr OrchestrationEventErrorV0

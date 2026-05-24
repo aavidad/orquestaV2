@@ -106,7 +106,7 @@ func TestApplyAgentStopConfirmedV0RejectsReflectedEffectConflict(t *testing.T) {
 
 func TestRegisterAgentStopConfirmedV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validAgentStopConfirmedPayloadV0("agent-request-forbidden")
-	payload.Summary = "parada observada por runtime externo"
+	payload.Summary = "authorization: Bearer abc123"
 
 	_, err := NewRegisterAgentStopConfirmedCommandV0(validCommandMetaV0("cmd-stop-confirmed-forbidden", "idem-stop-confirmed-forbidden"), payload)
 	var publicErr OrchestrationCommandErrorV0

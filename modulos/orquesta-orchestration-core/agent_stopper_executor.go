@@ -3,6 +3,7 @@ package orquestacionnucleoapp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -48,6 +49,15 @@ func (executor AgentStopperExecutorV0) ExecuteOutboxDispatchV0(
 		EventSink: executor.EventSink,
 	}
 	if _, err := workflow.HandleWorkflowCommandV0(context.Background(), command); err != nil {
+		if result, ok := executor.agentStopperTerminalRecoveryV0(
+			intent,
+			inbound,
+			result,
+			err,
+			agentStopConfirmationRefV0(intent, result),
+		); ok {
+			return result, nil
+		}
 		return orquestaoutboxdispatch.OutboxDispatchExecutionResultV0{}, err
 	}
 	return orquestaoutboxdispatch.OutboxDispatchExecutionResultV0{
@@ -91,8 +101,8 @@ func agentStopperInboundFromIntentV0(
 	inbound := orquestaruntime.AgentStopperInboundV0{
 		TargetPort:     orquestaruntime.AgentStopperTargetPortV0,
 		MessageType:    orquestaruntime.AgentStopperMessageTypeV0,
-		CorrelationID:  intent.CorrelationID,
-		IdempotencyKey: intent.IdempotencyKey,
+		CorrelationID:  agentStopperOpaqueControlRefV0("corr-agent-stop", intent.CorrelationID),
+		IdempotencyKey: agentStopperOpaqueControlRefV0("idem-agent-stop", intent.IdempotencyKey),
 		Payload:        &payload,
 	}
 	if issues := orquestaruntime.ValidateAgentStopperInboundV0(inbound); len(issues) > 0 {
@@ -117,4 +127,77 @@ func normalizeAgentStopperIntentV0(
 	intent.PayloadVersion = strings.TrimSpace(intent.PayloadVersion)
 	intent.Payload = append(intent.Payload[:0:0], intent.Payload...)
 	return intent
+}
+
+func (executor AgentStopperExecutorV0) agentStopperTerminalRecoveryV0(
+	intent orquestaoutboxdispatch.DispatchIntentV0,
+	inbound orquestaruntime.AgentStopperInboundV0,
+	stop AgentStopResultV0,
+	err error,
+	dispatchRef string,
+) (orquestaoutboxdispatch.OutboxDispatchExecutionResultV0, bool) {
+	if !agentStopperAgentRequestTransitionErrorV0(err) {
+		return orquestaoutboxdispatch.OutboxDispatchExecutionResultV0{}, false
+	}
+	run, loadErr := executor.RunStore.LoadRunV0(context.Background(), intent.RunID)
+	if loadErr != nil {
+		return orquestaoutboxdispatch.OutboxDispatchExecutionResultV0{}, false
+	}
+	agentRef := agentStopAgentRequestIDV0(inbound, stop)
+	if !agentStopperAgentTerminalOrReflectedV0(run, agentRef) {
+		return orquestaoutboxdispatch.OutboxDispatchExecutionResultV0{}, false
+	}
+	dispatchRef = strings.TrimSpace(dispatchRef)
+	if dispatchRef == "" {
+		dispatchRef = agentStopConfirmationRefV0(intent, stop)
+	}
+	evidenceRefs := executor.agentStopperEvidenceRefsV0(inbound, stop)
+	evidenceRefs = append(evidenceRefs,
+		"evidence-ref-agent-stop-terminal-recovery",
+		dispatchRef,
+	)
+	return orquestaoutboxdispatch.OutboxDispatchExecutionResultV0{
+		DispatchRef:  strings.TrimSpace(dispatchRef),
+		EvidenceRefs: compactStringsV0(evidenceRefs),
+	}, true
+}
+
+func agentStopperAgentRequestTransitionErrorV0(err error) bool {
+	var commandErr orquestacoreworkflow.OrchestrationCommandErrorV0
+	return errors.As(err, &commandErr) &&
+		commandErr.Code == orquestacoreworkflow.ErrTransicionInvalidaV0 &&
+		commandErr.Field == "payload.agent_request_id"
+}
+
+func agentStopperAgentTerminalOrReflectedV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	agentRef string,
+) bool {
+	agentRef = strings.TrimSpace(agentRef)
+	if agentRef == "" {
+		return false
+	}
+	if !containsCompactStringV0(run.Agents, agentRef) &&
+		!containsCompactStringV0(run.StartedAgents, agentRef) {
+		return false
+	}
+	reflected := reflectedDirectorAgentSetV0(run)
+	return containsCompactStringV0(run.ConfirmedStoppedAgents, agentRef) ||
+		containsCompactStringV0(run.LostAgents, agentRef) ||
+		containsCompactStringV0(run.FailedAgents, agentRef) ||
+		containsCompactStringV0(run.DeliveredAgents, agentRef) ||
+		reflected[agentRef]
+}
+
+func containsCompactStringV0(values []string, ref string) bool {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return false
+	}
+	for _, value := range values {
+		if strings.TrimSpace(value) == ref {
+			return true
+		}
+	}
+	return false
 }

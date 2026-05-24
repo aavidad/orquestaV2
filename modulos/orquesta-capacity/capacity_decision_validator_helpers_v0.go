@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func (v *capacityDecisionValidatorV0) requireOpaque(field, value string) {
@@ -51,7 +53,8 @@ func (v *capacityDecisionValidatorV0) optionalSafeText(field, value string) {
 	if value == "" {
 		return
 	}
-	if utf8.RuneCountInString(value) > 320 || forbiddenSafeTextPatternV0.MatchString(value) {
+	if utf8.RuneCountInString(value) > 320 ||
+		(orquestarails.DetailProhibitedRailsEnabledV0() && forbiddenSafeTextPatternV0.MatchString(value)) {
 		v.add(ErrCapacityDecisionInvalidaV0, field)
 	}
 }
@@ -169,6 +172,9 @@ func windowInsufficientV0(ctx ContextoEstimadoV0, quota QuotaSnapshotV0) bool {
 }
 
 func looksLikeHomePathV0(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	trimmed := strings.TrimSpace(value)
 	low := strings.ToLower(trimmed)
 	return strings.HasPrefix(trimmed, "/") ||
@@ -180,6 +186,9 @@ func looksLikeHomePathV0(value string) bool {
 }
 
 func looksLikeSecretV0(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	low := strings.ToLower(strings.TrimSpace(value))
 	return strings.HasPrefix(low, "bearer") ||
 		strings.HasPrefix(low, "sk-") ||
@@ -196,6 +205,9 @@ func looksLikeSecretV0(value string) bool {
 }
 
 func containsForbiddenBrandV0(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	for _, token := range strings.FieldsFunc(strings.ToLower(value), func(r rune) bool {
 		return (r < 'a' || r > 'z') && (r < '0' || r > '9')
 	}) {
@@ -229,7 +241,7 @@ func isASCIIAlphaV0(b byte) bool {
 }
 
 var (
-	opaqueRefPatternV0         = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{2,159}$`)
+	opaqueRefPatternV0         = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{2,511}$`)
 	phaseRefPatternV0          = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$`)
 	utcInstantPatternV0        = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$`)
 	jwtLikePatternV0           = regexp.MustCompile(`^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$`)

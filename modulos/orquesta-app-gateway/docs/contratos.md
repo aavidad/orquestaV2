@@ -29,6 +29,8 @@ Rutas montadas:
   de supervision sobre una run concreta o sobre la cola inyectada.
 - `/api/v0/autoprogramming/validate-request`: bridge REST de validacion de
   peticiones de autoprogramacion.
+- `/api/v0/autoprogramming/self-improvement`: bridge REST de automejora de baja
+  prioridad desde evidencia de fallo y refs opacas.
 - `/api/v0/autoprogramming/prepare-run`: bridge REST de MCP para preparar una
   run de autoprogramacion continuable por executor inyectado.
 - `/api/v0/autoprogramming/status`: bridge REST de MCP para consultar estado de
@@ -80,6 +82,9 @@ Entrada de composicion:
   executor usa Codex, trabajo de dominio u otra composicion.
 - `/api/v0/autoprogramming/prepare-run` delega en `orquesta-mcp`; este modulo no
   conoce `PrepareAutoprogrammingRunV0`, stores, runtime ni Codex.
+- `/api/v0/autoprogramming/self-improvement` delega en `orquesta-mcp`; este
+  modulo no decide prioridad, cola, runtime ni preparacion salvo puerto
+  inyectado.
 - `/api/v0/autoprogramming/status` y `/api/v0/autoprogramming/supervise`
   delegan en `orquesta-mcp`; este modulo no interpreta cola, stats, procesos ni
   scheduler.

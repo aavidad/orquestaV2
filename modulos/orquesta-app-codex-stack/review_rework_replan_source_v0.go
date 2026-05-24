@@ -58,7 +58,14 @@ func (source ReviewReworkReplanSourceV0) BuildReviewReworkReplanPlansV0(
 		if !ok || !reviewResultNeedsReworkV0(result.Status) {
 			continue
 		}
+		if reviewReworkReplanSkipSoftRailOnlyV0(request, rework, result) {
+			continue
+		}
 		plan := source.planForReworkV0(request, rework, result, descriptors)
+		plan = reviewReworkPlanWithTaskBoundaryV0(request, plan, descriptors)
+		if strings.TrimSpace(plan.CandidateRef) == "" {
+			continue
+		}
 		if reworkRetryAgentAlreadyRequestedV0(request.Run, plan.AgentRequestID) {
 			continue
 		}
@@ -205,6 +212,54 @@ func reworkRetryAgentAlreadyRequestedV0(
 		reviewReworkReplanStringInSetV0(run.StartedAgents, agentRef)
 }
 
+func reviewReworkProgrammingAgentAlreadyAssignedToTaskV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	taskRef string,
+	descriptors []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+) bool {
+	taskRef = strings.TrimSpace(taskRef)
+	if taskRef == "" {
+		return false
+	}
+	for _, descriptor := range descriptors {
+		if strings.TrimSpace(descriptor.Spec.AgentPacket.Task.TaskRef) != taskRef {
+			continue
+		}
+		for _, agentRef := range reviewReworkDescriptorAgentRefsV0(descriptor) {
+			if reviewReworkRunHasProgrammingAgentV0(run, agentRef) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func reviewReworkDescriptorAgentRefsV0(
+	descriptor orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+) []string {
+	return compactStringsV0([]string{
+		descriptor.AgentRef,
+		descriptor.Spec.RequestID,
+		descriptor.Spec.AgentPacket.RequestID,
+	})
+}
+
+func reviewReworkRunHasProgrammingAgentV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	agentRef string,
+) bool {
+	agentRef = strings.TrimSpace(agentRef)
+	if agentRef == "" {
+		return false
+	}
+	return reviewReworkReplanStringInSetV0(run.Agents, agentRef) ||
+		reviewReworkReplanStringInSetV0(run.StartedAgents, agentRef) ||
+		reviewReworkReplanStringInSetV0(run.DeliveredAgents, agentRef) ||
+		reviewReworkReplanStringInSetV0(run.FailedAgents, agentRef) ||
+		reviewReworkReplanStringInSetV0(run.LostAgents, agentRef) ||
+		reviewReworkReplanStringInSetV0(run.StoppedAgents, agentRef)
+}
+
 func reworkRetryAgentLimitReachedV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	taskRef string,
@@ -229,18 +284,4 @@ func reviewReworkReplanStringInSetV0(values []string, want string) bool {
 		}
 	}
 	return false
-}
-
-func reviewResultNeedsReworkV0(status orquestacoreworkflow.ReviewResultStatusV0) bool {
-	return status == orquestacoreworkflow.ReviewResultStatusChangesRequestedV0 ||
-		status == orquestacoreworkflow.ReviewResultStatusRejectedV0
-}
-
-func reviewReworkReplanCapacityV0(
-	config CapacityConfigV0,
-) orquestacoreworkflow.OrchestrationCapacityRecommendationV0 {
-	if strings.TrimSpace(string(config.Tier)) != "" {
-		return config.Tier
-	}
-	return orquestacoreworkflow.OrchestrationCapacityHighV0
 }

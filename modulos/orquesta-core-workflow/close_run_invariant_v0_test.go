@@ -37,7 +37,7 @@ func TestRunClosedEventV0RejectsMissingValidation(t *testing.T) {
 
 func TestCloseRunCommandV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validCloseRunPayloadV0("closure-forbidden")
-	payload.Summary = "usar provider externo"
+	payload.Summary = "usar api_key=valor"
 
 	_, err := NewCloseRunCommandV0(validCommandMetaV0("cmd-close-run-forbidden", "idem-close-run-forbidden"), payload)
 	assertCloseRunCommandErrorV0(t, err, ErrDetalleProhibidoV0)
@@ -45,7 +45,7 @@ func TestCloseRunCommandV0RejectsForbiddenDetails(t *testing.T) {
 
 func TestRunClosedEventV0RejectsForbiddenDetails(t *testing.T) {
 	payload := runClosedPayloadFromCommandV0(validCloseRunPayloadV0("closure-event-forbidden"))
-	payload.Summary = "usar Claude"
+	payload.Summary = "usar authorization: bearer valor"
 
 	_, err := NewRunClosedEventV0(reducerEventMetaV0("evt-close-run-forbidden", 18), payload)
 	assertRunClosedEventErrorV0(t, err, ErrDetalleProhibidoV0)

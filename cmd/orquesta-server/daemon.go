@@ -52,7 +52,7 @@ func startDetachedRunV0(config orquestaserver.ConfigV0) (int, error) {
 	}
 	defer stderrLog.Close()
 	cmd := exec.Command(exe, "run")
-	cmd.Env = os.Environ()
+	cmd.Env = serverEnvironmentWithDetailRailsDefaultV0(os.Environ())
 	cmd.Stdin = nil
 	cmd.Stdout = stdoutLog
 	cmd.Stderr = stderrLog

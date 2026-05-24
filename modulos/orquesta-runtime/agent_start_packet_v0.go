@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	orquestacontext "orquesta/modulos/orquesta-context"
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func BuildAgentStartPacketV0(
@@ -32,7 +33,7 @@ func BuildAgentStartPacketV0(
 	packet.Task = agentStartTaskFromLaunchV0(request)
 	packet.Context = materialized
 	packet.DeliveryRefs = agentStartDeliveryRefsFromLaunchV0(request)
-	packet.Policies = agentStartPoliciesFromLaunchV0(request)
+	packet.Policies = agentStartPoliciesFromLaunchV0(request, materialized)
 	if agentStartPacketHasForbiddenOperationalDetailV0(packet) {
 		packet.Issues = append(packet.Issues, runtimeLaunchIssueV0(AgentStartPacketInvalidoV0, "packet"))
 	}
@@ -80,8 +81,11 @@ func agentStartDeliveryRefsFromLaunchV0(request RuntimeLaunchRequestV0) AgentSta
 	}
 }
 
-func agentStartPoliciesFromLaunchV0(request RuntimeLaunchRequestV0) []string {
-	return []string{
+func agentStartPoliciesFromLaunchV0(
+	request RuntimeLaunchRequestV0,
+	materialized orquestacontext.ContextMaterializedBundleV0,
+) []string {
+	policies := []string{
 		"context_small_by_refs",
 		"ask_director_on_missing_context",
 		"refs_only_for_credentials",
@@ -89,6 +93,13 @@ func agentStartPoliciesFromLaunchV0(request RuntimeLaunchRequestV0) []string {
 		"ack_required",
 		"capacity_" + request.CapacityDecision.NivelCapacidad,
 	}
+	if len(materialized.SanitizationEvidence) > 0 {
+		policies = append(policies, "context_sanitization_evidence_present")
+	}
+	if orquestacontext.ContextBundleRequiresSanitizationReviewV0(materialized) {
+		policies = append(policies, "ask_director_on_sanitization_review")
+	}
+	return policies
 }
 
 func runtimeLaunchIssueV0(code RuntimeLaunchErrorCodeV0, field string) RuntimeLaunchErrorV0 {
@@ -101,6 +112,9 @@ func runtimeLaunchIssueV0(code RuntimeLaunchErrorCodeV0, field string) RuntimeLa
 }
 
 func agentStartPacketHasForbiddenOperationalDetailV0(packet AgentStartPacketV0) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	data, err := json.Marshal(packet)
 	if err != nil {
 		return true

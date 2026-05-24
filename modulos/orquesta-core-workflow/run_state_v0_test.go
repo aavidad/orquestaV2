@@ -97,7 +97,7 @@ func TestOrchestrationRunV0SerializableSinAdaptadores(t *testing.T) {
 
 func TestValidateOrchestrationRunV0RejectsForbiddenRefs(t *testing.T) {
 	run := validRunForSerializationTestV0()
-	run.Tasks = []string{"task_ref_001", "dsn postgres://example"}
+	run.Tasks = []string{"task_ref_001", "api_key=valor"}
 
 	issues := ValidateOrchestrationRunV0(run)
 	if len(issues) == 0 {
@@ -156,26 +156,5 @@ func validRunForSerializationTestV0() OrchestrationRunV0 {
 }
 
 func forbiddenSerializedDetailsV0() []string {
-	return []string{
-		"dsn",
-		"sql",
-		"home",
-		"oauth",
-		"tmux",
-		"docker",
-		"codex",
-		"claude",
-		"ollama",
-		"vllm",
-		"provider",
-		"proveedor",
-		"transcript",
-		"token",
-		"secret",
-		"runtime",
-		"http",
-		"cli",
-		"mcp",
-		"db",
-	}
+	return operationalSensitiveFragmentsForTestV0()
 }

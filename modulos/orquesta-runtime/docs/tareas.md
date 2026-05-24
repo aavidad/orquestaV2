@@ -448,6 +448,46 @@ Bloqueos:
 Estado: cerrada localmente el 2026-05-08.
 ```
 
+## RUNTIME-019
+
+```text
+ID: RUNTIME-019
+Objetivo: Propagar en AgentStartPacketV0 la politica publica de saneamiento de contexto cuando ContextMaterializedBundleV0 trae evidencia.
+Write-set:
+  - modulos/orquesta-runtime/agent_start_packet_v0.go
+  - modulos/orquesta-runtime/agent_start_packet_v0_test.go
+  - modulos/orquesta-runtime/docs/tareas.md
+  - modulos/orquesta-runtime/docs/pruebas.md
+Simbolo foco: BuildAgentStartPacketV0.
+Contrato: AgentStartPacketV0; ContextSanitizationEvidenceV0.
+Validacion:
+  - go test -count=1 ./modulos/orquesta-runtime
+Bloqueos:
+  - Runtime no materializa contexto ni ejecuta sanitizadores; solo conserva evidencia y politica compacta.
+Estado: cerrada localmente.
+```
+
+## RUNTIME-020
+
+```text
+ID: RUNTIME-020
+Objetivo: Cubrir E2E contractual de runtime externo neutral no-Codex desde orden compacta hasta launch/progress/stop por puertos inyectados.
+Write-set:
+  - modulos/orquesta-runtime/runtime_neutral_e2e_v0_test.go
+  - modulos/orquesta-runtime-worktree
+  - modulos/orquesta-runtime/docs/tareas.md
+  - modulos/orquesta-runtime/docs/pruebas.md
+Simbolo foco: LaunchRuntimeAgentToRuntimeLaunchRequestV0; BuildExternalAgentLaunchSpecV0; LaunchExternalAgentProcessV0; BuildAgentProgressReportFromHeartbeatV0.
+Contrato: runtime externo opt-in sin proveedor concreto ni detalle operacional en resultados publicos.
+Validacion:
+  - go test -count=1 ./modulos/orquesta-runtime
+  - go test -count=1 ./modulos/orquesta-runtime ./modulos/orquesta-runtime-worktree
+Bloqueos:
+  - Usa proceso controlado del binario de test; no valida CLI real, proveedor, cuota, red ni transporte productivo.
+  - La verificacion de worktree comprueba paths relativos y write-set, no Git ni merge productivo.
+Estado: cerrada localmente el 2026-05-24.
+```
+
 ## Plantilla
 
 ```text

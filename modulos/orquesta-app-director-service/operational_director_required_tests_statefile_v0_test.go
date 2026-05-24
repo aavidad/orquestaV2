@@ -137,8 +137,8 @@ func TestRequiredTestsEvidenceMissingStateFileRestartNoDuplicaGateYReentraConEvi
 	recovered := serviceRequiredTestsStateFileStoreForTestV0(t, rootDir)
 	request.OccurredAt = "2026-05-22T21:00:01Z"
 	request.CorrelationID = "corr-service-required-tests-statefile-restart"
-	if _, err := continueRequestWithOperationalDirectorPlanStateV0(ctx, request, serviceRequiredTestsStateFilePortsV0(recovered)); err == nil {
-		t.Fatalf("continueRequestWithOperationalDirectorPlanStateV0 without evidence: err nil")
+	if _, err := continueRequestWithOperationalDirectorPlanStateV0(ctx, request, serviceRequiredTestsStateFilePortsV0(recovered)); err != nil {
+		t.Fatalf("continueRequestWithOperationalDirectorPlanStateV0 without evidence: %v", err)
 	}
 	serviceAssertRequiredTestsMissingStateV0(t, recovered, fixture)
 	serviceAssertRequiredTestsGateCountsV0(t, recovered, fixture.RunRef, 1, 0)

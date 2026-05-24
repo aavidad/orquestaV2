@@ -136,7 +136,7 @@ func TestRequestBrainstormCommandV0RejectsNonBrainstormPhase(t *testing.T) {
 
 func TestRequestBrainstormCommandV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validRequestBrainstormPayloadV0("brainstorm-request-forbidden")
-	payload.Summary = "usar Codex para decidir proveedor"
+	payload.Summary = "usar api_key=valor"
 
 	_, err := NewRequestBrainstormCommandV0(validCommandMetaV0("cmd-brainstorm-forbidden", "idem-brainstorm-forbidden"), payload)
 	var publicErr OrchestrationCommandErrorV0
@@ -150,7 +150,7 @@ func TestRequestBrainstormCommandV0RejectsForbiddenDetails(t *testing.T) {
 
 func TestBrainstormRequestedEventV0RejectsForbiddenDetails(t *testing.T) {
 	payload := brainstormRequestedPayloadFromCommandV0(validRequestBrainstormPayloadV0("brainstorm-request-event-forbidden"))
-	payload.Summary = "usar Claude"
+	payload.Summary = "usar authorization: bearer valor"
 
 	_, err := NewBrainstormRequestedEventV0(reducerEventMetaV0("evt-brainstorm-forbidden", 3), payload)
 	var publicErr OrchestrationEventErrorV0

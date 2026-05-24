@@ -47,6 +47,7 @@ func TestBuildDirectorSchedulerTickV0ProgressStalledAsksDirectorBeforeWork(t *te
 
 func TestBuildDirectorSchedulerTickV0ProgressDoesNotRepeatAssessment(t *testing.T) {
 	input := validSchedulerTickInputWithProgressV0(orquestaruntime.AgentProgressingV0)
+	input.WorkCandidates = nil
 	input.Snapshot.AgentAssessments = []string{"assessment-ref-progress-scheduler-001"}
 
 	plan := mustSchedulerTickPlanV0(t, input)
@@ -54,19 +55,20 @@ func TestBuildDirectorSchedulerTickV0ProgressDoesNotRepeatAssessment(t *testing.
 	assertSchedulerPlanV0(t, plan, SchedulerTickStatusQuiescentV0, 0)
 }
 
-func TestBuildDirectorSchedulerTickV0ProgressQuestionPendingWaits(t *testing.T) {
+func TestBuildDirectorSchedulerTickV0ProgressQuestionPendingNoBloquea(t *testing.T) {
 	input := validSchedulerTickInputWithProgressV0(orquestaruntime.AgentStalledV0)
 	input.Snapshot.AgentAssessments = []string{"assessment-ref-progress-scheduler-001"}
 	input.Snapshot.DirectorQuestions = []string{"question-ref-progress-scheduler-001"}
 
 	plan := mustSchedulerTickPlanV0(t, input)
 
-	assertSchedulerPlanV0(t, plan, SchedulerTickStatusWaitingV0, 0)
-	assertSchedulerWaitingV0(t, plan, SchedulerWaitingDirectorQuestionPendingV0)
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 1)
+	assertSchedulerCommandTypesV0(t, plan, orquestacoreworkflow.OrchestrationCommandRequestCapacityV0)
 }
 
 func TestBuildDirectorSchedulerTickV0ProgressQuestionAnsweredQuiescent(t *testing.T) {
 	input := validSchedulerTickInputWithProgressV0(orquestaruntime.AgentStalledV0)
+	input.WorkCandidates = nil
 	input.Snapshot.AgentAssessments = []string{"assessment-ref-progress-scheduler-001"}
 	input.Snapshot.DirectorAnsweredQuestions = []string{"question-ref-progress-scheduler-001"}
 

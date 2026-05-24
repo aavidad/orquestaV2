@@ -9,6 +9,7 @@ import (
 	"time"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 var forbiddenOutboxDispatchCycleTermsV0 = []string{
@@ -226,6 +227,9 @@ func indexedCycleFieldV0(index int, field string) string {
 }
 
 func outboxDispatchCycleHasForbiddenTermV0(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	normalized := strings.ToLower(strings.TrimSpace(value))
 	for _, term := range forbiddenOutboxDispatchCycleTermsV0 {
 		if strings.Contains(normalized, term) {

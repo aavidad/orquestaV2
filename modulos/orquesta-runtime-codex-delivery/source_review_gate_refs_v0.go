@@ -22,6 +22,9 @@ func codexReviewGateAcceptedReviewRefV0(deliveryRef string) string {
 func codexReviewGateSummaryV0(
 	result orquestaautoprogramming.AutoprogrammingReviewGateResultV0,
 ) string {
+	if result.Accepted && result.RequiresFollowup {
+		return "Entrega aceptada con rail blando para follow-up no bloqueante."
+	}
 	if result.Accepted {
 		return "Entrega aceptada por gate de revision."
 	}
@@ -36,11 +39,32 @@ func codexReviewGateEvidenceRefsV0(
 	result orquestaautoprogramming.AutoprogrammingReviewGateResultV0,
 ) []string {
 	values := []string{strings.TrimSpace(ack.AckRef)}
+	values = append(values, orquestaruntimecodex.CodexAgentAckPendingRailEvidenceRefsV0(ack)...)
+	if result.RecommendedAction != "" {
+		values = append(values, "gate-action:"+string(result.RecommendedAction))
+	}
+	if result.RequiresFollowup {
+		values = append(values, "gate-followup-required")
+	}
 	for _, issue := range result.Issues {
-		code := strings.TrimSpace(issue.Code)
-		if code != "" {
-			values = append(values, "gate-issue:"+code)
+		ref := codexReviewGateIssueEvidenceRefV0(issue.Code)
+		if ref != "" {
+			values = append(values, ref)
 		}
 	}
 	return compactCodexDeliveryRefsV0(values)
+}
+
+func codexReviewGateIssueEvidenceRefV0(code string) string {
+	code = strings.TrimSpace(code)
+	for {
+		if !strings.HasPrefix(strings.ToLower(code), "gate-issue:") {
+			break
+		}
+		code = strings.TrimSpace(code[len("gate-issue:"):])
+	}
+	if code == "" {
+		return ""
+	}
+	return "gate-issue:" + code
 }

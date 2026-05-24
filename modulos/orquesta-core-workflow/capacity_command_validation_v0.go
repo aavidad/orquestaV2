@@ -11,33 +11,6 @@ const (
 	maxCapacityRequestEvidenceRefsV0 = 20
 )
 
-var forbiddenCapacityRequestFragmentsV0 = []string{
-	"db",
-	"database",
-	"sql",
-	"dsn",
-	"runtime",
-	"provider",
-	"proveedor",
-	"model",
-	"modelo",
-	"home",
-	"oauth",
-	"codex",
-	"claude",
-	"ollama",
-	"vllm",
-	"adapter",
-	"adaptador",
-	"secret",
-	"secreto",
-	"token",
-	"password",
-	"credential",
-	"credencial",
-	"api_key",
-}
-
 func decodeRequestCapacityCommandPayloadV0(raw json.RawMessage) (RequestCapacityCommandPayloadV0, error) {
 	if len(raw) == 0 || len(raw) > maxCapacityRequestPayloadBytesV0 {
 		return RequestCapacityCommandPayloadV0{}, commandErrorV0(ErrPayloadInvalidoV0, "payload")
@@ -184,15 +157,7 @@ func capacityRequestStringsInvalidV0(values []string) bool {
 }
 
 func capacityRequestHasForbiddenDetailsV0(values []string) bool {
-	for _, value := range values {
-		lower := strings.ToLower(value)
-		for _, fragment := range forbiddenCapacityRequestFragmentsV0 {
-			if containsForbiddenFragmentV0(lower, fragment) {
-				return true
-			}
-		}
-	}
-	return false
+	return textValuesContainForbiddenOperationalSensitiveDetailV0(values)
 }
 
 func capacityRequestTextFieldsV0(payload RequestCapacityCommandPayloadV0) []string {

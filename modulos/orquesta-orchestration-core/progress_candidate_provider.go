@@ -2,6 +2,8 @@ package orquestacionnucleoapp
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"strings"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -190,12 +192,54 @@ func normalizeProgressObservationV0(
 		observation.PhaseID = string(request.Run.CurrentPhase)
 	}
 	if observation.AssessmentRef == "" {
-		observation.AssessmentRef = "assessment-ref-" + observation.Report.ReportID
+		observation.AssessmentRef = progressObservationAssessmentRefV0(observation)
 	}
-	if observation.QuestionID == "" && observation.Report.Status == orquestaruntime.AgentStalledV0 {
-		observation.QuestionID = "question-ref-" + observation.Report.ReportID
+	if observation.QuestionID == "" && progressObservationRequiresSchedulerDecisionV0(observation) {
+		observation.QuestionID = progressObservationQuestionRefV0(observation)
 	}
 	return observation
+}
+
+func progressObservationAssessmentRefV0(observation AgentProgressObservationV0) string {
+	if progressObservationNeedsStableAdvisoryRefV0(observation) {
+		return "assessment-ref-" + progressObservationStableAdvisoryHashV0(observation)
+	}
+	return "assessment-ref-" + observation.Report.ReportID
+}
+
+func progressObservationQuestionRefV0(observation AgentProgressObservationV0) string {
+	if progressObservationNeedsStableAdvisoryRefV0(observation) {
+		return "question-ref-" + progressObservationStableAdvisoryHashV0(observation)
+	}
+	return "question-ref-" + observation.Report.ReportID
+}
+
+func progressObservationNeedsStableAdvisoryRefV0(
+	observation AgentProgressObservationV0,
+) bool {
+	if observation.Report.Status == orquestaruntime.AgentStoppedV0 ||
+		observation.Report.Status == orquestaruntime.AgentLoopDetectedV0 {
+		return false
+	}
+	return observation.DecisionRequired ||
+		observation.Report.DecisionRequired ||
+		observation.Report.Status == orquestaruntime.AgentStalledV0 ||
+		observation.Report.BudgetStatus == orquestaruntime.AgentProgressBudgetOverBudgetButActiveV0 ||
+		observation.Report.BudgetStatus == orquestaruntime.AgentProgressBudgetOverBudgetNoActivityV0
+}
+
+func progressObservationStableAdvisoryHashV0(
+	observation AgentProgressObservationV0,
+) string {
+	parts := []string{
+		observation.Report.RunID,
+		observation.Report.AgentRequestID,
+		observation.TaskRef,
+		string(observation.Report.Status),
+		string(observation.Report.BudgetStatus),
+	}
+	sum := sha1.Sum([]byte(strings.Join(parts, "|")))
+	return "agent-progress-" + hex.EncodeToString(sum[:])[:16]
 }
 
 func validateProgressObservationV0(

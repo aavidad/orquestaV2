@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func validateCompactValueV0(field string, value any, depth int, add func(string, string)) {
@@ -129,6 +131,9 @@ func validatePayloadKeyV0(key string, field string, add func(string, string)) {
 }
 
 func forbiddenPayloadKeyCodeV0(key string) string {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return ""
+	}
 	lower := strings.ToLower(key)
 	for _, forbidden := range forbiddenPayloadKeysV0 {
 		if strings.Contains(lower, forbidden) {

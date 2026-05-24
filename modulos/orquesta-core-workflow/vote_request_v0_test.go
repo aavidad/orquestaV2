@@ -136,7 +136,7 @@ func TestRequestVoteCommandV0RejectsNonVotePhase(t *testing.T) {
 
 func TestRequestVoteCommandV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validRequestVotePayloadV0("vote-request-forbidden")
-	payload.Summary = "votar provider con Codex"
+	payload.Summary = "votar api_key=valor"
 
 	_, err := NewRequestVoteCommandV0(validCommandMetaV0("cmd-vote-forbidden", "idem-vote-forbidden"), payload)
 	var publicErr OrchestrationCommandErrorV0
@@ -150,7 +150,7 @@ func TestRequestVoteCommandV0RejectsForbiddenDetails(t *testing.T) {
 
 func TestVoteRequestedEventV0RejectsForbiddenDetails(t *testing.T) {
 	payload := voteRequestedPayloadFromCommandV0(validRequestVotePayloadV0("vote-request-event-forbidden"))
-	payload.Summary = "usar Claude"
+	payload.Summary = "usar authorization: bearer valor"
 
 	_, err := NewVoteRequestedEventV0(reducerEventMetaV0("evt-vote-forbidden", 3), payload)
 	var publicErr OrchestrationEventErrorV0

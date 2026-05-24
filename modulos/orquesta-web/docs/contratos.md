@@ -187,7 +187,8 @@ Consumidores: operador humano / cliente web de autoprogramacion
 Contrato externo consumido: `orquesta.autoprogramming.prepare_run.v0`
 Campos:
 - command: request_id, correlation_id, request_ref, project_ref, worktree_ref,
-  branch_ref, tasks, write_set, required_tests y limites de continuacion.
+  branch_ref, tasks, write_set, required_tests, priority_score y limites de
+  continuacion.
 - view_model: estado, accepted, run_ref, project_ref, worktree_ref,
   branch_ref, phase_id, workflow_task_refs, wait_agent_refs, continue y
   errores_publicos.
@@ -199,6 +200,8 @@ Invariantes:
   interpretan como rutas, nombres Git ni comandos.
 - La preparacion solo deja una run continuable; la supervision posterior usa
   `run_ref` y `wait_agent_refs` devueltos.
+- `priority_score` se transporta al contrato prepare-run para que la cola
+  mantenga el trabajo secundario acotado sin bloquear trabajo primario.
 Errores:
 - autoprogramming_prepare_run_error_transporte
 - autoprogramming_prepare_run_respuesta_invalida
@@ -502,6 +505,37 @@ Implementacion actual:
 - `nueva_app_html_handler_v0.go` define `NuevaAppHTMLHandlerV0` como handler `net/http` puro.
 - `nueva_app_html_render_v0.go` usa `html/template` en memoria, sin filesystem productivo.
 - El submit compartido vive en `nueva_app_endpoint_post_page_v0.go` para mantener JSON y HTML sobre la misma delegacion.
+```
+
+```text
+Nombre: WebAutoprogrammingStatusV0
+Tipo: cliente_salida/dto
+Version: v0
+Propietario: orquesta-web
+Consumidores: vistas web de autoprogramacion y operador
+Campos:
+- query: request_id, correlation_id, locale, run_ref?, app_ref?,
+  external_job_ref?, queue_ref?, app_refs?, queue_limit? y flags de telemetria.
+- viewmodel: queue_live, run_live, queue_ref, run_ref, runs, agents,
+  diagnostics y errores_publicos.
+Invariantes:
+- Consume `POST /api/v0/autoprogramming/status`.
+- Delega estado de cola/run en `orquesta.autoprogramming.status.v0`.
+- Pide progreso de agentes por defecto cuando no se explicitan flags.
+- Proyecta refs opacas; no convierte worktree_ref/branch_ref en rutas ni ramas.
+- No lee stores, DB, runtime, filesystem, Codex, OPES ni proveedor.
+Errores:
+- autoprogramming_status_error_transporte
+- autoprogramming_status_respuesta_invalida
+- errores publicos del contrato MCP status
+Pruebas de contrato:
+- `go test -count=1 ./modulos/orquesta-web` compila cliente y proyeccion junto
+  al contrato prepare-run existente.
+Implementacion actual:
+- `autoprogramming_prepare_run_client_v0.go` expone el cliente REST fino de
+  prepare-run y status reutilizando el transporte HTTP local.
+- `autoprogramming_prepare_run_types_v0.go` define query y proyeccion compacta
+  de cola, runs en progreso, agentes, diagnosticos y errores publicos.
 ```
 
 ```text

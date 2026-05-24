@@ -176,7 +176,7 @@ Riesgos: stdout/stderr se descartan y no se comprueba contenido de salida; el co
 Caso: RUNTIME-013 paquete neutral de arranque para agentes
 Tipo: unit
 Comando: go test -count=1 ./modulos/orquesta-runtime
-Evidencia esperada: paquete orquesta/modulos/orquesta-runtime OK; BuildAgentStartPacketV0 produce AgentStartPacketV0 valido desde RuntimeLaunchRequestV0 y ContextMaterializedBundleV0 coincidentes, incluye task/context/delivery_refs/policies y no serializa provider/model/HOME/OAuth/credential refs ni secretos. AgentStartTaskV0 conserva linaje recursivo neutral en JSON sin detalle operativo.
+Evidencia esperada: paquete orquesta/modulos/orquesta-runtime OK; BuildAgentStartPacketV0 produce AgentStartPacketV0 valido desde RuntimeLaunchRequestV0 y ContextMaterializedBundleV0 coincidentes, incluye task/context/delivery_refs/policies y no serializa provider/model/HOME/OAuth/credential refs ni secretos. AgentStartTaskV0 conserva linaje recursivo neutral en JSON sin detalle operativo. Si el contexto trae ContextSanitizationEvidenceV0, el packet declara politica de evidencia y revision al director sin transportar el dato sensible.
 Ultima ejecucion: 2026-05-05, OK.
 Riesgos: no ejecuta conectores reales ni transporte de agente; valida la frontera neutral antes de adaptar CLI/MCP/API/local/remoto.
 ```
@@ -235,6 +235,15 @@ Comando: go test -count=1 ./modulos/orquesta-runtime
 Evidencia esperada: paquete orquesta/modulos/orquesta-runtime OK; spec invalida, resolver/runtime ausentes, issues del resolver, request operacional invalida y fallo del runtime devuelven status blocked con errores i18n versionados.
 Ultima ejecucion: 2026-05-07, OK.
 Riesgos: no valida un CLI/proveedor concreto; valida que el nucleo no lo hardcodea y que el fallo queda en contrato publico.
+```
+
+```text
+Caso: RUNTIME-020 E2E contractual de runtime externo neutral no-Codex
+Tipo: integration
+Comando: go test -count=1 ./modulos/orquesta-runtime
+Evidencia esperada: paquete orquesta/modulos/orquesta-runtime OK; LaunchRuntimeAgentToRuntimeLaunchRequestV0, BuildAgentStartPacketV0 y BuildClosedExternalAgentConnectorProfileV0 componen un spec neutral; LaunchExternalAgentProcessV0 lanza un proceso controlado por puertos, BuildAgentProgressReportFromHeartbeatV0 registra progreso y parada, StopV0 conserva stop_ref como evidencia, VerifyWorktreeWriteSetV0 confirma un efecto real dentro del write-set con paths relativos, y el resultado publico no filtra Codex, proveedor, modelo, HOME, credenciales, command_path, working_dir ni PID.
+Ultima ejecucion: 2026-05-24, OK.
+Riesgos: usa el binario de test como proceso controlado; no valida proveedor real, CLI real, cuota ni transporte productivo.
 ```
 
 ## AgentLauncher transform v0

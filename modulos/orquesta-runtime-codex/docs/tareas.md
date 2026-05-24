@@ -67,10 +67,16 @@ Validacion:
 
 Bloqueos:
 
-- ACK `completed` sin artifacts exigidos o con artifacts fuera del write-set.
+- ACK `completed` sin artifacts exigidos.
 - ACK con HOME real, secretos, OAuth, prompt/completion o transcript completo.
 - ACK sin correlacion entre outbox/agent: `request_id`, `correlation_id`,
   `target_module`, `task_ref` y `ack_ref`.
+
+Review posterior:
+
+- Artifacts fuera del write-set se conservan como rail blando si la identidad,
+  las rutas seguras y los tests requeridos estan bien; el review gate genera el
+  follow-up no bloqueante.
 
 ## RTCODEX-005 - decision_path condicionado por contrato
 

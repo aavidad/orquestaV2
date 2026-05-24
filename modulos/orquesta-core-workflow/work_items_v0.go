@@ -14,24 +14,6 @@ const (
 	maxWorkflowTaskRecursiveAgentsV0 = 4096
 )
 
-var forbiddenWorkflowTaskSensitiveFragmentsV0 = []string{
-	"secret",
-	"secreto",
-	"password",
-	"credential",
-	"credencial",
-	"api_key",
-	"api-key",
-	"access_token",
-	"access-token",
-	"refresh_token",
-	"refresh-token",
-	"client_secret",
-	"client-secret",
-}
-
-var forbiddenWorkflowTaskFragmentsV0 = forbiddenWorkflowTaskSensitiveFragmentsV0
-
 type WorkflowTaskV0 struct {
 	SchemaVersion        string                          `json:"schema_version"`
 	TaskID               string                          `json:"task_id"`
@@ -68,7 +50,7 @@ type WorkflowTaskErrorV0 struct {
 }
 
 func (err WorkflowTaskErrorV0) Error() string {
-	return err.Code
+	return codeFieldErrorTextV0(err.Code, err.Field)
 }
 
 func NewWorkflowTaskV0(task WorkflowTaskV0) (WorkflowTaskV0, error) {

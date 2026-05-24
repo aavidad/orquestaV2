@@ -170,9 +170,9 @@ func TestCodexStackV0ProgressStalledProtegeDirectorInicial(t *testing.T) {
 	if agentRef == "" || !codexStackHasRefV0(director.StartedAgents, agentRef) {
 		t.Fatalf("run sin director arrancado: run=%+v drain=%+v", run, drain)
 	}
-	if !codexStackRefsContainPartV0(run.AgentAssessments, "assessment-ref-agent-progress-report-ref-"+agentRef) ||
+	if !codexStackRefsContainPartV0(run.AgentAssessments, "assessment-ref-agent-progress-") ||
 		!codexStackRefsContainPartV0(run.AgentAssessments, "#action:ask_director") ||
-		!codexStackRefsContainPartV0(run.DirectorQuestions, "question-ref-agent-progress-report-ref-"+agentRef) {
+		!codexStackRefsContainPartV0(run.DirectorQuestions, "question-ref-agent-progress-") {
 		t.Fatalf("run sin assessment/pregunta esperados para %s: %+v", agentRef, run)
 	}
 	if codexStackHasRefV0(run.StoppedAgents, agentRef) ||

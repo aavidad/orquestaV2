@@ -121,7 +121,7 @@ func TestApplyDirectorQuestionAnsweredV0RejectsReflectedEffectConflict(t *testin
 
 func TestValidateAnswerDirectorQuestionCommandV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validAnswerDirectorQuestionPayloadV0(false)
-	payload.Summary = "usar provider real para decidir"
+	payload.Summary = "usar api_key=valor"
 
 	_, err := NewAnswerDirectorQuestionCommandV0(validCommandMetaV0("cmd-answer-004", "idem-answer-004"), payload)
 	var publicErr OrchestrationCommandErrorV0

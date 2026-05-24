@@ -66,6 +66,44 @@ func TestRunProgressiveLoopV0CancelRequestedCompletaSinAgentesVivos(t *testing.T
 	}
 }
 
+func TestRunProgressiveLoopV0StopRequestedCompletaSiAgenteYaEntrego(t *testing.T) {
+	runRef := "run-nucleo-progressive-control-complete-delivered-001"
+	agentRef := "agent-ref-delivered-001"
+	run := mustActiveProgrammingRunV0(t, runRef)
+	run.Agents = []string{agentRef}
+	run.StartedAgents = []string{agentRef}
+	run.DeliveredAgents = []string{agentRef}
+	ledger := NewInMemoryOutboxLedgerV0()
+	terminal := &recordingRunControlTerminalWriterV0{}
+
+	result, err := ServiceV0{
+		RunStore:           NewInMemoryRunStoreV0(run),
+		EventSink:          NewInMemoryEventSinkV0(),
+		CandidateProvider:  StaticCandidateProviderV0{},
+		RunControl:         sequenceRunControlForTestV0(stopRequestedRunControlStateForTestV0(runRef)),
+		RunControlTerminal: terminal,
+		OutboxLedger:       ledger,
+		MaxCommands:        4,
+	}.RunProgressiveLoopV0(context.Background(), ProgressiveLoopRequestV0{
+		RunRef:               runRef,
+		OccurredAt:           "2026-05-11T09:31:30Z",
+		MaxBursts:            1,
+		MaxStepsPerBurst:     1,
+		MaxDispatchesPerWait: 1,
+		CorrelationID:        "corr-run-control-complete-delivered-001",
+	})
+	if err != nil {
+		t.Fatalf("progressive loop: %v", err)
+	}
+	if result.Status != ProgressiveLoopStatusRunTerminalV0 ||
+		terminal.lastTargetV0() != orquestaruncontrol.RunControlStatusStoppedV0 {
+		t.Fatalf("result=%+v terminal=%+v", result, terminal.commands)
+	}
+	if pending := pendingOutboxRefsForTargetV0(t, ledger, runRef, orquestacoreworkflow.OutboxTargetAgentLauncherV0); len(pending) != 0 {
+		t.Fatalf("pending agent_launcher=%v", pending)
+	}
+}
+
 func TestRunProgressiveLoopV0NoCompletaConParadaPendiente(t *testing.T) {
 	runRef := "run-nucleo-progressive-control-complete-pending-001"
 	ledger := NewInMemoryOutboxLedgerV0()

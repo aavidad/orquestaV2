@@ -419,3 +419,19 @@ Invariantes:
   de que CLI pueda enviar la senal final al servidor;
 - la decision de cerrar el proceso servidor pertenece al borde operativo
   (`cmd/orquesta-server` o futuro runtime de servidor), no al caso de uso.
+
+## Sanitizador local de contexto sensible
+
+`CodexRuntimeConfigV0.ContextSanitizer` permite inyectar un
+`ContextSanitizerPortV0` antes de construir el packet del agente. El adaptador
+local `LocalSensitiveDataSanitizerV0` es determinista y opt-in: sustituye
+tokens, claves, rutas privadas, URLs y material no publicable por refs opacas y
+adjunta `ContextSanitizationEvidenceV0`.
+
+Invariantes:
+
+- si no se inyecta sanitizador, el stack conserva el comportamiento anterior;
+- el adaptador no elige proveedor, modelo, HOME ni transporte;
+- la evidencia incluye categorias y contador, no el dato sensible;
+- si hay duda, el contexto requerido se reduce a refs y el task exige revision
+  por director/humano antes del cierre.

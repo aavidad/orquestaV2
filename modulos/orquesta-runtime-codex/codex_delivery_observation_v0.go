@@ -51,36 +51,27 @@ func BuildCodexDeliveryObservationV0(
 			codexIssueV0(CodexConnectorAckInvalidV0, "status", spec.CorrelationID, "status_not_completed"),
 		}
 	}
-	observation := codexDeliveryObservationFromAckV0(ack, spec.AgentPacket)
-	if codexDeliveryObservationUnsafeForCoreV0(observation) {
-		return CodexDeliveryObservationV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{
-			codexIssueV0(
-				CodexConnectorAckForbiddenV0,
-				"delivery_observation",
-				spec.CorrelationID,
-				"core_forbidden_detail",
-			),
-		}
-	}
-	return observation, nil
+	return codexDeliveryObservationFromAckV0(ack, spec.AgentPacket), nil
 }
 
 func codexDeliveryObservationFromAckV0(
 	ack CodexAgentAckV0,
 	packet orquestaruntime.AgentStartPacketV0,
 ) CodexDeliveryObservationV0 {
+	evidenceRefs := []string{
+		ack.AckRef,
+		packet.DeliveryRefs.MailboxRef,
+		packet.DeliveryRefs.ReadinessRef,
+		packet.DeliveryRefs.CheckpointRef,
+	}
+	evidenceRefs = append(evidenceRefs, CodexAgentAckPendingRailEvidenceRefsV0(ack)...)
 	return CodexDeliveryObservationV0{
-		DeliveryRef: strings.TrimSpace(ack.AckRef),
-		PhaseID:     strings.TrimSpace(packet.Phase),
-		TaskID:      strings.TrimSpace(ack.TaskRef),
-		AgentRef:    strings.TrimSpace(ack.RequestID),
-		Summary:     "Entrega compacta validada por recibo de agente.",
-		EvidenceRefs: compactCodexDeliveryObservationRefsV0([]string{
-			ack.AckRef,
-			packet.DeliveryRefs.MailboxRef,
-			packet.DeliveryRefs.ReadinessRef,
-			packet.DeliveryRefs.CheckpointRef,
-		}),
+		DeliveryRef:  strings.TrimSpace(ack.AckRef),
+		PhaseID:      strings.TrimSpace(packet.Phase),
+		TaskID:       strings.TrimSpace(ack.TaskRef),
+		AgentRef:     strings.TrimSpace(ack.RequestID),
+		Summary:      "Entrega compacta validada por recibo de agente.",
+		EvidenceRefs: compactCodexDeliveryObservationRefsV0(evidenceRefs),
 	}
 }
 
@@ -99,6 +90,23 @@ func compactCodexDeliveryObservationRefsV0(values []string) []string {
 }
 
 func codexDeliveryObservationUnsafeForCoreV0(observation CodexDeliveryObservationV0) bool {
+	return codexDeliveryObservationValuesContainV0(
+		observation,
+		codexDeliveryObservationValueUnsafeForCoreV0,
+	)
+}
+
+func codexDeliveryObservationHasPendingRailV0(observation CodexDeliveryObservationV0) bool {
+	return codexDeliveryObservationValuesContainV0(
+		observation,
+		codexDeliveryObservationValueHasPendingRailV0,
+	)
+}
+
+func codexDeliveryObservationValuesContainV0(
+	observation CodexDeliveryObservationV0,
+	match func(string) bool,
+) bool {
 	values := []string{
 		observation.DeliveryRef,
 		observation.PhaseID,
@@ -108,7 +116,7 @@ func codexDeliveryObservationUnsafeForCoreV0(observation CodexDeliveryObservatio
 	}
 	values = append(values, observation.EvidenceRefs...)
 	for _, value := range values {
-		if codexDeliveryObservationValueUnsafeForCoreV0(value) {
+		if match(value) {
 			return true
 		}
 	}
@@ -116,42 +124,17 @@ func codexDeliveryObservationUnsafeForCoreV0(observation CodexDeliveryObservatio
 }
 
 func codexDeliveryObservationValueUnsafeForCoreV0(value string) bool {
-	lower := strings.ToLower(strings.TrimSpace(value))
-	for _, fragment := range []string{
-		"db",
-		"database",
-		"sql",
-		"dsn",
-		"runtime",
-		"provider",
-		"proveedor",
-		"model",
-		"modelo",
-		"home",
-		"oauth",
-		"codex",
-		"claude",
-		"ollama",
-		"vllm",
-		"adapter",
-		"adaptador",
-		"filesystem",
-		"git",
-		"docker",
-		"tmux",
-		"secret",
-		"secreto",
-		"token",
-		"password",
-		"credential",
-		"credencial",
-		"api_key",
-	} {
-		if codexDeliveryObservationContainsFragmentV0(lower, fragment) {
-			return true
-		}
-	}
-	return false
+	return codexAckTextContainsEffectiveSensitiveDetailV0(value)
+}
+
+func codexDeliveryObservationValueHasPendingRailV0(value string) bool {
+	return !codexDeliveryObservationValueUnsafeForCoreV0(value) &&
+		(codexTextContainsOperationalDetailMarkerV0(value) ||
+			codexDeliveryObservationValueHasLegacyPendingMarkerV0(value))
+}
+
+func codexDeliveryObservationValueHasLegacyPendingMarkerV0(value string) bool {
+	return codexTextHasLegacyPendingMarkerV0(value)
 }
 
 func codexDeliveryObservationContainsFragmentV0(lowerValue string, fragment string) bool {

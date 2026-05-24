@@ -33,7 +33,7 @@ func TestReviewRequestedEventV0RejectsMissingDelivery(t *testing.T) {
 
 func TestRequestReviewCommandV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validRequestReviewPayloadV0("review-request-forbidden")
-	payload.Summary = "usar provider externo"
+	payload.Summary = "usar api_key=valor"
 
 	_, err := NewRequestReviewCommandV0(validCommandMetaV0("cmd-review-forbidden", "idem-review-forbidden"), payload)
 	assertRequestReviewCommandErrorV0(t, err, ErrDetalleProhibidoV0)
@@ -41,7 +41,7 @@ func TestRequestReviewCommandV0RejectsForbiddenDetails(t *testing.T) {
 
 func TestReviewRequestedEventV0RejectsForbiddenDetails(t *testing.T) {
 	payload := reviewRequestedPayloadFromCommandV0(validRequestReviewPayloadV0("review-request-event-forbidden"))
-	payload.Summary = "usar Claude"
+	payload.Summary = "usar authorization: bearer valor"
 
 	_, err := NewReviewRequestedEventV0(reducerEventMetaV0("evt-review-forbidden", 12), payload)
 	assertReviewRequestedEventErrorV0(t, err, ErrDetalleProhibidoV0)

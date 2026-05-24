@@ -20,6 +20,12 @@ Configuracion externa relacionada:
   pulso del supervisor residente. Por defecto se conserva acotado a `1`.
 - `ORQUESTA_SERVER_ALLOW_REPEATED_RUNS=true`: permite que un mismo pulso del
   supervisor repita run si la politica de la composicion lo necesita.
+- `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_TARGET_QUEUE`: tamano objetivo de cola
+  de automejora. Si la cola visible queda por debajo y hay planner inyectado, el
+  servidor puede pedir nuevas tareas aunque el supervisor no este idle.
+- `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_MAX_REQUESTS`: maximo de tareas nuevas
+  por tanda de automejora. El objetivo de cola nunca baja por debajo de este
+  valor normalizado.
 - `ORQUESTA_OPES_BASE_URL`: si existe, el comando servidor crea un conector
   REST OPES y lo inyecta como executor `domain_work` en el stack de aplicacion.
   Si falta, `domain_work` queda apagado por opt-in.
@@ -51,6 +57,9 @@ Invariantes:
 - cada pulso del supervisor es acotado.
 - el runtime residente respeta el `MaxTicks` configurado; no lo pisa
   silenciosamente salvo que llegue vacio o invalido.
+- la automejora se puede disparar por idle o por capacidad libre. La ruta por
+  capacidad requiere cola visible, sin skips pendientes en el tick y planner
+  inyectado; no crea una tarea generica a ciegas.
 - OPES y el backend file de `domain_work` se cablean desde `cmd/orquesta-server`,
   no desde el runtime residente.
 - el autodiagnostico de arranque entra por puerto: el modulo residente solo

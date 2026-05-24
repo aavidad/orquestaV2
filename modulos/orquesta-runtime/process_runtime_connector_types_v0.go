@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 const ProcessRuntimeConnectorVersionV0 = "process_runtime_connector.v0"
@@ -152,6 +154,9 @@ func processRuntimeEnvEntryAllowedV0(item string) bool {
 }
 
 func processRuntimeEnvKeyForbiddenV0(key string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	upper := strings.ToUpper(strings.TrimSpace(key))
 	for _, marker := range []string{
 		"HOME",
@@ -189,6 +194,9 @@ func processRuntimePathEnvValueAllowedV0(value string) bool {
 }
 
 func processRuntimeUnsafeValueV0(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	return looksLikeSecret(value) ||
 		processRuntimeContainsForbiddenMarkerV0(value) ||
 		looksLikeConcreteProviderValueV0(value) ||
@@ -196,16 +204,25 @@ func processRuntimeUnsafeValueV0(value string) bool {
 }
 
 func processRuntimeContainsForbiddenMarkerV0(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	return processRuntimeContainsHomeMarkerV0(value) ||
 		processRuntimeContainsCredentialMarkerV0(value)
 }
 
 func processRuntimeOperationalPathUnsafeV0(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	return processRuntimeContainsExplicitHomeMarkerV0(value) ||
 		processRuntimeContainsCredentialMarkerV0(value)
 }
 
 func processRuntimeContainsHomeMarkerV0(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	low := strings.ToLower(strings.TrimSpace(value))
 	return processRuntimeContainsExplicitHomeMarkerV0(low) ||
 		strings.Contains(low, "/home/") ||
@@ -214,6 +231,9 @@ func processRuntimeContainsHomeMarkerV0(value string) bool {
 }
 
 func processRuntimeContainsExplicitHomeMarkerV0(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	low := strings.ToLower(strings.TrimSpace(value))
 	return strings.Contains(low, "$home") ||
 		strings.Contains(low, "${home}") ||
@@ -223,6 +243,9 @@ func processRuntimeContainsExplicitHomeMarkerV0(value string) bool {
 }
 
 func processRuntimeContainsCredentialMarkerV0(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	low := strings.ToLower(strings.TrimSpace(value))
 	return strings.Contains(low, "oauth") ||
 		strings.Contains(low, "token") ||

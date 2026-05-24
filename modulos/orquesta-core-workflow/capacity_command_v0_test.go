@@ -179,7 +179,7 @@ func TestHandleRequestCapacityCommandV0RejectsNonCurrentPhase(t *testing.T) {
 	}
 }
 
-func TestRequestCapacityCommandV0RejectsForbiddenDetails(t *testing.T) {
+func TestRequestCapacityCommandV0PermiteDetallesOperativosOpacos(t *testing.T) {
 	cases := map[string]func(*RequestCapacityCommandPayloadV0){
 		"provider": func(payload *RequestCapacityCommandPayloadV0) { payload.Summary = "decidir provider externo" },
 		"modelo":   func(payload *RequestCapacityCommandPayloadV0) { payload.ReasonCode = "modelo_requerido" },
@@ -195,21 +195,30 @@ func TestRequestCapacityCommandV0RejectsForbiddenDetails(t *testing.T) {
 			payload := validRequestCapacityPayloadV0("capacity-request-forbidden")
 			mutate(&payload)
 
-			_, err := NewRequestCapacityCommandV0(validCommandMetaV0("cmd-capacity-forbidden-"+strings.ToLower(name), "idem-capacity-forbidden-"+strings.ToLower(name)), payload)
-			var publicErr OrchestrationCommandErrorV0
-			if !errors.As(err, &publicErr) {
-				t.Fatalf("expected public command error, got %T %v", err, err)
-			}
-			if publicErr.Code != ErrDetalleProhibidoV0 {
-				t.Fatalf("code=%q, want %q", publicErr.Code, ErrDetalleProhibidoV0)
+			if _, err := NewRequestCapacityCommandV0(validCommandMetaV0("cmd-capacity-opaque-"+strings.ToLower(name), "idem-capacity-opaque-"+strings.ToLower(name)), payload); err != nil {
+				t.Fatalf("detalle operativo opaco rechazado: %v", err)
 			}
 		})
 	}
 }
 
+func TestRequestCapacityCommandV0RejectsSensitiveDetails(t *testing.T) {
+	payload := validRequestCapacityPayloadV0("capacity-request-sensitive")
+	payload.EvidenceRefs = []string{"client_secret=abc123"}
+
+	_, err := NewRequestCapacityCommandV0(validCommandMetaV0("cmd-capacity-sensitive", "idem-capacity-sensitive"), payload)
+	var publicErr OrchestrationCommandErrorV0
+	if !errors.As(err, &publicErr) {
+		t.Fatalf("expected public command error, got %T %v", err, err)
+	}
+	if publicErr.Code != ErrDetalleProhibidoV0 {
+		t.Fatalf("code=%q, want %q", publicErr.Code, ErrDetalleProhibidoV0)
+	}
+}
+
 func TestCapacityRequestedEventV0RejectsForbiddenDetails(t *testing.T) {
 	payload := capacityRequestedPayloadFromCommandV0(validRequestCapacityPayloadV0("capacity-request-event-forbidden"))
-	payload.Summary = "usar Claude"
+	payload.Summary = "authorization: Bearer abc123"
 
 	_, err := NewCapacityRequestedEventV0(reducerEventMetaV0("evt-capacity-forbidden", 2), payload)
 	var publicErr OrchestrationEventErrorV0
@@ -230,7 +239,7 @@ func TestCapacityRequestedOutboxPayloadDoesNotContainProviderModelRuntimeHome(t 
 		t.Fatalf("handle RequestCapacity: %v", err)
 	}
 	serialized := strings.ToLower(string(result.Outbox[0].Payload))
-	for _, forbidden := range []string{"provider", "proveedor", "model", "modelo", "runtime", "home", "codex", "claude", "ollama", "vllm"} {
+	for _, forbidden := range operationalSensitiveFragmentsForTestV0() {
 		if strings.Contains(serialized, forbidden) {
 			t.Fatalf("outbox payload contains forbidden fragment %q: %s", forbidden, serialized)
 		}

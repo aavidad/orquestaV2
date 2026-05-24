@@ -33,6 +33,31 @@ func TestCodexExecResolverV0BloqueaCamposRequeridos(t *testing.T) {
 	requireCodexIssueV0(t, issues, CodexConnectorPathInvalidV0)
 }
 
+func TestCodexExecResolverV0AceptaSandboxDangerFullAccess(t *testing.T) {
+	profile := codexProfileForTestV0(t)
+	profile.Sandbox = "danger-full-access"
+
+	req, issues := NewCodexExecResolverV0(profile).
+		ResolveExternalAgentProcessCommandV0(context.Background(), codexSpecForTestV0())
+
+	if len(issues) != 0 {
+		t.Fatalf("issues inesperadas: %+v", issues)
+	}
+	if req.CommandPath == "" {
+		t.Fatalf("request no materializado")
+	}
+}
+
+func TestCodexExecResolverV0BloqueaExtraArgsQueEscapanWorkspace(t *testing.T) {
+	profile := codexProfileForTestV0(t)
+	profile.ExtraArgs = []string{"--add-dir", "/tmp"}
+
+	_, issues := NewCodexExecResolverV0(profile).
+		ResolveExternalAgentProcessCommandV0(context.Background(), codexSpecForTestV0())
+
+	requireCodexIssueV0(t, issues, CodexConnectorValueInvalidV0)
+}
+
 func TestCodexExecResolverV0MaterializaPacketPromptYWrapper(t *testing.T) {
 	profile := codexProfileForTestV0(t)
 	req, issues := NewCodexExecResolverV0(profile).
@@ -138,6 +163,11 @@ func TestCodexExecResolverV0PromptUsaControlFilesDelRuntime(t *testing.T) {
 		"No imprimas diffs ni pegues artefactos completos",
 		"Si escribes decision_path, completa antes los ficheros pedidos del write-set",
 		"files debe listar rutas reales de archivos de producto tocados",
+		"RAIL ESTRICTO",
+		"no borres",
+		"no salgas del workdir del proyecto",
+		"No edites fuera del write-set",
+		"si falta alcance, escribe CONSULTA AL DIRECTOR",
 		"Las rutas del write-set son relativas al workdir del proyecto",
 		"No incluyas archivos de control en ACK.files",
 		"Write-set permitido:",

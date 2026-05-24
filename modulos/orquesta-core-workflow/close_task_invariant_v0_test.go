@@ -71,7 +71,7 @@ func TestTaskClosedEventV0RejectsMissingAcceptedReview(t *testing.T) {
 
 func TestCloseTaskCommandV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validCloseTaskPayloadV0("task-close-forbidden")
-	payload.Summary = "usar provider externo"
+	payload.Summary = "usar api_key=valor"
 
 	_, err := NewCloseTaskCommandV0(validCommandMetaV0("cmd-close-task-forbidden", "idem-close-task-forbidden"), payload)
 	assertCloseTaskCommandErrorV0(t, err, ErrDetalleProhibidoV0)
@@ -79,7 +79,7 @@ func TestCloseTaskCommandV0RejectsForbiddenDetails(t *testing.T) {
 
 func TestTaskClosedEventV0RejectsForbiddenDetails(t *testing.T) {
 	payload := taskClosedPayloadFromCommandV0(validCloseTaskPayloadV0("task-close-event-forbidden"))
-	payload.Summary = "usar Claude"
+	payload.Summary = "usar authorization: bearer valor"
 
 	_, err := NewTaskClosedEventV0(reducerEventMetaV0("evt-close-task-forbidden", 14), payload)
 	assertTaskClosedEventErrorV0(t, err, ErrDetalleProhibidoV0)

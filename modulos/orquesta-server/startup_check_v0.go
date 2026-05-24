@@ -47,26 +47,37 @@ func (err StartupNotReadyErrorV0) Error() string {
 
 func (runtime *RuntimeV0) prepareStartupV0(ctx context.Context) error {
 	if runtime.startupCheck == nil {
+		result := StartupCheckResultV0{
+			Status:  StartupCheckStatusReadyV0,
+			Ready:   true,
+			Message: "orquesta_startup_ready",
+		}
+		runtime.auditEventV0(ctx, "startup_check_skipped", "ready", "", map[string]interface{}{
+			"result": result,
+		})
 		runtime.persistStateV0(ctx, runtime.tracker.MarkStartupReadyV0(
-			StartupCheckResultV0{
-				Status:  StartupCheckStatusReadyV0,
-				Ready:   true,
-				Message: "orquesta_startup_ready",
-			},
+			result,
 			runtime.clock.Now(),
 		))
 		return nil
 	}
 	now := runtime.clock.Now()
-	runtime.persistStateV0(ctx, runtime.tracker.MarkStartupCheckingV0(now))
-	result, err := runtime.startupCheck.PrepareStartupV0(ctx, StartupCheckCommandV0{
+	command := StartupCheckCommandV0{
 		ProjectWorkDir: runtime.config.ProjectWorkDir,
 		RuntimeWorkDir: runtime.config.RuntimeWorkDir,
 		StateDir:       runtime.config.StateDir,
 		CorrelationID:  "corr-orquesta-server-startup",
 		OccurredAt:     now,
+	}
+	runtime.auditEventV0(ctx, "startup_check_start", "checking", "", map[string]interface{}{
+		"command": command,
 	})
+	runtime.persistStateV0(ctx, runtime.tracker.MarkStartupCheckingV0(now))
+	result, err := runtime.startupCheck.PrepareStartupV0(ctx, command)
 	if err != nil {
+		runtime.auditEventV0(ctx, "startup_check_error", "blocked", err.Error(), map[string]interface{}{
+			"command": command,
+		})
 		runtime.persistStateV0(ctx, runtime.tracker.MarkStartupBlockedV0(
 			StartupCheckResultV0{
 				Status:  StartupCheckStatusBlockedV0,
@@ -79,9 +90,17 @@ func (runtime *RuntimeV0) prepareStartupV0(ctx context.Context) error {
 	}
 	result = normalizeStartupCheckResultV0(result)
 	if !result.Ready {
+		runtime.auditEventV0(ctx, "startup_check_blocked", "blocked", result.Message, map[string]interface{}{
+			"command": command,
+			"result":  result,
+		})
 		runtime.persistStateV0(ctx, runtime.tracker.MarkStartupBlockedV0(result, runtime.clock.Now()))
 		return StartupNotReadyErrorV0{Status: result.Status, Message: result.Message}
 	}
+	runtime.auditEventV0(ctx, "startup_check_ready", "ready", "", map[string]interface{}{
+		"command": command,
+		"result":  result,
+	})
 	runtime.persistStateV0(ctx, runtime.tracker.MarkStartupReadyV0(result, runtime.clock.Now()))
 	return nil
 }

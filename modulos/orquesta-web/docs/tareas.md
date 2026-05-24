@@ -296,7 +296,23 @@ Contrato: Consume `orquesta.autoprogramming.prepare_run.v0` por REST interno.
 Validacion: `go test -count=1 ./modulos/orquesta-web`.
 Bloqueos: La web no arranca agentes ni supervisa la run; eso queda en
 composicion/MCP con executor inyectado y puertos de runtime.
-Estado: completada.
+Estado: completada; preserva refs opacas y transporta `priority_score` opcional
+para automejora en segundo plano.
+```
+
+```text
+ID: WEB-024
+Objetivo: Permitir que la web vea apps/runs de autoprogramacion en progreso y
+pida autoprogramacion usando las APIs operativas sin acoplarse al runtime.
+Write-set: autoprogramming_prepare_run_*_v0.go,
+docs/contratos.md, docs/pruebas.md y docs/tareas.md.
+Simbolo foco: WebAutoprogrammingStatusV0
+Contrato: Consume `orquesta.autoprogramming.status.v0` por REST interno y
+proyecta cola, runs, agentes, progreso compacto, diagnosticos y errores.
+Validacion: `go test -count=1 ./modulos/orquesta-web`.
+Bloqueos: La planificacion y ejecucion real siguen en director/composicion; web
+no lee stores ni runtime ni convierte refs opacas en rutas o ramas.
+Estado: completada como cliente/proyeccion web fina.
 ```
 
 ## CONSULTA AL DIRECTOR

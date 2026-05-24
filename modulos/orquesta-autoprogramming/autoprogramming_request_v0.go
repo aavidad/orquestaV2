@@ -3,6 +3,8 @@ package orquestaautoprogramming
 import (
 	"errors"
 	"strings"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 const (
@@ -198,20 +200,7 @@ func autoprogrammingRequestTaskRefsV0(groups []AutoprogrammingTaskGroupV0) []str
 }
 
 func autoprogrammingRequestWriteSetPathAllowedV0(path string) bool {
-	trimmed := strings.TrimSpace(path)
-	if trimmed == "" || strings.HasPrefix(trimmed, "/") || strings.HasPrefix(trimmed, "\\") {
-		return false
-	}
-	if len(trimmed) >= 2 && trimmed[1] == ':' {
-		return false
-	}
-	segments := strings.Split(strings.ReplaceAll(trimmed, "\\", "/"), "/")
-	for _, segment := range segments {
-		if segment == "" || segment == "." || segment == ".." {
-			return false
-		}
-	}
-	return true
+	return orquestarails.WorkspaceRelativePathAllowedV0(path, true)
 }
 
 func autoprogrammingRequestMaxTaskRefsV0(request AutoprogrammingRequestV0) int {

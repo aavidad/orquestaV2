@@ -44,6 +44,16 @@ Politica productiva de tests de dominio:
   no contiene strings OPES ni rutas/DB internas para decidir que ejecutar;
 - el runner concreto que convierta esas refs en evidencia durable debe vivir
   fuera de `orquesta-domain-work` y ser opt-in por composicion.
+- el stack Codex puede recibir una implementacion de
+  `DomainWorkRequiredTestPolicyPortV0`; cuando existe, reemplaza las
+  validaciones textuales de `domain_work` por `test_ref` opacos resueltos por
+  el dominio, y el runner de dominio genera `RequiredTestEvidenceV0` desde el
+  ledger causal de `submit_artifact`;
+- si aun no hay receipt causal del dominio, la reentrada queda como evidencia
+  faltante/latencia de ingesta; si el dominio rechazo el artefacto, se registra
+  evidencia `failed`; si el receipt fue aceptado, se registra evidencia
+  `passed`. URL, DSN, rutas internas o nombres de conectores no son evidencia
+  suficiente.
 
 Criterio de exito:
 

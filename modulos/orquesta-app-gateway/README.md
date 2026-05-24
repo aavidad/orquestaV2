@@ -17,9 +17,11 @@ Este modulo ensambla handlers ya existentes:
 - REST `/api/v0/runs/queue/priority`;
 - REST `/api/v0/runs/supervise`;
 - REST `/api/v0/autoprogramming/validate-request`;
+- REST `/api/v0/autoprogramming/self-improvement`;
 - REST `/api/v0/autoprogramming/prepare-run`;
 - REST `/api/v0/autoprogramming/status`;
 - REST `/api/v0/autoprogramming/supervise`;
+- REST `/api/v0/director/human-work/review-plan`;
 - REST `/api/v0/server/shutdown`.
 - REST `/api/v0/domain-work`;
 - REST `/api/v0/external-work/run`.

@@ -262,9 +262,9 @@ Riesgos: exponer stack traces del director o aceptar una respuesta no compacta.
 ```text
 Caso: CLI-P025 autoprogramacion cliente fino
 Tipo: contract
-Comando: orquesta-cli servidor estado --json; orquesta-cli autoprogramacion cola listar --json; orquesta-cli autoprogramacion run ver --run-ref RUN_REF --json
-Evidencia esperada: la CLI consume solo HTTP/API publica, propaga X-Correlation-ID y no lee stores, runtime, worktrees ni filesystem interno.
-Ultima ejecucion: 2026-05-23, go test -count=1 ./cmd/orquesta-cli ./modulos/orquesta-cli; TestRunOrquestaCLIV0ServidorEstadoUsaAPI y TestRunOrquestaCLIV0AutoprogramacionColaListarUsaAPI.
+Comando: orquesta-cli servidor estado --json; orquesta-cli autoprogramacion estado ver --run-ref RUN_REF --json; orquesta-cli autoprogramacion supervisar --max-ticks 1 --json; orquesta-cli autoprogramacion cola listar --json; orquesta-cli autoprogramacion run ver --run-ref RUN_REF --json; orquesta-cli autoprogramacion run controlar --run-ref RUN_REF --action pause --json
+Evidencia esperada: la CLI consume solo HTTP/API publica, propaga X-Correlation-ID y no lee stores, runtime, worktrees ni filesystem interno; estado, supervisor y control de run viajan por endpoints publicos, no por runtime local.
+Ultima ejecucion: 2026-05-23, go test -count=1 ./cmd/orquesta-cli ./modulos/orquesta-cli; TestRunOrquestaCLIV0ServidorEstadoUsaAPI, TestRunOrquestaCLIV0AutoprogramacionColaListarUsaAPI, TestRunOrquestaCLIV0AutoprogramacionEstadoYSupervisarUsanAPI y TestRunOrquestaCLIV0AutoprogramacionRunControlarUsaAPI.
 Riesgos: convertir CLI en control plane local o recomponer estado de cola/run fuera del servidor.
 ```
 
@@ -278,7 +278,16 @@ Riesgos: normalizar refs opacas en CLI o lanzar agentes directamente desde el cl
 ```
 
 ```text
-Caso: CLI-P025 FunctionContract read-only listar/ver
+Caso: CLI-P027 configuracion residente visible para operador y CLI
+Tipo: contract
+Comando: orquesta-cli servidor estado --json; orquesta-cli autoprogramacion estado ver --run-ref RUN_REF --json; orquesta-cli autoprogramacion cola listar --json; orquesta-cli autoprogramacion run ver --run-ref RUN_REF --json; orquesta-cli autoprogramacion supervisar --max-ticks 1 --json; orquesta-cli autoprogramacion run controlar --run-ref RUN_REF --action pause --json; revision documental de ORQUESTA_SERVER_ALLOW_REPEATED_RUNS, ORQUESTA_SERVER_ALLOW_REPEAT, ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_* y limites residentes
+Evidencia esperada: el operador encuentra las variables `ORQUESTA_SERVER_SUPERVISOR_MAX_TICKS`, `ORQUESTA_SERVER_ALLOW_REPEATED_RUNS`, `ORQUESTA_SERVER_MAX_RUNS_PER_TICK`, `ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK`, `ORQUESTA_SERVER_DRAIN_MAX_BURSTS`, `ORQUESTA_SERVER_DRAIN_MAX_STEPS`, `ORQUESTA_SERVER_DRAIN_MAX_DISPATCHES`, `ORQUESTA_SERVER_DRAIN_MAX_COMMANDS`, `ORQUESTA_SERVER_DRAIN_MAX_OUTBOX`, `ORQUESTA_SERVER_DRAIN_MAX_DECISIONS`, `ORQUESTA_SERVER_DRAIN_MAX_EXTERNAL_WAITS`, `ORQUESTA_SERVER_TICK_INTERVAL_MS` y `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_*` en docs CLI/runbook; cada variable declara frontera o default operativo; `ORQUESTA_SERVER_ALLOW_REPEATED_RUNS` aparece con nombre exacto y `ORQUESTA_SERVER_ALLOW_REPEAT` aparece solo como alias no valido; los perfiles por entorno quedan como variables del proceso servidor, no como flags CLI; la CLI observa estado, cola, run, supervision y control por API publica, sin leer entorno, statefile ni runtime local; si falta snapshot publico de un valor efectivo, la salida debe tratarlo como configuracion no visible y no reconstruirlo.
+Ultima ejecucion: 2026-05-23, revision documental de rework `task-ref-self-improvement-ed850d0c5d8d`; go test -count=1 ./modulos/orquesta-cli.
+Riesgos: ocultar la configuracion residente al operador, o convertir la CLI en fuente local de configuracion del servidor.
+```
+
+```text
+Caso: CLI-P028 FunctionContract read-only listar/ver
 Tipo: contract
 Comando: orquesta-cli contratos funcion listar --json; orquesta-cli contratos funcion ver --json
 Evidencia esperada: `FunctionContractCliClientV0` hace `POST /api/v0/core/function-contracts/list` y `POST /api/v0/core/function-contracts/view`, propaga `X-Correlation-ID`, request_id y correlation_id, y devuelve resumenes o `FunctionContractV0` canonico de core sin fallback local.
@@ -287,7 +296,7 @@ Riesgos: inventar shape paralelo o validar reglas de microtarea dentro de CLI.
 ```
 
 ```text
-Caso: CLI-P026 FunctionContract transporte y errores publicos
+Caso: CLI-P029 FunctionContract transporte y errores publicos
 Tipo: unit
 Comando: orquesta-cli contratos funcion listar --json; orquesta-cli contratos funcion ver --json
 Evidencia esperada: 400 devuelve `FunctionContractErrorV0` publico, timeout devuelve `error_transporte`, JSON/shape invalido devuelve `respuesta_invalida`, `server_url` con credenciales se rechaza sin filtrar usuario/secreto y `registrar` devuelve `registrar_function_contract_bloqueado`.

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestarails "orquesta/modulos/orquesta-rails"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
@@ -224,6 +225,9 @@ func compactSupervisorStringsV0(values []string) []string {
 }
 
 func supervisorHasForbiddenDetailV0(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	lower := strings.ToLower(strings.TrimSpace(value))
 	for _, fragment := range agentProgressSupervisorForbiddenFragmentsV0 {
 		if strings.Contains(lower, fragment) {

@@ -3,6 +3,7 @@ package orquestadirectorsupervisedburst
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	orquestadirectorcycle "orquesta/modulos/orquesta-director-cycle"
 	orquestadirectorsupervisor "orquesta/modulos/orquesta-director-supervisor"
@@ -82,7 +83,7 @@ func runDirectorSupervisedBurstStepV0(
 		return orquestadirectorcycle.DirectorCycleStepResultV0{},
 			orquestadirectorsupervisor.DirectorSupervisorDecisionV0{},
 			nil,
-			burstErrorV0(input, ErrDirectorSupervisedBurstStepInputV0, err.Error(), "step_input_builder", true)
+			burstErrorV0(input, ErrDirectorSupervisedBurstStepInputV0, fmt.Sprintf("%T: %v", err, err), "step_input_builder", true)
 	}
 	stepResult, stepErr := input.StepExecutor.ExecuteDirectorCycleStepV0(ctx, stepInput)
 	decision, decisionErr := input.Supervisor.DecideDirectorSupervisorNextActionV0(

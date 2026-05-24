@@ -96,7 +96,7 @@ printf 'fake stdout\n'
 	if _, err := os.Stat(summary.RegistryPath); err != nil {
 		t.Fatalf("registry no escrito: %v", err)
 	}
-	if summary.Sandbox != "danger-full-access" || summary.ApprovalPolicy != "never" {
+	if summary.Sandbox != "workspace-write" || summary.ApprovalPolicy != "never" {
 		t.Fatalf("permisos inesperados sandbox=%q approval=%q", summary.Sandbox, summary.ApprovalPolicy)
 	}
 	if len(summary.Agents) != 2 {
@@ -120,7 +120,7 @@ printf 'fake stdout\n'
 			t.Fatalf("leer wrapper agente %d: %v", i, err)
 		}
 		wrapperText := string(wrapperData)
-		if !strings.Contains(wrapperText, "--sandbox 'danger-full-access'") ||
+		if !strings.Contains(wrapperText, "--sandbox 'workspace-write'") ||
 			!strings.Contains(wrapperText, "--ask-for-approval 'never'") {
 			t.Fatalf("wrapper no transporta permisos esperados:\n%s", wrapperText)
 		}

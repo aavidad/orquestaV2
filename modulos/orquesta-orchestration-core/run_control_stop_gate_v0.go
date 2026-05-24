@@ -78,9 +78,11 @@ func runControlStoppableAgentRefsV0(
 	lost := autonomousStringSetV0(run.LostAgents)
 	stopped := autonomousStringSetV0(run.StoppedAgents)
 	confirmed := autonomousStringSetV0(run.ConfirmedStoppedAgents)
+	reflected := reflectedDirectorAgentSetV0(run)
 	out := make([]string, 0, len(run.StartedAgents))
 	for _, agentRef := range compactStringsV0(run.StartedAgents) {
-		if failed[agentRef] || lost[agentRef] || stopped[agentRef] || confirmed[agentRef] {
+		if failed[agentRef] || lost[agentRef] || stopped[agentRef] ||
+			confirmed[agentRef] || reflected[agentRef] {
 			continue
 		}
 		out = append(out, agentRef)
@@ -149,9 +151,10 @@ func runControlUnconfirmedAgentRefsV0(
 	failed := autonomousStringSetV0(run.FailedAgents)
 	lost := autonomousStringSetV0(run.LostAgents)
 	confirmed := autonomousStringSetV0(run.ConfirmedStoppedAgents)
+	reflected := reflectedDirectorAgentSetV0(run)
 	out := make([]string, 0, len(run.StartedAgents))
 	for _, agentRef := range compactStringsV0(run.StartedAgents) {
-		if failed[agentRef] || lost[agentRef] || confirmed[agentRef] {
+		if failed[agentRef] || lost[agentRef] || confirmed[agentRef] || reflected[agentRef] {
 			continue
 		}
 		out = append(out, agentRef)

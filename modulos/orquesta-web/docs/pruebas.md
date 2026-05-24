@@ -187,8 +187,9 @@ Comando: `go test -count=1 ./modulos/orquesta-web`
 Evidencia esperada: `RESTAutoprogrammingPrepareRunClientV0` envia
 `POST /api/v0/autoprogramming/prepare-run`, correlation header,
 `worktree_isolated=true`, `worktree_ref`, `branch_ref`, write-set y tests
-obligatorios; la respuesta proyecta run, workflow tasks, agentes de espera,
-continue y errores publicos sin leer runtime/stores.
+obligatorios; `priority_score` cruza como dato de cola opcional; la respuesta
+proyecta run, workflow tasks, agentes de espera, continue y errores publicos
+sin leer runtime/stores.
 Ultima ejecucion: 2026-05-23; pasa.
 Riesgos: El executor real de prepare-run se inyecta fuera de web; este corte
 solo cubre cliente, DTO y viewmodel.
@@ -319,6 +320,19 @@ run para saltar al panel de progreso vivo.
 Ultima ejecucion: 2026-05-13; pasa con `go test -count=1 ./modulos/orquesta-web`.
 Riesgos: el panel muestra ranking/prioridad; progreso profundo por run no se
 duplica y sigue en `/director-stats`.
+```
+
+```text
+Caso: WEB-CT-024 cliente REST autoprogramming status
+Tipo: contract
+Comando: `go test -count=1 ./modulos/orquesta-web`
+Evidencia esperada: `RESTAutoprogrammingPrepareRunClientV0` tambien implementa
+`AutoprogrammingStatusClientV0`, envia `POST /api/v0/autoprogramming/status`
+con correlation header, pide progreso de agentes por defecto y proyecta cola,
+runs, agentes, diagnosticos y errores publicos sin leer runtime/stores.
+Ultima ejecucion: 2026-05-23; pasa.
+Riesgos: El estado real depende de que el bridge MCP tenga inyectados
+`run_queue.priority` y `director.stats`; la web solo consume el contrato.
 ```
 
 ```text

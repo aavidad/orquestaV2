@@ -46,6 +46,7 @@ func (resolver CodexLaunchSpecResolverV0) ResolveExternalAgentLaunchSpecV0(
 	if err != nil {
 		return orquestacionnucleoapp.ExternalAgentLaunchSpecResolutionV0{}, err
 	}
+	contextBundle = sanitizeCodexStackAgentContextV0(contextBundle, resolver.Config.ContextSanitizer)
 	task = taskWithContextGuardV0(task, contextBundle)
 	spec := resolver.launchSpecV0(
 		agentRef,
@@ -55,6 +56,7 @@ func (resolver CodexLaunchSpecResolverV0) ResolveExternalAgentLaunchSpecV0(
 		task,
 	)
 	spec.AgentPacket.Context = contextBundle
+	spec.AgentPacket.Policies = packetPoliciesWithContextGuardV0(spec.AgentPacket.Policies, contextBundle)
 	profile := codexProfileForAreaV0(resolver.Config, runtimeDir, area)
 	return orquestacionnucleoapp.ExternalAgentLaunchSpecResolutionV0{
 		Spec:            spec,
@@ -74,11 +76,11 @@ func codexProfileForAreaV0(
 	runtimeDir string,
 	area string,
 ) orquestaruntimecodex.CodexConnectorProfileV0 {
-	sandbox := strings.TrimSpace(config.Sandbox)
+	sandbox := codexWorkspaceWriteSandboxV0(config.Sandbox)
 	approvalPolicy := strings.TrimSpace(config.ApprovalPolicy)
 	if strings.TrimSpace(area) == "director" {
 		if strings.TrimSpace(config.DirectorSandbox) != "" {
-			sandbox = strings.TrimSpace(config.DirectorSandbox)
+			sandbox = codexWorkspaceWriteSandboxV0(config.DirectorSandbox)
 		}
 		if strings.TrimSpace(config.DirectorApprovalPolicy) != "" {
 			approvalPolicy = strings.TrimSpace(config.DirectorApprovalPolicy)
@@ -100,6 +102,17 @@ func codexProfileForAreaV0(
 		ApprovalPolicy:  approvalPolicy,
 		ExtraArgs:       append([]string(nil), config.ExtraArgs...),
 		PromptHints:     codexPromptHintsV0(config.PromptHints),
+	}
+}
+
+func codexWorkspaceWriteSandboxV0(value string) string {
+	switch strings.TrimSpace(value) {
+	case "danger-full-access":
+		return "danger-full-access"
+	case "workspace-write":
+		return "workspace-write"
+	default:
+		return "workspace-write"
 	}
 }
 

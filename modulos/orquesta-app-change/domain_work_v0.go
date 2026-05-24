@@ -25,6 +25,7 @@ func DomainWorkJobRequestFromAppChangeV0(
 			InputRefs:          append([]string(nil), request.CurrentStateRefs...),
 			Constraints:        append([]string(nil), request.Constraints...),
 			AcceptanceCriteria: append([]string(nil), request.AcceptanceCriteria...),
+			RequiredTests:      copyDomainWorkRequiredTestsFromAppChangeV0(work.RequiredTests),
 			ExternalRefs:       domainWorkExternalRefsFromAppChangeV0(request),
 			EvidenceRefs:       append([]string(nil), request.MetadataRefs...),
 		},
@@ -59,6 +60,26 @@ func copyDomainWorkFieldsFromAppChangeV0(
 	}
 	if out == nil {
 		return []orquestadomainwork.DomainWorkFieldV0{}
+	}
+	return out
+}
+
+func copyDomainWorkRequiredTestsFromAppChangeV0(
+	tests []orquestadomainwork.DomainWorkRequiredTestV0,
+) []orquestadomainwork.DomainWorkRequiredTestV0 {
+	out := make([]orquestadomainwork.DomainWorkRequiredTestV0, 0, len(tests))
+	for _, test := range tests {
+		out = append(out, orquestadomainwork.DomainWorkRequiredTestV0{
+			TestRef:                test.TestRef,
+			AcceptanceCriteria:     append([]string(nil), test.AcceptanceCriteria...),
+			AcceptanceCriteriaRefs: append([]string(nil), test.AcceptanceCriteriaRefs...),
+			InputRefs:              append([]string(nil), test.InputRefs...),
+			ExternalRefs:           append([]orquestadomainwork.DomainWorkExternalRefV0(nil), test.ExternalRefs...),
+			EvidenceRefs:           append([]string(nil), test.EvidenceRefs...),
+		})
+	}
+	if out == nil {
+		return []orquestadomainwork.DomainWorkRequiredTestV0{}
 	}
 	return out
 }

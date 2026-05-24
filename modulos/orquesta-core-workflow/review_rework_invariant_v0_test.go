@@ -99,7 +99,7 @@ func TestReworkRequestedEventV0RejectsConflictingRef(t *testing.T) {
 
 func TestRequestReworkCommandV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validRequestReworkPayloadV0("rework-request-forbidden", "review-result-forbidden")
-	payload.Summary = "usar provider externo"
+	payload.Summary = "usar api_key=valor"
 
 	_, err := NewRequestReworkCommandV0(validCommandMetaV0("cmd-request-rework-forbidden", "idem-request-rework-forbidden"), payload)
 	assertRequestReworkCommandErrorV0(t, err, ErrDetalleProhibidoV0)
@@ -114,7 +114,7 @@ func TestRequestReworkCommandV0RejectsProjectionSeparators(t *testing.T) {
 
 func TestReworkRequestedEventV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validReworkRequestedPayloadV0("rework-request-event-forbidden", "review-result-event-forbidden")
-	payload.Summary = "usar Claude"
+	payload.Summary = "usar authorization: bearer valor"
 
 	_, err := NewReworkRequestedEventV0(reducerEventMetaV0("evt-request-rework-forbidden", 18), payload)
 	assertReworkRequestedEventErrorV0(t, err, ErrDetalleProhibidoV0)

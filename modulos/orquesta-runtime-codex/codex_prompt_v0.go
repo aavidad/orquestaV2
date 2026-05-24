@@ -39,9 +39,11 @@ func BuildCodexAgentPromptWithControlFilesV0(
 	b.WriteString("Lee ")
 	b.WriteString(packetPath)
 	b.WriteString(" antes de tocar archivos.\n")
-	b.WriteString("Usa el write-set del paquete como alcance primario; si contiene '.', tienes permiso sobre todo el repo del proyecto.\n")
+	b.WriteString("RAIL ESTRICTO: no borres, no muevas fuera, no trunques archivos existentes y no salgas del workdir del proyecto.\n")
+	b.WriteString("Si para cumplir la tarea crees imprescindible borrar, mover fuera del proyecto o trabajar fuera del workdir, no lo hagas: escribe CONSULTA AL DIRECTOR en el ACK.\n")
+	b.WriteString("Usa el write-set del paquete como alcance cerrado; si contiene '.', el alcance es todo el repo del proyecto, pero sigue prohibido borrar o salir del workdir.\n")
 	b.WriteString("Las rutas del write-set son relativas al workdir del proyecto, no al directorio de control ni a .orquesta-runtime; crea docs/codigo en el proyecto.\n")
-	b.WriteString("Si el write-set no contiene '.', no edites fuera de ese alcance salvo archivos de control o una ampliacion imprescindible para cumplir el objetivo, que debes justificar en notes.\n")
+	b.WriteString("No edites fuera del write-set; si falta alcance, escribe CONSULTA AL DIRECTOR en el ACK. La unica excepcion son archivos de control indicados por Orquesta.\n")
 	b.WriteString("Archivos de control permitidos fuera del write-set: ")
 	b.WriteString(ackPath)
 	if decisionPath != "" {
@@ -87,7 +89,7 @@ func BuildCodexAgentPromptWithControlFilesV0(
 	}
 	b.WriteString("En el ACK, files debe listar rutas reales de archivos de producto tocados, no globs, directorios ni el write-set completo; ejemplo cmd/server/main.go, no cmd/server/**.\n")
 	b.WriteString("No incluyas archivos de control en ACK.files: agent_ack.json, director_decisions.json, agent_packet.json, prompts, logs ni checkpoints.\n")
-	b.WriteString("Si algun archivo queda fuera del write-set estrecho, notes debe explicar por que era necesario.\n")
+	b.WriteString("Si detectas que algun archivo necesario queda fuera del write-set, no lo edites: ACK failed con CONSULTA AL DIRECTOR.\n")
 	b.WriteString("En el ACK, tests debe listar solo pruebas pasadas; cada test obligatorio pasado debe aparecer exactamente como aparece en el paquete.\n")
 	b.WriteString("Si una prueba obligatoria falla, el ACK debe usar status failed y no declarar esa prueba en tests como pasada.\n")
 	b.WriteString("No incluyas HOME real, tokens, secretos, prompts, completions ni transcripts completos.\n")

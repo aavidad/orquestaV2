@@ -22,6 +22,15 @@ func VerifyWorktreeWriteSetV0(
 		return WorktreeVerifyResultV0{}, captureIssues
 	}
 	result := diffWorktreeSnapshotsV0(request.Baseline, current, request.WriteSet)
+	if len(result.RemovedPaths) > 0 {
+		return result, []WorktreeIssueV0{
+			worktreeIssueV0(
+				WorktreeIssueRemovedPathV0,
+				"removed_paths",
+				result.RemovedPaths...,
+			),
+		}
+	}
 	if len(result.OutsideWriteSet) > 0 {
 		return result, []WorktreeIssueV0{
 			worktreeIssueV0(

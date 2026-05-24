@@ -91,6 +91,33 @@ func TestBuildAgentStartPacketV0RechazaSecretoEnContextoMaterializado(t *testing
 	requireRuntimeLaunchCodeV0(t, packet.Issues, AgentStartPacketInvalidoV0)
 }
 
+func TestBuildAgentStartPacketV0DeclaraEvidenciaDeSaneamiento(t *testing.T) {
+	request := runtimeLaunchRequestValidaV0()
+	materialized := runtimeMaterializedContextValidoV0(t, *request.ContextBundle)
+	materialized.SanitizationEvidence = []orquestacontext.ContextSanitizationEvidenceV0{{
+		SchemaVersion:  orquestacontext.ContextSanitizationEvidenceSchemaVersionV0,
+		EvidenceRef:    "context-sanitization-evidence-entry-001",
+		BundleRef:      materialized.BundleRef,
+		WorkOrderRef:   materialized.WorkOrderRef,
+		TargetModule:   materialized.TargetModule,
+		EntryRef:       "context-entry-001",
+		SourceRef:      "orquesta-common-rules:v0",
+		SanitizerRef:   "sanitizer-ref-local-001",
+		Status:         orquestacontext.ContextSanitizationStatusReviewRequiredV0,
+		ReviewRequired: true,
+	}}
+
+	packet := BuildAgentStartPacketV0(request, materialized)
+	if !packet.Valid() {
+		t.Fatalf("packet invalid: %+v", packet.Issues)
+	}
+	if !stringInSetRuntimeTestV0(packet.Policies, "context_sanitization_evidence_present") ||
+		!stringInSetRuntimeTestV0(packet.Policies, "ask_director_on_sanitization_review") {
+		t.Fatalf("policies=%+v", packet.Policies)
+	}
+	assertAgentStartPacketNoOperationalDetailsV0(t, packet)
+}
+
 func runtimeMaterializedContextValidoV0(
 	t *testing.T,
 	bundle orquestacontext.ContextBundleV0,
@@ -140,4 +167,13 @@ func assertAgentStartPacketNoOperationalDetailsV0(t *testing.T, packet AgentStar
 	if agentStartPacketHasSecretPrefixV0(lower) {
 		t.Fatalf("packet leaks secret prefix: %s", string(data))
 	}
+}
+
+func stringInSetRuntimeTestV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

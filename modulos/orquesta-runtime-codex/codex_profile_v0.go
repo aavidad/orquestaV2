@@ -75,10 +75,11 @@ func ValidateCodexConnectorProfileV0(
 	v.optionalSafeValue("model", profile.Model)
 	v.optionalSafeValue("reasoning_effort", profile.ReasoningEffort)
 	v.optionalSafeValue("profile", profile.Profile)
-	v.optionalSafeValue("sandbox", profile.Sandbox)
+	v.requireSupportedSandboxV0(profile.Sandbox)
 	v.optionalSafeValue("approval_policy", profile.ApprovalPolicy)
 	for i, value := range profile.ExtraArgs {
 		v.optionalSafeValue(fmt.Sprintf("extra_args[%d]", i), value)
+		v.rejectWorkspaceEscapeExtraArgV0(fmt.Sprintf("extra_args[%d]", i), value)
 	}
 	for i, value := range profile.PromptHints {
 		v.optionalSafeValue(fmt.Sprintf("prompt_hints[%d]", i), value)
@@ -108,6 +109,29 @@ func (v *codexProfileValidatorV0) optionalSafeValue(field, value string) {
 		return
 	}
 	if codexHasControlCharsV0(value) || strings.ContainsAny(value, "\x00\r\n") {
+		v.add(CodexConnectorValueInvalidV0, field)
+	}
+}
+
+func (v *codexProfileValidatorV0) requireSupportedSandboxV0(value string) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed != "workspace-write" && trimmed != "danger-full-access" {
+		v.add(CodexConnectorValueInvalidV0, "sandbox")
+		return
+	}
+	v.optionalSafeValue("sandbox", trimmed)
+}
+
+func (v *codexProfileValidatorV0) rejectWorkspaceEscapeExtraArgV0(field, value string) {
+	trimmed := strings.TrimSpace(value)
+	switch {
+	case trimmed == "--add-dir",
+		strings.HasPrefix(trimmed, "--add-dir="),
+		trimmed == "-C",
+		trimmed == "--cd",
+		strings.HasPrefix(trimmed, "--cd="),
+		trimmed == "--sandbox",
+		strings.HasPrefix(trimmed, "--sandbox="):
 		v.add(CodexConnectorValueInvalidV0, field)
 	}
 }

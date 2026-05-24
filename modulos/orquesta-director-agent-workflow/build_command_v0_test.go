@@ -119,7 +119,7 @@ func TestBuildDirectorAgentWorkflowCommandV0IdempotenciaUsaCommandRef(t *testing
 
 func TestBuildDirectorAgentWorkflowCommandV0RechazaDecisionInvalida(t *testing.T) {
 	request := validDirectorAgentWorkflowRequestForTestV0()
-	request.Decision.Summary = "usar provider concreto"
+	request.Decision.Summary = "usar client_secret=abc123"
 
 	_, issues := BuildDirectorAgentWorkflowCommandV0(request)
 

@@ -68,7 +68,7 @@ func TestReviewResultRecordedEventV0RejectsConflictingRef(t *testing.T) {
 
 func TestRecordReviewResultCommandV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validRecordReviewResultPayloadV0("review-result-forbidden", ReviewResultStatusChangesRequestedV0)
-	payload.Summary = "usar provider externo"
+	payload.Summary = "usar api_key=valor"
 
 	_, err := NewRecordReviewResultCommandV0(validCommandMetaV0("cmd-record-result-forbidden", "idem-record-result-forbidden"), payload)
 	assertRecordReviewResultCommandErrorV0(t, err, ErrDetalleProhibidoV0)
@@ -76,7 +76,7 @@ func TestRecordReviewResultCommandV0RejectsForbiddenDetails(t *testing.T) {
 
 func TestReviewResultRecordedEventV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validRecordReviewResultPayloadV0("review-result-event-forbidden", ReviewResultStatusRejectedV0)
-	payload.Summary = "usar Claude"
+	payload.Summary = "usar authorization: bearer valor"
 
 	_, err := NewReviewResultRecordedEventV0(reducerEventMetaV0("evt-record-result-forbidden", 15), payload)
 	assertReviewResultRecordedEventErrorV0(t, err, ErrDetalleProhibidoV0)

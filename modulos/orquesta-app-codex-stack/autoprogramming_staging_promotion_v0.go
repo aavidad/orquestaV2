@@ -1,0 +1,258 @@
+package orquestaappcodexstack
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
+)
+
+type AutoprogrammingPromotionConfigV0 struct {
+	Enabled       bool
+	Port          orquestaautoprogramming.AutoprogrammingStagingPromotionPortV0
+	AppRef        string
+	RepoRef       string
+	CommitMessage string
+}
+
+func (stack StackV0) maybePromoteClosedAutoprogrammingRunV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) (bool, []string, error) {
+	config := stack.AutoprogrammingPromotion
+	if !config.Enabled || config.Port == nil ||
+		run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+		return true, nil, nil
+	}
+	request, ok, err := stack.autoprogrammingPromotionRequestV0(ctx, run)
+	if err != nil {
+		return false, nil, err
+	}
+	if !ok {
+		return true, nil, nil
+	}
+	decision := orquestaautoprogramming.EvaluateAutoprogrammingStagingPromotionV0(request)
+	if !decision.Ready {
+		return false, decision.EvidenceRefs, nil
+	}
+	promoted, err := config.Port.PromoteAutoprogrammingStagingV0(ctx, decision.PromotionCommand)
+	if err != nil {
+		return false, promoted.EvidenceRefs, err
+	}
+	refs := compactStringsV0(append(decision.EvidenceRefs, promoted.EvidenceRefs...))
+	if !autoprogrammingPromotionEffectCompleteV0(promoted.Status) {
+		return false, refs, nil
+	}
+	archived, err := config.Port.ArchiveAutoprogrammingStagingV0(ctx, decision.CleanupCommand)
+	if err != nil {
+		return false, compactStringsV0(append(refs, archived.EvidenceRefs...)), err
+	}
+	refs = compactStringsV0(append(refs, archived.EvidenceRefs...))
+	return archived.Status == orquestaautoprogramming.AutoprogrammingStagingEffectArchivedV0, refs, nil
+}
+
+func (stack StackV0) autoprogrammingPromotionRequestV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) (orquestaautoprogramming.AutoprogrammingStagingPromotionRequestV0, bool, error) {
+	tasks, err := stack.autoprogrammingPromotionTasksV0(ctx, run)
+	if err != nil {
+		return orquestaautoprogramming.AutoprogrammingStagingPromotionRequestV0{}, false, err
+	}
+	if len(tasks) == 0 {
+		return orquestaautoprogramming.AutoprogrammingStagingPromotionRequestV0{}, false, nil
+	}
+	evidence, err := stack.autoprogrammingPromotionRequiredTestEvidenceV0(ctx, run)
+	if err != nil {
+		return orquestaautoprogramming.AutoprogrammingStagingPromotionRequestV0{}, false, err
+	}
+	return orquestaautoprogramming.AutoprogrammingStagingPromotionRequestV0{
+		RequestRef:           run.AppSpecRef,
+		RunRef:               run.RunID,
+		ProjectRef:           run.ProjectRef,
+		WorktreeRef:          autoprogrammingPromotionTaskContextRefV0(tasks, "worktree_ref:"),
+		BranchRef:            autoprogrammingPromotionTaskContextRefV0(tasks, "branch_ref:"),
+		RunClosed:            run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0,
+		WriteSet:             autoprogrammingPromotionTaskWriteSetV0(tasks),
+		RequiredTests:        autoprogrammingPromotionTaskRequiredTestsV0(tasks),
+		ClosedTaskRefs:       append([]string(nil), run.ClosedTasks...),
+		AcceptedReviewRefs:   append([]string(nil), run.AcceptedReviews...),
+		RequiredTestEvidence: evidence,
+		LiveWorks:            stack.autoprogrammingPromotionLiveWorksV0(ctx, run.RunID),
+		EvidenceRefs:         []string{"evidence-ref-codex-stack-autoprogramming-promotion"},
+	}, true, nil
+}
+
+func (stack StackV0) autoprogrammingPromotionTasksV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) ([]orquestacoreworkflow.WorkflowTaskV0, error) {
+	if stack.Stores.TaskStore == nil {
+		return nil, fmt.Errorf("autoprogramming_promotion_task_store_required")
+	}
+	tasks, err := stack.Stores.TaskStore.LoadWorkflowTasksV0(ctx, run.RunID, run.Tasks)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]orquestacoreworkflow.WorkflowTaskV0, 0, len(tasks))
+	for _, task := range tasks {
+		if autoprogrammingPromotionTaskV0(task) {
+			out = append(out, task)
+		}
+	}
+	return out, nil
+}
+
+func autoprogrammingPromotionTaskV0(task orquestacoreworkflow.WorkflowTaskV0) bool {
+	for _, ref := range task.ContextRefs {
+		if strings.TrimSpace(ref) == autoprogrammingBridgeOperationalTaskSourceRefV0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (stack StackV0) autoprogrammingPromotionRequiredTestEvidenceV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) ([]orquestaautoprogramming.AutoprogrammingRequiredTestEvidenceV0, error) {
+	if stack.Stores.OperationalPlanStateStore == nil || stack.Stores.RequiredTestEvidenceStore == nil {
+		return nil, nil
+	}
+	state, err := stack.Stores.OperationalPlanStateStore.LoadOperationalDirectorPlanStateV0(
+		ctx,
+		run.RunID,
+		autoprogrammingPromotionPlanRefV0(run.RunID),
+	)
+	if err != nil {
+		return nil, nil
+	}
+	refs := autoprogrammingPromotionPlanTestEvidenceRefsV0(state)
+	items, err := stack.Stores.RequiredTestEvidenceStore.LoadRequiredTestEvidenceV0(ctx, run.RunID, refs)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]orquestaautoprogramming.AutoprogrammingRequiredTestEvidenceV0, 0, len(items))
+	for _, item := range items {
+		out = append(out, orquestaautoprogramming.AutoprogrammingRequiredTestEvidenceV0{
+			EvidenceRef: item.EvidenceRef,
+			TaskRef:     item.TaskRef,
+			TestCommand: item.TestCommand,
+			Status:      string(item.Status),
+		})
+	}
+	return out, nil
+}
+
+func autoprogrammingPromotionPlanTestEvidenceRefsV0(
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+) []string {
+	var refs []string
+	for _, step := range state.Steps {
+		refs = append(refs, step.RequiredTestEvidenceRefs...)
+	}
+	return compactStringsV0(refs)
+}
+
+func (stack StackV0) autoprogrammingPromotionLiveWorksV0(
+	ctx context.Context,
+	currentRunRef string,
+) []orquestaautoprogramming.AutoprogrammingLiveWorkV0 {
+	if stack.Stores.RunQueue == nil || stack.Stores.RunStore == nil || stack.Stores.TaskStore == nil {
+		return nil
+	}
+	candidates, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		ctx,
+		orquestarunqueue.RunQueueReadRequestV0{QueueRef: normalizeRunQueueConfigV0(stack.RunQueue).QueueRef},
+	)
+	if err != nil {
+		return nil
+	}
+	out := make([]orquestaautoprogramming.AutoprogrammingLiveWorkV0, 0, len(candidates))
+	for _, candidate := range candidates {
+		if strings.TrimSpace(candidate.RunRef) == strings.TrimSpace(currentRunRef) {
+			continue
+		}
+		live, ok := stack.autoprogrammingPromotionLiveWorkV0(ctx, candidate)
+		if ok {
+			out = append(out, live)
+		}
+	}
+	return out
+}
+
+func (stack StackV0) autoprogrammingPromotionLiveWorkV0(
+	ctx context.Context,
+	candidate orquestarunqueue.RunSchedulingCandidateV0,
+) (orquestaautoprogramming.AutoprogrammingLiveWorkV0, bool) {
+	run, err := stack.Stores.RunStore.LoadRunV0(ctx, candidate.RunRef)
+	if err != nil {
+		return orquestaautoprogramming.AutoprogrammingLiveWorkV0{}, false
+	}
+	tasks, err := stack.Stores.TaskStore.LoadWorkflowTasksV0(ctx, run.RunID, run.Tasks)
+	if err != nil {
+		return orquestaautoprogramming.AutoprogrammingLiveWorkV0{}, false
+	}
+	writeSet := autoprogrammingPromotionTaskWriteSetV0(tasks)
+	if len(writeSet) == 0 {
+		return orquestaautoprogramming.AutoprogrammingLiveWorkV0{}, false
+	}
+	return orquestaautoprogramming.AutoprogrammingLiveWorkV0{
+		WorkRef:  candidate.RunRef,
+		Status:   candidate.Status,
+		WriteSet: writeSet,
+	}, true
+}
+
+func autoprogrammingPromotionTaskContextRefV0(
+	tasks []orquestacoreworkflow.WorkflowTaskV0,
+	prefix string,
+) string {
+	for _, task := range tasks {
+		for _, ref := range task.ContextRefs {
+			if value, ok := strings.CutPrefix(strings.TrimSpace(ref), prefix); ok {
+				return strings.TrimSpace(value)
+			}
+		}
+	}
+	return ""
+}
+
+func autoprogrammingPromotionTaskWriteSetV0(tasks []orquestacoreworkflow.WorkflowTaskV0) []string {
+	var out []string
+	for _, task := range tasks {
+		out = append(out, task.WriteSet...)
+	}
+	return compactStringsV0(out)
+}
+
+func autoprogrammingPromotionTaskRequiredTestsV0(tasks []orquestacoreworkflow.WorkflowTaskV0) []string {
+	var out []string
+	for _, task := range tasks {
+		out = append(out, task.RequiredTests...)
+	}
+	return compactStringsV0(out)
+}
+
+func autoprogrammingPromotionPlanRefV0(runRef string) string {
+	runRef = strings.TrimSpace(runRef)
+	if runRef == "" {
+		return ""
+	}
+	safe := strings.NewReplacer("\\", "-", "/", "-", " ", "-").Replace(runRef)
+	return "operational-director-plan-director-decisions-" + safe
+}
+
+func autoprogrammingPromotionEffectCompleteV0(status string) bool {
+	switch strings.TrimSpace(status) {
+	case orquestaautoprogramming.AutoprogrammingStagingEffectPromotedV0,
+		orquestaautoprogramming.AutoprogrammingStagingEffectCleanV0:
+		return true
+	default:
+		return false
+	}
+}

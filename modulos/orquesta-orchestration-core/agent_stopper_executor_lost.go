@@ -44,6 +44,15 @@ func (executor AgentStopperExecutorV0) registerAgentLostAfterUnconfirmedStopV0(
 		EventSink: executor.EventSink,
 	}
 	if _, err := workflow.HandleWorkflowCommandV0(context.Background(), command); err != nil {
+		if result, ok := executor.agentStopperTerminalRecoveryV0(
+			intent,
+			inbound,
+			AgentStopResultV0{},
+			err,
+			lossRef,
+		); ok {
+			return result, nil
+		}
 		return orquestaoutboxdispatch.OutboxDispatchExecutionResultV0{}, err
 	}
 	return orquestaoutboxdispatch.OutboxDispatchExecutionResultV0{
@@ -56,8 +65,9 @@ func (executor AgentStopperExecutorV0) agentLostCommandMetaV0(
 	intent orquestaoutboxdispatch.DispatchIntentV0,
 	lossRef string,
 ) orquestacoreworkflow.OrchestrationCommandMetaV0 {
+	messageRef := agentStopperOpaqueControlRefV0("agent-stop-message", intent.MessageID)
 	return orquestacoreworkflow.OrchestrationCommandMetaV0{
-		CommandID:      "cmd-agent-lost-" + strings.TrimSpace(intent.MessageID),
+		CommandID:      "cmd-agent-lost-" + messageRef,
 		RunID:          intent.RunID,
 		IdempotencyKey: "idem-agent-lost-" + strings.TrimSpace(lossRef),
 		CorrelationID:  agentStopperCorrelationIDV0(executor.CorrelationID, intent),

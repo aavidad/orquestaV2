@@ -69,6 +69,8 @@ func TestValidateOperatorSupervisedBurstBudgetV0(t *testing.T) {
 }
 
 func TestValidateOperatorDirectedQueryRejectsSensitiveRefsV0(t *testing.T) {
+	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "on")
+
 	issues := ValidateOperatorDirectedQueryV0(OperatorDirectedQueryV0{
 		QueryRef:          "query-1",
 		TargetRef:         "director-1",
@@ -97,6 +99,21 @@ func TestValidateOperatorDirectedQueryRejectsSensitiveRefsV0(t *testing.T) {
 	})
 	if !hasIssueCodeV0(issues, ErrOperatorMCPQuestionInvalidV0) {
 		t.Fatalf("expected sensitive question issue, got %#v", issues)
+	}
+}
+
+func TestValidateOperatorDirectedQueryPermiteDetallesConRailsDesactivadosV0(t *testing.T) {
+	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "off")
+
+	issues := ValidateOperatorDirectedQueryV0(OperatorDirectedQueryV0{
+		QueryRef:          "query-token-policy-1",
+		TargetRef:         "director-1",
+		QueryConnectorRef: "query-connector-1",
+		Question:          "revisa token de operador como politica, no valor secreto",
+		EvidenceRefs:      []string{"evidence-ref-token-policy"},
+	})
+	if len(issues) != 0 {
+		t.Fatalf("expected permissive directed query, got %#v", issues)
 	}
 }
 

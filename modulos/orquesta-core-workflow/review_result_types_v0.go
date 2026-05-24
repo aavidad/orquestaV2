@@ -28,5 +28,5 @@ type ReviewResultErrorV0 struct {
 }
 
 func (err ReviewResultErrorV0) Error() string {
-	return err.Code
+	return codeFieldErrorTextV0(err.Code, err.Field)
 }

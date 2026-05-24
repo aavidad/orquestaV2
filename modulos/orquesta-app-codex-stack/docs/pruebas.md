@@ -64,25 +64,26 @@ Cobertura Go actual:
   aparecer protegido, no los directores especializados.
 - `TestCodexStackV0ReviewGateAceptaEntregaConEvidenciaReal` valida que el
   stack conecta review gate y acepta una entrega con fichero real manejable.
-- `TestCodexStackV0ReviewGatePideCambiosSiFicheroEsDemasiadoGrande` valida que
-  una entrega registrada pasa a `changes_requested` si supera 300 lineas.
+- `TestCodexStackV0ReviewGateAceptaFicheroGrandeComoAviso` valida que una
+  entrega registrada con mas de 300 lineas conserva la evidencia como rail
+  blando y no dispara `changes_requested`.
 - `TestCodexStackV0ReviewChangesRequestedReplanificaYArrancaAgente` valida el
   flujo vertical completo: entrega registrada, revision con evidencia real,
   `changes_requested`, `RequestRework`, `retry_task`, decision de capacidad y
   arranque de un nuevo agente sin intervencion manual del test.
-- `TestReviewReworkReplanSourceV0FiltraEvidenciaAmbientalCodex` valida que el
-  adaptador Codex no envia refs ambientales del runtime al replan neutral del
-  nucleo; solo conserva evidencia causal apta para workflow.
+- `TestReviewReworkReplanSourceV0MantieneEvidenciaOperativaOpaca` valida que
+  refs operativas opacas como runtime/Codex se conservan como evidencia y solo
+  se filtran valores sensibles efectivos.
 - El stack cablea `OperationalPlanStateWriter` y `OperationalPlanStateStore`
   hacia `ContinueAppDirectorV0`; la prueba focal del state vive en
   `orquesta-app-director-service` y `TestOperationalPlanStateStoreV0UsaStoreExplicitoOWriterLegible`
   cubre el fallback de composicion.
 - `TestNuevaAppWebCodexStackRealReviewReworkOptInV0` queda desactivado por
   defecto y valida con Codex reales el ciclo: app multiagente, entregas de
-  programacion, revision `changes_requested` por evidencia real de fichero
-  demasiado grande, `RequestRework`, `retry_task`, agente real de rework y ACK
-  del rework. La version actual exige ademas que la entrega del rework sea
-  aceptada por el review gate con evidencia real.
+  programacion, revision `changes_requested` por incidencia real no blanda,
+  `RequestRework`, `retry_task`, agente real de rework y ACK del rework. La
+  version actual exige ademas que la entrega del rework sea aceptada por el
+  review gate con evidencia real.
 - `TestCompositeDirectorDecisionSourceV0RechazaVoteRefIncoherente` valida que
   el stack no consume un lote del director con refs causales rotas entre
   votacion, decision, contrato y microtareas.
@@ -1126,8 +1127,8 @@ Resultado local: `ok`.
 
 Cobertura:
 
-- `TestCodexStackV0ReviewGatePideCambiosSiFaltaDestinoWriteSet` fija que un
-  destino ausente como `web` produce `changes_requested`;
+- `TestCodexStackV0ReviewGateAceptaDestinoWriteSetFaltanteComoAviso` fija que
+  un destino ausente como `web` queda como rail blando aceptado;
 - `TestReviewReworkReplanSourceV0DescribeWriteSetFaltanteParaElAgente` fija
   que el follow-up de rework dice que hay que completar el faltante;
 - `TestProgrammingTaskV0IncluyeContextoDeReworkSinRehacerTodo` fija que el
@@ -1137,3 +1138,18 @@ Cobertura:
   cubren la equivalencia `web` -> `internal/webadmin` en apps Go;
 - el smoke real multiagente queda preparado para abrir revision y esperar el
   rework antes de la verificacion final.
+
+Validacion sanitizador local de contexto sensible:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack
+```
+
+Cobertura:
+
+- `TestLocalSensitiveDataSanitizerV0SaneaContextoAntesDelPacket` verifica que
+  el packet no conserva token, secreto, ruta HOME ni prompt literal y que deja
+  evidencia durable con policy publica de saneamiento;
+- `TestLocalSensitiveDataSanitizerV0DudaYActivaRevisionDirector` verifica que
+  material privado ambiguo se degrada a refs y agrega criterios de revision por
+  director/humano con policy de consulta al director.

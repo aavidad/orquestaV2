@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -76,6 +75,15 @@ func TestServerConfigFromEnvV0ExponeSupervisorDesatendidoV0(t *testing.T) {
 	}
 	if !config.SupervisorCommand.AllowRepeatedRuns {
 		t.Fatalf("allow_repeated_runs=%v want=true", config.SupervisorCommand.AllowRepeatedRuns)
+	}
+	if config.IdleSelfImprovementPriorityScore != orquestaserver.DefaultIdleSelfImprovementPriorityScoreV0 {
+		t.Fatalf("idle priority=%d", config.IdleSelfImprovementPriorityScore)
+	}
+	if config.IdleSelfImprovementMaxRequests != orquestaserver.DefaultIdleSelfImprovementMaxRequestsV0 {
+		t.Fatalf("idle max_requests=%d", config.IdleSelfImprovementMaxRequests)
+	}
+	if config.IdleSelfImprovementTargetQueue != orquestaserver.DefaultIdleSelfImprovementTargetQueueV0 {
+		t.Fatalf("idle target_queue=%d", config.IdleSelfImprovementTargetQueue)
 	}
 }
 
@@ -261,7 +269,7 @@ func TestCodexStackCapacityConfigFromEnvV0PermiteSobrescribirCapacidad(t *testin
 	}
 }
 
-func TestCodexRuntimeConfigV0PermitePermisosEspecificosDelDirector(t *testing.T) {
+func TestCodexRuntimeConfigV0PermiteSandboxAmplioConfigurable(t *testing.T) {
 	t.Setenv("ORQUESTA_CODEX_SANDBOX", "workspace-write")
 	t.Setenv("ORQUESTA_CODEX_APPROVAL_POLICY", "never")
 	t.Setenv("ORQUESTA_CODEX_DIRECTOR_SANDBOX", "danger-full-access")
@@ -280,6 +288,43 @@ func TestCodexRuntimeConfigV0PermitePermisosEspecificosDelDirector(t *testing.T)
 	}
 }
 
+func TestCodexRuntimeConfigV0RespetaSandboxAmplioDeOperador(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_SANDBOX", "danger-full-access")
+
+	config := codexRuntimeConfigV0(orquestaserver.ConfigV0{
+		ProjectWorkDir: t.TempDir(),
+		RuntimeWorkDir: t.TempDir(),
+	}, nil)
+
+	if config.Sandbox != "danger-full-access" {
+		t.Fatalf("sandbox=%q want danger-full-access", config.Sandbox)
+	}
+}
+
+func TestCodexRuntimeConfigV0UsaDangerFullAccessPorDefecto(t *testing.T) {
+	config := codexRuntimeConfigV0(orquestaserver.ConfigV0{
+		ProjectWorkDir: t.TempDir(),
+		RuntimeWorkDir: t.TempDir(),
+	}, nil)
+
+	if config.Sandbox != "danger-full-access" {
+		t.Fatalf("sandbox=%q want danger-full-access", config.Sandbox)
+	}
+}
+
+func TestServerConfigFromEnvV0ActivaPurgaLogicaPorDefecto(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", t.TempDir())
+	t.Setenv("ORQUESTA_STARTUP_CLEANUP_MODE", "")
+
+	_, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if got := os.Getenv("ORQUESTA_STARTUP_CLEANUP_MODE"); got != "forced_stop" {
+		t.Fatalf("startup cleanup mode=%q", got)
+	}
+}
+
 func TestDomainWorkExecutorFromEnvV0ConectaOPESOptIn(t *testing.T) {
 	var received struct {
 		CorrelationID  string `json:"correlation_id"`
@@ -287,7 +332,7 @@ func TestDomainWorkExecutorFromEnvV0ConectaOPESOptIn(t *testing.T) {
 		RequestedBy    string `json:"requested_by"`
 		JobType        string `json:"job_type"`
 	}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs" || r.Method != http.MethodPost {
 			t.Fatalf("request=%s %s", r.Method, r.URL.Path)
 		}
@@ -366,7 +411,7 @@ func TestDomainWorkExecutorFromEnvV0ConectaOPESBaseURLFallback(t *testing.T) {
 	var received struct {
 		JobType string `json:"job_type"`
 	}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs" || r.Method != http.MethodPost {
 			t.Fatalf("request=%s %s", r.Method, r.URL.Path)
 		}
@@ -487,7 +532,7 @@ func TestDomainWorkExecutorFromEnvV0ConectaFileCreatorOptIn(t *testing.T) {
 func TestDomainWorkExecutorFromEnvV0ConectaHTTPNeutralOptIn(t *testing.T) {
 	var gotJobRequest orquestadomainwork.DomainWorkJobRequestV0
 	var gotSubmission orquestadomainwork.DomainWorkArtifactSubmissionV0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/jobs":
 			if err := json.NewDecoder(r.Body).Decode(&gotJobRequest); err != nil {

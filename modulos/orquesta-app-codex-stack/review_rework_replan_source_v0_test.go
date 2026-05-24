@@ -5,9 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	orquestacorereplanner "orquesta/modulos/orquesta-core-replanner"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
-	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 )
 
@@ -72,7 +71,7 @@ func TestReviewReworkReplanSourceV0FallbackPrimeraTareaSoloSinReceipt(t *testing
 	}
 }
 
-func TestReviewReworkReplanSourceV0FiltraEvidenciaAmbientalCodex(t *testing.T) {
+func TestReviewReworkReplanSourceV0MantieneEvidenciaOperativaOpaca(t *testing.T) {
 	source := ReviewReworkReplanSourceV0{
 		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(
 			reviewReworkDescriptorForTestV0("delivery-ref-target", "task-ref-target"),
@@ -93,12 +92,10 @@ func TestReviewReworkReplanSourceV0FiltraEvidenciaAmbientalCodex(t *testing.T) {
 		t.Fatalf("plans=%d %+v", len(plans), plans)
 	}
 	evidence := plans[0].EvidenceRefs
-	if reviewReworkPlanHasEvidenceForTestV0(evidence, "evidence-ref-codex-supervisor-stack-drain") ||
-		reviewReworkPlanHasEvidenceForTestV0(evidence, "evidence-ref-runtime-drain") {
-		t.Fatalf("evidence_refs filtran detalles de runtime: %v", evidence)
-	}
-	if !reviewReworkPlanHasEvidenceForTestV0(evidence, "evidence-ref-neutral-review-rework") {
-		t.Fatalf("evidence_refs perdio evidencia neutral: %v", evidence)
+	for _, want := range request.EvidenceRefs {
+		if !reviewReworkPlanHasEvidenceForTestV0(evidence, want) {
+			t.Fatalf("evidence_refs perdio evidencia operativa %q: %v", want, evidence)
+		}
 	}
 }
 
@@ -127,6 +124,58 @@ func TestReviewReworkReplanSourceV0MantienePlanTrasReplanHastaAgente(t *testing.
 	}
 	if len(plans) != 0 {
 		t.Fatalf("plan debe parar tras agente solicitado: %+v", plans)
+	}
+}
+
+func TestReviewReworkReplanSourceV0NoCreaSegundoPadreParaMismaTarea(t *testing.T) {
+	descriptor := reviewReworkDescriptorForTestV0("delivery-ref-target", "task-ref-target")
+	source := ReviewReworkReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(descriptor),
+	}
+	request := reviewReworkPlanRequestForTestV0(false)
+	request.Run.Agents = []string{descriptor.AgentRef}
+	request.Run.StartedAgents = []string{descriptor.AgentRef}
+
+	plans, err := source.BuildReviewReworkReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildReviewReworkReplanPlansV0: %v", err)
+	}
+	if len(plans) != 0 {
+		t.Fatalf("no debe crear otro agente padre para la misma tarea: %+v", plans)
+	}
+}
+
+func TestReviewReworkReplanSourceV0CreaTareaCorreccionSiYaHayPadreYWriteSet(t *testing.T) {
+	descriptor := reviewReworkDescriptorForTestV0("delivery-ref-target", "task-ref-target")
+	descriptor.Spec.AgentPacket.Task.WriteSet = []string{"modulos/orquesta-app-codex-stack"}
+	descriptor.Spec.AgentPacket.Task.RequiredTests = []string{"go test -count=1 ./modulos/orquesta-app-codex-stack"}
+	source := ReviewReworkReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(descriptor),
+	}
+	request := reviewReworkPlanRequestForTestV0(false)
+	request.Run.Agents = []string{descriptor.AgentRef}
+	request.Run.StartedAgents = []string{descriptor.AgentRef}
+
+	plans, err := source.BuildReviewReworkReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildReviewReworkReplanPlansV0: %v", err)
+	}
+	if len(plans) != 1 {
+		t.Fatalf("plans=%+v", plans)
+	}
+	plan := plans[0]
+	if plan.RequestedAction != orquestacorereplanner.ReplanActionSplitTaskV0 ||
+		plan.AgentRequestID != "" ||
+		plan.CapacityRequestRef != "" ||
+		len(plan.SplitTasks) != 1 {
+		t.Fatalf("plan debe crear split_task sin segundo padre: %+v", plan)
+	}
+	task := plan.SplitTasks[0]
+	if task.TaskID == "" ||
+		!reviewReworkReplanStringInSetV0(task.DependsOn, "task-ref-target") ||
+		!reviewReworkReplanStringInSetV0(task.RequiredTests, "go test -count=1 ./modulos/orquesta-app-codex-stack") ||
+		!reviewReworkPlanHasEvidenceForTestV0(plan.EvidenceRefs, "evidence-ref-review-rework-task-boundary") {
+		t.Fatalf("tarea de correccion sin causalidad/evidencia: plan=%+v task=%+v", plan, task)
 	}
 }
 
@@ -240,66 +289,4 @@ func TestBuildStackV0CableaReviewReworkReplanSource(t *testing.T) {
 	if stack.Ports.ReviewReworkReplanSource == nil {
 		t.Fatalf("ReviewReworkReplanSource no cableado")
 	}
-}
-
-func reviewReworkPlanRequestForTestV0(
-	alreadyReplanned bool,
-) orquestacionnucleoapp.ReviewReworkReplanPlanRequestV0 {
-	run := orquestacoreworkflow.OrchestrationRunV0{
-		RunID:        "run-ref-review-rework-stack-001",
-		CurrentPhase: orquestacoreworkflow.OrchestrationPhaseRevisionV0,
-		Tasks:        []string{"task-ref-first", "task-ref-target"},
-		ReworkRequests: []string{
-			"rework-request-ref-target#review_result:review-result-ref-target" +
-				"#review_request:review-request-ref-target#delivery:delivery-ref-target",
-		},
-		ReviewResults: []string{
-			"review-result-ref-target#review_result:changes_requested" +
-				"#review_request:review-request-ref-target#delivery:delivery-ref-target",
-		},
-	}
-	if alreadyReplanned {
-		run.ReplanDecisions = []string{
-			"replan-ref-target#source:rework-request-ref-target#task:task-ref-target" +
-				"#action:retry_task#followups:capacity-ref-target+agent-ref-target",
-		}
-	}
-	return orquestacionnucleoapp.ReviewReworkReplanPlanRequestV0{
-		Run:           run,
-		OccurredAt:    "2026-05-10T10:00:00Z",
-		CorrelationID: "corr-review-rework-stack-001",
-		EvidenceRefs:  []string{"evidence-ref-request-review-rework"},
-	}
-}
-
-func reviewReworkDescriptorForTestV0(
-	deliveryRef string,
-	taskRef string,
-) orquestaruntimecodexdelivery.CodexReceiptDescriptorV0 {
-	return orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
-		DescriptorRef: "receipt-ref-" + deliveryRef,
-		RunID:         "run-ref-review-rework-stack-001",
-		AgentRef:      "agent-ref-" + taskRef,
-		AckPath:       "ack-ref-test.json",
-		Spec: orquestaruntime.ExternalAgentLaunchSpecV0{
-			RequestID: "agent-ref-" + taskRef,
-			AgentPacket: orquestaruntime.AgentStartPacketV0{
-				DeliveryRefs: orquestaruntime.AgentStartDeliveryRefsV0{
-					AckRef: deliveryRef,
-				},
-				Task: orquestaruntime.AgentStartTaskV0{
-					TaskRef: taskRef,
-				},
-			},
-		},
-	}
-}
-
-func reviewReworkPlanHasEvidenceForTestV0(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
 }

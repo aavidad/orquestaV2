@@ -5,8 +5,10 @@ import (
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
+	orquestacontext "orquesta/modulos/orquesta-context"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -19,20 +21,26 @@ import (
 )
 
 type ConfigV0 struct {
-	Enabled        bool
-	Clock          orquestafactoryhttp.AppSpecHTTPClockV0
-	Timeout        time.Duration
-	DirectorLimits orquestaweb.WebArrancarDirectorAppLimitsV0
-	Stores         StoresV0
-	RunQueue       RunQueueConfigV0
-	RunSupervisor  RunSupervisorConfigV0
-	Codex          CodexRuntimeConfigV0
-	Capacity       CapacityConfigV0
-	ReviewGate     ReviewGateConfigV0
-	RequiredTests  orquestacionnucleoapp.RequiredTestRunnerPortV0
-	AppChange      orquestaappchange.AppChangePortsV0
-	DomainWork     orquestamcp.MCPDomainWorkExecutorPortV0
-	DomainDelivery DomainWorkDeliveryBridgeConfigV0
+	Enabled                  bool
+	Clock                    orquestafactoryhttp.AppSpecHTTPClockV0
+	Timeout                  time.Duration
+	DirectorLimits           orquestaweb.WebArrancarDirectorAppLimitsV0
+	Stores                   StoresV0
+	RunQueue                 RunQueueConfigV0
+	RunSupervisor            RunSupervisorConfigV0
+	Codex                    CodexRuntimeConfigV0
+	Capacity                 CapacityConfigV0
+	ReviewGate               ReviewGateConfigV0
+	RequiredTests            orquestacionnucleoapp.RequiredTestRunnerPortV0
+	DomainTests              DomainWorkRequiredTestConfigV0
+	AppChange                orquestaappchange.AppChangePortsV0
+	AutoprogrammingPromotion AutoprogrammingPromotionConfigV0
+	DomainWork               orquestamcp.MCPDomainWorkExecutorPortV0
+	DomainDelivery           DomainWorkDeliveryBridgeConfigV0
+}
+
+type DomainWorkRequiredTestConfigV0 struct {
+	Policy orquestadomainwork.DomainWorkRequiredTestPolicyPortV0
 }
 
 type StoresV0 struct {
@@ -81,9 +89,10 @@ type CodexRuntimeConfigV0 struct {
 	ExtraArgs              []string
 	PromptHints            []string
 
-	Runtime        orquestaruntime.ExternalAgentProcessRuntimePortV0
-	ProcessStopper orquestacionnucleoapp.ProcessRuntimeStopPortV0
-	SnapshotSource orquestaruntimecodexdelivery.CodexProcessSnapshotSourcePortV0
+	Runtime          orquestaruntime.ExternalAgentProcessRuntimePortV0
+	ProcessStopper   orquestacionnucleoapp.ProcessRuntimeStopPortV0
+	SnapshotSource   orquestaruntimecodexdelivery.CodexProcessSnapshotSourcePortV0
+	ContextSanitizer orquestacontext.ContextSanitizerPortV0
 
 	MaxBatchReady  int
 	MaxConcurrency int

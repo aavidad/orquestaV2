@@ -72,8 +72,35 @@ func (ledger *FileDomainWorkArtifactSubmissionLedgerV0) RecordDomainWorkArtifact
 	if err := ledger.loadLockedV0(); err != nil {
 		return err
 	}
-	ledger.records[record.IdempotencyKey] = record
+	ledger.records[record.IdempotencyKey] = normalizeDomainWorkArtifactSubmissionRecordV0(record)
 	return ledger.persistLockedV0()
+}
+
+func (ledger *FileDomainWorkArtifactSubmissionLedgerV0) ListDomainWorkArtifactSubmissionsV0(
+	ctx context.Context,
+	filter DomainWorkArtifactSubmissionRecordFilterV0,
+) ([]DomainWorkArtifactSubmissionRecordV0, error) {
+	if ledger == nil {
+		return nil, nil
+	}
+	if err := contextErrDomainWorkFileLedgerV0(ctx); err != nil {
+		return nil, err
+	}
+	filter = normalizeDomainWorkArtifactSubmissionRecordFilterV0(filter)
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	if err := ledger.loadLockedV0(); err != nil {
+		return nil, err
+	}
+	out := make([]DomainWorkArtifactSubmissionRecordV0, 0, len(ledger.records))
+	for _, record := range ledger.records {
+		record = normalizeDomainWorkArtifactSubmissionRecordV0(record)
+		if !domainWorkArtifactSubmissionRecordMatchesFilterV0(record, filter) {
+			continue
+		}
+		out = append(out, record)
+	}
+	return out, nil
 }
 
 func (ledger *FileDomainWorkArtifactSubmissionLedgerV0) loadLockedV0() error {
@@ -100,7 +127,7 @@ func (ledger *FileDomainWorkArtifactSubmissionLedgerV0) loadLockedV0() error {
 	}
 	ledger.records = map[string]DomainWorkArtifactSubmissionRecordV0{}
 	for _, record := range snapshot.Records {
-		record.IdempotencyKey = strings.TrimSpace(record.IdempotencyKey)
+		record = normalizeDomainWorkArtifactSubmissionRecordV0(record)
 		if record.IdempotencyKey == "" {
 			continue
 		}

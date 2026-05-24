@@ -159,6 +159,9 @@ func agentProgressHeartbeatEvidenceRefsV0(
 	if snapshot.LaunchRef != "" {
 		refs = append(refs, snapshot.LaunchRef)
 	}
+	if snapshot.StopRef != "" {
+		refs = append(refs, snapshot.StopRef)
+	}
 	refs = append(refs, current.EvidenceRefs...)
 	return refs
 }

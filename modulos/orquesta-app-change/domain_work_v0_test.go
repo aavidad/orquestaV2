@@ -27,6 +27,16 @@ func TestDomainWorkJobRequestFromAppChangeV0ConvierteExternalWork(t *testing.T) 
 			Values: []string{"source-ref-calendar"},
 		},
 	}
+	request.ExternalWork.RequiredTests = []orquestadomainwork.DomainWorkRequiredTestV0{{
+		TestRef:                " domain-test-ref-agenda-week ",
+		AcceptanceCriteriaRefs: []string{" criteria-ref-week-view "},
+		InputRefs:              []string{" input-ref-week-view "},
+		ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{{
+			Kind: " domain_validator ",
+			Ref:  " validator-ref-week-view ",
+		}},
+		EvidenceRefs: []string{" artifact-ref-week-view "},
+	}}
 
 	job, ok := DomainWorkJobRequestFromAppChangeV0(request)
 
@@ -60,6 +70,9 @@ func TestDomainWorkJobRequestFromAppChangeV0ConvierteExternalWork(t *testing.T) 
 		job.Constraints[0] != "sin cambiar contratos publicos" ||
 		len(job.AcceptanceCriteria) != 1 ||
 		job.AcceptanceCriteria[0] != "vista semanal visible" ||
+		len(job.RequiredTests) != 1 ||
+		job.RequiredTests[0].TestRef != "domain-test-ref-agenda-week" ||
+		job.RequiredTests[0].ExternalRefs[0].Ref != "validator-ref-week-view" ||
 		len(job.EvidenceRefs) != 1 ||
 		job.EvidenceRefs[0] != "evidence-ref-001" {
 		t.Fatalf("refs inesperadas: %+v", job)

@@ -206,11 +206,13 @@ Invariantes:
   - Si process status es running y progress_counter no aumenta durante la politica configurada, reporta stalled.
   - Si repeated_action_count alcanza la politica configurada, reporta loop_detected.
   - Si process status es stopped, reporta stopped.
+  - Si el snapshot stopped trae stop_ref, esa ref viaja como evidencia durable del reporte.
   - La politica solo contiene umbrales numericos; no menciona proveedor, modelo, HOME, credencial ni DB.
 Errores:
   - Reutiliza AgentProgressReportErrorV0.
 Pruebas de contrato:
   - TestBuildAgentProgressReportFromHeartbeatV0DistingueProgresoEstancamientoYBucle.
+  - TestRuntimeNeutralE2EV0LaunchProgressStopSinProviderConcreto.
 ```
 
 ## RuntimeFakeLifecycle v0

@@ -47,6 +47,8 @@ func validateConfigV0(config ConfigV0) error {
 		return fmt.Errorf("orquesta_app_codex_stack: capacity.occurred_at requerido")
 	case strings.TrimSpace(config.Capacity.RequestedBy) == "":
 		return fmt.Errorf("orquesta_app_codex_stack: capacity.requested_by requerido")
+	case config.AutoprogrammingPromotion.Enabled && config.AutoprogrammingPromotion.Port == nil:
+		return fmt.Errorf("orquesta_app_codex_stack: autoprogramming_promotion.port requerido")
 	}
 	if issues := orquestaruntimecodex.ValidateCodexConnectorProfileV0(
 		codexProfileV0(config.Codex, config.Codex.RuntimeWorkDir),

@@ -71,6 +71,89 @@ func TestCodexShutdownCheckpointV0RechazaAckDeOtroAgente(t *testing.T) {
 	requireCodexIssueV0(t, issues, CodexConnectorAckCorrelationV0)
 }
 
+func TestCodexShutdownCheckpointV0PermiteDetalleConRailsDesactivados(t *testing.T) {
+	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "off")
+
+	dir := t.TempDir()
+	request := codexShutdownRequestForTestV0()
+	ackPath := filepath.Join(dir, CodexShutdownCheckpointAckFileNameV0)
+	writeCodexShutdownAckForTestV0(t, ackPath, CodexShutdownCheckpointAckV0{
+		SchemaVersion: CodexShutdownCheckpointAckSchemaVersionV0,
+		RunRef:        request.RunRef,
+		AgentRef:      request.AgentRef,
+		CheckpointRef: request.CheckpointRef,
+		Status:        CodexShutdownCheckpointStatusReadyV0,
+		Summary:       "checkpoint con token policy y prompt policy como refs operativas",
+		EvidenceRefs:  []string{"evidence-ref-token-policy"},
+	})
+
+	_, issues := ReadCodexShutdownCheckpointAckFileV0(ackPath, request)
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+}
+
+func TestCodexShutdownCheckpointV0ConRailsDetalleOffRechazaSecretoEfectivo(t *testing.T) {
+	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "off")
+
+	dir := t.TempDir()
+	request := codexShutdownRequestForTestV0()
+	ackPath := filepath.Join(dir, CodexShutdownCheckpointAckFileNameV0)
+	writeCodexShutdownAckForTestV0(t, ackPath, CodexShutdownCheckpointAckV0{
+		SchemaVersion: CodexShutdownCheckpointAckSchemaVersionV0,
+		RunRef:        request.RunRef,
+		AgentRef:      request.AgentRef,
+		CheckpointRef: request.CheckpointRef,
+		Status:        CodexShutdownCheckpointStatusReadyV0,
+		Summary:       "access_token=abc123",
+	})
+
+	_, issues := ReadCodexShutdownCheckpointAckFileV0(ackPath, request)
+	requireCodexIssueV0(t, issues, CodexConnectorAckForbiddenV0)
+}
+
+func TestCodexShutdownCheckpointV0NoCortaPorRailsGenericos(t *testing.T) {
+	dir := t.TempDir()
+	request := codexShutdownRequestForTestV0()
+	request.Reason = "shutdown por provider policy y prompt policy"
+	request.EvidenceRefs = []string{"evidence-ref-token-policy"}
+	ackPath := filepath.Join(dir, CodexShutdownCheckpointAckFileNameV0)
+	writeCodexShutdownAckForTestV0(t, ackPath, CodexShutdownCheckpointAckV0{
+		SchemaVersion: CodexShutdownCheckpointAckSchemaVersionV0,
+		RunRef:        request.RunRef,
+		AgentRef:      request.AgentRef,
+		CheckpointRef: request.CheckpointRef,
+		Status:        CodexShutdownCheckpointStatusReadyV0,
+		Summary:       "checkpoint con token provider home prompt como refs blandas",
+		EvidenceRefs:  []string{"evidence-ref-provider-policy"},
+	})
+
+	if issues := ValidateCodexShutdownRequestV0(request); len(issues) != 0 {
+		t.Fatalf("request issues=%+v", issues)
+	}
+	_, issues := ReadCodexShutdownCheckpointAckFileV0(ackPath, request)
+	if len(issues) != 0 {
+		t.Fatalf("ack issues=%+v", issues)
+	}
+}
+
+func TestCodexShutdownCheckpointV0RechazaDetalleSensibleEfectivo(t *testing.T) {
+	dir := t.TempDir()
+	request := codexShutdownRequestForTestV0()
+	ackPath := filepath.Join(dir, CodexShutdownCheckpointAckFileNameV0)
+	writeCodexShutdownAckForTestV0(t, ackPath, CodexShutdownCheckpointAckV0{
+		SchemaVersion: CodexShutdownCheckpointAckSchemaVersionV0,
+		RunRef:        request.RunRef,
+		AgentRef:      request.AgentRef,
+		CheckpointRef: request.CheckpointRef,
+		Status:        CodexShutdownCheckpointStatusReadyV0,
+		Summary:       "access_token=abc123",
+	})
+
+	_, issues := ReadCodexShutdownCheckpointAckFileV0(ackPath, request)
+	requireCodexIssueV0(t, issues, CodexConnectorAckForbiddenV0)
+}
+
 func codexShutdownRequestForTestV0() CodexShutdownRequestV0 {
 	return CodexShutdownRequestV0{
 		SchemaVersion: CodexShutdownRequestSchemaVersionV0,

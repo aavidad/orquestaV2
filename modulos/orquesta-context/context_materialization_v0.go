@@ -4,6 +4,14 @@ func MaterializeContextBundleV0(
 	bundle ContextBundleV0,
 	reader ContextRefReaderV0,
 ) ContextMaterializedBundleV0 {
+	return MaterializeContextBundleWithSanitizerV0(bundle, reader, nil)
+}
+
+func MaterializeContextBundleWithSanitizerV0(
+	bundle ContextBundleV0,
+	reader ContextRefReaderV0,
+	sanitizer ContextSanitizerPortV0,
+) ContextMaterializedBundleV0 {
 	result := ContextMaterializedBundleV0{
 		SchemaVersion:        ContextMaterializedBundleSchemaVersionV0,
 		BundleRef:            bundle.BundleRef,
@@ -17,10 +25,16 @@ func MaterializeContextBundleV0(
 		return result
 	}
 	for _, entry := range bundle.Entries {
-		materialized, issues := materializeContextEntryV0(bundle, entry, reader)
+		materialized, evidence, issues := materializeContextEntryV0(bundle, entry, reader, sanitizer)
 		if len(issues) > 0 {
 			result.Issues = append(result.Issues, issues...)
 			continue
+		}
+		if evidence.SchemaVersion != "" {
+			result.SanitizationEvidence = append(result.SanitizationEvidence, evidence)
+		}
+		if materialized.Required && evidence.ReviewRequired {
+			result.DirectorQuestionHint = appendContextSanitizationHintV0(result.DirectorQuestionHint)
 		}
 		result.TotalBytes += materialized.Bytes
 		if result.TotalBytes > bundle.Limits.MaxTotalBytes {
@@ -37,14 +51,15 @@ func materializeContextEntryV0(
 	bundle ContextBundleV0,
 	entry ContextBundleEntryV0,
 	reader ContextRefReaderV0,
-) (ContextMaterializedEntryV0, []ContextMaterializationIssueV0) {
+	sanitizer ContextSanitizerPortV0,
+) (ContextMaterializedEntryV0, ContextSanitizationEvidenceV0, []ContextMaterializationIssueV0) {
 	if entry.Kind == ContextEntryRuleRefV0 {
-		return materializeContextRuleEntryV0(entry), nil
+		return materializeContextRuleEntryV0(entry), ContextSanitizationEvidenceV0{}, nil
 	}
 	if resolvedRef, ok := contextMaterializationReadableRefV0(bundle, entry); ok {
-		return materializeContextReadableEntryV0(entry, resolvedRef, reader)
+		return materializeContextReadableEntryV0(bundle, entry, resolvedRef, reader, sanitizer)
 	}
-	return contextMaterializedRefOnlyV0(entry), nil
+	return contextMaterializedRefOnlyV0(entry), ContextSanitizationEvidenceV0{}, nil
 }
 
 func materializeContextRuleEntryV0(entry ContextBundleEntryV0) ContextMaterializedEntryV0 {
@@ -60,23 +75,34 @@ func materializeContextRuleEntryV0(entry ContextBundleEntryV0) ContextMaterializ
 }
 
 func materializeContextReadableEntryV0(
+	bundle ContextBundleV0,
 	entry ContextBundleEntryV0,
 	resolvedRef string,
 	reader ContextRefReaderV0,
-) (ContextMaterializedEntryV0, []ContextMaterializationIssueV0) {
+	sanitizer ContextSanitizerPortV0,
+) (ContextMaterializedEntryV0, ContextSanitizationEvidenceV0, []ContextMaterializationIssueV0) {
 	if reader == nil {
-		return ContextMaterializedEntryV0{}, []ContextMaterializationIssueV0{
+		return ContextMaterializedEntryV0{}, ContextSanitizationEvidenceV0{}, []ContextMaterializationIssueV0{
 			contextMaterializationIssueV0(ErrContextMaterializationReaderRequeridoV0, entry.SourceRef, "reader requerido"),
 		}
 	}
 	content, issues := reader.ReadContextRefV0(resolvedRef, contextMaterializationEntryMaxBytesV0(entry))
 	if len(issues) > 0 {
-		return ContextMaterializedEntryV0{}, issues
+		return ContextMaterializedEntryV0{}, ContextSanitizationEvidenceV0{}, issues
+	}
+	materialized := contextMaterializedContentV0(entry, content)
+	if sanitizer != nil {
+		bundleView := ContextMaterializedBundleV0{
+			BundleRef:    bundle.BundleRef,
+			WorkOrderRef: bundle.WorkOrderRef,
+			TargetModule: bundle.TargetModule,
+		}
+		return sanitizeContextMaterializedEntryV0(bundleView, materialized, sanitizer)
 	}
 	if contextMaterializedContentHasForbiddenDetailV0(content.Content) {
-		return ContextMaterializedEntryV0{}, []ContextMaterializationIssueV0{
+		return ContextMaterializedEntryV0{}, ContextSanitizationEvidenceV0{}, []ContextMaterializationIssueV0{
 			contextMaterializationIssueV0(ErrContextMaterializationDetalleProhibidoV0, entry.SourceRef, "detalle prohibido"),
 		}
 	}
-	return contextMaterializedContentV0(entry, content), nil
+	return materialized, ContextSanitizationEvidenceV0{}, nil
 }

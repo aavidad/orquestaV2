@@ -174,6 +174,8 @@ Invariantes:
 - despues filtra por `run.Deliveries`, agente elegible y review no proyectado;
 - usa `orquesta-autoprogramming.EvaluateAutoprogrammingReviewGateV0` para
   validar ACK completado, tests requeridos, write-set y limite de lineas;
+- proyecta `ack-pending-rail:*` del ACK como issues advisory del gate, para que
+  queden como follow-up no bloqueante y no como razon de relanzar otro agente;
 - una entrega valida produce `accepted` y `accepted_review_ref`;
 - una entrega invalida produce `changes_requested` por defecto y evidencia de
   incidencias compactas;

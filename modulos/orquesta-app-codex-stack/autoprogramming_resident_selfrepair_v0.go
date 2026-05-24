@@ -94,10 +94,7 @@ func autoprogrammingResidentShouldRepairV0(
 		return false
 	}
 	for _, ref := range result.EvidenceRefs {
-		value := strings.TrimSpace(ref)
-		if strings.Contains(value, "blocked") ||
-			strings.Contains(value, "required-tests-failed") ||
-			strings.Contains(value, "required-tests-evidence-missing") {
+		if autoprogrammingResidentEvidenceIsBlockingV0(ref) {
 			return true
 		}
 	}

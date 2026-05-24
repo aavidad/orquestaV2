@@ -57,7 +57,8 @@ func CoordinateRunsTickV0(
 		}
 		executed, drainErr := deps.Drainer.DrainRunV0(ctx, drainRequestV0(candidate, command))
 		if drainErr != nil {
-			return RunCoordinatorTickResultV0{}, drainErr
+			result.Executions = append(result.Executions, executionSummaryV0(candidate, executed))
+			return result, drainErr
 		}
 		if err := rotateExecutedRunV0(ctx, deps.QueueUpdater, candidate, command, executed); err != nil {
 			return RunCoordinatorTickResultV0{}, err
@@ -195,5 +196,6 @@ func executionSummaryV0(
 		Outcome:      result.Outcome,
 		QueueStatus:  strings.TrimSpace(result.QueueStatus),
 		EvidenceRefs: append([]string(nil), result.EvidenceRefs...),
+		Diagnostics:  append([]RunDrainDiagnosticV0(nil), result.Diagnostics...),
 	}
 }

@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-var forbiddenReplanDecisionFragmentsV0 = forbiddenReviewReworkFragmentsV0
-
 func validateRecordReplanDecisionPayloadDataV0(payload RecordReplanDecisionCommandPayloadV0) error {
 	if err := validateRecordReplanDecisionRequiredV0(payload); err != nil {
 		return err
@@ -117,15 +115,7 @@ func replanDecisionHasLongStringV0(values []string) bool {
 }
 
 func replanDecisionHasForbiddenDetailsV0(values []string) bool {
-	for _, value := range values {
-		lower := strings.ToLower(value)
-		for _, fragment := range forbiddenReplanDecisionFragmentsV0 {
-			if containsForbiddenFragmentV0(lower, fragment) {
-				return true
-			}
-		}
-	}
-	return false
+	return textValuesContainForbiddenOperationalSensitiveDetailV0(values)
 }
 
 func validateRecordReplanDecisionPayloadSizeV0(payload RecordReplanDecisionCommandPayloadV0) error {

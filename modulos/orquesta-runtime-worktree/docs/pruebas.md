@@ -10,6 +10,7 @@ Cobertura:
 - ignora prefijos de control inyectados;
 - acepta cambios dentro del write-set;
 - rechaza cambios fuera del write-set;
+- rechaza borrados detectados aunque el path pertenezca al write-set;
 - permite `write_set=["."]` para apps nuevas completas;
 - rechaza project workdir invalido y write-set inseguro;
 - prepara worktree aislada preservando `branch_ref` opaco y sin filtrar paths

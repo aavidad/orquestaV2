@@ -195,7 +195,7 @@ func TestDeliveryRegisteredEventV0RejectsStoppedAgent(t *testing.T) {
 
 func TestRegisterDeliveryCommandV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validRegisterDeliveryPayloadV0("delivery-forbidden")
-	payload.Summary = "usar provider externo"
+	payload.Summary = "usar api_key=valor"
 
 	_, err := NewRegisterDeliveryCommandV0(validCommandMetaV0("cmd-delivery-forbidden", "idem-delivery-forbidden"), payload)
 	assertRegisterDeliveryCommandErrorV0(t, err, ErrDetalleProhibidoV0)
@@ -203,7 +203,7 @@ func TestRegisterDeliveryCommandV0RejectsForbiddenDetails(t *testing.T) {
 
 func TestDeliveryRegisteredEventV0RejectsForbiddenDetails(t *testing.T) {
 	payload := deliveryRegisteredPayloadFromCommandV0(validRegisterDeliveryPayloadV0("delivery-event-forbidden"))
-	payload.Summary = "usar Claude"
+	payload.Summary = "usar authorization: bearer valor"
 
 	_, err := NewDeliveryRegisteredEventV0(reducerEventMetaV0("evt-delivery-forbidden", 10), payload)
 	assertDeliveryRegisteredEventErrorV0(t, err, ErrDetalleProhibidoV0)

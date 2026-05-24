@@ -137,15 +137,7 @@ func brainstormRequestHasLongStringV0(values []string) bool {
 }
 
 func brainstormRequestHasForbiddenDetailsV0(values []string) bool {
-	for _, value := range values {
-		lower := strings.ToLower(value)
-		for _, fragment := range forbiddenBrainstormRequestFragmentsV0 {
-			if containsForbiddenFragmentV0(lower, fragment) {
-				return true
-			}
-		}
-	}
-	return false
+	return textValuesContainForbiddenOperationalSensitiveDetailV0(values)
 }
 
 func brainstormRequestTextFieldsV0(payload RequestBrainstormCommandPayloadV0) []string {

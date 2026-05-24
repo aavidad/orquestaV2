@@ -19,12 +19,25 @@ type StateV0 struct {
 	LastSupervisorStatus      string   `json:"last_supervisor_status,omitempty"`
 	LastSupervisorStop        string   `json:"last_supervisor_stop,omitempty"`
 	LastSupervisorError       string   `json:"last_supervisor_error,omitempty"`
+	SupervisorLastErrorAt     string   `json:"supervisor_last_error_at,omitempty"`
+	SupervisorLastError       string   `json:"supervisor_last_error,omitempty"`
 	LastSupervisorQueueRef    string   `json:"last_supervisor_queue_ref,omitempty"`
+	LastSupervisorQueueSize   int      `json:"last_supervisor_queue_size,omitempty"`
+	LastSupervisorTickNumber  int      `json:"last_supervisor_tick_number,omitempty"`
 	LastSupervisorResultTicks int      `json:"last_supervisor_result_ticks,omitempty"`
 	LastSupervisorExecutions  int      `json:"last_supervisor_executions,omitempty"`
 	LastSupervisorSkips       int      `json:"last_supervisor_skips,omitempty"`
 	SupervisorTicks           int      `json:"supervisor_ticks"`
 	SupervisorErrorTicks      int      `json:"supervisor_error_ticks,omitempty"`
+	SupervisorExecutions      int      `json:"supervisor_executions,omitempty"`
+	SupervisorSkips           int      `json:"supervisor_skips,omitempty"`
+	IdleSelfImprovementAfter  string   `json:"idle_self_improvement_after,omitempty"`
+	IdleSelfImprovementTarget int      `json:"idle_self_improvement_target_queue,omitempty"`
+	IdleSelfImprovementCheck  string   `json:"idle_self_improvement_check,omitempty"`
+	IdleSelfImprovementReason string   `json:"idle_self_improvement_reason,omitempty"`
+	IdleSelfImprovementFlight bool     `json:"idle_self_improvement_in_flight,omitempty"`
+	IdleSelfImprovementRuns   int      `json:"idle_self_improvement_runs,omitempty"`
+	IdleSelfImprovementOK     int      `json:"idle_self_improvement_ok,omitempty"`
 	LastError                 string   `json:"last_error,omitempty"`
 	StartupEvidenceRefs       []string `json:"startup_evidence_refs,omitempty"`
 }

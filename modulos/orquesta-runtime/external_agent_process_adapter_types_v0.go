@@ -14,6 +14,7 @@ const (
 	ExternalAgentResolverUnavailableV0       ExternalAgentConnectorErrorCodeV0 = "external_agent_command_resolver_unavailable"
 	ExternalAgentRuntimeUnavailableV0        ExternalAgentConnectorErrorCodeV0 = "external_agent_runtime_unavailable"
 	ExternalAgentRuntimeLaunchFailedV0       ExternalAgentConnectorErrorCodeV0 = "external_agent_runtime_launch_failed"
+	ExternalAgentRuntimeSnapshotInvalidaV0   ExternalAgentConnectorErrorCodeV0 = "external_agent_runtime_snapshot_invalida"
 )
 
 type ExternalAgentProcessCommandResolverV0 interface {

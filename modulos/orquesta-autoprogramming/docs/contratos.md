@@ -45,16 +45,21 @@ como convertirlo en observaciones de review, rework o aceptacion.
 El resultado tambien expone:
 
 - `preserve_output`: la salida puede conservarse como evidencia reutilizable;
-- `requires_followup`: la entrega no se acepta, pero debe abrir revision o
-  tarea posterior dirigida;
+- `requires_followup`: la entrega se conserva como aceptada con rail dudoso y
+  debe quedar como evidencia para revision o tarea posterior dirigida;
 - `recommended_action`: `accept`, `request_followup_review`, `block_closure` o
   `request_changes`.
 
-Si una entrega tiene ACK completado, tests obligatorios verdes y solo toca
-ficheros fuera del `write_set`, el gate devuelve `accepted=false`,
-`preserve_output=true`, `requires_followup=true` y
-`recommended_action=request_followup_review`. Asi un arreglo fuera de alcance no
-se acepta en silencio ni se descarta sin reparacion reusable.
+Si una entrega tiene ACK completado, tests obligatorios verdes y solo trae rails
+dudosos de codigo (`file_too_large`, `file_outside_write_set` o destino faltante
+del `write_set`), el gate devuelve `accepted=true`, conserva la salida y adjunta
+`requires_followup=true` como evidencia para review/rework posterior. Asi un
+arreglo util no queda bloqueado por falsos positivos, pero la evidencia no se
+pierde.
+
+Las refs `ack-pending-rail:*` se tratan igual: son evidencia de detector dudoso,
+no razon suficiente para relanzar otro agente si el ACK y los tests estan
+verdes.
 
 ACK ausente, ACK no completado, tests obligatorios ausentes o tests fallidos
 siguen bloqueando cierre con issues compactos y

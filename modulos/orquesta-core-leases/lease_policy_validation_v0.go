@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func ValidateAgentLeasePolicyV0(policy AgentLeasePolicyV0) []AgentLeaseIssueV0 {
@@ -122,6 +124,9 @@ func (v *agentLeaseValidatorV0) add(code AgentLeaseIssueCodeV0, field string) {
 }
 
 func detectForbiddenAgentLeaseJSONKeysV0(data []byte) []AgentLeaseIssueV0 {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return nil
+	}
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil

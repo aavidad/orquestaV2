@@ -14,6 +14,11 @@ import (
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 )
 
+const (
+	DomainWorkArtifactSubmissionStatusAcceptedV0 = "accepted"
+	DomainWorkArtifactSubmissionStatusRejectedV0 = "rejected"
+)
+
 type DomainWorkDeliveryBridgeConfigV0 struct {
 	Enabled bool
 	Builder DomainWorkArtifactSubmissionBuilderPortV0
@@ -32,6 +37,13 @@ type DomainWorkArtifactSubmissionLedgerPortV0 interface {
 	RecordDomainWorkArtifactSubmissionV0(context.Context, DomainWorkArtifactSubmissionRecordV0) error
 }
 
+type DomainWorkArtifactSubmissionRecordReaderPortV0 interface {
+	ListDomainWorkArtifactSubmissionsV0(
+		context.Context,
+		DomainWorkArtifactSubmissionRecordFilterV0,
+	) ([]DomainWorkArtifactSubmissionRecordV0, error)
+}
+
 type DomainWorkArtifactSubmissionBuildInputV0 struct {
 	Run         orquestacoreworkflow.OrchestrationRunV0
 	Task        orquestacoreworkflow.WorkflowTaskV0
@@ -43,12 +55,22 @@ type DomainWorkArtifactSubmissionBuildInputV0 struct {
 }
 
 type DomainWorkArtifactSubmissionRecordV0 struct {
-	IdempotencyKey string `json:"idempotency_key"`
-	RunRef         string `json:"run_ref,omitempty"`
-	TaskRef        string `json:"task_ref,omitempty"`
-	DeliveryRef    string `json:"delivery_ref,omitempty"`
-	ReceiptRef     string `json:"receipt_ref,omitempty"`
-	RecordedAt     string `json:"recorded_at,omitempty"`
+	IdempotencyKey string   `json:"idempotency_key"`
+	Status         string   `json:"status,omitempty"`
+	RunRef         string   `json:"run_ref,omitempty"`
+	TaskRef        string   `json:"task_ref,omitempty"`
+	DeliveryRef    string   `json:"delivery_ref,omitempty"`
+	ReceiptRef     string   `json:"receipt_ref,omitempty"`
+	EvidenceRefs   []string `json:"evidence_refs,omitempty"`
+	IssueRefs      []string `json:"issue_refs,omitempty"`
+	RecordedAt     string   `json:"recorded_at,omitempty"`
+}
+
+type DomainWorkArtifactSubmissionRecordFilterV0 struct {
+	RunRef      string
+	TaskRef     string
+	DeliveryRef string
+	Status      string
 }
 
 func normalizeDomainWorkDeliveryBridgeConfigV0(
@@ -98,8 +120,65 @@ func (ledger *InMemoryDomainWorkArtifactSubmissionLedgerV0) RecordDomainWorkArti
 	if record.IdempotencyKey == "" {
 		return fmt.Errorf("domain_work_artifact_idempotency_key_requerida")
 	}
+	record = normalizeDomainWorkArtifactSubmissionRecordV0(record)
 	ledger.mu.Lock()
 	defer ledger.mu.Unlock()
 	ledger.records[record.IdempotencyKey] = record
 	return nil
+}
+
+func (ledger *InMemoryDomainWorkArtifactSubmissionLedgerV0) ListDomainWorkArtifactSubmissionsV0(
+	_ context.Context,
+	filter DomainWorkArtifactSubmissionRecordFilterV0,
+) ([]DomainWorkArtifactSubmissionRecordV0, error) {
+	if ledger == nil {
+		return nil, nil
+	}
+	filter = normalizeDomainWorkArtifactSubmissionRecordFilterV0(filter)
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	out := make([]DomainWorkArtifactSubmissionRecordV0, 0, len(ledger.records))
+	for _, record := range ledger.records {
+		record = normalizeDomainWorkArtifactSubmissionRecordV0(record)
+		if !domainWorkArtifactSubmissionRecordMatchesFilterV0(record, filter) {
+			continue
+		}
+		out = append(out, record)
+	}
+	return out, nil
+}
+
+func normalizeDomainWorkArtifactSubmissionRecordV0(
+	record DomainWorkArtifactSubmissionRecordV0,
+) DomainWorkArtifactSubmissionRecordV0 {
+	record.IdempotencyKey = strings.TrimSpace(record.IdempotencyKey)
+	record.Status = strings.TrimSpace(record.Status)
+	record.RunRef = strings.TrimSpace(record.RunRef)
+	record.TaskRef = strings.TrimSpace(record.TaskRef)
+	record.DeliveryRef = strings.TrimSpace(record.DeliveryRef)
+	record.ReceiptRef = strings.TrimSpace(record.ReceiptRef)
+	record.EvidenceRefs = compactStringsV0(record.EvidenceRefs)
+	record.IssueRefs = compactStringsV0(record.IssueRefs)
+	record.RecordedAt = strings.TrimSpace(record.RecordedAt)
+	return record
+}
+
+func normalizeDomainWorkArtifactSubmissionRecordFilterV0(
+	filter DomainWorkArtifactSubmissionRecordFilterV0,
+) DomainWorkArtifactSubmissionRecordFilterV0 {
+	filter.RunRef = strings.TrimSpace(filter.RunRef)
+	filter.TaskRef = strings.TrimSpace(filter.TaskRef)
+	filter.DeliveryRef = strings.TrimSpace(filter.DeliveryRef)
+	filter.Status = strings.TrimSpace(filter.Status)
+	return filter
+}
+
+func domainWorkArtifactSubmissionRecordMatchesFilterV0(
+	record DomainWorkArtifactSubmissionRecordV0,
+	filter DomainWorkArtifactSubmissionRecordFilterV0,
+) bool {
+	return (filter.RunRef == "" || record.RunRef == filter.RunRef) &&
+		(filter.TaskRef == "" || record.TaskRef == filter.TaskRef) &&
+		(filter.DeliveryRef == "" || record.DeliveryRef == filter.DeliveryRef) &&
+		(filter.Status == "" || record.Status == filter.Status)
 }

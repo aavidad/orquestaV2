@@ -10,9 +10,9 @@ func TestValidateDirectorAgentDecisionV0AceptaPlanEquipoAutonomoCompacto(t *test
 	}
 }
 
-func TestValidateDirectorAgentDecisionV0RechazaPlanEquipoConDetalleOperativo(t *testing.T) {
+func TestValidateDirectorAgentDecisionV0RechazaPlanEquipoConDetalleSensible(t *testing.T) {
 	decision := validDirectorAgentPlanTeamDecisionV0()
-	decision.ProposePlanTeam.Plan.WorkUnits[0].Summary = "Elegir runtime concreto."
+	decision.ProposePlanTeam.Plan.WorkUnits[0].Summary = "Usar client_secret=abc123."
 
 	requireDirectorAgentIssueV0(t,
 		ValidateDirectorAgentDecisionV0(decision),

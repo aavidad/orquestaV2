@@ -100,6 +100,29 @@ func TestProbeAgentReadinessV0RejectsNonOpaqueRefs(t *testing.T) {
 	assertNucleoErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "agent_readiness.process_ref")
 }
 
+func TestProbeAgentReadinessV0AceptaRefsInternasAnidadas(t *testing.T) {
+	request := validAgentReadinessProbeRequestV0()
+	request.AgentRequestID = "agent-ref-assessment-assessment-ref-agent-progress-report-ref-agent-ref-assessment-assessment-ref-agent-progress-report-ref-agent-ref-task-autoprogramming-d6f0b05f2e4d-g01-000088-000016"
+	request.ProcessRef = "process-ref-assessment-assessment-ref-agent-progress-report-ref-agent-ref-assessment-assessment-ref-agent-progress-report-ref-agent-ref-task-autoprogramming-d6f0b05f2e4d-g01-000088-000016"
+	request.EvidenceRefs = []string{
+		"readiness-evidence-ref-assessment-ref-agent-progress-report-ref-agent-ref-assessment-assessment-ref-agent-progress-report-ref-agent-ref-task-autoprogramming-d6f0b05f2e4d-g01-000088-000016",
+	}
+	probe := &fakeAgentReadinessProbeV0{
+		result: AgentReadinessProbeResultV0{
+			Status:       AgentReadinessReadyV0,
+			EvidenceRefs: request.EvidenceRefs,
+		},
+	}
+
+	result, err := ProbeAgentReadinessV0(context.Background(), probe, request)
+	if err != nil {
+		t.Fatalf("probe readiness con refs anidadas: %v", err)
+	}
+	if result.Status != AgentReadinessReadyV0 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func validAgentReadinessProbeRequestV0() AgentReadinessProbeRequestV0 {
 	return AgentReadinessProbeRequestV0{
 		RunID:          "run-readiness-001",

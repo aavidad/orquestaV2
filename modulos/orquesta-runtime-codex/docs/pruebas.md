@@ -47,8 +47,9 @@ Cobertura:
 - normaliza `task_ref` y `correlation_id` desde el descriptor si `request_id`,
   `ack_ref` y `target_module` coinciden;
 - rechaza ACK corrupto o incompleto con error publico;
-- rechaza ACK `completed` con `files: []` o con artifacts fuera de write-set
-  sin justificacion;
+- rechaza ACK `completed` con `files: []` sin evidencia;
+- acepta ACK `completed` con artifacts fuera de write-set como rail blando para
+  revision posterior;
 - acepta entregas parciales dentro del write-set para revisor/corrector; la
   completitud queda en director/review/rework/tests, no en `ACK.files`;
 - acepta ampliacion de write-set justificada en `notes`, pero rechaza archivos
@@ -58,10 +59,13 @@ Cobertura:
 - advierte en el prompt cuando hay contexto requerido truncado;
 - rechaza ACK `completed` con contexto requerido truncado si no justifica
   `contexto_truncado_resuelto`;
-- rechaza ACK con HOME real, token/secreto, OAuth, prompt/completion o transcript completo.
+- conserva marcadores dudosos de HOME/token/OAuth/prompt como rail pendiente
+  cuando no incluyen valores sensibles efectivos;
+- rechaza valores sensibles efectivos como `access_token=...`,
+  `client_secret: ...`, `authorization: bearer ...` o claves privadas;
 - lee `agent_ack.json` y construye `CodexDeliveryObservationV0` neutral;
-- rechaza observaciones que filtren detalles prohibidos para el core, incluido
-  el nombre del proveedor en refs.
+- conserva refs operativas dudosas como evidencia blanda para review externa,
+  sin aceptar archivos de control ni rutas inseguras.
 
 Riesgo residual:
 

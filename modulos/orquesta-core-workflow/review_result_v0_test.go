@@ -49,12 +49,10 @@ func TestReviewResultV0ChangesRequestedAndRejectedDoNotCloseTask(t *testing.T) {
 
 func TestValidateReviewResultV0RejectsForbiddenDetails(t *testing.T) {
 	cases := map[string]func(*ReviewResultV0){
-		"provider":   func(result *ReviewResultV0) { result.Summary = "depende de provider externo" },
-		"HOME":       func(result *ReviewResultV0) { result.EvidenceRefs = []string{"$HOME/revision.txt"} },
-		"OAuth":      func(result *ReviewResultV0) { result.QualityGateRef = "oauth:gate" },
-		"DB":         func(result *ReviewResultV0) { result.ReviewResultRef = "db-result" },
-		"prompts":    func(result *ReviewResultV0) { result.Summary = "ver prompts completos" },
-		"transcript": func(result *ReviewResultV0) { result.DeliveryRef = "transcript-entrega" },
+		"api_key":       func(result *ReviewResultV0) { result.Summary = "depende de api_key=valor" },
+		"authorization": func(result *ReviewResultV0) { result.EvidenceRefs = []string{"authorization: bearer valor"} },
+		"client_secret": func(result *ReviewResultV0) { result.QualityGateRef = "client_secret=valor" },
+		"private_key":   func(result *ReviewResultV0) { result.ReviewResultRef = "-----BEGIN PRIVATE KEY-----" },
 	}
 
 	for name, mutate := range cases {
@@ -117,9 +115,7 @@ func TestReviewResultV0JSONHasNoProviderHomeOAuthDBPromptsOrTranscripts(t *testi
 		t.Fatalf("review result JSON is invalid: %s", data)
 	}
 	serialized := strings.ToLower(string(data))
-	for _, forbidden := range []string{
-		"provider", "home", "oauth", "db", "database", "prompt", "prompts", "transcript", "transcripts",
-	} {
+	for _, forbidden := range operationalSensitiveFragmentsForTestV0() {
 		if containsForbiddenFragmentV0(serialized, forbidden) {
 			t.Fatalf("review result JSON contains forbidden detail %q: %s", forbidden, serialized)
 		}

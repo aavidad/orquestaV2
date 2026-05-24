@@ -5,37 +5,6 @@ import (
 	"strings"
 )
 
-var forbiddenFunctionContractPublishFragmentsV0 = []string{
-	"db",
-	"database",
-	"sql",
-	"dsn",
-	"runtime",
-	"provider",
-	"proveedor",
-	"model",
-	"modelo",
-	"home",
-	"oauth",
-	"codex",
-	"claude",
-	"ollama",
-	"vllm",
-	"adapter",
-	"adaptador",
-	"filesystem",
-	"git",
-	"docker",
-	"tmux",
-	"secret",
-	"secreto",
-	"token",
-	"password",
-	"credential",
-	"credencial",
-	"api_key",
-}
-
 func validatePublishFunctionContractCommandPayloadDataV0(payload PublishFunctionContractCommandPayloadV0) error {
 	if err := validatePublishFunctionContractRequiredV0(payload); err != nil {
 		return err
@@ -160,15 +129,7 @@ func functionContractPublishHasLongStringV0(values []string) bool {
 }
 
 func functionContractPublishHasForbiddenDetailsV0(values []string) bool {
-	for _, value := range values {
-		lower := strings.ToLower(value)
-		for _, fragment := range forbiddenFunctionContractPublishFragmentsV0 {
-			if containsForbiddenFragmentV0(lower, fragment) {
-				return true
-			}
-		}
-	}
-	return false
+	return textValuesContainForbiddenOperationalSensitiveDetailV0(values)
 }
 
 func publishFunctionContractTextFieldsV0(payload PublishFunctionContractCommandPayloadV0) []string {

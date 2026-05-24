@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 var forbiddenPersistenceConnectorFieldsV0 = map[string]bool{
@@ -110,6 +112,9 @@ func trimV0(value string) string {
 }
 
 func rejectForbiddenPersistenceContractFieldsV0(data []byte, prefix string) []PersistenceRepositoryValidationIssueV0 {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return nil
+	}
 	var raw any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil
@@ -145,6 +150,9 @@ func rejectForbiddenPersistenceContractValueV0(value any, field string) []Persis
 }
 
 func forbiddenPersistenceFieldIssueV0(field, path string) (PersistenceRepositoryValidationIssueV0, bool) {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return PersistenceRepositoryValidationIssueV0{}, false
+	}
 	normalized := strings.ToLower(trimV0(field))
 	switch {
 	case forbiddenPersistenceConnectorFieldsV0[normalized]:
@@ -165,6 +173,9 @@ func forbiddenPersistenceFieldIssueV0(field, path string) (PersistenceRepository
 }
 
 func validateNoForbiddenPersistenceTermsV0(value any, prefix string) []PersistenceRepositoryValidationIssueV0 {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return nil
+	}
 	return validateNoForbiddenPersistenceTermsValueV0(reflect.ValueOf(value), trimTrailingDotV0(prefix))
 }
 
@@ -210,6 +221,9 @@ func validateNoForbiddenPersistenceTermsValueV0(value reflect.Value, field strin
 }
 
 func containsForbiddenPersistenceTermV0(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	normalized := strings.ToLower(trimV0(value))
 	for _, term := range forbiddenPersistenceTermsV0 {
 		if containsSeparatedTermV0(normalized, term) {

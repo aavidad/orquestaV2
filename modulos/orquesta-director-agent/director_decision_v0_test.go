@@ -118,9 +118,18 @@ func TestValidateDirectorAgentDecisionV0AceptaChildRefsHastaLimiteRecursivo(t *t
 	}
 }
 
-func TestValidateDirectorAgentDecisionV0RechazaProveedorYModelo(t *testing.T) {
+func TestValidateDirectorAgentDecisionV0PermiteProveedorYModeloComoRefsOpacas(t *testing.T) {
 	decision := validDirectorAgentDecisionV0()
 	decision.Summary = "usar provider y modelo concretos"
+
+	if issues := ValidateDirectorAgentDecisionV0(decision); len(issues) != 0 {
+		t.Fatalf("issues inesperados: %+v", issues)
+	}
+}
+
+func TestValidateDirectorAgentDecisionV0RechazaDetalleSensible(t *testing.T) {
+	decision := validDirectorAgentDecisionV0()
+	decision.Summary = "usar client_secret=abc123"
 
 	requireDirectorAgentIssueV0(t,
 		ValidateDirectorAgentDecisionV0(decision),
@@ -201,7 +210,7 @@ func TestValidateDirectorAgentDecisionV0RechazaContextRefsNoCompactas(t *testing
 	for _, refs := range [][]string{
 		{"context ref invalid"},
 		{"external/context-ref-001"},
-		{"token-ref-context-001"},
+		{"client_secret=abc123"},
 	} {
 		decision := validDirectorAgentCreateMicrotaskDecisionV0()
 		decision.CreateMicrotask.Task.ContextRefs = refs

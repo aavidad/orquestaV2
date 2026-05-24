@@ -43,6 +43,43 @@ func TestMCPAutoprogrammingStatusHTTPHandlerV0ExecutorNil(t *testing.T) {
 	}
 }
 
+func TestMCPAutoprogrammingStatusHTTPHandlerV0ConservaOperatorAdviceNoBloqueante(t *testing.T) {
+	executor := &fakeMCPAutoprogrammingStatusHTTPExecutorV0{
+		result: MCPAutoprogrammingStatusToolResultV0{
+			Estado:    MCPAutoprogrammingStatusEstadoOKV0,
+			RequestID: "request-ref-status-advice-001",
+			RunRef:    "run-ref-status-advice-001",
+		},
+	}
+	body := bytes.NewBufferString(`{
+		"run_ref":"run-ref-status-advice-001",
+		"operator_advice":[{
+			"run":"run-ref-status-advice-alias-001",
+			"kind":"pause",
+			"text":"esperar confirmacion humana"
+		}]
+	}`)
+	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingStatusHTTPPathV0, body)
+	rec := httptest.NewRecorder()
+
+	NewMCPAutoprogrammingStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result mcpAutoprogrammingStatusHTTPResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(result.OperatorAdvice) != 1 ||
+		result.OperatorAdvice[0].TargetRef != "run-ref-status-advice-alias-001" ||
+		result.OperatorAdvice[0].Action != "advise" ||
+		!result.OperatorAdvice[0].NonBlocking ||
+		len(result.Diagnostics) == 0 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 type fakeMCPAutoprogrammingStatusHTTPExecutorV0 struct {
 	input  MCPAutoprogrammingStatusToolInputV0
 	result MCPAutoprogrammingStatusToolResultV0

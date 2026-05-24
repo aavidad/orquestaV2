@@ -191,7 +191,7 @@ func TestClosePhaseRejectsForbiddenDetails(t *testing.T) {
 	_, err := NewClosePhaseCommandV0(validCommandMetaV0("cmd-close-forbidden", "idem-close-forbidden"), ClosePhaseCommandPayloadV0{
 		PhaseID:    string(OrchestrationPhaseProgramacionV0),
 		ClosureRef: "closure:forbidden",
-		Summary:    "ver transcript completo",
+		Summary:    "ver api_key=valor",
 	})
 
 	var publicErr OrchestrationCommandErrorV0

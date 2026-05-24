@@ -100,3 +100,28 @@ Errores publicos:
 - `context_materialization_ref_no_encontrada`
 - `context_materialization_tamano_invalido`
 - `context_materialization_detalle_prohibido`
+
+## ContextSanitizerPortV0
+
+Propietario: `orquesta-context`.
+
+Tipo: puerto neutral opcional.
+
+Entrada:
+
+- `ContextSanitizationRequestV0`: refs del bundle/entry y contenido materializado.
+
+Salida:
+
+- `ContextSanitizationResultV0`: `clean`, `sanitized` o `review_required`;
+- `ContextSanitizationEvidenceV0`: evidencia durable sin guardar el valor sensible.
+
+Reglas:
+
+- El puerto no conoce IA, proveedor, modelo, transporte, HOME ni runtime real.
+- Si no hay sanitizador inyectado, la materializacion conserva el bloqueo
+  historico por `context_materialization_detalle_prohibido`.
+- Si el sanitizador limpia el contenido, `sanitization_evidence` viaja junto al
+  bundle con categorias y contador, nunca con el secreto original.
+- Si el sanitizador duda, la entrada requerida se degrada a `ref_only`, se marca
+  `truncated=true` y se propaga `CONSULTA_AL_DIRECTOR`.

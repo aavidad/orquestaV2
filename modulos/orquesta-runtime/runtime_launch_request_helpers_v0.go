@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func (v *runtimeLaunchRequestValidatorV0) requireOpaque(field, value string, missingCode RuntimeLaunchErrorCodeV0) {
@@ -131,16 +133,13 @@ func isRelativeContractPath(value string) bool {
 	if !relativePathAllowedPatternV0.MatchString(value) {
 		return false
 	}
-	low := strings.ToLower(value)
-	return !strings.HasPrefix(value, "/") &&
-		!(len(value) >= 2 && isASCIIAlpha(value[0]) && value[1] == ':') &&
-		!strings.Contains(value, "://") &&
-		!containsParentTraversal(value) &&
-		!strings.Contains(low, "$home") &&
-		!strings.Contains(value, "~")
+	return orquestarails.WorkspaceRelativePathAllowedV0(value, false)
 }
 
 func looksLikeHomePath(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	low := strings.ToLower(value)
 	return strings.HasPrefix(value, "/") ||
 		strings.HasPrefix(value, "~") ||
@@ -151,6 +150,9 @@ func looksLikeHomePath(value string) bool {
 }
 
 func looksLikeSecret(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	low := strings.ToLower(strings.TrimSpace(value))
 	return strings.HasPrefix(low, "bearer") ||
 		strings.HasPrefix(low, "sk-") ||
@@ -164,6 +166,9 @@ func looksLikeSecret(value string) bool {
 }
 
 func looksLikeConcreteProviderValueV0(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	low := strings.ToLower(strings.TrimSpace(value))
 	return strings.Contains(low, "openai") ||
 		strings.Contains(low, "anthropic") ||
@@ -174,6 +179,9 @@ func looksLikeConcreteProviderValueV0(value string) bool {
 }
 
 func looksLikeConcreteModelValueV0(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	low := strings.ToLower(strings.TrimSpace(value))
 	return strings.Contains(low, "gpt-") ||
 		strings.Contains(low, "claude") ||
@@ -224,7 +232,7 @@ func moduleFromRuntimeContractPathV0(path string) string {
 }
 
 var (
-	opaqueRefPatternV0           = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{2,159}$`)
+	opaqueRefPatternV0           = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{2,511}$`)
 	relativePathAllowedPatternV0 = regexp.MustCompile(`^[A-Za-z0-9._+={}/,@-]{1,240}$`)
 	localePatternV0              = regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$`)
 	utcInstantPatternV0          = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$`)

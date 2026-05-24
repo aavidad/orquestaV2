@@ -21,6 +21,7 @@ type OutboxDispatchOnceResultV0 struct {
 	Status       string
 	RunRef       string
 	TargetPort   string
+	MessageType  string
 	MessageID    string
 	DispatchRef  string
 	EvidenceRefs []string
@@ -49,6 +50,10 @@ func RunOutboxDispatchOnceV0(
 			Acker:       request.Acker,
 		},
 	)
+	if result.Status == orquestaoutboxdispatch.RunOutboxDispatchOnceDispatchFailedV0 ||
+		result.Status == orquestaoutboxdispatch.RunOutboxDispatchOnceAckFailedV0 {
+		_ = releaseOnceClaimV0(request.Claimer, result.Intent)
+	}
 	return compactOutboxDispatchResultV0(result), err
 }
 
@@ -68,9 +73,24 @@ func compactOutboxDispatchResultV0(
 		Status:       string(result.Status),
 		RunRef:       result.RunID,
 		TargetPort:   result.TargetPort,
+		MessageType:  result.Intent.MessageType,
 		MessageID:    result.Intent.MessageID,
 		DispatchRef:  result.Execution.DispatchRef,
 		EvidenceRefs: append([]string(nil), result.Execution.EvidenceRefs...),
 		Issues:       len(result.Issues),
 	}
+}
+
+func releaseOnceClaimV0(
+	claimer orquestaoutboxdispatch.OutboxDispatchClaimerPortV0,
+	intent orquestaoutboxdispatch.DispatchIntentV0,
+) []orquestaoutboxdispatch.DispatchIssueV0 {
+	if intent.MessageID == "" {
+		return nil
+	}
+	releaser, ok := claimer.(outboxDispatchClaimReleaserPortV0)
+	if !ok {
+		return nil
+	}
+	return releaser.ReleaseOutboxDispatchClaimV0(batchPlanClaimFromIntentV0(intent))
 }

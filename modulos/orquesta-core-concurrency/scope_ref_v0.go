@@ -4,6 +4,8 @@ import (
 	"path"
 	"sort"
 	"strings"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 type ScopeRefV0 struct {
@@ -134,6 +136,9 @@ func hasTraversalScopeRefV0(value string) bool {
 }
 
 func hasForbiddenScopeSegmentV0(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	segments := strings.Split(value, "/")
 	if len(segments) == 0 {
 		return false

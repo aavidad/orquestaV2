@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,7 +19,7 @@ import (
 )
 
 func TestRunOPESDrainOnceV0LedgerEvitaReenviarJobPendienteV0(t *testing.T) {
-	opesServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
 			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
 		}
@@ -36,7 +35,7 @@ func TestRunOPESDrainOnceV0LedgerEvitaReenviarJobPendienteV0(t *testing.T) {
 	defer opesServer.Close()
 
 	posts := 0
-	orquestaServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v0/external-work/run" || r.Method != http.MethodPost {
 			t.Fatalf("orquesta request inesperada %s %s", r.Method, r.URL.Path)
 		}
@@ -86,7 +85,7 @@ func TestRunOPESDrainOnceV0LedgerEvitaReenviarJobPendienteV0(t *testing.T) {
 }
 
 func TestRunOPESDrainOnceV0PlanTemarioOperadoresEnviaExternalWorkDocumentPlanV0(t *testing.T) {
-	opesServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs/job-ref-plan-operadores-001" || r.Method != http.MethodGet {
 			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
 		}
@@ -116,7 +115,7 @@ func TestRunOPESDrainOnceV0PlanTemarioOperadoresEnviaExternalWorkDocumentPlanV0(
 	defer opesServer.Close()
 
 	var received orquestaexternalworkrun.StartExternalWorkRunRequestV0
-	orquestaServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v0/external-work/run" || r.Method != http.MethodPost {
 			t.Fatalf("orquesta request inesperada %s %s", r.Method, r.URL.Path)
 		}
@@ -178,7 +177,7 @@ func TestRunOPESDrainOnceV0PlanTemarioOperadoresEnviaExternalWorkDocumentPlanV0(
 
 func TestRunOPESDrainOnceV0SecuenciaPasesSaltaTiposSinPendientesV0(t *testing.T) {
 	queries := []string{}
-	opesServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
 			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
 		}
@@ -206,7 +205,7 @@ func TestRunOPESDrainOnceV0SecuenciaPasesSaltaTiposSinPendientesV0(t *testing.T)
 	defer opesServer.Close()
 
 	posts := 0
-	orquestaServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v0/external-work/run" || r.Method != http.MethodPost {
 			t.Fatalf("orquesta request inesperada %s %s", r.Method, r.URL.Path)
 		}
@@ -257,7 +256,7 @@ func TestRunOPESDrainOnceV0SecuenciaPasesSaltaTiposSinPendientesV0(t *testing.T)
 
 func TestRunOPESDrainOnceV0SecuenciaPasesNoAvanzaSiPrimerTipoYaEnviadoV0(t *testing.T) {
 	queries := []string{}
-	opesServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
 			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
 		}
@@ -277,7 +276,7 @@ func TestRunOPESDrainOnceV0SecuenciaPasesNoAvanzaSiPrimerTipoYaEnviadoV0(t *test
 	}))
 	defer opesServer.Close()
 
-	orquestaServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Fatalf("orquesta no debe recibir POST, recibido %s %s", r.Method, r.URL.Path)
 	}))
 	defer orquestaServer.Close()
@@ -329,7 +328,7 @@ func TestRunOPESDrainOnceV0SecuenciaPasesNoAvanzaSiPrimerTipoYaEnviadoV0(t *test
 }
 
 func TestRunOPESDrainOnceV0EscaneaMasQueLimitYEnviaSiguientesNoEnviadosV0(t *testing.T) {
-	opesServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
 			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
 		}
@@ -360,7 +359,7 @@ func TestRunOPESDrainOnceV0EscaneaMasQueLimitYEnviaSiguientesNoEnviadosV0(t *tes
 	defer opesServer.Close()
 
 	posts := []string{}
-	orquestaServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v0/external-work/run" || r.Method != http.MethodPost {
 			t.Fatalf("orquesta request inesperada %s %s", r.Method, r.URL.Path)
 		}
@@ -444,7 +443,7 @@ func TestRunOPESDrainOnceV0SecuenciaDerivadosOPESHastaAssembleTopicV0(t *testing
 	queries := []string{}
 	submittedByType := map[string]int{}
 
-	opesServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
 			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
 		}
@@ -474,7 +473,7 @@ func TestRunOPESDrainOnceV0SecuenciaDerivadosOPESHastaAssembleTopicV0(t *testing
 		WriteSet     string
 	}
 	posts := []postedRun{}
-	orquestaServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v0/external-work/run" || r.Method != http.MethodPost {
 			t.Fatalf("orquesta request inesperada %s %s", r.Method, r.URL.Path)
 		}
@@ -601,6 +600,7 @@ func opesDerivedPayloadForDrainTestV0(jobType string) string {
 }
 
 func TestSmokeOPESDerivativesRESTWrapperFakeServerV0(t *testing.T) {
+	requireLocalTCPForTestV0(t)
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 no disponible")
 	}
@@ -633,6 +633,7 @@ func TestSmokeOPESDerivativesRESTWrapperFakeServerV0(t *testing.T) {
 }
 
 func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilAssembleV0(t *testing.T) {
+	requireLocalTCPForTestV0(t)
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 no disponible")
 	}
@@ -671,6 +672,7 @@ func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilAssembleV0(t *testing.
 }
 
 func TestSmokeOPESPlanTemarioWrapperFakeServerV0(t *testing.T) {
+	requireLocalTCPForTestV0(t)
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 no disponible")
 	}

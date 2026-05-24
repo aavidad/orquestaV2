@@ -67,6 +67,27 @@ func TestVerifyWorktreeWriteSetV0PermiteRootParaAppNueva(t *testing.T) {
 	}
 }
 
+func TestVerifyWorktreeWriteSetV0RechazaBorradoAunqueEsteEnWriteSet(t *testing.T) {
+	root := t.TempDir()
+	writeWorktreeFileForTestV0(t, root, "docs/manual.md", "v1")
+	baseline := captureWorktreeSnapshotForTestV0(t, root, nil)
+
+	if err := os.Remove(filepath.Join(root, "docs", "manual.md")); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	result, issues := VerifyWorktreeWriteSetV0(context.Background(), WorktreeVerifyRequestV0{
+		Baseline:       baseline,
+		ProjectWorkDir: root,
+		WriteSet:       []string{"docs/manual.md"},
+	})
+	if len(issues) != 1 || issues[0].Code != WorktreeIssueRemovedPathV0 {
+		t.Fatalf("result=%+v issues=%+v", result, issues)
+	}
+	if len(result.RemovedPaths) != 1 || result.RemovedPaths[0] != "docs/manual.md" {
+		t.Fatalf("removed=%v", result.RemovedPaths)
+	}
+}
+
 func TestVerifyWorktreeWriteSetV0RechazaRequestInsegura(t *testing.T) {
 	root := t.TempDir()
 	baseline := captureWorktreeSnapshotForTestV0(t, root, nil)

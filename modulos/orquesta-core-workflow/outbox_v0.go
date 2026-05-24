@@ -35,27 +35,6 @@ const (
 	maxOutboxCollectionLenV0 = 20
 )
 
-var forbiddenOutboxFragmentsV0 = []string{
-	"secret",
-	"secreto",
-	"token",
-	"password",
-	"credential",
-	"credencial",
-	"api_key",
-	"oauth",
-	"dsn",
-	"connection",
-	"conexion",
-	"home",
-	"codex",
-	"claude",
-	"ollama",
-	"vllm",
-	"provider",
-	"proveedor",
-}
-
 var forbiddenOutboxPayloadKeysV0 = []string{
 	"transcript",
 	"prompt",
@@ -95,7 +74,7 @@ type OutboxMessageErrorV0 struct {
 }
 
 func (err OutboxMessageErrorV0) Error() string {
-	return err.Code
+	return codeFieldErrorTextV0(err.Code, err.Field)
 }
 
 func NewSendDirectorQuestionOutboxV0(meta OutboxMessageMetaV0, question DirectorQuestionV0) (OutboxMessageV0, error) {

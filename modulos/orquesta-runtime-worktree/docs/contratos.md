@@ -21,6 +21,9 @@ Invariantes:
 - `write_set=["."]` permite una app nueva completa, pero los cambios siguen
   saliendo como paths relativos concretos.
 - Un cambio fuera de write-set produce issue `outside_write_set`.
+- Un borrado detectado produce issue `removed_path` aunque el path este dentro
+  del write-set; el borrado es rail estricto y requiere decision humana/director
+  antes de repetirse con autorizacion explicita futura.
 - No conoce Codex, Claude, Gemini, DB, HOME, OAuth ni modelos.
 - El adaptador que consuma el resultado decide si registra entrega, pide
   revision o corta agente.

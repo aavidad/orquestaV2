@@ -308,12 +308,15 @@ Nombre: AutoprogrammingCliClientV0
 Tipo: puerto_salida
 Version: v0
 Propietario: orquesta-cli
-Consumidores: comandos `servidor estado`, `autoprogramacion preparar|cola listar|run ver`
+Consumidores: comandos `servidor estado`, `autoprogramacion preparar|estado ver|supervisar|cola listar|run ver|run controlar`
 Campos:
   - `servidor estado`: GET `/api/v0/server/status`.
   - `preparar`: POST `/api/v0/autoprogramming/prepare-run` con `MCPAutoprogrammingPrepareRunToolInputV0`.
+  - `estado ver`: POST `/api/v0/autoprogramming/status` con `MCPAutoprogrammingStatusToolInputV0`.
+  - `supervisar`: POST `/api/v0/autoprogramming/supervise` con `MCPRunSupervisorToolInputV0`.
   - `cola listar`: POST `/api/v0/runs/queue/priority` con action `rank`.
   - `run ver`: POST `/api/v0/director/stats` con `run_ref` opaco.
+  - `run controlar`: POST `/api/v0/runs/control` con `MCPRunControlToolInputV0`.
 Invariantes:
   - Cliente fino server-first; no lee stores, runtime, worktrees, DB ni filesystem interno.
   - `branch_ref`, `worktree_ref` y `run_ref` se tratan como refs opacas y no se recomputan en CLI.
@@ -323,9 +326,68 @@ Errores:
   - respuesta_invalida
   - opcion_invalida
 Pruebas de contrato:
-  - httptest valida rutas, headers, rechazo de respuestas invalidas y preservacion de refs opacas en prepare-run.
+  - httptest valida rutas, headers, rechazo de respuestas invalidas, preservacion de refs opacas en prepare-run y que estado/supervision/control viajan por API publica.
 Estado:
   - Completado ejecutable como adaptador secundario.
+```
+
+```text
+Nombre: AutoprogramacionResidenteConfigOperadorCliV0
+Tipo: contrato_operativo_documental
+Version: v0
+Propietario: orquesta-cli
+Consumidores: operadores, scripts CLI, runbooks de autoprogramacion residente
+Campos:
+  - ORQUESTA_SERVER_SUPERVISOR_MAX_TICKS: presupuesto de ticks por pulso residente; default seguro `1`.
+  - ORQUESTA_SERVER_ALLOW_REPEATED_RUNS: `true` permite repetir runs en el mismo pulso cuando la composicion lo autoriza; default `false`; este es el nombre exacto.
+  - ORQUESTA_SERVER_ALLOW_REPEAT: alias no valido; no debe documentarse como variable soportada ni aceptarse como abreviatura de `ORQUESTA_SERVER_ALLOW_REPEATED_RUNS`.
+  - ORQUESTA_SERVER_MAX_RUNS_PER_TICK: limite de runs candidatos por pulso; default operativo del servidor `2`.
+  - ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK: limite de ejecuciones lanzadas por pulso; default operativo del servidor `2`.
+  - ORQUESTA_SERVER_DRAIN_MAX_BURSTS: rondas maximas de drain por ejecucion residente; default operativo `4`.
+  - ORQUESTA_SERVER_DRAIN_MAX_STEPS: pasos maximos por ronda de drain; default operativo `6`.
+  - ORQUESTA_SERVER_DRAIN_MAX_DISPATCHES: despachos maximos por espera; default operativo `4`.
+  - ORQUESTA_SERVER_DRAIN_MAX_COMMANDS: comandos maximos por drain; default operativo `20`.
+  - ORQUESTA_SERVER_DRAIN_MAX_OUTBOX: elementos maximos de outbox por ciclo; default operativo `4`.
+  - ORQUESTA_SERVER_DRAIN_MAX_DECISIONS: ciclos maximos de decision por drain; default operativo `1`.
+  - ORQUESTA_SERVER_DRAIN_MAX_EXTERNAL_WAITS: esperas externas maximas por drain; queda acotado a `1`.
+  - ORQUESTA_SERVER_TICK_INTERVAL_MS: intervalo entre pulsos automaticos del servidor residente; default operativo `5000`.
+  - ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS: segundos sin ejecuciones antes de proponer automejora idle; default operativo `60`; valor `0` desactiva este disparador.
+  - ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PROJECT_REF: proyecto opaco de la automejora idle; default `project-ref-orquesta-server`.
+  - ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_WORKTREE_REF: worktree opaca de la automejora idle; default `worktree-ref-orquesta-server-idle-self-improvement`.
+  - ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_BRANCH_REF: rama opaca de la automejora idle; default `branch-ref-orquesta-server-idle-self-improvement`.
+  - ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AREA: area sugerida; default `automejora`.
+  - ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_WRITE_SET: lista CSV de write-set para tareas idle; default del servidor acotado a piezas de servidor residente.
+  - ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_REQUIRED_TESTS: lista CSV de pruebas requeridas; default `go test -count=1 ./...`.
+  - ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_CONTEXT_REFS: lista CSV de refs opacas de contexto adicional; default vacio.
+  - ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_EVIDENCE_REFS: lista CSV de refs opacas de evidencia; default vacio.
+  - ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_ACCEPTANCE: lista CSV de criterios de aceptacion para la tarea idle; default del servidor documenta disparo tras 60s y apagado con `0`.
+  - ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_COMPACT_RULES: lista CSV de reglas compactas para agentes; default incluye comunicacion compacta y trabajo secundario.
+  - Comandos de observacion CLI: `servidor estado`, `autoprogramacion cola listar`, `autoprogramacion estado ver`, `autoprogramacion supervisar`, `autoprogramacion run ver` y `autoprogramacion run controlar`.
+  - Perfil por entorno: conjunto documentado de variables que el operador exporta al proceso servidor residente antes de arrancarlo; no es un DTO leido por CLI.
+  - Salida observable por CLI: estado publico del servidor, contadores de ticks/ejecuciones/skips cuando el servidor los expone, cola priorizada, stats publicas de run y respuesta de control de run.
+Invariantes:
+  - Las variables se leen en el borde `cmd/orquesta-server`; la CLI no lee entorno local como fuente de verdad ni intenta reconfigurar el servidor.
+  - La CLI solo hace visible la configuracion por documentacion y por endpoints publicos del servidor; si el servidor no expone un campo, la CLI no lo reconstruye desde internals.
+  - Para cambiar de entorno, el operador cambia el entorno del proceso servidor y reinicia o reconfigura el servidor por un puerto publico futuro; no hay flag CLI que reescriba `ORQUESTA_SERVER_*`.
+  - `worktree_ref` y `branch_ref` de automejora se tratan como refs opacas; no se convierten en rutas ni nombres Git.
+  - La automejora residente sigue siendo trabajo secundario de baja prioridad y no bloquea ni mezcla la run principal.
+  - `ORQUESTA_SERVER_ALLOW_REPEATED_RUNS` no autoriza bucles infinitos: queda acotado por max_ticks, limites de drain y decisiones del supervisor.
+  - `ORQUESTA_SERVER_ALLOW_REPEAT` no existe como contrato de entorno; si aparece en una guia o script, debe corregirse a `ORQUESTA_SERVER_ALLOW_REPEATED_RUNS`.
+  - `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_*` solo arma solicitudes de automejora por puerto publico inyectado; no autoriza a la CLI a preparar runs por filesystem, Git, HOME, DB ni runtime local.
+  - `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_WRITE_SET`, `CONTEXT_REFS`, `EVIDENCE_REFS`, `ACCEPTANCE` y `COMPACT_RULES` se interpretan como listas compactas del servidor; la CLI no expande globs ni valida negocio.
+  - El operador audita valores efectivos desde el proceso servidor o desde un snapshot publico futuro; la CLI solo puede confirmar sintomas publicos: estado del servidor, cola, stats de run y resultado de supervisar.
+  - Si una variable configurada no aparece en el snapshot publico del servidor, la salida CLI debe tratarla como `configuracion_residente_no_visible`, no como dato inferible localmente.
+Errores:
+  - configuracion_residente_no_visible
+  - servidor_no_disponible
+  - respuesta_invalida
+Pruebas de contrato:
+  - `servidor estado --json` devuelve estado publico del servidor sin leer statefile local.
+  - `autoprogramacion supervisar --max-ticks N --json` transporta el limite pedido al puerto publico sin arrancar runtime local.
+  - La revision documental comprueba el nombre exacto `ORQUESTA_SERVER_ALLOW_REPEATED_RUNS` y rechaza documentar el alias abreviado `ORQUESTA_SERVER_ALLOW_REPEAT`.
+  - Revision documental valida que las variables de entorno residentes y `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_*` aparecen con nombre exacto, default/frontera y comandos de observacion en contratos, pruebas, tareas y runbook CLI.
+Estado:
+  - Completado documental tras rework de `task-ref-self-improvement-ed850d0c5d8d`; la publicacion de un snapshot explicito de configuracion en `/api/v0/server/status` queda como mejora de servidor, no como lectura local de CLI.
 ```
 
 ## Inventario V1 resumido

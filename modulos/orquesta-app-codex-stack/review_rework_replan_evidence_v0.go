@@ -113,50 +113,32 @@ func reviewReworkReplanEvidenceRefIsNeutralV0(value string) bool {
 	if lower == "" {
 		return false
 	}
-	for _, token := range reviewReworkReplanForbiddenEvidenceTokensV0() {
-		if reviewReworkReplanHasEvidenceTokenV0(lower, token) {
-			return false
-		}
+	if reviewReworkReplanEvidenceRefHasSensitiveDetailV0(lower) {
+		return false
 	}
 	return true
 }
 
-func reviewReworkReplanForbiddenEvidenceTokensV0() []string {
-	return []string{
-		"db", "database", "sql", "dsn",
-		"runtime", "provider", "proveedor", "model", "modelo",
-		"home", "oauth", "codex", "claude", "ollama", "vllm",
-		"adapter", "adaptador", "filesystem", "git", "docker", "tmux",
-		"secret", "secreto", "token", "password", "credential", "credencial", "api_key",
-	}
-}
-
-func reviewReworkReplanHasEvidenceTokenV0(value string, token string) bool {
-	token = strings.ToLower(strings.TrimSpace(token))
-	if token == "" {
-		return false
-	}
-	start := 0
-	for {
-		index := strings.Index(value[start:], token)
-		if index < 0 {
-			return false
-		}
-		absolute := start + index
-		if reviewReworkReplanTokenBoundaryV0(value, absolute, absolute+len(token)) {
+func reviewReworkReplanEvidenceRefHasSensitiveDetailV0(value string) bool {
+	for _, fragment := range []string{
+		"access_token=",
+		"refresh_token=",
+		"authorization: bearer ",
+		"bearer ",
+		"client_secret=",
+		"api_key=",
+		"password=",
+		"secret=",
+		"secreto=",
+		"/home/",
+		"/users/",
+		`c:\users\`,
+		"$home",
+		"~/",
+	} {
+		if strings.Contains(value, fragment) {
 			return true
 		}
-		start = absolute + len(token)
 	}
-}
-
-func reviewReworkReplanTokenBoundaryV0(value string, start int, end int) bool {
-	return (start == 0 || !reviewReworkReplanTokenCharV0(value[start-1])) &&
-		(end >= len(value) || !reviewReworkReplanTokenCharV0(value[end]))
-}
-
-func reviewReworkReplanTokenCharV0(value byte) bool {
-	return (value >= 'a' && value <= 'z') ||
-		(value >= '0' && value <= '9') ||
-		value == '_'
+	return false
 }

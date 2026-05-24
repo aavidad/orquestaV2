@@ -38,6 +38,11 @@ func reviewReworkProjectTargetExistsV0(projectDir string, rawTarget string) bool
 	if !ok {
 		return false
 	}
+	for _, alias := range reviewReworkTargetAliasesV0(target) {
+		if reviewReworkProjectTargetExistsV0(projectDir, alias) {
+			return true
+		}
+	}
 	if reviewReworkTargetHasGlobV0(target) {
 		return reviewReworkProjectGlobHasFileV0(projectDir, target)
 	}
@@ -50,6 +55,19 @@ func reviewReworkProjectTargetExistsV0(projectDir string, rawTarget string) bool
 		return info.Size() > 0
 	}
 	return reviewReworkDirHasFileV0(path)
+}
+
+func reviewReworkTargetAliasesV0(target string) []string {
+	switch strings.Trim(strings.ToLower(filepath.ToSlash(target)), "/") {
+	case "web":
+		return []string{"internal/webadmin", "internal/web", "frontend", "ui"}
+	case "api":
+		return []string{"internal/api", "cmd/api", "cmd/server"}
+	case "docs":
+		return []string{"README.md"}
+	default:
+		return nil
+	}
 }
 
 func reviewReworkProjectGlobHasFileV0(projectDir string, pattern string) bool {

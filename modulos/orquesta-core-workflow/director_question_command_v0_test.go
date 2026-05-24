@@ -210,9 +210,11 @@ func TestHandleAskDirectorCommandV0DoesNotReblockAnsweredQuestion(t *testing.T) 
 
 func TestValidateAskDirectorCommandV0RejectsForbiddenDetails(t *testing.T) {
 	cases := map[string]func(*AskDirectorCommandPayloadV0){
-		"runtime": func(payload *AskDirectorCommandPayloadV0) { payload.Summary = "depende del runtime real" },
-		"HOME":    func(payload *AskDirectorCommandPayloadV0) { payload.EvidenceRefs = []string{"$HOME/estado"} },
-		"token":   func(payload *AskDirectorCommandPayloadV0) { payload.Options = []string{"pasar token"} },
+		"api_key": func(payload *AskDirectorCommandPayloadV0) { payload.Summary = "depende de api_key=valor" },
+		"authorization": func(payload *AskDirectorCommandPayloadV0) {
+			payload.EvidenceRefs = []string{"authorization: bearer valor"}
+		},
+		"client_secret": func(payload *AskDirectorCommandPayloadV0) { payload.Options = []string{"client_secret=valor"} },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {

@@ -113,7 +113,7 @@ func TestApplyAgentWorkAssessedV0RejectsReflectedEffectConflict(t *testing.T) {
 
 func TestAssessAgentWorkCommandV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validAssessmentPayloadV0("assessment-forbidden", "agent-request-forbidden")
-	payload.Summary = "Detectado proveedor externo en la entrega."
+	payload.Summary = "authorization: Bearer abc123"
 
 	_, err := NewAssessAgentWorkCommandV0(validCommandMetaV0("cmd-assess-forbidden", "idem-assess-forbidden"), payload)
 	var publicErr OrchestrationCommandErrorV0

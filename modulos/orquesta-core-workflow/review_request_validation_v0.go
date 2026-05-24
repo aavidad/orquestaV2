@@ -5,37 +5,6 @@ import (
 	"strings"
 )
 
-var forbiddenReviewRequestFragmentsV0 = []string{
-	"db",
-	"database",
-	"sql",
-	"dsn",
-	"runtime",
-	"provider",
-	"proveedor",
-	"model",
-	"modelo",
-	"home",
-	"oauth",
-	"codex",
-	"claude",
-	"ollama",
-	"vllm",
-	"adapter",
-	"adaptador",
-	"filesystem",
-	"git",
-	"docker",
-	"tmux",
-	"secret",
-	"secreto",
-	"token",
-	"password",
-	"credential",
-	"credencial",
-	"api_key",
-}
-
 func validateRequestReviewCommandPayloadDataV0(payload RequestReviewCommandPayloadV0) error {
 	if err := validateRequestReviewRequiredV0(payload); err != nil {
 		return err
@@ -154,15 +123,7 @@ func reviewRequestHasLongStringV0(values []string) bool {
 }
 
 func reviewRequestHasForbiddenDetailsV0(values []string) bool {
-	for _, value := range values {
-		lower := strings.ToLower(value)
-		for _, fragment := range forbiddenReviewRequestFragmentsV0 {
-			if containsForbiddenFragmentV0(lower, fragment) {
-				return true
-			}
-		}
-	}
-	return false
+	return textValuesContainForbiddenOperationalSensitiveDetailV0(values)
 }
 
 func requestReviewTextFieldsV0(payload RequestReviewCommandPayloadV0) []string {

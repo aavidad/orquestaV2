@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-var forbiddenCloseRunFragmentsV0 = forbiddenReviewRequestFragmentsV0
-
 func validateCloseRunCommandPayloadDataV0(payload CloseRunCommandPayloadV0) error {
 	if err := validateCloseRunRequiredV0(payload); err != nil {
 		return err
@@ -125,15 +123,7 @@ func closeRunHasLongStringV0(values []string) bool {
 }
 
 func closeRunHasForbiddenDetailsV0(values []string) bool {
-	for _, value := range values {
-		lower := strings.ToLower(value)
-		for _, fragment := range forbiddenCloseRunFragmentsV0 {
-			if containsForbiddenFragmentV0(lower, fragment) {
-				return true
-			}
-		}
-	}
-	return false
+	return textValuesContainForbiddenOperationalSensitiveDetailV0(values)
 }
 
 func closeRunTextFieldsV0(payload CloseRunCommandPayloadV0) []string {

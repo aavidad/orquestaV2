@@ -66,14 +66,15 @@ func MCPAutoprogrammingStatusDescriptorV0() MCPAutoprogrammingStatusToolDescript
 	return MCPAutoprogrammingStatusToolDescriptorV0{
 		Name:        MCPAutoprogrammingStatusToolNameV0,
 		Version:     MCPAutoprogrammingStatusToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,external_job_ref?,queue_ref?,app_refs?,queue_limit?,telemetry_flags?}",
-		Output:      "ok:{queue?,run?,operator?,diagnostics?}|error:{errores_publicos,diagnostics?}",
+		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,external_job_ref?,queue_ref?,app_refs?,queue_limit?,telemetry_flags?,operator_advice?}",
+		Output:      "ok:{queue?,run?,operator?,diagnostics?,operator_advice?}|error:{errores_publicos,diagnostics?,operator_advice?}",
 		ResourceURI: MCPAutoprogrammingStatusResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
 			"estado de cola via run_queue.priority inyectado",
 			"estado de run via director.stats inyectado",
 			"diagnostico solo resume puertos y errores publicos",
+			"operator_advice se conserva como observacion no bloqueante",
 			"sin DB runtime filesystem Codex ni proveedor concreto",
 		},
 	}

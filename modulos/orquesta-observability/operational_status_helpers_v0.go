@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func validateOperationalAreaV0(area string, field string, add func(string, string)) {
@@ -87,6 +89,9 @@ func validateOperationalTextV0(value string, field string, maxRunes int, require
 }
 
 func forbiddenOperationalTextCodeV0(value string) string {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return ""
+	}
 	lower := strings.ToLower(value)
 	if lower == "home" {
 		return ErrOperationalStatusQueryInvalidaV0

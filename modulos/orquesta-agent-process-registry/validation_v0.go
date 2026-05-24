@@ -3,6 +3,8 @@ package orquestaagentprocessregistry
 import (
 	"regexp"
 	"strings"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func NormalizeAgentProcessRegistryRecordV0(
@@ -108,6 +110,9 @@ func compactRefsV0(values []string) []string {
 }
 
 func unsafeRefV0(value string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	low := strings.ToLower(strings.TrimSpace(value))
 	return strings.Contains(low, "://") ||
 		strings.Contains(low, "/home/") ||
@@ -133,4 +138,4 @@ type registryFieldV0 struct {
 	value string
 }
 
-var opaqueRefPatternV0 = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{2,159}$`)
+var opaqueRefPatternV0 = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{2,511}$`)

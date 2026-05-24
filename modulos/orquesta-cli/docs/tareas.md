@@ -141,10 +141,21 @@ ID: CLI-012
 Objetivo: Exponer comandos CLI finos para autoprogramacion supervisada sin entrar al nucleo ni al runtime local.
 Write-set: server_status_client_v0.go, autoprogramming_client_v0.go, command_handlers_autoprogramming_v0.go, command_runner_v0.go, tests locales, docs locales
 Simbolo foco: ServerStatusCliClientV0, AutoprogrammingCliClientV0
-Contrato: /api/v0/server/status, /api/v0/autoprogramming/prepare-run, /api/v0/runs/queue/priority, /api/v0/director/stats
-Validacion: gofmt; go test -count=1 ./cmd/orquesta-cli ./modulos/orquesta-cli. Tests con httptest verifican estado servidor por GET, cola por API, run stats por API y prepare-run preservando worktree aislada y branch_ref opaca.
+Contrato: /api/v0/server/status, /api/v0/autoprogramming/prepare-run, /api/v0/autoprogramming/status, /api/v0/autoprogramming/supervise, /api/v0/runs/queue/priority, /api/v0/director/stats, /api/v0/runs/control
+Validacion: gofmt; go test -count=1 ./cmd/orquesta-cli ./modulos/orquesta-cli. Tests con httptest verifican estado servidor por GET, autoprogramacion status/supervise por API, cola por API, run stats/control por API y prepare-run preservando worktree aislada y branch_ref opaca.
 Bloqueos: ninguno local; diagnostico mas rico depende de nuevos puertos publicos del servidor.
 Estado: completada ejecutable
+```
+
+```text
+ID: CLI-013
+Objetivo: Hacer visible para operador y CLI la configuracion de automejora residente por entorno, sin convertir CLI en control plane.
+Write-set: modulos/orquesta-cli/docs/contratos.md, modulos/orquesta-cli/docs/pruebas.md, modulos/orquesta-cli/docs/tareas.md, docs/runbooks/autoprogramacion_cli_2026-05-23.md
+Simbolo foco: AutoprogramacionResidenteConfigOperadorCliV0
+Contrato: variables `ORQUESTA_SERVER_*` del servidor residente, variables `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_*` de automejora idle + endpoints publicos `servidor estado` y `autoprogramacion estado ver|supervisar|cola listar|run ver|run controlar`
+Validacion: go test -count=1 ./modulos/orquesta-cli; revision documental de `ORQUESTA_SERVER_SUPERVISOR_MAX_TICKS`, `ORQUESTA_SERVER_ALLOW_REPEATED_RUNS` como nombre exacto, `ORQUESTA_SERVER_ALLOW_REPEAT` solo como alias no valido, limites `ORQUESTA_SERVER_DRAIN_MAX_*`, `ORQUESTA_SERVER_TICK_INTERVAL_MS`, `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_*`, perfiles por entorno del proceso servidor, comandos CLI de observacion y frontera CLI server-first.
+Bloqueos: el servidor aun no publica un snapshot explicito de todos los valores efectivos; la CLI no debe reconstruirlos leyendo entorno local. Si el operador necesita auditoria exacta por entorno, debe venir de `/api/v0/server/status` u otro puerto publico futuro del servidor.
+Estado: completada documental tras rework de `task-ref-self-improvement-ed850d0c5d8d`; queda documentado que la CLI muestra sintomas publicos y no valores efectivos ausentes del snapshot del servidor.
 ```
 
 ## CONSULTA AL DIRECTOR registrada

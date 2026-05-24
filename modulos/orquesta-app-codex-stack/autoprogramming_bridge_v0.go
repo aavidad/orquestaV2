@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"reflect"
 	"strings"
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
@@ -156,14 +155,22 @@ func autoprogrammingBridgeValidateStoredTasksV0(
 	for _, task := range expected {
 		expectedByRef[strings.TrimSpace(task.TaskID)] = task
 	}
+	seen := map[string]bool{}
 	for _, task := range stored {
+		taskRef := strings.TrimSpace(task.TaskID)
 		expectedTask, ok := expectedByRef[strings.TrimSpace(task.TaskID)]
-		if !ok || !reflect.DeepEqual(task, expectedTask) {
+		if !ok || strings.TrimSpace(task.RunID) != strings.TrimSpace(expectedTask.RunID) {
 			return fmt.Errorf("autoprogramming workflow task existente incompatible: %s", task.TaskID)
 		}
+		if err := orquestacoreworkflow.ValidateWorkflowTaskV0(task); err != nil {
+			return fmt.Errorf("autoprogramming workflow task existente invalida: %s", task.TaskID)
+		}
+		seen[taskRef] = true
 	}
-	if len(stored) != len(expectedByRef) {
-		return fmt.Errorf("autoprogramming workflow tasks existentes incompletas")
+	for taskRef := range expectedByRef {
+		if !seen[taskRef] {
+			return fmt.Errorf("autoprogramming workflow task existente ausente: %s", taskRef)
+		}
 	}
 	return nil
 }

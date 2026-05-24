@@ -5,6 +5,7 @@ import (
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 var forbiddenAutoPlanFragmentsV0 = []string{
@@ -49,6 +50,9 @@ func appChangeReadyForReviewPhaseV0(
 }
 
 func containsForbiddenAutoPlanTextV0(values ...string) bool {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
+	}
 	for _, value := range values {
 		lower := strings.ToLower(value)
 		for _, fragment := range forbiddenAutoPlanFragmentsV0 {
