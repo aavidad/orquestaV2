@@ -3,6 +3,7 @@ package orquestaserver
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 )
 
 type HandlerConfigV0 struct {
@@ -24,6 +25,8 @@ func (handler handlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		handler.writeJSONV0(w, http.StatusOK, map[string]string{"status": "ok"})
 	case "/api/status", "/api/v0/server/status":
 		handler.writeJSONV0(w, http.StatusOK, handler.statusV0())
+	case ServerResourcesEndpointV0:
+		handler.writeJSONV0(w, http.StatusOK, NewServerResourcesV0(handler.statusV0(), time.Now().UTC()))
 	default:
 		if handler.config.AppHandler != nil {
 			handler.config.AppHandler.ServeHTTP(w, r)

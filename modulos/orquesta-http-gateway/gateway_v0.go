@@ -4,6 +4,7 @@ import "net/http"
 
 const (
 	RouteNuevaAppV0                       = "/nueva-app"
+	RouteOpsDashboardV0                   = "/ops"
 	RouteAppChangePageV0                  = "/app-change"
 	RouteDirectorStatsPageV0              = "/director-stats"
 	RouteRunControlPageV0                 = "/run-control"
@@ -28,6 +29,7 @@ const (
 
 type RouteHandlersV0 struct {
 	NuevaApp                       http.Handler
+	OpsDashboard                   http.Handler
 	AppChangePage                  http.Handler
 	DirectorStatsPage              http.Handler
 	RunControlPage                 http.Handler
@@ -54,6 +56,7 @@ func NewAppGatewayMuxV0(handlers RouteHandlersV0) http.Handler {
 	mux := http.NewServeMux()
 
 	handleIfPresent(mux, RouteNuevaAppV0, handlers.NuevaApp)
+	handleIfPresent(mux, RouteOpsDashboardV0, handlers.OpsDashboard)
 	handleIfPresent(mux, RouteAppChangePageV0, handlers.AppChangePage)
 	handleIfPresent(mux, RouteDirectorStatsPageV0, handlers.DirectorStatsPage)
 	handleIfPresent(mux, RouteRunControlPageV0, handlers.RunControlPage)

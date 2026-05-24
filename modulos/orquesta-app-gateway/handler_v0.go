@@ -33,6 +33,7 @@ func NewRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 {
 
 	return orquestahttpgateway.RouteHandlersV0{
 		NuevaApp:                       orquestaweb.NuevaAppHTMLHandlerV0{Endpoint: nuevaEndpoint},
+		OpsDashboard:                   orquestaweb.NewOpsDashboardWebEndpointV0(),
 		AppChangePage:                  changeEndpoint,
 		DirectorStatsPage:              orquestaweb.NewDirectorStatsWebEndpointV0(newStatsClientV0(config, client)),
 		RunControlPage:                 orquestaweb.NewRunControlWebEndpointV0(newRunControlClientV0(config, client)),

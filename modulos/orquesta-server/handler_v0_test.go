@@ -20,6 +20,7 @@ func TestHandlerV0ExponeHealthStatusYDelegaV0(t *testing.T) {
 
 	assertServerPathV0(t, handler, "/healthz", `"ok"`)
 	assertServerPathV0(t, handler, "/api/status", `"running"`)
+	assertServerPathV0(t, handler, ServerResourcesEndpointV0, ServerResourcesSchemaVersionV0)
 	assertServerPathV0(t, handler, "/nueva-app", "app")
 }
 

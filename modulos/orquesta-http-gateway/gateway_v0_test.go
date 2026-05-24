@@ -27,6 +27,13 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 			},
 		},
 		{
+			name:  "ops dashboard",
+			route: RouteOpsDashboardV0,
+			handlers: RouteHandlersV0{
+				OpsDashboard: markerHandler("ops-dashboard"),
+			},
+		},
+		{
 			name:  "app change page",
 			route: RouteAppChangePageV0,
 			handlers: RouteHandlersV0{
@@ -252,6 +259,7 @@ func TestNewAppGatewayMuxV0Returns404ForUnconfiguredRoutes(t *testing.T) {
 	for _, route := range []string{
 		RouteAppSpecV0,
 		RouteAppDirectorV0,
+		RouteOpsDashboardV0,
 		RouteDirectorStatsPageV0,
 		RouteDirectorStatsV0,
 		RouteDomainWorkV0,
