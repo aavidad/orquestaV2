@@ -24,10 +24,25 @@ type AutoprogrammingRequestV0 struct {
 	RequiredTests    []string                              `json:"required_tests"`
 	AreaAliases      []AutoprogrammingAreaAliasV0          `json:"area_aliases,omitempty"`
 	LiveWorks        []AutoprogrammingLiveWorkV0           `json:"live_works,omitempty"`
+	BacklogScan      AutoprogrammingBacklogScanV0          `json:"backlog_scan,omitempty"`
 
 	MaxTaskRefs        int `json:"max_task_refs,omitempty"`
 	MaxAreas           int `json:"max_areas,omitempty"`
 	MaxWriteSetEntries int `json:"max_write_set_entries,omitempty"`
+}
+
+type AutoprogrammingBacklogScanV0 struct {
+	Epoch           string                             `json:"epoch,omitempty"`
+	Documents       []AutoprogrammingBacklogDocumentV0 `json:"documents,omitempty"`
+	ReservationRefs []string                           `json:"reservation_refs,omitempty"`
+}
+
+type AutoprogrammingBacklogDocumentV0 struct {
+	Path       string `json:"path"`
+	StartLine  int    `json:"start_line,omitempty"`
+	SHA256     string `json:"sha256"`
+	Missing    bool   `json:"missing,omitempty"`
+	SectionRef string `json:"section_ref,omitempty"`
 }
 
 type AutoprogrammingRequestValidationResultV0 struct {
@@ -57,6 +72,7 @@ func ValidateAutoprogrammingRequestV0(
 	writeSet := compactStringsV0(request.WriteSet)
 	issues = append(issues, autoprogrammingRequestWriteSetIssuesV0(request, writeSet)...)
 	issues = append(issues, autoprogrammingRequestLiveWorkIssuesV0(request.LiveWorks)...)
+	issues = append(issues, autoprogrammingRequestBacklogScanIssuesV0(request.BacklogScan)...)
 
 	requiredTests := compactStringsV0(request.RequiredTests)
 	if len(requiredTests) == 0 {

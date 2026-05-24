@@ -107,9 +107,15 @@ func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) freshAttemptForSta
 		return input
 	}
 	_ = executor.markStaleAutoprogrammingQueueCandidateV0(ctx, run)
+	nextAttempt := autoprogrammingPrepareRetryAttemptV0(requestRef) + 1
 	nextRef := autoprogrammingPrepareRetryRefV0(requestRef, input.OccurredAt, stackNowV0(executor.Clock))
 	input.RequestID = nextRef
 	input.AutoprogrammingRequest.RequestRef = nextRef
+	input.AutoprogrammingRequest = reframeAutoprogrammingRequestAfterRepeatedRetriesV0(
+		input.AutoprogrammingRequest,
+		requestRef,
+		nextAttempt,
+	)
 	if strings.TrimSpace(input.CorrelationID) == "" ||
 		strings.TrimSpace(input.CorrelationID) == "corr-"+requestRef ||
 		strings.TrimSpace(input.CorrelationID) == requestRef {
@@ -164,6 +170,65 @@ func autoprogrammingPrepareStringSetV0(values []string) map[string]bool {
 		out[value] = true
 	}
 	return out
+}
+
+func autoprogrammingPrepareRetryAttemptV0(requestRef string) int {
+	return strings.Count(strings.TrimSpace(requestRef), "-retry-")
+}
+
+func reframeAutoprogrammingRequestAfterRepeatedRetriesV0(
+	request orquestaautoprogramming.AutoprogrammingRequestV0,
+	previousRunRef string,
+	nextAttempt int,
+) orquestaautoprogramming.AutoprogrammingRequestV0 {
+	if nextAttempt < 2 || len(request.Tasks) == 0 {
+		return request
+	}
+	out := request
+	out.Tasks = append([]orquestaautoprogramming.AutoprogrammingTaskGroupCandidateV0(nil), request.Tasks...)
+	strategyRef := fmt.Sprintf("retry_strategy:reframe-%02d", nextAttempt)
+	previousRef := "previous_run_ref:" + autoprogrammingPrepareRetrySafeRefV0(previousRunRef)
+	for index := range out.Tasks {
+		out.Tasks[index] = reframeAutoprogrammingTaskAfterRepeatedRetriesV0(
+			out.Tasks[index],
+			nextAttempt,
+			strategyRef,
+			previousRef,
+		)
+	}
+	return out
+}
+
+func reframeAutoprogrammingTaskAfterRepeatedRetriesV0(
+	task orquestaautoprogramming.AutoprogrammingTaskGroupCandidateV0,
+	nextAttempt int,
+	strategyRef string,
+	previousRef string,
+) orquestaautoprogramming.AutoprogrammingTaskGroupCandidateV0 {
+	task.Context = compactStringsV0(append(
+		append([]string(nil), task.Context...),
+		fmt.Sprintf("Retry %d: el intento anterior quedo atascado; cambia enfoque antes de reintentar.", nextAttempt),
+		"Si el contrato es demasiado amplio, entrega un minimo verificable y deja followups causales.",
+	))
+	task.ContextRefs = compactStringsV0(append(
+		append([]string(nil), task.ContextRefs...),
+		strategyRef,
+		previousRef,
+	))
+	task.AcceptanceCriteria = compactStringsV0(append(
+		append([]string(nil), task.AcceptanceCriteria...),
+		"No repetir literalmente el intento fallido; reencuadrar, dividir o normalizar antes de programar.",
+		"El ACK explica que cambio de enfoque se aplico y que pruebas verifican el resultado.",
+	))
+	task.CompactRules = compactStringsV0(append(
+		append([]string(nil), task.CompactRules...),
+		fmt.Sprintf("retry_reframed_attempt:%02d", nextAttempt),
+		"preferir cambios pequenos verificables si el intento anterior fallo por tamano, payload o contrato",
+	))
+	if strings.TrimSpace(task.Objective) == "" {
+		task.Objective = "Reintento reencuadrado: completar la mejora con el menor cambio verificable."
+	}
+	return task
 }
 
 func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) markStaleAutoprogrammingQueueCandidateV0(

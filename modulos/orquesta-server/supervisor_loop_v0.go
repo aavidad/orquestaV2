@@ -322,7 +322,17 @@ func (runtime *RuntimeV0) prepareIdleSelfImprovementBatchV0(
 		runtime.auditEventV0(ctx, "idle_self_improvement_prepare_result", "ok", "", map[string]interface{}{"request": request, "result": prepared})
 	}
 	now := runtime.clock.Now()
-	if failed != "" || !aggregate.Accepted {
+	if failed != "" {
+		aggregate.Message = firstNonEmptyIdleSelfImprovementV0(
+			aggregate.Message,
+			"automejora_parcial_con_preparaciones_reparables: "+failed,
+		)
+		aggregate.NextActions = compactConfigStringsV0(append(
+			aggregate.NextActions,
+			"repair_failed_prepare_requests_and_retry",
+		))
+	}
+	if !aggregate.Accepted {
 		message := firstNonEmptyIdleSelfImprovementV0(failed, aggregate.Message, aggregate.Status, "idle_self_improvement_prepare_run_not_accepted")
 		runtime.auditEventV0(ctx, "idle_self_improvement_prepare_batch", "not_accepted", message, map[string]interface{}{"result": aggregate})
 		runtime.persistStateV0(ctx, runtime.tracker.MarkIdleSelfImprovementErrorV0(message, now))

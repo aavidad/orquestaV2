@@ -59,6 +59,18 @@ documento antes de editar.
 - Comunicacion compacta: usar `$caveman full` si esta disponible, o equivalente.
 - ACK valido solo con archivos reales tocados y pruebas ejecutadas.
 
+## Tareas futuras tras estabilizar la automejora
+
+- Extrapolar el patron de autoprogramacion estable de Orquesta a las apps
+  creadas por Orquesta: modo opt-in de mejora continua por app, con backlog
+  propio, revision de si cada mejora merece la pena, pruebas causales y cierre
+  verificable. No activar como producto hasta que Orquesta se automejore sin
+  bloqueos operativos.
+- Revisar legado v0/v1/v2/v3 cuando la automejora sea estable: inventariar
+  tareas pendientes y codigo ya programado, rescatar solo lo compatible y util,
+  y adaptarlo a la arquitectura actual sin romper hexagonal, refs opacas,
+  i18n, conectores ni reglas vigentes de esta version.
+
 ## Aperturas de rail pendientes de revision futura
 
 ### R01 concurrency-gate-detalle-prohibido
@@ -2026,7 +2038,15 @@ Objetivo: evitar que scanners de automejora concurrentes con el mismo write-set
 documental dupliquen Txx, oculten pendientes o escriban sobre una foto obsoleta
 del backlog.
 
-Estado: pendiente.
+Estado: completado.
+
+Evidencia focal 2026-05-24: el scanner de backlog transporta
+`backlog_scan_epoch`, hashes/lineas de documentos leidos y refs de reserva de
+write-set documental desde `cmd/orquesta-server` hacia
+`orquesta-autoprogramming`; los ACK completados con foto documental obsoleta
+quedan como `backlog_docs_changed_after_plan` y se exponen en el resultado del
+planner para rebase/merge dirigido. La deduplicacion incorpora firma documental
+de seccion y colisiones compactas de scanner/heading.
 
 Alcance:
 

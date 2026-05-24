@@ -169,6 +169,80 @@ func TestBuildAutoprogrammingProgrammableWorkV0CompactaTextoLargoParaWorkflowTas
 	}
 }
 
+func TestBuildAutoprogrammingProgrammableWorkV0CompactaBacklogScanParaWorkflowTask(t *testing.T) {
+	request := validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.RequestRef = "request-ref-autoprogramming-backlog-t45-autoprogramming-go-file-line-budget-baseline-fd1e0db4"
+		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{{
+			TaskRef:   "task-ref-backlog-scan-large-001",
+			Area:      "Autoprogramming",
+			Title:     "Automejora en segundo plano",
+			Objective: "Corregir de forma general un patron detectado en backlog documental con criterios extensos.",
+			Context: []string{
+				"failure_summary: convertir el limite de 300 lineas por fichero Go en contrato medible",
+				"backlog_input:write_set:`modulos/orquesta-autoprogramming`+`modulos/orquesta-runtime-worktree`+`modulos/orquesta-app-codex-stack`+`cmd/orquesta-server`",
+			},
+			ContextRefs: []string{
+				"backlog-doc-autoprogramacion-2026-05-23",
+				"backlog_input:tests:go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-runtime-worktree ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server",
+			},
+			AcceptanceCriteria: []string{
+				"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS por defecto dispara tras 60 segundos sin ejecuciones",
+				"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS=0 desactiva automejora idle",
+				"el servidor prepara automejora cuando hay idle o capacidad libre por debajo de ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_TARGET_QUEUE",
+				"el planner salta tareas ya visibles en cola y puede crear una tarea scanner para descubrir nuevos huecos",
+				"usar evidencia del fallo y corregir la causa general si es posible",
+				"crear una linea base de ficheros Go historicos por encima de 300 lineas y no bloquear por piezas existentes",
+				"en modo estricto futuro una entrega nueva no debe cerrar completed si agranda ficheros sin particionar",
+				"la medicion debe salir del snapshot real cuando exista y el ACK no debe decidirlo solo",
+				"file_too_large puede seguir como advisory en modo legacy hasta tener matriz externa suficiente",
+			},
+			CompactRules: []string{
+				"comunicacion compacta",
+				"un agente padre por tarea; subagentes hasta 6 si ayudan",
+				"si aparece otro hueco general, registrarlo como nueva automejora y seguir",
+			},
+		}}
+		request.WriteSet = []string{
+			"modulos/orquesta-autoprogramming",
+			"modulos/orquesta-runtime-worktree",
+			"modulos/orquesta-app-codex-stack",
+			"cmd/orquesta-server",
+			"docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+			"docs/rail_errors_observados_2026-05-23.md",
+			"docs/duplicaciones_railes_pendientes_2026-05-24.md",
+		}
+		request.RequiredTests = []string{
+			"go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-runtime-worktree ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server",
+		}
+		request.BacklogScan = AutoprogrammingBacklogScanV0{
+			Epoch:           "backlog-scan-epoch-5f7d86dffafa",
+			ReservationRefs: []string{"reservation-ref-backlog-scan-doc-merge-1a2b3c4d5e6f"},
+			Documents: []AutoprogrammingBacklogDocumentV0{
+				{Path: "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md", StartLine: 2115, SHA256: strings.Repeat("a", 64), SectionRef: "t45-autoprogramming-go-file-line-budget-baseline"},
+				{Path: "docs/rail_errors_observados_2026-05-23.md", StartLine: 2115, SHA256: strings.Repeat("b", 64), SectionRef: "t45-autoprogramming-go-file-line-budget-baseline"},
+				{Path: "docs/duplicaciones_railes_pendientes_2026-05-24.md", StartLine: 2115, SHA256: strings.Repeat("c", 64), SectionRef: "t45-autoprogramming-go-file-line-budget-baseline"},
+			},
+		}
+		request.MaxWriteSetEntries = len(request.WriteSet)
+	})
+
+	result := BuildAutoprogrammingProgrammableWorkV0(request)
+
+	if !result.Accepted {
+		t.Fatalf("accepted=false issues=%+v", result.Issues)
+	}
+	task := result.Work.Tasks[0]
+	payload, err := json.Marshal(task)
+	if err != nil {
+		t.Fatalf("marshal task: %v", err)
+	}
+	if len(payload) > 4096 {
+		t.Fatalf("payload demasiado grande: %d %s", len(payload), payload)
+	}
+	assertAutoprogrammingContextRefV0(t, task.ContextRefs, "backlog_scan_epoch:backlog-scan-epoch-5f7d86dffafa")
+	assertAutoprogrammingContextRefPrefixV0(t, task.ContextRefs, "context_ref:backlog-input-")
+}
+
 func TestBuildAutoprogrammingProgrammableWorkV0PartitionsWriteSetByGroupArea(t *testing.T) {
 	request := validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
 		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{

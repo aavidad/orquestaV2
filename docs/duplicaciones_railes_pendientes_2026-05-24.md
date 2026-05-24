@@ -111,6 +111,10 @@ Indice vivo: `docs/rails/registro_railes_2026-05-24.md`.
   decide estado cerrado y required tests desde Markdown con heuristicas locales.
   Debe compartir contrato de estado/verificacion con el backlog vivo para no
   perder scripts, `git diff --check` o pruebas documentales.
+- T43 cerrado para scanners: las requests de scanner ya llevan epoch documental,
+  hash/linea por doc y reserva opaca de write-set; el ACK con foto obsoleta no
+  cierra silenciosamente y el planner expone colision compacta para rebase/merge.
+  Sigue pendiente el parser general de pruebas/estado documental de T37.
 - Observaciones Codex: `modulos/orquesta-runtime-codex/codex_delivery_observation_v0.go`
   conserva una lista local de terminos sensibles/operativos solo usada como
   detector de rail pendiente. Si debe proteger produccion, debe usar politica

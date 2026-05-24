@@ -45,11 +45,15 @@ func (planner idleSelfImprovementBacklogPlannerV0) PlanV0(
 	planner.syncBacklogSectionStateV0(sections)
 	idleSelfImprovementPrioritizeBacklogSectionsV0(sections)
 	excluded := idleSelfImprovementExcludedRequestRefsV0(request)
-	completedRequestRefs, ackEvidenceRefs := planner.completedBacklogRequestRefsV0()
+	completedRequestRefs, ackEvidenceRefs, ackCollisions := planner.completedBacklogRequestRefsV0()
 	completedSections := idleSelfImprovementCompletedBacklogSectionsV0(sections, completedRequestRefs)
 	for ref := range completedRequestRefs {
 		excluded[ref] = true
 	}
+	collisions := compactBacklogScanCollisionsV0(append(
+		ackCollisions,
+		idleSelfImprovementBacklogSectionCollisionsV0(sections, excluded)...,
+	))
 	requests := make([]orquestaserver.IdleSelfImprovementRequestV0, 0, maxRequests)
 	for _, section := range sections {
 		if section.Completed {
@@ -62,6 +66,7 @@ func (planner idleSelfImprovementBacklogPlannerV0) PlanV0(
 		if section.NeedsDocumentReview {
 			next = idleSelfImprovementDocumentReviewRequestForBacklogSectionV0(base, section)
 		}
+		next = planner.withBacklogSectionMergeLeaseV0(next, section)
 		if excluded[next.RequestRef] {
 			continue
 		}
@@ -76,11 +81,13 @@ func (planner idleSelfImprovementBacklogPlannerV0) PlanV0(
 			EvidenceRefs: compactServerStackStringsV0(append([]string{
 				"evidence-ref-autoprogramming-backlog-known-work",
 			}, ackEvidenceRefs...)),
-			Message: "backlog_tareas_ya_visibles_en_cola",
+			Collisions: collisions,
+			Message:    "backlog_tareas_ya_visibles_en_cola",
 		}, nil
 	}
 	if len(requests) < maxRequests && idleSelfImprovementShouldAddScannerRequestV0(request, requests) {
 		scanner := idleSelfImprovementBacklogScannerRequestV0(base, request)
+		scanner = planner.withBacklogScannerMergeLeaseV0(scanner)
 		if !excluded[scanner.RequestRef] {
 			requests = append(requests, scanner)
 		}
@@ -92,7 +99,8 @@ func (planner idleSelfImprovementBacklogPlannerV0) PlanV0(
 				EvidenceRefs: compactServerStackStringsV0(append([]string{
 					"evidence-ref-autoprogramming-backlog-known-work",
 				}, ackEvidenceRefs...)),
-				Message: "backlog_tareas_ya_visibles_en_cola",
+				Collisions: collisions,
+				Message:    "backlog_tareas_ya_visibles_en_cola",
 			}, nil
 		}
 		requests = append(requests, idleSelfImprovementBacklogFallbackRequestV0(base, "backlog_sin_tareas_pendientes_detectadas"))
@@ -102,7 +110,8 @@ func (planner idleSelfImprovementBacklogPlannerV0) PlanV0(
 		EvidenceRefs: compactServerStackStringsV0(append([]string{
 			"evidence-ref-autoprogramming-backlog-doc",
 		}, ackEvidenceRefs...)),
-		Message: "backlog_autoprogramming_planned",
+		Collisions: collisions,
+		Message:    "backlog_autoprogramming_planned",
 	}, nil
 }
 

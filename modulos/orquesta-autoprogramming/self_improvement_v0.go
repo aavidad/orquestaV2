@@ -12,24 +12,25 @@ const (
 )
 
 type AutoprogrammingSelfImprovementProposalV0 struct {
-	RequestRef         string   `json:"request_ref,omitempty"`
-	ProjectRef         string   `json:"project_ref"`
-	WorktreeRef        string   `json:"worktree_ref,omitempty"`
-	WorktreeIsolated   bool     `json:"worktree_isolated,omitempty"`
-	BranchRef          string   `json:"branch_ref,omitempty"`
-	ObservedBy         string   `json:"observed_by,omitempty"`
-	SourceRunRef       string   `json:"source_run_ref,omitempty"`
-	SourceTaskRef      string   `json:"source_task_ref,omitempty"`
-	FailureKind        string   `json:"failure_kind,omitempty"`
-	FailureSummary     string   `json:"failure_summary"`
-	SuggestedArea      string   `json:"suggested_area,omitempty"`
-	SuggestedWriteSet  []string `json:"suggested_write_set,omitempty"`
-	RequiredTests      []string `json:"required_tests,omitempty"`
-	AcceptanceCriteria []string `json:"acceptance_criteria,omitempty"`
-	CompactRules       []string `json:"compact_rules,omitempty"`
-	ContextRefs        []string `json:"context_refs,omitempty"`
-	EvidenceRefs       []string `json:"evidence_refs,omitempty"`
-	PriorityScore      int      `json:"priority_score,omitempty"`
+	RequestRef         string                       `json:"request_ref,omitempty"`
+	ProjectRef         string                       `json:"project_ref"`
+	WorktreeRef        string                       `json:"worktree_ref,omitempty"`
+	WorktreeIsolated   bool                         `json:"worktree_isolated,omitempty"`
+	BranchRef          string                       `json:"branch_ref,omitempty"`
+	ObservedBy         string                       `json:"observed_by,omitempty"`
+	SourceRunRef       string                       `json:"source_run_ref,omitempty"`
+	SourceTaskRef      string                       `json:"source_task_ref,omitempty"`
+	FailureKind        string                       `json:"failure_kind,omitempty"`
+	FailureSummary     string                       `json:"failure_summary"`
+	SuggestedArea      string                       `json:"suggested_area,omitempty"`
+	SuggestedWriteSet  []string                     `json:"suggested_write_set,omitempty"`
+	RequiredTests      []string                     `json:"required_tests,omitempty"`
+	AcceptanceCriteria []string                     `json:"acceptance_criteria,omitempty"`
+	CompactRules       []string                     `json:"compact_rules,omitempty"`
+	ContextRefs        []string                     `json:"context_refs,omitempty"`
+	EvidenceRefs       []string                     `json:"evidence_refs,omitempty"`
+	BacklogScan        AutoprogrammingBacklogScanV0 `json:"backlog_scan,omitempty"`
+	PriorityScore      int                          `json:"priority_score,omitempty"`
 }
 
 type AutoprogrammingSelfImprovementResultV0 struct {
@@ -87,6 +88,7 @@ func normalizeAutoprogrammingSelfImprovementProposalV0(
 	proposal.CompactRules = compactStringsV0(proposal.CompactRules)
 	proposal.ContextRefs = compactStringsV0(proposal.ContextRefs)
 	proposal.EvidenceRefs = compactStringsV0(proposal.EvidenceRefs)
+	proposal.BacklogScan = normalizeAutoprogrammingBacklogScanV0(proposal.BacklogScan)
 	if proposal.RequestRef == "" {
 		proposal.RequestRef = "request-ref-self-improvement-" + autoprogrammingSelfImprovementHashV0(
 			proposal.ProjectRef+"|"+proposal.SourceRunRef+"|"+proposal.SourceTaskRef+"|"+proposal.FailureSummary,
@@ -167,6 +169,7 @@ func autoprogrammingSelfImprovementRequestV0(
 		}},
 		WriteSet:           append([]string(nil), proposal.SuggestedWriteSet...),
 		RequiredTests:      append([]string(nil), proposal.RequiredTests...),
+		BacklogScan:        proposal.BacklogScan,
 		MaxTaskRefs:        1,
 		MaxAreas:           1,
 		MaxWriteSetEntries: positiveAutoprogrammingSelfImprovementLimitV0(len(proposal.SuggestedWriteSet)),
@@ -209,6 +212,25 @@ func autoprogrammingSelfImprovementContextRefsV0(
 		refs = append(refs, "source_task_ref:"+proposal.SourceTaskRef)
 	}
 	return compactStringsV0(refs)
+}
+
+func normalizeAutoprogrammingBacklogScanV0(
+	scan AutoprogrammingBacklogScanV0,
+) AutoprogrammingBacklogScanV0 {
+	scan.Epoch = strings.TrimSpace(scan.Epoch)
+	scan.ReservationRefs = compactStringsV0(scan.ReservationRefs)
+	docs := make([]AutoprogrammingBacklogDocumentV0, 0, len(scan.Documents))
+	for _, doc := range scan.Documents {
+		doc.Path = strings.TrimSpace(doc.Path)
+		doc.SHA256 = strings.TrimSpace(doc.SHA256)
+		doc.SectionRef = strings.TrimSpace(doc.SectionRef)
+		if doc.Path == "" && doc.SHA256 == "" {
+			continue
+		}
+		docs = append(docs, doc)
+	}
+	scan.Documents = docs
+	return scan
 }
 
 func autoprogrammingSelfImprovementRulesV0(

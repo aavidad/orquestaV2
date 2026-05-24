@@ -24,7 +24,7 @@ func TestIdleSelfImprovementBacklogPlannerV0SaltaTareasYaEnColaYAnadeScannerV0(t
 			QueueSize:    2,
 			FreeCapacity: 3,
 			KnownRequestRefs: []string{
-				"request-ref-autoprogramming-backlog-t08-runtime-neutral-e2e-51b03c45",
+				backlogRequestRefForTestV0(content, 0),
 			},
 			BaseRequest: orquestaserver.IdleSelfImprovementRequestV0{
 				RequestRef:    "request-ref-base",
@@ -45,8 +45,14 @@ func TestIdleSelfImprovementBacklogPlannerV0SaltaTareasYaEnColaYAnadeScannerV0(t
 	if scanner.SuggestedArea != "backlog-scan" ||
 		scanner.FailureKind != "backlog_scan" ||
 		!containsStringForTestV0(scanner.WriteSet, idleSelfImprovementBacklogDocRelV0) ||
-		!containsStringForTestV0(scanner.ContextRefs, "trigger:capacity_free") {
+		!containsStringForTestV0(scanner.ContextRefs, "trigger:capacity_free") ||
+		scanner.BacklogScanEpoch == "" ||
+		len(scanner.BacklogScanDocs) != 3 ||
+		len(scanner.ReservationRefs) == 0 {
 		t.Fatalf("scanner=%+v", scanner)
+	}
+	if !containsStringForTestV0(scanner.ContextRefs, "backlog_scan_epoch:"+scanner.BacklogScanEpoch) {
+		t.Fatalf("context_refs=%+v", scanner.ContextRefs)
 	}
 }
 
@@ -66,7 +72,7 @@ func TestIdleSelfImprovementBacklogPlannerV0NoInventaFallbackSiTodoEstaEnColaV0(
 			QueueSize:    2,
 			FreeCapacity: 2,
 			KnownRequestRefs: []string{
-				"request-ref-autoprogramming-backlog-t08-runtime-neutral-e2e-51b03c45",
+				backlogRequestRefForTestV0(content, 0),
 				"request-ref-autoprogramming-backlog-scanner-d64fa5bb",
 			},
 			BaseRequest: orquestaserver.IdleSelfImprovementRequestV0{
@@ -92,7 +98,7 @@ func TestIdleSelfImprovementBacklogPlannerV0SaltaACKCompletadosDelRuntimeV0(t *t
 	if err := os.WriteFile(filepath.Join(projectDir, idleSelfImprovementBacklogDocRelV0), []byte(content), 0o600); err != nil {
 		t.Fatalf("write backlog: %v", err)
 	}
-	runRef := "request-ref-autoprogramming-backlog-t08-runtime-neutral-e2e-51b03c45-retry-deadbeef"
+	runRef := backlogRequestRefForTestV0(content, 0) + "-retry-deadbeef"
 	ackDir := filepath.Join(projectDir, ".orquesta-runtime", runRef, "agent-ref-t08")
 	if err := os.MkdirAll(ackDir, 0o700); err != nil {
 		t.Fatalf("mkdir ack: %v", err)

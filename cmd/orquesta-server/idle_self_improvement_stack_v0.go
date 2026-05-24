@@ -75,7 +75,28 @@ func idleSelfImprovementProposalFromServerV0(
 		CompactRules:       append([]string(nil), request.CompactRules...),
 		ContextRefs:        append([]string(nil), request.ContextRefs...),
 		EvidenceRefs:       append([]string(nil), request.EvidenceRefs...),
+		BacklogScan:        idleSelfImprovementBacklogScanToAutoprogrammingV0(request),
 		PriorityScore:      request.PriorityScore,
+	}
+}
+
+func idleSelfImprovementBacklogScanToAutoprogrammingV0(
+	request orquestaserver.IdleSelfImprovementRequestV0,
+) orquestaautoprogramming.AutoprogrammingBacklogScanV0 {
+	docs := make([]orquestaautoprogramming.AutoprogrammingBacklogDocumentV0, 0, len(request.BacklogScanDocs))
+	for _, doc := range request.BacklogScanDocs {
+		docs = append(docs, orquestaautoprogramming.AutoprogrammingBacklogDocumentV0{
+			Path:       doc.Path,
+			StartLine:  doc.StartLine,
+			SHA256:     doc.SHA256,
+			Missing:    doc.Missing,
+			SectionRef: doc.SectionRef,
+		})
+	}
+	return orquestaautoprogramming.AutoprogrammingBacklogScanV0{
+		Epoch:           request.BacklogScanEpoch,
+		Documents:       docs,
+		ReservationRefs: append([]string(nil), request.ReservationRefs...),
 	}
 }
 

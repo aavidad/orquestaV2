@@ -54,7 +54,12 @@ func PrepareAutoprogrammingRunV0(
 	}
 	work := orquestaautoprogramming.BuildAutoprogrammingProgrammableWorkV0(request.Request)
 	if work.Accepted {
-		work.Work.Tasks = autoprogrammingBridgeOperationalTasksV0(work.Work.Tasks)
+		tasks, issue := autoprogrammingBridgeOperationalTasksV0(work.Work.Tasks)
+		if issue.Code != "" {
+			work.Accepted = false
+			work.Issues = append(work.Issues, issue)
+		}
+		work.Work.Tasks = tasks
 	}
 	result := AutoprogrammingBridgeResultV0{
 		SchemaVersion: AutoprogrammingBridgeResultSchemaVersionV0,
@@ -192,13 +197,18 @@ func normalizeAutoprogrammingBridgeRequestV0(
 
 func autoprogrammingBridgeOperationalTasksV0(
 	tasks []orquestacoreworkflow.WorkflowTaskV0,
-) []orquestacoreworkflow.WorkflowTaskV0 {
+) ([]orquestacoreworkflow.WorkflowTaskV0, orquestaautoprogramming.AutoprogrammingRequestIssueV0) {
 	out := make([]orquestacoreworkflow.WorkflowTaskV0, 0, len(tasks))
 	for _, task := range tasks {
 		task.ContextRefs = compactStringsV0(append(task.ContextRefs, autoprogrammingBridgeOperationalTaskSourceRefV0))
+		repaired, issue := orquestaautoprogramming.EnsureAutoprogrammingWorkflowTaskAcceptedByCoreV0(task)
+		if issue.Code != "" {
+			return out, issue
+		}
+		task = repaired
 		out = append(out, task)
 	}
-	return out
+	return out, orquestaautoprogramming.AutoprogrammingRequestIssueV0{}
 }
 
 func validateAutoprogrammingBridgePortsV0(

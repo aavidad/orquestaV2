@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
 func (planner idleSelfImprovementBacklogPlannerV0) syncBacklogSectionStateV0(
@@ -118,12 +120,16 @@ func idleSelfImprovementLocalDocSectionBlockV0(
 	return strings.Join(lines[start:end], "\n")
 }
 
-func (planner idleSelfImprovementBacklogPlannerV0) completedBacklogRequestRefsV0() (map[string]bool, []string) {
+func (planner idleSelfImprovementBacklogPlannerV0) completedBacklogRequestRefsV0() (
+	map[string]bool,
+	[]string,
+	[]orquestaserver.BacklogScanCollisionV0,
+) {
 	projectDir := strings.TrimSpace(planner.ProjectWorkDir)
 	if projectDir == "" {
-		return map[string]bool{}, nil
+		return map[string]bool{}, nil, nil
 	}
-	return idleSelfImprovementCompletedBacklogRequestRefsFromRuntimeV0(projectDir)
+	return planner.completedBacklogRequestRefsFromRuntimeV0(projectDir)
 }
 
 func backlogRunRefFromRuntimeACKPathV0(runtimeDir string, ackPath string) string {

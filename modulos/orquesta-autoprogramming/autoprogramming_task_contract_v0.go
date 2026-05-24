@@ -12,6 +12,7 @@ const (
 	autoprogrammingWorkflowSummaryLimitV0   = 160
 	autoprogrammingWorkflowObjectiveLimitV0 = 600
 	autoprogrammingWorkflowCriteriaLimitV0  = 100
+	autoprogrammingWorkflowCriteriaMaxV0    = 14
 )
 
 func autoprogrammingTitleForGroupV0(
@@ -177,5 +178,20 @@ func autoprogrammingAcceptanceCriteriaForGroupV0(
 			out = append(out, "Regla compacta "+task.TaskRef+": "+rule)
 		}
 	}
-	return compactAutoprogrammingWorkflowTextsV0(compactStringsV0(out), autoprogrammingWorkflowCriteriaLimitV0)
+	return compactAutoprogrammingWorkflowTextsLimitedV0(
+		compactStringsV0(out),
+		autoprogrammingWorkflowCriteriaLimitV0,
+		autoprogrammingWorkflowCriteriaMaxV0,
+	)
+}
+
+func compactAutoprogrammingWorkflowTextsLimitedV0(values []string, limit int, maxItems int) []string {
+	out := compactAutoprogrammingWorkflowTextsV0(values, limit)
+	if maxItems <= 0 || len(out) <= maxItems {
+		return out
+	}
+	hash := autoprogrammingWorkflowListHashV0(out[maxItems:])
+	out = append([]string(nil), out[:maxItems]...)
+	out = append(out, "criterios_extra_ref:"+hash)
+	return out
 }

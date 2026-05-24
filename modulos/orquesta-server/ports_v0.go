@@ -41,6 +41,7 @@ type IdleSelfImprovementPlanRequestV0 struct {
 type IdleSelfImprovementPlanResultV0 struct {
 	Requests     []IdleSelfImprovementRequestV0
 	EvidenceRefs []string
+	Collisions   []BacklogScanCollisionV0
 	Message      string
 }
 
@@ -61,8 +62,27 @@ type IdleSelfImprovementRequestV0 struct {
 	CompactRules       []string
 	ContextRefs        []string
 	EvidenceRefs       []string
+	BacklogScanEpoch   string
+	BacklogScanDocs    []BacklogScanDocumentV0
+	ReservationRefs    []string
 	OccurredAt         string
 	PriorityScore      int
+}
+
+type BacklogScanDocumentV0 struct {
+	Path       string `json:"path"`
+	StartLine  int    `json:"start_line,omitempty"`
+	SHA256     string `json:"sha256"`
+	Missing    bool   `json:"missing,omitempty"`
+	SectionRef string `json:"section_ref,omitempty"`
+}
+
+type BacklogScanCollisionV0 struct {
+	Code         string   `json:"code"`
+	RequestRef   string   `json:"request_ref,omitempty"`
+	SectionRef   string   `json:"section_ref,omitempty"`
+	Message      string   `json:"message,omitempty"`
+	EvidenceRefs []string `json:"evidence_refs,omitempty"`
 }
 
 type IdleSelfImprovementResultV0 struct {

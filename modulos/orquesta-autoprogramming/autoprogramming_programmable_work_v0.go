@@ -151,6 +151,10 @@ func autoprogrammingWorkflowTaskForGroupV0(
 			autoprogrammingWorkflowTaskIssueV0(err)
 	}
 	task.ContextRefs = autoprogrammingContextRefsForGroupV0(request, group)
+	task, issue := EnsureAutoprogrammingWorkflowTaskAcceptedByCoreV0(task)
+	if issue.Code != "" {
+		return orquestacoreworkflow.WorkProfileV0{}, orquestacoreworkflow.WorkflowTaskV0{}, issue
+	}
 	task, err = orquestacoreworkflow.NewWorkflowTaskV0(task)
 	if err != nil {
 		return orquestacoreworkflow.WorkProfileV0{}, orquestacoreworkflow.WorkflowTaskV0{},
@@ -191,10 +195,21 @@ func autoprogrammingProgrammableTaskRefV0(requestRef string, groupIndex int) str
 func autoprogrammingProgrammableContextRefsV0(
 	request AutoprogrammingRequestV0,
 ) []string {
-	return []string{
+	refs := []string{
 		"request_ref:" + strings.TrimSpace(request.RequestRef),
 		"project_ref:" + strings.TrimSpace(request.ProjectRef),
 		"worktree_ref:" + strings.TrimSpace(request.WorktreeRef),
 		"branch_ref:" + strings.TrimSpace(request.BranchRef),
 	}
+	if request.BacklogScan.Epoch != "" {
+		refs = append(refs, "backlog_scan_epoch:"+request.BacklogScan.Epoch)
+	}
+	for _, ref := range request.BacklogScan.ReservationRefs {
+		refs = append(refs, "backlog_scan_reservation_ref:"+ref)
+	}
+	for _, doc := range request.BacklogScan.Documents {
+		refs = append(refs, "backlog_scan_doc:"+doc.Path+
+			":line:"+fmt.Sprint(doc.StartLine)+":sha256:"+doc.SHA256)
+	}
+	return refs
 }

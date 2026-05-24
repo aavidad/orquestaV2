@@ -15,6 +15,14 @@ func containsStringForTestV0(values []string, target string) bool {
 	return false
 }
 
+func backlogRequestRefForTestV0(content string, index int) string {
+	sections := parseIdleSelfImprovementBacklogSectionsV0(content)
+	if index < 0 || index >= len(sections) {
+		return ""
+	}
+	return idleSelfImprovementRequestRefForBacklogSectionV0(sections[index])
+}
+
 type fakeIdleSelfRunQueueV0 struct {
 	candidates []orquestarunqueue.RunSchedulingCandidateV0
 }

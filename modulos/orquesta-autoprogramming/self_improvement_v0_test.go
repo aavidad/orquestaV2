@@ -63,6 +63,30 @@ func TestBuildAutoprogrammingSelfImprovementRequestV0RespetaPrioridadExplicita(t
 	}
 }
 
+func TestBuildAutoprogrammingSelfImprovementRequestV0TransportaBacklogScanV0(t *testing.T) {
+	proposal := validSelfImprovementProposalForTestV0()
+	proposal.BacklogScan = AutoprogrammingBacklogScanV0{
+		Epoch:           "backlog-scan-epoch-001",
+		ReservationRefs: []string{"reservation-ref-backlog-scan-doc-merge-001"},
+		Documents: []AutoprogrammingBacklogDocumentV0{{
+			Path:      "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+			StartLine: 10,
+			SHA256:    "abc123",
+		}},
+	}
+
+	result := BuildAutoprogrammingSelfImprovementRequestV0(proposal)
+
+	if !result.Accepted || result.Request.BacklogScan.Epoch != proposal.BacklogScan.Epoch {
+		t.Fatalf("result=%+v", result)
+	}
+	work := BuildAutoprogrammingProgrammableWorkV0(result.Request)
+	if !work.Accepted ||
+		!stringsSliceContainsForAutoprogrammingTestV0(work.Work.Tasks[0].ContextRefs, "backlog_scan_epoch:backlog-scan-epoch-001") {
+		t.Fatalf("work=%+v", work)
+	}
+}
+
 func validSelfImprovementProposalForTestV0() AutoprogrammingSelfImprovementProposalV0 {
 	return AutoprogrammingSelfImprovementProposalV0{
 		ProjectRef:         "project-ref-orquesta",

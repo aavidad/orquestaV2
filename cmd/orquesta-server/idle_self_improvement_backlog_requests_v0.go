@@ -125,7 +125,9 @@ func idleSelfImprovementBaseRequestForBacklogSectionV0(
 func idleSelfImprovementRequestRefForBacklogSectionV0(
 	section idleSelfImprovementBacklogSectionV0,
 ) string {
-	refSuffix := section.Ref + "-" + idleSelfImprovementBacklogHashV0(section.Heading+"|"+section.Objective)
+	refSuffix := section.Ref + "-" + idleSelfImprovementBacklogHashV0(
+		idleSelfImprovementBacklogSectionFingerprintV0(section),
+	)
 	return "request-ref-autoprogramming-backlog-" + refSuffix
 }
 
