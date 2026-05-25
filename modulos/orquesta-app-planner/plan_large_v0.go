@@ -79,13 +79,15 @@ func appLargeI18NUnitV0(request AppPlanRequestV0) AppWorkUnitV0 {
 }
 
 func appLargeDeployUnitV0(request AppPlanRequestV0) AppWorkUnitV0 {
-	return appUnitV0(request, "deploy", "entorno", orquestacoreworkflow.OrchestrationCapacityMediumV0,
+	unit := appUnitV0(request, "deploy", "entorno", orquestacoreworkflow.OrchestrationCapacityMediumV0,
 		"Preparar entorno de ejecucion",
-		"Crear contrato de despliegue y scripts seguros sin imponer plataforma concreta.",
-		[]string{"deploy", "docs/deploy.md"},
-		[]string{"Entorno documentado.", "Deploy queda como conector configurable."},
+		"Crear DeploymentPlan v0 y ejecutarlo por puerto dry-run sin efectos externos.",
+		[]string{"contracts/deployment_plan_v0.json", "docs/deploy.md", "tests/deployment_plan_dry_run_test.go"},
+		[]string{"DeploymentPlan v0 validado.", "Dry-run devuelve refs de plan/evidencia.", "No se ejecuta Docker, Kubernetes, cloud ni secretos."},
 		[]string{deliveryRefV0(request, "architecture")},
 	)
+	unit.EvidenceRefs = append(unit.EvidenceRefs, deploymentPlanEvidenceRefV0(request))
+	return unit
 }
 
 func appLargeIntegrationUnitV0(request AppPlanRequestV0) AppWorkUnitV0 {

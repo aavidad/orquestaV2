@@ -17,6 +17,41 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-05-25
+Decision: Los fallos Codex recuperables por `no_ack` o autenticacion invalida
+no se degradan a `garbage`.
+Motivo: el runtime ya emite evidencias compactas (`evidence-ref-no-ack`,
+`evidence-ref-auth-config-blocker`), pero si el scheduler las elimina antes de
+consultar al Director, un proceso parado parece una entrega basura generica y
+puede entrar en bucle de parada/reemplazo.
+Impacto: la supervision de progreso preserva evidencias compactas hasta el
+Director. El Director clasifica `no_ack` como `needs_revision/ask_director` y
+auth invalida como `needs_revision/ask_director/critical`; registra el proceso
+externo como `AgentLost` para no dejar waits colgados, pero no emite
+`StopRuntimeAgent` ni replan automatico. `AgentStopped` sin evidencia
+recuperable mantiene el comportamiento legacy.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-25
+Decision: La cola ready de autoprogramacion no puede reutilizar runs activos
+contaminados por assessments terminales de ejecuciones anteriores.
+Motivo: tras reinicios o cambios de version, la purga de arranque puede dejar
+un candidato ready apuntando a un run viejo con `garbage/stop_agent`,
+`capacity_limited/stop_agent` o agentes pendientes fantasma sin runtime vivo.
+El supervisor entonces drena en quiescent y no lanza trabajo nuevo.
+Impacto: `AutoprogrammingRunNeedsFreshAttemptV0` considera tambien
+`AgentAssessments` terminales como senal de fallo, y la variante con runtime
+detecta pendientes fantasma sin directorio vivo. La compactacion de arranque y
+el preparador de autoprogramacion usan ese mismo criterio: apartan de la cola
+activa esos candidatos ready y preparan un retry causal sin reutilizar el run
+contaminado. El run historico se conserva en `orchestration-state`; solo se
+mueve la entrada de cola a revision.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-22
 Decision: La app Codex corrige entregas incompletas por review/rework antes de
 fallar el smoke final.
@@ -558,15 +593,15 @@ Estado: aceptada.
 ```text
 Fecha: 2026-05-11
 Decision: Las estadisticas de agentes separan progreso de uso de recursos.
-Motivo: el director, la web y el humano necesitan ver modelo, capacidad, cuota
-y tokens por agente, pero mezclar esos datos con `AgentProgressReportV0`
+Motivo: el director, la web y el humano necesitan ver capacidad, cuota y tokens
+agregados por agente, pero mezclar esos datos con `AgentProgressReportV0`
 romperia el contrato de progreso compacto y podria filtrar detalles operativos.
 Impacto: el nucleo expone `AgentUsageStatsProviderPortV0` y
 `DirectorAgentStatsV0.Usage` y `UsageSummary`. MCP/web pueden pedir
-`include_agent_usage=true`. El stack Codex publica modelo/capacidad desde
-configuracion, acepta un `CodexStackAgentUsageMetricsProviderPortV0` inyectado
-y marca cuota como `not_configured` cuando no hay conector real. No se exponen
-HOME, OAuth, tokens de credencial ni rutas locales.
+`include_agent_usage=true`. El stack Codex publica capacidad desde el paquete
+de agente, acepta un `CodexStackAgentUsageMetricsProviderPortV0` inyectado y
+marca cuota como `not_configured` cuando no hay conector real. No se exponen
+modelo, coste, HOME, OAuth, tokens de credencial ni rutas locales.
 Estado: aceptada.
 ```
 

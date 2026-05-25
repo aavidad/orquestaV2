@@ -6,6 +6,11 @@ orquesta.db-journal
 .orquesta-runtime/
 .orquesta-runs/
 .orquesta-worktrees/
+.orquesta-local-*
+.agents/
+.codex/
+.orquesta-server/
+.orquesta-smoke-work/
 backups/
 certs/
 .ssl-key.log
@@ -29,6 +34,7 @@ server_new.log
 orquesta_bin
 orquesta_server
 cmd.test
+*.test
 orquesta.env
 .orquesta-inbox.md
 .orquesta-logs/
@@ -36,3 +42,6 @@ sigue.py
 sigue.txt
 sigue_300_veces.txt
 transcribe-app/
+berserk-salidas/
+__pycache__/
+*.pyc

@@ -7,14 +7,16 @@ import (
 )
 
 const (
-	DirectorAgentDecisionFileSchemaVersionV0   = "director_agent_decisions_file.v0"
-	DefaultDirectorAgentDecisionFileMaxBytesV0 = 64 * 1024
+	DirectorAgentDecisionFileSchemaVersionV0    = "director_agent_decisions_file.v0"
+	DirectorAgentDecisionSidecarReceiptSchemaV0 = "director_agent_decision_sidecar_receipt.v0"
+	DefaultDirectorAgentDecisionFileMaxBytesV0  = 64 * 1024
 )
 
 type DirectorAgentDecisionFileDescriptorV0 struct {
-	DescriptorRef string `json:"descriptor_ref,omitempty"`
-	RunID         string `json:"run_id,omitempty"`
-	Path          string `json:"path"`
+	DescriptorRef  string                                 `json:"descriptor_ref,omitempty"`
+	RunID          string                                 `json:"run_id,omitempty"`
+	Path           string                                 `json:"path"`
+	SidecarReceipt *DirectorAgentDecisionSidecarReceiptV0 `json:"sidecar_receipt,omitempty"`
 }
 
 type DirectorAgentDecisionFileListRequestV0 struct {
@@ -40,11 +42,19 @@ type DirectorAgentDecisionFileReaderPortV0 interface {
 	) ([]byte, error)
 }
 
+type DirectorAgentDecisionFileConsumptionRecorderPortV0 interface {
+	RecordDirectorAgentDecisionFileConsumptionV0(
+		ctx context.Context,
+		receipt DirectorAgentDecisionSidecarReceiptV0,
+	) error
+}
+
 type DirectorAgentDecisionFileSourceV0 struct {
-	DescriptorProvider DirectorAgentDecisionFileDescriptorProviderPortV0
-	Reader             DirectorAgentDecisionFileReaderPortV0
-	MaxBytes           int
-	IgnoreInvalidFiles bool
+	DescriptorProvider  DirectorAgentDecisionFileDescriptorProviderPortV0
+	Reader              DirectorAgentDecisionFileReaderPortV0
+	ConsumptionRecorder DirectorAgentDecisionFileConsumptionRecorderPortV0
+	MaxBytes            int
+	IgnoreInvalidFiles  bool
 }
 
 type DirectorAgentDecisionFileEnvelopeV0 struct {
@@ -54,6 +64,19 @@ type DirectorAgentDecisionFileEnvelopeV0 struct {
 
 type DirectorAgentFileSourceIssueV0 struct {
 	Field string
+}
+
+type DirectorAgentDecisionSidecarReceiptV0 struct {
+	SchemaVersion         string `json:"schema_version"`
+	ReceiptRef            string `json:"receipt_ref"`
+	ProducerDescriptorRef string `json:"producer_descriptor_ref,omitempty"`
+	ProducerAckRef        string `json:"producer_ack_ref,omitempty"`
+	RunID                 string `json:"run_id,omitempty"`
+	AgentRef              string `json:"agent_ref,omitempty"`
+	CorrelationID         string `json:"correlation_id,omitempty"`
+	SHA256                string `json:"sha256"`
+	SizeBytes             int64  `json:"size_bytes,omitempty"`
+	Status                string `json:"status"`
 }
 
 func (issue DirectorAgentFileSourceIssueV0) Error() string {

@@ -41,7 +41,7 @@ func TestNewMCPProjectRoadmapResourceV0CompactoYUtilParaNucleo(t *testing.T) {
 		!containsProjectRoadmapTestStringV0(resource.Freshness.BacklogRefs, "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md#T25-mcp-roadmap-backlog-state-sync") {
 		t.Fatalf("freshness incompleta: %+v", resource.Freshness)
 	}
-	if len(resource.Roadmap) != 5 {
+	if len(resource.Roadmap) != 6 {
 		t.Fatalf("roadmap=%d", len(resource.Roadmap))
 	}
 	if len(resource.Decisions) != 5 {
@@ -82,6 +82,11 @@ func TestNewMCPProjectRoadmapResourceV0CompactoYUtilParaNucleo(t *testing.T) {
 	if byID["CORE-ROADMAP-005"].Status != "abierto_opes_derivados_cierre" ||
 		!containsProjectRoadmapTestStringV0(byID["CORE-ROADMAP-005"].BacklogRefs, "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md#T18-opes-operational-closure-source") {
 		t.Fatalf("domain work consumidores: %+v", byID["CORE-ROADMAP-005"])
+	}
+	if byID["CORE-ROADMAP-006"].Status != "vigente_dry_run_por_puerto" ||
+		!containsProjectRoadmapTestStringV0(byID["CORE-ROADMAP-006"].Contracts, "DeploymentPlan v0") ||
+		!containsProjectRoadmapTestStringV0(byID["CORE-ROADMAP-006"].BacklogRefs, mcpBacklogT74RefV0) {
+		t.Fatalf("deployment plan: %+v", byID["CORE-ROADMAP-006"])
 	}
 
 	decisionsByID := map[string]MCPProjectDecisionCompactV0{}
@@ -134,6 +139,8 @@ func TestMCPProjectRoadmapLookupV0NormalizaEntradas(t *testing.T) {
 		" RuntimeLaunchRequest v0 ": "CORE-ROADMAP-004",
 		"runtime_launch_request":    "CORE-ROADMAP-004",
 		"domain_work_consumidores":  "CORE-ROADMAP-005",
+		"deployment_plan":           "CORE-ROADMAP-006",
+		"DeploymentPlan v0":         "CORE-ROADMAP-006",
 		"CORE_ROADMAP_002":          "CORE-ROADMAP-002",
 	}
 

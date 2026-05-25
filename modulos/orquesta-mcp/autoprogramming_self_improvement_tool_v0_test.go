@@ -202,6 +202,36 @@ func TestMCPAutoprogrammingSelfImprovementTransportV0RegistradoEInvocable(t *tes
 	assertTransportPayloadSaneadoMCPTestV0(t, output, 3200)
 }
 
+func TestMCPAutoprogrammingSelfImprovementTransportV0AceptaOperatorAdviceTexto(t *testing.T) {
+	transport := newFakeMCPTransportV0()
+	if err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{}); err != nil {
+		t.Fatalf("register transport: %v", err)
+	}
+
+	output, err := transport.CallToolV0(
+		context.Background(),
+		MCPAutoprogrammingSelfImprovementToolNameV0,
+		map[string]any{
+			"request_id":      "request-ref-self-improvement-advice-text-001",
+			"operator_advice": "Cola vacia: preparar automejora segura sin bloquear trabajo principal.",
+			"proposal":        validMCPSelfImprovementProposalV0(),
+		},
+	)
+	if err != nil {
+		t.Fatalf("call tool: %v", err)
+	}
+	var result MCPAutoprogrammingSelfImprovementToolResultV0
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != MCPAutoprogrammingSelfImprovementEstadoOKV0 ||
+		len(result.OperatorAdvice) != 1 ||
+		result.OperatorAdvice[0].Message == "" ||
+		!stringsSliceContainsMCPHumanWorkV0(result.NextActions, "operator_advice_recorded_non_blocking") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPAutoprogrammingSelfImprovementHTTPHandlerV0(t *testing.T) {
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(MCPAutoprogrammingSelfImprovementToolInputV0{

@@ -51,7 +51,8 @@ func TestRunDirectorSupervisedBurstV0CortaEnMaxSteps(t *testing.T) {
 	if result.FinalAction != orquestadirectorsupervisor.DirectorSupervisorActionStopMaxStepsV0 {
 		t.Fatalf("final action=%s", result.FinalAction)
 	}
-	if result.Steps[1].ShouldRepeat {
+	if result.Steps[1].ShouldRepeat ||
+		result.StopProjection.PublicReason != "budget_max_steps" {
 		t.Fatalf("max steps should not repeat: %+v", result.Steps[1])
 	}
 }

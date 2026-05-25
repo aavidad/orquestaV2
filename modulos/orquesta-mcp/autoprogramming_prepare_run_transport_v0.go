@@ -18,7 +18,16 @@ func mcpAutoprogrammingPrepareRunTransportHandlerV0(
 		}
 		result, err := port.Execute(ctx, input)
 		if err != nil {
-			return nil, err
+			if result.Estado == MCPAutoprogrammingPrepareRunEstadoErrorV0 && len(result.Errores) > 0 {
+				return json.Marshal(result)
+			}
+			payload := NewMCPAutoprogrammingPrepareRunErrorResultV0(
+				input,
+				"autoprogramming_prepare_run_executor_error",
+				"executor",
+				publicMCPExecutorErrorMessageFromErrorV0("autoprogramming_prepare_run_executor_error", err),
+			)
+			return json.Marshal(payload)
 		}
 		return json.Marshal(result)
 	}

@@ -12,9 +12,10 @@ func normalizeDirectorAgentDecisionFileDescriptorsV0(
 	out := make([]DirectorAgentDecisionFileDescriptorV0, 0, len(descriptors))
 	for _, descriptor := range descriptors {
 		normalized := DirectorAgentDecisionFileDescriptorV0{
-			DescriptorRef: strings.TrimSpace(descriptor.DescriptorRef),
-			RunID:         strings.TrimSpace(descriptor.RunID),
-			Path:          strings.TrimSpace(descriptor.Path),
+			DescriptorRef:  strings.TrimSpace(descriptor.DescriptorRef),
+			RunID:          strings.TrimSpace(descriptor.RunID),
+			Path:           strings.TrimSpace(descriptor.Path),
+			SidecarReceipt: normalizeDirectorAgentDecisionSidecarReceiptV0(descriptor.SidecarReceipt),
 		}
 		if normalized.DescriptorRef == "" && normalized.Path == "" {
 			continue
@@ -22,6 +23,24 @@ func normalizeDirectorAgentDecisionFileDescriptorsV0(
 		out = append(out, normalized)
 	}
 	return out
+}
+
+func normalizeDirectorAgentDecisionSidecarReceiptV0(
+	receipt *DirectorAgentDecisionSidecarReceiptV0,
+) *DirectorAgentDecisionSidecarReceiptV0 {
+	if receipt == nil {
+		return nil
+	}
+	normalized := *receipt
+	normalized.SchemaVersion = strings.TrimSpace(normalized.SchemaVersion)
+	normalized.ReceiptRef = strings.TrimSpace(normalized.ReceiptRef)
+	normalized.ProducerDescriptorRef = strings.TrimSpace(normalized.ProducerDescriptorRef)
+	normalized.ProducerAckRef = strings.TrimSpace(normalized.ProducerAckRef)
+	normalized.RunID = strings.TrimSpace(normalized.RunID)
+	normalized.CorrelationID = strings.TrimSpace(normalized.CorrelationID)
+	normalized.SHA256 = strings.TrimSpace(normalized.SHA256)
+	normalized.Status = strings.TrimSpace(normalized.Status)
+	return &normalized
 }
 
 func validateDirectorAgentDecisionFileDecisionsV0(

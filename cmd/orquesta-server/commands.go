@@ -134,10 +134,7 @@ func getStatusBodyV0(addr string) ([]byte, error) {
 		return nil, err
 	}
 	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("status_http_%d", response.StatusCode)
-	}
-	return io.ReadAll(response.Body)
+	return readCommandHTTPResponseBodyV0(response, "status")
 }
 
 func waitUntilDownV0(addr string, timeout time.Duration) {

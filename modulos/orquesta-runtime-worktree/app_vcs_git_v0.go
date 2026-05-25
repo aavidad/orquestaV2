@@ -56,6 +56,7 @@ func (connector GitAppVCSConnectorV0) prepareRepoV0(
 		return newAppVCSResultV0(request, AppVCSStatusFailedV0, nil), issues
 	}
 	result := newAppVCSResultV0(request, AppVCSStatusCompletedV0, paths)
+	result.Issues = appVCSControlIssuesFromPathsV0(connector.controlPathsV0(ctx, request.ProjectWorkDir))
 	result.CommitRef = strings.TrimSpace(head)
 	result.CommitShortRef = shortCommitRefV0(result.CommitRef)
 	return result, nil
@@ -78,6 +79,7 @@ func (connector GitAppVCSConnectorV0) reviewRepoV0(
 		status = AppVCSStatusCleanV0
 	}
 	result := newAppVCSResultV0(request, status, paths)
+	result.Issues = appVCSControlIssuesFromPathsV0(connector.controlPathsV0(ctx, request.ProjectWorkDir))
 	result.CommitRef = strings.TrimSpace(head)
 	result.CommitShortRef = shortCommitRefV0(result.CommitRef)
 	return result, nil
@@ -94,10 +96,16 @@ func (connector GitAppVCSConnectorV0) commitRepoV0(
 	if len(paths) == 0 {
 		return connector.cleanResultV0(ctx, request)
 	}
-	addArgs := append([]string{"add", "-A", "--"}, request.CommitPaths...)
+	commitPaths, controlPaths := splitWorktreeProductAndControlPathsV0(request.CommitPaths)
 	if len(request.CommitPaths) == 0 {
-		addArgs = []string{"add", "-A"}
+		commitPaths = paths
 	}
+	if len(commitPaths) == 0 {
+		result := newAppVCSResultV0(request, AppVCSStatusCleanV0, nil)
+		result.Issues = appVCSControlIssuesFromPathsV0(controlPaths)
+		return result, nil
+	}
+	addArgs := append([]string{"add", "-A", "--"}, commitPaths...)
 	if _, issue := connector.gitOutputV0(ctx, request.ProjectWorkDir, addArgs...); issue != nil {
 		return newAppVCSResultV0(request, AppVCSStatusFailedV0, paths), []AppVCSIssueV0{*issue}
 	}
@@ -109,6 +117,7 @@ func (connector GitAppVCSConnectorV0) commitRepoV0(
 		return result, prepareIssues
 	}
 	result.ChangedPaths = paths
+	result.Issues = append(result.Issues, appVCSControlIssuesFromPathsV0(controlPaths)...)
 	if request.AllowPush {
 		return connector.pushFromResultV0(ctx, request, result)
 	}
@@ -166,7 +175,17 @@ func (connector GitAppVCSConnectorV0) changedPathsV0(
 	if issue != nil {
 		return nil, []AppVCSIssueV0{*issue}
 	}
-	return parseAppVCSStatusPathsV0(raw), nil
+	paths, _ := splitWorktreeProductAndControlPathsV0(parseAppVCSStatusPathsV0(raw))
+	return paths, nil
+}
+
+func (connector GitAppVCSConnectorV0) controlPathsV0(ctx context.Context, repo string) []string {
+	raw, issue := connector.gitOutputRawV0(ctx, repo, "status", "--porcelain", "--untracked-files=all")
+	if issue != nil {
+		return nil
+	}
+	_, control := splitWorktreeProductAndControlPathsV0(parseAppVCSStatusPathsV0(raw))
+	return control
 }
 
 func (connector GitAppVCSConnectorV0) gitOutputV0(

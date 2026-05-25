@@ -74,9 +74,8 @@ func TestCodexLaunchDirectorWaveCommandV0DryRunConstruyePlanYPromptsPorAgente(t 
 		t.Fatalf("agents=%d", len(summary.Launch.Agents))
 	}
 	firstWrapper := mustReadFileStringV0(t, summary.Launch.Agents[0].WrapperPath)
-	if strings.Contains(firstWrapper, `model_reasoning_effort="medium"`) ||
-		!strings.Contains(firstWrapper, `model_reasoning_effort="high"`) {
-		t.Fatalf("wrapper agente 1 no eleva reasoning a high:\n%s", firstWrapper)
+	if !strings.Contains(firstWrapper, `model_reasoning_effort="medium"`) {
+		t.Fatalf("wrapper agente 1 no conserva reasoning medium:\n%s", firstWrapper)
 	}
 
 	firstPrompt := mustReadFileStringV0(t, summary.Launch.Agents[0].PromptPath)
@@ -241,7 +240,7 @@ func TestCodexLaunchDirectorWaveCommandV0RechazaBranchRefComoRuta(t *testing.T) 
 func TestCodexLaunchDirectorWaveCommandV0RecursiveDryRunMaterializaHijosYContextoDominio(t *testing.T) {
 	root := t.TempDir()
 	projectDir := filepath.Join(root, "project")
-	runtimeDir := filepath.Join(root, "runtime", "domain-a1-wave")
+	runtimeDir := filepath.Join(projectDir, ".orquesta-runtime", "codex-waves", "domain-a1-wave")
 	sourceCodeHome := filepath.Join(root, "source-codex-home")
 	fakeCodex := filepath.Join(root, "codex-fake")
 	stalePath := filepath.Join(runtimeDir, "stale.txt")
@@ -281,6 +280,7 @@ func TestCodexLaunchDirectorWaveCommandV0RecursiveDryRunMaterializaHijosYContext
 	exitCode := codexLaunchDirectorWaveCommandV0([]string{
 		"--dry-run",
 		"--purge-runtime",
+		"--confirm-purge-runtime", "domain-a1-wave",
 		"--agents", "2",
 		"--allow-recursive-delegation",
 		"--max-delegation-depth", "1",
@@ -468,8 +468,8 @@ func TestCodexLaunchDirectorWaveCommandV0RecursiveDryRunMaterializaNietosConLimi
 	}
 	grandchildWrapper := mustReadFileStringV0(t, grandchild.Launch.Agents[0].WrapperPath)
 	if strings.Contains(grandchildWrapper, `model_reasoning_effort="xhigh"`) ||
-		!strings.Contains(grandchildWrapper, `model_reasoning_effort="high"`) {
-		t.Fatalf("wrapper nieto no debe usar xhigh por defecto:\n%s", grandchildWrapper)
+		!strings.Contains(grandchildWrapper, `model_reasoning_effort="medium"`) {
+		t.Fatalf("wrapper nieto debe usar medium por defecto:\n%s", grandchildWrapper)
 	}
 
 	nodes := codexDirectorCollectAgentNodesForTestV0(summary)

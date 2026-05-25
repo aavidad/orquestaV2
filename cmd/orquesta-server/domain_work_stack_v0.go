@@ -45,10 +45,15 @@ func domainWorkExecutorFromEnvV0(
 		return orquestamcp.NewMCPDomainWorkToolExecutorV0(client, client), nil
 	}
 	if httpBaseURL != "" {
+		egressPolicy, err := domainWorkHTTPEgressPolicyFromEnvV0()
+		if err != nil {
+			return nil, err
+		}
 		client, err := orquestadomainworkhttp.NewClientV0(orquestadomainworkhttp.ConfigV0{
 			BaseURL:            httpBaseURL,
 			CreateJobPath:      strings.TrimSpace(os.Getenv("ORQUESTA_DOMAIN_WORK_HTTP_CREATE_PATH")),
 			SubmitArtifactPath: strings.TrimSpace(os.Getenv("ORQUESTA_DOMAIN_WORK_HTTP_SUBMIT_PATH")),
+			EgressPolicy:       egressPolicy,
 			Timeout:            time.Duration(intEnvOrDefaultV0("ORQUESTA_DOMAIN_WORK_HTTP_TIMEOUT_SECONDS", 30)) * time.Second,
 		})
 		if err != nil {
@@ -71,6 +76,33 @@ func domainWorkExecutorFromEnvV0(
 		return nil, err
 	}
 	return orquestamcp.NewMCPDomainWorkToolExecutorV0(creator, nil), nil
+}
+
+func domainWorkHTTPEgressPolicyFromEnvV0() (orquestadomainworkhttp.EgressPolicyV0, error) {
+	mode := strings.TrimSpace(os.Getenv("ORQUESTA_DOMAIN_WORK_HTTP_EGRESS_MODE"))
+	switch mode {
+	case orquestadomainworkhttp.EgressModeSmokeLocalV0:
+		return orquestadomainworkhttp.SmokeLocalEgressPolicyV0(), nil
+	case orquestadomainworkhttp.EgressModeAllowlistV0:
+		allowedHosts := splitCSVEnvV0(os.Getenv("ORQUESTA_DOMAIN_WORK_HTTP_ALLOWED_HOSTS"))
+		if len(allowedHosts) == 0 {
+			return orquestadomainworkhttp.EgressPolicyV0{}, fmt.Errorf(orquestadomainworkhttp.ErrDomainWorkHTTPEgressPolicyRequiredV0)
+		}
+		return orquestadomainworkhttp.AllowlistEgressPolicyV0(allowedHosts...), nil
+	default:
+		return orquestadomainworkhttp.EgressPolicyV0{}, fmt.Errorf(orquestadomainworkhttp.ErrDomainWorkHTTPEgressPolicyRequiredV0)
+	}
+}
+
+func splitCSVEnvV0(raw string) []string {
+	var values []string
+	for _, item := range strings.Split(raw, ",") {
+		value := strings.TrimSpace(item)
+		if value != "" {
+			values = append(values, value)
+		}
+	}
+	return values
 }
 
 func domainWorkDeliveryEnabledFromEnvV0() bool {

@@ -11,6 +11,7 @@ func normalizeAppPlanRequestV0(request AppPlanRequestV0) AppPlanRequestV0 {
 	request.OccurredAt = strings.TrimSpace(request.OccurredAt)
 	request.RequestedBy = strings.TrimSpace(request.RequestedBy)
 	request.Locale = strings.TrimSpace(request.Locale)
+	request.DeployTarget = strings.TrimSpace(request.DeployTarget)
 	if request.AppKind == "" {
 		request.AppKind = "go_api_web"
 	}

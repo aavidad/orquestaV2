@@ -33,9 +33,7 @@ type AgentUsageStatsObservationV0 struct {
 	RuntimeKind      string   `json:"runtime_kind,omitempty"`
 	ConnectorRef     string   `json:"connector_ref,omitempty"`
 	ProfileRef       string   `json:"profile_ref,omitempty"`
-	ModelAlias       string   `json:"model_alias,omitempty"`
 	CapacityLevel    string   `json:"capacity_level,omitempty"`
-	ReasoningEffort  string   `json:"reasoning_effort,omitempty"`
 	QuotaStatus      string   `json:"quota_status,omitempty"`
 	QuotaRemaining   int64    `json:"quota_remaining,omitempty"`
 	QuotaLimit       int64    `json:"quota_limit,omitempty"`
@@ -43,7 +41,6 @@ type AgentUsageStatsObservationV0 struct {
 	PromptTokens     int64    `json:"prompt_tokens,omitempty"`
 	CompletionTokens int64    `json:"completion_tokens,omitempty"`
 	TotalTokens      int64    `json:"total_tokens,omitempty"`
-	CostMicros       int64    `json:"cost_micros,omitempty"`
 	EvidenceRefs     []string `json:"evidence_refs,omitempty"`
 }
 
@@ -51,9 +48,7 @@ type DirectorAgentUsageStatsV0 struct {
 	RuntimeKind      string   `json:"runtime_kind,omitempty"`
 	ConnectorRef     string   `json:"connector_ref,omitempty"`
 	ProfileRef       string   `json:"profile_ref,omitempty"`
-	ModelAlias       string   `json:"model_alias,omitempty"`
 	CapacityLevel    string   `json:"capacity_level,omitempty"`
-	ReasoningEffort  string   `json:"reasoning_effort,omitempty"`
 	QuotaStatus      string   `json:"quota_status,omitempty"`
 	QuotaRemaining   int64    `json:"quota_remaining,omitempty"`
 	QuotaLimit       int64    `json:"quota_limit,omitempty"`
@@ -61,7 +56,6 @@ type DirectorAgentUsageStatsV0 struct {
 	PromptTokens     int64    `json:"prompt_tokens,omitempty"`
 	CompletionTokens int64    `json:"completion_tokens,omitempty"`
 	TotalTokens      int64    `json:"total_tokens,omitempty"`
-	CostMicros       int64    `json:"cost_micros,omitempty"`
 	EvidenceRefs     []string `json:"evidence_refs,omitempty"`
 }
 
@@ -73,7 +67,6 @@ type DirectorRunUsageStatsV0 struct {
 	PromptTokens     int64    `json:"prompt_tokens,omitempty"`
 	CompletionTokens int64    `json:"completion_tokens,omitempty"`
 	TotalTokens      int64    `json:"total_tokens,omitempty"`
-	CostMicros       int64    `json:"cost_micros,omitempty"`
 	EvidenceRefs     []string `json:"evidence_refs,omitempty"`
 }
 
@@ -85,6 +78,7 @@ func ApplyDirectorAgentUsageStatsV0(
 		return
 	}
 	byAgent := latestAgentUsageStatsByAgentV0(observations)
+	applied := map[string]AgentUsageStatsObservationV0{}
 	for index := range stats.Agents {
 		observation, ok := byAgent[stats.Agents[index].AgentRequestID]
 		if !ok {
@@ -92,8 +86,9 @@ func ApplyDirectorAgentUsageStatsV0(
 		}
 		usage := directorAgentUsageStatsFromObservationV0(observation)
 		stats.Agents[index].Usage = &usage
+		applied[stats.Agents[index].AgentRequestID] = observation
 	}
-	stats.UsageSummary = directorRunUsageSummaryFromObservationsV0(byAgent)
+	stats.UsageSummary = directorRunUsageSummaryFromObservationsV0(applied)
 }
 
 func latestAgentUsageStatsByAgentV0(
@@ -116,9 +111,7 @@ func directorAgentUsageStatsFromObservationV0(
 		RuntimeKind:      strings.TrimSpace(observation.RuntimeKind),
 		ConnectorRef:     strings.TrimSpace(observation.ConnectorRef),
 		ProfileRef:       strings.TrimSpace(observation.ProfileRef),
-		ModelAlias:       strings.TrimSpace(observation.ModelAlias),
 		CapacityLevel:    strings.TrimSpace(observation.CapacityLevel),
-		ReasoningEffort:  strings.TrimSpace(observation.ReasoningEffort),
 		QuotaStatus:      normalizeDirectorAgentQuotaStatusV0(observation.QuotaStatus),
 		QuotaRemaining:   nonNegativeInt64V0(observation.QuotaRemaining),
 		QuotaLimit:       nonNegativeInt64V0(observation.QuotaLimit),
@@ -126,7 +119,6 @@ func directorAgentUsageStatsFromObservationV0(
 		PromptTokens:     nonNegativeInt64V0(observation.PromptTokens),
 		CompletionTokens: nonNegativeInt64V0(observation.CompletionTokens),
 		TotalTokens:      nonNegativeInt64V0(observation.TotalTokens),
-		CostMicros:       nonNegativeInt64V0(observation.CostMicros),
 		EvidenceRefs:     compactStringsV0(observation.EvidenceRefs),
 	}
 }
@@ -151,7 +143,6 @@ func directorRunUsageSummaryFromObservationsV0(
 		summary.PromptTokens += nonNegativeInt64V0(observation.PromptTokens)
 		summary.CompletionTokens += nonNegativeInt64V0(observation.CompletionTokens)
 		summary.TotalTokens += nonNegativeInt64V0(observation.TotalTokens)
-		summary.CostMicros += nonNegativeInt64V0(observation.CostMicros)
 		summary.EvidenceRefs = compactStringsV0(append(summary.EvidenceRefs, observation.EvidenceRefs...))
 	}
 	return &summary

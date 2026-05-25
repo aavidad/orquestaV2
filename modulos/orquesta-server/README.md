@@ -3,12 +3,25 @@
 Servidor residente de Orquesta.
 
 Este modulo permite ejecutar Orquesta como proceso independiente de la consola
-que lo lanza. Expone `healthz`, `/api/status` y delega el resto del trafico al
-handler de aplicacion inyectado.
+que lo lanza. Expone `/healthz` como liveness del proceso,
+`/api/v0/server/readiness` como readiness operativa, `/api/status` y delega el
+resto del trafico al handler de aplicacion inyectado.
 
 El supervisor global se ejecuta por pulsos acotados mediante un puerto. Si el
 usuario cierra la sesion de Codex, el daemon sigue vivo y el operador puede
 reengancharse leyendo el statefile y consultando la API.
+
+## Uso local y supervision
+
+Para trabajo local, arranca el residente desde la raiz con
+`go run ./cmd/orquesta-server run`. `/healthz` solo confirma socket/proceso
+vivo; antes de lanzar Codex, OPES, `domain_work` o automejora usa
+`GET /api/v0/server/readiness` y exige `ready=true`. La supervision operativa
+debe hacerse contra las APIs publicas del servidor, por ejemplo
+`GET /api/v0/server/status`, `POST /api/v0/autoprogramming/status` y
+`POST /api/v0/autoprogramming/supervise`; el supervisor avanza por pulsos
+acotados y no debe sustituirse por acceso directo a stores, runtime, filesystem
+o procesos internos.
 
 La composicion productiva configura presupuesto de progreso para agentes Codex
 por entorno:

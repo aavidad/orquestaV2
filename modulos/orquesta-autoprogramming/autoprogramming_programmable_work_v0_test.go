@@ -243,6 +243,45 @@ func TestBuildAutoprogrammingProgrammableWorkV0CompactaBacklogScanParaWorkflowTa
 	assertAutoprogrammingContextRefPrefixV0(t, task.ContextRefs, "context_ref:backlog-input-")
 }
 
+func TestEnsureAutoprogrammingWorkflowTaskAcceptedByCoreV0PreservaMarkerDirectorOperativoV0(t *testing.T) {
+	request := validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.RequestRef = "request-ref-autoprogramming-marker-director-operativo-001"
+		request.Tasks[0].ContextRefs = append([]string{
+			"backlog-doc-autoprogramacion-2026-05-23",
+			"backlog_section:t11-rails-blandos-y-falsos-positivos",
+			"backlog_line:705",
+			"backlog_input:write_set_modulos_orquesta_runtime_codex",
+			"backlog_output:tests_go_test_count_1_all",
+			"context_ref:extra-001",
+			"context_ref:extra-002",
+			"context_ref:extra-003",
+			"context_ref:extra-004",
+			"context_ref:extra-005",
+			"context_ref:extra-006",
+			"context_ref:extra-007",
+			"context_ref:extra-008",
+			"context_ref:extra-009",
+			"context_ref:extra-010",
+			"context_ref:extra-011",
+			"context_ref:extra-012",
+			"context_ref:extra-013",
+			"context_ref:extra-014",
+			"context_ref:extra-015",
+		}, "operational_director.task_source:autoprogramming")
+	})
+
+	result := BuildAutoprogrammingProgrammableWorkV0(request)
+
+	if !result.Accepted {
+		t.Fatalf("accepted=false issues=%+v", result.Issues)
+	}
+	task := result.Work.Tasks[0]
+	assertAutoprogrammingContextRefV0(t, task.ContextRefs, "operational_director.task_source:autoprogramming")
+	if len(task.ContextRefs) > autoprogrammingWorkflowTaskContextRefsMaxV0+1 {
+		t.Fatalf("context_refs no compactadas: %d refs=%v", len(task.ContextRefs), task.ContextRefs)
+	}
+}
+
 func TestBuildAutoprogrammingProgrammableWorkV0PartitionsWriteSetByGroupArea(t *testing.T) {
 	request := validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
 		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{

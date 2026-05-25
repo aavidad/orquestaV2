@@ -29,6 +29,10 @@ func TestDecideDirectorSupervisorNextActionV0WaitsForOutbox(t *testing.T) {
 	if !reflect.DeepEqual(decision.PendingOutboxRefs, expected) {
 		t.Fatalf("pending refs=%v, want %v", decision.PendingOutboxRefs, expected)
 	}
+	if decision.StopProjection.PublicReason != "wait_outbox" ||
+		len(decision.StopProjection.PendingOutboxRefs) != 2 {
+		t.Fatalf("stop projection=%+v", decision.StopProjection)
+	}
 }
 
 func TestDecideDirectorSupervisorNextActionV0OutboxRefsWinOverMaxSteps(t *testing.T) {

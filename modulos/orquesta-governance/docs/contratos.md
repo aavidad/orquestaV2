@@ -265,14 +265,19 @@ Campos:
   request.filters.role: string opcional. Filtra por rol exacto.
   request.filters.phase: string opcional. Filtra por fase exacta.
   request.filters.tags: string[] opcional. Todas las tags pedidas deben existir en la entrada para que coincida.
-  response.result.current_block: const effective. Explicita que solo este bloque es vigente.
-  response.result.inactive_blocks: const [proposed, quarantine]. Explicita que estos bloques solo cuentan como contexto.
-  response.result.effective: GovernanceCatalogEntryV0[] filtrado; solo entradas vigentes.
-  response.result.counters: GovernanceCatalogCountersV0. Incluye `effective`, `proposed` y `quarantine` tras aplicar el mismo filtro.
+  response.request_id: eco compacto del request cuando existe.
+  response.correlation_id: eco compacto para trazabilidad.
+  response.effective: GovernanceCatalogEntryV0[] filtrado; solo entradas vigentes.
+  response.counters: GovernanceCatalogCountersV0. Incluye `effective`, `proposed` y `quarantine` tras aplicar el mismo filtro.
+  error.request_id: eco compacto del request cuando se pudo parsear.
+  error.correlation_id: eco compacto cuando se pudo parsear.
+  error.errors[].code: codigo publico estable.
+  error.errors[].field: campo publico opcional.
 Invariantes:
   - Es un puerto read-only y compacto; no crea, promueve, rescata ni muta reglas.
-  - Solo `response.result.effective` se puede tratar como vigente.
+  - Solo `response.effective` se puede tratar como vigente.
   - `proposed` y `quarantine` nunca se devuelven como reglas activas; solo aparecen como contadores.
+  - No se publican `current_block`, `inactive_blocks`, rowids DB v1, rutas HOME, prompts, transcripts ni catalogos completos de cuarentena.
   - Reutiliza `GovernanceCatalogV0` y `QueryEffectiveGovernanceCatalogV0` como fuente semantica.
   - El proveedor del catalogo es inyectable; el contrato no exige DB real, runtime ni filesystem productivo.
 Errores:

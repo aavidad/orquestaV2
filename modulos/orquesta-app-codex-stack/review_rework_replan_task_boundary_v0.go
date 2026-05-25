@@ -94,25 +94,46 @@ func reviewReworkCorrectionTaskV0(
 	if len(writeSet) == 0 {
 		return orquestacoreworkflow.WorkflowTaskV0{}, false
 	}
+	functionContracts := reviewReworkFunctionContractRefsFromRunV0(request.Run)
+	if len(functionContracts) == 0 {
+		return orquestacoreworkflow.WorkflowTaskV0{}, false
+	}
 	taskID := reviewReworkCorrectionTaskIDV0(plan)
 	task, err := orquestacoreworkflow.NewWorkflowTaskV0(orquestacoreworkflow.WorkflowTaskV0{
-		SchemaVersion:      orquestacoreworkflow.WorkflowTaskSchemaVersionV0,
-		TaskID:             taskID,
-		RunID:              request.Run.RunID,
-		PhaseID:            orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
-		WorkProfileKind:    orquestacoreworkflow.WorkProfileImplementationV0,
-		Title:              "Correccion de entrega tras revision",
-		Summary:            "Completar correcciones en una tarea nueva conservando entrega valida.",
-		WriteSet:           writeSet,
-		AcceptanceCriteria: []string{"Corregir la entrega rechazada sin relanzar otro agente padre sobre la tarea original."},
-		RequiredTests:      compactStringsV0(descriptor.Spec.AgentPacket.Task.RequiredTests),
-		DependsOn:          compactStringsV0([]string{plan.TaskRef}),
-		ContextRefs:        []string{"context-ref-" + taskID},
+		SchemaVersion:        orquestacoreworkflow.WorkflowTaskSchemaVersionV0,
+		TaskID:               taskID,
+		RunID:                request.Run.RunID,
+		PhaseID:              orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		WorkProfileKind:      orquestacoreworkflow.WorkProfileImplementationV0,
+		Title:                "Correccion de entrega tras revision",
+		Summary:              "Completar correcciones en una tarea nueva conservando entrega valida.",
+		WriteSet:             writeSet,
+		AcceptanceCriteria:   []string{"Corregir la entrega rechazada sin relanzar otro agente padre sobre la tarea original."},
+		RequiredTests:        compactStringsV0(descriptor.Spec.AgentPacket.Task.RequiredTests),
+		DependsOn:            compactStringsV0([]string{plan.TaskRef}),
+		ContextRefs:          []string{"context-ref-" + taskID},
+		FunctionContractRefs: functionContracts,
 	})
 	if err != nil {
 		return orquestacoreworkflow.WorkflowTaskV0{}, false
 	}
 	return task, true
+}
+
+func reviewReworkFunctionContractRefsFromRunV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) []orquestacoreworkflow.WorkflowFunctionContractRefV0 {
+	contracts := compactStringsV0(run.FunctionContracts)
+	if len(contracts) == 0 {
+		return nil
+	}
+	refs := make([]orquestacoreworkflow.WorkflowFunctionContractRefV0, 0, len(contracts))
+	for _, contract := range contracts {
+		refs = append(refs, orquestacoreworkflow.WorkflowFunctionContractRefV0{
+			ContractRef: contract,
+		})
+	}
+	return refs
 }
 
 func reviewReworkCorrectionTaskIDV0(

@@ -70,15 +70,17 @@ func (connector GitStagingPromotionConnectorV0) PromoteStagingWorktreeV0(
 	if len(issues) > 0 {
 		return newStagingPromotionResultV0(request, StagingPromotionStatusBlockedV0, nil, issues), issues
 	}
-	changed := stagingPromotionChangedPathsV0(entries)
+	productEntries, controlIssues := stagingPromotionProductEntriesV0(entries)
+	changed := stagingPromotionChangedPathsV0(productEntries)
 	if issues := stagingPromotionWriteSetIssuesV0(entries, request.WriteSet); len(issues) > 0 {
-		return newStagingPromotionResultV0(request, StagingPromotionStatusBlockedV0, changed, issues), issues
+		allIssues := append(issues, controlIssues...)
+		return newStagingPromotionResultV0(request, StagingPromotionStatusBlockedV0, changed, allIssues), issues
 	}
 	if len(changed) == 0 {
 		if request.AllowPush {
 			return connector.pushCleanPromotionV0(ctx, request)
 		}
-		return connector.cleanPromotionResultV0(ctx, request, nil)
+		return connector.cleanPromotionResultV0(ctx, request, nil, controlIssues)
 	}
 	addArgs := append([]string{"add", "--"}, changed...)
 	if _, issue := connector.vcsV0().gitOutputV0(ctx, request.ProjectWorkDir, addArgs...); issue != nil {
@@ -89,7 +91,7 @@ func (connector GitStagingPromotionConnectorV0) PromoteStagingWorktreeV0(
 		issues := []WorktreeIssueV0{stagingPromotionGitIssueV0("git.commit", issue.Evidence...)}
 		return newStagingPromotionResultV0(request, StagingPromotionStatusBlockedV0, changed, issues), issues
 	}
-	result, issues := connector.cleanPromotionResultV0(ctx, request, changed)
+	result, issues := connector.cleanPromotionResultV0(ctx, request, changed, controlIssues)
 	result.Status = StagingPromotionStatusPromotedV0
 	if len(issues) > 0 || !request.AllowPush {
 		return result, issues
@@ -189,42 +191,18 @@ func parseStagingPromotionGitStatusV0(raw string) []stagingPromotionGitStatusEnt
 	return out
 }
 
-func stagingPromotionChangedPathsV0(entries []stagingPromotionGitStatusEntryV0) []string {
-	paths := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		paths = append(paths, entry.Path)
-	}
-	return compactWorktreeStringsV0(paths)
-}
-
-func stagingPromotionWriteSetIssuesV0(
-	entries []stagingPromotionGitStatusEntryV0,
-	writeSet []string,
-) []WorktreeIssueV0 {
-	var issues []WorktreeIssueV0
-	for _, entry := range entries {
-		if strings.Contains(entry.Code, "D") {
-			issues = append(issues, worktreeIssueV0(WorktreeIssueRemovedPathV0, entry.Path))
-			continue
-		}
-		if !worktreePathAllowedV0(entry.Path, writeSet) {
-			issues = append(issues, worktreeIssueV0(WorktreeIssueOutsideWriteSetV0, entry.Path))
-		}
-	}
-	return issues
-}
-
 func (connector GitStagingPromotionConnectorV0) cleanPromotionResultV0(
 	ctx context.Context,
 	request StagingPromotionRequestV0,
 	changed []string,
+	controlIssues []WorktreeIssueV0,
 ) (StagingPromotionResultV0, []WorktreeIssueV0) {
 	head, issue := connector.vcsV0().gitOutputV0(ctx, request.ProjectWorkDir, "rev-parse", "HEAD")
 	if issue != nil {
 		issues := []WorktreeIssueV0{stagingPromotionGitIssueV0("git.rev_parse", issue.Evidence...)}
 		return newStagingPromotionResultV0(request, StagingPromotionStatusBlockedV0, changed, issues), issues
 	}
-	result := newStagingPromotionResultV0(request, StagingPromotionStatusCleanV0, changed, nil)
+	result := newStagingPromotionResultV0(request, StagingPromotionStatusCleanV0, changed, controlIssues)
 	result.CommitRef = strings.TrimSpace(head)
 	result.CommitShortRef = shortCommitRefV0(result.CommitRef)
 	return result, nil
@@ -234,7 +212,7 @@ func (connector GitStagingPromotionConnectorV0) pushCleanPromotionV0(
 	ctx context.Context,
 	request StagingPromotionRequestV0,
 ) (StagingPromotionResultV0, []WorktreeIssueV0) {
-	result, issues := connector.cleanPromotionResultV0(ctx, request, nil)
+	result, issues := connector.cleanPromotionResultV0(ctx, request, nil, nil)
 	if len(issues) > 0 {
 		return result, issues
 	}

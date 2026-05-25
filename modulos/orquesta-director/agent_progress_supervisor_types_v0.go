@@ -24,8 +24,9 @@ type AgentProgressSupervisionInputV0 struct {
 }
 
 type AgentProgressSupervisionResultV0 struct {
-	AssessCommand      orquestacoreworkflow.OrchestrationCommandV0  `json:"assess_command"`
-	AskDirectorCommand *orquestacoreworkflow.OrchestrationCommandV0 `json:"ask_director_command,omitempty"`
+	AssessCommand       orquestacoreworkflow.OrchestrationCommandV0  `json:"assess_command"`
+	RegisterLostCommand *orquestacoreworkflow.OrchestrationCommandV0 `json:"register_lost_command,omitempty"`
+	AskDirectorCommand  *orquestacoreworkflow.OrchestrationCommandV0 `json:"ask_director_command,omitempty"`
 }
 
 type AgentProgressSupervisionErrorV0 struct {

@@ -590,9 +590,14 @@ la cobertura actual acepta `files` fuera del write-set como rail blando. El
 paquete OrquestaV2 externo exige modo estricto: no editar fuera del write-set,
 no declarar archivos de control y fallar con `CONSULTA AL DIRECTOR` si falta
 alcance.
-Decision pendiente: separar modo legacy/advisory de modo terminal estricto por
-policy/packet; en estricto, `completed` requiere files reales dentro de alcance,
-tests requeridos pasados y evidencia de snapshot si esta disponible.
+Decision aplicada 2026-05-24: separar modo legacy/advisory de modo terminal
+estricto por policy/packet. En estricto, `completed` requiere refs explicitas,
+`files` concretos dentro del write-set, sin archivos de control, y `tests`
+exactamente iguales a los requeridos. La prueba de snapshot queda en
+`orquesta-runtime-worktree`: si el adaptador aporta `ACK.files`, todos deben
+corresponder a cambios reales y no pueden faltar cambios del snapshot.
+Estado: cubierto 2026-05-25; la observacion terminal Codex ya no degrada a modo
+legacy cuando el packet trae policy estricta y falta recibo de test.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-worktree ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
 Backlog: `T42 codex-ack-strict-write-set-terminal-proof`.
@@ -637,10 +642,17 @@ Casos: el prompt exige ficheros Go por debajo de 300 lineas, pero
 301..520 lineas con followup. El repo ya contiene deuda historica por encima de
 300 lineas; sin baseline, endurecer bloquea todo, pero sin modo estricto una
 entrega nueva puede agrandar controladores enormes y cerrar como completed.
-Decision pendiente: crear baseline de ficheros Go grandes y validar crecimiento
-real por snapshot/worktree. Mantener advisory legacy solo para compatibilidad;
-en modo OrquestaV2 estricto, bloquear crecimiento nuevo o exigir followup de
-particion aceptado por el director.
+Decision 2026-05-24: `orquesta-runtime-worktree` registra lineas Go en
+snapshots y valida crecimiento con `StrictGoLineBudget`;
+`orquesta-autoprogramming` conserva advisory legacy y separa el bloqueo
+`go_file_line_budget_strict_blocking`; `orquesta-app-codex-stack` puede activar
+el rail estricto por puerto/configuracion sin confiar en `ACK.LineCount`.
+Decision 2026-05-25: la presencia de `LineCountSource` real ya no activa el rail
+estricto por si sola; solo `StrictGoLineBudget` endurece cierre. En modo
+estricto, el stack tambien usa el diff snapshot/worktree para detectar ficheros
+Go omitidos del ACK.
+Rework 2026-05-25: se conserva la entrega util y se alinea el estado documental
+de T45 sin relanzar la tarea padre.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-runtime-worktree ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
 Backlog: `T45 autoprogramming-go-file-line-budget-baseline`.
@@ -649,13 +661,20 @@ Backlog: `T45 autoprogramming-go-file-line-budget-baseline`.
 ```text
 ID: RAIL-CAND-PACKET-WRITESET-PRECEDENCE-001
 Origen: scanner backlog 2026-05-24 decimotercera pasada.
-Casos: el paquete OrquestaV2 trae `write_set_closed` y el prompt Codex ordena no
-editar fuera del write-set, pero `programmingObjectiveV0` anade "si debes tocar
-otros ficheros del repo ... hazlo y dejalo justificado en el ACK".
-Decision pendiente: generar paquetes sin reglas incompatibles. Si el alcance
-queda cerrado, una ampliacion requiere decision del director o ACK failed con
-`CONSULTA AL DIRECTOR`; no basta una nota.
-Test futuro:
+Casos historicos: el paquete OrquestaV2 traia `write_set_closed` y el prompt
+Codex ordenaba no editar fuera del write-set, pero `programmingObjectiveV0`
+anadia permiso textual para tocar otros ficheros y justificarlo en ACK.
+Decision aplicada 2026-05-24: los paquetes estrictos ya declaran alcance
+cerrado, el prompt fija precedencia de `write_set_closed`, el modo legacy queda
+nombrado como compatibilidad y `BuildAgentStartPacketV0` invalida frases de
+ampliacion por simple ACK.
+Revalidacion 2026-05-25: esta entrada no reabre T46; cualquier resto pendiente
+queda separado en receipts de tests estrictos o prueba de efectos destructivos.
+Rework de revision 2026-05-25: el paquete estricto
+`agent-ref-task-ref-review-rework-task-autoprogramming-e8eba749c154-g01-c80cde88cf66`
+mantiene la entrega dentro del write-set documental, valida contexto
+`ref_only` requerido por lectura local/evidencia ACK y no relanza otro padre.
+Test:
 `go test -count=1 ./modulos/orquesta-app-codex-stack ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime`.
 Backlog: `T46 agent-packet-write-set-precedence`.
 ```
@@ -666,9 +685,9 @@ Origen: scanner backlog 2026-05-24 decimotercera pasada.
 Casos: `ValidateCodexAgentAckForSpecV0` exige que `ACK.tests` contenga los
 comandos requeridos y detecta evidencia textual de fallo, pero no prueba por si
 solo que el agente externo haya ejecutado el comando con exit code exitoso.
-Decision pendiente: en modo estricto, completar requires `RequiredTestEvidenceV0`
-o recibo estructurado del runtime/adaptador; strings de ACK quedan como
-diagnostico o compatibilidad legacy.
+Decision aplicada 2026-05-25: en modo estricto, completar requiere
+`RequiredTestEvidenceV0` o recibo estructurado del runtime/adaptador; strings de
+ACK quedan como diagnostico o compatibilidad legacy.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-required-test ./modulos/orquesta-app-codex-stack ./modulos/orquesta-orchestration-core ./cmd/orquesta-server`.
 Backlog: `T47 external-agent-required-test-receipts`.
@@ -686,6 +705,11 @@ bloquear `completed` en modo estricto salvo decision causal explicita.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-runtime-worktree ./modulos/orquesta-autoprogramming ./modulos/orquesta-runtime-codex ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
 Backlog: `T48 destructive-worktree-change-proof`.
+Estado: cubierto 2026-05-24 para clasificacion offline y bloqueo estricto en
+runtime-worktree, review gate de autoprogramacion y stack Codex. Revalidado en
+segunda pasada: el stack Codex comparte el store de snapshots entre baseline,
+verificador de delivery y review gate, y `cmd/orquesta-server` lo inyecta desde
+composicion sin filtrar rutas locales al nucleo.
 ```
 
 ```text
@@ -702,6 +726,15 @@ decision explicita del director/operador.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
 Backlog: `T49 codex-runtime-security-profile-strict-mode`.
+Estado: cubierto 2026-05-24 para servidor/stack Codex. La configuracion conserva
+sandbox invalido hasta la validacion publica, approval interactivo requiere
+opt-in `ORQUESTA_CODEX_ALLOW_INTERACTIVE_APPROVAL=1` y el perfil/prompt declaran
+si el runtime de control es interno al proyecto o writable root externo.
+Revalidacion: los paquetes OrquestaV2 estrictos deben declarar resolucion de
+contexto `ref_only` por evidencia explicita en el ACK antes de cerrar
+`completed`.
+Revalidacion 2026-05-24 r2: required-tests retry resuelve contexto `ref_only`
+por evidencia explicita en ACK y conserva T49 como cubierto.
 ```
 
 ```text
@@ -718,6 +751,12 @@ artefacto exportable.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-runtime-worktree ./modulos/orquesta-runtime-codex ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
 Backlog: `T50 runtime-control-files-worktree-exclusion`.
+Estado: cubierto 2026-05-25 r3. `orquesta-runtime-worktree` centraliza
+exclusiones por defecto y issue `control_path`; snapshots/verificacion ignoran
+control files, `ACK.files` los rechaza, staging promotion/AppVCS no los
+promocionan ni commitean, y `orquesta-runtime-codex` los mantiene prohibidos
+incluso con `write_set=["."]`. La revalidacion r3 incluye runtimes locales con
+sufijo temporal como `.orquesta-local-runtime-*`.
 ```
 
 ```text
@@ -733,6 +772,9 @@ medio para scanners/automejora documental.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-app-codex-stack ./modulos/orquesta-runtime-codex ./modulos/orquesta-autoprogramming`.
 Backlog: `T51 capacity-reasoning-default-policy`.
+Estado: cerrado 2026-05-25. `orquesta-autoprogramming` publica la matriz
+compacta, `cmd/orquesta-server` conserva `medium` y defaults `medium`, y los
+packets/stats Codex exponen refs de politica/evidencia compactas.
 ```
 
 ```text
@@ -742,8 +784,10 @@ Casos: medicion local encontro ficheros Go muy por encima de 300 lineas en
 `modulos/orquesta-app-director-service`, incluyendo ciclo operativo, continue,
 cierre y tests. El rail OrquestaV2 exige no seguir creciendo controladores
 enormes, pero falta shard concreto de particion para este modulo.
-Decision pendiente: partir por responsabilidad sin cambiar comportamiento y
+Decision 2026-05-25: partir por responsabilidad sin cambiar comportamiento y
 registrar baseline de deuda historica que no pueda cerrarse en una sola tarea.
+El codigo productivo del modulo queda bajo 300 lineas por fichero; el residuo
+baselinado queda limitado a tests historicos y no debe crecer sin nuevo shard.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-app-director-service ./modulos/orquesta-orchestration-core ./modulos/orquesta-state-file`.
 Backlog: `T52 app-director-service-file-split`.
@@ -756,9 +800,11 @@ Casos: `orquesta-orchestration-core` tiene materializador, cierre, plan-state y
 runner de tests por encima del rail de 300 lineas. Al ser nucleo de aplicacion,
 un refactor mal delimitado puede mezclar puertos neutrales con adaptadores
 concretos.
-Decision pendiente: separar ficheros por responsabilidad neutral, conservar
-puertos/refs opacas y probar idempotencia, WaitAgentRefs, cierre causal y
-evidencias requeridas.
+Decision 2026-05-25: separar los cuatro ficheros objetivo por responsabilidad
+neutral, conservar puertos/refs opacas y dejar cada fichero productivo tocado
+por debajo de 300 lineas. La particion no cambia contratos publicos; solo
+redistribuye materializacion, cierre causal, plan-state y runner de tests en
+shards locales.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-director-service`.
 Backlog: `T53 orchestration-core-file-split`.
@@ -771,8 +817,10 @@ Casos: `modulos/orquesta-app-codex-stack` y `cmd/orquesta-server` acumulan
 ficheros largos de composicion, comandos y smokes reales. Sin particion, los
 rails de ACK, control files, seguridad Codex, VCS y capacidad pueden volver a
 duplicarse dentro de controladores grandes.
-Decision pendiente: separar composicion por flujo y mantener los rails T49-T51
-como propietarios, sin mover runtime/proveedor/API al nucleo.
+Decision 2026-05-25: separar `codex-wave`, `director-wave` y `drain` por flujo
+sin cambiar contratos ni mover runtime/proveedor/API al nucleo. Queda baseline
+explicita para tests y smokes historicos largos; cualquier crecimiento futuro
+requiere shard propio.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-codex-delivery`.
 Backlog: `T54 codex-stack-server-file-split`.
@@ -787,6 +835,12 @@ autoprogramacion, AppVCS opt-in y transporte MCP real futuro.
 Decision pendiente: loopback por defecto; bind no-loopback solo con opt-in,
 principal/credencial o mTLS/TLS de composicion, autorizacion por ruta y auditoria
 sin tokens/cabeceras completas/payloads crudos.
+Decision 2026-05-25: `orquesta-server` queda como propietario de la guarda
+residente. `ORQUESTA_SERVER_ADDR` no-loopback exige
+`ORQUESTA_SERVER_REMOTE_CONTROL_PLANE_CONFIRM=1` y
+`ORQUESTA_SERVER_CONTROL_TOKEN`; las mutaciones HTTP/MCP pasan por token opt-in o
+loopback local, y la auditoria guarda solo decision, principal/ref de permiso,
+bind, metodo/path y claves de query sin valores.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./modulos/orquesta-mcp ./cmd/orquesta-server`.
 Backlog: `T55 server-control-plane-exposure-guards`.
@@ -800,11 +854,15 @@ skills, plugins, rules y memories desde `CODEX_HOME` a homes de agentes. El
 vocabulario `auth`, `token`, `credential`, `HOME`, `skills` o `plugins` no debe
 bloquear refs opacas, pero los valores reales no pueden acabar en snapshot,
 ACK, auditoria, promocion ni contexto de producto.
-Decision pendiente: politica de proyeccion por fichero/categoria, allowlist,
-evidencia compacta de categorias copiadas, redaccion de errores y bloqueo
-recuperable si falta auth/config requerida.
-Test futuro:
+Decision 2026-05-25: `codex-wave`/`codex-director-wave` usan politica de
+proyeccion por categoria. La evidencia durable lista categorias y refs opacas,
+no valores ni ruta fuente; `memories` requiere opt-in y el modo estricto exige
+home aislado con `auth`/`config` presentes o bloquea con error publico
+recuperable.
+Test:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-worktree ./modulos/orquesta-app-codex-stack`.
+Estado: cubierto 2026-05-25; rework de revision sincroniza el estado cerrado de
+T56 con el backlog ejecutable y mantiene T152 como shard mecanico separado.
 Backlog: `T56 codex-code-home-credential-projection`.
 ```
 
@@ -829,12 +887,17 @@ Casos: `codex-wave-tail` imprime fragmentos crudos de `codex_stdout.log`,
 `codex_stderr.log` o `codex_last_message.txt`. Es diagnostico util, pero puede
 exponer prompts, transcripts, HOME, rutas privadas, tokens, payloads HTTP o
 diffs completos si se usa fuera de una consola local controlada.
-Decision pendiente: summary/redaccion por defecto, opt-in de fragmento crudo,
-limites de bytes/lineas, permiso por `wave_ref`/`agent_ref` y prohibicion de
-usar logs como evidencia terminal de ACK/delivery/cierre.
+Decision: summary/redaccion por defecto, opt-in de fragmento crudo, limites de
+bytes/lineas, permiso por `wave_ref`/`agent_ref` y prohibicion de usar logs
+como evidencia terminal de ACK/delivery/cierre.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-rails`.
 Backlog: `T58 codex-wave-log-tail-redaction-access`.
+Estado 2026-05-25: cubierto; `codex-wave-tail` queda como diagnostico JSON
+redactado/acotado, exige razon de diagnostico y valida runtime/agente antes de
+leer logs.
+Rework de revision 2026-05-25: sincronizado con el cierre documental de T58 en
+el backlog y la matriz de duplicaciones.
 ```
 
 ```text
@@ -845,9 +908,12 @@ Casos: `codex-launch-wave` y `codex-launch-director-wave` aceptan
 runtime resuelto. Las guardas actuales reducen riesgo obvio, pero no prueban
 raiz permitida, manifest, agentes vivos, checkpoints, ACKs no reconciliados,
 director_decisions pendientes, outbox pendiente ni plan state abierto.
-Decision pendiente: purga solo con confirmacion explicita, runtime bajo raiz
-permitida, dry-run/report, bloqueo por trabajo vivo y evidencia compacta sin
-rutas privadas ni contenido de logs/prompts.
+Decision implementada 2026-05-25: purga solo con confirmacion explicita,
+runtime bajo raiz permitida, report-only, bloqueo por trabajo vivo y evidencia
+compacta sin rutas privadas ni contenido de logs/prompts.
+Rework de revision 2026-05-25: la correccion estricta conserva la entrega T59,
+no relanza otro padre y valida el contexto `required ref_only` mediante lectura
+local de `agent_packet.json` mas recibo explicito en ACK.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-worktree ./modulos/orquesta-server-shutdown ./modulos/orquesta-agent-process-registry`.
 Backlog: `T59 codex-wave-runtime-purge-proof`.
@@ -860,10 +926,15 @@ Casos: `codex-wave-stop` carga un registro desde `runtime-dir` y senala PIDs
 listados. Si el runtime-dir esta mal seleccionado o el registro esta corrupto,
 la herramienta puede intentar parar un proceso que Orquesta no lanzo ni sigue
 reconociendo como agente de esa ola.
-Decision pendiente: validar descriptor/store de proceso antes de senalar PID:
+Decision implementada 2026-05-25: validar descriptor de proceso antes de senalar PID:
 `run_ref`, `wave_ref`, `agent_ref`, command ref, runtime permitido,
 start time/owner opaco y estado vivo; si no hay prueba, bloquear con error
-publico `blocked_registry_untrusted`.
+publico `blocked_registry_untrusted`. `codex-wave-stop` exige confirmacion,
+razon publica y `--force` explicito para senal directa; sin `--force`, escribe
+shutdown cooperativo.
+Rework de revision 2026-05-25: la correccion estricta conserva la entrega T60,
+no relanza otro padre y valida el contexto `required ref_only` mediante lectura
+local de `agent_packet.json` mas recibo explicito en ACK.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-runtime ./modulos/orquesta-runtime-codex ./modulos/orquesta-agent-process-registry ./modulos/orquesta-run-control`.
 Backlog: `T60 codex-wave-stop-registry-pid-proof`.
@@ -880,6 +951,11 @@ dominio.
 Decision pendiente: persistir evidencia causal compacta y logs diagnosticos
 redactados/retencionados por separado; si aparece material sensible no
 redactable, bloquear o fallar sin guardar el material crudo.
+Decision aplicada 2026-05-25: `LocalCommandExecutorV0` separa
+`RequiredTestEvidenceV0` de los logs, redacta stdout/stderr antes de persistir,
+marca `output_redacted=true`, aplica limite de bytes y retencion configurable;
+salida no UTF-8/no redactable queda como fallo con causa publica sin guardar el
+material crudo.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-runtime-required-test ./modulos/orquesta-orchestration-core ./modulos/orquesta-state-file ./modulos/orquesta-app-director-service ./cmd/orquesta-server`.
 Backlog: `T61 required-test-output-redaction-retention`.
@@ -895,6 +971,14 @@ vocabulario operativo opaco y corta solo secretos efectivos o payloads crudos.
 Decision pendiente: sustituir lista textual por politica positiva de refs
 opacas y datos no publicables, alineada con el helper comun o una matriz local
 de frontera.
+Resolucion 2026-05-25: cerrado en codigo. El prompt de
+`director_decisions.json` usa politica positiva de refs opacas y datos no
+publicables; los validadores comparten `orquesta-rails` como owner de detalle
+sensible y mantienen el corte para secretos efectivos, rutas privadas,
+prompts/transcripts crudos y payloads completos.
+Rework de revision 2026-05-25: la evidencia documental de T62 queda acotada a
+prompt/validacion focal y no reutiliza smokes de servidor de T65; el contexto
+`required ref_only` se resuelve con lectura local y recibo explicito en ACK.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-app-codex-stack ./modulos/orquesta-director-agent ./modulos/orquesta-director-agent-file-source ./modulos/orquesta-rails ./modulos/orquesta-runtime-codex-delivery`.
 Backlog: `T62 director-decisions-prompt-rail-sync`.
@@ -904,13 +988,14 @@ Backlog: `T62 director-decisions-prompt-rail-sync`.
 ID: RAIL-CAND-DIRECTOR-DECISIONS-SIDECAR-001
 Origen: scanner backlog 2026-05-24 decimoctava pasada.
 Casos: el descriptor de `director_decisions.json` se deriva desde el `AckPath`
-del recibo Codex y la fuente filtra por run/ACK reflejado, pero el sidecar no
-tiene recibo propio con hash, producer ACK, correlacion, estado consumido ni
-conflicto durable si cambia el payload.
-Decision pendiente: exigir recibo estructurado y correlado para convertir el
-sidecar en decisiones ejecutables; bloquear stale, fuera de scope, hash
-cambiante o ya consumido bajo otro receipt.
-Test futuro:
+del recibo Codex y la fuente filtra por run/ACK reflejado. Cierre 2026-05-25:
+el sidecar ya obtiene receipt propio con hash, ACK productor, correlacion y
+estado de consumo durable en el store de receipts; el source valida hash/tamano
+antes de decodificar y marca `consumed`.
+Decision aplicada: convertir el sidecar en decision ejecutable solo con receipt
+correlado; omitir receipt ya consumido y bloquear payload cambiado bajo el
+mismo receipt con conflicto publico compacto.
+Test:
 `go test -count=1 ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-director-agent-file-source ./modulos/orquesta-app-codex-stack ./modulos/orquesta-app-director-service ./cmd/orquesta-server`.
 Backlog: `T63 director-decisions-sidecar-receipt-correlation`.
 ```
@@ -922,9 +1007,10 @@ Casos: la espina `orquesta-director-cycle`/`scheduler`/`runner`/`tick-input` ya
 existe y `orquesta-orchestration-core` la importa, pero la foto raiz y la matriz
 no la nombran; `orquesta-orchestration-core/AGENTS.md` conserva pendientes
 viejos de review/tests/rework/cierre como si el ciclo offline siguiera abierto.
-Decision pendiente: sincronizar documentos de autoridad y AGENTS locales con
+Decision 2026-05-25: sincronizados documentos de autoridad y AGENTS locales con
 estados separados por codigo offline, composicion residente, smoke real y
-proveedor/OPES real.
+proveedor/OPES real. No se abre rail de validacion nuevo por T64; futuros
+"pendiente Director" deben declarar el tipo de hueco.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-director-cycle ./modulos/orquesta-director-scheduler ./modulos/orquesta-director-runner ./modulos/orquesta-director-tick-input ./modulos/orquesta-orchestration-core`.
 Backlog: `T64 director-cycle-source-of-truth-sync`.
@@ -937,8 +1023,11 @@ Casos: existen pruebas locales de cycle, scheduler, runner, state-file/outbox y
 dispatch, pero falta smoke de composicion residente que demuestre
 `DirectorCycleStepV0` con `FileOutboxLedgerV0`, ACK parcial, reinicio y reentrada
 sin duplicar comandos ni cerrar con outbox pendiente.
-Decision pendiente: anadir smoke servidor temporal con puerto fake/temporal,
-claims/ACK reabiertos tras restart y contadores publicos de pending/acked/failed.
+Decision 2026-05-25: anadido smoke focal de servidor temporal en
+`cmd/orquesta-server`: crea stack con `state_dir` durable, ejecuta
+`DirectorCycleStepV0`, reinicia la composicion sobre el mismo ledger, bloquea el
+segundo paso por outbox pendiente, despacha por puerto fake con ACK y valida
+causa publica de ACK fallido con refs compactas.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-director-service ./modulos/orquesta-app-codex-stack ./modulos/orquesta-state-file ./modulos/orquesta-outbox-dispatch`.
 Backlog: `T65 director-cycle-resident-restart-smoke`.
@@ -947,14 +1036,12 @@ Backlog: `T65 director-cycle-resident-restart-smoke`.
 ```text
 ID: RAIL-CAND-NEUTRAL-PROCESS-STOP-001
 Origen: scanner backlog 2026-05-24 decimonovena pasada.
-Casos: `DIR-P006` sigue documentando parada de proceso real pendiente. El
-runtime neutral tiene `ProcessRuntimeConnectorV0` y tests focales, pero falta
-recorrer Director/scheduler/outbox hasta `StopRuntimeAgent` contra proceso
-temporal real con ACK/evidencia e idempotencia.
-Decision pendiente: smoke neutral sin Codex que lance proceso temporal por puerto
-explicito, emita stop causal, bloquee refs ajenas/stale y no filtre command/env
-crudos.
-Test futuro:
+Casos: `DIR-P006` ya tiene cierre focal neutral en `cmd/orquesta-server` con
+proceso temporal real, `DirectorCycleStepV0`, outbox durable,
+`StopRuntimeAgent`, ACK/evidencia e idempotencia de replay tras reinicio.
+Decision: cerrado como smoke neutral sin Codex; no cubre escalado avanzado,
+politica de launch/env ni shutdown checkpoint.
+Test:
 `go test -count=1 ./modulos/orquesta-runtime ./modulos/orquesta-director ./modulos/orquesta-director-scheduler ./modulos/orquesta-director-cycle ./modulos/orquesta-orchestration-core ./cmd/orquesta-server`.
 Backlog: `T66 neutral-process-stop-e2e`.
 ```
@@ -1000,10 +1087,12 @@ Casos: `run-supervisor`, `director-supervisor` y
 stats, cola e idle autoprogramming pueden interpretar distinto `no_execution`,
 `max_ticks`, `wait_outbox`, `wait_external`, `stop_max_steps` o `stop_error` si
 cada capa proyecta su propio vocabulario.
-Decision pendiente: crear proyeccion publica comun de stop reasons con refs y
-contadores compactos; idle autoprogramming solo debe disparar por capacidad
-libre real, no por outbox pendiente, espera externa o presupuesto agotado.
-Test futuro:
+Decision cerrada 2026-05-25: `orquesta_supervisor_stop_reason_projection.v0`
+queda como proyeccion publica comun con categoria, reason estable, refs y
+contadores compactos. `orquesta-server` ya audita summaries compactos y el idle
+autoprogramming consulta la proyeccion `idle_no_execution`, no razones locales
+de outbox, espera, presupuesto o error.
+Test ejecutado:
 `go test -count=1 ./modulos/orquesta-run-supervisor ./modulos/orquesta-director-supervisor ./modulos/orquesta-director-supervised-burst ./modulos/orquesta-server ./cmd/orquesta-server`.
 Backlog: `T69 nested-supervisor-stop-reason-contract`.
 ```
@@ -1015,10 +1104,11 @@ Casos: docs locales de `orquesta-core-workflow` siguen afirmando que comandos,
 eventos o JSON rechazan palabras como `runtime`, `provider`, `DB`, `SQL`,
 `HOME`, `modelo` o `Codex`, mientras el rail vivo permite vocabulario operativo
 opaco y corta solo valores sensibles efectivos.
-Decision pendiente: sincronizar docs/pruebas/decisiones locales con
+Decision 2026-05-25: docs/pruebas/decisiones locales sincronizados con
 `orquesta-rails`: refs opacas y terminos arquitectonicos pasan; secretos,
-rutas privadas, prompts/transcripts crudos y payloads masivos se bloquean.
-Test futuro:
+rutas privadas, prompts/transcripts crudos y payloads masivos se bloquean. No
+se cambian validadores ni adaptadores.
+Test:
 `go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-rails`.
 Backlog: `T70 core-workflow-docs-rail-policy-sync`.
 ```
@@ -1030,12 +1120,13 @@ Casos: el rail OrquestaV2 de ficheros Go menores de 300 lineas no solo afecta a
 stack/director. `orquesta-domain-work-sql/store_v0.go`,
 `orquesta-document-plan-expander/expander_v0.go` y los `job_creator_v0.go` de
 memory/file superan el limite o se acercan mezclando responsabilidades.
-Decision pendiente: partir por responsabilidad o dejar baseline de no
-crecimiento con followups concretos; conservar contract tests y frontera
-neutral sin introducir DB/producto en el nucleo.
-Test futuro:
+Decision 2026-05-26: partir por responsabilidad local `store`, idempotencia,
+jobs, filtros/listado, fingerprints, dialecto SQL, helpers y tests; no queda
+baseline vivo >300 en el write-set T71.
+Test:
 `go test -count=1 ./modulos/orquesta-domain-work ./modulos/orquesta-domain-work-memory ./modulos/orquesta-domain-work-file ./modulos/orquesta-domain-work-sql ./modulos/orquesta-document-plan-expander`.
 Backlog: `T71 domain-work-adapters-file-budget-split`.
+Estado: cubierto
 ```
 
 ```text
@@ -1044,12 +1135,13 @@ Origen: scanner backlog 2026-05-24 vigesimoprimera pasada.
 Casos: el mapa `work_kind -> expected_artifact_type` aparece duplicado en
 `orquesta-document-plan-expander`, `orquesta-app-codex-stack`,
 `orquesta-opes-bridge` y tests de `cmd/orquesta-server`.
-Decision pendiente: fijar owner neutral del mapa y hacer que expander, builder
-de entregas, bridge OPES y drain de servidor prueben la misma correspondencia;
-unknown work kinds deben tener fallback/issue coherente.
+Decision 2026-05-25: `orquesta-domain-work` es el owner neutral del mapa por
+`ExpectedDomainWorkArtifactTypeForWorkKindV0`. Expander, builder de entregas,
+bridge OPES y drain de servidor consumen/proban esa correspondencia; unknown
+work kinds conservan fallback coherente `work_delivery`.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-domain-work ./modulos/orquesta-document-plan-expander ./modulos/orquesta-app-codex-stack ./modulos/orquesta-opes-bridge ./cmd/orquesta-server`.
-Backlog: `T72 domain-work-artifact-contract-map-owner`.
+Backlog: `T72 domain-work-artifact-contract-map-owner` cerrado.
 ```
 
 ```text
@@ -1064,6 +1156,14 @@ Decision pendiente: sustituir el rail textual por politica de capacidad vs
 proveedor concreto. Bloquear DSN, credenciales, SDK/proveedor elegido o backend
 impuesto; permitir vocabulario operativo si el director/adaptador puede
 normalizarlo sin riesgo.
+Resolucion 2026-05-25: `orquesta-factory` aplica una politica de
+capacidad/proveedor para integraciones. Ya no bloquea `db`, `runtime`, `queue`,
+`cola`, `deploy` o `database` por substring cuando expresan capacidad; conserva
+rechazo recuperable para proveedor/backend concreto, SDK cloud, credenciales y
+DSN. Web/MCP solo proyectan el error publico e i18n.
+Revalidacion 2026-05-25: `postgres database` y `cloud sdk` quedan cubiertos
+como proveedor/backend impuesto; `database audit`, `runtime metrics` y
+`cola de tareas` siguen aceptados como capacidades.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-factory ./modulos/orquesta-mcp ./modulos/orquesta-web`.
 Backlog: `T73 factory-connector-capability-policy-port`.
@@ -1076,9 +1176,10 @@ Casos: `DeploymentPlan v0` aparece en factory/MCP y `orquesta-deploy`, pero
 `orquesta-deploy` no esta en el mapa raiz de capas y no hay consumidores Go
 fuera del propio modulo. Las tareas de deploy pueden quedar como docs/write-set
 sin invocar el contrato dry-run ni producir evidencia por puerto.
-Decision pendiente: declarar owner de deploy en la foto raiz y conectar el
-contrato por composicion opt-in/dry-run. No ejecutar Docker, Kubernetes, cloud,
-filesystem productivo ni secretos desde el nucleo.
+Resolucion 2026-05-25: T74 cerrado con `orquesta-deploy` como owner de
+`DeploymentPlan v0`, puerto dry-run de composicion y consumidores en
+`orquesta-app-planner`, factory y MCP. Sigue prohibido ejecutar Docker,
+Kubernetes, cloud, filesystem productivo o secretos desde el nucleo.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-deploy ./modulos/orquesta-factory ./modulos/orquesta-app-planner ./modulos/orquesta-mcp`.
 Backlog: `T74 deployment-plan-composition-wiring`.
@@ -1091,12 +1192,14 @@ Casos: `orquesta-i18n-docs` define builder/validator de bundles, loader shape
 y docs generadas, pero no tiene consumidores Go fuera del modulo. Web/factory
 mantienen mapas i18n locales y la foto vigente aun habla de brechas historicas
 de i18n.
-Decision pendiente: decidir owner activo. Si `orquesta-i18n-docs` sigue vivo,
-factory/web/MCP deben consumir el contrato o una proyeccion por puerto; si no,
-marcarlo historico y evitar que sus docs locales se usen como verdad vigente.
+Decision 2026-05-25: `orquesta-i18n-docs` sigue vivo como owner activo.
+Factory/web/MCP consumen contrato o proyeccion por puerto; no debe marcarse
+historico ni duplicarse con otro owner local de bundles, loader o docs
+generadas.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-i18n-docs ./modulos/orquesta-factory ./modulos/orquesta-web ./modulos/orquesta-mcp`.
-Backlog: `T75 i18n-docs-active-composition-owner`.
+Backlog: `T75 i18n-docs-active-composition-owner` cerrado en corte focal
+2026-05-25.
 ```
 
 ```text
@@ -1113,6 +1216,9 @@ como preview/legacy/compatibilidad o enlazarlo con
 Test futuro:
 `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-runner ./modulos/orquesta-app-planner ./modulos/orquesta-app-director-intake ./modulos/orquesta-app-director-service`.
 Backlog: `T76 appspec-entrypoints-director-v2-routing`.
+Estado: cubierto 2026-05-25; refrescado 2026-05-26. `route_policy` publica
+`arrancar_director` como preferente en resultado y descriptor compacto, y
+`app-runner` bloquea con `director_v2_required` si se exige Director V2.
 ```
 
 ```text
@@ -1126,6 +1232,20 @@ ocultar semantica de dominio fuera del scope de `T15`.
 Decision pendiente: mover readiness/sanitizacion a politica por campo alineada
 con `orquesta-rails`; permitir vocabulario operativo opaco y cortar solo valores
 sensibles efectivos, material crudo o efectos externos no autorizados.
+Decision 2026-05-25: resuelto en `orquesta-app-change-director-source`; la
+fuente usa `orquesta-rails` por campo para readiness, conserva vocabulario
+operativo opaco y bloquea solo detalle sensible/raw efectivo.
+Revision 2026-05-26: retry Orquesta V2 mantiene T77 cerrado en codigo de
+alcance. El test obligatorio no puede declararse verde porque
+`orquesta-app-codex-stack` arrastra una compilacion rota de
+`orquesta-observability` fuera del write-set. Se observaron fallos externos por
+tipos timeline ausentes y, en un reintento posterior, por
+`cloneWorkspaceTimelineProjectionV0` redeclarado entre
+`workspace_timeline_filter_v0.go` y `workspace_timeline_clone_v0.go`. Retry
+2026-05-26 en esta tarea: se observo un fallo externo transitorio en
+`orquesta-web` por deriva de `WorkspaceTimelineItemV0`, pero la reejecucion
+posterior del comando requerido paso completa. T77 queda cerrado en codigo de
+alcance y no requiere editar modulos fuera del write-set.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-app-change-director-source ./modulos/orquesta-app-change ./modulos/orquesta-rails ./modulos/orquesta-app-codex-stack`.
 Backlog: `T77 app-change-director-source-readiness-rail-policy`.
@@ -1138,9 +1258,11 @@ Casos: `docs/corte_plan_state_director_decisions_2026-05-21.md` deja pendiente
 fusionar nuevas tasks operativas en un `OperationalDirectorPlanStateV0`
 existente. El ensure actual devuelve si el state ya existe, por lo que una
 decision tardia que abre otra ola necesita contrato de merge/reentrada y replay.
-Decision pendiente: anadir merge causal de tasks marcadas por
-`director_decision`, wait scope acotado, idempotencia y bloqueo publico si falta
-metadata suficiente.
+Decision aplicada 2026-05-25: `app-director-service` fusiona en el plan state
+abierto las tasks operativas nuevas marcadas por `director_decision`, reabre
+`wait_subagents` con scope acotado por agent refs de la nueva task y mantiene
+replay idempotente. Si falta metadata operativa, la task queda fuera de este
+merge y no crea wait ambiguo.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-director-agent-workflow ./modulos/orquesta-app-director-service ./modulos/orquesta-orchestration-core ./modulos/orquesta-state-file ./modulos/orquesta-app-codex-stack`.
 Backlog: `T78 director-decisions-existing-planstate-merge`.
@@ -1158,6 +1280,14 @@ pero no reduce el hotspot documental.
 Decision pendiente: crear indice/shards compatibles con el parser, preservar
 linea/hash/fichero por seccion Txx y no borrar ni truncar historico durante la
 migracion.
+Decision aplicada 2026-05-25: `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+declara indice vivo de shards, el planner lee indice/shards con fallback al
+documento historico y cada request conserva fichero, linea y hash en
+`BacklogScanDocumentV0`. La migracion fisica a shards nuevos queda pendiente con
+write-set propio; no se borra ni trunca historico.
+Revalidacion OrquestaV2 2026-05-25: contexto `ref_only` requerido resuelto por
+lectura local/evidencia ACK; se mantiene T79 como contrato inicial cerrado sin
+reabrir T43 ni migracion fisica de shards.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-autoprogramming ./modulos/orquesta-server`.
 Backlog: `T79 autoprogramming-backlog-doc-sharding`.
@@ -1173,7 +1303,16 @@ de composicion podria apuntar a endpoints no temporales o redes internas.
 Decision pendiente: anadir politica opt-in de destino, rechazo de credenciales
 en URL, allowlist o modo smoke declarado, errores publicos y auditoria compacta
 sin URL sensible ni payload crudo.
-Test futuro:
+Decision aplicada 2026-05-25: `orquesta-domain-work-http` normaliza destino con
+politica `smoke_local` o `allowlist`, rechaza credenciales/query/fragment,
+clasifica loopback, metadata, red interna y externo desconocido, y bloquea desde
+`cmd/orquesta-server` cualquier `ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL` sin
+`ORQUESTA_DOMAIN_WORK_HTTP_EGRESS_MODE` explicito. Paths de `create_job` y
+`submit_artifact` quedan relativos, sin query ni host override.
+Test ejecutado 2026-05-25 con fallo externo al write-set: pasa
+`go test -count=1 ./modulos/orquesta-domain-work-http`; el transversal falla
+por tipos faltantes en `modulos/orquesta-observability`
+(`WorkspaceTimelineV0`, `WorkspaceTimelineSourceStatusV0`):
 `go test -count=1 ./modulos/orquesta-domain-work-http ./modulos/orquesta-domain-work ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./cmd/orquesta-server`.
 Backlog: `T80 domain-work-http-egress-policy`.
 ```
@@ -1189,6 +1328,10 @@ workspace sin shell, transcript crudo o stores internos.
 Decision pendiente: definir puerto de lectura global con fuentes declaradas,
 paginacion temporal, redaccion por campo y `not_available` para fuentes ausentes
 en vez de inferencias ad hoc.
+Estado 2026-05-25: puerto inicial `WorkspaceTimelineQueryV0` definido en
+`orquesta-observability`; API/MCP/web comparten el contrato y el servidor
+residente expone `/api/v0/workspace/timeline` con fuentes ausentes como
+`not_available`.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-observability ./modulos/orquesta-server ./modulos/orquesta-mcp ./modulos/orquesta-web ./cmd/orquesta-server`.
 Backlog: `T81 observability-global-workspace-timeline`.
@@ -1208,6 +1351,13 @@ hay provider, devolver error publico recuperable.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-governance ./modulos/orquesta-cli ./modulos/orquesta-mcp ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./cmd/orquesta-server`.
 Backlog: `T82 governance-catalog-public-route-shape-sync`.
+Estado 2026-05-25: cerrado. `GovernanceCatalogQueryHTTPHandlerV0`,
+`GovernanceCatalogCliReaderV0`, descriptor MCP compartido, gateway HTTP,
+app-gateway y `cmd/orquesta-server` quedan sincronizados en el shape publico
+`{request_id, correlation_id, filters}` -> `{request_id, correlation_id,
+effective, counters}` y errores `{errors:[{code, field}]}`. La ruta responde
+`governance_catalog_source_unavailable` cuando no hay provider y no activa
+historicos ni lee DB v1.
 ```
 
 ```text
@@ -1223,6 +1373,10 @@ directas de shell, stores internos, runtime dirs o transcripts.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-observability ./modulos/orquesta-server ./modulos/orquesta-cli ./modulos/orquesta-web ./modulos/orquesta-mcp ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./cmd/orquesta-server`.
 Backlog: `T83 operational-status-public-query-source`.
+Cierre 2026-05-25: resuelto por source residente `OperationalStatusQueryV0`,
+handler HTTP comun y wiring de servidor/gateway. La salida valida
+`DiagnosticoCompactoV0`, no expone paths ni runtime dirs y conserva warnings
+`not_available` para fuentes ausentes sin inventar datos.
 ```
 
 ```text
@@ -1232,9 +1386,11 @@ Casos: la CLI implementa `POST /api/v0/core/function-contracts/list` y
 `/view`, pero `core` conserva esas operaciones como candidatas documentales y
 `core-workflow` solo proyecta refs compactas `FunctionContractPublished`.
 Faltan store/index read-only, shape de gateway y caso de payload insuficiente.
-Decision pendiente: definir consulta read-only por puerto desde eventos/stores
-causales, bloquear cuando solo haya refs sin payload contractual y mantener
-`registrar` como operacion no promovida.
+Decision 2026-05-25: consulta read-only definida por puerto desde eventos/stores
+causales. Cuando solo hay refs `FunctionContractPublished` sin payload
+contractual completo, `list` expone estado `evidencia_insuficiente` y `view`
+bloquea con error publico verificable. `registrar` se mantiene como operacion
+no promovida.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-core ./modulos/orquesta-core-workflow ./modulos/orquesta-orchestration-core ./modulos/orquesta-state-file ./modulos/orquesta-cli ./modulos/orquesta-mcp ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./cmd/orquesta-server`.
 Backlog: `T84 function-contract-readonly-public-index`.
@@ -1278,9 +1434,13 @@ Casos: scripts de smoke y daemon tratan `/healthz` como "servidor listo", pero
 el handler solo responde liveness `status=ok`. La readiness operativa vive en
 `startup_ready/startup_status` de `/api/v0/server/status`, incluyendo cleanup y
 reconciliacion.
-Decision pendiente: fijar contrato de liveness vs readiness y actualizar scripts
-para esperar readiness cuando vayan a preparar runs, drenar OPES, lanzar Codex
-o ejecutar automejora; si readiness falta, bloquear o degradar explicitamente.
+Estado: cerrado 2026-05-25. Contrato fijado: `/healthz` es liveness,
+`/api/v0/server/readiness` es readiness operativa con `startup_ready`,
+`startup_status`, mensaje publico y evidence refs. El endpoint devuelve 503
+cuando startup cleanup/reconciliacion no esta listo y no expone paths ni runtime
+dirs. Daemon y smokes que preparan runs, drenan OPES, lanzan Codex, ejecutan
+Director/domain_work o automejora esperan readiness; los checks de `/healthz`
+restantes son liveness de socket o apps externas temporales.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-cli ./cmd/orquesta-server` y `bash -n scripts/*.sh`.
 Backlog: `T87 server-liveness-readiness-contract`.
@@ -1298,6 +1458,11 @@ Decision pendiente: definir indice federado con source path/line/hash,
 freshness, owner, alias local y Txx relacionado; el planner solo debe programar
 entradas locales promocionadas o vigentes, y dejar docs historicos como
 evidencia no ejecutable.
+Resolucion 2026-05-25: el planner incorpora un indice federado declarado en el
+backlog global. Las fuentes locales `vigente`/`promocionada` generan entradas
+con owner, alias, hash y lease; fuentes sin tests/owner abren revision
+documental. La revalidacion obligatoria queda bloqueada por compilacion rota en
+`modulos/orquesta-observability`, fuera del write-set de T88.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-autoprogramming ./modulos/orquesta-mcp ./modulos/orquesta-server`.
 Backlog: `T88 federated-module-backlog-index`.

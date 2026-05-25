@@ -19,6 +19,18 @@ const (
 	ContextMaterializationModeRefOnlyV0 = "ref_only"
 )
 
+const (
+	ContextRefOnlyReasonByDesignV0               = "ref_only_by_design"
+	ContextRefOnlyReasonMaterializationMissingV0 = "materialization_missing"
+	ContextRefOnlyReasonSanitizationReviewV0     = "sanitization_review"
+)
+
+const (
+	ContextRequiredRefActionReadLocalV0   = "read_local_document"
+	ContextRequiredRefActionAskDirectorV0 = "ask_director"
+	ContextRequiredRefActionAckEvidenceV0 = "ack_evidence_required"
+)
+
 type ContextRefReaderV0 interface {
 	ReadContextRefV0(sourceRef string, maxBytes int) (ContextRefContentV0, []ContextMaterializationIssueV0)
 }
@@ -43,15 +55,17 @@ type ContextMaterializedBundleV0 struct {
 }
 
 type ContextMaterializedEntryV0 struct {
-	EntryRef  string `json:"entry_ref"`
-	Layer     string `json:"layer"`
-	Kind      string `json:"kind"`
-	SourceRef string `json:"source_ref"`
-	Mode      string `json:"mode"`
-	Content   string `json:"content,omitempty"`
-	Bytes     int    `json:"bytes,omitempty"`
-	Truncated bool   `json:"truncated,omitempty"`
-	Required  bool   `json:"required"`
+	EntryRef          string `json:"entry_ref"`
+	Layer             string `json:"layer"`
+	Kind              string `json:"kind"`
+	SourceRef         string `json:"source_ref"`
+	Mode              string `json:"mode"`
+	Content           string `json:"content,omitempty"`
+	Bytes             int    `json:"bytes,omitempty"`
+	Truncated         bool   `json:"truncated,omitempty"`
+	Required          bool   `json:"required"`
+	RefOnlyReason     string `json:"ref_only_reason,omitempty"`
+	RequiredRefAction string `json:"required_ref_action,omitempty"`
 }
 
 type ContextMaterializationIssueV0 struct {

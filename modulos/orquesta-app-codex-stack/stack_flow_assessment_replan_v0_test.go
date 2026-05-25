@@ -223,7 +223,8 @@ func (runtime *programmingLostOnFirstStopCodexStackRuntimeV0) loseNextSnapshotV0
 	runtime.lostSnapshotPending = true
 }
 
-func (runtime *programmingLostOnFirstStopCodexStackRuntimeV0) SnapshotV0(
+func (runtime *programmingLostOnFirstStopCodexStackRuntimeV0) StopV0(
+	_ context.Context,
 	processRef string,
 ) (orquestaruntime.ProcessRuntimeSnapshotV0, error) {
 	runtime.mu.Lock()
@@ -238,7 +239,7 @@ func (runtime *programmingLostOnFirstStopCodexStackRuntimeV0) SnapshotV0(
 		}
 	}
 	runtime.mu.Unlock()
-	return runtime.fakeCodexStackRuntimeV0.SnapshotV0(processRef)
+	return runtime.fakeCodexStackRuntimeV0.StopV0(context.Background(), processRef)
 }
 
 func codexStackLaunchPacketForTestV0(

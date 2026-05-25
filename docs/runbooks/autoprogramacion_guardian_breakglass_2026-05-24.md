@@ -12,7 +12,8 @@ guardian vive fuera del servidor Orquesta y trabaja con binario candidato,
 
 1. Compila el candidato en un path temporal.
 2. Ejecuta tests requeridos.
-3. Arranca el candidato contra estado/runtime temporal y comprueba `/healthz`.
+3. Arranca el candidato contra estado/runtime temporal; comprueba `/healthz`
+   solo como liveness y `/api/v0/server/readiness` antes de efectos externos.
 4. Si todo pasa, guarda el binario actual como `last_good` y promociona el
    candidato de forma atomica.
 5. Si falla build, tests o healthcheck, no toca el binario vivo, escribe

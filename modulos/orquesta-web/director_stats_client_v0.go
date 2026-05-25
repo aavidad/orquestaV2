@@ -136,7 +136,6 @@ func normalizeDirectorStatsQueryV0(query WebDirectorStatsQueryV0) WebDirectorSta
 	if query.RunRef != "" {
 		query.IncludeProcessRefs = true
 		query.IncludeAgentProgress = true
-		query.IncludeAgentUsage = true
 	}
 	return query
 }

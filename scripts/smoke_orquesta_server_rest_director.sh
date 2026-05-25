@@ -162,7 +162,7 @@ with open(sys.argv[1], encoding="utf-8") as fh:
     print(json.load(fh).get("addr", ""))
 PY
 )"
-    if [[ -n "$server_addr" ]] && curl -fsS -m 2 "http://$server_addr/healthz" >/dev/null; then
+    if [[ -n "$server_addr" ]] && curl -fsS -m 2 "http://$server_addr/api/v0/server/readiness" >/dev/null; then
       server_ready="1"
       break
     fi
@@ -171,7 +171,7 @@ PY
 done
 
 if [[ "$server_ready" != "1" ]]; then
-  echo "el servidor no llego a health OK; addr=$server_addr; stderr:" >&2
+  echo "el servidor no llego a readiness OK; addr=$server_addr; stderr:" >&2
   tail -n 80 "$server_stderr" >&2 || true
   exit 1
 fi

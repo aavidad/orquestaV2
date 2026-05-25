@@ -27,6 +27,7 @@ type MCPEjecutarOrquestacionAppToolInputV0 struct {
 	RequestID                 string                    `json:"request_id,omitempty"`
 	CorrelationID             string                    `json:"correlation_id,omitempty"`
 	Respuesta                 string                    `json:"respuesta,omitempty"`
+	RequireDirectorV2         bool                      `json:"require_director_v2,omitempty"`
 	RunRef                    string                    `json:"run_ref,omitempty"`
 	ProjectRef                string                    `json:"project_ref,omitempty"`
 	OccurredAt                string                    `json:"occurred_at"`
@@ -45,6 +46,7 @@ type MCPEjecutarOrquestacionAppToolResultV0 struct {
 	Estado            string                                               `json:"estado"`
 	RequestID         string                                               `json:"request_id,omitempty"`
 	CorrelationID     string                                               `json:"correlation_id,omitempty"`
+	RoutePolicy       MCPAppSpecRoutePolicyV0                              `json:"route_policy"`
 	AppSpec           MCPAppSpecCompactV0                                  `json:"app_spec,omitempty"`
 	RunRef            string                                               `json:"run_ref,omitempty"`
 	PhaseID           string                                               `json:"phase_id,omitempty"`
@@ -64,12 +66,13 @@ func MCPEjecutarOrquestacionAppDescriptorV0() MCPEjecutarOrquestacionAppToolDesc
 	return MCPEjecutarOrquestacionAppToolDescriptorV0{
 		Name:        MCPEjecutarOrquestacionAppToolNameV0,
 		Version:     MCPEjecutarOrquestacionAppToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,project_ref?,app_spec:AppSpecV0,limits?,use_autonomous_director_loop?}",
-		Output:      "ok:{app_spec,run_ref,phase_id,plan,progress,loop_status,started_agents,director_stats,director_loop_stats}|error:{errores_publicos}",
+		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,project_ref?,app_spec:AppSpecV0,require_director_v2?,limits?,use_autonomous_director_loop?}",
+		Output:      "ok:{route_policy,app_spec,run_ref,phase_id,plan,progress,loop_status,started_agents,director_stats,director_loop_stats}|error:{route_policy,errores_publicos}",
 		ResourceURI: MCPEjecutarOrquestacionAppResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
-			"prepara y ejecuta mediante orquesta-app-runner",
+			"compatibilidad legacy mediante orquesta-app-runner",
+			"si requiere Director V2 bloquea con razon publica",
 			"los efectos salen solo por puertos inyectados",
 			"no elige DB runtime proveedor modelo HOME OAuth ni credenciales",
 		},
@@ -86,6 +89,7 @@ func ToRunPreparedAppOrchestrationRequestMCPV0(
 		OccurredAt:                input.OccurredAt,
 		CorrelationID:             neutralPrepareOrchestrationCorrelationMCPV0(prepareInput),
 		RequestedBy:               "orquesta-app-runner",
+		RequireDirectorV2:         input.RequireDirectorV2,
 		MaxBursts:                 input.MaxBursts,
 		MaxStepsPerBurst:          input.MaxStepsPerBurst,
 		MaxDispatchesPerWait:      input.MaxDispatchesPerWait,

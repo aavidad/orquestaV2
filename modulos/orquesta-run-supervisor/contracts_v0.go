@@ -6,6 +6,7 @@ import (
 
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
+	stopreason "orquesta/modulos/orquesta-run-supervisor/stopreason"
 )
 
 const RunSupervisorSchemaVersionV0 = "run_supervisor.v0"
@@ -46,10 +47,15 @@ type RunSupervisorCommandV0 struct {
 }
 
 type RunSupervisorResultV0 struct {
-	Ticks           []RunSupervisorTickSummaryV0 `json:"ticks,omitempty"`
-	TotalExecutions int                          `json:"total_executions"`
-	TotalSkips      int                          `json:"total_skips"`
-	StopReason      string                       `json:"stop_reason"`
+	Ticks           []RunSupervisorTickSummaryV0                  `json:"ticks,omitempty"`
+	TotalExecutions int                                           `json:"total_executions"`
+	TotalSkips      int                                           `json:"total_skips"`
+	StopReason      string                                        `json:"stop_reason"`
+	Error           string                                        `json:"error,omitempty"`
+	ErrorTickNumber int                                           `json:"error_tick_number,omitempty"`
+	ErrorRunRefs    []string                                      `json:"error_run_refs,omitempty"`
+	Diagnostics     []orquestaruncoordinator.RunDrainDiagnosticV0 `json:"diagnostics,omitempty"`
+	StopProjection  stopreason.ProjectionV0                       `json:"stop_projection,omitempty"`
 }
 
 type RunSupervisorTickSummaryV0 struct {

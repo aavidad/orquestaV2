@@ -480,6 +480,9 @@ Invariantes:
   - task puede transportar linaje operativo neutral ya resuelto por la composicion: parent_task_ref, cohort_ref, wave_ref, delegation_depth, max_child_agents y child_task_refs. No autoriza spawn libre ni expone proveedor/runtime.
   - delivery_refs solo contiene mailbox_ref, ack_ref, readiness_ref y checkpoint_ref opacos.
   - policies son codigos compactos para el conector; no contienen texto UI final ni secretos.
+  - Si el contexto trae entradas `required` en modo `ref_only`, el paquete
+    conserva `ref_only_reason`, `required_ref_action` y declara la policy
+    `required_ref_only_context_guard`.
   - Los conectores concretos traducen este paquete a su transporte sin ampliar el contrato con datos operativos privados.
 Errores:
   - agent_start_packet_invalido

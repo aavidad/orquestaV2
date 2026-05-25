@@ -7,19 +7,35 @@ import (
 
 func codexAckHasFailedTestEvidenceV0(ack CodexAgentAckV0) bool {
 	return codexAckEvidenceStringsHaveFailureV0(ack.Tests, true) ||
+		codexRequiredTestReceiptsHaveFailureV0(ack.TestReceipts) ||
 		codexAckEvidenceStringsHaveFailureV0(ack.Notes, false)
 }
 
 func codexAckBytesHaveFailedTestEvidenceV0(data []byte) bool {
 	var raw struct {
-		Tests json.RawMessage `json:"tests"`
-		Notes json.RawMessage `json:"notes"`
+		Tests        json.RawMessage `json:"tests"`
+		TestReceipts json.RawMessage `json:"test_receipts"`
+		Notes        json.RawMessage `json:"notes"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return false
 	}
 	return codexAckRawEvidenceHasFailureV0(raw.Tests, true) ||
+		codexAckRawEvidenceHasFailureV0(raw.TestReceipts, true) ||
 		codexAckRawEvidenceHasFailureV0(raw.Notes, false)
+}
+
+func codexRequiredTestReceiptsHaveFailureV0(receipts []CodexRequiredTestReceiptV0) bool {
+	for _, receipt := range receipts {
+		if strings.TrimSpace(receipt.Status) != "" &&
+			strings.TrimSpace(receipt.Status) != "passed" {
+			return true
+		}
+		if receipt.ExitCode != nil && *receipt.ExitCode != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func codexAckEvidenceStringsHaveFailureV0(values []string, inTests bool) bool {

@@ -86,9 +86,12 @@ func TestDirectorTaskV0IncluyeContratoDeDecisionesEjecutables(t *testing.T) {
 		"close_run.closure_ref",
 		"Cierre normal",
 		"no emitas register_final_validation/close_run hasta tener contratos, tareas completas, entregas de programacion, tarea cerrada, revision aceptada y validacion",
-		"No escribas terminos prohibidos",
-		"adapter, adaptador",
-		"para seguridad usa datos sensibles",
+		"Politica de detalle",
+		"refs opacas",
+		"provider",
+		"adaptadores",
+		"no escribas valores reales",
+		"Para seguridad usa datos sensibles",
 		"no uses task_ref",
 	} {
 		if !strings.Contains(task.Objective, want) {

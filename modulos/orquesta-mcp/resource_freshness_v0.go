@@ -3,6 +3,7 @@ package orquestamcp
 const (
 	MCPResourceFreshnessUpdatedAtV0 = "2026-05-24"
 	MCPResourceFreshnessStatusV0    = "static_projection_with_live_refs"
+	mcpBacklogT74RefV0              = "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md#T74-deployment-plan-composition-wiring"
 )
 
 type MCPResourceFreshnessV0 struct {
@@ -39,4 +40,8 @@ func mcpRoadmapBacklogRefsV0(extra ...string) []string {
 
 func mcpMCPResourceVerificationV0(extra ...string) []string {
 	return compactStringsMCPV0(append([]string{"go test -count=1 ./modulos/orquesta-mcp"}, extra...))
+}
+
+func mcpDeploymentPlanVerificationV0() []string {
+	return []string{"go test -count=1 ./modulos/orquesta-deploy ./modulos/orquesta-factory ./modulos/orquesta-app-planner ./modulos/orquesta-mcp"}
 }

@@ -93,6 +93,35 @@ func TestReviewGateCandidateProviderV0BuildsAcceptForAccepted(t *testing.T) {
 	}
 }
 
+func TestReviewGateCandidateProviderV0AceptaResultadoPosteriorTrasRework(t *testing.T) {
+	run := mustReviewGateReadyRunV0(t, "run-nucleo-review-gate-accepted-after-rework-001")
+	run = mustApplyCommandV0(t, run, mustReviewReworkRequestReviewCommandV0(t, run.RunID))
+	run = mustApplyCommandV0(t, run, mustReviewReworkResultCommandV0(
+		t,
+		run.RunID,
+		orquestacoreworkflow.ReviewResultStatusChangesRequestedV0,
+	))
+	observation := reviewGateObservationForTestV0(orquestacoreworkflow.ReviewResultStatusAcceptedV0)
+	observation.ReviewResultRef = "review-result-ref-nucleo-review-001-rework-accepted"
+	observation.AcceptedReviewRef = "accepted-review-ref-nucleo-review-001-rework-accepted"
+	run = mustApplyCommandV0(t, run, mustReviewGateRecordResultCommandForObservationV0(t, run.RunID, observation))
+	provider := ReviewGateCandidateProviderV0{
+		GateSource: staticReviewGateObservationSourceV0{Observations: []ReviewGateObservationV0{observation}},
+	}
+
+	candidates, err := provider.BuildSchedulerCandidatesV0(context.Background(), SchedulerCandidateRequestV0{
+		Run:           run,
+		OccurredAt:    "2026-05-25T18:40:00Z",
+		CorrelationID: "corr-review-gate-accepted-after-rework-001",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	if len(candidates.ReviewGateCandidates) != 1 || candidates.ReviewGateCandidates[0].AcceptReview == nil {
+		t.Fatalf("accept_review posterior requerido: %+v", candidates.ReviewGateCandidates)
+	}
+}
+
 func TestReviewGateCandidateProviderV0ProgressiveLoopAcceptsReviewSinReplan(t *testing.T) {
 	runRef := "run-nucleo-review-gate-accept-loop-001"
 	run := mustReviewGateReadyRunV0(t, runRef)
@@ -308,4 +337,28 @@ func reviewGateObservationForTestV0(
 		QualityGateRef:  "quality-gate-ref-nucleo-review-001",
 		EvidenceRefs:    []string{"evidence-ref-review-gate-nucleo-001"},
 	}
+}
+
+func mustReviewGateRecordResultCommandForObservationV0(
+	t *testing.T,
+	runRef string,
+	observation ReviewGateObservationV0,
+) orquestacoreworkflow.OrchestrationCommandV0 {
+	t.Helper()
+	command, err := orquestacoreworkflow.NewRecordReviewResultCommandV0(
+		commandMetaV0(runRef, "cmd-record-review-"+observation.ReviewResultRef, "idem-record-review-"+observation.ReviewResultRef),
+		orquestacoreworkflow.ReviewResultV0{
+			ReviewResultRef: observation.ReviewResultRef,
+			ReviewRequestID: observation.ReviewRequestID,
+			DeliveryRef:     observation.DeliveryRef,
+			Status:          observation.Status,
+			Summary:         observation.Summary,
+			EvidenceRefs:    observation.EvidenceRefs,
+			QualityGateRef:  observation.QualityGateRef,
+		},
+	)
+	if err != nil {
+		t.Fatalf("review result command from observation: %v", err)
+	}
+	return command
 }

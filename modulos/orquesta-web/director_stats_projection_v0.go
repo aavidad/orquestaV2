@@ -36,7 +36,6 @@ func directorStatsAgentsV0(
 			item.RepeatedActionCount = progress.RepeatedActionCount
 		}
 		if agent.Usage != nil {
-			item.ModelAlias = trimDirectorStatsV0(agent.Usage.ModelAlias)
 			item.CapacityLevel = trimDirectorStatsV0(agent.Usage.CapacityLevel)
 			item.QuotaStatus = trimDirectorStatsV0(agent.Usage.QuotaStatus)
 			item.QuotaRemaining = agent.Usage.QuotaRemaining

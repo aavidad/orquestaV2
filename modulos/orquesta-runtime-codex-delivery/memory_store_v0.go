@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+
+	orquestadirectoragentfilesource "orquesta/modulos/orquesta-director-agent-file-source"
 )
 
 type InMemoryCodexReceiptDescriptorStoreV0 struct {
@@ -59,6 +61,26 @@ func (store *InMemoryCodexReceiptDescriptorStoreV0) ListCodexReceiptDescriptorsV
 	return result, nil
 }
 
+func (store *InMemoryCodexReceiptDescriptorStoreV0) RecordDirectorAgentDecisionFileConsumptionV0(
+	_ context.Context,
+	receipt orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0,
+) error {
+	receipt = normalizeDirectorDecisionSidecarReceiptV0(receipt)
+	if err := validateDirectorDecisionSidecarReceiptForStoreV0(receipt); err != nil {
+		return err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	for index := range store.descriptors {
+		if !codexReceiptDescriptorMatchesDecisionSidecarV0(store.descriptors[index], receipt) {
+			continue
+		}
+		store.descriptors[index].DirectorDecisionSidecarReceipt = &receipt
+		return nil
+	}
+	return fmt.Errorf("codex_receipt_descriptor: director_decision_sidecar_unknown")
+}
+
 func normalizeCodexReceiptDescriptorV0(
 	descriptor CodexReceiptDescriptorV0,
 ) CodexReceiptDescriptorV0 {
@@ -100,6 +122,55 @@ func validateCodexReceiptDescriptorV0(descriptor CodexReceiptDescriptorV0) error
 	default:
 		return nil
 	}
+}
+
+func normalizeDirectorDecisionSidecarReceiptV0(
+	receipt orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0,
+) orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0 {
+	receipt.SchemaVersion = strings.TrimSpace(receipt.SchemaVersion)
+	receipt.ReceiptRef = strings.TrimSpace(receipt.ReceiptRef)
+	receipt.ProducerDescriptorRef = strings.TrimSpace(receipt.ProducerDescriptorRef)
+	receipt.ProducerAckRef = strings.TrimSpace(receipt.ProducerAckRef)
+	receipt.RunID = strings.TrimSpace(receipt.RunID)
+	receipt.AgentRef = strings.TrimSpace(receipt.AgentRef)
+	receipt.CorrelationID = strings.TrimSpace(receipt.CorrelationID)
+	receipt.SHA256 = strings.TrimSpace(receipt.SHA256)
+	receipt.Status = strings.TrimSpace(receipt.Status)
+	if receipt.Status == "" {
+		receipt.Status = "pending"
+	}
+	return receipt
+}
+
+func validateDirectorDecisionSidecarReceiptForStoreV0(
+	receipt orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0,
+) error {
+	switch {
+	case receipt.SchemaVersion != orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptSchemaV0:
+		return fmt.Errorf("codex_receipt_descriptor: director_decision_sidecar_schema_invalid")
+	case receipt.ReceiptRef == "":
+		return fmt.Errorf("codex_receipt_descriptor: director_decision_sidecar_receipt_ref_required")
+	case receipt.SHA256 == "":
+		return fmt.Errorf("codex_receipt_descriptor: director_decision_sidecar_hash_required")
+	case receipt.Status != "pending" && receipt.Status != "consumed":
+		return fmt.Errorf("codex_receipt_descriptor: director_decision_sidecar_status_invalid")
+	default:
+		return nil
+	}
+}
+
+func codexReceiptDescriptorMatchesDecisionSidecarV0(
+	descriptor CodexReceiptDescriptorV0,
+	receipt orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0,
+) bool {
+	if receipt.ProducerDescriptorRef != "" &&
+		strings.TrimSpace(descriptor.DescriptorRef) == receipt.ProducerDescriptorRef {
+		return true
+	}
+	if descriptor.DirectorDecisionSidecarReceipt == nil {
+		return false
+	}
+	return strings.TrimSpace(descriptor.DirectorDecisionSidecarReceipt.ReceiptRef) == receipt.ReceiptRef
 }
 
 func codexReceiptDescriptorMatchesRequestV0(

@@ -2,6 +2,8 @@ package orquestadirectoragentfilesource
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"strings"
 
@@ -79,7 +81,9 @@ func directorAgentDecisionFileSourceInvalidFileV0(err error) bool {
 	case "schema_version", "file", "file_size", "decisions", "decision":
 		return true
 	default:
-		return strings.HasPrefix(strings.TrimSpace(issue.Field), "decision.")
+		field := strings.TrimSpace(issue.Field)
+		return strings.HasPrefix(field, "decision.") ||
+			strings.HasPrefix(field, "sidecar_receipt.")
 	}
 }
 
@@ -98,11 +102,63 @@ func (source DirectorAgentDecisionFileSourceV0) decisionsFromDescriptorV0(
 	if err != nil {
 		return nil, err
 	}
+	if err := validateDirectorAgentDecisionSidecarReceiptV0(descriptor.SidecarReceipt, data); err != nil {
+		return nil, err
+	}
 	decisions, err := DecodeDirectorAgentDecisionFileV0(data)
 	if err != nil {
 		return nil, err
 	}
-	return validateDirectorAgentDecisionFileDecisionsV0(decisions)
+	decisions, err = validateDirectorAgentDecisionFileDecisionsV0(decisions)
+	if err != nil {
+		return nil, err
+	}
+	if err := source.recordDirectorAgentDecisionSidecarConsumedV0(ctx, descriptor.SidecarReceipt); err != nil {
+		return nil, err
+	}
+	return decisions, nil
+}
+
+func validateDirectorAgentDecisionSidecarReceiptV0(
+	receipt *DirectorAgentDecisionSidecarReceiptV0,
+	data []byte,
+) error {
+	if receipt == nil {
+		return nil
+	}
+	if strings.TrimSpace(receipt.SchemaVersion) != DirectorAgentDecisionSidecarReceiptSchemaV0 {
+		return DirectorAgentFileSourceIssueV0{Field: "sidecar_receipt.schema_version"}
+	}
+	if strings.TrimSpace(receipt.ReceiptRef) == "" {
+		return DirectorAgentFileSourceIssueV0{Field: "sidecar_receipt.receipt_ref"}
+	}
+	if strings.TrimSpace(receipt.SHA256) == "" {
+		return DirectorAgentFileSourceIssueV0{Field: "sidecar_receipt.sha256"}
+	}
+	if strings.TrimSpace(receipt.SHA256) != directorAgentDecisionFileSHA256V0(data) {
+		return DirectorAgentFileSourceIssueV0{Field: "sidecar_receipt.sha256_mismatch"}
+	}
+	if receipt.SizeBytes > 0 && receipt.SizeBytes != int64(len(data)) {
+		return DirectorAgentFileSourceIssueV0{Field: "sidecar_receipt.size_mismatch"}
+	}
+	return nil
+}
+
+func (source DirectorAgentDecisionFileSourceV0) recordDirectorAgentDecisionSidecarConsumedV0(
+	ctx context.Context,
+	receipt *DirectorAgentDecisionSidecarReceiptV0,
+) error {
+	if source.ConsumptionRecorder == nil || receipt == nil {
+		return nil
+	}
+	consumed := *receipt
+	consumed.Status = "consumed"
+	return source.ConsumptionRecorder.RecordDirectorAgentDecisionFileConsumptionV0(ctx, consumed)
+}
+
+func directorAgentDecisionFileSHA256V0(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }
 
 func filterDirectorAgentDecisionFileRunV0(

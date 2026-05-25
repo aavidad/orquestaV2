@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	orquestadirectoragentfilesource "orquesta/modulos/orquesta-director-agent-file-source"
 )
 
 const (
@@ -96,6 +98,34 @@ func (store *FileCodexReceiptDescriptorStoreV0) ListCodexReceiptDescriptorsV0(
 	return append([]CodexReceiptDescriptorV0(nil), result...), nil
 }
 
+func (store *FileCodexReceiptDescriptorStoreV0) RecordDirectorAgentDecisionFileConsumptionV0(
+	ctx context.Context,
+	receipt orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0,
+) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	receipt = normalizeDirectorDecisionSidecarReceiptV0(receipt)
+	if err := validateDirectorDecisionSidecarReceiptForStoreV0(receipt); err != nil {
+		return err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	next := append([]CodexReceiptDescriptorV0(nil), store.descriptors...)
+	for index := range next {
+		if !codexReceiptDescriptorMatchesDecisionSidecarV0(next[index], receipt) {
+			continue
+		}
+		next[index].DirectorDecisionSidecarReceipt = &receipt
+		if err := persistFileCodexReceiptDescriptorsV0(store.path, next); err != nil {
+			return err
+		}
+		store.descriptors = next
+		return nil
+	}
+	return fmt.Errorf("codex_receipt_descriptor_file_store: director_decision_sidecar_unknown")
+}
+
 func loadFileCodexReceiptDescriptorsV0(path string) ([]CodexReceiptDescriptorV0, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -116,6 +146,13 @@ func loadFileCodexReceiptDescriptorsV0(path string) ([]CodexReceiptDescriptorV0,
 		descriptor = normalizeCodexReceiptDescriptorV0(descriptor)
 		if err := validateCodexReceiptDescriptorV0(descriptor); err != nil {
 			return nil, fmt.Errorf("codex_receipt_descriptor_file_store: descriptor_invalid")
+		}
+		if descriptor.DirectorDecisionSidecarReceipt != nil {
+			receipt := normalizeDirectorDecisionSidecarReceiptV0(*descriptor.DirectorDecisionSidecarReceipt)
+			if err := validateDirectorDecisionSidecarReceiptForStoreV0(receipt); err != nil {
+				return nil, fmt.Errorf("codex_receipt_descriptor_file_store: sidecar_receipt_invalid")
+			}
+			descriptor.DirectorDecisionSidecarReceipt = &receipt
 		}
 		descriptors = append(descriptors, descriptor)
 	}

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -82,8 +83,10 @@ func TestRuntimeV0SupervisorEscribeAuditoriaJSONLV0(t *testing.T) {
 		events[1].Status != "ok" {
 		t.Fatalf("events=%+v", events)
 	}
-	if events[1].Payload["result"] == nil {
-		t.Fatalf("sin result auditado: %+v", events[1])
+	if events[1].Payload["result_summary"] == nil ||
+		events[1].Payload["result"] != nil ||
+		events[1].Payload["command"] != nil {
+		t.Fatalf("payload audit supervisor no compacto: %+v", events[1].Payload)
 	}
 }
 
@@ -109,9 +112,56 @@ func TestRuntimeV0HandlerAuditaPeticionesHTTPV0(t *testing.T) {
 	if last.Event != "http_request" ||
 		last.Status != "200" ||
 		last.Payload["path"] != "/healthz" ||
-		last.Payload["raw_query"] != "debug=1" {
+		!auditPayloadContainsQueryKeyForTestV0(last.Payload["query_keys"], "debug") ||
+		last.Payload["raw_query"] != nil {
 		t.Fatalf("last=%+v", last)
 	}
+}
+
+func TestRuntimeV0AuditEventNoSilenciaFalloDeSinkV0(t *testing.T) {
+	store := &memoryStateStoreV0{}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:      t.TempDir(),
+		AuditDisabled: true,
+	}, RuntimeDepsV0{
+		StateStore: store,
+		AuditSink:  failingAuditSinkV0{},
+		Clock:      fixedClockV0{now: time.Date(2026, 5, 24, 10, 0, 0, 0, time.UTC)},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	runtime.auditEventV0(context.Background(), "supervisor_tick_result", "ok", "", map[string]interface{}{"run_ref": "run-ref-001"})
+
+	if store.last.LastError == "" ||
+		store.last.LastError != "audit_append_failed: audit sink roto" {
+		t.Fatalf("fallo audit no visible en estado: %+v", store.last)
+	}
+	if len(store.last.RecentErrors) != 1 ||
+		store.last.RecentErrors[0].Code != "server_error" ||
+		store.last.RecentErrors[0].Message != "audit_append_failed: audit sink roto" {
+		t.Fatalf("recent_errors no registra audit failure: %+v", store.last.RecentErrors)
+	}
+}
+
+type failingAuditSinkV0 struct{}
+
+func (failingAuditSinkV0) AppendAuditEventV0(context.Context, AuditEventV0) error {
+	return errors.New("audit sink roto")
+}
+
+func auditPayloadContainsQueryKeyForTestV0(value any, want string) bool {
+	keys, ok := value.([]interface{})
+	if !ok {
+		return false
+	}
+	for _, key := range keys {
+		if key == want {
+			return true
+		}
+	}
+	return false
 }
 
 func readAuditEventsForTestV0(t *testing.T, path string) []AuditEventV0 {

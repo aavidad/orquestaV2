@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -117,6 +119,64 @@ func TestMCPDirectorStatsHTTPHandlerV0ExecutorNil(t *testing.T) {
 	if rec.Code != http.StatusServiceUnavailable ||
 		rec.Header().Get("X-Correlation-ID") != "corr-director-stats-http-nil-001" {
 		t.Fatalf("status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
+	}
+}
+
+func TestMCPDirectorStatsHTTPHandlerV0ExponeCausaSanitizadaSiExecutorFalla(t *testing.T) {
+	executor := mcpDirectorStatsHTTPFakeExecutorV0{
+		Err: errors.New("director stats failed at /root/Trabajo/orquesta token=secret123456 run-ref-director-error-001"),
+	}
+	body := bytes.NewBufferString(`{"run_ref":"run-ref-director-error-001"}`)
+	req := httptest.NewRequest(http.MethodPost, MCPDirectorStatsHTTPPathV0, body)
+	rec := httptest.NewRecorder()
+
+	NewMCPDirectorStatsHTTPHandlerV0(&executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPDirectorStatsToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != MCPDirectorStatsEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		!strings.Contains(result.Errores[0].Message, "director_stats_executor_error") ||
+		!strings.Contains(result.Errores[0].Message, "run-ref-director-error-001") {
+		t.Fatalf("payload publico incompleto: %+v", result)
+	}
+	if strings.Contains(rec.Body.String(), "/root/Trabajo") ||
+		strings.Contains(rec.Body.String(), "secret123456") {
+		t.Fatalf("payload filtra datos operativos: %s", rec.Body.String())
+	}
+}
+
+func TestMCPDirectorStatsTransportV0DevuelvePayloadPublicoSiExecutorFalla(t *testing.T) {
+	executor := &mcpDirectorStatsHTTPFakeExecutorV0{
+		Err: errors.New("director stats failed at /root/Trabajo/orquesta token=secret123456 run-ref-director-transport-error-001"),
+	}
+	raw, err := json.Marshal(MCPDirectorStatsToolInputV0{RunRef: "run-ref-director-transport-error-001"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	output, err := mcpDirectorStatsTransportHandlerV0(executor)(context.Background(), raw)
+	if err != nil {
+		t.Fatalf("transport no debe romper JSON-RPC: %v", err)
+	}
+	var result MCPDirectorStatsToolResultV0
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("decode: %v payload=%s", err, string(output))
+	}
+	if result.Estado != MCPDirectorStatsEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		!strings.Contains(result.Errores[0].Message, "director_stats_executor_error") ||
+		!strings.Contains(result.Errores[0].Message, "run-ref-director-transport-error-001") {
+		t.Fatalf("payload publico incompleto: %+v", result)
+	}
+	if strings.Contains(string(output), "/root/Trabajo") ||
+		strings.Contains(string(output), "secret123456") {
+		t.Fatalf("payload filtra datos operativos: %s", string(output))
 	}
 }
 

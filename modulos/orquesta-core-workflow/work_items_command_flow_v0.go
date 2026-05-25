@@ -7,7 +7,7 @@ func validateCreateMicrotaskFunctionRefsRequiredV0(task WorkflowTaskV0) error {
 		return commandErrorV0(ErrPayloadInvalidoV0, "payload.task.function_contract_refs")
 	}
 	for _, ref := range task.FunctionContractRefs {
-		if strings.TrimSpace(ref.ContractRef) == "" {
+		if strings.TrimSpace(ref.ContractRef) == "" && strings.TrimSpace(ref.FunctionName) == "" {
 			return commandErrorV0(ErrPayloadInvalidoV0, "payload.task.function_contract_refs")
 		}
 	}
@@ -66,7 +66,11 @@ func functionContractRefsAlreadyPublishedV0(current OrchestrationRunV0, refs []s
 func explicitFunctionContractRefsV0(refs []WorkflowFunctionContractRefV0) []string {
 	result := make([]string, 0, len(refs))
 	for _, ref := range refs {
-		result = appendUniqueCompactRefV0(result, ref.ContractRef)
+		if strings.TrimSpace(ref.ContractRef) != "" {
+			result = appendUniqueCompactRefV0(result, ref.ContractRef)
+			continue
+		}
+		result = appendUniqueCompactRefV0(result, ref.FunctionName)
 	}
 	return result
 }

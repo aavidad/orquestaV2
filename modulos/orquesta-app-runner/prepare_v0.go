@@ -36,9 +36,11 @@ func PrepareAppOrchestrationV0(
 		Plan:              plan,
 		InitialProgress:   progress,
 		CandidateProvider: provider,
+		RoutePolicy:       AppRunnerPreviewRoutePolicyV0(AppRunnerLegacyEntrypointPrepareV0),
 		EvidenceRefs: compactAppRunnerRefsV0([]string{
 			"evidence-ref-app-runner-prepared-v0",
 			"evidence-ref-" + safeAppRunnerRefPartV0(request.RunRef),
+			AppRunnerPreviewCompatibilityEvidenceV0,
 		}),
 	}, nil
 }

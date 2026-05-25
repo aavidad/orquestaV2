@@ -9,10 +9,8 @@ import (
 )
 
 type CodexStackAgentUsageSourceV0 struct {
-	Store           CodexReceiptStorePortV0
-	ModelAlias      string
-	ReasoningEffort string
-	UsageMetrics    CodexStackAgentUsageMetricsProviderPortV0
+	Store        CodexReceiptStorePortV0
+	UsageMetrics CodexStackAgentUsageMetricsProviderPortV0
 }
 
 var _ orquestacionnucleoapp.AgentUsageStatsProviderPortV0 = CodexStackAgentUsageSourceV0{}
@@ -40,7 +38,6 @@ type CodexStackAgentUsageMetricV0 struct {
 	PromptTokens     int64
 	CompletionTokens int64
 	TotalTokens      int64
-	CostMicros       int64
 	EvidenceRefs     []string
 }
 
@@ -90,9 +87,7 @@ func (source CodexStackAgentUsageSourceV0) observationFromDescriptorV0(
 		RuntimeKind:      strings.TrimSpace(spec.RuntimeKind),
 		ConnectorRef:     strings.TrimSpace(spec.ConnectorRef),
 		ProfileRef:       strings.TrimSpace(spec.ProfileRef),
-		ModelAlias:       strings.TrimSpace(source.ModelAlias),
 		CapacityLevel:    strings.TrimSpace(spec.AgentPacket.CapacityLevel),
-		ReasoningEffort:  strings.TrimSpace(source.ReasoningEffort),
 		QuotaStatus:      quotaStatus,
 		QuotaRemaining:   metric.QuotaRemaining,
 		QuotaLimit:       metric.QuotaLimit,
@@ -100,13 +95,26 @@ func (source CodexStackAgentUsageSourceV0) observationFromDescriptorV0(
 		PromptTokens:     metric.PromptTokens,
 		CompletionTokens: metric.CompletionTokens,
 		TotalTokens:      metric.TotalTokens,
-		CostMicros:       metric.CostMicros,
 		EvidenceRefs: compactStringsV0(append([]string{
 			strings.TrimSpace(descriptor.DescriptorRef),
 			strings.TrimSpace(spec.RequestID),
 			strings.TrimSpace(spec.AgentPacket.WorkOrderRef),
-		}, metric.EvidenceRefs...)),
+		}, append(
+			metric.EvidenceRefs,
+			codexStackCapacityPolicyEvidenceRefsV0(spec.AgentPacket.Policies)...,
+		)...)),
 	}
+}
+
+func codexStackCapacityPolicyEvidenceRefsV0(policies []string) []string {
+	refs := make([]string, 0, len(policies))
+	for _, policy := range policies {
+		ref, ok := strings.CutPrefix(strings.TrimSpace(policy), "capacity_policy_evidence_ref:")
+		if ok {
+			refs = append(refs, ref)
+		}
+	}
+	return refs
 }
 
 func (source CodexStackAgentUsageSourceV0) metricsByAgentV0(

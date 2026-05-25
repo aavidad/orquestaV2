@@ -59,6 +59,20 @@ Esto implica:
   transportan como `WorkProfileV0`/`WorkflowTaskV0.work_profile_kind`;
 - ninguna app externa debe copiar internals, compartir DB/filesystem interno ni
   decidir plan, runtime, modelo o paralelismo sin director de Orquesta.
+- la espina `DirectorCycleStepV0 -> director-runner -> director-scheduler ->
+  core-workflow -> director-cycle-outbox` es la fuente de verdad documental para
+  un tick acotado del Director V2: consulta outbox pendiente, construye tick
+  compacto, obtiene comandos del scheduler, aplica workflow por puerto y
+  registra nueva outbox. No es el loop progresivo historico de
+  `app-director-service`, no es daemon y no demuestra por si sola composicion
+  residente, smoke real, proveedor real ni OPES temporal.
+- para `AppSpecV0`, la ruta publica operativa preferente es
+  `orquesta.apps.arrancar_director.v0`, que delega en
+  `orquesta-app-director-service`. `orquesta.apps.preparar_orquestacion.v0` y
+  `orquesta.apps.ejecutar_orquestacion.v0` quedan como preview/compatibilidad
+  sobre `orquesta-app-runner` y publican `route_policy` en resultados y
+  descriptores compactos; si el caller declara que necesita Director V2, el
+  runner bloquea con `director_v2_required`.
 
 ## Nucleo neutral
 
@@ -236,6 +250,13 @@ El primer corte ya no esta solo en documentos:
 
 Lo pendiente no debe confundirse con lo hecho:
 
+- en la espina `DirectorCycleStepV0 -> runner -> scheduler -> workflow ->
+  cycle-outbox`, el codigo offline ya cubre el tick neutral con outbox pendiente
+  como corte de seguridad; lo pendiente para esa linea se clasifica aparte:
+  composicion residente/restart (`T65`), smoke neutral de proceso real (`T66`),
+  proveedor real si aplica y OPES temporal real de derivados/cierre. No se debe
+  reabrir como "pendiente generico" review/tests/rework/cierre ya cubiertos por
+  PlanState y pruebas offline;
 - el `PlanState` ya cubre la salida positiva
   `review_deliveries -> run_required_tests/replan_or_close` cuando existe la
   cadena causal `DeliveryRegistered -> ReviewRequested ->
@@ -377,7 +398,11 @@ Leer con cuidado:
 - La delegacion recursiva con Codex aun no esta cerrada end-to-end. No anunciar
   "director recursivo completo" hasta tener evidencia real con hijos, nietos,
   limites y review.
-- El contrato i18n y su cargador activo tienen brechas historicas documentadas.
+- El contrato i18n y su cargador activo tenian brechas historicas documentadas.
+  Corte T75 del 2026-05-25: `orquesta-i18n-docs` queda declarado owner activo
+  de bundles, loader shape y documentacion generada; factory, web y MCP deben
+  consumir su proyeccion `ActiveI18nDocsCompositionOwnerV0` o el plan
+  `AppI18nDocsPlanV0` en vez de crear otro owner paralelo.
 - Seguridad operativa, multi-tenant, TLS/mTLS, RBAC y auditoria fuerte siguen
   siendo frentes de cierre antes de considerar la plataforma lista para despliegue
   amplio.

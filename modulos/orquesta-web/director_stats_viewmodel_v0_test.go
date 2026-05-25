@@ -51,7 +51,6 @@ func TestWebDirectorStatsPanelV0ProyectaRunCountsProgresoYErrores(t *testing.T) 
 		panel.Agentes[0].StopReasonCode != "loop_detected" ||
 		panel.Agentes[0].StopReasonSource != "agent_stop_request" ||
 		panel.Agentes[0].StopReasonRef != "agent-ref-web-stats-001#reason:loop_detected" ||
-		panel.Agentes[0].ModelAlias != "gpt-5.5" ||
 		panel.Agentes[0].QuotaRemaining != 90 ||
 		panel.Agentes[0].TotalTokens != 1500 {
 		t.Fatalf("agentes=%+v", panel.Agentes)
@@ -206,7 +205,6 @@ func directorStatsResultForWebTestV0() WebDirectorStatsInboundResultV0 {
 				AgentsObserved: 1,
 				QuotaStatus:    "available",
 				TotalTokens:    1500,
-				CostMicros:     500,
 			},
 			Agents: []WebDirectorAgentStatsContractV0{{
 				AgentRequestID:   "agent-ref-web-stats-001",
@@ -223,7 +221,6 @@ func directorStatsResultForWebTestV0() WebDirectorStatsInboundResultV0 {
 					RepeatedActionCount: 1,
 				},
 				Usage: &WebDirectorAgentUsageV0{
-					ModelAlias:     " gpt-5.5 ",
 					CapacityLevel:  "xhigh",
 					QuotaStatus:    "available",
 					QuotaRemaining: 90,

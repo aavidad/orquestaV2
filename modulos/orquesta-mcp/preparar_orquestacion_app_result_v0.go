@@ -28,6 +28,7 @@ func NewMCPPrepararOrquestacionAppOKResultV0(
 		Estado:        MCPPrepararOrquestacionAppEstadoOKV0,
 		RequestID:     firstNonEmptyMCPV0(input.RequestID, prepared.Run.AppSpecRef, input.AppSpec.RequestID),
 		CorrelationID: firstNonEmptyMCPV0(input.CorrelationID, "corr-"+prepared.Run.RunID),
+		RoutePolicy:   mcpRoutePolicyFromAppRunnerV0(prepared.RoutePolicy),
 		AppSpec:       compactAppSpecV0(input.AppSpec),
 		RunRef:        strings.TrimSpace(prepared.Run.RunID),
 		PhaseID:       strings.TrimSpace(string(prepared.Run.CurrentPhase)),
@@ -46,7 +47,21 @@ func NewMCPPrepararOrquestacionAppErrorResultV0(
 		Estado:        MCPPrepararOrquestacionAppEstadoErrorV0,
 		RequestID:     firstNonEmptyMCPV0(input.RequestID, input.AppSpec.RequestID),
 		CorrelationID: firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
-		Errores:       []MCPValidationIssueV0{publicPrepareOrchestrationIssueMCPV0(err)},
+		RoutePolicy: mcpRoutePolicyFromAppRunnerV0(
+			orquestaapprunner.AppRunnerPreviewRoutePolicyV0(orquestaapprunner.AppRunnerLegacyEntrypointPrepareV0),
+		),
+		Errores: []MCPValidationIssueV0{publicPrepareOrchestrationIssueMCPV0(err)},
+	}
+}
+
+func mcpRoutePolicyFromAppRunnerV0(
+	policy orquestaapprunner.AppRunnerRoutePolicyV0,
+) MCPAppSpecRoutePolicyV0 {
+	return MCPAppSpecRoutePolicyV0{
+		Mode:                strings.TrimSpace(policy.Mode),
+		PreferredEntrypoint: strings.TrimSpace(policy.PreferredEntrypoint),
+		LegacyEntrypoint:    strings.TrimSpace(policy.LegacyEntrypoint),
+		PublicReason:        strings.TrimSpace(policy.PublicReason),
 	}
 }
 

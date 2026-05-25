@@ -73,11 +73,12 @@ func (directorQuestionAckExecutorV0) ExecuteOutboxDispatchV0(
 
 func agentBatchDispatcherV0(config ConfigV0) orquestacionnucleoapp.OutboxBatchDispatcherBindingV0 {
 	return orquestacionnucleoapp.OutboxBatchDispatcherBindingV0{
-		TargetPort:  orquestacoreworkflow.OutboxTargetAgentLauncherV0,
-		MessageType: orquestacoreworkflow.OutboxMessageLaunchRuntimeAgentV0,
-		MaxReady:    config.Codex.MaxBatchReady,
-		Reader:      config.Stores.OutboxLedger,
-		Claimer:     config.Stores.OutboxLedger,
+		TargetPort:   orquestacoreworkflow.OutboxTargetAgentLauncherV0,
+		MessageType:  orquestacoreworkflow.OutboxMessageLaunchRuntimeAgentV0,
+		MaxReady:     config.Codex.MaxBatchReady,
+		CapacityGate: codexLiveProcessCapacityGateV0(config),
+		Reader:       config.Stores.OutboxLedger,
+		Claimer:      config.Stores.OutboxLedger,
 		Executor: orquestacionnucleoapp.ExternalProcessAgentBatchExecutorV0{
 			RunStore:        config.Stores.RunStore,
 			EventSink:       config.Stores.EventSink,
@@ -91,6 +92,21 @@ func agentBatchDispatcherV0(config ConfigV0) orquestacionnucleoapp.OutboxBatchDi
 			EvidenceRefs:    []string{"evidence-ref-app-stack-agent"},
 		},
 		Acker: config.Stores.OutboxLedger,
+	}
+}
+
+func codexLiveProcessCapacityGateV0(
+	config ConfigV0,
+) orquestacionnucleoapp.LiveProcessCapacityGatePortV0 {
+	registry, ok := config.Stores.ProcessRegistry.(orquestacionnucleoapp.AgentProcessRegistryListPortV0)
+	if !ok || registry == nil || config.Codex.SnapshotSource == nil || config.Codex.MaxConcurrency <= 0 {
+		return nil
+	}
+	return &orquestacionnucleoapp.LiveProcessCapacityGateV0{
+		Registry:       registry,
+		SnapshotSource: config.Codex.SnapshotSource,
+		Limit:          config.Codex.MaxConcurrency,
+		EvidenceRefs:   []string{"evidence-ref-codex-live-process-capacity"},
 	}
 }
 
@@ -108,5 +124,18 @@ func recordingSpecResolverV0(
 			BaseDir:        config.Codex.RuntimeWorkDir,
 			ProjectWorkDir: config.Codex.ProjectWorkDir,
 		},
+		WorktreeBaselineRecorder: codexStackWorktreeBaselineRecorderV0(config),
+	}
+}
+
+func codexStackWorktreeBaselineRecorderV0(
+	config ConfigV0,
+) orquestaruntimecodexdelivery.CodexReceiptWorktreeBaselineRecorderPortV0 {
+	if config.ReviewGate.LineBudgetSnapshotStore == nil {
+		return nil
+	}
+	return orquestaruntimecodexdelivery.CodexReceiptWorktreeBaselineRecorderV0{
+		SnapshotStore:  config.ReviewGate.LineBudgetSnapshotStore,
+		IgnorePrefixes: codexStackWorktreeIgnorePrefixesV0(),
 	}
 }

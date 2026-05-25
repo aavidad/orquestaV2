@@ -89,9 +89,10 @@ type DirectorAgentProgressV0 struct {
 }
 
 type DirectorProgressSourceRequestV0 struct {
-	StepNumber    int
-	MaxSteps      int
-	OccurredAt    string
-	CorrelationID string
-	EvidenceRefs  []string
+	StepNumber        int
+	MaxSteps          int
+	OccurredAt        string
+	CorrelationID     string
+	IncludeAgentUsage bool
+	EvidenceRefs      []string
 }

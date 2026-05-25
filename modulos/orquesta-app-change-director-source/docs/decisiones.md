@@ -178,6 +178,23 @@ de abrir revision para no revisar un conjunto de tareas incompleto.
 
 ## Visuales OPES como trabajo externo
 
+## Readiness alineado con rails comunes
+
+Decision: La fuente deja de mantener una lista local de vocabulario prohibido
+para autoplanning. El readiness usa la politica comun de `orquesta-rails` por
+campo y solo corta detalle sensible efectivo o material crudo, como
+`api_key=`, `client_secret=`, `authorization: Bearer`, DSN con credenciales,
+rutas privadas, `prompt=` o `transcript=`.
+
+Motivo: `runtime`, `provider`, `model`, `db`, `sql`, `codex`, `docker` y
+`home` pueden ser refs opacas, nombres de modulo o criterios operativos validos.
+Bloquearlos por substring impedia cambios reales y ocultaba la causa de dominio
+al director.
+
+Impacto: los criterios se compactan, pero no sustituyen terminos de dominio ni
+vocabulario operativo normal. Si aparece detalle sensible efectivo, no se crea
+microtarea automatica y el director conserva la consulta pendiente.
+
 Decision: `generate_visual_asset` publica el mismo contrato externo
 `ApplyExternalDomainWorkV0`, pero la tarea declara criterios especificos de
 visual pedagogico.

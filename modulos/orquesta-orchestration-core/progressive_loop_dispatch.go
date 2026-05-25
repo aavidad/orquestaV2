@@ -21,14 +21,15 @@ func (service ServiceV0) dispatchProgressiveWaitV0(
 		dispatched := false
 		for _, dispatcher := range request.BatchDispatchers {
 			batch, err := RunOutboxDispatchBatchV0(ctx, OutboxDispatchBatchRunRequestV0{
-				RunRef:      request.RunRef,
-				TargetPort:  dispatcher.TargetPort,
-				MessageType: dispatcher.MessageType,
-				MaxReady:    dispatcher.MaxReady,
-				Reader:      dispatcher.Reader,
-				Claimer:     dispatcher.Claimer,
-				Executor:    dispatcher.Executor,
-				Acker:       dispatcher.Acker,
+				RunRef:       request.RunRef,
+				TargetPort:   dispatcher.TargetPort,
+				MessageType:  dispatcher.MessageType,
+				MaxReady:     dispatcher.MaxReady,
+				CapacityGate: dispatcher.CapacityGate,
+				Reader:       dispatcher.Reader,
+				Claimer:      dispatcher.Claimer,
+				Executor:     dispatcher.Executor,
+				Acker:        dispatcher.Acker,
 			})
 			result.Batch = append(result.Batch, batch)
 			if err != nil {

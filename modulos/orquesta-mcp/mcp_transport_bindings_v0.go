@@ -3,6 +3,7 @@ package orquestamcp
 import (
 	"context"
 
+	orquestaobservability "orquesta/modulos/orquesta-observability"
 	operator "orquesta/modulos/orquesta-operator-mcp"
 )
 
@@ -16,6 +17,7 @@ type MCPTransportBindingsV0 struct {
 	RunControl                MCPTransportRunControlExecutorV0
 	RunQueuePriority          MCPTransportRunQueuePriorityExecutorV0
 	RunSupervisor             MCPTransportRunSupervisorExecutorV0
+	WorkspaceTimeline         orquestaobservability.WorkspaceTimelineSourcePortV0
 	AutoprogrammingPrepareRun MCPTransportAutoprogrammingPrepareRunExecutorV0
 	ServerShutdown            MCPTransportServerShutdownExecutorV0
 	DomainWork                MCPDomainWorkExecutorPortV0

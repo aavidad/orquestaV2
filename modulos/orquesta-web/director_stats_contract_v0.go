@@ -123,9 +123,7 @@ type WebDirectorAgentUsageV0 struct {
 	RuntimeKind      string `json:"runtime_kind,omitempty"`
 	ConnectorRef     string `json:"connector_ref,omitempty"`
 	ProfileRef       string `json:"profile_ref,omitempty"`
-	ModelAlias       string `json:"model_alias,omitempty"`
 	CapacityLevel    string `json:"capacity_level,omitempty"`
-	ReasoningEffort  string `json:"reasoning_effort,omitempty"`
 	QuotaStatus      string `json:"quota_status,omitempty"`
 	QuotaRemaining   int64  `json:"quota_remaining,omitempty"`
 	QuotaLimit       int64  `json:"quota_limit,omitempty"`
@@ -133,7 +131,6 @@ type WebDirectorAgentUsageV0 struct {
 	PromptTokens     int64  `json:"prompt_tokens,omitempty"`
 	CompletionTokens int64  `json:"completion_tokens,omitempty"`
 	TotalTokens      int64  `json:"total_tokens,omitempty"`
-	CostMicros       int64  `json:"cost_micros,omitempty"`
 }
 
 type WebDirectorRunUsageSummaryV0 struct {
@@ -144,7 +141,6 @@ type WebDirectorRunUsageSummaryV0 struct {
 	PromptTokens     int64  `json:"prompt_tokens,omitempty"`
 	CompletionTokens int64  `json:"completion_tokens,omitempty"`
 	TotalTokens      int64  `json:"total_tokens,omitempty"`
-	CostMicros       int64  `json:"cost_micros,omitempty"`
 }
 
 type WebDirectorStatsPublicIssueV0 struct {

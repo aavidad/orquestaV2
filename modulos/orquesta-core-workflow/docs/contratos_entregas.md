@@ -24,7 +24,7 @@ Invariantes:
   - `agent_ref` no puede estar en `failed_agents`.
   - `agent_ref` no puede estar en `stopped_agents`; una parada solicitada corta entregas posteriores.
   - Si `delivery_ref` ya esta reflejado, el retry solo es no-op si coincide la huella durable de comando y payload normalizado.
-  - No contiene codigo, commits, rutas locales, runtime, DB, proveedor, modelo, HOME, OAuth, Docker, tmux ni secretos.
+  - No contiene codigo, commits, rutas locales ni valores reales de runtime, DB, proveedor, modelo, HOME, OAuth, Docker, tmux o secretos.
   - No emite outbox ni solicita revision.
 Errores:
   - payload_invalido

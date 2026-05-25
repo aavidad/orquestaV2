@@ -118,13 +118,14 @@ func stackDrainBoolStatusV0(value bool) string {
 func stackDrainDiagnosticsWithErrorV0(
 	result orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
 	diagnostics []orquestaruncoordinator.RunDrainDiagnosticV0,
+	fallbackRunRef string,
 	errorMessage string,
 ) []orquestaruncoordinator.RunDrainDiagnosticV0 {
 	errorMessage = strings.TrimSpace(errorMessage)
 	if errorMessage == "" {
 		return diagnostics
 	}
-	diagnostics = append(diagnostics, stackDrainErrorDiagnosticV0(result, errorMessage))
+	diagnostics = append(diagnostics, stackDrainErrorDiagnosticV0(result, fallbackRunRef, errorMessage))
 	for _, attempt := range result.Attempts {
 		diagnostics = append(diagnostics, stackDrainDispatchErrorDiagnosticsV0(
 			attempt.AttemptNumber,
@@ -137,12 +138,13 @@ func stackDrainDiagnosticsWithErrorV0(
 
 func stackDrainErrorDiagnosticV0(
 	result orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
+	fallbackRunRef string,
 	errorMessage string,
 ) orquestaruncoordinator.RunDrainDiagnosticV0 {
 	return orquestaruncoordinator.RunDrainDiagnosticV0{
 		Kind:   "drain_error",
 		Status: "error",
-		RunRef: strings.TrimSpace(result.Final.Run.RunID),
+		RunRef: firstNonEmptyQueuedSourceV0(result.Final.Run.RunID, fallbackRunRef),
 		Error:  errorMessage,
 	}
 }

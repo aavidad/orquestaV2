@@ -70,6 +70,9 @@ func idleSelfImprovementBacklogSectionFingerprintV0(
 	parts := []string{
 		strings.TrimSpace(section.Heading),
 		strings.TrimSpace(section.Objective),
+		strings.TrimSpace(section.SourcePath),
+		strings.TrimSpace(section.LocalAlias),
+		strings.TrimSpace(section.LocalEntryHash),
 		strings.Join(compactServerStackStringsV0(section.Scope), ","),
 		strings.Join(compactServerStackStringsV0(section.StateEvidenceRefs), ","),
 	}

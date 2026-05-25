@@ -96,7 +96,7 @@ smoke_start_orquesta_server() {
     if [[ -s "$state_file" ]]; then
       local addr
       addr="$(jq -r '.addr // empty' "$state_file")"
-      if [[ -n "$addr" ]] && curl -fsS -m 2 "http://$addr/healthz" >/dev/null; then
+      if [[ -n "$addr" ]] && curl -fsS -m 2 "http://$addr/api/v0/server/readiness" >/dev/null; then
         base_url="http://$addr"
         echo "orquesta-server listo: $base_url"
         return
@@ -104,7 +104,7 @@ smoke_start_orquesta_server() {
     fi
     sleep 0.5
   done
-  echo "orquesta-server no llego a health OK" >&2
+  echo "orquesta-server no llego a readiness OK" >&2
   tail -n 80 "$SMOKE_OUT_DIR/orquesta-server.stderr.log" >&2 || true
   exit 1
 }

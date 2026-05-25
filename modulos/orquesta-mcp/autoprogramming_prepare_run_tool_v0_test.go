@@ -3,6 +3,7 @@ package orquestamcp
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -17,6 +18,9 @@ func TestMCPAutoprogrammingPrepareRunDescriptorV0EsAdaptadorOptIn(t *testing.T) 
 	}
 	if len(descriptor.Invariantes) == 0 {
 		t.Fatalf("invariantes vacias")
+	}
+	if !strings.Contains(descriptor.InputSchema, "autoprogramming_request:AutoprogrammingRequestV0") {
+		t.Fatalf("descriptor debe publicar autoprogramming_request como objeto tipado, no string generico: %q", descriptor.InputSchema)
 	}
 }
 

@@ -98,7 +98,8 @@ func writeCodexStackACKForPacketV0(
 		"status":         "completed",
 		"files":          packet.Task.WriteSet,
 		"tests":          packet.Task.RequiredTests,
-		"notes":          []string{"ack de prueba para tareas completas"},
+		"test_receipts":  codexStackRequiredTestReceiptsV0(packet.Task.RequiredTests),
+		"notes":          codexStackFakeAckNotesV0(packet, "ack de prueba para tareas completas"),
 	})
 	if err != nil {
 		return err

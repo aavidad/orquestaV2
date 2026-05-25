@@ -1,6 +1,9 @@
 # orquesta-app-director-intake
 
 Entrada limpia para pedir una app completa a Orquesta arrancando por director.
+Es la ruta de intake usada por la entrada publica preferente
+`orquesta.apps.arrancar_director.v0`; no comparte el camino preview de
+`orquesta-app-runner`/`AppPlan`.
 
 Responsabilidades:
 

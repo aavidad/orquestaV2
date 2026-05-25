@@ -137,11 +137,13 @@ func TestCodexDeliveryObservationSourceV0RechazaAckFileInexistente(t *testing.T)
 
 func TestCodexDeliveryObservationSourceV0ConservaCambioRealFueraDeWriteSetComoRailBlando(t *testing.T) {
 	spec := codexDeliverySpecForTestV0()
+	ack := codexDeliveryAckForTestV0(spec)
+	ack.Files = append(ack.Files, "docs/extra.md")
 	projectDir := t.TempDir()
 	writeCodexDeliveryProjectFileForTestV0(t, projectDir, "README.md", "v1")
 	baseline := captureCodexDeliveryWorktreeBaselineForTestV0(t, projectDir)
 	snapshotStore := orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0(baseline)
-	ackPath := writeCodexDeliveryAckForTestV0(t, spec, codexDeliveryAckForTestV0(spec))
+	ackPath := writeCodexDeliveryAckForTestV0(t, spec, ack)
 	writeCodexDeliveryProjectFileForTestV0(t, projectDir, "README.md", "v2")
 	writeCodexDeliveryProjectFileForTestV0(t, projectDir, "docs/extra.md", "fuera")
 	store := &staticCodexReceiptStoreV0{
@@ -171,7 +173,44 @@ func TestCodexDeliveryObservationSourceV0ConservaCambioRealFueraDeWriteSetComoRa
 	}
 }
 
-func TestCodexDeliveryObservationSourceV0MantieneBorradoRealComoBloqueo(t *testing.T) {
+func TestCodexDeliveryObservationSourceV0ConservaAckFilesMismatchComoRailBlando(t *testing.T) {
+	spec := codexDeliverySpecForTestV0()
+	ack := codexDeliveryAckForTestV0(spec)
+	ack.Files = append(ack.Files, "docs/extra.md")
+	projectDir := t.TempDir()
+	writeCodexDeliveryProjectFileForTestV0(t, projectDir, "README.md", "v1")
+	baseline := captureCodexDeliveryWorktreeBaselineForTestV0(t, projectDir)
+	snapshotStore := orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0(baseline)
+	ackPath := writeCodexDeliveryAckForTestV0(t, spec, ack)
+	writeCodexDeliveryProjectFileForTestV0(t, projectDir, "README.md", "v2")
+	store := &staticCodexReceiptStoreV0{
+		Descriptors: []CodexReceiptDescriptorV0{{
+			DescriptorRef:       "receipt-ref-ack-mismatch-001",
+			Spec:                spec,
+			AckPath:             ackPath,
+			ProjectWorkDir:      projectDir,
+			WorktreeBaselineRef: baseline.SnapshotRef,
+		}},
+	}
+
+	observations, err := (CodexDeliveryObservationSourceV0{
+		Store: store,
+		WorktreeVerifier: CodexReceiptWorktreeVerifierV0{
+			SnapshotStore: snapshotStore,
+		},
+	}).BuildAgentDeliveryObservationsV0(context.Background(), codexDeliveryRequestForTestV0(spec, nil))
+	if err != nil {
+		t.Fatalf("BuildAgentDeliveryObservationsV0: %v", err)
+	}
+	if len(observations) != 1 || observations[0].DeliveryRef != spec.AgentPacket.DeliveryRefs.AckRef {
+		t.Fatalf("observations=%+v", observations)
+	}
+	if !stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-issue:ack_files_mismatch") {
+		t.Fatalf("rail blando ack_files_mismatch no conservado: %+v", observations[0].EvidenceRefs)
+	}
+}
+
+func TestCodexDeliveryObservationSourceV0ConservaBorradoRealComoIssueBloqueante(t *testing.T) {
 	spec := codexDeliverySpecForTestV0()
 	projectDir := t.TempDir()
 	writeCodexDeliveryProjectFileForTestV0(t, projectDir, "README.md", "v1")
@@ -191,20 +230,124 @@ func TestCodexDeliveryObservationSourceV0MantieneBorradoRealComoBloqueo(t *testi
 		}},
 	}
 
-	_, err := (CodexDeliveryObservationSourceV0{
+	observations, err := (CodexDeliveryObservationSourceV0{
 		Store: store,
 		WorktreeVerifier: CodexReceiptWorktreeVerifierV0{
 			SnapshotStore: snapshotStore,
 		},
 	}).BuildAgentDeliveryObservationsV0(context.Background(), codexDeliveryRequestForTestV0(spec, nil))
-	if err == nil {
-		t.Fatalf("esperaba bloqueo por borrado real")
+	if err != nil {
+		t.Fatalf("BuildAgentDeliveryObservationsV0: %v", err)
 	}
-	if strings.Contains(err.Error(), projectDir) || strings.Contains(err.Error(), ackPath) {
-		t.Fatalf("error filtra path operacional: %v", err)
+	if len(observations) != 1 || observations[0].DeliveryRef != spec.AgentPacket.DeliveryRefs.AckRef {
+		t.Fatalf("observations=%+v", observations)
 	}
-	if !strings.Contains(err.Error(), string(orquestaruntimeworktree.WorktreeIssueRemovedPathV0)) {
-		t.Fatalf("error inesperado: %v", err)
+	if !stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-issue:removed_path") ||
+		!stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-issue:removed_path:README.md") {
+		t.Fatalf("borrado real sin evidencia bloqueante: %+v", observations[0].EvidenceRefs)
+	}
+}
+
+func TestCodexDeliveryObservationSourceV0ConservaTruncadoComoRailBlando(t *testing.T) {
+	spec := codexDeliverySpecForTestV0()
+	projectDir := t.TempDir()
+	writeCodexDeliveryProjectFileForTestV0(t, projectDir, "README.md", strings.Repeat("base\n", 80))
+	baseline := captureCodexDeliveryWorktreeBaselineForTestV0(t, projectDir)
+	snapshotStore := orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0(baseline)
+	ackPath := writeCodexDeliveryAckForTestV0(t, spec, codexDeliveryAckForTestV0(spec))
+	writeCodexDeliveryProjectFileForTestV0(t, projectDir, "README.md", "resumen\n")
+	store := &staticCodexReceiptStoreV0{
+		Descriptors: []CodexReceiptDescriptorV0{{
+			DescriptorRef:       "receipt-ref-truncated-001",
+			Spec:                spec,
+			AckPath:             ackPath,
+			ProjectWorkDir:      projectDir,
+			WorktreeBaselineRef: baseline.SnapshotRef,
+		}},
+	}
+
+	observations, err := (CodexDeliveryObservationSourceV0{
+		Store: store,
+		WorktreeVerifier: CodexReceiptWorktreeVerifierV0{
+			SnapshotStore: snapshotStore,
+		},
+	}).BuildAgentDeliveryObservationsV0(context.Background(), codexDeliveryRequestForTestV0(spec, nil))
+	if err != nil {
+		t.Fatalf("BuildAgentDeliveryObservationsV0: %v", err)
+	}
+	if len(observations) != 1 || observations[0].DeliveryRef != spec.AgentPacket.DeliveryRefs.AckRef {
+		t.Fatalf("observations=%+v", observations)
+	}
+	if !stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-issue:truncated_path") {
+		t.Fatalf("rail blando truncated_path no conservado: %+v", observations[0].EvidenceRefs)
+	}
+}
+
+func TestCodexDeliveryObservationSourceV0ConservaReemplazoGrandeComoRailBlando(t *testing.T) {
+	spec := codexDeliverySpecForTestV0()
+	projectDir := t.TempDir()
+	writeCodexDeliveryProjectFileForTestV0(t, projectDir, "README.md", strings.Repeat("base\n", 1300))
+	baseline := captureCodexDeliveryWorktreeBaselineForTestV0(t, projectDir)
+	snapshotStore := orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0(baseline)
+	ackPath := writeCodexDeliveryAckForTestV0(t, spec, codexDeliveryAckForTestV0(spec))
+	writeCodexDeliveryProjectFileForTestV0(t, projectDir, "README.md", strings.Repeat("current\n", 2200))
+	store := &staticCodexReceiptStoreV0{
+		Descriptors: []CodexReceiptDescriptorV0{{
+			DescriptorRef:       "receipt-ref-large-replacement-001",
+			Spec:                spec,
+			AckPath:             ackPath,
+			ProjectWorkDir:      projectDir,
+			WorktreeBaselineRef: baseline.SnapshotRef,
+		}},
+	}
+
+	observations, err := (CodexDeliveryObservationSourceV0{
+		Store: store,
+		WorktreeVerifier: CodexReceiptWorktreeVerifierV0{
+			SnapshotStore: snapshotStore,
+		},
+	}).BuildAgentDeliveryObservationsV0(context.Background(), codexDeliveryRequestForTestV0(spec, nil))
+	if err != nil {
+		t.Fatalf("BuildAgentDeliveryObservationsV0: %v", err)
+	}
+	if len(observations) != 1 || observations[0].DeliveryRef != spec.AgentPacket.DeliveryRefs.AckRef {
+		t.Fatalf("observations=%+v", observations)
+	}
+	if !stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-issue:replaced_large_delta") {
+		t.Fatalf("rail blando replaced_large_delta no conservado: %+v", observations[0].EvidenceRefs)
+	}
+}
+
+func TestCodexDeliveryObservationSourceV0FallbackACKFilesSiBaselineSePierdeTrasReinicio(t *testing.T) {
+	spec := codexDeliverySpecForTestV0()
+	projectDir := t.TempDir()
+	writeCodexDeliveryProjectFileForTestV0(t, projectDir, "README.md", "entrega tras reinicio")
+	ackPath := writeCodexDeliveryAckForTestV0(t, spec, codexDeliveryAckForTestV0(spec))
+	store := &staticCodexReceiptStoreV0{
+		Descriptors: []CodexReceiptDescriptorV0{{
+			DescriptorRef:       "receipt-ref-missing-baseline-001",
+			Spec:                spec,
+			AckPath:             ackPath,
+			ProjectWorkDir:      projectDir,
+			WorktreeBaselineRef: "worktree-snapshot-ref-perdido-tras-reinicio",
+		}},
+	}
+
+	observations, err := (CodexDeliveryObservationSourceV0{
+		Store: store,
+		WorktreeVerifier: CodexReceiptWorktreeVerifierV0{
+			SnapshotStore: orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0(),
+		},
+	}).BuildAgentDeliveryObservationsV0(context.Background(), codexDeliveryRequestForTestV0(spec, nil))
+	if err != nil {
+		t.Fatalf("BuildAgentDeliveryObservationsV0: %v", err)
+	}
+	if len(observations) != 1 || observations[0].DeliveryRef != spec.AgentPacket.DeliveryRefs.AckRef {
+		t.Fatalf("observations=%+v", observations)
+	}
+	if !stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-issue:worktree_baseline_missing") ||
+		!stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-issue:strict_diff_unavailable") {
+		t.Fatalf("fallback sin evidencia: %+v", observations[0].EvidenceRefs)
 	}
 }
 

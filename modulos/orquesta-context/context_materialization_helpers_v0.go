@@ -58,7 +58,7 @@ func contextCommonRulesContentV0(sourceRef string) (string, bool) {
 }
 
 func contextMaterializedRefOnlyV0(entry ContextBundleEntryV0) ContextMaterializedEntryV0 {
-	return ContextMaterializedEntryV0{
+	materialized := ContextMaterializedEntryV0{
 		EntryRef:  entry.EntryRef,
 		Layer:     entry.Layer,
 		Kind:      entry.Kind,
@@ -66,6 +66,11 @@ func contextMaterializedRefOnlyV0(entry ContextBundleEntryV0) ContextMaterialize
 		Mode:      ContextMaterializationModeRefOnlyV0,
 		Required:  entry.Required,
 	}
+	if entry.Required {
+		materialized.RefOnlyReason = contextRefOnlyReasonForEntryV0(entry)
+		materialized.RequiredRefAction = contextRequiredRefActionForEntryV0(entry)
+	}
+	return materialized
 }
 
 func contextMaterializedContentV0(
@@ -99,4 +104,38 @@ func contextMaterializedRefHasForbiddenDetailV0(ref string) bool {
 		"ref",
 		ref,
 	)
+}
+
+func contextRefOnlyReasonForEntryV0(entry ContextBundleEntryV0) string {
+	switch entry.Kind {
+	case ContextEntryDocRefV0, ContextEntryReadRefV0:
+		return ContextRefOnlyReasonMaterializationMissingV0
+	case ContextEntryWriteRefV0, ContextEntryContractRefV0, ContextEntryEvidenceRefV0:
+		return ContextRefOnlyReasonByDesignV0
+	default:
+		return ContextRefOnlyReasonByDesignV0
+	}
+}
+
+func contextRequiredRefActionForEntryV0(entry ContextBundleEntryV0) string {
+	switch entry.Kind {
+	case ContextEntryDocRefV0, ContextEntryReadRefV0:
+		if contextRefLooksLocalDocumentV0(entry.SourceRef) {
+			return ContextRequiredRefActionReadLocalV0
+		}
+		return ContextRequiredRefActionAskDirectorV0
+	case ContextEntryWriteRefV0, ContextEntryContractRefV0, ContextEntryEvidenceRefV0:
+		return ContextRequiredRefActionAckEvidenceV0
+	default:
+		return ContextRequiredRefActionAskDirectorV0
+	}
+}
+
+func contextRefLooksLocalDocumentV0(sourceRef string) bool {
+	sourceRef = strings.TrimSpace(sourceRef)
+	return strings.HasPrefix(sourceRef, "modulos/") ||
+		strings.HasPrefix(sourceRef, "cmd/") ||
+		strings.HasPrefix(sourceRef, "docs/") ||
+		sourceRef == "AGENTS.md" ||
+		sourceRef == "README.md"
 }

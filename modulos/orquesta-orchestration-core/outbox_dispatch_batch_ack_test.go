@@ -107,6 +107,36 @@ func TestRunOutboxDispatchBatchAckClosureV0InvalidWithoutAcker(t *testing.T) {
 	}
 }
 
+func TestRunOutboxDispatchBatchAckClosureV0PersisteAckFailedSiPuertoExiste(t *testing.T) {
+	acker := &recordingObservationAckerV0{}
+	message := batchPlanMessageV0("outbox-agent-ack-failed-001")
+	_, err := RunOutboxDispatchBatchAckClosureV0(context.Background(), OutboxDispatchBatchAckRequestV0{
+		Intents: []orquestaoutboxdispatch.DispatchIntentV0{
+			{
+				MessageID:      message.MessageID,
+				RunID:          message.RunID,
+				TargetPort:     message.TargetPort,
+				MessageType:    message.MessageType,
+				IdempotencyKey: message.IdempotencyKey,
+				CorrelationID:  message.CorrelationID,
+				PayloadVersion: message.PayloadVersion,
+				Payload:        message.Payload,
+			},
+		},
+		Acks: []orquestaoutboxdispatch.OutboxDispatchAckObservationV0{
+			failedBatchAckV0("outbox-agent-ack-failed-001"),
+		},
+		Acker: acker,
+	})
+	if err != nil {
+		t.Fatalf("ack closure: %v", err)
+	}
+	if len(acker.observed) != 1 ||
+		acker.observed[0].Status != orquestaoutboxdispatch.OutboxDispatchAckObservationFailedV0 {
+		t.Fatalf("observed=%+v", acker.observed)
+	}
+}
+
 func successBatchAckV0(messageID string) orquestaoutboxdispatch.OutboxDispatchAckObservationV0 {
 	return orquestaoutboxdispatch.OutboxDispatchAckObservationV0{
 		MessageID:    messageID,
@@ -129,4 +159,21 @@ func directorPendingFilterForBatchAckV0() orquestadirectorcycleoutbox.DirectorCy
 		RunRef:     "run-batch-plan-001",
 		TargetPort: orquestacoreworkflow.OutboxTargetAgentLauncherV0,
 	}
+}
+
+type recordingObservationAckerV0 struct {
+	observed []orquestaoutboxdispatch.OutboxDispatchAckObservationV0
+}
+
+func (acker *recordingObservationAckerV0) AckOutboxDispatchV0(
+	_ orquestaoutboxdispatch.OutboxDispatchAckV0,
+) []orquestaoutboxdispatch.DispatchIssueV0 {
+	return nil
+}
+
+func (acker *recordingObservationAckerV0) AckOutboxDispatchObservationV0(
+	ack orquestaoutboxdispatch.OutboxDispatchAckObservationV0,
+) []orquestaoutboxdispatch.DispatchIssueV0 {
+	acker.observed = append(acker.observed, ack)
+	return nil
 }

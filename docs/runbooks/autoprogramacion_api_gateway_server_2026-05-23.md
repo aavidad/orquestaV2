@@ -54,7 +54,9 @@ contractuales de la composicion, no rutas locales ni nombres Git.
 
 Rutas propias del servidor residente:
 
-- `GET /healthz`
+- `GET /healthz` solo como liveness.
+- `GET /api/v0/server/readiness` antes de preparar runs, drenar OPES, lanzar
+  Codex o ejecutar automejora.
 - `GET /api/status`
 - `GET /api/v0/server/status`
 

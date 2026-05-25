@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
+	stopreason "orquesta/modulos/orquesta-run-supervisor/stopreason"
 )
 
 var ErrRunSupervisorTickerRequiredV0 = errors.New("run_supervisor: ticker required")
@@ -22,16 +23,19 @@ func SuperviseRunsV0(
 	result := RunSupervisorResultV0{}
 	if deps.Ticker == nil {
 		result.StopReason = RunSupervisorStopNoTickerV0
+		result.StopProjection = runSupervisorStopProjectionV0(result)
 		return result, ErrRunSupervisorTickerRequiredV0
 	}
 	excluded := compactRunSupervisorStringsV0(nil)
 	for tickNumber := 1; tickNumber <= command.MaxTicks; tickNumber++ {
 		if err := ctx.Err(); err != nil {
 			result.StopReason = RunSupervisorStopContextDoneV0
+			result.StopProjection = runSupervisorStopProjectionV0(result)
 			return result, err
 		}
 		if command.MaxExecutions > 0 && result.TotalExecutions >= command.MaxExecutions {
 			result.StopReason = RunSupervisorStopMaxExecutionsV0
+			result.StopProjection = runSupervisorStopProjectionV0(result)
 			return result, nil
 		}
 		tickCommand := coordinatorCommandV0(command, excluded, result.TotalExecutions)
@@ -46,6 +50,11 @@ func SuperviseRunsV0(
 		result.TotalSkips += len(tickResult.Skips)
 		if err != nil {
 			result.StopReason = RunSupervisorStopTickErrorV0
+			result.Error = strings.TrimSpace(err.Error())
+			result.ErrorTickNumber = tickNumber
+			result.ErrorRunRefs = runSupervisorTickRunRefsV0(tickResult)
+			result.Diagnostics = runSupervisorTickErrorDiagnosticsV0(tickNumber, tickResult, err)
+			result.StopProjection = runSupervisorStopProjectionV0(result)
 			return result, err
 		}
 		if !command.AllowRepeatedRuns {
@@ -53,15 +62,77 @@ func SuperviseRunsV0(
 		}
 		if command.MaxExecutions > 0 && result.TotalExecutions >= command.MaxExecutions {
 			result.StopReason = RunSupervisorStopMaxExecutionsV0
+			result.StopProjection = runSupervisorStopProjectionV0(result)
 			return result, nil
 		}
 		if len(tickResult.Executions) == 0 && command.StopOnNoExecution {
 			result.StopReason = RunSupervisorStopNoExecutionV0
+			result.StopProjection = runSupervisorStopProjectionV0(result)
 			return result, nil
 		}
 	}
 	result.StopReason = RunSupervisorStopMaxTicksV0
+	result.StopProjection = runSupervisorStopProjectionV0(result)
 	return result, nil
+}
+
+func runSupervisorStopProjectionV0(result RunSupervisorResultV0) stopreason.ProjectionV0 {
+	return stopreason.ProjectV0(stopreason.ProjectionInputV0{
+		Source:     stopreason.SourceRunSupervisorV0,
+		StopReason: result.StopReason,
+		Executions: result.TotalExecutions,
+		Skips:      result.TotalSkips,
+		Ticks:      len(result.Ticks),
+		ErrorRefs:  result.ErrorRunRefs,
+	})
+}
+
+func runSupervisorTickErrorDiagnosticsV0(
+	tickNumber int,
+	tickResult orquestaruncoordinator.RunCoordinatorTickResultV0,
+	err error,
+) []orquestaruncoordinator.RunDrainDiagnosticV0 {
+	message := ""
+	if err != nil {
+		message = strings.TrimSpace(err.Error())
+	}
+	diagnostics := []orquestaruncoordinator.RunDrainDiagnosticV0{}
+	for _, execution := range tickResult.Executions {
+		diagnostics = append(diagnostics, execution.Diagnostics...)
+	}
+	if len(diagnostics) == 0 || message != "" {
+		for _, runRef := range runSupervisorTickRunRefsV0(tickResult) {
+			diagnostics = append(diagnostics, orquestaruncoordinator.RunDrainDiagnosticV0{
+				Kind:          "supervisor_tick_error",
+				Status:        "error",
+				RunRef:        runRef,
+				Error:         message,
+				AttemptNumber: tickNumber,
+			})
+		}
+	}
+	if len(diagnostics) == 0 && message != "" {
+		diagnostics = append(diagnostics, orquestaruncoordinator.RunDrainDiagnosticV0{
+			Kind:          "supervisor_tick_error",
+			Status:        "error",
+			Error:         message,
+			AttemptNumber: tickNumber,
+		})
+	}
+	return diagnostics
+}
+
+func runSupervisorTickRunRefsV0(
+	tickResult orquestaruncoordinator.RunCoordinatorTickResultV0,
+) []string {
+	refs := []string{}
+	for _, execution := range tickResult.Executions {
+		refs = append(refs, execution.RunRef)
+	}
+	for _, skip := range tickResult.Skips {
+		refs = append(refs, skip.RunRef)
+	}
+	return compactRunSupervisorStringsV0(refs)
 }
 
 func normalizeRunSupervisorCommandV0(command RunSupervisorCommandV0) RunSupervisorCommandV0 {

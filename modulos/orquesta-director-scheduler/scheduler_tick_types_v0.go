@@ -67,6 +67,7 @@ type RunSchedulingSnapshotV0 struct {
 	Agents                    []string `json:"agents,omitempty"`
 	StartedAgents             []string `json:"started_agents,omitempty"`
 	FailedAgents              []string `json:"failed_agents,omitempty"`
+	LostAgents                []string `json:"lost_agents,omitempty"`
 	StoppedAgents             []string `json:"stopped_agents,omitempty"`
 	PhaseArtifacts            []string `json:"phase_artifacts,omitempty"`
 	Deliveries                []string `json:"deliveries,omitempty"`

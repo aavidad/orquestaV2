@@ -37,6 +37,10 @@ Rutas montadas:
   cola/run y diagnostico compacto usando puertos ya inyectados.
 - `/api/v0/autoprogramming/supervise`: bridge REST de MCP para ejecutar una
   pasada puntual de supervision por el supervisor inyectado.
+- `/api/v0/governance/catalog/query`: REST read-only de gobernanza con request
+  `{request_id, correlation_id, filters}` y respuesta `{request_id,
+  correlation_id, effective, counters}`. Si falta provider, devuelve error
+  publico recuperable `governance_catalog_source_unavailable`.
 - `/api/v0/server/shutdown`: bridge REST de MCP para cierre controlado.
 - `/api/v0/domain-work`: bridge REST de MCP para crear trabajo de dominio
   externo o entregar artefactos mediante un executor inyectado.
@@ -59,6 +63,8 @@ Entrada de composicion:
   autoprogramacion.
 - Estado y supervision de autoprogramacion reutilizan `RunQueuePriority`,
   `DirectorStats` y `RunSupervisor`; este modulo no crea casos de uso nuevos.
+- `GovernanceCatalog`: provider inyectado para consulta read-only del catalogo
+  publico; nil conserva ruta con error publico, sin fallback documental.
 - `ServerShutdown`: executor MCP inyectado para cierre controlado.
 - `DomainWork`: executor MCP inyectado para trabajo de dominio externo.
 - `ExternalWorkRun`: executor MCP inyectado para crear runs de trabajo externo.
@@ -88,5 +94,8 @@ Entrada de composicion:
 - `/api/v0/autoprogramming/status` y `/api/v0/autoprogramming/supervise`
   delegan en `orquesta-mcp`; este modulo no interpreta cola, stats, procesos ni
   scheduler.
+- `/api/v0/governance/catalog/query` delega en `orquesta-governance`; este
+  modulo no activa historicos, no lee DB v1, no muta permisos y no inventa
+  catalogos si falta provider.
 - `/api/v0/domain-work` delega en `orquesta-mcp`; este modulo no interpreta
   `DomainWorkJobRequestV0`, no importa OPES y no crea conectores reales.

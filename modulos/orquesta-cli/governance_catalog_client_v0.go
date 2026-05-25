@@ -26,6 +26,16 @@ type GovernanceCatalogCliReaderV0 struct {
 }
 
 type governanceCatalogQueryHTTPRequestV0 struct {
+	RequestID     string                              `json:"request_id,omitempty"`
+	CorrelationID string                              `json:"correlation_id,omitempty"`
+	Module        string                              `json:"module,omitempty"`
+	Role          string                              `json:"role,omitempty"`
+	Phase         string                              `json:"phase,omitempty"`
+	Tags          []string                            `json:"tags,omitempty"`
+	Filters       governanceCatalogQueryHTTPFiltersV0 `json:"filters"`
+}
+
+type governanceCatalogQueryHTTPFiltersV0 struct {
 	Module string   `json:"module,omitempty"`
 	Role   string   `json:"role,omitempty"`
 	Phase  string   `json:"phase,omitempty"`
@@ -33,12 +43,14 @@ type governanceCatalogQueryHTTPRequestV0 struct {
 }
 
 type governanceCatalogHTTPErrorV0 struct {
-	Errores []governanceCatalogIssueV0 `json:"errores"`
+	RequestID     string                     `json:"request_id,omitempty"`
+	CorrelationID string                     `json:"correlation_id,omitempty"`
+	Errors        []governanceCatalogIssueV0 `json:"errors"`
 }
 
 type governanceCatalogIssueV0 struct {
-	Codigo string `json:"codigo"`
-	Campo  string `json:"campo,omitempty"`
+	Code  string `json:"code"`
+	Field string `json:"field,omitempty"`
 }
 
 func NewGovernanceCatalogCliReaderV0(serverURL string, timeout time.Duration) (*GovernanceCatalogCliReaderV0, error) {
@@ -76,7 +88,7 @@ func (client *GovernanceCatalogCliReaderV0) ConsultarCatalogo(ctx context.Contex
 		return clientErrorGovernanceEnvelopeV0(inv, err, start)
 	}
 
-	payload, err := json.Marshal(governanceCatalogRequestFromQueryV0(query))
+	payload, err := json.Marshal(governanceCatalogRequestFromQueryV0(inv, query))
 	if err != nil {
 		return cliSingleGovernanceErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", "request_no_serializable", 0, false, start)
 	}
@@ -98,20 +110,29 @@ func (client *GovernanceCatalogCliReaderV0) ConsultarCatalogo(ctx context.Contex
 	return decodeGovernanceCatalogResponseV0(resp, inv, start)
 }
 
-func governanceCatalogRequestFromQueryV0(query orquestagovernance.GovernanceCatalogQueryV0) governanceCatalogQueryHTTPRequestV0 {
+func governanceCatalogRequestFromQueryV0(inv CliInvocationContextV0, query orquestagovernance.GovernanceCatalogQueryV0) governanceCatalogQueryHTTPRequestV0 {
+	tags := governanceCatalogCleanTagsV0(query.Tags)
 	return governanceCatalogQueryHTTPRequestV0{
-		Module: strings.TrimSpace(query.Module),
-		Role:   strings.TrimSpace(query.Role),
-		Phase:  strings.TrimSpace(query.Phase),
-		Tags:   governanceCatalogCleanTagsV0(query.Tags),
+		RequestID:     strings.TrimSpace(inv.RequestID),
+		CorrelationID: strings.TrimSpace(inv.CorrelationID),
+		Module:        strings.TrimSpace(query.Module),
+		Role:          strings.TrimSpace(query.Role),
+		Phase:         strings.TrimSpace(query.Phase),
+		Tags:          tags,
+		Filters: governanceCatalogQueryHTTPFiltersV0{
+			Module: strings.TrimSpace(query.Module),
+			Role:   strings.TrimSpace(query.Role),
+			Phase:  strings.TrimSpace(query.Phase),
+			Tags:   tags,
+		},
 	}
 }
 
 func decodeGovernanceCatalogResponseV0(resp *http.Response, inv CliInvocationContextV0, start time.Time) CliOutputEnvelopeV0 {
-	if resp.StatusCode == http.StatusBadRequest {
+	if resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusServiceUnavailable {
 		issues, ok := decodeGovernanceCatalogIssuesV0(resp.Body)
 		if !ok || len(issues) == 0 {
-			return cliSingleGovernanceErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "errores", "respuesta_400_sin_errores_publicos", resp.StatusCode, false, start)
+			return cliSingleGovernanceErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "errors", "respuesta_error_sin_errores_publicos", resp.StatusCode, false, start)
 		}
 		return NewCliOutputErrorEnvelopeV0(
 			inv,
@@ -145,14 +166,18 @@ func decodeGovernanceCatalogResponseV0(resp *http.Response, inv CliInvocationCon
 }
 
 func decodeGovernanceCatalogResultV0(raw []byte) (orquestagovernance.GovernanceCatalogQueryResultV0, error) {
-	var result orquestagovernance.GovernanceCatalogQueryResultV0
+	var response orquestagovernance.GovernanceCatalogPublicQueryResponseV0
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&result); err != nil {
+	if err := decoder.Decode(&response); err != nil {
 		return orquestagovernance.GovernanceCatalogQueryResultV0{}, errors.New("json_invalido")
 	}
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		return orquestagovernance.GovernanceCatalogQueryResultV0{}, errors.New("json_invalido")
+	}
+	result := orquestagovernance.GovernanceCatalogQueryResultV0{
+		Effective: response.Effective,
+		Counters:  response.Counters,
 	}
 	if result.Counters.Effective != len(result.Effective) {
 		return orquestagovernance.GovernanceCatalogQueryResultV0{}, errors.New("effective_count_no_coincide")
@@ -175,19 +200,19 @@ func decodeGovernanceCatalogIssuesV0(body io.Reader) ([]governanceCatalogIssueV0
 	if err := decoder.Decode(&out); err != nil {
 		return nil, false
 	}
-	return sanitizeGovernanceIssuesForCliV0(out.Errores), true
+	return sanitizeGovernanceIssuesForCliV0(out.Errors), true
 }
 
 func sanitizeGovernanceIssuesForCliV0(values []governanceCatalogIssueV0) []governanceCatalogIssueV0 {
 	out := make([]governanceCatalogIssueV0, 0, len(values))
 	for _, value := range values {
-		code := strings.TrimSpace(value.Codigo)
+		code := strings.TrimSpace(value.Code)
 		if !isKnownGovernanceIssueCliV0(code) {
 			code = string(orquestagovernance.GovernanceCatalogForbiddenActivationErrorV0)
 		}
 		out = append(out, governanceCatalogIssueV0{
-			Codigo: code,
-			Campo:  strings.TrimSpace(value.Campo),
+			Code:  code,
+			Field: strings.TrimSpace(value.Field),
 		})
 	}
 	if out == nil {
@@ -199,10 +224,10 @@ func sanitizeGovernanceIssuesForCliV0(values []governanceCatalogIssueV0) []gover
 func governanceIssuesToCliErrorsV0(values []governanceCatalogIssueV0) []CliPublicErrorV0 {
 	out := make([]CliPublicErrorV0, 0, len(values))
 	for _, value := range values {
-		code := strings.TrimSpace(value.Codigo)
+		code := strings.TrimSpace(value.Code)
 		out = append(out, CliPublicErrorV0{
 			Codigo:      code,
-			Campo:       strings.TrimSpace(value.Campo),
+			Campo:       strings.TrimSpace(value.Field),
 			MensajeI18N: "orquesta_governance.errores." + code,
 		})
 	}

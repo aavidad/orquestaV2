@@ -67,6 +67,13 @@ correlacionado; los demas quedan pendientes o fallidos segun su propio ACK.
 Puerto abstracto para listar pendientes. Este modulo declara el puerto pero no
 incluye implementaciones de DB, red ni filesystem productivo.
 
+## OutboxDispatchAckObservationPortV0
+
+Puerto opcional para adaptadores que necesitan persistir ACK terminales de lote
+con status `success` o `failed`. Mantiene el puerto historico
+`OutboxDispatchAckPortV0` para ACK success y evita cerrar por arrastre items sin
+ACK correlacionado.
+
 ## RunOutboxDispatchOnceV0
 
 Caso de uso de un solo paso. Requiere `target_port` explicito y puertos

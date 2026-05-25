@@ -137,6 +137,103 @@ func TestBuildAgentProgressSupervisionV0CapacidadLimitadaCierraParaRelevo(t *tes
 	}
 }
 
+func TestBuildAgentProgressSupervisionV0AuthInvalidaPreguntaDirectorSinStop(t *testing.T) {
+	const (
+		taskRef       = "task-ref-supervisor-auth-001"
+		agentRef      = "agent-request-ref-supervisor-auth-001"
+		assessmentRef = "assessment-ref-supervisor-auth-001"
+		questionID    = "question-ref-supervisor-auth-001"
+	)
+	h := newSupervisionHarnessWithAgentV0(t, taskRef, agentRef, "auth")
+	report := validSupervisionProgressReportV0(h.run.RunID, agentRef, orquestaruntime.AgentStoppedV0)
+	report.ReportID = "agent-progress-report-ref-supervisor-auth-001"
+	report.DecisionRequired = true
+	report.Summary = "Autenticacion externa invalida; requiere reautorizacion del operador."
+	report.EvidenceRefs = append(report.EvidenceRefs, "evidence-ref-auth-config-blocker")
+
+	result, err := BuildAgentProgressSupervisionV0(AgentProgressSupervisionInputV0{
+		CommandMeta:   h.meta("agent-supervision-auth"),
+		Report:        report,
+		PhaseID:       string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+		TaskRef:       taskRef,
+		AssessmentRef: assessmentRef,
+		QuestionID:    questionID,
+	})
+	if err != nil {
+		t.Fatalf("BuildAgentProgressSupervisionV0: %v", err)
+	}
+	payload := decodeAssessAgentWorkPayloadV0(t, result.AssessCommand)
+	if payload.Verdict != orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0 ||
+		payload.Action != orquestacoreworkflow.AgentAssessmentActionAskDirectorV0 ||
+		payload.Severity != orquestacoreworkflow.AgentAssessmentSeverityCriticalV0 {
+		t.Fatalf("payload auth inesperado: %+v", payload)
+	}
+	if result.AskDirectorCommand == nil {
+		t.Fatalf("AskDirector command requerido")
+	}
+	if result.RegisterLostCommand == nil {
+		t.Fatalf("RegisterAgentLost command requerido")
+	}
+	handled := h.handle(result.AssessCommand)
+	if len(handled.Outbox) != 0 {
+		t.Fatalf("auth invalida no debe pedir stop automatico: %+v", handled.Outbox)
+	}
+	lost := h.handle(*result.RegisterLostCommand)
+	if len(lost.Outbox) != 0 ||
+		supervisionEventTypeCountV0(lost.Events, orquestacoreworkflow.OrchestrationEventAgentLostV0) != 1 {
+		t.Fatalf("auth invalida debe registrar perdida sin outbox: %+v", lost)
+	}
+}
+
+func TestBuildAgentProgressSupervisionV0NoACKPreguntaDirectorSinGarbage(t *testing.T) {
+	const (
+		taskRef       = "task-ref-supervisor-no-ack-001"
+		agentRef      = "agent-request-ref-supervisor-no-ack-001"
+		assessmentRef = "assessment-ref-supervisor-no-ack-001"
+		questionID    = "question-ref-supervisor-no-ack-001"
+	)
+	h := newSupervisionHarnessWithAgentV0(t, taskRef, agentRef, "no-ack")
+	report := validSupervisionProgressReportV0(h.run.RunID, agentRef, orquestaruntime.AgentStoppedV0)
+	report.ReportID = "agent-progress-report-ref-supervisor-no-ack-001"
+	report.DecisionRequired = true
+	report.Summary = "Proceso detenido sin ACK."
+	report.EvidenceRefs = append(report.EvidenceRefs, "evidence-ref-no-ack")
+
+	result, err := BuildAgentProgressSupervisionV0(AgentProgressSupervisionInputV0{
+		CommandMeta:   h.meta("agent-supervision-no-ack"),
+		Report:        report,
+		PhaseID:       string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+		TaskRef:       taskRef,
+		AssessmentRef: assessmentRef,
+		QuestionID:    questionID,
+	})
+	if err != nil {
+		t.Fatalf("BuildAgentProgressSupervisionV0: %v", err)
+	}
+	payload := decodeAssessAgentWorkPayloadV0(t, result.AssessCommand)
+	if payload.Verdict != orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0 ||
+		payload.Action != orquestacoreworkflow.AgentAssessmentActionAskDirectorV0 ||
+		payload.Severity != orquestacoreworkflow.AgentAssessmentSeverityHighV0 ||
+		payload.Summary != "Proceso detenido sin ACK; revisar evidencias antes de replanificar." {
+		t.Fatalf("payload no_ack inesperado: %+v", payload)
+	}
+	if result.AskDirectorCommand == nil {
+		t.Fatalf("AskDirector command requerido")
+	}
+	if result.RegisterLostCommand == nil {
+		t.Fatalf("RegisterAgentLost command requerido")
+	}
+	handled := h.handle(result.AssessCommand)
+	if len(handled.Outbox) != 0 {
+		t.Fatalf("no_ack no debe pedir stop automatico: %+v", handled.Outbox)
+	}
+	lost := h.handle(*result.RegisterLostCommand)
+	if len(lost.Outbox) != 0 ||
+		supervisionEventTypeCountV0(lost.Events, orquestacoreworkflow.OrchestrationEventAgentLostV0) != 1 {
+		t.Fatalf("no_ack debe registrar perdida sin outbox: %+v", lost)
+	}
+}
+
 func TestBuildAgentProgressSupervisionV0TiempoSinActividadDetieneAunqueHayaStalledPrevio(t *testing.T) {
 	const (
 		taskRef       = "task-ref-supervisor-timeout-001"
@@ -386,13 +483,14 @@ func newSupervisionHarnessWithAgentV0(
 	t.Helper()
 	h := newProgressiveHarnessV0(t)
 	runtimeFake := newProgressiveRuntimeFakeOutboxDispatcherV0(t)
-	h.prepareFullFlowTask(
+	launched := h.prepareFullFlowTask(
 		taskRef,
 		"contract-ref-supervisor-"+suffix+"-001",
 		"capacity-request-ref-supervisor-"+suffix+"-001",
 		agentRef,
 		runtimeFake,
 	)
+	h.handle(h.registerAgentStarted(agentRef, launched.LaunchRef))
 	return h
 }
 

@@ -107,7 +107,56 @@ func TestMCPRealTransportV0HandshakeCompatibleClienteMCP(t *testing.T) {
 	callMCPJSONRPCTestV0(t, server.URL+mcpRealHTTPPathV0, "ping", map[string]any{}, &pong)
 }
 
+func TestMCPRealTransportV0ToleraArgumentsComoStringJSONObjectV0(t *testing.T) {
+	handler, err := newMCPRealHTTPHandlerV0(orquestamcp.MCPTransportBindingsV0{})
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	server := newLocalHTTPServerForTestV0(t, handler)
+	defer server.Close()
+
+	var result mcpToolCallResultV0
+	callMCPJSONRPCTestV0(t, server.URL+mcpRealHTTPPathV0, "tools/call", map[string]any{
+		"name":      "orquesta.status.v0",
+		"arguments": `{"include_recent_errors":true}`,
+	}, &result)
+	if len(result.Content) == 0 {
+		t.Fatalf("tool result inesperado: %+v", result)
+	}
+}
+
+func TestMCPRealTransportV0ArgumentsStringInvalidoDevuelveInvalidParamsV0(t *testing.T) {
+	handler, err := newMCPRealHTTPHandlerV0(orquestamcp.MCPTransportBindingsV0{})
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	server := newLocalHTTPServerForTestV0(t, handler)
+	defer server.Close()
+
+	rpc := callMCPJSONRPCRawTestV0(t, server.URL+mcpRealHTTPPathV0, "tools/call", map[string]any{
+		"name":      "orquesta.status.v0",
+		"arguments": "no es json",
+	})
+	if rpc.Error == nil ||
+		rpc.Error.Code != -32602 ||
+		rpc.Error.Message != "mcp_invalid_params" ||
+		rpc.Error.Data["error_code"] != "mcp_tool_arguments_string_not_json_object" {
+		t.Fatalf("rpc error inesperado: %+v", rpc.Error)
+	}
+}
+
 func callMCPJSONRPCTestV0(t *testing.T, endpoint string, method string, params any, output any) {
+	t.Helper()
+	rpc := callMCPJSONRPCRawTestV0(t, endpoint, method, params)
+	if rpc.Error != nil {
+		t.Fatalf("rpc error=%+v", rpc.Error)
+	}
+	if err := json.Unmarshal(rpc.Result, output); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+}
+
+func callMCPJSONRPCRawTestV0(t *testing.T, endpoint string, method string, params any) mcpJSONRPCRawResponseV0 {
 	t.Helper()
 	body, err := json.Marshal(map[string]any{
 		"jsonrpc": mcpJSONRPCVersionV0,
@@ -130,12 +179,7 @@ func callMCPJSONRPCTestV0(t *testing.T, endpoint string, method string, params a
 	if err := json.NewDecoder(response.Body).Decode(&rpc); err != nil {
 		t.Fatalf("decode rpc: %v", err)
 	}
-	if rpc.Error != nil {
-		t.Fatalf("rpc error=%+v", rpc.Error)
-	}
-	if err := json.Unmarshal(rpc.Result, output); err != nil {
-		t.Fatalf("decode result: %v", err)
-	}
+	return rpc
 }
 
 func mcpToolByNameTestV0(tools []mcpToolDescriptorV0, name string) *mcpToolDescriptorV0 {

@@ -164,6 +164,63 @@ Pruebas de contrato:
 - Adaptador puro en memoria para contract tests de consumidores: `operational_status_memory_adapter_v0.go`.
 - Schema JSON y fixtures quedan pendientes de una microtarea posterior si hacen falta para consumidores externos.
 
+## `WorkspaceTimelineQueryV0`
+
+Nombre: `WorkspaceTimelineQueryV0`
+Tipo: puerto_entrada
+Version: `v0`
+Propietario: `orquesta-observability`
+Consumidores autorizados:
+
+- API residente, MCP y web como adaptadores read-only.
+- Las fuentes reales de eventos, auditoria, cola, runtime/progreso, Git y
+  uso/coste entran por adaptadores de lectura; si no estan cableadas devuelven
+  `not_available`.
+
+Request: `WorkspaceTimelineQueryV0`
+
+Campos:
+
+- `request_id`, `correlation_id`: refs opacas de consulta.
+- `consumer`: modulo/canal autorizado.
+- `locale`: locale de presentacion.
+- `scope`: debe ser `workspace`.
+- `agent_ref`, `project_ref`, `task_ref`: filtros opacos opcionales.
+- `time_window`: ventana por `from`, `to` o `preset`.
+- `page`: `limit` compacto y `cursor_ref` opaco opcional.
+- `sources`: lista declarada entre `events`, `audit`, `run_queue`,
+  `runtime_progress`, `git_stats` y `usage_cost`.
+
+Salida correcta: `WorkspaceTimelineV0`
+
+Errores publicos:
+
+- `workspace_timeline_query_invalida`
+- `workspace_timeline_no_disponible`
+- `consumidor_no_autorizado`
+- `scope_no_soportado`
+- `referencia_no_opaca`
+- `consulta_demasiado_amplia`
+- `secreto_detectado`
+- `transcript_no_permitido`
+
+Invariantes:
+
+- El puerto es read-only y no reconstruye estado desde shell, Git local,
+  runtime filesystem ni transcripts crudos.
+- Todas las fuentes solicitadas aparecen con estado `available`, `partial` o
+  `not_available`; las fuentes ausentes deben incluir razon y evidencia compacta.
+- Los items exponen resumen, refs opacas y clasificacion redactada; no incluyen
+  prompts, completions, transcripts, HOME, tokens, secretos, SQL, DSN ni payloads
+  HTTP crudos.
+- API, MCP y web deben consumir este mismo puerto de lectura.
+
+Pruebas de contrato:
+
+- DTO y validacion pura Go: `workspace_timeline_*_v0.go`.
+- Adaptadores offline: `WorkspaceTimelineUnavailableReaderV0` y
+  `WorkspaceTimelineStaticReaderV0`.
+
 ## `SafeHistoricalSignalExtractionPolicyV0`
 
 Nombre: `SafeHistoricalSignalExtractionPolicyV0`

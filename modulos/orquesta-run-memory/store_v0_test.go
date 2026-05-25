@@ -215,6 +215,35 @@ func TestRunMemoryStorePriorityWriterAndReaderV0(t *testing.T) {
 	}
 }
 
+func TestRunMemoryStoreListSchedulingCandidatesIncluyeNoEjecutablesOptInV0(t *testing.T) {
+	store := NewRunMemoryStoreV0()
+	ctx := context.Background()
+	now := time.Date(2026, 5, 25, 16, 0, 0, 0, time.UTC)
+	if _, err := store.UpsertRunSchedulingCandidateV0(ctx, "main", candidateForTestV0(
+		"run-canceled", "app-1", orquestarunqueue.RunStatusCanceledV0, 9, now,
+	)); err != nil {
+		t.Fatalf("seed canceled: %v", err)
+	}
+
+	visible, err := store.ListRunSchedulingCandidatesV0(ctx, orquestarunqueue.RunQueueReadRequestV0{QueueRef: "main"})
+	if err != nil {
+		t.Fatalf("list visible: %v", err)
+	}
+	if len(visible) != 0 {
+		t.Fatalf("visible=%+v", visible)
+	}
+	all, err := store.ListRunSchedulingCandidatesV0(ctx, orquestarunqueue.RunQueueReadRequestV0{
+		QueueRef:             "main",
+		IncludeNonExecutable: true,
+	})
+	if err != nil {
+		t.Fatalf("list all: %v", err)
+	}
+	if len(all) != 1 || all[0].RunRef != "run-canceled" {
+		t.Fatalf("all=%+v", all)
+	}
+}
+
 func TestRunMemoryStoreRankingUsesQueuePolicyV0(t *testing.T) {
 	store := NewRunMemoryStoreV0()
 	ctx := context.Background()

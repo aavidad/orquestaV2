@@ -2,6 +2,7 @@ package orquestacoreworkflow
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 )
 
@@ -146,13 +147,16 @@ func TestRegisterDeliveryCommandV0RejectsFailedAgent(t *testing.T) {
 	assertRegisterDeliveryCommandErrorV0(t, err, ErrTransicionInvalidaV0)
 }
 
-func TestRegisterDeliveryCommandV0RejectsStoppedAgent(t *testing.T) {
+func TestRegisterDeliveryCommandV0AcceptsStoppedAgentWithLateAck(t *testing.T) {
 	run := mustDeliveryReadyRunV0(t)
 	run = mustApplySingleCommandEventV0(t, run, mustStopAgentCommandV0(t, "cmd-stop-before-delivery", "idem-stop-before-delivery", "agent-request-001"))
 	command := mustRegisterDeliveryCommandV0(t, "cmd-delivery-stopped-agent", "idem-delivery-stopped-agent", "delivery-stopped-agent")
 
-	_, err := HandleCommandV0(run, command)
-	assertRegisterDeliveryCommandErrorV0(t, err, ErrTransicionInvalidaV0)
+	result, err := HandleCommandV0(run, command)
+	if err != nil {
+		t.Fatalf("late stopped delivery rejected: %v", err)
+	}
+	assertSingleEventTypeV0(t, result, OrchestrationEventDeliveryRegisteredV0)
 }
 
 func TestDeliveryRegisteredEventV0RejectsMissingTask(t *testing.T) {
@@ -184,13 +188,18 @@ func TestDeliveryRegisteredEventV0RejectsFailedAgent(t *testing.T) {
 	assertDeliveryRegisteredEventErrorV0(t, err, ErrSecuenciaInvalidaV0)
 }
 
-func TestDeliveryRegisteredEventV0RejectsStoppedAgent(t *testing.T) {
+func TestDeliveryRegisteredEventV0AcceptsStoppedAgentWithLateAck(t *testing.T) {
 	run := mustDeliveryReadyRunV0(t)
 	run = mustApplySingleCommandEventV0(t, run, mustStopAgentCommandV0(t, "cmd-stop-before-delivery-event", "idem-stop-before-delivery-event", "agent-request-001"))
 	event := mustDeliveryRegisteredEventV0(t, "evt-delivery-stopped-agent", run.LastSequence+1, "delivery-stopped-agent")
 
-	_, err := ApplyEventV0(run, event)
-	assertDeliveryRegisteredEventErrorV0(t, err, ErrSecuenciaInvalidaV0)
+	got, err := ApplyEventV0(run, event)
+	if err != nil {
+		t.Fatalf("late stopped delivery event rejected: %v", err)
+	}
+	if !reflect.DeepEqual(got.DeliveredAgents, []string{"agent-request-001"}) {
+		t.Fatalf("delivered_agents=%v", got.DeliveredAgents)
+	}
 }
 
 func TestRegisterDeliveryCommandV0RejectsForbiddenDetails(t *testing.T) {

@@ -49,6 +49,7 @@ func (executor ExternalProcessAgentBatchExecutorV0) ExecuteOutboxDispatchBatchV0
 	}
 	prepared := executor.prepareBatchV0(ctx, intents)
 	acks := append([]orquestaoutboxdispatch.OutboxDispatchAckObservationV0(nil), prepared.Failed...)
+	acks = append(acks, prepared.Closed...)
 	if len(prepared.Items) == 0 {
 		return acks, nil
 	}
@@ -96,6 +97,10 @@ func (executor ExternalProcessAgentBatchExecutorV0) prepareBatchV0(
 			prepared.Failed = append(prepared.Failed, failedBatchObservationV0(intent, "evidence-ref-external-process-batch-inbound"))
 			continue
 		}
+		if executor.agentLaunchAlreadyTerminalV0(ctx, inbound) {
+			prepared.Closed = append(prepared.Closed, handledTerminalAgentBatchObservationV0(intent, inbound))
+			continue
+		}
 		resolution, err := executor.SpecResolver.ResolveExternalAgentLaunchSpecV0(ctx, inbound)
 		if err != nil {
 			prepared.Failed = append(prepared.Failed, failedBatchObservationV0(intent, "evidence-ref-external-process-batch-spec"))
@@ -135,4 +140,5 @@ type externalProcessBatchPreparedV0 struct {
 	Specs    []orquestaruntime.ExternalAgentLaunchSpecV0
 	Items    []orquestaruntime.ExternalAgentProcessBatchItemV0
 	Failed   []orquestaoutboxdispatch.OutboxDispatchAckObservationV0
+	Closed   []orquestaoutboxdispatch.OutboxDispatchAckObservationV0
 }

@@ -88,11 +88,27 @@ func TestStackDrainDiagnosticsWithErrorV0ConservaMensajeYError(t *testing.T) {
 	diagnostics := stackDrainDiagnosticsWithErrorV0(
 		result,
 		stackDrainDiagnosticsV0(result),
+		"run-ref-error-001",
 		"transicion_invalida: payload.agent_request_id",
 	)
 	if !stackDiagnosticsHasErrorV0(diagnostics, "drain_error", "") ||
 		!stackDiagnosticsHasErrorV0(diagnostics, "outbox_batch_dispatch_error", "outbox-launch-error-001") {
 		t.Fatalf("diagnostics=%+v", diagnostics)
+	}
+}
+
+func TestStackDrainDiagnosticsWithErrorV0UsaRunRefDeRequestSiFinalVacio(t *testing.T) {
+	diagnostics := stackDrainDiagnosticsWithErrorV0(
+		orquestacionnucleoapp.ManagedProgressiveLoopResultV0{},
+		nil,
+		"run-ref-from-request-001",
+		"drain fallo antes de cargar run",
+	)
+	if len(diagnostics) != 1 ||
+		diagnostics[0].Kind != "drain_error" ||
+		diagnostics[0].RunRef != "run-ref-from-request-001" ||
+		diagnostics[0].Error == "" {
+		t.Fatalf("diagnostic sin run_ref de request: %+v", diagnostics)
 	}
 }
 

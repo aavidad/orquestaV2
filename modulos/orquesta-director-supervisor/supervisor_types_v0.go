@@ -3,6 +3,7 @@ package orquestadirectorsupervisor
 import (
 	orquestadirectorcycle "orquesta/modulos/orquesta-director-cycle"
 	orquestadirectorscheduler "orquesta/modulos/orquesta-director-scheduler"
+	stopreason "orquesta/modulos/orquesta-run-supervisor/stopreason"
 )
 
 const (
@@ -66,6 +67,7 @@ type DirectorSupervisorDecisionV0 struct {
 	BlockedRefs              []string                                             `json:"blocked_refs,omitempty"`
 	Issues                   []DirectorSupervisorIssueV0                          `json:"issues,omitempty"`
 	EvidenceRefs             []string                                             `json:"evidence_refs,omitempty"`
+	StopProjection           stopreason.ProjectionV0                              `json:"stop_projection,omitempty"`
 }
 
 type DirectorSupervisorIssueV0 struct {

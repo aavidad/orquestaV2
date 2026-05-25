@@ -148,9 +148,11 @@ go test -count=1 ./...
 
 ## Pendiente verificable
 
-- Fusionar nuevas tasks operativas en un `OperationalDirectorPlanStateV0`
-  existente cuando una decision posterior abra otra ola; el corte actual crea
-  el state inicial y reutiliza el existente.
+- Cerrado el 2026-05-25: si aparece una nueva `WorkflowTaskV0` operativa de
+  `director_decisions` y el `OperationalDirectorPlanStateV0` ya existe y sigue
+  abierto, `app-director-service` la fusiona en el plan conservando `plan_ref`,
+  task refs, tests requeridos y wait scope acotado por agent refs. La reentrada
+  no duplica wait refs ni reescribe el state si la task ya estaba reflejada.
 - Añadir pruebas especificas de persistencia file-store para este camino si se
   cambia el formato o el reload del `OperationalDirectorPlanStateV0`.
 - Añadir wiring opt-in especifico en `orquesta-app-codex-stack` si una fuente

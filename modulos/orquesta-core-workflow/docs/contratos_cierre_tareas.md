@@ -24,7 +24,7 @@ Invariantes:
   - Si `task_id` ya existe en `OrchestrationRunV0.ClosedTasks`, devuelve no-op solo si coincide la huella durable de comando y payload normalizado.
   - No emite outbox.
   - No cierra fase, no cierra run, no abre otra fase y no ejecuta conectores.
-  - No contiene codigo, diffs, commits, transcripts, rutas locales, runtime, DB, proveedor, modelo, OAuth, HOME ni secretos salvo como prohibiciones.
+  - No contiene codigo, diffs, commits, transcripts crudos, rutas locales ni valores reales de runtime, DB, proveedor, modelo, OAuth, HOME o secretos.
 Errores:
   - payload_invalido
   - fase_no_soportada

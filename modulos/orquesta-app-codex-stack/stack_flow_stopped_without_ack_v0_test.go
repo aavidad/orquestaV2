@@ -39,12 +39,18 @@ func TestDrainRunV0ProcesoParadoSinACKNoQuedaEsperandoIndefinido(t *testing.T) {
 	if drainRunHasPendingExternalAgentsV0(run, nil) {
 		t.Fatalf("run sigue con agentes externos pendientes: status=%s started=%v stopped=%v confirmed=%v", drain.Status, run.StartedAgents, run.StoppedAgents, run.ConfirmedStoppedAgents)
 	}
-	if !codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionStopAgentV0) {
-		t.Fatalf("sin assessment stop_agent: %+v", run.AgentAssessments)
+	if !codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0) ||
+		!codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionAskDirectorV0) {
+		t.Fatalf("sin assessment de revision no_ack: %+v", run.AgentAssessments)
 	}
-	if len(compactStringsV0(run.StoppedAgents)) == 0 ||
-		len(compactStringsV0(run.ConfirmedStoppedAgents)) == 0 {
-		t.Fatalf("sin parada confirmada: stopped=%v confirmed=%v", run.StoppedAgents, run.ConfirmedStoppedAgents)
+	if codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictGarbageV0) ||
+		codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionStopAgentV0) {
+		t.Fatalf("no_ack no debe marcar basura ni stop_agent: %+v", run.AgentAssessments)
+	}
+	if len(compactStringsV0(run.LostAgents)) == 0 ||
+		len(compactStringsV0(run.StoppedAgents)) != 0 ||
+		len(compactStringsV0(run.ConfirmedStoppedAgents)) != 0 {
+		t.Fatalf("no_ack debe reconciliar como lost sin parada runtime: lost=%v stopped=%v confirmed=%v", run.LostAgents, run.StoppedAgents, run.ConfirmedStoppedAgents)
 	}
 }
 
@@ -78,12 +84,13 @@ func TestDrainRunV0WaitAgentRefsProcesoParadoSinACKActivaSupervision(t *testing.
 		t.Fatalf("DrainRunV0: %v status=%s final=%+v", err, drain.Status, drain.Final)
 	}
 	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
-	if !codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionStopAgentV0) {
+	if !codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionAskDirectorV0) {
 		t.Fatalf("WaitAgentRefs no paso por supervision de progreso: assessments=%+v run=%+v", run.AgentAssessments, run)
 	}
-	if !codexStackHasRefV0(run.StoppedAgents, agentRef) ||
-		!codexStackHasRefV0(run.ConfirmedStoppedAgents, agentRef) {
-		t.Fatalf("agente acotado no quedo parado/confirmado: status=%s stopped=%v confirmed=%v", drain.Status, run.StoppedAgents, run.ConfirmedStoppedAgents)
+	if !codexStackHasRefV0(run.LostAgents, agentRef) ||
+		codexStackHasRefV0(run.StoppedAgents, agentRef) ||
+		codexStackHasRefV0(run.ConfirmedStoppedAgents, agentRef) {
+		t.Fatalf("agente acotado no quedo reconciliado como lost: status=%s lost=%v stopped=%v confirmed=%v", drain.Status, run.LostAgents, run.StoppedAgents, run.ConfirmedStoppedAgents)
 	}
 }
 
@@ -116,6 +123,44 @@ func TestDrainRunV0ProcesoParadoPorCapacidadLimitadaNoMarcaBasura(t *testing.T) 
 	if codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictGarbageV0) ||
 		codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0) {
 		t.Fatalf("capacity_limited no debe clasificarse como basura/bucle: %+v", run.AgentAssessments)
+	}
+}
+
+func TestDrainRunV0ProcesoParadoPorAuthInvalidaPreguntaDirectorSinBasura(t *testing.T) {
+	ctx := context.Background()
+	runtime := newAuthInvalidPendingAckCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	director := postDirectorAPIV0(t, stack)
+
+	if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+		RunRef:               director.RunRef,
+		CorrelationID:        "corr-stack-auth-invalid-no-ack-001",
+		MaxBursts:            12,
+		MaxStepsPerBurst:     8,
+		MaxDispatchesPerWait: 8,
+		MaxCommands:          20,
+		MaxOutboxPerCycle:    8,
+		MaxExternalWaits:     2,
+	}); err != nil {
+		t.Fatalf("DrainRunV0: %v", err)
+	}
+	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	if drainRunHasPendingExternalAgentsV0(run, nil) {
+		t.Fatalf("run sigue pendiente tras auth invalida: lost=%v stopped=%v confirmed=%v", run.LostAgents, run.StoppedAgents, run.ConfirmedStoppedAgents)
+	}
+	if !codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0) ||
+		!codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionAskDirectorV0) ||
+		!codexStackRefsContainPartV0(run.AgentAssessments, "#severity:"+orquestacoreworkflow.AgentAssessmentSeverityCriticalV0) {
+		t.Fatalf("sin assessment auth ask_director critical: %+v", run.AgentAssessments)
+	}
+	if codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictGarbageV0) ||
+		codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionStopAgentV0) {
+		t.Fatalf("auth invalida no debe marcar basura ni stop_agent: %+v", run.AgentAssessments)
+	}
+	if len(compactStringsV0(run.LostAgents)) == 0 ||
+		len(compactStringsV0(run.StoppedAgents)) != 0 ||
+		len(compactStringsV0(run.ConfirmedStoppedAgents)) != 0 {
+		t.Fatalf("auth invalida debe reconciliar como lost sin parada runtime: lost=%v stopped=%v confirmed=%v", run.LostAgents, run.StoppedAgents, run.ConfirmedStoppedAgents)
 	}
 }
 
@@ -185,6 +230,32 @@ func (runtime *capacityLimitedPendingAckCodexStackRuntimeV0) LaunchV0(
 	return snapshot, os.WriteFile(
 		stderrPath,
 		[]byte("ERROR: Selected model is at capacity. Please try a different model."),
+		0o600,
+	)
+}
+
+type authInvalidPendingAckCodexStackRuntimeV0 struct {
+	*stoppedPendingAckCodexStackRuntimeV0
+}
+
+func newAuthInvalidPendingAckCodexStackRuntimeV0() *authInvalidPendingAckCodexStackRuntimeV0 {
+	return &authInvalidPendingAckCodexStackRuntimeV0{
+		stoppedPendingAckCodexStackRuntimeV0: newStoppedPendingAckCodexStackRuntimeV0(),
+	}
+}
+
+func (runtime *authInvalidPendingAckCodexStackRuntimeV0) LaunchV0(
+	ctx context.Context,
+	req orquestaruntime.ProcessRuntimeLaunchRequestV0,
+) (orquestaruntime.ProcessRuntimeSnapshotV0, error) {
+	snapshot, err := runtime.stoppedPendingAckCodexStackRuntimeV0.LaunchV0(ctx, req)
+	if err != nil {
+		return snapshot, err
+	}
+	stderrPath := filepath.Join(filepath.Dir(req.CommandPath), orquestaruntimecodex.CodexStderrFileNameV0)
+	return snapshot, os.WriteFile(
+		stderrPath,
+		[]byte("ERROR 401 token_invalidated refresh_token_reused"),
 		0o600,
 	)
 }

@@ -91,6 +91,7 @@ func normalizeRunQueueQueryV0(query WebRunQueueQueryV0) WebRunQueueQueryV0 {
 	query.AppRefs = compactStringsV0(query.AppRefs)
 	query.RunRef = trimV0(query.RunRef)
 	query.AppRef = trimV0(query.AppRef)
+	query.Status = trimV0(query.Status)
 	query.RequestedBy = trimV0(query.RequestedBy)
 	query.Reason = trimV0(query.Reason)
 	query.IdempotencyKey = trimV0(query.IdempotencyKey)
@@ -107,6 +108,7 @@ func runQueueToolInputV0(query WebRunQueueQueryV0) orquestamcp.MCPRunQueuePriori
 		AppRefs:        query.AppRefs,
 		RunRef:         query.RunRef,
 		AppRef:         query.AppRef,
+		Status:         query.Status,
 		PriorityScore:  query.PriorityScore,
 		RequestedBy:    query.RequestedBy,
 		Reason:         query.Reason,

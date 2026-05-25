@@ -168,7 +168,7 @@ main() {
   require_tool jq
   mkdir -p "$SMOKE_OUT_DIR"
 
-  get_json "$ORQUESTA_BASE_URL/healthz" "$SMOKE_OUT_DIR/orquesta_health.json"
+  get_json "$ORQUESTA_BASE_URL/api/v0/server/readiness" "$SMOKE_OUT_DIR/orquesta_readiness.json"
   get_json "$OPES_BASE_URL/api/health" "$SMOKE_OUT_DIR/opes_health.json"
 
   post_json "$OPES_BASE_URL/api/topics" \

@@ -20,6 +20,19 @@ func BuildAgentProgressSupervisionV0(
 		return AgentProgressSupervisionResultV0{}, err
 	}
 	result := AgentProgressSupervisionResultV0{AssessCommand: assessCommand}
+	if agentProgressShouldRegisterLostV0(normalized.Report, assessment) {
+		lost, err := orquestacoreworkflow.NewRegisterAgentLostCommandV0(
+			registerLostMetaFromSupervisionV0(normalized.CommandMeta),
+			registerLostPayloadFromProgressReportV0(
+				normalized.Report,
+				normalized.CommandMeta.OccurredAt,
+			),
+		)
+		if err != nil {
+			return AgentProgressSupervisionResultV0{}, err
+		}
+		result.RegisterLostCommand = &lost
+	}
 	if assessment.Action != orquestacoreworkflow.AgentAssessmentActionAskDirectorV0 {
 		return result, nil
 	}

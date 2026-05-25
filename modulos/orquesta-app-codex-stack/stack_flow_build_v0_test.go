@@ -86,7 +86,7 @@ func mustBuildCodexStackWithDomainWorkAndRequiredTestsForTestV0(
 			ProcessStopper:  runtime,
 			SnapshotSource:  runtime,
 			MaxBatchReady:   4,
-			MaxConcurrency:  4,
+			MaxConcurrency:  32,
 			WaitInterval:    time.Millisecond,
 			ProgressPolicy:  codexStackProgressPolicyForTestV0(),
 			ApprovalPolicy:  "never",
@@ -164,6 +164,34 @@ func TestBuildStackV0CableaVerificadorWorktreeSiHaySnapshotStoreV0(t *testing.T)
 	source, ok := deliverySourceV0(config).(orquestaruntimecodexdelivery.CodexDeliveryObservationSourceV0)
 	if !ok || source.WorktreeVerifier == nil {
 		t.Fatalf("delivery source sin verificador worktree: %T %+v", source, source)
+	}
+}
+
+func TestAgentBatchDispatcherV0CableaGateDeProcesosVivosCodex(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	config := ConfigV0{
+		Stores: StoresV0{
+			ProcessRegistry: orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0(),
+			OutboxLedger:    orquestacionnucleoapp.NewInMemoryOutboxLedgerV0(),
+		},
+		Codex: CodexRuntimeConfigV0{
+			Runtime:         runtime,
+			ProcessStopper:  runtime,
+			SnapshotSource:  runtime,
+			MaxBatchReady:   3,
+			MaxConcurrency:  10,
+			ProjectWorkDir:  t.TempDir(),
+			RuntimeWorkDir:  filepath.Join(t.TempDir(), "runtime"),
+			CommandPath:     filepath.Join(t.TempDir(), "codex-bin"),
+			Sandbox:         "workspace-write",
+			ApprovalPolicy:  "never",
+			ReasoningEffort: string(orquestacoreworkflow.OrchestrationCapacityHighV0),
+		},
+	}
+	dispatcher := agentBatchDispatcherV0(config)
+	gate, ok := dispatcher.CapacityGate.(*orquestacionnucleoapp.LiveProcessCapacityGateV0)
+	if !ok || gate.Limit != 10 {
+		t.Fatalf("capacity gate=%T %+v", dispatcher.CapacityGate, dispatcher.CapacityGate)
 	}
 }
 

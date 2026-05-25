@@ -2,6 +2,18 @@
 
 Estos contratos son locales hasta que el director los promueva a `../../CONTRATOS.md`.
 
+## Politica de rails de detalle
+
+Los contratos locales citan la politica comun de `modulos/orquesta-rails`:
+refs opacas y vocabulario operativo como `runtime`, `provider`, `DB`, `SQL`,
+`HOME`, `modelo` o `Codex` no son detalle prohibido por si mismos. El corte
+fuerte sigue siendo para valores sensibles efectivos (`api_key=`,
+`client_secret=`, `authorization: Bearer`), rutas privadas, prompts/transcripts
+crudos y payloads masivos. Si un contrato dice que no transporta runtime,
+proveedor, modelo, DB o HOME, significa que no transporta valores reales ni
+configuracion concreta de adaptador; puede transportar refs compactas cuando la
+frontera lo requiera.
+
 ## Plantilla
 
 ```text
@@ -215,7 +227,8 @@ Errores:
 Pruebas de contrato:
   - Mapping determinista desde draft a `StartRun`.
   - Refs vacios se rechazan con error publico.
-  - Serializacion no contiene DB/runtime/proveedor/HOME.
+  - Serializacion conserva solo refs opacas; no contiene valores reales de
+    DB/runtime/proveedor/HOME ni material sensible efectivo.
   - El comando resultante valida como `StartRun` y el handler puro lo acepta.
 Estado: implementado como candidato local en NCW-006; puente real pendiente de contrato global futuro.
 ```
@@ -306,7 +319,7 @@ Invariantes:
   - `RunBlocked` proyecta `blocker_id`, registra huella `CommandEffects` y no emite outbox por si mismo.
   - `PhaseClosed` cierra la fase actual, registra huella `CommandEffects` por `closure_ref`, no cierra el run y permite retry exacto aunque el run haya avanzado a otra fase.
   - `DirectorQuestionRaised` esta en el catalogo durable v0, proyecta una ref compacta en `director_questions` y registra huella `CommandEffects` por `question_id`.
-  - `DirectorQuestionAnswered` proyecta respuesta compacta del director por `answer_id`, tambien `question_id` en `director_answered_questions`, y registra huella `CommandEffects`; no transporta secretos, provider/proveedor, HOME, DB, runtime, prompts ni transcripts.
+  - `DirectorQuestionAnswered` proyecta respuesta compacta del director por `answer_id`, tambien `question_id` en `director_answered_questions`, y registra huella `CommandEffects`; no transporta secretos, valores reales de provider/proveedor, HOME, DB, runtime ni prompts/transcripts crudos.
   - `CapacityDecided` proyecta una decision compacta por `capacity_request_id`, registra huella `CommandEffects` y habilita `RequestAgent`; no transporta proveedor/modelo/HOME/cuotas reales.
   - Eventos de arquitectura proyectan refs compactas en `brainstorms`, `votes` y `decisions`.
   - `MicrotaskCreated` proyecta `task_id` en `tasks` y refs compactas de contratos de funcion en `function_contracts`.
@@ -466,7 +479,7 @@ Invariantes:
   - `answer_id`, `question_id`, `decision` y `summary` son obligatorios.
   - `evidence_refs` son refs opacas.
   - `decision` pertenece a `continue`, `replan` o `stop_agent`.
-  - No contiene secretos, provider/proveedor, HOME, DB, runtime, prompts, transcripts ni contexto masivo.
+  - No contiene secretos, valores reales de provider/proveedor, HOME, DB, runtime, prompts/transcripts crudos ni contexto masivo.
   - `AnswerDirectorQuestion` no emite outbox.
   - La identidad fuerte se registra por `answer_id` en `CommandEffects`.
   - Repetir la misma respuesta ya reflejada solo es no-op si coinciden command_id, idempotency_key y payload normalizado.

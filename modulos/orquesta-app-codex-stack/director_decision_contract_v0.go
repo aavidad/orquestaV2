@@ -45,7 +45,7 @@ func directorDecisionInstructionsV0(
 		"Cierre normal: conserva minimum_deliverables exactos (" + minimums + ") y no emitas register_final_validation/close_run hasta tener contratos, tareas completas, entregas de programacion, tarea cerrada, revision aceptada y validacion; si falta algo, crea trabajo/revision o CONSULTA AL DIRECTOR.",
 		"En debug puedes cerrar alcance reducido solo si summary de register_final_validation y close_run lista omisiones_debug con cada minimum_deliverable ausente; evidence_refs debe incluir una ref compacta de omisiones. Debug no convierte cierre reducido en cierre productivo.",
 		"No uses action, decision_id, payload ni refs; create_microtask contiene create_microtask.task.",
-		"No escribas terminos prohibidos en decision: secret, secreto, token, credential, api_key, provider, model, db, sql, base de datos, runtime, adapter, adaptador, filesystem, git, docker, tmux, home, oauth; para seguridad usa datos sensibles.",
+		"Politica de detalle: usa refs opacas para runtime, provider, modelo, DB, git, filesystem, HOME, OAuth y adaptadores; no escribas valores reales, rutas privadas, credenciales, secretos, prompts crudos, conversaciones crudas ni payloads completos. Para seguridad usa datos sensibles.",
 	}
 }
 

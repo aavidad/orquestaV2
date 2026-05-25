@@ -33,13 +33,14 @@ type OutboxDispatcherBindingV0 struct {
 }
 
 type OutboxBatchDispatcherBindingV0 struct {
-	TargetPort  string
-	MessageType string
-	MaxReady    int
-	Reader      orquestaoutboxdispatch.PendingOutboxReaderPortV0
-	Claimer     orquestaoutboxdispatch.OutboxDispatchClaimerPortV0
-	Executor    OutboxDispatchBatchExecutorPortV0
-	Acker       orquestaoutboxdispatch.OutboxDispatchAckPortV0
+	TargetPort   string
+	MessageType  string
+	MaxReady     int
+	CapacityGate LiveProcessCapacityGatePortV0
+	Reader       orquestaoutboxdispatch.PendingOutboxReaderPortV0
+	Claimer      orquestaoutboxdispatch.OutboxDispatchClaimerPortV0
+	Executor     OutboxDispatchBatchExecutorPortV0
+	Acker        orquestaoutboxdispatch.OutboxDispatchAckPortV0
 }
 
 type ProgressiveLoopRequestV0 struct {

@@ -265,6 +265,25 @@ Pruebas de contrato:
   - `outbox_ledger_memory_v0_test.go` valida guardado de `LaunchRuntimeAgent`, `StopRuntimeAgent` y `SendDirectorQuestion`, filtros por run/target, ACK, idempotencia, conflictos y snapshots sin detalles prohibidos.
 ```
 
+```text
+Nombre: FileOutboxLedgerV0
+Tipo: puerto_entrada
+Version: v0
+Propietario: orquesta-persistence
+Consumidores: servidor residente Codex/file-based por composicion opt-in.
+Campos:
+  - `save_pending` / `list_pending`: contrato `DirectorCycleOutboxLedgerPortV0`.
+  - `list_pending_outbox` / `claim` / `release` / `ack`: contratos de `orquesta-outbox-dispatch`.
+  - `ack_observation`: puerto opcional para ACK terminal `success`/`failed`.
+Invariantes:
+  - Persiste JSON atomico con mensajes, claims, `claim_ref`, `lease_ref` y ACK.
+  - Al reabrir, claims sin ACK quedan recuperables para retry idempotente.
+  - ACK `dispatched` no vuelve a pendientes; ACK `failed` queda en snapshot publico.
+  - No guarda proveedor, HOME, DB, rutas productivas, transcripts ni prompts.
+Pruebas:
+  - `outbox_ledger_file_v0_test.go` cubre rehidratacion de claim, ACK failed durable y no reejecucion tras ACK success.
+```
+
 ## Consulta al director cerrada
 
 ```text

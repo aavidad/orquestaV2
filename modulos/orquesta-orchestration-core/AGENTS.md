@@ -26,6 +26,13 @@ Unir los modulos limpios del nucleo:
 - `orquesta-core-leases`;
 - `orquesta-director-cycle-outbox`.
 
+La fuente de verdad del ciclo Director V2 es la espina
+`DirectorCycleStepV0 -> orquesta-director-runner ->
+orquesta-director-scheduler -> orquesta-core-workflow ->
+orquesta-director-cycle-outbox`. Esa espina ejecuta un tick acotado, registra
+outbox pendiente y devuelve estado compacto para un supervisor externo. No es
+`app-director-service`, no es loop progresivo residente y no despacha runtime.
+
 ## Director Operativo
 
 El materializador vigente esta en `operational_director_materializer_v0.go`.
@@ -49,11 +56,17 @@ corte durable de espera por ola/cohorte/parent task. Guardan causa, scope,
 tasks, agentes objetivo y agentes pendientes por puertos; no metas persistencia
 file/DB aqui.
 
-Pendiente antes de llamarlo "ciclo completo":
+Pendientes reales, clasificados:
 
-- review, tests requeridos, rework/replan y cierre como workflow durable;
-- parent/child refs propagados hasta runtime cuando se autorice recursion;
-- guardas para no lanzar OPES/domain-work con contexto insuficiente.
+- Composicion residente/restart: demostrar que el servidor usa
+  `DirectorCycleStepV0` con outbox durable, dispatch/ACK y reentrada sin
+  duplicar efectos.
+- Smoke real neutral: recorrer scheduler/outbox hasta parada de proceso
+  temporal no-Codex con ACK/evidencia por refs opacas.
+- Proveedor real u OPES temporal: cualquier cierre fuera del stack Codex actual
+  necesita fuente/validador real propio. Review, tests durables,
+  rework/replan, cierre offline y PlanState ya tienen cobertura focal; no los
+  declares pendientes genericos sin regresion nueva.
 
 ## Test minimo
 

@@ -34,7 +34,7 @@ Campos:
     max_delegation_depth, max_child_agents, max_subagents_per_agent,
     max_recursive_agents, child_task_refs
 Invariantes:
-  - DTO puro sin runtime, DB, proveedor, HOME, agentes concretos ni adaptadores.
+  - DTO puro sin valores reales de runtime, DB, proveedor, HOME, agentes concretos ni adaptadores.
   - Representa una unidad de trabajo acotada; el tamano lo decide el director por politica, no el core.
   - `phase_id` pertenece al catalogo de fases v0.
   - `work_profile_kind` es opcional; si viene debe pertenecer al catalogo neutral de `WorkProfileV0`.
@@ -45,7 +45,7 @@ Invariantes:
   - `max_delegation_depth`, `max_subagents_per_agent` y `max_recursive_agents`
     son presupuestos opcionales del arbol de tareas; `0` conserva
     compatibilidad sin limite estructurado.
-  - Rechaza secretos y credenciales. Permite refs/texto opacos de adaptador o ejecucion para que el director normalice/repare sin cortar por palabras; esta apertura queda pendiente de revision futura en `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`.
+  - Rechaza secretos, credenciales, rutas privadas, prompts/transcripts crudos y payloads masivos por la politica comun de `orquesta-rails`. Permite refs/texto opacos de adaptador o ejecucion para que el director normalice/repare sin cortar por palabras.
 Errores:
   - workflow_task_invalida
   - fase_no_soportada
@@ -95,7 +95,7 @@ Perfiles iniciales:
   - review
   - domain_work
 Invariantes:
-  - DTO puro sin adaptador, proveedor, proceso real, HOME, credenciales ni conocimiento interno de conectores.
+  - DTO puro sin valores reales de adaptador, proveedor, proceso, HOME, credenciales ni conocimiento interno de conectores.
   - Reutiliza `WorkflowTaskV0`: `WorkflowTaskFromWorkProfileV0` valida el perfil y produce una tarea durable compacta con `work_profile_kind`.
   - `profile_kind` decide fase y criterios base por politica neutral; los conectores aportan refs, reglas y validadores.
   - `implementation`, `refactor` y `required_tests` exigen `required_tests` antes de poder materializarse.
@@ -122,7 +122,7 @@ Payload:
 Salida:
   - MicrotaskCreated
 Invariantes:
-  - Handler puro: no runtime, DB, proveedor, HOME, filesystem ni outbox.
+  - Handler puro: no ejecuta runtime, DB, proveedor, HOME, filesystem ni outbox, y no transporta valores reales de adaptador.
   - El nombre del comando no fuerza granularidad minima; fuerza planificacion cerrada y verificable.
   - Valida `WorkflowTaskV0`: fase soportada, `write_set` no vacio, `acceptance_criteria` no vacio, detalles prohibidos y payload compacto.
   - Valida que la proyeccion `MicrotaskCreated` sea compacta antes de aceptar el comando.
@@ -153,7 +153,7 @@ Payload:
   - phase_id
   - function_contract_refs: lista de strings compactos ya normalizados
 Invariantes:
-  - Evento compacto: no guarda `write_set`, criterios completos, runtime, DB, proveedor, HOME ni adaptadores.
+  - Evento compacto: no guarda `write_set`, criterios completos ni valores reales de runtime, DB, proveedor, HOME o adaptadores.
   - `task_id` y `phase_id` son obligatorios.
   - `phase_id` pertenece al catalogo v0.
   - `function_contract_refs` son opacas y compactas; no guarda par redundante `contract_ref` + `function_name`.

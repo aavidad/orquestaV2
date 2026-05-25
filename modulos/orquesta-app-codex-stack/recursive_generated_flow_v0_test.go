@@ -16,7 +16,9 @@ func TestCodexStackGeneratedRecursiveTreeFakeRuntimeV0(t *testing.T) {
 	ctx := context.Background()
 	cfg := codexStackRequiredTestLocalConfigV0(t)
 	cfg.MaxBatchReady = 2
-	cfg.MaxConcurrency = 2
+	// La runtime fake no marca procesos como parados tras escribir ACK; esta prueba
+	// valida recursion completa, no el gate global de procesos vivos.
+	cfg.MaxConcurrency = 8
 	writeCodexStackRequiredTestTinyGoModuleV0(t, cfg.ProjectWorkDir)
 	goCommand := codexStackRequiredTestGoCommandV0(t)
 	outputDir := filepath.Join(t.TempDir(), "required-test-output")

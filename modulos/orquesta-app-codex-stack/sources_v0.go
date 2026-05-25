@@ -7,11 +7,13 @@ import (
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
+	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
 )
 
 func deliverySourceV0(config ConfigV0) orquestacionnucleoapp.AgentDeliveryObservationProviderPortV0 {
 	base := orquestaruntimecodexdelivery.CodexDeliveryObservationSourceV0{
-		Store: config.Stores.ReceiptStore,
+		Store:            config.Stores.ReceiptStore,
+		WorktreeVerifier: codexStackWorktreeVerifierV0(config),
 	}
 	recovery := domainWorkRecoveryDeliverySourceV0{
 		Stores:         config.Stores,
@@ -29,10 +31,27 @@ func deliverySourceV0(config ConfigV0) orquestacionnucleoapp.AgentDeliveryObserv
 	}
 }
 
+func codexStackWorktreeVerifierV0(
+	config ConfigV0,
+) orquestaruntimecodexdelivery.CodexReceiptWorktreeVerifierPortV0 {
+	if config.ReviewGate.LineBudgetSnapshotStore == nil {
+		return nil
+	}
+	return orquestaruntimecodexdelivery.CodexReceiptWorktreeVerifierV0{
+		SnapshotStore:  config.ReviewGate.LineBudgetSnapshotStore,
+		IgnorePrefixes: codexStackWorktreeIgnorePrefixesV0(),
+	}
+}
+
+func codexStackWorktreeIgnorePrefixesV0() []string {
+	prefixes := []string{".git"}
+	return append(prefixes, orquestaruntimeworktree.DefaultWorktreeControlIgnorePrefixesV0()...)
+}
+
 func reviewGateSourceV0(config ConfigV0) orquestacionnucleoapp.ReviewGateObservationProviderPortV0 {
 	base := orquestaruntimecodexdelivery.CodexReviewGateObservationSourceV0{
 		Store:              config.Stores.ReceiptStore,
-		FileEvidenceResult: config.ReviewGate.FileEvidence,
+		FileEvidenceResult: codexStackReviewGateFileEvidenceV0(config.ReviewGate),
 		MaxLinesPerFile:    config.ReviewGate.MaxLinesPerFile,
 		FailureStatus:      config.ReviewGate.FailureStatus,
 	}
@@ -76,10 +95,8 @@ func statsProgressSourceV0(config ConfigV0) orquestaruntimecodexdelivery.CodexPr
 
 func agentUsageSourceV0(config ConfigV0) CodexStackAgentUsageSourceV0 {
 	return CodexStackAgentUsageSourceV0{
-		Store:           config.Stores.ReceiptStore,
-		ModelAlias:      config.Codex.Model,
-		ReasoningEffort: string(config.Capacity.ReasoningEffort),
-		UsageMetrics:    config.Codex.UsageMetrics,
+		Store:        config.Stores.ReceiptStore,
+		UsageMetrics: config.Codex.UsageMetrics,
 	}
 }
 
@@ -127,7 +144,15 @@ func directorDecisionFileSourceV0(config ConfigV0) orquestadirectoragentfilesour
 		DescriptorProvider: orquestaruntimecodexdelivery.CodexReceiptDirectorDecisionFileDescriptorProviderV0{
 			Store: config.Stores.ReceiptStore,
 		},
-		Reader:             orquestadirectoragentfilesource.OSDirectorAgentDecisionFileReaderV0{},
-		IgnoreInvalidFiles: true,
+		Reader:              orquestadirectoragentfilesource.OSDirectorAgentDecisionFileReaderV0{},
+		ConsumptionRecorder: directorDecisionFileConsumptionRecorderV0(config.Stores.ReceiptStore),
+		IgnoreInvalidFiles:  true,
 	}
+}
+
+func directorDecisionFileConsumptionRecorderV0(
+	store CodexReceiptStorePortV0,
+) orquestadirectoragentfilesource.DirectorAgentDecisionFileConsumptionRecorderPortV0 {
+	recorder, _ := store.(orquestadirectoragentfilesource.DirectorAgentDecisionFileConsumptionRecorderPortV0)
+	return recorder
 }

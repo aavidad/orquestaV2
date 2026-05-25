@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	orquestacore "orquesta/modulos/orquesta-core"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
@@ -177,6 +178,38 @@ func TestDomainWorkAPIDelegaEnExecutorRESTSinOPESNiDBRuntimeV0(t *testing.T) {
 	}
 }
 
+func TestFunctionContractAPIDelegaEnIndiceReadOnlyV0(t *testing.T) {
+	index := &recordingFunctionContractIndexV0{
+		ListResult: orquestacore.ListFunctionContractsResultV0{
+			Items: []orquestacore.FunctionContractSummaryV0{{
+				FunctionContractRef: "contract:function:app-gateway:v0",
+				Estado:              orquestacore.FunctionContractEstadoEvidenciaInsuficienteV0,
+			}},
+			Warnings: []string{"function_contract_payload_no_materializado"},
+		},
+	}
+	handler := NewHTTPHandlerV0(ConfigV0{
+		FunctionContracts: index,
+		Timeout:           time.Second,
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/core/function-contracts/list", strings.NewReader(`{"page":{"limit":1}}`))
+	req.Header.Set("Content-Type", "application/json")
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK || index.ListCalls != 1 {
+		t.Fatalf("status=%d calls=%d body=%s", rec.Code, index.ListCalls, rec.Body.String())
+	}
+	var result orquestacore.ListFunctionContractsResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(result.Items) != 1 || result.Items[0].FunctionContractRef != "contract:function:app-gateway:v0" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestInProcessTransportV0PreservaRequestYResponse(t *testing.T) {
 	transport := InProcessTransportV0{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPatch || r.URL.Path != "/api/v0/test" {
@@ -206,6 +239,26 @@ func TestInProcessTransportV0PreservaRequestYResponse(t *testing.T) {
 
 type recordingArrancarDirectorExecutorV0 struct {
 	Input orquestamcp.MCPArrancarDirectorAppToolInputV0
+}
+
+type recordingFunctionContractIndexV0 struct {
+	ListResult orquestacore.ListFunctionContractsResultV0
+	ListCalls  int
+}
+
+func (index *recordingFunctionContractIndexV0) ListFunctionContractsV0(
+	_ context.Context,
+	_ orquestacore.ListFunctionContractsRequestV0,
+) (orquestacore.ListFunctionContractsResultV0, error) {
+	index.ListCalls++
+	return index.ListResult, nil
+}
+
+func (index *recordingFunctionContractIndexV0) ViewFunctionContractV0(
+	_ context.Context,
+	_ orquestacore.ViewFunctionContractRequestV0,
+) (orquestacore.ViewFunctionContractResultV0, error) {
+	return orquestacore.ViewFunctionContractResultV0{}, nil
 }
 
 func (executor *recordingArrancarDirectorExecutorV0) Execute(

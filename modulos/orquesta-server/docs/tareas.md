@@ -64,3 +64,24 @@ Validacion:
 - el planner recibe `known_request_refs`/`known_run_refs`;
 - `cmd/orquesta-server` puede generar una tarea scanner para ampliar backlog
   cuando no quedan tareas nuevas concretas.
+
+## SRV-TASK-007: supervisor residente reentrante
+
+Estado: pendiente documentado.
+
+Origen: `task-ref-self-improvement-afbb86d34eb5`. Refs opacas preservadas:
+`worktree-ref-orquesta-local-parallel-01`,
+`branch-ref-orquesta-local-parallel-01`.
+
+Objetivo: el supervisor residente debe observar el estado disponible, ejecutar
+un pulso acotado y volver al bucle tras cada supervision o preparacion de
+automejora. No debe quedar retenido esperando agentes largos ni mezclar trabajo
+secundario con el trabajo principal.
+
+Validacion prevista:
+
+- `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`;
+- un caso focal debe demostrar que el pulso usa limites de espera acotados y que
+  la siguiente iteracion del bucle puede ejecutar nueva supervision;
+- la automejora de fondo conserva write-set propio, refs opacas y prioridad baja
+  sin bloquear runs principales.

@@ -15,16 +15,18 @@ const (
 )
 
 type MCPOperatorFriendlyQueryV0 struct {
-	RequestID       string `json:"request_id,omitempty"`
-	CorrelationID   string `json:"correlation_id,omitempty"`
-	QueueRef        string `json:"queue_ref,omitempty"`
-	RunRef          string `json:"run_ref,omitempty"`
-	CommandText     string `json:"command_text,omitempty"`
-	Question        string `json:"question,omitempty"`
-	Limit           int    `json:"limit,omitempty"`
-	IncludeAgents   bool   `json:"include_agents,omitempty"`
-	IncludeRunStats bool   `json:"include_run_stats,omitempty"`
-	IncludeUsage    bool   `json:"include_usage,omitempty"`
+	RequestID       string            `json:"request_id,omitempty"`
+	CorrelationID   string            `json:"correlation_id,omitempty"`
+	QueueRef        string            `json:"queue_ref,omitempty"`
+	RunRef          string            `json:"run_ref,omitempty"`
+	ProjectRef      string            `json:"project_ref,omitempty"`
+	Status          string            `json:"status,omitempty"`
+	CommandText     string            `json:"command_text,omitempty"`
+	Question        string            `json:"question,omitempty"`
+	Limit           int               `json:"limit,omitempty"`
+	IncludeAgents   mcpFlexibleBoolV0 `json:"include_agents,omitempty"`
+	IncludeRunStats mcpFlexibleBoolV0 `json:"include_run_stats,omitempty"`
+	IncludeUsage    mcpFlexibleBoolV0 `json:"include_usage,omitempty"`
 }
 
 type MCPOperatorFriendlyStatusResultV0 struct {
@@ -51,6 +53,7 @@ type MCPOperatorFriendlyCountsV0 struct {
 
 type MCPOperatorFriendlyAgentV0 struct {
 	RunRef         string `json:"run_ref"`
+	ProjectRef     string `json:"project_ref,omitempty"`
 	AgentRef       string `json:"agent_ref"`
 	Status         string `json:"status,omitempty"`
 	InFlight       bool   `json:"in_flight,omitempty"`
@@ -67,7 +70,7 @@ func mcpOperatorFriendlyTransportToolsV0(
 			MCPOperatorFriendlyStatusToolNameV0,
 			"v0",
 			"orquesta://operator/friendly/status/v0",
-			"envelope:{request_id?,correlation_id?,queue_ref?,run_ref?,limit?,include_agents?,include_run_stats?,include_usage?}; no required fields; use for general status/como va",
+			"envelope:{request_id?,correlation_id?,queue_ref?,run_ref?,project_ref?,status?,limit?,include_agents?,include_run_stats?,include_usage?}; no required fields; use for general status/como va",
 			"ok:{counts,projects,tasks,runs?,agents?,next_actions}|error:{errores_publicos}",
 			mcpOperatorFriendlyStatusTransportHandlerV0(bindings, MCPOperatorFriendlyStatusToolNameV0),
 		),
@@ -75,7 +78,7 @@ func mcpOperatorFriendlyTransportToolsV0(
 			MCPOperatorFriendlyTasksToolNameV0,
 			"v0",
 			"orquesta://operator/friendly/tasks/v0",
-			"envelope:{request_id?,correlation_id?,queue_ref?,limit?}; no required fields; list queue tasks",
+			"envelope:{request_id?,correlation_id?,queue_ref?,project_ref?,status?,limit?}; no required fields; list queue tasks",
 			"ok:{counts,tasks,projects}|error:{errores_publicos}",
 			mcpOperatorFriendlyStatusTransportHandlerV0(bindings, MCPOperatorFriendlyTasksToolNameV0),
 		),
@@ -83,7 +86,7 @@ func mcpOperatorFriendlyTransportToolsV0(
 			MCPOperatorFriendlyProjectsToolNameV0,
 			"v0",
 			"orquesta://operator/friendly/projects/v0",
-			"envelope:{request_id?,correlation_id?,queue_ref?,limit?}; no required fields; list active projects from queue",
+			"envelope:{request_id?,correlation_id?,queue_ref?,project_ref?,status?,limit?}; no required fields; list active projects from queue",
 			"ok:{counts,projects}|error:{errores_publicos}",
 			mcpOperatorFriendlyStatusTransportHandlerV0(bindings, MCPOperatorFriendlyProjectsToolNameV0),
 		),
@@ -91,7 +94,7 @@ func mcpOperatorFriendlyTransportToolsV0(
 			MCPOperatorFriendlyAgentsToolNameV0,
 			"v0",
 			"orquesta://operator/friendly/agents/v0",
-			"envelope:{request_id?,correlation_id?,queue_ref?,run_ref?,limit?,include_usage?}; no required fields; list agents using queued runs",
+			"envelope:{request_id?,correlation_id?,queue_ref?,run_ref?,project_ref?,status?,limit?,include_usage?}; no required fields; list agents using queued runs",
 			"ok:{counts,agents,runs?}|error:{errores_publicos}",
 			mcpOperatorFriendlyStatusTransportHandlerV0(bindings, MCPOperatorFriendlyAgentsToolNameV0),
 		),
@@ -99,7 +102,7 @@ func mcpOperatorFriendlyTransportToolsV0(
 			MCPOperatorFriendlyCommandToolNameV0,
 			"v0",
 			"orquesta://operator/friendly/command/v0",
-			"envelope:{request_id?,correlation_id?,command_text?,question?,queue_ref?,run_ref?,limit?}; no internal refs required; routes simple human commands",
+			"envelope:{request_id?,correlation_id?,command_text?,question?,queue_ref?,run_ref?,project_ref?,status?,limit?}; no internal refs required; routes simple human commands",
 			"ok:{counts,projects,tasks,runs?,agents?,next_actions}|error:{errores_publicos}",
 			mcpOperatorFriendlyStatusTransportHandlerV0(bindings, MCPOperatorFriendlyCommandToolNameV0),
 		),
@@ -135,11 +138,11 @@ func executeMCPOperatorFriendlyStatusV0(
 	if toolName == MCPOperatorFriendlyCommandToolNameV0 {
 		toolName = operatorFriendlyToolForCommandV0(input)
 	}
-	includeRuns := input.IncludeRunStats ||
-		input.IncludeAgents ||
+	includeRuns := bool(input.IncludeRunStats) ||
+		bool(input.IncludeAgents) ||
 		toolName == MCPOperatorFriendlyAgentsToolNameV0 ||
 		strings.TrimSpace(input.RunRef) != ""
-	includeAgents := input.IncludeAgents || toolName == MCPOperatorFriendlyAgentsToolNameV0
+	includeAgents := bool(input.IncludeAgents) || toolName == MCPOperatorFriendlyAgentsToolNameV0
 	if includeAgents {
 		includeRuns = true
 	}
@@ -163,8 +166,8 @@ func executeMCPOperatorFriendlyStatusV0(
 		return out, nil
 	}
 	out.QueueRef = queue.QueueRef
-	out.Tasks = queue.Ranked
-	out.Projects = projectsFromMCPFriendlyTasksV0(queue.Ranked)
+	out.Tasks = filterMCPFriendlyTasksV0(queue.Ranked, input)
+	out.Projects = projectsFromMCPFriendlyTasksV0(out.Tasks)
 	out.Counts.QueueLive = true
 	out.Counts.Tasks = len(out.Tasks)
 	out.Counts.Projects = len(out.Projects)
@@ -227,6 +230,7 @@ func mcpOperatorFriendlyRunStatsV0(
 	if len(runRefs) == 0 {
 		runRefs = runRefsFromMCPFriendlyTasksV0(tasks)
 	}
+	projectByRun := projectRefsByMCPFriendlyRunV0(tasks)
 	runs := make([]MCPDirectorStatsToolResultV0, 0, len(runRefs))
 	agents := []MCPOperatorFriendlyAgentV0{}
 	for _, runRef := range runRefs {
@@ -236,7 +240,7 @@ func mcpOperatorFriendlyRunStatsV0(
 			RunRef:               runRef,
 			IncludeProcessRefs:   includeAgents,
 			IncludeAgentProgress: includeAgents,
-			IncludeAgentUsage:    input.IncludeUsage,
+			IncludeAgentUsage:    bool(input.IncludeUsage),
 		})
 		if err != nil || run.Estado != MCPDirectorStatsEstadoOKV0 {
 			continue
@@ -246,6 +250,7 @@ func mcpOperatorFriendlyRunStatsV0(
 			for _, agent := range run.Stats.Agents {
 				agents = append(agents, MCPOperatorFriendlyAgentV0{
 					RunRef:         run.RunRef,
+					ProjectRef:     projectByRun[run.RunRef],
 					AgentRef:       agent.AgentRequestID,
 					Status:         agent.Status,
 					InFlight:       agent.InFlight,
@@ -257,73 +262,4 @@ func mcpOperatorFriendlyRunStatsV0(
 		}
 	}
 	return runs, agents
-}
-
-func operatorFriendlyToolForCommandV0(input MCPOperatorFriendlyQueryV0) string {
-	text := strings.ToLower(strings.TrimSpace(firstNonEmptyMCPV0(input.CommandText, input.Question)))
-	switch {
-	case strings.Contains(text, "agente"):
-		return MCPOperatorFriendlyAgentsToolNameV0
-	case strings.Contains(text, "proyecto"):
-		return MCPOperatorFriendlyProjectsToolNameV0
-	case strings.Contains(text, "tarea") || strings.Contains(text, "cola"):
-		return MCPOperatorFriendlyTasksToolNameV0
-	default:
-		return MCPOperatorFriendlyStatusToolNameV0
-	}
-}
-
-func projectsFromMCPFriendlyTasksV0(tasks []MCPRunQueueRankedCandidateCompactV0) []string {
-	values := make([]string, 0, len(tasks))
-	seen := map[string]struct{}{}
-	for _, task := range tasks {
-		appRef := strings.TrimSpace(task.AppRef)
-		if appRef == "" {
-			continue
-		}
-		if _, ok := seen[appRef]; ok {
-			continue
-		}
-		seen[appRef] = struct{}{}
-		values = append(values, appRef)
-	}
-	return values
-}
-
-func runRefsFromMCPFriendlyTasksV0(tasks []MCPRunQueueRankedCandidateCompactV0) []string {
-	refs := make([]string, 0, len(tasks))
-	for _, task := range tasks {
-		refs = append(refs, task.RunRef)
-	}
-	return compactStringsMCPV0(refs)
-}
-
-func statusCountsFromMCPFriendlyTasksV0(tasks []MCPRunQueueRankedCandidateCompactV0) map[string]int {
-	counts := map[string]int{}
-	for _, task := range tasks {
-		status := strings.TrimSpace(task.Status)
-		if status == "" {
-			status = "unknown"
-		}
-		counts[status]++
-	}
-	return counts
-}
-
-func mcpOperatorFriendlyNextActionsV0(
-	toolName string,
-	status MCPOperatorFriendlyStatusResultV0,
-) []string {
-	if len(status.Tasks) == 0 {
-		return []string{"queue_empty_or_not_visible", "ask_orquesta_to_start_autonomy_review_if_needed"}
-	}
-	switch toolName {
-	case MCPOperatorFriendlyAgentsToolNameV0:
-		if len(status.Agents) == 0 {
-			return []string{"agents_not_visible_from_current_runs", "query_status_with_include_run_stats"}
-		}
-	case MCPOperatorFriendlyTasksToolNameV0:
-		return []string{"select_task_by_run_ref_to_prioritize_pause_cancel_or_supervise"}
-	}
-	return []string{"use_orquesta.tasks.list.v0_for_queue_detail", "use_orquesta.agents.list.v0_for_agent_detail"}
 }

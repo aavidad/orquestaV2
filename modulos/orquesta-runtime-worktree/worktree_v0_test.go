@@ -51,6 +51,66 @@ func TestVerifyWorktreeWriteSetV0RechazaCambioFueraDelWriteSet(t *testing.T) {
 	}
 }
 
+func TestVerifyWorktreeWriteSetV0ValidaAckFilesContraSnapshot(t *testing.T) {
+	root := t.TempDir()
+	writeWorktreeFileForTestV0(t, root, "README.md", "v1")
+	baseline := captureWorktreeSnapshotForTestV0(t, root, nil)
+
+	writeWorktreeFileForTestV0(t, root, "README.md", "v2")
+	result, issues := VerifyWorktreeWriteSetV0(context.Background(), WorktreeVerifyRequestV0{
+		Baseline:       baseline,
+		ProjectWorkDir: root,
+		WriteSet:       []string{"README.md"},
+		AckFiles:       []string{"README.md"},
+	})
+	if len(issues) > 0 || !result.OK {
+		t.Fatalf("result=%+v issues=%+v", result, issues)
+	}
+}
+
+func TestVerifyWorktreeWriteSetV0RechazaAckFileNoTocado(t *testing.T) {
+	root := t.TempDir()
+	writeWorktreeFileForTestV0(t, root, "README.md", "v1")
+	writeWorktreeFileForTestV0(t, root, "docs/extra.md", "v1")
+	baseline := captureWorktreeSnapshotForTestV0(t, root, nil)
+
+	writeWorktreeFileForTestV0(t, root, "README.md", "v2")
+	result, issues := VerifyWorktreeWriteSetV0(context.Background(), WorktreeVerifyRequestV0{
+		Baseline:       baseline,
+		ProjectWorkDir: root,
+		WriteSet:       []string{"README.md", "docs"},
+		AckFiles:       []string{"README.md", "docs/extra.md"},
+	})
+	if len(issues) != 1 || issues[0].Code != WorktreeIssueAckFilesMismatchV0 {
+		t.Fatalf("result=%+v issues=%+v", result, issues)
+	}
+	if len(result.AckFilesNotChanged) != 1 || result.AckFilesNotChanged[0] != "docs/extra.md" {
+		t.Fatalf("ack_files_not_changed=%v", result.AckFilesNotChanged)
+	}
+}
+
+func TestVerifyWorktreeWriteSetV0RechazaCambioNoDeclaradoEnAck(t *testing.T) {
+	root := t.TempDir()
+	writeWorktreeFileForTestV0(t, root, "README.md", "v1")
+	writeWorktreeFileForTestV0(t, root, "docs/extra.md", "v1")
+	baseline := captureWorktreeSnapshotForTestV0(t, root, nil)
+
+	writeWorktreeFileForTestV0(t, root, "README.md", "v2")
+	writeWorktreeFileForTestV0(t, root, "docs/extra.md", "v2")
+	result, issues := VerifyWorktreeWriteSetV0(context.Background(), WorktreeVerifyRequestV0{
+		Baseline:       baseline,
+		ProjectWorkDir: root,
+		WriteSet:       []string{"README.md", "docs"},
+		AckFiles:       []string{"README.md"},
+	})
+	if len(issues) != 1 || issues[0].Code != WorktreeIssueAckFilesMismatchV0 {
+		t.Fatalf("result=%+v issues=%+v", result, issues)
+	}
+	if len(result.UnreportedChangedPaths) != 1 || result.UnreportedChangedPaths[0] != "docs/extra.md" {
+		t.Fatalf("unreported=%v", result.UnreportedChangedPaths)
+	}
+}
+
 func TestVerifyWorktreeWriteSetV0PermiteRootParaAppNueva(t *testing.T) {
 	root := t.TempDir()
 	baseline := captureWorktreeSnapshotForTestV0(t, root, nil)

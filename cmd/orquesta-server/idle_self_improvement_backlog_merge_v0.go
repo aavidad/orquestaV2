@@ -21,7 +21,7 @@ var idleSelfImprovementBacklogScannerDocsV0 = []string{
 func (planner idleSelfImprovementBacklogPlannerV0) withBacklogScannerMergeLeaseV0(
 	request orquestaserver.IdleSelfImprovementRequestV0,
 ) orquestaserver.IdleSelfImprovementRequestV0 {
-	return planner.withBacklogMergeLeaseV0(request, "", 1, idleSelfImprovementBacklogScannerDocsV0)
+	return planner.withBacklogMergeLeaseV0(request, "", 1, planner.backlogScannerDocumentRefsV0())
 }
 
 func (planner idleSelfImprovementBacklogPlannerV0) withBacklogSectionMergeLeaseV0(
@@ -32,7 +32,8 @@ func (planner idleSelfImprovementBacklogPlannerV0) withBacklogSectionMergeLeaseV
 	if line <= 0 {
 		line = 1
 	}
-	request = planner.withBacklogMergeLeaseV0(request, section.Ref, line, []string{idleSelfImprovementBacklogDocRelV0})
+	sourcePath := firstNonEmptyServerStackV0(section.SourcePath, idleSelfImprovementBacklogDocRelV0)
+	request = planner.withBacklogMergeLeaseV0(request, section.Ref, line, []string{sourcePath})
 	request.ContextRefs = compactServerStackStringsV0(append(request.ContextRefs,
 		"backlog_section_fingerprint:"+idleSelfImprovementBacklogHashV0(
 			idleSelfImprovementBacklogSectionFingerprintV0(section),

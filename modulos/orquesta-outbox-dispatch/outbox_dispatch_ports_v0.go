@@ -21,3 +21,7 @@ type OutboxDispatchExecutorPortV0 interface {
 type OutboxDispatchAckPortV0 interface {
 	AckOutboxDispatchV0(ack OutboxDispatchAckV0) []DispatchIssueV0
 }
+
+type OutboxDispatchAckObservationPortV0 interface {
+	AckOutboxDispatchObservationV0(ack OutboxDispatchAckObservationV0) []DispatchIssueV0
+}

@@ -17,7 +17,7 @@ func codexStackRealSmokeWriteProjectContextV0(t *testing.T, dir string) {
 	files := map[string]string{
 		"AGENTS.md": strings.Join([]string{
 			"# Contexto local",
-			"- Usa el write-set recibido como alcance primario; si hace falta ampliarlo para arreglar pruebas, justificadlo en el ACK.",
+			"- Usa el write-set recibido como alcance cerrado; si falta alcance, usa CONSULTA AL DIRECTOR.",
 			"- Arquitectura hexagonal e i18n por defecto.",
 			"- Persistencia solo por puerto/conector; no elijas una base concreta.",
 			"- Ficheros pequenos; divide responsabilidades si crecen.",

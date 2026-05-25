@@ -12,6 +12,14 @@ type AgentProcessRegistryPortV0 interface {
 	ResolveAgentProcessV0(context.Context, string, string) (AgentProcessRegistryRecordV0, error)
 }
 
+type AgentProcessRegistryListPortV0 interface {
+	ListAgentProcessesV0(context.Context, AgentProcessRegistryListFilterV0) ([]AgentProcessRegistryRecordV0, error)
+}
+
+type AgentProcessRegistryListFilterV0 struct {
+	RunID string
+}
+
 type AgentProcessRegistryRecordV0 struct {
 	RunID          string
 	AgentRequestID string

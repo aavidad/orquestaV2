@@ -50,6 +50,7 @@ func reviewReworkSplitTaskV0(
 	request SchedulerCandidateRequestV0,
 	task orquestacoreworkflow.WorkflowTaskV0,
 ) (orquestacoreworkflow.WorkflowTaskV0, error) {
+	task = reviewReworkSplitTaskWithRunFunctionContractsV0(request, task)
 	normalized, err := orquestacoreworkflow.NewWorkflowTaskV0(task)
 	if err != nil {
 		return orquestacoreworkflow.WorkflowTaskV0{}, errorV0(ErrNucleoOrquestacionInvalidoV0, "split_task", err.Error())
@@ -61,6 +62,26 @@ func reviewReworkSplitTaskV0(
 		return orquestacoreworkflow.WorkflowTaskV0{}, errorV0(ErrNucleoOrquestacionInvalidoV0, "split_task.phase_id", "phase_id no soportado")
 	}
 	return normalized, nil
+}
+
+func reviewReworkSplitTaskWithRunFunctionContractsV0(
+	request SchedulerCandidateRequestV0,
+	task orquestacoreworkflow.WorkflowTaskV0,
+) orquestacoreworkflow.WorkflowTaskV0 {
+	if len(task.FunctionContractRefs) > 0 {
+		return task
+	}
+	contracts := compactStringsV0(request.Run.FunctionContracts)
+	if len(contracts) == 0 {
+		return task
+	}
+	task.FunctionContractRefs = make([]orquestacoreworkflow.WorkflowFunctionContractRefV0, 0, len(contracts))
+	for _, ref := range contracts {
+		task.FunctionContractRefs = append(task.FunctionContractRefs, orquestacoreworkflow.WorkflowFunctionContractRefV0{
+			ContractRef: ref,
+		})
+	}
+	return task
 }
 
 func reviewReworkSplitTaskPhaseAllowedV0(

@@ -18,6 +18,17 @@ Estado:
 ## Microtareas iniciales
 
 ```text
+ID: I18N-011
+Objetivo: Publicar `ActiveI18nDocsCompositionOwnerV0` como proyeccion activa T75 para factory, web y MCP.
+Write-set: i18n_docs_owner_v0.go, i18n_docs_owner_v0_test.go, docs/contratos.md, docs/decisiones.md, docs/pruebas.md
+Simbolo foco: ActiveI18nDocsCompositionOwnerV0
+Contrato: AppI18nDocsPlanV0 -> owner activo de bundles, loader shape, fallback locale, required keys y docs generadas.
+Validacion: `go test -count=1 ./modulos/orquesta-i18n-docs ./modulos/orquesta-factory ./modulos/orquesta-web ./modulos/orquesta-mcp`.
+Bloqueos: Ninguno; los adaptadores de filesystem/materializacion real siguen fuera del owner puro.
+Estado: completada
+```
+
+```text
 ID: I18N-000
 Objetivo: Alinear alcance del mini-proyecto con SolicitarNuevaApp v0 y registrar que i18n/docs son default en nueva app.
 Write-set: docs/decisiones.md, docs/contratos.md, docs/tareas.md, docs/pruebas.md

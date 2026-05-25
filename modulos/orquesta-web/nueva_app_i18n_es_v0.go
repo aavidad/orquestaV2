@@ -82,7 +82,7 @@ func nuevaAppI18nSpanishV0() map[string]string {
 		"nueva_app.error.opcion_incompatible":                 "Hay opciones incompatibles.",
 		"nueva_app.error.target_no_soportado":                 "El destino elegido no esta soportado.",
 		"nueva_app.error.idioma_invalido":                     "El idioma elegido no esta soportado.",
-		"nueva_app.error.conector_requerido_no_disponible":    "Falta un conector requerido.",
+		"nueva_app.error.conector_requerido_no_disponible":    "La integracion debe describir una capacidad, sin proveedor, credencial ni backend impuesto.",
 		"nueva_app.error.metodo_no_soportado":                 "Metodo no soportado.",
 		"nueva_app.error.form_incompleto":                     "La solicitud no se pudo leer.",
 		"nueva_app.error.error_transporte":                    "No se pudo completar la comunicacion.",

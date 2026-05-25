@@ -64,7 +64,9 @@ func TestCodexAckPendingRailExternalMatrixV0CamposNoCortanConValoresBlandos(t *t
 	cases := []string{
 		`"files":["README.md","docs/secret:policy.md"],"tests":["go test ./..."]`,
 		`"files":["README.md"],"tests":["go test ./...","rail access_token=redacted sin valor"]`,
+		`"files":["README.md"],"tests":["go test ./...","rail access_token=REDACTED sin valor"]`,
 		`"files":["README.md"],"tests":["go test ./..."],"notes":["authorization: bearer redacted"]`,
+		`"files":["README.md"],"tests":["go test ./..."],"notes":["authorization: bearer REDACTED"]`,
 	}
 	for _, fragment := range cases {
 		data := []byte(codexAckJSONWithFragmentForPendingRailTestV0(fragment))

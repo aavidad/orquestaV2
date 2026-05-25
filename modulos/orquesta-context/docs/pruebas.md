@@ -32,6 +32,7 @@ Evidencia esperada:
 - reporta ref no encontrada;
 - materializa `doc_ref` y `read_ref` como contenido;
 - mantiene `write_ref`, `contract_ref` y `evidence_ref` como `ref_only`;
+- clasifica cada `required ref_only` con razon y accion esperada;
 - trunca entradas grandes;
 - mantiene `total_bytes` por debajo de `max_total_bytes`;
 - propaga la pista `CONSULTA_AL_DIRECTOR`.
@@ -52,7 +53,7 @@ Evidencia esperada:
   `ContextSanitizerPortV0`;
 - conserva `ContextSanitizationEvidenceV0` sin persistir token, secreto ni HOME;
 - si el sanitizador devuelve `review_required`, la entrada queda como `ref_only`
-  y el bundle exige `CONSULTA_AL_DIRECTOR`.
+  con accion `ask_director` y el bundle exige `CONSULTA_AL_DIRECTOR`.
 
 Riesgos: el sanitizador real es adaptador de composicion; este modulo solo fija
 el puerto y el comportamiento neutral del bundle.

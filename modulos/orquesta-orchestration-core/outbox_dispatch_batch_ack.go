@@ -56,6 +56,11 @@ func RunOutboxDispatchBatchAckClosureV0(
 		FailedCount:  len(closure.Failed),
 		Issues:       len(closure.Issues),
 	}
+	result.Issues = ackBatchClosureFailuresV0(
+		request.Acker,
+		closure.Failed,
+		result.Issues,
+	)
 	result.AckedMessages, result.Issues = ackBatchClosureSuccessesV0(
 		request.Acker,
 		closure.Acked,
@@ -85,6 +90,30 @@ func ackBatchClosureSuccessesV0(
 		}
 	}
 	return compactStringsV0(ackedMessages), issueCount
+}
+
+func ackBatchClosureFailuresV0(
+	acker orquestaoutboxdispatch.OutboxDispatchAckPortV0,
+	items []orquestaoutboxdispatch.OutboxDispatchAckClosureItemV0,
+	issueCount int,
+) int {
+	observer, ok := acker.(orquestaoutboxdispatch.OutboxDispatchAckObservationPortV0)
+	if !ok {
+		return issueCount
+	}
+	for _, item := range items {
+		issues := observer.AckOutboxDispatchObservationV0(orquestaoutboxdispatch.OutboxDispatchAckObservationV0{
+			MessageID:    item.MessageID,
+			RunID:        item.RunID,
+			TargetPort:   item.TargetPort,
+			Status:       orquestaoutboxdispatch.OutboxDispatchAckObservationFailedV0,
+			DispatchRef:  item.DispatchRef,
+			EvidenceRefs: item.EvidenceRefs,
+			Issues:       item.Issues,
+		})
+		issueCount += len(issues)
+	}
+	return issueCount
 }
 
 func batchAckClosureStatusV0(

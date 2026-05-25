@@ -52,6 +52,9 @@ func CoordinateRunsTickV0(
 		}
 		evaluation := orquestaruncontrol.EvaluateRunControlV0(state)
 		if !evaluation.DispatchAllowed && !evaluation.StopAgentsAllowed {
+			if err := syncControlBlockedQueueStatusV0(ctx, deps.QueueUpdater, candidate, command, state); err != nil {
+				return RunCoordinatorTickResultV0{}, err
+			}
 			result.Skips = append(result.Skips, controlSkipV0(candidate, state))
 			continue
 		}
@@ -73,6 +76,51 @@ func queueReadRequestV0(command RunCoordinatorTickCommandV0) orquestarunqueue.Ru
 		QueueRef: strings.TrimSpace(command.QueueRef),
 		AppRefs:  append([]string(nil), command.AppRefs...),
 		Limit:    command.QueueLimit,
+	}
+}
+
+func syncControlBlockedQueueStatusV0(
+	ctx context.Context,
+	updater orquestarunqueue.RunQueuePriorityWriterPortV0,
+	candidate orquestarunqueue.RankedRunCandidateV0,
+	command RunCoordinatorTickCommandV0,
+	state orquestaruncontrol.RunControlStateV0,
+) error {
+	if updater == nil {
+		return nil
+	}
+	status, ok := queueStatusForBlockedRunControlV0(state)
+	if !ok || strings.TrimSpace(candidate.Status) == status {
+		return nil
+	}
+	refs := append([]string(nil), candidate.EvidenceRefs...)
+	refs = append(refs, "evidence-ref-run-coordinator-control-blocked-queue-sync")
+	_, err := updater.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        candidate.RunRef,
+		QueueRef:      command.QueueRef,
+		AppRef:        candidate.AppRef,
+		Status:        status,
+		PriorityScore: candidate.PriorityScore,
+		UpdatedAt:     command.OccurredAt,
+		RequestedBy:   "orquesta-run-coordinator",
+		Reason:        "run_control_blocked_queue_sync",
+		EvidenceRefs:  refs,
+	})
+	return err
+}
+
+func queueStatusForBlockedRunControlV0(
+	state orquestaruncontrol.RunControlStateV0,
+) (string, bool) {
+	switch orquestaruncontrol.NormalizeRunControlStatusV0(state.Status) {
+	case orquestaruncontrol.RunControlStatusPausedV0:
+		return orquestarunqueue.RunStatusPausedV0, true
+	case orquestaruncontrol.RunControlStatusStopRequestedV0, orquestaruncontrol.RunControlStatusStoppedV0:
+		return orquestarunqueue.RunStatusStoppedV0, true
+	case orquestaruncontrol.RunControlStatusCancelRequestedV0, orquestaruncontrol.RunControlStatusCanceledV0:
+		return orquestarunqueue.RunStatusCanceledV0, true
+	default:
+		return "", false
 	}
 }
 

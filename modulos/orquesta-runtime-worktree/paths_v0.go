@@ -34,7 +34,27 @@ func normalizeWorktreePathListV0(values []string, allowRoot bool) ([]string, []W
 func worktreePathIgnoredV0(path string, prefixes []string) bool {
 	path = strings.TrimSpace(path)
 	for _, prefix := range prefixes {
-		if prefix == "." || path == prefix || strings.HasPrefix(path, prefix+"/") {
+		if worktreePathMatchesIgnorePrefixV0(path, strings.TrimSpace(prefix)) {
+			return true
+		}
+	}
+	return false
+}
+
+func worktreePathMatchesIgnorePrefixV0(path string, prefix string) bool {
+	if prefix == "." || path == prefix || strings.HasPrefix(path, prefix+"/") {
+		return true
+	}
+	if !worktreeDefaultControlIgnorePrefixV0(prefix) {
+		return false
+	}
+	segment, _, _ := strings.Cut(path, "/")
+	return strings.HasPrefix(segment, prefix+"-")
+}
+
+func worktreeDefaultControlIgnorePrefixV0(prefix string) bool {
+	for _, controlPrefix := range worktreeDefaultControlPrefixesV0 {
+		if prefix == controlPrefix {
 			return true
 		}
 	}

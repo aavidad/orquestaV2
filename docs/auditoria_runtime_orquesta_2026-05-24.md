@@ -51,6 +51,13 @@ Cuando el supervisor ejecuta una run, el JSONL incluye:
 Esto evita que estados agregados como `wait_unhandled_outbox` o `blocked`
 queden sin detalle operacional.
 
+## Timeline global
+
+Desde el 2026-05-25 la auditoria queda disponible como una fuente declarable de
+`WorkspaceTimelineQueryV0`. La timeline global no lee el JSONL por su cuenta ni
+recompone shell: consume un puerto de observabilidad y marca `audit` como
+`not_available` cuando la composicion no inyecta adaptador de lectura.
+
 ## Evidencia local
 
 El arranque con la version nueva dejo eventos de startup y peticiones HTTP.

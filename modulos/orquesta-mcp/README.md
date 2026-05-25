@@ -29,6 +29,10 @@ Estado vigente:
   exponen gestion fina de autoprogramacion sobre puertos inyectados de cola,
   stats y supervisor. No ejecutan runtime ni leen estado concreto por si mismos.
 - `/api/v0/domain-work` es el bridge HTTP local del mismo executor.
+- `orquesta.apps.arrancar_director.v0` es la entrada operativa preferente para
+  apps nuevas desde `AppSpecV0`; `orquesta.apps.preparar_orquestacion.v0` y
+  `orquesta.apps.ejecutar_orquestacion.v0` quedan como preview/compatibilidad
+  sobre `orquesta-app-runner` y publican `route_policy`.
 - OPES se conecta hoy inyectando su cliente REST como adaptador de dominio; si se
   usa MCPO o servidor MCP real, debe envolver estos tools como transporte opt-in,
   no duplicar logica en el nucleo.

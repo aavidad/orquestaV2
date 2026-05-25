@@ -35,7 +35,17 @@ go test -count=1 ./...
 
 El core puro vive en `modulos/orquesta-core-workflow` y el loop de aplicacion en
 `modulos/orquesta-orchestration-core`. Los adaptadores concretos de runtime,
-persistencia, web, MCP, OPES y Codex deben quedar fuera de esas capas.
+persistencia, deploy, web, MCP, OPES y Codex deben quedar fuera de esas capas.
+`modulos/orquesta-deploy` es el owner de `DeploymentPlan v0`: prepara contratos
+de despliegue declarativos y dry-run por puerto, sin ejecutar infraestructura ni
+tocar secretos.
+
+La espina `DirectorCycleStepV0 -> director-runner -> director-scheduler ->
+core-workflow -> director-cycle-outbox` define el tick neutral del Director V2:
+prepara input compacto, planifica comandos publicos, aplica workflow por puerto
+y deja outbox pendiente para un supervisor externo. No es daemon ni composicion
+residente; esos cierres viven en el servidor/adaptadores y requieren evidencia
+propia.
 
 `modulos/orquesta-domain-work-sql` es solo un adaptador SQL externo de referencia
 para jobs de dominio. No es persistencia global de Orquesta, no abre conexiones,

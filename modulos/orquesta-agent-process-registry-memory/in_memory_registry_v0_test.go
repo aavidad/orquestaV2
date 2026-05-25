@@ -37,6 +37,15 @@ func TestInMemoryAgentProcessRegistryV0RecordsAndResolves(t *testing.T) {
 		got.EvidenceRefs[0] != "evidence-ref-registry-001" {
 		t.Fatalf("record=%+v", got)
 	}
+	listed, err := registry.ListAgentProcessesV0(context.Background(), orquestaagentprocessregistry.AgentProcessRegistryListFilterV0{
+		RunID: got.RunID,
+	})
+	if err != nil {
+		t.Fatalf("list agent processes: %v", err)
+	}
+	if len(listed) != 1 || listed[0].ProcessRef != got.ProcessRef {
+		t.Fatalf("listed=%+v", listed)
+	}
 }
 
 func TestInMemoryAgentProcessRegistryV0RejectsForbiddenDetail(t *testing.T) {

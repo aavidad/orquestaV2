@@ -26,7 +26,7 @@ func TestRunFileStoreQueuePersistsAfterRecreateV0(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SetRunPriorityV0: %v", err)
 	}
-	if updated.Status != "ready" ||
+	if updated.Status != orquestarunqueue.RunStatusReadyV0 ||
 		updated.RunRef != "run-created" ||
 		updated.AppRef != "app-created" ||
 		!reflect.DeepEqual(updated.EvidenceRefs, []string{"ev-1"}) {
@@ -85,7 +85,7 @@ func TestRunFileStoreQueueUpsertPersistsAfterRecreateV0(t *testing.T) {
 	if _, err := store.UpsertRunSchedulingCandidateV0(context.Background(), "main", orquestarunqueue.RunSchedulingCandidateV0{
 		RunRef:        " run-seeded ",
 		AppRef:        "app-seeded",
-		Status:        "ready",
+		Status:        orquestarunqueue.RunStatusReadyV0,
 		PriorityScore: 3,
 		UpdatedAt:     now,
 		EvidenceRefs:  []string{"seed"},
@@ -115,7 +115,7 @@ func TestRunFileStoreListSchedulingCandidatesFiltraTerminalesAntesDeLimitV0(t *t
 	seeds := []orquestarunqueue.RunSchedulingCandidateV0{
 		{RunRef: "run-a-stopped", AppRef: "app", Status: "stopped", PriorityScore: 70, UpdatedAt: now},
 		{RunRef: "run-b-stopped", AppRef: "app", Status: "stopped", PriorityScore: 70, UpdatedAt: now},
-		{RunRef: "run-c-ready", AppRef: "app", Status: "ready", PriorityScore: 50, UpdatedAt: now},
+		{RunRef: "run-c-ready", AppRef: "app", Status: orquestarunqueue.RunStatusReadyV0, PriorityScore: 50, UpdatedAt: now},
 	}
 	for _, seed := range seeds {
 		if _, err := store.UpsertRunSchedulingCandidateV0(ctx, "global", seed); err != nil {
@@ -173,5 +173,15 @@ func TestRunFileStorePriorityWriterPuedePersistirEstadoTerminalV0(t *testing.T) 
 	}
 	if len(listed) != 0 {
 		t.Fatalf("listed=%+v", listed)
+	}
+	all, err := reopened.ListRunSchedulingCandidatesV0(ctx, orquestarunqueue.RunQueueReadRequestV0{
+		QueueRef:             "global",
+		IncludeNonExecutable: true,
+	})
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0 include terminal: %v", err)
+	}
+	if len(all) != 1 || all[0].RunRef != "run-terminal" || all[0].Status != orquestarunqueue.RunStatusClosedV0 {
+		t.Fatalf("all=%+v", all)
 	}
 }

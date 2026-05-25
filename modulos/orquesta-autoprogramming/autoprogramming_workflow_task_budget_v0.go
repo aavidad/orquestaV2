@@ -174,7 +174,17 @@ func compactAutoprogrammingWorkflowContextRefsLimitedV0(values []string, maxItem
 		if len(keep) >= maxItems {
 			break
 		}
-		if !autoprogrammingWorkflowContextRefPriorityV0(value) {
+		if !autoprogrammingWorkflowContextRefMandatoryV0(value) {
+			continue
+		}
+		keep = append(keep, value)
+		keepSet[value] = true
+	}
+	for _, value := range values {
+		if len(keep) >= maxItems {
+			break
+		}
+		if keepSet[value] || !autoprogrammingWorkflowContextRefPriorityV0(value) {
 			continue
 		}
 		keep = append(keep, value)
@@ -199,6 +209,10 @@ func compactAutoprogrammingWorkflowContextRefsLimitedV0(values []string, maxItem
 	return compactStringsV0(keep)
 }
 
+func autoprogrammingWorkflowContextRefMandatoryV0(value string) bool {
+	return strings.HasPrefix(value, "operational_director.task_source")
+}
+
 func autoprogrammingWorkflowContextRefPriorityV0(value string) bool {
 	for _, prefix := range []string{
 		"request_ref:",
@@ -209,6 +223,7 @@ func autoprogrammingWorkflowContextRefPriorityV0(value string) bool {
 		"backlog_scan_epoch:",
 		"backlog_scan_reservation_ref:",
 		"backlog_scan_doc:",
+		"operational_director.task_source",
 	} {
 		if strings.HasPrefix(value, prefix) {
 			return true

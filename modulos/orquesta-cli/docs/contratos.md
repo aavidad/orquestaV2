@@ -214,9 +214,10 @@ Consumidores: comandos previstos `gobernanza catalogo listar|ver`
 Campos:
   - Entrada: `GovernanceCatalogQueryV0` de `orquesta-governance`, restringido a filtros compactos `module`, `role`, `phase` y `tags`.
   - Transporte REST asumido: `POST /api/v0/governance/catalog/query`.
-  - Request body canonico del adaptador: JSON compacto `{module, role, phase, tags}`.
+  - Request body canonico del adaptador: JSON compacto `{request_id, correlation_id, filters:{module, role, phase, tags}}`.
   - Salida correcta: `GovernanceCatalogQueryResultV0` con `effective` y `counters.effective|proposed|quarantine`.
-  - Salida error: `errores[]` publicos compactos con `codigo` y `campo`, o `error_transporte`/`respuesta_invalida` del adaptador CLI.
+  - Response HTTP canonica: `{request_id, correlation_id, effective, counters}`; sin `result`, `current_block` ni `inactive_blocks`.
+  - Error HTTP canonico: `{request_id, correlation_id, errors:[{code, field}]}`. La CLI lo normaliza a `errores[]` propios con `codigo`, `campo` y `mensaje_i18n`.
   - Headers: Content-Type, Accept, X-Correlation-ID.
 Invariantes:
   - Solo lectura.
@@ -240,11 +241,11 @@ Errores:
   - respuesta_invalida
 Pruebas de contrato:
   - Query valida produce `ok=true`, propaga `X-Correlation-ID` y devuelve `GovernanceCatalogQueryResultV0` canonico.
-  - Respuesta 400 conserva errores publicos compactos.
+  - Respuesta 400/503 conserva errores publicos compactos.
   - Respuesta 500/timeout se traduce a `error_transporte` sin filtrar body privado.
   - JSON invalido o `effective` no valido devuelve `respuesta_invalida`.
 Acoplamiento minimo documentado:
-  - Mientras `orquesta-governance` no publique aun la ruta, la CLI asume `POST /api/v0/governance/catalog/query` como endpoint REST compacto recomendado para `GovernanceCatalogQueryV0`.
+  - La CLI consume `POST /api/v0/governance/catalog/query` como endpoint REST compacto de `GovernanceCatalogQueryV0`; no usa fallback documental ni DB v1.
 ```
 
 ```text

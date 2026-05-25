@@ -279,6 +279,34 @@ func TestWorkflowTaskCandidateProviderV0WaitsForDeliveredDependencies(t *testing
 	}
 }
 
+func TestWorkflowTaskCandidateProviderV0NoBloqueaFollowupPorAgentePadreEntregado(t *testing.T) {
+	runRef := "run-nucleo-workflow-task-delivered-parent-001"
+	parent := workflowTaskForCandidateProviderTestV0(runRef, "task-parent", []string{"internal/api"})
+	followup := workflowTaskForCandidateProviderTestV0(runRef, "task-followup", []string{"internal/api"})
+	followup.DependsOn = []string{parent.TaskID}
+	parentAgent := WorkflowTaskAgentRequestRefV0(parent.TaskID)
+	run := mustActiveProgrammingRunV0(t, runRef)
+	run.Tasks = []string{parent.TaskID, followup.TaskID}
+	run.Agents = []string{parentAgent}
+	run.StartedAgents = []string{parentAgent}
+	run.DeliveredAgents = []string{parentAgent}
+	run.DeliveredTasks = []string{parent.TaskID}
+
+	candidates, err := (WorkflowTaskCandidateProviderV0{
+		TaskStore: NewInMemoryWorkflowTaskStoreV0(parent, followup),
+	}).BuildSchedulerCandidatesV0(context.Background(), SchedulerCandidateRequestV0{
+		Run:        run,
+		OccurredAt: "2026-05-25T18:20:00Z",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	got := workflowCandidateTaskRefsForTestV0(candidates.WorkCandidates)
+	if !sameStringsForTestV0(got, []string{followup.TaskID}) {
+		t.Fatalf("frontier=%v want followup tras entrega del padre", got)
+	}
+}
+
 func TestWorkflowTaskCandidateProviderV0BuildsCompactConflictAwareFrontier(t *testing.T) {
 	runRef := "run-nucleo-workflow-task-frontier-001"
 	domain := workflowTaskForCandidateProviderTestV0(runRef, "task-domain", []string{"internal/agenda/ports"})
@@ -377,6 +405,32 @@ func TestInMemoryWorkflowTaskStoreV0RejectsSameTaskWithDifferentContract(t *test
 	err := store.SaveWorkflowTaskV0(context.Background(), task)
 	if err == nil {
 		t.Fatalf("expected workflow task conflict")
+	}
+}
+
+func TestInMemoryWorkflowTaskStoreV0CompletaFunctionContractsFaltantes(t *testing.T) {
+	store := NewInMemoryWorkflowTaskStoreV0()
+	task := workflowTaskForCandidateProviderTestV0(
+		"run-store-contract-repair",
+		"task-store-contract-repair",
+		[]string{"internal/a"},
+	)
+	task.FunctionContractRefs = nil
+	if err := store.SaveWorkflowTaskV0(context.Background(), task); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0 inicial: %v", err)
+	}
+	task.FunctionContractRefs = []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
+		ContractRef: "contract:function:workflow-task:v0",
+	}}
+	if err := store.SaveWorkflowTaskV0(context.Background(), task); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0 debe reconciliar contratos faltantes: %v", err)
+	}
+	loaded, err := store.LoadWorkflowTasksV0(context.Background(), task.RunID, []string{task.TaskID})
+	if err != nil {
+		t.Fatalf("LoadWorkflowTasksV0: %v", err)
+	}
+	if len(loaded) != 1 || len(loaded[0].FunctionContractRefs) != 1 {
+		t.Fatalf("task no reconciliada: %+v", loaded)
 	}
 }
 

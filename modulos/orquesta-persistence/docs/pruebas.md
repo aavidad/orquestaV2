@@ -169,6 +169,15 @@ Riesgos: Solo valida contrato en RAM; no prueba almacenamiento operativo, querie
 ```
 
 ```text
+Caso: Ledger outbox file-based durable con claims y ACK terminales
+Tipo: contract
+Comando: `go test -count=1 ./modulos/orquesta-persistence`
+Evidencia esperada: Tras recrear instancia, un claim sin ACK se puede reclamar de nuevo, un ACK `failed` queda visible en snapshots y un ACK `success` no vuelve a pendientes.
+Ultima ejecucion: 2026-05-25; ejecutada correctamente.
+Riesgos: Es adaptador JSON local del servidor residente; no sustituye un backend transaccional externo ni broker productivo.
+```
+
+```text
 Caso: Idempotencia y conflictos de ACK `failed`
 Tipo: contract
 Comando: `go test -count=1 ./modulos/orquesta-persistence`

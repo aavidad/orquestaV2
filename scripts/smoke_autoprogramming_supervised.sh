@@ -235,7 +235,7 @@ wait_server_ready() {
     local pid
     pid="$(state_field pid)"
     if [[ "$pid" == "$server_pid" && -n "$addr" ]] &&
-      curl -fsS -m 2 "http://$addr/healthz" >/dev/null; then
+      curl -fsS -m 2 "http://$addr/api/v0/server/readiness" >/dev/null; then
       base_url="http://$addr"
       return 0
     fi
@@ -262,7 +262,7 @@ start_server() {
   server_pid="$!"
 
   if ! wait_server_ready; then
-    echo "orquesta-server temporal no llego a health OK" >&2
+    echo "orquesta-server temporal no llego a readiness OK" >&2
     tail -n 80 "$server_stderr" >&2 || true
     exit 1
   fi

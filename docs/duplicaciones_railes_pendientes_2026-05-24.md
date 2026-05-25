@@ -71,10 +71,11 @@ Indice vivo: `docs/rails/registro_railes_2026-05-24.md`.
   script y matriz. Conviene un catalogo comun para distinguir offline/fake,
   real con proveedor, OPES temporal, DB temporal y efectos externos.
 - `cmd/orquesta-server/detail_rails_env_v0.go` y
-  `modulos/orquesta-rails/detail_field_policy_v0.go`: el servidor ya fija
-  `ORQUESTA_DETAIL_PROHIBITED_RAILS=on` por defecto con scope acotado, mientras
-  parte de la documentacion aun habla de apertura global `off`. El propietario
-  del default/scope debe quedar separado del propietario de la politica comun.
+  `modulos/orquesta-rails/detail_field_policy_v0.go`: el servidor deja
+  `ORQUESTA_DETAIL_PROHIBITED_RAILS=off` por defecto para priorizar ejecucion
+  real y documentar falsos positivos como deuda. El propietario del default/scope
+  debe quedar separado del propietario de la politica comun antes de reactivar
+  restricciones por campo.
 - Transporte MCP real: `cmd/orquesta-server/mcp_real_transport_v0.go` y
   `mcp_real_smoke_v0.go` poseen el transporte JSON-RPC HTTP de composicion;
   `orquesta-mcp` conserva el registro/tooling puro. Si se expone en modo
@@ -120,9 +121,11 @@ Indice vivo: `docs/rails/registro_railes_2026-05-24.md`.
   detector de rail pendiente. Si debe proteger produccion, debe usar politica
   comun por campo; si no, debe quedar como deuda historica eliminable.
 - `modulos/orquesta-app-codex-stack/director_decision_contract_v0.go`: el
-  prompt de `director_decisions.json` conserva una lista textual de terminos
-  prohibidos que contradice la politica comun permisiva. Debe compartir owner
-  con los validadores de decision o declararse como frontera local con matriz.
+  prompt de `director_decisions.json` ya no conserva lista textual de terminos
+  prohibidos desde el cierre T62 del 2026-05-25. La frontera queda alineada con
+  `orquesta-rails`: refs opacas y vocabulario operativo pasan; valores reales,
+  rutas privadas, secretos efectivos, prompts/transcripts crudos y payloads
+  completos siguen bloqueados.
 - `modulos/orquesta-runtime-codex-delivery` y
   `modulos/orquesta-director-agent-file-source`: el sidecar
   `director_decisions.json` se resuelve desde `agent_ack.json`, pero la
@@ -266,6 +269,9 @@ Prioridad media:
 - Unificar la exposicion de uso/coste de proveedor: stats fake/offline,
   fuente Codex, MCP, web y servidor deben compartir puerto o proyeccion comun,
   con redaccion por campo y sin mezclar proveedor real con auditoria o ACKs.
+- Cierre parcial 2026-05-25: el query vivo minimo de estado operativo queda
+  centralizado en `OperationalStatusQueryV0` y `/api/v0/operational-status/query`;
+  no sustituye la agregacion historica ni el recibo detallado de proveedor.
 - Mantener `USAGE-METRICS-REAL` dentro del catalogo de smokes reales con guarda
   explicita hasta que exista conector productivo de cuota/tokens probado.
 
@@ -413,7 +419,18 @@ Prioridad media:
 
 Backlog asociado: `T45 autoprogramming-go-file-line-budget-baseline`.
 
-Prioridad alta:
+Estado 2026-05-24: cerrado localmente. Queda como rail unificado:
+`file_too_large` es advisory legacy; `go_file_line_budget_strict_blocking` es
+bloqueo terminal estricto con conteo real de snapshot/worktree/proyecto y
+baseline de no crecimiento.
+Actualizacion 2026-05-25: el owner de activacion queda explicito en
+`StrictGoLineBudget`. `LineCountSource` es evidencia, no switch de modo; el
+stack Codex estricto cruza esa evidencia con snapshot/worktree para cubrir
+ficheros omitidos del ACK.
+Rework 2026-05-25: T45 queda cerrado documentalmente como rail unificado; las
+particiones futuras se abren solo ante violaciones concretas del baseline.
+
+Prioridad historica:
 
 - Unificar propietario del rail de tamano de fichero Go. El prompt Codex, el
   review gate de autoprogramacion, el snapshot/worktree y el cierre terminal no
@@ -442,6 +459,15 @@ Prioridad alta:
 - Unificar propietario de precedencia del paquete: `spec_task_v0.go`,
   `codex_prompt_v0.go`, policies del packet y validacion terminal no deben
   emitir instrucciones incompatibles sobre ampliar write-set.
+- Estado 2026-05-24: T46 queda cerrado para contradiccion packet/prompt. La
+  precedencia vive en objetivo generado, prompt Codex y validacion de
+  `AgentStartPacketV0`; lo pendiente de esta lista pasa a T47/T48.
+- Revalidacion 2026-05-25: el backlog ejecutable deja T46 como cerrado y no
+  debe volver a listar la contradiccion `programmingObjectiveV0`/prompt como
+  hueco nuevo salvo regresion demostrada.
+- Rework de revision 2026-05-25: el retry estricto de T46 solo actualiza la
+  evidencia documental dentro del write-set, resuelve `required ref_only` con
+  lectura local/ACK y conserva T47/T48 como propietarios de los restos.
 - Separar prueba declarada de prueba ejecutada. `ACK.tests`, runner de tests
   requeridos, receipts de runtime y cierre operativo deben compartir contrato
   de evidencia para modo estricto.
@@ -473,15 +499,30 @@ Prioridad alta:
   `orquesta-app-codex-stack` y `orquesta-runtime-codex` no deben divergir entre
   "rechazar sandbox invalido" y "normalizarlo silenciosamente". Las politicas de
   approval interactivo deben quedar separadas para operador vivo y no para
-  autoprogramacion residente.
+  autoprogramacion residente. Cubierto 2026-05-24: el servidor/stack conservan
+  sandbox invalido para que `orquesta-runtime-codex` emita error publico,
+  `approval_policy` interactivo exige opt-in explicito de operador vivo y el
+  perfil/prompt declara la ubicacion del runtime de control. La revalidacion
+  estricta exige resolver contexto `ref_only` requerido por evidencia explicita
+  en ACK.
+- Revalidacion 2026-05-24 r2: paquete estricto retry confirma evidencia
+  explicita de contexto `ref_only` en ACK y no cambia el propietario del perfil.
 - Excluir control files del flujo de producto. `.orquesta-runtime`,
-  `.orquesta-codex-runtime`, prompts, packets, ACKs, logs y checkpoints no deben
-  aparecer en snapshots, AppVCS, staging promotion, contexto de producto ni
-  `ACK.files`, incluso cuando el write-set sea raiz.
+  `.orquesta-codex-runtime`, `.orquesta-local-runtime-*`, prompts, packets,
+  ACKs, logs y checkpoints no deben aparecer en snapshots, AppVCS, staging
+  promotion, contexto de producto ni `ACK.files`, incluso cuando el write-set
+  sea raiz. Cubierto 2026-05-25 r3 en `orquesta-runtime-worktree`,
+  `orquesta-runtime-codex` y `orquesta-app-codex-stack`: exclusiones por
+  defecto, issue `control_path`, filtrado de AppVCS/staging promotion, rechazo
+  de control files en ACK terminal y consumo de prefijos comunes en baseline,
+  verificacion y review/rework.
 - Fijar politica unica de capacidad/razonamiento. El servidor, el stack Codex,
   los packets y los smokes no deben mezclar default `xhigh`, elevacion a `high`
   y regla documental de `medium` sin una matriz por work profile, dominio y
-  riesgo.
+  riesgo. Cubierto 2026-05-25: la matriz compacta vive en
+  `orquesta-autoprogramming`, el servidor conserva `medium` sin elevarlo, OPES
+  documental sigue opt-in `xhigh`, y packets/stats exponen refs de politica y
+  evidencia.
 
 Prioridad media:
 
@@ -504,13 +545,15 @@ Backlog asociado: `T52 app-director-service-file-split`,
 
 Prioridad alta:
 
-- Partir primero `modulos/orquesta-app-director-service`: hoy concentra
-  continue, wait-state, review/replan, cierre causal y pruebas enormes. Es el
-  punto donde mas facil se duplican guards de cierre, tests requeridos y estado
-  vivo del Director.
-- Partir `modulos/orquesta-orchestration-core` preservando frontera neutral. El
-  materializador, plan-state, cierre y runner de tests deben quedar como
-  responsabilidades locales claras antes de anadir mas ciclo operativo.
+- `modulos/orquesta-app-director-service` ya separa el codigo productivo de
+  continue, wait-state, review/replan y cierre causal en ficheros menores. La
+  deuda restante de ese modulo queda como baseline de tests historicos que no
+  debe crecer sin shard propio.
+- `modulos/orquesta-orchestration-core` ya partio el materializador,
+  plan-state, cierre y runner de tests por responsabilidad neutral el
+  2026-05-25. Mantener esos shards como owner local antes de anadir mas ciclo
+  operativo; la deuda residual de otros ficheros grandes queda para shards
+  explicitos.
 
 Prioridad media:
 
@@ -522,6 +565,12 @@ Prioridad media:
   lineas por deuda historica.
 - La particion no debe relajar T49-T51: seguridad Codex, control files y
   capacidad/razonamiento siguen como rails separados con propietario propio.
+
+Avance 2026-05-25: T54 separo `cmd/orquesta-server/codex_wave_command_v0.go`,
+`cmd/orquesta-server/codex_director_wave_command_v0.go` y
+`modulos/orquesta-app-codex-stack/drain_v0.go` en ficheros productivos menores
+por responsabilidad. Los tests/smokes historicos largos quedan como baseline y
+no se consideran permiso para ampliar controladores productivos.
 
 ## Priorizacion scanner 2026-05-24 decimosexta pasada
 
@@ -536,10 +585,11 @@ Prioridad alta:
   divergentes sobre loopback, bind remoto, autenticacion, TLS/mTLS, operador y
   auditoria. El default debe seguir local; cualquier exposicion remota necesita
   opt-in y evidencia.
-- Separar proyeccion de credenciales Codex de contexto/producto. La copia de
-  `auth.json`, config, skills, plugins, rules y memories debe tener politica de
-  allowlist/redaccion propia; no puede apoyarse solo en sanitizador de contexto,
-  exclusiones de control files o prompts de agente.
+- Separar proyeccion de credenciales Codex de contexto/producto. Cerrado el
+  2026-05-25 para `codex-wave`/`codex-director-wave`: la copia de `auth.json`,
+  config, skills, plugins, rules y memories pasa por politica de categorias,
+  receipt compacto y modo estricto recuperable. T152 conserva el shard mecanico
+  de presupuesto, symlinks y modos.
 - Cerrar propietario de outbox dispatch durable. La cola de runs (`T31`) no
   sustituye al claim/lease/ACK por mensaje de outbox; ambos rails deben estar
   coordinados pero con contratos y pruebas propias.
@@ -549,9 +599,16 @@ Prioridad media:
 - Health/status pueden conservar lectura limitada sin auth fuerte si el bind es
   loopback; endpoints mutables requieren principal/permiso. La auditoria debe
   guardar decision y ref de permiso, no cabeceras ni tokens.
-- La politica de credenciales debe permitir vocabulario operativo normal
-  (`auth`, `token policy`, `skills`, `plugins`, `HOME ref`) cuando es ref opaca,
-  pero bloquear valores reales, rutas privadas y material completo.
+- Cierre 2026-05-25: el propietario comun queda en `orquesta-server`; bind
+  remoto requiere opt-in y token de composicion, las mutaciones HTTP/MCP quedan
+  guardadas por loopback o token, y auditoria redacta valores de query, tokens,
+  cabeceras completas y payloads.
+- La politica de credenciales permite vocabulario operativo normal (`auth`,
+  `token policy`, `skills`, `plugins`, `HOME ref`) cuando es ref opaca, pero
+  bloquea valores reales, rutas privadas y material completo en la evidencia de
+  proyeccion.
+- Rework de revision 2026-05-25: backlog, rail observado y esta matriz quedan
+  sincronizados como cierre T56; no se reabre el shard mecanico T152.
 - La recuperacion de outbox debe convivir con batches parciales: success cierra
   solo el item ACK correlacionado, failed queda publico y missing no permite
   declarar cierre de plan/run.
@@ -569,13 +626,27 @@ Prioridad alta:
   `codex_last_message.txt`, stdout o stderr como fuente de cierre. Si imprime
   algo, debe ser summary redactado por defecto y fragmento crudo solo con opt-in
   local y limite fuerte.
-- Unificar el propietario de operaciones destructivas sobre runtime Codex. La
-  purga de ola no es el mismo rail que T48 de cambios destructivos de worktree ni
-  T35 de cleanup de arranque; debe tener confirmacion, raiz permitida, manifest,
-  bloqueo por agentes vivos/checkpoints/outbox y evidencia compacta propia.
+  Cierre T58 2026-05-25: tail queda en JSON diagnostico, con razon requerida,
+  scope runtime/agente, limites antes de lectura y redaccion `orquesta-rails`.
+  Rework de revision 2026-05-25: backlog, rail observado y esta matriz quedan
+  sincronizados como cierre T58.
+- Unificar el propietario de operaciones destructivas sobre runtime Codex. T59
+  queda implementado desde 2026-05-25 para `cmd/orquesta-server`: confirmacion,
+  raiz permitida, manifest, bloqueo por agentes vivos/checkpoints/outbox y
+  evidencia compacta propia.
+  Rework de revision 2026-05-25: el retry estricto no abre scope nuevo,
+  conserva la evidencia T59 y resuelve `required ref_only` por lectura
+  local/ACK, dejando T60 como owner separado de stop/status.
 - Unificar confianza de control de procesos. `codex-wave-stop`, status y tail no
   deben confiar en un registro JSON arbitrario bajo `runtime-dir`; deben usar el
   mismo contrato de descriptor/store que el registry de agentes y run-control.
+  Cierre T60 2026-05-25: launch escribe proof por agente, status/tail/stop
+  comparten runtime permitido, stop bloquea registry suelto como
+  `blocked_registry_untrusted`, usa shutdown cooperativo por defecto y solo
+  senala con confirmacion, razon y `--force`.
+  Rework de revision 2026-05-25: backlog, rail observado y esta matriz quedan
+  sincronizados como cierre T60; el retry estricto no abre scope nuevo y resuelve
+  `required ref_only` por lectura local/ACK.
 
 Prioridad media:
 
@@ -600,20 +671,29 @@ Prioridad alta:
 - Separar evidencia causal de tests requeridos de logs crudos. El cierre del
   Director puede necesitar refs durables, pero no necesita persistir stdout o
   stderr sin redaccion para demostrar que un comando paso o fallo.
-- Corregir el prompt de `director_decisions.json` antes de ampliar ejecuciones
-  reales: una lista textual vieja puede inducir al director a evitar
-  vocabulario normal y recrear falsos positivos que los rails nuevos ya
-  cerraron.
-- Dar recibo propio al sidecar de decisiones. `agent_ack.json` puede seguir
-  siendo productor causal, pero `director_decisions.json` necesita hash,
-  correlacion y consumo idempotente para no convertirse en otra fuente textual
-  ambigua de cierre o planificacion.
+- `T62 director-decisions-prompt-rail-sync` queda cerrado el 2026-05-25 para el
+  prompt y validacion focal: se retiro la lista textual vieja y se sustituyo por
+  politica positiva de refs opacas. Si reaparecen falsos positivos, deben entrar
+  como regresion con evidencia nueva.
+- Rework T62 2026-05-25: la documentacion ya no atribuye el cierre a smokes de
+  servidor de T65; el alcance queda en prompt, validacion focal y matriz de
+  rails del write-set.
+- `T63 director-decisions-sidecar-receipt-correlation` queda cerrado el
+  2026-05-25 para el tramo Codex/file-source/app-stack: `director_decisions.json`
+  tiene receipt propio con hash, ACK productor, correlacion y consumo
+  idempotente en el store de receipts. Si reaparece ambiguedad, debe entrar como
+  regresion con sidecar mutado/stale o store no durable concreto.
 
 Prioridad media:
 
 - La redaccion de test output puede reutilizar politica comun de rails, pero el
   owner del artefacto y retencion pertenece a `orquesta-runtime-required-test` y
   composicion de servidor, no a auditoria HTTP ni a tail Codex.
+- Cierre 2026-05-25: `orquesta-runtime-required-test` ya es owner del artefacto
+  `required-test-output-v0/*.log`; reutiliza `orquesta-rails`, escribe salida
+  redactada con limite/retencion y el servidor expone
+  `ORQUESTA_REQUIRED_TEST_OUTPUT_MAX_ARTIFACTS`. T41/T58/T97 no deben duplicar
+  este owner; solo pueden consumir refs/summary redactados.
 - Las reglas de prompt y validacion de decisiones deben permitir refs opacas de
   runtime/proveedor/modelo cuando son contexto arquitectonico, y cortar solo
   valores reales, rutas privadas, secretos, prompt/transcript crudos o
@@ -628,6 +708,17 @@ Backlog asociado: `T64 director-cycle-source-of-truth-sync`,
 `T65 director-cycle-resident-restart-smoke` y
 `T66 neutral-process-stop-e2e`.
 
+Estado 2026-05-25: `T64` queda cerrado como sincronizacion documental de fuente
+de verdad. La espina `DirectorCycleStepV0 -> director-runner ->
+director-scheduler -> core-workflow -> director-cycle-outbox` ya aparece en la
+foto vigente, guia, README raiz, matriz y docs locales de
+`orquesta-orchestration-core`. `T65` queda cerrado localmente con smoke focal de
+composicion residente/restart en `cmd/orquesta-server`, usando outbox durable,
+dispatch fake y ACK correlado. `T66` queda cerrado localmente con
+`TestNeutralProcessStopE2EV0`: proceso temporal real neutral, stop causal por
+`DirectorCycleStepV0`/scheduler/outbox, ACK de parada e idempotencia de replay
+tras reinicio.
+
 Prioridad alta:
 
 - Sincronizar la fuente de verdad del ciclo Director V2. `T27` cubre autoridad
@@ -635,10 +726,10 @@ Prioridad alta:
   para no duplicar pendientes historicos de review/tests/cierre ni ocultar los
   nuevos modulos en contextos de agente.
 - Cubrir la composicion residente de ciclo + outbox durable. `T57` gobierna
-  claim/lease/ACK por mensaje de outbox; `T65` debe demostrar que el servidor
-  usa esa frontera desde `DirectorCycleStepV0` y no solo desde tests locales.
-- Cerrar `DIR-P006` como rail neutral de runtime. `T60` protege stop de ola
-  Codex por registry/PID; `T66` debe probar proceso temporal real sin Codex,
+  claim/lease/ACK por mensaje de outbox; `T65` demuestra que el servidor usa esa
+  frontera desde `DirectorCycleStepV0` y no solo desde tests locales.
+- Mantener `DIR-P006` como rail neutral de runtime cerrado. `T60` protege stop
+  de ola Codex por registry/PID; `T66` prueba proceso temporal real sin Codex,
   con stop causal y ACK/evidencia por refs opacas.
 
 Prioridad media:
@@ -670,10 +761,11 @@ Prioridad alta:
   durable/restart; `T68` debe demostrar que `MaxTicks`, `MaxBursts` y
   `MaxStepsPerBurst` producen acciones finales visibles sin cerrar por error ni
   relanzar la misma run.
-- Unificar razones de parada antes de ampliar idle autoprogramming. `T69` debe
-  impedir que `no_execution`, `max_ticks`, `wait_outbox`, `wait_external` y
-  `stop_max_steps` se interpreten como estados incompatibles entre cola, stats,
-  auditoria y planificador de automejora.
+- Razones de parada: `T69` quedo cerrado el 2026-05-25 con
+  `orquesta_supervisor_stop_reason_projection.v0`. `no_execution`,
+  `max_ticks`, `wait_outbox`, `wait_external` y `stop_max_steps` se proyectan a
+  categorias publicas compartidas para cola, stats, auditoria y planificador de
+  automejora.
 
 Prioridad media:
 
@@ -694,22 +786,32 @@ Backlog asociado: `T70 core-workflow-docs-rail-policy-sync`,
 
 Prioridad alta:
 
-- Sincronizar docs locales de `orquesta-core-workflow` con la politica comun de
-  rails. Hoy el codigo/test permite vocabulario operativo opaco, pero varias
-  paginas antiguas siguen describiendo `runtime`, `provider`, `DB`, `SQL`,
-  `HOME` o `modelo` como prohibiciones genericas. Eso duplica una politica ya
-  cerrada y puede reabrir falsos positivos.
 - Unificar el owner del mapa `work_kind -> expected_artifact_type`. El expander,
   stack Codex, bridge OPES y tests de servidor no deben tener tablas paralelas
   para `draft_content_block`, `generate_visual_asset`, revisiones,
   `validate_topic`, `expand_topic_from_summary` y `assemble_topic`.
 
+Cierre T72 2026-05-25: `orquesta-domain-work` publica
+`ExpectedDomainWorkArtifactTypeForWorkKindV0` como owner neutral. Expander,
+stack Codex, bridge OPES y prueba focal de servidor consumen el mismo mapa; el
+fallback para work kinds desconocidos sigue siendo `work_delivery`.
+
+Cierre T70 2026-05-25: los docs locales de `orquesta-core-workflow` quedan
+sincronizados con la politica comun de `orquesta-rails`. Ya no tratan
+`runtime`, `provider`, `DB`, `SQL`, `HOME`, `modelo` o `Codex` como
+prohibiciones genericas; distinguen refs opacas validas de valores sensibles
+efectivos y conservan el bloqueo de secretos, rutas privadas,
+prompts/transcripts crudos y payloads masivos.
+
+Cierre T71 2026-05-26: `orquesta-domain-work-sql`, `orquesta-domain-work-file`,
+`orquesta-domain-work-memory` y `contracttest` quedaron partidos por
+responsabilidad local; no quedan ficheros Go >300 lineas en el alcance T71.
+
 Prioridad media:
 
-- Partir ficheros grandes de `domain_work` y expander por responsabilidades
-  locales antes de anadir mas dialectos, snapshots o derivados. Mantener
-  contract tests compartidos y baseline de no crecimiento si una pasada no baja
-  todos los ficheros de 300 lineas.
+- Mantener no crecimiento del alcance T71 antes de anadir mas dialectos,
+  snapshots o derivados. Contract tests compartidos deben seguir siendo la
+  barrera comun de memory/file/sql.
 - El mapa de artefactos puede vivir en un helper/contrato neutral, pero no debe
   arrastrar OPES, Codex, HTTP, runtime, DB ni reglas editoriales al nucleo.
 - La correccion documental de rails no debe convertirse en relajacion nueva:
@@ -728,15 +830,24 @@ Prioridad alta:
   lista local de substrings. La frontera correcta es capacidad de dominio frente
   a proveedor/backend/credencial impuesto. Esta politica no debe duplicar
   `orquesta-rails` ni los validadores de web/MCP.
+- Cierre T73 2026-05-25: `orquesta-factory` valida integraciones con una
+  politica de capacidad/proveedor y permite vocabulario operativo opaco o
+  reparable (`db`, `runtime`, `queue`, `cola`, `deploy`, `database`) sin
+  reimplementar listas en web/MCP. Siguen bloqueados proveedor/backend impuesto,
+  SDK cloud, credenciales y DSN. La revalidacion del mismo dia cubre proveedor
+  concreto combinado con capacidad (`postgres database`) sin bloquear
+  capacidades genericas (`database audit`, `runtime metrics`, `cola de tareas`).
 - `DeploymentPlan v0` debe tener un owner de composicion visible. Factory,
   planner y MCP ya lo nombran, y `orquesta-deploy` lo implementa como dry-run,
-  pero falta el enlace operativo por puerto y la foto raiz de capas.
+  y desde el 2026-05-25 T74 enlaza el owner por puerto dry-run, AppSpec,
+  microtarea de deploy y refs MCP/backlog.
 
 Prioridad media:
 
-- `orquesta-i18n-docs` debe dejar de ser isla: o se consume como owner activo
-  para bundles, loader y docs generadas, o se marca historico. Mantener mapas
-  i18n paralelos en web/factory reabre la brecha documentada de i18n.
+- `orquesta-i18n-docs` deja de ser isla en el corte T75 del 2026-05-25: se
+  consume como owner activo para bundles, loader y docs generadas. Mantener
+  otro owner paralelo en web/factory/MCP reabriria la brecha documentada de
+  i18n.
 - Deploy e i18n no deben arrastrar proveedores, filesystem productivo,
   toolchains, tiendas, cloud, DB ni runtime al nucleo. La primera integracion
   debe ser dry-run/contrato con refs y evidencia compacta.
@@ -755,12 +866,22 @@ Prioridad alta:
   `app-runner`/`AppPlan` puede seguir como preview o compatibilidad, pero la
   ruta operativa con juicio debe pasar por Director V2 o declarar bloqueo
   verificable.
+  Estado 2026-05-25, refrescado 2026-05-26: cubierto para T76 con
+  `route_policy` publico en MCP, tambien en descriptor compacto, y bloqueo
+  `director_v2_required` en `orquesta-app-runner`.
 - Sacar `orquesta-app-change-director-source` del patron de listas locales de
   terminos prohibidos. Su readiness de autoplanning toca trabajos reales de
   app/domain_work y no debe reabrir falsos positivos por vocabulario operativo.
-- Completar el merge de `director_decisions` tardias en plan state existente
-  antes de confiar en olas posteriores emitidas por sidecars. T62/T63 protegen
-  prompt/receipt; T78 protege estado vivo y wait scope.
+  Estado 2026-05-25: cerrado para T77; readiness delega en `orquesta-rails` por
+  campo y conserva vocabulario operativo opaco. Revision 2026-05-26: el retry
+  confirma el contrato y queda bloqueado solo por compilacion de
+  `orquesta-observability`/`orquesta-web` fuera del write-set al probar
+  `orquesta-app-codex-stack`; la reejecucion posterior del comando requerido
+  paso completa y T77 queda cerrado sin cambios de codigo adicionales.
+- El merge de `director_decisions` tardias en plan state existente quedo cerrado
+  el 2026-05-25 para el camino offline de `app-director-service`: tasks nuevas
+  marcadas reabren `wait_subagents` con agent refs acotados e idempotencia.
+  T62/T63 protegen prompt/receipt; T78 protege estado vivo y wait scope.
 
 Prioridad media:
 
@@ -769,6 +890,9 @@ Prioridad media:
   criterios de uso.
 - La sanitizacion de app-change debe preservar el motivo del dominio en issues
   estructurados en vez de reemplazar palabras hasta hacer invisible la causa.
+  Estado 2026-05-25: cerrado para T77; los criterios se compactan sin
+  reescribir terminos de dominio, y el detalle sensible efectivo queda como
+  bloqueo de autoplanning.
 - El merge de plan state debe conservar compatibilidad con decisiones legacy que
   no traen metadata operativa: esas decisiones no cierran el plan ni crean wait
   ambiguo.
@@ -785,11 +909,30 @@ Prioridad alta:
   scanners; T79 estructura el backlog en indice/shards para que el hotspot deje
   de crecer en tres ficheros monoliticos. No borrar historico ni romper el
   parser residente durante la migracion.
+  Estado 2026-05-25: T79 ya tiene contrato inicial residente. El backlog
+  historico declara indice vivo, el planner lee indice/shards con fallback al
+  documento unico y transporta fichero/linea/hash por shard en las leases. La
+  particion fisica a nuevos shards debe entrar como tarea posterior con alcance
+  documental propio.
+  Revalidacion OrquestaV2 2026-05-25: paquete estricto con contexto `ref_only`
+  requerido resuelto por lectura local y recibo ACK; no se amplia write-set ni
+  se trunca historico.
 - Dar propietario al egress de `DomainWork` HTTP neutral. OPES tiene su propio
   conector y guardas; el HTTP neutral debe tener allowlist/modo smoke y auditoria
   compacta sin duplicar politica OPES ni meter red en `orquesta-domain-work`.
+  Estado 2026-05-25: implementacion inicial de T80 aplicada, pendiente de
+  validacion transversal limpia. El cliente HTTP neutral aplica politica
+  `smoke_local`/`allowlist`, rechaza credenciales, query y fragment en base URL,
+  bloquea metadata/redes internas no allowlisted, conserva paths relativos sin
+  query/host override y el servidor exige modo de egress explicito para
+  `ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL`. El test transversal requerido falla por
+  tipos `WorkspaceTimelineV0` faltantes en `modulos/orquesta-observability`.
 - Cerrar la lectura global de workspace como contrato de observability, no como
   mezcla nueva de auditoria, stats Git locales, transcript y comandos shell.
+  Estado 2026-05-25: T81 ya tiene contrato inicial
+  `WorkspaceTimelineQueryV0`, resource MCP y endpoint server-first compartido;
+  quedan adaptadores reales de fuentes historicas donde hoy se declara
+  `not_available`.
 
 Prioridad media:
 
@@ -814,12 +957,15 @@ Prioridad alta:
 - Unificar los shapes publicos read-only antes de seguir ampliando CLI/web/MCP.
   `GovernanceCatalog` ya tiene handler y cliente, pero usan envelopes distintos;
   aceptar ambos sin owner produciria otra compatibilidad permanente.
+  Estado 2026-05-25: T82 cerrado con shape unico para request, response y error
+  publico. Gateway y servidor exponen la ruta read-only; sin provider hay error
+  publico recuperable, no fallback documental ni catalogo inventado.
 - Publicar el query minimo de `OperationalStatus` desde source residente antes
   de la timeline global T81. Los clientes ya anuncian el endpoint, asi que el
   fallo debe ser `proyeccion_no_disponible` verificable o diagnostico real, no
   transporte inexistente ambiguo.
-- Separar FunctionContract read-only de registro/mutacion. La consulta viva
-  puede salir de eventos/stores causales; registrar contratos sigue bloqueado
+- Separacion FunctionContract read-only cerrada el 2026-05-25: la consulta viva
+  sale del indice causal de eventos/stores; registrar contratos sigue bloqueado
   hasta que exista flujo durable de workflow/outbox.
 
 Prioridad media:
@@ -829,9 +975,9 @@ Prioridad media:
   historicos completos o errores con shape diferente por cliente.
 - `OperationalStatus` debe convivir con T81: respuesta de estado actual y
   timeline historica son contratos relacionados, no el mismo rail.
-- FunctionContract no debe reconstruirse desde Markdown ni DB v1 como canon. Si
-  solo existe `contract_ref`, devolver evidencia insuficiente y dejar que el
-  director materialice o repare.
+- FunctionContract no se reconstruye desde Markdown ni DB v1 como canon. Si solo
+  existe `contract_ref`, se devuelve `evidencia_insuficiente` y queda para que
+  el director materialice o repare.
 
 ## Priorizacion scanner 2026-05-24 vigesimosexta pasada
 
@@ -850,7 +996,9 @@ Prioridad alta:
   compatibilidad implicita.
 - Corregir el uso de `/healthz` como readiness en smokes y daemon. Liveness del
   proceso no prueba que startup cleanup, reconciliacion o supervisor residente
-  esten listos para lanzar efectos externos.
+  esten listos para lanzar efectos externos. Cerrado 2026-05-25 para daemon y
+  smokes con Codex/OPES/domain_work/Director/automejora: usan
+  `/api/v0/server/readiness`; `/healthz` queda como liveness.
 
 Prioridad media:
 
@@ -888,6 +1036,13 @@ Prioridad media:
 - La sincronizacion documental del Director Operativo debe reutilizar T27 y la
   matriz de smokes; no crear otra lista manual de excepciones para
   `CODEX-WAVE-REAL`, `CODEX-RECURSION-REAL` u OPES temporal pendiente.
+
+Revalidacion 2026-05-25: T88 deja un indice federado inicial en el backlog
+global y el planner residente lo consume con owner, estado, alias local, hash y
+lease/epoch. Las fuentes locales no vigentes no se programan; las vigentes sin
+tests/owner pasan a revision documental. El cierre verde queda pendiente porque
+la prueba obligatoria falla por `modulos/orquesta-observability`
+(`WorkspaceTimelineV0` indefinido), fuera del write-set de T88.
 
 ## Priorizacion scanner 2026-05-24 vigesimoctava pasada
 

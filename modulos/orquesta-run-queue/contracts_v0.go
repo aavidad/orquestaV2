@@ -8,6 +8,7 @@ import (
 const (
 	RunQueueSchemaVersionV0 = "run_queue.v0"
 
+	RunStatusReadyV0     = "ready"
 	RunStatusPausedV0    = "paused"
 	RunStatusDeliveredV0 = "delivered"
 	RunStatusCanceledV0  = "canceled"
@@ -29,9 +30,10 @@ type RunQueuePortV0 interface {
 }
 
 type RunQueueReadRequestV0 struct {
-	QueueRef string   `json:"queue_ref,omitempty"`
-	AppRefs  []string `json:"app_refs,omitempty"`
-	Limit    int      `json:"limit,omitempty"`
+	QueueRef             string   `json:"queue_ref,omitempty"`
+	AppRefs              []string `json:"app_refs,omitempty"`
+	Limit                int      `json:"limit,omitempty"`
+	IncludeNonExecutable bool     `json:"include_non_executable,omitempty"`
 }
 
 type RunQueuePriorityCommandV0 struct {

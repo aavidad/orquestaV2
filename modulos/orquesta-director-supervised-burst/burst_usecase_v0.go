@@ -51,6 +51,7 @@ func runDirectorSupervisedBurstLoopV0(
 		result.Steps = append(result.Steps, burstStepResultV0(stepNumber, stepResult, decision, errorCode))
 		result.ExecutedSteps = stepNumber
 		result.FinalAction = decision.Action
+		result.StopProjection = burstStopProjectionV0(result, decision)
 		previousStep = &stepResult
 		previousDecision = &decision
 		if stepErr != nil {
@@ -109,5 +110,6 @@ func capBurstDecisionAtMaxStepsV0(
 	decision.Action = orquestadirectorsupervisor.DirectorSupervisorActionStopMaxStepsV0
 	decision.ReasonCode = orquestadirectorsupervisor.DirectorSupervisorReasonMaxStepsV0
 	decision.ShouldContinue = false
+	decision.AutonomousRecommendation = orquestadirectorsupervisor.DirectorSupervisorAutonomousStopV0
 	return decision
 }

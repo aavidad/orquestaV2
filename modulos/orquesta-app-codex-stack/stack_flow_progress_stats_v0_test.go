@@ -62,8 +62,7 @@ func TestCodexStackV0DirectorStatsIncluyeProcesoYProgresoPorPuertos(t *testing.T
 		if !agent.CanStop && agent.ControlState != orquestacionnucleoapp.DirectorAgentControlStateRegisteredV0 {
 			t.Fatalf("director protegido sin registro de control: %+v", agent)
 		}
-		if agent.ModelAlias != "gpt-5.5" ||
-			agent.QuotaStatus != orquestacionnucleoapp.DirectorAgentUsageQuotaNotConfiguredV0 {
+		if agent.QuotaStatus != orquestacionnucleoapp.DirectorAgentUsageQuotaNotConfiguredV0 {
 			t.Fatalf("agent sin usage esperado: %+v", agent)
 		}
 	}
@@ -80,9 +79,7 @@ func TestCodexStackAgentUsageSourceV0UneMetricasInyectadas(t *testing.T) {
 		t.Fatalf("sin agente para usage: %+v", director)
 	}
 	source := CodexStackAgentUsageSourceV0{
-		Store:           stack.Stores.ReceiptStore,
-		ModelAlias:      "gpt-5.5",
-		ReasoningEffort: "xhigh",
+		Store: stack.Stores.ReceiptStore,
 		UsageMetrics: staticCodexStackUsageMetricsSourceV0{
 			Metrics: []CodexStackAgentUsageMetricV0{{
 				AgentRequestID:   agentRef,
@@ -92,7 +89,6 @@ func TestCodexStackAgentUsageSourceV0UneMetricasInyectadas(t *testing.T) {
 				PromptTokens:     1000,
 				CompletionTokens: 250,
 				TotalTokens:      1250,
-				CostMicros:       700,
 				EvidenceRefs:     []string{"usage-evidence-ref-stack-001"},
 			}},
 		},
@@ -105,7 +101,8 @@ func TestCodexStackAgentUsageSourceV0UneMetricasInyectadas(t *testing.T) {
 		nil,
 		source,
 		orquestacionnucleoapp.DirectorProgressSourceRequestV0{
-			CorrelationID: "corr-stack-usage-metrics-001",
+			CorrelationID:     "corr-stack-usage-metrics-001",
+			IncludeAgentUsage: true,
 		},
 	)
 
@@ -114,6 +111,12 @@ func TestCodexStackAgentUsageSourceV0UneMetricasInyectadas(t *testing.T) {
 		agent.Usage.QuotaStatus != orquestacionnucleoapp.DirectorAgentUsageQuotaLimitedV0 ||
 		agent.Usage.TotalTokens != 1250 {
 		t.Fatalf("usage=%+v", agent.Usage)
+	}
+	if !codexStackRefsContainPartV0(
+		agent.Usage.EvidenceRefs,
+		"evidence-ref-capacity-policy-ref-background-medium-v0",
+	) {
+		t.Fatalf("usage evidence refs no reflejan politica de capacidad: %+v", agent.Usage.EvidenceRefs)
 	}
 	if stats.UsageSummary == nil ||
 		stats.UsageSummary.AgentsObserved != len(director.StartedAgents) ||

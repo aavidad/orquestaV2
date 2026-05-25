@@ -2,6 +2,7 @@ package orquestaserver
 
 import (
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 )
@@ -41,7 +42,7 @@ func (runtime *RuntimeV0) auditHTTPHandlerV0(next http.Handler) http.Handler {
 		runtime.auditEventV0(r.Context(), "http_request", strconv.Itoa(status), "", map[string]interface{}{
 			"method":          r.Method,
 			"path":            r.URL.Path,
-			"raw_query":       r.URL.RawQuery,
+			"query_keys":      auditQueryKeysV0(r),
 			"remote_addr":     r.RemoteAddr,
 			"status":          status,
 			"bytes":           recorder.bytes,
@@ -49,4 +50,19 @@ func (runtime *RuntimeV0) auditHTTPHandlerV0(next http.Handler) http.Handler {
 			"duration_millis": time.Since(start).Milliseconds(),
 		})
 	})
+}
+
+func auditQueryKeysV0(r *http.Request) []string {
+	if r == nil || r.URL == nil || r.URL.RawQuery == "" {
+		return []string{}
+	}
+	query := r.URL.Query()
+	keys := make([]string, 0, len(query))
+	for key := range query {
+		if compactControlPlaneIDV0(key) != "" {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	return keys
 }

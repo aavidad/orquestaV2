@@ -118,6 +118,29 @@ func TestBuildAgentStartPacketV0DeclaraEvidenciaDeSaneamiento(t *testing.T) {
 	assertAgentStartPacketNoOperationalDetailsV0(t, packet)
 }
 
+func TestBuildAgentStartPacketV0DeclaraGuardDeRequiredRefOnly(t *testing.T) {
+	request := runtimeLaunchRequestValidaV0()
+	materialized := runtimeMaterializedContextValidoV0(t, *request.ContextBundle)
+	materialized.Entries = append(materialized.Entries, orquestacontext.ContextMaterializedEntryV0{
+		EntryRef:          "context-entry-ref-only-001",
+		Layer:             orquestacontext.ContextLayerTaskContextV0,
+		Kind:              orquestacontext.ContextEntryDocRefV0,
+		SourceRef:         "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+		Mode:              orquestacontext.ContextMaterializationModeRefOnlyV0,
+		Required:          true,
+		RefOnlyReason:     orquestacontext.ContextRefOnlyReasonMaterializationMissingV0,
+		RequiredRefAction: orquestacontext.ContextRequiredRefActionReadLocalV0,
+	})
+
+	packet := BuildAgentStartPacketV0(request, materialized)
+	if !packet.Valid() {
+		t.Fatalf("packet invalid: %+v", packet.Issues)
+	}
+	if !stringInSetRuntimeTestV0(packet.Policies, "required_ref_only_context_guard") {
+		t.Fatalf("policies=%+v", packet.Policies)
+	}
+}
+
 func runtimeMaterializedContextValidoV0(
 	t *testing.T,
 	bundle orquestacontext.ContextBundleV0,

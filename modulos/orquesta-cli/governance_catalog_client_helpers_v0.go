@@ -59,6 +59,8 @@ func clientTimeoutGovernanceV0(client *GovernanceCatalogCliReaderV0) time.Durati
 func isKnownGovernanceIssueCliV0(code string) bool {
 	switch strings.TrimSpace(code) {
 	case "governance_catalog_source_unavailable",
+		orquestagovernance.GovernanceCatalogInvalidRequestErrorCodeV0,
+		orquestagovernance.GovernanceCatalogMethodNotAllowedErrorCodeV0,
 		"governance_catalog_invalid_source",
 		"governance_catalog_entry_without_origin",
 		"governance_catalog_entry_without_promotion_criteria",

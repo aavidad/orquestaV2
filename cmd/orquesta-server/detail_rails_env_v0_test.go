@@ -5,14 +5,14 @@ import (
 	"testing"
 )
 
-func TestEnsureServerDetailRailsDefaultV0ReactivaPorDefecto(t *testing.T) {
+func TestEnsureServerDetailRailsDefaultV0MantieneRailAbiertoPorDefecto(t *testing.T) {
 	t.Setenv(detailProhibitedRailsEnvV0, "")
 	t.Setenv(detailProhibitedRailsScopeEnvV0, "")
 
 	ensureServerDetailRailsDefaultV0()
 
-	if got := os.Getenv(detailProhibitedRailsEnvV0); got != "on" {
-		t.Fatalf("default=%q, want on", got)
+	if got := os.Getenv(detailProhibitedRailsEnvV0); got != "off" {
+		t.Fatalf("default=%q, want off", got)
 	}
 	if got := os.Getenv(detailProhibitedRailsScopeEnvV0); got != detailProhibitedRailsScopeServerDefaultV0 {
 		t.Fatalf("scope=%q, want %q", got, detailProhibitedRailsScopeServerDefaultV0)

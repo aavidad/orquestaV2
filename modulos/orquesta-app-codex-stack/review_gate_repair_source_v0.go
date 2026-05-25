@@ -27,7 +27,7 @@ func (source codexStackReviewGateRepairSourceV0) BuildReviewGateObservationsV0(
 	request orquestacionnucleoapp.ReviewGateObservationRequestV0,
 ) ([]orquestacionnucleoapp.ReviewGateObservationV0, error) {
 	observations, err := source.Inner.BuildReviewGateObservationsV0(ctx, request)
-	if err != nil || len(observations) == 0 || source.Store == nil {
+	if err != nil || source.Store == nil {
 		return observations, err
 	}
 	descriptors, err := source.Store.ListCodexReceiptDescriptorsV0(
@@ -40,6 +40,7 @@ func (source codexStackReviewGateRepairSourceV0) BuildReviewGateObservationsV0(
 	for index := range observations {
 		observations[index] = source.repairObservationV0(observations[index], descriptors)
 	}
+	observations = append(observations, codexStackReviewGateReworkAcceptanceObservationsV0(request, descriptors)...)
 	return observations, nil
 }
 

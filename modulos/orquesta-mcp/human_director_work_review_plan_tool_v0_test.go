@@ -163,6 +163,36 @@ func TestMCPHumanDirectorWorkReviewPlanTransportV0RegistradoEInvocable(t *testin
 	assertTransportPayloadSaneadoMCPTestV0(t, output, 3200)
 }
 
+func TestMCPHumanDirectorWorkReviewPlanTransportV0AceptaWorkIntakeTextoAmigable(t *testing.T) {
+	transport := newFakeMCPTransportV0()
+	if err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{}); err != nil {
+		t.Fatalf("register transport: %v", err)
+	}
+
+	output, err := transport.CallToolV0(
+		context.Background(),
+		MCPHumanDirectorWorkReviewPlanToolNameV0,
+		map[string]any{
+			"request_id":        "request-ref-human-work-text-001",
+			"worktree_isolated": true,
+			"work_intake":       "Revisar cola vacia y preparar automejora segura dentro del repo autorizado.",
+		},
+	)
+	if err != nil {
+		t.Fatalf("call tool: %v", err)
+	}
+	var result MCPHumanDirectorWorkReviewPlanToolResultV0
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != MCPHumanDirectorWorkReviewPlanEstadoOKV0 ||
+		!result.Accepted ||
+		result.Plan.Goal == "" ||
+		len(result.Plan.Steps) == 0 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 type recordingHumanDirectorOperatorQueryV0 struct{}
 
 func (recordingHumanDirectorOperatorQueryV0) RaiseOperatorDirectedQueryV0(

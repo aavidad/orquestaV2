@@ -99,7 +99,15 @@ func BuildDirectorRunStatsWithTelemetryPortsV0(
 	request DirectorProgressSourceRequestV0,
 ) DirectorRunStatsV0 {
 	stats := BuildDirectorRunStatsWithPortsV0(ctx, run, registry, progressSource, request)
+	if !request.IncludeAgentUsage {
+		return stats
+	}
 	if usageSource == nil {
+		stats.Progress.Issues = append(stats.Progress.Issues, DirectorProgressIssueV0{
+			Code:    "agent_usage_source_not_configured",
+			Field:   "agent_usage_source",
+			Message: "agent_usage_source_not_configured",
+		})
 		return stats
 	}
 	usage, err := usageSource.BuildAgentUsageStatsV0(ctx, AgentUsageStatsRequestV0{
@@ -111,7 +119,7 @@ func BuildDirectorRunStatsWithTelemetryPortsV0(
 		stats.Progress.Issues = append(stats.Progress.Issues, DirectorProgressIssueV0{
 			Code:    "agent_usage_source_error",
 			Field:   "agent_usage_source",
-			Message: err.Error(),
+			Message: "agent_usage_source_error",
 		})
 		return stats
 	}

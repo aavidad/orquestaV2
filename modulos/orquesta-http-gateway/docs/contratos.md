@@ -40,6 +40,7 @@ Campos:
 - `AutoprogrammingPrepareRun`.
 - `AutoprogrammingStatus`.
 - `AutoprogrammingSupervise`.
+- `GovernanceCatalogQuery`.
 - `HumanDirectorWorkReviewPlan`.
 - `DomainWork`.
 - `ExternalWorkRun`.
@@ -63,6 +64,7 @@ Campos:
 - `RouteAutoprogrammingPrepareRunV0`: `/api/v0/autoprogramming/prepare-run`;
 - `RouteAutoprogrammingStatusV0`: `/api/v0/autoprogramming/status`;
 - `RouteAutoprogrammingSuperviseV0`: `/api/v0/autoprogramming/supervise`;
+- `RouteGovernanceCatalogQueryV0`: `/api/v0/governance/catalog/query`;
 - `RouteHumanDirectorWorkReviewPlanV0`: `/api/v0/director/human-work/review-plan`;
 - `RouteServerShutdownV0`: `/api/v0/server/shutdown`.
 - `RouteDomainWorkV0`: `/api/v0/domain-work`.

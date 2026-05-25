@@ -22,7 +22,7 @@ Invariantes:
   - `agent_ref` no puede estar fallido ni parado antes de registrar el artefacto.
   - Si `artifact_ref` ya esta reflejado, solo se acepta retry exacto por `CommandEffects`.
   - No emite outbox.
-  - No transporta codigo, transcript, prompt, runtime, DB, proveedor, modelo, HOME, OAuth, Docker, tmux, Git ni secretos.
+  - No transporta codigo, transcript/prompt crudo ni valores reales de runtime, DB, proveedor, modelo, HOME, OAuth, Docker, tmux, Git o secretos.
 Errores:
   - payload_invalido
   - fase_no_soportada

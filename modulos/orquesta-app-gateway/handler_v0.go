@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
+	orquestagovernance "orquesta/modulos/orquesta-governance"
 	orquestahttpgateway "orquesta/modulos/orquesta-http-gateway"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaweb "orquesta/modulos/orquesta-web"
@@ -45,6 +46,10 @@ func NewRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 {
 		RunControl:                     apiHandlers.RunControl,
 		RunQueuePriority:               apiHandlers.RunQueuePriority,
 		RunSupervisor:                  apiHandlers.RunSupervisor,
+		OpsAgentRuntimeDetail:          apiHandlers.OpsAgentRuntimeDetail,
+		OperationalStatus:              apiHandlers.OperationalStatus,
+		FunctionContractList:           apiHandlers.FunctionContractList,
+		FunctionContractView:           apiHandlers.FunctionContractView,
 		ServerShutdown:                 apiHandlers.ServerShutdown,
 		HumanDirectorWorkReviewPlan:    apiHandlers.HumanDirectorWorkReviewPlan,
 		AutoprogrammingValidateRequest: apiHandlers.AutoprogrammingValidateRequest,
@@ -52,6 +57,7 @@ func NewRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 {
 		AutoprogrammingPrepareRun:      apiHandlers.AutoprogrammingPrepareRun,
 		AutoprogrammingStatus:          apiHandlers.AutoprogrammingStatus,
 		AutoprogrammingSupervise:       apiHandlers.AutoprogrammingSupervise,
+		GovernanceCatalogQuery:         apiHandlers.GovernanceCatalogQuery,
 		DomainWork:                     apiHandlers.DomainWork,
 		ExternalWorkRun:                apiHandlers.ExternalWorkRun,
 	}
@@ -70,6 +76,10 @@ func NewAPIRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 
 		RunControl:                     orquestamcp.NewMCPRunControlHTTPHandlerV0(config.RunControl),
 		RunQueuePriority:               orquestamcp.NewMCPRunQueuePriorityHTTPHandlerV0(config.RunQueuePriority),
 		RunSupervisor:                  orquestamcp.NewMCPRunSupervisorHTTPHandlerV0(config.RunSupervisor),
+		OpsAgentRuntimeDetail:          config.OpsAgentRuntimeDetail,
+		OperationalStatus:              orquestamcp.NewMCPOperationalStatusHTTPHandlerV0(config.OperationalStatus),
+		FunctionContractList:           orquestamcp.NewMCPFunctionContractListHTTPHandlerV0(config.FunctionContracts),
+		FunctionContractView:           orquestamcp.NewMCPFunctionContractViewHTTPHandlerV0(config.FunctionContracts),
 		ServerShutdown:                 orquestamcp.NewMCPServerShutdownHTTPHandlerV0(config.ServerShutdown),
 		HumanDirectorWorkReviewPlan:    orquestamcp.NewMCPHumanDirectorWorkReviewPlanHTTPHandlerWithOperatorQueryV0(config.OperatorQuery),
 		AutoprogrammingValidateRequest: orquestamcp.NewMCPAutoprogrammingValidateRequestHTTPHandlerV0(),
@@ -77,6 +87,7 @@ func NewAPIRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 
 		AutoprogrammingPrepareRun:      orquestamcp.NewMCPAutoprogrammingPrepareRunHTTPHandlerV0(config.AutoprogrammingPrepareRun),
 		AutoprogrammingStatus:          orquestamcp.NewMCPAutoprogrammingStatusHTTPHandlerV0(autoprogrammingStatus),
 		AutoprogrammingSupervise:       orquestamcp.NewMCPAutoprogrammingSuperviseHTTPHandlerV0(config.RunSupervisor),
+		GovernanceCatalogQuery:         orquestagovernance.GovernanceCatalogQueryHTTPHandlerV0(config.GovernanceCatalog),
 		DomainWork:                     orquestamcp.NewMCPDomainWorkHTTPHandlerV0(config.DomainWork),
 		ExternalWorkRun:                orquestamcp.NewMCPExternalWorkRunHTTPHandlerV0(config.ExternalWorkRun),
 	}

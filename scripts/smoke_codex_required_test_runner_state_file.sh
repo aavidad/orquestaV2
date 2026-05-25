@@ -422,7 +422,7 @@ with open(sys.argv[1], encoding="utf-8") as fh:
     print(json.load(fh).get("addr", ""))
 PY
 )"
-    if [[ -n "$server_addr" ]] && curl -fsS -m 2 "http://$server_addr/healthz" >/dev/null; then
+    if [[ -n "$server_addr" ]] && curl -fsS -m 2 "http://$server_addr/api/v0/server/readiness" >/dev/null; then
       base_url="http://$server_addr"
       server_ready="1"
       break
@@ -432,7 +432,7 @@ PY
 done
 
 if [[ "$server_ready" != "1" ]]; then
-  echo "orquesta-server no llego a health OK" >&2
+  echo "orquesta-server no llego a readiness OK" >&2
   tail -n 80 "$server_stderr" >&2 || true
   exit 1
 fi

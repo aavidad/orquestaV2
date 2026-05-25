@@ -142,6 +142,7 @@ func (source CodexProgressObservationSourceV0) observationFromDescriptorV0(
 		)
 	}
 	report = source.reportWithBudgetV0(report, state)
+	report = codexProgressReportWithRunningNoVisibleSignalV0(descriptor, snapshot, report)
 	report = codexProgressReportWithProcessFailureContextV0(descriptor, report)
 	report = codexProgressReportWithRepeatedActionEvidenceV0(report)
 	decisionRequired := codexProgressReportDecisionRequiredV0(report)

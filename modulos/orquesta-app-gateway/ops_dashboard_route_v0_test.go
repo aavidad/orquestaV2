@@ -25,3 +25,24 @@ func TestAppGatewayOpsDashboardRouteV0(t *testing.T) {
 		t.Fatalf("ops html incompleto: %s", body)
 	}
 }
+
+func TestAppGatewayOpsAgentRuntimeDetailRouteInyectadaV0(t *testing.T) {
+	handler := NewHTTPHandlerV0(ConfigV0{
+		OpsAgentRuntimeDetail: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/api/v0/ops/agent-runtime-detail" {
+				t.Fatalf("path=%s", r.URL.Path)
+			}
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"estado":"ok"}`))
+		}),
+		Timeout: time.Second,
+	})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/ops/agent-runtime-detail", nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted || !strings.Contains(rec.Body.String(), `"estado":"ok"`) {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}

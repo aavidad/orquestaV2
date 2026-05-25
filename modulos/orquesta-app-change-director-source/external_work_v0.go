@@ -6,8 +6,6 @@ import (
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 )
 
-const maxAppChangeTaskCriteriaV0 = 10
-
 type appChangeExternalWorkKindClassV0 string
 
 const (
@@ -122,107 +120,6 @@ func appChangeTaskSummaryV0(request orquestaappchange.AppChangeRequestV0) string
 		return "Coordinar agentes sobre contrato externo y devolver entrega verificable a la app propietaria."
 	}
 	return "Implementar solo el cambio aceptado."
-}
-
-func appChangeTaskCriteriaV0(request orquestaappchange.AppChangeRequestV0) []string {
-	criteria := []string{"Mantener arquitectura hexagonal e i18n si aplica."}
-	criteria = append(criteria, appChangeExternalWorkCriteriaV0(request)...)
-	criteria = append(criteria, request.AcceptanceCriteria...)
-	return compactAppChangeTaskCriteriaV0(criteria)
-}
-
-func compactAppChangeTaskCriteriaV0(criteria []string) []string {
-	criteria = compactAppChangeSourceRefsV0(criteria)
-	criteria = sanitizeAppChangeTaskCriteriaV0(criteria)
-	if len(criteria) <= maxAppChangeTaskCriteriaV0 {
-		return criteria
-	}
-	return append([]string(nil), criteria[:maxAppChangeTaskCriteriaV0]...)
-}
-
-func sanitizeAppChangeTaskCriteriaV0(criteria []string) []string {
-	out := make([]string, 0, len(criteria))
-	for _, criterion := range criteria {
-		sanitized := strings.TrimSpace(sanitizeAppChangeTaskCriterionV0(criterion))
-		if sanitized != "" {
-			out = append(out, sanitized)
-		}
-	}
-	return out
-}
-
-func sanitizeAppChangeTaskCriterionV0(value string) string {
-	value = sanitizeAppChangeOperationalTermsV0(value)
-	replacer := strings.NewReplacer(
-		"base de datos", "almacen interno",
-		"Base de datos", "Almacen interno",
-		"BASE DE DATOS", "ALMACEN INTERNO",
-		"database", "almacen interno",
-		"Database", "Almacen interno",
-		"DATABASE", "ALMACEN INTERNO",
-		"DB", "almacen interno",
-		"db", "almacen interno",
-		"SQL", "consulta interna",
-		"sql", "consulta interna",
-		"prompt", "instrucciones",
-		"Prompt", "Instrucciones",
-		"transcript", "registro externo",
-		"Transcript", "Registro externo",
-		"runtime", "ejecucion interna",
-		"Runtime", "Ejecucion interna",
-		"provider", "adaptador",
-		"Provider", "Adaptador",
-		"proveedor", "adaptador",
-		"Proveedor", "Adaptador",
-		"model", "capacidad",
-		"Model", "Capacidad",
-		"modelo", "capacidad",
-		"Modelo", "Capacidad",
-		"Codex", "agente externo",
-		"codex", "agente externo",
-		"Claude", "agente externo",
-		"claude", "agente externo",
-		"Gemini", "agente externo",
-		"gemini", "agente externo",
-		"Ollama", "agente externo",
-		"ollama", "agente externo",
-		"vLLM", "agente externo",
-		"vllm", "agente externo",
-		"HOME", "directorio interno",
-		"home", "directorio interno",
-		"OAuth", "identidad externa",
-		"oauth", "identidad externa",
-		"Docker", "contenedor",
-		"docker", "contenedor",
-		"tmux", "multiplexor externo",
-		"secret", "dato sensible",
-		"Secret", "Dato sensible",
-		"secreto", "dato sensible",
-		"Secreto", "Dato sensible",
-		"token", "dato sensible",
-		"Token", "Dato sensible",
-		"password", "dato sensible",
-		"Password", "Dato sensible",
-		"credential", "dato sensible",
-		"Credential", "Dato sensible",
-		"credencial", "dato sensible",
-		"Credencial", "Dato sensible",
-		"api_key", "clave externa",
-		"API_KEY", "clave externa",
-	)
-	return replacer.Replace(value)
-}
-
-func sanitizeAppChangeOperationalTermsV0(value string) string {
-	replacer := strings.NewReplacer(
-		"token economy", "economia de contexto",
-		"Token economy", "Economia de contexto",
-		"TOKEN ECONOMY", "ECONOMIA DE CONTEXTO",
-		"economia de tokens", "economia de contexto",
-		"Economia de tokens", "Economia de contexto",
-		"ECONOMIA DE TOKENS", "ECONOMIA DE CONTEXTO",
-	)
-	return replacer.Replace(value)
 }
 
 func appChangeExternalWorkCriteriaV0(
@@ -377,58 +274,4 @@ func appChangeHasExternalWorkV0(request orquestaappchange.AppChangeRequestV0) bo
 			len(request.ExternalWork.InterfaceRefs) > 0 ||
 			len(request.ExternalWork.WorkRefs) > 0 ||
 			len(request.ExternalWork.InputFields) > 0)
-}
-
-func appChangeTaskWriteSetV0(request orquestaappchange.AppChangeRequestV0) []string {
-	if len(request.AllowedWriteSet) > 0 {
-		return append([]string(nil), request.AllowedWriteSet...)
-	}
-	if !appChangeHasExternalWorkV0(request) {
-		return nil
-	}
-	return appChangeExternalWorkScopesV0(request.ExternalWork)
-}
-
-func appChangeExternalWorkScopesV0(
-	work *orquestaappchange.AppChangeExternalWorkV0,
-) []string {
-	if work == nil {
-		return nil
-	}
-	project := appChangeScopePartV0(work.ProjectRef)
-	if project == "" {
-		project = "external"
-	}
-	scopes := []string{}
-	if kind := appChangeScopePartV0(work.WorkKind); kind != "" {
-		scopes = append(scopes, "external/"+project+"/"+kind)
-	}
-	if job := appChangeScopePartV0(work.JobRef); job != "" {
-		scopes = append(scopes, "external/"+project+"/"+job)
-	}
-	for _, ref := range work.WorkRefs {
-		part := appChangeScopePartV0(ref)
-		if part == "" {
-			continue
-		}
-		scopes = append(scopes, "external/"+project+"/"+part)
-	}
-	return compactAppChangeSourceRefsV0(scopes)
-}
-
-func appChangeScopePartV0(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	value = strings.NewReplacer(
-		" ", "-",
-		"\t", "-",
-		"\n", "-",
-		"\r", "-",
-		"/", "-",
-		"\\", "-",
-	).Replace(value)
-	value = strings.Trim(value, "-")
-	if value == "" {
-		return ""
-	}
-	return value
 }

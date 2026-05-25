@@ -18,6 +18,7 @@ func runStatusCommandV0(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags.SetOutput(stderr)
 	runRef := flags.String("run-ref", "", "ref opaca del run")
 	progress := flags.Bool("progress", false, "incluir progreso observado de agentes")
+	usage := flags.Bool("usage", false, "incluir uso agregado de agentes")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
@@ -39,7 +40,7 @@ func runStatusCommandV0(args []string, stdout io.Writer, stderr io.Writer) int {
 		RunRef:               strings.TrimSpace(*runRef),
 		IncludeProcessRefs:   true,
 		IncludeAgentProgress: *progress,
-		IncludeAgentUsage:    true,
+		IncludeAgentUsage:    *usage,
 	})
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "run-status: %v\n", err)
@@ -70,12 +71,5 @@ func postRunStatusBodyV0(addr string, input orquestamcp.MCPDirectorStatsToolInpu
 		return nil, err
 	}
 	defer response.Body.Close()
-	body, readErr := io.ReadAll(response.Body)
-	if readErr != nil {
-		return nil, readErr
-	}
-	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("run_status_http_%d: %s", response.StatusCode, strings.TrimSpace(string(body)))
-	}
-	return body, nil
+	return readCommandHTTPResponseBodyV0(response, "run_status")
 }

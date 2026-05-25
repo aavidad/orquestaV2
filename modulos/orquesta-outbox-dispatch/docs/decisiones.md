@@ -54,3 +54,14 @@ Alternativas:
 Impacto: el cierre de ACK usa los issues del executor si existen; si no, mantiene el issue generico anterior. Solo se propagan codigo, campo y message key compactos.
 Estado: aceptada para OBD-006
 ```
+
+```text
+Fecha: 2026-05-25
+Decision: se declara `OutboxDispatchAckObservationPortV0` como puerto opcional
+para ACK terminales de batch, incluidos fallos.
+Motivo: un lote parcial debe persistir `ack_failed` sin retirar otros items ni
+forzar el contrato historico de ACK success.
+Impacto: los adaptadores que implementen el puerto pueden exponer fallos
+durables; los que no lo implementen conservan comportamiento previo.
+Estado: aceptada para T57
+```

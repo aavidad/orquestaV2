@@ -3,5 +3,7 @@ package orquestacionnucleoapp
 import orquestaagentprocessregistry "orquesta/modulos/orquesta-agent-process-registry"
 
 type AgentProcessRegistryPortV0 = orquestaagentprocessregistry.AgentProcessRegistryPortV0
+type AgentProcessRegistryListPortV0 = orquestaagentprocessregistry.AgentProcessRegistryListPortV0
+type AgentProcessRegistryListFilterV0 = orquestaagentprocessregistry.AgentProcessRegistryListFilterV0
 type AgentProcessRegistryRecordV0 = orquestaagentprocessregistry.AgentProcessRegistryRecordV0
 type AgentProcessRecordV0 = AgentProcessRegistryRecordV0

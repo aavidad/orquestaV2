@@ -74,7 +74,7 @@ func TestCodexDeliveryObservationSourceV0OmiteDeliveryYaRegistrada(t *testing.T)
 	}
 }
 
-func TestCodexDeliveryObservationSourceV0OmiteAgenteCerrado(t *testing.T) {
+func TestCodexDeliveryObservationSourceV0IngiereACKCompletoAunqueAgenteEsteCerrado(t *testing.T) {
 	spec := codexDeliverySpecForTestV0()
 	path := writeCodexDeliveryAckForTestV0(t, spec, codexDeliveryAckForTestV0(spec))
 	store := &staticCodexReceiptStoreV0{
@@ -86,14 +86,57 @@ func TestCodexDeliveryObservationSourceV0OmiteAgenteCerrado(t *testing.T) {
 	}
 	request := codexDeliveryRequestForTestV0(spec, nil)
 	request.Run.StoppedAgents = []string{spec.RequestID}
+	request.Run.ConfirmedStoppedAgents = []string{spec.RequestID}
 
 	observations, err := (CodexDeliveryObservationSourceV0{Store: store}).
 		BuildAgentDeliveryObservationsV0(context.Background(), request)
 	if err != nil {
 		t.Fatalf("BuildAgentDeliveryObservationsV0: %v", err)
 	}
-	if len(observations) != 0 {
+	if len(observations) != 1 || observations[0].AgentRef != spec.RequestID {
 		t.Fatalf("observations=%+v", observations)
+	}
+}
+
+func TestCodexDeliveryObservationSourceV0CompactaEvidenciasParaCore(t *testing.T) {
+	spec := codexDeliverySpecForTestV0()
+	path := writeCodexDeliveryAckForTestV0(t, spec, codexDeliveryAckForTestV0(spec))
+	store := &staticCodexReceiptStoreV0{
+		Descriptors: []CodexReceiptDescriptorV0{{
+			DescriptorRef:  "receipt-ref-001",
+			Spec:           spec,
+			AckPath:        path,
+			ProjectWorkDir: t.TempDir(),
+		}},
+	}
+	source := CodexDeliveryObservationSourceV0{
+		Store: store,
+		WorktreeVerifier: staticCodexReceiptWorktreeEvidenceVerifierV0{
+			Refs: manyCodexDeliveryEvidenceRefsForTestV0(),
+		},
+	}
+
+	observations, err := source.BuildAgentDeliveryObservationsV0(
+		context.Background(),
+		codexDeliveryRequestForTestV0(spec, nil),
+	)
+	if err != nil {
+		t.Fatalf("BuildAgentDeliveryObservationsV0: %v", err)
+	}
+	if len(observations) != 1 {
+		t.Fatalf("observations=%+v", observations)
+	}
+	if len(observations[0].EvidenceRefs) > 20 ||
+		!codexDeliveryEvidenceContainsForTestV0(
+			observations[0].EvidenceRefs,
+			"evidence-ref-codex-delivery-evidence-truncated",
+		) {
+		t.Fatalf("evidence_refs=%+v", observations[0].EvidenceRefs)
+	}
+	for _, ref := range observations[0].EvidenceRefs {
+		if len([]rune(ref)) > 260 {
+			t.Fatalf("evidence ref demasiado larga: %d %q", len([]rune(ref)), ref)
+		}
 	}
 }
 
@@ -247,6 +290,24 @@ type staticCodexReceiptStoreV0 struct {
 	LastRequest CodexReceiptDescriptorRequestV0
 }
 
+type staticCodexReceiptWorktreeEvidenceVerifierV0 struct {
+	Refs []string
+}
+
+func (verifier staticCodexReceiptWorktreeEvidenceVerifierV0) VerifyCodexReceiptWorktreeV0(
+	context.Context,
+	CodexReceiptWorktreeVerificationRequestV0,
+) error {
+	return nil
+}
+
+func (verifier staticCodexReceiptWorktreeEvidenceVerifierV0) VerifyCodexReceiptWorktreeEvidenceRefsV0(
+	context.Context,
+	CodexReceiptWorktreeVerificationRequestV0,
+) ([]string, error) {
+	return append([]string(nil), verifier.Refs...), nil
+}
+
 func (store *staticCodexReceiptStoreV0) ListCodexReceiptDescriptorsV0(
 	_ context.Context,
 	request CodexReceiptDescriptorRequestV0,
@@ -328,6 +389,7 @@ func codexDeliveryAckForTestV0(
 		Status:        "completed",
 		Files:         orquestaruntimecodex.EvidenceListV0{"README.md"},
 		Tests:         orquestaruntimecodex.EvidenceListV0{"go test ./..."},
+		Notes:         orquestaruntimecodex.EvidenceListV0{"contexto_ref_only_resuelto: fixture local sin contexto externo"},
 	}
 }
 
@@ -374,6 +436,23 @@ func codexDeliveryObservationRefsForTestV0(
 ) bool {
 	for _, observation := range observations {
 		if observation.AgentRef == agentRef {
+			return true
+		}
+	}
+	return false
+}
+
+func manyCodexDeliveryEvidenceRefsForTestV0() []string {
+	refs := make([]string, 0, 40)
+	for index := 0; index < 40; index++ {
+		refs = append(refs, strings.Repeat("evidence-ref-worktree-soft-issue-", 12)+string(rune('a'+index%20)))
+	}
+	return refs
+}
+
+func codexDeliveryEvidenceContainsForTestV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
 			return true
 		}
 	}

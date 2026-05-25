@@ -52,6 +52,9 @@ func validateAgentProgressSupervisionInputV0(input AgentProgressSupervisionInput
 }
 
 func progressSupervisionNeedsQuestionV0(input AgentProgressSupervisionInputV0) bool {
+	if agentProgressAuthConfigBlockerV0(input.Report) || agentProgressNoACKV0(input.Report) {
+		return true
+	}
 	if agentProgressCapacityLimitedV0(input.Report) {
 		return !agentProgressStopAllowedV0(input)
 	}

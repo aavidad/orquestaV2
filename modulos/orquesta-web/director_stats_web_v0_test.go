@@ -71,8 +71,8 @@ func TestDirectorStatsWebEndpointV0GETPreparaRefreshSemitiempoReal(t *testing.T)
 	}
 	if !client.Query.IncludeAgentProgress ||
 		!client.Query.IncludeProcessRefs ||
-		!client.Query.IncludeAgentUsage {
-		t.Fatalf("query no pide estado completo de agentes: %+v", client.Query)
+		client.Query.IncludeAgentUsage {
+		t.Fatalf("query debe pedir uso solo con include_agent_usage explicito: %+v", client.Query)
 	}
 	var page WebDirectorStatsPageV0
 	if err := json.NewDecoder(rec.Body).Decode(&page); err != nil {
@@ -89,6 +89,23 @@ func TestDirectorStatsWebEndpointV0GETPreparaRefreshSemitiempoReal(t *testing.T)
 	}
 	if page.ViewModel.Textos.Refresh != "Actualizar progreso de agentes" {
 		t.Fatalf("texto refresh=%q", page.ViewModel.Textos.Refresh)
+	}
+}
+
+func TestDirectorStatsWebEndpointV0GETRespetaUsoOptIn(t *testing.T) {
+	client := &fakeDirectorStatsClientV0{VM: NewWebDirectorStatsViewModelV0(webDirectorStatsFixtureV0())}
+	endpoint := NewDirectorStatsWebEndpointV0(client)
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/director-stats?run_ref=run-web-director-stats-001&include_agent_usage=true",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+
+	endpoint.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK || !client.Query.IncludeAgentUsage {
+		t.Fatalf("code=%d query=%+v body=%s", rec.Code, client.Query, rec.Body.String())
 	}
 }
 
@@ -175,7 +192,6 @@ func webDirectorStatsFixtureV0() WebDirectorRunStatsContractV0 {
 		AgentsObserved: 2,
 		QuotaStatus:    "limited",
 		TotalTokens:    1750,
-		CostMicros:     900,
 	}
 	return out
 }

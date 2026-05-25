@@ -156,11 +156,11 @@ func (b backlogBuilderV0) deployTask() MicrotareaPropuestaV0 {
 	return MicrotareaPropuestaV0{
 		Fase:             "arquitectura",
 		ModuloSugerido:   "deploy",
-		Objetivo:         "Preparar plan de entorno para target de deploy " + b.spec.Deploy.Target + ".",
-		WriteSetPrevisto: []string{"docs/deploy.md", "deploy/"},
+		Objetivo:         "Preparar DeploymentPlan v0 para target de deploy " + b.spec.Deploy.Target + " y validarlo por dry-run.",
+		WriteSetPrevisto: []string{"contracts/deployment_plan_v0.json", "docs/deploy.md", "tests/deployment_plan_dry_run_test.go"},
 		Contrato:         "DeploymentPlan v0",
-		Validacion:       "Plan de deploy reproducible con healthcheck y rollback, sin acoplarlo al core.",
-		Bloqueos:         []string{"DeploymentPlan v0"},
+		Validacion:       "Dry-run de DeploymentPlan v0 devuelve refs de plan/evidencia sin ejecutar Docker, Kubernetes, cloud ni secretos.",
+		Bloqueos:         []string{"DeploymentPlan v0 dry-run"},
 	}
 }
 

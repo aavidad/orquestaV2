@@ -15,6 +15,7 @@ import (
 	orquestarunmemory "orquesta/modulos/orquesta-run-memory"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 	orquestaserver "orquesta/modulos/orquesta-server"
+	orquestastatefile "orquesta/modulos/orquesta-state-file"
 )
 
 func TestStartupCleanupCandidatesV0IncluyeColaReadyConControlTerminal(t *testing.T) {
@@ -141,9 +142,10 @@ func TestCompactStartupStateFilesV0ArchivaBasuraActiva(t *testing.T) {
 	if err := os.MkdirAll(agentDir, 0o755); err != nil {
 		t.Fatalf("mkdir agent: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(agentDir, "codex_last_message.txt"), []byte("ACK ack-1 completed"), 0o644); err != nil {
-		t.Fatalf("write last message: %v", err)
-	}
+	writeStartupStrictCompletedAckForTestV0(t, agentDir, startupStrictAckFixtureV0{
+		RunRef:   "run-ready-completed",
+		AgentRef: "agent-1",
+	})
 
 	check := serverStartupCheckV0{ServerConfig: orquestaserver.ConfigV0{
 		StateDir:       stateDir,
@@ -178,6 +180,95 @@ func TestCompactStartupStateFilesV0ArchivaBasuraActiva(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(runtimeDir, "run-ready-completed")); !os.IsNotExist(err) {
 		t.Fatalf("runtime source still exists or unexpected err=%v", err)
+	}
+}
+
+func TestCompactStartupStateFilesV0ApartaReadyConRunAutoprogrammingObsoleto(t *testing.T) {
+	stateDir := t.TempDir()
+	runtimeDir := t.TempDir()
+	runStateDir := filepath.Join(stateDir, "run-state")
+	if err := os.MkdirAll(runStateDir, 0o755); err != nil {
+		t.Fatalf("mkdir run-state: %v", err)
+	}
+	staleRunRef := "request-ref-autoprogramming-backlog-stale-assessment-001"
+	liveRunRef := "request-ref-autoprogramming-backlog-live-001"
+	queue := startupQueueSnapshotV0{
+		SchemaVersion: "orquesta.run_file.queue.v0",
+		Records: []startupQueueRecordV0{
+			{
+				RunRef:   staleRunRef,
+				QueueRef: "global",
+				Candidate: orquestarunqueue.RunSchedulingCandidateV0{
+					RunRef: staleRunRef,
+					Status: "ready",
+				},
+			},
+			{
+				RunRef:   liveRunRef,
+				QueueRef: "global",
+				Candidate: orquestarunqueue.RunSchedulingCandidateV0{
+					RunRef: liveRunRef,
+					Status: "ready",
+				},
+			},
+		},
+	}
+	writeStartupJSONForTestV0(t, filepath.Join(runStateDir, "queue_v0.json"), queue)
+	writeStartupJSONForTestV0(t, filepath.Join(runStateDir, "control_v0.json"), startupControlSnapshotV0{})
+	stateStore, err := orquestastatefile.NewStoreV0(orquestastatefile.ConfigV0{
+		RootDir: filepath.Join(stateDir, "orchestration-state"),
+	})
+	if err != nil {
+		t.Fatalf("NewStoreV0: %v", err)
+	}
+	agentRef := "agent-ref-autoprogramming-backlog-stale-assessment-001"
+	ghostAgentRef := "agent-ref-autoprogramming-backlog-stale-assessment-ghost-001"
+	if err := stateStore.SaveRunV0(context.Background(), orquestacoreworkflow.OrchestrationRunV0{
+		SchemaVersion: orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
+		RunID:         staleRunRef,
+		Status:        orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+		CurrentPhase:  orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		StartedAgents: []string{agentRef, ghostAgentRef},
+		StoppedAgents: []string{agentRef},
+		AgentAssessments: []string{orquestacoreworkflow.AgentAssessmentProjectionRefV0(orquestacoreworkflow.AgentWorkAssessedPayloadV0{
+			AssessmentRef:  "assessment-ref-startup-stale-001",
+			PhaseID:        string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			AgentRequestID: agentRef,
+			Verdict:        orquestacoreworkflow.AgentAssessmentVerdictGarbageV0,
+			Action:         orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
+			Severity:       orquestacoreworkflow.AgentAssessmentSeverityHighV0,
+		})},
+	}); err != nil {
+		t.Fatalf("SaveRunV0 stale: %v", err)
+	}
+
+	check := serverStartupCheckV0{ServerConfig: orquestaserver.ConfigV0{
+		StateDir:       stateDir,
+		RuntimeWorkDir: runtimeDir,
+	}}
+	got, err := check.compactStartupStateFilesV0(orquestaserver.StartupCheckCommandV0{
+		StateDir:       stateDir,
+		RuntimeWorkDir: runtimeDir,
+		OccurredAt:     time.Date(2026, 5, 25, 16, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("compactStartupStateFilesV0: %v", err)
+	}
+	if !got.CompactionNeeded || got.QueueRemoved != 1 || got.QueueKept != 1 {
+		t.Fatalf("compaction=%+v", got)
+	}
+	queueAfter := readStartupQueueForTestV0(t, filepath.Join(runStateDir, "queue_v0.json"))
+	if len(queueAfter.Records) != 1 || queueAfter.Records[0].RunRef != liveRunRef {
+		t.Fatalf("queue after=%+v", queueAfter)
+	}
+	removed := readStartupQueueForTestV0(t, filepath.Join(got.RevisionDir, "queue_removed.json"))
+	if len(removed.Records) != 1 ||
+		removed.Records[0].RunRef != staleRunRef ||
+		removed.Records[0].PurgeReason != "ready_run_autoprogramming_obsoleto" {
+		t.Fatalf("removed=%+v", removed)
+	}
+	if _, err := stateStore.LoadRunV0(context.Background(), staleRunRef); err != nil {
+		t.Fatalf("run historico no debe borrarse: %v", err)
 	}
 }
 

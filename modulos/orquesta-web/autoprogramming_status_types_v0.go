@@ -47,20 +47,29 @@ type WebAutoprogrammingRunProgressV0 struct {
 }
 
 type WebAutoprogrammingAgentProgressV0 struct {
-	AgentRef            string `json:"agent_ref"`
-	Status              string `json:"status,omitempty"`
-	InFlight            bool   `json:"in_flight,omitempty"`
-	NeedsAttention      bool   `json:"needs_attention,omitempty"`
-	CanStop             bool   `json:"can_stop,omitempty"`
-	ProgressStatus      string `json:"progress_status,omitempty"`
-	NoProgressTicks     int    `json:"no_progress_ticks,omitempty"`
-	RepeatedActionCount int    `json:"repeated_action_count,omitempty"`
+	AgentRef            string   `json:"agent_ref"`
+	Status              string   `json:"status,omitempty"`
+	InFlight            bool     `json:"in_flight,omitempty"`
+	NeedsAttention      bool     `json:"needs_attention,omitempty"`
+	CanStop             bool     `json:"can_stop,omitempty"`
+	TaskRef             string   `json:"task_ref,omitempty"`
+	ProcessRef          string   `json:"process_ref,omitempty"`
+	SessionRef          string   `json:"session_ref,omitempty"`
+	RuntimeKind         string   `json:"runtime_kind,omitempty"`
+	CapacityLevel       string   `json:"capacity_level,omitempty"`
+	QuotaStatus         string   `json:"quota_status,omitempty"`
+	TotalTokens         int64    `json:"total_tokens,omitempty"`
+	ProgressStatus      string   `json:"progress_status,omitempty"`
+	NoProgressTicks     int      `json:"no_progress_ticks,omitempty"`
+	RepeatedActionCount int      `json:"repeated_action_count,omitempty"`
+	EvidenceRefs        []string `json:"evidence_refs,omitempty"`
 }
 
 type WebAutoprogrammingDiagnosticV0 struct {
-	Code    string `json:"code"`
-	Scope   string `json:"scope,omitempty"`
-	Message string `json:"message,omitempty"`
+	Code         string   `json:"code"`
+	Scope        string   `json:"scope,omitempty"`
+	Message      string   `json:"message,omitempty"`
+	EvidenceRefs []string `json:"evidence_refs,omitempty"`
 }
 
 func NewWebAutoprogrammingStatusViewModelV0(locale string, result orquestamcp.MCPAutoprogrammingStatusToolResultV0) WebAutoprogrammingStatusViewModelV0 {
@@ -126,9 +135,23 @@ func webAutoprogrammingAgentProgressV0(result *orquestamcp.MCPDirectorStatsToolR
 			CanStop:        agent.CanStop,
 		}
 		if agent.LastProgress != nil {
+			item.TaskRef = trimV0(agent.LastProgress.TaskRef)
 			item.ProgressStatus = trimV0(agent.LastProgress.Status)
 			item.NoProgressTicks = agent.LastProgress.NoProgressTicks
 			item.RepeatedActionCount = agent.LastProgress.RepeatedActionCount
+			item.EvidenceRefs = append(item.EvidenceRefs, agent.LastProgress.EvidenceRefs...)
+		}
+		if agent.Process != nil {
+			item.ProcessRef = trimV0(agent.Process.ProcessRef)
+			item.SessionRef = trimV0(agent.Process.SessionRef)
+			item.EvidenceRefs = append(item.EvidenceRefs, agent.Process.EvidenceRefs...)
+		}
+		if agent.Usage != nil {
+			item.RuntimeKind = trimV0(agent.Usage.RuntimeKind)
+			item.CapacityLevel = trimV0(agent.Usage.CapacityLevel)
+			item.QuotaStatus = trimV0(agent.Usage.QuotaStatus)
+			item.TotalTokens = agent.Usage.TotalTokens
+			item.EvidenceRefs = append(item.EvidenceRefs, agent.Usage.EvidenceRefs...)
 		}
 		out = append(out, item)
 	}
@@ -139,7 +162,7 @@ func webAutoprogrammingDiagnosticsV0(values []orquestamcp.MCPAutoprogrammingDiag
 	out := make([]WebAutoprogrammingDiagnosticV0, 0, len(values))
 	for _, value := range values {
 		out = append(out, WebAutoprogrammingDiagnosticV0{
-			Code: trimV0(value.Code), Scope: trimV0(value.Scope), Message: trimV0(value.Message),
+			Code: trimV0(value.Code), Scope: trimV0(value.Scope), Message: trimV0(value.Message), EvidenceRefs: value.EvidenceRefs,
 		})
 	}
 	return out

@@ -439,17 +439,7 @@
               "mysql",
               "sqlite",
               "mongodb",
-              "redis",
-              "runtime",
-              "filesystem",
-              "fs",
-              "llm",
-              "cache",
-              "queue",
-              "cola",
-              "deploy",
-              "database",
-              "db"
+              "redis"
             ]
           }
         },

@@ -67,6 +67,7 @@ func TestRunQueueWebEndpointV0POSTSetPriority(t *testing.T) {
 	values.Set("action", WebRunQueueActionSetV0)
 	values.Set("run_ref", "run-ref-web-queue-002")
 	values.Set("app_ref", "app-ref-web-queue-002")
+	values.Set("status", "canceled")
 	values.Set("priority_score", "120")
 	req := httptest.NewRequest(http.MethodPost, "/run-queue", strings.NewReader(values.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -79,6 +80,7 @@ func TestRunQueueWebEndpointV0POSTSetPriority(t *testing.T) {
 	}
 	if client.query.Action != WebRunQueueActionSetV0 ||
 		client.query.RunRef != "run-ref-web-queue-002" ||
+		client.query.Status != "canceled" ||
 		client.query.PriorityScore != 120 {
 		t.Fatalf("query=%+v", client.query)
 	}
@@ -99,6 +101,31 @@ func TestWebRunQueueViewModelV0IncluyeHrefStatsPorRun(t *testing.T) {
 	if len(vm.Ranked) != 1 ||
 		vm.Ranked[0].StatsHref != "/director-stats?include_agent_progress=true&run_ref=run-ref-web-queue-003" {
 		t.Fatalf("vm=%+v", vm)
+	}
+}
+
+func TestWebRunQueueViewModelV0ExponeIdentidadEstableYDetalleOperador(t *testing.T) {
+	vm := NewWebRunQueueViewModelV0("es", orquestamcp.MCPRunQueuePriorityToolResultV0{
+		Estado: WebRunQueueEstadoOKV0,
+		Action: WebRunQueueActionRankV0,
+		Ranked: []orquestamcp.MCPRunQueueRankedCandidateCompactV0{{
+			Rank:          1,
+			RunRef:        "request-ref-autoprogramming-backlog-t11-rails-blandos-a1b2c3d4",
+			AppRef:        "orquesta",
+			Status:        "ready",
+			PriorityScore: 90,
+		}},
+	})
+
+	if len(vm.Ranked) != 1 {
+		t.Fatalf("vm=%+v", vm)
+	}
+	got := vm.Ranked[0]
+	if got.StableID != "queue:request-ref-autoprogramming-backlog-t11-rails-blandos-a1b2c3d4" ||
+		got.Title != "t11 rails blandos" ||
+		!strings.Contains(got.Detail, "run_ref=request-ref-autoprogramming-backlog-t11-rails-blandos-a1b2c3d4") ||
+		!strings.Contains(got.Detail, "status=ready") {
+		t.Fatalf("candidate=%+v", got)
 	}
 }
 

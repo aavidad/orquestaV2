@@ -62,7 +62,7 @@ const (
 var (
 	operationalLocalePatternV0     = regexp.MustCompile(`^[a-z]{2}(-[A-Z]{2})?$`)
 	operationalI18nKeyPatternV0    = regexp.MustCompile(`^[a-z][a-z0-9_.-]*$`)
-	operationalTokenPatternV0      = regexp.MustCompile(`^[a-z][a-z0-9_.:-]*$`)
+	operationalTokenPatternV0      = regexp.MustCompile(`^[a-z][a-z0-9_.:-]*$|^[a-z][a-z0-9_.:-]*-[a-z0-9_.:-]+$`)
 	operationalCounterKeyPatternV0 = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 	operationalConsumerPairsV0     = map[string]string{
 		"orquesta-cli":  OperationalStatusConsumerCLIChannelV0,
@@ -124,8 +124,8 @@ var (
 	operationalTranscriptTextPartsV0 = []string{"transcript", "transcripcion"}
 	operationalForbiddenTextPartsV0  = []string{
 		"prompt", "completion", "sql", "select", "insert", "update", "delete", "drop",
-		"dsn", "connection", "conexion", "table", "tabla", "provider", "proveedor",
-		"model_name", "modelo", "/home/", "home=", "$home", "~/", "home_path", "home_ref",
+		"dsn", "connection", "conexion", "table", "tabla",
+		"/home/", "home=", "$home", "~/", "home_path", "home_ref",
 	}
 )
 

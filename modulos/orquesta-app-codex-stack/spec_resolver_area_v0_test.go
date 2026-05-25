@@ -24,10 +24,11 @@ func TestCodexAreaV0ClasificaRolesNeutralesComoProgramacion(t *testing.T) {
 
 func TestCodexProfileForAreaV0PermiteSandboxAmplioPorArea(t *testing.T) {
 	config := CodexRuntimeConfigV0{
-		Sandbox:                "workspace-write",
-		ApprovalPolicy:         "never",
-		DirectorSandbox:        "danger-full-access",
-		DirectorApprovalPolicy: "on-request",
+		Sandbox:                  "workspace-write",
+		ApprovalPolicy:           "never",
+		DirectorSandbox:          "danger-full-access",
+		DirectorApprovalPolicy:   "on-request",
+		InteractiveApprovalOptIn: true,
 	}
 
 	director := codexProfileForAreaV0(config, "/tmp/runtime-director", "director")
@@ -38,5 +39,19 @@ func TestCodexProfileForAreaV0PermiteSandboxAmplioPorArea(t *testing.T) {
 	}
 	if worker.Sandbox != "workspace-write" || worker.ApprovalPolicy != "never" {
 		t.Fatalf("worker profile=%+v", worker)
+	}
+}
+
+func TestCodexProfileForAreaV0NoNormalizaSandboxInvalido(t *testing.T) {
+	config := CodexRuntimeConfigV0{
+		ProjectWorkDir: "/tmp/project",
+		Sandbox:        "read-only",
+		ApprovalPolicy: "never",
+	}
+
+	profile := codexProfileForAreaV0(config, "/tmp/runtime", "programacion")
+
+	if profile.Sandbox != "read-only" {
+		t.Fatalf("sandbox normalizado silenciosamente: %+v", profile)
 	}
 }

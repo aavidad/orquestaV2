@@ -209,6 +209,25 @@ func applyDirectorAgentProgressV0(
 		}
 		progress := directorAgentProgressFromObservationV0(observation)
 		stats.Agents[index].LastProgress = &progress
+		if progress.Status == string(orquestaruntime.AgentStoppedV0) {
+			wasInFlight := stats.Agents[index].InFlight
+			wasControlRegistered := stats.Agents[index].ControlRegistered
+			wasControlMissing := stats.Agents[index].ControlState == DirectorAgentControlStateMissingV0
+			stats.Agents[index].InFlight = false
+			stats.Agents[index].StopConfirmed = true
+			stats.Agents[index].Status = DirectorAgentStatusStoppedV0
+			stats.Agents[index].ControlState = DirectorAgentControlStateNotNeededV0
+			stats.Agents[index].CanStop = false
+			if wasInFlight && stats.Counts.AgentsInFlight > 0 {
+				stats.Counts.AgentsInFlight--
+			}
+			if wasControlRegistered && stats.Counts.AgentsControlRegistered > 0 {
+				stats.Counts.AgentsControlRegistered--
+			}
+			if wasControlMissing && stats.Counts.AgentsControlMissing > 0 {
+				stats.Counts.AgentsControlMissing--
+			}
+		}
 		if progress.Status == string(orquestaruntime.AgentLoopDetectedV0) ||
 			progress.DecisionRequired {
 			stats.Agents[index].NeedsAttention = true

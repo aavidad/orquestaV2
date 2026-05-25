@@ -24,9 +24,23 @@ func TestAutoprogrammingReviewGateSoftRailSuffixCompatSigueAdvisoryV0(t *testing
 		"file_too_large#policy_blocked",
 		"outside-write-set:docs/extra.md#blocked",
 		"ack-pending-rail:token#blocked",
+		"artifact_paths_outside_write_set:docs/extra.md#blocked",
+		"destino-write-set-faltante:web#policy_blocked",
+		"fichero-demasiado-grande:README.md#blocked",
+		"detector-dudoso:provider#blocked",
 	} {
 		if !AutoprogrammingReviewGateIssueCodeIsAdvisoryV0(code) {
 			t.Fatalf("code=%q advisory=false", code)
 		}
+	}
+}
+
+func TestAutoprogrammingReviewGateSoftRailAliasNoOcultaBloqueoV0(t *testing.T) {
+	code := "fichero-demasiado-grande:README.md#gate-issue:required-test-failed"
+	if !AutoprogrammingReviewGateIssueCodeBlocksClosureV0(code) {
+		t.Fatalf("code=%q blocks_closure=false", code)
+	}
+	if AutoprogrammingReviewGateIssueCodeIsAdvisoryV0(code) {
+		t.Fatalf("code=%q advisory=true", code)
 	}
 }

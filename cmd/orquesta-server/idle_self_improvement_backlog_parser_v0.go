@@ -8,13 +8,17 @@ import (
 )
 
 type idleSelfImprovementBacklogSectionV0 struct {
-	Ref, Heading, Objective       string
-	Scope, Criteria, Tests        []string
-	Dependencies, Inputs, Outputs []string
-	StateEvidenceRefs             []string
-	Completed                     bool
-	NeedsDocumentReview           bool
-	SourceLine                    int
+	Ref, Heading, Objective        string
+	SourcePath                     string
+	SourceKind, Owner              string
+	LocalAlias, RelatedTXX         string
+	LocalState, LocalEntryHash     string
+	Scope, Criteria, Tests         []string
+	ManualVerifications            []string
+	Dependencies, Inputs, Outputs  []string
+	StateEvidenceRefs              []string
+	Completed, NeedsDocumentReview bool
+	SourceLine                     int
 }
 
 type idleSelfImprovementBacklogStateV0 struct {
@@ -24,6 +28,13 @@ type idleSelfImprovementBacklogStateV0 struct {
 }
 
 func parseIdleSelfImprovementBacklogSectionsV0(content string) []idleSelfImprovementBacklogSectionV0 {
+	return parseIdleSelfImprovementBacklogSectionsFromDocumentV0(content, idleSelfImprovementBacklogDocRelV0)
+}
+
+func parseIdleSelfImprovementBacklogSectionsFromDocumentV0(
+	content string,
+	sourcePath string,
+) []idleSelfImprovementBacklogSectionV0 {
 	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
 	sections := []idleSelfImprovementBacklogSectionV0{}
 	for index := 0; index < len(lines); index++ {
@@ -39,6 +50,7 @@ func parseIdleSelfImprovementBacklogSectionsV0(content string) []idleSelfImprove
 			}
 		}
 		section := idleSelfImprovementParseBacklogSectionV0(heading, lines[index+1:next], index+1)
+		section.SourcePath = firstNonEmptyServerStackV0(strings.TrimSpace(sourcePath), idleSelfImprovementBacklogDocRelV0)
 		sections = append(sections, section)
 	}
 	return sections
@@ -50,6 +62,7 @@ func idleSelfImprovementParseBacklogSectionV0(
 	sourceLine int,
 ) idleSelfImprovementBacklogSectionV0 {
 	state := idleSelfImprovementSectionStateV0(lines)
+	tests, manualVerifications := idleSelfImprovementSectionTestsV0(lines)
 	return idleSelfImprovementBacklogSectionV0{
 		Ref:                 idleSelfImprovementHeadingRefV0(heading),
 		Heading:             strings.TrimPrefix(heading, "## "),
@@ -59,7 +72,8 @@ func idleSelfImprovementParseBacklogSectionV0(
 		Dependencies:        idleSelfImprovementSectionDependenciesV0(lines),
 		Inputs:              idleSelfImprovementSectionIOV0(lines, "Entrada:", "Entradas:"),
 		Outputs:             idleSelfImprovementSectionIOV0(lines, "Salida:", "Salidas:"),
-		Tests:               idleSelfImprovementSectionTestsV0(lines),
+		Tests:               tests,
+		ManualVerifications: manualVerifications,
 		StateEvidenceRefs:   state.EvidenceRefs,
 		Completed:           state.Completed,
 		NeedsDocumentReview: state.NeedsDocumentReview,
@@ -93,7 +107,7 @@ func idleSelfImprovementSectionHasAmbiguousEvidenceV0(lines []string) bool {
 	text := strings.ToLower(strings.Join(lines, "\n"))
 	return idleSelfImprovementBacklogTextContainsAnyV0(text,
 		"evidencia focal:", "evidencia ejecutada", "evidencia local:",
-		"validacion focal:", "validación focal:", "revalidacion final", "revalidación final",
+		"validacion focal:", "validación focal:",
 	)
 }
 
@@ -203,25 +217,6 @@ func idleSelfImprovementSectionIOV0(lines []string, labels ...string) []string {
 	var out []string
 	for _, label := range labels {
 		out = append(out, idleSelfImprovementSectionListV0(lines, label)...)
-	}
-	return compactServerStackStringsV0(out)
-}
-
-func idleSelfImprovementSectionTestsV0(lines []string) []string {
-	var out []string
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if !strings.Contains(trimmed, "Tests:") {
-			continue
-		}
-		value := strings.TrimSpace(trimmed[strings.Index(trimmed, "Tests:")+len("Tests:"):])
-		value = strings.Trim(value, "` ")
-		for _, part := range strings.Split(value, " y ") {
-			part = strings.Trim(strings.TrimSpace(part), "` .")
-			if strings.HasPrefix(part, "go test ") {
-				out = append(out, part)
-			}
-		}
 	}
 	return compactServerStackStringsV0(out)
 }

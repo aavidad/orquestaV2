@@ -13,9 +13,9 @@ Riesgos: La integracion durable con eventos/comandos queda para otro corte autor
 Caso: workflow_task_v0_rechaza_detalles_prohibidos
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-core-workflow
-Evidencia esperada: Fase desconocida, `write_set` vacio y criterio vacio se rechazan con errores publicos. Secretos y credenciales se rechazan; refs/texto opacos de adaptador o ejecucion se permiten para no cortar el ciclo por palabras reparables. La apertura queda pendiente de revision futura.
+Evidencia esperada: Fase desconocida, `write_set` vacio y criterio vacio se rechazan con errores publicos. Secretos, credenciales, rutas privadas, prompts/transcripts crudos y payloads masivos se rechazan por la politica comun de `orquesta-rails`; refs/texto opacos de adaptador o ejecucion se permiten para no cortar el ciclo por palabras reparables.
 Ultima ejecucion: 2026-05-04, ok, go test -count=1 ./modulos/orquesta-core-workflow
-Riesgos: La lista negativa debe ampliarse cuando aparezcan nuevos conectores o terminos de infraestructura.
+Riesgos: No debe reaparecer una lista local por palabras de infraestructura; nuevos conectores deben reutilizar la politica comun de `orquesta-rails` o definir una frontera de campo propia.
 ```
 
 ```text

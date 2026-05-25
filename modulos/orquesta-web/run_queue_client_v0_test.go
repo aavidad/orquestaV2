@@ -43,6 +43,7 @@ func TestRESTRunQueueClientV0EnviaRankYProyectaVista(t *testing.T) {
 		Locale:        "es",
 		Action:        "rank",
 		QueueRef:      "global",
+		Status:        " ready ",
 		Limit:         5,
 	})
 
@@ -51,6 +52,7 @@ func TestRESTRunQueueClientV0EnviaRankYProyectaVista(t *testing.T) {
 	}
 	if received.Action != "rank" ||
 		received.QueueRef != "global" ||
+		received.Status != "ready" ||
 		received.Limit != 5 ||
 		vm.Estado != WebRunQueueEstadoOKV0 ||
 		len(vm.Ranked) != 1 ||

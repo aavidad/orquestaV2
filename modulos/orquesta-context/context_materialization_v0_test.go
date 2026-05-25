@@ -25,6 +25,11 @@ func TestMaterializeContextBundleV0ConFilesystemExplicito(t *testing.T) {
 	if !strings.Contains(materialized.DirectorQuestionHint, "CONSULTA_AL_DIRECTOR") {
 		t.Fatalf("director hint missing: %q", materialized.DirectorQuestionHint)
 	}
+	contract := materializedEntryBySourceV0(materialized, "ProcessRuntimeConnectorV0")
+	if contract.RefOnlyReason != ContextRefOnlyReasonByDesignV0 ||
+		contract.RequiredRefAction != ContextRequiredRefActionAckEvidenceV0 {
+		t.Fatalf("contract ref_only sin clasificacion: %+v", contract)
+	}
 }
 
 func TestMaterializeContextBundleV0TruncaEntradasGrandes(t *testing.T) {
@@ -89,6 +94,34 @@ func TestSanitizeMaterializedContextBundleV0DudaYMinimizaPorRefs(t *testing.T) {
 	if !ContextBundleRequiresSanitizationReviewV0(materialized) ||
 		!strings.Contains(materialized.DirectorQuestionHint, "CONSULTA_AL_DIRECTOR") {
 		t.Fatalf("review hint missing: %+v", materialized)
+	}
+	if entry.RefOnlyReason != ContextRefOnlyReasonSanitizationReviewV0 ||
+		entry.RequiredRefAction != ContextRequiredRefActionAskDirectorV0 {
+		t.Fatalf("review ref_only sin accion requerida: %+v", entry)
+	}
+}
+
+func TestContextRequiredRefOnlyEntriesV0DistingueMaterializacionPendiente(t *testing.T) {
+	entry := contextMaterializedRefOnlyV0(ContextBundleEntryV0{
+		EntryRef:  "entry-ref-required-doc",
+		Layer:     ContextLayerTaskContextV0,
+		Kind:      ContextEntryDocRefV0,
+		SourceRef: "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+		Required:  true,
+	})
+	bundle := ContextMaterializedBundleV0{
+		SchemaVersion: ContextMaterializedBundleSchemaVersionV0,
+		BundleRef:     "bundle-ref-required-doc",
+		WorkOrderRef:  "task-ref-required-doc",
+		TargetModule:  "orquesta-context",
+		Entries:       []ContextMaterializedEntryV0{entry},
+	}
+
+	refs := ContextRequiredRefOnlyEntriesV0(bundle)
+	if len(refs) != 1 ||
+		refs[0].RefOnlyReason != ContextRefOnlyReasonMaterializationMissingV0 ||
+		refs[0].RequiredRefAction != ContextRequiredRefActionReadLocalV0 {
+		t.Fatalf("required ref_only mal clasificado: %+v", refs)
 	}
 }
 

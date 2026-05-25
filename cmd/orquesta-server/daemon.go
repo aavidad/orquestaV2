@@ -85,21 +85,21 @@ func waitForStateHealthyV0(
 		state, err := loadStateV0(config)
 		if err == nil {
 			last = state
-			if healthOKV0(state.Addr) {
+			if serverReadinessOKV0(state.Addr) {
 				return state, nil
 			}
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
 	if last.Addr != "" {
-		return last, fmt.Errorf("healthz_timeout")
+		return last, fmt.Errorf("readiness_timeout")
 	}
 	return last, fmt.Errorf("statefile_timeout")
 }
 
-func healthOKV0(addr string) bool {
+func serverReadinessOKV0(addr string) bool {
 	client := http.Client{Timeout: 1 * time.Second}
-	response, err := client.Get("http://" + addr + "/healthz")
+	response, err := client.Get("http://" + addr + orquestaserver.ServerReadinessEndpointV0)
 	if err != nil {
 		return false
 	}

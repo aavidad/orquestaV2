@@ -516,6 +516,11 @@ func (registry *mcpRealTransportRegistryV0) callToolV0(
 	if len(arguments) == 0 || string(arguments) == "null" {
 		arguments = json.RawMessage(`{}`)
 	}
+	var rpcErr *mcpJSONRPCErrorV0
+	arguments, rpcErr = normalizeMCPToolArgumentsV0(arguments)
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
 	payload, err := tool.Handler(ctx, arguments)
 	if err != nil {
 		return nil, mcpRPCErrorV0(-32000, "mcp_tool_handler_error", "mcp_tool_handler_error")
@@ -528,6 +533,35 @@ func (registry *mcpRealTransportRegistryV0) callToolV0(
 		}},
 		IsError: mcpJSONPayloadIsErrorV0(payload),
 	}, nil
+}
+
+func normalizeMCPToolArgumentsV0(
+	arguments json.RawMessage,
+) (json.RawMessage, *mcpJSONRPCErrorV0) {
+	var probe any
+	if err := json.Unmarshal(arguments, &probe); err != nil {
+		return nil, mcpRPCErrorV0(-32602, "mcp_invalid_params", "mcp_tool_arguments_invalid_json")
+	}
+	switch value := probe.(type) {
+	case map[string]any:
+		return arguments, nil
+	case string:
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return nil, mcpRPCErrorV0(-32602, "mcp_invalid_params", "mcp_tool_arguments_string_empty")
+		}
+		var nested map[string]any
+		if err := json.Unmarshal([]byte(value), &nested); err != nil {
+			return nil, mcpRPCErrorV0(-32602, "mcp_invalid_params", "mcp_tool_arguments_string_not_json_object")
+		}
+		raw, err := json.Marshal(nested)
+		if err != nil {
+			return nil, mcpRPCErrorV0(-32602, "mcp_invalid_params", "mcp_tool_arguments_invalid")
+		}
+		return raw, nil
+	default:
+		return nil, mcpRPCErrorV0(-32602, "mcp_invalid_params", "mcp_tool_arguments_must_be_object")
+	}
 }
 
 func mcpJSONPayloadIsErrorV0(payload json.RawMessage) bool {

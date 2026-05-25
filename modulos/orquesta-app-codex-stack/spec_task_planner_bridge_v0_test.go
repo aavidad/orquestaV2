@@ -123,7 +123,7 @@ func assertAppPlannerBridgeAgentTaskForTestV0(
 	if len(agentTask.WriteSet) != 1 || agentTask.WriteSet[0] != tc.unit.WriteSet[0] {
 		t.Fatalf("write_set=%v want=%v", agentTask.WriteSet, tc.unit.WriteSet)
 	}
-	if len(agentTask.RequiredTests) != 1 || agentTask.RequiredTests[0] != "go test ./..." {
+	if !stringInSetV0(agentTask.RequiredTests, "go test ./...") {
 		t.Fatalf("required_tests=%v", agentTask.RequiredTests)
 	}
 	if !strings.Contains(agentTask.Objective, tc.wantObjective) {

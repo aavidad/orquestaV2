@@ -23,6 +23,7 @@ type AppOrchestrationPreparedV0 struct {
 	Plan              orquestaappplanner.AppMicrotaskPlanV0         `json:"plan"`
 	InitialProgress   orquestaappplanner.AppPlanProgressV0          `json:"initial_progress"`
 	CandidateProvider orquestaappplanner.AppPlanCandidateProviderV0 `json:"candidate_provider"`
+	RoutePolicy       AppRunnerRoutePolicyV0                        `json:"route_policy"`
 	EvidenceRefs      []string                                      `json:"evidence_refs,omitempty"`
 }
 

@@ -12,55 +12,13 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 		route    string
 		handlers RouteHandlersV0
 	}{
-		{
-			name:  "nueva app",
-			route: RouteNuevaAppV0,
-			handlers: RouteHandlersV0{
-				NuevaApp: markerHandler("nueva-app"),
-			},
-		},
-		{
-			name:  "app spec",
-			route: RouteAppSpecV0,
-			handlers: RouteHandlersV0{
-				AppSpec: markerHandler("app-spec"),
-			},
-		},
-		{
-			name:  "ops dashboard",
-			route: RouteOpsDashboardV0,
-			handlers: RouteHandlersV0{
-				OpsDashboard: markerHandler("ops-dashboard"),
-			},
-		},
-		{
-			name:  "app change page",
-			route: RouteAppChangePageV0,
-			handlers: RouteHandlersV0{
-				AppChangePage: markerHandler("app-change-page"),
-			},
-		},
-		{
-			name:  "director stats page",
-			route: RouteDirectorStatsPageV0,
-			handlers: RouteHandlersV0{
-				DirectorStatsPage: markerHandler("director-stats-page"),
-			},
-		},
-		{
-			name:  "run control page",
-			route: RouteRunControlPageV0,
-			handlers: RouteHandlersV0{
-				RunControlPage: markerHandler("run-control-page"),
-			},
-		},
-		{
-			name:  "run queue page",
-			route: RouteRunQueuePageV0,
-			handlers: RouteHandlersV0{
-				RunQueuePage: markerHandler("run-queue-page"),
-			},
-		},
+		{name: "nueva app", route: RouteNuevaAppV0, handlers: RouteHandlersV0{NuevaApp: markerHandler("nueva-app")}},
+		{name: "app spec", route: RouteAppSpecV0, handlers: RouteHandlersV0{AppSpec: markerHandler("app-spec")}},
+		{name: "ops dashboard", route: RouteOpsDashboardV0, handlers: RouteHandlersV0{OpsDashboard: markerHandler("ops-dashboard")}},
+		{name: "app change page", route: RouteAppChangePageV0, handlers: RouteHandlersV0{AppChangePage: markerHandler("app-change-page")}},
+		{name: "director stats page", route: RouteDirectorStatsPageV0, handlers: RouteHandlersV0{DirectorStatsPage: markerHandler("director-stats-page")}},
+		{name: "run control page", route: RouteRunControlPageV0, handlers: RouteHandlersV0{RunControlPage: markerHandler("run-control-page")}},
+		{name: "run queue page", route: RouteRunQueuePageV0, handlers: RouteHandlersV0{RunQueuePage: markerHandler("run-queue-page")}},
 		{
 			name:  "app director",
 			route: RouteAppDirectorV0,
@@ -101,6 +59,27 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 			route: RouteRunSupervisorV0,
 			handlers: RouteHandlersV0{
 				RunSupervisor: markerHandler("run-supervisor"),
+			},
+		},
+		{
+			name:  "ops agent runtime detail",
+			route: RouteOpsAgentRuntimeDetailV0,
+			handlers: RouteHandlersV0{
+				OpsAgentRuntimeDetail: markerHandler("ops-agent-runtime-detail"),
+			},
+		},
+		{
+			name:  "function contract list",
+			route: RouteFunctionContractListV0,
+			handlers: RouteHandlersV0{
+				FunctionContractList: markerHandler("function-contract-list"),
+			},
+		},
+		{
+			name:  "function contract view",
+			route: RouteFunctionContractViewV0,
+			handlers: RouteHandlersV0{
+				FunctionContractView: markerHandler("function-contract-view"),
 			},
 		},
 		{
@@ -150,6 +129,13 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 			route: RouteAutoprogrammingSuperviseV0,
 			handlers: RouteHandlersV0{
 				AutoprogrammingSupervise: markerHandler("autoprogramming-supervise"),
+			},
+		},
+		{
+			name:  "governance catalog query",
+			route: RouteGovernanceCatalogQueryV0,
+			handlers: RouteHandlersV0{
+				GovernanceCatalogQuery: markerHandler("governance-catalog-query"),
 			},
 		},
 		{
@@ -262,6 +248,7 @@ func TestNewAppGatewayMuxV0Returns404ForUnconfiguredRoutes(t *testing.T) {
 		RouteOpsDashboardV0,
 		RouteDirectorStatsPageV0,
 		RouteDirectorStatsV0,
+		RouteOpsAgentRuntimeDetailV0,
 		RouteDomainWorkV0,
 		"/no-existe",
 	} {

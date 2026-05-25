@@ -80,6 +80,52 @@ func TestReviewReworkReplanCandidateProviderV0ProgressiveLoopSplitCreatesSchedul
 	})
 }
 
+func TestReviewReworkReplanSplitTaskV0InheritsRunFunctionContractsWhenPlanOmitsThem(t *testing.T) {
+	runRef := "run-nucleo-review-rework-split-contract-inherit-001"
+	task := reviewReworkSplitWorkflowTaskV0(runRef, "task-ref-review-split-contract-inherit", "app/rework_contract_inherit.go")
+	task.FunctionContractRefs = nil
+	store := NewInMemoryWorkflowTaskStoreV0()
+	provider := ReviewReworkReplanCandidateProviderV0{
+		TaskWriter:  store,
+		RequestedBy: "orquesta-nucleo-test",
+	}
+
+	candidates, err := provider.reviewReworkMicrotaskCandidatesV0(
+		context.Background(),
+		SchedulerCandidateRequestV0{
+			Run: orquestacoreworkflow.OrchestrationRunV0{
+				RunID:             runRef,
+				CurrentPhase:      orquestacoreworkflow.OrchestrationPhaseRevisionV0,
+				FunctionContracts: []string{"contract:function:rework-split:v0"},
+			},
+			OccurredAt:    "2026-05-25T17:00:00Z",
+			CorrelationID: "corr-review-rework-split-contract-inherit-001",
+		},
+		ReviewReworkReplanPlanV0{SplitTasks: []orquestacoreworkflow.WorkflowTaskV0{task}},
+		orquestacoreworkflow.ReplanDecisionActionSplitTaskV0,
+	)
+	if err != nil {
+		t.Fatalf("split task debe heredar function contracts publicados: %v", err)
+	}
+	if len(candidates) != 1 || len(candidates[0].Payload.Task.FunctionContractRefs) != 1 ||
+		candidates[0].Payload.Task.FunctionContractRefs[0].ContractRef != "contract:function:rework-split:v0" {
+		t.Fatalf("function_contract_refs no heredadas: %+v", candidates)
+	}
+	if _, err := orquestacoreworkflow.NewCreateMicrotaskCommandV0(
+		candidates[0].CommandMeta,
+		candidates[0].Payload,
+	); err != nil {
+		t.Fatalf("candidate heredado debe ser comando CreateMicrotask valido: %v", err)
+	}
+	stored, err := store.LoadWorkflowTasksV0(context.Background(), runRef, []string{task.TaskID})
+	if err != nil {
+		t.Fatalf("split task no guardada: %v", err)
+	}
+	if len(stored[0].FunctionContractRefs) != 1 || stored[0].FunctionContractRefs[0].ContractRef != "contract:function:rework-split:v0" {
+		t.Fatalf("store sin function_contract_refs heredadas: %+v", stored[0])
+	}
+}
+
 func TestReviewReworkReplanSplitTaskV0ValidatesRecursiveParentLimits(t *testing.T) {
 	runRef := "run-nucleo-review-rework-recursive-split-001"
 

@@ -125,7 +125,7 @@ Fecha: 2026-05-04
 Decision: `CLI-005` se implementa como cliente REST fino read-only sobre una ruta compacta asumida para `GovernanceCatalog v0`.
 Motivo: `GovernanceCatalog v0` ya esta promovido como contrato compartido y `orquesta-governance` expone DTOs/validadores reutilizables; faltaba solo fijar un acoplamiento minimo de transporte para no dejar la CLI esperando a un servidor final.
 Alternativas: dejarlo documental; leer docs/fixtures locales; devolver el catalogo completo `GovernanceCatalogV0`; crear un DTO espejo solo de CLI.
-Impacto: la CLI consume `POST /api/v0/governance/catalog/query` con filtros `module|role|phase|tags`, propaga `X-Correlation-ID`, devuelve `GovernanceCatalogQueryResultV0` canonico y valida localmente que `effective` solo contenga entradas efectivas aprobadas. Si `orquesta-governance` publica otra ruta/version, el cambio queda aislado en una constante y en tests del adaptador.
+Impacto: la CLI consume `POST /api/v0/governance/catalog/query` con envelope `{request_id, correlation_id, filters}`, propaga `X-Correlation-ID`, consume respuesta publica `{request_id, correlation_id, effective, counters}` y normaliza errores HTTP `{errors:[{code, field}]}` a errores CLI. Devuelve `GovernanceCatalogQueryResultV0` canonico y valida localmente que `effective` solo contenga entradas efectivas aprobadas.
 Contratos afectados: GovernanceCatalog v0, GovernanceCatalogCliReaderV0
 Estado: aceptada localmente
 ```

@@ -1,15 +1,18 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 
+	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 	orquestaserver "orquesta/modulos/orquesta-server"
+	orquestastatefile "orquesta/modulos/orquesta-state-file"
 )
 
 func (check serverStartupCheckV0) compactStartupStateFilesV0(
@@ -31,7 +34,7 @@ func (check serverStartupCheckV0) compactStartupStateFilesV0(
 		return startupStateCompactionV0{}, err
 	}
 
-	removedQueue, keptQueue := splitStartupQueueRecordsV0(queue.Records, runtimeDir)
+	removedQueue, keptQueue := splitStartupQueueRecordsV0(queue.Records, stateDir, runtimeDir)
 	removedControl, keptControl := splitStartupControlRecordsV0(control.Records)
 	runRefs := startupRemovedRunRefsV0(removedQueue, removedControl)
 	if len(removedQueue) == 0 && len(removedControl) == 0 && len(runRefs) == 0 {
@@ -147,12 +150,13 @@ func readStartupControlSnapshotV0(path string) (startupControlSnapshotV0, []byte
 
 func splitStartupQueueRecordsV0(
 	records []startupQueueRecordV0,
+	stateDir string,
 	runtimeDir string,
 ) ([]startupQueueRecordV0, []startupQueueRecordV0) {
 	removed := make([]startupQueueRecordV0, 0, len(records))
 	kept := make([]startupQueueRecordV0, 0, len(records))
 	for _, record := range records {
-		reason := startupQueueRecordPurgeReasonV0(record, runtimeDir)
+		reason := startupQueueRecordPurgeReasonV0(record, stateDir, runtimeDir)
 		if reason == "" {
 			kept = append(kept, record)
 			continue
@@ -163,16 +167,42 @@ func splitStartupQueueRecordsV0(
 	return removed, kept
 }
 
-func startupQueueRecordPurgeReasonV0(record startupQueueRecordV0, runtimeDir string) string {
+func startupQueueRecordPurgeReasonV0(record startupQueueRecordV0, stateDir string, runtimeDir string) string {
 	status := strings.TrimSpace(record.Candidate.Status)
 	if !orquestarunqueue.IsExecutableRunStatusV0(status) {
 		return "queue_status_no_ejecutable"
 	}
 	runRef := startupQueueRecordRunRefV0(record)
+	if runRef != "" && startupRunNeedsFreshAutoprogrammingAttemptV0(stateDir, runtimeDir, runRef) {
+		return "ready_run_autoprogramming_obsoleto"
+	}
 	if runRef != "" && startupRunHasCompletedAckV0(runtimeDir, runRef) {
 		return "ready_huerfano_con_ack_completed"
 	}
 	return ""
+}
+
+func startupRunNeedsFreshAutoprogrammingAttemptV0(stateDir string, runtimeDir string, runRef string) bool {
+	stateDir = strings.TrimSpace(stateDir)
+	runRef = strings.TrimSpace(runRef)
+	if stateDir == "" || runRef == "" {
+		return false
+	}
+	rootDir := filepath.Join(stateDir, "orchestration-state")
+	if _, err := os.Stat(rootDir); err != nil {
+		return false
+	}
+	store, err := orquestastatefile.NewStoreV0(orquestastatefile.ConfigV0{
+		RootDir: rootDir,
+	})
+	if err != nil {
+		return false
+	}
+	run, err := store.LoadRunV0(context.Background(), runRef)
+	if err != nil {
+		return false
+	}
+	return orquestaappcodexstack.AutoprogrammingRunNeedsFreshAttemptWithRuntimeV0(run, runtimeDir)
 }
 
 func splitStartupControlRecordsV0(
@@ -223,28 +253,7 @@ func startupQueueRecordRunRefV0(record startupQueueRecordV0) string {
 }
 
 func startupRunHasCompletedAckV0(runtimeDir string, runRef string) bool {
-	if strings.TrimSpace(runtimeDir) == "" || strings.TrimSpace(runRef) == "" {
-		return false
-	}
-	root := filepath.Join(runtimeDir, runRef)
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		return false
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(root, entry.Name(), "codex_last_message.txt"))
-		if err != nil {
-			continue
-		}
-		text := strings.ToLower(string(data))
-		if strings.Contains(text, "ack") && strings.Contains(text, "completed") {
-			return true
-		}
-	}
-	return false
+	return startupRunHasStrictCompletedACKV0(runtimeDir, runRef)
 }
 
 func writeStartupJSONFileV0(path string, value any) error {

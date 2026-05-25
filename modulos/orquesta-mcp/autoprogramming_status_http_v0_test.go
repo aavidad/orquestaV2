@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -80,9 +82,70 @@ func TestMCPAutoprogrammingStatusHTTPHandlerV0ConservaOperatorAdviceNoBloqueante
 	}
 }
 
+func TestMCPAutoprogrammingStatusHTTPHandlerV0AceptaOperatorAdviceTexto(t *testing.T) {
+	executor := &fakeMCPAutoprogrammingStatusHTTPExecutorV0{
+		result: MCPAutoprogrammingStatusToolResultV0{
+			Estado: MCPAutoprogrammingStatusEstadoOKV0,
+			RunRef: "run-ref-status-advice-text-http-001",
+		},
+	}
+	body := bytes.NewBufferString(`{
+		"run_ref":"run-ref-status-advice-text-http-001",
+		"operator_advice":"vigilar sin borrar datos validos"
+	}`)
+	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingStatusHTTPPathV0, body)
+	rec := httptest.NewRecorder()
+
+	NewMCPAutoprogrammingStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result mcpAutoprogrammingStatusHTTPResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(result.OperatorAdvice) != 1 ||
+		result.OperatorAdvice[0].Message != "vigilar sin borrar datos validos" ||
+		result.OperatorAdvice[0].TargetRef != "run-ref-status-advice-text-http-001" ||
+		!result.OperatorAdvice[0].NonBlocking ||
+		len(result.Diagnostics) == 0 {
+		t.Fatalf("operator_advice=%+v diagnostics=%+v", result.OperatorAdvice, result.Diagnostics)
+	}
+}
+
+func TestMCPAutoprogrammingStatusHTTPHandlerV0AceptaIncludesFlexibles(t *testing.T) {
+	executor := &fakeMCPAutoprogrammingStatusHTTPExecutorV0{
+		result: MCPAutoprogrammingStatusToolResultV0{
+			Estado: MCPAutoprogrammingStatusEstadoOKV0,
+			RunRef: "run-ref-status-flex-http-001",
+		},
+	}
+	body := bytes.NewBufferString(`{
+		"run_ref":"run-ref-status-flex-http-001",
+		"include_process_refs":["process_refs"],
+		"include_agent_progress":"yes",
+		"include_agent_usage":1
+	}`)
+	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingStatusHTTPPathV0, body)
+	rec := httptest.NewRecorder()
+
+	NewMCPAutoprogrammingStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !bool(executor.input.IncludeProcessRefs) ||
+		!bool(executor.input.IncludeAgentProgress) ||
+		!bool(executor.input.IncludeAgentUsage) {
+		t.Fatalf("input no normalizado: %+v", executor.input)
+	}
+}
+
 type fakeMCPAutoprogrammingStatusHTTPExecutorV0 struct {
 	input  MCPAutoprogrammingStatusToolInputV0
 	result MCPAutoprogrammingStatusToolResultV0
+	err    error
 }
 
 func (executor *fakeMCPAutoprogrammingStatusHTTPExecutorV0) Execute(
@@ -90,7 +153,7 @@ func (executor *fakeMCPAutoprogrammingStatusHTTPExecutorV0) Execute(
 	input MCPAutoprogrammingStatusToolInputV0,
 ) (MCPAutoprogrammingStatusToolResultV0, error) {
 	executor.input = input
-	return executor.result, nil
+	return executor.result, executor.err
 }
 
 func TestMCPAutoprogrammingStatusHTTPHandlerV0ErrorPublico(t *testing.T) {
@@ -111,5 +174,67 @@ func TestMCPAutoprogrammingStatusHTTPHandlerV0ErrorPublico(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestMCPAutoprogrammingStatusHTTPHandlerV0ExponeCausaSanitizadaSiExecutorFalla(t *testing.T) {
+	executor := &fakeMCPAutoprogrammingStatusHTTPExecutorV0{
+		err: errors.New("status store failed at /root/Trabajo/orquesta token=secret123456 run-ref-status-error-001"),
+	}
+	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingStatusHTTPPathV0, bytes.NewBufferString(`{"run_ref":"run-ref-status-error-001"}`))
+	rec := httptest.NewRecorder()
+
+	NewMCPAutoprogrammingStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPAutoprogrammingStatusToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != MCPAutoprogrammingStatusEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "autoprogramming_status_executor_error" ||
+		!strings.Contains(result.Errores[0].Message, "status store failed") ||
+		!strings.Contains(result.Errores[0].Message, "run-ref-status-error-001") ||
+		len(result.Diagnostics) != 1 {
+		t.Fatalf("error publico incompleto: %+v", result)
+	}
+	if strings.Contains(rec.Body.String(), "/root/Trabajo") ||
+		strings.Contains(rec.Body.String(), "secret123456") {
+		t.Fatalf("payload filtra datos operativos: %s", rec.Body.String())
+	}
+}
+
+func TestMCPAutoprogrammingStatusTransportV0DevuelvePayloadPublicoSiExecutorFalla(t *testing.T) {
+	executor := &fakeMCPAutoprogrammingStatusHTTPExecutorV0{
+		err: errors.New("status store failed at /root/Trabajo/orquesta token=secret123456 run-ref-status-transport-error-001"),
+	}
+	raw, err := json.Marshal(MCPAutoprogrammingStatusToolInputV0{
+		RunRef: "run-ref-status-transport-error-001",
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	output, err := mcpAutoprogrammingStatusTransportHandlerV0(executor)(context.Background(), raw)
+	if err != nil {
+		t.Fatalf("transport no debe romper JSON-RPC: %v", err)
+	}
+	var result MCPAutoprogrammingStatusToolResultV0
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("decode: %v payload=%s", err, string(output))
+	}
+	if result.Estado != MCPAutoprogrammingStatusEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "autoprogramming_status_executor_error" ||
+		!strings.Contains(result.Errores[0].Message, "status store failed") ||
+		!strings.Contains(result.Errores[0].Message, "run-ref-status-transport-error-001") {
+		t.Fatalf("payload publico incompleto: %+v", result)
+	}
+	if strings.Contains(string(output), "/root/Trabajo") ||
+		strings.Contains(string(output), "secret123456") {
+		t.Fatalf("payload filtra datos operativos: %s", string(output))
 	}
 }

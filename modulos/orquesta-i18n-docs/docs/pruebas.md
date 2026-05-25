@@ -16,6 +16,15 @@ Riesgos:
 ## Pruebas previstas
 
 ```text
+Caso: contract:active-i18n-docs-owner-v0
+Tipo: contract
+Comando: `go test -count=1 ./modulos/orquesta-i18n-docs ./modulos/orquesta-factory ./modulos/orquesta-web ./modulos/orquesta-mcp`
+Evidencia esperada: `ActiveI18nDocsCompositionOwnerV0` declara `orquesta-i18n-docs` como owner, expone fallback locale, required keys hash, required doc types y verification; factory/web/MCP consumen esa proyeccion en pruebas focales.
+Ultima ejecucion: 2026-05-25; pendiente de reejecucion por agente de T75 en este corte.
+Riesgos: Web mantiene catalogo local de adaptador para su UI; debe seguir validado contra owner y no convertirse en owner paralelo de docs generadas.
+```
+
+```text
 Caso: contract:generar-i18n-docs-iniciales-v0
 Tipo: contract
 Comando: `go test -count=1 ./modulos/orquesta-i18n-docs`

@@ -23,7 +23,7 @@ Invariantes:
   - No emite outbox.
   - No cierra fase automaticamente, no abre otra fase y no ejecuta conectores.
   - La decision local mantiene `ClosePhase` separado: si la regla de producto exige cerrar la fase `cierre`, debe invocarse `ClosePhase` antes o despues como transicion independiente.
-  - No contiene codigo, diffs, commits, transcripts, rutas locales, runtime, DB, provider/proveedor, modelo, OAuth, HOME ni secretos salvo como prohibiciones.
+  - No contiene codigo, diffs, commits, transcripts crudos, rutas locales ni valores reales de runtime, DB, provider/proveedor, modelo, OAuth, HOME o secretos.
 Errores:
   - payload_invalido
   - fase_no_soportada

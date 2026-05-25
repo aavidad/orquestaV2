@@ -56,7 +56,10 @@ func idleSelfImprovementRequestForBacklogSectionV0(
 	request.AcceptanceCriteria = compactServerStackStringsV0(append(append(
 		append([]string(nil), base.AcceptanceCriteria...),
 		section.Criteria...,
-	), idleSelfImprovementBacklogDependencyAcceptanceCriteriaV0(section)...))
+	), append(
+		idleSelfImprovementBacklogDependencyAcceptanceCriteriaV0(section),
+		idleSelfImprovementBacklogManualVerificationCriteriaV0(section)...,
+	)...))
 	request.CompactRules = compactServerStackStringsV0(append(append([]string(nil), base.CompactRules...),
 		"el director revisa backlog y genera tareas concretas; no una tarea generica",
 		"un agente padre por tarea; subagentes hasta 6 si ayudan",
@@ -101,9 +104,12 @@ func idleSelfImprovementBaseRequestForBacklogSectionV0(
 	request.RequiredTests = append([]string(nil), base.RequiredTests...)
 	if len(section.Tests) > 0 {
 		request.RequiredTests = compactServerStackStringsV0(section.Tests)
+	} else if len(section.ManualVerifications) > 0 {
+		request.RequiredTests = nil
 	}
 	request.ContextRefs = compactServerStackStringsV0(append(append([]string(nil), base.ContextRefs...),
 		"backlog-doc-autoprogramacion-2026-05-23",
+		"backlog_doc:"+firstNonEmptyServerStackV0(section.SourcePath, idleSelfImprovementBacklogDocRelV0),
 		"backlog_section:"+section.Ref,
 		"backlog_line:"+strconv.Itoa(section.SourceLine),
 	))
@@ -114,6 +120,14 @@ func idleSelfImprovementBaseRequestForBacklogSectionV0(
 	request.ContextRefs = compactServerStackStringsV0(append(
 		request.ContextRefs,
 		idleSelfImprovementBacklogIOContextRefsV0(section)...,
+	))
+	request.ContextRefs = compactServerStackStringsV0(append(
+		request.ContextRefs,
+		idleSelfImprovementFederatedBacklogContextRefsV0(section)...,
+	))
+	request.ContextRefs = compactServerStackStringsV0(append(
+		request.ContextRefs,
+		idleSelfImprovementBacklogManualVerificationContextRefsV0(section)...,
 	))
 	request.EvidenceRefs = compactServerStackStringsV0(append(append([]string(nil), base.EvidenceRefs...),
 		"evidence-ref-autoprogramming-backlog-doc",
@@ -192,6 +206,9 @@ func idleSelfImprovementBacklogIOContextRefsV0(
 		outputs = []string{"entrega verificable para " + section.Ref}
 		if len(section.Tests) > 0 {
 			outputs = append(outputs, "tests:"+strings.Join(section.Tests, "+"))
+		}
+		if len(section.ManualVerifications) > 0 {
+			outputs = append(outputs, "manual_verification:"+strings.Join(section.ManualVerifications, "+"))
 		}
 	}
 	refs := make([]string, 0, len(inputs)+len(outputs))

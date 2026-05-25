@@ -10,7 +10,7 @@ import (
 const (
 	detailProhibitedRailsEnvV0                = orquestarails.DetailProhibitedRailsEnvV0
 	detailProhibitedRailsScopeEnvV0           = orquestarails.DetailProhibitedRailsScopeEnvV0
-	detailProhibitedRailsServerDefaultV0      = "on"
+	detailProhibitedRailsServerDefaultV0      = "off"
 	detailProhibitedRailsScopeServerDefaultV0 = "core_workflow.*,context_bundle_request.*," +
 		"context_materialization.content,context_materialization.ref,director_agent_decision.*"
 )

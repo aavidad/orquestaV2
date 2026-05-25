@@ -52,26 +52,7 @@ func (defaultDomainWorkArtifactSubmissionBuilderV0) BuildDomainWorkArtifactSubmi
 }
 
 func domainWorkArtifactTypeForWorkKindV0(workKind string) string {
-	switch strings.TrimSpace(workKind) {
-	case "draft_content_block", "generate_block", "generate_program_topic_draft":
-		return "content_block"
-	case "generate_visual_asset":
-		return "visual_asset"
-	case "review_legal", "review_pedagogical", "review_quality", "validate_topic":
-		return "block_revision"
-	case "research_sources", "download_source", "verify_sources":
-		return "source"
-	case "summarize_block", "summarize_chapter", "summarize_topic", "create_exam_outline":
-		return "topic_summary"
-	case "expand_topic_from_summary":
-		return "topic_expansion_package"
-	case "plan_documento", "plan_tema", "plan_temario":
-		return orquestadomainwork.DomainDocumentPlanArtifactTypeV0
-	case "assemble_topic":
-		return "assembled_topic"
-	default:
-		return "work_delivery"
-	}
+	return orquestadomainwork.ExpectedDomainWorkArtifactTypeForWorkKindV0(workKind)
 }
 
 func domainWorkDeliveryPayloadFieldsV0(

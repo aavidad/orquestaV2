@@ -173,7 +173,8 @@ func writeDomainWorkAckForWaitAgentRefsTestV0(
 		"status":         "completed",
 		"files":          files,
 		"tests":          packet.Task.RequiredTests,
-		"notes":          []string{"ack de prueba para wait_agent_refs domain_work"},
+		"test_receipts":  codexStackRequiredTestReceiptsV0(packet.Task.RequiredTests),
+		"notes":          codexStackFakeAckNotesV0(packet, "ack de prueba para wait_agent_refs domain_work"),
 	})
 	if err != nil {
 		t.Fatalf("marshal ack: %v", err)

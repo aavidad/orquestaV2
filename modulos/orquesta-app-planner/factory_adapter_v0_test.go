@@ -38,6 +38,33 @@ func TestAppPlanRequestFromAppSpecV0RechazaSpecNoValidada(t *testing.T) {
 	}
 }
 
+func TestPrepareDeploymentPlanDryRunFromAppSpecV0InvocaPuertoDeploy(t *testing.T) {
+	spec := validFactoryAppSpecForPlannerTestV0(t)
+	spec.Deploy.Target = "kubernetes"
+
+	result, err := PrepareDeploymentPlanDryRunFromAppSpecV0("run-ref-deploy-plan-001", spec, nil)
+	if err != nil {
+		t.Fatalf("PrepareDeploymentPlanDryRunFromAppSpecV0: %v", err)
+	}
+	if result.Plan.DeployTarget != "kubernetes" ||
+		result.Receipt.PlanRef == "" ||
+		result.Receipt.EvidenceRef == "" {
+		t.Fatalf("dry-run incompleto: %+v", result)
+	}
+
+	plan, err := BuildGoAPIWebMicrotaskPlanFromAppSpecV0("run-ref-deploy-plan-001", spec)
+	if err != nil {
+		t.Fatalf("BuildGoAPIWebMicrotaskPlanFromAppSpecV0: %v", err)
+	}
+	assertAppUnitForTestV0(t, plan, "deploy", orquestacoreworkflow.OrchestrationPhaseIntegracionV0, []string{
+		"ack-agenda-architecture",
+	}, []string{
+		"contracts/deployment_plan_v0.json",
+		"docs/deploy.md",
+		"tests/deployment_plan_dry_run_test.go",
+	})
+}
+
 func validFactoryAppSpecForPlannerTestV0(t *testing.T) orquestafactory.AppSpecV0 {
 	t.Helper()
 	observability := true

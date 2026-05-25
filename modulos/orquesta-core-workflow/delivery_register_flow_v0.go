@@ -24,9 +24,6 @@ func ensureRegisterDeliveryCommandAllowedV0(current OrchestrationRunV0, command 
 	if !agentStartedAlreadyReflectedV0(current, payload.AgentRef) {
 		return commandErrorV0(ErrTransicionInvalidaV0, "payload.agent_ref")
 	}
-	if agentStopAlreadyReflectedV0(current, payload.AgentRef) {
-		return commandErrorV0(ErrTransicionInvalidaV0, "payload.agent_ref")
-	}
 	return nil
 }
 
@@ -50,9 +47,6 @@ func ensureDeliveryRegisteredEventAllowedV0(current OrchestrationRunV0, event Or
 		return eventErrorV0(ErrSecuenciaInvalidaV0, "payload.agent_ref")
 	}
 	if !agentStartedAlreadyReflectedV0(current, payload.AgentRef) {
-		return eventErrorV0(ErrSecuenciaInvalidaV0, "payload.agent_ref")
-	}
-	if agentStopAlreadyReflectedV0(current, payload.AgentRef) {
 		return eventErrorV0(ErrSecuenciaInvalidaV0, "payload.agent_ref")
 	}
 	return nil

@@ -48,11 +48,42 @@ func TestRunStatusCommandV0ConsultaStatsDelRunPersistido(t *testing.T) {
 	if received.RunRef != "run-cli-status-001" ||
 		!received.IncludeProcessRefs ||
 		!received.IncludeAgentProgress ||
-		!received.IncludeAgentUsage {
+		received.IncludeAgentUsage {
 		t.Fatalf("input inesperado: %+v", received)
 	}
 	if !strings.Contains(stdout.String(), `"run_ref":"run-cli-status-001"`) {
 		t.Fatalf("stdout no contiene run_ref: %s", stdout.String())
+	}
+}
+
+func TestRunStatusCommandV0UsoRequiereOptIn(t *testing.T) {
+	projectDir := t.TempDir()
+	stateDir := t.TempDir()
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", projectDir)
+	t.Setenv("ORQUESTA_SERVER_STATE_DIR", stateDir)
+	t.Setenv("ORQUESTA_CODEX_RUNTIME_WORKDIR", filepath.Join(t.TempDir(), "runtime"))
+
+	var received orquestamcp.MCPDirectorStatsToolInputV0
+	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		_ = json.NewEncoder(w).Encode(orquestamcp.MCPDirectorStatsToolResultV0{
+			Estado: "ok",
+			RunRef: received.RunRef,
+		})
+	}))
+	defer server.Close()
+	saveRunStatusServerStateV0(t, stateDir, strings.TrimPrefix(server.URL, "http://"))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode := runStatusCommandV0([]string{"--run-ref", "run-cli-status-usage-001", "--usage"}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("exit=%d stderr=%s", exitCode, stderr.String())
+	}
+	if !received.IncludeAgentUsage || received.IncludeAgentProgress {
+		t.Fatalf("input inesperado: %+v", received)
 	}
 }
 
@@ -65,6 +96,33 @@ func TestRunStatusCommandV0RequiereRunRef(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "run_ref requerido") {
 		t.Fatalf("stderr inesperado: %s", stderr.String())
+	}
+}
+
+func TestRunStatusCommandV0NoPropagaBodyHTTPCrudoEnError(t *testing.T) {
+	projectDir := t.TempDir()
+	stateDir := t.TempDir()
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", projectDir)
+	t.Setenv("ORQUESTA_SERVER_STATE_DIR", stateDir)
+	t.Setenv("ORQUESTA_CODEX_RUNTIME_WORKDIR", filepath.Join(t.TempDir(), "runtime"))
+
+	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "secret_token=abc local_path=/tmp/private", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	saveRunStatusServerStateV0(t, stateDir, strings.TrimPrefix(server.URL, "http://"))
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode := runStatusCommandV0([]string{"--run-ref", "run-cli-status-error-001"}, &stdout, &stderr)
+	if exitCode != 1 {
+		t.Fatalf("exit=%d", exitCode)
+	}
+	if strings.Contains(stderr.String(), "secret_token") || strings.Contains(stderr.String(), "/tmp/private") {
+		t.Fatalf("stderr filtra body crudo: %s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "run_status_http_500") {
+		t.Fatalf("stderr sin codigo publico: %s", stderr.String())
 	}
 }
 

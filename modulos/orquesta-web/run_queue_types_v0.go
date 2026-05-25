@@ -2,9 +2,13 @@ package orquestaweb
 
 import (
 	"net/url"
+	"regexp"
+	"strings"
 
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 )
+
+var webRunQueueHashSuffixPatternV0 = regexp.MustCompile(`-[a-f0-9]{8,}$`)
 
 const (
 	WebRunQueuePageEndpointV0    = "/run-queue"
@@ -28,6 +32,7 @@ type WebRunQueueQueryV0 struct {
 	AppRefs        []string `json:"app_refs,omitempty"`
 	RunRef         string   `json:"run_ref,omitempty"`
 	AppRef         string   `json:"app_ref,omitempty"`
+	Status         string   `json:"status,omitempty"`
 	PriorityScore  int      `json:"priority_score,omitempty"`
 	RequestedBy    string   `json:"requested_by,omitempty"`
 	Reason         string   `json:"reason,omitempty"`
@@ -50,8 +55,11 @@ type WebRunQueueViewModelV0 struct {
 
 type WebRunQueueCandidateV0 struct {
 	Rank             int      `json:"rank"`
+	StableID         string   `json:"stable_id"`
 	RunRef           string   `json:"run_ref"`
 	AppRef           string   `json:"app_ref"`
+	Title            string   `json:"title,omitempty"`
+	Detail           string   `json:"detail,omitempty"`
 	Status           string   `json:"status,omitempty"`
 	PriorityScore    int      `json:"priority_score"`
 	AgingBoost       int      `json:"aging_boost,omitempty"`
@@ -121,10 +129,14 @@ func webRunQueueCandidateV0(
 	value orquestamcp.MCPRunQueueRankedCandidateCompactV0,
 ) WebRunQueueCandidateV0 {
 	runRef := trimV0(value.RunRef)
+	appRef := trimV0(value.AppRef)
 	return WebRunQueueCandidateV0{
 		Rank:             value.Rank,
+		StableID:         webRunQueueStableIDV0(runRef, appRef),
 		RunRef:           runRef,
-		AppRef:           trimV0(value.AppRef),
+		AppRef:           appRef,
+		Title:            webRunQueueTitleV0(runRef),
+		Detail:           webRunQueueDetailV0(value),
 		Status:           trimV0(value.Status),
 		PriorityScore:    value.PriorityScore,
 		AgingBoost:       value.AgingBoost,
@@ -133,6 +145,41 @@ func webRunQueueCandidateV0(
 		StatsHref:        runQueueStatsHrefV0(runRef),
 		EvidenceRefs:     compactStringsV0(value.EvidenceRefs),
 	}
+}
+
+func webRunQueueStableIDV0(runRef string, appRef string) string {
+	runRef = trimV0(runRef)
+	if runRef != "" {
+		return "queue:" + runRef
+	}
+	appRef = trimV0(appRef)
+	if appRef != "" {
+		return "queue-app:" + appRef
+	}
+	return "queue:sin-ref"
+}
+
+func webRunQueueTitleV0(runRef string) string {
+	title := trimV0(runRef)
+	title = strings.TrimPrefix(title, "request-ref-autoprogramming-backlog-")
+	title = strings.TrimPrefix(title, "request-ref-")
+	title = strings.TrimPrefix(title, "run-ref-")
+	title = strings.TrimPrefix(title, "task-ref-")
+	title = webRunQueueHashSuffixPatternV0.ReplaceAllString(title, "")
+	title = strings.TrimSpace(strings.Join(strings.Fields(strings.NewReplacer("-", " ", "_", " ").Replace(title)), " "))
+	if title == "" {
+		return "Tarea sin nombre"
+	}
+	return title
+}
+
+func webRunQueueDetailV0(value orquestamcp.MCPRunQueueRankedCandidateCompactV0) string {
+	parts := compactStringsV0([]string{
+		"run_ref=" + trimV0(value.RunRef),
+		"app_ref=" + trimV0(value.AppRef),
+		"status=" + trimV0(value.Status),
+	})
+	return strings.Join(parts, "; ")
 }
 
 func runQueueStatsHrefV0(runRef string) string {

@@ -35,3 +35,8 @@ Invariantes:
   `checkpoint_deadlines_expired`;
 - `shutdown_ready=true` solo cuando todas las runs objetivo estan terminales o
   sin agentes en vuelo segun stats compactas y sin checkpoint pendiente.
+- La composicion servidor debe congelar el supervisor residente al aceptar
+  `POST /api/v0/server/shutdown`. Mientras `shutdown_in_progress` siga activo,
+  el supervisor no puede reactivar runs paradas por shutdown ni lanzar nuevos
+  agentes/automejora. Si la peticion se rechaza por autorizacion o contrato, la
+  congelacion se libera.

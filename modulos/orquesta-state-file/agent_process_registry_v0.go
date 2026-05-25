@@ -2,7 +2,10 @@ package orquestastatefile
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"reflect"
+	"sort"
 
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
@@ -62,6 +65,23 @@ func (store *StoreV0) ResolveAgentProcessV0(
 	return store.resolveAgentProcessLockedV0(runID, agentRequestID)
 }
 
+func (store *StoreV0) ListAgentProcessesV0(
+	ctx context.Context,
+	filter orquestacionnucleoapp.AgentProcessRegistryListFilterV0,
+) ([]orquestacionnucleoapp.AgentProcessRecordV0, error) {
+	ctx = contextOrBackgroundV0(ctx)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	filter = orquestacionnucleoapp.NormalizeAgentProcessRegistryListFilterV0(filter)
+	if err := orquestacionnucleoapp.ValidateAgentProcessRegistryListFilterV0(filter); err != nil {
+		return nil, err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	return store.listAgentProcessesLockedV0(filter)
+}
+
 func (store *StoreV0) recordAgentProcessLockedV0(
 	record orquestacionnucleoapp.AgentProcessRecordV0,
 ) error {
@@ -103,6 +123,50 @@ func (store *StoreV0) resolveAgentProcessLockedV0(
 	}
 	record := agentProcessRecordFromJSONV0(document.Record)
 	return record, orquestacionnucleoapp.ValidateAgentProcessRegistryRecordV0(record)
+}
+
+func (store *StoreV0) listAgentProcessesLockedV0(
+	filter orquestacionnucleoapp.AgentProcessRegistryListFilterV0,
+) ([]orquestacionnucleoapp.AgentProcessRecordV0, error) {
+	root := filepath.Join(store.rootDir, agentProcessesDirV0)
+	var records []orquestacionnucleoapp.AgentProcessRecordV0
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			return nil
+		}
+		document, ok, err := readJSONFileV0[agentProcessDocumentV0](path)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return nil
+		}
+		record := agentProcessRecordFromJSONV0(document.Record)
+		if filter.RunID != "" && record.RunID != filter.RunID {
+			return nil
+		}
+		if err := validateAgentProcessDocumentV0(document, record.RunID, record.AgentRequestID); err != nil {
+			return err
+		}
+		if err := orquestacionnucleoapp.ValidateAgentProcessRegistryRecordV0(record); err != nil {
+			return err
+		}
+		records = append(records, record)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(records, func(i int, j int) bool {
+		if records[i].RunID != records[j].RunID {
+			return records[i].RunID < records[j].RunID
+		}
+		return records[i].AgentRequestID < records[j].AgentRequestID
+	})
+	return records, nil
 }
 
 func agentProcessDocumentFromRecordV0(

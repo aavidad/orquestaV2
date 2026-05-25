@@ -34,14 +34,21 @@ docs historicos solo como contexto enlazado a una fuente vigente.
 | --- | --- | --- |
 | `modulos/orquesta-core-workflow` | Maquina pura: comandos, eventos, reducer, outbox, replay. | Alineada. No debe importar runtime, DB, Codex, OPES, web ni MCP. |
 | `modulos/orquesta-orchestration-core` | Loop de aplicacion por puertos: candidatos, stores, perfiles de trabajo, outbox, launch/stop/delivery/review. | Alineada como capa de aplicacion. Puede importar `orquesta-runtime` neutral, no adaptadores concretos. |
+| `modulos/orquesta-director-cycle` | Ensamblador de un tick neutral `DirectorCycleStepV0`: outbox pendiente, tick-input, runner y registro de outbox nueva. | Alineada como frontera de ciclo acotado. No es daemon, no despacha outbox y no prueba composicion residente por si sola. |
+| `modulos/orquesta-director-runner` | Ejecuta un ciclo sobre tick ya preparado: scheduler por puerto, workflow por puerto y parada ante outbox/bloqueo/error. | Alineada. No construye candidatos ni toca runtime/persistencia concreta. |
+| `modulos/orquesta-director-scheduler` | Decide comandos publicos desde snapshot/candidates compactos. | Alineada como planificador puro. No aplica comandos, no persiste y no elige proveedor. |
+| `modulos/orquesta-director-tick-input` | Construye input compacto del scheduler desde run durable, candidates explicitos y refs de outbox pendiente. | Alineada. No lista outbox ni calcula candidates. |
+| `modulos/orquesta-director-cycle-outbox` | Registra outbox generada por el ciclo y lista refs pendientes por ledger inyectado. | Alineada. No despacha, no ACK y no elige storage. |
 | `modulos/orquesta-director-operativo` | Contrato puro de Director Operativo V1: plan vivo, subagentes, espera, review, replan y delegacion recursiva gobernada. | Alineada como DTO/validacion previa a integracion. No ejecuta runtime ni duplica scheduler/replanner. |
 | `modulos/orquesta-domain-work` | Contratos genericos de jobs, records filtrables y artefactos externos. | Alineada. Debe seguir sin OPES, programacion, REST, MCP, runtime ni modelo. |
 | `modulos/orquesta-document-plan-expander` | Expande `DomainDocumentPlanV0` a `DomainWorkJobRequestV0[]` por puerto. | Alineada. No ejecuta jobs ni importa adaptadores. |
 | `modulos/orquesta-domain-work-memory` | Conector volatil de referencia para crear jobs y leer records `Request+Job` filtrados. | Adaptador neutral sin IO; util para tests offline. |
 | `modulos/orquesta-domain-work-file` | Conector durable file-based para crear jobs y leer records `Request+Job` filtrados. | Adaptador filesystem. No es nucleo puro ni bundle DB. |
 | `modulos/orquesta-domain-work-sql` | Adaptador SQL driver-neutral para crear jobs y leer records `Request+Job` filtrados. | Adaptador DB externo. Recibe `*sql.DB`; no registra drivers ni entra al nucleo. |
+| `modulos/orquesta-deploy` | Owner de `DeploymentPlan v0` y dry-run declarativo por puerto para planes de deploy derivados de `AppSpecV0` o microtareas. | Adaptador/contrato de composicion. No ejecuta Docker, Kubernetes, cloud, filesystem productivo ni secretos. |
 | `modulos/orquesta-app-change` | Cambio de app y proyeccion de `external_work` hacia contratos. | Alineada si mantiene refs opacas y no conoce runtime/proveedor. |
 | `modulos/orquesta-app-change-director-source` | Fuente de decisiones/tareas para cambios externos ya aceptados. | Alineada con cautela: contiene taxonomia documental concentrada; no debe crecer como OPES interno. |
+| `modulos/orquesta-i18n-docs` | Owner activo de bundles i18n, loader shape y documentacion generada para apps. | Alineada como contrato puro. Factory, web y MCP consumen su proyeccion activa; no importa runtime, DB, web, MCP ni filesystem productivo. |
 | `modulos/orquesta-app-runner` | Flujo historico app-plan para preparar/ejecutar planes de app. | Separado del Director Operativo: no participa en waits por cohorte/ola/parent ni en `OperationalDirectorPlanStateV0`. |
 | `modulos/orquesta-external-work-run` | Crea run operativo para trabajo externo ya especificado. | Alineada. No decide contenido ni arranca director inicial. |
 | `modulos/orquesta-app-director-service` | Servicio de entrada/continuacion del director de app; materializa plan, espera por scope y puede cerrar despues de loop quiescent. | Capa de aplicacion. Depende de puertos inyectados; `OperationalClosureSource` real pertenece a composicion/adaptador. |
@@ -105,6 +112,21 @@ metadata de `WorkflowTaskV0` usada para waits acotados. Una migracion futura
 debe delegar en `app-director-service` o anadir metadata compatible en
 `WorkflowTaskStore`/`OperationalDirectorPlanStateV0`; no debe adaptar refs de
 app-plan como si fueran cohortes, olas o parent tasks del Director.
+La ruta publica vigente para apps nuevas con `AppSpecV0` es
+`orquesta.apps.arrancar_director.v0`. `preparar_orquestacion` y
+`ejecutar_orquestacion` son preview/compatibilidad de `app-runner`, anuncian esa
+frontera mediante `route_policy` en resultado y descriptor compacto, y bloquean
+con razon publica si el caller exige Director V2, waits por ola/cohorte,
+review/tests/cierre o recursion.
+
+La espina `DirectorCycleStepV0 -> director-runner -> director-scheduler ->
+core-workflow -> director-cycle-outbox` es otra frontera neutral: un tick
+acotado de scheduler/workflow/outbox. Sirve como fuente de verdad del ciclo
+Director V2 para agentes y scanners, pero no debe mezclarse con el loop
+progresivo de `app-director-service` ni usarse para declarar cerrada la
+composicion residente. Sus pendientes se nombran por tipo: codigo offline,
+composicion residente/restart, smoke real neutral, proveedor real u OPES
+temporal.
 
 Estado real del primer corte:
 

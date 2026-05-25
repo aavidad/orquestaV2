@@ -26,6 +26,7 @@ const (
 	AppVCSIssueInvalidRequestV0 AppVCSIssueCodeV0 = "app_vcs_request_invalida"
 	AppVCSIssueGitErrorV0       AppVCSIssueCodeV0 = "app_vcs_git_error"
 	AppVCSIssuePushPendingV0    AppVCSIssueCodeV0 = "app_vcs_push_pending"
+	AppVCSIssueControlPathV0    AppVCSIssueCodeV0 = "app_vcs_control_path"
 )
 
 type AppVCSRequestV0 struct {

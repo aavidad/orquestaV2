@@ -176,8 +176,9 @@ func (executor MCPDirectorStatsToolExecutorV0) Execute(
 			progressSource,
 			usageSource,
 			orquestacionnucleoapp.DirectorProgressSourceRequestV0{
-				OccurredAt:    input.OccurredAt,
-				CorrelationID: input.CorrelationID,
+				OccurredAt:        input.OccurredAt,
+				CorrelationID:     input.CorrelationID,
+				IncludeAgentUsage: input.IncludeAgentUsage,
 			},
 		)
 	}

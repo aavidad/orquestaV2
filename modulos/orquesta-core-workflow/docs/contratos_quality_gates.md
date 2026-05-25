@@ -28,7 +28,7 @@ Invariantes:
   - Repetir el mismo gate exacto ya reflejado es no-op solo si coinciden command_id, idempotency_key y payload normalizado.
   - La misma `gate_ref` con decision o sujeto distinto se rechaza como transicion invalida.
   - No emite outbox, no cierra revision, no pide rework, no bloquea el run y no pregunta al director por si mismo.
-  - Payload compacto; sin DB, runtime, proveedor, modelo, HOME, OAuth, Git productivo, prompts, transcripts ni secretos.
+  - Payload compacto; sin valores reales de DB, runtime, proveedor, modelo, HOME, OAuth, Git productivo ni secretos; bloquea prompts/transcripts crudos.
 Errores:
   - payload_invalido
   - transicion_invalida
@@ -54,7 +54,7 @@ Invariantes:
   - `ValidateOrchestrationRunV0` rechaza `quality_gates` mal formados o duplicados por `gate_ref`.
   - Registra/verifica `CommandEffects` por `gate_ref`; replay rechaza misma ref con otra key, event_id, command_id o payload.
   - No materializa `ReviewResultRecorded`, `RequestRework`, `BlockRun`, `AskDirector` ni outbox.
-  - No contiene payload completo de revision, runtime, proveedor, HOME, OAuth, DB, rutas reales, comandos ni secretos.
+  - No contiene payload completo de revision ni valores reales de runtime, proveedor, HOME, OAuth, DB, rutas reales, comandos o secretos.
 Errores:
   - evento_invalido
   - payload_invalido

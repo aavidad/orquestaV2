@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	orquestadirectoragentfilesource "orquesta/modulos/orquesta-director-agent-file-source"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
@@ -31,13 +32,14 @@ type CodexReceiptDescriptorRequestV0 struct {
 }
 
 type CodexReceiptDescriptorV0 struct {
-	DescriptorRef       string
-	RunID               string
-	AgentRef            string
-	Spec                orquestaruntime.ExternalAgentLaunchSpecV0
-	AckPath             string
-	ProjectWorkDir      string
-	WorktreeBaselineRef string
+	DescriptorRef                  string
+	RunID                          string
+	AgentRef                       string
+	Spec                           orquestaruntime.ExternalAgentLaunchSpecV0
+	AckPath                        string
+	ProjectWorkDir                 string
+	WorktreeBaselineRef            string
+	DirectorDecisionSidecarReceipt *orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0
 }
 
 type CodexDeliveryObservationSourceV0 struct {
@@ -112,7 +114,7 @@ func codexDeliveryObservationAgentEligibleV0(
 	return stringInCodexDeliverySetV0(request.Run.Agents, agentRef) &&
 		stringInCodexDeliverySetV0(request.Run.StartedAgents, agentRef) &&
 		!stringInCodexDeliverySetV0(request.Run.FailedAgents, agentRef) &&
-		!stringInCodexDeliverySetV0(request.Run.StoppedAgents, agentRef)
+		!stringInCodexDeliverySetV0(request.Run.LostAgents, agentRef)
 }
 
 func codexDeliveryObservationDescriptorMatchesWaitAgentRefsV0(
@@ -202,6 +204,9 @@ func (source CodexDeliveryObservationSourceV0) observationFromDescriptorV0(
 	if err != nil {
 		return orquestacionnucleoapp.AgentDeliveryObservationV0{}, false, err
 	}
+	evidenceRefs := codexDeliveryObservationCoreEvidenceRefsV0(
+		append(codexObservation.EvidenceRefs, worktreeEvidenceRefs...),
+	)
 	return orquestacionnucleoapp.AgentDeliveryObservationV0{
 		CandidateRef: "delivery-candidate-ref-" + codexObservation.DeliveryRef,
 		ArtifactRef:  codexObservation.DeliveryRef,
@@ -210,8 +215,39 @@ func (source CodexDeliveryObservationSourceV0) observationFromDescriptorV0(
 		TaskID:       codexObservation.TaskID,
 		AgentRef:     codexObservation.AgentRef,
 		Summary:      codexObservation.Summary,
-		EvidenceRefs: compactCodexDeliveryRefsV0(append(codexObservation.EvidenceRefs, worktreeEvidenceRefs...)),
+		EvidenceRefs: evidenceRefs,
 	}, true, nil
+}
+
+func codexDeliveryObservationCoreEvidenceRefsV0(values []string) []string {
+	const maxCoreEvidenceRefs = 18
+	const maxCoreEvidenceRefLen = 240
+	seen := map[string]bool{}
+	result := make([]string, 0, maxCoreEvidenceRefs+1)
+	truncated := false
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if len([]rune(value)) > maxCoreEvidenceRefLen {
+			value = string([]rune(value)[:maxCoreEvidenceRefLen]) + "-truncated"
+			truncated = true
+		}
+		if seen[value] {
+			continue
+		}
+		if len(result) >= maxCoreEvidenceRefs {
+			truncated = true
+			continue
+		}
+		seen[value] = true
+		result = append(result, value)
+	}
+	if truncated && !seen["evidence-ref-codex-delivery-evidence-truncated"] {
+		result = append(result, "evidence-ref-codex-delivery-evidence-truncated")
+	}
+	return result
 }
 
 func codexReceiptIssueMeansAckWithoutDeliveryV0(

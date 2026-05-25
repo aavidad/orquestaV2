@@ -9,6 +9,9 @@
 - `TestShutdownServerV0NoPropagaSupervisorSiNoHayAgentesEnVuelo`
 - `TestShutdownServerV0EsperaDrainConAgentesEnVuelo`
 - `TestShutdownServerV0SinRunsQuedaReady`
+- `TestRuntimeV0ServerShutdownCongelaSupervisorResidenteV0`
+- `TestRuntimeV0ServerShutdownRechazadoNoCongelaSupervisorV0`
+- `TestCodexStackV0RunGlobalTickNoReanudaReadyActivoParadoPorShutdownServidorV0`
 
 Evidencia esperada: el caso de uso registra checkpoint por puerto antes de
 solicitar stop en modo no forzado, ejecuta supervisor cuando procede y calcula
@@ -27,3 +30,8 @@ Si el run sigue activo pero stats informa `agents_in_flight=0`, shutdown queda
 bloquear cuando ya no hay agentes vivos. En ese caso tampoco debe propagar un
 error del supervisor/director, porque no hay proceso que drenar. Con
 `agents_in_flight>0` sigue devolviendo `waiting_drain` y ejecuta supervisor.
+
+La composicion HTTP del servidor congela el supervisor residente antes de
+procesar shutdown aceptado. Un tick posterior debe quedar auditado como
+`shutdown_in_progress` y no ejecutar el supervisor. Un run parado por shutdown
+del servidor tampoco debe ser reanudado por el reconciliador global.

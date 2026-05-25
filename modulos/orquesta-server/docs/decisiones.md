@@ -74,3 +74,16 @@ La purga concreta no vive en `orquesta-server`: una composicion puede decidir
 si diagnostica, solicita parada logica, limpia procesos de su runtime o bloquea
 el arranque. El servidor solo persiste estado, mensaje para el Director y refs
 de evidencia compactas.
+
+## SRV-009: el supervisor residente no espera agentes largos en linea
+
+El servidor residente debe lanzar u observar trabajo y volver pronto al bucle
+global. La manga ancha de los agentes se gestiona por runtime, heartbeats,
+progreso, leases y reentradas posteriores, no dejando bloqueado el tick del
+supervisor durante minutos.
+
+Por defecto `ORQUESTA_SERVER_DRAIN_MAX_EXTERNAL_WAITS` usa una espera externa
+en linea. Esto permite materializar el arranque y una observacion inicial sin
+impedir que otros runs entren en ticks posteriores. Si una prueba real necesita
+un drain sincrono largo, puede elevar el entorno de forma explicita, pero no
+debe ser el modo desatendido normal.

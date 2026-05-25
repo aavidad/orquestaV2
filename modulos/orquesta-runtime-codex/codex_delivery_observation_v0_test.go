@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func TestReadCodexDeliveryObservationFileV0LeeACKYConstruyeObservacion(t *testing.T) {
@@ -30,9 +28,96 @@ func TestReadCodexDeliveryObservationFileV0LeeACKYConstruyeObservacion(t *testin
 	}
 }
 
-func TestReadCodexDeliveryObservationFileV0AceptaACKMinimoYCorrelacionaConSpec(t *testing.T) {
+func TestReadCodexDeliveryObservationFileV0AceptaACKLegacySinTestReceipts(t *testing.T) {
+	spec := codexNeutralSpecForDeliveryObservationTestV0()
+	spec.AgentPacket.Policies = nil
+	ack := codexNeutralAckForDeliveryObservationTestV0(spec)
+	ack.TestReceipts = nil
+	data, err := json.Marshal(ack)
+	if err != nil {
+		t.Fatalf("marshal ack: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), CodexAgentAckFileNameV0)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write ack: %v", err)
+	}
+
+	observation, issues := ReadCodexDeliveryObservationFileV0(path, spec)
+
+	if len(issues) > 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if observation.DeliveryRef != spec.AgentPacket.DeliveryRefs.AckRef {
+		t.Fatalf("observation=%+v", observation)
+	}
+}
+
+func TestReadCodexDeliveryObservationFileV0AceptaACKEstrictoLegacySinTestReceipts(t *testing.T) {
+	spec := codexNeutralSpecForDeliveryObservationTestV0()
+	ack := codexNeutralAckForDeliveryObservationTestV0(spec)
+	ack.TestReceipts = nil
+	data, err := json.Marshal(ack)
+	if err != nil {
+		t.Fatalf("marshal ack: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), CodexAgentAckFileNameV0)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write ack: %v", err)
+	}
+
+	observation, issues := ReadCodexDeliveryObservationFileV0(path, spec)
+
+	if len(issues) > 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if observation.DeliveryRef != spec.AgentPacket.DeliveryRefs.AckRef {
+		t.Fatalf("observation=%+v", observation)
+	}
+}
+
+func TestReadCodexDeliveryObservationFileV0NoAceptaTestReceiptsInvalidosComoLegacy(t *testing.T) {
+	spec := codexNeutralSpecForDeliveryObservationTestV0()
+	ack := codexNeutralAckForDeliveryObservationTestV0(spec)
+	ack.TestReceipts = []CodexRequiredTestReceiptV0{{
+		SchemaVersion: CodexRequiredTestReceiptSchemaVersionV0,
+		Command:       "otro test",
+		Status:        "passed",
+	}}
+	data, err := json.Marshal(ack)
+	if err != nil {
+		t.Fatalf("marshal ack: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), CodexAgentAckFileNameV0)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write ack: %v", err)
+	}
+
+	_, issues := ReadCodexDeliveryObservationFileV0(path, spec)
+
+	requireCodexIssueEvidenceV0(t, issues, "required_test_receipt_mismatch")
+}
+
+func TestReadCodexDeliveryObservationFileV0RechazaACKMinimoHidratableV0(t *testing.T) {
 	spec := codexNeutralSpecForDeliveryObservationTestV0()
 	spec.AgentPacket.Task.RequiredTests = nil
+	path := filepath.Join(t.TempDir(), CodexAgentAckFileNameV0)
+	if err := os.WriteFile(
+		path,
+		[]byte(`{"schema_version":"codex_agent_ack.v0","status":"completed"}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write ack: %v", err)
+	}
+
+	_, issues := ReadCodexDeliveryObservationFileV0(path, spec)
+
+	requireCodexIssueV0(t, issues, CodexConnectorAckInvalidV0)
+}
+
+func TestReadCodexDeliveryObservationFileV0AceptaACKMinimoSinPolicyStrictV0(t *testing.T) {
+	spec := codexNeutralSpecForDeliveryObservationTestV0()
+	spec.AgentPacket.Task.RequiredTests = nil
+	spec.AgentPacket.Policies = nil
 	path := filepath.Join(t.TempDir(), CodexAgentAckFileNameV0)
 	if err := os.WriteFile(
 		path,
@@ -47,11 +132,8 @@ func TestReadCodexDeliveryObservationFileV0AceptaACKMinimoYCorrelacionaConSpec(t
 	if len(issues) > 0 {
 		t.Fatalf("issues=%+v", issues)
 	}
-	if observation.DeliveryRef != spec.AgentPacket.DeliveryRefs.AckRef ||
-		observation.AgentRef != spec.RequestID ||
-		observation.TaskID != spec.AgentPacket.Task.TaskRef ||
-		observation.PhaseID != spec.AgentPacket.Phase {
-		t.Fatalf("observation no correlacionada: %+v spec=%+v", observation, spec)
+	if observation.DeliveryRef != spec.AgentPacket.DeliveryRefs.AckRef {
+		t.Fatalf("observation no correlacionada: %+v", observation)
 	}
 }
 
@@ -83,7 +165,7 @@ func TestBuildCodexDeliveryObservationV0AceptaACKCompletoNeutral(t *testing.T) {
 		observation.PhaseID != spec.AgentPacket.Phase {
 		t.Fatalf("observation no correlacionada: %+v", observation)
 	}
-	if len(observation.EvidenceRefs) != 3 {
+	if len(observation.EvidenceRefs) != 4 {
 		t.Fatalf("evidence_refs=%v", observation.EvidenceRefs)
 	}
 	if codexDeliveryObservationUnsafeForCoreV0(observation) {
@@ -196,34 +278,5 @@ func TestCodexDeliveryObservationV0ConservaValorRedactadoComoRailPendiente(t *te
 	}
 	if !codexDeliveryObservationHasPendingRailV0(observation) {
 		t.Fatalf("rail blando no conservado como pendiente: %+v", observation)
-	}
-}
-
-func codexNeutralSpecForDeliveryObservationTestV0() orquestaruntime.ExternalAgentLaunchSpecV0 {
-	spec := codexSpecForTestV0()
-	spec.RequestID = "agent-ref-001"
-	spec.CorrelationID = "corr-agent-001"
-	spec.AgentPacket.RequestID = spec.RequestID
-	spec.AgentPacket.CorrelationID = spec.CorrelationID
-	spec.AgentPacket.DeliveryRefs.AckRef = "ack-ref-001"
-	spec.AgentPacket.DeliveryRefs.MailboxRef = "mailbox-ref-001"
-	spec.AgentPacket.DeliveryRefs.ReadinessRef = "readiness-ref-001"
-	spec.AgentPacket.DeliveryRefs.CheckpointRef = ""
-	return spec
-}
-
-func codexNeutralAckForDeliveryObservationTestV0(
-	spec orquestaruntime.ExternalAgentLaunchSpecV0,
-) CodexAgentAckV0 {
-	return CodexAgentAckV0{
-		SchemaVersion: CodexAgentAckSchemaVersionV0,
-		RequestID:     spec.RequestID,
-		CorrelationID: spec.CorrelationID,
-		AckRef:        spec.AgentPacket.DeliveryRefs.AckRef,
-		TargetModule:  spec.AgentPacket.TargetModule,
-		TaskRef:       spec.AgentPacket.Task.TaskRef,
-		Status:        codexAgentAckStatusCompletedV0,
-		Files:         EvidenceListV0{"README.md"},
-		Tests:         EvidenceListV0{"go test ./..."},
 	}
 }

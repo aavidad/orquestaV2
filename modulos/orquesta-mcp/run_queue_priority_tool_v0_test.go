@@ -99,6 +99,7 @@ func TestMCPRunQueuePriorityExecutorV0SetPriorityDelegaEnWriter(t *testing.T) {
 		QueueRef:      "global",
 		RunRef:        " run-priority-001 ",
 		AppRef:        " app-priority-001 ",
+		Status:        " canceled ",
 		PriorityScore: 77,
 		RequestedBy:   " director ",
 		EvidenceRefs:  []string{" evidence-1 ", "evidence-1"},
@@ -110,11 +111,13 @@ func TestMCPRunQueuePriorityExecutorV0SetPriorityDelegaEnWriter(t *testing.T) {
 		result.Action != MCPRunQueuePriorityActionSetV0 ||
 		result.Updated == nil ||
 		result.Updated.RunRef != "run-priority-001" ||
+		result.Updated.Status != "canceled" ||
 		result.Updated.PriorityScore != 77 {
 		t.Fatalf("result=%+v", result)
 	}
 	if writer.command.RunRef != "run-priority-001" ||
 		writer.command.AppRef != "app-priority-001" ||
+		writer.command.Status != "canceled" ||
 		writer.command.PriorityScore != 77 ||
 		len(writer.command.EvidenceRefs) != 1 {
 		t.Fatalf("command=%+v", writer.command)
@@ -196,10 +199,14 @@ func (fake *fakeMCPRunQueueWriterV0) SetRunPriorityV0(
 	command orquestarunqueue.RunQueuePriorityCommandV0,
 ) (orquestarunqueue.RunSchedulingCandidateV0, error) {
 	fake.command = command
+	status := command.Status
+	if status == "" {
+		status = "ready"
+	}
 	return orquestarunqueue.RunSchedulingCandidateV0{
 		RunRef:        command.RunRef,
 		AppRef:        command.AppRef,
-		Status:        "ready",
+		Status:        status,
 		PriorityScore: command.PriorityScore,
 		EvidenceRefs:  command.EvidenceRefs,
 	}, nil

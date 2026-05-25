@@ -66,6 +66,7 @@ func codexAckContainsSensitiveDetailV0(ack CodexAgentAckV0) bool {
 	}) ||
 		codexAckValuesContainSensitiveDetailV0(ack.Files) ||
 		codexAckValuesContainSensitiveDetailV0(ack.Tests) ||
+		codexAckValuesContainSensitiveDetailV0(codexRequiredTestReceiptSensitiveValuesV0(ack.TestReceipts)) ||
 		codexAckNotesContainSensitiveDetailV0(ack.Notes)
 }
 
@@ -208,7 +209,7 @@ func codexAckSensitiveTailValueV0(tail string) string {
 }
 
 func codexAckSensitiveValueIsSoftRailV0(value string) bool {
-	value = strings.TrimSpace(value)
+	value = strings.ToLower(strings.TrimSpace(value))
 	if value == "" || strings.Contains(value, "sin valor") || strings.Contains(value, "no value") {
 		return true
 	}

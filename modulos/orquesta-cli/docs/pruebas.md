@@ -128,7 +128,7 @@ Riesgos: reintroducir microprogramacion hardcodeada
 Caso: CLI-P010 Governance read-only
 Tipo: contract
 Comando: orquesta-cli gobernanza catalogo listar --json
-Evidencia esperada: `GovernanceCatalogCliReaderV0` hace `POST /api/v0/governance/catalog/query`, propaga `X-Correlation-ID` y devuelve `GovernanceCatalogQueryResultV0` canonico con `effective` + contadores `proposed/quarantine`, sin activar ni mutar reglas
+Evidencia esperada: `GovernanceCatalogCliReaderV0` hace `POST /api/v0/governance/catalog/query`, propaga `request_id`, `correlation_id` y `X-Correlation-ID`, consume respuesta publica `{effective,counters}` con ids compactos y devuelve `GovernanceCatalogQueryResultV0` canonico sin activar ni mutar reglas
 Ultima ejecucion: 2026-05-04, go test -count=1 .; TestGovernanceCatalogCliReaderV0ExitoPropagaCorrelacionYEnvelopeCanonico y TestGovernanceCatalogCliReaderV0Respuesta400DevuelveErroresPublicos
 Riesgos: convertir CLI en control plane de gobernanza
 ```

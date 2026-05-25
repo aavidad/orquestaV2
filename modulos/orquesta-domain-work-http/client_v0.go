@@ -14,19 +14,21 @@ import (
 )
 
 const (
-	DefaultDomainWorkHTTPCreateJobPathV0      = "/api/domain-work/jobs"
-	DefaultDomainWorkHTTPSubmitArtifactPathV0 = "/api/domain-work/artifacts"
-	defaultDomainWorkHTTPTimeoutV0            = 30 * time.Second
-	ErrDomainWorkHTTPBaseURLRequiredV0        = "domain_work_http_base_url_required"
-	ErrDomainWorkHTTPBaseURLInvalidV0         = "domain_work_http_base_url_invalid"
-	ErrDomainWorkHTTPRequestBuildFailedV0     = "domain_work_http_request_build_failed"
-	ErrDomainWorkHTTPRequestFailedV0          = "domain_work_http_request_failed"
-	ErrDomainWorkHTTPStatusFailedV0           = "domain_work_http_status_failed"
-	ErrDomainWorkHTTPResponseDecodeFailedV0   = "domain_work_http_response_decode_failed"
-	ErrDomainWorkHTTPResponseJobMissingV0     = "domain_work_http_response_job_missing"
-	ErrDomainWorkHTTPResponseReceiptMissingV0 = "domain_work_http_response_receipt_missing"
-	ErrDomainWorkHTTPCreatePathInvalidV0      = "domain_work_http_create_path_invalid"
-	ErrDomainWorkHTTPSubmitPathInvalidV0      = "domain_work_http_submit_path_invalid"
+	DefaultDomainWorkHTTPCreateJobPathV0       = "/api/domain-work/jobs"
+	DefaultDomainWorkHTTPSubmitArtifactPathV0  = "/api/domain-work/artifacts"
+	defaultDomainWorkHTTPTimeoutV0             = 30 * time.Second
+	ErrDomainWorkHTTPBaseURLRequiredV0         = "domain_work_http_base_url_required"
+	ErrDomainWorkHTTPBaseURLInvalidV0          = "domain_work_http_base_url_invalid"
+	ErrDomainWorkHTTPEgressPolicyRequiredV0    = "domain_work_http_egress_policy_required"
+	ErrDomainWorkHTTPEgressDestinationDeniedV0 = "domain_work_http_egress_destination_denied"
+	ErrDomainWorkHTTPRequestBuildFailedV0      = "domain_work_http_request_build_failed"
+	ErrDomainWorkHTTPRequestFailedV0           = "domain_work_http_request_failed"
+	ErrDomainWorkHTTPStatusFailedV0            = "domain_work_http_status_failed"
+	ErrDomainWorkHTTPResponseDecodeFailedV0    = "domain_work_http_response_decode_failed"
+	ErrDomainWorkHTTPResponseJobMissingV0      = "domain_work_http_response_job_missing"
+	ErrDomainWorkHTTPResponseReceiptMissingV0  = "domain_work_http_response_receipt_missing"
+	ErrDomainWorkHTTPCreatePathInvalidV0       = "domain_work_http_create_path_invalid"
+	ErrDomainWorkHTTPSubmitPathInvalidV0       = "domain_work_http_submit_path_invalid"
 )
 
 var _ orquestadomainwork.DomainWorkJobCreatorPortV0 = ClientV0{}
@@ -36,6 +38,7 @@ type ConfigV0 struct {
 	BaseURL            string
 	CreateJobPath      string
 	SubmitArtifactPath string
+	EgressPolicy       EgressPolicyV0
 	HTTPClient         *http.Client
 	Timeout            time.Duration
 }
@@ -45,6 +48,7 @@ type ClientV0 struct {
 	createJobPath      string
 	submitArtifactPath string
 	httpClient         *http.Client
+	destination        DestinationV0
 }
 
 type ErrorV0 struct {
@@ -56,7 +60,7 @@ func (err ErrorV0) Error() string {
 }
 
 func NewClientV0(config ConfigV0) (ClientV0, error) {
-	baseURL, err := normalizeBaseURLV0(config.BaseURL)
+	destination, err := NormalizeDestinationV0(config.BaseURL, effectiveEgressPolicyV0(config.EgressPolicy))
 	if err != nil {
 		return ClientV0{}, err
 	}
@@ -77,11 +81,16 @@ func NewClientV0(config ConfigV0) (ClientV0, error) {
 		httpClient = &http.Client{Timeout: timeout}
 	}
 	return ClientV0{
-		baseURL:            baseURL,
+		baseURL:            destination.BaseURL,
 		createJobPath:      createPath,
 		submitArtifactPath: submitPath,
 		httpClient:         httpClient,
+		destination:        destination,
 	}, nil
+}
+
+func (client ClientV0) DestinationV0() DestinationV0 {
+	return client.destination
 }
 
 func (client ClientV0) CreateDomainWorkJobV0(
@@ -246,25 +255,17 @@ func (envelope domainWorkHTTPReceiptEnvelopeV0) receiptV0() (orquestadomainwork.
 	return receipt, strings.TrimSpace(receipt.ReceiptRef) != ""
 }
 
-func normalizeBaseURLV0(raw string) (string, error) {
-	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
-	if raw == "" {
-		return "", ErrorV0{Code: ErrDomainWorkHTTPBaseURLRequiredV0}
-	}
-	parsed, err := url.Parse(raw)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" ||
-		(parsed.Scheme != "http" && parsed.Scheme != "https") {
-		return "", ErrorV0{Code: ErrDomainWorkHTTPBaseURLInvalidV0}
-	}
-	return raw, nil
-}
-
 func normalizePathV0(raw string, fallback string, errCode string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		raw = fallback
 	}
-	if !strings.HasPrefix(raw, "/") || strings.ContainsAny(raw, " \t\r\n") {
+	if !strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "//") ||
+		strings.ContainsAny(raw, " \t\r\n?#\\") ||
+		strings.Contains(raw, "://") {
+		return "", ErrorV0{Code: errCode}
+	}
+	if parsed, err := url.Parse(raw); err != nil || parsed.IsAbs() || parsed.Host != "" {
 		return "", ErrorV0{Code: errCode}
 	}
 	return raw, nil

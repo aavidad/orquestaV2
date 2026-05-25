@@ -35,6 +35,7 @@ type MCPRunQueuePriorityToolInputV0 struct {
 	AppRefs        []string `json:"app_refs,omitempty"`
 	RunRef         string   `json:"run_ref,omitempty"`
 	AppRef         string   `json:"app_ref,omitempty"`
+	Status         string   `json:"status,omitempty"`
 	PriorityScore  int      `json:"priority_score,omitempty"`
 	RequestedBy    string   `json:"requested_by,omitempty"`
 	Reason         string   `json:"reason,omitempty"`
@@ -77,7 +78,7 @@ func MCPRunQueuePriorityDescriptorV0() MCPRunQueuePriorityToolDescriptorV0 {
 	return MCPRunQueuePriorityToolDescriptorV0{
 		Name:        MCPRunQueuePriorityToolNameV0,
 		Version:     MCPRunQueuePriorityToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,action:rank|set_priority,queue_ref?,app_refs?,run_ref?,app_ref?,priority_score?,limit?,occurred_at?}",
+		InputSchema: "envelope:{request_id?,correlation_id?,action:rank|set_priority,queue_ref?,app_refs?,run_ref?,app_ref?,status?,priority_score?,limit?,occurred_at?}",
 		Output:      "ok:{action,queue_ref,count,ranked?,updated?}|error:{errores_publicos}",
 		ResourceURI: MCPRunQueuePriorityResourceURIV0,
 		Invariantes: []string{
@@ -153,6 +154,7 @@ func (executor MCPRunQueuePriorityToolExecutorV0) executeSetPriorityV0(
 		RunRef:         input.RunRef,
 		QueueRef:       input.QueueRef,
 		AppRef:         input.AppRef,
+		Status:         input.Status,
 		PriorityScore:  input.PriorityScore,
 		UpdatedAt:      parseMCPRunQueueOccurredAtV0(input.OccurredAt),
 		RequestedBy:    input.RequestedBy,

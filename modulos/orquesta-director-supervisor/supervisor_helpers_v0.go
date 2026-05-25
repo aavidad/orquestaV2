@@ -5,6 +5,7 @@ import (
 
 	orquestadirectorcycle "orquesta/modulos/orquesta-director-cycle"
 	orquestadirectorscheduler "orquesta/modulos/orquesta-director-scheduler"
+	stopreason "orquesta/modulos/orquesta-run-supervisor/stopreason"
 )
 
 func normalizeDirectorSupervisorInputV0(
@@ -42,6 +43,7 @@ func supervisorDecisionWithActionV0(
 	decision.ReasonCode = reason
 	decision.ShouldContinue = shouldContinue
 	decision.AutonomousRecommendation = supervisorAutonomousRecommendationForActionV0(action)
+	decision.StopProjection = supervisorStopProjectionV0(decision)
 	return decision
 }
 
@@ -103,6 +105,28 @@ func supervisorPendingOutboxRefsV0(
 	values := append(result.PendingOutboxBeforeRefs[:0:0], result.PendingOutboxBeforeRefs...)
 	values = append(values, result.PendingOutboxAfterRefs...)
 	return compactSupervisorStringsV0(values)
+}
+
+func supervisorStopProjectionV0(decision DirectorSupervisorDecisionV0) stopreason.ProjectionV0 {
+	return stopreason.ProjectV0(stopreason.ProjectionInputV0{
+		Source:            stopreason.SourceDirectorSupervisorV0,
+		StopReason:        string(decision.Action),
+		Steps:             decision.StepNumber,
+		PendingOutboxRefs: decision.PendingOutboxRefs,
+		WaitingReasons:    supervisorWaitingReasonStringsV0(decision.WaitingReasons),
+		BlockedRefs:       decision.BlockedRefs,
+		EvidenceRefs:      decision.EvidenceRefs,
+	})
+}
+
+func supervisorWaitingReasonStringsV0(
+	values []orquestadirectorscheduler.SchedulerWaitingReasonV0,
+) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		out = append(out, string(value))
+	}
+	return out
 }
 
 func compactSupervisorStringsV0(values []string) []string {

@@ -18,6 +18,7 @@ type RunPreparedAppOrchestrationRequestV0 struct {
 	OccurredAt                string                     `json:"occurred_at"`
 	CorrelationID             string                     `json:"correlation_id,omitempty"`
 	RequestedBy               string                     `json:"requested_by,omitempty"`
+	RequireDirectorV2         bool                       `json:"require_director_v2,omitempty"`
 	UseAutonomousDirectorLoop bool                       `json:"use_autonomous_director_loop,omitempty"`
 	MaxBursts                 int                        `json:"max_bursts,omitempty"`
 	MaxStepsPerBurst          int                        `json:"max_steps_per_burst,omitempty"`
@@ -52,5 +53,6 @@ type AppOrchestrationRunResultV0 struct {
 	Attempts          int                                                  `json:"attempts"`
 	ExternalWaits     int                                                  `json:"external_waits"`
 	DirectorLoopStats *orquestacionnucleoapp.AutonomousDirectorLoopStatsV0 `json:"director_loop_stats,omitempty"`
+	RoutePolicy       AppRunnerRoutePolicyV0                               `json:"route_policy"`
 	EvidenceRefs      []string                                             `json:"evidence_refs,omitempty"`
 }

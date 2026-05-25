@@ -17,6 +17,16 @@ Estado:
 ## Decisiones activas
 
 ```text
+Fecha: 2026-05-25
+Decision: `orquesta-i18n-docs` es owner activo de bundles, loader shape y documentacion generada para apps.
+Motivo: T75 cerraba la brecha donde factory, web y MCP podian mantener owners paralelos de claves, fallback locale, loader hash y docs iniciales.
+Alternativas: Marcar el modulo como historico; dejar catalogos y docs iniciales repartidos entre web/factory/MCP.
+Impacto: `ActiveI18nDocsCompositionOwnerV0` queda como proyeccion publica; factory, web y MCP deben consumirla o consumir `AppI18nDocsPlanV0` antes de publicar capacidades i18n/docs.
+Contratos afectados: ActiveI18nDocsCompositionOwnerV0, GenerarI18nDocsIniciales v0, AppI18nDocsPlanV0, I18nBundleV0, DocsBundleV0.
+Estado: aceptada
+```
+
+```text
 Fecha: 2026-05-04
 Decision: El flujo "nueva app" siempre genera catalogos i18n y documentacion inicial; no existe modo sin i18n.
 Motivo: `SolicitarNuevaApp v0` declara i18n y documentacion como defaults explicitos, y este modulo tiene la responsabilidad de bundles, idiomas y plantillas.

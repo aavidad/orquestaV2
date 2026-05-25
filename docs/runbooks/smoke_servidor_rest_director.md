@@ -63,6 +63,29 @@ ORQUESTA_SMOKE_MIN_STARTED_AGENTS=1
 ORQUESTA_KEEP_SMOKE_DIR=0
 ```
 
+Para que las stats incluyan uso real observado desde Codex, el servidor debe
+arrancar con opt-in explicito y el runtime debe producir un reporte redactado:
+
+```bash
+ORQUESTA_CODEX_USAGE_ACCOUNTING=redacted_report
+ORQUESTA_CODEX_USAGE_LOG_MAX_BYTES=65536
+```
+
+Ese adaptador solo publica contadores y estado de cuota redactados cuando se
+consulta stats con `include_agent_usage=true`; no persiste prompts, transcripts,
+cuentas reales, HOME ni payloads de proveedor.
+Lee solo `codex_usage_accounting.json` en el runtime del agente con
+campos redactados como `usage.input_tokens`, `usage.output_tokens` y
+`quota.status`; si el reporte trae proveedor, modelo, coste, cuenta, HOME,
+tokens o payload crudo, se descarta entero. `stdout`, `stderr` y
+`codex_last_message.txt` no son fuente de uso.
+Las consultas web/API que no envian ese flag mantienen solo progreso, refs de
+proceso y agentes observados; el uso queda ausente aunque haya fuente opt-in.
+Si una superficie pide `include_agent_usage=true` y la composicion no inyecto
+fuente de uso, la respuesta debe conservar stats basicas y anadir issue publico
+`agent_usage_source_not_configured`, sin fabricar coste, proveedor, modelo ni
+cuenta.
+
 `ORQUESTA_SMOKE_MIN_PARALLEL_AGENTS` se conserva como alias compatible para
 subir el umbral manualmente, pero el valor por defecto del smoke REST directo es
 un agente arrancado.

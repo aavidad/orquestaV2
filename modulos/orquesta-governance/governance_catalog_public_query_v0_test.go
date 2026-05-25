@@ -56,17 +56,11 @@ func TestQueryGovernanceCatalogPublicV0ReturnsEffectiveOnly(t *testing.T) {
 		t.Fatalf("QueryGovernanceCatalogPublicV0() error = %v", err)
 	}
 
-	if response.Result.CurrentBlock != GovernanceCatalogCurrentBlockEffectiveV0 {
-		t.Fatalf("CurrentBlock = %q, want %q", response.Result.CurrentBlock, GovernanceCatalogCurrentBlockEffectiveV0)
-	}
-	if len(response.Result.InactiveBlocks) != 2 {
-		t.Fatalf("InactiveBlocks len = %d, want 2", len(response.Result.InactiveBlocks))
-	}
-	if got := response.Result.Counters; got.Effective != 1 || got.Proposed != 1 || got.Quarantine != 1 {
+	if got := response.Counters; got.Effective != 1 || got.Proposed != 1 || got.Quarantine != 1 {
 		t.Fatalf("Counters = %+v, want effective=1 proposed=1 quarantine=1", got)
 	}
-	if len(response.Result.Effective) != 1 || response.Result.Effective[0].Name != "regla governance review" {
-		t.Fatalf("Effective = %+v, want one governance rule", response.Result.Effective)
+	if len(response.Effective) != 1 || response.Effective[0].Name != "regla governance review" {
+		t.Fatalf("Effective = %+v, want one governance rule", response.Effective)
 	}
 }
 
@@ -115,8 +109,33 @@ func TestGovernanceCatalogQueryHTTPHandlerV0ReturnsJSONResponse(t *testing.T) {
 	if response.RequestID != "req-http" || response.CorrelationID != "corr-http" {
 		t.Fatalf("response ids = %q/%q, want req-http/corr-http", response.RequestID, response.CorrelationID)
 	}
-	if response.Result.Counters.Effective != 1 {
-		t.Fatalf("effective counter = %d, want 1", response.Result.Counters.Effective)
+	if response.Counters.Effective != 1 {
+		t.Fatalf("effective counter = %d, want 1", response.Counters.Effective)
+	}
+}
+
+func TestGovernanceCatalogQueryHTTPHandlerV0ProviderMissingReturnsPublicError(t *testing.T) {
+	request := httptest.NewRequest(
+		http.MethodPost,
+		GovernanceCatalogQueryHTTPPathV0,
+		strings.NewReader(`{"request_id":"req-missing","correlation_id":"corr-missing","filters":{"module":"orquesta-cli"}}`),
+	)
+	recorder := httptest.NewRecorder()
+
+	GovernanceCatalogQueryHTTPHandlerV0(nil).ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusServiceUnavailable)
+	}
+	var response GovernanceCatalogPublicErrorResponseV0
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if response.RequestID != "req-missing" || response.CorrelationID != "corr-missing" {
+		t.Fatalf("response ids = %q/%q, want request/correlation", response.RequestID, response.CorrelationID)
+	}
+	if len(response.Errors) != 1 || response.Errors[0].Code != "governance_catalog_source_unavailable" {
+		t.Fatalf("errors = %+v, want source unavailable", response.Errors)
 	}
 }
 

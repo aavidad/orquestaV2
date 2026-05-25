@@ -66,7 +66,7 @@ const (
 
 var (
 	eventTypePatternV0      = regexp.MustCompile(`^(core|runtime|capacity|review)\.[a-z0-9_]+(\.[a-z0-9_]+)?$`)
-	opaqueIDPatternV0       = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:-]*$`)
+	opaqueIDPatternV0       = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:-]*(-[A-Za-z0-9_.:-]+)*$`)
 	payloadKeyPatternV0     = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 	producerTokenPatternV0  = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.:-]*$`)
 	subjectVersionPatternV0 = regexp.MustCompile(`^[A-Za-z0-9_.:-]+$`)

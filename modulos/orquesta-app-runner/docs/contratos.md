@@ -1,5 +1,17 @@
 # Contratos: orquesta-app-runner
 
+## Ruta publica de AppSpec
+
+`orquesta-app-runner` queda como compatibilidad/preview historica. La ruta
+operativa preferente para apps nuevas que necesitan juicio de Orquesta es
+`orquesta.apps.arrancar_director.v0`, implementada por
+`orquesta-app-director-service`.
+
+`PrepareAppOrchestrationV0` y `RunPreparedAppOrchestrationV0` exponen
+`route_policy` para que MCP/web/CLI no tengan que duplicar routing. Si un caller
+declara `require_director_v2=true`, el runner bloquea antes de efectos externos
+con `field=director_v2_required`.
+
 ## `PrepareAppOrchestrationV0`
 
 Entrada: `PrepareAppOrchestrationRequestV0`
@@ -16,6 +28,7 @@ Salida: `AppOrchestrationPreparedV0`
 - `plan`: `AppMicrotaskPlanV0`;
 - `initial_progress`: total, listas, bloqueadas, pendientes y completado;
 - `candidate_provider`: provider para scheduler;
+- `route_policy`: preview/compatibilidad y entrypoint preferente;
 - `evidence_refs`: refs compactas.
 
 Invariantes:
@@ -62,6 +75,7 @@ Salida: `AppOrchestrationRunResultV0`
 - `started_agents`, `attempts`, `external_waits`, `evidence_refs`.
 - `director_loop_stats`: estadisticas opcionales del loop autonomo cuando se
   uso `RunAutonomousDirectorLoopV0`.
+- `route_policy`: compatibilidad legacy y entrypoint preferente.
 
 Invariantes:
 

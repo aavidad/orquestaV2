@@ -147,11 +147,62 @@ func (store *InMemoryWorkflowTaskStoreV0) saveNormalizedWorkflowTaskV0(
 	}
 	taskRef := strings.TrimSpace(normalized.TaskID)
 	if existing, ok := store.tasks[runRef][taskRef]; ok {
-		if !reflect.DeepEqual(existing, normalized) {
+		reconciled, compatible := reconcileWorkflowTaskStoreMetadataV0(existing, normalized)
+		if !compatible {
 			return errorV0(ErrNucleoOrquestacionStoreV0, "workflow_task", "microtarea existente con contrato distinto")
 		}
+		store.tasks[runRef][taskRef] = reconciled
 		return nil
 	}
 	store.tasks[runRef][taskRef] = normalized
 	return nil
+}
+
+func reconcileWorkflowTaskStoreMetadataV0(
+	existing orquestacoreworkflow.WorkflowTaskV0,
+	incoming orquestacoreworkflow.WorkflowTaskV0,
+) (orquestacoreworkflow.WorkflowTaskV0, bool) {
+	if reflect.DeepEqual(existing, incoming) {
+		return existing, true
+	}
+	if !workflowTasksEqualIgnoringFunctionContractsV0(existing, incoming) {
+		return orquestacoreworkflow.WorkflowTaskV0{}, false
+	}
+	existingRefs := workflowTaskStoreFunctionContractRefsV0(existing.FunctionContractRefs)
+	incomingRefs := workflowTaskStoreFunctionContractRefsV0(incoming.FunctionContractRefs)
+	switch {
+	case len(existingRefs) == 0 && len(incomingRefs) > 0:
+		return incoming, true
+	case len(existingRefs) > 0 && len(incomingRefs) == 0:
+		return existing, true
+	case reflect.DeepEqual(existingRefs, incomingRefs):
+		return incoming, true
+	default:
+		return orquestacoreworkflow.WorkflowTaskV0{}, false
+	}
+}
+
+func workflowTasksEqualIgnoringFunctionContractsV0(
+	first orquestacoreworkflow.WorkflowTaskV0,
+	second orquestacoreworkflow.WorkflowTaskV0,
+) bool {
+	first.FunctionContractRefs = nil
+	second.FunctionContractRefs = nil
+	return reflect.DeepEqual(first, second)
+}
+
+func workflowTaskStoreFunctionContractRefsV0(
+	refs []orquestacoreworkflow.WorkflowFunctionContractRefV0,
+) []string {
+	out := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		if strings.TrimSpace(ref.ContractRef) != "" {
+			out = append(out, strings.TrimSpace(ref.ContractRef))
+			continue
+		}
+		out = append(out, strings.TrimSpace(ref.FunctionName))
+	}
+	out = compactStringsV0(out)
+	sort.Strings(out)
+	return out
 }

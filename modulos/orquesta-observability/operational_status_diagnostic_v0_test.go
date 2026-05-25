@@ -144,6 +144,16 @@ func TestValidateDiagnosticoCompactoV0ContenidoProhibido(t *testing.T) {
 	}
 }
 
+func TestValidateDiagnosticoCompactoV0PermiteVocabularioOperativoOpaco(t *testing.T) {
+	diagnostic := validDiagnosticoCompactoV0()
+	diagnostic.Progreso.Summary = "runtime provider model como contexto opaco"
+	diagnostic.Warnings[0].Summary = "provider model not_available sin valor concreto"
+
+	if err := ValidateDiagnosticoCompactoV0(diagnostic); err != nil {
+		t.Fatalf("diagnostic should allow opaque operational vocabulary: %v", err)
+	}
+}
+
 func TestValidateDiagnosticoCompactoV0ListasCompactas(t *testing.T) {
 	diagnostic := validDiagnosticoCompactoV0()
 	diagnostic.ActividadReciente = make([]DiagnosticoActividadV0, maxOperationalListItemsV0+1)

@@ -4,12 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
+	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
+	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 )
 
 func TestOperationalClosureSourceV0ConstruyeRequestCausalDentroDeScope(t *testing.T) {
@@ -95,6 +100,164 @@ func TestOperationalClosureSourceV0NoCierraRunNoActivo(t *testing.T) {
 	}
 	if ok {
 		t.Fatalf("source no debe producir cierre con run bloqueado")
+	}
+}
+
+func TestOperationalClosureSourceV0CierraAutoprogrammingConAckTestReceipts(t *testing.T) {
+	runRef := "run-stack-operational-closure-autoprogramming-legacy-001"
+	task := stackAutoprogrammingClosureTaskForTestV0(runRef, "task-autoprogramming-closure-legacy-001", []string{"go test -count=1 ./..."})
+	deliveryRef := "ack-ref-app-stack-" + orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(task.TaskID)
+	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(task.TaskID)
+	run := stackOperationalClosureRunForTestV0(runRef, task.TaskID)
+	run.AppSpecRef = "app-spec-ref-autoprogramming-closure-legacy-001"
+	run.Deliveries = []string{deliveryRef}
+	run.AcceptedReviews = []string{"accepted-review-ref-" + deliveryRef}
+	reader := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	if err := reader.AppendRunEventsV0(context.Background(), runRef, []orquestacoreworkflow.OrchestrationEventV0{
+		stackOperationalClosureDeliveryEventForTestV0(t, runRef, 1, task.TaskID, deliveryRef),
+		stackOperationalClosureReviewRequestedEventForTestV0(t, runRef, 2, deliveryRef),
+		stackOperationalClosureReviewResultEventForTestV0(t, runRef, 3, deliveryRef, orquestacoreworkflow.ReviewResultStatusAcceptedV0),
+		stackOperationalClosureAcceptedReviewEventForTestV0(t, runRef, 4, deliveryRef),
+	}); err != nil {
+		t.Fatalf("AppendRunEventsV0: %v", err)
+	}
+	runtimeDir := t.TempDir()
+	ackPath := filepath.Join(runtimeDir, orquestaruntimecodex.CodexAgentAckFileNameV0)
+	if err := os.WriteFile(ackPath, []byte(`{
+		"schema_version":"codex_agent_ack.v0",
+		"request_id":"`+agentRef+`",
+		"correlation_id":"corr-stack-operational-closure-autoprogramming-legacy",
+		"ack_ref":"`+deliveryRef+`",
+		"target_module":"orquesta",
+		"task_ref":"`+task.TaskID+`",
+		"status":"completed",
+		"tests":["go test -count=1 ./..."],
+		"test_receipts":[{
+			"schema_version":"codex_required_test_receipt.v0",
+			"command":"go test -count=1 ./...",
+			"status":"passed",
+			"exit_code":0,
+			"evidence_refs":["required-test-receipt-ref-autoprogramming-legacy"],
+			"occurred_at":"2026-05-24T18:20:00Z",
+			"sequence":1,
+			"output_redacted":true
+		}]
+	}`), 0o600); err != nil {
+		t.Fatalf("write ack: %v", err)
+	}
+	evidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
+	source := codexStackOperationalClosureSourceV0{
+		TaskStore:                  orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(task),
+		EventReader:                reader,
+		RequiredTestEvidenceStore:  evidenceStore,
+		RequiredTestEvidenceWriter: evidenceStore,
+		ReceiptStore: fakeCodexOpsReceiptStoreV0{descriptors: []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{{
+			DescriptorRef: "descriptor-ref-stack-operational-closure-autoprogramming-legacy",
+			RunID:         runRef,
+			AgentRef:      agentRef,
+			AckPath:       ackPath,
+			Spec: orquestaruntime.ExternalAgentLaunchSpecV0{
+				RequestID: agentRef,
+				AgentPacket: orquestaruntime.AgentStartPacketV0{
+					RequestID: agentRef,
+					Task: orquestaruntime.AgentStartTaskV0{
+						TaskRef:       task.TaskID,
+						RequiredTests: task.RequiredTests,
+					},
+					DeliveryRefs: orquestaruntime.AgentStartDeliveryRefsV0{
+						AckRef:       deliveryRef,
+						MailboxRef:   "mailbox-ref-" + deliveryRef,
+						ReadinessRef: "readiness-ref-" + deliveryRef,
+					},
+				},
+			},
+		}}},
+	}
+
+	got, ok, err := source.BuildOperationalDirectorClosureRequestV0(
+		context.Background(),
+		orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0{
+			Run:          run,
+			OccurredAt:   "2026-05-24T18:20:00Z",
+			EvidenceRefs: []string{"evidence-ref-stack-operational-closure-autoprogramming-legacy"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("BuildOperationalDirectorClosureRequestV0: %v", err)
+	}
+	if !ok || got.TaskID != task.TaskID || len(got.RequiredTestEvidenceRefs) != 1 {
+		t.Fatalf("source no cerro autoprogramming legacy: ok=%v request=%+v", ok, got)
+	}
+}
+
+func TestOperationalClosureSourceV0ReconciliaAckArchivadoSinDescriptor(t *testing.T) {
+	runRef := "run-stack-operational-closure-archived-ack-001"
+	task := stackAutoprogrammingClosureTaskForTestV0(runRef, "task-autoprogramming-archived-ack-001", []string{"go test -count=1 ./..."})
+	deliveryRef := "ack-ref-app-stack-" + orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(task.TaskID)
+	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(task.TaskID)
+	run := stackOperationalClosureRunForTestV0(runRef, task.TaskID)
+	run.AppSpecRef = "app-spec-ref-autoprogramming-archived-ack-001"
+	run.Deliveries = []string{deliveryRef}
+	run.AcceptedReviews = []string{"accepted-review-ref-" + deliveryRef}
+	reader := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	if err := reader.AppendRunEventsV0(context.Background(), runRef, []orquestacoreworkflow.OrchestrationEventV0{
+		stackOperationalClosureDeliveryEventForTestV0(t, runRef, 1, task.TaskID, deliveryRef),
+		stackOperationalClosureReviewRequestedEventForTestV0(t, runRef, 2, deliveryRef),
+		stackOperationalClosureReviewResultEventForTestV0(t, runRef, 3, deliveryRef, orquestacoreworkflow.ReviewResultStatusAcceptedV0),
+		stackOperationalClosureAcceptedReviewEventForTestV0(t, runRef, 4, deliveryRef),
+	}); err != nil {
+		t.Fatalf("AppendRunEventsV0: %v", err)
+	}
+	root := t.TempDir()
+	runtimeRoot := filepath.Join(root, "runtime")
+	archivedDir := filepath.Join(root, "state", "revision", "purga_startup_20260524T164039Z", "runtime_archived", runRef, agentRef)
+	if err := os.MkdirAll(archivedDir, 0o700); err != nil {
+		t.Fatalf("mkdir archived runtime: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(archivedDir, orquestaruntimecodex.CodexAgentAckFileNameV0), []byte(`{
+		"schema_version":"codex_agent_ack.v0",
+		"request_id":"`+agentRef+`",
+		"correlation_id":"corr-stack-operational-closure-archived-ack",
+		"ack_ref":"`+deliveryRef+`",
+		"target_module":"orquesta",
+		"task_ref":"`+task.TaskID+`",
+		"status":"completed",
+		"tests":["go test -count=1 ./..."],
+		"test_receipts":[{
+			"schema_version":"codex_required_test_receipt.v0",
+			"command":"go test -count=1 ./...",
+			"status":"passed",
+			"exit_code":0,
+			"evidence_refs":["required-test-receipt-ref-archived-ack"],
+			"occurred_at":"2026-05-24T18:30:00Z",
+			"sequence":1,
+			"output_redacted":true
+		}]
+	}`), 0o600); err != nil {
+		t.Fatalf("write archived ack: %v", err)
+	}
+	evidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
+	source := codexStackOperationalClosureSourceV0{
+		TaskStore:                  orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(task),
+		EventReader:                reader,
+		RequiredTestEvidenceStore:  evidenceStore,
+		RequiredTestEvidenceWriter: evidenceStore,
+		RuntimeWorkDir:             runtimeRoot,
+	}
+
+	got, ok, err := source.BuildOperationalDirectorClosureRequestV0(
+		context.Background(),
+		orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0{
+			Run:          run,
+			OccurredAt:   "2026-05-24T18:30:00Z",
+			EvidenceRefs: []string{"evidence-ref-stack-operational-closure-archived-ack"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("BuildOperationalDirectorClosureRequestV0: %v", err)
+	}
+	if !ok || got.TaskID != task.TaskID || len(got.RequiredTestEvidenceRefs) != 1 {
+		t.Fatalf("source no reconcilio ACK archivado: ok=%v request=%+v", ok, got)
 	}
 }
 
@@ -282,6 +445,141 @@ func TestOperationalClosureSourceV0CierraPadreCuandoHijosYaCerrados(t *testing.T
 	}
 	if !ok || got.TaskID != parent.TaskID {
 		t.Fatalf("debe cerrar padre cuando hijos ya estan cerrados: ok=%v request=%+v", ok, got)
+	}
+}
+
+func TestOperationalClosureSourceV0CierraPadreReworkConDeliveryAceptadaDelHijo(t *testing.T) {
+	runRef := "run-stack-operational-closure-source-parent-rework-child-001"
+	parent := stackOperationalClosureTaskForTestV0(runRef, "task-stack-operational-closure-parent-rework", nil)
+	child := stackOperationalClosureTaskForTestV0(runRef, "task-stack-operational-closure-child-rework", nil)
+	parent.ChildTaskRefs = []string{child.TaskID}
+	child.ParentTaskRef = parent.TaskID
+	child.DelegationDepth = parent.DelegationDepth + 1
+	run := stackOperationalClosureRunForTestV0(runRef, parent.TaskID, child.TaskID)
+	parentDelivery := "delivery-ref-stack-operational-closure-parent-rework"
+	childDelivery := "delivery-ref-stack-operational-closure-child-rework"
+	run.Deliveries = []string{parentDelivery, childDelivery}
+	run.AcceptedReviews = []string{"accepted-review-ref-" + childDelivery}
+	run.ClosedTasks = []string{child.TaskID}
+	reader := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	if err := reader.AppendRunEventsV0(context.Background(), runRef, []orquestacoreworkflow.OrchestrationEventV0{
+		stackOperationalClosureDeliveryEventForTestV0(t, runRef, 1, parent.TaskID, parentDelivery),
+		stackOperationalClosureReviewRequestedEventForTestV0(t, runRef, 2, parentDelivery),
+		stackOperationalClosureReviewResultEventForTestV0(t, runRef, 3, parentDelivery, orquestacoreworkflow.ReviewResultStatusChangesRequestedV0),
+		stackOperationalClosureDeliveryEventForTestV0(t, runRef, 4, child.TaskID, childDelivery),
+		stackOperationalClosureReviewRequestedEventForTestV0(t, runRef, 5, childDelivery),
+		stackOperationalClosureReviewResultEventForTestV0(t, runRef, 6, childDelivery, orquestacoreworkflow.ReviewResultStatusAcceptedV0),
+		stackOperationalClosureAcceptedReviewEventForTestV0(t, runRef, 7, childDelivery),
+	}); err != nil {
+		t.Fatalf("AppendRunEventsV0: %v", err)
+	}
+	source := codexStackOperationalClosureSourceV0{
+		TaskStore:   orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(parent, child),
+		EventReader: reader,
+	}
+
+	got, ok, err := source.BuildOperationalDirectorClosureRequestV0(
+		context.Background(),
+		orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0{Run: run, OccurredAt: "2026-05-25T20:35:00Z"},
+	)
+	if err != nil {
+		t.Fatalf("BuildOperationalDirectorClosureRequestV0: %v", err)
+	}
+	if !ok || got.TaskID != parent.TaskID || got.DeliveryRef != childDelivery {
+		t.Fatalf("debe cerrar padre con entrega aceptada del rework hijo: ok=%v request=%+v", ok, got)
+	}
+}
+
+func TestOperationalClosureSourceV0CierraPadreReworkAunqueScopeSeaHijo(t *testing.T) {
+	runRef := "run-stack-operational-closure-source-parent-rework-child-scope-001"
+	requiredTest := "go test -count=1 ./modulos/orquesta-app-codex-stack"
+	parent := stackOperationalClosureTaskForTestV0(runRef, "task-stack-operational-closure-parent-rework-scope", []string{requiredTest})
+	child := stackOperationalClosureTaskForTestV0(runRef, "task-stack-operational-closure-child-rework-scope", []string{requiredTest})
+	run := stackOperationalClosureRunForTestV0(runRef, parent.TaskID, child.TaskID)
+	parentDelivery := "delivery-ref-stack-operational-closure-parent-rework-scope"
+	childDelivery := "delivery-ref-stack-operational-closure-child-rework-scope"
+	run.Deliveries = []string{parentDelivery, childDelivery}
+	run.AcceptedReviews = []string{"accepted-review-ref-" + childDelivery}
+	run.ClosedTasks = []string{child.TaskID}
+	run.ReplanDecisions = []string{
+		"replan-ref-parent-rework-scope#source:rework-ref-parent-rework-scope#task:" + parent.TaskID + "#action:split_task#followups:" + child.TaskID,
+	}
+	reader := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	if err := reader.AppendRunEventsV0(context.Background(), runRef, []orquestacoreworkflow.OrchestrationEventV0{
+		stackOperationalClosureDeliveryEventForTestV0(t, runRef, 1, parent.TaskID, parentDelivery),
+		stackOperationalClosureReviewRequestedEventForTestV0(t, runRef, 2, parentDelivery),
+		stackOperationalClosureReviewResultEventForTestV0(t, runRef, 3, parentDelivery, orquestacoreworkflow.ReviewResultStatusChangesRequestedV0),
+		stackOperationalClosureDeliveryEventForTestV0(t, runRef, 4, child.TaskID, childDelivery),
+		stackOperationalClosureReviewRequestedEventForTestV0(t, runRef, 5, childDelivery),
+		stackOperationalClosureReviewResultEventForTestV0(t, runRef, 6, childDelivery, orquestacoreworkflow.ReviewResultStatusAcceptedV0),
+		stackOperationalClosureAcceptedReviewEventForTestV0(t, runRef, 7, childDelivery),
+	}); err != nil {
+		t.Fatalf("AppendRunEventsV0: %v", err)
+	}
+	childAgentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(child.TaskID)
+	ackPath := filepath.Join(t.TempDir(), orquestaruntimecodex.CodexAgentAckFileNameV0)
+	if err := os.WriteFile(ackPath, []byte(`{
+		"schema_version":"codex_agent_ack.v0",
+		"request_id":"`+childAgentRef+`",
+		"correlation_id":"corr-stack-operational-closure-parent-rework-child-scope",
+		"ack_ref":"`+childDelivery+`",
+		"target_module":"orquesta",
+		"task_ref":"`+child.TaskID+`",
+		"status":"completed",
+		"tests":["`+requiredTest+`"],
+		"test_receipts":[{
+			"schema_version":"codex_required_test_receipt.v0",
+			"command":"`+requiredTest+`",
+			"status":"passed",
+			"exit_code":0,
+			"evidence_refs":["required-test-receipt-ref-parent-rework-child-scope"],
+			"occurred_at":"2026-05-25T20:36:00Z",
+			"sequence":1,
+			"output_redacted":true
+		}]
+	}`), 0o600); err != nil {
+		t.Fatalf("write ack: %v", err)
+	}
+	evidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
+	source := codexStackOperationalClosureSourceV0{
+		TaskStore:                  orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(parent, child),
+		EventReader:                reader,
+		RequiredTestEvidenceStore:  evidenceStore,
+		RequiredTestEvidenceWriter: evidenceStore,
+		ReceiptStore: fakeCodexOpsReceiptStoreV0{descriptors: []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{{
+			DescriptorRef: "descriptor-ref-parent-rework-child-scope",
+			RunID:         runRef,
+			AgentRef:      childAgentRef,
+			AckPath:       ackPath,
+			Spec: orquestaruntime.ExternalAgentLaunchSpecV0{
+				RequestID: childAgentRef,
+				AgentPacket: orquestaruntime.AgentStartPacketV0{
+					RequestID: childAgentRef,
+					Task: orquestaruntime.AgentStartTaskV0{
+						TaskRef:       child.TaskID,
+						RequiredTests: child.RequiredTests,
+					},
+					DeliveryRefs: orquestaruntime.AgentStartDeliveryRefsV0{AckRef: childDelivery},
+				},
+			},
+		}}},
+	}
+
+	got, ok, err := source.BuildOperationalDirectorClosureRequestV0(
+		context.Background(),
+		orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0{
+			Run:              run,
+			OccurredAt:       "2026-05-25T20:36:00Z",
+			WaitScopeApplied: true,
+			WaitAgentRefs:    []string{orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(child.TaskID)},
+		},
+	)
+	if err != nil {
+		t.Fatalf("BuildOperationalDirectorClosureRequestV0: %v", err)
+	}
+	if !ok || got.TaskID != parent.TaskID || got.DeliveryRef != childDelivery ||
+		len(got.RequiredTestEvidenceRefs) != 1 {
+		t.Fatalf("debe cerrar padre con rework de hijo aunque el scope sea hijo: ok=%v request=%+v", ok, got)
 	}
 }
 
@@ -493,6 +791,82 @@ func TestOperationalClosureSourceV0NoCierraSinTestEvidenceDurable(t *testing.T) 
 	}
 }
 
+func TestOperationalClosureSourceV0NoReconciliaAckLegacyComoTestEvidence(t *testing.T) {
+	runRef := "run-stack-operational-closure-source-legacy-ack-001"
+	task := stackOperationalClosureTaskForTestV0(runRef, "task-stack-operational-closure-legacy-ack", []string{"go test ./modulos/orquesta-web"})
+	deliveryRef := "delivery-ref-stack-operational-closure-legacy-ack"
+	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(task.TaskID)
+	run := stackOperationalClosureRunForTestV0(runRef, task.TaskID)
+	run.Deliveries = []string{deliveryRef}
+	run.AcceptedReviews = []string{"accepted-review-ref-" + deliveryRef}
+	reader := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	if err := reader.AppendRunEventsV0(context.Background(), runRef, []orquestacoreworkflow.OrchestrationEventV0{
+		stackOperationalClosureDeliveryEventForTestV0(t, runRef, 1, task.TaskID, deliveryRef),
+		stackOperationalClosureReviewRequestedEventForTestV0(t, runRef, 2, deliveryRef),
+		stackOperationalClosureReviewResultEventForTestV0(t, runRef, 3, deliveryRef, orquestacoreworkflow.ReviewResultStatusAcceptedV0),
+		stackOperationalClosureAcceptedReviewEventForTestV0(t, runRef, 4, deliveryRef),
+	}); err != nil {
+		t.Fatalf("AppendRunEventsV0: %v", err)
+	}
+	runtimeDir := t.TempDir()
+	ackPath := filepath.Join(runtimeDir, orquestaruntimecodex.CodexAgentAckFileNameV0)
+	if err := os.WriteFile(ackPath, []byte(`{
+		"schema_version":"codex_agent_ack.v0",
+		"request_id":"`+agentRef+`",
+		"correlation_id":"corr-stack-operational-closure-legacy-ack",
+		"ack_ref":"`+deliveryRef+`",
+		"target_module":"orquesta",
+		"task_ref":"`+task.TaskID+`",
+		"status":"completed",
+		"tests":["go test ./modulos/orquesta-web"]
+	}`), 0o600); err != nil {
+		t.Fatalf("write ack: %v", err)
+	}
+	evidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
+	source := codexStackOperationalClosureSourceV0{
+		TaskStore:                  orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(task),
+		EventReader:                reader,
+		RequiredTestEvidenceStore:  evidenceStore,
+		RequiredTestEvidenceWriter: evidenceStore,
+		ReceiptStore: fakeCodexOpsReceiptStoreV0{descriptors: []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{{
+			DescriptorRef: "descriptor-ref-stack-operational-closure-legacy-ack",
+			RunID:         runRef,
+			AgentRef:      agentRef,
+			AckPath:       ackPath,
+			Spec: orquestaruntime.ExternalAgentLaunchSpecV0{
+				RequestID: agentRef,
+				AgentPacket: orquestaruntime.AgentStartPacketV0{
+					RequestID: agentRef,
+					Task: orquestaruntime.AgentStartTaskV0{
+						TaskRef:       task.TaskID,
+						RequiredTests: task.RequiredTests,
+					},
+					DeliveryRefs: orquestaruntime.AgentStartDeliveryRefsV0{
+						AckRef:       deliveryRef,
+						MailboxRef:   "mailbox-ref-" + deliveryRef,
+						ReadinessRef: "readiness-ref-" + deliveryRef,
+					},
+				},
+			},
+		}}},
+	}
+
+	got, ok, err := source.BuildOperationalDirectorClosureRequestV0(
+		context.Background(),
+		orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0{
+			Run:          run,
+			OccurredAt:   "2026-05-24T18:00:00Z",
+			EvidenceRefs: []string{"evidence-ref-stack-operational-closure-legacy-ack"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("BuildOperationalDirectorClosureRequestV0: %v", err)
+	}
+	if ok || len(got.RequiredTestEvidenceRefs) != 0 {
+		t.Fatalf("source no debe reconciliar ACK legacy sin test_receipts: ok=%v request=%+v", ok, got)
+	}
+}
+
 func stackOperationalClosureRunForTestV0(
 	runRef string,
 	taskRefs ...string,
@@ -530,6 +904,28 @@ func stackOperationalClosureTaskForTestV0(
 		FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
 			ContractRef:  "contract:function:operational-director:v0",
 			FunctionName: "OperationalDirectorCut",
+		}},
+	}
+}
+
+func stackAutoprogrammingClosureTaskForTestV0(
+	runRef string,
+	taskRef string,
+	requiredTests []string,
+) orquestacoreworkflow.WorkflowTaskV0 {
+	return orquestacoreworkflow.WorkflowTaskV0{
+		SchemaVersion: orquestacoreworkflow.WorkflowTaskSchemaVersionV0,
+		TaskID:        taskRef,
+		RunID:         runRef,
+		PhaseID:       orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		Title:         "Autoprogramacion legacy",
+		WriteSet:      []string{"modulos/orquesta-app-codex-stack"},
+		AcceptanceCriteria: []string{
+			"entrega revisada con evidencias causales",
+		},
+		RequiredTests: append([]string(nil), requiredTests...),
+		FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
+			FunctionName: "BuildAutoprogrammingProgrammableWorkV0",
 		}},
 	}
 }

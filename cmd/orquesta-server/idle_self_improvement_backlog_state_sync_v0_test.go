@@ -108,7 +108,7 @@ Evidencia focal: go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-serve
 	}
 }
 
-func TestIdleSelfImprovementBacklogPlannerV0NoAnadeScannerSiUnicaTareaYaVisibleV0(t *testing.T) {
+func TestIdleSelfImprovementBacklogPlannerV0AnadeScannerSiUnicaTareaVisibleYHayCapacidadV0(t *testing.T) {
 	projectDir := t.TempDir()
 	content := "## T08 runtime-neutral-e2e\n\nObjetivo: uno.\n"
 	mustWriteBacklogForStateSyncTestV0(t, projectDir, content)
@@ -127,7 +127,7 @@ func TestIdleSelfImprovementBacklogPlannerV0NoAnadeScannerSiUnicaTareaYaVisibleV
 	if err != nil {
 		t.Fatalf("PlanV0: %v", err)
 	}
-	if len(result.Requests) != 0 || result.Message != "backlog_tareas_ya_visibles_en_cola" {
+	if len(result.Requests) != 1 || result.Requests[0].FailureKind != "backlog_scan" {
 		t.Fatalf("result=%+v", result)
 	}
 }

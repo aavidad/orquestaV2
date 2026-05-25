@@ -394,7 +394,7 @@ Riesgos: No abre servidor real ni configura puertos productivos; solo fija el br
 Caso: MCP-CT-024 tool preparar orquestacion de app
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-runner ./modulos/orquesta-app-planner
-Evidencia esperada: `orquesta.apps.preparar_orquestacion.v0` recibe AppSpecV0 validada, delega en app-runner, devuelve run_ref, fase programacion, plan grande de 11 unidades, progreso inicial y error publico con field exacto si la AppSpec no es valida.
+Evidencia esperada: `orquesta.apps.preparar_orquestacion.v0` recibe AppSpecV0 validada, delega en app-runner, devuelve run_ref, fase programacion, plan grande de 11 unidades, progreso inicial, `route_policy` de preview/compatibilidad con `orquesta.apps.arrancar_director.v0` como preferente y error publico con field exacto si la AppSpec no es valida.
 Ultima ejecucion: 2026-05-09; pasa.
 Riesgos: No arranca agentes reales ni persiste runtime; es el contrato MCP seco para que el wizard/director pidan una preparacion sin conocer scheduler ni provider interno.
 ```
@@ -403,6 +403,7 @@ Riesgos: No arranca agentes reales ni persiste runtime; es el contrato MCP seco 
 Caso: MCP-CT-025 tool ejecutar orquestacion de app
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-runner ./modulos/orquesta-app-planner
+Evidencia esperada: `orquesta.apps.ejecutar_orquestacion.v0` conserva compatibilidad legacy por puertos inyectados y bloquea con `director_v2_required` cuando el caller declara que necesita Director V2.
 Evidencia esperada: `orquesta.apps.ejecutar_orquestacion.v0` prepara el run, guarda estado inicial, ejecuta el loop progresivo por puertos fake, arranca `agent-agenda-bootstrap`, devuelve `wait_external` y no filtra refs externas con detalle de adaptador al core/outbox.
 Ultima ejecucion: 2026-05-09; pasa.
 Riesgos: No valida proveedor Codex/Claude/Gemini real; el conector productivo debe enchufarse por puertos y mantener las mismas reglas de neutralizacion.

@@ -87,7 +87,9 @@ func AutoprogrammingReviewGateIssueCodeIsAdvisoryV0(code string) bool {
 		if stem == "file_too_large" ||
 			stem == "file_outside_write_set" ||
 			stem == "write_set_target_missing" ||
-			stem == "ack_pending_rail" {
+			stem == "ack_pending_rail" ||
+			stem == "ack_files_mismatch" ||
+			stem == "go_file_line_budget_exceeded" {
 			return true
 		}
 	}
@@ -99,6 +101,11 @@ func AutoprogrammingReviewGateIssueCodeBlocksClosureV0(code string) bool {
 		switch stem {
 		case "ack_missing",
 			"ack_not_completed",
+			"go_file_line_budget_strict_blocking",
+			"removed_path",
+			"truncated_path",
+			"renamed_or_moved_path",
+			"replaced_large_delta",
 			"required_test_missing",
 			"required_test_failed",
 			"test_failed":
@@ -163,21 +170,43 @@ func autoprogrammingReviewGateCanonicalStemV0(stem string) string {
 		"outside_allowed_write_set",
 		"outside_write_scope",
 		"outside_scope",
+		"out_of_scope",
+		"fuera_write_set",
+		"fuera_de_write_set",
+		"fuera_del_write_set",
+		"fuera_alcance",
+		"fuera_de_alcance",
+		"fuera_del_alcance",
 		"file_outside_writeset",
+		"file_outside_write_sets",
 		"files_outside_write_set",
+		"files_outside_write_sets",
 		"file_outside_allowed_write_set",
 		"file_outside_scope",
+		"files_outside_scope",
+		"fichero_fuera_write_set",
+		"fichero_fuera_de_write_set",
+		"fichero_fuera_alcance",
+		"archivo_fuera_write_set",
+		"archivo_fuera_de_write_set",
+		"archivo_fuera_alcance",
 		"artifact_outside_write_set",
 		"artifact_outside_writeset",
+		"artifacts_outside_write_set",
 		"artifact_out_of_write_set",
 		"artifact_path_outside_write_set",
 		"artifact_path_out_of_write_set",
+		"artifact_paths_outside_write_set",
 		"path_outside_scope",
-		"path_outside_write_set":
+		"path_outside_write_set",
+		"paths_outside_write_set":
 		return "file_outside_write_set"
 	case "missing_write_set_target",
 		"write_set_missing_target",
+		"missing_write_set_targets",
+		"write_set_missing_targets",
 		"write_set_target_absent",
+		"write_set_targets_absent",
 		"missing_write_set_destination",
 		"write_set_destination_missing",
 		"missing_write_set_path",
@@ -186,23 +215,36 @@ func autoprogrammingReviewGateCanonicalStemV0(stem string) string {
 		"write_set_entry_missing",
 		"missing_target",
 		"target_missing",
-		"target_missing_from_write_set":
+		"targets_missing",
+		"target_missing_from_write_set",
+		"destino_write_set_faltante",
+		"destino_faltante",
+		"ruta_write_set_faltante":
 		return "write_set_target_missing"
 	case "too_large_file",
+		"too_large_files",
 		"large_file",
+		"large_files",
 		"file_large",
+		"files_large",
 		"file_too_big",
+		"files_too_big",
 		"file_too_long",
+		"files_too_long",
 		"file_exceeds_limit",
 		"file_size_over_limit",
 		"file_over_line_limit",
 		"file_line_limit_exceeded",
+		"files_over_line_limit",
 		"line_limit_exceeded",
 		"max_lines_exceeded",
 		"max_line_limit_exceeded",
 		"line_count_exceeded",
 		"too_many_lines",
-		"oversized_file":
+		"oversized_file",
+		"oversized_files",
+		"fichero_demasiado_grande",
+		"archivo_demasiado_grande":
 		return "file_too_large"
 	case "ack_pending_rail",
 		"pending_rail",
@@ -215,10 +257,16 @@ func autoprogrammingReviewGateCanonicalStemV0(stem string) string {
 		"pending_sensitive_rail",
 		"sensitive_rail_pending",
 		"soft_rail",
+		"soft_rails",
 		"rail_blando",
+		"rails_blandos",
 		"rail_dudoso",
+		"rails_dudosos",
 		"doubtful_rail",
-		"suspect_rail":
+		"suspect_rail",
+		"detector_dudoso",
+		"false_positive",
+		"falso_positivo":
 		return "ack_pending_rail"
 	case "missing_required_test":
 		return "required_test_missing"
@@ -231,6 +279,9 @@ func autoprogrammingReviewGateCanonicalStemV0(stem string) string {
 	case "ack_not_complete":
 		return "ack_not_completed"
 	default:
+		if destructive := autoprogrammingReviewGateDestructiveCanonicalStemV0(stem); destructive != "" {
+			return destructive
+		}
 		return stem
 	}
 }

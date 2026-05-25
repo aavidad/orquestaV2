@@ -23,6 +23,7 @@ type CodexSupervisorStopReasonV0 string
 const (
 	CodexSupervisorStopDoneV0         CodexSupervisorStopReasonV0 = "done"
 	CodexSupervisorStopFailedV0       CodexSupervisorStopReasonV0 = "failed"
+	CodexSupervisorStopStoppedV0      CodexSupervisorStopReasonV0 = "stopped"
 	CodexSupervisorStopMaxTicksV0     CodexSupervisorStopReasonV0 = "max_ticks"
 	CodexSupervisorStopContextDoneV0  CodexSupervisorStopReasonV0 = "context_done"
 	CodexSupervisorStopRuntimeErrorV0 CodexSupervisorStopReasonV0 = "runtime_error"
@@ -109,6 +110,10 @@ func SuperviseCodexV0(
 			result.StopReason = CodexSupervisorStopFailedV0
 			return result, nil
 		}
+		if codexSupervisorRuntimeStoppedV0(snapshot.Status) {
+			result.StopReason = CodexSupervisorStopStoppedV0
+			return result, nil
+		}
 	}
 	result.StopReason = CodexSupervisorStopMaxTicksV0
 	return result, nil
@@ -167,6 +172,15 @@ func codexSupervisorRuntimeDoneV0(state CodexSupervisorRuntimeStateV0) bool {
 func codexSupervisorRuntimeFailedV0(state CodexSupervisorRuntimeStateV0) bool {
 	switch strings.TrimSpace(string(state)) {
 	case string(CodexSupervisorRuntimeFailedV0), "error", "errored":
+		return true
+	default:
+		return false
+	}
+}
+
+func codexSupervisorRuntimeStoppedV0(state CodexSupervisorRuntimeStateV0) bool {
+	switch strings.TrimSpace(string(state)) {
+	case string(CodexSupervisorRuntimeStoppedV0), "blocked", "paused", "stop_requested":
 		return true
 	default:
 		return false

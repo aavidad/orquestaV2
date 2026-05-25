@@ -20,7 +20,7 @@ type mcpAutoprogrammingStatusHTTPHandlerV0 struct {
 
 type mcpAutoprogrammingStatusHTTPInputV0 struct {
 	MCPAutoprogrammingStatusToolInputV0
-	OperatorAdvice []MCPAutoprogrammingOperatorAdviceV0 `json:"operator_advice,omitempty"`
+	OperatorAdvice mcpAutoprogrammingOperatorAdviceListV0 `json:"operator_advice,omitempty"`
 }
 
 type mcpAutoprogrammingStatusHTTPResultV0 struct {
@@ -39,8 +39,8 @@ func (handler mcpAutoprogrammingStatusHTTPHandlerV0) ServeHTTP(w http.ResponseWr
 		return
 	}
 	var input mcpAutoprogrammingStatusHTTPInputV0
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeMCPAutoprogrammingStatusHTTPV0(w, http.StatusBadRequest, newMCPAutoprogrammingStatusHTTPErrorV0(r, input.MCPAutoprogrammingStatusToolInputV0, "body", "request_body_invalido"))
+	if code := decodeMCPPublicHTTPJSONV0(w, r, &input); code != "" {
+		writeMCPAutoprogrammingStatusHTTPV0(w, http.StatusBadRequest, newMCPAutoprogrammingStatusHTTPErrorV0(r, input.MCPAutoprogrammingStatusToolInputV0, "body", code))
 		return
 	}
 	if handler.executor == nil {
@@ -49,7 +49,12 @@ func (handler mcpAutoprogrammingStatusHTTPHandlerV0) ServeHTTP(w http.ResponseWr
 	}
 	result, err := handler.executor.Execute(r.Context(), input.MCPAutoprogrammingStatusToolInputV0)
 	if err != nil {
-		writeMCPAutoprogrammingStatusHTTPResultV0(w, http.StatusInternalServerError, newMCPAutoprogrammingStatusHTTPErrorV0(r, input.MCPAutoprogrammingStatusToolInputV0, "executor", "autoprogramming_status_error"), input.OperatorAdvice)
+		result := newMCPAutoprogrammingStatusExecutorErrorResultV0(
+			input.MCPAutoprogrammingStatusToolInputV0,
+			publicMCPExecutorErrorMessageFromErrorV0("autoprogramming_status_executor_error", err),
+		)
+		result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), result.CorrelationID)
+		writeMCPAutoprogrammingStatusHTTPResultV0(w, http.StatusInternalServerError, result, input.OperatorAdvice)
 		return
 	}
 	status := http.StatusOK
@@ -57,6 +62,25 @@ func (handler mcpAutoprogrammingStatusHTTPHandlerV0) ServeHTTP(w http.ResponseWr
 		status = http.StatusBadRequest
 	}
 	writeMCPAutoprogrammingStatusHTTPResultV0(w, status, result, input.OperatorAdvice)
+}
+
+func newMCPAutoprogrammingStatusExecutorErrorResultV0(
+	input MCPAutoprogrammingStatusToolInputV0,
+	message string,
+) MCPAutoprogrammingStatusToolResultV0 {
+	result := newMCPAutoprogrammingStatusBaseV0(input)
+	result.Estado = MCPAutoprogrammingStatusEstadoErrorV0
+	result.Errores = []MCPValidationIssueV0{{
+		Code:    "autoprogramming_status_executor_error",
+		Field:   "executor",
+		Message: strings.TrimSpace(firstNonEmptyMCPV0(message, "autoprogramming_status_executor_error")),
+	}}
+	result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingDiagnosticV0(
+		"autoprogramming_status_executor_error",
+		"executor",
+		result.Errores[0].Message,
+	))
+	return result
 }
 
 func newMCPAutoprogrammingStatusHTTPErrorV0(
@@ -93,10 +117,9 @@ func writeMCPAutoprogrammingStatusHTTPResultV0(
 	w http.ResponseWriter,
 	status int,
 	result MCPAutoprogrammingStatusToolResultV0,
-	advice []MCPAutoprogrammingOperatorAdviceV0,
+	advice mcpAutoprogrammingOperatorAdviceListV0,
 ) {
-	normalizedAdvice := normalizeMCPAutoprogrammingOperatorAdviceV0(
-		advice,
+	normalizedAdvice := advice.normalizedMCPV0(
 		firstNonEmptyMCPV0(result.RunRef, result.QueueRef, result.RequestID, result.CorrelationID),
 	)
 	if len(normalizedAdvice) == 0 {

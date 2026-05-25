@@ -8,14 +8,18 @@ import (
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 )
 
 type codexStackOperationalClosureSourceV0 struct {
-	TaskStore                 orquestacionnucleoapp.WorkflowTaskStorePortV0
-	EventReader               orquestacionnucleoapp.RunEventReaderPortV0
-	RequiredTestEvidenceStore orquestacionnucleoapp.RequiredTestEvidenceReaderPortV0
-	AppChangeStore            orquestaappchange.AppChangeRecordSourcePortV0
-	DomainSubmissionLedger    DomainWorkArtifactSubmissionRecordReaderPortV0
+	TaskStore                  orquestacionnucleoapp.WorkflowTaskStorePortV0
+	EventReader                orquestacionnucleoapp.RunEventReaderPortV0
+	RequiredTestEvidenceStore  orquestacionnucleoapp.RequiredTestEvidenceReaderPortV0
+	RequiredTestEvidenceWriter orquestacionnucleoapp.RequiredTestEvidenceWriterPortV0
+	ReceiptStore               orquestaruntimecodexdelivery.CodexReceiptDescriptorStorePortV0
+	RuntimeWorkDir             string
+	AppChangeStore             orquestaappchange.AppChangeRecordSourcePortV0
+	DomainSubmissionLedger     DomainWorkArtifactSubmissionRecordReaderPortV0
 }
 
 var _ orquestaappdirectorservice.AppDirectorOperationalClosureSourcePortV0 = codexStackOperationalClosureSourceV0{}
@@ -27,12 +31,16 @@ func operationalClosureSourceV0(
 	if config.Stores.TaskStore == nil || reader == nil {
 		return nil
 	}
+	requiredTestEvidenceStore := requiredTestEvidenceStoreV0(config)
 	return codexStackOperationalClosureSourceV0{
-		TaskStore:                 config.Stores.TaskStore,
-		EventReader:               reader,
-		RequiredTestEvidenceStore: requiredTestEvidenceStoreV0(config),
-		AppChangeStore:            config.Stores.AppChangeStore,
-		DomainSubmissionLedger:    domainWorkSubmissionRecordReaderV0(config.DomainDelivery.Ledger),
+		TaskStore:                  config.Stores.TaskStore,
+		EventReader:                reader,
+		RequiredTestEvidenceStore:  requiredTestEvidenceStore,
+		RequiredTestEvidenceWriter: requiredTestEvidenceStore,
+		ReceiptStore:               config.Stores.ReceiptStore,
+		RuntimeWorkDir:             config.Codex.RuntimeWorkDir,
+		AppChangeStore:             config.Stores.AppChangeStore,
+		DomainSubmissionLedger:     domainWorkSubmissionRecordReaderV0(config.DomainDelivery.Ledger),
 	}
 }
 
@@ -105,7 +113,7 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureC
 		if !codexStackOperationalClosureChildrenClosedV0(request, task, tasks) {
 			continue
 		}
-		if len(scopeAgents) > 0 && !scopeAgents[orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(task.TaskID)] {
+		if len(scopeAgents) > 0 && !codexStackOperationalClosureTaskMatchesScopeV0(request.Run, task, tasks, scopeAgents) {
 			continue
 		}
 		if codexStackOperationalClosureContainsV0(request.Run.ClosedTasks, task.TaskID) {
@@ -120,12 +128,55 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureC
 	return closed, nil
 }
 
+func codexStackOperationalClosureTaskMatchesScopeV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	task orquestacoreworkflow.WorkflowTaskV0,
+	tasks []orquestacoreworkflow.WorkflowTaskV0,
+	scopeAgents map[string]bool,
+) bool {
+	if len(scopeAgents) == 0 {
+		return true
+	}
+	if scopeAgents[orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(task.TaskID)] {
+		return true
+	}
+	tasksByRef := make(map[string]orquestacoreworkflow.WorkflowTaskV0, len(tasks))
+	for _, item := range tasks {
+		tasksByRef[strings.TrimSpace(item.TaskID)] = item
+	}
+	return codexStackOperationalClosureDescendantMatchesScopeV0(run, task, tasksByRef, scopeAgents, map[string]bool{})
+}
+
+func codexStackOperationalClosureDescendantMatchesScopeV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	task orquestacoreworkflow.WorkflowTaskV0,
+	tasksByRef map[string]orquestacoreworkflow.WorkflowTaskV0,
+	scopeAgents map[string]bool,
+	seen map[string]bool,
+) bool {
+	for _, childRef := range codexStackOperationalClosureChildTaskRefsV0(run, task) {
+		if seen[childRef] {
+			continue
+		}
+		seen[childRef] = true
+		if scopeAgents[orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(childRef)] {
+			return true
+		}
+		child, ok := tasksByRef[childRef]
+		if ok && codexStackOperationalClosureDescendantMatchesScopeV0(run, child, tasksByRef, scopeAgents, seen) {
+			return true
+		}
+	}
+	return false
+}
+
 func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureTaskIsClosableV0(
 	ctx context.Context,
 	request orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0,
 	task orquestacoreworkflow.WorkflowTaskV0,
 ) (bool, error) {
-	if codexStackOperationalClosureTaskIsOperationalDirectorV0(task) {
+	if codexStackOperationalClosureTaskIsOperationalDirectorV0(task) ||
+		codexStackWorkflowTaskLooksAutoprogrammingV0(task) {
 		return true, nil
 	}
 	return source.codexStackOperationalClosureTaskIsOPESDomainWorkV0(ctx, request.Run.RunID, task)
@@ -142,7 +193,7 @@ func codexStackOperationalClosureChildrenClosedV0(
 	task orquestacoreworkflow.WorkflowTaskV0,
 	tasks []orquestacoreworkflow.WorkflowTaskV0,
 ) bool {
-	childRefs := codexStackOperationalClosureCompactRefsV0(task.ChildTaskRefs)
+	childRefs := codexStackOperationalClosureChildTaskRefsV0(request.Run, task)
 	if len(childRefs) == 0 {
 		return true
 	}
@@ -156,6 +207,24 @@ func codexStackOperationalClosureChildrenClosedV0(
 		}
 	}
 	return true
+}
+
+func codexStackOperationalClosureChildTaskRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	task orquestacoreworkflow.WorkflowTaskV0,
+) []string {
+	refs := append([]string(nil), task.ChildTaskRefs...)
+	taskRef := strings.TrimSpace(task.TaskID)
+	for _, rawReplan := range run.ReplanDecisions {
+		replan, ok := codexStackReviewGateParseReplanProjectionV0(rawReplan)
+		if !ok ||
+			strings.TrimSpace(replan.TaskRef) != taskRef ||
+			replan.AcceptedAction != string(orquestacoreworkflow.ReplanDecisionActionSplitTaskV0) {
+			continue
+		}
+		refs = append(refs, replan.FollowupRefs...)
+	}
+	return codexStackOperationalClosureCompactRefsV0(refs)
 }
 
 func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureRequestForTaskV0(
@@ -179,6 +248,20 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureR
 				return orquestacionnucleoapp.OperationalDirectorClosureRequestV0{}, false, err
 			}
 			requiredTestEvidenceRefs = codexStackOperationalClosurePassedTestEvidenceRefsV0(task, evidence, accepted, result)
+			if len(requiredTestEvidenceRefs) == 0 {
+				requiredTestEvidenceRefs, err = source.codexStackOperationalClosureEnsureAckRequiredTestEvidenceRefsV0(
+					ctx,
+					request,
+					task,
+					delivery,
+					reviewRequest,
+					accepted,
+					result,
+				)
+				if err != nil {
+					return orquestacionnucleoapp.OperationalDirectorClosureRequestV0{}, false, err
+				}
+			}
 			if len(requiredTestEvidenceRefs) == 0 {
 				continue
 			}

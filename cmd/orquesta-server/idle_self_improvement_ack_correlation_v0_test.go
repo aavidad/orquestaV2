@@ -134,9 +134,9 @@ func writeBacklogPlannerCorrelatedACKWithCriteriaForTestV0(
 ) {
 	t.Helper()
 	normalizedRunRef := idleSelfImprovementNormalizeQueuedRequestRefV0(runRef)
-	packet := fmt.Sprintf(`{"schema_version":"agent_start_packet.v0","request_id":"agent-ref-t08","correlation_id":"corr-%s-burst-001","target_module":"orquesta-app-stack-programacion","task":{"task_ref":"task-t08","required_tests":%s,"done_criteria":%s},"delivery_refs":{"ack_ref":"ack-ref-t08"}}`, normalizedRunRef, mustJSONArrayForBacklogAckTestV0(t, requiredTests), mustJSONArrayForBacklogAckTestV0(t, doneCriteria))
+	packet := fmt.Sprintf(`{"schema_version":"agent_start_packet.v0","request_id":"agent-ref-t08","correlation_id":"corr-%s-burst-001","target_module":"orquesta-app-stack-programacion","task":{"task_ref":"task-t08","write_set":["cmd/orquesta-server"],"required_tests":%s,"done_criteria":%s},"delivery_refs":{"ack_ref":"ack-ref-t08"}}`, normalizedRunRef, mustJSONArrayForBacklogAckTestV0(t, requiredTests), mustJSONArrayForBacklogAckTestV0(t, doneCriteria))
 	mustWriteFileForBacklogAckTestV0(t, filepath.Join(ackDir, "agent_packet.json"), packet)
-	ack := fmt.Sprintf(`{"schema_version":"codex_agent_ack.v0","request_id":"agent-ref-t08","correlation_id":"corr-%s-burst-001","ack_ref":"ack-ref-t08","target_module":"orquesta-app-stack-programacion","task_ref":"task-t08","status":"completed","files":["cmd/orquesta-server/idle_self_improvement_backlog_planner_v0.go"],"tests":%s}`, normalizedRunRef, mustJSONArrayForBacklogAckTestV0(t, requiredTests))
+	ack := fmt.Sprintf(`{"schema_version":"codex_agent_ack.v0","request_id":"agent-ref-t08","correlation_id":"corr-%s-burst-001","ack_ref":"ack-ref-t08","target_module":"orquesta-app-stack-programacion","task_ref":"task-t08","status":"completed","files":["cmd/orquesta-server/idle_self_improvement_backlog_planner_v0.go"],"tests":%s,"test_receipts":%s}`, normalizedRunRef, mustJSONArrayForBacklogAckTestV0(t, requiredTests), mustTestReceiptsJSONForBacklogAckTestV0(t, requiredTests))
 	mustWriteFileForBacklogAckTestV0(t, filepath.Join(ackDir, "agent_ack.json"), ack)
 }
 
@@ -163,6 +163,18 @@ func mustJSONArrayForBacklogAckTestV0(t *testing.T, values []string) string {
 			out += ","
 		}
 		out += fmt.Sprintf("%q", value)
+	}
+	return out + "]"
+}
+
+func mustTestReceiptsJSONForBacklogAckTestV0(t *testing.T, values []string) string {
+	t.Helper()
+	out := "["
+	for index, value := range values {
+		if index > 0 {
+			out += ","
+		}
+		out += fmt.Sprintf(`{"schema_version":"codex_required_test_receipt.v0","command":%q,"status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-%d"],"occurred_at":"2026-05-24T10:00:00Z","sequence":%d,"output_redacted":true}`, value, index+1, index+1)
 	}
 	return out + "]"
 }

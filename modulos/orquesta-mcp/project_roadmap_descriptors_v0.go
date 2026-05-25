@@ -1,7 +1,7 @@
 package orquestamcp
 
 func mcpProjectRoadmapSourcesV0() []mcpProjectRoadmapItemSourceV0 {
-	return []mcpProjectRoadmapItemSourceV0{
+	return append([]mcpProjectRoadmapItemSourceV0{
 		{
 			ID:          "CORE-ROADMAP-001",
 			Area:        "registro_proyecto",
@@ -147,7 +147,7 @@ func mcpProjectRoadmapSourcesV0() []mcpProjectRoadmapItemSourceV0 {
 				"docs/runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md",
 			),
 		},
-	}
+	}, mcpProjectRoadmapDeploymentSourcesV0()...)
 }
 
 func mcpProjectDecisionSourcesV0() []mcpProjectDecisionSourceV0 {

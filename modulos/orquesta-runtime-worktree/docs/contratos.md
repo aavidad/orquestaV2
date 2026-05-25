@@ -24,6 +24,9 @@ Invariantes:
 - Un borrado detectado produce issue `removed_path` aunque el path este dentro
   del write-set; el borrado es rail estricto y requiere decision humana/director
   antes de repetirse con autorizacion explicita futura.
+- Un truncado fuerte, renombre/movimiento ambiguo o reemplazo con delta grande
+  se clasifica como `truncated`, `renamed_or_moved` o
+  `replaced_large_delta` desde el snapshot, sin depender de `ACK.files`.
 - No conoce Codex, Claude, Gemini, DB, HOME, OAuth ni modelos.
 - El adaptador que consuma el resultado decide si registra entrega, pide
   revision o corta agente.

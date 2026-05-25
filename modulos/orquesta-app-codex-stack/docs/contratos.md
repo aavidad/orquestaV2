@@ -92,6 +92,12 @@ Manejo real de agentes en Orquesta:
 
 - las tareas se convierten en outbox `LaunchRuntimeAgent`;
 - `agentBatchDispatcherV0` ejecuta `ExternalProcessAgentBatchExecutorV0`;
+- antes de reclamar un batch de `LaunchRuntimeAgent`, el stack inyecta
+  `LiveProcessCapacityGateV0`: `MaxConcurrency` de la config Codex significa
+  limite global de procesos Codex vivos. Si el limite esta completo, el outbox
+  queda pendiente y no se pierde la tarea; si hay hueco parcial, solo se lanza
+  ese numero de agentes. Los outbox de parada no usan este gate: deben poder
+  cerrar o reconciliar agentes aunque la capacidad de lanzamiento este llena;
 - el launcher resuelve spec Codex, arranca proceso, registra `AgentStarted` y
   escribe `AgentProcessRegistryRecordV0`;
 - si la tarea viene de `WorkflowTaskStore`, el paquete neutral conserva linaje

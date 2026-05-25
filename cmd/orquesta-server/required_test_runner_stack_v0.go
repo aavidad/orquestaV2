@@ -40,6 +40,7 @@ func requiredTestRunnerFromEnvV0(
 			AllowedCommands: allowed,
 			Env:             env,
 			MaxOutputBytes:  int64(intEnvOrDefaultV0("ORQUESTA_REQUIRED_TEST_MAX_OUTPUT_BYTES", 1024*1024)),
+			MaxArtifacts:    intEnvOrDefaultV0("ORQUESTA_REQUIRED_TEST_OUTPUT_MAX_ARTIFACTS", 200),
 		},
 		EvidenceWriter: evidenceWriter,
 	}, nil

@@ -28,12 +28,33 @@ type IdleSelfImprovementPlannerPortV0 interface {
 	) (IdleSelfImprovementPlanResultV0, error)
 }
 
+type IdleSelfImprovementBlockerPortV0 interface {
+	IdleSelfImprovementBlockersV0(
+		context.Context,
+		IdleSelfImprovementBlockerRequestV0,
+	) (IdleSelfImprovementBlockerResultV0, error)
+}
+
+type IdleSelfImprovementBlockerRequestV0 struct {
+	KnownRunRefs     []string
+	KnownRequestRefs []string
+}
+
+type IdleSelfImprovementBlockerResultV0 struct {
+	Blocked      bool
+	Reason       string
+	RunRefs      []string
+	EvidenceRefs []string
+	Message      string
+}
+
 type IdleSelfImprovementPlanRequestV0 struct {
 	BaseRequest      IdleSelfImprovementRequestV0
 	MaxRequests      int
 	Trigger          string
 	QueueSize        int
 	FreeCapacity     int
+	Skips            int
 	KnownRunRefs     []string
 	KnownRequestRefs []string
 }

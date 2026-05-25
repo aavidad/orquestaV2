@@ -1,12 +1,12 @@
 package orquestadirectorsupervisedburst
 
-import "strings"
-
 import (
 	"context"
+	"strings"
 
 	orquestadirectorcycle "orquesta/modulos/orquesta-director-cycle"
 	orquestadirectorsupervisor "orquesta/modulos/orquesta-director-supervisor"
+	stopreason "orquesta/modulos/orquesta-run-supervisor/stopreason"
 )
 
 const (
@@ -57,13 +57,14 @@ type DirectorSupervisedBurstStepRequestV0 struct {
 }
 
 type DirectorSupervisedBurstResultV0 struct {
-	RunRef        string                                                `json:"run_ref"`
-	MaxSteps      int                                                   `json:"max_steps"`
-	ExecutedSteps int                                                   `json:"executed_steps"`
-	FinalAction   orquestadirectorsupervisor.DirectorSupervisorActionV0 `json:"final_action,omitempty"`
-	Steps         []DirectorSupervisedBurstStepResultV0                 `json:"steps,omitempty"`
-	Issues        []DirectorSupervisedBurstIssueV0                      `json:"issues,omitempty"`
-	EvidenceRefs  []string                                              `json:"evidence_refs,omitempty"`
+	RunRef         string                                                `json:"run_ref"`
+	MaxSteps       int                                                   `json:"max_steps"`
+	ExecutedSteps  int                                                   `json:"executed_steps"`
+	FinalAction    orquestadirectorsupervisor.DirectorSupervisorActionV0 `json:"final_action,omitempty"`
+	Steps          []DirectorSupervisedBurstStepResultV0                 `json:"steps,omitempty"`
+	Issues         []DirectorSupervisedBurstIssueV0                      `json:"issues,omitempty"`
+	EvidenceRefs   []string                                              `json:"evidence_refs,omitempty"`
+	StopProjection stopreason.ProjectionV0                               `json:"stop_projection,omitempty"`
 }
 
 type DirectorSupervisedBurstStepResultV0 struct {

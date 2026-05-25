@@ -1,6 +1,7 @@
 package orquestaruntimeworktree
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -40,7 +41,7 @@ func normalizeWorktreeSnapshotRequestV0(
 ) WorktreeSnapshotRequestV0 {
 	request.SnapshotRef = strings.TrimSpace(request.SnapshotRef)
 	request.ProjectWorkDir = strings.TrimSpace(request.ProjectWorkDir)
-	request.IgnorePrefixes, _ = normalizeWorktreePathListV0(request.IgnorePrefixes, false)
+	request.IgnorePrefixes = normalizeWorktreeIgnorePrefixesV0(request.IgnorePrefixes)
 	return request
 }
 
@@ -79,7 +80,7 @@ func collectWorktreeFilesV0(
 		if !ok {
 			return fs.SkipDir
 		}
-		if worktreePathIgnoredV0(rel, ignorePrefixes) {
+		if worktreePathIgnoredV0(rel, ignorePrefixes) || worktreeControlPathV0(rel) {
 			if entry.IsDir() {
 				return fs.SkipDir
 			}
@@ -125,8 +126,20 @@ func hashWorktreeFileV0(path string, rel string, size int64) (WorktreeSnapshotFi
 	}
 	sum := sha256.Sum256(data)
 	return WorktreeSnapshotFileV0{
-		Path:   rel,
-		Digest: hex.EncodeToString(sum[:]),
-		Size:   size,
+		Path:      rel,
+		Digest:    hex.EncodeToString(sum[:]),
+		Size:      size,
+		LineCount: worktreeGoLineCountV0(rel, data),
 	}, nil
+}
+
+func worktreeGoLineCountV0(rel string, data []byte) int {
+	if !strings.HasSuffix(rel, ".go") || len(data) == 0 {
+		return 0
+	}
+	lines := bytes.Count(data, []byte{'\n'})
+	if !bytes.HasSuffix(data, []byte{'\n'}) {
+		lines++
+	}
+	return lines
 }

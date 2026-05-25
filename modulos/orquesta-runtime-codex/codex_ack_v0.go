@@ -7,18 +7,31 @@ import (
 )
 
 const CodexAgentAckSchemaVersionV0 = "codex_agent_ack.v0"
+const CodexRequiredTestReceiptSchemaVersionV0 = "codex_required_test_receipt.v0"
 
 type CodexAgentAckV0 struct {
-	SchemaVersion string         `json:"schema_version"`
-	RequestID     string         `json:"request_id"`
-	CorrelationID string         `json:"correlation_id"`
-	AckRef        string         `json:"ack_ref"`
-	TargetModule  string         `json:"target_module"`
-	TaskRef       string         `json:"task_ref"`
-	Status        string         `json:"status"`
-	Files         EvidenceListV0 `json:"files,omitempty"`
-	Tests         EvidenceListV0 `json:"tests,omitempty"`
-	Notes         EvidenceListV0 `json:"notes,omitempty"`
+	SchemaVersion string                       `json:"schema_version"`
+	RequestID     string                       `json:"request_id"`
+	CorrelationID string                       `json:"correlation_id"`
+	AckRef        string                       `json:"ack_ref"`
+	TargetModule  string                       `json:"target_module"`
+	TaskRef       string                       `json:"task_ref"`
+	Status        string                       `json:"status"`
+	Files         EvidenceListV0               `json:"files,omitempty"`
+	Tests         EvidenceListV0               `json:"tests,omitempty"`
+	TestReceipts  []CodexRequiredTestReceiptV0 `json:"test_receipts,omitempty"`
+	Notes         EvidenceListV0               `json:"notes,omitempty"`
+}
+
+type CodexRequiredTestReceiptV0 struct {
+	SchemaVersion  string   `json:"schema_version"`
+	Command        string   `json:"command"`
+	Status         string   `json:"status"`
+	ExitCode       *int     `json:"exit_code"`
+	EvidenceRefs   []string `json:"evidence_refs,omitempty"`
+	OccurredAt     string   `json:"occurred_at"`
+	Sequence       int      `json:"sequence"`
+	OutputRedacted *bool    `json:"output_redacted"`
 }
 
 type EvidenceListV0 []string

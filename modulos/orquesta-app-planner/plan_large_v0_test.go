@@ -42,8 +42,9 @@ func TestBuildGoAPIWebMicrotaskPlanV0ParaAppGrandeDividePorContratos(t *testing.
 		"ack-erp-i18n",
 	}, []string{"internal/app", "internal/integration"})
 	assertAppUnitForTestV0(t, plan, "deploy", orquestacoreworkflow.OrchestrationPhaseIntegracionV0, []string{"ack-erp-architecture"}, []string{
-		"deploy",
+		"contracts/deployment_plan_v0.json",
 		"docs/deploy.md",
+		"tests/deployment_plan_dry_run_test.go",
 	})
 	assertAppUnitForTestV0(t, plan, "docs", orquestacoreworkflow.OrchestrationPhaseDocumentacionV0, []string{"ack-erp-integration", "ack-erp-deploy"}, []string{
 		"README.md",

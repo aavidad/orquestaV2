@@ -21,6 +21,7 @@ type RuntimeV0 struct {
 	appHandler           http.Handler
 	supervisor           SupervisorPortV0
 	supervisorTickActive int32
+	shutdownInProgress   int32
 	stateStore           StateStorePortV0
 	auditSink            AuditSinkPortV0
 	startupCheck         StartupCheckPortV0
@@ -64,10 +65,10 @@ func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
 
 func (runtime *RuntimeV0) HandlerV0() http.Handler {
 	handler := NewHandlerV0(HandlerConfigV0{
-		AppHandler: runtime.appHandler,
+		AppHandler: runtime.shutdownFreezeHTTPHandlerV0(runtime.appHandler),
 		Tracker:    runtime.tracker,
 	})
-	return runtime.auditHTTPHandlerV0(handler)
+	return runtime.auditHTTPHandlerV0(runtime.controlPlaneGuardHTTPHandlerV0(handler))
 }
 
 func (runtime *RuntimeV0) RunV0(ctx context.Context) error {

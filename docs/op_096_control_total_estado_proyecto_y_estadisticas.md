@@ -202,7 +202,12 @@ La pregunta “que ha hecho `Codex1` en la ultima hora en `orquestador`” debe 
 Matiz de estado real:
 
 - hoy ya puede resolverse razonablemente por agente/proyecto usando `agente actividad`, `audit`, `runtime-transcript` y estadística Git
-- lo que sigue sin cerrarse es la agregación global y la calidad del transcript pasivo
+- desde el 2026-05-25 existe el contrato inicial
+  `WorkspaceTimelineQueryV0` para agregacion global de workspace por puerto
+  read-only; las fuentes reales aun pueden responder `not_available` si la
+  composicion no inyecta adaptador
+- lo que sigue sin cerrarse es la cobertura real completa de fuentes historicas
+  y la calidad del transcript pasivo
 
 ## Estadisticas Git canónicas
 
@@ -246,6 +251,7 @@ Debe entrar por un puerto hexagonal de observabilidad/control Git y proyectarse 
 
 - `GET /api/proyectos/{slug}/cockpit`
 - `GET /api/proyectos/{slug}/timeline`
+- `POST /api/v0/workspace/timeline`
 - `GET /api/proyectos/{slug}/estadisticas`
 - `GET /api/agentes/{agente}/estadisticas`
 - `GET /api/git/repos`

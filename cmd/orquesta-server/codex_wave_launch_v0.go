@@ -1,0 +1,242 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
+)
+
+func runCodexLaunchWaveV0(
+	ctx context.Context,
+	config codexWaveConfigV0,
+) (codexWaveLaunchSummaryV0, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	summary := codexWaveLaunchSummaryV0{
+		SchemaVersion:  codexWaveSummarySchemaVersionV0,
+		WaveRef:        config.WaveRef,
+		AgentCount:     config.Agents,
+		ProjectWorkDir: config.ProjectWorkDir,
+		RuntimeWorkDir: config.RuntimeWorkDir,
+		RegistryPath:   codexWaveRegistryPathV0(config.RuntimeWorkDir),
+		Sandbox:        config.Sandbox,
+		ApprovalPolicy: config.ApprovalPolicy,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+		DryRun:         config.DryRun,
+		Agents:         make([]codexWaveAgentSummaryV0, 0, config.Agents),
+	}
+	if config.PurgeRuntime {
+		report, err := codexWaveApplyRuntimePurgeV0(config)
+		summary.PurgeReport = report
+		if err != nil {
+			return summary, err
+		}
+	}
+	if err := os.MkdirAll(config.RuntimeWorkDir, 0o700); err != nil {
+		return codexWaveLaunchSummaryV0{}, err
+	}
+	for i := 1; i <= config.Agents; i++ {
+		codexWaveLaunchOneAgentV0(ctx, config, &summary, i)
+	}
+	codexWaveRefreshSummaryV0(&summary)
+	if err := codexWaveSaveRegistryV0(summary); err != nil {
+		return codexWaveLaunchSummaryV0{}, err
+	}
+	return summary, nil
+}
+
+func codexWaveLaunchOneAgentV0(
+	ctx context.Context,
+	config codexWaveConfigV0,
+	summary *codexWaveLaunchSummaryV0,
+	index int,
+) {
+	agent, err := codexWaveMaterializeAgentV0(config, index)
+	if err != nil {
+		summary.Errors = append(summary.Errors, codexWavePublicErrorV0{
+			AgentRef: fmt.Sprintf("%s-agent-%02d", config.WaveRef, index),
+			Code:     "materialize_failed",
+			Message:  err.Error(),
+		})
+		return
+	}
+	if config.DryRun {
+		agent.Status = "dry_run"
+		summary.Agents = append(summary.Agents, agent)
+		return
+	}
+	pid, err := codexWaveStartAgentProcessV0(ctx, agent.WrapperPath, config.ProjectWorkDir)
+	if err != nil {
+		agent.Status = "launch_failed"
+		summary.Errors = append(summary.Errors, codexWavePublicErrorV0{
+			AgentRef: agent.AgentRef,
+			Code:     "launch_failed",
+			Message:  err.Error(),
+		})
+		summary.Agents = append(summary.Agents, agent)
+		return
+	}
+	agent.ProcessRef = fmt.Sprintf("%s-process-%02d", config.WaveRef, index)
+	agent.SessionRef = fmt.Sprintf("%s-session-%02d", config.WaveRef, index)
+	agent.LaunchRef = fmt.Sprintf("%s-launch-%02d", config.WaveRef, index)
+	agent.PID = pid
+	agent.StartedAt = time.Now().UTC().Format(time.RFC3339)
+	if err := codexWaveAttachProcessProofV0(&agent, config, index); err != nil {
+		_ = signalProcessV0(pid)
+		agent.Status = "launch_failed"
+		summary.Errors = append(summary.Errors, codexWaveProcessProofAttachErrorV0(agent.AgentRef, err))
+		summary.Agents = append(summary.Agents, agent)
+		return
+	}
+	agent.Status = "running"
+	summary.Agents = append(summary.Agents, agent)
+}
+
+func codexWaveStartAgentProcessV0(ctx context.Context, wrapperPath string, projectWorkDir string) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	cmd := exec.Command(wrapperPath)
+	cmd.Dir = projectWorkDir
+	cmd.Env = []string{}
+	cmd.Stdin = nil
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	configureDetachedProcessV0(cmd)
+	if err := cmd.Start(); err != nil {
+		return 0, err
+	}
+	pid := cmd.Process.Pid
+	go func() {
+		_ = cmd.Wait()
+	}()
+	return pid, nil
+}
+
+func codexWaveMaterializeAgentV0(
+	config codexWaveConfigV0,
+	index int,
+) (codexWaveAgentSummaryV0, error) {
+	agentRef := fmt.Sprintf("%s-agent-%02d", config.WaveRef, index)
+	agentRuntimeDir := filepath.Join(config.RuntimeWorkDir, fmt.Sprintf("agent-%02d", index))
+	if err := os.MkdirAll(agentRuntimeDir, 0o700); err != nil {
+		return codexWaveAgentSummaryV0{}, err
+	}
+	homeDir, codeHomeDir, credentialProjection, err := codexWaveAgentHomesV0(config, agentRuntimeDir)
+	if err != nil {
+		return codexWaveAgentSummaryV0{}, err
+	}
+	profile := codexWaveConnectorProfileV0(config, agentRuntimeDir, codeHomeDir, homeDir, index)
+	if issues := orquestaruntimecodex.ValidateCodexConnectorProfileV0(profile); len(issues) > 0 {
+		return codexWaveAgentSummaryV0{}, fmt.Errorf("codex_profile_invalid:%s", issues[0].Field)
+	}
+	return codexWaveWriteAgentFilesV0(config, profile, agentRef, agentRuntimeDir, homeDir, codeHomeDir, credentialProjection, index)
+}
+
+func codexWaveAgentHomesV0(config codexWaveConfigV0, agentRuntimeDir string) (string, string, *codexWaveCredentialProjectionReceiptV0, error) {
+	if config.IsolateHome {
+		return codexWaveCopyCodeHomeV0(config.SourceCodeHome, agentRuntimeDir, config.CredentialProjectionPolicy)
+	}
+	return homeDirV0(), config.SourceCodeHome, nil, nil
+}
+
+func codexWaveConnectorProfileV0(
+	config codexWaveConfigV0,
+	agentRuntimeDir string,
+	codeHomeDir string,
+	homeDir string,
+	index int,
+) orquestaruntimecodex.CodexConnectorProfileV0 {
+	return orquestaruntimecodex.CodexConnectorProfileV0{
+		SchemaVersion:   orquestaruntimecodex.CodexConnectorProfileSchemaVersionV0,
+		OptIn:           true,
+		CommandPath:     config.CommandPath,
+		ProjectWorkDir:  config.ProjectWorkDir,
+		RuntimeWorkDir:  agentRuntimeDir,
+		CodeHomeDir:     codeHomeDir,
+		HomeDir:         homeDir,
+		PathEnv:         config.PathEnv,
+		Model:           config.Model,
+		ReasoningEffort: config.ReasoningEffort,
+		Profile:         config.Profile,
+		Sandbox:         config.Sandbox,
+		ApprovalPolicy:  config.ApprovalPolicy,
+		ExtraArgs:       append([]string(nil), config.ExtraArgs...),
+		PromptHints: []string{
+			"codex-launch-wave",
+			fmt.Sprintf("wave=%s", config.WaveRef),
+			fmt.Sprintf("agent=%d/%d", index, config.Agents),
+		},
+	}
+}
+
+func codexWaveWriteAgentFilesV0(
+	config codexWaveConfigV0,
+	profile orquestaruntimecodex.CodexConnectorProfileV0,
+	agentRef string,
+	agentRuntimeDir string,
+	homeDir string,
+	codeHomeDir string,
+	credentialProjection *codexWaveCredentialProjectionReceiptV0,
+	index int,
+) (codexWaveAgentSummaryV0, error) {
+	promptPath := filepath.Join(agentRuntimeDir, orquestaruntimecodex.CodexAgentPromptFileNameV0)
+	wrapperPath := filepath.Join(agentRuntimeDir, orquestaruntimecodex.CodexWrapperFileNameV0)
+	if err := os.WriteFile(promptPath, []byte(codexWaveAgentPromptV0(config, agentRef, index)), 0o600); err != nil {
+		return codexWaveAgentSummaryV0{}, err
+	}
+	if err := os.WriteFile(wrapperPath, []byte(orquestaruntimecodex.BuildCodexWrapperScriptV0(profile)), 0o700); err != nil {
+		return codexWaveAgentSummaryV0{}, err
+	}
+	return codexWaveAgentSummaryV0{
+		AgentRef:             agentRef,
+		RuntimeWorkDir:       agentRuntimeDir,
+		PromptPath:           promptPath,
+		WrapperPath:          wrapperPath,
+		StdoutPath:           filepath.Join(agentRuntimeDir, orquestaruntimecodex.CodexStdoutFileNameV0),
+		StderrPath:           filepath.Join(agentRuntimeDir, orquestaruntimecodex.CodexStderrFileNameV0),
+		LastMessagePath:      filepath.Join(agentRuntimeDir, orquestaruntimecodex.CodexLastMessageFileNameV0),
+		HomeDir:              homeDir,
+		CodeHomeDir:          codeHomeDir,
+		Status:               "materialized",
+		CredentialProjection: credentialProjection,
+	}, nil
+}
+
+func codexWaveAgentPromptV0(config codexWaveConfigV0, agentRef string, index int) string {
+	var b strings.Builder
+	b.WriteString("Eres un agente Codex lanzado por Orquesta en una ola operativa opt-in.\n\n")
+	b.WriteString("Identidad:\n")
+	b.WriteString("- wave_ref: " + config.WaveRef + "\n")
+	b.WriteString("- agent_ref: " + agentRef + "\n")
+	b.WriteString("- agente: " + strconv.Itoa(index) + " de " + strconv.Itoa(config.Agents) + "\n\n")
+	b.WriteString("Reglas operativas:\n")
+	b.WriteString("- Trabaja en el repositorio indicado por Orquesta y respeta AGENTS.md locales antes de editar.\n")
+	b.WriteString("- No borres archivos ni codigo existente sin revisar primero su uso y dejar evidencia clara.\n")
+	b.WriteString("- Manten el write-set estrecho y coordina mentalmente tu parte con el resto de la ola.\n")
+	b.WriteString("- Al terminar, resume cambios, rutas tocadas, pruebas ejecutadas y bloqueos.\n\n")
+	b.WriteString("Instrucciones del operador:\n")
+	b.WriteString(codexWavePromptForAgentV0(config, index))
+	b.WriteString("\n")
+	return b.String()
+}
+
+func codexWavePromptForAgentV0(config codexWaveConfigV0, index int) string {
+	if index > 0 && index <= len(config.AgentPrompts) {
+		if prompt := strings.TrimSpace(config.AgentPrompts[index-1]); prompt != "" {
+			return prompt
+		}
+	}
+	return config.Prompt
+}

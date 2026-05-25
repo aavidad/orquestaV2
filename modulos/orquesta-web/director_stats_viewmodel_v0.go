@@ -77,7 +77,6 @@ type WebDirectorStatsSummaryV0 struct {
 	UsageAgents        int      `json:"usage_agents,omitempty"`
 	UsageQuotaStatus   string   `json:"usage_quota_status,omitempty"`
 	UsageTotalTokens   int64    `json:"usage_total_tokens,omitempty"`
-	UsageCostMicros    int64    `json:"usage_cost_micros,omitempty"`
 	NoSignalAgentRefs  []string `json:"no_signal_agent_refs"`
 }
 
@@ -102,7 +101,6 @@ type WebDirectorStatsAgentV0 struct {
 	TaskRef             string `json:"task_ref,omitempty"`
 	NoProgressTicks     int    `json:"no_progress_ticks,omitempty"`
 	RepeatedActionCount int    `json:"repeated_action_count,omitempty"`
-	ModelAlias          string `json:"model_alias,omitempty"`
 	CapacityLevel       string `json:"capacity_level,omitempty"`
 	QuotaStatus         string `json:"quota_status,omitempty"`
 	QuotaRemaining      int64  `json:"quota_remaining,omitempty"`
@@ -234,7 +232,6 @@ func directorStatsSummaryV0(
 		summary.UsageAgents = usage.AgentsObserved
 		summary.UsageQuotaStatus = trimDirectorStatsV0(usage.QuotaStatus)
 		summary.UsageTotalTokens = usage.TotalTokens
-		summary.UsageCostMicros = usage.CostMicros
 	}
 	return summary
 }

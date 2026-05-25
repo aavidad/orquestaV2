@@ -11,6 +11,8 @@ Cobertura:
 - acepta cambios dentro del write-set;
 - rechaza cambios fuera del write-set;
 - rechaza borrados detectados aunque el path pertenezca al write-set;
+- clasifica y bloquea truncados fuertes, renombres/movimientos ambiguos y
+  reemplazos con delta grande dentro del write-set;
 - permite `write_set=["."]` para apps nuevas completas;
 - rechaza project workdir invalido y write-set inseguro;
 - prepara worktree aislada preservando `branch_ref` opaco y sin filtrar paths

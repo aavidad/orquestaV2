@@ -70,6 +70,8 @@ func sanitizeContextMaterializedEntryV0(
 	case ContextSanitizationStatusReviewRequiredV0:
 		sanitized = contextMaterializedRefOnlyV0(contextEntryFromMaterializedV0(sanitized))
 		sanitized.Truncated = true
+		sanitized.RefOnlyReason = ContextRefOnlyReasonSanitizationReviewV0
+		sanitized.RequiredRefAction = ContextRequiredRefActionAskDirectorV0
 	case ContextSanitizationStatusSanitizedV0, ContextSanitizationStatusCleanV0:
 		sanitized.Content = firstContextSanitizedContentV0(result.Content, entry.Content)
 		sanitized.Bytes = len(sanitized.Content)

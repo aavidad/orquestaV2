@@ -148,12 +148,21 @@ func reviewGateResultStatusForTargetV0(
 	reviewRef string,
 	deliveryRef string,
 ) (string, bool) {
+	var first string
 	for _, projection := range run.ReviewResults {
 		status, request, delivery, ok := reviewGateResultProjectionV0(projection)
 		if ok && request == strings.TrimSpace(reviewRef) &&
 			delivery == strings.TrimSpace(deliveryRef) {
-			return status, true
+			if status == string(orquestacoreworkflow.ReviewResultStatusAcceptedV0) {
+				return status, true
+			}
+			if first == "" {
+				first = status
+			}
 		}
+	}
+	if first != "" {
+		return first, true
 	}
 	return "", false
 }

@@ -8,13 +8,7 @@ import (
 	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
-var forbiddenAutoPlanFragmentsV0 = []string{
-	"secret", "secreto", "token", "password", "credential", "credencial",
-	"api_key", "oauth", "transcript", "prompt", "runtime", "sql", "dsn",
-	"provider", "proveedor", "model", "modelo", "database", "base de datos",
-	"base_de_datos", "sqlite", "postgres", "mysql", "mongodb", "codex",
-	"claude", "gemini", "ollama", "vllm", "docker", "tmux", "home",
-}
+const appChangeDirectorSourceRailBoundaryV0 = "app_change_director_source"
 
 func appChangeReadyForAutoPlanV0(request orquestaappchange.AppChangeRequestV0) bool {
 	criteria := sanitizeAppChangeTaskCriteriaV0(request.AcceptanceCriteria)
@@ -54,11 +48,12 @@ func containsForbiddenAutoPlanTextV0(values ...string) bool {
 		return false
 	}
 	for _, value := range values {
-		lower := strings.ToLower(value)
-		for _, fragment := range forbiddenAutoPlanFragmentsV0 {
-			if strings.Contains(lower, fragment) {
-				return true
-			}
+		if orquestarails.TextContainsOperationalRawDetailForFieldV0(
+			appChangeDirectorSourceRailBoundaryV0,
+			"autoplan_readiness",
+			value,
+		) {
+			return true
 		}
 	}
 	return false

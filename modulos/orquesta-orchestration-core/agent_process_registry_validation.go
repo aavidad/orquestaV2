@@ -51,6 +51,20 @@ func ValidateAgentProcessRegistryLookupV0(
 	)
 }
 
+func NormalizeAgentProcessRegistryListFilterV0(
+	filter AgentProcessRegistryListFilterV0,
+) AgentProcessRegistryListFilterV0 {
+	return orquestaagentprocessregistry.NormalizeAgentProcessRegistryListFilterV0(filter)
+}
+
+func ValidateAgentProcessRegistryListFilterV0(
+	filter AgentProcessRegistryListFilterV0,
+) error {
+	return mapAgentProcessRegistryValidationErrorV0(
+		orquestaagentprocessregistry.ValidateAgentProcessRegistryListFilterV0(filter),
+	)
+}
+
 func mapAgentProcessRegistryValidationErrorV0(err error) error {
 	if err == nil {
 		return nil

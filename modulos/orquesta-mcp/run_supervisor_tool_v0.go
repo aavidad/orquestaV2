@@ -27,6 +27,7 @@ type MCPRunSupervisorToolInputV0 struct {
 	QueueRef                   string `json:"queue_ref,omitempty"`
 	ContinueMessage            string `json:"continue_message,omitempty"`
 	OccurredAt                 string `json:"occurred_at,omitempty"`
+	IdempotencyKey             string `json:"idempotency_key,omitempty"`
 
 	MaxTicks             int  `json:"max_ticks,omitempty"`
 	MaxRunsPerTick       int  `json:"max_runs_per_tick,omitempty"`
@@ -56,26 +57,28 @@ type MCPRunSupervisorTickV0 struct {
 }
 
 type MCPRunSupervisorToolResultV0 struct {
-	Estado        string                     `json:"estado"`
-	RequestID     string                     `json:"request_id,omitempty"`
-	CorrelationID string                     `json:"correlation_id,omitempty"`
-	RunRef        string                     `json:"run_ref,omitempty"`
-	StopReason    string                     `json:"stop_reason,omitempty"`
-	Ticks         int                        `json:"ticks,omitempty"`
-	Last          MCPRunSupervisorSnapshotV0 `json:"last,omitempty"`
-	History       []MCPRunSupervisorTickV0   `json:"history,omitempty"`
-	EvidenceRefs  []string                   `json:"evidence_refs,omitempty"`
-	RepairRunRefs []string                   `json:"repair_run_refs,omitempty"`
-	NextActions   []string                   `json:"next_actions,omitempty"`
-	Errores       []MCPValidationIssueV0     `json:"errores_publicos,omitempty"`
+	Estado         string                           `json:"estado"`
+	RequestID      string                           `json:"request_id,omitempty"`
+	CorrelationID  string                           `json:"correlation_id,omitempty"`
+	RunRef         string                           `json:"run_ref,omitempty"`
+	StopReason     string                           `json:"stop_reason,omitempty"`
+	Ticks          int                              `json:"ticks,omitempty"`
+	Last           MCPRunSupervisorSnapshotV0       `json:"last,omitempty"`
+	History        []MCPRunSupervisorTickV0         `json:"history,omitempty"`
+	EvidenceRefs   []string                         `json:"evidence_refs,omitempty"`
+	IdempotencyKey string                           `json:"idempotency_key,omitempty"`
+	RepairRunRefs  []string                         `json:"repair_run_refs,omitempty"`
+	NextActions    []string                         `json:"next_actions,omitempty"`
+	Diagnostics    []MCPAutoprogrammingDiagnosticV0 `json:"diagnostics,omitempty"`
+	Errores        []MCPValidationIssueV0           `json:"errores_publicos,omitempty"`
 }
 
 func MCPRunSupervisorDescriptorV0() MCPRunSupervisorToolDescriptorV0 {
 	return MCPRunSupervisorToolDescriptorV0{
 		Name:        MCPRunSupervisorToolNameV0,
 		Version:     MCPRunSupervisorToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,operational_director_plan_ref?,queue_ref?,max_ticks?,continue_message?,limits?}",
-		Output:      "ok:{run_ref,stop_reason,ticks,last,history?,evidence_refs?}|error:{errores_publicos}",
+		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,operational_director_plan_ref?,queue_ref?,idempotency_key?,max_ticks?,continue_message?,limits?}",
+		Output:      "ok:{run_ref,stop_reason,ticks,last,history?,evidence_refs?,idempotency_key?,diagnostics?,next_actions?}|error:{errores_publicos,idempotency_key?,diagnostics?,next_actions?}",
 		ResourceURI: MCPRunSupervisorResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -96,16 +99,18 @@ func NewMCPRunSupervisorOKResultV0(
 	history []MCPRunSupervisorTickV0,
 ) MCPRunSupervisorToolResultV0 {
 	return MCPRunSupervisorToolResultV0{
-		Estado:        MCPRunSupervisorEstadoOKV0,
-		RequestID:     strings.TrimSpace(input.RequestID),
-		CorrelationID: firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
-		RunRef:        firstNonEmptyMCPV0(runRef, input.RunRef, last.SessionRef),
-		StopReason:    strings.TrimSpace(stopReason),
-		Ticks:         ticks,
-		Last:          last,
-		History:       append([]MCPRunSupervisorTickV0(nil), history...),
-		EvidenceRefs:  compactStringsMCPV0(last.EvidenceRefs),
-		Errores:       []MCPValidationIssueV0{},
+		Estado:         MCPRunSupervisorEstadoOKV0,
+		RequestID:      strings.TrimSpace(input.RequestID),
+		CorrelationID:  firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
+		RunRef:         firstNonEmptyMCPV0(runRef, input.RunRef, last.SessionRef),
+		StopReason:     strings.TrimSpace(stopReason),
+		Ticks:          ticks,
+		Last:           last,
+		History:        append([]MCPRunSupervisorTickV0(nil), history...),
+		EvidenceRefs:   compactStringsMCPV0(last.EvidenceRefs),
+		IdempotencyKey: strings.TrimSpace(input.IdempotencyKey),
+		Diagnostics:    []MCPAutoprogrammingDiagnosticV0{},
+		Errores:        []MCPValidationIssueV0{},
 	}
 }
 
@@ -120,10 +125,12 @@ func NewMCPRunSupervisorErrorResultV0(
 		code = "run_supervisor_error"
 	}
 	return MCPRunSupervisorToolResultV0{
-		Estado:        MCPRunSupervisorEstadoErrorV0,
-		RequestID:     strings.TrimSpace(input.RequestID),
-		CorrelationID: firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
-		RunRef:        strings.TrimSpace(input.RunRef),
+		Estado:         MCPRunSupervisorEstadoErrorV0,
+		RequestID:      strings.TrimSpace(input.RequestID),
+		CorrelationID:  firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
+		RunRef:         strings.TrimSpace(input.RunRef),
+		IdempotencyKey: strings.TrimSpace(input.IdempotencyKey),
+		Diagnostics:    []MCPAutoprogrammingDiagnosticV0{},
 		Errores: []MCPValidationIssueV0{{
 			Code:    code,
 			Field:   strings.TrimSpace(field),

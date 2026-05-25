@@ -131,6 +131,28 @@ func TestBuildDirectorSchedulerTickV0StoppedWithoutAckReconstructsMissingStop(t 
 	)
 }
 
+func TestBuildDirectorSchedulerTickV0NoACKRegistraLostYPreguntaDirector(t *testing.T) {
+	input := validSchedulerTickInputWithProgressV0(orquestaruntime.AgentStoppedV0)
+	input.ProgressSupervisionCandidates[0].SupervisionInput.Report.DecisionRequired = true
+	input.ProgressSupervisionCandidates[0].SupervisionInput.Report.EvidenceRefs = append(
+		input.ProgressSupervisionCandidates[0].SupervisionInput.Report.EvidenceRefs,
+		"evidence-ref-no-ack",
+	)
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 3)
+	assertSchedulerCommandTypesV0(t, plan,
+		orquestacoreworkflow.OrchestrationCommandAssessAgentWorkV0,
+		orquestacoreworkflow.OrchestrationCommandRegisterAgentLostV0,
+		orquestacoreworkflow.OrchestrationCommandAskDirectorV0,
+	)
+	assertSchedulerProgressAssessmentV0(t, plan.Commands[0],
+		orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
+		orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
+	)
+}
+
 func TestBuildDirectorSchedulerTickV0InterruptedWithoutAckStopsBeforeWork(t *testing.T) {
 	input := validSchedulerTickInputWithProgressV0(orquestaruntime.AgentStoppedV0)
 	input.ProgressSupervisionCandidates[0].SupervisionInput.Report.Summary =

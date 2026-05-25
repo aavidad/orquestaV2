@@ -2,6 +2,7 @@ package orquestaagentprocessregistrymemory
 
 import (
 	"context"
+	"sort"
 	"sync"
 
 	orquestaagentprocessregistry "orquesta/modulos/orquesta-agent-process-registry"
@@ -10,6 +11,7 @@ import (
 type AgentProcessRecordV0 = orquestaagentprocessregistry.AgentProcessRegistryRecordV0
 
 var _ orquestaagentprocessregistry.AgentProcessRegistryPortV0 = (*InMemoryAgentProcessRegistryV0)(nil)
+var _ orquestaagentprocessregistry.AgentProcessRegistryListPortV0 = (*InMemoryAgentProcessRegistryV0)(nil)
 
 type InMemoryAgentProcessRegistryV0 struct {
 	mu      sync.Mutex
@@ -86,6 +88,39 @@ func (registry *InMemoryAgentProcessRegistryV0) ResolveAgentProcessV0(
 		)
 	}
 	return record, nil
+}
+
+func (registry *InMemoryAgentProcessRegistryV0) ListAgentProcessesV0(
+	ctx context.Context,
+	filter orquestaagentprocessregistry.AgentProcessRegistryListFilterV0,
+) ([]AgentProcessRecordV0, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	filter = orquestaagentprocessregistry.NormalizeAgentProcessRegistryListFilterV0(filter)
+	if err := orquestaagentprocessregistry.ValidateAgentProcessRegistryListFilterV0(filter); err != nil {
+		return nil, err
+	}
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+	registry.ensureRecordsLockedV0()
+	records := make([]AgentProcessRecordV0, 0, len(registry.records))
+	for _, record := range registry.records {
+		if filter.RunID != "" && record.RunID != filter.RunID {
+			continue
+		}
+		records = append(records, record)
+	}
+	sort.Slice(records, func(i int, j int) bool {
+		if records[i].RunID != records[j].RunID {
+			return records[i].RunID < records[j].RunID
+		}
+		return records[i].AgentRequestID < records[j].AgentRequestID
+	})
+	return records, nil
 }
 
 func validateAgentProcessLookupV0(key agentProcessRegistryKeyV0) error {

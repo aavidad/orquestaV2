@@ -63,7 +63,8 @@ func TestSuperviseRunsParaSinEjecucionesV0(t *testing.T) {
 		t.Fatalf("SuperviseRunsV0: %v", err)
 	}
 	if result.StopReason != RunSupervisorStopNoExecutionV0 ||
-		len(result.Ticks) != 1 {
+		len(result.Ticks) != 1 ||
+		result.StopProjection.PublicReason != "idle_no_execution" {
 		t.Fatalf("result=%+v", result)
 	}
 }
@@ -115,10 +116,31 @@ func TestSuperviseRunsNoMutaInputV0(t *testing.T) {
 }
 
 func TestSuperviseRunsPropagaErrorYContextV0(t *testing.T) {
-	ticker := &fakeSupervisorTickerV0{err: errors.New("tick failed")}
+	ticker := &fakeSupervisorTickerV0{
+		err: errors.New("tick failed"),
+		errResult: orquestaruncoordinator.RunCoordinatorTickResultV0{
+			Executions: []orquestaruncoordinator.RunExecutionSummaryV0{{
+				RunRef: "run-ref-error-001",
+				Diagnostics: []orquestaruncoordinator.RunDrainDiagnosticV0{{
+					Kind:   "drain_error",
+					Status: "error",
+					RunRef: "run-ref-error-001",
+					Error:  "drain failed",
+				}},
+			}},
+		},
+	}
 	result, err := SuperviseRunsV0(context.Background(), RunSupervisorDepsV0{Ticker: ticker}, supervisorCommandV0(1))
 	if err == nil || result.StopReason != RunSupervisorStopTickErrorV0 {
 		t.Fatalf("err=%v result=%+v", err, result)
+	}
+	if result.Error != "tick failed" ||
+		result.ErrorTickNumber != 1 ||
+		len(result.ErrorRunRefs) != 1 ||
+		result.ErrorRunRefs[0] != "run-ref-error-001" ||
+		len(result.Diagnostics) == 0 ||
+		result.Diagnostics[0].RunRef != "run-ref-error-001" {
+		t.Fatalf("diagnostico de error perdido: %+v", result)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -130,9 +152,10 @@ func TestSuperviseRunsPropagaErrorYContextV0(t *testing.T) {
 }
 
 type fakeSupervisorTickerV0 struct {
-	commands []orquestaruncoordinator.RunCoordinatorTickCommandV0
-	results  []orquestaruncoordinator.RunCoordinatorTickResultV0
-	err      error
+	commands  []orquestaruncoordinator.RunCoordinatorTickCommandV0
+	results   []orquestaruncoordinator.RunCoordinatorTickResultV0
+	errResult orquestaruncoordinator.RunCoordinatorTickResultV0
+	err       error
 }
 
 func (fake *fakeSupervisorTickerV0) RunGlobalTickV0(
@@ -141,7 +164,7 @@ func (fake *fakeSupervisorTickerV0) RunGlobalTickV0(
 ) (orquestaruncoordinator.RunCoordinatorTickResultV0, error) {
 	fake.commands = append(fake.commands, command)
 	if fake.err != nil {
-		return orquestaruncoordinator.RunCoordinatorTickResultV0{}, fake.err
+		return fake.errResult, fake.err
 	}
 	if len(fake.results) == 0 {
 		return orquestaruncoordinator.RunCoordinatorTickResultV0{}, nil

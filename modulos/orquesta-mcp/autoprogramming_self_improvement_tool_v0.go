@@ -2,6 +2,7 @@ package orquestamcp
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
@@ -30,6 +31,27 @@ type MCPAutoprogrammingSelfImprovementToolInputV0 struct {
 	AutoPrepareRun bool                                                             `json:"auto_prepare_run,omitempty"`
 	OperatorAdvice []MCPAutoprogrammingOperatorAdviceV0                             `json:"operator_advice,omitempty"`
 	Proposal       orquestaautoprogramming.AutoprogrammingSelfImprovementProposalV0 `json:"proposal"`
+}
+
+func (input *MCPAutoprogrammingSelfImprovementToolInputV0) UnmarshalJSON(raw []byte) error {
+	type alias MCPAutoprogrammingSelfImprovementToolInputV0
+	var envelope struct {
+		alias
+		OperatorAdvice json.RawMessage `json:"operator_advice"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return err
+	}
+	*input = MCPAutoprogrammingSelfImprovementToolInputV0(envelope.alias)
+	if len(envelope.OperatorAdvice) == 0 || strings.TrimSpace(string(envelope.OperatorAdvice)) == "null" {
+		return nil
+	}
+	var advice mcpAutoprogrammingOperatorAdviceListV0
+	if err := json.Unmarshal(envelope.OperatorAdvice, &advice); err != nil {
+		return err
+	}
+	input.OperatorAdvice = []MCPAutoprogrammingOperatorAdviceV0(advice)
+	return nil
 }
 
 type MCPAutoprogrammingSelfImprovementToolResultV0 struct {
@@ -65,6 +87,46 @@ type MCPAutoprogrammingOperatorAdviceV0 struct {
 	Text         string   `json:"text,omitempty"`
 	EvidenceRefs []string `json:"evidence_refs,omitempty"`
 	NonBlocking  bool     `json:"non_blocking"`
+}
+
+type mcpAutoprogrammingOperatorAdviceListV0 []MCPAutoprogrammingOperatorAdviceV0
+
+func (advice *mcpAutoprogrammingOperatorAdviceListV0) UnmarshalJSON(raw []byte) error {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		*advice = nil
+		return nil
+	}
+	if strings.HasPrefix(trimmed, "\"") {
+		var text string
+		if err := json.Unmarshal(raw, &text); err != nil {
+			return err
+		}
+		if strings.TrimSpace(text) == "" {
+			*advice = nil
+			return nil
+		}
+		*advice = []MCPAutoprogrammingOperatorAdviceV0{{Message: strings.TrimSpace(text)}}
+		return nil
+	}
+	if strings.HasPrefix(trimmed, "{") {
+		var item MCPAutoprogrammingOperatorAdviceV0
+		if err := json.Unmarshal(raw, &item); err != nil {
+			return err
+		}
+		*advice = []MCPAutoprogrammingOperatorAdviceV0{item}
+		return nil
+	}
+	var items []MCPAutoprogrammingOperatorAdviceV0
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return err
+	}
+	*advice = items
+	return nil
+}
+
+func (advice mcpAutoprogrammingOperatorAdviceListV0) normalizedMCPV0(defaultTargetRef string) []MCPAutoprogrammingOperatorAdviceV0 {
+	return normalizeMCPAutoprogrammingOperatorAdviceV0([]MCPAutoprogrammingOperatorAdviceV0(advice), defaultTargetRef)
 }
 
 type MCPAutoprogrammingSelfImprovementToolExecutorV0 struct {

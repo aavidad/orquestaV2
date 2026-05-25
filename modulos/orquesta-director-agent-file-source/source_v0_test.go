@@ -508,6 +508,21 @@ func (provider *recordingDecisionFileDescriptorProviderForTestV0) ListDirectorAg
 	return append([]DirectorAgentDecisionFileDescriptorV0(nil), provider.Descriptors...), nil
 }
 
+type decisionFileConsumptionRecorderForTestV0 struct {
+	Receipts []DirectorAgentDecisionSidecarReceiptV0
+}
+
+func (recorder *decisionFileConsumptionRecorderForTestV0) RecordDirectorAgentDecisionFileConsumptionV0(
+	ctx context.Context,
+	receipt DirectorAgentDecisionSidecarReceiptV0,
+) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	recorder.Receipts = append(recorder.Receipts, receipt)
+	return nil
+}
+
 type memoryDecisionFileReaderForTestV0 struct {
 	Files map[string][]byte
 }

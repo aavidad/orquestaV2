@@ -29,6 +29,17 @@ Estado: completada
 ```
 
 ```text
+ID: PER-013
+Objetivo: Implementar ledger outbox file-based para recuperacion durable de dispatch/ACK del servidor residente.
+Write-set: outbox_ledger_file_*_v0.go; outbox_ledger_file_v0_test.go; docs locales
+Simbolo foco: FileOutboxLedgerV0
+Contrato: DirectorCycleOutboxLedgerPortV0 + orquesta-outbox-dispatch ports
+Validacion: `go test -count=1 ./modulos/orquesta-persistence`
+Bloqueos: No es DB ni broker productivo; solo adaptador JSON local opt-in por composicion.
+Estado: completada
+```
+
+```text
 ID: PER-001
 Objetivo: Definir contrato local minimo de repositorio para persistir `ProyectoPlanBorradorV0` en un corte futuro.
 Write-set: docs/contratos.md

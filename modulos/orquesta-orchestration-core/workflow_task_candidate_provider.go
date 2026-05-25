@@ -205,7 +205,8 @@ func workflowTaskSchedulableV0(
 func workflowTaskRefsForSchedulingV0(run orquestacoreworkflow.OrchestrationRunV0) []string {
 	refs := make([]string, 0, len(run.Tasks))
 	for _, taskRef := range compactStringsV0(run.Tasks) {
-		if stringInSetV0(taskRef, run.ClosedTasks) {
+		if stringInSetV0(taskRef, run.ClosedTasks) ||
+			stringInSetV0(taskRef, run.DeliveredTasks) {
 			continue
 		}
 		refs = append(refs, taskRef)
@@ -253,7 +254,11 @@ func stringInSetV0(value string, set []string) bool {
 
 func workflowTaskAgentActiveV0(run orquestacoreworkflow.OrchestrationRunV0, taskRef string) bool {
 	agentRef := WorkflowTaskAgentRequestRefV0(taskRef)
-	if stringInSetV0(agentRef, run.FailedAgents) || stringInSetV0(agentRef, run.StoppedAgents) {
+	if stringInSetV0(agentRef, run.DeliveredAgents) ||
+		stringInSetV0(agentRef, run.FailedAgents) ||
+		stringInSetV0(agentRef, run.LostAgents) ||
+		stringInSetV0(agentRef, run.StoppedAgents) ||
+		stringInSetV0(agentRef, run.ConfirmedStoppedAgents) {
 		return false
 	}
 	return stringInSetV0(agentRef, run.Agents) || stringInSetV0(agentRef, run.StartedAgents)

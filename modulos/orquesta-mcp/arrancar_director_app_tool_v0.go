@@ -42,6 +42,7 @@ type MCPArrancarDirectorAppToolResultV0 struct {
 	Estado        string                     `json:"estado"`
 	RequestID     string                     `json:"request_id,omitempty"`
 	CorrelationID string                     `json:"correlation_id,omitempty"`
+	RoutePolicy   MCPAppSpecRoutePolicyV0    `json:"route_policy"`
 	AppSpec       MCPAppSpecCompactV0        `json:"app_spec,omitempty"`
 	RunRef        string                     `json:"run_ref,omitempty"`
 	PhaseID       string                     `json:"phase_id,omitempty"`
@@ -65,10 +66,11 @@ func MCPArrancarDirectorAppDescriptorV0() MCPArrancarDirectorAppToolDescriptorV0
 		Name:        MCPArrancarDirectorAppToolNameV0,
 		Version:     MCPArrancarDirectorAppToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,app_spec_request:AppSpecRequestV0(request_kind?,execution_mode?),limits?:{max_external_waits?}}",
-		Output:      "ok:{app_spec,run_ref,phase_id,director_task,director_tasks,loop_status}|error:{errores_publicos}",
+		Output:      "ok:{route_policy,app_spec,run_ref,phase_id,director_task,director_tasks,loop_status}|error:{route_policy,errores_publicos}",
 		ResourceURI: MCPArrancarDirectorAppResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
+			"entrada operativa preferente para apps nuevas con juicio del Director",
 			"no elige proveedor modelo credenciales home runtime ni DB",
 			"delegacion en orquesta-app-director-service",
 		},
@@ -103,6 +105,7 @@ func NewMCPArrancarDirectorAppResultV0(
 		return MCPArrancarDirectorAppToolResultV0{
 			Estado:        MCPArrancarDirectorAppEstadoErrorV0,
 			CorrelationID: strings.TrimSpace(result.CorrelationID),
+			RoutePolicy:   mcpPreferredDirectorRoutePolicyV0(),
 			Errores:       publicIssuesMCPV0(result.ValidationIssues),
 			EvidenceRefs:  compactStringsMCPV0(result.EvidenceRefs),
 		}
@@ -111,6 +114,7 @@ func NewMCPArrancarDirectorAppResultV0(
 		Estado:        MCPArrancarDirectorAppEstadoOKV0,
 		RequestID:     strings.TrimSpace(result.AppSpec.RequestID),
 		CorrelationID: strings.TrimSpace(result.CorrelationID),
+		RoutePolicy:   mcpPreferredDirectorRoutePolicyV0(),
 		AppSpec:       compactAppSpecV0(result.AppSpec),
 		RunRef:        strings.TrimSpace(result.Run.RunID),
 		PhaseID:       strings.TrimSpace(string(result.Run.CurrentPhase)),
@@ -124,6 +128,14 @@ func NewMCPArrancarDirectorAppResultV0(
 		LoopStatus:    strings.TrimSpace(string(result.LoopStatus)),
 		StartedAgents: compactStringsMCPV0(result.StartedAgents),
 		EvidenceRefs:  compactStringsMCPV0(result.EvidenceRefs),
+	}
+}
+
+func mcpPreferredDirectorRoutePolicyV0() MCPAppSpecRoutePolicyV0 {
+	return MCPAppSpecRoutePolicyV0{
+		Mode:                "operativo_preferente",
+		PreferredEntrypoint: MCPArrancarDirectorAppToolNameV0,
+		PublicReason:        "apps_nuevas_con_juicio_usan_director_v2",
 	}
 }
 

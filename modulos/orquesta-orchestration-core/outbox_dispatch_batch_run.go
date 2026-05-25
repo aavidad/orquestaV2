@@ -2,7 +2,9 @@ package orquestacionnucleoapp
 
 import (
 	"context"
+	"strings"
 
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
 )
 
@@ -10,6 +12,7 @@ const (
 	OutboxDispatchBatchRunDispatchedV0      = "dispatched"
 	OutboxDispatchBatchRunNoPendingV0       = "no_pending"
 	OutboxDispatchBatchRunAlreadyClaimedV0  = "already_claimed"
+	OutboxDispatchBatchRunCapacityBlockedV0 = "capacity_blocked"
 	OutboxDispatchBatchRunExecutionFailedV0 = "execution_failed"
 	OutboxDispatchBatchRunAckFailedV0       = "ack_failed"
 	OutboxDispatchBatchRunPendingV0         = "pending"
@@ -30,14 +33,15 @@ type outboxDispatchClaimReleaserPortV0 interface {
 }
 
 type OutboxDispatchBatchRunRequestV0 struct {
-	RunRef      string
-	TargetPort  string
-	MessageType string
-	MaxReady    int
-	Reader      orquestaoutboxdispatch.PendingOutboxReaderPortV0
-	Claimer     orquestaoutboxdispatch.OutboxDispatchClaimerPortV0
-	Executor    OutboxDispatchBatchExecutorPortV0
-	Acker       orquestaoutboxdispatch.OutboxDispatchAckPortV0
+	RunRef       string
+	TargetPort   string
+	MessageType  string
+	MaxReady     int
+	CapacityGate LiveProcessCapacityGatePortV0
+	Reader       orquestaoutboxdispatch.PendingOutboxReaderPortV0
+	Claimer      orquestaoutboxdispatch.OutboxDispatchClaimerPortV0
+	Executor     OutboxDispatchBatchExecutorPortV0
+	Acker        orquestaoutboxdispatch.OutboxDispatchAckPortV0
 }
 
 type OutboxDispatchBatchRunResultV0 struct {
@@ -50,6 +54,10 @@ type OutboxDispatchBatchRunResultV0 struct {
 	PendingCount      int
 	FailedCount       int
 	Issues            int
+	CapacityGranted   int
+	CapacityLive      int
+	CapacityLimit     int
+	CapacityRef       string
 	ClaimedMessageIDs []string
 	AckedMessages     []string
 }
@@ -67,6 +75,17 @@ func RunOutboxDispatchBatchV0(
 	if request.Executor == nil {
 		return invalidBatchRunResultV0(request, 1), nil
 	}
+	capacity, err := reserveBatchRunCapacityV0(ctx, request)
+	if err != nil {
+		return OutboxDispatchBatchRunResultV0{}, err
+	}
+	if capacity.gated && capacity.reservation.Granted <= 0 {
+		return batchRunCapacityBlockedResultV0(request, capacity.reservation), nil
+	}
+	if capacity.gated {
+		defer releaseBatchRunCapacityV0(ctx, request.CapacityGate, capacity.reservation)
+		request.MaxReady = batchRunCapacityMaxReadyV0(request.MaxReady, capacity.reservation.Granted)
+	}
 	plan, err := RunOutboxDispatchBatchPlanV0(ctx, OutboxDispatchBatchPlanRequestV0{
 		RunRef:      request.RunRef,
 		TargetPort:  request.TargetPort,
@@ -79,6 +98,7 @@ func RunOutboxDispatchBatchV0(
 		return OutboxDispatchBatchRunResultV0{}, err
 	}
 	result := batchRunResultFromPlanV0(plan)
+	result = batchRunResultWithCapacityV0(result, capacity.reservation)
 	if plan.Status != OutboxDispatchBatchPlannedV0 {
 		return result, nil
 	}
@@ -120,6 +140,18 @@ func invalidBatchRunResultV0(
 	}
 }
 
+func batchRunCapacityBlockedResultV0(
+	request OutboxDispatchBatchRunRequestV0,
+	reservation LiveProcessCapacityReservationV0,
+) OutboxDispatchBatchRunResultV0 {
+	return batchRunResultWithCapacityV0(OutboxDispatchBatchRunResultV0{
+		Status:      OutboxDispatchBatchRunCapacityBlockedV0,
+		RunRef:      request.RunRef,
+		TargetPort:  request.TargetPort,
+		MessageType: request.MessageType,
+	}, reservation)
+}
+
 func batchRunResultFromPlanV0(
 	plan OutboxDispatchBatchPlanResultV0,
 ) OutboxDispatchBatchRunResultV0 {
@@ -132,6 +164,17 @@ func batchRunResultFromPlanV0(
 		Issues:            plan.Issues,
 		ClaimedMessageIDs: append([]string(nil), plan.ClaimedMessageIDs...),
 	}
+}
+
+func batchRunResultWithCapacityV0(
+	result OutboxDispatchBatchRunResultV0,
+	reservation LiveProcessCapacityReservationV0,
+) OutboxDispatchBatchRunResultV0 {
+	result.CapacityGranted = reservation.Granted
+	result.CapacityLive = reservation.Live
+	result.CapacityLimit = reservation.Limit
+	result.CapacityRef = reservation.ReservationRef
+	return result
 }
 
 func batchRunStatusFromPlanV0(planStatus string) string {
@@ -183,4 +226,55 @@ func releaseBatchClaimsV0(
 		issues += len(releaser.ReleaseOutboxDispatchClaimV0(batchPlanClaimFromIntentV0(intent)))
 	}
 	return issues
+}
+
+type batchRunCapacityReservationStateV0 struct {
+	gated       bool
+	reservation LiveProcessCapacityReservationV0
+}
+
+func reserveBatchRunCapacityV0(
+	ctx context.Context,
+	request OutboxDispatchBatchRunRequestV0,
+) (batchRunCapacityReservationStateV0, error) {
+	if request.CapacityGate == nil || !batchRunNeedsLiveProcessCapacityV0(request) {
+		return batchRunCapacityReservationStateV0{}, nil
+	}
+	reservation, err := request.CapacityGate.ReserveLiveProcessCapacityV0(ctx, LiveProcessCapacityReservationRequestV0{
+		RunRef:      request.RunRef,
+		TargetPort:  request.TargetPort,
+		MessageType: request.MessageType,
+		Requested:   effectiveBatchReadyLimitV0(request.MaxReady),
+	})
+	if err != nil {
+		return batchRunCapacityReservationStateV0{}, err
+	}
+	return batchRunCapacityReservationStateV0{gated: true, reservation: reservation}, nil
+}
+
+func releaseBatchRunCapacityV0(
+	ctx context.Context,
+	gate LiveProcessCapacityGatePortV0,
+	reservation LiveProcessCapacityReservationV0,
+) {
+	if gate == nil || reservation.ReservationRef == "" || reservation.Granted <= 0 {
+		return
+	}
+	_ = gate.ReleaseLiveProcessCapacityV0(ctx, reservation)
+}
+
+func batchRunCapacityMaxReadyV0(maxReady int, granted int) int {
+	if granted <= 0 {
+		return 0
+	}
+	ready := effectiveBatchReadyLimitV0(maxReady)
+	if ready > granted {
+		return granted
+	}
+	return ready
+}
+
+func batchRunNeedsLiveProcessCapacityV0(request OutboxDispatchBatchRunRequestV0) bool {
+	return strings.TrimSpace(request.TargetPort) == orquestacoreworkflow.OutboxTargetAgentLauncherV0 &&
+		strings.TrimSpace(request.MessageType) == orquestacoreworkflow.OutboxMessageLaunchRuntimeAgentV0
 }

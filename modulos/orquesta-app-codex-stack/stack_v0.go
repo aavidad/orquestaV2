@@ -23,6 +23,7 @@ type StackV0 struct {
 	AutoprogrammingPromotion AutoprogrammingPromotionConfigV0
 	DomainWork               orquestamcp.MCPDomainWorkExecutorPortV0
 	DomainDelivery           DomainWorkDeliveryBridgeConfigV0
+	CodexRuntimeWorkDir      string
 }
 
 func BuildStackV0(config ConfigV0) (StackV0, error) {
@@ -43,6 +44,7 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 		AutoprogrammingPromotion: config.AutoprogrammingPromotion,
 		DomainWork:               config.DomainWork,
 		DomainDelivery:           config.DomainDelivery,
+		CodexRuntimeWorkDir:      config.Codex.RuntimeWorkDir,
 	}
 	stack.MCPTransportBindings = buildStackMCPTransportBindingsV0(config, ports, queueConfig, &stack)
 	stack.Handler = buildStackHTTPHandlerV0(config, stack.MCPTransportBindings)
@@ -90,6 +92,7 @@ func buildStackMCPTransportBindingsV0(
 			config.Stores.RunQueue,
 			queueConfig,
 			config.Clock,
+			config.Codex.RuntimeWorkDir,
 		),
 		ServerShutdown: serverShutdownExecutorV0(config, stack),
 		DomainWork:     config.DomainWork,

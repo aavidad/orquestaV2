@@ -625,8 +625,8 @@ Evidencia:
 
 - el stack sigue devolviendo `not_configured` si no hay proveedor de metricas;
 - con `CodexStackAgentUsageMetricsProviderPortV0` fake se proyectan cuota,
-  tokens y coste por agente;
-- `DirectorRunStatsV0.UsageSummary` acumula tokens/coste para que MCP/web y el
+  tokens y capacidad por agente;
+- `DirectorRunStatsV0.UsageSummary` acumula tokens para que MCP/web y el
   director puedan responder cuanto se ha usado en una app;
 - no se introduce proveedor, HOME, OAuth, DB ni API concreta en el core.
 
@@ -1109,8 +1109,8 @@ Cobertura:
 - `TestDrainRunV0ConsumeDecisionFileVerticalGoConGlobsDeDirectorReal` reproduce
   una salida realista del director con una tarea vertical Go amplia y comprueba
   que se materializa y lanza programacion;
-- `TestCodexRuntimeConfigV0ElevaReasoningEffortBajoAHigh`,
-  `TestCodexStackCapacityConfigFromEnvV0ElevaReasoningCodexMediumAHigh`,
+- `TestCodexRuntimeConfigV0ConservaReasoningEffortMedium`,
+  `TestCodexStackCapacityConfigFromEnvV0ConservaReasoningCodexMedium`,
   `TestCodexLaunchWaveCommandV0DryRunNoExigeCodexReal` y
   `TestCodexLaunchDirectorWaveCommandV0DryRunConstruyePlanYPromptsPorAgente`
   fijan que los agentes reales no bajan de `high` aunque el operador haya

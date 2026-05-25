@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 )
 
@@ -22,6 +25,7 @@ type CodexStackAutoprogrammingPrepareRunExecutorV0 struct {
 	QueueWriter        orquestarunqueue.RunQueuePriorityWriterPortV0
 	Queue              RunQueueConfigV0
 	Clock              orquestafactoryhttp.AppSpecHTTPClockV0
+	RuntimeWorkDir     string
 }
 
 var _ orquestamcp.MCPTransportAutoprogrammingPrepareRunExecutorV0 = CodexStackAutoprogrammingPrepareRunExecutorV0{}
@@ -33,6 +37,7 @@ func NewCodexStackAutoprogrammingPrepareRunExecutorV0(
 	queueWriter orquestarunqueue.RunQueuePriorityWriterPortV0,
 	queue RunQueueConfigV0,
 	clock orquestafactoryhttp.AppSpecHTTPClockV0,
+	runtimeWorkDir string,
 ) CodexStackAutoprogrammingPrepareRunExecutorV0 {
 	return CodexStackAutoprogrammingPrepareRunExecutorV0{
 		Stack:              stack,
@@ -41,6 +46,7 @@ func NewCodexStackAutoprogrammingPrepareRunExecutorV0(
 		QueueWriter:        queueWriter,
 		Queue:              normalizeRunQueueConfigV0(queue),
 		Clock:              clock,
+		RuntimeWorkDir:     strings.TrimSpace(runtimeWorkDir),
 	}
 }
 
@@ -103,7 +109,7 @@ func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) freshAttemptForSta
 	if err != nil {
 		return input
 	}
-	if !autoprogrammingPrepareRunNeedsFreshAttemptV0(run) {
+	if !autoprogrammingPrepareRunNeedsFreshAttemptWithRuntimeV0(run, executor.RuntimeWorkDir) {
 		return input
 	}
 	_ = executor.markStaleAutoprogrammingQueueCandidateV0(ctx, run)
@@ -127,30 +133,55 @@ func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) freshAttemptForSta
 func autoprogrammingPrepareRunNeedsFreshAttemptV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 ) bool {
+	return AutoprogrammingRunNeedsFreshAttemptV0(run)
+}
+
+func autoprogrammingPrepareRunNeedsFreshAttemptWithRuntimeV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	runtimeWorkDir string,
+) bool {
+	return AutoprogrammingRunNeedsFreshAttemptWithRuntimeV0(run, runtimeWorkDir)
+}
+
+func AutoprogrammingRunNeedsFreshAttemptV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) bool {
 	if strings.TrimSpace(run.RunID) == "" ||
 		run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
-		len(compactStringsV0(run.StartedAgents)) == 0 ||
 		!autoprogrammingPrepareRunHasFailureSignalV0(run) {
 		return false
 	}
 	return !autoprogrammingPrepareRunHasLivePendingAgentV0(run)
 }
 
-func autoprogrammingPrepareRunHasFailureSignalV0(
+func AutoprogrammingRunNeedsFreshAttemptWithRuntimeV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
+	runtimeWorkDir string,
 ) bool {
-	return len(compactStringsV0(run.FailedAgents)) > 0 ||
-		len(compactStringsV0(run.LostAgents)) > 0
+	if AutoprogrammingRunNeedsFreshAttemptV0(run) {
+		return true
+	}
+	pendingAgents := AutoprogrammingRunPendingAgentRefsV0(run)
+	return AutoprogrammingRunHasFreshAttemptFailureSignalV0(run) &&
+		len(pendingAgents) > 0 &&
+		!autoprogrammingRunHasRuntimeDirForAnyAgentV0(runtimeWorkDir, run.RunID, pendingAgents)
 }
 
-func autoprogrammingPrepareRunHasLivePendingAgentV0(
+func AutoprogrammingRunHasFreshAttemptFailureSignalV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 ) bool {
+	return autoprogrammingPrepareRunHasFailureSignalV0(run)
+}
+
+func AutoprogrammingRunPendingAgentRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) []string {
 	delivered := autoprogrammingPrepareStringSetV0(run.DeliveredAgents)
 	failed := autoprogrammingPrepareStringSetV0(run.FailedAgents)
 	lost := autoprogrammingPrepareStringSetV0(run.LostAgents)
 	stopped := autoprogrammingPrepareStringSetV0(run.StoppedAgents)
 	confirmedStopped := autoprogrammingPrepareStringSetV0(run.ConfirmedStoppedAgents)
+	out := make([]string, 0)
 	for _, agentRef := range compactStringsV0(run.StartedAgents) {
 		if delivered[agentRef] ||
 			failed[agentRef] ||
@@ -159,7 +190,62 @@ func autoprogrammingPrepareRunHasLivePendingAgentV0(
 			confirmedStopped[agentRef] {
 			continue
 		}
-		return true
+		out = append(out, agentRef)
+	}
+	return out
+}
+
+func autoprogrammingPrepareRunHasFailureSignalV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) bool {
+	return len(compactStringsV0(run.FailedAgents)) > 0 ||
+		len(compactStringsV0(run.LostAgents)) > 0 ||
+		autoprogrammingPrepareRunHasTerminalAssessmentV0(run)
+}
+
+func autoprogrammingPrepareRunHasTerminalAssessmentV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) bool {
+	for _, raw := range compactStringsV0(run.AgentAssessments) {
+		projection, ok := orquestacoreworkflow.ParseAgentAssessmentProjectionV0(raw)
+		if !ok {
+			continue
+		}
+		if projection.Action == orquestacoreworkflow.AgentAssessmentActionStopAgentV0 {
+			return true
+		}
+		switch projection.Verdict {
+		case orquestacoreworkflow.AgentAssessmentVerdictGarbageV0,
+			orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0,
+			orquestacoreworkflow.AgentAssessmentVerdictCapacityLimitedV0,
+			orquestacoreworkflow.AgentAssessmentVerdictTimeoutV0:
+			return true
+		}
+	}
+	return false
+}
+
+func autoprogrammingPrepareRunHasLivePendingAgentV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) bool {
+	return len(AutoprogrammingRunPendingAgentRefsV0(run)) > 0
+}
+
+func autoprogrammingRunHasRuntimeDirForAnyAgentV0(
+	runtimeWorkDir string,
+	runRef string,
+	agentRefs []string,
+) bool {
+	runtimeWorkDir = strings.TrimSpace(runtimeWorkDir)
+	runRef = strings.TrimSpace(runRef)
+	if runtimeWorkDir == "" || runRef == "" {
+		return false
+	}
+	for _, agentRef := range compactStringsV0(agentRefs) {
+		info, err := os.Stat(filepath.Join(runtimeWorkDir, runRef, agentRef))
+		if err == nil && info.IsDir() {
+			return true
+		}
 	}
 	return false
 }
@@ -297,10 +383,19 @@ func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) enqueuePreparedRun
 	if runRef == "" {
 		return fmt.Errorf("run_ref preparado requerido")
 	}
+	if terminalStatus := autoprogrammingPreparedRunTerminalQueueStatusV0(result.Run); terminalStatus != "" {
+		return executor.markPreparedRunTerminalV0(ctx, input, result, terminalStatus)
+	}
+	if blockedStatus, blocked, err := executor.queueStatusForPreparedRunControlV0(ctx, runRef); err != nil {
+		return err
+	} else if blocked {
+		return executor.markPreparedRunControlBlockedV0(ctx, input, result, blockedStatus)
+	}
 	_, err := executor.QueueWriter.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
 		RunRef:        runRef,
 		QueueRef:      executor.Queue.QueueRef,
 		AppRef:        autoprogrammingQueueAppRefV0(result),
+		Status:        orquestarunqueue.RunStatusReadyV0,
 		PriorityScore: autoprogrammingPrepareRunPriorityScoreV0(input.PriorityScore, executor.Queue.DefaultPriorityScore),
 		UpdatedAt:     stackNowV0(executor.Clock),
 		RequestedBy: firstNonEmptyAutoprogrammingStackV0(
@@ -312,6 +407,109 @@ func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) enqueuePreparedRun
 		Reason:         "autoprogramming_prepare_run",
 		IdempotencyKey: "idem-run-queue-autoprogramming-prepare-" + runRef,
 		EvidenceRefs:   []string{"evidence-ref-autoprogramming-prepare-run-enqueued"},
+	})
+	return err
+}
+
+func autoprogrammingPreparedRunTerminalQueueStatusV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) string {
+	if run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+		return orquestarunqueue.RunStatusClosedV0
+	}
+	return ""
+}
+
+func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) markPreparedRunTerminalV0(
+	ctx context.Context,
+	input orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0,
+	result AutoprogrammingBridgeResultV0,
+	status string,
+) error {
+	runRef := strings.TrimSpace(result.Run.RunID)
+	_, err := executor.QueueWriter.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        runRef,
+		QueueRef:      executor.Queue.QueueRef,
+		AppRef:        autoprogrammingQueueAppRefV0(result),
+		Status:        status,
+		PriorityScore: 0,
+		UpdatedAt:     stackNowV0(executor.Clock),
+		RequestedBy: firstNonEmptyAutoprogrammingStackV0(
+			input.RequestedBy,
+			result.Continue.RequestedBy,
+			executor.DefaultRequestedBy,
+			"orquesta-app-codex-stack-autoprogramming",
+		),
+		Reason:         "autoprogramming_prepare_run_terminal_reconciled",
+		IdempotencyKey: "idem-run-queue-autoprogramming-terminal-" + runRef,
+		EvidenceRefs: []string{
+			"evidence-ref-autoprogramming-prepare-run-terminal-reconciled",
+			"evidence-ref-autoprogramming-run-not-requeued",
+		},
+	})
+	return err
+}
+
+func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) queueStatusForPreparedRunControlV0(
+	ctx context.Context,
+	runRef string,
+) (string, bool, error) {
+	if executor.Stack == nil || executor.Stack.Stores.RunControl == nil {
+		return "", false, nil
+	}
+	state, err := executor.Stack.Stores.RunControl.ReadRunControlStateV0(
+		ctx,
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: runRef},
+	)
+	if err != nil {
+		var notFound orquestaruncontrol.RunControlStateNotFoundErrorV0
+		if errorAsRunControlNotFoundV0(err, &notFound) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	evaluation := orquestaruncontrol.EvaluateRunControlV0(state)
+	if evaluation.DispatchAllowed || evaluation.StopAgentsAllowed {
+		return "", false, nil
+	}
+	switch orquestaruncontrol.NormalizeRunControlStatusV0(state.Status) {
+	case orquestaruncontrol.RunControlStatusPausedV0:
+		return orquestarunqueue.RunStatusPausedV0, true, nil
+	case orquestaruncontrol.RunControlStatusStopRequestedV0, orquestaruncontrol.RunControlStatusStoppedV0:
+		return orquestarunqueue.RunStatusStoppedV0, true, nil
+	case orquestaruncontrol.RunControlStatusCancelRequestedV0, orquestaruncontrol.RunControlStatusCanceledV0:
+		return orquestarunqueue.RunStatusCanceledV0, true, nil
+	default:
+		return "", false, nil
+	}
+}
+
+func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) markPreparedRunControlBlockedV0(
+	ctx context.Context,
+	input orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0,
+	result AutoprogrammingBridgeResultV0,
+	status string,
+) error {
+	runRef := strings.TrimSpace(result.Run.RunID)
+	_, err := executor.QueueWriter.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        runRef,
+		QueueRef:      executor.Queue.QueueRef,
+		AppRef:        autoprogrammingQueueAppRefV0(result),
+		Status:        status,
+		PriorityScore: 0,
+		UpdatedAt:     stackNowV0(executor.Clock),
+		RequestedBy: firstNonEmptyAutoprogrammingStackV0(
+			input.RequestedBy,
+			result.Continue.RequestedBy,
+			executor.DefaultRequestedBy,
+			"orquesta-app-codex-stack-autoprogramming",
+		),
+		Reason:         "autoprogramming_prepare_run_control_blocked",
+		IdempotencyKey: "idem-run-queue-autoprogramming-control-blocked-" + runRef,
+		EvidenceRefs: []string{
+			"evidence-ref-autoprogramming-prepare-run-control-blocked",
+			"evidence-ref-autoprogramming-run-not-requeued",
+		},
 	})
 	return err
 }

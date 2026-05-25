@@ -7,7 +7,7 @@ import (
 )
 
 func TestCodexSupervisorV0LanzaPrimeroYContinuaHastaDoneV0(t *testing.T) {
-	runtime := newFakeCodexSupervisorRuntimeV0("pending", "stopped", "done")
+	runtime := newFakeCodexSupervisorRuntimeV0("pending", "running", "done")
 
 	result, err := SuperviseCodexV0(
 		context.Background(),
@@ -34,7 +34,7 @@ func TestCodexSupervisorV0LanzaPrimeroYContinuaHastaDoneV0(t *testing.T) {
 }
 
 func TestCodexSupervisorV0CortaPorMaxTicksSinDoneV0(t *testing.T) {
-	runtime := newFakeCodexSupervisorRuntimeV0("pending", "stopped", "stopped", "stopped")
+	runtime := newFakeCodexSupervisorRuntimeV0("pending", "running", "running", "running")
 
 	result, err := SuperviseCodexV0(
 		context.Background(),
@@ -56,6 +56,33 @@ func TestCodexSupervisorV0CortaPorMaxTicksSinDoneV0(t *testing.T) {
 		t.Fatalf("stop_reason=%q result=%+v", result.StopReason, result)
 	}
 	if result.Ticks != 3 {
+		t.Fatalf("ticks=%d result=%+v", result.Ticks, result)
+	}
+}
+
+func TestCodexSupervisorV0NoContinuaCuandoRuntimeQuedaStoppedV0(t *testing.T) {
+	runtime := newFakeCodexSupervisorRuntimeV0("pending", "stopped", "done")
+
+	result, err := SuperviseCodexV0(
+		context.Background(),
+		CodexSupervisorDepsV0{Runtime: runtime},
+		CodexSupervisorCommandV0{
+			MaxTicks:        5,
+			ContinueMessage: "sigue",
+		},
+	)
+	if err != nil {
+		t.Fatalf("SuperviseCodexV0: %v", err)
+	}
+
+	wantCalls := []string{"launch", "continue:sigue"}
+	if !reflect.DeepEqual(runtime.calls, wantCalls) {
+		t.Fatalf("calls got %#v want %#v", runtime.calls, wantCalls)
+	}
+	if result.StopReason != CodexSupervisorStopStoppedV0 {
+		t.Fatalf("stop_reason=%q result=%+v", result.StopReason, result)
+	}
+	if result.Ticks != 2 {
 		t.Fatalf("ticks=%d result=%+v", result.Ticks, result)
 	}
 }

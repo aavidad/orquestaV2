@@ -23,6 +23,10 @@ Cobertura:
   observadas por agente arrancado, incluyendo olas paralelas y caps compactos;
 - si hay `ExternalWaiter`, `MaxExternalWaits=0` usa el presupuesto por defecto y
   permite cerrar una app grande por entregas externas paso a paso;
+- el runner declara `route_policy` de preview/compatibilidad y conserva como
+  preferente `orquesta.apps.arrancar_director.v0`;
+- `RunPreparedAppOrchestrationV0` bloquea con `director_v2_required` cuando el
+  caller declara que el objetivo requiere Director V2;
 - con `UseAutonomousDirectorLoop=true`, el runner usa
   `RunAutonomousDirectorLoopV0`, pasa limites locales a la politica y propaga
   `director_loop_stats`;
@@ -50,6 +54,8 @@ Evidencia 2026-05-09:
 - `TestRunPreparedAppOrchestrationV0RegistraEntregaYAvanzaOla`;
 - `TestRunPreparedAppOrchestrationV0CompletaPlanGrandeConEntregas`;
 - `TestRunPreparedAppOrchestrationV0EsperaExternaPorDefectoHastaCompletar`;
+- `TestPrepareAppOrchestrationV0DeclaraRutaPreviewCompatibilidad`;
+- `TestRunPreparedAppOrchestrationV0BloqueaSiRequiereDirectorV2`;
 - `TestRunPreparedAppOrchestrationV0UsaDirectorAutonomoOptInYPropagaStats`;
 - `TestRunPreparedAppOrchestrationV0DirectorAutonomoMantieneEsperaExterna`;
 - `TestRunPreparedAppOrchestrationV0DirectorAutonomoEnriqueceStatsConProgressSource`;

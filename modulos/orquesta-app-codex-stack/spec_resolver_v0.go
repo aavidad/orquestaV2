@@ -76,43 +76,37 @@ func codexProfileForAreaV0(
 	runtimeDir string,
 	area string,
 ) orquestaruntimecodex.CodexConnectorProfileV0 {
-	sandbox := codexWorkspaceWriteSandboxV0(config.Sandbox)
+	sandbox := strings.TrimSpace(config.Sandbox)
 	approvalPolicy := strings.TrimSpace(config.ApprovalPolicy)
 	if strings.TrimSpace(area) == "director" {
 		if strings.TrimSpace(config.DirectorSandbox) != "" {
-			sandbox = codexWorkspaceWriteSandboxV0(config.DirectorSandbox)
+			sandbox = strings.TrimSpace(config.DirectorSandbox)
 		}
 		if strings.TrimSpace(config.DirectorApprovalPolicy) != "" {
 			approvalPolicy = strings.TrimSpace(config.DirectorApprovalPolicy)
 		}
 	}
 	return orquestaruntimecodex.CodexConnectorProfileV0{
-		SchemaVersion:   orquestaruntimecodex.CodexConnectorProfileSchemaVersionV0,
-		OptIn:           true,
-		CommandPath:     strings.TrimSpace(config.CommandPath),
-		ProjectWorkDir:  strings.TrimSpace(config.ProjectWorkDir),
-		RuntimeWorkDir:  strings.TrimSpace(runtimeDir),
-		CodeHomeDir:     strings.TrimSpace(config.CodeHomeDir),
-		HomeDir:         strings.TrimSpace(config.HomeDir),
-		PathEnv:         strings.TrimSpace(config.PathEnv),
-		Model:           strings.TrimSpace(config.Model),
-		ReasoningEffort: strings.TrimSpace(config.ReasoningEffort),
-		Profile:         strings.TrimSpace(config.Profile),
-		Sandbox:         sandbox,
-		ApprovalPolicy:  approvalPolicy,
-		ExtraArgs:       append([]string(nil), config.ExtraArgs...),
-		PromptHints:     codexPromptHintsV0(config.PromptHints),
-	}
-}
-
-func codexWorkspaceWriteSandboxV0(value string) string {
-	switch strings.TrimSpace(value) {
-	case "danger-full-access":
-		return "danger-full-access"
-	case "workspace-write":
-		return "workspace-write"
-	default:
-		return "workspace-write"
+		SchemaVersion:  orquestaruntimecodex.CodexConnectorProfileSchemaVersionV0,
+		OptIn:          true,
+		CommandPath:    strings.TrimSpace(config.CommandPath),
+		ProjectWorkDir: strings.TrimSpace(config.ProjectWorkDir),
+		RuntimeWorkDir: strings.TrimSpace(runtimeDir),
+		RuntimeWorkDirPlacement: orquestaruntimecodex.InferCodexRuntimeWorkDirPlacementV0(
+			config.ProjectWorkDir,
+			runtimeDir,
+		),
+		CodeHomeDir:              strings.TrimSpace(config.CodeHomeDir),
+		HomeDir:                  strings.TrimSpace(config.HomeDir),
+		PathEnv:                  strings.TrimSpace(config.PathEnv),
+		Model:                    strings.TrimSpace(config.Model),
+		ReasoningEffort:          strings.TrimSpace(config.ReasoningEffort),
+		Profile:                  strings.TrimSpace(config.Profile),
+		Sandbox:                  sandbox,
+		ApprovalPolicy:           approvalPolicy,
+		InteractiveApprovalOptIn: config.InteractiveApprovalOptIn,
+		ExtraArgs:                append([]string(nil), config.ExtraArgs...),
+		PromptHints:              codexPromptHintsV0(config.PromptHints),
 	}
 }
 

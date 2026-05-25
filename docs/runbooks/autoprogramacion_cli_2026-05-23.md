@@ -97,6 +97,15 @@ de segundo plano, las variables relevantes del borde `cmd/orquesta-server` son:
 - `ORQUESTA_SERVER_MAX_RUNS_PER_TICK`: limite de runs candidatos por pulso.
 - `ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK`: limite de ejecuciones lanzadas por
   pulso; default operativo `2`.
+- `ORQUESTA_CODEX_MAX_BATCH_READY`: agentes Codex `ready` a despachar por
+  tanda; es el nombre canonico, no `ORQUESTA_CODEX_MAX_BATCH`.
+- `ORQUESTA_CODEX_MAX_CONCURRENCY`: procesos Codex concurrentes; es el nombre
+  canonico, no `ORQUESTA_CODEX_MAX_CONCURRENT`.
+- `ORQUESTA_CODEX_REASONING_EFFORT`: esfuerzo de razonamiento de agentes Codex;
+  es el nombre canonico, no `ORQUESTA_CODEX_REASONING`.
+- `ORQUESTA_CODEX_DIRECTOR_WAVE_AGENTS`: agentes padre por ola del Director.
+- `ORQUESTA_CODEX_DIRECTOR_MAX_SUBAGENTS_PER_AGENT`: fanout maximo de
+  subagentes por agente padre en delegacion recursiva; default operativo `6`.
 - `ORQUESTA_SERVER_DRAIN_MAX_BURSTS`: rondas maximas de drain por ejecucion;
   default operativo `4`.
 - `ORQUESTA_SERVER_DRAIN_MAX_STEPS`: pasos maximos por ronda de drain; default
@@ -110,7 +119,7 @@ de segundo plano, las variables relevantes del borde `cmd/orquesta-server` son:
 - `ORQUESTA_SERVER_DRAIN_MAX_DECISIONS`: ciclos maximos de decision por drain;
   default operativo `1`.
 - `ORQUESTA_SERVER_DRAIN_MAX_EXTERNAL_WAITS`: esperas externas maximas por
-  drain; el servidor lo acota a `1`.
+  drain; default operativo `1` y maximo normalizado `70`.
 - `ORQUESTA_SERVER_TICK_INTERVAL_MS`: intervalo entre pulsos automaticos;
   default operativo `5000`.
 - `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS`: segundos sin ejecuciones
@@ -129,6 +138,13 @@ de segundo plano, las variables relevantes del borde `cmd/orquesta-server` son:
   tareas idle; default acotado a piezas del servidor residente.
 - `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_REQUIRED_TESTS`: lista CSV de pruebas
   requeridas; default `go test -count=1 ./...`.
+
+El panel `/ops` consume `GET /api/v0/server/status` y muestra
+`effective_config.settings`. Las ediciones de variables desde Admin son
+pendientes de reinicio: no cambian el proceso vivo. Para aplicarlas hay que
+pedir cierre ordenado o forzoso desde Admin y relanzar el servidor con esos
+valores. El forzoso debe mostrar aviso de posible perdida de datos no
+checkpointados.
 - `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_CONTEXT_REFS`: lista CSV de refs opacas
   de contexto adicional; default vacio.
 - `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_EVIDENCE_REFS`: lista CSV de refs

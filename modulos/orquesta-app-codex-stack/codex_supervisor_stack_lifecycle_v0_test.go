@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -332,7 +331,7 @@ func TestCodexStackRunSupervisorAPIV0ColaGlobalConsumeDecisionFileAparecidoTrasA
 		t.Fatalf("launches iniciales=%d want=4", runtime.launchCountV0())
 	}
 	for _, descriptor := range codexStackDescriptorsForTestV0(t, stack) {
-		if err := writeCodexStackMinimalAckForDescriptorV0(descriptor.AckPath); err != nil {
+		if err := writeCodexStackCompletedAckForDescriptorV0(descriptor); err != nil {
 			t.Fatalf("write ACK %s: %v", descriptor.AgentRef, err)
 		}
 	}
@@ -405,14 +404,6 @@ func postRunSupervisorQueueStackV0(
 		t.Fatalf("decode: %v", err)
 	}
 	return result
-}
-
-func writeCodexStackMinimalAckForDescriptorV0(path string) error {
-	return os.WriteFile(
-		path,
-		[]byte(`{"schema_version":"codex_agent_ack.v0","status":"completed"}`),
-		0o600,
-	)
 }
 
 func TestCodexSupervisorRuntimeStateFromLoopV0MapeaEstadosDelNucleoV0(t *testing.T) {
@@ -501,5 +492,29 @@ func TestCodexSupervisorSnapshotFromDrainV0NoCierraAutomejoraActivaConEntregaAbi
 	})
 	if snapshot.Status != CodexSupervisorRuntimeDoneV0 {
 		t.Fatalf("snapshot=%+v want status=%s", snapshot, CodexSupervisorRuntimeDoneV0)
+	}
+}
+
+func TestCodexSupervisorRunOperationalBlockerRefsV0SoloBloqueosVivosV0(t *testing.T) {
+	taskRef := "task-autoprogramming-blockers-live-001"
+	run := orquestacoreworkflow.OrchestrationRunV0{
+		RunID: "run-ref-autoprogramming-blockers-live-001",
+		Tasks: []string{taskRef},
+		QualityGates: []string{
+			"quality-gate-ref-required-tests-failed-old#decision:blocked#subject:" + taskRef,
+			"quality-gate-ref-required-tests-accepted#decision:accepted#subject:" + taskRef,
+		},
+	}
+
+	if got := codexSupervisorRunOperationalBlockerRefsV0(run); len(got) != 0 {
+		t.Fatalf("blockers=%+v", got)
+	}
+
+	run.QualityGates = append(run.QualityGates,
+		"quality-gate-ref-required-tests-failed-new#decision:blocked#subject:"+taskRef,
+	)
+	got := codexSupervisorRunOperationalBlockerRefsV0(run)
+	if len(got) != 1 || got[0] != "quality-gate-ref-required-tests-failed-new" {
+		t.Fatalf("blockers=%+v", got)
 	}
 }

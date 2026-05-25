@@ -15,14 +15,15 @@ func AppPlanRequestFromAppSpecV0(
 	}
 	api, web := appSpecSurfacesV0(spec)
 	return AppPlanRequestV0{
-		RunRef:  strings.TrimSpace(runRef),
-		AppRef:  firstAppPlanValueV0(spec.App.Slug, spec.SpecID),
-		AppName: strings.TrimSpace(spec.App.Nombre),
-		AppKind: strings.TrimSpace(spec.App.TipoApp),
-		Scale:   appPlanScaleFromSpecV0(spec),
-		API:     api,
-		Web:     web,
-		Locale:  strings.TrimSpace(spec.Locale),
+		RunRef:       strings.TrimSpace(runRef),
+		AppRef:       firstAppPlanValueV0(spec.App.Slug, spec.SpecID),
+		AppName:      strings.TrimSpace(spec.App.Nombre),
+		AppKind:      strings.TrimSpace(spec.App.TipoApp),
+		Scale:        appPlanScaleFromSpecV0(spec),
+		API:          api,
+		Web:          web,
+		Locale:       strings.TrimSpace(spec.Locale),
+		DeployTarget: strings.TrimSpace(spec.Deploy.Target),
 	}, nil
 }
 
@@ -37,7 +38,7 @@ func appPlanScaleFromSpecV0(spec orquestafactory.AppSpecV0) string {
 
 func appPlanDeployNeedsPlanV0(target string) bool {
 	switch strings.TrimSpace(target) {
-	case "", "sin_preferencia", "local":
+	case "", "sin_preferencia":
 		return false
 	default:
 		return true

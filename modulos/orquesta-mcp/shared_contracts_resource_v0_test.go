@@ -15,8 +15,8 @@ func TestMCPSharedContractsDescriptorV0CatalogaResources(t *testing.T) {
 	}
 
 	descriptors := MCPSharedContractResourceDescriptorsV0()
-	if len(descriptors) != 9 {
-		t.Fatalf("descriptores=%d, quiero catalogo + 8 contratos", len(descriptors))
+	if len(descriptors) != 10 {
+		t.Fatalf("descriptores=%d, quiero catalogo + 9 contratos", len(descriptors))
 	}
 
 	seen := map[string]bool{}
@@ -39,6 +39,7 @@ func TestMCPSharedContractsDescriptorV0CatalogaResources(t *testing.T) {
 		"orquesta://contracts/runtime-launch-request/v0",
 		"orquesta://contracts/orquesta-event/v0",
 		"orquesta://contracts/operational-status-query/v0",
+		"orquesta://contracts/workspace-timeline-query/v0",
 		"orquesta://contracts/governance-catalog/v0",
 	} {
 		if !seen[uri] {
@@ -56,7 +57,7 @@ func TestNewMCPSharedContractsResourceV0CompactoYSinDumps(t *testing.T) {
 		!containsSharedContractsTestStringV0(resource.Freshness.BacklogRefs, "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md#T25-mcp-roadmap-backlog-state-sync") {
 		t.Fatalf("freshness incompleta: %+v", resource.Freshness)
 	}
-	if len(resource.Contracts) != 8 {
+	if len(resource.Contracts) != 9 {
 		t.Fatalf("contracts=%d", len(resource.Contracts))
 	}
 
@@ -89,9 +90,31 @@ func TestNewMCPSharedContractsResourceV0CompactoYSinDumps(t *testing.T) {
 	if byContract["GovernanceCatalog v0"].MCPRole != "compact_read_resource" {
 		t.Fatalf("governance role: %+v", byContract["GovernanceCatalog v0"])
 	}
+	if byContract["GovernanceCatalog v0"].Output != "{request_id, correlation_id, effective, counters}" ||
+		!containsSharedContractsTestStringV0(byContract["GovernanceCatalog v0"].PublicErrors, "governance_catalog_invalid_request") ||
+		!containsSharedContractsTestStringV0(byContract["GovernanceCatalog v0"].Guardrails, "solo_effective_y_contadores") {
+		t.Fatalf("governance shape publico: %+v", byContract["GovernanceCatalog v0"])
+	}
 	if byContract["OperationalStatusQuery v0"].Owner != "orquesta-observability" ||
 		byContract["OperationalStatusQuery v0"].MCPRole != "compact_read_resource" {
 		t.Fatalf("operational status: %+v", byContract["OperationalStatusQuery v0"])
+	}
+	if byContract["WorkspaceTimelineQuery v0"].Owner != "orquesta-observability" ||
+		!containsSharedContractsTestStringV0(byContract["WorkspaceTimelineQuery v0"].Guardrails, "source_ausente_not_available") {
+		t.Fatalf("workspace timeline: %+v", byContract["WorkspaceTimelineQuery v0"])
+	}
+	if byContract["DeploymentPlan v0"].Owner != "orquesta-deploy" ||
+		!containsSharedContractsTestStringV0(byContract["DeploymentPlan v0"].BacklogRefs, mcpBacklogT74RefV0) ||
+		!containsSharedContractsTestStringV0(byContract["DeploymentPlan v0"].Verification, "go test -count=1 ./modulos/orquesta-deploy ./modulos/orquesta-factory ./modulos/orquesta-app-planner ./modulos/orquesta-mcp") {
+		t.Fatalf("deployment plan: %+v", byContract["DeploymentPlan v0"])
+	}
+	if byContract["GenerarI18nDocsIniciales v0"].Owner != "orquesta-i18n-docs" ||
+		!containsSharedContractsTestStringV0(byContract["GenerarI18nDocsIniciales v0"].BacklogRefs, mcpBacklogT75RefV0) ||
+		!containsSharedContractsTestStringV0(byContract["GenerarI18nDocsIniciales v0"].Guardrails, "owner_activo_i18n_docs") ||
+		!containsSharedContractsTestStringV0(byContract["GenerarI18nDocsIniciales v0"].Guardrails, "fallback_locale_de_owner_activo") ||
+		!containsSharedContractsTestStringV0(byContract["GenerarI18nDocsIniciales v0"].Guardrails, "required_keys_hash_de_owner_activo") ||
+		!containsSharedContractsTestStringV0(byContract["GenerarI18nDocsIniciales v0"].Verification, "go test -count=1 ./modulos/orquesta-i18n-docs ./modulos/orquesta-factory ./modulos/orquesta-web ./modulos/orquesta-mcp") {
+		t.Fatalf("i18n docs owner: %+v", byContract["GenerarI18nDocsIniciales v0"])
 	}
 
 	payload, err := json.Marshal(resource)

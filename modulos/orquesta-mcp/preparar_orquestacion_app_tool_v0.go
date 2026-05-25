@@ -39,6 +39,7 @@ type MCPPrepararOrquestacionAppToolResultV0 struct {
 	Estado        string                  `json:"estado"`
 	RequestID     string                  `json:"request_id,omitempty"`
 	CorrelationID string                  `json:"correlation_id,omitempty"`
+	RoutePolicy   MCPAppSpecRoutePolicyV0 `json:"route_policy"`
 	AppSpec       MCPAppSpecCompactV0     `json:"app_spec,omitempty"`
 	RunRef        string                  `json:"run_ref,omitempty"`
 	PhaseID       string                  `json:"phase_id,omitempty"`
@@ -78,16 +79,24 @@ type MCPAppPlanProgressMCPV0 struct {
 	DeliveredTaskRefs []string `json:"delivered_task_refs,omitempty"`
 }
 
+type MCPAppSpecRoutePolicyV0 struct {
+	Mode                string `json:"mode"`
+	PreferredEntrypoint string `json:"preferred_entrypoint"`
+	LegacyEntrypoint    string `json:"legacy_entrypoint,omitempty"`
+	PublicReason        string `json:"public_reason"`
+}
+
 func MCPPrepararOrquestacionAppDescriptorV0() MCPPrepararOrquestacionAppToolDescriptorV0 {
 	return MCPPrepararOrquestacionAppToolDescriptorV0{
 		Name:        MCPPrepararOrquestacionAppToolNameV0,
 		Version:     MCPPrepararOrquestacionAppToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,project_ref?,app_spec:AppSpecV0}",
-		Output:      "ok:{app_spec,run_ref,phase_id,plan,progress}|error:{errores_publicos}",
+		Output:      "ok:{route_policy,app_spec,run_ref,phase_id,plan,progress}|error:{route_policy,errores_publicos}",
 		ResourceURI: MCPPrepararOrquestacionAppResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
-			"delegacion en orquesta-app-runner",
+			"preview de compatibilidad por orquesta-app-runner",
+			"entrada operativa preferente orquesta.apps.arrancar_director.v0",
 			"no expone CandidateProvider ni elige DB runtime proveedor modelo o HOME",
 		},
 	}

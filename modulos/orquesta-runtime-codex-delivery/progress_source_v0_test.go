@@ -15,7 +15,7 @@ import (
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 )
 
-func TestCodexProgressObservationSourceV0ReportaEstancamientoSinACKNiProgreso(t *testing.T) {
+func TestCodexProgressObservationSourceV0NoReportaEstancamientoSinSenalVisibleSiSigueRunning(t *testing.T) {
 	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
 	source := codexProgressSourceForTestV0(t, spec, ackPath)
 	request := codexProgressRequestForTestV0(spec)
@@ -32,19 +32,8 @@ func TestCodexProgressObservationSourceV0ReportaEstancamientoSinACKNiProgreso(t 
 	if err != nil {
 		t.Fatalf("second BuildAgentProgressObservationsV0: %v", err)
 	}
-	if len(second) != 1 {
+	if len(second) != 0 {
 		t.Fatalf("second observations=%+v", second)
-	}
-	got := second[0]
-	if got.Report.Status != orquestaruntime.AgentStalledV0 ||
-		got.Report.AgentRequestID != spec.RequestID ||
-		got.TaskRef != spec.AgentPacket.Task.TaskRef ||
-		got.DecisionRequired ||
-		got.Report.DecisionRequired {
-		t.Fatalf("observacion no correlada: %+v", got)
-	}
-	if codexProgressObservationLeaksPathV0(got, ackPath) {
-		t.Fatalf("observacion filtra path: %+v", got)
 	}
 }
 
@@ -52,9 +41,10 @@ func TestCodexProgressObservationSourceV0NoEscalaABucleSoloPorACKSinCambios(t *t
 	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
 	source := codexProgressSourceForTestV0(t, spec, ackPath)
 	source.Policy.LoopAfterRepeatedActions = 3
+	source.EmitProgressing = true
 	request := codexProgressRequestForTestV0(spec)
 
-	if got, err := source.BuildAgentProgressObservationsV0(context.Background(), request); err != nil || len(got) != 0 {
+	if got, err := source.BuildAgentProgressObservationsV0(context.Background(), request); err != nil || len(got) != 1 {
 		t.Fatalf("first observations=%+v err=%v", got, err)
 	}
 	if got, err := source.BuildAgentProgressObservationsV0(context.Background(), request); err != nil || len(got) != 1 {
@@ -67,7 +57,7 @@ func TestCodexProgressObservationSourceV0NoEscalaABucleSoloPorACKSinCambios(t *t
 		t.Fatalf("third BuildAgentProgressObservationsV0: %v", err)
 	}
 	if len(third) != 1 ||
-		third[0].Report.Status != orquestaruntime.AgentStalledV0 ||
+		third[0].Report.Status != orquestaruntime.AgentProgressingV0 ||
 		third[0].DecisionRequired ||
 		third[0].Report.DecisionRequired {
 		t.Fatalf("third observations=%+v", third)
@@ -99,6 +89,7 @@ func TestCodexProgressObservationSourceV0SilencioSostenidoReportaEstancamientoSi
 	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
 	source := codexProgressSourceForTestV0(t, spec, ackPath)
 	source.Policy.LoopAfterRepeatedActions = 3
+	source.EmitProgressing = true
 	request := codexProgressRequestForTestV0(spec)
 
 	for i := 0; i < 3; i++ {
@@ -111,13 +102,16 @@ func TestCodexProgressObservationSourceV0SilencioSostenidoReportaEstancamientoSi
 		t.Fatalf("fourth BuildAgentProgressObservationsV0: %v", err)
 	}
 	if len(got) != 1 ||
-		got[0].Report.Status != orquestaruntime.AgentStalledV0 ||
+		got[0].Report.Status != orquestaruntime.AgentProgressingV0 ||
 		got[0].DecisionRequired ||
 		got[0].Report.DecisionRequired {
-		t.Fatalf("stalled observation=%+v", got)
+		t.Fatalf("running no signal observation=%+v", got)
 	}
 	if got[0].Report.RepeatedActionCount != 0 || got[0].Report.NoProgressTicks == 0 {
 		t.Fatalf("progress counters=%+v", got[0].Report)
+	}
+	if !stringInCodexDeliverySetV0(got[0].Report.EvidenceRefs, "evidence-ref-running-no-visible-signal") {
+		t.Fatalf("evidence refs sin running no visible signal: %+v", got[0].Report.EvidenceRefs)
 	}
 }
 
@@ -324,6 +318,45 @@ func TestCodexProgressObservationSourceV0ClasificaCapacidadLimitadaSinACK(t *tes
 	}
 	if !stringInCodexDeliverySetV0(report.EvidenceRefs, "evidence-ref-capacity-warning") {
 		t.Fatalf("evidence refs sin capacity_warning compacto: %+v", report.EvidenceRefs)
+	}
+	if codexProgressObservationLeaksPathV0(got[0], ackPath) {
+		t.Fatalf("observacion filtra path: %+v", got[0])
+	}
+}
+
+func TestCodexProgressObservationSourceV0ClasificaAuthInvalidaSinACK(t *testing.T) {
+	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
+	source := codexProgressSourceForTestV0(t, spec, ackPath)
+	source.SnapshotSource = stoppedSnapshotSourceForProgressTestV0{}
+	stderrPath := filepath.Join(filepath.Dir(ackPath), orquestaruntimecodex.CodexStderrFileNameV0)
+	if err := os.WriteFile(
+		stderrPath,
+		[]byte("ERROR 401 token_invalidated refresh_token_reused"),
+		0o600,
+	); err != nil {
+		t.Fatalf("write stderr: %v", err)
+	}
+
+	got, err := source.BuildAgentProgressObservationsV0(
+		context.Background(),
+		codexProgressRequestForTestV0(spec),
+	)
+	if err != nil {
+		t.Fatalf("BuildAgentProgressObservationsV0: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("observations=%+v", got)
+	}
+	report := got[0].Report
+	if report.Status != orquestaruntime.AgentStoppedV0 ||
+		!report.DecisionRequired ||
+		!stringInCodexDeliverySetV0(report.EvidenceRefs, "evidence-ref-auth-config-blocker") {
+		t.Fatalf("report auth inesperado: %+v", report)
+	}
+	if report.BudgetStatus != "" ||
+		stringInCodexDeliverySetV0(report.EvidenceRefs, "evidence-ref-no-ack") ||
+		stringInCodexDeliverySetV0(report.EvidenceRefs, "evidence-ref-capacity-warning") {
+		t.Fatalf("auth invalida no debe mezclarse con no_ack/capacity: %+v", report)
 	}
 	if codexProgressObservationLeaksPathV0(got[0], ackPath) {
 		t.Fatalf("observacion filtra path: %+v", got[0])

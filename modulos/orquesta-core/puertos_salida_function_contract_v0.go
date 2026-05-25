@@ -1,11 +1,12 @@
 package orquestacore
 
 const (
-	FunctionContractFormatoPatchEvidenciaV0    = "patch+evidencia"
-	FunctionContractFormatoPatchUnificadoV0    = "patch_unificado"
-	FunctionContractFormatoFicherosEvidenciaV0 = "ficheros+evidencia"
-	FunctionContractEstadoBorradorV0           = "borrador"
-	FunctionContractEstadoActivaV0             = "activa"
+	FunctionContractFormatoPatchEvidenciaV0       = "patch+evidencia"
+	FunctionContractFormatoPatchUnificadoV0       = "patch_unificado"
+	FunctionContractFormatoFicherosEvidenciaV0    = "ficheros+evidencia"
+	FunctionContractEstadoBorradorV0              = "borrador"
+	FunctionContractEstadoActivaV0                = "activa"
+	FunctionContractEstadoEvidenciaInsuficienteV0 = "evidencia_insuficiente"
 )
 
 type FunctionContractV0 struct {

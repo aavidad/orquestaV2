@@ -65,6 +65,58 @@ func TestContinueAppDirectorV0InvocaCierreOperativoTrasLoopQuiescent(t *testing.
 	}
 }
 
+func TestContinueAppDirectorV0CierreOperativoNormalizaRevisionTrasReabrirProgramacion(t *testing.T) {
+	runRef := "run-service-operational-closure-reopened-programming"
+	run := serviceContinueClosureRunForTestV0(runRef, orquestacoreworkflow.OrchestrationPhaseProgramacionV0)
+	run.Tasks = []string{"task-ref-service-operational-closure-001"}
+	run.Deliveries = []string{"delivery-ref-service-operational-closure-001"}
+	run.AcceptedReviews = []string{"accepted-review-ref-service-operational-closure-001"}
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0(run)
+	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(serviceOperationalClosureTaskForTestV0(runRef))
+	source := &serviceOperationalClosureSourceForTestV0{
+		Request: orquestacionnucleoapp.OperationalDirectorClosureRequestV0{
+			TaskID:                   "task-ref-service-operational-closure-001",
+			DeliveryRef:              "delivery-ref-service-operational-closure-001",
+			AcceptedReviewRef:        "accepted-review-ref-service-operational-closure-001",
+			ValidationRef:            "validation-ref-service-operational-closure-reopened-programming",
+			ClosureRef:               "closure-ref-service-operational-closure-reopened-programming",
+			RequiredTestEvidenceRefs: []string{"test-evidence-ref-service-operational-closure-001"},
+			EvidenceRefs:             []string{"evidence-ref-service-operational-closure-reopened-programming"},
+		},
+	}
+
+	loop, issues, err := maybeCloseOperationalDirectorV0(
+		context.Background(),
+		serviceContinueClosureRequestForTestV0(runRef),
+		StartAppDirectorPortsV0{
+			RunStore:                  store,
+			EventSink:                 sink,
+			EventReader:               newServiceOperationalClosureEventReaderForTestV0(t, runRef),
+			DirectorTaskStore:         taskStore,
+			RequiredTestEvidenceStore: orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0(serviceOperationalClosureRequiredTestEvidenceForTestV0(runRef)),
+			OperationalClosureSource:  source,
+		},
+		orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+			Run:    run,
+		},
+		orquestacionnucleoapp.ProgressiveLoopRequestV0{},
+	)
+	if err != nil || len(issues) != 0 {
+		t.Fatalf("maybeCloseOperationalDirectorV0 err=%v issues=%+v", err, issues)
+	}
+	if loop.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		!serviceStringInSetV0(loop.Run.ClosedTasks, "task-ref-service-operational-closure-001") ||
+		!serviceStringInSetV0(loop.Run.Closures, "closure-ref-service-operational-closure-reopened-programming") {
+		t.Fatalf("run no cerrado desde programacion reabierta: %+v", loop.Run)
+	}
+	if !serviceHasEventTypeV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventPhaseOpenedV0) ||
+		!serviceHasEventTypeV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventTaskClosedV0) {
+		t.Fatalf("eventos sin normalizacion revision/cierre task: %+v", sink.EventsV0())
+	}
+}
+
 func TestContinueAppDirectorV0NoInvocaCierreOperativoMientrasEsperaAgente(t *testing.T) {
 	runRef := "run-service-operational-closure-wait-001"
 	run := mustServiceActiveProgrammingRunForClosureV0(t, runRef)

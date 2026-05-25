@@ -10,6 +10,7 @@ import (
 	"time"
 
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
+	stopreason "orquesta/modulos/orquesta-run-supervisor/stopreason"
 )
 
 func (runtime *RuntimeV0) runSupervisorLoopV0(ctx context.Context) {
@@ -30,11 +31,19 @@ func (runtime *RuntimeV0) runSupervisorLoopV0(ctx context.Context) {
 }
 
 func (runtime *RuntimeV0) runSupervisorTickAsyncV0(ctx context.Context) bool {
+	if runtime.supervisorFrozenForShutdownV0() {
+		runtime.markSupervisorFrozenForShutdownV0(ctx, "shutdown_in_progress")
+		return false
+	}
 	if !atomic.CompareAndSwapInt32(&runtime.supervisorTickActive, 0, 1) {
 		return false
 	}
 	go func() {
-		defer atomic.StoreInt32(&runtime.supervisorTickActive, 0)
+		runtime.persistStateV0(ctx, runtime.tracker.MarkSupervisorTickActiveV0(true, runtime.clock.Now()))
+		defer func() {
+			atomic.StoreInt32(&runtime.supervisorTickActive, 0)
+			runtime.persistStateV0(context.Background(), runtime.tracker.MarkSupervisorTickActiveV0(false, runtime.clock.Now()))
+		}()
 		runtime.runSupervisorTickV0(ctx)
 	}()
 	return true
@@ -42,6 +51,10 @@ func (runtime *RuntimeV0) runSupervisorTickAsyncV0(ctx context.Context) bool {
 
 func (runtime *RuntimeV0) runSupervisorTickV0(ctx context.Context) {
 	defer runtime.recoverSupervisorTickPanicV0(ctx)
+	if runtime.supervisorFrozenForShutdownV0() {
+		runtime.markSupervisorFrozenForShutdownV0(ctx, "shutdown_in_progress")
+		return
+	}
 	if err := ctx.Err(); err != nil {
 		return
 	}
@@ -50,14 +63,14 @@ func (runtime *RuntimeV0) runSupervisorTickV0(ctx context.Context) {
 		command.MaxTicks = DefaultSupervisorMaxTicksV0
 	}
 	runtime.auditEventV0(ctx, "supervisor_tick_start", "running", "", map[string]interface{}{
-		"command": command,
+		"command_summary": supervisorCommandAuditSummaryV0(command),
 	})
 	result, err := runtime.supervisor.RunGlobalSupervisorV0(ctx, command)
 	now := runtime.clock.Now()
 	if err != nil {
 		runtime.auditEventV0(ctx, "supervisor_tick_error", "error", err.Error(), map[string]interface{}{
-			"command": command,
-			"result":  result,
+			"command_summary": supervisorCommandAuditSummaryV0(command),
+			"result_summary":  supervisorResultAuditSummaryV0(result),
 		})
 		runtime.persistStateV0(ctx, runtime.tracker.MarkSupervisorErrorV0(
 			command,
@@ -68,8 +81,8 @@ func (runtime *RuntimeV0) runSupervisorTickV0(ctx context.Context) {
 		return
 	}
 	runtime.auditEventV0(ctx, "supervisor_tick_result", "ok", "", map[string]interface{}{
-		"command": command,
-		"result":  result,
+		"command_summary": supervisorCommandAuditSummaryV0(command),
+		"result_summary":  supervisorResultAuditSummaryV0(result),
 	})
 	runtime.persistStateV0(ctx, runtime.tracker.MarkSupervisorV0(command, result, now))
 	runtime.maybeScheduleIdleSelfImprovementV0(ctx, result, now)
@@ -80,6 +93,11 @@ func (runtime *RuntimeV0) maybeScheduleIdleSelfImprovementV0(
 	result orquestarunsupervisor.RunSupervisorResultV0,
 	now time.Time,
 ) {
+	if runtime.supervisorFrozenForShutdownV0() {
+		runtime.auditEventV0(ctx, "idle_self_improvement_check", "skipped", "", map[string]interface{}{"reason": "shutdown_in_progress"})
+		runtime.markIdleSelfImprovementCheckedV0(ctx, "shutdown_in_progress", now)
+		return
+	}
 	if runtime.config.IdleSelfImprovementAfter <= 0 {
 		runtime.auditEventV0(ctx, "idle_self_improvement_check", "skipped", "", map[string]interface{}{"reason": "disabled"})
 		runtime.markIdleSelfImprovementCheckedV0(ctx, "disabled", now)
@@ -114,6 +132,24 @@ const (
 	idleSelfImprovementTriggerCapacityFreeV0 = "capacity_free"
 )
 
+type IdleSelfImprovementRunFreshnessPortV0 interface {
+	RetryableIdleSelfImprovementRunRefsV0(
+		context.Context,
+		IdleSelfImprovementRunFreshnessRequestV0,
+	) (IdleSelfImprovementRunFreshnessResultV0, error)
+}
+
+type IdleSelfImprovementRunFreshnessRequestV0 struct {
+	KnownRunRefs     []string
+	KnownRequestRefs []string
+}
+
+type IdleSelfImprovementRunFreshnessResultV0 struct {
+	RetryableRunRefs     []string
+	RetryableRequestRefs []string
+	EvidenceRefs         []string
+}
+
 type idleSelfImprovementScheduleDecisionV0 struct {
 	Schedule         bool
 	AuditStatus      string
@@ -130,18 +166,28 @@ type idleSelfImprovementScheduleDecisionV0 struct {
 	Skips            int
 	KnownRunRefs     []string
 	KnownRequestRefs []string
+	RetryableRunRefs []string
+	BlockerRunRefs   []string
+	BlockerEvidence  []string
+	BlockerMessage   string
 }
 
 func (runtime *RuntimeV0) idleSelfImprovementScheduleDecisionV0(
-	_ context.Context,
+	ctx context.Context,
 	result orquestarunsupervisor.RunSupervisorResultV0,
 	now time.Time,
 ) idleSelfImprovementScheduleDecisionV0 {
 	idleSince, lastAttempt, inFlight, accepted := runtime.tracker.IdleSelfImprovementWindowV0()
 	metrics := collectSupervisorResultMetricsV0(result)
 	knownRunRefs := idleSelfImprovementKnownRunRefsV0(result)
+	knownRequestRefs := idleSelfImprovementKnownRequestRefsV0(knownRunRefs)
+	freshness := runtime.idleSelfImprovementRunFreshnessV0(ctx, knownRunRefs, knownRequestRefs)
+	if len(freshness.RetryableRunRefs) > 0 || len(freshness.RetryableRequestRefs) > 0 {
+		knownRunRefs = idleSelfImprovementWithoutRetryableRefsV0(knownRunRefs, freshness.RetryableRunRefs, freshness.RetryableRequestRefs)
+		knownRequestRefs = idleSelfImprovementWithoutRetryableRefsV0(knownRequestRefs, freshness.RetryableRunRefs, freshness.RetryableRequestRefs)
+	}
 	queueSize := len(knownRunRefs)
-	if metrics.QueueSize > queueSize {
+	if len(freshness.RetryableRunRefs) == 0 && len(freshness.RetryableRequestRefs) == 0 && metrics.QueueSize > queueSize {
 		queueSize = metrics.QueueSize
 	}
 	decision := idleSelfImprovementScheduleDecisionV0{
@@ -157,12 +203,47 @@ func (runtime *RuntimeV0) idleSelfImprovementScheduleDecisionV0(
 		MaxRequests:      runtime.config.IdleSelfImprovementMaxRequests,
 		Skips:            metrics.Skips,
 		KnownRunRefs:     knownRunRefs,
-		KnownRequestRefs: idleSelfImprovementKnownRequestRefsV0(knownRunRefs),
+		KnownRequestRefs: knownRequestRefs,
+		RetryableRunRefs: compactConfigStringsV0(append(freshness.RetryableRunRefs, freshness.RetryableRequestRefs...)),
+	}
+	if blocked := runtime.idleSelfImprovementProviderBlockerV0(ctx, decision); blocked.Blocked {
+		decision.Schedule = false
+		decision.AuditStatus = "blocked"
+		decision.Reason = firstNonEmptyIdleSelfImprovementV0(
+			blocked.Reason,
+			"provider_blocked",
+		)
+		decision.BlockerRunRefs = compactConfigStringsV0(blocked.RunRefs)
+		decision.BlockerEvidence = compactConfigStringsV0(blocked.EvidenceRefs)
+		decision.BlockerMessage = strings.TrimSpace(blocked.Message)
+		return decision
 	}
 	if supervisorResultIsIdleForSelfImprovementV0(result) {
 		return runtime.idleSelfImprovementIdleDecisionV0(decision, now)
 	}
 	return runtime.idleSelfImprovementCapacityDecisionV0(decision, now)
+}
+
+func (runtime *RuntimeV0) idleSelfImprovementProviderBlockerV0(
+	ctx context.Context,
+	decision idleSelfImprovementScheduleDecisionV0,
+) IdleSelfImprovementBlockerResultV0 {
+	blocker, ok := runtime.supervisor.(IdleSelfImprovementBlockerPortV0)
+	if !ok || blocker == nil {
+		return IdleSelfImprovementBlockerResultV0{}
+	}
+	result, err := blocker.IdleSelfImprovementBlockersV0(ctx, IdleSelfImprovementBlockerRequestV0{
+		KnownRunRefs:     append([]string(nil), decision.KnownRunRefs...),
+		KnownRequestRefs: append([]string(nil), decision.KnownRequestRefs...),
+	})
+	if err != nil {
+		runtime.auditEventV0(ctx, "idle_self_improvement_blocker_error", "error", err.Error(), map[string]interface{}{
+			"known_run_refs":     append([]string(nil), decision.KnownRunRefs...),
+			"known_request_refs": append([]string(nil), decision.KnownRequestRefs...),
+		})
+		return IdleSelfImprovementBlockerResultV0{}
+	}
+	return result
 }
 
 func (runtime *RuntimeV0) idleSelfImprovementIdleDecisionV0(
@@ -207,19 +288,9 @@ func (runtime *RuntimeV0) idleSelfImprovementCapacityDecisionV0(
 		decision.Reason = "capacity_attempt_in_flight"
 		return decision
 	}
-	if idleSelfImprovementCooldownBlocksV0(decision.LastAttempt, now, runtime.config.IdleSelfImprovementAfter) {
-		decision.AuditStatus = "blocked"
-		decision.Reason = "capacity_cooldown"
-		return decision
-	}
-	if decision.QueueSize <= 0 {
+	if decision.QueueSize <= 0 && len(decision.RetryableRunRefs) == 0 {
 		decision.AuditStatus = "skipped"
 		decision.Reason = "capacity_queue_unknown"
-		return decision
-	}
-	if decision.Skips > 0 {
-		decision.AuditStatus = "skipped"
-		decision.Reason = "capacity_pending_skips"
 		return decision
 	}
 	target := runtime.config.IdleSelfImprovementTargetQueue
@@ -260,7 +331,53 @@ func (decision idleSelfImprovementScheduleDecisionV0) AuditPayload() map[string]
 		"skips":              decision.Skips,
 		"known_run_refs":     append([]string(nil), decision.KnownRunRefs...),
 		"known_request_refs": append([]string(nil), decision.KnownRequestRefs...),
+		"retryable_run_refs": append([]string(nil), decision.RetryableRunRefs...),
+		"blocker_run_refs":   append([]string(nil), decision.BlockerRunRefs...),
+		"blocker_evidence":   append([]string(nil), decision.BlockerEvidence...),
+		"blocker_message":    decision.BlockerMessage,
 	}
+}
+
+func (runtime *RuntimeV0) idleSelfImprovementRunFreshnessV0(
+	ctx context.Context,
+	knownRunRefs []string,
+	knownRequestRefs []string,
+) IdleSelfImprovementRunFreshnessResultV0 {
+	port, ok := runtime.supervisor.(IdleSelfImprovementRunFreshnessPortV0)
+	if !ok || port == nil {
+		return IdleSelfImprovementRunFreshnessResultV0{}
+	}
+	result, err := port.RetryableIdleSelfImprovementRunRefsV0(ctx, IdleSelfImprovementRunFreshnessRequestV0{
+		KnownRunRefs:     append([]string(nil), knownRunRefs...),
+		KnownRequestRefs: append([]string(nil), knownRequestRefs...),
+	})
+	if err != nil {
+		runtime.auditEventV0(ctx, "idle_self_improvement_freshness_error", "error", err.Error(), map[string]interface{}{
+			"known_run_refs":     append([]string(nil), knownRunRefs...),
+			"known_request_refs": append([]string(nil), knownRequestRefs...),
+		})
+		return IdleSelfImprovementRunFreshnessResultV0{}
+	}
+	result.RetryableRunRefs = compactConfigStringsV0(result.RetryableRunRefs)
+	result.RetryableRequestRefs = compactConfigStringsV0(result.RetryableRequestRefs)
+	return result
+}
+
+func idleSelfImprovementWithoutRetryableRefsV0(values []string, retryableRunRefs []string, retryableRequestRefs []string) []string {
+	retryable := map[string]bool{}
+	for _, value := range append(append([]string(nil), retryableRunRefs...), retryableRequestRefs...) {
+		if ref := idleSelfImprovementRequestRefFromRunRefV0(value); ref != "" {
+			retryable[ref] = true
+		}
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range compactConfigStringsV0(values) {
+		if retryable[idleSelfImprovementRequestRefFromRunRefV0(value)] {
+			continue
+		}
+		out = append(out, value)
+	}
+	return compactConfigStringsV0(out)
 }
 
 func (decision idleSelfImprovementScheduleDecisionV0) QueueSizeString() string {
@@ -357,6 +474,7 @@ func (runtime *RuntimeV0) idleSelfImprovementRequestsV0(
 		Trigger:          decision.Trigger,
 		QueueSize:        decision.QueueSize,
 		FreeCapacity:     decision.FreeCapacity,
+		Skips:            decision.Skips,
 		KnownRunRefs:     append([]string(nil), decision.KnownRunRefs...),
 		KnownRequestRefs: append([]string(nil), decision.KnownRequestRefs...),
 	})
@@ -420,11 +538,13 @@ func (runtime *RuntimeV0) idleSelfImprovementRequestV0(
 		WriteSet:           append([]string(nil), runtime.config.IdleSelfImprovementWriteSet...),
 		RequiredTests:      append([]string(nil), runtime.config.IdleSelfImprovementRequiredTests...),
 		AcceptanceCriteria: append([]string(nil), runtime.config.IdleSelfImprovementAcceptance...),
-		CompactRules:       append([]string(nil), runtime.config.IdleSelfImprovementCompactRules...),
-		ContextRefs:        contextRefs,
-		EvidenceRefs:       evidenceRefs,
-		OccurredAt:         formatTimeV0(now),
-		PriorityScore:      runtime.config.IdleSelfImprovementPriorityScore,
+		CompactRules: compactConfigStringsV0(append(append([]string(nil), runtime.config.IdleSelfImprovementCompactRules...),
+			"un agente padre por tarea; subagentes maximo 6 si ayudan",
+		)),
+		ContextRefs:   contextRefs,
+		EvidenceRefs:  evidenceRefs,
+		OccurredAt:    formatTimeV0(now),
+		PriorityScore: runtime.config.IdleSelfImprovementPriorityScore,
 	}
 }
 
@@ -512,7 +632,8 @@ func idleSelfImprovementEvidenceRefsV0(config ConfigV0) []string {
 func supervisorResultIsIdleForSelfImprovementV0(
 	result orquestarunsupervisor.RunSupervisorResultV0,
 ) bool {
-	if strings.TrimSpace(result.StopReason) != orquestarunsupervisor.RunSupervisorStopNoExecutionV0 ||
+	projection := supervisorResultStopProjectionV0(result, result.TotalExecutions, result.TotalSkips)
+	if projection.PublicReason != stopreason.PublicReasonIdleNoExecutionV0 ||
 		result.TotalExecutions > 0 ||
 		result.TotalSkips > 0 {
 		return false

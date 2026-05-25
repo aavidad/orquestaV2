@@ -6,53 +6,62 @@ import (
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
-	orquestapersistence "orquesta/modulos/orquesta-persistence"
 )
 
 const cycleOutboxRunRefV0 = "run-cycle-outbox-001"
 
 type cycleOutboxPersistenceLedgerAdapterV0 struct {
-	ledger *orquestapersistence.InMemoryOutboxLedgerV0
+	order []string
+	byID  map[string]orquestacoreworkflow.OutboxMessageV0
 }
 
 func newCycleOutboxPersistenceLedgerAdapterV0() *cycleOutboxPersistenceLedgerAdapterV0 {
-	return &cycleOutboxPersistenceLedgerAdapterV0{ledger: orquestapersistence.NewInMemoryOutboxLedgerV0()}
+	return &cycleOutboxPersistenceLedgerAdapterV0{
+		byID: map[string]orquestacoreworkflow.OutboxMessageV0{},
+	}
 }
 
 func (adapter *cycleOutboxPersistenceLedgerAdapterV0) SavePending(
 	ctx context.Context,
 	messages []orquestacoreworkflow.OutboxMessageV0,
 ) ([]orquestacoreworkflow.OutboxMessageV0, []DirectorCycleOutboxIssueV0) {
-	saved, issues := adapter.ledger.SavePending(ctx, messages)
-	return saved, cycleOutboxPersistenceIssuesV0(issues)
+	if err := ctx.Err(); err != nil {
+		return nil, []DirectorCycleOutboxIssueV0{{Code: "context_done", Field: "context", Message: err.Error()}}
+	}
+	saved := make([]orquestacoreworkflow.OutboxMessageV0, 0, len(messages))
+	for _, message := range messages {
+		if err := orquestacoreworkflow.ValidateOutboxMessageV0(message); err != nil {
+			return nil, []DirectorCycleOutboxIssueV0{{Code: "message_invalid", Field: "messages", Message: err.Error()}}
+		}
+		if _, exists := adapter.byID[message.MessageID]; exists {
+			continue
+		}
+		adapter.byID[message.MessageID] = message
+		adapter.order = append(adapter.order, message.MessageID)
+		saved = append(saved, message)
+	}
+	return saved, nil
 }
 
 func (adapter *cycleOutboxPersistenceLedgerAdapterV0) ListPending(
 	ctx context.Context,
 	filter DirectorCycleOutboxPendingFilterV0,
 ) ([]orquestacoreworkflow.OutboxMessageV0, []DirectorCycleOutboxIssueV0) {
-	pending, issues := adapter.ledger.ListPending(ctx, orquestapersistence.OutboxPendingFilterV0{
-		RunID:      filter.RunRef,
-		TargetPort: filter.TargetPort,
-	})
-	return pending, cycleOutboxPersistenceIssuesV0(issues)
-}
-
-func cycleOutboxPersistenceIssuesV0(
-	issues []orquestapersistence.OutboxLedgerIssueV0,
-) []DirectorCycleOutboxIssueV0 {
-	if len(issues) == 0 {
-		return nil
+	if err := ctx.Err(); err != nil {
+		return nil, []DirectorCycleOutboxIssueV0{{Code: "context_done", Field: "context", Message: err.Error()}}
 	}
-	out := make([]DirectorCycleOutboxIssueV0, 0, len(issues))
-	for _, issue := range issues {
-		out = append(out, DirectorCycleOutboxIssueV0{
-			Code:    issue.Code,
-			Field:   issue.Field,
-			Message: issue.Message,
-		})
+	pending := make([]orquestacoreworkflow.OutboxMessageV0, 0, len(adapter.order))
+	for _, messageID := range adapter.order {
+		message := adapter.byID[messageID]
+		if filter.RunRef != "" && message.RunID != filter.RunRef {
+			continue
+		}
+		if filter.TargetPort != "" && message.TargetPort != filter.TargetPort {
+			continue
+		}
+		pending = append(pending, message)
 	}
-	return out
+	return pending, nil
 }
 
 func mustCycleOutboxCapacityMessageV0(

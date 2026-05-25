@@ -14,7 +14,7 @@ func TestRankRunCandidatesFiltersNonExecutableStatusesV0(t *testing.T) {
 		candidateV0("canceled-run", "app-1", "CANCELED", 50, now),
 		candidateV0("stopped-run", "app-1", RunStatusStoppedV0, 50, now),
 		candidateV0("closed-run", "app-1", RunStatusClosedV0, 50, now),
-		candidateV0("ready-run", "app-2", "ready", 10, now),
+		candidateV0("ready-run", "app-2", RunStatusReadyV0, 10, now),
 	}
 
 	ranked := RankRunCandidatesV0(candidates, DefaultRunQueueRankingPolicyV0(now))
@@ -36,9 +36,9 @@ func TestRankRunCandidatesOrdersPriorityBeforeAgingV0(t *testing.T) {
 		MaxAgingBoost:     9,
 	}
 	candidates := []RunSchedulingCandidateV0{
-		candidateV0("same-priority-newer", "app-1", "ready", 10, now.Add(-10*time.Minute)),
-		candidateV0("high-priority-newer", "app-2", "ready", 20, now.Add(-10*time.Minute)),
-		candidateV0("same-priority-aged", "app-3", "ready", 10, now.Add(-2*time.Hour)),
+		candidateV0("same-priority-newer", "app-1", RunStatusReadyV0, 10, now.Add(-10*time.Minute)),
+		candidateV0("high-priority-newer", "app-2", RunStatusReadyV0, 20, now.Add(-10*time.Minute)),
+		candidateV0("same-priority-aged", "app-3", RunStatusReadyV0, 10, now.Add(-2*time.Hour)),
 	}
 
 	ranked := RankRunCandidatesV0(candidates, policy)
@@ -58,9 +58,9 @@ func TestRankRunCandidatesOrdersUpdatedAtStableAfterPriorityAndAgingV0(t *testin
 	policy := RunQueueRankingPolicyV0{Now: now, MissingUpdatedAtLast: true}
 	shared := now.Add(-5 * time.Minute)
 	candidates := []RunSchedulingCandidateV0{
-		candidateV0("newer-stable-a", "app-1", "ready", 7, shared),
-		candidateV0("older-first", "app-2", "ready", 7, now.Add(-10*time.Minute)),
-		candidateV0("newer-stable-b", "app-3", "ready", 7, shared),
+		candidateV0("newer-stable-a", "app-1", RunStatusReadyV0, 7, shared),
+		candidateV0("older-first", "app-2", RunStatusReadyV0, 7, now.Add(-10*time.Minute)),
+		candidateV0("newer-stable-b", "app-3", RunStatusReadyV0, 7, shared),
 	}
 
 	ranked := RankRunCandidatesV0(candidates, policy)
@@ -75,7 +75,7 @@ func TestRankRunCandidatesOrdersUpdatedAtStableAfterPriorityAndAgingV0(t *testin
 func TestRankRunCandidatesDoesNotMutateInputsV0(t *testing.T) {
 	now := time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC)
 	candidates := []RunSchedulingCandidateV0{
-		candidateV0("run-1", "app-1", "ready", 1, now),
+		candidateV0("run-1", "app-1", RunStatusReadyV0, 1, now),
 	}
 	candidates[0].EvidenceRefs = []string{"evidence-1"}
 

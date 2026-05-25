@@ -41,6 +41,41 @@ func TestCodexProgressReportWithProcessFailureContextV0ClasificaCuotaSinFiltrarP
 	}
 }
 
+func TestCodexProgressReportWithProcessFailureContextV0ClasificaAuthInvalidaComoBloqueoRecuperable(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(dir, orquestaruntimecodex.CodexStderrFileNameV0),
+		[]byte("ERROR 401 token_invalidated refresh_token_reused"),
+		0o600,
+	); err != nil {
+		t.Fatalf("write stderr: %v", err)
+	}
+	report := validCodexProgressFailureReportForTestV0()
+
+	got := codexProgressReportWithProcessFailureContextV0(
+		CodexReceiptDescriptorV0{
+			AckPath: filepath.Join(dir, orquestaruntimecodex.CodexAgentAckFileNameV0),
+		},
+		report,
+	)
+
+	if !got.DecisionRequired ||
+		got.Summary != "Autenticacion externa invalida; requiere reautorizacion del operador." ||
+		!stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-auth-config-blocker") {
+		t.Fatalf("report=%+v", got)
+	}
+	if got.BudgetStatus != "" || got.BudgetReason != "" {
+		t.Fatalf("auth invalida no debe confundirse con capacidad: %+v", got)
+	}
+	if stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-capacity-warning") ||
+		stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-no-ack") {
+		t.Fatalf("auth invalida no debe mezclar evidencias de capacidad/no_ack: %+v", got.EvidenceRefs)
+	}
+	if issues := orquestaruntime.ValidateAgentProgressReportV0(got); len(issues) > 0 {
+		t.Fatalf("progress report invalido: %+v", issues)
+	}
+}
+
 func TestCodexProgressReportWithProcessFailureContextV0ClasificaNoACKSinLogs(t *testing.T) {
 	report := validCodexProgressFailureReportForTestV0()
 
@@ -155,6 +190,11 @@ func TestCodexProgressFailureClassFromDescriptorV0ClasificaSenalesCompactas(t *t
 			name:    "capacity_warning_priority",
 			content: "turn interrupted\nlow remaining capacity for this model\n",
 			want:    codexProgressFailureCapacityWarningV0,
+		},
+		{
+			name:    "auth_invalid_priority",
+			content: "ERROR 401 token_invalidated selected service is at capacity",
+			want:    codexProgressFailureAuthInvalidV0,
 		},
 		{
 			name:    "no_ack_without_signal",

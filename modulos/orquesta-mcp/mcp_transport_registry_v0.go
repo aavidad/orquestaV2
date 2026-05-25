@@ -9,6 +9,7 @@ import (
 const (
 	MCPTransportModeOptInV0           = "adapter_opt_in"
 	MCPTransportToolUnboundV0         = "mcp_transport_tool_unbound"
+	MCPTransportToolInputInvalidV0    = "mcp_transport_tool_input_invalid"
 	MCPTransportPortUnavailableV0     = "mcp_transport_port_unavailable"
 	MCPTransportResourceShapeV0       = "resource_payload_compacto_v0"
 	MCPTransportOperatorOutputShapeV0 = "operator_tool_result_compacto_v0"
@@ -67,6 +68,8 @@ func MCPTransportResourcesV0() []MCPTransportResourceEnvelopeV0 {
 	shared := MCPSharedContractsDescriptorV0()
 	roadmap := MCPProjectRoadmapDescriptorV0()
 	operational := MCPOperationalStatusDescriptorV0()
+	functionContracts := MCPFunctionContractDescriptorV0()
+	timeline := MCPWorkspaceTimelineDescriptorV0()
 	bootstrap := MCPBootstrapDescriptorV0()
 	workflow := MCPCoreWorkflowContractsDescriptorV0()
 	operatorOps := MCPOperatorOperationsDescriptorV0()
@@ -74,6 +77,8 @@ func MCPTransportResourcesV0() []MCPTransportResourceEnvelopeV0 {
 		mcpTransportResourceEnvelopeV0(shared.Name, shared.Version, shared.URI, shared.ContentType, shared.SummaryKey, func() any { return NewMCPSharedContractsResourceV0() }),
 		mcpTransportResourceEnvelopeV0(roadmap.Name, roadmap.Version, roadmap.URI, roadmap.ContentType, roadmap.SummaryKey, func() any { return NewMCPProjectRoadmapResourceV0() }),
 		mcpTransportResourceEnvelopeV0(operational.Name, operational.Version, operational.URI, operational.ContentType, operational.SummaryKey, func() any { return NewMCPOperationalStatusResourceV0() }),
+		mcpTransportResourceEnvelopeV0(functionContracts.Name, functionContracts.Version, functionContracts.URI, functionContracts.ContentType, functionContracts.SummaryKey, func() any { return NewMCPFunctionContractResourceV0() }),
+		mcpTransportResourceEnvelopeV0(timeline.Name, timeline.Version, timeline.URI, timeline.ContentType, timeline.SummaryKey, func() any { return NewMCPWorkspaceTimelineResourceV0() }),
 		mcpTransportResourceEnvelopeV0(bootstrap.Name, bootstrap.Version, bootstrap.URI, bootstrap.ContentType, bootstrap.SummaryKey, func() any { return NewMCPBootstrapResourceV0() }),
 		mcpTransportResourceEnvelopeV0(workflow.Name, workflow.Version, workflow.URI, workflow.ContentType, workflow.SummaryKey, func() any { return NewMCPCoreWorkflowContractsResourceV0() }),
 		mcpTransportResourceEnvelopeV0(operatorOps.Name, operatorOps.Version, operatorOps.URI, operatorOps.ContentType, operatorOps.SummaryKey, func() any { return NewMCPOperatorOperationsResourceV0() }),

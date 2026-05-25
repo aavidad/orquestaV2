@@ -19,6 +19,7 @@ type mcpTransportToolDescriptorsV0 struct {
 	runControl               MCPRunControlToolDescriptorV0
 	runQueue                 MCPRunQueuePriorityToolDescriptorV0
 	runSupervisor            MCPRunSupervisorToolDescriptorV0
+	workspaceTimeline        MCPWorkspaceTimelineToolDescriptorV0
 	serverShutdown           MCPServerShutdownToolDescriptorV0
 	domainWork               MCPDomainWorkToolDescriptorV0
 	externalWorkRun          MCPExternalWorkRunToolDescriptorV0
@@ -45,6 +46,7 @@ func newMCPTransportToolDescriptorsV0() mcpTransportToolDescriptorsV0 {
 		runControl:               MCPRunControlDescriptorV0(),
 		runQueue:                 MCPRunQueuePriorityDescriptorV0(),
 		runSupervisor:            MCPRunSupervisorDescriptorV0(),
+		workspaceTimeline:        MCPWorkspaceTimelineToolDescriptorV0Value(),
 		serverShutdown:           MCPServerShutdownDescriptorV0(),
 		domainWork:               MCPDomainWorkDescriptorV0(),
 		externalWorkRun:          MCPExternalWorkRunDescriptorV0(),

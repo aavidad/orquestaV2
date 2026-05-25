@@ -188,6 +188,11 @@ func (v *codexAckValidatorV0) validateCompletedEvidence(
 		v.add(CodexConnectorAckArtifactV0, "notes", "required_context_truncated")
 		return
 	}
+	if codexPacketRequiresRefOnlyAckEvidenceV0(packet) &&
+		!codexAckContainsNotePrefixV0(ack.Notes, "contexto_ref_only_resuelto") {
+		v.add(CodexConnectorAckArtifactV0, "notes", "required_context_ref_only")
+		return
+	}
 	if codexAckHasFailedTestEvidenceV0(ack) {
 		v.add(CodexConnectorAckArtifactV0, "tests", "failed_test_evidence")
 		return

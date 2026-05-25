@@ -27,6 +27,13 @@ func NormalizeAgentProcessRegistryLookupV0(
 	return normalizeRefV0(runID), normalizeRefV0(agentRequestID)
 }
 
+func NormalizeAgentProcessRegistryListFilterV0(
+	filter AgentProcessRegistryListFilterV0,
+) AgentProcessRegistryListFilterV0 {
+	filter.RunID = normalizeRefV0(filter.RunID)
+	return filter
+}
+
 func ValidateAgentProcessRegistryRecordV0(
 	record AgentProcessRegistryRecordV0,
 ) error {
@@ -50,6 +57,18 @@ func ValidateAgentProcessRegistryLookupV0(
 	return validateRefsV0([]registryFieldV0{
 		{field: "agent_process.run_id", value: runID},
 		{field: "agent_process.agent_request_id", value: agentRequestID},
+	})
+}
+
+func ValidateAgentProcessRegistryListFilterV0(
+	filter AgentProcessRegistryListFilterV0,
+) error {
+	filter = NormalizeAgentProcessRegistryListFilterV0(filter)
+	if filter.RunID == "" {
+		return nil
+	}
+	return validateRefsV0([]registryFieldV0{
+		{field: "agent_process.run_id", value: filter.RunID},
 	})
 }
 

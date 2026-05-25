@@ -168,7 +168,8 @@ func TestClientV0DevuelveErrorConStatusNo2xx(t *testing.T) {
 
 func TestClientV0DevuelveErrorConTimeoutOCancelacion(t *testing.T) {
 	client, err := orquestadomainworkhttp.NewClientV0(orquestadomainworkhttp.ConfigV0{
-		BaseURL: "http://domain-work-http-test.invalid",
+		BaseURL:      "http://domain-work-http-test.invalid",
+		EgressPolicy: orquestadomainworkhttp.AllowlistEgressPolicyV0("domain-work-http-test.invalid"),
 		HTTPClient: &http.Client{Transport: roundTripFuncV0(func(r *http.Request) (*http.Response, error) {
 			<-r.Context().Done()
 			return nil, r.Context().Err()

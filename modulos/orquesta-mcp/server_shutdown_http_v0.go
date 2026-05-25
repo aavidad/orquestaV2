@@ -39,7 +39,20 @@ func (handler mcpServerShutdownHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r
 	}
 	result, err := handler.executor.Execute(r.Context(), input)
 	if err != nil {
-		writeMCPServerShutdownHTTPV0(w, http.StatusInternalServerError, newMCPServerShutdownHTTPErrorV0(r, input, "executor", "server_shutdown_error"))
+		if result.Estado == MCPServerShutdownEstadoErrorV0 && len(result.Errores) > 0 {
+			writeMCPServerShutdownHTTPV0(w, http.StatusInternalServerError, result)
+			return
+		}
+		writeMCPServerShutdownHTTPV0(
+			w,
+			http.StatusInternalServerError,
+			newMCPServerShutdownHTTPErrorV0(
+				r,
+				input,
+				"executor",
+				publicMCPExecutorErrorMessageFromErrorV0("server_shutdown_executor_error", err),
+			),
+		)
 		return
 	}
 	status := http.StatusOK

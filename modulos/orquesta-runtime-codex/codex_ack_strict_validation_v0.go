@@ -2,10 +2,27 @@ package orquestaruntimecodex
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
+
+func ReadAndValidateStrictCompletedCodexAgentAckFileV0(
+	path string,
+	spec orquestaruntime.ExternalAgentLaunchSpecV0,
+) (CodexAgentAckV0, []orquestaruntime.ExternalAgentConnectorErrorV0) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		issue := codexIssueV0(CodexConnectorAckInvalidV0, CodexAgentAckFileNameV0, spec.CorrelationID, "read_failed")
+		if os.IsNotExist(err) {
+			issue.Retryable = true
+			issue.Evidence = []string{"ack_not_ready"}
+		}
+		return CodexAgentAckV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{issue}
+	}
+	return ValidateStrictCompletedCodexAgentAckBytesForSpecV0(data, spec)
+}
 
 func ValidateStrictCompletedCodexAgentAckBytesForSpecV0(
 	data []byte,
@@ -17,11 +34,21 @@ func ValidateStrictCompletedCodexAgentAckBytesForSpecV0(
 			codexIssueV0(CodexConnectorAckInvalidV0, CodexAgentAckFileNameV0, spec.CorrelationID, "json_invalid"),
 		}
 	}
-	if issues := codexStrictCompletedAckIssuesV0(ack, spec); len(issues) > 0 {
+	issues := codexStrictCompletedAckIssuesV0(ack, spec)
+	issues = append(issues, codexStrictCompletedAckRawTestReceiptIssuesV0(data, spec.CorrelationID)...)
+	if len(issues) > 0 {
 		return ack, issues
 	}
 	validated, issues := ValidateCodexAgentAckBytesForSpecV0(data, spec)
 	return validated, issues
+}
+
+func CodexAgentPacketRequiresStrictTerminalAckV0(
+	packet orquestaruntime.AgentStartPacketV0,
+) bool {
+	return codexAckStringInSetV0(packet.Policies, "write_set_closed") ||
+		codexAckStringInSetV0(packet.Policies, "ack_terminal_strict") ||
+		codexAckStringInSetV0(packet.Policies, "orquestav2_strict")
 }
 
 func codexStrictCompletedAckIssuesV0(
@@ -47,6 +74,15 @@ func codexStrictCompletedAckIssuesV0(
 	if strings.TrimSpace(ack.Status) != codexAgentAckStatusCompletedV0 {
 		v.add(CodexConnectorAckInvalidV0, "status", "status_not_completed")
 	}
+	if ack.Files == nil && !codexAckHasNonFileCompletionEvidenceV0(ack) {
+		v.add(CodexConnectorAckArtifactV0, "files", "required")
+	}
+	if ack.Tests == nil {
+		v.add(CodexConnectorAckArtifactV0, "tests", "required")
+	}
+	v.validateStrictFiles(ack, spec.AgentPacket)
+	v.validateStrictTests(ack, spec.AgentPacket)
+	v.validateStrictTestReceipts(ack, spec.AgentPacket)
 	packet := spec.AgentPacket
 	if strings.TrimSpace(ack.RequestID) != strings.TrimSpace(spec.RequestID) ||
 		strings.TrimSpace(ack.RequestID) != strings.TrimSpace(packet.RequestID) ||
@@ -58,4 +94,100 @@ func codexStrictCompletedAckIssuesV0(
 		v.add(CodexConnectorAckCorrelationV0, "agent_ack", "correlation_mismatch")
 	}
 	return v.issues
+}
+
+func (v *codexAckValidatorV0) validateStrictFiles(
+	ack CodexAgentAckV0,
+	packet orquestaruntime.AgentStartPacketV0,
+) {
+	if ack.Files == nil {
+		return
+	}
+	if codexAckHasInvalidPathV0(ack.Files) {
+		v.add(CodexConnectorAckArtifactV0, "files", "artifact_path_invalid")
+		return
+	}
+	files := normalizeCodexAckPathsV0(ack.Files)
+	if len(files) == 0 {
+		if codexAckHasNonFileCompletionEvidenceV0(ack) {
+			return
+		}
+		v.add(CodexConnectorAckArtifactV0, "files", "required")
+		return
+	}
+	if codexAckHasForbiddenArtifactPathV0(files) {
+		v.add(CodexConnectorAckArtifactV0, "files", "artifact_path_forbidden")
+		return
+	}
+	writeSet := normalizeCodexAckWriteSetPathsV0(packet.Task.WriteSet)
+	if len(writeSet) == 0 {
+		v.add(CodexConnectorAckArtifactV0, "write_set", "required")
+		return
+	}
+	// Write-set drift is evaluated by review/worktree gates as a soft rail.
+	// Strict ACK validation only owns receipt shape, identity, safe paths and
+	// required test evidence, so useful completed work can reach review.
+}
+
+func codexAckHasNonFileCompletionEvidenceV0(ack CodexAgentAckV0) bool {
+	return len(compactCodexAckStringsV0(ack.Tests)) > 0 ||
+		len(compactCodexAckStringsV0(ack.Notes)) > 0 ||
+		len(ack.TestReceipts) > 0
+}
+
+func (v *codexAckValidatorV0) validateStrictTests(
+	ack CodexAgentAckV0,
+	packet orquestaruntime.AgentStartPacketV0,
+) {
+	if ack.Tests == nil {
+		return
+	}
+	required := compactCodexAckStringsV0(packet.Task.RequiredTests)
+	if len(required) == 0 {
+		return
+	}
+	tests := compactCodexAckStringsV0(ack.Tests)
+	if len(tests) != len(required) {
+		v.add(CodexConnectorAckArtifactV0, "tests", "required_tests_mismatch")
+		return
+	}
+	for index := range required {
+		if tests[index] != required[index] {
+			v.add(CodexConnectorAckArtifactV0, "tests", "required_tests_mismatch")
+			return
+		}
+	}
+}
+
+func codexAckPathAllowedByWriteSetV0(file string, writeSet []string) bool {
+	for _, entry := range writeSet {
+		if codexAckPathMatchesWriteSetEntryV0(file, entry) {
+			return true
+		}
+	}
+	return false
+}
+
+func codexAckStringInSetV0(values []string, want string) bool {
+	want = strings.TrimSpace(want)
+	for _, value := range values {
+		if strings.TrimSpace(value) == want {
+			return true
+		}
+	}
+	return false
+}
+
+func compactCodexAckStringsV0(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
 }

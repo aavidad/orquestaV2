@@ -40,12 +40,14 @@ func (executor ExternalProcessAgentBatchExecutorV0) ackBatchResultV0(
 	started orquestaruntime.ExternalAgentProcessLaunchResultV0,
 ) orquestaoutboxdispatch.OutboxDispatchAckObservationV0 {
 	if started.Status != orquestaruntime.ExternalAgentProcessLaunchStartedV0 {
-		_ = executor.registerAgentFailedV0(ctx, intent, inbound, started)
-		return failedBatchObservationWithIssuesV0(
-			intent,
-			"evidence-ref-external-process-batch-blocked",
-			externalProcessBatchDispatchIssuesV0(started),
-		)
+		if err := executor.registerAgentFailedV0(ctx, intent, inbound, started); err != nil {
+			return failedBatchObservationWithIssuesV0(
+				intent,
+				"evidence-ref-external-process-batch-blocked",
+				externalProcessBatchDispatchIssuesV0(started),
+			)
+		}
+		return handledFailedAgentBatchObservationV0(intent, executor.agentFailedEvidenceRefsV0(inbound))
 	}
 	readiness, err := ProbeAgentReadinessV0(
 		ctx,
@@ -165,6 +167,66 @@ func (executor ExternalProcessAgentBatchExecutorV0) agentFailedEvidenceRefsV0(
 	}
 	refs = append(refs, "evidence-ref-external-process-batch-blocked")
 	return compactStringsV0(refs)
+}
+
+func handledFailedAgentBatchObservationV0(
+	intent orquestaoutboxdispatch.DispatchIntentV0,
+	evidenceRefs []string,
+) orquestaoutboxdispatch.OutboxDispatchAckObservationV0 {
+	return orquestaoutboxdispatch.OutboxDispatchAckObservationV0{
+		MessageID:   intent.MessageID,
+		RunID:       intent.RunID,
+		TargetPort:  intent.TargetPort,
+		Status:      orquestaoutboxdispatch.OutboxDispatchAckObservationSuccessV0,
+		DispatchRef: "dispatch-ref-agent-failed-" + strings.TrimSpace(intent.MessageID),
+		EvidenceRefs: compactStringsV0(append(
+			append([]string(nil), evidenceRefs...),
+			"evidence-ref-external-process-batch-failed-agent-recorded",
+		)),
+	}
+}
+
+func (executor ExternalProcessAgentBatchExecutorV0) agentLaunchAlreadyTerminalV0(
+	ctx context.Context,
+	inbound orquestaruntime.AgentLauncherInboundV0,
+) bool {
+	if executor.RunStore == nil || inbound.Payload == nil {
+		return false
+	}
+	runID := strings.TrimSpace(inbound.Payload.RunID)
+	agentRef := strings.TrimSpace(inbound.Payload.AgentRequestID)
+	if runID == "" || agentRef == "" {
+		return false
+	}
+	run, err := executor.RunStore.LoadRunV0(ctx, runID)
+	if err != nil {
+		return false
+	}
+	return stringInSetV0(agentRef, run.DeliveredAgents) ||
+		stringInSetV0(agentRef, run.FailedAgents) ||
+		stringInSetV0(agentRef, run.LostAgents) ||
+		stringInSetV0(agentRef, run.StoppedAgents) ||
+		stringInSetV0(agentRef, run.ConfirmedStoppedAgents)
+}
+
+func handledTerminalAgentBatchObservationV0(
+	intent orquestaoutboxdispatch.DispatchIntentV0,
+	inbound orquestaruntime.AgentLauncherInboundV0,
+) orquestaoutboxdispatch.OutboxDispatchAckObservationV0 {
+	evidenceRefs := []string{
+		"evidence-ref-external-process-batch-terminal-agent-preserved",
+	}
+	if inbound.Payload != nil {
+		evidenceRefs = append(evidenceRefs, inbound.Payload.EvidenceRefs...)
+	}
+	return orquestaoutboxdispatch.OutboxDispatchAckObservationV0{
+		MessageID:    intent.MessageID,
+		RunID:        intent.RunID,
+		TargetPort:   intent.TargetPort,
+		Status:       orquestaoutboxdispatch.OutboxDispatchAckObservationSuccessV0,
+		DispatchRef:  "dispatch-ref-terminal-agent-" + strings.TrimSpace(intent.MessageID),
+		EvidenceRefs: compactStringsV0(evidenceRefs),
+	}
 }
 
 func successBatchObservationV0(

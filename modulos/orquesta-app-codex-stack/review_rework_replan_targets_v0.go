@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
+	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
 )
 
 func reviewReworkMissingWriteSetTargetsV0(
@@ -164,12 +165,10 @@ func reviewReworkGlobRegexpV0(pattern string) (*regexp.Regexp, error) {
 }
 
 func reviewReworkSkipProjectDirV0(name string) bool {
-	switch name {
-	case ".git", ".orquesta-runtime", ".orquesta-codex-runtime":
+	if name == ".git" {
 		return true
-	default:
-		return false
 	}
+	return orquestaruntimeworktree.IsWorktreeControlPathV0(name)
 }
 
 func reviewReworkReplanSafeOpaqueTargetV0(value string) string {

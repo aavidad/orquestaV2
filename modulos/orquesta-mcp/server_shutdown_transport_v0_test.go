@@ -3,6 +3,8 @@ package orquestamcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 )
 
@@ -58,9 +60,48 @@ func TestMCPTransportV0ServerShutdownInvocaExecutor(t *testing.T) {
 	}
 }
 
+func TestMCPTransportV0ServerShutdownDevuelvePayloadPublicoSiExecutorFalla(t *testing.T) {
+	executor := &fakeMCPServerShutdownTransportExecutorV0{
+		err: errors.New("payload_invalido: payload en /root/.codex bearer sk-123456789"),
+	}
+	transport := newFakeMCPTransportV0()
+	if err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{
+		ServerShutdown: executor,
+	}); err != nil {
+		t.Fatalf("register transport: %v", err)
+	}
+
+	output, err := transport.CallToolV0(
+		context.Background(),
+		MCPServerShutdownToolNameV0,
+		MCPServerShutdownToolInputV0{
+			RequestID:     "req-shutdown-transport-error-001",
+			CorrelationID: "corr-shutdown-transport-error-001",
+			Forced:        true,
+			RequestedBy:   "orquesta-director",
+		},
+	)
+	if err != nil {
+		t.Fatalf("call server shutdown no debe devolver error transporte: %v", err)
+	}
+	var result MCPServerShutdownToolResultV0
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if result.Estado != MCPServerShutdownEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "server_shutdown_executor_error" ||
+		!strings.Contains(result.Errores[0].Message, "payload_invalido: payload") ||
+		strings.Contains(result.Errores[0].Message, "/root/") ||
+		strings.Contains(result.Errores[0].Message, "sk-123456789") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 type fakeMCPServerShutdownTransportExecutorV0 struct {
 	input  MCPServerShutdownToolInputV0
 	result MCPServerShutdownToolResultV0
+	err    error
 }
 
 func (executor *fakeMCPServerShutdownTransportExecutorV0) Execute(
@@ -68,5 +109,5 @@ func (executor *fakeMCPServerShutdownTransportExecutorV0) Execute(
 	input MCPServerShutdownToolInputV0,
 ) (MCPServerShutdownToolResultV0, error) {
 	executor.input = input
-	return executor.result, nil
+	return executor.result, executor.err
 }

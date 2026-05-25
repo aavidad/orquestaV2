@@ -179,6 +179,62 @@ func TestStoreV0RechazaConflictosDurables(t *testing.T) {
 	}
 }
 
+func TestStoreV0ListaAgentProcessesPorRun(t *testing.T) {
+	ctx := context.Background()
+	store := mustStoreV0(t, t.TempDir())
+	first := validAgentProcessRecordV0("run-state-file-list-001")
+	second := validAgentProcessRecordV0("run-state-file-list-002")
+	second.AgentRequestID = "agent-ref-state-file-list-002"
+	second.ProcessRef = "process-ref-state-file-list-002"
+	second.SessionRef = "session-ref-state-file-list-002"
+	second.LaunchRef = "launch-ref-state-file-list-002"
+	second.ReadinessRef = "readiness-ref-state-file-list-002"
+	for _, record := range []orquestacionnucleoapp.AgentProcessRecordV0{first, second} {
+		if err := store.RecordAgentProcessV0(ctx, record); err != nil {
+			t.Fatalf("record process: %v", err)
+		}
+	}
+	all, err := store.ListAgentProcessesV0(ctx, orquestacionnucleoapp.AgentProcessRegistryListFilterV0{})
+	if err != nil {
+		t.Fatalf("list all: %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("all=%+v", all)
+	}
+	filtered, err := store.ListAgentProcessesV0(ctx, orquestacionnucleoapp.AgentProcessRegistryListFilterV0{
+		RunID: first.RunID,
+	})
+	if err != nil {
+		t.Fatalf("list filtered: %v", err)
+	}
+	if len(filtered) != 1 || filtered[0].RunID != first.RunID {
+		t.Fatalf("filtered=%+v", filtered)
+	}
+}
+
+func TestStoreV0ReconciliaWorkflowTaskConFunctionContractsFaltantes(t *testing.T) {
+	ctx := context.Background()
+	store := mustStoreV0(t, t.TempDir())
+	task := mustWorkflowTaskV0(t, "run-state-file-contract-repair")
+	task.FunctionContractRefs = nil
+	if err := store.SaveWorkflowTaskV0(ctx, task); err != nil {
+		t.Fatalf("save task sin contratos: %v", err)
+	}
+	task.FunctionContractRefs = []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
+		ContractRef: "contract:function:workflow-task:v0",
+	}}
+	if err := store.SaveWorkflowTaskV0(ctx, task); err != nil {
+		t.Fatalf("save task debe reconciliar contratos: %v", err)
+	}
+	got, err := store.LoadWorkflowTasksV0(ctx, task.RunID, []string{task.TaskID})
+	if err != nil {
+		t.Fatalf("LoadWorkflowTasksV0: %v", err)
+	}
+	if len(got) != 1 || len(got[0].FunctionContractRefs) != 1 {
+		t.Fatalf("task no reconciliada: %+v", got)
+	}
+}
+
 func assertRecoveredRunV0(t *testing.T, store *StoreV0, want orquestacoreworkflow.OrchestrationRunV0) {
 	t.Helper()
 	got, err := store.LoadRunV0(context.Background(), want.RunID)

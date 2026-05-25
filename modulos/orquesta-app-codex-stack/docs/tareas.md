@@ -425,23 +425,23 @@ proveedor.
 Trabajo aplicado:
 
 - `AgentUsageStatsProviderPortV0` en el nucleo;
-- `DirectorAgentStatsV0.Usage` con modelo, capacidad, cuota y tokens;
+- `DirectorAgentStatsV0.Usage` con capacidad, cuota y tokens agregados;
 - MCP `orquesta.director.stats.v0` acepta `include_agent_usage`;
-- web proyecta `model_alias`, `capacity_level`, `quota_status`,
-  `quota_remaining`, `quota_limit` y `total_tokens`;
-- stack Codex publica modelo/capacidad desde configuracion y cuota
+- web proyecta `capacity_level`, `quota_status`, `quota_remaining`,
+  `quota_limit` y `total_tokens`;
+- stack Codex publica capacidad desde el paquete de agente y cuota
   `not_configured` hasta conectar proveedor real.
 - `CodexStackAgentUsageMetricsProviderPortV0` permite inyectar metricas por
   agente sin que el stack conozca proveedor, HOME, OAuth ni API remota;
-- `DirectorRunStatsV0.UsageSummary` acumula agentes observados, cuota, tokens y
-  coste por run;
+- `DirectorRunStatsV0.UsageSummary` acumula agentes observados, cuota y tokens
+  por run;
 - web proyecta el resumen en `resumen.usage_*`.
 
 Pendiente:
 
 - conector real de cuota/tokens por proveedor o runtime;
-- politica final para coste real si el proveedor no entrega precio;
-- decidir politica de privacidad para mostrar modelo literal vs alias publico.
+- politica final de privacidad para aliases publicos si una composicion quiere
+  exponer metadatos de proveedor fuera del contrato neutral.
 
 ## APP-CODEX-STACK-015
 

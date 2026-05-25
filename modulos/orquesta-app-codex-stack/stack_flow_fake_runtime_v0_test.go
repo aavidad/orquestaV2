@@ -119,7 +119,8 @@ func (runtime *fakeCodexStackRuntimeV0) writeAckV0(
 		"status":         "completed",
 		"files":          files,
 		"tests":          packet.Task.RequiredTests,
-		"notes":          []string{"fake runtime ack"},
+		"test_receipts":  codexStackRequiredTestReceiptsV0(packet.Task.RequiredTests),
+		"notes":          codexStackFakeAckNotesV0(packet, "fake runtime ack"),
 	}
 	ackData, err := json.Marshal(ack)
 	if err != nil {
@@ -131,6 +132,20 @@ func (runtime *fakeCodexStackRuntimeV0) writeAckV0(
 		return err
 	}
 	return os.Rename(tmpPath, ackPath)
+}
+
+func codexStackFakeAckNotesV0(
+	packet orquestaruntime.AgentStartPacketV0,
+	base string,
+) []string {
+	notes := []string{base}
+	if contextBundleHasRequiredTruncatedEntryV0(packet.Context) {
+		notes = append(notes, "contexto_truncado_resuelto: contexto fake validado")
+	}
+	if contextBundleHasRequiredRefOnlyEntryV0(packet.Context) {
+		notes = append(notes, "contexto_ref_only_resuelto: contexto fake validado")
+	}
+	return notes
 }
 
 func (runtime *fakeCodexStackRuntimeV0) writeDeliveryFilesV0(

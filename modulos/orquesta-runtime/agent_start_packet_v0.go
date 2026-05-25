@@ -37,6 +37,10 @@ func BuildAgentStartPacketV0(
 	if agentStartPacketHasForbiddenOperationalDetailV0(packet) {
 		packet.Issues = append(packet.Issues, runtimeLaunchIssueV0(AgentStartPacketInvalidoV0, "packet"))
 	}
+	if AgentStartPacketWriteSetClosedV0(packet) &&
+		agentStartPacketHasWriteSetExpansionContradictionV0(packet) {
+		packet.Issues = append(packet.Issues, runtimeLaunchIssueV0(AgentStartPacketInvalidoV0, "task"))
+	}
 	return packet
 }
 
@@ -99,7 +103,27 @@ func agentStartPoliciesFromLaunchV0(
 	if orquestacontext.ContextBundleRequiresSanitizationReviewV0(materialized) {
 		policies = append(policies, "ask_director_on_sanitization_review")
 	}
+	if orquestacontext.ContextBundleHasRequiredRefOnlyV0(materialized) {
+		policies = append(policies, "required_ref_only_context_guard")
+	}
 	return policies
+}
+
+func AgentStartPacketHasPolicyV0(packet AgentStartPacketV0, policy string) bool {
+	policy = strings.TrimSpace(policy)
+	if policy == "" {
+		return false
+	}
+	for _, candidate := range packet.Policies {
+		if strings.TrimSpace(candidate) == policy {
+			return true
+		}
+	}
+	return false
+}
+
+func AgentStartPacketWriteSetClosedV0(packet AgentStartPacketV0) bool {
+	return AgentStartPacketHasPolicyV0(packet, "write_set_closed")
 }
 
 func runtimeLaunchIssueV0(code RuntimeLaunchErrorCodeV0, field string) RuntimeLaunchErrorV0 {
@@ -145,6 +169,25 @@ func agentStartPacketHasSecretPrefixV0(value string) bool {
 			return false
 		}
 		index += next + 1
+	}
+	return false
+}
+
+func agentStartPacketHasWriteSetExpansionContradictionV0(packet AgentStartPacketV0) bool {
+	text := strings.ToLower(strings.Join(append(
+		[]string{packet.Task.Objective},
+		packet.Task.DoneCriteria...,
+	), "\n"))
+	for _, marker := range []string{
+		"si debes tocar otros ficheros",
+		"si hace falta ampliarlo",
+		"justificadlo en el ack",
+		"justificado en el ack",
+		"justificando cualquier toque fuera del write-set",
+	} {
+		if strings.Contains(text, marker) {
+			return true
+		}
 	}
 	return false
 }

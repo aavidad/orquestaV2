@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -60,9 +62,44 @@ func TestMCPServerShutdownHTTPHandlerV0MetodoYExecutorNil(t *testing.T) {
 	}
 }
 
+func TestMCPServerShutdownHTTPHandlerV0ExponeCausaSanitizadaSiExecutorFalla(t *testing.T) {
+	executor := &fakeMCPServerShutdownHTTPExecutorV0{
+		err: errors.New("payload_invalido: payload en /home/alberto/Trabajo/orquesta/secreto bearer sk-123456789"),
+	}
+	body := bytes.NewBuffer(nil)
+	_ = json.NewEncoder(body).Encode(MCPServerShutdownToolInputV0{
+		RequestID:     "req-shutdown-http-error-001",
+		CorrelationID: "corr-shutdown-http-error-001",
+		Forced:        true,
+		RequestedBy:   "orquesta-director",
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, MCPServerShutdownHTTPPathV0, body)
+
+	NewMCPServerShutdownHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError ||
+		rec.Header().Get("X-Correlation-ID") != "corr-shutdown-http-error-001" {
+		t.Fatalf("status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
+	}
+	var result MCPServerShutdownToolResultV0
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if result.Estado != MCPServerShutdownEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "server_shutdown_http_error" ||
+		!strings.Contains(result.Errores[0].Message, "payload_invalido: payload") ||
+		strings.Contains(result.Errores[0].Message, "/home/alberto") ||
+		strings.Contains(result.Errores[0].Message, "sk-123456789") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 type fakeMCPServerShutdownHTTPExecutorV0 struct {
 	input  MCPServerShutdownToolInputV0
 	result MCPServerShutdownToolResultV0
+	err    error
 }
 
 func (executor *fakeMCPServerShutdownHTTPExecutorV0) Execute(
@@ -70,5 +107,5 @@ func (executor *fakeMCPServerShutdownHTTPExecutorV0) Execute(
 	input MCPServerShutdownToolInputV0,
 ) (MCPServerShutdownToolResultV0, error) {
 	executor.input = input
-	return executor.result, nil
+	return executor.result, executor.err
 }

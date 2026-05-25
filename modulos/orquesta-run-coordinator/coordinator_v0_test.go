@@ -94,6 +94,82 @@ func TestCoordinateRunsTickSkipsStopRequestedConCheckpointPendienteV0(t *testing
 	}
 }
 
+func TestCoordinateRunsTickSincronizaControlBloqueadoConColaNoEjecutableV0(t *testing.T) {
+	now := time.Date(2026, 5, 25, 10, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name        string
+		control     orquestaruncontrol.RunControlStatusV0
+		wantQueue   string
+		wantSkipped string
+	}{
+		{
+			name:        "stop_requested",
+			control:     orquestaruncontrol.RunControlStatusStopRequestedV0,
+			wantQueue:   orquestarunqueue.RunStatusStoppedV0,
+			wantSkipped: string(orquestaruncontrol.RunControlStatusStopRequestedV0),
+		},
+		{
+			name:        "cancel_requested",
+			control:     orquestaruncontrol.RunControlStatusCancelRequestedV0,
+			wantQueue:   orquestarunqueue.RunStatusCanceledV0,
+			wantSkipped: string(orquestaruncontrol.RunControlStatusCancelRequestedV0),
+		},
+		{
+			name:        "paused",
+			control:     orquestaruncontrol.RunControlStatusPausedV0,
+			wantQueue:   orquestarunqueue.RunStatusPausedV0,
+			wantSkipped: string(orquestaruncontrol.RunControlStatusPausedV0),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			queue := &fakeQueueStoreV0{candidates: []orquestarunqueue.RunSchedulingCandidateV0{
+				candidateWithUpdatedAtV0("run-blocked", "app", 9, now.Add(-time.Hour)),
+			}}
+			control := &fakeControlReaderV0{
+				states: map[string]orquestaruncontrol.RunControlStateV0{
+					"run-blocked": {
+						RunRef: "run-blocked",
+						Status: tt.control,
+					},
+				},
+				missing: map[string]bool{},
+			}
+			deps := RunCoordinatorDepsV0{
+				QueueReader:   queue,
+				QueueUpdater:  queue,
+				ControlReader: control,
+				Drainer:       &fakeDrainerV0{},
+			}
+			command := tickCommandV0(1)
+			command.OccurredAt = now
+			command.RankingPolicy = orquestarunqueue.DefaultRunQueueRankingPolicyV0(now)
+
+			first, err := CoordinateRunsTickV0(context.Background(), deps, command)
+			if err != nil {
+				t.Fatalf("first tick: %v", err)
+			}
+			second, err := CoordinateRunsTickV0(context.Background(), deps, command)
+			if err != nil {
+				t.Fatalf("second tick: %v", err)
+			}
+
+			if len(first.Executions) != 0 ||
+				len(first.Skips) != 1 ||
+				first.Skips[0].Status != tt.wantSkipped {
+				t.Fatalf("first=%+v", first)
+			}
+			if queue.candidates[0].Status != tt.wantQueue ||
+				!containsStringV0(queue.candidates[0].EvidenceRefs, "evidence-ref-run-coordinator-control-blocked-queue-sync") {
+				t.Fatalf("queue=%+v", queue.candidates[0])
+			}
+			if len(second.Ranked) != 0 || len(second.Executions) != 0 {
+				t.Fatalf("second=%+v", second)
+			}
+		})
+	}
+}
+
 func TestCoordinateRunsTickDefaultsRunningWhenControlStateMissingV0(t *testing.T) {
 	deps := coordinatorDepsV0([]orquestarunqueue.RunSchedulingCandidateV0{
 		candidateV0("run-missing", "app", 9),
@@ -508,4 +584,13 @@ func cloneCandidatesV0(
 		cloned[index].EvidenceRefs = append([]string(nil), cloned[index].EvidenceRefs...)
 	}
 	return cloned
+}
+
+func containsStringV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

@@ -17,7 +17,12 @@ type codexWaveControlConfigV0 struct {
 	RuntimeWorkDir string
 	AgentRef       string
 	LogKind        string
+	Mode           string
+	Reason         string
+	ConfirmStop    string
+	ForceStop      bool
 	Lines          int
+	MaxBytes       int64
 }
 
 func codexWaveStatusCommandV0(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -26,7 +31,7 @@ func codexWaveStatusCommandV0(args []string, stdout io.Writer, stderr io.Writer)
 		_, _ = fmt.Fprintf(stderr, "codex-wave-status: %v\n", err)
 		return 2
 	}
-	summary, err := codexWaveLoadRegistryV0(config.RuntimeWorkDir)
+	summary, err := codexWaveLoadTrustedRegistryV0(config)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "codex-wave-status: %v\n", err)
 		return 1
@@ -46,29 +51,12 @@ func codexWaveStopCommandV0(args []string, stdout io.Writer, stderr io.Writer) i
 		_, _ = fmt.Fprintf(stderr, "codex-wave-stop: %v\n", err)
 		return 2
 	}
-	summary, err := codexWaveLoadRegistryV0(config.RuntimeWorkDir)
+	summary, err := codexWaveLoadTrustedRegistryV0(config)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "codex-wave-stop: %v\n", err)
 		return 1
 	}
-	now := time.Now().UTC().Format(time.RFC3339)
-	for i := range summary.Agents {
-		if config.AgentRef != "" && summary.Agents[i].AgentRef != config.AgentRef {
-			continue
-		}
-		if summary.Agents[i].PID <= 0 || !processAliveV0(summary.Agents[i].PID) {
-			continue
-		}
-		if err := signalProcessV0(summary.Agents[i].PID); err != nil {
-			summary.Errors = append(summary.Errors, codexWavePublicErrorV0{
-				AgentRef: summary.Agents[i].AgentRef,
-				Code:     "stop_failed",
-			})
-			continue
-		}
-		summary.Agents[i].StopRequestedAt = now
-		summary.Agents[i].Status = "stop_requested"
-	}
+	codexWaveApplyStopRequestV0(&summary, config, time.Now().UTC())
 	codexWaveRefreshSummaryV0(&summary)
 	if err := codexWaveSaveRegistryV0(summary); err != nil {
 		_, _ = fmt.Fprintf(stderr, "codex-wave-stop: %v\n", err)
@@ -87,43 +75,20 @@ func codexWaveTailCommandV0(args []string, stdout io.Writer, stderr io.Writer) i
 		_, _ = fmt.Fprintf(stderr, "codex-wave-tail: %v\n", err)
 		return 2
 	}
-	summary, err := codexWaveLoadRegistryV0(config.RuntimeWorkDir)
+	summary, err := codexWaveLoadTrustedRegistryV0(config)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "codex-wave-tail: %v\n", err)
 		return 1
 	}
-	matched := 0
-	for _, agent := range summary.Agents {
-		if config.AgentRef != "" && agent.AgentRef != config.AgentRef {
-			continue
-		}
-		matched++
-		path, err := codexWaveAgentLogPathV0(agent, config.LogKind)
-		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "codex-wave-tail: %v\n", err)
+	report, err := codexWaveBuildTailReportV0(summary, config)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "codex-wave-tail: %v\n", err)
+		if errors.Is(err, errCodexWaveTailBadRequestV0) {
 			return 2
 		}
-		text, err := codexWaveTailFileV0(path, config.Lines)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				text = ""
-			} else {
-				_, _ = fmt.Fprintf(stderr, "codex-wave-tail: %v\n", err)
-				return 1
-			}
-		}
-		_, _ = fmt.Fprintf(stdout, "== %s %s ==\n", agent.AgentRef, config.LogKind)
-		if text != "" {
-			_, _ = fmt.Fprint(stdout, text)
-			if !strings.HasSuffix(text, "\n") {
-				_, _ = fmt.Fprintln(stdout)
-			}
-		}
-	}
-	if matched == 0 {
-		_, _ = fmt.Fprintf(stderr, "codex-wave-tail: agent_ref_not_found\n")
 		return 1
 	}
+	_ = json.NewEncoder(stdout).Encode(report)
 	return 0
 }
 
@@ -134,7 +99,12 @@ func codexWaveControlConfigFromArgsV0(command string, args []string, stderr io.W
 	runtimeDir := flags.String("runtime-dir", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_WAVE_RUNTIME_WORKDIR")), "directorio runtime de la ola")
 	agentRef := flags.String("agent-ref", "", "agente concreto")
 	logKind := flags.String("file", "stdout", "stdout, stderr o last-message")
-	lines := flags.Int("lines", 80, "lineas a mostrar")
+	mode := flags.String("mode", "summary", "summary o fragment")
+	reason := flags.String("reason", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_WAVE_TAIL_REASON")), "razon de diagnostico")
+	confirmStop := flags.String("confirm-stop", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_WAVE_STOP_CONFIRM")), "confirmacion explicita: debe coincidir con wave-ref")
+	forceStop := flags.Bool("force", boolEnvOrDefaultV0("ORQUESTA_CODEX_WAVE_STOP_FORCE", false), "senalar proceso tras confirmacion explicita")
+	lines := flags.Int("lines", 20, "lineas maximas a leer")
+	maxBytes := flags.Int64("max-bytes", 8192, "bytes maximos a leer")
 	if err := flags.Parse(args); err != nil {
 		return codexWaveControlConfigV0{}, err
 	}
@@ -145,12 +115,20 @@ func codexWaveControlConfigFromArgsV0(command string, args []string, stderr io.W
 	if *lines <= 0 {
 		return codexWaveControlConfigV0{}, errors.New("lines_out_of_range")
 	}
+	if *maxBytes <= 0 || *maxBytes > codexWaveTailMaxBytesCeilingV0 {
+		return codexWaveControlConfigV0{}, errors.New("max_bytes_out_of_range")
+	}
 	return codexWaveControlConfigV0{
 		WaveRef:        strings.TrimSpace(*waveRef),
 		RuntimeWorkDir: absRuntimeDir,
 		AgentRef:       strings.TrimSpace(*agentRef),
 		LogKind:        strings.TrimSpace(*logKind),
+		Mode:           strings.TrimSpace(*mode),
+		Reason:         strings.TrimSpace(*reason),
+		ConfirmStop:    strings.TrimSpace(*confirmStop),
+		ForceStop:      *forceStop,
 		Lines:          *lines,
+		MaxBytes:       *maxBytes,
 	}, nil
 }
 
@@ -246,36 +224,4 @@ func fileSizeOrZeroV0(path string) int64 {
 		return 0
 	}
 	return info.Size()
-}
-
-func codexWaveAgentLogPathV0(agent codexWaveAgentSummaryV0, kind string) (string, error) {
-	switch strings.TrimSpace(kind) {
-	case "stdout":
-		return agent.StdoutPath, nil
-	case "stderr":
-		return agent.StderrPath, nil
-	case "last-message":
-		return agent.LastMessagePath, nil
-	default:
-		return "", errors.New("log_file_kind_invalid")
-	}
-}
-
-func codexWaveTailFileV0(path string, lines int) (string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	text := string(data)
-	if lines <= 0 {
-		return "", errors.New("lines_out_of_range")
-	}
-	parts := strings.SplitAfter(text, "\n")
-	if len(parts) > 0 && parts[len(parts)-1] == "" {
-		parts = parts[:len(parts)-1]
-	}
-	if len(parts) <= lines {
-		return text, nil
-	}
-	return strings.Join(parts[len(parts)-lines:], ""), nil
 }

@@ -3419,9 +3419,13 @@ func TestContinueRequestWithOperationalDirectorPlanStateV0RequiredTestsFailedRea
 		WaitCohortRef:              fixture.CohortRef,
 		WaitParentTaskRef:          fixture.ParentTaskRef,
 	}, StartAppDirectorPortsV0{
-		RunStore:                   orquestacionnucleoapp.NewInMemoryRunStoreV0(replannedRun),
-		EventReader:                serviceOperationalClosureEventReaderForTestV0{Events: replannedEvents},
-		DirectorTaskStore:          orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(firstFollowup, secondFollowup),
+		RunStore:    orquestacionnucleoapp.NewInMemoryRunStoreV0(replannedRun),
+		EventReader: serviceOperationalClosureEventReaderForTestV0{Events: replannedEvents},
+		DirectorTaskStore: orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(
+			serviceOperationalDirectorWorkflowTaskForFixtureV0(fixture),
+			firstFollowup,
+			secondFollowup,
+		),
 		OperationalPlanStateStore:  planStateStore,
 		OperationalPlanStateWriter: planStateStore,
 	})
@@ -4062,6 +4066,106 @@ func TestContinueRequestWithOperationalDirectorPlanStateV0NoReentraReviewChanges
 	}
 }
 
+func TestContinueRequestWithOperationalDirectorPlanStateV0ReabreReviewChangesRequestedConSplitTaskSinScope(t *testing.T) {
+	fixture := serviceOperationalDirectorPlanStateReviewReworkReplanFixtureForTestV0(
+		t,
+		orquestacoreworkflow.ReviewResultStatusChangesRequestedV0,
+	)
+	followupTask := serviceOperationalDirectorWorkflowTaskForFixtureV0(fixture)
+	followupTask.TaskID = "task-ref-app-director-operational-plan-state-review-split-no-scope"
+	followupTask.ParentTaskRef = ""
+	followupTask.WaveRef = ""
+	followupTask.CohortRef = ""
+	followupAgentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(followupTask.TaskID)
+	fixture.Run.Tasks = append(fixture.Run.Tasks, followupTask.TaskID)
+	fixture.Run.Agents = append(fixture.Run.Agents, "agent-ref-app-director-review-unrelated-live")
+	fixture.Run.ReplanDecisions = []string{
+		fixture.ReplanDecisionRef + "#source:" + fixture.ReworkRequestRef +
+			"#task:" + fixture.TaskRef +
+			"#action:" + string(orquestacoreworkflow.ReplanDecisionActionSplitTaskV0) +
+			"#followups:" + followupTask.TaskID,
+	}
+	fixture.Events[4] = serviceOperationalDirectorPlanStateEventForTestV0(t, fixture.RunRef, 5, orquestacoreworkflow.OrchestrationEventReplanDecisionRecordedV0, orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{
+		ReplanRef:      fixture.ReplanDecisionRef,
+		RunRef:         fixture.RunRef,
+		TaskRef:        fixture.TaskRef,
+		SourceRef:      fixture.ReworkRequestRef,
+		AcceptedAction: orquestacoreworkflow.ReplanDecisionActionSplitTaskV0,
+		FollowupRefs:   []string{followupTask.TaskID},
+		Summary:        "Replan split sin scope; debe esperar por refs explicitas.",
+		EvidenceRefs:   []string{"evidence-ref-replan-decision-split-no-scope"},
+	})
+	fixture.State.ReplanAttempts = 1
+	fixture.State.EvidenceRefs = []string{"evidence-ref-app-director-operational-plan-state-review-rework-replan-v0"}
+	for index := range fixture.State.Steps {
+		step := &fixture.State.Steps[index]
+		if step.StepID != "step-review-deliveries" {
+			continue
+		}
+		step.Status = orquestadirectoroperativo.OperationalDirectorStepChangesRequestedV0
+		step.DeliveryRefs = []string{fixture.DeliveryRef}
+		step.ReviewResultRefs = []string{fixture.ReviewResultRef}
+		step.ReworkRequestRefs = []string{fixture.ReworkRequestRef}
+		step.ReplanDecisionRefs = []string{fixture.ReplanDecisionRef}
+		step.BlockerRefs = []string{"review-rework-replan-recorded"}
+		step.Reason = "review-rework-replan-recorded"
+	}
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0(fixture.Run)
+	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(fixture.State)
+	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(
+		serviceOperationalDirectorWorkflowTaskForFixtureV0(fixture),
+		followupTask,
+	)
+
+	reentered, err := continueRequestWithOperationalDirectorPlanStateV0(context.Background(), ContinueAppDirectorRequestV0{
+		RunRef:                     fixture.RunRef,
+		OccurredAt:                 "2026-05-22T18:20:00Z",
+		CorrelationID:              "corr-app-director-review-split-no-scope",
+		OperationalDirectorPlanRef: fixture.PlanRef,
+	}, StartAppDirectorPortsV0{
+		RunStore:                   runStore,
+		EventReader:                serviceOperationalClosureEventReaderForTestV0{Events: fixture.Events},
+		DirectorTaskStore:          taskStore,
+		OperationalPlanStateStore:  planStateStore,
+		OperationalPlanStateWriter: planStateStore,
+	})
+	if err != nil {
+		t.Fatalf("continueRequestWithOperationalDirectorPlanStateV0: %v", err)
+	}
+	if reentered.WaitWaveRef != "" ||
+		reentered.WaitCohortRef != "" ||
+		reentered.WaitParentTaskRef != "" ||
+		!serviceStringInSetV0(reentered.WaitAgentRefs, followupAgentRef) ||
+		serviceStringInSetV0(reentered.WaitAgentRefs, fixture.AgentRef) ||
+		serviceStringInSetV0(reentered.WaitAgentRefs, "agent-ref-app-director-review-unrelated-live") {
+		t.Fatalf("reentered=%+v followup=%s old=%s", reentered, followupAgentRef, fixture.AgentRef)
+	}
+
+	state, err := planStateStore.LoadOperationalDirectorPlanStateV0(context.Background(), fixture.RunRef, fixture.PlanRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0: %v", err)
+	}
+	waitStep := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-wait-subagents")
+	if state.ActiveStepID != "step-wait-subagents" ||
+		state.ActiveWaveRef != "" ||
+		state.ActiveCohortRef != "" ||
+		state.ActiveParentTaskRef != "" ||
+		!serviceStringInSetV0(state.PendingAgentRefs, followupAgentRef) ||
+		serviceStringInSetV0(state.PendingAgentRefs, fixture.AgentRef) ||
+		!serviceStringInSetV0(state.EvidenceRefs, "evidence-ref-app-director-operational-plan-state-review-rework-replan-followups-late-v0") ||
+		!serviceStringInSetV0(state.EvidenceRefs, "evidence-ref-app-director-operational-plan-state-review-rework-replan-followups-v0") {
+		t.Fatalf("state=%+v", state)
+	}
+	if waitStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
+		waitStep.Reason != "review-rework-replan-followups-waiting" ||
+		!serviceStringInSetV0(waitStep.BlockerRefs, "wait-subagents-replan-followups") ||
+		!serviceStringInSetV0(waitStep.TaskRefs, followupTask.TaskID) ||
+		!serviceStringInSetV0(waitStep.PendingAgentRefs, followupAgentRef) ||
+		serviceStringInSetV0(waitStep.PendingAgentRefs, fixture.AgentRef) {
+		t.Fatalf("waitStep=%+v", waitStep)
+	}
+}
+
 func TestContinueRequestWithOperationalDirectorPlanStateV0ReabreReviewChangesRequestedConFollowupTardio(t *testing.T) {
 	fixture := serviceOperationalDirectorPlanStateReviewReworkReplanFixtureForTestV0(
 		t,
@@ -4270,6 +4374,80 @@ func TestContinueRequestWithOperationalDirectorPlanStateV0RespetaWaitExplicito(t
 	}
 	if len(got.WaitAgentRefs) != 1 || got.WaitAgentRefs[0] != "agent-ref-explicit" {
 		t.Fatalf("request=%+v", got)
+	}
+}
+
+func TestOperationalDirectorPlanStateV0BloqueaWaitTerminalSinDeliveryV0(t *testing.T) {
+	runRef := "run-app-director-operational-plan-terminal-wait"
+	planRef := "plan-ref-terminal-wait"
+	task := serviceOperationalClosureTaskRefsForTestV0{TaskRef: "task-ref-terminal-wait"}
+	state := serviceOperationalDirectorWideWaveWaitStateForTestV0(
+		runRef,
+		planRef,
+		"task-ref-parent-terminal-wait",
+		"wave-terminal-wait",
+		"cohort-terminal-wait",
+		task,
+	)
+	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(task.TaskRef)
+	run := orquestacoreworkflow.OrchestrationRunV0{
+		SchemaVersion: orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
+		RunID:         runRef,
+		ProjectRef:    "orquesta",
+		AppSpecRef:    "app-spec-terminal-wait",
+		Status:        orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+		CurrentPhase:  orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		Tasks:         []string{task.TaskRef},
+		StartedAgents: []string{agentRef},
+		StoppedAgents: []string{agentRef},
+		AgentAssessments: []string{orquestacoreworkflow.AgentAssessmentProjectionRefV0(orquestacoreworkflow.AgentWorkAssessedPayloadV0{
+			AssessmentRef:  "assessment-ref-terminal-wait",
+			PhaseID:        string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			AgentRequestID: agentRef,
+			TaskRef:        task.TaskRef,
+			Verdict:        orquestacoreworkflow.AgentAssessmentVerdictGarbageV0,
+			Action:         orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
+			Severity:       orquestacoreworkflow.AgentAssessmentSeverityHighV0,
+		})},
+	}
+	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(state)
+	request := ContinueAppDirectorRequestV0{
+		RunRef:                     runRef,
+		OperationalDirectorPlanRef: planRef,
+		OccurredAt:                 "2026-05-25T18:10:00Z",
+		CorrelationID:              "corr-terminal-wait",
+	}
+	changed, err := applyOperationalDirectorPlanStateAfterLoopV0(context.Background(), request, StartAppDirectorPortsV0{
+		OperationalPlanStateStore:  planStateStore,
+		OperationalPlanStateWriter: planStateStore,
+	}, orquestacionnucleoapp.ProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+		Run:    run,
+	})
+	if err != nil || !changed {
+		t.Fatalf("applyOperationalDirectorPlanStateAfterLoopV0 changed=%v err=%v", changed, err)
+	}
+	blocked, err := planStateStore.LoadOperationalDirectorPlanStateV0(context.Background(), runRef, planRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0: %v", err)
+	}
+	waitStep := serviceOperationalDirectorPlanStateStepForTestV0(t, blocked, "step-wait-subagents")
+	if blocked.Status != orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0 ||
+		blocked.ActiveStepID != "step-wait-subagents" ||
+		len(blocked.PendingAgentRefs) != 0 ||
+		waitStep.Status != orquestadirectoroperativo.OperationalDirectorStepBlockedV0 ||
+		waitStep.Reason != "wait-subagents-terminal-without-delivery" ||
+		len(waitStep.PendingAgentRefs) != 0 {
+		t.Fatalf("blocked=%+v waitStep=%+v", blocked, waitStep)
+	}
+	got, err := continueRequestWithOperationalDirectorPlanStateV0(context.Background(), request, StartAppDirectorPortsV0{
+		OperationalPlanStateStore: planStateStore,
+	})
+	if err != nil {
+		t.Fatalf("continueRequestWithOperationalDirectorPlanStateV0 blocked terminal wait: %v", err)
+	}
+	if len(got.WaitAgentRefs) != 0 {
+		t.Fatalf("got=%+v", got)
 	}
 }
 

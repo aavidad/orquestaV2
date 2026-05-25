@@ -5,7 +5,9 @@ import (
 	"strings"
 
 	orquestadirectorcycle "orquesta/modulos/orquesta-director-cycle"
+	orquestadirectorscheduler "orquesta/modulos/orquesta-director-scheduler"
 	orquestadirectorsupervisor "orquesta/modulos/orquesta-director-supervisor"
+	stopreason "orquesta/modulos/orquesta-run-supervisor/stopreason"
 )
 
 func normalizeDirectorSupervisedBurstInputV0(
@@ -76,6 +78,31 @@ func burstStepResultV0(
 		ErrorCode:    errorCode,
 		ShouldRepeat: decision.ShouldContinue,
 	}
+}
+
+func burstStopProjectionV0(
+	result DirectorSupervisedBurstResultV0,
+	decision orquestadirectorsupervisor.DirectorSupervisorDecisionV0,
+) stopreason.ProjectionV0 {
+	return stopreason.ProjectV0(stopreason.ProjectionInputV0{
+		Source:            stopreason.SourceDirectorSupervisedBurstV0,
+		StopReason:        string(result.FinalAction),
+		Steps:             result.ExecutedSteps,
+		PendingOutboxRefs: decision.PendingOutboxRefs,
+		WaitingReasons:    burstWaitingReasonStringsV0(decision.WaitingReasons),
+		BlockedRefs:       decision.BlockedRefs,
+		EvidenceRefs:      result.EvidenceRefs,
+	})
+}
+
+func burstWaitingReasonStringsV0(
+	values []orquestadirectorscheduler.SchedulerWaitingReasonV0,
+) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		out = append(out, string(value))
+	}
+	return out
 }
 
 func publicCycleStepErrorCodeV0(err error) string {

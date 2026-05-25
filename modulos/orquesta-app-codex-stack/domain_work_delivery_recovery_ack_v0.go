@@ -54,7 +54,12 @@ func recoverDomainWorkAckV0(
 		Status:        "completed",
 		Files:         orquestaruntimecodex.EvidenceListV0(files),
 		Tests:         orquestaruntimecodex.EvidenceListV0(packet.Task.RequiredTests),
-		Notes:         orquestaruntimecodex.EvidenceListV0{"domain_work_ack_recovered_from_valid_artifact"},
+		TestReceipts:  codexStackRequiredTestReceiptsV0(packet.Task.RequiredTests),
+		Notes: orquestaruntimecodex.EvidenceListV0{
+			"domain_work_ack_recovered_from_valid_artifact",
+			"contexto_truncado_resuelto: artefacto domain_work recuperado",
+			"contexto_ref_only_resuelto: artefacto domain_work recuperado",
+		},
 	}
 	if issues := orquestaruntimecodex.ValidateCodexAgentAckForSpecV0(
 		ack,

@@ -10,16 +10,17 @@ const (
 )
 
 type AppPlanRequestV0 struct {
-	RunRef      string `json:"run_ref"`
-	AppRef      string `json:"app_ref"`
-	AppName     string `json:"app_name"`
-	AppKind     string `json:"app_kind,omitempty"`
-	Scale       string `json:"scale,omitempty"`
-	OccurredAt  string `json:"occurred_at,omitempty"`
-	RequestedBy string `json:"requested_by,omitempty"`
-	API         bool   `json:"api"`
-	Web         bool   `json:"web"`
-	Locale      string `json:"locale,omitempty"`
+	RunRef       string `json:"run_ref"`
+	AppRef       string `json:"app_ref"`
+	AppName      string `json:"app_name"`
+	AppKind      string `json:"app_kind,omitempty"`
+	Scale        string `json:"scale,omitempty"`
+	OccurredAt   string `json:"occurred_at,omitempty"`
+	RequestedBy  string `json:"requested_by,omitempty"`
+	API          bool   `json:"api"`
+	Web          bool   `json:"web"`
+	Locale       string `json:"locale,omitempty"`
+	DeployTarget string `json:"deploy_target,omitempty"`
 }
 
 type AppMicrotaskPlanV0 struct {

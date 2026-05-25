@@ -38,9 +38,12 @@ Casos focales:
   seguro, accesibilidad, caption, alt text, ausencia de placeholders y entrega
   `visual_asset`.
 - `TestAppChangeDirectorDecisionSourceV0SaneaCriteriosOperativosSinBloquearAutoPlan`:
-  reproduce reglas operativas de autoprogramacion con `token economy`, runtime
-  de agente, capacidad y adaptador; la fuente las normaliza y crea microtarea
-  en vez de dejar la pregunta pendiente.
+  reproduce reglas operativas de autoprogramacion con `token economy`, Codex,
+  modelo y provider; la fuente conserva esos terminos como vocabulario opaco y
+  crea microtarea en vez de dejar la pregunta pendiente.
+- `TestAppChangeDirectorDecisionSourceV0BloqueaDetalleSensibleEnAutoPlan`:
+  reproduce un criterio con `api_key=` y valida que no se cree microtarea
+  automatica.
 - `TestAppChangeDirectorDecisionSourceV0CompactaCriteriosExternosAlLimiteDelDirector`:
   reproduce un job OPES con criterios generados y de usuario que antes excedian
   el limite compacto del DTO del director.

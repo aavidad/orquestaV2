@@ -1,6 +1,22 @@
 # Decisiones: orquesta-runtime-codex-delivery
 
 ```text
+Fecha: 2026-05-25
+Decision: Un borrado detectado por el verificador Codex se ingiere como rail de
+revision, no como error fatal del tick.
+Motivo: el borrado ya ocurrio en la worktree externa; rechazar el ACK en
+`step_input_builder` bloquea toda la supervision y pierde la ruta causal para
+que el Director pida rework/restauracion. La regla de no borrar sin permiso se
+conserva como evidencia `gate-issue:removed_path` para revision y cierre, no
+como excepcion opaca de transporte.
+Impacto: `CodexReceiptWorktreeVerifierV0` registra la entrega con evidencia
+compacta `gate-issue:removed_path`. Requests invalidas, ACKs invalidos y errores
+de filesystem siguen fallando. No se filtran rutas locales ni detalles de
+runtime.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-24
 Decision: Un descriptor sin registro de proceso se omite como inconsistencia
 recuperable de supervision, no como error fatal del tick.
@@ -11,6 +27,22 @@ del run.
 Impacto: `CodexProgressObservationSourceV0` salta solo missing de
 `agent_process_registry`; conflictos o registros invalidos siguen propagando
 error. No se exponen paths, PID, HOME, proveedor, modelo ni logs.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-25
+Decision: Si el baseline de worktree no esta disponible al ingerir un ACK,
+el verificador cae a `ACK.files` y conserva evidencia.
+Motivo: el baseline puede perderse tras reiniciar una composicion que usa store
+en memoria. Rechazar el ACK en ese punto bloquea runs ya completadas y fuerza
+reintentos inutiles. La ausencia de diff estricto debe ser visible para review,
+no impedir ingerir trabajo verificable.
+Impacto: `CodexReceiptWorktreeVerifierV0` valida que los ficheros declarados en
+ACK existan y proyecta `gate-issue:worktree_baseline_missing` y
+`gate-issue:strict_diff_unavailable`. Si los ficheros declarados no existen o
+son rutas invalidas, sigue fallando. No se filtran rutas locales ni detalles de
+runtime.
 Estado: aceptada.
 ```
 
@@ -26,6 +58,22 @@ inyecta, pero proyecta `gate-issue:file_outside_write_set` como evidencia de
 delivery. Borrados, request invalida, baseline ausente y errores de filesystem
 siguen bloqueando sin filtrar rutas locales.
 Estado: aceptada; matiza la decision del 2026-05-10 para rails blandos.
+```
+
+```text
+Fecha: 2026-05-25
+Decision: El verificador de worktree conserva `replaced_large_delta` como rail
+blando.
+Motivo: el detector de reemplazo grande es heuristico. En documentacion y
+runbooks puede dispararse con ediciones validas o con concurrencia entre
+agentes; tratarlo como error terminal bloqueaba el tick residente y hacia que
+Orquesta relanzara/reintentara en lugar de revisar la entrega.
+Impacto: `CodexReceiptWorktreeVerifierV0` proyecta
+`gate-issue:replaced_large_delta` en evidencias de delivery. Borrados,
+truncados fuertes y renombrados siguen siendo bloqueo fuerte porque violan la
+regla operativa de no borrar, no truncar y no mover sin permiso. El core no
+recibe rutas locales ni detalles de runtime.
+Estado: aceptada.
 ```
 
 ```text

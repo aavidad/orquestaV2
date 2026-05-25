@@ -154,7 +154,8 @@ func writeCodexStackAckForDescriptorV0(
 		"status":         "completed",
 		"files":          packet.Task.WriteSet,
 		"tests":          packet.Task.RequiredTests,
-		"notes":          []string{"ack de prueba para desbloqueo de frontera"},
+		"test_receipts":  codexStackRequiredTestReceiptsV0(packet.Task.RequiredTests),
+		"notes":          codexStackFakeAckNotesV0(packet, "ack de prueba para desbloqueo de frontera"),
 	})
 	if err != nil {
 		return err

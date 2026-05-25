@@ -52,9 +52,10 @@ func (store *RunFileStoreV0) ListRunSchedulingCandidatesV0(
 	request orquestarunqueue.RunQueueReadRequestV0,
 ) ([]orquestarunqueue.RunSchedulingCandidateV0, error) {
 	filter := runFileQueueFilterV0{
-		queueRef: strings.TrimSpace(request.QueueRef),
-		appRefs:  runFileStringSetV0(request.AppRefs),
-		limit:    request.Limit,
+		queueRef:             strings.TrimSpace(request.QueueRef),
+		appRefs:              runFileStringSetV0(request.AppRefs),
+		limit:                request.Limit,
+		includeNonExecutable: request.IncludeNonExecutable,
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
@@ -65,7 +66,8 @@ func (store *RunFileStoreV0) ListRunSchedulingCandidatesV0(
 		if !filter.matches(entry) {
 			continue
 		}
-		if !orquestarunqueue.IsExecutableRunStatusV0(entry.candidate.Status) {
+		if !filter.includeNonExecutable &&
+			!orquestarunqueue.IsExecutableRunStatusV0(entry.candidate.Status) {
 			continue
 		}
 		out = append(out, cloneRunFileCandidateV0(entry.candidate))
@@ -98,9 +100,10 @@ func (store *RunFileStoreV0) SetRunPriorityV0(
 }
 
 type runFileQueueFilterV0 struct {
-	queueRef string
-	appRefs  map[string]struct{}
-	limit    int
+	queueRef             string
+	appRefs              map[string]struct{}
+	limit                int
+	includeNonExecutable bool
 }
 
 func (filter runFileQueueFilterV0) matches(entry runFileQueueEntryV0) bool {
@@ -128,7 +131,7 @@ func applyRunFilePriorityCommandV0(
 		entry.queueRef = command.QueueRef
 	}
 	if strings.TrimSpace(candidate.Status) == "" {
-		candidate.Status = "ready"
+		candidate.Status = orquestarunqueue.RunStatusReadyV0
 	}
 	if command.Status != "" {
 		candidate.Status = command.Status

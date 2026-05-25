@@ -94,15 +94,15 @@ func (verifier CodexReceiptWorktreeVerifierV0) VerifyCodexReceiptWorktreeEvidenc
 		return nil, verifyCodexReceiptAckFilesV0(request)
 	}
 	if verifier.SnapshotStore == nil {
-		return nil, fmt.Errorf("codex_worktree_verification: snapshot_store_required")
+		return codexReceiptWorktreeFallbackAckFilesV0(request, "gate-issue:worktree_snapshot_store_missing")
 	}
 	if strings.TrimSpace(request.ProjectWorkDir) == "" ||
 		strings.TrimSpace(request.WorktreeBaselineRef) == "" {
-		return nil, fmt.Errorf("codex_worktree_verification: baseline_required")
+		return codexReceiptWorktreeFallbackAckFilesV0(request, "gate-issue:worktree_baseline_missing")
 	}
 	baseline, err := verifier.SnapshotStore.LoadWorktreeSnapshotV0(ctx, request.WorktreeBaselineRef)
 	if err != nil {
-		return nil, fmt.Errorf("codex_worktree_verification: baseline_not_found")
+		return codexReceiptWorktreeFallbackAckFilesV0(request, "gate-issue:worktree_baseline_missing")
 	}
 	result, issues := orquestaruntimeworktree.VerifyWorktreeWriteSetV0(
 		ctx,
@@ -110,19 +110,27 @@ func (verifier CodexReceiptWorktreeVerifierV0) VerifyCodexReceiptWorktreeEvidenc
 			Baseline:       baseline,
 			ProjectWorkDir: strings.TrimSpace(request.ProjectWorkDir),
 			WriteSet:       request.Spec.AgentPacket.Task.WriteSet,
+			AckFiles:       request.AckFiles,
 			IgnorePrefixes: verifier.IgnorePrefixes,
 		},
 	)
 	if len(issues) > 0 {
-		if codexReceiptWorktreeIssuesOnlyOutsideWriteSetV0(issues) {
-			return compactCodexDeliveryRefsV0(append(
-				result.EvidenceRefs,
-				"gate-issue:file_outside_write_set",
-			)), nil
+		if refs, ok := codexReceiptWorktreeSoftIssueRefsV0(issues); ok {
+			return compactCodexDeliveryRefsV0(append(result.EvidenceRefs, refs...)), nil
 		}
 		return nil, fmt.Errorf("codex_worktree_verification: %s", issues[0].Code)
 	}
 	return compactCodexDeliveryRefsV0(result.EvidenceRefs), nil
+}
+
+func codexReceiptWorktreeFallbackAckFilesV0(
+	request CodexReceiptWorktreeVerificationRequestV0,
+	evidenceRef string,
+) ([]string, error) {
+	if err := verifyCodexReceiptAckFilesV0(request); err != nil {
+		return nil, err
+	}
+	return compactCodexDeliveryRefsV0([]string{evidenceRef, "gate-issue:strict_diff_unavailable"}), nil
 }
 
 func (verifier CodexReceiptWorktreeVerifierV0) modeV0() CodexReceiptWorktreeVerificationModeV0 {
@@ -183,16 +191,62 @@ func codexReceiptPathAllowedByWriteSetV0(path string, writeSet []string) bool {
 	return false
 }
 
-func codexReceiptWorktreeIssuesOnlyOutsideWriteSetV0(
+func codexReceiptWorktreeSoftIssueRefsV0(
 	issues []orquestaruntimeworktree.WorktreeIssueV0,
-) bool {
+) ([]string, bool) {
 	if len(issues) == 0 {
-		return false
+		return nil, false
 	}
+	refs := make([]string, 0, len(issues))
 	for _, issue := range issues {
-		if issue.Code != orquestaruntimeworktree.WorktreeIssueOutsideWriteSetV0 {
-			return false
+		switch issue.Code {
+		case orquestaruntimeworktree.WorktreeIssueRemovedPathV0:
+			refs = append(refs, codexReceiptWorktreeIssueEvidenceRefsV0("removed_path", issue)...)
+		case orquestaruntimeworktree.WorktreeIssueOutsideWriteSetV0:
+			refs = append(refs, codexReceiptWorktreeIssueEvidenceRefsV0("file_outside_write_set", issue)...)
+		case orquestaruntimeworktree.WorktreeIssueTruncatedPathV0:
+			refs = append(refs, codexReceiptWorktreeIssueEvidenceRefsV0("truncated_path", issue)...)
+		case orquestaruntimeworktree.WorktreeIssueRenamedOrMovedV0:
+			refs = append(refs, codexReceiptWorktreeIssueEvidenceRefsV0("renamed_or_moved_path", issue)...)
+		case orquestaruntimeworktree.WorktreeIssueReplacedLargeV0:
+			refs = append(refs, codexReceiptWorktreeIssueEvidenceRefsV0("replaced_large_delta", issue)...)
+		case orquestaruntimeworktree.WorktreeIssueAckFilesMismatchV0:
+			refs = append(refs, codexReceiptWorktreeIssueEvidenceRefsV0("ack_files_mismatch", issue)...)
+		case orquestaruntimeworktree.WorktreeIssueGoLineBudgetV0:
+			refs = append(refs, codexReceiptWorktreeIssueEvidenceRefsV0("go_file_line_budget_exceeded", issue)...)
+		default:
+			return nil, false
 		}
+	}
+	return compactCodexDeliveryRefsV0(refs), true
+}
+
+func codexReceiptWorktreeIssueEvidenceRefsV0(
+	stem string,
+	issue orquestaruntimeworktree.WorktreeIssueV0,
+) []string {
+	stem = strings.TrimSpace(stem)
+	if stem == "" {
+		return nil
+	}
+	refs := []string{"gate-issue:" + stem}
+	for _, evidence := range issue.Evidence {
+		evidence = strings.TrimSpace(evidence)
+		if !codexReceiptWorktreeIssueEvidenceSafeV0(evidence) {
+			continue
+		}
+		refs = append(refs, "gate-issue:"+stem+":"+evidence)
+	}
+	return compactCodexDeliveryRefsV0(refs)
+}
+
+func codexReceiptWorktreeIssueEvidenceSafeV0(value string) bool {
+	if value == "" ||
+		strings.Contains(value, "://") ||
+		strings.HasPrefix(value, "~") ||
+		strings.Contains(value, "$HOME") ||
+		filepath.IsAbs(value) {
+		return false
 	}
 	return true
 }

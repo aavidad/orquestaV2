@@ -23,11 +23,11 @@ Salida:
   - AgentRequested
   - outbox LaunchRuntimeAgent con target agent_launcher
 Invariantes:
-  - Handler puro: no ejecuta nada ni decide runtime, proveedor, modelo, HOME, OAuth, cuenta o adaptador.
+  - Handler puro: no ejecuta nada ni decide runtime, proveedor, modelo, HOME, OAuth, cuenta o adaptador concretos.
   - `phase_id` pertenece al catalogo v0.
   - `phase_id` debe coincidir con `run.current_phase` salvo no-op idempotente ya reflejado.
   - `capacity_request_ref` debe apuntar a una `CapacityDecided` ya proyectada; enlaza la decision sin transportar su detalle.
-  - Payload compacto, sin DB, HOME, OAuth, Codex, Claude, Ollama, vLLM ni secretos.
+  - Payload compacto, sin valores reales de DB, HOME, OAuth, proveedor, modelo, runtime ni secretos; refs opacas siguen permitidas.
   - Si `agent_request_id` ya esta proyectado, el comando debe coincidir con la huella `CommandEffects` original.
   - Si coincide y no hay lifecycle terminal, reemite solo outbox `LaunchRuntimeAgent`.
   - Si coincide y existe `AgentStarted`, `AgentFailed` o `AgentStopRequested`, devuelve no-op idempotente sin outbox.
@@ -56,12 +56,12 @@ Salida:
   - AgentStopRequested
   - outbox StopRuntimeAgent con target agent_launcher
 Invariantes:
-  - Handler puro: no ejecuta nada ni decide runtime, proveedor, modelo, HOME, OAuth, cuenta o adaptador.
+  - Handler puro: no ejecuta nada ni decide runtime, proveedor, modelo, HOME, OAuth, cuenta o adaptador concretos.
   - `agent_request_id` debe existir ya en `run.agents`.
   - Si `agent_request_id` ya esta en `run.stopped_agents`, el comando debe coincidir con la huella `CommandEffects` original.
   - Si coincide y la parada no esta confirmada, reemite solo outbox `StopRuntimeAgent`; si ya esta confirmada, devuelve no-op idempotente.
   - No puede existir `AgentFailed` previo para el mismo agente.
-  - Payload compacto, sin DB, HOME, OAuth, Codex, Claude, Ollama, vLLM ni secretos.
+  - Payload compacto, sin valores reales de DB, HOME, OAuth, proveedor, modelo, runtime ni secretos; refs opacas siguen permitidas.
   - `agent_request_id` y `reason_code` no pueden contener `#`, porque forman una proyeccion compacta parseable en `agent_stop_requests`.
 Errores:
   - payload_invalido
@@ -87,11 +87,11 @@ Payload:
 Salida:
   - AgentStopConfirmed
 Invariantes:
-  - Handler puro: no ejecuta nada ni consulta procesos, DB, proveedor, HOME, OAuth, cuenta o adaptador.
+  - Handler puro: no ejecuta nada ni consulta procesos, DB, proveedor, HOME, OAuth, cuenta o adaptador concretos.
   - `agent_request_id` debe existir ya en `run.stopped_agents`; una confirmacion no puede adelantarse a `AgentStopRequested`.
   - Si `agent_request_id` ya esta en `run.confirmed_stopped_agents`, devuelve no-op solo si coincide la huella durable de comando y payload normalizado.
   - No emite outbox; es una senal compacta entrante de un adaptador externo.
-  - Payload compacto, sin DB, HOME, OAuth, Codex, Claude, Ollama, vLLM ni secretos.
+  - Payload compacto, sin valores reales de DB, HOME, OAuth, proveedor, modelo, runtime ni secretos; refs opacas siguen permitidas.
 Errores:
   - payload_invalido
   - detalle_prohibido
@@ -122,7 +122,7 @@ Salida:
   - AgentWorkAssessed
   - si action=stop_agent: AgentStopRequested y outbox StopRuntimeAgent con target agent_launcher
 Invariantes:
-  - Handler puro: no ejecuta nada ni decide runtime, proveedor, modelo, HOME, OAuth, cuenta o adaptador.
+  - Handler puro: no ejecuta nada ni decide runtime, proveedor, modelo, HOME, OAuth, cuenta o adaptador concretos.
   - `phase_id` pertenece al catalogo v0.
   - `phase_id` debe coincidir con `run.current_phase` para registrar una evaluacion nueva.
   - `agent_request_id` debe existir ya en `run.agents`.
@@ -132,7 +132,7 @@ Invariantes:
   - Si tambien quedo proyectado `AgentStopRequested` pero se perdio el outbox, repetir el mismo comando reconstruye solo `StopRuntimeAgent` con la idempotency key del evento de parada.
   - `action=stop_agent` solo es valida para `verdict=garbage`, `verdict=loop_detected`, `verdict=capacity_limited` o `verdict=timeout`.
   - Si el agente ya esta en `stopped_agents`, una nueva evaluacion se registra sin reenviar outbox de parada.
-  - Payload compacto, sin DB, HOME, OAuth, Codex, Claude, Ollama, vLLM ni secretos.
+  - Payload compacto, sin valores reales de DB, HOME, OAuth, proveedor, modelo, runtime ni secretos; refs opacas siguen permitidas.
 Errores:
   - payload_invalido
   - detalle_prohibido
@@ -169,7 +169,7 @@ Invariantes:
   - Proyecta una huella `CommandEffects` por `(AgentWorkAssessed, assessment_ref)`.
   - Rechaza otra evaluacion durable con el mismo `assessment_ref` y distinta key, event_id, causation_id o payload.
   - `ReplayDurableEventsV0` acepta el evento y un duplicado exacto con la misma huella durable.
-  - No contiene runtime, proveedor, modelo, HOME, OAuth, cuenta, adaptador ni secreto.
+  - No contiene valores reales de runtime, proveedor, modelo, HOME, OAuth, cuenta, adaptador ni secreto.
 Errores:
   - evento_invalido
   - payload_invalido
@@ -199,7 +199,7 @@ Invariantes:
   - Rechaza otro stop durable para el mismo agente con distinta key, event_id, causation_id o payload.
   - Rechaza `agent_request_id` si ya existe en `failed_agents`.
   - `ReplayDurableEventsV0` acepta el evento y un duplicado exacto con la misma huella durable.
-  - No contiene runtime, proveedor, modelo, HOME, OAuth, cuenta, adaptador ni secreto.
+  - No contiene valores reales de runtime, proveedor, modelo, HOME, OAuth, cuenta, adaptador ni secreto.
 Errores:
   - evento_invalido
   - payload_invalido
@@ -228,7 +228,7 @@ Invariantes:
   - Proyecta una huella `CommandEffects` por `(AgentStopConfirmed, agent_request_id)`.
   - Rechaza otra confirmacion durable para el mismo agente con distinta key, event_id, causation_id o payload.
   - `ReplayDurableEventsV0` acepta el evento y un duplicado exacto con la misma huella durable.
-  - No contiene runtime, proveedor, modelo, HOME, OAuth, cuenta, adaptador ni secreto.
+  - No contiene valores reales de runtime, proveedor, modelo, HOME, OAuth, cuenta, adaptador ni secreto.
 Errores:
   - evento_invalido
   - payload_invalido
@@ -268,8 +268,8 @@ Invariantes:
     `CommandEffects` por `loss_ref`.
   - `RecordReplanDecision` puede usar `source_kind=agent_lost` en
     `programacion` para crear un reemplazo explicito.
-  - Payload compacto, sin DB, HOME, OAuth, proveedor, modelo, adaptador, PID,
-    ruta, comando ni secreto.
+  - Payload compacto, sin valores reales de DB, HOME, OAuth, proveedor, modelo,
+    adaptador, PID, ruta, comando ni secreto.
 Errores:
   - payload_invalido
   - detalle_prohibido
@@ -296,7 +296,7 @@ Invariantes:
   - Se entrega como `StopRuntimeAgent` con target `agent_launcher`.
   - Es una solicitud logica de parada, no una llamada a runtime real.
   - `ValidateOutboxMessageV0` valida sus campos obligatorios y `run_id`.
-  - No incluye proveedor, modelo, cuenta, HOME, OAuth, Codex, Claude, Ollama, vLLM ni adaptador.
+  - No incluye valores reales de proveedor, modelo, cuenta, HOME, OAuth, runtime ni adaptador.
 Estado: implementado local en NCW-028.
 ```
 
@@ -321,7 +321,7 @@ Invariantes:
   - `capacity_request_ref` es obligatorio y debe estar decidido en `capacity_decisions` al aplicar/replayar.
   - `ApplyEventV0` proyecta `agent_request_id` en `agents` sin duplicar.
   - `ReplayDurableEventsV0` acepta el evento con sequence estricta.
-  - No contiene runtime, proveedor, modelo, HOME, OAuth, cuenta, adaptador ni secreto.
+  - No contiene valores reales de runtime, proveedor, modelo, HOME, OAuth, cuenta, adaptador ni secreto.
 Errores:
   - evento_invalido
   - payload_invalido
@@ -351,7 +351,7 @@ Invariantes:
   - Proyecta `agent_request_id` en `started_agents` sin duplicar y registra/verifica `CommandEffects`.
   - Repetir `RegisterAgentStarted` solo es no-op si coincide la huella durable de comando y payload normalizado.
   - `launch_ref`, `ack_ref` y `readiness_ref` son refs opacas; no se resuelven en el core.
-  - No contiene runtime, proveedor, modelo, HOME, OAuth, cuenta, adaptador, PID, ruta, comando ni secreto.
+  - No contiene valores reales de runtime, proveedor, modelo, HOME, OAuth, cuenta, adaptador, PID, ruta, comando ni secreto.
 Estado: implementado local en NCW-038, endurecido en NCW-052 e identidad fuerte extendida en NCW-062.
 ```
 
@@ -376,7 +376,7 @@ Invariantes:
   - Proyecta `agent_request_id` en `failed_agents` sin duplicar y registra/verifica `CommandEffects`.
   - Repetir `RegisterAgentFailed` solo es no-op si coincide la huella durable de comando y payload normalizado.
   - `reason_code` es compacto y no transporta detalles operativos.
-  - No contiene runtime, proveedor, modelo, HOME, OAuth, cuenta, adaptador, PID, ruta, comando ni secreto.
+  - No contiene valores reales de runtime, proveedor, modelo, HOME, OAuth, cuenta, adaptador, PID, ruta, comando ni secreto.
 Estado: implementado local en NCW-038, endurecido en NCW-052 e identidad fuerte extendida en NCW-062.
 ```
 
@@ -406,7 +406,7 @@ Invariantes:
   - Repetir `RegisterAgentLeaseExpired` solo es no-op si coincide la huella durable de comando y payload normalizado.
   - No emite outbox, no para procesos, no marca agentes como failed/stopped y no replanifica por si solo.
   - `recommended_action` es una recomendacion durable; la accion real entra despues por `StopAgent`, `AskDirector`, `RecordReplanDecision` u otro comando separado.
-  - No contiene runtime, proveedor, modelo, HOME, OAuth, cuenta, adaptador, PID, ruta, comando ni secreto.
+  - No contiene valores reales de runtime, proveedor, modelo, HOME, OAuth, cuenta, adaptador, PID, ruta, comando ni secreto.
 Estado: implementado local en NCW-046; identidad fuerte extendida en NCW-063.
 ```
 
@@ -432,6 +432,6 @@ Invariantes:
   - Es una solicitud logica de lanzamiento, no una decision de runtime.
   - Solo se emite despues de una `CapacityDecided` durable para `capacity_request_ref`.
   - `ValidateOutboxMessageV0` valida sus campos obligatorios y `run_id`.
-  - No incluye proveedor, modelo, cuenta, HOME, OAuth, Codex, Claude, Ollama, vLLM ni adaptador.
+  - No incluye valores reales de proveedor, modelo, cuenta, HOME, OAuth, runtime ni adaptador.
 Estado: implementado local en NCW-011 y endurecido en NCW-039.
 ```

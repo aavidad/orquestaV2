@@ -126,14 +126,19 @@ func codexSupervisorRunOperationalBlockerRefsV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 ) []string {
 	refs := []string{}
-	for _, gate := range run.QualityGates {
-		gate = strings.TrimSpace(gate)
-		if gate == "" {
-			continue
-		}
-		if strings.Contains(gate, "required-tests-evidence-missing") ||
-			strings.Contains(gate, "#decision:blocked") {
-			refs = append(refs, gate)
+	for _, taskRef := range compactStringsV0(run.Tasks) {
+		refs = append(refs, orquestacoreworkflow.PendingBlockingQualityGateRefsForSubjectV0(run, taskRef)...)
+	}
+	if len(refs) == 0 {
+		for _, gate := range run.QualityGates {
+			gate = strings.TrimSpace(gate)
+			if gate == "" || strings.Contains(gate, "#subject:") {
+				continue
+			}
+			if strings.Contains(gate, "required-tests-evidence-missing") ||
+				strings.Contains(gate, "#decision:blocked") {
+				refs = append(refs, gate)
+			}
 		}
 	}
 	return compactStringsV0(refs)
@@ -312,11 +317,20 @@ func codexSupervisorGlobalEvidenceRefsV0(
 		"evidence-ref-codex-supervisor-stack-global",
 		strings.TrimSpace(result.StopReason),
 	}
+	refs = append(refs, result.ErrorRunRefs...)
 	for _, tick := range result.Ticks {
 		for _, execution := range tick.Result.Executions {
 			refs = append(refs, execution.EvidenceRefs...)
 			refs = append(refs, strings.TrimSpace(execution.Outcome))
 		}
+	}
+	for _, diagnostic := range result.Diagnostics {
+		refs = append(refs,
+			diagnostic.RunRef,
+			diagnostic.Kind,
+			diagnostic.MessageID,
+			diagnostic.DispatchRef,
+		)
 	}
 	return compactStringsV0(refs)
 }

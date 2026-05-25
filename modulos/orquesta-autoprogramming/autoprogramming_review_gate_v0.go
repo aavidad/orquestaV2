@@ -8,17 +8,19 @@ const (
 )
 
 type AutoprogrammingReviewGateInputV0 struct {
-	ACK             AutoprogrammingReviewGateACKV0
-	Ack             AutoprogrammingReviewGateACKV0
-	RequiredTests   []string
-	Tests           []AutoprogrammingReviewGateTestV0
-	TestRuns        []AutoprogrammingReviewGateTestV0
-	TestResults     []AutoprogrammingReviewGateTestV0
-	Files           []AutoprogrammingReviewGateFileV0
-	WriteSet        []string
-	AllowedFiles    []string
-	MaxLinesPerFile int
-	MaxFileLines    int
+	ACK                        AutoprogrammingReviewGateACKV0
+	Ack                        AutoprogrammingReviewGateACKV0
+	RequiredTests              []string
+	Tests                      []AutoprogrammingReviewGateTestV0
+	TestRuns                   []AutoprogrammingReviewGateTestV0
+	TestResults                []AutoprogrammingReviewGateTestV0
+	Files                      []AutoprogrammingReviewGateFileV0
+	WriteSet                   []string
+	AllowedFiles               []string
+	MaxLinesPerFile            int
+	MaxFileLines               int
+	StrictGoLineBudget         bool
+	AcceptedPartitionFollowups []string
 }
 
 type AutoprogrammingReviewGateACKV0 struct {
@@ -35,9 +37,12 @@ type AutoprogrammingReviewGateTestV0 struct {
 }
 
 type AutoprogrammingReviewGateFileV0 struct {
-	Path      string
-	LineCount int
-	Lines     int
+	Path              string
+	LineCount         int
+	Lines             int
+	BaselineLineCount int
+	BaselineLines     int
+	LineCountSource   string
 }
 
 type AutoprogrammingReviewGateResultV0 struct {
@@ -76,7 +81,7 @@ func EvaluateAutoprogrammingReviewGateV0(
 	tests := autoprogrammingReviewGateTestsV0(input)
 	issues = append(issues, autoprogrammingReviewGateRequiredTestIssuesV0(input.RequiredTests, tests)...)
 	issues = append(issues, autoprogrammingReviewGateFailedTestIssuesV0(tests)...)
-	issues = append(issues, autoprogrammingReviewGateFileIssuesV0(input.Files, autoprogrammingReviewGateMaxLinesV0(input))...)
+	issues = append(issues, autoprogrammingReviewGateFileIssuesV0(input)...)
 	issues = append(issues, autoprogrammingReviewGateWriteSetIssuesV0(input)...)
 
 	return autoprogrammingReviewGateResultV0(issues)
@@ -168,11 +173,14 @@ func autoprogrammingReviewGateTestPassedV0(
 }
 
 func autoprogrammingReviewGateFileIssuesV0(
-	files []AutoprogrammingReviewGateFileV0,
-	maxLines int,
+	input AutoprogrammingReviewGateInputV0,
 ) []AutoprogrammingReviewGateIssueV0 {
+	if autoprogrammingReviewGateStrictGoLineBudgetV0(input) {
+		return autoprogrammingReviewGateStrictGoLineBudgetIssuesV0(input)
+	}
 	var issues []AutoprogrammingReviewGateIssueV0
-	for _, file := range files {
+	maxLines := autoprogrammingReviewGateMaxLinesV0(input)
+	for _, file := range input.Files {
 		lineCount := autoprogrammingReviewGateLineCountV0(file)
 		if lineCount <= maxLines {
 			continue
@@ -240,6 +248,15 @@ func autoprogrammingReviewGateLineCountV0(
 		return file.LineCount
 	}
 	return file.Lines
+}
+
+func autoprogrammingReviewGateBaselineLineCountV0(
+	file AutoprogrammingReviewGateFileV0,
+) int {
+	if file.BaselineLineCount != 0 {
+		return file.BaselineLineCount
+	}
+	return file.BaselineLines
 }
 
 func autoprogrammingReviewGateMaxLinesV0(

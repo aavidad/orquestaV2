@@ -17,6 +17,7 @@ func TestReviewReworkReplanSourceV0CreaTareaCorreccionSiYaHayPadreV0(t *testing.
 		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(descriptor),
 	}
 	request := reviewReworkPlanRequestForTestV0(false)
+	request.Run.FunctionContracts = []string{"BuildAutoprogrammingProgrammableWorkV0"}
 	request.Run.Agents = []string{descriptor.AgentRef}
 	request.Run.StartedAgents = []string{descriptor.AgentRef}
 
@@ -42,7 +43,9 @@ func TestReviewReworkReplanSourceV0CreaTareaCorreccionSiYaHayPadreV0(t *testing.
 	}
 	if !reviewReworkPlanHasEvidenceForTestV0(plan.EvidenceRefs, "evidence-ref-review-rework-task-boundary") ||
 		!reviewReworkPlanHasEvidenceForTestV0(task.DependsOn, "task-ref-target") ||
-		!reviewReworkPlanHasEvidenceForTestV0(task.WriteSet, "modulos/orquesta-app-codex-stack") {
+		!reviewReworkPlanHasEvidenceForTestV0(task.WriteSet, "modulos/orquesta-app-codex-stack") ||
+		len(task.FunctionContractRefs) != 1 ||
+		task.FunctionContractRefs[0].ContractRef != "BuildAutoprogrammingProgrammableWorkV0" {
 		t.Fatalf("refs/evidencia incompletas plan=%v task=%+v", plan.EvidenceRefs, task)
 	}
 }

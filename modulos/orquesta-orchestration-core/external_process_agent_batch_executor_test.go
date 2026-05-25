@@ -2,6 +2,7 @@ package orquestacionnucleoapp
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -167,10 +168,65 @@ func TestExternalProcessAgentBatchExecutorV0RegistersFailedAgentOnBlockedLaunch(
 	if !containsNucleoRefV0(result.Run.FailedAgents, "agent-ref-blocked") {
 		t.Fatalf("failed agents=%v", result.Run.FailedAgents)
 	}
-	failedBatch := failedProcessBatchResultV0(result.BatchDispatches)
-	if failedBatch.FailedCount != 1 || failedBatch.AckedCount != 0 {
+	dispatched := dispatchedProcessBatchResultV0(result.BatchDispatches)
+	if dispatched.AckedCount != 1 || dispatched.FailedCount != 0 {
 		t.Fatalf("batch dispatches=%+v", result.BatchDispatches)
 	}
+	if result.PendingOutboxCount != 0 {
+		t.Fatalf("pending=%d refs=%v", result.PendingOutboxCount, result.PendingOutboxRefs)
+	}
+}
+
+func TestExternalProcessAgentBatchExecutorV0CierraOutboxSiAgenteYaEsTerminal(t *testing.T) {
+	runRef := "run-nucleo-process-batch-terminal-001"
+	agentRef := "agent-ref-process-batch-terminal-001"
+	run := mustActiveProgrammingRunV0(t, runRef)
+	run.FailedAgents = []string{agentRef}
+	store := NewInMemoryRunStoreV0(run)
+	inbound := externalProcessLauncherInboundV0(runRef, agentRef)
+	payload, err := json.Marshal(inbound.Payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	acks, err := (ExternalProcessAgentBatchExecutorV0{
+		RunStore:        store,
+		EventSink:       NewInMemoryEventSinkV0(),
+		SpecResolver:    batchSpecResolverMustNotRunV0{t: t},
+		Runtime:         orquestaruntime.NewProcessRuntimeConnectorV0(),
+		ProcessStopper:  orquestaruntime.NewProcessRuntimeConnectorV0(),
+		ProcessRegistry: NewInMemoryAgentProcessRegistryV0(),
+		OccurredAt:      "2026-05-09T11:12:00Z",
+	}).ExecuteOutboxDispatchBatchV0(context.Background(), []orquestaoutboxdispatch.DispatchIntentV0{{
+		MessageID:      "outbox-process-batch-terminal-001",
+		RunID:          runRef,
+		TargetPort:     orquestacoreworkflow.OutboxTargetAgentLauncherV0,
+		MessageType:    orquestacoreworkflow.OutboxMessageLaunchRuntimeAgentV0,
+		IdempotencyKey: inbound.IdempotencyKey,
+		CorrelationID:  inbound.CorrelationID,
+		PayloadVersion: orquestacoreworkflow.OutboxPayloadVersionV0,
+		Payload:        payload,
+	}})
+	if err != nil {
+		t.Fatalf("ExecuteOutboxDispatchBatchV0: %v", err)
+	}
+	if len(acks) != 1 ||
+		acks[0].Status != orquestaoutboxdispatch.OutboxDispatchAckObservationSuccessV0 ||
+		!containsNucleoRefV0(acks[0].EvidenceRefs, "evidence-ref-external-process-batch-terminal-agent-preserved") {
+		t.Fatalf("acks=%+v", acks)
+	}
+}
+
+type batchSpecResolverMustNotRunV0 struct {
+	t *testing.T
+}
+
+func (resolver batchSpecResolverMustNotRunV0) ResolveExternalAgentLaunchSpecV0(
+	context.Context,
+	orquestaruntime.AgentLauncherInboundV0,
+) (ExternalAgentLaunchSpecResolutionV0, error) {
+	resolver.t.Fatalf("spec resolver no debe ejecutarse para agente terminal")
+	return ExternalAgentLaunchSpecResolutionV0{}, nil
 }
 
 func dispatchedProcessBatchResultV0(

@@ -58,17 +58,8 @@ func TestExpandDomainDocumentPlanV0ProduceJobsDerivadosCompatibles(t *testing.T)
 			t.Fatalf("job[%d] cayo a work_delivery: %+v", i, job)
 		}
 	}
-	expectedArtifacts := map[string]string{
-		"draft_content_block":   "content_block",
-		"generate_visual_asset": "visual_asset",
-		"review_legal":          "block_revision",
-		"review_pedagogical":    "block_revision",
-		"review_quality":        "block_revision",
-		"validate_topic":        "block_revision",
-		"assemble_topic":        "assembled_topic",
-	}
 	for _, job := range result.Jobs {
-		want := expectedArtifacts[job.WorkKind]
+		want := orquestadomainwork.ExpectedDomainWorkArtifactTypeForWorkKindV0(job.WorkKind)
 		if got := fieldValueForDocumentPlanExpanderTestV0(job.InputFields, "expected_artifact_type"); got != want {
 			t.Fatalf("work_kind=%s expected_artifact_type=%q want=%q", job.WorkKind, got, want)
 		}

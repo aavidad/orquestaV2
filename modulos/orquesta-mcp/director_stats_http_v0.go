@@ -55,9 +55,13 @@ func (handler mcpDirectorStatsHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r 
 	}
 	result, err := handler.executor.Execute(r.Context(), input)
 	if err != nil {
+		if result.Estado == MCPDirectorStatsEstadoErrorV0 && len(result.Errores) > 0 {
+			writeMCPDirectorStatsHTTPV0(w, http.StatusInternalServerError, result)
+			return
+		}
 		writeMCPDirectorStatsHTTPV0(w, http.StatusInternalServerError, newMCPDirectorStatsHTTPErrorV0(
 			"executor",
-			"director_stats_error",
+			publicMCPExecutorErrorMessageFromErrorV0("director_stats_executor_error", err),
 			correlationFromDirectorStatsHTTPV0(r, input),
 		))
 		return

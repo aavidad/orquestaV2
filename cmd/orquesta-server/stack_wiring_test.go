@@ -6,21 +6,16 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
-	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestapersistence "orquesta/modulos/orquesta-persistence"
 	orquestarunfile "orquesta/modulos/orquesta-run-file"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
-	orquestaruntimerequiredtest "orquesta/modulos/orquesta-runtime-required-test"
-	orquestaserver "orquesta/modulos/orquesta-server"
 	orquestastatefile "orquesta/modulos/orquesta-state-file"
-	orquestastatefileoutbox "orquesta/modulos/orquesta-state-file/outbox"
 )
 
 func TestBuildStackFromEnvV0UsaConectoresDurablesFileBased(t *testing.T) {
@@ -174,6 +169,7 @@ func TestBuildStackFromEnvV0CableaHTTPNeutralParaDomainWorkYDeliveryV0(t *testin
 	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_ENABLED", "")
 	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_DIR", "")
 	t.Setenv("ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL", "http://127.0.0.1:18083")
+	t.Setenv("ORQUESTA_DOMAIN_WORK_HTTP_EGRESS_MODE", "smoke_local")
 
 	config, err := serverConfigFromEnvV0()
 	if err != nil {
@@ -191,7 +187,7 @@ func TestBuildStackFromEnvV0CableaHTTPNeutralParaDomainWorkYDeliveryV0(t *testin
 	}
 }
 
-func TestBuildStackFromEnvV0NoCableaRequiredTestRunnerPorDefecto(t *testing.T) {
+func TestBuildStackFromEnvV0NoCableaRunnerLocalPorDefectoPeroAceptaReceiptsACK(t *testing.T) {
 	projectDir := t.TempDir()
 	stateDir := t.TempDir()
 	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", projectDir)
@@ -212,8 +208,15 @@ func TestBuildStackFromEnvV0NoCableaRequiredTestRunnerPorDefecto(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildStackFromEnvV0: %v", err)
 	}
-	if stack.Ports.RequiredTestRunner != nil {
-		t.Fatalf("RequiredTestRunner debe quedar apagado por defecto")
+	localRunner, err := requiredTestRunnerFromEnvV0(config, stack.Stores.RequiredTestEvidenceStore)
+	if err != nil {
+		t.Fatalf("requiredTestRunnerFromEnvV0: %v", err)
+	}
+	if localRunner != nil {
+		t.Fatalf("runner local de comandos debe quedar apagado por defecto")
+	}
+	if stack.Ports.RequiredTestRunner == nil {
+		t.Fatalf("runner de receipts ACK debe quedar disponible por defecto")
 	}
 }
 
@@ -244,130 +247,6 @@ func TestBuildStackFromEnvV0CableaRequiredTestRunnerOptIn(t *testing.T) {
 	}
 }
 
-func TestRequiredTestRunnerFromEnvV0RequiereAllowlist(t *testing.T) {
-	t.Setenv("ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED", "1")
-	t.Setenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND", "")
-	t.Setenv("ORQUESTA_REQUIRED_TEST_ALLOWED_COMMANDS", "")
-	stateStore, err := orquestastatefile.NewStoreV0(orquestastatefile.ConfigV0{RootDir: t.TempDir()})
-	if err != nil {
-		t.Fatalf("NewStoreV0: %v", err)
-	}
-
-	_, err = requiredTestRunnerFromEnvV0(orquestaserver.ConfigV0{
-		StateDir:       t.TempDir(),
-		ProjectWorkDir: t.TempDir(),
-	}, stateStore)
-	if err == nil || err.Error() != "required_test_allowed_commands_required" {
-		t.Fatalf("err=%v", err)
-	}
-}
-
-func TestRequiredTestRunnerFromEnvV0GoCommandInyectaEntornoGoAcotado(t *testing.T) {
-	projectDir := t.TempDir()
-	stateDir := t.TempDir()
-	outputDir := filepath.Join(t.TempDir(), "required-test-output")
-	t.Setenv("ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED", "1")
-	t.Setenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND", filepath.Join(projectDir, "go-bin"))
-	t.Setenv("ORQUESTA_REQUIRED_TEST_OUTPUT_DIR", outputDir)
-	t.Setenv("ORQUESTA_REQUIRED_TEST_ENV", "")
-	stateStore, err := orquestastatefile.NewStoreV0(orquestastatefile.ConfigV0{RootDir: filepath.Join(stateDir, "state")})
-	if err != nil {
-		t.Fatalf("NewStoreV0: %v", err)
-	}
-
-	runnerPort, err := requiredTestRunnerFromEnvV0(orquestaserver.ConfigV0{
-		StateDir:       stateDir,
-		ProjectWorkDir: projectDir,
-	}, stateStore)
-	if err != nil {
-		t.Fatalf("requiredTestRunnerFromEnvV0: %v", err)
-	}
-	env := requiredTestExecutorEnvByKeyV0(t, runnerPort)
-
-	expected := map[string]string{
-		"GOCACHE":    filepath.Join(outputDir, "go-build-cache"),
-		"GOPATH":     filepath.Join(outputDir, "go-path"),
-		"GOMODCACHE": filepath.Join(outputDir, "go-mod-cache"),
-	}
-	for key, want := range expected {
-		if got := env[key]; got != want {
-			t.Fatalf("%s=%q, want %q; env=%v", key, got, want, env)
-		}
-		if _, err := os.Stat(want); err != nil {
-			t.Fatalf("%s dir no disponible: %v", key, err)
-		}
-	}
-	if _, ok := env["HOME"]; ok {
-		t.Fatalf("HOME no debe heredarse: env=%v", env)
-	}
-	if _, ok := env["ORQUESTA_CODEX_HOME"]; ok {
-		t.Fatalf("ORQUESTA_CODEX_HOME no debe inyectarse: env=%v", env)
-	}
-}
-
-func TestRequiredTestRunnerFromEnvV0PreservaEntornoGoExplicito(t *testing.T) {
-	projectDir := t.TempDir()
-	stateDir := t.TempDir()
-	outputDir := filepath.Join(t.TempDir(), "required-test-output")
-	explicit := map[string]string{
-		"GOCACHE":    filepath.Join(t.TempDir(), "custom-gocache"),
-		"GOPATH":     filepath.Join(t.TempDir(), "custom-gopath"),
-		"GOMODCACHE": filepath.Join(t.TempDir(), "custom-gomodcache"),
-	}
-	t.Setenv("ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED", "1")
-	t.Setenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND", filepath.Join(projectDir, "go-bin"))
-	t.Setenv("ORQUESTA_REQUIRED_TEST_OUTPUT_DIR", outputDir)
-	t.Setenv("ORQUESTA_REQUIRED_TEST_ENV",
-		"GOCACHE="+explicit["GOCACHE"]+","+
-			"GOPATH="+explicit["GOPATH"]+","+
-			"GOMODCACHE="+explicit["GOMODCACHE"],
-	)
-	stateStore, err := orquestastatefile.NewStoreV0(orquestastatefile.ConfigV0{RootDir: filepath.Join(stateDir, "state")})
-	if err != nil {
-		t.Fatalf("NewStoreV0: %v", err)
-	}
-
-	runnerPort, err := requiredTestRunnerFromEnvV0(orquestaserver.ConfigV0{
-		StateDir:       stateDir,
-		ProjectWorkDir: projectDir,
-	}, stateStore)
-	if err != nil {
-		t.Fatalf("requiredTestRunnerFromEnvV0: %v", err)
-	}
-	env := requiredTestExecutorEnvByKeyV0(t, runnerPort)
-
-	for key, want := range explicit {
-		if got := env[key]; got != want {
-			t.Fatalf("%s=%q, want %q; env=%v", key, got, want, env)
-		}
-	}
-	if got := env["GOCACHE"]; strings.HasPrefix(got, outputDir) {
-		t.Fatalf("GOCACHE explicito fue reemplazado: %q", got)
-	}
-}
-
-func TestValidateCodexCommandAvailableV0MantieneRequisitoSinExternalOnly(t *testing.T) {
-	t.Setenv("ORQUESTA_CODEX_COMMAND", "codex-missing-orquesta-test")
-	t.Setenv("PATH", t.TempDir())
-	t.Setenv("ORQUESTA_OPES_BASE_URL", "")
-	t.Setenv("OPES_BASE_URL", "")
-
-	if err := validateCodexCommandAvailableV0(); err == nil || err.Error() != "codex_command_unavailable" {
-		t.Fatalf("validateCodexCommandAvailableV0 err=%v", err)
-	}
-}
-
-func TestValidateCodexCommandAvailableV0ExigeCodexAunqueHayaOPESMientrasStackSeaCodex(t *testing.T) {
-	t.Setenv("ORQUESTA_CODEX_COMMAND", "codex-missing-orquesta-test")
-	t.Setenv("PATH", t.TempDir())
-	t.Setenv("ORQUESTA_OPES_BASE_URL", "http://127.0.0.1:1")
-	t.Setenv("OPES_BASE_URL", "")
-
-	if err := validateCodexCommandAvailableV0(); err == nil || err.Error() != "codex_command_unavailable" {
-		t.Fatalf("validateCodexCommandAvailableV0 err=%v", err)
-	}
-}
-
 func assertServerStackDurableStoresV0(
 	t *testing.T,
 	stack orquestaappcodexstack.StackV0,
@@ -380,7 +259,7 @@ func assertServerStackDurableStoresV0(
 	assertTypeV0[*orquestastatefile.StoreV0](t, "OperationalPlanStateWriter", stack.Stores.OperationalPlanStateWriter)
 	assertTypeV0[*orquestastatefile.StoreV0](t, "OperationalPlanStateStore", stack.Stores.OperationalPlanStateStore)
 	assertTypeV0[*orquestastatefile.StoreV0](t, "ProcessRegistry", stack.Stores.ProcessRegistry)
-	assertTypeV0[*orquestastatefileoutbox.FileOutboxLedgerV0](t, "OutboxLedger", stack.Stores.OutboxLedger)
+	assertTypeV0[*orquestapersistence.FileOutboxLedgerV0](t, "OutboxLedger", stack.Stores.OutboxLedger)
 	assertTypeV0[*orquestarunfile.RunFileStoreV0](t, "AppChangeStore", stack.Stores.AppChangeStore)
 	assertTypeV0[*orquestarunfile.RunFileStoreV0](t, "RunControl", stack.Stores.RunControl)
 	assertTypeV0[*orquestarunfile.RunFileStoreV0](t, "RunQueue", stack.Stores.RunQueue)
@@ -393,28 +272,4 @@ func assertTypeV0[T any](t *testing.T, name string, value any) {
 	if _, ok := value.(T); !ok {
 		t.Fatalf("%s usa %T, debe usar %T", name, value, *new(T))
 	}
-}
-
-func requiredTestExecutorEnvByKeyV0(
-	t *testing.T,
-	runnerPort orquestacionnucleoapp.RequiredTestRunnerPortV0,
-) map[string]string {
-	t.Helper()
-	runner, ok := runnerPort.(orquestacionnucleoapp.RequiredTestRunnerV0)
-	if !ok {
-		t.Fatalf("RequiredTestRunner usa %T", runnerPort)
-	}
-	executor, ok := runner.Executor.(orquestaruntimerequiredtest.LocalCommandExecutorV0)
-	if !ok {
-		t.Fatalf("RequiredTest executor usa %T", runner.Executor)
-	}
-	env := map[string]string{}
-	for _, item := range executor.Env {
-		key, value, ok := strings.Cut(item, "=")
-		if !ok {
-			t.Fatalf("env invalido en executor: %q", item)
-		}
-		env[key] = value
-	}
-	return env
 }

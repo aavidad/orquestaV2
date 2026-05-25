@@ -2,6 +2,7 @@ package orquestaserver
 
 import (
 	"fmt"
+	"net"
 	"path/filepath"
 	"strings"
 	"time"
@@ -32,6 +33,8 @@ type ConfigV0 struct {
 	StateFile                        string
 	AuditFile                        string
 	AuditDisabled                    bool
+	ControlPlane                     ControlPlaneConfigV0
+	EffectiveConfig                  ServerEffectiveConfigV0
 	ProjectWorkDir                   string
 	RuntimeWorkDir                   string
 	TickInterval                     time.Duration
@@ -53,6 +56,14 @@ type ConfigV0 struct {
 	IdleSelfImprovementTargetQueue   int
 }
 
+type ControlPlaneConfigV0 struct {
+	RemoteAccessOptIn bool
+	Token             string
+	Principal         string
+	PermissionRef     string
+	PublicReason      string
+}
+
 func NormalizeConfigV0(config ConfigV0) ConfigV0 {
 	config.Addr = strings.TrimSpace(config.Addr)
 	if config.Addr == "" {
@@ -67,6 +78,20 @@ func NormalizeConfigV0(config ConfigV0) ConfigV0 {
 	if config.AuditFile == "" {
 		config.AuditFile = DefaultAuditFileV0
 	}
+	config.ControlPlane.Token = strings.TrimSpace(config.ControlPlane.Token)
+	config.ControlPlane.Principal = strings.TrimSpace(config.ControlPlane.Principal)
+	config.ControlPlane.PermissionRef = strings.TrimSpace(config.ControlPlane.PermissionRef)
+	config.ControlPlane.PublicReason = strings.TrimSpace(config.ControlPlane.PublicReason)
+	if config.ControlPlane.Principal == "" {
+		config.ControlPlane.Principal = "loopback-local"
+	}
+	if config.ControlPlane.PermissionRef == "" {
+		config.ControlPlane.PermissionRef = "permission-ref-loopback-control-plane"
+	}
+	if config.ControlPlane.PublicReason == "" {
+		config.ControlPlane.PublicReason = "loopback_control_plane"
+	}
+	config.EffectiveConfig = NormalizeServerEffectiveConfigV0(config.EffectiveConfig)
 	config.ProjectWorkDir = strings.TrimSpace(config.ProjectWorkDir)
 	config.RuntimeWorkDir = strings.TrimSpace(config.RuntimeWorkDir)
 	if config.TickInterval <= 0 {
@@ -132,6 +157,14 @@ func ValidateConfigV0(config ConfigV0) error {
 	if filepath.Base(config.AuditFile) != config.AuditFile || filepath.Ext(config.AuditFile) != ".jsonl" {
 		return fmt.Errorf("orquesta_server: audit_file invalido")
 	}
+	if !controlPlaneAddrIsLoopbackV0(config.Addr) {
+		if !config.ControlPlane.RemoteAccessOptIn {
+			return fmt.Errorf("orquesta_server: control_plane_remote_opt_in_required")
+		}
+		if config.ControlPlane.Token == "" {
+			return fmt.Errorf("orquesta_server: control_plane_token_required")
+		}
+	}
 	if strings.TrimSpace(config.ProjectWorkDir) != "" && !filepath.IsAbs(config.ProjectWorkDir) {
 		return fmt.Errorf("orquesta_server: project_work_dir invalido")
 	}
@@ -139,6 +172,22 @@ func ValidateConfigV0(config ConfigV0) error {
 		return fmt.Errorf("orquesta_server: runtime_work_dir invalido")
 	}
 	return nil
+}
+
+func controlPlaneAddrIsLoopbackV0(addr string) bool {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(addr))
+	if err != nil {
+		host = strings.TrimSpace(addr)
+	}
+	host = strings.Trim(host, "[]")
+	if host == "" {
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func StatePathV0(config ConfigV0) string {

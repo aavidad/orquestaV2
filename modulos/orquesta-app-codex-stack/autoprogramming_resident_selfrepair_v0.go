@@ -192,6 +192,7 @@ func autoprogrammingResidentPrepareSelfRepairV0(
 		stack.Stores.RunQueue,
 		stack.RunQueue,
 		stack.Clock,
+		stack.CodexRuntimeWorkDir,
 	)
 	self := orquestamcp.NewMCPAutoprogrammingSelfImprovementToolExecutorV0(prepare)
 	out, err := self.Execute(ctx, orquestamcp.MCPAutoprogrammingSelfImprovementToolInputV0{

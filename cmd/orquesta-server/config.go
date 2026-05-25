@@ -15,7 +15,7 @@ import (
 
 const (
 	defaultServerSupervisorMaxExternalWaitsV0 = 1
-	maxServerSupervisorMaxExternalWaitsV0     = 1
+	maxServerSupervisorMaxExternalWaitsV0     = 70
 )
 
 func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
@@ -29,10 +29,17 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 	runtimeDir := absDirEnvOrDefaultV0("ORQUESTA_CODEX_RUNTIME_WORKDIR",
 		filepath.Join(projectDir, ".orquesta-runtime"))
 	config := orquestaserver.ConfigV0{
-		Addr:           envOrDefaultV0("ORQUESTA_SERVER_ADDR", orquestaserver.DefaultAddrV0),
-		StateDir:       stateDir,
-		AuditFile:      envOrDefaultV0("ORQUESTA_SERVER_AUDIT_FILE", orquestaserver.DefaultAuditFileV0),
-		AuditDisabled:  boolEnvOrDefaultV0("ORQUESTA_SERVER_AUDIT_DISABLED", false),
+		Addr:          envOrDefaultV0("ORQUESTA_SERVER_ADDR", orquestaserver.DefaultAddrV0),
+		StateDir:      stateDir,
+		AuditFile:     envOrDefaultV0("ORQUESTA_SERVER_AUDIT_FILE", orquestaserver.DefaultAuditFileV0),
+		AuditDisabled: boolEnvOrDefaultV0("ORQUESTA_SERVER_AUDIT_DISABLED", false),
+		ControlPlane: orquestaserver.ControlPlaneConfigV0{
+			RemoteAccessOptIn: boolEnvOrDefaultV0("ORQUESTA_SERVER_REMOTE_CONTROL_PLANE_CONFIRM", false),
+			Token:             os.Getenv("ORQUESTA_SERVER_CONTROL_TOKEN"),
+			Principal:         envOrDefaultV0("ORQUESTA_SERVER_CONTROL_PRINCIPAL", "loopback-local"),
+			PermissionRef:     envOrDefaultV0("ORQUESTA_SERVER_CONTROL_PERMISSION_REF", "permission-ref-loopback-control-plane"),
+			PublicReason:      envOrDefaultV0("ORQUESTA_SERVER_CONTROL_PUBLIC_REASON", "loopback_control_plane"),
+		},
 		ProjectWorkDir: projectDir,
 		RuntimeWorkDir: runtimeDir,
 		TickInterval:   time.Duration(intEnvOrDefaultV0("ORQUESTA_SERVER_TICK_INTERVAL_MS", 5000)) * time.Millisecond,
@@ -56,9 +63,9 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 		IdleSelfImprovementTargetQueue:   intEnvOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_TARGET_QUEUE", orquestaserver.DefaultIdleSelfImprovementTargetQueueV0),
 		SupervisorCommand: orquestarunsupervisor.RunSupervisorCommandV0{
 			QueueRef:          "global",
-			MaxRunsPerTick:    intEnvOrDefaultV0("ORQUESTA_SERVER_MAX_RUNS_PER_TICK", 2),
+			MaxRunsPerTick:    intEnvOrDefaultV0("ORQUESTA_SERVER_MAX_RUNS_PER_TICK", defaultCodexServerMaxRunsPerTickV0),
 			MaxTicks:          intEnvOrDefaultV0("ORQUESTA_SERVER_SUPERVISOR_MAX_TICKS", orquestaserver.DefaultSupervisorMaxTicksV0),
-			MaxExecutions:     intEnvOrDefaultV0("ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK", 2),
+			MaxExecutions:     intEnvOrDefaultV0("ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK", defaultCodexServerMaxExecutionsV0),
 			StopOnNoExecution: true,
 			AllowRepeatedRuns: boolEnvOrDefaultV0("ORQUESTA_SERVER_ALLOW_REPEATED_RUNS", false),
 			DrainLimits: orquestaruncoordinator.RunDrainLimitsV0{
@@ -72,6 +79,7 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 			},
 		},
 	}
+	config.EffectiveConfig = serverEffectiveConfigFromEnvV0(config)
 	return orquestaserver.NormalizeConfigV0(config), orquestaserver.ValidateConfigV0(config)
 }
 

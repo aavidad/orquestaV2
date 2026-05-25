@@ -88,6 +88,9 @@ Reglas:
 - `rule_ref` conocido se materializa como reglas comunes compactas.
 - `doc_ref` y `read_ref` se materializan por el reader.
 - `write_ref`, `contract_ref` y `evidence_ref` quedan como `ref_only`.
+- Toda entrada requerida que quede como `ref_only` declara `ref_only_reason` y
+  `required_ref_action` para distinguir refs opacas por diseno de refs que
+  debian materializarse, requerir lectura local o requerir consulta al director.
 - Si se detectan patrones de secreto o ruta real sensible en contenido materializado, se rechaza.
 - Si falta una ref requerida, la materializacion falla y el agente debe emitir `CONSULTA AL DIRECTOR` o esperar correccion del director.
 

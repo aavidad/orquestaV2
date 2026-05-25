@@ -17,6 +17,7 @@ func NewMCPEjecutarOrquestacionAppOKResultV0(
 		Estado:            MCPEjecutarOrquestacionAppEstadoOKV0,
 		RequestID:         firstNonEmptyMCPV0(input.RequestID, input.AppSpec.RequestID),
 		CorrelationID:     firstNonEmptyMCPV0(input.CorrelationID, "corr-"+result.Run.RunID),
+		RoutePolicy:       mcpRoutePolicyFromAppRunnerV0(result.RoutePolicy),
 		AppSpec:           compactAppSpecV0(input.AppSpec),
 		RunRef:            strings.TrimSpace(result.Run.RunID),
 		PhaseID:           strings.TrimSpace(string(result.Run.CurrentPhase)),
@@ -41,6 +42,9 @@ func NewMCPEjecutarOrquestacionAppErrorResultV0(
 		Estado:        MCPEjecutarOrquestacionAppEstadoErrorV0,
 		RequestID:     firstNonEmptyMCPV0(input.RequestID, input.AppSpec.RequestID),
 		CorrelationID: firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
-		Errores:       []MCPValidationIssueV0{publicPrepareOrchestrationIssueMCPV0(err)},
+		RoutePolicy: mcpRoutePolicyFromAppRunnerV0(
+			orquestaapprunner.AppRunnerPreviewRoutePolicyV0(orquestaapprunner.AppRunnerLegacyEntrypointExecuteV0),
+		),
+		Errores: []MCPValidationIssueV0{publicPrepareOrchestrationIssueMCPV0(err)},
 	}
 }

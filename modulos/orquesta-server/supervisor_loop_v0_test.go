@@ -32,6 +32,8 @@ func TestRuntimeV0SupervisorPersisteTicksV0(t *testing.T) {
 	if store.last.SupervisorTicks != 1 ||
 		store.last.LastSupervisorStatus != "ok" ||
 		store.last.LastSupervisorStop != orquestarunsupervisor.RunSupervisorStopNoExecutionV0 ||
+		store.last.LastSupervisorStopPublic != "idle_no_execution" ||
+		store.last.LastSupervisorStopCategory != "idle" ||
 		store.last.LastSupervisorQueueRef != "" {
 		t.Fatalf("state=%+v", store.last)
 	}
@@ -105,7 +107,10 @@ func TestRuntimeV0SupervisorRegistraErrorYPermiteSiguienteTickV0(t *testing.T) {
 		store.last.LastSupervisorError != "fallo_transitorio" ||
 		store.last.SupervisorTicks != 1 ||
 		store.last.SupervisorErrorTicks != 1 ||
-		store.last.LastSupervisorQueueRef != "global" {
+		store.last.LastSupervisorQueueRef != "global" ||
+		len(store.last.RecentErrors) != 1 ||
+		store.last.RecentErrors[0].Code != orquestarunsupervisor.RunSupervisorStopTickErrorV0 ||
+		store.last.RecentErrors[0].Scope != "supervisor" {
 		t.Fatalf("state error=%+v", store.last)
 	}
 	runtime.runSupervisorTickV0(context.Background())
@@ -115,7 +120,8 @@ func TestRuntimeV0SupervisorRegistraErrorYPermiteSiguienteTickV0(t *testing.T) {
 		store.last.LastSupervisorError != "" ||
 		store.last.LastSupervisorExecutions != 2 ||
 		store.last.SupervisorTicks != 2 ||
-		store.last.SupervisorErrorTicks != 1 {
+		store.last.SupervisorErrorTicks != 1 ||
+		len(store.last.RecentErrors) != 1 {
 		t.Fatalf("state recovered=%+v calls=%d", store.last, supervisor.calls)
 	}
 }
@@ -168,7 +174,12 @@ func TestRuntimeV0SupervisorPreparaAutomejoraTrasIdleV0(t *testing.T) {
 		},
 	}, noExecution, noExecution, noExecution}, selfStarted: make(chan struct{}, 1), selfRelease: make(chan struct{})}
 	runtime, err := NewRuntimeV0(ConfigV0{
-		StateDir: t.TempDir(), TickInterval: time.Hour, IdleSelfImprovementAfter: time.Minute, AuditDisabled: true,
+		StateDir:                       t.TempDir(),
+		TickInterval:                   time.Hour,
+		IdleSelfImprovementAfter:       time.Minute,
+		IdleSelfImprovementMaxRequests: 1,
+		IdleSelfImprovementTargetQueue: 1,
+		AuditDisabled:                  true,
 	}, RuntimeDepsV0{
 		Supervisor: supervisor, StateStore: &memoryStateStoreV0{}, Clock: fixedClockV0{now: now},
 	})
@@ -276,6 +287,123 @@ func TestRuntimeV0SupervisorPreparaAutomejoraConCapacidadLibreV0(t *testing.T) {
 	}
 }
 
+func TestRuntimeV0SupervisorCapacidadLibreNoEsBloqueadaPorCooldownV0(t *testing.T) {
+	now := time.Date(2026, 5, 24, 12, 2, 0, 0, time.UTC)
+	supervisor := &fakeSupervisorV0{
+		results: []fakeSupervisorResultV0{{result: orquestarunsupervisor.RunSupervisorResultV0{
+			StopReason:      orquestarunsupervisor.RunSupervisorStopMaxExecutionsV0,
+			TotalExecutions: 1,
+			Ticks: []orquestarunsupervisor.RunSupervisorTickSummaryV0{{
+				Result: orquestaruncoordinator.RunCoordinatorTickResultV0{
+					Ranked: []orquestaruncoordinator.RankedRunSummaryV0{{
+						RunRef: "request-ref-autoprogramming-backlog-t08-runtime-neutral-e2e-aaa",
+						Rank:   1,
+					}},
+					Executions: []orquestaruncoordinator.RunExecutionSummaryV0{{
+						RunRef:  "request-ref-autoprogramming-backlog-t08-runtime-neutral-e2e-aaa",
+						Outcome: "wait_external",
+					}},
+				},
+			}},
+		}}},
+		planRequests: []IdleSelfImprovementRequestV0{{RequestRef: "request-ref-backlog-scanner"}},
+		selfStarted:  make(chan struct{}, 1),
+	}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                       t.TempDir(),
+		TickInterval:                   time.Hour,
+		IdleSelfImprovementAfter:       time.Minute,
+		IdleSelfImprovementMaxRequests: 3,
+		IdleSelfImprovementTargetQueue: 4,
+		AuditDisabled:                  true,
+	}, RuntimeDepsV0{
+		Supervisor: supervisor,
+		StateStore: &memoryStateStoreV0{},
+		Clock:      fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	runtime.tracker.MarkIdleSelfImprovementPreparedV0(IdleSelfImprovementResultV0{
+		Accepted: true,
+		RunRef:   "request-ref-autoprogramming-backlog-t07-prev",
+	}, now.Add(-10*time.Second))
+
+	runtime.runSupervisorTickV0(context.Background())
+
+	select {
+	case <-supervisor.selfStarted:
+	case <-time.After(time.Second):
+		t.Fatalf("capacity_free quedo bloqueado por cooldown: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
+	}
+	if supervisor.lastPlanRequest.Trigger != "capacity_free" ||
+		supervisor.lastPlanRequest.FreeCapacity != 3 {
+		t.Fatalf("plan=%+v", supervisor.lastPlanRequest)
+	}
+}
+
+func TestRuntimeV0SupervisorPreparaAutomejoraConCapacidadLibreAunqueHayaSkipsV0(t *testing.T) {
+	now := time.Date(2026, 5, 24, 12, 3, 0, 0, time.UTC)
+	supervisor := &fakeSupervisorV0{
+		results: []fakeSupervisorResultV0{{result: orquestarunsupervisor.RunSupervisorResultV0{
+			StopReason:      orquestarunsupervisor.RunSupervisorStopMaxExecutionsV0,
+			TotalExecutions: 1,
+			TotalSkips:      1,
+			Ticks: []orquestarunsupervisor.RunSupervisorTickSummaryV0{{
+				Result: orquestaruncoordinator.RunCoordinatorTickResultV0{
+					Ranked: []orquestaruncoordinator.RankedRunSummaryV0{{
+						RunRef: "request-ref-autoprogramming-backlog-t08-runtime-neutral-e2e-aaa",
+						Rank:   1,
+					}, {
+						RunRef: "request-ref-autoprogramming-backlog-t09-sanitizer-ccc",
+						Rank:   2,
+					}},
+					Executions: []orquestaruncoordinator.RunExecutionSummaryV0{{
+						RunRef:  "request-ref-autoprogramming-backlog-t08-runtime-neutral-e2e-aaa",
+						Outcome: "wait_external",
+					}},
+					Skips: []orquestaruncoordinator.RunSkipSummaryV0{{
+						RunRef: "request-ref-autoprogramming-backlog-t09-sanitizer-ccc",
+						Rank:   2,
+						Reason: "capacity_temporal",
+					}},
+				},
+			}},
+		}}},
+		planRequests: []IdleSelfImprovementRequestV0{{RequestRef: "request-ref-backlog-t10"}},
+		selfStarted:  make(chan struct{}, 1),
+	}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                       t.TempDir(),
+		TickInterval:                   time.Hour,
+		IdleSelfImprovementAfter:       time.Minute,
+		IdleSelfImprovementMaxRequests: 3,
+		IdleSelfImprovementTargetQueue: 4,
+		AuditDisabled:                  true,
+	}, RuntimeDepsV0{
+		Supervisor: supervisor,
+		StateStore: &memoryStateStoreV0{},
+		Clock:      fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	runtime.runSupervisorTickV0(context.Background())
+
+	select {
+	case <-supervisor.selfStarted:
+	case <-time.After(time.Second):
+		t.Fatalf("automejora no preparada con skips no terminales: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
+	}
+	if supervisor.lastPlanRequest.Trigger != "capacity_free" ||
+		supervisor.lastPlanRequest.Skips != 1 ||
+		supervisor.lastPlanRequest.QueueSize != 2 ||
+		supervisor.lastPlanRequest.FreeCapacity != 2 {
+		t.Fatalf("plan=%+v", supervisor.lastPlanRequest)
+	}
+}
+
 func TestRuntimeV0SupervisorNoPreparaAutomejoraSiCapacidadLlenaV0(t *testing.T) {
 	now := time.Date(2026, 5, 24, 12, 5, 0, 0, time.UTC)
 	supervisor := &fakeSupervisorV0{
@@ -318,6 +446,108 @@ func TestRuntimeV0SupervisorNoPreparaAutomejoraSiCapacidadLlenaV0(t *testing.T) 
 	}
 }
 
+func TestRuntimeV0SupervisorDescuentaRunsRetryablesDePresionDeColaV0(t *testing.T) {
+	now := time.Date(2026, 5, 25, 18, 20, 0, 0, time.UTC)
+	retryableRunRef := "request-ref-autoprogramming-backlog-t34-director-wave-strict-guards-default-a3db5927"
+	supervisor := &fakeSupervisorV0{
+		results: []fakeSupervisorResultV0{{result: orquestarunsupervisor.RunSupervisorResultV0{
+			StopReason:      orquestarunsupervisor.RunSupervisorStopMaxExecutionsV0,
+			TotalExecutions: 1,
+			Ticks: []orquestarunsupervisor.RunSupervisorTickSummaryV0{{
+				Result: orquestaruncoordinator.RunCoordinatorTickResultV0{
+					Ranked: []orquestaruncoordinator.RankedRunSummaryV0{{
+						RunRef: retryableRunRef,
+						Rank:   1,
+					}, {
+						RunRef: "request-ref-autoprogramming-backlog-t42-live",
+						Rank:   2,
+					}},
+					Executions: []orquestaruncoordinator.RunExecutionSummaryV0{{
+						RunRef:  retryableRunRef,
+						Outcome: "wait_external",
+					}},
+				},
+			}},
+		}}},
+		retryableRunRefs: []string{retryableRunRef},
+		planRequests:     []IdleSelfImprovementRequestV0{{RequestRef: "request-ref-backlog-retry-fill"}},
+		selfStarted:      make(chan struct{}, 1),
+	}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                       t.TempDir(),
+		TickInterval:                   time.Hour,
+		IdleSelfImprovementAfter:       time.Minute,
+		IdleSelfImprovementMaxRequests: 2,
+		IdleSelfImprovementTargetQueue: 2,
+		AuditDisabled:                  true,
+	}, RuntimeDepsV0{
+		Supervisor: supervisor,
+		StateStore: &memoryStateStoreV0{},
+		Clock:      fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	runtime.runSupervisorTickV0(context.Background())
+
+	select {
+	case <-supervisor.selfStarted:
+	case <-time.After(time.Second):
+		t.Fatalf("automejora no preparada descontando retryables: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
+	}
+	if supervisor.lastPlanRequest.QueueSize != 1 ||
+		supervisor.lastPlanRequest.FreeCapacity != 1 ||
+		containsStringForTestV0(supervisor.lastPlanRequest.KnownRunRefs, retryableRunRef) ||
+		containsStringForTestV0(supervisor.lastPlanRequest.KnownRequestRefs, retryableRunRef) {
+		t.Fatalf("plan=%+v retryable=%s", supervisor.lastPlanRequest, retryableRunRef)
+	}
+}
+
+func TestRuntimeV0SupervisorNoPreparaAutomejoraConProveedorAuthBloqueadoV0(t *testing.T) {
+	now := time.Date(2026, 5, 25, 17, 0, 0, 0, time.UTC)
+	store := &memoryStateStoreV0{}
+	supervisor := &fakeSupervisorV0{
+		results: []fakeSupervisorResultV0{{result: orquestarunsupervisor.RunSupervisorResultV0{
+			StopReason: orquestarunsupervisor.RunSupervisorStopNoExecutionV0,
+		}}},
+		planRequests: []IdleSelfImprovementRequestV0{{RequestRef: "request-ref-backlog-no-debe-usarse"}},
+		selfStarted:  make(chan struct{}, 1),
+		blocker: IdleSelfImprovementBlockerResultV0{
+			Blocked:      true,
+			Reason:       "provider_auth_blocked",
+			RunRefs:      []string{"run-ref-auth-blocked-001"},
+			EvidenceRefs: []string{"evidence-ref-auth-config-blocker"},
+			Message:      "Autenticacion externa bloqueada; requiere reautorizacion.",
+		},
+	}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                       t.TempDir(),
+		TickInterval:                   time.Hour,
+		IdleSelfImprovementAfter:       time.Minute,
+		IdleSelfImprovementMaxRequests: 3,
+		IdleSelfImprovementTargetQueue: 4,
+		AuditDisabled:                  true,
+	}, RuntimeDepsV0{
+		Supervisor: supervisor,
+		StateStore: store,
+		Clock:      fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	markNoExecutionSinceForTestV0(runtime, now)
+
+	runtime.runSupervisorTickV0(context.Background())
+
+	if supervisor.planCalls != 0 || supervisor.selfCalls != 0 {
+		t.Fatalf("bloqueo proveedor no debe planificar: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
+	}
+	if store.last.IdleSelfImprovementReason != "provider_auth_blocked" {
+		t.Fatalf("reason=%q state=%+v", store.last.IdleSelfImprovementReason, store.last)
+	}
+}
+
 func TestStatusTrackerV0ConservaAutomejoraAceptadaDuranteBloqueoV0(t *testing.T) {
 	now := time.Date(2026, 5, 24, 10, 0, 0, 0, time.UTC)
 	tracker := NewStatusTrackerV0(ConfigV0{}, now)
@@ -332,17 +562,19 @@ func TestStatusTrackerV0ConservaAutomejoraAceptadaDuranteBloqueoV0(t *testing.T)
 }
 
 type fakeSupervisorV0 struct {
-	calls           int
-	selfCalls       int
-	planCalls       int
-	lastCommand     orquestarunsupervisor.RunSupervisorCommandV0
-	lastSelfRequest IdleSelfImprovementRequestV0
-	lastPlanRequest IdleSelfImprovementPlanRequestV0
-	results         []fakeSupervisorResultV0
-	planRequests    []IdleSelfImprovementRequestV0
-	selfRequestRefs []string
-	selfStarted     chan struct{}
-	selfRelease     chan struct{}
+	calls            int
+	selfCalls        int
+	planCalls        int
+	lastCommand      orquestarunsupervisor.RunSupervisorCommandV0
+	lastSelfRequest  IdleSelfImprovementRequestV0
+	lastPlanRequest  IdleSelfImprovementPlanRequestV0
+	results          []fakeSupervisorResultV0
+	planRequests     []IdleSelfImprovementRequestV0
+	blocker          IdleSelfImprovementBlockerResultV0
+	retryableRunRefs []string
+	selfRequestRefs  []string
+	selfStarted      chan struct{}
+	selfRelease      chan struct{}
 }
 
 func (fake *fakeSupervisorV0) PrepareIdleSelfImprovementV0(
@@ -360,6 +592,22 @@ func (fake *fakeSupervisorV0) PrepareIdleSelfImprovementV0(
 	}
 	return IdleSelfImprovementResultV0{
 		Accepted: true, RunRef: "run-ref-idle-self-improvement-001", RequestRef: request.RequestRef, Status: "ok",
+	}, nil
+}
+
+func (fake *fakeSupervisorV0) IdleSelfImprovementBlockersV0(
+	context.Context,
+	IdleSelfImprovementBlockerRequestV0,
+) (IdleSelfImprovementBlockerResultV0, error) {
+	return fake.blocker, nil
+}
+
+func (fake *fakeSupervisorV0) RetryableIdleSelfImprovementRunRefsV0(
+	context.Context,
+	IdleSelfImprovementRunFreshnessRequestV0,
+) (IdleSelfImprovementRunFreshnessResultV0, error) {
+	return IdleSelfImprovementRunFreshnessResultV0{
+		RetryableRunRefs: append([]string(nil), fake.retryableRunRefs...),
 	}, nil
 }
 

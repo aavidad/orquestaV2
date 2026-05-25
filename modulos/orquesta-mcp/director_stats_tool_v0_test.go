@@ -2,7 +2,6 @@ package orquestamcp
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
@@ -190,7 +189,6 @@ func TestMCPDirectorStatsToolExecutorV0IncluyeUsoDeAgentesOptIn(t *testing.T) {
 				RuntimeKind:    "codex",
 				ConnectorRef:   "connector-ref-codex-001",
 				ProfileRef:     "profile-ref-codex-001",
-				ModelAlias:     "gpt-5.5",
 				CapacityLevel:  "xhigh",
 				QuotaStatus:    orquestacionnucleoapp.DirectorAgentUsageQuotaAvailableV0,
 				QuotaRemaining: 90,
@@ -209,7 +207,6 @@ func TestMCPDirectorStatsToolExecutorV0IncluyeUsoDeAgentesOptIn(t *testing.T) {
 	}
 	agent := mcpDirectorStatsAgentForTestV0(t, *result.Stats, "agent-ref-stats-001")
 	if agent.Usage == nil ||
-		agent.Usage.ModelAlias != "gpt-5.5" ||
 		agent.Usage.QuotaRemaining != 90 ||
 		agent.Usage.TotalTokens != 1500 {
 		t.Fatalf("usage=%+v", agent.Usage)
@@ -286,27 +283,4 @@ func TestMCPDirectorStatsToolExecutorV0DecisionContextCompletoParaDirector(t *te
 		contextAgent.StopReasonSource != orquestacionnucleoapp.DirectorAgentStopReasonSourceStopRequestV0 {
 		t.Fatalf("context agent stop reason=%+v", contextAgent)
 	}
-}
-
-func TestMCPTransportV0DirectorStatsQuedaOptInSinPuerto(t *testing.T) {
-	transport := newFakeMCPTransportV0()
-	if err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{}); err != nil {
-		t.Fatalf("register transport: %v", err)
-	}
-	output, err := transport.CallToolV0(
-		context.Background(),
-		MCPDirectorStatsToolNameV0,
-		MCPDirectorStatsToolInputV0{RunRef: "run-ref-mcp-director-stats-unbound-001"},
-	)
-	if err != nil {
-		t.Fatalf("call director stats unbound: %v", err)
-	}
-	var result MCPTransportToolErrorV0
-	if err := json.Unmarshal(output, &result); err != nil {
-		t.Fatalf("decode unbound: %v", err)
-	}
-	if result.ErrorCode != MCPTransportToolUnboundV0 {
-		t.Fatalf("director stats debe ser opt-in: %+v", result)
-	}
-	assertTransportPayloadSaneadoMCPTestV0(t, json.RawMessage(output), 300)
 }

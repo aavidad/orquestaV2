@@ -15,6 +15,16 @@ Estado:
 ## Backlog inicial
 
 ```text
+ID: NCW-081
+Objetivo: Sincronizar docs locales con la politica comun de rails permisivos por campo: vocabulario operativo opaco permitido, valores sensibles efectivos bloqueados.
+Write-set: docs/contratos*.md, docs/pruebas*.md, docs/decisiones.md, docs/tareas.md y docs globales T70.
+Contrato: Politica documental de rails de detalle para core-workflow.
+Validacion: 2026-05-25, go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-rails.
+Bloqueos: No cambia validadores ni adaptadores; si una frontera necesita regla nueva, debe reutilizar `orquesta-rails` o declarar owner de campo.
+Estado: completada local
+```
+
+```text
 ID: NCW-080
 Objetivo: Crear matriz externa y rapida de railes observados para acumular casos reales antes de recompilar servidor.
 Write-set: rail_external_v0_test.go, scripts/test_rails_fast.sh, docs/rail_errors_observados_2026-05-23.md, docs locales/globales.
@@ -270,7 +280,7 @@ Objetivo: Publicar catalogo soportado de comandos/eventos del workflow para que 
 Write-set: command_event_catalog_v0.go, command_event_catalog_v0_test.go, commands_validation_v0.go, events_validation_v0.go, docs locales.
 Contrato: SupportedOrchestrationCommandTypesV0, SupportedOrchestrationEventTypesV0.
 Validacion: 2026-05-06, ok, go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-mcp.
-Bloqueos: No cambia payloads ni transiciones; solo elimina duplicacion de catalogo y conserva core sin DB/runtime/provider/HOME/OAuth.
+Bloqueos: No cambia payloads ni transiciones; solo elimina duplicacion de catalogo y conserva core con refs opacas, sin valores reales de DB/runtime/provider/HOME/OAuth.
 Estado: completada
 ```
 
@@ -521,7 +531,7 @@ ID: NCW-022
 Objetivo: Implementar aceptacion durable de revision como `AcceptReview` -> `ReviewAccepted`.
 Write-set: review_accept_*.go, commands_v0.go, events_v0.go, events_validation_v0.go, handler_v0.go, reducer_v0.go, run_state_v0.go, tests y docs locales
 Contrato: AcceptReview, ReviewAccepted, OrchestrationRunV0.AcceptedReviews
-Validacion: go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-core; referencias compactas; sin conectores hardcodeados; sin detalles de runtime, DB, proveedor, OAuth ni HOME salvo como prohibiciones.
+Validacion: go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-core; referencias compactas; sin conectores hardcodeados; sin valores reales de runtime, DB, proveedor, OAuth ni HOME.
 Bloqueos: Cierre de tarea, cierre de fase y validacion final quedan como microtareas posteriores.
 Estado: completada local
 ```
@@ -531,7 +541,7 @@ ID: NCW-023
 Objetivo: Implementar cierre durable de tarea como `CloseTask` -> `TaskClosed`.
 Write-set: close_task_*.go, commands_v0.go, events_v0.go, events_validation_v0.go, handler_v0.go, reducer_v0.go, run_state_v0.go, tests y docs locales
 Contrato: CloseTask, TaskClosed, OrchestrationRunV0.ClosedTasks
-Validacion: go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-core; `CloseTask` compacto sin outbox; exige fase `revision` activa, `task_id` en `tasks`, `delivery_ref` en `deliveries` y `accepted_review_ref` en `accepted_reviews`; `TaskClosed` proyecta `task_id` en `closed_tasks`; no cierra fase ni run; sin conectores ni detalles de runtime, DB, proveedor, OAuth o HOME salvo como prohibiciones.
+Validacion: go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-core; `CloseTask` compacto sin outbox; exige fase `revision` activa, `task_id` en `tasks`, `delivery_ref` en `deliveries` y `accepted_review_ref` en `accepted_reviews`; `TaskClosed` proyecta `task_id` en `closed_tasks`; no cierra fase ni run; sin conectores ni valores reales de runtime, DB, proveedor, OAuth o HOME.
 Bloqueos: Cierre de fase, validacion final y cierre de run quedan como microtareas posteriores.
 Estado: completada local
 ```
@@ -541,7 +551,7 @@ ID: NCW-024
 Objetivo: Implementar validacion final durable como `RegisterFinalValidation` -> `FinalValidationRegistered`.
 Write-set: final_validation_*.go, commands_v0.go, events_v0.go, events_validation_v0.go, handler_v0.go, reducer_v0.go, run_state_v0.go, tests y docs locales
 Contrato: RegisterFinalValidation, FinalValidationRegistered, OrchestrationRunV0.Validations
-Validacion: go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-core; refs compactas; sin outbox; exige fase `validacion_final` activa y `closed_task_ref` en `closed_tasks`; `FinalValidationRegistered` proyecta `validation_ref` en `validations`; no cierra fase ni run; sin conectores ni detalles de runtime, DB, proveedor, OAuth o HOME salvo como prohibiciones.
+Validacion: go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-core; refs compactas; sin outbox; exige fase `validacion_final` activa y `closed_task_ref` en `closed_tasks`; `FinalValidationRegistered` proyecta `validation_ref` en `validations`; no cierra fase ni run; sin conectores ni valores reales de runtime, DB, proveedor, OAuth o HOME.
 Bloqueos: Cierre de fase y cierre de run quedan como microtareas posteriores.
 Estado: completada local
 ```
@@ -551,7 +561,7 @@ ID: NCW-025
 Objetivo: Implementar cierre durable de run como `CloseRun` -> `RunClosed`.
 Write-set: close_run_*.go, commands_v0.go, events_v0.go, events_validation_v0.go, handler_v0.go, reducer_v0.go, run_state_v0.go, tests y docs locales
 Contrato: CloseRun, RunClosed, OrchestrationRunV0.Closures
-Validacion: go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-core; `CloseRun` compacto sin outbox; exige fase `cierre` activa y `validation_ref` ya proyectado en `validations`; `RunClosed` proyecta `closure_ref` en `closures` y marca el run como `cerrado`; no cierra fase automaticamente; sin conectores ni detalles de runtime, DB, provider/proveedor, OAuth o HOME salvo como prohibiciones.
+Validacion: go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-core; `CloseRun` compacto sin outbox; exige fase `cierre` activa y `validation_ref` ya proyectado en `validations`; `RunClosed` proyecta `closure_ref` en `closures` y marca el run como `cerrado`; no cierra fase automaticamente; sin conectores ni valores reales de runtime, DB, provider/proveedor, OAuth o HOME.
 Bloqueos: Si producto exige cerrar la fase `cierre`, debe seguir usando `ClosePhase` separado.
 Estado: completada local
 ```
@@ -708,7 +718,7 @@ Estado: completada local
 
 ```text
 ID: NCW-009
-Objetivo: Integrar `WorkflowTaskV0` como transicion durable `CreateMicrotask` sin runtime, DB, proveedor, HOME ni adaptadores.
+Objetivo: Integrar `WorkflowTaskV0` como transicion durable `CreateMicrotask` sin valores reales de runtime, DB, proveedor, HOME ni adaptadores.
 Write-set: modulos/orquesta-core-workflow/commands_v0.go, modulos/orquesta-core-workflow/events_v0.go, modulos/orquesta-core-workflow/handler_v0.go, modulos/orquesta-core-workflow/reducer_v0.go, modulos/orquesta-core-workflow/work_items_command_v0.go, modulos/orquesta-core-workflow/work_items_command_v0_test.go, docs/contratos.md, docs/contratos_microtareas.md, docs/tareas.md, docs/pruebas.md, docs/decisiones.md
 Contrato: CreateMicrotask, MicrotaskCreated, WorkflowTaskV0
 Validacion: 2026-05-04, ok, go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-core; git diff --check; `MicrotaskCreated` usa refs compactas `[]string` y el comando rechaza proyecciones de evento demasiado grandes.
@@ -718,7 +728,7 @@ Estado: completada local
 
 ```text
 ID: NCW-010
-Objetivo: Integrar solicitud de capacidad dinamica como transicion durable `RequestCapacity` sin decidir proveedor/modelo ni usar runtime, DB, HOME, OAuth, Codex, Claude, Ollama, vLLM ni adaptadores.
+Objetivo: Integrar solicitud de capacidad dinamica como transicion durable `RequestCapacity` sin decidir proveedor/modelo ni usar valores reales de runtime, DB, HOME, OAuth o adaptadores.
 Write-set: modulos/orquesta-core-workflow/commands_v0.go, modulos/orquesta-core-workflow/events_v0.go, modulos/orquesta-core-workflow/handler_v0.go, modulos/orquesta-core-workflow/reducer_v0.go, modulos/orquesta-core-workflow/outbox_v0.go, modulos/orquesta-core-workflow/capacity_command_v0.go, modulos/orquesta-core-workflow/capacity_outbox_v0.go, modulos/orquesta-core-workflow/capacity_command_v0_test.go, modulos/orquesta-core-workflow/docs/contratos.md, modulos/orquesta-core-workflow/docs/contratos_capacidad.md, modulos/orquesta-core-workflow/docs/tareas.md, modulos/orquesta-core-workflow/docs/pruebas.md, modulos/orquesta-core-workflow/docs/decisiones.md
 Contrato: RequestCapacity, CapacityRequested, CapacityDecisionRequestV0
 Validacion: 2026-05-04, ok, go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-core; git diff --check.
@@ -728,7 +738,7 @@ Estado: completada local
 
 ```text
 ID: NCW-011
-Objetivo: Integrar solicitud de agente como transicion durable `RequestAgent` sin decidir ni transportar runtime, proveedor, modelo, HOME, OAuth, Codex, Claude, Ollama, vLLM, adaptadores ni secretos.
+Objetivo: Integrar solicitud de agente como transicion durable `RequestAgent` sin decidir ni transportar valores reales de runtime, proveedor, modelo, HOME, OAuth, adaptadores ni secretos.
 Write-set: modulos/orquesta-core-workflow/commands_v0.go, modulos/orquesta-core-workflow/events_v0.go, modulos/orquesta-core-workflow/handler_v0.go, modulos/orquesta-core-workflow/reducer_v0.go, modulos/orquesta-core-workflow/outbox_v0.go, modulos/orquesta-core-workflow/agent_request_v0.go, modulos/orquesta-core-workflow/agent_outbox_v0.go, modulos/orquesta-core-workflow/agent_request_v0_test.go, docs/contratos.md, docs/contratos_agentes.md, docs/tareas.md, docs/pruebas.md, docs/decisiones.md
 Contrato: RequestAgent, AgentRequested, LaunchRuntimeAgentRequestV0
 Validacion: 2026-05-04, ok, go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-core; git diff --check.

@@ -171,9 +171,12 @@ func TestCodexAgentAckReceiptV0RechazaArchivosDeControlAunqueExpansionEsteJustif
 	spec := codexSpecForTestV0()
 	cases := []string{
 		".orquesta-runtime/run/agent_ack.json",
+		".orquesta-codex-runtime/run/agent_prompt.txt",
 		"director_decisions.json",
 		"agent_packet.json",
+		"agent_shutdown_checkpoint_ack.json",
 		"codex_stderr.log",
+		"orquesta_shutdown_request.json",
 	}
 	for _, file := range cases {
 		t.Run(file, func(t *testing.T) {
@@ -245,6 +248,16 @@ func TestCodexAgentAckReceiptV0AceptaWriteSetRaiz(t *testing.T) {
 	}
 }
 
+func TestCodexAgentAckReceiptV0RechazaControlFilesConWriteSetRaiz(t *testing.T) {
+	spec := codexSpecForTestV0()
+	spec.AgentPacket.Task.WriteSet = []string{"."}
+	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":[".orquesta-runtime/run/agent_ack.json"],"tests":["go test ./..."],"notes":["alcance raiz no exporta control"]}`
+
+	_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	requireCodexIssueV0(t, issues, CodexConnectorAckArtifactV0)
+}
+
 func codexValidAckJSONV0() string {
-	return `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."],"notes":["done"]}`
+	return `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."],"test_receipts":[{"schema_version":"codex_required_test_receipt.v0","command":"go test ./...","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-001"],"occurred_at":"2026-05-24T10:00:00Z","sequence":1,"output_redacted":true}],"notes":["done"]}`
 }

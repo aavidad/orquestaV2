@@ -28,8 +28,8 @@ Riesgos: No reemplaza pruebas de integracion ni sanitizado real; evita iteracion
 Caso: workflow_task_recursive_limits_neutral
 Tipo: unit | contract | regression
 Comando: go test -count=1 ./modulos/orquesta-core-workflow -run 'TestWorkflowTaskV0AcceptsNeutralLineageMetadata|TestValidateWorkflowTaskV0RejectsInvalidLineageMetadata|TestWorkflowTaskFromWorkProfileV0RefactorRequiresTestsAndPreservesLineage'
-Evidencia esperada: `WorkflowTaskV0` y `WorkProfileV0` conservan `max_delegation_depth`, `max_subagents_per_agent` y `max_recursive_agents`, rechazan valores fuera de rango y no introducen runtime/proveedor/adaptadores.
-Actualizacion 2026-05-23: `WorkflowTaskV0` permite refs/texto opacos de adaptador o ejecucion y mantiene rechazo de secretos/credenciales; apertura pendiente de revision futura.
+Evidencia esperada: `WorkflowTaskV0` y `WorkProfileV0` conservan `max_delegation_depth`, `max_subagents_per_agent` y `max_recursive_agents`, rechazan valores fuera de rango y no introducen valores reales de runtime/proveedor/adaptadores.
+Actualizacion 2026-05-25: `WorkflowTaskV0` permite refs/texto opacos de adaptador o ejecucion y mantiene rechazo de secretos, credenciales, rutas privadas, prompts/transcripts crudos y payloads masivos por la politica comun de `orquesta-rails`.
 Ultima ejecucion: 2026-05-23, ok, tests focales de linaje.
 Riesgos: El conteo del arbol ocurre fuera del core-workflow usando `WorkflowTaskStore`; aqui solo se preserva el contrato neutral.
 ```
@@ -292,7 +292,7 @@ Riesgos: La decision compacta no sustituye al contrato rico de `orquesta-capacit
 Caso: agent_lifecycle_started_failed_opaco
 Tipo: contract | replay | e2e
 Comando: go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-e2e
-Evidencia esperada: `RegisterAgentStarted` produce `AgentStarted` y proyecta `started_agents`; `RegisterAgentFailed` produce `AgentFailed` y proyecta `failed_agents`; ambos exigen `agent_request_id` ya solicitado y rechazan runtime/provider/HOME/DB/secretos. E2E real registra `AgentStarted` tras ACK de launch.
+Evidencia esperada: `RegisterAgentStarted` produce `AgentStarted` y proyecta `started_agents`; `RegisterAgentFailed` produce `AgentFailed` y proyecta `failed_agents`; ambos exigen `agent_request_id` ya solicitado y rechazan valores reales de runtime/provider/HOME/DB y secretos. E2E real registra `AgentStarted` tras ACK de launch.
 Ultima ejecucion: 2026-05-05, ok, go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-e2e.
 Riesgos: El detalle de proceso/ACK real vive en runtime/persistence; el core solo conserva refs opacas.
 ```
@@ -328,7 +328,7 @@ Riesgos: La entrega de la pregunta al director sigue fuera del core; el desbloqu
 Caso: answer_director_question_sin_detalles_prohibidos
 Tipo: unit | contract
 Comando: go test -count=1 ./modulos/orquesta-core-workflow
-Evidencia esperada: Comando, evento y JSON rechazan secretos, provider/proveedor, HOME, DB, runtime, prompts, transcripts, adaptadores concretos y contexto masivo; `decision` y `evidence_refs` se conservan como datos compactos/opacos.
+Evidencia esperada: Comando, evento y JSON rechazan secretos, valores reales de provider/proveedor, HOME, DB, runtime, adaptadores concretos, prompts/transcripts crudos y contexto masivo; `decision` y `evidence_refs` se conservan como datos compactos/opacos.
 Ultima ejecucion: 2026-05-05, ok, go test -count=1 ./modulos/orquesta-core-workflow.
 Riesgos: La lista negativa debe mantenerse sincronizada con nuevos conectores.
 ```
@@ -337,7 +337,7 @@ Riesgos: La lista negativa debe mantenerse sincronizada con nuevos conectores.
 Caso: review_result_v0_dto_puro
 Tipo: unit | contract
 Comando: go test -count=1 ./modulos/orquesta-core-workflow
-Evidencia esperada: `NewReviewResultV0` acepta `accepted`; `changes_requested` y `rejected` no habilitan cierre de tarea; rechaza detalles prohibidos, payload masivo, refs vacias y status desconocido; JSON valido sin provider/HOME/OAuth/DB/prompts/transcripts.
+Evidencia esperada: `NewReviewResultV0` acepta `accepted`; `changes_requested` y `rejected` no habilitan cierre de tarea; rechaza detalles prohibidos, payload masivo, refs vacias y status desconocido; JSON valido con refs opacas y sin valores reales de provider/HOME/OAuth/DB ni prompts/transcripts crudos.
 Ultima ejecucion: 2026-05-05, ok, go test -count=1 ./modulos/orquesta-core-workflow; git diff --check -- modulos/orquesta-core-workflow.
 Riesgos: El DTO no esta conectado a `RequestReview`/`AcceptReview`; un comando durable futuro debe versionar la integracion sin cerrar tareas implicitamente.
 ```
@@ -397,7 +397,7 @@ Riesgos: `AgentAssessments` es proyeccion compacta; el detalle de evaluacion viv
 Caso: assess_agent_work_sin_detalles_prohibidos
 Tipo: unit
 Comando: go test -count=1 ./modulos/orquesta-core-workflow
-Evidencia esperada: El comando/evento rechaza payloads con DB, runtime, proveedor, modelo, HOME, OAuth, adaptadores concretos o secretos.
+Evidencia esperada: El comando/evento rechaza payloads con valores reales de DB, runtime, proveedor, modelo, HOME, OAuth, adaptadores concretos o secretos.
 Ultima ejecucion: 2026-05-05, ok, go test -count=1 ./modulos/orquesta-core-workflow
 Riesgos: La lista negativa debe mantenerse sincronizada con nuevos puertos.
 ```
@@ -415,7 +415,7 @@ Riesgos: La consulta real sigue fuera del nucleo; el core solo conserva eventos 
 Caso: stop_agent_emite_evento_y_outbox
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-core-workflow
-Evidencia esperada: `StopAgent` sobre un agente ya solicitado produce `AgentStopRequested` y outbox `StopRuntimeAgent` con target `agent_launcher`, payload compacto y sin proveedor/modelo/HOME/OAuth.
+Evidencia esperada: `StopAgent` sobre un agente ya solicitado produce `AgentStopRequested` y outbox `StopRuntimeAgent` con target `agent_launcher`, payload compacto, refs opacas y sin valores reales de proveedor/modelo/HOME/OAuth.
 Ultima ejecucion: 2026-05-04, ok, go test -count=1 ./modulos/orquesta-core-workflow
 Riesgos: La ejecucion real de parada pertenece al puerto `agent_launcher`.
 ```
@@ -550,7 +550,7 @@ Riesgos: La politica de conflicto debe versionarse si nuevos eventos necesitan e
 Caso: outbox_send_director_question_serializable_sin_adaptadores
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-core-workflow
-Evidencia esperada: `SendDirectorQuestion` serializa como JSON valido sin DB, HTTP, CLI, MCP, HOME, OAuth, tmux, Docker, Git, proveedores, secretos ni transcripts.
+Evidencia esperada: `SendDirectorQuestion` serializa como JSON valido con refs opacas; no guarda valores reales de DB, HTTP, CLI, MCP, HOME, OAuth, tmux, Docker, Git, proveedores, secretos ni transcripts crudos.
 Ultima ejecucion: 2026-05-04, ok, go test -count=1 ./modulos/orquesta-core-workflow
 Riesgos: La lista negativa debe ampliarse al incorporar nuevos puertos de salida.
 ```
@@ -667,7 +667,7 @@ Riesgos: La lista negativa debe versionarse si aparecen nuevos adaptadores o nom
 Caso: ncw_007_contratos_globales_minimos_workflow
 Tipo: contract
 Comando: git diff --check; go test -count=1 ./modulos/orquesta-core-workflow
-Evidencia esperada: `../../CONTRATOS.md` promueve `OrchestrationRun v0`, `OutboxMessage v0` y `DirectorQuestion v0` con propietario, consumidores, DTOs, invariantes, errores publicos y prohibiciones de DB/runtime/proveedor/HOME/OAuth/transcripts/contexto masivo; no cambia codigo Go.
+Evidencia esperada: `../../CONTRATOS.md` promueve `OrchestrationRun v0`, `OutboxMessage v0` y `DirectorQuestion v0` con propietario, consumidores, DTOs, invariantes, errores publicos y bloqueo de valores reales DB/runtime/proveedor/HOME/OAuth, transcripts crudos y contexto masivo; no cambia codigo Go.
 Ultima ejecucion: 2026-05-04, ok, git diff --check; go test -count=1 ./modulos/orquesta-core-workflow.
 Riesgos: Si un consumidor necesita payloads ricos, debe versionar contrato o elevar `CONSULTA AL DIRECTOR`.
 ```
@@ -698,7 +698,7 @@ Riesgos: El evento guarda la solicitud compacta, no la decision final de capacid
 Caso: request_capacity_rechaza_detalles_prohibidos
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-core
-Evidencia esperada: Payload con proveedor/modelo/runtime/HOME/Codex/Claude/Ollama/vLLM se rechaza con error publico; outbox valido no contiene esos detalles.
+Evidencia esperada: Payload con valores reales de proveedor/modelo/runtime/HOME/OAuth/adaptador se rechaza con error publico; outbox valido no contiene esos detalles.
 Ultima ejecucion: 2026-05-04, ok, go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-core
 Riesgos: La lista negativa debe ampliarse si aparecen nuevos adaptadores concretos.
 ```
@@ -734,7 +734,7 @@ Riesgos: El evento guarda la solicitud compacta, no la ejecucion real.
 Caso: request_agent_rechaza_detalles_prohibidos
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-core
-Evidencia esperada: Comando y replay de evento con proveedor/modelo/runtime/HOME/OAuth/Codex/Claude/Ollama/vLLM se rechazan con error publico; outbox valido no contiene esos detalles.
+Evidencia esperada: Comando y replay de evento con valores reales de proveedor/modelo/runtime/HOME/OAuth/adaptador se rechazan con error publico; outbox valido no contiene esos detalles.
 Ultima ejecucion: 2026-05-04, ok, go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-core
 Riesgos: La lista negativa debe ampliarse si aparecen nuevos adaptadores concretos.
 ```

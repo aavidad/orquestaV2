@@ -87,8 +87,13 @@ func TestGenerarBacklogInicialPropuestoV0IncluyePersistenciaDeployYConectores(t 
 		t.Fatalf("missing connector contract: %+v", backlog.ContratosRequeridos)
 	}
 	assertHasTaskContractV0(t, backlog.Microtareas, "PersistenceRepository v0")
-	assertHasTaskContractV0(t, backlog.Microtareas, "DeploymentPlan v0")
+	deployTask := assertHasTaskContractV0(t, backlog.Microtareas, "DeploymentPlan v0")
 	assertHasTaskContractV0(t, backlog.Microtareas, "PagosGateway v0")
+	if !containsStringV0(deployTask.WriteSetPrevisto, "contracts/deployment_plan_v0.json") ||
+		!containsStringV0(deployTask.WriteSetPrevisto, "tests/deployment_plan_dry_run_test.go") ||
+		!containsStringV0(deployTask.Bloqueos, "DeploymentPlan v0 dry-run") {
+		t.Fatalf("deploy task no enlaza contrato dry-run: %+v", deployTask)
+	}
 }
 
 func TestGenerarBacklogInicialPropuestoV0PropagaPreguntasAbiertasComoBloqueos(t *testing.T) {
@@ -155,15 +160,16 @@ func assertNoForbiddenWriteSetV0(t *testing.T, task MicrotareaPropuestaV0) {
 	}
 }
 
-func assertHasTaskContractV0(t *testing.T, tasks []MicrotareaPropuestaV0, contract string) {
+func assertHasTaskContractV0(t *testing.T, tasks []MicrotareaPropuestaV0, contract string) MicrotareaPropuestaV0 {
 	t.Helper()
 	for _, task := range tasks {
 		if task.Contrato == contract {
 			assertCompleteMicrotaskV0(t, task)
-			return
+			return task
 		}
 	}
 	t.Fatalf("missing task with contract %q in %+v", contract, tasks)
+	return MicrotareaPropuestaV0{}
 }
 
 func containsStringV0(values []string, want string) bool {

@@ -19,6 +19,9 @@ func RunPreparedAppOrchestrationV0(
 	if err := validateRunPreparedAppOrchestrationRequestV0(request); err != nil {
 		return AppOrchestrationRunResultV0{}, err
 	}
+	if err := validateDirectorV2RequirementForAppRunnerV0(request); err != nil {
+		return AppOrchestrationRunResultV0{}, err
+	}
 	if err := validateRunPreparedAppOrchestrationPortsV0(ports); err != nil {
 		return AppOrchestrationRunResultV0{}, err
 	}
@@ -85,6 +88,7 @@ func appRunResultV0(
 		Attempts:          len(loop.Managed.Attempts),
 		ExternalWaits:     len(loop.Managed.ExternalWaits),
 		DirectorLoopStats: loop.DirectorLoopStats,
+		RoutePolicy:       AppRunnerPreviewRoutePolicyV0(AppRunnerLegacyEntrypointExecuteV0),
 		EvidenceRefs: compactAppRunnerRefsV0(append(
 			request.Prepared.EvidenceRefs,
 			"evidence-ref-app-runner-run-v0",

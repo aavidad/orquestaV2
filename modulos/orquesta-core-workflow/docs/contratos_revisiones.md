@@ -22,7 +22,7 @@ Invariantes:
   - `quality_gate_ref` puede citar un gate durable de `quality_gates`, pero `ReviewResultV0` no consulta ni exige esa proyeccion.
   - `accepted` puede alimentar una aceptacion durable posterior, pero no cierra tarea por si mismo.
   - `changes_requested` y `rejected` no cierran tarea ni generan `AcceptReview`.
-  - No contiene provider/proveedor, HOME, OAuth, DB, prompts, transcripts, runtime, conectores ni secretos.
+  - No contiene valores reales de provider/proveedor, HOME, OAuth, DB, runtime, conectores ni secretos; bloquea prompts/transcripts crudos.
 Errores:
   - review_result_invalido
   - status_no_soportado
@@ -50,7 +50,7 @@ Invariantes:
   - Si `review_result_ref` ya esta reflejado, el retry tambien debe coincidir en command/idempotency/event esperado y payload completo normalizado.
   - No emite outbox.
   - No genera `AcceptReview`, no cierra tarea, no cierra fase y no dispara rework automatico.
-  - No contiene provider/proveedor, HOME, OAuth, DB, runtime, prompts, transcripts, conectores ni secretos.
+  - No contiene valores reales de provider/proveedor, HOME, OAuth, DB, runtime, conectores ni secretos; bloquea prompts/transcripts crudos.
 Errores:
   - payload_invalido
   - transicion_invalida
@@ -77,7 +77,7 @@ Invariantes:
   - `accepted` no crea `ReviewAccepted` automaticamente.
   - `changes_requested` y `rejected` no cierran tarea ni crean rework automatico.
   - `ApplyEventV0` registra/verifica `CommandEffects` para impedir que la misma ref oculte otro evento, idempotency key, command_id o payload.
-  - No contiene prompts, transcripts, DB, provider/proveedor, HOME, OAuth, runtime, conectores ni secretos.
+  - No contiene valores reales de DB, provider/proveedor, HOME, OAuth, runtime, conectores ni secretos; bloquea prompts/transcripts crudos.
 Errores:
   - evento_invalido
   - payload_invalido
@@ -105,7 +105,7 @@ Invariantes:
   - `phase_id` debe ser `revision` y estar como fase actual activa.
   - `delivery_ref` debe existir ya en `OrchestrationRunV0.Deliveries`.
   - Si `review_request_id` ya esta reflejado, el retry solo es idempotente si coincide la huella durable de comando y payload normalizado.
-  - No decide revisor, modelo, runtime, DB, proveedor, HOME, OAuth ni adaptadores.
+  - No decide revisor, modelo, runtime, DB, proveedor, HOME, OAuth ni adaptadores concretos.
   - No emite outbox ni acepta la revision.
 Errores:
   - payload_invalido
@@ -141,7 +141,7 @@ Invariantes:
   - Un mismo `rework_request_ref` con resultado, revision o entrega distinta es conflicto de transicion.
   - Si `rework_request_ref` ya esta reflejado, el retry tambien debe coincidir en command/idempotency/event esperado y payload completo normalizado.
   - No emite outbox, no relanza agentes, no registra replan, no acepta revision, no cierra tarea, no cierra fase y no cierra run.
-  - No contiene provider/proveedor, HOME, OAuth, DB, runtime, prompts, transcripts, conectores ni secretos.
+  - No contiene valores reales de provider/proveedor, HOME, OAuth, DB, runtime, conectores ni secretos; bloquea prompts/transcripts crudos.
 Errores:
   - payload_invalido
   - fase_no_soportada
@@ -213,7 +213,7 @@ Invariantes:
   - Si `replan_ref` ya esta reflejado, el retry tambien debe coincidir en command/idempotency/event esperado y payload completo normalizado.
   - No emite outbox, no crea tareas, no pide capacidad, no relanza agentes, no cierra tarea/fase/run.
   - `followup_refs` solo traza efectos que deben materializarse por comandos separados.
-  - No contiene provider/proveedor, HOME, OAuth, DB, runtime, prompts, transcripts, conectores ni secretos.
+  - No contiene valores reales de provider/proveedor, HOME, OAuth, DB, runtime, conectores ni secretos; bloquea prompts/transcripts crudos.
 Errores:
   - payload_invalido
   - transicion_invalida
@@ -279,7 +279,7 @@ Invariantes:
   - Si `accepted_review_ref` ya esta reflejado, el retry solo es idempotente si coincide la huella durable de comando y payload normalizado.
   - No decide merge, cierre de tarea, cierre de fase ni despliegue.
   - El cierre de tarea posterior pertenece a `CloseTask`; ver `docs/contratos_cierre_tareas.md`.
-  - No ejecuta conectores ni contiene detalles de runtime, DB, proveedor, OAuth o HOME.
+  - No ejecuta conectores ni contiene valores reales de runtime, DB, proveedor, OAuth o HOME.
 Errores:
   - payload_invalido
   - fase_no_soportada

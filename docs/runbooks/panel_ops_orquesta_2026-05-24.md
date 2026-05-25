@@ -16,7 +16,17 @@
 - Numero de proyectos activos inferido desde `app_ref/project_ref`.
 - Numero de tareas en cola y validacion publica derivada de estado/evidencias.
 - Runs/proyectos con progreso, fase actual, agentes activos y bloqueos.
+- Tareas publicadas por stats con scroll y filtros por texto, estado y agente.
 - Agentes por run con estado, tarea, senal de progreso y porcentaje operativo.
+- Filtros de proyectos/runs y agentes para aislar una app o tarea sin leer
+  stores directamente.
+
+## MCP operativo equivalente
+
+- `orquesta.status.v0`, `orquesta.tasks.list.v0`,
+  `orquesta.projects.list.v0` y `orquesta.agents.list.v0` aceptan
+  `project_ref` y `status` opcionales para acotar la lectura a un proyecto,
+  estado o run visible desde la cola.
 
 ## Notas
 

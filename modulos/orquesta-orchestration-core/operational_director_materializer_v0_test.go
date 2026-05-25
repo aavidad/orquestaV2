@@ -97,6 +97,58 @@ func containsFragmentInValuesV0(values []string, fragment string) bool {
 	return false
 }
 
+func TestOperationalDirectorPlanMaterializerV0VersionaTaskSiStoreConservaContratoAntiguo(t *testing.T) {
+	runRef := "run-operational-director-materializer-stale-contract-001"
+	contractRef := "contract:function:operational-director:v0"
+	run := mustActiveProgrammingRunV0(t, runRef)
+	run.FunctionContracts = []string{contractRef}
+	store := NewInMemoryRunStoreV0(run)
+	plan := operationalDirectorProgrammingPlanForMaterializerTestV0(runRef)
+	staleTaskRef := "task-operational-director-req-operational-director-materializer-001-step-launch-subagents"
+	staleTask := mustWorkflowTaskForMaterializerConflictV0(t, runRef, staleTaskRef)
+	staleTask.Title = "Contrato antiguo conservado"
+	taskStore := NewInMemoryWorkflowTaskStoreV0(staleTask)
+
+	materialized, err := (OperationalDirectorPlanMaterializerV0{
+		RunStore:    store,
+		EventSink:   NewInMemoryEventSinkV0(),
+		TaskWriter:  taskStore,
+		RequestedBy: "orquesta-nucleo-test",
+	}).MaterializeOperationalDirectorPlanV0(context.Background(), OperationalDirectorPlanMaterializeRequestV0{
+		Plan:       plan,
+		OccurredAt: "2026-05-24T18:30:00Z",
+		FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
+			ContractRef:  contractRef,
+			FunctionName: "OperationalDirectorCut",
+		}},
+		CorrelationID: "corr-operational-director-materializer-stale-contract-001",
+	})
+
+	if err != nil {
+		t.Fatalf("MaterializeOperationalDirectorPlanV0: %v", err)
+	}
+	if len(materialized.Issues) != 0 || len(materialized.Tasks) != 1 {
+		t.Fatalf("materialized=%+v", materialized)
+	}
+	taskRef := materialized.Tasks[0].TaskID
+	if taskRef == staleTaskRef || !strings.HasPrefix(taskRef, staleTaskRef+"-contract-") {
+		t.Fatalf("task_ref versionado=%s stale=%s", taskRef, staleTaskRef)
+	}
+	if _, err := taskStore.LoadWorkflowTasksV0(context.Background(), runRef, []string{staleTaskRef}); err != nil {
+		t.Fatalf("stale task no conservada: %v", err)
+	}
+	if _, err := taskStore.LoadWorkflowTasksV0(context.Background(), runRef, []string{taskRef}); err != nil {
+		t.Fatalf("version task no guardada: %v", err)
+	}
+	reloaded, err := store.LoadRunV0(context.Background(), runRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if stringInSetV0(staleTaskRef, reloaded.Tasks) || !stringInSetV0(taskRef, reloaded.Tasks) {
+		t.Fatalf("run tasks=%v stale=%s version=%s", reloaded.Tasks, staleTaskRef, taskRef)
+	}
+}
+
 func TestOperationalDirectorPlanMaterializerV0NoLanzaPlanBloqueado(t *testing.T) {
 	runRef := "run-operational-director-materializer-blocked-001"
 	planResult := orquestadirectoroperativo.BuildOperationalDirectorPlanV0(orquestadirectoroperativo.OperationalDirectorRequestV0{
@@ -401,4 +453,32 @@ func operationalDirectorProgrammingPlanForMaterializerTestV0(
 		panic("invalid materializer test plan")
 	}
 	return result.Plan
+}
+
+func mustWorkflowTaskForMaterializerConflictV0(
+	t *testing.T,
+	runRef string,
+	taskRef string,
+) orquestacoreworkflow.WorkflowTaskV0 {
+	t.Helper()
+	task, err := orquestacoreworkflow.NewWorkflowTaskV0(orquestacoreworkflow.WorkflowTaskV0{
+		SchemaVersion:      orquestacoreworkflow.WorkflowTaskSchemaVersionV0,
+		TaskID:             taskRef,
+		RunID:              runRef,
+		PhaseID:            orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		WorkProfileKind:    orquestacoreworkflow.WorkProfileImplementationV0,
+		Title:              "Contrato antiguo",
+		Summary:            "Contrato antiguo conservado para auditoria.",
+		WriteSet:           []string{"docs/old.md"},
+		AcceptanceCriteria: []string{"criterio antiguo"},
+		RequiredTests:      []string{"go test -count=1 ./modulos/orquesta-orchestration-core"},
+		FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
+			ContractRef:  "contract:function:operational-director:v0",
+			FunctionName: "OperationalDirectorCut",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("NewWorkflowTaskV0: %v", err)
+	}
+	return task
 }

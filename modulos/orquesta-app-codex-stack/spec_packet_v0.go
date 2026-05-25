@@ -3,6 +3,7 @@ package orquestaappcodexstack
 import (
 	"strings"
 
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacontext "orquesta/modulos/orquesta-context"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
@@ -16,6 +17,7 @@ func agentPacketV0(
 ) orquestaruntime.AgentStartPacketV0 {
 	phase = firstPacketValueV0(phase, "brainstorming_arquitectura")
 	deliverySuffix := packetRefSuffixV0(agentRef, area)
+	capacityPolicy := packetCapacityPolicyV0(area, task)
 	return orquestaruntime.AgentStartPacketV0{
 		SchemaVersion: orquestaruntime.AgentStartPacketSchemaVersionV0,
 		RequestID:     agentRef,
@@ -23,7 +25,7 @@ func agentPacketV0(
 		WorkOrderRef:  task.TaskRef,
 		TargetModule:  "orquesta-app-stack-" + area,
 		Phase:         phase,
-		CapacityLevel: packetCapacityLevelV0(area, task),
+		CapacityLevel: capacityPolicy.CapacityLevel,
 		Locale:        "es-ES",
 		Task:          task,
 		Context:       contextBundleV0(area, task.TaskRef),
@@ -32,36 +34,42 @@ func agentPacketV0(
 			AckRef:       "ack-ref-app-stack-" + deliverySuffix,
 			ReadinessRef: "readiness-ref-app-stack-" + deliverySuffix,
 		},
-		Policies: []string{"write_set_closed", "ack_required", "context_small_by_refs"},
+		Policies: packetPoliciesV0(capacityPolicy),
 	}
 }
 
 func packetCapacityLevelV0(area string, task orquestaruntime.AgentStartTaskV0) string {
-	if area == "director" && strings.Contains(task.Objective, "Modo de ejecucion: normal.") {
-		return "xhigh"
-	}
-	if taskRequiresXHighPacketCapacityV0(task) {
-		return "xhigh"
-	}
-	return "high"
+	return packetCapacityPolicyV0(area, task).CapacityLevel
 }
 
-func taskRequiresXHighPacketCapacityV0(task orquestaruntime.AgentStartTaskV0) bool {
-	value := strings.ToLower(strings.Join(append(
-		[]string{task.TaskRef, task.Title, task.Objective},
-		task.WriteSet...,
-	), "\n"))
-	for _, marker := range []string{
-		"plan_temario",
-		"plan_tema",
-		"plan_documento",
-		"document_plan",
-	} {
-		if strings.Contains(value, marker) {
-			return true
-		}
+func packetCapacityPolicyV0(
+	area string,
+	task orquestaruntime.AgentStartTaskV0,
+) orquestaautoprogramming.CapacityReasoningPolicyDecisionV0 {
+	return orquestaautoprogramming.DecideCapacityReasoningPolicyV0(
+		orquestaautoprogramming.CapacityReasoningPolicyInputV0{
+			DomainRefs: []string{area},
+			TaskRef:    task.TaskRef,
+			Title:      task.Title,
+			Objective:  task.Objective,
+			WriteSet:   task.WriteSet,
+		},
+	)
+}
+
+func packetPoliciesV0(
+	capacityPolicy orquestaautoprogramming.CapacityReasoningPolicyDecisionV0,
+) []string {
+	policies := []string{
+		"write_set_closed",
+		"ack_required",
+		"context_small_by_refs",
+		"capacity_policy_ref:" + capacityPolicy.PolicyRef,
 	}
-	return false
+	for _, ref := range capacityPolicy.EvidenceRefs {
+		policies = append(policies, "capacity_policy_evidence_ref:"+ref)
+	}
+	return policies
 }
 
 func contextBundleV0(area string, taskRef string) orquestacontext.ContextMaterializedBundleV0 {
@@ -72,12 +80,14 @@ func contextBundleV0(area string, taskRef string) orquestacontext.ContextMateria
 		WorkOrderRef:  taskRef,
 		TargetModule:  "orquesta-app-stack-" + area,
 		Entries: []orquestacontext.ContextMaterializedEntryV0{{
-			EntryRef:  "entry-ref-app-stack-" + contextSuffix,
-			Layer:     orquestacontext.ContextLayerTaskContextV0,
-			Kind:      orquestacontext.ContextEntryDocRefV0,
-			SourceRef: "source-ref-app-stack-" + contextSuffix,
-			Mode:      orquestacontext.ContextMaterializationModeRefOnlyV0,
-			Required:  true,
+			EntryRef:          "entry-ref-app-stack-" + contextSuffix,
+			Layer:             orquestacontext.ContextLayerTaskContextV0,
+			Kind:              orquestacontext.ContextEntryDocRefV0,
+			SourceRef:         "source-ref-app-stack-" + contextSuffix,
+			Mode:              orquestacontext.ContextMaterializationModeRefOnlyV0,
+			Required:          true,
+			RefOnlyReason:     orquestacontext.ContextRefOnlyReasonMaterializationMissingV0,
+			RequiredRefAction: orquestacontext.ContextRequiredRefActionAckEvidenceV0,
 		}},
 	}
 }

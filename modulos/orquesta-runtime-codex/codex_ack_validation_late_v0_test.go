@@ -1,6 +1,10 @@
 package orquestaruntimecodex
 
-import "testing"
+import (
+	"testing"
+
+	orquestacontext "orquesta/modulos/orquesta-context"
+)
 
 func TestCodexAgentAckReceiptV0RechazaCompletedConTestsFallidos(t *testing.T) {
 	spec := codexSpecForTestV0()
@@ -42,6 +46,35 @@ func TestCodexAgentAckReceiptV0AceptaCompletedConContextoTruncadoJustificado(t *
 	spec := codexSpecForTestV0()
 	spec.AgentPacket.Context.Entries[0].Truncated = true
 	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."],"notes":["contexto_truncado_resuelto: source_refs y paquete externo suficientes"]}`
+
+	_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	if len(issues) != 0 {
+		t.Fatalf("issues inesperadas: %+v", issues)
+	}
+}
+
+func TestCodexAgentAckReceiptV0RechazaCompletedConRequiredRefOnlySinEvidencia(t *testing.T) {
+	spec := codexSpecForTestV0()
+	spec.AgentPacket.Context.Entries[0].Mode = orquestacontext.ContextMaterializationModeRefOnlyV0
+	spec.AgentPacket.Context.Entries[0].Content = ""
+	spec.AgentPacket.Context.Entries[0].Bytes = 0
+	spec.AgentPacket.Context.Entries[0].RefOnlyReason = orquestacontext.ContextRefOnlyReasonMaterializationMissingV0
+	spec.AgentPacket.Context.Entries[0].RequiredRefAction = orquestacontext.ContextRequiredRefActionReadLocalV0
+
+	_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(codexValidAckJSONV0()), spec)
+
+	requireCodexIssueV0(t, issues, CodexConnectorAckArtifactV0)
+}
+
+func TestCodexAgentAckReceiptV0AceptaCompletedConRequiredRefOnlyResuelto(t *testing.T) {
+	spec := codexSpecForTestV0()
+	spec.AgentPacket.Context.Entries[0].Mode = orquestacontext.ContextMaterializationModeRefOnlyV0
+	spec.AgentPacket.Context.Entries[0].Content = ""
+	spec.AgentPacket.Context.Entries[0].Bytes = 0
+	spec.AgentPacket.Context.Entries[0].RefOnlyReason = orquestacontext.ContextRefOnlyReasonMaterializationMissingV0
+	spec.AgentPacket.Context.Entries[0].RequiredRefAction = orquestacontext.ContextRequiredRefActionReadLocalV0
+	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."],"notes":["contexto_ref_only_resuelto: docs locales leidos desde workdir"]}`
 
 	_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
 

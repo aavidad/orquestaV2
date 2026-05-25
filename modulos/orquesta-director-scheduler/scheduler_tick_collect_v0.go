@@ -19,6 +19,7 @@ type schedulerTickCollectorV0 struct {
 	agents                    map[string]bool
 	startedAgents             map[string]bool
 	failedAgents              map[string]bool
+	lostAgents                map[string]bool
 	stoppedAgents             map[string]bool
 	phaseArtifacts            map[string]bool
 	deliveries                map[string]bool
@@ -40,6 +41,7 @@ type schedulerTickCollectorV0 struct {
 	plannedCapacityRequests   map[string]bool
 	plannedConcurrencyGates   map[string]bool
 	plannedAgents             map[string]bool
+	plannedLostAgents         map[string]bool
 	plannedAgentAssessments   map[string]bool
 	plannedDirectorQuestions  map[string]bool
 	plannedReplanRefs         map[string]bool
@@ -56,6 +58,7 @@ func newSchedulerTickCollectorV0(input DirectorSchedulerTickInputV0) *schedulerT
 		agents:                    schedulerStringSetV0(input.Snapshot.Agents),
 		startedAgents:             schedulerStringSetV0(input.Snapshot.StartedAgents),
 		failedAgents:              schedulerStringSetV0(input.Snapshot.FailedAgents),
+		lostAgents:                schedulerStringSetV0(input.Snapshot.LostAgents),
 		stoppedAgents:             schedulerStringSetV0(input.Snapshot.StoppedAgents),
 		phaseArtifacts:            schedulerStringSetV0(input.Snapshot.PhaseArtifacts),
 		deliveries:                schedulerStringSetV0(input.Snapshot.Deliveries),
@@ -77,6 +80,7 @@ func newSchedulerTickCollectorV0(input DirectorSchedulerTickInputV0) *schedulerT
 		plannedCapacityRequests:   map[string]bool{},
 		plannedConcurrencyGates:   map[string]bool{},
 		plannedAgents:             map[string]bool{},
+		plannedLostAgents:         map[string]bool{},
 		plannedAgentAssessments:   map[string]bool{},
 		plannedDirectorQuestions:  map[string]bool{},
 		plannedReplanRefs:         map[string]bool{},

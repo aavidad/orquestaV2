@@ -2,6 +2,11 @@
 
 Servicio de aplicacion para arrancar una solicitud de app por director.
 
+Es la ruta operativa preferente para `AppSpecV0` cuando una app nueva requiere
+juicio del Director V2, plan-state, waits acotados, review/tests/cierre o
+recursion gobernada. Los entrypoints de `app-runner` quedan como
+preview/compatibilidad.
+
 Flujo:
 
 1. valida `AppSpecRequestV0` con factory;

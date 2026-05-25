@@ -108,6 +108,7 @@ func recordStackReviewDescriptorForTestV0(
 		Status:        "completed",
 		Files:         orquestaruntimecodex.EvidenceListV0(files),
 		Tests:         orquestaruntimecodex.EvidenceListV0(spec.AgentPacket.Task.RequiredTests),
+		TestReceipts:  codexStackRequiredTestReceiptsV0(spec.AgentPacket.Task.RequiredTests),
 	}
 	data, err := json.Marshal(ack)
 	if err != nil {

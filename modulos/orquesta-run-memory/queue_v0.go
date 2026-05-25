@@ -12,9 +12,10 @@ func (store *RunMemoryStoreV0) ListRunSchedulingCandidatesV0(
 	request orquestarunqueue.RunQueueReadRequestV0,
 ) ([]orquestarunqueue.RunSchedulingCandidateV0, error) {
 	filter := runQueueFilterV0{
-		queueRef: strings.TrimSpace(request.QueueRef),
-		appRefs:  stringSetV0(request.AppRefs),
-		limit:    request.Limit,
+		queueRef:             strings.TrimSpace(request.QueueRef),
+		appRefs:              stringSetV0(request.AppRefs),
+		limit:                request.Limit,
+		includeNonExecutable: request.IncludeNonExecutable,
 	}
 	store.mu.RLock()
 	out := make([]orquestarunqueue.RunSchedulingCandidateV0, 0, len(store.queueRuns))
@@ -22,7 +23,8 @@ func (store *RunMemoryStoreV0) ListRunSchedulingCandidatesV0(
 		if !filter.matches(entry) {
 			continue
 		}
-		if !orquestarunqueue.IsExecutableRunStatusV0(entry.candidate.Status) {
+		if !filter.includeNonExecutable &&
+			!orquestarunqueue.IsExecutableRunStatusV0(entry.candidate.Status) {
 			continue
 		}
 		out = append(out, cloneRunSchedulingCandidateV0(entry.candidate))
@@ -51,9 +53,10 @@ func (store *RunMemoryStoreV0) SetRunPriorityV0(
 }
 
 type runQueueFilterV0 struct {
-	queueRef string
-	appRefs  map[string]struct{}
-	limit    int
+	queueRef             string
+	appRefs              map[string]struct{}
+	limit                int
+	includeNonExecutable bool
 }
 
 func (filter runQueueFilterV0) matches(entry runQueueEntryV0) bool {

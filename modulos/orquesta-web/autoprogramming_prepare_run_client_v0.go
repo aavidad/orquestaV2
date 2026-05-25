@@ -195,8 +195,9 @@ func autoprogrammingStatusToolInputV0(query WebAutoprogrammingStatusQueryV0) orq
 		RequestID: query.RequestID, CorrelationID: query.CorrelationID,
 		RunRef: query.RunRef, AppRef: query.AppRef, ExternalJobRef: query.ExternalJobRef,
 		QueueRef: query.QueueRef, AppRefs: query.AppRefs, QueueLimit: query.QueueLimit,
-		OccurredAt: query.OccurredAt, IncludeProcessRefs: query.IncludeProcessRefs,
-		IncludeAgentProgress: query.IncludeAgentProgress, IncludeAgentUsage: query.IncludeAgentUsage,
+		OccurredAt: query.OccurredAt, IncludeProcessRefs: orquestamcp.MCPFlexibleBoolV0(query.IncludeProcessRefs),
+		IncludeAgentProgress: orquestamcp.MCPFlexibleBoolV0(query.IncludeAgentProgress),
+		IncludeAgentUsage:    orquestamcp.MCPFlexibleBoolV0(query.IncludeAgentUsage),
 	}
 }
 

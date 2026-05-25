@@ -12,6 +12,7 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestaservershutdown "orquesta/modulos/orquesta-server-shutdown"
 )
 
@@ -275,10 +276,11 @@ func TestCodexStackAutoprogrammingSupervisorGlobalSupervisaAgenteParado(t *testi
 	if err != nil {
 		t.Fatalf("LoadRunV0: %v", err)
 	}
-	if !autoprogrammingBridgeStringInSetForTestV0(run.StoppedAgents, agentRef) ||
-		!autoprogrammingBridgeStringInSetForTestV0(run.ConfirmedStoppedAgents, agentRef) ||
-		!codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionStopAgentV0) {
-		t.Fatalf("supervisor global no activo supervision: stopped=%v confirmed=%v assessments=%v", run.StoppedAgents, run.ConfirmedStoppedAgents, run.AgentAssessments)
+	if !autoprogrammingBridgeStringInSetForTestV0(run.LostAgents, agentRef) ||
+		autoprogrammingBridgeStringInSetForTestV0(run.StoppedAgents, agentRef) ||
+		autoprogrammingBridgeStringInSetForTestV0(run.ConfirmedStoppedAgents, agentRef) ||
+		!codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionAskDirectorV0) {
+		t.Fatalf("supervisor global no activo revision recuperable: lost=%v stopped=%v confirmed=%v assessments=%v", run.LostAgents, run.StoppedAgents, run.ConfirmedStoppedAgents, run.AgentAssessments)
 	}
 }
 
@@ -304,6 +306,124 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0RespetaPrioridadSolicitada(t *t
 		ranking.Ranked[0].RunRef != prepared.RunRef ||
 		ranking.Ranked[0].PriorityScore != 10 {
 		t.Fatalf("ranking=%+v prepared=%+v", ranking, prepared)
+	}
+}
+
+func TestCodexStackAutoprogrammingPrepareRunAPIV0ReabreCandidatoStoppedComoReadyV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	input := orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-autoprogramming-reopen-stopped-001",
+		CorrelationID:          "corr-autoprogramming-reopen-stopped-001",
+		AutoprogrammingRequest: autoprogrammingBridgeRequestForTestV0(),
+	}
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, input)
+	if !prepared.Accepted || prepared.RunRef == "" {
+		t.Fatalf("prepared=%+v", prepared)
+	}
+
+	stopped := postRunQueuePriorityStackV0(t, stack, orquestamcp.MCPRunQueuePriorityToolInputV0{
+		RequestID:     "request-autoprogramming-reopen-stopped-stop-001",
+		CorrelationID: "corr-autoprogramming-reopen-stopped-001",
+		Action:        orquestamcp.MCPRunQueuePriorityActionSetV0,
+		QueueRef:      DefaultRunQueueRefV0,
+		RunRef:        prepared.RunRef,
+		AppRef:        prepared.ProjectRef,
+		Status:        "stopped",
+		PriorityScore: 0,
+	})
+	if stopped.Estado != orquestamcp.MCPRunQueuePriorityEstadoOKV0 {
+		t.Fatalf("stopped=%+v", stopped)
+	}
+	empty := postRunQueuePriorityStackV0(t, stack, orquestamcp.MCPRunQueuePriorityToolInputV0{
+		Action:   orquestamcp.MCPRunQueuePriorityActionRankV0,
+		QueueRef: DefaultRunQueueRefV0,
+		Limit:    1,
+	})
+	if len(empty.Ranked) != 0 {
+		t.Fatalf("stopped candidate visible=%+v", empty)
+	}
+
+	reopened := postAutoprogrammingPrepareRunStackV0(t, stack, input)
+	ranking := postRunQueuePriorityStackV0(t, stack, orquestamcp.MCPRunQueuePriorityToolInputV0{
+		Action:   orquestamcp.MCPRunQueuePriorityActionRankV0,
+		QueueRef: DefaultRunQueueRefV0,
+		Limit:    1,
+	})
+	if !reopened.Accepted ||
+		reopened.RunRef != prepared.RunRef ||
+		len(ranking.Ranked) != 1 ||
+		ranking.Ranked[0].RunRef != prepared.RunRef ||
+		ranking.Ranked[0].Status != "ready" {
+		t.Fatalf("reopened=%+v ranking=%+v", reopened, ranking)
+	}
+}
+
+func TestCodexStackAutoprogrammingPrepareRunAPIV0NoReencolaRunCerradaV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	input := orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-autoprogramming-closed-idempotent-001",
+		CorrelationID:          "corr-autoprogramming-closed-idempotent-001",
+		AutoprogrammingRequest: autoprogrammingBridgeRequestForTestV0(),
+	}
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, input)
+	if !prepared.Accepted || prepared.RunRef == "" {
+		t.Fatalf("prepared=%+v", prepared)
+	}
+	run, err := stack.Ports.RunStore.LoadRunV0(context.Background(), prepared.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	run.Status = orquestacoreworkflow.OrchestrationRunStatusClosedV0
+	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0 closed: %v", err)
+	}
+
+	reprepared := postAutoprogrammingPrepareRunStackV0(t, stack, input)
+	ranking := postRunQueuePriorityStackV0(t, stack, orquestamcp.MCPRunQueuePriorityToolInputV0{
+		Action:   orquestamcp.MCPRunQueuePriorityActionRankV0,
+		QueueRef: DefaultRunQueueRefV0,
+		Limit:    1,
+	})
+
+	if !reprepared.Accepted ||
+		reprepared.RunRef != prepared.RunRef ||
+		len(ranking.Ranked) != 0 {
+		t.Fatalf("reprepared=%+v ranking=%+v", reprepared, ranking)
+	}
+}
+
+func TestCodexStackAutoprogrammingPrepareRunAPIV0NoReencolaRunCanceladaPorControlV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	input := orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-autoprogramming-cancel-control-001",
+		CorrelationID:          "corr-autoprogramming-cancel-control-001",
+		AutoprogrammingRequest: autoprogrammingBridgeRequestForTestV0(),
+	}
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, input)
+	if !prepared.Accepted || prepared.RunRef == "" {
+		t.Fatalf("prepared=%+v", prepared)
+	}
+
+	cancelled := postRunControlStackV0(t, stack, orquestamcp.MCPRunControlToolInputV0{
+		Action:      "cancel",
+		RunRef:      prepared.RunRef,
+		RequestedBy: "director",
+		Reason:      "run apartada por humano",
+	})
+	if cancelled.Status != string(orquestaruncontrol.RunControlStatusCancelRequestedV0) {
+		t.Fatalf("cancelled=%+v", cancelled)
+	}
+	reprepared := postAutoprogrammingPrepareRunStackV0(t, stack, input)
+	ranking := postRunQueuePriorityStackV0(t, stack, orquestamcp.MCPRunQueuePriorityToolInputV0{
+		Action:   orquestamcp.MCPRunQueuePriorityActionRankV0,
+		QueueRef: DefaultRunQueueRefV0,
+		Limit:    1,
+	})
+
+	if !reprepared.Accepted ||
+		reprepared.RunRef != prepared.RunRef ||
+		len(ranking.Ranked) != 0 {
+		t.Fatalf("reprepared=%+v ranking=%+v", reprepared, ranking)
 	}
 }
 

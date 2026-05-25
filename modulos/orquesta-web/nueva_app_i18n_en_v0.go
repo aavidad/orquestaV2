@@ -82,7 +82,7 @@ func nuevaAppI18nEnglishV0() map[string]string {
 		"nueva_app.error.opcion_incompatible":                 "Some options are incompatible.",
 		"nueva_app.error.target_no_soportado":                 "The selected target is not supported.",
 		"nueva_app.error.idioma_invalido":                     "The selected language is not supported.",
-		"nueva_app.error.conector_requerido_no_disponible":    "A required connector is missing.",
+		"nueva_app.error.conector_requerido_no_disponible":    "The integration must describe a capability, without forcing provider, credentials, or backend.",
 		"nueva_app.error.metodo_no_soportado":                 "Method not supported.",
 		"nueva_app.error.form_incompleto":                     "The request could not be read.",
 		"nueva_app.error.error_transporte":                    "The communication could not be completed.",

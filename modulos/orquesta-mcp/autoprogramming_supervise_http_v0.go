@@ -20,7 +20,7 @@ type mcpAutoprogrammingSuperviseHTTPHandlerV0 struct {
 
 type mcpAutoprogrammingSuperviseHTTPInputV0 struct {
 	MCPRunSupervisorToolInputV0
-	OperatorAdvice []MCPAutoprogrammingOperatorAdviceV0 `json:"operator_advice,omitempty"`
+	OperatorAdvice mcpAutoprogrammingOperatorAdviceListV0 `json:"operator_advice,omitempty"`
 }
 
 type mcpAutoprogrammingSuperviseHTTPResultV0 struct {
@@ -40,8 +40,8 @@ func (handler mcpAutoprogrammingSuperviseHTTPHandlerV0) ServeHTTP(w http.Respons
 		return
 	}
 	var input mcpAutoprogrammingSuperviseHTTPInputV0
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeMCPAutoprogrammingSuperviseHTTPV0(w, http.StatusBadRequest, newMCPAutoprogrammingSuperviseHTTPErrorV0(r, input.MCPRunSupervisorToolInputV0, "body", "request_body_invalido"))
+	if code := decodeMCPPublicHTTPJSONV0(w, r, &input); code != "" {
+		writeMCPAutoprogrammingSuperviseHTTPV0(w, http.StatusBadRequest, newMCPAutoprogrammingSuperviseHTTPErrorV0(r, input.MCPRunSupervisorToolInputV0, "body", code))
 		return
 	}
 	if handler.executor == nil {
@@ -50,7 +50,11 @@ func (handler mcpAutoprogrammingSuperviseHTTPHandlerV0) ServeHTTP(w http.Respons
 	}
 	result, err := handler.executor.Execute(r.Context(), input.MCPRunSupervisorToolInputV0)
 	if err != nil {
-		writeMCPAutoprogrammingSuperviseHTTPResultV0(w, http.StatusInternalServerError, newMCPAutoprogrammingSuperviseHTTPErrorV0(r, input.MCPRunSupervisorToolInputV0, "executor", "autoprogramming_supervise_error"), input.OperatorAdvice)
+		if result.Estado == MCPRunSupervisorEstadoErrorV0 && len(result.Errores) > 0 {
+			writeMCPAutoprogrammingSuperviseHTTPResultV0(w, http.StatusInternalServerError, result, input.OperatorAdvice)
+			return
+		}
+		writeMCPAutoprogrammingSuperviseHTTPResultV0(w, http.StatusInternalServerError, newMCPAutoprogrammingSuperviseExecutorErrorV0(r, input.MCPRunSupervisorToolInputV0, err), input.OperatorAdvice)
 		return
 	}
 	status := http.StatusOK
@@ -67,6 +71,17 @@ func newMCPAutoprogrammingSuperviseHTTPErrorV0(
 	message string,
 ) MCPRunSupervisorToolResultV0 {
 	result := NewMCPRunSupervisorErrorResultV0(input, "autoprogramming_supervise_http_error", field, strings.TrimSpace(message))
+	result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), input.CorrelationID, input.RequestID)
+	return result
+}
+
+func newMCPAutoprogrammingSuperviseExecutorErrorV0(
+	r *http.Request,
+	input MCPRunSupervisorToolInputV0,
+	err error,
+) MCPRunSupervisorToolResultV0 {
+	message := publicMCPExecutorErrorMessageFromErrorV0("autoprogramming_supervise_executor_error", err)
+	result := NewMCPRunSupervisorErrorResultV0(input, "autoprogramming_supervise_executor_error", "executor", message)
 	result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), input.CorrelationID, input.RequestID)
 	return result
 }
@@ -88,24 +103,27 @@ func writeMCPAutoprogrammingSuperviseHTTPResultV0(
 	w http.ResponseWriter,
 	status int,
 	result MCPRunSupervisorToolResultV0,
-	advice []MCPAutoprogrammingOperatorAdviceV0,
+	advice mcpAutoprogrammingOperatorAdviceListV0,
 ) {
-	normalizedAdvice := normalizeMCPAutoprogrammingOperatorAdviceV0(
-		advice,
+	normalizedAdvice := advice.normalizedMCPV0(
 		firstNonEmptyMCPV0(result.RunRef, result.RequestID, result.CorrelationID),
 	)
 	if len(normalizedAdvice) == 0 {
 		writeMCPAutoprogrammingSuperviseHTTPV0(w, status, result)
 		return
 	}
+	diagnostics := append([]MCPAutoprogrammingDiagnosticV0(nil), result.Diagnostics...)
+	diagnostics = append(diagnostics, mcpAutoprogrammingDiagnosticV0(
+		"operator_advice_recorded_non_blocking",
+		"operator_advice",
+		"consejo de operador registrado sin bloquear supervisor",
+	))
+	payloadResult := result
+	payloadResult.Diagnostics = nil
 	payload := mcpAutoprogrammingSuperviseHTTPResultV0{
-		MCPRunSupervisorToolResultV0: result,
+		MCPRunSupervisorToolResultV0: payloadResult,
 		OperatorAdvice:               normalizedAdvice,
-		Diagnostics: []MCPAutoprogrammingDiagnosticV0{mcpAutoprogrammingDiagnosticV0(
-			"operator_advice_recorded_non_blocking",
-			"operator_advice",
-			"consejo de operador registrado sin bloquear supervisor",
-		)},
+		Diagnostics:                  diagnostics,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if result.CorrelationID != "" {

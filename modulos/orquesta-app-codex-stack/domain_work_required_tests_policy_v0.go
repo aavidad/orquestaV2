@@ -101,11 +101,12 @@ func domainWorkRequiredTestRefsFromPlanV0(
 func requiredTestRunnerV0(
 	config ConfigV0,
 ) orquestacionnucleoapp.RequiredTestRunnerPortV0 {
+	inner := codexAckRequiredTestRunnerFromConfigV0(config, config.RequiredTests)
 	if config.DomainTests.Policy == nil {
-		return config.RequiredTests
+		return inner
 	}
 	return DomainWorkRequiredTestRunnerV0{
-		Inner:            config.RequiredTests,
+		Inner:            inner,
 		Policy:           config.DomainTests.Policy,
 		AppChangeStore:   config.Stores.AppChangeStore,
 		SubmissionLedger: domainWorkSubmissionRecordReaderV0(config.DomainDelivery.Ledger),

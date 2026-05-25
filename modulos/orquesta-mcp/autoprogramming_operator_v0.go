@@ -137,7 +137,8 @@ func mcpAutoprogrammingSupervisorErrorsV0(
 	out := []MCPAutoprogrammingSupervisorErrorV0{}
 	for _, item := range diagnostics {
 		code := strings.TrimSpace(item.Code)
-		if !strings.HasSuffix(code, "_error") && !strings.Contains(code, "supervisor") {
+		if !strings.HasSuffix(code, "_error") &&
+			!strings.Contains(code, "supervisor") {
 			continue
 		}
 		out = append(out, MCPAutoprogrammingSupervisorErrorV0{
@@ -157,23 +158,72 @@ func mcpAutoprogrammingSafeActionsV0(
 	if operator == nil {
 		return out
 	}
-	if operator.QueueLive || len(operator.ActiveRuns) > 0 {
+	blockedByReplanAmplification := mcpAutoprogrammingReplanAmplificationBlockedV0(run)
+	queueNeedsRunStats := mcpAutoprogrammingOperatorHasDiagnosticV0(
+		operator.SupervisorErrors,
+		"run_stats_required_for_safe_supervision",
+	)
+	if !blockedByReplanAmplification && !queueNeedsRunStats && len(operator.ActiveRuns) > 0 {
 		out = append(out, mcpAutoprogrammingSafeActionV0("supervise", "queue", ""))
 	}
 	runRef := ""
 	if run != nil {
 		runRef = strings.TrimSpace(run.RunRef)
 	}
-	if runRef != "" {
+	if runRef != "" && !blockedByReplanAmplification {
 		out = append(out, mcpAutoprogrammingSafeActionV0("supervise", "run", runRef))
 	}
-	if len(operator.ClosureBlockers) > 0 {
+	if len(operator.ClosureBlockers) > 0 && !blockedByReplanAmplification {
 		out = append(out, mcpAutoprogrammingSafeActionV0("review", "closure", runRef))
 	}
-	if len(operator.SupervisorErrors) > 0 || mcpAutoprogrammingNeedsRetryV0(operator) {
+	if !blockedByReplanAmplification && !queueNeedsRunStats && (len(operator.SupervisorErrors) > 0 || mcpAutoprogrammingNeedsRetryV0(operator)) {
 		out = append(out, mcpAutoprogrammingSafeActionV0("retry", "supervisor", runRef))
 	}
 	return out
+}
+
+func mcpAutoprogrammingReplanAmplificationBlockedV0(
+	run *MCPDirectorStatsToolResultV0,
+) bool {
+	if run == nil || run.Stats == nil {
+		return false
+	}
+	counts := run.Stats.Counts
+	if counts.ReplanDecisions < 3 || counts.AgentsStarted < 3 {
+		return false
+	}
+	if counts.Deliveries > 0 || counts.Reviews > 0 || counts.ReviewResults > 0 || counts.Closures > 0 {
+		return false
+	}
+	return counts.AgentsStopRequested >= counts.ReplanDecisions-1 && counts.AgentsStarted > counts.AgentsDelivered
+}
+
+func mcpAutoprogrammingQueueEmptyOrNotVisibleV0(
+	queue *MCPRunQueuePriorityToolResultV0,
+	run *MCPDirectorStatsToolResultV0,
+) bool {
+	if queue == nil || queue.Estado != MCPRunQueuePriorityEstadoOKV0 || len(queue.Ranked) > 0 {
+		return false
+	}
+	return run == nil || run.Stats == nil || strings.TrimSpace(run.RunRef) == ""
+}
+
+func mcpAutoprogrammingNeedsRunStatsForSafeSupervisionV0(
+	queue *MCPRunQueuePriorityToolResultV0,
+	run *MCPDirectorStatsToolResultV0,
+) bool {
+	if queue == nil || queue.Estado != MCPRunQueuePriorityEstadoOKV0 || len(queue.Ranked) == 0 {
+		return false
+	}
+	if run != nil && run.Stats != nil && strings.TrimSpace(run.RunRef) != "" {
+		return false
+	}
+	for _, item := range queue.Ranked {
+		if strings.TrimSpace(item.RunRef) != "" && !mcpAutoprogrammingTerminalRunV0(item.Status) {
+			return true
+		}
+	}
+	return false
 }
 
 func mcpAutoprogrammingSafeActionV0(action string, scope string, runRef string) MCPAutoprogrammingSafeActionV0 {
@@ -200,6 +250,22 @@ func mcpAutoprogrammingTerminalRunV0(status string) bool {
 func mcpAutoprogrammingNeedsRetryV0(operator *MCPAutoprogrammingOperatorV0) bool {
 	for _, agent := range operator.AgentsInFlight {
 		if agent.NeedsAttention {
+			return true
+		}
+	}
+	return false
+}
+
+func mcpAutoprogrammingOperatorHasDiagnosticV0(
+	errors []MCPAutoprogrammingSupervisorErrorV0,
+	code string,
+) bool {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return false
+	}
+	for _, item := range errors {
+		if strings.TrimSpace(item.Code) == code {
 			return true
 		}
 	}

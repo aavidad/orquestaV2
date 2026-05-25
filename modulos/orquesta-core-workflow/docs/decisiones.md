@@ -2,6 +2,15 @@
 
 Las decisiones de este archivo afectan solo a este modulo. Si una decision cambia contratos globales, se registra tambien en `../../CONTRATOS.md` o se eleva `CONSULTA AL DIRECTOR`.
 
+## Politica de rails de detalle
+
+Desde T70/NCW-081, las decisiones locales deben leerse con la politica comun de
+`modulos/orquesta-rails`: `runtime`, `provider`, `DB`, `SQL`, `HOME`, `modelo`
+o `Codex` pueden aparecer como refs opacas o vocabulario arquitectonico. Lo que
+el core no guarda son valores reales de proveedor/runtime/DB/HOME/adaptador,
+secretos efectivos, rutas privadas, prompts/transcripts crudos ni payloads
+masivos.
+
 ## Plantilla
 
 ```text
@@ -86,7 +95,7 @@ Fecha: 2026-05-06
 Decision: `RunStarted`, `RunBlocked` y `PhaseClosed` pasan a formar parte de `CommandEffects`; `OpenPhase` queda fuera de este corte.
 Motivo: Arranque, bloqueo y cierre de fase son transiciones de lifecycle que no deben aceptar refs ya reflejadas con otro comando o payload. `OpenPhase` permite reapertura de fases en el modelo actual, asi que endurecerlo por `phase_id` cambiaria la semantica y requiere una decision aparte.
 Alternativas: Guardar payload completo en estado; eliminar reapertura de fases; usar `phase_id` como identidad unica de apertura; aceptar no-op por proyeccion compacta.
-Impacto: Un retry exacto de StartRun/BlockRun/ClosePhase sigue siendo no-op; un ClosePhase exacto puede repetirse aunque el run haya avanzado a otra fase. Cambios de payload, command_id, idempotency_key o event_id se rechazan. No se anaden outbox, DB, runtime, proveedor, HOME ni scheduler.
+Impacto: Un retry exacto de StartRun/BlockRun/ClosePhase sigue siendo no-op; un ClosePhase exacto puede repetirse aunque el run haya avanzado a otra fase. Cambios de payload, command_id, idempotency_key o event_id se rechazan. No se anaden outbox, scheduler ni valores reales de DB, runtime, proveedor o HOME.
 Contratos afectados: RunStarted, RunBlocked, PhaseClosed, OrchestrationRunV0.CommandEffects.
 Estado: aceptada e implementada en NCW-064
 ```
@@ -96,7 +105,7 @@ Fecha: 2026-05-06
 Decision: `ConcurrencyGateRecorded`, `AgentLeaseExpired` y `DirectorQuestionAnswered` pasan a formar parte de `CommandEffects`.
 Motivo: Estas senales gobiernan supervision, leases y respuestas humanas/IA. Si se aceptan como no-op solo por ref, un gate, una expiracion o una respuesta del director podrian cambiar payload/metadatos y dejar una historia aparentemente valida pero ambigua.
 Alternativas: Guardar payload completo en estado; ampliar proyecciones compactas con todos los campos; resolver conflictos en director/scheduler; aceptar no-op por ref.
-Impacto: Un retry exacto sigue siendo no-op, incluso si la respuesta del director ya desbloqueo el run; si la ref ya esta proyectada, cambiar payload, command_id, idempotency_key o event_id produce conflicto publico. No se anaden outbox, proveedor, modelo, DB, HOME, runtime ni timers.
+Impacto: Un retry exacto sigue siendo no-op, incluso si la respuesta del director ya desbloqueo el run; si la ref ya esta proyectada, cambiar payload, command_id, idempotency_key o event_id produce conflicto publico. No se anaden outbox, timers ni valores reales de proveedor, modelo, DB, HOME o runtime.
 Contratos afectados: ConcurrencyGateRecorded, AgentLeaseExpired, DirectorQuestionAnswered, OrchestrationRunV0.CommandEffects.
 Estado: aceptada e implementada en NCW-063
 ```
@@ -106,7 +115,7 @@ Fecha: 2026-05-06
 Decision: `CapacityDecided`, `AgentStarted`, `AgentFailed`, `AgentStopConfirmed` y `DeliveryRegistered` pasan a formar parte de `CommandEffects`.
 Motivo: Estas refs son evidencia operativa de programacion. Si se aceptan como no-op solo por ref, una decision de capacidad, un ACK de agente, un fallo, una parada confirmada o una entrega podrian cambiar payload/metadatos sin que replay lo detectase.
 Alternativas: Guardar payload completo en estado; ampliar listas compactas con todos los campos; delegar conflictos a runtime/persistence; aceptar el riesgo por ser senales externas.
-Impacto: Un retry exacto sigue siendo no-op; si la ref ya esta proyectada, cambiar payload, command_id, idempotency_key o event_id produce conflicto publico. No se anaden outbox, proveedor, modelo, DB, HOME ni runtime.
+Impacto: Un retry exacto sigue siendo no-op; si la ref ya esta proyectada, cambiar payload, command_id, idempotency_key o event_id produce conflicto publico. No se anaden outbox ni valores reales de proveedor, modelo, DB, HOME o runtime.
 Contratos afectados: CapacityDecided, AgentStarted, AgentFailed, AgentStopConfirmed, DeliveryRegistered, OrchestrationRunV0.CommandEffects.
 Estado: aceptada e implementada en NCW-062
 ```
@@ -116,7 +125,7 @@ Fecha: 2026-05-06
 Decision: `TaskClosed`, `FinalValidationRegistered` y `RunClosed` pasan a formar parte de `CommandEffects`.
 Motivo: Las refs de cierre son la evidencia final del producto. Reutilizar una ref de cierre con otro payload o metadatos de idempotencia podria cerrar tareas o runs con historia ambigua.
 Alternativas: Guardar payload completo en estado; ampliar proyecciones de cierre con todos los campos; aceptar no-op por ref; resolver conflictos en observabilidad.
-Impacto: Un retry exacto sigue siendo no-op, incluso despues de `RunClosed`; si la ref ya esta proyectada, cambiar payload, command_id, idempotency_key o event_id produce conflicto publico. No se anaden outbox, proveedor, modelo, DB, HOME ni runtime.
+Impacto: Un retry exacto sigue siendo no-op, incluso despues de `RunClosed`; si la ref ya esta proyectada, cambiar payload, command_id, idempotency_key o event_id produce conflicto publico. No se anaden outbox ni valores reales de proveedor, modelo, DB, HOME o runtime.
 Contratos afectados: TaskClosed, FinalValidationRegistered, RunClosed, OrchestrationRunV0.CommandEffects.
 Estado: aceptada e implementada en NCW-061
 ```
@@ -126,7 +135,7 @@ Fecha: 2026-05-06
 Decision: `ReviewResultRecorded`, `ReworkRequested` y `ReplanDecisionRecorded` pasan a formar parte de `CommandEffects`.
 Motivo: Sus proyecciones compactas no guardan todos los campos del payload. Sin huella durable, una misma ref podria repetir status/fuente principales pero cambiar resumen, evidencias o metadatos de idempotencia sin que el replay lo detectase.
 Alternativas: Guardar payload completo en `OrchestrationRunV0`; ampliar las proyecciones compactas con todos los campos; aceptar la perdida de detalle; resolver conflictos solo al cerrar tarea.
-Impacto: Un retry exacto sigue siendo no-op; si la ref ya esta proyectada, cambiar payload completo, command_id, idempotency_key o event_id produce conflicto publico. No se anaden outbox, proveedor, modelo, DB, HOME ni runtime.
+Impacto: Un retry exacto sigue siendo no-op; si la ref ya esta proyectada, cambiar payload completo, command_id, idempotency_key o event_id produce conflicto publico. No se anaden outbox ni valores reales de proveedor, modelo, DB, HOME o runtime.
 Contratos afectados: ReviewResultRecorded, ReworkRequested, ReplanDecisionRecorded, OrchestrationRunV0.CommandEffects.
 Estado: aceptada e implementada en NCW-060
 ```
@@ -136,7 +145,7 @@ Fecha: 2026-05-06
 Decision: `ReviewRequested` y `ReviewAccepted` pasan a formar parte de `CommandEffects`.
 Motivo: La revision es la barrera que decide si una entrega puede avanzar hacia cierre. Si una misma ref de revision o aceptacion pudiera repetirse con otro payload, el replay podria ocultar decisiones contradictorias.
 Alternativas: Mantener solo listas compactas `reviews`/`accepted_reviews`; comparar payload completo en estado; resolver conflictos en cierre de tarea; crear un store especial de revision.
-Impacto: Un retry exacto sigue siendo no-op; si la ref ya esta proyectada, cambiar payload, command_id, idempotency_key o event_id produce conflicto publico. No se anaden outbox, proveedor, modelo, DB, HOME ni runtime.
+Impacto: Un retry exacto sigue siendo no-op; si la ref ya esta proyectada, cambiar payload, command_id, idempotency_key o event_id produce conflicto publico. No se anaden outbox ni valores reales de proveedor, modelo, DB, HOME o runtime.
 Contratos afectados: RequestReview, ReviewRequested, AcceptReview, ReviewAccepted, OrchestrationRunV0.CommandEffects.
 Estado: aceptada e implementada en NCW-059
 ```
@@ -146,7 +155,7 @@ Fecha: 2026-05-06
 Decision: `BrainstormRequested` y `VoteRequested` pasan a formar parte de `CommandEffects`.
 Motivo: Las fases iniciales deciden arquitectura y rumbo del proyecto; reutilizar `brainstorm_request_id` o `vote_request_id` con otro payload bajo apariencia de idempotencia ocultaria decisiones distintas y degradaria el replay.
 Alternativas: Mantener solo listas compactas `brainstorms`/`votes`; comparar payload completo en estado; delegar el conflicto al director; crear un store especial para arquitectura.
-Impacto: Un retry exacto sigue siendo no-op; si la ref ya esta proyectada, cambiar payload, command_id, idempotency_key o event_id produce conflicto publico. No se anaden outbox, proveedor, modelo, DB, HOME ni runtime.
+Impacto: Un retry exacto sigue siendo no-op; si la ref ya esta proyectada, cambiar payload, command_id, idempotency_key o event_id produce conflicto publico. No se anaden outbox ni valores reales de proveedor, modelo, DB, HOME o runtime.
 Contratos afectados: RequestBrainstorm, BrainstormRequested, RequestVote, VoteRequested, OrchestrationRunV0.CommandEffects.
 Estado: aceptada e implementada en NCW-058
 ```
@@ -346,7 +355,7 @@ Fecha: 2026-05-05
 Decision: `AnswerDirectorQuestion` registra una respuesta compacta del director mediante `DirectorQuestionAnswered`, sin outbox, y solo puede desbloquear el blocker `director-question-<question_id>` asociado.
 Motivo: La respuesta del director es conocimiento de dominio ya resuelto; reemitirla por outbox duplicaria efectos y mezclarla con adaptadores. El desbloqueo debe ser trazable y acotado a la pregunta que bloqueo el run.
 Alternativas: Reutilizar `AskDirector`; emitir `SendDirectorAnswer`; limpiar cualquier blocker activo; guardar respuesta completa con contexto operacional.
-Impacto: El payload conserva refs opacas y prohibe secretos, provider/proveedor, HOME, DB, runtime, prompts, transcripts y contexto masivo. Otros blockers no se limpian implicitamente.
+Impacto: El payload conserva refs opacas y bloquea secretos, credenciales, valores reales de provider/proveedor, HOME, DB, runtime, prompts/transcripts crudos y contexto masivo. Otros blockers no se limpian implicitamente.
 Contratos afectados: AnswerDirectorQuestion, DirectorQuestionAnswered, OrchestrationRunV0.
 Estado: aceptada e implementada en NCW-036
 ```
@@ -356,7 +365,7 @@ Fecha: 2026-05-05
 Decision: `ReviewResultV0` se mantiene como DTO/validador puro y no se conecta todavia a comandos, eventos, reducer ni outbox.
 Motivo: El resultado compacto de una revision necesita validarse antes de traducirse a comandos durables existentes, pero mezclarlo ahora con `AcceptReview` o `CloseTask` abriria demasiado el nucleo.
 Alternativas: Convertirlo directamente en nuevo comando/evento; ampliar `AcceptReview`; cerrar tareas desde resultados no aceptados.
-Impacto: `accepted` queda como outcome apto para una aceptacion durable posterior; `changes_requested` y `rejected` no cierran tarea. El DTO rechaza provider/proveedor, HOME, OAuth, DB, prompts, transcripts, runtime, conectores y payload masivo.
+Impacto: `accepted` queda como outcome apto para una aceptacion durable posterior; `changes_requested` y `rejected` no cierran tarea. El DTO bloquea valores reales de provider/proveedor, HOME, OAuth, DB, prompts/transcripts crudos, runtime, conectores y payload masivo, pero conserva refs opacas validas.
 Contratos afectados: ReviewResultV0.
 Estado: aceptada local en NCW-035
 ```
@@ -466,7 +475,7 @@ Fecha: 2026-05-04
 Decision: Promover `OrchestrationRun v0`, `OutboxMessage v0` y `DirectorQuestion v0` como contratos globales minimos del workflow durable.
 Motivo: NCW-001..NCW-005 estabilizaron estado, eventos, handler inicial, outbox, consulta al director, replay e idempotencia; otros modulos necesitan una frontera publica sin importar internals.
 Alternativas: Mantenerlos solo locales; promover tambien comandos/eventos completos; esperar a adaptadores reales de persistence/runtime/observability.
-Impacto: `../../CONTRATOS.md` declara propietario, consumidores, DTOs, invariantes, errores publicos y prohibiciones de detalles DB/runtime/proveedor/HOME/OAuth/transcripts/contexto masivo. Los detalles extensos siguen en docs locales y no se toca codigo Go.
+Impacto: `../../CONTRATOS.md` declara propietario, consumidores, DTOs, invariantes, errores publicos y bloqueo de valores reales DB/runtime/proveedor/HOME/OAuth, transcripts crudos y contexto masivo. Los detalles extensos siguen en docs locales y no se toca codigo Go.
 Contratos afectados: OrchestrationRunV0, OutboxMessageV0, DirectorQuestionV0.
 Estado: aceptada global en NCW-007
 ```
@@ -524,7 +533,7 @@ Estado: aceptada local
 ```text
 Fecha: 2026-05-04
 Decision: `CreateMicrotask` usa `WorkflowTaskV0` como payload de comando, pero `MicrotaskCreated` solo persiste refs compactas normalizadas.
-Motivo: El handler necesita validar write-set, criterios y fase antes de crear la microtarea, mientras que el estado durable debe seguir siendo una proyeccion pequena sin runtime, DB, proveedor, HOME ni adaptadores.
+Motivo: El handler necesita validar write-set, criterios y fase antes de crear la microtarea, mientras que el estado durable debe seguir siendo una proyeccion pequena con refs opacas y sin valores reales de runtime, DB, proveedor, HOME ni adaptadores.
 Alternativas: Persistir la tarea completa en el evento; guardar solo `task_id` y perder refs de contratos; ejecutar la tarea desde el handler.
 Impacto: `OrchestrationRunV0.Tasks` recibe `task_id` y `FunctionContracts` recibe strings compactos derivados de `contract_ref` o `function_name` sin duplicar. El comando rechaza la proyeccion si el evento resultante seria demasiado grande.
 Contratos afectados: CreateMicrotask, MicrotaskCreated, OrchestrationCommandV0, OrchestrationEventV0, OrchestrationRunV0.
@@ -776,7 +785,7 @@ Fecha: 2026-05-10
 Decision: Tratar `WorkflowTaskV0` como unidad de trabajo de granularidad adaptativa.
 Motivo: La regla de microtareas evita macroparches y contextos gigantes, pero no todo trabajo real debe partirse al minimo. Algunas funcionalidades cohesionadas son mas seguras como tarea mediana o grande si tienen contrato, write-set, checkpoints, tests y observabilidad.
 Alternativas: Forzar microtareas siempre; renombrar ahora todos los comandos/eventos durables; permitir tareas grandes sin politica de control.
-Impacto: `CreateMicrotask` y `MicrotaskCreated` conservan nombre v0 por compatibilidad, pero documentan que crean `WorkflowTaskV0`. El director decide tamano por politica; el core sigue validando contrato compacto, write-set, fase, refs y ausencia de runtime/DB/proveedor/HOME.
+Impacto: `CreateMicrotask` y `MicrotaskCreated` conservan nombre v0 por compatibilidad, pero documentan que crean `WorkflowTaskV0`. El director decide tamano por politica; el core sigue validando contrato compacto, write-set, fase, refs opacas y ausencia de valores reales de runtime/DB/proveedor/HOME.
 Contratos afectados: WorkflowTaskV0, CreateMicrotask, MicrotaskCreated.
 Estado: aceptada local en NCW-070
 ```

@@ -41,16 +41,10 @@ type GovernanceCatalogPublicQueryFiltersV0 struct {
 }
 
 type GovernanceCatalogPublicQueryResponseV0 struct {
-	RequestID     string                               `json:"request_id,omitempty"`
-	CorrelationID string                               `json:"correlation_id,omitempty"`
-	Result        GovernanceCatalogPublicQueryResultV0 `json:"result"`
-}
-
-type GovernanceCatalogPublicQueryResultV0 struct {
-	CurrentBlock   string                      `json:"current_block"`
-	InactiveBlocks []string                    `json:"inactive_blocks"`
-	Effective      []GovernanceCatalogEntryV0  `json:"effective"`
-	Counters       GovernanceCatalogCountersV0 `json:"counters"`
+	RequestID     string                      `json:"request_id,omitempty"`
+	CorrelationID string                      `json:"correlation_id,omitempty"`
+	Effective     []GovernanceCatalogEntryV0  `json:"effective"`
+	Counters      GovernanceCatalogCountersV0 `json:"counters"`
 }
 
 type GovernanceCatalogPublicErrorResponseV0 struct {
@@ -89,15 +83,8 @@ func QueryGovernanceCatalogPublicV0(provider GovernanceCatalogProviderV0, reques
 		return response, err
 	}
 
-	response.Result = GovernanceCatalogPublicQueryResultV0{
-		CurrentBlock: GovernanceCatalogCurrentBlockEffectiveV0,
-		InactiveBlocks: []string{
-			GovernanceCatalogInactiveBlockProposedV0,
-			GovernanceCatalogInactiveBlockQuarantineV0,
-		},
-		Effective: result.Effective,
-		Counters:  result.Counters,
-	}
+	response.Effective = result.Effective
+	response.Counters = result.Counters
 	return response, nil
 }
 

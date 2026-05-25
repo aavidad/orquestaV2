@@ -165,6 +165,7 @@ Campos:
     max_bursts, max_steps_per_burst, max_dispatches_per_wait: limites operativos
   output_ok:
     estado: ok
+    route_policy: entrada operativa preferente por Director V2
     app_spec: resumen compacto
     run_ref: ref interna neutra
 	    phase_id: fase inicial
@@ -614,7 +615,7 @@ Campos:
 Invariantes:
   - Implementacion pura sin servidor MCP real, transporte, DB, CLI, runtime ni filesystem productivo.
   - El detalle extenso queda en el modulo propietario y en documentos vigentes de estado/nucleo.
-  - No incluye secretos, transcripts, dumps de fixtures, endpoints REST ni detalles de sink/tablas/driver.
+  - No incluye secretos, transcripts, dumps de fixtures ni detalles de sink/tablas/driver; solo declara endpoints REST cuando forman parte del contrato publico vigente.
   - Usa message keys para resumen y progreso en vez de texto largo localizado.
   - No duplica estados `pendiente_*`: enlaza backlog vivo y freshness cuando un frente sigue abierto.
   - Cubre `SolicitarNuevaApp`, `PersistenceRepository`, `RuntimeLaunchRequest`, `OrquestaEvent`, `GovernanceCatalog`, `OperationalStatusQuery`, `DeploymentPlan` y `GenerarI18nDocsIniciales` v0.
@@ -919,11 +920,14 @@ Campos:
 Invariantes:
   - Tool puro sin servidor MCP real, DB, runtime, filesystem productivo ni proveedor LLM.
   - Delega solo en `orquesta-app-runner.PrepareAppOrchestrationV0`.
+  - Queda como preview/compatibilidad, no como cierre operativo.
+  - La entrada operativa preferente para apps nuevas es `orquesta.apps.arrancar_director.v0`.
   - No expone `CandidateProvider`; devuelve solo plan/progreso reconstruible.
   - No elige SQLite, Postgres, Docker, HOME, OAuth, modelo ni credenciales.
   - El plan grande se expresa por puertos/conectores y microtareas pequenas.
 Pruebas de contrato:
   - AppSpec grande produce plan de 11 unidades y progreso inicial.
+  - El resultado declara `route_policy` con `orquesta.apps.arrancar_director.v0` como preferente.
   - Error publico conserva el campo exacto del runner/planner.
   - Registro MCP ejecuta el tool puro sin binding externo.
 ```

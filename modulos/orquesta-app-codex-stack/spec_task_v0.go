@@ -73,7 +73,7 @@ func programmingObjectiveV0(
 	lines := []string{
 		strings.TrimSpace(task.Summary),
 		programmingProfileObjectiveLineV0(task, unit),
-		"Usa el write-set como alcance primario; si debes tocar otros ficheros del repo para cumplir el objetivo o arreglar pruebas, hazlo y dejalo justificado en el ACK.",
+		strictWriteSetObjectiveLineV0(),
 		agentDelegationObjectiveLineV0(task.MaxChildAgents),
 		"Si la app es Go completa, debe quedar como modulo autonomo con go.mod, entrypoint bajo cmd/server o equivalente documentado, imports de modulo y sin imports relativos ../.",
 		"Ejecuta pruebas focales razonables y registra el resultado en el ACK.",
@@ -106,12 +106,16 @@ func programmingProfileObjectiveLineV0(
 	case orquestacoreworkflow.WorkProfileCodeStudyV0:
 		return "Estudia el codigo y documenta el mapa de cambio del " + unit + "; no cambies implementacion salvo que sea imprescindible para producir evidencia verificable."
 	case orquestacoreworkflow.WorkProfileRefactorV0:
-		return "Refactoriza solo el " + unit + " conservando comportamiento publico y justificando cualquier toque fuera del write-set."
+		return "Refactoriza solo el " + unit + " conservando comportamiento publico; si falta alcance, pide decision del director en el ACK."
 	case orquestacoreworkflow.WorkProfileRequiredTestsV0:
 		return "Completa o ejecuta las pruebas requeridas del " + unit + " y deja evidencia clara del resultado."
 	default:
 		return "Implementa solo el " + unit + "."
 	}
+}
+
+func strictWriteSetObjectiveLineV0() string {
+	return "Usa el write-set como alcance cerrado. Si falta alcance para cumplir el objetivo o arreglar pruebas, no edites fuera: deja CONSULTA AL DIRECTOR en el ACK y cierra failed salvo decision explicita del director o policy opt-in distinta."
 }
 
 func programmingReworkContextV0(payload orquestaruntime.LaunchRuntimeAgentRequestV0) string {

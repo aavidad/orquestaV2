@@ -7,7 +7,7 @@ import (
 
 type mcpAutoprogrammingStatusTransportInputV0 struct {
 	MCPAutoprogrammingStatusToolInputV0
-	OperatorAdvice []MCPAutoprogrammingOperatorAdviceV0 `json:"operator_advice,omitempty"`
+	OperatorAdvice mcpAutoprogrammingOperatorAdviceListV0 `json:"operator_advice,omitempty"`
 }
 
 type mcpAutoprogrammingStatusTransportResultV0 struct {
@@ -28,10 +28,13 @@ func mcpAutoprogrammingStatusTransportHandlerV0(
 		}
 		result, err := executor.Execute(ctx, input.MCPAutoprogrammingStatusToolInputV0)
 		if err != nil {
-			return nil, err
+			payload := newMCPAutoprogrammingStatusExecutorErrorResultV0(
+				input.MCPAutoprogrammingStatusToolInputV0,
+				publicMCPExecutorErrorMessageFromErrorV0("autoprogramming_status_executor_error", err),
+			)
+			return json.Marshal(payload)
 		}
-		normalizedAdvice := normalizeMCPAutoprogrammingOperatorAdviceV0(
-			input.OperatorAdvice,
+		normalizedAdvice := input.OperatorAdvice.normalizedMCPV0(
 			firstNonEmptyMCPV0(result.RunRef, result.QueueRef, result.RequestID, result.CorrelationID),
 		)
 		if len(normalizedAdvice) == 0 {

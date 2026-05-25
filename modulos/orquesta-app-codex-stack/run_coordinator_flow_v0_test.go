@@ -77,6 +77,90 @@ func TestCodexStackV0RunGlobalTickRespetaPausaV0(t *testing.T) {
 	}
 }
 
+func TestCodexStackV0RunGlobalTickNoReanudaReadyActivoParadoPorShutdownServidorV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	director := postDirectorAPIWithNameV0(t, stack, "app-shutdown-requeue", "Agenda Shutdown Requeue")
+	setStackRunPriorityForTestV0(t, stack, director.RunRef, director.AppSpec.Slug, 90)
+	if _, err := stack.Stores.RunControl.CompleteRunControlV0(context.Background(), orquestaruncontrol.CompleteRunControlCommandV0{
+		RunRef:         director.RunRef,
+		TargetStatus:   orquestaruncontrol.RunControlStatusStoppedV0,
+		RequestedBy:    "orquesta-director",
+		Reason:         "apagado controlado solicitado por CLI al Director",
+		IdempotencyKey: "idem-orquesta-server-stop",
+		EvidenceRefs:   []string{"evidence-ref-test-server-shutdown"},
+	}); err != nil {
+		t.Fatalf("CompleteRunControlV0: %v", err)
+	}
+
+	result, err := stack.RunGlobalTickV0(context.Background(), globalTickCommandForTestV0())
+	if err != nil {
+		t.Fatalf("RunGlobalTickV0: %v", err)
+	}
+	if got := executionRefsForStackCoordinatorTestV0(result); len(got) != 0 {
+		t.Fatalf("executions got %#v want empty result=%+v", got, result)
+	}
+	state, err := stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: director.RunRef},
+	)
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0: %v", err)
+	}
+	if state.Status != orquestaruncontrol.RunControlStatusStoppedV0 {
+		t.Fatalf("run control reanudado durante shutdown: %+v", state)
+	}
+}
+
+func TestCodexStackV0RecoverReencolaRunActivoNoEjecutableConTrabajoAbiertoV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	runRef := "request-ref-autoprogramming-requeue-active-001"
+	taskRef := "task-autoprogramming-requeue-active-001"
+	run := codexStackAutoprogrammingRunForCoordinatorRepairTestV0(runRef, taskRef)
+	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	if _, err := stack.Stores.RunQueue.SetRunPriorityV0(context.Background(), orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        runRef,
+		QueueRef:      DefaultRunQueueRefV0,
+		AppRef:        "project-ref-orquesta-server",
+		Status:        orquestarunqueue.RunStatusCanceledV0,
+		PriorityScore: 70,
+		UpdatedAt:     time.Date(2026, 5, 25, 16, 0, 0, 0, time.UTC),
+		EvidenceRefs:  []string{"evidence-ref-test-stale-canceled-queue"},
+	}); err != nil {
+		t.Fatalf("SetRunPriorityV0: %v", err)
+	}
+
+	visibleBefore, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		context.Background(),
+		orquestarunqueue.RunQueueReadRequestV0{QueueRef: DefaultRunQueueRefV0},
+	)
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0 before: %v", err)
+	}
+	if len(visibleBefore) != 0 {
+		t.Fatalf("visibleBefore=%+v", visibleBefore)
+	}
+
+	if err := stack.recoverQueuedStoppedActiveRunsV0(context.Background(), globalTickCommandForTestV0()); err != nil {
+		t.Fatalf("recoverQueuedStoppedActiveRunsV0: %v", err)
+	}
+
+	visibleAfter, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		context.Background(),
+		orquestarunqueue.RunQueueReadRequestV0{QueueRef: DefaultRunQueueRefV0},
+	)
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0 after: %v", err)
+	}
+	if len(visibleAfter) != 1 ||
+		visibleAfter[0].RunRef != runRef ||
+		visibleAfter[0].Status != orquestarunqueue.RunStatusReadyV0 ||
+		!codexStackStringInSetV0(visibleAfter[0].EvidenceRefs, "evidence-ref-run-queue-non-executable-active-reconciled") {
+		t.Fatalf("visibleAfter=%+v", visibleAfter)
+	}
+}
+
 func TestCodexStackV0RunGlobalTickMarcaRunCerradaComoTerminalEnColaV0(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	director := postDirectorAPIV0(t, stack)
@@ -105,6 +189,33 @@ func TestCodexStackV0RunGlobalTickMarcaRunCerradaComoTerminalEnColaV0(t *testing
 	}
 }
 
+func TestCodexStackV0RepairAutoprogrammingNoBloqueaTaskLegacyInmutableV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	runRef := "request-ref-autoprogramming-legacy-immutable-001"
+	taskRef := "task-autoprogramming-legacy-immutable-001"
+	task := stackDeliveredAutoprogrammingTaskForTestV0(runRef, taskRef)
+	run := codexStackAutoprogrammingRunForCoordinatorRepairTestV0(runRef, taskRef)
+	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	if err := stack.Ports.DirectorTaskStore.SaveWorkflowTaskV0(context.Background(), task); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0: %v", err)
+	}
+
+	err := stack.repairQueuedAutoprogrammingWorkflowTasksV0(context.Background(), runRef)
+
+	if err != nil {
+		t.Fatalf("repairQueuedAutoprogrammingWorkflowTasksV0: %v", err)
+	}
+	stored, err := stack.Ports.DirectorTaskStore.LoadWorkflowTasksV0(context.Background(), runRef, []string{taskRef})
+	if err != nil {
+		t.Fatalf("LoadWorkflowTasksV0: %v", err)
+	}
+	if len(stored) != 1 || codexStackWorkflowTaskLooksOperationalDirectorV0(stored[0]) {
+		t.Fatalf("task legacy no debe mutarse in-place: %+v", stored)
+	}
+}
+
 func TestCodexStackV0DrainQueueStatusMarcaRunEntregadaComoTerminalEnColaV0(t *testing.T) {
 	taskRef := "task-ref-stack-delivered-queue-001"
 	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskRef)
@@ -124,6 +235,67 @@ func TestCodexStackV0DrainQueueStatusMarcaRunEntregadaComoTerminalEnColaV0(t *te
 	}
 	if got := stackDrainQueueStatusV0(result); got != orquestarunqueue.RunStatusDeliveredV0 {
 		t.Fatalf("queue_status=%q want %q", got, orquestarunqueue.RunStatusDeliveredV0)
+	}
+}
+
+func TestCodexStackV0DrainQueueStatusMantieneActivoArranqueDirectorSinTareasV0(t *testing.T) {
+	result := orquestacionnucleoapp.ManagedProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+		Final: orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+			Run: orquestacoreworkflow.OrchestrationRunV0{
+				Status:         orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+				CurrentPhase:   orquestacoreworkflow.OrchestrationPhaseBrainstormingArquitecturaV0,
+				StartedAgents:  []string{"agent-ref-stack-director-queue-001"},
+				PhaseArtifacts: []string{"artifact-ref-stack-director-queue-001"},
+				Decisions:      []string{"decision-ref-stack-director-parcial-001"},
+			},
+		},
+	}
+	if got := stackDrainQueueStatusV0(result); got != "" {
+		t.Fatalf("queue_status=%q want activo para permitir decisiones tardias", got)
+	}
+}
+
+func TestCodexStackV0DrainQueueStatusMantieneActivoArranqueDirectorConACKSinArtifactV0(t *testing.T) {
+	agentRef := "agent-ref-stack-director-queue-ack-001"
+	result := orquestacionnucleoapp.ManagedProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+		Final: orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+			Run: orquestacoreworkflow.OrchestrationRunV0{
+				Status:          orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+				CurrentPhase:    orquestacoreworkflow.OrchestrationPhaseBrainstormingArquitecturaV0,
+				StartedAgents:   []string{agentRef},
+				DeliveredAgents: []string{agentRef},
+			},
+		},
+	}
+	if got := stackDrainQueueStatusV0(result); got != "" {
+		t.Fatalf("queue_status=%q want activo con ACK antes de decision file", got)
+	}
+}
+
+func codexStackAutoprogrammingRunForCoordinatorRepairTestV0(
+	runRef string,
+	taskRef string,
+) orquestacoreworkflow.OrchestrationRunV0 {
+	phases := orquestacoreworkflow.OrchestrationPhaseCatalogV0()
+	for index := range phases {
+		if phases[index].ID == orquestacoreworkflow.OrchestrationPhaseProgramacionV0 {
+			phases[index].Status = orquestacoreworkflow.OrchestrationPhaseStatusActiveV0
+		}
+	}
+	return orquestacoreworkflow.OrchestrationRunV0{
+		SchemaVersion:     orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
+		RunID:             runRef,
+		ProjectRef:        "project-ref-orquesta-server",
+		AppSpecRef:        codexStackAutoprogrammingAppSpecPrefixV0 + "legacy-immutable",
+		Status:            orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+		CurrentPhase:      orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		Phases:            phases,
+		Tasks:             []string{taskRef},
+		FunctionContracts: []string{"BuildAutoprogrammingProgrammableWorkV0"},
 	}
 }
 

@@ -150,17 +150,17 @@ func TestCanonicalDomainWorkDeliveryPayloadBodyV0ReconoceDerivadosTemarioComplet
 		t.Fatalf("deliverables=%+v", plan.Deliverables)
 	}
 
-	expectedArtifactsByWorkKind := map[string]string{
-		"plan_temario":          orquestadomainwork.DomainDocumentPlanArtifactTypeV0,
-		"draft_content_block":   "content_block",
-		"generate_visual_asset": "visual_asset",
-		"review_legal":          "block_revision",
-		"review_pedagogical":    "block_revision",
-		"review_quality":        "block_revision",
-		"validate_topic":        "block_revision",
-		"assemble_topic":        "assembled_topic",
-	}
-	for workKind, expectedArtifact := range expectedArtifactsByWorkKind {
+	for _, workKind := range []string{
+		"plan_temario",
+		"draft_content_block",
+		"generate_visual_asset",
+		"review_legal",
+		"review_pedagogical",
+		"review_quality",
+		"validate_topic",
+		"assemble_topic",
+	} {
+		expectedArtifact := orquestadomainwork.ExpectedDomainWorkArtifactTypeForWorkKindV0(workKind)
 		if artifact := domainWorkArtifactTypeForWorkKindV0(workKind); artifact != expectedArtifact {
 			t.Fatalf("work_kind %q artifact=%q, esperado %q", workKind, artifact, expectedArtifact)
 		}

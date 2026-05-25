@@ -22,6 +22,7 @@ func TestOPESBridgeLoopDisabledByDefaultV0(t *testing.T) {
 }
 
 func TestOPESBridgeLoopConfigUsesServerFallbackV0(t *testing.T) {
+	t.Setenv("ORQUESTA_BASE_URL", "")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_ENABLED", "1")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_CONFIRM", "1")
 	t.Setenv("ORQUESTA_OPES_BASE_URL", "http://127.0.0.1:18082")
@@ -49,6 +50,7 @@ func TestOPESBridgeLoopConfigUsesServerFallbackV0(t *testing.T) {
 }
 
 func TestOPESBridgeLoopConfigAceptaSecuenciaComoFiltroSeguroV0(t *testing.T) {
+	t.Setenv("ORQUESTA_BASE_URL", "")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_ENABLED", "1")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_CONFIRM", "1")
 	t.Setenv("ORQUESTA_OPES_BASE_URL", "http://127.0.0.1:18082")

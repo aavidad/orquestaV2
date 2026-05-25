@@ -20,6 +20,9 @@ func (collector *schedulerTickCollectorV0) collectProgressSupervisionCandidateV0
 		collector.addBlockedRefsV0([]string{agentRef})
 		return nil
 	}
+	if collector.lostAgents[agentRef] {
+		return nil
+	}
 	if collector.stoppedAgents[agentRef] {
 		collector.addInFlightAgentWaitIfAnyV0()
 		return nil
@@ -42,7 +45,6 @@ func (collector *schedulerTickCollectorV0) collectProgressSupervisionCandidateV0
 func schedulerProgressSupervisionCommandInputV0(
 	input orquestadirector.AgentProgressSupervisionInputV0,
 ) orquestadirector.AgentProgressSupervisionInputV0 {
-	input.Report.EvidenceRefs = nil
 	return input
 }
 
@@ -55,6 +57,10 @@ func (collector *schedulerTickCollectorV0) collectProgressSupervisionResultV0(
 		collector.addReadyCommandV0(result.AssessCommand)
 		collector.plannedAgentAssessments[assessmentRef] = true
 	}
+	if result.RegisterLostCommand != nil && collector.progressLostCommandAllowedV0(input) {
+		collector.addReadyCommandV0(*result.RegisterLostCommand)
+		collector.plannedLostAgents[input.Report.AgentRequestID] = true
+	}
 	if result.AskDirectorCommand != nil && collector.progressQuestionCommandAllowedV0(input.QuestionID) {
 		collector.addReadyCommandV0(*result.AskDirectorCommand)
 		collector.plannedDirectorQuestions[input.QuestionID] = true
@@ -63,6 +69,16 @@ func (collector *schedulerTickCollectorV0) collectProgressSupervisionResultV0(
 
 func (collector *schedulerTickCollectorV0) progressAgentKnownV0(agentRef string) bool {
 	return collector.agents[agentRef] || collector.startedAgents[agentRef]
+}
+
+func (collector *schedulerTickCollectorV0) progressLostCommandAllowedV0(
+	input orquestadirector.AgentProgressSupervisionInputV0,
+) bool {
+	agentRef := input.Report.AgentRequestID
+	return agentRef != "" &&
+		!collector.lostAgents[agentRef] &&
+		!collector.plannedLostAgents[agentRef] &&
+		!collector.stoppedAgents[agentRef]
 }
 
 func schedulerProgressCandidateCanYieldToReplanV0(

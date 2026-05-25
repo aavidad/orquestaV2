@@ -76,15 +76,19 @@ func ensureContinueOperationalDirectorPlanStateFromWorkflowTasksV0(
 	if planRef == "" {
 		return request, nil
 	}
+	var existingState orquestacionnucleoapp.OperationalDirectorPlanStateV0
+	hasExistingState := false
 	if ports.OperationalPlanStateStore != nil {
 		state, err := ports.OperationalPlanStateStore.LoadOperationalDirectorPlanStateV0(ctx, request.RunRef, planRef)
 		if err == nil {
 			if state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0 {
 				request.OperationalDirectorPlanRef = state.PlanRef
+				existingState = state
+				hasExistingState = true
+			} else {
+				return request, nil
 			}
-			return request, nil
-		}
-		if !operationalDirectorPlanStateMissingV0(err) {
+		} else if !operationalDirectorPlanStateMissingV0(err) {
 			return ContinueAppDirectorRequestV0{}, err
 		}
 	}
@@ -97,12 +101,29 @@ func ensureContinueOperationalDirectorPlanStateFromWorkflowTasksV0(
 	if err != nil {
 		return ContinueAppDirectorRequestV0{}, err
 	}
-	tasks, err := ports.DirectorTaskStore.LoadWorkflowTasksV0(ctx, request.RunRef, workflowTaskOpenRefsForDirectorDecisionPlanStateV0(run))
+	tasks, err := loadDirectorDecisionOperationalTasksForPlanStateV0(
+		ctx,
+		ports.DirectorTaskStore,
+		request.RunRef,
+		workflowTaskOpenRefsForDirectorDecisionPlanStateV0(run),
+	)
 	if err != nil {
 		return ContinueAppDirectorRequestV0{}, err
 	}
-	tasks = directorDecisionOperationalTasksV0(tasks)
 	if len(tasks) == 0 {
+		return request, nil
+	}
+	if hasExistingState {
+		state, changed, err := mergeDirectorDecisionOperationalPlanStateV0(request, existingState, tasks)
+		if err != nil {
+			return ContinueAppDirectorRequestV0{}, err
+		}
+		if changed {
+			if err := ports.OperationalPlanStateWriter.SaveOperationalDirectorPlanStateV0(ctx, state); err != nil {
+				return ContinueAppDirectorRequestV0{}, err
+			}
+		}
+		request.OperationalDirectorPlanRef = state.PlanRef
 		return request, nil
 	}
 	state, err := directorDecisionOperationalPlanStateV0(request, run, planRef, tasks)
@@ -188,6 +209,26 @@ func directorDecisionOperationalTasksV0(
 		out = append(out, task)
 	}
 	return out
+}
+
+func loadDirectorDecisionOperationalTasksForPlanStateV0(
+	ctx context.Context,
+	store orquestacionnucleoapp.WorkflowTaskStorePortV0,
+	runRef string,
+	taskRefs []string,
+) ([]orquestacoreworkflow.WorkflowTaskV0, error) {
+	out := make([]orquestacoreworkflow.WorkflowTaskV0, 0, len(taskRefs))
+	for _, taskRef := range compactServiceRefsV0(taskRefs) {
+		tasks, err := store.LoadWorkflowTasksV0(ctx, runRef, []string{taskRef})
+		if err != nil {
+			if operationalDirectorPlanMissingWorkflowTasksV0(err) {
+				continue
+			}
+			return nil, err
+		}
+		out = append(out, directorDecisionOperationalTasksV0(tasks)...)
+	}
+	return out, nil
 }
 
 func workflowTaskHasOperationalDirectorDecisionMarkerV0(

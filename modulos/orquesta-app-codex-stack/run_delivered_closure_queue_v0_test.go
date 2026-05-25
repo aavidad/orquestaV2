@@ -78,6 +78,28 @@ func TestStackDrainQueueStatusConservaDeliveredLegacySinTaskStoreV0(t *testing.T
 	}
 }
 
+func TestStackDrainQueueStatusMantieneActivoSiQuedanTareasAbiertasV0(t *testing.T) {
+	run := stackDeliveredRunForQueueTestV0(
+		"run-stack-open-rework-001",
+		"task-original-001",
+		orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0("task-original-001"),
+	)
+	run.Tasks = append(run.Tasks, "task-rework-001")
+	result := orquestacionnucleoapp.ManagedProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+		Final: orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+			Run:    run,
+		},
+	}
+
+	status := stackDrainQueueStatusV0(result)
+
+	if status != "" {
+		t.Fatalf("queue_status=%q, want activo por tarea abierta", status)
+	}
+}
+
 func stackDeliveredRunForQueueTestV0(
 	runRef string,
 	taskRef string,

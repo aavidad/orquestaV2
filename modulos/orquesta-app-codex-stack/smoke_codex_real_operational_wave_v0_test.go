@@ -44,7 +44,7 @@ func TestCodexStackRecursiveTreeFakeRuntimeV0(t *testing.T) {
 	ctx := context.Background()
 	cfg := codexStackRequiredTestLocalConfigV0(t)
 	cfg.MaxBatchReady = 2
-	cfg.MaxConcurrency = 2
+	cfg.MaxConcurrency = 8
 	writeCodexStackRequiredTestTinyGoModuleV0(t, cfg.ProjectWorkDir)
 	goCommand := codexStackRequiredTestGoCommandV0(t)
 	outputDir := filepath.Join(t.TempDir(), "required-test-output")
@@ -65,7 +65,7 @@ func TestCodexStackRecursiveTreeFakeRuntimeNoCierraPadreAntesDeHijosV0(t *testin
 	ctx := context.Background()
 	cfg := codexStackRequiredTestLocalConfigV0(t)
 	cfg.MaxBatchReady = 2
-	cfg.MaxConcurrency = 2
+	cfg.MaxConcurrency = 8
 	writeCodexStackRequiredTestTinyGoModuleV0(t, cfg.ProjectWorkDir)
 	goCommand := codexStackRequiredTestGoCommandV0(t)
 	outputDir := filepath.Join(t.TempDir(), "required-test-output")
@@ -160,7 +160,7 @@ func TestCodexSupervisorStackLifecycleV0AvanzaArbolRecursivoFakeSinManualPorNive
 	ctx := context.Background()
 	cfg := codexStackRequiredTestLocalConfigV0(t)
 	cfg.MaxBatchReady = 2
-	cfg.MaxConcurrency = 2
+	cfg.MaxConcurrency = 8
 	writeCodexStackRequiredTestTinyGoModuleV0(t, cfg.ProjectWorkDir)
 	goCommand := codexStackRequiredTestGoCommandV0(t)
 	outputDir := filepath.Join(t.TempDir(), "required-test-output")

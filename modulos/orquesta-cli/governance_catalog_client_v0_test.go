@@ -17,18 +17,18 @@ func TestGovernanceCatalogCliReaderV0ExitoPropagaCorrelacionYEnvelopeCanonico(t 
 	var gotMethod string
 	var gotPath string
 	var gotHeader string
-	var gotQuery governanceCatalogQueryHTTPRequestV0
+	var gotRequest governanceCatalogQueryHTTPRequestV0
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod = r.Method
 		gotPath = r.URL.Path
 		gotHeader = r.Header.Get(GovernanceCatalogCliCorrelationHeaderV0)
-		if err := json.NewDecoder(r.Body).Decode(&gotQuery); err != nil {
+		if err := json.NewDecoder(r.Body).Decode(&gotRequest); err != nil {
 			t.Fatalf("Decode(request) error = %v", err)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(testGovernanceCatalogResultV0()); err != nil {
+		if err := json.NewEncoder(w).Encode(testGovernanceCatalogPublicResponseV0("req-cli-gov-001", "corr-gov-001")); err != nil {
 			t.Fatalf("Encode(response) error = %v", err)
 		}
 	}))
@@ -41,6 +41,7 @@ func TestGovernanceCatalogCliReaderV0ExitoPropagaCorrelacionYEnvelopeCanonico(t 
 
 	inv := NormalizeCliInvocationContextV0(CliInvocationContextV0{
 		ServerURL:     server.URL,
+		RequestID:     "req-cli-gov-001",
 		CorrelationID: "corr-gov-001",
 	})
 	query := orquestagovernance.GovernanceCatalogQueryV0{
@@ -64,11 +65,14 @@ func TestGovernanceCatalogCliReaderV0ExitoPropagaCorrelacionYEnvelopeCanonico(t 
 	if gotHeader != inv.CorrelationID {
 		t.Fatalf("X-Correlation-ID = %q, want %q", gotHeader, inv.CorrelationID)
 	}
-	if gotQuery.Module != "orquesta-cli" || gotQuery.Role != "director" || gotQuery.Phase != "brainstorming" {
-		t.Fatalf("query enviada = %#v", gotQuery)
+	if gotRequest.RequestID != inv.RequestID || gotRequest.CorrelationID != inv.CorrelationID {
+		t.Fatalf("ids enviados = %#v", gotRequest)
 	}
-	if len(gotQuery.Tags) != 2 || gotQuery.Tags[0] != "hexagonal" || gotQuery.Tags[1] != "i18n" {
-		t.Fatalf("tags = %#v", gotQuery.Tags)
+	if gotRequest.Filters.Module != "orquesta-cli" || gotRequest.Filters.Role != "director" || gotRequest.Filters.Phase != "brainstorming" {
+		t.Fatalf("query enviada = %#v", gotRequest.Filters)
+	}
+	if len(gotRequest.Filters.Tags) != 2 || gotRequest.Filters.Tags[0] != "hexagonal" || gotRequest.Filters.Tags[1] != "i18n" {
+		t.Fatalf("tags = %#v", gotRequest.Filters.Tags)
 	}
 	if out.Contract != CliContractGovernanceCatalogV0 || out.Version != CliContractVersionGovernanceV0 {
 		t.Fatalf("contract/version = %q/%q", out.Contract, out.Version)
@@ -89,8 +93,8 @@ func TestGovernanceCatalogCliReaderV0Respuesta400DevuelveErroresPublicos(t *test
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(governanceCatalogHTTPErrorV0{
-			Errores: []governanceCatalogIssueV0{
-				{Codigo: "governance_catalog_invalid_source", Campo: "module"},
+			Errors: []governanceCatalogIssueV0{
+				{Code: "governance_catalog_invalid_source", Field: "module"},
 			},
 		})
 	}))
@@ -210,6 +214,16 @@ func testGovernanceCatalogResultV0() orquestagovernance.GovernanceCatalogQueryRe
 			Proposed:   2,
 			Quarantine: 1,
 		},
+	}
+}
+
+func testGovernanceCatalogPublicResponseV0(requestID, correlationID string) orquestagovernance.GovernanceCatalogPublicQueryResponseV0 {
+	result := testGovernanceCatalogResultV0()
+	return orquestagovernance.GovernanceCatalogPublicQueryResponseV0{
+		RequestID:     requestID,
+		CorrelationID: correlationID,
+		Effective:     result.Effective,
+		Counters:      result.Counters,
 	}
 }
 

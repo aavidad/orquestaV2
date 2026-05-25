@@ -10,7 +10,7 @@ const (
 	MCPAutoprogrammingPrepareRunHTTPPathV0                  = "/api/v0/autoprogramming/prepare-run"
 	MCPAutoprogrammingPrepareRunHTTPErrorCodeV0             = "autoprogramming_prepare_run_http_error"
 	MCPAutoprogrammingPrepareRunHTTPNotConfiguredCodeV0     = "autoprogramming_prepare_run_no_configurado"
-	MCPAutoprogrammingPrepareRunHTTPExecutorErrorCodeV0     = "autoprogramming_prepare_run_error"
+	MCPAutoprogrammingPrepareRunHTTPExecutorErrorCodeV0     = "autoprogramming_prepare_run_executor_error"
 	MCPAutoprogrammingPrepareRunHTTPInvalidBodyCodeV0       = "request_body_invalido"
 	MCPAutoprogrammingPrepareRunHTTPUnsupportedPathCodeV0   = "ruta_no_soportada"
 	MCPAutoprogrammingPrepareRunHTTPUnsupportedMethodCodeV0 = "metodo_no_permitido"
@@ -67,12 +67,18 @@ func (handler mcpAutoprogrammingPrepareRunHTTPHandlerV0) ServeHTTP(w http.Respon
 	}
 	result, err := handler.executor.Execute(r.Context(), input)
 	if err != nil {
-		writeMCPAutoprogrammingPrepareRunHTTPV0(w, http.StatusInternalServerError, newMCPAutoprogrammingPrepareRunHTTPErrorV0(
-			r,
+		if result.Estado == MCPAutoprogrammingPrepareRunEstadoErrorV0 && len(result.Errores) > 0 {
+			writeMCPAutoprogrammingPrepareRunHTTPV0(w, http.StatusInternalServerError, result)
+			return
+		}
+		payload := NewMCPAutoprogrammingPrepareRunErrorResultV0(
 			input,
-			"executor",
 			MCPAutoprogrammingPrepareRunHTTPExecutorErrorCodeV0,
-		))
+			"executor",
+			publicMCPExecutorErrorMessageFromErrorV0(MCPAutoprogrammingPrepareRunHTTPExecutorErrorCodeV0, err),
+		)
+		payload.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), payload.CorrelationID)
+		writeMCPAutoprogrammingPrepareRunHTTPV0(w, http.StatusInternalServerError, payload)
 		return
 	}
 	status := http.StatusOK

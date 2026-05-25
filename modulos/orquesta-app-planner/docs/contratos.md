@@ -4,6 +4,11 @@
 
 Plan compacto de microtareas para una app.
 
+Estado publico: compatibilidad/preview para `app-runner`. No es la ruta
+operativa preferente de `AppSpecV0`; cuando se necesita juicio del Director,
+plan-state, waits por ola/cohorte, review/tests/cierre o recursion, la entrada
+publica debe ser `orquesta.apps.arrancar_director.v0`.
+
 Campos principales:
 
 - `run_ref`, `app_ref`, `schema_version`;

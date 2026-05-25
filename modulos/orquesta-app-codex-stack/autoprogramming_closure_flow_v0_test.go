@@ -110,6 +110,78 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0CierraConPlanStateYTestsRealesV
 	}
 }
 
+func TestCodexStackAutoprogrammingSupervisorGlobalCierraDerivandoPlanStateV0(t *testing.T) {
+	cfg := codexStackRequiredTestLocalConfigV0(t)
+	writeCodexStackRequiredTestTinyGoModuleV0(t, cfg.ProjectWorkDir)
+	goCommand := codexStackRequiredTestGoCommandV0(t)
+	outputDir := filepath.Join(t.TempDir(), "required-test-output")
+	runtime := newFakeCodexStackRuntimeV0().withDeliveryBodyForTargetV0(
+		"README.md",
+		"# Entrega autoprogramming\n\nCambio acotado desde cola global.\n",
+	)
+	evidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
+	stack := codexStackRealRequiredTestRunnerStackV0(t, cfg, runtime, evidenceStore, goCommand, outputDir)
+
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-autoprogramming-global-closure-flow-001",
+		CorrelationID:          "corr-autoprogramming-global-closure-flow-001",
+		OccurredAt:             "2026-05-23T18:30:00Z",
+		RequestedBy:            "orquesta-app-stack-test",
+		AutoprogrammingRequest: autoprogrammingClosureRequestForTestV0(),
+		MaxBursts:              8,
+		MaxStepsPerBurst:       8,
+		MaxDispatchesPerWait:   4,
+		MaxCommands:            16,
+		MaxOutboxPerCycle:      8,
+	})
+	if !prepared.Accepted || prepared.RunRef == "" || prepared.Continue == nil ||
+		prepared.Continue.OperationalDirectorPlanRef == "" {
+		t.Fatalf("prepared=%+v", prepared)
+	}
+	planRef := prepared.Continue.OperationalDirectorPlanRef
+
+	for cycle := 1; cycle <= 16; cycle++ {
+		result := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
+			RequestID:            fmt.Sprintf("request-autoprogramming-global-closure-supervisor-%03d", cycle),
+			CorrelationID:        fmt.Sprintf("corr-autoprogramming-global-closure-supervisor-%03d", cycle),
+			QueueRef:             DefaultRunQueueRefV0,
+			MaxTicks:             1,
+			MaxRunsPerTick:       1,
+			MaxExecutions:        1,
+			MaxBursts:            12,
+			MaxStepsPerBurst:     12,
+			MaxDispatchesPerWait: 6,
+			MaxCommands:          32,
+			MaxOutboxPerCycle:    16,
+			MaxDecisionCycles:    8,
+			MaxExternalWaits:     1,
+			AllowRepeatedRuns:    true,
+		})
+		if result.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 {
+			t.Fatalf("supervisor cycle=%d result=%+v", cycle, result)
+		}
+		run := mustLoadCodexStackRunForTestV0(t, stack, prepared.RunRef)
+		state := autoprogrammingClosurePlanStateForTestV0(t, stack, prepared.RunRef, planRef)
+		if run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 &&
+			state.Status == orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0 {
+			break
+		}
+	}
+
+	run := mustLoadCodexStackRunForTestV0(t, stack, prepared.RunRef)
+	state := autoprogrammingClosurePlanStateForTestV0(t, stack, prepared.RunRef, planRef)
+	if run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0 ||
+		len(run.ClosedTasks) != 1 ||
+		len(run.Validations) != 1 ||
+		len(run.Closures) != 1 {
+		t.Fatalf("global no cerro autoprogramming: run=%+v state=%+v", run, state)
+	}
+	if runtime.launchCountV0() != 1 {
+		t.Fatalf("launches=%d", runtime.launchCountV0())
+	}
+}
+
 func autoprogrammingClosureRequestForTestV0() orquestaautoprogramming.AutoprogrammingRequestV0 {
 	return orquestaautoprogramming.AutoprogrammingRequestV0{
 		RequestRef:       "run-autoprogramming-closure-flow-001",

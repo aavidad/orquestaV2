@@ -35,6 +35,16 @@ func assessmentFromAgentProgressReportV0(
 }
 
 func assessmentDecisionFromProgressStatusV0(input AgentProgressSupervisionInputV0) (string, string, string) {
+	if agentProgressAuthConfigBlockerV0(input.Report) {
+		return orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
+			orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
+			orquestacoreworkflow.AgentAssessmentSeverityCriticalV0
+	}
+	if agentProgressNoACKV0(input.Report) {
+		return orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
+			orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
+			orquestacoreworkflow.AgentAssessmentSeverityHighV0
+	}
 	if agentProgressCapacityLimitedV0(input.Report) {
 		if !agentProgressStopAllowedV0(input) {
 			return orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
@@ -121,6 +131,25 @@ func agentProgressHasArtifactWithoutAckV0(report orquestaruntime.AgentProgressRe
 	return false
 }
 
+func agentProgressNoACKV0(report orquestaruntime.AgentProgressReportV0) bool {
+	for _, ref := range report.EvidenceRefs {
+		switch strings.TrimSpace(ref) {
+		case "evidence-ref-no-ack", "evidence-ref-no-ack-interrupted":
+			return true
+		}
+	}
+	return false
+}
+
+func agentProgressAuthConfigBlockerV0(report orquestaruntime.AgentProgressReportV0) bool {
+	for _, ref := range report.EvidenceRefs {
+		if strings.TrimSpace(ref) == "evidence-ref-auth-config-blocker" {
+			return true
+		}
+	}
+	return false
+}
+
 func agentProgressStopAllowedV0(input AgentProgressSupervisionInputV0) bool {
 	return input.StopAllowed == nil || *input.StopAllowed
 }
@@ -134,6 +163,15 @@ func stalledSeverityFromCountersV0(report orquestaruntime.AgentProgressReportV0)
 }
 
 func assessmentSummaryFromProgressReportV0(report orquestaruntime.AgentProgressReportV0) string {
+	if agentProgressAuthConfigBlockerV0(report) {
+		return "Autenticacion externa invalida; pausar reintentos y solicitar reautorizacion."
+	}
+	if agentProgressNoACKV0(report) {
+		if agentProgressHasArtifactWithoutAckV0(report) {
+			return "Entrega sin ACK con artefacto materializado; validar antes de replanificar."
+		}
+		return "Proceso detenido sin ACK; revisar evidencias antes de replanificar."
+	}
 	if agentProgressOverBudgetNoActivityV0(report) {
 		if agentProgressHasArtifactWithoutAckV0(report) {
 			return "Tiempo excedido sin actividad reciente y artefacto sin ACK; detener agente logico y conservar evidencias."
@@ -194,6 +232,37 @@ func askDirectorMetaFromSupervisionV0(
 	meta.CommandID += "-ask-director"
 	meta.IdempotencyKey += "-ask-director"
 	return meta
+}
+
+func registerLostMetaFromSupervisionV0(
+	meta orquestacoreworkflow.OrchestrationCommandMetaV0,
+) orquestacoreworkflow.OrchestrationCommandMetaV0 {
+	meta.CommandID += "-register-lost"
+	meta.IdempotencyKey += "-register-lost"
+	return meta
+}
+
+func registerLostPayloadFromProgressReportV0(
+	report orquestaruntime.AgentProgressReportV0,
+	occurredAt string,
+) orquestacoreworkflow.RegisterAgentLostCommandPayloadV0 {
+	return orquestacoreworkflow.RegisterAgentLostCommandPayloadV0{
+		AgentRequestID: strings.TrimSpace(report.AgentRequestID),
+		LossRef:        "loss-ref-" + strings.TrimSpace(report.ReportID),
+		ReasonCode:     "external_process_ended_without_ack",
+		ObservedAt:     strings.TrimSpace(occurredAt),
+		Retryable:      true,
+		EvidenceRefs:   supervisionEvidenceRefsV0(report),
+	}
+}
+
+func agentProgressShouldRegisterLostV0(
+	report orquestaruntime.AgentProgressReportV0,
+	assessment orquestacoreworkflow.AssessAgentWorkCommandPayloadV0,
+) bool {
+	return report.Status == orquestaruntime.AgentStoppedV0 &&
+		assessment.Action == orquestacoreworkflow.AgentAssessmentActionAskDirectorV0 &&
+		(agentProgressNoACKV0(report) || agentProgressAuthConfigBlockerV0(report))
 }
 
 func supervisionEvidenceRefsV0(report orquestaruntime.AgentProgressReportV0) []string {

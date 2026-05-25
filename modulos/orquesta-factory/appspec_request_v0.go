@@ -217,20 +217,6 @@ func validateDatosV0(req AppSpecRequestV0) []ValidationIssue {
 	return nil
 }
 
-func validateConnectorNamesV0(req AppSpecRequestV0) []ValidationIssue {
-	var issues []ValidationIssue
-	for index, connector := range req.Integraciones {
-		nombre := strings.TrimSpace(strings.ToLower(connector.Nombre))
-		if nombre == "" {
-			continue
-		}
-		if containsV0(nombre, "postgres", "postgresql", "mysql", "sqlite", "mongodb", "redis", "runtime", "filesystem", "fs", "llm", "cache", "queue", "cola", "deploy", "database", "db") {
-			issues = append(issues, issue(ErrConectorRequeridoNoDisponible, fmt.Sprintf("integraciones.%d.nombre", index), "la integracion debe nombrar una capacidad, no un proveedor directo"))
-		}
-	}
-	return issues
-}
-
 func issue(code, field, message string) ValidationIssue {
 	return ValidationIssue{Code: code, Field: field, Message: message}
 }

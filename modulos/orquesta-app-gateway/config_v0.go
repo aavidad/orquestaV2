@@ -4,8 +4,11 @@ import (
 	"net/http"
 	"time"
 
+	orquestacore "orquesta/modulos/orquesta-core"
 	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
+	orquestagovernance "orquesta/modulos/orquesta-governance"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestaobservability "orquesta/modulos/orquesta-observability"
 	operator "orquesta/modulos/orquesta-operator-mcp"
 	orquestaweb "orquesta/modulos/orquesta-web"
 )
@@ -21,7 +24,11 @@ type ConfigV0 struct {
 	RunControl                orquestamcp.MCPTransportRunControlExecutorV0
 	RunQueuePriority          orquestamcp.MCPTransportRunQueuePriorityExecutorV0
 	RunSupervisor             orquestamcp.MCPTransportRunSupervisorExecutorV0
+	OpsAgentRuntimeDetail     http.Handler
+	OperationalStatus         orquestaobservability.OperationalStatusQuerySourceV0
+	FunctionContracts         orquestacore.FunctionContractReadIndexPortV0
 	AutoprogrammingPrepareRun orquestamcp.MCPTransportAutoprogrammingPrepareRunExecutorV0
+	GovernanceCatalog         orquestagovernance.GovernanceCatalogProviderV0
 	OperatorQuery             operator.OperatorMCPDirectedQueryPortV0
 	ServerShutdown            orquestamcp.MCPTransportServerShutdownExecutorV0
 	DomainWork                orquestamcp.MCPDomainWorkExecutorPortV0

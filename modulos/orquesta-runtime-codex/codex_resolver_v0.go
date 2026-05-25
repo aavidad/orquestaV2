@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
@@ -96,9 +97,11 @@ func (r CodexExecResolverV0) materializeFilesV0(
 			codexIssueV0(CodexConnectorFilesystemV0, CodexAgentPacketFileNameV0, spec.CorrelationID, err.Error()),
 		}
 	}
+	promptHints := append([]string(nil), r.profile.PromptHints...)
+	promptHints = append(promptHints, codexRuntimeWorkDirPromptHintV0(r.profile))
 	prompt := BuildCodexAgentPromptWithControlFilesV0(
 		spec.AgentPacket,
-		r.profile.PromptHints,
+		promptHints,
 		CodexControlFilesV0{
 			PacketPath:          packetPath,
 			AckPath:             filepath.Join(r.profile.RuntimeWorkDir, CodexAgentAckFileNameV0),
@@ -119,6 +122,17 @@ func (r CodexExecResolverV0) materializeFilesV0(
 		}
 	}
 	return nil
+}
+
+func codexRuntimeWorkDirPromptHintV0(profile CodexConnectorProfileV0) string {
+	switch strings.TrimSpace(profile.RuntimeWorkDirPlacement) {
+	case CodexRuntimeWorkDirExternalRootV0:
+		return "runtime_work_dir es writable root externo solo para control; no crees docs/codigo alli ni lo trates como workdir de producto."
+	case CodexRuntimeWorkDirInsideProjectV0:
+		return "runtime_work_dir es directorio de control dentro del proyecto; no incluyas sus ficheros en ACK.files ni en artefactos de producto."
+	default:
+		return "runtime_work_dir debe usarse solo para ficheros de control del agente."
+	}
 }
 
 func writeJSONFileV0(path string, value any) error {

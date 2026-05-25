@@ -32,3 +32,32 @@ func TestCodexAckPendingRailFalsePositiveVocabularyV0(t *testing.T) {
 		}
 	}
 }
+
+func TestCodexAckPendingRailFalsePositiveVocabularySinMarcadorExplicitoV0(t *testing.T) {
+	spec := codexSpecForTestV0()
+	cases := []string{
+		"token budget policy",
+		"secret handling docs",
+		"prompt policy",
+		"provider ref opaco",
+		"codex home redacted policy",
+	}
+
+	for _, note := range cases {
+		data := []byte(codexAckJSONWithNoteForPendingRailTestV0(note))
+		ack, issues := ValidateCodexAgentAckBytesForSpecV0(data, spec)
+		if len(issues) != 0 {
+			t.Fatalf("vocabulario generico no debe bloquear issues=%+v note=%q", issues, note)
+		}
+		if !CodexAgentAckHasPendingRailV0(ack) {
+			t.Fatalf("rail pendiente generico no conservado note=%q ack=%+v", note, ack)
+		}
+		observation, issues := BuildCodexDeliveryObservationV0(ack, spec)
+		if len(issues) != 0 {
+			t.Fatalf("observacion no debe bloquear issues=%+v note=%q", issues, note)
+		}
+		if codexDeliveryObservationUnsafeForCoreV0(observation) {
+			t.Fatalf("observacion marca vocabulario generico como unsafe note=%q observation=%+v", note, observation)
+		}
+	}
+}

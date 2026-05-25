@@ -136,6 +136,15 @@ Estado: aceptada localmente
 ```
 
 ```text
+Fecha: 2026-05-25
+Decision: La ruta publica preferente de AppSpec es `orquesta.apps.arrancar_director.v0`.
+Motivo: la foto vigente exige juicio del Director V2 para apps nuevas; el plan fijo de `orquesta-app-runner` no demuestra plan-state, waits por ola/cohorte, review/tests/cierre ni recursion.
+Impacto: `preparar_orquestacion` y `ejecutar_orquestacion` publican `route_policy` de preview/compatibilidad; `ejecutar_orquestacion` bloquea con `director_v2_required` si el caller declara esa necesidad.
+Contratos afectados: mcp.tool.orquesta.apps.arrancar_director.v0; mcp.tool.orquesta.apps.preparar_orquestacion.v0; mcp.tool.orquesta.apps.ejecutar_orquestacion.v0; RunPreparedAppOrchestrationV0.
+Estado: aceptada localmente
+```
+
+```text
 Fecha: 2026-05-09
 Decision: Ejecutar orquestacion de app por MCP es opt-in y neutraliza refs externas antes de tocar core/outbox.
 Motivo: el wizard necesita una orden unica para que Orquesta arranque el loop, pero el core prohibe detalles de transporte como mcp, web, cli, provider, HOME o runtime en referencias internas y outbox.

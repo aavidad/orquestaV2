@@ -20,6 +20,7 @@ const (
 	CodexLastMessageFileNameV0           = "codex_last_message.txt"
 	CodexStdoutFileNameV0                = "codex_stdout.log"
 	CodexStderrFileNameV0                = "codex_stderr.log"
+	CodexUsageAccountingFileNameV0       = "codex_usage_accounting.json"
 	CodexWrapperFileNameV0               = "orquesta_codex_exec_v0.sh"
 )
 
@@ -37,22 +38,35 @@ const (
 	CodexConnectorAckForbiddenV0   CodexConnectorIssueCodeV0 = "codex_agent_ack_detalle_prohibido"
 )
 
+const (
+	CodexRuntimeWorkDirInsideProjectV0 = "inside_project_control_dir"
+	CodexRuntimeWorkDirExternalRootV0  = "external_control_root"
+	CodexApprovalPolicyNeverV0         = "never"
+	CodexApprovalPolicyOnRequestV0     = "on-request"
+	CodexApprovalPolicyOnFailureV0     = "on-failure"
+	CodexApprovalPolicyUnlessTrustedV0 = "unless-trusted"
+	CodexApprovalPolicyUntrustedV0     = "untrusted"
+	CodexApprovalPolicyOnWorkspaceV0   = "on-workspace-write"
+)
+
 type CodexConnectorProfileV0 struct {
-	SchemaVersion   string   `json:"schema_version"`
-	OptIn           bool     `json:"opt_in"`
-	CommandPath     string   `json:"command_path"`
-	ProjectWorkDir  string   `json:"project_work_dir"`
-	RuntimeWorkDir  string   `json:"runtime_work_dir"`
-	CodeHomeDir     string   `json:"code_home_dir,omitempty"`
-	HomeDir         string   `json:"home_dir,omitempty"`
-	PathEnv         string   `json:"path_env,omitempty"`
-	Model           string   `json:"model,omitempty"`
-	ReasoningEffort string   `json:"reasoning_effort,omitempty"`
-	Profile         string   `json:"profile,omitempty"`
-	Sandbox         string   `json:"sandbox,omitempty"`
-	ApprovalPolicy  string   `json:"approval_policy,omitempty"`
-	ExtraArgs       []string `json:"extra_args,omitempty"`
-	PromptHints     []string `json:"prompt_hints,omitempty"`
+	SchemaVersion            string   `json:"schema_version"`
+	OptIn                    bool     `json:"opt_in"`
+	CommandPath              string   `json:"command_path"`
+	ProjectWorkDir           string   `json:"project_work_dir"`
+	RuntimeWorkDir           string   `json:"runtime_work_dir"`
+	RuntimeWorkDirPlacement  string   `json:"runtime_work_dir_placement,omitempty"`
+	CodeHomeDir              string   `json:"code_home_dir,omitempty"`
+	HomeDir                  string   `json:"home_dir,omitempty"`
+	PathEnv                  string   `json:"path_env,omitempty"`
+	Model                    string   `json:"model,omitempty"`
+	ReasoningEffort          string   `json:"reasoning_effort,omitempty"`
+	Profile                  string   `json:"profile,omitempty"`
+	Sandbox                  string   `json:"sandbox,omitempty"`
+	ApprovalPolicy           string   `json:"approval_policy,omitempty"`
+	InteractiveApprovalOptIn bool     `json:"interactive_approval_opt_in,omitempty"`
+	ExtraArgs                []string `json:"extra_args,omitempty"`
+	PromptHints              []string `json:"prompt_hints,omitempty"`
 }
 
 func ValidateCodexConnectorProfileV0(
@@ -68,6 +82,7 @@ func ValidateCodexConnectorProfileV0(
 	v.requireAbsPath("command_path", profile.CommandPath)
 	v.requireAbsPath("project_work_dir", profile.ProjectWorkDir)
 	v.requireAbsPath("runtime_work_dir", profile.RuntimeWorkDir)
+	v.validateRuntimeWorkDirPlacementV0(profile)
 	v.validateWorkspaceWriteRuntimeIsolationV0(profile)
 	v.optionalAbsPath("code_home_dir", profile.CodeHomeDir)
 	v.optionalAbsPath("home_dir", profile.HomeDir)
@@ -76,7 +91,7 @@ func ValidateCodexConnectorProfileV0(
 	v.optionalSafeValue("reasoning_effort", profile.ReasoningEffort)
 	v.optionalSafeValue("profile", profile.Profile)
 	v.requireSupportedSandboxV0(profile.Sandbox)
-	v.optionalSafeValue("approval_policy", profile.ApprovalPolicy)
+	v.validateApprovalPolicyV0(profile)
 	for i, value := range profile.ExtraArgs {
 		v.optionalSafeValue(fmt.Sprintf("extra_args[%d]", i), value)
 		v.rejectWorkspaceEscapeExtraArgV0(fmt.Sprintf("extra_args[%d]", i), value)
@@ -85,6 +100,18 @@ func ValidateCodexConnectorProfileV0(
 		v.optionalSafeValue(fmt.Sprintf("prompt_hints[%d]", i), value)
 	}
 	return v.issues
+}
+
+func InferCodexRuntimeWorkDirPlacementV0(projectWorkDir string, runtimeWorkDir string) string {
+	project := filepath.Clean(strings.TrimSpace(projectWorkDir))
+	runtime := filepath.Clean(strings.TrimSpace(runtimeWorkDir))
+	if project == "." || runtime == "." {
+		return ""
+	}
+	if runtime == project || codexPathInsideV0(runtime, project) {
+		return CodexRuntimeWorkDirInsideProjectV0
+	}
+	return CodexRuntimeWorkDirExternalRootV0
 }
 
 type codexProfileValidatorV0 struct {
@@ -120,6 +147,47 @@ func (v *codexProfileValidatorV0) requireSupportedSandboxV0(value string) {
 		return
 	}
 	v.optionalSafeValue("sandbox", trimmed)
+}
+
+func (v *codexProfileValidatorV0) validateApprovalPolicyV0(profile CodexConnectorProfileV0) {
+	trimmed := strings.TrimSpace(profile.ApprovalPolicy)
+	if trimmed == "" {
+		v.add(CodexConnectorValueInvalidV0, "approval_policy")
+		return
+	}
+	switch trimmed {
+	case CodexApprovalPolicyNeverV0:
+	case CodexApprovalPolicyOnFailureV0,
+		CodexApprovalPolicyOnRequestV0,
+		CodexApprovalPolicyUnlessTrustedV0,
+		CodexApprovalPolicyUntrustedV0,
+		CodexApprovalPolicyOnWorkspaceV0:
+		if !profile.InteractiveApprovalOptIn {
+			v.add(CodexConnectorValueInvalidV0, "approval_policy")
+			return
+		}
+	default:
+		v.add(CodexConnectorValueInvalidV0, "approval_policy")
+		return
+	}
+	v.optionalSafeValue("approval_policy", trimmed)
+}
+
+func (v *codexProfileValidatorV0) validateRuntimeWorkDirPlacementV0(
+	profile CodexConnectorProfileV0,
+) {
+	declared := strings.TrimSpace(profile.RuntimeWorkDirPlacement)
+	if declared == "" {
+		return
+	}
+	expected := InferCodexRuntimeWorkDirPlacementV0(
+		profile.ProjectWorkDir,
+		profile.RuntimeWorkDir,
+	)
+	if expected != "" && declared != expected {
+		v.add(CodexConnectorValueInvalidV0, "runtime_work_dir_placement")
+	}
+	v.optionalSafeValue("runtime_work_dir_placement", declared)
 }
 
 func (v *codexProfileValidatorV0) rejectWorkspaceEscapeExtraArgV0(field, value string) {

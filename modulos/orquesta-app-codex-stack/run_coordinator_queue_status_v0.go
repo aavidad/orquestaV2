@@ -42,9 +42,34 @@ func stackDrainQueueStatusV0(
 	if run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
 		return orquestarunqueue.RunStatusClosedV0
 	}
+	if stackDrainRunAwaitsLateDirectorDecisionsV0(run) {
+		return ""
+	}
 	if stackDrainRunHasAllTasksDeliveredOrClosedV0(run) &&
 		!drainRunHasPendingExternalAgentsV0(run, nil) {
 		return orquestarunqueue.RunStatusDeliveredV0
 	}
+	if run.Status == orquestacoreworkflow.OrchestrationRunStatusActiveV0 &&
+		len(stackDrainOpenTaskRefsV0(run)) > 0 {
+		return ""
+	}
+	if result.Status == orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0 &&
+		result.Final.PendingOutboxCount == 0 &&
+		result.Final.FirstPendingCount == 0 &&
+		!drainRunHasPendingExternalAgentsV0(run, nil) {
+		return orquestarunqueue.RunStatusStoppedV0
+	}
 	return ""
+}
+
+func stackDrainRunAwaitsLateDirectorDecisionsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) bool {
+	return run.Status == orquestacoreworkflow.OrchestrationRunStatusActiveV0 &&
+		run.CurrentPhase == orquestacoreworkflow.OrchestrationPhaseBrainstormingArquitecturaV0 &&
+		len(compactCodexStackStringsV0(run.Tasks)) == 0 &&
+		len(compactCodexStackStringsV0(run.StartedAgents)) > 0 &&
+		(len(compactCodexStackStringsV0(run.PhaseArtifacts)) > 0 ||
+			len(compactCodexStackStringsV0(run.DeliveredAgents)) > 0 ||
+			len(compactCodexStackStringsV0(run.Deliveries)) > 0)
 }

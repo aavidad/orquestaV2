@@ -43,6 +43,9 @@ func (source AssessmentReplanSourceV0) BuildAgentAssessmentReplanPlansV0(
 		if taskRef == "" {
 			continue
 		}
+		if assessmentReplanTaskHasMaterializedFollowupV0(request.Run, taskRef) {
+			continue
+		}
 		plan := source.planForAssessmentV0(request, projection, taskRef)
 		if assessmentReplanReplacementAlreadyRequestedV0(request.Run, plan.AgentRequestID) {
 			continue
@@ -156,6 +159,70 @@ func assessmentReplanReplacementAlreadyRequestedV0(
 ) bool {
 	return stringInSetV0(run.Agents, agentRef) ||
 		stringInSetV0(run.StartedAgents, agentRef)
+}
+
+func assessmentReplanTaskHasMaterializedFollowupV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	taskRef string,
+) bool {
+	taskRef = strings.TrimSpace(taskRef)
+	if taskRef == "" {
+		return false
+	}
+	needle := "#task:" + taskRef + "#action:" +
+		string(orquestacoreworkflow.ReplanDecisionActionReplaceAgentV0)
+	for _, projection := range run.ReplanDecisions {
+		projection = strings.TrimSpace(projection)
+		if !strings.Contains(projection, needle) {
+			continue
+		}
+		for _, followupRef := range assessmentReplanFollowupAgentRefsV0(projection) {
+			if assessmentReplanAgentMaterializedV0(run, followupRef) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func assessmentReplanFollowupAgentRefsV0(projection string) []string {
+	const marker = "#followups:"
+	index := strings.Index(projection, marker)
+	if index < 0 {
+		return nil
+	}
+	value := projection[index+len(marker):]
+	if next := strings.Index(value, "#"); next >= 0 {
+		value = value[:next]
+	}
+	parts := strings.FieldsFunc(value, func(r rune) bool {
+		return r == '+' || r == ',' || r == ';' || r == ' '
+	})
+	refs := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, "agent-ref-") {
+			refs = append(refs, part)
+		}
+	}
+	return refs
+}
+
+func assessmentReplanAgentMaterializedV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	agentRef string,
+) bool {
+	agentRef = strings.TrimSpace(agentRef)
+	if agentRef == "" {
+		return false
+	}
+	return stringInSetV0(run.Agents, agentRef) ||
+		stringInSetV0(run.StartedAgents, agentRef) ||
+		stringInSetV0(run.DeliveredAgents, agentRef) ||
+		stringInSetV0(run.FailedAgents, agentRef) ||
+		stringInSetV0(run.LostAgents, agentRef) ||
+		stringInSetV0(run.StoppedAgents, agentRef) ||
+		stringInSetV0(run.ConfirmedStoppedAgents, agentRef)
 }
 
 func assessmentReplanCapacityV0(

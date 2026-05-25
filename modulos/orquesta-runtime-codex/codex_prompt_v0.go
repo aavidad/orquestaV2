@@ -41,9 +41,8 @@ func BuildCodexAgentPromptWithControlFilesV0(
 	b.WriteString(" antes de tocar archivos.\n")
 	b.WriteString("RAIL ESTRICTO: no borres, no muevas fuera, no trunques archivos existentes y no salgas del workdir del proyecto.\n")
 	b.WriteString("Si para cumplir la tarea crees imprescindible borrar, mover fuera del proyecto o trabajar fuera del workdir, no lo hagas: escribe CONSULTA AL DIRECTOR en el ACK.\n")
-	b.WriteString("Usa el write-set del paquete como alcance cerrado; si contiene '.', el alcance es todo el repo del proyecto, pero sigue prohibido borrar o salir del workdir.\n")
+	writeWriteSetPrecedenceProtocolV0(&b, packet)
 	b.WriteString("Las rutas del write-set son relativas al workdir del proyecto, no al directorio de control ni a .orquesta-runtime; crea docs/codigo en el proyecto.\n")
-	b.WriteString("No edites fuera del write-set; si falta alcance, escribe CONSULTA AL DIRECTOR en el ACK. La unica excepcion son archivos de control indicados por Orquesta.\n")
 	b.WriteString("Archivos de control permitidos fuera del write-set: ")
 	b.WriteString(ackPath)
 	if decisionPath != "" {
@@ -65,6 +64,9 @@ func BuildCodexAgentPromptWithControlFilesV0(
 	b.WriteString("Si falta contexto, no inventes: escribe una nota CONSULTA AL DIRECTOR en el ACK.\n")
 	if codexPacketHasRequiredTruncatedContextV0(packet) {
 		b.WriteString("CONTEXTO TRUNCADO REQUERIDO: agent_packet.context contiene entradas required=true y truncated=true. No completes salvo que puedas resolverlo con refs/materializacion externa; si completas, notes debe incluir contexto_truncado_resuelto: <motivo>. Si no, usa status failed y CONSULTA AL DIRECTOR.\n")
+	}
+	if codexPacketHasRequiredRefOnlyContextV0(packet) {
+		b.WriteString("CONTEXTO REF_ONLY REQUERIDO: agent_packet.context contiene entradas required=true y mode=ref_only. Sigue required_ref_action por entrada: read_local_document, ask_director o ack_evidence_required. Si completas una entrada que no es ref_only_by_design, notes debe incluir contexto_ref_only_resuelto: <motivo>. Si no, usa status failed y CONSULTA AL DIRECTOR.\n")
 	}
 	b.WriteString("Aplica arquitectura hexagonal e i18n si la tarea genera app o UI.\n")
 	b.WriteString("La persistencia concreta solo pertenece a la app generada si la tarea la pide; Orquesta no usa DB por defecto.\n")
@@ -92,8 +94,9 @@ func BuildCodexAgentPromptWithControlFilesV0(
 	b.WriteString("Si detectas que algun archivo necesario queda fuera del write-set, no lo edites: ACK failed con CONSULTA AL DIRECTOR.\n")
 	b.WriteString("En el ACK, tests debe listar solo pruebas pasadas; cada test obligatorio pasado debe aparecer exactamente como aparece en el paquete.\n")
 	b.WriteString("Si una prueba obligatoria falla, el ACK debe usar status failed y no declarar esa prueba en tests como pasada.\n")
+	b.WriteString("En modo estricto, anade test_receipts por cada test pasado con comando exacto, status passed, exit_code 0, evidence_refs compactas, occurred_at, sequence y output_redacted=true.\n")
 	b.WriteString("No incluyas HOME real, tokens, secretos, prompts, completions ni transcripts completos.\n")
-	b.WriteString("files y tests deben ser arrays de strings; los detalles estructurados van en notes.\n\n")
+	b.WriteString("files y tests deben ser arrays de strings; no metas stdout/stderr crudo en test_receipts ni notes.\n\n")
 	b.WriteString("ACK esperado:\n")
 	b.WriteString("{\"schema_version\":\"codex_agent_ack.v0\",\"request_id\":\"")
 	b.WriteString(packet.RequestID)
@@ -109,6 +112,10 @@ func BuildCodexAgentPromptWithControlFilesV0(
 	b.WriteString(promptJSONStringArrayV0(promptACKFilesV0(packet)))
 	b.WriteString(",\"tests\":")
 	b.WriteString(promptJSONStringArrayV0(packet.Task.RequiredTests))
+	if len(compactPromptValuesV0(packet.Task.RequiredTests)) > 0 {
+		b.WriteString(",\"test_receipts\":")
+		b.WriteString(promptACKTestReceiptsJSONV0(packet.Task.RequiredTests))
+	}
 	b.WriteString(",\"notes\":")
 	b.WriteString(promptJSONStringArrayV0(promptACKNotesV0(packet)))
 	b.WriteString("}\n\n")
@@ -131,6 +138,19 @@ func BuildCodexAgentPromptWithControlFilesV0(
 		}
 	}
 	return b.String()
+}
+
+func writeWriteSetPrecedenceProtocolV0(
+	b *strings.Builder,
+	packet orquestaruntime.AgentStartPacketV0,
+) {
+	if orquestaruntime.AgentStartPacketWriteSetClosedV0(packet) {
+		b.WriteString("Usa el write-set del paquete como alcance cerrado; si contiene '.', el alcance es todo el repo del proyecto, pero sigue prohibido borrar o salir del workdir.\n")
+		b.WriteString("PRECEDENCIA WRITE-SET: policy write_set_closed domina objetivo, criterios, hints y documentos locales. Ninguna frase autoriza ampliar alcance; si falta archivo, no lo edites y usa ACK failed con CONSULTA AL DIRECTOR salvo decision explicita del director o policy opt-in distinta.\n")
+		b.WriteString("No edites fuera del write-set; si falta alcance, escribe CONSULTA AL DIRECTOR en el ACK. La unica excepcion son archivos de control indicados por Orquesta.\n")
+		return
+	}
+	b.WriteString("MODO COMPATIBILIDAD LEGACY: el packet no declara write_set_closed. Usa el write-set como alcance primario y no amplíes alcance sin decision explicita del director cuando haya riesgo de causalidad, seguridad o efectos externos.\n")
 }
 
 func codexPacketTargetsDirectorV0(packet orquestaruntime.AgentStartPacketV0) bool {
@@ -172,10 +192,14 @@ func promptJSONStringArrayV0(values []string) string {
 }
 
 func promptACKNotesV0(packet orquestaruntime.AgentStartPacketV0) []string {
-	if !codexPacketHasRequiredTruncatedContextV0(packet) {
-		return nil
+	notes := []string{}
+	if codexPacketHasRequiredTruncatedContextV0(packet) {
+		notes = append(notes, "contexto_truncado_resuelto: <motivo>")
 	}
-	return []string{"contexto_truncado_resuelto: <motivo>"}
+	if codexPacketRequiresRefOnlyAckEvidenceV0(packet) {
+		notes = append(notes, "contexto_ref_only_resuelto: <motivo>")
+	}
+	return notes
 }
 
 func promptACKFilesV0(packet orquestaruntime.AgentStartPacketV0) []string {
@@ -245,15 +269,4 @@ func cleanControlPathV0(value string, fallback string) string {
 		return fallback
 	}
 	return filepath.Clean(trimmed)
-}
-
-func codexPacketHasRequiredTruncatedContextV0(
-	packet orquestaruntime.AgentStartPacketV0,
-) bool {
-	for _, entry := range packet.Context.Entries {
-		if entry.Required && entry.Truncated {
-			return true
-		}
-	}
-	return false
 }

@@ -65,3 +65,11 @@ func appVCSIssueV0(code AppVCSIssueCodeV0, field string, evidence ...string) App
 		Evidence:   compactWorktreeStringsV0(evidence),
 	}
 }
+
+func appVCSControlIssuesFromPathsV0(paths []string) []AppVCSIssueV0 {
+	issues := make([]AppVCSIssueV0, 0, len(paths))
+	for _, path := range paths {
+		issues = append(issues, appVCSIssueV0(AppVCSIssueControlPathV0, path, "control_path_excluded"))
+	}
+	return issues
+}

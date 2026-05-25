@@ -6,6 +6,16 @@ import (
 	"strings"
 )
 
+var codexAckForbiddenControlDirBasesV0 = []string{
+	".orquesta-runtime",
+	".orquesta-codex-runtime",
+	".orquesta-local-runtime",
+	".orquesta-control",
+	"orquesta-runtime",
+	"orquesta-codex-runtime",
+	"orquesta-local-runtime",
+}
+
 func codexAckHasInvalidPathV0(values []string) bool {
 	for _, value := range values {
 		if _, ok := normalizeCodexAckFilePathV0(value); !ok {
@@ -29,8 +39,7 @@ func codexAckArtifactPathForbiddenV0(value string) bool {
 	if !ok {
 		return true
 	}
-	if strings.HasPrefix(path, ".orquesta-runtime/") ||
-		strings.HasPrefix(path, "orquesta-runtime/") {
+	if codexAckControlDirPathForbiddenV0(path) {
 		return true
 	}
 	switch pathpkg.Base(path) {
@@ -38,13 +47,25 @@ func codexAckArtifactPathForbiddenV0(value string) bool {
 		CodexAgentPacketFileNameV0,
 		CodexDirectorDecisionsFileNameV0,
 		"agent_prompt.txt",
+		"agent_shutdown_checkpoint_ack.json",
 		"codex_stdout.log",
 		"codex_stderr.log",
-		"codex_last_message.txt":
+		"codex_last_message.txt",
+		"orquesta_shutdown_request.json":
 		return true
 	default:
 		return false
 	}
+}
+
+func codexAckControlDirPathForbiddenV0(path string) bool {
+	segment, _, _ := strings.Cut(path, "/")
+	for _, base := range codexAckForbiddenControlDirBasesV0 {
+		if segment == base || strings.HasPrefix(segment, base+"-") {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeCodexAckPathsV0(values []string) []string {

@@ -24,6 +24,20 @@ func codexStackOperationalClosureDeliveriesForTaskV0(
 		}
 		deliveries = append(deliveries, delivery)
 	}
+	closedTasks := codexStackOperationalClosureSetV0(request.Run.ClosedTasks)
+	for _, childRef := range codexStackOperationalClosureChildTaskRefsV0(request.Run, task) {
+		if !closedTasks[childRef] {
+			continue
+		}
+		for _, deliveryRef := range request.Run.Deliveries {
+			delivery, ok := trace.Deliveries[strings.TrimSpace(deliveryRef)]
+			if !ok || strings.TrimSpace(delivery.TaskID) != childRef ||
+				!codexStackOperationalClosureContainsV0(request.Run.Deliveries, delivery.DeliveryRef) {
+				continue
+			}
+			deliveries = append(deliveries, delivery)
+		}
+	}
 	return deliveries
 }
 

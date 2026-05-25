@@ -47,13 +47,36 @@ func TestRESTConsultarDirectorStatsClientV0EnviaPOSTJSONYProyectaPanel(t *testin
 		received.RunRef != "run-ref-web-stats-001" ||
 		!received.IncludeAgentProgress ||
 		!received.IncludeProcessRefs ||
-		!received.IncludeAgentUsage {
+		received.IncludeAgentUsage {
 		t.Fatalf("request=%+v", received)
 	}
 	if panel.RunRef != "run-ref-web-stats-001" ||
 		panel.Resumen.TasksTotal != 2 ||
 		len(panel.Agentes) != 1 {
 		t.Fatalf("panel=%+v", panel)
+	}
+}
+
+func TestRESTConsultarDirectorStatsClientV0RespetaUsoOptIn(t *testing.T) {
+	var received WebDirectorStatsQueryV0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		_ = json.NewEncoder(w).Encode(directorStatsResultForWebTestV0())
+	}))
+	defer server.Close()
+
+	client := NewRESTConsultarDirectorStatsClientV0(server.URL, time.Second)
+	_, err := client.ConsultarDirectorStats(context.Background(), WebDirectorStatsQueryV0{
+		RunRef:            "run-ref-web-stats-usage-001",
+		IncludeAgentUsage: true,
+	})
+	if err != nil {
+		t.Fatalf("ConsultarDirectorStats: %v", err)
+	}
+	if !received.IncludeAgentUsage || !received.IncludeAgentProgress || !received.IncludeProcessRefs {
+		t.Fatalf("request=%+v", received)
 	}
 }
 

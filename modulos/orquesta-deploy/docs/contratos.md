@@ -24,6 +24,15 @@ Fixtures canonicos:
 - `docs/fixtures/deployment_plan_v0/paas_valido.json`
 - `docs/fixtures/deployment_plan_v0/target_no_soportado_invalido.json`
 
+### Wiring de composicion dry-run
+
+Desde T74, `DeploymentPlanDryRunPortV0` es el puerto opt-in para que una
+composicion invoque `orquesta-deploy` desde `AppSpecV0` o desde una microtarea
+de deploy. `BuildDeploymentPlanForCompositionDryRunV0` prepara un
+`DeploymentPlanV0` declarativo y `DefaultDeploymentPlanDryRunPortV0` devuelve
+refs de plan/evidencia sin ejecutar Docker, Kubernetes, cloud, filesystem
+productivo ni secretos.
+
 Campos de entrada:
 
 - `request_id`: identificador opaco de correlacion.

@@ -257,8 +257,8 @@ ejecucion, pero no puede depender de Codex, Claude, Gemini, HOME, OAuth ni APIs
 de cuota concretas.
 Impacto: `WebDirectorRunStatsContractV0` acepta `usage_summary` del nucleo y
 `WebDirectorStatsSummaryV0` expone `usage_agents`, `usage_quota_status`,
-`usage_total_tokens` y `usage_cost_micros`. Los datos vienen ya saneados por
-MCP/director stats.
+`usage_total_tokens`. Coste, proveedor y modelo no forman parte del contrato
+web de usage; los datos vienen ya saneados por MCP/director stats.
 Contratos afectados: `WebDirectorRunStatsContractV0`,
 `WebDirectorStatsSummaryV0`.
 Estado: aceptada localmente.

@@ -65,9 +65,10 @@ func TestWebAutoprogrammingStatusViewModelV0AgregaColaYRunVivos(t *testing.T) {
 			},
 		},
 		Diagnostics: []orquestamcp.MCPAutoprogrammingDiagnosticV0{{
-			Code:    "run_closure_blocked",
-			Scope:   "run",
-			Message: "cierre bloqueado",
+			Code:         "run_closure_blocked",
+			Scope:        "run",
+			Message:      "cierre bloqueado",
+			EvidenceRefs: []string{"blocker-ref-autop-status-web-001"},
 		}},
 	})
 
@@ -106,7 +107,9 @@ func TestWebAutoprogrammingStatusViewModelV0AgregaColaYRunVivos(t *testing.T) {
 		!vm.Agents[0].NeedsAttention {
 		t.Fatalf("agents=%+v", vm.Agents)
 	}
-	if len(vm.Diagnostics) != 1 || vm.Diagnostics[0].Code != "run_closure_blocked" {
+	if len(vm.Diagnostics) != 1 ||
+		vm.Diagnostics[0].Code != "run_closure_blocked" ||
+		len(vm.Diagnostics[0].EvidenceRefs) != 1 {
 		t.Fatalf("diagnostics=%+v", vm.Diagnostics)
 	}
 

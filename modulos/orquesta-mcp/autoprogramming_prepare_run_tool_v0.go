@@ -71,7 +71,7 @@ func MCPAutoprogrammingPrepareRunDescriptorV0() MCPAutoprogrammingPrepareRunTool
 	return MCPAutoprogrammingPrepareRunToolDescriptorV0{
 		Name:        MCPAutoprogrammingPrepareRunToolNameV0,
 		Version:     MCPAutoprogrammingPrepareRunToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,autoprogramming_request,limits?,priority_score?}",
+		InputSchema: "envelope:{request_id?,correlation_id?,autoprogramming_request:AutoprogrammingRequestV0,limits?,priority_score?}",
 		Output:      "ok:{run_ref,workflow_task_refs,wait_agent_refs,continue{operational_director_plan_ref?}}|error:{errores_publicos}",
 		ResourceURI: MCPAutoprogrammingPrepareRunResourceURIV0,
 		Invariantes: []string{

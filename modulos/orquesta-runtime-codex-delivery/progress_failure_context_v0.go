@@ -18,6 +18,7 @@ const (
 	codexProgressFailureNoACKV0           codexProgressFailureClassV0 = "no_ack"
 	codexProgressFailureInterruptedV0     codexProgressFailureClassV0 = "interrupted"
 	codexProgressFailureCapacityWarningV0 codexProgressFailureClassV0 = "capacity_warning"
+	codexProgressFailureAuthInvalidV0     codexProgressFailureClassV0 = "auth_invalid"
 )
 
 func codexProgressReportWithProcessFailureContextV0(
@@ -39,6 +40,13 @@ func codexProgressReportWithProcessFailureContextV0(
 	}
 	failure := codexProgressFailureClassFromDescriptorV0(descriptor)
 	switch failure {
+	case codexProgressFailureAuthInvalidV0:
+		report.Summary = "Autenticacion externa invalida; requiere reautorizacion del operador."
+		report.DecisionRequired = true
+		report.EvidenceRefs = compactCodexDeliveryRefsV0(append(
+			report.EvidenceRefs,
+			"evidence-ref-auth-config-blocker",
+		))
 	case codexProgressFailureCapacityWarningV0:
 		report.Summary = "Proceso detenido por aviso de capacidad externa; requiere relevo."
 		report.BudgetStatus = orquestaruntime.AgentProgressBudgetCapacityLimitedV0
@@ -94,6 +102,11 @@ func codexProgressFailureClassFromDescriptorV0(
 ) codexProgressFailureClassV0 {
 	logs := codexProgressFailureLogsFromDescriptorV0(descriptor)
 	for _, log := range logs {
+		if codexProgressTextHasAuthInvalidSignalV0(log) {
+			return codexProgressFailureAuthInvalidV0
+		}
+	}
+	for _, log := range logs {
 		if codexProgressTextHasCapacitySignalV0(log) {
 			return codexProgressFailureCapacityWarningV0
 		}
@@ -136,6 +149,16 @@ func codexProgressTextHasCapacitySignalV0(text string) bool {
 		strings.Contains(normalized, "at capacity") ||
 		strings.Contains(normalized, "capacity") ||
 		strings.Contains(normalized, "credits")
+}
+
+func codexProgressTextHasAuthInvalidSignalV0(text string) bool {
+	normalized := strings.ToLower(text)
+	return strings.Contains(normalized, "token_invalidated") ||
+		strings.Contains(normalized, "refresh_token_reused") ||
+		strings.Contains(normalized, "invalid_grant") ||
+		strings.Contains(normalized, "authentication required") ||
+		strings.Contains(normalized, "unauthorized") ||
+		strings.Contains(normalized, "401")
 }
 
 func codexProgressTextHasInterruptedNoACKSignalV0(text string) bool {

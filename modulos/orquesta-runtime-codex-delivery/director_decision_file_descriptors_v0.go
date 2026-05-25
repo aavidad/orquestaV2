@@ -2,6 +2,8 @@ package orquestaruntimecodexdelivery
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -19,6 +21,13 @@ type CodexReceiptDirectorDecisionFileDescriptorProviderV0 struct {
 }
 
 var _ orquestadirectoragentfilesource.DirectorAgentDecisionFileDescriptorProviderPortV0 = CodexReceiptDirectorDecisionFileDescriptorProviderV0{}
+
+type codexDirectorDecisionSidecarReceiptRecorderV0 interface {
+	RecordDirectorAgentDecisionFileConsumptionV0(
+		context.Context,
+		orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0,
+	) error
+}
 
 func (provider CodexReceiptDirectorDecisionFileDescriptorProviderV0) ListDirectorAgentDecisionFilesV0(
 	ctx context.Context,
@@ -45,10 +54,12 @@ func (provider CodexReceiptDirectorDecisionFileDescriptorProviderV0) ListDirecto
 	if err != nil {
 		return nil, err
 	}
-	return directorDecisionDescriptorsFromReceiptsV0(receipts, runID, fileName, request)
+	return directorDecisionDescriptorsFromReceiptsV0(ctx, provider.Store, receipts, runID, fileName, request)
 }
 
 func directorDecisionDescriptorsFromReceiptsV0(
+	ctx context.Context,
+	store CodexReceiptDescriptorStorePortV0,
 	receipts []CodexReceiptDescriptorV0,
 	runID string,
 	fileName string,
@@ -72,20 +83,39 @@ func directorDecisionDescriptorsFromReceiptsV0(
 			return nil, fmt.Errorf("director_decision_file_descriptors: ack_path requerido")
 		}
 		decisionPath := filepath.Join(filepath.Dir(ackPath), fileName)
-		exists, err := directorDecisionFileExistsV0(decisionPath)
+		sidecar, exists, err := directorDecisionSidecarReceiptForFileV0(receipt, decisionPath, request)
 		if err != nil {
 			return nil, err
 		}
 		if !exists {
 			continue
 		}
+		if sidecar.Status == "consumed" {
+			continue
+		}
+		if err := recordDirectorDecisionSidecarPendingReceiptV0(ctx, store, sidecar); err != nil {
+			return nil, err
+		}
 		descriptors = append(descriptors, orquestadirectoragentfilesource.DirectorAgentDecisionFileDescriptorV0{
-			DescriptorRef: directorDecisionDescriptorRefV0(receipt),
-			RunID:         receiptRunID,
-			Path:          decisionPath,
+			DescriptorRef:  directorDecisionDescriptorRefV0(receipt),
+			RunID:          receiptRunID,
+			Path:           decisionPath,
+			SidecarReceipt: &sidecar,
 		})
 	}
 	return descriptors, nil
+}
+
+func recordDirectorDecisionSidecarPendingReceiptV0(
+	ctx context.Context,
+	store CodexReceiptDescriptorStorePortV0,
+	receipt orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0,
+) error {
+	recorder, ok := store.(codexDirectorDecisionSidecarReceiptRecorderV0)
+	if !ok || recorder == nil {
+		return nil
+	}
+	return recorder.RecordDirectorAgentDecisionFileConsumptionV0(ctx, receipt)
 }
 
 func directorDecisionReceiptReflectedV0(
@@ -100,18 +130,93 @@ func directorDecisionReceiptReflectedV0(
 		codexReceiptArtifactRefRegisteredV0(request.PhaseArtifacts, ackRef)
 }
 
-func directorDecisionFileExistsV0(path string) (bool, error) {
+func directorDecisionSidecarReceiptForFileV0(
+	receipt CodexReceiptDescriptorV0,
+	path string,
+	request orquestadirectoragentfilesource.DirectorAgentDecisionFileListRequestV0,
+) (orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0, bool, error) {
 	info, err := os.Stat(path)
-	if err == nil {
-		if !info.Mode().IsRegular() {
-			return false, fmt.Errorf("director_decision_file_descriptors: decision_file no regular")
-		}
-		return true, nil
-	}
 	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
+		return orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0{}, false, nil
 	}
-	return false, fmt.Errorf("director_decision_file_descriptors: stat decision_file: %s", directorDecisionStatErrorKindV0(err))
+	if err != nil {
+		return orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0{}, false,
+			fmt.Errorf("director_decision_file_descriptors: stat decision_file: %s", directorDecisionStatErrorKindV0(err))
+	}
+	if !info.Mode().IsRegular() {
+		return orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0{}, false,
+			fmt.Errorf("director_decision_file_descriptors: decision_file no regular")
+	}
+	hash, err := directorDecisionFileHashV0(path)
+	if err != nil {
+		return orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0{}, false, err
+	}
+	sidecar := directorDecisionSidecarReceiptV0(receipt, request, hash, info.Size())
+	if existing := receipt.DirectorDecisionSidecarReceipt; existing != nil {
+		if err := validateDirectorDecisionExistingSidecarReceiptV0(*existing, sidecar); err != nil {
+			return orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0{}, false, err
+		}
+		sidecar = *existing
+		sidecar.Status = strings.TrimSpace(sidecar.Status)
+		if sidecar.Status == "" {
+			sidecar.Status = "pending"
+		}
+	}
+	return sidecar, true, nil
+}
+
+func directorDecisionFileHashV0(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("director_decision_file_descriptors: hash decision_file: %s", directorDecisionStatErrorKindV0(err))
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func directorDecisionSidecarReceiptV0(
+	receipt CodexReceiptDescriptorV0,
+	request orquestadirectoragentfilesource.DirectorAgentDecisionFileListRequestV0,
+	hash string,
+	size int64,
+) orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0 {
+	receiptRef := directorDecisionDescriptorRefV0(receipt) + "-" + shortDirectorDecisionHashV0(hash)
+	return orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0{
+		SchemaVersion:         orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptSchemaV0,
+		ReceiptRef:            receiptRef,
+		ProducerDescriptorRef: strings.TrimSpace(receipt.DescriptorRef),
+		ProducerAckRef:        strings.TrimSpace(receipt.Spec.AgentPacket.DeliveryRefs.AckRef),
+		RunID:                 strings.TrimSpace(receipt.RunID),
+		AgentRef:              codexReceiptDescriptorAgentRefV0(receipt),
+		CorrelationID:         strings.TrimSpace(request.CorrelationID),
+		SHA256:                hash,
+		SizeBytes:             size,
+		Status:                "pending",
+	}
+}
+
+func validateDirectorDecisionExistingSidecarReceiptV0(
+	existing orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0,
+	current orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0,
+) error {
+	if strings.TrimSpace(existing.SchemaVersion) != current.SchemaVersion ||
+		strings.TrimSpace(existing.ReceiptRef) != current.ReceiptRef ||
+		strings.TrimSpace(existing.SHA256) != current.SHA256 ||
+		existing.SizeBytes != current.SizeBytes ||
+		strings.TrimSpace(existing.ProducerAckRef) != current.ProducerAckRef ||
+		strings.TrimSpace(existing.RunID) != current.RunID ||
+		strings.TrimSpace(existing.AgentRef) != current.AgentRef {
+		return fmt.Errorf("director_decision_file_descriptors: sidecar_receipt_conflict")
+	}
+	return nil
+}
+
+func shortDirectorDecisionHashV0(hash string) string {
+	hash = strings.TrimSpace(hash)
+	if len(hash) <= 12 {
+		return hash
+	}
+	return hash[:12]
 }
 
 func directorDecisionStatErrorKindV0(err error) string {

@@ -31,11 +31,71 @@ func ReadCodexDeliveryObservationFileV0(
 			issue,
 		}
 	}
-	ack, issues := ValidateCodexAgentAckBytesForSpecV0(data, spec)
+	ack, issues := validateCodexDeliveryAckBytesForSpecV0(data, spec)
 	if len(issues) > 0 {
 		return CodexDeliveryObservationV0{}, issues
 	}
 	return BuildCodexDeliveryObservationV0(ack, spec)
+}
+
+func validateCodexDeliveryAckBytesForSpecV0(
+	data []byte,
+	spec orquestaruntime.ExternalAgentLaunchSpecV0,
+) (CodexAgentAckV0, []orquestaruntime.ExternalAgentConnectorErrorV0) {
+	if CodexAgentPacketRequiresStrictTerminalAckV0(spec.AgentPacket) {
+		ack, issues := ValidateStrictCompletedCodexAgentAckBytesForSpecV0(data, spec)
+		if len(issues) == 0 {
+			return ack, nil
+		}
+		if codexDeliveryObservationCanAcceptLegacyAckWithoutReceiptsV0(data, spec, issues) {
+			return ValidateCodexAgentAckBytesForSpecV0(data, spec)
+		}
+		return ack, issues
+	}
+	return ValidateCodexAgentAckBytesForSpecV0(data, spec)
+}
+
+func codexDeliveryObservationCanAcceptLegacyAckWithoutReceiptsV0(
+	data []byte,
+	spec orquestaruntime.ExternalAgentLaunchSpecV0,
+	strictIssues []orquestaruntime.ExternalAgentConnectorErrorV0,
+) bool {
+	if !codexDeliveryObservationIssuesOnlyMissingTestReceiptV0(strictIssues) {
+		return false
+	}
+	ack, issues := ValidateCodexAgentAckBytesForSpecV0(data, spec)
+	if len(issues) > 0 || len(ack.TestReceipts) > 0 {
+		return false
+	}
+	return len(compactCodexAckStringsV0(spec.AgentPacket.Task.RequiredTests)) > 0
+}
+
+func codexDeliveryObservationIssuesOnlyMissingTestReceiptV0(
+	issues []orquestaruntime.ExternalAgentConnectorErrorV0,
+) bool {
+	if len(issues) == 0 {
+		return false
+	}
+	for _, issue := range issues {
+		if issue.Code != orquestaruntime.ExternalAgentConnectorErrorCodeV0(CodexConnectorAckArtifactV0) ||
+			strings.TrimSpace(issue.Field) != "test_receipts" ||
+			!codexAckIssueHasEvidenceV0(issue, "missing_required_test_receipt") {
+			return false
+		}
+	}
+	return true
+}
+
+func codexAckIssueHasEvidenceV0(
+	issue orquestaruntime.ExternalAgentConnectorErrorV0,
+	want string,
+) bool {
+	for _, evidence := range issue.Evidence {
+		if evidence == want {
+			return true
+		}
+	}
+	return false
 }
 
 func BuildCodexDeliveryObservationV0(
@@ -64,6 +124,7 @@ func codexDeliveryObservationFromAckV0(
 		packet.DeliveryRefs.ReadinessRef,
 		packet.DeliveryRefs.CheckpointRef,
 	}
+	evidenceRefs = append(evidenceRefs, CodexRequiredTestReceiptEvidenceRefsV0(ack.TestReceipts)...)
 	evidenceRefs = append(evidenceRefs, CodexAgentAckPendingRailEvidenceRefsV0(ack)...)
 	return CodexDeliveryObservationV0{
 		DeliveryRef:  strings.TrimSpace(ack.AckRef),

@@ -101,7 +101,6 @@ func directorStatsQueryWithAgentProgressV0(query WebDirectorStatsQueryV0) WebDir
 	if query.RunRef != "" {
 		query.IncludeProcessRefs = true
 		query.IncludeAgentProgress = true
-		query.IncludeAgentUsage = true
 	}
 	return query
 }

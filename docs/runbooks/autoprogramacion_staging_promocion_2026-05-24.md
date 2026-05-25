@@ -41,6 +41,31 @@ run autoprogramming cerrada causalmente
   como pendiente de promocion.
 - El archivo de staging es idempotente: si el manifest ya existe y coincide, se
   acepta; si difiere, bloquea con evidencia compacta.
+- Si promocion, push o archivo devuelve `pending`, `pending_push` o `blocked`,
+  la cola no se marca como `closed`; el retry debe conservar evidence refs
+  compactas.
+
+## Nota operativa
+
+No se promueven cambios de autoprogramacion mientras exista cualquier run viva,
+ejecutable, en revision o pendiente de agente externo con `write_set` solapado.
+La promocion queda pendiente y debe reevaluar el estado vivo antes de cada
+intento; no basta con que el candidato haya pasado tests si otra entrega puede
+modificar el mismo alcance. `worktree_ref` y `branch_ref` siguen siendo refs
+opacas y no se convierten en rutas ni nombres Git para resolver el solape.
+
+## Evidencia T40
+
+El e2e acotado cerrado el 2026-05-24 vive en
+`TestCodexStackAutoprogrammingPromotionV0E2ERepoTemporalReplayV0`: usa repo Git
+temporal, run de autoprogramacion cerrada causalmente, review aceptada,
+`RequiredTestEvidenceV0` `passed`, promocion opt-in por el puerto del stack,
+commit solo dentro del `write_set` y archivo idempotente. El replay repite el
+tick y verifica que no aparecen commits ni manifests duplicados.
+
+Push remoto/productivo no queda habilitado por este runbook. Esa superficie
+requiere guardas propias de remoto, rama, ventana operativa y confirmacion de
+operador.
 
 Validacion focal:
 

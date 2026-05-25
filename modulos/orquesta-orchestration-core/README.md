@@ -192,6 +192,27 @@ en `WorkflowTaskStorePortV0` y el wait vivo en
 `WorkflowTaskWaitStateStorePortV0`, o rematerializarse idempotentemente antes de
 reanudar waits por ola/cohorte.
 
+## Ciclo Director V2
+
+La espina fuente de verdad para un tick neutral es:
+
+```text
+DirectorCycleStepV0
+  -> orquesta-director-runner
+  -> orquesta-director-scheduler
+  -> orquesta-core-workflow
+  -> orquesta-director-cycle-outbox
+```
+
+`orquesta-director-cycle` consulta outbox pendiente por ledger inyectado,
+`orquesta-director-tick-input` prepara el input compacto, el runner pide el plan
+al scheduler y aplica comandos por puerto de workflow, y
+`orquesta-director-cycle-outbox` registra la outbox nueva. Esa frontera no
+arranca procesos, no despacha ACKs, no elige persistencia concreta y no sustituye
+al loop progresivo historico de `app-director-service`. Los pendientes de esta
+linea deben decir si falta codigo offline, composicion residente/restart, smoke
+real neutral, proveedor real u OPES temporal.
+
 El contrato operativo de solicitud de autoprogramacion vive fuera del nucleo en
 `modulos/orquesta-autoprogramming`. Este paquete solo ve observaciones,
 candidatos y puertos genericos; no valida `write_set`, no decide tests
@@ -251,6 +272,14 @@ actual.
   y reclama varios intents sin ejecutar runtime ni crear goroutines en el core.
 - Cierre de batch: `RunOutboxDispatchBatchV0` delega la ejecucion a un puerto
   externo y solo ACKea los items confirmados como success.
+- Gate opcional de capacidad viva:
+  `LiveProcessCapacityGatePortV0` reserva huecos antes de reclamar outbox solo
+  para `LaunchRuntimeAgent`. Si `Granted=0`, el batch queda
+  `capacity_blocked` y los mensajes siguen pendientes; si hay hueco parcial,
+  `MaxReady` se reduce al hueco concedido. `StopRuntimeAgent` y otros mensajes
+  no pasan por este gate para no bloquear ni consumir observaciones de parada.
+  La implementacion neutral lista registros por puerto y consulta snapshots de
+  runtime inyectado, sin conocer Codex ni procesos concretos del producto.
 - Loop progresivo con `BatchDispatchers`: si `MaxOutboxPerCycle` se activa, el
   runner puede generar varios outbox y el dispatcher batch puede cerrar varios
   agentes en el mismo ciclo.

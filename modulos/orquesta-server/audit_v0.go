@@ -94,11 +94,17 @@ func (runtime *RuntimeV0) auditEventV0(
 	if runtime == nil || runtime.auditSink == nil {
 		return
 	}
-	_ = runtime.auditSink.AppendAuditEventV0(ctx, AuditEventV0{
+	if err := runtime.auditSink.AppendAuditEventV0(ctx, AuditEventV0{
 		Event:      event,
 		OccurredAt: formatTimeV0(runtime.clock.Now()),
 		Status:     status,
 		Error:      errText,
 		Payload:    payload,
-	})
+	}); err != nil {
+		message := "audit_append_failed: " + err.Error()
+		if runtime.tracker != nil {
+			runtime.persistStateV0(context.Background(), runtime.tracker.MarkErrorV0(message, runtime.clock.Now()))
+		}
+		fmt.Fprintln(os.Stderr, message)
+	}
 }

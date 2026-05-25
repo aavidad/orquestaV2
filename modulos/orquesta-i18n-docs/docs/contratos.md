@@ -35,6 +35,34 @@ Fixtures locales iniciales:
 Nota de validacion v0: JSON Schema cubre estructura, campos obligatorios, enums, patrones, unicidad de arrays y ausencia de campos no contratados. Las invariantes relacionales dinamicas, como `default_locale` incluido en `locales`, correspondencia exacta entre `locales` y `catalogs`, cobertura de `required_keys` en cada catalogo, y completitud de `required_doc_types` por locale, quedan como validacion de contrato posterior hasta existir harness local.
 
 ```text
+Nombre: ActiveI18nDocsCompositionOwnerV0
+Tipo: dto
+Version: v0
+Propietario: orquesta-i18n-docs
+Consumidores: orquesta-factory, orquesta-web, orquesta-mcp.
+Campos:
+  - owner_module: literal `orquesta-i18n-docs`.
+  - contract: `GenerarI18nDocsIniciales v0`.
+  - contract_version: version del plan `AppI18nDocsPlanV0`.
+  - bundle_structure_version: version unica de `I18nBundleV0`.
+  - loader_contract: literal `i18n-loader/v0`.
+  - fallback_locale: locale que debe usar el loader si el solicitado no existe.
+  - required_namespaces: namespaces cubiertos por skeleton/loader.
+  - required_keys_hash: hash determinista de claves requeridas.
+  - web_required_keys, factory_required_keys, required_doc_types: proyecciones de paridad para consumidores.
+  - canonical_refs, verification: refs publicas de contrato y pruebas.
+Invariantes:
+  - No ejecuta runtime, filesystem, DB, LLM ni proveedor.
+  - Factory, web y MCP deben consumir esta proyeccion o el plan que la origina antes de declarar owner propio.
+  - `fallback_locale`, `required_keys_hash` y `required_doc_types` salen del plan validado, no de listas paralelas.
+Errores:
+  - No aplica como DTO; la validacion pertenece a `ValidateAppI18nDocsPlanV0`.
+Pruebas de contrato:
+  - `BuildActiveI18nDocsCompositionOwnerV0` produce owner valido y refs canonicas.
+  - Factory/web/MCP mantienen pruebas focales que consumen owner/proyeccion T75.
+```
+
+```text
 Nombre: GenerarI18nDocsIniciales
 Tipo: puerto_entrada
 Version: v0

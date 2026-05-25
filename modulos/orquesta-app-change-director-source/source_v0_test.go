@@ -291,8 +291,8 @@ func TestAppChangeDirectorDecisionSourceV0SaneaGuardasInternasEnExpansion(t *tes
 		!stringInSetV0(task.RequiredTests, "validar longitud declarada del tema grande") {
 		t.Fatalf("task=%+v", task)
 	}
-	if stringInSetV0(task.AcceptanceCriteria, "no leer DB ni ficheros internos de OPES") {
-		t.Fatalf("criterio no saneado: %+v", task.AcceptanceCriteria)
+	if !stringInSetV0(task.AcceptanceCriteria, "no leer DB ni ficheros internos de OPES") {
+		t.Fatalf("criterio de dominio perdido: %+v", task.AcceptanceCriteria)
 	}
 	if _, err := orquestacoreworkflow.NewWorkflowTaskV0(workflowTaskFromDirectorTaskForTestV0(task)); err != nil {
 		t.Fatalf("workflow task invalida tras saneo: %v task=%+v", err, task)
@@ -322,12 +322,31 @@ func TestAppChangeDirectorDecisionSourceV0SaneaCriteriosOperativosSinBloquearAut
 		t.Fatalf("decisions vacias")
 	}
 	task := decisions[6].CreateMicrotask.Task
-	if !stringInSetV0(task.AcceptanceCriteria, "Reglas de hexagonal, i18n, archivos manejables y economia de contexto llegan a agentes desde codigo.") ||
-		containsFragmentInSetForTestV0(task.AcceptanceCriteria, "token") ||
-		containsFragmentInSetForTestV0(task.AcceptanceCriteria, "Codex") ||
-		containsFragmentInSetForTestV0(task.AcceptanceCriteria, "modelo") ||
-		containsFragmentInSetForTestV0(task.AcceptanceCriteria, "provider") {
+	if !stringInSetV0(task.AcceptanceCriteria, "Reglas de hexagonal, i18n, archivos manejables y token economy llegan a agentes desde codigo.") ||
+		!stringInSetV0(task.AcceptanceCriteria, "No fijar Codex, modelo ni provider en nucleo.") {
 		t.Fatalf("criteria=%+v", task.AcceptanceCriteria)
+	}
+}
+
+func TestAppChangeDirectorDecisionSourceV0BloqueaDetalleSensibleEnAutoPlan(t *testing.T) {
+	record := appChangeRecordForSourceTestV0()
+	record.Request.AcceptanceCriteria = []string{
+		"No persistir api_key=valor en criterios publicos.",
+	}
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	run := appChangeRunForSourceTestV0(record)
+
+	decisions, err := (AppChangeDirectorDecisionSourceV0{Store: store}).
+		ListDirectorAgentDecisionsV0(
+			context.Background(),
+			orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+		)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	if len(decisions) != 0 {
+		t.Fatalf("decisions=%+v", decisions)
 	}
 }
 

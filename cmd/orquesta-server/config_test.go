@@ -39,8 +39,11 @@ func TestServerConfigFromEnvV0SupervisorResidenteNoEsperaAgenteLargo(t *testing.
 	if err != nil {
 		t.Fatalf("serverConfigFromEnvV0: %v", err)
 	}
+	if config.SupervisorCommand.DrainLimits.MaxExternalWaits != defaultServerSupervisorMaxExternalWaitsV0 {
+		t.Fatalf("server drain max_external_waits=%d want=%d", config.SupervisorCommand.DrainLimits.MaxExternalWaits, defaultServerSupervisorMaxExternalWaitsV0)
+	}
 	if config.SupervisorCommand.DrainLimits.MaxExternalWaits != 1 {
-		t.Fatalf("server drain max_external_waits=%d want=1", config.SupervisorCommand.DrainLimits.MaxExternalWaits)
+		t.Fatalf("el supervisor residente debe observar y volver al bucle, no esperar agentes largos: %d", config.SupervisorCommand.DrainLimits.MaxExternalWaits)
 	}
 	limits := directorLimitsV0()
 	if limits.MaxExternalWaits != 120 {
@@ -56,8 +59,8 @@ func TestServerConfigFromEnvV0CapaEsperaLargaDelSupervisorResidente(t *testing.T
 	if err != nil {
 		t.Fatalf("serverConfigFromEnvV0: %v", err)
 	}
-	if config.SupervisorCommand.DrainLimits.MaxExternalWaits != 1 {
-		t.Fatalf("server drain max_external_waits=%d want=1", config.SupervisorCommand.DrainLimits.MaxExternalWaits)
+	if config.SupervisorCommand.DrainLimits.MaxExternalWaits != maxServerSupervisorMaxExternalWaitsV0 {
+		t.Fatalf("server drain max_external_waits=%d want=%d", config.SupervisorCommand.DrainLimits.MaxExternalWaits, maxServerSupervisorMaxExternalWaitsV0)
 	}
 }
 
@@ -87,6 +90,39 @@ func TestServerConfigFromEnvV0ExponeSupervisorDesatendidoV0(t *testing.T) {
 	}
 }
 
+func TestServerConfigFromEnvV0PublicaConfiguracionEfectivaCanonica(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", t.TempDir())
+	t.Setenv("ORQUESTA_SERVER_MAX_RUNS_PER_TICK", "10")
+	t.Setenv("ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK", "10")
+	t.Setenv("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_TARGET_QUEUE", "25")
+	t.Setenv("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_MAX_REQUESTS", "10")
+	t.Setenv("ORQUESTA_CODEX_MAX_BATCH_READY", "10")
+	t.Setenv("ORQUESTA_CODEX_MAX_CONCURRENCY", "10")
+	t.Setenv("ORQUESTA_CODEX_REASONING_EFFORT", "high")
+	t.Setenv("ORQUESTA_CODEX_DIRECTOR_MAX_SUBAGENTS_PER_AGENT", "6")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	settings := config.EffectiveConfig.Settings
+	for key, want := range map[string]string{
+		"ORQUESTA_SERVER_MAX_RUNS_PER_TICK":                  "10",
+		"ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK":            "10",
+		"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_TARGET_QUEUE": "25",
+		"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_MAX_REQUESTS": "10",
+		"ORQUESTA_CODEX_MAX_BATCH_READY":                     "10",
+		"ORQUESTA_CODEX_MAX_CONCURRENCY":                     "10",
+		"ORQUESTA_CODEX_REASONING_EFFORT":                    "high",
+		"ORQUESTA_CODEX_DIRECTOR_MAX_SUBAGENTS_PER_AGENT":    "6",
+	} {
+		got := effectiveSettingValueForTestV0(settings, key)
+		if got != want {
+			t.Fatalf("%s=%q want %q settings=%+v", key, got, want, settings)
+		}
+	}
+}
+
 func TestServerConfigFromEnvV0AislaEstadoYDejaRuntimeEscribiblePorDefecto(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", projectDir)
@@ -109,6 +145,42 @@ func TestServerConfigFromEnvV0AislaEstadoYDejaRuntimeEscribiblePorDefecto(t *tes
 	if filepath.Base(config.RuntimeWorkDir) != ".orquesta-runtime" {
 		t.Fatalf("runtime dir inesperado: %s", config.RuntimeWorkDir)
 	}
+}
+
+func TestCodexDirectorWaveConfigFromEnvV0UsaSubagentesCanonicos(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_DIRECTOR_MAX_SUBAGENTS_PER_AGENT", "6")
+	t.Setenv("ORQUESTA_CODEX_DIRECTOR_RECURSIVE_AGENT_BUDGET", "42")
+	stderr := strings.Builder{}
+
+	config, err := codexDirectorWaveConfigFromArgsV0([]string{
+		"--dry-run",
+		"--allow-recursive-delegation",
+		"--max-delegation-depth", "1",
+		"--wave-ref", "wave-env-subagents",
+		"--project-dir", t.TempDir(),
+		"--runtime-dir", filepath.Join(t.TempDir(), "runtime"),
+		"--command", os.Args[0],
+		"--objective", "probar fanout configurable",
+		"--write-set", "cmd/orquesta-server",
+		"--required-tests", "go test -count=1 ./cmd/orquesta-server",
+		"--branch-ref", "branch-env-subagents",
+		"--worktree-ref", "worktree-env-subagents",
+	}, &stderr)
+	if err != nil {
+		t.Fatalf("codexDirectorWaveConfigFromArgsV0: %v stderr=%s", err, stderr.String())
+	}
+	if config.MaxSubagentsPerAgent != 6 || config.RecursiveAgentBudget != 42 {
+		t.Fatalf("subagentes=%d budget=%d", config.MaxSubagentsPerAgent, config.RecursiveAgentBudget)
+	}
+}
+
+func effectiveSettingValueForTestV0(settings []orquestaserver.ServerConfigSettingV0, key string) string {
+	for _, setting := range settings {
+		if setting.Key == key {
+			return setting.Value
+		}
+	}
+	return ""
 }
 
 func pathIsInsideForTestV0(t *testing.T, child string, parent string) bool {
@@ -156,8 +228,8 @@ func TestCodexRuntimeConfigV0UsaUmbralesConservadoresPorDefecto(t *testing.T) {
 	if config.ProgressBudget.MaxExpected != 20*time.Minute {
 		t.Fatalf("max_expected=%s want 20m", config.ProgressBudget.MaxExpected)
 	}
-	if config.ReasoningEffort != "xhigh" {
-		t.Fatalf("reasoning_effort=%q want xhigh", config.ReasoningEffort)
+	if config.ReasoningEffort != "medium" {
+		t.Fatalf("reasoning_effort=%q want medium", config.ReasoningEffort)
 	}
 }
 
@@ -203,7 +275,7 @@ func TestCodexRuntimeConfigV0PermiteSobrescribirReasoningEffort(t *testing.T) {
 	}
 }
 
-func TestCodexRuntimeConfigV0ElevaReasoningEffortBajoAHigh(t *testing.T) {
+func TestCodexRuntimeConfigV0ConservaReasoningEffortMedium(t *testing.T) {
 	t.Setenv("ORQUESTA_CODEX_REASONING_EFFORT", "medium")
 
 	config := codexRuntimeConfigV0(orquestaserver.ConfigV0{
@@ -211,8 +283,8 @@ func TestCodexRuntimeConfigV0ElevaReasoningEffortBajoAHigh(t *testing.T) {
 		RuntimeWorkDir: t.TempDir(),
 	}, nil)
 
-	if config.ReasoningEffort != "high" {
-		t.Fatalf("reasoning_effort=%q want high", config.ReasoningEffort)
+	if config.ReasoningEffort != "medium" {
+		t.Fatalf("reasoning_effort=%q want medium", config.ReasoningEffort)
 	}
 }
 
@@ -237,17 +309,17 @@ func TestCodexRuntimeConfigV0InyectaToolbeltOperativoDelServidor(t *testing.T) {
 	}
 }
 
-func TestCodexStackCapacityConfigFromEnvV0ElevaReasoningCodexMediumAHigh(t *testing.T) {
+func TestCodexStackCapacityConfigFromEnvV0ConservaReasoningCodexMedium(t *testing.T) {
 	t.Setenv("ORQUESTA_CAPACITY_REASONING_EFFORT", "")
 	t.Setenv("ORQUESTA_CODEX_REASONING_EFFORT", "medium")
 
 	config := codexStackCapacityConfigFromEnvV0()
 
-	if config.ReasoningEffort != orquestacoreworkflow.OrchestrationCapacityHighV0 {
-		t.Fatalf("reasoning_effort=%q want high", config.ReasoningEffort)
+	if config.ReasoningEffort != orquestacoreworkflow.OrchestrationCapacityMediumV0 {
+		t.Fatalf("reasoning_effort=%q want medium", config.ReasoningEffort)
 	}
-	if config.Tier != orquestacoreworkflow.OrchestrationCapacityXHighV0 {
-		t.Fatalf("tier=%q want xhigh", config.Tier)
+	if config.Tier != orquestacoreworkflow.OrchestrationCapacityMediumV0 {
+		t.Fatalf("tier=%q want medium", config.Tier)
 	}
 	if config.OccurredAt == "" || config.RequestedBy != "orquesta-server" {
 		t.Fatalf("capacity config incompleta: %+v", config)
@@ -264,8 +336,8 @@ func TestCodexStackCapacityConfigFromEnvV0PermiteSobrescribirCapacidad(t *testin
 	if config.Tier != orquestacoreworkflow.OrchestrationCapacityHighV0 {
 		t.Fatalf("tier=%q want high", config.Tier)
 	}
-	if config.ReasoningEffort != orquestacoreworkflow.OrchestrationCapacityHighV0 {
-		t.Fatalf("reasoning_effort=%q want high", config.ReasoningEffort)
+	if config.ReasoningEffort != orquestacoreworkflow.OrchestrationCapacityLowV0 {
+		t.Fatalf("reasoning_effort=%q want low", config.ReasoningEffort)
 	}
 }
 
@@ -574,6 +646,7 @@ func TestDomainWorkExecutorFromEnvV0ConectaHTTPNeutralOptIn(t *testing.T) {
 	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_ENABLED", "")
 	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_DIR", "")
 	t.Setenv("ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL", server.URL)
+	t.Setenv("ORQUESTA_DOMAIN_WORK_HTTP_EGRESS_MODE", "smoke_local")
 	t.Setenv("ORQUESTA_DOMAIN_WORK_HTTP_CREATE_PATH", "/jobs")
 	t.Setenv("ORQUESTA_DOMAIN_WORK_HTTP_SUBMIT_PATH", "/artifacts")
 

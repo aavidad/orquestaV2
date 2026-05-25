@@ -62,6 +62,67 @@ func TestDrainRunV0WaitAgentRefsNoIngiereACKFueraDeScope(t *testing.T) {
 	}
 }
 
+func TestDrainRunV0ACKExistenteFueraDeScopeSeIngiereAlEntrarEnWaitAgentRefsV0(t *testing.T) {
+	runtime := &noAckCodexStackRuntimeV0{
+		fakeCodexStackRuntimeV0: newFakeCodexStackRuntimeV0(),
+	}
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	ctx := context.Background()
+
+	director := postDirectorAPIV0(t, stack)
+	receiptStore := stack.Stores.ReceiptStore.(*orquestaruntimecodexdelivery.InMemoryCodexReceiptDescriptorStoreV0)
+	descriptors := codexStackRealSmokeDescriptorsV0(t, receiptStore)
+	if len(descriptors) < 2 {
+		t.Fatalf("descriptors=%d want>=2", len(descriptors))
+	}
+	scoped := descriptors[0]
+	delayed := descriptors[1]
+	if err := writeCodexStackAckForDescriptorV0(t, delayed); err != nil {
+		t.Fatalf("write delayed ACK: %v", err)
+	}
+
+	if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+		RunRef:               director.RunRef,
+		CorrelationID:        "corr-stack-drain-existing-ack-out-of-scope-001",
+		MaxBursts:            1,
+		MaxStepsPerBurst:     1,
+		MaxDispatchesPerWait: 1,
+		MaxCommands:          4,
+		MaxOutboxPerCycle:    1,
+		MaxDecisionCycles:    1,
+		MaxExternalWaits:     1,
+		WaitAgentRefs:        []string{scoped.AgentRef},
+	}); err != nil {
+		t.Fatalf("DrainRunV0 out-of-scope: %v", err)
+	}
+
+	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	delayedObservation := drainObservationFromDescriptorForTestV0(delayed)
+	if drainObservationAlreadyRegisteredV0(run, delayedObservation) {
+		t.Fatalf("ACK delayed ingerido fuera de scope: deliveries=%v artifacts=%v observation=%+v", run.Deliveries, run.PhaseArtifacts, delayedObservation)
+	}
+
+	if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+		RunRef:               director.RunRef,
+		CorrelationID:        "corr-stack-drain-existing-ack-in-scope-001",
+		MaxBursts:            1,
+		MaxStepsPerBurst:     1,
+		MaxDispatchesPerWait: 1,
+		MaxCommands:          4,
+		MaxOutboxPerCycle:    1,
+		MaxDecisionCycles:    1,
+		MaxExternalWaits:     1,
+		WaitAgentRefs:        []string{delayed.AgentRef},
+	}); err != nil {
+		t.Fatalf("DrainRunV0 in-scope: %v", err)
+	}
+
+	run = mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	if !drainObservationAlreadyRegisteredV0(run, delayedObservation) {
+		t.Fatalf("ACK delayed existente no ingerido al entrar en scope: deliveries=%v artifacts=%v observation=%+v", run.Deliveries, run.PhaseArtifacts, delayedObservation)
+	}
+}
+
 func TestDrainRunV0ConACKCompletoReentraDirectorConWaitAgentRefsV0(t *testing.T) {
 	runtime := &noAckCodexStackRuntimeV0{
 		fakeCodexStackRuntimeV0: newFakeCodexStackRuntimeV0(),

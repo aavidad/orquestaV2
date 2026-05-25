@@ -45,6 +45,10 @@ func TestAutoprogrammingReviewGateIssueCodeIsAdvisoryV0(t *testing.T) {
 		"rail_blando:provider",
 		"rail-pendiente:provider",
 		"ack-pending-rail:operational-detail-marker",
+		"ack_files_mismatch",
+		"gate-issue:ack-files-mismatch:ack_files_do_not_match_snapshot_changes",
+		"go_file_line_budget_exceeded",
+		"gate-issue:go-file-line-budget-exceeded:modulos/orquesta-mcp/http.go",
 	} {
 		if !AutoprogrammingReviewGateIssueCodeIsAdvisoryV0(code) {
 			t.Fatalf("code=%q advisory=false", code)
@@ -68,6 +72,8 @@ func TestAutoprogrammingReviewGateAdvisoryIssuesPidenFollowupSinBloquearV0(t *te
 		{Code: "outside_write_set"},
 		{Code: "write_set_target_missing"},
 		{Code: "write_set_target_missing:web"},
+		{Code: "gate-issue:ack_files_mismatch"},
+		{Code: "gate-issue:go_file_line_budget_exceeded"},
 	})
 
 	assertAutoprogrammingReviewGateFollowupV0(t, result)

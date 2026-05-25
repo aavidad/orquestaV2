@@ -29,6 +29,7 @@ func NewStatusTrackerV0(config ConfigV0, now time.Time) *StatusTrackerV0 {
 		Addr:                      config.Addr,
 		ProjectWorkDir:            config.ProjectWorkDir,
 		RuntimeWorkDir:            config.RuntimeWorkDir,
+		EffectiveConfig:           config.EffectiveConfig,
 		StartedAt:                 formatTimeV0(now),
 		LastHeartbeatAt:           formatTimeV0(now),
 		IdleSelfImprovementAfter:  config.IdleSelfImprovementAfter.String(),
@@ -94,6 +95,7 @@ func (tracker *StatusTrackerV0) MarkStartupBlockedV0(
 		state.StartupMessage = result.Message
 		state.StartupEvidenceRefs = append([]string(nil), result.EvidenceRefs...)
 		state.LastError = result.Message
+		appendRecentServerErrorV0(state, now, "startup_blocked", "startup", result.Message, result.EvidenceRefs)
 	})
 }
 
@@ -108,6 +110,8 @@ func (tracker *StatusTrackerV0) MarkSupervisorV0(
 		state.LastSupervisorAt = formatTimeV0(now)
 		state.LastSupervisorStatus = "ok"
 		state.LastSupervisorStop = strings.TrimSpace(metrics.StopReason)
+		state.LastSupervisorStopPublic = strings.TrimSpace(metrics.PublicStop)
+		state.LastSupervisorStopCategory = strings.TrimSpace(metrics.StopCategory)
 		state.LastSupervisorError = ""
 		state.LastSupervisorQueueRef = strings.TrimSpace(command.QueueRef)
 		state.LastSupervisorQueueSize = metrics.QueueSize
@@ -120,6 +124,32 @@ func (tracker *StatusTrackerV0) MarkSupervisorV0(
 		state.SupervisorExecutions += metrics.Executions
 		state.SupervisorSkips += metrics.Skips
 		state.LastError = ""
+	})
+}
+
+func (tracker *StatusTrackerV0) MarkSupervisorTickActiveV0(active bool, now time.Time) StateV0 {
+	return tracker.updateV0(func(state *StateV0) {
+		state.LastHeartbeatAt = formatTimeV0(now)
+		state.SupervisorTickActive = active
+	})
+}
+
+func (tracker *StatusTrackerV0) MarkSupervisorFrozenV0(reason string, now time.Time) StateV0 {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "shutdown_in_progress"
+	}
+	return tracker.updateV0(func(state *StateV0) {
+		state.LastHeartbeatAt = formatTimeV0(now)
+		state.LastSupervisorAt = formatTimeV0(now)
+		state.LastSupervisorStatus = "skipped"
+		state.LastSupervisorStop = reason
+		state.LastSupervisorStopPublic = reason
+		state.LastSupervisorStopCategory = "control"
+		state.LastSupervisorExecutions = 0
+		state.LastSupervisorSkips = 0
+		state.SupervisorTickActive = false
+		state.SupervisorFrozen = true
 	})
 }
 
@@ -136,6 +166,8 @@ func (tracker *StatusTrackerV0) MarkSupervisorErrorV0(
 		state.LastSupervisorAt = formatTimeV0(now)
 		state.LastSupervisorStatus = "error"
 		state.LastSupervisorStop = strings.TrimSpace(metrics.StopReason)
+		state.LastSupervisorStopPublic = strings.TrimSpace(metrics.PublicStop)
+		state.LastSupervisorStopCategory = strings.TrimSpace(metrics.StopCategory)
 		state.LastSupervisorError = message
 		state.SupervisorLastErrorAt = formatTimeV0(now)
 		state.SupervisorLastError = message
@@ -151,6 +183,55 @@ func (tracker *StatusTrackerV0) MarkSupervisorErrorV0(
 		state.SupervisorExecutions += metrics.Executions
 		state.SupervisorSkips += metrics.Skips
 		state.LastError = message
+		appendRecentServerErrorV0(state, now, firstNonEmptyServerDiagnosticV0(metrics.StopReason, "supervisor_error"), "supervisor", message, result.ErrorRunRefs)
+	})
+}
+
+type ShutdownProjectionV0 struct {
+	Status             string
+	Ready              bool
+	HTTPStatus         int
+	RunsRequested      int
+	RunsStopped        int
+	AgentsInFlight     int
+	CheckpointsPending int
+}
+
+func (tracker *StatusTrackerV0) MarkShutdownRequestedV0(now time.Time) StateV0 {
+	return tracker.updateV0(func(state *StateV0) {
+		state.LastHeartbeatAt = formatTimeV0(now)
+		state.LastShutdownAt = formatTimeV0(now)
+		state.ShutdownInProgress = true
+		state.ShutdownStatus = "requested"
+		state.ShutdownReady = false
+		state.SupervisorFrozen = true
+	})
+}
+
+func (tracker *StatusTrackerV0) MarkShutdownResultV0(
+	result ShutdownProjectionV0,
+	keepFrozen bool,
+	now time.Time,
+) StateV0 {
+	result.Status = strings.TrimSpace(result.Status)
+	if result.Status == "" {
+		result.Status = "observed"
+	}
+	return tracker.updateV0(func(state *StateV0) {
+		state.LastHeartbeatAt = formatTimeV0(now)
+		state.LastShutdownAt = formatTimeV0(now)
+		state.ShutdownInProgress = keepFrozen
+		state.ShutdownStatus = result.Status
+		state.ShutdownReady = result.Ready
+		state.ShutdownHTTPStatus = result.HTTPStatus
+		state.ShutdownRunsRequested = result.RunsRequested
+		state.ShutdownRunsStopped = result.RunsStopped
+		state.ShutdownAgentsInFlight = result.AgentsInFlight
+		state.ShutdownCheckpointsPending = result.CheckpointsPending
+		state.SupervisorFrozen = keepFrozen
+		if keepFrozen {
+			state.SupervisorTickActive = false
+		}
 	})
 }
 
@@ -223,6 +304,7 @@ func (tracker *StatusTrackerV0) MarkIdleSelfImprovementErrorV0(message string, n
 		state.IdleSelfImprovementRuns = tracker.idleSelfImprovementAttempts
 		state.IdleSelfImprovementOK = tracker.idleSelfImprovementPrepared
 		state.LastError = message
+		appendRecentServerErrorV0(state, now, "idle_self_improvement_error", "idle_self_improvement", message, nil)
 	})
 }
 
@@ -250,6 +332,7 @@ func (tracker *StatusTrackerV0) MarkErrorV0(message string, now time.Time) State
 	return tracker.updateV0(func(state *StateV0) {
 		state.LastHeartbeatAt = formatTimeV0(now)
 		state.LastError = strings.TrimSpace(message)
+		appendRecentServerErrorV0(state, now, "server_error", "server", message, nil)
 	})
 }
 
@@ -258,6 +341,67 @@ func (tracker *StatusTrackerV0) MarkStoppedV0(now time.Time) StateV0 {
 		state.Status = "stopped"
 		state.LastHeartbeatAt = formatTimeV0(now)
 	})
+}
+
+func appendRecentServerErrorV0(
+	state *StateV0,
+	now time.Time,
+	code string,
+	scope string,
+	message string,
+	evidenceRefs []string,
+) {
+	if state == nil {
+		return
+	}
+	message = strings.TrimSpace(message)
+	code = strings.TrimSpace(code)
+	if message == "" && code == "" {
+		return
+	}
+	if code == "" {
+		code = "server_error"
+	}
+	entry := ServerDiagnosticV0{
+		OccurredAt:   formatTimeV0(now),
+		Code:         code,
+		Scope:        strings.TrimSpace(scope),
+		Message:      message,
+		EvidenceRefs: compactServerDiagnosticStringsV0(evidenceRefs),
+	}
+	state.RecentErrors = append([]ServerDiagnosticV0{entry}, state.RecentErrors...)
+	if len(state.RecentErrors) > 25 {
+		state.RecentErrors = state.RecentErrors[:25]
+	}
+}
+
+func compactServerDiagnosticStringsV0(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	if out == nil {
+		return []string{}
+	}
+	return out
+}
+
+func firstNonEmptyServerDiagnosticV0(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func (tracker *StatusTrackerV0) updateV0(fn func(*StateV0)) StateV0 {

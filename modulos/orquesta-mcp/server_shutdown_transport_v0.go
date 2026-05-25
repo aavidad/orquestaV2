@@ -18,7 +18,16 @@ func mcpServerShutdownTransportHandlerV0(
 		}
 		result, err := port.Execute(ctx, input)
 		if err != nil {
-			return nil, err
+			if result.Estado == MCPServerShutdownEstadoErrorV0 && len(result.Errores) > 0 {
+				return json.Marshal(result)
+			}
+			payload := newMCPServerShutdownErrorV0(
+				input,
+				"server_shutdown_executor_error",
+				"executor",
+				publicMCPExecutorErrorMessageFromErrorV0("server_shutdown_executor_error", err),
+			)
+			return json.Marshal(payload)
 		}
 		return json.Marshal(result)
 	}

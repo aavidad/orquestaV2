@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -44,6 +46,81 @@ func TestMCPRunSupervisorHTTPHandlerV0DelegaEnExecutor(t *testing.T) {
 	}
 }
 
+func TestMCPRunSupervisorHTTPHandlerV0PropagaErrorPublicoDelExecutor(t *testing.T) {
+	input := MCPRunSupervisorToolInputV0{
+		RequestID:     "request-ref-run-supervisor-http-error-001",
+		CorrelationID: "corr-run-supervisor-http-error-001",
+		RunRef:        "run-ref-supervisor-http-error-001",
+	}
+	executor := &fakeMCPRunSupervisorHTTPExecutorV0{
+		result: NewMCPRunSupervisorErrorResultV0(
+			input,
+			"run_supervisor_execute_error",
+			"executor",
+			"delivery_ack_ingestion_failed",
+		),
+		err: errors.New("internal stack error must not hide public payload"),
+	}
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(input); err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, MCPRunSupervisorHTTPPathV0, body)
+	rec := httptest.NewRecorder()
+
+	NewMCPRunSupervisorHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPRunSupervisorToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != MCPRunSupervisorEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "run_supervisor_execute_error" ||
+		result.Errores[0].Message != "delivery_ack_ingestion_failed" {
+		t.Fatalf("error publico perdido: %+v", result)
+	}
+}
+
+func TestMCPRunSupervisorHTTPHandlerV0ExponeCausaSanitizadaSiExecutorNoDaPayload(t *testing.T) {
+	input := MCPRunSupervisorToolInputV0{
+		RequestID:     "request-ref-run-supervisor-http-cause-001",
+		CorrelationID: "corr-run-supervisor-http-cause-001",
+		RunRef:        "run-ref-supervisor-http-cause-001",
+	}
+	executor := &fakeMCPRunSupervisorHTTPExecutorV0{
+		err: errors.New("codex_worktree_verification: ack_files_mismatch en /root/Trabajo/orquesta con token=secret123456"),
+	}
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(input); err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, MCPRunSupervisorHTTPPathV0, body)
+	rec := httptest.NewRecorder()
+
+	NewMCPRunSupervisorHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPRunSupervisorToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != MCPRunSupervisorEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		!strings.Contains(result.Errores[0].Message, "ack_files_mismatch") {
+		t.Fatalf("error sin causa util: %+v", result)
+	}
+	if strings.Contains(rec.Body.String(), "/root/Trabajo") ||
+		strings.Contains(rec.Body.String(), "secret123456") {
+		t.Fatalf("error filtra datos operativos: %s", rec.Body.String())
+	}
+}
+
 func TestMCPRunSupervisorHTTPHandlerV0ExecutorNil(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, MCPRunSupervisorHTTPPathV0, bytes.NewBufferString(`{}`))
 	rec := httptest.NewRecorder()
@@ -69,6 +146,7 @@ func TestMCPRunSupervisorHTTPHandlerV0SoloPOST(t *testing.T) {
 type fakeMCPRunSupervisorHTTPExecutorV0 struct {
 	input  MCPRunSupervisorToolInputV0
 	result MCPRunSupervisorToolResultV0
+	err    error
 }
 
 func (executor *fakeMCPRunSupervisorHTTPExecutorV0) Execute(
@@ -79,5 +157,5 @@ func (executor *fakeMCPRunSupervisorHTTPExecutorV0) Execute(
 	if executor.result.Estado == "" {
 		executor.result = MCPRunSupervisorToolResultV0{Estado: MCPRunSupervisorEstadoOKV0}
 	}
-	return executor.result, nil
+	return executor.result, executor.err
 }

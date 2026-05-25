@@ -176,7 +176,7 @@ Riesgos: stdout/stderr se descartan y no se comprueba contenido de salida; el co
 Caso: RUNTIME-013 paquete neutral de arranque para agentes
 Tipo: unit
 Comando: go test -count=1 ./modulos/orquesta-runtime
-Evidencia esperada: paquete orquesta/modulos/orquesta-runtime OK; BuildAgentStartPacketV0 produce AgentStartPacketV0 valido desde RuntimeLaunchRequestV0 y ContextMaterializedBundleV0 coincidentes, incluye task/context/delivery_refs/policies y no serializa provider/model/HOME/OAuth/credential refs ni secretos. AgentStartTaskV0 conserva linaje recursivo neutral en JSON sin detalle operativo. Si el contexto trae ContextSanitizationEvidenceV0, el packet declara politica de evidencia y revision al director sin transportar el dato sensible.
+Evidencia esperada: paquete orquesta/modulos/orquesta-runtime OK; BuildAgentStartPacketV0 produce AgentStartPacketV0 valido desde RuntimeLaunchRequestV0 y ContextMaterializedBundleV0 coincidentes, incluye task/context/delivery_refs/policies y no serializa provider/model/HOME/OAuth/credential refs ni secretos. AgentStartTaskV0 conserva linaje recursivo neutral en JSON sin detalle operativo. Si el contexto trae ContextSanitizationEvidenceV0, el packet declara politica de evidencia y revision al director sin transportar el dato sensible. Si hay `required ref_only`, declara `required_ref_only_context_guard`.
 Ultima ejecucion: 2026-05-05, OK.
 Riesgos: no ejecuta conectores reales ni transporte de agente; valida la frontera neutral antes de adaptar CLI/MCP/API/local/remoto.
 ```

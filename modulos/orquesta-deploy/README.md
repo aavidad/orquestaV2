@@ -1,6 +1,7 @@
 # orquesta-deploy
 
-Responsabilidad: preparar entorno y despliegue de Orquesta y de apps generadas.
+Responsabilidad: preparar contratos declarativos de entorno y despliegue para
+Orquesta y apps generadas.
 
 Incluye:
 
@@ -14,4 +15,6 @@ Incluye:
 - rollback;
 - dependencias por sistema operativo.
 
-No decide arquitectura de producto; ejecuta planes.
+Estado vigente: `DeploymentPlan v0` se expone como contrato de composicion y
+dry-run por puerto. No decide arquitectura de producto y no ejecuta Docker,
+Kubernetes, cloud, filesystem productivo ni secretos desde el nucleo.

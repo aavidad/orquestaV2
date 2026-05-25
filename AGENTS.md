@@ -92,6 +92,13 @@ Tras los cortes del 2026-05-17, el estado real es:
   `wave_ref`, `cohort_ref`, parent/child refs, criterios completos ni el estado
   vivo de espera; cualquier recuperacion debe restaurar o rematerializar ese
   store y el `WorkflowTaskWaitStateV0`.
+- La espina neutral `DirectorCycleStepV0 -> director-runner ->
+  director-scheduler -> core-workflow -> director-cycle-outbox` es la fuente de
+  verdad para un tick acotado del Director V2. No sustituye al flujo historico
+  `app-director-service`/loop progresivo: lo complementa como ciclo puro de
+  scheduler/workflow/outbox, sin daemon, runtime real ni composicion residente.
+  Lo pendiente en esa linea debe clasificarse como codigo offline, composicion
+  residente, smoke real, proveedor real u OPES temporal.
 
 Orden de autoridad documental:
 
@@ -136,6 +143,7 @@ Documentos de entrada obligatorios para cambios transversales:
 - Plan operativo del director: `modulos/orquesta-director-operativo`.
 - Trabajo externo neutral: `modulos/orquesta-domain-work`,
   `modulos/orquesta-app-change`, `modulos/orquesta-external-work-run`.
+- Deploy declarativo/dry-run: `modulos/orquesta-deploy`.
 - Adaptadores de dominio: `modulos/orquesta-opes-*`.
 - Runtime neutral: `modulos/orquesta-runtime`.
 - Adaptador Codex: `modulos/orquesta-runtime-codex*`.

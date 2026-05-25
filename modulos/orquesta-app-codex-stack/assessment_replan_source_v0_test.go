@@ -91,6 +91,60 @@ func TestAssessmentReplanSourceV0NoDuplicaSiReplacementYaExiste(t *testing.T) {
 	}
 }
 
+func TestAssessmentReplanSourceV0NoEncadenaReemplazosParaMismaTarea(t *testing.T) {
+	runRef := "run-ref-assessment-replan-stack-chain-001"
+	oldAgentRef := "agent-ref-assessment-chain-old-001"
+	replacementAgentRef := "agent-ref-assessment-chain-replacement-001"
+	taskRef := "task-ref-assessment-stack-chain-001"
+	source := AssessmentReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(
+			assessmentReplanDescriptorForTestV0(runRef, oldAgentRef, taskRef),
+			assessmentReplanDescriptorForTestV0(runRef, replacementAgentRef, taskRef),
+		),
+	}
+	request := assessmentReplanRequestForTestV0(runRef, replacementAgentRef, taskRef, false)
+	request.Run.ReplanDecisions = []string{
+		"replan-ref-chain-001#source:assessment-ref-chain-old#task:" + taskRef +
+			"#action:" + string(orquestacoreworkflow.ReplanDecisionActionReplaceAgentV0) +
+			"#followups:" + replacementAgentRef,
+	}
+	request.Run.Agents = []string{replacementAgentRef}
+
+	plans, err := source.BuildAgentAssessmentReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildAgentAssessmentReplanPlansV0 chain: %v", err)
+	}
+	if len(plans) != 0 {
+		t.Fatalf("replan encadenado para misma tarea=%+v", plans)
+	}
+}
+
+func TestAssessmentReplanSourceV0RecuperaReplanConFollowupNoMaterializado(t *testing.T) {
+	runRef := "run-ref-assessment-replan-stack-recover-001"
+	oldAgentRef := "agent-ref-assessment-recover-old-001"
+	replacementAgentRef := "agent-ref-assessment-recover-replacement-001"
+	taskRef := "task-ref-assessment-stack-recover-001"
+	source := AssessmentReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(
+			assessmentReplanDescriptorForTestV0(runRef, oldAgentRef, taskRef),
+		),
+	}
+	request := assessmentReplanRequestForTestV0(runRef, oldAgentRef, taskRef, false)
+	request.Run.ReplanDecisions = []string{
+		"replan-ref-recover-001#source:assessment-ref-recover-old#task:" + taskRef +
+			"#action:" + string(orquestacoreworkflow.ReplanDecisionActionReplaceAgentV0) +
+			"#followups:" + replacementAgentRef + "+capacity-ref-recover-001",
+	}
+
+	plans, err := source.BuildAgentAssessmentReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildAgentAssessmentReplanPlansV0 recover: %v", err)
+	}
+	if len(plans) != 1 {
+		t.Fatalf("debe recuperar replacement no materializado, plans=%+v", plans)
+	}
+}
+
 func TestAssessmentReplanSourceV0GeneraRefsCompactasParaAssessmentAnidado(t *testing.T) {
 	runRef := "run-ref-assessment-replan-stack-compact-001"
 	oldAgentRef := "agent-ref-assessment-assessment-ref-agent-progress-report-ref-agent-ref-assessment-assessment-ref-agent-progress-report-ref-agent-ref-task-autoprogramming-d6f0b05f2e4d-g01-000088-000016"
