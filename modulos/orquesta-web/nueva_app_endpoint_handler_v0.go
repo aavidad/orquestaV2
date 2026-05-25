@@ -51,14 +51,21 @@ func decodeNuevaAppWebFormV0(r *http.Request) (WebNuevaAppFormV0, error) {
 
 func nuevaAppFormFromValuesV0(values map[string][]string) WebNuevaAppFormV0 {
 	form := WebNuevaAppFormV0{
-		RequestID:        formValueV0(values, "request_id"),
-		Locale:           formValueV0(values, "locale"),
-		RequestKind:      formValueV0(values, "request_kind"),
-		ExecutionMode:    formValueV0(values, "execution_mode"),
-		Nombre:           formValueV0(values, "nombre"),
-		Objetivo:         formValueV0(values, "objetivo"),
-		Descripcion:      formValueV0(values, "descripcion"),
-		TipoApp:          formValueV0(values, "tipo_app"),
+		RequestID:     formValueV0(values, "request_id"),
+		Locale:        formValueV0(values, "locale"),
+		RequestKind:   formValueV0(values, "request_kind"),
+		ExecutionMode: formValueV0(values, "execution_mode"),
+		Nombre:        formValueV0(values, "nombre"),
+		Objetivo:      formValueV0(values, "objetivo"),
+		Descripcion:   formValueV0(values, "descripcion"),
+		TipoApp:       formValueV0(values, "tipo_app"),
+		ProjectSource: WebNuevaAppProjectSourceFormV0{
+			Kind:       formValueV0(values, "project_source.kind"),
+			GitURL:     formValueV0(values, "project_source.git_url"),
+			Branch:     formValueV0(values, "project_source.branch"),
+			LocalPath:  formValueV0(values, "project_source.local_path"),
+			ProjectRef: formValueV0(values, "project_source.project_ref"),
+		},
 		UsuariosObjetivo: formValuesV0(values, "usuarios_objetivo"),
 		Plataformas:      formValuesV0(values, "plataformas"),
 		PreferenciasTecnicas: WebNuevaAppPreferenciasFormV0{

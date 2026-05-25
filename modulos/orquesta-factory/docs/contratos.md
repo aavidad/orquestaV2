@@ -103,6 +103,8 @@ Campos:
 - `locale`: locale principal de la peticion.
 - `request_kind`: tipo de trabajo solicitado; default `crear_app_completa`.
 - `execution_mode`: `normal` o `debug`; default `normal`.
+- `project_source`: origen opcional del proyecto: `new`, `github` con
+  `git_url` sin credenciales, o `local_path`.
 - `nombre`: nombre humano de la app.
 - `objetivo`: resultado que la app debe conseguir.
 - `descripcion`: contexto libre y breve.
@@ -126,6 +128,11 @@ Invariantes:
   `tipo_app` son obligatorios.
 - `execution_mode=debug` es la unica via para recortar entregables minimos y no
   permite marcar cierre productivo sin declarar lo omitido.
+- `project_source.kind` se normaliza a `new`, `github` o `local_path`; `git_url`
+  y `local_path` son mutuamente excluyentes.
+- Las peticiones sobre app existente deben declarar `project_source` con
+  `github` o `local_path`.
+- `project_source.git_url` no puede incluir credenciales.
 - `locale` y `i18n.default_locale` usan BCP 47.
 - `i18n.enabled` es `true` por defecto; si es `false`, debe haber
   `i18n.justificacion`.
@@ -162,6 +169,7 @@ Campos:
 - `request_id`: peticion origen.
 - `created_at`: instante ISO 8601 asignado por el caso de uso.
 - `locale`: locale principal.
+- `project_source`: origen normalizado del proyecto.
 - `app`: nombre, slug, objetivo, descripcion, tipo y usuarios objetivo.
 - `scope`: objetivos, fuera de alcance, supuestos y preguntas abiertas.
 - `architecture`: patron, modulos iniciales, fronteras y contratos esperados.

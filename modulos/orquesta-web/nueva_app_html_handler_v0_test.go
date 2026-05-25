@@ -39,6 +39,11 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		`name="nombre"`,
 		`name="objetivo"`,
 		`name="tipo_app"`,
+		`name="project_source.kind"`,
+		`name="project_source.git_url"`,
+		`name="project_source.branch"`,
+		`name="project_source.local_path"`,
+		`name="project_source.project_ref"`,
 		`name="plataformas"`,
 		`name="preferencias_tecnicas.arquitectura"`,
 		`name="i18n.enabled"`,
@@ -77,6 +82,8 @@ func TestNuevaAppHTMLHandlerV0POSTValidoDelegaYRenderizaResultado(t *testing.T) 
 	if client.received.Nombre != "Agenda" ||
 		client.received.RequestKind != "crear_app_completa" ||
 		client.received.ExecutionMode != "normal" ||
+		client.received.ProjectSource.Kind != "github" ||
+		client.received.ProjectSource.GitURL != "https://example.test/agenda.git" ||
 		client.received.PreferenciasTecnicas.Arquitectura != "hexagonal" ||
 		!client.received.Datos.DBRequired ||
 		client.received.Deploy.Target != "contenedor" ||
@@ -133,6 +140,10 @@ func nuevaAppHTMLValidFormValuesV0() url.Values {
 	values.Set("objetivo", "Coordinar ensayos")
 	values.Set("descripcion", "Gestion operativa")
 	values.Set("tipo_app", "web")
+	values.Set("project_source.kind", "github")
+	values.Set("project_source.git_url", "https://example.test/agenda.git")
+	values.Set("project_source.branch", "main")
+	values.Set("project_source.project_ref", "project-ref-agenda")
 	values.Add("plataformas", "web")
 	values.Set("preferencias_tecnicas.arquitectura", "hexagonal")
 	values.Set("i18n.enabled", "true")

@@ -39,6 +39,9 @@ func TestSolicitarNuevaAppV0AppliesDefaults(t *testing.T) {
 	if spec.RequestKind != RequestKindCrearAppCompletaV0 || spec.ExecutionMode != ExecutionModeNormalV0 {
 		t.Fatalf("request policy: kind=%q mode=%q", spec.RequestKind, spec.ExecutionMode)
 	}
+	if spec.ProjectSource.Kind != ProjectSourceKindNewV0 {
+		t.Fatalf("project_source=%+v", spec.ProjectSource)
+	}
 	if spec.Validation.Estado != "valida" {
 		t.Fatalf("validation=%+v", spec.Validation)
 	}
@@ -62,6 +65,11 @@ func TestSolicitarNuevaAppV0HonorsExplicitOptions(t *testing.T) {
 	req.Agentes.Autonomia = "alta"
 	req.RequestKind = RequestKindDocumentarAppV0
 	req.ExecutionMode = ExecutionModeDebugV0
+	req.ProjectSource = ProjectSourceRequestV0{
+		Kind:   ProjectSourceKindGitHubV0,
+		GitURL: "https://github.com/example/portal.git",
+		Branch: "main",
+	}
 
 	spec, issues := SolicitarNuevaAppV0(req, time.Date(2026, 5, 4, 11, 0, 0, 0, time.UTC))
 	if len(issues) > 0 {
@@ -87,6 +95,11 @@ func TestSolicitarNuevaAppV0HonorsExplicitOptions(t *testing.T) {
 	}
 	if spec.RequestKind != RequestKindDocumentarAppV0 || spec.ExecutionMode != ExecutionModeDebugV0 {
 		t.Fatalf("request policy not honored: kind=%q mode=%q", spec.RequestKind, spec.ExecutionMode)
+	}
+	if spec.ProjectSource.Kind != ProjectSourceKindGitHubV0 ||
+		spec.ProjectSource.GitURL != "https://github.com/example/portal.git" ||
+		spec.ProjectSource.Branch != "main" {
+		t.Fatalf("project_source not honored: %+v", spec.ProjectSource)
 	}
 }
 
@@ -187,6 +200,36 @@ func TestValidateAppSpecRequestV0RejectsUnsupportedRequestPolicy(t *testing.T) {
 	}
 }
 
+func TestSolicitarNuevaAppV0InfersLocalProjectSource(t *testing.T) {
+	req := validMinimalRequestV0()
+	req.RequestKind = RequestKindSeguridadV0
+	req.ProjectSource.LocalPath = "/srv/apps/agenda"
+
+	spec, issues := SolicitarNuevaAppV0(req, time.Date(2026, 5, 4, 13, 0, 0, 0, time.UTC))
+	if len(issues) > 0 {
+		t.Fatalf("unexpected issues: %+v", issues)
+	}
+	if spec.ProjectSource.Kind != ProjectSourceKindLocalPathV0 ||
+		spec.ProjectSource.LocalPath != "/srv/apps/agenda" {
+		t.Fatalf("project_source=%+v", spec.ProjectSource)
+	}
+}
+
+func TestSolicitarNuevaAppV0InfersGitHubProjectSource(t *testing.T) {
+	req := validMinimalRequestV0()
+	req.RequestKind = RequestKindRevisarCodigoV0
+	req.ProjectSource.GitURL = "https://github.com/example/agenda.git"
+
+	spec, issues := SolicitarNuevaAppV0(req, time.Date(2026, 5, 4, 13, 30, 0, 0, time.UTC))
+	if len(issues) > 0 {
+		t.Fatalf("unexpected issues: %+v", issues)
+	}
+	if spec.ProjectSource.Kind != ProjectSourceKindGitHubV0 ||
+		spec.ProjectSource.GitURL != "https://github.com/example/agenda.git" {
+		t.Fatalf("project_source=%+v", spec.ProjectSource)
+	}
+}
+
 func TestAppSpecV0SerializesPublicIssueShape(t *testing.T) {
 	spec, issues := SolicitarNuevaAppV0(validMinimalRequestV0(), time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC))
 	if len(issues) > 0 {
@@ -209,6 +252,10 @@ func TestAppSpecV0SerializesPublicIssueShape(t *testing.T) {
 	assertJSONArrayV0(t, decoded["connectors"].(map[string]any), "required")
 	assertJSONArrayV0(t, decoded["connectors"].(map[string]any), "optional")
 	assertJSONArrayV0(t, decoded["app"].(map[string]any), "usuarios_objetivo")
+	projectSource, ok := decoded["project_source"].(map[string]any)
+	if !ok || projectSource["kind"] != ProjectSourceKindNewV0 {
+		t.Fatalf("project_source missing from JSON: %s", data)
+	}
 }
 
 func assertJSONArrayV0(t *testing.T, object map[string]any, key string) {

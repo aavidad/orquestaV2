@@ -39,10 +39,13 @@ func TestRESTArrancarDirectorAppClientV0EnviaPOSTJSONYProyectaDirector(t *testin
 		MaxExternalWaits:     1,
 	}
 
-	vm, err := client.ArrancarDirectorApp(
-		context.Background(),
-		minimalFormForClientV0("req-director-client-001"),
-	)
+	form := minimalFormForClientV0("req-director-client-001")
+	form.ProjectSource = WebNuevaAppProjectSourceFormV0{
+		Kind:       "github",
+		GitURL:     "https://example.test/director.git",
+		ProjectRef: "project-ref-director-001",
+	}
+	vm, err := client.ArrancarDirectorApp(context.Background(), form)
 	if err != nil {
 		t.Fatalf("ArrancarDirectorApp: %v", err)
 	}
@@ -55,6 +58,11 @@ func TestRESTArrancarDirectorAppClientV0EnviaPOSTJSONYProyectaDirector(t *testin
 		received.MaxOutboxPerCycle != 5 ||
 		received.MaxExternalWaits != 1 {
 		t.Fatalf("payload inesperado: %+v", received)
+	}
+	if received.AppSpecRequest.ProjectSource.Kind != "github" ||
+		received.AppSpecRequest.ProjectSource.GitURL != "https://example.test/director.git" ||
+		received.AppSpecRequest.ProjectSource.ProjectRef != "project-ref-director-001" {
+		t.Fatalf("project_source director inesperado: %+v", received.AppSpecRequest.ProjectSource)
 	}
 	if vm.Estado != WebNuevaAppEstadoDirector ||
 		vm.Director == nil ||

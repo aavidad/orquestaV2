@@ -5,6 +5,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 source "$ROOT/scripts/lib/parallel_test_runner.sh"
+source "$ROOT/scripts/lib/go_tool.sh"
+
+orquesta_go_tool_ensure_path
 
 orquesta_parallel_test_init
 trap orquesta_parallel_test_cleanup EXIT

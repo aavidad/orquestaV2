@@ -8,6 +8,7 @@ type AppSpecV0 struct {
 	Locale           string              `json:"locale"`
 	RequestKind      string              `json:"request_kind"`
 	ExecutionMode    string              `json:"execution_mode"`
+	ProjectSource    ProjectSourceSpecV0 `json:"project_source"`
 	App              AppInfoV0           `json:"app"`
 	Scope            ScopeV0             `json:"scope"`
 	Architecture     ArchitectureV0      `json:"architecture"`

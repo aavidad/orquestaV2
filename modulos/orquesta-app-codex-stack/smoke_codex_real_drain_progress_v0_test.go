@@ -52,6 +52,18 @@ func TestCodexStackRealSmokeDrainHastaProgramacionToleraTasksVaciasConProgreso(t
 	}
 }
 
+func TestCodexStackRealSmokeDrainMaxCyclesEscalaConTimeout(t *testing.T) {
+	if got := codexStackRealSmokeDrainMaxCyclesV0(1); got != 8 {
+		t.Fatalf("cycles min=%d", got)
+	}
+	if got := codexStackRealSmokeDrainMaxCyclesV0(600); got <= 8 {
+		t.Fatalf("cycles timeout largo=%d, want >8", got)
+	}
+	if got := codexStackRealSmokeDrainMaxCyclesV0(5000); got != 40 {
+		t.Fatalf("cycles cap=%d", got)
+	}
+}
+
 type smokeDrainDelayedProgrammingDecisionSourceV0 struct {
 	calls                int
 	progressCallSequence int64

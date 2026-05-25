@@ -103,6 +103,13 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
       <label>{{index .Labels "descripcion"}}<textarea name="descripcion"></textarea></label>
       <div class="checks"><label><input type="checkbox" name="plataformas" value="web">web</label><label><input type="checkbox" name="plataformas" value="mobile">mobile</label><label><input type="checkbox" name="plataformas" value="desktop">desktop</label><label><input type="checkbox" name="plataformas" value="api">api</label></div>
     </fieldset>
+    <fieldset><legend>{{index .Labels "project_source"}}</legend><div class="grid">
+      <label>{{index .Labels "project_source.kind"}}<select name="project_source.kind"><option value=""></option><option value="new">new</option><option value="github">github</option><option value="local_path">local_path</option></select></label>
+      <label>{{index .Labels "project_source.git_url"}}<input name="project_source.git_url"></label>
+      <label>{{index .Labels "project_source.branch"}}<input name="project_source.branch"></label>
+      <label>{{index .Labels "project_source.local_path"}}<input name="project_source.local_path"></label>
+      <label>{{index .Labels "project_source.project_ref"}}<input name="project_source.project_ref"></label>
+    </div></fieldset>
     <fieldset><legend>{{index .Labels "preferencias_tecnicas"}}</legend><div class="grid">
       <label>{{index .Labels "preferencias_tecnicas.arquitectura"}}<select name="preferencias_tecnicas.arquitectura"><option value="hexagonal">hexagonal</option><option value="modular">modular</option><option value="monolito_modular">monolito_modular</option></select></label>
       <label>{{index .Labels "preferencias_tecnicas.lenguaje"}}<input name="preferencias_tecnicas.lenguaje"></label>

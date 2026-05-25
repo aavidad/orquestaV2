@@ -49,6 +49,14 @@ func TestNuevaAppWebEndpointV0GETRenderInicialLocalizadoYOpcionesDelForm(t *test
 	if integracionTipo.Label != "Integration type" || integracionTipo.Tipo != "texto" {
 		t.Fatalf("campo integracion tipo inesperado: %+v", integracionTipo)
 	}
+	projectSource := nuevaAppCampoByPathTestV0(page.Formulario.Campos, "project_source")
+	if projectSource.Label != "Project source" || projectSource.Tipo != "objeto" {
+		t.Fatalf("campo project_source inesperado: %+v", projectSource)
+	}
+	projectGitURL := nuevaAppCampoByPathTestV0(page.Formulario.Campos, "project_source.git_url")
+	if projectGitURL.Label != "Git URL" || projectGitURL.Tipo != "texto" {
+		t.Fatalf("campo project_source.git_url inesperado: %+v", projectGitURL)
+	}
 	for _, field := range page.Formulario.Campos {
 		if field.Label == "" {
 			t.Fatalf("campo sin label i18n: %+v", field)

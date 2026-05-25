@@ -64,6 +64,64 @@ func TestValidateAppSpecRequestV0AcceptsDocumentationType(t *testing.T) {
 	}
 }
 
+func TestValidateAppSpecRequestV0RejectsUnsupportedProjectSourceKind(t *testing.T) {
+	req := validMinimalRequestV0()
+	req.ProjectSource.Kind = "gitlab"
+
+	issues := ValidateAppSpecRequestV0(req)
+
+	if !hasIssueFieldV0(issues, "project_source.kind") {
+		t.Fatalf("expected project_source.kind issue, got %+v", issues)
+	}
+}
+
+func TestValidateAppSpecRequestV0RejectsGitURLWithCredentials(t *testing.T) {
+	req := validMinimalRequestV0()
+	req.ProjectSource.Kind = ProjectSourceKindGitHubV0
+	req.ProjectSource.GitURL = "https://token@github.com/example/portal.git"
+
+	issues := ValidateAppSpecRequestV0(req)
+
+	if !hasIssueFieldV0(issues, "project_source.git_url") {
+		t.Fatalf("expected project_source.git_url issue, got %+v", issues)
+	}
+}
+
+func TestValidateAppSpecRequestV0RejectsGitURLAndLocalPathTogether(t *testing.T) {
+	req := validMinimalRequestV0()
+	req.ProjectSource.GitURL = "https://github.com/example/portal.git"
+	req.ProjectSource.LocalPath = "/srv/apps/portal"
+
+	issues := ValidateAppSpecRequestV0(req)
+
+	if !hasIssueFieldV0(issues, "project_source") {
+		t.Fatalf("expected project_source issue, got %+v", issues)
+	}
+}
+
+func TestValidateAppSpecRequestV0RequiresExistingProjectSource(t *testing.T) {
+	req := validMinimalRequestV0()
+	req.RequestKind = RequestKindModificarAppExistenteV0
+
+	issues := ValidateAppSpecRequestV0(req)
+
+	if !hasIssueFieldV0(issues, "project_source.kind") {
+		t.Fatalf("expected project_source.kind issue, got %+v", issues)
+	}
+}
+
+func TestValidateAppSpecRequestV0RequiresGitHubURL(t *testing.T) {
+	req := validMinimalRequestV0()
+	req.RequestKind = RequestKindModificarAppExistenteV0
+	req.ProjectSource.Kind = ProjectSourceKindGitHubV0
+
+	issues := ValidateAppSpecRequestV0(req)
+
+	if !hasIssueFieldV0(issues, "project_source.git_url") {
+		t.Fatalf("expected project_source.git_url issue, got %+v", issues)
+	}
+}
+
 func validMinimalRequestV0() AppSpecRequestV0 {
 	return AppSpecRequestV0{
 		SchemaVersion: AppSpecRequestSchemaV0,

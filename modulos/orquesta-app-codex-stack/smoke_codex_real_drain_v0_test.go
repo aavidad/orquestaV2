@@ -55,7 +55,7 @@ func codexStackRealSmokeDrainUntilProgrammingStartedResultV0(
 ) (codexStackRealSmokeProgrammingDrainV0, error) {
 	t.Helper()
 	var last codexStackRealSmokeProgrammingDrainV0
-	for cycle := 1; cycle <= 16; cycle++ {
+	for cycle := 1; cycle <= codexStackRealSmokeDrainMaxCyclesV0(maxExternalWaits); cycle++ {
 		drain, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
 			RunRef:               runRef,
 			CorrelationID:        fmt.Sprintf("corr-app-stack-real-programming-start-%03d", cycle),
@@ -135,7 +135,7 @@ func codexStackRealSmokeDrainUntilProgrammingDeliveredResultV0(
 	var last codexStackRealSmokeProgrammingDrainV0
 	previousSequence := mustLoadCodexStackRunForTestV0(t, stack, runRef).LastSequence
 	previousFingerprint := codexStackRealSmokeDrainFingerprintV0(t, stores, stack, runRef)
-	for cycle := 1; cycle <= 16; cycle++ {
+	for cycle := 1; cycle <= codexStackRealSmokeDrainMaxCyclesV0(maxExternalWaits); cycle++ {
 		drain, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
 			RunRef:               runRef,
 			CorrelationID:        fmt.Sprintf("corr-app-stack-real-programming-drain-%03d", cycle),
@@ -195,6 +195,17 @@ func codexStackRealSmokeDrainUntilProgrammingDeliveredResultV0(
 		last.Drain.Attempts,
 		last.Drain.Waits,
 	)
+}
+
+func codexStackRealSmokeDrainMaxCyclesV0(maxExternalWaits int) int {
+	cycles := maxExternalWaits / 30
+	if cycles < 8 {
+		return 8
+	}
+	if cycles > 40 {
+		return 40
+	}
+	return cycles
 }
 
 func codexStackRealSmokePendingProgrammingDescriptorsV0(

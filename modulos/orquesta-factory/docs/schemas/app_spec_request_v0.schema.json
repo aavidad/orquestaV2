@@ -64,6 +64,9 @@
         "debug"
       ]
     },
+    "project_source": {
+      "$ref": "#/$defs/project_source_request"
+    },
     "nombre": {
       "type": "string",
       "minLength": 1,
@@ -419,6 +422,47 @@
     "locale": {
       "type": "string",
       "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    "project_source_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "default": "new",
+          "enum": [
+            "new",
+            "github",
+            "local_path"
+          ]
+        },
+        "git_url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "branch": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "local_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "project_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        }
+      },
+      "not": {
+        "required": [
+          "git_url",
+          "local_path"
+        ]
+      }
     },
     "connector_request": {
       "type": "object",

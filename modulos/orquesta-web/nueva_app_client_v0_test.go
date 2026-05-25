@@ -81,6 +81,37 @@ func TestRESTSolicitarNuevaAppClientV0CreaRequestIDSiFalta(t *testing.T) {
 	}
 }
 
+func TestRESTSolicitarNuevaAppClientV0TransportaProjectSourceEnJSON(t *testing.T) {
+	var received orquestafactory.AppSpecRequestV0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		writeSuccessV0(t, w)
+	}))
+	defer server.Close()
+
+	client := NewRESTSolicitarNuevaAppClientV0(server.URL, time.Second)
+	form := minimalFormForClientV0("req-project-source")
+	form.ProjectSource = WebNuevaAppProjectSourceFormV0{
+		Kind:       "github",
+		GitURL:     "https://example.test/agenda.git",
+		Branch:     "main",
+		ProjectRef: "project-ref-agenda",
+	}
+
+	if _, err := client.SolicitarNuevaApp(context.Background(), form); err != nil {
+		t.Fatalf("SolicitarNuevaApp error: %v", err)
+	}
+	if received.RequestID != "req-project-source" ||
+		received.ProjectSource.Kind != "github" ||
+		received.ProjectSource.GitURL != "https://example.test/agenda.git" ||
+		received.ProjectSource.Branch != "main" ||
+		received.ProjectSource.ProjectRef != "project-ref-agenda" {
+		t.Fatalf("payload project_source inesperado: %+v", received)
+	}
+}
+
 func TestRESTSolicitarNuevaAppClientV0Respuesta2xxGeneraViewModelConSpecYBacklog(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeSuccessV0(t, w)

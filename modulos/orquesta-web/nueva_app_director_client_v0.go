@@ -91,9 +91,7 @@ func (client *RESTArrancarDirectorAppClientV0) ArrancarDirectorApp(
 	return decodeArrancarDirectorAppResponseV0(resp, form)
 }
 
-func (client *RESTArrancarDirectorAppClientV0) payloadV0(
-	request orquestafactory.AppSpecRequestV0,
-) arrancarDirectorAppRequestEnvelopeV0 {
+func (client *RESTArrancarDirectorAppClientV0) payloadV0(request orquestafactory.AppSpecRequestV0) arrancarDirectorAppRequestEnvelopeV0 {
 	return arrancarDirectorAppRequestEnvelopeV0{
 		RequestID:            request.RequestID,
 		CorrelationID:        request.RequestID,

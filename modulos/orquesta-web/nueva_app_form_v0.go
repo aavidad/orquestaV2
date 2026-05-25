@@ -20,6 +20,7 @@ type WebNuevaAppFormV0 struct {
 	Objetivo             string                         `json:"objetivo"`
 	Descripcion          string                         `json:"descripcion,omitempty"`
 	TipoApp              string                         `json:"tipo_app"`
+	ProjectSource        WebNuevaAppProjectSourceFormV0 `json:"project_source,omitempty"`
 	UsuariosObjetivo     []string                       `json:"usuarios_objetivo,omitempty"`
 	Plataformas          []string                       `json:"plataformas,omitempty"`
 	Integraciones        []WebNuevaAppConnectorFormV0   `json:"integraciones,omitempty"`
@@ -31,6 +32,14 @@ type WebNuevaAppFormV0 struct {
 	I18N                 WebNuevaAppI18NFormV0          `json:"i18n,omitempty"`
 	Agentes              WebNuevaAppAgentesFormV0       `json:"agentes,omitempty"`
 	Restricciones        []string                       `json:"restricciones,omitempty"`
+}
+
+type WebNuevaAppProjectSourceFormV0 struct {
+	Kind       string `json:"kind,omitempty"`
+	GitURL     string `json:"git_url,omitempty"`
+	Branch     string `json:"branch,omitempty"`
+	LocalPath  string `json:"local_path,omitempty"`
+	ProjectRef string `json:"project_ref,omitempty"`
 }
 
 type WebNuevaAppConnectorFormV0 struct {
@@ -101,6 +110,7 @@ func (form WebNuevaAppFormV0) ToAppSpecRequestV0() orquestafactory.AppSpecReques
 		Objetivo:             trimV0(form.Objetivo),
 		Descripcion:          trimV0(form.Descripcion),
 		TipoApp:              trimV0(form.TipoApp),
+		ProjectSource:        mapProjectSourceFormV0(form.ProjectSource),
 		UsuariosObjetivo:     compactStringsV0(form.UsuariosObjetivo),
 		Plataformas:          compactStringsV0(form.Plataformas),
 		Integraciones:        mapConnectorFormsV0(form.Integraciones),
@@ -199,6 +209,16 @@ func mapAgentesFormV0(value WebNuevaAppAgentesFormV0) orquestafactory.AgentesReq
 		RevisionHumana: value.RevisionHumana,
 		Autonomia:      trimV0(value.Autonomia),
 		Preferencias:   compactStringsV0(value.Preferencias),
+	}
+}
+
+func mapProjectSourceFormV0(value WebNuevaAppProjectSourceFormV0) orquestafactory.ProjectSourceRequestV0 {
+	return orquestafactory.ProjectSourceRequestV0{
+		Kind:       trimV0(value.Kind),
+		GitURL:     trimV0(value.GitURL),
+		Branch:     trimV0(value.Branch),
+		LocalPath:  trimV0(value.LocalPath),
+		ProjectRef: trimV0(value.ProjectRef),
 	}
 }
 

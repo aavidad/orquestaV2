@@ -347,6 +347,12 @@ Campos:
 - objetivo
 - descripcion
 - tipo_app
+- project_source
+  - kind
+  - git_url
+  - branch
+  - local_path
+  - project_ref
 - usuarios_objetivo
 - plataformas
 - integraciones
@@ -363,6 +369,8 @@ Invariantes:
 - No contiene IDs de DB obligatorios ni asume proyecto existente.
 - No contiene reglas de recomendacion; solo elecciones, omisiones explicitas y texto libre del operador.
 - Todo texto visible asociado debe tener clave i18n.
+- `project_source` solo transporta origen declarado por el operador hacia
+  factory/director; web no valida si una ruta, repo o ref existe.
 Errores:
 - form_incompleto
 - locale_no_soportado_web
@@ -376,6 +384,8 @@ Implementacion actual:
 - El mapper importa factory como `orquestafactory "orquesta/modulos/orquesta-factory"`.
 - Defaults locales: `schema_version=app_spec_request.v0`, `source=orquesta-web`, `request_kind=crear_app_completa`, `execution_mode=normal`, `i18n.default_locale=locale` si falta y `preferencias_tecnicas.arquitectura=hexagonal` si falta.
 - No valida reglas de negocio; esa validacion queda en `orquesta-factory`.
+- `project_source.kind` usa el mismo contrato que factory: `new`, `github` o
+  `local_path`.
 ```
 
 ```text

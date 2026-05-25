@@ -14,6 +14,10 @@ func (n appSpecNormalizerV0) executionMode() string {
 	return NormalizeExecutionModeV0(n.req.ExecutionMode)
 }
 
+func (n appSpecNormalizerV0) projectSource() ProjectSourceSpecV0 {
+	return normalizeProjectSourceV0(n.req.ProjectSource)
+}
+
 func (n appSpecNormalizerV0) app() AppInfoV0 {
 	return AppInfoV0{
 		Nombre:           strings.TrimSpace(n.req.Nombre),

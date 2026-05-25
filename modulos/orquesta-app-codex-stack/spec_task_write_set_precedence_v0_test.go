@@ -34,6 +34,7 @@ func TestProgrammingObjectiveV0RespetaWriteSetClosed(t *testing.T) {
 		}
 	}
 	for _, forbidden := range []string{
+		"App Go completa",
 		"si debes tocar otros ficheros",
 		"justificado en el ACK",
 		"justificando cualquier toque fuera del write-set",

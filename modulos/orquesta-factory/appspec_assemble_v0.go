@@ -15,6 +15,7 @@ func assembleAppSpecV0(req AppSpecRequestV0, now time.Time) AppSpecV0 {
 		Locale:           strings.TrimSpace(req.Locale),
 		RequestKind:      normalizer.requestKind(),
 		ExecutionMode:    normalizer.executionMode(),
+		ProjectSource:    normalizer.projectSource(),
 		App:              normalizer.app(),
 		Scope:            normalizer.scope(),
 		Architecture:     normalizer.architecture(),

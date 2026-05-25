@@ -41,14 +41,20 @@ func TestWebNuevaAppFormV0ToAppSpecRequestV0PreservaCamposRicos(t *testing.T) {
 	no := false
 	yes := true
 	form := WebNuevaAppFormV0{
-		RequestID:        "req-rica",
-		Locale:           "es",
-		RequestKind:      "documentar_app",
-		ExecutionMode:    "debug",
-		Nombre:           "Portal",
-		Objetivo:         "Publicar contenidos",
-		Descripcion:      "CMS interno",
-		TipoApp:          "web",
+		RequestID:     "req-rica",
+		Locale:        "es",
+		RequestKind:   "documentar_app",
+		ExecutionMode: "debug",
+		Nombre:        "Portal",
+		Objetivo:      "Publicar contenidos",
+		Descripcion:   "CMS interno",
+		TipoApp:       "web",
+		ProjectSource: WebNuevaAppProjectSourceFormV0{
+			Kind:       " github ",
+			GitURL:     " https://example.test/repo.git ",
+			Branch:     " main ",
+			ProjectRef: " project-ref-123 ",
+		},
 		UsuariosObjetivo: []string{" editores ", "operaciones"},
 		Plataformas:      []string{"web", "mobile"},
 		Integraciones: []WebNuevaAppConnectorFormV0{{
@@ -120,6 +126,12 @@ func TestWebNuevaAppFormV0ToAppSpecRequestV0PreservaCamposRicos(t *testing.T) {
 	}
 	if req.I18N.Enabled == nil || !*req.I18N.Enabled || req.Agentes.RevisionHumana == nil || !*req.Agentes.RevisionHumana {
 		t.Fatalf("i18n/agentes no preservados: i18n=%+v agentes=%+v", req.I18N, req.Agentes)
+	}
+	if req.ProjectSource.Kind != "github" ||
+		req.ProjectSource.GitURL != "https://example.test/repo.git" ||
+		req.ProjectSource.Branch != "main" ||
+		req.ProjectSource.ProjectRef != "project-ref-123" {
+		t.Fatalf("project_source no preservado hacia factory: %+v", req.ProjectSource)
 	}
 }
 

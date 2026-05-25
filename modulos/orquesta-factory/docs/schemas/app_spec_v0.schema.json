@@ -12,6 +12,7 @@
     "locale",
     "request_kind",
     "execution_mode",
+    "project_source",
     "app",
     "scope",
     "architecture",
@@ -54,6 +55,9 @@
     },
     "execution_mode": {
       "$ref": "#/$defs/execution_mode"
+    },
+    "project_source": {
+      "$ref": "#/$defs/project_source_spec"
     },
     "app": {
       "type": "object",
@@ -479,6 +483,49 @@
         "normal",
         "debug"
       ]
+    },
+    "project_source_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "new",
+            "github",
+            "local_path"
+          ]
+        },
+        "git_url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "branch": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "local_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "project_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        }
+      },
+      "not": {
+        "required": [
+          "git_url",
+          "local_path"
+        ]
+      }
     },
     "tipo_app": {
       "type": "string",

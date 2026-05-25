@@ -21,6 +21,12 @@ func TestNuevaAppWebEndpointV0POSTJSONDelegaAlClienteYRenderizaViewModel(t *test
 		Nombre:    "Agenda",
 		Objetivo:  "Coordinar ensayos",
 		TipoApp:   "web",
+		ProjectSource: WebNuevaAppProjectSourceFormV0{
+			Kind:       "github",
+			GitURL:     "https://example.test/agenda.git",
+			Branch:     "main",
+			ProjectRef: "project-ref-agenda",
+		},
 	}); err != nil {
 		t.Fatalf("encode form: %v", err)
 	}
@@ -42,6 +48,11 @@ func TestNuevaAppWebEndpointV0POSTJSONDelegaAlClienteYRenderizaViewModel(t *test
 		client.received.Objetivo != "Coordinar ensayos" ||
 		client.received.TipoApp != "web" {
 		t.Fatalf("form enviado inesperado: %+v", client.received)
+	}
+	if client.received.ProjectSource.Kind != "github" ||
+		client.received.ProjectSource.GitURL != "https://example.test/agenda.git" ||
+		client.received.ProjectSource.ProjectRef != "project-ref-agenda" {
+		t.Fatalf("project_source json inesperado: %+v", client.received.ProjectSource)
 	}
 	if page.ViewModel.Estado != WebNuevaAppEstadoValida ||
 		page.Textos.Estado != "Lista para revisar" ||
@@ -181,6 +192,10 @@ func TestNuevaAppWebEndpointV0POSTFormURLEncodedDelegaSinTemplates(t *testing.T)
 	values.Set("nombre", "Agenda")
 	values.Set("objetivo", "Coordinar ensayos")
 	values.Set("tipo_app", "web")
+	values.Set("project_source.kind", "github")
+	values.Set("project_source.git_url", "https://example.test/agenda.git")
+	values.Set("project_source.branch", "main")
+	values.Set("project_source.project_ref", "project-ref-agenda")
 	values.Add("plataformas", "web,mobile")
 	values.Set("integraciones.0.tipo", "api")
 	values.Set("integraciones.0.nombre", "crm")
@@ -202,6 +217,12 @@ func TestNuevaAppWebEndpointV0POSTFormURLEncodedDelegaSinTemplates(t *testing.T)
 	}
 	if len(client.received.Plataformas) != 2 || client.received.Plataformas[1] != "mobile" {
 		t.Fatalf("plataformas=%+v", client.received.Plataformas)
+	}
+	if client.received.ProjectSource.Kind != "github" ||
+		client.received.ProjectSource.GitURL != "https://example.test/agenda.git" ||
+		client.received.ProjectSource.Branch != "main" ||
+		client.received.ProjectSource.ProjectRef != "project-ref-agenda" {
+		t.Fatalf("project_source=%+v", client.received.ProjectSource)
 	}
 	if len(client.received.Integraciones) != 1 ||
 		client.received.Integraciones[0].Tipo != "api" ||

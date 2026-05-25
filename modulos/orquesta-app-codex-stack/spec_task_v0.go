@@ -75,8 +75,12 @@ func programmingObjectiveV0(
 		programmingProfileObjectiveLineV0(task, unit),
 		strictWriteSetObjectiveLineV0(),
 		agentDelegationObjectiveLineV0(task.MaxChildAgents),
-		"Si la app es Go completa, debe quedar como modulo autonomo con go.mod, entrypoint bajo cmd/server o equivalente documentado, imports de modulo y sin imports relativos ../.",
 		"Ejecuta pruebas focales razonables y registra el resultado en el ACK.",
+	}
+	if programmingTaskRequiresCompleteGoAppV0(task) {
+		lines = append(lines, "App Go completa: modulo autonomo con go.mod, entrypoint bajo cmd/server o equivalente documentado, imports de modulo y sin imports relativos ../.")
+	} else {
+		lines = append(lines, "No conviertas refactors, revisiones, documentacion o cambios de app existente en una app Go nueva salvo que el contrato lo pida claramente.")
 	}
 	if scopeLine := autoprogrammingScopeObjectiveLineV0(task); scopeLine != "" {
 		lines = append(lines, scopeLine)
@@ -96,6 +100,33 @@ func agentDelegationObjectiveLineV0(maxChildAgents int) string {
 		"Delegacion operativa: si necesitas ayuda y el runtime lo permite, activa subagentes para paralelizar analisis, implementacion, pruebas o revision; limite %d subagentes, conservando refs/parentesco, write-set, presupuesto y evidencia en el ACK.",
 		limit,
 	)
+}
+
+func programmingTaskRequiresCompleteGoAppV0(task orquestacoreworkflow.WorkflowTaskV0) bool {
+	if programmingTaskWriteSetContainsV0(task, "go.mod") {
+		return true
+	}
+	text := strings.ToLower(strings.Join([]string{
+		task.Summary,
+		task.Title,
+		strings.Join(task.AcceptanceCriteria, " "),
+	}, " "))
+	if strings.Contains(text, "go.mod") ||
+		strings.Contains(text, "app go completa") ||
+		strings.Contains(text, "modulo go autonomo") {
+		return true
+	}
+	return strings.Contains(text, "request_kind=crear_app_completa") && strings.Contains(text, " go")
+}
+
+func programmingTaskWriteSetContainsV0(task orquestacoreworkflow.WorkflowTaskV0, want string) bool {
+	want = strings.Trim(strings.TrimSpace(want), "/")
+	for _, path := range task.WriteSet {
+		if strings.Trim(strings.TrimSpace(path), "/") == want {
+			return true
+		}
+	}
+	return false
 }
 
 func programmingProfileObjectiveLineV0(
@@ -170,7 +201,7 @@ func directorObjectiveV0(
 		"Modo de ejecucion: " + mode + ".",
 		"Resumen de Orquesta: " + strings.TrimSpace(payload.Summary),
 		"Reglas: hexagonal, i18n si aplica, persistencia solo por puerto/conector, funciones pequenas, sin archivos gigantes.",
-		"Go app completa: modulo autonomo con go.mod, entrypoint cmd/server, imports de modulo y `go test ./...` para cierre.",
+		"No asumas app nueva ni Go por defecto: request_kind decide si crear, modificar, refactorizar, reimplementar, documentar, analizar, probar, asegurar o preparar deploy.",
 		"Separa brainstorming, documentacion, programacion, pruebas, seguridad y revision final.",
 		"Cumple los minimos del tipo de peticion; solo puedes recortar alcance si execution_mode=debug y debes listar lo omitido.",
 		"Si falta informacion no inferible, deja CONSULTA AL DIRECTOR en el documento.",

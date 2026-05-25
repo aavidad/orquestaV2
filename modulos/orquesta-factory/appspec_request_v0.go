@@ -26,6 +26,7 @@ type AppSpecRequestV0 struct {
 	Locale               string                 `json:"locale"`
 	RequestKind          string                 `json:"request_kind,omitempty"`
 	ExecutionMode        string                 `json:"execution_mode,omitempty"`
+	ProjectSource        ProjectSourceRequestV0 `json:"project_source,omitempty"`
 	Nombre               string                 `json:"nombre"`
 	Objetivo             string                 `json:"objetivo"`
 	Descripcion          string                 `json:"descripcion,omitempty"`
@@ -49,6 +50,14 @@ type ConnectorRequestV0 struct {
 	Proposito     string   `json:"proposito,omitempty"`
 	Requerido     bool     `json:"requerido,omitempty"`
 	Restricciones []string `json:"restricciones,omitempty"`
+}
+
+type ProjectSourceRequestV0 struct {
+	Kind       string `json:"kind,omitempty"`
+	GitURL     string `json:"git_url,omitempty"`
+	Branch     string `json:"branch,omitempty"`
+	LocalPath  string `json:"local_path,omitempty"`
+	ProjectRef string `json:"project_ref,omitempty"`
 }
 
 type PreferenciasTecnicasV0 struct {
@@ -123,6 +132,8 @@ func ValidateAppSpecRequestV0(req AppSpecRequestV0) []ValidationIssue {
 	var issues []ValidationIssue
 	issues = append(issues, validateRequiredV0(req)...)
 	issues = append(issues, validateEnumsV0(req)...)
+	issues = append(issues, validateProjectSourceV0(req.ProjectSource)...)
+	issues = append(issues, validateRequestKindProjectSourceV0(req)...)
 	issues = append(issues, validateLocalesV0(req)...)
 	issues = append(issues, validateI18NV0(req)...)
 	issues = append(issues, validateDatosV0(req)...)
