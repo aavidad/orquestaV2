@@ -4693,7 +4693,7 @@ Objetivo: cerrar la ruta legacy CLI
 los endpoints vigentes de `AppSpec`/Director, sin dejar un cliente que apunta a
 una ruta no cableada.
 
-Estado: pendiente.
+Estado: completada 2026-05-26.
 
 Alcance:
 
