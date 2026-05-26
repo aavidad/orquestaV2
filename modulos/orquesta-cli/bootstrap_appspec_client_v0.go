@@ -13,11 +13,14 @@ import (
 )
 
 const (
-	BootstrapAppSpecCliEndpointV0          = "/api/v0/director/bootstrap/appspec"
-	BootstrapAppSpecCliCorrelationHeaderV0 = CliCorrelationHeaderV0
-	BootstrapAppSpecCliContractV0          = "BootstrapProyectoDesdeAppSpec"
-	BootstrapAppSpecCliContractVersionV0   = "v0"
-	BootstrapAppSpecCliDefaultCommandV0    = "app spec bootstrap"
+	BootstrapAppSpecCliLegacyEndpointV0     = "/api/v0/director/bootstrap/appspec"
+	BootstrapAppSpecCliPreferredEndpointV0  = "/api/v0/apps/director"
+	BootstrapAppSpecCliCorrelationHeaderV0  = CliCorrelationHeaderV0
+	BootstrapAppSpecCliContractV0           = "BootstrapProyectoDesdeAppSpec"
+	BootstrapAppSpecCliContractVersionV0    = "v0"
+	BootstrapAppSpecCliDefaultCommandV0     = "app spec bootstrap"
+	BootstrapAppSpecCliQuarantineDetailV0   = "bootstrap_appspec_legacy_route_en_cuarentena_use_api_v0_apps_director"
+	BootstrapAppSpecCliQuarantineEvidenceV0 = "T86_bootstrap_appspec_legacy_route_quarantine"
 )
 
 type BootstrapAppSpecCliClientV0 struct {
@@ -41,7 +44,7 @@ type bootstrapAppSpecHTTPErrorV0 struct {
 }
 
 func NewBootstrapAppSpecCliClientV0(serverURL string, timeout time.Duration) (*BootstrapAppSpecCliClientV0, error) {
-	config, err := newCLIRESTClientConfigV0(serverURL, timeout, BootstrapAppSpecCliEndpointV0)
+	config, err := newBootstrapAppSpecLegacyClientConfigV0(serverURL, timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -56,6 +59,8 @@ func NewBootstrapAppSpecCliClientV0(serverURL string, timeout time.Duration) (*B
 }
 
 func (client *BootstrapAppSpecCliClientV0) BootstrapProyectoDesdeAppSpec(ctx context.Context, inv CliInvocationContextV0, cmd orquestadirector.BootstrapProyectoDesdeAppSpecCommandV0) CliOutputEnvelopeV0 {
+	_ = ctx
+	_ = cmd
 	start := time.Now()
 	inv = NormalizeCliInvocationContextV0(inv)
 	if inv.Command == "" {
@@ -70,35 +75,7 @@ func (client *BootstrapAppSpecCliClientV0) BootstrapProyectoDesdeAppSpec(ctx con
 	if errs := validateBootstrapAppSpecInvocationV0(inv); len(errs) > 0 {
 		return NewCliOutputErrorEnvelopeV0(inv, BootstrapAppSpecCliContractV0, BootstrapAppSpecCliContractVersionV0, errs, cliMetaV0(start, 0, false))
 	}
-	baseURL, err := normalizeServerURLV0(inv.ServerURL)
-	if err != nil {
-		return clientErrorBootstrapAppSpecEnvelopeV0(inv, err, start)
-	}
-
-	cmd.RequestID = inv.RequestID
-	cmd.CorrelationID = inv.CorrelationID
-	if strings.TrimSpace(inv.IdempotencyKey) != "" {
-		cmd.IdempotencyKey = inv.IdempotencyKey
-	}
-	payload, err := json.Marshal(cmd)
-	if err != nil {
-		return cliSingleBootstrapAppSpecErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", "request_no_serializable", 0, false, start)
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	httpReq, err := prepareCLIRESTRequestV0(ctx, baseURL, endpointBootstrapAppSpecV0(client), inv.CorrelationID, payload)
-	if err != nil {
-		return cliSingleBootstrapAppSpecErrorEnvelopeV0(inv, CliErrErrorTransporteV0, "server_url", "request_http_invalida", 0, true, start)
-	}
-	resp, err := httpClientBootstrapAppSpecV0(client, timeout).Do(httpReq)
-	if err != nil {
-		return transportBootstrapAppSpecEnvelopeV0(inv, err, start)
-	}
-	defer resp.Body.Close()
-
-	return decodeBootstrapAppSpecResponseV0(resp, inv, start)
+	return bootstrapAppSpecQuarantineEnvelopeV0(inv, start)
 }
 
 func decodeBootstrapAppSpecResponseV0(resp *http.Response, inv CliInvocationContextV0, start time.Time) CliOutputEnvelopeV0 {

@@ -127,13 +127,13 @@ Estado: completada; tests y helpers quedan separados por escenario/responsabilid
 
 ```text
 ID: CLI-011
-Objetivo: Preparar cliente CLI fino para BootstrapProyectoDesdeAppSpec v0 sin binario completo ni fallback local.
+Objetivo: Cerrar cliente CLI legacy de BootstrapProyectoDesdeAppSpec v0 como ruta HTTP en cuarentena, sin binario completo ni fallback local.
 Write-set: bootstrap_appspec_client_v0.go, bootstrap_appspec_client_helpers_v0.go, bootstrap_appspec_client_v0_test.go, docs/tareas.md, docs/pruebas.md, docs/decisiones.md
 Simbolo foco: BootstrapAppSpecCliClientV0
 Contrato: BootstrapProyectoDesdeAppSpec v0
-Validacion: gofmt; go test -count=1 ./modulos/orquesta-cli; git diff --check -- modulos/orquesta-cli; wc -l de ficheros Go tocados. Tests con httptest verifican POST JSON a /api/v0/director/bootstrap/appspec, X-Correlation-ID, request_id/correlation_id/idempotency_key tecnicos, 400 publico, 500/timeout sin body privado, JSON/respuesta invalida y server_url sin credenciales.
-Bloqueos: ninguno local; si el director publica otra ruta/version, el cambio queda aislado en la constante del cliente y sus tests.
-Estado: completada ejecutable
+Validacion: gofmt; go test -count=1 ./modulos/orquesta-cli; git diff --check -- modulos/orquesta-cli; wc -l de ficheros Go tocados. Tests verifican que `app spec bootstrap` devuelve bloqueo publico `contrato_no_configurado` con `route_policy`, no llama a `/api/v0/director/bootstrap/appspec`, no requiere `server_url` para informar cuarentena y sigue rechazando credenciales si se configuran.
+Bloqueos: la ruta HTTP `/api/v0/director/bootstrap/appspec` queda en cuarentena legacy; el flujo vigente para apps nuevas es `/api/v0/apps/director` / `orquesta.apps.arrancar_director.v0`.
+Estado: completada ejecutable; actualizada por T86 el 2026-05-26
 ```
 
 ```text

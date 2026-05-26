@@ -142,12 +142,12 @@ Estado: aceptada_local
 
 ```text
 Fecha: 2026-05-04
-Decision: `CLI-011` se implementa como cliente REST fino de `BootstrapProyectoDesdeAppSpec v0` con ruta local asumida `/api/v0/director/bootstrap/appspec`.
-Motivo: El contrato global autoriza a CLI como consumidor secundario y exige que Web/MCP/CLI consuman el puerto del director en vez de duplicar la composicion de `SolicitarNuevaApp`, registro de core y StartRun.
-Alternativas: recomponer el flujo en CLI; invocar `BootstrapProyectoDesdeAppSpecV0` local; copiar comandos V1; dejar solo documentacion.
-Impacto: `BootstrapAppSpecCliClientV0` solo normaliza datos tecnicos de invocacion, envia POST JSON al director y mapea errores publicos compactos. Los tests usan fake server HTTP y no llaman core/workflow ni al caso de uso local del director.
+Decision: `CLI-011` queda en cuarentena HTTP legacy para `BootstrapProyectoDesdeAppSpec v0`; la CLI no llama `/api/v0/director/bootstrap/appspec`.
+Motivo: T86 detecto que esa ruta no esta cableada por gateway/servidor y la ruta vigente de AppSpec con juicio operativo es `/api/v0/apps/director` / `orquesta.apps.arrancar_director.v0`.
+Alternativas: cablear compatibilidad real; recomponer el flujo en CLI; invocar `BootstrapProyectoDesdeAppSpecV0` local; copiar comandos V1.
+Impacto: `BootstrapAppSpecCliClientV0` devuelve bloqueo publico `contrato_no_configurado` con `route_policy`, no requiere `server_url` para informar la cuarentena y sigue rechazando credenciales si se configuran.
 Contratos afectados: BootstrapProyectoDesdeAppSpec v0, CliOutputEnvelopeV0
-Estado: aceptada_local
+Estado: superada por T86; cuarentena aceptada el 2026-05-26
 ```
 
 ```text

@@ -26,7 +26,7 @@ de fallback local.
 | `FunctionContract v0` listar/ver | si | si | si | si | activo read-only |
 | `FunctionContract v0` registrar | si | no | no | si, solo rechazo | bloqueado |
 | `GovernanceCatalog v0` listar/ver | si | si | si | si | activo |
-| `BootstrapProyectoDesdeAppSpec v0` | si | si | si | si | activo |
+| `BootstrapProyectoDesdeAppSpec v0` | si | si, bloqueo | no | si, solo rechazo | cuarentena HTTP legacy |
 | futuros contratos read-only | segun DTO local | planificado | planificado | si | pendiente |
 
 ### Reglas del harness
@@ -242,21 +242,21 @@ Riesgos: el saneamiento no anyade cobertura nueva; verifica que la division no c
 ```
 
 ```text
-Caso: CLI-P023 bootstrap AppSpec desde director
+Caso: CLI-P023 bootstrap AppSpec HTTP legacy en cuarentena
 Tipo: contract
 Comando: orquesta-cli app spec bootstrap --json
-Evidencia esperada: `BootstrapAppSpecCliClientV0` hace `POST /api/v0/director/bootstrap/appspec`, propaga `X-Correlation-ID`, `request_id`, `correlation_id` e `idempotency_key`, y devuelve `BootstrapProyectoDesdeAppSpecResultV0` canonico con registro compacto, refs opacas, StartRun y RunStarted.
-Ultima ejecucion: 2026-05-04, go test -count=1 ./modulos/orquesta-cli; TestBootstrapAppSpecCliClientV0ExitoPropagaCorrelacionYEnvelopeCanonico.
-Riesgos: duplicar en CLI la composicion del director o llamar core/workflow localmente.
+Evidencia esperada: `BootstrapAppSpecCliClientV0` devuelve `contrato_no_configurado` con campo `route_policy`, no hace `POST /api/v0/director/bootstrap/appspec` y apunta al flujo vigente `/api/v0/apps/director`.
+Ultima ejecucion: 2026-05-26, go test -count=1 ./modulos/orquesta-cli; TestBootstrapAppSpecCliClientV0CuarentenaNoHaceHTTP.
+Riesgos: dejar un cliente fino apuntando a una ruta no cableada o reintroducir bootstrap legacy como entrada operativa.
 ```
 
 ```text
-Caso: CLI-P024 bootstrap transporte y errores compactos
+Caso: CLI-P024 bootstrap cuarentena y configuracion compacta
 Tipo: unit
 Comando: orquesta-cli app spec bootstrap --json
-Evidencia esperada: 400 devuelve errores publicos del director/core-workflow; 500/timeout devuelven `error_transporte` sin body privado; JSON o resultado invalido devuelve `respuesta_invalida`; `server_url` con credenciales se rechaza sin filtrar usuario/secreto.
-Ultima ejecucion: 2026-05-04, go test -count=1 ./modulos/orquesta-cli; TestBootstrapAppSpecCliClientV0Respuesta400DevuelveErroresPublicos, TestBootstrapAppSpecCliClientV0Status500NoFiltraBodyPrivado, TestBootstrapAppSpecCliClientV0TimeoutDevuelveErrorTransporte, TestBootstrapAppSpecCliClientV0RespuestaInvalida y TestBootstrapAppSpecCliClientV0RechazaServerURLConCredenciales.
-Riesgos: exponer stack traces del director o aceptar una respuesta no compacta.
+Evidencia esperada: el bloqueo no requiere `server_url`, conserva envelope estable, y si se configura `server_url` con credenciales lo rechaza sin filtrar usuario/secreto.
+Ultima ejecucion: 2026-05-26, go test -count=1 ./modulos/orquesta-cli; TestBootstrapAppSpecCliClientV0CuarentenaNoRequiereServerURL y TestBootstrapAppSpecCliClientV0RechazaServerURLConCredenciales.
+Riesgos: convertir la cuarentena en transporte inexistente ambiguo o filtrar configuracion privada.
 ```
 
 ```text

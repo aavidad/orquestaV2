@@ -9,6 +9,39 @@ import (
 	orquestadirector "orquesta/modulos/orquesta-director"
 )
 
+func newBootstrapAppSpecLegacyClientConfigV0(serverURL string, timeout time.Duration) (cliRESTClientConfigV0, error) {
+	serverURL = strings.TrimSpace(serverURL)
+	baseURL := ""
+	if serverURL != "" {
+		normalized, err := normalizeServerURLV0(serverURL)
+		if err != nil {
+			return cliRESTClientConfigV0{}, err
+		}
+		baseURL = normalized
+	}
+	return cliRESTClientConfigV0{
+		BaseURL:  baseURL,
+		Endpoint: "",
+		Timeout:  effectiveTimeoutV0(timeout, 0),
+	}, nil
+}
+
+func bootstrapAppSpecQuarantineEnvelopeV0(inv CliInvocationContextV0, start time.Time) CliOutputEnvelopeV0 {
+	return NewCliOutputErrorEnvelopeV0(
+		inv,
+		BootstrapAppSpecCliContractV0,
+		BootstrapAppSpecCliContractVersionV0,
+		[]CliPublicErrorV0{
+			NewCliPublicErrorV0(CliErrContratoNoConfiguradoV0, "route_policy", BootstrapAppSpecCliQuarantineDetailV0),
+		},
+		cliMetaV0(start, 0, false),
+	)
+}
+
+func bootstrapAppSpecQuarantinedCommandV0() orquestadirector.BootstrapProyectoDesdeAppSpecCommandV0 {
+	return orquestadirector.BootstrapProyectoDesdeAppSpecCommandV0{}
+}
+
 func clientErrorBootstrapAppSpecEnvelopeV0(inv CliInvocationContextV0, err error, start time.Time) CliOutputEnvelopeV0 {
 	var cliErr CliClientErrorV0
 	if errors.As(err, &cliErr) {
@@ -39,7 +72,7 @@ func endpointBootstrapAppSpecV0(client *BootstrapAppSpecCliClientV0) string {
 	if client != nil && strings.TrimSpace(client.Endpoint) != "" {
 		return client.Endpoint
 	}
-	return BootstrapAppSpecCliEndpointV0
+	return BootstrapAppSpecCliLegacyEndpointV0
 }
 
 func httpClientBootstrapAppSpecV0(client *BootstrapAppSpecCliClientV0, timeout time.Duration) *http.Client {

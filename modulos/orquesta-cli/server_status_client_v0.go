@@ -73,7 +73,7 @@ func decodeServerStatusResponseV0(resp *http.Response, inv CliInvocationContextV
 	if resp.StatusCode < http.StatusOK || resp.StatusCode > 299 {
 		return serverStatusSingleErrorEnvelopeV0(inv, CliErrErrorTransporteV0, "status_code", "status_no_2xx", resp.StatusCode, retryableStatusV0(resp.StatusCode), start)
 	}
-	var state orquestaserver.StateV0
+	var state orquestaserver.ServerPublicStatusV0
 	if err := json.NewDecoder(resp.Body).Decode(&state); err != nil {
 		return serverStatusSingleErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", "json_invalido", resp.StatusCode, false, start)
 	}

@@ -70,6 +70,32 @@ func TestRunOrquestaCLIV0AppSpecSolicitarUsaClienteREST(t *testing.T) {
 	}
 }
 
+func TestRunOrquestaCLIV0AppSpecBootstrapLegacyBloqueadoSinInput(t *testing.T) {
+	serverCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serverCalled = true
+		http.Error(w, "legacy route must not be called", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	env, code := runCLIAndDecodeEnvelopeV0(t, []string{
+		"app", "spec", "bootstrap",
+		"--server-url", server.URL,
+		"--json",
+	}, nil)
+
+	if serverCalled {
+		t.Fatalf("bootstrap legacy llamo HTTP")
+	}
+	if code == 0 || env.OK || len(env.Errores) != 1 {
+		t.Fatalf("env/code inesperados: code=%d env=%+v", code, env)
+	}
+	if env.Errores[0].Codigo != CliErrContratoNoConfiguradoV0 ||
+		env.Errores[0].Campo != "route_policy" {
+		t.Fatalf("error inesperado: %+v", env.Errores)
+	}
+}
+
 func TestRunOrquestaCLIV0FunctionContractListarReadOnly(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != FunctionContractCliListEndpointV0 {

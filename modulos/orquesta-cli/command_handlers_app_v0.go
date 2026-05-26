@@ -3,7 +3,6 @@ package orquestacli
 import (
 	"context"
 
-	orquestadirector "orquesta/modulos/orquesta-director"
 	orquestafactory "orquesta/modulos/orquesta-factory"
 )
 
@@ -40,15 +39,11 @@ func runCLIAppSpecBootstrapV0(ctx context.Context, args []string, runner Orquest
 	}
 	inv := invocationFromCLIFlagsV0(BootstrapAppSpecCliDefaultCommandV0, common)
 
-	var cmd orquestadirector.BootstrapProyectoDesdeAppSpecCommandV0
-	if err := readCLIJSONInputV0(runner, common.InputPath, &cmd); err != nil {
-		return cliParseErrorEnvelopeV0(BootstrapAppSpecCliDefaultCommandV0, err)
-	}
 	client, err := NewBootstrapAppSpecCliClientV0(common.ServerURL, common.Timeout)
 	if err != nil {
 		env := clientErrorBootstrapAppSpecEnvelopeV0(inv, err, runnerNowV0(runner))
 		return env, exitCodeForEnvelopeV0(env)
 	}
-	env := client.BootstrapProyectoDesdeAppSpec(ctx, inv, cmd)
+	env := client.BootstrapProyectoDesdeAppSpec(ctx, inv, bootstrapAppSpecQuarantinedCommandV0())
 	return env, exitCodeForEnvelopeV0(env)
 }

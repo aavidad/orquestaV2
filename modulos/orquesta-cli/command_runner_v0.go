@@ -14,7 +14,7 @@ const (
 
 Comandos:
   app spec solicitar --server-url URL --input request.json --json
-  app spec bootstrap --server-url URL --input command.json --idempotency-key KEY --json
+  app spec bootstrap --input command.json --json  (legacy en cuarentena; use /api/v0/apps/director)
   servidor estado --server-url URL --json
   autoprogramacion preparar --server-url URL --input request.json --json
   autoprogramacion estado ver --server-url URL --run-ref RUN_REF --json
@@ -35,7 +35,7 @@ Opciones comunes:
 
 Commands:
   app spec solicitar --server-url URL --input request.json --json
-  app spec bootstrap --server-url URL --input command.json --idempotency-key KEY --json
+  app spec bootstrap --input command.json --json  (legacy quarantined; use /api/v0/apps/director)
   servidor estado --server-url URL --json
   autoprogramacion preparar --server-url URL --input request.json --json
   autoprogramacion estado ver --server-url URL --run-ref RUN_REF --json
