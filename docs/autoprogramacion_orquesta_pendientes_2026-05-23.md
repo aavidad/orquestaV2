@@ -4740,7 +4740,18 @@ juicio operativo queda en `/api/v0/apps/director` /
 Objetivo: distinguir liveness (`healthz`) de readiness/startup operativo antes
 de que smokes, daemon o supervisor residente lancen trabajo real.
 
-Estado: pendiente.
+Estado: completada 2026-05-26.
+
+Evidencia de cierre 2026-05-26:
+
+- `/healthz` queda limitado a liveness y `/api/v0/server/readiness` gobierna
+  readiness operativa del servidor Orquesta.
+- `cmd/orquesta-server` espera readiness y no acepta `/healthz` como listo.
+- Los smokes de Orquesta que necesitan servidor operativo esperan readiness;
+  `smoke_orquesta_server_restart_state.sh` se corrige para no arrancar el caso
+  de persistencia de cola con solo liveness.
+- La respuesta de readiness redacta mensajes de startup que puedan contener
+  paths, runtime dirs, prompts, transcripts o payloads.
 
 Alcance:
 
