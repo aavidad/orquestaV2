@@ -43,31 +43,9 @@ func validateCodexDeliveryAckBytesForSpecV0(
 	spec orquestaruntime.ExternalAgentLaunchSpecV0,
 ) (CodexAgentAckV0, []orquestaruntime.ExternalAgentConnectorErrorV0) {
 	if CodexAgentPacketRequiresStrictTerminalAckV0(spec.AgentPacket) {
-		ack, issues := ValidateStrictCompletedCodexAgentAckBytesForSpecV0(data, spec)
-		if len(issues) == 0 {
-			return ack, nil
-		}
-		if codexDeliveryObservationCanAcceptLegacyAckWithoutReceiptsV0(data, spec, issues) {
-			return ValidateCodexAgentAckBytesForSpecV0(data, spec)
-		}
-		return ack, issues
+		return ValidateStrictCompletedCodexAgentAckBytesForSpecV0(data, spec)
 	}
 	return ValidateCodexAgentAckBytesForSpecV0(data, spec)
-}
-
-func codexDeliveryObservationCanAcceptLegacyAckWithoutReceiptsV0(
-	data []byte,
-	spec orquestaruntime.ExternalAgentLaunchSpecV0,
-	strictIssues []orquestaruntime.ExternalAgentConnectorErrorV0,
-) bool {
-	if !codexDeliveryObservationIssuesOnlyMissingTestReceiptV0(strictIssues) {
-		return false
-	}
-	ack, issues := ValidateCodexAgentAckBytesForSpecV0(data, spec)
-	if len(issues) > 0 || len(ack.TestReceipts) > 0 {
-		return false
-	}
-	return len(compactCodexAckStringsV0(spec.AgentPacket.Task.RequiredTests)) > 0
 }
 
 func codexDeliveryObservationIssuesOnlyMissingTestReceiptV0(

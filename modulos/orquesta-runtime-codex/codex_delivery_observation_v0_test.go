@@ -52,7 +52,7 @@ func TestReadCodexDeliveryObservationFileV0AceptaACKLegacySinTestReceipts(t *tes
 	}
 }
 
-func TestReadCodexDeliveryObservationFileV0AceptaACKEstrictoLegacySinTestReceipts(t *testing.T) {
+func TestReadCodexDeliveryObservationFileV0RechazaACKEstrictoSinTestReceipts(t *testing.T) {
 	spec := codexNeutralSpecForDeliveryObservationTestV0()
 	ack := codexNeutralAckForDeliveryObservationTestV0(spec)
 	ack.TestReceipts = nil
@@ -65,14 +65,9 @@ func TestReadCodexDeliveryObservationFileV0AceptaACKEstrictoLegacySinTestReceipt
 		t.Fatalf("write ack: %v", err)
 	}
 
-	observation, issues := ReadCodexDeliveryObservationFileV0(path, spec)
+	_, issues := ReadCodexDeliveryObservationFileV0(path, spec)
 
-	if len(issues) > 0 {
-		t.Fatalf("issues=%+v", issues)
-	}
-	if observation.DeliveryRef != spec.AgentPacket.DeliveryRefs.AckRef {
-		t.Fatalf("observation=%+v", observation)
-	}
+	requireCodexIssueEvidenceV0(t, issues, "missing_required_test_receipt")
 }
 
 func TestReadCodexDeliveryObservationFileV0NoAceptaTestReceiptsInvalidosComoLegacy(t *testing.T) {

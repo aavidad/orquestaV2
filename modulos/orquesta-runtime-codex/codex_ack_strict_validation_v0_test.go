@@ -3,7 +3,6 @@ package orquestaruntimecodex
 import (
 	"testing"
 
-	orquestacontext "orquesta/modulos/orquesta-context"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
@@ -108,17 +107,22 @@ func TestStrictCompletedCodexAgentAckV0NoBloqueaRailsPendientesGenericosV0(t *te
 	}
 }
 
-func TestCodexDeliveryObservationV0AceptaACKLegacySinRecibosConContextoRefOnlyV0(t *testing.T) {
+func TestCodexDeliveryObservationV0RechazaACKStrictSinRecibosV0(t *testing.T) {
 	spec := codexSpecForTestV0()
-	spec.AgentPacket.Context.Entries[0].Mode = orquestacontext.ContextMaterializationModeRefOnlyV0
 	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."],"notes":["contexto_ref_only_resuelto: fixture local sin contexto externo"]}`
 
 	_, regularIssues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
 	_, strictIssues := ValidateStrictCompletedCodexAgentAckBytesForSpecV0([]byte(ack), spec)
 	_, issues := validateCodexDeliveryAckBytesForSpecV0([]byte(ack), spec)
 
-	if len(issues) != 0 {
-		t.Fatalf("ACK legacy sin recibos debe conservar compatibilidad de delivery: strict=%+v only=%v regular=%+v delivery=%+v", strictIssues, codexDeliveryObservationIssuesOnlyMissingTestReceiptV0(strictIssues), regularIssues, issues)
+	if len(regularIssues) != 0 {
+		t.Fatalf("lectura diagnostica legacy debe seguir tolerante: %+v", regularIssues)
+	}
+	if !codexDeliveryObservationIssuesOnlyMissingTestReceiptV0(strictIssues) {
+		t.Fatalf("strict debe identificar solo recibo faltante: %+v", strictIssues)
+	}
+	if !codexDeliveryObservationIssuesOnlyMissingTestReceiptV0(issues) {
+		t.Fatalf("delivery terminal strict no debe degradar a legacy: strict=%+v delivery=%+v", strictIssues, issues)
 	}
 }
 

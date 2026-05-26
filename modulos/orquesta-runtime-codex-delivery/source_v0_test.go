@@ -379,6 +379,8 @@ func codexDeliverySpecWithRefsForTestV0(
 func codexDeliveryAckForTestV0(
 	spec orquestaruntime.ExternalAgentLaunchSpecV0,
 ) orquestaruntimecodex.CodexAgentAckV0 {
+	exitCode := 0
+	outputRedacted := true
 	return orquestaruntimecodex.CodexAgentAckV0{
 		SchemaVersion: orquestaruntimecodex.CodexAgentAckSchemaVersionV0,
 		RequestID:     spec.RequestID,
@@ -389,7 +391,17 @@ func codexDeliveryAckForTestV0(
 		Status:        "completed",
 		Files:         orquestaruntimecodex.EvidenceListV0{"README.md"},
 		Tests:         orquestaruntimecodex.EvidenceListV0{"go test ./..."},
-		Notes:         orquestaruntimecodex.EvidenceListV0{"contexto_ref_only_resuelto: fixture local sin contexto externo"},
+		TestReceipts: []orquestaruntimecodex.CodexRequiredTestReceiptV0{{
+			SchemaVersion:  orquestaruntimecodex.CodexRequiredTestReceiptSchemaVersionV0,
+			Command:        "go test ./...",
+			Status:         "passed",
+			ExitCode:       &exitCode,
+			EvidenceRefs:   []string{"required-test-receipt-ref-codex-delivery-test"},
+			OccurredAt:     "2026-05-24T10:00:00Z",
+			Sequence:       1,
+			OutputRedacted: &outputRedacted,
+		}},
+		Notes: orquestaruntimecodex.EvidenceListV0{"contexto_ref_only_resuelto: fixture local sin contexto externo"},
 	}
 }
 
