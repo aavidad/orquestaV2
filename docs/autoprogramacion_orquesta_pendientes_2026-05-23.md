@@ -4819,7 +4819,7 @@ Objetivo: hacer visible el backlog local de modulos para automejora residente
 sin convertir documentos historicos en tareas ejecutables ambiguas ni duplicar
 Txx ya existentes.
 
-Estado: pendiente.
+Estado: completada 2026-05-26.
 
 Alcance:
 
@@ -4858,6 +4858,9 @@ scanner tambien incluye fuentes federadas en su lease. La prueba obligatoria
 queda bloqueada antes de ejecutar estos paquetes porque
 `modulos/orquesta-observability` no compila en el worktree actual
 (`WorkspaceTimelineV0` indefinido), fuera del alcance cerrado de T88.
+
+Evidencia de cierre 2026-05-26: reejecutada la bateria obligatoria y ya pasa:
+`go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-autoprogramming ./modulos/orquesta-mcp ./modulos/orquesta-server`.
 
 ## T89 director-operativo-local-doc-state-sync
 
