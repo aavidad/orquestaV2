@@ -235,6 +235,8 @@ func TestOperationalDirectorPlanMaterializerV0PreservaRefsOperativasTipadas(t *t
 		plan.Steps[index].DelegationDepth = 1
 		plan.Steps[index].MaxChildAgents = 2
 		plan.Steps[index].ChildStepIDs = []string{"step-wait-subagents", "step-review-deliveries"}
+		plan.Steps[index].DomainRefs = []string{"domain-topic-ref-001", "domain/nested-ref-skipped"}
+		plan.Steps[index].EvidenceRefs = []string{"source-ref-boe-001", "source ref skipped"}
 	}
 
 	materialized, err := (OperationalDirectorPlanMaterializerV0{
@@ -287,6 +289,23 @@ func TestOperationalDirectorPlanMaterializerV0PreservaRefsOperativasTipadas(t *t
 	}
 	if containsFragmentInValuesV0(task.AcceptanceCriteria, "operational_director.parent_task_ref") {
 		t.Fatalf("criteria should not invent parent_task_ref when parent item was not materialized: %v", task.AcceptanceCriteria)
+	}
+	for _, expected := range []string{
+		"operational_director.plan_ref:" + plan.PlanRef,
+		"operational_director.request_ref:req-operational-director-materializer-refs-001",
+		"operational_director.source_step_ref:step-launch-subagents",
+		"operational_director.source_item_ref:work-item-step-launch-subagents",
+		"operational_director.domain_ref:domain-topic-ref-001",
+		"operational_director.evidence_ref:source-ref-boe-001",
+	} {
+		if !stringInSetV0(expected, task.ContextRefs) {
+			t.Fatalf("context_refs=%v missing=%s", task.ContextRefs, expected)
+		}
+	}
+	for _, skipped := range []string{"domain/nested-ref-skipped", "source ref skipped"} {
+		if containsFragmentInValuesV0(task.ContextRefs, skipped) {
+			t.Fatalf("context_refs should contain only compact refs, got=%v", task.ContextRefs)
+		}
 	}
 }
 

@@ -100,6 +100,40 @@ func TestProbeAgentReadinessV0RejectsNonOpaqueRefs(t *testing.T) {
 	assertNucleoErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "agent_readiness.process_ref")
 }
 
+func TestProbeAgentReadinessV0PermiteVocabularioOperativoOpaco(t *testing.T) {
+	request := validAgentReadinessProbeRequestV0()
+	request.ProcessRef = "process-ref-oauth-token-budget-provider-model-001"
+	request.SessionRef = "session-ref-secrets-policy-runtime-codex-001"
+	request.EvidenceRefs = []string{
+		"readiness-evidence-ref-token-budget-001",
+		"readiness-evidence-ref-secrets-policy-001",
+	}
+	probe := &fakeAgentReadinessProbeV0{
+		result: AgentReadinessProbeResultV0{
+			Status:       AgentReadinessReadyV0,
+			EvidenceRefs: request.EvidenceRefs,
+		},
+	}
+
+	result, err := ProbeAgentReadinessV0(context.Background(), probe, request)
+	if err != nil {
+		t.Fatalf("probe readiness con vocabulario operativo opaco: %v", err)
+	}
+	if result.Status != AgentReadinessReadyV0 ||
+		!containsNucleoRefV0(result.EvidenceRefs, "readiness-evidence-ref-secrets-policy-001") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestProbeAgentReadinessV0RechazaValorSensibleEnRefOpaca(t *testing.T) {
+	request := validAgentReadinessProbeRequestV0()
+	request.EvidenceRefs = []string{"client-secret:valor"}
+
+	_, err := ProbeAgentReadinessV0(context.Background(), &fakeAgentReadinessProbeV0{}, request)
+
+	assertNucleoErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "agent_readiness.evidence_refs")
+}
+
 func TestProbeAgentReadinessV0AceptaRefsInternasAnidadas(t *testing.T) {
 	request := validAgentReadinessProbeRequestV0()
 	request.AgentRequestID = "agent-ref-assessment-assessment-ref-agent-progress-report-ref-agent-ref-assessment-assessment-ref-agent-progress-report-ref-agent-ref-task-autoprogramming-d6f0b05f2e4d-g01-000088-000016"

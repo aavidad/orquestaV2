@@ -3,6 +3,8 @@ package orquestacionnucleoapp
 import (
 	"regexp"
 	"strings"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func validateAgentReadinessProbeRequestV0(
@@ -88,16 +90,19 @@ func validateAgentReadinessEvidenceRefsV0(
 }
 
 func agentReadinessUnsafeTextV0(value string) bool {
-	low := strings.ToLower(strings.TrimSpace(value))
+	low := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(value), `\/`, "/"))
+	for _, fragment := range orquestarails.OperationalSensitiveFragmentsV0 {
+		if orquestarails.ContainsFragmentWithBoundaryV0(low, fragment) {
+			return true
+		}
+	}
 	return strings.Contains(low, "://") ||
 		strings.Contains(low, "/home/") ||
+		strings.Contains(low, "/users/") ||
 		strings.Contains(low, "\\users\\") ||
-		strings.Contains(low, "oauth") ||
-		strings.Contains(low, "token") ||
-		strings.Contains(low, "secret") ||
-		strings.Contains(low, "home=") ||
-		strings.Contains(low, "provider=") ||
-		strings.Contains(low, "proveedor=")
+		strings.Contains(low, "c:\\users\\") ||
+		strings.Contains(low, "$home") ||
+		strings.Contains(low, "~/")
 }
 
 type agentReadinessFieldV0 struct {

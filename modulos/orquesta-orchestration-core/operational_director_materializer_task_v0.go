@@ -27,6 +27,7 @@ func operationalDirectorWorkflowTaskFromItemV0(
 		AcceptanceCriteria:   criteria,
 		RequiredTests:        append([]string(nil), item.RequiredTests...),
 		DependsOn:            operationalDirectorWorkflowTaskDependsOnV0(item.DependsOn, itemTaskRefs),
+		ContextRefs:          operationalDirectorWorkflowTaskContextRefsV0(request, item),
 		ParentTaskRef:        strings.TrimSpace(itemTaskRefs[item.ParentItemID]),
 		CohortRef:            operationalDirectorCohortRefV0(request.Plan, waveRef),
 		WaveRef:              waveRef,
@@ -39,6 +40,36 @@ func operationalDirectorWorkflowTaskFromItemV0(
 		FunctionContractRefs: append([]orquestacoreworkflow.WorkflowFunctionContractRefV0(nil), request.FunctionContractRefs...),
 	}
 	return orquestacoreworkflow.NewWorkflowTaskV0(task)
+}
+
+func operationalDirectorWorkflowTaskContextRefsV0(
+	request OperationalDirectorPlanMaterializeRequestV0,
+	item orquestadirectoroperativo.OperationalDirectorWorkItemV0,
+) []string {
+	refs := make([]string, 0, 4+len(item.DomainRefs)+len(item.EvidenceRefs))
+	refs = appendOperationalDirectorContextRefV0(refs, "operational_director.plan_ref", request.Plan.PlanRef)
+	refs = appendOperationalDirectorContextRefV0(refs, "operational_director.request_ref", request.Plan.RequestRef)
+	refs = appendOperationalDirectorContextRefV0(refs, "operational_director.source_step_ref", item.SourceStepID)
+	refs = appendOperationalDirectorContextRefV0(refs, "operational_director.source_item_ref", item.ItemID)
+	for _, ref := range item.DomainRefs {
+		refs = appendOperationalDirectorContextRefV0(refs, "operational_director.domain_ref", ref)
+	}
+	for _, ref := range item.EvidenceRefs {
+		refs = appendOperationalDirectorContextRefV0(refs, "operational_director.evidence_ref", ref)
+	}
+	return compactStringsV0(refs)
+}
+
+func appendOperationalDirectorContextRefV0(refs []string, key string, value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" || !operationalDirectorContextRefValueCompactV0(value) {
+		return refs
+	}
+	return append(refs, key+":"+value)
+}
+
+func operationalDirectorContextRefValueCompactV0(value string) bool {
+	return !strings.ContainsAny(value, " /\\\t\r\n")
 }
 
 func operationalDirectorWorkflowTaskCriteriaV0(
