@@ -20,20 +20,6 @@ import (
 	orquestaweb "orquesta/modulos/orquesta-web"
 )
 
-const (
-	defaultCodexWaitIntervalMSV0        = 2000
-	defaultCodexStalledTicksV0          = 300
-	defaultCodexLoopTicksV0             = 300
-	defaultCodexMaxExpectedSecondsV0    = 1200
-	defaultCodexNoActivitySecondsV0     = 600
-	defaultCodexMaxBatchReadyV0         = 10
-	defaultCodexMaxConcurrencyV0        = 10
-	defaultCodexServerMaxRunsPerTickV0  = 10
-	defaultCodexServerQueueLimitV0      = 20
-	defaultCodexServerDefaultPriorityV0 = 50
-	defaultCodexServerMaxExecutionsV0   = 10
-)
-
 func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 	serverConfig, err := serverConfigFromEnvV0()
 	if err != nil {
@@ -139,7 +125,7 @@ func buildStackFromEnvV0(
 			MaxRunsPerTick: serverConfig.SupervisorCommand.MaxRunsPerTick,
 			QueueLimit:     serverRunQueueLimitFromEnvV0(),
 			DefaultPriorityScore: intEnvOrDefaultV0(
-				"ORQUESTA_SERVER_DEFAULT_PRIORITY", defaultCodexServerDefaultPriorityV0,
+				envServerDefaultPriorityV0, defaultCodexServerDefaultPriorityV0,
 			),
 		},
 		RunSupervisor: orquestaappcodexstack.RunSupervisorConfigV0{
@@ -154,7 +140,7 @@ func buildStackFromEnvV0(
 		Capacity: codexStackCapacityConfigFromEnvV0(),
 		ReviewGate: orquestaappcodexstack.ReviewGateConfigV0{
 			FileEvidence:            orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
-			StrictGoLineBudget:      boolEnvOrDefaultV0("ORQUESTA_REVIEW_GATE_STRICT_GO_LINE_BUDGET", false),
+			StrictGoLineBudget:      boolEnvOrDefaultV0(envReviewGateStrictGoLineBudgetV0, false),
 			LineBudgetSnapshotStore: worktreeSnapshotStore,
 		},
 		RequiredTests:            requiredTestRunner,
@@ -193,13 +179,13 @@ type codexStackCapacityEnvConfigV0 struct {
 func codexStackCapacityEnvConfigFromEnvV0() codexStackCapacityEnvConfigV0 {
 	return codexStackCapacityEnvConfigV0{
 		Tier: capacityRecommendationEnvOrDefaultV0(
-			"ORQUESTA_CAPACITY_TIER",
+			envCapacityTierV0,
 			orquestacoreworkflow.OrchestrationCapacityMediumV0,
 		),
 		ReasoningEffort: capacityRecommendationEnvOrDefaultV0(
-			"ORQUESTA_CAPACITY_REASONING_EFFORT",
+			envCapacityReasoningEffortV0,
 			capacityRecommendationEnvOrDefaultV0(
-				"ORQUESTA_CODEX_REASONING_EFFORT",
+				envCodexReasoningEffortV0,
 				orquestacoreworkflow.OrchestrationCapacityMediumV0,
 			),
 		),
@@ -227,7 +213,7 @@ func capacityRecommendationEnvOrDefaultV0(
 func domainDeliveryLedgerFromEnvV0(
 	serverConfig orquestaserver.ConfigV0,
 ) orquestaappcodexstack.DomainWorkArtifactSubmissionLedgerPortV0 {
-	path := strings.TrimSpace(os.Getenv("ORQUESTA_DOMAIN_DELIVERY_LEDGER_PATH"))
+	path := strings.TrimSpace(os.Getenv(envDomainDeliveryLedgerPathV0))
 	if path == "" {
 		path = filepath.Join(serverConfig.StateDir, "domain-work-artifact-ledger.json")
 	}
@@ -236,12 +222,12 @@ func domainDeliveryLedgerFromEnvV0(
 
 func directorLimitsV0() orquestaweb.WebArrancarDirectorAppLimitsV0 {
 	return orquestaweb.WebArrancarDirectorAppLimitsV0{
-		MaxBursts:            intEnvOrDefaultV0("ORQUESTA_DIRECTOR_MAX_BURSTS", 16),
-		MaxStepsPerBurst:     intEnvOrDefaultV0("ORQUESTA_DIRECTOR_MAX_STEPS", 12),
-		MaxDispatchesPerWait: intEnvOrDefaultV0("ORQUESTA_DIRECTOR_MAX_DISPATCHES", 8),
-		MaxCommands:          intEnvOrDefaultV0("ORQUESTA_DIRECTOR_MAX_COMMANDS", 20),
-		MaxOutboxPerCycle:    intEnvOrDefaultV0("ORQUESTA_DIRECTOR_MAX_OUTBOX", 8),
-		MaxExternalWaits:     intEnvOrDefaultV0("ORQUESTA_DIRECTOR_MAX_EXTERNAL_WAITS", 120),
+		MaxBursts:            intEnvOrDefaultV0(envDirectorMaxBurstsV0, 16),
+		MaxStepsPerBurst:     intEnvOrDefaultV0(envDirectorMaxStepsV0, 12),
+		MaxDispatchesPerWait: intEnvOrDefaultV0(envDirectorMaxDispatchesV0, 8),
+		MaxCommands:          intEnvOrDefaultV0(envDirectorMaxCommandsV0, 20),
+		MaxOutboxPerCycle:    intEnvOrDefaultV0(envDirectorMaxOutboxV0, 8),
+		MaxExternalWaits:     intEnvOrDefaultV0(envDirectorMaxExternalWaitsV0, 120),
 	}
 }
 
@@ -309,28 +295,28 @@ func codexRuntimeEnvConfigFromEnvV0() codexRuntimeEnvConfigV0 {
 		CommandPath: codexCommandPathV0(),
 		CodeHomeDir: codeHomeDirV0(),
 		HomeDir:     homeDirV0(),
-		PathEnv:     envOrDefaultV0("ORQUESTA_CODEX_PATH", os.Getenv("PATH")),
-		Model:       strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_MODEL")),
+		PathEnv:     envOrDefaultV0(envCodexPathV0, os.Getenv("PATH")),
+		Model:       strings.TrimSpace(os.Getenv(envCodexModelV0)),
 		ReasoningEffort: codexReasoningEffortPolicyV0(envOrDefaultV0(
-			"ORQUESTA_CODEX_REASONING_EFFORT",
+			envCodexReasoningEffortV0,
 			string(orquestacoreworkflow.OrchestrationCapacityMediumV0),
 		)),
-		Profile:                  strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_PROFILE")),
-		Sandbox:                  codexSandboxFromEnvV0("ORQUESTA_CODEX_SANDBOX", "danger-full-access"),
-		ApprovalPolicy:           envOrDefaultV0("ORQUESTA_CODEX_APPROVAL_POLICY", "never"),
-		DirectorSandbox:          codexOptionalSandboxFromEnvV0("ORQUESTA_CODEX_DIRECTOR_SANDBOX"),
-		DirectorApprovalPolicy:   strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_DIRECTOR_APPROVAL_POLICY")),
-		InteractiveApprovalOptIn: boolEnvOrDefaultV0("ORQUESTA_CODEX_ALLOW_INTERACTIVE_APPROVAL", false),
-		ExtraArgs:                strings.Fields(os.Getenv("ORQUESTA_CODEX_EXTRA_ARGS")),
+		Profile:                  strings.TrimSpace(os.Getenv(envCodexProfileV0)),
+		Sandbox:                  codexSandboxFromEnvV0(envCodexSandboxV0, "danger-full-access"),
+		ApprovalPolicy:           envOrDefaultV0(envCodexApprovalPolicyV0, "never"),
+		DirectorSandbox:          codexOptionalSandboxFromEnvV0(envCodexDirectorSandboxV0),
+		DirectorApprovalPolicy:   strings.TrimSpace(os.Getenv(envCodexDirectorApprovalPolicyV0)),
+		InteractiveApprovalOptIn: boolEnvOrDefaultV0(envCodexAllowInteractiveApprovalV0, false),
+		ExtraArgs:                strings.Fields(os.Getenv(envCodexExtraArgsV0)),
 		Limits:                   codexRuntimeLimitsFromEnvV0(),
-		WaitInterval:             time.Duration(intEnvOrDefaultV0("ORQUESTA_CODEX_WAIT_INTERVAL_MS", defaultCodexWaitIntervalMSV0)) * time.Millisecond,
+		WaitInterval:             time.Duration(intEnvOrDefaultV0(envCodexWaitIntervalMSV0, defaultCodexWaitIntervalMSV0)) * time.Millisecond,
 		ProgressPolicy: orquestaruntime.AgentProgressHeartbeatPolicyV0{
-			StalledAfterNoProgressTicks: intEnvOrDefaultV0("ORQUESTA_CODEX_STALLED_TICKS", defaultCodexStalledTicksV0),
-			LoopAfterRepeatedActions:    intEnvOrDefaultV0("ORQUESTA_CODEX_LOOP_TICKS", defaultCodexLoopTicksV0),
+			StalledAfterNoProgressTicks: intEnvOrDefaultV0(envCodexStalledTicksV0, defaultCodexStalledTicksV0),
+			LoopAfterRepeatedActions:    intEnvOrDefaultV0(envCodexLoopTicksV0, defaultCodexLoopTicksV0),
 		},
 		ProgressBudget: orquestaruntimecodexdelivery.CodexBudgetActivityPolicyV0{
-			MaxExpected:     time.Duration(intEnvOrDefaultV0("ORQUESTA_CODEX_MAX_EXPECTED_SECONDS", defaultCodexMaxExpectedSecondsV0)) * time.Second,
-			NoActivityLimit: time.Duration(intEnvOrDefaultV0("ORQUESTA_CODEX_NO_ACTIVITY_SECONDS", defaultCodexNoActivitySecondsV0)) * time.Second,
+			MaxExpected:     time.Duration(intEnvOrDefaultV0(envCodexMaxExpectedSecondsV0, defaultCodexMaxExpectedSecondsV0)) * time.Second,
+			NoActivityLimit: time.Duration(intEnvOrDefaultV0(envCodexNoActivitySecondsV0, defaultCodexNoActivitySecondsV0)) * time.Second,
 		},
 	}
 }
@@ -342,13 +328,13 @@ type codexRuntimeLimitsV0 struct {
 
 func codexRuntimeLimitsFromEnvV0() codexRuntimeLimitsV0 {
 	return codexRuntimeLimitsV0{
-		MaxBatchReady:    intEnvOrDefaultV0("ORQUESTA_CODEX_MAX_BATCH_READY", defaultCodexMaxBatchReadyV0),
-		MaxLiveProcesses: intEnvOrDefaultV0("ORQUESTA_CODEX_MAX_CONCURRENCY", defaultCodexMaxConcurrencyV0),
+		MaxBatchReady:    intEnvOrDefaultV0(envCodexMaxBatchReadyV0, defaultCodexMaxBatchReadyV0),
+		MaxLiveProcesses: intEnvOrDefaultV0(envCodexMaxConcurrencyV0, defaultCodexMaxConcurrencyV0),
 	}
 }
 
 func serverRunQueueLimitFromEnvV0() int {
-	return intEnvOrDefaultV0("ORQUESTA_SERVER_QUEUE_LIMIT", defaultCodexServerQueueLimitV0)
+	return intEnvOrDefaultV0(envServerQueueLimitV0, defaultCodexServerQueueLimitV0)
 }
 
 type codexDirectorWaveLimitsEnvConfigV0 struct {
@@ -359,8 +345,8 @@ type codexDirectorWaveLimitsEnvConfigV0 struct {
 
 func codexDirectorWaveLimitsEnvConfigFromEnvV0() codexDirectorWaveLimitsEnvConfigV0 {
 	return codexDirectorWaveLimitsEnvConfigV0{
-		Agents:               intEnvOrDefaultV0("ORQUESTA_CODEX_DIRECTOR_WAVE_AGENTS", 10),
-		MaxSubagentsPerAgent: intEnvOrDefaultV0("ORQUESTA_CODEX_DIRECTOR_MAX_SUBAGENTS_PER_AGENT", defaultCodexDirectorMaxSubagentsPerAgentV0),
-		RecursiveAgentBudget: intEnvOrDefaultV0("ORQUESTA_CODEX_DIRECTOR_RECURSIVE_AGENT_BUDGET", 70),
+		Agents:               intEnvOrDefaultV0(envCodexDirectorWaveAgentsV0, defaultCodexDirectorWaveAgentsV0),
+		MaxSubagentsPerAgent: intEnvOrDefaultV0(envCodexDirectorMaxSubagentsPerAgentV0, defaultCodexDirectorMaxSubagentsPerAgentV0),
+		RecursiveAgentBudget: intEnvOrDefaultV0(envCodexDirectorRecursiveAgentBudgetV0, defaultCodexDirectorRecursiveAgentBudgetV0),
 	}
 }

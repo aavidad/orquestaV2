@@ -125,7 +125,7 @@ func codexWaveAllowedPurgeRootsV0(projectWorkDir string) []string {
 		roots = append(roots, filepath.Join(projectWorkDir, ".orquesta-runtime", "codex-waves"))
 		roots = append(roots, filepath.Join(filepath.Dir(filepath.Clean(projectWorkDir)), "runtime"))
 	}
-	if base := strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_RUNTIME_WORKDIR")); base != "" {
+	if base := strings.TrimSpace(os.Getenv(envCodexRuntimeWorkDirV0)); base != "" {
 		roots = append(roots, filepath.Join(base, "codex-waves"))
 	}
 	out := make([]string, 0, len(roots))

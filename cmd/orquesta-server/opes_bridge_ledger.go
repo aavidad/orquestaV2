@@ -14,10 +14,10 @@ const opesBridgeExternalSystemV0 = "opes"
 func opesBridgeInputLedgerFromEnvV0(
 	dryRun bool,
 ) (externalBridgeInputLedgerV0, error) {
-	if dryRun || strings.TrimSpace(os.Getenv("ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_DISABLED")) == "1" {
+	if dryRun || strings.TrimSpace(os.Getenv(envOPESBridgeInputLedgerDisabledV0)) == "1" {
 		return nil, nil
 	}
-	path := strings.TrimSpace(os.Getenv("ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH"))
+	path := strings.TrimSpace(os.Getenv(envOPESBridgeInputLedgerPathV0))
 	if path == "" {
 		config, err := serverConfigFromEnvV0()
 		if err != nil {

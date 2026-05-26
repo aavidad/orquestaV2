@@ -9,7 +9,7 @@ import (
 )
 
 func codexCommandPathV0() string {
-	raw := strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_COMMAND"))
+	raw := strings.TrimSpace(os.Getenv(envCodexCommandV0))
 	if raw == "" {
 		raw = "codex"
 	}
@@ -24,7 +24,7 @@ func codexCommandPathV0() string {
 }
 
 func codeHomeDirV0() string {
-	value := strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_CODE_HOME"))
+	value := strings.TrimSpace(os.Getenv(envCodexCodeHomeV0))
 	if value != "" {
 		return value
 	}
@@ -32,7 +32,7 @@ func codeHomeDirV0() string {
 }
 
 func homeDirV0() string {
-	value := strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_HOME"))
+	value := strings.TrimSpace(os.Getenv(envCodexHomeV0))
 	if value != "" {
 		return value
 	}

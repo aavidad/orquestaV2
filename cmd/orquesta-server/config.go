@@ -24,57 +24,57 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 	if err != nil {
 		return orquestaserver.ConfigV0{}, err
 	}
-	stateDir := absDirEnvOrDefaultV0("ORQUESTA_SERVER_STATE_DIR",
+	stateDir := absDirEnvOrDefaultV0(envServerStateDirV0,
 		filepath.Join(defaultControlDirV0(projectDir), "state"))
-	runtimeDir := absDirEnvOrDefaultV0("ORQUESTA_CODEX_RUNTIME_WORKDIR",
+	runtimeDir := absDirEnvOrDefaultV0(envCodexRuntimeWorkDirV0,
 		filepath.Join(projectDir, ".orquesta-runtime"))
 	config := orquestaserver.ConfigV0{
-		Addr:          envOrDefaultV0("ORQUESTA_SERVER_ADDR", orquestaserver.DefaultAddrV0),
+		Addr:          envOrDefaultV0(envServerAddrV0, orquestaserver.DefaultAddrV0),
 		StateDir:      stateDir,
-		AuditFile:     envOrDefaultV0("ORQUESTA_SERVER_AUDIT_FILE", orquestaserver.DefaultAuditFileV0),
-		AuditDisabled: boolEnvOrDefaultV0("ORQUESTA_SERVER_AUDIT_DISABLED", false),
+		AuditFile:     envOrDefaultV0(envServerAuditFileV0, orquestaserver.DefaultAuditFileV0),
+		AuditDisabled: boolEnvOrDefaultV0(envServerAuditDisabledV0, false),
 		ControlPlane: orquestaserver.ControlPlaneConfigV0{
-			RemoteAccessOptIn: boolEnvOrDefaultV0("ORQUESTA_SERVER_REMOTE_CONTROL_PLANE_CONFIRM", false),
-			Token:             os.Getenv("ORQUESTA_SERVER_CONTROL_TOKEN"),
-			Principal:         envOrDefaultV0("ORQUESTA_SERVER_CONTROL_PRINCIPAL", "loopback-local"),
-			PermissionRef:     envOrDefaultV0("ORQUESTA_SERVER_CONTROL_PERMISSION_REF", "permission-ref-loopback-control-plane"),
-			PublicReason:      envOrDefaultV0("ORQUESTA_SERVER_CONTROL_PUBLIC_REASON", "loopback_control_plane"),
+			RemoteAccessOptIn: boolEnvOrDefaultV0(envServerRemoteControlPlaneConfirmV0, false),
+			Token:             os.Getenv(envServerControlTokenV0),
+			Principal:         envOrDefaultV0(envServerControlPrincipalV0, "loopback-local"),
+			PermissionRef:     envOrDefaultV0(envServerControlPermissionRefV0, "permission-ref-loopback-control-plane"),
+			PublicReason:      envOrDefaultV0(envServerControlPublicReasonV0, "loopback_control_plane"),
 		},
 		ProjectWorkDir: projectDir,
 		RuntimeWorkDir: runtimeDir,
-		TickInterval:   time.Duration(intEnvOrDefaultV0("ORQUESTA_SERVER_TICK_INTERVAL_MS", 5000)) * time.Millisecond,
+		TickInterval:   time.Duration(intEnvOrDefaultV0(envServerTickIntervalMSV0, 5000)) * time.Millisecond,
 		IdleSelfImprovementAfter: time.Duration(intEnvOrDefaultAllowZeroV0(
-			"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS",
+			envServerIdleSelfImprovementAfterV0,
 			int(orquestaserver.DefaultIdleSelfImprovementAfterV0/time.Second),
 		)) * time.Second,
-		IdleSelfImprovementDisabled:      strings.TrimSpace(os.Getenv("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS")) == "0",
-		IdleSelfImprovementProjectRef:    envOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PROJECT_REF", orquestaserver.DefaultIdleSelfImprovementProjectRefV0),
-		IdleSelfImprovementWorktreeRef:   envOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_WORKTREE_REF", orquestaserver.DefaultIdleSelfImprovementWorktreeRefV0),
-		IdleSelfImprovementBranchRef:     envOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_BRANCH_REF", orquestaserver.DefaultIdleSelfImprovementBranchRefV0),
-		IdleSelfImprovementSuggestedArea: envOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AREA", orquestaserver.DefaultIdleSelfImprovementSuggestedAreaV0),
-		IdleSelfImprovementWriteSet:      csvEnvOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_WRITE_SET", defaultIdleSelfImprovementWriteSetV0()),
-		IdleSelfImprovementRequiredTests: csvEnvOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_REQUIRED_TESTS", []string{orquestaserver.DefaultIdleSelfImprovementRequiredTestV0}),
-		IdleSelfImprovementContextRefs:   csvEnvOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_CONTEXT_REFS", nil),
-		IdleSelfImprovementEvidenceRefs:  csvEnvOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_EVIDENCE_REFS", nil),
-		IdleSelfImprovementAcceptance:    csvEnvOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_ACCEPTANCE", defaultIdleSelfImprovementAcceptanceV0()),
-		IdleSelfImprovementCompactRules:  csvEnvOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_COMPACT_RULES", defaultIdleSelfImprovementCompactRulesV0()),
-		IdleSelfImprovementPriorityScore: intEnvOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PRIORITY_SCORE", orquestaserver.DefaultIdleSelfImprovementPriorityScoreV0),
-		IdleSelfImprovementMaxRequests:   intEnvOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_MAX_REQUESTS", orquestaserver.DefaultIdleSelfImprovementMaxRequestsV0),
-		IdleSelfImprovementTargetQueue:   intEnvOrDefaultV0("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_TARGET_QUEUE", orquestaserver.DefaultIdleSelfImprovementTargetQueueV0),
+		IdleSelfImprovementDisabled:      strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementAfterV0)) == "0",
+		IdleSelfImprovementProjectRef:    envOrDefaultV0(envServerIdleSelfImprovementProjectRefV0, orquestaserver.DefaultIdleSelfImprovementProjectRefV0),
+		IdleSelfImprovementWorktreeRef:   envOrDefaultV0(envServerIdleSelfImprovementWorktreeRefV0, orquestaserver.DefaultIdleSelfImprovementWorktreeRefV0),
+		IdleSelfImprovementBranchRef:     envOrDefaultV0(envServerIdleSelfImprovementBranchRefV0, orquestaserver.DefaultIdleSelfImprovementBranchRefV0),
+		IdleSelfImprovementSuggestedArea: envOrDefaultV0(envServerIdleSelfImprovementAreaV0, orquestaserver.DefaultIdleSelfImprovementSuggestedAreaV0),
+		IdleSelfImprovementWriteSet:      csvEnvOrDefaultV0(envServerIdleSelfImprovementWriteSetV0, defaultIdleSelfImprovementWriteSetV0()),
+		IdleSelfImprovementRequiredTests: csvEnvOrDefaultV0(envServerIdleSelfImprovementRequiredTestsV0, []string{orquestaserver.DefaultIdleSelfImprovementRequiredTestV0}),
+		IdleSelfImprovementContextRefs:   csvEnvOrDefaultV0(envServerIdleSelfImprovementContextRefsV0, nil),
+		IdleSelfImprovementEvidenceRefs:  csvEnvOrDefaultV0(envServerIdleSelfImprovementEvidenceRefsV0, nil),
+		IdleSelfImprovementAcceptance:    csvEnvOrDefaultV0(envServerIdleSelfImprovementAcceptanceV0, defaultIdleSelfImprovementAcceptanceV0()),
+		IdleSelfImprovementCompactRules:  csvEnvOrDefaultV0(envServerIdleSelfImprovementCompactRulesV0, defaultIdleSelfImprovementCompactRulesV0()),
+		IdleSelfImprovementPriorityScore: intEnvOrDefaultV0(envServerIdleSelfImprovementPriorityScoreV0, orquestaserver.DefaultIdleSelfImprovementPriorityScoreV0),
+		IdleSelfImprovementMaxRequests:   intEnvOrDefaultV0(envServerIdleSelfImprovementMaxRequestsV0, orquestaserver.DefaultIdleSelfImprovementMaxRequestsV0),
+		IdleSelfImprovementTargetQueue:   intEnvOrDefaultV0(envServerIdleSelfImprovementTargetQueueV0, orquestaserver.DefaultIdleSelfImprovementTargetQueueV0),
 		SupervisorCommand: orquestarunsupervisor.RunSupervisorCommandV0{
 			QueueRef:          "global",
-			MaxRunsPerTick:    intEnvOrDefaultV0("ORQUESTA_SERVER_MAX_RUNS_PER_TICK", defaultCodexServerMaxRunsPerTickV0),
-			MaxTicks:          intEnvOrDefaultV0("ORQUESTA_SERVER_SUPERVISOR_MAX_TICKS", orquestaserver.DefaultSupervisorMaxTicksV0),
-			MaxExecutions:     intEnvOrDefaultV0("ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK", defaultCodexServerMaxExecutionsV0),
+			MaxRunsPerTick:    intEnvOrDefaultV0(envServerMaxRunsPerTickV0, defaultCodexServerMaxRunsPerTickV0),
+			MaxTicks:          intEnvOrDefaultV0(envServerSupervisorMaxTicksV0, orquestaserver.DefaultSupervisorMaxTicksV0),
+			MaxExecutions:     intEnvOrDefaultV0(envServerMaxExecutionsPerTickV0, defaultCodexServerMaxExecutionsV0),
 			StopOnNoExecution: true,
-			AllowRepeatedRuns: boolEnvOrDefaultV0("ORQUESTA_SERVER_ALLOW_REPEATED_RUNS", false),
+			AllowRepeatedRuns: boolEnvOrDefaultV0(envServerAllowRepeatedRunsV0, false),
 			DrainLimits: orquestaruncoordinator.RunDrainLimitsV0{
-				MaxBursts:            intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_BURSTS", 4),
-				MaxStepsPerBurst:     intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_STEPS", 6),
-				MaxDispatchesPerWait: intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_DISPATCHES", 4),
-				MaxCommands:          intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_COMMANDS", 20),
-				MaxOutboxPerCycle:    intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_OUTBOX", 4),
-				MaxDecisionCycles:    intEnvOrDefaultV0("ORQUESTA_SERVER_DRAIN_MAX_DECISIONS", 1),
+				MaxBursts:            intEnvOrDefaultV0(envServerDrainMaxBurstsV0, 4),
+				MaxStepsPerBurst:     intEnvOrDefaultV0(envServerDrainMaxStepsV0, 6),
+				MaxDispatchesPerWait: intEnvOrDefaultV0(envServerDrainMaxDispatchesV0, 4),
+				MaxCommands:          intEnvOrDefaultV0(envServerDrainMaxCommandsV0, 20),
+				MaxOutboxPerCycle:    intEnvOrDefaultV0(envServerDrainMaxOutboxV0, 4),
+				MaxDecisionCycles:    intEnvOrDefaultV0(envServerDrainMaxDecisionsV0, 1),
 				MaxExternalWaits:     serverSupervisorMaxExternalWaitsV0(),
 			},
 		},
@@ -84,10 +84,10 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 }
 
 func setDefaultStartupCleanupModeV0() {
-	if strings.TrimSpace(os.Getenv("ORQUESTA_STARTUP_CLEANUP_MODE")) != "" {
+	if strings.TrimSpace(os.Getenv(envStartupCleanupModeV0)) != "" {
 		return
 	}
-	_ = os.Setenv("ORQUESTA_STARTUP_CLEANUP_MODE", "forced_stop")
+	_ = os.Setenv(envStartupCleanupModeV0, "forced_stop")
 }
 
 func defaultIdleSelfImprovementWriteSetV0() []string {
@@ -105,9 +105,9 @@ func defaultIdleSelfImprovementWriteSetV0() []string {
 
 func defaultIdleSelfImprovementAcceptanceV0() []string {
 	return []string{
-		"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS por defecto dispara tras 60 segundos sin ejecuciones",
-		"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS=0 desactiva automejora idle",
-		"el servidor prepara automejora cuando hay idle o capacidad libre por debajo de ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_TARGET_QUEUE",
+		envServerIdleSelfImprovementAfterV0 + " por defecto dispara tras 60 segundos sin ejecuciones",
+		envServerIdleSelfImprovementAfterV0 + "=0 desactiva automejora idle",
+		"el servidor prepara automejora cuando hay idle o capacidad libre por debajo de " + envServerIdleSelfImprovementTargetQueueV0,
 		"el planner salta tareas ya visibles en cola y puede crear una tarea scanner para descubrir nuevos huecos",
 		"usar evidencia del fallo y corregir la causa general si es posible",
 	}
@@ -122,7 +122,7 @@ func defaultIdleSelfImprovementCompactRulesV0() []string {
 
 func serverSupervisorMaxExternalWaitsV0() int {
 	value := intEnvOrDefaultV0(
-		"ORQUESTA_SERVER_DRAIN_MAX_EXTERNAL_WAITS",
+		envServerDrainMaxExternalWaitsV0,
 		defaultServerSupervisorMaxExternalWaitsV0,
 	)
 	if value <= 0 {
@@ -144,7 +144,7 @@ func defaultControlDirV0(projectDir string) string {
 }
 
 func projectDirFromEnvV0() (string, error) {
-	value := strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_PROJECT_WORKDIR"))
+	value := strings.TrimSpace(os.Getenv(envCodexProjectWorkDirV0))
 	if value == "" {
 		cwd, err := os.Getwd()
 		if err != nil {

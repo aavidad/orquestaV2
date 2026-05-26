@@ -15,6 +15,7 @@ func codexServerPromptHintsV0(config orquestaserver.ConfigV0) []string {
 		"Antes de programar codigo nuevo, busca codigo reutilizable compatible con rg en modulos, cmd, docs, scripts y variantes v0/v1/v2/v3/legacy.",
 		"Si una API o entrega falla por forma reparable, normaliza alias/campos/rutas o pide correccion; no descartes trabajo completo salvo seguridad, causalidad, refs imposibles, datos sensibles o efectos externos no autorizados.",
 		"Estas APIs son adaptadores de composicion: no metas HTTP, MCP, Codex, OPES, DB, HOME, tokens, proveedor ni rutas locales dentro del nucleo.",
+		"En cualquier app que programes o mejores, centraliza configuracion/env en una unica superficie canonica con nombres, defaults y documentacion; no dupliques variables con nombres distintos repartidas por el codigo.",
 		"Para trabajos amplios, divide por write-set sin pisar a otros agentes; si hay solape, agenda o delega revision/correccion en vez de sobrescribir.",
 		"Si detectas una mejora general repetible, usa self-improvement con evidencia y write-set propio; auto_prepare_run solo si quieres que el puerto inyectado prepare una run en cola.",
 		"Si la revision humana necesita operador, usa review-plan con raise_operator_question u orquesta.operator.directed_query.v0; si falta conector, conserva plan y trata la reparacion como accion publica.",

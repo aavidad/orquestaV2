@@ -19,10 +19,10 @@ type opesBridgeDrainerV0 func(context.Context, opesDrainConfigV0) (opesDrainSumm
 func opesBridgeLoopConfigFromEnvV0(
 	orquestaBaseURLFallback string,
 ) (opesBridgeLoopConfigV0, error) {
-	if strings.TrimSpace(os.Getenv("ORQUESTA_OPES_BRIDGE_ENABLED")) != "1" {
+	if strings.TrimSpace(os.Getenv(envOPESBridgeEnabledV0)) != "1" {
 		return opesBridgeLoopConfigV0{}, nil
 	}
-	if strings.TrimSpace(os.Getenv("ORQUESTA_OPES_BRIDGE_CONFIRM")) != "1" {
+	if strings.TrimSpace(os.Getenv(envOPESBridgeConfirmV0)) != "1" {
 		return opesBridgeLoopConfigV0{}, fmt.Errorf("ORQUESTA_OPES_BRIDGE_CONFIRM requerido para opes bridge loop")
 	}
 	drainConfig, err := opesDrainConfigFromEnvWithBaseURLV0(orquestaBaseURLFallback)
@@ -42,9 +42,9 @@ func opesBridgeLoopConfigFromEnvV0(
 			Enabled:      true,
 			Component:    component,
 			ResultField:  "summary",
-			Interval:     durationSecondsEnvOrDefaultV0("ORQUESTA_OPES_BRIDGE_INTERVAL_SECONDS", 60*time.Second),
-			InitialDelay: durationSecondsEnvOrDefaultV0("ORQUESTA_OPES_BRIDGE_INITIAL_DELAY_SECONDS", 2*time.Second),
-			MaxTicks:     intEnvOrZeroV0("ORQUESTA_OPES_BRIDGE_MAX_TICKS"),
+			Interval:     durationSecondsEnvOrDefaultV0(envOPESBridgeIntervalSecondsV0, 60*time.Second),
+			InitialDelay: durationSecondsEnvOrDefaultV0(envOPESBridgeInitialDelaySecondsV0, 2*time.Second),
+			MaxTicks:     intEnvOrZeroV0(envOPESBridgeMaxTicksV0),
 		},
 		DrainConfig: drainConfig,
 	}, nil
@@ -65,7 +65,7 @@ func runOPESBridgeLoopV0(
 }
 
 func opesBridgeHasSafeFilterV0(config opesDrainConfigV0) bool {
-	if strings.TrimSpace(os.Getenv("ORQUESTA_OPES_BRIDGE_ALLOW_UNFILTERED")) == "1" {
+	if strings.TrimSpace(os.Getenv(envOPESBridgeAllowUnfilteredV0)) == "1" {
 		return true
 	}
 	return strings.TrimSpace(config.JobType) != "" ||

@@ -11,13 +11,13 @@ import (
 func codexUsageMetricsFromEnvV0(
 	receiptStore orquestaappcodexstack.CodexReceiptStorePortV0,
 ) orquestaappcodexstack.CodexStackAgentUsageMetricsProviderPortV0 {
-	mode := strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_USAGE_ACCOUNTING"))
+	mode := strings.TrimSpace(os.Getenv(envCodexUsageAccountingV0))
 	if mode != "redacted_report" && mode != "runtime_usage_report" {
 		return nil
 	}
 	return orquestaappcodexstack.CodexStackRuntimeUsageMetricsSourceV0{
 		Store:    receiptStore,
-		MaxBytes: int64EnvOrDefaultV0("ORQUESTA_CODEX_USAGE_LOG_MAX_BYTES", 65536),
+		MaxBytes: int64EnvOrDefaultV0(envCodexUsageLogMaxBytesV0, 65536),
 	}
 }
 

@@ -174,6 +174,12 @@ Documentos de entrada obligatorios para cambios transversales:
   sensibles o efectos externos no autorizados.
 - Si una decision requiere producto, runtime, modelo, cuota o proveedor,
   documenta la frontera y dejala en adaptador/composicion.
+- Configuracion canonica: Orquesta y cualquier app generada o modificada por
+  sus agentes deben concentrar variables globales, nombres de entorno, defaults,
+  limites y metadata editable en una superficie unica por composicion/app. No
+  dupliques variables con nombres distintos repartidas por el codigo; los
+  adaptadores deben consumir constantes/registro canonico y documentar ahi los
+  cambios que requieran reinicio.
 - No borres documentos o codigo antiguo sin revisar. Si algo es historico,
   marcalo como historico y apunta al documento vigente.
 - No borres archivos, docs, tests ni piezas "legacy" solo porque parezcan

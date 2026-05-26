@@ -20,10 +20,10 @@ import (
 func domainWorkExecutorFromEnvV0(
 	serverConfig orquestaserver.ConfigV0,
 ) (orquestamcp.MCPDomainWorkExecutorPortV0, error) {
-	baseURL := firstNonEmptyEnvV0("ORQUESTA_OPES_BASE_URL", "OPES_BASE_URL")
-	httpBaseURL := strings.TrimSpace(os.Getenv("ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL"))
-	fileDir := strings.TrimSpace(os.Getenv("ORQUESTA_DOMAIN_WORK_FILE_DIR"))
-	fileEnabled := strings.TrimSpace(os.Getenv("ORQUESTA_DOMAIN_WORK_FILE_ENABLED")) == "1" ||
+	baseURL := firstNonEmptyEnvV0(envOPESBaseURLV0, envOPESBaseURLLegacyV0)
+	httpBaseURL := strings.TrimSpace(os.Getenv(envDomainWorkHTTPBaseURLV0))
+	fileDir := strings.TrimSpace(os.Getenv(envDomainWorkFileDirV0))
+	fileEnabled := strings.TrimSpace(os.Getenv(envDomainWorkFileEnabledV0)) == "1" ||
 		fileDir != ""
 	configuredBackends := 0
 	for _, enabled := range []bool{baseURL != "", httpBaseURL != "", fileEnabled} {
@@ -38,9 +38,9 @@ func domainWorkExecutorFromEnvV0(
 		client := orquestaopesconnector.NewRESTClientV0(orquestaopesconnector.RESTClientConfigV0{
 			BaseURL: baseURL,
 			HTTPClient: &http.Client{
-				Timeout: time.Duration(intEnvOrDefaultV0("ORQUESTA_OPES_TIMEOUT_SECONDS", 30)) * time.Second,
+				Timeout: time.Duration(intEnvOrDefaultV0(envOPESTimeoutSecondsV0, 30)) * time.Second,
 			},
-			DefaultMaxAttempts: intEnvOrDefaultV0("ORQUESTA_OPES_DEFAULT_MAX_ATTEMPTS", 1),
+			DefaultMaxAttempts: intEnvOrDefaultV0(envOPESDefaultMaxAttemptsV0, 1),
 		})
 		return orquestamcp.NewMCPDomainWorkToolExecutorV0(client, client), nil
 	}
@@ -51,10 +51,10 @@ func domainWorkExecutorFromEnvV0(
 		}
 		client, err := orquestadomainworkhttp.NewClientV0(orquestadomainworkhttp.ConfigV0{
 			BaseURL:            httpBaseURL,
-			CreateJobPath:      strings.TrimSpace(os.Getenv("ORQUESTA_DOMAIN_WORK_HTTP_CREATE_PATH")),
-			SubmitArtifactPath: strings.TrimSpace(os.Getenv("ORQUESTA_DOMAIN_WORK_HTTP_SUBMIT_PATH")),
+			CreateJobPath:      strings.TrimSpace(os.Getenv(envDomainWorkHTTPCreatePathV0)),
+			SubmitArtifactPath: strings.TrimSpace(os.Getenv(envDomainWorkHTTPSubmitPathV0)),
 			EgressPolicy:       egressPolicy,
-			Timeout:            time.Duration(intEnvOrDefaultV0("ORQUESTA_DOMAIN_WORK_HTTP_TIMEOUT_SECONDS", 30)) * time.Second,
+			Timeout:            time.Duration(intEnvOrDefaultV0(envDomainWorkHTTPTimeoutSecondsV0, 30)) * time.Second,
 		})
 		if err != nil {
 			return nil, err
@@ -79,12 +79,12 @@ func domainWorkExecutorFromEnvV0(
 }
 
 func domainWorkHTTPEgressPolicyFromEnvV0() (orquestadomainworkhttp.EgressPolicyV0, error) {
-	mode := strings.TrimSpace(os.Getenv("ORQUESTA_DOMAIN_WORK_HTTP_EGRESS_MODE"))
+	mode := strings.TrimSpace(os.Getenv(envDomainWorkHTTPEgressModeV0))
 	switch mode {
 	case orquestadomainworkhttp.EgressModeSmokeLocalV0:
 		return orquestadomainworkhttp.SmokeLocalEgressPolicyV0(), nil
 	case orquestadomainworkhttp.EgressModeAllowlistV0:
-		allowedHosts := splitCSVEnvV0(os.Getenv("ORQUESTA_DOMAIN_WORK_HTTP_ALLOWED_HOSTS"))
+		allowedHosts := splitCSVEnvV0(os.Getenv(envDomainWorkHTTPAllowedHostsV0))
 		if len(allowedHosts) == 0 {
 			return orquestadomainworkhttp.EgressPolicyV0{}, fmt.Errorf(orquestadomainworkhttp.ErrDomainWorkHTTPEgressPolicyRequiredV0)
 		}
@@ -106,12 +106,12 @@ func splitCSVEnvV0(raw string) []string {
 }
 
 func domainWorkDeliveryEnabledFromEnvV0() bool {
-	return firstNonEmptyEnvV0("ORQUESTA_OPES_BASE_URL", "OPES_BASE_URL") != "" ||
-		strings.TrimSpace(os.Getenv("ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL")) != ""
+	return firstNonEmptyEnvV0(envOPESBaseURLV0, envOPESBaseURLLegacyV0) != "" ||
+		strings.TrimSpace(os.Getenv(envDomainWorkHTTPBaseURLV0)) != ""
 }
 
 func domainWorkRequiredTestConfigFromEnvV0() orquestaappcodexstack.DomainWorkRequiredTestConfigV0 {
-	if firstNonEmptyEnvV0("ORQUESTA_OPES_BASE_URL", "OPES_BASE_URL") == "" {
+	if firstNonEmptyEnvV0(envOPESBaseURLV0, envOPESBaseURLLegacyV0) == "" {
 		return orquestaappcodexstack.DomainWorkRequiredTestConfigV0{}
 	}
 	return orquestaappcodexstack.DomainWorkRequiredTestConfigV0{

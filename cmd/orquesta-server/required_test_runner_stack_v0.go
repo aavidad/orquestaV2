@@ -15,7 +15,7 @@ func requiredTestRunnerFromEnvV0(
 	serverConfig orquestaserver.ConfigV0,
 	evidenceWriter orquestacionnucleoapp.RequiredTestEvidenceWriterPortV0,
 ) (orquestacionnucleoapp.RequiredTestRunnerPortV0, error) {
-	if strings.TrimSpace(os.Getenv("ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED")) != "1" {
+	if strings.TrimSpace(os.Getenv(envRequiredTestRunnerEnabledV0)) != "1" {
 		return nil, nil
 	}
 	if evidenceWriter == nil {
@@ -39,8 +39,8 @@ func requiredTestRunnerFromEnvV0(
 			OutputDir:       absOutputDir,
 			AllowedCommands: allowed,
 			Env:             env,
-			MaxOutputBytes:  int64(intEnvOrDefaultV0("ORQUESTA_REQUIRED_TEST_MAX_OUTPUT_BYTES", 1024*1024)),
-			MaxArtifacts:    intEnvOrDefaultV0("ORQUESTA_REQUIRED_TEST_OUTPUT_MAX_ARTIFACTS", 200),
+			MaxOutputBytes:  int64(intEnvOrDefaultV0(envRequiredTestMaxOutputBytesV0, 1024*1024)),
+			MaxArtifacts:    intEnvOrDefaultV0(envRequiredTestOutputMaxArtifactsV0, 200),
 		},
 		EvidenceWriter: evidenceWriter,
 	}, nil
@@ -48,14 +48,14 @@ func requiredTestRunnerFromEnvV0(
 
 func requiredTestAllowedCommandsFromEnvV0() (map[string]string, error) {
 	allowed := map[string]string{}
-	if goCommand := strings.TrimSpace(os.Getenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND")); goCommand != "" {
+	if goCommand := strings.TrimSpace(os.Getenv(envRequiredTestGoCommandV0)); goCommand != "" {
 		abs, err := filepath.Abs(goCommand)
 		if err != nil {
 			return nil, fmt.Errorf("required_test_go_command_invalid")
 		}
 		allowed["go"] = abs
 	}
-	for _, item := range strings.Split(os.Getenv("ORQUESTA_REQUIRED_TEST_ALLOWED_COMMANDS"), ",") {
+	for _, item := range strings.Split(os.Getenv(envRequiredTestAllowedCommandsV0), ",") {
 		item = strings.TrimSpace(item)
 		if item == "" {
 			continue
@@ -77,7 +77,7 @@ func requiredTestAllowedCommandsFromEnvV0() (map[string]string, error) {
 }
 
 func requiredTestOutputDirFromEnvV0(serverConfig orquestaserver.ConfigV0) (string, error) {
-	outputDir := strings.TrimSpace(os.Getenv("ORQUESTA_REQUIRED_TEST_OUTPUT_DIR"))
+	outputDir := strings.TrimSpace(os.Getenv(envRequiredTestOutputDirV0))
 	if outputDir == "" {
 		outputDir = filepath.Join(serverConfig.StateDir, "required-test-output")
 	}
@@ -94,7 +94,7 @@ func requiredTestEnvFromEnvV0(
 ) ([]string, error) {
 	env := []string(nil)
 	provided := map[string]bool{}
-	for _, item := range strings.Split(os.Getenv("ORQUESTA_REQUIRED_TEST_ENV"), ",") {
+	for _, item := range strings.Split(os.Getenv(envRequiredTestEnvV0), ",") {
 		item = strings.TrimSpace(item)
 		if item == "" {
 			continue

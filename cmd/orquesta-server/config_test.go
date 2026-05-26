@@ -334,6 +334,7 @@ func TestCodexRuntimeConfigV0InyectaToolbeltOperativoDelServidor(t *testing.T) {
 		"orquesta.operator.operations.v0",
 		"codigo reutilizable",
 		"no metas HTTP, MCP, Codex, OPES",
+		"centraliza configuracion/env",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("prompt hints no contienen %q: %s", want, joined)

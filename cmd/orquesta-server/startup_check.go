@@ -29,7 +29,7 @@ func startupCheckFromEnvV0(
 	stack orquestaappcodexstack.StackV0,
 	serverConfig orquestaserver.ConfigV0,
 ) orquestaserver.StartupCheckPortV0 {
-	mode := strings.TrimSpace(os.Getenv("ORQUESTA_STARTUP_CLEANUP_MODE"))
+	mode := strings.TrimSpace(os.Getenv(envStartupCleanupModeV0))
 	if mode == "" {
 		mode = startupCleanupModeDiagnoseV0
 	}
@@ -41,7 +41,7 @@ func startupCheckFromEnvV0(
 		Stack:        stack,
 		ServerConfig: serverConfig,
 		Mode:         mode,
-		QueueLimit:   intEnvOrDefaultV0("ORQUESTA_STARTUP_QUEUE_LIMIT", 0),
+		QueueLimit:   intEnvOrDefaultV0(envStartupQueueLimitV0, 0),
 	}
 }
 
@@ -104,7 +104,7 @@ func (check serverStartupCheckV0) diagnoseStartupV0(
 	return orquestaserver.StartupCheckResultV0{
 		Status:       "startup_dirty_runs_detected",
 		Ready:        false,
-		Message:      fmt.Sprintf("runs transitorios activos=%d cola_desincronizada=%d; usar ORQUESTA_STARTUP_CLEANUP_MODE=forced_stop para purga logica", active, queueDirty),
+		Message:      fmt.Sprintf("runs transitorios activos=%d cola_desincronizada=%d; usar %s=forced_stop para purga logica", active, queueDirty, envStartupCleanupModeV0),
 		EvidenceRefs: []string{"evidence-ref-orquesta-startup-dirty-runs"},
 	}, nil
 }

@@ -15,30 +15,30 @@ func codexWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexWaveConfig
 	flags := flag.NewFlagSet("codex-launch-wave", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 
-	agents := flags.Int("agents", intEnvOrDefaultV0("ORQUESTA_CODEX_WAVE_AGENTS", 1), "numero de agentes Codex a lanzar")
-	waveRef := flags.String("wave-ref", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_WAVE_REF")), "ref opaca de la ola")
+	agents := flags.Int("agents", intEnvOrDefaultV0(envCodexWaveAgentsV0, 1), "numero de agentes Codex a lanzar")
+	waveRef := flags.String("wave-ref", strings.TrimSpace(os.Getenv(envCodexWaveRefV0)), "ref opaca de la ola")
 	prompt := flags.String("prompt", "", "instrucciones para los agentes")
 	promptFile := flags.String("prompt-file", "", "archivo con instrucciones para los agentes")
-	projectDir := flags.String("project-dir", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_PROJECT_WORKDIR")), "directorio de trabajo del proyecto")
-	runtimeDir := flags.String("runtime-dir", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_WAVE_RUNTIME_WORKDIR")), "directorio runtime de esta ola")
-	commandPath := flags.String("command", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_COMMAND")), "ruta al binario codex")
-	sourceCodeHome := flags.String("source-code-home", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_WAVE_SOURCE_CODEX_HOME")), "CODEX_HOME fuente para copiar credenciales/config")
-	model := flags.String("model", firstNonEmptyEnvV0("ORQUESTA_CODEX_WAVE_MODEL", "ORQUESTA_CODEX_MODEL"), "modelo Codex opcional")
-	reasoningEffort := flags.String("reasoning-effort", envOrDefaultV0("ORQUESTA_CODEX_WAVE_REASONING_EFFORT", envOrDefaultV0("ORQUESTA_CODEX_REASONING_EFFORT", "medium")), "esfuerzo de razonamiento")
-	profile := flags.String("profile", firstNonEmptyEnvV0("ORQUESTA_CODEX_WAVE_PROFILE", "ORQUESTA_CODEX_PROFILE"), "perfil Codex opcional")
-	sandbox := flags.String("sandbox", envOrDefaultV0("ORQUESTA_CODEX_WAVE_SANDBOX", "workspace-write"), "sandbox Codex")
-	approval := flags.String("approval-policy", envOrDefaultV0("ORQUESTA_CODEX_WAVE_APPROVAL_POLICY", "never"), "politica de aprobacion Codex")
-	extraArgs := flags.String("extra-args", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_WAVE_EXTRA_ARGS")), "argumentos extra para codex exec")
-	isolateHome := flags.Bool("isolate-home", boolEnvOrDefaultV0("ORQUESTA_CODEX_WAVE_ISOLATE_HOME", false), "copiar CODEX_HOME por agente bajo el runtime")
-	strictCredentialProjection := flags.Bool("strict-credential-projection", boolEnvOrDefaultV0("ORQUESTA_CODEX_WAVE_STRICT_CREDENTIAL_PROJECTION", false), "exigir proyeccion aislada con auth/config presentes")
-	projectMemories := flags.Bool("project-memories", boolEnvOrDefaultV0("ORQUESTA_CODEX_WAVE_PROJECT_MEMORIES", false), "permitir proyeccion explicita de memories de CODEX_HOME")
+	projectDir := flags.String("project-dir", strings.TrimSpace(os.Getenv(envCodexProjectWorkDirV0)), "directorio de trabajo del proyecto")
+	runtimeDir := flags.String("runtime-dir", strings.TrimSpace(os.Getenv(envCodexWaveRuntimeWorkDirV0)), "directorio runtime de esta ola")
+	commandPath := flags.String("command", strings.TrimSpace(os.Getenv(envCodexCommandV0)), "ruta al binario codex")
+	sourceCodeHome := flags.String("source-code-home", strings.TrimSpace(os.Getenv(envCodexWaveSourceCodeHomeV0)), "CODEX_HOME fuente para copiar credenciales/config")
+	model := flags.String("model", firstNonEmptyEnvV0(envCodexWaveModelV0, envCodexModelV0), "modelo Codex opcional")
+	reasoningEffort := flags.String("reasoning-effort", envOrDefaultV0(envCodexWaveReasoningEffortV0, envOrDefaultV0(envCodexReasoningEffortV0, "medium")), "esfuerzo de razonamiento")
+	profile := flags.String("profile", firstNonEmptyEnvV0(envCodexWaveProfileV0, envCodexProfileV0), "perfil Codex opcional")
+	sandbox := flags.String("sandbox", envOrDefaultV0(envCodexWaveSandboxV0, "workspace-write"), "sandbox Codex")
+	approval := flags.String("approval-policy", envOrDefaultV0(envCodexWaveApprovalPolicyV0, "never"), "politica de aprobacion Codex")
+	extraArgs := flags.String("extra-args", strings.TrimSpace(os.Getenv(envCodexWaveExtraArgsV0)), "argumentos extra para codex exec")
+	isolateHome := flags.Bool("isolate-home", boolEnvOrDefaultV0(envCodexWaveIsolateHomeV0, false), "copiar CODEX_HOME por agente bajo el runtime")
+	strictCredentialProjection := flags.Bool("strict-credential-projection", boolEnvOrDefaultV0(envCodexWaveStrictCredentialProjectionV0, false), "exigir proyeccion aislada con auth/config presentes")
+	projectMemories := flags.Bool("project-memories", boolEnvOrDefaultV0(envCodexWaveProjectMemoriesV0, false), "permitir proyeccion explicita de memories de CODEX_HOME")
 	dryRun := flags.Bool("dry-run", false, "materializar prompts/wrappers sin arrancar procesos")
-	purgeRuntime := flags.Bool("purge-runtime", boolEnvOrDefaultV0("ORQUESTA_CODEX_WAVE_PURGE_RUNTIME", false), "purgar runtime de esta ola antes de materializar")
-	purgeConfirm := flags.String("confirm-purge-runtime", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_WAVE_PURGE_RUNTIME_CONFIRM")), "confirmacion explicita: debe coincidir con wave-ref")
-	purgeReportOnly := flags.Bool("purge-runtime-report", boolEnvOrDefaultV0("ORQUESTA_CODEX_WAVE_PURGE_RUNTIME_REPORT", false), "reportar purga sin borrar")
-	allowUnmanagedLaunch := flags.Bool("allow-unmanaged-launch", boolEnvOrDefaultV0("ORQUESTA_CODEX_WAVE_ALLOW_UNMANAGED_LAUNCH", false), "breakglass auditado para lanzar agentes fuera del servidor/cola de Orquesta")
-	unmanagedLaunchReason := flags.String("unmanaged-launch-reason", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_WAVE_UNMANAGED_LAUNCH_REASON")), "motivo auditado para el breakglass unmanaged")
-	unmanagedLaunchConfirm := flags.String("confirm-unmanaged-launch", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_WAVE_UNMANAGED_LAUNCH_CONFIRM")), "confirmacion explicita unmanaged: debe coincidir con wave-ref")
+	purgeRuntime := flags.Bool("purge-runtime", boolEnvOrDefaultV0(envCodexWavePurgeRuntimeV0, false), "purgar runtime de esta ola antes de materializar")
+	purgeConfirm := flags.String("confirm-purge-runtime", strings.TrimSpace(os.Getenv(envCodexWavePurgeRuntimeConfirmV0)), "confirmacion explicita: debe coincidir con wave-ref")
+	purgeReportOnly := flags.Bool("purge-runtime-report", boolEnvOrDefaultV0(envCodexWavePurgeRuntimeReportV0, false), "reportar purga sin borrar")
+	allowUnmanagedLaunch := flags.Bool("allow-unmanaged-launch", boolEnvOrDefaultV0(envCodexWaveAllowUnmanagedLaunchV0, false), "breakglass auditado para lanzar agentes fuera del servidor/cola de Orquesta")
+	unmanagedLaunchReason := flags.String("unmanaged-launch-reason", strings.TrimSpace(os.Getenv(envCodexWaveUnmanagedLaunchReasonV0)), "motivo auditado para el breakglass unmanaged")
+	unmanagedLaunchConfirm := flags.String("confirm-unmanaged-launch", strings.TrimSpace(os.Getenv(envCodexWaveUnmanagedLaunchConfirmV0)), "confirmacion explicita unmanaged: debe coincidir con wave-ref")
 
 	if err := flags.Parse(args); err != nil {
 		return codexWaveConfigV0{}, err
@@ -79,7 +79,7 @@ func codexWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexWaveConfig
 		RuntimeWorkDir:             rootRuntimeDir,
 		CommandPath:                resolvedCommand,
 		SourceCodeHome:             sourceHome,
-		PathEnv:                    envOrDefaultV0("ORQUESTA_CODEX_WAVE_PATH", envOrDefaultV0("ORQUESTA_CODEX_PATH", os.Getenv("PATH"))),
+		PathEnv:                    envOrDefaultV0(envCodexWavePathV0, envOrDefaultV0(envCodexPathV0, os.Getenv("PATH"))),
 		Model:                      strings.TrimSpace(*model),
 		ReasoningEffort:            codexReasoningEffortPolicyV0(*reasoningEffort),
 		Profile:                    strings.TrimSpace(*profile),
@@ -171,7 +171,7 @@ func codexWaveRuntimeDirForLaunchV0(raw string, projectWorkDir string, waveRef s
 func codexWaveRuntimeDirPathV0(raw string, projectWorkDir string, waveRef string) (string, error) {
 	value := strings.TrimSpace(raw)
 	if value == "" {
-		base := strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_RUNTIME_WORKDIR"))
+		base := strings.TrimSpace(os.Getenv(envCodexRuntimeWorkDirV0))
 		if base == "" {
 			base = filepath.Join(projectWorkDir, ".orquesta-runtime")
 		}
@@ -200,7 +200,7 @@ func codexWaveCommandPathV0(raw string) (string, error) {
 }
 
 func codexWaveSourceCodeHomeV0(raw string) string {
-	for _, candidate := range []string{raw, strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_CODE_HOME")), strings.TrimSpace(os.Getenv("CODEX_HOME"))} {
+	for _, candidate := range []string{raw, strings.TrimSpace(os.Getenv(envCodexCodeHomeV0)), strings.TrimSpace(os.Getenv("CODEX_HOME"))} {
 		if candidate == "" {
 			continue
 		}

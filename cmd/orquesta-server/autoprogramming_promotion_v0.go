@@ -29,19 +29,19 @@ type serverAutoprogrammingPromotionPortV0 struct {
 func autoprogrammingPromotionConfigFromEnvV0(
 	config orquestaserver.ConfigV0,
 ) orquestaappcodexstack.AutoprogrammingPromotionConfigV0 {
-	if !boolEnvOrDefaultV0("ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_ENABLED", false) {
+	if !boolEnvOrDefaultV0(envServerAutoprogrammingPromotionEnabledV0, false) {
 		return orquestaappcodexstack.AutoprogrammingPromotionConfigV0{}
 	}
 	archiveDir := absDirEnvOrDefaultV0(
-		"ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_ARCHIVE_DIR",
+		envServerAutoprogrammingPromotionArchiveDirV0,
 		filepath.Join(config.StateDir, "autoprogramming-promotion-archive"),
 	)
 	port := serverAutoprogrammingPromotionPortV0{
 		ProjectWorkDir: strings.TrimSpace(config.ProjectWorkDir),
 		ArchiveDir:     archiveDir,
-		RepoRef:        envOrDefaultV0("ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_REPO_REF", defaultAutoprogrammingPromotionRepoRefV0),
-		AppRef:         envOrDefaultV0("ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_APP_REF", defaultAutoprogrammingPromotionAppRefV0),
-		CommitMessage:  envOrDefaultV0("ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_COMMIT_MESSAGE", defaultAutoprogrammingPromotionMessageV0),
+		RepoRef:        envOrDefaultV0(envServerAutoprogrammingPromotionRepoRefV0, defaultAutoprogrammingPromotionRepoRefV0),
+		AppRef:         envOrDefaultV0(envServerAutoprogrammingPromotionAppRefV0, defaultAutoprogrammingPromotionAppRefV0),
+		CommitMessage:  envOrDefaultV0(envServerAutoprogrammingPromotionCommitMessageV0, defaultAutoprogrammingPromotionMessageV0),
 	}
 	return orquestaappcodexstack.AutoprogrammingPromotionConfigV0{
 		Enabled:       true,

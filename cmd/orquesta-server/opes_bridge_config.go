@@ -29,11 +29,11 @@ func opesDrainConfigFromEnvV0() (opesDrainConfigV0, error) {
 func opesDrainConfigFromEnvWithBaseURLV0(
 	orquestaBaseURLFallback string,
 ) (opesDrainConfigV0, error) {
-	opesBaseURL := firstNonEmptyEnvV0("ORQUESTA_OPES_BASE_URL", "OPES_BASE_URL")
+	opesBaseURL := firstNonEmptyEnvV0(envOPESBaseURLV0, envOPESBaseURLLegacyV0)
 	if opesBaseURL == "" {
 		return opesDrainConfigV0{}, fmt.Errorf("ORQUESTA_OPES_BASE_URL u OPES_BASE_URL requerido")
 	}
-	dryRun := strings.TrimSpace(os.Getenv("ORQUESTA_OPES_BRIDGE_DRY_RUN")) == "1"
+	dryRun := strings.TrimSpace(os.Getenv(envOPESBridgeDryRunV0)) == "1"
 	orquestaBaseURL, err := orquestaBaseURLFromEnvOrStateOrFallbackV0(
 		dryRun,
 		orquestaBaseURLFallback,
@@ -45,9 +45,9 @@ func opesDrainConfigFromEnvWithBaseURLV0(
 	if err != nil {
 		return opesDrainConfigV0{}, err
 	}
-	jobType := strings.TrimSpace(os.Getenv("ORQUESTA_OPES_BRIDGE_JOB_TYPE"))
+	jobType := strings.TrimSpace(os.Getenv(envOPESBridgeJobTypeV0))
 	jobTypeSequence := opesBridgeJobTypeSequenceFromEnvV0()
-	jobRef := strings.TrimSpace(os.Getenv("ORQUESTA_OPES_BRIDGE_JOB_REF"))
+	jobRef := strings.TrimSpace(os.Getenv(envOPESBridgeJobRefV0))
 	if len(jobTypeSequence) > 0 && jobType != "" {
 		return opesDrainConfigV0{}, fmt.Errorf("ORQUESTA_OPES_BRIDGE_JOB_TYPE incompatible con ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE")
 	}
@@ -57,14 +57,14 @@ func opesDrainConfigFromEnvWithBaseURLV0(
 	return opesDrainConfigV0{
 		OPESBaseURL:     strings.TrimRight(opesBaseURL, "/"),
 		OrquestaBaseURL: strings.TrimRight(orquestaBaseURL, "/"),
-		Limit:           intEnvOrDefaultV0("ORQUESTA_OPES_BRIDGE_LIMIT", 3),
+		Limit:           intEnvOrDefaultV0(envOPESBridgeLimitV0, 3),
 		JobType:         jobType,
 		JobTypeSequence: jobTypeSequence,
 		JobRef:          jobRef,
 		DryRun:          dryRun,
-		HTTPTimeout:     time.Duration(intEnvOrDefaultV0("ORQUESTA_OPES_BRIDGE_TIMEOUT_SECONDS", 30)) * time.Second,
+		HTTPTimeout:     time.Duration(intEnvOrDefaultV0(envOPESBridgeTimeoutSecondsV0, 30)) * time.Second,
 		RunConfig: orquestaopesbridge.JobRunConfigV0{
-			PriorityScore: intEnvOrDefaultV0("ORQUESTA_OPES_BRIDGE_PRIORITY", 70),
+			PriorityScore: intEnvOrDefaultV0(envOPESBridgePriorityV0, 70),
 			RequestedBy:   "orquesta-opes-bridge",
 		},
 		InputLedger: inputLedger,
@@ -79,7 +79,7 @@ func orquestaBaseURLFromEnvOrStateOrFallbackV0(
 	dryRun bool,
 	fallback string,
 ) (string, error) {
-	if value := strings.TrimSpace(os.Getenv("ORQUESTA_BASE_URL")); value != "" {
+	if value := strings.TrimSpace(os.Getenv(envOrquestaBaseURLV0)); value != "" {
 		return value, nil
 	}
 	if value := strings.TrimSpace(fallback); value != "" {
@@ -112,7 +112,7 @@ func firstNonEmptyEnvV0(keys ...string) string {
 }
 
 func opesBridgeJobTypeSequenceFromEnvV0() []string {
-	return parseOPESBridgeJobTypeSequenceV0(os.Getenv("ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE"))
+	return parseOPESBridgeJobTypeSequenceV0(os.Getenv(envOPESBridgeJobTypeSequenceV0))
 }
 
 func parseOPESBridgeJobTypeSequenceV0(raw string) []string {
