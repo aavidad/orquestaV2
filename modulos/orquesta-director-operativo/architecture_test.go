@@ -42,6 +42,43 @@ func TestDirectorOperativoNoImportaAdaptadoresConcretos(t *testing.T) {
 	}
 }
 
+func TestDirectorOperativoDocsLocalesNoReabrenCierresVigentes(t *testing.T) {
+	paths := []string{
+		"README.md",
+		filepath.Join("docs", "contratos.md"),
+		filepath.Join("docs", "pruebas.md"),
+		filepath.Join("docs", "tareas.md"),
+	}
+	var combined strings.Builder
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		combined.Write(content)
+		combined.WriteByte('\n')
+	}
+	docs := combined.String()
+	for _, required := range []string{
+		"CODEX-WAVE-REAL",
+		"CODEX-RECURSION-REAL",
+		"OPES temporal real de derivados/cierre",
+	} {
+		if !strings.Contains(docs, required) {
+			t.Fatalf("docs locales no declaran estado vigente %q", required)
+		}
+	}
+	for _, stale := range []string{
+		"quedan pendientes wait por cohorte/ola",
+		"recursion Codex real con parent/child refs",
+		"smoke con Codex real amplio/recursivo",
+	} {
+		if strings.Contains(docs, stale) {
+			t.Fatalf("docs locales reabren pendiente stale %q", stale)
+		}
+	}
+}
+
 func assertFileDoesNotImportForbiddenV0(t *testing.T, path string, forbidden []string) {
 	t.Helper()
 	file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)

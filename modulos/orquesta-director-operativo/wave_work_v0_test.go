@@ -129,7 +129,23 @@ func TestBuildOperationalDirectorWaveWorkV0ReportsUnresolvableDependencies(t *te
 
 	work := BuildOperationalDirectorWaveWorkV0(plan)
 
+	if work.ReadyToLaunch {
+		t.Fatalf("unresolvable dependencies should not be ready: %+v", work)
+	}
 	assertIssueV0(t, work.Issues, "step_dependency_cycle")
+}
+
+func TestBuildOperationalDirectorWaveWorkV0InvalidStructuralIssuesNotReady(t *testing.T) {
+	result := BuildOperationalDirectorPlanV0(validProgrammingRequestV0(nil))
+	plan := result.Plan
+	plan.Steps = append(plan.Steps, plan.Steps[0])
+
+	work := BuildOperationalDirectorWaveWorkV0(plan)
+
+	if work.ReadyToLaunch {
+		t.Fatalf("structural issues should not be ready: %+v", work)
+	}
+	assertIssueV0(t, work.Issues, "step_id_duplicate")
 }
 
 func TestBuildOperationalDirectorWaveWorkV0RejectsInvalidDelegationRefsAndBudgets(t *testing.T) {
@@ -181,6 +197,37 @@ func TestBuildOperationalDirectorWaveWorkV0RejectsReadyPlanWithoutOperationalCyc
 	}
 	assertIssueV0(t, work.Issues, "ready_step_missing")
 	assertIssueV0(t, work.Issues, "run_required_tests_missing")
+}
+
+func TestBuildOperationalDirectorWaveWorkV0RejectsProgrammingReadyPlanWithoutPlanScope(t *testing.T) {
+	result := BuildOperationalDirectorPlanV0(validProgrammingRequestV0(nil))
+	plan := result.Plan
+	plan.WriteSet = nil
+	plan.RequiredTests = nil
+
+	work := BuildOperationalDirectorWaveWorkV0(plan)
+
+	if work.ReadyToLaunch {
+		t.Fatalf("programming plan without scope should not be ready: %+v", work)
+	}
+	assertIssueV0(t, work.Issues, "write_set_missing")
+	assertIssueV0(t, work.Issues, "required_tests_missing")
+}
+
+func TestBuildOperationalDirectorWaveWorkV0RejectsProgrammingLaunchItemWithoutActionableScope(t *testing.T) {
+	result := BuildOperationalDirectorPlanV0(validProgrammingRequestV0(nil))
+	plan := result.Plan
+	launchIndex := planStepIndexByKindV0(plan, OperationalDirectorStepLaunchSubagentsV0)
+	plan.Steps[launchIndex].WriteSet = nil
+	plan.Steps[launchIndex].RequiredTests = nil
+
+	work := BuildOperationalDirectorWaveWorkV0(plan)
+
+	if work.ReadyToLaunch {
+		t.Fatalf("programming launch without actionable scope should not be ready: %+v", work)
+	}
+	assertIssueV0(t, work.Issues, "launch_write_set_missing")
+	assertIssueV0(t, work.Issues, "launch_required_tests_missing")
 }
 
 func TestBuildOperationalDirectorWaveWorkV0RejectsDomainReadyPlanWithoutOpaqueScope(t *testing.T) {

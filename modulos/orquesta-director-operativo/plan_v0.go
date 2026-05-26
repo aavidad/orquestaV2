@@ -43,8 +43,8 @@ func normalizeOperationalDirectorRequestV0(
 	request.RunRef = strings.TrimSpace(request.RunRef)
 	request.ProjectRef = strings.TrimSpace(request.ProjectRef)
 	request.Objective = strings.TrimSpace(request.Objective)
-	request.Mode = OperationalDirectorModeV0(strings.TrimSpace(string(request.Mode)))
-	request.ContextStatus = OperationalDirectorContextStatusV0(strings.TrimSpace(string(request.ContextStatus)))
+	request.Mode = normalizeOperationalDirectorModeV0(request.Mode)
+	request.ContextStatus = normalizeOperationalDirectorContextStatusV0(request.ContextStatus)
 	request.DomainRefs = compactStringsV0(request.DomainRefs)
 	request.MissingContext = compactStringsV0(request.MissingContext)
 	request.WorktreeRef = strings.TrimSpace(request.WorktreeRef)
@@ -79,6 +79,34 @@ func normalizeOperationalDirectorRequestV0(
 		request.ContextStatus = OperationalDirectorContextSufficientV0
 	}
 	return request
+}
+
+func normalizeOperationalDirectorModeV0(
+	mode OperationalDirectorModeV0,
+) OperationalDirectorModeV0 {
+	switch canonicalEnumTokenV0(string(mode)) {
+	case "programming", "programacion":
+		return OperationalDirectorModeProgrammingV0
+	case "domain_work", "domainwork", "trabajo_dominio":
+		return OperationalDirectorModeDomainWorkV0
+	default:
+		return OperationalDirectorModeV0(strings.TrimSpace(string(mode)))
+	}
+}
+
+func normalizeOperationalDirectorContextStatusV0(
+	status OperationalDirectorContextStatusV0,
+) OperationalDirectorContextStatusV0 {
+	switch canonicalEnumTokenV0(string(status)) {
+	case "":
+		return ""
+	case "sufficient", "suficiente":
+		return OperationalDirectorContextSufficientV0
+	case "insufficient", "insuficiente", "needs_context", "missing_context":
+		return OperationalDirectorContextInsufficientV0
+	default:
+		return OperationalDirectorContextStatusV0(strings.TrimSpace(string(status)))
+	}
 }
 
 func baseOperationalDirectorPlanV0(

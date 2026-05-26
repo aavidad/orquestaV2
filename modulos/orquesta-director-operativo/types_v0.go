@@ -64,7 +64,7 @@ const (
 	DefaultOperationalDirectorMaxDelegationDepthV0   = 2
 	DefaultOperationalDirectorMaxSubagentsPerAgentV0 = 3
 	MaxOperationalDirectorMaxLoopsV0                 = 12
-	MaxOperationalDirectorMaxParallelAgentsV0        = 6
+	MaxOperationalDirectorMaxParallelAgentsV0        = 10
 	MaxOperationalDirectorMaxDelegationDepthV0       = 3
 	MaxOperationalDirectorMaxSubagentsPerAgentV0     = 6
 	MaxOperationalDirectorMaxRecursiveAgentsV0       = 4096

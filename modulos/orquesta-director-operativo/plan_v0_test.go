@@ -100,6 +100,25 @@ func TestBuildOperationalDirectorPlanV0DomainReadyUsesSameOperationalLoop(t *tes
 	}
 }
 
+func TestBuildOperationalDirectorPlanV0NormalizaAliasDeModoYContexto(t *testing.T) {
+	result := BuildOperationalDirectorPlanV0(validDomainWorkRequestV0(func(request *OperationalDirectorRequestV0) {
+		request.Mode = " domain-work "
+		request.ContextStatus = "needs context"
+		request.MissingContext = []string{"topic_outline"}
+		request.DomainRefs = nil
+	}))
+
+	if !result.Accepted || result.ReadyToLaunch || !result.Blocked {
+		t.Fatalf("result=%+v", result)
+	}
+	if result.Plan.Mode != OperationalDirectorModeDomainWorkV0 ||
+		result.Plan.Status != OperationalDirectorPlanNeedsContextV0 ||
+		!planHasStepKindV0(result.Plan, OperationalDirectorStepRequestDomainContextV0) ||
+		planHasStepKindV0(result.Plan, OperationalDirectorStepLaunchSubagentsV0) {
+		t.Fatalf("plan=%+v", result.Plan)
+	}
+}
+
 func TestBuildOperationalDirectorPlanV0DomainReadyShardsWriteSetByMaxParallelAgents(t *testing.T) {
 	result := BuildOperationalDirectorPlanV0(validDomainWorkRequestV0(func(request *OperationalDirectorRequestV0) {
 		request.MaxParallelAgents = 3
@@ -219,7 +238,7 @@ func TestBuildOperationalDirectorPlanV0ClampsBudgetsAndDeduplicates(t *testing.T
 	}
 	waitStep := planStepByKindV0(result.Plan, OperationalDirectorStepWaitSubagentsV0)
 	if len(waitStep.DependsOn) != MaxOperationalDirectorMaxParallelAgentsV0 ||
-		!stringInSetV0(waitStep.DependsOn, "step-launch-subagents-06") {
+		!stringInSetV0(waitStep.DependsOn, "step-launch-subagents-10") {
 		t.Fatalf("wait step=%+v", waitStep)
 	}
 }

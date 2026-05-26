@@ -1,6 +1,9 @@
 package orquestadirectoroperativo
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+)
 
 func compactStringsV0(values []string) []string {
 	out := make([]string, 0, len(values))
@@ -40,4 +43,22 @@ func clampOptionalPositiveMaxV0(value int, max int) int {
 		return max
 	}
 	return value
+}
+
+func canonicalEnumTokenV0(value string) string {
+	value = strings.TrimSpace(strings.ToLower(value))
+	var builder strings.Builder
+	previousUnderscore := false
+	for _, r := range value {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			builder.WriteRune(r)
+			previousUnderscore = false
+			continue
+		}
+		if !previousUnderscore {
+			builder.WriteByte('_')
+			previousUnderscore = true
+		}
+	}
+	return strings.Trim(builder.String(), "_")
 }

@@ -49,8 +49,10 @@ Estado actual: el contrato sigue puro y no ejecuta runtime. La materializacion
 real vive en `orquesta-orchestration-core` y `app-director-service`: review
 aceptada, `RequestRework`, `RecordReplanDecision`, `split_task`, runner por
 puerto de tests requeridos, cierre causal y replay `state-file` ya tienen corte
-offline. Lo pendiente de este frente no es mas contrato puro, sino smoke con
-Codex real amplio/recursivo y dominios reales por conectores.
+offline. `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL` cierran tambien el frente
+Codex real opt-in. Lo pendiente de este frente no es mas contrato puro ni otro
+smoke Codex generico, sino OPES temporal real de derivados/cierre por conectores
+de dominio o blockers nuevos con evidencia propia.
 
 ## DIR-OP-005: recursion gobernada real
 
@@ -66,3 +68,17 @@ presupuesto global, profundidad/fanout, waits acotados, review causal y cierre
 del arbol; el supervisor fake del stack avanza ese arbol sin llamadas manuales
 por nivel. `CODEX-RECURSION-REAL` ejecuto el mismo recorrido con proveedor vivo,
 ACK/entregas reales y cierre causal del arbol.
+
+## Sincronizacion documental 2026-05-26
+
+Este modulo no mantiene un backlog paralelo de integracion. Si una fuente local
+usa la palabra "pendiente" para Director Operativo, debe clasificarla contra la
+foto vigente:
+
+| Frente | Clasificacion vigente |
+| --- | --- |
+| Contrato puro del plan, olas, presupuestos y delegacion | Cerrado en este modulo con tests locales. |
+| Materializacion de `launch_subagents` | Cerrada fuera del modulo puro; el resto del ciclo no pertenece a este contrato. |
+| Waits por ola/cohorte/parent e ingesta acotada | Cerrado para stack Codex; `WaitAgentRefs` vacio conserva compatibilidad legacy. |
+| Review, tests requeridos, replan y cierre causal | Cerrado offline/fake-runtime; Codex real amplio y recursivo ya tienen evidencia opt-in. |
+| OPES temporal real de derivados/cierre | Pendiente real verificable fuera de este modulo. |

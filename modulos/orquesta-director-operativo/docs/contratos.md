@@ -35,6 +35,9 @@ aprovechable y decidir `normalize`, `request_correction`, `delegate_review`,
 reservado para seguridad, causalidad rota, refs imposibles o efectos externos no
 autorizados. Esta regla es neutral para todo Orquesta y no depende de Codex,
 OPES ni otro conector de producto.
+La entrada normaliza alias conservadores de forma para `mode` y
+`context_status` (`domain-work`, `domain work`, `needs context`, etc.) antes de
+validar, porque son errores reparables de contrato y no riesgos causales.
 
 La version actual conserva el contrato de cohorte en dos niveles: las olas del
 plan (`OperationalDirectorWaveWorkV0`) y la metadata neutral que el
@@ -46,9 +49,22 @@ Primer corte real: el materializador de
 `modulos/orquesta-orchestration-core/operational_director_materializer_v0.go`
 consume planes `ready` y solo convierte items `launch_subagents` en
 `WorkflowTaskV0` + `CreateMicrotask`. La espera por ola/cohorte se puede derivar
-con `WorkflowTaskWaitAgentRefsV0`; el ciclo completo de espera, review, tests,
-rework/replan y cierre vive en `app-director-service`/`orchestration-core`, no
-en este contrato puro.
+con `WorkflowTaskWaitAgentRefsV0`; el ciclo de espera, review, tests,
+rework/replan y cierre causal ya tiene implementacion fuera de este contrato
+puro, en `app-director-service`/`orchestration-core` y composiciones por puerto.
+La frontera local sigue siendo DTO/validacion/proyeccion: no runtime, no
+proveedor, no OPES interno y no cierre ejecutado desde este modulo.
+
+Mapa de responsabilidades del ciclo:
+
+| Tramo | Dato principal | Owner vigente |
+| --- | --- | --- |
+| Plan neutral | `OperationalDirectorPlanV0` | Este modulo puro. |
+| Olas/items | `OperationalDirectorWaveWorkV0` | Este modulo puro. |
+| Tasks/outbox | `WorkflowTaskV0`, `CreateMicrotask` | `orquesta-orchestration-core`. |
+| Espera acotada | `WorkflowTaskWaitStateV0`, `WaitAgentRefs` | `app-director-service` + stores. |
+| Review/tests/cierre | refs de delivery, review y evidencias | `app-director-service` + `orquesta-orchestration-core`. |
+| Smokes reales | `CODEX-*`, `EXT-NO-OPES`, OPES temporal | Composiciones opt-in y matriz. |
 
 ## `OperationalDirectorWaveWorkV0`
 
@@ -62,6 +78,9 @@ La proyeccion:
 - conserva `work_profile_kind` para materializacion posterior como
   `WorkflowTaskV0`;
 - conserva `domain_refs`, `write_set`, `required_tests`, evidencias y criterios;
+- el materializador proyecta `domain_refs` y `evidence_refs` compactas como
+  `WorkflowTaskV0.context_refs` tipadas para trazabilidad; no usa summaries,
+  rutas internas ni detalles de producto como fuente primaria;
 - expande `MaxParallelAgents` en varios pasos/items `launch_subagents` dentro de
   la misma ola, con sharding de `write_set` como ownership inicial para evitar
   bloqueos de concurrencia artificiales;
@@ -107,8 +126,18 @@ Las decisiones producidas por un agente director hijo no deben consumirse hasta
 que su ACK/artefacto quede registrado causalmente.
 
 La recursion Codex productiva queda cerrada en modo proveedor real por
-`CODEX-RECURSION-REAL`. Offline y fake-runtime ya hay arbol 1->2->4,
-parent/child refs, limites, waits acotados, presupuesto, review causal, cierre
-de arbol y supervisor fake que avanza sin llamadas manuales por nivel. El smoke
-real ejecuto el mismo arbol con Codex vivo, ACK/entregas reales y cierre causal
-del arbol.
+`CODEX-RECURSION-REAL`; la ola/cohorte amplia queda cerrada por
+`CODEX-WAVE-REAL`. Offline y fake-runtime ya hay arbol 1->2->4, parent/child
+refs, limites, waits acotados, presupuesto, review causal, cierre de arbol y
+supervisor fake que avanza sin llamadas manuales por nivel. El smoke real ejecuto
+el mismo arbol con Codex vivo, ACK/entregas reales y cierre causal del arbol.
+El hueco real abierto sigue siendo OPES temporal real de derivados/cierre por
+conectores, no el contrato puro de este modulo.
+
+## Ejemplos y errores frecuentes
+
+Ver `docs/ejemplos.md` para casos practicos de `programming`, `domain_work` con
+contexto insuficiente, `domain_work` listo, waits por ola/cohorte, recursion
+gobernada y notas de prueba. Esos ejemplos no amplian la frontera del modulo:
+runtime, proveedor, stores, OPES, Codex y cierre real siguen en adaptadores o
+capas de aplicacion.

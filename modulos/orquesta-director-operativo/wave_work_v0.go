@@ -19,6 +19,7 @@ func BuildOperationalDirectorWaveWorkV0(
 	}
 	if len(plan.Steps) == 0 {
 		work.Issues = append(work.Issues, issueV0("plan_steps_missing", "steps", "plan sin pasos operativos"))
+		work.ReadyToLaunch = false
 		return work
 	}
 
@@ -35,6 +36,7 @@ func BuildOperationalDirectorWaveWorkV0(
 		stepsByID[step.StepID] = step
 	}
 	if len(work.Issues) > 0 {
+		work.ReadyToLaunch = false
 		return work
 	}
 	if issues := validateOperationalDirectorPlanShapeV0(plan, stepsByID); len(issues) > 0 {
@@ -56,6 +58,7 @@ func BuildOperationalDirectorWaveWorkV0(
 		}
 		if len(ready) == 0 {
 			work.Issues = append(work.Issues, issueV0("step_dependency_cycle", "steps.depends_on", "dependencias de pasos no resolubles"))
+			work.ReadyToLaunch = false
 			return work
 		}
 
@@ -140,11 +143,56 @@ func validateOperationalDirectorReadyPlanStepsV0(
 		!operationalDirectorPlanHasStepKindV0(plan, OperationalDirectorStepRunRequiredTestsV0) {
 		issues = append(issues, issueV0("run_required_tests_missing", "steps.kind", "programming requiere run_required_tests antes de cierre"))
 	}
+	if plan.Mode == OperationalDirectorModeProgrammingV0 {
+		issues = append(issues, validateOperationalDirectorReadyProgrammingPlanScopeV0(plan)...)
+	}
 	if plan.Mode == OperationalDirectorModeDomainWorkV0 {
 		if len(compactStringsV0(plan.DomainRefs)) == 0 {
 			issues = append(issues, issueV0("domain_refs_missing", "domain_refs", "refs de dominio requeridas"))
 		}
 		issues = append(issues, validateOperationalDirectorWriteSetV0(plan.WriteSet)...)
+	}
+	issues = append(issues, validateOperationalDirectorLaunchStepScopesV0(plan)...)
+	return issues
+}
+
+func validateOperationalDirectorReadyProgrammingPlanScopeV0(
+	plan OperationalDirectorPlanV0,
+) []OperationalDirectorIssueV0 {
+	var issues []OperationalDirectorIssueV0
+	issues = append(issues, validateOperationalDirectorWriteSetV0(plan.WriteSet)...)
+	if len(compactStringsV0(plan.RequiredTests)) == 0 {
+		issues = append(issues, issueV0("required_tests_missing", "required_tests", "tests obligatorios requeridos"))
+	}
+	return issues
+}
+
+func validateOperationalDirectorLaunchStepScopesV0(
+	plan OperationalDirectorPlanV0,
+) []OperationalDirectorIssueV0 {
+	var issues []OperationalDirectorIssueV0
+	for _, step := range plan.Steps {
+		if step.Kind != OperationalDirectorStepLaunchSubagentsV0 {
+			continue
+		}
+		if len(compactStringsV0(step.WriteSet)) == 0 {
+			issues = append(issues, issueV0("launch_write_set_missing", "steps.write_set", "launch_subagents requiere write-set accionable"))
+		} else {
+			for _, issue := range validateOperationalDirectorWriteSetV0(step.WriteSet) {
+				issue.Field = "steps.write_set"
+				issues = append(issues, issue)
+			}
+		}
+		switch plan.Mode {
+		case OperationalDirectorModeProgrammingV0:
+			if len(compactStringsV0(step.RequiredTests)) == 0 {
+				issues = append(issues, issueV0("launch_required_tests_missing", "steps.required_tests", "launch_subagents de programming requiere tests"))
+			}
+		case OperationalDirectorModeDomainWorkV0:
+			if len(compactStringsV0(step.DomainRefs)) == 0 {
+				issues = append(issues, issueV0("launch_domain_refs_missing", "steps.domain_refs", "launch_subagents de domain_work requiere refs opacas"))
+			}
+		}
 	}
 	return issues
 }

@@ -38,3 +38,24 @@ func TestBuildOperationalDirectorAgentBudgetV0BudgetCeroNoBloquea(t *testing.T) 
 		t.Fatalf("budget=%+v", budget)
 	}
 }
+
+func TestBuildOperationalDirectorAgentBudgetV0CapacidadCanonicaDiezPadresSeisHijos(t *testing.T) {
+	result := BuildOperationalDirectorPlanV0(validProgrammingRequestV0(func(request *OperationalDirectorRequestV0) {
+		request.MaxParallelAgents = 10
+		request.AllowRecursiveDelegation = true
+		request.MaxDelegationDepth = 1
+		request.MaxSubagentsPerAgent = 6
+		request.MaxRecursiveAgents = 70
+	}))
+
+	budget := BuildOperationalDirectorAgentBudgetV0(result.Plan)
+
+	if result.Plan.MaxParallelAgents != 10 ||
+		result.Plan.MaxSubagentsPerAgent != 6 ||
+		budget.PlannedAgents != 70 ||
+		budget.MaxAgents != 70 ||
+		budget.Exceeded ||
+		!budget.RecursiveLaunch {
+		t.Fatalf("plan=%+v budget=%+v", result.Plan, budget)
+	}
+}
