@@ -83,7 +83,7 @@ func TestDirectorStatsWebEndpointV0GETPreparaRefreshSemitiempoReal(t *testing.T)
 		page.Refresh.IntervalMillis != WebDirectorStatsRefreshIntervalMsV0 ||
 		!strings.Contains(page.Refresh.Href, "include_process_refs=true") ||
 		!strings.Contains(page.Refresh.Href, "include_agent_progress=true") ||
-		!strings.Contains(page.Refresh.Href, "include_agent_usage=true") ||
+		strings.Contains(page.Refresh.Href, "include_agent_usage=true") ||
 		!strings.Contains(page.Refresh.Href, "run_ref=run-web-director-stats-001") {
 		t.Fatalf("refresh=%+v", page.Refresh)
 	}
@@ -107,11 +107,18 @@ func TestDirectorStatsWebEndpointV0GETRespetaUsoOptIn(t *testing.T) {
 	if rec.Code != http.StatusOK || !client.Query.IncludeAgentUsage {
 		t.Fatalf("code=%d query=%+v body=%s", rec.Code, client.Query, rec.Body.String())
 	}
+	var page WebDirectorStatsPageV0
+	if err := json.NewDecoder(rec.Body).Decode(&page); err != nil {
+		t.Fatalf("decode page: %v", err)
+	}
+	if !strings.Contains(page.Refresh.Href, "include_agent_usage=true") {
+		t.Fatalf("refresh debe preservar uso opt-in: %+v", page.Refresh)
+	}
 }
 
 func TestRESTDirectorStatsClientV0DecodificaStats(t *testing.T) {
 	stats := webDirectorStatsFixtureV0()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("method=%s", r.Method)
 		}

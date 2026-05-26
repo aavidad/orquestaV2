@@ -34,16 +34,18 @@ type WebAutoprogrammingStatusViewModelV0 struct {
 
 type WebAutoprogrammingRunProgressV0 struct {
 	WebRunQueueCandidateV0
-	CurrentPhase      string `json:"current_phase,omitempty"`
-	PercentComplete   int    `json:"percent_complete,omitempty"`
-	TasksTotal        int    `json:"tasks_total,omitempty"`
-	TasksClosed       int    `json:"tasks_closed,omitempty"`
-	AgentsInFlight    int    `json:"agents_in_flight,omitempty"`
-	AgentsFailed      int    `json:"agents_failed,omitempty"`
-	ProgressingAgents int    `json:"progressing_agents,omitempty"`
-	StalledAgents     int    `json:"stalled_agents,omitempty"`
-	ClosureStatus     string `json:"closure_status,omitempty"`
-	NeedsAttention    bool   `json:"needs_attention,omitempty"`
+	CurrentPhase       string   `json:"current_phase,omitempty"`
+	PercentComplete    int      `json:"percent_complete,omitempty"`
+	TasksTotal         int      `json:"tasks_total,omitempty"`
+	TasksClosed        int      `json:"tasks_closed,omitempty"`
+	AgentsInFlight     int      `json:"agents_in_flight,omitempty"`
+	AgentsFailed       int      `json:"agents_failed,omitempty"`
+	ProgressingAgents  int      `json:"progressing_agents,omitempty"`
+	StalledAgents      int      `json:"stalled_agents,omitempty"`
+	ClosureStatus      string   `json:"closure_status,omitempty"`
+	ClosureBlockedBy   []string `json:"closure_blocked_by,omitempty"`
+	ClosureBlockerRefs []string `json:"closure_blocker_refs,omitempty"`
+	NeedsAttention     bool     `json:"needs_attention,omitempty"`
 }
 
 type WebAutoprogrammingAgentProgressV0 struct {
@@ -110,15 +112,17 @@ func webAutoprogrammingRunProgressV0(result *orquestamcp.MCPDirectorStatsToolRes
 		WebRunQueueCandidateV0: WebRunQueueCandidateV0{
 			RunRef: trimV0(stats.RunRef), AppRef: trimV0(stats.ProjectRef), Status: trimV0(stats.Status),
 		},
-		CurrentPhase:      trimV0(stats.CurrentPhase),
-		PercentComplete:   stats.Progress.PercentComplete,
-		TasksTotal:        stats.Counts.TasksTotal,
-		TasksClosed:       stats.Counts.TasksClosed,
-		AgentsInFlight:    stats.Counts.AgentsInFlight,
-		AgentsFailed:      stats.Counts.AgentsFailed,
-		ProgressingAgents: stats.Progress.ProgressingAgents,
-		StalledAgents:     stats.Progress.StalledAgents,
-		ClosureStatus:     trimV0(stats.Closure.Status),
+		CurrentPhase:       trimV0(stats.CurrentPhase),
+		PercentComplete:    stats.Progress.PercentComplete,
+		TasksTotal:         stats.Counts.TasksTotal,
+		TasksClosed:        stats.Counts.TasksClosed,
+		AgentsInFlight:     stats.Counts.AgentsInFlight,
+		AgentsFailed:       stats.Counts.AgentsFailed,
+		ProgressingAgents:  stats.Progress.ProgressingAgents,
+		StalledAgents:      stats.Progress.StalledAgents,
+		ClosureStatus:      trimV0(stats.Closure.Status),
+		ClosureBlockedBy:   compactStringsV0(stats.Closure.BlockedBy),
+		ClosureBlockerRefs: compactStringsV0(stats.Closure.BlockerRefs),
 		NeedsAttention: stats.Counts.AgentsFailed > 0 ||
 			stats.Progress.StalledAgents > 0 || stats.Closure.Blocked,
 	}
@@ -153,6 +157,7 @@ func webAutoprogrammingAgentProgressV0(result *orquestamcp.MCPDirectorStatsToolR
 			item.TotalTokens = agent.Usage.TotalTokens
 			item.EvidenceRefs = append(item.EvidenceRefs, agent.Usage.EvidenceRefs...)
 		}
+		item.EvidenceRefs = compactStringsV0(item.EvidenceRefs)
 		out = append(out, item)
 	}
 	return out
@@ -162,7 +167,7 @@ func webAutoprogrammingDiagnosticsV0(values []orquestamcp.MCPAutoprogrammingDiag
 	out := make([]WebAutoprogrammingDiagnosticV0, 0, len(values))
 	for _, value := range values {
 		out = append(out, WebAutoprogrammingDiagnosticV0{
-			Code: trimV0(value.Code), Scope: trimV0(value.Scope), Message: trimV0(value.Message), EvidenceRefs: value.EvidenceRefs,
+			Code: trimV0(value.Code), Scope: trimV0(value.Scope), Message: trimV0(value.Message), EvidenceRefs: compactStringsV0(value.EvidenceRefs),
 		})
 	}
 	return out

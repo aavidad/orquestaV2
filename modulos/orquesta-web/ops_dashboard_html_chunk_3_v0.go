@@ -51,6 +51,8 @@ const opsDashboardHTMLChunk3V0 = `          currently_visible: true,
     }
     function renderCurrentSnapshot() {
       renderProjects(lastSnapshot.runs || []);
+      renderPhaseMatrix(lastSnapshot.runs || []);
+      renderUsageMatrix(lastSnapshot.runs || [], lastSnapshot.agents || []);
       renderTasks(lastSnapshot.tasks || []);
       renderAgents(lastSnapshot.agents || []);
       renderQueue(lastSnapshot.ranked || []);
@@ -73,13 +75,13 @@ const opsDashboardHTMLChunk3V0 = `          currently_visible: true,
         const percent = Number(run.percent_complete || 0);
         const bad = run.blocked || Number(run.stalled_agents || 0) > 0 || Number(run.agents_failed || 0) > 0;
         const selected = run.run_ref === selectedRunRef ? ' class="selected"' : '';
-        return '<tr data-run-ref="' + esc(run.run_ref || '') + '"' + selected + ' onclick="selectRun(\'' + esc(run.run_ref || '') + '\')">' +
-          '<td title="' + esc(runTitle(run)) + '">' + taskTitleCell(runTitle(run), run.app_ref || '-', run.task_id || taskIDFromRef(run.run_ref)) + '</td>' +
-          '<td class="mono" title="' + esc(run.run_ref || '-') + '">' + esc(shortRef(run.run_ref || '-')) + '</td>' +
-          '<td>' + statusPill(run.status || 'unknown') + '</td>' +
-          '<td>' + bar(percent, bad) + '<span class="sub">' + percent + '% · ' + esc(run.current_phase || '-') + '</span></td>' +
-          '<td>' + esc(String(run.agents_in_flight || 0)) + ' / ' + esc(String(run.agents_started || 0)) + '</td>' +
-          '<td>' + statusPill(run.validation || 'pendiente') + '</td>' +
+        return '<tr data-run-ref="' + esc(run.run_ref || '') + '"' + selected + ' onclick="selectRun(\'' + jsArg(run.run_ref || '') + '\')">' +
+          tableCell('Tarea', taskTitleCell(runTitle(run), run.app_ref || '-', run.task_id || taskIDFromRef(run.run_ref)), 'title="' + esc(runTitle(run)) + '"') +
+          tableCell('Run', esc(shortRef(run.run_ref || '-')), 'class="mono" title="' + esc(run.run_ref || '-') + '"') +
+          tableCell('Estado', statusPill(run.status || 'unknown')) +
+          tableCell('Progreso', bar(percent, bad) + '<span class="sub">' + percent + '% · ' + esc(run.current_phase || '-') + '</span>') +
+          tableCell('Agentes', esc(String(run.agents_in_flight || 0)) + ' / ' + esc(String(run.agents_started || 0))) +
+          tableCell('Validación', statusPill(run.validation || 'pendiente')) +
         '</tr>';
       }).join('');
     }
@@ -101,11 +103,11 @@ const opsDashboardHTMLChunk3V0 = `          currently_visible: true,
       byId('tasks-body').innerHTML = tasks.map(function(task) {
         const selected = task.run_ref === selectedRunRef ? ' class="selected"' : '';
         return '<tr data-run-ref="' + esc(task.run_ref || '') + '"' + selected + ' onclick="selectRun(\'' + jsArg(task.run_ref || '') + '\', \'' + jsArg(task.agent_ref || '') + '\')">' +
-          '<td title="' + esc(task.task_ref || '-') + '">' + taskTitleCell(task.title || titleFromRef(task.task_ref), task.app_ref || shortRef(task.task_ref || ''), task.task_id || taskIDFromRef(task.task_ref)) + '</td>' +
-          '<td class="mono" title="' + esc(task.run_ref || '-') + '">' + esc(shortRef(task.run_ref || '-')) + '</td>' +
-          '<td>' + statusPill(task.status || 'unknown') + '</td>' +
-          '<td class="mono" title="' + esc(task.agent_ref || '-') + '">' + esc(shortRef(task.agent_ref || '-')) + '</td>' +
-          '<td>' + esc(task.progress_status || '-') + ' · ticks ' + esc(String(task.no_progress_ticks || 0)) + '</td>' +
+          tableCell('Tarea', taskTitleCell(task.title || titleFromRef(task.task_ref), task.app_ref || shortRef(task.task_ref || ''), task.task_id || taskIDFromRef(task.task_ref)), 'title="' + esc(task.task_ref || '-') + '"') +
+          tableCell('Run', esc(shortRef(task.run_ref || '-')), 'class="mono" title="' + esc(task.run_ref || '-') + '"') +
+          tableCell('Estado', statusPill(task.status || 'unknown')) +
+          tableCell('Agente', esc(shortRef(task.agent_ref || '-')), 'class="mono" title="' + esc(task.agent_ref || '-') + '"') +
+          tableCell('Señal', esc(task.progress_status || '-') + ' · ticks ' + esc(String(task.no_progress_ticks || 0))) +
         '</tr>';
       }).join('');
     }
@@ -120,18 +122,19 @@ const opsDashboardHTMLChunk3V0 = `          currently_visible: true,
           (signal !== 'stalled' || Number(agent.no_progress_ticks || 0) > 0 || String(agent.progress_status || '').toLowerCase().includes('stall'));
       });
       if (!agents.length) {
-        byId('agents-body').innerHTML = '<tr><td colspan="6" class="empty">Sin agentes observados</td></tr>';
+        byId('agents-body').innerHTML = '<tr><td colspan="7" class="empty">Sin agentes observados</td></tr>';
         return;
       }
       byId('agents-body').innerHTML = agents.map(function(agent) {
         const selected = agent.run_ref === selectedRunRef ? ' class="selected"' : '';
-        return '<tr data-run-ref="' + esc(agent.run_ref || '') + '" data-agent-ref="' + esc(agent.agent_ref || '') + '"' + selected + ' onclick="selectRun(\'' + esc(agent.run_ref || '') + '\', \'' + esc(agent.agent_ref || '') + '\')">' +
-          '<td class="mono" title="' + esc(agent.agent_ref || '-') + '">' + esc(shortRef(agent.agent_ref || '-')) + '</td>' +
-          '<td class="mono" title="' + esc(agent.run_ref || '-') + '">' + esc(shortRef(agent.run_ref || '-')) + '</td>' +
-          '<td>' + statusPill(agent.status || 'unknown') + '</td>' +
-          '<td title="' + esc(agent.task_ref || '-') + '">' + taskTitleCell(agent.task_title || titleFromRef(agent.task_ref), shortRef(agent.task_ref || ''), agent.task_id || taskIDFromRef(agent.task_ref)) + '</td>' +
-          '<td>' + bar(agent.percent, agent.needs_attention) + '<span class="sub">' + agent.percent + '%</span></td>' +
-          '<td>' + esc(agent.progress_status || '-') + ' · ticks ' + esc(String(agent.no_progress_ticks || 0)) + (agent.currently_visible === false ? ' · visto ' + esc(agent.last_seen_at || '-') : '') + '</td>' +
+        return '<tr data-run-ref="' + esc(agent.run_ref || '') + '" data-agent-ref="' + esc(agent.agent_ref || '') + '"' + selected + ' onclick="selectRun(\'' + jsArg(agent.run_ref || '') + '\', \'' + jsArg(agent.agent_ref || '') + '\')">' +
+          tableCell('Agente', esc(shortRef(agent.agent_ref || '-')), 'class="mono" title="' + esc(agent.agent_ref || '-') + '"') +
+          tableCell('Run', esc(shortRef(agent.run_ref || '-')), 'class="mono" title="' + esc(agent.run_ref || '-') + '"') +
+	  tableCell('Estado', statusPill(agent.status || 'unknown')) +
+	  tableCell('Tarea', taskTitleCell(agent.task_title || titleFromRef(agent.task_ref), shortRef(agent.task_ref || ''), agent.task_id || taskIDFromRef(agent.task_ref)), 'title="' + esc(agent.task_ref || '-') + '"') +
+	  tableCell('Progreso', bar(agent.percent, agent.needs_attention) + '<span class="sub">' + agent.percent + '%</span>') +
+	  tableCell('Capacidad / uso', esc(agentUsageLabel(agent)), 'title="' + esc(agentUsageLabel(agent)) + '"') +
+	  tableCell('Señal', esc(agent.progress_status || '-') + ' · ticks ' + esc(String(agent.no_progress_ticks || 0)) + (agent.currently_visible === false ? ' · visto ' + esc(agent.last_seen_at || '-') : '')) +
         '</tr>';
       }).join('');
     }
@@ -146,18 +149,18 @@ const opsDashboardHTMLChunk3V0 = `          currently_visible: true,
         const stableID = item.stable_id || queueStableID(item);
         const selected = item.run_ref === selectedRunRef ? ' class="selected"' : '';
         return '<tr data-run-ref="' + esc(item.run_ref || '') + '" data-stable-id="' + esc(stableID) + '"' + selected + ' onclick="selectRun(\'' + jsArg(item.run_ref || '') + '\')">' +
-          '<td>' + esc(item.rank || '-') + '</td>' +
-          '<td title="' + esc(detail) + '">' + taskTitleCell(title, detail, taskIDFromRef(item.run_ref)) + '</td>' +
-          '<td title="' + esc(item.app_ref || '-') + '">' + esc(shortRef(item.app_ref || '-')) + '</td>' +
-          '<td>' + statusPill(item.status || 'unknown') + '</td>' +
-          '<td>' + esc(item.priority_score || 0) + '</td>' +
-          '<td>' + statusPill(validationState(item)) + '</td>' +
-          '<td><div class="row-actions">' +
+          tableCell('#', esc(item.rank || '-')) +
+          tableCell('Tarea', taskTitleCell(title, detail, taskIDFromRef(item.run_ref)), 'title="' + esc(detail) + '"') +
+          tableCell('Proyecto', esc(shortRef(item.app_ref || '-')), 'title="' + esc(item.app_ref || '-') + '"') +
+          tableCell('Estado', statusPill(item.status || 'unknown')) +
+          tableCell('Prioridad', esc(item.priority_score || 0)) +
+          tableCell('Validación', statusPill(validationState(item))) +
+          tableCell('Control', '<div class="row-actions">' +
             '<button class="small" type="button" title="Subir prioridad" onclick="event.stopPropagation(); setQueueRowPriority(\'' + jsArg(item.run_ref || '') + '\', 25)">↑</button>' +
             '<button class="small" type="button" title="Bajar prioridad" onclick="event.stopPropagation(); setQueueRowPriority(\'' + jsArg(item.run_ref || '') + '\', -25)">↓</button>' +
             '<button class="small" type="button" title="Pausar run" onclick="event.stopPropagation(); controlQueueRow(\'' + jsArg(item.run_ref || '') + '\', \'pause\')">Ⅱ</button>' +
             '<button class="small" type="button" title="Reanudar run" onclick="event.stopPropagation(); controlQueueRow(\'' + jsArg(item.run_ref || '') + '\', \'resume\')">▶</button>' +
-          '</div></td>' +
+          '</div>') +
         '</tr>';
       }).join('');
     }
@@ -166,6 +169,7 @@ const opsDashboardHTMLChunk3V0 = `          currently_visible: true,
       selectedAgentRef = agentRef || '';
       controlMessage = '';
       renderProjects(lastSnapshot.runs || []);
+      renderUsageMatrix(lastSnapshot.runs || [], lastSnapshot.agents || []);
       renderTasks(lastSnapshot.tasks || []);
       renderAgents(lastSnapshot.agents || []);
       renderQueue(lastSnapshot.ranked || []);
@@ -210,13 +214,13 @@ const opsDashboardHTMLChunk3V0 = `          currently_visible: true,
       }
       byId('completed-body').innerHTML = completedHistory.slice(0, 80).map(function(item) {
         const selected = item.run_ref === selectedRunRef ? ' class="selected"' : '';
-        return '<tr data-run-ref="' + esc(item.run_ref || '') + '"' + selected + ' onclick="selectRun(\'' + esc(item.run_ref || '') + '\')">' +
-          '<td>' + taskTitleCell(item.title || titleFromRef(item.run_ref), item.app_ref || '-', item.task_id || taskIDFromRef(item.run_ref)) + '</td>' +
-          '<td class="mono" title="' + esc(item.run_ref || '-') + '">' + esc(shortRef(item.run_ref || '-')) + '</td>' +
-          '<td title="' + esc(item.app_ref || '-') + '">' + esc(shortRef(item.app_ref || '-')) + '</td>' +
-          '<td>' + statusPill(item.status || 'completed') + '</td>' +
-          '<td>' + bar(item.percent_complete || 100, false) + '<span class="sub">' + esc(String(item.percent_complete || 100)) + '%</span></td>' +
-          '<td>' + esc(item.observed_at || '-') + '</td>' +
+        return '<tr data-run-ref="' + esc(item.run_ref || '') + '"' + selected + ' onclick="selectRun(\'' + jsArg(item.run_ref || '') + '\')">' +
+          tableCell('Tarea', taskTitleCell(item.title || titleFromRef(item.run_ref), item.app_ref || '-', item.task_id || taskIDFromRef(item.run_ref))) +
+          tableCell('Run', esc(shortRef(item.run_ref || '-')), 'class="mono" title="' + esc(item.run_ref || '-') + '"') +
+          tableCell('Proyecto', esc(shortRef(item.app_ref || '-')), 'title="' + esc(item.app_ref || '-') + '"') +
+          tableCell('Estado final', statusPill(item.status || 'completed')) +
+          tableCell('Progreso', bar(item.percent_complete || 100, false) + '<span class="sub">' + esc(String(item.percent_complete || 100)) + '%</span>') +
+          tableCell('Hora', esc(item.observed_at || '-')) +
         '</tr>';
       }).join('');
     }
@@ -274,6 +278,15 @@ const opsDashboardHTMLChunk3V0 = `          currently_visible: true,
         logs +
       '</div>';
     }
+    function runFlowHTML(run, runAgents, tasks) {
+      const attention = runNeedsAttention(run);
+      return '<div class="run-flow" aria-label="esquema de run">' +
+        '<div class="run-flow-step"><div class="label">Run</div><div class="value">' + esc(shortRef(run.run_ref || '-')) + '</div><div class="hint">' + esc(run.app_ref || '-') + '</div></div>' +
+        '<div class="run-flow-step"><div class="label">Fase</div><div class="value">' + esc(run.current_phase || '-') + '</div><div class="hint">' + esc(run.status || 'unknown') + '</div></div>' +
+        '<div class="run-flow-step"><div class="label">Agentes</div><div class="value">' + esc(String(run.agents_in_flight || 0)) + ' / ' + esc(String(run.agents_started || runAgents.length || 0)) + '</div><div class="hint">' + esc(String(run.progressing_agents || 0)) + ' progreso · ' + esc(String(run.stalled_agents || 0)) + ' sin progreso</div></div>' +
+        '<div class="run-flow-step"><div class="label">Cierre</div><div class="value">' + esc(run.closure_status || run.validation || 'pendiente') + '</div><div class="hint">' + esc(tasks.length ? ((run.tasks_closed || 0) + '/' + (run.tasks_total || tasks.length) + ' tareas') : (attention ? 'requiere atención' : 'sin tareas publicadas')) + '</div></div>' +
+      '</div>';
+    }
     function renderSelectedDetail() {
       captureDetailOpenState();
       const run = runByRef(selectedRunRef);
@@ -285,6 +298,12 @@ const opsDashboardHTMLChunk3V0 = `          currently_visible: true,
       const tasks = run.tasks || [];
       const priority = run.priority_score == null ? 10 : run.priority_score;
       const isCompletedSnapshot = !!run.observed_at;
+      const usageAgents = runAgents.filter(function(agent) {
+        return agent.capacity_level || agent.quota_status || Number(agent.total_tokens || 0) > 0;
+      });
+      const usageTokens = usageAgents.reduce(function(total, agent) {
+        return total + Number(agent.total_tokens || 0);
+      }, 0);
       const taskRows = tasks.length ? tasks.map(function(task) {
         return '<div class="kv"><div class="k">' + esc(task.status || '-') + '</div><div>' +
           '<div class="task-title">' + esc(task.summary || titleFromRef(task.task_ref)) + '</div>' +

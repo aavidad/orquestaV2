@@ -3,7 +3,6 @@ package orquestaweb
 import (
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	orquestamcp "orquesta/modulos/orquesta-mcp"
@@ -11,7 +10,7 @@ import (
 
 func TestRESTAppChangeClientV0EnviaContratoYDecodificaResultado(t *testing.T) {
 	var got orquestamcp.MCPRequestAppChangeToolInputV0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != AppChangeEndpointV0 {
 			t.Fatalf("path=%s", r.URL.Path)
 		}
@@ -24,9 +23,9 @@ func TestRESTAppChangeClientV0EnviaContratoYDecodificaResultado(t *testing.T) {
 			ChangeRef:           got.AppChangeRequest.ChangeRef,
 			DirectorQuestionRef: "question-ref-client-change-001",
 		})
-	}))
-	defer server.Close()
-	client := NewRESTAppChangeClientV0(server.URL, 0)
+	})
+	client := NewRESTAppChangeClientV0(webHTTPClientTestBaseURLV0, 0)
+	client.HTTPClient = newWebHTTPClientForHandlerV0(handler)
 
 	vm, err := client.RequestAppChange(nil, WebAppChangeFormV0{
 		RunRef:     "run-ref-client-change-001",

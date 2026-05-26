@@ -118,7 +118,9 @@ func directorStatsRefreshV0(
 	values.Set("locale", normalizeDirectorStatsLocaleV0(firstDirectorStatsNonEmptyV0(query.Locale, locale)))
 	values.Set("include_process_refs", "true")
 	values.Set("include_agent_progress", "true")
-	values.Set("include_agent_usage", "true")
+	if query.IncludeAgentUsage {
+		values.Set("include_agent_usage", "true")
+	}
 	return WebDirectorStatsRefreshV0{
 		Enabled:        true,
 		Method:         http.MethodGet,

@@ -12,10 +12,17 @@ type nuevaAppHTMLDataV0 struct {
 	HTML   map[string]string
 }
 
-func writeNuevaAppHTMLPageV0(w http.ResponseWriter, status int, page NuevaAppWebPageV0) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(status)
-	_ = nuevaAppHTMLTemplateV0.Execute(w, nuevaAppHTMLDataFromPageV0(page))
+func writeNuevaAppHTMLPageV0(w http.ResponseWriter, status int, page NuevaAppWebPageV0) WebHTMLWriteResultV0 {
+	return writeNuevaAppHTMLPageWithTemplateV0(w, status, page, nuevaAppHTMLTemplateV0)
+}
+
+func writeNuevaAppHTMLPageWithTemplateV0(
+	w http.ResponseWriter,
+	status int,
+	page NuevaAppWebPageV0,
+	tmpl *template.Template,
+) WebHTMLWriteResultV0 {
+	return writeWebHTMLTemplateResponseV0(w, status, tmpl, nuevaAppHTMLDataFromPageV0(page), page.Locale)
 }
 
 func nuevaAppHTMLDataFromPageV0(page NuevaAppWebPageV0) nuevaAppHTMLDataV0 {

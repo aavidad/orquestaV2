@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -14,7 +13,7 @@ import (
 
 func TestRESTAutoprogrammingPrepareRunClientV0PreservaWorktreeAisladaYRamaOpaca(t *testing.T) {
 	var got orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != WebAutoprogrammingPrepareRunInboundEndpointV0 {
 			t.Fatalf("request inesperada: %s %s", r.Method, r.URL.Path)
 		}
@@ -87,7 +86,7 @@ func TestRESTAutoprogrammingPrepareRunClientV0PreservaWorktreeAisladaYRamaOpaca(
 }
 
 func TestRESTAutoprogrammingPrepareRunClientV0RenderizaErrorPublicoHTTP(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_ = json.NewEncoder(w).Encode(orquestamcp.MCPAutoprogrammingPrepareRunToolResultV0{
 			Estado:   orquestamcp.MCPAutoprogrammingPrepareRunEstadoErrorV0,
@@ -114,7 +113,7 @@ func TestRESTAutoprogrammingPrepareRunClientV0RenderizaErrorPublicoHTTP(t *testi
 }
 
 func TestRESTAutoprogrammingPrepareRunClientV0RespuestaInvalida(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"estado": ""})
 	}))
 	defer server.Close()

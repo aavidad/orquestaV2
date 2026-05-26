@@ -3,7 +3,6 @@ package orquestaweb
 import (
 	"context"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -13,7 +12,7 @@ import (
 
 func TestNuevaAppRESTFlowV0ValidaWebRESTFactory(t *testing.T) {
 	const requestID = "req-web-int-006a"
-	server := httptest.NewServer(orquestafactoryhttp.NewAppSpecHTTPHandlerV0(fixedRESTFlowClockV0))
+	server := newWebHTTPTestServerV0(t, orquestafactoryhttp.NewAppSpecHTTPHandlerV0(fixedRESTFlowClockV0))
 	defer server.Close()
 
 	transport := &captureCorrelationTransportV0{base: http.DefaultTransport}
@@ -73,7 +72,7 @@ func TestNuevaAppRESTFlowV0ValidaWebRESTFactory(t *testing.T) {
 
 func TestNuevaAppRESTFlowV0InvalidaFormularioAViewModelPublico(t *testing.T) {
 	const requestID = "req-web-int-invalid"
-	server := httptest.NewServer(orquestafactoryhttp.NewAppSpecHTTPHandlerV0(fixedRESTFlowClockV0))
+	server := newWebHTTPTestServerV0(t, orquestafactoryhttp.NewAppSpecHTTPHandlerV0(fixedRESTFlowClockV0))
 	defer server.Close()
 
 	client := NewRESTSolicitarNuevaAppClientV0(server.URL, time.Second)

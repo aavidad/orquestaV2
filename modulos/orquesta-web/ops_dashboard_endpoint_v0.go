@@ -19,9 +19,7 @@ func (endpoint OpsDashboardWebEndpointV0) ServeHTTP(w http.ResponseWriter, r *ht
 		http.Error(w, "metodo no permitido", http.StatusMethodNotAllowed)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(opsDashboardHTMLV0()))
+	writeWebHTMLStringResponseV0(w, http.StatusOK, opsDashboardHTMLV0(), "es")
 }
 
 func opsDashboardHTMLV0() string {

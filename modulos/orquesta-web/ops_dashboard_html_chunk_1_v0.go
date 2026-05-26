@@ -17,6 +17,24 @@ const opsDashboardHTMLChunk1V0 = `      if (!n) return '-';
       const label = value || '-';
       return '<span class="status ' + statusClass(label) + '">' + esc(label) + '</span>';
     }
+    function tableCell(label, content, attrs) {
+      return '<td data-label="' + esc(label) + '"' + (attrs ? ' ' + attrs : '') + '>' + content + '</td>';
+    }
+    function formatTokens(value) {
+      const n = Number(value || 0);
+      if (!Number.isFinite(n) || n <= 0) return '-';
+      if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M tok';
+      if (n >= 1000) return (Math.round(n / 100) / 10) + 'k tok';
+      return String(n) + ' tok';
+    }
+    function agentUsageLabel(agent) {
+      const parts = [];
+      if (agent.capacity_level) parts.push(agent.capacity_level);
+      if (agent.quota_status) parts.push(agent.quota_status);
+      const tokens = formatTokens(agent.total_tokens);
+      if (tokens !== '-') parts.push(tokens);
+      return parts.length ? parts.join(' · ') : '-';
+    }
     function detailKey(runRef, agentRef, name) {
       return [runRef || '-', agentRef || '-', name || '-'].join('|');
     }

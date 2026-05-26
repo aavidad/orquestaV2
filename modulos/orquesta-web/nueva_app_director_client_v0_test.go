@@ -5,14 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 )
 
 func TestRESTArrancarDirectorAppClientV0EnviaPOSTJSONYProyectaDirector(t *testing.T) {
 	var received arrancarDirectorAppRequestEnvelopeV0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("method=%s", r.Method)
 		}
@@ -74,7 +73,7 @@ func TestRESTArrancarDirectorAppClientV0EnviaPOSTJSONYProyectaDirector(t *testin
 }
 
 func TestRESTArrancarDirectorAppClientV0ErroresPublicosNoSonTransporte(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(WebArrancarDirectorAppResultV0{
 			Estado:    ArrancarDirectorAppEstadoErrorV0,
 			RequestID: "req-director-invalid",
@@ -102,8 +101,24 @@ func TestRESTArrancarDirectorAppClientV0ErroresPublicosNoSonTransporte(t *testin
 	}
 }
 
+func TestRESTArrancarDirectorAppClientV0AceptaContextNil(t *testing.T) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeDirectorSuccessV0(t, w)
+	}))
+	defer server.Close()
+
+	client := NewRESTArrancarDirectorAppClientV0(server.URL, time.Second)
+	vm, err := client.ArrancarDirectorApp(nil, minimalFormForClientV0("req-director-context-nil"))
+	if err != nil {
+		t.Fatalf("ArrancarDirectorApp: %v", err)
+	}
+	if vm.Estado != WebNuevaAppEstadoDirector {
+		t.Fatalf("vm=%+v", vm)
+	}
+}
+
 func TestRESTArrancarDirectorAppClientV0Status500DevuelveErrorPublico(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "stack privado", http.StatusInternalServerError)
 	}))
 	defer server.Close()

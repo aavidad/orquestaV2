@@ -2,7 +2,6 @@ package orquestaweb
 
 import (
 	"context"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -22,14 +21,14 @@ func TestRESTDirectorStatsClientV0ConsumeMCPDirectorStatsHTTPBridgeV0(t *testing
 		StartedAgents: []string{"agent-web-mcp-stats-001"},
 		Deliveries:    []string{"delivery-web-mcp-stats-001"},
 	}
-	server := httptest.NewServer(orquestamcp.NewMCPDirectorStatsHTTPHandlerV0(
+	handler := orquestamcp.NewMCPDirectorStatsHTTPHandlerV0(
 		orquestamcp.MCPDirectorStatsToolExecutorV0{
 			RunStore: orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
 		},
-	))
-	defer server.Close()
+	)
 
-	client := NewRESTDirectorStatsClientV0(server.URL, time.Second)
+	client := NewRESTDirectorStatsClientV0(webHTTPClientTestBaseURLV0, time.Second)
+	client.HTTPClient = newWebHTTPClientForHandlerV0(handler)
 	panel, err := client.ConsultarDirectorStats(context.Background(), WebDirectorStatsQueryV0{
 		RequestID:            "request-ref-web-mcp-stats-flow-001",
 		CorrelationID:        "corr-web-mcp-stats-flow-001",

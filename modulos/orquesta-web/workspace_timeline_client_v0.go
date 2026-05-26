@@ -57,6 +57,7 @@ func (client *RESTWorkspaceTimelineClientV0) ConsultarWorkspaceTimeline(
 	ctx context.Context,
 	query orquestaobservability.WorkspaceTimelineQueryV0,
 ) (WebWorkspaceTimelineViewModelV0, error) {
+	ctx = webContextOrBackgroundV0(ctx)
 	if client.Timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, client.Timeout)

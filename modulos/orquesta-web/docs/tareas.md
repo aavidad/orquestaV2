@@ -219,8 +219,8 @@ Write-set: docs/tareas.md, docs/contratos.md, nueva_app_intake_session_v0.go, nu
 Simbolo foco: WebNuevaAppIntakeSessionV0
 Contrato: `IntakeSession v0` consume/produce `AppSpecRequestV0` parcial y delega el cierre en `SolicitarNuevaApp v0`.
 Validacion: tests puros de sesion inicial desde nombre/idea, pregunta pendiente, decision capturada, AppSpec parcial y estado `requiere_datos`; no DB, runtime, filesystem productivo, LLM real ni MCP directo.
-Bloqueos: Necesita contrato equivalente en API/MCP para arrancar agente de intake real; en este corte solo se modela estado web y puerto.
-Estado: pendiente.
+Bloqueos: El arranque de agente de intake real y la vista HTML completa quedan como integracion posterior por API/MCP; este corte solo modela estado web y puerto local.
+Estado: completada como modelo puro de sesion web: crea borrador parcial, registra preguntas criticas, acepta respuestas del usuario, conserva decisiones y no valida enums de factory ni toca DB/runtime/proveedor.
 ```
 
 ```text
@@ -313,6 +313,57 @@ Validacion: `go test -count=1 ./modulos/orquesta-web`.
 Bloqueos: La planificacion y ejecucion real siguen en director/composicion; web
 no lee stores ni runtime ni convierte refs opacas en rutas o ramas.
 Estado: completada como cliente/proyeccion web fina.
+```
+
+```text
+ID: WEB-025
+Objetivo: Hacer que `/ops` compare visualmente cola, ejecucion, atencion y
+cierre sin duplicar backend ni leer internals.
+Write-set: ops_dashboard_html_chunk_0_v0.go,
+ops_dashboard_html_chunk_2_v0.go, ops_dashboard_endpoint_v0_test.go y docs
+locales.
+Simbolo foco: renderFlowSummary
+Contrato: Usa los snapshots publicos que el panel ya carga desde
+`autoprogramming/status` y `director/stats`; no crea contratos nuevos ni accede
+a DB, runtime, stores o proveedor.
+Validacion: `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto`.
+Bloqueos: La franja no sustituye fuentes canonicas; solo resume lo ya
+publicado por el servidor.
+Estado: completada localmente en este corte.
+```
+
+```text
+ID: WEB-027
+Objetivo: Completar tablas responsivas de `/ops` con celdas etiquetadas para
+fases, uso, runs, tareas, agentes, cola y completadas.
+Write-set: ops_dashboard_html_chunk_1_v0.go,
+ops_dashboard_html_chunk_3_v0.go, ops_dashboard_html_chunk_5_v0.go,
+ops_dashboard_endpoint_v0_test.go y docs locales.
+Simbolo foco: tableCell
+Contrato: La web conserva endpoints actuales y solo reordena proyeccion HTML;
+no crea backend nuevo ni lee stores/runtime/DB.
+Validacion: `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto`.
+Bloqueos: Ninguno; la precision de datos depende de los contratos publicos ya
+consumidos por `/ops`.
+Estado: completada localmente en este corte; tambien elimina un duplicado de
+`renderUsageMatrix` que anulaba las celdas etiquetadas.
+```
+
+```text
+ID: WEB-026
+Objetivo: Hacer explicitos errores de render HTML y escritura tardia con reason
+codes publicos, sin exponer detalles privados ni reejecutar efectos.
+Write-set: web_html_response_v0.go, nueva_app_html_render_v0.go,
+app_change_html_v0.go, ops_dashboard_endpoint_v0.go,
+web_html_response_v0_test.go y docs locales.
+Simbolo foco: WebHTMLWriteResultV0
+Contrato: Slice local de `T183 web-html-render-error-contract`.
+Validacion: `go test -count=1 ./modulos/orquesta-web`.
+Bloqueos: T183 transversal sigue pendiente para app-gateway, observability y
+cmd/orquesta-server; este corte solo cubre renderers HTML locales de web.
+Estado: completada como helper comun que bufferiza templates antes de escribir,
+devuelve `web_html_render_failed` ante error de template y
+`web_response_write_failed` ante fallo observable de escritura.
 ```
 
 ## CONSULTA AL DIRECTOR

@@ -80,7 +80,8 @@ const opsDashboardHTMLChunk2V0 = `    }
       text('kpi-server-hint', 'ticks ' + (data.server.supervisor_ticks || 0) + ' · ejecuciones ' + (data.server.supervisor_executions || 0));
       text('kpi-projects', projectCount);
       text('kpi-projects-hint', activeRuns.length + ' runs activos declarados');
-      text('kpi-queue', queue.count == null ? ranked.length : queue.count);
+      const queueCount = queue.count == null ? ranked.length : queue.count;
+      text('kpi-queue', queueCount);
       text('kpi-queue-hint', 'supervisor cola ' + (data.server.last_supervisor_queue_size == null ? '-' : data.server.last_supervisor_queue_size));
       const activeAgentCount = runs.reduce(function(total, run) { return total + Number(run.agents_in_flight || 0); }, 0);
       text('kpi-agents', activeAgentCount || agents.filter(function(a) { return a.in_flight && a.currently_visible !== false; }).length);
@@ -89,10 +90,13 @@ const opsDashboardHTMLChunk2V0 = `    }
       text('kpi-memory-hint', 'goroutines ' + ((data.resources.process || {}).num_goroutine || '-'));
       text('kpi-disk', worstDisk ? ((worstDisk.used_percent || 0) + '%') : '-');
       text('kpi-disk-hint', worstDisk ? shortRef(worstDisk.path) : '-');
+      renderFlowSummary(ranked, runs, agents, queueCount, activeAgentCount);
       updateCompletedHistory(runs, ranked);
       lastSnapshot = {runs: runs, agents: agents, ranked: ranked, tasks: tasks};
       if (!selectedRunRef && runs.length) selectedRunRef = runs[0].run_ref;
       renderProjects(runs);
+      renderPhaseMatrix(runs);
+      renderUsageMatrix(runs, agents);
       renderTasks(tasks);
       renderAgents(agents);
       renderQueue(ranked);
@@ -143,11 +147,42 @@ const opsDashboardHTMLChunk2V0 = `    }
           progressing_agents: progress.progressing_agents || 0,
           stalled_agents: progress.stalled_agents || 0,
           closure_status: closure.status,
+          usage_summary: stats.usage_summary || (byRun[runRef] || {}).usage_summary,
           blocked: closure.blocked,
           validation: (byRun[runRef] || {}).validation || 'pendiente'
         });
       });
       return Object.values(byRun);
+    }
+    function renderFlowSummary(ranked, runs, agents, queueCount, activeAgentCount) {
+      const readyQueued = (ranked || []).filter(function(item) { return matchesStatus(item.status, 'running'); }).length;
+      const activeRuns = (runs || []).filter(function(run) { return matchesStatus(run.status || run.closure_status, 'running') && !isTerminalRun(run); }).length;
+      const attentionRuns = (runs || []).filter(runNeedsAttention).length;
+      const attentionAgents = (agents || []).filter(function(agent) {
+        return agent.needs_attention || Number(agent.no_progress_ticks || 0) > 0 || String(agent.progress_status || '').toLowerCase().includes('stall');
+      }).length;
+      const terminalRuns = (runs || []).filter(isTerminalRun).length;
+      const taskTotals = (runs || []).reduce(function(acc, run) {
+        acc.total += Number(run.tasks_total || 0);
+        acc.closed += Number(run.tasks_closed || 0);
+        return acc;
+      }, {total: 0, closed: 0});
+      text('flow-queue', queueCount);
+      text('flow-queue-hint', readyQueued + ' preparadas o activas');
+      text('flow-execution', activeRuns);
+      text('flow-execution-hint', (activeAgentCount || 0) + ' agentes en vuelo');
+      text('flow-attention', attentionRuns + attentionAgents);
+      text('flow-attention-hint', attentionRuns + ' runs · ' + attentionAgents + ' agentes');
+      byId('flow-attention-card').className = 'flow-card' + (attentionRuns + attentionAgents > 0 ? ' attention' : '');
+      text('flow-closure', terminalRuns);
+      text('flow-closure-hint', taskTotals.closed + '/' + taskTotals.total + ' tareas cerradas');
+    }
+    function runNeedsAttention(run) {
+      return !!run.blocked ||
+        Number(run.stalled_agents || 0) > 0 ||
+        Number(run.agents_failed || 0) > 0 ||
+        Number(run.agents_need_attention || 0) > 0 ||
+        String(run.validation || '').toLowerCase().includes('bloqueada');
     }
     function buildAgents(statsResults) {
       const out = [];
@@ -160,6 +195,7 @@ const opsDashboardHTMLChunk2V0 = `    }
         (stats.agents || []).forEach(function(agent) {
           const progress = agent.last_progress || {};
           const task = taskMap[progress.task_ref] || {};
+          const usage = agent.usage || {};
           out.push({
             run_ref: stats.run_ref || result.run_ref,
             agent_ref: agent.agent_request_id,
@@ -172,6 +208,9 @@ const opsDashboardHTMLChunk2V0 = `    }
             progress_status: progress.status || '',
             no_progress_ticks: progress.no_progress_ticks || 0,
             repeated_action_count: progress.repeated_action_count || 0,
+            capacity_level: usage.capacity_level || '',
+            quota_status: usage.quota_status || '',
+            total_tokens: usage.total_tokens || 0,
             percent: agentPercent(agent, progress)
           });
         });
@@ -233,6 +272,9 @@ const opsDashboardHTMLChunk2V0 = `    }
             progress_status: (byKey[key] || {}).progress_status || 'runtime',
             no_progress_ticks: (byKey[key] || {}).no_progress_ticks || 0,
             repeated_action_count: (byKey[key] || {}).repeated_action_count || 0,
+            capacity_level: (byKey[key] || {}).capacity_level || '',
+            quota_status: (byKey[key] || {}).quota_status || '',
+            total_tokens: (byKey[key] || {}).total_tokens || 0,
             percent: (byKey[key] || {}).percent || (((runtimeAgent.ack || {}).status === 'completed') ? 100 : 0)
           });
         });

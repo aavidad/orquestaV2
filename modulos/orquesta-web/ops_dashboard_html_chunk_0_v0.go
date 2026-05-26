@@ -40,6 +40,11 @@ const opsDashboardHTMLChunk0V0 = `<!doctype html>
     .grid { display: grid; gap: 12px; }
     .kpis { grid-template-columns: repeat(6, minmax(150px, 1fr)); margin-bottom: 12px; }
     .layout { grid-template-columns: minmax(0, 1.4fr) minmax(360px, .7fr); align-items: start; }
+    .ops-flow { display: grid; grid-template-columns: repeat(4, minmax(170px, 1fr)); gap: 12px; margin-bottom: 12px; }
+    .flow-card { min-height: 82px; border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 11px 12px; }
+    .flow-card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; }
+    .flow-card .metric { margin-top: 6px; font-size: 24px; font-weight: 750; }
+    .flow-card.attention { border-color: rgba(253,176,34,.7); }
     .panel { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; overflow: hidden; }
     .panel h2 { margin: 0; padding: 12px 14px; font-size: 14px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.02); }
     .pad { padding: 12px 14px; }
@@ -49,6 +54,7 @@ const opsDashboardHTMLChunk0V0 = `<!doctype html>
     .kpi .hint { color: var(--muted); margin-top: 4px; font-size: 12px; min-height: 18px; }
     .table-wrap { overflow: auto; max-height: 520px; }
     table { width: 100%; min-width: 980px; border-collapse: collapse; table-layout: fixed; }
+    table.compact-table { min-width: 620px; }
     th, td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     th { color: var(--muted); font-weight: 600; font-size: 12px; background: rgba(255,255,255,.02); }
     tr:hover td { background: rgba(124,212,253,.05); }
@@ -65,6 +71,11 @@ const opsDashboardHTMLChunk0V0 = `<!doctype html>
     .bar span.warn { background: var(--warn); }
     .bar span.bad { background: var(--bad); }
     .stack { display: grid; gap: 12px; }
+    .run-flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+    .run-flow-step { min-height: 74px; border: 1px solid var(--line); border-radius: 6px; padding: 8px; background: rgba(255,255,255,.025); }
+    .run-flow-step .label { color: var(--muted); font-size: 11px; text-transform: uppercase; }
+    .run-flow-step .value { margin-top: 5px; font-weight: 700; overflow-wrap: anywhere; }
+    .run-flow-step .hint { margin-top: 4px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
     .kv { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 8px; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
     .kv:last-child { border-bottom: 0; }
     .kv .k { color: var(--muted); }
@@ -72,6 +83,11 @@ const opsDashboardHTMLChunk0V0 = `<!doctype html>
     .task-title { font-weight: 650; }
     .task-subtitle { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
     .task-id { display: inline-flex; align-items: center; justify-content: center; min-width: 42px; min-height: 20px; margin-right: 8px; padding: 1px 6px; border-radius: 5px; background: var(--info); color: var(--ink); font-size: 12px; font-weight: 750; }
+    .phase-map { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.015); }
+    .phase-node { display: grid; gap: 7px; min-height: 94px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
+    .phase-node.attention { border-color: rgba(249,112,102,.7); }
+    .phase-node .phase-title { font-weight: 700; overflow-wrap: anywhere; }
+    .phase-node .phase-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 12px; }
     .controls { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 10px; }
     .button-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
     .row-actions { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
@@ -85,17 +101,37 @@ const opsDashboardHTMLChunk0V0 = `<!doctype html>
     pre { margin: 0; max-height: 360px; overflow: auto; padding: 10px; white-space: pre-wrap; word-break: break-word; background: #0b0d10; border-top: 1px solid rgba(255,255,255,.08); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
     input[type="number"], input[type="search"], select { width: 100%; min-height: 32px; border: 1px solid var(--line); border-radius: 6px; background: #0f1215; color: var(--text); padding: 6px 8px; }
     .filters { display: grid; grid-template-columns: minmax(180px, 1fr) 150px 150px; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.015); }
+    .compact-table { min-width: 620px; }
     .empty { color: var(--muted); padding: 18px 14px; }
     .error { color: var(--bad); white-space: pre-wrap; }
     @media (max-width: 1180px) {
       .kpis { grid-template-columns: repeat(3, minmax(150px, 1fr)); }
+      .ops-flow { grid-template-columns: repeat(2, minmax(170px, 1fr)); }
       .layout { grid-template-columns: 1fr; }
     }
     @media (max-width: 720px) {
       body { padding: 12px; }
       header { align-items: flex-start; flex-direction: column; }
       .kpis { grid-template-columns: 1fr 1fr; }
-      th:nth-child(2), td:nth-child(2), th:nth-child(5), td:nth-child(5) { display: none; }
+      .ops-flow { grid-template-columns: 1fr; }
+      .run-flow { grid-template-columns: 1fr 1fr; }
+      .filters { grid-template-columns: 1fr; }
+      .table-wrap { max-height: none; overflow: visible; padding: 0 10px 10px; }
+      .table-wrap table { min-width: 0; }
+      .table-wrap thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+      .table-wrap tbody, .table-wrap tr, .table-wrap td { display: block; width: 100%; }
+      .table-wrap tr { margin-top: 10px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.02); }
+      .table-wrap td { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 8px; padding: 7px 6px; border-bottom: 1px solid rgba(255,255,255,.06); white-space: normal; }
+      .table-wrap td::before { content: attr(data-label); color: var(--muted); font-size: 12px; font-weight: 650; }
+      .table-wrap td:last-child { border-bottom: 0; }
+      .table-wrap td.empty { display: block; }
+      .table-wrap td.empty::before { content: none; }
+      .row-actions { flex-wrap: wrap; }
+    }
+    @media (max-width: 520px) {
+      .kpis { grid-template-columns: 1fr; }
+      .table-wrap td { grid-template-columns: 82px minmax(0, 1fr); }
+      .kv { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -123,6 +159,13 @@ const opsDashboardHTMLChunk0V0 = `<!doctype html>
       <div class="kpi"><div class="label">Disco peor uso</div><div id="kpi-disk" class="value">-</div><div id="kpi-disk-hint" class="hint">-</div></div>
     </section>
 
+    <section class="ops-flow" aria-label="flujo operativo">
+      <div class="flow-card"><div class="label">Cola</div><div id="flow-queue" class="metric">-</div><div id="flow-queue-hint" class="sub">-</div></div>
+      <div class="flow-card"><div class="label">Ejecución</div><div id="flow-execution" class="metric">-</div><div id="flow-execution-hint" class="sub">-</div></div>
+      <div id="flow-attention-card" class="flow-card"><div class="label">Atención</div><div id="flow-attention" class="metric">-</div><div id="flow-attention-hint" class="sub">-</div></div>
+      <div class="flow-card"><div class="label">Cierre</div><div id="flow-closure" class="metric">-</div><div id="flow-closure-hint" class="sub">-</div></div>
+    </section>
+
     <main class="grid layout">
       <section class="stack">
         <div class="panel">
@@ -136,6 +179,25 @@ const opsDashboardHTMLChunk0V0 = `<!doctype html>
             <table>
               <thead><tr><th>Tarea</th><th>Run</th><th>Estado</th><th>Progreso</th><th>Agentes</th><th>Validación</th></tr></thead>
               <tbody id="projects-body"><tr><td colspan="6" class="empty">Sin datos todavía</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Fases comparadas</h2>
+          <div id="phase-map" class="phase-map" aria-label="esquema de fases"><div class="empty">Sin fases observadas</div></div>
+          <div class="table-wrap compact-wrap">
+            <table class="compact-table">
+              <thead><tr><th>Fase</th><th>Runs</th><th>Progreso medio</th><th>Atención</th><th>Tareas</th></tr></thead>
+              <tbody id="phase-body"><tr><td colspan="5" class="empty">Sin fases observadas</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Uso comparado</h2>
+          <div class="table-wrap compact-wrap">
+            <table class="compact-table">
+              <thead><tr><th>Tarea</th><th>Cuota</th><th>Tokens</th><th>Agentes</th><th>Atención</th></tr></thead>
+              <tbody id="usage-body"><tr><td colspan="5" class="empty">Sin uso publicado por stats</td></tr></tbody>
             </table>
           </div>
         </div>
@@ -162,8 +224,8 @@ const opsDashboardHTMLChunk0V0 = `<!doctype html>
           </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Agente</th><th>Run</th><th>Estado</th><th>Tarea</th><th>Progreso</th><th>Señal</th></tr></thead>
-              <tbody id="agents-body"><tr><td colspan="6" class="empty">Sin agentes observados</td></tr></tbody>
+              <thead><tr><th>Agente</th><th>Run</th><th>Estado</th><th>Tarea</th><th>Progreso</th><th>Capacidad / uso</th><th>Señal</th></tr></thead>
+              <tbody id="agents-body"><tr><td colspan="7" class="empty">Sin agentes observados</td></tr></tbody>
             </table>
           </div>
         </div>

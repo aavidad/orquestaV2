@@ -47,8 +47,10 @@ func TestWebAutoprogrammingStatusViewModelV0AgregaColaYRunVivos(t *testing.T) {
 					StalledAgents:     1,
 				},
 				Closure: orquestacionnucleoapp.DirectorClosureStatsV0{
-					Status:  "blocked",
-					Blocked: true,
+					Status:      "blocked",
+					Blocked:     true,
+					BlockedBy:   []string{" closure-required-tests ", "closure-required-tests"},
+					BlockerRefs: []string{" blocker-ref-required-tests-001 ", "blocker-ref-required-tests-001"},
 				},
 				Agents: []orquestacionnucleoapp.DirectorAgentStatsV0{{
 					AgentRequestID: " agent-ref-autop-status-web-001 ",
@@ -60,6 +62,7 @@ func TestWebAutoprogrammingStatusViewModelV0AgregaColaYRunVivos(t *testing.T) {
 						Status:              "stalled",
 						NoProgressTicks:     3,
 						RepeatedActionCount: 2,
+						EvidenceRefs:        []string{" evidence-ref-progress-web-001 ", "evidence-ref-progress-web-001"},
 					},
 				}},
 			},
@@ -68,7 +71,7 @@ func TestWebAutoprogrammingStatusViewModelV0AgregaColaYRunVivos(t *testing.T) {
 			Code:         "run_closure_blocked",
 			Scope:        "run",
 			Message:      "cierre bloqueado",
-			EvidenceRefs: []string{"blocker-ref-autop-status-web-001"},
+			EvidenceRefs: []string{" blocker-ref-autop-status-web-001 ", "blocker-ref-autop-status-web-001"},
 		}},
 	})
 
@@ -95,6 +98,10 @@ func TestWebAutoprogrammingStatusViewModelV0AgregaColaYRunVivos(t *testing.T) {
 		vm.Runs[1].ProgressingAgents != 1 ||
 		vm.Runs[1].StalledAgents != 1 ||
 		vm.Runs[1].ClosureStatus != "blocked" ||
+		len(vm.Runs[1].ClosureBlockedBy) != 1 ||
+		vm.Runs[1].ClosureBlockedBy[0] != "closure-required-tests" ||
+		len(vm.Runs[1].ClosureBlockerRefs) != 1 ||
+		vm.Runs[1].ClosureBlockerRefs[0] != "blocker-ref-required-tests-001" ||
 		!vm.Runs[1].NeedsAttention {
 		t.Fatalf("runs=%+v", vm.Runs)
 	}
@@ -103,13 +110,16 @@ func TestWebAutoprogrammingStatusViewModelV0AgregaColaYRunVivos(t *testing.T) {
 		vm.Agents[0].ProgressStatus != "stalled" ||
 		vm.Agents[0].NoProgressTicks != 3 ||
 		vm.Agents[0].RepeatedActionCount != 2 ||
+		len(vm.Agents[0].EvidenceRefs) != 1 ||
+		vm.Agents[0].EvidenceRefs[0] != "evidence-ref-progress-web-001" ||
 		!vm.Agents[0].CanStop ||
 		!vm.Agents[0].NeedsAttention {
 		t.Fatalf("agents=%+v", vm.Agents)
 	}
 	if len(vm.Diagnostics) != 1 ||
 		vm.Diagnostics[0].Code != "run_closure_blocked" ||
-		len(vm.Diagnostics[0].EvidenceRefs) != 1 {
+		len(vm.Diagnostics[0].EvidenceRefs) != 1 ||
+		vm.Diagnostics[0].EvidenceRefs[0] != "blocker-ref-autop-status-web-001" {
 		t.Fatalf("diagnostics=%+v", vm.Diagnostics)
 	}
 

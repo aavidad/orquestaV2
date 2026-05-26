@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -13,7 +12,7 @@ import (
 
 func TestRESTRunQueueClientV0EnviaRankYProyectaVista(t *testing.T) {
 	var received orquestamcp.MCPRunQueuePriorityToolInputV0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != WebRunQueueInboundEndpointV0 {
 			t.Fatalf("request=%s %s", r.Method, r.URL.Path)
 		}
@@ -62,7 +61,7 @@ func TestRESTRunQueueClientV0EnviaRankYProyectaVista(t *testing.T) {
 }
 
 func TestRESTRunQueueClientV0SetPriorityErroresPublicosNoSonTransporte(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(orquestamcp.MCPRunQueuePriorityToolResultV0{
 			Estado: orquestamcp.MCPRunQueuePriorityEstadoErrorV0,

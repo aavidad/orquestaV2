@@ -61,6 +61,7 @@ func (client *RESTArrancarDirectorAppClientV0) ArrancarDirectorApp(
 	ctx context.Context,
 	form WebNuevaAppFormV0,
 ) (WebNuevaAppViewModelV0, error) {
+	ctx = webContextOrBackgroundV0(ctx)
 	request := form.ToAppSpecRequestV0()
 	if strings.TrimSpace(request.RequestID) == "" {
 		request.RequestID = newWebRequestIDV0()

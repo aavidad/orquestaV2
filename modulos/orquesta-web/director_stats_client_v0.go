@@ -59,6 +59,7 @@ func (client *RESTDirectorStatsClientV0) ConsultarDirectorStats(
 	ctx context.Context,
 	query WebDirectorStatsQueryV0,
 ) (WebDirectorStatsViewModelV0, error) {
+	ctx = webContextOrBackgroundV0(ctx)
 	query = normalizeDirectorStatsQueryV0(query)
 	if query.RunRef == "" {
 		return WebDirectorStatsViewModelV0{}, directorStatsClientErrorV0(WebDirectorStatsErrRunRefRequeridoV0, 0)

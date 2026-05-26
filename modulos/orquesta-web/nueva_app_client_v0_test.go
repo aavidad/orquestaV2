@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -14,7 +13,7 @@ import (
 
 func TestRESTSolicitarNuevaAppClientV0EnviaPOSTJSONCorrelacionYTimeout(t *testing.T) {
 	var received orquestafactory.AppSpecRequestV0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("method=%s", r.Method)
 		}
@@ -61,7 +60,7 @@ func TestRESTSolicitarNuevaAppClientV0EnviaPOSTJSONCorrelacionYTimeout(t *testin
 func TestRESTSolicitarNuevaAppClientV0CreaRequestIDSiFalta(t *testing.T) {
 	var received orquestafactory.AppSpecRequestV0
 	var correlation string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		correlation = r.Header.Get(SolicitarNuevaAppCorrelationV0)
 		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
 			t.Fatalf("decode request: %v", err)
@@ -81,9 +80,25 @@ func TestRESTSolicitarNuevaAppClientV0CreaRequestIDSiFalta(t *testing.T) {
 	}
 }
 
+func TestRESTSolicitarNuevaAppClientV0AceptaContextNil(t *testing.T) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeSuccessV0(t, w)
+	}))
+	defer server.Close()
+
+	client := NewRESTSolicitarNuevaAppClientV0(server.URL, time.Second)
+	vm, err := client.SolicitarNuevaApp(nil, minimalFormForClientV0("req-context-nil"))
+	if err != nil {
+		t.Fatalf("SolicitarNuevaApp: %v", err)
+	}
+	if vm.Estado != WebNuevaAppEstadoValida {
+		t.Fatalf("vm=%+v", vm)
+	}
+}
+
 func TestRESTSolicitarNuevaAppClientV0TransportaProjectSourceEnJSON(t *testing.T) {
 	var received orquestafactory.AppSpecRequestV0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
@@ -113,7 +128,7 @@ func TestRESTSolicitarNuevaAppClientV0TransportaProjectSourceEnJSON(t *testing.T
 }
 
 func TestRESTSolicitarNuevaAppClientV0Respuesta2xxGeneraViewModelConSpecYBacklog(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeSuccessV0(t, w)
 	}))
 	defer server.Close()
@@ -139,7 +154,7 @@ func TestRESTSolicitarNuevaAppClientV0Respuesta2xxGeneraViewModelConSpecYBacklog
 }
 
 func TestRESTSolicitarNuevaAppClientV0Respuesta400GeneraViewModelInvalido(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"errores": []orquestafactory.ValidationIssue{{
@@ -168,7 +183,7 @@ func TestRESTSolicitarNuevaAppClientV0Respuesta400GeneraViewModelInvalido(t *tes
 }
 
 func TestRESTSolicitarNuevaAppClientV0Status500DevuelveErrorPublicoEstable(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "stack privado", http.StatusInternalServerError)
 	}))
 	defer server.Close()
@@ -188,14 +203,17 @@ func TestRESTSolicitarNuevaAppClientV0Status500DevuelveErrorPublicoEstable(t *te
 }
 
 func TestRESTSolicitarNuevaAppClientV0TransportErrorYTimeoutDevuelvenErrorPublicoEstable(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(50 * time.Millisecond)
 		writeSuccessV0(t, w)
 	}))
 	defer server.Close()
 
-	client := NewRESTSolicitarNuevaAppClientV0(server.URL, time.Nanosecond)
-	_, err := client.SolicitarNuevaApp(context.Background(), minimalFormForClientV0("req-timeout"))
+	client := NewRESTSolicitarNuevaAppClientV0(server.URL, time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
+	time.Sleep(time.Millisecond)
+	defer cancel()
+	_, err := client.SolicitarNuevaApp(ctx, minimalFormForClientV0("req-timeout"))
 	if !IsWebNuevaAppClientErrorCodeV0(err, WebNuevaAppErrTransporteV0) {
 		t.Fatalf("timeout error=%v", err)
 	}

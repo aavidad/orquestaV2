@@ -5,14 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 )
 
 func TestRESTConsultarDirectorStatsClientV0EnviaPOSTJSONYProyectaPanel(t *testing.T) {
 	var received WebDirectorStatsQueryV0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("method=%s", r.Method)
 		}
@@ -29,10 +28,10 @@ func TestRESTConsultarDirectorStatsClientV0EnviaPOSTJSONYProyectaPanel(t *testin
 			t.Fatalf("decode request: %v", err)
 		}
 		_ = json.NewEncoder(w).Encode(directorStatsResultForWebTestV0())
-	}))
-	defer server.Close()
+	})
 
-	client := NewRESTConsultarDirectorStatsClientV0(server.URL, time.Second)
+	client := NewRESTConsultarDirectorStatsClientV0(webHTTPClientTestBaseURLV0, time.Second)
+	client.HTTPClient = newWebHTTPClientForHandlerV0(handler)
 	panel, err := client.ConsultarDirectorStats(context.Background(), WebDirectorStatsQueryV0{
 		RequestID:     "request-ref-web-stats-001",
 		CorrelationID: "corr-web-stats-001",
@@ -59,15 +58,15 @@ func TestRESTConsultarDirectorStatsClientV0EnviaPOSTJSONYProyectaPanel(t *testin
 
 func TestRESTConsultarDirectorStatsClientV0RespetaUsoOptIn(t *testing.T) {
 	var received WebDirectorStatsQueryV0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
 		_ = json.NewEncoder(w).Encode(directorStatsResultForWebTestV0())
-	}))
-	defer server.Close()
+	})
 
-	client := NewRESTConsultarDirectorStatsClientV0(server.URL, time.Second)
+	client := NewRESTConsultarDirectorStatsClientV0(webHTTPClientTestBaseURLV0, time.Second)
+	client.HTTPClient = newWebHTTPClientForHandlerV0(handler)
 	_, err := client.ConsultarDirectorStats(context.Background(), WebDirectorStatsQueryV0{
 		RunRef:            "run-ref-web-stats-usage-001",
 		IncludeAgentUsage: true,
@@ -83,16 +82,16 @@ func TestRESTConsultarDirectorStatsClientV0RespetaUsoOptIn(t *testing.T) {
 func TestRESTConsultarDirectorStatsClientV0CreaRequestIDYCorrelacion(t *testing.T) {
 	var received WebDirectorStatsQueryV0
 	var correlation string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		correlation = r.Header.Get(WebDirectorStatsCorrelationHeaderV0)
 		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
 		_ = json.NewEncoder(w).Encode(directorStatsResultForWebTestV0())
-	}))
-	defer server.Close()
+	})
 
-	client := NewRESTConsultarDirectorStatsClientV0(server.URL, time.Second)
+	client := NewRESTConsultarDirectorStatsClientV0(webHTTPClientTestBaseURLV0, time.Second)
+	client.HTTPClient = newWebHTTPClientForHandlerV0(handler)
 	if _, err := client.ConsultarDirectorStats(context.Background(), WebDirectorStatsQueryV0{
 		RunRef: "run-ref-web-stats-001",
 	}); err != nil {
@@ -105,8 +104,26 @@ func TestRESTConsultarDirectorStatsClientV0CreaRequestIDYCorrelacion(t *testing.
 	}
 }
 
+func TestRESTConsultarDirectorStatsClientV0AceptaContextNil(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(directorStatsResultForWebTestV0())
+	})
+
+	client := NewRESTConsultarDirectorStatsClientV0(webHTTPClientTestBaseURLV0, time.Second)
+	client.HTTPClient = newWebHTTPClientForHandlerV0(handler)
+	panel, err := client.ConsultarDirectorStats(nil, WebDirectorStatsQueryV0{
+		RunRef: "run-ref-web-stats-context-nil",
+	})
+	if err != nil {
+		t.Fatalf("ConsultarDirectorStats: %v", err)
+	}
+	if panel.Estado != WebDirectorStatsInboundEstadoOKV0 {
+		t.Fatalf("panel=%+v", panel)
+	}
+}
+
 func TestRESTConsultarDirectorStatsClientV0ErroresPublicosDelInboundNoSonTransporte(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	currentHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(WebDirectorStatsInboundResultV0{
 			Estado: WebDirectorStatsInboundEstadoErrorV0,
@@ -116,10 +133,13 @@ func TestRESTConsultarDirectorStatsClientV0ErroresPublicosDelInboundNoSonTranspo
 				Field: "run_ref",
 			}},
 		})
-	}))
-	defer server.Close()
+	})
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		currentHandler(w, r)
+	})
 
-	client := NewRESTConsultarDirectorStatsClientV0(server.URL, time.Second)
+	client := NewRESTConsultarDirectorStatsClientV0(webHTTPClientTestBaseURLV0, time.Second)
+	client.HTTPClient = newWebHTTPClientForHandlerV0(handler)
 	panel, err := client.ConsultarDirectorStats(context.Background(), WebDirectorStatsQueryV0{
 		Locale: "en",
 		RunRef: "run-ref-missing",
@@ -133,7 +153,7 @@ func TestRESTConsultarDirectorStatsClientV0ErroresPublicosDelInboundNoSonTranspo
 		t.Fatalf("panel=%+v", panel)
 	}
 
-	server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	currentHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(WebDirectorStatsInboundResultV0{
 			Estado: WebDirectorStatsInboundEstadoOKV0,
@@ -149,12 +169,15 @@ func TestRESTConsultarDirectorStatsClientV0ErroresPublicosDelInboundNoSonTranspo
 }
 
 func TestRESTConsultarDirectorStatsClientV0Status500EInvalidoSonErroresPublicosCliente(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	currentHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "stack privado", http.StatusInternalServerError)
-	}))
-	defer server.Close()
+	})
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		currentHandler(w, r)
+	})
 
-	client := NewRESTConsultarDirectorStatsClientV0(server.URL, time.Second)
+	client := NewRESTConsultarDirectorStatsClientV0(webHTTPClientTestBaseURLV0, time.Second)
+	client.HTTPClient = newWebHTTPClientForHandlerV0(handler)
 	_, err := client.ConsultarDirectorStats(context.Background(), WebDirectorStatsQueryV0{RunRef: "run-ref"})
 	var clientErr WebDirectorStatsClientErrorV0
 	if !errors.As(err, &clientErr) ||
@@ -163,7 +186,7 @@ func TestRESTConsultarDirectorStatsClientV0Status500EInvalidoSonErroresPublicosC
 		t.Fatalf("error=%+v", err)
 	}
 
-	server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	currentHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{`))
 	})
 	_, err = client.ConsultarDirectorStats(context.Background(), WebDirectorStatsQueryV0{RunRef: "run-ref"})

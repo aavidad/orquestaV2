@@ -55,6 +55,7 @@ func NewRESTSolicitarNuevaAppClientV0(baseURL string, timeout time.Duration) *RE
 }
 
 func (client *RESTSolicitarNuevaAppClientV0) SolicitarNuevaApp(ctx context.Context, form WebNuevaAppFormV0) (WebNuevaAppViewModelV0, error) {
+	ctx = webContextOrBackgroundV0(ctx)
 	req := form.ToAppSpecRequestV0()
 	if strings.TrimSpace(req.RequestID) == "" {
 		req.RequestID = newWebRequestIDV0()

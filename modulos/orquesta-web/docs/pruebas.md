@@ -249,6 +249,23 @@ Ultima ejecucion: 2026-05-04; pasa.
 Riesgos: El transporte inbound real del director aun no existe; si se define REST/MCP posterior, debe reemplazar el cliente local sin cambiar el viewmodel.
 ```
 
+```text
+Caso: WEB-UT-013 sesion conversacional nueva app
+Tipo: unit
+Comando: `GOCACHE=/tmp/orquesta-go-cache go test -count=1 ./modulos/orquesta-web -run 'TestWebNuevaAppIntakeSessionV0|TestApplyWebNuevaAppIntake'`
+Evidencia esperada: `TestWebNuevaAppIntakeSessionV0CreaSesionDesdeIdeaYPideCamposCriticos`,
+`TestApplyWebNuevaAppIntakeAnswerV0RegistraDecisionYDejaDraftListo`,
+`TestApplyWebNuevaAppIntakeAnswerV0NoValidaEnumsDeFactory` y
+`TestWebNuevaAppIntakeSessionV0SnapshotCompactoSinDumpsInternos` validan sesion
+desde idea/nombre, pregunta pendiente, indice de campos, decision capturada,
+`AppSpecRequestV0` parcial listo para validar, snapshot compacto y ausencia de
+validacion de enums de factory, sin DB, runtime, filesystem productivo, LLM real
+ni MCP directo.
+Ultima ejecucion: 2026-05-26; pasa con `GOCACHE=/tmp/orquesta-go-cache`.
+Riesgos: No arranca agente de intake real ni renderiza la vista HTML completa;
+ese tramo debe entrar por API/MCP/handler posterior.
+```
+
 ## Validaciones realizadas en este arranque
 
 ```text
@@ -346,4 +363,46 @@ JSON/form sin leer stores, runtime, procesos, scheduler ni DB.
 Ultima ejecucion: 2026-05-13; pasa con `go test -count=1 ./modulos/orquesta-web`.
 Riesgos: checkpoint y parada fisica siguen fuera de la web; el panel solo emite
 la orden publica.
+```
+
+```text
+Caso: WEB-UT-025 panel ops expone flujo comparativo
+Tipo: unit/html contract
+Comando: `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto`
+Evidencia esperada: `/ops` contiene la franja `flujo operativo` con cola,
+ejecucion, atencion y cierre; el resumen se calcula en `renderFlowSummary`
+desde snapshots ya consumidos por el panel y no anade endpoints, DB, runtime ni
+proveedor.
+Ultima ejecucion: 2026-05-26; pasa con
+`GOCACHE=/tmp/orquesta-go-cache go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto`.
+Riesgos: La precision depende de `autoprogramming/status` y `director/stats`;
+si esas fuentes degradan, el panel solo refleja la proyeccion publica.
+```
+
+```text
+Caso: WEB-UT-027 tablas responsivas de panel ops
+Tipo: unit/html contract
+Comando: `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto`
+Evidencia esperada: `/ops` contiene `tableCell`, `data-label`,
+`content: attr(data-label)`, tabla de fases y tabla de uso; las filas siguen
+seleccionando por refs opacas y no anaden endpoints, stores, DB ni runtime.
+Ultima ejecucion: 2026-05-26; pasa con
+`GOCACHE=/tmp/orquesta-gocache go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto`.
+Riesgos: No sustituye una prueba visual con navegador; cubre contrato HTML
+server-rendered.
+```
+
+```text
+Caso: WEB-UT-026 errores publicos de render HTML
+Tipo: unit
+Comando: `go test -count=1 ./modulos/orquesta-web`
+Evidencia esperada: `TestWebHTMLTemplateResponseV0RenderErrorDevuelveReasonPublico`,
+`TestWebHTMLTemplateResponseV0WriteErrorDevuelveReasonCompacto` y
+`TestAppChangeHTMLV0UsaFallbackComunAnteRenderError` validan buffer previo a
+escritura, fallback HTML con `web_html_render_failed`, reason
+`web_response_write_failed` en fallo de socket y ausencia de detalles privados
+del template/error.
+Ultima ejecucion: 2026-05-26; pasa.
+Riesgos: El slice cubre renderers HTML locales; T183 transversal aun requiere
+observability/gateway/cmd para auditoria y contadores compactos.
 ```

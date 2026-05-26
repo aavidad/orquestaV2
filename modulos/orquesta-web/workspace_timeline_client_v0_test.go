@@ -3,7 +3,6 @@ package orquestaweb
 import (
 	"context"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -18,7 +17,7 @@ func TestRESTWorkspaceTimelineClientV0ConsumeMismoEndpointMCP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("source: %v", err)
 	}
-	server := httptest.NewServer(orquestamcp.NewMCPWorkspaceTimelineHTTPHandlerV0(source))
+	server := newWebHTTPTestServerV0(t, orquestamcp.NewMCPWorkspaceTimelineHTTPHandlerV0(source))
 	defer server.Close()
 	client := NewRESTWorkspaceTimelineClientV0(server.URL, time.Second)
 	view, err := client.ConsultarWorkspaceTimeline(context.Background(), validWebWorkspaceTimelineQueryForClientV0())
@@ -33,8 +32,28 @@ func TestRESTWorkspaceTimelineClientV0ConsumeMismoEndpointMCP(t *testing.T) {
 	}
 }
 
+func TestRESTWorkspaceTimelineClientV0AceptaContextNil(t *testing.T) {
+	source, err := orquestaobservability.NewWorkspaceTimelineMemoryAdapterV0(
+		[]orquestaobservability.WorkspaceTimelineV0{validWebWorkspaceTimelineForClientV0()},
+	)
+	if err != nil {
+		t.Fatalf("source: %v", err)
+	}
+	server := newWebHTTPTestServerV0(t, orquestamcp.NewMCPWorkspaceTimelineHTTPHandlerV0(source))
+	defer server.Close()
+
+	client := NewRESTWorkspaceTimelineClientV0(server.URL, time.Second)
+	view, err := client.ConsultarWorkspaceTimeline(nil, validWebWorkspaceTimelineQueryForClientV0())
+	if err != nil {
+		t.Fatalf("client: %v", err)
+	}
+	if view.SchemaVersion != WebWorkspaceTimelineSchemaV0 {
+		t.Fatalf("view=%+v", view)
+	}
+}
+
 func TestRESTWorkspaceTimelineClientV0ClasificaErrorHTTP(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	defer server.Close()

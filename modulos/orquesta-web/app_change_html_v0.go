@@ -30,10 +30,17 @@ func appChangePageV0(locale string, vm WebAppChangeViewModelV0) appChangePageDat
 	return appChangePageDataV0{Locale: locale, VM: vm, Text: text}
 }
 
-func writeAppChangeHTMLV0(w http.ResponseWriter, status int, page appChangePageDataV0) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(status)
-	_ = appChangeHTMLTemplateV0.Execute(w, page)
+func writeAppChangeHTMLV0(w http.ResponseWriter, status int, page appChangePageDataV0) WebHTMLWriteResultV0 {
+	return writeAppChangeHTMLWithTemplateV0(w, status, page, appChangeHTMLTemplateV0)
+}
+
+func writeAppChangeHTMLWithTemplateV0(
+	w http.ResponseWriter,
+	status int,
+	page appChangePageDataV0,
+	tmpl *template.Template,
+) WebHTMLWriteResultV0 {
+	return writeWebHTMLTemplateResponseV0(w, status, tmpl, page, page.Locale)
 }
 
 var appChangeHTMLTemplateV0 = template.Must(template.New("app_change_html_v0").Parse(`<!doctype html>

@@ -3,7 +3,6 @@ package orquestaweb
 import (
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -19,7 +18,7 @@ func TestRESTRunControlClientV0SerializaAccionesSoportadas(t *testing.T) {
 	} {
 		t.Run(action, func(t *testing.T) {
 			var got orquestamcp.MCPRunControlToolInputV0
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path != WebRunControlInboundEndpointV0 {
 					t.Fatalf("path=%s", r.URL.Path)
 				}
@@ -61,7 +60,7 @@ func TestRESTRunControlClientV0SerializaAccionesSoportadas(t *testing.T) {
 }
 
 func TestRESTRunControlClientV0ConservaErrorPublico400(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(orquestamcp.MCPRunControlToolResultV0{
 			Estado: orquestamcp.MCPRunControlEstadoErrorV0,

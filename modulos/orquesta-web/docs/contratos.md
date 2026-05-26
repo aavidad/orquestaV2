@@ -276,31 +276,30 @@ Version: v0
 Propietario: orquesta-web
 Consumidores: vistas/handlers de nueva app, futuro API/MCP de intake
 Campos:
+- schema_version: `web_nueva_app_intake_session.v0`
 - session_id
-- request_id
+- session_ref
 - locale
-- estado: inicial | esperando_agente | preguntando | requiere_datos | listo_para_validar | error
-- idea_inicial
-- app_spec_request_parcial
-- preguntas_pendientes
-- decisiones_tomadas
-- alternativas_descartadas
-- agente_intake_ref
+- estado: `requiere_datos | lista_para_solicitar`
+- form: `WebNuevaAppFormV0`
+- sections: indice compacto por seccion, campos requeridos, capturados y pendientes
+- field_index: mapa estable campo -> seccion
+- pending_questions: ids de campos criticos pendientes
+- decisions: respuestas capturadas como ids de campo y valores compactos
+- app_spec_partial: `AppSpecRequestV0` derivado del formulario parcial
 Invariantes:
 - La sesion conversa y acumula decisiones; no reemplaza a `AppSpecRequestV0`.
 - La web no decide arquitectura ni aplica reglas de negocio de factory.
-- El agente de intake puede preguntar al usuario cuando falten datos o haya ambiguedad.
-- La UI muestra estado y preguntas; no obliga a rellenar todos los campos a mano.
+- Las preguntas son ids de campo/seccion, no texto visible final; la capa UI debe localizar textos por i18n.
+- La UI muestra estado e indice de secciones; no obliga a rellenar todos los campos a mano.
 - No toca DB, runtime, filesystem ni proveedor de agente concreto.
 Errores:
-- intake_session_invalida
-- intake_agente_no_arrancado
-- intake_requiere_respuesta_usuario
+- No define errores propios en este corte; los errores publicos siguen perteneciendo al cliente/handler que consuma la sesion.
 Pruebas de contrato:
 - Crear sesion desde nombre/idea inicial.
-- Registrar pregunta pendiente y respuesta del usuario.
+- Registrar pregunta pendiente, respuesta del usuario e indice campo/seccion.
 - Proyectar AppSpecRequestV0 parcial sin validarlo como definitivo.
-- Marcar listo para validar solo cuando no queden preguntas abiertas criticas.
+- Marcar `lista_para_solicitar` solo cuando no queden preguntas criticas.
 ```
 
 ```text

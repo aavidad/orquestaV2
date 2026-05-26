@@ -360,6 +360,39 @@ Contratos afectados: `WebAutoprogrammingPrepareRunV0`,
 Estado: aceptada localmente.
 ```
 
+```text
+Fecha: 2026-05-26
+Decision: El panel `/ops` muestra una franja visual de flujo operativo
+derivada de contratos publicos ya consumidos.
+Motivo: el operador necesita comparar rapidamente cola, ejecucion, atencion y
+cierre sin inspeccionar cada tabla ni JSON crudo, pero la web no debe crear una
+fuente canonica nueva ni leer stores/runtime.
+Alternativas: duplicar una pantalla de director stats; crear endpoint nuevo;
+mantener solo KPIs y tablas largas.
+Impacto: `opsDashboardHTMLV0` agrega `renderFlowSummary` sobre los datos de
+`autoprogramming/status`, `director/stats` y recursos ya cargados por el panel.
+No cambia contratos REST ni introduce acoplamiento a DB, runtime o proveedor.
+Contratos afectados: `/ops`, `orquesta.autoprogramming.status.v0`,
+`director-stats`.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-05-26
+Decision: El intake conversacional de nueva app se modela primero como sesion
+web pura con indice de secciones y `AppSpecRequestV0` parcial.
+Motivo: permite sustituir el formulario largo por un flujo incremental sin que
+la web arranque agentes, valide negocio de factory ni conozca runtime/stores.
+Alternativas: crear ya handler HTML completo; llamar MCP desde web; duplicar
+validacion de `AppSpecRequestV0` en el adaptador.
+Impacto: `WebNuevaAppIntakeSessionV0` conserva decisiones y preguntas criticas
+como ids de campo/seccion, y delega el cierre a `SolicitarNuevaApp v0` o al
+arranque de director cuando exista el puerto inyectado.
+Contratos afectados: `WebNuevaAppIntakeSessionV0`, `AppSpecRequestV0`,
+`SolicitarNuevaApp v0`.
+Estado: aceptada localmente.
+```
+
 Reutilizable como referencia, no como copia directa:
 
 - `cmd/proyectos_web.go`: estructura de secciones del wizard: briefing, arquitectura, interfaces, datos, plataformas, sistemas operativos, compliance, entrega/calidad.

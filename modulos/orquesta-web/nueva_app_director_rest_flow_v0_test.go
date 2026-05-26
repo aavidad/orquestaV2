@@ -2,7 +2,6 @@ package orquestaweb
 
 import (
 	"context"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -58,9 +57,9 @@ func TestRESTArrancarDirectorAppClientV0FlujoVerticalMCP(t *testing.T) {
 func httptestNewDirectorServerV0(
 	t *testing.T,
 	executor orquestamcp.MCPArrancarDirectorAppToolExecutorV0,
-) *httptest.Server {
+) *webHTTPClientTestServerV0 {
 	t.Helper()
-	return httptest.NewServer(orquestamcp.NewMCPArrancarDirectorAppHTTPHandlerV0(executor))
+	return newWebHTTPTestServerV0(t, orquestamcp.NewMCPArrancarDirectorAppHTTPHandlerV0(executor))
 }
 
 func webDirectorCapacityDispatcherForTestV0(

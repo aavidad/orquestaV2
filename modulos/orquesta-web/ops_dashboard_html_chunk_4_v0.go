@@ -5,6 +5,7 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
       byId('selected-detail').innerHTML =
         '<div class="task-title">' + esc(runTitle(run)) + '</div>' +
         '<div class="task-subtitle mono">' + esc(run.run_ref || '-') + '</div>' +
+        runFlowHTML(run, runAgents, tasks) +
         '<div class="kv"><div class="k">ID tarea</div><div><span class="task-id">' + esc(run.task_id || taskIDFromRef(run.run_ref)) + '</span></div></div>' +
         '<div class="kv"><div class="k">Proyecto</div><div class="mono">' + esc(run.app_ref || '-') + '</div></div>' +
         '<div class="kv"><div class="k">Estado</div><div>' + statusPill(run.status || 'unknown') + '</div></div>' +
@@ -12,6 +13,7 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
         '<div class="kv"><div class="k">Progreso</div><div>' + bar(run.percent_complete || 0, !!run.blocked) + '<span class="sub">' + esc(String(run.percent_complete || 0)) + '% · fase ' + esc(run.current_phase || '-') + '</span></div></div>' +
         (isCompletedSnapshot ? '<div class="kv"><div class="k">Observada</div><div class="mono">' + esc(run.observed_at || '-') + '</div></div>' : '') +
         '<div class="kv"><div class="k">Agentes</div><div>' + esc(String(run.agents_in_flight || 0)) + ' activos · ' + esc(String(run.agents_started || runAgents.length || 0)) + ' observados</div></div>' +
+        '<div class="kv"><div class="k">Uso observado</div><div>' + esc(String(usageAgents.length)) + ' agentes · ' + esc(formatTokens(usageTokens)) + '</div></div>' +
         '<div class="controls"><input id="detail-priority" type="number" min="0" max="1000" step="1" value="' + esc(priority) + '" aria-label="Prioridad"><button type="button" onclick="setSelectedPriority()">Prioridad</button></div>' +
         '<div class="button-row">' +
           '<button type="button" onclick="controlSelectedRun(\'pause\')">Pausar</button>' +
