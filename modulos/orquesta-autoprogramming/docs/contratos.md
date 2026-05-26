@@ -17,12 +17,27 @@ Campos obligatorios:
 - `required_tests`.
 - opcionalmente `area_aliases` para normalizar nombres seguros de area y
   `live_works` para declarar trabajos vivos con refs opacas y `write_set`.
+- opcionalmente limites de ola: `max_task_refs`, `max_areas`,
+  `max_write_set_entries`, `max_delegation_depth`,
+  `max_subagents_per_agent` y `max_recursive_agents`.
 
 Limites por defecto:
 
-- 3 tareas;
-- 2 areas;
-- 5 entradas de `write_set`.
+- 10 tareas padre;
+- 10 areas;
+- 10 entradas de `write_set`;
+- profundidad programable por defecto 1;
+- hasta 6 subagentes por padre;
+- presupuesto recursivo por defecto 60 agentes derivados.
+
+Errores frecuentes:
+
+- `scopes`, `scope` u otros terminos de programacion no activan por si solos
+  politica documental OPES ni `xhigh`;
+- para reducir una ola bajo 10 padres, declarar limites explicitos mas bajos en
+  la request;
+- para ampliar por encima de 10 padres o 6 subagentes por padre hace falta
+  nueva decision de composicion/director, no hints en texto libre.
 
 Invariantes:
 
@@ -74,6 +89,8 @@ programable compatible con el nucleo:
 - conserva `write_set`, `required_tests`, `worktree_ref` y `branch_ref`;
 - conserva objetivo, contexto, criterios, tests y reglas compactas declaradas
   por tarea dentro de `WorkflowTaskV0`/`WorkProfileV0`;
+- propaga limites de delegacion gobernada a cada `WorkflowTaskV0` sin lanzar
+  agentes ni elegir runtime: profundidad, hijos por padre y presupuesto total;
 - compacta `title`, `summary`, objetivo y criterios antes de crear
   `WorkflowTaskV0`; el contexto largo debe viajar por refs opacas, no como
   payload durable masivo;

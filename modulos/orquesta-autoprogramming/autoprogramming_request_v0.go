@@ -8,9 +8,12 @@ import (
 )
 
 const (
-	AutoprogrammingRequestDefaultMaxTaskRefsV0        = 3
-	AutoprogrammingRequestDefaultMaxAreasV0           = 2
-	AutoprogrammingRequestDefaultMaxWriteSetEntriesV0 = 5
+	AutoprogrammingRequestDefaultMaxTaskRefsV0        = 10
+	AutoprogrammingRequestDefaultMaxAreasV0           = 10
+	AutoprogrammingRequestDefaultMaxWriteSetEntriesV0 = 10
+	AutoprogrammingRequestMaxDelegationDepthV0        = 3
+	AutoprogrammingRequestMaxSubagentsPerAgentV0      = 6
+	AutoprogrammingRequestMaxRecursiveAgentsV0        = 4096
 )
 
 type AutoprogrammingRequestV0 struct {
@@ -26,9 +29,12 @@ type AutoprogrammingRequestV0 struct {
 	LiveWorks        []AutoprogrammingLiveWorkV0           `json:"live_works,omitempty"`
 	BacklogScan      AutoprogrammingBacklogScanV0          `json:"backlog_scan,omitempty"`
 
-	MaxTaskRefs        int `json:"max_task_refs,omitempty"`
-	MaxAreas           int `json:"max_areas,omitempty"`
-	MaxWriteSetEntries int `json:"max_write_set_entries,omitempty"`
+	MaxTaskRefs          int `json:"max_task_refs,omitempty"`
+	MaxAreas             int `json:"max_areas,omitempty"`
+	MaxWriteSetEntries   int `json:"max_write_set_entries,omitempty"`
+	MaxDelegationDepth   int `json:"max_delegation_depth,omitempty"`
+	MaxSubagentsPerAgent int `json:"max_subagents_per_agent,omitempty"`
+	MaxRecursiveAgents   int `json:"max_recursive_agents,omitempty"`
 }
 
 type AutoprogrammingBacklogScanV0 struct {
@@ -73,6 +79,7 @@ func ValidateAutoprogrammingRequestV0(
 	issues = append(issues, autoprogrammingRequestWriteSetIssuesV0(request, writeSet)...)
 	issues = append(issues, autoprogrammingRequestLiveWorkIssuesV0(request.LiveWorks)...)
 	issues = append(issues, autoprogrammingRequestBacklogScanIssuesV0(request.BacklogScan)...)
+	issues = append(issues, autoprogrammingRequestDelegationIssuesV0(request)...)
 
 	requiredTests := compactStringsV0(request.RequiredTests)
 	if len(requiredTests) == 0 {
@@ -190,6 +197,37 @@ func autoprogrammingRequestWriteSetIssuesV0(
 			"write_set_path_invalid",
 			"write_set",
 			"ruta de write-set no permitida: "+path,
+		))
+	}
+	return issues
+}
+
+func autoprogrammingRequestDelegationIssuesV0(
+	request AutoprogrammingRequestV0,
+) []AutoprogrammingRequestIssueV0 {
+	var issues []AutoprogrammingRequestIssueV0
+	if request.MaxDelegationDepth < 0 ||
+		request.MaxDelegationDepth > AutoprogrammingRequestMaxDelegationDepthV0 {
+		issues = append(issues, autoprogrammingRequestIssueV0(
+			"delegation_depth_budget_invalid",
+			"max_delegation_depth",
+			"max_delegation_depth fuera de rango",
+		))
+	}
+	if request.MaxSubagentsPerAgent < 0 ||
+		request.MaxSubagentsPerAgent > AutoprogrammingRequestMaxSubagentsPerAgentV0 {
+		issues = append(issues, autoprogrammingRequestIssueV0(
+			"subagents_per_agent_budget_invalid",
+			"max_subagents_per_agent",
+			"max_subagents_per_agent fuera de rango",
+		))
+	}
+	if request.MaxRecursiveAgents < 0 ||
+		request.MaxRecursiveAgents > AutoprogrammingRequestMaxRecursiveAgentsV0 {
+		issues = append(issues, autoprogrammingRequestIssueV0(
+			"recursive_agents_budget_invalid",
+			"max_recursive_agents",
+			"max_recursive_agents fuera de rango",
 		))
 	}
 	return issues

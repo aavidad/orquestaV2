@@ -42,3 +42,22 @@ estan verdes y el problema es el alcance.
 Consecuencia: ACK ausente o tests fallidos siguen bloqueando cierre con
 `recommended_action=block_closure`; el follow-up queda como reparacion dirigida
 para revision o tarea posterior.
+
+## 2026-05-26: capacidad por marcadores tokenizados
+
+Decision: la politica de capacidad detecta OPES, planes documentales y riesgo
+alto por tokens o frases normalizadas, no por subcadenas arbitrarias.
+
+Motivo: palabras practicas de programacion como `scopes` no deben activar la
+politica documental OPES ni escalar capacidad a `xhigh`.
+
+## 2026-05-26: ola programable 10x6
+
+Decision: `AutoprogrammingRequestV0` admite por defecto hasta 10 tareas padre,
+10 areas y 10 entradas de `write_set`; cada `WorkflowTaskV0` generado transporta
+profundidad recursiva 1, hasta 6 subagentes por padre y presupuesto derivado de
+60 agentes hijos salvo limite explicito menor en la request.
+
+Motivo: la ola complementaria de autoprogramacion necesita expresar capacidad
+10 padres + 6 subagentes por padre sin mover runtime, proveedor ni lanzamiento
+real dentro del contrato puro.

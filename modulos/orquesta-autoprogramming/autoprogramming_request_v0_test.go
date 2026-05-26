@@ -1,6 +1,9 @@
 package orquestaautoprogramming
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestValidateAutoprogrammingRequestV0AcceptsSmallIsolatedRequest(t *testing.T) {
 	result := ValidateAutoprogrammingRequestV0(validAutoprogrammingRequestV0(nil))
@@ -33,19 +36,17 @@ func TestValidateAutoprogrammingRequestV0RejectsMissingIsolationOrBranchRef(t *t
 
 func TestValidateAutoprogrammingRequestV0RejectsBroadScope(t *testing.T) {
 	result := ValidateAutoprogrammingRequestV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
-		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{
-			{TaskRef: "task-ref-a", Area: "core"},
-			{TaskRef: "task-ref-b", Area: "core"},
-			{TaskRef: "task-ref-c", Area: "runtime"},
-			{TaskRef: "task-ref-d", Area: "web"},
-		}
-		request.WriteSet = []string{
-			"modulos/orquesta-orchestration-core/a.go",
-			"modulos/orquesta-orchestration-core/b.go",
-			"modulos/orquesta-orchestration-core/c.go",
-			"modulos/orquesta-orchestration-core/d.go",
-			"modulos/orquesta-orchestration-core/e.go",
-			"modulos/orquesta-orchestration-core/f.go",
+		request.Tasks = nil
+		request.WriteSet = nil
+		for i := 1; i <= AutoprogrammingRequestDefaultMaxTaskRefsV0+1; i++ {
+			area := fmt.Sprintf("area-%02d", i)
+			request.Tasks = append(request.Tasks, AutoprogrammingTaskGroupCandidateV0{
+				TaskRef: fmt.Sprintf("task-ref-broad-%02d", i),
+				Area:    area,
+			})
+			request.WriteSet = append(request.WriteSet,
+				fmt.Sprintf("modulos/orquesta-autoprogramming/%s/file.go", area),
+			)
 		}
 	}))
 
@@ -55,6 +56,31 @@ func TestValidateAutoprogrammingRequestV0RejectsBroadScope(t *testing.T) {
 	assertAutoprogrammingRequestIssueV0(t, result, "scope_tasks_too_large")
 	assertAutoprogrammingRequestIssueV0(t, result, "scope_areas_too_large")
 	assertAutoprogrammingRequestIssueV0(t, result, "scope_write_set_too_large")
+}
+
+func TestValidateAutoprogrammingRequestV0AcceptsTenParentWaveByDefault(t *testing.T) {
+	result := ValidateAutoprogrammingRequestV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.Tasks = nil
+		request.WriteSet = nil
+		for i := 1; i <= 10; i++ {
+			taskRef := fmt.Sprintf("task-ref-parent-wave-%02d", i)
+			area := fmt.Sprintf("parent-wave-%02d", i)
+			request.Tasks = append(request.Tasks, AutoprogrammingTaskGroupCandidateV0{
+				TaskRef: taskRef,
+				Area:    area,
+			})
+			request.WriteSet = append(request.WriteSet,
+				"modulos/orquesta-autoprogramming/"+area+"/contrato.go",
+			)
+		}
+	}))
+
+	if !result.Accepted {
+		t.Fatalf("accepted=false issues=%+v", result.Issues)
+	}
+	if len(result.Groups) != 10 || len(result.WriteSet) != 10 {
+		t.Fatalf("groups=%d write_set=%d result=%+v", len(result.Groups), len(result.WriteSet), result)
+	}
 }
 
 func TestValidateAutoprogrammingRequestV0RejectsMissingTestsAndWriteSet(t *testing.T) {
@@ -82,6 +108,21 @@ func TestValidateAutoprogrammingRequestV0RejectsUnsafeWriteSetPath(t *testing.T)
 		t.Fatalf("accepted=true")
 	}
 	assertAutoprogrammingRequestIssueV0(t, result, "write_set_path_invalid")
+}
+
+func TestValidateAutoprogrammingRequestV0RejectsDelegationBudgetFueraDeRango(t *testing.T) {
+	result := ValidateAutoprogrammingRequestV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.MaxDelegationDepth = AutoprogrammingRequestMaxDelegationDepthV0 + 1
+		request.MaxSubagentsPerAgent = AutoprogrammingRequestMaxSubagentsPerAgentV0 + 1
+		request.MaxRecursiveAgents = AutoprogrammingRequestMaxRecursiveAgentsV0 + 1
+	}))
+
+	if result.Accepted {
+		t.Fatalf("accepted=true")
+	}
+	assertAutoprogrammingRequestIssueV0(t, result, "delegation_depth_budget_invalid")
+	assertAutoprogrammingRequestIssueV0(t, result, "subagents_per_agent_budget_invalid")
+	assertAutoprogrammingRequestIssueV0(t, result, "recursive_agents_budget_invalid")
 }
 
 func validAutoprogrammingRequestV0(

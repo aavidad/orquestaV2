@@ -1,6 +1,9 @@
 package orquestaautoprogramming
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+)
 
 const (
 	CapacityPolicyRefBackgroundMediumV0 = "capacity-policy-ref-background-medium-v0"
@@ -63,10 +66,55 @@ func capacityReasoningContainsAnyV0(input CapacityReasoningPolicyInputV0, marker
 		},
 		input.WriteSet...,
 	), "\n"))
+	tokens := capacityReasoningTokensV0(value)
 	for _, marker := range markers {
-		if strings.Contains(value, marker) {
+		if capacityReasoningMarkerMatchesV0(value, tokens, marker) {
 			return true
 		}
 	}
 	return false
+}
+
+func capacityReasoningMarkerMatchesV0(value string, tokens []string, marker string) bool {
+	marker = strings.ToLower(strings.TrimSpace(marker))
+	markerTokens := capacityReasoningTokensV0(marker)
+	if len(markerTokens) > 0 && capacityReasoningTokenSequenceContainsV0(tokens, markerTokens) {
+		return true
+	}
+	if strings.Contains(marker, ":") {
+		return strings.Contains(value, marker)
+	}
+	return false
+}
+
+func capacityReasoningTokenSequenceContainsV0(tokens []string, marker []string) bool {
+	if len(marker) == 0 || len(marker) > len(tokens) {
+		return false
+	}
+	for start := 0; start <= len(tokens)-len(marker); start++ {
+		matched := true
+		for offset := range marker {
+			if tokens[start+offset] != marker[offset] {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
+}
+
+func capacityReasoningTokensV0(value string) []string {
+	raw := strings.FieldsFunc(strings.ToLower(strings.TrimSpace(value)), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+	out := make([]string, 0, len(raw))
+	for _, token := range raw {
+		if token != "" {
+			out = append(out, token)
+		}
+	}
+	return out
 }

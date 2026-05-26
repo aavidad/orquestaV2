@@ -9,6 +9,9 @@ go test -count=1 ./modulos/orquesta-autoprogramming
 Cobertura actual:
 
 - acepta solicitud pequena con worktree aislada;
+- acepta ola de 10 tareas padre dentro de los limites vigentes;
+- rechaza presupuestos de delegacion fuera de rango y preserva limites
+  explicitos validos en `WorkflowTaskV0`;
 - rechaza branch/ref/isolation incompletos;
 - rechaza alcance demasiado amplio;
 - rechaza `write_set` vacio o inseguro;
@@ -31,6 +34,8 @@ Cobertura actual:
   ficheros grandes, ficheros fuera del `write_set` o destinos faltantes;
 - review gate mantiene ACK ausente o tests fallidos como bloqueo de cierre con
   evidencia compacta;
+- politica de capacidad usa tokens operativos para OPES/riesgo alto y no escala
+  a `xhigh` por subcadenas inocuas como `scopes`;
 - arquitectura impide importar core, runtime, DB, `cmd` o adaptadores.
 
 ## Integracion focal

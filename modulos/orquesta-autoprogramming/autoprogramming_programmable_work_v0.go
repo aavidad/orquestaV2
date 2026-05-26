@@ -38,6 +38,18 @@ type AutoprogrammingProgrammableGroupV0 struct {
 	Task          orquestacoreworkflow.WorkflowTaskV0 `json:"task"`
 }
 
+const (
+	AutoprogrammingDefaultMaxDelegationDepthV0   = 1
+	AutoprogrammingDefaultMaxSubagentsPerAgentV0 = 6
+	AutoprogrammingDefaultMaxRecursiveAgentsV0   = AutoprogrammingRequestDefaultMaxTaskRefsV0 * AutoprogrammingDefaultMaxSubagentsPerAgentV0
+)
+
+type autoprogrammingDelegationLimitsV0 struct {
+	maxDelegationDepth   int
+	maxSubagentsPerAgent int
+	maxRecursiveAgents   int
+}
+
 func BuildAutoprogrammingProgrammableWorkV0(
 	request AutoprogrammingRequestV0,
 ) AutoprogrammingProgrammableWorkResultV0 {
@@ -122,18 +134,23 @@ func autoprogrammingWorkflowTaskForGroupV0(
 	groupIndex int,
 ) (orquestacoreworkflow.WorkProfileV0, orquestacoreworkflow.WorkflowTaskV0, AutoprogrammingRequestIssueV0) {
 	taskRef := autoprogrammingProgrammableTaskRefV0(request.RequestRef, groupIndex)
+	limits := autoprogrammingDelegationLimitsForRequestV0(request)
 	profile, err := orquestacoreworkflow.NewWorkProfileV0(orquestacoreworkflow.WorkProfileV0{
-		SchemaVersion:      orquestacoreworkflow.WorkProfileSchemaVersionV0,
-		ProfileRef:         "profile-" + taskRef,
-		ProfileKind:        orquestacoreworkflow.WorkProfileImplementationV0,
-		TaskRef:            taskRef,
-		RunRef:             strings.TrimSpace(request.RequestRef),
-		Title:              autoprogrammingTitleForGroupV0(group, groupIndex),
-		Objective:          autoprogrammingObjectiveForGroupV0(group),
-		Summary:            autoprogrammingSummaryForGroupV0(group),
-		ScopeRefs:          append([]string(nil), writeSet...),
-		RequiredTests:      autoprogrammingRequiredTestsForGroupV0(requiredTests, group),
-		AcceptanceCriteria: autoprogrammingAcceptanceCriteriaForGroupV0(group),
+		SchemaVersion:        orquestacoreworkflow.WorkProfileSchemaVersionV0,
+		ProfileRef:           "profile-" + taskRef,
+		ProfileKind:          orquestacoreworkflow.WorkProfileImplementationV0,
+		TaskRef:              taskRef,
+		RunRef:               strings.TrimSpace(request.RequestRef),
+		Title:                autoprogrammingTitleForGroupV0(group, groupIndex),
+		Objective:            autoprogrammingObjectiveForGroupV0(group),
+		Summary:              autoprogrammingSummaryForGroupV0(group),
+		ScopeRefs:            append([]string(nil), writeSet...),
+		RequiredTests:        autoprogrammingRequiredTestsForGroupV0(requiredTests, group),
+		AcceptanceCriteria:   autoprogrammingAcceptanceCriteriaForGroupV0(group),
+		MaxDelegationDepth:   limits.maxDelegationDepth,
+		MaxChildAgents:       limits.maxSubagentsPerAgent,
+		MaxSubagentsPerAgent: limits.maxSubagentsPerAgent,
+		MaxRecursiveAgents:   limits.maxRecursiveAgents,
 		FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{
 			{FunctionName: "ValidateAutoprogrammingRequestV0"},
 			{FunctionName: "BuildAutoprogrammingProgrammableWorkV0"},
@@ -161,6 +178,41 @@ func autoprogrammingWorkflowTaskForGroupV0(
 			autoprogrammingWorkflowTaskIssueV0(err)
 	}
 	return profile, task, AutoprogrammingRequestIssueV0{}
+}
+
+func autoprogrammingDelegationLimitsForRequestV0(
+	request AutoprogrammingRequestV0,
+) autoprogrammingDelegationLimitsV0 {
+	maxSubagents := AutoprogrammingDefaultMaxSubagentsPerAgentV0
+	if request.MaxSubagentsPerAgent > 0 {
+		maxSubagents = request.MaxSubagentsPerAgent
+	}
+	limits := autoprogrammingDelegationLimitsV0{
+		maxDelegationDepth:   AutoprogrammingDefaultMaxDelegationDepthV0,
+		maxSubagentsPerAgent: maxSubagents,
+		maxRecursiveAgents:   autoprogrammingDefaultMaxRecursiveAgentsForRequestV0(request, maxSubagents),
+	}
+	if request.MaxDelegationDepth > 0 {
+		limits.maxDelegationDepth = request.MaxDelegationDepth
+	}
+	if request.MaxRecursiveAgents > 0 {
+		limits.maxRecursiveAgents = request.MaxRecursiveAgents
+	}
+	return limits
+}
+
+func autoprogrammingDefaultMaxRecursiveAgentsForRequestV0(
+	request AutoprogrammingRequestV0,
+	maxSubagentsPerAgent int,
+) int {
+	maxAgents := autoprogrammingRequestMaxTaskRefsV0(request) * maxSubagentsPerAgent
+	if maxAgents <= 0 {
+		return AutoprogrammingDefaultMaxRecursiveAgentsV0
+	}
+	if maxAgents > AutoprogrammingRequestMaxRecursiveAgentsV0 {
+		return AutoprogrammingRequestMaxRecursiveAgentsV0
+	}
+	return maxAgents
 }
 
 func autoprogrammingWorkProfileIssueV0(err error) AutoprogrammingRequestIssueV0 {

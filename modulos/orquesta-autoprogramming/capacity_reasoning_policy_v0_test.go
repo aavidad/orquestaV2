@@ -30,6 +30,20 @@ func TestDecideCapacityReasoningPolicyV0OPESDocumentalOptInXHigh(t *testing.T) {
 	}
 }
 
+func TestDecideCapacityReasoningPolicyV0NoEscalaOPESPorSubcadena(t *testing.T) {
+	got := DecideCapacityReasoningPolicyV0(CapacityReasoningPolicyInputV0{
+		WorkProfileKind: "implementation",
+		Objective:       "Ajustar write-set scopes para autoprogramacion generica.",
+		WriteSet:        []string{"modulos/orquesta-autoprogramming/scope_policy.go"},
+	})
+
+	if got.CapacityLevel != "medium" ||
+		got.ReasoningEffort != "medium" ||
+		got.PolicyRef != CapacityPolicyRefBackgroundMediumV0 {
+		t.Fatalf("policy=%+v", got)
+	}
+}
+
 func TestDecideCapacityReasoningPolicyV0RiesgoAltoUsaHighNoXHigh(t *testing.T) {
 	got := DecideCapacityReasoningPolicyV0(CapacityReasoningPolicyInputV0{
 		Objective: "Decidir arquitectura amplia para runtime externo",

@@ -11,6 +11,10 @@
   prioridad para que el adaptador la prepare/encole despues.
 - `BuildAutoprogrammingProgrammableWorkV0` compacta textos largos antes de
   `WorkflowTaskV0` y devuelve issues con subcampo causal para reparacion.
+- Los limites vigentes de ola admiten 10 padres por defecto y hasta 6
+  subagentes por padre en el trabajo programable; limites menores pueden
+  declararse explicitamente por request cuando una composicion quiera acotar la
+  ola.
 
 ## Backlog
 

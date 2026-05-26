@@ -2,6 +2,7 @@ package orquestaautoprogramming
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -38,6 +39,61 @@ func TestBuildAutoprogrammingProgrammableWorkV0BuildsWorkflowTaskForSingleGroup(
 	assertAutoprogrammingContextRefV0(t, task.ContextRefs, "branch_ref:"+request.BranchRef)
 	assertAutoprogrammingContextRefV0(t, task.ContextRefs, "source_task_ref:task-ref-autoprogramming-a")
 	assertAutoprogrammingContextRefV0(t, task.ContextRefs, "source_task_ref:task-ref-autoprogramming-b")
+}
+
+func TestBuildAutoprogrammingProgrammableWorkV0SetsTenBySixDelegationBudget(t *testing.T) {
+	request := validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.Tasks = nil
+		request.WriteSet = nil
+		for i := 1; i <= AutoprogrammingRequestDefaultMaxTaskRefsV0; i++ {
+			area := fmt.Sprintf("parent-wave-%02d", i)
+			request.Tasks = append(request.Tasks, AutoprogrammingTaskGroupCandidateV0{
+				TaskRef: fmt.Sprintf("task-ref-parent-wave-%02d", i),
+				Area:    area,
+			})
+			request.WriteSet = append(request.WriteSet,
+				"modulos/orquesta-autoprogramming/"+area+"/contrato.go",
+			)
+		}
+	})
+
+	result := BuildAutoprogrammingProgrammableWorkV0(request)
+
+	if !result.Accepted {
+		t.Fatalf("accepted=false issues=%+v", result.Issues)
+	}
+	if len(result.Work.Tasks) != AutoprogrammingRequestDefaultMaxTaskRefsV0 {
+		t.Fatalf("tasks=%d", len(result.Work.Tasks))
+	}
+	for _, task := range result.Work.Tasks {
+		if task.MaxDelegationDepth != AutoprogrammingDefaultMaxDelegationDepthV0 ||
+			task.MaxChildAgents != AutoprogrammingDefaultMaxSubagentsPerAgentV0 ||
+			task.MaxSubagentsPerAgent != AutoprogrammingDefaultMaxSubagentsPerAgentV0 ||
+			task.MaxRecursiveAgents != AutoprogrammingDefaultMaxRecursiveAgentsV0 {
+			t.Fatalf("delegation budget inesperado: %+v", task)
+		}
+	}
+}
+
+func TestBuildAutoprogrammingProgrammableWorkV0PreservaDelegationBudgetExplicito(t *testing.T) {
+	request := validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.MaxDelegationDepth = 2
+		request.MaxSubagentsPerAgent = 4
+		request.MaxRecursiveAgents = 40
+	})
+
+	result := BuildAutoprogrammingProgrammableWorkV0(request)
+
+	if !result.Accepted {
+		t.Fatalf("accepted=false issues=%+v", result.Issues)
+	}
+	task := result.Work.Tasks[0]
+	if task.MaxDelegationDepth != 2 ||
+		task.MaxChildAgents != 4 ||
+		task.MaxSubagentsPerAgent != 4 ||
+		task.MaxRecursiveAgents != 40 {
+		t.Fatalf("delegation budget explicito no preservado: %+v", task)
+	}
 }
 
 func TestBuildAutoprogrammingProgrammableWorkV0TransportaContratoExplicitoDeTarea(t *testing.T) {
@@ -314,6 +370,47 @@ func TestBuildAutoprogrammingProgrammableWorkV0PartitionsWriteSetByGroupArea(t *
 		"modulos/orquesta-autoprogramming/autoprogramming_review_gate_v0.go",
 	})
 	assertNoWriteSetOverlapV0(t, result.Work.Tasks)
+}
+
+func TestBuildAutoprogrammingProgrammableWorkV0ConstruyeDiezPadresConLimitesExplicitos(t *testing.T) {
+	request := validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.Tasks = nil
+		request.WriteSet = nil
+		for i := 1; i <= 10; i++ {
+			area := fmt.Sprintf("parent-wave-%02d", i)
+			request.Tasks = append(request.Tasks, AutoprogrammingTaskGroupCandidateV0{
+				TaskRef: fmt.Sprintf("task-ref-parent-wave-%02d", i),
+				Area:    area,
+			})
+			request.WriteSet = append(request.WriteSet,
+				"modulos/orquesta-autoprogramming/"+area+"/contrato.go",
+			)
+		}
+		request.MaxTaskRefs = 10
+		request.MaxAreas = 10
+		request.MaxWriteSetEntries = 10
+	})
+
+	result := BuildAutoprogrammingProgrammableWorkV0(request)
+
+	if !result.Accepted {
+		t.Fatalf("accepted=false issues=%+v", result.Issues)
+	}
+	if len(result.Work.Groups) != 10 ||
+		len(result.Work.Profiles) != 10 ||
+		len(result.Work.Tasks) != 10 ||
+		len(result.Work.Partition.Steps) != 10 {
+		t.Fatalf("work=%+v", result.Work)
+	}
+	assertNoWriteSetOverlapV0(t, result.Work.Tasks)
+	for i, task := range result.Work.Tasks {
+		wantPath := fmt.Sprintf("modulos/orquesta-autoprogramming/parent-wave-%02d/contrato.go", i+1)
+		if !stringsSliceContainsForAutoprogrammingTestV0(task.WriteSet, wantPath) {
+			t.Fatalf("task %d write_set=%v want %s", i, task.WriteSet, wantPath)
+		}
+		assertAutoprogrammingContextRefV0(t, task.ContextRefs,
+			fmt.Sprintf("source_task_ref:task-ref-parent-wave-%02d", i+1))
+	}
 }
 
 func TestBuildAutoprogrammingProgrammableWorkV0RejectsUnpartitionableWriteSet(t *testing.T) {
