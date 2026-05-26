@@ -44,12 +44,16 @@ func requestServerShutdownV0(addr string) error {
 		return fmt.Errorf("shutdown_request_failed")
 	}
 	defer response.Body.Close()
+	responseBody, err := readCommandHTTPResponseBodyV0(response, "shutdown")
+	if err != nil {
+		return err
+	}
 	var result serverShutdownClientResultV0
-	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(responseBody, &result); err != nil {
 		return fmt.Errorf("shutdown_response_invalid")
 	}
-	if response.StatusCode != http.StatusOK || result.Estado != "ok" {
-		return fmt.Errorf("shutdown_http_%d_%s", response.StatusCode, result.Status)
+	if result.Estado != "ok" {
+		return fmt.Errorf("shutdown_status_%s", result.Status)
 	}
 	if !result.ShutdownReady {
 		return fmt.Errorf(

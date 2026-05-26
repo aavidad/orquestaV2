@@ -31,6 +31,7 @@ func TestRunStatusCommandV0ConsultaStatsDelRunPersistido(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
+		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(orquestamcp.MCPDirectorStatsToolResultV0{
 			Estado: "ok",
 			RunRef: received.RunRef,
@@ -68,6 +69,7 @@ func TestRunStatusCommandV0UsoRequiereOptIn(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
+		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(orquestamcp.MCPDirectorStatsToolResultV0{
 			Estado: "ok",
 			RunRef: received.RunRef,

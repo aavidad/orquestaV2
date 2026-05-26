@@ -10265,7 +10265,7 @@ Objetivo: aplicar limites, redaccion y shape publico a los clientes HTTP de
 gestion embebidos en `cmd/orquesta-server`, sin confundirlos con los clientes de
 `modulos/orquesta-cli`.
 
-Estado: pendiente.
+Estado: completada 2026-05-26 para clientes HTTP de gestion del binario servidor.
 
 Alcance:
 
@@ -10296,6 +10296,18 @@ Criterios:
   idempotencia de mutaciones, construccion de URL, clientes `orquesta-cli` ni
   catalogo global de errores MCP/HTTP.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-observability`.
+
+Evidencia 2026-05-26:
+
+- `cmd/orquesta-server/command_http_response_v0.go` centraliza limite de body,
+  rechazo de no-2xx sin propagar body crudo, `Content-Type` JSON y validacion
+  de JSON sin trailing-data para `status`, `run-status` y `stop`.
+- `cmd/orquesta-server/shutdown_client.go` reutiliza el helper comun antes de
+  decodificar la respuesta de shutdown.
+- Cobertura focal:
+  `cmd/orquesta-server/command_http_response_v0_test.go`,
+  `cmd/orquesta-server/shutdown_client_v0_test.go` y
+  `cmd/orquesta-server/run_status_command_v0_test.go`.
 
 ## Escaneo backlog 2026-05-24 septuagesima segunda pasada
 
