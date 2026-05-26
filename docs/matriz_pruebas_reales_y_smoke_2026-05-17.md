@@ -79,7 +79,7 @@ regresion.
 | DOMAIN-WORK-SQL-OFFLINE | Adaptador SQL driver-neutral para `DomainWorkJobRecordStorePortV0`. | Offline determinista con driver fake local. | Sin app externa, sin Codex, sin red, sin driver DB real; usa `database/sql` con driver fake de test. | `go test -count=1 ./modulos/orquesta-domain-work-sql`. | Ejecuta `contracttest` con placeholders `question` y `dollar`, crea jobs aceptados, replaya por idempotencia, rechaza conflictos sin sobrescribir, lista records `Request+Job` con filtros AND y limite, propaga contexto cancelado, simula unique violation concurrente y mantiene frontera sin drivers concretos. | No prueba Postgres/MySQL/SQLite real, no crea schema productivo y no esta cableado al servidor. Un driver real debe entrar despues por composicion opt-in con `IsUniqueViolation` propio. |
 | DOMAIN-WORK-SQL-REAL-DIALECT | Bundle futuro con DB temporal real para cada dialecto soportado. | Pendiente documentado; real opt-in por motor. | DB temporal aislada, driver elegido en modulo de composicion, DSN secreto/temporal, migracion/schema explicito, backend no compartido con apps externas. | Sin script claro en repo. No se documenta comando nuevo. | Debe probar schema real, placeholders del driver, unicidad `(domain_ref,idempotency_key)` y `job_ref`, replay tras reinicio, carrera concurrente replay/conflict, tipos JSON/TEXT, filtros/limit y teardown limpio. | No debe importar drivers desde core/domain/director. Riesgo de convertir SQL en persistencia global incompleta si se cablea antes de definir bundle y migraciones. |
 | DAEMON-RESTART | Reinicio de daemon con estado file-based: cola persiste tras parar y arrancar servidor. | Smoke offline no invasivo. | `go`, `curl`, `python3`; opcional `ORQUESTA_KEEP_SMOKE_DIR=1`, `ORQUESTA_SMOKE_ROOT`, `ORQUESTA_SMOKE_REQUEST_TIMEOUT_SECONDS`. | `./scripts/smoke_orquesta_server_restart_state.sh`. | Salida con `servidor before listo`, `rank_verificado=<run_ref> priority=80`, `servidor after listo`, verificacion tras reinicio, `priority=95`, `agents_launched=false`, `opes_touched=false`. | No valida agentes reales ni rehidratacion de procesos Codex vivos. Cubre continuidad basica de estado operativo. |
-| SERVER-LIVENESS-READINESS | Contrato servidor: `/healthz` es liveness y `/api/v0/server/readiness` es readiness operativa antes de efectos externos. | Offline determinista. | Sin Codex real, sin OPES, sin proveedor; scripts solo validan sintaxis. | `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-cli ./cmd/orquesta-server`; `bash -n scripts/*.sh`. | Readiness devuelve 200 solo con `ready=true`, 503 si startup cleanup/reconciliacion queda bloqueado, incluye `startup_ready`, `startup_status`, mensaje publico y evidence refs, y no expone paths ni runtime dirs. El daemon no acepta `/healthz` como listo y los smokes con Codex/OPES/domain_work/Director/automejora esperan readiness. | No prueba readiness de apps externas distintas de Orquesta; sus `/healthz` siguen siendo contratos propios de cada app temporal. |
+| SERVER-LIVENESS-READINESS | Contrato servidor: `/healthz` es liveness y `/api/v0/server/readiness` es readiness operativa antes de efectos externos. | Offline determinista cerrado 2026-05-26. | Sin Codex real, sin OPES, sin proveedor; scripts solo validan sintaxis. | `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-cli ./cmd/orquesta-server`; `bash -n scripts/*.sh`. | Readiness devuelve 200 solo con `ready=true`, 503 si startup cleanup/reconciliacion queda bloqueado, incluye `startup_ready`, `startup_status`, mensaje publico y evidence refs, y no expone paths ni runtime dirs. El daemon no acepta `/healthz` como listo y los smokes con Codex/OPES/domain_work/Director/automejora esperan readiness. | No prueba readiness de apps externas distintas de Orquesta; sus `/healthz` siguen siendo contratos propios de cada app temporal. |
 | SHUTDOWN-COOP-OFFLINE | Shutdown cooperativo por contrato sin Codex real. | Offline determinista. | Sin procesos externos; paquetes de stack y shutdown. | `go test ./modulos/orquesta-app-codex-stack ./modulos/orquesta-server-shutdown -run 'Test.*Shutdown.*|TestShutdownServerV0.*' -count=1`. | `forced=false` no pide stop si falta checkpoint; con ACK registra checkpoint; deadline vencido fuerza stop con evidencia; `shutdown_ready` solo si no quedan agentes en vuelo ni checkpoints pendientes. | No valida que Codex real lea `orquesta_shutdown_request.json`. |
 | SHUTDOWN-COOP-REAL | Shutdown cooperativo Codex real con request y ACK de checkpoint. | Real, opt-in, con cuota. | `ORQUESTA_CODEX_STACK_SHUTDOWN_SMOKE=1`; `ORQUESTA_CODEX_COMMAND`; `ORQUESTA_CODEX_HOME`; `ORQUESTA_CODEX_CODE_HOME`; `ORQUESTA_CODEX_PATH`; `ORQUESTA_CODEX_APPROVAL_POLICY=never`; `ORQUESTA_CODEX_SANDBOX=workspace-write`; `ORQUESTA_CODEX_MODEL`; workdirs temporales dentro del proyecto. | `go test ./modulos/orquesta-app-codex-stack -run TestCodexStackRealShutdownCheckpointOptInV0 -count=1 -timeout 300s -v`. | Agente vivo; `POST /api/v0/server/shutdown forced=false`; se escribe `orquesta_shutdown_request.json`; agente responde `agent_shutdown_checkpoint_ack.json`; segunda llamada registra checkpoint o muestra pending compacto. | Solo cubre Codex cooperativo por prompt; otros runtimes/proveedores siguen pendientes. |
 | INVALID-REPLAN-OFFLINE | Entrega invalida, review gate y replan/rework sin procesos reales. | Offline determinista. | Sin Codex real. | `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackV0ReviewGatePideCambiosSiFicheroEsDemasiadoGrande|TestCodexStackV0ReviewChangesRequestedReplanificaYArrancaAgente|TestValidateDomainWorkDeliveryQualityV0RechazaDocumentPlanIncompleto|TestCompositeDirectorDecisionSourceV0RechazaVoteRefIncoherente'`. | Entrega grande queda `changes_requested`; se emite `RequestRework`; `retry_task` enlaza descriptor de entrega; `document_plan` incompleto se rechaza; lote de director con refs causales rotas no se consume. | No mide calidad semantica del rework real. |
@@ -159,10 +159,12 @@ go test -count=1 \
 Los smokes reales con Codex u OPES siguen opt-in y fuera de CI rapida. Para
 regresion del caso acotado ya cerrado, usar
   `./scripts/smoke_codex_real_required_test_runner.sh` solo con confirmaciones,
-cuota y workdirs temporales validados. Ola/cohorte Codex amplia, recursion real
-y derivados OPES reales siguen sin cierre generico equivalente. La ruta no-OPES
-temporal con `codex-fake` esta cubierta por `EXT-NO-OPES`; repetirla con
-proveedor Codex real pertenece al pendiente Codex real, no al cierre no-OPES.
+cuota y workdirs temporales validados. Ola/cohorte Codex amplia y recursion real
+ya estan cubiertas por `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL`; no son
+backlog abierto salvo regresion demostrada. Derivados OPES reales siguen sin
+cierre generico equivalente. La ruta no-OPES temporal con `codex-fake` esta
+cubierta por `EXT-NO-OPES`; repetirla con proveedor Codex real es smoke opcional
+de proveedor, no prerequisito del cierre no-OPES.
 
 ## Siguiente incremento
 
@@ -235,19 +237,20 @@ evidencia focal propia.
   tiene cobertura offline y ya se integra con un conector durable file-based;
   falta un smoke real de app externa no acoplada.
 - `generate_visual_asset` tiene smoke REST directo, pero falta agente real.
-- Hay smoke opt-in de materializacion fuerte para recursion Codex con
-  parent/child refs, profundidad, fanout, presupuesto y `review_required_before_close`.
-  Sigue faltando smoke real completo con agentes Codex vivos, ACK/artefactos,
-  revision causal del director y cierre del arbol.
-- Hay cobertura offline de derivacion `cohort_ref`/`wave_ref` a
-  `WaitAgentRefs`, persistencia `WorkflowTaskWaitStateV0` e ingesta Codex
-  acotada por scope. Falta smoke real que lo pruebe como cohorte/ola formal del
-  Director Operativo con agentes Codex vivos.
+- La recursion Codex real ya esta cubierta por `CODEX-RECURSION-REAL`: arbol
+  1->2->4 con agentes vivos, parent/child refs, presupuesto, waits acotados,
+  review causal, runner/evidencia y cierre del arbol. No reabrir salvo
+  regresion demostrada.
+- La ola/cohorte Codex real ya esta cubierta por `CODEX-WAVE-REAL`, con
+  `WaitAgentRefs` derivados de scope formal del Director Operativo e ingesta
+  acotada. No reabrir salvo regresion demostrada.
 - `DIRECTOR-GENERIC-CLOSURE-OFFLINE` tiene tramo offline cerrado para cierre
   causal, source real del stack Codex sobre tasks del Director Operativo,
   puerta `replan_or_close`, bloqueo por cierre insuficiente y replay focal. El
-  caso real acotado con runner esta cubierto por `CODEX-REQTEST-REAL-E2E`; no
-  sustituye ola/cohorte real amplia ni recursion real.
+  caso real acotado con runner esta cubierto por `CODEX-REQTEST-REAL-E2E`, y
+  Codex real amplio/recursivo por `CODEX-WAVE-REAL` y
+  `CODEX-RECURSION-REAL`. El frente abierto verificable sigue siendo OPES
+  temporal real de derivados/cierre.
 - `DIRECTOR-WAVE-REVIEW-OFFLINE` queda cerrado offline para review positiva,
   observacion negativa durable y reentrada tardia a followups ya materializados.
 - `DIRECTOR-REQUIRED-TESTS-DURABLE-OFFLINE` queda cerrado como consumo de

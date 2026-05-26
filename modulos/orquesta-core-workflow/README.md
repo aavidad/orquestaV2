@@ -1,8 +1,8 @@
 # orquesta-core-workflow
 
-Responsabilidad: nucleo durable de orquestacion de programacion.
+Responsabilidad: nucleo durable de orquestacion neutral de agentes.
 
-Este mini-proyecto nace para disenar e implementar el nucleo nuevo sin perder el core actual. El core actual queda congelado como referencia y compatibilidad; este modulo construye la maquina de workflow que debe gobernar fases, decisiones, agentes, entregas, revisiones, bloqueos y outbox.
+Este mini-proyecto nace para disenar e implementar el nucleo nuevo sin perder el core actual. El core actual queda congelado como referencia y compatibilidad; este modulo construye la maquina de workflow que debe gobernar fases, decisiones, agentes, entregas, revisiones, bloqueos y outbox para composiciones externas. Programacion, OPES u otros dominios consumen el nucleo por puertos y refs opacas; no definen su frontera.
 
 Incluye:
 

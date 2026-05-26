@@ -187,9 +187,9 @@ Estado del P0: cerrado para materializacion `launch_subagents`, wait acotado y
 estado durable de espera. P1 WaitAgentRefs tambien queda cerrado para ingesta
 Codex: pending, wait y ACK/deliveries usan el mismo scope. El ciclo durable
 offline posterior ya tiene pruebas para review/rework/replan/cierre, runner de
-tests y replay focal. Lo que sigue pendiente no es el tramo offline, sino su
-repeticion con Codex real amplio, recursion real y OPES temporal real de
-derivados/cierre.
+tests y replay focal. `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL` ya cubren la
+repeticion con Codex real amplio y recursion real; lo que sigue pendiente es
+OPES temporal real de derivados/cierre.
 
 Tramo P0 ya disponible:
 

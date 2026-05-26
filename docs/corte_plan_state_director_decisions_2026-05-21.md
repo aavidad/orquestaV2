@@ -153,6 +153,9 @@ go test -count=1 ./...
   abierto, `app-director-service` la fusiona en el plan conservando `plan_ref`,
   task refs, tests requeridos y wait scope acotado por agent refs. La reentrada
   no duplica wait refs ni reescribe el state si la task ya estaba reflejada.
+- Revalidado por OrquestaV2 el 2026-05-26: el contexto `ref_only` requerido se
+  resolvio por lectura local del paquete y evidencia explicita en ACK; el test
+  obligatorio de T78 paso completo dentro del write-set.
 - Añadir pruebas especificas de persistencia file-store para este camino si se
   cambia el formato o el reload del `OperationalDirectorPlanStateV0`.
 - Añadir wiring opt-in especifico en `orquesta-app-codex-stack` si una fuente

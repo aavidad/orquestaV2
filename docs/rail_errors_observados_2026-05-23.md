@@ -1246,6 +1246,9 @@ tipos timeline ausentes y, en un reintento posterior, por
 `orquesta-web` por deriva de `WorkspaceTimelineItemV0`, pero la reejecucion
 posterior del comando requerido paso completa. T77 queda cerrado en codigo de
 alcance y no requiere editar modulos fuera del write-set.
+Validacion OrquestaV2 2026-05-26: contexto `ref_only` resuelto por evidencia
+explicita de ACK; el comando requerido paso completo y no se detecta nueva
+regresion del rail.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-app-change-director-source ./modulos/orquesta-app-change ./modulos/orquesta-rails ./modulos/orquesta-app-codex-stack`.
 Backlog: `T77 app-change-director-source-readiness-rail-policy`.
@@ -1263,6 +1266,9 @@ abierto las tasks operativas nuevas marcadas por `director_decision`, reabre
 `wait_subagents` con scope acotado por agent refs de la nueva task y mantiene
 replay idempotente. Si falta metadata operativa, la task queda fuera de este
 merge y no crea wait ambiguo.
+Revalidacion OrquestaV2 2026-05-26: el paquete `ref_only` se resolvio por
+lectura local y evidencia explicita en ACK; el comando requerido paso completo
+sin reabrir rails ni ampliar write-set.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-director-agent-workflow ./modulos/orquesta-app-director-service ./modulos/orquesta-orchestration-core ./modulos/orquesta-state-file ./modulos/orquesta-app-codex-stack`.
 Backlog: `T78 director-decisions-existing-planstate-merge`.
@@ -1309,11 +1315,8 @@ clasifica loopback, metadata, red interna y externo desconocido, y bloquea desde
 `cmd/orquesta-server` cualquier `ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL` sin
 `ORQUESTA_DOMAIN_WORK_HTTP_EGRESS_MODE` explicito. Paths de `create_job` y
 `submit_artifact` quedan relativos, sin query ni host override.
-Test ejecutado 2026-05-25 con fallo externo al write-set: pasa
-`go test -count=1 ./modulos/orquesta-domain-work-http`; el transversal falla
-por tipos faltantes en `modulos/orquesta-observability`
-(`WorkspaceTimelineV0`, `WorkspaceTimelineSourceStatusV0`):
-`go test -count=1 ./modulos/orquesta-domain-work-http ./modulos/orquesta-domain-work ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./cmd/orquesta-server`.
+Revalidacion 2026-05-26: pasa `go test -count=1 ./...`; el rail queda cerrado
+para T80 sin ampliar el contrato puro `orquesta-domain-work`.
 Backlog: `T80 domain-work-http-egress-policy`.
 ```
 
@@ -1422,6 +1425,11 @@ handler de app-gateway ni wiring de servidor para esa ruta legacy.
 Decision pendiente: decidir si `BootstrapProyectoDesdeAppSpec` sigue vivo como
 compatibilidad cableada, queda bloqueado con error publico o migra al flujo
 vigente; no dejar cliente fino apuntando a transporte inexistente.
+Estado: cerrado 2026-05-26. El contrato puro permanece disponible en
+director/web/MCP, pero la ruta HTTP legacy queda en cuarentena: la CLI devuelve
+`contrato_no_configurado` con `route_policy`, no llama
+`/api/v0/director/bootstrap/appspec` y remite al flujo vigente
+`/api/v0/apps/director` / `orquesta.apps.arrancar_director.v0`.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-cli ./modulos/orquesta-director ./modulos/orquesta-factory ./modulos/orquesta-web ./modulos/orquesta-mcp ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./cmd/orquesta-server`.
 Backlog: `T86 bootstrap-appspec-legacy-route-quarantine`.
@@ -1441,7 +1449,7 @@ cuando startup cleanup/reconciliacion no esta listo y no expone paths ni runtime
 dirs. Daemon y smokes que preparan runs, drenan OPES, lanzan Codex, ejecutan
 Director/domain_work o automejora esperan readiness; los checks de `/healthz`
 restantes son liveness de socket o apps externas temporales.
-Test futuro:
+Tests de cierre:
 `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-cli ./cmd/orquesta-server` y `bash -n scripts/*.sh`.
 Backlog: `T87 server-liveness-readiness-contract`.
 ```
@@ -1476,12 +1484,13 @@ pendientes wait por cohorte/ola, review/rework/replan/cierre durable y recursion
 Codex real, aunque las fuentes vigentes ya cierran WaitAgentRefs, ciclo offline
 del PlanState y `CODEX-WAVE-REAL`/`CODEX-RECURSION-REAL`; el pendiente real
 abierto es OPES temporal de derivados/cierre salvo regresion demostrada.
-Decision pendiente: sincronizar README/docs locales y documentos obligatorios
-del Director Operativo con la foto vigente, marcando historia sin borrar cortes
-anteriores y anadiendo check de contradicciones conocidas.
-Test futuro:
-`go test -count=1 ./modulos/orquesta-director-operativo` y check documental
-focal de `CODEX-WAVE-REAL`, `CODEX-RECURSION-REAL` y OPES derivados/cierre.
+Resolucion 2026-05-26: T89 sincroniza README/docs locales con la foto vigente,
+marca `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL` como cerrados salvo regresion
+demostrada y deja el pendiente real en OPES temporal de derivados/cierre. El
+check focal vive en
+`TestDirectorOperativoLocalDocsAlineadosConFotoVigenteV0`.
+Test:
+`go test -count=1 ./modulos/orquesta-director-operativo`.
 Backlog: `T89 director-operativo-local-doc-state-sync`.
 ```
 

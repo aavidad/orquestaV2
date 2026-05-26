@@ -14,6 +14,8 @@ mismo formato `## Txx`, conservando fichero, linea y hash por seccion.
 - Backlog historico y shard canonico actual: `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`.
 - Shard rail errors observados: `docs/rail_errors_observados_2026-05-23.md`.
 - Shard matriz de duplicaciones/rails pendientes: `docs/duplicaciones_railes_pendientes_2026-05-24.md`.
+- Mapa operativo no programable para ola complementaria 10x6:
+  `docs/autoprogramacion_ola_complementaria_10x6_2026-05-25.md`.
 
 ## Indice federado de backlog local
 
@@ -1813,7 +1815,7 @@ Huecos concretos nuevos o reencuadrados:
 Objetivo: separar lectura tolerante de ACKs legacy de validacion estricta de ACK
 terminal para observacion, cierre, startup y planner de automejora.
 
-Estado: cubierto 2026-05-25 r3.
+Estado: cubierto 2026-05-26 r5.
 
 Alcance:
 
@@ -1853,6 +1855,19 @@ Evidencia 2026-05-25:
 - `ReadCodexDeliveryObservationFileV0` ya no degrada paquetes con policy
   terminal estricta a lectura legacy cuando faltan `test_receipts`; la
   compatibilidad legacy queda limitada a paquetes sin policy estricta.
+
+Evidencia 2026-05-26:
+
+- Revalidado en codigo que `ReadCodexDeliveryObservationFileV0` usa solo
+  `ValidateStrictCompletedCodexAgentAckBytesForSpecV0` cuando el packet trae
+  `write_set_closed`/policy estricta. La lectura tolerante queda como camino
+  legacy diagnostico para packets sin policy estricta y no declara entrega
+  terminal OrquestaV2.
+- Rework `agent-ref-task-ref-review-rework-task-autoprogramming-e44e32f96f05-g01-a6215dfd6ac4`:
+  entrega acotada sin relanzar el padre original; se conserva el cierre de T36,
+  se reejecuta la prueba obligatoria focal y el contexto `required ref_only`
+  queda resuelto por `ack_evidence_required` en el ACK tras lectura local del
+  packet y docs locales.
 
 ## T37 autoprogramming-backlog-parser-fidelity
 
@@ -4222,6 +4237,9 @@ la reejecucion posterior del comando requerido paso completa. Los paquetes T77
 directos `orquesta-app-change-director-source`, `orquesta-app-change` y
 `orquesta-rails` compilaron en ambos intentos, y T77 queda cerrado sin reabrir
 la politica de rails.
+Validacion OrquestaV2 2026-05-26: el paquete `ref_only` se resolvio por
+evidencia explicita en ACK y el comando requerido paso completo dentro del
+write-set T77.
 
 ## T78 director-decisions-existing-planstate-merge
 
@@ -4229,9 +4247,10 @@ Objetivo: fusionar decisiones tardias del director en un
 `OperationalDirectorPlanStateV0` existente cuando `director_decisions` abre una
 nueva ola, sin recrear el state ni esperar agentes fuera de scope.
 
-Estado: codigo/documentacion implementados; cierre pendiente de revalidacion
-obligatoria por fallo de compilacion ajeno al write-set en
-`modulos/orquesta-observability`.
+Estado: cerrado el 2026-05-26 por revalidacion OrquestaV2. El comando
+obligatorio paso completo dentro del write-set T78 y el contexto `ref_only`
+requerido quedo resuelto por lectura local del paquete y evidencia explicita en
+ACK.
 
 Alcance:
 
@@ -4337,14 +4356,12 @@ Criterios:
 Objetivo: cerrar una politica de egress opt-in para el adaptador HTTP neutral
 de `DomainWork`, separada de OPES y sin meter HTTP/red en el contrato puro.
 
-Estado: implementacion inicial aplicada 2026-05-25, pendiente de validacion
-transversal limpia. `orquesta-domain-work-http` clasifica destino, rechaza
-credenciales, exige politica explicita desde
+Estado: cerrado 2026-05-26. `orquesta-domain-work-http` clasifica destino,
+rechaza credenciales, exige politica explicita desde
 `ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL` en composicion, permite `smoke_local` solo
 para loopback temporal y `allowlist` por host/puerto, y conserva paths relativos
-sin query ni host override. La prueba focal de `orquesta-domain-work-http` pasa;
-el test transversal requerido queda bloqueado por tipos `WorkspaceTimelineV0`
-faltantes en `modulos/orquesta-observability`, fuera del write-set de T80.
+sin query ni host override. La revalidacion transversal completa pasa con
+`go test -count=1 ./...`.
 
 Alcance:
 
@@ -4372,11 +4389,9 @@ Criterios:
 - Auditoria/MCP/web solo exponen refs, host clasificado y estado; no persisten
   URL completa con secretos, headers, payloads de dominio crudos ni cuerpos de
   respuesta.
-- Tests 2026-05-25: `go test -count=1 ./modulos/orquesta-domain-work-http`
-  pasa. El test transversal requerido
-  `go test -count=1 ./modulos/orquesta-domain-work-http ./modulos/orquesta-domain-work ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./cmd/orquesta-server`
-  falla por `modulos/orquesta-observability` fuera de alcance
-  (`WorkspaceTimelineV0` y `WorkspaceTimelineSourceStatusV0` no definidos).
+- Tests 2026-05-26: `go test -count=1 ./modulos/orquesta-domain-work-http`
+  pasa y la revalidacion transversal requerida queda cubierta por
+  `go test -count=1 ./...`.
 
 ## T81 observability-global-workspace-timeline
 
@@ -4550,7 +4565,7 @@ Objetivo: convertir las operaciones candidatas `listar/ver FunctionContractV0`
 en una consulta read-only real por puerto y gateway, sin promover registro
 mutante ni reconstruir contratos desde texto libre.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26.
 
 Alcance:
 
@@ -4637,7 +4652,12 @@ Objetivo: separar el estado publico del servidor y el snapshot efectivo de
 configuracion residente, con redaccion por campo y sin exponer paths locales ni
 internals como contrato normal de CLI/web/MCP.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26. Contrato implementado y documentado:
+`/healthz` queda como liveness, `/api/v0/server/readiness` como readiness
+operativa con `startup_ready`, `startup_status`, mensaje publico y evidence
+refs. Daemon y smokes que preparan runs, drenan OPES, lanzan Codex, ejecutan
+Director/domain_work o automejora esperan readiness; los checks de `/healthz`
+restantes son liveness de socket o apps externas temporales.
 
 Alcance:
 
@@ -4704,6 +4724,17 @@ Criterios:
   rutas publicas con semantica incompatible para la misma solicitud.
 - Tests: `go test -count=1 ./modulos/orquesta-cli ./modulos/orquesta-director ./modulos/orquesta-factory ./modulos/orquesta-web ./modulos/orquesta-mcp ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./cmd/orquesta-server`.
 
+Cierre 2026-05-26: inventario acotado confirma que
+`BootstrapProyectoDesdeAppSpec` sigue vivo como contrato puro local en
+`orquesta-director`, web y MCP, pero no como ruta HTTP publica del servidor. La
+CLI deja `app spec bootstrap` en cuarentena legacy: devuelve
+`contrato_no_configurado` con campo `route_policy`, no llama
+`/api/v0/director/bootstrap/appspec`, no requiere `server_url` para informar el
+bloqueo y rechaza credenciales si se configuran. El flujo vigente de AppSpec con
+juicio operativo queda en `/api/v0/apps/director` /
+`orquesta.apps.arrancar_director.v0`, coordinado con T76 sin reintroducir
+`app-runner` como camino operativo.
+
 ## T87 server-liveness-readiness-contract
 
 Objetivo: distinguir liveness (`healthz`) de readiness/startup operativo antes
@@ -4735,7 +4766,7 @@ Criterios:
   que no lanzan trabajo externo.
 - La respuesta no debe exponer paths, runtime dirs, prompts, transcripts ni
   payloads de startup; solo estado compacto y evidence refs.
-- Tests: `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-cli ./cmd/orquesta-server` y `bash -n scripts/*.sh`.
+- Tests de cierre: `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-cli ./cmd/orquesta-server` y `bash -n scripts/*.sh`.
 
 ## Escaneo backlog 2026-05-24 vigesimoseptima pasada
 
@@ -4823,7 +4854,7 @@ Objetivo: sincronizar los documentos locales y obligatorios del Director
 Operativo con la foto vigente, sin reabrir WaitAgentRefs ni smokes Codex ya
 cerrados.
 
-Estado: pendiente.
+Estado: hecho.
 
 Alcance:
 
@@ -4854,6 +4885,15 @@ Criterios:
   vigente, sin eliminar docs antiguos ni reordenar cortes.
 - Tests: `go test -count=1 ./modulos/orquesta-director-operativo` y check
   documental focal de contradicciones conocidas.
+
+Evidencia 2026-05-26: los docs locales del Director Operativo declaran el
+modulo como contrato puro, enlazan el mapa
+`OperationalDirectorPlanV0 -> OperationalDirectorWaveWorkV0 -> WorkflowTaskV0`
+y sustituyen contradicciones conocidas: `WaitAgentRefs`/wait por ola-cohorte,
+ciclo offline de review/tests/cierre, `CODEX-WAVE-REAL` y
+`CODEX-RECURSION-REAL` quedan cerrados salvo regresion demostrada. El pendiente
+real vigente queda acotado a OPES temporal real de derivados/cierre. Se anadio
+`TestDirectorOperativoLocalDocsAlineadosConFotoVigenteV0` como check focal.
 
 ## Escaneo backlog 2026-05-24 vigesimoctava pasada
 
@@ -5153,7 +5193,18 @@ Hueco concreto nuevo:
 Objetivo: hacer visible y verificable el fallo de persistencia del estado del
 servidor residente sin depender de auditoria JSONL ni filtrar detalles locales.
 
-Estado: pendiente.
+Estado: completada local el 2026-05-26.
+
+Cierre local 2026-05-26: `orquesta-server` registra los fallos no fatales de
+`StateStorePortV0` en una proyeccion compacta `state_persist_*` del `StateV0`.
+`persistStateV0` conserva compatibilidad y delega en una ruta con transicion
+causal; si el store falla, el estado vivo queda `degraded` con
+`state_persist_failed`, contador, timestamp y transicion sin exponer paths ni el
+error crudo. Una escritura posterior confirmada marca `state_persist_status=ok`
+sin borrar el contador historico. El source residente de operational-status
+degrada salud, anade blocker redactado y expone contador compacto.
+
+Evidencia local: `go test -count=1 ./modulos/orquesta-server`.
 
 Alcance:
 
@@ -9390,6 +9441,13 @@ vistas web sin duplicar efectos ni convertir detalles privados en diagnostico.
 
 Estado: pendiente.
 
+Avance parcial 2026-05-26: `modulos/orquesta-web` cubre el slice local de
+renderers HTML con helper comun que bufferiza templates antes de escribir,
+fallback publico `web_html_render_failed` y reason compacto
+`web_response_write_failed` para fallo observable de escritura. T183 sigue
+pendiente para auditoria/contadores en `orquesta-app-gateway`,
+`orquesta-observability` y `cmd/orquesta-server`.
+
 Alcance:
 
 - `modulos/orquesta-web`
@@ -9823,7 +9881,11 @@ Objetivo: introducir una proyeccion estable y acotada para mensajes operativos
 del servidor antes de persistirlos o exponerlos en `StateV0`, status o
 auditoria.
 
-Estado: pendiente.
+Estado: parcial local 2026-05-26 para `StateV0` del runtime residente:
+`StatusTrackerV0` ya proyecta mensajes de startup, supervisor, automejora idle
+y errores recientes con helper canonico, truncado y redaccion de paths/secrets.
+Sigue pendiente extender la misma politica a auditoria general y a otros
+adaptadores que formen mensajes publicos fuera del tracker.
 
 Alcance:
 

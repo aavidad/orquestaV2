@@ -878,10 +878,15 @@ Prioridad alta:
   `orquesta-observability`/`orquesta-web` fuera del write-set al probar
   `orquesta-app-codex-stack`; la reejecucion posterior del comando requerido
   paso completa y T77 queda cerrado sin cambios de codigo adicionales.
+  Validacion OrquestaV2 2026-05-26: contexto `ref_only` resuelto por evidencia
+  explicita de ACK y comando requerido verde dentro del write-set T77.
 - El merge de `director_decisions` tardias en plan state existente quedo cerrado
   el 2026-05-25 para el camino offline de `app-director-service`: tasks nuevas
   marcadas reabren `wait_subagents` con agent refs acotados e idempotencia.
   T62/T63 protegen prompt/receipt; T78 protege estado vivo y wait scope.
+  Revalidacion OrquestaV2 2026-05-26: comando requerido T78 verde y contexto
+  `ref_only` resuelto por lectura local/evidencia en ACK, sin cambios de
+  alcance ni rails adicionales.
 
 Prioridad media:
 
@@ -920,13 +925,13 @@ Prioridad alta:
 - Dar propietario al egress de `DomainWork` HTTP neutral. OPES tiene su propio
   conector y guardas; el HTTP neutral debe tener allowlist/modo smoke y auditoria
   compacta sin duplicar politica OPES ni meter red en `orquesta-domain-work`.
-  Estado 2026-05-25: implementacion inicial de T80 aplicada, pendiente de
-  validacion transversal limpia. El cliente HTTP neutral aplica politica
+  Estado 2026-05-26: T80 cerrado con validacion transversal limpia. El cliente
+  HTTP neutral aplica politica
   `smoke_local`/`allowlist`, rechaza credenciales, query y fragment en base URL,
   bloquea metadata/redes internas no allowlisted, conserva paths relativos sin
   query/host override y el servidor exige modo de egress explicito para
-  `ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL`. El test transversal requerido falla por
-  tipos `WorkspaceTimelineV0` faltantes en `modulos/orquesta-observability`.
+  `ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL`. La revalidacion ejecutada pasa con
+  `go test -count=1 ./...`.
 - Cerrar la lectura global de workspace como contrato de observability, no como
   mezcla nueva de auditoria, stats Git locales, transcript y comandos shell.
   Estado 2026-05-25: T81 ya tiene contrato inicial
@@ -992,13 +997,17 @@ Prioridad alta:
   y fuga de paths; T83 cubre diagnostico operativo, T85 cubre snapshot de config
   redactado.
 - Poner en cuarentena la ruta CLI legacy de bootstrap AppSpec antes de cerrar
-  T76. Una ruta no cableada no puede quedar como cliente fino "vigente" por
-  compatibilidad implicita.
+  T76. Cerrado 2026-05-26: `app spec bootstrap` devuelve bloqueo publico
+  `contrato_no_configurado` con `route_policy`, no llama la ruta legacy
+  `/api/v0/director/bootstrap/appspec` y remite a `/api/v0/apps/director` /
+  `orquesta.apps.arrancar_director.v0`.
 - Corregir el uso de `/healthz` como readiness en smokes y daemon. Liveness del
   proceso no prueba que startup cleanup, reconciliacion o supervisor residente
   esten listos para lanzar efectos externos. Cerrado 2026-05-25 para daemon y
   smokes con Codex/OPES/domain_work/Director/automejora: usan
-  `/api/v0/server/readiness`; `/healthz` queda como liveness.
+  `/api/v0/server/readiness`; `/healthz` queda como liveness. Verificado como
+  cierre offline en T87 con `go test -count=1 ./modulos/orquesta-server
+  ./modulos/orquesta-cli ./cmd/orquesta-server` y `bash -n scripts/*.sh`.
 
 Prioridad media:
 
@@ -1043,6 +1052,11 @@ lease/epoch. Las fuentes locales no vigentes no se programan; las vigentes sin
 tests/owner pasan a revision documental. El cierre verde queda pendiente porque
 la prueba obligatoria falla por `modulos/orquesta-observability`
 (`WorkspaceTimelineV0` indefinido), fuera del write-set de T88.
+
+Resolucion T89 2026-05-26: README/docs locales del Director Operativo quedan
+sincronizados con la matriz: no reabren waits, cierre offline, ola Codex amplia
+ni recursion Codex real; el pendiente real sigue siendo OPES temporal de
+derivados/cierre. El modulo incorpora check documental focal.
 
 ## Priorizacion scanner 2026-05-24 vigesimoctava pasada
 

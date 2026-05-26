@@ -1,51 +1,108 @@
-# Índice de Documentación - Orquesta
+# Indice de documentacion - Orquesta
 
-## Módulos de Operación y Arquitectura
-- [M00 - Biblia de la App Orquesta](BIBLIA_APP_ORQUESTA.md)
-- [M00 - README Princial](../README.md)
-- [M01 - Visión de Orquesta V1](orquesta_v1_vision.md)
-- [M02 - Roadmap Orquesta V1](orquesta_v1_roadmap.md)
-- [M03 - Uso Actual de la App Orquesta](uso_actual_app_orquesta.md)
-- [M04 - Operativa de Agentes Manuales](operacion_agentes_manuales.md)
-- [M05 - Estado actual 2026-05-17](estado_actual_2026-05-17.md)
-- [M06 - Matriz de pruebas reales y smoke 2026-05-17](matriz_pruebas_reales_y_smoke_2026-05-17.md)
-- [M07 - Guia del nucleo de orquestacion 2026-05-17](guia_nucleo_orquestacion_2026-05-17.md)
-- [M08 - Director Operativo V1 2026-05-17](director_operativo_v1_2026-05-17.md)
-- [M09 - Corte Director funcionando esta tarde 2026-05-17](corte_director_funcionando_tarde_2026-05-17.md)
-- [M10 - Corte OPES como consumidor 2026-05-18](corte_opes_como_consumidor_orquesta_2026-05-18.md)
-- [M11 - Runbook OPES plan_temario Operario 2026-05-18](runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md)
-- [M12 - Resultado OPES-Orquesta plan_temario Operario 2026-05-18](resultado_prueba_opes_orquesta_plan_temario_operario_2026-05-18.md)
+Este indice es una puerta de entrada. La foto vigente no vive aqui: se resuelve
+por el orden de autoridad documental indicado abajo.
 
-## Políticas de Gobernanza
-- [P01 - Política de Selección de Lenguaje (ES)](politica_seleccion_lenguaje_es.md) | [(EN)](politica_seleccion_lenguaje_en.md)
-- [P02 - Política Arquitectónica por Proyecto (ES)](politica_arquitectura_tipos_proyecto_es.md) | [(EN)](politica_arquitectura_tipos_proyecto_en.md)
-- [P03 - Gestión de Reglas, Skills y Workflows (ES)](gestion_reglas_skills_workflows_es.md) | [(EN)](gestion_reglas_skills_workflows_en.md)
-- [P04 - Política de Acceso a Persistencia - AP-077 (ES)](politica_acceso_persistencia_es.md) | [(EN)](politica_acceso_persistencia_en.md)
-- [P05 - Política de Copias de Seguridad del backend SQLite (ES)](politica_backups_es.md) | [(EN)](politica_backups_en.md)
+## Autoridad vigente
 
-## Diseño Técnico
-- [D01 - Matriz de Voto y Decisiones](op_050_matriz_voto.md)
-- [D02 - Orquestador Jerárquico y Gestión de Pools](op_050_orquestador_jerarquico.md)
-- [D03 - Control de Presupuesto y Relevo Preventivo](op_052_control_presupuesto_y_relevo.md)
-- [D04 - Diseño de Control Activo de Agentes](diseno_control_activo_agentes.md)
-- [D05 - Diseño Mínimo de Pools y Presupuestos](diseno_minimo_pools_y_presupuestos.md)
-- [D06 - Autogestión Supervisada de Agentes](op_087_autogestion_supervisada_agentes.md)
-- [D07 - Plan de Integración de ramas Codex2 y Codex3](plan_integracion_codex2_codex3_2026-03-23.md)
-- [D08 - UI Declarativa para Agentes (OP-094)](op_094_ui_declarativa_agentes.md)
-- [D09 - Diseño de app de escritorio sobre la API de Orquesta](diseno_app_escritorio_orquesta.md)
-- [D10 - Diseño integrado de orquestador jerárquico y presupuesto de sesión](diseno_orquestador_jerarquico_y_presupuesto.md)
-- [D11 - Plan de traslado físico a ~/Trabajo/orquestador](plan_traslado_orquestador_a_trabajo.md)
-- [D12 - OP-121 F1: catálogo base de skills, versionado y anti-duplicado](op_121_catalogo_skills_fase1.md)
-- [D13 - OP-121: seguridad básica y refresh dinámico de skills](op_121_skills_seguridad_y_refresh.md)
-- [D14 - Microprogramación dirigida para agentes](diseno_microprogramacion_dirigida_agentes.md)
+1. [AGENTS.md](../AGENTS.md) y
+   [estado_actual_2026-05-17.md](estado_actual_2026-05-17.md) fijan la frontera
+   conceptual: Orquesta es nucleo reutilizable de orquestacion; Codex, OPES,
+   web, MCP y CLI son composiciones o adaptadores.
+2. [guia_nucleo_orquestacion_2026-05-17.md](guia_nucleo_orquestacion_2026-05-17.md),
+   [corte_cierre_generico_director_operativo_2026-05-17.md](corte_cierre_generico_director_operativo_2026-05-17.md)
+   y [matriz_pruebas_reales_y_smoke_2026-05-17.md](matriz_pruebas_reales_y_smoke_2026-05-17.md)
+   fijan piezas, handoffs, evidencias y smokes.
+3. [autoprogramacion_orquesta_pendientes_2026-05-23.md](autoprogramacion_orquesta_pendientes_2026-05-23.md)
+   es backlog ejecutable y tambien indice vivo de shards durante la migracion.
+4. Los `AGENTS.md` y docs locales de cada modulo gobiernan solo su alcance y
+   quedan subordinados a las fuentes anteriores si estan stale.
+5. Los documentos historicos sirven como contexto, no como plan operativo, salvo
+   que enlacen a una fuente vigente.
 
-## Análisis e Informes
-- [A01 - Ecosistema de Orquestación Multi-Agente 2026 (mejoras a implementar)](informe_ecosistema_orquestacion_2026-03-29.md)
-- [A02 - Análisis de repositorios de control de agentes 2026-03-23](analisis_repos_control_agentes_2026-03-23.md)
-- [A03 - Unificación de ramas 2026-05-11](unificacion_ramas_2026-05-11.md)
+## Mapa conceptual
 
-## Plantillas de Documentación
-- [README (ES/EN)](plantillas_documentacion/README_es.md)
-- [Manual de Usuario (ES/EN)](plantillas_documentacion/manual_usuario_es.md)
-- [Manual de Desarrollador (ES/EN)](plantillas_documentacion/manual_desarrollador_es.md)
-- [Manual de Sysadmin (ES/EN)](plantillas_documentacion/manual_sysadmin_es.md)
+| Capa | Owner principal | Lectura inicial |
+| --- | --- | --- |
+| Core puro | `modulos/orquesta-core-workflow` | [guia nucleo](guia_nucleo_orquestacion_2026-05-17.md), `modulos/orquesta-core-workflow/AGENTS.md` |
+| Loop de aplicacion | `modulos/orquesta-orchestration-core` | [director operativo](director_operativo_v1_2026-05-17.md), [cierre generico](corte_cierre_generico_director_operativo_2026-05-17.md) |
+| Director Operativo | `modulos/orquesta-director-operativo`, `modulos/orquesta-app-director-service` | [director operativo](director_operativo_v1_2026-05-17.md), [corte director tarde](corte_director_funcionando_tarde_2026-05-17.md) |
+| Ciclo neutral V2 | `modulos/orquesta-director-cycle`, `modulos/orquesta-director-runner`, `modulos/orquesta-director-scheduler`, `modulos/orquesta-director-cycle-outbox` | [guia nucleo](guia_nucleo_orquestacion_2026-05-17.md), [matriz](matriz_pruebas_reales_y_smoke_2026-05-17.md) |
+| Trabajo externo neutral | `modulos/orquesta-domain-work`, `modulos/orquesta-app-change`, `modulos/orquesta-external-work-run` | [principio director](principio_orquesta_piensa_director.md), [guia nucleo](guia_nucleo_orquestacion_2026-05-17.md) |
+| Runtime y composicion | `modulos/orquesta-runtime*`, `modulos/orquesta-app-codex-stack`, `cmd/orquesta-server`, `modulos/orquesta-server` | [matriz](matriz_pruebas_reales_y_smoke_2026-05-17.md), runbooks en `docs/runbooks/` |
+| Web/MCP/API | `modulos/orquesta-web`, `modulos/orquesta-mcp`, `cmd/orquesta-server` | [backlog autoprogramacion](autoprogramacion_orquesta_pendientes_2026-05-23.md), runbooks de API/web/MCP |
+| Ola autoprogramacion 10x6 | `docs`, write-set autorizado por Director | [mapa 10x6](mapa_autoprogramacion_capacidad_10x6_2026-05-26.md), [backlog autoprogramacion](autoprogramacion_orquesta_pendientes_2026-05-23.md) |
+| OPES como consumidor | `modulos/orquesta-opes-*` | [corte OPES](corte_opes_como_consumidor_orquesta_2026-05-18.md), [runbook plan_temario](runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md) |
+
+## Ruta de lectura para agentes
+
+- Cambio transversal: lee las cinco fuentes de autoridad de arriba y despues el
+  `AGENTS.md` local del modulo.
+- Director, waits, review, replan o cierre: anade
+  [director_operativo_v1_2026-05-17.md](director_operativo_v1_2026-05-17.md),
+  [corte_director_funcionando_tarde_2026-05-17.md](corte_director_funcionando_tarde_2026-05-17.md)
+  y [corte_cierre_generico_director_operativo_2026-05-17.md](corte_cierre_generico_director_operativo_2026-05-17.md).
+- OPES, bridge o `domain_work` aplicado a OPES: anade
+  [corte_opes_como_consumidor_orquesta_2026-05-18.md](corte_opes_como_consumidor_orquesta_2026-05-18.md)
+  y su runbook temporal.
+- Smokes reales, runtime, shutdown o proveedor: usa la matriz y el runbook
+  especifico antes de ejecutar nada opt-in.
+
+## Backlog y shards
+
+- [autoprogramacion_orquesta_pendientes_2026-05-23.md](autoprogramacion_orquesta_pendientes_2026-05-23.md):
+  backlog canonico y shard historico principal.
+- [rail_errors_observados_2026-05-23.md](rail_errors_observados_2026-05-23.md):
+  errores de rails observados.
+- [duplicaciones_railes_pendientes_2026-05-24.md](duplicaciones_railes_pendientes_2026-05-24.md):
+  matriz de duplicaciones, rails y fuentes locales.
+
+## Documentos vigentes frecuentes
+
+- [README raiz](../README.md)
+- [README docs](README.md)
+- [principio_orquesta_piensa_director.md](principio_orquesta_piensa_director.md)
+- [corte_supervisor_codex_director_2026-05-18.md](corte_supervisor_codex_director_2026-05-18.md)
+- [corte_tests_requeridos_y_smoke_programacion_2026-05-21.md](corte_tests_requeridos_y_smoke_programacion_2026-05-21.md)
+- [corte_required_tests_failed_replan_2026-05-21.md](corte_required_tests_failed_replan_2026-05-21.md)
+- [corte_replan_negativo_followups_split_2026-05-21.md](corte_replan_negativo_followups_split_2026-05-21.md)
+- [corte_plan_state_director_decisions_2026-05-21.md](corte_plan_state_director_decisions_2026-05-21.md)
+- [informe_operativo_cierre_autoprogramacion_2026-05-25.md](informe_operativo_cierre_autoprogramacion_2026-05-25.md)
+
+## Politicas y disenos reutilizables
+
+- [politica_seleccion_lenguaje_es.md](politica_seleccion_lenguaje_es.md) |
+  [EN](politica_seleccion_lenguaje_en.md)
+- [politica_arquitectura_tipos_proyecto_es.md](politica_arquitectura_tipos_proyecto_es.md) |
+  [EN](politica_arquitectura_tipos_proyecto_en.md)
+- [gestion_reglas_skills_workflows_es.md](gestion_reglas_skills_workflows_es.md) |
+  [EN](gestion_reglas_skills_workflows_en.md)
+- [politica_acceso_persistencia_es.md](politica_acceso_persistencia_es.md) |
+  [EN](politica_acceso_persistencia_en.md)
+- [politica_backups_es.md](politica_backups_es.md) |
+  [EN](politica_backups_en.md)
+- [politica_supervision_residente_event_driven.md](politica_supervision_residente_event_driven.md)
+- [politica_multilenguaje_por_defecto.md](politica_multilenguaje_por_defecto.md)
+
+## Contexto historico
+
+Estos documentos conservan contexto de producto, diagnostico o diseno previo.
+Antes de usarlos como evidencia o plan, enlazalos a una fuente vigente.
+
+- [BIBLIA_APP_ORQUESTA.md](BIBLIA_APP_ORQUESTA.md)
+- [orquesta_v1_vision.md](orquesta_v1_vision.md)
+- [orquesta_v1_roadmap.md](orquesta_v1_roadmap.md)
+- [uso_actual_app_orquesta.md](uso_actual_app_orquesta.md)
+- [operacion_agentes_manuales.md](operacion_agentes_manuales.md)
+- [informe_revision_hexagonal.md](informe_revision_hexagonal.md)
+- [informe_ecosistema_orquestacion_2026-03-29.md](informe_ecosistema_orquestacion_2026-03-29.md)
+- [analisis_repos_control_agentes_2026-03-23.md](analisis_repos_control_agentes_2026-03-23.md)
+- [unificacion_ramas_2026-05-11.md](unificacion_ramas_2026-05-11.md)
+
+## Plantillas
+
+- [plantillas_documentacion/README_es.md](plantillas_documentacion/README_es.md)
+- [plantillas_documentacion/manual_usuario_es.md](plantillas_documentacion/manual_usuario_es.md)
+- [plantillas_documentacion/manual_desarrollador_es.md](plantillas_documentacion/manual_desarrollador_es.md)
+- [plantillas_documentacion/manual_sysadmin_es.md](plantillas_documentacion/manual_sysadmin_es.md)
+- [plantillas_i18n/README_es.md](plantillas_i18n/README_es.md)
