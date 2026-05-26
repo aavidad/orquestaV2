@@ -369,11 +369,24 @@ func TestCodexLaunchDirectorWaveCommandV0RecursiveDryRunMaterializaHijosYContext
 			t.Fatalf("prompt hijo no contiene %q:\n%s", want, childPrompt)
 		}
 	}
+	if strings.Contains(childPrompt, "Checklist operativo del rol") {
+		t.Fatalf("prompt hijo 1 no debe recibir checklist especializado:\n%s", childPrompt)
+	}
 
 	secondChildPrompt := mustReadFileStringV0(t, summary.ChildLaunches[1].Launch.Agents[5].PromptPath)
-	if !strings.Contains(secondChildPrompt, "external/temarios/a1/tema_002") ||
-		!strings.Contains(secondChildPrompt, "revision pedagogica") {
-		t.Fatalf("prompt hijo tema 2 incompleto:\n%s", secondChildPrompt)
+	for _, want := range []string{
+		"external/temarios/a1/tema_002",
+		"revision pedagogica",
+		"Checklist operativo del rol",
+		"coherencia pedagogica",
+		"no redactes relleno doctrinal para inflar palabras",
+		"Valida el conteo de palabras A1 con metodo reproducible",
+		"estructura, fuentes/refs, visuales o preguntas requeridas",
+		"pide correccion dirigida con ref concreta",
+	} {
+		if !strings.Contains(secondChildPrompt, want) {
+			t.Fatalf("prompt hijo tema 2 no contiene %q:\n%s", want, secondChildPrompt)
+		}
 	}
 }
 
@@ -419,10 +432,10 @@ func TestCodexLaunchDirectorWaveCommandV0RecursiveDryRunMaterializaNietosConLimi
 	if !summary.Plan.RecursiveDelegation ||
 		summary.Plan.MaxDelegationDepth != 2 ||
 		summary.Plan.MaxSubagentsPerAgent != 2 ||
-		summary.Request.MaxRecursiveAgents != 32 ||
-		summary.Plan.MaxRecursiveAgents != 32 ||
+		summary.Request.MaxRecursiveAgents != 70 ||
+		summary.Plan.MaxRecursiveAgents != 70 ||
 		summary.AgentBudget.PlannedAgents != 7 ||
-		summary.AgentBudget.MaxAgents != 32 ||
+		summary.AgentBudget.MaxAgents != 70 ||
 		summary.AgentBudget.Exceeded ||
 		len(summary.Launch.Agents) != 1 ||
 		len(summary.ChildLaunches) != 1 {
@@ -464,6 +477,28 @@ func TestCodexLaunchDirectorWaveCommandV0RecursiveDryRunMaterializaNietosConLimi
 	} {
 		if !strings.Contains(grandchildPrompt, want) {
 			t.Fatalf("prompt nieto no contiene %q:\n%s", want, grandchildPrompt)
+		}
+	}
+	secondChildPrompt := mustReadFileStringV0(t, child.Launch.Agents[1].PromptPath)
+	for _, want := range []string{
+		"revision tecnica",
+		"Checklist operativo del rol",
+		"limites hexagonales",
+		"Valida que write-set, tests requeridos y rutas tocadas coinciden con el alcance autorizado.",
+		"no declares cierres que correspondan al Director",
+	} {
+		if !strings.Contains(secondChildPrompt, want) {
+			t.Fatalf("prompt hijo tecnico no contiene %q:\n%s", want, secondChildPrompt)
+		}
+	}
+	for _, forbidden := range []string{
+		"revision pedagogica",
+		"checklist A1",
+		"conteo de palabras A1",
+		"relleno doctrinal",
+	} {
+		if strings.Contains(secondChildPrompt, forbidden) {
+			t.Fatalf("prompt hijo tecnico contiene rol documental %q:\n%s", forbidden, secondChildPrompt)
 		}
 	}
 	grandchildWrapper := mustReadFileStringV0(t, grandchild.Launch.Agents[0].WrapperPath)
@@ -535,6 +570,9 @@ printf '%s\n' "$input"
 	var stderr bytes.Buffer
 	exitCode := codexLaunchDirectorWaveCommandV0([]string{
 		"--agents", "1",
+		"--allow-unmanaged-launch",
+		"--unmanaged-launch-reason", "test de bajo nivel del arbol recursivo con runtime falso",
+		"--confirm-unmanaged-launch", "recursive-fake-runtime",
 		"--allow-recursive-delegation",
 		"--max-delegation-depth", "2",
 		"--max-subagents-per-agent", "2",
@@ -590,18 +628,7 @@ printf '%s\n' "$input"
 		)
 	}
 	for _, launch := range codexDirectorCollectLaunchesForTestV0(summary) {
-		var statusOut bytes.Buffer
-		stderr.Reset()
-		exitCode = codexWaveStatusCommandV0([]string{
-			"--runtime-dir", launch.RuntimeWorkDir,
-		}, &statusOut, &stderr)
-		if exitCode != 0 {
-			t.Fatalf("status wave=%s exit=%d stderr=%s", launch.WaveRef, exitCode, stderr.String())
-		}
-		var status codexWaveLaunchSummaryV0
-		if err := json.Unmarshal(statusOut.Bytes(), &status); err != nil {
-			t.Fatalf("status json invalido wave=%s: %v", launch.WaveRef, err)
-		}
+		status := codexDirectorWaitForLaunchAgentsStoppedForTestV0(t, launch)
 		for _, agent := range status.Agents {
 			if agent.Status != "stopped" {
 				t.Fatalf("agent no quedo observable como stopped: %+v", agent)
@@ -611,6 +638,46 @@ printf '%s\n' "$input"
 			}
 		}
 	}
+}
+
+func codexDirectorWaitForLaunchAgentsStoppedForTestV0(
+	t *testing.T,
+	launch codexWaveLaunchSummaryV0,
+) codexWaveLaunchSummaryV0 {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	var last codexWaveLaunchSummaryV0
+	var lastErr string
+	for time.Now().Before(deadline) {
+		var statusOut bytes.Buffer
+		var stderr bytes.Buffer
+		exitCode := codexWaveStatusCommandV0([]string{
+			"--runtime-dir", launch.RuntimeWorkDir,
+		}, &statusOut, &stderr)
+		if exitCode != 0 {
+			lastErr = stderr.String()
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		if err := json.Unmarshal(statusOut.Bytes(), &last); err != nil {
+			lastErr = err.Error()
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		allStopped := len(last.Agents) > 0
+		for _, agent := range last.Agents {
+			if agent.Status != "stopped" {
+				allStopped = false
+				break
+			}
+		}
+		if allStopped {
+			return last
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("agents wave=%s no quedaron stopped: last=%+v err=%s", launch.WaveRef, last, lastErr)
+	return codexWaveLaunchSummaryV0{}
 }
 
 func TestCodexLaunchDirectorWaveCommandV0RecursiveBudgetBloqueaAntesDeLanzar(t *testing.T) {

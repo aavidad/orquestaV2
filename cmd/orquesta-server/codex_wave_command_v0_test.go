@@ -75,6 +75,9 @@ printf '/home/alberto/privado\n'
 	exitCode := codexLaunchWaveCommandV0([]string{
 		"--agents", "2",
 		"--wave-ref", "wave-test",
+		"--allow-unmanaged-launch",
+		"--unmanaged-launch-reason", "test de bajo nivel con runtime falso",
+		"--confirm-unmanaged-launch", "wave-test",
 		"--isolate-home=true",
 		"--prompt", "divide este trabajo en dos partes y ejecuta una parte concreta",
 	}, &stdout, &stderr)
@@ -152,26 +155,7 @@ printf '/home/alberto/privado\n'
 		}
 	}
 
-	var statusOut bytes.Buffer
-	stderr.Reset()
-	exitCode = codexWaveStatusCommandV0([]string{
-		"--runtime-dir", summary.RuntimeWorkDir,
-	}, &statusOut, &stderr)
-	if exitCode != 0 {
-		t.Fatalf("status exit=%d stderr=%s", exitCode, stderr.String())
-	}
-	var statusSummary codexWaveLaunchSummaryV0
-	if err := json.Unmarshal(statusOut.Bytes(), &statusSummary); err != nil {
-		t.Fatalf("status json invalido: %v", err)
-	}
-	for _, agent := range statusSummary.Agents {
-		if agent.Status != "stopped" {
-			t.Fatalf("status agente=%s, want stopped: %+v", agent.Status, agent)
-		}
-		if agent.StdoutBytes == 0 || agent.LastMessageBytes == 0 {
-			t.Fatalf("sizes no refrescados: %+v", agent)
-		}
-	}
+	waitForCodexWaveStatusStoppedV0(t, summary.RuntimeWorkDir)
 
 	var tailOut bytes.Buffer
 	stderr.Reset()
@@ -199,6 +183,83 @@ printf '/home/alberto/privado\n'
 	if strings.Contains(encoded, "valor-real") || strings.Contains(encoded, "/home/alberto") {
 		t.Fatalf("tail sin redactar: %s", encoded)
 	}
+}
+
+func TestCodexLaunchWaveCommandV0BloqueaLaunchRealNoGestionadoPorDefecto(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project")
+	runtimeDir := filepath.Join(root, "runtime", "blocked")
+	fakeCodex := filepath.Join(root, "codex-fake")
+	if err := os.MkdirAll(projectDir, 0o700); err != nil {
+		t.Fatalf("crear project dir: %v", err)
+	}
+	if err := os.WriteFile(fakeCodex, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatalf("crear codex falso: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode := codexLaunchWaveCommandV0([]string{
+		"--agents", "1",
+		"--wave-ref", "wave-unmanaged-blocked",
+		"--project-dir", projectDir,
+		"--runtime-dir", runtimeDir,
+		"--command", fakeCodex,
+		"--prompt", "intento de lanzamiento directo no gestionado",
+	}, &stdout, &stderr)
+	if exitCode != 1 {
+		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+	var summary codexWaveLaunchSummaryV0
+	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
+		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
+	}
+	if len(summary.Errors) != 1 || summary.Errors[0].Code != "unmanaged_launch_blocked" {
+		t.Fatalf("error esperado ausente: %+v", summary.Errors)
+	}
+	if len(summary.Agents) != 0 {
+		t.Fatalf("no debe materializar agentes: %+v", summary.Agents)
+	}
+	if _, err := os.Stat(filepath.Join(runtimeDir, "codex_wave_registry_v0.json")); !os.IsNotExist(err) {
+		t.Fatalf("no debe escribir registry tras bloqueo, err=%v", err)
+	}
+}
+
+func waitForCodexWaveStatusStoppedV0(t *testing.T, runtimeDir string) codexWaveLaunchSummaryV0 {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	var last codexWaveLaunchSummaryV0
+	var lastErr string
+	for time.Now().Before(deadline) {
+		var statusOut bytes.Buffer
+		var stderr bytes.Buffer
+		exitCode := codexWaveStatusCommandV0([]string{
+			"--runtime-dir", runtimeDir,
+		}, &statusOut, &stderr)
+		if exitCode != 0 {
+			lastErr = stderr.String()
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		if err := json.Unmarshal(statusOut.Bytes(), &last); err != nil {
+			lastErr = err.Error()
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		allStopped := len(last.Agents) > 0
+		for _, agent := range last.Agents {
+			if agent.Status != "stopped" || agent.StdoutBytes == 0 || agent.LastMessageBytes == 0 {
+				allStopped = false
+				break
+			}
+		}
+		if allStopped {
+			return last
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("agents no quedaron stopped: last=%+v err=%s", last, lastErr)
+	return codexWaveLaunchSummaryV0{}
 }
 
 func TestCodexLaunchWaveCommandV0DryRunNoExigeCodexReal(t *testing.T) {

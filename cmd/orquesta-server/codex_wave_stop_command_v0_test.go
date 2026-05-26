@@ -52,6 +52,9 @@ while :; do /bin/sleep 1; done
 	exitCode := codexLaunchWaveCommandV0([]string{
 		"--agents", "1",
 		"--wave-ref", "wave-stop-test",
+		"--allow-unmanaged-launch",
+		"--unmanaged-launch-reason", "test de stop de bajo nivel con runtime falso",
+		"--confirm-unmanaged-launch", "wave-stop-test",
 		"--isolate-home=true",
 		"--prompt", "quedate vivo hasta que te pare el operador",
 	}, &stdout, &stderr)

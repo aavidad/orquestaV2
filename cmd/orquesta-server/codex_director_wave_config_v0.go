@@ -46,6 +46,9 @@ func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDi
 	purgeRuntime := flags.Bool("purge-runtime", boolEnvOrDefaultV0("ORQUESTA_CODEX_WAVE_PURGE_RUNTIME", false), "purgar runtime de esta ola antes de materializar")
 	purgeConfirm := flags.String("confirm-purge-runtime", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_WAVE_PURGE_RUNTIME_CONFIRM")), "confirmacion explicita: debe coincidir con wave-ref")
 	purgeReportOnly := flags.Bool("purge-runtime-report", boolEnvOrDefaultV0("ORQUESTA_CODEX_WAVE_PURGE_RUNTIME_REPORT", false), "reportar purga sin borrar")
+	allowUnmanagedLaunch := flags.Bool("allow-unmanaged-launch", boolEnvOrDefaultV0("ORQUESTA_CODEX_WAVE_ALLOW_UNMANAGED_LAUNCH", false), "breakglass auditado para lanzar agentes fuera del servidor/cola de Orquesta")
+	unmanagedLaunchReason := flags.String("unmanaged-launch-reason", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_WAVE_UNMANAGED_LAUNCH_REASON")), "motivo auditado para el breakglass unmanaged")
+	unmanagedLaunchConfirm := flags.String("confirm-unmanaged-launch", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_WAVE_UNMANAGED_LAUNCH_CONFIRM")), "confirmacion explicita unmanaged: debe coincidir con wave-ref")
 	allowRecursive := flags.Bool("allow-recursive-delegation", false, "permitir que el Director gobierne delegacion recursiva")
 	maxDepth := flags.Int("max-delegation-depth", 0, "profundidad maxima de delegacion")
 	maxChildren := flags.Int("max-subagents-per-agent", directorWaveLimits.MaxSubagentsPerAgent, "fanout maximo por agente")
@@ -97,7 +100,9 @@ func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDi
 		approval: *approval, extraArgs: *extraArgs, isolateHome: *isolateHome, dryRun: *dryRun,
 		purgeRuntime: *purgeRuntime, strictCredentialProjection: *strictCredentialProjection,
 		purgeConfirm: *purgeConfirm, purgeReportOnly: *purgeReportOnly,
-		projectMemories: *projectMemories, requestRef: *requestRef, runRef: *runRef,
+		allowUnmanagedLaunch: *allowUnmanagedLaunch, unmanagedLaunchReason: *unmanagedLaunchReason,
+		unmanagedLaunchConfirm: *unmanagedLaunchConfirm,
+		projectMemories:        *projectMemories, requestRef: *requestRef, runRef: *runRef,
 		projectRef: *projectRef, domainRefs: *domainRefs, worktreeRef: *worktreeRef,
 		branchRef: *branchRef, writeSet: *writeSet, requiredTests: *requiredTests,
 		allowRecursive: *allowRecursive, maxDepth: *maxDepth, maxChildren: *maxChildren,
@@ -116,8 +121,10 @@ type parsedCodexDirectorWaveFlagsV0 struct {
 	domainRefs, worktreeRef, branchRef, writeSet, requiredTests      string
 	guardOverrideReason, guardOverrideEvidenceRefs                   string
 	purgeConfirm                                                     string
+	unmanagedLaunchReason, unmanagedLaunchConfirm                    string
 	isolateHome, dryRun, purgeRuntime, allowRecursive                bool
 	purgeReportOnly                                                  bool
+	allowUnmanagedLaunch                                             bool
 	strictCredentialProjection, projectMemories                      bool
 	strictDirectorGuards, allowGlobalWriteSet, allowPlaceholderTests bool
 	domainContextFiles                                               []string
@@ -154,6 +161,8 @@ func codexDirectorWaveConfigFromParsedFlagsV0(values parsedCodexDirectorWaveFlag
 			ApprovalPolicy: strings.TrimSpace(values.approval), ExtraArgs: strings.Fields(values.extraArgs),
 			IsolateHome: values.isolateHome, DryRun: values.dryRun, PurgeRuntime: values.purgeRuntime,
 			PurgeConfirm: values.purgeConfirm, PurgeReportOnly: values.purgeReportOnly,
+			AllowUnmanagedLaunch: values.allowUnmanagedLaunch, UnmanagedLaunchReason: strings.TrimSpace(values.unmanagedLaunchReason),
+			UnmanagedLaunchConfirm:     strings.TrimSpace(values.unmanagedLaunchConfirm),
 			CredentialProjectionPolicy: codexWaveCredentialProjectionPolicyV0FromFlags(values.strictCredentialProjection, values.projectMemories),
 		},
 		RequestRef: codexDirectorDefaultRefV0(values.requestRef, "req", values.waveRef),

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCodexWaveStopCommandV0BloqueaRegistrySinProof(t *testing.T) {
@@ -107,6 +108,19 @@ func TestCodexWaveStopCommandV0CooperativoAntesDeForceV0(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("force stop exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
+	waitForCodexWaveProcessStoppedForTestV0(t, summary.Agents[0].PID)
+}
+
+func waitForCodexWaveProcessStoppedForTestV0(t *testing.T, pid int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if !processAliveV0(pid) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("proceso %d sigue vivo tras force stop", pid)
 }
 
 func launchCodexWaveStopTestAgentV0(t *testing.T, waveRef string) codexWaveLaunchSummaryV0 {
@@ -135,6 +149,9 @@ func launchCodexWaveStopTestAgentV0(t *testing.T, waveRef string) codexWaveLaunc
 	exitCode := codexLaunchWaveCommandV0([]string{
 		"--agents", "1",
 		"--wave-ref", waveRef,
+		"--allow-unmanaged-launch",
+		"--unmanaged-launch-reason", "test de stop/proof de bajo nivel con runtime falso",
+		"--confirm-unmanaged-launch", waveRef,
 		"--isolate-home=true",
 		"--prompt", "test stop",
 	}, &stdout, &stderr)

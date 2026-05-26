@@ -207,6 +207,44 @@ func TestCodexLaunchDirectorWaveCommandV0OptInAuditadoMaterializaGuardasEnPrompt
 	}
 }
 
+func TestCodexLaunchDirectorWaveCommandV0BloqueaLaunchRealNoGestionadoPorDefecto(t *testing.T) {
+	root := t.TempDir()
+	projectDir, fakeCodex := codexDirectorStrictGuardFixtureV0(t, root)
+	runtimeDir := filepath.Join(root, "runtime", "director-wave-unmanaged-blocked")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode := codexLaunchDirectorWaveCommandV0([]string{
+		"--agents", "1",
+		"--wave-ref", "director-wave-unmanaged-blocked",
+		"--project-dir", projectDir,
+		"--runtime-dir", runtimeDir,
+		"--command", fakeCodex,
+		"--objective", "Intentar lanzamiento directo con rails validos pero fuera del servidor.",
+		"--write-set", "cmd/orquesta-server",
+		"--required-tests", "go test -count=1 ./cmd/orquesta-server",
+		"--branch-ref", "branch-director-wave-unmanaged-blocked",
+		"--worktree-ref", "worktree-director-wave-unmanaged-blocked",
+	}, &stdout, &stderr)
+	if exitCode != 1 {
+		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+
+	var summary codexDirectorWaveSummaryV0
+	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
+		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
+	}
+	if !codexDirectorHasIssueV0(summary.Issues, "unmanaged_launch_blocked") {
+		t.Fatalf("falta issue unmanaged: %+v", summary.Issues)
+	}
+	if len(summary.Launch.Agents) != 0 {
+		t.Fatalf("no debe lanzar agentes fuera de Orquesta: %+v", summary.Launch)
+	}
+	if _, err := os.Stat(filepath.Join(runtimeDir, "codex_wave_registry_v0.json")); !os.IsNotExist(err) {
+		t.Fatalf("no debe escribir registry tras bloqueo, err=%v", err)
+	}
+}
+
 func TestCodexLaunchDirectorWaveCommandV0PromptsDistinguenShardYWriteSetGlobal(t *testing.T) {
 	root := t.TempDir()
 	projectDir, fakeCodex := codexDirectorStrictGuardFixtureV0(t, root)

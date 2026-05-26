@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +14,8 @@ import (
 
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 )
+
+const codexWaveProcessDoneFileNameV0 = "codex_process_done_v0"
 
 func runCodexLaunchWaveV0(
 	ctx context.Context,
@@ -36,6 +39,14 @@ func runCodexLaunchWaveV0(
 		DryRun:         config.DryRun,
 		Agents:         make([]codexWaveAgentSummaryV0, 0, config.Agents),
 	}
+	if err := codexWaveValidateUnmanagedLaunchPolicyV0(config); err != nil {
+		summary.Errors = append(summary.Errors, codexWavePublicErrorV0{
+			Code:    err.Error(),
+			Field:   "unmanaged_launch",
+			Message: "los agentes reales deben arrancar desde el servidor/cola de Orquesta; usa dry-run o un breakglass auditado",
+		})
+		return summary, nil
+	}
 	if config.PurgeRuntime {
 		report, err := codexWaveApplyRuntimePurgeV0(config)
 		summary.PurgeReport = report
@@ -54,6 +65,22 @@ func runCodexLaunchWaveV0(
 		return codexWaveLaunchSummaryV0{}, err
 	}
 	return summary, nil
+}
+
+func codexWaveValidateUnmanagedLaunchPolicyV0(config codexWaveConfigV0) error {
+	if config.DryRun {
+		return nil
+	}
+	if !config.AllowUnmanagedLaunch {
+		return errors.New("unmanaged_launch_blocked")
+	}
+	if strings.TrimSpace(config.UnmanagedLaunchReason) == "" {
+		return errors.New("unmanaged_launch_reason_required")
+	}
+	if strings.TrimSpace(config.UnmanagedLaunchConfirm) != strings.TrimSpace(config.WaveRef) {
+		return errors.New("unmanaged_launch_confirmation_required")
+	}
+	return nil
 }
 
 func codexWaveLaunchOneAgentV0(
@@ -107,6 +134,8 @@ func codexWaveStartAgentProcessV0(ctx context.Context, wrapperPath string, proje
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
+	donePath := codexWaveProcessDonePathV0(wrapperPath)
+	_ = os.Remove(donePath)
 	cmd := exec.Command(wrapperPath)
 	cmd.Dir = projectWorkDir
 	cmd.Env = []string{}
@@ -119,9 +148,18 @@ func codexWaveStartAgentProcessV0(ctx context.Context, wrapperPath string, proje
 	}
 	pid := cmd.Process.Pid
 	go func() {
-		_ = cmd.Wait()
+		err := cmd.Wait()
+		status := []byte("completed\n")
+		if err != nil {
+			status = []byte("failed\n")
+		}
+		_ = os.WriteFile(donePath, status, 0o600)
 	}()
 	return pid, nil
+}
+
+func codexWaveProcessDonePathV0(wrapperPath string) string {
+	return filepath.Join(filepath.Dir(wrapperPath), codexWaveProcessDoneFileNameV0)
 }
 
 func codexWaveMaterializeAgentV0(

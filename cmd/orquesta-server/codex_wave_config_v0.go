@@ -36,6 +36,9 @@ func codexWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexWaveConfig
 	purgeRuntime := flags.Bool("purge-runtime", boolEnvOrDefaultV0("ORQUESTA_CODEX_WAVE_PURGE_RUNTIME", false), "purgar runtime de esta ola antes de materializar")
 	purgeConfirm := flags.String("confirm-purge-runtime", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_WAVE_PURGE_RUNTIME_CONFIRM")), "confirmacion explicita: debe coincidir con wave-ref")
 	purgeReportOnly := flags.Bool("purge-runtime-report", boolEnvOrDefaultV0("ORQUESTA_CODEX_WAVE_PURGE_RUNTIME_REPORT", false), "reportar purga sin borrar")
+	allowUnmanagedLaunch := flags.Bool("allow-unmanaged-launch", boolEnvOrDefaultV0("ORQUESTA_CODEX_WAVE_ALLOW_UNMANAGED_LAUNCH", false), "breakglass auditado para lanzar agentes fuera del servidor/cola de Orquesta")
+	unmanagedLaunchReason := flags.String("unmanaged-launch-reason", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_WAVE_UNMANAGED_LAUNCH_REASON")), "motivo auditado para el breakglass unmanaged")
+	unmanagedLaunchConfirm := flags.String("confirm-unmanaged-launch", strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_WAVE_UNMANAGED_LAUNCH_CONFIRM")), "confirmacion explicita unmanaged: debe coincidir con wave-ref")
 
 	if err := flags.Parse(args); err != nil {
 		return codexWaveConfigV0{}, err
@@ -88,6 +91,9 @@ func codexWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexWaveConfig
 		PurgeRuntime:               *purgeRuntime,
 		PurgeConfirm:               strings.TrimSpace(*purgeConfirm),
 		PurgeReportOnly:            *purgeReportOnly,
+		AllowUnmanagedLaunch:       *allowUnmanagedLaunch,
+		UnmanagedLaunchReason:      strings.TrimSpace(*unmanagedLaunchReason),
+		UnmanagedLaunchConfirm:     strings.TrimSpace(*unmanagedLaunchConfirm),
 		CredentialProjectionPolicy: codexWaveCredentialProjectionPolicyV0FromFlags(*strictCredentialProjection, *projectMemories),
 	}
 	if err := codexWaveValidateProjectionPolicyV0(config); err != nil {

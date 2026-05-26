@@ -79,6 +79,9 @@ type codexWaveConfigV0 struct {
 	PurgeRuntime               bool
 	PurgeConfirm               string
 	PurgeReportOnly            bool
+	AllowUnmanagedLaunch       bool
+	UnmanagedLaunchReason      string
+	UnmanagedLaunchConfirm     string
 	AgentPrompts               []string
 	CredentialProjectionPolicy codexWaveCredentialProjectionPolicyV0
 }

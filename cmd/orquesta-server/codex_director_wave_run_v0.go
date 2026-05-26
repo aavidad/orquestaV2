@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	orquestadirectoroperativo "orquesta/modulos/orquesta-director-operativo"
 )
@@ -40,6 +41,14 @@ func runCodexLaunchDirectorWaveV0(
 	}
 	if guardIssues := codexDirectorStrictGuardIssuesV0(config); len(guardIssues) > 0 {
 		summary.Issues = append(summary.Issues, guardIssues...)
+		return summary, nil
+	}
+	if err := codexWaveValidateUnmanagedLaunchPolicyV0(config.Wave); err != nil {
+		summary.Issues = append(summary.Issues, orquestadirectoroperativo.OperationalDirectorIssueV0{
+			Code:    err.Error(),
+			Field:   "unmanaged_launch",
+			Message: "los agentes reales deben arrancar desde el servidor/cola de Orquesta; usa dry-run o un breakglass auditado",
+		})
 		return summary, nil
 	}
 	isolation, isolationIssues := codexDirectorPrepareWorktreeIsolationV0(ctx, config)
@@ -144,6 +153,9 @@ func runCodexLaunchDirectorChildWaveV0(
 	childConfig.WaveRef = childWaveRef
 	childConfig.Agents = plan.MaxSubagentsPerAgent
 	childConfig.RuntimeWorkDir = filepath.Join(config.Wave.RuntimeWorkDir, "children", childWaveRef)
+	if childConfig.AllowUnmanagedLaunch && strings.TrimSpace(childConfig.UnmanagedLaunchReason) != "" {
+		childConfig.UnmanagedLaunchConfirm = childWaveRef
+	}
 	childConfig.PurgeRuntime = false
 	childConfig.PurgeReportOnly = false
 	childConfig.PurgeConfirm = ""
