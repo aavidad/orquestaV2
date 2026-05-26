@@ -129,6 +129,35 @@ func TestCodexLaunchSpecResolverV0MarcaPresupuestoTotalAgotado(t *testing.T) {
 	}
 }
 
+func TestExternalWorkFieldContentV0RedactaValoresSensiblesAntesDelPacket(t *testing.T) {
+	content := externalWorkFieldContentV0(orquestadomainwork.DomainWorkFieldV0{
+		Name:      "api_key",
+		Value:     "live-secret-value",
+		Values:    []string{"otro-secreto"},
+		ValueJSON: []byte(`{"api_key":"json-secret-value"}`),
+	})
+
+	if content == "" ||
+		strings.Contains(content, "live-secret-value") ||
+		strings.Contains(content, "otro-secreto") ||
+		strings.Contains(content, "json-secret-value") ||
+		!strings.Contains(content, "redacted-sensitive-field") {
+		t.Fatalf("contexto sensible no redactado: %s", content)
+	}
+
+	content = externalWorkFieldContentV0(orquestadomainwork.DomainWorkFieldV0{
+		Name:      "runtime_ref",
+		Value:     "usar ref opaca adapter-runtime-001",
+		Values:    []string{"authorization: Bearer live-token-001"},
+		ValueJSON: []byte(`{"client_secret":"json-secret-value"}`),
+	})
+	if !strings.Contains(content, "adapter-runtime-001") ||
+		strings.Contains(content, "live-token-001") ||
+		strings.Contains(content, "json-secret-value") {
+		t.Fatalf("contexto opaco/sensible mal tratado: %s", content)
+	}
+}
+
 func externalContextPolicyTaskForTestV0(
 	runRef string,
 	taskRef string,

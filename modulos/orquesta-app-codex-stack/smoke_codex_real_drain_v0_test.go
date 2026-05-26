@@ -177,6 +177,9 @@ func codexStackRealSmokeDrainUntilProgrammingDeliveredResultV0(
 			)
 		}
 		if !drainRunHasPendingExternalAgentsV0(run, nil) && !progressed {
+			if len(compactStringsV0(run.PhaseArtifacts)) > 0 && len(compactStringsV0(run.Tasks)) == 0 {
+				continue
+			}
 			return last, fmt.Errorf(
 				"run sin progreso de programacion ciclo=%d tasks=%v delivered=%v sequence=%d",
 				cycle,

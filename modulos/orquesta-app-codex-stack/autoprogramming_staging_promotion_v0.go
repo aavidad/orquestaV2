@@ -74,8 +74,8 @@ func (stack StackV0) autoprogrammingPromotionRequestV0(
 		RequestRef:           run.AppSpecRef,
 		RunRef:               run.RunID,
 		ProjectRef:           run.ProjectRef,
-		WorktreeRef:          autoprogrammingPromotionTaskContextRefV0(tasks, "worktree_ref:"),
-		BranchRef:            autoprogrammingPromotionTaskContextRefV0(tasks, "branch_ref:"),
+		WorktreeRef:          autoprogrammingPromotionTaskUniqueContextRefV0(tasks, "worktree_ref:"),
+		BranchRef:            autoprogrammingPromotionTaskUniqueContextRefV0(tasks, "branch_ref:"),
 		RunClosed:            run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0,
 		WriteSet:             autoprogrammingPromotionTaskWriteSetV0(tasks),
 		RequiredTests:        autoprogrammingPromotionTaskRequiredTestsV0(tasks),
@@ -220,6 +220,24 @@ func autoprogrammingPromotionTaskContextRefV0(
 		}
 	}
 	return ""
+}
+
+func autoprogrammingPromotionTaskUniqueContextRefV0(
+	tasks []orquestacoreworkflow.WorkflowTaskV0,
+	prefix string,
+) string {
+	seen := ""
+	for _, task := range tasks {
+		value := autoprogrammingPromotionTaskContextRefV0([]orquestacoreworkflow.WorkflowTaskV0{task}, prefix)
+		if value == "" {
+			continue
+		}
+		if seen != "" && seen != value {
+			return ""
+		}
+		seen = value
+	}
+	return seen
 }
 
 func autoprogrammingPromotionTaskWriteSetV0(tasks []orquestacoreworkflow.WorkflowTaskV0) []string {

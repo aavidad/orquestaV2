@@ -52,7 +52,35 @@ func (defaultDomainWorkArtifactSubmissionBuilderV0) BuildDomainWorkArtifactSubmi
 }
 
 func domainWorkArtifactTypeForWorkKindV0(workKind string) string {
-	return orquestadomainwork.ExpectedDomainWorkArtifactTypeForWorkKindV0(workKind)
+	return orquestadomainwork.ExpectedDomainWorkArtifactTypeForWorkKindV0(
+		domainWorkCanonicalWorkKindForArtifactV0(workKind),
+	)
+}
+
+func domainWorkCanonicalWorkKindForArtifactV0(workKind string) string {
+	key := normalizeDomainWorkDeliveryAliasV0(workKind)
+	switch key {
+	case "redaccion_tema", "redaccion_documental", "investigacion_y_redaccion",
+		"sintesis_pedagogica", "control_editorial", "desarrollo_contenido",
+		"tema_grande":
+		return "draft_content_block"
+	case "visual_asset_plan", "plan_visual", "visual_assets", "revision_visual_assets",
+		"revision_visual", "esquema_estudio", "diagrama_flujo":
+		return "generate_visual_asset"
+	case "revision_legal", "revision_legal_deontologica":
+		return "review_legal"
+	case "revision_pedagogica", "revision_pedagogical":
+		return "review_pedagogical"
+	case "revision_psicologia", "revision_contenido", "revision_contenido_tecnico",
+		"revision_editorial", "revision_calidad":
+		return "review_quality"
+	case "validacion_contrato", "validacion_documental", "validacion_tema", "validar_tema":
+		return "validate_topic"
+	case "ensamblado_y_exportacion", "ensamblado", "exportacion":
+		return "assemble_topic"
+	default:
+		return key
+	}
 }
 
 func domainWorkDeliveryPayloadFieldsV0(

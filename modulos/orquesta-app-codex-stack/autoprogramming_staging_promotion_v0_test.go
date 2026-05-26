@@ -61,6 +61,26 @@ func TestCodexStackAutoprogrammingPromotionV0QuedaPendientePorSolapeVivoV0(t *te
 	}
 }
 
+func TestCodexStackAutoprogrammingPromotionV0BloqueaRefsStagingInconsistentesV0(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	stack = withAutoprogrammingPromotionStoresForTestV0(stack)
+	port := &fakeAutoprogrammingPromotionPortV0{}
+	stack.AutoprogrammingPromotion = AutoprogrammingPromotionConfigV0{Enabled: true, Port: port}
+	runRef := "run-autoprogramming-promotion-conflicting-refs-001"
+	seedAutoprogrammingPromotionRunV0(t, ctx, stack, runRef, nil)
+	seedAutoprogrammingPromotionConflictingTaskV0(t, ctx, stack, runRef)
+
+	run := mustLoadCodexStackRunForTestV0(t, stack, runRef)
+	complete, refs, err := stack.maybePromoteClosedAutoprogrammingRunV0(ctx, run)
+	if err != nil {
+		t.Fatalf("maybePromoteClosedAutoprogrammingRunV0: %v", err)
+	}
+	if complete || port.promotions != 0 || port.archives != 0 || len(refs) == 0 {
+		t.Fatalf("complete=%v refs=%v port=%+v", complete, refs, port)
+	}
+}
+
 func seedAutoprogrammingPromotionRunV0(
 	t *testing.T,
 	ctx context.Context,
@@ -109,6 +129,42 @@ func seedAutoprogrammingPromotionRunV0(
 		t.Fatalf("SaveRunV0: %v", err)
 	}
 	seedAutoprogrammingPromotionEvidenceV0(t, ctx, stack, runRef, taskRef)
+}
+
+func seedAutoprogrammingPromotionConflictingTaskV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	runRef string,
+) {
+	t.Helper()
+	taskRef := runRef + "-task-conflicting"
+	task := orquestacoreworkflow.WorkflowTaskV0{
+		SchemaVersion:      orquestacoreworkflow.WorkflowTaskSchemaVersionV0,
+		TaskID:             taskRef,
+		RunID:              runRef,
+		PhaseID:            orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		WorkProfileKind:    orquestacoreworkflow.WorkProfileImplementationV0,
+		Title:              "Autoprogramming promotion conflicting staging refs",
+		WriteSet:           []string{"modulos/orquesta-app-codex-stack"},
+		AcceptanceCriteria: []string{"no promocionar refs de staging inconsistentes"},
+		RequiredTests:      []string{"go test ./modulos/orquesta-app-codex-stack"},
+		ContextRefs: []string{
+			autoprogrammingBridgeOperationalTaskSourceRefV0,
+			"worktree_ref:worktree-ref-autoprogramming-promotion-conflicting",
+			"branch_ref:branch-ref-autoprogramming-promotion-conflicting",
+		},
+		FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{FunctionName: "BuildAutoprogrammingProgrammableWorkV0"}},
+	}
+	if err := stack.Stores.TaskStore.SaveWorkflowTaskV0(ctx, task); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0 conflicting: %v", err)
+	}
+	run := mustLoadCodexStackRunForTestV0(t, stack, runRef)
+	run.Tasks = append(run.Tasks, taskRef)
+	run.ClosedTasks = append(run.ClosedTasks, taskRef)
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0 conflicting: %v", err)
+	}
 }
 
 func seedAutoprogrammingPromotionEvidenceV0(

@@ -51,7 +51,9 @@ func TestCodexAckRequiredTestRunnerV0MaterializaReceiptsComoEvidenciaDurable(t *
 			RequestID:     agentRef,
 			CorrelationID: "corr-codex-ack-required-test-001",
 			AgentPacket: orquestaruntime.AgentStartPacketV0{
-				RequestID: agentRef,
+				RequestID:     agentRef,
+				CorrelationID: "corr-codex-ack-required-test-001",
+				TargetModule:  "orquesta-app-stack-programacion",
 				Task: orquestaruntime.AgentStartTaskV0{
 					TaskRef:       taskRef,
 					RequiredTests: requiredTests,
@@ -176,9 +178,12 @@ func TestCodexAckRequiredTestRunnerV0NoMaterializaACKLegacyComoEvidencia(t *test
 		AgentRef:      agentRef,
 		AckPath:       ackPath,
 		Spec: orquestaruntime.ExternalAgentLaunchSpecV0{
-			RequestID: agentRef,
+			RequestID:     agentRef,
+			CorrelationID: "corr-codex-ack-required-test-legacy",
 			AgentPacket: orquestaruntime.AgentStartPacketV0{
-				RequestID: agentRef,
+				RequestID:     agentRef,
+				CorrelationID: "corr-codex-ack-required-test-legacy",
+				TargetModule:  "orquesta-app-stack-programacion",
 				Task: orquestaruntime.AgentStartTaskV0{
 					TaskRef:       taskRef,
 					RequiredTests: requiredTests,
@@ -211,6 +216,80 @@ func TestCodexAckRequiredTestRunnerV0NoMaterializaACKLegacyComoEvidencia(t *test
 	}
 	if len(result.EvidenceRefs) != 0 || len(result.PassedEvidenceRefs) != 0 {
 		t.Fatalf("ACK legacy no debe materializar evidencia: %+v", result)
+	}
+}
+
+func TestCodexAckRequiredTestRunnerV0NoMaterializaACKNoCorreladoAunqueTraigaReceipts(t *testing.T) {
+	ctx := context.Background()
+	runRef := "run-ref-codex-ack-required-test-mismatch"
+	taskRef := "task-ref-codex-ack-required-test-mismatch"
+	agentRef := "agent-ref-codex-ack-required-test-mismatch"
+	deliveryRef := "ack-ref-codex-ack-required-test-mismatch"
+	requiredTests := []string{"go test ./..."}
+	ackPath := filepath.Join(t.TempDir(), orquestaruntimecodex.CodexAgentAckFileNameV0)
+	ack := orquestaruntimecodex.CodexAgentAckV0{
+		SchemaVersion: orquestaruntimecodex.CodexAgentAckSchemaVersionV0,
+		RequestID:     agentRef,
+		CorrelationID: "corr-codex-ack-required-test-otro",
+		AckRef:        deliveryRef,
+		TargetModule:  "orquesta-app-stack-programacion",
+		TaskRef:       taskRef,
+		Status:        "completed",
+		Tests:         orquestaruntimecodex.EvidenceListV0(requiredTests),
+		TestReceipts:  codexStackRequiredTestReceiptsV0(requiredTests),
+	}
+	data, err := json.Marshal(ack)
+	if err != nil {
+		t.Fatalf("Marshal ACK: %v", err)
+	}
+	if err := os.WriteFile(ackPath, data, 0o600); err != nil {
+		t.Fatalf("Write ACK: %v", err)
+	}
+	descriptor := orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+		DescriptorRef: "descriptor-ref-codex-ack-required-test-mismatch",
+		RunID:         runRef,
+		AgentRef:      agentRef,
+		AckPath:       ackPath,
+		Spec: orquestaruntime.ExternalAgentLaunchSpecV0{
+			RequestID:     agentRef,
+			CorrelationID: "corr-codex-ack-required-test-mismatch",
+			AgentPacket: orquestaruntime.AgentStartPacketV0{
+				RequestID:     agentRef,
+				CorrelationID: "corr-codex-ack-required-test-mismatch",
+				TargetModule:  "orquesta-app-stack-programacion",
+				Task: orquestaruntime.AgentStartTaskV0{
+					TaskRef:       taskRef,
+					RequiredTests: requiredTests,
+				},
+				DeliveryRefs: orquestaruntime.AgentStartDeliveryRefsV0{
+					AckRef: deliveryRef,
+				},
+			},
+		},
+	}
+	evidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
+	runner := codexAckRequiredTestRunnerV0{
+		ReceiptStore:   orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(descriptor),
+		EvidenceReader: evidenceStore,
+		EvidenceWriter: evidenceStore,
+	}
+
+	result, err := runner.RunRequiredTestsV0(ctx, orquestacionnucleoapp.RequiredTestExecutionRequestV0{
+		RunRef:            runRef,
+		TaskRef:           taskRef,
+		TestCommands:      requiredTests,
+		DeliveryRef:       deliveryRef,
+		ReviewRequestID:   "review-request-ref-codex-ack-required-test-mismatch",
+		ReviewResultRef:   "review-result-ref-codex-ack-required-test-mismatch",
+		AcceptedReviewRef: "accepted-review-ref-codex-ack-required-test-mismatch",
+		OccurredAt:        "2026-05-25T16:33:00Z",
+		CorrelationID:     "corr-codex-ack-required-test-mismatch",
+	})
+	if err != nil {
+		t.Fatalf("RunRequiredTestsV0: %v", err)
+	}
+	if len(result.EvidenceRefs) != 0 || len(result.PassedEvidenceRefs) != 0 {
+		t.Fatalf("ACK no correlado no debe materializar evidencia: %+v", result)
 	}
 }
 

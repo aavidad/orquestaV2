@@ -2,8 +2,6 @@ package orquestaappcodexstack
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -246,7 +244,7 @@ func codexStackOperationalClosureRequiredTestEvidenceRefV0(
 	result orquestacoreworkflow.ReviewResultV0,
 	accepted orquestacoreworkflow.ReviewAcceptedPayloadV0,
 ) string {
-	hash := sha256.Sum256([]byte(strings.Join([]string{
+	return codexStackDeterministicRefV0("test-evidence-ref-v0-",
 		request.Run.RunID,
 		taskRef,
 		command,
@@ -254,6 +252,5 @@ func codexStackOperationalClosureRequiredTestEvidenceRefV0(
 		result.ReviewRequestID,
 		result.ReviewResultRef,
 		accepted.AcceptedReviewRef,
-	}, "\x00")))
-	return "test-evidence-ref-v0-" + hex.EncodeToString(hash[:])[:24]
+	)
 }

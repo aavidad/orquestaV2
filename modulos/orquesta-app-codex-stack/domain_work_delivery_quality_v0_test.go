@@ -1,6 +1,7 @@
 package orquestaappcodexstack
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -44,6 +45,12 @@ func TestValidateDomainWorkDeliveryQualityV0RechazaPlaceholderVisible(t *testing
 	if err == nil || !strings.Contains(err.Error(), "domain_work_artifact_quality_gate_failed") {
 		t.Fatalf("esperaba rechazo por placeholder visible, err=%v", err)
 	}
+	var issue domainWorkQualityIssueErrorV0
+	if !errors.As(err, &issue) ||
+		issue.Issue.Code != "placeholder_visible" ||
+		issue.Issue.Field != "payload.visible_text" {
+		t.Fatalf("esperaba issue estructurado de placeholder, issue=%+v err=%v", issue, err)
+	}
 }
 
 func TestValidateDomainWorkDeliveryQualityV0RechazaPendienteConAcento(t *testing.T) {
@@ -60,6 +67,33 @@ func TestValidateDomainWorkDeliveryQualityV0RechazaPendienteConAcento(t *testing
 
 	if err == nil || !strings.Contains(err.Error(), "domain_work_artifact_quality_gate_failed") {
 		t.Fatalf("esperaba rechazo por pendiente visible, err=%v", err)
+	}
+}
+
+func TestValidateDomainWorkDeliveryQualityV0ReportaIssueEstructuradoDePalabras(t *testing.T) {
+	payload := `{
+		"chapters":[{"blocks":[{"markdown":"uno dos tres cuatro"}]}]
+	}`
+
+	err := validateDomainWorkDeliveryQualityV0(
+		[]orquestadomainwork.DomainWorkFieldV0{{Name: "target_words_min", Value: "8"}},
+		"topic_expansion_package",
+		payload,
+		payload,
+	)
+
+	var issue domainWorkQualityIssueErrorV0
+	if !errors.As(err, &issue) {
+		t.Fatalf("esperaba issue estructurado, err=%v", err)
+	}
+	if issue.Issue.Code != "min_words_not_met" ||
+		issue.Issue.Field != "payload.chapters.blocks" ||
+		issue.MinWords != 8 ||
+		issue.ActualWords != 4 {
+		t.Fatalf("issue inesperado: %+v", issue)
+	}
+	if !strings.Contains(err.Error(), "code=min_words_not_met") {
+		t.Fatalf("error sin codigo publico: %v", err)
 	}
 }
 
@@ -100,5 +134,11 @@ func TestValidateDomainWorkDeliveryQualityV0RechazaDocumentPlanIncompleto(t *tes
 
 	if err == nil || !strings.Contains(err.Error(), "domain_work_artifact_quality_gate_failed") {
 		t.Fatalf("esperaba rechazo por document_plan incompleto, err=%v", err)
+	}
+	var issue domainWorkQualityIssueErrorV0
+	if !errors.As(err, &issue) ||
+		issue.Issue.Code == "" ||
+		issue.Issue.Field == "" {
+		t.Fatalf("esperaba issue estructurado de document_plan, issue=%+v err=%v", issue, err)
 	}
 }

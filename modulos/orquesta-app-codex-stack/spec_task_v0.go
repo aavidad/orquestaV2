@@ -74,7 +74,7 @@ func programmingObjectiveV0(
 		strings.TrimSpace(task.Summary),
 		programmingProfileObjectiveLineV0(task, unit),
 		strictWriteSetObjectiveLineV0(),
-		agentDelegationObjectiveLineV0(task.MaxChildAgents),
+		agentDelegationObjectiveLineV0(task.MaxChildAgents, task.MaxSubagentsPerAgent),
 		"Ejecuta pruebas focales razonables y registra el resultado en el ACK.",
 	}
 	if programmingTaskRequiresCompleteGoAppV0(task) {
@@ -91,15 +91,23 @@ func programmingObjectiveV0(
 	return strings.Join(lines, "\n")
 }
 
-func agentDelegationObjectiveLineV0(maxChildAgents int) string {
-	limit := maxChildAgents
-	if limit <= 0 || limit > 6 {
-		limit = 6
-	}
+func agentDelegationObjectiveLineV0(maxChildAgents int, maxSubagentsPerAgent int) string {
+	limit := agentDelegationLimitV0(maxChildAgents, maxSubagentsPerAgent)
 	return fmt.Sprintf(
 		"Delegacion operativa: si necesitas ayuda y el runtime lo permite, activa subagentes para paralelizar analisis, implementacion, pruebas o revision; limite %d subagentes, conservando refs/parentesco, write-set, presupuesto y evidencia en el ACK.",
 		limit,
 	)
+}
+
+func agentDelegationLimitV0(maxChildAgents int, maxSubagentsPerAgent int) int {
+	limit := maxChildAgents
+	if maxSubagentsPerAgent > 0 && (limit <= 0 || maxSubagentsPerAgent < limit) {
+		limit = maxSubagentsPerAgent
+	}
+	if limit <= 0 || limit > 6 {
+		limit = 6
+	}
+	return limit
 }
 
 func programmingTaskRequiresCompleteGoAppV0(task orquestacoreworkflow.WorkflowTaskV0) bool {

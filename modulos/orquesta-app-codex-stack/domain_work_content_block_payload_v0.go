@@ -28,6 +28,15 @@ func canonicalDomainWorkContentBlockPayloadJSONV0(body string) (string, bool) {
 		}
 	}
 	if rawCitations, ok := payload["citations"]; ok && len(rawCitations) > 0 {
+		if !contentBlockPayloadHasSourceRefsV0(payload) {
+			if refs, ok := sourceRefsFromContentBlockCitationsV0(rawCitations); ok {
+				encodedRefs, err := json.Marshal(refs)
+				if err == nil {
+					payload["source_refs"] = encodedRefs
+					changed = true
+				}
+			}
+		}
 		if encodedCitations, ok := compactContentBlockCitationsV0(rawCitations); ok {
 			payload["citations"] = encodedCitations
 			if _, exists := payload["citation_details"]; !exists {
@@ -44,6 +53,21 @@ func canonicalDomainWorkContentBlockPayloadJSONV0(body string) (string, bool) {
 		return body, true
 	}
 	return string(canonical), true
+}
+
+func contentBlockPayloadHasSourceRefsV0(payload map[string]json.RawMessage) bool {
+	raw, ok := payload["source_refs"]
+	if !ok || len(raw) == 0 {
+		return false
+	}
+	var refs []string
+	if err := json.Unmarshal(raw, &refs); err == nil {
+		return len(compactCodexStackStringsV0(refs)) > 0
+	}
+	if refs, ok := compactSourceRefsFromRichPayloadV0(raw); ok {
+		return len(refs) > 0
+	}
+	return false
 }
 
 func sourceRefsAlreadyCompactV0(raw json.RawMessage) bool {
@@ -83,6 +107,27 @@ func sourceRefFromRichEntryV0(entry map[string]json.RawMessage) string {
 		}
 	}
 	return ""
+}
+
+func sourceRefsFromContentBlockCitationsV0(raw json.RawMessage) ([]string, bool) {
+	var entries []map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &entries); err != nil || len(entries) == 0 {
+		return nil, false
+	}
+	refs := make([]string, 0, len(entries))
+	seen := map[string]struct{}{}
+	for _, entry := range entries {
+		ref := sourceRefFromRichEntryV0(entry)
+		if ref == "" {
+			continue
+		}
+		if _, exists := seen[ref]; exists {
+			continue
+		}
+		seen[ref] = struct{}{}
+		refs = append(refs, ref)
+	}
+	return refs, len(refs) > 0
 }
 
 func compactContentBlockCitationsV0(raw json.RawMessage) (json.RawMessage, bool) {

@@ -13,14 +13,24 @@ func domainWorkDeliveryArtifactTypeMatchesV0(actual string, expected string) boo
 }
 
 func domainWorkDeliveryCanonicalArtifactTypeV0(value string) string {
-	switch normalizeDomainWorkDeliveryAliasV0(value) {
+	key := normalizeDomainWorkDeliveryAliasV0(value)
+	if artifactType := domainWorkArtifactTypeForWorkKindV0(key); artifactType != orquestadomainwork.DomainWorkArtifactTypeGenericWorkDeliveryV0 {
+		return artifactType
+	}
+	switch key {
 	case "content_block", "draft_content_block", "generate_block", "generate_program_topic_draft",
-		"bloque", "bloque_contenido", "contenido_bloque":
+		"bloque", "bloque_contenido", "contenido_bloque", "redaccion_tema",
+		"redaccion_documental", "investigacion_y_redaccion", "sintesis_pedagogica",
+		"control_editorial", "desarrollo_contenido", "tema_grande":
 		return "content_block"
 	case "visual_asset", "generate_visual_asset", "visual", "recurso_visual", "activo_visual":
 		return "visual_asset"
 	case "block_revision", "revision", "review_legal", "review_pedagogical", "review_quality",
-		"validate_topic", "revision_bloque", "revision_texto":
+		"validate_topic", "revision_bloque", "revision_texto", "revision_legal",
+		"revision_legal_deontologica", "revision_pedagogica", "revision_pedagogical",
+		"revision_psicologia", "revision_contenido", "revision_contenido_tecnico",
+		"revision_editorial", "revision_calidad", "validacion_contrato",
+		"validacion_documental", "validacion_tema", "validar_tema":
 		return "block_revision"
 	case "source", "fuente", "research_sources", "download_source", "verify_sources":
 		return "source"
@@ -33,7 +43,8 @@ func domainWorkDeliveryCanonicalArtifactTypeV0(value string) string {
 	case "document_plan", "plan_documento", "plan_tema", "plan_temario", "plan",
 		"planificacion", "planificacion_documental":
 		return orquestadomainwork.DomainDocumentPlanArtifactTypeV0
-	case "assembled_topic", "assemble_topic", "tema_ensamblado":
+	case "assembled_topic", "assemble_topic", "tema_ensamblado", "ensamblado",
+		"ensamblado_y_exportacion", "exportacion":
 		return "assembled_topic"
 	case "work_delivery", "entrega", "resultado":
 		return "work_delivery"

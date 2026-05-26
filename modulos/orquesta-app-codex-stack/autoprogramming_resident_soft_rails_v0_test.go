@@ -57,13 +57,13 @@ func TestAutoprogrammingResidentModeV0AliasesDeRailBlandoNoBloqueanV0(t *testing
 	for _, evidenceRef := range []string{
 		"gate-issue:artifact_path_outside_write_set:docs/extra.md#policy_blocked",
 		"review-gate-issue:outside-of-write-set:docs/extra.md#blocked",
-			"quality_gate_issue:line_limit_exceeded:README.md#policy-blocked",
-			"write-set-target-missing:web#blocked",
-			"gate-issue:ack-pending-rail:provider#blocked",
-			"gate-action:request_followup_review#blocked",
-			"ack_pending_rail:token#blocked",
-			"rail_blando:provider#policy_blocked",
-			"file_too_large#policy_blocked",
+		"quality_gate_issue:line_limit_exceeded:README.md#policy-blocked",
+		"write-set-target-missing:web#blocked",
+		"gate-issue:ack-pending-rail:provider#blocked",
+		"gate-action:request_followup_review#blocked",
+		"ack_pending_rail:token#blocked",
+		"rail_blando:provider#policy_blocked",
+		"file_too_large#policy_blocked",
 	} {
 		shouldRepair := autoprogrammingResidentShouldRepairV0(
 			orquestamcp.MCPRunSupervisorToolInputV0{ResidentMode: true},

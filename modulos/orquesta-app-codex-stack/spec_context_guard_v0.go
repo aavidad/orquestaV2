@@ -1,6 +1,8 @@
 package orquestaappcodexstack
 
 import (
+	"strings"
+
 	orquestacontext "orquesta/modulos/orquesta-context"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
@@ -20,7 +22,7 @@ func taskWithContextGuardV0(
 ) orquestaruntime.AgentStartTaskV0 {
 	if !contextBundleHasRequiredTruncatedEntryV0(bundle) &&
 		!contextBundleHasRequiredRefOnlyEntryV0(bundle) &&
-		!orquestacontext.ContextBundleRequiresSanitizationReviewV0(bundle) {
+		!contextBundleHasSanitizationReviewSignalV0(bundle) {
 		return task
 	}
 	if contextBundleHasRequiredTruncatedEntryV0(bundle) {
@@ -31,7 +33,7 @@ func taskWithContextGuardV0(
 		task.RequiredTests = compactStringsV0(append(task.RequiredTests, externalContextRefOnlyRequiredTestV0))
 		task.DoneCriteria = compactStringsV0(append(task.DoneCriteria, externalContextRefOnlyDoneCriteriaV0))
 	}
-	if orquestacontext.ContextBundleRequiresSanitizationReviewV0(bundle) {
+	if contextBundleHasSanitizationReviewSignalV0(bundle) {
 		task.RequiredTests = compactStringsV0(append(task.RequiredTests, externalContextSanitizedRequiredTestV0))
 		task.DoneCriteria = compactStringsV0(append(task.DoneCriteria, externalContextSanitizedDoneCriteriaV0))
 	}
@@ -45,7 +47,7 @@ func packetPoliciesWithContextGuardV0(
 	if len(bundle.SanitizationEvidence) > 0 {
 		policies = compactStringsV0(append(policies, "context_sanitization_evidence_present"))
 	}
-	if orquestacontext.ContextBundleRequiresSanitizationReviewV0(bundle) {
+	if contextBundleHasSanitizationReviewSignalV0(bundle) {
 		policies = compactStringsV0(append(policies, "ask_director_on_sanitization_review"))
 	}
 	if contextBundleHasRequiredRefOnlyEntryV0(bundle) {
@@ -69,4 +71,13 @@ func contextBundleHasRequiredRefOnlyEntryV0(
 	bundle orquestacontext.ContextMaterializedBundleV0,
 ) bool {
 	return orquestacontext.ContextBundleHasRequiredRefOnlyV0(bundle)
+}
+
+func contextBundleHasSanitizationReviewSignalV0(
+	bundle orquestacontext.ContextMaterializedBundleV0,
+) bool {
+	if orquestacontext.ContextBundleRequiresSanitizationReviewV0(bundle) {
+		return true
+	}
+	return strings.Contains(bundle.DirectorQuestionHint, "context_sanitization_review_required")
 }

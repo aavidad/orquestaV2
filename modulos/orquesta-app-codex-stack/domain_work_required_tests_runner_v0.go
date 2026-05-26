@@ -2,9 +2,6 @@ package orquestaappcodexstack
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"strings"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestaappchangedirectorsource "orquesta/modulos/orquesta-app-change-director-source"
@@ -191,7 +188,7 @@ func domainWorkRequiredTestEvidenceRefV0(
 	request orquestacionnucleoapp.RequiredTestExecutionRequestV0,
 	command string,
 ) string {
-	hash := sha256.Sum256([]byte(strings.Join([]string{
+	return codexStackDeterministicRefV0("domain-test-evidence-ref-v0-",
 		request.RunRef,
 		request.TaskRef,
 		command,
@@ -199,6 +196,5 @@ func domainWorkRequiredTestEvidenceRefV0(
 		request.ReviewRequestID,
 		request.ReviewResultRef,
 		request.AcceptedReviewRef,
-	}, "\x00")))
-	return "domain-test-evidence-ref-v0-" + hex.EncodeToString(hash[:])[:24]
+	)
 }

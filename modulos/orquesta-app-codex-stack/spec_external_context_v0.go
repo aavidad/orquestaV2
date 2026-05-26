@@ -11,6 +11,7 @@ import (
 	orquestaappchangedirectorsource "orquesta/modulos/orquesta-app-change-director-source"
 	orquestacontext "orquesta/modulos/orquesta-context"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
+	orquestarails "orquesta/modulos/orquesta-rails"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
@@ -144,11 +145,87 @@ func externalWorkFieldContentV0(
 		(field.Value == "" && len(field.Values) == 0 && len(field.ValueJSON) == 0) {
 		return ""
 	}
+	field = redactExternalWorkSensitiveFieldV0(field)
 	raw, err := json.Marshal(field)
 	if err != nil {
 		return ""
 	}
 	return sanitizeExternalWorkContextContentV0(string(raw))
+}
+
+func redactExternalWorkSensitiveFieldV0(
+	field orquestadomainwork.DomainWorkFieldV0,
+) orquestadomainwork.DomainWorkFieldV0 {
+	reviewRequired := externalWorkFieldNeedsSanitizationReviewV0(field)
+	if externalContextRefPartHasSensitiveNameV0(field.Name) {
+		field.Value = "redacted-sensitive-field"
+		if reviewRequired {
+			field.Value = "non_public_context_review_required"
+		}
+		field.Values = nil
+		field.ValueJSON = nil
+		return field
+	}
+	if externalWorkFieldHasPrivateMaterialV0(field) {
+		field.Value = "prompt completo redacted-sensitive-material"
+		field.Values = nil
+		field.ValueJSON = nil
+		return field
+	}
+	field.Value, _ = orquestarails.RedactOperationalTextForFieldV0(
+		"codex_stack_external_context",
+		field.Name,
+		field.Value,
+	)
+	for index, value := range field.Values {
+		field.Values[index], _ = orquestarails.RedactOperationalTextForFieldV0(
+			"codex_stack_external_context",
+			field.Name,
+			value,
+		)
+	}
+	if len(field.ValueJSON) > 0 {
+		redacted, _ := orquestarails.RedactOperationalTextForFieldV0(
+			"codex_stack_external_context",
+			field.Name,
+			string(field.ValueJSON),
+		)
+		field.ValueJSON = []byte(redacted)
+	}
+	if reviewRequired {
+		field.Value = "non_public_context_review_required"
+		field.Values = nil
+		field.ValueJSON = nil
+	}
+	return field
+}
+
+func externalWorkFieldNeedsSanitizationReviewV0(
+	field orquestadomainwork.DomainWorkFieldV0,
+) bool {
+	if localSensitiveDataSanitizerNeedsReviewV0(field.Value) ||
+		localSensitiveDataSanitizerNeedsReviewV0(string(field.ValueJSON)) {
+		return true
+	}
+	for _, value := range field.Values {
+		if localSensitiveDataSanitizerNeedsReviewV0(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func externalWorkFieldHasPrivateMaterialV0(
+	field orquestadomainwork.DomainWorkFieldV0,
+) bool {
+	for _, value := range append(append([]string{field.Value}, field.Values...), string(field.ValueJSON)) {
+		lower := strings.ToLower(value)
+		if strings.Contains(lower, "-----begin ") ||
+			strings.Contains(lower, "private key-----") {
+			return true
+		}
+	}
+	return false
 }
 
 func boundedExternalWorkContextContentV0(value string, maxBytes int) (string, bool) {
@@ -195,6 +272,7 @@ func externalContextRefPartV0(value string) string {
 }
 
 func externalContextRefPartHasSensitiveNameV0(value string) bool {
+	value = strings.ReplaceAll(strings.ToLower(strings.TrimSpace(value)), "_", "-")
 	for _, marker := range []string{
 		"access-token", "refresh-token", "api-key", "secret", "secreto",
 		"password", "credential", "credencial", "token", "prompt",

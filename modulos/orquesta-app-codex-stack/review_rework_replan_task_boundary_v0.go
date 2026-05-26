@@ -1,8 +1,6 @@
 package orquestaappcodexstack
 
 import (
-	"crypto/sha1"
-	"fmt"
 	"strings"
 
 	orquestacorereplanner "orquesta/modulos/orquesta-core-replanner"
@@ -140,11 +138,14 @@ func reviewReworkCorrectionTaskIDV0(
 	plan orquestacionnucleoapp.ReviewReworkReplanPlanV0,
 ) string {
 	stem := reviewReworkReplanAgentStemV0(plan.TaskRef)
-	sum := sha1.Sum([]byte(strings.Join([]string{
+	digest := codexStackDeterministicDigestV0(
 		plan.ReworkRequestRef,
 		plan.ReplanRef,
 		plan.TaskRef,
 		plan.ReviewResult.DeliveryRef,
-	}, "\x00")))
-	return "task-ref-review-rework-" + stem + "-" + fmt.Sprintf("%x", sum[:])[:12]
+	)
+	if len(digest) > 12 {
+		digest = digest[:12]
+	}
+	return "task-ref-review-rework-" + stem + "-" + digest
 }

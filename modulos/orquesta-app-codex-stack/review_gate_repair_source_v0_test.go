@@ -84,10 +84,10 @@ func TestCodexStackReviewGateReworkAcceptanceObservaPadreTrasFollowupCerradoV0(t
 	reworkRequestRef := "rework-request-ref-" + reviewResultRef
 	request := orquestacionnucleoapp.ReviewGateObservationRequestV0{
 		Run: orquestacoreworkflow.OrchestrationRunV0{
-			RunID:          runRef,
-			CurrentPhase:   orquestacoreworkflow.OrchestrationPhaseRevisionV0,
-			Tasks:          []string{parentTaskRef, followupTaskRef},
-			Deliveries:     []string{parentDelivery, followupDelivery},
+			RunID:        runRef,
+			CurrentPhase: orquestacoreworkflow.OrchestrationPhaseRevisionV0,
+			Tasks:        []string{parentTaskRef, followupTaskRef},
+			Deliveries:   []string{parentDelivery, followupDelivery},
 			ReviewResults: []string{
 				reviewResultRef + "#review_result:changes_requested#review_request:" + reviewRequestRef + "#delivery:" + parentDelivery,
 				"review-result-ref-" + followupDelivery + "#review_result:accepted#review_request:review-request-ref-" + followupDelivery + "#delivery:" + followupDelivery,

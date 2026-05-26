@@ -1293,6 +1293,20 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-05-26
+Decision: Las entregas `content_block` pueden derivar `source_refs` desde
+`citations` cuando el agente no envia la lista compacta.
+Motivo: algunos agentes citan fuentes oficiales o doctrina en `citations`
+usando `ref`/`source_ref`, pero omiten `source_refs`. Rechazar la entrega por
+esa forma pierde trazabilidad reparable y contradice la politica de normalizar
+alias seguros en el adaptador.
+Impacto: el builder DomainWork sintetiza `source_refs` deduplicados a partir de
+las citas solo si faltan refs explicitas. Las citas se conservan normalizadas y
+el core sigue neutral: OPES u otro dominio validan despues el contenido.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-21
 Decision: El director puede avanzar con ACKs parciales y recoger ACKs tardios
 de la ola anterior.

@@ -24,7 +24,11 @@ func validateDomainWorkDeliveryQualityV0(
 		return nil
 	}
 	if domainWorkExpansionPayloadHasForbiddenPlaceholderV0(payloadBody) {
-		return fmt.Errorf("domain_work_artifact_quality_gate_failed")
+		return newDomainWorkQualityIssueErrorV0(
+			"placeholder_visible",
+			"payload.visible_text",
+			"placeholder_or_pending_marker",
+		)
 	}
 	minWords := domainWorkExpansionMinWordsV0(fields)
 	if minWords <= 0 {
@@ -32,7 +36,15 @@ func validateDomainWorkDeliveryQualityV0(
 	}
 	words := domainWorkExpansionPayloadWordsV0(payloadBody)
 	if words < minWords {
-		return fmt.Errorf("domain_work_artifact_quality_gate_failed")
+		return domainWorkQualityIssueErrorV0{
+			Issue: orquestadomainwork.DomainWorkIssueV0{
+				Code:  "min_words_not_met",
+				Field: "payload.chapters.blocks",
+			},
+			Reason:      "visible_content_below_target",
+			MinWords:    minWords,
+			ActualWords: words,
+		}
 	}
 	return nil
 }
@@ -44,12 +56,56 @@ func validateDomainWorkDocumentPlanDeliveryV0(payloadBody string) error {
 	}
 	var plan orquestadomainwork.DomainDocumentPlanV0
 	if err := json.Unmarshal([]byte(payloadBody), &plan); err != nil {
-		return fmt.Errorf("domain_work_artifact_quality_gate_failed")
+		return newDomainWorkQualityIssueErrorV0(
+			"invalid_json",
+			"payload",
+			"document_plan_json_unmarshal_failed",
+		)
 	}
 	if issues := orquestadomainwork.ValidateDomainDocumentPlanV0(plan); len(issues) > 0 {
-		return fmt.Errorf("domain_work_artifact_quality_gate_failed")
+		return domainWorkQualityIssueErrorV0{
+			Issue:  issues[0],
+			Reason: "document_plan_validation_failed",
+		}
 	}
 	return nil
+}
+
+type domainWorkQualityIssueErrorV0 struct {
+	Issue       orquestadomainwork.DomainWorkIssueV0
+	Reason      string
+	MinWords    int
+	ActualWords int
+}
+
+func newDomainWorkQualityIssueErrorV0(code, field, reason string) domainWorkQualityIssueErrorV0 {
+	return domainWorkQualityIssueErrorV0{
+		Issue: orquestadomainwork.DomainWorkIssueV0{
+			Code:  code,
+			Field: field,
+		},
+		Reason: reason,
+	}
+}
+
+func (err domainWorkQualityIssueErrorV0) Error() string {
+	parts := []string{"domain_work_artifact_quality_gate_failed"}
+	if code := strings.TrimSpace(err.Issue.Code); code != "" {
+		parts = append(parts, "code="+code)
+	}
+	if field := strings.TrimSpace(err.Issue.Field); field != "" {
+		parts = append(parts, "field="+field)
+	}
+	if reason := strings.TrimSpace(err.Reason); reason != "" {
+		parts = append(parts, "reason="+reason)
+	}
+	if err.MinWords > 0 {
+		parts = append(parts, fmt.Sprintf("min_words=%d", err.MinWords))
+	}
+	if err.ActualWords > 0 {
+		parts = append(parts, fmt.Sprintf("actual_words=%d", err.ActualWords))
+	}
+	return strings.Join(parts, " ")
 }
 
 func domainWorkExpansionMinWordsV0(fields []orquestadomainwork.DomainWorkFieldV0) int {

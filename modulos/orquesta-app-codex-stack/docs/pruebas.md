@@ -147,13 +147,14 @@ Cobertura Go actual:
 
 Estado de huecos restantes:
 
-- `CODEX-WAVE-REAL` cierra la ola/cohorte amplia formal con varios agentes
+- `CODEX-WAVE-REAL` ya cierra la ola/cohorte amplia formal con varios agentes
   Codex vivos, `PlanState`, review causal, `RequiredTestEvidenceV0` y cierre.
-- `CODEX-REQTEST-REAL-E2E` cierra solo el caso acotado de un agente Codex vivo
+- `CODEX-REQTEST-REAL-E2E` ya cierra el caso acotado de un agente Codex vivo
   con runner y cierre causal.
-- `CODEX-RECURSION-REAL` cierra el arbol 1->2->4 con proveedor real,
-  fake-runtime end-to-end, split_task generado offline y wrapper real opt-in
-  (`scripts/smoke_codex_real_recursive_tree.sh`).
+- `CODEX-RECURSION-REAL` ya cierra el arbol 1->2->4 con proveedor real,
+  split_task generado offline y wrapper real opt-in
+  (`scripts/smoke_codex_real_recursive_tree.sh`). No reabrir estos smokes salvo
+  regresion demostrada.
 - `EXT-NO-OPES` cierra la ruta temporal no-OPES con `codex-fake`, no una
   politica productiva de tests de dominio ni un proveedor Codex real.
 - OPES `plan_temario` real quedo cerrado para `document_plan` y creacion de
@@ -1062,7 +1063,7 @@ Validacion tolerancia de nombres OPES 2026-05-18:
 
 ```bash
 go test -count=1 ./modulos/orquesta-app-codex-stack \
-  -run 'TestDefaultDomainWorkArtifactSubmissionBuilderV0AceptaEnvelopeConNombreLibreOPES|TestDefaultDomainWorkArtifactSubmissionBuilderV0NormalizaSourceRefsRicosContentBlockOPES|TestDefaultDomainWorkArtifactSubmissionBuilderV0EntregaVisualAssetOPES'
+  -run 'TestDefaultDomainWorkArtifactSubmissionBuilderV0AceptaEnvelopeConNombreLibreOPES|TestDefaultDomainWorkArtifactSubmissionBuilderV0NormalizaSourceRefsRicosContentBlockOPES|TestDefaultDomainWorkArtifactSubmissionBuilderV0DerivaSourceRefsDesdeCitasOPES|TestDefaultDomainWorkArtifactSubmissionBuilderV0EntregaVisualAssetOPES'
 
 go test -count=1 ./modulos/orquesta-app-codex-stack ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector
 ```
@@ -1076,6 +1077,8 @@ Cobertura:
 - aliases como `tema_id`, `id_capitulo`, `titulo`, `contenido`, `idioma` y
   `fuentes` se normalizan a `topic_id`, `chapter_id`, `title`, `body`,
   `language_code` y `source_refs`;
+- si un bloque trae `citations` con `ref`/`source_ref` y omite `source_refs`,
+  el adaptador deriva una lista compacta deduplicada sin perder las citas;
 - `topic_summary` conserva `markdown` para no romper contratos existentes;
 - la entrega sigue bloqueada si el payload no es materializable.
 
@@ -1153,3 +1156,19 @@ Cobertura:
 - `TestLocalSensitiveDataSanitizerV0DudaYActivaRevisionDirector` verifica que
   material privado ambiguo se degrada a refs y agrega criterios de revision por
   director/humano con policy de consulta al director.
+
+Validacion de calidad `domain_work` con issues estructurados:
+
+```bash
+GOCACHE=/tmp/orquesta-go-cache go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestValidateDomainWorkDeliveryQualityV0|TestDefaultDomainWorkArtifactSubmissionBuilderV0'
+GOCACHE=/tmp/orquesta-go-cache go test -count=1 ./modulos/orquesta-domain-work
+```
+
+Cobertura:
+
+- `TestValidateDomainWorkDeliveryQualityV0ReportaIssueEstructuradoDePalabras`
+  fija que el rechazo por palabras minimas conserva campo causal
+  `payload.chapters.blocks` y conteos observados;
+- los rechazos por placeholder visible y `document_plan` incompleto exponen un
+  `DomainWorkIssueV0` local sin cambiar el error publico compatible
+  `domain_work_artifact_quality_gate_failed`.

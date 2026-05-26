@@ -2,7 +2,6 @@ package orquestaappcodexstack
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"strings"
 
@@ -271,12 +270,15 @@ func assessmentReplanSuffixV0(
 	if base == "sin-ref" {
 		base = assessmentReplanSafeRefV0(projection.AgentRequestID)
 	}
-	return base + "-" + assessmentReplanShortHashV0(
+	return base + "-" + assessmentReplanDigestV0(
 		runRef+"|"+projection.AssessmentRef+"|"+projection.AgentRequestID+"|"+taskRef,
 	)
 }
 
-func assessmentReplanShortHashV0(value string) string {
-	sum := sha256.Sum256([]byte(strings.TrimSpace(value)))
-	return fmt.Sprintf("%x", sum[:6])
+func assessmentReplanDigestV0(value string) string {
+	digest := codexStackDeterministicDigestV0(value)
+	if len(digest) > 12 {
+		return digest[:12]
+	}
+	return digest
 }

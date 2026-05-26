@@ -2,8 +2,6 @@ package orquestaappcodexstack
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -359,8 +357,7 @@ func autoprogrammingPrepareRetryRefV0(requestRef string, occurredAt string, now 
 }
 
 func autoprogrammingPrepareRetryHashV0(value string) string {
-	sum := sha256.Sum256([]byte(strings.TrimSpace(value)))
-	return hex.EncodeToString(sum[:])[:12]
+	return codexStackDeterministicDigestV0(value)
 }
 
 func autoprogrammingPrepareRetrySafeRefV0(value string) string {

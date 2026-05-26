@@ -143,6 +143,11 @@ func localSensitiveDataSanitizerNeedsReviewV0(content string) bool {
 	lower := strings.ToLower(content)
 	return strings.Contains(lower, "-----begin ") ||
 		strings.Contains(lower, "private key-----") ||
+		strings.Contains(lower, "private key") ||
+		strings.Contains(lower, "private_material") ||
+		strings.Contains(lower, "private-material") ||
+		strings.Contains(lower, "private-material-redacted") ||
+		strings.Contains(lower, "non_public_context_review_required") ||
 		strings.Contains(lower, "prompt completo") ||
 		strings.Contains(lower, "transcript completo")
 }

@@ -22,13 +22,14 @@ func TestProgrammingTaskV0PropagaRequiredTestsYContratoGoCompleto(t *testing.T) 
 			"go.mod e imports de modulo",
 			"sin imports relativos ../",
 		},
-		ParentTaskRef:   "task-ref-parent-001",
-		CohortRef:       "cohort-ref-recursive-001",
-		WaveRef:         "wave-ref-recursive-001",
-		DelegationDepth: 2,
-		MaxChildAgents:  6,
-		ChildTaskRefs:   []string{"task-ref-child-002"},
-		RequiredTests:   []string{"go test ./..."},
+		ParentTaskRef:        "task-ref-parent-001",
+		CohortRef:            "cohort-ref-recursive-001",
+		WaveRef:              "wave-ref-recursive-001",
+		DelegationDepth:      2,
+		MaxChildAgents:       6,
+		MaxSubagentsPerAgent: 6,
+		ChildTaskRefs:        []string{"task-ref-child-002"},
+		RequiredTests:        []string{"go test ./..."},
 		FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
 			ContractRef:  "contract:function:agenda-api:v0",
 			FunctionName: "CrearAPI",
@@ -73,6 +74,40 @@ func TestProgrammingTaskV0PropagaRequiredTestsYContratoGoCompleto(t *testing.T) 
 	}
 	if strings.Contains(got.Objective, "microtarea") {
 		t.Fatalf("objective no debe pedir microtareas: %s", got.Objective)
+	}
+}
+
+func TestProgrammingTaskV0RespetaMaxSubagentsPerAgentMasRestrictivo(t *testing.T) {
+	task := orquestacoreworkflow.WorkflowTaskV0{
+		TaskID:               "task-programacion-budget-001",
+		RunID:                "run-programacion-budget-001",
+		PhaseID:              orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		Title:                "Refinar presupuesto de delegacion",
+		Summary:              "Mantener fanout gobernado por plan operativo.",
+		WriteSet:             []string{"modulos/orquesta-app-codex-stack"},
+		AcceptanceCriteria:   []string{"presupuesto de subagentes respetado"},
+		MaxChildAgents:       6,
+		MaxSubagentsPerAgent: 2,
+		RequiredTests:        []string{"go test -count=1 ./modulos/orquesta-app-codex-stack"},
+		FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{FunctionName: "programmingTaskV0"}},
+	}
+	resolver := CodexLaunchSpecResolverV0{
+		TaskStore: orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(task),
+	}
+
+	got, err := resolver.agentTaskV0(context.Background(), orquestaruntime.LaunchRuntimeAgentRequestV0{
+		RunID:   task.RunID,
+		PhaseID: string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+		TaskRef: task.TaskID,
+	}, "programacion")
+	if err != nil {
+		t.Fatalf("agentTaskV0: %v", err)
+	}
+	if !strings.Contains(got.Objective, "limite 2 subagentes") {
+		t.Fatalf("objective no respeta max_subagents_per_agent: %s", got.Objective)
+	}
+	if strings.Contains(got.Objective, "limite 6 subagentes") {
+		t.Fatalf("objective usa max_child_agents aunque el presupuesto por agente es menor: %s", got.Objective)
 	}
 }
 

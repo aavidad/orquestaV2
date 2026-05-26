@@ -227,6 +227,77 @@ func TestDefaultDomainWorkArtifactSubmissionBuilderV0NormalizaSourceRefsRicosCon
 	}
 }
 
+func TestDefaultDomainWorkArtifactSubmissionBuilderV0DerivaSourceRefsDesdeCitasOPES(t *testing.T) {
+	projectDir := t.TempDir()
+	bodyPath := filepath.Join(projectDir, "external", "opes", "draft_content_block")
+	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	payload := `{
+		"artifact_type":"content_block",
+		"payload_json":{
+			"topic_id":"topic-ref-001",
+			"chapter_id":"chapter-ref-001",
+			"type":"doctrine",
+			"title":"Fuentes oficiales",
+			"markdown":"Contenido con citas oficiales y trazabilidad por fuente.",
+			"language_code":"es",
+			"citations":[
+				{"ref":"boe-ley-41-2002","locator":"art. 2","claim":"normativa oficial"},
+				{"source_ref":"boe-ley-41-2002","locator":"art. 3"},
+				{"source_ref":"manual-doctrina-001","claim":"apoyo doctrinal"}
+			]
+		}
+	}`
+	if err := os.WriteFile(bodyPath, []byte(payload), 0o600); err != nil {
+		t.Fatalf("write body: %v", err)
+	}
+
+	submission, ok, err := (defaultDomainWorkArtifactSubmissionBuilderV0{}).
+		BuildDomainWorkArtifactSubmissionV0(
+			context.Background(),
+			DomainWorkArtifactSubmissionBuildInputV0{
+				Run:  orquestacoreworkflow.OrchestrationRunV0{RunID: "run-ref-content-citations-001"},
+				Task: orquestacoreworkflow.WorkflowTaskV0{TaskID: "task-ref-content-citations-001", Title: "Redactar bloque OPES"},
+				Record: orquestaappchange.AppChangeRecordV0{
+					Request: orquestaappchange.AppChangeRequestV0{
+						CorrelationID: "corr-ref-content-citations-001",
+						ChangeRef:     "change-ref-content-citations-001",
+						ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+							ProjectRef: "opes",
+							JobRef:     "job-ref-content-citations-001",
+							WorkKind:   "draft_content_block",
+						},
+					},
+				},
+				Descriptor: orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+					DescriptorRef:  "descriptor-ref-content-citations-001",
+					ProjectWorkDir: projectDir,
+				},
+				Ack: orquestaruntimecodex.CodexAgentAckV0{
+					Files: []string{"external/opes/draft_content_block"},
+				},
+				Observation: orquestacionnucleoapp.AgentDeliveryObservationV0{
+					DeliveryRef:  "ack-ref-content-citations-001",
+					AgentRef:     "agent-ref-content-citations-001",
+					Summary:      "Bloque con fuentes validado.",
+					EvidenceRefs: []string{"ack-ref-content-citations-001"},
+				},
+			},
+		)
+
+	if err != nil || !ok {
+		t.Fatalf("BuildDomainWorkArtifactSubmissionV0 ok=%v err=%v", ok, err)
+	}
+	if !domainWorkFieldValuesForTestV0(
+		submission.PayloadFields,
+		"source_refs",
+		[]string{"boe-ley-41-2002", "manual-doctrina-001"},
+	) || !domainWorkCitationSourceRefForTestV0(submission.PayloadFields, "manual-doctrina-001") {
+		t.Fatalf("submission=%+v", submission)
+	}
+}
+
 func TestDefaultDomainWorkArtifactSubmissionBuilderV0AceptaEnvelopeConNombreLibreOPES(t *testing.T) {
 	projectDir := t.TempDir()
 	bodyPath := filepath.Join(projectDir, "external", "opes", "draft_content_block")
@@ -422,6 +493,25 @@ func TestDefaultDomainWorkArtifactSubmissionBuilderV0EntregaAssembledTopicOPES(t
 	}
 	if issues := orquestadomainwork.ValidateDomainWorkArtifactSubmissionV0(submission); len(issues) != 0 {
 		t.Fatalf("submission invalida: %+v", issues)
+	}
+}
+
+func TestDomainWorkArtifactTypeForWorkKindV0NormalizaAliasPedagogicosYEnsamblado(t *testing.T) {
+	cases := map[string]string{
+		"revision_pedagogica":      "block_revision",
+		"revision calidad":         "block_revision",
+		"validacion_tema":          "block_revision",
+		"ensamblado_y_exportacion": "assembled_topic",
+		"redaccion documental":     "content_block",
+		"plan visual":              "visual_asset",
+	}
+	for workKind, want := range cases {
+		if got := domainWorkArtifactTypeForWorkKindV0(workKind); got != want {
+			t.Fatalf("work_kind %q artifact=%q, want %q", workKind, got, want)
+		}
+		if !domainWorkDeliveryArtifactTypeMatchesV0(workKind, want) {
+			t.Fatalf("work_kind %q no matchea artifact %q", workKind, want)
+		}
 	}
 }
 

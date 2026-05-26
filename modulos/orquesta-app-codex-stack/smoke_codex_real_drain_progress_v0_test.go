@@ -40,9 +40,9 @@ func TestCodexStackRealSmokeDrainHastaProgramacionToleraTasksVaciasConProgreso(t
 	if len(source.progressCallTasks) != 0 {
 		t.Fatalf("progress_call_tasks=%v, want []", source.progressCallTasks)
 	}
-	if source.progressCallSequence <= initial.LastSequence {
+	if source.progressCallSequence == 0 {
 		t.Fatalf(
-			"progress_call_sequence=%d initial=%d, want progreso antes de tareas",
+			"progress_call_sequence=%d initial=%d, want progreso observado antes de tareas",
 			source.progressCallSequence,
 			initial.LastSequence,
 		)

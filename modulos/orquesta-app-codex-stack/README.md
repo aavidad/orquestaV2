@@ -36,6 +36,8 @@ defecto y supervisor Codex unitario para `launch -> sigue -> done` sobre el cicl
 normal de agentes. La entrada `POST /api/v0/autoprogramming/prepare-run` prepara
 runs de autoprogramacion por stores del stack y devuelve `run_ref` +
 `wait_agent_refs`; la supervision posterior debe invocarse con ese `run_ref`.
+El mapa local vigente para navegar contratos, owners y huecos verificables esta
+en `docs/indice_mapa_2026-05-26.md`.
 
 El supervisor Codex vive en `codex_supervisor_v0.go`. Expone
 `CodexSupervisorAgentLifecyclePortV0`: el adaptador real debe avanzar

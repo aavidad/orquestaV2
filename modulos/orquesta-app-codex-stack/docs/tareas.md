@@ -776,3 +776,60 @@ Reglas cerradas:
 - no hay sanitizador activo si la composicion no lo inyecta;
 - no se elige proveedor, modelo, HOME ni transporte desde el adaptador;
 - la evidencia no conserva el dato sensible.
+
+## APP-CODEX-STACK-026
+
+Objetivo: crear un indice/mapa local del stack para orientar estructura,
+owners, estado de cierres reales y plan de secciones sin reabrir frentes ya
+cerrados por la foto vigente.
+
+Estado: hecho como documentacion local.
+
+Trabajo aplicado:
+
+- `docs/indice_mapa_2026-05-26.md` resume frontera, flujo, tabla de areas,
+  estado operativo local y plan de secciones;
+- `README.md` enlaza el mapa desde el estado actual;
+- `docs/pruebas.md` deja claro que `CODEX-WAVE-REAL`,
+  `CODEX-REQTEST-REAL-E2E` y `CODEX-RECURSION-REAL` estan cerrados salvo
+  regresion demostrada.
+
+Validacion:
+
+- `git diff --check -- modulos/orquesta-app-codex-stack`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack`
+
+Reglas cerradas:
+
+- el mapa no declara nuevos smokes cerrados sin evidencia;
+- los huecos siguen clasificados como verificables, especialmente OPES temporal
+  real de derivados/cierre;
+- no toca core, runtime, servidor ni adaptadores de dominio.
+
+## APP-CODEX-STACK-027
+
+Objetivo: hacer que la validacion de calidad de `domain_work` reporte issues
+estructurados con campo causal para review/rework, sin endurecer la politica por
+palabras ni mover reglas de dominio al core.
+
+Estado: completada localmente.
+
+Trabajo aplicado:
+
+- `topic_expansion_package` conserva el rail actual para placeholders visibles
+  y palabras minimas, pero devuelve `DomainWorkIssueV0` en el error local;
+- `document_plan` conserva validacion por `orquesta-domain-work` y propaga el
+  primer issue de contrato como causa;
+- el error publico mantiene `domain_work_artifact_quality_gate_failed` para
+  compatibilidad con callers existentes.
+
+Validacion:
+
+- `GOCACHE=/tmp/orquesta-go-cache go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestValidateDomainWorkDeliveryQualityV0|TestDefaultDomainWorkArtifactSubmissionBuilderV0'`
+- `GOCACHE=/tmp/orquesta-go-cache go test -count=1 ./modulos/orquesta-domain-work`
+
+Reglas cerradas:
+
+- no introduce lista nueva de palabras prohibidas;
+- no toca core, OPES bridge, runtime, servidor ni conectores externos;
+- no declara cerrado el smoke real OPES de derivados/cierre.

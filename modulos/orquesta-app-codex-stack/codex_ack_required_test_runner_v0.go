@@ -2,8 +2,6 @@ package orquestaappcodexstack
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"strings"
 
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -84,8 +82,11 @@ func (runner codexAckRequiredTestRunnerV0) resultFromCodexAckDescriptorV0(
 	if !codexAckRequiredTestDescriptorMatchesRequestV0(descriptor, request) {
 		return orquestacionnucleoapp.RequiredTestExecutionResultV0{}, false, nil
 	}
-	ack, err := orquestaruntimecodex.ReadCodexAgentAckFileV0(descriptor.AckPath)
-	if err != nil || !codexAckRequiredTestAckMatchesRequestV0(ack, descriptor, request) {
+	ack, issues := orquestaruntimecodex.ReadAndValidateStrictCompletedCodexAgentAckFileV0(
+		descriptor.AckPath,
+		descriptor.Spec,
+	)
+	if len(issues) > 0 || !codexAckRequiredTestAckMatchesRequestV0(ack, descriptor, request) {
 		return orquestacionnucleoapp.RequiredTestExecutionResultV0{}, false, nil
 	}
 	result := orquestacionnucleoapp.RequiredTestExecutionResultV0{}
@@ -255,7 +256,7 @@ func codexAckRequiredTestEvidenceRefV0(
 	request orquestacionnucleoapp.RequiredTestExecutionRequestV0,
 	command string,
 ) string {
-	hash := sha256.Sum256([]byte(strings.Join([]string{
+	return codexStackDeterministicRefV0("test-evidence-ref-v0-",
 		request.RunRef,
 		request.TaskRef,
 		command,
@@ -263,6 +264,5 @@ func codexAckRequiredTestEvidenceRefV0(
 		request.ReviewRequestID,
 		request.ReviewResultRef,
 		request.AcceptedReviewRef,
-	}, "\x00")))
-	return "test-evidence-ref-v0-" + hex.EncodeToString(hash[:])[:24]
+	)
 }
