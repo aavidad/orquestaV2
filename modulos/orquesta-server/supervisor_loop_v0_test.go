@@ -208,6 +208,7 @@ func TestRuntimeV0SupervisorPreparaAutomejoraTrasIdleV0(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatalf("self improvement not started")
 	}
+	waitSupervisorTickInactiveForTestV0(t, runtime)
 	if !runtime.runSupervisorTickAsyncV0(context.Background()) {
 		t.Fatalf("idle self improvement blocked supervisor tick")
 	}
@@ -239,6 +240,19 @@ func waitIdleSelfImprovementFinishedForTestV0(t *testing.T, runtime *RuntimeV0) 
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("idle self improvement sigue en vuelo")
+}
+
+func waitSupervisorTickInactiveForTestV0(t *testing.T, runtime *RuntimeV0) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if runtime.tracker.SnapshotV0().SupervisorTickActive {
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		return
+	}
+	t.Fatalf("supervisor tick sigue activo")
 }
 
 func TestRuntimeV0SupervisorPreparaAutomejoraConCapacidadLibreV0(t *testing.T) {
