@@ -114,7 +114,7 @@ func ensureContinueOperationalDirectorPlanStateFromWorkflowTasksV0(
 		return request, nil
 	}
 	if hasExistingState {
-		state, changed, err := mergeDirectorDecisionOperationalPlanStateV0(request, existingState, tasks)
+		state, changed, err := mergeDirectorDecisionOperationalPlanStateV0(request, existingState, run, tasks)
 		if err != nil {
 			return ContinueAppDirectorRequestV0{}, err
 		}

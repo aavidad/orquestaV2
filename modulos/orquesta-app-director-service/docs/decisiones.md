@@ -28,8 +28,10 @@ director tenga estado causal.
 Impacto: ContinueAppDirectorV0 acepta `OperationalDirectorPlanV0`, llama al
 materializador, deriva wait por ola/cohorte, registra `WorkflowTaskWaitStateV0`
 si hay writer y reentra al loop progresivo con refs acotadas. El siguiente
-corte llevo la salida positiva de ese wait a review/tests/cierre offline; queda
-smoke real de servidor con runner opt-in.
+corte llevo la salida positiva de ese wait a review/tests/cierre offline;
+`CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL` ya cubren proveedor real para
+ola/cohorte amplia y recursion. Queda como frente real abierto OPES temporal de
+derivados/cierre, fuera de este servicio.
 Estado: historica. El 2026-05-22 se mantiene como regla para el bootstrap
 normal, pero se abre modo plan directo con contratos funcionales explicitos y
 bootstrap causal previo.

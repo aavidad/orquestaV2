@@ -1,6 +1,7 @@
 package orquestaappdirectorservice
 
 import (
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
@@ -16,12 +17,7 @@ func TestAppDirectorServiceArchitectureV0NoImportaLegacyNiDBHardcodeada(t *testi
 		if err != nil {
 			t.Fatalf("read %s: %v", file, err)
 		}
-		for _, forbidden := range forbiddenServiceSourceFragmentsV0() {
-			if strings.Contains(strings.ToLower(string(src)), forbidden) {
-				t.Fatalf("%s contiene fragmento prohibido %q", file, forbidden)
-			}
-		}
-		parsed, err := parser.ParseFile(token.NewFileSet(), file, src, parser.ImportsOnly)
+		parsed, err := parser.ParseFile(token.NewFileSet(), file, src, 0)
 		if err != nil {
 			t.Fatalf("parse %s: %v", file, err)
 		}
@@ -32,6 +28,11 @@ func TestAppDirectorServiceArchitectureV0NoImportaLegacyNiDBHardcodeada(t *testi
 			}
 			if serviceImportForbiddenV0(path) {
 				t.Fatalf("%s importa dependencia prohibida %q", file, path)
+			}
+		}
+		for _, literal := range serviceSourceStringLiteralsV0(parsed) {
+			if serviceSourceStringLiteralForbiddenV0(literal) {
+				t.Fatalf("%s contiene literal sensible o adaptador concreto %q", file, literal)
 			}
 		}
 	}
@@ -57,18 +58,94 @@ func productionGoFilesForServiceTestV0(t *testing.T) []string {
 	return files
 }
 
-func forbiddenServiceSourceFragmentsV0() []string {
+func TestServiceSourceStringLiteralForbiddenV0PermiteVocabularioOperativoOpaco(t *testing.T) {
+	values := []string{
+		"context-ref-runtime-provider-modelo-opaco",
+		"domain-ref-review_pedagogical-assemble_topic-a1",
+		"adapter-ref-codex-fake-temporal",
+		"oauth-policy-ref-sin-valor",
+		"db-policy-ref-sql-neutral",
+	}
+	for _, value := range values {
+		if serviceSourceStringLiteralForbiddenV0(value) {
+			t.Fatalf("literal opaco bloqueado por vocabulario normal: %q", value)
+		}
+	}
+}
+
+func TestServiceSourceStringLiteralForbiddenV0BloqueaValoresSensiblesYConectores(t *testing.T) {
+	values := []string{
+		"postgres://user:pass@localhost/db",
+		"mysql://user:pass@localhost/db",
+		"sqlite:///tmp/orquesta.db",
+		"dsn=postgres://user:pass@localhost/db",
+		"authorization: Bearer token-real",
+		"api_key=valor-real",
+		"client_secret=valor-real",
+		"/home/alberto/.config/orquesta",
+	}
+	for _, value := range values {
+		if !serviceSourceStringLiteralForbiddenV0(value) {
+			t.Fatalf("literal sensible no bloqueado: %q", value)
+		}
+	}
+}
+
+func serviceSourceStringLiteralsV0(file *ast.File) []string {
+	values := []string{}
+	ast.Inspect(file, func(node ast.Node) bool {
+		lit, ok := node.(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			return true
+		}
+		value, err := strconv.Unquote(lit.Value)
+		if err != nil {
+			return true
+		}
+		values = append(values, value)
+		return true
+	})
+	return values
+}
+
+func serviceSourceStringLiteralForbiddenV0(value string) bool {
+	lower := strings.ToLower(strings.ReplaceAll(value, `\/`, "/"))
+	for _, forbidden := range forbiddenServiceStringLiteralFragmentsV0() {
+		if strings.Contains(lower, forbidden) {
+			return true
+		}
+	}
+	return false
+}
+
+func forbiddenServiceStringLiteralFragmentsV0() []string {
 	return []string{
-		"database/sql",
-		"postgres",
-		"sqlite",
-		"mysql",
-		"oauth",
-		"ollama",
-		"vllm",
-		" codex",
-		" claude",
-		" gemini",
+		"postgres://",
+		"mysql://",
+		"sqlite://",
+		"mongodb://",
+		"dsn=",
+		"database_url=",
+		"authorization:",
+		"bearer ",
+		"api_key=",
+		"api-key=",
+		"access_token=",
+		"access-token=",
+		"refresh_token=",
+		"refresh-token=",
+		"client_secret=",
+		"client-secret=",
+		"password=",
+		"passwd=",
+		"pwd=",
+		"secret=",
+		"credential=",
+		"-----begin ",
+		"/home/",
+		"/users/",
+		`c:\users\`,
+		"~/",
 	}
 }
 

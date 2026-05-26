@@ -118,6 +118,9 @@ func closedOperationalDirectorPlanStateContinueResultV0(
 	ports StartAppDirectorPortsV0,
 ) (ContinueAppDirectorResultV0, bool, error) {
 	planRef := strings.TrimSpace(request.OperationalDirectorPlanRef)
+	if planRef == "" {
+		planRef = defaultOperationalDirectorDecisionPlanRefV0(request.RunRef)
+	}
 	if planRef == "" || ports.OperationalPlanStateStore == nil {
 		return ContinueAppDirectorResultV0{}, false, nil
 	}

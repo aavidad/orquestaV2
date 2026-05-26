@@ -188,8 +188,12 @@ offline, tambien tras reinicio `state-file`, sin duplicar quality gate, replan
 ni apertura de fase. El reinicio `state-file` cubre tambien wait expirado,
 review negativa `changes_requested` con rework/replan ya registrado, y bloqueo
 de prerequisitos de cierre hasta reentrada/cierre sin duplicar evidencias ni
-eventos. Sigue pendiente reproducir el ciclo con proveedor real en ola/cohorte
-amplia o recursion.
+eventos. Actualizacion 2026-05-23: `CODEX-WAVE-REAL` y
+`CODEX-RECURSION-REAL` ya cerraron ola/cohorte Codex amplia y recursion con
+proveedor real opt-in; no son backlog abierto salvo regresion demostrada. El
+pendiente real vigente para este frente es OPES temporal real de
+derivados/cierre hasta `assemble_topic`, que pertenece a la composicion/bridge
+OPES y no al nucleo del servicio.
 
 Alcance esperado:
 
@@ -217,3 +221,33 @@ Validacion de replays durables adicionales:
 ```sh
 go test -count=1 ./modulos/orquesta-app-director-service -run 'TestContinueAppDirectorV0WaitExpiredStateFileRestartNoDuplicaEvidenceRefs|TestContinueAppDirectorV0StateFileReplayReviewChangesRequestedReworkReplanNoDuplica|TestContinueRequestWithOperationalDirectorPlanStateV0StateFileRestartReintentaPrereqSinDuplicar'
 ```
+
+## APP-DIR-SVC-015
+
+Objetivo: dejar un mapa local del servicio para orientar cambios pequenos sin
+mezclar entrada, waits, plan-state, review/tests, cierre y composicion de
+providers.
+
+Estado: hecho.
+
+Cambio: `docs/mapa.md` documenta entradas, ciclo conceptual, grupos de ficheros
+y reglas de ampliacion. `README.md` enlaza el indice local y
+`docs/contratos.md` sincroniza la regla vigente de `replan_or_close`.
+
+Validacion:
+
+```sh
+go test -count=1 ./modulos/orquesta-app-director-service
+```
+
+Notas de test:
+
+- para regresiones de scope, priorizar tests con `WaitAgentRefs` o
+  `operational_director_plan_ref`; una espera vacia debe seguir significando
+  modo legacy de run completo;
+- para regresiones de cierre, probar primero `PlanState` en
+  `replan_or_close/running`, outbox cero y refs causales completas antes de
+  llamar a `OperationalClosureSource`;
+- si aparece un blocker nuevo, anadir una prueba focal con la cadena causal que
+  lo hace reparable o explicitar que queda bloqueado; no ampliar validaciones por
+  texto libre ni mover pendientes reales cerrados de la matriz.

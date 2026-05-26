@@ -103,9 +103,12 @@ carga `OperationalDirectorPlanStateV0` por `run_ref + plan_ref` y solo proyecta
 los steps activos soportados. `wait_subagents` se proyecta a `wait_wave_ref`,
 `wait_cohort_ref`, `wait_parent_task_ref` y refs pendientes. `review_deliveries`
 y `run_required_tests` se proyectan al mismo scope usando `agent_refs`, porque
-los pending refs ya se limpiaron al consumir el wait. `replan_or_close` y otros
-steps siguen fallando de forma explicita hasta tener handler causal propio, para
-no volver al scope legacy de todo el run.
+los pending refs ya se limpiaron al consumir el wait. `replan_or_close` se
+maneja como puerta causal de cierre: solo consulta la fuente de cierre cuando el
+step esta `running`, el loop queda `quiescent`, no hay outbox pendiente, el run
+sigue activo y existen puertos de task store/fuente de cierre. Steps no
+soportados siguen fallando de forma explicita para no volver al scope legacy de
+todo el run.
 
 Regla de avance del plan state tras el loop: si el loop queda `quiescent`, el
 state pasa de `wait_subagents` a `review_deliveries` cuando todos los agentes
@@ -157,3 +160,50 @@ inyecta writer, y entra al loop progresivo con esas refs.
 `StartAppDirectorV0` mantiene el bootstrap normal cuando no recibe plan
 operativo, pero el modo plan directo ya puede hacer el mismo tramo inicial
 desde un run recien creado sin meter runtime ni producto dentro del servicio.
+
+## Ejemplos de reentrada
+
+Reentrada por plan state vivo:
+
+```text
+run_ref=run-autoprogramacion-001
+operational_director_plan_ref=operational-director-plan-autoprogramacion-001
+```
+
+El servicio carga el state por `OperationalPlanStateStore`, reusa el scope del
+step activo y conserva `WaitAgentRefs` acotados. Es el camino preferido cuando
+el caller no necesita reenviar el plan completo.
+
+Reentrada por cohorte/ola:
+
+```text
+run_ref=run-autoprogramacion-001
+wait_wave_ref=wave-ref-implementation-001
+wait_cohort_ref=cohort-ref-docs-001
+```
+
+El servicio exige `DirectorTaskStore`, deriva agentes desde `WorkflowTaskV0` y
+registra `WorkflowTaskWaitStateV0` si hay writer. No convierte la espera en
+"todos los agentes vivos" del run.
+
+Reentrada por refs explicitas:
+
+```text
+run_ref=run-legacy-001
+wait_agent_refs=agent-ref-a,agent-ref-b
+```
+
+Se conserva por compatibilidad y no requiere `DirectorTaskStore`, pero no aporta
+metadata de ola/cohorte ni parent/child refs. Para Director Operativo usar refs
+de plan, ola, cohorte o parent task cuando existan.
+
+Errores publicos esperables:
+
+- filtro de wait sin `DirectorTaskStore`: falta el puerto que traduce metadata de
+  task a agentes concretos;
+- `operational_director_plan_ref` sin `OperationalPlanStateStore`: no hay estado
+  vivo reentrable;
+- plan directo sin contratos funcionales explicitos: el servicio rechaza antes
+  de persistir para no materializar microtareas sin causalidad;
+- cierre con `PlanState` fuera de `replan_or_close/running`, outbox pendiente o
+  source/task store ausente: el state se bloquea o reintenta con razon durable.

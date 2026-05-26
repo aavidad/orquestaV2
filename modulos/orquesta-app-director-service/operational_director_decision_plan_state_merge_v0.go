@@ -11,6 +11,7 @@ import (
 func mergeDirectorDecisionOperationalPlanStateV0(
 	request ContinueAppDirectorRequestV0,
 	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
 	tasks []orquestacoreworkflow.WorkflowTaskV0,
 ) (orquestacionnucleoapp.OperationalDirectorPlanStateV0, bool, error) {
 	if state.Status == orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0 {
@@ -28,8 +29,8 @@ func mergeDirectorDecisionOperationalPlanStateV0(
 	if waitStepID == "" {
 		return state, false, AppDirectorServiceIssueV0{Field: "operational_director_plan_state.wait_subagents"}
 	}
-	taskRefs := continueOperationalDirectorTaskRefsV0(newTasks)
-	agentRefs := continueOperationalDirectorAgentRefsV0(newTasks)
+	taskRefs := directorDecisionPlanStateMergedTaskRefsV0(state, run, newTasks)
+	agentRefs := directorDecisionPlanStateMergedAgentRefsV0(state, run, newTasks)
 	waitRef := appDirectorWaitRefV0(state.RunRef, scope, request.CorrelationID)
 
 	next := state
@@ -53,6 +54,55 @@ func mergeDirectorDecisionOperationalPlanStateV0(
 		return state, false, err
 	}
 	return normalized, true, nil
+}
+
+func directorDecisionPlanStateMergedTaskRefsV0(
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	newTasks []orquestacoreworkflow.WorkflowTaskV0,
+) []string {
+	refs := continueOperationalDirectorTaskRefsV0(newTasks)
+	pendingAgents := directorDecisionPlanStatePendingAgentRefsV0(state, run)
+	if len(pendingAgents) == 0 {
+		return compactServiceRefsV0(refs)
+	}
+	activeStep, ok := operationalDirectorPlanStateActiveStepV0(state)
+	if !ok {
+		return compactServiceRefsV0(refs)
+	}
+	for _, taskRef := range activeStep.TaskRefs {
+		agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskRef)
+		if startAppDirectorStringInSetV0(pendingAgents, agentRef) {
+			refs = append(refs, taskRef)
+		}
+	}
+	return compactServiceRefsV0(refs)
+}
+
+func directorDecisionPlanStateMergedAgentRefsV0(
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	newTasks []orquestacoreworkflow.WorkflowTaskV0,
+) []string {
+	refs := continueOperationalDirectorAgentRefsV0(newTasks)
+	refs = append(refs, directorDecisionPlanStatePendingAgentRefsV0(state, run)...)
+	return compactServiceRefsV0(refs)
+}
+
+func directorDecisionPlanStatePendingAgentRefsV0(
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) []string {
+	activeStep, ok := operationalDirectorPlanStateActiveStepV0(state)
+	if !ok ||
+		activeStep.Kind != orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0 ||
+		activeStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 {
+		return nil
+	}
+	return appDirectorExplicitPendingAgentRefsV0(
+		run,
+		compactServiceRefsV0(append(activeStep.PendingAgentRefs, state.PendingAgentRefs...)),
+	)
 }
 
 func directorDecisionPlanStateNewTasksV0(

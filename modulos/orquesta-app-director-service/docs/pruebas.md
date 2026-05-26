@@ -146,3 +146,33 @@ Evidencia real 2026-05-09:
 - Proyecto generado en `/tmp/orquesta-director-driven-20260509190441/project`.
 - Validacion externa: `go test ./...` en `apps/agenda-rest`, `node --check` en
   modulos JS de `apps/agenda-web`, sin ficheros de codigo sobre 300 lineas.
+
+## Notas para nuevos tests
+
+Elegir el nivel minimo que pruebe la frontera:
+
+- helpers puros para normalizacion, politica de cierre y construccion de refs;
+- tests de `ContinueAppDirectorV0` cuando el comportamiento dependa de puertos,
+  run durable, outbox o `OperationalDirectorPlanStateV0`;
+- tests de composicion fuera de este modulo cuando haya runtime real, Codex,
+  OPES, REST, MCP, state-file o servidor.
+
+Supuestos que deben quedar visibles en la prueba:
+
+- `WaitAgentRefs` no vacio acota pending, wait e ingesta; vacio conserva modo
+  legacy de run completo;
+- `OperationalClosureSource` solo se consulta con loop quiescent, outbox cero y
+  `PlanState` en `replan_or_close/running`;
+- `RequiredTestEvidenceV0` debe ser causal, `passed`, pedida por ref y enlazada
+  a la misma delivery/review aceptada; summaries textuales no cuentan;
+- `domain_work` cierra por refs opacas y validacion de dominio, no por rutas,
+  URLs, DB o nombres de conectores.
+
+Errores que merecen prueba focal antes de tocar codigo:
+
+- una entrega o evidencia de otra ola avanza el state;
+- un retry de cierre duplica `TaskClosed`, validacion, `RunClosed`, quality gate
+  o replan;
+- una reentrada por `operational_director_plan_ref` vuelve al scope global;
+- una validacion de forma rechaza alias o refs opacas reparables en vez de dejar
+  que el adaptador/director normalice.
