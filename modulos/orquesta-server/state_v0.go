@@ -54,6 +54,12 @@ type StateV0 struct {
 	IdleSelfImprovementOK      int                     `json:"idle_self_improvement_ok,omitempty"`
 	LastError                  string                  `json:"last_error,omitempty"`
 	StartupEvidenceRefs        []string                `json:"startup_evidence_refs,omitempty"`
+	StatePersistStatus         string                  `json:"state_persist_status,omitempty"`
+	StatePersistFailures       int                     `json:"state_persist_failures,omitempty"`
+	StatePersistLastFailedAt   string                  `json:"state_persist_last_failed_at,omitempty"`
+	StatePersistLastCode       string                  `json:"state_persist_last_code,omitempty"`
+	StatePersistLastTransition string                  `json:"state_persist_last_transition,omitempty"`
+	StatePersistLastConfirmed  string                  `json:"state_persist_last_confirmed_at,omitempty"`
 	RecentErrors               []ServerDiagnosticV0    `json:"recent_errors,omitempty"`
 }
 

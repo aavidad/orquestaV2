@@ -87,3 +87,9 @@ en linea. Esto permite materializar el arranque y una observacion inicial sin
 impedir que otros runs entren en ticks posteriores. Si una prueba real necesita
 un drain sincrono largo, puede elevar el entorno de forma explicita, pero no
 debe ser el modo desatendido normal.
+
+El pulso residente se ejecuta de forma asincrona con una guarda atomica de
+actividad: un segundo tick no se solapa con el primero, pero la siguiente
+iteracion puede avanzar en cuanto el pulso anterior libera el slot. La
+preparacion de automejora se lanza aparte para no mezclar trabajo secundario con
+el tick principal.

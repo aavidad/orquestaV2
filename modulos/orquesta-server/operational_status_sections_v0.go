@@ -30,16 +30,25 @@ func residentOperationalHealthV0(state StateV0) []orquestaobservability.Diagnost
 }
 
 func residentOperationalBlockersV0(state StateV0) []orquestaobservability.DiagnosticoBloqueoV0 {
-	if strings.TrimSpace(state.LastError) == "" && state.SupervisorErrorTicks == 0 {
-		return nil
+	var blockers []orquestaobservability.DiagnosticoBloqueoV0
+	if strings.TrimSpace(state.LastError) != "" || state.SupervisorErrorTicks > 0 {
+		blockers = append(blockers, orquestaobservability.DiagnosticoBloqueoV0{
+			BlockerRef:   "blocker-ref-server-operational-status",
+			Severity:     "warning",
+			OwnerArea:    "system",
+			Summary:      "bloqueo residente redactado",
+			EvidenceRefs: sanitizeServerEvidenceRefsV0(state.StartupEvidenceRefs),
+		})
 	}
-	return []orquestaobservability.DiagnosticoBloqueoV0{{
-		BlockerRef:   "blocker-ref-server-operational-status",
-		Severity:     "warning",
-		OwnerArea:    "system",
-		Summary:      "bloqueo residente redactado",
-		EvidenceRefs: sanitizeServerEvidenceRefsV0(state.StartupEvidenceRefs),
-	}}
+	if strings.TrimSpace(state.StatePersistStatus) == "degraded" {
+		blockers = append(blockers, orquestaobservability.DiagnosticoBloqueoV0{
+			BlockerRef: "blocker-ref-server-state-persist",
+			Severity:   "warning",
+			OwnerArea:  "system",
+			Summary:    "persistencia de estado degradada",
+		})
+	}
+	return blockers
 }
 
 func residentOperationalActivityV0(state StateV0) []orquestaobservability.DiagnosticoActividadV0 {
@@ -58,6 +67,7 @@ func residentOperationalActivityV0(state StateV0) []orquestaobservability.Diagno
 	appendActivity("activity-ref-server-heartbeat", state.LastHeartbeatAt, "system", "heartbeat residente observado")
 	appendActivity("activity-ref-server-supervisor", state.LastSupervisorAt, "runtime", "pulso supervisor observado")
 	appendActivity("activity-ref-server-startup", state.LastStartupCheckAt, "system", "startup check observado")
+	appendActivity("activity-ref-server-state-persist-failed", state.StatePersistLastFailedAt, "system", "fallo de persistencia de estado observado")
 	return out
 }
 

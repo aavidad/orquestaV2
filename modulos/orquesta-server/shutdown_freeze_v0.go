@@ -46,7 +46,7 @@ func (runtime *RuntimeV0) freezeSupervisorForShutdownV0(ctx context.Context, rea
 		runtime.auditEventV0(ctx, "server_shutdown_freeze", "active", "", map[string]interface{}{"reason": reason})
 	}
 	if runtime.tracker != nil {
-		runtime.persistStateV0(ctx, runtime.tracker.MarkShutdownRequestedV0(runtime.clock.Now()))
+		runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkShutdownRequestedV0(runtime.clock.Now()), "shutdown_requested")
 	}
 }
 
@@ -62,7 +62,7 @@ func (runtime *RuntimeV0) markSupervisorFrozenForShutdownV0(ctx context.Context,
 		return
 	}
 	runtime.auditEventV0(ctx, "supervisor_tick_skipped", "skipped", "", map[string]interface{}{"reason": reason})
-	runtime.persistStateV0(ctx, runtime.tracker.MarkSupervisorFrozenV0(reason, runtime.clock.Now()))
+	runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkSupervisorFrozenV0(reason, runtime.clock.Now()), "supervisor_frozen")
 }
 
 func (runtime *RuntimeV0) recordShutdownHTTPResultV0(ctx context.Context, statusCode int, body []byte) {
@@ -73,11 +73,11 @@ func (runtime *RuntimeV0) recordShutdownHTTPResultV0(ctx context.Context, status
 	if !keepFrozen {
 		atomic.StoreInt32(&runtime.shutdownInProgress, 0)
 	}
-	runtime.persistStateV0(ctx, runtime.tracker.MarkShutdownResultV0(
+	runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkShutdownResultV0(
 		projection,
 		keepFrozen,
 		runtime.clock.Now(),
-	))
+	), "shutdown_result")
 }
 
 func shutdownProjectionFromHTTPV0(statusCode int, body []byte) (ShutdownProjectionV0, bool) {

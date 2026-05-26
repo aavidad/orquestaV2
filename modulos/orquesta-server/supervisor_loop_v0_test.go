@@ -126,7 +126,7 @@ func TestRuntimeV0SupervisorRegistraErrorYPermiteSiguienteTickV0(t *testing.T) {
 	}
 }
 
-func TestRuntimeV0SupervisorAsyncNoBloqueaTickResidenteV0(t *testing.T) {
+func TestRuntimeV0SupervisorAsyncCoalesceaUnTickPendienteV0(t *testing.T) {
 	store := &memoryStateStoreV0{}
 	supervisor := newBlockingSupervisorV0()
 	runtime, err := NewRuntimeV0(ConfigV0{
@@ -149,12 +149,20 @@ func TestRuntimeV0SupervisorAsyncNoBloqueaTickResidenteV0(t *testing.T) {
 	}
 	supervisor.release()
 	supervisor.waitDone(t)
-	time.Sleep(10 * time.Millisecond)
-	if !runtime.runSupervisorTickAsyncV0(context.Background()) {
-		t.Fatalf("async tick did not restart after first completed")
+	select {
+	case <-supervisor.started:
+	case <-time.After(time.Second):
+		t.Fatalf("pending async tick was not coalesced after first completed")
+	}
+	if runtime.runSupervisorTickAsyncV0(context.Background()) {
+		t.Fatalf("third async tick overlapped while coalesced tick in flight")
 	}
 	supervisor.release()
 	supervisor.waitDone(t)
+	time.Sleep(10 * time.Millisecond)
+	if store.last.SupervisorTickActive {
+		t.Fatalf("supervisor tick stayed active after coalesced pulse: %+v", store.last)
+	}
 }
 func TestRuntimeV0SupervisorPreparaAutomejoraTrasIdleV0(t *testing.T) {
 	now := time.Date(2026, 5, 23, 10, 2, 0, 0, time.UTC)
@@ -204,6 +212,7 @@ func TestRuntimeV0SupervisorPreparaAutomejoraTrasIdleV0(t *testing.T) {
 		t.Fatalf("idle self improvement blocked supervisor tick")
 	}
 	close(supervisor.selfRelease)
+	waitIdleSelfImprovementFinishedForTestV0(t, runtime)
 	if supervisor.selfCalls != 1 ||
 		!strings.Contains(supervisor.lastSelfRequest.FailureSummary, "1m0s") ||
 		supervisor.lastSelfRequest.PriorityScore != DefaultIdleSelfImprovementPriorityScoreV0 ||
@@ -217,6 +226,19 @@ func TestRuntimeV0SupervisorPreparaAutomejoraTrasIdleV0(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatalf("retry no lanzado tras cooldown")
 	}
+}
+
+func waitIdleSelfImprovementFinishedForTestV0(t *testing.T, runtime *RuntimeV0) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		_, _, inFlight, _ := runtime.tracker.IdleSelfImprovementWindowV0()
+		if !inFlight {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("idle self improvement sigue en vuelo")
 }
 
 func TestRuntimeV0SupervisorPreparaAutomejoraConCapacidadLibreV0(t *testing.T) {
@@ -545,6 +567,23 @@ func TestRuntimeV0SupervisorNoPreparaAutomejoraConProveedorAuthBloqueadoV0(t *te
 	}
 	if store.last.IdleSelfImprovementReason != "provider_auth_blocked" {
 		t.Fatalf("reason=%q state=%+v", store.last.IdleSelfImprovementReason, store.last)
+	}
+}
+
+func TestIdleSelfImprovementAuditPayloadRedactaMensajeDeBlockerV0(t *testing.T) {
+	payload := idleSelfImprovementScheduleDecisionV0{
+		Reason:          "provider_auth_blocked",
+		BlockerRunRefs:  []string{"run-ref-auth-blocked-001"},
+		BlockerEvidence: []string{"evidence-ref-auth-config-blocker"},
+		BlockerMessage:  "reautorizar token en /home/user/.config/provider",
+	}.AuditPayload()
+
+	if payload["blocker_message"] != "diagnostic_message_redacted" {
+		t.Fatalf("blocker_message=%q", payload["blocker_message"])
+	}
+	if payload["blocker_run_refs"].([]string)[0] != "run-ref-auth-blocked-001" ||
+		payload["blocker_evidence"].([]string)[0] != "evidence-ref-auth-config-blocker" {
+		t.Fatalf("payload compacto perdido: %+v", payload)
 	}
 }
 

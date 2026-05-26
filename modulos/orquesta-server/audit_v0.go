@@ -103,7 +103,7 @@ func (runtime *RuntimeV0) auditEventV0(
 	}); err != nil {
 		message := "audit_append_failed: " + err.Error()
 		if runtime.tracker != nil {
-			runtime.persistStateV0(context.Background(), runtime.tracker.MarkErrorV0(message, runtime.clock.Now()))
+			runtime.persistStateTransitionV0(context.Background(), runtime.tracker.MarkErrorV0(message, runtime.clock.Now()), "audit_error")
 		}
 		fmt.Fprintln(os.Stderr, message)
 	}

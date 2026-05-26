@@ -21,6 +21,10 @@
 - `modulos/orquesta-server` prueba que un panic del supervisor residente queda
   registrado como error observable y que el siguiente tick recupera metricas de
   ejecucion, skips y cola sin bloquear el loop.
+- `modulos/orquesta-server` prueba que el supervisor residente ejecuta ticks
+  asincronos sin solaparse, coalescea un unico tick pendiente si otro pulso llega
+  durante la supervision activa y puede preparar automejora en segundo plano sin
+  bloquear nuevos pulsos.
 - `cmd/orquesta-server` prueba que el planner de automejora salta tareas ya
   visibles en cola y anade una tarea scanner cuando hay capacidad libre para
   descubrir nuevos huecos.
@@ -32,16 +36,25 @@
   `SupervisorCommand.MaxTicks` positivo y usa default solo para valores vacios o
   invalidos.
 - `modulos/orquesta-server` prueba que la automejora se prepara tambien por
-  capacidad libre con cola visible, y que no se prepara si la cola ya alcanzo el
-  objetivo configurado.
+  capacidad libre con cola visible, incluso con skips no terminales si queda
+  hueco bajo el objetivo, y que no se prepara si la cola ya alcanzo el objetivo
+  configurado.
 - `modulos/orquesta-server` prueba que un bloqueo posterior del supervisor no
   pisa la razon de una automejora aceptada y la conserva como intento pendiente.
+- `modulos/orquesta-server` prueba que la auditoria de blockers de automejora
+  redacta mensajes con rutas, HOME, tokens, prompts o transcripts sin perder
+  refs opacas ni evidencias compactas.
 - `modulos/orquesta-server` prueba que `StartupCheckPortV0` publica
   `startup_ready` con mensaje/evidencias y bloquea el arranque cuando la
   composicion no esta lista.
+- `modulos/orquesta-server` prueba que la auditoria JSONL de `startup_check_*`
+  usa summaries compactos y no persiste paths de proyecto, runtime o state.
 - `modulos/orquesta-server` prueba que `/healthz` es liveness y
   `/api/v0/server/readiness` es readiness, responde 503 si startup no esta
   listo y no filtra paths ni runtime dirs.
+- `modulos/orquesta-server` prueba que los fallos no fatales de persistencia de
+  estado quedan visibles como `state_persist_failed`, sin filtrar paths del
+  store, y que una escritura posterior confirmada devuelve la proyeccion a `ok`.
 - `cmd/orquesta-server` prueba que el daemon espera readiness y no acepta
   `/healthz` como senal suficiente.
 - Prueba manual recomendada:

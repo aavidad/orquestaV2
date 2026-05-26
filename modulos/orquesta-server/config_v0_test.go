@@ -42,3 +42,15 @@ func TestNormalizeConfigV0AjustaObjetivoAutomejoraAlMaximoDeTandaV0(t *testing.T
 		t.Fatalf("target_queue=%d want=8", config.IdleSelfImprovementTargetQueue)
 	}
 }
+
+func TestNormalizeConfigV0AutomejoraDefaultDiezPadresV0(t *testing.T) {
+	config := NormalizeConfigV0(ConfigV0{})
+
+	if config.IdleSelfImprovementMaxRequests != 10 ||
+		config.IdleSelfImprovementTargetQueue != 10 {
+		t.Fatalf("idle defaults max_requests=%d target_queue=%d",
+			config.IdleSelfImprovementMaxRequests,
+			config.IdleSelfImprovementTargetQueue,
+		)
+	}
+}

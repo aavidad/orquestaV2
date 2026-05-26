@@ -34,7 +34,7 @@ func (handler handlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		handler.writeJSONV0(w, status, readiness)
 	case "/api/status", "/api/v0/server/status":
-		handler.writeJSONV0(w, http.StatusOK, handler.statusV0())
+		handler.writeJSONV0(w, http.StatusOK, NewServerPublicStatusV0(handler.statusV0()))
 	case "/api/v0/operational-status/query":
 		handler.serveOperationalStatusV0(w, r)
 	case ServerResourcesEndpointV0:

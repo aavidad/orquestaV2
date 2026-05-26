@@ -55,10 +55,10 @@ func (runtime *RuntimeV0) prepareStartupV0(ctx context.Context) error {
 		runtime.auditEventV0(ctx, "startup_check_skipped", "ready", "", map[string]interface{}{
 			"result": result,
 		})
-		runtime.persistStateV0(ctx, runtime.tracker.MarkStartupReadyV0(
+		runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkStartupReadyV0(
 			result,
 			runtime.clock.Now(),
-		))
+		), "startup_ready")
 		return nil
 	}
 	now := runtime.clock.Now()
@@ -70,39 +70,60 @@ func (runtime *RuntimeV0) prepareStartupV0(ctx context.Context) error {
 		OccurredAt:     now,
 	}
 	runtime.auditEventV0(ctx, "startup_check_start", "checking", "", map[string]interface{}{
-		"command": command,
+		"command_summary": startupCheckCommandAuditSummaryV0(command),
 	})
-	runtime.persistStateV0(ctx, runtime.tracker.MarkStartupCheckingV0(now))
+	runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkStartupCheckingV0(now), "startup_checking")
 	result, err := runtime.startupCheck.PrepareStartupV0(ctx, command)
 	if err != nil {
 		runtime.auditEventV0(ctx, "startup_check_error", "blocked", err.Error(), map[string]interface{}{
-			"command": command,
+			"command_summary": startupCheckCommandAuditSummaryV0(command),
 		})
-		runtime.persistStateV0(ctx, runtime.tracker.MarkStartupBlockedV0(
+		runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkStartupBlockedV0(
 			StartupCheckResultV0{
 				Status:  StartupCheckStatusBlockedV0,
 				Ready:   false,
 				Message: err.Error(),
 			},
 			runtime.clock.Now(),
-		))
+		), "startup_blocked")
 		return err
 	}
 	result = normalizeStartupCheckResultV0(result)
 	if !result.Ready {
 		runtime.auditEventV0(ctx, "startup_check_blocked", "blocked", result.Message, map[string]interface{}{
-			"command": command,
-			"result":  result,
+			"command_summary": startupCheckCommandAuditSummaryV0(command),
+			"result_summary":  startupCheckResultAuditSummaryV0(result),
 		})
-		runtime.persistStateV0(ctx, runtime.tracker.MarkStartupBlockedV0(result, runtime.clock.Now()))
+		runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkStartupBlockedV0(result, runtime.clock.Now()), "startup_blocked")
 		return StartupNotReadyErrorV0{Status: result.Status, Message: result.Message}
 	}
 	runtime.auditEventV0(ctx, "startup_check_ready", "ready", "", map[string]interface{}{
-		"command": command,
-		"result":  result,
+		"command_summary": startupCheckCommandAuditSummaryV0(command),
+		"result_summary":  startupCheckResultAuditSummaryV0(result),
 	})
-	runtime.persistStateV0(ctx, runtime.tracker.MarkStartupReadyV0(result, runtime.clock.Now()))
+	runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkStartupReadyV0(result, runtime.clock.Now()), "startup_ready")
 	return nil
+}
+
+func startupCheckCommandAuditSummaryV0(command StartupCheckCommandV0) map[string]interface{} {
+	return map[string]interface{}{
+		"correlation_id":       strings.TrimSpace(command.CorrelationID),
+		"occurred_at":          formatTimeV0(command.OccurredAt),
+		"project_configured":   strings.TrimSpace(command.ProjectWorkDir) != "",
+		"runtime_configured":   strings.TrimSpace(command.RuntimeWorkDir) != "",
+		"statefile_configured": strings.TrimSpace(command.StateDir) != "",
+	}
+}
+
+func startupCheckResultAuditSummaryV0(result StartupCheckResultV0) map[string]interface{} {
+	evidenceRefs := compactServerStringsV0(result.EvidenceRefs)
+	return map[string]interface{}{
+		"status":              strings.TrimSpace(result.Status),
+		"ready":               result.Ready,
+		"message":             publicReadinessMessageV0(result.Message),
+		"evidence_refs":       append([]string(nil), evidenceRefs...),
+		"evidence_refs_count": len(evidenceRefs),
+	}
 }
 
 func normalizeStartupCheckResultV0(result StartupCheckResultV0) StartupCheckResultV0 {

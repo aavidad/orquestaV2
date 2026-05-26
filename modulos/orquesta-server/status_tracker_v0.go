@@ -75,7 +75,7 @@ func (tracker *StatusTrackerV0) MarkStartupReadyV0(
 		state.LastStartupCheckAt = formatTimeV0(now)
 		state.StartupStatus = result.Status
 		state.StartupReady = true
-		state.StartupMessage = result.Message
+		state.StartupMessage = projectServerStartupMessageV0(result.Message)
 		state.StartupEvidenceRefs = append([]string(nil), result.EvidenceRefs...)
 		state.LastError = ""
 	})
@@ -92,10 +92,10 @@ func (tracker *StatusTrackerV0) MarkStartupBlockedV0(
 		state.LastStartupCheckAt = formatTimeV0(now)
 		state.StartupStatus = result.Status
 		state.StartupReady = false
-		state.StartupMessage = result.Message
+		state.StartupMessage = projectServerStartupMessageV0(result.Message)
 		state.StartupEvidenceRefs = append([]string(nil), result.EvidenceRefs...)
-		state.LastError = result.Message
-		appendRecentServerErrorV0(state, now, "startup_blocked", "startup", result.Message, result.EvidenceRefs)
+		state.LastError = projectServerOperationalMessageV0("startup", result.Message)
+		appendRecentServerErrorV0(state, now, "startup_blocked", "startup", state.LastError, result.EvidenceRefs)
 	})
 }
 
@@ -159,7 +159,7 @@ func (tracker *StatusTrackerV0) MarkSupervisorErrorV0(
 	message string,
 	now time.Time,
 ) StateV0 {
-	message = strings.TrimSpace(message)
+	message = projectServerOperationalMessageV0("supervisor", message)
 	metrics := collectSupervisorResultMetricsV0(result)
 	return tracker.updateV0(func(state *StateV0) {
 		state.LastHeartbeatAt = formatTimeV0(now)
@@ -250,13 +250,13 @@ func (tracker *StatusTrackerV0) MarkIdleSelfImprovementPreparedV0(
 			reason = append(reason, "request_ref="+strings.TrimSpace(result.RequestRef))
 		}
 		if strings.TrimSpace(result.Status) != "" {
-			reason = append(reason, "status="+strings.TrimSpace(result.Status))
+			reason = append(reason, projectServerOperationalReasonFieldV0("status", result.Status))
 		}
 		if strings.TrimSpace(result.Message) != "" {
-			reason = append(reason, "message="+strings.TrimSpace(result.Message))
+			reason = append(reason, projectServerOperationalReasonFieldV0("message", result.Message))
 		}
 		if len(result.NextActions) > 0 {
-			reason = append(reason, "next="+strings.Join(result.NextActions, ","))
+			reason = append(reason, projectServerOperationalReasonFieldV0("next", strings.Join(result.NextActions, ",")))
 		}
 		if len(result.EvidenceRefs) > 0 {
 			reason = append(reason, "evidence="+strings.Join(result.EvidenceRefs, ","))
@@ -291,7 +291,7 @@ func (tracker *StatusTrackerV0) MarkIdleSelfImprovementScheduledV0(now time.Time
 }
 
 func (tracker *StatusTrackerV0) MarkIdleSelfImprovementErrorV0(message string, now time.Time) StateV0 {
-	message = strings.TrimSpace(message)
+	message = projectServerOperationalMessageV0("idle_self_improvement", message)
 	return tracker.updateV0(func(state *StateV0) {
 		state.LastHeartbeatAt = formatTimeV0(now)
 		state.IdleSelfImprovementCheck = formatTimeV0(now)
@@ -309,7 +309,7 @@ func (tracker *StatusTrackerV0) MarkIdleSelfImprovementErrorV0(message string, n
 }
 
 func (tracker *StatusTrackerV0) MarkIdleSelfImprovementCheckedV0(reason string, now time.Time) StateV0 {
-	reason = strings.TrimSpace(reason)
+	reason = projectServerOperationalMessageV0("idle_self_improvement", reason)
 	return tracker.updateV0(func(state *StateV0) {
 		if reason == "attempt_blocked" &&
 			tracker.idleSelfImprovementAccepted &&
@@ -329,10 +329,46 @@ func (tracker *StatusTrackerV0) MarkIdleSelfImprovementCheckedV0(reason string, 
 }
 
 func (tracker *StatusTrackerV0) MarkErrorV0(message string, now time.Time) StateV0 {
+	message = projectServerOperationalMessageV0("server", message)
 	return tracker.updateV0(func(state *StateV0) {
 		state.LastHeartbeatAt = formatTimeV0(now)
-		state.LastError = strings.TrimSpace(message)
+		state.LastError = message
 		appendRecentServerErrorV0(state, now, "server_error", "server", message, nil)
+	})
+}
+
+func (tracker *StatusTrackerV0) MarkStatePersistFailedV0(transition string, now time.Time) StateV0 {
+	transition = strings.TrimSpace(transition)
+	if transition == "" {
+		transition = "state_update"
+	}
+	return tracker.updateV0(func(state *StateV0) {
+		state.LastHeartbeatAt = formatTimeV0(now)
+		state.StatePersistStatus = "degraded"
+		state.StatePersistFailures++
+		state.StatePersistLastFailedAt = formatTimeV0(now)
+		state.StatePersistLastCode = "state_persist_failed"
+		state.StatePersistLastTransition = transition
+		appendRecentServerErrorV0(
+			state,
+			now,
+			"state_persist_failed",
+			"state",
+			"state_persist_failed",
+			nil,
+		)
+	})
+}
+
+func (tracker *StatusTrackerV0) MarkStatePersistConfirmedV0(transition string, now time.Time) StateV0 {
+	transition = strings.TrimSpace(transition)
+	if transition == "" {
+		transition = "state_update"
+	}
+	return tracker.updateV0(func(state *StateV0) {
+		state.StatePersistStatus = "ok"
+		state.StatePersistLastConfirmed = formatTimeV0(now)
+		state.StatePersistLastTransition = transition
 	})
 }
 
@@ -354,7 +390,7 @@ func appendRecentServerErrorV0(
 	if state == nil {
 		return
 	}
-	message = strings.TrimSpace(message)
+	message = projectServerOperationalMessageV0(scope, message)
 	code = strings.TrimSpace(code)
 	if message == "" && code == "" {
 		return

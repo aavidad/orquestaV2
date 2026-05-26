@@ -23,7 +23,7 @@ const (
 	DefaultIdleSelfImprovementRequiredTestV0  = "go test -count=1 ./..."
 	DefaultIdleSelfImprovementSuggestedAreaV0 = "automejora"
 	DefaultIdleSelfImprovementPriorityScoreV0 = 10
-	DefaultIdleSelfImprovementMaxRequestsV0   = 5
+	DefaultIdleSelfImprovementMaxRequestsV0   = 10
 	DefaultIdleSelfImprovementTargetQueueV0   = 10
 )
 

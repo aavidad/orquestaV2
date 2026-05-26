@@ -8,7 +8,9 @@ import (
 )
 
 func residentOperationalEstadoV0(state StateV0) string {
-	if strings.TrimSpace(state.LastError) != "" || state.SupervisorErrorTicks > 0 {
+	if strings.TrimSpace(state.LastError) != "" ||
+		state.SupervisorErrorTicks > 0 ||
+		strings.TrimSpace(state.StatePersistStatus) == "degraded" {
 		return orquestaobservability.DiagnosticoEstadoDegradedV0
 	}
 	switch strings.TrimSpace(state.Status) {
@@ -53,6 +55,7 @@ func residentOperationalCountersV0(state StateV0) map[string]float64 {
 		"queue_size":                float64(nonNegativeServerIntV0(state.LastSupervisorQueueSize)),
 		"idle_improvement_runs":     float64(nonNegativeServerIntV0(state.IdleSelfImprovementRuns)),
 		"idle_improvement_accepted": float64(nonNegativeServerIntV0(state.IdleSelfImprovementOK)),
+		"state_persist_failures":    float64(nonNegativeServerIntV0(state.StatePersistFailures)),
 	}
 }
 

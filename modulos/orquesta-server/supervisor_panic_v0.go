@@ -20,10 +20,10 @@ func (runtime *RuntimeV0) recoverSupervisorTickPanicV0(ctx context.Context) {
 		"command": runtime.config.SupervisorCommand,
 		"result":  result,
 	})
-	runtime.persistStateV0(ctx, runtime.tracker.MarkSupervisorErrorV0(
+	runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkSupervisorErrorV0(
 		runtime.config.SupervisorCommand,
 		result,
 		message,
 		runtime.clock.Now(),
-	))
+	), "supervisor_panic")
 }

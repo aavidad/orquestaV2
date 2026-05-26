@@ -20,6 +20,9 @@ Salida:
   `ready=true`; si el startup cleanup/reconciliacion esta bloqueado devuelve
   503 con estado compacto y evidence refs.
 - `GET /api/status` y `GET /api/v0/server/status`: estado/diagnostico publico.
+  Incluye la proyeccion compacta `state_persist_*` para distinguir estado vivo
+  en memoria de persistencia durable confirmada o degradada, sin detalles del
+  filesystem ni errores crudos del store.
 - statefile JSON `orquesta_server_state.v0`
 
 Configuracion externa relacionada:
@@ -89,14 +92,22 @@ Invariantes:
   y pasar el valor efectivo al stack; el stack no debe releer limites ya
   normalizados por `ConfigV0`.
 - la automejora se puede disparar por idle o por capacidad libre. La ruta por
-  capacidad requiere cola visible, sin skips pendientes en el tick y planner
-  inyectado; no crea una tarea generica a ciegas.
+  capacidad requiere cola visible, planner inyectado y hueco bajo el objetivo
+  configurado; los skips no terminales cuentan como presion de cola, pero no
+  bloquean por si solos si sigue quedando capacidad. No crea una tarea generica
+  a ciegas.
+- el supervisor residente ejecuta pulsos asincronos con una guarda de actividad:
+  no solapa ticks, libera el slot al terminar y permite reentrada posterior. La
+  preparacion de automejora corre fuera del tick principal y no debe retener el
+  bucle global.
 - `IdleSelfImprovementBlockerPortV0` no es dependencia obligatoria del runtime:
   si la composicion no lo implementa, la comprobacion queda omitida y el resto
   de guardas decide. Si existe, solo puede bloquear automejora por causas
   observables de composicion, debe devolver refs opacas/evidencias compactas y
-  no debe preparar runs ni inspeccionar secretos. Un error del puerto se audita
-  como `idle_self_improvement_blocker_error` y no equivale a bloqueo.
+  no debe preparar runs ni inspeccionar secretos. El mensaje publico del blocker
+  se redacta antes de auditar si contiene rutas, HOME, tokens, prompts o
+  transcripts. Un error del puerto se audita como
+  `idle_self_improvement_blocker_error` y no equivale a bloqueo.
 - OPES y el backend file de `domain_work` se cablean desde `cmd/orquesta-server`,
   no desde el runtime residente.
 - el autodiagnostico de arranque entra por puerto: el modulo residente solo
@@ -105,3 +116,10 @@ Invariantes:
 - la respuesta de readiness no expone paths, runtime dirs, prompts,
   transcripts, payloads de startup ni secretos; solo estado compacto y
   evidence refs.
+- un fallo no fatal de `StateStorePortV0` despues del arranque queda visible
+  como `state_persist_failed` en memoria/status y en `recent_errors`; no se
+  intenta reparar escribiendo esa proyeccion en el mismo store fallido.
+- la auditoria JSONL del startup check tampoco persiste `StartupCheckCommandV0`
+  ni `StartupCheckResultV0` completos: registra `command_summary` y
+  `result_summary` con correlacion, presencia booleana de dirs, estado, mensaje
+  publico redactado y evidence refs compactas.

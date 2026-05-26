@@ -36,15 +36,23 @@ func (runtime *RuntimeV0) runSupervisorTickAsyncV0(ctx context.Context) bool {
 		return false
 	}
 	if !atomic.CompareAndSwapInt32(&runtime.supervisorTickActive, 0, 1) {
+		atomic.StoreInt32(&runtime.supervisorTickPending, 1)
 		return false
 	}
+	atomic.StoreInt32(&runtime.supervisorTickPending, 0)
 	go func() {
-		runtime.persistStateV0(ctx, runtime.tracker.MarkSupervisorTickActiveV0(true, runtime.clock.Now()))
+		runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkSupervisorTickActiveV0(true, runtime.clock.Now()), "supervisor_tick_active")
 		defer func() {
+			atomic.StoreInt32(&runtime.supervisorTickPending, 0)
 			atomic.StoreInt32(&runtime.supervisorTickActive, 0)
-			runtime.persistStateV0(context.Background(), runtime.tracker.MarkSupervisorTickActiveV0(false, runtime.clock.Now()))
+			runtime.persistStateTransitionV0(context.Background(), runtime.tracker.MarkSupervisorTickActiveV0(false, runtime.clock.Now()), "supervisor_tick_inactive")
 		}()
 		runtime.runSupervisorTickV0(ctx)
+		if atomic.SwapInt32(&runtime.supervisorTickPending, 0) == 1 &&
+			ctx.Err() == nil &&
+			!runtime.supervisorFrozenForShutdownV0() {
+			runtime.runSupervisorTickV0(ctx)
+		}
 	}()
 	return true
 }
@@ -72,19 +80,19 @@ func (runtime *RuntimeV0) runSupervisorTickV0(ctx context.Context) {
 			"command_summary": supervisorCommandAuditSummaryV0(command),
 			"result_summary":  supervisorResultAuditSummaryV0(result),
 		})
-		runtime.persistStateV0(ctx, runtime.tracker.MarkSupervisorErrorV0(
+		runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkSupervisorErrorV0(
 			command,
 			result,
 			err.Error(),
 			now,
-		))
+		), "supervisor_error")
 		return
 	}
 	runtime.auditEventV0(ctx, "supervisor_tick_result", "ok", "", map[string]interface{}{
 		"command_summary": supervisorCommandAuditSummaryV0(command),
 		"result_summary":  supervisorResultAuditSummaryV0(result),
 	})
-	runtime.persistStateV0(ctx, runtime.tracker.MarkSupervisorV0(command, result, now))
+	runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkSupervisorV0(command, result, now), "supervisor_tick")
 	runtime.maybeScheduleIdleSelfImprovementV0(ctx, result, now)
 }
 
@@ -123,7 +131,7 @@ func (runtime *RuntimeV0) maybeScheduleIdleSelfImprovementV0(
 		return
 	}
 	runtime.auditEventV0(ctx, "idle_self_improvement_scheduled", "scheduled", "", map[string]interface{}{"requests": requests})
-	runtime.persistStateV0(ctx, runtime.tracker.MarkIdleSelfImprovementScheduledV0(now))
+	runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkIdleSelfImprovementScheduledV0(now), "idle_self_improvement_scheduled")
 	go runtime.prepareIdleSelfImprovementBatchV0(ctx, port, requests)
 }
 
@@ -334,7 +342,7 @@ func (decision idleSelfImprovementScheduleDecisionV0) AuditPayload() map[string]
 		"retryable_run_refs": append([]string(nil), decision.RetryableRunRefs...),
 		"blocker_run_refs":   append([]string(nil), decision.BlockerRunRefs...),
 		"blocker_evidence":   append([]string(nil), decision.BlockerEvidence...),
-		"blocker_message":    decision.BlockerMessage,
+		"blocker_message":    publicAuditDiagnosticMessageV0(decision.BlockerMessage),
 	}
 }
 
@@ -397,7 +405,7 @@ func (runtime *RuntimeV0) markIdleSelfImprovementCheckedV0(
 	reason string,
 	now time.Time,
 ) {
-	runtime.persistStateV0(ctx, runtime.tracker.MarkIdleSelfImprovementCheckedV0(reason, now))
+	runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkIdleSelfImprovementCheckedV0(reason, now), "idle_self_improvement_checked")
 }
 
 func (runtime *RuntimeV0) prepareIdleSelfImprovementBatchV0(
@@ -413,7 +421,7 @@ func (runtime *RuntimeV0) prepareIdleSelfImprovementBatchV0(
 		now := runtime.clock.Now()
 		if err != nil {
 			runtime.auditEventV0(ctx, "idle_self_improvement_prepare_error", "error", err.Error(), map[string]interface{}{"request": request})
-			runtime.persistStateV0(ctx, runtime.tracker.MarkIdleSelfImprovementErrorV0(err.Error(), now))
+			runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkIdleSelfImprovementErrorV0(err.Error(), now), "idle_self_improvement_error")
 			return
 		}
 		if prepared.Accepted && strings.TrimSpace(prepared.RunRef) == "" {
@@ -452,11 +460,11 @@ func (runtime *RuntimeV0) prepareIdleSelfImprovementBatchV0(
 	if !aggregate.Accepted {
 		message := firstNonEmptyIdleSelfImprovementV0(failed, aggregate.Message, aggregate.Status, "idle_self_improvement_prepare_run_not_accepted")
 		runtime.auditEventV0(ctx, "idle_self_improvement_prepare_batch", "not_accepted", message, map[string]interface{}{"result": aggregate})
-		runtime.persistStateV0(ctx, runtime.tracker.MarkIdleSelfImprovementErrorV0(message, now))
+		runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkIdleSelfImprovementErrorV0(message, now), "idle_self_improvement_error")
 		return
 	}
 	runtime.auditEventV0(ctx, "idle_self_improvement_prepare_batch", "accepted", "", map[string]interface{}{"result": aggregate})
-	runtime.persistStateV0(ctx, runtime.tracker.MarkIdleSelfImprovementPreparedV0(aggregate, now))
+	runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkIdleSelfImprovementPreparedV0(aggregate, now), "idle_self_improvement_prepared")
 }
 
 func (runtime *RuntimeV0) idleSelfImprovementRequestsV0(
@@ -481,7 +489,7 @@ func (runtime *RuntimeV0) idleSelfImprovementRequestsV0(
 	if err != nil {
 		now := runtime.clock.Now()
 		runtime.auditEventV0(ctx, "idle_self_improvement_plan_error", "error", err.Error(), map[string]interface{}{"request": base})
-		runtime.persistStateV0(ctx, runtime.tracker.MarkIdleSelfImprovementErrorV0(err.Error(), now))
+		runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkIdleSelfImprovementErrorV0(err.Error(), now), "idle_self_improvement_error")
 		return []IdleSelfImprovementRequestV0{base}
 	}
 	requests := normalizeIdleSelfImprovementRequestsV0(plan.Requests, decision.MaxRequests)
