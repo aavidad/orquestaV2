@@ -4949,7 +4949,7 @@ Objetivo: convertir el segundo grupo de ficheros Go grandes en shards de
 refactor acotados con baseline de no crecimiento, sin mezclarlo con los frentes
 ya cubiertos por T52-T54/T71.
 
-Estado: pendiente.
+Estado: completada 2026-05-26.
 
 Alcance:
 
@@ -4979,6 +4979,17 @@ Criterios:
 - Mantener T52-T54/T71 como shards prioritarios; esta tarea cubre el residuo que
   no pertenece a esos owners.
 - Tests: `go test -count=1 ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-runtime-required-test ./modulos/orquesta-run-coordinator ./modulos/orquesta-external-work-run ./modulos/orquesta-app-gateway ./modulos/orquesta-director ./modulos/orquesta-core-workflow ./cmd/orquesta-server`.
+
+Evidencia de cierre 2026-05-26: se anade
+`TestResidualGoFileBudgetT90V0` con baseline real medido desde el arbol para el
+residuo >300 lineas del alcance T90. El test falla si un fichero baseline crece,
+si desaparece sin actualizar la deuda o si aparece otro fichero productivo >300
+en los scopes T90 sin declararlo. Quedan como followups de refactor por
+responsabilidad los ficheros baselined de `cmd/orquesta-server`,
+`orquesta-runtime-codex-delivery`, `orquesta-core-workflow`,
+`orquesta-director` y `orquesta-external-work-run`; `orquesta-app-gateway`,
+`orquesta-run-coordinator` y `orquesta-runtime-required-test` no presentan
+ficheros productivos >300 en esta medicion.
 
 ## T91 smoke-script-ops-library
 
