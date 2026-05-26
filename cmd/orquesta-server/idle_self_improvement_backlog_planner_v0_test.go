@@ -130,6 +130,81 @@ func TestIdleSelfImprovementBacklogPlannerV0RespetaMaxRequestsV0(t *testing.T) {
 	}
 }
 
+func TestIdleSelfImprovementBacklogPlannerV0FallbackIlegibleEsScannerDocumentalV0(t *testing.T) {
+	projectDir := t.TempDir()
+	result, err := (idleSelfImprovementBacklogPlannerV0{ProjectWorkDir: projectDir}).PlanV0(
+		orquestaserver.IdleSelfImprovementPlanRequestV0{
+			MaxRequests: 1,
+			Trigger:     "capacity_free",
+			BaseRequest: orquestaserver.IdleSelfImprovementRequestV0{
+				RequestRef:    "request-ref-base",
+				CorrelationID: "corr-request-ref-base",
+				ProjectRef:    "project-ref-orquesta",
+				WriteSet: []string{
+					"cmd/orquesta-server",
+					"modulos/orquesta-server",
+				},
+				RequiredTests: []string{"go test -count=1 ./cmd/orquesta-server"},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("PlanV0: %v", err)
+	}
+	if len(result.Requests) != 1 {
+		t.Fatalf("requests=%+v", result.Requests)
+	}
+	request := result.Requests[0]
+	if request.FailureKind != "backlog_scan" ||
+		request.SuggestedArea != "backlog-scan" ||
+		!containsStringForTestV0(request.ContextRefs, "backlog_planner_fallback:autoprogramming_backlog_doc_unavailable") ||
+		!containsStringForTestV0(request.EvidenceRefs, "evidence-ref-autoprogramming-backlog-planner-fallback") {
+		t.Fatalf("request=%+v", request)
+	}
+	if containsStringForTestV0(request.WriteSet, "cmd/orquesta-server") ||
+		containsStringForTestV0(request.WriteSet, "modulos/orquesta-server") ||
+		!containsStringForTestV0(request.WriteSet, idleSelfImprovementBacklogDocRelV0) {
+		t.Fatalf("write_set=%+v", request.WriteSet)
+	}
+	if request.BacklogScanEpoch == "" || len(request.BacklogScanDocs) == 0 {
+		t.Fatalf("scan=%s docs=%+v", request.BacklogScanEpoch, request.BacklogScanDocs)
+	}
+}
+
+func TestIdleSelfImprovementBacklogPlannerV0FallbackVacioNoAbreCodigoGenericoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(projectDir, "docs"), 0o700); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, idleSelfImprovementBacklogDocRelV0), []byte("# Backlog\n\nSin secciones Txx.\n"), 0o600); err != nil {
+		t.Fatalf("write backlog: %v", err)
+	}
+	result, err := (idleSelfImprovementBacklogPlannerV0{ProjectWorkDir: projectDir}).PlanV0(
+		orquestaserver.IdleSelfImprovementPlanRequestV0{
+			MaxRequests: 1,
+			BaseRequest: orquestaserver.IdleSelfImprovementRequestV0{
+				RequestRef:    "request-ref-base",
+				CorrelationID: "corr-request-ref-base",
+				ProjectRef:    "project-ref-orquesta",
+				WriteSet:      []string{"cmd/orquesta-server"},
+				RequiredTests: []string{"go test -count=1 ./cmd/orquesta-server"},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("PlanV0: %v", err)
+	}
+	if len(result.Requests) != 1 {
+		t.Fatalf("requests=%+v", result.Requests)
+	}
+	request := result.Requests[0]
+	if request.FailureKind != "backlog_scan" ||
+		containsStringForTestV0(request.WriteSet, "cmd/orquesta-server") ||
+		!containsStringForTestV0(request.ContextRefs, "backlog_planner_fallback:backlog_sin_tareas_pendientes_detectadas") {
+		t.Fatalf("request=%+v", request)
+	}
+}
+
 func TestIdleSelfImprovementBacklogPlannerV0PriorizaNucleoDirectorAutomejoraAntesQueSecundariasV0(t *testing.T) {
 	projectDir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(projectDir, "docs"), 0o700); err != nil {

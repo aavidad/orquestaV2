@@ -19,6 +19,7 @@ type idleSelfImprovementBacklogSectionV0 struct {
 	StateEvidenceRefs              []string
 	Completed, NeedsDocumentReview bool
 	SourceLine                     int
+	SourceIndexLine                int
 }
 
 type idleSelfImprovementBacklogStateV0 struct {

@@ -123,6 +123,38 @@ func TestServerConfigFromEnvV0PublicaConfiguracionEfectivaCanonica(t *testing.T)
 	}
 }
 
+func TestServerConfigFromEnvV0UsaCapacidadCanonicaDiezPadresSeisHijos(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", t.TempDir())
+	t.Setenv("ORQUESTA_SERVER_MAX_RUNS_PER_TICK", "")
+	t.Setenv("ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK", "")
+	t.Setenv("ORQUESTA_CODEX_MAX_BATCH_READY", "")
+	t.Setenv("ORQUESTA_CODEX_MAX_CONCURRENCY", "")
+	t.Setenv("ORQUESTA_CODEX_DIRECTOR_WAVE_AGENTS", "")
+	t.Setenv("ORQUESTA_CODEX_DIRECTOR_MAX_SUBAGENTS_PER_AGENT", "")
+	t.Setenv("ORQUESTA_CODEX_DIRECTOR_RECURSIVE_AGENT_BUDGET", "")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if config.SupervisorCommand.MaxRunsPerTick != 10 ||
+		config.SupervisorCommand.MaxExecutions != 10 {
+		t.Fatalf("supervisor capacity=%d/%d want 10/10", config.SupervisorCommand.MaxRunsPerTick, config.SupervisorCommand.MaxExecutions)
+	}
+	settings := config.EffectiveConfig.Settings
+	for key, want := range map[string]string{
+		"ORQUESTA_CODEX_MAX_BATCH_READY":                  "10",
+		"ORQUESTA_CODEX_MAX_CONCURRENCY":                  "10",
+		"ORQUESTA_CODEX_DIRECTOR_WAVE_AGENTS":             "10",
+		"ORQUESTA_CODEX_DIRECTOR_MAX_SUBAGENTS_PER_AGENT": "6",
+		"ORQUESTA_CODEX_DIRECTOR_RECURSIVE_AGENT_BUDGET":  "70",
+	} {
+		if got := effectiveSettingValueForTestV0(settings, key); got != want {
+			t.Fatalf("%s=%q want %q settings=%+v", key, got, want, settings)
+		}
+	}
+}
+
 func TestServerConfigFromEnvV0AislaEstadoYDejaRuntimeEscribiblePorDefecto(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", projectDir)

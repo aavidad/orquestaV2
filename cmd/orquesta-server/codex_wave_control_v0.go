@@ -197,6 +197,10 @@ func codexWaveRefreshSummaryV0(summary *codexWaveLaunchSummaryV0) {
 			agent.Status = "dry_run"
 			continue
 		}
+		if codexWaveAgentProcessDoneV0(*agent) {
+			agent.Status = "stopped"
+			continue
+		}
 		if agent.PID > 0 && processAliveV0(agent.PID) {
 			if agent.StopRequestedAt != "" {
 				agent.Status = "stop_requested"
@@ -213,6 +217,14 @@ func codexWaveRefreshSummaryV0(summary *codexWaveLaunchSummaryV0) {
 			agent.Status = "unknown"
 		}
 	}
+}
+
+func codexWaveAgentProcessDoneV0(agent codexWaveAgentSummaryV0) bool {
+	if strings.TrimSpace(agent.WrapperPath) == "" {
+		return false
+	}
+	_, err := os.Stat(codexWaveProcessDonePathV0(agent.WrapperPath))
+	return err == nil
 }
 
 func fileSizeOrZeroV0(path string) int64 {

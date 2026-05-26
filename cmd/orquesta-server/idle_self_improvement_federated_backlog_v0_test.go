@@ -46,6 +46,47 @@ func TestIdleSelfImprovementBacklogPlannerV0UsaIndiceFederadoLocalV0(t *testing.
 	}
 }
 
+func TestIdleSelfImprovementBacklogPlannerV0UsaIndiceFederadoLocalMultilineaV0(t *testing.T) {
+	projectDir := t.TempDir()
+	content := "# Backlog\n\n## Indice federado de backlog local\n\n" +
+		"- source_path: `modulos/orquesta-autoprogramming/docs/tareas.md`; source_kind:\n" +
+		"  module_tasks; owner: `modulos/orquesta-autoprogramming`; estado: vigente;\n" +
+		"  aliases: APG-*; tests: `go test -count=1 ./modulos/orquesta-autoprogramming`.\n"
+	if err := os.MkdirAll(filepath.Join(projectDir, "docs"), 0o700); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, idleSelfImprovementBacklogDocRelV0), []byte(content), 0o600); err != nil {
+		t.Fatalf("write backlog: %v", err)
+	}
+	mustWriteFederatedLocalDocTestV0(t, projectDir, "modulos/orquesta-autoprogramming/docs/tareas.md", `# Tareas
+
+## Backlog
+
+- APG-001: ampliar limites por contrato si apps grandes necesitan tareas largas.
+`)
+
+	result := mustPlanFederatedBacklogTestV0(t, projectDir, 1)
+	request := result.Requests[0]
+	if request.FailureKind != "backlog_autoprogramming" ||
+		request.SuggestedArea != "apg-001" ||
+		request.WriteSet[0] != "modulos/orquesta-autoprogramming" ||
+		request.RequiredTests[0] != "go test -count=1 ./modulos/orquesta-autoprogramming" {
+		t.Fatalf("request=%+v", request)
+	}
+	for _, want := range []string{
+		"backlog_doc:modulos/orquesta-autoprogramming/docs/tareas.md",
+		"backlog_federated_source_kind:module_tasks",
+		"backlog_federated_owner:modulos/orquesta-autoprogramming",
+		"backlog_federated_state:vigente",
+		"backlog_federated_source_line:5",
+		"backlog_local_alias:APG-001",
+	} {
+		if !containsStringForTestV0(request.ContextRefs, want) {
+			t.Fatalf("missing %s in context_refs=%+v", want, request.ContextRefs)
+		}
+	}
+}
+
 func TestIdleSelfImprovementBacklogPlannerV0IgnoraFuenteFederadaHistoricaV0(t *testing.T) {
 	projectDir := t.TempDir()
 	mustWriteFederatedBacklogIndexTestV0(t, projectDir, "historico",

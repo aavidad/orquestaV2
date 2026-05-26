@@ -120,7 +120,10 @@ func codexDirectorChildAgentPromptV0(
 	b.WriteString("\nWrite-set primario del agente padre y compartido por este subarbol:\n")
 	codexDirectorWriteAssignedSetV0(&b, assigned)
 	b.WriteString("\nRol sugerido del subagente:\n")
-	b.WriteString("- " + codexDirectorChildRoleV0(childIndex) + "\n")
+	roleProfile := codexDirectorChildRoleProfileV0(plan, domainContextBlocks)
+	roleIndex := codexDirectorChildRoleIndexV0(childIndex, childTotal)
+	b.WriteString("- " + codexDirectorChildRoleV0(roleProfile, roleIndex) + "\n")
+	codexDirectorWriteChildRoleChecklistV0(&b, roleProfile, roleIndex)
 	b.WriteString("\nTests requeridos por el Director:\n")
 	codexDirectorWriteListV0(&b, plan.RequiredTests)
 	b.WriteString("\nCriterios de aceptacion:\n")
@@ -169,21 +172,142 @@ func codexDirectorWriteCommonRulesV0(b *strings.Builder, child bool) {
 	b.WriteString("- Al terminar, resume rutas tocadas, pruebas ejecutadas, resultado y bloqueos.\n")
 }
 
-func codexDirectorChildRoleV0(index int) string {
+type codexDirectorChildRoleProfileKindV0 string
+
+const (
+	codexDirectorChildRoleProfileProgrammingV0    codexDirectorChildRoleProfileKindV0 = "programming"
+	codexDirectorChildRoleProfileDocumentDomainV0 codexDirectorChildRoleProfileKindV0 = "document_domain"
+)
+
+func codexDirectorChildRoleProfileV0(
+	plan orquestadirectoroperativo.OperationalDirectorPlanV0,
+	domainContextBlocks []codexDirectorDomainContextBlockV0,
+) codexDirectorChildRoleProfileKindV0 {
+	if plan.Mode == orquestadirectoroperativo.OperationalDirectorModeDomainWorkV0 {
+		return codexDirectorChildRoleProfileDocumentDomainV0
+	}
+	var b strings.Builder
+	b.WriteString(plan.ProjectRef)
+	b.WriteString("\n")
+	b.WriteString(plan.Objective)
+	b.WriteString("\n")
+	for _, ref := range plan.DomainRefs {
+		b.WriteString(ref)
+		b.WriteString("\n")
+	}
+	for _, block := range domainContextBlocks {
+		b.WriteString(block.SourceRef)
+		b.WriteString("\n")
+		b.WriteString(block.Text)
+		b.WriteString("\n")
+	}
+	haystack := strings.ToLower(b.String())
+	if codexDirectorChildRoleProfileHasA1MarkerV0(haystack) {
+		return codexDirectorChildRoleProfileDocumentDomainV0
+	}
+	for _, indicator := range []string{
+		"temario",
+		"tema_",
+		"document_plan",
+		"documento",
+		"editorial",
+		"pedagog",
+		"html_topic_template",
+	} {
+		if strings.Contains(haystack, indicator) {
+			return codexDirectorChildRoleProfileDocumentDomainV0
+		}
+	}
+	return codexDirectorChildRoleProfileProgrammingV0
+}
+
+func codexDirectorChildRoleProfileHasA1MarkerV0(text string) bool {
+	fields := strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
+		return (r < 'a' || r > 'z') && (r < '0' || r > '9')
+	})
+	for _, field := range fields {
+		if field == "a1" {
+			return true
+		}
+	}
+	return false
+}
+
+func codexDirectorChildRoleIndexV0(childIndex int, childTotal int) int {
+	if childTotal > 1 && childTotal < 6 && childIndex == childTotal {
+		return 6
+	}
+	return childIndex
+}
+
+func codexDirectorChildRoleV0(profile codexDirectorChildRoleProfileKindV0, index int) string {
+	if profile == codexDirectorChildRoleProfileDocumentDomainV0 {
+		switch index {
+		case 1:
+			return "estructura, indice, mapa conceptual y plan de secciones"
+		case 2:
+			return "fuentes oficiales, normativa, doctrina y trazabilidad"
+		case 3:
+			return "desarrollo teorico principal con tono A1"
+		case 4:
+			return "ejemplos, supuestos practicos, errores frecuentes y notas de test"
+		case 5:
+			return "visuales utiles, tablas comparativas y esquemas responsivos"
+		case 6:
+			return "revision pedagogica, ensamblado, validacion de palabras y checklist A1"
+		default:
+			return "apoyo editorial acotado y revision"
+		}
+	}
 	switch index {
 	case 1:
-		return "estructura, indice, mapa conceptual y plan de secciones"
+		return "analisis de arquitectura, contratos y fronteras"
 	case 2:
-		return "fuentes oficiales, normativa, doctrina y trazabilidad"
+		return "flujo de datos, causalidad, persistencia y reentrada"
 	case 3:
-		return "desarrollo teorico principal con tono A1"
+		return "implementacion focal y normalizacion segura"
 	case 4:
-		return "ejemplos, supuestos practicos, errores frecuentes y notas de test"
+		return "pruebas focales, fixtures y cobertura de regresion"
 	case 5:
-		return "visuales utiles, tablas comparativas y esquemas responsivos"
+		return "experiencia de operador, panel web y mensajes compactos"
 	case 6:
-		return "revision pedagogica, ensamblado, validacion de palabras y checklist A1"
+		return "revision tecnica, ensamblado de evidencias, validacion de alcance y checklist de cierre"
 	default:
-		return "apoyo editorial acotado y revision"
+		return "apoyo tecnico acotado y revision"
+	}
+}
+
+func codexDirectorWriteChildRoleChecklistV0(
+	b *strings.Builder,
+	profile codexDirectorChildRoleProfileKindV0,
+	index int,
+) {
+	checklist := codexDirectorChildRoleChecklistV0(profile, index)
+	if len(checklist) == 0 {
+		return
+	}
+	b.WriteString("\nChecklist operativo del rol:\n")
+	codexDirectorWriteListV0(b, checklist)
+}
+
+func codexDirectorChildRoleChecklistV0(profile codexDirectorChildRoleProfileKindV0, index int) []string {
+	if index != 6 {
+		return nil
+	}
+	if profile == codexDirectorChildRoleProfileDocumentDomainV0 {
+		return []string{
+			"Revisa coherencia pedagogica, tono adulto, transiciones y ausencia de placeholders.",
+			"Ensambla solo artefactos existentes o entregas del subarbol; no redactes relleno doctrinal para inflar palabras.",
+			"Valida el conteo de palabras A1 con metodo reproducible cuando el dominio o los tests lo exijan.",
+			"Contrasta el checklist A1 declarado por contexto: estructura, fuentes/refs, visuales o preguntas requeridas y pruebas obligatorias.",
+			"Si falta una pieza causal para ensamblar o validar, pide correccion dirigida con ref concreta en vez de ampliar alcance.",
+		}
+	}
+	return []string{
+		"Revisa coherencia tecnica, limites hexagonales, refs opacas y ausencia de placeholders.",
+		"Ensambla solo evidencias existentes del subarbol; no declares cierres que correspondan al Director.",
+		"Valida que write-set, tests requeridos y rutas tocadas coinciden con el alcance autorizado.",
+		"Contrasta el checklist de cierre: cambios pequenos, pruebas focales, pruebas obligatorias y bloqueos explicitos.",
+		"Si falta una pieza causal para validar, pide correccion dirigida con ref concreta en vez de ampliar alcance.",
 	}
 }

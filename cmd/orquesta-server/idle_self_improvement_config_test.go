@@ -15,6 +15,7 @@ func TestServerConfigFromEnvV0ConfiguraAutomejoraIdleV0(t *testing.T) {
 	}
 	if config.IdleSelfImprovementAfter != 60*time.Second ||
 		config.IdleSelfImprovementDisabled ||
+		config.IdleSelfImprovementMaxRequests != 10 ||
 		config.IdleSelfImprovementTargetQueue != 10 ||
 		len(config.IdleSelfImprovementWriteSet) == 0 ||
 		config.IdleSelfImprovementRequiredTests[0] != "go test -count=1 ./..." {

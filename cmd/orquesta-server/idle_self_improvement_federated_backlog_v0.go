@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -58,7 +59,8 @@ func idleSelfImprovementParseFederatedBacklogSourcesV0(content string) []idleSel
 	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
 	var sources []idleSelfImprovementFederatedBacklogSourceV0
 	inIndex := false
-	for index, line := range lines {
+	for index := 0; index < len(lines); index++ {
+		line := lines[index]
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "## ") {
 			inIndex = idleSelfImprovementFederatedBacklogIndexHeadingV0(trimmed)
@@ -67,8 +69,19 @@ func idleSelfImprovementParseFederatedBacklogSourcesV0(content string) []idleSel
 		if !inIndex || !strings.HasPrefix(trimmed, "- ") {
 			continue
 		}
-		source := idleSelfImprovementParseFederatedBacklogSourceLineV0(trimmed)
-		source.SourceLine = index + 1
+		sourceLine := index + 1
+		item := strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
+		cursor := index + 1
+		for ; cursor < len(lines); cursor++ {
+			next := strings.TrimSpace(lines[cursor])
+			if next == "" || strings.HasPrefix(next, "## ") || strings.HasPrefix(next, "- ") {
+				break
+			}
+			item += " " + next
+		}
+		index = cursor - 1
+		source := idleSelfImprovementParseFederatedBacklogSourceLineV0("- " + item)
+		source.SourceLine = sourceLine
 		if source.SourcePath != "" {
 			sources = append(sources, source)
 		}
@@ -106,7 +119,7 @@ func idleSelfImprovementFederatedBacklogFieldsV0(text string) map[string]string 
 			continue
 		}
 		key = strings.ToLower(strings.TrimSpace(key))
-		value = strings.Trim(strings.TrimSpace(value), "` ")
+		value = strings.TrimSpace(value)
 		if key != "" && value != "" {
 			out[key] = value
 		}
@@ -243,19 +256,20 @@ func idleSelfImprovementFederatedSectionV0(
 	ref := idleSelfImprovementHeadingRefV0(alias)
 	hash := idleSelfImprovementBacklogHashV0(source.SourcePath + "|" + alias + "|" + objective)
 	section := idleSelfImprovementBacklogSectionV0{
-		Ref:            ref,
-		Heading:        alias + " " + objective,
-		Objective:      objective,
-		SourcePath:     source.SourcePath,
-		SourceKind:     source.SourceKind,
-		Owner:          source.Owner,
-		LocalAlias:     alias,
-		RelatedTXX:     source.RelatedTXX,
-		LocalState:     source.State,
-		LocalEntryHash: hash,
-		Scope:          []string{source.Owner},
-		Tests:          append([]string(nil), source.Tests...),
-		SourceLine:     line,
+		Ref:             ref,
+		Heading:         alias + " " + objective,
+		Objective:       objective,
+		SourcePath:      source.SourcePath,
+		SourceKind:      source.SourceKind,
+		Owner:           source.Owner,
+		LocalAlias:      alias,
+		RelatedTXX:      source.RelatedTXX,
+		LocalState:      source.State,
+		LocalEntryHash:  hash,
+		Scope:           []string{source.Owner},
+		Tests:           append([]string(nil), source.Tests...),
+		SourceLine:      line,
+		SourceIndexLine: source.SourceLine,
 	}
 	if source.Owner == "" || len(source.Tests) == 0 {
 		section.NeedsDocumentReview = true
@@ -283,6 +297,9 @@ func idleSelfImprovementFederatedBacklogContextRefsV0(section idleSelfImprovemen
 	refs = appendFederatedBacklogContextRefV0(refs, "backlog_local_alias:", section.LocalAlias)
 	refs = appendFederatedBacklogContextRefV0(refs, "backlog_related_txx:", section.RelatedTXX)
 	refs = appendFederatedBacklogContextRefV0(refs, "backlog_local_entry_hash:", section.LocalEntryHash)
+	if section.SourceIndexLine > 0 {
+		refs = append(refs, "backlog_federated_source_line:"+strconv.Itoa(section.SourceIndexLine))
+	}
 	return compactServerStackStringsV0(refs)
 }
 

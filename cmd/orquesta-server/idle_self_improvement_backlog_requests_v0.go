@@ -147,11 +147,16 @@ func idleSelfImprovementRequestRefForBacklogSectionV0(
 
 func idleSelfImprovementBacklogFallbackRequestV0(
 	base orquestaserver.IdleSelfImprovementRequestV0,
+	plan orquestaserver.IdleSelfImprovementPlanRequestV0,
 	reason string,
 ) orquestaserver.IdleSelfImprovementRequestV0 {
-	request := base
+	request := idleSelfImprovementBacklogScannerRequestV0(base, plan)
+	request.FailureSummary = "revisar backlog de automejora degradado antes de programar cambios de codigo"
 	request.ContextRefs = compactServerStackStringsV0(append(request.ContextRefs,
 		"backlog_planner_fallback:"+strings.TrimSpace(reason),
+	))
+	request.AcceptanceCriteria = compactServerStackStringsV0(append(request.AcceptanceCriteria,
+		"si el backlog no se puede leer, dejar bloqueo documental publico y no preparar trabajo de codigo generico",
 	))
 	request.EvidenceRefs = compactServerStackStringsV0(append(request.EvidenceRefs,
 		"evidence-ref-autoprogramming-backlog-planner-fallback",

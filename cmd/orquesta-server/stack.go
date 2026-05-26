@@ -26,12 +26,12 @@ const (
 	defaultCodexLoopTicksV0             = 300
 	defaultCodexMaxExpectedSecondsV0    = 1200
 	defaultCodexNoActivitySecondsV0     = 600
-	defaultCodexMaxBatchReadyV0         = 4
-	defaultCodexMaxConcurrencyV0        = 4
-	defaultCodexServerMaxRunsPerTickV0  = 2
+	defaultCodexMaxBatchReadyV0         = 10
+	defaultCodexMaxConcurrencyV0        = 10
+	defaultCodexServerMaxRunsPerTickV0  = 10
 	defaultCodexServerQueueLimitV0      = 20
 	defaultCodexServerDefaultPriorityV0 = 50
-	defaultCodexServerMaxExecutionsV0   = 2
+	defaultCodexServerMaxExecutionsV0   = 10
 )
 
 func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
@@ -359,8 +359,8 @@ type codexDirectorWaveLimitsEnvConfigV0 struct {
 
 func codexDirectorWaveLimitsEnvConfigFromEnvV0() codexDirectorWaveLimitsEnvConfigV0 {
 	return codexDirectorWaveLimitsEnvConfigV0{
-		Agents:               intEnvOrDefaultV0("ORQUESTA_CODEX_DIRECTOR_WAVE_AGENTS", 6),
+		Agents:               intEnvOrDefaultV0("ORQUESTA_CODEX_DIRECTOR_WAVE_AGENTS", 10),
 		MaxSubagentsPerAgent: intEnvOrDefaultV0("ORQUESTA_CODEX_DIRECTOR_MAX_SUBAGENTS_PER_AGENT", defaultCodexDirectorMaxSubagentsPerAgentV0),
-		RecursiveAgentBudget: intEnvOrDefaultV0("ORQUESTA_CODEX_DIRECTOR_RECURSIVE_AGENT_BUDGET", 32),
+		RecursiveAgentBudget: intEnvOrDefaultV0("ORQUESTA_CODEX_DIRECTOR_RECURSIVE_AGENT_BUDGET", 70),
 	}
 }

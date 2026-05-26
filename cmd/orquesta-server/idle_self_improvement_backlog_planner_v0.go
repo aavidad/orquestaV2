@@ -154,17 +154,42 @@ func (planner idleSelfImprovementBacklogPlannerV0) PlanV0(
 	}
 	sections, err := planner.loadBacklogSectionsV0()
 	if err != nil {
+		fallback := idleSelfImprovementBacklogFallbackRequestV0(base, request, err.Error())
+		fallback = planner.withBacklogScannerMergeLeaseV0(fallback)
 		return orquestaserver.IdleSelfImprovementPlanResultV0{
-			Requests: []orquestaserver.IdleSelfImprovementRequestV0{
-				idleSelfImprovementBacklogFallbackRequestV0(base, err.Error()),
+			Requests: []orquestaserver.IdleSelfImprovementRequestV0{fallback},
+			EvidenceRefs: []string{
+				"evidence-ref-autoprogramming-backlog-planner-fallback",
+				"evidence-ref-autoprogramming-backlog-scanner",
 			},
-			EvidenceRefs: []string{"evidence-ref-autoprogramming-backlog-planner-fallback"},
-			Message:      err.Error(),
+			Message: err.Error(),
 		}, nil
 	}
 	planner.syncBacklogSectionStateV0(sections)
 	idleSelfImprovementPrioritizeBacklogSectionsV0(sections)
 	excluded := idleSelfImprovementExcludedRequestRefsV0(request)
+	if len(sections) == 0 {
+		if idleSelfImprovementHasKnownBacklogWorkV0(excluded) {
+			return orquestaserver.IdleSelfImprovementPlanResultV0{
+				Requests: []orquestaserver.IdleSelfImprovementRequestV0{},
+				EvidenceRefs: []string{
+					"evidence-ref-autoprogramming-backlog-known-work",
+					"evidence-ref-autoprogramming-backlog-planner-fallback",
+				},
+				Message: "backlog_tareas_ya_visibles_en_cola",
+			}, nil
+		}
+		fallback := idleSelfImprovementBacklogFallbackRequestV0(base, request, "backlog_sin_tareas_pendientes_detectadas")
+		fallback = planner.withBacklogScannerMergeLeaseV0(fallback)
+		return orquestaserver.IdleSelfImprovementPlanResultV0{
+			Requests: []orquestaserver.IdleSelfImprovementRequestV0{fallback},
+			EvidenceRefs: []string{
+				"evidence-ref-autoprogramming-backlog-planner-fallback",
+				"evidence-ref-autoprogramming-backlog-scanner",
+			},
+			Message: "backlog_sin_tareas_pendientes_detectadas",
+		}, nil
+	}
 	completedRequestRefs, ackEvidenceRefs, ackCollisions := planner.completedBacklogRequestRefsV0()
 	completedSections := idleSelfImprovementCompletedBacklogSectionsV0(sections, completedRequestRefs)
 	for ref := range completedRequestRefs {
@@ -216,6 +241,9 @@ func (planner idleSelfImprovementBacklogPlannerV0) PlanV0(
 	}
 	if !scannerAdded && len(requests) < maxRequests && idleSelfImprovementShouldAddScannerRequestV0(request, requests) {
 		scanner := idleSelfImprovementBacklogScannerRequestV0(base, request)
+		if len(requests) == 0 {
+			scanner = idleSelfImprovementBacklogFallbackRequestV0(base, request, "backlog_sin_tareas_pendientes_detectadas")
+		}
 		scanner = planner.withBacklogScannerMergeLeaseV0(scanner)
 		if !excluded[scanner.RequestRef] {
 			requests = append(requests, scanner)
@@ -232,7 +260,9 @@ func (planner idleSelfImprovementBacklogPlannerV0) PlanV0(
 				Message:    "backlog_tareas_ya_visibles_en_cola",
 			}, nil
 		}
-		requests = append(requests, idleSelfImprovementBacklogFallbackRequestV0(base, "backlog_sin_tareas_pendientes_detectadas"))
+		fallback := idleSelfImprovementBacklogFallbackRequestV0(base, request, "backlog_sin_tareas_pendientes_detectadas")
+		fallback = planner.withBacklogScannerMergeLeaseV0(fallback)
+		requests = append(requests, fallback)
 	}
 	return orquestaserver.IdleSelfImprovementPlanResultV0{
 		Requests: requests,
