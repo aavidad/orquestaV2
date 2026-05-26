@@ -3873,7 +3873,7 @@ Criterios:
 Objetivo: unificar el propietario del mapa neutral `work_kind ->
 expected_artifact_type` para derivados documentales y entregas `domain_work`.
 
-Estado: hecho.
+Estado: completada 2026-05-26.
 
 Alcance:
 
@@ -4908,6 +4908,7 @@ ciclo offline de review/tests/cierre, `CODEX-WAVE-REAL` y
 `CODEX-RECURSION-REAL` quedan cerrados salvo regresion demostrada. El pendiente
 real vigente queda acotado a OPES temporal real de derivados/cierre. Se anadio
 `TestDirectorOperativoLocalDocsAlineadosConFotoVigenteV0` como check focal.
+Revalidado con `go test -count=1 ./modulos/orquesta-director-operativo`.
 
 ## Escaneo backlog 2026-05-24 vigesimoctava pasada
 
