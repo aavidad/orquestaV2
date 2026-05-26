@@ -747,6 +747,10 @@ Criterios:
 Objetivo: mantener los rails dudosos como material de automejora, no como cortes
 duros de produccion.
 
+Estado: completada 2026-05-26. La politica blanda queda cubierta para los
+casos observados: rails dudosos como advisory, tests externos de matriz y regla
+de un agente padre por tarea.
+
 Alcance:
 
 - `modulos/orquesta-autoprogramming`
@@ -772,11 +776,16 @@ Criterios:
   `TestAutoprogrammingReviewGateExternalMatrixV0`,
   `TestCodexAckPendingRailExternalMatrixV0`,
   `TestReviewReworkReplanSourceV0NoCreaSegundoPadreParaMismaTarea`.
+- Evidencia 2026-05-26:
+  `GOCACHE=/tmp/orquesta-go-build-cache go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack`.
 
 ## T12 opes-consumer-smoke-real-opt-in
 
 Objetivo: ejecutar y documentar el smoke OPES completo contra instancia temporal
 aislada, sin tocar OPES productivo.
+
+Estado: pendiente. Los paquetes del bridge/conector compilan, pero sigue sin
+evidencia del smoke OPES temporal completo hasta derivados y `assemble_topic`.
 
 Alcance:
 
@@ -792,6 +801,8 @@ Criterios:
   permita; si falta entorno, dejar bloqueo verificable con comando exacto.
 - No drenar colas amplias ni tocar OPES productivo.
 - Tests: `go test -count=1 ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector`.
+- Evidencia parcial 2026-05-26:
+  `GOCACHE=/tmp/orquesta-go-build-cache go test -count=1 ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector`.
 
 ## Escaneo backlog 2026-05-24
 
@@ -887,13 +898,10 @@ Objetivo: reemplazar la apertura temporal de `detalle_prohibido` por una politic
 reactivable por campo y por frontera, con matriz de falsos positivos antes de
 volver a endurecer.
 
-Estado: parcialmente cerrado para reactivacion acotada del servidor. El codigo
-vigente de `cmd/orquesta-server` ya fija por defecto
-`ORQUESTA_DETAIL_PROHIBITED_RAILS=on` con scope limitado a
-`core_workflow.*`, `context_bundle_request.*`,
-`context_materialization.content`, `context_materialization.ref` y
-`director_agent_decision.*`; queda pendiente sincronizar docs de rails y ampliar
-matriz antes de declarar cerrado el frente completo.
+Estado: pendiente. Hay matriz y helpers por campo, pero el servidor residente
+mantiene `ORQUESTA_DETAIL_PROHIBITED_RAILS=off` por defecto para no bloquear
+autoprogramacion. Sigue pendiente reactivar scopes concretos solo con matrices
+externas suficientes y sincronizar la documentacion de rails.
 
 Alcance:
 
@@ -2054,8 +2062,10 @@ Objetivo: definir un contrato de payload auditado por evento para que la
 auditoria JSONL del servidor no persista material crudo de automejora,
 supervision, HTTP, proveedor o dominio.
 
-Estado: cerrado 2026-05-25 tras rework de revision; queda pendiente solo crear
-followups de particion concretos cuando el rail detecte crecimiento real.
+Estado: completada 2026-05-25.
+
+Nota: los followups de particion concretos se crearan como tareas nuevas solo
+si el rail detecta crecimiento real posterior.
 
 Alcance:
 
@@ -4181,6 +4191,8 @@ Objetivo: sustituir la lista local de readiness/autoplan de
 `orquesta-rails`, sin perder la guarda contra secretos efectivos ni efectos
 externos no autorizados.
 
+Estado: completada 2026-05-26.
+
 Estado 2026-05-25: cerrado para T77. La readiness de
 `orquesta-app-change-director-source` ya no mantiene lista local de fragments
 prohibidos y delega en `orquesta-rails` por campo.
@@ -4240,6 +4252,8 @@ la politica de rails.
 Validacion OrquestaV2 2026-05-26: el paquete `ref_only` se resolvio por
 evidencia explicita en ACK y el comando requerido paso completo dentro del
 write-set T77.
+Revalidacion 2026-05-26:
+`GOCACHE=/tmp/orquesta-go-build-cache go test -count=1 ./modulos/orquesta-app-change-director-source ./modulos/orquesta-app-change ./modulos/orquesta-rails ./modulos/orquesta-app-codex-stack`.
 
 ## T78 director-decisions-existing-planstate-merge
 
@@ -9907,11 +9921,11 @@ Objetivo: introducir una proyeccion estable y acotada para mensajes operativos
 del servidor antes de persistirlos o exponerlos en `StateV0`, status o
 auditoria.
 
-Estado: parcial local 2026-05-26 para `StateV0` del runtime residente:
-`StatusTrackerV0` ya proyecta mensajes de startup, supervisor, automejora idle
-y errores recientes con helper canonico, truncado y redaccion de paths/secrets.
-Sigue pendiente extender la misma politica a auditoria general y a otros
-adaptadores que formen mensajes publicos fuera del tracker.
+Estado: pendiente. `StatusTrackerV0` ya proyecta mensajes de startup,
+supervisor, automejora idle y errores recientes con helper canonico, truncado y
+redaccion de paths/secrets. Sigue pendiente extender la misma politica a
+auditoria general y a otros adaptadores que formen mensajes publicos fuera del
+tracker.
 
 Alcance:
 
@@ -10701,8 +10715,8 @@ Objetivo: implementar un guardian externo minimo para que la autoprogramacion no
 dependa de una Orquesta ya rota cuando una version candidata no compila, no
 arranca o deja de responder.
 
-Estado: base implementada 2026-05-24; pendiente integrar en el ciclo residente
-de promocion/restart.
+Estado: pendiente. La base `cmd/orquesta-guardian` esta implementada; sigue
+pendiente integrarla en el ciclo residente de promocion/restart.
 
 Alcance:
 
