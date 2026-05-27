@@ -16,6 +16,11 @@ type directorTaskAreaV0 struct {
 
 const maxDirectorTaskAreasV0 = 4
 
+const (
+	maxDirectorTaskSummaryBytesV0      = 560
+	maxDirectorTaskSummaryValueBytesV0 = 180
+)
+
 func directorTasksFromAppSpecV0(spec AppDirectorInputSpecV0) []AppDirectorTaskV0 {
 	appRef := appDirectorTaskRefPrefixV0(spec)
 	areas := []directorTaskAreaV0{primaryDirectorTaskAreaV0(spec)}
@@ -75,7 +80,10 @@ func directorTaskSummaryV0(spec AppDirectorInputSpecV0, base string) string {
 	if hints := directorTaskSummaryHintsV0(spec); len(hints) > 0 {
 		parts = append(parts, "contexto_app: "+strings.Join(hints, "; ")+".")
 	}
-	return strings.Join(compactDirectorTaskSummaryPartsV0(parts), " ")
+	return joinDirectorTaskSummaryWithinBudgetV0(
+		compactDirectorTaskSummaryPartsV0(parts),
+		maxDirectorTaskSummaryBytesV0,
+	)
 }
 
 func directorTaskSummaryHintsV0(spec AppDirectorInputSpecV0) []string {
@@ -96,7 +104,10 @@ func directorTaskSummaryHintsV0(spec AppDirectorInputSpecV0) []string {
 }
 
 func directorTaskSummaryFieldV0(label string, value string) string {
-	value = compactDirectorTaskSummaryTextV0(value)
+	value = truncateDirectorTaskSummaryTextV0(
+		compactDirectorTaskSummaryTextV0(value),
+		maxDirectorTaskSummaryValueBytesV0,
+	)
 	if label == "" || value == "" {
 		return ""
 	}
@@ -127,6 +138,79 @@ func compactDirectorTaskSummaryPartsV0(values []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func joinDirectorTaskSummaryWithinBudgetV0(values []string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	out := ""
+	for _, value := range values {
+		value = compactDirectorTaskSummaryTextV0(value)
+		if value == "" {
+			continue
+		}
+		candidate := value
+		if out != "" {
+			candidate = out + " " + value
+		}
+		if len(candidate) <= maxBytes {
+			out = candidate
+			continue
+		}
+		remaining := maxBytes - len(out)
+		if out != "" {
+			remaining--
+		}
+		if remaining > 24 {
+			tail := truncateDirectorTaskSummaryTextV0(value, remaining)
+			if tail != "" {
+				if out != "" {
+					out += " "
+				}
+				out += tail
+			}
+		}
+		break
+	}
+	return strings.TrimSpace(out)
+}
+
+func truncateDirectorTaskSummaryTextV0(value string, maxBytes int) string {
+	value = compactDirectorTaskSummaryTextV0(value)
+	if maxBytes <= 0 || value == "" {
+		return ""
+	}
+	if len(value) <= maxBytes {
+		return value
+	}
+	if maxBytes <= 3 {
+		return truncateDirectorTaskSummaryTextBytesV0(value, maxBytes)
+	}
+	limit := maxBytes - 3
+	prefix := truncateDirectorTaskSummaryTextBytesV0(value, limit)
+	if cut := strings.LastIndex(prefix, " "); cut >= limit/2 {
+		prefix = strings.TrimSpace(prefix[:cut])
+	}
+	prefix = strings.TrimRight(strings.TrimSpace(prefix), ".,;:")
+	if prefix == "" {
+		prefix = truncateDirectorTaskSummaryTextBytesV0(value, limit)
+	}
+	return prefix + "..."
+}
+
+func truncateDirectorTaskSummaryTextBytesV0(value string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	var builder strings.Builder
+	for _, r := range value {
+		if builder.Len()+len(string(r)) > maxBytes {
+			break
+		}
+		builder.WriteRune(r)
+	}
+	return builder.String()
 }
 
 func directorSpecializedAreasV0(spec AppDirectorInputSpecV0) []directorTaskAreaV0 {

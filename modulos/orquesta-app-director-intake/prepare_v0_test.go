@@ -117,6 +117,61 @@ func TestPrepareAppDirectorIntakeV0PropagaContextoFuncionalEnSummary(t *testing.
 	}
 }
 
+func TestPrepareAppDirectorIntakeV0CompactaSummaryLargoSinRechazar(t *testing.T) {
+	observability := true
+	req := validFactoryAppSpecRequestForDirectorIntakeTestV0()
+	req.RequestID = "request-ref-app-director-long-summary-001"
+	req.Nombre = "ResiGRX"
+	req.Objetivo = strings.Repeat("Gestion residencial clinica con expediente unico eMAR auditoria cuidados documentos firma y portal familiar. ", 12)
+	req.Descripcion = strings.Repeat("Aplicacion server-first hexagonal i18n API-first para datos de salud dependencia discapacidad trazabilidad y cumplimiento normativo. ", 12)
+	req.TipoApp = "mixed"
+	req.Plataformas = []string{"web", "api", "mobile"}
+	req.Datos = orquestafactory.DatosRequestV0{
+		DBRequired:         true,
+		NecesidadFuncional: strings.Repeat("datos de salud medicacion auditoria documentos turnos facturacion y trazabilidad asistencial ", 8),
+	}
+	req.Calidad = orquestafactory.CalidadRequestV0{
+		Pruebas:        "alta",
+		Accesibilidad:  "wcag_aa",
+		Observabilidad: &observability,
+	}
+	req.Agentes = orquestafactory.AgentesRequestV0{Autonomia: "alta"}
+	spec, issues := orquestafactory.SolicitarNuevaAppV0(req, time.Date(2026, 5, 27, 16, 40, 0, 0, time.UTC))
+	if len(issues) > 0 {
+		t.Fatalf("build spec: %+v", issues)
+	}
+
+	prepared, err := PrepareAppDirectorIntakeV0(PrepareAppDirectorIntakeRequestV0{
+		RunRef:        "run-app-director-long-summary-001",
+		ProjectRef:    "project-app-director-long-summary-001",
+		OccurredAt:    "2026-05-27T16:40:00Z",
+		CorrelationID: "corr-app-director-long-summary-001",
+		RequestedBy:   "orquesta-app-director-intake-test",
+		AppSpec:       spec,
+	})
+	if err != nil {
+		t.Fatalf("PrepareAppDirectorIntakeV0: %v", err)
+	}
+
+	if len(prepared.DirectorTasks) != 4 {
+		t.Fatalf("director_tasks=%d %+v", len(prepared.DirectorTasks), prepared.DirectorTasks)
+	}
+	for _, task := range prepared.DirectorTasks {
+		if len(task.Summary) > maxDirectorTaskSummaryBytesV0 {
+			t.Fatalf("summary demasiado largo: len=%d max=%d summary=%q",
+				len(task.Summary),
+				maxDirectorTaskSummaryBytesV0,
+				task.Summary,
+			)
+		}
+		for _, want := range []string{"request_kind=crear_app_completa", "execution_mode=normal"} {
+			if !strings.Contains(task.Summary, want) {
+				t.Fatalf("summary no contiene %q: %q", want, task.Summary)
+			}
+		}
+	}
+}
+
 func TestPrepareAppDirectorIntakeV0DirectorNormalPuedeCrearManuales(t *testing.T) {
 	req := validFactoryAppSpecRequestForDirectorIntakeTestV0()
 	req.RequestKind = orquestafactory.RequestKindDocumentarAppV0
