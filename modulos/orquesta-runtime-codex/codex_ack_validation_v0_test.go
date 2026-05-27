@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	orquestacontext "orquesta/modulos/orquesta-context"
 )
 
 func TestCodexAgentAckReceiptV0AceptaACKValido(t *testing.T) {
@@ -13,6 +15,88 @@ func TestCodexAgentAckReceiptV0AceptaACKValido(t *testing.T) {
 	_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
 	if len(issues) != 0 {
 		t.Fatalf("issues inesperadas: %+v", issues)
+	}
+}
+
+func TestCodexAgentAckReceiptV0AceptaACKProgramacionResiGRXConContextoRefOnly(t *testing.T) {
+	spec := codexSpecForTestV0()
+	requestID := "agent-ref-task-resigrx-rx000-bootstrap-vertical-mvp"
+	correlationID := "corr-run-spec-resigrx-req-resigrx-887f4566d73cdaa5c23e03d06a14da8a-burst-002"
+	targetModule := "orquesta-app-stack-programacion"
+	taskRef := "task-resigrx-rx000-bootstrap-vertical-mvp"
+	ackRef := "ack-ref-app-stack-agent-ref-task-resigrx-rx000-bootstrap-vertical-mvp"
+	requiredTests := []string{
+		"go test ./...",
+		"git diff --check",
+		"test de arquitectura contra imports prohibidos en dominio",
+		"test de i18n para errores publicos",
+		"OpenAPI parseable",
+		"validar contexto required ref_only mediante lectura local, consulta al director o evidencia explicita",
+	}
+	spec.RequestID = requestID
+	spec.CorrelationID = correlationID
+	spec.AgentPacket.RequestID = requestID
+	spec.AgentPacket.CorrelationID = correlationID
+	spec.AgentPacket.WorkOrderRef = taskRef
+	spec.AgentPacket.TargetModule = targetModule
+	spec.AgentPacket.Task.TaskRef = taskRef
+	spec.AgentPacket.Task.WriteSet = []string{
+		"go.mod",
+		"cmd/resigrx-api/main.go",
+		"cmd/resigrx-worker/main.go",
+		"internal/platform/**",
+		"internal/modules/identity/**",
+		"internal/modules/residents/**",
+		"internal/modules/care/**",
+		"internal/modules/medication/**",
+		"internal/modules/audit/**",
+		"i18n/**",
+		"docs/openapi.yaml",
+		"README.md",
+		".env.example",
+	}
+	spec.AgentPacket.Task.RequiredTests = requiredTests
+	spec.AgentPacket.Context = orquestacontext.ContextMaterializedBundleV0{
+		SchemaVersion: orquestacontext.ContextMaterializedBundleSchemaVersionV0,
+		BundleRef:     "bundle-ref-app-stack-task-resigrx-rx000-bootstrap-vertical-mvp",
+		WorkOrderRef:  taskRef,
+		TargetModule:  targetModule,
+		Entries: []orquestacontext.ContextMaterializedEntryV0{{
+			EntryRef:          "entry-ref-app-stack-task-resigrx-rx000-bootstrap-vertical-mvp",
+			Layer:             orquestacontext.ContextLayerTaskContextV0,
+			Kind:              orquestacontext.ContextEntryDocRefV0,
+			SourceRef:         "source-ref-app-stack-task-resigrx-rx000-bootstrap-vertical-mvp",
+			Mode:              orquestacontext.ContextMaterializationModeRefOnlyV0,
+			Required:          true,
+			RefOnlyReason:     orquestacontext.ContextRefOnlyReasonMaterializationMissingV0,
+			RequiredRefAction: orquestacontext.ContextRequiredRefActionAckEvidenceV0,
+		}},
+	}
+	spec.AgentPacket.DeliveryRefs.AckRef = ackRef
+	spec.AgentPacket.Policies = []string{
+		"write_set_closed",
+		"ack_required",
+		"context_small_by_refs",
+		"required_ref_only_context_guard",
+	}
+	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"` + requestID + `","correlation_id":"` + correlationID + `","ack_ref":"` + ackRef + `","target_module":"` + targetModule + `","task_ref":"` + taskRef + `","status":"completed","files":["go.mod","cmd/resigrx-api/main.go","cmd/resigrx-worker/main.go","internal/platform/api/server.go","internal/modules/residents/application/service.go","i18n/es/errors.json","docs/openapi.yaml","README.md",".env.example"],"tests":["go test ./...","git diff --check","test de arquitectura contra imports prohibidos en dominio","test de i18n para errores publicos","OpenAPI parseable","validar contexto required ref_only mediante lectura local, consulta al director o evidencia explicita"],"test_receipts":[{"schema_version":"codex_required_test_receipt.v0","command":"go test ./...","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-go-test-all-20260527T1724Z"],"occurred_at":"2026-05-27T17:24:40Z","sequence":1,"output_redacted":true},{"schema_version":"codex_required_test_receipt.v0","command":"git diff --check","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-git-diff-check-20260527T1724Z"],"occurred_at":"2026-05-27T17:24:40Z","sequence":2,"output_redacted":true},{"schema_version":"codex_required_test_receipt.v0","command":"test de arquitectura contra imports prohibidos en dominio","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-arch-domain-imports-20260527T1724Z"],"occurred_at":"2026-05-27T17:24:40Z","sequence":3,"output_redacted":true},{"schema_version":"codex_required_test_receipt.v0","command":"test de i18n para errores publicos","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-i18n-errors-20260527T1724Z"],"occurred_at":"2026-05-27T17:24:40Z","sequence":4,"output_redacted":true},{"schema_version":"codex_required_test_receipt.v0","command":"OpenAPI parseable","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-openapi-parseable-20260527T1724Z"],"occurred_at":"2026-05-27T17:24:40Z","sequence":5,"output_redacted":true},{"schema_version":"codex_required_test_receipt.v0","command":"validar contexto required ref_only mediante lectura local, consulta al director o evidencia explicita","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-ref-only-context-20260527T1724Z"],"occurred_at":"2026-05-27T17:24:40Z","sequence":6,"output_redacted":true}],"notes":["contexto_ref_only_resuelto: agent_packet.json leido; entrada required=true mode=ref_only required_ref_action=ack_evidence_required resuelta por evidencia explicita en ACK","documentos obligatorios leidos antes de programar; sin datos reales de residentes en tests"]}`
+
+	_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	if len(issues) != 0 {
+		t.Fatalf("issues inesperadas: %+v", issues)
+	}
+}
+
+func TestCodexAgentAckReceiptV0NoBloqueaDetalleConRailOffPorDefecto(t *testing.T) {
+	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "")
+	spec := codexSpecForTestV0()
+	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."],"notes":["diagnostico conservado access_token=abc123 para auditoria local"]}`
+	_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+	for _, issue := range issues {
+		if string(issue.Code) == string(CodexConnectorAckForbiddenV0) {
+			t.Fatalf("detalle_prohibido no debe bloquear con rail off por defecto: %+v", issues)
+		}
 	}
 }
 
