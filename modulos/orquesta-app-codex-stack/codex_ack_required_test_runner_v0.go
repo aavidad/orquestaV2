@@ -89,6 +89,9 @@ func (runner codexAckRequiredTestRunnerV0) resultFromCodexAckDescriptorV0(
 	if len(issues) > 0 || !codexAckRequiredTestAckMatchesRequestV0(ack, descriptor, request) {
 		return orquestacionnucleoapp.RequiredTestExecutionResultV0{}, false, nil
 	}
+	if orquestaruntimecodex.CodexAgentAckDeclaresIncompleteRequiredEvidenceV0(ack) {
+		return orquestacionnucleoapp.RequiredTestExecutionResultV0{}, false, nil
+	}
 	result := orquestacionnucleoapp.RequiredTestExecutionResultV0{}
 	for _, command := range request.TestCommands {
 		evidenceRef := codexAckRequiredTestEvidenceRefV0(request, command)
@@ -101,6 +104,9 @@ func (runner codexAckRequiredTestRunnerV0) resultFromCodexAckDescriptorV0(
 			continue
 		}
 		evidenceRefs, ok := codexAckRequiredTestReceiptEvidenceRefsV0(ack, command)
+		if !ok {
+			evidenceRefs, ok = codexAckRequiredTestContextualRefOnlyEvidenceRefsV0(descriptor, ack, request, command)
+		}
 		if !ok {
 			continue
 		}
@@ -192,6 +198,33 @@ func codexAckRequiredTestReceiptEvidenceRefsV0(
 		return compactStringsV0(receipt.EvidenceRefs), true
 	}
 	return nil, false
+}
+
+func codexAckRequiredTestContextualRefOnlyEvidenceRefsV0(
+	descriptor orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+	ack orquestaruntimecodex.CodexAgentAckV0,
+	request orquestacionnucleoapp.RequiredTestExecutionRequestV0,
+	command string,
+) ([]string, bool) {
+	if !codexStackOperationalClosureRequiredTestIsContextualRefOnlyV0(command) ||
+		!stringInSetV0([]string(ack.Tests), command) ||
+		!codexStackOperationalClosureAckHasNotePrefixV0([]string(ack.Notes), "contexto_ref_only_resuelto") {
+		return nil, false
+	}
+	return compactStringsV0([]string{
+		descriptor.DescriptorRef,
+		request.DeliveryRef,
+		request.ReviewRequestID,
+		request.ReviewResultRef,
+		request.AcceptedReviewRef,
+		codexStackDeterministicRefV0(
+			"evidence-ref-codex-context-ref-only-",
+			request.DeliveryRef,
+			request.ReviewResultRef,
+			request.AcceptedReviewRef,
+			command,
+		),
+	}), true
 }
 
 func codexAckRequiredTestReceiptMatchesV0(

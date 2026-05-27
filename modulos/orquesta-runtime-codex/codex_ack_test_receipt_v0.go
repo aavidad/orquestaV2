@@ -11,26 +11,80 @@ func (v *codexAckValidatorV0) validateStrictTestReceipts(
 	ack CodexAgentAckV0,
 	packet orquestaruntime.AgentStartPacketV0,
 ) {
-	required := compactCodexAckStringsV0(packet.Task.RequiredTests)
+	required := codexStrictTestReceiptRequiredCommandsV0(ack, packet)
 	if len(required) == 0 {
 		return
 	}
 	receipts := normalizeCodexRequiredTestReceiptsV0(ack.TestReceipts)
-	if len(receipts) != len(required) {
+	if len(receipts) < len(required) {
 		v.add(CodexConnectorAckArtifactV0, "test_receipts", "missing_required_test_receipt")
 		return
 	}
-	for index, command := range required {
-		receipt := receipts[index]
-		if receipt.Command != command {
-			v.add(CodexConnectorAckArtifactV0, "test_receipts", "required_test_receipt_mismatch")
-			return
-		}
+	if !codexRequiredTestReceiptsCoverRequiredCommandsV0(receipts, required) {
+		v.add(CodexConnectorAckArtifactV0, "test_receipts", "required_test_receipt_mismatch")
+		return
+	}
+	receiptsByCommand := map[string]CodexRequiredTestReceiptV0{}
+	for _, receipt := range receipts {
 		if issue := codexRequiredTestReceiptIssueV0(receipt); issue != "" {
 			v.add(CodexConnectorAckArtifactV0, "test_receipts", issue)
 			return
 		}
+		if _, exists := receiptsByCommand[receipt.Command]; !exists {
+			receiptsByCommand[receipt.Command] = receipt
+		}
 	}
+	for _, command := range required {
+		if _, exists := receiptsByCommand[command]; !exists {
+			v.add(CodexConnectorAckArtifactV0, "test_receipts", "missing_required_test_receipt")
+			return
+		}
+	}
+}
+
+func codexStrictTestReceiptRequiredCommandsV0(
+	ack CodexAgentAckV0,
+	packet orquestaruntime.AgentStartPacketV0,
+) []string {
+	required := compactCodexAckStringsV0(packet.Task.RequiredTests)
+	out := make([]string, 0, len(required))
+	for _, command := range required {
+		if codexStrictTestReceiptContextualRefOnlyResolvedV0(ack, packet, command) {
+			continue
+		}
+		out = append(out, command)
+	}
+	return out
+}
+
+func codexStrictTestReceiptContextualRefOnlyResolvedV0(
+	ack CodexAgentAckV0,
+	packet orquestaruntime.AgentStartPacketV0,
+	command string,
+) bool {
+	trimmed := strings.TrimSpace(command)
+	lower := strings.ToLower(trimmed)
+	return trimmed != "" &&
+		strings.Contains(lower, "ref_only") &&
+		codexPacketRequiresRefOnlyAckEvidenceV0(packet) &&
+		codexAckContainsTrimmedV0(ack.Tests, trimmed) &&
+		codexAckContainsNotePrefixV0(ack.Notes, "contexto_ref_only_resuelto")
+}
+
+func codexRequiredTestReceiptsCoverRequiredCommandsV0(
+	receipts []CodexRequiredTestReceiptV0,
+	required []string,
+) bool {
+	seen := map[string]bool{}
+	for _, receipt := range receipts {
+		seen[strings.TrimSpace(receipt.Command)] = true
+	}
+	for _, command := range required {
+		if !seen[strings.TrimSpace(command)] {
+			return false
+		}
+	}
+	return true
 }
 
 func normalizeCodexRequiredTestReceiptsV0(

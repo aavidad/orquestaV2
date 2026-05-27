@@ -120,7 +120,9 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureA
 		return nil, false, nil
 	}
 	ack, err := orquestaruntimecodex.ReadCodexAgentAckFileV0(descriptor.AckPath)
-	if err != nil || !codexStackOperationalClosureAckMatchesAcceptedDeliveryV0(ack, task, delivery, result) {
+	if err != nil ||
+		orquestaruntimecodex.CodexAgentAckDeclaresIncompleteRequiredEvidenceV0(ack) ||
+		!codexStackOperationalClosureAckMatchesAcceptedDeliveryV0(ack, task, delivery, result) {
 		return nil, false, nil
 	}
 	requiredTests := codexStackOperationalClosureCompactRefsV0(task.RequiredTests)
@@ -132,6 +134,17 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureA
 			continue
 		}
 		evidenceRefs := codexStackOperationalClosureAckTestEvidenceRefsV0(ack, command)
+		if len(evidenceRefs) == 0 {
+			evidenceRefs = codexStackOperationalClosureAckContextualRefOnlyEvidenceRefsV0(
+				descriptor,
+				ack,
+				command,
+				delivery,
+				reviewRequest,
+				accepted,
+				result,
+			)
+		}
 		if len(evidenceRefs) == 0 {
 			return nil, false, nil
 		}
@@ -235,6 +248,53 @@ func codexStackOperationalClosureAckTestEvidenceRefsV0(
 		return codexStackOperationalClosureCompactRefsV0(receipt.EvidenceRefs)
 	}
 	return nil
+}
+
+func codexStackOperationalClosureAckContextualRefOnlyEvidenceRefsV0(
+	descriptor orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+	ack orquestaruntimecodex.CodexAgentAckV0,
+	command string,
+	delivery orquestacoreworkflow.DeliveryRegisteredPayloadV0,
+	reviewRequest orquestacoreworkflow.ReviewRequestedPayloadV0,
+	accepted orquestacoreworkflow.ReviewAcceptedPayloadV0,
+	result orquestacoreworkflow.ReviewResultV0,
+) []string {
+	if !codexStackOperationalClosureRequiredTestIsContextualRefOnlyV0(command) ||
+		!codexStackOperationalClosureContainsV0([]string(ack.Tests), command) ||
+		!codexStackOperationalClosureAckHasNotePrefixV0([]string(ack.Notes), "contexto_ref_only_resuelto") {
+		return nil
+	}
+	return codexStackOperationalClosureCompactRefsV0([]string{
+		descriptor.DescriptorRef,
+		delivery.DeliveryRef,
+		reviewRequest.ReviewRequestID,
+		result.ReviewResultRef,
+		accepted.AcceptedReviewRef,
+		codexStackDeterministicRefV0(
+			"evidence-ref-codex-context-ref-only-",
+			delivery.DeliveryRef,
+			result.ReviewResultRef,
+			accepted.AcceptedReviewRef,
+			command,
+		),
+	})
+}
+
+func codexStackOperationalClosureRequiredTestIsContextualRefOnlyV0(command string) bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(command)), "ref_only")
+}
+
+func codexStackOperationalClosureAckHasNotePrefixV0(values []string, want string) bool {
+	want = strings.ToLower(strings.TrimSpace(want))
+	for _, value := range values {
+		normalized := strings.ToLower(strings.TrimSpace(value))
+		if normalized == want ||
+			strings.HasPrefix(normalized, want+":") ||
+			strings.HasPrefix(normalized, want+" ") {
+			return true
+		}
+	}
+	return false
 }
 
 func codexStackOperationalClosureRequiredTestEvidenceRefV0(

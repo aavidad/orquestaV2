@@ -12,6 +12,14 @@ El corte ya tiene un tramo offline integrado en core + `app-director-service` +
 Si una pieza de codigo no esta integrada o no tiene prueba clara, se documenta
 como pendiente verificable, no como hecho.
 
+Actualizacion 2026-05-28: el cierre de una app generada ResiGRX validó una
+recuperacion laxa del ciclo operativo: si el cierre/replan queda con scope stale
+o con required test contextual `ref_only` ya resuelto por evidencia de ACK, el
+adaptador refresca refs causales y materializa evidencia durable sin ampliar la
+espera a todos los agentes del run. Evidencia: `go test -count=1 ./...`,
+`go build -o /tmp/orquesta-server-resigrx-fix ./cmd/orquesta-server` y run
+ResiGRX cerrado con 21/21 tareas, 1 validacion y 1 closure.
+
 Autoridad documental: este corte gobierna el cierre causal del Director
 Operativo; la matriz gobierna el estado de smokes. Si el backlog o un doc local
 contradice `CODEX-WAVE-REAL` o `CODEX-RECURSION-REAL`, prevalece la evidencia de

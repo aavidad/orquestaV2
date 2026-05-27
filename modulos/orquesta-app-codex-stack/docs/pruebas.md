@@ -126,6 +126,12 @@ Cobertura Go actual:
   causal aceptada, runner local de tests, `RequiredTestEvidenceV0` durable y
   cierre de plan/run. Cerrado por `CODEX-REQTEST-REAL-E2E`; no sustituye OPES
   temporal real de derivados/cierre.
+- `TestCodexAckRequiredTestRunnerV0MaterializaContextoRefOnlyDesdeNotaSinReceipt`
+  y `TestOperationalClosureSourceV0CierraConContextoRefOnlySinTestReceipt`
+  cubren el caso ResiGRX: un required test contextual `ref_only` no necesita
+  recibo shell si el ACK lista el test, trae nota `contexto_ref_only_resuelto`
+  y conserva refs causales de entrega/review; los tests ejecutables siguen
+  exigiendo `test_receipts` validos.
   El cierre no-OPES temporal con app HTTP/file, submitter real opt-in,
   `codex-fake`, review, required-tests y plan cerrado queda cubierto por
   `EXT-NO-OPES`.
@@ -630,6 +636,22 @@ Evidencia:
 - `DirectorRunStatsV0.UsageSummary` acumula tokens para que MCP/web y el
   director puedan responder cuanto se ha usado en una app;
 - no se introduce proveedor, HOME, OAuth, DB ni API concreta en el core.
+
+Reconciliacion T209 2026-05-27 de reporte runtime redactado:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackRuntimeUsageMetricsSourceV0|TestCodexStackAgentUsageSourceV0UneMetricasInyectadas|TestCodexStackV0DirectorStatsIncluyeProcesoYProgresoPorPuertos'
+```
+
+Cobertura:
+
+- lee `codex_usage_accounting.json` redactado por descriptor registrado;
+- reporta tokens y `quota_status` cuando el reporte es seguro;
+- si el reporte falta, esta vacio, no trae cuota fiable o contiene campos
+  sensibles, publica `unknown` con `quota_observed_unavailable` y evidence ref
+  compacto;
+- no expone proveedor, modelo, HOME, OAuth, coste, rutas privadas, prompts,
+  transcripts ni completions.
 
 Smoke real multiagente repetido el 2026-05-11 con app Go/API/web:
 

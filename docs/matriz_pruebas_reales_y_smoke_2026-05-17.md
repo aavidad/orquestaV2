@@ -13,6 +13,12 @@ marcados.
 Actualizacion 2026-05-23: `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL` quedaron
 cerrados con proveedor real opt-in; no son backlog abierto salvo regresion
 demostrada.
+Actualizacion 2026-05-28: el ciclo ResiGRX/autonomia cerro como regresion real
+de app generada: run `run-spec-resigrx-req-resigrx-887f4566d73cdaa5c23e03d06a14da8a`
+con 21/21 tareas cerradas, 21 entregas, 1 validacion, 1 closure y 4 replans.
+La correccion queda cubierta por `go test -count=1 ./...`, por pruebas focales
+de cierre/replan y por el servidor residente reiniciado en modo limpio. No
+reabre `WaitAgentRefs`, OPES, `CODEX-WAVE-REAL` ni `CODEX-RECURSION-REAL`.
 
 Reglas operativas:
 
@@ -29,6 +35,17 @@ Reglas operativas:
   smoke;
 - si no existe script claro, este documento marca el caso como pendiente y no
   inventa un comando nuevo.
+- los smokes Go opt-in y harnesses que ejecutan procesos reales deben fallar
+  con diagnosticos redactados/acotados: refs, nombres de control file, codigos y
+  contadores por defecto; prompts, transcripts, completions, cuerpos HTTP,
+  respuestas OPES, stdout/stderr completos, rutas privadas, HOME, env, tokens,
+  remotos Git y control files crudos solo pueden conservarse en directorio
+  temporal opt-in con razon local y no cuentan como evidencia terminal.
+- desde el cierre T158 del 2026-05-26, `opes-drain-once` debe aplicar politica
+  de destino OPES antes de drenar: URLs sin credenciales ni query, destino
+  loopback/temporal/productivo confirmado, evidence ref compacta para productivo
+  y summary publico solo con refs opacas, categorias, filtros, estado y
+  contadores.
 
 Fuentes revisadas:
 
@@ -64,6 +81,20 @@ regresion.
 
 ## Matriz
 
+Nota T158 2026-05-26: los smokes OPES que usan `opes-drain-once` conservan OPES
+temporal o opt-in productivo explicito. La salida publica del bridge queda en
+refs/categorias de destino, filtro aplicado y contadores, sin URL completa,
+query sensible, host privado, payload OPES, tokens ni cuerpos HTTP; productivo
+exige evidence ref compacta de operador.
+Revalidacion OrquestaV2 2026-05-26:
+`agent-ref-task-autoprogramming-bf0d81417acc-g01` confirma que esta politica
+sigue vigente sin reabrir owners vecinos; el contexto `ref_only` requerido queda
+resuelto por lectura local y evidencia explicita en ACK.
+Retry OrquestaV2 2026-05-26:
+`agent-ref-task-autoprogramming-761a129dc1b4-g01` revalida este cierre sin
+abrir smoke real ni owner vecino; el contexto `ref_only` requerido queda
+resuelto por lectura local y evidencia explicita en ACK.
+
 | ID | Caso | Tipo | Prerrequisitos y env vars | Comando existente | Criterio de exito | Riesgos y limites |
 | --- | --- | --- | --- | --- | --- | --- |
 | OPES-PLAN-REAL | OPES `plan_tema` completo: OPES crea job, Orquesta drena, Codex real entrega `document_plan`, OPES completa y crea derivados. | Real, invasivo, con cuota. | OPES temporal con job `plan_tema` pendiente; Orquesta temporal levantada con `ORQUESTA_OPES_BASE_URL` al mismo OPES; `ORQUESTA_BASE_URL`; Codex configurado por operador; `ORQUESTA_OPES_BRIDGE_CONFIRM=1`; `ORQUESTA_OPES_BRIDGE_JOB_TYPE=plan_tema`; `ORQUESTA_OPES_BRIDGE_LIMIT=1`. | `go run ./cmd/orquesta-server opes-drain-once` con las env anteriores. | Un solo artefacto `document_plan` en OPES; job `plan_tema` `completed`; sin duplicar `document_plan`; jobs derivados creados desde el plan con tipos ejecutables (`draft_content_block`, `generate_visual_asset`, `review_*`, `validate_topic`, `assemble_topic`). La entrega de `assemble_topic` debe validarse como `assembled_topic`. | No ejecutar contra OPES activo. Si se omite `ORQUESTA_OPES_BRIDGE_JOB_TYPE=plan_tema`, el bridge puede enviar derivados y lanzar trabajo no focal. Puede consumir decenas de miles de tokens. |
@@ -79,7 +110,7 @@ regresion.
 | DOMAIN-WORK-SQL-OFFLINE | Adaptador SQL driver-neutral para `DomainWorkJobRecordStorePortV0`. | Offline determinista con driver fake local. | Sin app externa, sin Codex, sin red, sin driver DB real; usa `database/sql` con driver fake de test. | `go test -count=1 ./modulos/orquesta-domain-work-sql`. | Ejecuta `contracttest` con placeholders `question` y `dollar`, crea jobs aceptados, replaya por idempotencia, rechaza conflictos sin sobrescribir, lista records `Request+Job` con filtros AND y limite, propaga contexto cancelado, simula unique violation concurrente y mantiene frontera sin drivers concretos. | No prueba Postgres/MySQL/SQLite real, no crea schema productivo y no esta cableado al servidor. Un driver real debe entrar despues por composicion opt-in con `IsUniqueViolation` propio. |
 | DOMAIN-WORK-SQL-REAL-DIALECT | Bundle futuro con DB temporal real para cada dialecto soportado. | Pendiente documentado; real opt-in por motor. | DB temporal aislada, driver elegido en modulo de composicion, DSN secreto/temporal, migracion/schema explicito, backend no compartido con apps externas. | Sin script claro en repo. No se documenta comando nuevo. | Debe probar schema real, placeholders del driver, unicidad `(domain_ref,idempotency_key)` y `job_ref`, replay tras reinicio, carrera concurrente replay/conflict, tipos JSON/TEXT, filtros/limit y teardown limpio. | No debe importar drivers desde core/domain/director. Riesgo de convertir SQL en persistencia global incompleta si se cablea antes de definir bundle y migraciones. |
 | DAEMON-RESTART | Reinicio de daemon con estado file-based: cola persiste tras parar y arrancar servidor. | Smoke offline no invasivo. | `go`, `curl`, `python3`; opcional `ORQUESTA_KEEP_SMOKE_DIR=1`, `ORQUESTA_SMOKE_ROOT`, `ORQUESTA_SMOKE_REQUEST_TIMEOUT_SECONDS`. | `./scripts/smoke_orquesta_server_restart_state.sh`. | Salida con `servidor before listo`, `rank_verificado=<run_ref> priority=80`, `servidor after listo`, verificacion tras reinicio, `priority=95`, `agents_launched=false`, `opes_touched=false`. | No valida agentes reales ni rehidratacion de procesos Codex vivos. Cubre continuidad basica de estado operativo. |
-| SERVER-LIVENESS-READINESS | Contrato servidor: `/healthz` es liveness y `/api/v0/server/readiness` es readiness operativa antes de efectos externos. | Offline determinista cerrado 2026-05-26. | Sin Codex real, sin OPES, sin proveedor; scripts solo validan sintaxis. | `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-cli ./cmd/orquesta-server`; `bash -n scripts/*.sh`. | Readiness devuelve 200 solo con `ready=true`, 503 si startup cleanup/reconciliacion queda bloqueado, incluye `startup_ready`, `startup_status`, mensaje publico y evidence refs, y no expone paths ni runtime dirs. El daemon no acepta `/healthz` como listo y los smokes con Codex/OPES/domain_work/Director/automejora esperan readiness. | No prueba readiness de apps externas distintas de Orquesta; sus `/healthz` siguen siendo contratos propios de cada app temporal. |
+| SERVER-LIVENESS-READINESS | Contrato servidor: `/healthz` es liveness y `/api/v0/server/readiness` es readiness operativa antes de efectos externos. | Offline determinista cerrado 2026-05-26. | Sin Codex real, sin OPES, sin proveedor; scripts solo validan sintaxis. | `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-cli ./cmd/orquesta-server`; `bash -n scripts/*.sh scripts/lib/*.sh`. | Readiness devuelve 200 solo con `ready=true`, 503 si startup cleanup/reconciliacion queda bloqueado, incluye `startup_ready`, `startup_status`, mensaje publico y evidence refs, y no expone paths ni runtime dirs. El daemon no acepta `/healthz` como listo y los smokes con Codex/OPES/domain_work/Director/automejora esperan readiness. Los helpers compartidos de smokes esperan `/api/v0/server/readiness` antes de efectos externos. | No prueba readiness de apps externas distintas de Orquesta; sus `/healthz` siguen siendo contratos propios de cada app temporal. |
 | SHUTDOWN-COOP-OFFLINE | Shutdown cooperativo por contrato sin Codex real. | Offline determinista. | Sin procesos externos; paquetes de stack y shutdown. | `go test ./modulos/orquesta-app-codex-stack ./modulos/orquesta-server-shutdown -run 'Test.*Shutdown.*|TestShutdownServerV0.*' -count=1`. | `forced=false` no pide stop si falta checkpoint; con ACK registra checkpoint; deadline vencido fuerza stop con evidencia; `shutdown_ready` solo si no quedan agentes en vuelo ni checkpoints pendientes. | No valida que Codex real lea `orquesta_shutdown_request.json`. |
 | SHUTDOWN-COOP-REAL | Shutdown cooperativo Codex real con request y ACK de checkpoint. | Real, opt-in, con cuota. | `ORQUESTA_CODEX_STACK_SHUTDOWN_SMOKE=1`; `ORQUESTA_CODEX_COMMAND`; `ORQUESTA_CODEX_HOME`; `ORQUESTA_CODEX_CODE_HOME`; `ORQUESTA_CODEX_PATH`; `ORQUESTA_CODEX_APPROVAL_POLICY=never`; `ORQUESTA_CODEX_SANDBOX=workspace-write`; `ORQUESTA_CODEX_MODEL`; workdirs temporales dentro del proyecto. | `go test ./modulos/orquesta-app-codex-stack -run TestCodexStackRealShutdownCheckpointOptInV0 -count=1 -timeout 300s -v`. | Agente vivo; `POST /api/v0/server/shutdown forced=false`; se escribe `orquesta_shutdown_request.json`; agente responde `agent_shutdown_checkpoint_ack.json`; segunda llamada registra checkpoint o muestra pending compacto. | Solo cubre Codex cooperativo por prompt; otros runtimes/proveedores siguen pendientes. |
 | INVALID-REPLAN-OFFLINE | Entrega invalida, review gate y replan/rework sin procesos reales. | Offline determinista. | Sin Codex real. | `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackV0ReviewGatePideCambiosSiFicheroEsDemasiadoGrande|TestCodexStackV0ReviewChangesRequestedReplanificaYArrancaAgente|TestValidateDomainWorkDeliveryQualityV0RechazaDocumentPlanIncompleto|TestCompositeDirectorDecisionSourceV0RechazaVoteRefIncoherente'`. | Entrega grande queda `changes_requested`; se emite `RequestRework`; `retry_task` enlaza descriptor de entrega; `document_plan` incompleto se rechaza; lote de director con refs causales rotas no se consume. | No mide calidad semantica del rework real. |

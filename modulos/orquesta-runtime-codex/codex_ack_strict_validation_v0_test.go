@@ -3,6 +3,7 @@ package orquestaruntimecodex
 import (
 	"testing"
 
+	orquestacontext "orquesta/modulos/orquesta-context"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
@@ -50,6 +51,35 @@ func TestStrictCompletedCodexAgentAckV0RequiereReciboDeTestV0(t *testing.T) {
 	_, issues := ValidateStrictCompletedCodexAgentAckBytesForSpecV0([]byte(ack), spec)
 
 	requireCodexIssueEvidenceV0(t, issues, "missing_required_test_receipt")
+}
+
+func TestStrictCompletedCodexAgentAckV0AceptaContextoRefOnlyResueltoSinReciboShellV0(t *testing.T) {
+	spec := codexSpecForTestV0()
+	refOnlyCommand := "validar contexto required ref_only mediante lectura local, consulta al director o evidencia explicita"
+	spec.AgentPacket.Task.RequiredTests = []string{"go test ./...", refOnlyCommand}
+	spec.AgentPacket.Context = orquestacontext.ContextMaterializedBundleV0{
+		SchemaVersion: orquestacontext.ContextMaterializedBundleSchemaVersionV0,
+		BundleRef:     "bundle-ref-strict-ref-only",
+		WorkOrderRef:  spec.AgentPacket.WorkOrderRef,
+		TargetModule:  spec.AgentPacket.TargetModule,
+		Entries: []orquestacontext.ContextMaterializedEntryV0{{
+			EntryRef:          "entry-ref-strict-ref-only",
+			Layer:             orquestacontext.ContextLayerTaskContextV0,
+			Kind:              orquestacontext.ContextEntryDocRefV0,
+			SourceRef:         "source-ref-strict-ref-only",
+			Mode:              orquestacontext.ContextMaterializationModeRefOnlyV0,
+			Required:          true,
+			RefOnlyReason:     orquestacontext.ContextRefOnlyReasonMaterializationMissingV0,
+			RequiredRefAction: orquestacontext.ContextRequiredRefActionAckEvidenceV0,
+		}},
+	}
+	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./...","` + refOnlyCommand + `"],"test_receipts":[{"schema_version":"codex_required_test_receipt.v0","command":"go test ./...","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-001"],"occurred_at":"2026-05-24T10:00:00Z","sequence":1,"output_redacted":true}],"notes":["contexto_ref_only_resuelto: contexto requerido validado por evidencia explicita"]}`
+
+	_, issues := ValidateStrictCompletedCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	if len(issues) != 0 {
+		t.Fatalf("contexto ref_only resuelto no debe exigir recibo shell: %+v", issues)
+	}
 }
 
 func TestStrictCompletedCodexAgentAckV0RechazaReciboConSalidaCrudaV0(t *testing.T) {
@@ -126,13 +156,24 @@ func TestCodexDeliveryObservationV0RechazaACKStrictSinRecibosV0(t *testing.T) {
 	}
 }
 
-func TestStrictCompletedCodexAgentAckV0RechazaTestsExtraV0(t *testing.T) {
+func TestStrictCompletedCodexAgentAckV0AceptaTestsExtraConRecibosValidosV0(t *testing.T) {
 	spec := codexSpecForTestV0()
-	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./...","node --check web/app.js"]}`
+	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./...","node --check web/app.js"],"test_receipts":[{"schema_version":"codex_required_test_receipt.v0","command":"go test ./...","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-001"],"occurred_at":"2026-05-24T10:00:00Z","sequence":1,"output_redacted":true},{"schema_version":"codex_required_test_receipt.v0","command":"node --check web/app.js","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-002"],"occurred_at":"2026-05-24T10:01:00Z","sequence":2,"output_redacted":true}]}`
 
 	_, issues := ValidateStrictCompletedCodexAgentAckBytesForSpecV0([]byte(ack), spec)
 
-	requireCodexIssueV0(t, issues, CodexConnectorAckArtifactV0)
+	if len(issues) != 0 {
+		t.Fatalf("tests extra validos deben llegar a review como evidencia: %+v", issues)
+	}
+}
+
+func TestStrictCompletedCodexAgentAckV0RechazaSiFaltaTestObligatorioAunqueHayaExtrasV0(t *testing.T) {
+	spec := codexSpecForTestV0()
+	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["node --check web/app.js"],"test_receipts":[{"schema_version":"codex_required_test_receipt.v0","command":"node --check web/app.js","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-002"],"occurred_at":"2026-05-24T10:01:00Z","sequence":2,"output_redacted":true}]}`
+
+	_, issues := ValidateStrictCompletedCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	requireCodexIssueEvidenceV0(t, issues, "required_tests_mismatch")
 }
 
 func TestCodexAgentPacketRequiresStrictTerminalAckV0PorPolicyV0(t *testing.T) {

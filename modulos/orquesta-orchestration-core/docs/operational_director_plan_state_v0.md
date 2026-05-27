@@ -39,6 +39,10 @@ Debe trabajar por puertos y refs opacas.
 - Reentrada y replay no pueden duplicar review, tests, rework, replan ni cierre.
 - Un cierre exige scope `quiescent`, outbox cero, reviews aceptadas,
   evidencias/validaciones requeridas y ninguna task abierta dentro del scope.
+- Si `replan_or_close` conserva un scope stale, la composicion debe refrescarlo
+  desde tasks hoja abiertas ya entregadas y con review aceptada, filtrando por
+  `wave_ref`/`cohort_ref`/`parent_task_ref` cuando existan y sin ampliar a
+  agentes ajenos.
 - El contrato no importa Codex, OPES, runtime concreto, DB, web, MCP, HOME,
   OAuth, tokens ni rutas locales.
 
@@ -87,6 +91,10 @@ apuntar a esas refs, no convertirse en un segundo log paralelo.
     operacional tiene exito, el state queda `closed`; si el cerrador devuelve
     issues o el source no puede construir request, queda `blocked` con
     `closure_reason`.
+12. Recuperacion de cierre/replan: `run.open_tasks` con progreso parcial no se
+    convierte en bloqueo terminal; `app-director-service` reabre review para
+    followups entregados sin review aceptada o refresca `replan_or_close` con
+    hojas abiertas ya aceptadas antes de volver a intentar cierre.
 
 Validacion focal:
 
