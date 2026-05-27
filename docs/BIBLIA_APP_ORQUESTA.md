@@ -2,15 +2,44 @@
 
 ## Estado de este documento
 
-Este archivo es la doctrina canonica de Orquesta.
+Estado documental: historico/stale.
+Fecha de clasificacion: 2026-05-26.
+Sustituto vigente: `AGENTS.md`, `README.md`,
+`docs/estado_actual_2026-05-17.md`,
+`docs/guia_nucleo_orquestacion_2026-05-17.md` y
+`docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`.
+
+Este archivo conserva vision, decisiones y diagnosticos de Orquesta V1. No es
+doctrina canonica del proyecto vigente y no debe abrir trabajo ni cerrar
+evidencia si contradice la foto actual.
+
+Marcadores para indice/linter T88/T116:
+
+- `doc_estado=historico-stale`
+- `doc_sustituto=AGENTS.md,README.md,docs/estado_actual_2026-05-17.md,docs/guia_nucleo_orquestacion_2026-05-17.md,docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `doc_no_canonico=true`
+- `doc_no_ejecutable_sin_fuente_vigente=true`
+- `doc_quarantine=T124 legacy_external_orchestrator_doc`
+- `doc_excluir_planificacion_automatica=true`
+
+Cuarentena T124: las referencias de este archivo a OpenClaw, `tmux`,
+Terminator, `/api/mcp`, servidor MCP, rutas legacy o transportes externos no
+son requisitos vivos del nucleo neutral ni autorizan abrir endpoints, procesos
+o gestores. Solo cuentan como inspiracion historica, compatibilidad de rescate o
+composicion opt-in con decision y tests propios. La superficie MCP vigente vive
+en `modulos/orquesta-mcp` y, si la composicion lo habilita, en el transporte
+opt-in `/mcp` de `cmd/orquesta-server`.
 
 Su funcion es consolidar en un unico sitio la direccion arquitectonica, operativa y de desarrollo del proyecto para que ningun agente dependa de una lectura parcial o dispersa del repo.
 
 Regla de precedencia:
 
-1. Este archivo manda como doctrina estatica del proyecto.
-2. El estado vivo manda para tareas, propuestas, sesiones, runtimes y colas, y se consulta en Orquesta.
-3. Si otro documento antiguo contradice esta biblia, prevalece esta biblia hasta que el otro documento se actualice.
+1. `AGENTS.md` y `docs/estado_actual_2026-05-17.md` fijan la foto vigente.
+2. `README.md`, `docs/README.md`,
+   `docs/guia_nucleo_orquestacion_2026-05-17.md` y el backlog vivo fijan
+   rutas de lectura, handoffs y trabajo ejecutable.
+3. Este archivo solo aporta contexto historico/vision. Si contradice una fuente
+   vigente, prevalece la fuente vigente y este archivo debe leerse como stale.
 
 ## Fuentes consolidadas
 
@@ -44,13 +73,19 @@ Este archivo consolida y resume, entre otros, estos documentos:
 
 Todo agente, humano o autonomo, debe:
 
-1. Leer este archivo al inicio de cada sesion o bootstrap.
-2. Consultar despues el estado vivo en Orquesta.
-3. Trabajar segun esta doctrina y no segun recuerdos parciales de conversaciones anteriores.
+1. Leer primero `AGENTS.md`, `README.md` y la foto vigente.
+2. Consultar este archivo solo cuando necesite contexto historico de Orquesta
+   V1.
+3. No convertir OpenClaw, SQLite, rutas `/api/*` antiguas ni control-plane V1
+   mencionados aqui en requisitos vigentes sin enlace a fuente viva.
 
-## Estado real consolidado a 2026-04-23
+## Estado historico consolidado a 2026-04-23
 
-Este documento fija doctrina, pero en esta sesion ya hay cambios de implementacion que obligan a dejar claro el punto real del proyecto.
+Este bloque fija doctrina historica de Orquesta V1. Para el proyecto vigente,
+prevalecen `AGENTS.md`, `README.md`, `docs/estado_actual_2026-05-17.md`,
+`docs/guia_nucleo_orquestacion_2026-05-17.md` y el backlog vivo; cualquier
+frase de este bloque que parezca canonica debe leerse como contexto stale hasta
+que una fuente vigente la ratifique.
 
 Ya existe y debe documentarse como estado operativo actual:
 
@@ -82,7 +117,8 @@ Regla de redaccion a partir de este punto:
 
 ## Delta de estado a 2026-04-28
 
-Para evitar deriva entre doctrina y estado real del repo, esta actualización deja cuatro aclaraciones:
+Para evitar deriva entre doctrina historica V1 y estado real del repo, esta
+actualizacion deja cuatro aclaraciones:
 
 - retiro/fuera de orquestación:
   - el control plane ya incorpora mitigaciones para no reactivar retirados, consumir mailbox residual y bloquear tarea huérfana
@@ -105,7 +141,7 @@ Para evitar deriva entre doctrina y estado real del repo, esta actualización de
 Se acepta como evolución compatible con la filosofía actual de Orquesta la línea documentada en [docs/propuesta_adk_eventos_delta_artifacts_rewind_2026-04-23.md](/home/alberto/Trabajo/orquesta/docs/propuesta_adk_eventos_delta_artifacts_rewind_2026-04-23.md).
 También se acepta, como línea complementaria y no competidora, la documentada en [docs/propuesta_omx_hooks_roles_worktree_resume_2026-04-23.md](/home/alberto/Trabajo/orquesta/docs/propuesta_omx_hooks_roles_worktree_resume_2026-04-23.md).
 
-Regla doctrinal:
+Regla historica de diseno V1, no canon vigente:
 
 - no se adopta `ADK` como framework de aplicación
 - sí se pueden copiar contratos útiles para reforzar el núcleo actual:
@@ -164,13 +200,16 @@ Sus principios estructurales son:
 - persistencia como adaptador, no como nucleo
 - web, CLI y futuras apps como clientes finos
 
-## Fuentes de verdad
+## Fuentes de verdad historicas de Orquesta V1
 
-Hay dos y no deben mezclarse:
+Las fuentes descritas en esta seccion pertenecen al marco V1 conservado como
+historia. No mandan sobre la foto vigente ni sustituyen el orden de autoridad
+documental declarado al inicio de este archivo.
 
 ### 1. Doctrina estatica
 
-La fuente estatica de referencia es este archivo.
+En el marco V1, la fuente estatica de referencia era este archivo. En el repo
+vigente, este archivo es `doc_estado=historico-stale`.
 
 Sirve para:
 
@@ -179,9 +218,11 @@ Sirve para:
 - reglas operativas
 - decisiones de producto ya consolidadas
 
-### 2. Estado operativo vivo
+### 2. Estado operativo vivo historico
 
-La fuente de verdad viva es Orquesta, consultada por daemon, API, web o CLI server-first.
+La fuente de verdad viva descrita aqui era Orquesta V1, consultada por daemon,
+API, web o CLI server-first. Las rutas, transportes o clientes mencionados abajo
+no son requisitos vivos si no enlazan a `/api/v0/*` o a una fuente vigente.
 
 Sirve para:
 
@@ -489,7 +530,7 @@ La experiencia real del proyecto ya ha demostrado una cosa:
 - cuando a un agente se le entrega un frente amplio, el agente tiende a decidir arquitectura, cortes y soluciones laterales
 - eso produce deriva del roadmap, incumplimientos de hexagonalidad y reescrituras fuera del objetivo real
 
-Por tanto, la doctrina canonica cambia de forma explicita:
+Por tanto, la doctrina historica V1 registraba este cambio de forma explicita:
 
 - el orquestador define el trabajo
 - el agente implementa una unidad minima cerrada
@@ -531,7 +572,7 @@ Referencia de diseño:
 
 - `docs/diseno_microprogramacion_dirigida_agentes.md`
 
-Regla canonica para promocion de modelos locales:
+Regla historica V1 para promocion de modelos locales:
 
 - la evaluacion de workers locales se hace por `perfil_tarea`, no por nombres libres de rol
 - la puntuacion de agentes locales no es una nota unica ni fija; se mantiene como matriz mutable por materias
@@ -1165,8 +1206,12 @@ Hallazgo operativo consolidado:
 
 - una fuente recurrente de `SQLITE_BUSY` en Orquesta era abrir SQLite y correr bootstrap/post-migraciones antes de confirmar que el daemon habia conseguido su puerto
 - eso permitia arranques fantasma o duplicados que tocaban la BD y solo despues fallaban al escuchar
-- la doctrina correcta es: primero reservar listener, despues abrir persistencia, despues publicar estado y servir
-- otra brecha peligrosa era permitir que `ORQUESTA_FORCE_LOCAL_DB` abriera la BD en escritura para comandos no diagnosticos; la doctrina correcta es que el modo local de recuperacion sea de solo lectura y con whitelist explicita
+- la regla historica correcta para V1 era: primero reservar listener, despues
+  abrir persistencia, despues publicar estado y servir
+- otra brecha peligrosa era permitir que `ORQUESTA_FORCE_LOCAL_DB` abriera la
+  BD en escritura para comandos no diagnosticos; la regla historica correcta
+  para V1 era que el modo local de recuperacion fuese de solo lectura y con
+  whitelist explicita
 
 ## Comandos base de consulta viva
 
@@ -1196,18 +1241,26 @@ Mientras no se cierre explicitamente por Orquesta, los frentes estructurales dom
 - reducir dependencia operativa de scripts manuales
 - mantener backend de persistencia desacoplado
 
-## Criterio de disciplina para todos los agentes
+## Criterio historico de disciplina V1
 
-Todo agente debe actuar como si este archivo fuese la constitucion del proyecto.
+En Orquesta V1 se pidio a los agentes tratar este archivo como constitucion del
+proyecto. En el repo vigente eso queda revocado por la cabecera
+`doc_estado=historico-stale`: la autoridad viva esta en `AGENTS.md`,
+`README.md`, `docs/estado_actual_2026-05-17.md`,
+`docs/guia_nucleo_orquestacion_2026-05-17.md` y el backlog ejecutable.
 
-Eso implica:
+Como contexto historico, eso implicaba:
 
 - leerlo
 - obedecerlo
 - citarlo cuando haya ambiguedad
 - no degradarlo con excepciones oportunistas
 
-Cuando haya que cambiar esta doctrina, se cambia aqui primero y luego se alinean los demas documentos.
+Cuando haya que cambiar doctrina vigente, se cambia primero en `AGENTS.md`,
+`README.md`, `docs/estado_actual_2026-05-17.md`,
+`docs/guia_nucleo_orquestacion_2026-05-17.md` o el backlog vivo segun alcance.
+Este documento historico solo se actualiza para conservar trazabilidad y evitar
+que texto V1 sea promovido a plan operativo.
 
 ## Runtime handles vivos
 

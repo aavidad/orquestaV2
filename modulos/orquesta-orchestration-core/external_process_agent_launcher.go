@@ -120,7 +120,7 @@ func externalProcessAgentLaunchResultV0(
 	snapshot orquestaruntime.ProcessRuntimeSnapshotV0,
 ) AgentLaunchResultV0 {
 	delivery := spec.AgentPacket.DeliveryRefs
-	return AgentLaunchResultV0{
+	result := AgentLaunchResultV0{
 		AgentRequestID: externalProcessAgentRequestIDV0(inbound),
 		LaunchRef:      strings.TrimSpace(snapshot.LaunchRef),
 		AckRef:         strings.TrimSpace(delivery.AckRef),
@@ -135,6 +135,11 @@ func externalProcessAgentLaunchResultV0(
 			delivery.CheckpointRef,
 		}),
 	}
+	result.EvidenceRefs = compactStringsV0(append(
+		result.EvidenceRefs,
+		orquestaruntime.ProcessRuntimeSnapshotEvidenceRefsV0(snapshot)...,
+	))
+	return result
 }
 
 func externalProcessAgentRequestIDV0(
@@ -175,6 +180,7 @@ func agentProcessRegistryRecordFromLaunchV0(
 		ProcessRef:   strings.TrimSpace(snapshot.ProcessRef),
 		SessionRef:   strings.TrimSpace(snapshot.SessionRef),
 		LaunchRef:    strings.TrimSpace(launch.LaunchRef),
+		PID:          snapshot.PID,
 		ReadinessRef: strings.TrimSpace(launch.ReadinessRef),
 		EvidenceRefs: compactStringsV0(append([]string{
 			snapshot.ProcessRef,

@@ -2,10 +2,11 @@ package main
 
 import (
 	"encoding/json"
-	"io/fs"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
@@ -15,6 +16,13 @@ import (
 const (
 	idleSelfImprovementAckStructuredEvidenceRefV0 = "evidence-ref-autoprogramming-backlog-ack-structured"
 	idleSelfImprovementAckAmbiguousEvidenceRefV0  = "evidence-ref-autoprogramming-backlog-ack-ambiguous"
+	idleSelfImprovementAckScanBudgetEvidenceRefV0 = "evidence-ref-autoprogramming-backlog-ack-scan-budget-exhausted"
+
+	idleSelfImprovementAckScanMaxRuntimeDirsV0      = 256
+	idleSelfImprovementAckScanMaxRunEntriesV0       = 128
+	idleSelfImprovementAckScanMaxAgentDirsPerRunV0  = 64
+	idleSelfImprovementAckScanMaxControlFileBytesV0 = 128 * 1024
+	idleSelfImprovementAckScanMaxDurationV0         = 2 * time.Second
 )
 
 func (planner idleSelfImprovementBacklogPlannerV0) completedBacklogRequestRefsFromRuntimeV0(
@@ -24,36 +32,35 @@ func (planner idleSelfImprovementBacklogPlannerV0) completedBacklogRequestRefsFr
 	completed := map[string]bool{}
 	evidenceRefs := []string{}
 	collisions := []orquestaserver.BacklogScanCollisionV0{}
-	_ = filepath.WalkDir(runtimeDir, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil || entry == nil || entry.IsDir() || entry.Name() != "agent_ack.json" {
-			return nil
-		}
-		runRef := backlogRunRefFromRuntimeACKPathV0(runtimeDir, path)
-		if runRef == "" {
-			return nil
-		}
-		agentRef := backlogAgentRefFromRuntimeACKPathV0(runtimeDir, path)
-		ok, stale := planner.structuredACKCompletedAndCurrentV0(path, runRef, agentRef)
+	scan := idleSelfImprovementACKRuntimeScanV0{
+		runtimeDir: runtimeDir,
+		deadline:   time.Now().Add(idleSelfImprovementAckScanMaxDurationV0),
+	}
+	for _, candidate := range scan.runtimeACKCandidatesV0() {
+		ok, stale, ambiguous := planner.structuredACKCompletedAndCurrentV0(candidate.ackPath, candidate.runRef, candidate.agentRef)
 		if ok {
-			completed[idleSelfImprovementNormalizeQueuedRequestRefV0(runRef)] = true
+			completed[idleSelfImprovementNormalizeQueuedRequestRefV0(candidate.runRef)] = true
 			evidenceRefs = append(evidenceRefs, idleSelfImprovementAckStructuredEvidenceRefV0)
-			return nil
+			continue
 		}
 		if stale {
-			collisions = append(collisions, orquestaserver.BacklogScanCollisionV0{
-				Code:       "backlog_docs_changed_after_plan",
-				RequestRef: idleSelfImprovementNormalizeQueuedRequestRefV0(runRef),
-				Message:    "ACK completado sobre foto documental obsoleta; requiere rebase/merge",
-				EvidenceRefs: []string{
-					"evidence-ref-autoprogramming-backlog-doc-merge-pending",
-				},
-			})
+			collisions = append(collisions, idleSelfImprovementBacklogACKDocStaleCollisionV0(candidate.runRef))
 			evidenceRefs = append(evidenceRefs, "evidence-ref-autoprogramming-backlog-doc-merge-pending")
-			return nil
+			continue
+		}
+		if ambiguous {
+			collisions = append(collisions, idleSelfImprovementBacklogACKAmbiguousCollisionV0(candidate.runRef))
 		}
 		evidenceRefs = append(evidenceRefs, idleSelfImprovementAckAmbiguousEvidenceRefV0)
-		return nil
-	})
+	}
+	for _, runRef := range compactServerStackStringsV0(scan.ambiguousRunRefs) {
+		collisions = append(collisions, idleSelfImprovementBacklogACKAmbiguousCollisionV0(runRef))
+		evidenceRefs = append(evidenceRefs, idleSelfImprovementAckAmbiguousEvidenceRefV0)
+	}
+	if scan.exhausted {
+		collisions = append(collisions, idleSelfImprovementBacklogACKScanBudgetCollisionV0())
+		evidenceRefs = append(evidenceRefs, idleSelfImprovementAckScanBudgetEvidenceRefV0)
+	}
 	return completed, compactServerStackStringsV0(evidenceRefs), compactBacklogScanCollisionsV0(collisions)
 }
 
@@ -61,14 +68,14 @@ func (planner idleSelfImprovementBacklogPlannerV0) structuredACKCompletedAndCurr
 	ackPath string,
 	runRef string,
 	agentRef string,
-) (bool, bool) {
+) (bool, bool, bool) {
 	packet, ok := idleSelfImprovementReadAgentPacketBesideACKV0(ackPath)
 	if !ok || !idleSelfImprovementPacketMatchesBacklogRuntimeV0(packet, runRef, agentRef) {
-		return false, false
+		return false, false, false
 	}
-	data, err := os.ReadFile(ackPath)
-	if err != nil {
-		return false, false
+	data, oversized, err := idleSelfImprovementReadBoundedControlFileV0(ackPath)
+	if err != nil || oversized {
+		return false, false, true
 	}
 	spec := orquestaruntime.ExternalAgentLaunchSpecV0{
 		SchemaVersion: orquestaruntime.ExternalAgentLaunchSpecSchemaVersionV0,
@@ -78,19 +85,19 @@ func (planner idleSelfImprovementBacklogPlannerV0) structuredACKCompletedAndCurr
 	}
 	ack, issues := orquestaruntimecodex.ValidateStrictCompletedCodexAgentAckBytesForSpecV0(data, spec)
 	if len(issues) != 0 || strings.TrimSpace(ack.Status) != "completed" {
-		return false, false
+		return false, false, false
 	}
 	if !planner.packetBacklogDocsCurrentV0(packet) {
-		return false, true
+		return false, true, false
 	}
-	return true, false
+	return true, false, false
 }
 
 func idleSelfImprovementReadAgentPacketBesideACKV0(
 	ackPath string,
 ) (orquestaruntime.AgentStartPacketV0, bool) {
-	data, err := os.ReadFile(filepath.Join(filepath.Dir(ackPath), "agent_packet.json"))
-	if err != nil {
+	data, oversized, err := idleSelfImprovementReadBoundedControlFileV0(filepath.Join(filepath.Dir(ackPath), "agent_packet.json"))
+	if err != nil || oversized {
 		return orquestaruntime.AgentStartPacketV0{}, false
 	}
 	var packet orquestaruntime.AgentStartPacketV0
@@ -98,6 +105,22 @@ func idleSelfImprovementReadAgentPacketBesideACKV0(
 		return orquestaruntime.AgentStartPacketV0{}, false
 	}
 	return packet, idleSelfImprovementPacketHasACKFieldsV0(packet)
+}
+
+func idleSelfImprovementReadBoundedControlFileV0(path string) ([]byte, bool, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, false, err
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, idleSelfImprovementAckScanMaxControlFileBytesV0+1))
+	if err != nil {
+		return nil, false, err
+	}
+	if len(data) > idleSelfImprovementAckScanMaxControlFileBytesV0 {
+		return nil, true, nil
+	}
+	return data, false, nil
 }
 
 func idleSelfImprovementPacketHasACKFieldsV0(packet orquestaruntime.AgentStartPacketV0) bool {

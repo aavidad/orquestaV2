@@ -144,8 +144,8 @@ func reviewReworkCorrectionTaskIDV0(
 		plan.TaskRef,
 		plan.ReviewResult.DeliveryRef,
 	)
-	if len(digest) > 12 {
-		digest = digest[:12]
+	if len(digest) > 32 {
+		digest = digest[:32]
 	}
 	return "task-ref-review-rework-" + stem + "-" + digest
 }

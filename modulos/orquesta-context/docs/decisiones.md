@@ -1,5 +1,21 @@
 # Decisiones locales: orquesta-context
 
+## CTX-D004 - T15 cerrado no reabre contexto
+
+Fecha: 2026-05-27
+
+Decision: las entradas `required ref_only` se resuelven por
+`required_ref_action` y evidencia ACK; no se materializa contexto faltante ni se
+relaja el rail para completar una tarea.
+
+Motivo: T15 ya quedo cerrado para default acotado de detalle. El contexto debe
+mantener refs pequenas y verificables, no transportar payloads crudos para
+evitar falsos positivos.
+
+Consecuencia: `orquesta-context` consume la politica comun por campo y conserva
+tolerancia a refs opacas; secretos, HOME, prompts/transcripts y material crudo
+siguen bloqueados o quedan como consulta al director.
+
 ## CTX-D001 - Builder puro antes que adaptador de filesystem
 
 Fecha: 2026-05-05

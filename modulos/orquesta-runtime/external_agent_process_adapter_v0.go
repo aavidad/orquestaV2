@@ -31,6 +31,8 @@ func LaunchExternalAgentProcessV0(
 			externalAgentProcessNormalizeIssuesV0(spec.CorrelationID, issues),
 		)
 	}
+	receipt := externalAgentProcessLaunchReceiptV0(resolver, spec)
+	req.LaunchReceipt = &receipt
 	if err := validateProcessRuntimeLaunchRequestV0(req); err != nil {
 		return externalAgentProcessBlockedV0([]ExternalAgentConnectorErrorV0{
 			externalAgentProcessIssueFromRuntimeErrorV0(
@@ -57,9 +59,23 @@ func LaunchExternalAgentProcessV0(
 		)
 	}
 	return ExternalAgentProcessLaunchResultV0{
-		Status:   ExternalAgentProcessLaunchStartedV0,
-		Snapshot: snapshot,
+		Status:        ExternalAgentProcessLaunchStartedV0,
+		Snapshot:      snapshot,
+		LaunchReceipt: snapshot.LaunchReceipt,
 	}
+}
+
+func externalAgentProcessLaunchReceiptV0(
+	resolver ExternalAgentProcessCommandResolverV0,
+	spec ExternalAgentLaunchSpecV0,
+) ProcessRuntimeLaunchReceiptV0 {
+	if provider, ok := resolver.(ExternalAgentProcessCommandResolutionReceiptProviderV0); ok {
+		receipt := provider.ExternalAgentProcessCommandResolutionReceiptV0()
+		if receipt.SchemaVersion != "" {
+			return receipt
+		}
+	}
+	return NewProcessRuntimeLaunchReceiptFromSpecV0(spec, "command_resolver_resolution")
 }
 
 func externalAgentProcessSpecIssuesV0(

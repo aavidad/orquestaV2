@@ -121,7 +121,9 @@ func idleSelfImprovementCleanTestPartV0(value string) string {
 	if strings.HasPrefix(lower, "y ") || strings.HasPrefix(lower, "e ") {
 		value = strings.TrimSpace(value[2:])
 	}
-	for len(value) > 1 && strings.ContainsRune(".,;:", rune(value[len(value)-1])) {
+	for len(value) > 1 &&
+		strings.ContainsRune(".,;:", rune(value[len(value)-1])) &&
+		!strings.HasSuffix(value, "...") {
 		value = strings.TrimSpace(value[:len(value)-1])
 	}
 	return value

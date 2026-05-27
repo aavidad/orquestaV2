@@ -39,12 +39,19 @@ func opesBridgeLoopConfigFromEnvV0(
 	}
 	return opesBridgeLoopConfigV0{
 		Loop: externalBridgeLoopConfigV0{
-			Enabled:      true,
-			Component:    component,
-			ResultField:  "summary",
-			Interval:     durationSecondsEnvOrDefaultV0(envOPESBridgeIntervalSecondsV0, 60*time.Second),
-			InitialDelay: durationSecondsEnvOrDefaultV0(envOPESBridgeInitialDelaySecondsV0, 2*time.Second),
-			MaxTicks:     intEnvOrZeroV0(envOPESBridgeMaxTicksV0),
+			Enabled:       true,
+			Component:     component,
+			ResultField:   "summary",
+			FilterSummary: opesBridgeFilterSummaryV0(drainConfig),
+			Interval:      durationSecondsEnvOrDefaultV0(envOPESBridgeIntervalSecondsV0, 60*time.Second),
+			InitialDelay:  durationSecondsEnvOrDefaultV0(envOPESBridgeInitialDelaySecondsV0, 2*time.Second),
+			MaxTicks:      intEnvOrZeroV0(envOPESBridgeMaxTicksV0),
+			EffectTimeout: drainConfig.HTTPTimeout,
+			RetryPolicy: externalBridgeRetryPolicyV0{
+				MaxAttempts: 3,
+				BaseDelay:   durationSecondsEnvOrDefaultV0(envOPESBridgeIntervalSecondsV0, 60*time.Second),
+				MaxDelay:    5 * time.Minute,
+			},
 		},
 		DrainConfig: drainConfig,
 	}, nil
@@ -64,6 +71,47 @@ func runOPESBridgeLoopV0(
 	})
 }
 
+func runOPESBridgeLoopAsyncV0(
+	ctx context.Context,
+	config opesBridgeLoopConfigV0,
+	stderr io.Writer,
+	drainer opesBridgeDrainerV0,
+) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		runOPESBridgeLoopV0(ctx, config, stderr, drainer)
+	}()
+	return done
+}
+
+func waitOPESBridgeLoopDoneV0(
+	_ context.Context,
+	config opesBridgeLoopConfigV0,
+	done <-chan struct{},
+) bool {
+	if done == nil {
+		return true
+	}
+	timeout := externalBridgeLoopShutdownTimeoutV0(config.Loop)
+	waitCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	select {
+	case <-done:
+		return true
+	case <-waitCtx.Done():
+		if config.Loop.Observer != nil {
+			config.Loop.Observer(context.Background(), externalBridgeLoopEventV0{
+				Component:  config.Loop.Component,
+				Status:     "timeout",
+				ErrorCode:  "external_bridge_shutdown_timeout",
+				StopReason: "shutdown_timeout",
+			})
+		}
+		return false
+	}
+}
+
 func opesBridgeHasSafeFilterV0(config opesDrainConfigV0) bool {
 	if strings.TrimSpace(os.Getenv(envOPESBridgeAllowUnfilteredV0)) == "1" {
 		return true
@@ -71,4 +119,21 @@ func opesBridgeHasSafeFilterV0(config opesDrainConfigV0) bool {
 	return strings.TrimSpace(config.JobType) != "" ||
 		strings.TrimSpace(config.JobRef) != "" ||
 		len(config.JobTypeSequence) > 0
+}
+
+func opesBridgeFilterSummaryV0(config opesDrainConfigV0) []string {
+	filters := []string{}
+	if strings.TrimSpace(config.JobType) != "" {
+		filters = append(filters, "job_type="+strings.TrimSpace(config.JobType))
+	}
+	if strings.TrimSpace(config.JobRef) != "" {
+		filters = append(filters, "job_ref=configured")
+	}
+	if len(config.JobTypeSequence) > 0 {
+		filters = append(filters, "job_type_sequence_count="+fmt.Sprint(len(config.JobTypeSequence)))
+	}
+	if config.Limit > 0 {
+		filters = append(filters, "limit="+fmt.Sprint(config.Limit))
+	}
+	return filters
 }

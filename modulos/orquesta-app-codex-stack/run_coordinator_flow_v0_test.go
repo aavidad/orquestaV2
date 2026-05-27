@@ -50,6 +50,59 @@ func TestCodexStackV0RunGlobalTickEjecutaRunConMasPrioridadV0(t *testing.T) {
 	}
 }
 
+func TestCodexStackV0RunGlobalTickResidenteNoBloqueaEnExternalWaiterV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	stack.Ports.ExternalWaiter = failingCoordinatorExternalWaiterV0{t: t}
+	runRef := "request-ref-autoprogramming-resident-no-wait-001"
+	taskRef := "task-autoprogramming-resident-no-wait-001"
+	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskRef)
+	run := codexStackAutoprogrammingRunForCoordinatorRepairTestV0(runRef, taskRef)
+	run.Agents = []string{agentRef}
+	run.StartedAgents = []string{agentRef}
+	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	if err := stack.Ports.DirectorTaskStore.SaveWorkflowTaskV0(
+		context.Background(),
+		stackDeliveredAutoprogrammingTaskForTestV0(runRef, taskRef),
+	); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0: %v", err)
+	}
+	if _, err := stack.Stores.RunQueue.SetRunPriorityV0(context.Background(), orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        runRef,
+		QueueRef:      DefaultRunQueueRefV0,
+		AppRef:        "project-ref-orquesta-server",
+		Status:        orquestarunqueue.RunStatusReadyV0,
+		PriorityScore: 90,
+		UpdatedAt:     time.Date(2026, 5, 26, 20, 0, 0, 0, time.UTC),
+		EvidenceRefs:  []string{"evidence-ref-test-resident-no-blocking-wait"},
+	}); err != nil {
+		t.Fatalf("SetRunPriorityV0: %v", err)
+	}
+
+	result, err := stack.RunGlobalTickV0(context.Background(), orquestaruncoordinator.RunCoordinatorTickCommandV0{
+		QueueRef: DefaultRunQueueRefV0,
+		MaxRuns:  1,
+		DrainLimits: orquestaruncoordinator.RunDrainLimitsV0{
+			MaxBursts:            1,
+			MaxStepsPerBurst:     1,
+			MaxDispatchesPerWait: 8,
+			MaxCommands:          8,
+			MaxOutboxPerCycle:    8,
+			MaxExternalWaits:     1,
+		},
+		OccurredAt: time.Date(2026, 5, 26, 20, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("RunGlobalTickV0: %v", err)
+	}
+	if len(result.Executions) != 1 ||
+		result.Executions[0].RunRef != runRef ||
+		result.Executions[0].Outcome != string(orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0) {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestCodexStackV0RunGlobalTickRespetaPausaV0(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	paused := postDirectorAPIWithNameV0(t, stack, "app-pausada", "Agenda Pausada")
@@ -108,6 +161,384 @@ func TestCodexStackV0RunGlobalTickNoReanudaReadyActivoParadoPorShutdownServidorV
 	}
 	if state.Status != orquestaruncontrol.RunControlStatusStoppedV0 {
 		t.Fatalf("run control reanudado durante shutdown: %+v", state)
+	}
+}
+
+func TestCodexStackV0RunGlobalTickReanudaShutdownServidorSiAutoResumeExplicitoV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	director := postDirectorAPIWithNameV0(t, stack, "app-shutdown-autoresume", "Agenda Shutdown Auto Resume")
+	setStackRunPriorityForTestV0(t, stack, director.RunRef, director.AppSpec.Slug, 90)
+	if _, err := stack.Stores.RunControl.CompleteRunControlV0(context.Background(), orquestaruncontrol.CompleteRunControlCommandV0{
+		RunRef:         director.RunRef,
+		TargetStatus:   orquestaruncontrol.RunControlStatusStoppedV0,
+		RequestedBy:    "orquesta-director",
+		Reason:         "apagado controlado solicitado por CLI al Director",
+		IdempotencyKey: "idem-orquesta-server-stop",
+		EvidenceRefs: []string{
+			orquestaruncontrol.RunControlEvidenceAutoResumeAllowedV0,
+			"evidence-ref-test-server-shutdown-autoresume",
+		},
+	}); err != nil {
+		t.Fatalf("CompleteRunControlV0: %v", err)
+	}
+
+	result, err := stack.RunGlobalTickV0(context.Background(), globalTickCommandForTestV0())
+	if err != nil {
+		t.Fatalf("RunGlobalTickV0: %v", err)
+	}
+	if got := executionRefsForStackCoordinatorTestV0(result); !reflect.DeepEqual(got, []string{director.RunRef}) {
+		t.Fatalf("executions got %#v want %#v result=%+v", got, []string{director.RunRef}, result)
+	}
+	state, err := stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: director.RunRef},
+	)
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0: %v", err)
+	}
+	if state.Status != orquestaruncontrol.RunControlStatusRunningV0 {
+		t.Fatalf("run control no reanudado tras auto-resume explicito: %+v", state)
+	}
+}
+
+func TestCodexStackV0RunGlobalTickNoResucitaRunParadaPorControlHumanoV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	director := postDirectorAPIWithNameV0(t, stack, "app-human-stop-requeue", "Agenda Human Stop Requeue")
+	setStackRunPriorityForTestV0(t, stack, director.RunRef, director.AppSpec.Slug, 90)
+	if _, err := stack.Stores.RunControl.StopRunV0(context.Background(), orquestaruncontrol.StopRunCommandV0{
+		RunRef:       director.RunRef,
+		RequestedBy:  "operador-humano",
+		Reason:       "parada solicitada desde panel",
+		EvidenceRefs: []string{"evidence-ref-test-human-stop"},
+	}); err != nil {
+		t.Fatalf("StopRunV0: %v", err)
+	}
+	if _, err := stack.Stores.RunControl.CompleteRunControlV0(context.Background(), orquestaruncontrol.CompleteRunControlCommandV0{
+		RunRef:         director.RunRef,
+		TargetStatus:   orquestaruncontrol.RunControlStatusStoppedV0,
+		RequestedBy:    "orquesta-run-control",
+		Reason:         "agentes drenados por control de run",
+		IdempotencyKey: "idem-run-control-complete-" + codexStackOperationalClosureSafeRefV0(director.RunRef) + "-stopped",
+		EvidenceRefs:   []string{"evidence-ref-test-human-stop-complete"},
+	}); err != nil {
+		t.Fatalf("CompleteRunControlV0: %v", err)
+	}
+
+	result, err := stack.RunGlobalTickV0(context.Background(), globalTickCommandForTestV0())
+	if err != nil {
+		t.Fatalf("RunGlobalTickV0: %v", err)
+	}
+	if got := executionRefsForStackCoordinatorTestV0(result); len(got) != 0 {
+		t.Fatalf("executions got %#v want empty result=%+v", got, result)
+	}
+	state, err := stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: director.RunRef},
+	)
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0: %v", err)
+	}
+	if state.Status != orquestaruncontrol.RunControlStatusStoppedV0 {
+		t.Fatalf("run control reanudado tras parada humana: %+v", state)
+	}
+	visible, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		context.Background(),
+		orquestarunqueue.RunQueueReadRequestV0{QueueRef: DefaultRunQueueRefV0},
+	)
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	if len(visible) != 0 {
+		t.Fatalf("run parada sigue ejecutable en cola: %+v", visible)
+	}
+}
+
+func TestCodexStackV0RecoverNoReanudaStoppedSiRetryCerradoExisteV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	baseRef := "request-ref-autoprogramming-backlog-tx-stopped-001"
+	retryRef := baseRef + "-retry-closed"
+	taskRef := "task-autoprogramming-tx-stopped-001"
+	run := codexStackAutoprogrammingRunForCoordinatorRepairTestV0(baseRef, taskRef)
+	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	markRunControlStoppedAutoResumeForTestV0(t, stack, baseRef)
+	setRunQueueCandidateForTestV0(t, stack, baseRef, orquestarunqueue.RunStatusStoppedV0, 60, time.Date(2026, 5, 27, 10, 0, 0, 0, time.UTC))
+	setRunQueueCandidateForTestV0(t, stack, retryRef, orquestarunqueue.RunStatusClosedV0, 10, time.Date(2026, 5, 27, 11, 0, 0, 0, time.UTC))
+
+	if err := stack.recoverQueuedStoppedActiveRunsV0(context.Background(), globalTickCommandForTestV0()); err != nil {
+		t.Fatalf("recoverQueuedStoppedActiveRunsV0: %v", err)
+	}
+
+	state, err := stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: baseRef},
+	)
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0: %v", err)
+	}
+	if state.Status != orquestaruncontrol.RunControlStatusStoppedV0 {
+		t.Fatalf("base reanudada aunque existe retry cerrado: %+v", state)
+	}
+	visible, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		context.Background(),
+		orquestarunqueue.RunQueueReadRequestV0{QueueRef: DefaultRunQueueRefV0},
+	)
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	if len(visible) != 0 {
+		t.Fatalf("no debe reactivar stopped con retry cerrado: %+v", visible)
+	}
+}
+
+func TestCodexStackV0RecoverReanudaSoloUltimoStoppedUtilV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	baseRef := "request-ref-autoprogramming-backlog-tx-latest-001"
+	retryRef := baseRef + "-retry-latest"
+	baseTaskRef := "task-autoprogramming-tx-latest-base-001"
+	retryTaskRef := "task-autoprogramming-tx-latest-retry-001"
+	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), codexStackAutoprogrammingRunForCoordinatorRepairTestV0(baseRef, baseTaskRef)); err != nil {
+		t.Fatalf("SaveRunV0 base: %v", err)
+	}
+	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), codexStackAutoprogrammingRunForCoordinatorRepairTestV0(retryRef, retryTaskRef)); err != nil {
+		t.Fatalf("SaveRunV0 retry: %v", err)
+	}
+	markRunControlStoppedAutoResumeForTestV0(t, stack, baseRef)
+	markRunControlStoppedAutoResumeForTestV0(t, stack, retryRef)
+	setRunQueueCandidateForTestV0(t, stack, baseRef, orquestarunqueue.RunStatusStoppedV0, 40, time.Date(2026, 5, 27, 10, 0, 0, 0, time.UTC))
+	setRunQueueCandidateForTestV0(t, stack, retryRef, orquestarunqueue.RunStatusStoppedV0, 70, time.Date(2026, 5, 27, 11, 0, 0, 0, time.UTC))
+
+	if err := stack.recoverQueuedStoppedActiveRunsV0(context.Background(), globalTickCommandForTestV0()); err != nil {
+		t.Fatalf("recoverQueuedStoppedActiveRunsV0: %v", err)
+	}
+
+	baseState, err := stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: baseRef},
+	)
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0 base: %v", err)
+	}
+	retryState, err := stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: retryRef},
+	)
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0 retry: %v", err)
+	}
+	if baseState.Status != orquestaruncontrol.RunControlStatusStoppedV0 ||
+		retryState.Status != orquestaruncontrol.RunControlStatusRunningV0 {
+		t.Fatalf("states base=%+v retry=%+v", baseState, retryState)
+	}
+	visible, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		context.Background(),
+		orquestarunqueue.RunQueueReadRequestV0{QueueRef: DefaultRunQueueRefV0},
+	)
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	if len(visible) != 1 ||
+		visible[0].RunRef != retryRef ||
+		visible[0].Status != orquestarunqueue.RunStatusReadyV0 {
+		t.Fatalf("solo el ultimo stopped util debe quedar ready: %+v", visible)
+	}
+}
+
+func TestCodexStackV0RecoverReencolaRunEntregadaConStopCheckpointParaDrenarV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	director := postDirectorAPIWithNameV0(t, stack, "app-delivered-stop-drain", "Agenda Delivered Stop Drain")
+	if _, err := stack.Stores.RunQueue.SetRunPriorityV0(context.Background(), orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        director.RunRef,
+		QueueRef:      DefaultRunQueueRefV0,
+		AppRef:        director.AppSpec.Slug,
+		Status:        orquestarunqueue.RunStatusDeliveredV0,
+		PriorityScore: 80,
+		UpdatedAt:     time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC),
+		EvidenceRefs:  []string{"evidence-ref-test-delivered-before-stop"},
+	}); err != nil {
+		t.Fatalf("SetRunPriorityV0: %v", err)
+	}
+	if _, err := stack.Stores.RunControl.StopRunV0(context.Background(), orquestaruncontrol.StopRunCommandV0{
+		RunRef:       director.RunRef,
+		RequestedBy:  "operador-humano",
+		Reason:       "parada solicitada desde panel",
+		EvidenceRefs: []string{"evidence-ref-test-delivered-stop-requested"},
+	}); err != nil {
+		t.Fatalf("StopRunV0: %v", err)
+	}
+	if _, err := stack.Stores.RunControl.RecordRunCheckpointV0(context.Background(), orquestaruncontrol.RecordRunCheckpointCommandV0{
+		RunRef:       director.RunRef,
+		RequestedBy:  "orquesta-mcp-run-control",
+		Reason:       "checkpoint de stop ya registrado",
+		EvidenceRefs: []string{"evidence-ref-test-delivered-stop-checkpoint"},
+	}); err != nil {
+		t.Fatalf("RecordRunCheckpointV0: %v", err)
+	}
+	trackedQueue := &trackingStackRunQueuePortV0{inner: stack.Stores.RunQueue}
+	stack.Stores.RunQueue = trackedQueue
+
+	command := globalTickCommandForTestV0()
+	command.QueueLimit = 1
+	if err := stack.recoverQueuedStoppedActiveRunsV0(context.Background(), command); err != nil {
+		t.Fatalf("recoverQueuedStoppedActiveRunsV0: %v", err)
+	}
+	if trackedQueue.lastRead.Limit != 0 || !trackedQueue.lastRead.IncludeNonExecutable {
+		t.Fatalf("reconciliacion debe revisar toda la cola no ejecutable: read=%+v", trackedQueue.lastRead)
+	}
+
+	visible, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		context.Background(),
+		orquestarunqueue.RunQueueReadRequestV0{QueueRef: DefaultRunQueueRefV0},
+	)
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	if len(visible) != 1 ||
+		visible[0].RunRef != director.RunRef ||
+		visible[0].Status != orquestarunqueue.RunStatusReadyV0 ||
+		!codexStackStringInSetV0(visible[0].EvidenceRefs, "evidence-ref-run-queue-stop-requested-ready-for-drain") {
+		t.Fatalf("visible=%+v", visible)
+	}
+}
+
+func TestCodexStackV0RecoverTerminalizaRunRunningConStopCheckpointSinAgentesPendientesV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	runRef := "request-ref-autoprogramming-running-stop-no-pending-001"
+	taskRef := "task-autoprogramming-running-stop-no-pending-001"
+	agentRef := "agent-ref-running-stop-no-pending-001"
+	run := codexStackAutoprogrammingRunForCoordinatorRepairTestV0(runRef, taskRef)
+	run.StartedAgents = []string{agentRef}
+	run.ConfirmedStoppedAgents = []string{agentRef}
+	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	if _, err := stack.Stores.RunQueue.SetRunPriorityV0(context.Background(), orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        runRef,
+		QueueRef:      DefaultRunQueueRefV0,
+		AppRef:        "project-ref-orquesta-server",
+		Status:        orquestarunqueue.RunStatusRunningV0,
+		PriorityScore: 80,
+		UpdatedAt:     time.Date(2026, 5, 27, 14, 0, 0, 0, time.UTC),
+		EvidenceRefs:  []string{"evidence-ref-test-running-before-stop-sync"},
+	}); err != nil {
+		t.Fatalf("SetRunPriorityV0: %v", err)
+	}
+	if _, err := stack.Stores.RunControl.StopRunV0(context.Background(), orquestaruncontrol.StopRunCommandV0{
+		RunRef:       runRef,
+		RequestedBy:  "orquesta-director",
+		Reason:       "reinicio ordenado",
+		EvidenceRefs: []string{"evidence-ref-test-running-stop-requested"},
+	}); err != nil {
+		t.Fatalf("StopRunV0: %v", err)
+	}
+	if _, err := stack.Stores.RunControl.RecordRunCheckpointV0(context.Background(), orquestaruncontrol.RecordRunCheckpointCommandV0{
+		RunRef:       runRef,
+		RequestedBy:  "orquesta-mcp-run-control",
+		Reason:       "checkpoint de stop ya registrado",
+		EvidenceRefs: []string{"evidence-ref-test-running-stop-checkpoint"},
+	}); err != nil {
+		t.Fatalf("RecordRunCheckpointV0: %v", err)
+	}
+
+	result, err := stack.RunGlobalTickV0(context.Background(), globalTickCommandForTestV0())
+	if err != nil {
+		t.Fatalf("RunGlobalTickV0: %v", err)
+	}
+	if got := executionRefsForStackCoordinatorTestV0(result); len(got) != 0 {
+		t.Fatalf("run terminalizado por reconciliacion no debe drenarse: executions=%+v result=%+v", got, result)
+	}
+	state, err := stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: runRef},
+	)
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0: %v", err)
+	}
+	if state.Status != orquestaruncontrol.RunControlStatusStoppedV0 ||
+		!codexStackStringInSetV0(state.EvidenceRefs, "evidence-ref-run-control-complete-no-pending-agents") {
+		t.Fatalf("state=%+v", state)
+	}
+	visible, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		context.Background(),
+		orquestarunqueue.RunQueueReadRequestV0{QueueRef: DefaultRunQueueRefV0},
+	)
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	if len(visible) != 0 {
+		t.Fatalf("run parado no debe quedar ejecutable: %+v", visible)
+	}
+	all, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		context.Background(),
+		orquestarunqueue.RunQueueReadRequestV0{QueueRef: DefaultRunQueueRefV0, IncludeNonExecutable: true},
+	)
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0 all: %v", err)
+	}
+	if len(all) != 1 ||
+		all[0].RunRef != runRef ||
+		all[0].Status != orquestarunqueue.RunStatusStoppedV0 ||
+		!codexStackStringInSetV0(all[0].EvidenceRefs, "evidence-ref-run-queue-run-control-blocked-reconciled") {
+		t.Fatalf("queue all=%+v", all)
+	}
+}
+
+func TestCodexStackV0RecoverTerminalizaStopSinRunActivaV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	runRef := "request-ref-autoprogramming-stop-without-active-run-001"
+	if _, err := stack.Stores.RunQueue.SetRunPriorityV0(context.Background(), orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        runRef,
+		QueueRef:      DefaultRunQueueRefV0,
+		AppRef:        "project-ref-orquesta-server",
+		Status:        orquestarunqueue.RunStatusClosedV0,
+		PriorityScore: 0,
+		UpdatedAt:     time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC),
+		EvidenceRefs:  []string{"evidence-ref-test-closed-before-stop"},
+	}); err != nil {
+		t.Fatalf("SetRunPriorityV0: %v", err)
+	}
+	if _, err := stack.Stores.RunControl.StopRunV0(context.Background(), orquestaruncontrol.StopRunCommandV0{
+		RunRef:       runRef,
+		RequestedBy:  "operador-humano",
+		Reason:       "stop sobre run historica",
+		EvidenceRefs: []string{"evidence-ref-test-stop-without-active-run"},
+	}); err != nil {
+		t.Fatalf("StopRunV0: %v", err)
+	}
+	if _, err := stack.Stores.RunControl.RecordRunCheckpointV0(context.Background(), orquestaruncontrol.RecordRunCheckpointCommandV0{
+		RunRef:       runRef,
+		RequestedBy:  "orquesta-mcp-run-control",
+		Reason:       "checkpoint de stop sobre run historica",
+		EvidenceRefs: []string{"evidence-ref-test-stop-without-active-run-checkpoint"},
+	}); err != nil {
+		t.Fatalf("RecordRunCheckpointV0: %v", err)
+	}
+
+	if err := stack.recoverQueuedStoppedActiveRunsV0(context.Background(), globalTickCommandForTestV0()); err != nil {
+		t.Fatalf("recoverQueuedStoppedActiveRunsV0: %v", err)
+	}
+
+	state, err := stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: runRef},
+	)
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0: %v", err)
+	}
+	if state.Status != orquestaruncontrol.RunControlStatusStoppedV0 ||
+		!codexStackStringInSetV0(state.EvidenceRefs, "evidence-ref-run-control-complete-without-active-run") {
+		t.Fatalf("state=%+v", state)
+	}
+	all, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		context.Background(),
+		orquestarunqueue.RunQueueReadRequestV0{QueueRef: DefaultRunQueueRefV0, IncludeNonExecutable: true},
+	)
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	if len(all) != 1 || all[0].Status != orquestarunqueue.RunStatusClosedV0 {
+		t.Fatalf("queue debe conservar closed si ya estaba archivada: %+v", all)
 	}
 }
 
@@ -213,6 +644,46 @@ func TestCodexStackV0RepairAutoprogrammingNoBloqueaTaskLegacyInmutableV0(t *test
 	}
 	if len(stored) != 1 || codexStackWorkflowTaskLooksOperationalDirectorV0(stored[0]) {
 		t.Fatalf("task legacy no debe mutarse in-place: %+v", stored)
+	}
+}
+
+func TestCodexStackV0WaitRefsColaReparaTasksEntregadasYAgentesArrancadosPendientesV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	runRef := "request-ref-autoprogramming-wait-repair-001"
+	deliveredTaskRef := "task-autoprogramming-wait-repair-001"
+	reworkTaskRef := "task-ref-review-rework-task-autoprogramming-wait-repair-001"
+	ghostTaskRef := "task-ref-review-rework-task-autoprogramming-wait-repair-ghost-001"
+	deliveredAgentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(deliveredTaskRef)
+	reworkAgentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(reworkTaskRef)
+
+	run := codexStackAutoprogrammingRunForCoordinatorRepairTestV0(runRef, deliveredTaskRef)
+	run.Tasks = []string{deliveredTaskRef, reworkTaskRef, ghostTaskRef}
+	run.Agents = []string{deliveredAgentRef, reworkAgentRef}
+	run.StartedAgents = []string{deliveredAgentRef, reworkAgentRef}
+	run.DeliveredAgents = []string{deliveredAgentRef}
+	run.DeliveredTasks = []string{deliveredTaskRef}
+	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	if err := stack.Ports.DirectorTaskStore.SaveWorkflowTaskV0(
+		context.Background(),
+		stackDeliveredOperationalTaskForTestV0(runRef, ghostTaskRef),
+	); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0 ghost: %v", err)
+	}
+
+	refs, err := stack.queuedOperationalDirectorWaitAgentRefsV0(context.Background(), runRef)
+	if err != nil {
+		t.Fatalf("queuedOperationalDirectorWaitAgentRefsV0: %v", err)
+	}
+	if !codexStackStringInSetV0(refs, reworkAgentRef) {
+		t.Fatalf("wait refs no incluyen agente arrancado pendiente: refs=%v want=%s", refs, reworkAgentRef)
+	}
+	if codexStackStringInSetV0(refs, deliveredAgentRef) {
+		t.Fatalf("wait refs no deben reabrir agente ya entregado: refs=%v delivered=%s", refs, deliveredAgentRef)
+	}
+	if codexStackStringInSetV0(stackDrainOpenTaskRefsV0(run), deliveredTaskRef) {
+		t.Fatalf("open task refs no deben incluir tarea ya entregada: open=%v", stackDrainOpenTaskRefsV0(run))
 	}
 }
 
@@ -358,6 +829,49 @@ func setStackRunPriorityForTestV0(
 	}
 }
 
+func setRunQueueCandidateForTestV0(
+	t *testing.T,
+	stack StackV0,
+	runRef string,
+	status string,
+	priority int,
+	updatedAt time.Time,
+) {
+	t.Helper()
+	if _, err := stack.Stores.RunQueue.SetRunPriorityV0(context.Background(), orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        runRef,
+		QueueRef:      DefaultRunQueueRefV0,
+		AppRef:        "project-ref-orquesta-server",
+		Status:        status,
+		PriorityScore: priority,
+		UpdatedAt:     updatedAt,
+		EvidenceRefs:  []string{"evidence-ref-test-queue-candidate"},
+	}); err != nil {
+		t.Fatalf("SetRunPriorityV0 %s: %v", runRef, err)
+	}
+}
+
+func markRunControlStoppedAutoResumeForTestV0(
+	t *testing.T,
+	stack StackV0,
+	runRef string,
+) {
+	t.Helper()
+	if _, err := stack.Stores.RunControl.CompleteRunControlV0(context.Background(), orquestaruncontrol.CompleteRunControlCommandV0{
+		RunRef:         runRef,
+		TargetStatus:   orquestaruncontrol.RunControlStatusStoppedV0,
+		RequestedBy:    "orquesta-run-control",
+		Reason:         "agentes drenados por control de run",
+		IdempotencyKey: "idem-run-control-complete-" + codexStackOperationalClosureSafeRefV0(runRef) + "-stopped",
+		EvidenceRefs: []string{
+			orquestaruncontrol.RunControlEvidenceAutoResumeAllowedV0,
+			"evidence-ref-test-auto-resume",
+		},
+	}); err != nil {
+		t.Fatalf("CompleteRunControlV0 %s: %v", runRef, err)
+	}
+}
+
 func globalTickCommandForTestV0() orquestaruncoordinator.RunCoordinatorTickCommandV0 {
 	now := time.Date(2026, 5, 11, 12, 5, 0, 0, time.UTC)
 	return orquestaruncoordinator.RunCoordinatorTickCommandV0{
@@ -384,4 +898,36 @@ func executionRefsForStackCoordinatorTestV0(
 		refs = append(refs, execution.RunRef)
 	}
 	return refs
+}
+
+type failingCoordinatorExternalWaiterV0 struct {
+	t *testing.T
+}
+
+type trackingStackRunQueuePortV0 struct {
+	inner    orquestarunqueue.RunQueuePortV0
+	lastRead orquestarunqueue.RunQueueReadRequestV0
+}
+
+func (queue *trackingStackRunQueuePortV0) ListRunSchedulingCandidatesV0(
+	ctx context.Context,
+	request orquestarunqueue.RunQueueReadRequestV0,
+) ([]orquestarunqueue.RunSchedulingCandidateV0, error) {
+	queue.lastRead = request
+	return queue.inner.ListRunSchedulingCandidatesV0(ctx, request)
+}
+
+func (queue *trackingStackRunQueuePortV0) SetRunPriorityV0(
+	ctx context.Context,
+	command orquestarunqueue.RunQueuePriorityCommandV0,
+) (orquestarunqueue.RunSchedulingCandidateV0, error) {
+	return queue.inner.SetRunPriorityV0(ctx, command)
+}
+
+func (waiter failingCoordinatorExternalWaiterV0) WaitExternalProgressV0(
+	context.Context,
+	orquestacionnucleoapp.ExternalProgressWaitRequestV0,
+) (orquestacionnucleoapp.ExternalProgressWaitResultV0, error) {
+	waiter.t.Fatalf("RunGlobalTickV0 residente no debe bloquear esperando progreso externo")
+	return orquestacionnucleoapp.ExternalProgressWaitResultV0{}, nil
 }

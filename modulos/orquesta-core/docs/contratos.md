@@ -697,7 +697,7 @@ Pruebas de contrato:
 Modulo origen: orquesta-core
 Modulo afectado: contratos globales
 Bloqueo: La tarea CORE-005 pidio confirmar la ubicacion del registro compartido antes de promocionar el resumen global de FunctionContract v0.
-Pregunta concreta: Confirmar si el resumen global de `FunctionContract v0` debe vivir en `/home/alberto/Trabajo/orquestaV2/CONTRATOS.md` o en `/home/alberto/Trabajo/orquestaV2/modulos/CONTRATOS.md`.
+Pregunta concreta: Confirmar si el resumen global de `FunctionContract v0` debe vivir en `CONTRATOS.md` raiz o en `modulos/CONTRATOS.md`.
 Opcion recomendada: Usar `modulos/CONTRATOS.md` como registro global entre mini-proyectos. Desde archivos en `modulos/orquesta-core/docs/`, la ruta relativa `../../CONTRATOS.md` es correcta; desde el directorio del modulo es `../CONTRATOS.md`.
 Impacto: Evita crear dos fuentes globales de contratos y permite promocionar solo el resumen minimo manteniendo el detalle canonico en `orquesta-core/docs/contratos.md`.
 Decision del director: Usar `modulos/CONTRATOS.md`. FunctionContract v0 queda promovido como contrato global minimo; esta consulta queda cerrada.

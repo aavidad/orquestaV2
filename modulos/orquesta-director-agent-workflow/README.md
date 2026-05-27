@@ -14,6 +14,11 @@ Responsabilidades:
 
 No crea conectores por defecto. El caller inyecta store y sink.
 
+T207 rotacion de sesiones no se traduce aqui: el puente solo convierte
+decisiones del director a comandos publicos del workflow. El handoff
+experimental es contrato runtime/orchestration y no crea comando nuevo en este
+modulo.
+
 Validacion:
 
 ```bash

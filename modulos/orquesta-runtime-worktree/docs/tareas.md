@@ -51,6 +51,19 @@ Bloqueos:
 
 Estado: cerrada localmente el 2026-05-23.
 
+## RTWT-005 - Reconciliacion T208
+
+Objetivo: dejar claro que el guardian break-glass usa este modulo solo como
+adaptador de verificacion externa, no como owner de promocion, servidor ni
+Codex.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-runtime-worktree`
+- bateria T208 cruzada del paquete OrquestaV2.
+
+Estado: documentado el 2026-05-27; no requiere codigo nuevo.
+
 ## RTWT-004 - Rail estricto de no borrado
 
 Objetivo: convertir los borrados detectados por snapshot en issue bloqueante

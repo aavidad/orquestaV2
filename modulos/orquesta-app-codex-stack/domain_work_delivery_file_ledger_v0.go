@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -11,7 +12,11 @@ import (
 	"sync"
 )
 
-const fileDomainWorkArtifactSubmissionLedgerSchemaV0 = "domain_work_artifact_submission_ledger.v0"
+const (
+	fileDomainWorkArtifactSubmissionLedgerSchemaV0           = "domain_work_artifact_submission_ledger.v0"
+	fileDomainWorkArtifactSubmissionLedgerMaxBytesV0   int64 = 8 * 1024 * 1024
+	fileDomainWorkArtifactSubmissionLedgerMaxRecordsV0       = 10000
+)
 
 type FileDomainWorkArtifactSubmissionLedgerV0 struct {
 	path    string
@@ -72,7 +77,16 @@ func (ledger *FileDomainWorkArtifactSubmissionLedgerV0) RecordDomainWorkArtifact
 	if err := ledger.loadLockedV0(); err != nil {
 		return err
 	}
-	ledger.records[record.IdempotencyKey] = normalizeDomainWorkArtifactSubmissionRecordV0(record)
+	record = normalizeDomainWorkArtifactSubmissionRecordV0(record)
+	if existing, ok := ledger.records[record.IdempotencyKey]; ok {
+		merged, err := mergeDomainWorkArtifactSubmissionRecordV0(existing, record)
+		if err != nil {
+			return err
+		}
+		ledger.records[record.IdempotencyKey] = merged
+	} else {
+		ledger.records[record.IdempotencyKey] = record
+	}
 	return ledger.persistLockedV0()
 }
 
@@ -110,7 +124,7 @@ func (ledger *FileDomainWorkArtifactSubmissionLedgerV0) loadLockedV0() error {
 	if strings.TrimSpace(ledger.path) == "" {
 		return fmt.Errorf("domain_work_artifact_file_ledger_path_requerido")
 	}
-	data, err := os.ReadFile(ledger.path)
+	data, err := readFileDomainWorkArtifactSubmissionLedgerBytesV0(ledger.path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			ledger.loaded = true
@@ -120,10 +134,13 @@ func (ledger *FileDomainWorkArtifactSubmissionLedgerV0) loadLockedV0() error {
 	}
 	var snapshot fileDomainWorkArtifactSubmissionLedgerSnapshotV0
 	if err := json.Unmarshal(data, &snapshot); err != nil {
-		return err
+		return fmt.Errorf("domain_work_artifact_file_ledger_json_invalido")
 	}
 	if snapshot.SchemaVersion != fileDomainWorkArtifactSubmissionLedgerSchemaV0 {
 		return fmt.Errorf("domain_work_artifact_file_ledger_schema_invalido")
+	}
+	if len(snapshot.Records) > fileDomainWorkArtifactSubmissionLedgerMaxRecordsV0 {
+		return fmt.Errorf("domain_work_artifact_file_ledger_records_limit_exceeded")
 	}
 	ledger.records = map[string]DomainWorkArtifactSubmissionRecordV0{}
 	for _, record := range snapshot.Records {
@@ -135,6 +152,32 @@ func (ledger *FileDomainWorkArtifactSubmissionLedgerV0) loadLockedV0() error {
 	}
 	ledger.loaded = true
 	return nil
+}
+
+func readFileDomainWorkArtifactSubmissionLedgerBytesV0(path string) ([]byte, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("domain_work_artifact_file_ledger_read_error")
+	}
+	if info.Size() > fileDomainWorkArtifactSubmissionLedgerMaxBytesV0 {
+		return nil, fmt.Errorf("domain_work_artifact_file_ledger_size_limit_exceeded")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("domain_work_artifact_file_ledger_read_error")
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, fileDomainWorkArtifactSubmissionLedgerMaxBytesV0+1))
+	if err != nil {
+		return nil, fmt.Errorf("domain_work_artifact_file_ledger_read_error")
+	}
+	if int64(len(data)) > fileDomainWorkArtifactSubmissionLedgerMaxBytesV0 {
+		return nil, fmt.Errorf("domain_work_artifact_file_ledger_size_limit_exceeded")
+	}
+	return data, nil
 }
 
 func (ledger *FileDomainWorkArtifactSubmissionLedgerV0) persistLockedV0() error {
@@ -154,28 +197,15 @@ func (ledger *FileDomainWorkArtifactSubmissionLedgerV0) persistLockedV0() error 
 		return err
 	}
 	dir := filepath.Dir(ledger.path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("domain_work_artifact_file_ledger: dir_unavailable")
 	}
-	tmp, err := os.CreateTemp(dir, ".domain-work-artifact-ledger-*.json")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	if _, err := tmp.Write(append(data, '\n')); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	if err := os.Rename(tmpPath, ledger.path); err != nil {
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	return nil
+	data = append(data, '\n')
+	return writeAppStackDurableFileV0(
+		ledger.path,
+		data,
+		"domain_work_artifact_file_ledger",
+	)
 }
 
 func contextErrDomainWorkFileLedgerV0(ctx context.Context) error {

@@ -1,16 +1,16 @@
 package orquestaruntimeworktree
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 )
+
+var errWorktreeSnapshotStoppedV0 = errors.New("worktree_snapshot_stopped")
 
 func CaptureWorktreeSnapshotV0(
 	ctx context.Context,
@@ -25,14 +25,22 @@ func CaptureWorktreeSnapshotV0(
 			worktreeIssueV0(WorktreeIssueInvalidRequestV0, "snapshot_ref"),
 		}
 	}
-	files, issues := collectWorktreeFilesV0(ctx, request.ProjectWorkDir, request.IgnorePrefixes)
+	budget := worktreeSnapshotRequestBudgetV0(request)
+	files, receipts, issues := collectWorktreeFilesV0(
+		ctx,
+		request.ProjectWorkDir,
+		request.IgnorePrefixes,
+		budget,
+	)
 	if len(issues) > 0 {
 		return WorktreeSnapshotV0{}, issues
 	}
 	return WorktreeSnapshotV0{
-		SchemaVersion: WorktreeSnapshotSchemaVersionV0,
-		SnapshotRef:   request.SnapshotRef,
-		Files:         files,
+		SchemaVersion:     WorktreeSnapshotSchemaVersionV0,
+		SnapshotRef:       request.SnapshotRef,
+		ReadBudget:        budget,
+		Files:             files,
+		ExclusionReceipts: receipts,
 	}, nil
 }
 
@@ -42,6 +50,10 @@ func normalizeWorktreeSnapshotRequestV0(
 	request.SnapshotRef = strings.TrimSpace(request.SnapshotRef)
 	request.ProjectWorkDir = strings.TrimSpace(request.ProjectWorkDir)
 	request.IgnorePrefixes = normalizeWorktreeIgnorePrefixesV0(request.IgnorePrefixes)
+	budget := worktreeSnapshotRequestBudgetV0(request)
+	request.MaxFiles = budget.MaxFiles
+	request.MaxFileBytes = budget.MaxFileBytes
+	request.MaxTotalBytes = budget.MaxTotalBytes
 	return request
 }
 
@@ -62,11 +74,16 @@ func collectWorktreeFilesV0(
 	ctx context.Context,
 	root string,
 	ignorePrefixes []string,
-) ([]WorktreeSnapshotFileV0, []WorktreeIssueV0) {
+	budget WorktreeSnapshotReadBudgetV0,
+) ([]WorktreeSnapshotFileV0, []WorktreeLocalArtifactExclusionReceiptV0, []WorktreeIssueV0) {
 	files := make([]WorktreeSnapshotFileV0, 0)
+	var excluded []string
+	var issues []WorktreeIssueV0
+	var totalBytes int64
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
-			return err
+			issues = append(issues, worktreeSnapshotUnreadableIssueV0(root, path))
+			return errWorktreeSnapshotStoppedV0
 		}
 		if ctx != nil {
 			if err := ctx.Err(); err != nil {
@@ -80,7 +97,14 @@ func collectWorktreeFilesV0(
 		if !ok {
 			return fs.SkipDir
 		}
-		if worktreePathIgnoredV0(rel, ignorePrefixes) || worktreeControlPathV0(rel) {
+		if worktreeControlPathV0(rel) {
+			excluded = append(excluded, rel)
+			if entry.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if worktreePathIgnoredV0(rel, ignorePrefixes) {
 			if entry.IsDir() {
 				return fs.SkipDir
 			}
@@ -91,20 +115,54 @@ func collectWorktreeFilesV0(
 		}
 		info, err := entry.Info()
 		if err != nil || !info.Mode().IsRegular() {
-			return err
+			issues = append(issues, worktreeIssueV0(
+				WorktreeIssueSnapshotUnreadableV0,
+				"file",
+				rel,
+			))
+			return errWorktreeSnapshotStoppedV0
 		}
-		file, err := hashWorktreeFileV0(path, rel, info.Size())
-		if err != nil {
-			return err
+		if len(files) >= budget.MaxFiles {
+			issues = append(issues, worktreeIssueV0(
+				WorktreeIssueSnapshotTooManyFilesV0,
+				"max_files",
+				"worktree_snapshot_file_count_budget_exceeded",
+			))
+			return errWorktreeSnapshotStoppedV0
 		}
+		if info.Size() > budget.MaxFileBytes {
+			issues = append(issues, worktreeIssueV0(
+				WorktreeIssueSnapshotFileTooLargeV0,
+				"file",
+				rel,
+			))
+			return errWorktreeSnapshotStoppedV0
+		}
+		if totalBytes+info.Size() > budget.MaxTotalBytes {
+			issues = append(issues, worktreeIssueV0(
+				WorktreeIssueSnapshotTooLargeV0,
+				"max_total_bytes",
+				"worktree_snapshot_total_budget_exceeded",
+			))
+			return errWorktreeSnapshotStoppedV0
+		}
+		file, readBytes, issue := hashWorktreeFileV0(path, rel, info.Size(), budget, totalBytes)
+		if issue != nil {
+			issues = append(issues, *issue)
+			return errWorktreeSnapshotStoppedV0
+		}
+		totalBytes += readBytes
 		files = append(files, file)
 		return nil
 	})
+	if errors.Is(err, errWorktreeSnapshotStoppedV0) {
+		return nil, nil, issues
+	}
 	if err != nil {
-		return nil, []WorktreeIssueV0{worktreeIssueV0(WorktreeIssueFilesystemV0, "project_work_dir")}
+		return nil, nil, []WorktreeIssueV0{worktreeIssueV0(WorktreeIssueFilesystemV0, "project_work_dir")}
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
-	return files, nil
+	return files, worktreeLocalArtifactReceiptsV0(excluded), nil
 }
 
 func worktreeRelativePathV0(root string, path string) (string, bool) {
@@ -119,27 +177,9 @@ func worktreeRelativePathV0(root string, path string) (string, bool) {
 	return rel, true
 }
 
-func hashWorktreeFileV0(path string, rel string, size int64) (WorktreeSnapshotFileV0, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return WorktreeSnapshotFileV0{}, err
+func worktreeSnapshotUnreadableIssueV0(root string, path string) WorktreeIssueV0 {
+	if rel, ok := worktreeRelativePathV0(root, path); ok {
+		return worktreeIssueV0(WorktreeIssueSnapshotUnreadableV0, "file", rel)
 	}
-	sum := sha256.Sum256(data)
-	return WorktreeSnapshotFileV0{
-		Path:      rel,
-		Digest:    hex.EncodeToString(sum[:]),
-		Size:      size,
-		LineCount: worktreeGoLineCountV0(rel, data),
-	}, nil
-}
-
-func worktreeGoLineCountV0(rel string, data []byte) int {
-	if !strings.HasSuffix(rel, ".go") || len(data) == 0 {
-		return 0
-	}
-	lines := bytes.Count(data, []byte{'\n'})
-	if !bytes.HasSuffix(data, []byte{'\n'}) {
-		lines++
-	}
-	return lines
+	return worktreeIssueV0(WorktreeIssueSnapshotUnreadableV0, "file")
 }

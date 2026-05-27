@@ -4,11 +4,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
+)
+
+const (
+	domainWorkFileSnapshotMaxBytesV0   int64 = 16 * 1024 * 1024
+	domainWorkFileSnapshotMaxRecordsV0       = 10000
 )
 
 type domainWorkFileJobSnapshotV0 struct {
@@ -37,6 +43,9 @@ func loadDomainWorkFileRecordsV0(
 	}
 	if snapshot.SchemaVersion != DomainWorkFileJobCreatorSnapshotSchemaV0 {
 		return nil, fmt.Errorf("orquesta_domain_work_file: schema_invalid")
+	}
+	if len(snapshot.Records) > domainWorkFileSnapshotMaxRecordsV0 {
+		return nil, fmt.Errorf("orquesta_domain_work_file: records_limit_exceeded")
 	}
 	records := make(map[domainWorkFileJobKeyV0]domainWorkFileJobRecordV0, len(snapshot.Records))
 	jobsByRef := map[string]struct{}{}
@@ -98,17 +107,43 @@ func writeDomainWorkFileSnapshotV0(
 }
 
 func readDomainWorkFileSnapshotV0(path string, target any) (bool, error) {
-	data, err := os.ReadFile(path)
+	data, err := readDomainWorkFileSnapshotBytesV0(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("orquesta_domain_work_file: read_failed")
+		return false, err
 	}
 	if err := json.Unmarshal(data, target); err != nil {
 		return true, fmt.Errorf("orquesta_domain_work_file: json_invalid")
 	}
 	return true, nil
+}
+
+func readDomainWorkFileSnapshotBytesV0(path string) ([]byte, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("orquesta_domain_work_file: read_failed")
+	}
+	if info.Size() > domainWorkFileSnapshotMaxBytesV0 {
+		return nil, fmt.Errorf("orquesta_domain_work_file: size_limit_exceeded")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("orquesta_domain_work_file: read_failed")
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, domainWorkFileSnapshotMaxBytesV0+1))
+	if err != nil {
+		return nil, fmt.Errorf("orquesta_domain_work_file: read_failed")
+	}
+	if int64(len(data)) > domainWorkFileSnapshotMaxBytesV0 {
+		return nil, fmt.Errorf("orquesta_domain_work_file: size_limit_exceeded")
+	}
+	return data, nil
 }
 
 func domainWorkFileRecordsJSONV0(

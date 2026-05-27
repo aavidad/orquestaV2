@@ -3,6 +3,7 @@ package orquestaappcodexstack
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -90,25 +91,89 @@ func codexStackAgentRuntimeDetailReadFileV0(
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
-		file := CodexStackAgentRuntimeDetailFileV0{Name: name, Path: path, Exists: err == nil}
+		file := CodexStackAgentRuntimeDetailFileV0{
+			Name:           name,
+			FileKind:       codexStackAgentRuntimeDetailFileKindV0(name),
+			Exists:         err == nil,
+			RedactionLevel: codexStackAgentRuntimeDetailRedactionLevelV0(name),
+		}
 		if err != nil {
-			file.Error = err.Error()
+			file.ReasonCodes = append(file.ReasonCodes, "runtime_detail_unavailable")
 			return file
 		}
 		file.SizeBytes = info.Size()
-		data, err := os.ReadFile(path)
-		if err != nil {
-			file.Error = err.Error()
+		data, truncated, readErr := codexStackAgentRuntimeDetailReadContentV0(path, name, maxBytes)
+		if readErr != nil {
+			file.ReasonCodes = append(file.ReasonCodes, "runtime_detail_unavailable")
 			return file
 		}
-		if maxBytes > 0 && int64(len(data)) > maxBytes {
-			file.Truncated = true
-			data = data[:maxBytes]
-		}
-		file.Content = string(data)
-		return file
+		readLimit := codexStackAgentRuntimeDetailReadLimitV0(name, maxBytes)
+		file.Truncated = truncated || (readLimit > 0 && info.Size() > readLimit)
+		return codexStackAgentRuntimeDetailEnvelopeV0(file, data)
 	}
-	return CodexStackAgentRuntimeDetailFileV0{Name: name, Exists: false}
+	return CodexStackAgentRuntimeDetailFileV0{
+		Name:           name,
+		FileKind:       codexStackAgentRuntimeDetailFileKindV0(name),
+		Exists:         false,
+		RedactionLevel: "metadata_only",
+		ReasonCodes:    []string{"runtime_detail_unavailable"},
+	}
+}
+
+func codexStackAgentRuntimeDetailReadContentV0(
+	path string,
+	name string,
+	maxBytes int64,
+) ([]byte, bool, error) {
+	limit := codexStackAgentRuntimeDetailReadLimitV0(name, maxBytes)
+	if limit > 0 && codexStackAgentRuntimeDetailIsTailFileV0(name) {
+		data, ok := codexStackReadTailFileV0(path, limit)
+		if ok {
+			return data, false, nil
+		}
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, false, err
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, limit+1))
+	if err != nil {
+		return nil, false, err
+	}
+	truncated := int64(len(data)) > limit
+	if truncated {
+		data = data[:limit]
+	}
+	return data, truncated, nil
+}
+
+func codexStackAgentRuntimeDetailIsLogFileV0(name string) bool {
+	switch name {
+	case orquestaruntimecodex.CodexStdoutFileNameV0,
+		orquestaruntimecodex.CodexStderrFileNameV0,
+		orquestaruntimecodex.CodexLastMessageFileNameV0:
+		return true
+	default:
+		return false
+	}
+}
+
+func codexStackAgentRuntimeDetailIsTailFileV0(name string) bool {
+	return codexStackAgentRuntimeDetailIsLogFileV0(name)
+}
+
+func codexStackAgentRuntimeDetailReadLimitV0(name string, maxBytes int64) int64 {
+	if maxBytes <= 0 {
+		maxBytes = 64 * 1024
+	}
+	if codexStackAgentRuntimeDetailIsLogFileV0(name) && maxBytes > 32*1024 {
+		return 32 * 1024
+	}
+	if maxBytes > 64*1024 {
+		return 64 * 1024
+	}
+	return maxBytes
 }
 
 func codexStackAgentRuntimeDetailContentByNameV0(

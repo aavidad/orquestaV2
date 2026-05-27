@@ -3,25 +3,25 @@ package orquestaweb
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"time"
 
 	orquestafactory "orquesta/modulos/orquesta-factory"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 const (
 	SolicitarNuevaAppEndpointV0       = "/api/v0/apps/spec"
 	SolicitarNuevaAppCorrelationV0    = "X-Correlation-ID"
-	WebNuevaAppErrTransporteV0        = "error_transporte"
-	WebNuevaAppErrRespuestaInvalidaV0 = "respuesta_invalida"
+	WebNuevaAppErrTransporteV0        = webPublicErrTransportV0
+	WebNuevaAppErrRespuestaInvalidaV0 = webPublicErrResponseInvalidV0
 )
+
+var webRequestIDGeneratorV0 = orquestaruntime.NewSystemRefGeneratorV0()
 
 type SolicitarNuevaAppClientV0 interface {
 	SolicitarNuevaApp(ctx context.Context, form WebNuevaAppFormV0) (WebNuevaAppViewModelV0, error)
@@ -45,12 +45,10 @@ func (err WebNuevaAppClientErrorV0) Error() string {
 
 func NewRESTSolicitarNuevaAppClientV0(baseURL string, timeout time.Duration) *RESTSolicitarNuevaAppClientV0 {
 	return &RESTSolicitarNuevaAppClientV0{
-		BaseURL:  strings.TrimRight(baseURL, "/"),
-		Endpoint: SolicitarNuevaAppEndpointV0,
-		Timeout:  timeout,
-		HTTPClient: &http.Client{
-			Timeout: timeout,
-		},
+		BaseURL:    normalizeWebRESTBaseURLStringV0(baseURL),
+		Endpoint:   SolicitarNuevaAppEndpointV0,
+		Timeout:    timeout,
+		HTTPClient: newWebLoopbackHTTPClientV0(timeout),
 	}
 }
 
@@ -90,7 +88,10 @@ func (client *RESTSolicitarNuevaAppClientV0) SolicitarNuevaApp(ctx context.Conte
 
 func (client *RESTSolicitarNuevaAppClientV0) decodeResponse(resp *http.Response, req orquestafactory.AppSpecRequestV0) (WebNuevaAppViewModelV0, error) {
 	if resp.StatusCode == http.StatusBadRequest {
-		issues := decodeValidationIssuesV0(resp.Body)
+		var issues []orquestafactory.ValidationIssue
+		if body, ok := readWebHTTPResponseBodyV0(resp); ok {
+			issues = decodeValidationIssuesV0(bytes.NewReader(body))
+		}
 		if len(issues) == 0 {
 			issues = []orquestafactory.ValidationIssue{publicValidationIssueV0(orquestafactory.ErrAppSpecInvalida, "", "")}
 		}
@@ -101,7 +102,7 @@ func (client *RESTSolicitarNuevaAppClientV0) decodeResponse(resp *http.Response,
 	}
 
 	var out solicitarNuevaAppSuccessEnvelopeV0
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if !decodeWebHTTPJSONResponseV0(resp, &out) {
 		return WebNuevaAppViewModelV0{}, webNuevaAppClientErrorV0(WebNuevaAppErrRespuestaInvalidaV0, resp.StatusCode)
 	}
 	spec := out.AppSpecValue()
@@ -113,10 +114,7 @@ func (client *RESTSolicitarNuevaAppClientV0) decodeResponse(resp *http.Response,
 }
 
 func (client *RESTSolicitarNuevaAppClientV0) httpClient() *http.Client {
-	if client.HTTPClient != nil {
-		return client.HTTPClient
-	}
-	return &http.Client{Timeout: client.Timeout}
+	return webHTTPClientWithRedirectPolicyV0(client.HTTPClient, client.Timeout, client.BaseURL)
 }
 
 func (client *RESTSolicitarNuevaAppClientV0) url() string {
@@ -124,7 +122,7 @@ func (client *RESTSolicitarNuevaAppClientV0) url() string {
 	if endpoint == "" {
 		endpoint = SolicitarNuevaAppEndpointV0
 	}
-	return strings.TrimRight(client.BaseURL, "/") + "/" + strings.TrimLeft(endpoint, "/")
+	return webRESTEndpointURLV0(client.BaseURL, endpoint, SolicitarNuevaAppEndpointV0)
 }
 
 type solicitarNuevaAppSuccessEnvelopeV0 struct {
@@ -213,11 +211,8 @@ func webNuevaAppClientErrorV0(code string, statusCode int) WebNuevaAppClientErro
 }
 
 func newWebRequestIDV0() string {
-	var raw [8]byte
-	if _, err := rand.Read(raw[:]); err != nil {
-		return fmt.Sprintf("req-web-%d", time.Now().UTC().UnixNano())
-	}
-	return "req-web-" + hex.EncodeToString(raw[:])
+	ref, _ := webRequestIDGeneratorV0.NextRefV0("req-web", "client-mutation")
+	return ref
 }
 
 func IsWebNuevaAppClientErrorCodeV0(err error, code string) bool {

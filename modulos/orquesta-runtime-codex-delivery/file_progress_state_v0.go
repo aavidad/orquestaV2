@@ -124,12 +124,12 @@ func (store *FileCodexProgressStateStoreV0) persistNextV0(
 }
 
 func loadFileCodexProgressStateV0(path string) (map[string]codexProgressStateRecordV0, error) {
-	data, err := os.ReadFile(path)
+	data, err := readCodexDeliveryFileSnapshotBytesV0(path, "codex_progress_state_file_store")
 	if errors.Is(err, os.ErrNotExist) {
 		return map[string]codexProgressStateRecordV0{}, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("codex_progress_state_file_store: read_failed")
+		return nil, err
 	}
 	var snapshot fileCodexProgressStateSnapshotV0
 	if err := json.Unmarshal(data, &snapshot); err != nil {
@@ -137,6 +137,9 @@ func loadFileCodexProgressStateV0(path string) (map[string]codexProgressStateRec
 	}
 	if snapshot.SchemaVersion != fileCodexProgressStateSchemaVersionV0 {
 		return nil, fmt.Errorf("codex_progress_state_file_store: schema_invalid")
+	}
+	if len(snapshot.Records) > codexDeliveryFileSnapshotMaxRecordsV0 {
+		return nil, fmt.Errorf("codex_progress_state_file_store: records_limit_exceeded")
 	}
 	records := map[string]codexProgressStateRecordV0{}
 	for _, record := range snapshot.Records {
@@ -171,12 +174,6 @@ func persistFileCodexProgressStateV0(
 	if err != nil {
 		return fmt.Errorf("codex_progress_state_file_store: json_failed")
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return fmt.Errorf("codex_progress_state_file_store: write_failed")
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return fmt.Errorf("codex_progress_state_file_store: rename_failed")
-	}
-	return nil
+	data = append(data, '\n')
+	return writeCodexDeliveryDurableFileV0(path, data, "codex_progress_state_file_store")
 }

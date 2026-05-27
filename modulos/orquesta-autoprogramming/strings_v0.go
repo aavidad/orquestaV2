@@ -21,3 +21,13 @@ func compactStringsV0(values []string) []string {
 	}
 	return out
 }
+
+func stringSliceContainsV0(values []string, expected string) bool {
+	expected = strings.TrimSpace(expected)
+	for _, value := range values {
+		if strings.TrimSpace(value) == expected {
+			return true
+		}
+	}
+	return false
+}

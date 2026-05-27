@@ -1,6 +1,10 @@
 package orquestaobservability
 
-import "regexp"
+import (
+	"regexp"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
+)
 
 const (
 	OperationalStatusQuerySchemaVersionV0 = "operational_status_query.v0"
@@ -32,6 +36,11 @@ const (
 	DiagnosticoEstadoBlockedV0  = "blocked"
 	DiagnosticoEstadoFailedV0   = "failed"
 	DiagnosticoEstadoUnknownV0  = "unknown"
+
+	DiagnosticoPrivacyRedactionNoneV0         = orquestarails.OperationalPrivacyRedactionNoneV0
+	DiagnosticoPrivacyRedactionMetadataOnlyV0 = orquestarails.OperationalPrivacyRedactionMetadataOnlyV0
+	DiagnosticoPrivacyRedactionSummarizedV0   = orquestarails.OperationalPrivacyRedactionSummarizedV0
+	DiagnosticoPrivacyRedactionRedactedV0     = orquestarails.OperationalPrivacyRedactionRedactedV0
 
 	ErrOperationalStatusQueryInvalidaV0 = "operational_status_query_invalida"
 	ErrConsumidorNoAutorizadoV0         = "consumidor_no_autorizado"
@@ -118,15 +127,6 @@ var (
 		"capacity_decision",
 		"review",
 	)
-	operationalSecretTextPartsV0 = []string{
-		"secret", "secreto", "token", "password", "credential", "credencial", "api_key", "apikey", "oauth", "bearer",
-	}
-	operationalTranscriptTextPartsV0 = []string{"transcript", "transcripcion"}
-	operationalForbiddenTextPartsV0  = []string{
-		"prompt", "completion", "sql", "select", "insert", "update", "delete", "drop",
-		"dsn", "connection", "conexion", "table", "tabla",
-		"/home/", "home=", "$home", "~/", "home_path", "home_ref",
-	}
 )
 
 type OperationalStatusQueryV0 struct {
@@ -233,11 +233,12 @@ type DiagnosticoWarningV0 struct {
 }
 
 type DiagnosticoPrivacyV0 struct {
-	ContainsSecret           bool `json:"contains_secret"`
-	ContainsTranscript       bool `json:"contains_transcript"`
-	ContainsPrompt           bool `json:"contains_prompt"`
-	ContainsCompletion       bool `json:"contains_completion"`
-	ContainsConnectionDetail bool `json:"contains_connection_detail"`
+	ContainsSecret           bool   `json:"contains_secret"`
+	ContainsTranscript       bool   `json:"contains_transcript"`
+	ContainsPrompt           bool   `json:"contains_prompt"`
+	ContainsCompletion       bool   `json:"contains_completion"`
+	ContainsConnectionDetail bool   `json:"contains_connection_detail"`
+	RedactionLevel           string `json:"redaction_level,omitempty"`
 }
 
 type OperationalStatusValidationIssueV0 struct {

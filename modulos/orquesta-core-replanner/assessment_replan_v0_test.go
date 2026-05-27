@@ -100,6 +100,27 @@ func TestAgentWorkAssessmentToReplanProposalV0AskDirectorActionAsksDirector(t *t
 	}
 }
 
+func TestAgentWorkAssessmentToReplanProposalV0AskDirectorPuedeRepararConAccionExplicita(t *testing.T) {
+	for _, action := range []ReplanRecommendedActionV0{
+		ReplanActionRetryTaskV0,
+		ReplanActionReplaceAgentV0,
+	} {
+		t.Run(string(action), func(t *testing.T) {
+			input := validAgentWorkAssessmentReplanInputV0(
+				orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
+				orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
+				action,
+			)
+
+			proposal := mustAgentWorkAssessmentReplanProposalV0(t, input)
+			if proposal.RecommendedAction != action {
+				t.Fatalf("recommended_action=%q, want %q", proposal.RecommendedAction, action)
+			}
+			assertAgentAssessmentReplanProposalTraceV0(t, proposal, input)
+		})
+	}
+}
+
 func TestAgentWorkAssessmentToReplanProposalV0JSONHasNoForbiddenDetails(t *testing.T) {
 	input := validAgentWorkAssessmentReplanInputV0(
 		orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0,

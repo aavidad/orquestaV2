@@ -10,7 +10,12 @@ import (
 func residentOperationalEstadoV0(state StateV0) string {
 	if strings.TrimSpace(state.LastError) != "" ||
 		state.SupervisorErrorTicks > 0 ||
-		strings.TrimSpace(state.StatePersistStatus) == "degraded" {
+		state.ExternalBridgeErrorTicks > 0 ||
+		strings.TrimSpace(state.ExternalBridgeStatus) == "blocked" ||
+		strings.TrimSpace(state.ExternalBridgeStatus) == "degraded" ||
+		strings.TrimSpace(state.ExternalBridgeStatus) == "timeout" ||
+		strings.TrimSpace(state.StatePersistStatus) == "degraded" ||
+		strings.TrimSpace(state.AuditStatus) == "degraded" {
 		return orquestaobservability.DiagnosticoEstadoDegradedV0
 	}
 	switch strings.TrimSpace(state.Status) {
@@ -48,14 +53,18 @@ func residentOperationalProgressV0(state StateV0) orquestaobservability.Diagnost
 
 func residentOperationalCountersV0(state StateV0) map[string]float64 {
 	return map[string]float64{
-		"supervisor_ticks":          float64(nonNegativeServerIntV0(state.SupervisorTicks)),
-		"supervisor_error_ticks":    float64(nonNegativeServerIntV0(state.SupervisorErrorTicks)),
-		"supervisor_executions":     float64(nonNegativeServerIntV0(state.SupervisorExecutions)),
-		"supervisor_skips":          float64(nonNegativeServerIntV0(state.SupervisorSkips)),
-		"queue_size":                float64(nonNegativeServerIntV0(state.LastSupervisorQueueSize)),
-		"idle_improvement_runs":     float64(nonNegativeServerIntV0(state.IdleSelfImprovementRuns)),
-		"idle_improvement_accepted": float64(nonNegativeServerIntV0(state.IdleSelfImprovementOK)),
-		"state_persist_failures":    float64(nonNegativeServerIntV0(state.StatePersistFailures)),
+		"supervisor_ticks":           float64(nonNegativeServerIntV0(state.SupervisorTicks)),
+		"supervisor_error_ticks":     float64(nonNegativeServerIntV0(state.SupervisorErrorTicks)),
+		"supervisor_executions":      float64(nonNegativeServerIntV0(state.SupervisorExecutions)),
+		"supervisor_skips":           float64(nonNegativeServerIntV0(state.SupervisorSkips)),
+		"queue_size":                 float64(nonNegativeServerIntV0(state.LastSupervisorQueueSize)),
+		"idle_improvement_runs":      float64(nonNegativeServerIntV0(state.IdleSelfImprovementRuns)),
+		"idle_improvement_accepted":  float64(nonNegativeServerIntV0(state.IdleSelfImprovementOK)),
+		"shutdown_async_work_active": float64(nonNegativeServerIntV0(state.ShutdownAsyncWorkActive)),
+		"external_bridge_ticks":      float64(nonNegativeServerIntV0(state.ExternalBridgeTicks)),
+		"external_bridge_errors":     float64(nonNegativeServerIntV0(state.ExternalBridgeErrorTicks)),
+		"state_persist_failures":     float64(nonNegativeServerIntV0(state.StatePersistFailures)),
+		"audit_failures":             float64(nonNegativeServerIntV0(state.AuditFailures)),
 	}
 }
 

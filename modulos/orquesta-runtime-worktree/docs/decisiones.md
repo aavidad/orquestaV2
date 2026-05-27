@@ -15,6 +15,19 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-05-27
+Decision: T208 no convierte refs opacas de worktree en rutas operativas.
+Motivo: el guardian break-glass necesita evidencias de cambios y promocion, pero
+las refs `worktree_ref` y `branch_ref` pertenecen al contrato de
+autoprogramacion y no deben transformarse aqui en nombres Git, paths locales ni
+raices de control.
+Impacto: `orquesta-runtime-worktree` sigue siendo adaptador externo de
+snapshot/diff/AppVCS. Nuevas reglas de guardian deben entrar por owners de
+guardian/servidor o por tareas focales de este modulo si afectan verificacion.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-23
 Decision: La worktree aislada de autoprogramacion se valida por contrato neutral
 y preserva `branch_ref` como ref opaca.

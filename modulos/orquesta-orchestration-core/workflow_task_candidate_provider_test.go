@@ -363,6 +363,34 @@ func TestWorkflowTaskCandidateProviderV0SkipsWorkBlockedByActiveAgent(t *testing
 	}
 }
 
+func TestWorkflowTaskCandidateProviderV0DefaultNoRecortaFrontier(t *testing.T) {
+	runRef := "run-nucleo-workflow-task-frontier-unbounded-001"
+	tasks := make([]orquestacoreworkflow.WorkflowTaskV0, 0, 12)
+	run := mustActiveProgrammingRunV0(t, runRef)
+	for index := 0; index < 12; index++ {
+		task := workflowTaskForCandidateProviderTestV0(
+			runRef,
+			"task-unbounded-"+string(rune('a'+index)),
+			[]string{"app/scope-" + string(rune('a'+index))},
+		)
+		tasks = append(tasks, task)
+		run.Tasks = append(run.Tasks, task.TaskID)
+	}
+
+	candidates, err := (WorkflowTaskCandidateProviderV0{
+		TaskStore: NewInMemoryWorkflowTaskStoreV0(tasks...),
+	}).BuildSchedulerCandidatesV0(context.Background(), SchedulerCandidateRequestV0{
+		Run:        run,
+		OccurredAt: "2026-05-09T13:28:00Z",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	if len(candidates.WorkCandidates) != len(tasks) || len(candidates.WorkClaims) != len(tasks) {
+		t.Fatalf("frontier=%d claims=%d want %d", len(candidates.WorkCandidates), len(candidates.WorkClaims), len(tasks))
+	}
+}
+
 func TestWorkflowTaskCandidateProviderV0LimitsFrontier(t *testing.T) {
 	runRef := "run-nucleo-workflow-task-frontier-limit-001"
 	tasks := []orquestacoreworkflow.WorkflowTaskV0{

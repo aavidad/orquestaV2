@@ -6,6 +6,7 @@ import (
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
 )
 
@@ -97,6 +98,7 @@ func (lifecycle CodexSupervisorStackLifecycleV0) codexSupervisorSnapshotFromDrai
 		SessionRef:   strings.TrimSpace(runRef),
 		ProcessRef:   codexSupervisorLastRefV0(result.Final.Run.StartedAgents),
 		EvidenceRefs: evidenceRefs,
+		Diagnostics:  append([]orquestaruncoordinator.RunDrainDiagnosticV0(nil), stackDrainDiagnosticsV0(result)...),
 	}
 }
 
@@ -187,53 +189,6 @@ func (lifecycle CodexSupervisorStackLifecycleV0) codexSupervisorPlanStateEvidenc
 	return compactStringsV0(refs)
 }
 
-func codexSupervisorSnapshotFromGlobalSupervisorV0(
-	result orquestarunsupervisor.RunSupervisorResultV0,
-) CodexSupervisorRuntimeSnapshotV0 {
-	return CodexSupervisorRuntimeSnapshotV0{
-		Status:       codexSupervisorRuntimeStateFromGlobalSupervisorV0(result),
-		SessionRef:   codexSupervisorLastGlobalExecutionRunRefV0(result),
-		EvidenceRefs: codexSupervisorGlobalEvidenceRefsV0(result),
-	}
-}
-
-func codexSupervisorRuntimeStateFromGlobalSupervisorV0(
-	result orquestarunsupervisor.RunSupervisorResultV0,
-) CodexSupervisorRuntimeStateV0 {
-	switch result.StopReason {
-	case orquestarunsupervisor.RunSupervisorStopTickErrorV0,
-		orquestarunsupervisor.RunSupervisorStopNoTickerV0:
-		return CodexSupervisorRuntimeFailedV0
-	}
-	seenStopped := false
-	seenRunning := false
-	seenExecution := false
-	for _, tick := range result.Ticks {
-		for _, execution := range tick.Result.Executions {
-			seenExecution = true
-			state := codexSupervisorRuntimeStateFromOutcomeV0(execution.Outcome)
-			switch state {
-			case CodexSupervisorRuntimeFailedV0:
-				return state
-			case CodexSupervisorRuntimeRunningV0:
-				seenRunning = true
-			case CodexSupervisorRuntimeStoppedV0:
-				seenStopped = true
-			}
-		}
-	}
-	if seenRunning {
-		return CodexSupervisorRuntimeRunningV0
-	}
-	if seenStopped {
-		return CodexSupervisorRuntimeStoppedV0
-	}
-	if !seenExecution {
-		return CodexSupervisorRuntimeDoneV0
-	}
-	return CodexSupervisorRuntimeDoneV0
-}
-
 func codexSupervisorRuntimeStateFromOutcomeV0(
 	outcome string,
 ) CodexSupervisorRuntimeStateV0 {
@@ -280,59 +235,22 @@ func codexSupervisorRuntimeStateFromLoopV0(
 		return CodexSupervisorRuntimeDoneV0
 	}
 	switch status {
-	case orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
-		orquestacionnucleoapp.ProgressiveLoopStatusRunTerminalV0:
+	case orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0:
 		return CodexSupervisorRuntimeDoneV0
+	case orquestacionnucleoapp.ProgressiveLoopStatusRunTerminalV0:
+		return CodexSupervisorRuntimeStoppedV0
 	case orquestacionnucleoapp.ProgressiveLoopStatusStopErrorV0,
 		orquestacionnucleoapp.ProgressiveLoopStatusRunCanceledV0:
 		return CodexSupervisorRuntimeFailedV0
-	case orquestacionnucleoapp.ProgressiveLoopStatusNeedsDirectorV0,
-		orquestacionnucleoapp.ProgressiveLoopStatusBlockedV0,
+	case orquestacionnucleoapp.ProgressiveLoopStatusNeedsDirectorV0:
+		return CodexSupervisorRuntimeRunningV0
+	case orquestacionnucleoapp.ProgressiveLoopStatusBlockedV0,
 		orquestacionnucleoapp.ProgressiveLoopStatusRunPausedV0,
 		orquestacionnucleoapp.ProgressiveLoopStatusRunStopRequestedV0:
 		return CodexSupervisorRuntimeStoppedV0
 	default:
 		return CodexSupervisorRuntimeRunningV0
 	}
-}
-
-func codexSupervisorLastGlobalExecutionRunRefV0(
-	result orquestarunsupervisor.RunSupervisorResultV0,
-) string {
-	for tickIndex := len(result.Ticks) - 1; tickIndex >= 0; tickIndex-- {
-		executions := result.Ticks[tickIndex].Result.Executions
-		for executionIndex := len(executions) - 1; executionIndex >= 0; executionIndex-- {
-			if ref := strings.TrimSpace(executions[executionIndex].RunRef); ref != "" {
-				return ref
-			}
-		}
-	}
-	return ""
-}
-
-func codexSupervisorGlobalEvidenceRefsV0(
-	result orquestarunsupervisor.RunSupervisorResultV0,
-) []string {
-	refs := []string{
-		"evidence-ref-codex-supervisor-stack-global",
-		strings.TrimSpace(result.StopReason),
-	}
-	refs = append(refs, result.ErrorRunRefs...)
-	for _, tick := range result.Ticks {
-		for _, execution := range tick.Result.Executions {
-			refs = append(refs, execution.EvidenceRefs...)
-			refs = append(refs, strings.TrimSpace(execution.Outcome))
-		}
-	}
-	for _, diagnostic := range result.Diagnostics {
-		refs = append(refs,
-			diagnostic.RunRef,
-			diagnostic.Kind,
-			diagnostic.MessageID,
-			diagnostic.DispatchRef,
-		)
-	}
-	return compactStringsV0(refs)
 }
 
 func codexSupervisorLastRefV0(values []string) string {

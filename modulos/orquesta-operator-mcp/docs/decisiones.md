@@ -1,5 +1,17 @@
 # Decisiones: orquesta-operator-mcp
 
+## descriptor_source T198
+
+- `OperatorMCPCapabilitiesV0` es la fuente canonica local para capabilities del
+  resource operativo.
+- `orquesta-mcp` puede referenciar esa fuente en `descriptor_source`, pero no
+  puede leer internals, DB, outbox, runtime ni filesystem productivo del
+  operador.
+- La reconciliacion de T198 cierra deuda documental stale; no habilita
+  transporte real ni cambia puertos.
+- Revalidacion `agent-ref-task-autoprogramming-c3678e9bc306-g01`: mantiene el
+  mismo cierre y no crea owner alternativo.
+
 ## v0 scaffold
 
 - MCP es fachada inbound, no cerebro operativo.

@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	orquestaserver "orquesta/modulos/orquesta-server"
@@ -101,6 +102,107 @@ func TestIdleSelfImprovementBacklogPlannerV0IgnoraFuenteFederadaHistoricaV0(t *t
 	}
 }
 
+func TestIdleSelfImprovementBacklogPlannerV0AcotaEpochAFuentesFederadasEjecutablesV0(t *testing.T) {
+	projectDir := t.TempDir()
+	content := "# Backlog\n\n## Indice federado de backlog local\n\n" +
+		"- source_path: `modulos/orquesta-autoprogramming/docs/tareas.md`; " +
+		"source_kind: module_tasks; owner: `modulos/orquesta-autoprogramming`; " +
+		"estado: vigente; aliases: APG-*; tests: `go test -count=1 ./modulos/orquesta-autoprogramming`\n" +
+		"- source_path: `docs/legacy_orquestador_externo.md`; " +
+		"source_kind: legacy_docs; owner: `docs`; estado: quarantine; aliases: LEG-*\n"
+	if err := os.MkdirAll(filepath.Join(projectDir, "docs"), 0o700); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, idleSelfImprovementBacklogDocRelV0), []byte(content), 0o600); err != nil {
+		t.Fatalf("write backlog: %v", err)
+	}
+	mustWriteFederatedLocalDocTestV0(t, projectDir, "modulos/orquesta-autoprogramming/docs/tareas.md",
+		"- APG-001: tarea ejecutable.\n")
+	mustWriteFederatedLocalDocTestV0(t, projectDir, "docs/legacy_orquestador_externo.md",
+		"- LEG-001: legado cuarentenado.\n")
+
+	planner := idleSelfImprovementBacklogPlannerV0{ProjectWorkDir: projectDir}
+	first := planner.withBacklogScannerMergeLeaseV0(orquestaserver.IdleSelfImprovementRequestV0{
+		WriteSet: []string{"cmd/orquesta-server"},
+	})
+	if !backlogScanDocsContainPathTestV0(first.BacklogScanDocs, "modulos/orquesta-autoprogramming/docs/tareas.md") ||
+		backlogScanDocsContainPathTestV0(first.BacklogScanDocs, "docs/legacy_orquestador_externo.md") {
+		t.Fatalf("scan docs=%+v", first.BacklogScanDocs)
+	}
+	if !strings.Contains(strings.Join(first.ContextRefs, "\n"),
+		"federated_backlog_source_not_executable:path=docs/legacy_orquestador_externo.md;state=quarantine") {
+		t.Fatalf("context_refs=%+v", first.ContextRefs)
+	}
+	mustWriteFederatedLocalDocTestV0(t, projectDir, "docs/legacy_orquestador_externo.md",
+		"- LEG-001: legado cuarentenado cambiado sin entrar al epoch.\n")
+
+	second := planner.withBacklogScannerMergeLeaseV0(orquestaserver.IdleSelfImprovementRequestV0{
+		WriteSet: []string{"cmd/orquesta-server"},
+	})
+	if first.BacklogScanEpoch == "" || first.BacklogScanEpoch != second.BacklogScanEpoch {
+		t.Fatalf("epochs first=%s second=%s", first.BacklogScanEpoch, second.BacklogScanEpoch)
+	}
+}
+
+func TestIdleSelfImprovementBacklogPlannerV0AcotaEpochAFuentesStaleHistoricasV0(t *testing.T) {
+	projectDir := t.TempDir()
+	content := "# Backlog\n\n## Indice federado de backlog local\n\n" +
+		"- source_path: `modulos/orquesta-autoprogramming/docs/tareas.md`; " +
+		"source_kind: module_tasks; owner: `modulos/orquesta-autoprogramming`; " +
+		"estado: active; aliases: APG-*; tests: `go test -count=1 ./modulos/orquesta-autoprogramming`\n" +
+		"- source_path: `docs/stale.md`; source_kind: legacy_docs; owner: `docs`; estado: stale; aliases: OLD-*\n" +
+		"- source_path: `docs/historico.md`; source_kind: legacy_docs; owner: `docs`; estado: historico; aliases: OLD-*\n"
+	if err := os.MkdirAll(filepath.Join(projectDir, "docs"), 0o700); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, idleSelfImprovementBacklogDocRelV0), []byte(content), 0o600); err != nil {
+		t.Fatalf("write backlog: %v", err)
+	}
+	mustWriteFederatedLocalDocTestV0(t, projectDir, "modulos/orquesta-autoprogramming/docs/tareas.md",
+		"- APG-001: tarea ejecutable.\n")
+	mustWriteFederatedLocalDocTestV0(t, projectDir, "docs/stale.md", "- OLD-001: stale inicial.\n")
+	mustWriteFederatedLocalDocTestV0(t, projectDir, "docs/historico.md", "- OLD-002: historico inicial.\n")
+
+	planner := idleSelfImprovementBacklogPlannerV0{ProjectWorkDir: projectDir}
+	first := planner.withBacklogScannerMergeLeaseV0(orquestaserver.IdleSelfImprovementRequestV0{
+		WriteSet: []string{"cmd/orquesta-server"},
+	})
+	if backlogScanDocsContainPathTestV0(first.BacklogScanDocs, "docs/stale.md") ||
+		backlogScanDocsContainPathTestV0(first.BacklogScanDocs, "docs/historico.md") {
+		t.Fatalf("scan docs=%+v", first.BacklogScanDocs)
+	}
+	context := strings.Join(first.ContextRefs, "\n")
+	for _, want := range []string{
+		"federated_backlog_source_not_executable:path=docs/stale.md;state=stale",
+		"federated_backlog_source_not_executable:path=docs/historico.md;state=historico",
+	} {
+		if !strings.Contains(context, want) {
+			t.Fatalf("missing %s in context_refs=%+v", want, first.ContextRefs)
+		}
+	}
+	mustWriteFederatedLocalDocTestV0(t, projectDir, "docs/stale.md", "- OLD-001: stale cambiado.\n")
+	mustWriteFederatedLocalDocTestV0(t, projectDir, "docs/historico.md", "- OLD-002: historico cambiado.\n")
+
+	second := planner.withBacklogScannerMergeLeaseV0(orquestaserver.IdleSelfImprovementRequestV0{
+		WriteSet: []string{"cmd/orquesta-server"},
+	})
+	if first.BacklogScanEpoch == "" || first.BacklogScanEpoch != second.BacklogScanEpoch {
+		t.Fatalf("epochs first=%s second=%s", first.BacklogScanEpoch, second.BacklogScanEpoch)
+	}
+}
+
+func TestIdleSelfImprovementFederatedBacklogV0IgnoraDirectoriosSinContratoEfectivoV0(t *testing.T) {
+	content := "# Backlog\n\n## Indice federado de backlog local\n\n" +
+		"- source_path: `modulos/orquesta-work-profiles`; source_kind: module_placeholder; " +
+		"owner: `modulos/orquesta-work-profiles`; estado: vigente; aliases: WPR-*; " +
+		"tests: `go test -count=1 ./modulos/orquesta-core-workflow`.\n"
+
+	sources := idleSelfImprovementParseFederatedBacklogSourcesV0(content)
+	if len(sources) != 0 {
+		t.Fatalf("directorios sin contrato efectivo no deben ser fuentes federadas: %+v", sources)
+	}
+}
+
 func TestIdleSelfImprovementBacklogPlannerV0ClasificaLocalSinTestsV0(t *testing.T) {
 	projectDir := t.TempDir()
 	mustWriteFederatedBacklogIndexTestV0(t, projectDir, "vigente", "")
@@ -141,6 +243,15 @@ func mustPlanFederatedBacklogTestV0(
 		t.Fatalf("requests=%+v", result.Requests)
 	}
 	return result
+}
+
+func backlogScanDocsContainPathTestV0(docs []orquestaserver.BacklogScanDocumentV0, path string) bool {
+	for _, doc := range docs {
+		if doc.Path == path {
+			return true
+		}
+	}
+	return false
 }
 
 func mustWriteFederatedBacklogIndexTestV0(

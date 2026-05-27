@@ -1,7 +1,8 @@
 package orquestaappchangedirectorsource
 
 import (
-	"hash/fnv"
+	"crypto/sha256"
+	"encoding/hex"
 	"strconv"
 	"strings"
 )
@@ -15,9 +16,23 @@ func AppChangeTaskRefV0(changeRef string) string {
 }
 
 func appChangeSuffixV0(changeRef string) string {
-	hash := fnv.New32a()
-	_, _ = hash.Write([]byte(strings.TrimSpace(changeRef)))
-	return "appchange-" + strconv.FormatUint(uint64(hash.Sum32()), 36)
+	sum := sha256.Sum256(appChangeCanonicalRefPayloadV0("change_ref", changeRef))
+	return "appchange-" + hex.EncodeToString(sum[:])[:32]
+}
+
+func appChangeCanonicalRefPayloadV0(fields ...string) []byte {
+	var builder strings.Builder
+	builder.WriteString("orquesta-app-change-director-source.ref.v0|")
+	builder.WriteString(strconv.Itoa(len(fields)))
+	builder.WriteByte('|')
+	for _, field := range fields {
+		value := strings.TrimSpace(field)
+		builder.WriteString(strconv.Itoa(len(value)))
+		builder.WriteByte(':')
+		builder.WriteString(value)
+		builder.WriteByte(';')
+	}
+	return []byte(builder.String())
 }
 
 func appChangeRefsV0(changeRef string) appChangeRefSetV0 {

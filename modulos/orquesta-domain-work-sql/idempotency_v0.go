@@ -2,7 +2,6 @@ package orquestadomainworksql
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
@@ -11,22 +10,28 @@ import (
 func (store *SQLDomainWorkJobRecordStoreV0) jobAfterUniqueViolationV0(
 	ctx context.Context,
 	request orquestadomainwork.DomainWorkJobRequestV0,
-	fingerprint string,
-) (orquestadomainwork.DomainWorkJobV0, error) {
+) (orquestadomainwork.DomainWorkJobV0, bool, error) {
 	existing, found, err := store.findByKeyV0(ctx, request.DomainRef, request.IdempotencyKey)
 	if err != nil {
-		return orquestadomainwork.DomainWorkJobV0{}, err
+		return orquestadomainwork.DomainWorkJobV0{}, false, err
 	}
 	if found {
-		if existing.Fingerprint == fingerprint {
-			return cloneDomainWorkSQLJobV0(existing.Job), nil
+		equivalent, err := orquestadomainwork.EquivalentDomainWorkJobRequestsV0(
+			existing.Request,
+			request,
+		)
+		if err != nil {
+			return orquestadomainwork.DomainWorkJobV0{}, false, err
+		}
+		if equivalent {
+			return cloneDomainWorkSQLJobV0(existing.Job), true, nil
 		}
 		return invalidDomainWorkSQLJobV0(request, []orquestadomainwork.DomainWorkIssueV0{{
 			Code:  ErrDomainWorkSQLIdempotencyConflictV0,
 			Field: "idempotency_key",
-		}}), nil
+		}}), true, nil
 	}
-	return orquestadomainwork.DomainWorkJobV0{}, fmt.Errorf("orquesta_domain_work_sql: insert_unique_violation_unresolved")
+	return orquestadomainwork.DomainWorkJobV0{}, false, nil
 }
 
 func (store *SQLDomainWorkJobRecordStoreV0) uniqueViolationV0(err error) bool {
@@ -38,7 +43,16 @@ func (store *SQLDomainWorkJobRecordStoreV0) nextJobRefV0(
 	domainRef string,
 	idempotencyKey string,
 ) (string, error) {
-	base := "domain-work-job-" + domainWorkSQLHashV0(domainRef+"\x00"+idempotencyKey)
+	identity, err := orquestadomainwork.BuildDomainWorkJobIdentityV0(
+		orquestadomainwork.DomainWorkJobRequestV0{
+			DomainRef:      domainRef,
+			IdempotencyKey: idempotencyKey,
+		},
+	)
+	if err != nil {
+		return "", err
+	}
+	base := identity.JobRefBase
 	jobRef := base
 	for index := 2; ; index++ {
 		exists, err := store.jobRefExistsV0(ctx, jobRef)
@@ -48,6 +62,10 @@ func (store *SQLDomainWorkJobRecordStoreV0) nextJobRefV0(
 		if !exists {
 			return jobRef, nil
 		}
-		jobRef = base + "-" + strconv.Itoa(index)
+		jobRef = domainWorkSQLCollisionJobRefV0(base, index)
 	}
+}
+
+func domainWorkSQLCollisionJobRefV0(base string, index int) string {
+	return base + "-collision-" + strconv.Itoa(index)
 }

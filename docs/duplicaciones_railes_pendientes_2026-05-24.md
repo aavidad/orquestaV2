@@ -140,17 +140,217 @@ Indice vivo: `docs/rails/registro_railes_2026-05-24.md`.
   control Codex con politicas distintas. Correlacion, write-set y sidecar causal
   ya tienen tareas vecinas; falta owner comun de tamano/redaccion para
   `agent_ack.json`, `director_decisions.json` y checkpoints.
-- Reloj y generacion de refs: `cmd/orquesta-server`, `modulos/orquesta-server`,
+- Detalle runtime de `/ops`: `modulos/orquesta-app-codex-stack` vuelve a leer
+  control files/logs de agentes y `modulos/orquesta-web` los renderiza en
+  bloques de detalle. Aunque T143 gobierna validadores/fuentes de observacion y
+  T211 frescura del dashboard, falta owner unico de presupuesto/redaccion para
+  contenido operacional visible. Backlog asociado: `T227
+  ops-runtime-detail-redaction-and-budget`. Cerrado localmente el 2026-05-27:
+  `/ops` consume envelopes redactados por fichero, refs compactas y tail
+  acotado; no renderiza prompts, packets, ACKs ni logs crudos.
+- Reloj y generacion de refs: cerrado 2026-05-26 para T161 con owner comun en
+  `modulos/orquesta-runtime/clock_ref_policy_v0.go`. `cmd/orquesta-server`,
+  `modulos/orquesta-server`,
   `modulos/orquesta-runtime`, `modulos/orquesta-runtime-codex-delivery`,
   `modulos/orquesta-app-codex-stack`, `modulos/orquesta-web` y
-  `modulos/orquesta-cli` usan `time.Now`, `UnixNano`, refs con timestamp o
-  fallbacks locales. Debe haber owner comun de clock/ref generator por
-  composicion para evitar colisiones y replay no determinista.
+  `modulos/orquesta-cli` conservan usos de reloj para evidencia o duraciones,
+  pero las fronteras focales detectadas ya usan reloj/generador compartido,
+  colision observable y fallback degradado sin `UnixNano` silencioso.
 - Identidad publica de mutaciones: web, CLI, MCP, gateways y comandos del
   servidor repiten normalizacion de `request_id`, `correlation_id`,
   `idempotency_key` y `X-Correlation-ID`. Falta una politica compartida que
   distinga lecturas de mutaciones reintentables y no duplique reglas por
-  cliente.
+  cliente. Backlog asociado: `T236 public-mutation-identity-contract`.
+- Promocion/restauracion del guardian: T214 cubre copia atomica y manifiesto,
+  T220 retencion/replay, T221 concurrencia de promocion y T228 ownership de
+  address. Cierre local 2026-05-27 para T237: el lease durable bajo `state_dir`
+  serializa `check-promote`, `restore-last-good`, `shutdown-server` y el
+  servidor trata busy/lost como bloqueo retryable sin promocion exitosa ni
+  reparacion Codex automatica.
+- Politicas de autoprogramacion: cierre local 2026-05-27 para T238. Review gate
+  queda dividido entre resultado/acciones, issue codes y stems canonicos; el
+  particionado queda dividido entre plan base, steps/bloqueos por trabajo vivo y
+  matching de paths/aliases. No quedan ficheros Go productivos del modulo por
+  encima de 300 lineas en ese alcance.
+- Shutdown checkpoint Codex: runtime Codex define el schema de request/ACK,
+  `orquesta-app-codex-stack` genera `checkpoint_ref` por run/agente y
+  `cmd/orquesta-server` expone stop/shutdown. Falta un owner visible para la
+  identidad causal por intento de shutdown y para rechazar ACKs stale entre
+  mutaciones distintas del mismo agente. Backlog asociado: `T239
+  codex-shutdown-checkpoint-attempt-correlation`.
+- Recuperacion por auth de proveedor en automejora idle: `cmd/orquesta-server`
+  detecta `provider_auth_blocked`, `modulos/orquesta-server` proyecta estado
+  publico/auditoria y `orquesta-app-codex-stack` conoce proveedor/runtime. Falta
+  owner comun para accion de operador, retry idempotente y no duplicacion de
+  scanners cuando las credenciales se recuperan. Backlog asociado: `T241
+  idle-self-improvement-provider-auth-recovery-contract`.
+- Replan por quality gate en `orquesta-orchestration-core`: el provider mezcla
+  seleccion de evidencias, validacion causal, decision de replan y candidatos en
+  un fichero productivo por encima del limite operativo. Backlog asociado:
+  `T253 orchestration-core-quality-gate-replan-provider-split`. Cierre
+  2026-05-27: T253 separa proyeccion causal, followups y politica local del
+  provider; rework sincroniza backlog y rail observado con ese cierre, sin
+  relanzar agente padre. No abrir duplicados salvo regresion nueva.
+- Numeracion humana de backlog: las tareas `T248`, `T249`, `T250` y `T251`
+  cubren identidad de escaneos, dedupe y canonicalizacion, pero la reserva del
+  numero visible `Txx` queda como rail separado. El backlog ya conserva varios
+  `## T250` distintos; el owner debe reservar `task_id_ref` causal antes de
+  escribir, bloquear colisiones y preservar historico por linea/hash sin
+  renumerar. Backlog asociado: `T252
+  backlog-task-number-reservation-policy`. Cierre 2026-05-27: el servidor
+  residente emite `task_id_ref`, reserva opaca y rango `Txx` por request/epoch,
+  y publica `backlog_task_number_collision` con instancias por linea/hash sin
+  renumerar historico.
+- Rework T249 2026-05-27: la correccion
+  `agent-ref-task-ref-review-rework-task-autoprogramming-1c574ac7c424-g01-5cba0f0171e79bd80bbbcf4c49f5bc8a`
+  no abre owner nuevo ni duplica backlog. T249 sigue como contrato de identidad
+  de entradas de scanner; T250/T251/T252 conservan sus fronteras de dedupe,
+  preflight y reserva de numero humano.
+- Revalidacion scanner 2026-05-27: el paquete
+  `agent-ref-assessment-task-autoprogramming-8f23d8e2a22e-g01-556dde497c2e0ff3e929391ffeb28c93`
+  no abre duplicacion nueva. T44, T249, T250, T251, T252, T254, T255, T256 y
+  T257 siguen siendo owners visibles; el contexto `ref_only` se resuelve por
+  lectura local/evidencia ACK y las refs de worktree/branch se conservan opacas.
+- Revalidacion scanner retry 5465c1 burst 002 2026-05-27: el paquete
+  `agent-ref-assessment-task-autoprogramming-87d5c800f528-g01-4fe334168e77c5b5a5a29a19c299e7e8`
+  no abre duplicacion nueva. El patron ya esta cubierto por owners visibles:
+  T44 para contexto obligatorio `ref_only`, T249/T250/T251 para identidad,
+  dedupe, preflight y alcance de pruebas de scanners, T252/T254 para ids
+  humanos `Txx`, y T253/T255/T256/T257/T258 para splits recientes. Las refs
+  `worktree_ref` y `branch_ref` se conservan opacas.
+- Reconciliacion T198 2026-05-27: el paquete
+  `agent-ref-task-autoprogramming-974732911968-g01` no abre duplicacion nueva.
+  T198 queda como owner visible de `descriptor_source` para resources MCP, con
+  `orquesta-mcp` como owner del envelope/registro y los modulos
+  `orquesta-operator-mcp`, `orquesta-observability`, `orquesta-governance` y
+  `orquesta-core` como fuentes canonicas documentadas. El pendiente residual se
+  trata como stale reconciliado, no como nueva tarea.
+- Reconciliacion adicional T198 2026-05-27: el paquete
+  `agent-ref-task-autoprogramming-c3678e9bc306-g01` confirma que el patron
+  vuelve por backlog stale, no por brecha nueva. Mantiene T198 como owner,
+  conserva refs de worktree/branch opacas, resuelve `ref_only` por ACK y no
+  duplica owners ni codigo.
+- Revalidacion retry 69e1ba 2026-05-27: el paquete
+  `agent-ref-assessment-task-autoprogramming-8f23d8e2a22e-g01-697704c71decfb03744436e559856b7f`
+  no abre duplicacion nueva. T44, T249, T250, T251, T252, T253, T254, T255,
+  T256, T257 y T258 siguen como owners visibles; el contexto `ref_only` se
+  resuelve por lectura local/evidencia ACK y las refs de worktree/branch se
+  conservan opacas.
+- Revalidacion retry a3abed 2026-05-27: el paquete
+  `agent-ref-task-autoprogramming-30b4d5ecfe9b-g01` no abre duplicacion nueva.
+  T44, T249, T250, T251, T252, T253, T254, T255, T256, T257 y T258 siguen como
+  owners visibles; el contexto `ref_only` se resuelve por lectura
+  local/evidencia ACK y las refs de worktree/branch se conservan opacas.
+- Revalidacion retry 69e1ba burst 002 2026-05-27: el paquete
+  `agent-ref-assessment-task-autoprogramming-8f23d8e2a22e-g01-89e006236c585aa247a81664e7b037e1`
+  no abre duplicacion nueva. T44, T249, T250, T251, T252, T253, T254, T255,
+  T256, T257 y T258 siguen como owners visibles; el contexto `ref_only` se
+  resuelve por lectura local/evidencia ACK y las refs de worktree/branch se
+  conservan opacas.
+- Revalidacion retry 5465c1 burst 002 2026-05-27: el paquete
+  `agent-ref-assessment-task-autoprogramming-87d5c800f528-g01-219c350ad3df01efd266321f376e4f7b`
+  no abre duplicacion nueva. T44, T249, T250, T251, T252, T253, T254, T255,
+  T256, T257 y T258 siguen como owners visibles; el contexto `ref_only` se
+  resuelve por lectura local/evidencia ACK y las refs de worktree/branch se
+  conservan opacas.
+- Revalidacion burst 002 1db27 2026-05-27: el paquete
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-1db27b63b7ddb14755938b05f1eff32f`
+  no abre duplicacion nueva. El patron ya esta cubierto por T44 para contexto
+  obligatorio `ref_only`, T249/T250/T251 para identidad, dedupe/preflight y
+  alcance de pruebas de scanners, T252/T254 para ids humanos, reserva,
+  colisiones, aliases y read model, y T253/T255/T256/T257/T258 para splits
+  concretos recientes. Las refs `worktree_ref` y `branch_ref` se conservan
+  opacas.
+- Revalidacion burst 002 c10c 2026-05-27: el paquete
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-c10cb19de09867b08fe7a7c947dc4467`
+  no abre duplicacion nueva. T44, T249, T250, T251, T252, T253, T254, T255,
+  T256, T257 y T258 siguen como owners visibles; el contexto `ref_only` se
+  resuelve por lectura local/evidencia ACK y las refs de worktree/branch se
+  conservan opacas.
+- Revalidacion burst 002 562c49 2026-05-27: el paquete
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-562c496eddcc7c55bd3b622c5e825749`
+  no abre duplicacion nueva. T44, T249, T250, T251, T252, T253, T254, T255,
+  T256, T257 y T258 siguen como owners visibles; el contexto `ref_only` se
+  resuelve por lectura local/evidencia ACK y las refs de worktree/branch se
+  conservan opacas.
+- Revalidacion burst 002 f8e40 2026-05-27: el paquete
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-f8e40a7bedded7d2878462d370a72a30`
+  no abre duplicacion nueva. T44, T249, T250, T251, T252, T253, T254, T255,
+  T256, T257 y T258 siguen como owners visibles; el contexto `ref_only` se
+  resuelve por lectura local/evidencia ACK y las refs de worktree/branch se
+  conservan opacas.
+- Revalidacion burst 002 9fa6 2026-05-27: el paquete
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-9fa6b01dc86ff93d9228ca93a474de5c`
+  no abre duplicacion nueva. El patron ya esta cubierto por T44 para contexto
+  obligatorio `ref_only`, T249/T250/T251 para identidad, dedupe/preflight y
+  alcance de pruebas de scanners, T252/T254 para ids humanos, reserva,
+  colisiones, aliases y read model, y T253/T255/T256/T257/T258 para splits
+  concretos recientes. Las refs `worktree_ref` y `branch_ref` se conservan
+  opacas.
+- Revalidacion retry 598e4b burst 002 2026-05-27: el paquete
+  `agent-ref-task-autoprogramming-65f3f5860bf2-g01` no abre duplicacion nueva.
+  Reobserva backlog degradado antes de programar codigo, pero el patron ya esta
+  cubierto por T44 para contexto obligatorio `ref_only`, T249/T250/T251 para
+  identidad, dedupe/preflight y alcance de pruebas de scanners, T252/T254 para
+  ids humanos, reserva, colisiones, aliases y read model, y
+  T253/T255/T256/T257/T258 para splits concretos recientes. Las refs
+  `worktree_ref` y `branch_ref` se conservan opacas.
+- Revalidacion retry 6ed415 burst 002 2026-05-27: el paquete
+  `agent-ref-task-autoprogramming-6050b74fc6c4-g01` no abre duplicacion nueva.
+  Reobserva contexto obligatorio `ref_only`, write-set documental cerrado,
+  prueba global obligatoria y backlog degradado antes de programar codigo, pero
+  el patron ya esta cubierto por T44 para contexto obligatorio `ref_only`,
+  T249/T250/T251 para identidad, dedupe/preflight y alcance de pruebas de
+  scanners, T252/T254 para ids humanos, reserva, colisiones, aliases y read
+  model, y T253/T255/T256/T257/T258 para splits concretos recientes. Las refs
+  `worktree_ref` y `branch_ref` se conservan opacas.
+- Revalidacion retry 4da183 burst 002 2026-05-27: el paquete
+  `agent-ref-task-autoprogramming-3533ffab219a-g01` no abre duplicacion nueva.
+  Reobserva contexto obligatorio `ref_only`, write-set documental cerrado,
+  prueba global obligatoria y backlog degradado antes de programar codigo, pero
+  el patron ya esta cubierto por T44 para contexto obligatorio `ref_only`,
+  T249/T250/T251 para identidad, dedupe/preflight y alcance de pruebas de
+  scanners, T252/T254 para ids humanos, reserva, colisiones, aliases y read
+  model, y T253/T255/T256/T257/T258 para splits concretos recientes. Las refs
+  `worktree_ref` y `branch_ref` se conservan opacas.
+
+## Cerrado 2026-05-26: T125 work-profiles-empty-module-quarantine
+
+- `modulos/orquesta-work-profiles` queda clasificado como placeholder historico
+  no ejecutable con `README.md` y `AGENTS.md` locales.
+- La fuente vigente de perfiles sigue siendo `WorkProfileV0` y
+  `WorkflowTaskV0.work_profile_kind` en `modulos/orquesta-core-workflow`; la
+  resolucion operativa sigue en `modulos/orquesta-orchestration-core`.
+- El indice federado del planner no acepta directorios de modulo como fuentes:
+  solo documentos Markdown bajo `docs/` o `*/docs/`. La regresion queda cubierta
+  por `TestIdleSelfImprovementFederatedBacklogV0IgnoraDirectoriosSinContratoEfectivoV0`.
+
+## Cerrado 2026-05-26: T126 module-local-codex-launcher-compatibility-contract
+
+- Los wrappers `modulos/*/arrancar_codex.sh` quedan inventariados por categoria:
+  compatibilidad historica con error publico, prompt/contexto local,
+  recuperacion manual opt-in y smoke opt-in.
+- Los wrappers que llamaban a `../_comun/arrancar_codex_modulo.sh` ya no
+  dependen de un helper inexistente ni lanzan una via paralela de runtime Codex.
+- Las READMEs que recomendaban el wrapper local como arranque normal apuntan al
+  servidor residente/cola OrquestaV2 como ruta vigente con write-set, ACK,
+  checkpoint y shutdown gobernados.
+- Revalidado 2026-05-27 por
+  `agent-ref-task-autoprogramming-089a03f67381-g01`: 36 wrappers clasificados,
+  helper comun ausente no recreado, sin referencias versionadas al helper roto y
+  pruebas obligatorias de shell/CLI/servidor en verde.
+
+## Cerrado 2026-05-26: T142 cli-json-input-bounds-and-source-policy
+
+- `modulos/orquesta-cli/command_flags_v0.go` concentra el owner local de
+  entrada JSON por CLI: limite por comando, lectura acotada, error publico
+  `input_too_large` y sin volcar cuerpos recibidos.
+- La fuente queda clasificada como `stdin`, `file_explicit` o `inline` futuro;
+  `arg` se conserva solo para comandos sin payload JSON.
+- La entrada por fichero explicito bloquea rutas absolutas, salida del
+  directorio actual, `.orquesta-runtime`, prompts, transcripts, logs y ficheros
+  de control Codex antes de abrir el fichero. T103/T138/T139 siguen siendo
+  owners de respuesta HTTP, salida publica y stdout.
 
 ## Priorizacion scanner 2026-05-24
 
@@ -1072,6 +1272,8 @@ Prioridad alta:
 - Unificar helpers de smokes antes de ampliar scripts reales. Confirmaciones,
   readiness, cleanup y redaccion no deben vivir como copias divergentes en cada
   smoke largo.
+  Resolucion inicial 2026-05-26: `scripts/lib/smoke_common.sh` concentra helpers
+  compartidos y los smokes OPES largos lo consumen como primer shard verificable.
 
 Prioridad media:
 
@@ -1098,6 +1300,9 @@ Prioridad alta:
   puerto comun, T51 puede fijar defaults de razonamiento pero la seleccion real
   de tier/reasoning/pool/model/quota queda duplicada entre config de servidor,
   stack y docs locales.
+  Resolucion 2026-05-26: T92 anadio `CapacityDecisionPolicyPortV0`, adapter
+  stack -> `orquesta-capacity` y refs opacas centralizadas en config/env del
+  servidor; el fallback estatico queda solo como legacy auditable.
 - Sincronizar prompts/toolbelt con los registries reales. `codex_prompt_hints`
   no debe tener una lista manual distinta de HTTP/MCP, runbooks, paquetes de
   agente y `orquesta-mcp`; si una capability como `directed_query` existe solo
@@ -1118,26 +1323,43 @@ Prioridad media:
   secretos efectivos, payloads crudos, prompts/transcripts y conectores reales
   no inyectados siguen bloqueados o devuelven error publico verificable.
 
+Cierre T93 2026-05-26: los prompts Codex ya usan una fuente compacta
+verificable en `cmd/orquesta-server/codex_toolbelt_source_v0.go`: HTTP sale de
+constantes publicas de `orquesta-mcp` usadas por gateway y MCP se valida contra
+`MCPTransportToolsV0`. La fuente incluye `orquesta.operator.directed_query.v0`,
+expone `orquesta.operator.operations.v0` como resource de subtools y distingue
+transporte HTTP vivo, tool registrado y puerto opt-in no configurado sin
+prometer operador humano, runtime, OPES, DB ni red real no inyectada.
+Verificacion OrquestaV2 2026-05-26: agente externo valido contexto `ref_only`
+por evidencia explicita y reejecuto la matriz requerida de T93.
+
 ## Priorizacion scanner 2026-05-24 trigesima pasada
 
 Backlog asociado: `T94 server-audit-write-failure-visibility`.
+
+Estado 2026-05-26: cerrado local para visibilidad base del fallo de escritura
+de auditoria del servidor residente. `modulos/orquesta-server` es el propietario
+unico de la proyeccion `audit_*`; HTTP, supervisor, startup y `cmd` consumen el
+estado comun en vez de inventar contadores por ruta.
 
 Prioridad alta:
 
 - Separar redaccion/schema de auditoria (T41) de visibilidad de fallo de
   escritura. Un sink JSONL roto no debe desaparecer como best-effort silencioso
   cuando el mismo servidor usa esa auditoria como evidencia operativa de
-  automejora, supervisor, startup y control plane.
+  automejora, supervisor, startup y control plane. Cerrado con
+  `audit_write_failed` en estado/status/readiness.
 - Unificar propietario del estado de auditoria degradada en
   `modulos/orquesta-server`: HTTP, supervisor loop, startup checks y
   composicion de `cmd/orquesta-server` no deben inventar cada uno su contador,
-  error publico o politica de bloqueo.
+  error publico o politica de bloqueo. Cerrado para la proyeccion base `audit_*`.
 
 Prioridad media:
 
 - La proyeccion de fallo debe ser compacta y no recursiva: contador, evento,
   codigo publico y timestamp; sin rutas locales, HOME, permisos exactos,
-  payloads HTTP, prompts, transcripts ni tokens.
+  payloads HTTP, prompts, transcripts ni tokens. Cerrado localmente con tests de
+  sink roto y state store roto.
 - Coordinar con T19/T41 antes de exponer visor o retencion: un fallo de
   escritura no autoriza fallback a stdout/stderr crudo ni a otra persistencia
   paralela sin redaccion por campo.
@@ -1178,9 +1400,16 @@ Prioridad alta:
   shutdown HTTP, state file y registry de procesos no deben tener criterios
   distintos para identidad de proceso, forced/cooperativo y estado stale. T60
   cubre olas Codex; T96 cubre el proceso servidor.
+  Cierre T96 2026-05-26: el daemon residente usa `process_ref` y
+  `daemon_epoch_ref` opacos en state/status, `stop` verifica correspondencia
+  HTTP-state antes de senalar y `forced` queda como opt-in con `--reason`.
 - Convertir el ledger de entrada de bridges externos en claim/recovery antes de
-  crear runs. T31 protege la cola interna, pero no impide que dos drains OPES o
-  un fallo post-submit generen duplicacion por job externo.
+  crear runs. Cierre 2026-05-26: `cmd/orquesta-server` ya registra claim
+  `claimed` con refs de correlacion/idempotencia antes del POST, bloquea drains
+  concurrentes, rechaza sobrescritura de `submitted` con otro `run_ref` y usa
+  `external_bridge_recovery_required` cuando hay que reconciliar tras fallo de
+  finalizacion. T31 sigue protegiendo la cola interna; T98 protege el job
+  externo de entrada.
 
 Prioridad media:
 
@@ -1192,6 +1421,12 @@ Prioridad media:
   unica, argv completos, prompts, transcripts, tokens, payloads HTTP completos
   y respuestas OPES crudas no se persisten como evidencia de cierre.
 
+Revalidacion 2026-05-26: T97 queda cerrada para el servidor residente. El
+daemon tiene owner/politica propia, rotacion y retencion local; status y
+diagnostico solo publican resumen/politica redactada; stdout/stderr crudos no
+se capturan por defecto y el opt-in local queda separado de auditoria, tail
+Codex y required-test output.
+
 ## Priorizacion scanner 2026-05-24 trigesimotercera pasada
 
 Backlog asociado: `T99 server-http-resource-guardrails`,
@@ -1200,27 +1435,40 @@ Backlog asociado: `T99 server-http-resource-guardrails`,
 
 Prioridad alta:
 
-- Unificar limites de transporte HTTP antes de ampliar control plane residente:
-  servidor, MCP HTTP, app-gateway y web no deben copiar cada uno su decode JSON,
-  tamano de body, politica de campos desconocidos ni timeouts.
+- T99 queda cerrado en el primer alcance residente: servidor, MCP HTTP,
+  app-gateway y web comparten politica de recursos por perfil para timeouts,
+  decode JSON, tamano de body, trailing tokens y auditoria compacta. T102 queda
+  como owner de handlers publicos/legacy fuera de este write-set.
 - Separar archivo de revision de startup de purga/reconciliacion. T35 decide
   si compactar y T59 protege purga de runtime; T100 debe gobernar permisos,
   redaccion, retencion y exposicion publica de los artefactos generados.
-- Convertir el ledger de salida `domain_work` en claim/recovery antes de
-  ejecutar mas derivados OPES reales. T98 protege entrada de jobs; T101 protege
-  el efecto externo de devolver artefactos.
+- El ledger de salida `domain_work` ya tiene claim/recovery offline para
+  `submit_artifact`: claim antes del efecto, bloqueo de claims no terminales y
+  conflicto terminal compacto. T98 protege entrada de jobs; T101 protege el
+  efecto externo de devolver artefactos.
 
 Prioridad media:
 
-- La auditoria de HTTP debe registrar solo metadatos compactos del limite
-  aplicado, coordinada con T41/T94; no guardar bodies ni usar logs daemon como
-  fallback.
+- La auditoria de HTTP ya registra metadatos compactos del request residente
+  para T99; T41/T94 siguen gobernando detalle prohibido y otros artefactos de
+  diagnostico.
 - El archivo de revision puede conservar material crudo solo como diagnostico
   local opt-in con limite; no debe entrar en contexto, AppVCS, promocion,
   timeline ni recursos MCP.
 - Los ledgers de entrada/salida deben compartir conceptos de idempotency,
   correlation, receipt y conflicto, pero sin fusionar OPES con el contrato
   neutral `domain_work`.
+
+Revalidacion 2026-05-26: T100 queda cerrado para el archivo de revision de
+startup. `cmd/orquesta-server` genera `revision_ref` opaco, snapshots redactados
+por campo, manifest con retencion/limite/permisos y archivo de runtime solo como
+metadata redactada; `modulos/orquesta-server` proyecta `startup_revision` en
+readiness/status sin rutas locales.
+
+Revalidacion 2026-05-26: T101 queda cerrado para claim/recovery offline de
+salida `domain_work`. El stack registra `claimed/submitting` antes del efecto
+externo, bloquea claims no terminales con recovery compacto y conserva
+accepted/rejected terminales sin sobrescritura conflictiva.
 
 ## Priorizacion scanner 2026-05-24 trigesimocuarta pasada
 
@@ -1234,13 +1482,34 @@ Prioridad alta:
   o transporte MCP residente. T99 cubre recursos del servidor; T102 debe evitar
   que factory/governance/MCP/web/app-gateway conserven decoders, limites y
   shapes de error incompatibles.
-- Fijar limites de respuesta saliente antes de usar conectores HTTP como fuente
-  durable de diagnostico. T80 decide adonde puede salir `domain_work-http`;
-  T103 decide cuanto y como se lee lo que vuelve.
+- T103 queda cubierto el 2026-05-26 para conectores OPES/domain-work, CLI, web,
+  app-gateway por cliente web in-process y comandos de servidor: limite de
+  respuesta, `Content-Type` JSON o legacy `text/plain` con JSON parseable,
+  trailing data y errores publicos redactados. T80 sigue decidiendo adonde puede salir
+  `domain_work-http`.
+- Revalidacion T103 2026-05-26: la bateria focal del alcance sigue verde y no se
+  abre duplicado nuevo frente a T138.
+- Revalidacion OrquestaV2 2026-05-26:
+  `agent-ref-task-autoprogramming-49b26a6e419d-g01` mantiene T103 cerrado como
+  canon y refuerza la prueba de `text/plain` legacy con JSON parseable en el
+  write-set asignado.
 - Normalizar escritura durable file-based antes de depender de restart,
   reconciliacion, ledgers y estado residente como prueba terminal. T95 detecta
   fallo de estado, pero T104 debe cerrar permisos, fsync, temp/lock y recovery
   de snapshot.
+
+Revalidacion 2026-05-26: T104 queda cerrado local para stores y ledgers del
+write-set. `orquesta-run-file`, `orquesta-domain-work-file`,
+`orquesta-runtime-codex-delivery`, `orquesta-server`,
+`orquesta-app-codex-stack` y `cmd/orquesta-server` usan temp unico o append
+durable segun contrato, permisos `0600`, `fsync`/close, `rename` y sync de
+directorio donde aplica. Los control files Codex de prompt/wrapper/ACK no se
+fusionan aqui; siguen como T159.
+
+Revalidacion OrquestaV2 2026-05-27: T104 queda cerrado con bateria obligatoria
+completa del alcance:
+`go test -count=1 ./modulos/orquesta-run-file ./modulos/orquesta-domain-work-file ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-server ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
+No se abre duplicado nuevo para control files Codex; T159 conserva ese owner.
 
 Prioridad media:
 
@@ -1253,6 +1522,13 @@ Prioridad media:
   y `orquesta-domain-work-file`, pero debe respetar owners concretos de outbox,
   cola, ledgers OPES/domain_work y runtime Codex.
 
+Revalidacion 2026-05-26: T102 queda cerrado para los handlers del write-set.
+`orquesta-factory-http`, governance, MCP, web y `/mcp` del servidor tienen
+limites JSON, trailing-token check, politica de `Content-Type`, modo de campos
+desconocidos documentado por perfil y errores publicos compactos con
+correlacion cuando existe. `orquesta-app-gateway` y `orquesta-http-gateway`
+siguen como compositores de handlers inyectados, sin parseo JSON propio.
+
 ## Priorizacion scanner 2026-05-24 trigesimoquinta pasada
 
 Backlog asociado: `T105 process-runtime-launch-env-io-receipt`,
@@ -1264,12 +1540,23 @@ Prioridad alta:
 - Separar launch neutral de stop neutral. T66 gobierna parada causal; T105 debe
   gobernar recibo de resolucion de comando/env/working dir e IO para que el
   runtime no dependa de valores reales invisibles ni de stdout/stderr crudo.
+  Actualizacion 2026-05-26: T105 queda cubierto por
+  `ProcessRuntimeLaunchReceiptV0` y refs compactas en registry/stats; no reabrir
+  stop neutral, logs daemon ni salida publica de `codex-wave`.
 - Redactar la salida publica de `codex-wave` antes de usarla como evidencia o
   diagnostico compartible. Tail/purge/stop tienen owners propios, pero launch y
   status aun pueden exponer rutas y ficheros de control completos.
+  Actualizacion 2026-05-26: T106 queda cubierto en
+  `cmd/orquesta-server`; stdout de launch/status/stop/director-wave usa
+  summaries publicos con refs opacas y la registry local queda como artefacto
+  operativo no publico. T58 conserva el owner de fragmentos de log opt-in.
 - Cubrir smokes Go opt-in, no solo scripts shell. Los fallos de pruebas reales
   deben ser utiles para operador sin imprimir prompts, transcripts, bodies,
   stdout/stderr completos ni rutas privadas.
+  Actualizacion 2026-05-26: T107 queda cubierto localmente para los helpers de
+  smokes Go reales Codex y el harness Go de procesos: salida redactada/acotada
+  por defecto y crudo solo como artefacto local opt-in, no como evidencia
+  terminal.
 
 Prioridad media:
 
@@ -1290,13 +1577,19 @@ Backlog asociado: `T108 decision-council-operational-rounds` y
 
 Prioridad alta:
 
-- Dar owner operativo a las rondas de consejo. `orquesta-decision-council`
-  planifica propuesta/critica/voto y `orquesta-director-candidates` sabe
-  convertir asignaciones en candidatos, pero el ciclo vivo del Director no debe
-  recrear deliberacion como texto libre ni saltarse quorum/evidencia.
+- Dar owner operativo a las rondas de consejo. Cerrado offline focal el
+  2026-05-26: `orquesta-decision-council` expone rondas operativas y
+  `orquesta-orchestration-core` las materializa como `WorkflowTaskV0` con
+  gate/wait scope por cohorte/ola, deps causales y aceptacion final por
+  `AcceptDecision` tras `DecisionCouncilVoteV0` aceptado. No reabrir salvo
+  regresion o smoke con proveedor real explicitamente pedido.
 - Unificar leases y progreso. `orquesta-core-leases`, heartbeat de
   `orquesta-runtime`, observacion Codex y scheduler de lease actions no deben
   mantener umbrales paralelos para stopped/stalled/loop/retry/stop/replan.
+  Actualizacion 2026-05-26: T109 queda cubierto por
+  `AgentProgressLeaseBridgeV0` y cableado Codex opt-in con budget de progreso;
+  la misma observacion compacta alimenta supervision y lease assessment, y el
+  scheduler consume `LeaseActionCandidates` sin payloads sensibles.
 
 Prioridad media:
 
@@ -1314,6 +1607,11 @@ Prioridad media:
 Backlog asociado: `T110 director-scheduler-cycle-rail-policy-sync`,
 `T111 local-agents-required-doc-refs-sync` y
 `T112 run-queue-workset-concurrency-bridge`.
+
+Estado T110 2026-05-26: cerrado localmente. El scheduler y el ciclo de
+dispatch siguen con owners separados, pero ambos delegan la semantica de detalle
+sensible en `orquesta-rails`; no bloquean vocabulario operativo opaco como
+`runtime`, `provider`, `model`, `db`, `sql`, `filesystem` o `docker`.
 
 Prioridad alta:
 
@@ -1342,27 +1640,32 @@ Prioridad media:
 
 ## Priorizacion scanner 2026-05-24 trigesimoctava pasada
 
-Backlog asociado: `T113 module-historical-doc-ref-sync`,
-`T114 run-queue-fairness-group-policy` y
-`T115 web-app-intake-session-contract`.
+Backlog asociado: `T113 module-historical-doc-ref-sync` y
+`T114 run-queue-fairness-group-policy`. `T115 web-app-intake-session-contract`
+queda cerrado el 2026-05-26 con contrato web de sesion y handoff compacto.
 
 Prioridad alta:
 
-- Separar contexto historico de contexto requerido vivo. T111 cubre
+- Separar contexto historico de contexto requerido vivo. T111 ya sincronizo
   instrucciones obligatorias en `AGENTS.md`; T113 debe limpiar docs locales que
   aun apuntan a `docs/reinicio_orquesta_v2` para que el indice federado no
   convierta DBV1/control-plane stale en tareas ejecutables.
 - Dar semantica a `fairness_group_ref` antes de ampliar colas paralelas de
-  automejora. T31 reserva, T112 evita solapes de write-set y T114 debe evitar
-  hambre o monopolio entre grupos.
+  automejora. T31 reserva, T112 evita solapes de write-set y T114 evita hambre
+  o monopolio entre grupos con politica secundaria por prioridad, reason codes
+  publicos y reloj inyectado.
 
 Prioridad media:
 
-- Completar `WEB-013` como contrato de intake web solo despues de mantener T76
-  como ruta publica del Director V2. La web conserva AppSpec/refs opacas y no
-  decide arquitectura, runtime, proveedor ni DB.
+- `WEB-013` queda cubierto por `WebNuevaAppIntakeSessionV0`: la sesion conserva
+  AppSpec parcial, preguntas i18n, refs opacas y handoff al Director V2; la web
+  no decide arquitectura, runtime, proveedor ni DB.
 - T113 no debe borrar documentos historicos ni recrear carpetas ausentes; debe
   marcar fuente, freshness y sustituto vigente.
+- Estado T113 2026-05-26: cerrado para el write-set asignado. Las refs locales
+  a reinicio v2 quedan historicas/stale con sustitutos vigentes, y
+  `modulos/*/docs/tareas.md` ya no usa el inventario DB v1 como prerequisito
+  ejecutable.
 - Fairness de cola no puede saltarse guardas de smokes reales, OPES temporal,
   proveedor, DB o efectos externos. Solo ordena candidatos ya ejecutables y
   confirmados por sus rails propios.
@@ -1391,7 +1694,21 @@ Prioridad media:
   ambiguos, despues partir backlog o federar tareas por modulo.
 - T117 debe coordinarse con T42/T45/T61: ACK estricto, presupuesto de ficheros y
   redaccion de tests son rails vecinos, no sustitutos de la politica de review.
-- T118 debe coordinarse con T27/T111/T113: marcar historico o plantilla, sin
+  Resolucion 2026-05-26: el owner ejecutable queda en
+  `ReviewGateDeliveryPolicyPortV0` dentro de `orquesta-app-codex-stack`; el
+  recibo de snapshot/write-set queda en `orquesta-runtime-worktree`; prompt y
+  ACK solo transportan instrucciones/evidencia, no deciden cierre.
+  Revalidacion 2026-05-26: T117 concentra el owner ejecutable en
+  `codexStackReviewGatePolicyV0`; el ACK no decide presupuesto, el snapshot no
+  decide severidad y el review gate aplica la politica con aliases/globs seguros
+  y perfiles documentales/no-Go sin forzar reglas Go. La evidencia focal queda
+  en el test de los cuatro modulos del write-set T117 y en los tests locales de
+  `review_gate_policy_v0`.
+  Revalidacion OrquestaV2 retry 2026-05-26: no se duplica rail nuevo; T117 queda
+  cerrado por owner ejecutable en stack, recibo worktree y prueba focal del
+  write-set completo.
+- T118 queda cerrado como sincronizacion documental: planes historico/debug,
+  artefactos de app generada como plantillas/refs del proyecto objetivo, sin
   borrar docs antiguos ni recrear carpetas stale para satisfacer pruebas
   documentales heredadas.
 
@@ -1413,6 +1730,15 @@ Prioridad alta:
   y Terminator no deben ser fuente paralela de runtime, sesiones, worktrees ni
   cierre frente al daemon residente.
 
+Resolucion T121 2026-05-26:
+
+- Los wrappers manuales quedan cerrados como recuperacion asistida subordinada a
+  readiness `/api/v0/server/readiness` y CLI/API publica.
+- `cargar_agentes.sh` y `terminator_agentes.sh` conservan dry-run por defecto;
+  no siembran flotas legacy sin confirmacion.
+- `agente_console.sh` bloquea runtime directo y conserva solo la consola de
+  operador.
+
 Prioridad media:
 
 - T119 se coordina con T27/T82/T83/T87: documentacion, rutas publicas, estado
@@ -1424,6 +1750,27 @@ Prioridad media:
 - T121 se coordina con T28/T30/T66/T96: recuperacion de agentes vivos,
   checkpoint, stop neutral y daemon identity gobiernan el ciclo; wrappers
   manuales solo pueden llamar a esas superficies o declarar bloqueo.
+
+Resolucion T119 2026-05-26:
+
+- `docs/uso_actual_app_orquesta.md` queda como manual server-first de la
+  composicion actual y lista solo rutas publicas versionadas como superficie
+  viva para clientes nuevos.
+- `README.md` y `docs/README.md` enlazan ese manual y declaran historicos los
+  manuales V1 que anuncien `./orquesta serve`, rutas `/api/*` sin version,
+  OpenClaw, AP-077 como requisito operativo o DBV1.
+- La ruta sin version `/api/status` queda documentada como alias legacy de
+  compatibilidad; el uso nuevo debe citar `/api/v0/server/status` y
+  `/api/v0/server/readiness`.
+- Estado sincronizado en backlog: T119 queda cerrado; las secciones V1
+  preservadas en `docs/uso_actual_app_orquesta.md` son cuarentena historica, no
+  fuente para clientes web/CLI nuevos ni para pruebas de cierre.
+
+Cierre T120 2026-05-26: snapshots SQLite/DBV1 quedan como evidencia forense en
+cuarentena con refs relativas opacas, no como prerequisito vivo ni persistencia
+global. T88/T116 deben conservar la separacion `forense`/`historico`/
+`quarantine`/`effective` y requerir decision explicita del director antes de
+programar lecturas DBV1 o comandos `sqlite3`.
 
 ## Priorizacion scanner 2026-05-24 cuadragesima primera pasada
 
@@ -1452,6 +1799,26 @@ Prioridad media:
 - T124 coordina con T16/T23/T30/T66/T121: MCP real, shutdown, stop neutral y
   wrappers manuales siguen como adaptadores opt-in o recuperacion, no nucleo.
 
+Resolucion T123 2026-05-26: T123 queda cerrado para el alcance factory/HTTP/web/
+MCP/intake. El backlog inicial queda marcado como `preview_no_ejecutable`, lleva
+freshness y handoff causal a `orquesta.apps.arrancar_director.v0`, y las
+superficies publicas lo muestran como preview compacta/insumo. Ninguna de esas
+capas materializa cola, plan-state, wait, review, tests ni cierre.
+
+Resolucion T124 2026-05-26: T124 queda cerrado como cuarentena documental. Los
+docs de OpenClaw, `tmux`, Terminator, MCP real y transportes externos conservan
+historia pero no alimentan planificacion automatica; el indice federado los
+declara `quarantine`, y cualquier activacion requiere tarea explicita de
+composicion externa/legacy con decision y tests propios.
+
+Resolucion T122 2026-05-26: `BIBLIA_APP_ORQUESTA.md` se autoidentifica como
+historico/stale con sustitutos vigentes; `00_INDICE.md` y `docs/README.md`
+separan fuentes vigentes, historicas, forenses y plantillas. La historia se
+conserva, pero no puede gobernar planes actuales sin enlace a la foto vigente.
+Refuerzo retry 2026-05-26: los textos internos V1 que se declaraban
+"fuentes de verdad" o "doctrina" quedan nombrados como historicos para que
+T88/T116 prioricen marcadores de stale y sustituto vivo frente al cuerpo antiguo.
+
 ## Priorizacion scanner 2026-05-24 cuadragesima segunda pasada
 
 Backlog asociado: `T125 work-profiles-empty-module-quarantine`,
@@ -1468,10 +1835,10 @@ Prioridad alta:
   manuales raiz, pero estos wrappers locales pueden estar rotos por helper
   comun ausente y competir con daemon/cola si docs locales los anuncian como
   camino vigente.
-- Pasar de `.gitignore` a politica ejecutable para artefactos locales. T50
-  cubre control files, pero snapshots, contexto, AppVCS, promocion y ACK
-  terminal necesitan excluir tambien logs/diagnostico locales ignorados sin
-  depender de Git ni de un walk ad hoc.
+- Pasar de `.gitignore` a politica ejecutable para artefactos locales. T127
+  queda cerrado el 2026-05-26 con exclusion por categoria/reason code en
+  snapshots, contexto, AppVCS, promocion y ACK terminal; `.gitignore` queda como
+  defensa de operador, no como contrato unico.
 
 Prioridad media:
 
@@ -1480,10 +1847,16 @@ Prioridad media:
 - T126 debe coordinarse con T121/T30/T66/T96: wrapper manual, checkpoint,
   parada neutral e identidad de daemon conservan owners separados; el wrapper
   solo puede llamar a esas superficies o quedar historico.
-- T127 debe coordinarse con T43/T50/T56/T59: merge documental, control files,
+- T127 queda coordinado con T43/T50/T56/T59: merge documental, control files,
   proyeccion de credenciales y purga de runtime no deben duplicar listas
   parciales. La salida publica es categoria/contador/ref, no path local ni
   contenido crudo.
+- Cierre T127 2026-05-26: la lista de ignores queda subordinada a la politica
+  ejecutable y a recibos por categoria. `.gitignore` se mantiene como defensa
+  local sincronizada, no como criterio unico para snapshots, contexto, AppVCS,
+  promocion ni ACK terminal.
+- Refuerzo puntual T127: `.orquesta-logs`, `orquesta.env`, `orquesta.db*` y
+  `.orquesta-inbox.md` se tratan como artefactos locales no exportables.
 
 ## Priorizacion scanner 2026-05-24 cuadragesima tercera pasada
 
@@ -1496,9 +1869,16 @@ Prioridad alta:
 - Unificar el rail del supervisor de progreso antes de que oculte evidencia
   operacional valida. La decision del Director necesita refs opacas completas,
   no una lista local que borre palabras como `provider`, `model` o `runtime`.
+- Revision 2026-05-26: T128 sustituye la lista local del supervisor por el
+  helper comun por campo de `orquesta-rails` y alinea runtime/leases para
+  permitir vocabulario operativo opaco, conservando cortes de secreto, HOME real
+  y contenido crudo.
 - Acotar el entorno efectivo de `start` del daemon. Heredar el proceso padre sin
   recibo de categorias/redaccion mezcla conveniencia operativa con superficie
   sensible de HOME, tokens, proveedor y diagnostico.
+  Cerrado 2026-05-26: `start` usa allowlist y recibo `effective_config` por
+  categorias/conteos sin valores crudos; Codex, bootstrap, logs y runtime quedan
+  como owners separados.
 - Separar tests de arquitectura de railes por vocabulario. Los imports/efectos
   prohibidos deben seguir fallando, pero refs y comentarios validos no deben
   depender de substrings globales copiados por modulo.
@@ -1512,6 +1892,16 @@ Prioridad media:
   centralizar secretos.
 - T130 debe coordinarse con T70/T77/T116: docs, app-change y freshness
   documental necesitan neutralidad, no listas textuales nuevas por cada test.
+
+## Cerrado 2026-05-26: T130 architecture-guard-test-rail-policy-owner
+
+- `modulos/orquesta-rails` es el owner comun para helpers de tests de
+  arquitectura que distinguen imports concretos de literales sensibles.
+- Los modulos del alcance conservan listas locales solo para imports, prefijos o
+  fragmentos de paquetes reales; ya no escanean vocabulario global como `runtime`,
+  `http`, `mcp`, `sql` o `provider` sobre todo el fuente.
+- La politica compartida permite refs opacas y nombres de politica, y bloquea
+  solo valores sensibles efectivos o adaptadores concretos.
 
 ## Priorizacion scanner 2026-05-24 cuadragesima cuarta pasada
 
@@ -1539,12 +1929,25 @@ Prioridad media:
 - T131 debe coordinarse con T43/T50/T85/T127: merge, control files, status
   publico y artefactos ignorados comparten frontera, pero el foco aqui es
   documentacion/contexto/ACK.
+Cierre T131 2026-05-26: la frontera queda cubierta en contexto materializado,
+ACK Codex y linter documental de autoprogramacion. La evidencia publica queda
+redactada por documento/linea y conserva variables/refs opacas como sustituto.
 - T132 debe coordinarse con T41/T81/T85: audit payloads, timeline y status
   publico consumen privacidad/redaccion, pero no deben poseer tres politicas
   incompatibles.
-- T133 debe coordinarse con T111/T116/T125: refs documentales locales, linter
-  de integridad y modulos placeholder son vecinos; aqui el foco es cobertura de
-  frontera por modulo sensible.
+Cierre T132 2026-05-26: la taxonomia visible de privacidad/redaccion queda en
+`orquesta-rails`; observability, auditoria/status, MCP y web consumen esa
+politica mediante `privacy.redaction_level` y refs opacas permitidas, sin listas
+paralelas por substring para `*_policy_ref` o `*_redaction_ref`.
+- T133 queda cerrado para su alcance el 2026-05-26: refs documentales locales,
+  linter de integridad y modulos placeholder siguen como vecinos, pero
+  `orquesta-rails`, `orquesta-domain-work-http`, `orquesta-factory-http`,
+  `orquesta-context` y `cmd/orquesta-server` ya tienen guia local o test
+  documental que falla con `module_boundary_local_agent_doc_missing` antes de
+  preparar una automejora sobre fronteras sensibles sin cobertura.
+  Revalidacion OrquestaV2 retry 2026-05-26: el cierre se conserva sin crear otro
+  rail local; el owner verificable sigue siendo el linter documental residente
+  y las guias locales del alcance.
 
 ## Priorizacion scanner 2026-05-24 cuadragesima quinta pasada
 
@@ -1554,15 +1957,28 @@ Backlog asociado: `T134 server-status-legacy-alias-sunset`,
 
 Prioridad alta:
 
-- Canonizar `/api/v0/server/status` y tratar `/api/status` como alias legacy
-  con owner. El CLI, toolbelt y docs no deben normalizar una ruta sin version
-  como si fuera contrato vigente.
+- Aplicacion T134 2026-05-26 revalidada en retry OrquestaV2:
+  `/api/v0/server/status` queda canonico en comando y clientes finos;
+  `/api/status` queda solo como alias legacy con owner, headers de
+  deprecacion/canonical y mismo DTO redactado que la ruta versionada. El CLI,
+  toolbelt y docs no deben normalizar una ruta sin version como contrato
+  vigente. La prueba
+  `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-cli ./modulos/orquesta-web ./cmd/orquesta-server`
+  pasa completa.
+  Retry 2026-05-27 fija owner y sunset como headers publicos del alias:
+  `X-Orquesta-Status-Owner=orquesta-server` y
+  `X-Orquesta-Status-Sunset-Policy=no_new_use`.
 - Hacer seguro el fallback del planner de automejora. Un backlog ilegible,
   vacio o ambiguo debe producir bloqueo/revision o scanner documental acotado,
   no una tarea generica de codigo con write-set historico.
 - Gobernar `MaxExternalWaits` por modo. El residente puede mantener smokes
   rapidos, pero Codex real, OPES temporal y operador necesitan presupuesto
   observable sin confundir espera externa viva con idle.
+
+Estado T135 2026-05-26: cerrado para el fallback degradado. El planner no hereda
+la request base generica ante documento ilegible; en `capacity_free` con backlog
+ya conocido no prepara scanner nuevo, y el residente no convierte errores del
+puerto planner en automejora de codigo.
 
 Prioridad media:
 
@@ -1574,6 +1990,13 @@ Prioridad media:
 - T136 coordina con T32/T68/T69: wakeups, timeouts y taxonomia de parada no se
   reabren; esta tarea fija presupuesto de espera externa y status efectivo del
   residente.
+
+Estado 2026-05-26: T136 queda cerrado para servidor residente y stack Codex. La
+politica efectiva mantiene `MaxExternalWaits=1` en modo residente, publica ese
+valor en configuracion efectiva, bloquea overrides incompatibles con error
+publico recuperable y bloquea
+automejora idle/capacity cuando el supervisor observa `wait_external` o
+`candidate_pending` con refs vivas.
 
 ## Priorizacion scanner 2026-05-24 cuadragesima sexta pasada
 
@@ -1597,11 +2020,25 @@ Prioridad media:
 
 - T137 coordina con T55/T82/T134: exposicion de control plane, shapes publicos
   y alias legacy son vecinos, pero aqui el owner es parseo de entrada.
+- Cierre 2026-05-26: T137 queda cerrado para MCP/HTTP publico, web JSON/form,
+  gateway/app-gateway y `/mcp` JSON-RPC real. La evidencia focal cubre perfiles
+  control, autoprogramacion, domain_work y MCP JSON-RPC sin mezclar limites.
+- Retry 2026-05-26: la composicion `cmd/orquesta-server` deja de duplicar la
+  lectura JSON entre `/mcp` y workspace timeline; ambos pasan por helper local
+  perfilado, conservando limite compatible JSON-RPC y limite control-plane para
+  timeline.
 - T138 coordina con T41/T85/T131: auditoria, status y rutas locales comparten
   redaccion, pero aqui el owner es respuesta HTTP recibida por clientes.
+  Estado 2026-05-26: T138 cerrado para su write-set; queda como politica comun
+  reutilizable, no como duplicado abierto de cada cliente HTTP.
 - T139 coordina con T58/T61/T85/T138: logs, tests, status y respuestas HTTP
   alimentan comandos, pero el cierre terminal sigue en ACK/eventos/evidencias
   estructuradas, no en stdout.
+
+Estado 2026-05-26: T139 queda cerrado para el write-set de servidor/stack. Los
+comandos cubiertos publican schema/freshness/redaction/canonical source; salidas
+diagnosticas locales quedan acotadas y los smokes OPES conservan shape operativo
+sin exponer URLs/base URLs crudas. No reabre T58/T85/T131/T138.
 
 ## Priorizacion scanner 2026-05-24 cuadragesima septima pasada
 
@@ -1614,6 +2051,11 @@ Prioridad alta:
   sobre HTTP request/response bounds. `T102`/`T137` y `T103`/`T138` deben tener
   canon/alias y merge de criterios; no borrar historia ni declarar cerrado por
   una sola entrada.
+- Implementacion 2026-05-26: T102/T103 quedan canonicas; T137/T138 declaran
+  `Fusionada_con` hacia su canon. El planner fusiona criterios/tests/write-set,
+  marca la duplicada como `duplicate_backlog_task` y bloquea la canonica si el
+  alias ya esta visible en cola/runtime. Cierre completo pendiente hasta que la
+  bateria obligatoria deje de fallar en el smoke OPES fake `run-until-assemble`.
 - Rechazar `panic` no-test en fronteras publicas o neutral-core. Un smoke opt-in
   o validador de leases debe devolver error publico/issue, no tumbar daemon o
   proceso de comando.
@@ -1626,6 +2068,10 @@ Prioridad media:
 - T141 coordina con T85/T97/T107/T139: status, logs, diagnostico y stdout
   siguen owners separados; aqui el rail es crash/no-panic y reason code
   recuperable.
+- Cierre 2026-05-26: T141 queda cerrado para los dos `panic(` no-test del
+  write-set detectados por scanner; futuros solapes con T85/T97/T107/T139 deben
+  tratar salida/diagnostico como vecinos, no reabrir este rail salvo regresion
+  de `panic` ejecutable.
 
 ## Priorizacion scanner 2026-05-24 cuadragesima octava pasada
 
@@ -1648,6 +2094,10 @@ Prioridad media:
 - T143 coordina con T33/T36/T42/T63/T104: correlacion, terminalidad estricta,
   sidecar causal y escritura durable siguen separados; aqui el foco es lectura
   acotada y redaccion de control files.
+- Estado local 2026-05-26: el owner comun de lectura acotada queda en
+  `orquesta-runtime-codex` y se reutiliza desde ACK, observation source,
+  checkpoint, sidecar de decisiones y startup strict con reason publico
+  `control_file_too_large`; logs/progreso mantienen su tail acotado separado.
 
 ## Priorizacion scanner 2026-05-24 cuadragesima novena pasada
 
@@ -1673,11 +2123,25 @@ Prioridad media:
 - T144 coordina con T80/T101: egress HTTP y ledger de submit siguen siendo
   owners vecinos; aqui el owner es el payload leido desde `ACK.files` antes de
   `submit_artifact`.
+- Estado 2026-05-26: T144 queda cerrado en `orquesta-app-codex-stack` con owner
+  de intake por artefacto, lectura limitada, errores publicos estables,
+  distincion texto/JSON/binario y bloqueo de campos sensibles antes de
+  `PayloadFields`. T80/T101 conservan egress HTTP y ledger; no se reabren por
+  este cierre.
 - T145 coordina con T23/T55/T85/T136: MCP residente, control plane, status y
   espera externa publican estado; el cliente de operador debe aportar timeout
   y cancelacion sin filtrar transporte.
+- Estado local 2026-05-26: T145 queda cubierto en
+  `orquesta-operator-mcp-client`; cada llamada usa contexto padre opcional,
+  timeout de composicion y codigos publicos `operator_mcp_timeout` /
+  `operator_mcp_cancelled`, sin reabrir transporte MCP residente ni waits.
 - T146 coordina con T123/T133/T137: preview de factory, docs locales y helper
   JSON publico deben converger sin convertir factory en planner operativo.
+- Estado local 2026-05-26: T146 queda cerrado en
+  `orquesta-factory-http`. El handler de `POST /api/v0/apps/spec` usa decode
+  acotado por `MaxBytesReader`, politica de `Content-Type`, rechazo de trailing
+  data/campos desconocidos y guia local en `README.md`; gateways siguen como
+  compositores sin parseo JSON propio.
 
 ## Priorizacion scanner 2026-05-24 quincuagesima pasada
 
@@ -1700,9 +2164,18 @@ Prioridad media:
 - T147 coordina con T58/T106/T128/T143: tail publico, summaries, railes de
   progreso y control files siguen siendo owners separados; aqui el foco es
   failure context interno.
+- Estado local 2026-05-26: T147 queda cerrado para failure context interno y
+  lectores vecinos de progreso/recovery ops Codex. La lectura usa tail acotado
+  antes de clasificar y conserva stdout/stderr/last-message fuera de evidencia
+  terminal; T58/T106/T128/T143 siguen como owners separados.
 - T148 coordina con T98/T101/T104: claim/recovery de bridge, submit ledger y
   escritura durable no se fusionan; aqui el foco es presupuesto de lectura,
   `max_records`, corrupcion recuperable y error publico redactado.
+- Estado local 2026-05-26: T148 queda cerrado para el write-set asignado.
+  Bridge externo, ledger `domain_work`, `domain-work-file`, `run-file`,
+  `state-file/outbox` y stores Codex delivery leen snapshots con limite de
+  bytes, `max_records` y errores compactos; no asumen estado vacio ante
+  sobrelimite, corrupcion o schema invalido. T98/T101/T104 no se reabren.
 
 ## Priorizacion scanner 2026-05-24 quincuagesima primera pasada
 
@@ -1720,12 +2193,24 @@ Prioridad alta:
   `orquesta-runtime-codex-delivery` y `orquesta-app-codex-stack` tienen helpers
   parecidos con ignore lists propias; T150 debe evitar que globs amplios
   bloqueen o lean medio proyecto como heuristica de existencia.
+  Revalidado el 2026-05-26: esos helpers delegan en
+  `ProjectTreeScanHasFileV0`/`ProjectTreeScanFilesV0`, con presupuesto,
+  `context`, ignore prefixes comunes y reason codes publicos.
 - Acotar ficheros de operador usados como prompt/objetivo/contexto de olas
   Codex. T151 separa esos inputs locales de T56 (`CODEX_HOME`) y de T143
   (control files), con limite y redaccion antes de construir paquetes.
+  Cerrado localmente el 2026-05-26: `cmd/orquesta-server` concentra la politica
+  de lectura de `--prompt-file`, `--objective-file` y `--domain-context-file`
+  en un helper unico, con limite por fichero, validacion UTF-8/texto, bloqueo de
+  control files/logs/symlinks/no regulares y summaries `operator_inputs` con
+  categoria/hash/ref compactos.
 
 Prioridad media:
 
+- Estado local 2026-05-26: T149 queda cerrado para snapshot de worktree
+  acotado. El presupuesto vive en `orquesta-runtime-worktree`, el stack Codex y
+  `cmd/orquesta-server` solo inyectan defaults/configuracion de composicion; los
+  issues de presupuesto se publican como rails compactos.
 - T149 coordina con T50/T127/T143: control files, artefactos ignorados y ACKs
   siguen como owners separados; snapshot solo debe emitir hashes, tamanos,
   paths relativos seguros y issues publicos.
@@ -1753,24 +2238,30 @@ Backlog asociado: `T152 codex-code-home-copy-bounds-symlink-policy`,
 
 Prioridad alta:
 
-- Separar T56 de su shard mecanico: la politica de que categorias de
-  `CODEX_HOME` se proyectan no basta si la copia sigue sin max de bytes/ficheros
-  ni tratamiento seguro de symlinks/modos. El propietario de copia debe vivir en
-  la composicion Codex y no en el nucleo.
-- Alinear comandos/eventos con el outbox: si outbox tiene presupuesto de
-  payload pero comandos/eventos no, un payload grande puede entrar por workflow
-  y persistencia antes de las guardas de lectura/escritura durable.
-- Hacer visible el deadline de efectos externos. Un timeout de HTTP, MCP,
-  runtime o shutdown debe tener error publico y correlation/ref; no debe quedar
-  como espera indefinida ni como fallo opaco del cliente inyectado.
+- Separar T56 de su shard mecanico: cerrado 2026-05-26 para
+  `codex-wave`/`codex-director-wave`. La politica de categorias de
+  `CODEX_HOME` ahora se combina con max de bytes/ficheros, tratamiento seguro de
+  symlinks/modos y receipt compacto en la composicion Codex, sin moverlo al
+  nucleo.
+- Alinear comandos/eventos con el outbox: cerrado 2026-05-26 para
+  `T153 workflow-command-event-payload-budget` en core/state-file. El workflow
+  usa presupuesto comun alineado con outbox, overrides tipados de microtareas y
+  validacion antes de decode/compactacion/persistencia.
+- T154 queda cerrado en el write-set asignado el 2026-05-26: HTTP domain_work,
+  OPES REST, runtime process launch/stop y bridge OPES residente tienen deadline
+  por efecto y errores publicos compactos. MCP operador ya estaba cubierto por
+  T145; shutdown avanzado y espera externa siguen como owners vecinos.
+- Reintento `agent-ref-task-autoprogramming-c22c7438ddc1-g01`: el cierre queda
+  reflejado tambien en el estado vivo del backlog para que el planner no reprograme
+  T154 por una cabecera stale.
 
 Prioridad media:
 
 - La copia de `CODEX_HOME` debe coordinarse con T50/T127 para que credenciales y
   control files no entren en snapshot, AppVCS, promocion ni ACK.files.
-- El presupuesto de payload del workflow debe conservar compatibilidad con
-  eventos historicos y usar refs de artefacto para contenido grande; no mover
-  cuerpos HTTP, prompts ni transcripts a eventos por comodidad.
+- El presupuesto de payload del workflow conserva compatibilidad con eventos
+  compactos historicos y mantiene cuerpos grandes por refs de artefacto; no
+  mover cuerpos HTTP, prompts ni transcripts a eventos por comodidad.
 - La politica de deadline no sustituye T136: una espera externa puede ser
   valida si tiene presupuesto y wait scope; un conector colgado debe producir
   timeout publico y no consumo silencioso de ticks.
@@ -1796,9 +2287,26 @@ Prioridad media:
 - T155 debe coordinarse con T79 y T135: sharding/fallback no sustituyen el scan
   acotado de ACKs completados; si el indice falta o el scan se degrada, la
   salida debe ser bloqueo/scanner documental visible.
+- Estado 2026-05-26: T155 cerrado para el planner idle del servidor. El scan de
+  ACKs queda acotado a runs backlog y profundidad `run/agent/agent_ack.json`,
+  con presupuesto de directorios, entradas, agentes, bytes y duracion; agotado o
+  ambiguo conserva scanner documental visible.
+- Revalidacion OrquestaV2 2026-05-26: el rework
+  `agent-ref-task-ref-review-rework-task-autoprogramming-a8f8edf38716-g01-4dce1eb3cf44`
+  conserva T155 cerrado, no abre rails nuevos y resuelve `required ref_only`
+  mediante lectura local/evidencia explicita en ACK.
 - T156 debe coordinarse con T105 y T154: deadline e IO neutral son vecinos, pero
   los comandos Git de AppVCS necesitan codigos propios de truncation, timeout y
   exceso de paths.
+
+Estado 2026-05-26: T156 queda cerrado para AppVCS y promocion de staging con
+captura stdout/stderr presupuestada, `max_changed_paths`, errores publicos
+`git_output_too_large`, `git_status_too_many_paths` y `git_command_timeout`, y
+evidencia Git compacta sin salida cruda ni datos sensibles.
+Revalidacion OrquestaV2 2026-05-26: el rework
+`agent-ref-task-ref-review-rework-task-autoprogramming-a61a87a140a8-g01-14fd8c3348e6`
+mantiene T156 cerrado, no abre rails nuevos y resuelve `required ref_only`
+mediante lectura local/evidencia explicita en ACK.
 
 ## Priorizacion scanner 2026-05-24 quincuagesima cuarta pasada
 
@@ -1820,9 +2328,39 @@ Prioridad media:
 - T157 debe coordinarse con T50, T63 y T147: control files excluidos del
   producto, sidecar correlado y tails de progreso siguen owners separados; aqui
   el foco es path/raiz/symlink antes de leer.
+- Estado 2026-05-26: T157 queda cerrado para el write-set asignado. El helper
+  comun de `orquesta-runtime-codex` valida nombre base, raiz no trivial, `Lstat`,
+  symlink/hardlink/no regular y cambio entre `Lstat`/`open` antes de leer ACK,
+  checkpoint o sidecar; delivery/progreso y `codex-wave-tail` rechazan tails
+  symlink/hardlink/no regulares antes de ingerir diagnostico.
+- Revalidacion OrquestaV2 2026-05-26: el rework
+  `agent-ref-task-ref-review-rework-task-autoprogramming-0149f7cf3c20-g01-935bd05e71ff`
+  mantiene T157 cerrado, no abre rails nuevos y resuelve `required ref_only`
+  mediante lectura local/evidencia explicita en ACK.
 - T158 debe coordinarse con T12, T21, T98, T103 y T139: smoke OPES, guardas
   reales, claim de entrada, respuesta HTTP y salida de comandos siguen como
   owners vecinos; aqui el foco es destino OPES y redaccion de summary.
+
+Estado 2026-05-26: T158 queda cerrado para el bridge OPES. La configuracion
+`ORQUESTA_OPES_BASE_URL`/`OPES_BASE_URL` y `ORQUESTA_BASE_URL` pasa por politica
+de destino con esquema permitido, sin credenciales/query, confirmacion
+loopback/temporal/productiva y evidence ref compacta para productivo; el summary
+publico de `opes-drain-once` expone refs opacas, categorias, filtro aplicado,
+estado y contadores sin URL completa ni payload crudo. Revalidacion OrquestaV2
+`agent-ref-task-autoprogramming-453f91b133d4-g01`: no abre owner vecino y
+resuelve `required ref_only` mediante lectura local/evidencia explicita en ACK.
+Retry OrquestaV2 2026-05-26
+`agent-ref-task-autoprogramming-985c0ad5e009-g01`: revalida T158 sin duplicar
+owner vecino y conserva `required ref_only` resuelto por evidencia explicita en
+ACK.
+Retry OrquestaV2 2026-05-26
+`agent-ref-task-autoprogramming-bf0d81417acc-g01`: revalida T158 sin duplicar
+owner vecino ni cambiar codigo; conserva `required ref_only` resuelto por
+lectura local y evidencia explicita en ACK.
+Retry OrquestaV2 2026-05-26
+`agent-ref-task-autoprogramming-761a129dc1b4-g01`: revalida T158 sin duplicar
+owner vecino ni relanzar smoke real; conserva `required ref_only` resuelto por
+lectura local/evidencia explicita en ACK.
 
 ## Priorizacion scanner 2026-05-24 quincuagesima quinta pasada
 
@@ -1836,6 +2374,9 @@ Prioridad alta:
   requests de checkpoint se escriben desde owners distintos con `os.WriteFile`
   sobre ruta final. La politica debe ser atomica, con permisos cerrados,
   receipt compacto y sin path local ni contenido crudo.
+  Estado 2026-05-26: cerrado local para runtime Codex y comandos de ola con
+  `WriteCodexControlFileBytesV0`; si reaparece debe tratarse como regresion de
+  owner concreto o frontera no migrada.
 - Acotar fan-in de `director_decisions.json`. Un limite de bytes por fichero no
   basta si varias fuentes/descriptors aportan muchas decisiones o microtareas
   antes de que `MaxCommands`, outbox o waits entren en juego.
@@ -1853,6 +2394,13 @@ Prioridad media:
   normal; los rechazos son por frontera de IO, tamano, cardinalidad,
   correlacion o seguridad, no por substrings del contenido.
 
+Cierre parcial 2026-05-26:
+
+- `T160` queda cubierto para `director-agent-file-source`, `director-agent-workflow`
+  y `orquesta-app-codex-stack`: presupuesto compartido, reason publico
+  `director_decisions_batch_too_large` y contadores compactos. `T159` sigue como
+  owner separado de escritura durable de control files.
+
 ## Priorizacion scanner 2026-05-24 quincuagesima sexta pasada
 
 Backlog asociado: `T161 clock-and-ref-generation-policy` y
@@ -1860,7 +2408,8 @@ Backlog asociado: `T161 clock-and-ref-generation-policy` y
 
 Prioridad alta:
 
-- Unificar reloj y generador de refs antes de ampliar olas concurrentes,
+- Cerrado T161 2026-05-26: reloj y generador de refs quedan unificados para el
+  alcance focal antes de ampliar olas concurrentes,
   reinicio/resume o automejora idle. Los timestamps pueden seguir como evidencia
   temporal, pero no deben ser identidad causal unica ni producir refs
   colisionables bajo rafagas del mismo segundo.
@@ -1877,6 +2426,16 @@ Prioridad media:
 - La politica de idempotencia publica debe reutilizar limites JSON, deadlines y
   redaccion existentes; no debe meter tokens, URLs con credenciales, HOME,
   rutas privadas ni payloads completos en headers, auditoria o errores.
+
+Cierre 2026-05-26:
+
+- `T162` queda cerrado para el stack publico acotado: helpers MCP canonicos de
+  identidad de mutacion, headers `X-Correlation-ID`/`Idempotency-Key`,
+  derivacion estable desde `request_id`, clasificacion HTTP de rutas mutables y
+  consumo desde web, CLI, MCP, app-gateway, http-gateway y shutdown CLI del
+  servidor.
+- Evidencia:
+  `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-cli ./modulos/orquesta-mcp ./cmd/orquesta-server ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway`.
 
 ## Priorizacion scanner 2026-05-24 quincuagesima septima pasada
 
@@ -1902,12 +2461,21 @@ Prioridad media:
 
 - T163 debe coordinarse con escritura durable y snapshots sin duplicar T104 ni
   T148: aqui el owner es log de eventos por run, no todos los ledgers.
+  Cierre 2026-05-26: `orquesta-state-file` agrega indice durable por run,
+  registros de evento, budgets y lectura paginada; T104/T148/T153 conservan sus
+  fronteras vecinas.
 - T164 debe conservar metadata completa del `WorkflowTaskStore`; no reconstruir
   parent/child, ola o cohorte desde eventos compactos si el indice puede
   recuperarse o rematerializarse con presupuesto.
-- T165 debe distinguir default operativo de autorizacion explicita. Un default
-  de rails o cleanup puede ser valido para servidor residente, pero debe quedar
-  visible como `defaulted`, no como env original del operador.
+  Cierre 2026-05-26: `orquesta-state-file` conserva esa metadata en un indice
+  durable por run, lee hijos por refs indexadas y rematerializa el indice solo
+  con presupuesto. Si el indice falta/corrupto y el rebuild excede limites,
+  devuelve `workflow_task_parent_index_budget_exhausted` para bloquear
+  recursion/cierre en vez de asumir que no hay hijos.
+- T165 cerrado 2026-05-26: el default operativo queda separado de la
+  autorizacion explicita. Los defaults de rails y cleanup se leen como config
+  efectiva y se proyectan al daemon como `defaulted`; el input del operador
+  queda marcado como `explicit` y los valores derivados como `derived`.
 
 ## Priorizacion scanner 2026-05-24 quincuagesima octava pasada
 
@@ -1935,12 +2503,31 @@ Prioridad media:
   pueden estar frescos si el transporte real permite sobrescribir un tool o
   resource sin error. T169 es mas estrecha que la sincronizacion global del
   catalogo.
+- Estado 2026-05-26: T169 cerrado para el transporte MCP real. El registro
+  rechaza resources duplicados por `name`/`uri`, tools duplicados por `name`,
+  no deja mutacion parcial en el item rechazado y expone solo errores compactos
+  `mcp_duplicate_resource`/`mcp_duplicate_tool`; T93 sigue como sincronizacion
+  global de catalogo/toolbelt si aparece evidencia propia.
 - T166 y T167 deben compartir taxonomia de lifecycle (`running`, `stopping`,
   `stopped`, `timeout`, `degraded`) con T87/T134, pero no deben meter OPES,
   Codex ni proveedor en `orquesta-server`.
+- Estado 2026-05-26: T166 cerrado para el runtime residente. El owner de
+  quiescencia async queda en `modulos/orquesta-server`: `Serve`, supervisor
+  loop, ticks y preparaciones idle se registran y se esperan con deadline de
+  composicion antes de publicar `stopped`; `stop_timeout` conserva contador
+  compacto.
+- Estado 2026-05-26: T167 cerrado para el loop OPES/bridge externo residente.
+  La composicion publica lifecycle compacto en status/readiness, audita errores
+  de tick con codigos redactados y coordina shutdown con join; OPES sigue fuera
+  de `orquesta-server` salvo el wiring opt-in de `cmd/orquesta-server`.
 - T168 debe conservar compatibilidad de snapshots validos y no convertirse en
   migrador silencioso. Reparacion o migracion de estado debe entrar por puerto
   opt-in con evidencia durable.
+- Estado 2026-05-26: T168 cerrado para carga state-file. `LoadRunV0` valida la
+  proyeccion de run con `ValidateOrchestrationRunV0`; `LoadRunEventsV0` valida
+  eventos, refs y duplicados antes de entregar historial. Los documentos
+  corruptos quedan bloqueados con error publico compacto y no se reparan ni se
+  migran en silencio.
 
 ## Priorizacion scanner 2026-05-24 quincuagesima novena pasada
 
@@ -1968,9 +2555,35 @@ Prioridad media:
 - T171 debe normalizar alias razonables en adaptadores cuando sea seguro, pero
   mantener cortes fuertes por datos sensibles, refs imposibles, causalidad rota
   o efectos externos no autorizados.
+- Cierre T171 2026-05-26: la web concentra limites de query/form publicos antes
+  de `URL.Query`/`ParseForm`; la auditoria HTTP residente guarda solo claves
+  acotadas/redactadas y reason codes, nunca `raw_query` completo.
+- Revalidacion OrquestaV2 2026-05-26
+  `agent-ref-task-ref-review-rework-task-autoprogramming-03f6b0927ba2-g01-24a1e410cd44`:
+  no reabre T171 ni owners vecinos; el contexto `ref_only` requerido queda
+  resuelto por lectura local de paquete/docs y evidencia explicita en ACK.
 - T172 debe registrar errores compactos despues de headers emitidos sin intentar
   reescribir status tarde; la evidencia debe servir para smokes y shutdown
   quiescent sin almacenar payloads internos.
+
+Estado 2026-05-26: T172 queda cerrado para el residente HTTP del write-set. El
+helper local serializa antes de headers cuando puede, emite
+`response_encode_failed` estable si falla la serializacion, y la auditoria HTTP
+registra `response_write_failed` con etapa compacta cuando la escritura al
+cliente falla antes o despues del header observable.
+
+Estado 2026-05-26: T170 queda cerrado para el write-set asignado. Los clientes
+salientes de `orquesta-domain-work-http`, `orquesta-opes-connector`,
+`orquesta-web`, `orquesta-mcp` y los comandos/bridge residentes del servidor
+aplican politica de redirect por defecto: cada salto revalida esquema, host,
+puerto, ausencia de credenciales/fragmento y frontera de path cuando el
+conector la declara. Los saltos a otro origen se bloquean con reason code
+publico compacto y no reenvian cabeceras de correlacion, idempotencia o
+autorizacion fuera del origen inicial.
+Revalidacion OrquestaV2 2026-05-26:
+`agent-ref-task-ref-review-rework-task-autoprogramming-74734b6a029e-g01-9160302b840b`
+mantiene T170 cerrado, no relanza otro agente padre sobre la tarea original y
+resuelve `required ref_only` por evidencia explicita en ACK.
 
 ## Priorizacion scanner 2026-05-24 sexagesima pasada
 
@@ -1983,9 +2596,16 @@ Prioridad alta:
   pero las mutaciones web/gateway necesitan owner propio para `Origin`,
   `Referer`, CSRF/intent token y decision compacta antes de exponer mas rutas a
   navegador local o bind opt-in.
+  Cierre 2026-05-26: owner en `orquesta-http-gateway` +
+  `orquesta-app-gateway`, con headers compactos de decision y bloqueo
+  same-origin/token para browser/form.
 - Fijar el contrato JSON-RPC de `/mcp` antes de usar el transporte residente
   como superficie publica estable. T23 y T169 no bastan si el handler acepta
   formas ambiguas de `jsonrpc`, `id`, batch, notification o params.
+  Cierre 2026-05-26: `/mcp` valida JSON-RPC 2.0 estricto, `id` seguro,
+  presupuesto de params, `Accept`/`Content-Type`, batch rechazado y
+  notification acotada a `notifications/initialized`; `resources/read` y
+  `tools/call` validan params estrictos con errores compactos.
 
 Prioridad media:
 
@@ -2006,25 +2626,27 @@ Backlog asociado: `T175 mcp-tool-resource-output-budget`,
 
 Prioridad alta:
 
-- Limitar salida MCP antes de tratar `/mcp` como transporte residente estable.
-  T174 endurece request/protocolo, pero sin T175 un resource/tool puede devolver
-  payload grande o diagnostico no redactado como texto JSON-RPC.
-- Fijar headers/cache del control plane antes de ampliar uso web/browser. T173
-  decide origen/intencion, pero T176 debe evitar framing, sniffing, referrers y
-  cache implicita en rutas con estado operativo.
-- Unificar base URL + endpoint en clientes REST antes de sumar nuevos gateways.
-  T80/T170/T103 operan despues del destino construido; T177 debe impedir que el
-  destino final nazca ambiguo.
+- T175 queda cerrado 2026-05-26 para salida MCP: cada resource/tool declara
+  `output_budget` comun y el transporte real bloquea payloads sobre presupuesto
+  con error compacto antes de envolverlos como texto JSON-RPC.
+- T176 queda cerrado 2026-05-26 para headers/cache del control plane:
+  `orquesta-http-gateway` aplica perfiles HTML/JSON/MCP con anti-frame,
+  `nosniff`, `Referrer-Policy`, cache explicita `no-store` y reason code
+  publico, sin copiar datos privados de request.
+- T177 queda cerrado 2026-05-26 para clientes REST de web, CLI, MCP y
+  composicion: base URL parseada, base path preservado, endpoints relativos
+  controlados y rechazo de destinos ambiguos antes de egress, redirects o
+  lectura de respuesta.
 
 Prioridad media:
 
 - T175 debe reutilizar catalogo/freshness de recursos MCP cuando exista, sin
   duplicar descriptores estaticos de T25/T93.
-- T176 debe coordinarse con T99/T137/T171/T172: no sustituye limites de body,
-  query/form ni visibilidad de fallo de escritura.
-- T177 debe distinguir transporte interno in-process de egress real. El alias
-  `http://orquesta.internal` puede seguir vivo solo como destino interno
-  probado, no como URL externa.
+- T176 no sustituye T99/T137/T171/T172: los limites de body, query/form y
+  visibilidad de fallo de escritura siguen con sus owners.
+- T177 distingue transporte interno in-process de egress real. El alias
+  `http://orquesta.internal` queda vivo solo como destino interno probado por
+  `orquesta-app-gateway`, no como URL externa.
 
 ## Priorizacion scanner 2026-05-24 sexagesima segunda pasada
 
@@ -2048,13 +2670,28 @@ Prioridad media:
 - T178 debe coordinarse con T80/T103/T154/T170/T177: no sustituye egress,
   respuesta, deadline, redirects ni join de URL; gobierna solo transporte,
   proxy, TLS/keepalive y perfil de cliente.
+- Estado 2026-05-26: T178 queda cerrado localmente para clientes HTTP salientes
+  del write-set. Los perfiles `domain_egress`, `opes_temporal`,
+  `loopback_control_plane` e `internal_inprocess` declaran proxy deny,
+  dial/TLS/headers, pool y keepalive cuando hay red real; no habilitan proxy/TLS
+  custom ni cambian los owners vecinos de egress, redirects, URL final,
+  respuesta o idempotencia.
 - T179 debe coordinarse con T102/T137/T141/T172/T176: el in-process debe
   compartir limites y errores publicos sin duplicar cada helper HTTP ni guardar
   payloads, prompts, transcripts, HOME, tokens o rutas privadas.
+- Estado 2026-05-26: T179 queda cerrado localmente para el gateway, helpers web
+  de test y smoke MCP in-process del servidor mediante transporte comun
+  `inprocesshttp`, con limite de respuesta, cancelacion/timeout observable,
+  recover de panic y errores publicos compactos.
 
 ## Priorizacion scanner 2026-05-24 sexagesima tercera pasada
 
 Backlog asociado: `T180 command-stdio-write-error-visibility`.
+
+Estado 2026-05-26: cerrado local para visibilidad base en comandos stdio. El
+contrato compacto vive en `orquesta-observability`; `cmd/orquesta-server` y
+`orquesta-cli` comprueban escritura de salida publica y devuelven fallo
+observable con reason code redactado si stdout se rompe.
 
 Prioridad media-alta:
 
@@ -2073,24 +2710,25 @@ Prioridad media:
 ## Priorizacion scanner 2026-05-24 sexagesima cuarta pasada
 
 Backlog asociado:
-`T181 domain-document-plan-ref-uniqueness-and-diagnostics`,
+`T181 domain-document-plan-ref-uniqueness-and-diagnostics` cerrado 2026-05-26,
 `T182 mcp-tool-execution-budget-and-cancellation` y
 `T183 web-html-render-error-contract`.
 
 Prioridad alta:
 
-- Resolver T181 antes de ampliar OPES temporal o nuevos conectores documentales:
-  si el plan neutral permite refs duplicados o pierde diagnostico de arrays raw,
-  el adaptador recibe jobs ambiguos y la reparacion queda demasiado tarde.
+- T181 ya fija unicidad/diagnostico del plan documental neutral: rechaza refs
+  duplicados por tipo, diagnostica arrays raw invalidos por campo y bloquea
+  identidades derivadas duplicadas antes de expansion.
 - Resolver T182 antes de tratar MCP real como transporte residente de
   autoprogramacion: T174/T175 cubren request y salida, pero sin presupuesto de
   ejecucion un tool lento puede agotar el worker sin reason code estable.
 
 Prioridad media-alta:
 
-- T183 debe entrar junto a T172/T176 cuando se endurezcan fronteras web. Un
-  template roto o writer tardio no debe quedar como exito visual parcial ni como
-  auditoria con datos privados.
+- T183 cerrado 2026-05-27 junto a fronteras web T172/T176: template roto y
+  writer tardio quedan como reason codes compactos (`web_html_render_failed`,
+  `web_response_write_failed`) y observabilidad no guarda query, formularios,
+  payloads, HOME, rutas privadas, prompts, transcripts, cookies ni tokens.
 
 Duplicaciones a evitar:
 
@@ -2099,9 +2737,12 @@ Duplicaciones a evitar:
   previa a expansion.
 - T182 no reabre deadlines internos de puertos (T154), parsing MCP (T174),
   output budget (T175) ni paridad in-process (T179); gobierna solo presupuesto
-  de ejecucion del handler MCP real.
+  de ejecucion del handler MCP real. Cerrado 2026-05-26 con `execution_budget`
+  por perfil en el registro MCP, timeout/cancel publico en transporte real y
+  observacion compacta sin argumentos ni payloads.
 - T183 no duplica T172/T176/T173/T75: usa sus helpers cuando existan, pero el
-  owner nuevo es el contrato de render HTML y fallback localizado.
+  owner cerrado es el contrato de render HTML, fallback localizado y contador
+  compacto de render/write.
 
 ## Priorizacion scanner 2026-05-24 sexagesima quinta pasada
 
@@ -2114,21 +2755,37 @@ Prioridad alta:
 - Resolver T185 antes de ampliar smokes opt-in o ejecuciones reales con raiz
   inyectada por entorno. T59/T91/T121/T126/T127 acotan shutdown y semantica del
   smoke, pero no prueban que un cleanup recursivo solo borre directorios
-  generados y marcados por el propio script.
+  generados y marcados por el propio script. Cerrado el 2026-05-26:
+  `scripts/lib/smoke_common.sh` centraliza la guarda y los smokes/runners ya
+  limpian raices temporales a traves del helper.
 - Resolver T184 antes de usar refs derivadas como contrato de recuperacion o
   cierre causal. T161/T162/T169/T181 cubren generacion, unicidad de tasks y
   refs documentales, pero no separan digest visual/advisory de identidad causal
-  ni fuerzan prueba de colision.
+  ni fuerzan prueba de colision. Cerrado 2026-05-27: los owners asignados usan
+  builders canonicos con longitud de campos y `sha256`; el retry de
+  autoprogramacion deja de unir `request_ref` y timestamp con separador textual
+  y el core suma prueba focal de namespace/payload no ambiguo.
+  Rework de revision 2026-05-27:
+  `agent-ref-task-ref-review-rework-task-autoprogramming-298dd18fed1e-g01-c005a1d6953bff0a3fc8364f7d4ac61b`
+  conserva el cierre sin relanzar otro agente padre; el contexto
+  `required ref_only` queda resuelto por lectura local del paquete y evidencia
+  explicita en ACK.
 
 Prioridad media:
 
 - T184 debe empezar por inventario de usos de FNV32, SHA1 truncado y
   `strings.Join` en derivaciones deterministas. Si una huella solo es
   diagnostica, basta documentar esa frontera; si decide idempotencia o
-  causalidad, debe migrar a builder canonico y conflicto reparable.
-- T185 debe centralizarse en `scripts/lib` para no duplicar guardas en cada
-  smoke. Los scripts pueden mantener su contrato funcional, pero el borrado de
-  raiz debe quedar detras de un unico helper probado.
+  causalidad, debe migrar a builder canonico y conflicto reparable. La
+  revalidacion 2026-05-27 conserva `strings.Join` solo en texto diagnosticado,
+  comandos normalizados o listas ordenadas que no son identidad causal directa.
+- T185 queda centralizado en `scripts/lib`: los scripts mantienen su contrato
+  funcional y el borrado de raiz queda detras de un unico helper probado.
+  Rework de revision 2026-05-26:
+  `agent-ref-task-ref-review-rework-task-autoprogramming-66353e1f46d9-g01-33cae0148aa014c3f796cbabf72f5114`
+  conserva ese cierre sin relanzar otro agente padre; el contexto
+  `required ref_only` queda resuelto por lectura local del paquete y evidencia
+  explicita en ACK.
 
 Duplicaciones a evitar:
 
@@ -2136,7 +2793,8 @@ Duplicaciones a evitar:
   `WorkflowTaskStore`; solo cierra la ambiguedad/colision de huellas
   deterministas usadas para refs o firmas.
 - T185 no reabre la politica de instancia temporal ni el shutdown de smokes;
-  cubre exclusivamente limpieza local y rutas prohibidas, sin guardar HOME,
+  cubre exclusivamente limpieza local y rutas prohibidas. La implementacion
+  publica solo refs compactas de raiz temporal y reason codes, sin guardar HOME,
   tokens, prompts, payloads ni rutas privadas en evidencia durable.
 
 ## Priorizacion scanner 2026-05-24 sexagesima sexta pasada
@@ -2152,21 +2810,34 @@ Prioridad alta:
   productiva de varios conectores. T181 protege refs del plan documental y T184
   hashes de otros paquetes, pero la identidad de job vive en los adaptadores de
   `domain_work` y debe ser equivalente entre memory, file y SQL.
+- Cierre T186 2026-05-26: `BuildDomainWorkJobIdentityV0` concentra
+  fingerprint/base de `job_ref` con `sha256`; memory/file/SQL preservan replay
+  legacy por request guardado y reparan colisiones visibles con sufijo
+  explicito. Evidencia focal:
+  `go test -count=1 ./modulos/orquesta-domain-work ./modulos/orquesta-domain-work-memory ./modulos/orquesta-domain-work-file ./modulos/orquesta-domain-work-sql`.
 - Resolver T187 antes de exponer visor o export de auditoria. T171 evita query
   cruda y T132 clasifica privacidad, pero `remote_addr` y headers de proxy son
   identidad operativa y no deben quedar como payload estable sin perfil.
 
 Prioridad media:
 
-- Resolver T188 junto a T173/T176 cuando se endurezcan rutas web o MCP. Metodo,
-  `Allow` y `OPTIONS` no sustituyen CSRF ni headers de seguridad, pero evitan
-  que cada handler tenga una semantica distinta para clientes, probes y
-  navegadores.
+- T188 queda cerrado desde el 2026-05-26: metodo, `Allow` y `OPTIONS` tienen
+  contrato comun por perfil en MCP HTTP, web, governance, factory y transporte
+  MCP real. Esto no sustituye CSRF ni headers de seguridad.
+- Revalidacion T188 2026-05-27: bateria focal de MCP, web, governance, factory
+  HTTP y `cmd/orquesta-server` pasada sin ampliar alcance.
 - T186 debe coordinarse con T20 y T101: cambiar refs de job sin compatibilidad
   rompe replay, ledgers de submit y smokes OPES/no-OPES.
 - T187 debe coordinarse con T55: audit puede clasificar origen, pero la decision
   de bind/autorizacion sigue en control plane, no en cabeceras declaradas por el
   cliente.
+- Estado 2026-05-26: T187 queda cerrado para `orquesta-server`; auditoria HTTP
+  publica `client_identity` con categoria, redaccion `category_only`, scope de
+  bind/autorizacion y solo nombres de headers de forwarding presentes bajo
+  politica `ignored_untrusted`, sin valores ni IP:puerto durables.
+- Revalidacion 2026-05-27: mantener T187 como frontera de redaccion de
+  auditoria; no reabrir autenticacion, geolocalizacion, tracking ni confianza
+  en headers declarados por el cliente.
 
 Duplicaciones a evitar:
 
@@ -2174,8 +2845,8 @@ Duplicaciones a evitar:
   de jobs `domain_work` y sus stores memory/file/SQL.
 - T187 no crea autenticacion, geolocalizacion ni tracking de clientes; solo
   redaccion/clasificacion de identidad en auditoria HTTP.
-- T188 no decide origen/intencion ni CORS amplio; solo contrato de metodos,
-  `Allow`, `OPTIONS` y error publico por perfil.
+- T188 no decide origen/intencion ni CORS amplio; su cierre cubre solo contrato
+  de metodos, `Allow`, `OPTIONS` y error publico por perfil.
 
 ## Priorizacion scanner 2026-05-24 sexagesima septima pasada
 
@@ -2186,28 +2857,37 @@ Backlog asociado:
 
 Prioridad alta:
 
-- Resolver T189 antes de tratar el servidor residente como daemon de sistema:
-  T96 valida identidad de proceso y T166 espera quiescencia interna, pero sin
-  politica de SIGTERM/segunda senal/timeout el operador no sabe si el cierre fue
-  cooperativo, escalado o parcial.
-- Resolver T190 antes de sumar mas endpoints bajo `/api/v0/apps/` o overlays de
-  gateway. T169 protege el registro MCP y T188 metodo/OPTIONS; el riesgo nuevo
-  es dispatch a handler equivocado por prefijo o colision no declarada.
+- T189 queda resuelto el 2026-05-26 para el servidor residente: politica por
+  plataforma, primera senal cooperativa, segunda senal `signal_escalated`,
+  timeout observable y status/auditoria compacta. T96 sigue siendo identidad de
+  proceso y T166 quiescencia interna.
+- Rework de revision 2026-05-26:
+  `agent-ref-task-ref-review-rework-task-autoprogramming-13b40a6e5fc4-g01-a9146f390bba643a490794bd55481129`
+  mantiene T189 cerrado y corrige solo la clasificacion del backlog, sin
+  relanzar agente padre ni reabrir T30/T96/T166.
+- T190 queda cubierto 2026-05-26 antes de sumar mas endpoints bajo
+  `/api/v0/apps/` o overlays de gateway: hay manifiesto canonico, validator de
+  colisiones/shadows y tests de dispatch AppVCS. T169 protege el registro MCP y
+  T188 metodo/OPTIONS; esta entrada solo debe reabrirse por regresion de
+  precedencia HTTP.
 
 Prioridad media-alta:
 
-- Resolver T191 junto a T66: el E2E neutral de stop necesita una politica de
-  senal/escalado real para procesos que no cooperan, con estado observable y sin
-  filtrar argv/env/stdout/stderr.
+- T191 queda cerrado el 2026-05-26: el E2E neutral de stop ya tiene politica de
+  senal/escalado real para procesos que no cooperan, con `stopping`,
+  `stop_grace_deadline`, `stop_reason_code` y sin filtrar argv/env/stdout/stderr.
+- Rework de revision 2026-05-26: se conserva T191 cerrado y solo se sincroniza
+  la clasificacion documental; no abre rail adicional ni modifica launch env/io.
 
 Duplicaciones a evitar:
 
 - T189 no reabre checkpoint de shutdown ni stop de agentes; gobierna senales del
   servidor residente foreground/daemon.
 - T190 no sustituye catalogos publicos, docs de rutas ni CSRF; solo verifica
-  manifest, precedencia y colisiones de gateway HTTP.
-- T191 no cambia launch env/io ni stop de olas Codex; solo define deadline y
-  escalation del conector neutral de procesos.
+  manifest, precedencia y colisiones de gateway HTTP y queda cerrado salvo
+  regresion.
+- T191 no cambia launch env/io ni stop de olas Codex; el cierre 2026-05-26
+  solo define deadline y escalation del conector neutral de procesos.
 
 ## Priorizacion scanner 2026-05-24 sexagesima octava pasada
 
@@ -2221,15 +2901,25 @@ Prioridad alta:
 - Resolver T192 antes de exponer o exportar status/auditoria de automejora idle:
   T41 puede aportar redaccion general, pero falta owner para mensajes
   operativos en `StateV0`.
-- Resolver T193 antes de ampliar previews/backlog generados desde AppSpec:
-  mantener `time.Now()` oculto en el caso de uso dificulta replay y pruebas
-  deterministas.
+  Cierre 2026-05-26: T192 queda cubierto por `*_operational_message` en
+  `StateV0`/status publico y por resumen/redaccion de payloads operativos en
+  auditoria; los campos legacy se conservan como compatibilidad.
+  Rework 2026-05-26: entrega revalidada sin relanzar otro padre; el contexto
+  `required ref_only` queda resuelto por lectura local y evidencia explicita en
+  ACK.
+- T193 queda cerrado el 2026-05-26 para el corte factory/AppSpec: el caso de uso
+  ya no tiene `time.Now()` oculto, exige reloj inyectado y rechaza `now` cero
+  con issue estable. Las ampliaciones de preview/backlog deben seguir usando esa
+  frontera.
+  Rework 2026-05-26: entrega revalidada sin relanzar otro padre; el contexto
+  `required ref_only` queda resuelto por lectura local y evidencia explicita en
+  ACK.
 
 Prioridad media:
 
-- Resolver T194 antes de estabilizar el catalogo publico de gobernanza para
-  CLI/MCP/gateway. Si los catalogos siguen chicos puede esperar, pero el limite
-  debe estar antes de abrirlo como API durable.
+- T194 queda cerrado el 2026-05-26 para la proyeccion publica de gobernanza:
+  `output_budget` bounded, version/freshness/source refs y resumen acotado de
+  estados no publicos quedan en `GovernanceCatalogPublicQuery v0`.
 
 Duplicaciones a evitar:
 
@@ -2248,9 +2938,11 @@ Backlog asociado:
 
 Prioridad alta:
 
-- Resolver T195 antes de tratar `/mcp` como transporte estable para agentes
-  externos. T174/T175/T182 cubren protocolo, salida y deadline, pero no evitan
-  que `InputSchema`/`Output` queden stale frente a DTOs y validadores reales.
+- T195 queda cerrado en codigo el 2026-05-26: `/mcp tools/list` deriva
+  `inputSchema` desde DTOs registrados por tool, las capabilities de operador
+  declaran shape/refs requeridas/errores publicos y el fallback marca
+  `mcp_transport_schema_stale` de forma verificable. T174/T175/T182 siguen
+  gobernando protocolo, salida y deadline.
 - Resolver T196 antes de ampliar CLI como superficie publica de operador. El
   dispatch, los flagsets y la ayuda localizada deben tener una fuente comun
   para no guiar a operadores o agentes hacia comandos incompletos.
@@ -2270,6 +2962,12 @@ Duplicaciones a evitar:
 - T196 no cambia semantica de comandos ni clientes REST; solo gobierna catalogo,
   ayuda, flags y ruta de dispatch sin volcar argumentos sensibles.
 
+Estado 2026-05-26: T196 queda cerrado localmente para `orquesta-cli`.
+`cliCommandCatalogV0` concentra rutas, flags visibles ES/EN, cliente destino,
+perfil de efecto, estado y handler; `cliHelpTextForArgsV0` y
+`dispatchOrquestaCLIV0` consumen el catalogo, con prueba de paridad y error de
+comando desconocido redactado.
+
 ## Priorizacion scanner 2026-05-24 septuagesima pasada
 
 Backlog asociado:
@@ -2286,9 +2984,11 @@ Prioridad alta:
   agentes externos. T195 cubre tools; operational-status, shared contracts,
   roadmap/governance y operator capabilities necesitan freshness y owner
   propios.
-- Resolver T199 antes de sumar mas handlers MCP/HTTP. Sin catalogo de codigos,
-  `metodo_no_permitido`, `not_configured`, `unavailable` y errores de schema
-  pueden divergir entre HTTP, JSON-RPC, CLI/web y operador.
+- T199 queda cerrado localmente el 2026-05-27 con catalogo publico inicial en
+  `orquesta-i18n-docs` y paridad focal en MCP, operador, web, CLI y servidor.
+  Nuevos handlers MCP/HTTP deben consumir ese catalogo antes de sumar codigos.
+  Si reciben un error no catalogado, deben devolver codigo generico publico y
+  no propagar detalle de `err.Error()` aunque este redactado.
 
 Prioridad media:
 
@@ -2298,6 +2998,28 @@ Prioridad media:
   demasiado grande degrade con reason code compacto.
 - T199 debe coordinar con T75/i18n: un codigo publico puede tener fallback
   temporal, pero la clave debe ser estable y testeable.
+
+Estado 2026-05-27: T198 queda cerrado focalmente para el transporte MCP real.
+Cada `MCPTransportResourceEnvelopeV0` declara `descriptor_source` y
+`resources/list` lo expone con owner, fuente canonica, freshness, DTO/validador,
+fuente de errores publicos y verificacion, saneado contra HOME, rutas locales,
+tokens, provider, prompts, transcripts, DB y payloads crudos. La cobertura
+comprueba paridad contra owners reales para operational-status, timeline,
+FunctionContract y operator capabilities.
+Revalidacion burst 002 2026-05-27:
+`agent-ref-task-autoprogramming-85571f97bc5e-g01` conserva este cierre como
+focal; el contexto `ref_only` queda resuelto por lectura local/evidencia ACK y
+no reabre T195, T197 ni T199.
+Revalidacion retry `agent-ref-task-autoprogramming-44e164597ee4-g01`:
+conserva el cierre con lectura local del contexto `ref_only` y prueba
+obligatoria focal, sin ampliar owners ni write-set.
+
+Estado 2026-05-27: T197 queda cerrado para clientes REST de `orquesta-cli`.
+`transport_rest_response_v0.go` concentra limite por comando, validacion de
+`Content-Type`, rechazo de trailing JSON y detalle no-2xx redactado para
+FunctionContract, OperationalStatus, GovernanceCatalog, ServerStatus,
+bootstrap AppSpec, autoprogramacion/run control/queue y solicitudes de nueva
+app.
 
 Duplicaciones a evitar:
 
@@ -2346,6 +3068,11 @@ Prioridad media-alta:
   dominio. Los timeouts y ledgers actuales evitan algunos duplicados, pero no
   gobiernan retry/backoff/rate limit cuando una app externa responde 429/503,
   queda lenta o devuelve errores temporales.
+  Aplicacion focal 2026-05-27: T201 ya gobierna retry/backoff opt-in en
+  `domain_work-http`, OPES REST y `runExternalBridgeLoopV0`, con `Retry-After`
+  acotado, jitter/sleep inyectables, presupuesto de intentos y bloqueo de
+  mutaciones no idempotentes. Revalidacion assessment OrquestaV2 2026-05-27:
+  la bateria obligatoria de T201 pasa completa en el write-set declarado.
 - Resolver T203 antes de ejecutar secuencias OPES largas contra instancia
   temporal con muchos derivados. Un limite bajo es necesario para seguridad,
   pero sin cursor/ventana estable puede ocultar jobs posteriores detras de refs
@@ -2368,3 +3095,3580 @@ Duplicaciones a evitar:
 - T203 no sustituye T98/T101: claim de entrada y ledger de submit siguen
   necesarios; paginacion/ventana decide que trabajos puede ver el bridge antes
   de reclamar o enviar.
+
+## Priorizacion scanner 2026-05-27 primera pasada
+
+Backlog asociado:
+`T211 ops-dashboard-live-progress-cache-policy`.
+
+Prioridad media:
+
+- Resolver T211 antes de usar `/ops` como senal unica de salud de la
+  autoprogramacion residente. T210 gobierna el calculo de progreso en stats, y
+  T209 gobierna el reporte de uso/quota Codex; `/ops` necesita su propio owner
+  para frescura, cache y agregacion visual de esas senales.
+  Aplicacion focal 2026-05-27: T211 queda cerrada para el panel web con
+  proyeccion cliente `progress_source`/`freshness`/`stats_fetch_status`/reason
+  code; completadas cacheadas no contaminan agregados vivos y uso sin reporte se
+  muestra como `unknown`/`unavailable` con causa publica.
+- La cache cliente no debe duplicar reglas de cierre: `tasks_closed` sigue
+  perteneciendo al workflow/review, `tasks_delivered` al progreso vivo y
+  `agent/process` a telemetria parcial. El dashboard solo proyecta esos estados
+  y debe publicar reason code si la fuente fresca falla.
+
+Duplicaciones a evitar:
+
+- T211 no sustituye T210: no recalcula progreso base, solo impide que la
+  agregacion/cache de `/ops` lo degrade a 0% o lo mezcle con snapshots
+  completados.
+- T211 no sustituye T209: usage/quota sigue viniendo de puerto/reporte
+  redactado; `/ops` solo muestra `unknown`/`unavailable` con causa cuando no
+  hay dato fresco.
+- T211 no sustituye T103/T138/T197/T199: limites de respuesta, redaccion y
+  catalogo de errores publicos siguen con sus owners; esta tarea gobierna
+  frescura/cache y fallback visual del dashboard.
+
+## Priorizacion scanner 2026-05-27 segunda pasada
+
+Backlog asociado:
+`T212 guardian-public-result-and-repair-packet-redaction`,
+`T213 guardian-command-output-budget-and-env-isolation` y
+`T214 guardian-binary-promotion-artifact-policy`.
+
+Prioridad media-alta:
+
+- T212 queda cubierto el 2026-05-27 para salida y repair packet redactados:
+  `cmd/orquesta-guardian` separa manifest local de payload automatizable con
+  refs opacas, freshness, reason codes, contadores y comandos como refs.
+- T213 queda cubierto el 2026-05-27 para output/env del guardian:
+  build/test/healthcheck/repair capturan tail redactado con presupuesto y
+  reason code publico, y ejecutan con entorno minimo allowlistado mas variables
+  explicitas de composicion.
+- T214 queda cubierto localmente el 2026-05-27 para artefactos binarios del
+  guardian: copia streaming con limite, SHA-256, guardas `Lstat`/open/post-copy,
+  bloqueo de symlinks/hardlinks inseguros y raiz declarada opt-in, tmp no
+  colisionable, fsync, rename atomico y manifest de recuperacion de
+  `candidate/current/last_good`.
+
+Duplicaciones a evitar:
+
+- T212 no sustituye T208: el break-glass puede seguir pendiente como ciclo
+  operativo aunque salida/repair packet queden redactados.
+- T213 no reabre seguridad Codex general: solo fija presupuesto de output y
+  entorno minimo para comandos lanzados por el guardian.
+- T214 no reabre AppVCS ni refs deterministas generales: solo gobierna copia,
+  hashes, atomicidad y estados recuperables de binarios del guardian.
+
+## Priorizacion scanner 2026-05-27 tercera pasada
+
+Backlog asociado:
+`T215 guardian-candidate-readiness-gate`,
+`T216 promotion-guardian-result-contract` y
+`T217 guardian-shutdown-http-client-policy`.
+
+Prioridad media-alta:
+
+- Resolver T215 antes de usar el guardian como barrera de promocion residente.
+  `/healthz` solo demuestra proceso HTTP vivo; la promocion necesita readiness
+  operativa de `/api/v0/server/readiness` contra estado/runtime temporal antes
+  de tocar `current_bin`.
+  Estado 2026-05-27: cerrado para el guardian. El healthcheck del candidato
+  exige liveness y readiness `ready=true`; un candidato con HTTP vivo pero sin
+  readiness publica bloquea con `candidate_readiness_not_ready` y conserva
+  estado/runtime temporal, dry-run de bridges y automejora idle desactivada.
+- T216 queda cerrado el 2026-05-27: el servidor ya no cierra promocion por solo
+  exit code; consume `orquesta_guardian_result.v0`, conserva evidence refs y
+  distingue fallo de candidato, parser, timeout y exit no cero.
+- Resolver T217 antes de depender de `shutdown-server` para restart de guardian.
+  T189 gobierna senales del servidor y T200 comandos locales del binario, pero
+  el guardian conserva otro cliente HTTP que debe tener limite, content-type,
+  trailing-data check e idempotencia propia.
+
+Duplicaciones a evitar:
+
+- T215 no sustituye T176 ni T188: headers/metodos siguen en el servidor; aqui
+  solo se exige que el guardian consulte readiness suficiente antes de promocion.
+- T216 no sustituye T212: el repair packet puede quedar redactado, pero la
+  promocion residente necesita validar resultado estructurado y no stdout libre.
+- T217 no sustituye T200 ni T189: el cliente shutdown del guardian es frontera
+  break-glass; no redefine comandos `status/stop` ni politica general de
+  senales del servidor.
+
+## Priorizacion scanner 2026-05-27 cuarta pasada
+
+Backlog asociado:
+`T218 guardian-repair-agent-launch-contract`,
+`T219 guardian-path-root-and-control-surface-policy` y
+`T220 guardian-manifest-retention-and-replay-policy`.
+
+Prioridad media-alta:
+
+- T218 queda cerrado el 2026-05-27 para el contrato de lanzamiento
+  `--repair-codex`: packet versionado, write-set cerrado, ACK terminal, tests
+  requeridos, presupuesto de un agente, break-glass unmanaged auditado y sandbox
+  amplio solo con opt-in/evidence ref. La preferencia por cola normal cuando
+  Orquesta residente siga sana queda como regla operativa del runbook.
+- T219 queda cerrado localmente el 2026-05-27 para guardian/server: resultados,
+  auditoria y packets de reparacion publican `path_policy` con refs hash y
+  clasificaciones; las rutas criticas se bloquean si salen de raices declaradas
+  o cruzan symlinks. T212 redacta salida y T214 gobierna copia de binarios; T219
+  ya no debe reabrirse salvo regresion demostrada.
+- Resolver T220 antes de ejecutar muchos intentos de guardian en modo residente.
+  Sin manifest idempotente, escritura durable y retencion por categoria, logs,
+  repair packets y runtimes temporales pueden pisarse, crecer sin limite o
+  desaparecer antes de servir como evidencia causal.
+  Estado 2026-05-27: cerrado localmente para el estado durable propio del
+  guardian: manifests/repair packets/prompts/logs redactados usan
+  tmp+fsync+rename, los intentos quedan indexados por ref, la salida publica
+  expone `retention_status` y la limpieza por categoria conserva evidencias
+  actuales y `last_good`.
+
+Duplicaciones a evitar:
+
+- T218 no sustituye T47/T49/T63/T143/T157: consume ACK, seguridad Codex,
+  sidecar y control-file policy existentes; solo gobierna el lanzamiento
+  break-glass del reparador.
+- T219 no sustituye T50/T127/T131: exclusiones de control files, artefactos
+  locales ignorados y redaccion documental siguen con sus owners; aqui se fija
+  la superficie de rutas del guardian.
+- T220 no sustituye T97/T100/T104/T159 ni T214: logs del daemon, archivos de
+  revision, escritura durable general, control files y binarios siguen aparte;
+  aqui se gobiernan manifests, repair packets, prompts, logs y runtimes
+  temporales propios del guardian.
+
+## Priorizacion scanner 2026-05-27 quinta pasada
+
+Backlog asociado:
+`T221 guardian-promotion-lease-and-concurrency-policy`,
+`T222 guardian-command-effect-profile-policy` y
+`T223 promotion-guardian-causal-receipt`.
+
+Prioridad media-alta:
+
+- Resolver T221 antes de permitir guardian residente o break-glass concurrente.
+  T214 hace atomica la copia de binarios y T220 hace durable el manifest, pero
+  ninguno decide quien posee el intento activo cuando dos procesos trabajan
+  sobre el mismo `current_bin`, `last_good_bin` o `state_dir`.
+  Cierre local 2026-05-27: `cmd/orquesta-guardian` serializa
+  `check-promote`, `restore-last-good` y `shutdown-server` con lease durable por
+  intento/promocion, bloquea `guardian_promotion_lease_busy` y revalida el lease
+  antes de tocar binario vivo o senalizar.
+- Resolver T222 antes de ampliar comandos configurables del guardian. T213
+  limita salida y entorno, pero el contrato publico todavia no clasifica si un
+  comando de build/test/repair puede tocar red, Git remoto, OPES, proveedor real
+  o artefactos fuera del candidato.
+  Cierre local 2026-05-27: `cmd/orquesta-guardian` clasifica comandos con
+  `guardian-command-effect-profile-policy-v0`, permite por defecto solo build
+  canonico y `go test`, bloquea efectos externos sin evidence ref y publica
+  reason codes/refs sin shell completo.
+- Resolver T223 antes de usar la salida del guardian como evidencia de
+  promocion final. T216 valida el schema del resultado, pero el servidor necesita
+  receipt causal propio que enlace ese resultado con staging, refs opacas y hash
+  del candidato.
+  Estado 2026-05-27: cerrado en `cmd/orquesta-server` con
+  `promotion_guardian_receipt.v0`; el receipt enlaza resultado del guardian,
+  staging aplicado, refs opacas, manifest/evidence refs y hash/tamano compacto
+  del candidato si existe. `--promote=false` queda como
+  `candidate_verified` bloqueante, no como promocion activa.
+
+Duplicaciones a evitar:
+
+- T221 no sustituye T31/T57: colas y outbox siguen siendo owners de claims
+  generales; aqui solo se gobierna exclusion mutua del guardian sobre artefactos
+  y estado local.
+- T222 no sustituye T139/T180/T212/T213: esos rails gobiernan forma publica,
+  redaccion, output y entorno; aqui se decide si el comando esta autorizado y
+  que perfil de efecto declara.
+- T223 no sustituye T13/T40/T156/T216: staging Git, promocion general,
+  output Git y contrato del resultado del guardian siguen separados; aqui se
+  fija el receipt causal servidor-guardian-promocion.
+
+## Priorizacion scanner 2026-05-27 sexta pasada
+
+Backlog asociado:
+`T224 guardian-candidate-process-tree-lifecycle`,
+`T225 guardian-forced-shutdown-escalation-contract` y
+`T226 guardian-repair-attempt-budget-and-idempotency`.
+
+Prioridad media-alta:
+
+- T224 quedo cerrado el 2026-05-27 para el guardian: el healthcheck publica
+  politica de proceso y receipt de stop compacto; Unix confirma parada de grupo
+  de proceso con deadline/escalado antes de promocionar, Windows declara alcance
+  de proceso padre y un stop ambiguo bloquea la promocion. T215 sigue validando
+  readiness HTTP.
+- T225 quedo cerrado el 2026-05-27: `shutdown-server` ya no escala
+  `force_after_timeout` por defecto; el break-glass exige opt-in explicito y
+  evidence ref, y publica estados de escalado sin PID/host/URLs/cuerpo HTTP.
+  T217 sigue acotando el cliente HTTP, no la decision de escalado.
+- T226 quedo cerrado el 2026-05-27 para presupuesto e idempotencia de repair:
+  cada intento tiene `repair_attempt_ref`, `failure_packet_hash`, registro
+  durable por scope de promocion/intento/run y bloqueo publico
+  `guardian_repair_attempt_duplicate` o
+  `guardian_repair_attempt_budget_exhausted`. T218 fija el contrato del agente
+  reparador y T222 autoriza comandos; no se reabren aqui.
+
+Duplicaciones a evitar:
+
+- T224 no sustituye T191 ni T215: senales generales del runtime y readiness del
+  servidor siguen con sus owners; aqui se gobierna solo el proceso candidato del
+  guardian.
+- T225 no sustituye T189/T199/T217: politica de senales, shutdown del servidor
+  y cliente HTTP siguen separados; aqui se fija la decision de escalado forzado
+  del guardian.
+- T226 no sustituye T47/T218/T220/T221/T222: receipts de tests, launch del
+  reparador, retencion, leases y comandos autorizados siguen aparte; aqui se
+  limita el numero y reentrada de intentos de repair.
+
+## Priorizacion scanner 2026-05-27 octava pasada
+
+Backlog asociado:
+`T228 guardian-candidate-address-ownership-policy` cerrado el 2026-05-27,
+`T229 promotion-guardian-runner-env-isolation` y
+`T230 guardian-skip-health-breakglass-policy`.
+
+Prioridad media-alta:
+
+- T228 queda cerrado para ownership de direccion del candidato: addr automatico
+  por `127.0.0.1:0` con lectura de statefile del candidato, addr declarado solo
+  loopback con puerto concreto y bloqueo `candidate_addr_unowned` cuando no se
+  puede probar propiedad.
+- Retry OrquestaV2 2026-05-27
+  `agent-ref-task-autoprogramming-db88e93cffaf-g01`: cierre revalidado con la
+  bateria focal requerida y contexto `ref_only` resuelto por lectura local mas
+  evidencia explicita en ACK.
+- T229 queda cerrado localmente el 2026-05-27 para el runner servidor ->
+  guardian: entorno `minimal_allowlist`, vars `ORQUESTA_GUARDIAN_*` explicitas,
+  cache local derivada del state dir y bloqueo de HOME/Codex/proxies/Git/
+  proveedor/secretos salvo allowlist declarada con evidence refs.
+- Retry OrquestaV2 2026-05-27
+  `agent-ref-task-autoprogramming-22cfff60721c-g01`: cierre revalidado con la
+  bateria focal requerida y contexto `ref_only` resuelto por lectura local mas
+  evidencia explicita en ACK.
+- Rework de revision 2026-05-27
+  `agent-ref-task-ref-review-rework-task-autoprogramming-22cfff60721c-g01-938062230e08e3a836b342951d5c588d`:
+  el runner servidor -> guardian descarta `ORQUESTA_GUARDIAN_*` heredadas y
+  deduplica el entorno para que las variables explicitas del request sean la
+  unica fuente de configuracion del guardian.
+- Retry de rework OrquestaV2 2026-05-27
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-3b1cd0fc9711a3bf097b5db163987e69`:
+  conserva el cierre de T229, revalida la bateria focal requerida y resuelve
+  contexto `ref_only` mediante lectura local mas evidencia explicita en ACK.
+- Retry final de rework OrquestaV2 2026-05-27
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-602dc9edc1ac71b6268bcede5729e588`:
+  conserva el cierre de T229, revalida la bateria focal requerida y resuelve
+  contexto `ref_only` mediante lectura local mas evidencia explicita en ACK.
+- T230 queda aplicado localmente el 2026-05-27: `--skip-health` con
+  `promote=true` bloquea por defecto con `guardian_healthcheck_required`; el
+  uso autorizado requiere evidence ref break-glass y publica
+  `candidate_promoted_breakglass` con causa compacta, no una readiness viva
+  equivalente.
+
+Duplicaciones a evitar:
+
+- T228 no sustituye T87/T215/T224: liveness/readiness y ciclo de vida del
+  proceso siguen con sus owners; aqui solo se gobierna ownership de direccion y
+  anti-hijack.
+- T229 no sustituye T213/T216/T222: output/env de comandos internos, parseo del
+  resultado y autorizacion de comandos siguen separados; aqui se aisla el
+  runner que arranca el guardian.
+- T230 no sustituye T215/T223/T225: readiness, receipt causal y escalado de
+  shutdown siguen aparte; aqui se gobierna la excepcion de saltar healthcheck.
+
+## Priorizacion scanner 2026-05-27 novena pasada
+
+Backlog asociado:
+`T231 guardian-config-env-strictness` y
+`T232 guardian-cli-extra-args-strictness`.
+
+Prioridad media:
+
+- T231 queda resuelto el 2026-05-27 para uso residente frecuente del guardian:
+  bool, duracion, entero, budget y allowlist invalidos bloquean con reason code
+  publico, el resultado publica `config_effective` compacto y el servidor
+  distingue config invalida de fallo de candidato. T213 aisla entorno y salida,
+  T216 parsea resultado y T225 decide escalado; siguen siendo owners separados.
+- T232 queda resuelto el 2026-05-27 para `orquesta-guardian`: la misma
+  superficie de configuracion ya no acepta typos posicionales y bloquea antes
+  de ejecutar efectos si quedan argumentos sobrantes tras `flag.Parse`.
+
+Duplicaciones a evitar:
+
+- T231 no sustituye T85/T213/T216/T217/T225/T228: config canonica del servidor,
+  entorno/output, resultado del guardian, cliente shutdown, escalado y runner
+  servidor -> guardian siguen con owners propios; aqui solo se gobierna parseo
+  estricto de env/flags del guardian.
+- T232 no sustituye T196/T200/T222: catalogo CLI, cliente REST de gestion y
+  autorizacion de comandos siguen separados; aqui se rechazan argumentos
+  sobrantes en `orquesta-guardian`.
+
+## Priorizacion scanner 2026-05-27 decima pasada
+
+Backlog asociado:
+`T233 guardian-local-diagnostic-ref-stability`,
+`T234 guardian-command-ref-template-profile` y
+`T235 guardian-repair-packet-read-budget-and-type`.
+
+Prioridad media:
+
+- T233 queda cerrado localmente el 2026-05-27: las refs publicas del guardian
+  para manifest, repair packet, repair launch, outputs y diagnosticos locales
+  usan ref causal, tipo de diagnostico y hash permitido para outputs, sin
+  depender de paths absolutos locales. T219 clasifica rutas y T220 conserva
+  manifests; este cierre solo gobierna identidad publica portable.
+  Revalidacion OrquestaV2
+  `agent-ref-task-autoprogramming-a35df67e3b46-g01`: el contexto obligatorio
+  `ref_only` se resuelve por lectura local/evidencia ACK y no reabre T233 ni
+  convierte `worktree_ref`/`branch_ref` en rutas o nombres Git.
+- Resolver T234 junto a T222: la autorizacion de comandos necesita perfiles,
+  pero la identidad publica tambien debe dejar de hashear shell expandido con
+  rutas locales o comandos configurables.
+  Cierre local 2026-05-27: `cmd/orquesta-guardian` deriva `command_ref` desde
+  `phase`, `command_profile`, `template_ref` y `attempt_ref`; templates
+  canonicas ignoran `state_dir`/`candidate_bin`, y comandos no canonicos exponen
+  `command_template_changed` con evidence ref compacta.
+- T235 queda cerrado localmente el 2026-05-27: el repair packet del guardian se
+  valida con lectura `lstat/open/read` acotada, schema, redaction level,
+  hash/attempt ref, presupuesto y fase causal antes de construir prompt o
+  comando Codex; si falla bloquea con `guardian_repair_packet_invalid`.
+
+Duplicaciones a evitar:
+
+- T233 no sustituye T184/T219/T220/T223: hash global, rutas, retencion y receipt
+  causal siguen separados; aqui se fijan refs publicas de diagnosticos locales.
+- T234 no sustituye T180/T216/T222/T223: salida, schema, autorizacion y receipt
+  siguen con sus owners; aqui se gobierna `command_ref` publico.
+- T235 no sustituye T50/T143/T157/T218/T220: control files, tamano/redaccion,
+  hardening de lectura, launch del reparador y retencion siguen aparte; aqui se
+  valida el packet que el guardian convierte en contexto reparador.
+
+## Priorizacion scanner 2026-05-27 undecima pasada
+
+Backlog asociado: `T236 public-mutation-identity-contract`.
+
+Prioridad media-alta:
+
+- Resolver T236 antes de ampliar acciones mutables de `/ops`, MCP real o CLI.
+  Hoy MCP tiene helper propio de identidad publica, web/CLI generan ids por
+  adaptador y el servidor/auditoria extraen headers por rutas concretas. Esa
+  duplicacion puede hacer que una misma mutacion sea idempotente en una
+  superficie y no en otra.
+- Mantener lecturas read-only separadas de mutaciones aunque usen POST por
+  compatibilidad. La politica compartida debe exigir idempotency solo cuando el
+  contrato declara efecto externo o cambio durable.
+- Actualizacion 2026-05-27: T236 queda cubierto localmente por
+  `modulos/orquesta-server/publicidentity`, consumido desde MCP, web, CLI,
+  servidor y `cmd/orquesta-server` sin mover seguridad de transporte, auditoria
+  completa ni limites de entrada fuera de sus owners.
+
+Duplicaciones a evitar:
+
+- T236 no sustituye T55/T99/T102: seguridad de transporte, recursos HTTP y
+  boundary legacy siguen con sus owners. Aqui solo se gobierna identidad publica
+  de request/correlation/idempotency.
+- T236 no sustituye T94/T138/T139: auditoria y salida publica siguen separados;
+  solo deben consumir la identidad efectiva ya normalizada.
+- T236 no sustituye T142: limites de entrada CLI y clasificacion de origen
+  siguen en el owner local de CLI; la identidad compartida no autoriza leer
+  ficheros ni payloads mayores.
+
+## Priorizacion scanner 2026-05-27 decimotercera pasada
+
+Backlog asociado: `T239 codex-shutdown-checkpoint-attempt-correlation`
+(cerrado localmente 2026-05-27).
+
+Prioridad media:
+
+- Resolver T239 antes de usar shutdown cooperativo Codex como evidencia fuerte
+  en reinicios frecuentes. El ACK de checkpoint ya valida run/agente/ref, pero
+  la ref deterministica por run/agente no distingue dos mutaciones de shutdown
+  con razon, evidencia o escalado distintos.
+- Mantener idempotencia por intento: reintentar la misma mutacion debe aceptar
+  el mismo ACK; una nueva mutacion debe requerir ACK nuevo o mismatch publico.
+
+Duplicaciones a evitar:
+
+- T239 no sustituye T24/T143/T157: ACK terminal y lectura/redaccion de control
+  files siguen con sus owners. Aqui solo se gobierna identidad causal del
+  intento de shutdown checkpoint.
+- T239 no sustituye T199/T225: shutdown general y escalado forzado siguen
+  separados; aqui se fija cuando un ACK cooperativo pertenece al intento vivo.
+- T239 no sustituye T223: receipt causal de promocion guardian sigue aparte; la
+  tarea nueva aplica al protocolo Codex de checkpoint durante shutdown.
+
+Cierre local 2026-05-27: runtime Codex valida `shutdown_attempt_ref` en request
+y ACK de checkpoint; `orquesta-app-codex-stack` deriva ese ref desde la mutacion
+de shutdown y mantiene `waiting_checkpoint` ante
+`shutdown_checkpoint_attempt_mismatch`.
+Rework 2026-05-27: T239 queda conservado como cierre local; el contexto
+obligatorio `ref_only` se resuelve por lectura local del paquete y evidencia en
+ACK, sin ampliar owner ni relanzar agente padre.
+
+## Priorizacion scanner 2026-05-27 decimoquinta pasada
+
+Backlog asociado: `T240 backlog-scan-doc-path-budget-policy`.
+
+Prioridad media-alta:
+
+- Resolver T240 antes de ampliar el scanner a mas shards o permitir que paquetes
+  externos reinyecten `backlog_scan_doc`. La lectura local para hash debe quedar
+  tan acotada como el write-set: catalogo canonico, ruta relativa dentro del
+  proyecto, sin control files/symlinks y con presupuesto explicito.
+- Mantener la semantica de merge lease de T43: si la foto documental no coincide
+  o trae docs no canonicos, el resultado correcto es bloqueo/rebase o
+  `CONSULTA AL DIRECTOR`, no lectura local fuera de catalogo ni `missing`
+  silencioso.
+
+Duplicaciones a evitar:
+
+- T240 no sustituye T37: el parser de backlog sigue siendo owner de extraer
+  secciones, tests y estado desde Markdown; aqui solo se gobierna path/budget de
+  docs usados para epoch.
+- T240 no sustituye T44: contexto `required ref_only` sigue validandose en
+  materializer/runtime/ACK; aqui solo se evita que el merge lease lea fuentes no
+  canonicas.
+- T240 no sustituye T50/T142: control files y entrada CLI mantienen sus owners;
+  esta tarea consume esas politicas para bloquear rutas antes de hashear docs.
+
+Cierre local 2026-05-27: T240 queda resuelto en `cmd/orquesta-server` con
+catalogo canonico de documentos de scanner, lectura acotada por presupuesto,
+rechazo de rutas no canonicas/control files/symlinks/no regulares y bloqueo de
+`backlog_scan_doc` fuera del catalogo actual. No reabre T37/T43/T44/T50/T142 ni
+los owners de identidad de scanner.
+
+## Priorizacion scanner 2026-05-27 decimocuarta pasada
+
+Backlog asociado: `T241 idle-self-improvement-provider-auth-recovery-contract`.
+
+Prioridad media-alta:
+
+- Resolver T241 antes de tratar `provider_auth_blocked` como error generico de
+  automejora. El bloqueo nace en composicion Codex/proveedor, pero el residente
+  lo convierte en decision de cola; si no hay contrato de recuperacion, puede
+  preparar scanners repetidos o quedarse bloqueado sin accion verificable.
+- Mantener la accion de operador fuera del nucleo. El servidor puede exponer
+  reason codes y evidence refs compactas, pero renovacion de credenciales,
+  comprobacion de proveedor y confirmacion de cuota pertenecen a adaptadores de
+  composicion.
+
+Duplicaciones a evitar:
+
+- T241 no sustituye T29/T56: contabilidad de proveedor y proyeccion de
+  credenciales siguen con sus owners. Aqui solo se gobierna el ciclo de bloqueo
+  y recuperacion de automejora idle.
+- T241 no sustituye T94/T138/T139/T187: auditoria, salida publica y redaccion
+  siguen separados; deben consumir un reason code ya normalizado.
+- T241 no sustituye T236: identidad/idempotencia de mutaciones publicas sigue
+  aparte; T241 solo debe usar esa identidad cuando exponga una accion de
+  operador o reintento.
+
+Estado 2026-05-27: T241 cerrado en el write-set del servidor residente. La
+recuperacion de auth de proveedor ya tiene contrato publico compacto y la
+accion real queda en composicion/run-control, sin mover credenciales, proveedor
+ni cuotas al nucleo.
+Rework 2026-05-27: el backlog vivo queda sincronizado con este cierre; no se
+abre owner nuevo para `provider_auth_blocked`, solo se conserva la frontera entre
+diagnostico publico, accion de operador y reintento idempotente.
+
+## Priorizacion scanner 2026-05-27 decimocuarta pasada
+
+Backlog asociado: `T242 server-supervisor-loop-file-split-before-growth` y
+`T243 mcp-public-tool-file-split-before-growth`.
+
+Prioridad media:
+
+- Resolver T242 antes de anadir mas comportamiento residente al supervisor del
+  servidor. El fichero concentra tick, wakeup, leases, observabilidad y
+  adaptacion de puertos, lo que aumenta el riesgo de duplicar politica de
+  shutdown, proveedor o automejora.
+- Resolver T243 antes de ampliar tools MCP con identidad publica, budgets,
+  repair handoff o nuevos descriptors. Los tools deben seguir siendo
+  adaptadores finos y no mezclar transporte, validacion, ejecucion y salida en
+  un solo owner grande.
+
+Duplicaciones a evitar:
+
+- T242 no sustituye T32, T109, T136, T166 ni T210: wakeup, leases, waits,
+  shutdown async y telemetria viva siguen con sus owners; aqui solo se parte el
+  loop residente sin mover composicion al nucleo.
+- T243 no sustituye T195, T198, T199 ni T236: schemas/descriptors, recursos,
+  errores publicos e identidad global siguen separados; aqui solo se divide la
+  implementacion local de tools MCP publicos.
+- Ambas tareas dependen de la regla T45: no legitiman aumentar ficheros grandes
+  ni cerrar entregas con crecimiento sobre baseline sin followup causal.
+
+Estado 2026-05-27: T243 queda cerrado localmente en `orquesta-mcp`. Los tools
+`orquesta.director.human_work.review_plan.v0` y
+`orquesta.autoprogramming.self_improvement.propose.v0` conservan metadata,
+nombres publicos y transporte, pero reparten input flexible, advice de operador,
+proyeccion de errores/resultados y builders en ficheros productivos menores de
+300 lineas. Evidencia T243: `go test -count=1 ./modulos/orquesta-mcp`.
+T242 queda cerrado localmente en `orquesta-server`: el loop
+residente queda separado de scheduling, decision, freshness, prepare, request y
+refs de automejora, manteniendo ficheros productivos del owner bajo 300 lineas.
+Revalidacion OrquestaV2 2026-05-27: los tests locales del supervisor se separan
+en shards de tick, idle async, capacidad, blockers y helpers para que la
+cobertura no vuelva a concentrar politica residente en un solo fichero.
+Assessment OrquestaV2 2026-05-27: `task-autoprogramming-594d493666c4-g01`
+repite el paquete de T242 y queda como revalidacion documental, no como nuevo
+frente de implementacion.
+
+## Priorizacion scanner 2026-05-27 decimosexta pasada
+
+Backlog asociado: `T244 codex-stack-residual-product-file-split`.
+
+Estado 2026-05-27: cerrado localmente por
+`task-autoprogramming-bbfaee8d0f40-g01`; conservar solo como rail de regresion
+si un cambio posterior vuelve a concentrar bridge, specs, contexto externo,
+replan o ejecutor MCP/supervisor por encima del presupuesto.
+Rework de revision 2026-05-27:
+`task-ref-review-rework-task-autoprogramming-bbfaee8d0f40-g01-d8a1fe905f79cb6b486cecd73b06d1df`
+mantiene T244 como cerrado, resuelve el contexto obligatorio `ref_only` con
+evidencia ACK y no sustituye los owners vecinos listados abajo.
+
+Prioridad media:
+
+- Resolver regresiones de T244 antes de ampliar `orquesta-app-codex-stack` con
+  mas puentes de autoprogramacion, specs, contexto externo, replan por
+  assessment o ejecutores MCP/supervisor. T54 dejo cerrado el corte
+  `codex-wave`/`director-wave` y `drain`; el residuo productivo que quedaba
+  sobre 300 lineas se cerro localmente el 2026-05-27.
+
+Duplicaciones a evitar:
+
+- T244 no sustituye T54: no reabre el split ya cerrado de comandos Codex ni
+  drain; cubre el residuo productivo no tocado por ese corte.
+- T244 no sustituye T238: las politicas neutrales de autoprogramacion siguen en
+  `modulos/orquesta-autoprogramming`; el stack Codex solo adapta esas politicas
+  a runtime/composicion.
+- T244 no sustituye T33, T36, T42, T47, T50, T56, T117, T143 ni T241: ACK
+  terminal, pruebas requeridas, write-set, control files, credenciales,
+  review gate, redaccion y provider auth mantienen owners propios.
+- T244 depende de T45/T90 como baseline de no crecimiento: una entrega no debe
+  cerrar si aumenta ficheros grandes sin split o followup causal.
+
+## Priorizacion scanner 2026-05-27 decimosexta pasada
+
+Backlog asociado: `T248 backlog-scan-section-id-and-sequence-policy`.
+
+Estado 2026-05-27: cerrado para el servidor residente. El planner publica
+`backlog_scan_ref` en contexto/criterios de ACK para cada merge lease de
+scanner y reutiliza `scan_entry_ref`/digest/linea/hash de T249 para diferenciar
+bloques `Escaneo backlog` duplicados o fuera de orden, sin renumerar historico.
+
+Prioridad media:
+
+- Resolver T248 antes de aumentar la concurrencia de scanners que escriben en
+  el backlog vivo. Las etiquetas ordinales humanas ya se repiten y pueden
+  quedar fuera de orden; la evidencia de merge/rebase necesita un `scan_ref`
+  estable por bloque para no depender del titulo visible.
+- Mantener historico intacto: no renumerar bloques antiguos ni usar el
+  `scan_ref` como sustituto de `Txx`. Debe servir para trazabilidad de escaneo,
+  no para cambiar el contrato ejecutable de tareas.
+
+Duplicaciones a evitar:
+
+- T248 no sustituye T37: el parser de Markdown sigue siendo owner de extraer
+  tareas, alcance, criterios y tests.
+- T248 no sustituye T43 ni T240: lease, epoch, hash y lectura segura de docs
+  siguen separados; esta tarea solo da identidad estable a la seccion de
+  escaneo que produjo o reviso esos datos.
+- T248 no sustituye T236: identidad publica de mutaciones sigue siendo global;
+  aqui se consume esa identidad para evidencia documental del scanner.
+- Rework 2026-05-27: la correccion
+  `agent-ref-task-ref-review-rework-task-autoprogramming-ce0100f5ae08-g01-a522429e98460b11fc001393c9f07b9e`
+  no duplica rail ni owner nuevo. Conserva T248 cerrado como identidad/secuencia
+  de escaneo, con `ref_only` resuelto por lectura local/evidencia ACK y prueba
+  requerida del servidor residente.
+
+## Priorizacion scanner 2026-05-27 decimosexta pasada
+
+Backlog asociado: `T247 app-codex-autoprogramming-bridge-file-split`.
+
+Prioridad media:
+
+- Resolver T247 antes de anadir mas logica de automejora residente al stack
+  Codex. El bridge actual concentra run, tasks, wait refs, plan-state, replay y
+  continue request; partirlo evita duplicar politicas que ya tienen owners en
+  `orquesta-autoprogramming`, `app-director-service` y el loop residente del
+  servidor.
+- Mantener el stack como composicion: la division no debe mover runtime Codex,
+  state-file, proveedor ni rutas de control al core puro.
+
+Estado 2026-05-27: T247 queda cerrado localmente. La composicion mantiene los
+owners separados en `autoprogramming_bridge_request_v0.go`,
+`autoprogramming_bridge_run_v0.go`, `autoprogramming_bridge_store_v0.go` y
+`autoprogramming_bridge_continue_v0.go`; los tests del bridge se shardearon
+para evitar un fichero local monolitico.
+
+Rework 2026-05-27: la revision/rework de T247 queda acotada a evidencia
+documental y ACK. No debe crear otro owner paralelo para request/run/store/continue
+ni relanzar la tarea padre original; una reapertura futura necesita una
+regresion concreta del bridge o una duplicacion nueva no cubierta por estos
+owners.
+
+Duplicaciones a evitar:
+
+- T247 no sustituye T238: las politicas puras de programacion/particionado viven
+  en `modulos/orquesta-autoprogramming`; el bridge solo adapta esas decisiones a
+  run/tasks/continue del stack Codex.
+- T247 no sustituye T241 ni T242: recuperacion por proveedor y supervisor
+  residente siguen en `modulos/orquesta-server`/`cmd/orquesta-server`; el bridge
+  no debe decidir auth, idle windows ni wakeups.
+- T247 no sustituye T43/T240: epoch documental, merge lease y lectura acotada de
+  docs del scanner siguen en el servidor. El bridge solo debe conservar refs ya
+  validadas y no reparsear backlog.
+
+## Priorizacion scanner 2026-05-27 decimosexta pasada
+
+Backlog asociado: `T249 backlog-scan-entry-identity-and-order-policy`.
+
+Prioridad media:
+
+- Resolver T249 antes de usar titulos humanos de `Escaneo backlog` como
+  evidencia suficiente para cierre, rebase o deduplicacion. Ya existen titulos
+  repetidos/fuera de orden, asi que el contrato debe depender de refs compactas,
+  hash de bloque y tipo de seccion, no solo de texto visible.
+- Preservar el historico documental: si una entrada antigua queda duplicada, el
+  sistema debe bloquear con reason code publico o pedir rebase, no renumerar ni
+  borrar evidencia.
+
+Duplicaciones a evitar:
+
+- T249 no sustituye T37: el parser de backlog sigue siendo owner de extraer
+  tareas, estado, criterios y tests desde Markdown.
+- T249 no sustituye T43 ni T240: merge lease y path/budget de documentos siguen
+  separados; T249 solo aporta identidad y orden de secciones de scanner.
+- T249 no sustituye T116/T122/T140: integridad documental, precedencia canonica
+  y solapes de backlog siguen como owners vecinos; aqui solo se corrige la
+  correlacion de entradas de evidencia de scanner.
+- Cierre T249 2026-05-27: `cmd/orquesta-server` mantiene el parser ejecutable
+  limitado a `## Txx` y anade identidad/digest/issues para
+  `## Escaneo backlog ...` en el merge lease. Los reason codes publicos son
+  `backlog_scan_entry_duplicate` y `backlog_scan_entry_order_ambiguous`; el
+  scanner debe pedir rebase o `CONSULTA AL DIRECTOR`, no renumerar historico.
+  Revalidado con
+  `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+## Priorizacion scanner 2026-05-27 decimoctava pasada
+
+Backlog asociado: `T251 backlog-scanner-required-test-scope-policy`.
+
+Prioridad media:
+
+- Resolver T251 antes de aumentar tandas documentales de assessment/backlog
+  scanner. Un paquete con write-set solo documental no debe heredar siempre
+  `go test -count=1 ./...` como prueba obligatoria si la seccion Txx o el
+  director no lo pidieron; esa decision mezcla validacion transversal,
+  verificacion documental y fiabilidad de codigo no tocado.
+- Mantener compatibilidad estricta de ACK: si una prueba obligatoria viene en
+  el paquete, el agente debe ejecutarla y declararla solo si pasa. La correccion
+  futura vive en el planner/materializador de paquetes, no en relajar ACKs de
+  agentes externos.
+
+Duplicaciones a evitar:
+
+- T251 no sustituye T37: el parser sigue extrayendo tests desde Markdown.
+- T251 no sustituye T44 ni T47: contexto `ref_only` y receipts de pruebas
+  requeridas siguen con sus owners; aqui solo se decide que comandos entran al
+  paquete de scanner.
+- T251 no sustituye `git diff --check` ni `go test -count=1 ./...` como
+  verificacion transversal manual cuando un cambio realmente toca codigo o
+  frontera de nucleo.
+
+Cierre T251 2026-05-27: `cmd/orquesta-server` acota `required_tests` para
+scanners documentales; el default global `go test -count=1 ./...` no se hereda
+cuando el write-set solo cubre backlog/rail errors/duplicaciones, pero las
+pruebas declaradas por una seccion Txx se conservan. La decision queda marcada
+en `ContextRefs` mediante `required_test_origin:*` y
+`required_test_scope_policy:*`. Revalidado con
+`go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Rework de revision 2026-05-27: se confirma que T251 no reabre T37/T44/T47 ni
+la verificacion transversal manual; backlog, rail error y esta matriz quedan
+alineados, con contexto `ref_only` resuelto por lectura local/evidencia ACK.
+
+## Priorizacion scanner 2026-05-27 decimoseptima pasada
+
+Backlog asociado: `T250 federated-backlog-epoch-scope-policy`.
+
+Prioridad media:
+
+- Resolver T250 antes de aumentar fuentes federadas del backlog. El indice ya
+  mezcla fuentes ejecutables y cuarentenadas; si todas entran en el epoch del
+  scanner, un cambio historico puede bloquear trabajo vivo sin aportar tarea
+  ejecutable.
+- Mantener la cuarentena T124 como evidencia, no como dependencia activa del
+  scanner. Las fuentes legacy solo deben volver al epoch cuando una tarea
+  explicita de rescate, composicion externa o `related_txx` lo pida.
+
+Duplicaciones a evitar:
+
+- T250 no sustituye T240: path/budget de lectura sigue separado; aqui solo se
+  decide que fuentes participan en el epoch activo.
+- T250 no sustituye T88/T116/T124: indice federado, precedencia documental y
+  cuarentena legacy siguen con sus owners; la nueva tarea consume esos estados.
+- T250 no sustituye T248/T249: identidad/orden de secciones de scanner sigue
+  aparte; aqui se acota freshness/scope de fuentes federadas.
+
+Resolucion 2026-05-27: el scanner calcula `BacklogScanDocs`, epoch y reservas
+solo con fuentes federadas ejecutables (`vigente`, `promocionada`, `promoted`,
+`active`). Las fuentes historicas/quarantine quedan como contexto compacto
+`federated_backlog_source_not_executable` y no fuerzan rebase de backlog vivo.
+
+Revalidacion retry 2026-05-27 burst 002: el paquete
+`agent-ref-assessment-task-autoprogramming-88a96698afb2-g01-b0935e0be19681ea514f9a2acacaff39`
+no abre duplicacion nueva. T250 queda como owner cerrado de freshness/scope del
+epoch federado; T44 mantiene contexto `ref_only`, T249 identidad de entradas y
+T251 alcance de pruebas de scanners.
+
+## Priorizacion scanner 2026-05-27 decimoctava pasada
+
+Backlog asociado: `T251 backlog-scanner-canonical-preflight`.
+
+Prioridad media-alta:
+
+- Resolver T251 antes de lanzar mas bursts de scanners sobre los tres documentos
+  vivos. T140 ya implemento canon/alias para solapes escritos; el scanner debe
+  consumir esa informacion antes de proponer un nuevo Txx, o volvera a crear
+  tareas equivalentes como T250 sobre una frontera ya cerrada parcialmente.
+- El resultado correcto ante solape con tarea cerrada es evidencia de cobertura
+  o regresion concreta con causa nueva. Ante solape con pendiente canonica, debe
+  crear alias/fusion aditiva o bloquear con reason publico y rebase, sin editar
+  historico destructivamente.
+
+Duplicaciones a evitar:
+
+- T251 no sustituye T140: T140 gobierna la canonicalizacion de tareas ya
+  escritas; T251 es el preflight que evita escribir otro duplicado antes de
+  programarlo.
+- T251 no sustituye T248/T249: identidad y orden de secciones de scanner siguen
+  con su owner; el preflight usa esa identidad como evidencia, pero no cambia el
+  formato de seccion por si solo.
+- T251 no sustituye T240: lectura path/budget de documentos sigue separada y
+  debe ejecutarse antes de confiar en hashes o lineas de backlog.
+
+Cierre T251 2026-05-27: el planner aplica preflight canonico sobre secciones de
+backlog, bloquea solapes con canonicas cerradas mediante
+`backlog_scanner_canonical_preflight_required` y entrega a los scanners un
+indice compacto con refs, estado, linea y fingerprint. Rework de revision: no
+se relanza agente padre; backlog, rail error y esta matriz quedan alineados, con
+contexto `ref_only` resuelto por lectura local/evidencia ACK.
+
+## Priorizacion scanner 2026-05-27 decimonovena pasada
+
+Backlog asociado: `T252 backlog-duplicate-task-id-read-model`.
+
+Prioridad alta:
+
+- Resolver T252 antes de cerrar, encolar o deduplicar tareas por numero humano
+  `Txx` cuando el backlog ya contiene duplicados. T250/T251 previenen nuevos
+  duplicados, pero no bastan para leer historico ambiguo ya escrito.
+- El lector debe exponer instancias separadas por path, linea/hash, titulo y
+  evidence refs. Si el caller pide `T250` sin instancia canonica, debe bloquear
+  con `backlog_duplicate_task_id_ambiguous` o exigir alias/cobertura de director,
+  nunca elegir por orden de fichero.
+
+Estado 2026-05-27: T252 cerrado para planner residente. Las secciones duplicadas
+exponen `task_instance_ref` y las peticiones por Txx ambiguo bloquean con
+`backlog_duplicate_task_id_ambiguous`; aliases/cobertura siguen siendo
+reparacion aditiva.
+Rework 2026-05-27: entrega valida conservada; el cierre se apoya en lectura
+local, evidencia ACK para contexto `ref_only` y test focal requerido.
+
+Duplicaciones a evitar:
+
+- T252 no sustituye T37: el parser Markdown sigue siendo owner de extraer
+  estado, criterios, tests y bloques; T252 anade identidad de instancia cuando
+  el id humano colisiona.
+- T252 no sustituye T250: la reserva/dedupe de ids futuros sigue en T250; T252
+  solo trata lectura y cierre de duplicados ya existentes.
+- T252 no sustituye T251: el preflight de scanner evita escribir otro Txx
+  equivalente; T252 protege APIs, cola y cierre que consumen backlog historico.
+
+## Priorizacion scanner 2026-05-27 decimoseptima pasada
+
+Backlog asociado: `T252 runtime-codex-delivery-progress-source-file-split`.
+
+Estado 2026-05-27: cerrado para el split local del adaptador Codex delivery.
+Los tres ficheros productivos objetivo quedaron por debajo de 300 lineas y el
+nucleo sigue recibiendo solo observaciones, refs opacas y puertos.
+
+Prioridad cerrada:
+
+- T252 ya separa observacion de progreso, estado durable y fuente de delivery
+  en helpers locales del adaptador; `progress_state_v0.go`,
+  `progress_source_v0.go` y `source_v0.go` quedan bajo 300 lineas productivas.
+- Rework 2026-05-27: el mismo rail de tamano queda aplicado a los tests locales
+  grandes del adaptador mediante shards de progress, delivery, review gate,
+  worktree y fixtures, todos por debajo de 300 lineas.
+- Mantener el split dentro del adaptador Codex delivery. El nucleo debe seguir
+  viendo solo observaciones, refs opacas y puertos; filesystem, prompts, HOME,
+  proveedor y rutas locales no deben migrar a core ni workflow.
+
+Duplicaciones a evitar:
+
+- T252 no sustituye T36 ni T143: ACK terminal estricto y lectura/redaccion de
+  control files ya tienen owners cerrados; esta tarea solo divide codigo grande
+  que consume esas politicas.
+- T252 no sustituye T38: el rail de observacion Codex ya quedo clasificado; el
+  split no debe reabrir listas locales de terminos ni relajar tolerancia a refs
+  opacas.
+- T252 no sustituye T247: el bridge de autoprogramacion del stack Codex sigue
+  en composicion; runtime-codex-delivery solo observa progreso/entrega y no
+  decide plan-state, waits ni cierre de cola.
+
+## Priorizacion scanner 2026-05-27 decimoseptima pasada
+
+Backlog asociado: `T250 backlog-task-id-allocation-lease`.
+
+Estado 2026-05-27: cerrado para el servidor residente. El merge lease anade
+`task_id_ref`, `reservation-ref-backlog-task-id-*` y rango `Txx` al paquete de
+scanner; el lector de ids distingue `## Txx` de `## Escaneo backlog ...` y
+publica `backlog_task_number_collision` sin renumerar historico.
+Rework 2026-05-27: la revision
+`agent-ref-task-ref-review-rework-task-autoprogramming-9ad7b5061f27-g01-d2d05e084cc48aa9566f43b01d7d8f5e`
+solo revalida el cierre T252, conserva la entrega valida y resuelve
+`ref_only` mediante evidencia ACK sin abrir otro owner ni tocar historico.
+
+Prioridad media:
+
+- Resolver T250 antes de aumentar la concurrencia de scanners que crean tareas
+  `Txx` en el backlog vivo. La identidad de seccion de T248/T249 ayuda a
+  trazar el escaneo, pero el numero ejecutable de la tarea tambien necesita
+  reserva causal para no depender del ultimo encabezado visto o de una
+  insercion manual concurrente.
+- Preservar historico: huecos o saltos ya persistidos se conservan como
+  evidencia; la mejora debe bloquear nuevas colisiones o huecos no reservados,
+  no renumerar ni reescribir tareas existentes.
+
+Duplicaciones a evitar:
+
+- T250 no sustituye T37: el parser sigue extrayendo estado, criterios y tests
+  desde Markdown.
+- T250 no sustituye T43 ni T240: merge lease documental y path/budget de docs
+  siguen separados; T250 consume esa epoch para reservar ids ejecutables.
+- T250 no sustituye T248/T249: `scan_ref`/`scan_entry_ref` identifican evidencia
+  de escaneo; `task_id_ref` o reserva equivalente identifica tareas `Txx`.
+- T250 no sustituye T116/T122/T140: precedencia, solapes e integridad de backlog
+  siguen con owners vecinos; aqui solo se corrige asignacion y colision de ids
+  ejecutables durante inserciones concurrentes.
+
+## Priorizacion scanner 2026-05-27 decimoseptima pasada
+
+Backlog asociado: `T250 backlog-task-overlap-canonical-merge-policy`.
+
+Prioridad media-alta:
+
+- Resolver T250 antes de permitir que scanners concurrentes lancen tareas Txx
+  nuevas sin revisar solape conceptual. La evidencia actual muestra T248 y T249
+  sobre la misma frontera practica de identidad/orden de entradas de scanner,
+  con una nota de fusion manual pero sin contrato ejecutable que evite dos
+  trabajos paralelos sobre el mismo owner.
+- La salida correcta debe ser aditiva: canonical task ref, aliases o reason code
+  publico de rebase/decision. No debe renumerar ni borrar historico del backlog.
+
+Duplicaciones a evitar:
+
+- T250 no sustituye T37: el parser sigue extrayendo tareas, estado, criterios y
+  tests desde Markdown.
+- T250 no sustituye T43/T240: merge lease y lectura segura de docs siguen
+  gobernando epoch, hashes y path/budget.
+- T250 no sustituye T248/T249: esas tareas gobiernan identidad de entradas de
+  scanner; T250 gobierna solape entre tareas ejecutables antes de lanzarlas.
+- T250 no sustituye T140: T140 cubre solapes historicos generales; T250 acota
+  la regla a tareas nuevas producidas por scanners concurrentes y a su
+  canonicalizacion previa al lanzamiento.
+
+Resolucion 2026-05-27: cerrado en el planner residente. Las tareas pendientes
+con misma frontera ejecutable reciben una firma `backlog-task-overlap-*`; el
+planner elige canonica por doc/linea/ref, conserva aliases mediante
+`covered_by`, fusiona criterios/tests/write-set sin borrar historico y emite
+`backlog_task_overlap_canonicalization_required` para rebase/decision cuando una
+alias ya esta viva. Evidencia focal:
+`go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+Rework 2026-05-27: la correccion de revision no abre duplicacion nueva. T250
+permanece como owner cerrado de canonicalizacion de solapes; esta pasada solo
+sincroniza la evidencia documental con el ACK estricto y deja T44 como guarda de
+contexto `ref_only`. No se relanza agente padre ni se anaden tareas Txx nuevas.
+
+## Priorizacion scanner 2026-05-27 decimoseptima pasada
+
+Backlog asociado: `T250 backlog-proposal-deduplication-fingerprint`.
+
+Prioridad media:
+
+- Resolver T250 antes de aumentar la paralelizacion de scanners que escriben en
+  el backlog vivo. T248/T249 gobiernan identidad de bloques de escaneo, pero no
+  impiden que dos propuestas Txx distintas cubran la misma frontera ejecutable
+  con titulos o granularidad parecida.
+- Usar una huella estructurada de propuesta permite bloquear duplicados antes de
+  encolarlos y conservar evidencia de la propuesta descartada para rebase o
+  revision humana.
+
+Duplicaciones a evitar:
+
+- T250 no sustituye T37: el parser de Markdown sigue siendo owner de extraer
+  tareas, estado, alcance, criterios y tests.
+- T250 no sustituye T43/T240: lease, epoch documental y lectura segura de docs
+  siguen separados; T250 consume esos datos para comparar propuestas.
+- T250 no sustituye T248/T249: identidad y orden de secciones de escaneo siguen
+  aparte; aqui se deduplican propuestas ejecutables `Txx`.
+- T250 debe respetar T45/T90: una tarea puede quedar como subshard solo si
+  declara frontera reducida, criterio no cubierto y motivo causal; si no, debe
+  bloquearse como solape.
+
+Resolucion 2026-05-27: cerrado en el planner residente. La huella
+`backlog_proposal_fingerprint` se anade a los context refs de cada propuesta
+ejecutable; el dedupe compara objetivo, scope y tokens normalizados, registra
+`duplicate_backlog_proposal_fingerprint` y deja evidence refs compactas para
+rebase/revision humana. Si una de las propuestas solapadas ya esta viva, ambas
+refs quedan bloqueadas y el planner devuelve trabajo conocido en cola en vez de
+relanzar otro agente padre.
+
+## Priorizacion scanner 2026-05-27 decimonovena pasada
+
+Backlog asociado: `T254 backlog-task-id-collision-alias-index`.
+
+Estado 2026-05-27: cerrado en el planner residente de automejora. Las secciones
+homonimas `## Txx` conservan el numero humano como alias visible, pero cada
+request publica `task_instance_ref`/`backlog_task_entry_ref`, alias `Txx#NN`,
+reason `backlog_duplicate_task_id_ambiguous` y colision
+`backlog_task_number_collision` con `instance_refs`.
+
+Prioridad alta:
+
+- Resolver T254 antes de usar un id humano `Txx` como unica clave de cierre,
+  encolado, roadmap o ACK. La evidencia actual ya no es solo riesgo futuro:
+  varias secciones `## T250` existen en el backlog vivo y representan fronteras
+  distintas, por lo que un cierre por numero puede afectar a la tarea equivocada.
+- Mantener reparacion aditiva. No renumerar ni borrar historico; crear refs de
+  entrada estables, aliases y reason codes publicos para que planner, MCP,
+  stats y auditoria puedan distinguir secciones homonimas.
+
+Duplicaciones a evitar:
+
+- T254 no sustituye T37: el parser de Markdown sigue siendo owner de extraer
+  estado, criterios y tests; T252 anade identidad resoluble ante colision.
+- T254 no sustituye T43/T240: merge lease y lectura segura de docs siguen
+  separados; T252 consume fichero/linea/hash como evidencia de entrada.
+- T254 no sustituye T248/T249: scan refs e identidad de bloques de evidencia
+  siguen aparte; aqui se resuelve la identidad ejecutable de tareas `Txx`.
+- T254 no sustituye T250/T251: dedupe/preflight evita nuevos duplicados o
+  solapes; T252 repara de forma aditiva colisiones ya persistidas.
+
+## Priorizacion scanner 2026-05-27 vigesima pasada
+
+Backlog asociado: T44, T249, T250, T251 y T252.
+
+Prioridad alta:
+
+- No abrir otro Txx para el mismo patron mientras los owners anteriores sigan
+  pendientes y visibles. El scanner debe registrar evidencia de lectura local,
+  resolver `required ref_only` en ACK y cerrar la pasada documental sin generar
+  una tarea solapada.
+- Ejecutar primero T251/T252 antes de aumentar concurrencia de scanners: una
+  nueva seccion sin reserva causal o sin preflight canonico agrava la colision
+  de ids humanos que ya se esta intentando reparar.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: la guarda de contexto `required ref_only` ya existe; esta
+  pasada solo aporta evidencia de que se uso lectura local y nota de ACK.
+- No duplicar T249: identidad y orden de entradas de escaneo siguen en ese
+  owner.
+- No duplicar T250/T251: reserva/dedupe/preflight de propuestas nuevas quedan
+  ahi.
+- No duplicar T252: read model, alias y reparacion aditiva de ids humanos
+  duplicados quedan ahi; no renumerar ni borrar historico.
+
+## Priorizacion scanner 2026-05-27 vigesima primera pasada
+
+Backlog asociado: T44, T249, T250, T251, T252 y T254.
+
+Prioridad alta:
+
+- Tratar las pasadas nuevas que solo reobservan `required_ref_action`,
+  write-set documental cerrado y colisiones `Txx` ya registradas como no-op con
+  evidencia, no como generadoras de mas backlog. El ACK debe resolver el
+  contexto `ref_only` con lectura local o consulta al director y conservar refs
+  opacas de worktree/branch sin convertirlas en rutas.
+- Ejecutar primero los owners pendientes de dedupe/preflight/read model antes de
+  lanzar mas scanners paralelos que escriban en los mismos shards.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` se resuelve en ACK/evidencia.
+- No duplicar T249: identidad de bloques de escaneo sigue ahi.
+- No duplicar T250/T251: dedupe, preflight y alcance de pruebas siguen ahi.
+- No duplicar T252/T254: ids humanos duplicados y aliases aditivos siguen ahi.
+
+## Priorizacion scanner 2026-05-27 vigesimoprimera pasada
+
+Backlog asociado: `T255 opes-bridge-document-plan-contract-file-split`.
+
+Prioridad media:
+
+Estado 2026-05-27: cerrado para el split local del bridge OPES. La frontera
+queda en `orquesta-opes-bridge`: contrato documental, politica editorial,
+politica/plantilla HTML y metodologia/calidad OPES se separan sin mover reglas a
+core, workflow, director ni `orquesta-domain-work`.
+
+- Mantener T255 como cierre aplicado antes de anadir mas politica editorial,
+  HTML o tipos documentales OPES al bridge. La evidencia original mostro
+  `document_plan_contract_v0.go` por encima de 300 lineas y mezclando varias
+  responsabilidades de dominio; el cierre local ya separa esos owners.
+- Mantener la division dentro del adaptador OPES. La mejora debe reducir
+  tamano/ownership local y conservar los campos publicos existentes; no debe
+  mover reglas editoriales a `orquesta-domain-work`, core, workflow ni director.
+
+Duplicaciones a evitar:
+
+- T255 no sustituye T204: presupuesto/ventana de `topic_blocks` sigue en su
+  owner.
+- T255 no sustituye T205: schema y normalizacion de payload por `job_type`
+  siguen separados.
+- T255 no sustituye T206: readback y receipt causal OPES siguen separados.
+- T255 no sustituye T244 ni T253: esos splits pertenecen al stack Codex y al
+  provider de replan por quality gate, no al bridge OPES.
+
+## Priorizacion scanner 2026-05-27 vigesima segunda pasada
+
+Backlog asociado: `T256 server-shutdown-usecase-file-split` como owner
+canonico; la variante `server-shutdown-usecase-file-split-before-growth` queda
+fusionable y no debe programarse por separado.
+
+Prioridad media:
+
+- Resolver T256 antes de anadir nuevos modos de apagado, reason codes,
+  reintentos o integracion de checkpoint al caso de uso residente. La evidencia
+  actual muestra `shutdown_v0.go` con 319 lineas y varias responsabilidades
+  mezcladas en una frontera que debe seguir siendo hexagonal.
+- Mantener el split dentro de `orquesta-server-shutdown`: el modulo coordina
+  por puertos `RunControl`, `RunQueue`, `RunSupervisor` y checkpoints, pero no
+  debe matar procesos ni importar runtime concreto, web, MCP, DB o `cmd`.
+
+Estado 2026-05-27: T256 queda resuelto dentro de `orquesta-server-shutdown`.
+`shutdown_v0.go` conserva la fachada publica y el detalle local queda separado
+en autorizacion, control, targets/checkpoint y supervision; no se abre la
+variante `server-shutdown-usecase-file-split-before-growth` como tarea
+independiente.
+Rework 2026-05-27: la entrega
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-846263ad27220f7ca7d97aeec4d5e7d1`
+mantiene esa fusion, conserva T256 como owner canonico y cierra el contexto
+`ref_only` con evidencia ACK, sin tocar owners vecinos.
+Rework adicional 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-40ea96487c3783404f7d6a48b0cb8411`
+confirma la misma fusion y evita relanzar otra tarea para el alias
+`server-shutdown-usecase-file-split-before-growth`.
+Rework final 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-247e6d495674dee5a1b996468956a6be`
+mantiene T256 como owner canonico, conserva la absorcion del alias
+`server-shutdown-usecase-file-split-before-growth` y deja el contexto
+`ref_only` cerrado por evidencia ACK sin crear owner nuevo.
+Rework correctivo 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-ced6b146bcf5b10e5253ef166816de66`
+revalida el cierre sin relanzar agente padre, mantiene la variante
+`server-shutdown-usecase-file-split-before-growth` absorbida por T256 y conserva
+el contexto `ref_only` resuelto en ACK.
+Rework de reemplazo 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-75ba20e2214f2eaaea16f312c68208f0`
+mantiene la fusion con T256 canonico, evita crear owner nuevo para el alias
+`server-shutdown-usecase-file-split-before-growth` y deja el contexto
+`ref_only` resuelto por evidencia ACK.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-f878e21cfa5e67e7481d20a5f9bd24c5`
+conserva la misma fusion, no crea owner nuevo para el alias
+`server-shutdown-usecase-file-split-before-growth` y resuelve el contexto
+`ref_only` por lectura local y evidencia ACK.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-3d04cc0bcd1f59b871869ec824d2c996`
+conserva la fusion con T256 canonico, no crea owner nuevo para el alias
+`server-shutdown-usecase-file-split-before-growth` y resuelve el contexto
+`ref_only` por lectura local y evidencia ACK.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-46d0d95f62343cc1e51b9ca398f83f84`
+conserva la fusion con T256 canonico, no crea owner nuevo para el alias
+`server-shutdown-usecase-file-split-before-growth` y resuelve el contexto
+`ref_only` por lectura local y evidencia ACK.
+Rework de reemplazo 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-b6686ba67b0d901948d8ce067d8771ec`
+conserva la fusion con T256 canonico, no crea owner nuevo para el alias
+`server-shutdown-usecase-file-split-before-growth` y resuelve el contexto
+`ref_only` por lectura local y evidencia ACK.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-bff7aa189e7e24662071cf55dffcb95f`
+conserva la fusion con T256 canonico, no crea owner nuevo para el alias
+`server-shutdown-usecase-file-split-before-growth` y resuelve el contexto
+`ref_only` por lectura local y evidencia ACK.
+Rework de reemplazo 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-55de335961e2cd74deaeda6d56c611bb`
+conserva la fusion con T256 canonico, no crea owner nuevo para el alias
+`server-shutdown-usecase-file-split-before-growth` y resuelve el contexto
+`ref_only` por lectura local y evidencia ACK.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-c853a308c21a89806299b2db6b75edfe`
+conserva la fusion con T256 canonico, no crea owner nuevo para el alias
+`server-shutdown-usecase-file-split-before-growth` y resuelve el contexto
+`ref_only` por lectura local y evidencia ACK. La revalidacion no puede cerrar
+la prueba obligatoria porque el build de `cmd/orquesta-server` falla en
+`modulos/orquesta-app-director-service`, fuera del write-set.
+Rework de reemplazo 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-3cf9f50f2a1ee0b94df79560b6eeca53`
+conserva la fusion con T256 canonico, no crea owner nuevo para el alias
+`server-shutdown-usecase-file-split-before-growth` y resuelve el contexto
+`ref_only` por lectura local y evidencia ACK.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-a0fa2702f7f819236261be3abc537d86`
+conserva la fusion con T256 canonico, no crea owner nuevo para el alias
+`server-shutdown-usecase-file-split-before-growth` y resuelve el contexto
+`ref_only` por lectura local, evidencia ACK y prueba obligatoria pasada.
+Rework de reemplazo 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-autoprogr-2e9-81707decc46db22fc599c9343d59d3cb`
+mantiene la fusion con T256 canonico, no crea owner nuevo para el alias
+`server-shutdown-usecase-file-split-before-growth` y resuelve el contexto
+`ref_only` por lectura local, evidencia ACK y prueba obligatoria pasada.
+
+Duplicaciones a evitar:
+
+- T256 no sustituye T30: el puerto neutral de checkpoint de shutdown sigue en
+  su owner.
+- T256 no sustituye T226 ni T239: intentos/idempotencia y correlacion de ACKs
+  stale siguen como rails de Codex/guardian/stack.
+- T256 no sustituye T52/T54/T90/T242: esos splits pertenecen a
+  app-director-service, stack Codex, residuo general y supervisor residente.
+- T256 no sustituye T213/T227: redaccion/budget de salida publica y detalle
+  runtime siguen separados; aqui solo se reduce tamano y ownership local del
+  caso de uso de apagado.
+
+## Priorizacion scanner 2026-05-27 vigesimosegunda pasada
+
+Backlog asociado: sin Txx nuevo; owners existentes T44, T249, T250, T251,
+T252, T254, T255, T227 y T241.
+
+Prioridad alta:
+
+- Evitar que scanners documentales equivalentes vuelvan a crear tareas cuando
+  solo reobservan `required_ref_action=ack_evidence_required`, pruebas globales
+  para write-set documental, colisiones `Txx` historicas, control files/ACK o
+  `provider_auth_blocked` ya cubiertos por owners pendientes.
+- Cerrar estas pasadas por evidencia local y ACK explicito de contexto
+  `ref_only`, conservando `worktree_ref` y `branch_ref` como refs opacas.
+
+Duplicaciones a evitar:
+
+- No duplicar T44 para contexto `ref_only`.
+- No duplicar T249/T250/T251/T252/T254 para identidad, dedupe, preflight,
+  reserva y read model de backlog.
+- No duplicar T143/T155/T157/T227 para ACK/control files/detalle runtime.
+- No duplicar T241 para recuperacion por `provider_auth_blocked`.
+- No duplicar T244/T253/T255 para splits por presupuesto de ficheros.
+
+## Priorizacion scanner 2026-05-27 vigesima segunda pasada
+
+Backlog asociado: T44, T250, T251, T252, T254 y T255.
+
+Prioridad alta:
+
+- No abrir otra tarea de scanner para el mismo paquete documental mientras T250,
+  T251, T252 y T254 sigan pendientes: la colision de ids humanos y el preflight
+  canonico ya tienen owner.
+- No abrir otra tarea de split OPES por el hueco ya cerrado en T255: el alcance,
+  criterios y test focal del bridge quedan documentados y verificados.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: el contexto `ref_only` se resuelve en ACK/evidencia, no con
+  otro owner.
+- No duplicar T250/T251/T252/T254: dedupe, scope de pruebas, read model,
+  alias y reserva de ids `Txx` siguen en esos owners.
+- No duplicar T255: la division de politica editorial/HTML/contrato OPES
+  pertenece al bridge OPES y no debe mezclarse con T204, T205, T206, T244 ni
+  T253.
+
+## Priorizacion scanner 2026-05-27 vigesima segunda pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254 y T255.
+
+Prioridad alta:
+
+- Cerrar las pasadas documentales repetidas como evidencia de cobertura cuando
+  el scanner solo reobserva contexto `ref_only`, write-set de shards y huecos
+  ya visibles. No abrir un Txx nuevo hasta que T249/T250/T251/T252/T254
+  resuelvan identidad, dedupe, preflight y colisiones de ids humanos.
+- Mantener T255 como owner separado del split OPES ya detectado. Las pasadas
+  posteriores no deben duplicarlo salvo que aporten una frontera distinta con
+  evidencia propia.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: el contexto `ref_only` se resuelve en ACK con lectura local o
+  consulta al director.
+- No duplicar T249/T250/T251: identidad de entradas, dedupe de propuestas,
+  preflight canonico y alcance de tests siguen en esos owners.
+- No duplicar T252/T254: la reparacion de ids `Txx` ambiguos debe ser aditiva,
+  con aliases/read model, sin renumerar historico.
+- No duplicar T255: el split de `orquesta-opes-bridge` es un owner local de
+  tamano/ownership, no una razon para abrir otro scanner programable.
+
+## Priorizacion scanner 2026-05-27 vigesima segunda pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254 y T255.
+
+Prioridad alta:
+
+- Tratar las nuevas pasadas con el mismo paquete `ref_only`, write-set
+  documental cerrado y owners ya visibles como no-op con evidencia. No abrir un
+  nuevo Txx solo para confirmar T44/T249/T250/T251/T252/T254/T255.
+- Mantener `worktree_ref` y `branch_ref` como refs opacas en la entrega; no
+  convertirlas en rutas ni nombres Git.
+- Resolver el contexto obligatorio por lectura local o consulta al director, y
+  reflejarlo en ACK con `contexto_ref_only_resuelto`.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` se resuelve en ACK/evidencia.
+- No duplicar T249: identidad y orden de bloques de escaneo siguen ahi.
+- No duplicar T250/T251: reserva, dedupe, preflight y alcance de pruebas siguen
+  ahi.
+- No duplicar T252/T254: ids humanos duplicados, alias/read model y reparacion
+  aditiva siguen ahi.
+- No duplicar T255: la division del contrato documental OPES ya tiene owner
+  local en `orquesta-opes-bridge`.
+
+## Priorizacion scanner 2026-05-27 vigesimosegunda pasada
+
+Backlog asociado: `T256 server-shutdown-usecase-file-split`.
+
+## Priorizacion scanner 2026-05-27 vigesima tercera pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255 y T256.
+
+Prioridad alta:
+
+- Tratar las nuevas pasadas con el mismo paquete `ref_only`, write-set
+  documental cerrado y owners ya visibles como no-op con evidencia. No abrir un
+  nuevo Txx solo para confirmar T44/T249/T250/T251/T252/T254/T255/T256.
+- Mantener `worktree_ref` y `branch_ref` como refs opacas en la entrega; no
+  convertirlas en rutas ni nombres Git.
+- Resolver el contexto obligatorio por lectura local o consulta al director y
+  reflejarlo en ACK con `contexto_ref_only_resuelto`.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` se resuelve en ACK/evidencia.
+- No duplicar T249: identidad y orden de bloques de escaneo siguen ahi.
+- No duplicar T250/T251: reserva, dedupe, preflight y alcance de pruebas siguen
+  ahi.
+- No duplicar T252/T254: ids humanos duplicados, alias/read model y reparacion
+  aditiva siguen ahi.
+- No duplicar T255/T256: los splits locales de OPES bridge y shutdown ya tienen
+  owners propios; no crear otro scanner programable para esas mismas fronteras.
+
+Prioridad media:
+
+- No relanzar T256 como tarea nueva: el cierre local ya deja `shutdown_v0.go`
+  como fachada menor de 300 lineas y reparte detalle en owners locales de
+  autorizacion, control, checkpoint, targets, supervision y resumen.
+- La revision/rework final del 2026-05-27 solo sincroniza evidencia documental
+  y ACK; nuevos cambios de shutdown deben usar T256 canonico o un owner vecino
+  real, no el alias `before-growth`.
+- La correccion
+  `agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-ced6b146bcf5b10e5253ef166816de66`
+  mantiene esa regla: evidencia documental y ACK, sin nuevo owner programable.
+- La correccion
+  `agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-75ba20e2214f2eaaea16f312c68208f0`
+  revalida la misma absorcion de `before-growth`: no hay nueva tarea
+  programable ni cambio de contrato de shutdown.
+- La correccion
+  `agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-f878e21cfa5e67e7481d20a5f9bd24c5`
+  mantiene la absorcion de `before-growth`, sin nuevo owner programable ni
+  cambio de contrato de shutdown.
+- La correccion
+  `agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-3d04cc0bcd1f59b871869ec824d2c996`
+  mantiene la misma absorcion de `before-growth`, sin nuevo owner programable
+  ni cambio de contrato de shutdown.
+- La correccion
+  `agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-46d0d95f62343cc1e51b9ca398f83f84`
+  mantiene la misma absorcion de `before-growth`, sin nuevo owner programable
+  ni cambio de contrato de shutdown.
+- La correccion
+  `agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-33ca4ea060412afa902e83e3765c1d23`
+  mantiene la misma absorcion de `before-growth`, sin nuevo owner programable
+  ni cambio de contrato de shutdown.
+- La correccion
+  `agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-b6686ba67b0d901948d8ce067d8771ec`
+  mantiene la misma absorcion de `before-growth`, sin nuevo owner programable
+  ni cambio de contrato de shutdown.
+- La correccion
+  `agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-bff7aa189e7e24662071cf55dffcb95f`
+  mantiene la misma absorcion de `before-growth`, sin nuevo owner programable
+  ni cambio de contrato de shutdown.
+- La correccion
+  `agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-c853a308c21a89806299b2db6b75edfe`
+  mantiene la misma absorcion de `before-growth`, sin nuevo owner programable
+  ni cambio de contrato de shutdown; el fallo de build observado pertenece a
+  `modulos/orquesta-app-director-service`, fuera del write-set cerrado.
+- Mantener nuevos cambios de apagado dentro de `orquesta-server-shutdown` y
+  `cmd/orquesta-server` solo para wiring/pruebas de composicion. El modulo
+  sigue siendo hexagonal: no mata procesos, no conoce runtime real, no importa
+  Codex/MCP/web/DB/filesystem y no expone HOME, tokens ni rutas.
+
+Duplicaciones a evitar:
+
+- T256 no sustituye T30: checkpoint cooperativo neutral y ACK durable siguen en
+  su owner.
+- T256 no sustituye T225: escalado forzado del guardian sigue cerrado en su
+  owner.
+- T256 no sustituye T239: correlacion de intento de checkpoint Codex sigue
+  separada.
+- T256 no sustituye T199 ni T217: catalogo publico de errores y politica de
+  senales/shutdown del servidor siguen como rails vecinos.
+
+## Priorizacion scanner 2026-05-27 vigesima segunda pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254 y T255.
+
+Prioridad alta:
+
+- Tratar nuevas pasadas equivalentes del scanner documental como evidencia de
+  cobertura, no como generadoras de mas `Txx`, cuando el paquete solo aporta
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog y huecos ya visibles en owners pendientes.
+- Resolver primero T250/T251/T252/T254 antes de aumentar concurrencia de
+  scanners que escriben ids humanos o fusionan propuestas; resolver T255 antes
+  de crecer el contrato documental OPES.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` se resuelve por lectura local/evidencia
+  en ACK.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos duplicados y aliases aditivos siguen ahi.
+- No duplicar T255: el split OPES pertenece al bridge OPES y no reabre reglas
+  de nucleo ni owners OPES previos.
+
+## Priorizacion scanner 2026-05-27 vigesima segunda pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254 y T255.
+
+Prioridad alta:
+
+- Tratar nuevas pasadas documentales equivalentes como evidencia de cobertura,
+  no como backlog programable nuevo, mientras los owners anteriores sigan
+  pendientes y visibles en los shards. El ACK debe declarar la resolucion del
+  contexto `ref_only` y las pruebas obligatorias ejecutadas.
+- No aumentar colisiones `Txx` ni duplicar splits por presupuesto de fichero:
+  T253/T255 ya tienen owners locales y T250/T251/T252/T254 gobiernan identidad,
+  preflight, read model y aliases.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada resuelve el contexto por lectura local/evidencia,
+  sin crear otra guarda.
+- No duplicar T249/T250/T251: identidad de escaneo, dedupe, reserva y preflight
+  siguen en esos owners.
+- No duplicar T252/T254: ids humanos duplicados y reparacion aditiva siguen ahi.
+- No duplicar T253/T255: los splits de ficheros grandes ya tienen owner local.
+
+## Priorizacion scanner 2026-05-27 vigesima cuarta pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256 y T257.
+
+Prioridad alta:
+
+- Ejecutar T257 antes de anadir mas reglas al indice federado de backlog: la
+  separacion debe dejar una frontera clara entre catalogo canonico, parsing de
+  indice, parsing de entradas locales, cuarentena documental y refs de scanner.
+- Mantener T249/T250/T251/T252/T254 como owners de identidad, dedupe, preflight,
+  alcance de pruebas e ids humanos; T257 no debe absorber esas politicas.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` se resuelve por lectura local/evidencia
+  en ACK.
+- No duplicar T249/T250/T251/T252/T254: el split federado debe conservar la
+  semantica existente y delegar esos rails a sus owners.
+- No duplicar T255/T256: los splits OPES bridge y server-shutdown siguen en sus
+  modulos; T257 solo cubre `cmd/orquesta-server` para backlog federado.
+
+Cierre 2026-05-27: T257 queda cerrado en `cmd/orquesta-server` dividiendo
+carga federada, parser de indice, parser local y clasificacion de estado; los
+owners T249/T250/T251/T252/T254 siguen gobernando identidad, dedupe, preflight,
+alcance de pruebas e ids humanos.
+
+Revalidacion OrquestaV2 2026-05-27: el paquete
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-ec8e0c187f3a9ac12eb4a2a1b1343950`
+confirma que T257 sigue cerrado; resolver `ref_only` por lectura local y ACK,
+ejecutar la prueba focal del servidor y no duplicar owners ni politicas de
+T249/T250/T251/T252/T254/T255/T256/T258.
+
+Revalidacion OrquestaV2 burst 002 2026-05-27: el paquete
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-a2fd4b485cb6c9eb3e118699b8c263e8`
+solo reobserva T257; mantener cierre existente, resolver `ref_only` con lectura
+local/evidencia en ACK y no duplicar owners de identidad, dedupe, preflight,
+ids humanos ni splits recientes.
+
+Revalidacion OrquestaV2 burst 003 2026-05-27: el paquete
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-6e9bb2925e8315f5a8e8a4458c5dafec`
+solo reobserva T257; no abrir owner nuevo ni duplicar T249/T250/T251/T252/T254,
+T255/T256/T258. El ACK debe declarar contexto `ref_only` resuelto y bloqueo de
+la prueba obligatoria por compilacion fuera del write-set si persiste.
+
+Revalidacion OrquestaV2 burst 002 adicional 2026-05-27: el paquete
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-d42ec6b2c4feefb41c1a8bd1217aba3a`
+solo reobserva T257; mantener el cierre existente, resolver `ref_only` por
+lectura local/evidencia en ACK y no duplicar owners de identidad, dedupe,
+preflight, ids humanos ni splits recientes. La prueba obligatoria queda
+bloqueada por compilacion de `modulos/orquesta-app-director-service` fuera del
+write-set.
+
+Revalidacion OrquestaV2 burst 002 adicional 6dc6 2026-05-27: el paquete
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-6dc6bdca36a88bfa03d0be4e0ef98dbd`
+confirma que el paquete solo reobserva T257 ya cerrado; mantener split vigente,
+resolver `ref_only` por lectura local/evidencia ACK y no duplicar owners de
+identidad, dedupe, preflight, ids humanos ni splits recientes.
+
+Revalidacion OrquestaV2 burst 002 adicional 3519 2026-05-27: el paquete
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-3519b447ee0e247812f0a2de19e107ff`
+solo reobserva T257; conservar el cierre existente, resolver `ref_only` por
+lectura local/evidencia ACK y mantener `worktree_ref`/`branch_ref` como refs
+opacas sin abrir owner nuevo.
+
+Revalidacion OrquestaV2 burst 003 adicional 688572 2026-05-27: el paquete
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-688572c0228e7735f6c5a3d0b137d96f`
+solo reobserva T257; mantener el cierre existente de carga federada, parser de
+indice, parser local y clasificacion de estado, resolver `ref_only` por lectura
+local/evidencia en ACK, ejecutar la prueba focal del servidor y no duplicar
+T44/T249/T250/T251/T252/T254/T255/T256/T258.
+
+Revalidacion OrquestaV2 burst 002 adicional b744 2026-05-27: el paquete
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-b744e45b4bc69e90339caae12c59ddac`
+solo reobserva T257; mantener el cierre existente, resolver `ref_only` por
+lectura local/evidencia en ACK, conservar `worktree_ref`/`branch_ref` como refs
+opacas y no duplicar T44/T249/T250/T251/T252/T254/T255/T256/T258.
+
+Revalidacion OrquestaV2 burst 003 adicional e3e841 2026-05-27: el paquete
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-e3e8416382f03b021e17fad4f48672c6`
+solo reobserva T257; mantener el cierre existente de carga federada, parser de
+indice, parser local, clasificacion de estado y refs de contexto, resolver
+`ref_only` por lectura local/evidencia en ACK, conservar `worktree_ref` y
+`branch_ref` como refs opacas y no duplicar T44/T249/T250/T251/T252/T254/T255/T256/T258.
+
+Revalidacion OrquestaV2 burst 002 adicional 6ad2 2026-05-27: el paquete
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-6ad2ce2a420fdd4406624de54709433a`
+solo reobserva T257; mantener el cierre existente de carga federada, parser de
+indice, parser local, clasificacion de estado y refs de contexto, resolver
+`ref_only` por lectura local/evidencia ACK, conservar `worktree_ref` y
+`branch_ref` como refs opacas y no duplicar T44/T249/T250/T251/T252/T254/T255/T256/T258.
+
+## Priorizacion scanner 2026-05-27 vigesima segunda pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254 y T255.
+
+Prioridad alta:
+
+- Cerrar las nuevas pasadas del scanner que solo reobservan `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set documental cerrado y
+  owners pendientes visibles como no-op con evidencia. No generar otro Txx
+  mientras no aparezca un hueco causal distinto.
+- Mantener la prueba global `go test -count=1 ./...` como validacion requerida
+  del paquete, pero no usarla para abrir una politica nueva si T251 ya cubre el
+  alcance de pruebas de scanners documentales.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: el contexto requerido por ref se resuelve en ACK con lectura
+  local/evidencia explicita.
+- No duplicar T249/T250/T251: identidad de escaneo, dedupe, preflight y alcance
+  de pruebas siguen en esos owners.
+- No duplicar T252/T254: ids humanos duplicados, read model y aliases aditivos
+  siguen en esos owners.
+- No duplicar T255: el split OPES bridge ya esta abierto; esta pasada no anade
+  otro owner para el mismo fichero ni cambia la frontera OPES como consumidor.
+
+## Priorizacion scanner 2026-05-27 vigesima tercera pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255 y T256.
+
+Prioridad alta:
+
+- Tratar la nueva pasada del scanner documental
+  `agent-ref-assessment-task-autoprogramming-721523601cc1-g01-520f979fdde9866f084ddfa1d5cc7425`
+  como no-op cubierto: solo reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+  shards y owners pendientes ya visibles.
+- Resolver el contexto requerido por lectura local/evidencia en ACK, conservar
+  `worktree_ref` y `branch_ref` como refs opacas y no crear otro `Txx` mientras
+  no aparezca un hueco causal distinto.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: la guarda `ref_only` se resuelve en ACK/evidencia.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen ahi.
+- No duplicar T252/T254: ids humanos duplicados, read model y aliases aditivos
+  siguen en esos owners.
+- No duplicar T255/T256: los splits concretos de OPES bridge y shutdown ya
+  tienen owners locales; este scanner no anade frontera nueva.
+
+## Priorizacion scanner 2026-05-27 vigesima tercera pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255 y T256.
+
+Prioridad alta:
+
+- Cerrar como no-op cubierto las pasadas documentales que solo reobservan
+  `ref_only`, `required_ref_action=ack_evidence_required`, write-set cerrado a
+  shards de backlog y owners pendientes ya visibles. El ACK debe resolver el
+  contexto por lectura local/evidencia y no convertir refs opacas de worktree o
+  branch en rutas ni nombres Git.
+- No abrir mas splits por presupuesto de fichero desde este scanner mientras
+  T253, T255 y T256 sigan pendientes y cubran los ficheros concretos detectados.
+  Cualquier nuevo fichero debe llegar con medicion, owner local y ausencia de
+  solape contra esos Txx.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto por lectura local y nota
+  `contexto_ref_only_resuelto` en ACK.
+- No duplicar T249/T250/T251: identidad de escaneo, dedupe, preflight y alcance
+  de pruebas de scanners siguen en esos owners.
+- No duplicar T252/T254: lectura ambigua de ids humanos y aliases aditivos
+  siguen en esos owners.
+- No duplicar T255/T256: OPES bridge y server-shutdown ya tienen owners locales
+  para split por responsabilidad; esta pasada solo conserva evidencia de
+  cobertura.
+
+## Scanner 2026-05-27: conector de proceso runtime por dividir
+
+Backlog asociado: `T256 runtime-process-connector-file-split`.
+
+Evidencia:
+
+- `modulos/orquesta-runtime/process_runtime_connector_v0.go` tiene 313 lineas y
+  concentra launch, adopcion, wait interno y stop de proceso.
+- `modulos/orquesta-runtime/process_runtime_connector_types_v0.go` tiene 318
+  lineas y concentra DTOs, errores, validacion de request/snapshot, guardas de
+  env, shell y rutas.
+
+Estado 2026-05-27: T256 queda resuelto dentro de `orquesta-runtime`.
+`ProcessRuntimeConnectorV0` conserva contrato publico y refs opacas, mientras
+launch validation, env policy, value guards, adopcion, estado interno y watchers
+quedan en owners locales bajo 300 lineas. El cierre no reabre
+`NEUTRAL-PROCESS-STOP-E2E`, T65 ni T66.
+
+Rework de revision 2026-05-27: el paquete
+`agent-ref-task-ref-review-rework-task-autoprogramming-d1516ddebab4-g01-736b5902b9f28a1666a612eccb83a9c2`
+mantiene T256 como owner canonico, no crea duplicacion nueva y cierra el
+contexto `ref_only` mediante lectura local/evidencia ACK.
+
+Reglas:
+
+- Resolver T256 antes de anadir mas politica de proceso local, escalado de kill,
+  receipts o redaccion de snapshots al runtime neutral.
+- Mantener la separacion conceptual: `orquesta-runtime` ejecuta ordenes y
+  devuelve evidencia; no decide plan, proveedor, Codex, OPES, DB, HOME ni UI.
+- T256 no sustituye `NEUTRAL-PROCESS-STOP-E2E`: el smoke/proceso temporal ya
+  valida comportamiento vivo y debe seguir pasando.
+- T256 no sustituye T65/T66: composicion residente, restart y smoke neutral de
+  proceso real siguen en sus owners.
+
+## Priorizacion scanner 2026-05-27 vigesima cuarta pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255 y T256.
+
+Prioridad alta:
+
+- Cerrar como no-op cubierto las pasadas documentales que solo reobservan
+  `ref_only`, `required_ref_action=ack_evidence_required`, write-set cerrado a
+  shards de backlog, prueba global obligatoria y owners pendientes visibles.
+  El ACK debe resolver el contexto por lectura local/evidencia y conservar
+  refs de worktree o branch como opacas.
+- No abrir mas Txx desde este scanner mientras no aparezca una frontera causal
+  nueva con owner local, evidencia concreta y no solapada contra T44/T249/T250/
+  T251/T252/T254/T255/T256.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto por lectura local y nota
+  `contexto_ref_only_resuelto` en ACK.
+- No duplicar T249/T250/T251: identidad de escaneo, dedupe, preflight y alcance
+  de pruebas de scanners siguen en esos owners.
+- No duplicar T252/T254: lectura ambigua de ids humanos y aliases aditivos
+  siguen en esos owners.
+- No duplicar T255/T256: OPES bridge, server-shutdown y runtime-process ya
+  tienen owners locales para splits por responsabilidad.
+
+## Scanner 2026-05-27: suite historica app-director-service por dividir
+
+Backlog asociado: `T258 app-director-service-test-suite-file-split`.
+
+Evidencia:
+
+- T52 cerro el split de ficheros productivos de
+  `modulos/orquesta-app-director-service`, pero dejo baseline historico de
+  tests grandes con regla de no crecimiento.
+- `operational_director_v0_test.go`, `operational_closure_v0_test.go`,
+  `operational_director_full_statefile_replay_v0_test.go`,
+  `director_decision_source_v0_test.go` y tests vecinos siguen por encima del
+  limite operativo de 300 lineas.
+
+Reglas:
+
+- Resolver T258 antes de anadir mas escenarios de Director Operativo, cierre
+  causal, replay statefile, domain work o replan negativo a esos ficheros
+  historicos.
+- No duplicar T52: T258 solo reparte tests y helpers de test, no reabre codigo
+  productivo ni contratos publicos.
+- No duplicar T53/T253: materializador/cierre de orchestration-core y replan
+  por quality gate tienen owners propios.
+
+## Priorizacion scanner 2026-05-27 vigesima quinta pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-assessment-task-autoprogramming-350b93e475a8-g01-a9fca45e81d848b2c2a00b8349e4817b`
+  como no-op cubierto: solo reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Mantener el ACK como evidencia de resolucion de contexto por lectura local;
+  no convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+- No abrir mas `Txx` desde retries equivalentes mientras no aparezca una
+  frontera causal nueva con medicion, owner local y ausencia de solape contra
+  T44/T249/T250/T251/T252/T254/T255/T256/T257/T258.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto por lectura local y nota
+  `contexto_ref_only_resuelto` en ACK.
+- No duplicar T249/T250/T251: identidad de escaneo, dedupe, preflight y alcance
+  de pruebas de scanners siguen en esos owners.
+- No duplicar T252/T254: lectura ambigua de ids humanos, reserva, colisiones y
+  aliases aditivos siguen ahi.
+- No duplicar T255/T256/T257/T258: los splits concretos de OPES bridge,
+  server-shutdown, backlog federado y suite historica app-director-service ya
+  tienen owners locales.
+
+## Cierre T258 2026-05-27
+
+Backlog asociado: `T258 app-director-service-test-suite-file-split`.
+
+Resultado:
+
+- La suite historica de `modulos/orquesta-app-director-service` queda dividida
+  por escenarios de Director Operativo, cierre causal, replay statefile, tests
+  requeridos, domain work y replan negativo.
+- No abrir otro owner para este mismo split salvo regresion medida: los casos
+  publicos siguen trazables por nombre de test y la verificacion focal es
+  `go test -count=1 ./modulos/orquesta-app-director-service`.
+- Los refs `worktree_ref` y `branch_ref` de autoprogramacion se conservan como
+  refs opacas; no son rutas ni nombres Git.
+- Rework de revision 2026-05-27: T258 queda confirmado como cierre del rail de
+  tamano para la suite local; no se relanza agente padre ni se duplica T52/T53.
+
+## Priorizacion scanner 2026-05-27 retry d64a6a tercera pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-assessment-task-autoprogramming-757fa45b2845-g01-9a0012e071185631d9f7652eb10ef3bb`
+  como no-op cubierto: solo reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No abrir mas `Txx` desde scanners equivalentes mientras no aparezca una
+  frontera causal nueva con medicion, owner local y ausencia de solape contra
+  T44/T249/T250/T251/T252/T254/T255/T256/T257/T258.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto por lectura local y nota
+  `contexto_ref_only_resuelto` en ACK.
+- No duplicar T249/T250/T251: identidad de escaneo, dedupe, preflight y alcance
+  de pruebas de scanners siguen en esos owners.
+- No duplicar T252/T254: lectura ambigua de ids humanos, reserva, colisiones y
+  aliases aditivos siguen ahi.
+- No duplicar T255/T256/T257/T258: los splits concretos de OPES bridge,
+  server-shutdown, backlog federado y suite historica app-director-service ya
+  tienen owners locales.
+
+## Priorizacion scanner 2026-05-27 vigesima septima pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T253, T254, T255, T256, T257 y
+T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-assessment-task-autoprogramming-721523601cc1-g01-6b02071be67727512a14341842bf4332`
+  como no-op cubierto: repite `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local/evidencia en ACK, preservar
+  `worktree_ref` y `branch_ref` como refs opacas y no abrir otro `Txx` salvo
+  frontera causal nueva con medicion, owner local y ausencia de solape.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto por lectura local y nota
+  `contexto_ref_only_resuelto` en ACK.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos, colisiones, aliases y read model siguen
+  en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya
+  tienen owner local y este scanner no aporta otro fichero ni frontera.
+
+## Priorizacion scanner 2026-05-27 retry 7a5673
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-assessment-task-autoprogramming-3ddbc1385ac2-g01-00ef1096db1ef4935750f733b3fe3ccf`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya
+  tienen owner local y test asociado.
+
+## Rework T257 2026-05-27 reemplazo 5a8806
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el rework documental
+  `agent-ref-assessment-task-ref-review-rework-task-autoprogramming-c4dae25a0488-g01-385-5a8806ef75f49aae3734e7a512136f48`
+  como correccion acotada de T257: el paquete solo exige conservar la entrega
+  valida, resolver `ref_only` por lectura local/evidencia ACK y ejecutar la
+  prueba focal del servidor.
+- Mantener T257 como owner canonico de `federated-backlog-source-file-split`;
+  no relanzar agente padre ni abrir otro `Txx` mientras no aparezca frontera
+  causal nueva con fichero, medicion y ausencia de solape.
+- Registrar en ACK `contexto_ref_only_resuelto` y no convertir refs de runtime
+  en rutas de producto ni nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto en ACK/evidencia.
+- No duplicar T249/T250/T251: identidad, dedupe/preflight y alcance de pruebas
+  siguen en esos owners.
+- No duplicar T252/T254: ids humanos, aliases, colisiones y read model siguen
+  en esos owners.
+- No duplicar T255/T256/T258: los otros splits recientes ya tienen owners
+  locales; este rework solo revalida T257.
+
+## Priorizacion scanner 2026-05-27 retry 5465c1
+
+Backlog asociado: T44, T249, T250, T251, T252, T253, T254, T255, T256, T257 y
+T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-assessment-task-autoprogramming-87d5c800f528-g01-d77d5415386c2758420eb50d9de1c982`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local/evidencia en ACK, preservar
+  `worktree_ref` y `branch_ref` como refs opacas y no abrir otro `Txx` salvo
+  frontera causal nueva con medicion, owner local y ausencia de solape.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto por lectura local y nota
+  `contexto_ref_only_resuelto` en ACK.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos, reserva, colisiones, aliases y read model
+  siguen ahi.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya
+  tienen owner local y este scanner no aporta otro fichero ni frontera.
+
+## Priorizacion scanner 2026-05-27 retry d64a6a
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-assessment-task-autoprogramming-757fa45b2845-g01-5ab69cd762c0b3eea5d2721713dd49d0`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto por lectura local y nota
+  `contexto_ref_only_resuelto` en ACK.
+- No duplicar T249/T250/T251: identidad de escaneo, dedupe, preflight y alcance
+  de pruebas de scanners siguen en esos owners.
+- No duplicar T252/T254: lectura ambigua de ids humanos, reserva, colisiones y
+  aliases aditivos siguen ahi.
+- No duplicar T255/T256/T257/T258: los splits concretos de OPES bridge,
+  server-shutdown, backlog federado y suite historica app-director-service ya
+  tienen owners locales.
+
+## Priorizacion scanner 2026-05-27 vigesima octava pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T253, T254, T255, T256, T257 y
+T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-350b93e475a8-g01-9be0de2c97caf766173a451288993ca0`
+  como no-op cubierto: solo reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto por lectura local y nota
+  `contexto_ref_only_resuelto` en ACK.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya
+  tienen owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 vigesima septima pasada retry 69e1ba
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-assessment-task-autoprogramming-8f23d8e2a22e-g01-957608057af975d94befe452b621687e`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- Conservar `worktree_ref` y `branch_ref` como refs opacas; no convertirlas en
+  rutas ni nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto por lectura local y nota
+  de ACK en esta pasada.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos, reserva, colisiones, aliases y read model
+  siguen ahi.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion T257 2026-05-27 burst 003 7caabb
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el paquete
+  `agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-7caabb5af4687f69a91e450ea47d88db`
+  como no-op cubierto: reobserva T257 ya cerrado, contexto obligatorio
+  `ref_only`, `required_ref_action=ack_evidence_required`, write-set cerrado y
+  prueba focal del servidor.
+- Mantener el cierre existente de T257: carga federada, parser de indice,
+  parser local, clasificacion de estado y refs de contexto quedan separados en
+  `cmd/orquesta-server`.
+- Resolver el contexto requerido por lectura local/evidencia ACK y conservar
+  `worktree_ref`/`branch_ref` como refs opacas.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo valida resolucion operacional de contexto
+  por ACK.
+- No duplicar T249/T250/T251: identidad, dedupe/preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos, reservas, colisiones, aliases y read
+  model siguen ahi.
+- No duplicar T255/T256/T258: OPES bridge, server-shutdown y suite historica
+  app-director-service conservan sus splits propios.
+
+## Priorizacion T257 2026-05-27 burst 002 ebeb
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar la revalidacion
+  `agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-ebebfa72236082cbc973b4c48b012e70`
+  como no-op cubierto: reobserva T257, contexto `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado y prueba focal
+  del servidor.
+- Mantener el cierre existente de T257: carga federada, parser de indice,
+  parser local y clasificacion de estado quedan separados en
+  `cmd/orquesta-server`; `modulos/orquesta-server` no asume politicas de
+  producto ni persistencia concreta.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK.
+- No duplicar T249/T250/T251: identidad, dedupe/preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos, reservas, colisiones, aliases y read
+  model siguen ahi.
+- No duplicar T255/T256/T258: los splits OPES bridge, server-shutdown y suite
+  historica app-director-service ya tienen owner local.
+
+## Priorizacion scanner 2026-05-27 rework T254 09624d3f
+
+Backlog asociado: `T254 backlog-task-id-collision-alias-index`.
+
+Estado 2026-05-27: rework cerrado como correccion de entrega, no como owner
+nuevo. El paquete
+`agent-ref-task-ref-review-rework-task-autoprogramming-6ed65028eb0b-g01-0154a0e80595eed31f9c3059a95a2f93`
+exige resolver contexto `ref_only` por evidencia ACK y conservar la entrega ya
+valida de T254: aliases `Txx#NN`, refs de instancia/entrada y reason
+`backlog_duplicate_task_id_ambiguous` para colisiones de numero humano.
+
+Prioridad alta:
+
+- No relanzar agente padre sobre la tarea original ni abrir otro Txx para el
+  mismo patron de colision/alias de backlog.
+- Mantener reparacion aditiva: no renumerar, borrar ni mover historico; usar
+  `task_instance_ref`, `backlog_task_entry_ref`, alias canonico o decision del
+  director cuando un consumidor llegue solo con `Txx`.
+- Dejar el contexto requerido resuelto por lectura local en ACK con nota
+  `contexto_ref_only_resuelto`.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: la guarda `required ref_only` se satisface en ACK.
+- No duplicar T249/T250/T251: identidad de escaneo, reservas y preflight siguen
+  en sus owners.
+- No duplicar T252/T254: read model, aliases y colisiones de ids humanos siguen
+  cerrados en el planner residente.
+
+## Priorizacion scanner 2026-05-27 retry 9607b2
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-task-autoprogramming-1db274df2c82-g01` como no-op cubierto:
+  reobserva `ref_only`, `required_ref_action=ack_evidence_required`,
+  write-set cerrado a shards de backlog, prueba global obligatoria y owners
+  pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry db2473 burst 002
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-task-autoprogramming-ba3b7ec7b59c-g01` como no-op cubierto:
+  reobserva `ref_only`, `required_ref_action=ack_evidence_required`, write-set
+  cerrado a shards de backlog, prueba global obligatoria y owners pendientes
+  visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry ca7a01 burst 002
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental `agent-ref-task-autoprogramming-b06fa6486ff1-g01`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y backlog degradado ya cubierto por owners
+  pendientes visibles antes de programar codigo.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git:
+  `worktree-ref-orquesta-server-idle-self-improvement` y
+  `branch-ref-orquesta-server-idle-self-improvement` son refs opacas.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe/preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, reserva, aliases, colisiones y read
+  model siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry 4da183 burst 003
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-assessment-task-autoprogramming-3533ffab219a-g01-3b2c0d9af98bdc2180840a7c40a31ccc`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry debe09
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-task-autoprogramming-62119e82f3e7-g01` como no-op cubierto:
+  reobserva `ref_only`, `required_ref_action=ack_evidence_required`, write-set
+  cerrado a shards de backlog, prueba global obligatoria y owners pendientes
+  visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry c848ae
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-task-autoprogramming-d5b73c0f6568-g01` como no-op cubierto:
+  reobserva `ref_only`, `required_ref_action=ack_evidence_required`, write-set
+  cerrado a shards de backlog, prueba global obligatoria y backlog degradado ya
+  cubierto por owners pendientes.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry 33cf37 burst 002
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-task-autoprogramming-29c1c237ce8c-g01` como no-op cubierto:
+  reobserva `ref_only`, `required_ref_action=ack_evidence_required`,
+  write-set cerrado a shards de backlog, prueba global obligatoria y owners
+  pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry 6ed415 burst 002
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-assessment-task-autoprogramming-6050b74fc6c4-g01-b49cac799ca28e09e2cf85d868d4d056`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe/preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry 3d4312 burst 002
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-task-autoprogramming-f924bc43a081-g01` como no-op cubierto:
+  reobserva `ref_only`, `required_ref_action=ack_evidence_required`, write-set
+  cerrado a shards de backlog, prueba global obligatoria y owners pendientes
+  visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry 6ed415 burst 002
+
+Backlog asociado: T44, T249, T250, T251, T252, T253, T254, T255, T256, T257 y
+T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-task-autoprogramming-6050b74fc6c4-g01` como no-op cubierto:
+  reobserva `ref_only`, `required_ref_action=ack_evidence_required`, write-set
+  cerrado a shards de backlog, prueba global obligatoria, backlog degradado y
+  owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry d3160 burst 002
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-task-autoprogramming-205bd061b6ad-g01` como no-op cubierto:
+  reobserva `ref_only`, `required_ref_action=ack_evidence_required`,
+  write-set cerrado a shards de backlog, prueba global obligatoria y owners
+  pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+- No abrir otro `Txx` desde scanners equivalentes mientras no aparezca una
+  frontera causal nueva con medicion, owner local y ausencia de solape contra
+  T44/T249/T250/T251/T252/T254/T255/T256/T257/T258.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto por lectura local y nota
+  `contexto_ref_only_resuelto` en ACK.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Revalidacion scanner retry ed6089 burst 002 2026-05-27
+
+Backlog asociado: T44, T249, T250, T251, T252, T253, T254, T255, T256, T257 y
+T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-task-autoprogramming-72215ef37936-g01` como no-op cubierto:
+  reobserva `ref_only`, `required_ref_action=ack_evidence_required`, write-set
+  cerrado a shards de backlog, prueba global obligatoria y owners pendientes
+  visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, reserva, colisiones, aliases y read
+  model siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry bb17
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-task-autoprogramming-6ae909f7547f-g01` como no-op cubierto:
+  reobserva `ref_only`, `required_ref_action=ack_evidence_required`, write-set
+  cerrado a shards de backlog, prueba global obligatoria y owners pendientes
+  visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry 4e3533
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-task-autoprogramming-8e83bd89baf6-g01` como no-op cubierto:
+  reobserva `ref_only`, `required_ref_action=ack_evidence_required`, write-set
+  cerrado a shards de backlog, prueba global obligatoria y owners pendientes
+  visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- Preservar `worktree_ref` y `branch_ref` como refs opacas; no convertirlas en
+  rutas ni nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto por lectura local y nota
+  `contexto_ref_only_resuelto` en ACK.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, reserva, colisiones, aliases y read
+  model siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya
+  tienen owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry 15eeecb9 burst 002
+
+Backlog asociado: T44, T249, T250, T251, T252, T253, T254, T255, T256, T257 y
+T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental `agent-ref-task-autoprogramming-7b90ca195eaf-g01`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- Revisar backlog/rail errors/duplicaciones antes de programar codigo: el
+  patron degradado ya tiene owners, asi que este scanner no debe abrir Txx ni
+  ampliar alcance.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Revalidacion T250 2026-05-27 acff973f
+
+Backlog asociado: `T250 federated-backlog-epoch-scope-policy`.
+
+Prioridad cerrada:
+
+- Cerrar la evaluacion
+  `agent-ref-assessment-task-autoprogramming-88a96698afb2-g01-6dab0da79e1908567a8bf8e7f3250f9b`
+  como revalidacion de T250: no abre un segundo owner y no convierte fuentes
+  `historico`, `stale` o `quarantine` en dependencias activas del epoch.
+- Mantener la regla operativa: solo fuentes federadas ejecutables (`vigente`,
+  `promocionada`, `promoted`, `active`) participan en `BacklogScanDocs`, epoch
+  y reservas; las demas viajan como contexto compacto
+  `federated_backlog_source_not_executable`.
+- Resolver `ref_only` en ACK con lectura local/evidencia explicita y conservar
+  `worktree_ref`/`branch_ref` como refs opacas.
+
+Duplicaciones a evitar:
+
+- No duplicar T43/T240: lease, epoch documental base y lectura acotada siguen
+  separados.
+- No duplicar T88/T116/T124: indice federado, precedencia documental y
+  cuarentena legacy siguen con sus owners.
+- No duplicar T248/T249/T251: identidad de entradas, dedupe/preflight y alcance
+  de pruebas de scanner siguen separados.
+
+## Priorizacion scanner 2026-05-27 retry 35a079
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental `agent-ref-task-autoprogramming-49af6e594adb-g01`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry a3abed burst 002
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental `agent-ref-task-autoprogramming-30b4d5ecfe9b-g01`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry d1d80
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-task-autoprogramming-798614d0f80e-g01` como no-op cubierto:
+  reobserva `ref_only`, `required_ref_action=ack_evidence_required`, write-set
+  cerrado a shards de backlog, prueba global obligatoria y owners pendientes
+  visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 burst 003 f7d3
+
+Backlog asociado: T44, T249, T250, T251, T252, T253, T254, T255, T256, T257 y
+T258.
+
+Prioridad alta:
+
+- Cerrar el paquete
+  `agent-ref-assessment-task-autoprogramming-fba55e3296a0-g01-f7d3f88efa3648cbceb5112f1cf4a040`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+  shards, prueba global obligatoria y owners pendientes ya visibles.
+- Resolver el contexto requerido por lectura local/evidencia en ACK, conservar
+  `worktree_ref` y `branch_ref` como refs opacas y no crear otro `Txx` mientras
+  no aparezca un hueco causal distinto.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto por lectura local y nota
+  `contexto_ref_only_resuelto` en ACK.
+- No duplicar T249/T250/T251: identidad de escaneo, dedupe/preflight y alcance
+  de pruebas de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos duplicados, reserva, aliases y read model
+  siguen ahi.
+- No duplicar T253/T255/T256/T257/T258: los splits recientes ya tienen owners
+  concretos; este scanner solo conserva evidencia de cobertura.
+
+## Priorizacion scanner 2026-05-27 scanner 15eeecb9 burst 002 8a1ece
+
+Backlog asociado: T44, T249, T250, T251, T252, T253, T254, T255, T256, T257 y
+T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-fba55e3296a0-g01-8a1ecec98ecf3323c5488e327056f703`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete, AGENTS/README y
+  fuentes vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe/preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, reserva, colisiones, aliases y read
+  model siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 burst 002 fba55
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-task-autoprogramming-fba55e3296a0-g01` como no-op cubierto:
+  reobserva `ref_only`, `required_ref_action=ack_evidence_required`, write-set
+  cerrado a shards de backlog, prueba global obligatoria y owners pendientes
+  visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 scanner 15eeecb9 burst 002 f13a
+
+Backlog asociado: T44, T249, T250, T251, T252, T253, T254, T255, T256, T257 y
+T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-fba55e3296a0-g01-f13a1353960542f949b1c478324a27ec`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete, AGENTS/README y
+  fuentes vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe/preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, reserva, colisiones, aliases y read
+  model siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 burst 002 da14
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-da14e4762930936ab46118bb39f7aa9a`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 burst 002 17978
+
+Backlog asociado: T44, T249, T250, T251, T252, T253, T254, T255, T256, T257 y
+T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-17978e79d655060ec0da8977cea2a0ee`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- Conservar `worktree_ref` y `branch_ref` como refs opacas; no convertirlas en
+  rutas ni nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 burst 002 2048
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-2048ee92b24ec50625c2242b8eb85463`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 burst 002 52b63
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-52b63d817ae78008276d7d3e084d76df`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 burst 002 585742
+
+Backlog asociado: T44, T249, T250, T251, T252, T253, T254, T255, T256, T257 y
+T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-585742898dfa4be257b5a2282769c9c2`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, reserva, colisiones, aliases y read
+  model siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry 69e1ba burst 002 c86d18
+
+Backlog asociado: T44, T249, T250, T251, T252, T253, T254, T255, T256, T257 y
+T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-assessment-task-autoprogramming-8f23d8e2a22e-g01-c86d18cc769b57d176d2617c4d0990a6`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry 7a567340
+
+Backlog asociado: T44, T249, T250, T251, T252, T253, T254, T255, T256, T257 y
+T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-assessment-task-autoprogramming-3ddbc1385ac2-g01-0d1f79ec31384d00b4994f75b7e11068`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry 69e1ba burst 002 406b68
+
+Backlog asociado: T44, T249, T250, T251, T252, T253, T254, T255, T256, T257 y
+T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-assessment-task-autoprogramming-8f23d8e2a22e-g01-406b68b132e5ad3f6495920aad6064eb`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry d64a6a burst 002 644f
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-757fa45b2845-g01-644fcb17f3eb0e2fc3b46dc77aa883b8`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe/preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry 42fbc4 burst 002 abd199
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-assessment-task-autoprogramming-721523601cc1-g01-abd199fbb4db7baa1c08602cd2d3dade`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto por lectura local y nota
+  `contexto_ref_only_resuelto` en ACK.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 burst 002 988548
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-988548c1efac02c34d8ab6cf81a53d19`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 burst 002 70a7
+
+Backlog asociado: T44, T249, T250, T251, T252, T253, T254, T255, T256, T257 y
+T258.
+
+Prioridad alta:
+
+- Cerrar el paquete
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-70a7d8db3b4ebd33b19ae663b484aef6`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry d0cf1e burst 002 0d330c
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-assessment-task-autoprogramming-350b93e475a8-g01-0d330c4e1579d03076ce1e175634e42b`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe/preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 burst 002 1db27
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-1db27b63b7ddb14755938b05f1eff32f`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 burst 002 e7040
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el burst documental
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-e7040a9c028b6c9195871408101972c0`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 burst 002 25ebab
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-25ebab4465052369f6e1f66d949cd514`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 burst 002 31b587
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el burst documental
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-31b58785a2bc25303ea28ac1a457f2d3`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 burst 002 c0f755
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-c0f7550c04cbfe4cddf673cf37c73725`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 burst 002 5b79
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el burst documental
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-5b79f9accf52b539a3be229cf4e83bdb`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry 7a5673 burst 002 7aa0
+
+Backlog asociado: T44, T249, T250, T251, T252, T253, T254, T255, T256, T257 y
+T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-assessment-task-autoprogramming-3ddbc1385ac2-g01-7aa072fa3bae532da402f4b748f1904d`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry 5465c1 burst 002 ef66
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-assessment-task-autoprogramming-87d5c800f528-g01-ef66a8153742b6161a7f9836a4c2779e`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 retry 42fbc4 burst 002
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-assessment-task-autoprogramming-721523601cc1-g01-2e79a5694817170a5384a408d1acb03b`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 vigesima septima pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-e078c7be6425160a0ccb6bb8f8b78d11`
+  como no-op cubierto: solo reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No abrir mas `Txx` desde scanners equivalentes mientras no aparezca una
+  frontera causal nueva con medicion, owner local y ausencia de solape contra
+  T44/T249/T250/T251/T252/T254/T255/T256/T257/T258.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto por lectura local y nota
+  `contexto_ref_only_resuelto` en ACK.
+- No duplicar T249/T250/T251: identidad de escaneo, dedupe, preflight y alcance
+  de pruebas de scanners siguen en esos owners.
+- No duplicar T252/T254: lectura ambigua de ids humanos, reserva, colisiones y
+  aliases aditivos siguen ahi.
+- No duplicar T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 vigesima septima pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-4b676d31f48327f48f51c6ce1cc855b4`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- Mantener `worktree_ref` y `branch_ref` como refs opacas; no convertirlas en
+  rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya
+  tienen owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 vigesima septima pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-ae7b1168a2882f5580acd71e20ec5732`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo aporta evidencia operacional de resolucion
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, reserva, colisiones, aliases y read
+  model siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya
+  tienen owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 vigesima septima pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-72e651512c5a9856094dd77d5b947474`
+  como no-op cubierto: solo reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- Preservar `worktree_ref` y `branch_ref` como refs opacas; no convertirlas en
+  rutas ni nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto por lectura local y nota
+  `contexto_ref_only_resuelto` en ACK.
+- No duplicar T249/T250/T251: identidad de escaneo, dedupe, preflight y alcance
+  de pruebas de scanners siguen en esos owners.
+- No duplicar T252/T254: lectura ambigua de ids humanos, reserva, colisiones y
+  aliases aditivos siguen ahi.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya
+  tienen owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 vigesima septima pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-1957b876997d6c6e6b87bbb19f48735f`
+  como no-op cubierto: solo reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo aporta evidencia operacional de contexto
+  resuelto, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 vigesima septima pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-41c250bd381a729b6b7a942fa03db578`
+  como no-op cubierto: solo reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 vigesima sexta pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T253, T254, T255, T256, T257 y
+T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-30cb4ab771802c1a99b591d81d13d88d`
+  como no-op cubierto: solo reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Mantener el ACK como evidencia de resolucion de contexto por lectura local;
+  no convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+- No abrir mas `Txx` desde scanners equivalentes mientras no aparezca una
+  frontera causal nueva con medicion, owner local y ausencia de solape contra
+  T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto por lectura local y nota
+  `contexto_ref_only_resuelto` en ACK.
+- No duplicar T249/T250/T251: identidad de escaneo, dedupe, preflight y alcance
+  de pruebas de scanners siguen en esos owners.
+- No duplicar T252/T254: lectura ambigua de ids humanos, reserva, colisiones y
+  aliases aditivos siguen ahi.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya
+  tienen owners locales y pruebas asociadas.
+
+## Priorizacion scanner 2026-05-27 vigesima septima pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-55fbe00917266eb9dce3cb7ef06512d2`
+  como no-op cubierto: solo reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Mantener el ACK como evidencia de resolucion de contexto por lectura local y
+  fuentes vigentes; no convertir `worktree_ref` ni `branch_ref` en rutas o
+  nombres Git.
+- No abrir otro `Txx` desde scanners equivalentes mientras no aparezca una
+  frontera causal nueva con medicion, owner local y ausencia de solape contra
+  T44/T249/T250/T251/T252/T254/T255/T256/T257/T258.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto por lectura local y nota
+  `contexto_ref_only_resuelto` en ACK.
+- No duplicar T249/T250/T251: identidad de escaneo, dedupe, preflight y alcance
+  de pruebas de scanners siguen en esos owners.
+- No duplicar T252/T254: lectura ambigua de ids humanos, reserva, colisiones y
+  aliases aditivos siguen ahi.
+- No duplicar T255/T256/T257/T258: los splits concretos de OPES bridge,
+  server-shutdown, backlog federado y suite historica app-director-service ya
+  tienen owners locales.
+
+## Priorizacion scanner 2026-05-27 vigesima septima pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-0baf5a292701de903673675f4731b8c4`
+  como no-op cubierto: solo reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Mantener el ACK como evidencia de resolucion de contexto por lectura local;
+  no convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+- No abrir mas `Txx` desde scanners equivalentes mientras no aparezca una
+  frontera causal nueva con medicion, owner local y ausencia de solape contra
+  T44/T249/T250/T251/T252/T254/T255/T256/T257/T258.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto por lectura local y nota
+  `contexto_ref_only_resuelto` en ACK.
+- No duplicar T249/T250/T251: identidad de escaneo, dedupe, preflight y alcance
+  de pruebas de scanners siguen en esos owners.
+- No duplicar T252/T254: lectura ambigua de ids humanos, reserva, colisiones y
+  aliases aditivos siguen ahi.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya
+  tienen owner local y este scanner no aporta otro fichero ni frontera.
+
+## Priorizacion scanner 2026-05-27 vigesima septima pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-ed50a0e5d063ce9367242318b76013ca`
+  como no-op cubierto: solo reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Mantener el ACK como evidencia de resolucion de contexto por lectura local;
+  no convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+- No abrir mas `Txx` desde scanners equivalentes mientras no aparezca una
+  frontera causal nueva con medicion, owner local y ausencia de solape contra
+  T44/T249/T250/T251/T252/T254/T255/T256/T257/T258.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto por lectura local y nota
+  `contexto_ref_only_resuelto` en ACK.
+- No duplicar T249/T250/T251: identidad de escaneo, dedupe, preflight y alcance
+  de pruebas de scanners siguen en esos owners.
+- No duplicar T252/T254: lectura ambigua de ids humanos, reserva, colisiones y
+  aliases aditivos siguen ahi.
+- No duplicar T255/T256/T257/T258: los splits concretos de OPES bridge,
+  server-shutdown, backlog federado y suite historica app-director-service ya
+  tienen owners locales.
+
+## Priorizacion scanner 2026-05-27 retry 42fbc4
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-assessment-task-autoprogramming-721523601cc1-g01-a88632e247fc4b53576ed868990269ec`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto por lectura local y nota
+  `contexto_ref_only_resuelto` en ACK.
+- No duplicar T249/T250/T251: identidad de escaneo, dedupe, preflight y alcance
+  de pruebas de scanners siguen en esos owners.
+- No duplicar T252/T254: lectura ambigua de ids humanos, reserva, colisiones y
+  aliases aditivos siguen ahi.
+- No duplicar T255/T256/T257/T258: los splits concretos de OPES bridge,
+  server-shutdown/runtime-process, backlog federado y suite historica
+  app-director-service ya tienen owners locales.
+
+## Priorizacion scanner 2026-05-27 vigesima sexta pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-assessment-task-autoprogramming-87d5c800f528-g01-7099771d60152a40426c551b9fed8fdb`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local/evidencia en ACK, preservar
+  `worktree_ref` y `branch_ref` como refs opacas y no abrir otro `Txx` salvo
+  frontera causal nueva con medicion, owner local y ausencia de solape.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto por lectura local y nota
+  `contexto_ref_only_resuelto` en ACK.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos, reserva, colisiones y aliases aditivos
+  siguen ahi.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos ya tienen owner
+  local y este scanner no aporta otro fichero ni frontera.
+
+## Priorizacion scanner 2026-05-27 vigesima sexta pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-assessment-task-autoprogramming-3ddbc1385ac2-g01-a39762df8a44697f801b68e1a8195f6b`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.
+
+## Priorizacion scanner 2026-05-27 vigesima sexta pasada
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el scanner documental
+  `agent-ref-assessment-task-autoprogramming-757fa45b2845-g01-ec8943db18ad09ba2b17a1035b324e9b`
+  como no-op cubierto: solo reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Mantener el ACK como evidencia de resolucion de contexto por lectura local;
+  no convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+- No abrir mas `Txx` desde scanners equivalentes mientras no aparezca una
+  frontera causal nueva con medicion, owner local y ausencia de solape contra
+  T44/T249/T250/T251/T252/T254/T255/T256/T257/T258.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: contexto `ref_only` queda resuelto por lectura local y nota
+  `contexto_ref_only_resuelto` en ACK.
+- No duplicar T249/T250/T251: identidad de escaneo, dedupe, preflight y alcance
+  de pruebas de scanners siguen en esos owners.
+- No duplicar T252/T254: lectura ambigua de ids humanos, reserva, colisiones y
+  aliases aditivos siguen ahi.
+- No duplicar T255/T256/T257/T258: los splits concretos de OPES bridge,
+  server-shutdown, backlog federado y suite historica app-director-service ya
+  tienen owners locales.
+## Priorizacion scanner 2026-05-27 retry d0cf1e
+
+Backlog asociado: T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+
+Prioridad alta:
+
+- Cerrar el retry documental
+  `agent-ref-assessment-task-autoprogramming-350b93e475a8-g01-7b6283b42d81ab988ec874761f9ce9e0`
+  como no-op cubierto: reobserva `ref_only`,
+  `required_ref_action=ack_evidence_required`, write-set cerrado a shards de
+  backlog, prueba global obligatoria y owners pendientes visibles.
+- Resolver el contexto requerido por lectura local del paquete y fuentes
+  vigentes, dejando nota `contexto_ref_only_resuelto` en ACK.
+- No convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+
+Duplicaciones a evitar:
+
+- No duplicar T44: esta pasada solo prueba resolucion operacional de contexto
+  por ACK, no cambia la guarda general.
+- No duplicar T249/T250/T251: identidad, dedupe, preflight y alcance de pruebas
+  de scanners siguen en esos owners.
+- No duplicar T252/T254: ids humanos `Txx`, aliases, colisiones y read model
+  siguen en esos owners.
+- No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
+  owner local y test asociado.

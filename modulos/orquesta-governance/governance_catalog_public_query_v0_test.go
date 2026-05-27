@@ -160,6 +160,42 @@ func TestGovernanceCatalogQueryHTTPHandlerV0RejectsInvalidJSON(t *testing.T) {
 	}
 }
 
+func TestGovernanceCatalogQueryHTTPHandlerV0AplicaFronteraJSONPublica(t *testing.T) {
+	provider := GovernanceCatalogProviderFuncV0(func() (GovernanceCatalogV0, error) {
+		return GovernanceCatalogV0{}, nil
+	})
+	for _, tc := range []struct {
+		name        string
+		contentType string
+		body        string
+	}{
+		{name: "content_type", contentType: "text/plain", body: `{"filters":{}}`},
+		{name: "trailing", body: `{"filters":{}} {}`},
+		{name: "too_large", body: `{"request_id":"req-large","filters":{"module":"` + strings.Repeat("a", int(governancePublicHTTPJSONMaxBytesV0)+1) + `"}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, GovernanceCatalogQueryHTTPPathV0, strings.NewReader(tc.body))
+			request.Header.Set("X-Correlation-ID", "corr-gov-boundary")
+			if tc.contentType != "" {
+				request.Header.Set("Content-Type", tc.contentType)
+			}
+			recorder := httptest.NewRecorder()
+
+			GovernanceCatalogQueryHTTPHandlerV0(provider).ServeHTTP(recorder, request)
+
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
+			}
+			if got := recorder.Header().Get("X-Correlation-ID"); got != "corr-gov-boundary" {
+				t.Fatalf("correlation header=%q", got)
+			}
+			if strings.Contains(recorder.Body.String(), tc.body) {
+				t.Fatalf("error response should not echo body")
+			}
+		})
+	}
+}
+
 func TestGovernanceCatalogQueryHTTPHandlerV0RejectsMethod(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, GovernanceCatalogQueryHTTPPathV0, nil)
 	recorder := httptest.NewRecorder()
@@ -168,5 +204,25 @@ func TestGovernanceCatalogQueryHTTPHandlerV0RejectsMethod(t *testing.T) {
 
 	if recorder.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusMethodNotAllowed)
+	}
+	if got := recorder.Header().Get("Allow"); got != governancePublicHTTPAllowHeaderV0(http.MethodPost) {
+		t.Fatalf("allow=%q", got)
+	}
+}
+
+func TestGovernanceCatalogQueryHTTPHandlerV0OptionsSinEfectos(t *testing.T) {
+	request := httptest.NewRequest(http.MethodOptions, GovernanceCatalogQueryHTTPPathV0, nil)
+	recorder := httptest.NewRecorder()
+
+	GovernanceCatalogQueryHTTPHandlerV0(nil).ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusNoContent)
+	}
+	if got := recorder.Header().Get("Allow"); got != governancePublicHTTPAllowHeaderV0(http.MethodPost) {
+		t.Fatalf("allow=%q", got)
+	}
+	if recorder.Body.Len() != 0 {
+		t.Fatalf("body=%q", recorder.Body.String())
 	}
 }

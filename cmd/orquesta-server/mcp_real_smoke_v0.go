@@ -8,11 +8,11 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"strings"
 	"time"
 
+	"orquesta/modulos/orquesta-app-gateway/inprocesshttp"
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	operator "orquesta/modulos/orquesta-operator-mcp"
@@ -67,12 +67,21 @@ func mcpRealSmokeCommandV0(stdout io.Writer, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "mcp smoke: %v\n", err)
 		return 1
 	}
-	_ = json.NewEncoder(stdout).Encode(summary)
+	if err := writeCommandPublicOutputV0(
+		stdout,
+		"mcp-real-smoke",
+		summary.Status,
+		commandPublicFreshnessLiveV0,
+		"local_smoke_summary_only",
+		summary,
+	); err != nil {
+		return reportCommandStdioWriteFailureV0(stderr, "mcp-real-smoke", "stdout", "json_encode", err)
+	}
 	return 0
 }
 
 func runMCPRealSmokeV0(ctx context.Context, endpoint string) (mcpRealSmokeSummaryV0, error) {
-	return runMCPRealSmokeWithClientV0(ctx, http.Client{Timeout: 5 * time.Second}, endpoint)
+	return runMCPRealSmokeWithClientV0(ctx, commandHTTPClientWithRedirectPolicyV0(5*time.Second, endpoint), endpoint)
 }
 
 func runMCPRealSmokeWithHandlerV0(
@@ -82,8 +91,9 @@ func runMCPRealSmokeWithHandlerV0(
 	return runMCPRealSmokeWithClientV0(
 		ctx,
 		http.Client{
-			Timeout:   5 * time.Second,
-			Transport: mcpHandlerRoundTripperV0{handler: handler},
+			Timeout:       5 * time.Second,
+			Transport:     inprocesshttp.TransportV0{Handler: handler},
+			CheckRedirect: commandHTTPRedirectPolicyV0("http://orquesta-mcp.local"),
 		},
 		"http://orquesta-mcp.local"+mcpRealHTTPPathV0,
 	)
@@ -121,20 +131,17 @@ func mcpRealSmokeInProcessCommandV0(stdout io.Writer, stderr io.Writer, handler 
 		_, _ = fmt.Fprintf(stderr, "mcp smoke: %v\n", err)
 		return 1
 	}
-	_ = json.NewEncoder(stdout).Encode(summary)
+	if err := writeCommandPublicOutputV0(
+		stdout,
+		"mcp-real-smoke",
+		summary.Status,
+		commandPublicFreshnessSnapshotV0,
+		"inprocess_smoke_summary_only",
+		summary,
+	); err != nil {
+		return reportCommandStdioWriteFailureV0(stderr, "mcp-real-smoke", "stdout", "json_encode", err)
+	}
 	return 0
-}
-
-type mcpHandlerRoundTripperV0 struct {
-	handler http.Handler
-}
-
-func (transport mcpHandlerRoundTripperV0) RoundTrip(req *http.Request) (*http.Response, error) {
-	recorder := httptest.NewRecorder()
-	transport.handler.ServeHTTP(recorder, req)
-	response := recorder.Result()
-	response.Request = req
-	return response, nil
 }
 
 func mcpSmokeReadOperatorResourceV0(ctx context.Context, client http.Client, endpoint string) error {
@@ -152,12 +159,16 @@ func mcpSmokeReadOperatorResourceV0(ctx context.Context, client http.Client, end
 
 func mcpSmokeSelfImprovementV0(ctx context.Context, client http.Client, endpoint string) error {
 	var result mcpToolCallResultV0
+	arguments, err := mcpMarshalMCPRealSmokeV0(orquestamcp.MCPAutoprogrammingSelfImprovementToolInputV0{
+		RequestID: "request-ref-mcp-real-smoke-self-improvement-001",
+		Proposal:  mcpRealSmokeProposalV0(),
+	})
+	if err != nil {
+		return err
+	}
 	if err := callMCPJSONRPCV0(ctx, client, endpoint, "tools/call", mcpToolCallParamsV0{
-		Name: orquestamcp.MCPAutoprogrammingSelfImprovementToolNameV0,
-		Arguments: mustMarshalMCPRealSmokeV0(orquestamcp.MCPAutoprogrammingSelfImprovementToolInputV0{
-			RequestID: "request-ref-mcp-real-smoke-self-improvement-001",
-			Proposal:  mcpRealSmokeProposalV0(),
-		}),
+		Name:      orquestamcp.MCPAutoprogrammingSelfImprovementToolNameV0,
+		Arguments: arguments,
 	}, &result); err != nil {
 		return err
 	}
@@ -176,14 +187,18 @@ func mcpSmokeSelfImprovementV0(ctx context.Context, client http.Client, endpoint
 
 func mcpSmokeOperatorErrorV0(ctx context.Context, client http.Client, endpoint string) (string, error) {
 	var result mcpToolCallResultV0
+	arguments, err := mcpMarshalMCPRealSmokeV0(operator.OperatorStatusQueryV0{
+		RequestRef:         "request-ref-mcp-real-smoke-status-001",
+		SubjectRef:         "run-ref-mcp-real-smoke-001",
+		StatusConnectorRef: "status-connector-ref-mcp-real-smoke-001",
+		IncludeSections:    []string{"summary"},
+	})
+	if err != nil {
+		return "", err
+	}
 	if err := callMCPJSONRPCV0(ctx, client, endpoint, "tools/call", mcpToolCallParamsV0{
-		Name: operator.OperatorMCPStatusToolNameV0,
-		Arguments: mustMarshalMCPRealSmokeV0(operator.OperatorStatusQueryV0{
-			RequestRef:         "request-ref-mcp-real-smoke-status-001",
-			SubjectRef:         "run-ref-mcp-real-smoke-001",
-			StatusConnectorRef: "status-connector-ref-mcp-real-smoke-001",
-			IncludeSections:    []string{"summary"},
-		}),
+		Name:      operator.OperatorMCPStatusToolNameV0,
+		Arguments: arguments,
 	}, &result); err != nil {
 		return "", err
 	}
@@ -226,11 +241,12 @@ func callMCPJSONRPCV0(
 		return err
 	}
 	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("mcp http status %d", response.StatusCode)
+	responseBody, err := readCommandHTTPResponseBodyV0(response, "mcp")
+	if err != nil {
+		return err
 	}
 	var rpc mcpJSONRPCRawResponseV0
-	if err := json.NewDecoder(response.Body).Decode(&rpc); err != nil {
+	if err := json.Unmarshal(responseBody, &rpc); err != nil {
 		return err
 	}
 	if rpc.Error != nil {
@@ -246,12 +262,12 @@ func decodeMCPToolTextV0(result mcpToolCallResultV0, output any) error {
 	return json.Unmarshal([]byte(result.Content[0].Text), output)
 }
 
-func mustMarshalMCPRealSmokeV0(value any) json.RawMessage {
+func mcpMarshalMCPRealSmokeV0(value any) (json.RawMessage, error) {
 	payload, err := json.Marshal(value)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("internal_invariant:mcp_smoke_arguments_json")
 	}
-	return payload
+	return payload, nil
 }
 
 func mcpRealSmokeProposalV0() orquestaautoprogramming.AutoprogrammingSelfImprovementProposalV0 {

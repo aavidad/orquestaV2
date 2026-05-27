@@ -33,11 +33,12 @@ func runCodexLaunchDirectorWaveV0(
 	}
 	result := orquestadirectoroperativo.BuildOperationalDirectorPlanV0(request)
 	summary := codexDirectorWaveSummaryV0{
-		SchemaVersion: codexDirectorWaveSummarySchemaVersionV0,
-		Request:       request,
-		Plan:          result.Plan,
-		GuardOptIn:    codexDirectorGuardOptInSummaryFromConfigV0(config),
-		Issues:        append([]orquestadirectoroperativo.OperationalDirectorIssueV0(nil), result.Issues...),
+		SchemaVersion:  codexDirectorWaveSummarySchemaVersionV0,
+		Request:        request,
+		Plan:           result.Plan,
+		GuardOptIn:     codexDirectorGuardOptInSummaryFromConfigV0(config),
+		OperatorInputs: codexWaveOperatorInputReceiptsCopyV0(config.Wave.OperatorInputs),
+		Issues:         append([]orquestadirectoroperativo.OperationalDirectorIssueV0(nil), result.Issues...),
 	}
 	if guardIssues := codexDirectorStrictGuardIssuesV0(config); len(guardIssues) > 0 {
 		summary.Issues = append(summary.Issues, guardIssues...)

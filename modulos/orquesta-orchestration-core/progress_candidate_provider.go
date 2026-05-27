@@ -2,8 +2,6 @@ package orquestacionnucleoapp
 
 import (
 	"context"
-	"crypto/sha1"
-	"encoding/hex"
 	"strings"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -188,7 +186,7 @@ func normalizeProgressObservationV0(
 	if observation.CandidateRef == "" {
 		observation.CandidateRef = "progress-supervision-candidate-ref-" + observation.Report.ReportID
 	}
-	if observation.PhaseID == "" {
+	if strings.TrimSpace(string(request.Run.CurrentPhase)) != "" {
 		observation.PhaseID = string(request.Run.CurrentPhase)
 	}
 	if observation.AssessmentRef == "" {
@@ -238,8 +236,7 @@ func progressObservationStableAdvisoryHashV0(
 		string(observation.Report.Status),
 		string(observation.Report.BudgetStatus),
 	}
-	sum := sha1.Sum([]byte(strings.Join(parts, "|")))
-	return "agent-progress-" + hex.EncodeToString(sum[:])[:16]
+	return "agent-progress-" + deterministicRefDigestPrefixV0("agent_progress_assessment", 32, parts...)
 }
 
 func validateProgressObservationV0(

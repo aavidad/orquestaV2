@@ -46,7 +46,21 @@ func runStatusCommandV0(args []string, stdout io.Writer, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "run-status: %v\n", err)
 		return 1
 	}
-	_, _ = stdout.Write(body)
+	var result orquestamcp.MCPDirectorStatsToolResultV0
+	if err := json.Unmarshal(body, &result); err != nil {
+		_, _ = fmt.Fprintf(stderr, "run-status: run_status_response_invalid_json\n")
+		return 1
+	}
+	if err := writeCommandPublicOutputV0(
+		stdout,
+		"run-status",
+		result.Estado,
+		commandPublicFreshnessLiveV0,
+		"use_director_stats_tool_for_canonical_run_state",
+		commandPublicRunStatusPayloadV0(result),
+	); err != nil {
+		return reportCommandStdioWriteFailureV0(stderr, "run-status", "stdout", "json_encode", err)
+	}
 	return 0
 }
 
@@ -55,17 +69,21 @@ func postRunStatusBodyV0(addr string, input orquestamcp.MCPDirectorStatsToolInpu
 	if err := json.NewEncoder(&payload).Encode(input); err != nil {
 		return nil, fmt.Errorf("run_status_request_invalid")
 	}
-	endpoint := strings.TrimRight(strings.TrimSpace(addr), "/")
-	if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
-		endpoint = "http://" + endpoint
+	baseURL, err := commandRESTBaseURLFromAddrV0(addr)
+	if err != nil {
+		return nil, fmt.Errorf("run_status_request_invalid")
 	}
-	request, err := http.NewRequest(http.MethodPost, endpoint+orquestamcp.MCPDirectorStatsHTTPPathV0, &payload)
+	target, err := commandRESTEndpointURLV0(baseURL, orquestamcp.MCPDirectorStatsHTTPPathV0)
+	if err != nil {
+		return nil, fmt.Errorf("run_status_request_invalid")
+	}
+	request, err := http.NewRequest(http.MethodPost, target, &payload)
 	if err != nil {
 		return nil, fmt.Errorf("run_status_request_invalid")
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-Correlation-ID", strings.TrimSpace(input.RunRef))
-	client := http.Client{Timeout: 5 * time.Second}
+	client := commandHTTPClientWithRedirectPolicyV0(5*time.Second, baseURL)
 	response, err := client.Do(request)
 	if err != nil {
 		return nil, err

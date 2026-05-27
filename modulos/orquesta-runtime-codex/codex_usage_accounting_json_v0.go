@@ -48,10 +48,22 @@ func applyCodexUsageJSONStringV0(
 ) {
 	key := lastCodexUsageJSONKeyV0(path)
 	if key == "quota_status" || (key == "status" && pathHasCodexUsageJSONKeyV0(path, "quota")) {
+		status := normalizeCodexUsageQuotaTextV0(value)
 		snapshot.QuotaStatus = codexUsageQuotaPrecedenceV0(
 			snapshot.QuotaStatus,
-			normalizeCodexUsageQuotaTextV0(value),
+			status,
 		)
+		if status == CodexUsageQuotaUnknownV0 && strings.TrimSpace(snapshot.QuotaReason) == "" {
+			snapshot.QuotaReason = normalizeCodexUsageUnknownReasonTextV0(value)
+		}
+	}
+	if key == "reason" && pathHasCodexUsageJSONKeyV0(path, "quota") {
+		if normalizeCodexUsageQuotaReasonTextV0(value) == CodexUsageQuotaReasonObservedUnavailableV0 {
+			snapshot.QuotaReason = CodexUsageQuotaReasonObservedUnavailableV0
+		}
+	}
+	if metric := codexUsageParseIntV0(value); metric > 0 {
+		applyCodexUsageJSONNumberV0(snapshot, path, metric)
 	}
 }
 
@@ -91,8 +103,28 @@ func normalizeCodexUsageQuotaTextV0(value string) string {
 		return CodexUsageQuotaExhaustedV0
 	case CodexUsageQuotaUnknownV0:
 		return CodexUsageQuotaUnknownV0
+	case "unavailable":
+		return CodexUsageQuotaUnknownV0
 	default:
 		return CodexUsageQuotaNotConfiguredV0
+	}
+}
+
+func normalizeCodexUsageUnknownReasonTextV0(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "unavailable":
+		return CodexUsageQuotaReasonObservedUnavailableV0
+	default:
+		return CodexUsageQuotaReasonUnknownReportedV0
+	}
+}
+
+func normalizeCodexUsageQuotaReasonTextV0(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case CodexUsageQuotaReasonObservedUnavailableV0:
+		return CodexUsageQuotaReasonObservedUnavailableV0
+	default:
+		return ""
 	}
 }
 

@@ -26,6 +26,7 @@ type MCPAutoprogrammingPrepareRunToolDescriptorV0 struct {
 type MCPAutoprogrammingPrepareRunToolInputV0 struct {
 	RequestID              string                                           `json:"request_id,omitempty"`
 	CorrelationID          string                                           `json:"correlation_id,omitempty"`
+	IdempotencyKey         string                                           `json:"idempotency_key,omitempty"`
 	OccurredAt             string                                           `json:"occurred_at,omitempty"`
 	RequestedBy            string                                           `json:"requested_by,omitempty"`
 	AutoprogrammingRequest orquestaautoprogramming.AutoprogrammingRequestV0 `json:"autoprogramming_request"`
@@ -71,7 +72,7 @@ func MCPAutoprogrammingPrepareRunDescriptorV0() MCPAutoprogrammingPrepareRunTool
 	return MCPAutoprogrammingPrepareRunToolDescriptorV0{
 		Name:        MCPAutoprogrammingPrepareRunToolNameV0,
 		Version:     MCPAutoprogrammingPrepareRunToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,autoprogramming_request:AutoprogrammingRequestV0,limits?,priority_score?}",
+		InputSchema: "envelope:{request_id?,correlation_id?,idempotency_key?,occurred_at?,requested_by?,autoprogramming_request:AutoprogrammingRequestV0,max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,priority_score?}",
 		Output:      "ok:{run_ref,workflow_task_refs,wait_agent_refs,continue{operational_director_plan_ref?}}|error:{errores_publicos}",
 		ResourceURI: MCPAutoprogrammingPrepareRunResourceURIV0,
 		Invariantes: []string{
@@ -82,6 +83,25 @@ func MCPAutoprogrammingPrepareRunDescriptorV0() MCPAutoprogrammingPrepareRunTool
 			"la supervision posterior debe usar run_ref explicito",
 		},
 	}
+}
+
+func normalizeMCPAutoprogrammingPrepareRunIdentityV0(
+	input MCPAutoprogrammingPrepareRunToolInputV0,
+	headerCorrelationID string,
+	headerIdempotencyKey string,
+) (MCPAutoprogrammingPrepareRunToolInputV0, []MCPValidationIssueV0) {
+	identity := NormalizeMCPPublicMutationIdentityV0(MCPPublicMutationIdentityInputV0{
+		RequestID:            input.RequestID,
+		CorrelationID:        input.CorrelationID,
+		IdempotencyKey:       input.IdempotencyKey,
+		HeaderCorrelationID:  headerCorrelationID,
+		HeaderIdempotencyKey: headerIdempotencyKey,
+		Mutating:             true,
+	})
+	input.RequestID = identity.RequestID
+	input.CorrelationID = identity.CorrelationID
+	input.IdempotencyKey = identity.IdempotencyKey
+	return input, identity.Issues
 }
 
 func NewMCPAutoprogrammingPrepareRunErrorResultV0(

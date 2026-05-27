@@ -95,6 +95,7 @@ func applyPhaseArtifactRegisteredEventV0(current OrchestrationRunV0, event Orche
 	if !matches {
 		next.PhaseArtifacts = appendUniqueCompactRefV0(next.PhaseArtifacts, phaseArtifactProjectionRefV0(payload))
 	}
+	next.LostAgents = removeCompactRefV0(next.LostAgents, payload.AgentRef)
 	effects, err := appendCommandEffectFromEventV0(next.CommandEffects, event, payload.ArtifactRef)
 	if err != nil {
 		return current, err

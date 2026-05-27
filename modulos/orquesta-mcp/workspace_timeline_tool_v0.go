@@ -31,6 +31,8 @@ type MCPWorkspaceTimelineToolResultV0 struct {
 	Errores       []MCPValidationIssueV0                     `json:"errores_publicos,omitempty"`
 }
 
+type MCPWorkspaceTimelineToolInputV0 = orquestaobservability.WorkspaceTimelineQueryV0
+
 type MCPWorkspaceTimelineToolExecutorV0 struct {
 	Source orquestaobservability.WorkspaceTimelineSourcePortV0
 }

@@ -80,20 +80,21 @@ type AutoprogrammingStagingCleanupCommandV0 struct {
 }
 
 type AutoprogrammingStagingEffectResultV0 struct {
-	SchemaVersion  string                          `json:"schema_version"`
-	Status         string                          `json:"status"`
-	PromotionRef   string                          `json:"promotion_ref,omitempty"`
-	ArchiveRef     string                          `json:"archive_ref,omitempty"`
-	RunRef         string                          `json:"run_ref,omitempty"`
-	ProjectRef     string                          `json:"project_ref,omitempty"`
-	WorktreeRef    string                          `json:"worktree_ref,omitempty"`
-	BranchRef      string                          `json:"branch_ref,omitempty"`
-	ChangedPaths   []string                        `json:"changed_paths,omitempty"`
-	CommitRef      string                          `json:"commit_ref,omitempty"`
-	CommitShortRef string                          `json:"commit_short_ref,omitempty"`
-	Retryable      bool                            `json:"retryable,omitempty"`
-	EvidenceRefs   []string                        `json:"evidence_refs,omitempty"`
-	Issues         []AutoprogrammingRequestIssueV0 `json:"issues,omitempty"`
+	SchemaVersion             string                                      `json:"schema_version"`
+	Status                    string                                      `json:"status"`
+	PromotionRef              string                                      `json:"promotion_ref,omitempty"`
+	ArchiveRef                string                                      `json:"archive_ref,omitempty"`
+	RunRef                    string                                      `json:"run_ref,omitempty"`
+	ProjectRef                string                                      `json:"project_ref,omitempty"`
+	WorktreeRef               string                                      `json:"worktree_ref,omitempty"`
+	BranchRef                 string                                      `json:"branch_ref,omitempty"`
+	ChangedPaths              []string                                    `json:"changed_paths,omitempty"`
+	CommitRef                 string                                      `json:"commit_ref,omitempty"`
+	CommitShortRef            string                                      `json:"commit_short_ref,omitempty"`
+	Retryable                 bool                                        `json:"retryable,omitempty"`
+	EvidenceRefs              []string                                    `json:"evidence_refs,omitempty"`
+	PromotionGuardianReceipts []AutoprogrammingPromotionGuardianReceiptV0 `json:"promotion_guardian_receipts,omitempty"`
+	Issues                    []AutoprogrammingRequestIssueV0             `json:"issues,omitempty"`
 }
 
 type AutoprogrammingStagingPromotionPortV0 interface {

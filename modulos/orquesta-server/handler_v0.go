@@ -1,11 +1,11 @@
 package orquestaserver
 
 import (
-	"encoding/json"
 	"net/http"
 	"time"
 
 	orquestaobservability "orquesta/modulos/orquesta-observability"
+	publicidentity "orquesta/modulos/orquesta-server/publicidentity"
 )
 
 type HandlerConfigV0 struct {
@@ -33,8 +33,10 @@ func (handler handlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			status = http.StatusServiceUnavailable
 		}
 		handler.writeJSONV0(w, status, readiness)
-	case "/api/status", "/api/v0/server/status":
+	case ServerStatusEndpointV0:
 		handler.writeJSONV0(w, http.StatusOK, NewServerPublicStatusV0(handler.statusV0()))
+	case ServerStatusLegacyEndpointV0:
+		handler.writeLegacyStatusAliasV0(w, NewServerPublicStatusV0(handler.statusV0()))
 	case "/api/v0/operational-status/query":
 		handler.serveOperationalStatusV0(w, r)
 	case ServerResourcesEndpointV0:
@@ -51,7 +53,7 @@ func (handler handlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (handler handlerV0) serveOperationalStatusV0(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
-		handler.writeOperationalStatusErrorV0(w, http.StatusMethodNotAllowed, r.Header.Get("X-Correlation-ID"), "method", "metodo_no_permitido")
+		handler.writeOperationalStatusErrorV0(w, http.StatusMethodNotAllowed, r.Header.Get(publicidentity.PublicCorrelationHeaderV0), "method", "metodo_no_permitido")
 		return
 	}
 	source := handler.config.OperationalStatusSource
@@ -59,12 +61,12 @@ func (handler handlerV0) serveOperationalStatusV0(w http.ResponseWriter, r *http
 		source = ResidentOperationalStatusSourceV0{Tracker: handler.config.Tracker}
 	}
 	if source == nil {
-		handler.writeOperationalStatusErrorV0(w, http.StatusServiceUnavailable, r.Header.Get("X-Correlation-ID"), "source", orquestaobservability.ErrProyeccionNoDisponibleV0)
+		handler.writeOperationalStatusErrorV0(w, http.StatusServiceUnavailable, r.Header.Get(publicidentity.PublicCorrelationHeaderV0), "source", orquestaobservability.ErrProyeccionNoDisponibleV0)
 		return
 	}
 	var query orquestaobservability.OperationalStatusQueryV0
-	if err := json.NewDecoder(r.Body).Decode(&query); err != nil {
-		handler.writeOperationalStatusErrorV0(w, http.StatusBadRequest, r.Header.Get("X-Correlation-ID"), "body", "request_body_invalido")
+	if code := decodeServerControlJSONV0(w, r, &query); code != "" {
+		handler.writeOperationalStatusErrorV0(w, http.StatusBadRequest, r.Header.Get(publicidentity.PublicCorrelationHeaderV0), "body", code)
 		return
 	}
 	diagnostic, err := source.QueryOperationalStatusV0(query)
@@ -83,9 +85,18 @@ func (handler handlerV0) statusV0() StateV0 {
 }
 
 func (handler handlerV0) writeJSONV0(w http.ResponseWriter, status int, value any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(value)
+	handler.observeResponseWriteV0(writeServerJSONResponseV0(w, status, value))
+}
+
+func (handler handlerV0) writeLegacyStatusAliasV0(w http.ResponseWriter, value ServerPublicStatusV0) {
+	w.Header().Set(ServerStatusCanonicalHeaderV0, ServerStatusEndpointV0)
+	w.Header().Set(ServerStatusCompatibilityHeaderV0, ServerStatusCompatibilityLegacyV0)
+	w.Header().Set(ServerStatusOwnerHeaderV0, ServerStatusOwnerServerV0)
+	w.Header().Set(ServerStatusSunsetHeaderV0, ServerStatusSunsetNoNewUseV0)
+	w.Header().Set("Deprecation", "true")
+	w.Header().Set("Link", "<"+ServerStatusEndpointV0+">; rel=\"canonical\"")
+	w.Header().Set("Warning", `299 - "legacy status alias; use /api/v0/server/status"`)
+	handler.writeJSONV0(w, http.StatusOK, value)
 }
 
 func (handler handlerV0) writeOperationalStatusErrorV0(
@@ -126,12 +137,22 @@ func (handler handlerV0) writeOperationalStatusValidationV0(
 	correlationID string,
 	issues []orquestaobservability.OperationalStatusValidationIssueV0,
 ) {
-	w.Header().Set("Content-Type", "application/json")
 	if correlationID != "" {
-		w.Header().Set("X-Correlation-ID", correlationID)
+		w.Header().Set(publicidentity.PublicCorrelationHeaderV0, correlationID)
 	}
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(orquestaobservability.OperationalStatusValidationErrorV0{Issues: issues})
+	handler.observeResponseWriteV0(writeServerJSONResponseV0(w, status, orquestaobservability.OperationalStatusValidationErrorV0{Issues: issues}))
+}
+
+func (handler handlerV0) observeResponseWriteV0(observation serverHTTPResponseObservationV0) {
+	if observation.OK || handler.config.Tracker == nil {
+		return
+	}
+	switch observation.Code {
+	case serverResponseEncodeFailedCodeV0:
+		handler.config.Tracker.MarkResponseEncodeFailedV0(observation.Stage, time.Now().UTC())
+	case serverResponseWriteFailedCodeV0:
+		handler.config.Tracker.MarkResponseWriteFailedV0(observation.Stage, time.Now().UTC())
+	}
 }
 
 func statusForServerOperationalStatusErrorV0(err error) int {

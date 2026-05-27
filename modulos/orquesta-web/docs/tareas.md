@@ -217,10 +217,15 @@ ID: WEB-013
 Objetivo: Sustituir el formulario largo de nueva app por un flujo conversacional guiado por agente de intake, sin perder `AppSpecV0` como contrato canonico.
 Write-set: docs/tareas.md, docs/contratos.md, nueva_app_intake_session_v0.go, nueva_app_intake_session_v0_test.go
 Simbolo foco: WebNuevaAppIntakeSessionV0
-Contrato: `IntakeSession v0` consume/produce `AppSpecRequestV0` parcial y delega el cierre en `SolicitarNuevaApp v0`.
+Contrato: `IntakeSession v0` consume/produce `AppSpecRequestV0` parcial, expone
+preguntas i18n y delega el cierre en `orquesta.apps.arrancar_director.v0` cuando
+hay puerto configurado, con fallback documentado a `SolicitarNuevaApp v0`.
 Validacion: tests puros de sesion inicial desde nombre/idea, pregunta pendiente, decision capturada, AppSpec parcial y estado `requiere_datos`; no DB, runtime, filesystem productivo, LLM real ni MCP directo.
 Bloqueos: El arranque de agente de intake real y la vista HTML completa quedan como integracion posterior por API/MCP; este corte solo modela estado web y puerto local.
-Estado: completada como modelo puro de sesion web: crea borrador parcial, registra preguntas criticas, acepta respuestas del usuario, conserva decisiones y no valida enums de factory ni toca DB/runtime/proveedor.
+Estado: completada como modelo puro de sesion web: crea borrador parcial,
+registra preguntas criticas con claves i18n, acepta respuestas del usuario,
+conserva decisiones, expone handoff compacto con refs opacas y no valida enums
+de factory ni toca DB/runtime/proveedor.
 ```
 
 ```text
@@ -268,6 +273,21 @@ Contrato: Consume `DirectorStatsClientV0` contra `/api/v0/director/stats`; el po
 Validacion: `go test -count=1 ./modulos/orquesta-web`.
 Bloqueos: El progreso real solo aparecera si el gateway/MCP inyecta `AgentProgressObservationProviderPortV0`; sin ese puerto la web muestra `source_status` degradado/no configurado.
 Estado: completada como preparacion UI semitiempo-real sobre contrato existente.
+```
+
+```text
+ID: WEB-024
+Objetivo: Reconciliar T210 en la web: mostrar progreso vivo recibido desde
+`director.stats` sin degradarlo a 0% por fallback visual.
+Write-set: docs locales; codigo ya entregado en ACKs T210.
+Simbolo foco: WebDirectorStatsProgressV0, ops dashboard live projection.
+Contrato: `percent_complete` y `progress_source` vienen de stats; `tasks_closed`
+no se incrementa por entregas; `/ops` debe usar reason code/frescura cuando
+falte fuente fresca.
+Validacion: `go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-server ./modulos/orquesta-web ./cmd/orquesta-server`.
+Bloqueos: T211 gobierna cache/frescura visual de `/ops`; no reabre T210 salvo
+regresion en la proyeccion base.
+Estado: cerrada por reconciliacion T210.
 ```
 
 ```text
@@ -364,6 +384,18 @@ cmd/orquesta-server; este corte solo cubre renderers HTML locales de web.
 Estado: completada como helper comun que bufferiza templates antes de escribir,
 devuelve `web_html_render_failed` ante error de template y
 `web_response_write_failed` ante fallo observable de escritura.
+```
+
+```text
+ID: WEB-T209
+Objetivo: Proyectar uso Codex redactado sin ocultar reporte ausente como
+`not_configured`.
+Contrato: La web consume solo `director/stats` con `include_agent_usage=true`.
+No lee runtime, logs, HOME, proveedor, modelo, coste ni rutas privadas.
+Validacion: `go test -count=1 ./modulos/orquesta-web`.
+Estado: completada para la proyeccion T209; si el stack entrega
+`unknown`/`unavailable`, `/director-stats` y `/ops` lo muestran con reason code
+publico.
 ```
 
 ## CONSULTA AL DIRECTOR

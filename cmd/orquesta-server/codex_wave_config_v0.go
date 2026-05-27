@@ -8,8 +8,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
+
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
+
+var codexWaveRefGeneratorV0 = orquestaruntime.NewSystemRefGeneratorV0()
 
 func codexWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexWaveConfigV0, error) {
 	flags := flag.NewFlagSet("codex-launch-wave", flag.ContinueOnError)
@@ -32,6 +35,9 @@ func codexWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexWaveConfig
 	isolateHome := flags.Bool("isolate-home", boolEnvOrDefaultV0(envCodexWaveIsolateHomeV0, false), "copiar CODEX_HOME por agente bajo el runtime")
 	strictCredentialProjection := flags.Bool("strict-credential-projection", boolEnvOrDefaultV0(envCodexWaveStrictCredentialProjectionV0, false), "exigir proyeccion aislada con auth/config presentes")
 	projectMemories := flags.Bool("project-memories", boolEnvOrDefaultV0(envCodexWaveProjectMemoriesV0, false), "permitir proyeccion explicita de memories de CODEX_HOME")
+	projectionMaxFiles := flags.Int("projection-max-files", intEnvOrDefaultV0(envCodexWaveProjectionMaxFilesV0, codexWaveProjectionDefaultMaxFilesV0), "maximo de ficheros a copiar desde CODEX_HOME")
+	projectionMaxFileBytes := flags.Int("projection-max-file-bytes", intEnvOrDefaultV0(envCodexWaveProjectionMaxFileBytesV0, int(codexWaveProjectionDefaultMaxFileBytesV0)), "maximo de bytes por fichero proyectado")
+	projectionMaxTotalBytes := flags.Int("projection-max-total-bytes", intEnvOrDefaultV0(envCodexWaveProjectionMaxTotalBytesV0, int(codexWaveProjectionDefaultMaxTotalBytesV0)), "maximo total de bytes proyectados desde CODEX_HOME")
 	dryRun := flags.Bool("dry-run", false, "materializar prompts/wrappers sin arrancar procesos")
 	purgeRuntime := flags.Bool("purge-runtime", boolEnvOrDefaultV0(envCodexWavePurgeRuntimeV0, false), "purgar runtime de esta ola antes de materializar")
 	purgeConfirm := flags.String("confirm-purge-runtime", strings.TrimSpace(os.Getenv(envCodexWavePurgeRuntimeConfirmV0)), "confirmacion explicita: debe coincidir con wave-ref")
@@ -43,7 +49,7 @@ func codexWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexWaveConfig
 	if err := flags.Parse(args); err != nil {
 		return codexWaveConfigV0{}, err
 	}
-	promptText, err := codexWavePromptTextV0(*prompt, *promptFile, flags.Args())
+	promptText, inputReceipt, err := codexWavePromptTextV0(*prompt, *promptFile, flags.Args())
 	if err != nil {
 		return codexWaveConfigV0{}, err
 	}
@@ -72,29 +78,36 @@ func codexWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexWaveConfig
 	}
 
 	config := codexWaveConfigV0{
-		Agents:                     *agents,
-		WaveRef:                    ref,
-		Prompt:                     promptText,
-		ProjectWorkDir:             projectWorkDir,
-		RuntimeWorkDir:             rootRuntimeDir,
-		CommandPath:                resolvedCommand,
-		SourceCodeHome:             sourceHome,
-		PathEnv:                    envOrDefaultV0(envCodexWavePathV0, envOrDefaultV0(envCodexPathV0, os.Getenv("PATH"))),
-		Model:                      strings.TrimSpace(*model),
-		ReasoningEffort:            codexReasoningEffortPolicyV0(*reasoningEffort),
-		Profile:                    strings.TrimSpace(*profile),
-		Sandbox:                    strings.TrimSpace(*sandbox),
-		ApprovalPolicy:             strings.TrimSpace(*approval),
-		ExtraArgs:                  strings.Fields(*extraArgs),
-		IsolateHome:                *isolateHome,
-		DryRun:                     *dryRun,
-		PurgeRuntime:               *purgeRuntime,
-		PurgeConfirm:               strings.TrimSpace(*purgeConfirm),
-		PurgeReportOnly:            *purgeReportOnly,
-		AllowUnmanagedLaunch:       *allowUnmanagedLaunch,
-		UnmanagedLaunchReason:      strings.TrimSpace(*unmanagedLaunchReason),
-		UnmanagedLaunchConfirm:     strings.TrimSpace(*unmanagedLaunchConfirm),
-		CredentialProjectionPolicy: codexWaveCredentialProjectionPolicyV0FromFlags(*strictCredentialProjection, *projectMemories),
+		Agents:                 *agents,
+		WaveRef:                ref,
+		Prompt:                 promptText,
+		ProjectWorkDir:         projectWorkDir,
+		RuntimeWorkDir:         rootRuntimeDir,
+		CommandPath:            resolvedCommand,
+		SourceCodeHome:         sourceHome,
+		PathEnv:                envOrDefaultV0(envCodexWavePathV0, envOrDefaultV0(envCodexPathV0, os.Getenv("PATH"))),
+		Model:                  strings.TrimSpace(*model),
+		ReasoningEffort:        codexReasoningEffortPolicyV0(*reasoningEffort),
+		Profile:                strings.TrimSpace(*profile),
+		Sandbox:                strings.TrimSpace(*sandbox),
+		ApprovalPolicy:         strings.TrimSpace(*approval),
+		ExtraArgs:              strings.Fields(*extraArgs),
+		IsolateHome:            *isolateHome,
+		DryRun:                 *dryRun,
+		PurgeRuntime:           *purgeRuntime,
+		PurgeConfirm:           strings.TrimSpace(*purgeConfirm),
+		PurgeReportOnly:        *purgeReportOnly,
+		AllowUnmanagedLaunch:   *allowUnmanagedLaunch,
+		UnmanagedLaunchReason:  strings.TrimSpace(*unmanagedLaunchReason),
+		UnmanagedLaunchConfirm: strings.TrimSpace(*unmanagedLaunchConfirm),
+		CredentialProjectionPolicy: codexWaveCredentialProjectionPolicyWithBoundsV0(
+			*strictCredentialProjection,
+			*projectMemories,
+			*projectionMaxFiles,
+			int64(*projectionMaxFileBytes),
+			int64(*projectionMaxTotalBytes),
+		),
+		OperatorInputs: []codexWaveOperatorInputReceiptV0{inputReceipt},
 	}
 	if err := codexWaveValidateProjectionPolicyV0(config); err != nil {
 		return codexWaveConfigV0{}, err
@@ -102,28 +115,25 @@ func codexWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexWaveConfig
 	return config, nil
 }
 
-func codexWavePromptTextV0(prompt string, promptFile string, trailing []string) (string, error) {
+func codexWavePromptTextV0(prompt string, promptFile string, trailing []string) (string, codexWaveOperatorInputReceiptV0, error) {
 	if strings.TrimSpace(promptFile) != "" {
-		data, err := os.ReadFile(promptFile)
+		text, receipt, err := codexWaveOperatorTextFromFileV0("prompt", promptFile)
 		if err != nil {
-			return "", err
+			return "", codexWaveOperatorInputReceiptV0{}, err
 		}
-		text := strings.TrimSpace(string(data))
-		if text == "" {
-			return "", errors.New("prompt_empty")
-		}
-		return text, nil
+		return text, receipt, nil
 	}
 	if strings.TrimSpace(prompt) != "" {
-		return strings.TrimSpace(prompt), nil
+		text := strings.TrimSpace(prompt)
+		return text, codexWaveOperatorInputReceiptFromTextV0("prompt", "operator_inline", text), nil
 	}
 	if len(trailing) > 0 {
 		text := strings.TrimSpace(strings.Join(trailing, " "))
 		if text != "" {
-			return text, nil
+			return text, codexWaveOperatorInputReceiptFromTextV0("prompt", "operator_trailing", text), nil
 		}
 	}
-	return "", errors.New("prompt_required")
+	return "", codexWaveOperatorInputReceiptV0{}, errors.New("prompt_required")
 }
 
 func codexReasoningEffortPolicyV0(value string) string {
@@ -218,7 +228,8 @@ func codexWaveSourceCodeHomeV0(raw string) string {
 func codexWaveRefV0(raw string) (string, error) {
 	value := strings.TrimSpace(raw)
 	if value == "" {
-		return "codex-wave-v0-" + time.Now().UTC().Format("20060102T150405Z"), nil
+		ref, _ := codexWaveRefGeneratorV0.NextRefV0("codex-wave-v0", "wave")
+		return ref, nil
 	}
 	if strings.ContainsAny(value, "\x00\r\n/\\") || strings.Contains(value, "..") {
 		return "", errors.New("wave_ref_invalid")

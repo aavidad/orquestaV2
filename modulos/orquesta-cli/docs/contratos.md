@@ -30,7 +30,7 @@ Campos:
   - output_format: text | json | tsv.
   - locale: locale de salida cuando haya texto localizado.
   - dry_run: bool, solo si el contrato consumido lo admite.
-  - input_source: stdin | file | arg, sin rutas absolutas en la salida publica.
+  - input_source: stdin | file_explicit | inline | arg, sin rutas absolutas en la salida publica.
 Invariantes:
   - No contiene secretos, tokens, rutas HOME reales ni DSN.
   - No autoriza fallback local.
@@ -216,7 +216,7 @@ Campos:
   - Transporte REST asumido: `POST /api/v0/governance/catalog/query`.
   - Request body canonico del adaptador: JSON compacto `{request_id, correlation_id, filters:{module, role, phase, tags}}`.
   - Salida correcta: `GovernanceCatalogQueryResultV0` con `effective` y `counters.effective|proposed|quarantine`.
-  - Response HTTP canonica: `{request_id, correlation_id, effective, counters}`; sin `result`, `current_block` ni `inactive_blocks`.
+  - Response HTTP canonica: `{schema_version, request_id, correlation_id, catalog_version, freshness, source_refs, effective, counters, inactive_summary, output_budget}`; sin `result` ni `inactive_blocks`.
   - Error HTTP canonico: `{request_id, correlation_id, errors:[{code, field}]}`. La CLI lo normaliza a `errores[]` propios con `codigo`, `campo` y `mensaje_i18n`.
   - Headers: Content-Type, Accept, X-Correlation-ID.
 Invariantes:
@@ -225,7 +225,7 @@ Invariantes:
   - `proposed` y `quarantine` se muestran como evidencia, no se activan.
   - La CLI no devuelve `catalogs.proposed` ni `catalogs.quarantine` completos; solo consume `effective` y contadores compactos.
   - La CLI valida que toda entrada en `effective` pase `ValidateEffectiveGovernanceEntryV0`.
-  - `counters.effective` debe coincidir con el numero de entradas `effective` devueltas.
+  - `counters.effective` debe coincidir con el numero de entradas `effective` devueltas salvo respuesta truncada con `output_budget.status=truncated`, donde conserva el total filtrado.
   - El adaptador no lee docs locales, DB, runtime ni filesystem como fallback si la ruta no responde.
 Errores:
   - governance_catalog_source_unavailable
@@ -350,7 +350,7 @@ Campos:
   - ORQUESTA_SERVER_DRAIN_MAX_COMMANDS: comandos maximos por drain; default operativo `20`.
   - ORQUESTA_SERVER_DRAIN_MAX_OUTBOX: elementos maximos de outbox por ciclo; default operativo `4`.
   - ORQUESTA_SERVER_DRAIN_MAX_DECISIONS: ciclos maximos de decision por drain; default operativo `1`.
-  - ORQUESTA_SERVER_DRAIN_MAX_EXTERNAL_WAITS: esperas externas maximas por drain; queda acotado a `1`.
+  - ORQUESTA_SERVER_DRAIN_MAX_EXTERNAL_WAITS: esperas externas maximas por drain; default `1`, configurable hasta `70`.
   - ORQUESTA_SERVER_TICK_INTERVAL_MS: intervalo entre pulsos automaticos del servidor residente; default operativo `5000`.
   - ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS: segundos sin ejecuciones antes de proponer automejora idle; default operativo `60`; valor `0` desactiva este disparador.
   - ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PROJECT_REF: proyecto opaco de la automejora idle; default `project-ref-orquesta-server`.

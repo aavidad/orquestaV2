@@ -99,6 +99,7 @@ func (fake *fakeShutdownControlV0) StopRunV0(
 		state.CheckpointRecorded = previous.CheckpointRecorded
 		state.EvidenceRefs = append([]string(nil), previous.EvidenceRefs...)
 	}
+	state.EvidenceRefs = compactServerShutdownStringsV0(append(state.EvidenceRefs, command.EvidenceRefs...))
 	fake.states[command.RunRef] = state
 	return state, nil
 }

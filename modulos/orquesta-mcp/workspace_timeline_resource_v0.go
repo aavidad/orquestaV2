@@ -56,6 +56,7 @@ func NewMCPWorkspaceTimelineResourceV0() MCPWorkspaceTimelineResourceV0 {
 			orquestaobservability.WorkspaceTimelineSourceRuntimeProgressV0,
 			orquestaobservability.WorkspaceTimelineSourceGitStatsV0,
 			orquestaobservability.WorkspaceTimelineSourceUsageCostV0,
+			orquestaobservability.WorkspaceTimelineSourceDirectorStatsV0,
 		},
 		InputShape:  "query:{request_id,correlation_id,consumer,locale,scope=workspace,agent_ref?,project_ref?,task_ref?,time_window,page,sources}",
 		OutputShape: "timeline:{sources[].status,items[],privacy}",

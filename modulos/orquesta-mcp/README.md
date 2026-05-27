@@ -36,3 +36,9 @@ Estado vigente:
 - OPES se conecta hoy inyectando su cliente REST como adaptador de dominio; si se
   usa MCPO o servidor MCP real, debe envolver estos tools como transporte opt-in,
   no duplicar logica en el nucleo.
+- Los resources registrados publican `descriptor_source` verificable. La fuente
+  canonica de esta regla es T198 del backlog: `orquesta-mcp` declara el envelope
+  y cada owner aporta DTO/validador/freshness sin exponer rutas locales,
+  secretos, prompts, transcripts ni payloads de dominio.
+- La reconciliacion `agent-ref-task-autoprogramming-c3678e9bc306-g01` conserva
+  ese cierre como documental/stale: no reabre codigo, transporte ni owners.

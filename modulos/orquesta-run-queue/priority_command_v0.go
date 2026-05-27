@@ -9,10 +9,12 @@ func NormalizeRunQueuePriorityCommandV0(
 	command.QueueRef = strings.TrimSpace(command.QueueRef)
 	command.AppRef = strings.TrimSpace(command.AppRef)
 	command.Status = strings.TrimSpace(command.Status)
+	command.FairnessGroupRef = strings.TrimSpace(command.FairnessGroupRef)
 	command.RequestedBy = strings.TrimSpace(command.RequestedBy)
 	command.Reason = strings.TrimSpace(command.Reason)
 	command.IdempotencyKey = strings.TrimSpace(command.IdempotencyKey)
 	command.EvidenceRefs = compactRunQueueStringsV0(command.EvidenceRefs)
+	command.WorksetClaims = cloneRunQueueWorksetClaimsV0(command.WorksetClaims)
 	return command
 }
 

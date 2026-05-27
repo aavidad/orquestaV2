@@ -17,6 +17,18 @@ Estado:
 ## Decisiones iniciales desde DB v1
 
 ```text
+Fecha: 2026-05-27
+Decision: Usar los DTOs/validadores de observability como fuente de T198 para resources MCP read-only.
+Motivo: operational-status y workspace timeline ya tienen contrato compacto; el descriptor MCP debe enlazar a esos owners y no a strings stale.
+Alternativas: Duplicar shapes en `orquesta-mcp`; declarar el resource stale aunque el owner exista.
+Impacto: `orquesta-mcp` puede publicar `descriptor_source` hacia observability; observability no expone stores reales ni decide negocio.
+Contratos afectados: OperationalStatusQueryV0; WorkspaceTimelineQueryV0; MCPResourceDescriptorSourceV0.
+Estado: aceptada_local
+Revalidacion 2026-05-27: `agent-ref-task-autoprogramming-c3678e9bc306-g01`
+mantiene esta fuente sin ampliar persistencia ni observabilidad productiva.
+```
+
+```text
 Fecha: 2026-05-04
 Decision: Usar transcripts, telemetria y auditoria de DB v1 solo como evidencia agregada.
 Motivo: La DB historica contiene volumen enorme y util para aprender patrones, pero cargarlo en contexto degradaria agentes y puede mezclar estado viejo con decisiones nuevas.

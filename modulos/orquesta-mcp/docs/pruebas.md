@@ -14,6 +14,21 @@ Riesgos:
 ```
 
 ```text
+Caso: MCP-CT-037 descriptor_source de resources T198 reconciliado
+Tipo: contract
+Comando: go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-observability ./modulos/orquesta-governance ./modulos/orquesta-core ./cmd/orquesta-server
+Evidencia esperada: resources MCP registrados exponen `descriptor_source`
+activo/stale/legacy con owner, fuente canonica, DTO/validador, errores
+publicos y verificacion compacta, sin rutas locales ni datos sensibles.
+Ultima ejecucion: 2026-05-27, ok en paquete
+`agent-ref-task-autoprogramming-c3678e9bc306-g01`.
+Riesgos: La prueba valida implementacion existente; esta entrada solo evita que
+el backlog trate T198 cerrado como pendiente stale.
+Revalidacion: `agent-ref-task-autoprogramming-c3678e9bc306-g01` debe declarar
+el comando obligatorio del paquete como evidencia, sin reabrir codigo.
+```
+
+```text
 Caso: MCP-CT-034 tool domain work por MCP/HTTP
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-mcp -run TestMCPDomainWork

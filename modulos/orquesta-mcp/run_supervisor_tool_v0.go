@@ -77,7 +77,7 @@ func MCPRunSupervisorDescriptorV0() MCPRunSupervisorToolDescriptorV0 {
 	return MCPRunSupervisorToolDescriptorV0{
 		Name:        MCPRunSupervisorToolNameV0,
 		Version:     MCPRunSupervisorToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,operational_director_plan_ref?,queue_ref?,idempotency_key?,max_ticks?,continue_message?,limits?}",
+		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,operational_director_plan_ref?,queue_ref?,continue_message?,occurred_at?,idempotency_key?,max_ticks?,max_runs_per_tick?,max_executions?,allow_repeated_runs?,max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,max_decision_cycles?,max_external_waits?,resident_mode?}",
 		Output:      "ok:{run_ref,stop_reason,ticks,last,history?,evidence_refs?,idempotency_key?,diagnostics?,next_actions?}|error:{errores_publicos,idempotency_key?,diagnostics?,next_actions?}",
 		ResourceURI: MCPRunSupervisorResourceURIV0,
 		Invariantes: []string{

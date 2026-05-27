@@ -21,9 +21,9 @@ func (stack StackV0) recoverQueuedControlledDomainWorkArtifactsV0(
 	candidates, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
 		ctx,
 		orquestarunqueue.RunQueueReadRequestV0{
-			QueueRef: command.QueueRef,
-			AppRefs:  append([]string(nil), command.AppRefs...),
-			Limit:    command.QueueLimit,
+			QueueRef:             command.QueueRef,
+			AppRefs:              append([]string(nil), command.AppRefs...),
+			IncludeNonExecutable: true,
 		},
 	)
 	if err != nil {

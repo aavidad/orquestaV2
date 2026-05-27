@@ -10,6 +10,10 @@ func httpClientForWebV0(config ConfigV0, apiMux http.Handler) *http.Client {
 	if config.HTTPClient != nil {
 		return config.HTTPClient
 	}
+	return newGatewayInProcessHTTPClientV0(config, apiMux)
+}
+
+func newGatewayInProcessHTTPClientV0(config ConfigV0, apiMux http.Handler) *http.Client {
 	return &http.Client{
 		Transport: InProcessTransportV0{Handler: apiMux},
 		Timeout:   config.Timeout,

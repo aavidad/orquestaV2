@@ -90,9 +90,10 @@ func TestNewMCPSharedContractsResourceV0CompactoYSinDumps(t *testing.T) {
 	if byContract["GovernanceCatalog v0"].MCPRole != "compact_read_resource" {
 		t.Fatalf("governance role: %+v", byContract["GovernanceCatalog v0"])
 	}
-	if byContract["GovernanceCatalog v0"].Output != "{request_id, correlation_id, effective, counters}" ||
+	if byContract["GovernanceCatalog v0"].Output != "{schema_version, request_id, correlation_id, catalog_version, freshness, source_refs, effective, counters, inactive_summary, output_budget}" ||
 		!containsSharedContractsTestStringV0(byContract["GovernanceCatalog v0"].PublicErrors, "governance_catalog_invalid_request") ||
-		!containsSharedContractsTestStringV0(byContract["GovernanceCatalog v0"].Guardrails, "solo_effective_y_contadores") {
+		!containsSharedContractsTestStringV0(byContract["GovernanceCatalog v0"].Guardrails, "solo_effective_y_contadores") ||
+		!containsSharedContractsTestStringV0(byContract["GovernanceCatalog v0"].Guardrails, "output_budget_obligatorio") {
 		t.Fatalf("governance shape publico: %+v", byContract["GovernanceCatalog v0"])
 	}
 	if byContract["OperationalStatusQuery v0"].Owner != "orquesta-observability" ||

@@ -8,6 +8,7 @@ import (
 	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 	orquestaweb "orquesta/modulos/orquesta-web"
 )
 
@@ -23,7 +24,9 @@ type StackV0 struct {
 	AutoprogrammingPromotion AutoprogrammingPromotionConfigV0
 	DomainWork               orquestamcp.MCPDomainWorkExecutorPortV0
 	DomainDelivery           DomainWorkDeliveryBridgeConfigV0
+	Codex                    CodexRuntimeConfigV0
 	CodexRuntimeWorkDir      string
+	CodexSnapshotSource      orquestaruntimecodexdelivery.CodexProcessSnapshotSourcePortV0
 }
 
 func BuildStackV0(config ConfigV0) (StackV0, error) {
@@ -44,7 +47,9 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 		AutoprogrammingPromotion: config.AutoprogrammingPromotion,
 		DomainWork:               config.DomainWork,
 		DomainDelivery:           config.DomainDelivery,
+		Codex:                    config.Codex,
 		CodexRuntimeWorkDir:      config.Codex.RuntimeWorkDir,
+		CodexSnapshotSource:      config.Codex.SnapshotSource,
 	}
 	stack.MCPTransportBindings = buildStackMCPTransportBindingsV0(config, ports, queueConfig, &stack)
 	stack.Handler = buildStackHTTPHandlerV0(config, stack.MCPTransportBindings)
@@ -133,6 +138,7 @@ func buildStackHTTPHandlerV0(
 func buildDirectorPortsV0(
 	config ConfigV0,
 ) orquestaappdirectorservice.StartAppDirectorPortsV0 {
+	progressSource, leaseSource := progressAndLeaseSourcesV0(config)
 	return orquestaappdirectorservice.StartAppDirectorPortsV0{
 		RunStore:                    config.Stores.RunStore,
 		EventSink:                   ackRuntimeCleanupSinkV0(config),
@@ -142,9 +148,10 @@ func buildDirectorPortsV0(
 		ReviewGateSource:            reviewGateSourceV0(config),
 		ReviewReworkReplanSource:    reviewReworkReplanSourceV0(config),
 		AssessmentReplanSource:      assessmentReplanSourceV0(config),
-		ProgressSource:              progressSourceV0(config),
+		ProgressSource:              progressSource,
 		RunControl:                  config.Stores.RunControl,
 		RunControlTerminal:          config.Stores.RunControl,
+		LeaseSource:                 leaseSource,
 		DirectorDecisionSource:      directorDecisionSourceV0(config),
 		DirectorTaskStore:           config.Stores.TaskStore,
 		WorkflowTaskDefaultCapacity: config.Capacity.Tier,

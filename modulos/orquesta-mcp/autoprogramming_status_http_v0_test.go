@@ -177,7 +177,7 @@ func TestMCPAutoprogrammingStatusHTTPHandlerV0ErrorPublico(t *testing.T) {
 	}
 }
 
-func TestMCPAutoprogrammingStatusHTTPHandlerV0ExponeCausaSanitizadaSiExecutorFalla(t *testing.T) {
+func TestMCPAutoprogrammingStatusHTTPHandlerV0NoPropagaErrorNoCatalogado(t *testing.T) {
 	executor := &fakeMCPAutoprogrammingStatusHTTPExecutorV0{
 		err: errors.New("status store failed at /root/Trabajo/orquesta token=secret123456 run-ref-status-error-001"),
 	}
@@ -196,8 +196,7 @@ func TestMCPAutoprogrammingStatusHTTPHandlerV0ExponeCausaSanitizadaSiExecutorFal
 	if result.Estado != MCPAutoprogrammingStatusEstadoErrorV0 ||
 		len(result.Errores) != 1 ||
 		result.Errores[0].Code != "autoprogramming_status_executor_error" ||
-		!strings.Contains(result.Errores[0].Message, "status store failed") ||
-		!strings.Contains(result.Errores[0].Message, "run-ref-status-error-001") ||
+		result.Errores[0].Message != "autoprogramming_status_executor_error" ||
 		len(result.Diagnostics) != 1 {
 		t.Fatalf("error publico incompleto: %+v", result)
 	}
@@ -229,8 +228,7 @@ func TestMCPAutoprogrammingStatusTransportV0DevuelvePayloadPublicoSiExecutorFall
 	if result.Estado != MCPAutoprogrammingStatusEstadoErrorV0 ||
 		len(result.Errores) != 1 ||
 		result.Errores[0].Code != "autoprogramming_status_executor_error" ||
-		!strings.Contains(result.Errores[0].Message, "status store failed") ||
-		!strings.Contains(result.Errores[0].Message, "run-ref-status-transport-error-001") {
+		result.Errores[0].Message != "autoprogramming_status_executor_error" {
 		t.Fatalf("payload publico incompleto: %+v", result)
 	}
 	if strings.Contains(string(output), "/root/Trabajo") ||

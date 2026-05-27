@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"strings"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func validateDiagnosticoCompactoV0(diagnostic DiagnosticoCompactoV0, prefix string, add func(string, string)) {
@@ -177,5 +179,9 @@ func validateDiagnosticoPrivacyV0(privacy DiagnosticoPrivacyV0, prefix string, a
 	}
 	if privacy.ContainsConnectionDetail {
 		add(ErrOperationalStatusQueryInvalidaV0, fieldV0(prefix, "contains_connection_detail"))
+	}
+	if strings.TrimSpace(privacy.RedactionLevel) != "" &&
+		!orquestarails.IsOperationalPrivacyRedactionLevelV0(privacy.RedactionLevel) {
+		add(ErrOperationalStatusQueryInvalidaV0, fieldV0(prefix, "redaction_level"))
 	}
 }

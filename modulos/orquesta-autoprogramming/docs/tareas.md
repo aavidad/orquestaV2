@@ -16,11 +16,20 @@
   declararse explicitamente por request cuando una composicion quiera acotar la
   ola.
 
-## Backlog
+## Cerrado
 
-- APG-001: ampliar limites por contrato si OPES o apps grandes necesitan tareas
-  largas sin microfragmentar contenido.
-- APG-002: versionar contratos `v1` cuando existan perfiles de trabajo por tipo
-  de app, sin romper `v0`.
-- APG-003: anadir fixtures de solicitud real desde web/MCP cuando el wizard
-  guiado este estabilizado.
+- APG-001: contrato `v0` cerrado: OPES o apps grandes pueden declarar
+  `max_task_refs`, `max_areas` y `max_write_set_entries` hasta 40 sin
+  microfragmentar contenido; texto libre no amplia limites.
+- APG-002: `AutoprogrammingRequestV1` permite perfiles de trabajo por tipo de
+  app, area o tarea y `BuildAutoprogrammingProgrammableWorkV1` materializa esos
+  perfiles sobre `WorkProfileV0`/`WorkflowTaskV0`; `v0` conserva su fallback de
+  implementacion.
+- APG-003: contrato puro `AutoprogrammingRequestSourceV0` para evidencia de
+  entrada real web/MCP/CLI sin importar adaptadores. Las fixtures en
+  `docs/fixtures/autoprogramming_request_v0/` son ejemplos versionados y pruebas
+  de compatibilidad, no el mecanismo de cierre por si solas.
+- APG-004: reconciliacion documental T208, 2026-05-27. El guardian break-glass
+  queda tratado como umbrella historico ya cubierto por owners especificos
+  T212-T237; este modulo no absorbe runtime, VCS, Codex, servidor ni guardian.
+  Si aparece regresion, abrir tarea focal con write-set propio.

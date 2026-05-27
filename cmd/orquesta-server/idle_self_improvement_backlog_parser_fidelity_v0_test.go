@@ -78,6 +78,69 @@ Criterios:
 	}
 }
 
+func TestIdleSelfImprovementBacklogPlannerV0ScannerDocumentalNoHeredaGoTestGlobalV0(t *testing.T) {
+	projectDir := t.TempDir()
+	mustWriteBacklogForParserFidelityTestV0(t, projectDir, "# Backlog\n\nSin secciones Txx.\n")
+
+	result := mustPlanParserFidelityWithRequestTestV0(t, projectDir,
+		orquestaserver.IdleSelfImprovementPlanRequestV0{
+			MaxRequests: 1,
+			Trigger:     "backlog_scan",
+			BaseRequest: orquestaserver.IdleSelfImprovementRequestV0{
+				RequestRef:    "request-ref-base",
+				CorrelationID: "corr-request-ref-base",
+				WriteSet:      []string{"cmd/orquesta-server"},
+				RequiredTests: []string{
+					"go test -count=1 ./...",
+					idleSelfImprovementRefOnlyRequiredTestV0,
+				},
+			},
+		},
+	)
+	request := result.Requests[0]
+	if containsStringForTestV0(request.RequiredTests, "go test -count=1 ./...") ||
+		!containsStringForTestV0(request.RequiredTests, idleSelfImprovementBacklogDocumentalRequiredTestV0) ||
+		!containsStringForTestV0(request.RequiredTests, idleSelfImprovementRefOnlyRequiredTestV0) {
+		t.Fatalf("required_tests=%+v", request.RequiredTests)
+	}
+	for _, want := range []string{
+		"required_test_origin:global_policy:documental_focal",
+		"required_test_origin:ref_only_guard",
+		"required_test_scope_policy:global_go_test_all_omitted_for_doc_only_scanner",
+	} {
+		if !containsStringForTestV0(request.ContextRefs, want) {
+			t.Fatalf("missing %s in context_refs=%+v", want, request.ContextRefs)
+		}
+	}
+}
+
+func TestIdleSelfImprovementBacklogPlannerV0PreservaGoTestGlobalDeclaradoEnSeccionV0(t *testing.T) {
+	projectDir := t.TempDir()
+	mustWriteBacklogForParserFidelityTestV0(t, projectDir, `# Backlog
+
+## T40 declarada
+
+Objetivo: preservar pruebas explicitas.
+
+Alcance:
+
+- docs/autoprogramacion_orquesta_pendientes_2026-05-23.md
+
+Criterios:
+
+- Tests: `+"`go test -count=1 ./...`"+`
+`)
+
+	result := mustPlanParserFidelityTestV0(t, projectDir,
+		[]string{"go test -count=1 ./cmd/orquesta-server"},
+	)
+	request := result.Requests[0]
+	if !containsStringForTestV0(request.RequiredTests, "go test -count=1 ./...") ||
+		!containsStringForTestV0(request.ContextRefs, "required_test_origin:section_declared") {
+		t.Fatalf("request=%+v", request)
+	}
+}
+
 func TestIdleSelfImprovementBacklogPlannerV0RevalidacionFinalNoOcultaSeccionV0(t *testing.T) {
 	projectDir := t.TempDir()
 	mustWriteBacklogForParserFidelityTestV0(t, projectDir, `# Backlog
@@ -120,6 +183,22 @@ func mustPlanParserFidelityTestV0(
 			},
 		},
 	)
+	if err != nil {
+		t.Fatalf("PlanV0: %v", err)
+	}
+	if len(result.Requests) == 0 {
+		t.Fatalf("requests=%+v", result.Requests)
+	}
+	return result
+}
+
+func mustPlanParserFidelityWithRequestTestV0(
+	t *testing.T,
+	projectDir string,
+	request orquestaserver.IdleSelfImprovementPlanRequestV0,
+) orquestaserver.IdleSelfImprovementPlanResultV0 {
+	t.Helper()
+	result, err := (idleSelfImprovementBacklogPlannerV0{ProjectWorkDir: projectDir}).PlanV0(request)
 	if err != nil {
 		t.Fatalf("PlanV0: %v", err)
 	}

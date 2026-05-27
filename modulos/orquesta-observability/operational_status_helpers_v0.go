@@ -89,23 +89,35 @@ func validateOperationalTextV0(value string, field string, maxRunes int, require
 }
 
 func forbiddenOperationalTextCodeV0(value string) string {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return ""
-	}
-	lower := strings.ToLower(value)
-	if lower == "home" {
-		return ErrOperationalStatusQueryInvalidaV0
-	}
-	if containsAnyV0(lower, operationalTranscriptTextPartsV0) {
-		return ErrTranscriptNoPermitidoV0
-	}
-	if containsAnyV0(lower, operationalSecretTextPartsV0) {
+	finding := orquestarails.ClassifyOperationalPrivacyTextV0(value)
+	if finding.ContainsSecret {
 		return ErrSecretoDetectadoV0
 	}
-	if containsAnyV0(lower, operationalForbiddenTextPartsV0) {
+	if finding.ContainsTranscript {
+		return ErrTranscriptNoPermitidoV0
+	}
+	if finding.ContainsPrompt || finding.ContainsCompletion || finding.ContainsConnectionDetail {
 		return ErrOperationalStatusQueryInvalidaV0
 	}
 	return ""
+}
+
+func DiagnosticoPrivacyRedactionLevelV0(value DiagnosticoPrivacyV0) string {
+	trimmed := strings.TrimSpace(value.RedactionLevel)
+	if orquestarails.IsOperationalPrivacyRedactionLevelV0(trimmed) {
+		return trimmed
+	}
+	return orquestarails.OperationalPrivacyDefaultProjectionRedactionLevelV0()
+}
+
+func NewDiagnosticoPrivacyMetadataOnlyV0() DiagnosticoPrivacyV0 {
+	return DiagnosticoPrivacyV0{
+		RedactionLevel: orquestarails.OperationalPrivacyDefaultProjectionRedactionLevelV0(),
+	}
+}
+
+func OperationalPrivacyRedactionLevelsForConsumersV0() []string {
+	return orquestarails.OperationalPrivacyRedactionLevelsV0()
 }
 
 func validateOperationalJSONSizeV0(value any, maxBytes int, field string, add func(string, string)) {

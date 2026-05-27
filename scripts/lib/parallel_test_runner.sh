@@ -1,7 +1,17 @@
 #!/usr/bin/env bash
 
+parallel_test_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/smoke_common.sh
+source "$parallel_test_lib_dir/smoke_common.sh"
+
 orquesta_parallel_test_init() {
-  ORQUESTA_PARALLEL_TEST_TMP="${ORQUESTA_PARALLEL_TEST_TMP:-$(mktemp -d)}"
+  local tmp_source="generated"
+  if [[ -n "${ORQUESTA_PARALLEL_TEST_TMP:-}" ]]; then
+    tmp_source="env:ORQUESTA_PARALLEL_TEST_TMP"
+  else
+    ORQUESTA_PARALLEL_TEST_TMP="$(mktemp -d)"
+  fi
+  smoke_temp_root_prepare "$ORQUESTA_PARALLEL_TEST_TMP" "$tmp_source"
   ORQUESTA_PARALLEL_TEST_PIDS=()
   ORQUESTA_PARALLEL_TEST_NAMES=()
   ORQUESTA_PARALLEL_TEST_LOGS=()
@@ -9,7 +19,7 @@ orquesta_parallel_test_init() {
 
 orquesta_parallel_test_cleanup() {
   if [[ -n "${ORQUESTA_PARALLEL_TEST_TMP:-}" && -d "$ORQUESTA_PARALLEL_TEST_TMP" ]]; then
-    rm -rf "$ORQUESTA_PARALLEL_TEST_TMP"
+    smoke_temp_root_cleanup "$ORQUESTA_PARALLEL_TEST_TMP" "${ORQUESTA_KEEP_PARALLEL_TEST_TMP:-${ORQUESTA_KEEP_SMOKE_DIR:-0}}"
   fi
 }
 

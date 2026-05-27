@@ -2,35 +2,26 @@ package orquestaruntime
 
 import (
 	"context"
-	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"sync"
+	"time"
 )
 
 type ProcessRuntimeConnectorV0 struct {
-	mu          sync.Mutex
-	nextProcess uint64
-	nextSession uint64
-	nextLaunch  uint64
-	nextStop    uint64
-	processes   map[string]*processRuntimeRecordV0
-}
-
-type processRuntimeRecordV0 struct {
-	cmd        *exec.Cmd
-	processRef string
-	sessionRef string
-	launchRef  string
-	stopRef    string
-	status     ProcessRuntimeStatusV0
-	done       chan struct{}
+	mu           sync.Mutex
+	nextProcess  uint64
+	nextSession  uint64
+	nextLaunch   uint64
+	nextStop     uint64
+	processes    map[string]*processRuntimeRecordV0
+	effectPolicy ProcessRuntimeEffectPolicyV0
 }
 
 func NewProcessRuntimeConnectorV0() *ProcessRuntimeConnectorV0 {
 	return &ProcessRuntimeConnectorV0{
-		processes: map[string]*processRuntimeRecordV0{},
+		processes:    map[string]*processRuntimeRecordV0{},
+		effectPolicy: normalizeProcessRuntimeEffectPolicyV0(ProcessRuntimeEffectPolicyV0{}),
 	}
 }
 
@@ -38,15 +29,16 @@ func (c *ProcessRuntimeConnectorV0) LaunchV0(
 	ctx context.Context,
 	req ProcessRuntimeLaunchRequestV0,
 ) (ProcessRuntimeSnapshotV0, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	policy := c.normalizedEffectPolicyV0()
+	ctx, cancel := processRuntimeEffectContextV0(ctx, policy.LaunchTimeout)
+	defer cancel()
 	if err := ctx.Err(); err != nil {
 		return ProcessRuntimeSnapshotV0{}, processRuntimeErrorV0(ProcessRuntimeContextDoneV0, "context")
 	}
 	if err := validateProcessRuntimeLaunchRequestV0(req); err != nil {
 		return ProcessRuntimeSnapshotV0{}, err
 	}
+	receipt := processRuntimeFinalizeLaunchReceiptForRequestV0(req)
 
 	cmd := exec.Command(req.CommandPath, req.Args...)
 	cmd.Dir = req.WorkingDir
@@ -62,12 +54,15 @@ func (c *ProcessRuntimeConnectorV0) LaunchV0(
 	c.mu.Lock()
 	c.ensureProcessesLocked()
 	record := &processRuntimeRecordV0{
-		cmd:        cmd,
-		processRef: c.nextProcessRefLocked(),
-		sessionRef: c.nextSessionRefLocked(),
-		launchRef:  c.nextLaunchRefLocked(),
-		status:     ProcessRuntimeRunningV0,
-		done:       make(chan struct{}),
+		cmd:           cmd,
+		process:       cmd.Process,
+		pid:           cmd.Process.Pid,
+		processRef:    c.nextProcessRefLocked(),
+		sessionRef:    c.nextSessionRefLocked(),
+		launchRef:     c.nextLaunchRefLocked(),
+		status:        ProcessRuntimeRunningV0,
+		launchReceipt: &receipt,
+		done:          make(chan struct{}),
 	}
 	c.processes[record.processRef] = record
 	snapshot := record.snapshot()
@@ -84,18 +79,28 @@ func processRuntimeExecEnvV0(env []string) []string {
 	return clean
 }
 
+func processRuntimeFinalizeLaunchReceiptForRequestV0(
+	req ProcessRuntimeLaunchRequestV0,
+) ProcessRuntimeLaunchReceiptV0 {
+	if req.LaunchReceipt == nil {
+		return processRuntimeDirectLaunchReceiptV0(req)
+	}
+	return finalizeProcessRuntimeLaunchReceiptV0(*req.LaunchReceipt)
+}
+
 func (c *ProcessRuntimeConnectorV0) StopV0(
 	ctx context.Context,
 	processRef string,
 ) (ProcessRuntimeSnapshotV0, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	policy := c.normalizedEffectPolicyV0()
+	ctx, cancel := processRuntimeEffectContextV0(ctx, policy.StopTimeout)
+	defer cancel()
 	if err := validateProcessRuntimeRefV0(processRef); err != nil {
 		return ProcessRuntimeSnapshotV0{}, err
 	}
+	graceDeadline := processRuntimeContextDeadlineV0(ctx, policy.StopTimeout)
 
-	record, snapshot, alreadyStopped, err := c.recordForStopV0(processRef)
+	record, snapshot, alreadyStopped, err := c.recordForStopV0(processRef, graceDeadline)
 	if err != nil {
 		return ProcessRuntimeSnapshotV0{}, err
 	}
@@ -103,19 +108,18 @@ func (c *ProcessRuntimeConnectorV0) StopV0(
 		return snapshot, nil
 	}
 
-	c.signalProcessStopV0(record)
+	reason, escalate := c.signalProcessStopV0(record, policy.StopSignal)
+	c.markStopReasonV0(record, reason)
+	if escalate {
+		return c.escalateProcessStopV0(record, policy.KillWait)
+	}
 
 	select {
 	case <-record.done:
 		return c.SnapshotV0(processRef)
 	case <-ctx.Done():
-		c.killProcessV0(record)
-		select {
-		case <-record.done:
-			return c.SnapshotV0(processRef)
-		default:
-			return ProcessRuntimeSnapshotV0{}, processRuntimeErrorV0(ProcessRuntimeContextDoneV0, "context")
-		}
+		c.markStopReasonV0(record, ProcessRuntimeStopGraceTimeoutV0)
+		return c.escalateProcessStopV0(record, policy.KillWait)
 	}
 }
 
@@ -138,6 +142,7 @@ func (c *ProcessRuntimeConnectorV0) SnapshotV0(
 
 func (c *ProcessRuntimeConnectorV0) recordForStopV0(
 	processRef string,
+	graceDeadline time.Time,
 ) (*processRuntimeRecordV0, ProcessRuntimeSnapshotV0, bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -150,68 +155,16 @@ func (c *ProcessRuntimeConnectorV0) recordForStopV0(
 	if record.stopRef == "" {
 		record.stopRef = c.nextStopRefLocked()
 	}
+	if record.status == ProcessRuntimeStoppedV0 {
+		if record.stopReason == "" {
+			record.stopReason = ProcessRuntimeStopAlreadyStoppedV0
+		}
+		snapshot := record.snapshot()
+		return record, snapshot, true, nil
+	}
+	record.status = ProcessRuntimeStoppingV0
+	record.stopReason = ProcessRuntimeStopCooperativeSignalSentV0
+	record.stopDeadline = graceDeadline
 	snapshot := record.snapshot()
-	return record, snapshot, record.status == ProcessRuntimeStoppedV0, nil
-}
-
-func (c *ProcessRuntimeConnectorV0) waitProcessV0(record *processRuntimeRecordV0) {
-	_ = record.cmd.Wait()
-
-	c.mu.Lock()
-	record.status = ProcessRuntimeStoppedV0
-	c.mu.Unlock()
-	close(record.done)
-}
-
-func (c *ProcessRuntimeConnectorV0) signalProcessStopV0(record *processRuntimeRecordV0) {
-	if record.cmd == nil || record.cmd.Process == nil {
-		return
-	}
-	if err := record.cmd.Process.Signal(os.Interrupt); err != nil {
-		c.killProcessV0(record)
-	}
-}
-
-func (c *ProcessRuntimeConnectorV0) killProcessV0(record *processRuntimeRecordV0) {
-	if record.cmd == nil || record.cmd.Process == nil {
-		return
-	}
-	_ = record.cmd.Process.Kill()
-}
-
-func (c *ProcessRuntimeConnectorV0) ensureProcessesLocked() {
-	if c.processes == nil {
-		c.processes = map[string]*processRuntimeRecordV0{}
-	}
-}
-
-func (c *ProcessRuntimeConnectorV0) nextProcessRefLocked() string {
-	c.nextProcess++
-	return fmt.Sprintf("process-ref-v0-%06d", c.nextProcess)
-}
-
-func (c *ProcessRuntimeConnectorV0) nextLaunchRefLocked() string {
-	c.nextLaunch++
-	return fmt.Sprintf("launch-ref-v0-%06d", c.nextLaunch)
-}
-
-func (c *ProcessRuntimeConnectorV0) nextSessionRefLocked() string {
-	c.nextSession++
-	return fmt.Sprintf("session-ref-v0-%06d", c.nextSession)
-}
-
-func (c *ProcessRuntimeConnectorV0) nextStopRefLocked() string {
-	c.nextStop++
-	return fmt.Sprintf("stop-ref-v0-%06d", c.nextStop)
-}
-
-func (r *processRuntimeRecordV0) snapshot() ProcessRuntimeSnapshotV0 {
-	return ProcessRuntimeSnapshotV0{
-		SchemaVersion: ProcessRuntimeConnectorVersionV0,
-		ProcessRef:    r.processRef,
-		SessionRef:    r.sessionRef,
-		LaunchRef:     r.launchRef,
-		StopRef:       r.stopRef,
-		Status:        r.status,
-	}
+	return record, snapshot, false, nil
 }

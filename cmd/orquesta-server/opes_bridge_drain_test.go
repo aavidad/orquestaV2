@@ -23,6 +23,7 @@ func TestRunOPESDrainOnceV0LedgerEvitaReenviarJobPendienteV0(t *testing.T) {
 		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
 			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
 		}
+		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode([]map[string]any{{
 			"id":             "job-ref-expansion-001",
 			"type":           "expand_topic_from_summary",
@@ -40,6 +41,7 @@ func TestRunOPESDrainOnceV0LedgerEvitaReenviarJobPendienteV0(t *testing.T) {
 			t.Fatalf("orquesta request inesperada %s %s", r.Method, r.URL.Path)
 		}
 		posts++
+		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"run_ref": "run-ref-expansion-001",
 			"estado":  "accepted",
@@ -92,6 +94,7 @@ func TestRunOPESDrainOnceV0PlanTemarioOperadoresEnviaExternalWorkDocumentPlanV0(
 		if r.URL.RawQuery != "" {
 			t.Fatalf("query=%s", r.URL.RawQuery)
 		}
+		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":             "job-ref-plan-operadores-001",
 			"type":           "plan_temario",
@@ -126,6 +129,7 @@ func TestRunOPESDrainOnceV0PlanTemarioOperadoresEnviaExternalWorkDocumentPlanV0(
 			t.Fatalf("decode request: %v", err)
 		}
 		received = envelope.ExternalWorkRunRequest
+		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"run_ref": "run-ref-plan-operadores-001",
 			"estado":  "ok",
@@ -188,8 +192,10 @@ func TestRunOPESDrainOnceV0SecuenciaPasesSaltaTiposSinPendientesV0(t *testing.T)
 		queries = append(queries, jobType)
 		switch jobType {
 		case "draft_content_block":
+			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode([]map[string]any{})
 		case "generate_visual_asset":
+			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode([]map[string]any{{
 				"id":             "job-ref-visual-001",
 				"type":           "generate_visual_asset",
@@ -210,6 +216,7 @@ func TestRunOPESDrainOnceV0SecuenciaPasesSaltaTiposSinPendientesV0(t *testing.T)
 			t.Fatalf("orquesta request inesperada %s %s", r.Method, r.URL.Path)
 		}
 		posts++
+		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"run_ref": "run-ref-visual-001",
 			"estado":  "accepted",
@@ -265,6 +272,7 @@ func TestRunOPESDrainOnceV0SecuenciaPasesNoAvanzaSiPrimerTipoYaEnviadoV0(t *test
 		if jobType != "draft_content_block" {
 			t.Fatalf("job_type inesperado=%q", jobType)
 		}
+		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode([]map[string]any{{
 			"id":             "job-ref-draft-001",
 			"type":           "draft_content_block",
@@ -354,6 +362,7 @@ func TestRunOPESDrainOnceV0EscaneaMasQueLimitYEnviaSiguientesNoEnviadosV0(t *tes
 				"requested_by":   "opes",
 			})
 		}
+		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(jobs)
 	}))
 	defer opesServer.Close()
@@ -371,6 +380,7 @@ func TestRunOPESDrainOnceV0EscaneaMasQueLimitYEnviaSiguientesNoEnviadosV0(t *tes
 		}
 		jobRef := envelope.ExternalWorkRunRequest.AppChangeRequest.ExternalWork.JobRef
 		posts = append(posts, jobRef)
+		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"run_ref": "run-ref-" + jobRef,
 			"estado":  "accepted",
@@ -450,9 +460,11 @@ func TestRunOPESDrainOnceV0SecuenciaDerivadosOPESHastaAssembleTopicV0(t *testing
 		jobType := r.URL.Query().Get("job_type")
 		queries = append(queries, jobType)
 		if activeStage >= len(sequence) || jobType != sequence[activeStage] {
+			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode([]map[string]any{})
 			return
 		}
+		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode([]map[string]any{{
 			"id":              "job-ref-" + strings.ReplaceAll(jobType, "_", "-") + "-001",
 			"type":            jobType,
@@ -495,6 +507,7 @@ func TestRunOPESDrainOnceV0SecuenciaDerivadosOPESHastaAssembleTopicV0(t *testing
 			WriteSet:     envelope.ExternalWorkRunRequest.AppChangeRequest.AllowedWriteSet[0],
 		})
 		submittedByType[work.WorkKind]++
+		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"run_ref": "run-ref-" + work.JobRef,
 			"estado":  "accepted",

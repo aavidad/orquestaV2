@@ -70,45 +70,14 @@ func compactSchedulerWaitingReasonsV0(reasons []SchedulerWaitingReasonV0) []Sche
 }
 
 func schedulerContainsForbiddenDetailsV0(values []string) bool {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return false
-	}
 	for _, value := range values {
-		lower := strings.ToLower(value)
-		for _, forbidden := range forbiddenSchedulerFragmentsV0 {
-			if containsSchedulerTokenV0(lower, forbidden) {
-				return true
-			}
+		if orquestarails.TextContainsOperationalRawDetailForFieldV0(
+			"director_scheduler_tick",
+			"operational_text",
+			value,
+		) {
+			return true
 		}
 	}
 	return false
-}
-
-func containsSchedulerTokenV0(value string, fragment string) bool {
-	fragment = strings.ToLower(strings.TrimSpace(fragment))
-	if fragment == "" {
-		return false
-	}
-	start := 0
-	for {
-		index := strings.Index(value[start:], fragment)
-		if index < 0 {
-			return false
-		}
-		absolute := start + index
-		if schedulerTokenBoundaryV0(value, absolute, absolute+len(fragment)) {
-			return true
-		}
-		start = absolute + len(fragment)
-	}
-}
-
-func schedulerTokenBoundaryV0(value string, start int, end int) bool {
-	before := start == 0 || !schedulerAsciiLetterOrDigitV0(value[start-1])
-	after := end >= len(value) || !schedulerAsciiLetterOrDigitV0(value[end])
-	return before && after
-}
-
-func schedulerAsciiLetterOrDigitV0(ch byte) bool {
-	return (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')
 }

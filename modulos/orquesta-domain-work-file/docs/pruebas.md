@@ -17,6 +17,8 @@ Cobertura:
 - `limit` corta despues de ordenar y filtrar;
 - lectura filtrada sobrevive a reinstanciar el adaptador;
 - conflicto de idempotencia no sobrescribe el archivo;
+- identidad de job usa el builder canonico, repara colisiones de `job_ref` y
+  preserva replay de snapshots con fingerprint legacy por request guardado;
 - request invalido no escribe estado;
 - snapshot corrupto falla al abrir y no se repara en silencio;
 - contexto cancelado no escribe y tampoco lista records;

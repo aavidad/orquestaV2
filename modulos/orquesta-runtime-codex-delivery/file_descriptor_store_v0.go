@@ -127,12 +127,12 @@ func (store *FileCodexReceiptDescriptorStoreV0) RecordDirectorAgentDecisionFileC
 }
 
 func loadFileCodexReceiptDescriptorsV0(path string) ([]CodexReceiptDescriptorV0, error) {
-	data, err := os.ReadFile(path)
+	data, err := readCodexDeliveryFileSnapshotBytesV0(path, "codex_receipt_descriptor_file_store")
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("codex_receipt_descriptor_file_store: read_failed")
+		return nil, err
 	}
 	var snapshot fileCodexReceiptDescriptorSnapshotV0
 	if err := json.Unmarshal(data, &snapshot); err != nil {
@@ -140,6 +140,9 @@ func loadFileCodexReceiptDescriptorsV0(path string) ([]CodexReceiptDescriptorV0,
 	}
 	if snapshot.SchemaVersion != fileCodexReceiptDescriptorStoreSchemaVersionV0 {
 		return nil, fmt.Errorf("codex_receipt_descriptor_file_store: schema_invalid")
+	}
+	if len(snapshot.Descriptors) > codexDeliveryFileSnapshotMaxRecordsV0 {
+		return nil, fmt.Errorf("codex_receipt_descriptor_file_store: records_limit_exceeded")
 	}
 	descriptors := make([]CodexReceiptDescriptorV0, 0, len(snapshot.Descriptors))
 	for _, descriptor := range snapshot.Descriptors {
@@ -171,12 +174,6 @@ func persistFileCodexReceiptDescriptorsV0(
 	if err != nil {
 		return fmt.Errorf("codex_receipt_descriptor_file_store: json_failed")
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return fmt.Errorf("codex_receipt_descriptor_file_store: write_failed")
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return fmt.Errorf("codex_receipt_descriptor_file_store: rename_failed")
-	}
-	return nil
+	data = append(data, '\n')
+	return writeCodexDeliveryDurableFileV0(path, data, "codex_receipt_descriptor_file_store")
 }

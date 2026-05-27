@@ -253,3 +253,46 @@ func TestAutoprogrammingResidentModeV0SinBloqueoNoCreaReparacionV0(t *testing.T)
 		t.Fatalf("result=%+v", result)
 	}
 }
+
+func TestNormalizeAutoprogrammingResidentInputV0DespachaLoteSinEsperarAgentesLargos(t *testing.T) {
+	input := normalizeAutoprogrammingResidentInputV0(
+		orquestamcp.MCPRunSupervisorToolInputV0{
+			ResidentMode: true,
+		},
+		StackV0{},
+	)
+
+	if input.MaxRunsPerTick != 10 {
+		t.Fatalf("max_runs_per_tick=%d want 10", input.MaxRunsPerTick)
+	}
+	if input.MaxExternalWaits != 1 {
+		t.Fatalf("max_external_waits=%d want 1", input.MaxExternalWaits)
+	}
+	if input.MaxDispatchesPerWait != 10 {
+		t.Fatalf("max_dispatches_per_wait=%d want 10", input.MaxDispatchesPerWait)
+	}
+	if input.MaxOutboxPerCycle != 10 {
+		t.Fatalf("max_outbox_per_cycle=%d want 10", input.MaxOutboxPerCycle)
+	}
+	if !input.AllowRepeatedRuns {
+		t.Fatalf("allow_repeated_runs=false want true")
+	}
+}
+
+func TestNormalizeAutoprogrammingResidentInputV0RespetaCapacidadExplicita(t *testing.T) {
+	input := normalizeAutoprogrammingResidentInputV0(
+		orquestamcp.MCPRunSupervisorToolInputV0{
+			ResidentMode:     true,
+			MaxRunsPerTick:   6,
+			MaxExternalWaits: 3,
+		},
+		StackV0{},
+	)
+
+	if input.MaxRunsPerTick != 6 {
+		t.Fatalf("max_runs_per_tick=%d want 6", input.MaxRunsPerTick)
+	}
+	if input.MaxExternalWaits != 3 {
+		t.Fatalf("max_external_waits=%d want 3", input.MaxExternalWaits)
+	}
+}

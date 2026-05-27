@@ -151,6 +151,12 @@ Riesgos: prueba aislamiento del fake en memoria; no ejecuta runtime real, provee
   heredar el resto del entorno.
 - `TestProcessRuntimeConnectorV0RechazaPathOperativoInseguro` valida que `PATH`
   vacio, relativo o con marcas de credencial sigue bloqueado.
+- `TestProcessRuntimeConnectorV0ExponeStoppingAntesDeEscalar` valida estado
+  `stopping`, `stop_ref`, deadline de gracia y razon cooperativa antes de kill.
+- `TestProcessRuntimeConnectorV0ProcesoQueIgnoraSenalEscalaPorTimeout` valida
+  escalado por `grace_timeout` cuando el proceso ignora la senal cooperativa.
+- `TestProcessRuntimeConnectorV0StopDeProcesoYaDetenidoDeclaraCodigoPublico`
+  valida `process_already_stopped` con stop idempotente y ref opaca.
 
 ```text
 Caso: RUNTIME-011 lanza y para un proceso local real controlado
@@ -286,4 +292,15 @@ Comando:
 Evidencia esperada:
 Ultima ejecucion:
 Riesgos:
+```
+
+## RuntimeSessionRotation v0
+
+```text
+Caso: T207 rotacion de sesiones exige handoff suficiente y opt-in
+Tipo: unit
+Comando: go test -count=1 ./modulos/orquesta-runtime
+Evidencia esperada: EvaluateRuntimeSessionRotationV0 pide completar handoff si falta o es insuficiente, no activa sin opt-in, permite relevo solo con handoff aceptado y mantiene stop_current deshabilitado.
+Ultima ejecucion: 2026-05-27, OK dentro de bateria transversal T207.
+Riesgos: no prueba relanzamiento real de proveedor ni coste comparativo productivo.
 ```

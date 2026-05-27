@@ -51,16 +51,26 @@ func TestServerConfigFromEnvV0SupervisorResidenteNoEsperaAgenteLargo(t *testing.
 	}
 }
 
-func TestServerConfigFromEnvV0CapaEsperaLargaDelSupervisorResidente(t *testing.T) {
+func TestServerConfigFromEnvV0PermiteEsperaResidenteAmpliaConfiguradaV0(t *testing.T) {
 	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", t.TempDir())
-	t.Setenv("ORQUESTA_SERVER_DRAIN_MAX_EXTERNAL_WAITS", "900")
+	t.Setenv("ORQUESTA_SERVER_DRAIN_MAX_EXTERNAL_WAITS", "70")
 
 	config, err := serverConfigFromEnvV0()
 	if err != nil {
 		t.Fatalf("serverConfigFromEnvV0: %v", err)
 	}
-	if config.SupervisorCommand.DrainLimits.MaxExternalWaits != maxServerSupervisorMaxExternalWaitsV0 {
-		t.Fatalf("server drain max_external_waits=%d want=%d", config.SupervisorCommand.DrainLimits.MaxExternalWaits, maxServerSupervisorMaxExternalWaitsV0)
+	if config.SupervisorCommand.DrainLimits.MaxExternalWaits != 70 {
+		t.Fatalf("max_external_waits=%d want 70", config.SupervisorCommand.DrainLimits.MaxExternalWaits)
+	}
+}
+
+func TestServerConfigFromEnvV0BloqueaEsperaResidenteDescontroladaV0(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", t.TempDir())
+	t.Setenv("ORQUESTA_SERVER_DRAIN_MAX_EXTERNAL_WAITS", "900")
+
+	_, err := serverConfigFromEnvV0()
+	if err == nil || !strings.Contains(err.Error(), "ORQUESTA_SERVER_DRAIN_MAX_EXTERNAL_WAITS incompatible") {
+		t.Fatalf("serverConfigFromEnvV0 err=%v", err)
 	}
 }
 
@@ -109,6 +119,8 @@ func TestServerConfigFromEnvV0PublicaConfiguracionEfectivaCanonica(t *testing.T)
 	for key, want := range map[string]string{
 		"ORQUESTA_SERVER_MAX_RUNS_PER_TICK":                  "10",
 		"ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK":            "10",
+		"ORQUESTA_SERVER_DRAIN_MAX_DISPATCHES":               "10",
+		"ORQUESTA_SERVER_DRAIN_MAX_OUTBOX":                   "10",
 		"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_TARGET_QUEUE": "25",
 		"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_MAX_REQUESTS": "10",
 		"ORQUESTA_CODEX_MAX_BATCH_READY":                     "10",
@@ -152,6 +164,59 @@ func TestServerConfigFromEnvV0UsaCapacidadCanonicaDiezPadresSeisHijos(t *testing
 		if got := effectiveSettingValueForTestV0(settings, key); got != want {
 			t.Fatalf("%s=%q want %q settings=%+v", key, got, want, settings)
 		}
+	}
+}
+
+func TestServerStackIdleSelfImprovementFiltraSeccionesNoTxxV0(t *testing.T) {
+	supervisor := serverStackSupervisorV0{}
+	result, err := supervisor.FilterIdleSelfImprovementRequestsV0(context.Background(), orquestaserver.IdleSelfImprovementRequestFilterRequestV0{
+		Requests: []orquestaserver.IdleSelfImprovementRequestV0{{
+			RequestRef: "request-ref-autoprogramming-backlog-tareas-futuras-tras-estabilizar-la-automejora-0cdbd385",
+		}, {
+			RequestRef:    "request-ref-autoprogramming-backlog-t33-alias-reparado-a1b2c3d4",
+			SuggestedArea: "t33-alias-reparado",
+			ContextRefs:   []string{"backlog_section:tareas-futuras-tras-estabilizar-la-automejora"},
+		}, {
+			RequestRef: "request-ref-autoprogramming-backlog-t33-autoprogramming-backlog-ack-correlation-a1b2c3d4",
+		}, {
+			RequestRef: "request-ref-autoprogramming-backlog-scanner-abc123",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("FilterIdleSelfImprovementRequestsV0: %v", err)
+	}
+	if len(result.Requests) != 2 ||
+		result.Requests[0].RequestRef != "request-ref-autoprogramming-backlog-t33-autoprogramming-backlog-ack-correlation-a1b2c3d4" ||
+		result.Requests[1].RequestRef != "request-ref-autoprogramming-backlog-scanner-abc123" ||
+		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-idle-self-improvement-backlog-non-task-section-filtered") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestServerStackIdleSelfImprovementPermiteAliasesFederadosV0(t *testing.T) {
+	supervisor := serverStackSupervisorV0{}
+	result, err := supervisor.FilterIdleSelfImprovementRequestsV0(context.Background(), orquestaserver.IdleSelfImprovementRequestFilterRequestV0{
+		Requests: []orquestaserver.IdleSelfImprovementRequestV0{{
+			RequestRef:  "request-ref-autoprogramming-backlog-apg-001-doc-loader",
+			ContextRefs: []string{"backlog_local_alias:APG-001"},
+		}, {
+			RequestRef:  "request-ref-autoprogramming-backlog-srv-task-006-capacidad-libre",
+			ContextRefs: []string{"backlog_local_alias:SRV-TASK-006"},
+		}, {
+			RequestRef:  "request-ref-autoprogramming-backlog-mcp-012-roadmap",
+			ContextRefs: []string{"backlog_local_alias:MCP-012"},
+		}, {
+			RequestRef: "request-ref-autoprogramming-backlog-tareas-futuras-001",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("FilterIdleSelfImprovementRequestsV0: %v", err)
+	}
+	if len(result.Requests) != 3 ||
+		result.Requests[0].RequestRef != "request-ref-autoprogramming-backlog-apg-001-doc-loader" ||
+		result.Requests[1].RequestRef != "request-ref-autoprogramming-backlog-srv-task-006-capacidad-libre" ||
+		result.Requests[2].RequestRef != "request-ref-autoprogramming-backlog-mcp-012-roadmap" {
+		t.Fatalf("result=%+v", result)
 	}
 }
 
@@ -417,16 +482,44 @@ func TestCodexRuntimeConfigV0UsaDangerFullAccessPorDefecto(t *testing.T) {
 	}
 }
 
-func TestServerConfigFromEnvV0ActivaPurgaLogicaPorDefecto(t *testing.T) {
+func TestServerConfigFromEnvV0NoMutaStartupCleanupGlobalPorDefecto(t *testing.T) {
 	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", t.TempDir())
 	t.Setenv("ORQUESTA_STARTUP_CLEANUP_MODE", "")
 
-	_, err := serverConfigFromEnvV0()
+	config, err := serverConfigFromEnvV0()
 	if err != nil {
 		t.Fatalf("serverConfigFromEnvV0: %v", err)
 	}
-	if got := os.Getenv("ORQUESTA_STARTUP_CLEANUP_MODE"); got != "forced_stop" {
-		t.Fatalf("startup cleanup mode=%q", got)
+	if got := os.Getenv("ORQUESTA_STARTUP_CLEANUP_MODE"); got != "" {
+		t.Fatalf("startup cleanup global mutado=%q", got)
+	}
+	counts := daemonStartEnvCountsV0(serverDaemonStartEnvPolicyV0(os.Environ(), config))
+	if !strings.Contains(counts, "defaulted=") {
+		t.Fatalf("daemon policy sin defaults: %s", counts)
+	}
+}
+
+func TestServerConfigFromEnvV0LecturasRepetidasNoContaminanDefaultsV0(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", t.TempDir())
+	t.Setenv("ORQUESTA_STARTUP_CLEANUP_MODE", "")
+	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "")
+
+	first, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("first serverConfigFromEnvV0: %v", err)
+	}
+	second, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("second serverConfigFromEnvV0: %v", err)
+	}
+	if got := os.Getenv("ORQUESTA_STARTUP_CLEANUP_MODE"); got != "" {
+		t.Fatalf("startup cleanup global mutado=%q", got)
+	}
+	if got := os.Getenv("ORQUESTA_DETAIL_PROHIBITED_RAILS"); got != "" {
+		t.Fatalf("detail rails global mutado=%q", got)
+	}
+	if first.EffectiveConfig.Settings[0].Key != second.EffectiveConfig.Settings[0].Key {
+		t.Fatalf("lecturas no estables")
 	}
 }
 
@@ -444,6 +537,7 @@ func TestDomainWorkExecutorFromEnvV0ConectaOPESOptIn(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
 			t.Fatalf("decode body: %v", err)
 		}
+		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":              "job-ref-opes-env-001",
 			"status":          "accepted",
@@ -523,6 +617,7 @@ func TestDomainWorkExecutorFromEnvV0ConectaOPESBaseURLFallback(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
 			t.Fatalf("decode body: %v", err)
 		}
+		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":              "job-ref-opes-fallback-001",
 			"status":          "accepted",
@@ -643,6 +738,7 @@ func TestDomainWorkExecutorFromEnvV0ConectaHTTPNeutralOptIn(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&gotJobRequest); err != nil {
 				t.Fatalf("decode job: %v", err)
 			}
+			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"job": map[string]any{
 					"schema_version":  orquestadomainwork.DomainWorkJobSchemaV0,
@@ -658,6 +754,7 @@ func TestDomainWorkExecutorFromEnvV0ConectaHTTPNeutralOptIn(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&gotSubmission); err != nil {
 				t.Fatalf("decode submission: %v", err)
 			}
+			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"receipt": map[string]any{
 					"schema_version":  orquestadomainwork.DomainWorkArtifactReceiptSchemaV0,

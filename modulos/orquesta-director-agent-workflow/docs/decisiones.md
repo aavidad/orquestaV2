@@ -91,3 +91,15 @@ Motivo: hoy es un DTO de propuesta del director, no un comando publico de `orque
 Impacto: el adaptador lo rechaza como `director_agent_command_no_soportado`; una capa de aplicacion puede leerlo como artefacto validado sin store, runtime ni proveedor por defecto.
 Estado: aceptada.
 ```
+
+```text
+Fecha: 2026-05-27
+Decision: T207 no anade comando publico al puente director-agent-workflow.
+Motivo: la rotacion experimental opera sobre handoff runtime y directiva de
+orquestacion; traducirla como decision del director mezclaria runtime/proceso
+con el puente puro a workflow.
+Impacto: el modulo conserva validacion de decisiones existentes. Si una
+composicion necesita relevo real, debe materializarlo por puertos superiores y
+no por mutacion directa desde este puente.
+Estado: aceptada.
+```

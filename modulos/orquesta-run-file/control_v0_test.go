@@ -37,7 +37,7 @@ func TestRunFileStoreControlPersistsAfterRecreateV0(t *testing.T) {
 		!completed.CheckpointRecorded ||
 		completed.Forced ||
 		completed.Meta.RequestedBy != "director" ||
-		!reflect.DeepEqual(completed.EvidenceRefs, []string{"ev-1"}) {
+		!reflect.DeepEqual(completed.EvidenceRefs, []string{"seed-ev", "ev-1"}) {
 		t.Fatalf("completed=%+v", completed)
 	}
 
@@ -59,7 +59,7 @@ func TestRunFileStoreControlPersistsAfterRecreateV0(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadRunControlStateV0 again: %v", err)
 	}
-	if again.EvidenceRefs[0] != "ev-1" {
+	if again.EvidenceRefs[0] != "seed-ev" {
 		t.Fatalf("state leaked mutable evidence refs: %+v", again)
 	}
 }

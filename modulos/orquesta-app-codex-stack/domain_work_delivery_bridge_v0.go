@@ -185,11 +185,16 @@ func (stack StackV0) submitDomainWorkArtifactForObservationV0(
 		return err
 	}
 	submission = orquestadomainwork.NormalizeDomainWorkArtifactSubmissionV0(submission)
-	if submitted, err := stack.DomainDelivery.Ledger.HasDomainWorkArtifactSubmissionV0(
-		ctx,
-		submission.IdempotencyKey,
-	); err != nil || submitted {
+	if submitted, err := stack.domainWorkSubmissionAlreadyRecordedV0(ctx, run, task, observation, submission); err != nil || submitted {
 		return err
+	}
+	claim := domainWorkClaimedSubmissionRecordV0(run, task, observation, submission, request.OccurredAt)
+	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(ctx, claim); err != nil {
+		return fmt.Errorf("domain_work_submit_claim_failed")
+	}
+	submitting := domainWorkSubmittingSubmissionRecordV0(run, task, observation, submission, request.OccurredAt)
+	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(ctx, submitting); err != nil {
+		return fmt.Errorf("domain_work_submit_claim_failed")
 	}
 	result, err := stack.DomainWork.Execute(ctx, orquestamcp.MCPDomainWorkToolInputV0{
 		RequestID:          submission.RequestID,
@@ -205,14 +210,17 @@ func (stack StackV0) submitDomainWorkArtifactForObservationV0(
 			ctx,
 			domainWorkRejectedSubmissionRecordV0(run, task, observation, submission, result, request.OccurredAt),
 		); recordErr != nil {
-			return recordErr
+			return fmt.Errorf("domain_work_submit_recovery_required")
 		}
 		return fmt.Errorf("domain_work_submit_artifact_failed")
 	}
-	return stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
+	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
 		ctx,
 		domainWorkAcceptedSubmissionRecordV0(run, task, observation, submission, result, request.OccurredAt),
-	)
+	); err != nil {
+		return fmt.Errorf("domain_work_submit_recovery_required")
+	}
+	return nil
 }
 
 func domainWorkSubmitIssueRefsV0(

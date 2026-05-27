@@ -59,6 +59,38 @@ func TestProgressSupervisionCandidateProviderV0BuildsCandidatesFromObservationPo
 	}
 }
 
+func TestProgressSupervisionCandidateProviderV0NormalizaFaseViejaAFaseActualV0(t *testing.T) {
+	runRef := "run-nucleo-progress-observacion-fase-actual-001"
+	run := mustActiveProgrammingRunV0(t, runRef)
+	run = mustApplyCommandV0(t, run, mustOpenRevisionCommandV0(t, runRef))
+	provider := ProgressSupervisionCandidateProviderV0{
+		ProgressSource: staticAgentProgressObservationSourceV0{Observations: []AgentProgressObservationV0{{
+			Report: progressObservationReportV0(
+				runRef,
+				"agent-ref-progress-fase-vieja-001",
+				orquestaruntime.AgentLoopDetectedV0,
+			),
+			PhaseID: string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			TaskRef: "task-ref-progress-fase-vieja-001",
+		}}},
+		RequestedBy: "orquestacion-nucleo",
+	}
+
+	candidates, err := provider.BuildSchedulerCandidatesV0(context.Background(), SchedulerCandidateRequestV0{
+		Run:        run,
+		OccurredAt: "2026-05-26T12:10:00Z",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	if len(candidates.ProgressSupervisionCandidates) != 1 {
+		t.Fatalf("progress candidates=%+v", candidates.ProgressSupervisionCandidates)
+	}
+	if got := candidates.ProgressSupervisionCandidates[0].SupervisionInput.PhaseID; got != string(orquestacoreworkflow.OrchestrationPhaseRevisionV0) {
+		t.Fatalf("phase_id=%s", got)
+	}
+}
+
 func TestProgressSupervisionCandidateProviderV0LimitaPrimeraObservacionAccionable(t *testing.T) {
 	runRef := "run-nucleo-progress-observacion-first-001"
 	provider := ProgressSupervisionCandidateProviderV0{

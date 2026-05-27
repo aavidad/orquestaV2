@@ -1,12 +1,11 @@
 package orquestacli
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
+
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 const (
@@ -14,16 +13,18 @@ const (
 	CliOutputFormatJSONV0 = "json"
 	CliOutputFormatTSVV0  = "tsv"
 
-	CliInputSourceStdinV0 = "stdin"
-	CliInputSourceFileV0  = "file"
-	CliInputSourceArgV0   = "arg"
+	CliInputSourceStdinV0        = "stdin"
+	CliInputSourceFileExplicitV0 = "file_explicit"
+	CliInputSourceInlineV0       = "inline"
+	CliInputSourceArgV0          = "arg"
 
-	CliErrOpcionInvalidaV0                = "opcion_invalida"
-	CliErrConfiguracionInvalidaV0         = "configuracion_cli_invalida"
-	CliErrContratoNoConfiguradoV0         = "contrato_no_configurado"
-	CliErrRespuestaInvalidaV0             = "respuesta_invalida"
-	CliErrErrorTransporteV0               = "error_transporte"
-	CliErrSalidaNoSerializableV0          = "salida_no_serializable"
+	CliErrOpcionInvalidaV0                = cliPublicErrOptionInvalidV0
+	CliErrInputTooLargeV0                 = cliPublicErrInputTooLargeV0
+	CliErrConfiguracionInvalidaV0         = cliPublicErrConfigInvalidV0
+	CliErrContratoNoConfiguradoV0         = cliPublicErrContractMissingV0
+	CliErrRespuestaInvalidaV0             = cliPublicErrResponseInvalidV0
+	CliErrErrorTransporteV0               = cliPublicErrTransportV0
+	CliErrSalidaNoSerializableV0          = cliPublicErrNotSerializableV0
 	CliContractSolicitarNuevaAppV0        = "SolicitarNuevaApp"
 	CliContractVersionSolicitarAppV0      = "v0"
 	CliContractOperationalStatusV0        = "OperationalStatusQuery"
@@ -49,6 +50,8 @@ const (
 	CliDefaultRequestIDPrefixV0           = "req-cli-"
 	CliDefaultErrorMessageNamespaceV0     = "orquesta_cli.errores."
 )
+
+var cliRequestIDGeneratorV0 = orquestaruntime.NewSystemRefGeneratorV0()
 
 type CliInvocationContextV0 struct {
 	Command        string        `json:"command"`
@@ -140,9 +143,9 @@ func ValidateCliInvocationContextV0(inv CliInvocationContextV0) []CliPublicError
 		errs = append(errs, NewCliPublicErrorV0(CliErrOpcionInvalidaV0, "output_format", "output_format_debe_ser_text_json_o_tsv"))
 	}
 	switch inv.InputSource {
-	case "", CliInputSourceStdinV0, CliInputSourceFileV0, CliInputSourceArgV0:
+	case "", CliInputSourceStdinV0, CliInputSourceFileExplicitV0, CliInputSourceInlineV0, CliInputSourceArgV0:
 	default:
-		errs = append(errs, NewCliPublicErrorV0(CliErrOpcionInvalidaV0, "input_source", "input_source_debe_ser_stdin_file_o_arg"))
+		errs = append(errs, NewCliPublicErrorV0(CliErrOpcionInvalidaV0, "input_source", "input_source_debe_ser_stdin_file_explicit_inline_o_arg"))
 	}
 	return errs
 }
@@ -219,9 +222,6 @@ func cliMetaV0(start time.Time, statusCode int, retryable bool) CliOutputMetaV0 
 }
 
 func newCliRequestIDV0() string {
-	var raw [8]byte
-	if _, err := rand.Read(raw[:]); err != nil {
-		return fmt.Sprintf("%s%d", CliDefaultRequestIDPrefixV0, time.Now().UTC().UnixNano())
-	}
-	return CliDefaultRequestIDPrefixV0 + hex.EncodeToString(raw[:])
+	ref, _ := cliRequestIDGeneratorV0.NextRefV0(CliDefaultRequestIDPrefixV0, "client-mutation")
+	return ref
 }

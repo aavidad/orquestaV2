@@ -8,6 +8,7 @@ import (
 	"time"
 
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
+	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 )
 
 func TestSuperviseRunsRespetaMaxTicksV0(t *testing.T) {
@@ -98,6 +99,32 @@ func TestSuperviseRunsPropagaCommandYExcluyeRunsEjecutadasV0(t *testing.T) {
 	}
 	if !reflect.DeepEqual(ticker.commands[1].ExcludeRunRefs, []string{"run-a"}) {
 		t.Fatalf("second excludes=%+v", ticker.commands[1].ExcludeRunRefs)
+	}
+}
+
+func TestSuperviseRunsPropagaPoliticaFairnessV0(t *testing.T) {
+	now := time.Date(2026, 5, 26, 11, 0, 0, 0, time.UTC)
+	ticker := &fakeSupervisorTickerV0{
+		results: []orquestaruncoordinator.RunCoordinatorTickResultV0{tickResultV0("run-a")},
+	}
+	command := supervisorCommandV0(1)
+	command.RankingPolicy = orquestarunqueue.DefaultRunQueueRankingPolicyV0(now)
+	command.RankingPolicy.FairnessWindowSeconds = 600
+	command.RankingPolicy.MaxRunsPerFairnessGroup = 1
+	command.RankingPolicy.FairnessGroupLastSelectedAt = map[string]time.Time{
+		"group-a": now.Add(-time.Minute),
+	}
+	command.RankingPolicy.FairnessGroupRunCounts = map[string]int{"group-a": 1}
+
+	if _, err := SuperviseRunsV0(context.Background(), RunSupervisorDepsV0{Ticker: ticker}, command); err != nil {
+		t.Fatalf("SuperviseRunsV0: %v", err)
+	}
+	got := ticker.commands[0].RankingPolicy
+	if got.FairnessWindowSeconds != 600 ||
+		got.MaxRunsPerFairnessGroup != 1 ||
+		got.FairnessGroupRunCounts["group-a"] != 1 ||
+		got.FairnessGroupLastSelectedAt["group-a"].IsZero() {
+		t.Fatalf("ranking policy not propagated: %+v", got)
 	}
 }
 

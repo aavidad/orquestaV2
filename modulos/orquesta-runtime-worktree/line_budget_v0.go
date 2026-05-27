@@ -43,6 +43,10 @@ func worktreeGoLineBudgetMaxV0(maxLines int) int {
 	return WorktreeDefaultGoFileLineBudgetV0
 }
 
+func WorktreeGoFileLineBudgetLimitV0(maxLines int) int {
+	return worktreeGoLineBudgetMaxV0(maxLines)
+}
+
 func worktreePathSetV0(paths []string) map[string]struct{} {
 	out := map[string]struct{}{}
 	for _, path := range compactWorktreeStringsV0(paths) {

@@ -95,6 +95,25 @@ func MCPServerShutdownDescriptorV0() MCPServerShutdownToolDescriptorV0 {
 	}
 }
 
+func normalizeMCPServerShutdownIdentityV0(
+	input MCPServerShutdownToolInputV0,
+	headerCorrelationID string,
+	headerIdempotencyKey string,
+) (MCPServerShutdownToolInputV0, []MCPValidationIssueV0) {
+	identity := NormalizeMCPPublicMutationIdentityV0(MCPPublicMutationIdentityInputV0{
+		RequestID:            input.RequestID,
+		CorrelationID:        input.CorrelationID,
+		IdempotencyKey:       input.IdempotencyKey,
+		HeaderCorrelationID:  headerCorrelationID,
+		HeaderIdempotencyKey: headerIdempotencyKey,
+		Mutating:             true,
+	})
+	input.RequestID = identity.RequestID
+	input.CorrelationID = identity.CorrelationID
+	input.IdempotencyKey = identity.IdempotencyKey
+	return input, identity.Issues
+}
+
 func newMCPServerShutdownResultV0(
 	input MCPServerShutdownToolInputV0,
 	result orquestaservershutdown.ServerShutdownResultV0,

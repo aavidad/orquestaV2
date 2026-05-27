@@ -2,6 +2,7 @@ package orquestaserver
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -45,6 +46,7 @@ func TestFileStateStoreV0RecuperaStateV0(t *testing.T) {
 		got.EffectiveConfig.Settings[0].Key != "ORQUESTA_SERVER_MAX_RUNS_PER_TICK" {
 		t.Fatalf("state=%+v want=%+v", got, want)
 	}
+	assertServerDurableFilePolicyV0(t, filepath.Dir(path), filepath.Base(path))
 }
 
 func TestFileStateStoreV0NoFiltraPathEnErrorV0(t *testing.T) {
@@ -59,5 +61,26 @@ func TestFileStateStoreV0NoFiltraPathEnErrorV0(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), path) {
 		t.Fatalf("error filtra path: %v", err)
+	}
+}
+
+func assertServerDurableFilePolicyV0(t *testing.T, dir string, name string) {
+	t.Helper()
+	info, err := os.Stat(filepath.Join(dir, name))
+	if err != nil {
+		t.Fatalf("stat durable file: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("durable file mode=%#o", got)
+	}
+	leftovers, err := filepath.Glob(filepath.Join(dir, "."+name+".*.tmp"))
+	if err != nil {
+		t.Fatalf("glob temp: %v", err)
+	}
+	if len(leftovers) != 0 {
+		t.Fatalf("temps persistidos=%v", leftovers)
+	}
+	if _, err := os.Stat(filepath.Join(dir, name+".tmp")); !os.IsNotExist(err) {
+		t.Fatalf("temp fijo presente err=%v", err)
 	}
 }

@@ -2,7 +2,6 @@ package orquestaruntimecodex
 
 import (
 	"encoding/json"
-	"os"
 	"strings"
 
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
@@ -12,14 +11,11 @@ func ReadAndValidateStrictCompletedCodexAgentAckFileV0(
 	path string,
 	spec orquestaruntime.ExternalAgentLaunchSpecV0,
 ) (CodexAgentAckV0, []orquestaruntime.ExternalAgentConnectorErrorV0) {
-	data, err := os.ReadFile(path)
+	data, err := ReadCodexControlFileBytesV0(path, CodexAgentAckFileNameV0)
 	if err != nil {
-		issue := codexIssueV0(CodexConnectorAckInvalidV0, CodexAgentAckFileNameV0, spec.CorrelationID, "read_failed")
-		if os.IsNotExist(err) {
-			issue.Retryable = true
-			issue.Evidence = []string{"ack_not_ready"}
+		return CodexAgentAckV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{
+			CodexControlFileReadIssueV0(err, CodexAgentAckFileNameV0, spec.CorrelationID, "ack_not_ready"),
 		}
-		return CodexAgentAckV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{issue}
 	}
 	return ValidateStrictCompletedCodexAgentAckBytesForSpecV0(data, spec)
 }
@@ -116,7 +112,7 @@ func (v *codexAckValidatorV0) validateStrictFiles(
 		return
 	}
 	if codexAckHasForbiddenArtifactPathV0(files) {
-		v.add(CodexConnectorAckArtifactV0, "files", "artifact_path_forbidden")
+		v.add(CodexConnectorAckArtifactV0, "files", codexAckForbiddenArtifactEvidenceV0(files))
 		return
 	}
 	writeSet := normalizeCodexAckWriteSetPathsV0(packet.Task.WriteSet)
@@ -147,12 +143,8 @@ func (v *codexAckValidatorV0) validateStrictTests(
 		return
 	}
 	tests := compactCodexAckStringsV0(ack.Tests)
-	if len(tests) != len(required) {
-		v.add(CodexConnectorAckArtifactV0, "tests", "required_tests_mismatch")
-		return
-	}
-	for index := range required {
-		if tests[index] != required[index] {
+	for _, command := range required {
+		if !codexAckStringInSetV0(tests, command) {
 			v.add(CodexConnectorAckArtifactV0, "tests", "required_tests_mismatch")
 			return
 		}

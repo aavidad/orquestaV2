@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"strings"
 
@@ -14,21 +13,23 @@ import (
 )
 
 type opesDrainSummaryV0 struct {
-	OPESBaseURL      string                   `json:"opes_base_url"`
-	OrquestaBaseURL  string                   `json:"orquesta_base_url"`
-	Limit            int                      `json:"limit"`
-	JobType          string                   `json:"job_type,omitempty"`
-	JobTypeSequence  []string                 `json:"job_type_sequence,omitempty"`
-	SelectedJobType  string                   `json:"selected_job_type,omitempty"`
-	EmptyJobTypes    []string                 `json:"empty_job_types,omitempty"`
-	JobRef           string                   `json:"job_ref,omitempty"`
-	DryRun           bool                     `json:"dry_run,omitempty"`
-	Seen             int                      `json:"seen"`
-	Submitted        int                      `json:"submitted"`
-	AlreadySubmitted int                      `json:"already_submitted,omitempty"`
-	Skipped          int                      `json:"skipped"`
-	Results          []opesDrainJobResultV0   `json:"results"`
-	Errors           []opesDrainPublicErrorV0 `json:"errors,omitempty"`
+	OPESBaseURL      string                       `json:"opes_base_url"`
+	OrquestaBaseURL  string                       `json:"orquesta_base_url"`
+	Limit            int                          `json:"limit"`
+	JobType          string                       `json:"job_type,omitempty"`
+	JobTypeSequence  []string                     `json:"job_type_sequence,omitempty"`
+	SelectedJobType  string                       `json:"selected_job_type,omitempty"`
+	EmptyJobTypes    []string                     `json:"empty_job_types,omitempty"`
+	JobRef           string                       `json:"job_ref,omitempty"`
+	DryRun           bool                         `json:"dry_run,omitempty"`
+	Seen             int                          `json:"seen"`
+	Submitted        int                          `json:"submitted"`
+	AlreadySubmitted int                          `json:"already_submitted,omitempty"`
+	Claimed          int                          `json:"claimed,omitempty"`
+	Skipped          int                          `json:"skipped"`
+	Results          []opesDrainJobResultV0       `json:"results"`
+	Errors           []opesDrainPublicErrorV0     `json:"errors,omitempty"`
+	Destination      opesDrainDestinationPolicyV0 `json:"-"`
 }
 
 type opesDrainJobResultV0 struct {
@@ -59,12 +60,16 @@ func opesDrainOnceCommandV0(stdout io.Writer, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stderr, "opes-drain-once: exporta ORQUESTA_OPES_BRIDGE_JOB_TYPE, ORQUESTA_OPES_BRIDGE_JOB_REF u ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE para crear runs")
 		return 2
 	}
-	summary, err := runOPESDrainOnceV0(context.Background(), config)
+	ctx, cancel := context.WithTimeout(context.Background(), config.HTTPTimeout)
+	defer cancel()
+	summary, err := runOPESDrainOnceV0(ctx, config)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "opes-drain-once: %v\n", err)
 		return 1
 	}
-	_ = json.NewEncoder(stdout).Encode(summary)
+	if err := writeCommandJSONOutputV0(stdout, commandPublicOPESDrainPayloadV0(summary)); err != nil {
+		return reportCommandStdioWriteFailureV0(stderr, "opes-drain-once", "stdout", "json_encode", err)
+	}
 	if len(summary.Errors) > 0 {
 		return 1
 	}
@@ -111,6 +116,7 @@ func runOPESDrainSequenceOnceV0(
 		JobTypeSequence: sequence,
 		EmptyJobTypes:   emptyJobTypes,
 		DryRun:          config.DryRun,
+		Destination:     config.Destination,
 	}, nil
 }
 
@@ -118,7 +124,8 @@ func runOPESDrainSingleOnceV0(
 	ctx context.Context,
 	config opesDrainConfigV0,
 ) (opesDrainSummaryV0, error) {
-	httpClient := &http.Client{Timeout: config.HTTPTimeout}
+	orquestaHTTPClient := commandHTTPClientWithRedirectPolicyV0(config.HTTPTimeout, config.OrquestaBaseURL)
+	httpClient := commandOPESTemporalHTTPClientV0(config.HTTPTimeout)
 	client := orquestaopesconnector.NewRESTClientV0(orquestaopesconnector.RESTClientConfigV0{
 		BaseURL:    config.OPESBaseURL,
 		HTTPClient: httpClient,
@@ -141,30 +148,20 @@ func runOPESDrainSingleOnceV0(
 		JobRef:          config.JobRef,
 		DryRun:          config.DryRun,
 		Seen:            len(jobs),
+		Destination:     config.Destination,
 	}
 	for _, job := range jobs {
 		if !config.DryRun && summary.Submitted >= config.Limit {
 			break
 		}
 		result := opesDrainJobResultV0{JobRef: job.ID, WorkKind: job.Type}
-		ledgerEntry, alreadySubmitted, err := opesBridgeSubmittedLedgerEntryV0(
+		if opesBridgeSkipRecordedInputV0(
 			ctx,
 			config.InputLedger,
 			job,
-		)
-		if err != nil {
-			summary.Skipped++
-			result.Status = "ledger_error"
-			summary.Results = append(summary.Results, result)
-			summary.Errors = append(summary.Errors, opesDrainPublicErrorV0{JobRef: job.ID, Code: err.Error()})
-			continue
-		}
-		if alreadySubmitted {
-			summary.AlreadySubmitted++
-			result.Status = "already_submitted"
-			result.RunRef = ledgerEntry.RunRef
-			result.ChangeRef = ledgerEntry.ChangeRef
-			summary.Results = append(summary.Results, result)
+			&summary,
+			&result,
+		) {
 			continue
 		}
 		jobContext, err := opesJobContextV0(ctx, client, job)
@@ -190,7 +187,18 @@ func runOPESDrainSingleOnceV0(
 			summary.Results = append(summary.Results, result)
 			continue
 		}
-		runRef, err := submitOPESExternalWorkRunV0(ctx, httpClient, config.OrquestaBaseURL, request)
+		request, claimedSkip := opesBridgeClaimRunRequestV0(
+			ctx,
+			config.InputLedger,
+			job,
+			request,
+			&summary,
+			&result,
+		)
+		if claimedSkip {
+			continue
+		}
+		runRef, err := submitOPESExternalWorkRunV0(ctx, &orquestaHTTPClient, config.OrquestaBaseURL, request)
 		if err != nil {
 			summary.Skipped++
 			result.Status = "submit_error"
@@ -201,8 +209,8 @@ func runOPESDrainSingleOnceV0(
 		result.RunRef = runRef
 		result.Status = "submitted"
 		if err := opesBridgeRecordSubmittedV0(ctx, config.InputLedger, job, runRef, result.ChangeRef); err != nil {
-			result.Status = "submitted_ledger_error"
-			summary.Errors = append(summary.Errors, opesDrainPublicErrorV0{JobRef: job.ID, Code: err.Error()})
+			result.Status = "recovery_required"
+			appendOPESDrainErrorV0(&summary, job.ID, externalBridgeRecoveryRequiredCodeV0)
 		}
 		summary.Submitted++
 		summary.Results = append(summary.Results, result)

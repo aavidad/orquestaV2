@@ -99,3 +99,51 @@ Bloqueos:
 
 - `director_decisions.json` sigue fuera del write-set.
 - El conector no interpreta decisiones; solo materializa el archivo de control.
+
+## RTCODEX-006 - Reporte de uso redactado
+
+Objetivo: generar evidencia local de uso Codex sin filtrar proveedor, HOME,
+OAuth, prompts, transcripts, completions, coste, cuenta real ni rutas privadas.
+
+Estado: hecho para T209.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex`
+
+Criterios cerrados:
+
+- el wrapper genera `codex_usage_accounting.json` en `runtime_work_dir`;
+- los contadores permitidos son `usage.input_tokens`,
+  `usage.output_tokens` y `usage.total_tokens`;
+- la cuota solo cruza como `quota.status` redactado;
+- si no hay cuota real fiable, el status queda `unknown` con
+  `quota_observed_unavailable`;
+- stdout, stderr y last-message no se convierten en fuente publica de uso.
+
+## RTCODEX-006 - T207 como consumidor de handoff
+
+Objetivo: reconciliar que Codex no implementa rotacion automatica; solo aporta
+ACK/handoff/checkpoint que una composicion opt-in puede convertir en
+`RuntimeSessionRotationHandoffV0`.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex`
+
+Bloqueos:
+
+- No relanza Codex real, no mata sesiones y no lee HOME/OAuth/proveedor.
+- El smoke real de relevo pertenece a composicion opt-in futura.
+
+## RTCODEX-006 - Reconciliacion T208
+
+Objetivo: conservar la frontera del reparador Codex del guardian como opt-in
+break-glass ya gobernado por owners especificos, sin reabrir el umbrella T208.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex`
+- bateria T208 cruzada del paquete OrquestaV2.
+
+Estado: documentado el 2026-05-27; nuevos huecos requieren owner focal.

@@ -111,6 +111,47 @@ func TestRuntimeV0ServerShutdownRechazadoNoCongelaSupervisorV0(t *testing.T) {
 	}
 }
 
+func TestRuntimeV0ServerShutdownReadyDescongelaSupervisorV0(t *testing.T) {
+	store := &memoryStateStoreV0{}
+	supervisor := &countingShutdownFreezeSupervisorV0{}
+	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"estado":         "ok",
+			"status":         "ready",
+			"shutdown_ready": true,
+		})
+	})
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:     t.TempDir(),
+		TickInterval: time.Hour,
+		SupervisorCommand: orquestarunsupervisor.RunSupervisorCommandV0{
+			QueueRef:      "global",
+			MaxExecutions: 10,
+		},
+	}, RuntimeDepsV0{
+		AppHandler: app,
+		Supervisor: supervisor,
+		StateStore: store,
+		Clock:      fixedClockV0{now: time.Date(2026, 5, 25, 18, 0, 0, 0, time.UTC)},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, serverShutdownRoutePathV0, nil)
+	runtime.HandlerV0().ServeHTTP(httptest.NewRecorder(), req)
+	state := runtime.StateV0()
+	if state.SupervisorFrozen || state.ShutdownInProgress || !state.ShutdownReady {
+		t.Fatalf("shutdown ready dejo supervisor congelado: %+v", state)
+	}
+
+	runtime.runSupervisorTickV0(context.Background())
+	if supervisor.calls != 1 {
+		t.Fatalf("supervisor no recuperado tras ready: calls=%d", supervisor.calls)
+	}
+}
+
 type countingShutdownFreezeSupervisorV0 struct {
 	calls int
 }

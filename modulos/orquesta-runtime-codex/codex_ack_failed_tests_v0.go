@@ -206,7 +206,10 @@ func codexAckMissingEvidencePhraseV0(text string) bool {
 	if strings.Contains(text, "no falta") ||
 		strings.Contains(text, "no faltan") ||
 		strings.Contains(text, "sin faltantes") ||
-		strings.Contains(text, "faltantes resueltos") {
+		strings.Contains(text, "faltantes resueltos") ||
+		strings.Contains(text, "resuelto") ||
+		strings.Contains(text, "resuelta") ||
+		strings.Contains(text, "resolved") {
 		return false
 	}
 	for _, token := range []string{

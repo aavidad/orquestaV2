@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -65,10 +64,7 @@ func TestCodexWaveStopCommandV0BloqueaRegistrySinProof(t *testing.T) {
 	if strings.Contains(stdout.String(), "process_proof") {
 		t.Fatalf("stdout filtro detalle interno: %s", stdout.String())
 	}
-	var stopped codexWaveLaunchSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &stopped); err != nil {
-		t.Fatalf("stop json invalido: %v stderr=%s", err, stderr.String())
-	}
+	stopped := mustReadCodexWaveCommandSummaryForTest(t, stdout.Bytes(), runtimeDir)
 	if len(stopped.Errors) != 1 || stopped.Errors[0].Code != "blocked_registry_untrusted" {
 		t.Fatalf("error publico inesperado: %+v", stopped.Errors)
 	}
@@ -158,9 +154,5 @@ func launchCodexWaveStopTestAgentV0(t *testing.T, waveRef string) codexWaveLaunc
 	if exitCode != 0 {
 		t.Fatalf("launch exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
-	var summary codexWaveLaunchSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("launch json invalido: %v", err)
-	}
-	return summary
+	return mustReadCodexWaveCommandSummaryForTest(t, stdout.Bytes(), runtimeDir)
 }

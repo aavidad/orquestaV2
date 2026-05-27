@@ -14,8 +14,11 @@ var OperationalRawDetailFragmentsV0 = []string{
 	"sk-",
 	"postgres://",
 	"mysql://",
+	"sqlite://",
 	"mongodb://",
 	"redis://",
+	"dsn=",
+	"database_url=",
 	"/home/",
 	"\\home\\",
 	"/users/",
@@ -24,12 +27,16 @@ var OperationalRawDetailFragmentsV0 = []string{
 	"$home",
 	"~/",
 	"prompt=",
+	"process=",
+	"process_ref=",
+	"pid=",
 	"completion=",
 	"transcript=",
 	"raw_prompt=",
 	"raw_transcript=",
 	"raw_text=",
 	"full_text=",
+	"secret-token",
 }
 
 func ValuesContainOperationalSensitiveDetailForFieldV0(

@@ -57,6 +57,22 @@ func codexReviewGateMergePendingRailEvidenceV0(
 	return orquestaautoprogramming.AutoprogrammingReviewGateResultFromIssuesV0(result.Issues)
 }
 
+func codexReviewGateMergeIncompleteRequiredEvidenceV0(
+	result orquestaautoprogramming.AutoprogrammingReviewGateResultV0,
+	ack orquestaruntimecodex.CodexAgentAckV0,
+) orquestaautoprogramming.AutoprogrammingReviewGateResultV0 {
+	if !orquestaruntimecodex.CodexAgentAckDeclaresIncompleteRequiredEvidenceV0(ack) ||
+		codexReviewGateResultHasIssueV0(result, "required_test_not_executed") {
+		return result
+	}
+	result.Issues = append(result.Issues, orquestaautoprogramming.AutoprogrammingReviewGateIssueV0{
+		Code:    "required_test_not_executed",
+		Field:   "agent_ack",
+		Message: "el ACK declara evidencia obligatoria no ejecutada o incompleta",
+	})
+	return orquestaautoprogramming.AutoprogrammingReviewGateResultFromIssuesV0(result.Issues)
+}
+
 func codexReviewGateMergeGateIssuesV0(
 	result orquestaautoprogramming.AutoprogrammingReviewGateResultV0,
 	issues []orquestaautoprogramming.AutoprogrammingReviewGateIssueV0,

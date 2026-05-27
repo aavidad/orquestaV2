@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 	orquestaserver "orquesta/modulos/orquesta-server"
@@ -41,17 +40,19 @@ func (check serverStartupCheckV0) compactStartupStateFilesV0(
 		return startupStateCompactionV0{}, nil
 	}
 
-	revisionDir := filepath.Join(stateDir, "revision", "purga_startup_"+startupRevisionTimestampV0(command.OccurredAt))
-	if err := os.MkdirAll(revisionDir, 0o755); err != nil {
+	revisionRef := startupRevisionRefV0(command.OccurredAt)
+	revisionDir := filepath.Join(stateDir, "revision", startupSafeRefPartV0(revisionRef))
+	if err := os.MkdirAll(revisionDir, 0o700); err != nil {
 		return startupStateCompactionV0{}, err
 	}
+	manifest := newStartupRevisionManifestV0(revisionRef, command.OccurredAt)
 	if len(queueBytes) > 0 {
-		if err := os.WriteFile(filepath.Join(revisionDir, "queue_v0.before.json"), queueBytes, 0o644); err != nil {
+		if err := writeStartupRevisionQueueSnapshotV0(revisionDir, "queue_v0.before.json", queue, &manifest); err != nil {
 			return startupStateCompactionV0{}, err
 		}
 	}
 	if len(controlBytes) > 0 {
-		if err := os.WriteFile(filepath.Join(revisionDir, "control_v0.before.json"), controlBytes, 0o644); err != nil {
+		if err := writeStartupRevisionControlSnapshotV0(revisionDir, "control_v0.before.json", control, &manifest); err != nil {
 			return startupStateCompactionV0{}, err
 		}
 	}
@@ -68,16 +69,16 @@ func (check serverStartupCheckV0) compactStartupStateFilesV0(
 			return startupStateCompactionV0{}, err
 		}
 	}
-	if err := writeStartupJSONFileV0(filepath.Join(revisionDir, "queue_removed.json"), startupQueueSnapshotV0{
+	if err := writeStartupRevisionQueueSnapshotV0(revisionDir, "queue_removed.json", startupQueueSnapshotV0{
 		SchemaVersion: queue.SchemaVersion,
 		Records:       removedQueue,
-	}); err != nil {
+	}, &manifest); err != nil {
 		return startupStateCompactionV0{}, err
 	}
-	if err := writeStartupJSONFileV0(filepath.Join(revisionDir, "control_removed.json"), startupControlSnapshotV0{
+	if err := writeStartupRevisionControlSnapshotV0(revisionDir, "control_removed.json", startupControlSnapshotV0{
 		SchemaVersion: control.SchemaVersion,
 		Records:       removedControl,
-	}); err != nil {
+	}, &manifest); err != nil {
 		return startupStateCompactionV0{}, err
 	}
 
@@ -87,6 +88,9 @@ func (check serverStartupCheckV0) compactStartupStateFilesV0(
 	}
 	compaction := startupStateCompactionV0{
 		RevisionDir:      revisionDir,
+		RevisionRef:      revisionRef,
+		RetentionDays:    startupRevisionRetentionDaysV0,
+		MaxBytes:         startupRevisionMaxSnapshotBytes,
 		QueueRemoved:     len(removedQueue),
 		QueueKept:        len(keptQueue),
 		ControlRemoved:   len(removedControl),
@@ -94,7 +98,13 @@ func (check serverStartupCheckV0) compactStartupStateFilesV0(
 		RuntimeArchived:  archivedRuntime,
 		CompactionNeeded: len(removedQueue) > 0 || len(removedControl) > 0 || archivedRuntime > 0,
 	}
-	if err := writeStartupJSONFileV0(filepath.Join(revisionDir, "manifest.json"), compaction); err != nil {
+	manifest.QueueRemoved = compaction.QueueRemoved
+	manifest.QueueKept = compaction.QueueKept
+	manifest.ControlRemoved = compaction.ControlRemoved
+	manifest.ControlKept = compaction.ControlKept
+	manifest.RuntimeArchived = compaction.RuntimeArchived
+	compaction.Artifacts = len(manifest.Artifacts) + 1
+	if err := writeStartupJSONFileV0(filepath.Join(revisionDir, "manifest.json"), manifest); err != nil {
 		return startupStateCompactionV0{}, err
 	}
 	if compaction.CompactionNeeded {
@@ -200,9 +210,9 @@ func startupRunNeedsFreshAutoprogrammingAttemptV0(stateDir string, runtimeDir st
 	}
 	run, err := store.LoadRunV0(context.Background(), runRef)
 	if err != nil {
-		return false
+		return startupAutoprogrammingRunDocumentExistsV0(rootDir, runRef)
 	}
-	return orquestaappcodexstack.AutoprogrammingRunNeedsFreshAttemptWithRuntimeV0(run, runtimeDir)
+	return startupAutoprogrammingRunNeedsFreshAttemptV0(run, runtimeDir)
 }
 
 func splitStartupControlRecordsV0(
@@ -260,7 +270,7 @@ func writeStartupJSONFileV0(path string, value any) error {
 	if strings.TrimSpace(path) == "" {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(value, "", "  ")
@@ -268,5 +278,5 @@ func writeStartupJSONFileV0(path string, value any) error {
 		return err
 	}
 	data = append(data, '\n')
-	return os.WriteFile(path, data, 0o644)
+	return writeCommandDurableFileV0(path, data, "startup_compaction_snapshot")
 }

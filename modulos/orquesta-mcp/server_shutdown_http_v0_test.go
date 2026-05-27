@@ -22,6 +22,7 @@ func TestMCPServerShutdownHTTPHandlerV0DelegaEnExecutor(t *testing.T) {
 	}
 	body := bytes.NewBuffer(nil)
 	_ = json.NewEncoder(body).Encode(MCPServerShutdownToolInputV0{
+		RequestID:     "request-ref-server-shutdown-http-001",
 		Forced:        true,
 		CorrelationID: "corr-server-shutdown-http-input-001",
 	})
@@ -62,7 +63,7 @@ func TestMCPServerShutdownHTTPHandlerV0MetodoYExecutorNil(t *testing.T) {
 	}
 }
 
-func TestMCPServerShutdownHTTPHandlerV0ExponeCausaSanitizadaSiExecutorFalla(t *testing.T) {
+func TestMCPServerShutdownHTTPHandlerV0NoPropagaErrorNoCatalogado(t *testing.T) {
 	executor := &fakeMCPServerShutdownHTTPExecutorV0{
 		err: errors.New("payload_invalido: payload en /home/alberto/Trabajo/orquesta/secreto bearer sk-123456789"),
 	}
@@ -89,7 +90,7 @@ func TestMCPServerShutdownHTTPHandlerV0ExponeCausaSanitizadaSiExecutorFalla(t *t
 	if result.Estado != MCPServerShutdownEstadoErrorV0 ||
 		len(result.Errores) != 1 ||
 		result.Errores[0].Code != "server_shutdown_http_error" ||
-		!strings.Contains(result.Errores[0].Message, "payload_invalido: payload") ||
+		result.Errores[0].Message != "server_shutdown_executor_error" ||
 		strings.Contains(result.Errores[0].Message, "/home/alberto") ||
 		strings.Contains(result.Errores[0].Message, "sk-123456789") {
 		t.Fatalf("result=%+v", result)

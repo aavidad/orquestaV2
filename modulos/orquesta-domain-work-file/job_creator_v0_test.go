@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
@@ -145,6 +146,48 @@ func TestFileDomainWorkJobCreatorV0EscribeSnapshotEstructurado(t *testing.T) {
 	}
 }
 
+func TestFileDomainWorkJobCreatorV0ReplaySnapshotLegacyPorRequestGuardado(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "domain_work_jobs_v0.json")
+	request := orquestadomainwork.NormalizeDomainWorkJobRequestV0(validDomainWorkFileJobRequestV0())
+	request.RequiredTests = []orquestadomainwork.DomainWorkRequiredTestV0{{
+		TestRef: "domain-test-ref-file-legacy",
+	}}
+	job := orquestadomainwork.DomainWorkJobV0{
+		SchemaVersion:  orquestadomainwork.DomainWorkJobSchemaV0,
+		Status:         orquestadomainwork.DomainWorkStatusAcceptedV0,
+		JobRef:         "domain-work-job-legacy",
+		DomainRef:      request.DomainRef,
+		WorkKind:       request.WorkKind,
+		CorrelationID:  request.CorrelationID,
+		IdempotencyKey: request.IdempotencyKey,
+	}
+	data, err := json.Marshal(map[string]any{
+		"schema_version": orquestadomainworkfile.DomainWorkFileJobCreatorSnapshotSchemaV0,
+		"records": []map[string]any{{
+			"domain_ref":      request.DomainRef,
+			"idempotency_key": request.IdempotencyKey,
+			"fingerprint":     "legacy-fingerprint-json",
+			"request":         request,
+			"job":             job,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	creator := mustNewFileDomainWorkJobCreatorV0(t, dir)
+	replay, err := creator.CreateDomainWorkJobV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("CreateDomainWorkJobV0: %v", err)
+	}
+	if replay.JobRef != job.JobRef || replay.Status != orquestadomainwork.DomainWorkStatusAcceptedV0 {
+		t.Fatalf("replay=%+v job=%+v", replay, job)
+	}
+}
+
 func TestFileDomainWorkJobCreatorV0CorrupcionLecturaFallaSinMutar(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "domain_work_jobs_v0.json")
@@ -160,6 +203,36 @@ func TestFileDomainWorkJobCreatorV0CorrupcionLecturaFallaSinMutar(t *testing.T) 
 	}
 	if string(data) != `{` {
 		t.Fatalf("corrupt snapshot mutated: %q", data)
+	}
+}
+
+func TestFileDomainWorkJobCreatorV0LimitaLecturaSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "domain_work_jobs_v0.json")
+	if err := os.WriteFile(path, []byte(strings.Repeat("x", 16*1024*1024+1)), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	_, err := orquestadomainworkfile.NewFileDomainWorkJobCreatorV0(dir)
+	if err == nil || err.Error() != "orquesta_domain_work_file: size_limit_exceeded" {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestFileDomainWorkJobCreatorV0LimitaRecordsSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "domain_work_jobs_v0.json")
+	records := make([]string, 0, 10001)
+	for index := 0; index < 10001; index++ {
+		records = append(records, `{}`)
+	}
+	body := `{"schema_version":"` + orquestadomainworkfile.DomainWorkFileJobCreatorSnapshotSchemaV0 +
+		`","records":[` + strings.Join(records, ",") + `]}`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	_, err := orquestadomainworkfile.NewFileDomainWorkJobCreatorV0(dir)
+	if err == nil || err.Error() != "orquesta_domain_work_file: records_limit_exceeded" {
+		t.Fatalf("err=%v", err)
 	}
 }
 

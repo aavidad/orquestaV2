@@ -26,7 +26,17 @@ Para resolver contradicciones, usar este orden: `AGENTS.md` y
 `docs/estado_actual_2026-05-17.md` para foto vigente; esta guia, el corte de
 cierre generico y la matriz para handoff operativo y evidencias; backlog de
 autoprogramacion para trabajo ejecutable; docs locales solo dentro de su modulo;
-docs historicos solo como contexto enlazado a una fuente vigente.
+docs historicos solo como contexto enlazado a una fuente vigente. Una ruta local
+obligatoria hacia `docs/reinicio_orquesta_v2/*` debe tratarse como historica o
+stale si el arbol no existe; se sustituye por fuentes vigentes o se eleva
+`CONSULTA AL DIRECTOR`.
+Los documentos historicos que antes se declaraban canonicos deben
+autoidentificarse con estado, fecha y sustituto vigente; si un indice o linter
+detecta `doc_estado=historico-stale`, no puede promover esa fuente a plan
+operativo sin enlace nuevo a la foto vigente. Esta regla tambien aplica cuando
+el cuerpo historico conserva encabezados V1 como "fuentes de verdad",
+"doctrina" o "canonico": mandan los marcadores de cabecera y el orden de
+autoridad vigente.
 
 ## Mapa de piezas
 

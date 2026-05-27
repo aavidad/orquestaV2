@@ -24,12 +24,17 @@ type ExternalAgentProcessCommandResolverV0 interface {
 	) (ProcessRuntimeLaunchRequestV0, []ExternalAgentConnectorErrorV0)
 }
 
+type ExternalAgentProcessCommandResolutionReceiptProviderV0 interface {
+	ExternalAgentProcessCommandResolutionReceiptV0() ProcessRuntimeLaunchReceiptV0
+}
+
 type ExternalAgentProcessRuntimePortV0 interface {
 	LaunchV0(context.Context, ProcessRuntimeLaunchRequestV0) (ProcessRuntimeSnapshotV0, error)
 }
 
 type ExternalAgentProcessLaunchResultV0 struct {
-	Status   ExternalAgentProcessLaunchStatusV0 `json:"status"`
-	Snapshot ProcessRuntimeSnapshotV0           `json:"snapshot,omitempty"`
-	Issues   []ExternalAgentConnectorErrorV0    `json:"issues,omitempty"`
+	Status        ExternalAgentProcessLaunchStatusV0 `json:"status"`
+	Snapshot      ProcessRuntimeSnapshotV0           `json:"snapshot,omitempty"`
+	LaunchReceipt *ProcessRuntimeLaunchReceiptV0     `json:"launch_receipt,omitempty"`
+	Issues        []ExternalAgentConnectorErrorV0    `json:"issues,omitempty"`
 }

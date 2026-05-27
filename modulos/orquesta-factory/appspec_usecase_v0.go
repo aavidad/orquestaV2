@@ -8,8 +8,8 @@ func SolicitarNuevaAppV0(req AppSpecRequestV0, now time.Time) (AppSpecV0, []Vali
 	if issues := ValidateAppSpecRequestV0(req); len(issues) > 0 {
 		return AppSpecV0{}, issues
 	}
-	if now.IsZero() {
-		now = time.Now().UTC()
+	if issues := ValidateAppSpecReceptionTimeV0(now); len(issues) > 0 {
+		return AppSpecV0{}, issues
 	}
 	return assembleAppSpecV0(req, now), nil
 }

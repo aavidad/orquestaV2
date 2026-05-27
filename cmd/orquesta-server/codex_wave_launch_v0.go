@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -37,6 +36,7 @@ func runCodexLaunchWaveV0(
 		CreatedAt:      now,
 		UpdatedAt:      now,
 		DryRun:         config.DryRun,
+		OperatorInputs: codexWaveOperatorInputReceiptsCopyV0(config.OperatorInputs),
 		Agents:         make([]codexWaveAgentSummaryV0, 0, config.Agents),
 	}
 	if err := codexWaveValidateUnmanagedLaunchPolicyV0(config); err != nil {
@@ -153,7 +153,7 @@ func codexWaveStartAgentProcessV0(ctx context.Context, wrapperPath string, proje
 		if err != nil {
 			status = []byte("failed\n")
 		}
-		_ = os.WriteFile(donePath, status, 0o600)
+		_ = codexWaveWriteControlFileV0(filepath.Dir(donePath), donePath, codexWaveProcessDoneFileNameV0, "codex_wave_process_done", status, 0o600)
 	}()
 	return pid, nil
 }
@@ -161,7 +161,6 @@ func codexWaveStartAgentProcessV0(ctx context.Context, wrapperPath string, proje
 func codexWaveProcessDonePathV0(wrapperPath string) string {
 	return filepath.Join(filepath.Dir(wrapperPath), codexWaveProcessDoneFileNameV0)
 }
-
 func codexWaveMaterializeAgentV0(
 	config codexWaveConfigV0,
 	index int,
@@ -231,10 +230,10 @@ func codexWaveWriteAgentFilesV0(
 ) (codexWaveAgentSummaryV0, error) {
 	promptPath := filepath.Join(agentRuntimeDir, orquestaruntimecodex.CodexAgentPromptFileNameV0)
 	wrapperPath := filepath.Join(agentRuntimeDir, orquestaruntimecodex.CodexWrapperFileNameV0)
-	if err := os.WriteFile(promptPath, []byte(codexWaveAgentPromptV0(config, agentRef, index)), 0o600); err != nil {
+	if err := codexWaveWriteControlFileV0(agentRuntimeDir, promptPath, orquestaruntimecodex.CodexAgentPromptFileNameV0, "agent_prompt", []byte(codexWaveAgentPromptV0(config, agentRef, index)), 0o600); err != nil {
 		return codexWaveAgentSummaryV0{}, err
 	}
-	if err := os.WriteFile(wrapperPath, []byte(orquestaruntimecodex.BuildCodexWrapperScriptV0(profile)), 0o700); err != nil {
+	if err := codexWaveWriteControlFileV0(agentRuntimeDir, wrapperPath, orquestaruntimecodex.CodexWrapperFileNameV0, "codex_wrapper", []byte(orquestaruntimecodex.BuildCodexWrapperScriptV0(profile)), 0o700); err != nil {
 		return codexWaveAgentSummaryV0{}, err
 	}
 	return codexWaveAgentSummaryV0{
@@ -252,29 +251,22 @@ func codexWaveWriteAgentFilesV0(
 	}, nil
 }
 
-func codexWaveAgentPromptV0(config codexWaveConfigV0, agentRef string, index int) string {
-	var b strings.Builder
-	b.WriteString("Eres un agente Codex lanzado por Orquesta en una ola operativa opt-in.\n\n")
-	b.WriteString("Identidad:\n")
-	b.WriteString("- wave_ref: " + config.WaveRef + "\n")
-	b.WriteString("- agent_ref: " + agentRef + "\n")
-	b.WriteString("- agente: " + strconv.Itoa(index) + " de " + strconv.Itoa(config.Agents) + "\n\n")
-	b.WriteString("Reglas operativas:\n")
-	b.WriteString("- Trabaja en el repositorio indicado por Orquesta y respeta AGENTS.md locales antes de editar.\n")
-	b.WriteString("- No borres archivos ni codigo existente sin revisar primero su uso y dejar evidencia clara.\n")
-	b.WriteString("- Manten el write-set estrecho y coordina mentalmente tu parte con el resto de la ola.\n")
-	b.WriteString("- Al terminar, resume cambios, rutas tocadas, pruebas ejecutadas y bloqueos.\n\n")
-	b.WriteString("Instrucciones del operador:\n")
-	b.WriteString(codexWavePromptForAgentV0(config, index))
-	b.WriteString("\n")
-	return b.String()
-}
-
-func codexWavePromptForAgentV0(config codexWaveConfigV0, index int) string {
-	if index > 0 && index <= len(config.AgentPrompts) {
-		if prompt := strings.TrimSpace(config.AgentPrompts[index-1]); prompt != "" {
-			return prompt
-		}
-	}
-	return config.Prompt
+func codexWaveWriteControlFileV0(
+	rootDir string,
+	path string,
+	fileName string,
+	controlKind string,
+	data []byte,
+	perm os.FileMode,
+) error {
+	_, err := orquestaruntimecodex.WriteCodexControlFileBytesV0(orquestaruntimecodex.CodexControlFileWriteRequestV0{
+		RootDir:     rootDir,
+		Path:        path,
+		FileName:    fileName,
+		ControlKind: controlKind,
+		Data:        data,
+		Mode:        orquestaruntimecodex.CodexControlFileWriteCreateOrReplaceV0,
+		Perm:        perm,
+	})
+	return err
 }

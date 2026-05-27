@@ -3,9 +3,9 @@ package orquestaweb
 const (
 	NuevaAppWebEndpointSchemaV0 = "nueva_app_web_endpoint.v0"
 
-	WebNuevaAppErrMetodoNoSoportadoV0       = "metodo_no_soportado"
-	WebNuevaAppErrFormIncompletoV0          = "form_incompleto"
-	WebNuevaAppErrTransporteNoConfiguradoV0 = "transporte_no_configurado"
+	WebNuevaAppErrMetodoNoSoportadoV0       = webPublicErrMethodUnsupportedV0
+	WebNuevaAppErrFormIncompletoV0          = webPublicErrFormIncompleteV0
+	WebNuevaAppErrTransporteNoConfiguradoV0 = webPublicErrTransportMissingV0
 )
 
 type NuevaAppWebEndpointV0 struct {

@@ -167,15 +167,16 @@ func coordinatorCommandV0(
 		}
 	}
 	return orquestaruncoordinator.RunCoordinatorTickCommandV0{
-		QueueRef:       command.QueueRef,
-		AppRefs:        append([]string(nil), command.AppRefs...),
-		ExcludeRunRefs: append([]string(nil), excluded...),
-		QueueLimit:     command.QueueLimit,
-		MaxRuns:        maxRuns,
-		OccurredAt:     command.OccurredAt,
-		CorrelationID:  command.CorrelationID,
-		DrainLimits:    command.DrainLimits,
-		RankingPolicy:  command.RankingPolicy,
+		QueueRef:             command.QueueRef,
+		AppRefs:              append([]string(nil), command.AppRefs...),
+		ExcludeRunRefs:       append([]string(nil), excluded...),
+		QueueLimit:           command.QueueLimit,
+		MaxRuns:              maxRuns,
+		OccurredAt:           command.OccurredAt,
+		CorrelationID:        command.CorrelationID,
+		DrainLimits:          command.DrainLimits,
+		RankingPolicy:        command.RankingPolicy,
+		ContinueOnDrainError: true,
 	}
 }
 

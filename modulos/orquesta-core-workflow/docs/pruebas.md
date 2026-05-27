@@ -16,6 +16,15 @@ Detalle quality gates: `docs/pruebas_quality_gates.md`.
 ## Pruebas previstas
 
 ```text
+Caso: detail_rails_t15_reconciliado
+Tipo: contract | regression
+Comando: go test -count=1 ./modulos/orquesta-rails ./modulos/orquesta-core-workflow ./modulos/orquesta-context ./modulos/orquesta-director-agent ./cmd/orquesta-server
+Evidencia esperada: T15 permanece cerrado; core-workflow acepta refs opacas y vocabulario operativo, pero conserva rechazo de secretos, rutas privadas, prompts/transcripts crudos y payloads masivos por helper comun.
+Ultima ejecucion: 2026-05-27, ACKs cerrados de T15 con suite requerida pasada.
+Riesgos: nuevos scopes de detalle no se heredan automaticamente; requieren matriz externa y tarea propia.
+```
+
+```text
 Caso: railes_observados_matriz_externa
 Tipo: contract | regression | black-box
 Comando: ./scripts/test_rails_fast.sh

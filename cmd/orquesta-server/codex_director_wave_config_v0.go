@@ -3,12 +3,10 @@ package main
 import (
 	"errors"
 	"flag"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDirectorWaveConfigV0, error) {
@@ -42,6 +40,9 @@ func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDi
 	isolateHome := flags.Bool("isolate-home", boolEnvOrDefaultV0(envCodexWaveIsolateHomeV0, false), "copiar CODEX_HOME por agente bajo el runtime")
 	strictCredentialProjection := flags.Bool("strict-credential-projection", boolEnvOrDefaultV0(envCodexWaveStrictCredentialProjectionV0, false), "exigir proyeccion aislada con auth/config presentes")
 	projectMemories := flags.Bool("project-memories", boolEnvOrDefaultV0(envCodexWaveProjectMemoriesV0, false), "permitir proyeccion explicita de memories de CODEX_HOME")
+	projectionMaxFiles := flags.Int("projection-max-files", intEnvOrDefaultV0(envCodexWaveProjectionMaxFilesV0, codexWaveProjectionDefaultMaxFilesV0), "maximo de ficheros a copiar desde CODEX_HOME")
+	projectionMaxFileBytes := flags.Int("projection-max-file-bytes", intEnvOrDefaultV0(envCodexWaveProjectionMaxFileBytesV0, int(codexWaveProjectionDefaultMaxFileBytesV0)), "maximo de bytes por fichero proyectado")
+	projectionMaxTotalBytes := flags.Int("projection-max-total-bytes", intEnvOrDefaultV0(envCodexWaveProjectionMaxTotalBytesV0, int(codexWaveProjectionDefaultMaxTotalBytesV0)), "maximo total de bytes proyectados desde CODEX_HOME")
 	dryRun := flags.Bool("dry-run", false, "materializar prompts/wrappers sin arrancar procesos")
 	purgeRuntime := flags.Bool("purge-runtime", boolEnvOrDefaultV0(envCodexWavePurgeRuntimeV0, false), "purgar runtime de esta ola antes de materializar")
 	purgeConfirm := flags.String("confirm-purge-runtime", strings.TrimSpace(os.Getenv(envCodexWavePurgeRuntimeConfirmV0)), "confirmacion explicita: debe coincidir con wave-ref")
@@ -63,7 +64,7 @@ func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDi
 	if err := flags.Parse(args); err != nil {
 		return codexDirectorWaveConfigV0{}, err
 	}
-	objectiveText, err := codexDirectorObjectiveTextV0(*objective, *objectiveFile, flags.Args())
+	objectiveText, objectiveInputReceipt, err := codexDirectorObjectiveTextV0(*objective, *objectiveFile, flags.Args())
 	if err != nil {
 		return codexDirectorWaveConfigV0{}, err
 	}
@@ -100,7 +101,10 @@ func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDi
 		approval: *approval, extraArgs: *extraArgs, isolateHome: *isolateHome, dryRun: *dryRun,
 		purgeRuntime: *purgeRuntime, strictCredentialProjection: *strictCredentialProjection,
 		purgeConfirm: *purgeConfirm, purgeReportOnly: *purgeReportOnly,
-		allowUnmanagedLaunch: *allowUnmanagedLaunch, unmanagedLaunchReason: *unmanagedLaunchReason,
+		projectionMaxFiles:      *projectionMaxFiles,
+		projectionMaxFileBytes:  *projectionMaxFileBytes,
+		projectionMaxTotalBytes: *projectionMaxTotalBytes,
+		allowUnmanagedLaunch:    *allowUnmanagedLaunch, unmanagedLaunchReason: *unmanagedLaunchReason,
 		unmanagedLaunchConfirm: *unmanagedLaunchConfirm,
 		projectMemories:        *projectMemories, requestRef: *requestRef, runRef: *runRef,
 		projectRef: *projectRef, domainRefs: *domainRefs, worktreeRef: *worktreeRef,
@@ -110,24 +114,27 @@ func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDi
 		allowGlobalWriteSet: *allowGlobalWriteSet, allowPlaceholderTests: *allowPlaceholderTests,
 		guardOverrideReason: *guardOverrideReason, guardOverrideEvidenceRefs: *guardOverrideEvidenceRefs,
 		domainContextFiles: append(codexDirectorCSVV0(os.Getenv(envCodexDirectorDomainContextFilesV0)), []string(domainContextFiles)...),
+		operatorInputs:     []codexWaveOperatorInputReceiptV0{objectiveInputReceipt},
 	})
 }
 
 type parsedCodexDirectorWaveFlagsV0 struct {
-	agents, maxDepth, maxChildren, recursiveAgentBudget              int
-	waveRef, objectiveText, projectWorkDir, rootRuntimeDir           string
-	resolvedCommand, sourceHome, model, reasoningEffort, profile     string
-	sandbox, approval, extraArgs, requestRef, runRef, projectRef     string
-	domainRefs, worktreeRef, branchRef, writeSet, requiredTests      string
-	guardOverrideReason, guardOverrideEvidenceRefs                   string
-	purgeConfirm                                                     string
-	unmanagedLaunchReason, unmanagedLaunchConfirm                    string
-	isolateHome, dryRun, purgeRuntime, allowRecursive                bool
-	purgeReportOnly                                                  bool
-	allowUnmanagedLaunch                                             bool
-	strictCredentialProjection, projectMemories                      bool
-	strictDirectorGuards, allowGlobalWriteSet, allowPlaceholderTests bool
-	domainContextFiles                                               []string
+	agents, maxDepth, maxChildren, recursiveAgentBudget                 int
+	projectionMaxFiles, projectionMaxFileBytes, projectionMaxTotalBytes int
+	waveRef, objectiveText, projectWorkDir, rootRuntimeDir              string
+	resolvedCommand, sourceHome, model, reasoningEffort, profile        string
+	sandbox, approval, extraArgs, requestRef, runRef, projectRef        string
+	domainRefs, worktreeRef, branchRef, writeSet, requiredTests         string
+	guardOverrideReason, guardOverrideEvidenceRefs                      string
+	purgeConfirm                                                        string
+	unmanagedLaunchReason, unmanagedLaunchConfirm                       string
+	isolateHome, dryRun, purgeRuntime, allowRecursive                   bool
+	purgeReportOnly                                                     bool
+	allowUnmanagedLaunch                                                bool
+	strictCredentialProjection, projectMemories                         bool
+	strictDirectorGuards, allowGlobalWriteSet, allowPlaceholderTests    bool
+	domainContextFiles                                                  []string
+	operatorInputs                                                      []codexWaveOperatorInputReceiptV0
 }
 
 func codexDirectorWaveConfigFromParsedFlagsV0(values parsedCodexDirectorWaveFlagsV0) (codexDirectorWaveConfigV0, error) {
@@ -135,10 +142,11 @@ func codexDirectorWaveConfigFromParsedFlagsV0(values parsedCodexDirectorWaveFlag
 	writeSetValues := codexDirectorCSVV0(values.writeSet)
 	requiredTestValues := codexDirectorCSVV0(values.requiredTests)
 	effectiveStrictDirectorGuards := values.strictDirectorGuards || !values.dryRun
-	domainContextBlocks, err := codexDirectorDomainContextBlocksFromFilesV0(values.domainContextFiles)
+	domainContextBlocks, domainContextReceipts, err := codexDirectorDomainContextBlocksFromFilesV0(values.domainContextFiles)
 	if err != nil {
 		return codexDirectorWaveConfigV0{}, err
 	}
+	operatorInputs := append(codexWaveOperatorInputReceiptsCopyV0(values.operatorInputs), domainContextReceipts...)
 	if !effectiveStrictDirectorGuards {
 		if branchValue == "" {
 			branchValue = codexDirectorDefaultBranchRefV0(values.waveRef)
@@ -162,8 +170,15 @@ func codexDirectorWaveConfigFromParsedFlagsV0(values parsedCodexDirectorWaveFlag
 			IsolateHome: values.isolateHome, DryRun: values.dryRun, PurgeRuntime: values.purgeRuntime,
 			PurgeConfirm: values.purgeConfirm, PurgeReportOnly: values.purgeReportOnly,
 			AllowUnmanagedLaunch: values.allowUnmanagedLaunch, UnmanagedLaunchReason: strings.TrimSpace(values.unmanagedLaunchReason),
-			UnmanagedLaunchConfirm:     strings.TrimSpace(values.unmanagedLaunchConfirm),
-			CredentialProjectionPolicy: codexWaveCredentialProjectionPolicyV0FromFlags(values.strictCredentialProjection, values.projectMemories),
+			UnmanagedLaunchConfirm: strings.TrimSpace(values.unmanagedLaunchConfirm),
+			CredentialProjectionPolicy: codexWaveCredentialProjectionPolicyWithBoundsV0(
+				values.strictCredentialProjection,
+				values.projectMemories,
+				values.projectionMaxFiles,
+				int64(values.projectionMaxFileBytes),
+				int64(values.projectionMaxTotalBytes),
+			),
+			OperatorInputs: operatorInputs,
 		},
 		RequestRef: codexDirectorDefaultRefV0(values.requestRef, "req", values.waveRef),
 		RunRef:     codexDirectorDefaultRefV0(values.runRef, "run", values.waveRef),
@@ -183,48 +198,43 @@ func codexDirectorWaveConfigFromParsedFlagsV0(values parsedCodexDirectorWaveFlag
 	return config, nil
 }
 
-func codexDirectorObjectiveTextV0(objective string, objectiveFile string, trailing []string) (string, error) {
+func codexDirectorObjectiveTextV0(objective string, objectiveFile string, trailing []string) (string, codexWaveOperatorInputReceiptV0, error) {
 	if strings.TrimSpace(objectiveFile) != "" {
-		data, err := os.ReadFile(objectiveFile)
+		text, receipt, err := codexWaveOperatorTextFromFileV0("objective", objectiveFile)
 		if err != nil {
-			return "", err
+			return "", codexWaveOperatorInputReceiptV0{}, err
 		}
-		text := strings.TrimSpace(string(data))
-		if text == "" {
-			return "", errors.New("objective_empty")
-		}
-		return text, nil
+		return text, receipt, nil
 	}
 	if strings.TrimSpace(objective) != "" {
-		return strings.TrimSpace(objective), nil
+		text := strings.TrimSpace(objective)
+		return text, codexWaveOperatorInputReceiptFromTextV0("objective", "operator_inline", text), nil
 	}
 	if len(trailing) > 0 {
 		text := strings.TrimSpace(strings.Join(trailing, " "))
 		if text != "" {
-			return text, nil
+			return text, codexWaveOperatorInputReceiptFromTextV0("objective", "operator_trailing", text), nil
 		}
 	}
-	return "", errors.New("objective_required")
+	return "", codexWaveOperatorInputReceiptV0{}, errors.New("objective_required")
 }
 
-func codexDirectorDomainContextBlocksFromFilesV0(paths []string) ([]codexDirectorDomainContextBlockV0, error) {
+func codexDirectorDomainContextBlocksFromFilesV0(paths []string) ([]codexDirectorDomainContextBlockV0, []codexWaveOperatorInputReceiptV0, error) {
 	blocks := make([]codexDirectorDomainContextBlockV0, 0, len(paths))
+	receipts := make([]codexWaveOperatorInputReceiptV0, 0, len(paths))
 	for _, rawPath := range paths {
 		path := strings.TrimSpace(rawPath)
 		if path == "" {
 			continue
 		}
-		data, err := os.ReadFile(path)
+		text, receipt, err := codexWaveOperatorTextFromFileV0("domain_context", path)
 		if err != nil {
-			return nil, fmt.Errorf("domain_context_file_read_failed %s: %w", filepath.Base(path), err)
-		}
-		text := strings.TrimSpace(string(data))
-		if text == "" {
-			return nil, fmt.Errorf("domain_context_file_empty %s", filepath.Base(path))
+			return nil, nil, err
 		}
 		blocks = append(blocks, codexDirectorDomainContextBlockV0{SourceRef: filepath.Base(path), Text: text})
+		receipts = append(receipts, receipt)
 	}
-	return blocks, nil
+	return blocks, receipts, nil
 }
 
 func codexDirectorDefaultRefV0(value string, prefix string, waveRef string) string {
@@ -234,7 +244,7 @@ func codexDirectorDefaultRefV0(value string, prefix string, waveRef string) stri
 	}
 	waveRef = strings.TrimSpace(waveRef)
 	if waveRef == "" {
-		waveRef = time.Now().UTC().Format("20060102T150405Z")
+		waveRef, _ = codexWaveRefGeneratorV0.NextRefV0("codex-wave-v0", "director-wave")
 	}
 	return prefix + "-" + waveRef
 }

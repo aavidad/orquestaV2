@@ -24,6 +24,7 @@ type serverAutoprogrammingPromotionPortV0 struct {
 	AppRef         string
 	CommitMessage  string
 	Connector      orquestaruntimeworktree.GitStagingPromotionConnectorV0
+	Guardian       serverAutoprogrammingPromotionGuardianV0
 }
 
 func autoprogrammingPromotionConfigFromEnvV0(
@@ -42,6 +43,7 @@ func autoprogrammingPromotionConfigFromEnvV0(
 		RepoRef:        envOrDefaultV0(envServerAutoprogrammingPromotionRepoRefV0, defaultAutoprogrammingPromotionRepoRefV0),
 		AppRef:         envOrDefaultV0(envServerAutoprogrammingPromotionAppRefV0, defaultAutoprogrammingPromotionAppRefV0),
 		CommitMessage:  envOrDefaultV0(envServerAutoprogrammingPromotionCommitMessageV0, defaultAutoprogrammingPromotionMessageV0),
+		Guardian:       autoprogrammingPromotionGuardianFromEnvV0(config),
 	}
 	return orquestaappcodexstack.AutoprogrammingPromotionConfigV0{
 		Enabled:       true,
@@ -69,7 +71,18 @@ func (port serverAutoprogrammingPromotionPortV0) PromoteAutoprogrammingStagingV0
 		WriteSet:       append([]string(nil), command.WriteSet...),
 		EvidenceRefs:   append([]string(nil), command.EvidenceRefs...),
 	})
-	return autoprogrammingPromotionEffectFromWorktreeV0(result, issues), nil
+	effect := autoprogrammingPromotionEffectFromWorktreeV0(result, issues)
+	if !autoprogrammingPromotionWorktreeEffectCompleteV0(effect.Status) || port.Guardian.Runner == nil {
+		return effect, nil
+	}
+	guarded, err := port.Guardian.Runner.CheckAutoprogrammingPromotionGuardianV0(
+		ctx,
+		autoprogrammingPromotionGuardianRequestV0(port, command),
+	)
+	if err != nil {
+		return autoprogrammingPromotionGuardianBlockedEffectV0(effect, command, guarded, err), nil
+	}
+	return autoprogrammingPromotionEffectWithGuardianV0(effect, command, guarded), nil
 }
 
 func (port serverAutoprogrammingPromotionPortV0) ArchiveAutoprogrammingStagingV0(
@@ -111,6 +124,16 @@ func autoprogrammingPromotionEffectFromWorktreeV0(
 		Retryable:      result.Retryable,
 		EvidenceRefs:   append([]string(nil), result.EvidenceRefs...),
 		Issues:         autoprogrammingPromotionIssuesFromWorktreeV0(issues),
+	}
+}
+
+func autoprogrammingPromotionWorktreeEffectCompleteV0(status string) bool {
+	switch strings.TrimSpace(status) {
+	case orquestaautoprogramming.AutoprogrammingStagingEffectPromotedV0,
+		orquestaautoprogramming.AutoprogrammingStagingEffectCleanV0:
+		return true
+	default:
+		return false
 	}
 }
 

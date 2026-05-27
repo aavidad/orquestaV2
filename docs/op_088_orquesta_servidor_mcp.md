@@ -7,6 +7,21 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 # OP-088 — Orquesta como Servidor MCP (Patrón "Control Plane Organizacional")
 
+## Estado de vigencia 2026-05-26
+
+Documento en cuarentena T124: vision historica de integracion con gestores
+externos. No es contrato vivo del nucleo, no obliga a instalar OpenClaw y no
+declara `/api/mcp` ni rutas legacy como superficie vigente. La superficie MCP
+actual es el adaptador `modulos/orquesta-mcp`; el transporte real del servidor,
+cuando la composicion lo habilita, es opt-in en `cmd/orquesta-server` y usa
+`/mcp` con tools/resources registrados por puerto.
+
+OpenClaw, Claude Desktop, LangGraph u otros gestores externos solo pueden entrar
+como clientes/adaptadores de composicion con refs opacas, write-set, identidad,
+auditoria y pruebas propias. El indice federado debe excluir este documento de
+planificacion automatica salvo una tarea que declare explicitamente
+`legacy_external_orchestrator_doc_quarantine` o composicion externa.
+
 ## Objetivo
 
 Formalizar la arquitectura para que gestores externos de agentes (como OpenClaw, Claude Desktop o frameworks futuros) puedan interactuar y gobernar los proyectos locales a través del Model Context Protocol (MCP), manteniendo a Orquesta como la única fuente de verdad y autoridad.

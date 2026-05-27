@@ -64,8 +64,16 @@ func (stack StackV0) drainRunAttemptControlV0(
 	}
 	if drainRunHasPendingExternalAgentsV0(run, request.WaitAgentRefs) {
 		if len(compactStringsV0(request.WaitAgentRefs)) > 0 {
-			if control, progressed, err := stack.continuePendingExternalProgressV0(ctx, request, run); err != nil || progressed {
+			if control, progressed, err := stack.continuePendingExternalProgressV0(ctx, request, run); err != nil {
 				return control, err
+			} else if progressed {
+				if !drainRunHasPendingExternalAgentsV0(control.Loop.Run, request.WaitAgentRefs) {
+					return control, nil
+				}
+				if drainRunHasScopedPartialClosureV0(control.Loop.Run, request.WaitAgentRefs) {
+					return control, nil
+				}
+				return control, nil
 			}
 			return drainRunAttemptControlV0{
 				Loop: drainProgressiveResultV0(
@@ -76,6 +84,11 @@ func (stack StackV0) drainRunAttemptControlV0(
 		}
 		if control, progressed, err := stack.continuePendingExternalProgressV0(ctx, request, run); err != nil || progressed {
 			return control, err
+		}
+		if stackDrainRunAwaitsLateDirectorDecisionsV0(run) {
+			if control, progressed, err := stack.continuePendingExternalDirectorV0(ctx, request, run); err != nil || progressed {
+				return control, err
+			}
 		}
 		if hold, err := stack.holdDirectorProgressWhileExternalAgentsPendingV0(ctx, run); err != nil || hold {
 			return drainRunAttemptControlV0{
@@ -113,7 +126,14 @@ func (stack StackV0) continuePendingExternalDirectorV0(
 	if stack.Ports.DirectorDecisionSource == nil {
 		return drainRunAttemptControlV0{}, false, nil
 	}
-	control, err := stack.continueDrainRunControlAfterExternalV0(ctx, request)
+	directorRequest := request
+	directorRequest.WaitAgentRefs = nil
+	ports := stack.Ports
+	ports.DeliverySource = nil
+	ports.ProgressSource = nil
+	ports.LeaseSource = nil
+	ports.AssessmentReplanSource = nil
+	control, err := stack.continueDrainRunControlAfterExternalWithPortsV0(ctx, directorRequest, ports)
 	if err != nil {
 		return drainRunAttemptControlV0{}, false, err
 	}
@@ -132,6 +152,12 @@ func (stack StackV0) continuePendingExternalProgressV0(
 		stack.Ports.LeaseSource == nil &&
 		stack.Ports.AssessmentReplanSource == nil {
 		return drainRunAttemptControlV0{}, false, nil
+	}
+	reconciled, applied, err := stack.reconcileStoppedPendingAgentsV0(ctx, request, run)
+	if err != nil || applied {
+		return drainRunAttemptControlV0{
+			Loop: drainProgressiveResultV0(orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0, reconciled),
+		}, applied, err
 	}
 	ports := stack.Ports
 	ports.DirectorDecisionSource = nil
@@ -163,7 +189,7 @@ func (stack StackV0) drainAvailableObservationsV0(
 	observations, err := stack.Ports.DeliverySource.BuildAgentDeliveryObservationsV0(
 		ctx,
 		orquestacionnucleoapp.AgentDeliveryObservationRequestV0{
-			Run:           run,
+			Run:           drainRunWithStartedAgentsKnownV0(run),
 			OccurredAt:    request.OccurredAt,
 			CorrelationID: request.CorrelationID,
 			EvidenceRefs:  []string{"evidence-ref-app-stack-drain-observations"},

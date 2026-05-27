@@ -69,6 +69,8 @@ func TestDirectorTaskV0IncluyeContratoDeDecisionesEjecutables(t *testing.T) {
 		"no lo uses para trozos minimos",
 		"Para documentar_app normal, por defecto crea una sola tarea completa de documentacion",
 		"Para crear_app_completa Go normal, prefiere tareas completas verticales",
+		"con backlog estructurado de la app, emite una create_microtask por cada item ejecutable",
+		"no te quedes solo en bootstrap",
 		"si la solicitud trae objetivo funcional suficiente, no uses CONSULTA AL DIRECTOR para evitar programar",
 		"la primera create_microtask debe ser una tarea de programacion real, no solo documentacion",
 		"required_tests incluye go test ./...",
@@ -78,6 +80,21 @@ func TestDirectorTaskV0IncluyeContratoDeDecisionesEjecutables(t *testing.T) {
 		"go test ./...",
 		"imports desde go.mod",
 		"sin imports relativos ../",
+		"Planifica para paralelismo real",
+		"despues del bootstrap, crea todas las microtareas independientes",
+		"no encadenes depends_on por comodidad",
+		"No repitas write_set compartidos entre tareas hermanas",
+		"solo una tarea integradora debe tocar rutas agregadas",
+		"docs/openapi/fragments/<area>.yaml",
+		"i18n/modules/<area>/**",
+		"depends_on solo expresa requisito causal real",
+		"misma ola paralela",
+		"lanza tambien microtareas paralelas de documentacion, revision, pruebas, seguridad y preparacion de manuales",
+		"cuando su write_set no pise a programacion",
+		"no esperes al final si pueden trabajar con contratos, entregas parciales o fragmentos",
+		"docs/reviews/**",
+		"docs/manuales/**",
+		"dejar pendientes claros si una parte aun depende de una entrega futura",
 		"Revision/cierre payloads",
 		"request_review.review_request_id",
 		"record_review_result.review_result_ref",
@@ -85,7 +102,7 @@ func TestDirectorTaskV0IncluyeContratoDeDecisionesEjecutables(t *testing.T) {
 		"register_final_validation.validation_ref",
 		"close_run.closure_ref",
 		"Cierre normal",
-		"no emitas register_final_validation/close_run hasta tener contratos, tareas completas, entregas de programacion, tarea cerrada, revision aceptada y validacion",
+		"no emitas register_final_validation/close_run hasta tener contratos, tareas completas, backlog/plan sin items pendientes, entregas, tareas cerradas, revisiones aceptadas y validacion",
 		"Politica de detalle",
 		"refs opacas",
 		"provider",
@@ -98,7 +115,7 @@ func TestDirectorTaskV0IncluyeContratoDeDecisionesEjecutables(t *testing.T) {
 			t.Fatalf("objective no contiene %q:\n%s", want, task.Objective)
 		}
 	}
-	if len(task.Objective) > 7000 {
+	if len(task.Objective) > 8200 {
 		t.Fatalf("objective demasiado grande: %d bytes", len(task.Objective))
 	}
 	if !codexStackStringInSetForTestV0(

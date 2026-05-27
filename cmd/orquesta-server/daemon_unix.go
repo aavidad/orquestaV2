@@ -19,7 +19,17 @@ func signalProcessV0(pid int) error {
 	if err != nil {
 		return err
 	}
-	return process.Signal(os.Interrupt)
+	return process.Signal(serverCooperativeStopSignalV0())
+}
+
+func signalProcessGroupV0(pid int) error {
+	if pid <= 0 {
+		return os.ErrProcessDone
+	}
+	if err := syscall.Kill(-pid, syscall.SIGTERM); err != nil {
+		return signalProcessV0(pid)
+	}
+	return nil
 }
 
 func processAliveV0(pid int) bool {

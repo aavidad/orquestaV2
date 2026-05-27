@@ -97,6 +97,22 @@ func TestExpandDomainDocumentPlanV0RechazaRefsInvalidasEnJobsDerivados(t *testin
 	}
 }
 
+func TestExpandDomainDocumentPlanV0RechazaIdentidadDuplicada(t *testing.T) {
+	plan := validDocumentPlanForExpanderTestV0()
+	plan.Sections = append(plan.Sections, plan.Sections[0])
+
+	result := ExpandDomainDocumentPlanV0(DomainDocumentPlanExpansionRequestV0{Plan: plan})
+
+	if len(result.Issues) == 0 ||
+		result.Issues[0].Code != orquestadomainwork.ErrDomainDocumentPlanRefDuplicateV0 ||
+		result.Issues[0].Field != "sections.section_ref" {
+		t.Fatalf("issues=%+v", result.Issues)
+	}
+	if len(result.Jobs) != 0 {
+		t.Fatalf("jobs parciales=%+v", result.Jobs)
+	}
+}
+
 func validDocumentPlanForExpanderTestV0() orquestadomainwork.DomainDocumentPlanV0 {
 	return orquestadomainwork.DomainDocumentPlanV0{
 		PlanRef:           "plan-temario-001",

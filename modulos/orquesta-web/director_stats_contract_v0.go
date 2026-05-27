@@ -12,9 +12,9 @@ const (
 	WebDirectorStatsEstadoOKV0             = "ok"
 	WebDirectorStatsEstadoAtencionV0       = "attention"
 	WebDirectorStatsEstadoErrorV0          = "error"
-	WebDirectorStatsErrRunRefRequeridoV0   = "run_ref_requerido"
-	WebDirectorStatsErrTransporteV0        = "error_transporte"
-	WebDirectorStatsErrRespuestaInvalidaV0 = "respuesta_invalida"
+	WebDirectorStatsErrRunRefRequeridoV0   = webPublicErrRunRefRequiredV0
+	WebDirectorStatsErrTransporteV0        = webPublicErrTransportV0
+	WebDirectorStatsErrRespuestaInvalidaV0 = webPublicErrResponseInvalidV0
 )
 
 const DirectorStatsEndpointV0 = WebDirectorStatsInboundEndpointV0

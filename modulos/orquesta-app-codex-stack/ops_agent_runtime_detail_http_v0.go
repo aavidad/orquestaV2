@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"path/filepath"
 	"strings"
 
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 )
@@ -100,14 +102,51 @@ func (handler codexStackAgentRuntimeDetailHTTPHandlerV0) agentDetailV0(
 	ack := codexStackAgentRuntimeDetailJSONByNameV0(files, orquestaruntimecodex.CodexAgentAckFileNameV0)
 	packet := descriptor.Spec.AgentPacket
 	return CodexStackAgentRuntimeDetailAgentV0{
-		RunRef:      descriptor.RunID,
-		AgentRef:    agentRef,
-		RuntimeDir:  runtimeDir,
-		Descriptor:  descriptor,
-		AgentPacket: packet,
-		Ack:         ack,
-		PromptText:  prompt,
-		Skills:      codexStackAgentRuntimeDetailSkillHintsV0(packet, prompt),
-		Files:       files,
+		RunRef:        descriptor.RunID,
+		AgentRef:      agentRef,
+		RuntimeRef:    codexStackAgentRuntimeDetailRuntimeRefV0(descriptor.RunID, agentRef, runtimeDir),
+		DescriptorRef: strings.TrimSpace(descriptor.DescriptorRef),
+		Task:          codexStackAgentRuntimeDetailTaskV0(packet),
+		Descriptor:    descriptor,
+		AgentPacket:   packet,
+		Ack:           ack,
+		PromptText:    prompt,
+		Skills:        codexStackAgentRuntimeDetailSkillHintsV0(packet, prompt),
+		Files:         files,
 	}
+}
+
+func codexStackAgentRuntimeDetailRuntimeRefV0(runRef string, agentRef string, runtimeDir string) string {
+	if strings.TrimSpace(runtimeDir) == "" {
+		return ""
+	}
+	source := strings.TrimSpace(runRef) + "|" + strings.TrimSpace(agentRef) + "|" + filepath.Base(runtimeDir)
+	return "runtime-ref-" + codexStackOperationalClosureSafeRefV0(source)
+}
+
+func codexStackAgentRuntimeDetailTaskV0(
+	packet orquestaruntime.AgentStartPacketV0,
+) CodexStackAgentRuntimeDetailTaskV0 {
+	task := packet.Task
+	return CodexStackAgentRuntimeDetailTaskV0{
+		TaskRef:            strings.TrimSpace(task.TaskRef),
+		Title:              strings.TrimSpace(task.Title),
+		ObjectiveSummary:   codexStackAgentRuntimeDetailCompactTextV0(task.Objective, 220),
+		WriteSet:           append([]string(nil), task.WriteSet...),
+		RequiredTests:      append([]string(nil), task.RequiredTests...),
+		ContextRefsCount:   len(packet.Context.Entries),
+		RequiredTestsCount: len(task.RequiredTests),
+		WriteSetCount:      len(task.WriteSet),
+	}
+}
+
+func codexStackAgentRuntimeDetailCompactTextV0(value string, max int) string {
+	value = strings.TrimSpace(strings.Join(strings.Fields(value), " "))
+	if max <= 0 || len(value) <= max {
+		return value
+	}
+	if max < 4 {
+		return value[:max]
+	}
+	return value[:max-3] + "..."
 }

@@ -19,12 +19,15 @@ type mcpWorkspaceTimelineHTTPHandlerV0 struct {
 
 func (handler mcpWorkspaceTimelineHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != MCPWorkspaceTimelineEndpointV0 {
-		writeMCPWorkspaceTimelineErrorHTTPV0(w, r, http.StatusNotFound, "path", "ruta_no_soportada")
+		writeMCPWorkspaceTimelineErrorHTTPV0(w, r, http.StatusNotFound, "path", MCPPublicErrPathUnsupportedV0)
+		return
+	}
+	if handleMCPPublicHTTPOptionsV0(w, r, http.MethodPost) {
 		return
 	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
-		writeMCPWorkspaceTimelineErrorHTTPV0(w, r, http.StatusMethodNotAllowed, "method", "metodo_no_permitido")
+		setMCPPublicHTTPAllowV0(w, http.MethodPost)
+		writeMCPWorkspaceTimelineErrorHTTPV0(w, r, http.StatusMethodNotAllowed, "method", MCPPublicErrMethodNotAllowedV0)
 		return
 	}
 	if handler.source == nil {
@@ -62,7 +65,7 @@ func writeMCPWorkspaceTimelineErrorHTTPV0(
 		Errores: []MCPValidationIssueV0{{
 			Code:    "workspace_timeline_http_error",
 			Field:   field,
-			Message: publicMCPExecutorErrorSanitizeV0(message),
+			Message: publicMCPErrorMessageFromTextV0("workspace_timeline_http_error", message),
 		}},
 	}
 	w.Header().Set("Content-Type", "application/json")

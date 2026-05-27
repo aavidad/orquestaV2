@@ -11,6 +11,7 @@ import (
 
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	publicidentity "orquesta/modulos/orquesta-server/publicidentity"
 )
 
 type AutoprogrammingPrepareRunClientV0 interface {
@@ -39,12 +40,10 @@ func (err WebAutoprogrammingPrepareRunClientErrorV0) Error() string {
 
 func NewRESTAutoprogrammingPrepareRunClientV0(baseURL string, timeout time.Duration) *RESTAutoprogrammingPrepareRunClientV0 {
 	return &RESTAutoprogrammingPrepareRunClientV0{
-		BaseURL:  strings.TrimRight(baseURL, "/"),
-		Endpoint: WebAutoprogrammingPrepareRunInboundEndpointV0,
-		Timeout:  timeout,
-		HTTPClient: &http.Client{
-			Timeout: timeout,
-		},
+		BaseURL:    normalizeWebRESTBaseURLStringV0(baseURL),
+		Endpoint:   WebAutoprogrammingPrepareRunInboundEndpointV0,
+		Timeout:    timeout,
+		HTTPClient: newWebLoopbackHTTPClientV0(timeout),
 	}
 }
 
@@ -63,6 +62,7 @@ func (client *RESTAutoprogrammingPrepareRunClientV0) PrepararAutoprogrammingRun(
 		client.url(),
 		autoprogrammingPrepareRunToolInputV0(command),
 		command.CorrelationID,
+		command.IdempotencyKey,
 		WebAutoprogrammingPrepareRunErrRespuestaInvalidaV0,
 		WebAutoprogrammingPrepareRunErrTransporteV0,
 	)
@@ -79,6 +79,14 @@ func normalizeAutoprogrammingPrepareRunCommandV0(command WebAutoprogrammingPrepa
 		command.RequestID = newWebRequestIDV0()
 	}
 	command.CorrelationID = firstDirectorStatsNonEmptyV0(command.CorrelationID, command.RequestID)
+	identity := publicidentity.NormalizePublicIdentityV0(publicidentity.PublicIdentityInputV0{
+		RequestID:      command.RequestID,
+		CorrelationID:  command.CorrelationID,
+		IdempotencyKey: command.IdempotencyKey,
+		Mutating:       true,
+	})
+	command.CorrelationID = identity.CorrelationID
+	command.IdempotencyKey = identity.IdempotencyKey
 	command.Locale = normalizeDirectorStatsLocaleV0(command.Locale)
 	command.OccurredAt = trimV0(command.OccurredAt)
 	command.RequestedBy = trimV0(command.RequestedBy)
@@ -94,10 +102,11 @@ func normalizeAutoprogrammingPrepareRunCommandV0(command WebAutoprogrammingPrepa
 
 func autoprogrammingPrepareRunToolInputV0(command WebAutoprogrammingPrepareRunCommandV0) orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0 {
 	return orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
-		RequestID:     command.RequestID,
-		CorrelationID: command.CorrelationID,
-		OccurredAt:    command.OccurredAt,
-		RequestedBy:   command.RequestedBy,
+		RequestID:      command.RequestID,
+		CorrelationID:  command.CorrelationID,
+		IdempotencyKey: command.IdempotencyKey,
+		OccurredAt:     command.OccurredAt,
+		RequestedBy:    command.RequestedBy,
 		AutoprogrammingRequest: orquestaautoprogramming.AutoprogrammingRequestV0{
 			RequestRef:         command.RequestRef,
 			ProjectRef:         command.ProjectRef,
@@ -122,7 +131,7 @@ func autoprogrammingPrepareRunToolInputV0(command WebAutoprogrammingPrepareRunCo
 
 func decodeAutoprogrammingPrepareRunResponseV0(resp *http.Response, command WebAutoprogrammingPrepareRunCommandV0) (WebAutoprogrammingPrepareRunViewModelV0, error) {
 	var result orquestamcp.MCPAutoprogrammingPrepareRunToolResultV0
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if !decodeWebHTTPJSONResponseV0(resp, &result) {
 		return WebAutoprogrammingPrepareRunViewModelV0{}, autoprogrammingPrepareRunClientErrorV0(
 			WebAutoprogrammingPrepareRunErrRespuestaInvalidaV0,
 			resp.StatusCode,
@@ -161,6 +170,7 @@ func (client *RESTAutoprogrammingPrepareRunClientV0) ConsultarAutoprogrammingSta
 		client.endpointURLV0(WebAutoprogrammingStatusInboundEndpointV0),
 		autoprogrammingStatusToolInputV0(query),
 		query.CorrelationID,
+		"",
 		WebAutoprogrammingStatusErrRespuestaInvalidaV0,
 		WebAutoprogrammingStatusErrTransporteV0,
 	)
@@ -203,7 +213,7 @@ func autoprogrammingStatusToolInputV0(query WebAutoprogrammingStatusQueryV0) orq
 
 func decodeAutoprogrammingStatusResponseV0(resp *http.Response, query WebAutoprogrammingStatusQueryV0) (WebAutoprogrammingStatusViewModelV0, error) {
 	var result orquestamcp.MCPAutoprogrammingStatusToolResultV0
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if !decodeWebHTTPJSONResponseV0(resp, &result) {
 		return WebAutoprogrammingStatusViewModelV0{}, autoprogrammingPrepareRunClientErrorV0(
 			WebAutoprogrammingStatusErrRespuestaInvalidaV0,
 			resp.StatusCode,
@@ -227,7 +237,7 @@ func decodeAutoprogrammingStatusResponseV0(resp *http.Response, query WebAutopro
 	return NewWebAutoprogrammingStatusViewModelV0(query.Locale, result), nil
 }
 
-func (client *RESTAutoprogrammingPrepareRunClientV0) postJSONV0(ctx context.Context, url string, payloadValue any, correlationID string, invalidCode string, transportCode string) (*http.Response, error) {
+func (client *RESTAutoprogrammingPrepareRunClientV0) postJSONV0(ctx context.Context, url string, payloadValue any, correlationID string, idempotencyKey string, invalidCode string, transportCode string) (*http.Response, error) {
 	payload, err := json.Marshal(payloadValue)
 	if err != nil {
 		return nil, autoprogrammingPrepareRunClientErrorV0(invalidCode, 0)
@@ -239,6 +249,9 @@ func (client *RESTAutoprogrammingPrepareRunClientV0) postJSONV0(ctx context.Cont
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set(AppChangeCorrelationV0, correlationID)
+	if strings.TrimSpace(idempotencyKey) != "" {
+		req.Header.Set(AppChangeIdempotencyKeyV0, strings.TrimSpace(idempotencyKey))
+	}
 	resp, err := client.httpClient().Do(req)
 	if err != nil {
 		return nil, autoprogrammingPrepareRunClientErrorV0(transportCode, 0)
@@ -247,10 +260,7 @@ func (client *RESTAutoprogrammingPrepareRunClientV0) postJSONV0(ctx context.Cont
 }
 
 func (client *RESTAutoprogrammingPrepareRunClientV0) httpClient() *http.Client {
-	if client.HTTPClient != nil {
-		return client.HTTPClient
-	}
-	return &http.Client{Timeout: client.Timeout}
+	return webHTTPClientWithRedirectPolicyV0(client.HTTPClient, client.Timeout, client.BaseURL)
 }
 
 func (client *RESTAutoprogrammingPrepareRunClientV0) url() string {
@@ -262,7 +272,7 @@ func (client *RESTAutoprogrammingPrepareRunClientV0) url() string {
 }
 
 func (client *RESTAutoprogrammingPrepareRunClientV0) endpointURLV0(endpoint string) string {
-	return strings.TrimRight(client.BaseURL, "/") + "/" + strings.TrimLeft(endpoint, "/")
+	return webRESTEndpointURLV0(client.BaseURL, endpoint, WebAutoprogrammingPrepareRunInboundEndpointV0)
 }
 
 func autoprogrammingPrepareRunClientErrorV0(

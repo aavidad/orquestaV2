@@ -67,3 +67,11 @@ La secuencia consulta los tipos en orden y solo drena el primer tipo con jobs
 `pending`. Si el ledger marca un job como `already_submitted`, no lo reenvia y
 no avanza a fases posteriores hasta que OPES deje de mostrar pendientes de ese
 tipo.
+
+## Estado T12
+
+T12 queda reconciliada como bloqueo verificable para smoke real OPES temporal:
+los tests de bridge/conector y el fake `run-until-assemble` ya validan la ruta
+local hasta `assemble_topic -> assembled_topic`, pero falta entorno OPES
+temporal, servidor Orquesta temporal, confirmacion de efectos y cuota/modelo
+real. No repetir implementaciones padre para generar la misma evidencia fake.

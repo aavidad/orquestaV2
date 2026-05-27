@@ -1,13 +1,15 @@
 package orquestaruntimecodexdelivery
 
 import (
-	"hash/fnv"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 )
@@ -43,8 +45,11 @@ func codexProgressActionSignatureFromFileV0(path string) string {
 }
 
 func codexProgressReadTailV0(path string, maxBytes int64) ([]byte, bool) {
-	info, err := os.Stat(path)
-	if err != nil || info.Size() == 0 {
+	if strings.TrimSpace(path) == "" || maxBytes <= 0 {
+		return nil, false
+	}
+	info, ok := codexProgressSafeLogInfoV0(path)
+	if !ok || info.Size() == 0 {
 		return nil, false
 	}
 	file, err := os.Open(path)
@@ -52,6 +57,10 @@ func codexProgressReadTailV0(path string, maxBytes int64) ([]byte, bool) {
 		return nil, false
 	}
 	defer file.Close()
+	openedInfo, err := file.Stat()
+	if err != nil || !os.SameFile(info, openedInfo) {
+		return nil, false
+	}
 	size := info.Size()
 	offset := int64(0)
 	if size > maxBytes {
@@ -60,11 +69,26 @@ func codexProgressReadTailV0(path string, maxBytes int64) ([]byte, bool) {
 	if _, err := file.Seek(offset, 0); err != nil {
 		return nil, false
 	}
-	data, err := io.ReadAll(file)
+	data, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
 	if err != nil || len(data) == 0 {
 		return nil, false
 	}
+	if int64(len(data)) > maxBytes {
+		data = data[len(data)-int(maxBytes):]
+	}
 	return data, true
+}
+
+func codexProgressSafeLogInfoV0(path string) (os.FileInfo, bool) {
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+		return nil, false
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if ok && stat.Nlink > 1 {
+		return nil, false
+	}
+	return info, true
 }
 
 func codexProgressActionSignatureFromTextV0(text string) string {
@@ -171,10 +195,21 @@ func codexProgressActionTokenV0(value string) string {
 }
 
 func codexProgressActionHashV0(values []string) string {
-	hash := fnv.New32a()
+	sum := sha256.Sum256(codexProgressActionHashPayloadV0(values))
+	return hex.EncodeToString(sum[:])[:32]
+}
+
+func codexProgressActionHashPayloadV0(values []string) []byte {
+	var builder strings.Builder
+	builder.WriteString("orquesta-runtime-codex-delivery.action-signature.v0|")
+	builder.WriteString(strconv.Itoa(len(values)))
+	builder.WriteByte('|')
 	for _, value := range values {
-		_, _ = hash.Write([]byte(value))
-		_, _ = hash.Write([]byte{0})
+		value = strings.TrimSpace(value)
+		builder.WriteString(strconv.Itoa(len(value)))
+		builder.WriteByte(':')
+		builder.WriteString(value)
+		builder.WriteByte(';')
 	}
-	return strconv.FormatUint(uint64(hash.Sum32()), 36)
+	return []byte(builder.String())
 }

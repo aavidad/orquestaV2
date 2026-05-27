@@ -1,9 +1,12 @@
 package orquestaappcodexstack
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
+
+	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
 )
 
 func domainWorkRecoveryArtifactFilesV0(
@@ -49,25 +52,13 @@ func domainWorkRecoveryFilesUnderDirV0(
 	entry string,
 	dir string,
 ) ([]string, bool) {
-	files := make([]string, 0)
-	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return nil
-		}
-		info, infoErr := d.Info()
-		if infoErr != nil || info.Size() <= 0 {
-			return nil
-		}
-		rel, relErr := filepath.Rel(projectDir, path)
-		if relErr != nil {
-			return nil
-		}
-		rel = filepath.ToSlash(rel)
-		if rel == entry || strings.HasPrefix(rel, entry+"/") {
-			files = append(files, rel)
-		}
-		return nil
+	_ = dir
+	result := orquestaruntimeworktree.ProjectTreeScanFilesV0(context.Background(), orquestaruntimeworktree.ProjectTreeScanRequestV0{
+		ProjectRoot:    projectDir,
+		Target:         entry,
+		Mode:           orquestaruntimeworktree.ProjectTreeScanModeDirV0,
+		IgnorePrefixes: orquestaruntimeworktree.DefaultWorktreeControlIgnorePrefixesV0(),
 	})
-	files = compactCodexStackStringsV0(files)
-	return files, err == nil && len(files) > 0
+	files := compactCodexStackStringsV0(result.MatchedPaths)
+	return files, result.Found && len(files) > 0
 }

@@ -1,6 +1,10 @@
 package orquestaruntimecodexdelivery
 
-import "time"
+import (
+	"time"
+
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
+)
 
 type CodexBudgetActivityStatusV0 string
 
@@ -73,7 +77,7 @@ func normalizeCodexBudgetActivityInputV0(
 	input CodexBudgetActivityInputV0,
 ) CodexBudgetActivityInputV0 {
 	if input.ObservedAt.IsZero() {
-		input.ObservedAt = time.Now().UTC()
+		input.ObservedAt = orquestaruntime.NowUTCV0(nil)
 	}
 	input.ObservedAt = input.ObservedAt.UTC()
 	input.StartedAt = input.StartedAt.UTC()

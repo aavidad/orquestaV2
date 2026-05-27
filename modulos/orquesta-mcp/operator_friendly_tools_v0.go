@@ -138,13 +138,13 @@ func executeMCPOperatorFriendlyStatusV0(
 	if toolName == MCPOperatorFriendlyCommandToolNameV0 {
 		toolName = operatorFriendlyToolForCommandV0(input)
 	}
-	includeRuns := bool(input.IncludeRunStats) ||
+	showRuns := bool(input.IncludeRunStats) ||
 		bool(input.IncludeAgents) ||
 		toolName == MCPOperatorFriendlyAgentsToolNameV0 ||
 		strings.TrimSpace(input.RunRef) != ""
 	includeAgents := bool(input.IncludeAgents) || toolName == MCPOperatorFriendlyAgentsToolNameV0
 	if includeAgents {
-		includeRuns = true
+		showRuns = true
 	}
 	out := MCPOperatorFriendlyStatusResultV0{
 		Estado:  "ok",
@@ -166,14 +166,22 @@ func executeMCPOperatorFriendlyStatusV0(
 		return out, nil
 	}
 	out.QueueRef = queue.QueueRef
-	out.Tasks = filterMCPFriendlyTasksV0(queue.Ranked, input)
+	baseTasks := filterMCPFriendlyTasksByProjectV0(queue.Ranked, input)
+	if bindings.DirectorStats != nil && len(baseTasks) > 0 {
+		runs, agents := mcpOperatorFriendlyRunStatsV0(ctx, bindings, input, baseTasks, includeAgents)
+		baseTasks = projectMCPFriendlyLiveTaskStatusesV0(baseTasks, runs)
+		if showRuns {
+			out.Runs = runs
+			out.Agents = agents
+		}
+	}
+	out.Tasks = filterMCPFriendlyTasksV0(baseTasks, input)
 	out.Projects = projectsFromMCPFriendlyTasksV0(out.Tasks)
 	out.Counts.QueueLive = true
 	out.Counts.Tasks = len(out.Tasks)
 	out.Counts.Projects = len(out.Projects)
 	out.Counts.ByStatus = statusCountsFromMCPFriendlyTasksV0(out.Tasks)
-	if includeRuns && bindings.DirectorStats != nil {
-		out.Runs, out.Agents = mcpOperatorFriendlyRunStatsV0(ctx, bindings, input, out.Tasks, includeAgents)
+	if showRuns {
 		out.Counts.Runs = len(out.Runs)
 		out.Counts.Agents = len(out.Agents)
 	}
@@ -247,10 +255,11 @@ func mcpOperatorFriendlyRunStatsV0(
 		}
 		runs = append(runs, run)
 		if includeAgents && run.Stats != nil {
+			runRef := mcpFriendlyRunRefV0(run)
 			for _, agent := range run.Stats.Agents {
 				agents = append(agents, MCPOperatorFriendlyAgentV0{
-					RunRef:         run.RunRef,
-					ProjectRef:     projectByRun[run.RunRef],
+					RunRef:         runRef,
+					ProjectRef:     projectByRun[runRef],
 					AgentRef:       agent.AgentRequestID,
 					Status:         agent.Status,
 					InFlight:       agent.InFlight,

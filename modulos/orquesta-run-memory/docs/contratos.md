@@ -41,5 +41,6 @@ Reglas:
 
 `SetRunPriorityV0` normaliza y valida el comando con helpers de
 `orquesta-run-queue`, y actualiza `priority_score`, `app_ref` si llega
-informado, `status` si llega informado y evidencias. Si `status` queda vacio,
-conserva el estado existente o crea el candidato como `ready`.
+informado, `status` si llega informado, `fairness_group_ref` si llega informado
+y evidencias. Si `status` queda vacio, conserva el estado existente o crea el
+candidato como `ready`.

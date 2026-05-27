@@ -20,6 +20,10 @@ Fuera de alcance:
 - conocer modelos, proveedores, HOME, OAuth o cuotas reales;
 - despachar outbox.
 
+T207 rotacion de sesiones: el runner no rota sesiones ni relanza agentes. Solo
+ejecuta el tick recibido; cualquier relevo experimental debe llegar como
+comando/outbox preparado por capas superiores y volver a entrar en otro tick.
+
 Validacion local:
 
 ```sh

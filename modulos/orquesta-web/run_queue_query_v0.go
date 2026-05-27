@@ -6,22 +6,23 @@ import (
 )
 
 func runQueueQueryFromURLV0(r *http.Request) WebRunQueueQueryV0 {
+	values := webPublicQueryValuesV0(r)
 	return WebRunQueueQueryV0{
-		RequestID:      r.URL.Query().Get("request_id"),
-		CorrelationID:  r.URL.Query().Get("correlation_id"),
-		Locale:         r.URL.Query().Get("locale"),
-		Action:         r.URL.Query().Get("action"),
-		QueueRef:       r.URL.Query().Get("queue_ref"),
+		RequestID:      values.Get("request_id"),
+		CorrelationID:  values.Get("correlation_id"),
+		Locale:         values.Get("locale"),
+		Action:         values.Get("action"),
+		QueueRef:       values.Get("queue_ref"),
 		AppRefs:        queryValuesV0(r, "app_refs"),
-		RunRef:         r.URL.Query().Get("run_ref"),
-		AppRef:         r.URL.Query().Get("app_ref"),
-		Status:         r.URL.Query().Get("status"),
-		PriorityScore:  intQueryValueV0(r.URL.Query().Get("priority_score")),
-		RequestedBy:    r.URL.Query().Get("requested_by"),
-		Reason:         r.URL.Query().Get("reason"),
-		IdempotencyKey: r.URL.Query().Get("idempotency_key"),
-		Limit:          intQueryValueV0(r.URL.Query().Get("limit")),
-		OccurredAt:     r.URL.Query().Get("occurred_at"),
+		RunRef:         values.Get("run_ref"),
+		AppRef:         values.Get("app_ref"),
+		Status:         values.Get("status"),
+		PriorityScore:  intQueryValueV0(values.Get("priority_score")),
+		RequestedBy:    values.Get("requested_by"),
+		Reason:         values.Get("reason"),
+		IdempotencyKey: values.Get("idempotency_key"),
+		Limit:          intQueryValueV0(values.Get("limit")),
+		OccurredAt:     values.Get("occurred_at"),
 	}
 }
 
@@ -46,7 +47,7 @@ func runQueueQueryFromValuesV0(values map[string][]string) WebRunQueueQueryV0 {
 }
 
 func queryValuesV0(r *http.Request, key string) []string {
-	values := r.URL.Query()
+	values := webPublicQueryValuesV0(r)
 	return formValuesV0(map[string][]string{key: values[key]}, key)
 }
 

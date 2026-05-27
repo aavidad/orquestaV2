@@ -69,7 +69,7 @@ func TestMCPRunSupervisorTransportHandlerV0DevuelvePayloadPublicoSiExecutorNoDaR
 	if result.Estado != MCPRunSupervisorEstadoErrorV0 ||
 		len(result.Errores) != 1 ||
 		result.Errores[0].Code != "run_supervisor_execute_error" ||
-		!strings.Contains(result.Errores[0].Message, "codex failed") {
+		result.Errores[0].Message != "run_supervisor_execute_error" {
 		t.Fatalf("payload publico perdido: %+v", result)
 	}
 	if strings.Contains(string(payload), "/root/Trabajo") ||

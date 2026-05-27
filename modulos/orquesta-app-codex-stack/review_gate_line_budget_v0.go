@@ -85,13 +85,17 @@ func (provider codexStackReviewGateLineBudgetEvidenceV0) destructiveIssuesV0(
 	if !ok || strings.TrimSpace(descriptor.ProjectWorkDir) == "" {
 		return nil
 	}
+	policy := codexStackReviewGatePolicyFromConfigV0(provider.Config)
 	_, issues := orquestaruntimeworktree.VerifyWorktreeWriteSetV0(ctx, orquestaruntimeworktree.WorktreeVerifyRequestV0{
-		Baseline:           baseline,
-		ProjectWorkDir:     strings.TrimSpace(descriptor.ProjectWorkDir),
-		WriteSet:           descriptor.Spec.AgentPacket.Task.WriteSet,
-		IgnorePrefixes:     codexStackWorktreeIgnorePrefixesV0(),
-		StrictGoLineBudget: provider.Config.StrictGoLineBudget,
-		MaxGoFileLines:     provider.Config.MaxLinesPerFile,
+		Baseline:              baseline,
+		ProjectWorkDir:        strings.TrimSpace(descriptor.ProjectWorkDir),
+		WriteSet:              policy.EffectiveWriteSetV0(descriptor.Spec.AgentPacket.Task.WriteSet),
+		IgnorePrefixes:        codexStackWorktreeIgnorePrefixesV0(),
+		MaxSnapshotFiles:      provider.Config.SnapshotReadBudget.MaxFiles,
+		MaxSnapshotFileBytes:  provider.Config.SnapshotReadBudget.MaxFileBytes,
+		MaxSnapshotTotalBytes: provider.Config.SnapshotReadBudget.MaxTotalBytes,
+		StrictGoLineBudget:    policy.StrictGoLineBudgetForDeliveryV0(ack, descriptor.Spec.AgentPacket),
+		MaxGoFileLines:        policy.MaxGoFileLinesV0(),
 	})
 	return codexStackReviewGateWorktreeIssuesV0(issues, ack.AckRef)
 }
@@ -143,6 +147,14 @@ func codexStackReviewGateWorktreeIssueCodeV0(
 		return "replaced_large_delta"
 	case orquestaruntimeworktree.WorktreeIssueGoLineBudgetV0:
 		return orquestaautoprogramming.AutoprogrammingReviewGateStrictLineBudgetIssueV0
+	case orquestaruntimeworktree.WorktreeIssueSnapshotFileTooLargeV0:
+		return "worktree_snapshot_file_too_large"
+	case orquestaruntimeworktree.WorktreeIssueSnapshotTooManyFilesV0:
+		return "worktree_snapshot_too_many_files"
+	case orquestaruntimeworktree.WorktreeIssueSnapshotTooLargeV0:
+		return "worktree_snapshot_too_large"
+	case orquestaruntimeworktree.WorktreeIssueSnapshotUnreadableV0:
+		return "worktree_snapshot_unreadable"
 	default:
 		return ""
 	}

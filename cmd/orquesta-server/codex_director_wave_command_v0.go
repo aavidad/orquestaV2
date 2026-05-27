@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -22,6 +21,7 @@ type codexDirectorWaveSummaryV0 struct {
 	ChildLaunches     []codexDirectorChildWaveSummaryV0                          `json:"child_launches,omitempty"`
 	AgentBudget       orquestadirectoroperativo.OperationalDirectorAgentBudgetV0 `json:"agent_budget"`
 	GuardOptIn        codexDirectorGuardOptInSummaryV0                           `json:"guard_opt_in,omitempty"`
+	OperatorInputs    []codexWaveOperatorInputReceiptV0                          `json:"operator_inputs,omitempty"`
 	Issues            []orquestadirectoroperativo.OperationalDirectorIssueV0     `json:"issues,omitempty"`
 }
 
@@ -106,7 +106,9 @@ func codexLaunchDirectorWaveCommandV0(args []string, stdout io.Writer, stderr io
 		_, _ = fmt.Fprintf(stderr, "codex-launch-director-wave: %v\n", err)
 		return 1
 	}
-	_ = json.NewEncoder(stdout).Encode(summary)
+	if err := writeCommandJSONOutputV0(stdout, codexDirectorWavePublicSummaryFromV0(summary)); err != nil {
+		return reportCommandStdioWriteFailureV0(stderr, "codex-launch-director-wave", "stdout", "json_encode", err)
+	}
 	if len(summary.Issues) > 0 || len(summary.Launch.Errors) > 0 || codexDirectorChildLaunchHasErrorsV0(summary.ChildLaunches) {
 		return 1
 	}

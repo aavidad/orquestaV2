@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,10 +26,7 @@ func TestCodexLaunchDirectorWaveCommandV0EjecucionRealUsaGuardasEstrictasPorDefe
 		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 
-	var summary codexDirectorWaveSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
-	}
+	summary := mustReadCodexDirectorWaveCommandSummaryForTest(t, stdout.Bytes(), filepath.Join(root, "runtime", "director-wave-strict-default"))
 	for _, code := range []string{"branch_ref_missing", "worktree_ref_missing", "write_set_missing", "required_tests_missing"} {
 		if !codexDirectorHasIssueV0(summary.Issues, code) {
 			t.Fatalf("falta issue %s: %+v", code, summary.Issues)
@@ -64,10 +60,7 @@ func TestCodexLaunchDirectorWaveCommandV0WriteSetGlobalRequiereOptInAuditado(t *
 		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 
-	var summary codexDirectorWaveSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
-	}
+	summary := mustReadCodexDirectorWaveCommandSummaryForTest(t, stdout.Bytes(), runtimeDir)
 	if !codexDirectorHasIssueV0(summary.Issues, "global_write_set_requires_opt_in") {
 		t.Fatalf("falta issue global write-set: %+v", summary.Issues)
 	}
@@ -102,10 +95,7 @@ func TestCodexLaunchDirectorWaveCommandV0TestsPlaceholderRequierenOptInAuditado(
 		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 
-	var summary codexDirectorWaveSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
-	}
+	summary := mustReadCodexDirectorWaveCommandSummaryForTest(t, stdout.Bytes(), runtimeDir)
 	if !codexDirectorHasIssueV0(summary.Issues, "placeholder_tests_require_opt_in") {
 		t.Fatalf("falta issue placeholder tests: %+v", summary.Issues)
 	}
@@ -142,10 +132,7 @@ func TestCodexLaunchDirectorWaveCommandV0OptInSinAuditoriaNoLanza(t *testing.T) 
 		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 
-	var summary codexDirectorWaveSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
-	}
+	summary := mustReadCodexDirectorWaveCommandSummaryForTest(t, stdout.Bytes(), runtimeDir)
 	if !codexDirectorHasIssueV0(summary.Issues, "guard_override_audit_missing") {
 		t.Fatalf("falta issue auditoria: %+v", summary.Issues)
 	}
@@ -185,10 +172,7 @@ func TestCodexLaunchDirectorWaveCommandV0OptInAuditadoMaterializaGuardasEnPrompt
 		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 
-	var summary codexDirectorWaveSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
-	}
+	summary := mustReadCodexDirectorWaveCommandSummaryForTest(t, stdout.Bytes(), filepath.Join(root, "runtime", "director-wave-opt-in"))
 	if !summary.GuardOptIn.AllowGlobalWriteSet ||
 		!summary.GuardOptIn.AllowPlaceholderTests ||
 		summary.GuardOptIn.Reason == "" ||
@@ -230,10 +214,7 @@ func TestCodexLaunchDirectorWaveCommandV0BloqueaLaunchRealNoGestionadoPorDefecto
 		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 
-	var summary codexDirectorWaveSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
-	}
+	summary := mustReadCodexDirectorWaveCommandSummaryForTest(t, stdout.Bytes(), runtimeDir)
 	if !codexDirectorHasIssueV0(summary.Issues, "unmanaged_launch_blocked") {
 		t.Fatalf("falta issue unmanaged: %+v", summary.Issues)
 	}
@@ -273,10 +254,7 @@ func TestCodexLaunchDirectorWaveCommandV0PromptsDistinguenShardYWriteSetGlobal(t
 		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 
-	var summary codexDirectorWaveSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
-	}
+	summary := mustReadCodexDirectorWaveCommandSummaryForTest(t, stdout.Bytes(), filepath.Join(root, "runtime", "director-wave-recursive-strict"))
 	if len(summary.ChildLaunches) != 1 || len(summary.ChildLaunches[0].Launch.Agents) != 1 {
 		t.Fatalf("child launches inesperados: %+v", summary.ChildLaunches)
 	}

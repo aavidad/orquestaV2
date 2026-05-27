@@ -2,6 +2,20 @@
 
 Registra pruebas obligatorias del modulo.
 
+```text
+Caso: GOV-CT-008 descriptor_source MCP governance
+Tipo: contract
+Comando: go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-observability ./modulos/orquesta-governance ./modulos/orquesta-core ./cmd/orquesta-server
+Evidencia esperada: el descriptor MCP de governance referencia owner, fuente
+canonica, freshness y errores publicos del catalogo publico sin activar
+historicos ni exponer DB v1.
+Ultima ejecucion: 2026-05-27, ok en paquete
+`agent-ref-task-autoprogramming-c3678e9bc306-g01`.
+Riesgos: Valida la frontera documental/contractual; no sustituye pruebas de consumidores web/CLI.
+Revalidacion: `agent-ref-task-autoprogramming-c3678e9bc306-g01` usa el comando
+obligatorio ampliado para conservar el cierre T198.
+```
+
 ## Plantilla
 
 ```text
@@ -18,7 +32,9 @@ Riesgos:
 ```text
 Caso: GOV-001-CT-001 - lectura forense readonly de DB v1
 Tipo: contract
-Comando historico: lectura readonly acotada del snapshot forense `backups/legacy-sqlite-20260422/orquesta.db` cuando exista localmente.
+Comando historico en cuarentena: lectura readonly acotada del snapshot forense
+`backups/legacy-sqlite-20260422/orquesta.db` cuando exista localmente; no es
+prueba operativa obligatoria ni trabajo programable sin decision del director.
 Evidencia esperada: La lectura no escribe en DB y confirma tablas `reglas`, `skills`, `workflows` y sus tablas `_versiones`.
 Ultima ejecucion: 2026-05-04; ejecutada con lectura readonly y consultas acotadas.
 Riesgos: La DB historica puede estar bloqueada puntualmente; repetir con consultas pequenas y sin cargar tablas masivas.
@@ -268,4 +284,18 @@ Comando: go test -count=1 ./modulos/orquesta-governance
 Evidencia esperada: `GET` devuelve `governance_catalog_method_not_allowed` y payloads con campos desconocidos o multiple JSON devuelven `governance_catalog_invalid_request`.
 Ultima ejecucion: 2026-05-04; ejecutada con `go test -count=1 ./modulos/orquesta-governance` sin errores.
 Riesgos: Solo valida errores publicos compactos del slice local.
+```
+
+```text
+Caso: GOV-007-UNIT-005 - proyeccion publica aplica budget y frescura
+Tipo: unit
+Comando: go test -count=1 ./modulos/orquesta-governance
+Evidencia esperada: `QueryGovernanceCatalogPublicV0` normaliza
+`output_budget`, trunca `effective` por entradas/bytes con razon estable,
+preserva contadores totales filtrados, publica `schema_version`,
+`catalog_version`, `freshness`/`source_refs` y resume `proposed`/`quarantine`
+por conteo/refs sin payload completo.
+Ultima ejecucion: 2026-05-26; pendiente de reejecucion en este corte.
+Riesgos: La frescura se deriva de refs declaradas en catalogo; si una fuente
+externa no las aporta, el contrato publica razon estable en vez de inventarlas.
 ```

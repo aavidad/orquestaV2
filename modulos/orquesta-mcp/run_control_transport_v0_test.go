@@ -39,7 +39,11 @@ func TestMCPTransportV0RunControlInvocaExecutor(t *testing.T) {
 	output, err := transport.CallToolV0(
 		context.Background(),
 		MCPRunControlToolNameV0,
-		MCPRunControlToolInputV0{Action: "pause", RunRef: "run-ref-transport-001"},
+		MCPRunControlToolInputV0{
+			RequestID: "request-ref-run-control-transport-001",
+			Action:    "pause",
+			RunRef:    "run-ref-transport-001",
+		},
 	)
 	if err != nil {
 		t.Fatalf("call run control: %v", err)

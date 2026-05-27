@@ -419,8 +419,9 @@ Validacion esperada:
 
 Objetivo: exponer uso de recursos por agente para director, MCP y web.
 
-Estado: hecho para puerto y acumulado por run; pendiente conector productivo de
-proveedor.
+Estado: cerrado para puerto, acumulado por run y reporte runtime redactado
+T209. Sigue fuera de alcance inventar cuota restante real si Codex no la
+expone.
 
 Trabajo aplicado:
 
@@ -429,17 +430,24 @@ Trabajo aplicado:
 - MCP `orquesta.director.stats.v0` acepta `include_agent_usage`;
 - web proyecta `capacity_level`, `quota_status`, `quota_remaining`,
   `quota_limit` y `total_tokens`;
-- stack Codex publica capacidad desde el paquete de agente y cuota
-  `not_configured` hasta conectar proveedor real.
+- stack Codex publica capacidad desde el paquete de agente; sin fuente de
+  metricas queda `not_configured`, y con fuente runtime redactada puede quedar
+  `unknown`, `available`, `limited` o `exhausted`.
 - `CodexStackAgentUsageMetricsProviderPortV0` permite inyectar metricas por
   agente sin que el stack conozca proveedor, HOME, OAuth ni API remota;
 - `DirectorRunStatsV0.UsageSummary` acumula agentes observados, cuota y tokens
   por run;
 - web proyecta el resumen en `resumen.usage_*`.
+- `CodexStackRuntimeUsageMetricsSourceV0` lee
+  `codex_usage_accounting.json` desde descriptors del agente y rechaza reportes
+  con provider, modelo, cuenta, HOME, coste, rutas, prompts, transcripts o
+  completions.
+- reporte ausente/no redactado queda como `unknown` con
+  `quota_observed_unavailable`, no como `not_configured`.
 
 Pendiente:
 
-- conector real de cuota/tokens por proveedor o runtime;
+- cuota real restante de proveedor si Codex no la publica de forma segura;
 - politica final de privacidad para aliases publicos si una composicion quiere
   exponer metadatos de proveedor fuera del contrato neutral.
 

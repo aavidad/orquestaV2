@@ -104,6 +104,9 @@ func validateSummaryV0(summary string, field string, add func(string, string)) {
 	if utf8.RuneCountInString(summary) > maxSummaryRunesV0 {
 		add(ErrEventoDemasiadoExtensoV0, field)
 	}
+	if code := forbiddenOperationalTextCodeV0(summary); code != "" {
+		add(eventCodeFromOperationalPrivacyCodeV0(code), field)
+	}
 }
 
 func validateLinksV0(links []OrquestaEventLinkV0, prefix string, add func(string, string)) {

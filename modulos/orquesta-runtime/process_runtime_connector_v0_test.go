@@ -2,29 +2,12 @@ package orquestaruntime
 
 import (
 	"context"
-	"encoding/json"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
-
-const processRuntimeTestChildEnvV0 = "ORQUESTA_RUNTIME_TEST_CHILD"
-const processRuntimeParentMarkerEnvV0 = "ORQUESTA_RUNTIME_PARENT_MARKER"
-
-func TestMain(m *testing.M) {
-	switch os.Getenv(processRuntimeTestChildEnvV0) {
-	case "wait":
-		processRuntimeTestChildWaitV0()
-	case "exit":
-		os.Exit(0)
-	case "envdump":
-		processRuntimeTestChildEnvDumpV0()
-	}
-	os.Exit(m.Run())
-}
 
 func TestProcessRuntimeConnectorV0LanzaProcesoRealYLoPara(t *testing.T) {
 	connector := NewProcessRuntimeConnectorV0()
@@ -38,6 +21,7 @@ func TestProcessRuntimeConnectorV0LanzaProcesoRealYLoPara(t *testing.T) {
 	if launched.ProcessRef == "" || launched.SessionRef == "" || launched.LaunchRef == "" {
 		t.Fatalf("refs publicas incompletas: %+v", launched)
 	}
+	assertProcessRuntimeLaunchReceiptV0(t, launched, req)
 	assertProcessRuntimeSnapshotDoesNotLeakV0(t, launched, req)
 
 	running, err := connector.SnapshotV0(launched.ProcessRef)
@@ -58,6 +42,12 @@ func TestProcessRuntimeConnectorV0LanzaProcesoRealYLoPara(t *testing.T) {
 	}
 	if stopped.StopRef == "" {
 		t.Fatalf("stop_ref vacia: %+v", stopped)
+	}
+	if stopped.StopReasonCode != ProcessRuntimeStopCooperativeSignalSentV0 {
+		t.Fatalf("stop_reason_code = %q", stopped.StopReasonCode)
+	}
+	if stopped.StopGraceDeadline == "" {
+		t.Fatalf("stop_grace_deadline vacio: %+v", stopped)
 	}
 	assertProcessRuntimeSnapshotDoesNotLeakV0(t, stopped, req)
 }
@@ -83,6 +73,41 @@ func TestProcessRuntimeConnectorV0StopEsIdempotente(t *testing.T) {
 	if second.StopRef != first.StopRef {
 		t.Fatalf("stop idempotente cambio stop_ref: first=%q second=%q", first.StopRef, second.StopRef)
 	}
+}
+
+func TestProcessRuntimeConnectorV0AdoptaProcesoVivoYLoPara(t *testing.T) {
+	original := NewProcessRuntimeConnectorV0()
+	launched, err := original.LaunchV0(
+		context.Background(),
+		processRuntimeLaunchRequestForTestV0(t, "wait"),
+	)
+	requireNoProcessRuntimeErrorV0(t, err)
+	if launched.PID <= 0 {
+		t.Fatalf("pid no registrado: %+v", launched)
+	}
+
+	adopter := NewProcessRuntimeConnectorV0()
+	adopted, err := adopter.AdoptProcessV0(context.Background(), ProcessRuntimeSnapshotV0{
+		SchemaVersion: ProcessRuntimeConnectorVersionV0,
+		ProcessRef:    launched.ProcessRef,
+		SessionRef:    launched.SessionRef,
+		LaunchRef:     launched.LaunchRef,
+		PID:           launched.PID,
+		Status:        ProcessRuntimeRunningV0,
+	})
+	requireNoProcessRuntimeErrorV0(t, err)
+	if adopted.Status != ProcessRuntimeRunningV0 || adopted.ProcessRef != launched.ProcessRef {
+		t.Fatalf("adopted=%+v launched=%+v", adopted, launched)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	stopped, err := adopter.StopV0(ctx, launched.ProcessRef)
+	requireNoProcessRuntimeErrorV0(t, err)
+	if stopped.Status != ProcessRuntimeStoppedV0 {
+		t.Fatalf("status stop adoptado=%q", stopped.Status)
+	}
+	waitForProcessRuntimeStatusV0(t, original, launched.ProcessRef, ProcessRuntimeStoppedV0)
 }
 
 func TestProcessRuntimeConnectorV0ProcesoQueSaleSoloQuedaStopped(t *testing.T) {
@@ -115,6 +140,19 @@ func TestProcessRuntimeConnectorV0RechazaShellYEnvHeredado(t *testing.T) {
 	req.Env = nil
 	_, err = connector.LaunchV0(context.Background(), req)
 	requireProcessRuntimeCodeV0(t, err, ProcessRuntimeEnvProhibidoV0)
+}
+
+func TestValidateProcessRuntimeLaunchRequestV0PermiteShellYEnvAmplioConRailsDetalleOff(t *testing.T) {
+	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "off")
+	req := processRuntimeLaunchRequestForTestV0(t, "wait")
+	req.CommandPath = filepath.Join(string(filepath.Separator), "bin", "sh")
+	req.Env = []string{
+		"HOME=/home/alberto",
+		"OPENAI_TOKEN=token-real-proyectado-por-operador",
+		"PATH=/usr/bin",
+	}
+
+	requireNoProcessRuntimeErrorV0(t, validateProcessRuntimeLaunchRequestV0(req))
 }
 
 func TestProcessRuntimeConnectorV0NoHeredaEntornoPadre(t *testing.T) {
@@ -170,107 +208,5 @@ func TestProcessRuntimeConnectorV0RechazaPathOperativoInseguro(t *testing.T) {
 			_, err := NewProcessRuntimeConnectorV0().LaunchV0(context.Background(), req)
 			requireProcessRuntimeCodeV0(t, err, ProcessRuntimeEnvProhibidoV0)
 		})
-	}
-}
-
-func processRuntimeTestChildWaitV0() {
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt)
-	defer signal.Stop(signals)
-
-	select {
-	case <-signals:
-		os.Exit(0)
-	case <-time.After(30 * time.Second):
-		os.Exit(3)
-	}
-}
-
-func processRuntimeTestChildEnvDumpV0() {
-	_ = os.WriteFile("env.txt", []byte(os.Getenv(processRuntimeParentMarkerEnvV0)), 0o600)
-	os.Exit(0)
-}
-
-func processRuntimeLaunchRequestForTestV0(t *testing.T, childMode string) ProcessRuntimeLaunchRequestV0 {
-	t.Helper()
-	if !filepath.IsAbs(os.Args[0]) {
-		t.Fatalf("test binary path no es absoluto: %q", os.Args[0])
-	}
-	return ProcessRuntimeLaunchRequestV0{
-		CommandPath: os.Args[0],
-		Env: []string{
-			processRuntimeTestChildEnvV0 + "=" + childMode,
-		},
-		WorkingDir: t.TempDir(),
-	}
-}
-
-func waitForProcessRuntimeStatusV0(
-	t *testing.T,
-	connector *ProcessRuntimeConnectorV0,
-	processRef string,
-	status ProcessRuntimeStatusV0,
-) ProcessRuntimeSnapshotV0 {
-	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		snapshot, err := connector.SnapshotV0(processRef)
-		requireNoProcessRuntimeErrorV0(t, err)
-		if snapshot.Status == status {
-			return snapshot
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	snapshot, err := connector.SnapshotV0(processRef)
-	requireNoProcessRuntimeErrorV0(t, err)
-	t.Fatalf("status final = %q, se esperaba %q", snapshot.Status, status)
-	return ProcessRuntimeSnapshotV0{}
-}
-
-func assertProcessRuntimeSnapshotDoesNotLeakV0(
-	t *testing.T,
-	snapshot ProcessRuntimeSnapshotV0,
-	req ProcessRuntimeLaunchRequestV0,
-) {
-	t.Helper()
-	raw, err := json.Marshal(snapshot)
-	if err != nil {
-		t.Fatalf("marshal snapshot: %v", err)
-	}
-	text := string(raw)
-	for _, forbidden := range []string{
-		req.CommandPath,
-		req.WorkingDir,
-		processRuntimeTestChildEnvV0,
-		"pid",
-	} {
-		if forbidden != "" && strings.Contains(strings.ToLower(text), strings.ToLower(forbidden)) {
-			t.Fatalf("snapshot filtra detalle prohibido %q: %s", forbidden, text)
-		}
-	}
-}
-
-func requireNoProcessRuntimeErrorV0(t *testing.T, err error) {
-	t.Helper()
-	if err != nil {
-		t.Fatalf("error inesperado: %v", err)
-	}
-}
-
-func requireProcessRuntimeCodeV0(
-	t *testing.T,
-	err error,
-	code ProcessRuntimeErrorCodeV0,
-) {
-	t.Helper()
-	if err == nil {
-		t.Fatalf("error nil, se esperaba codigo %q", code)
-	}
-	runtimeErr, ok := err.(ProcessRuntimeErrorV0)
-	if !ok {
-		t.Fatalf("tipo de error = %T, se esperaba ProcessRuntimeErrorV0", err)
-	}
-	if runtimeErr.Code != code {
-		t.Fatalf("codigo = %q, se esperaba %q", runtimeErr.Code, code)
 	}
 }

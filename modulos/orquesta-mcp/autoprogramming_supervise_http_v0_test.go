@@ -156,8 +156,7 @@ func TestMCPAutoprogrammingSuperviseHTTPHandlerV0DevuelvePayloadPublicoSiExecuto
 	}
 	if result.Estado != MCPRunSupervisorEstadoErrorV0 || len(result.Errores) != 1 ||
 		result.Errores[0].Code != "autoprogramming_supervise_executor_error" ||
-		!strings.Contains(result.Errores[0].Message, "autoprogramming_supervise_executor_error") ||
-		!strings.Contains(result.Errores[0].Message, "payload.task requerido") {
+		result.Errores[0].Message != "autoprogramming_supervise_executor_error" {
 		t.Fatalf("result=%+v", result)
 	}
 }
@@ -234,8 +233,7 @@ func TestMCPAutoprogrammingSuperviseTransportV0DevuelvePayloadPublicoSiExecutorF
 	}
 	if result.Estado != MCPRunSupervisorEstadoErrorV0 || len(result.Errores) != 1 ||
 		result.Errores[0].Code != "autoprogramming_supervise_executor_error" ||
-		!strings.Contains(result.Errores[0].Message, "autoprogramming_supervise_executor_error") ||
-		!strings.Contains(result.Errores[0].Message, "payload.task requerido") {
+		result.Errores[0].Message != "autoprogramming_supervise_executor_error" {
 		t.Fatalf("result=%+v", result)
 	}
 }

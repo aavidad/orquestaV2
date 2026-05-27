@@ -22,7 +22,7 @@ func readCommandHTTPResponseBodyV0(response *http.Response, context string) ([]b
 	if int64(len(body)) > commandHTTPResponseMaxBytesV0 {
 		return nil, fmt.Errorf("%s_response_too_large", context)
 	}
-	if response.StatusCode != http.StatusOK {
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("%s_http_%d", context, response.StatusCode)
 	}
 	if !commandHTTPContentTypeIsJSONV0(response.Header.Get("Content-Type")) {
@@ -40,6 +40,9 @@ func readCommandHTTPResponseBodyV0(response *http.Response, context string) ([]b
 }
 
 func commandHTTPContentTypeIsJSONV0(value string) bool {
+	if strings.TrimSpace(value) == "" {
+		return true
+	}
 	mediaType := strings.TrimSpace(strings.ToLower(strings.Split(value, ";")[0]))
-	return mediaType == "application/json"
+	return mediaType == "application/json" || mediaType == "text/plain"
 }

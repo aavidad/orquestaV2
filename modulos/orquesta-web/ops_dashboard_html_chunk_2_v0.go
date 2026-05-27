@@ -46,10 +46,10 @@ const opsDashboardHTMLChunk2V0 = `    }
         const runRefs = ranked.slice(0, maxRuns).map(function(item) { return item.run_ref; }).filter(Boolean);
         const statResults = await Promise.allSettled(runRefs.map(fetchRunStats));
         const stats = statResults.map(function(item, index) {
-          if (item.status === 'fulfilled') return item.value;
-          diagnostics.push(runRefs[index] + ': ' + item.reason.message);
-          return null;
-        }).filter(Boolean);
+          const projection = opsStatsProjection(runRefs[index], item);
+          if (projection.stats_fetch_status !== 'ok') diagnostics.push(runRefs[index] + ': ' + projection.stats_reason_code);
+          return projection;
+        });
         render({server: server, resources: resources, auto: auto, ranked: ranked, stats: stats, diagnostics: diagnostics});
         markLive(true);
       } catch (err) {
@@ -109,51 +109,6 @@ const opsDashboardHTMLChunk2V0 = `    }
       saveStableOrders();
       ensureRuntimeDetail(selectedRunRef);
     }
-    function buildRuns(ranked, statsResults) {
-      const byRun = {};
-      ranked.forEach(function(item) {
-        byRun[item.run_ref] = Object.assign({}, item, {
-          validation: validationState(item),
-          task_id: taskIDFromRef(item.run_ref),
-          task_title: titleFromRef(item.run_ref)
-        });
-      });
-      statsResults.forEach(function(result) {
-        const stats = result.stats || result.director_stats || {};
-        const runRef = stats.run_ref || result.run_ref;
-        if (!runRef) return;
-        const counts = stats.counts || {};
-        const progress = stats.progress || {};
-        const closure = stats.closure || {};
-        const tasks = progress.tasks || [];
-        const firstTask = tasks.find(function(task) { return task.summary; }) || tasks[0] || {};
-        byRun[runRef] = Object.assign(byRun[runRef] || {}, {
-          run_ref: runRef,
-          app_ref: stats.project_ref || (byRun[runRef] || {}).app_ref,
-          status: stats.status || result.estado || (byRun[runRef] || {}).status,
-          current_phase: stats.current_phase,
-          summary: firstTask.summary || (byRun[runRef] || {}).summary || '',
-          task_id: (byRun[runRef] || {}).task_id || taskIDFromRef(runRef || firstTask.task_ref),
-          task_title: firstTask.summary || titleFromRef(firstTask.task_ref || runRef),
-          tasks: tasks,
-          evidence_refs: ((byRun[runRef] || {}).evidence_refs || []).concat((stats.refs && stats.refs.validations) || []),
-          percent_complete: progress.percent_complete || 0,
-          tasks_total: progress.tasks_total || counts.tasks_total || 0,
-          tasks_closed: progress.tasks_closed || counts.tasks_closed || 0,
-          agents_in_flight: counts.agents_in_flight || 0,
-          agents_started: counts.agents_started || 0,
-          agents_failed: counts.agents_failed || 0,
-          agents_need_attention: counts.agents_need_attention || 0,
-          progressing_agents: progress.progressing_agents || 0,
-          stalled_agents: progress.stalled_agents || 0,
-          closure_status: closure.status,
-          usage_summary: stats.usage_summary || (byRun[runRef] || {}).usage_summary,
-          blocked: closure.blocked,
-          validation: (byRun[runRef] || {}).validation || 'pendiente'
-        });
-      });
-      return Object.values(byRun);
-    }
     function renderFlowSummary(ranked, runs, agents, queueCount, activeAgentCount) {
       const readyQueued = (ranked || []).filter(function(item) { return matchesStatus(item.status, 'running'); }).length;
       const activeRuns = (runs || []).filter(function(run) { return matchesStatus(run.status || run.closure_status, 'running') && !isTerminalRun(run); }).length;
@@ -187,14 +142,16 @@ const opsDashboardHTMLChunk2V0 = `    }
     function buildAgents(statsResults) {
       const out = [];
       statsResults.forEach(function(result) {
-        const stats = result.stats || result.director_stats || {};
+        const stats = opsStatsObject(result);
         const taskMap = {};
+        const taskByAgent = {};
         ((stats.progress || {}).tasks || []).forEach(function(task) {
           if (task.task_ref) taskMap[task.task_ref] = task;
+          if (task.agent_request_id && !taskByAgent[task.agent_request_id]) taskByAgent[task.agent_request_id] = task;
         });
         (stats.agents || []).forEach(function(agent) {
           const progress = agent.last_progress || {};
-          const task = taskMap[progress.task_ref] || {};
+          const task = taskMap[progress.task_ref] || taskByAgent[agent.agent_request_id] || {};
           const usage = agent.usage || {};
           out.push({
             run_ref: stats.run_ref || result.run_ref,
@@ -202,10 +159,10 @@ const opsDashboardHTMLChunk2V0 = `    }
             status: agent.status,
             in_flight: !!agent.in_flight,
             needs_attention: !!agent.needs_attention,
-            task_ref: progress.task_ref || '',
-            task_id: taskIDFromRef(progress.task_ref || agent.agent_request_id),
+            task_ref: progress.task_ref || task.task_ref || '',
+            task_id: taskIDFromRef(progress.task_ref || task.task_ref || agent.agent_request_id),
             task_title: task.summary || progress.summary || titleFromRef(progress.task_ref || agent.agent_request_id),
-            progress_status: progress.status || '',
+            progress_status: progress.status || task.progress_status || '',
             no_progress_ticks: progress.no_progress_ticks || 0,
             repeated_action_count: progress.repeated_action_count || 0,
             capacity_level: usage.capacity_level || '',
@@ -258,24 +215,26 @@ const opsDashboardHTMLChunk2V0 = `    }
         (detail.agents || []).forEach(function(runtimeAgent) {
           const agentRef = runtimeAgent.agent_ref || '';
           if (!agentRef) return;
-          const packetTask = (((runtimeAgent.agent_packet || {}).task) || {});
+          const packetTask = runtimeAgent.task || {};
+          const ackFile = ((runtimeAgent.files || []).find(function(item) { return item.name === 'agent_ack.json'; }) || {});
+          const ackStatus = ((ackFile.extracts || {}).status) || '';
           const key = runRef + '|' + agentRef;
           byKey[key] = Object.assign({}, byKey[key] || {}, {
             run_ref: runRef,
             agent_ref: agentRef,
-            status: (byKey[key] || {}).status || (runtimeAgent.ack || {}).status || 'runtime_observed',
+            status: (byKey[key] || {}).status || ackStatus || 'runtime_observed',
             in_flight: (byKey[key] || {}).in_flight || false,
             needs_attention: (byKey[key] || {}).needs_attention || false,
             task_ref: (byKey[key] || {}).task_ref || packetTask.task_ref || '',
             task_id: (byKey[key] || {}).task_id || taskIDFromRef(packetTask.task_ref || agentRef),
-            task_title: (byKey[key] || {}).task_title || packetTask.title || packetTask.objective || titleFromRef(packetTask.task_ref || agentRef),
+            task_title: (byKey[key] || {}).task_title || packetTask.title || packetTask.objective_summary || titleFromRef(packetTask.task_ref || agentRef),
             progress_status: (byKey[key] || {}).progress_status || 'runtime',
             no_progress_ticks: (byKey[key] || {}).no_progress_ticks || 0,
             repeated_action_count: (byKey[key] || {}).repeated_action_count || 0,
             capacity_level: (byKey[key] || {}).capacity_level || '',
             quota_status: (byKey[key] || {}).quota_status || '',
             total_tokens: (byKey[key] || {}).total_tokens || 0,
-            percent: (byKey[key] || {}).percent || (((runtimeAgent.ack || {}).status === 'completed') ? 100 : 0)
+            percent: (byKey[key] || {}).percent || (ackStatus === 'completed' ? 100 : 0)
           });
         });
       });

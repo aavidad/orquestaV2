@@ -64,6 +64,10 @@ type MCPAppSpecCompactV0 struct {
 type MCPBacklogCompactV0 struct {
 	SchemaVersion       string   `json:"schema_version,omitempty"`
 	SpecID              string   `json:"spec_id,omitempty"`
+	Estado              string   `json:"estado,omitempty"`
+	FreshnessSourceRef  string   `json:"freshness_source_ref,omitempty"`
+	DirectorHandoff     string   `json:"director_handoff,omitempty"`
+	DirectorHandoffRef  string   `json:"director_handoff_ref,omitempty"`
 	Fases               int      `json:"fases"`
 	Microtareas         int      `json:"microtareas"`
 	ContratosRequeridos []string `json:"contratos_requeridos,omitempty"`
@@ -143,6 +147,10 @@ func compactBacklogV0(backlog orquestafactory.BacklogInicialPropuestoV0) MCPBack
 	return MCPBacklogCompactV0{
 		SchemaVersion:       strings.TrimSpace(backlog.SchemaVersion),
 		SpecID:              strings.TrimSpace(backlog.SpecID),
+		Estado:              strings.TrimSpace(backlog.Estado),
+		FreshnessSourceRef:  strings.TrimSpace(backlog.Freshness.SourceRef),
+		DirectorHandoff:     strings.TrimSpace(backlog.DirectorHandoff.RequiredContract),
+		DirectorHandoffRef:  strings.TrimSpace(backlog.DirectorHandoff.RequiredInputRef),
 		Fases:               len(backlog.Fases),
 		Microtareas:         len(backlog.Microtareas),
 		ContratosRequeridos: compactStringsMCPV0(backlog.ContratosRequeridos),

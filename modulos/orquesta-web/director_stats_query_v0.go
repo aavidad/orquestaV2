@@ -5,15 +5,16 @@ import (
 )
 
 func directorStatsQueryFromURLV0(r *http.Request) WebDirectorStatsQueryV0 {
+	values := webPublicQueryValuesV0(r)
 	return WebDirectorStatsQueryV0{
-		RequestID:            r.URL.Query().Get("request_id"),
-		CorrelationID:        r.URL.Query().Get("correlation_id"),
-		Locale:               r.URL.Query().Get("locale"),
-		RunRef:               r.URL.Query().Get("run_ref"),
-		OccurredAt:           r.URL.Query().Get("occurred_at"),
-		IncludeProcessRefs:   boolQueryValueV0(r.URL.Query().Get("include_process_refs")),
-		IncludeAgentProgress: boolQueryValueV0(r.URL.Query().Get("include_agent_progress")),
-		IncludeAgentUsage:    boolQueryValueV0(r.URL.Query().Get("include_agent_usage")),
+		RequestID:            values.Get("request_id"),
+		CorrelationID:        values.Get("correlation_id"),
+		Locale:               values.Get("locale"),
+		RunRef:               values.Get("run_ref"),
+		OccurredAt:           values.Get("occurred_at"),
+		IncludeProcessRefs:   boolQueryValueV0(values.Get("include_process_refs")),
+		IncludeAgentProgress: boolQueryValueV0(values.Get("include_agent_progress")),
+		IncludeAgentUsage:    boolQueryValueV0(values.Get("include_agent_usage")),
 	}
 }
 

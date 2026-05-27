@@ -67,6 +67,25 @@ func MCPRunControlDescriptorV0() MCPRunControlToolDescriptorV0 {
 	}
 }
 
+func normalizeMCPRunControlIdentityV0(
+	input MCPRunControlToolInputV0,
+	headerCorrelationID string,
+	headerIdempotencyKey string,
+) (MCPRunControlToolInputV0, []MCPValidationIssueV0) {
+	identity := NormalizeMCPPublicMutationIdentityV0(MCPPublicMutationIdentityInputV0{
+		RequestID:            input.RequestID,
+		CorrelationID:        input.CorrelationID,
+		IdempotencyKey:       input.IdempotencyKey,
+		HeaderCorrelationID:  headerCorrelationID,
+		HeaderIdempotencyKey: headerIdempotencyKey,
+		Mutating:             true,
+	})
+	input.RequestID = identity.RequestID
+	input.CorrelationID = identity.CorrelationID
+	input.IdempotencyKey = identity.IdempotencyKey
+	return input, identity.Issues
+}
+
 func newMCPRunControlResultV0(
 	input MCPRunControlToolInputV0,
 	state orquestaruncontrol.RunControlStateV0,

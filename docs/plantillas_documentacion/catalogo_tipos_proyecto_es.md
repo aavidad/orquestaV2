@@ -26,6 +26,14 @@ Este catálogo está alineado con la política arquitectónica por tipo de proye
 - `faq`: dudas recurrentes y resolución rápida
 - `ayuda_contextual`: microayudas por pantalla, flujo, estado o acción
 - `runbook_operativo`: respuesta operativa ante incidencias y tareas recurrentes
+- `pruebas_documentales`: evidencia compacta de validaciones ejecutadas o
+  revisiones documentales del proyecto generado
+- `pendientes`: huecos reales, decisiones diferidas y trabajo posterior del
+  proyecto generado
+
+Alias historico: `manual_sistemas_deploy` no es una pieza raiz nueva; se
+resuelve como `manual_sysadmin` mas `guia_despliegue` cuando operacion y
+despliegue aplican.
 
 ## Reglas de selección
 
@@ -35,6 +43,9 @@ Este catálogo está alineado con la política arquitectónica por tipo de proye
 - si existe operación continuada o guardias, incluir `runbook_operativo`
 - si hay separación entre desarrollo y operación, incluir `manual_sysadmin`
 - si terceros ampliarán o integrarán el sistema, incluir `manual_desarrollador`
+- si el director exige cierre con evidencia documental, incluir
+  `pruebas_documentales`
+- si quedan huecos reales o decisiones diferidas, incluir `pendientes`
 
 ## Mínimos por tipo de proyecto
 
@@ -54,12 +65,14 @@ Documentación mínima:
 - `guia_despliegue`
 - `runbook_operativo`
 - `faq`
+- `pruebas_documentales`
 
 Documentación recomendada:
 
 - `manual_sysadmin`
 - `manual_usuario` si existe panel o consola de uso funcional
 - `ayuda_contextual` si hay interfaz operable por personas
+- `pendientes` solo si queda trabajo verificable
 
 ### 2. Scripts y herramientas operativas rápidas
 
@@ -76,12 +89,14 @@ Documentación mínima:
 - `guia_instalacion`
 - `faq`
 - `runbook_operativo`
+- `pruebas_documentales` si hay ejecucion asistida o migracion
 
 Documentación recomendada:
 
 - `manual_desarrollador` si la herramienta va a evolucionar o recibir contribuciones
 - `manual_usuario` si la usan perfiles no técnicos
 - `guia_despliegue` si se publica fuera del entorno local del autor
+- `pendientes` si quedan riesgos o tareas diferidas
 
 ### 3. Controladores de infraestructura
 
@@ -99,11 +114,13 @@ Documentación mínima:
 - `manual_sysadmin`
 - `runbook_operativo`
 - `faq`
+- `pruebas_documentales`
 
 Documentación recomendada:
 
 - `guia_instalacion` si puede probarse o arrancarse en local
 - `manual_usuario` y `ayuda_contextual` solo si añade una interfaz real de operación humana
+- `pendientes` si quedan integraciones o permisos por cerrar
 
 ## Combinaciones sugeridas
 
@@ -121,6 +138,7 @@ Documentación recomendada:
 - `guia_despliegue`
 - `faq`
 - `runbook_operativo`
+- `pruebas_documentales`
 
 ### Perfil con interfaz funcional
 

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	publicidentity "orquesta/modulos/orquesta-server/publicidentity"
 )
 
 const (
@@ -33,7 +34,7 @@ func NewAutoprogrammingCliClientV0(serverURL string, timeout time.Duration) (*Au
 	return &AutoprogrammingCliClientV0{
 		BaseURL:    config.BaseURL,
 		Timeout:    config.Timeout,
-		HTTPClient: &http.Client{Timeout: config.Timeout},
+		HTTPClient: newCLILoopbackHTTPClientV0(config.Timeout),
 	}, nil
 }
 
@@ -42,8 +43,10 @@ func (client *AutoprogrammingCliClientV0) PrepararRun(
 	inv CliInvocationContextV0,
 	input orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0,
 ) CliOutputEnvelopeV0 {
+	inv = normalizeCLIPublicMutationInvocationV0(inv)
 	input.RequestID = firstNonEmptyCliStringV0(input.RequestID, inv.RequestID)
 	input.CorrelationID = firstNonEmptyCliStringV0(input.CorrelationID, inv.CorrelationID)
+	input.IdempotencyKey = firstNonEmptyCliStringV0(input.IdempotencyKey, inv.IdempotencyKey)
 	return client.postV0(ctx, inv, CliDefaultCommandAutoprogPrepareV0, AutoprogrammingPrepareRunCliEndpointV0, input, decodeAutoprogPrepareRunV0)
 }
 
@@ -95,6 +98,7 @@ func (client *AutoprogrammingCliClientV0) ControlarRun(
 	inv CliInvocationContextV0,
 	input orquestamcp.MCPRunControlToolInputV0,
 ) CliOutputEnvelopeV0 {
+	inv = normalizeCLIPublicMutationInvocationV0(inv)
 	input.RequestID = firstNonEmptyCliStringV0(input.RequestID, inv.RequestID)
 	input.CorrelationID = firstNonEmptyCliStringV0(input.CorrelationID, inv.CorrelationID)
 	input.IdempotencyKey = firstNonEmptyCliStringV0(input.IdempotencyKey, inv.IdempotencyKey)
@@ -135,6 +139,9 @@ func (client *AutoprogrammingCliClientV0) postV0(
 	req, err := prepareCLIRESTRequestV0(ctx, baseURL, endpoint, inv.CorrelationID, payload)
 	if err != nil {
 		return autoprogSingleErrorEnvelopeV0(inv, CliErrErrorTransporteV0, "server_url", "request_http_invalida", 0, true, start)
+	}
+	if strings.TrimSpace(inv.IdempotencyKey) != "" {
+		req.Header.Set(publicidentity.PublicIdempotencyKeyHeaderV0, strings.TrimSpace(inv.IdempotencyKey))
 	}
 	resp, err := httpClientAutoprogrammingV0(client, timeout).Do(req)
 	if err != nil {
@@ -184,11 +191,11 @@ func decodeAutoprogToolResponseV0(
 ) CliOutputEnvelopeV0 {
 	if resp.StatusCode < http.StatusOK || resp.StatusCode > 299 {
 		if resp.StatusCode != http.StatusBadRequest {
-			return autoprogSingleErrorEnvelopeV0(inv, CliErrErrorTransporteV0, "status_code", "status_no_2xx", resp.StatusCode, retryableStatusV0(resp.StatusCode), start)
+			return autoprogSingleErrorEnvelopeV0(inv, CliErrErrorTransporteV0, "status_code", cliRESTNo2xxDetailForCommandV0(resp, inv.Command), resp.StatusCode, retryableStatusV0(resp.StatusCode), start)
 		}
 	}
-	if err := json.NewDecoder(resp.Body).Decode(target); err != nil {
-		return autoprogSingleErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", "json_invalido", resp.StatusCode, false, start)
+	if detail := decodeCLIRESTJSONBodyForCommandV0(resp, inv.Command, target); detail != "" {
+		return autoprogSingleErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", detail, resp.StatusCode, false, start)
 	}
 	estado, issues = autoprogEstadoAndIssuesV0(target)
 	if strings.TrimSpace(estado) == "" {

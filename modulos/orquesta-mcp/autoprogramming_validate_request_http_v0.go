@@ -26,25 +26,28 @@ func (handler mcpAutoprogrammingValidateRequestHTTPHandlerV0) ServeHTTP(
 		writeMCPAutoprogrammingValidateRequestHTTPV0(
 			w,
 			http.StatusNotFound,
-			newMCPAutoprogrammingValidateRequestHTTPErrorV0(r, MCPAutoprogrammingValidateRequestToolInputV0{}, "path", "ruta_no_soportada"),
+			newMCPAutoprogrammingValidateRequestHTTPErrorV0(r, MCPAutoprogrammingValidateRequestToolInputV0{}, "path", MCPPublicErrPathUnsupportedV0),
 		)
 		return
 	}
+	if handleMCPPublicHTTPOptionsV0(w, r, http.MethodPost) {
+		return
+	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
+		setMCPPublicHTTPAllowV0(w, http.MethodPost)
 		writeMCPAutoprogrammingValidateRequestHTTPV0(
 			w,
 			http.StatusMethodNotAllowed,
-			newMCPAutoprogrammingValidateRequestHTTPErrorV0(r, MCPAutoprogrammingValidateRequestToolInputV0{}, "method", "metodo_no_permitido"),
+			newMCPAutoprogrammingValidateRequestHTTPErrorV0(r, MCPAutoprogrammingValidateRequestToolInputV0{}, "method", MCPPublicErrMethodNotAllowedV0),
 		)
 		return
 	}
 	var input MCPAutoprogrammingValidateRequestToolInputV0
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+	if code := decodeMCPPublicHTTPJSONProfileV0(w, r, &input, mcpPublicHTTPJSONProfileAutoprogrammingV0); code != "" {
 		writeMCPAutoprogrammingValidateRequestHTTPV0(
 			w,
 			http.StatusBadRequest,
-			newMCPAutoprogrammingValidateRequestHTTPErrorV0(r, input, "body", "request_body_invalido"),
+			newMCPAutoprogrammingValidateRequestHTTPErrorV0(r, input, "body", code),
 		)
 		return
 	}

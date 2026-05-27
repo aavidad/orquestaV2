@@ -44,6 +44,11 @@ func appChangeReadyForReviewPhaseV0(
 }
 
 func containsForbiddenAutoPlanTextV0(values ...string) bool {
+	for _, value := range values {
+		if containsSensitiveAutoPlanTextV0(value) {
+			return true
+		}
+	}
 	if !orquestarails.DetailProhibitedRailsEnabledV0() {
 		return false
 	}
@@ -53,6 +58,16 @@ func containsForbiddenAutoPlanTextV0(values ...string) bool {
 			"autoplan_readiness",
 			value,
 		) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsSensitiveAutoPlanTextV0(value string) bool {
+	lower := strings.ToLower(strings.ReplaceAll(value, `\/`, "/"))
+	for _, fragment := range orquestarails.OperationalSensitiveFragmentsV0 {
+		if orquestarails.ContainsFragmentWithBoundaryV0(lower, fragment) {
 			return true
 		}
 	}

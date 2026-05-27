@@ -103,7 +103,7 @@ func TestMCPDirectorStatsHTTPHandlerV0MetodoIncorrecto(t *testing.T) {
 	NewMCPDirectorStatsHTTPHandlerV0(&mcpDirectorStatsHTTPFakeExecutorV0{}).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusMethodNotAllowed ||
-		rec.Header().Get("Allow") != http.MethodPost ||
+		rec.Header().Get("Allow") != mcpPublicHTTPAllowHeaderV0(http.MethodPost) ||
 		rec.Header().Get("X-Correlation-ID") != "corr-director-stats-http-method-001" {
 		t.Fatalf("status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
 	}
@@ -122,7 +122,7 @@ func TestMCPDirectorStatsHTTPHandlerV0ExecutorNil(t *testing.T) {
 	}
 }
 
-func TestMCPDirectorStatsHTTPHandlerV0ExponeCausaSanitizadaSiExecutorFalla(t *testing.T) {
+func TestMCPDirectorStatsHTTPHandlerV0NoPropagaErrorNoCatalogado(t *testing.T) {
 	executor := mcpDirectorStatsHTTPFakeExecutorV0{
 		Err: errors.New("director stats failed at /root/Trabajo/orquesta token=secret123456 run-ref-director-error-001"),
 	}
@@ -141,8 +141,7 @@ func TestMCPDirectorStatsHTTPHandlerV0ExponeCausaSanitizadaSiExecutorFalla(t *te
 	}
 	if result.Estado != MCPDirectorStatsEstadoErrorV0 ||
 		len(result.Errores) != 1 ||
-		!strings.Contains(result.Errores[0].Message, "director_stats_executor_error") ||
-		!strings.Contains(result.Errores[0].Message, "run-ref-director-error-001") {
+		result.Errores[0].Message != "director_stats_executor_error" {
 		t.Fatalf("payload publico incompleto: %+v", result)
 	}
 	if strings.Contains(rec.Body.String(), "/root/Trabajo") ||
@@ -170,8 +169,7 @@ func TestMCPDirectorStatsTransportV0DevuelvePayloadPublicoSiExecutorFalla(t *tes
 	}
 	if result.Estado != MCPDirectorStatsEstadoErrorV0 ||
 		len(result.Errores) != 1 ||
-		!strings.Contains(result.Errores[0].Message, "director_stats_executor_error") ||
-		!strings.Contains(result.Errores[0].Message, "run-ref-director-transport-error-001") {
+		result.Errores[0].Message != "director_stats_executor_error" {
 		t.Fatalf("payload publico incompleto: %+v", result)
 	}
 	if strings.Contains(string(output), "/root/Trabajo") ||

@@ -16,12 +16,13 @@ func TestRunFileStoreQueuePersistsAfterRecreateV0(t *testing.T) {
 	now := time.Date(2026, 5, 12, 9, 0, 0, 0, time.UTC)
 
 	updated, err := store.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
-		RunRef:        " run-created ",
-		QueueRef:      " global ",
-		AppRef:        " app-created ",
-		PriorityScore: 50,
-		UpdatedAt:     now,
-		EvidenceRefs:  []string{" ev-1 ", "ev-1"},
+		RunRef:           " run-created ",
+		QueueRef:         " global ",
+		AppRef:           " app-created ",
+		FairnessGroupRef: " group-created ",
+		PriorityScore:    50,
+		UpdatedAt:        now,
+		EvidenceRefs:     []string{" ev-1 ", "ev-1"},
 	})
 	if err != nil {
 		t.Fatalf("SetRunPriorityV0: %v", err)
@@ -29,6 +30,7 @@ func TestRunFileStoreQueuePersistsAfterRecreateV0(t *testing.T) {
 	if updated.Status != orquestarunqueue.RunStatusReadyV0 ||
 		updated.RunRef != "run-created" ||
 		updated.AppRef != "app-created" ||
+		updated.FairnessGroupRef != "group-created" ||
 		!reflect.DeepEqual(updated.EvidenceRefs, []string{"ev-1"}) {
 		t.Fatalf("updated=%+v", updated)
 	}
@@ -41,7 +43,10 @@ func TestRunFileStoreQueuePersistsAfterRecreateV0(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
 	}
-	if len(listed) != 1 || listed[0].PriorityScore != 50 || !listed[0].UpdatedAt.Equal(now) {
+	if len(listed) != 1 ||
+		listed[0].PriorityScore != 50 ||
+		listed[0].FairnessGroupRef != "group-created" ||
+		!listed[0].UpdatedAt.Equal(now) {
 		t.Fatalf("listed=%+v", listed)
 	}
 
@@ -183,5 +188,38 @@ func TestRunFileStorePriorityWriterPuedePersistirEstadoTerminalV0(t *testing.T) 
 	}
 	if len(all) != 1 || all[0].RunRef != "run-terminal" || all[0].Status != orquestarunqueue.RunStatusClosedV0 {
 		t.Fatalf("all=%+v", all)
+	}
+}
+
+func TestRunFileStoreQueuePersisteWorksetClaimsV0(t *testing.T) {
+	dir := t.TempDir()
+	store := mustNewRunFileStoreV0(t, dir)
+	ctx := context.Background()
+	now := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
+
+	if _, err := store.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        "run-workset",
+		QueueRef:      "global",
+		AppRef:        "app",
+		PriorityScore: 50,
+		UpdatedAt:     now,
+		WorksetClaims: []orquestarunqueue.WorksetClaimV0{{
+			SchemaVersion: orquestarunqueue.WorksetClaimSchemaVersionV0,
+			ClaimRef:      "claim-workset",
+			RunRef:        "run-workset",
+			TaskRef:       "task-workset",
+			WriteSet:      []orquestarunqueue.ScopeRefV0{{Ref: "modulos/orquesta-run-file"}},
+		}},
+	}); err != nil {
+		t.Fatalf("SetRunPriorityV0: %v", err)
+	}
+
+	reopened := mustNewRunFileStoreV0(t, dir)
+	listed, err := reopened.ListRunSchedulingCandidatesV0(ctx, orquestarunqueue.RunQueueReadRequestV0{QueueRef: "global"})
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	if len(listed) != 1 || listed[0].WorksetClaims[0].WriteSet[0].Ref != "modulos/orquesta-run-file" {
+		t.Fatalf("listed=%+v", listed)
 	}
 }

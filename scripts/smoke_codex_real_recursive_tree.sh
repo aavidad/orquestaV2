@@ -2,7 +2,14 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/smoke_common.sh
+source "$repo_root/scripts/lib/smoke_common.sh"
+smoke_root_source="generated"
+if [[ -n "${ORQUESTA_SMOKE_ROOT:-}" ]]; then
+  smoke_root_source="env:ORQUESTA_SMOKE_ROOT"
+fi
 smoke_root="${ORQUESTA_SMOKE_ROOT:-$(mktemp -d "${TMPDIR:-/tmp}/orquesta-codex-real-recursive-tree.XXXXXX")}"
+smoke_temp_root_prepare "$smoke_root" "$smoke_root_source"
 project_dir="$smoke_root/project"
 runtime_dir="$smoke_root/runtime"
 codex_home="$smoke_root/codex-home"
@@ -11,11 +18,7 @@ output_dir="$smoke_root/required-test-output"
 keep_dir="${ORQUESTA_KEEP_SMOKE_DIR:-0}"
 
 cleanup() {
-  if [[ "$keep_dir" == "1" ]]; then
-    echo "directorio conservado: $smoke_root" >&2
-  else
-    rm -rf "$smoke_root"
-  fi
+  smoke_temp_root_cleanup "$smoke_root" "$keep_dir"
 }
 trap cleanup EXIT
 

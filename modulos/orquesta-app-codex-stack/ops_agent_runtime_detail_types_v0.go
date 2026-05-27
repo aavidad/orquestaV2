@@ -28,15 +28,28 @@ type CodexStackAgentRuntimeDetailResponseV0 struct {
 }
 
 type CodexStackAgentRuntimeDetailAgentV0 struct {
-	RunRef      string                                                `json:"run_ref"`
-	AgentRef    string                                                `json:"agent_ref"`
-	RuntimeDir  string                                                `json:"runtime_dir,omitempty"`
-	Descriptor  orquestaruntimecodexdelivery.CodexReceiptDescriptorV0 `json:"descriptor"`
-	AgentPacket orquestaruntime.AgentStartPacketV0                    `json:"agent_packet"`
-	Ack         map[string]any                                        `json:"ack,omitempty"`
-	PromptText  string                                                `json:"prompt_text,omitempty"`
-	Skills      CodexStackAgentRuntimeDetailSkillHintsV0              `json:"skills"`
-	Files       []CodexStackAgentRuntimeDetailFileV0                  `json:"files"`
+	RunRef        string                                                `json:"run_ref"`
+	AgentRef      string                                                `json:"agent_ref"`
+	RuntimeRef    string                                                `json:"runtime_ref,omitempty"`
+	DescriptorRef string                                                `json:"descriptor_ref,omitempty"`
+	Task          CodexStackAgentRuntimeDetailTaskV0                    `json:"task"`
+	Descriptor    orquestaruntimecodexdelivery.CodexReceiptDescriptorV0 `json:"-"`
+	AgentPacket   orquestaruntime.AgentStartPacketV0                    `json:"-"`
+	Ack           map[string]any                                        `json:"-"`
+	PromptText    string                                                `json:"-"`
+	Skills        CodexStackAgentRuntimeDetailSkillHintsV0              `json:"skills"`
+	Files         []CodexStackAgentRuntimeDetailFileV0                  `json:"files"`
+}
+
+type CodexStackAgentRuntimeDetailTaskV0 struct {
+	TaskRef            string   `json:"task_ref,omitempty"`
+	Title              string   `json:"title,omitempty"`
+	ObjectiveSummary   string   `json:"objective_summary,omitempty"`
+	WriteSet           []string `json:"write_set,omitempty"`
+	RequiredTests      []string `json:"required_tests,omitempty"`
+	ContextRefsCount   int      `json:"context_refs_count,omitempty"`
+	RequiredTestsCount int      `json:"required_tests_count,omitempty"`
+	WriteSetCount      int      `json:"write_set_count,omitempty"`
 }
 
 type CodexStackAgentRuntimeDetailSkillHintsV0 struct {
@@ -49,13 +62,18 @@ type CodexStackAgentRuntimeDetailSkillHintsV0 struct {
 }
 
 type CodexStackAgentRuntimeDetailFileV0 struct {
-	Name      string `json:"name"`
-	Path      string `json:"path,omitempty"`
-	Exists    bool   `json:"exists"`
-	SizeBytes int64  `json:"size_bytes,omitempty"`
-	Truncated bool   `json:"truncated,omitempty"`
-	Content   string `json:"content,omitempty"`
-	Error     string `json:"error,omitempty"`
+	Name           string         `json:"name"`
+	FileKind       string         `json:"file_kind"`
+	Exists         bool           `json:"exists"`
+	SizeBytes      int64          `json:"size_bytes,omitempty"`
+	Truncated      bool           `json:"truncated,omitempty"`
+	RedactionLevel string         `json:"redaction_level"`
+	ReasonCodes    []string       `json:"reason_codes,omitempty"`
+	ContentRef     string         `json:"content_ref,omitempty"`
+	SHA256         string         `json:"sha256,omitempty"`
+	Preview        string         `json:"preview,omitempty"`
+	Extracts       map[string]any `json:"extracts,omitempty"`
+	Content        string         `json:"-"`
 }
 
 type CodexStackAgentRuntimeDetailIssueV0 struct {

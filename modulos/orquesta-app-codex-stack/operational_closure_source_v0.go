@@ -68,7 +68,7 @@ func (source codexStackOperationalClosureSourceV0) BuildOperationalDirectorClosu
 		return orquestacionnucleoapp.OperationalDirectorClosureRequestV0{}, false, err
 	}
 	trace := codexStackOperationalClosureTraceFromEventsV0(events)
-	candidates, err := source.codexStackOperationalClosureCandidateTasksV0(ctx, request, tasks)
+	candidates, err := source.codexStackOperationalClosureCandidateTasksV0(ctx, request, trace, tasks)
 	if err != nil {
 		return orquestacionnucleoapp.OperationalDirectorClosureRequestV0{}, false, err
 	}
@@ -86,6 +86,7 @@ func (source codexStackOperationalClosureSourceV0) BuildOperationalDirectorClosu
 
 type codexStackOperationalClosureTraceV0 struct {
 	Deliveries      map[string]orquestacoreworkflow.DeliveryRegisteredPayloadV0
+	DeliveryRefs    []string
 	ReviewRequests  map[string]orquestacoreworkflow.ReviewRequestedPayloadV0
 	ReviewResults   map[string]orquestacoreworkflow.ReviewResultV0
 	AcceptedReviews map[string]orquestacoreworkflow.ReviewAcceptedPayloadV0
@@ -94,6 +95,7 @@ type codexStackOperationalClosureTraceV0 struct {
 func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureCandidateTasksV0(
 	ctx context.Context,
 	request orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0,
+	trace codexStackOperationalClosureTraceV0,
 	tasks []orquestacoreworkflow.WorkflowTaskV0,
 ) ([]orquestacoreworkflow.WorkflowTaskV0, error) {
 	scopeAgents := codexStackOperationalClosureSetV0(request.WaitAgentRefs)
@@ -103,7 +105,7 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureC
 	open := make([]orquestacoreworkflow.WorkflowTaskV0, 0, len(tasks))
 	closed := make([]orquestacoreworkflow.WorkflowTaskV0, 0, len(tasks))
 	for _, task := range tasks {
-		closable, err := source.codexStackOperationalClosureTaskIsClosableV0(ctx, request, task)
+		closable, err := source.codexStackOperationalClosureTaskIsClosableV0(ctx, request, task, tasks)
 		if err != nil {
 			return nil, err
 		}
@@ -113,7 +115,7 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureC
 		if !codexStackOperationalClosureChildrenClosedV0(request, task, tasks) {
 			continue
 		}
-		if len(scopeAgents) > 0 && !codexStackOperationalClosureTaskMatchesScopeV0(request.Run, task, tasks, scopeAgents) {
+		if len(scopeAgents) > 0 && !codexStackOperationalClosureTaskMatchesScopeV0(request.Run, trace, task, tasks, scopeAgents) {
 			continue
 		}
 		if codexStackOperationalClosureContainsV0(request.Run.ClosedTasks, task.TaskID) {
@@ -130,6 +132,7 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureC
 
 func codexStackOperationalClosureTaskMatchesScopeV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
+	trace codexStackOperationalClosureTraceV0,
 	task orquestacoreworkflow.WorkflowTaskV0,
 	tasks []orquestacoreworkflow.WorkflowTaskV0,
 	scopeAgents map[string]bool,
@@ -140,11 +143,107 @@ func codexStackOperationalClosureTaskMatchesScopeV0(
 	if scopeAgents[orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(task.TaskID)] {
 		return true
 	}
+	if codexStackOperationalClosureTaskDeliveryMatchesScopeV0(run, trace, task.TaskID, scopeAgents) {
+		return true
+	}
 	tasksByRef := make(map[string]orquestacoreworkflow.WorkflowTaskV0, len(tasks))
 	for _, item := range tasks {
 		tasksByRef[strings.TrimSpace(item.TaskID)] = item
 	}
+	if codexStackOperationalClosureAncestorMatchesScopeV0(run, trace, task, tasksByRef, scopeAgents, map[string]bool{}) {
+		return true
+	}
 	return codexStackOperationalClosureDescendantMatchesScopeV0(run, task, tasksByRef, scopeAgents, map[string]bool{})
+}
+
+func codexStackOperationalClosureAncestorMatchesScopeV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	trace codexStackOperationalClosureTraceV0,
+	task orquestacoreworkflow.WorkflowTaskV0,
+	tasksByRef map[string]orquestacoreworkflow.WorkflowTaskV0,
+	scopeAgents map[string]bool,
+	seen map[string]bool,
+) bool {
+	for _, parentRef := range codexStackOperationalClosureParentTaskRefsV0(run, task, tasksByRef) {
+		if seen[parentRef] {
+			continue
+		}
+		seen[parentRef] = true
+		parent, ok := tasksByRef[parentRef]
+		if !ok {
+			continue
+		}
+		if scopeAgents[orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(parent.TaskID)] ||
+			codexStackOperationalClosureTaskDeliveryMatchesScopeV0(run, trace, parent.TaskID, scopeAgents) {
+			return true
+		}
+		if codexStackOperationalClosureAncestorMatchesScopeV0(run, trace, parent, tasksByRef, scopeAgents, seen) {
+			return true
+		}
+	}
+	return false
+}
+
+func codexStackOperationalClosureParentTaskRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	task orquestacoreworkflow.WorkflowTaskV0,
+	tasksByRef map[string]orquestacoreworkflow.WorkflowTaskV0,
+) []string {
+	taskRef := strings.TrimSpace(task.TaskID)
+	refs := []string{}
+	for _, candidate := range tasksByRef {
+		if !codexStackOperationalClosureContainsV0(codexStackOperationalClosureReplanFollowupRefsV0(run, candidate.TaskID), taskRef) {
+			continue
+		}
+		refs = append(refs, candidate.TaskID)
+	}
+	return codexStackOperationalClosureCompactRefsV0(refs)
+}
+
+func codexStackOperationalClosureReplanFollowupRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	taskRef string,
+) []string {
+	taskRef = strings.TrimSpace(taskRef)
+	refs := []string{}
+	for _, rawReplan := range run.ReplanDecisions {
+		replan, ok := codexStackReviewGateParseReplanProjectionV0(rawReplan)
+		if !ok ||
+			strings.TrimSpace(replan.TaskRef) != taskRef ||
+			replan.AcceptedAction != string(orquestacoreworkflow.ReplanDecisionActionSplitTaskV0) {
+			continue
+		}
+		refs = append(refs, replan.FollowupRefs...)
+	}
+	return codexStackOperationalClosureCompactRefsV0(refs)
+}
+
+func codexStackOperationalClosureTaskDeliveryMatchesScopeV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	trace codexStackOperationalClosureTraceV0,
+	taskRef string,
+	scopeAgents map[string]bool,
+) bool {
+	taskRef = strings.TrimSpace(taskRef)
+	if taskRef == "" || !codexStackOperationalClosureContainsV0(run.DeliveredTasks, taskRef) {
+		return false
+	}
+	for _, deliveryRef := range trace.DeliveryRefs {
+		delivery := trace.Deliveries[deliveryRef]
+		if strings.TrimSpace(delivery.TaskID) != taskRef ||
+			!codexStackOperationalClosureContainsV0(run.Deliveries, delivery.DeliveryRef) {
+			continue
+		}
+		agentRef := strings.TrimSpace(delivery.AgentRef)
+		if agentRef == "" || !scopeAgents[agentRef] {
+			continue
+		}
+		if !codexStackOperationalClosureContainsV0(run.DeliveredAgents, agentRef) {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func codexStackOperationalClosureDescendantMatchesScopeV0(
@@ -174,12 +273,46 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureT
 	ctx context.Context,
 	request orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0,
 	task orquestacoreworkflow.WorkflowTaskV0,
+	tasks []orquestacoreworkflow.WorkflowTaskV0,
 ) (bool, error) {
 	if codexStackOperationalClosureTaskIsOperationalDirectorV0(task) ||
-		codexStackWorkflowTaskLooksAutoprogrammingV0(task) {
+		codexStackWorkflowTaskLooksAutoprogrammingV0(task) ||
+		codexStackOperationalClosureTaskIsOperationalReplanFollowupV0(request.Run, task, tasks) {
 		return true, nil
 	}
 	return source.codexStackOperationalClosureTaskIsOPESDomainWorkV0(ctx, request.Run.RunID, task)
+}
+
+func codexStackOperationalClosureTaskIsOperationalReplanFollowupV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	task orquestacoreworkflow.WorkflowTaskV0,
+	tasks []orquestacoreworkflow.WorkflowTaskV0,
+) bool {
+	taskRef := strings.TrimSpace(task.TaskID)
+	if taskRef == "" {
+		return false
+	}
+	tasksByRef := make(map[string]orquestacoreworkflow.WorkflowTaskV0, len(tasks))
+	for _, item := range tasks {
+		tasksByRef[strings.TrimSpace(item.TaskID)] = item
+	}
+	for _, rawReplan := range run.ReplanDecisions {
+		replan, ok := codexStackReviewGateParseReplanProjectionV0(rawReplan)
+		if !ok ||
+			replan.AcceptedAction != string(orquestacoreworkflow.ReplanDecisionActionSplitTaskV0) ||
+			!codexStackOperationalClosureContainsV0(replan.FollowupRefs, taskRef) {
+			continue
+		}
+		parent, ok := tasksByRef[strings.TrimSpace(replan.TaskRef)]
+		if !ok {
+			continue
+		}
+		if codexStackWorkflowTaskLooksOperationalDirectorV0(parent) ||
+			codexStackWorkflowTaskLooksAutoprogrammingV0(parent) {
+			return true
+		}
+	}
+	return false
 }
 
 func codexStackOperationalClosureTaskIsOperationalDirectorV0(

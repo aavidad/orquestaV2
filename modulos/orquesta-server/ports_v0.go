@@ -35,34 +35,60 @@ type IdleSelfImprovementBlockerPortV0 interface {
 	) (IdleSelfImprovementBlockerResultV0, error)
 }
 
+type IdleSelfImprovementRequestFilterPortV0 interface {
+	FilterIdleSelfImprovementRequestsV0(
+		context.Context,
+		IdleSelfImprovementRequestFilterRequestV0,
+	) (IdleSelfImprovementRequestFilterResultV0, error)
+}
+
 type IdleSelfImprovementBlockerRequestV0 struct {
 	KnownRunRefs     []string
 	KnownRequestRefs []string
 }
 
 type IdleSelfImprovementBlockerResultV0 struct {
-	Blocked      bool
-	Reason       string
-	RunRefs      []string
-	EvidenceRefs []string
-	Message      string
+	Blocked        bool
+	Reason         string
+	RunRefs        []string
+	EvidenceRefs   []string
+	Message        string
+	RecoveryAction string
+	NextActions    []string
 }
 
 type IdleSelfImprovementPlanRequestV0 struct {
-	BaseRequest      IdleSelfImprovementRequestV0
-	MaxRequests      int
-	Trigger          string
-	QueueSize        int
-	FreeCapacity     int
-	Skips            int
-	KnownRunRefs     []string
-	KnownRequestRefs []string
+	BaseRequest           IdleSelfImprovementRequestV0
+	MaxRequests           int
+	Trigger               string
+	QueueSize             int
+	FreeCapacity          int
+	Skips                 int
+	KnownRunRefs          []string
+	KnownRequestRefs      []string
+	RetryableRunRefs      []string
+	RetryableRequestRefs  []string
+	RetryableEvidenceRefs []string
 }
 
 type IdleSelfImprovementPlanResultV0 struct {
 	Requests     []IdleSelfImprovementRequestV0
 	EvidenceRefs []string
 	Collisions   []BacklogScanCollisionV0
+	Message      string
+}
+
+type IdleSelfImprovementRequestFilterRequestV0 struct {
+	BaseRequest  IdleSelfImprovementRequestV0
+	Requests     []IdleSelfImprovementRequestV0
+	Trigger      string
+	EvidenceRefs []string
+	Message      string
+}
+
+type IdleSelfImprovementRequestFilterResultV0 struct {
+	Requests     []IdleSelfImprovementRequestV0
+	EvidenceRefs []string
 	Message      string
 }
 
@@ -83,6 +109,7 @@ type IdleSelfImprovementRequestV0 struct {
 	CompactRules       []string
 	ContextRefs        []string
 	EvidenceRefs       []string
+	BacklogScanRef     string
 	BacklogScanEpoch   string
 	BacklogScanDocs    []BacklogScanDocumentV0
 	ReservationRefs    []string
@@ -91,17 +118,38 @@ type IdleSelfImprovementRequestV0 struct {
 }
 
 type BacklogScanDocumentV0 struct {
-	Path       string `json:"path"`
-	StartLine  int    `json:"start_line,omitempty"`
-	SHA256     string `json:"sha256"`
-	Missing    bool   `json:"missing,omitempty"`
-	SectionRef string `json:"section_ref,omitempty"`
+	Path            string                    `json:"path"`
+	StartLine       int                       `json:"start_line,omitempty"`
+	SHA256          string                    `json:"sha256"`
+	Missing         bool                      `json:"missing,omitempty"`
+	SectionRef      string                    `json:"section_ref,omitempty"`
+	ScanEntries     []BacklogScanEntryV0      `json:"scan_entries,omitempty"`
+	ScanEntryDigest string                    `json:"scan_entry_digest,omitempty"`
+	ScanEntryCount  int                       `json:"scan_entry_count,omitempty"`
+	ScanEntryIssues []BacklogScanEntryIssueV0 `json:"scan_entry_issues,omitempty"`
+}
+
+type BacklogScanEntryV0 struct {
+	Ref       string `json:"ref"`
+	Date      string `json:"date,omitempty"`
+	Ordinal   int    `json:"ordinal,omitempty"`
+	Line      int    `json:"line,omitempty"`
+	BlockHash string `json:"block_hash,omitempty"`
+}
+
+type BacklogScanEntryIssueV0 struct {
+	Code         string `json:"code"`
+	ScanEntryRef string `json:"scan_entry_ref,omitempty"`
+	Line         int    `json:"line,omitempty"`
+	Message      string `json:"message,omitempty"`
 }
 
 type BacklogScanCollisionV0 struct {
 	Code         string   `json:"code"`
 	RequestRef   string   `json:"request_ref,omitempty"`
 	SectionRef   string   `json:"section_ref,omitempty"`
+	TaskID       string   `json:"task_id,omitempty"`
+	InstanceRefs []string `json:"instance_refs,omitempty"`
 	Message      string   `json:"message,omitempty"`
 	EvidenceRefs []string `json:"evidence_refs,omitempty"`
 }

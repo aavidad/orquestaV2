@@ -86,6 +86,9 @@ func loadRunFileAppChangeV0(
 	if snapshot.SchemaVersion != runFileAppChangeSchemaVersionV0 {
 		return nil, fmt.Errorf("orquesta_run_file: app_change_schema_invalid")
 	}
+	if len(snapshot.Records) > runFileSnapshotMaxRecordsV0 {
+		return nil, fmt.Errorf("orquesta_run_file: app_change_records_limit_exceeded")
+	}
 	return copyRunFileAppChangeRecordsV0(snapshot.Records), nil
 }
 

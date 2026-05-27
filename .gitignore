@@ -4,9 +4,14 @@ orquesta.db-wal
 orquesta.db-shm
 orquesta.db-journal
 .orquesta-runtime/
+.orquesta-codex-runtime/
+.orquesta-control/
 .orquesta-runs/
 .orquesta-worktrees/
 .orquesta-local-*
+/orquesta-runtime/
+/orquesta-codex-runtime/
+/orquesta-local-runtime*/
 .agents/
 .codex/
 .orquesta-server/

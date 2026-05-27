@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	orquestarunfile "orquesta/modulos/orquesta-run-file"
 	orquestarunmemory "orquesta/modulos/orquesta-run-memory"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaserver "orquesta/modulos/orquesta-server"
 	orquestastatefile "orquesta/modulos/orquesta-state-file"
 )
@@ -58,6 +60,94 @@ func TestStartupCleanupCandidatesV0IncluyeColaReadyConControlTerminal(t *testing
 	}
 }
 
+func TestStartupDiagnoseV0AsumeRunsReadyActivosSinPurgaV0(t *testing.T) {
+	ctx := context.Background()
+	store := orquestarunmemory.NewRunMemoryStoreV0()
+	_, err := store.UpsertRunSchedulingCandidateV0(ctx, "queue-main", orquestarunqueue.RunSchedulingCandidateV0{
+		RunRef: "run-ready-active-adoptable",
+		AppRef: "app-001",
+		Status: orquestarunqueue.RunStatusReadyV0,
+	})
+	if err != nil {
+		t.Fatalf("UpsertRunSchedulingCandidateV0: %v", err)
+	}
+	check := serverStartupCheckV0{
+		Stack: orquestaappcodexstack.StackV0{
+			Stores: orquestaappcodexstack.StoresV0{
+				RunQueue:   store,
+				RunControl: store,
+			},
+			RunQueue: orquestaappcodexstack.RunQueueConfigV0{QueueRef: "queue-main"},
+		},
+		Mode: startupCleanupModeDiagnoseV0,
+	}
+
+	result, err := check.PrepareStartupV0(ctx, orquestaserver.StartupCheckCommandV0{})
+	if err != nil {
+		t.Fatalf("PrepareStartupV0: %v", err)
+	}
+	if !result.Ready ||
+		result.Status != orquestaserver.StartupCheckStatusReadyV0 ||
+		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-orquesta-startup-active-runs-adopted") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestStartupDiagnoseV0AdoptaProcesosVivosRegistradosV0(t *testing.T) {
+	ctx := context.Background()
+	queueControl := orquestarunmemory.NewRunMemoryStoreV0()
+	stateStore, err := orquestastatefile.NewStoreV0(orquestastatefile.ConfigV0{RootDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("NewStoreV0: %v", err)
+	}
+	runRef := "run-ready-active-adoptable"
+	agentRef := "agent-ref-startup-adoptable"
+	if _, err := queueControl.UpsertRunSchedulingCandidateV0(ctx, "queue-main", orquestarunqueue.RunSchedulingCandidateV0{
+		RunRef: runRef,
+		AppRef: "app-001",
+		Status: orquestarunqueue.RunStatusReadyV0,
+	}); err != nil {
+		t.Fatalf("UpsertRunSchedulingCandidateV0: %v", err)
+	}
+	if err := stateStore.RecordAgentProcessV0(ctx, orquestacionnucleoapp.AgentProcessRegistryRecordV0{
+		RunID:          runRef,
+		AgentRequestID: agentRef,
+		ProcessRef:     "process-ref-startup-adoptable",
+		SessionRef:     "session-ref-startup-adoptable",
+		LaunchRef:      "launch-ref-startup-adoptable",
+		PID:            12345,
+		ReadinessRef:   "readiness-ref-startup-adoptable",
+		EvidenceRefs:   []string{"evidence-ref-startup-adoptable"},
+	}); err != nil {
+		t.Fatalf("RecordAgentProcessV0: %v", err)
+	}
+	adopter := &fakeStartupProcessAdopterV0{}
+	check := serverStartupCheckV0{
+		Stack: orquestaappcodexstack.StackV0{
+			Stores: orquestaappcodexstack.StoresV0{
+				RunQueue:        queueControl,
+				RunControl:      queueControl,
+				ProcessRegistry: stateStore,
+			},
+			RunQueue: orquestaappcodexstack.RunQueueConfigV0{QueueRef: "queue-main"},
+			Codex:    orquestaappcodexstack.CodexRuntimeConfigV0{Runtime: adopter},
+		},
+		Mode: startupCleanupModeDiagnoseV0,
+	}
+
+	result, err := check.PrepareStartupV0(ctx, orquestaserver.StartupCheckCommandV0{})
+	if err != nil {
+		t.Fatalf("PrepareStartupV0: %v", err)
+	}
+	if !result.Ready ||
+		adopter.calls != 1 ||
+		adopter.last.PID != 12345 ||
+		!strings.Contains(result.Message, "agentes_adoptados=1") ||
+		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-orquesta-startup-live-process-adoption") {
+		t.Fatalf("result=%+v adopter=%+v", result, adopter)
+	}
+}
+
 func TestStartupCandidateCanBeCompletedByStartupV0AceptaStopSolicitadoSinACKV0(t *testing.T) {
 	ctx := context.Background()
 	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0(orquestacoreworkflow.OrchestrationRunV0{
@@ -79,6 +169,28 @@ func TestStartupCandidateCanBeCompletedByStartupV0AceptaStopSolicitadoSinACKV0(t
 	if !ready {
 		t.Fatalf("stop solicitado sin ack no debe bloquear purga de arranque")
 	}
+}
+
+type fakeStartupProcessAdopterV0 struct {
+	calls int
+	last  orquestaruntime.ProcessRuntimeSnapshotV0
+}
+
+func (fake *fakeStartupProcessAdopterV0) LaunchV0(
+	context.Context,
+	orquestaruntime.ProcessRuntimeLaunchRequestV0,
+) (orquestaruntime.ProcessRuntimeSnapshotV0, error) {
+	return orquestaruntime.ProcessRuntimeSnapshotV0{}, nil
+}
+
+func (fake *fakeStartupProcessAdopterV0) AdoptProcessV0(
+	_ context.Context,
+	snapshot orquestaruntime.ProcessRuntimeSnapshotV0,
+) (orquestaruntime.ProcessRuntimeSnapshotV0, error) {
+	fake.calls++
+	fake.last = snapshot
+	snapshot.Status = orquestaruntime.ProcessRuntimeRunningV0
+	return snapshot, nil
 }
 
 func TestCompactStartupStateFilesV0ArchivaBasuraActiva(t *testing.T) {
@@ -146,6 +258,12 @@ func TestCompactStartupStateFilesV0ArchivaBasuraActiva(t *testing.T) {
 		RunRef:   "run-ready-completed",
 		AgentRef: "agent-1",
 	})
+	if err := os.WriteFile(filepath.Join(agentDir, "agent_prompt.txt"), []byte("prompt secret_token=abc"), 0o644); err != nil {
+		t.Fatalf("write prompt: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(agentDir, "stderr.log"), []byte("stderr Bearer abc"), 0o644); err != nil {
+		t.Fatalf("write stderr: %v", err)
+	}
 
 	check := serverStartupCheckV0{ServerConfig: orquestaserver.ConfigV0{
 		StateDir:       stateDir,
@@ -175,11 +293,31 @@ func TestCompactStartupStateFilesV0ArchivaBasuraActiva(t *testing.T) {
 	if len(controlAfter.Records) != 1 || controlAfter.Records[0].RunRef != "run-running" {
 		t.Fatalf("control after=%+v", controlAfter)
 	}
-	if _, err := os.Stat(filepath.Join(got.RevisionDir, "runtime_archived", "run-ready-completed")); err != nil {
-		t.Fatalf("runtime not archived: %v", err)
+	if got.RevisionRef == "" || got.RetentionDays == 0 || got.MaxBytes == 0 || got.Artifacts == 0 {
+		t.Fatalf("revision policy missing=%+v", got)
 	}
-	if _, err := os.Stat(filepath.Join(runtimeDir, "run-ready-completed")); !os.IsNotExist(err) {
-		t.Fatalf("runtime source still exists or unexpected err=%v", err)
+	archiveManifest := filepath.Join(got.RevisionDir, "runtime_archived", "run-ready-completed", "manifest.json")
+	if _, err := os.Stat(archiveManifest); err != nil {
+		t.Fatalf("runtime summary not archived: %v", err)
+	}
+	archiveBytes, err := os.ReadFile(archiveManifest)
+	if err != nil {
+		t.Fatalf("read runtime archive manifest: %v", err)
+	}
+	for _, forbidden := range []string{"secret_token", "Bearer", "agent_prompt.txt", "stderr.log"} {
+		if strings.Contains(string(archiveBytes), forbidden) {
+			t.Fatalf("runtime archive leaks %q: %s", forbidden, string(archiveBytes))
+		}
+	}
+	manifestBytes, err := os.ReadFile(filepath.Join(got.RevisionDir, "manifest.json"))
+	if err != nil {
+		t.Fatalf("read revision manifest: %v", err)
+	}
+	if strings.Contains(string(manifestBytes), got.RevisionDir) || strings.Contains(string(manifestBytes), "revision_dir") {
+		t.Fatalf("revision manifest leaks local path: %s", string(manifestBytes))
+	}
+	if _, err := os.Stat(filepath.Join(runtimeDir, "run-ready-completed")); err != nil {
+		t.Fatalf("runtime source no queda preservado: %v", err)
 	}
 }
 
@@ -226,10 +364,21 @@ func TestCompactStartupStateFilesV0ApartaReadyConRunAutoprogrammingObsoleto(t *t
 	if err := stateStore.SaveRunV0(context.Background(), orquestacoreworkflow.OrchestrationRunV0{
 		SchemaVersion: orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
 		RunID:         staleRunRef,
+		ProjectRef:    "project-ref-startup-stale-001",
+		AppSpecRef:    "appspec-ref-startup-stale-001",
 		Status:        orquestacoreworkflow.OrchestrationRunStatusActiveV0,
 		CurrentPhase:  orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
-		StartedAgents: []string{agentRef, ghostAgentRef},
-		StoppedAgents: []string{agentRef},
+		Phases: []orquestacoreworkflow.OrchestrationPhaseV0{{
+			ID:                  orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+			Status:              orquestacoreworkflow.OrchestrationPhaseStatusActiveV0,
+			RecommendedCapacity: orquestacoreworkflow.OrchestrationCapacityMediumV0,
+		}},
+		LastEventID:       "evt-startup-stale-001",
+		LastSequence:      1,
+		Agents:            []string{agentRef, ghostAgentRef},
+		StartedAgents:     []string{agentRef, ghostAgentRef},
+		StoppedAgents:     []string{agentRef},
+		AgentStopRequests: []string{agentRef + "#reason:startup_stale_assessment"},
 		AgentAssessments: []string{orquestacoreworkflow.AgentAssessmentProjectionRefV0(orquestacoreworkflow.AgentWorkAssessedPayloadV0{
 			AssessmentRef:  "assessment-ref-startup-stale-001",
 			PhaseID:        string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
@@ -332,8 +481,8 @@ func TestForceStopStartupStateV0CompactaDespuesDeMarcarTerminal(t *testing.T) {
 	if _, err := store.ReadRunControlStateV0(ctx, orquestaruncontrol.RunControlReadRequestV0{RunRef: runRef}); err == nil {
 		t.Fatalf("store en memoria conserva control terminal tras compactar")
 	}
-	if _, err := os.Stat(filepath.Join(runtimeDir, runRef)); !os.IsNotExist(err) {
-		t.Fatalf("runtime source still exists or unexpected err=%v", err)
+	if _, err := os.Stat(filepath.Join(runtimeDir, runRef)); err != nil {
+		t.Fatalf("runtime source no queda preservado: %v", err)
 	}
 }
 

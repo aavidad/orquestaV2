@@ -222,7 +222,8 @@ func nuevaAppWebLookupV0(catalog NuevaAppI18nCatalogV0, locale, key string) stri
 }
 
 func localeFromNuevaAppRequestV0(r *http.Request, catalog NuevaAppI18nCatalogV0) string {
-	return catalog.normalizeLocale(firstNuevaAppLocaleV0(r.URL.Query().Get("locale"), r.URL.Query().Get("lang"), r.Header.Get("Accept-Language")))
+	values := webPublicQueryValuesV0(r)
+	return catalog.normalizeLocale(firstNuevaAppLocaleV0(values.Get("locale"), values.Get("lang"), r.Header.Get("Accept-Language")))
 }
 
 func firstNuevaAppLocaleV0(values ...string) string {

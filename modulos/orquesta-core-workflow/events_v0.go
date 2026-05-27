@@ -143,6 +143,9 @@ func ValidateOrchestrationEventV0(event OrchestrationEventV0) error {
 	if event.PayloadVersion != OrchestrationEventPayloadVersionV0 {
 		return eventErrorV0(ErrPayloadInvalidoV0, "payload_version")
 	}
+	if err := validateEventPayloadBudgetV0(event); err != nil {
+		return err
+	}
 	if err := validateEventPayloadV0(event); err != nil {
 		return err
 	}

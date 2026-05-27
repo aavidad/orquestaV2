@@ -4,13 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
 	orquestadirectoragentfilesource "orquesta/modulos/orquesta-director-agent-file-source"
+	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 )
 
 const DefaultDirectorAgentDecisionFileNameV0 = "director_decisions.json"
@@ -83,7 +82,7 @@ func directorDecisionDescriptorsFromReceiptsV0(
 			return nil, fmt.Errorf("director_decision_file_descriptors: ack_path requerido")
 		}
 		decisionPath := filepath.Join(filepath.Dir(ackPath), fileName)
-		sidecar, exists, err := directorDecisionSidecarReceiptForFileV0(receipt, decisionPath, request)
+		sidecar, exists, err := directorDecisionSidecarReceiptForFileV0(receipt, decisionPath, fileName, request)
 		if err != nil {
 			return nil, err
 		}
@@ -133,25 +132,20 @@ func directorDecisionReceiptReflectedV0(
 func directorDecisionSidecarReceiptForFileV0(
 	receipt CodexReceiptDescriptorV0,
 	path string,
+	fileName string,
 	request orquestadirectoragentfilesource.DirectorAgentDecisionFileListRequestV0,
 ) (orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0, bool, error) {
-	info, err := os.Stat(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0{}, false, nil
-	}
+	data, err := orquestaruntimecodex.ReadCodexControlFileBytesV0(path, fileName)
 	if err != nil {
+		reason, _ := orquestaruntimecodex.CodexControlFileReadErrorReasonV0(err)
+		if reason == "not_found" {
+			return orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0{}, false, nil
+		}
 		return orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0{}, false,
-			fmt.Errorf("director_decision_file_descriptors: stat decision_file: %s", directorDecisionStatErrorKindV0(err))
+			fmt.Errorf("director_decision_file_descriptors: read decision_file: %s", reason)
 	}
-	if !info.Mode().IsRegular() {
-		return orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0{}, false,
-			fmt.Errorf("director_decision_file_descriptors: decision_file no regular")
-	}
-	hash, err := directorDecisionFileHashV0(path)
-	if err != nil {
-		return orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0{}, false, err
-	}
-	sidecar := directorDecisionSidecarReceiptV0(receipt, request, hash, info.Size())
+	hash := directorDecisionFileHashV0(data)
+	sidecar := directorDecisionSidecarReceiptV0(receipt, request, hash, int64(len(data)))
 	if existing := receipt.DirectorDecisionSidecarReceipt; existing != nil {
 		if err := validateDirectorDecisionExistingSidecarReceiptV0(*existing, sidecar); err != nil {
 			return orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0{}, false, err
@@ -165,13 +159,9 @@ func directorDecisionSidecarReceiptForFileV0(
 	return sidecar, true, nil
 }
 
-func directorDecisionFileHashV0(path string) (string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("director_decision_file_descriptors: hash decision_file: %s", directorDecisionStatErrorKindV0(err))
-	}
+func directorDecisionFileHashV0(data []byte) string {
 	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:]), nil
+	return hex.EncodeToString(sum[:])
 }
 
 func directorDecisionSidecarReceiptV0(
@@ -217,13 +207,6 @@ func shortDirectorDecisionHashV0(hash string) string {
 		return hash
 	}
 	return hash[:12]
-}
-
-func directorDecisionStatErrorKindV0(err error) string {
-	if errors.Is(err, os.ErrPermission) {
-		return "permiso"
-	}
-	return "fallo"
 }
 
 func directorDecisionFileNameV0(fileName string) string {

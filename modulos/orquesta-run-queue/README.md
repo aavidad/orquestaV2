@@ -20,8 +20,9 @@ Orden de ranking v0:
 1. filtra runs con `status` `paused`, `delivered`, `canceled`, `stopped` o
    `closed`;
 2. ordena por `priority_score` descendente;
-3. desempata por `aging_boost` descendente si aplica;
-4. desempata por `updated_at` ascendente con orden estable en empates exactos.
+3. dentro de la misma prioridad aplica pausa/boost de `fairness_group_ref`;
+4. desempata por `aging_boost` descendente si aplica;
+5. desempata por `updated_at` ascendente con orden estable en empates exactos.
 
 Validacion local:
 

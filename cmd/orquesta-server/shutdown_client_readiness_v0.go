@@ -1,0 +1,90 @@
+package main
+
+import (
+	"fmt"
+	"strings"
+
+	orquestaserver "orquesta/modulos/orquesta-server"
+)
+
+func shutdownClientResultCanWaitV0(result serverShutdownClientResultV0) bool {
+	switch strings.TrimSpace(result.Status) {
+	case "waiting_drain", "waiting_checkpoint":
+		return true
+	default:
+		return false
+	}
+}
+
+func shutdownClientResultReadyForSignalV0(result serverShutdownClientResultV0) bool {
+	return result.ShutdownReady ||
+		(result.AgentsInFlight == 0 &&
+			result.CheckpointsPending == 0 &&
+			result.CheckpointAgentsPending == 0 &&
+			result.RunsRequested <= result.RunsStopped)
+}
+
+func shutdownPublicStatusReadyForSignalV0(status orquestaserver.ServerPublicStatusV0) bool {
+	return status.ShutdownReady ||
+		(status.ShutdownInProgress &&
+			status.ShutdownAgentsInFlight == 0 &&
+			status.ShutdownCheckpointsPending == 0 &&
+			status.ShutdownAsyncWorkActive == 0 &&
+			status.ShutdownRunsRequested <= status.ShutdownRunsStopped)
+}
+
+func serverShutdownClientResultFromStatusV0(status orquestaserver.ServerPublicStatusV0) serverShutdownClientResultV0 {
+	return serverShutdownClientResultV0{
+		Estado:             "ok",
+		Status:             strings.TrimSpace(status.ShutdownStatus),
+		ShutdownReady:      status.ShutdownReady,
+		RunsRequested:      status.ShutdownRunsRequested,
+		RunsStopped:        status.ShutdownRunsStopped,
+		AgentsInFlight:     status.ShutdownAgentsInFlight,
+		CheckpointsPending: status.ShutdownCheckpointsPending,
+	}
+}
+
+func shutdownClientNotReadyErrorV0(result serverShutdownClientResultV0) error {
+	return fmt.Errorf(
+		"shutdown_not_ready status=%s runs=%d/%d agents_in_flight=%d checkpoints=%d checkpoint_agents=%d",
+		result.Status,
+		result.RunsStopped,
+		result.RunsRequested,
+		result.AgentsInFlight,
+		result.CheckpointsPending,
+		result.CheckpointAgentsPending,
+	)
+}
+
+func shutdownRequestErrorMayStillNeedSignalV0(err error) bool {
+	if err == nil {
+		return false
+	}
+	switch strings.TrimSpace(err.Error()) {
+	case "shutdown_timeout", "shutdown_cancelled", "shutdown_request_failed":
+		return true
+	default:
+		return false
+	}
+}
+
+func shutdownRequestErrorAllowsSignalV0(
+	err error,
+	status orquestaserver.ServerPublicStatusV0,
+	forced bool,
+) bool {
+	if err == nil {
+		return true
+	}
+	if forced {
+		return true
+	}
+	if strings.TrimSpace(err.Error()) != "shutdown_timeout" {
+		return false
+	}
+	return status.ShutdownInProgress &&
+		status.ShutdownAgentsInFlight == 0 &&
+		status.ShutdownCheckpointsPending == 0 &&
+		status.ShutdownAsyncWorkActive == 0
+}

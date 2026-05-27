@@ -9,6 +9,8 @@ Entradas principales:
 
 - `QueueRef`, `AppRefs`, `QueueLimit`, `OccurredAt`, `CorrelationID`,
   `DrainLimits` y `RankingPolicy` se propagan al tick.
+- `RankingPolicy` transporta tambien ventanas/limites de fairness por grupo; el
+  supervisor no reordena por su cuenta.
 - `MaxTicks` limita el numero de ticks. Si no se informa, vale uno.
 - `MaxRunsPerTick` limita ejecuciones por tick. Si no se informa, vale uno.
 - `MaxExecutions` limita ejecuciones acumuladas. Cero significa sin limite

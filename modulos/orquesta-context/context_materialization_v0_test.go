@@ -185,6 +185,38 @@ func TestSanitizeMaterializedContextBundleV0PermiteRefsDePoliticaOpaca(t *testin
 	}
 }
 
+func TestMaterializeContextBundleV0RechazaRutasLocalesYControlComoContextoProducto(t *testing.T) {
+	root := createContextMaterializationRepoV0(t)
+	for _, content := range []string{
+		"ver .orquesta-smoke-work/run.log",
+		"ver .orquesta-logs/daemon.log",
+		"usar orquesta.env",
+		"leer orquesta.db",
+		"mirar .orquesta-inbox.md",
+	} {
+		writeContextFileV0(t, root, "modulos/orquesta-runtime/AGENTS.md", content)
+		store := newFileContextStoreForTestV0(t, root)
+		bundle := BuildContextBundleV0(validContextBundleRequestV0())
+
+		materialized := MaterializeContextBundleV0(bundle, store)
+
+		requireMaterializationIssueV0(t, materialized.Issues, ErrContextMaterializationDetalleProhibidoV0)
+	}
+}
+
+func TestMaterializeContextBundleV0PermiteRefsOpacasYVariablesDeEstado(t *testing.T) {
+	root := createContextMaterializationRepoV0(t)
+	writeContextFileV0(t, root, "modulos/orquesta-runtime/AGENTS.md", "usar ${ORQUESTA_SERVER_STATE_DIR} y state-dir-ref-demo sin valor local")
+	store := newFileContextStoreForTestV0(t, root)
+	bundle := BuildContextBundleV0(validContextBundleRequestV0())
+
+	materialized := MaterializeContextBundleV0(bundle, store)
+
+	if !materialized.Valid() {
+		t.Fatalf("materialized invalid: %+v", materialized.Issues)
+	}
+}
+
 type fakeContextSanitizerV0 struct{}
 
 func (fakeContextSanitizerV0) SanitizeContextEntryV0(

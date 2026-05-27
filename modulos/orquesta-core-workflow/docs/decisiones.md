@@ -11,6 +11,11 @@ el core no guarda son valores reales de proveedor/runtime/DB/HOME/adaptador,
 secretos efectivos, rutas privadas, prompts/transcripts crudos ni payloads
 masivos.
 
+Actualizacion 2026-05-27: T15 queda cerrada y reconciliada. El core-workflow no
+debe relanzar validadores por la frase historica de servidor `off`; el owner
+real es `orquesta-rails` por frontera/campo, con default de servidor `on`
+acotado y modo `programming` abierto.
+
 ## Plantilla
 
 ```text
@@ -435,7 +440,7 @@ Fecha: 2026-05-04
 Decision: Guardar snapshot comprimido del core actual antes de abrir el nucleo nuevo.
 Motivo: Hay que conservar lo que ya funciona sin introducir un segundo paquete Go duplicado que entre en `go test ./...`.
 Alternativas: Copiar el directorio completo bajo `modulos/`; no hacer copia; usar solo Git.
-Impacto: El estado actual queda preservado en `docs/reinicio_orquesta_v2/snapshots/orquesta-core-actual-2026-05-04.tgz`.
+Impacto: decision historica/stale. El snapshot de reinicio v2 ya no es fuente vigente ni prerequisito local; el sustituto vivo para agentes es `AGENTS.md`, `docs/estado_actual_2026-05-17.md` y `docs/guia_nucleo_orquestacion_2026-05-17.md`.
 Contratos afectados: ninguno.
 Estado: ejecutada
 ```

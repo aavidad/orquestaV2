@@ -1,0 +1,34 @@
+package orquestahttpgateway
+
+import "strings"
+
+const (
+	PublicRouteMutationV0 = "mutation"
+	PublicRouteReadV0     = "read"
+)
+
+func PublicRouteMutabilityV0(route string) string {
+	route = strings.TrimSpace(route)
+	if strings.HasPrefix(route, RouteAppChangeV0) {
+		return PublicRouteMutationV0
+	}
+	switch route {
+	case RouteAutoprogrammingPrepareRunV0,
+		RouteAutoprogrammingSelfImprovementV0,
+		RouteRunControlV0,
+		RouteRunQueuePriorityV0,
+		RouteServerShutdownV0,
+		RouteNuevaAppV0,
+		RouteAppChangePageV0,
+		RouteRunControlPageV0,
+		RouteRunQueuePageV0,
+		RouteAppSpecV0,
+		RouteAppDirectorV0,
+		RouteAppChangeV0,
+		RouteExternalWorkRunV0,
+		RouteDomainWorkV0:
+		return PublicRouteMutationV0
+	default:
+		return PublicRouteReadV0
+	}
+}

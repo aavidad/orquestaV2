@@ -24,9 +24,9 @@ const (
 	MCPDomainWorkHTTPErrorCodeV0             = "domain_work_http_error"
 	MCPDomainWorkHTTPNotConfiguredCodeV0     = "domain_work_no_configurado"
 	MCPDomainWorkHTTPExecutorErrorCodeV0     = "domain_work_error"
-	MCPDomainWorkHTTPInvalidBodyCodeV0       = "request_body_invalido"
-	MCPDomainWorkHTTPUnsupportedPathCodeV0   = "ruta_no_soportada"
-	MCPDomainWorkHTTPUnsupportedMethodCodeV0 = "metodo_no_permitido"
+	MCPDomainWorkHTTPInvalidBodyCodeV0       = MCPPublicErrBodyInvalidV0
+	MCPDomainWorkHTTPUnsupportedPathCodeV0   = MCPPublicErrPathUnsupportedV0
+	MCPDomainWorkHTTPUnsupportedMethodCodeV0 = MCPPublicErrMethodNotAllowedV0
 )
 
 type MCPDomainWorkToolDescriptorV0 struct {

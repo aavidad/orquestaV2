@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	orquestaserver "orquesta/modulos/orquesta-server"
@@ -99,6 +100,42 @@ Criterios:
 	}
 	if result.Requests[1].SuggestedArea != "t07-opes-consumer-smoke" {
 		t.Fatalf("second=%+v", result.Requests[1])
+	}
+}
+
+func TestIdleSelfImprovementBacklogPlannerV0LeeBacklogGrandeSinDegradarAScannerV0(t *testing.T) {
+	projectDir := t.TempDir()
+	docsDir := filepath.Join(projectDir, "docs")
+	if err := os.MkdirAll(docsDir, 0o700); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	content := "# Backlog\n\n" +
+		"## T01 backlog-grande\n\n" +
+		"Objetivo: validar que un backlog grande sigue generando owner ejecutable.\n\n" +
+		"Alcance:\n\n- `cmd/orquesta-server`\n\n" +
+		"Criterios:\n\n- Tests: `go test -count=1 ./cmd/orquesta-server`\n\n" +
+		strings.Repeat("Detalle historico no ejecutable para superar el limite antiguo.\n", 12000)
+	if err := os.WriteFile(filepath.Join(projectDir, idleSelfImprovementBacklogDocRelV0), []byte(content), 0o600); err != nil {
+		t.Fatalf("write backlog: %v", err)
+	}
+
+	result, err := (idleSelfImprovementBacklogPlannerV0{ProjectWorkDir: projectDir}).PlanV0(
+		orquestaserver.IdleSelfImprovementPlanRequestV0{
+			MaxRequests: 2,
+			Trigger:     "capacity_free",
+			BaseRequest: orquestaserver.IdleSelfImprovementRequestV0{
+				RequestRef: "request-ref-base",
+				ProjectRef: "project-ref-orquesta",
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("PlanV0: %v", err)
+	}
+	if len(result.Requests) != 1 ||
+		result.Requests[0].FailureKind != "backlog_autoprogramming" ||
+		result.Requests[0].SuggestedArea != "t01-backlog-grande" {
+		t.Fatalf("result=%+v", result)
 	}
 }
 

@@ -20,16 +20,27 @@ type startAppDirectorDecisionRecoveryV0 struct {
 	ReasonCode  string
 	Field       string
 	Code        string
+	Detail      string
 	DecisionRef string
 	CommandType string
 }
 
-func startAppDirectorDecisionSourceRecoveryV0() startAppDirectorDecisionRecoveryV0 {
-	return startAppDirectorDecisionRecoveryV0{
+func startAppDirectorDecisionSourceRecoveryV0(err error) startAppDirectorDecisionRecoveryV0 {
+	recovery := startAppDirectorDecisionRecoveryV0{
 		ReasonCode: "director_decision_source_error",
 		Field:      "director_decision_source",
 		Code:       "source_error",
 	}
+	if err == nil {
+		return recovery
+	}
+	recovery.Detail = err.Error()
+	var budgetIssue orquestadirectoragentworkflow.DirectorAgentDecisionBatchBudgetIssueV0
+	if errors.As(err, &budgetIssue) {
+		recovery.Field = "director_decision_source." + strings.TrimSpace(budgetIssue.Field)
+		recovery.Code = strings.TrimSpace(budgetIssue.ReasonCode)
+	}
+	return recovery
 }
 
 func startAppDirectorDecisionPolicyRecoveryV0(
@@ -128,6 +139,7 @@ func normalizeStartAppDirectorDecisionRecoveryV0(
 	recovery.ReasonCode = strings.TrimSpace(recovery.ReasonCode)
 	recovery.Field = strings.TrimSpace(recovery.Field)
 	recovery.Code = strings.TrimSpace(recovery.Code)
+	recovery.Detail = strings.TrimSpace(recovery.Detail)
 	recovery.DecisionRef = strings.TrimSpace(recovery.DecisionRef)
 	recovery.CommandType = strings.TrimSpace(recovery.CommandType)
 	if recovery.ReasonCode == "" {
@@ -178,6 +190,9 @@ func recoverySummaryV0(recovery startAppDirectorDecisionRecoveryV0) string {
 	}
 	if recovery.CommandType != "" {
 		parts = append(parts, "command_type="+recovery.CommandType)
+	}
+	if recovery.Detail != "" {
+		parts = append(parts, "detail="+recovery.Detail)
 	}
 	return compactRecoverySummaryV0(strings.Join(parts, "; "))
 }

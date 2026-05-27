@@ -89,6 +89,45 @@ func TestMCPDirectorStatsToolExecutorV0DevuelveStatsDeRunStore(t *testing.T) {
 	assertTransportPayloadSaneadoMCPTestV0(t, result, 12000)
 }
 
+func TestMCPDirectorStatsToolExecutorV0CalculaControlSinExponerProcessRefs(t *testing.T) {
+	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-control-redacted-001")
+	registry := orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
+	if err := registry.RecordAgentProcessV0(context.Background(), orquestacionnucleoapp.AgentProcessRecordV0{
+		RunID:          run.RunID,
+		AgentRequestID: "agent-ref-stats-001",
+		ProcessRef:     "process-ref-mcp-stats-control-redacted-001",
+		SessionRef:     "session-ref-mcp-stats-control-redacted-001",
+		LaunchRef:      "launch-ref-mcp-stats-control-redacted-001",
+		ReadinessRef:   "readiness-ref-mcp-stats-control-redacted-001",
+		EvidenceRefs:   []string{"evidence-ref-mcp-stats-control-redacted-001"},
+	}); err != nil {
+		t.Fatalf("record process: %v", err)
+	}
+
+	result, err := (MCPDirectorStatsToolExecutorV0{
+		RunStore:        orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+		ProcessRegistry: registry,
+	}).Execute(context.Background(), MCPDirectorStatsToolInputV0{
+		RequestID:     "request-ref-mcp-director-stats-control-redacted-001",
+		CorrelationID: "corr-mcp-director-stats-control-redacted-001",
+		RunRef:        run.RunID,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	agent := mcpDirectorStatsAgentForTestV0(t, *result.Stats, "agent-ref-stats-001")
+	if !agent.ControlRegistered || agent.ControlState == "not_loaded" || !agent.CanStop {
+		t.Fatalf("control no calculado sin process refs: %+v", agent)
+	}
+	if agent.Process != nil {
+		t.Fatalf("process refs expuestos sin opt-in: %+v", agent.Process)
+	}
+	if result.DecisionContext != nil && len(result.DecisionContext.Agents) > 0 &&
+		result.DecisionContext.Agents[0].SessionRef != "" {
+		t.Fatalf("decision context expuso session ref sin opt-in: %+v", result.DecisionContext.Agents[0])
+	}
+}
+
 func TestMCPDirectorStatsToolExecutorV0DevuelveIssuesPublicos(t *testing.T) {
 	result, err := (MCPDirectorStatsToolExecutorV0{}).Execute(
 		context.Background(),

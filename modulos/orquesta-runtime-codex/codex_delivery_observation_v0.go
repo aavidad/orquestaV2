@@ -1,7 +1,6 @@
 package orquestaruntimecodex
 
 import (
-	"os"
 	"strings"
 
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
@@ -20,19 +19,21 @@ func ReadCodexDeliveryObservationFileV0(
 	path string,
 	spec orquestaruntime.ExternalAgentLaunchSpecV0,
 ) (CodexDeliveryObservationV0, []orquestaruntime.ExternalAgentConnectorErrorV0) {
-	data, err := os.ReadFile(path)
+	data, err := ReadCodexControlFileBytesV0(path, CodexAgentAckFileNameV0)
 	if err != nil {
-		issue := codexIssueV0(CodexConnectorAckInvalidV0, CodexAgentAckFileNameV0, spec.CorrelationID, "read_failed")
-		if os.IsNotExist(err) {
-			issue.Retryable = true
-			issue.Evidence = []string{"ack_not_ready"}
-		}
 		return CodexDeliveryObservationV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{
-			issue,
+			CodexControlFileReadIssueV0(err, CodexAgentAckFileNameV0, spec.CorrelationID, "ack_not_ready"),
 		}
 	}
 	ack, issues := validateCodexDeliveryAckBytesForSpecV0(data, spec)
 	if len(issues) > 0 {
+		if codexDeliveryObservationIssuesOnlyFailedTestEvidenceV0(issues) {
+			return BuildCodexDeliveryObservationWithReviewRailsV0(
+				ack,
+				spec,
+				[]string{"gate-issue:failed_test_evidence"},
+			)
+		}
 		return CodexDeliveryObservationV0{}, issues
 	}
 	return BuildCodexDeliveryObservationV0(ack, spec)
@@ -64,6 +65,31 @@ func codexDeliveryObservationIssuesOnlyMissingTestReceiptV0(
 	return true
 }
 
+func codexDeliveryObservationIssuesOnlyFailedTestEvidenceV0(
+	issues []orquestaruntime.ExternalAgentConnectorErrorV0,
+) bool {
+	if len(issues) == 0 {
+		return false
+	}
+	for _, issue := range issues {
+		if issue.Code != orquestaruntime.ExternalAgentConnectorErrorCodeV0(CodexConnectorAckArtifactV0) {
+			return false
+		}
+		field := strings.TrimSpace(issue.Field)
+		if field != "tests" && field != "test_receipts" {
+			return false
+		}
+		if !codexAckIssueHasAnyEvidenceV0(issue,
+			"failed_test_evidence",
+			"required_test_receipt_not_passed",
+			"required_test_receipt_exit_code_invalid",
+		) {
+			return false
+		}
+	}
+	return true
+}
+
 func codexAckIssueHasEvidenceV0(
 	issue orquestaruntime.ExternalAgentConnectorErrorV0,
 	want string,
@@ -74,6 +100,38 @@ func codexAckIssueHasEvidenceV0(
 		}
 	}
 	return false
+}
+
+func codexAckIssueHasAnyEvidenceV0(
+	issue orquestaruntime.ExternalAgentConnectorErrorV0,
+	wants ...string,
+) bool {
+	for _, want := range wants {
+		if codexAckIssueHasEvidenceV0(issue, want) {
+			return true
+		}
+	}
+	return false
+}
+
+func BuildCodexDeliveryObservationWithReviewRailsV0(
+	ack CodexAgentAckV0,
+	spec orquestaruntime.ExternalAgentLaunchSpecV0,
+	reviewRails []string,
+) (CodexDeliveryObservationV0, []orquestaruntime.ExternalAgentConnectorErrorV0) {
+	ack = codexAgentAckWithSpecDefaultsV0(ack, spec)
+	issues := ValidateCodexAgentAckForSpecV0(ack, spec)
+	if !codexDeliveryObservationIssuesOnlyFailedTestEvidenceV0(issues) {
+		return CodexDeliveryObservationV0{}, issues
+	}
+	if strings.TrimSpace(ack.Status) != codexAgentAckStatusCompletedV0 {
+		return CodexDeliveryObservationV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{
+			codexIssueV0(CodexConnectorAckInvalidV0, "status", spec.CorrelationID, "status_not_completed"),
+		}
+	}
+	observation := codexDeliveryObservationFromAckV0(ack, spec.AgentPacket)
+	observation.EvidenceRefs = compactCodexDeliveryObservationRefsV0(append(observation.EvidenceRefs, reviewRails...))
+	return observation, nil
 }
 
 func BuildCodexDeliveryObservationV0(

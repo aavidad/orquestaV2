@@ -15,15 +15,16 @@ func BuildDirectorProgressStatsV0(
 ) DirectorProgressStatsV0 {
 	tasks := compactStringsV0(run.Tasks)
 	closed := autonomousStringSetV0(run.ClosedTasks)
-	resolved := directorClosedTaskCountV0(tasks, run)
+	resolved := directorResolvedTaskCountV0(tasks, run)
+	taskProgress := buildDirectorTaskProgressV0(run, observations)
 	progress := DirectorProgressStatsV0{
 		SourceStatus:    progressSourceStatusV0(observations, issues),
-		PercentComplete: directorProgressPercentV0(len(tasks), resolved),
+		PercentComplete: directorProgressPercentWithLiveWorkV0(len(tasks), resolved, taskProgress, run),
 		TasksTotal:      len(tasks),
 		TasksClosed:     len(closed),
 		Issues:          issues,
 	}
-	progress.Tasks = buildDirectorTaskProgressV0(run, observations)
+	progress.Tasks = taskProgress
 	progress.TasksObserved = countObservedDirectorTasksV0(progress.Tasks)
 	return summarizeDirectorProgressV0(run, observations, progress)
 }
@@ -39,6 +40,7 @@ func ApplyDirectorProgressObservationsV0(
 	run := runFromDirectorStatsV0(*stats)
 	stats.Progress = BuildDirectorProgressStatsV0(run, observations, issues)
 	applyDirectorAgentProgressV0(stats, run, observations)
+	applyDirectorRegisteredProcessProgressV0(stats)
 }
 
 func loadDirectorProgressObservationsV0(
@@ -84,24 +86,24 @@ func progressSourceStatusV0(
 	return DirectorProgressSourceLoadedV0
 }
 
-func directorProgressPercentV0(total int, closed int) int {
+func directorProgressPercentV0(total int, resolved int) int {
 	if total <= 0 {
 		return 100
 	}
-	if closed < 0 {
-		closed = 0
+	if resolved < 0 {
+		resolved = 0
 	}
-	if closed > total {
-		closed = total
+	if resolved > total {
+		resolved = total
 	}
-	return (closed * 100) / total
+	return (resolved * 100) / total
 }
 
-func directorClosedTaskCountV0(
+func directorResolvedTaskCountV0(
 	tasks []string,
 	run orquestacoreworkflow.OrchestrationRunV0,
 ) int {
-	resolved := autonomousStringSetV0(run.ClosedTasks)
+	resolved := autonomousStringSetV0(append(append([]string{}, run.DeliveredTasks...), run.ClosedTasks...))
 	count := 0
 	for _, taskRef := range tasks {
 		if resolved[strings.TrimSpace(taskRef)] {

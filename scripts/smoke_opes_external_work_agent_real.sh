@@ -15,6 +15,10 @@ fi
 
 OPES_BASE_URL="${OPES_BASE_URL:-http://127.0.0.1:18082}"
 SMOKE_ID="${SMOKE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
+smoke_root_source="generated"
+if [[ -n "${SMOKE_ROOT:-}" ]]; then
+  smoke_root_source="env:SMOKE_ROOT"
+fi
 SMOKE_ROOT="${SMOKE_ROOT:-/tmp/orquesta-opes-agent-smoke/$SMOKE_ID}"
 SMOKE_OUT_DIR="$SMOKE_ROOT/out"
 STATE_DIR="$SMOKE_ROOT/state"
@@ -33,6 +37,7 @@ trap 'exit 130' INT TERM
 
 main() {
   smoke_require_commands
+  smoke_temp_root_prepare "$SMOKE_ROOT" "$smoke_root_source"
   mkdir -p "$SMOKE_OUT_DIR"
 
   smoke_get_json "$OPES_BASE_URL/api/health" "$SMOKE_OUT_DIR/opes_health.json"

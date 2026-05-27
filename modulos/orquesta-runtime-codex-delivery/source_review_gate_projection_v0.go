@@ -12,7 +12,8 @@ func codexReviewGateTerminalProjectedV0(
 	status orquestacoreworkflow.ReviewResultStatusV0,
 ) bool {
 	reviewResultRef := codexReviewGateReviewResultRefV0(deliveryRef)
-	if codexReviewGateReworkForDeliveryProjectedV0(run.ReworkRequests, deliveryRef) {
+	if status != orquestacoreworkflow.ReviewResultStatusAcceptedV0 &&
+		codexReviewGateReworkForDeliveryProjectedV0(run.ReworkRequests, deliveryRef) {
 		return true
 	}
 	switch status {

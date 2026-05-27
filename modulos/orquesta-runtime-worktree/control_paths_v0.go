@@ -1,18 +1,29 @@
 package orquestaruntimeworktree
 
-import (
-	"path"
-	"strings"
-)
+import "strings"
 
 var worktreeDefaultControlPrefixesV0 = []string{
 	".orquesta-runtime",
 	".orquesta-codex-runtime",
 	".orquesta-local-runtime",
 	".orquesta-control",
+	".orquesta-server",
+	".orquesta-smoke-work",
+	".orquesta-runs",
+	".orquesta-worktrees",
+	".git",
+	".agents",
+	".codex",
+	".codex-docker-home",
+	".codex-sandbox-workspace",
 	"orquesta-runtime",
 	"orquesta-codex-runtime",
 	"orquesta-local-runtime",
+	"logs",
+	"tmp",
+	".cache",
+	"backups",
+	"certs",
 }
 
 var worktreeDefaultControlFileNamesV0 = map[string]bool{
@@ -41,25 +52,13 @@ func normalizeWorktreeIgnorePrefixesV0(values []string) []string {
 }
 
 func worktreeControlPathV0(value string) bool {
-	pathValue, ok := normalizeWorktreeRelPathV0(value, false)
-	if !ok {
-		return true
-	}
-	if worktreeControlPrefixPathV0(pathValue) ||
-		worktreePathIgnoredV0(pathValue, worktreeDefaultControlPrefixesV0) {
-		return true
-	}
-	return worktreeDefaultControlFileNamesV0[path.Base(pathValue)]
+	_, ok := worktreeLocalArtifactPolicyMatchV0(value)
+	return ok
 }
 
 func worktreeControlPrefixPathV0(pathValue string) bool {
 	segment, _, _ := strings.Cut(pathValue, "/")
-	for _, prefix := range worktreeDefaultControlPrefixesV0 {
-		if segment == prefix || strings.HasPrefix(segment, prefix+"-") {
-			return true
-		}
-	}
-	return false
+	return worktreeRuntimeControlDirV0(segment) || worktreeControlPathV0(segment)
 }
 
 func splitWorktreeProductAndControlPathsV0(values []string) ([]string, []string) {

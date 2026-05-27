@@ -258,12 +258,14 @@ Evidencia esperada: `TestWebNuevaAppIntakeSessionV0CreaSesionDesdeIdeaYPideCampo
 `TestApplyWebNuevaAppIntakeAnswerV0NoValidaEnumsDeFactory` y
 `TestWebNuevaAppIntakeSessionV0SnapshotCompactoSinDumpsInternos` validan sesion
 desde idea/nombre, pregunta pendiente, indice de campos, decision capturada,
-`AppSpecRequestV0` parcial listo para validar, snapshot compacto y ausencia de
-validacion de enums de factory, sin DB, runtime, filesystem productivo, LLM real
-ni MCP directo.
+claves i18n de pregunta, `AppSpecRequestV0` parcial listo para validar, handoff
+compacto con refs opacas hacia Director/fallback, snapshot compacto y ausencia
+de validacion de enums de factory, sin DB, runtime, filesystem productivo, LLM
+real ni MCP directo.
 Ultima ejecucion: 2026-05-26; pasa con `GOCACHE=/tmp/orquesta-go-cache`.
 Riesgos: No arranca agente de intake real ni renderiza la vista HTML completa;
-ese tramo debe entrar por API/MCP/handler posterior.
+ese tramo debe entrar por API/MCP/handler posterior. El handoff solo declara
+contrato compacto; la disponibilidad del puerto depende de la composicion.
 ```
 
 ## Validaciones realizadas en este arranque
@@ -299,6 +301,20 @@ en conectores del stack/director.
 ```
 
 ```text
+Caso: WEB-T209 uso redactado y reporte ausente
+Tipo: unit/html contract
+Comando: `go test -count=1 ./modulos/orquesta-web`
+Evidencia esperada: `director-stats` proyecta uso solo si el contrato trae
+`usage_summary`/`agent.usage`; `/ops` no degrada una run viva a cuota `-` si hay
+senales de agente y falta reporte, sino `unknown`/`unavailable` con reason code
+publico. No expone provider, modelo, HOME, OAuth, coste, rutas, prompts ni
+transcripts.
+Ultima ejecucion: 2026-05-27; pasa en bateria transversal
+`go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack ./modulos/orquesta-orchestration-core ./modulos/orquesta-web`.
+Riesgos: La fuente real queda en stack/runtime; web solo valida proyeccion.
+```
+
+```text
 Caso: WEB-UT-018 director stats prepara refresco de agentes
 Tipo: unit/integration
 Comando: `go test -count=1 ./modulos/orquesta-web`
@@ -310,6 +326,18 @@ localizable para polling GET.
 Ultima ejecucion: 2026-05-12; pasa con `go test -count=1 ./modulos/orquesta-web`.
 Riesgos: El progreso real depende de que el bridge MCP reciba un
 `ProgressSource` configurado; la web solo consume el contrato existente.
+```
+
+```text
+Caso: WEB-UT-024 T210 progreso vivo no vuelve a 0%
+Tipo: contract
+Comando: `go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-server ./modulos/orquesta-web ./cmd/orquesta-server`
+Evidencia esperada: la web proyecta `percent_complete` y `progress_source` de
+stats cuando hay entrega, agente vivo o proceso registrado; `tasks_closed` sigue
+en 0 hasta cierre aceptado; `/ops` usa frescura/reason code si falta fuente.
+Ultima ejecucion: reejecutada en reconciliacion T210 2026-05-27.
+Riesgos: T211 mantiene la politica de cache/agregacion visual de `/ops`; esta
+prueba no sustituye ese owner.
 ```
 
 ```text

@@ -76,6 +76,17 @@ func continueOperationalDirectorPlanStateAfterBlockedRequiredTestsEvidenceV0(
 	if err != nil || !complete {
 		return state, false, err
 	}
+	requiredTestsByTask, err := operationalDirectorPlanRequiredTestsByTaskV0(
+		ctx,
+		request.RunRef,
+		ports.DirectorTaskStore,
+		activeStep,
+		requiredTests,
+		matches,
+	)
+	if err != nil {
+		return state, false, err
+	}
 	evidence, err := operationalDirectorPlanRequiredTestEvidenceForMatchesV0(
 		ctx,
 		request.RunRef,
@@ -86,7 +97,7 @@ func continueOperationalDirectorPlanStateAfterBlockedRequiredTestsEvidenceV0(
 	if err != nil {
 		return state, false, err
 	}
-	testStatus := operationalDirectorPlanEvaluateRequiredTestEvidenceV0(request.RunRef, requiredTests, matches, evidence)
+	testStatus := operationalDirectorPlanEvaluateRequiredTestEvidenceV0(request.RunRef, requiredTests, matches, evidence, requiredTestsByTask)
 	if !testStatus.Complete {
 		updatedStep, generated, err := operationalDirectorPlanRunRequiredTestsV0(
 			ctx,
@@ -94,6 +105,7 @@ func continueOperationalDirectorPlanStateAfterBlockedRequiredTestsEvidenceV0(
 			ports,
 			activeStep,
 			requiredTests,
+			requiredTestsByTask,
 			matches,
 		)
 		if err != nil {
@@ -111,7 +123,7 @@ func continueOperationalDirectorPlanStateAfterBlockedRequiredTestsEvidenceV0(
 			if err != nil {
 				return state, false, err
 			}
-			testStatus = operationalDirectorPlanEvaluateRequiredTestEvidenceV0(request.RunRef, requiredTests, matches, evidence)
+			testStatus = operationalDirectorPlanEvaluateRequiredTestEvidenceV0(request.RunRef, requiredTests, matches, evidence, requiredTestsByTask)
 		}
 	}
 	if len(testStatus.FailedRefs) > 0 {

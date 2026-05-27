@@ -2,13 +2,13 @@ package orquestaruntime
 
 import (
 	"strings"
-	"time"
 )
 
 type AgentLauncherRuntimeLaunchOptionsV0 struct {
 	Locale                  string
 	AdapterRef              string
 	RequestedAt             string
+	Clock                   ClockV0
 	ReadinessTimeoutSeconds int
 	MaxStartupSeconds       int
 }
@@ -27,7 +27,7 @@ func LaunchRuntimeAgentToRuntimeLaunchRequestV0(
 		RequestID:      strings.TrimSpace(payload.AgentRequestID),
 		CorrelationID:  strings.TrimSpace(inbound.CorrelationID),
 		IdempotencyKey: strings.TrimSpace(inbound.IdempotencyKey),
-		RequestedAt:    runtimeLaunchRequestedAtV0(options.RequestedAt),
+		RequestedAt:    runtimeLaunchRequestedAtV0(options.RequestedAt, options.Clock),
 		Source: &RuntimeLaunchSourceV0{
 			Module:     RuntimeLaunchSourceModuleCoreV0,
 			AdapterRef: runtimeLaunchAdapterRefV0(options.AdapterRef),
@@ -72,12 +72,12 @@ func agentLauncherTransformPreflightV0(
 	return correlateAgentLauncherIssuesV0(inbound.CorrelationID, issues)
 }
 
-func runtimeLaunchRequestedAtV0(value string) string {
+func runtimeLaunchRequestedAtV0(value string, clock ClockV0) string {
 	value = strings.TrimSpace(value)
 	if value != "" {
 		return value
 	}
-	return time.Now().UTC().Format("2006-01-02T15:04:05Z")
+	return NowRFC3339UTCV0(clock)
 }
 
 func runtimeLaunchLocaleV0(value string) string {

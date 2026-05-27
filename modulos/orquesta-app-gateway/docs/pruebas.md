@@ -17,6 +17,8 @@ git diff --check -- modulos/orquesta-app-gateway
   multiapp; el gateway solo compone cliente in-process.
 - `/api/v0/apps/director` con executor real in-memory comparte RunStore con
   `/director-stats`.
+- `/api/v0/apps/vcs` precede al prefijo `/api/v0/apps/` y delega en AppVCS, no
+  en el catch-all de app-change.
 - `/api/v0/runs/control` y `/api/v0/runs/queue/priority` delegan en executors
   MCP inyectados.
 - `/api/v0/director/stats` mantiene el contrato MCP/API completo de

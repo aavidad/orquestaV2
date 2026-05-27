@@ -15,12 +15,13 @@ func TestRankRunCandidatesFiltersNonExecutableStatusesV0(t *testing.T) {
 		candidateV0("stopped-run", "app-1", RunStatusStoppedV0, 50, now),
 		candidateV0("closed-run", "app-1", RunStatusClosedV0, 50, now),
 		candidateV0("ready-run", "app-2", RunStatusReadyV0, 10, now),
+		candidateV0("running-run", "app-2", RunStatusRunningV0, 9, now),
 	}
 
 	ranked := RankRunCandidatesV0(candidates, DefaultRunQueueRankingPolicyV0(now))
 
 	got := runRefsV0(ranked)
-	want := []string{"ready-run"}
+	want := []string{"ready-run", "running-run"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("expected executable runs only, got %#v", got)
 	}
@@ -87,6 +88,60 @@ func TestRankRunCandidatesDoesNotMutateInputsV0(t *testing.T) {
 	}
 }
 
+func TestRankRunCandidatesFairnessPausaGrupoSoloDentroDePrioridadV0(t *testing.T) {
+	now := time.Date(2026, 5, 26, 9, 0, 0, 0, time.UTC)
+	policy := DefaultRunQueueRankingPolicyV0(now)
+	policy.FairnessWindowSeconds = 600
+	policy.MaxRunsPerFairnessGroup = 1
+	policy.FairnessGroupLastSelectedAt = map[string]time.Time{"group-hot": now.Add(-time.Minute)}
+	policy.FairnessGroupRunCounts = map[string]int{"group-hot": 1}
+	candidates := []RunSchedulingCandidateV0{
+		candidateWithGroupV0("paused-high", "app-1", 20, now, "group-hot"),
+		candidateWithGroupV0("fresh-same-priority", "app-2", 20, now, "group-fresh"),
+		candidateWithGroupV0("lower-priority", "app-3", 10, now, "group-fresh"),
+	}
+
+	ranked := RankRunCandidatesV0(candidates, policy)
+
+	got := runRefsV0(ranked)
+	want := []string{"fresh-same-priority", "paused-high", "lower-priority"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected fairness order: got %#v want %#v", got, want)
+	}
+	if !ranked[1].FairnessPaused ||
+		!reflect.DeepEqual(ranked[1].FairnessReasonCodes, []string{RunQueueFairnessGroupPausedV0}) {
+		t.Fatalf("fairness pause not exposed: %+v", ranked[1])
+	}
+}
+
+func TestRankRunCandidatesFairnessDerivaGrupoYBoostDeterministaV0(t *testing.T) {
+	now := time.Date(2026, 5, 26, 10, 0, 0, 0, time.UTC)
+	policy := DefaultRunQueueRankingPolicyV0(now)
+	policy.FairnessBoostAfterSeconds = 3600
+	policy.FairnessBoostPerWindow = 2
+	policy.FairnessGroupLastSelectedAt = map[string]time.Time{
+		"app:app-starved": now.Add(-2 * time.Hour),
+	}
+	candidates := []RunSchedulingCandidateV0{
+		candidateV0("run-normal", "app-normal", RunStatusReadyV0, 5, now.Add(-10*time.Minute)),
+		candidateV0("run-starved", "app-starved", RunStatusReadyV0, 5, now.Add(-10*time.Minute)),
+	}
+
+	ranked := RankRunCandidatesV0(candidates, policy)
+
+	if got := runRefsV0(ranked); !reflect.DeepEqual(got, []string{"run-starved", "run-normal"}) {
+		t.Fatalf("unexpected boosted order: %#v", got)
+	}
+	if ranked[0].FairnessGroupRef != "app:app-starved" ||
+		ranked[0].FairnessBoost != 2 ||
+		!reflect.DeepEqual(ranked[0].FairnessReasonCodes, []string{
+			RunQueueFairnessGroupMissingV0,
+			RunQueueFairnessGroupBoostedV0,
+		}) {
+		t.Fatalf("boosted fairness not exposed: %+v", ranked[0])
+	}
+}
+
 func candidateV0(runRef string, appRef string, status string, priority int, updatedAt time.Time) RunSchedulingCandidateV0 {
 	return RunSchedulingCandidateV0{
 		RunRef:        runRef,
@@ -95,6 +150,12 @@ func candidateV0(runRef string, appRef string, status string, priority int, upda
 		PriorityScore: priority,
 		UpdatedAt:     updatedAt,
 	}
+}
+
+func candidateWithGroupV0(runRef string, appRef string, priority int, updatedAt time.Time, groupRef string) RunSchedulingCandidateV0 {
+	candidate := candidateV0(runRef, appRef, RunStatusReadyV0, priority, updatedAt)
+	candidate.FairnessGroupRef = groupRef
+	return candidate
 }
 
 func runRefsV0(ranked []RankedRunCandidateV0) []string {

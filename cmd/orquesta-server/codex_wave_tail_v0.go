@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	orquestarails "orquesta/modulos/orquesta-rails"
 )
@@ -18,15 +19,18 @@ const (
 var errCodexWaveTailBadRequestV0 = errors.New("codex_wave_tail_bad_request")
 
 type codexWaveTailReportV0 struct {
-	SchemaVersion string                   `json:"schema_version"`
-	WaveRef       string                   `json:"wave_ref"`
-	LogKind       string                   `json:"log_kind"`
-	Mode          string                   `json:"mode"`
-	Reason        string                   `json:"reason_ref"`
-	LineLimit     int                      `json:"line_limit"`
-	ByteLimit     int64                    `json:"byte_limit"`
-	Agents        []codexWaveTailAgentV0   `json:"agents"`
-	Errors        []codexWavePublicErrorV0 `json:"errors,omitempty"`
+	SchemaVersion   string                   `json:"schema_version"`
+	WaveRef         string                   `json:"wave_ref"`
+	LogKind         string                   `json:"log_kind"`
+	Mode            string                   `json:"mode"`
+	Reason          string                   `json:"reason_ref"`
+	Freshness       string                   `json:"freshness"`
+	RedactionLevel  string                   `json:"redaction_level"`
+	CanonicalSource string                   `json:"canonical_source"`
+	LineLimit       int                      `json:"line_limit"`
+	ByteLimit       int64                    `json:"byte_limit"`
+	Agents          []codexWaveTailAgentV0   `json:"agents"`
+	Errors          []codexWavePublicErrorV0 `json:"errors,omitempty"`
 }
 
 type codexWaveTailAgentV0 struct {
@@ -56,13 +60,16 @@ func codexWaveBuildTailReportV0(
 		return codexWaveTailReportV0{}, err
 	}
 	report := codexWaveTailReportV0{
-		SchemaVersion: codexWaveTailSchemaVersionV0,
-		WaveRef:       summary.WaveRef,
-		LogKind:       strings.TrimSpace(config.LogKind),
-		Mode:          mode,
-		Reason:        config.Reason,
-		LineLimit:     config.Lines,
-		ByteLimit:     config.MaxBytes,
+		SchemaVersion:   codexWaveTailSchemaVersionV0,
+		WaveRef:         summary.WaveRef,
+		LogKind:         strings.TrimSpace(config.LogKind),
+		Mode:            mode,
+		Reason:          config.Reason,
+		Freshness:       commandPublicFreshnessSnapshotV0,
+		RedactionLevel:  "local_diagnostic_redacted",
+		CanonicalSource: commandPublicCanonicalSourceV0,
+		LineLimit:       config.Lines,
+		ByteLimit:       config.MaxBytes,
 	}
 	for _, agent := range summary.Agents {
 		if config.AgentRef != "" && agent.AgentRef != config.AgentRef {
@@ -149,18 +156,22 @@ func codexWaveTailFileLimitedV0(path string, lines int, maxBytes int64) (string,
 	if lines <= 0 {
 		return "", 0, false, errors.Join(errCodexWaveTailBadRequestV0, errors.New("lines_out_of_range"))
 	}
-	info, err := os.Stat(path)
+	info, err := codexWaveTailSafeLogInfoV0(path)
 	if err != nil {
 		return "", 0, false, err
-	}
-	if info.IsDir() {
-		return "", 0, false, errors.New("log_path_is_dir")
 	}
 	file, err := os.Open(path)
 	if err != nil {
 		return "", 0, false, err
 	}
 	defer file.Close()
+	openedInfo, err := file.Stat()
+	if err != nil {
+		return "", 0, false, err
+	}
+	if !os.SameFile(info, openedInfo) {
+		return "", 0, false, errors.New("log_path_changed")
+	}
 	start := int64(0)
 	truncated := info.Size() > maxBytes
 	if truncated {
@@ -178,6 +189,24 @@ func codexWaveTailFileLimitedV0(path string, lines int, maxBytes int64) (string,
 		text = strings.TrimLeft(text, "\r\n")
 	}
 	return strings.Join(codexWaveTailLinesV0(text, lines), "\n"), int64(len(data)), truncated, nil
+}
+
+func codexWaveTailSafeLogInfoV0(path string) (os.FileInfo, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil, errors.New("log_path_symlink")
+	}
+	if !info.Mode().IsRegular() {
+		return nil, errors.New("log_path_not_regular")
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if ok && stat.Nlink > 1 {
+		return nil, errors.New("log_path_hardlink")
+	}
+	return info, nil
 }
 
 func codexWaveTailLinesV0(text string, lines int) []string {

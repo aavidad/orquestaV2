@@ -128,11 +128,14 @@ func textContainsOperationalSensitiveDetailIgnoringEnvV0(value string) bool {
 }
 
 func DetailProhibitedRailsEnabledV0() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(DetailProhibitedRailsEnvV0))) {
-	case "0", "off", "false", "disabled", "disable", "open", "permissive":
+	if SecurityModeProgrammingEnabledV0() {
 		return false
-	default:
+	}
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(DetailProhibitedRailsEnvV0))) {
+	case "1", "on", "true", "enabled", "enable", "strict":
 		return true
+	default:
+		return false
 	}
 }
 

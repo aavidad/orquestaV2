@@ -1,8 +1,12 @@
 package orquestaappcodexstack
 
 import (
+	"os"
+	"path/filepath"
+
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 )
@@ -67,4 +71,26 @@ func reviewReworkPlanHasEvidenceForTestV0(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func writeReviewReworkAckForTestV0(t interface {
+	Helper()
+	Fatalf(string, ...any)
+	TempDir() string
+}, agentRef string, taskRef string, status string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), orquestaruntimecodex.CodexAgentAckFileNameV0)
+	data := []byte(`{
+		"schema_version":"codex_agent_ack.v0",
+		"request_id":"` + agentRef + `",
+		"correlation_id":"corr-review-rework-ack-test",
+		"ack_ref":"delivery-ref-target",
+		"target_module":"orquesta-app-codex-stack",
+		"task_ref":"` + taskRef + `",
+		"status":"` + status + `"
+	}`)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write ack: %v", err)
+	}
+	return path
 }

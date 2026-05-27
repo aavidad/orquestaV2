@@ -1,5 +1,20 @@
 # Decisiones: orquesta-runtime-codex
 
+## RTCODEX-DEC-014
+
+```text
+Fecha: 2026-05-27
+Decision: El runtime Codex solo publica uso por reporte redactado local.
+Motivo: T209 necesitaba dejar de mostrar `not_configured` cuando existe uso
+observado, pero leer logs completos o detalles de proveedor filtraria HOME,
+OAuth, prompts, transcripts, completions, rutas o cuenta real.
+Impacto: el wrapper escribe `codex_usage_accounting.json` con contadores y
+`quota.status` saneados. Si Codex no ofrece cuota fiable, se publica
+`quota.status=unknown` con `quota_observed_unavailable`. El conector no inventa
+limites ni coste y no cambia el contrato del core.
+Estado: aceptada.
+```
+
 ## RTCODEX-DEC-012
 
 ```text
@@ -14,6 +29,20 @@ demasiado acotado y bloqueaba trabajo valido.
 Impacto: se conserva la validacion de rutas relativas limpias, artifacts
 obligatorios y tests requeridos. Las ampliaciones quedan como evidencia durable
 en `notes`; los ficheros de control siguen prohibidos en `ACK.files`.
+Estado: aceptada.
+```
+
+## RTCODEX-DEC-014
+
+```text
+Fecha: 2026-05-27
+Decision: T208 no convierte el reparador Codex en runtime por defecto.
+Motivo: el guardian break-glass puede necesitar un agente externo cuando el
+servidor no arranca, pero ese camino debe seguir siendo opt-in, con packet
+redactado, sandbox/effort declarados, ACK terminal y refs opacas.
+Impacto: `orquesta-runtime-codex` mantiene control files, ACK, shutdown y repair
+packet acotados. Promocion, lease, readiness y resultado estructurado siguen en
+guardian/servidor; el core no recibe Codex, HOME, proveedor ni comandos.
 Estado: aceptada.
 ```
 
@@ -309,5 +338,18 @@ Impacto: el conector acepta el ACK solo si `request_id`, `ack_ref` y
 `target_module` coinciden con el `ExternalAgentLaunchSpecV0`; entonces hidrata
 `correlation_id` y `task_ref` desde el paquete. No permite reclamar otro agente
 ni otro modulo: la observacion resultante queda ligada al descriptor original.
+Estado: aceptada.
+```
+
+## RTCODEX-DEC-014
+
+```text
+Fecha: 2026-05-27
+Decision: Codex no activa T207 por si mismo.
+Motivo: el conector solo traduce ordenes opt-in y receipts; decidir rotacion,
+comparar coste/calidad y lanzar relevo pertenece a runtime/orchestration y a la
+composicion.
+Impacto: el prompt mantiene ACK, handoff/checkpoint y rails de control; no
+introduce default de relevo, stop automatico, HOME, modelo, proveedor ni cuota.
 Estado: aceptada.
 ```

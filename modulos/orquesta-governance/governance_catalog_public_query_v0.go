@@ -3,7 +3,6 @@ package orquestagovernance
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strings"
 )
@@ -31,6 +30,7 @@ type GovernanceCatalogPublicQueryRequestV0 struct {
 	RequestID     string                                `json:"request_id,omitempty"`
 	CorrelationID string                                `json:"correlation_id,omitempty"`
 	Filters       GovernanceCatalogPublicQueryFiltersV0 `json:"filters"`
+	OutputBudget  GovernanceCatalogPublicOutputBudgetV0 `json:"output_budget,omitempty"`
 }
 
 type GovernanceCatalogPublicQueryFiltersV0 struct {
@@ -41,10 +41,17 @@ type GovernanceCatalogPublicQueryFiltersV0 struct {
 }
 
 type GovernanceCatalogPublicQueryResponseV0 struct {
-	RequestID     string                      `json:"request_id,omitempty"`
-	CorrelationID string                      `json:"correlation_id,omitempty"`
-	Effective     []GovernanceCatalogEntryV0  `json:"effective"`
-	Counters      GovernanceCatalogCountersV0 `json:"counters"`
+	SchemaVersion   string                                   `json:"schema_version"`
+	RequestID       string                                   `json:"request_id,omitempty"`
+	CorrelationID   string                                   `json:"correlation_id,omitempty"`
+	CatalogVersion  string                                   `json:"catalog_version"`
+	CurrentBlock    string                                   `json:"current_block"`
+	Freshness       GovernanceCatalogPublicFreshnessV0       `json:"freshness"`
+	SourceRefs      []string                                 `json:"source_refs,omitempty"`
+	Effective       []GovernanceCatalogEntryV0               `json:"effective"`
+	Counters        GovernanceCatalogCountersV0              `json:"counters"`
+	InactiveSummary GovernanceCatalogPublicInactiveSummaryV0 `json:"inactive_summary"`
+	OutputBudget    GovernanceCatalogPublicOutputBudgetV0    `json:"output_budget"`
 }
 
 type GovernanceCatalogPublicErrorResponseV0 struct {
@@ -60,8 +67,12 @@ type GovernanceCatalogPublicErrorV0 struct {
 
 func QueryGovernanceCatalogPublicV0(provider GovernanceCatalogProviderV0, request GovernanceCatalogPublicQueryRequestV0) (GovernanceCatalogPublicQueryResponseV0, error) {
 	response := GovernanceCatalogPublicQueryResponseV0{
-		RequestID:     strings.TrimSpace(request.RequestID),
-		CorrelationID: strings.TrimSpace(request.CorrelationID),
+		SchemaVersion:  GovernanceCatalogPublicSchemaV0,
+		RequestID:      strings.TrimSpace(request.RequestID),
+		CorrelationID:  strings.TrimSpace(request.CorrelationID),
+		CatalogVersion: GovernanceCatalogVersionV0,
+		CurrentBlock:   GovernanceCatalogCurrentBlockEffectiveV0,
+		OutputBudget:   NormalizeGovernanceCatalogPublicOutputBudgetV0(request.OutputBudget),
 	}
 
 	if provider == nil {
@@ -73,43 +84,47 @@ func QueryGovernanceCatalogPublicV0(provider GovernanceCatalogProviderV0, reques
 		return response, GovernanceCatalogErrorV0("governance_catalog_source_unavailable")
 	}
 
-	result, err := QueryEffectiveGovernanceCatalogV0(catalog, GovernanceCatalogQueryV0{
+	if version := strings.TrimSpace(catalog.CatalogVersion); version != "" {
+		response.CatalogVersion = version
+	}
+	query := GovernanceCatalogQueryV0{
 		Module: strings.TrimSpace(request.Filters.Module),
 		Role:   strings.TrimSpace(request.Filters.Role),
 		Phase:  strings.TrimSpace(request.Filters.Phase),
 		Tags:   governanceCleanTagsV0(request.Filters.Tags),
-	})
+	}
+	result, err := QueryEffectiveGovernanceCatalogV0(catalog, query)
 	if err != nil {
 		return response, err
 	}
 
-	response.Effective = result.Effective
+	response.Freshness = governanceCatalogPublicFreshnessV0(catalog)
+	response.SourceRefs = response.Freshness.SourceRefs
+	response.InactiveSummary = governanceCatalogPublicInactiveSummaryV0(catalog, query)
+	response.Effective, response.OutputBudget = limitGovernanceCatalogPublicEffectiveV0(result.Effective, response.OutputBudget)
 	response.Counters = result.Counters
 	return response, nil
 }
 
 func GovernanceCatalogQueryHTTPHandlerV0(provider GovernanceCatalogProviderV0) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if handleGovernancePublicHTTPOptionsV0(w, r, http.MethodPost) {
+			return
+		}
 		if r.Method != http.MethodPost {
+			setGovernancePublicHTTPAllowV0(w, http.MethodPost)
 			writeGovernanceCatalogPublicErrorV0(w, http.StatusMethodNotAllowed, GovernanceCatalogPublicErrorResponseV0{
-				Errors: []GovernanceCatalogPublicErrorV0{{Code: GovernanceCatalogMethodNotAllowedErrorCodeV0}},
+				CorrelationID: governancePublicCorrelationIDFromHeaderV0(r),
+				Errors:        []GovernanceCatalogPublicErrorV0{{Code: GovernanceCatalogMethodNotAllowedErrorCodeV0}},
 			})
 			return
 		}
 
 		var request GovernanceCatalogPublicQueryRequestV0
-		decoder := json.NewDecoder(r.Body)
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&request); err != nil {
-			writeGovernanceCatalogPublicErrorV0(w, http.StatusBadRequest, GovernanceCatalogPublicErrorResponseV0{
-				Errors: []GovernanceCatalogPublicErrorV0{{Code: GovernanceCatalogInvalidRequestErrorCodeV0}},
-			})
-			return
-		}
-		if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		if code := decodeGovernancePublicHTTPJSONV0(w, r, &request); code != "" {
 			writeGovernanceCatalogPublicErrorV0(w, http.StatusBadRequest, GovernanceCatalogPublicErrorResponseV0{
 				RequestID:     strings.TrimSpace(request.RequestID),
-				CorrelationID: strings.TrimSpace(request.CorrelationID),
+				CorrelationID: firstNonEmptyGovernancePublicV0(request.CorrelationID, governancePublicCorrelationIDFromHeaderV0(r)),
 				Errors:        []GovernanceCatalogPublicErrorV0{{Code: GovernanceCatalogInvalidRequestErrorCodeV0}},
 			})
 			return
@@ -130,6 +145,9 @@ func GovernanceCatalogQueryHTTPHandlerV0(provider GovernanceCatalogProviderV0) h
 		}
 
 		w.Header().Set("Content-Type", "application/json")
+		if response.CorrelationID != "" {
+			w.Header().Set("X-Correlation-ID", response.CorrelationID)
+		}
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(response)
 	})
@@ -137,6 +155,9 @@ func GovernanceCatalogQueryHTTPHandlerV0(provider GovernanceCatalogProviderV0) h
 
 func writeGovernanceCatalogPublicErrorV0(w http.ResponseWriter, statusCode int, response GovernanceCatalogPublicErrorResponseV0) {
 	w.Header().Set("Content-Type", "application/json")
+	if response.CorrelationID != "" {
+		w.Header().Set("X-Correlation-ID", response.CorrelationID)
+	}
 	w.WriteHeader(statusCode)
 	_ = json.NewEncoder(w).Encode(response)
 }

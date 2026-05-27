@@ -11,9 +11,9 @@ const (
 	MCPAutoprogrammingPrepareRunHTTPErrorCodeV0             = "autoprogramming_prepare_run_http_error"
 	MCPAutoprogrammingPrepareRunHTTPNotConfiguredCodeV0     = "autoprogramming_prepare_run_no_configurado"
 	MCPAutoprogrammingPrepareRunHTTPExecutorErrorCodeV0     = "autoprogramming_prepare_run_executor_error"
-	MCPAutoprogrammingPrepareRunHTTPInvalidBodyCodeV0       = "request_body_invalido"
-	MCPAutoprogrammingPrepareRunHTTPUnsupportedPathCodeV0   = "ruta_no_soportada"
-	MCPAutoprogrammingPrepareRunHTTPUnsupportedMethodCodeV0 = "metodo_no_permitido"
+	MCPAutoprogrammingPrepareRunHTTPInvalidBodyCodeV0       = MCPPublicErrBodyInvalidV0
+	MCPAutoprogrammingPrepareRunHTTPUnsupportedPathCodeV0   = MCPPublicErrPathUnsupportedV0
+	MCPAutoprogrammingPrepareRunHTTPUnsupportedMethodCodeV0 = MCPPublicErrMethodNotAllowedV0
 )
 
 func NewMCPAutoprogrammingPrepareRunHTTPHandlerV0(
@@ -36,8 +36,11 @@ func (handler mcpAutoprogrammingPrepareRunHTTPHandlerV0) ServeHTTP(w http.Respon
 		))
 		return
 	}
+	if handleMCPPublicHTTPOptionsV0(w, r, http.MethodPost) {
+		return
+	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
+		setMCPPublicHTTPAllowV0(w, http.MethodPost)
 		writeMCPAutoprogrammingPrepareRunHTTPV0(w, http.StatusMethodNotAllowed, newMCPAutoprogrammingPrepareRunHTTPErrorV0(
 			r,
 			MCPAutoprogrammingPrepareRunToolInputV0{},
@@ -56,13 +59,22 @@ func (handler mcpAutoprogrammingPrepareRunHTTPHandlerV0) ServeHTTP(w http.Respon
 		return
 	}
 	var input MCPAutoprogrammingPrepareRunToolInputV0
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+	if code := decodeMCPPublicHTTPJSONProfileV0(w, r, &input, mcpPublicHTTPJSONProfileAutoprogrammingV0); code != "" {
 		writeMCPAutoprogrammingPrepareRunHTTPV0(w, http.StatusBadRequest, newMCPAutoprogrammingPrepareRunHTTPErrorV0(
 			r,
 			input,
 			"body",
-			MCPAutoprogrammingPrepareRunHTTPInvalidBodyCodeV0,
+			code,
 		))
+		return
+	}
+	input, issues := normalizeMCPAutoprogrammingPrepareRunIdentityV0(
+		input,
+		r.Header.Get(MCPPublicCorrelationHeaderV0),
+		MCPPublicMutationHeaderIdempotencyKeyV0(r.Header.Get),
+	)
+	if len(issues) > 0 {
+		writeMCPAutoprogrammingPrepareRunHTTPV0(w, http.StatusBadRequest, NewMCPAutoprogrammingPrepareRunIssuesResultV0(input, issues))
 		return
 	}
 	result, err := handler.executor.Execute(r.Context(), input)
@@ -77,7 +89,7 @@ func (handler mcpAutoprogrammingPrepareRunHTTPHandlerV0) ServeHTTP(w http.Respon
 			"executor",
 			publicMCPExecutorErrorMessageFromErrorV0(MCPAutoprogrammingPrepareRunHTTPExecutorErrorCodeV0, err),
 		)
-		payload.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), payload.CorrelationID)
+		payload.CorrelationID = firstNonEmptyMCPV0(r.Header.Get(MCPPublicCorrelationHeaderV0), payload.CorrelationID)
 		writeMCPAutoprogrammingPrepareRunHTTPV0(w, http.StatusInternalServerError, payload)
 		return
 	}
@@ -95,7 +107,7 @@ func newMCPAutoprogrammingPrepareRunHTTPErrorV0(
 	code string,
 ) MCPAutoprogrammingPrepareRunToolResultV0 {
 	result := NewMCPAutoprogrammingPrepareRunErrorResultV0(input, MCPAutoprogrammingPrepareRunHTTPErrorCodeV0, field, code)
-	result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), input.CorrelationID, input.RequestID)
+	result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get(MCPPublicCorrelationHeaderV0), input.CorrelationID, input.RequestID)
 	if len(result.Errores) > 0 {
 		result.Errores[0].Code = strings.TrimSpace(code)
 		result.Errores[0].Message = strings.TrimSpace(code)
@@ -110,7 +122,7 @@ func writeMCPAutoprogrammingPrepareRunHTTPV0(
 ) {
 	w.Header().Set("Content-Type", "application/json")
 	if result.CorrelationID != "" {
-		w.Header().Set("X-Correlation-ID", result.CorrelationID)
+		w.Header().Set(MCPPublicCorrelationHeaderV0, result.CorrelationID)
 	}
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(result)

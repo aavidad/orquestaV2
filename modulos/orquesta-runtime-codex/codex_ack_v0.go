@@ -3,7 +3,6 @@ package orquestaruntimecodex
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 )
 
 const CodexAgentAckSchemaVersionV0 = "codex_agent_ack.v0"
@@ -68,7 +67,7 @@ func evidenceObjectSummaryV0(item map[string]any) string {
 }
 
 func ReadCodexAgentAckFileV0(path string) (CodexAgentAckV0, error) {
-	data, err := os.ReadFile(path)
+	data, err := ReadCodexControlFileBytesV0(path, CodexAgentAckFileNameV0)
 	if err != nil {
 		return CodexAgentAckV0{}, err
 	}

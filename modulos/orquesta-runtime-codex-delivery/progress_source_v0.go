@@ -2,18 +2,12 @@ package orquestaruntimecodexdelivery
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
-	orquestaagentprocessregistry "orquesta/modulos/orquesta-agent-process-registry"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
-	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 )
 
 type CodexProcessSnapshotSourcePortV0 interface {
@@ -74,24 +68,17 @@ func (source CodexProgressObservationSourceV0) validateV0() error {
 	}
 }
 
-func codexReceiptDescriptorRequestFromProgressV0(
-	request orquestacionnucleoapp.AgentProgressObservationRequestV0,
-) CodexReceiptDescriptorRequestV0 {
-	return CodexReceiptDescriptorRequestV0{
-		RunID:          strings.TrimSpace(request.Run.RunID),
-		StartedAgents:  compactCodexDeliveryRefsV0(request.Run.StartedAgents),
-		Deliveries:     compactCodexDeliveryRefsV0(request.Run.Deliveries),
-		PhaseArtifacts: compactCodexDeliveryRefsV0(request.Run.PhaseArtifacts),
-		CorrelationID:  strings.TrimSpace(request.CorrelationID),
-		EvidenceRefs:   compactCodexDeliveryRefsV0(request.EvidenceRefs),
-	}
-}
-
 func (source CodexProgressObservationSourceV0) observationFromDescriptorV0(
 	ctx context.Context,
 	request orquestacionnucleoapp.AgentProgressObservationRequestV0,
 	descriptor CodexReceiptDescriptorV0,
 ) (orquestacionnucleoapp.AgentProgressObservationV0, bool, error) {
+	if observation, ready, err := codexProgressFailedAckObservationV0(descriptor); err != nil || ready {
+		if err != nil || codexProgressReportAlreadyHandledV0(request.Run, observation.Report) {
+			return orquestacionnucleoapp.AgentProgressObservationV0{}, false, err
+		}
+		return codexProgressObservationForCurrentRunPhaseV0(request, observation), true, nil
+	}
 	ackReady, err := codexProgressAckReadyV0(descriptor)
 	if err != nil || ackReady {
 		return orquestacionnucleoapp.AgentProgressObservationV0{}, false, err
@@ -118,7 +105,7 @@ func (source CodexProgressObservationSourceV0) observationFromDescriptorV0(
 		Signature:            codexProgressSignatureV0(descriptor),
 		ActionSignature:      codexProgressActionSignatureV0(descriptor),
 		EvidenceRefs:         codexProgressEvidenceRefsV0(record),
-		ObservedAt:           time.Now().UTC(),
+		ObservedAt:           orquestaruntime.NowUTCV0(nil),
 		MinUnchangedInterval: source.MinUnchangedSampleInterval,
 	})
 	if err != nil {
@@ -166,147 +153,8 @@ func (source CodexProgressObservationSourceV0) observationFromDescriptorV0(
 			return orquestacionnucleoapp.AgentProgressObservationV0{}, false, err
 		}
 	}
-	return codexProgressObservationV0(descriptor, report, decisionRequired), true, nil
-}
-
-func codexProgressAckReadyV0(
-	descriptor CodexReceiptDescriptorV0,
-) (bool, error) {
-	_, ready, err := (CodexDeliveryObservationSourceV0{}).observationFromDescriptorV0(context.Background(), descriptor)
-	return ready, err
-}
-
-func (source CodexProgressObservationSourceV0) snapshotV0(
-	record orquestacionnucleoapp.AgentProcessRegistryRecordV0,
-) (orquestaruntime.ProcessRuntimeSnapshotV0, error) {
-	if source.SnapshotSource != nil {
-		snapshot, err := source.SnapshotSource.SnapshotV0(record.ProcessRef)
-		if err == nil {
-			return snapshot, nil
-		}
-		if codexProgressSnapshotMissingV0(err) {
-			return stoppedCodexProgressSnapshotV0(record), nil
-		}
-		return orquestaruntime.ProcessRuntimeSnapshotV0{}, err
-	}
-	return orquestaruntime.ProcessRuntimeSnapshotV0{
-		SchemaVersion: orquestaruntime.ProcessRuntimeConnectorVersionV0,
-		ProcessRef:    strings.TrimSpace(record.ProcessRef),
-		SessionRef:    strings.TrimSpace(record.SessionRef),
-		LaunchRef:     strings.TrimSpace(record.LaunchRef),
-		Status:        orquestaruntime.ProcessRuntimeRunningV0,
-	}, nil
-}
-
-func codexProgressSnapshotMissingV0(err error) bool {
-	var runtimeErr orquestaruntime.ProcessRuntimeErrorV0
-	return errors.As(err, &runtimeErr) &&
-		runtimeErr.Code == orquestaruntime.ProcessRuntimeNoEncontradoV0
-}
-
-func codexProgressAgentProcessMissingV0(err error) bool {
-	var registryErr orquestaagentprocessregistry.ErrorV0
-	if errors.As(err, &registryErr) {
-		return registryErr.Code == orquestaagentprocessregistry.ErrAgentProcessRegistryNotFoundV0
-	}
-	var coreErr orquestacionnucleoapp.ErrorV0
-	if !errors.As(err, &coreErr) {
-		return false
-	}
-	return coreErr.Code == orquestacionnucleoapp.ErrNucleoOrquestacionStoreV0 &&
-		strings.TrimSpace(coreErr.Field) == "agent_process_registry" &&
-		strings.Contains(strings.ToLower(coreErr.Message), "no encontrado")
-}
-
-func stoppedCodexProgressSnapshotV0(
-	record orquestacionnucleoapp.AgentProcessRegistryRecordV0,
-) orquestaruntime.ProcessRuntimeSnapshotV0 {
-	return orquestaruntime.ProcessRuntimeSnapshotV0{
-		SchemaVersion: orquestaruntime.ProcessRuntimeConnectorVersionV0,
-		ProcessRef:    strings.TrimSpace(record.ProcessRef),
-		SessionRef:    strings.TrimSpace(record.SessionRef),
-		LaunchRef:     strings.TrimSpace(record.LaunchRef),
-		Status:        orquestaruntime.ProcessRuntimeStoppedV0,
-	}
-}
-
-func codexProgressObservationV0(
-	descriptor CodexReceiptDescriptorV0,
-	report orquestaruntime.AgentProgressReportV0,
-	decisionRequired bool,
-) orquestacionnucleoapp.AgentProgressObservationV0 {
-	task := descriptor.Spec.AgentPacket.Task
-	return orquestacionnucleoapp.AgentProgressObservationV0{
-		CandidateRef:     "progress-candidate-ref-" + report.ReportID,
-		Report:           report,
-		PhaseID:          descriptor.Spec.AgentPacket.Phase,
-		TaskRef:          strings.TrimSpace(task.TaskRef),
-		DecisionRequired: decisionRequired,
-		EvidenceRefs:     compactCodexDeliveryRefsV0(report.EvidenceRefs),
-	}
-}
-
-func codexProgressReportDecisionRequiredV0(report orquestaruntime.AgentProgressReportV0) bool {
-	if report.DecisionRequired {
-		return true
-	}
-	return report.Status == orquestaruntime.AgentLoopDetectedV0 ||
-		report.Status == orquestaruntime.AgentStoppedV0
-}
-
-func codexProgressReportWithRepeatedActionEvidenceV0(
-	report orquestaruntime.AgentProgressReportV0,
-) orquestaruntime.AgentProgressReportV0 {
-	if report.RepeatedActionCount <= 0 {
-		return report
-	}
-	report.EvidenceRefs = compactCodexDeliveryRefsV0(append(
-		report.EvidenceRefs,
-		"evidence-ref-repeated-action",
-	))
-	return report
-}
-
-func codexProgressSignatureV0(
-	descriptor CodexReceiptDescriptorV0,
-) string {
-	dir := filepath.Dir(strings.TrimSpace(descriptor.AckPath))
-	files := []string{
-		orquestaruntimecodex.CodexStdoutFileNameV0,
-		orquestaruntimecodex.CodexStderrFileNameV0,
-		orquestaruntimecodex.CodexLastMessageFileNameV0,
-		orquestaruntimecodex.CodexAgentAckFileNameV0,
-	}
-	var builder strings.Builder
-	for _, name := range files {
-		path := filepath.Join(dir, name)
-		info, err := os.Stat(path)
-		if err != nil {
-			builder.WriteString(name)
-			builder.WriteString(":missing;")
-			continue
-		}
-		builder.WriteString(name)
-		builder.WriteString(":")
-		builder.WriteString(strconv.FormatInt(info.Size(), 10))
-		builder.WriteString(":")
-		builder.WriteString(strconv.FormatInt(info.ModTime().UnixNano(), 10))
-		builder.WriteString(";")
-	}
-	return builder.String()
-}
-
-func codexProgressEvidenceRefsV0(
-	record orquestacionnucleoapp.AgentProcessRegistryRecordV0,
-) []string {
-	return compactCodexDeliveryRefsV0([]string{
-		"progress-evidence-ref-" + strings.TrimSpace(record.AgentRequestID),
-		strings.TrimSpace(record.SessionRef),
-	})
-}
-
-func codexProgressReportIDV0(
-	current orquestaruntime.AgentProgressHeartbeatV0,
-) string {
-	return fmt.Sprintf("agent-progress-report-ref-%s-%06d", current.AgentRequestID, current.TickCounter)
+	return codexProgressObservationForCurrentRunPhaseV0(
+		request,
+		codexProgressObservationV0(descriptor, report, decisionRequired),
+	), true, nil
 }

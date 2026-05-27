@@ -44,6 +44,11 @@ Invariantes:
 - `prompt_hints` es configuracion del conector para requisitos de producto que no deben entrar en el core.
 - `path_env` solo existe dentro del wrapper opt-in para runtimes que lo necesitan; no se serializa al request publico.
 - `codex_stdout.log` y `codex_stderr.log` son evidencia operacional local para diagnosticar fallos de conector.
+- Al terminar `codex exec`, el wrapper genera `codex_usage_accounting.json` solo
+  con contadores y cuota observados de forma redactada. El reporte no contiene
+  provider, modelo, cuenta, HOME, paths, prompts, transcripts, completions,
+  coste ni tokens secretos; si solo hay uso y no cuota real, publica
+  `quota.status=unknown`.
 
 ## CodexShutdownCheckpointAckV0
 

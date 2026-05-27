@@ -424,9 +424,9 @@ func TestCodexSupervisorRuntimeStateFromLoopV0MapeaEstadosDelNucleoV0(t *testing
 			want:   CodexSupervisorRuntimeDoneV0,
 		},
 		{
-			name:   "necesita_director_se_puede_reempujar",
+			name:   "necesita_director_sigue_vivo",
 			status: orquestacionnucleoapp.ProgressiveLoopStatusNeedsDirectorV0,
-			want:   CodexSupervisorRuntimeStoppedV0,
+			want:   CodexSupervisorRuntimeRunningV0,
 		},
 		{
 			name:   "error_falla",
@@ -438,6 +438,12 @@ func TestCodexSupervisorRuntimeStateFromLoopV0MapeaEstadosDelNucleoV0(t *testing
 			status:    orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0,
 			runStatus: orquestacoreworkflow.OrchestrationRunStatusClosedV0,
 			want:      CodexSupervisorRuntimeDoneV0,
+		},
+		{
+			name:      "run_terminal_por_control_no_cierra_run_activa",
+			status:    orquestacionnucleoapp.ProgressiveLoopStatusRunTerminalV0,
+			runStatus: orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+			want:      CodexSupervisorRuntimeStoppedV0,
 		},
 	}
 	for _, tt := range tests {

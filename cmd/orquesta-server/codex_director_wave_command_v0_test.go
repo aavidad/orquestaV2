@@ -50,10 +50,7 @@ func TestCodexLaunchDirectorWaveCommandV0DryRunConstruyePlanYPromptsPorAgente(t 
 		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 
-	var summary codexDirectorWaveSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
-	}
+	summary := mustReadCodexDirectorWaveCommandSummaryForTest(t, stdout.Bytes(), filepath.Join(runtimeDir, "director-wave-test"))
 	if summary.SchemaVersion != codexDirectorWaveSummarySchemaVersionV0 {
 		t.Fatalf("schema=%q", summary.SchemaVersion)
 	}
@@ -129,10 +126,7 @@ func TestCodexLaunchDirectorWaveCommandV0RechazaRequestSinTests(t *testing.T) {
 	if exitCode != 1 {
 		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
-	var summary codexDirectorWaveSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("json invalido: %v", err)
-	}
+	summary := mustReadCodexDirectorWaveCommandSummaryForTest(t, stdout.Bytes(), filepath.Join(root, "runtime", "director-wave-blocked"))
 	if !codexDirectorHasIssueV0(summary.Issues, "required_tests_missing") {
 		t.Fatalf("missing required_tests issue: %+v", summary.Issues)
 	}
@@ -169,10 +163,7 @@ func TestCodexLaunchDirectorWaveCommandV0ModoMinimoRellenaRails(t *testing.T) {
 		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 
-	var summary codexDirectorWaveSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
-	}
+	summary := mustReadCodexDirectorWaveCommandSummaryForTest(t, stdout.Bytes(), filepath.Join(runtimeDir, "director-wave-minimal"))
 	if len(summary.Issues) > 0 ||
 		summary.Request.BranchRef != "branch-director-wave-minimal" ||
 		len(summary.Plan.WriteSet) != 1 ||
@@ -227,10 +218,7 @@ func TestCodexLaunchDirectorWaveCommandV0RechazaBranchRefComoRuta(t *testing.T) 
 	if exitCode != 1 {
 		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
-	var summary codexDirectorWaveSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
-	}
+	summary := mustReadCodexDirectorWaveCommandSummaryForTest(t, stdout.Bytes(), runtimeDir)
 	if !codexDirectorHasIssueFieldV0(summary.Issues, "branch_ref") ||
 		len(summary.Launch.Agents) != 0 {
 		t.Fatalf("branch_ref no fue bloqueada antes de lanzar: %+v", summary)
@@ -306,10 +294,7 @@ func TestCodexLaunchDirectorWaveCommandV0RecursiveDryRunMaterializaHijosYContext
 		t.Fatalf("runtime no purgado, stat err=%v", err)
 	}
 
-	var summary codexDirectorWaveSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
-	}
+	summary := mustReadCodexDirectorWaveCommandSummaryForTest(t, stdout.Bytes(), runtimeDir)
 	if summary.Plan.MaxParallelAgents != 2 ||
 		!summary.Plan.RecursiveDelegation ||
 		summary.Plan.MaxSubagentsPerAgent != 6 ||
@@ -425,10 +410,7 @@ func TestCodexLaunchDirectorWaveCommandV0RecursiveDryRunMaterializaNietosConLimi
 		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 
-	var summary codexDirectorWaveSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
-	}
+	summary := mustReadCodexDirectorWaveCommandSummaryForTest(t, stdout.Bytes(), runtimeDir)
 	if !summary.Plan.RecursiveDelegation ||
 		summary.Plan.MaxDelegationDepth != 2 ||
 		summary.Plan.MaxSubagentsPerAgent != 2 ||
@@ -593,10 +575,7 @@ printf '%s\n' "$input"
 		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 
-	var summary codexDirectorWaveSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
-	}
+	summary := mustReadCodexDirectorWaveCommandSummaryForTest(t, stdout.Bytes(), runtimeDir)
 	if summary.AgentBudget.PlannedAgents != 7 ||
 		summary.AgentBudget.MaxAgents != 7 ||
 		summary.AgentBudget.Exceeded ||
@@ -659,11 +638,7 @@ func codexDirectorWaitForLaunchAgentsStoppedForTestV0(
 			time.Sleep(10 * time.Millisecond)
 			continue
 		}
-		if err := json.Unmarshal(statusOut.Bytes(), &last); err != nil {
-			lastErr = err.Error()
-			time.Sleep(10 * time.Millisecond)
-			continue
-		}
+		last = mustReadCodexWaveCommandSummaryForTest(t, statusOut.Bytes(), launch.RuntimeWorkDir)
 		allStopped := len(last.Agents) > 0
 		for _, agent := range last.Agents {
 			if agent.Status != "stopped" {
@@ -716,10 +691,7 @@ func TestCodexLaunchDirectorWaveCommandV0RecursiveBudgetBloqueaAntesDeLanzar(t *
 		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 
-	var summary codexDirectorWaveSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
-	}
+	summary := mustReadCodexDirectorWaveCommandSummaryForTest(t, stdout.Bytes(), runtimeDir)
 	if summary.AgentBudget.PlannedAgents != 26 ||
 		summary.AgentBudget.MaxAgents != 8 ||
 		!summary.AgentBudget.Exceeded ||
@@ -769,10 +741,7 @@ func TestCodexLaunchDirectorWaveCommandV0NoInyectaDominioPorProjectRef(t *testin
 		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 
-	var summary codexDirectorWaveSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
-	}
+	summary := mustReadCodexDirectorWaveCommandSummaryForTest(t, stdout.Bytes(), runtimeDir)
 	if len(summary.Launch.Agents) != 1 {
 		t.Fatalf("agents=%d", len(summary.Launch.Agents))
 	}

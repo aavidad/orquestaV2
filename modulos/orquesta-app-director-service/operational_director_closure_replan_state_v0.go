@@ -41,7 +41,7 @@ func continueOperationalDirectorPlanStateAfterBlockedClosureIssuesReplanV0(
 	if reader == nil {
 		return state, false, nil
 	}
-	events, err := reader.LoadRunEventsV0(ctx, request.RunRef)
+	events, err := loadOperationalRunEventsV0(ctx, reader, request.RunRef)
 	if err != nil {
 		return state, false, err
 	}
@@ -187,7 +187,7 @@ func continueOperationalDirectorPlanStateCanProgressBlockedClosureIssuesReplanV0
 	if reader == nil {
 		return false, nil
 	}
-	events, err := reader.LoadRunEventsV0(ctx, request.RunRef)
+	events, err := loadOperationalRunEventsV0(ctx, reader, request.RunRef)
 	if err != nil {
 		return false, err
 	}

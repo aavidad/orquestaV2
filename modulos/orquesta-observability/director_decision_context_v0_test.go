@@ -50,9 +50,9 @@ func TestValidateDirectorDecisionContextV0RechazaRefsYContenidoProhibido(t *test
 			code: ErrReferenciaNoOpacaV0,
 		},
 		{
-			name: "process ref con secreto",
+			name: "summary con secreto efectivo",
 			edit: func(context *DirectorDecisionContextV0) {
-				context.Agents[0].ProcessRef = "process-token-ref-001"
+				context.Blockers[0].Cause = "access_token"
 			},
 			code: ErrSecretoDetectadoV0,
 		},

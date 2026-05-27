@@ -3,7 +3,6 @@ package orquestaweb
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 )
 
 type RunControlWebEndpointV0 struct {
@@ -22,8 +21,11 @@ func NewRunControlWebEndpointV0(client RunControlClientV0) RunControlWebEndpoint
 }
 
 func (endpoint RunControlWebEndpointV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if handleWebPublicHTTPOptionsV0(w, r, http.MethodPost) {
+		return
+	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
+		setWebPublicHTTPAllowV0(w, http.MethodPost)
 		writeRunControlPageV0(w, http.StatusMethodNotAllowed, endpoint.pageV0(WebRunControlCommandV0{},
 			NewWebRunControlErrorViewModelV0("", WebNuevaAppErrMetodoNoSoportadoV0)))
 		return
@@ -74,16 +76,13 @@ func (endpoint RunControlWebEndpointV0) pageV0(
 }
 
 func decodeRunControlCommandV0(r *http.Request) (WebRunControlCommandV0, error) {
-	contentType := strings.ToLower(r.Header.Get("Content-Type"))
-	if contentType == "" || strings.Contains(contentType, "application/json") {
+	contentType := r.Header.Get("Content-Type")
+	if webControlContentTypeAllowsJSONV0(contentType) {
 		var command WebRunControlCommandV0
-		decoder := json.NewDecoder(r.Body)
-		decoder.DisallowUnknownFields()
-		return command, decoder.Decode(&command)
+		return command, decodeWebControlJSONV0(nil, r, &command)
 	}
-	if strings.Contains(contentType, "application/x-www-form-urlencoded") ||
-		strings.Contains(contentType, "multipart/form-data") {
-		if err := r.ParseForm(); err != nil {
+	if webControlContentTypeAllowsFormV0(contentType) {
+		if err := parseWebControlFormV0(nil, r); err != nil {
 			return WebRunControlCommandV0{}, err
 		}
 		return runControlCommandFromValuesV0(r.Form), nil

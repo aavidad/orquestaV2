@@ -36,10 +36,10 @@ func TestValidateAgentReworkSignalV0RejectsUnsupportedVerdictAndActions(t *testi
 			code:             ErrAgentReworkActionNoSoportadaV0,
 			field:            "assessment_action",
 		},
-		"ask_director_retry": {
+		"ask_director_abort": {
 			verdict:          orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0,
 			assessmentAction: orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
-			requestedAction:  ReplanActionRetryTaskV0,
+			requestedAction:  ReplanActionAbortTaskV0,
 			code:             ErrAgentReworkActionNoSoportadaV0,
 			field:            "requested_action",
 		},

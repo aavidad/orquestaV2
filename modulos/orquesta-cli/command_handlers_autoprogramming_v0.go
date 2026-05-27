@@ -35,7 +35,7 @@ func runCLIAutoprogrammingPrepareV0(ctx context.Context, args []string, runner O
 	}
 	inv := invocationFromCLIFlagsV0(CliDefaultCommandAutoprogPrepareV0, common)
 	var input orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0
-	if err := readCLIJSONInputV0(runner, common.InputPath, &input); err != nil {
+	if err := readCLIJSONInputWithLimitV0(runner, common.InputPath, common.InputMaxBytes, &input); err != nil {
 		return cliParseErrorEnvelopeV0(CliDefaultCommandAutoprogPrepareV0, err)
 	}
 	client, err := NewAutoprogrammingCliClientV0(common.ServerURL, common.Timeout)

@@ -3,6 +3,7 @@ package orquestaruntimecodexdelivery
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
@@ -222,6 +223,45 @@ func TestCodexProgressFailureClassFromDescriptorV0ClasificaSenalesCompactas(t *t
 				t.Fatalf("failure class=%s want=%s", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestCodexProgressReadFailureLogV0LeeSoloTailAcotado(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, orquestaruntimecodex.CodexStderrFileNameV0)
+	prefix := "capacity\n" + strings.Repeat("padding\n", 10*1024)
+	suffix := "turn was interrupted\n"
+	if err := os.WriteFile(path, []byte(prefix+suffix), 0o600); err != nil {
+		t.Fatalf("write stderr: %v", err)
+	}
+
+	got, ok := codexProgressReadFailureLogV0(path)
+	if !ok {
+		t.Fatalf("failure log no leido")
+	}
+	if len(got) > maxCodexProgressFailureLogBytesV0 {
+		t.Fatalf("tail len=%d max=%d", len(got), maxCodexProgressFailureLogBytesV0)
+	}
+	if strings.Contains(got, "capacity") || !strings.Contains(got, "turn was interrupted") {
+		t.Fatalf("tail inesperado")
+	}
+}
+
+func TestCodexProgressFailureClassFromDescriptorV0ClasificaDesdeTailSinPrefijoGrande(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(dir, orquestaruntimecodex.CodexStderrFileNameV0),
+		[]byte("capacity\n"+strings.Repeat("padding\n", 10*1024)+"turn interrupted\n"),
+		0o600,
+	); err != nil {
+		t.Fatalf("write stderr: %v", err)
+	}
+
+	got := codexProgressFailureClassFromDescriptorV0(CodexReceiptDescriptorV0{
+		AckPath: filepath.Join(dir, orquestaruntimecodex.CodexAgentAckFileNameV0),
+	})
+	if got != codexProgressFailureInterruptedV0 {
+		t.Fatalf("failure class=%s want=%s", got, codexProgressFailureInterruptedV0)
 	}
 }
 

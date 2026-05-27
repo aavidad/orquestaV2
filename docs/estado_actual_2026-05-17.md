@@ -16,7 +16,10 @@ la frontera actual del proyecto.
    ejecutable. Debe respetar los cierres ya documentados en la matriz y abrir
    tareas nuevas solo por huecos o regresiones verificables.
 4. Docs locales de modulo acotan trabajo del modulo, pero si contradicen esta
-   foto deben marcarse como historicos/stale o sincronizarse.
+   foto deben marcarse como historicos/stale o sincronizarse. Las referencias
+   obligatorias a `docs/reinicio_orquesta_v2/*` son historicas si el arbol no
+   existe en la foto vigente; no deben inventarse ni restaurarse para cumplir
+   contexto.
 5. Docs historicos sirven como contexto y no como fuente canonica sin enlace a
    una fuente vigente.
 
@@ -355,7 +358,13 @@ Leer con cuidado:
 
 - `orquesta_v1_vision.md`, `orquesta_v1_roadmap.md` y `BIBLIA_APP_ORQUESTA.md`
   son utiles como historia y vision, pero cualquier lectura centrada en
-  "app de programacion" queda subordinada al nucleo neutral reutilizable.
+  "app de programacion" queda subordinada al nucleo neutral reutilizable. Desde
+  el 2026-05-26, `BIBLIA_APP_ORQUESTA.md` debe autoidentificarse en cabecera
+  como `doc_estado=historico-stale` y enlazar a `AGENTS.md`, `README.md`, esta
+  foto, la guia de nucleo y el backlog vivo como sustitutos vigentes.
+  Sus secciones internas V1 llamadas "fuentes de verdad", "doctrina" o
+  "canonico" son contexto historico; no reabren autoridad documental ni
+  autorizan planificacion automatica sin enlace nuevo a esta foto.
 - `integracion_opes_orquesta_2026-05-13.md`,
   `estado_integracion_opes_orquesta_2026-05-13.md`,
   `corte_integracion_opes_orquesta_2026-05-13.md` y
@@ -371,6 +380,10 @@ Leer con cuidado:
 - Cualquier documento que hable del antiguo `cmd/db/internal`, de
   `ensureLocalDB` o de rutas SQLite acopladas pertenece al periodo previo al
   saneamiento modular y debe verificarse contra el arbol actual antes de usarse.
+- Los snapshots SQLite/DB v1, incluido el ref relativo
+  `backups/legacy-sqlite-20260422/orquesta.db`, son evidencia forense en
+  cuarentena. No son prerequisito operativo, fuente viva de persistencia ni
+  entrada programable para agentes sin decision explicita del director.
 
 ## Riesgos abiertos
 

@@ -66,7 +66,7 @@ func codexRuntimeBudgetStatusV0(
 
 func codexProgressObservedAtV0(state CodexProgressObservationStateV0) time.Time {
 	if state.ObservedAt.IsZero() {
-		return time.Now().UTC()
+		return orquestaruntime.NowUTCV0(nil)
 	}
 	return state.ObservedAt.UTC()
 }

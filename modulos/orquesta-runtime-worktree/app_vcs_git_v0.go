@@ -2,9 +2,6 @@ package orquestaruntimeworktree
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -14,7 +11,9 @@ import (
 const appVCSCommandTimeoutV0 = 10 * time.Second
 
 type GitAppVCSConnectorV0 struct {
-	CommandTimeout time.Duration
+	CommandTimeout  time.Duration
+	MaxOutputBytes  int64
+	MaxChangedPaths int
 }
 
 func (connector GitAppVCSConnectorV0) ExecuteAppVCSV0(
@@ -55,8 +54,10 @@ func (connector GitAppVCSConnectorV0) prepareRepoV0(
 	if len(issues) > 0 {
 		return newAppVCSResultV0(request, AppVCSStatusFailedV0, nil), issues
 	}
+	controlPaths := connector.controlPathsV0(ctx, request.ProjectWorkDir)
 	result := newAppVCSResultV0(request, AppVCSStatusCompletedV0, paths)
-	result.Issues = appVCSControlIssuesFromPathsV0(connector.controlPathsV0(ctx, request.ProjectWorkDir))
+	result.Issues = appVCSControlIssuesFromPathsV0(controlPaths)
+	result.ExclusionReceipts = worktreeLocalArtifactReceiptsV0(controlPaths)
 	result.CommitRef = strings.TrimSpace(head)
 	result.CommitShortRef = shortCommitRefV0(result.CommitRef)
 	return result, nil
@@ -78,8 +79,10 @@ func (connector GitAppVCSConnectorV0) reviewRepoV0(
 	if len(paths) == 0 {
 		status = AppVCSStatusCleanV0
 	}
+	controlPaths := connector.controlPathsV0(ctx, request.ProjectWorkDir)
 	result := newAppVCSResultV0(request, status, paths)
-	result.Issues = appVCSControlIssuesFromPathsV0(connector.controlPathsV0(ctx, request.ProjectWorkDir))
+	result.Issues = appVCSControlIssuesFromPathsV0(controlPaths)
+	result.ExclusionReceipts = worktreeLocalArtifactReceiptsV0(controlPaths)
 	result.CommitRef = strings.TrimSpace(head)
 	result.CommitShortRef = shortCommitRefV0(result.CommitRef)
 	return result, nil
@@ -103,6 +106,7 @@ func (connector GitAppVCSConnectorV0) commitRepoV0(
 	if len(commitPaths) == 0 {
 		result := newAppVCSResultV0(request, AppVCSStatusCleanV0, nil)
 		result.Issues = appVCSControlIssuesFromPathsV0(controlPaths)
+		result.ExclusionReceipts = worktreeLocalArtifactReceiptsV0(controlPaths)
 		return result, nil
 	}
 	addArgs := append([]string{"add", "-A", "--"}, commitPaths...)
@@ -118,6 +122,10 @@ func (connector GitAppVCSConnectorV0) commitRepoV0(
 	}
 	result.ChangedPaths = paths
 	result.Issues = append(result.Issues, appVCSControlIssuesFromPathsV0(controlPaths)...)
+	result.ExclusionReceipts = mergeWorktreeLocalArtifactReceiptsV0(
+		result.ExclusionReceipts,
+		worktreeLocalArtifactReceiptsV0(controlPaths),
+	)
 	if request.AllowPush {
 		return connector.pushFromResultV0(ctx, request, result)
 	}
@@ -144,6 +152,9 @@ func (connector GitAppVCSConnectorV0) cleanResultV0(
 		return newAppVCSResultV0(request, AppVCSStatusFailedV0, nil), []AppVCSIssueV0{*issue}
 	}
 	result := newAppVCSResultV0(request, AppVCSStatusCleanV0, nil)
+	controlPaths := connector.controlPathsV0(ctx, request.ProjectWorkDir)
+	result.Issues = appVCSControlIssuesFromPathsV0(controlPaths)
+	result.ExclusionReceipts = worktreeLocalArtifactReceiptsV0(controlPaths)
 	result.CommitRef = strings.TrimSpace(head)
 	result.CommitShortRef = shortCommitRefV0(result.CommitRef)
 	return result, nil
@@ -175,7 +186,11 @@ func (connector GitAppVCSConnectorV0) changedPathsV0(
 	if issue != nil {
 		return nil, []AppVCSIssueV0{*issue}
 	}
-	paths, _ := splitWorktreeProductAndControlPathsV0(parseAppVCSStatusPathsV0(raw))
+	allPaths := parseAppVCSStatusPathsV0(raw)
+	if issue := connector.gitStatusPathBudgetIssueV0(allPaths); issue != nil {
+		return nil, []AppVCSIssueV0{*issue}
+	}
+	paths, _ := splitWorktreeProductAndControlPathsV0(allPaths)
 	return paths, nil
 }
 
@@ -184,7 +199,11 @@ func (connector GitAppVCSConnectorV0) controlPathsV0(ctx context.Context, repo s
 	if issue != nil {
 		return nil
 	}
-	_, control := splitWorktreeProductAndControlPathsV0(parseAppVCSStatusPathsV0(raw))
+	allPaths := parseAppVCSStatusPathsV0(raw)
+	if connector.gitStatusPathBudgetIssueV0(allPaths) != nil {
+		return nil
+	}
+	_, control := splitWorktreeProductAndControlPathsV0(allPaths)
 	return control
 }
 
@@ -202,24 +221,7 @@ func (connector GitAppVCSConnectorV0) gitOutputRawV0(
 	repo string,
 	args ...string,
 ) (string, *AppVCSIssueV0) {
-	timeout := connector.CommandTimeout
-	if timeout <= 0 {
-		timeout = appVCSCommandTimeoutV0
-	}
-	runCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	cmd := exec.CommandContext(runCtx, "git", append([]string{"-C", repo}, args...)...)
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=Never")
-	out, err := cmd.CombinedOutput()
-	if err == nil {
-		return string(out), nil
-	}
-	evidence := strings.TrimSpace(string(out))
-	if runCtx.Err() != nil {
-		evidence = fmt.Sprintf("%s timeout: %s", strings.Join(args, " "), evidence)
-	}
-	issue := appVCSIssueV0(AppVCSIssueGitErrorV0, gitIssueFieldV0(args), evidence)
-	return "", &issue
+	return connector.runGitCommandV0(ctx, repo, args...)
 }
 
 func parseAppVCSStatusPathsV0(raw string) []string {

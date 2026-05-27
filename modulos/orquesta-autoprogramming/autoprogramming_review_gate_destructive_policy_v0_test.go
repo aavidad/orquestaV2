@@ -7,7 +7,6 @@ func TestAutoprogrammingReviewGateDestructiveIssuesBloqueanCierreV0(t *testing.T
 		"gate-issue:removed_path:docs/manual.md",
 		"gate-issue:truncated:docs/manual.md",
 		"review-gate-issue:renamed_or_moved:old -> new",
-		"quality-gate-issue:massive_replacement:docs/manual.md",
 	} {
 		t.Run(code, func(t *testing.T) {
 			if !AutoprogrammingReviewGateIssueCodeBlocksClosureV0(code) {

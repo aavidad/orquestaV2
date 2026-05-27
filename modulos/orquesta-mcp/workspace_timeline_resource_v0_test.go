@@ -11,7 +11,7 @@ func TestMCPWorkspaceTimelineResourceV0DeclaraContratoYGuardas(t *testing.T) {
 	}
 	resource := NewMCPWorkspaceTimelineResourceV0()
 	if resource.RecommendedEndpoint != MCPWorkspaceTimelineEndpointV0 ||
-		len(resource.AllowedSources) != 6 {
+		len(resource.AllowedSources) != 7 {
 		t.Fatalf("resource incompleto: %+v", resource)
 	}
 	if !containsStringMCPWorkspaceTimelineTestV0(resource.Guardrails, "sin_shell_git_local_runtime_filesystem_directo") {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"sync"
 )
 
 type RuntimeDepsV0 struct {
@@ -20,6 +21,7 @@ type RuntimeV0 struct {
 	config                ConfigV0
 	appHandler            http.Handler
 	supervisor            SupervisorPortV0
+	asyncWork             runtimeAsyncWorkGroupV0
 	supervisorTickActive  int32
 	supervisorTickPending int32
 	shutdownInProgress    int32
@@ -28,6 +30,8 @@ type RuntimeV0 struct {
 	startupCheck          StartupCheckPortV0
 	clock                 ClockPortV0
 	tracker               *StatusTrackerV0
+	handoffRequested      chan struct{}
+	handoffOnce           sync.Once
 }
 
 func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
@@ -52,27 +56,39 @@ func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
 		}
 		deps.AuditSink = sink
 	}
+	tracker := NewStatusTrackerV0(config, deps.Clock.Now())
+	if restored, ok := restoreStatusTrackerFromStoreV0(context.Background(), config, deps.StateStore, deps.Clock.Now()); ok {
+		tracker = restored
+	}
 	return &RuntimeV0{
-		config:       config,
-		appHandler:   deps.AppHandler,
-		supervisor:   deps.Supervisor,
-		stateStore:   deps.StateStore,
-		auditSink:    deps.AuditSink,
-		startupCheck: deps.StartupCheck,
-		clock:        deps.Clock,
-		tracker:      NewStatusTrackerV0(config, deps.Clock.Now()),
+		config:           config,
+		appHandler:       deps.AppHandler,
+		supervisor:       deps.Supervisor,
+		stateStore:       deps.StateStore,
+		auditSink:        deps.AuditSink,
+		startupCheck:     deps.StartupCheck,
+		clock:            deps.Clock,
+		tracker:          tracker,
+		handoffRequested: make(chan struct{}),
 	}, nil
 }
 
 func (runtime *RuntimeV0) HandlerV0() http.Handler {
 	handler := NewHandlerV0(HandlerConfigV0{
-		AppHandler: runtime.shutdownFreezeHTTPHandlerV0(runtime.appHandler),
+		AppHandler: runtime.serverLifecycleHTTPHandlerV0(runtime.appHandler),
 		Tracker:    runtime.tracker,
 	})
 	return runtime.auditHTTPHandlerV0(runtime.controlPlaneGuardHTTPHandlerV0(handler))
 }
 
 func (runtime *RuntimeV0) RunV0(ctx context.Context) error {
+	return runtime.RunWithShutdownCauseV0(ctx, nil)
+}
+
+func (runtime *RuntimeV0) RunWithShutdownCauseV0(
+	ctx context.Context,
+	cause func() ShutdownSignalCauseV0,
+) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -83,29 +99,53 @@ func (runtime *RuntimeV0) RunV0(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	server := &http.Server{Handler: runtime.HandlerV0()}
+	server := runtime.httpServerV0()
 	addr := listener.Addr().String()
 	if err := runtime.saveStateV0(ctx, runtime.tracker.MarkServingV0(addr, runtime.clock.Now())); err != nil {
 		_ = listener.Close()
 		return err
 	}
 
+	runCtx, cancelRun := context.WithCancel(ctx)
+	defer cancelRun()
 	serverDone := make(chan error, 1)
-	go func() { serverDone <- server.Serve(listener) }()
-	go runtime.runSupervisorLoopV0(ctx)
+	runtime.runAsyncWorkV0("http_serve", func() { serverDone <- server.Serve(listener) })
+	runtime.runAsyncWorkV0("supervisor_loop", func() { runtime.runSupervisorLoopV0(runCtx) })
 
 	select {
 	case <-ctx.Done():
-		_ = server.Shutdown(context.Background())
-		runtime.persistStateTransitionV0(context.Background(), runtime.tracker.MarkStoppedV0(runtime.clock.Now()), "stopped")
-		return nil
+		return runtime.shutdownRuntimeV0(server, cancelRun, shutdownCauseFromFuncV0(cause))
+	case <-runtime.handoffRequested:
+		return runtime.handoffRuntimeV0(server, cancelRun)
 	case err := <-serverDone:
 		if errors.Is(err, http.ErrServerClosed) {
-			return nil
+			return runtime.stopRuntimeAfterServeClosedV0(cancelRun)
 		}
 		runtime.persistStateTransitionV0(context.Background(), runtime.tracker.MarkErrorV0(err.Error(), runtime.clock.Now()), "server_error")
 		return err
 	}
+}
+
+func shutdownCauseFromFuncV0(cause func() ShutdownSignalCauseV0) ShutdownSignalCauseV0 {
+	if cause == nil {
+		return ShutdownSignalCauseV0{}
+	}
+	out := cause()
+	if out.SignalName == "" {
+		return ShutdownSignalCauseV0{}
+	}
+	return normalizeShutdownSignalCauseV0(out)
+}
+
+func (runtime *RuntimeV0) RecordShutdownSignalV0(cause ShutdownSignalCauseV0) {
+	if runtime == nil || runtime.tracker == nil {
+		return
+	}
+	runtime.persistStateTransitionV0(
+		context.Background(),
+		runtime.tracker.MarkRuntimeStoppingBySignalV0(cause, runtime.asyncWorkActiveV0(), runtime.clock.Now()),
+		"runtime_stopping_by_signal",
+	)
 }
 
 func (runtime *RuntimeV0) StateV0() StateV0 {

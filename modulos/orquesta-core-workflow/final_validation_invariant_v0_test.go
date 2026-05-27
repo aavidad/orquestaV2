@@ -25,6 +25,23 @@ func TestRegisterFinalValidationCommandV0RejectsMissingClosedTask(t *testing.T) 
 	assertRegisterFinalValidationCommandErrorV0(t, err, ErrTransicionInvalidaV0)
 }
 
+func TestRegisterFinalValidationCommandV0AceptaValidacionTardiaEnCierre(t *testing.T) {
+	run := mustFinalValidationReadyRunV0(t)
+	openClosure := mustOpenPhaseCommandV0(t, "cmd-open-closure-before-validation", "idem-open-closure-before-validation", OrchestrationPhaseCierreV0)
+	run = mustApplySingleCommandEventV0(t, run, openClosure)
+	command := mustRegisterFinalValidationCommandV0(t, "cmd-final-validation-late-closure", "idem-final-validation-late-closure", "validation-late-closure")
+
+	result, err := HandleCommandV0(run, command)
+	if err != nil {
+		t.Fatalf("late final validation rejected: %v", err)
+	}
+	assertSingleEventTypeV0(t, result, OrchestrationEventFinalValidationRegisteredV0)
+	got := mustApplySingleCommandEventV0(t, run, command)
+	if !finalValidationAlreadyReflectedV0(got, "validation-late-closure") {
+		t.Fatalf("validacion tardia no proyectada: %+v", got.Validations)
+	}
+}
+
 func TestFinalValidationRegisteredEventV0RejectsMissingClosedTask(t *testing.T) {
 	run := mustCloseTaskReadyRunV0(t)
 	open := mustOpenPhaseCommandV0(t, "cmd-open-final-validation-event-missing-task", "idem-open-final-validation-event-missing-task", OrchestrationPhaseValidacionFinalV0)

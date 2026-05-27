@@ -45,6 +45,7 @@ func TestMCPRunControlExecutorV0DelegaEnPuertoInyectado(t *testing.T) {
 		result.Action != "stop" ||
 		result.Status != string(orquestaruncontrol.RunControlStatusStopRequestedV0) ||
 		result.RunRef != "run-ref-001" ||
+		!result.CheckpointRecorded ||
 		!result.Forced {
 		t.Fatalf("result=%+v", result)
 	}
@@ -54,12 +55,18 @@ func TestMCPRunControlExecutorV0DelegaEnPuertoInyectado(t *testing.T) {
 		len(port.stop.EvidenceRefs) != 1 {
 		t.Fatalf("command=%+v", port.stop)
 	}
+	if port.checkpoint.RunRef != "run-ref-001" ||
+		port.checkpoint.RequestedBy != "director" ||
+		port.checkpoint.IdempotencyKey != "idem-001" ||
+		!containsStringMCPTestV0(port.checkpoint.EvidenceRefs, "evidence-ref-mcp-run-control-checkpoint-recorded") {
+		t.Fatalf("checkpoint=%+v", port.checkpoint)
+	}
 }
 
 func TestMCPRunControlExecutorV0ValidaAction(t *testing.T) {
 	result, err := NewMCPRunControlToolExecutorV0(&fakeMCPRunControlPortV0{}).Execute(
 		context.Background(),
-		MCPRunControlToolInputV0{Action: "restart", RunRef: "run-ref-001"},
+		MCPRunControlToolInputV0{RequestID: "request-ref-run-control-action-001", Action: "restart", RunRef: "run-ref-001"},
 	)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -113,6 +120,7 @@ type fakeMCPRunControlPortV0 struct {
 	resume orquestaruncontrol.ResumeRunCommandV0
 	stop   orquestaruncontrol.StopRunCommandV0
 	cancel orquestaruncontrol.CancelRunCommandV0
+	checkpoint orquestaruncontrol.RecordRunCheckpointCommandV0
 }
 
 func (fake *fakeMCPRunControlPortV0) PauseRunV0(
@@ -145,6 +153,23 @@ func (fake *fakeMCPRunControlPortV0) CancelRunV0(
 ) (orquestaruncontrol.RunControlStateV0, error) {
 	fake.cancel = command
 	return runControlStateForMCPTestV0(command.RunRef, orquestaruncontrol.RunControlStatusCancelRequestedV0, command.Forced), nil
+}
+
+func (fake *fakeMCPRunControlPortV0) RecordRunCheckpointV0(
+	_ context.Context,
+	command orquestaruncontrol.RecordRunCheckpointCommandV0,
+) (orquestaruncontrol.RunControlStateV0, error) {
+	fake.checkpoint = command
+	status := orquestaruncontrol.RunControlStatusStopRequestedV0
+	forced := fake.stop.Forced
+	if fake.cancel.RunRef == command.RunRef && fake.stop.RunRef == "" {
+		status = orquestaruncontrol.RunControlStatusCancelRequestedV0
+		forced = fake.cancel.Forced
+	}
+	state := runControlStateForMCPTestV0(command.RunRef, status, forced)
+	state.CheckpointRecorded = true
+	state.EvidenceRefs = command.EvidenceRefs
+	return state, nil
 }
 
 func runControlStateForMCPTestV0(

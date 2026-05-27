@@ -30,9 +30,10 @@ No incluye:
 
 Este modulo nuevo debe absorber solo lo que se demuestre util mediante contratos pequenos. Si una pieza actual se necesita aqui, se copia o adapta por microtarea documentada, nunca por arrastre completo.
 
-Snapshot del core actual:
-
-- `../../docs/reinicio_orquesta_v2/snapshots/orquesta-core-actual-2026-05-04.tgz`
+Snapshot historico del core anterior: el arbol de reinicio v2 ya no existe en
+la foto vigente y no es prerequisito local. Para contexto vivo usar
+`../../AGENTS.md`, `../../docs/estado_actual_2026-05-17.md`,
+`../../docs/guia_nucleo_orquestacion_2026-05-17.md` y este README.
 
 ## Forma del nucleo
 
@@ -48,10 +49,17 @@ El handler y el reducer son puros. No llaman a DB, runtime, MCP, CLI, web, Git n
 
 ## Arranque de Codex
 
-Desde este directorio:
+La ruta vigente para agentes OrquestaV2 es el servidor residente y la cola
+gobernada, no el wrapper local. El wrapper `./arrancar_codex.sh` queda como
+compatibilidad historica y devuelve un error publico si no hay contrato manual
+versionado. Para trabajo operativo usa `go run ./cmd/orquesta-server run` desde
+la raiz y APIs/CLI publicas con write-set, ACK, checkpoint y shutdown
+gobernados.
 
-```bash
-./arrancar_codex.sh "microtarea concreta"
-```
+## Rails de detalle
 
-Al arrancar, Codex debe leer `AGENTS.md`, este `README.md` y los docs locales en `docs/`.
+Desde la reconciliacion T15 del 2026-05-27, este modulo documenta la politica
+comun de `orquesta-rails`: refs opacas y vocabulario operativo son validos,
+mientras valores sensibles efectivos, rutas privadas y material crudo se cortan
+por frontera/campo. El servidor activa el rail por defecto con scope acotado; el
+modo `programming` conserva apertura para autoprogramacion gobernada.

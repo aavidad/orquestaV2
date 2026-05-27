@@ -38,7 +38,9 @@ func codexStackOperationalClosureTraceFromEventsV0(
 		case orquestacoreworkflow.OrchestrationEventDeliveryRegisteredV0:
 			var payload orquestacoreworkflow.DeliveryRegisteredPayloadV0
 			if codexStackOperationalClosureDecodeEventPayloadV0(event, &payload) {
-				trace.Deliveries[strings.TrimSpace(payload.DeliveryRef)] = payload
+				deliveryRef := strings.TrimSpace(payload.DeliveryRef)
+				trace.Deliveries[deliveryRef] = payload
+				trace.DeliveryRefs = append(trace.DeliveryRefs, deliveryRef)
 			}
 		case orquestacoreworkflow.OrchestrationEventReviewRequestedV0:
 			var payload orquestacoreworkflow.ReviewRequestedPayloadV0

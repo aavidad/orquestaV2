@@ -89,6 +89,24 @@ Estado: aceptada localmente.
 ```
 
 ```text
+Fecha: 2026-05-26
+Decision: Los documentos `manual_*`, `pruebas_documentales` y `pendientes` son
+artefactos de la app generada, no documentos raiz obligatorios de Orquesta.
+Motivo: el backlog T118 detecto que planes debug historicos podian tratar
+`docs/manual_desarrollador.md`, `docs/manual_sistemas_deploy.md`,
+`docs/pruebas_documentales.md` y `docs/pendientes.md` como requisitos vivos del
+repo Orquesta. Eso mezcla contrato de proyecto generado con documentacion del
+nucleo.
+Impacto: los adaptadores de intake/director deben conservar esos nombres como
+refs/rutas relativas del proyecto objetivo o como tipos de artefacto esperado.
+`manual_sistemas_deploy` queda como alias historico compuesto por
+`manual_sysadmin` y `guia_despliegue` en las plantillas. Si el write-set no
+incluye el proyecto generado, el director debe pedir revision o marcar el plan
+stale; no se crean archivos raiz vacios para satisfacer `test -s`.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-05-23
 Decision: La entrada humana amplia se transforma primero en plan revisable del
 director.

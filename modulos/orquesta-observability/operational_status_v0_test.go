@@ -79,16 +79,20 @@ func TestValidateOperationalStatusQueryV0ReferenciasOpacasYContenidoProhibido(t 
 		assertOperationalStatusIssueV0(t, ValidateOperationalStatusQueryV0(query), ErrReferenciaNoOpacaV0)
 	})
 
-	t.Run("home en referencia opaca", func(t *testing.T) {
+	t.Run("home en referencia opaca permitida", func(t *testing.T) {
 		query := cloneOperationalStatusQueryV0(t, base)
 		query.TraceRef = "trace_home_ref_000001"
-		assertOperationalStatusIssueV0(t, ValidateOperationalStatusQueryV0(query), ErrOperationalStatusQueryInvalidaV0)
+		if err := ValidateOperationalStatusQueryV0(query); err != nil {
+			t.Fatalf("query should allow opaque home ref: %v", err)
+		}
 	})
 
-	t.Run("secreto en request", func(t *testing.T) {
+	t.Run("policy ref con token permitida", func(t *testing.T) {
 		query := cloneOperationalStatusQueryV0(t, base)
-		query.RequestID = "req_token_20260504_000001"
-		assertOperationalStatusIssueV0(t, ValidateOperationalStatusQueryV0(query), ErrSecretoDetectadoV0)
+		query.RequestID = "token_policy_ref_20260504_000001"
+		if err := ValidateOperationalStatusQueryV0(query); err != nil {
+			t.Fatalf("query should allow opaque policy ref: %v", err)
+		}
 	})
 
 	t.Run("transcript en watermark", func(t *testing.T) {

@@ -59,6 +59,7 @@ func buildResidentOperationalStatusDiagnosticV0(
 		Contadores:        residentOperationalCountersV0(state),
 		Referencias:       residentOperationalReferencesV0(query, state),
 		Warnings:          warnings,
+		Privacy:           orquestaobservability.NewDiagnosticoPrivacyMetadataOnlyV0(),
 	}
 }
 

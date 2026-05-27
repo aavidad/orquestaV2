@@ -500,3 +500,24 @@ Validacion:
 Bloqueos:
 Estado:
 ```
+
+## RUNTIME-021
+
+```text
+ID: RUNTIME-021
+Objetivo: Reconciliar T207 como contrato experimental opt-in de rotacion por handoff durable.
+Write-set:
+  - modulos/orquesta-runtime/session_rotation_handoff_v0.go
+  - modulos/orquesta-runtime/session_rotation_handoff_helpers_v0.go
+  - modulos/orquesta-runtime/session_rotation_handoff_v0_test.go
+  - modulos/orquesta-runtime/docs/tareas.md
+  - modulos/orquesta-runtime/docs/decisiones.md
+  - modulos/orquesta-runtime/docs/pruebas.md
+Simbolo foco: RuntimeSessionRotationRequestV0; RuntimeSessionRotationHandoffV0; EvaluateRuntimeSessionRotationV0.
+Contrato: rotacion opt-in de baja prioridad; handoff requerido; session_epoch opaca; no stop de sesion actual.
+Validacion:
+  - go test -count=1 ./modulos/orquesta-runtime
+Bloqueos:
+  - No ejecuta proveedor real ni relanza proceso. El smoke real de relevo queda como tarea futura separada.
+Estado: cerrada localmente el 2026-05-27.
+```

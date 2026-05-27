@@ -8,31 +8,81 @@ import (
 )
 
 const (
-	detailProhibitedRailsEnvV0                = orquestarails.DetailProhibitedRailsEnvV0
-	detailProhibitedRailsScopeEnvV0           = orquestarails.DetailProhibitedRailsScopeEnvV0
-	detailProhibitedRailsServerDefaultV0      = "off"
+	detailProhibitedRailsEnvV0                = envDetailProhibitedRailsV0
+	detailProhibitedRailsScopeEnvV0           = envDetailProhibitedRailsScopeV0
+	securityModeServerDefaultV0               = orquestarails.SecurityModeProductionV0
+	detailProhibitedRailsServerDefaultV0      = "on"
 	detailProhibitedRailsScopeServerDefaultV0 = "core_workflow.*,context_bundle_request.*," +
 		"context_materialization.content,context_materialization.ref,director_agent_decision.*"
 )
 
-func ensureServerDetailRailsDefaultV0() {
-	if strings.TrimSpace(os.Getenv(detailProhibitedRailsEnvV0)) == "" {
-		_ = os.Setenv(detailProhibitedRailsEnvV0, detailProhibitedRailsServerDefaultV0)
+func serverSecurityModeEffectiveValueV0() string {
+	return orquestarails.NormalizeSecurityModeV0(envOrDefaultV0(envSecurityModeV0, securityModeServerDefaultV0))
+}
+
+func serverDetailRailsEffectiveValueV0() string {
+	if serverSecurityModeEffectiveValueV0() == orquestarails.SecurityModeProgrammingV0 {
+		return "off"
 	}
-	if strings.TrimSpace(os.Getenv(detailProhibitedRailsScopeEnvV0)) == "" {
-		_ = os.Setenv(detailProhibitedRailsScopeEnvV0, detailProhibitedRailsScopeServerDefaultV0)
-	}
+	return envOrDefaultV0(detailProhibitedRailsEnvV0, detailProhibitedRailsServerDefaultV0)
+}
+
+func serverDetailRailsScopeEffectiveValueV0() string {
+	return envOrDefaultV0(detailProhibitedRailsScopeEnvV0, detailProhibitedRailsScopeServerDefaultV0)
 }
 
 func serverEnvironmentWithDetailRailsDefaultV0(env []string) []string {
 	out := append([]string(nil), env...)
-	if !detailRailsEnvPresentV0(out, detailProhibitedRailsEnvV0) {
-		out = append(out, detailProhibitedRailsEnvV0+"="+detailProhibitedRailsServerDefaultV0)
+	securityMode := orquestarails.NormalizeSecurityModeV0(
+		detailRailsEnvValueOrDefaultV0(out, envSecurityModeV0, securityModeServerDefaultV0),
+	)
+	detailRails := detailRailsEnvValueOrDefaultV0(out, detailProhibitedRailsEnvV0, detailProhibitedRailsServerDefaultV0)
+	if securityMode == orquestarails.SecurityModeProgrammingV0 {
+		detailRails = "off"
 	}
-	if !detailRailsEnvPresentV0(out, detailProhibitedRailsScopeEnvV0) {
-		out = append(out, detailProhibitedRailsScopeEnvV0+"="+detailProhibitedRailsScopeServerDefaultV0)
-	}
+	scope := detailRailsEnvValueOrDefaultV0(out, detailProhibitedRailsScopeEnvV0, detailProhibitedRailsScopeServerDefaultV0)
+	out = detailRailsEnvUpsertV0(out, envSecurityModeV0, securityMode)
+	out = detailRailsEnvUpsertV0(out, detailProhibitedRailsEnvV0, detailRails)
+	out = detailRailsEnvUpsertV0(out, detailProhibitedRailsScopeEnvV0, scope)
 	return out
+}
+
+func applyServerDetailRailsRuntimeDefaultsV0() error {
+	env := serverEnvironmentWithDetailRailsDefaultV0(os.Environ())
+	for _, key := range []string{envSecurityModeV0, detailProhibitedRailsEnvV0, detailProhibitedRailsScopeEnvV0} {
+		value := detailRailsEnvValueOrDefaultV0(env, key, "")
+		if value == "" {
+			continue
+		}
+		if err := os.Setenv(key, value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func detailRailsEnvValueOrDefaultV0(env []string, key string, fallback string) string {
+	prefix := key + "="
+	for _, item := range env {
+		if strings.HasPrefix(item, prefix) {
+			if value := strings.TrimSpace(strings.TrimPrefix(item, prefix)); value != "" {
+				return value
+			}
+			return fallback
+		}
+	}
+	return fallback
+}
+
+func detailRailsEnvUpsertV0(env []string, key string, value string) []string {
+	prefix := key + "="
+	for index, item := range env {
+		if strings.HasPrefix(item, prefix) {
+			env[index] = prefix + value
+			return env
+		}
+	}
+	return append(env, prefix+value)
 }
 
 func detailRailsEnvPresentV0(env []string, key string) bool {

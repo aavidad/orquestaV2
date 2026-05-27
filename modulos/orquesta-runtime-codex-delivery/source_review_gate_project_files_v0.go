@@ -7,11 +7,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
+	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
 )
 
 type CodexReviewGateProjectFileEvidenceV0 struct{}
@@ -104,7 +104,7 @@ func codexReviewGateProjectWriteSetIssuesV0(
 				return append(issues, codexReviewGateFileIssueV0("project_read_cancelled", "write_set"))
 			}
 		}
-		if codexReviewGateProjectTargetExistsV0(root, target) {
+		if codexReviewGateProjectTargetExistsV0(ctx, root, target) {
 			continue
 		}
 		issues = append(issues, codexReviewGateFileIssueV0(
@@ -115,76 +115,44 @@ func codexReviewGateProjectWriteSetIssuesV0(
 	return issues
 }
 
-func codexReviewGateProjectTargetExistsV0(root string, rawTarget string) bool {
+func codexReviewGateProjectTargetExistsV0(ctx context.Context, root string, rawTarget string) bool {
 	target, ok := codexReviewGateRelPathV0(rawTarget)
 	if !ok {
 		return false
 	}
-	if target == "web" && codexReviewGateProjectTargetExistsV0(root, "internal/webadmin") {
+	if target == "web" && codexReviewGateProjectTargetExistsV0(ctx, root, "internal/webadmin") {
 		return true
 	}
 	if codexReviewGateHasGlobV0(target) {
-		return codexReviewGateProjectGlobHasFileV0(root, target)
+		return codexReviewGateProjectGlobHasFileV0(ctx, root, target)
 	}
-	fullPath := filepath.Join(root, filepath.FromSlash(target))
-	info, err := os.Stat(fullPath)
-	if err != nil {
-		return false
-	}
-	if !info.IsDir() {
-		return info.Size() > 0
-	}
-	return codexReviewGateDirHasFileV0(fullPath)
+	result := orquestaruntimeworktree.ProjectTreeScanHasFileV0(ctx, orquestaruntimeworktree.ProjectTreeScanRequestV0{
+		ProjectRoot:    root,
+		Target:         target,
+		Mode:           orquestaruntimeworktree.ProjectTreeScanModeTargetV0,
+		IgnorePrefixes: orquestaruntimeworktree.DefaultWorktreeControlIgnorePrefixesV0(),
+	})
+	return result.Found
 }
 
-func codexReviewGateProjectGlobHasFileV0(root string, pattern string) bool {
-	re, err := codexReviewGateGlobRegexpV0(pattern)
-	if err != nil {
-		return false
-	}
-	found := false
-	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil || entry == nil || found {
-			return nil
-		}
-		if entry.IsDir() {
-			if codexReviewGateSkipProjectDirV0(entry.Name()) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		info, err := entry.Info()
-		if err != nil || info.Size() == 0 {
-			return nil
-		}
-		rel, err := filepath.Rel(root, path)
-		if err == nil && re.MatchString(filepath.ToSlash(rel)) {
-			found = true
-		}
-		return nil
+func codexReviewGateProjectGlobHasFileV0(ctx context.Context, root string, pattern string) bool {
+	result := orquestaruntimeworktree.ProjectTreeScanHasFileV0(ctx, orquestaruntimeworktree.ProjectTreeScanRequestV0{
+		ProjectRoot:    root,
+		Target:         pattern,
+		Mode:           orquestaruntimeworktree.ProjectTreeScanModeGlobV0,
+		IgnorePrefixes: orquestaruntimeworktree.DefaultWorktreeControlIgnorePrefixesV0(),
 	})
-	return found
+	return result.Found
 }
 
 func codexReviewGateDirHasFileV0(dir string) bool {
-	found := false
-	_ = filepath.WalkDir(dir, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil || entry == nil || found {
-			return nil
-		}
-		if entry.IsDir() {
-			if path != dir && codexReviewGateSkipProjectDirV0(entry.Name()) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		info, err := entry.Info()
-		if err == nil && info.Size() > 0 {
-			found = true
-		}
-		return nil
+	result := orquestaruntimeworktree.ProjectTreeScanHasFileV0(context.Background(), orquestaruntimeworktree.ProjectTreeScanRequestV0{
+		ProjectRoot:    dir,
+		Target:         ".",
+		Mode:           orquestaruntimeworktree.ProjectTreeScanModeDirV0,
+		IgnorePrefixes: orquestaruntimeworktree.DefaultWorktreeControlIgnorePrefixesV0(),
 	})
-	return found
+	return result.Found
 }
 
 func codexReviewGateSkipProjectDirV0(name string) bool {
@@ -198,28 +166,6 @@ func codexReviewGateSkipProjectDirV0(name string) bool {
 
 func codexReviewGateHasGlobV0(value string) bool {
 	return strings.ContainsAny(value, "*?[")
-}
-
-func codexReviewGateGlobRegexpV0(pattern string) (*regexp.Regexp, error) {
-	var b strings.Builder
-	b.WriteString("^")
-	for i := 0; i < len(pattern); i++ {
-		if strings.HasPrefix(pattern[i:], "**") {
-			b.WriteString(".*")
-			i++
-			continue
-		}
-		switch pattern[i] {
-		case '*':
-			b.WriteString("[^/]*")
-		case '?':
-			b.WriteString("[^/]")
-		default:
-			b.WriteString(regexp.QuoteMeta(string(pattern[i])))
-		}
-	}
-	b.WriteString("$")
-	return regexp.Compile(b.String())
 }
 
 func codexReviewGateIssueTargetV0(value string) string {

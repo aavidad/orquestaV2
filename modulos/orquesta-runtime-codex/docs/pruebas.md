@@ -42,6 +42,8 @@ Cobertura:
   ancestro de `project_work_dir` para evitar contaminacion de contexto;
 - fuera de `workspace-write`, el wrapper no anade writable roots extra;
 - devuelve `ProcessRuntimeLaunchRequestV0` sin args/env operacionales;
+- genera `codex_usage_accounting.json` redactado desde salida permitida del
+  runtime y conserva el exit code real de Codex;
 - no filtra provider/model/HOME/OAuth al request publico de proceso;
 - valida ACK/receipt Codex opt-in correcto;
 - normaliza `task_ref` y `correlation_id` desde el descriptor si `request_id`,
@@ -66,8 +68,30 @@ Cobertura:
 - lee `agent_ack.json` y construye `CodexDeliveryObservationV0` neutral;
 - conserva refs operativas dudosas como evidencia blanda para review externa,
   sin aceptar archivos de control ni rutas inseguras.
+- reconciliacion T208 cubierta por la bateria cruzada requerida; no habilita
+  ejecucion Codex real por defecto ni relaja ACK/ref_only.
 
 Riesgo residual:
 
 - No ejecuta Codex real por defecto.
 - La prueba real pertenece al mini-proyecto E2E no controlado.
+
+## RTCODEX-T209
+
+Comando:
+
+```bash
+go test -count=1 ./modulos/orquesta-runtime-codex
+```
+
+Cobertura:
+
+- `codex_usage_accounting.json` se genera con contadores y cuota redactada;
+- reportes con proveedor, modelo, HOME, OAuth, cuenta, coste, rutas privadas,
+  prompt, transcript o completion se rechazan;
+- uso sin cuota real queda como `quota.status=unknown` y
+  `quota_observed_unavailable`;
+- el request publico de proceso no recibe modelo, proveedor, HOME ni secretos.
+- T207 no anade prueba real por defecto: la cobertura local comprueba ACK,
+  shutdown checkpoint y aislamiento de runtime; la directiva de rotacion se
+  valida en `orquesta-runtime` y `orquesta-orchestration-core`.

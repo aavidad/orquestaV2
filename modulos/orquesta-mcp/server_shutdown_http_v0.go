@@ -20,12 +20,15 @@ type mcpServerShutdownHTTPHandlerV0 struct {
 
 func (handler mcpServerShutdownHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != MCPServerShutdownHTTPPathV0 {
-		writeMCPServerShutdownHTTPV0(w, http.StatusNotFound, newMCPServerShutdownHTTPErrorV0(r, MCPServerShutdownToolInputV0{}, "path", "ruta_no_soportada"))
+		writeMCPServerShutdownHTTPV0(w, http.StatusNotFound, newMCPServerShutdownHTTPErrorV0(r, MCPServerShutdownToolInputV0{}, "path", MCPPublicErrPathUnsupportedV0))
+		return
+	}
+	if handleMCPPublicHTTPOptionsV0(w, r, http.MethodPost) {
 		return
 	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
-		writeMCPServerShutdownHTTPV0(w, http.StatusMethodNotAllowed, newMCPServerShutdownHTTPErrorV0(r, MCPServerShutdownToolInputV0{}, "method", "metodo_no_permitido"))
+		setMCPPublicHTTPAllowV0(w, http.MethodPost)
+		writeMCPServerShutdownHTTPV0(w, http.StatusMethodNotAllowed, newMCPServerShutdownHTTPErrorV0(r, MCPServerShutdownToolInputV0{}, "method", MCPPublicErrMethodNotAllowedV0))
 		return
 	}
 	if handler.executor == nil {
@@ -33,8 +36,17 @@ func (handler mcpServerShutdownHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r
 		return
 	}
 	var input MCPServerShutdownToolInputV0
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeMCPServerShutdownHTTPV0(w, http.StatusBadRequest, newMCPServerShutdownHTTPErrorV0(r, input, "body", "request_body_invalido"))
+	if code := decodeMCPPublicHTTPJSONV0(w, r, &input); code != "" {
+		writeMCPServerShutdownHTTPV0(w, http.StatusBadRequest, newMCPServerShutdownHTTPErrorV0(r, input, "body", code))
+		return
+	}
+	input, issues := normalizeMCPServerShutdownIdentityV0(
+		input,
+		r.Header.Get(MCPPublicCorrelationHeaderV0),
+		MCPPublicMutationHeaderIdempotencyKeyV0(r.Header.Get),
+	)
+	if len(issues) > 0 {
+		writeMCPServerShutdownHTTPV0(w, http.StatusBadRequest, newMCPServerShutdownErrorV0(input, issues[0].Code, issues[0].Field, issues[0].Code))
 		return
 	}
 	result, err := handler.executor.Execute(r.Context(), input)
@@ -69,7 +81,7 @@ func newMCPServerShutdownHTTPErrorV0(
 	message string,
 ) MCPServerShutdownToolResultV0 {
 	result := newMCPServerShutdownErrorV0(input, "server_shutdown_http_error", field, message)
-	result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), input.CorrelationID, input.RequestID)
+	result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get(MCPPublicCorrelationHeaderV0), input.CorrelationID, input.RequestID)
 	if len(result.Errores) > 0 {
 		result.Errores[0].Message = strings.TrimSpace(message)
 	}
@@ -83,7 +95,7 @@ func writeMCPServerShutdownHTTPV0(
 ) {
 	w.Header().Set("Content-Type", "application/json")
 	if result.CorrelationID != "" {
-		w.Header().Set("X-Correlation-ID", result.CorrelationID)
+		w.Header().Set(MCPPublicCorrelationHeaderV0, result.CorrelationID)
 	}
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(result)

@@ -39,12 +39,19 @@ runs de autoprogramacion por stores del stack y devuelve `run_ref` +
 El mapa local vigente para navegar contratos, owners y huecos verificables esta
 en `docs/indice_mapa_2026-05-26.md`.
 
+Uso Codex T209: si el servidor inyecta `CodexStackRuntimeUsageMetricsSourceV0`,
+el stack lee solo `codex_usage_accounting.json` redactado desde descriptors de
+agente. Reporte ausente, vacio o no redactado produce `quota_status=unknown`
+con reason code publico; sin fuente inyectada se mantiene
+`agent_usage_source_not_configured`.
+
 El supervisor Codex vive en `codex_supervisor_v0.go`. Expone
 `CodexSupervisorAgentLifecyclePortV0`: el adaptador real debe avanzar
 `RunGlobalSupervisorV0`/`DrainRunV0`/`ContinueAppDirectorV0` y usar el outbox
 `LaunchRuntimeAgent` existente si necesita arrancar otro Codex.
 
-Arranque manual de un smoke configurado:
+Arranque manual de un smoke configurado, opt-in y no canonico para agentes
+OrquestaV2:
 
 ```bash
 ORQUESTA_CODEX_STACK_OPT_IN=1 \

@@ -19,10 +19,13 @@ Salida:
 - `GET /api/v0/server/readiness`: readiness operativa. Devuelve 200 solo con
   `ready=true`; si el startup cleanup/reconciliacion esta bloqueado devuelve
   503 con estado compacto y evidence refs.
-- `GET /api/status` y `GET /api/v0/server/status`: estado/diagnostico publico.
+- `GET /api/v0/server/status`: estado/diagnostico publico canonico.
   Incluye la proyeccion compacta `state_persist_*` para distinguir estado vivo
   en memoria de persistencia durable confirmada o degradada, sin detalles del
   filesystem ni errores crudos del store.
+- `GET /api/status`: alias legacy compatible del estado publico. Debe devolver
+  el mismo DTO redactado que la ruta versionada y publicar headers de
+  deprecacion/canonical para que clientes nuevos no lo promuevan.
 - statefile JSON `orquesta_server_state.v0`
 
 Configuracion externa relacionada:
@@ -96,6 +99,10 @@ Invariantes:
   configurado; los skips no terminales cuentan como presion de cola, pero no
   bloquean por si solos si sigue quedando capacidad. No crea una tarea generica
   a ciegas.
+- los refs retryables devueltos por la composicion se descuentan de la presion
+  de cola y se transportan al planner como refs de run, refs de request y
+  evidencias compactas; un retryable por request ref no debe volver invisible la
+  capacidad libre ni perder la evidencia del guardian/promocion que lo motivo.
 - el supervisor residente ejecuta pulsos asincronos con una guarda de actividad:
   no solapa ticks, libera el slot al terminar y permite reentrada posterior. La
   preparacion de automejora corre fuera del tick principal y no debe retener el

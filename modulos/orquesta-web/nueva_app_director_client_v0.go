@@ -48,12 +48,10 @@ func NewRESTArrancarDirectorAppClientV0(
 	timeout time.Duration,
 ) *RESTArrancarDirectorAppClientV0 {
 	return &RESTArrancarDirectorAppClientV0{
-		BaseURL:  strings.TrimRight(baseURL, "/"),
-		Endpoint: ArrancarDirectorAppEndpointV0,
-		Timeout:  timeout,
-		HTTPClient: &http.Client{
-			Timeout: timeout,
-		},
+		BaseURL:    normalizeWebRESTBaseURLStringV0(baseURL),
+		Endpoint:   ArrancarDirectorAppEndpointV0,
+		Timeout:    timeout,
+		HTTPClient: newWebLoopbackHTTPClientV0(timeout),
 	}
 }
 
@@ -111,10 +109,11 @@ func decodeArrancarDirectorAppResponseV0(
 	form WebNuevaAppFormV0,
 ) (WebNuevaAppViewModelV0, error) {
 	if (resp.StatusCode < 200 || resp.StatusCode > 299) && resp.StatusCode != http.StatusBadRequest {
+		discardWebHTTPResponseBodyV0(resp)
 		return WebNuevaAppViewModelV0{}, webNuevaAppClientErrorV0(WebNuevaAppErrTransporteV0, resp.StatusCode)
 	}
 	var result WebArrancarDirectorAppResultV0
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if !decodeWebHTTPJSONResponseV0(resp, &result) {
 		return WebNuevaAppViewModelV0{}, webNuevaAppClientErrorV0(WebNuevaAppErrRespuestaInvalidaV0, resp.StatusCode)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
@@ -137,10 +136,7 @@ func decodeArrancarDirectorAppResponseV0(
 }
 
 func (client *RESTArrancarDirectorAppClientV0) httpClient() *http.Client {
-	if client.HTTPClient != nil {
-		return client.HTTPClient
-	}
-	return &http.Client{Timeout: client.Timeout}
+	return webHTTPClientWithRedirectPolicyV0(client.HTTPClient, client.Timeout, client.BaseURL)
 }
 
 func (client *RESTArrancarDirectorAppClientV0) url() string {
@@ -148,7 +144,7 @@ func (client *RESTArrancarDirectorAppClientV0) url() string {
 	if endpoint == "" {
 		endpoint = ArrancarDirectorAppEndpointV0
 	}
-	return strings.TrimRight(client.BaseURL, "/") + "/" + strings.TrimLeft(endpoint, "/")
+	return webRESTEndpointURLV0(client.BaseURL, endpoint, ArrancarDirectorAppEndpointV0)
 }
 
 func IsWebArrancarDirectorClientErrorCodeV0(err error, code string) bool {

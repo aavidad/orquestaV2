@@ -16,5 +16,7 @@ Incluye:
 - conector de proceso local controlado para pruebas e2e;
 - multi-HOME;
 - identidad operativa.
+- contrato experimental opt-in de rotacion por handoff durable
+  (`RuntimeSessionRotationRequestV0`).
 
 No decide negocio. Ejecuta ordenes del core y devuelve evidencia.

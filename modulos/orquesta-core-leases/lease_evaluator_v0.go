@@ -51,8 +51,18 @@ func EvaluateAgentLeaseV0(input AgentLeaseEvaluationInputV0) (AgentTimeoutAssess
 		return AgentTimeoutAssessmentV0{}, AgentLeaseValidationErrorV0{Issues: issues}
 	}
 
-	now := mustParseAgentLeaseInstantV0(input.NowObservedAt)
-	launchObservedAt := mustParseAgentLeaseInstantV0(input.LaunchObservedAt)
+	now, err := parseAgentLeaseInstantV0(input.NowObservedAt)
+	if err != nil {
+		return AgentTimeoutAssessmentV0{}, AgentLeaseValidationErrorV0{
+			Issues: []AgentLeaseIssueV0{{Code: ErrAgentLeaseObservedAtV0, Field: "now_observed_at"}},
+		}
+	}
+	launchObservedAt, err := parseAgentLeaseInstantV0(input.LaunchObservedAt)
+	if err != nil {
+		return AgentTimeoutAssessmentV0{}, AgentLeaseValidationErrorV0{
+			Issues: []AgentLeaseIssueV0{{Code: ErrAgentLeaseObservedAtV0, Field: "launch_observed_at"}},
+		}
+	}
 
 	decision := AgentTimeoutDecisionContinueV0
 	reason := AgentTimeoutReasonLaunchPendingV0
@@ -67,7 +77,12 @@ func EvaluateAgentLeaseV0(input AgentLeaseEvaluationInputV0) (AgentTimeoutAssess
 			decision = AgentTimeoutDecisionMarkFailedV0
 			reason = AgentTimeoutReasonHeartbeatFailedV0
 		default:
-			heartbeatObservedAt := mustParseAgentLeaseInstantV0(heartbeat.ObservedAt)
+			heartbeatObservedAt, err := parseAgentLeaseInstantV0(heartbeat.ObservedAt)
+			if err != nil {
+				return AgentTimeoutAssessmentV0{}, AgentLeaseValidationErrorV0{
+					Issues: []AgentLeaseIssueV0{{Code: ErrAgentLeaseObservedAtV0, Field: "last_heartbeat.observed_at"}},
+				}
+			}
 			if !agentLeaseDeadlineReachedV0(now, heartbeatObservedAt, input.Policy.HeartbeatTimeoutSeconds) {
 				decision = AgentTimeoutDecisionContinueV0
 				reason = AgentTimeoutReasonHeartbeatCurrentV0

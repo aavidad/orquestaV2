@@ -4,42 +4,90 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"mime"
 	"net/http"
-	"regexp"
 	"strings"
 )
 
-const mcpPublicHTTPJSONMaxBytesV0 int64 = 1 << 20
-const mcpPublicExecutorErrorMaxLenV0 = 360
+const (
+	mcpPublicHTTPJSONControlMaxBytesV0         int64 = 256 << 10
+	mcpPublicHTTPJSONAutoprogrammingMaxBytesV0 int64 = 512 << 10
+	mcpPublicHTTPJSONRPCMaxBytesV0             int64 = 1 << 20
+	mcpPublicHTTPJSONDomainWorkMaxBytesV0      int64 = 2 << 20
+)
 
-var mcpPublicExecutorErrorRedactionsV0 = []struct {
-	pattern *regexp.Regexp
-	replace string
-}{
-	{regexp.MustCompile(`(?i)(bearer\s+)[A-Za-z0-9._\-+/=]+`), `${1}<redacted>`},
-	{regexp.MustCompile(`(?i)((?:access|refresh|id)_?token=)[^&\s]+`), `${1}<redacted>`},
-	{regexp.MustCompile(`(?i)((?:api[_-]?key|token|password|secret)=)[^&\s]+`), `${1}<redacted>`},
-	{regexp.MustCompile(`\bsk-[A-Za-z0-9_\-]{8,}`), `<redacted>`},
-	{regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9_]{8,}`), `<redacted>`},
-	{regexp.MustCompile(`/home/[^\s"']+`), `<path>`},
-	{regexp.MustCompile(`/root/[^\s"']+`), `<path>`},
-	{regexp.MustCompile(`/tmp/[^\s"']+`), `<path>`},
-}
+type mcpPublicHTTPJSONProfileV0 string
+
+type mcpPublicHTTPJSONUnknownFieldsPolicyV0 string
+
+const (
+	mcpPublicHTTPJSONProfileControlV0         mcpPublicHTTPJSONProfileV0 = "control_plane"
+	mcpPublicHTTPJSONProfileAutoprogrammingV0 mcpPublicHTTPJSONProfileV0 = "autoprogramming"
+	mcpPublicHTTPJSONProfileJSONRPCV0         mcpPublicHTTPJSONProfileV0 = "mcp_json_rpc"
+	mcpPublicHTTPJSONProfileDomainWorkV0      mcpPublicHTTPJSONProfileV0 = "domain_work"
+
+	mcpPublicHTTPJSONUnknownFieldsLegacyV0 mcpPublicHTTPJSONUnknownFieldsPolicyV0 = "legacy_accept_unknown_fields"
+)
 
 func decodeMCPPublicHTTPJSONV0(w http.ResponseWriter, r *http.Request, dst any) string {
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, mcpPublicHTTPJSONMaxBytesV0))
+	return decodeMCPPublicHTTPJSONProfileV0(w, r, dst, mcpPublicHTTPJSONProfileControlV0)
+}
+
+func decodeMCPPublicHTTPJSONProfileV0(
+	w http.ResponseWriter,
+	r *http.Request,
+	dst any,
+	profile mcpPublicHTTPJSONProfileV0,
+) string {
+	if !mcpPublicHTTPContentTypeAllowsJSONV0(r.Header.Get("Content-Type")) {
+		return MCPPublicErrContentTypeInvalidV0
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, mcpPublicHTTPJSONMaxBytesV0(profile)))
 	if err := decoder.Decode(dst); err != nil {
 		var maxErr *http.MaxBytesError
 		if errors.As(err, &maxErr) {
-			return "request_body_too_large"
+			return MCPPublicErrBodyTooLargeV0
 		}
-		return "request_body_invalido"
+		return MCPPublicErrBodyInvalidV0
 	}
 	var extra json.RawMessage
 	if err := decoder.Decode(&extra); err != io.EOF {
-		return "request_body_trailing_data"
+		return MCPPublicErrBodyTrailingDataV0
 	}
 	return ""
+}
+
+func mcpPublicHTTPJSONUnknownFieldsPolicyForProfileV0(profile mcpPublicHTTPJSONProfileV0) mcpPublicHTTPJSONUnknownFieldsPolicyV0 {
+	switch profile {
+	default:
+		return mcpPublicHTTPJSONUnknownFieldsLegacyV0
+	}
+}
+
+func mcpPublicHTTPJSONMaxBytesV0(profile mcpPublicHTTPJSONProfileV0) int64 {
+	switch profile {
+	case mcpPublicHTTPJSONProfileAutoprogrammingV0:
+		return mcpPublicHTTPJSONAutoprogrammingMaxBytesV0
+	case mcpPublicHTTPJSONProfileJSONRPCV0:
+		return mcpPublicHTTPJSONRPCMaxBytesV0
+	case mcpPublicHTTPJSONProfileDomainWorkV0:
+		return mcpPublicHTTPJSONDomainWorkMaxBytesV0
+	default:
+		return mcpPublicHTTPJSONControlMaxBytesV0
+	}
+}
+
+func mcpPublicHTTPContentTypeAllowsJSONV0(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return true
+	}
+	mediaType, _, err := mime.ParseMediaType(value)
+	if err != nil {
+		mediaType = strings.TrimSpace(strings.Split(value, ";")[0])
+	}
+	mediaType = strings.ToLower(mediaType)
+	return mediaType == "application/json" || strings.HasSuffix(mediaType, "+json")
 }
 
 func publicMCPExecutorErrorMessageV0(fallback string) string {
@@ -49,30 +97,25 @@ func publicMCPExecutorErrorMessageV0(fallback string) string {
 	return fallback
 }
 
+func publicMCPExecutorErrorSanitizeV0(message string) string {
+	return publicMCPErrorMessageFromTextV0(MCPPublicErrExecutorV0, message)
+}
+
 func publicMCPExecutorErrorMessageFromErrorV0(fallback string, err error) string {
 	base := publicMCPExecutorErrorMessageV0(fallback)
 	if err == nil {
 		return base
 	}
-	cause := publicMCPExecutorErrorSanitizeV0(err.Error())
-	if cause == "" || cause == base {
-		return base
+	if MCPPublicErrorCodeKnownV0(err.Error()) {
+		return base + ": " + strings.TrimSpace(err.Error())
 	}
-	return base + ": " + cause
+	return base
 }
 
-func publicMCPExecutorErrorSanitizeV0(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return ""
+func publicMCPErrorMessageFromTextV0(fallback string, message string) string {
+	message = strings.TrimSpace(message)
+	if MCPPublicErrorCodeKnownV0(message) {
+		return message
 	}
-	for _, redaction := range mcpPublicExecutorErrorRedactionsV0 {
-		value = redaction.pattern.ReplaceAllString(value, redaction.replace)
-	}
-	value = strings.Join(strings.Fields(value), " ")
-	runes := []rune(value)
-	if len(runes) > mcpPublicExecutorErrorMaxLenV0 {
-		value = string(runes[:mcpPublicExecutorErrorMaxLenV0]) + "..."
-	}
-	return strings.TrimSpace(value)
+	return publicMCPExecutorErrorMessageV0(fallback)
 }

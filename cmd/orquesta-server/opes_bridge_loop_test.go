@@ -154,3 +154,27 @@ func TestOPESBridgeLoopRunsBoundedTicksV0(t *testing.T) {
 		t.Fatalf("stderr=%s", got)
 	}
 }
+
+func TestOPESBridgeLoopWaitReportaShutdownTimeoutV0(t *testing.T) {
+	events := []externalBridgeLoopEventV0{}
+	done := make(chan struct{})
+	ok := waitOPESBridgeLoopDoneV0(
+		context.Background(),
+		opesBridgeLoopConfigV0{
+			Loop: externalBridgeLoopConfigV0{
+				Component:     "opes_bridge_loop",
+				EffectTimeout: time.Nanosecond,
+				Observer: func(_ context.Context, event externalBridgeLoopEventV0) {
+					events = append(events, event)
+				},
+			},
+		},
+		done,
+	)
+
+	if ok || len(events) != 1 ||
+		events[0].Status != "timeout" ||
+		events[0].ErrorCode != "external_bridge_shutdown_timeout" {
+		t.Fatalf("ok=%v events=%+v", ok, events)
+	}
+}

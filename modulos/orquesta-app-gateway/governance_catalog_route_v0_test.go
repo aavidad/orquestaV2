@@ -37,6 +37,9 @@ func TestGovernanceCatalogAPIDelegaEnProviderPublicoV0(t *testing.T) {
 	}
 	if response.RequestID != "req-gov-app-gateway" ||
 		response.CorrelationID != "corr-gov-app-gateway" ||
+		response.SchemaVersion != orquestagovernance.GovernanceCatalogPublicSchemaV0 ||
+		response.CurrentBlock != orquestagovernance.GovernanceCatalogCurrentBlockEffectiveV0 ||
+		response.OutputBudget.Status != orquestagovernance.GovernanceCatalogPublicBudgetCompleteV0 ||
 		len(response.Effective) != 1 ||
 		response.Counters.Effective != 1 ||
 		response.Counters.Proposed != 1 ||

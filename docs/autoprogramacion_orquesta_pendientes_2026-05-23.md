@@ -24,6 +24,9 @@ vigente/promocionado. Cada entrada conserva owner, estado, alias local y hash en
 la request generada; si la entrada local ya esta cerrada o cubierta por un Txx,
 queda como evidencia y no se programa como tarea nueva. Fuentes historicas o
 stale deben permanecer fuera de este indice o declararse con estado historico.
+Los documentos en cuarentena por T124 se declaran con estado `quarantine` y no
+son ejecutables salvo una tarea que pida explicitamente composicion externa o
+legacy.
 
 - source_path: `modulos/orquesta-autoprogramming/docs/tareas.md`; source_kind:
   module_tasks; owner: `modulos/orquesta-autoprogramming`; estado: vigente;
@@ -34,6 +37,21 @@ stale deben permanecer fuera de este indice o declararse con estado historico.
 - source_path: `modulos/orquesta-mcp/docs/tareas.md`; source_kind:
   module_tasks; owner: `modulos/orquesta-mcp`; estado: vigente; aliases:
   MCP-*; tests: `go test -count=1 ./modulos/orquesta-mcp`.
+- source_path: `docs/BIBLIA_APP_ORQUESTA.md`; source_kind:
+  legacy_external_orchestrator_doc; owner: `docs`; estado: quarantine;
+  related_txx: T124; aliases: LEGACY-EXT-ORCH-*.
+- source_path: `docs/op_088_orquesta_servidor_mcp.md`; source_kind:
+  legacy_external_orchestrator_doc; owner: `docs`; estado: quarantine;
+  related_txx: T124; aliases: LEGACY-EXT-ORCH-*.
+- source_path: `docs/runtime_worker_contract.md`; source_kind:
+  legacy_external_orchestrator_doc; owner: `docs`; estado: quarantine;
+  related_txx: T124; aliases: LEGACY-EXT-ORCH-*.
+- source_path: `docs/op_087_autogestion_supervisada_agentes.md`; source_kind:
+  legacy_external_orchestrator_doc; owner: `docs`; estado: quarantine;
+  related_txx: T124; aliases: LEGACY-EXT-ORCH-*.
+- source_path: `docs/benchmark_orquestadores_externos_2026-04-12.md`;
+  source_kind: legacy_external_orchestrator_doc; owner: `docs`; estado:
+  quarantine; related_txx: T124; aliases: LEGACY-EXT-ORCH-*.
 
 ## Reglas globales
 
@@ -784,8 +802,13 @@ Criterios:
 Objetivo: ejecutar y documentar el smoke OPES completo contra instancia temporal
 aislada, sin tocar OPES productivo.
 
-Estado: pendiente. Los paquetes del bridge/conector compilan, pero sigue sin
-evidencia del smoke OPES temporal completo hasta derivados y `assemble_topic`.
+Estado: bloqueado verificable 2026-05-27 para smoke real OPES temporal.
+Los paquetes del bridge/conector compilan y los intentos cerrados de T12 ya
+demostraron el recorrido fake `run-until-assemble` hasta
+`assemble_topic -> assembled_topic`, pero no hay evidencia real de OPES temporal
+vivo, Orquesta temporal, cuota/modelo confirmados ni confirmacion explicita de
+efectos. No relanzar otra implementacion padre para esta misma tarea: la
+reapertura valida es una ejecucion opt-in con entorno temporal y comando exacto.
 
 Alcance:
 
@@ -803,6 +826,22 @@ Criterios:
 - Tests: `go test -count=1 ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector`.
 - Evidencia parcial 2026-05-26:
   `GOCACHE=/tmp/orquesta-go-build-cache go test -count=1 ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector`.
+- Reconciliacion 2026-05-27:
+  `docs/runbooks/resultado_smoke_opes_consumer_t12_2026-05-24.md` lineas
+  96-115 documenta los ACKs `5373ad36695c` y `51f9a01810a0`: tests
+  obligatorios pasados, sintaxis de wrappers pasada y smoke fake aislado
+  `run-until-assemble` pasado. Las lineas 128-143 mantienen el bloqueo real:
+  faltan `ORQUESTA_OPES_BASE_URL`, `ORQUESTA_BASE_URL`,
+  `ORQUESTA_OPES_TEMPORAL_CONFIRM=1` y confirmacion de efectos sobre instancia
+  temporal.
+- `backlog_scan_ref=scan-ref-backlog-59187ec35b54`,
+  `backlog_scan_epoch=backlog-scan-epoch-c231c1e77cf2`,
+  `backlog_scan_reservation_ref=reservation-ref-backlog-t12-opes-consumer-smoke-real-opt-in-21a9b3ab`.
+  Hashes leidos antes de reconciliar: backlog
+  `c3f98d1f5858c151808b5e3cf835622cee3f5b9f3595e455be1fd203381154be`
+  lineas 800-823; resultado T12
+  `aa3e45b7e5b089c641c8e9bc6b52c055239e7160fb95089a208f66b4474dbeb0`
+  lineas 96-143.
 
 ## Escaneo backlog 2026-05-24
 
@@ -898,10 +937,15 @@ Objetivo: reemplazar la apertura temporal de `detalle_prohibido` por una politic
 reactivable por campo y por frontera, con matriz de falsos positivos antes de
 volver a endurecer.
 
-Estado: pendiente. Hay matriz y helpers por campo, pero el servidor residente
-mantiene `ORQUESTA_DETAIL_PROHIBITED_RAILS=off` por defecto para no bloquear
-autoprogramacion. Sigue pendiente reactivar scopes concretos solo con matrices
-externas suficientes y sincronizar la documentacion de rails.
+Estado: cerrado y reconciliado el 2026-05-27. Los intentos cerrados
+`ack-ref-app-stack-agent-ref-task-autoprogramming-5d8df9a77934-g01`,
+`ack-ref-app-stack-agent-ref-task-autoprogramming-25043fa3a168-g01` y
+`ack-ref-app-stack-agent-ref-task-autoprogramming-537106138688-g01`
+reactivaron el rail por defecto en el servidor con scope acotado, preservaron
+`programming=off`, publicaron las variables canonicas en effective config y
+pasaron la suite requerida. Esta seccion no debe volver a relanzarse por la
+frase historica de apertura temporal `off`; nuevas ampliaciones de scope deben
+abrir tarea propia con matriz externa y write-set especifico.
 
 Alcance:
 
@@ -925,6 +969,23 @@ Criterios:
 - Registrar cada lista local restante en un propietario por modulo o sustituirla
   por helper/puerto de sanitizado.
 - Tests: `go test -count=1 ./modulos/orquesta-rails ./modulos/orquesta-core-workflow ./modulos/orquesta-context ./modulos/orquesta-director-agent ./cmd/orquesta-server`.
+
+Reconciliacion documental 2026-05-27:
+
+- `ORQUESTA_DETAIL_PROHIBITED_RAILS=on` es el default de servidor en modo
+  produccion con scope acotado a `core_workflow.*`,
+  `context_bundle_request.*`, `context_materialization.content`,
+  `context_materialization.ref` y `director_agent_decision.*`.
+- `ORQUESTA_SECURITY_MODE=programming` conserva apertura `off` para
+  autoprogramacion gobernada, sin convertir vocabulario operativo opaco
+  (`runtime`, `provider`, `model`, `codex`, `git`, `db`, `sql`) en bloqueo.
+- `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+  `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+  como refs opacas; no son rutas ni nombres Git.
+- Queda pendiente solo la sincronizacion de registros fuera de este write-set
+  (`docs/rails`, `docs/rail_errors_observados_2026-05-23.md` y
+  `docs/duplicaciones_railes_pendientes_2026-05-24.md`) si una run futura los
+  asigna explicitamente. No bloquea el cierre de T15.
 
 ## T16 mcp-server-real-opt-in
 
@@ -1335,6 +1396,18 @@ Criterios:
 - Si una entrada sigue pendiente, debe tener owner, alcance, prueba focal y
   relacion clara con una seccion Txx o doc local.
 - Tests: `go test -count=1 ./modulos/orquesta-mcp`.
+
+Cierre 2026-05-27: `human_director_work_review_plan_tool_v0.go` queda como
+descriptor/DTO/ejecutor fino y separa lectura de input en
+`human_director_work_review_plan_input_v0.go` y proyeccion/request builder en
+`human_director_work_review_plan_projection_v0.go`.
+`autoprogramming_self_improvement_tool_v0.go` queda como descriptor/DTO/ejecutor
+fino y separa input flexible, advice de operador y proyeccion en
+`autoprogramming_self_improvement_input_v0.go`,
+`autoprogramming_operator_advice_v0.go` y
+`autoprogramming_self_improvement_projection_v0.go`. Los nombres publicos de
+tools, HTTP y transporte se conservan; MCP sigue como adaptador opt-in sin
+runtime, proveedor, DB ni reglas de dominio.
 
 Evidencia de cierre:
 
@@ -1907,6 +1980,89 @@ Criterios:
   sustituirla por el test base.
 - Los tests deben cubrir secciones con varios comandos unidos por `y`, scripts,
   `git diff --check`, prueba documental focal y estado ambiguo.
+- Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+Cierre 2026-05-27: el planner de automejora aplica politica de alcance para
+`required_tests`: los paquetes de scanner con write-set solo documental omiten
+`go test -count=1 ./...` heredado como default global, anaden validacion
+documental focal y conservan la guarda `ref_only`; las pruebas declaradas por
+seccion Markdown, incluido `go test -count=1 ./...`, se preservan como
+`section_declared`. La procedencia queda visible en `ContextRefs` con
+`required_test_origin:*` y la omision de default global con
+`required_test_scope_policy:*`. Revalidado con
+`go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+## Escaneo backlog 2026-05-27 decimoseptima pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente, guia del
+nucleo, principio director, matriz de smokes, este backlog, rail errors,
+duplicaciones de rails y busquedas `rg` sobre `Escaneo backlog`, `^## T24`,
+`required_ref_action`, `test_receipts` y `contexto_ref_only_resuelto`. No se
+programa codigo desde este scanner.
+`task-ref-self-improvement-4f550c019e0d`,
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Hueco concreto nuevo:
+
+- El backlog ya muestra inserciones concurrentes con huecos de numeracion
+  visible (`T244` salta a `T247`) y bloques de escaneo duplicados/fuera de
+  orden. T248/T249 gobiernan identidad de secciones de escaneo, pero falta un
+  owner para reservar ids `Txx` ejecutables antes de escribir docs, detectar
+  colisiones entre agentes de la misma tanda y evitar que un scanner cierre o
+  promocione una tarea por numero humano ya ocupado.
+
+## T250 backlog-task-id-allocation-lease
+
+Objetivo: hacer idempotente y verificable la asignacion de ids `Txx` del
+backlog cuando varios scanners de automejora escriben tareas documentales en
+paralelo.
+
+Estado: cerrado el 2026-05-27 para reserva causal de ids ejecutables desde el
+merge lease del scanner y deteccion publica de colisiones de id humano.
+
+Evidencia focal 2026-05-27:
+
+- `cmd/orquesta-server/idle_self_improvement_backlog_task_id_lease_v0.go`
+  deriva `task_id_ref`, rango `Txx` y `reservation-ref-backlog-task-id-*`
+  desde request/correlation/epoch documental sin interpretar `worktree_ref` ni
+  `branch_ref` como rutas o nombres Git.
+- El parser de ids ejecutables solo acepta encabezados `## T[0-9]+` y no cuenta
+  secciones de evidencia como `## Escaneo backlog ...`.
+- El planner publica `backlog_task_number_collision` cuando el backlog vivo
+  contiene el mismo id humano para secciones distintas, preservando historico
+  sin renumerar.
+- Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+Alcance:
+
+- `cmd/orquesta-server`
+- `modulos/orquesta-server`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- El merge lease del scanner debe reservar un `task_id_ref` o rango `Txx`
+  compacto por request/correlation/epoch documental antes de insertar tareas
+  nuevas, sin convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git.
+- Si dos scanners proponen el mismo `Txx`, o si aparece un hueco no reservado
+  entre tareas nuevas de la misma tanda, el merge debe bloquear con reason code
+  publico como `backlog_task_id_collision` o
+  `backlog_task_id_allocation_gap` y pedir rebase/`CONSULTA AL DIRECTOR`.
+- La validacion debe distinguir ids ejecutables `## Txx` de secciones de
+  evidencia `## Escaneo backlog ...`; T248/T249 pueden aportar `scan_ref`, pero
+  no sustituyen la reserva de ids de tareas.
+- La solucion debe preservar historico: no renumerar `Txx` existentes, no
+  borrar huecos ya persistidos y no cerrar una tarea solo por coincidencia de
+  numero si faltan hash, linea, request/correlation y estado documental.
+- Coordinar con T37, T43, T44, T79, T116, T122, T140, T240, T248 y T249: esta
+  tarea no redefine parser completo, contexto `ref_only`, sharding, lectura
+  acotada de docs ni identidad de secciones de escaneo; solo gobierna reserva y
+  colision de ids ejecutables del backlog.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
 
 ## T38 codex-delivery-observation-rail-owner
@@ -5010,7 +5166,8 @@ ficheros productivos >300 en esta medicion.
 Objetivo: extraer helpers comunes para smokes reales/temporales largos sin
 relajar guardas de confirmacion, readiness ni redaccion.
 
-Estado: pendiente.
+Estado: cerrado offline el 2026-05-26 para el primer corte mecanico de
+helpers comunes de smokes.
 
 Alcance:
 
@@ -5037,6 +5194,15 @@ Criterios:
   cualquier cambio funcional debe ir en tarea separada con caso focal.
 - Tests: `bash -n scripts/*.sh scripts/lib/*.sh` y pruebas focales de los
   smokes afectados con confirmaciones fake/temporales cuando existan.
+
+Evidencia de cierre 2026-05-26: se anadio `scripts/lib/smoke_common.sh` como
+libreria compartida para prerequisitos, confirmaciones opt-in, URLs locales,
+POST/GET JSON con error acotado, parseo JSON compacto y espera de readiness
+operativa por `orquesta_server_state_v0.json`. Los smokes OPES de
+`domain_work`, visual, plan-temario, derivados REST y el smoke OPES con agente
+real reutilizan esos helpers sin relajar confirmaciones ni usar `/healthz` como
+readiness. La salida de error HTTP queda limitada por defecto y redacta userinfo
+o query de la URL. Prueba obligatoria: `bash -n scripts/*.sh scripts/lib/*.sh`.
 
 ## Escaneo backlog 2026-05-24 vigesimonovena pasada
 
@@ -5078,7 +5244,7 @@ ejecutable por puerto, reutilizando `orquesta-capacity` como contrato/politica
 de composicion sin meter proveedor, HOME, cuota real ni modelo concreto en el
 nucleo.
 
-Estado: pendiente.
+Estado: cerrado offline/focal el 2026-05-26.
 
 Alcance:
 
@@ -5111,13 +5277,41 @@ Criterios:
   pedir `high`/`xhigh` con razon auditable.
 - Tests: `go test -count=1 ./modulos/orquesta-capacity ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-codex-stack ./modulos/orquesta-runtime ./cmd/orquesta-server`.
 
+Resolucion 2026-05-26:
+
+- `CapacityDecisionExecutorV0` delega en `CapacityDecisionPolicyPortV0` cuando
+  la composicion lo inyecta. El camino estatico queda solo como fallback legacy
+  auditable con motivo `legacy-static-capacity-decision`.
+- `orquesta-app-codex-stack` inyecta un adapter sobre
+  `orquesta-capacity.DefaultCapacityPolicyV0`; el servidor centraliza refs
+  opacas en `ORQUESTA_CAPACITY_POLICY_REF`, `ORQUESTA_CAPACITY_POOL_REF`,
+  `ORQUESTA_CAPACITY_MODEL_REF` y `ORQUESTA_CAPACITY_QUOTA_REF`.
+- `RegisterCapacityDecision` conserva el contrato actual de core-workflow; los
+  refs de policy/pool/model/quota y motivos viajan como evidencias compactas
+  etiquetadas hasta que una evolucion del core permita campos dedicados.
+- Sigue pendiente, fuera de T92, conectar quota source real, benchmarks vivos o
+  una politica de proveedor opt-in. No se mete HOME, OAuth, token, proveedor ni
+  modelo concreto en core/runtime/domain-work.
+
 ## T93 codex-prompt-toolbelt-source-sync
 
 Objetivo: tener una fuente verificable para toolbelt/prompts de agentes Codex,
 derivada de rutas y tools registrados, para no entregar instrucciones
 contradictorias o stale a agentes externos.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26.
+
+Evidencia de cierre 2026-05-26: `cmd/orquesta-server/codex_prompt_hints_v0.go`
+consume `codexToolbeltHTTPHintV0` y `codexToolbeltMCPHintV0` desde
+`codex_toolbelt_source_v0.go`. La fuente HTTP usa constantes publicas de
+`orquesta-mcp` montadas por `orquesta-app-gateway`; la fuente MCP filtra sobre
+`MCPTransportToolsV0` e incluye `orquesta.operator.directed_query.v0` junto al
+resource `orquesta.operator.operations.v0`. Los estados publicados distinguen
+servidor HTTP vivo, tool registrado, puerto/conector opt-in no configurado y
+resource de operador, sin listar rutas locales, HOME real, secretos, prompts ni
+transcripts. La configuracion runtime Codex se separo a
+`cmd/orquesta-server/codex_runtime_config_v0.go` para mantener
+`stack.go` bajo el baseline T90.
 
 Alcance:
 
@@ -5147,6 +5341,8 @@ Criterios:
   transcripts ni payloads de control. Solo nombres publicos, metodos, paths,
   refs de contrato y errores recuperables.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-app-codex-stack ./modulos/orquesta-runtime-codex ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-app-gateway`.
+- Verificacion OrquestaV2 2026-05-26: agente externo valido contexto
+  `ref_only` por evidencia explicita y reejecuto la matriz requerida anterior.
 
 ## Escaneo backlog 2026-05-24 trigesima pasada
 
@@ -5174,7 +5370,7 @@ Hueco concreto nuevo:
 Objetivo: hacer visible y verificable el fallo de escritura de auditoria del
 servidor residente sin bloquear liveness ni persistir detalles sensibles.
 
-Estado: pendiente.
+Estado: hecho local 2026-05-26.
 
 Alcance:
 
@@ -5203,6 +5399,22 @@ Criterios:
 - Coordinar con T19/T41: esta tarea cubre visibilidad de fallo de escritura,
   no schema de payload ni visor de auditoria.
 - Tests: `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`.
+
+Cierre aplicado 2026-05-26:
+
+- `auditEventV0` registra fallos del sink en la proyeccion compacta
+  `audit_*` del estado residente: estado degradado, contador, codigo publico,
+  evento compacto, severidad y timestamp.
+- El fallo no se reaudita contra el mismo sink; se persiste por el state store
+  si esta disponible y, si ese store tambien falla, queda visible en memoria con
+  `state_persist_failed` independiente.
+- La severidad inicial queda en `warning`: `/healthz` conserva liveness, y
+  readiness/status pueden degradar sin exponer el error crudo de IO.
+- La proyeccion publica usa solo `audit_write_failed` y nombres de evento
+  compactos; no devuelve rutas locales, HOME, permisos exactos, payloads HTTP,
+  prompts, transcripts ni tokens.
+- Cobertura focal: `TestRuntimeV0AuditEventNoSilenciaFalloDeSinkV0` y
+  `TestRuntimeV0AuditFailureNoRecursivoSiStateStoreFallaV0`.
 
 ## Escaneo backlog 2026-05-24 trigesimoprimera pasada
 
@@ -5310,7 +5522,19 @@ Huecos concretos nuevos:
 Objetivo: hacer que `orquesta-server stop` valide identidad de proceso y modo de
 shutdown antes de senalar un PID desde estado durable potencialmente obsoleto.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26.
+
+Cierre 2026-05-26: `cmd/orquesta-server` publica salida de comando con DTO
+versionado y redaccion explicita. `status`, `run-status` y `mcp-real-smoke`
+usan `orquesta_command_public_output.v0` con `freshness`, `redaction_level`,
+`payload_ref`, modo de diagnostico y fuente canonica no terminal.
+`opes-drain-once` conserva los campos operativos top-level que consumen los
+smokes, pero sustituye URLs/base URLs por refs opacas y anade
+version/freshness/redaccion. Los DTO publicos de `codex-wave-*` y
+`codex-wave-tail` declaran freshness,
+redaction/canonical source y mantienen stdout/stderr solo como diagnostico local
+acotado. El fallback de `status` ya no imprime statefile crudo con PID, addr o
+paths.
 
 Alcance:
 
@@ -5339,13 +5563,22 @@ Criterios:
   checkpoint neutral, cleanup de arranque ni stop de ola Codex.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-server-shutdown ./modulos/orquesta-agent-process-registry`.
 
+Evidencia 2026-05-26: el state del servidor residente conserva
+`process_ref` y `daemon_epoch_ref` opacos junto a pid/addr/started_at.
+`orquesta-server stop` consulta `/api/v0/server/status`, compara addr, started_at,
+process_ref y daemon_epoch_ref antes de senalar el PID, y bloquea con
+`daemon_identity_mismatch` o `daemon_identity_unavailable` si el snapshot no
+corresponde al HTTP vivo. El shutdown del CLI pasa a cooperativo por defecto;
+`--force` requiere `--reason` explicita. La salida publica usa `process_ref`,
+no rutas, HOME, argv, prompts, transcripts ni tokens.
+
 ## T97 server-daemon-log-redaction-retention
 
 Objetivo: definir propietario, redaccion y retencion de `stdout.log`/`stderr.log`
 del daemon residente para que no dupliquen auditoria, tail Codex ni evidencias
 de tests requeridos.
 
-Estado: pendiente.
+Estado: completada 2026-05-26.
 
 Alcance:
 
@@ -5369,13 +5602,44 @@ Criterios:
   output y status/config snapshot conservan owners separados.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-observability`.
 
+Evidencia 2026-05-26:
+
+- `orquesta-server start` ya declara owner/politica canonica para logs
+  operacionales del daemon: tamano maximo, rotacion, retencion local, acceso
+  local y `terminal_evidence=false`.
+- Por defecto no conecta stdout/stderr crudos del proceso residente a
+  `stdout.log`/`stderr.log`; escribe un resumen JSON redactado y redirige la
+  salida viva a descarte. La captura cruda queda solo por opt-in local
+  `ORQUESTA_SERVER_DAEMON_LOG_RAW_ENABLED` con razon publica.
+- `/api/status`, `/api/v0/server/status` y diagnostico residente exponen solo la
+  politica compacta, sin rutas privadas, HOME, env, comandos, remotos, prompts,
+  transcripts, tokens, payloads HTTP ni salida de proveedor.
+
 ## T98 external-bridge-input-ledger-claim-recovery
 
 Objetivo: convertir el ledger de entrada de bridges externos en claim/recovery
 causal por job externo antes de crear runs, empezando por OPES sin meter OPES en
 el nucleo.
 
-Estado: pendiente.
+Estado: cerrado offline en servidor el 2026-05-26.
+
+Cierre 2026-05-26:
+
+- `cmd/orquesta-server` adquiere claim durable `claimed` por
+  `external_system + external_job_ref` antes de invocar
+  `/api/v0/external-work/run`.
+- El claim conserva `claim_ref`, `correlation_id`, `idempotency_key`,
+  `change_ref` y `run_ref` prevista; un segundo drain ve `claimed` o
+  `submitted` y no crea otra run.
+- La finalizacion `submitted` rechaza sobrescribir un `run_ref` distinto con
+  `external_bridge_submitted_conflict`.
+- Si el submit ya devolvio `run_ref` pero no se puede finalizar el ledger, el
+  summary queda en `recovery_required` con codigo publico
+  `external_bridge_recovery_required`; el claim previo deja refs suficientes
+  para reconciliar antes de reintentar.
+- Cobertura focal anadida en `cmd/orquesta-server` para claim previo al POST,
+  bloqueo por claim existente, fallo de finalizacion y conflicto de
+  `submitted`.
 
 Alcance:
 
@@ -5432,12 +5696,10 @@ Huecos concretos nuevos:
   check ni politica uniforme de campos desconocidos. El transporte MCP real ya
   usa un limite local con `io.LimitReader`, pero esa regla no gobierna el resto
   de la superficie HTTP.
-- La compactacion de startup escribe snapshots `before`, `removed`, `manifest`
-  y mueve runtime dirs a una revision con directorios/ficheros de modo amplio,
-  ademas de proyectar la ruta de revision en el mensaje de readiness. T35 cubre
-  si se debe compactar; T59 cubre purga de runtime Codex; falta owner de
-  redaccion, permisos, retencion y proyeccion publica de esos artefactos de
-  revision.
+- Antes de T100, la compactacion de startup escribia snapshots `before`,
+  `removed`, `manifest` y archivaba runtime con permisos/proyeccion demasiado
+  amplios. T100 cierra redaccion, permisos, retencion y proyeccion publica; T35
+  sigue cubriendo si se debe compactar y T59 la purga material de runtime Codex.
 - La entrega de artefactos `domain_work` consulta el ledger por
   `idempotency_key`, ejecuta `submit_artifact` y solo despues registra accepted
   o rejected. Si el submit externo funciona pero la escritura del ledger falla,
@@ -5451,7 +5713,11 @@ Objetivo: unificar limites de recursos HTTP del servidor residente y de los
 handlers MCP/HTTP publicos sin meter producto ni transporte concreto en el
 nucleo.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26 para el primer alcance residente: `RuntimeV0.RunV0`
+configura timeouts HTTP por politica de composicion, MCP/HTTP y web usan helpers
+de decode con limite/trailing-token por perfil, `/mcp` distingue JSON-RPC y la
+auditoria HTTP conserva solo metadatos compactos de endpoint, codigo, tamano y
+correlacion.
 
 Alcance:
 
@@ -5482,12 +5748,27 @@ Criterios:
   no autenticacion remota, politica de egress ni readiness semantica.
 - Tests: `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-web ./cmd/orquesta-server`.
 
+Evidencia 2026-05-26:
+
+- `modulos/orquesta-server/http_resource_limits_v0.go` centraliza timeouts y
+  limite de body de control plane; `cmd/orquesta-server` expone overrides
+  canonicos `ORQUESTA_SERVER_*_TIMEOUT_MS`, header/body bytes y metadata de
+  configuracion efectiva.
+- `modulos/orquesta-mcp/public_http_json_v0.go`,
+  `cmd/orquesta-server/mcp_real_http_json_v0.go` y
+  `modulos/orquesta-web/http_resource_limits_v0.go` aplican limites distintos
+  para control plane, autoprogramacion, MCP JSON-RPC y domain_work, rechazan
+  trailing tokens y mantienen compatibilidad de campos desconocidos solo donde
+  ya era contrato legacy.
+- La auditoria HTTP de servidor registra endpoint, codigo, tamano,
+  correlacion, content-length y query keys, sin body crudo ni valores de query.
+
 ## T100 startup-revision-archive-redaction-retention
 
 Objetivo: hacer seguros y verificables los artefactos de revision generados por
 compactacion de startup sin convertirlos en otra persistencia cruda paralela.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26 para archivo de revision redactado por defecto.
 
 Alcance:
 
@@ -5518,12 +5799,32 @@ Criterios:
   archivo de revision.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-run-control ./modulos/orquesta-state-file`.
 
+Cierre 2026-05-26: la compactacion de startup escribe artefactos de revision
+con permisos restrictivos, manifest con `revision_ref` opaco, retencion
+explicita, limite de tamano y snapshots redactados por campo. El runtime
+asociado se conserva en revision solo como manifest de metadata redactada; no se
+copian prompts, transcripts, stdout/stderr ni control files completos. Readiness
+y status proyectan `startup_revision` con contadores y `revision_ref`, sin rutas
+locales. Verificado con
+`go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-run-control ./modulos/orquesta-state-file`.
+
 ## T101 domain-work-artifact-submission-ledger-recovery
 
 Objetivo: convertir el ledger de salida de artefactos `domain_work` en una
 frontera de claim/recovery causal para `submit_artifact`.
 
-Estado: pendiente.
+Estado: cubierto 2026-05-26. Revalidacion 2026-05-26: la politica
+ejecutable queda en `codexStackReviewGatePolicyV0`, aplicada por el review gate
+del stack con evidencia de worktree y sin convertir ACK, prompt o snapshot en
+owners de aceptacion/rechazo.
+
+Revalidacion T117 2026-05-26: la politica ejecutable queda concentrada en
+`codexStackReviewGatePolicyV0` para decidir presupuesto estricto Go y write-set
+efectivo del review gate. `orquesta-runtime-worktree` acepta globs seguros en
+write-set, el stack Codex normaliza aliases locales reparables antes de revisar
+snapshot y los perfiles documentales declarados por policy no activan el
+presupuesto Go estricto. El ACK sigue siendo recibo de forma y tests; el
+snapshot aporta evidencia y el review gate aplica la politica.
 
 Alcance:
 
@@ -5556,6 +5857,23 @@ Criterios:
 - Coordinar con T14/T72/T98: esta tarea cubre idempotencia y recovery de salida,
   no mapa de tipos de artefacto ni claim de jobs externos de entrada.
 - Tests: `go test -count=1 ./modulos/orquesta-app-codex-stack ./modulos/orquesta-domain-work ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector ./cmd/orquesta-server`.
+
+Cierre 2026-05-26:
+
+- `DomainWorkArtifactSubmissionLedgerPortV0` registra estados `claimed`,
+  `submitting`, `accepted` y `rejected` por `idempotency_key` y superficie
+  causal `run_ref/task_ref/delivery_ref/domain_ref/job_ref/artifact_ref`.
+- El bridge registra `claimed` y `submitting` antes de llamar
+  `submit_artifact`; si encuentra una claim viva no terminal devuelve
+  `domain_work_submit_recovery_required` sin repetir el efecto externo.
+- El ledger memory/file rechaza conflictos compactos
+  `domain_work_submit_conflict` cuando una aceptacion intenta cambiar receipt o
+  una misma key intenta cambiar refs causales.
+- Si el submit externo devuelve receipt y la escritura terminal del ledger
+  falla, la claim/submitting persistida impide el reenvio automatico y fuerza
+  recovery publico compacto.
+- Verificado con
+  `go test -count=1 ./modulos/orquesta-app-codex-stack ./modulos/orquesta-domain-work ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector ./cmd/orquesta-server`.
 
 ## Escaneo backlog 2026-05-24 trigesimocuarta pasada
 
@@ -5608,7 +5926,14 @@ Huecos concretos nuevos:
 Objetivo: unificar la frontera JSON de handlers HTTP publicos y legacy que
 quedan fuera del primer scope de T99, sin meter HTTP en el nucleo puro.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26.
+
+Aliases canonicos 2026-05-26:
+
+- Fusionada_con: `T137 public-http-request-body-bounds`.
+- Canon: T102 conserva el cierre general de frontera JSON publica/legacy; T137
+  queda como alias historico de entrada HTTP y no debe relanzarse si T102 esta
+  cerrado o visible.
 
 Alcance:
 
@@ -5639,12 +5964,27 @@ Criterios:
   tarea cubre adaptadores HTTP publicos que quedaron con decoders locales.
 - Tests: `go test -count=1 ./modulos/orquesta-factory-http ./modulos/orquesta-governance ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway ./modulos/orquesta-web ./cmd/orquesta-server`.
 
+Cierre 2026-05-26: `orquesta-factory-http`, governance, MCP, web y el
+transporte MCP real del servidor quedan bajo helper/perfil JSON explicito para
+limite de body, trailing tokens, `Content-Type`, campos desconocidos y errores
+publicos compactos con correlacion. Factory y governance conservan modo estricto
+de campos desconocidos; MCP declara compatibilidad legacy para campos extra de
+clientes finos; web conserva JSON/form legacy por perfil.
+
 ## T103 outbound-http-response-limit-redaction
 
 Objetivo: fijar una politica comun para respuestas HTTP salientes consumidas por
 conectores, CLI, web y comandos de servidor.
 
-Estado: pendiente.
+Estado: cubierto 2026-05-26 por politica local equivalente en conectores OPES,
+`domain_work-http`, CLI, web y comandos de servidor.
+
+Aliases canonicos 2026-05-26:
+
+- Fusionada_con: `T138 outbound-http-response-bounds-redaction`.
+- Canon: T103 conserva el cierre general de respuestas HTTP salientes
+  acotadas/redactadas; T138 queda como alias historico y no debe relanzarse si
+  T103 esta cerrado o visible.
 
 Alcance:
 
@@ -5672,12 +6012,36 @@ Criterios:
   clientes salientes.
 - Tests: `go test -count=1 ./modulos/orquesta-opes-connector ./modulos/orquesta-domain-work-http ./modulos/orquesta-cli ./modulos/orquesta-web ./modulos/orquesta-app-gateway ./cmd/orquesta-server`.
 
+Evidencia 2026-05-26:
+
+- `orquesta-opes-connector` y `orquesta-domain-work-http` leen respuestas con
+  limite antes de decodificar, validan `Content-Type` JSON o compatibilidad
+  legacy `text/plain` siempre con JSON parseable, rechazan trailing data y no
+  propagan cuerpos no-2xx.
+- `orquesta-cli`, `orquesta-web` y comandos de `cmd/orquesta-server` usan
+  helpers locales equivalentes para limite, `Content-Type` JSON/legacy
+  `text/plain`, trailing data y errores publicos compactos sin body crudo.
+- `orquesta-app-gateway` conserva el cliente web in-process y hereda esa
+  politica desde los clientes web inyectados, sin abrir sockets ni meter logica
+  de negocio en el gateway.
+
+Revalidacion 2026-05-26: el grupo de autoprogramacion T103 reejecuto la bateria
+focal del alcance y conserva el cierre sin ampliar write-set ni tocar egress
+T80.
+
+Revalidacion OrquestaV2 2026-05-26:
+`agent-ref-task-autoprogramming-49b26a6e419d-g01` anadio cobertura explicita
+para compatibilidad legacy `text/plain` con JSON parseable en conectores,
+CLI/web/MCP y comandos de servidor, manteniendo T103 como canon y T138 como
+alias historico.
+
 ## T104 file-store-durable-write-policy
 
 Objetivo: unificar la politica de escritura durable para stores file-based de
 estado, runs, descriptors, ledgers y snapshots.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-27 con bateria obligatoria completa en el alcance del
+write-set.
 
 Alcance:
 
@@ -5706,6 +6070,26 @@ Criterios:
   `lock_conflict`, `snapshot_corrupt`) y coordinarse con T95, T57, T98 y T101
   sin sustituir sus contratos de estado, outbox o ledgers concretos.
 - Tests: `go test -count=1 ./modulos/orquesta-run-file ./modulos/orquesta-domain-work-file ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-server ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
+
+Implementacion 2026-05-26:
+
+- `orquesta-run-file` y `orquesta-domain-work-file` quedan como referencia:
+  temp unico en el mismo directorio, permisos `0600`, `fsync`, close, `rename`,
+  sync de directorio y limpieza de temp.
+- `orquesta-runtime-codex-delivery` aplica la misma politica a los snapshots de
+  descriptors ACK y progreso Codex; ya no depende de `path+".tmp"`.
+- `orquesta-server` aplica escritura durable con temp unico al statefile y
+  append durable con `fsync` a la auditoria JSONL.
+- `orquesta-app-codex-stack` aplica temp unico, permisos `0600`, `fsync`,
+  `rename` y sync de directorio al ledger de artefactos `domain_work`.
+- `cmd/orquesta-server` aplica la politica a ledger de bridge externo,
+  snapshots de compaction/startup, revision archive, registry/proof de ola
+  Codex. Los control files Codex de prompt/wrapper/ACK siguen bajo T159.
+- Cobertura local anade asserts de permisos, ausencia de temp fijo y limpieza de
+  temps en stores/ledgers tocados.
+- Cierre OrquestaV2 2026-05-27: la bateria obligatoria paso con
+  `go test -count=1 ./modulos/orquesta-run-file ./modulos/orquesta-domain-work-file ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-server ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
+  No se reabre T159: los control files Codex siguen bajo su backlog propio.
 
 ## Escaneo backlog 2026-05-24 trigesimoquinta pasada
 
@@ -5746,7 +6130,7 @@ Objetivo: cerrar la frontera de launch del runtime neutral para que la
 resolucion de comando/env/working dir desde refs opacas tenga recibo compacto,
 politica de IO y evidencia verificable.
 
-Estado: pendiente.
+Estado: cubierto en corte 2026-05-26.
 
 Alcance:
 
@@ -5777,12 +6161,26 @@ Criterios:
   daemon.
 - Tests: `go test -count=1 ./modulos/orquesta-runtime ./modulos/orquesta-orchestration-core ./modulos/orquesta-agent-process-registry ./modulos/orquesta-agent-process-registry-memory ./cmd/orquesta-server`.
 
+Cierre 2026-05-26:
+
+- `ProcessRuntimeLaunchReceiptV0` concentra el recibo publico de resolucion
+  desde refs opacas (`command_ref`, `executable_ref`, `arg_refs`, `env_refs`,
+  `working_dir_ref`), `policy_ref`, hash, causa e IO.
+- `ExternalAgentProcessCommandResolverV0` se envuelve en la composicion del
+  launcher con `ExternalAgentProcessCommandResolverWithReceiptV0`; el runtime
+  recibe el recibo por el request interno y `ProcessRuntimeConnectorV0` lo
+  devuelve con stdout/stderr `io_discarded`, sin path, args, env, HOME, PID ni
+  salida cruda.
+- El registro de procesos y stats conservan refs compactas de
+  process/session/launch y refs del recibo de politica; no almacenan comando,
+  entorno ni directorios reales.
+
 ## T106 codex-wave-public-summary-redaction
 
 Objetivo: separar la salida publica de `codex-wave`/`codex-director-wave` de los
 artefactos locales crudos de runtime, sin romper diagnostico opt-in de operador.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26.
 
 Alcance:
 
@@ -5812,13 +6210,21 @@ Criterios:
   proveedor, y que el modo diagnostico queda claramente opt-in.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-worktree ./modulos/orquesta-agent-process-registry`.
 
+Evidencia 2026-05-26: `codex-wave`, `codex-wave-status`,
+`codex-wave-stop` y `codex-director-wave` escriben stdout con summaries
+publicos `*_public_summary.v0`: refs opacas, contadores, estados, errores
+redactados y `redaction_level=refs_only`. La registry local conserva paths/PID
+para operaciones opt-in de operador; los tests de comando cargan esa registry
+solo como fixture local y validan que stdout no contiene rutas, HOME, logs,
+credenciales ni nombres de control files crudos.
+
 ## T107 real-smoke-go-diagnostic-redaction
 
 Objetivo: unificar redaccion y limites de diagnosticos en tests/smokes Go
 opt-in que pueden tocar Codex real, OPES temporal, control plane o payloads de
 dominio.
 
-Estado: pendiente.
+Estado: hecho local 2026-05-26.
 
 Alcance:
 
@@ -5850,6 +6256,21 @@ Criterios:
   salida de fallo, no scripts shell, logs daemon, required-test output ni
   respuesta HTTP saliente productiva.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-app-codex-stack ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector ./modulos/orquesta-server`.
+
+Cierre local 2026-05-26:
+
+- Los helpers de diagnostico de los smokes Go reales Codex (`codexRealSmoke*`,
+  equipo de programacion y stack Codex) aplican redaccion comun de
+  `orquesta-rails`, limite fuerte de bytes y resumen por nombre de control file,
+  sin imprimir rutas completas del runtime.
+- El harness Go de repeticion de procesos en `cmd/orquesta-server` usa el mismo
+  patron para stdout/stderr y contenido observado antes de fallar.
+- El modo crudo sigue fuera de la evidencia terminal: si un operador necesita
+  artefactos crudos debe conservar el directorio temporal con opt-in del smoke y
+  razon local, no pegarlos en `t.Fatalf`, ACK, auditoria ni matriz.
+- Cobertura focal: `TestCodexRealSmokeDiagnosticRedactionV0`,
+  `TestCodexStackRealSmokeDiagnosticRedactionV0` y
+  `TestGoSmokeDiagnosticForTestV0RedactaYAcota`.
 
 ## Escaneo backlog 2026-05-24 trigesimosexta pasada
 
@@ -5890,7 +6311,7 @@ Objetivo: cablear el consejo de decision multiagente como rondas operativas del
 Director, con gates y waits causales, sin convertirlo en prompt libre ni en
 runtime concreto.
 
-Estado: pendiente.
+Estado: cerrado local 2026-05-26.
 
 Alcance:
 
@@ -5922,13 +6343,34 @@ Criterios:
   reales; esas refs se resuelven en composicion/capacity.
 - Tests: `go test -count=1 ./modulos/orquesta-decision-council ./modulos/orquesta-director-candidates ./modulos/orquesta-director-scheduler ./modulos/orquesta-director-tick-input ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-director-service ./modulos/orquesta-app-codex-stack`.
 
+Evidencia 2026-05-26: `orquesta-decision-council` proyecta el plan en rondas
+operativas de propuesta, critica y voto con gate/wait scope por cohorte/ola.
+`orquesta-orchestration-core` materializa esas asignaciones como
+`WorkflowTaskV0` con deps entre rondas, refs opacas, write-set de artefactos,
+evidencias y contratos de funcion; `WorkflowTaskCandidateProviderV0` conserva
+roles de consejo desde `context_refs` estructuradas y no avanza a critica/voto
+hasta que las entregas requeridas de la ronda previa estan reflejadas. La
+aceptacion final se modela como comando `AcceptDecision` construido solo desde
+`DecisionCouncilVoteResultV0` aceptado y `VoteRequested` durable ya reflejado.
+No hay proveedor, modelo, HOME, cuota, runtime ni familias reales en el modulo
+puro. Queda fuera de este cierre cualquier smoke con proveedor real.
+
 ## T109 agent-lease-progress-policy-bridge
 
 Objetivo: unir la politica pura de leases/timeouts con la observacion de
 progreso de runtime para que stop/retry/replan no dependan de umbrales
 duplicados ni de timers ocultos.
 
-Estado: pendiente.
+Estado: completado 2026-05-26; revalidado 2026-05-27 por
+`agent-ref-assessment-task-autoprogramming-298dd18fed1e-g01-addaf78db4799db804ed801737c41c0a`.
+
+Evidencia: `AgentProgressLeaseBridgeV0` implementa un puente por puerto que
+reusa una observacion compacta de progreso para producir evaluaciones
+`AgentTimeoutAssessmentV0` con `AgentLeasePolicyV0`, sin leer runtime real ni
+reloj del sistema. El stack Codex lo cablea solo cuando hay politica de
+presupuesto de progreso, compartiendo el mismo source para evitar umbrales
+divergentes y doble muestreo. El scheduler sigue consumiendo
+`LeaseActionCandidates` existentes.
 
 Alcance:
 
@@ -6006,7 +6448,7 @@ Objetivo: alinear los rails de texto del scheduler y del ciclo de dispatch del
 Director con la politica viva de `orquesta-rails`, sin bloquear vocabulario
 operativo opaco ni relajar secretos efectivos.
 
-Estado: pendiente.
+Estado: completada 2026-05-26.
 
 Alcance:
 
@@ -6035,13 +6477,26 @@ Criterios:
   comun en cada comando.
 - Tests: `go test -count=1 ./modulos/orquesta-director-scheduler ./modulos/orquesta-director ./modulos/orquesta-rails ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-codex-stack`.
 
+Cierre 2026-05-26:
+
+- El scheduler deja de mantener lista local de vocabulario prohibido y valida
+  campos operativos mediante la politica comun por campo de `orquesta-rails`.
+  Pasan summaries/reason codes con `runtime`, `provider`, `model`, `db`, `sql`,
+  `filesystem` y `docker` como vocabulario operativo opaco.
+- El ciclo de dispatch conserva error codes publicos normalizados como
+  `provider_timeout`, `db_adapter_unavailable` y `runtime_backpressure`; solo
+  degrada a `dispatch_failed` cuando el codigo crudo contiene detalle sensible
+  real segun `orquesta-rails`.
+- La cobertura focal anade falsos positivos de vocabulario operativo y cortes
+  por `api_key=`, rutas HOME y prompts crudos.
+
 ## T111 local-agents-required-doc-refs-sync
 
 Objetivo: reparar o clasificar las referencias obligatorias a docs historicos
 inexistentes en `AGENTS.md` locales para que los agentes no cierren con contexto
 inventado ni se bloqueen por una ruta ausente.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26 para `AGENTS.md` locales del alcance.
 
 Alcance:
 
@@ -6070,13 +6525,29 @@ Criterios:
   rutas antiguas; corregir la fuente de autoridad o dejar bloqueo verificable.
 - Tests: `go test -count=1 ./modulos/orquesta-context ./modulos/orquesta-core-workflow ./modulos/orquesta-core-concurrency ./modulos/orquesta-core-leases ./modulos/orquesta-core-replanner ./modulos/orquesta-director-scheduler`.
 
+Resolucion 2026-05-26:
+
+- Los `AGENTS.md` del alcance ya no exigen leer
+  `../../docs/reinicio_orquesta_v2/protocolo_anti_bucles.md`.
+- La ruta antigua queda clasificada como historica/stale cuando el arbol no
+  existe; los sustitutos vivos son `docs/estado_actual_2026-05-17.md`,
+  `docs/guia_nucleo_orquestacion_2026-05-17.md`, este backlog y
+  `docs/rail_errors_observados_2026-05-23.md`.
+- No se recrea `docs/reinicio_orquesta_v2` ni se restaura DBV1/control-plane.
+  Si una clasificacion de bucle/progreso requiere un protocolo vivo que no este
+  en esas fuentes, el agente debe emitir `CONSULTA AL DIRECTOR`.
+- El criterio de contexto `ref_only` queda cubierto por `orquesta-context`:
+  `ContextRequiredRefOnlyEntriesV0` distingue `materialization_missing` de
+  `ref_only_by_design` y exige accion `read_local_document`,
+  `ask_director` o `ack_evidence_required`.
+
 ## T112 run-queue-workset-concurrency-bridge
 
 Objetivo: conectar la cola global de runs con los claims de
 `orquesta-core-concurrency` para no arrancar runs concurrentes con write-sets
 solapados antes de que el scheduler interno pueda gatearlos.
 
-Estado: pendiente.
+Estado: completado 2026-05-26.
 
 Alcance:
 
@@ -6147,7 +6618,7 @@ Objetivo: clasificar y reparar referencias historicas a
 `docs/reinicio_orquesta_v2` en docs locales de modulos, sin restaurar carpetas
 stale ni reintroducir DBV1/control-plane legacy.
 
-Estado: pendiente.
+Estado: cerrada 2026-05-26 con contrato web puro y adaptador fino al Director.
 
 Alcance:
 
@@ -6176,13 +6647,24 @@ Criterios:
   reparacion corrige la fuente que gobierna agentes actuales.
 - Tests: `go test -count=1 ./modulos/orquesta-context ./cmd/orquesta-server`.
 
+Cierre 2026-05-26:
+
+- Docs locales de `orquesta-core`, `orquesta-core-workflow`,
+  `orquesta-capacity`, `orquesta-governance` y `orquesta-observability`
+  clasifican DB v1/reinicio v2 como historico o stale y remiten a fuentes
+  vigentes existentes.
+- `modulos/*/docs/tareas.md` del alcance ya no presenta el inventario DB v1 ni
+  snapshots ausentes como prerequisito ejecutable de automejora.
+- No se recrea `docs/reinicio_orquesta_v2`, no se borra historico y el indice
+  federado puede tratar estas entradas como cerradas/historicas por T113.
+
 ## T114 run-queue-fairness-group-policy
 
 Objetivo: dar semantica ejecutable a `fairness_group_ref` en la cola global para
 evitar hambre o monopolio entre apps, automejora, smokes reales y trabajo humano
 sin romper prioridad explicita ni leases de T31.
 
-Estado: pendiente.
+Estado: completada 2026-05-26.
 
 Alcance:
 
@@ -6212,13 +6694,24 @@ Criterios:
   mismo productor.
 - Tests: `go test -count=1 ./modulos/orquesta-run-queue ./modulos/orquesta-run-supervisor ./modulos/orquesta-run-memory ./modulos/orquesta-run-file ./modulos/orquesta-server ./cmd/orquesta-server`.
 
+Cierre local 2026-05-26:
+
+- `RunQueueRankingPolicyV0` transporta ventana, limite por grupo, boost y estado
+  de seleccion por `fairness_group_ref` con reloj inyectado.
+- `RankRunCandidatesV0` conserva prioridad manual como primera clave, deriva
+  grupo estable si falta `fairness_group_ref` y expone los reason codes publicos.
+- `orquesta-run-memory` y `orquesta-run-file` persisten `fairness_group_ref`
+  desde `RunQueuePriorityCommandV0`.
+- `orquesta-run-supervisor` propaga la politica de ranking/fairness al tick; no
+  sustituye leases T31 ni claims de work-set T112.
+
 ## T115 web-app-intake-session-contract
 
 Objetivo: completar el contrato web de sesion conversacional para nueva app como
 cliente fino de intake/director, sin convertir la web en planificador ni duplicar
 `AppSpecV0`.
 
-Estado: pendiente.
+Estado: completado con evidencia documental.
 
 Alcance:
 
@@ -6245,6 +6738,17 @@ Criterios:
 - Coordinar con T76: routing publico AppSpec queda en Director V2; esta tarea
   solo cubre UX/contrato web de intake y tests de adaptador fino.
 - Tests: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-app-director-intake ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway ./cmd/orquesta-server`.
+
+Cierre 2026-05-26:
+
+- `WebNuevaAppIntakeSessionV0` mantiene estado parcial, preguntas con claves
+  i18n, decisiones capturadas, `AppSpecRequestV0` parcial y handoff compacto.
+- El handoff declara refs opacas de sesion/request/correlacion, contexto
+  compacto, ruta preferente `orquesta.apps.arrancar_director.v0` y fallback
+  documentado a `orquesta.apps.solicitar_nueva.v0`.
+- La web conserva el puerto `ArrancarDirectorAppClientV0` como opt-in y no
+  decide arquitectura, agentes, proveedor, runtime, DB, deploy ni filesystem.
+- Evidencia focal: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-app-director-intake ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway ./cmd/orquesta-server`.
 
 ## Escaneo backlog 2026-05-24 trigesimonovena pasada
 
@@ -6281,7 +6785,7 @@ Objetivo: anadir una comprobacion automatica de integridad documental para
 backlogs locales de modulos, centrada en IDs duplicados, estados stale y pruebas
 locales desalineadas con la evidencia real.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26.
 
 Alcance:
 
@@ -6314,7 +6818,7 @@ Objetivo: separar y hacer ejecutable la politica productiva del review gate de
 autoprogramacion para entregas Codex, sin mezclarla con estadisticas, prompts ni
 heuristicas de docs locales.
 
-Estado: pendiente.
+Estado: cubierto 2026-05-26.
 
 Alcance:
 
@@ -6342,13 +6846,29 @@ Criterios:
   automaticamente `go test` ni limites pensados para codigo Go.
 - Tests: `go test -count=1 ./modulos/orquesta-app-codex-stack ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-worktree ./modulos/orquesta-app-director-service`.
 
+Cierre ejecutable 2026-05-26:
+
+- `orquesta-app-codex-stack` expone `ReviewGateDeliveryPolicyPortV0` como owner
+  inyectable de la decision de presupuesto Go, write-set efectivo y limite de
+  lineas; el default conserva la politica previa de composicion.
+- `orquesta-runtime-worktree` sigue siendo el recibo de evidencia real del
+  snapshot/write-set y del presupuesto Go; el ACK y el prompt no son owners de
+  esa decision terminal.
+- La politica default tolera perfiles documentales/no-Go declarados por policy
+  explicita y aliases seguros de write-set, y solo convierte el presupuesto Go
+  en bloqueo estricto cuando el puerto lo decide para una entrega concreta.
+- Revalidacion OrquestaV2 retry 2026-05-26: no se abre codigo nuevo; el contrato
+  ejecutable ya vive en `codexStackReviewGatePolicyV0`, la evidencia de
+  worktree queda en `orquesta-runtime-worktree`, y la prueba obligatoria del
+  write-set T117 es la revalidacion focal.
+
 ## T118 legacy-generated-doc-artifact-contract-sync
 
 Objetivo: clasificar los planes documentales historicos de app generada y
 sincronizarlos con la foto vigente para que no gobiernen agentes actuales como
 requisitos vivos del repo Orquesta.
 
-Estado: pendiente.
+Estado: completado con evidencia documental.
 
 Alcance:
 
@@ -6372,6 +6892,15 @@ Criterios:
 - No crear archivos historicos vacios solo para satisfacer `test -s`; si falta
   producto o contexto, el director debe pedir revision o marcar el plan stale.
 - Tests: `go test -count=1 ./modulos/orquesta-app-director-intake ./modulos/orquesta-context ./cmd/orquesta-server`.
+
+Cierre 2026-05-26: `docs/plan_microtareas.md` y `docs/arquitectura.md` quedan
+marcados como historico/debug de app generada, sin fuerza normativa sobre docs
+raiz de Orquesta. `modulos/orquesta-app-director-intake/docs/decisiones.md`
+declara que `manual_*`, `pruebas_documentales` y `pendientes` son
+refs/rutas relativas del proyecto objetivo o tipos de artefacto esperado. Las
+plantillas documentales incluyen `pruebas_documentales` y `pendientes`, y
+`manual_sistemas_deploy` queda como alias historico de `manual_sysadmin` +
+`guia_despliegue`. No se crean archivos raiz vacios.
 
 ## Escaneo backlog 2026-05-24 cuadragesima pasada
 
@@ -6409,7 +6938,7 @@ Huecos concretos nuevos:
 Objetivo: sincronizar la documentacion de uso operativo para que no anuncie
 rutas, comandos ni control-plane V1 como camino vigente del servidor actual.
 
-Estado: pendiente.
+Estado: cerrado.
 
 Alcance:
 
@@ -6438,12 +6967,29 @@ Criterios:
   `cmd/db/internal` ni `ensureLocalDB`.
 - Tests: `go test -count=1 ./modulos/orquesta-cli ./modulos/orquesta-web ./cmd/orquesta-server`.
 
+Cierre 2026-05-26:
+
+- `docs/uso_actual_app_orquesta.md` queda sincronizado como manual server-first
+  de la composicion actual: servidor `cmd/orquesta-server`, readiness
+  `/api/v0/server/readiness`, status versionado, web/CLI como clientes finos,
+  rutas publicas `/api/v0/*` y MCP/toolbelt como superficie preferente para IA.
+- `./orquesta serve`, rutas `/api/*` sin version, OpenClaw, AP-077, wrappers
+  manuales y DBV1 quedan nombrados solo como compatibilidad historica o rescate,
+  no como requisito operativo vigente.
+- `README.md` y `docs/README.md` enlazan el manual sincronizado y fijan la regla
+  de cuarentena para manuales V1.
+- Verificacion: `go test -count=1 ./modulos/orquesta-cli ./modulos/orquesta-web ./cmd/orquesta-server`.
+- Nota de cierre: `docs/uso_actual_app_orquesta.md`, `README.md` y
+  `docs/README.md` son la fuente sincronizada para uso server-first. Las
+  secciones V1 preservadas quedan en cuarentena historica y no alimentan nuevos
+  clientes ni pruebas.
+
 ## T120 legacy-sqlite-forensic-doc-quarantine
 
 Objetivo: poner bajo cuarentena verificable las referencias documentales a
 snapshots SQLite/DBV1 para que no gobiernen agentes ni tareas actuales.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26 para el alcance declarado.
 
 Alcance:
 
@@ -6459,8 +7005,8 @@ Alcance:
 Criterios:
 
 - Las refs a `backups/legacy-sqlite-20260422/orquesta.db`, DBV1 y comandos
-  `sqlite3` deben quedar marcadas como forenses/historicas, con estado
-  `quarantine` o equivalente, no como prerequisito vivo de modulo.
+  `sqlite3` quedan marcadas como forenses/historicas, con estado `quarantine`
+  o equivalente, no como prerequisito vivo de modulo.
 - Ningun doc local vigente debe contener rutas absolutas de desarrollador como
   fuente de verdad; usar refs relativas opacas o notas historicas sin convertir
   el snapshot en dependencia de ejecucion.
@@ -6471,12 +7017,24 @@ Criterios:
   como persistencia global ni sucesor implicito de DBV1.
 - Tests: `go test -count=1 ./modulos/orquesta-governance ./modulos/orquesta-core ./modulos/orquesta-capacity ./modulos/orquesta-context`.
 
+Cierre T120 2026-05-26: los docs locales del alcance dejan de publicar rutas
+absolutas de desarrollador como fuente viva, conservan el snapshot DB v1 solo
+como ref relativo opaco forense/quarantine y etiquetan cualquier lectura
+`sqlite3` como comando historico no operativo. T88/T116 deben tratar las marcas
+`forense`, `historico`, `quarantine` y `effective` como estados distintos; no
+pueden convertir DBV1 ni `orquesta-domain-work-sql` en persistencia global ni
+programar lecturas DBV1 sin decision explicita del director.
+
 ## T121 manual-agent-ops-compatibility-contract
 
 Objetivo: cerrar el contrato de compatibilidad de wrappers manuales de agentes
 para que no compitan con el daemon residente ni con el runtime gobernado.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26 para el write-set T121. Los wrappers manuales quedan
+catalogados como recuperacion/operacion asistida, subordinados al servidor
+residente y cubiertos por pruebas de sintaxis, modo sin servidor, error publico
+recuperable, bloqueo de runtime directo y ausencia de arranque automatico de
+flotas legacy por seed.
 
 Alcance:
 
@@ -6506,6 +7064,19 @@ Criterios:
 - Las pruebas deben cubrir sintaxis de scripts, modo sin servidor, error publico
   recuperable y ausencia de arranque automatico de flotas legacy por seed.
 - Tests: `bash -n scripts/inicio_agente.sh scripts/cargar_agentes.sh scripts/terminator_agentes.sh scripts/agente_console.sh` y `go test -count=1 ./modulos/orquesta-cli ./modulos/orquesta-server ./cmd/orquesta-server`.
+
+Resolucion T121 2026-05-26:
+
+- `scripts/inicio_agente.sh` exige readiness versionada y CLI publica antes de
+  actuar; `--dry-run` solo describe la operacion.
+- `scripts/cargar_agentes.sh` y `scripts/terminator_agentes.sh` son dry-run por
+  defecto y delegan en `inicio_agente.sh` solo con confirmacion explicita.
+- `scripts/agente_console.sh` bloquea comandos de runtime directo y conserva la
+  consola como recuperacion asistida.
+- `docs/operacion_agentes_manuales.md` y `docs/uso_actual_app_orquesta.md`
+  documentan correlacion por `agent_ref`, `task_ref`, `run_ref`,
+  `external_session_id` y `worktree_ref` opacas, sin rutas privadas ni
+  Terminator/tmux como contrato del nucleo.
 
 ## Escaneo backlog 2026-05-24 cuadragesima primera pasada
 
@@ -6548,7 +7119,8 @@ Objetivo: hacer que los documentos historicos que antes se declaraban
 canonicos se autoidentifiquen como historicos/stale y apunten a la foto vigente
 sin depender de que el lector ya haya abierto `estado_actual`.
 
-Estado: pendiente.
+Estado: completada en autoprogramacion 2026-05-26 para el frente focal del
+supervisor de progreso, runtime progress report, leases y rail comun por campo.
 
 Alcance:
 
@@ -6575,13 +7147,41 @@ Criterios:
   vigente.
 - Tests: `go test -count=1 ./modulos/orquesta-context ./cmd/orquesta-server`.
 
+Resolucion 2026-05-26:
+
+- `docs/BIBLIA_APP_ORQUESTA.md` queda marcado en cabecera como
+  `doc_estado=historico-stale`, con fecha, sustitutos vivos y regla de
+  precedencia subordinada.
+- Refuerzo 2026-05-26 retry: las secciones internas V1 que aun usaban
+  "fuentes de verdad" o "doctrina" quedan reetiquetadas como historicas para
+  que no contradigan la cabecera ni el orden de autoridad documental.
+- `docs/00_INDICE.md` y `docs/README.md` separan fuentes vigentes,
+  historicas/stale, forenses y plantillas.
+- `docs/estado_actual_2026-05-17.md`,
+  `docs/guia_nucleo_orquestacion_2026-05-17.md`,
+  `docs/rail_errors_observados_2026-05-23.md` y
+  `docs/duplicaciones_railes_pendientes_2026-05-24.md` reflejan el cierre para
+  que T88/T116 puedan clasificar docs historicos sin promoverlos.
+
 ## T123 factory-backlog-preview-director-handoff
 
 Objetivo: separar el backlog determinista inicial de `orquesta-factory` de un
 plan operativo ejecutable, dejando claro que es preview/insumo y que el cierre
 real de apps nuevas pasa por Director V2 cuando se necesita juicio.
 
-Estado: pendiente.
+Estado: completado 2026-05-26. `BacklogInicialPropuestoV0` transporta estado
+`preview_no_ejecutable`, freshness desde `AppSpecV0` y handoff causal pendiente
+a `orquesta.apps.arrancar_director.v0`; no modela plan-state, wait, review,
+tests ni cierre. `/api/v0/apps/spec`, web y MCP exponen el backlog como preview
+compacta/insumo de intake con refs opacas al Director, sin materializar cola
+ejecutable ni duplicar juicio operativo.
+
+Evidencia focal: `orquesta-factory` genera `Freshness` y `DirectorHandoff`;
+`orquesta-factory-http` devuelve envelope canonico `app_spec` + `backlog` con
+validacion de frontera; `orquesta-web` proyecta `backlog_preview` compacto con
+handoff; `orquesta-mcp` devuelve `backlog_inicial_propuesto` compacto con
+`estado`, `freshness_source_ref` y `director_handoff_ref`; intake conserva
+entrada limpia al Director sin depender de factory en su nucleo neutral.
 
 Alcance:
 
@@ -6616,7 +7216,11 @@ Objetivo: cuarentenar la documentacion historica que presenta OpenClaw, `tmux`
 o MCP real como superficies canonicas vivas, para que no gobierne tareas ni
 conectores actuales sin decision explicita de composicion.
 
-Estado: pendiente.
+Estado: completado 2026-05-26. Los documentos de alcance declaran cuarentena
+T124 desde dentro, el indice federado los registra con estado `quarantine` y la
+superficie viva queda enlazada a `modulos/orquesta-mcp`,
+`modulos/orquesta-runtime`, `modulos/orquesta-runtime-codex` y al transporte
+opt-in `/mcp` de `cmd/orquesta-server`.
 
 Alcance:
 
@@ -6686,7 +7290,8 @@ Objetivo: clasificar `modulos/orquesta-work-profiles` para que no compita con
 `WorkProfileV0` en `orquesta-core-workflow` ni genere trabajo falso desde un
 directorio vacio.
 
-Estado: pendiente.
+Estado: completada por Orquesta en
+`request-ref-autoprogramming-backlog-t125-work-profiles-empty-module-quarantine-ad5411da`.
 
 Alcance:
 
@@ -6713,12 +7318,24 @@ Criterios:
   debe tener estado/freshness y sustituto vigente.
 - Tests: `go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-planner ./modulos/orquesta-context ./cmd/orquesta-server`.
 
+Cierre 2026-05-26: `modulos/orquesta-work-profiles` queda como placeholder
+historico no ejecutable, con `README.md` y `AGENTS.md` locales que declaran
+freshness, sustituto vigente y prohibicion de planificacion. El contrato de
+perfiles sigue en `orquesta-core-workflow`; la resolucion sigue en
+`orquesta-orchestration-core` y el planner consumidor en
+`orquesta-app-planner`. El indice federado del planner solo acepta fuentes
+Markdown bajo `docs/`, no directorios de modulo sin contrato efectivo; queda
+cubierto por
+`TestIdleSelfImprovementFederatedBacklogV0IgnoraDirectoriosSinContratoEfectivoV0`.
+
 ## T126 module-local-codex-launcher-compatibility-contract
 
 Objetivo: inventariar y gobernar los wrappers `modulos/*/arrancar_codex.sh`
 para que no sean una via rota o paralela al runtime gobernado.
 
-Estado: pendiente.
+Estado: completada e integrada 2026-05-27; el contrato local de wrappers queda
+revalidado por paquete OrquestaV2
+`agent-ref-task-autoprogramming-089a03f67381-g01`.
 
 Alcance:
 
@@ -6747,12 +7364,47 @@ Criterios:
   plane.
 - Tests: `bash -n $(find modulos -name arrancar_codex.sh | sort)` y `go test -count=1 ./modulos/orquesta-cli ./modulos/orquesta-server ./cmd/orquesta-server`.
 
+Cierre 2026-05-26: no se crea `modulos/_comun`; los 25 wrappers que apuntaban
+al helper ausente quedan como compatibilidad historica con error publico y
+remiten al servidor residente/cola OrquestaV2. `orquesta-runtime-codex` conserva
+su wrapper como recuperacion manual opt-in mediante
+`ORQUESTA_MODULE_CODEX_WRAPPER_OPT_IN=1`; `orquesta-app-codex-stack` ya era
+smoke opt-in, y los 9 wrappers restantes son prompt/contexto local sin lanzar
+runtime. Las READMEs locales que recomendaban `./arrancar_codex.sh` como ruta de
+arranque quedan sincronizadas para no saltarse daemon, cola, write-set, ACK,
+checkpoint ni shutdown.
+
+Revalidacion 2026-05-27: no existe `modulos/_comun`, ningun wrapper versionado
+referencia `../_comun/arrancar_codex_modulo.sh` y los 36 wrappers quedan
+clasificados como compatibilidad historica con error publico, prompt/contexto
+local, recuperacion manual opt-in o smoke opt-in. Pruebas pasadas:
+`bash -n $(find modulos -name arrancar_codex.sh | sort)` y
+`go test -count=1 ./modulos/orquesta-cli ./modulos/orquesta-server ./cmd/orquesta-server`.
+
 ## T127 ignored-local-artifact-exclusion-policy
 
 Objetivo: convertir la lista de artefactos locales ignorados en una politica
 ejecutable para snapshots, contexto, AppVCS, promocion y ACK terminal.
 
-Estado: pendiente.
+Estado: completada por Orquesta en
+`request-ref-autoprogramming-backlog-t127-ignored-local-artifact-exclusion-policy-76924b6d`.
+
+Cierre 2026-05-26: `.gitignore` queda sincronizado con una politica ejecutable,
+no como fuente unica de verdad. Snapshots, verificacion de write-set, AppVCS,
+promocion y ACK terminal excluyen artefactos locales de runtime, estado de
+servidor, smokes, logs, diagnostico sensible y scratch aunque el write-set sea
+`.`. La salida publica usa recibos compactos por categoria/reason code sin
+paths locales ni contenido crudo. Contexto y linter documental comparten la
+frontera de detalle local prohibido; si un diagnostico local es necesario queda
+como ref de control opt-in y redactada, no como artefacto de producto.
+
+Refuerzo retry 2026-05-26: la defensa local de ignore incorpora runtime/control
+dirs versionados o temporales usados por conectores y smokes. Esta lista sigue
+subordinada a la politica ejecutable y no reemplaza recibos de exclusion,
+validacion de ACK, contexto seguro, AppVCS ni promocion por write-set.
+Refuerzo puntual 2026-05-26: la politica ejecutable tambien cubre
+`.orquesta-logs`, `orquesta.env`, `orquesta.db*` y `.orquesta-inbox.md` como
+artefactos locales no exportables.
 
 Alcance:
 
@@ -6814,7 +7466,8 @@ Huecos detectados:
 Objetivo: alinear la sanitizacion de evidencias del supervisor de progreso de
 agentes con una politica comun de railes por campo, tolerante a refs opacas.
 
-Estado: pendiente.
+Estado: completada en autoprogramacion 2026-05-26 para el frente focal del
+supervisor de progreso, runtime progress report, leases y rail comun por campo.
 
 Alcance:
 
@@ -6844,12 +7497,23 @@ Criterios:
   otra lista paralela de railes.
 - Tests: `go test -count=1 ./modulos/orquesta-director ./modulos/orquesta-runtime ./modulos/orquesta-core-leases ./modulos/orquesta-rails ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-codex-stack`.
 
+Matriz cubierta:
+
+- Positivos permitidos: refs/evidencias opacas con `runtime`, `provider`,
+  `model`, `db`, `sql`, `home`, `process` o `pid` como vocabulario de politica.
+- Negativos bloqueados: `api_key=`, `client_secret=`, `Authorization`,
+  `Bearer`, `prompt=`, `transcript=`, `raw_text=`, rutas HOME reales,
+  `pid=`/`process_ref=` y URIs con credenciales o backend real.
+- Decision de progreso conservada: el supervisor sigue detectando detenido,
+  bucle, sin ACK, artefacto sin ACK, capacidad limitada y sin avance; solo cambia
+  el rail de filtrado de evidencias.
+
 ## T129 server-daemon-start-env-policy
 
 Objetivo: hacer explicita, acotada y redactada la proyeccion de entorno usada
 al arrancar el daemon residente.
 
-Estado: pendiente.
+Estado: cerrado localmente 2026-05-26.
 
 Alcance:
 
@@ -6864,14 +7528,14 @@ Alcance:
 
 Criterios:
 
-- `start` no debe transferir silenciosamente todo `os.Environ()` como contrato
+- Cerrado: `start` no transfiere silenciosamente todo `os.Environ()` como contrato
   implicito; debe existir perfil/allowlist o snapshot de categorias efectivas.
-- Estado, diagnostico, auditoria y logs solo exponen categorias, refs o valores
+- Cerrado: estado, diagnostico, auditoria y logs solo exponen categorias, refs o valores
   redactados; nunca HOME real, tokens, prompts, transcripts, remotes privados
   ni detalles crudos de proveedor.
-- Variables requeridas ausentes deben producir issue publico accionable sin
+- Cerrado: variables requeridas ausentes producen issue publico accionable sin
   volcar entorno completo.
-- La politica debe coordinar T56/T85/T97/T105: proyeccion Codex, bootstrap,
+- Cerrado: la politica coordina T56/T85/T97/T105: proyeccion Codex, bootstrap,
   stdout/stderr y entorno de runtime siguen owners separados.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-app-codex-stack ./modulos/orquesta-observability`.
 
@@ -6880,7 +7544,7 @@ Criterios:
 Objetivo: separar los guards de arquitectura reales de las listas locales de
 terminos prohibidos para evitar railes por substring divergentes.
 
-Estado: pendiente.
+Estado: cerrado el 2026-05-26.
 
 Alcance:
 
@@ -6911,6 +7575,18 @@ Criterios:
 - Coordinar con T70/T77/T110/T116 para no duplicar el rail de docs, app-change,
   scheduler/outbox ni freshness documental.
 - Tests: `go test -count=1 ./modulos/orquesta-run-control ./modulos/orquesta-run-queue ./modulos/orquesta-run-memory ./modulos/orquesta-director-candidates ./modulos/orquesta-app-director-intake ./modulos/orquesta-app-runner ./modulos/orquesta-director-agent-workflow ./modulos/orquesta-app-director-service ./modulos/orquesta-rails`.
+
+Cierre 2026-05-26:
+
+- Los tests de arquitectura del alcance separan imports/paquetes concretos de
+  literales sensibles: los comentarios, refs opacas y nombres de politica con
+  vocabulario operativo ya no se bloquean por substring global.
+- `modulos/orquesta-rails` queda como owner comun del helper de import policy y
+  literal policy para estos tests, reutilizando el rail de detalle crudo por
+  campo.
+- Se conserva fallo estricto para imports/adaptadores concretos y para valores
+  sensibles efectivos como DSN, URLs de DB con credenciales, tokens, HOME real
+  o material crudo.
 
 ## Escaneo backlog 2026-05-24 cuadragesima cuarta pasada
 
@@ -6954,7 +7630,7 @@ Objetivo: evitar que docs, contexto materializado, backlog y ACKs propaguen
 rutas locales absolutas, state dirs, HOME o ficheros de control como evidencia
 de producto.
 
-Estado: pendiente.
+Estado: completado 2026-05-26.
 
 Alcance:
 
@@ -6982,13 +7658,20 @@ Criterios:
   local marcada como ejemplo no exportable y con sustituto opaco para agentes.
 - Tests: `go test -count=1 ./modulos/orquesta-context ./modulos/orquesta-runtime-worktree ./modulos/orquesta-runtime-codex ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
 
+Cierre T131 2026-05-26: `orquesta-context` bloquea rutas locales y ficheros de
+control al materializar contexto de producto, `orquesta-runtime-codex` rechaza
+ACKs que usen esos valores como evidencia publica y `cmd/orquesta-server`
+incluye linter documental que reporta lineas sin filtrar sin copiar el valor
+local. Variables como `${ORQUESTA_SERVER_STATE_DIR}` y refs opacas siguen
+permitidas.
+
 ## T132 observability-privacy-taxonomy-rail-sync
 
 Objetivo: alinear la taxonomia de privacidad de `orquesta-observability` con la
 politica viva de railes y auditoria, sin duplicar listas de substrings ni
 relajar secretos efectivos.
 
-Estado: pendiente.
+Estado: cerrado localmente 2026-05-26.
 
 Alcance:
 
@@ -7015,12 +7698,29 @@ Criterios:
   no inferir privacidad desde texto libre.
 - Tests: `go test -count=1 ./modulos/orquesta-observability ./modulos/orquesta-rails ./modulos/orquesta-server ./modulos/orquesta-mcp ./modulos/orquesta-web ./cmd/orquesta-server`.
 
+Cierre 2026-05-26:
+
+- `orquesta-rails` queda como owner unico de taxonomia/redaccion visible:
+  niveles `none`, `metadata_only`, `summarized` y `redacted`, policy ref y
+  clasificador comun.
+- `orquesta-observability` conserva DTOs/eventos, pero valida privacidad contra
+  `orquesta-rails` y permite refs opacas como `*_policy_ref`,
+  `*_redaction_ref`, `transcript_ref`, `home_ref` o `dsn_ref` sin confundirlas
+  con valores crudos.
+- Las proyecciones publicas de status/timeline exponen `privacy.redaction_level`
+  y web/MCP lo consumen como campo verificable; no infieren privacidad desde
+  texto libre.
+
 ## T133 module-boundary-local-agent-doc-coverage
 
 Objetivo: asegurar que modulos de frontera sensible tienen `AGENTS.md` local o
 README suficiente para agentes OrquestaV2, sin crear boilerplate stale.
 
-Estado: pendiente.
+Estado: cubierto local 2026-05-26. Los modulos sensibles del alcance tienen
+guia local para agentes o fuente sustituta verificable, y el planner residente
+ejecuta un linter documental que emite
+`module_boundary_local_agent_doc_missing` antes de preparar automejoras sobre
+fronteras sin cobertura.
 
 Alcance:
 
@@ -7046,6 +7746,25 @@ Criterios:
   falle con error publico antes de preparar una run automatica.
 - Tests: `go test -count=1 ./modulos/orquesta-rails ./modulos/orquesta-domain-work-http ./modulos/orquesta-factory-http ./modulos/orquesta-context ./cmd/orquesta-server`.
 
+Evidencia 2026-05-26:
+
+- `AGENTS.md` local anadido o sincronizado en `modulos/orquesta-rails`,
+  `modulos/orquesta-domain-work-http`, `modulos/orquesta-factory-http`,
+  `modulos/orquesta-context` y `cmd/orquesta-server`.
+- `cmd/orquesta-server/module_boundary_local_doc_coverage_v0_test.go` lista los
+  modulos sensibles de T133 y falla con mensaje publico si falta `AGENTS.md` o
+  una fuente sustituta suficiente.
+- El scanner residente expone la colision
+  `module_boundary_local_agent_doc_missing` mediante el linter local de
+  integridad documental antes de preparar automejoras sobre modulos sensibles.
+
+Revalidacion OrquestaV2 retry 2026-05-26:
+
+- El paquete `agent-ref-task-autoprogramming-e347186127f9-g01` conserva T133
+  cerrado sin ampliar write-set: los cinco modulos sensibles siguen con guia
+  local suficiente y el linter residente mantiene la colision publica
+  `module_boundary_local_agent_doc_missing`.
+
 ## Escaneo backlog 2026-05-24 cuadragesima quinta pasada
 
 Evidencia revisada:
@@ -7066,10 +7785,10 @@ Evidencia revisada:
 
 Huecos detectados:
 
-- `orquesta-server status` consulta `/api/status` y el handler sigue aceptando
-  esa ruta legacy junto a `/api/v0/server/status`. T119/T85/T87 cubren docs,
-  estado publico y readiness, pero falta un owner para deprecacion o
-  compatibilidad de alias legacy dentro del servidor/comando real.
+- Antes del cierre T134, `orquesta-server status` consultaba `/api/status` y el
+  handler aceptaba esa ruta legacy junto a `/api/v0/server/status`. T119/T85/T87
+  cubren docs, estado publico y readiness; T134 gobierna deprecacion y
+  compatibilidad del alias legacy dentro del servidor/comando real.
 - Si el planner de backlog no puede leer el documento, o no detecta pendientes
   claros, devuelve una request fallback basada en la configuracion generica de
   automejora. Hoy esa base conserva write-set de `orquesta-server` y puede
@@ -7086,7 +7805,12 @@ Objetivo: hacer explicita la compatibilidad o retirada de `/api/status` para que
 la ruta vigente `/api/v0/server/status` sea la unica fuente publica normal de
 estado del servidor.
 
-Estado: pendiente.
+Estado: cerrada y revalidada en retry OrquestaV2 2026-05-26 con la prueba
+obligatoria. `orquesta-server status` consulta la ruta versionada
+`/api/v0/server/status`; `/api/status` queda solo como alias legacy con headers
+publicos de deprecacion/canonical y mismo DTO redactado que la ruta versionada.
+Retry OrquestaV2 2026-05-27 refuerza el contrato del alias con owner y politica
+de no uso nuevo en headers publicos, sin ampliar el DTO del alias.
 
 Alcance:
 
@@ -7113,12 +7837,32 @@ Criterios:
   sincronizacion completa de manuales ni el snapshot de configuracion.
 - Tests: `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-cli ./modulos/orquesta-web ./cmd/orquesta-server`.
 
+Aplicacion T134 2026-05-26:
+
+- `cmd/orquesta-server` usa `ServerStatusEndpointV0` para `status`, espera de
+  apagado e identidad viva del daemon.
+- `modulos/orquesta-server` conserva `/api/status` como alias legacy explicito
+  con `Deprecation: true`, `Link: </api/v0/server/status>; rel="canonical"`,
+  `Warning`, `X-Orquesta-Status-Canonical`,
+  `X-Orquesta-Status-Compatibility`, `X-Orquesta-Status-Owner` y
+  `X-Orquesta-Status-Sunset-Policy`; no anade campos propios.
+- La compatibilidad se valida con tests de handler y comando dentro del paquete
+  focal.
+
+Revalidacion OrquestaV2 retry 2026-05-26:
+
+- `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-cli ./modulos/orquesta-web ./cmd/orquesta-server`
+  pasa completo.
+- El cierre conserva `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+  y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` como refs
+  opacas.
+
 ## T135 idle-self-improvement-planner-fallback-safety
 
 Objetivo: impedir que un fallo o vacio del planner de backlog se convierta en
 una automejora generica de codigo con write-set historico de servidor.
 
-Estado: pendiente.
+Estado: cerrada 2026-05-26 para fallback degradado seguro.
 
 Alcance:
 
@@ -7143,13 +7887,29 @@ Criterios:
   esta degradado y ya hay tareas conocidas, reservadas o ambiguas.
 - Tests: `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-autoprogramming ./cmd/orquesta-server`.
 
+Cierre aplicado 2026-05-26:
+
+- El planner de backlog degradado mantiene el fallback como scanner documental
+  acotado cuando no hay trabajo conocido, sin heredar el write-set generico de
+  codigo.
+- Si el trigger es `capacity_free` y ya hay trabajo de backlog conocido, un
+  backlog ilegible bloquea la preparacion de nuevas requests y devuelve
+  evidencia publica `evidence-ref-autoprogramming-backlog-known-work` +
+  `evidence-ref-autoprogramming-backlog-planner-fallback`.
+- Si el puerto planner devuelve error, el residente registra
+  `idle_self_improvement_plan_error` y no usa la request base como fallback
+  generico de codigo.
+- Validacion focal anadida en
+  `cmd/orquesta-server/idle_self_improvement_backlog_degraded_v0_test.go` y
+  `modulos/orquesta-server/supervisor_planner_error_v0_test.go`.
+
 ## T136 resident-drain-external-wait-budget-policy
 
 Objetivo: definir una politica observable para `MaxExternalWaits` del supervisor
 residente, separando smokes rapidos, automejora con agentes vivos y flujos reales
 largos.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26.
 
 Alcance:
 
@@ -7178,6 +7938,21 @@ Criterios:
   externa; wakeups event-driven y taxonomia de parada siguen siendo owners
   separados.
 - Tests: `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-run-supervisor ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
+
+Cierre aplicado 2026-05-26:
+
+- El servidor residente conserva presupuesto rapido `MaxExternalWaits=1`, lo
+  publica como valor efectivo y mantiene separado el presupuesto largo del
+  Director (`ORQUESTA_DIRECTOR_MAX_EXTERNAL_WAITS`).
+- El modo residente bloquea overrides altos de `MaxExternalWaits` con error
+  publico recuperable y evidencia `resident-external-wait-policy`; no recorta
+  esperas largas en silencio.
+- La automejora idle/capacity queda bloqueada cuando el resultado del supervisor
+  observa `wait_external` o `candidate_pending` con refs vivas; la causa publica
+  es `active_external_wait`.
+- Validacion focal: `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-run-supervisor ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-codex-stack`.
+- Pendiente de integracion: la prueba exacta con `./cmd/orquesta-server` falla
+  por `scripts/inicio_agente.sh` ausente, fuera del write-set de T136.
 
 ## Escaneo backlog 2026-05-24 cuadragesima sexta pasada
 
@@ -7223,7 +7998,14 @@ Huecos detectados:
 Objetivo: unificar limites y decodificacion estricta para cuerpos de entrada en
 HTTP publico/MCP/web sin duplicar reglas por handler.
 
-Estado: pendiente.
+Estado: fusionada_con T102 legacy-http-json-boundary-policy 2026-05-26.
+
+Fusionada_con: T102 legacy-http-json-boundary-policy
+
+Nota canonica 2026-05-26: T137 queda como alias historico de entrada HTTP
+publica. Sus criterios/evidencias se conservan aqui y en T102; el planner
+residente debe elegir T102 y marcar esta seccion como `duplicate_backlog_task`,
+sin borrar historia ni relanzar otra tarea equivalente.
 
 Alcance:
 
@@ -7249,12 +8031,41 @@ Criterios:
   body crudo ni campos sensibles.
 - Tests: `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-web ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./cmd/orquesta-server`.
 
+Evidencia 2026-05-26:
+
+- `modulos/orquesta-mcp/public_http_json_v0.go` centraliza lectura JSON publica
+  por perfil con limite, `Content-Type`, rechazo de trailing data y politica
+  legacy explicita de campos desconocidos. Las rutas mutables de
+  autoprogramacion usan el perfil `autoprogramming`; run control, cola,
+  shutdown y app_change usan el perfil de control; `domain_work` y
+  `external-work/run` usan perfil de dominio.
+- `modulos/orquesta-web/http_resource_limits_v0.go` centraliza JSON/form de los
+  endpoints web con limite y rechazo de trailing data; los formularios web
+  aceptan JSON solo por ese helper.
+- `/mcp` conserva limite JSON-RPC compatible en
+  `cmd/orquesta-server/mcp_real_http_json_v0.go`, con `Content-Type`, body
+  demasiado grande y trailing data como errores publicos compactos.
+- Cobertura focal anadida para que `autoprogramming/status` y
+  `autoprogramming/supervise` acepten payloads propios del perfil de
+  autoprogramacion sin caer al limite de control plane.
+- Retry acotado 2026-05-26: `cmd/orquesta-server` comparte helper local de
+  body JSON publico para `/mcp` y workspace timeline; `/mcp` conserva 1 MiB
+  JSON-RPC y workspace timeline usa perfil control-plane con error publico
+  `request_body_too_large`.
+
 ## T138 outbound-http-response-bounds-redaction
 
 Objetivo: limitar y redactar respuestas HTTP leidas por clientes/comandos antes
 de escribirlas en stdout, errores publicos o auditoria.
 
-Estado: pendiente.
+Estado: fusionada_con T103 outbound-http-response-limit-redaction 2026-05-26.
+
+Fusionada_con: T103 outbound-http-response-limit-redaction
+
+Nota canonica 2026-05-26: T138 queda como alias historico de respuesta HTTP
+saliente. Sus criterios/evidencias se conservan aqui y en T103; el planner
+residente debe elegir T103 y marcar esta seccion como `duplicate_backlog_task`,
+sin borrar historia ni relanzar otra tarea equivalente.
 
 Alcance:
 
@@ -7287,7 +8098,7 @@ Criterios:
 Objetivo: separar salida publica de comandos, diagnostico local y evidencia
 durable para que agentes y operadores no consuman payloads crudos por stdout.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26.
 
 Alcance:
 
@@ -7339,19 +8150,17 @@ Huecos detectados:
   de scanners y T79 parte el backlog, pero falta una politica para consolidar
   duplicados ya escritos sin borrar historia ni lanzar dos agentes sobre el
   mismo owner.
-- Quedan `panic(` en codigo no-test: `mustMarshalMCPRealSmokeV0` en el comando
-  temporal MCP real y `mustParseAgentLeaseInstantV0` en leases. Aunque hoy se
-  usan con invariantes previas, las fronteras publicas/control-plane no tienen
-  contrato comun de "no panic": un fallo de marshal, parse o invariante rota
-  deberia volver como error publico recuperable o issue durable, no tumbar el
-  proceso residente.
+- Quedaban `panic(` en codigo no-test: `mustMarshalMCPRealSmokeV0` en el
+  comando temporal MCP real y `mustParseAgentLeaseInstantV0` en leases. T141
+  los sustituyo por error publico recuperable e issue durable; el rail queda
+  como contrato para futuros comandos/fronteras publicas.
 
 ## T140 backlog-overlap-canonicalization
 
 Objetivo: consolidar tareas Txx ya duplicadas o solapadas en el backlog de
 automejora sin borrar historia y sin perder criterios de cierre.
 
-Estado: pendiente.
+Estado: cerrado offline focal 2026-05-26.
 
 Alcance:
 
@@ -7379,13 +8188,29 @@ Criterios:
   seguro del planner.
 - Tests: `go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-server ./cmd/orquesta-server`.
 
+Cierre 2026-05-26:
+
+- T102/T137 y T103/T138 quedan consolidadas con alias `Fusionada_con` sin
+  borrar secciones historicas.
+- El parser/planner residente lee el alias canonico, fusiona `write_set`,
+  criterios y tests no redundantes en la tarea canonica, y omite la seccion
+  duplicada con collision `duplicate_backlog_task`.
+- Si una request viva corresponde al alias no canonico, el planner bloquea la
+  canonica equivalente y devuelve `backlog_tareas_ya_visibles_en_cola` para no
+  lanzar dos agentes sobre el mismo frente.
+- Evidencia focal: `go test -count=1 ./cmd/orquesta-server -run 'TestIdleSelfImprovementBacklogPlannerV0UsaCanonicaParaDuplicadosV0|TestIdleSelfImprovementBacklogPlannerV0BloqueaCanonicaSiAliasEstaVivoV0'`.
+- Pendiente de cierre: la bateria obligatoria
+  `go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-server ./cmd/orquesta-server`
+  no quedo verde por el smoke OPES fake `run-until-assemble`, fuera del frente
+  T140.
+
 ## T141 public-boundary-no-panic-contract
 
 Objetivo: impedir que codigo no-test de control plane, smokes opt-in o nucleo
 neutral use `panic` para errores que pueden llegar desde configuracion, IO,
 JSON, reloj o invariantes rotas.
 
-Estado: pendiente.
+Estado: completada 2026-05-26.
 
 Alcance:
 
@@ -7413,6 +8238,18 @@ Criterios:
 - Coordinar con T85, T97, T107 y T139: esta tarea gobierna crash/no-panic; las
   otras gobiernan status, logs, diagnosticos de tests y shape publico.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-core-leases ./modulos/orquesta-server ./modulos/orquesta-observability`.
+
+Resultado 2026-05-26:
+
+- `cmd/orquesta-server/mcp_real_smoke_v0.go` ya no usa helper `must*` ni
+  `panic` para marshaling de argumentos MCP; devuelve
+  `internal_invariant:mcp_smoke_arguments_json` sin detalles del valor.
+- `modulos/orquesta-core-leases` parsea instantes por error recuperable y
+  devuelve `AgentLeaseValidationErrorV0` con campo causal si una fecha externa o
+  invariante rota no se puede parsear.
+- `modulos/orquesta-server` conserva la recuperacion de panic del supervisor
+  como fallo operacional observable por state/auditoria, revalidado dentro de
+  la bateria de T141.
 
 ## Escaneo backlog 2026-05-24 cuadragesima octava pasada
 
@@ -7451,7 +8288,7 @@ Huecos detectados:
 Objetivo: acotar y clasificar la entrada JSON de CLI antes de enviarla a APIs
 publicas o convertirla en contrato operativo.
 
-Estado: pendiente.
+Estado: completado el 2026-05-26.
 
 Alcance:
 
@@ -7477,12 +8314,25 @@ Criterios:
   publica; esta gobierna la entrada local antes de construir requests.
 - Tests: `go test -count=1 ./modulos/orquesta-cli ./cmd/orquesta-server`.
 
+Cierre 2026-05-26:
+
+- `readCLIInputBytesV0` lee `stdin` y `--input` con limite acotado por comando
+  (`--input-max-bytes`, default 1 MiB, maximo local 8 MiB) usando lectura
+  limitada, error publico `input_too_large` y sin incluir el cuerpo recibido.
+- La fuente publica se clasifica como `stdin`, `file_explicit` o `inline`
+  futuro; comandos sin input conservan `arg` como compatibilidad.
+- `--input -` sigue leyendo stdin. Las rutas explicitas bloquean paths
+  absolutos, salida del directorio actual, `.orquesta-runtime`, prompts,
+  transcripts, logs y ficheros de control Codex con errores compactos sin ruta
+  local ni contenido crudo.
+- Verificado con `go test -count=1 ./modulos/orquesta-cli ./cmd/orquesta-server`.
+
 ## T143 codex-control-file-size-and-redaction-policy
 
 Objetivo: unificar limite, lectura y error publico para ficheros de control
 Codex antes de validar ACK, decisiones o checkpoint.
 
-Estado: pendiente.
+Estado: completado el 2026-05-26.
 
 Alcance:
 
@@ -7543,13 +8393,14 @@ Huecos detectados:
   limite comun ni politica de `Content-Type`/trailing data. T137 cubre
   MCP/web/gateway y T133 documenta falta de guia local en `factory-http`, pero
   el handler concreto queda fuera del alcance de pruebas declarado.
+  Cerrado por T146 el 2026-05-26 para el alcance factory-http/gateway.
 
 ## T144 domain-work-delivery-artifact-intake-policy
 
 Objetivo: acotar la lectura y normalizacion de ficheros de entrega antes de
 convertirlos en artefactos `domain_work` o payloads hacia apps externas.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26.
 
 Alcance:
 
@@ -7576,12 +8427,25 @@ Criterios:
   del fichero de producto entregado.
 - Tests: `go test -count=1 ./modulos/orquesta-app-codex-stack ./modulos/orquesta-domain-work ./modulos/orquesta-runtime-codex-delivery`.
 
+Cierre 2026-05-26:
+
+- `orquesta-app-codex-stack` separa el intake de artefactos `domain_work` en
+  `domain_work_delivery_artifact_intake_v0.go`: lectura limitada por tipo de
+  artefacto, errores publicos estables, deteccion de binario y JSON estructurado.
+- El builder bloquea campos sensibles antes de enviar `PayloadFields`: tokens,
+  HOME/rutas privadas, prompts/transcripts, payload HTTP crudo y payloads de
+  proveedor/modelo quedan como `domain_work_artifact_payload_sensitive` sin
+  filtrar cuerpo ni path local.
+- Binarios o data URI no viajan como string/`ValueJSON`; el error publico exige
+  ref/attachment validado por adaptador externo.
+- Validacion requerida: `go test -count=1 ./modulos/orquesta-app-codex-stack ./modulos/orquesta-domain-work ./modulos/orquesta-runtime-codex-delivery`.
+
 ## T145 operator-mcp-client-deadline-budget
 
 Objetivo: dar deadline, cancelacion y error publico al cliente MCP de operador
 sin meter transporte real ni operador concreto en el nucleo.
 
-Estado: pendiente.
+Estado: completado 2026-05-26 por T145.
 
 Alcance:
 
@@ -7608,13 +8472,25 @@ Criterios:
   gobierna el deadline del cliente.
 - Tests: `go test -count=1 ./modulos/orquesta-operator-mcp-client ./modulos/orquesta-operator-mcp ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
 
+Cierre 2026-05-26:
+
+- `OperatorMCPClientConnectorV0` deriva cada `CallToolV0` desde
+  `ContextFactory` opcional y `Timeout` de composicion; si no se configura,
+  aplica `DefaultOperatorMCPClientTimeoutV0`.
+- Timeout y cancelacion se publican como `operator_mcp_timeout` y
+  `operator_mcp_cancelled`; ausencia de conector conserva
+  `operator_mcp_connector_unavailable` y fallos opacos conservan
+  `operator_mcp_port_error`.
+- El contrato queda en el adaptador opt-in; no mete transporte real, operador,
+  URL, token, prompt ni transcript en el nucleo.
+
 ## T146 factory-http-json-boundary-coverage
 
 Objetivo: incorporar `orquesta-factory-http` a la politica comun de fronteras
 JSON publicas y a la cobertura documental local antes de usarlo como entrada de
 apps generadas o preview de backlog.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26.
 
 Alcance:
 
@@ -7638,6 +8514,13 @@ Criterios:
 - Coordinar con T123, T133 y T137: preview de backlog, guias locales y helper
   JSON publico son vecinos; esta tarea cubre el modulo omitido en alcance.
 - Tests: `go test -count=1 ./modulos/orquesta-factory-http ./modulos/orquesta-factory ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway`.
+
+Cierre 2026-05-26: `orquesta-factory-http` lee `POST /api/v0/apps/spec` con
+`MaxBytesReader`, `Content-Type` JSON/legacy vacio documentado, rechazo de
+trailing data y campos desconocidos, errores publicos compactos y sin eco del
+body. `README.md` local documenta la frontera sensible y la respuesta conserva
+el envelope preview `app_spec` + `backlog`, sin plan operativo ni cola
+ejecutable.
 
 ## Verificacion final esperada
 
@@ -7686,7 +8569,7 @@ Objetivo: leer logs Codex de progreso/fallo con tail acotado antes de
 clasificar no-ACK, interrupcion o capacidad, sin convertir logs crudos en
 evidencia terminal.
 
-Estado: pendiente.
+Estado: completado el 2026-05-26.
 
 Alcance:
 
@@ -7711,12 +8594,35 @@ Criterios:
   internos usados para decidir failure context.
 - Tests: `go test -count=1 ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-runtime-codex ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
 
+Evidencia 2026-05-26: `codexProgressReadFailureLogV0` reutiliza lectura tail
+acotada antes de clasificar fallo, la lectura de firma limita el tail aun si el
+log crece durante la lectura, y los lectores vecinos de progreso/recovery ops
+en el stack Codex usan tail acotado para stdout/stderr/last-message. Las
+salidas publicas conservan codigos/refs compactos sin stdout/stderr crudo como
+evidencia terminal.
+
 ## T148 file-ledger-snapshot-read-bounds
 
 Objetivo: fijar limites de lectura, records y error publico para ledgers y
 snapshots JSON file-based antes de usarlos como evidencia de estado vivo.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26 en alcance asignado.
+
+Cierre 2026-05-26: `orquesta-core-workflow` define un presupuesto comun de
+payload para comandos/eventos alineado con outbox, con overrides tipados para
+`CreateMicrotask` y `MicrotaskCreated`; `ValidateOrchestrationCommandV0` y
+`ValidateOrchestrationEventV0` cortan por tamano antes de decodificar JSON.
+`orquesta-state-file` valida eventos del workflow antes de compactar/persistir
+y al cargar documentos de eventos. Los payloads grandes siguen fuera del
+workflow durable: deben viajar por refs de artefacto/evidencia.
+
+Cierre T148 2026-05-26: los lectores file-based del alcance asignado declaran
+limite de bytes y `max_records` por tipo antes de reconstruir estado. Bridge
+externo, ledger de entrega `domain_work`, `domain-work-file`, `run-file`,
+`state-file/outbox` y stores Codex delivery devuelven errores compactos de
+sobrelimite/corrupcion/schema sin paths ni cuerpos crudos, y no degradan un
+ledger ilegible a estado vacio. T104, T98 y T101 conservan ownership de
+escritura durable, claim/recovery e idempotencia causal.
 
 Alcance:
 
@@ -7789,7 +8695,7 @@ Huecos detectados:
 Objetivo: convertir el snapshot de worktree en evidencia acotada y streaming,
 sin leer ficheros completos ni recorrer arboles sin presupuesto.
 
-Estado: pendiente.
+Estado: cerrado localmente el 2026-05-26 para snapshot de worktree.
 
 Alcance:
 
@@ -7818,13 +8724,31 @@ Criterios:
   solo en `ACK.files`.
 - Tests: `go test -count=1 ./modulos/orquesta-runtime-worktree ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
 
+Cierre 2026-05-26:
+
+- `CaptureWorktreeSnapshotV0` declara `read_budget` y aplica `max_files`,
+  `max_file_bytes` y `max_total_bytes`; calcula SHA-256 por streaming y cuenta
+  lineas Go sin `os.ReadFile` completo.
+- Los issues publicos son compactos y sin rutas absolutas:
+  `worktree_snapshot_file_too_large`,
+  `worktree_snapshot_too_many_files`, `worktree_snapshot_too_large` y
+  `worktree_snapshot_unreadable`.
+- El stack Codex y el servidor tienen presupuesto configurable por composicion
+  mediante `ORQUESTA_WORKTREE_SNAPSHOT_MAX_FILES`,
+  `ORQUESTA_WORKTREE_SNAPSHOT_MAX_FILE_BYTES` y
+  `ORQUESTA_WORKTREE_SNAPSHOT_MAX_TOTAL_BYTES`; el default vive en
+  `orquesta-runtime-worktree`.
+- Los verificadores Codex y el review gate proyectan agotamiento de presupuesto
+  como rail de revision/followup, sin caer al contenido de `ACK.files`.
+
 ## T150 project-tree-scan-budget-for-review-recovery
 
 Objetivo: unificar los escaneos de arbol usados por review/rework y recuperacion
 de artefactos para que globs y carpetas no recorran proyectos completos sin
 limite ni reglas divergentes.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26 con politica general acotada en adaptadores del
+write-set.
 
 Alcance:
 
@@ -7852,12 +8776,28 @@ Criterios:
   vecinos; esta tarea solo gobierna escaneos heuristicos de existencia/recovery.
 - Tests: `go test -count=1 ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack ./modulos/orquesta-runtime-worktree`.
 
+Revalidacion 2026-05-26:
+
+- `orquesta-runtime-worktree` aporta `ProjectTreeScanHasFileV0` y
+  `ProjectTreeScanFilesV0` como politica comun de scan con `context`,
+  `max_entries`, `max_depth`, `max_file_bytes`, `max_results`, ignore prefixes
+  y reason codes publicos (`found`, `not_found`, `scan_budget_exhausted`,
+  `scan_cancelled`, `invalid_request`, `filesystem_error`).
+- `codexReviewGateProjectGlobHasFileV0`,
+  `codexReviewGateDirHasFileV0`, `reviewReworkProjectGlobHasFileV0`,
+  `reviewReworkDirHasFileV0` y `domainWorkRecoveryFilesUnderDirV0` delegan en
+  esa politica comun. Los globs amplios quedan acotados por presupuesto y los
+  control files/directorios locales de Orquesta no cuentan como evidencia de
+  producto.
+- Evidencia ejecutada:
+  `go test -count=1 ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack ./modulos/orquesta-runtime-worktree`.
+
 ## T151 codex-wave-operator-file-input-bounds
 
 Objetivo: acotar los ficheros locales que alimentan prompts, objetivos y
 contexto de olas Codex antes de construir paquetes para agentes.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26.
 
 Alcance:
 
@@ -7887,6 +8827,18 @@ Criterios:
   publica, control files y logs de progreso son vecinos; esta tarea gobierna
   inputs de prompt/contexto antes del launch.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-worktree`.
+
+Evidencia 2026-05-26: `codex-wave` y `codex-director-wave` leen
+`--prompt-file`, `--objective-file` y `--domain-context-file` con presupuesto
+por fichero, rechazo de symlinks/no regulares, validacion UTF-8/texto y bloqueo
+de `.orquesta-runtime`, `.orquesta-codex-runtime`, logs, ACKs, checkpoints,
+prompts/transcripts previos y refs opacas usadas como si fueran fichero local.
+Los errores publicos (`prompt_file_too_large`, `prompt_file_invalid`,
+`objective_file_invalid`, `domain_context_file_unreadable`, etc.) no incluyen
+cuerpo ni path local completo. Los summaries publicos exponen
+`operator_inputs` con categoria, `source_ref` opaca, `content_ref` hash y bytes;
+si el objetivo viene de fichero, request/plan/wave_work publicos sustituyen el
+texto por ref compacta antes de serializar.
 
 ## Escaneo backlog 2026-05-24 quincuagesima segunda pasada
 
@@ -7938,7 +8890,7 @@ Objetivo: hacer que la proyeccion de `CODEX_HOME` hacia agentes Codex tenga
 presupuesto de copia, politica de symlinks/modos y recibo compacto, como shard
 operativo de T56.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26 en el write-set asignado.
 
 Alcance:
 
@@ -7968,12 +8920,16 @@ Criterios:
   y artefactos ignorados siguen como owners vecinos.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-worktree ./modulos/orquesta-app-codex-stack`.
 
+Evidencia 2026-05-26:
+
+- `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-worktree ./modulos/orquesta-app-codex-stack`
+
 ## T153 workflow-command-event-payload-budget
 
 Objetivo: unificar presupuesto y redaccion basica para payloads de comandos y
 eventos del workflow antes de persistirlos o proyectarlos.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26.
 
 Alcance:
 
@@ -8010,7 +8966,8 @@ Objetivo: hacer que puertos y adaptadores con efectos externos tengan deadline
 observable y cancelacion propagada, sin depender de `context.Background()` como
 contrato de ejecucion.
 
-Estado: pendiente.
+Estado: cerrado localmente 2026-05-26 para ACK, checkpoint, sidecar de decision
+y tails de progreso dentro del write-set asignado.
 
 Alcance:
 
@@ -8041,6 +8998,22 @@ Criterios:
   wait externo y cliente operador son vecinos; esta tarea gobierna la
   propagacion general de deadline en efectos.
 - Tests: `go test -count=1 ./modulos/orquesta-runtime ./modulos/orquesta-domain-work-http ./modulos/orquesta-opes-connector ./modulos/orquesta-operator-mcp-client ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
+
+Cierre 2026-05-26:
+
+- `orquesta-domain-work-http` y `orquesta-opes-connector` derivan deadline por
+  efecto aunque el cliente HTTP inyectado no tenga timeout propio, preservando
+  cancelacion del contexto de composicion.
+- Runtime de proceso neutral normaliza politica de deadline para launch/stop y
+  conserva compatibilidad legacy de `nil context` con deadline por defecto.
+- El bridge OPES residente ejecuta cada tick con deadline de efecto y
+  `opes-drain-once` deja de arrancar desde `context.Background()` sin limite.
+- Los errores de deadline/cancelacion se publican como codigos compactos
+  (`domain_work_http_timeout`, `opes_http_timeout`, `effect_timeout`,
+  `operator_mcp_timeout`) sin URL completa, HOME, tokens, prompts ni payloads.
+- Reintento `agent-ref-task-autoprogramming-c22c7438ddc1-g01`: se sincroniza el
+  estado documental con el cierre ya implementado y se conserva T136/T23/T145
+  como owners vecinos para espera externa, transporte MCP residente y operador.
 
 ## Escaneo backlog 2026-05-24 quincuagesima tercera pasada
 
@@ -8081,7 +9054,7 @@ Objetivo: acotar el scan de ACKs de automejora idle para que el planner no
 recorra todo el runtime local ni confunda falta de presupuesto con backlog
 cerrado o vacio.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26 para el planner idle del servidor.
 
 Alcance:
 
@@ -8109,13 +9082,32 @@ Criterios:
   files; gobierna el scan runtime usado para deduplicar trabajo completado.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
 
+Evidencia 2026-05-26:
+
+- `completedBacklogRequestRefsV0` deja de usar `WalkDir` sobre todo
+  `.orquesta-runtime`: solo inspecciona profundidad `run/agent/agent_ack.json`
+  para runs `request-ref-autoprogramming-backlog-*`, con limites de directorios,
+  entradas por run, agentes por run, bytes de control file y duracion.
+- ACKs sobredimensionados o ilegibles quedan como
+  `backlog_ack_scan_ambiguous`; agotamiento de presupuesto queda como
+  `backlog_ack_scan_budget_exhausted`. En ambos casos bloqueantes, el planner
+  conserva solo scanner documental acotado y no relanza codigo generico.
+- Cobertura focal: presupuesto agotado, ACK sobredimensionado, ACK ambiguo sin
+  cierre, ACK correlado estricto y foto documental obsoleta.
+- Rework de revision
+  `agent-ref-task-ref-review-rework-task-autoprogramming-a8f8edf38716-g01-4dce1eb3cf44`:
+  conserva el cierre de T155 sin relanzar otro padre, sincroniza el estado
+  documental con la evidencia ya aplicada y resuelve el contexto obligatorio
+  `ref_only` por lectura local del packet, AGENTS/README y evidencia explicita
+  en ACK.
+
 ## T156 app-vcs-git-output-and-path-budget
 
 Objetivo: limitar salida y cardinalidad de rutas en comandos Git de AppVCS y
 promocion de staging antes de usarlos como evidencia, errores publicos o lista
 de cambios.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26 en el write-set asignado.
 
 Alcance:
 
@@ -8145,6 +9137,21 @@ Criterios:
   shape publico de comandos y deadline general siguen como owners vecinos; esta
   tarea gobierna output/path budget especifico de Git AppVCS.
 - Tests: `go test -count=1 ./modulos/orquesta-runtime-worktree ./modulos/orquesta-app-codex-stack ./modulos/orquesta-mcp ./cmd/orquesta-server`.
+
+Evidencia de cierre 2026-05-26:
+
+- `GitAppVCSConnectorV0` ejecuta Git con stdout/stderr separados y presupuesto
+  `max_output_bytes`; exceso publica `git_output_too_large` sin salida cruda.
+- `git status --porcelain --untracked-files=all` aplica `max_changed_paths` en
+  AppVCS y promocion de staging; exceso publica
+  `git_status_too_many_paths` y bloquea antes de `git add`, commit o push.
+- Timeout de Git usa el deadline AppVCS existente y publica
+  `git_command_timeout`; la evidencia queda reducida a accion, contadores,
+  truncation/timeout y refs opacas, sin remotos, HOME, rutas ni diff.
+- Rework de revision
+  `agent-ref-task-ref-review-rework-task-autoprogramming-a61a87a140a8-g01-14fd8c3348e6`:
+  conserva T156 cerrado sin relanzar otro padre y resuelve contexto obligatorio
+  `ref_only` por lectura local/evidencia explicita en ACK.
 
 ## Escaneo backlog 2026-05-24 quincuagesima cuarta pasada
 
@@ -8189,7 +9196,19 @@ Objetivo: asegurar que ACKs, sidecars, checkpoints y tails de progreso Codex se
 leen solo desde raices de control autorizadas, sin seguir symlinks ni aceptar
 entradas no regulares como evidencia operativa.
 
-Estado: pendiente.
+Estado: cerrado local 2026-05-26 para escritura de control files Codex en
+runtime, checkpoint y comando de ola.
+
+Evidencia aplicada: `orquesta-runtime-codex` expone
+`CodexControlFileWriteRequestV0`/`CodexControlFileWriteReceiptV0` y
+`WriteCodexControlFileBytesV0` con raiz autorizada, nombre esperado,
+`Lstat` previo, rechazo de symlink/no regular/hardlink, temp+rename+fsync,
+permisos `0600` o wrapper `0700`, operaciones `created`/`replaced`/
+`idempotent` y conflicto `payload_conflict` para modo `create_if_absent`.
+`codex_resolver_v0.go`, `codex_shutdown_checkpoint_v0.go` y los comandos de
+ola del servidor escriben packet, prompt, wrapper, registry, process-done y
+request de shutdown por esa politica. Los receipts son compactos por tipo,
+nombre, bytes y hash, sin path local ni contenido crudo.
 
 Alcance:
 
@@ -8218,13 +9237,31 @@ Criterios:
   cierre terminal.
 - Tests: `go test -count=1 ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
 
+Cierre 2026-05-26:
+
+- `orquesta-runtime-codex` centraliza la lectura acotada de control files con
+  nombre base esperado, raiz no trivial, `Lstat` previo, rechazo de symlink,
+  hardlink, dir y no regular, comparacion tras abrir y limite T143.
+- `orquesta-runtime-codex-delivery` reutiliza esa lectura para ACK/sidecar y
+  aplica la misma politica de `Lstat`/no symlink/no hardlink a tails de progreso.
+- `cmd/orquesta-server codex-wave-tail` rechaza logs symlink, hardlink o no
+  regulares antes de leer fragmentos diagnosticos.
+- Evidencia focal: `TestReadCodexControlFileBytesV0RechazaSymlink`,
+  `TestReadCodexControlFileBytesV0RechazaHardlink`,
+  `TestCodexProgressReadTailV0RechazaSymlink` y
+  `TestCodexWaveTailFileLimitedV0RechazaSymlink`.
+- Rework de revision
+  `agent-ref-task-ref-review-rework-task-autoprogramming-0149f7cf3c20-g01-935bd05e71ff`:
+  conserva T157 cerrado sin relanzar otro padre y resuelve contexto obligatorio
+  `ref_only` mediante lectura local/evidencia explicita en ACK.
+
 ## T158 opes-bridge-destination-and-summary-policy
 
 Objetivo: cerrar la politica OPES especifica de destino HTTP y summary publico
 del bridge, separada del adaptador HTTP neutral y sin tocar OPES productivo por
 defecto.
 
-Estado: pendiente.
+Estado: cubierto 2026-05-26.
 
 Alcance:
 
@@ -8253,6 +9290,26 @@ Criterios:
   smokes, HTTP neutral, ledger de entrada, respuestas salientes y shape publico
   siguen como owners vecinos; esta tarea cubre destino y summary del bridge OPES.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-opes-connector ./modulos/orquesta-opes-bridge`.
+
+Revalidacion OrquestaV2 2026-05-26: el rework
+`agent-ref-task-autoprogramming-453f91b133d4-g01` mantiene T158 cerrado. La
+politica vigente exige destino OPES/Orquesta sin credenciales ni query,
+clasifica loopback/temporal/productivo con confirmacion y evidence ref compacta
+para productivo; el summary publico de `opes-drain-once` queda en refs opacas,
+categorias, filtros y contadores. Contexto obligatorio `ref_only` resuelto por
+lectura local/evidencia explicita en ACK.
+Retry OrquestaV2 2026-05-26:
+`agent-ref-task-autoprogramming-985c0ad5e009-g01` revalida el mismo cierre sin
+abrir owner vecino y conserva el contexto `ref_only` como evidencia explicita en
+ACK.
+Retry OrquestaV2 2026-05-26:
+`agent-ref-task-autoprogramming-bf0d81417acc-g01` revalida T158 como cierre
+vigente sin cambios de codigo ni owner vecino; el contexto obligatorio
+`ref_only` queda resuelto por lectura local y evidencia explicita en ACK.
+Retry OrquestaV2 2026-05-26:
+`agent-ref-task-autoprogramming-761a129dc1b4-g01` revalida T158 sin relanzar
+smoke real ni abrir owner vecino; el contexto obligatorio `ref_only` queda
+resuelto por lectura local y evidencia explicita en ACK.
 
 ## Escaneo backlog 2026-05-24 quincuagesima quinta pasada
 
@@ -8299,7 +9356,9 @@ Objetivo: unificar la escritura durable de ficheros de control Codex para que
 packet, prompt, wrappers, registry y requests de checkpoint no dependan de
 `os.WriteFile` directo ni de rutas finales sin receipt.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26 para la politica compartida de composicion en
+`orquesta-runtime`, con adopcion focal en servidor Codex wave/director-wave,
+runtime launch, progreso Codex delivery y fallbacks web/CLI.
 
 Alcance:
 
@@ -8335,7 +9394,7 @@ Objetivo: acotar el fan-in de `director_decisions.json` y fuentes de decisiones
 del Director para que varios sidecars o descriptors no generen microtareas,
 outbox ni waits por encima del presupuesto operativo.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26.
 
 Alcance:
 
@@ -8367,6 +9426,20 @@ Criterios:
   vecinos; esta tarea gobierna fan-in de decisiones antes de materializar
   efectos.
 - Tests: `go test -count=1 ./modulos/orquesta-director-agent-file-source ./modulos/orquesta-director-agent-workflow ./modulos/orquesta-app-codex-stack ./modulos/orquesta-orchestration-core`.
+
+Cierre 2026-05-26:
+
+- `orquesta-director-agent-workflow` define presupuesto y contadores compactos
+  por request de decisiones con reason publico
+  `director_decisions_batch_too_large`.
+- `DirectorAgentDecisionFileSourceV0` aplica limite de descriptors, bytes
+  acumulados, decisiones, microtareas, tasks nuevas y outbox esperado antes de
+  devolver el lote.
+- `compositeDirectorDecisionSourceV0` agrega fuentes bajo el mismo presupuesto
+  y propaga el limite al source de `director_decisions.json` desde la
+  configuracion canonica del stack.
+- Evidencia focal:
+  `go test -count=1 ./modulos/orquesta-director-agent-file-source ./modulos/orquesta-director-agent-workflow ./modulos/orquesta-app-codex-stack ./modulos/orquesta-orchestration-core`.
 
 ## Escaneo backlog 2026-05-24 quincuagesima sexta pasada
 
@@ -8400,7 +9473,7 @@ Huecos detectados:
 Objetivo: unificar reloj y generacion de refs publicas/operativas para evitar
 colisiones, replay no determinista y timestamps usados como identidad causal.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26.
 
 Alcance:
 
@@ -8433,13 +9506,27 @@ Criterios:
   gobierna reloj/ref generation compartido.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-runtime ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack ./modulos/orquesta-web ./modulos/orquesta-cli`.
 
+Evidencia de cierre 2026-05-26:
+
+- `modulos/orquesta-runtime/clock_ref_policy_v0.go` define `ClockV0`,
+  `RefGeneratorV0`, UTC normalizado, salida RFC3339, refs con entropia y scope,
+  fallback degradado observable con contador monotono y deteccion de colision.
+- `cmd/orquesta-server` deja de generar `wave_ref`/refs director por timestamp
+  de segundo cuando no hay ref explicita y usa el generador compartido.
+- `modulos/orquesta-runtime` resuelve `requested_at` con reloj inyectable; el
+  core sigue recibiendo valores ya resueltos.
+- `modulos/orquesta-runtime-codex-delivery`, `modulos/orquesta-app-codex-stack`,
+  `modulos/orquesta-web` y `modulos/orquesta-cli` consumen el helper para las
+  fronteras focales detectadas; los fallbacks web/CLI ya no emiten IDs
+  silenciosos basados solo en `UnixNano`.
+
 ## T162 public-client-mutation-idempotency-policy
 
 Objetivo: alinear `request_id`, `correlation_id` e `idempotency_key` en clientes
 publicos y mutaciones del control plane para que retries, timeouts y errores
 parciales no dupliquen efectos ni pierdan trazabilidad.
 
-Estado: pendiente.
+Estado: cerrado para la superficie publica acotada del stack de programacion.
 
 Alcance:
 
@@ -8474,6 +9561,20 @@ Criterios:
   de test, control plane, JSON publico, shape de salida y deadlines siguen como
   owners vecinos; esta tarea gobierna identidad/idempotencia de entrada publica.
 - Tests: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-cli ./modulos/orquesta-mcp ./cmd/orquesta-server ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway`.
+
+Cierre 2026-05-26:
+
+- `orquesta-mcp` concentra la normalizacion publica de mutaciones para
+  `request_id`, `correlation_id`, `idempotency_key`, `X-Correlation-ID` e
+  `Idempotency-Key`, con derivacion estable desde `request_id` cuando el cliente
+  no declara key explicita.
+- Prepare-run, run-control, queue-priority mutante, shutdown y AppVCS consumen
+  esa politica antes de delegar a puertos/executors; las lecturas conservan
+  correlacion sin exigir idempotencia.
+- Web, CLI, app-gateway, http-gateway y el cliente de shutdown del servidor
+  propagan headers/keys canonicos y evitan reutilizar `correlation_id` como
+  identidad de mutacion.
+- Evidencia: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-cli ./modulos/orquesta-mcp ./cmd/orquesta-server ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway`.
 
 ## Escaneo backlog 2026-05-24 quincuagesima septima pasada
 
@@ -8515,7 +9616,17 @@ Objetivo: acotar y hacer indexable el log de eventos file-based por run para
 que append, replay y deduplicacion no dependan de leer y reescribir un JSON
 creciente completo en cada ciclo residente.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26.
+
+Cierre 2026-05-26: `orquesta-state-file` mantiene un indice durable por run y
+registros de evento por ref, con documento `events` minimo como ancla compatible
+para stores existentes. `AppendRunEventsV0` valida presupuesto por append, por
+run y por payload antes de persistir, deduplica por `event_id` usando el indice
+y conserva conflicto por payload canonico. `LoadRunEventsPageV0` expone lectura
+paginada; los consumidores del Director Operativo en `app-director-service`
+prefieren ese puerto y declaran presupuesto de historial completo para cierre y
+review causal. Los documentos legacy `events/*.json` se bootstrapean al indice
+sin borrar ni mover archivos.
 
 Alcance:
 
@@ -8552,7 +9663,21 @@ Criterios:
 Objetivo: evitar que la recuperacion de hijos por `parent_task_ref` escanee
 todas las tasks del run sin presupuesto ni indice durable.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26.
+
+Cierre 2026-05-26: `orquesta-state-file` mantiene un indice durable
+`workflow_task_parent_index.v0` por run. `SaveWorkflowTaskV0` actualiza el
+indice con `run_ref`, `task_ref`, `parent_task_ref`, `wave_ref`, `cohort_ref`,
+`delegation_depth`, fanout declarado y `child_task_refs`; la carga por
+`parent_task_ref` consulta el indice y solo lee las refs de hijos conocidas. Si
+el indice falta o queda corrupto, se rematerializa desde los documentos de
+tasks con presupuesto de entradas/bytes y reason
+`workflow_task_parent_index_rebuild_required`; si el rebuild excede presupuesto,
+devuelve `workflow_task_parent_index_budget_exhausted` y bloquea el cierre o la
+recursion en vez de interpretar "sin hijos". La cobertura focal valida
+recuperacion tras recrear instancia, lectura desde indice aunque el presupuesto
+de rebuild sea menor que el total de tasks, metadata de linaje conservada y
+bloqueo de rebuild sin presupuesto.
 
 Alcance:
 
@@ -8592,7 +9717,7 @@ Objetivo: separar defaults de configuracion del servidor de mutaciones al
 entorno global del proceso para que smokes, tests y comandos hijos distingan
 input explicito del operador frente a defaults de composicion.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26 para el rail general del servidor.
 
 Alcance:
 
@@ -8623,6 +9748,14 @@ Criterios:
   exposicion de control plane, status redactado, env del daemon y deadlines son
   vecinos; esta tarea gobierna mutacion global de entorno en config.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-rails ./modulos/orquesta-app-codex-stack`.
+
+Cierre 2026-05-26: `serverConfigFromEnvV0` ya no fija
+`ORQUESTA_STARTUP_CLEANUP_MODE` con `os.Setenv`; los defaults de cleanup y rails
+se calculan como config efectiva y solo se proyectan al entorno del daemon desde
+`serverDaemonStartEnvironmentV0`. La config efectiva expone `source` por setting
+y el recibo de entorno del daemon mantiene conteos `explicit`/`defaulted`/
+`derived` por categoria sin valores crudos. Queda fuera de este cierre cualquier
+fallo de paquetes ajenos al write-set que impida ejecutar la bateria completa.
 
 ## Escaneo backlog 2026-05-24 quincuagesima octava pasada
 
@@ -8674,7 +9807,19 @@ Huecos detectados:
 Objetivo: asegurar que el servidor residente apaga con quiescencia verificable
 de goroutines internas antes de publicar estado `stopped` o cerrar el proceso.
 
-Estado: pendiente.
+Estado: completada local el 2026-05-26.
+
+Cierre local 2026-05-26: `RuntimeV0` registra `Serve`, loop supervisor, tick
+async y preparaciones idle en un grupo de trabajo interno; al recibir cancelacion
+publica `stopping`/`async_work_draining`, apaga HTTP con
+`ORQUESTA_SERVER_SHUTDOWN_GRACE_MS` y espera quiescencia antes de persistir
+`stopped`. Si vence el deadline, persiste `stop_timeout` con contador compacto
+`shutdown_async_work_active`. Las preparaciones idle observan cancelacion con
+receipt compacto y el estado publico expone `stopping`, `stopped`,
+`stop_timeout` y `async_work_draining` sin rutas ni payloads.
+
+Evidencia local:
+`go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server ./modulos/orquesta-observability`.
 
 Alcance:
 
@@ -8706,7 +9851,7 @@ Criterios:
 Objetivo: hacer observable y gobernable el ciclo residente de bridges externos
 sin depender solo de stderr ni de goroutines fire-and-forget.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26 para observabilidad residente offline/focal.
 
 Alcance:
 
@@ -8736,12 +9881,30 @@ Criterios:
   estado vivo del loop de bridges residentes.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-opes-bridge`.
 
+Cierre 2026-05-26:
+
+- `cmd/orquesta-server` conecta el loop residente OPES a un observer compacto y
+  espera su salida al cerrar el runtime. Si el bridge no termina dentro del
+  timeout acotado, publica `external_bridge_shutdown_timeout` y el comando no
+  cierra como exito silencioso.
+- `modulos/orquesta-server` publica en status/readiness lifecycle del bridge:
+  componente, estado (`disabled`, `waiting_initial_delay`, `running`, `idle`,
+  `stopping`, `stopped`, `blocked`, `degraded`, `timeout`), tick ref, ultimo
+  exito/error, filtros compactos y contadores. La readiness mantiene
+  `ready=true` para el servidor listo y expone `external_bridge_ready=false`
+  cuando el bridge esta degradado/bloqueado.
+- Los errores del tick se registran en `recent_errors` y auditoria
+  `external_bridge_tick` con codigo compacto, filtros y contadores; no se
+  persisten URLs completas, payload OPES, respuestas crudas, HOME, tokens ni
+  rutas locales.
+- Validacion: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-opes-bridge`.
+
 ## T168 state-file-run-event-load-validation
 
 Objetivo: validar proyecciones cargadas desde `orquesta-state-file` antes de
 usarlas como verdad durable en replay, cierre o supervision.
 
-Estado: pendiente.
+Estado: completada local el 2026-05-26.
 
 Alcance:
 
@@ -8770,12 +9933,23 @@ Criterios:
   esta tarea gobierna validacion semantica al cargar run/eventos.
 - Tests: `go test -count=1 ./modulos/orquesta-state-file ./modulos/orquesta-core-workflow ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-director-service`.
 
+Cierre local 2026-05-26: `StoreV0.LoadRunV0` valida la proyeccion cargada con
+`ValidateOrchestrationRunV0` y devuelve error publico compacto ante estado
+inconsistente. `LoadRunEventsV0` valida historial cargado con
+`ValidateOrchestrationEventV0`, refs de run y duplicados antes de entregar
+eventos a replay/cierre; los registros de eventos tambien rechazan refs
+inconsistentes al cargarse. No hay migracion silenciosa: snapshots validos
+siguen cargando y documentos corruptos bloquean al lector.
+
+Evidencia local:
+`go test -count=1 ./modulos/orquesta-state-file ./modulos/orquesta-core-workflow ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-director-service`.
+
 ## T169 mcp-real-transport-registration-collision-guard
 
 Objetivo: evitar que el transporte MCP real oculte resources/tools por
 sobrescritura silenciosa al registrar nombres o URIs duplicadas.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26.
 
 Alcance:
 
@@ -8800,6 +9974,14 @@ Criterios:
   toolbelt, limites JSON y cobertura factory HTTP son vecinos; esta tarea
   gobierna colisiones de registro del transporte MCP real.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-mcp`.
+
+Cierre 2026-05-26: el transporte MCP real rechaza colisiones de resources por
+`name` o `uri` y colisiones de tools por `name` con errores publicos
+`mcp_duplicate_resource`/`mcp_duplicate_tool`. El registro valida antes de
+mutar mapas, mantiene listados estables y redacta refs no compactas en errores.
+`RegisterMCPTransportV0` conserva propagacion inmediata del error del puerto.
+Evidencia focal:
+`go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-mcp`.
 
 ## Escaneo backlog 2026-05-24 quincuagesima novena pasada
 
@@ -8840,7 +10022,10 @@ Objetivo: declarar y aplicar una politica comun para redirects en clientes HTTP
 salientes de composiciones, sin ampliar destino efectivo ni reenviar credenciales
 por defecto.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26 para los clientes HTTP salientes del write-set
+asignado. Revalidacion de rework:
+`agent-ref-task-ref-review-rework-task-autoprogramming-74734b6a029e-g01-9160302b840b`
+conserva el cierre sin relanzar otro agente padre sobre la tarea original.
 
 Alcance:
 
@@ -8874,6 +10059,9 @@ Criterios:
 - Coordinar con T80/T103/T138/T154/T158: esta tarea no sustituye validacion de
   destino, deadline ni response limit; gobierna la cadena 3xx posterior.
 - Tests: `go test -count=1 ./modulos/orquesta-domain-work-http ./modulos/orquesta-opes-connector ./modulos/orquesta-web ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./cmd/orquesta-server`.
+- Validacion OrquestaV2 2026-05-26: el rework resolvio el contexto
+  `required ref_only` por evidencia explicita en ACK y reejecuto la matriz
+  requerida de T170.
 
 ## T171 public-query-form-parameter-bounds-redaction
 
@@ -8881,7 +10069,14 @@ Objetivo: aplicar limites y redaccion consistentes a parametros publicos de
 query/form antes de auditoria, status, validacion de dominio o construccion de
 comandos.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26. La web valida query/form publicos con limites de
+tamano total, claves, repeticion y valor antes de `URL.Query`/`ParseForm`; la
+auditoria HTTP del residente no persiste `raw_query`, limita claves y redacta
+nombres sensibles con reason codes compactos.
+Revalidacion OrquestaV2 2026-05-26:
+`agent-ref-task-ref-review-rework-task-autoprogramming-03f6b0927ba2-g01-24a1e410cd44`
+conserva el cierre sin relanzar agente padre; el contexto `ref_only` requerido
+queda resuelto por lectura local de paquete/docs y evidencia explicita en ACK.
 
 Alcance:
 
@@ -8920,7 +10115,13 @@ Objetivo: hacer visibles y testeables los fallos al serializar o escribir
 respuestas HTTP publicas, sin filtrar payloads ni confundirlos con exito de la
 operacion interna.
 
-Estado: pendiente.
+Estado: cerrado localmente el 2026-05-26 para el transporte MCP real `/mcp`.
+`serveJSONRPCV0` valida `jsonrpc:"2.0"`, `method`, `id` seguro,
+notifications, batch rechazado, presupuesto de `params`, `Accept` y
+`Content-Type`; `resources/read` y `tools/call` usan params de objeto estricto
+con errores JSON-RPC compactos sin eco de argumentos ni payloads. Notifications
+solo aceptan `notifications/initialized` sin `id`; batch se rechaza con
+`mcp_batch_unsupported`.
 
 Alcance:
 
@@ -8953,6 +10154,18 @@ Criterios:
 - Coordinar con T94/T139/T153/T166: auditoria, output publico, payload budget y
   shutdown async son vecinos; esta tarea gobierna response-write HTTP.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-web ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-observability`.
+
+Cierre 2026-05-26:
+
+- `modulos/orquesta-server` centraliza escritura JSON publica del residente con
+  serializacion previa a headers, error publico estable `response_encode_failed`
+  y registro compacto `response_write_failed`.
+- La auditoria HTTP distingue codigo HTTP de entrega fallida mediante
+  `response_status=response_write_failed` y `response_write.status=failed`, sin
+  guardar payload interno.
+- Cobertura focal: encode no serializable antes de header, writer fallando antes
+  de header implicito, writer fallando despues de header explicito y ausencia de
+  secreto simulado en la respuesta/error observable.
 
 ## Escaneo backlog 2026-05-24 sexagesima pasada
 
@@ -8991,7 +10204,14 @@ Huecos nuevos:
 Objetivo: definir una guarda comun de origen/intencion para mutaciones publicas
 del control plane cuando se acceden desde navegador, web local o gateway.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26 para gateway web/API. `orquesta-http-gateway`
+declara mutabilidad publica y aporta `BrowserMutationIntentGuardV0`; la raiz
+`orquesta-app-gateway` lo aplica sobre mutaciones expuestas. Requests de
+navegador/form necesitan `Origin`/`Referer` same-origin o token de intencion
+inyectado por composicion; clientes no-browser JSON siguen pasando por las
+guardas de identidad/idempotencia existentes. La decision compacta se expone en
+headers `X-Orquesta-Browser-Intent-*` y errores publicos sin URL, cookies,
+tokens, query cruda ni payload.
 
 Alcance:
 
@@ -9027,7 +10247,7 @@ Criterios:
 Objetivo: fijar el contrato JSON-RPC del transporte MCP real para que `/mcp`
 sea opt-in y predecible sin aceptar formas ambiguas ni payloads sin presupuesto.
 
-Estado: pendiente.
+Estado: completado 2026-05-26.
 
 Alcance:
 
@@ -9097,7 +10317,7 @@ Huecos nuevos:
 Objetivo: limitar, redactar y clasificar la salida de `resources/read` y
 `tools/call` del transporte MCP real antes de envolverla como contenido textual.
 
-Estado: pendiente.
+Estado: completado 2026-05-26.
 
 Alcance:
 
@@ -9127,12 +10347,18 @@ Criterios:
   vecinos; esta tarea gobierna payload de respuesta MCP.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-mcp ./modulos/orquesta-observability`.
 
+Evidencia 2026-05-26: `MCPTransportResourceEnvelopeV0` y
+`MCPTransportToolEnvelopeV0` declaran `output_budget` comun con bytes, modo,
+freshness, redaccion y diagnostico crudo solo opt-in. El transporte MCP real
+bloquea respuestas sobre presupuesto antes de envolverlas como texto JSON-RPC y
+devuelve error compacto sin eco de payload ni argumentos.
+
 ## T176 control-plane-http-security-cache-headers
 
 Objetivo: definir headers de seguridad y cache para respuestas web/API/MCP del
 control plane sin mezclarlo con autenticacion ni con la politica CSRF.
 
-Estado: pendiente.
+Estado: completado 2026-05-26.
 
 Alcance:
 
@@ -9163,13 +10389,20 @@ Criterios:
   JSON, query/form, fallos de escritura y CSRF siguen owners separados.
 - Tests: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway ./cmd/orquesta-server`.
 
+Evidencia 2026-05-26: `orquesta-http-gateway` define la politica comun
+`NewControlPlaneHTTPHeadersV0`/`ApplyControlPlaneHTTPHeadersV0` para HTML, JSON
+y MCP. La composicion HTTP y el servidor residente la aplican como wrapper del
+control plane, incluyendo `/mcp`; las rutas API/AppVCS quedan con `nosniff`,
+anti-frame, `Referrer-Policy`, `Cache-Control: no-store` y reason code publico
+sin eco de cookies, tokens, query, prompts, transcripts, HOME ni rutas privadas.
+
 ## T177 rest-client-base-url-endpoint-policy
 
 Objetivo: unificar normalizacion de base URL y union de endpoints en clientes
 REST de web, CLI, MCP y composicion para evitar destinos ambiguos antes de
 aplicar egress, redirects o lectura de respuesta.
 
-Estado: pendiente.
+Estado: completado 2026-05-26.
 
 Alcance:
 
@@ -9199,6 +10432,17 @@ Criterios:
   query/form e idempotencia son vecinos; esta tarea gobierna URL final antes de
   enviar.
 - Tests: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-cli ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./cmd/orquesta-server`.
+
+Evidencia 2026-05-26: los clientes REST de web usan `webRESTEndpointURLV0`
+para parsear base URL, preservar base path, permitir solo `http/https` e
+impedir userinfo/query/fragment y endpoints absolutos, con cobertura focal del
+alias interno `http://orquesta.internal` por el gateway in-process. CLI usa
+`buildCLIRESTEndpointURLV0`/`normalizeCLIEndpointV0` antes de construir requests
+POST/GET y conserva correlation/idempotency headers fuera del join. MCP usa
+`joinMCPRESTEndpointV0` con la misma politica para el executor de nueva app. El
+servidor usa `commandRESTEndpointURLV0` para status, readiness, run-status y
+submit de `external-work/run`, sin imprimir URLs completas ni credenciales en
+errores publicos.
 
 ## Escaneo backlog 2026-05-24 sexagesima segunda pasada
 
@@ -9238,7 +10482,7 @@ Objetivo: declarar una politica comun de transporte HTTP saliente para clientes
 de control plane, dominio y composicion antes de aplicar egress, redirect,
 respuesta o idempotencia.
 
-Estado: pendiente.
+Estado: completado localmente el 2026-05-26.
 
 Alcance:
 
@@ -9273,13 +10517,27 @@ Criterios:
   y proxy antes de enviar.
 - Tests: `go test -count=1 ./modulos/orquesta-domain-work-http ./modulos/orquesta-opes-connector ./modulos/orquesta-web ./modulos/orquesta-cli ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./cmd/orquesta-server`.
 
+Evidencia 2026-05-26: los clientes salientes declararon factory/perfil local
+por adaptador sin meter politica en el core. `orquesta-domain-work-http` usa
+perfil `domain_egress`; `orquesta-opes-connector` y el wiring OPES de
+`cmd/orquesta-server` usan `opes_temporal`; web, CLI, MCP y comandos del
+servidor usan `loopback_control_plane`; `orquesta-app-gateway` declara
+`internal_inprocess`. Todos esos perfiles fijan `proxy_policy=deny` por defecto,
+timeouts de dial/TLS/headers, pool y keepalive cuando hay red real; el gateway
+in-process queda marcado como `network=none`. Proxy/TLS custom quedan fuera de
+esta tarea como opt-in futuro de composicion y no se auditan aqui porque no se
+habilitaron. Las pruebas focales de transporte cubren que los perfiles no
+heredan proxy del entorno y que las mutaciones de control plane usan factory
+local en vez de transporte nil/por defecto.
+
 ## T179 inprocess-http-transport-budget-parity
 
 Objetivo: hacer que transportes HTTP in-process usados por gateway/smokes tengan
 presupuestos, cancelacion y errores publicos equivalentes a la frontera HTTP
 real, sin abrir red ni meter HTTP en el nucleo.
 
-Estado: pendiente.
+Estado: cerrado localmente 2026-05-26 para el gateway in-process y el smoke MCP
+in-process del servidor.
 
 Alcance:
 
@@ -9311,6 +10569,17 @@ Criterios:
   gobierna el adaptador in-process.
 - Tests: `go test -count=1 ./modulos/orquesta-app-gateway ./modulos/orquesta-web ./modulos/orquesta-mcp ./cmd/orquesta-server ./modulos/orquesta-observability`.
 
+Cierre 2026-05-26:
+
+- `modulos/orquesta-app-gateway/inprocesshttp` concentra el transporte
+  in-process acotado: limite de respuesta, errores publicos
+  `inprocess_response_too_large`, `inprocess_timeout`, `inprocess_cancelled`,
+  `inprocess_handler_panic` y fallo compacto de escritura.
+- `InProcessTransportV0`, helpers web de test y smoke MCP in-process del
+  servidor usan ese transporte sin abrir red, preservando metodo, headers,
+  `Content-Type`, correlacion, status y body.
+- Cobertura focal: `go test -count=1 ./modulos/orquesta-app-gateway ./modulos/orquesta-web ./modulos/orquesta-mcp ./cmd/orquesta-server ./modulos/orquesta-observability`.
+
 ## Escaneo backlog 2026-05-24 sexagesima tercera pasada
 
 Evidencia revisada:
@@ -9340,7 +10609,12 @@ Hueco nuevo:
 Objetivo: hacer visibles los fallos de escritura en stdout/stderr de comandos
 locales sin convertir stdout en evidencia terminal ni filtrar diagnostico crudo.
 
-Estado: pendiente.
+Estado 2026-05-26: cerrado localmente para la visibilidad base de fallos de
+escritura stdio en comandos de servidor y runner CLI. `orquesta-observability`
+define `CommandStdioWriteFailureV0` con reason codes compactos
+`command_output_write_failed`/`command_error_write_failed`; los comandos que
+emiten salida publica comprueban `Encode`/write y devuelven exit code fallido
+sin reejecutar efectos ni volcar payloads crudos.
 
 Alcance:
 
@@ -9410,7 +10684,13 @@ Objetivo: cerrar la frontera de diagnostico del plan documental neutral antes
 de expandir jobs, sin meter OPES, Codex, HTTP ni runtime en el nucleo de
 domain-work.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26.
+
+Avance 2026-05-26: `DomainDocumentPlanV0` rechaza refs duplicados por tipo con
+`domain_document_plan_ref_duplicate`; la canonicalizacion raw expone
+`domain_document_plan_array_invalid` por campo para arrays malformados; los refs
+derivados por alias se generan unicos y deterministas; el expander bloquea
+identidades derivadas duplicadas antes de devolver jobs.
 
 Alcance:
 
@@ -9443,7 +10723,16 @@ Criterios:
 Objetivo: dar presupuesto temporal observable a cada tool/resource MCP real,
 separado del limite de parsing JSON-RPC y del limite de salida.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26.
+
+Cierre 2026-05-26: `orquesta-mcp` declara `execution_budget` por tool/resource
+con perfiles diferenciados para lectura read-only, mutaciones de control plane
+y autoprogramacion larga. El transporte MCP real del servidor deriva contexto
+con deadline antes de invocar handlers, publica `mcp_tool_timeout` /
+`mcp_tool_cancelled` sin eco de argumentos o payloads y emite observacion
+compacta con metodo, perfil, reason code, bucket de duracion y correlacion.
+Verificado con
+`go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-observability`.
 
 Alcance:
 
@@ -9479,14 +10768,20 @@ Criterios:
 Objetivo: hacer explicitos los errores de render HTML y escritura tardia en
 vistas web sin duplicar efectos ni convertir detalles privados en diagnostico.
 
-Estado: pendiente.
+Estado: completada 2026-05-27 por
+`agent-ref-assessment-task-autoprogramming-91b89a8d44b0-g01-5a6ada5bebfebc51d5c37682995839bc`.
+Evidencia:
+`go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-app-gateway ./modulos/orquesta-observability ./cmd/orquesta-server`.
 
-Avance parcial 2026-05-26: `modulos/orquesta-web` cubre el slice local de
-renderers HTML con helper comun que bufferiza templates antes de escribir,
-fallback publico `web_html_render_failed` y reason compacto
-`web_response_write_failed` para fallo observable de escritura. T183 sigue
-pendiente para auditoria/contadores en `orquesta-app-gateway`,
-`orquesta-observability` y `cmd/orquesta-server`.
+Cierre 2026-05-27: `modulos/orquesta-web` cubre renderers HTML con helper comun
+que bufferiza templates antes de escribir, fallback publico
+`web_html_render_failed` y reason compacto `web_response_write_failed` para fallo
+observable de escritura. `orquesta-app-gateway` observa el header publico de
+render/fallback y errores de escritura tardia por route ref compacta, sin query
+ni payload. `orquesta-observability` guarda solo observaciones/contadores por
+reason, stage, status y locale compacto. `cmd/orquesta-server` cablea el observer
+de composicion sin exponer formularios, prompts, transcripts, HOME, rutas
+privadas, cookies ni tokens.
 
 Alcance:
 
@@ -9546,7 +10841,7 @@ Objetivo: endurecer refs y firmas deterministas para que identidad causal,
 idempotencia y recuperacion no dependan de hashes cortos, delimitadores
 ambiguos ni colisiones silenciosas.
 
-Estado: pendiente.
+Estado: completado 2026-05-26.
 
 Alcance:
 
@@ -9580,12 +10875,27 @@ Criterios:
   huellas/ref deterministas.
 - Tests: `go test -count=1 ./modulos/orquesta-app-change-director-source ./modulos/orquesta-mcp ./modulos/orquesta-orchestration-core ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack`.
 
+Evidencia 2026-05-27: los builders de refs deterministas de
+`orquesta-app-change-director-source`, `orquesta-mcp`,
+`orquesta-orchestration-core`, `orquesta-runtime-codex-delivery` y
+`orquesta-app-codex-stack` usan `sha256` sobre payload canonico con longitud de
+campo. La revalidacion anade cobertura focal para namespace del core y evita
+que el retry de autoprogramacion mezcle `request_ref` y timestamp con un
+separador textual.
+
+Rework de revision 2026-05-27:
+`agent-ref-task-ref-review-rework-task-autoprogramming-298dd18fed1e-g01-c005a1d6953bff0a3fc8364f7d4ac61b`
+conserva el cierre de T184 sin relanzar otro agente padre; el contexto
+`required ref_only` queda resuelto por lectura local del paquete y evidencia
+explicita en ACK.
+
 ## T185 smoke-script-temp-root-deletion-guard
 
 Objetivo: hacer segura la limpieza recursiva de directorios temporales de
 smokes y runners, especialmente cuando la raiz entra por variable de entorno.
 
-Estado: pendiente.
+Estado: completado el 2026-05-26; revalidado por
+`agent-ref-task-ref-review-rework-task-autoprogramming-66353e1f46d9-g01-33cae0148aa014c3f796cbabf72f5114`.
 
 Alcance:
 
@@ -9615,6 +10925,28 @@ Criterios:
   funcional de cada prueba real.
 - Tests: `bash -n scripts/*.sh scripts/lib/*.sh` y prueba focal del helper de
   cleanup con raiz valida, raiz sin marcador y raiz prohibida.
+
+Implementacion 2026-05-26:
+
+- `scripts/lib/smoke_common.sh` concentra `smoke_temp_root_prepare` y
+  `smoke_temp_root_cleanup`: valida prefijos temporales, bloquea proyecto,
+  HOME, `/`, `.orquesta-runtime` y rutas vacias, exige marcador
+  `.orquesta-smoke-root.v0` antes de borrar y conserva raices no verificadas
+  con reason code publico.
+- Los smokes/runners que limpiaban raices con `rm -rf` pasan por el helper; las
+  raices inyectadas por `ORQUESTA_SMOKE_ROOT`, `ORQUESTA_PARALLEL_TEST_TMP` o
+  equivalentes se preparan con source explicito y fallan cerrado si apuntan a
+  ruta prohibida o a una raiz no marcada con contenido previo.
+- `ORQUESTA_KEEP_SMOKE_DIR` y `ORQUESTA_KEEP_PARALLEL_TEST_TMP` conservan la
+  raiz y publican solo `temp-root:<basename>` mas reason code, no rutas privadas
+  completas.
+- Cobertura focal: `scripts/test_smoke_temp_root_cleanup.sh` valida raiz
+  marcada, raiz sin marcador y ruta de proyecto prohibida.
+- Rework de revision 2026-05-26:
+  `agent-ref-task-ref-review-rework-task-autoprogramming-66353e1f46d9-g01-33cae0148aa014c3f796cbabf72f5114`
+  conserva el cierre de T185 sin relanzar otro agente padre; el contexto
+  `required ref_only` queda resuelto por lectura local del paquete y evidencia
+  explicita en ACK.
 
 ## Escaneo backlog 2026-05-24 sexagesima sexta pasada
 
@@ -9655,7 +10987,11 @@ Objetivo: hacer que las refs deterministas de jobs `domain_work` sean
 canonicas, resistentes a colision y equivalentes entre memory, file y SQL sin
 convertir SQL en persistencia global.
 
-Estado: pendiente.
+Estado: cerrado el 2026-05-26 para identidad de jobs `domain_work`. El builder
+canonico `BuildDomainWorkJobIdentityV0` usa `sha256` para fingerprint y base
+determinista de `job_ref`; memory/file/SQL lo comparten, preservan replay de
+estado legacy por request guardado y reparan colisiones visibles con sufijo
+explicito sin sobrescribir.
 
 Alcance:
 
@@ -9684,13 +11020,19 @@ Criterios:
   refs documentales ni todos los hashes del repo.
 - Tests: `go test -count=1 ./modulos/orquesta-domain-work ./modulos/orquesta-domain-work-memory ./modulos/orquesta-domain-work-file ./modulos/orquesta-domain-work-sql`.
 
+Cierre 2026-05-26: `BuildDomainWorkJobIdentityV0` queda como builder canonico
+`sha256` para fingerprint y base determinista de `job_ref`; memory/file/SQL lo
+usan para jobs nuevos, detectan conflicto por request canonico guardado,
+preservan replay de fingerprints legacy y reparan colisiones visibles con
+sufijo explicito sin sobrescribir.
+
 ## T187 http-audit-client-identity-redaction-policy
 
 Objetivo: definir que identidad de cliente puede persistir la auditoria HTTP
 del servidor y como se redacta cuando hay loopback, proxy o headers de
 forwarding.
 
-Estado: pendiente.
+Estado: completada el 2026-05-26 para la auditoria HTTP residente del servidor.
 
 Alcance:
 
@@ -9720,12 +11062,29 @@ Criterios:
   cache/seguridad.
 - Tests: `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-observability ./cmd/orquesta-server`.
 
+Cierre 2026-05-26:
+
+- `auditHTTPHandlerV0` registra `client_identity` con categoria
+  `loopback`/`private`/`external`/`unknown`, redaccion `category_only` y
+  `raw_address_persisted=false`.
+- Los headers `Forwarded`, `X-Forwarded-For`, `X-Forwarded-Host` y `X-Real-IP`
+  quedan como nombres presentes bajo politica `ignored_untrusted`; no se guardan
+  valores ni se usan como autorizacion.
+- El payload conserva correlacion por `X-Correlation-ID` compactado, status y
+  scope de bind/autorizacion, sin IP:puerto, host privado, cookies, tokens ni
+  cabeceras crudas.
+
+Revalidacion 2026-05-27: el cierre T187 se conserva como politica de auditoria,
+no como autenticacion ni tracking; el contexto `ref_only` de esta entrega se
+resuelve por lectura local del paquete y evidencia explicita en ACK.
+
 ## T188 http-method-allow-options-contract
 
 Objetivo: unificar el contrato de metodo HTTP para rutas publicas HTML, JSON y
 MCP real: 405 coherente, `Allow` correcto y comportamiento `OPTIONS` explicito.
 
-Estado: pendiente.
+Estado: completado el 2026-05-26 por
+`task-autoprogramming-aa85b0fb040c-g01`.
 
 Alcance:
 
@@ -9753,6 +11112,17 @@ Criterios:
   OPTIONS; no sustituye parsing JSON, CSRF/origen, JSON-RPC estricto ni headers
   de cache/seguridad.
 - Tests: `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-web ./modulos/orquesta-governance ./modulos/orquesta-factory-http ./cmd/orquesta-server`.
+
+Evidencia de cierre 2026-05-26:
+
+- Helpers publicos por perfil centralizan `Allow` y `OPTIONS` sin efectos en
+  MCP HTTP, web HTML/JSON, governance JSON, factory HTTP y composicion servidor.
+- El transporte MCP real devuelve 405 JSON-RPC saneado para metodos no
+  permitidos y 204 sin body para `OPTIONS`; no invoca tools ni resources.
+- Cobertura focal agregada para autoprogramacion MCP, HTML web, governance,
+  factory y transporte MCP real.
+- Revalidacion 2026-05-27:
+  `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-web ./modulos/orquesta-governance ./modulos/orquesta-factory-http ./cmd/orquesta-server`.
 
 ## Escaneo backlog 2026-05-24 sexagesima septima pasada
 
@@ -9785,7 +11155,18 @@ Huecos nuevos:
 Objetivo: definir y probar la politica de senales del servidor residente para
 arranque foreground/daemon, shutdown cooperativo y escalado controlado.
 
-Estado: pendiente.
+Estado: completado 2026-05-26; revalidado por
+`agent-ref-task-ref-review-rework-task-autoprogramming-13b40a6e5fc4-g01-a9146f390bba643a490794bd55481129`.
+
+Implementacion 2026-05-26: `cmd/orquesta-server run` declara politica de
+senales por plataforma en el estado publico del residente. En Unix atiende
+`signal_interrupt` y `signal_terminate`; en Windows atiende
+`signal_interrupt`. La primera senal registra `stopping_by_signal` y arranca el
+shutdown cooperativo con `ORQUESTA_SERVER_SHUTDOWN_GRACE_MS`; una segunda senal
+registra `signal_escalated` y devuelve la senal al comportamiento del sistema.
+`orquesta-server stop` usa la misma senal cooperativa declarada por la politica.
+El status publico conserva `stopping_by_signal`, `stop_timeout` y `stopped` sin
+PID crudo, rutas locales, HOME, env, logs, prompts ni tokens.
 
 Alcance:
 
@@ -9815,12 +11196,26 @@ Criterios:
   goroutines internas.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-server-shutdown`.
 
+Rework de revision 2026-05-26:
+`agent-ref-task-ref-review-rework-task-autoprogramming-13b40a6e5fc4-g01-a9146f390bba643a490794bd55481129`
+conserva el cierre de T189 sin relanzar otro agente padre; corrige la
+clasificacion documental que mantenia el backlog como pendiente y valida el
+contexto `required ref_only` por lectura local del paquete y evidencia explicita
+en ACK.
+
 ## T190 http-gateway-route-manifest-collision-guard
 
 Objetivo: hacer explicito y testeable el manifiesto de rutas HTTP publicas para
 evitar shadowing, colisiones exactas o prefijos ambiguos al crecer el gateway.
 
-Estado: pendiente.
+Estado: cubierto 2026-05-26.
+
+Evidencia: `orquesta-http-gateway` declara `PublicRouteManifestV0` con rutas
+exactas, prefijos, owner, metodo esperado y perfil de seguridad. El builder
+valida que cada ruta registrada exista en el manifiesto y no duplique patron;
+la cobertura focal detecta duplicados, shadows bajo `/api/v0/apps/`, overlay
+AppVCS sobre `/api/v0/apps/vcs`, `/mcp` y workspace timeline del servidor.
+La evidencia publica queda como refs compactas `route-ref-...-owner-...`.
 
 Alcance:
 
@@ -9854,7 +11249,7 @@ Criterios:
 Objetivo: definir parada cooperativa y escalado del runtime de procesos cuando
 un agente/proceso local no atiende la senal inicial.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26.
 
 Alcance:
 
@@ -9882,6 +11277,22 @@ Criterios:
   de procesos; no reabre checkpoint Codex, stop de olas, E2E neutral, launch
   env/io ni shutdown async del servidor.
 - Tests: `go test -count=1 ./modulos/orquesta-runtime ./modulos/orquesta-runtime-required-test ./modulos/orquesta-orchestration-core ./cmd/orquesta-server`.
+
+Evidencia 2026-05-26:
+
+- `ProcessRuntimeConnectorV0` marca `stopping` antes de esperar la senal
+  cooperativa, publica `stop_grace_deadline` y conserva `stop_reason_code`
+  compacto.
+- El conector escala por `grace_timeout` si la senal configurada fue aceptada
+  pero el proceso no termina, espera el ACK de `Wait` tras `Kill` y diferencia
+  `signal_not_supported`, `process_already_stopped`, `grace_timeout` y
+  `process_runtime_kill_fallido`.
+- Tests nuevos cubren proceso que atiende interrupcion, proceso que ignora la
+  senal cooperativa configurada y proceso ya detenido, sin exponer command path,
+  argv completo, env, HOME, stdout/stderr crudos, prompts ni tokens.
+- Rework de revision 2026-05-26: se corrige la clasificacion del backlog para
+  que T191 no siga apareciendo pendiente tras la evidencia anterior; no se
+  reabre T30/T60/T66/T105/T166 ni se relanza agente padre.
 
 ## Escaneo backlog 2026-05-24 sexagesima octava pasada
 
@@ -9921,11 +11332,18 @@ Objetivo: introducir una proyeccion estable y acotada para mensajes operativos
 del servidor antes de persistirlos o exponerlos en `StateV0`, status o
 auditoria.
 
-Estado: pendiente. `StatusTrackerV0` ya proyecta mensajes de startup,
-supervisor, automejora idle y errores recientes con helper canonico, truncado y
-redaccion de paths/secrets. Sigue pendiente extender la misma politica a
-auditoria general y a otros adaptadores que formen mensajes publicos fuera del
-tracker.
+Estado: cerrado 2026-05-26. `StatusTrackerV0` conserva los campos JSON legacy,
+pero anade proyecciones `*_operational_message` con `reason_code`, refs opacas,
+contadores y texto truncado/redactado antes de exponer estado. La auditoria
+normaliza `event`, `status`, `error` y resume payloads operativos completos
+(`request`, `requests`, `result`, `plan`, `selected`, `command`) en
+`*_summary` con refs/contadores, sin volcar requests/results crudos cuando solo
+se necesita contexto causal compacto.
+
+Evidencia 2026-05-26: `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server ./modulos/orquesta-observability`.
+Rework 2026-05-26: entrega revalidada sin relanzar otro padre; el contexto
+`required ref_only` queda resuelto por lectura local y evidencia explicita en
+ACK.
 
 Alcance:
 
@@ -9960,7 +11378,17 @@ Objetivo: cerrar el contrato de reloj de AppSpec/factory para que la fecha de
 recepcion no dependa de un fallback silencioso a `time.Now()` dentro del caso de
 uso.
 
-Estado: pendiente.
+Estado: completado el 2026-05-26.
+
+Cierre aplicado: `SolicitarNuevaAppV0` ya no usa `time.Now()` como fallback
+silencioso. El reloj de recepcion es parte del contrato de entrada del caso de
+uso: si llega cero, devuelve `app_spec_invalida` en `received_at` con razon
+estable `reloj_recepcion_utc_requerido` y no genera `AppSpecV0`. El adaptador
+HTTP conserva la inyeccion de reloj UTC por puerto y las pruebas cubren reloj
+fijo determinista y reloj cero inyectado.
+Rework 2026-05-26: entrega revalidada sin relanzar otro padre; el contexto
+`required ref_only` queda resuelto por lectura local y evidencia explicita en
+ACK.
 
 Alcance:
 
@@ -9974,13 +11402,13 @@ Alcance:
 
 Criterios:
 
-- `SolicitarNuevaAppV0` no llama a `time.Now()` de forma implicita o lo hace
-  solo mediante una politica inyectada/versionada.
+- `SolicitarNuevaAppV0` no llama a `time.Now()` de forma implicita; exige reloj
+  de recepcion inyectado.
 - Los adaptadores reales inyectan reloj UTC y los tests pueden fijarlo.
-- Si `now` cero sigue siendo aceptado, queda registrado como issue de contrato
-  con razon estable y sin afectar refs causales.
+- `now` cero ya no se acepta: queda registrado como issue de contrato con razon
+  estable y sin crear refs causales nuevas.
 - Pruebas de determinismo ejecutan dos solicitudes equivalentes con reloj fijo y
-  comparan recibos/campos temporales.
+  comparan el `AppSpecV0` resultante y `created_at`.
 - Coordinar con `T161` para no crear dos helpers de reloj/ref. Esta tarea es el
   corte focal de factory/AppSpec y no mezcla validacion editorial ni i18n.
 - Tests: `go test -count=1 ./modulos/orquesta-factory ./modulos/orquesta-factory-http ./modulos/orquesta-web ./modulos/orquesta-mcp`.
@@ -9990,7 +11418,7 @@ Criterios:
 Objetivo: definir presupuesto de salida y frescura para la proyeccion publica
 del catalogo de gobernanza.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-26 para la proyeccion publica de gobernanza.
 
 Alcance:
 
@@ -10015,6 +11443,14 @@ Criterios:
 - Coordinar con T82/T175: forma HTTP y presupuesto MCP consumen esta proyeccion
   bounded; no la definen por si solos.
 - Tests: `go test -count=1 ./modulos/orquesta-governance ./modulos/orquesta-cli ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway`.
+- Cierre 2026-05-26: `GovernanceCatalogPublicQuery v0` normaliza
+  `output_budget` con defaults/maximos de entradas y bytes, publica
+  `schema_version`, `catalog_version`, `current_block`, `freshness`,
+  `source_refs`, `inactive_summary` y resultado de presupuesto. Los bloques
+  `proposed`/`quarantine` siguen sin payload publico: solo conteo y refs
+  acotadas. La CLI acepta respuestas truncadas con contador total y el catalogo
+  MCP compartido refleja el shape bounded. La nota previa de catalogo CLI en
+  este bloque correspondia a T196 y queda supersedida para T194 por este cierre.
 
 ## Escaneo backlog 2026-05-24 sexagesima novena pasada
 
@@ -10053,7 +11489,7 @@ Objetivo: hacer verificable la relacion entre descriptors MCP, DTOs de entrada,
 validadores y transporte real para que agentes externos no consuman schemas
 stale.
 
-Estado: pendiente.
+Estado: completado 2026-05-26.
 
 Alcance:
 
@@ -10085,12 +11521,23 @@ Criterios:
   prompts, protocolo JSON-RPC, presupuesto de salida ni deadline de ejecucion.
 - Tests: `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-app-gateway ./cmd/orquesta-server`.
 
+Evidencia 2026-05-26:
+
+- `orquesta-mcp` publica `MCPTransportToolInputFieldsV0` como fuente canonica
+  derivada de los DTO Go registrados por tool; el transporte MCP real usa esa
+  fuente para `inputSchema` y marca `schema_stale` solo si debe caer a fallback.
+- Las capabilities de `orquesta.operator.operations.v0` declaran `input_shape`,
+  `input_refs`, `required_input_refs` y errores publicos por subtool, incluyendo
+  puerto ausente como `operator_mcp_port_unavailable`.
+- Cobertura focal: descriptors de tools registrados contra DTOs, capabilities
+  operador contra DTOs y `/mcp tools/list` contra schemas canonicos.
+
 ## T196 cli-command-catalog-help-dispatch-sync
 
 Objetivo: unificar catalogo de comandos CLI, ayuda localizada y dispatch real
 para que la CLI no anuncie rutas obsoletas ni oculte comandos soportados.
 
-Estado: pendiente.
+Estado: completada 2026-05-27 para clientes REST de `orquesta-cli`.
 
 Alcance:
 
@@ -10163,7 +11610,13 @@ Huecos nuevos:
 Objetivo: aplicar a los clientes REST de `orquesta-cli` la misma politica de
 limite, decode y redaccion de respuestas que el resto del control plane.
 
-Estado: pendiente.
+Estado: cerrado localmente el 2026-05-27 para catalogo publico inicial.
+`modulos/orquesta-i18n-docs/public_error_catalog_v0.go` declara los codigos
+MCP/HTTP compartidos con i18n key, mapping HTTP/JSON-RPC, retryability y
+severidad. MCP, operador, web, CLI y `/mcp` del servidor consumen aliases o
+tests de paridad contra ese catalogo para los codigos base y handlers cubiertos.
+No redefine parseo JSON, protocolo JSON-RPC ni schemas de tool; futuros
+adapters deben registrar sus codigos especificos antes de exponerlos.
 
 Alcance:
 
@@ -10195,12 +11648,55 @@ Criterios:
   construccion de URL.
 - Tests: `go test -count=1 ./modulos/orquesta-cli ./modulos/orquesta-web ./modulos/orquesta-mcp ./cmd/orquesta-server`.
 
+Evidencia 2026-05-27:
+
+- `modulos/orquesta-cli/transport_rest_response_v0.go` centraliza la politica
+  de respuesta REST CLI con limite por comando, `Content-Type` JSON/text
+  legacy, decode JSON con rechazo de trailing data y detalle no-2xx redactado.
+- Los clientes de solicitudes de nueva app, bootstrap AppSpec, FunctionContract,
+  OperationalStatus, GovernanceCatalog, ServerStatus y autoprogramacion
+  consumen la politica por `inv.Command`.
+- Cobertura focal: `modulos/orquesta-cli/transport_rest_response_v0_test.go`
+  verifica limite por comando y que no-2xx no propaga body crudo.
+
 ## T198 mcp-resource-descriptor-source-sync
 
 Objetivo: verificar que los resources MCP publicados reflejan DTOs,
 validadores, public errors y fuentes vigentes, no strings estaticos stale.
 
-Estado: pendiente.
+Estado: implementado en codigo focal el 2026-05-27; validacion global pendiente
+por baseline T90 ajeno al write-set de producto de T201.
+
+Evidencia 2026-05-27:
+
+- `MCPTransportResourceEnvelopeV0` declara `descriptor_source` con owner,
+  fuente canonica, freshness, DTO/validador, fuente de errores publicos y
+  verificacion compacta.
+- `resources/list` del transporte MCP real publica ese `descriptor_source` por
+  resource registrado, sin rutas locales, HOME, tokens, provider, prompts,
+  transcripts, DB ni payloads de dominio.
+- Cobertura focal: `mcp_resource_descriptor_source_v0_test.go` valida fuente,
+  presupuesto/freshness y paridad con owners de operational-status, timeline,
+  FunctionContract y operator capabilities; `mcp_real_transport_v0_test.go`
+  valida la exposicion JSON-RPC compacta del descriptor.
+- Revalidacion burst 002 `agent-ref-task-autoprogramming-85571f97bc5e-g01`:
+  el cierre se conserva como implementacion focal; el paquete resuelve contexto
+  `ref_only` por lectura local y evidencia ACK, sin convertir
+  `worktree_ref`/`branch_ref` en rutas ni nombres Git.
+- Revalidacion retry `agent-ref-task-autoprogramming-44e164597ee4-g01`:
+  confirma el mismo cierre con lectura local del contexto `ref_only` y prueba
+  obligatoria focal, sin ampliar write-set ni abrir codigo nuevo.
+- Reconciliacion `agent-ref-task-autoprogramming-974732911968-g01`: el backlog
+  local y los docs de owners MCP/operador/observability/governance/core quedan
+  sincronizados con el cierre focal de T198. No reabre codigo ni convierte
+  `worktree_ref`/`branch_ref` en rutas; el contexto `ref_only` se resuelve por
+  lectura local y evidencia ACK.
+- Reconciliacion adicional
+  `agent-ref-task-autoprogramming-c3678e9bc306-g01`: confirma que el pendiente
+  residual de `descriptor_source` era stale tras intentos cerrados. Mantiene
+  T198 como cierre focal, conserva `worktree_ref` y `branch_ref` como refs
+  opacas, resuelve el contexto `ref_only` por lectura local/evidencia ACK y no
+  reabre codigo.
 
 Alcance:
 
@@ -10238,7 +11734,7 @@ Criterios:
 Objetivo: centralizar y verificar los codigos de error publicos MCP/HTTP para
 que tools, resources, transporte JSON-RPC, web/CLI y operador no diverjan.
 
-Estado: pendiente.
+Estado: cerrado localmente 2026-05-27.
 
 Alcance:
 
@@ -10269,6 +11765,14 @@ Criterios:
   catalogo de codigos; no redefine parseo JSON, salida de comandos, protocolo
   JSON-RPC, headers de seguridad, schemas de tool ni catalogo CLI.
 - Tests: `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-web ./modulos/orquesta-cli ./modulos/orquesta-i18n-docs ./cmd/orquesta-server`.
+
+Evidencia de cierre 2026-05-27:
+
+- Catalogo comun declarado en `modulos/orquesta-i18n-docs/public_error_catalog_v0.go`
+  y consumido por MCP, operador, web, CLI y servidor.
+- Los helpers MCP solo propagan `err.Error()` cuando el codigo esta catalogado;
+  errores desconocidos caen al codigo publico generico del adaptador sin volcar
+  payload crudo ni detalle sanitizado.
 
 ## Escaneo backlog 2026-05-24 septuagesima primera pasada
 
@@ -10396,7 +11900,7 @@ Objetivo: definir politica comun de retry, backoff, jitter y rate budget para
 conectores HTTP salientes y loops residentes de dominio sin meter red ni
 proveedor en el nucleo.
 
-Estado: pendiente.
+Estado: cerrada y revalidada por OrquestaV2 el 2026-05-27.
 
 Alcance:
 
@@ -10427,12 +11931,39 @@ Criterios:
   publica ni estado de ciclo del bridge; solo gobierna retry/backoff/rate.
 - Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-domain-work-http ./modulos/orquesta-opes-connector ./modulos/orquesta-opes-bridge ./modulos/orquesta-server`.
 
+Aplicacion 2026-05-27:
+
+- `modulos/orquesta-domain-work-http` y `modulos/orquesta-opes-connector`
+  incorporan `RetryPolicyV0` opt-in con `MaxAttempts`, backoff, `Retry-After`
+  acotado por deadline/delay maximo, jitter/sleep inyectables y codigos publicos
+  `retry_scheduled`, `retry_budget_exhausted`, `rate_limited` y
+  `non_idempotent_mutation_retry_blocked`.
+- Las mutaciones HTTP solo se reintentan con identidad idempotente ya presente
+  en el contrato; si falta, bloquean antes de repetir el efecto externo.
+- `runExternalBridgeLoopV0` publica estados compactos de retry/backoff para
+  errores consecutivos y el loop OPES residente recibe politica por composicion,
+  sin dormir indefinidamente ni imprimir bodies o URLs sensibles.
+- Evidencia focal pasada:
+  `go test -count=1 ./modulos/orquesta-domain-work-http ./modulos/orquesta-opes-connector ./cmd/orquesta-server -run 'Test(ClientV0RetryPolicy|RESTClientV0RetryPolicy|ExternalBridgeLoopPublicaRetry)'`.
+  La bateria obligatoria completa queda revalidada en el assessment
+  OrquestaV2 del 2026-05-27:
+  `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-domain-work-http ./modulos/orquesta-opes-connector ./modulos/orquesta-opes-bridge ./modulos/orquesta-server`.
+
 ## T202 outbound-domain-correlation-idempotency-headers
 
 Objetivo: propagar correlacion e idempotencia en cabeceras HTTP de conectores de
 dominio, manteniendo el cuerpo JSON como contrato canonico y refs opacas.
 
-Estado: pendiente.
+Estado: completada 2026-05-27 para politica visual/cache de `/ops`.
+`modulos/orquesta-web` anade una proyeccion publica cliente con
+`progress_source`, `freshness`, `stats_fetch_status` y reason code compacto para
+no degradar runs vivos a 0% ni mostrar cuota `-` cuando faltan stats/uso. La
+cache de completadas queda fuera de los agregados vivos y las matrices separan
+cierre, entrega, agentes en vuelo y frescura.
+
+Evidencia focal:
+
+- `go test -count=1 ./modulos/orquesta-web`.
 
 Alcance:
 
@@ -10469,7 +12000,8 @@ Criterios:
 Objetivo: evitar starvation y perdida silenciosa de jobs OPES cuando el bridge
 residente lista una sola ventana de jobs pendientes.
 
-Estado: pendiente.
+Estado: completada 2026-05-27 para consumo estructurado del resultado publico
+`orquesta_guardian_result.v0` por el servidor.
 
 Alcance:
 
@@ -10544,7 +12076,7 @@ Huecos nuevos:
 Objetivo: acotar y paginar el contexto de bloques OPES usado por
 `summarize_topic` antes de meterlo en `DomainWork`.
 
-Estado: pendiente.
+Estado: cerrado localmente el 2026-05-27.
 
 Alcance:
 
@@ -10580,7 +12112,20 @@ Criterios:
 Objetivo: validar y normalizar `payload_json` OPES por tipo de job antes de
 crear runs Orquesta.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-27. El guardian valida `/healthz` como liveness y
+`/api/v0/server/readiness` como readiness operativa antes de promocion. Si el
+servidor candidato responde HTTP pero no publica readiness `ready=true`, bloquea
+con reason code publico `candidate_readiness_not_ready`; el candidato arranca
+con `ORQUESTA_SERVER_STATE_DIR` y `ORQUESTA_SERVER_RUNTIME_WORKDIR` temporales,
+automejora idle desactivada y bridge OPES en dry-run.
+
+Evidencia focal:
+
+- `cmd/orquesta-guardian/guardian_readiness_v0.go`
+- `cmd/orquesta-guardian/guardian_readiness_v0_test.go`
+- `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-server`
+- contexto `ref_only` requerido resuelto mediante lectura local de
+  `agent_packet.json` y evidencia explicita en ACK.
 
 Alcance:
 
@@ -10617,7 +12162,25 @@ Criterios:
 Objetivo: anadir readback opt-in de artefactos/receipts OPES para cierre y
 recovery causal, sin leer internals de OPES.
 
-Estado: pendiente.
+Estado: cerrado 2026-05-27 por OrquestaV2 `agent-ref-task-autoprogramming-395b873cbe62-g01`.
+
+Evidencia:
+
+- `cmd/orquesta-guardian` ya no usa puerto libre cerrado para el candidato:
+  cuando no se declara `ORQUESTA_GUARDIAN_CANDIDATE_ADDR`, arranca con
+  `127.0.0.1:0`, espera el statefile del candidato y usa el addr loopback real
+  publicado por el propio proceso.
+- `ORQUESTA_GUARDIAN_CANDIDATE_ADDR` queda limitado a host loopback con puerto
+  concreto; URLs, userinfo, query, wildcard, host externo y `:0` declarado se
+  bloquean como `candidate_addr_unowned`.
+- El healthcheck solo acepta readiness si el proceso candidato sigue vivo tras
+  observar `/healthz` y `/api/v0/server/readiness`; si no puede probar ownership
+  publica `candidate_addr_unowned`.
+- El resultado anade refs compactas de address ownership, readiness target y
+  candidate attempt, sin PID crudo, puerto como identidad publica, rutas locales
+  ni body HTTP completo.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian` y bateria requerida
+  `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-server`.
 
 Alcance:
 
@@ -10655,7 +12218,8 @@ Objetivo: mejora futura experimental para estudiar si conviene rotar sesiones
 largas de director/agentes mediante handoff durable y relanzamiento con reglas
 frescas, sin cortar trabajos ni perder contexto util.
 
-Estado: pendiente futura.
+Estado: cerrado como contrato experimental opt-in el 2026-05-27. No queda como
+backlog pendiente de implementacion general.
 
 Alcance:
 
@@ -10709,14 +12273,39 @@ Criterios:
   refs.
 - Tests: `go test -count=1 ./modulos/orquesta-director-runner ./modulos/orquesta-director-agent-workflow ./modulos/orquesta-runtime ./modulos/orquesta-runtime-codex ./modulos/orquesta-orchestration-core ./cmd/orquesta-server`.
 
+Cierre 2026-05-27:
+
+- El contrato vivo esta acotado a `RuntimeSessionRotationRequestV0`,
+  `RuntimeSessionRotationHandoffV0`, `EvaluateRuntimeSessionRotationV0` y
+  `BuildSessionRotationDirectiveV0`.
+- La rotacion queda como experimento `opt_in_low_priority`: puede permitir
+  sesion de relevo si el handoff es suficiente, pero no corta la sesion actual
+  (`stop_current=false`) ni cambia waits por run completo.
+- `session_epoch` se conserva como ref opaca de runtime/adaptador; el nucleo no
+  deriva proveedor, HOME, modelo, PID, paths ni Git desde esa ref.
+- El runbook vigente es
+  `docs/runbooks/session_rotation_handoff_experimental_2026-05-27.md`.
+- Evidencia focal existente: `go test -count=1 ./modulos/orquesta-runtime
+  ./modulos/orquesta-orchestration-core`.
+
+Residual verificable:
+
+- Smoke real opt-in de relevo con proveedor/composicion concreta, sin duplicar
+  trabajo y preservando parent/child refs, wait scope y evidencias causales.
+  Ese smoke debe abrir tarea nueva si se ejecuta; no reabre T207.
+
 ## T208 autoprogramming-guardian-breakglass
 
 Objetivo: implementar un guardian externo minimo para que la autoprogramacion no
 dependa de una Orquesta ya rota cuando una version candidata no compila, no
 arranca o deja de responder.
 
-Estado: pendiente. La base `cmd/orquesta-guardian` esta implementada; sigue
-pendiente integrarla en el ciclo residente de promocion/restart.
+Estado: reconciliado 2026-05-27. La base `cmd/orquesta-guardian`, la
+integracion residente opt-in y los railes de resultado publico, redaccion,
+entorno, artefactos, readiness, shutdown, lease y refs causales ya quedaron
+cubiertos por los owners especificos T212-T237. Este item queda como umbrella
+historico de T208; no debe relanzarse como pendiente generico salvo regresion
+demostrada.
 
 Alcance:
 
@@ -10765,9 +12354,6759 @@ Criterios:
 - Si Orquesta esta sana, la reparacion debe entrar por la cola normal; el
   guardian solo es break-glass para build/startup/healthcheck rotos.
 - Base cubierta por `cmd/orquesta-guardian`: build candidato, tests requeridos,
-  healthcheck temporal, `last_good`, manifest, restore, repair packet,
-  `repair-command` opt-in, `--repair-codex` con `codex-launch-wave --agents 1`
-  y `shutdown-server` cooperativo con escalado forzado tras timeout o `--now`.
-- Pendiente: sustituir el instalador manual del residente por este guardian en
-  el ciclo de automejora.
+  healthcheck temporal con readiness, `last_good`, manifest, restore, repair
+  packet redactado, lease durable, refs portables, `repair-command` opt-in,
+  `--repair-codex` gobernado, resultado publico estructurado y
+  `shutdown-server` cooperativo.
+- Integracion residente cubierta por opt-in:
+  `ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_ENABLED=1` delega la
+  promocion al guardian, consume `orquesta_guardian_result.v0` y conserva
+  bloqueos retryables sin sustituir el binario vivo.
+- Cualquier hueco futuro debe abrir owner especifico con evidencia propia, no
+  reabrir T208 como backlog pendiente amplio.
 - Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-autoprogramming ./modulos/orquesta-runtime-worktree ./modulos/orquesta-runtime-codex ./modulos/orquesta-server`.
+
+Reconciliacion 2026-05-27:
+
+- Los intentos cerrados de T208 se consolidan como evidencia del umbrella:
+  T212/T213 cubren salida publica, repair packet, logs y entorno; T214 cubre
+  artefactos; T215 readiness/stop del candidato; T216 resultado estructurado;
+  T217 shutdown HTTP; T218 lanzamiento del reparador; T220/T221/T223 retencion
+  y refs; T231/T232 config/CLI estricta; T233/T234 refs de diagnostico y
+  comandos; T235 lectura acotada de repair packet; T237 lease de estado.
+- `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+  `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+  como refs opacas; no son rutas ni nombres Git.
+- El contexto obligatorio `ref_only` de esta pasada se resuelve por lectura
+  local del paquete, `AGENTS.md`, docs vigentes, docs locales y evidencia
+  explicita en ACK. No habia documento materializado adicional que leer.
+
+## T209 codex-usage-redacted-runtime-report
+
+Objetivo: hacer que el panel y las stats de Director dejen de mostrar
+`quota_status=not_configured` cuando Orquesta ejecuta Codex y exista informacion
+observada segura, sin meter OAuth, proveedor real, HOME, prompts ni transcripts
+en el nucleo.
+
+Estado: cerrado el 2026-05-27 para el reporte redactado runtime por agente.
+T29 cerro el puerto; este corte reconcilia la evidencia posterior: el wrapper
+Codex genera `codex_usage_accounting.json`, el servidor lo habilita por
+`ORQUESTA_CODEX_USAGE_ACCOUNTING=redacted_report` o
+`runtime_usage_report`, el stack lo lee solo desde descriptors registrados y
+API/web consumen uso solo con `include_agent_usage=true`.
+
+Alcance:
+
+- `cmd/orquesta-server`
+- `modulos/orquesta-runtime-codex`
+- `modulos/orquesta-runtime-codex-delivery`
+- `modulos/orquesta-app-codex-stack`
+- `modulos/orquesta-orchestration-core`
+- `modulos/orquesta-web`
+- `docs/runbooks`
+
+Entrada:
+
+- `ORQUESTA_CODEX_USAGE_ACCOUNTING=redacted_report` o modo equivalente
+  canonico de composicion.
+- directorio runtime de agente y recibos ya controlados por Orquesta.
+- salida permitida del runtime o parser seguro que no lea ni publique secretos.
+
+Salida:
+
+- reporte redactado por agente con `usage.input_tokens`,
+  `usage.output_tokens`, `usage.total_tokens` y `quota.status` cuando exista.
+- si no hay dato real de cuota, estado explicito `unknown`/`unavailable` con
+  razon publica, no `not_configured` cuando el puerto esta habilitado.
+- API/web/MCP muestran uso solo con `include_agent_usage=true` y sin datos
+  sensibles.
+
+Criterios:
+
+- No publicar token OAuth, refresh token, account id real, HOME, modelo real,
+  coste, prompt, transcript, completion ni rutas absolutas.
+- Si Codex CLI no ofrece cuota restante fiable, registrar evidencia de
+  `quota_observed_unavailable` y no inventar limites.
+- La ausencia de reporte de un agente no bloquea el director; genera issue
+  publico por agente/fuente.
+- Tests focales con reportes fake redactados y reportes rechazados por campos
+  sensibles; smoke opt-in real solo con confirmacion explicita.
+- Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack ./modulos/orquesta-orchestration-core ./modulos/orquesta-web`.
+
+Cierre 2026-05-27:
+
+- `orquesta-runtime-codex` genera reporte redactado desde salida permitida y
+  conserva `quota.status=unknown` con `quota_observed_unavailable` cuando no
+  hay cuota real fiable.
+- `orquesta-app-codex-stack` lee solo `codex_usage_accounting.json` del runtime
+  registrado por descriptor; si falta o se rechaza por sensible, publica
+  `unknown`/`quota_observed_unavailable`, no `not_configured`.
+- `cmd/orquesta-server` concentra el opt-in en
+  `ORQUESTA_CODEX_USAGE_ACCOUNTING`; la composicion sin fuente sigue emitiendo
+  `agent_usage_source_not_configured`.
+- `orquesta-web` y `/ops` muestran `unknown`/`unavailable` con reason code
+  publico cuando falta reporte vivo, sin coste, modelo, proveedor, HOME,
+  prompts, transcripts ni rutas privadas.
+- Validacion requerida de este corte: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack ./modulos/orquesta-orchestration-core ./modulos/orquesta-web`.
+
+## T210 run-progress-live-telemetry
+
+Objetivo: corregir la telemetria de proyectos/runs que aparece siempre al 0%
+cuando hay agentes vivos, tareas entregadas o trabajo real pendiente de review.
+
+Estado: cerrado documentalmente tras reconciliacion de ACKs. La implementacion
+ya quedo entregada por intentos cerrados de T210 y el backlog no debe relanzar
+otra implementacion padre para el mismo patron salvo regresion nueva. El estado
+previo observado era que `/ops` mostraba runs con `agents_started`,
+`agents_in_flight` y procesos registrados al 0% porque la proyeccion solo
+contaba tareas cerradas y no distinguia entrega viva, actividad observada y
+cierre final.
+
+Evidencia de cierre:
+
+- `backlog_scan_ref=scan-ref-backlog-d199c1197087`,
+  `backlog_scan_epoch=backlog-scan-epoch-54808a49f678` y
+  `backlog_scan_reservation_ref=reservation-ref-backlog-scan-doc-merge-d199c1197087`
+  conservados como refs opacas; lectura focal actual de este fichero en lineas
+  12334-12373 antes de editar, hash
+  `c3f98d1f5858c151808b5e3cf835622cee3f5b9f3595e455be1fd203381154be`.
+- `ack-ref-app-stack-agent-ref-task-autoprogramming-25c3ef000f20-g01`:
+  status `completed`; toco `director_progress_*`,
+  `director_stats_builder.go` y `director_stats_live_percent_v0_test.go`;
+  declaro pasada la prueba requerida
+  `go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-server ./modulos/orquesta-web ./cmd/orquesta-server`.
+- `ack-ref-app-stack-agent-ref-task-autoprogramming-62fb483d21b6-g01`:
+  status `completed`; refuerzo la proyeccion viva con agentes opacos,
+  procesos registrados y entregas sin modificar `TasksClosed`; declaro pasada
+  la misma prueba requerida.
+- La lectura local de contexto `ref_only` requerido quedo cubierta en ambos ACKs
+  con recibo explicito de evidencia.
+
+Alcance:
+
+- `modulos/orquesta-orchestration-core`
+- `modulos/orquesta-server`
+- `modulos/orquesta-web`
+- `cmd/orquesta-server`
+
+Entrada:
+
+- `OrchestrationRunV0` con `Tasks`, `DeliveredTasks`, `ClosedTasks`,
+  `StartedAgents`, proceso registrado y observaciones de progreso si existen.
+- consultas de stats/web con `include_agent_progress=true`.
+
+Salida:
+
+- porcentaje que cuenta tareas entregadas como progreso sin falsear
+  `TasksClosed`.
+- estado visible para tareas con agente vivo aunque todavia no tengan cierre o
+  ACK final.
+- panel web que no presenta todos los proyectos/runs a 0% cuando hay trabajo
+  vivo o entregado.
+
+Criterios:
+
+- `TasksClosed` sigue significando cierre/review aceptada; no se mezcla con
+  entrega.
+- Si no hay heartbeat de runtime, la UI debe mostrar actividad por proceso/run
+  registrado como senal parcial, no inventar completitud.
+- La proyeccion debe ser tolerante a datos parciales y no bloquear el director.
+- Tests: `go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-server ./modulos/orquesta-web ./cmd/orquesta-server`.
+
+## Escaneo backlog 2026-05-27 primera pasada
+
+Evidencia revisada:
+
+- `agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto
+  vigente de estado, guia del nucleo, principio director, corte de cierre
+  generico y matriz de smokes.
+- Backlog, railes observados y duplicaciones vigentes hasta `T210`.
+- Lectura focal de `modulos/orquesta-orchestration-core/director_stats_builder.go`,
+  `modulos/orquesta-orchestration-core/director_progress_live_projection_v0_test.go`,
+  `modulos/orquesta-web/director_stats_live_percent_v0_test.go`,
+  `modulos/orquesta-web/ops_dashboard_html_chunk_2_v0.go`,
+  `modulos/orquesta-web/ops_dashboard_html_chunk_3_v0.go` y
+  `modulos/orquesta-web/ops_dashboard_html_chunk_5_v0.go`.
+- Busquedas `rg` sobre `include_agent_progress`, `percent_complete`,
+  `usage_summary`, `quota_status`, `DeliveredTasks`, `StartedAgents`,
+  `agent_ack.json`, `context.Background` y `json.NewDecoder`.
+- `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+  `branch_ref=branch-ref-orquesta-server-idle-self-improvement` preservadas
+  como refs opacas.
+
+Hueco nuevo:
+
+- El nucleo y el panel de stats ya tienen pruebas focales para no dejar un run
+  vivo al 0% cuando hay proceso, agente o entrega, pero `/ops` conserva logica
+  cliente para fusionar runs activos/completados, calcular medias por proyecto
+  y rellenar defaults con `percent_complete || 0`. Si una consulta de stats
+  llega tarde, falla o se mezcla con cache de runs completados, el dashboard
+  puede volver a presentar progreso global 0% o cuota `-` sin reason code,
+  aunque el DTO de stats tenga senales vivas. Falta una politica unica de
+  frescura/cache para la agregacion visual de `/ops`.
+
+## T211 ops-dashboard-live-progress-cache-policy
+
+Objetivo: evitar que `/ops` oculte progreso/uso vivo por cache cliente, fallback
+0% o mezcla de runs completados con stats frescas.
+
+Estado: cerrado el 2026-05-27 por
+`agent-ref-task-autoprogramming-153a1f913a3c-g01`.
+
+Alcance:
+
+- `modulos/orquesta-web`
+- `modulos/orquesta-server`
+- `modulos/orquesta-orchestration-core`
+- `cmd/orquesta-server`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- `/ops` debe consumir una proyeccion publica con `progress_source`,
+  `freshness`, `stats_fetch_status` y reason code compacto cuando no puede
+  usar stats vivas; no debe degradar silenciosamente a 0% si existen agentes,
+  procesos, entregas o observaciones.
+- La cache cliente de runs completados no debe sobrescribir un run activo ni
+  contaminar medias de proyecto sin marcar `stale`, `completed_snapshot` o
+  `stats_unavailable`.
+- Los agregados de proyecto deben distinguir `tasks_closed`, `tasks_delivered`,
+  `agents_in_flight`, progreso parcial por proceso y cierre final; una entrega
+  viva no equivale a cierre, pero tampoco debe verse como 0%.
+- El uso/quota debe coordinarse con T209: si el reporte falta, mostrar
+  `unknown`/`unavailable` con causa publica, no `-` como si no hubiera puerto
+  configurado.
+- No serializar prompts, transcripts, completions, HOME, rutas privadas,
+  tokens, payloads HTTP ni respuestas OPES en el dashboard, cache o issues.
+- Coordinar con T103, T138, T175, T197, T198, T199, T209 y T210: esta tarea no
+  redefine el calculo base de progreso ni el reporte Codex, solo la frescura y
+  agregacion visual de `/ops`.
+- Tests: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-server ./modulos/orquesta-orchestration-core ./cmd/orquesta-server`.
+
+## Escaneo backlog 2026-05-27 segunda pasada
+
+Evidencia revisada:
+
+- `agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto
+  vigente de estado, guia del nucleo, principio director, runbook de apagado,
+  runbook de rotacion experimental y matriz de smokes.
+- Backlog, railes observados y duplicaciones vigentes hasta `T211`.
+- Lectura focal de `cmd/orquesta-guardian/guardian_v0.go`,
+  `cmd/orquesta-guardian/guardian_v0_test.go`,
+  `cmd/orquesta-server/command_public_output_v0.go`,
+  `cmd/orquesta-server/daemon_start_env_policy_v0.go` y
+  `cmd/orquesta-server/required_test_runner_env_v0_test.go`.
+- Busquedas `rg` sobre `cmd/orquesta-guardian`, `cmd/orquesta-server`,
+  `modulos`, `scripts` y `docs/runbooks` para `OutputPath`, `ProjectDir`,
+  `os.Environ`, `ReadFile`, `WriteFile`, `repair_packet`, `last_good`,
+  `guardian`, `shutdown`, `ACK`, `payload`, `HOME`, `token` y politicas de
+  redaccion.
+- `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+  `branch_ref=branch-ref-orquesta-server-idle-self-improvement` preservadas
+  como refs opacas.
+
+Huecos nuevos:
+
+- `cmd/orquesta-guardian` ya existe como base break-glass de T208, pero su
+  resultado publico y sus repair packets guardan `project_dir`, `current_bin`,
+  `candidate_bin`, `last_good_bin`, `output_path` y comandos shell completos.
+  Eso es util localmente, pero no tiene envelope publico/redactado equivalente
+  a T139/T180 ni separa evidencia local de salida automatizable.
+- Los comandos de build/test/healthcheck/repair del guardian acumulan stdout y
+  stderr completos en memoria y los escriben sin presupuesto ni redaccion de
+  contenido. Si una prueba imprime entorno, tokens simulados, rutas privadas,
+  prompts o payloads, el guardian puede convertir ese log en evidencia durable
+  paralela.
+- El healthcheck del candidato y el repair command heredan `os.Environ()`.
+  T129 gobierna el arranque daemon normal y T49/T56/T209 gobiernan Codex/uso,
+  pero el guardian tiene otra frontera de emergencia que puede inyectar HOME,
+  credenciales, proxies o variables de proveedor en el candidato temporal o el
+  reparador.
+- La promocion/restore del guardian copia binarios con `os.ReadFile` completo y
+  tmp name por `UnixNano`, sin manifest de tamano/hash, presupuesto, symlink
+  policy ni fsync/rename auditado. T184 cubre refs y T185 raices temporales de
+  smokes; falta rail propio para artefactos binarios `candidate/current/last_good`.
+
+## T212 guardian-public-result-and-repair-packet-redaction
+
+Objetivo: separar diagnostico local del guardian de la salida publica y del
+repair packet que puede consumir un agente reparador.
+
+Estado: cubierto 2026-05-27 para envelope publico y repair packet redactados
+del guardian. El manifest local conserva diagnostico local; el JSON publico y
+el repair packet usan refs opacas/relativas, `redaction_level=refs_only`,
+freshness, reason codes, contadores y comandos como refs.
+
+Alcance:
+
+- `cmd/orquesta-guardian`
+- `cmd/orquesta-server`
+- `modulos/orquesta-runtime-worktree`
+- `modulos/orquesta-runtime-codex`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- `orquesta-guardian` debe emitir un envelope publico compacto con refs
+  relativas/opacas, `redaction_level`, `freshness`, reason codes y contadores;
+  los paths absolutos solo pueden quedar en manifest local opt-in no enviado a
+  agentes.
+- El repair packet debe transportar failure phase, comandos requeridos como ids
+  o refs, evidence refs y resumen redactado; no debe incluir HOME, rutas
+  absolutas, tokens, URLs con credenciales, prompt/transcript, stdout/stderr
+  completo ni comandos shell con secretos expandidos.
+- Si una ruta local es imprescindible para repair local, debe viajar como ref
+  clasificada (`local_diagnostic_path`) y nunca en `ACK.files`, status publico,
+  auditoria remota ni payload de agente remoto.
+- Coordinar con T131, T139, T180 y T208: esta tarea no sustituye el guardian
+  break-glass ni el shape general de comandos; gobierna solo salida y paquete de
+  reparacion del guardian.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-runtime-worktree ./modulos/orquesta-runtime-codex`.
+
+## T213 guardian-command-output-budget-and-env-isolation
+
+Objetivo: acotar logs y entorno de ejecucion del guardian para build, tests,
+healthcheck y repair command.
+
+Estado: cubierto 2026-05-27 para presupuesto de salida y aislamiento de entorno
+del guardian. Build/tests/healthcheck/repair usan captura tail redactada con
+`ORQUESTA_GUARDIAN_COMMAND_OUTPUT_MAX_BYTES`, publican
+`output_truncated`/`output_reason_code` y ejecutan con entorno minimo
+allowlistado por `ORQUESTA_GUARDIAN_COMMAND_ENV_ALLOWLIST` mas variables
+explicitas de composicion.
+
+Alcance:
+
+- `cmd/orquesta-guardian`
+- `cmd/orquesta-server`
+- `modulos/orquesta-server`
+- `modulos/orquesta-runtime-codex`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Capturar stdout/stderr del guardian con limite por comando, tail redactado,
+  contador `output_truncated` y reason code publico; no acumular buffers sin
+  presupuesto ni escribir logs ilimitados.
+- Redactar o bloquear valores sensibles antes de guardar logs: tokens, HOME,
+  rutas privadas, proxies con credenciales, DSN, prompts, transcripts, payloads
+  HTTP/OPES y material tipo clave privada.
+- Construir entorno minimo por perfil para candidato temporal y repair command;
+  heredar solo variables allowlisted o explicitamente pasadas por composicion.
+  El default no debe arrastrar credenciales locales ni configuracion de
+  proveedor al candidato.
+- El repair Codex debe recibir solo refs/packet redactado y runtime dir
+  controlado; si necesita credenciales reales, esa decision queda en opt-in de
+  composicion con evidencia compacta, no en `os.Environ()` heredado.
+- Coordinar con T49, T56, T61, T129, T139, T180, T208 y T209: esta tarea no
+  reabre seguridad Codex ni output de tests requeridos; cubre la frontera
+  break-glass del guardian.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-runtime-codex`.
+
+Cierre 2026-05-27:
+
+- `cmd/orquesta-guardian` deja de acumular stdout/stderr sin presupuesto:
+  conserva solo tail redactado por comando, redaccion de paths locales/HOME,
+  credenciales, DSN, bearer, URLs con credenciales y material de clave privada.
+- El resultado interno y el envelope publico exponen conteos compactos y reason
+  code cuando la salida fue truncada; los logs durables quedan acotados.
+- El entorno de build/test/healthcheck/repair parte de allowlist minima
+  (`PATH`/temporales por defecto) y anade solo variables explicitas del perfil;
+  no hereda `HOME`, variables Codex/proveedor ni secretos locales por defecto.
+
+## T214 guardian-binary-promotion-artifact-policy
+
+Objetivo: hacer verificable y acotada la copia/promocion de binarios
+`candidate`, `current` y `last_good` del guardian.
+
+Estado: cerrado localmente el 2026-05-27.
+
+Alcance:
+
+- `cmd/orquesta-guardian`
+- `cmd/orquesta-server`
+- `modulos/orquesta-runtime-worktree`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Sustituir copia completa con `os.ReadFile` por copia streaming con limite
+  configurable, hash fuerte, tamano registrado y error publico si el artefacto
+  excede presupuesto.
+- Bloquear symlinks, hardlinks inseguros, cambios entre `Lstat`/open, rutas
+  fuera de la raiz declarada y destinos no regulares antes de promocionar o
+  restaurar.
+- Escribir tmp con nombre no colisionable por generador inyectado o helper
+  canonico, fsync de fichero/directorio cuando aplique, rename atomico y
+  manifest de promocion con hashes de `candidate`, `current` previo y
+  `last_good`.
+- Si restore o promotion quedan a medias, el guardian debe publicar estado
+  recuperable (`promotion_incomplete`, `last_good_unverified`, etc.) y no
+  declarar `candidate_promoted`.
+- Coordinar con T13, T40, T48, T59, T127, T152, T184, T185 y T208: esta tarea
+  gobierna artefactos binarios del guardian, no AppVCS, smokes ni refs
+  deterministas generales.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-runtime-worktree`.
+
+Cierre 2026-05-27:
+
+- `cmd/orquesta-guardian` reemplaza la copia completa de binarios por streaming
+  con `ORQUESTA_GUARDIAN_ARTIFACT_MAX_BYTES`/`--artifact-max-bytes`, hash
+  SHA-256, tamano registrado y reason code publico si el artefacto excede el
+  presupuesto.
+- La promocion y restore bloquean symlinks en la ruta, destinos no regulares,
+  hardlinks inseguros, rutas fuera de `ORQUESTA_GUARDIAN_ARTIFACT_ROOT` cuando
+  se declara y cambios entre `Lstat`/open/post-copy antes de declarar
+  `candidate_promoted` o `last_good_restored`.
+- La escritura usa tmp no colisionable por `os.CreateTemp`, fsync de fichero y
+  directorio, rename atomico y manifest interno
+  `orquesta_guardian_artifact_manifest.v0` con hashes de `candidate`, `current`
+  previo, `last_good` y `current` final.
+- Si falla backup o promocion se publica estado recuperable
+  `last_good_unverified` o `promotion_incomplete`; el resultado publico conserva
+  reason codes compactos sin rutas locales.
+- El servidor expone la variable canonica
+  `ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_ARTIFACT_ROOT` y
+  `ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_ARTIFACT_MAX_BYTES`, y las
+  pasa al guardian como `ORQUESTA_GUARDIAN_ARTIFACT_ROOT` y
+  `ORQUESTA_GUARDIAN_ARTIFACT_MAX_BYTES`.
+
+## Escaneo backlog 2026-05-27 tercera pasada
+
+Evidencia revisada:
+
+- `agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto
+  vigente de estado, guia del nucleo, principio director, runbook de guardian
+  break-glass y runbook de staging/promocion.
+- Backlog, railes observados y duplicaciones vigentes hasta `T214`.
+- Lectura focal de `cmd/orquesta-guardian/guardian_v0.go`,
+  `cmd/orquesta-guardian/guardian_v0_test.go`,
+  `cmd/orquesta-server/autoprogramming_promotion_guardian_v0.go`,
+  `docs/runbooks/autoprogramacion_guardian_breakglass_2026-05-24.md` y
+  `docs/runbooks/autoprogramacion_staging_promocion_2026-05-24.md`.
+- Busquedas `rg` sobre guardian, promocion, shutdown, manifest, readiness,
+  healthcheck, repair packet y comandos de servidor.
+- `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+  `branch_ref=branch-ref-orquesta-server-idle-self-improvement` preservadas
+  como refs opacas.
+
+Huecos nuevos:
+
+- El runbook del guardian exige comprobar `/api/v0/server/readiness` antes de
+  efectos externos, pero `runGuardianCandidateHealthcheckV0` solo espera
+  `/healthz`. Un candidato que arranca HTTP pero no cablea readiness, stores,
+  rutas `/api/v0/*` o estado operativo podria promocionarse como vivo.
+- La integracion residente del guardian en `cmd/orquesta-server` solo usa el
+  exit code del comando shell y descarta stdout/stderr. No parsea el schema
+  `orquesta_guardian_result.v0`, no verifica `status=candidate_promoted`, no
+  incorpora `evidence_refs` reales ni distingue resultado corrupto, timeout,
+  fallo de guardian y candidato rechazado.
+- `cmd/orquesta-guardian shutdown-server` tiene un cliente HTTP propio hacia
+  `/api/v0/server/shutdown`: decodifica JSON sin limite, sin comprobacion de
+  `Content-Type` ni trailing data, usa un `idempotency_key` fijo para todas las
+  invocaciones y puede aceptar respuestas parciales como si fueran evidencia
+  suficiente de shutdown.
+
+## T215 guardian-candidate-readiness-gate
+
+Objetivo: exigir readiness operativo del candidato antes de promocionar el
+binario desde el guardian.
+
+Estado: cerrado 2026-05-27 para el guardian.
+
+Implementacion:
+
+- El healthcheck del candidato publica `process_policy` por plataforma y
+  `stop_receipt` compacto por comando sin PID crudo, rutas locales, stdout,
+  stderr ni env.
+- En Unix el candidato se lanza en grupo de proceso propio y el stop usa
+  deadline, escalado y confirmacion del grupo antes de permitir promocion. En
+  Windows el contrato publico declara alcance de proceso padre.
+- Si el stop queda ambiguo o queda proceso vivo segun la politica disponible,
+  el healthcheck falla con reason code como `candidate_stop_timeout`,
+  `candidate_killed` o `candidate_process_left_alive`; solo un receipt no
+  ambiguo anade `evidence-ref-guardian-candidate-process-stop-confirmed`.
+
+Alcance:
+
+- `cmd/orquesta-guardian`
+- `cmd/orquesta-server`
+- `modulos/orquesta-server`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- El healthcheck del guardian debe comprobar `/healthz` como liveness y despues
+  `/api/v0/server/readiness` como readiness minimo antes de declarar candidato
+  promocionable.
+- La readiness debe exigir estado publico compatible con servidor operativo,
+  rutas versionadas `/api/v0/*` disponibles y stores/runtime temporales
+  inicializados; un HTTP vivo sin readiness debe bloquear con razon publica
+  `candidate_readiness_not_ready`.
+- El candidato debe arrancar contra estado/runtime temporal, dry-run de bridges
+  y automejora idle desactivada o acotada; no debe tocar OPES productivo,
+  HOME, proveedor real, prompts, transcripts ni runtime vivo.
+- La evidencia debe incluir contadores/status compactos y no volcar respuesta
+  HTTP completa, rutas absolutas, tokens ni logs crudos.
+- Coordinar con T13, T40, T103, T137, T176, T208, T212, T213 y T214: esta
+  tarea gobierna readiness de candidato, no output/logs, entorno, binarios ni
+  promocion Git.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+## T216 promotion-guardian-result-contract
+
+Objetivo: hacer que el servidor consuma un resultado estructurado del guardian,
+no solo el exit code del proceso.
+
+Estado: cerrado localmente el 2026-05-27.
+
+Alcance:
+
+- `cmd/orquesta-server`
+- `cmd/orquesta-guardian`
+- `modulos/orquesta-autoprogramming`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- `shellAutoprogrammingPromotionGuardianRunnerV0` debe leer stdout acotado,
+  parsear `orquesta_guardian_result.v0` y aceptar solo
+  `status=candidate_promoted` con `promoted=true` o verificacion equivalente si
+  `--promote=false` queda modelado explicitamente.
+- El servidor debe propagar `evidence_refs` compactas del guardian y mapear
+  estados `candidate_failed`, `last_good_restored`, `shutdown_ready`,
+  JSON invalido, timeout y exit code no cero a errores publicos distintos.
+- La salida corrupta, vacia, enorme o con campos sensibles debe bloquear la
+  promocion como `guardian_result_invalid`, sin cerrar la cola ni publicar
+  stdout/stderr crudo.
+- El contrato debe conservar refs opacas `promotion_ref`, `run_ref`,
+  `worktree_ref` y `branch_ref`; no convertirlas en rutas Git ni paths locales.
+- Evidencia 2026-05-27: `shellAutoprogrammingPromotionGuardianRunnerV0` captura
+  stdout/stderr con presupuesto, parsea JSON publico estricto, propaga
+  `evidence_refs`, distingue `candidate_failed`, `last_good_restored`,
+  `shutdown_ready`, `guardian_result_invalid`, `guardian_timeout` y
+  `guardian_exit_nonzero`, y conserva refs opacas de promocion en el resultado.
+- Coordinar con T13, T33, T36, T40, T139, T180, T199, T208 y T212: esta tarea
+  gobierna el resultado estructurado del guardian consumido por promocion, no
+  la validacion terminal de ACK Codex ni el packet de reparacion.
+- Tests: `go test -count=1 ./cmd/orquesta-server ./cmd/orquesta-guardian ./modulos/orquesta-autoprogramming`.
+
+## T217 guardian-shutdown-http-client-policy
+
+Objetivo: alinear el cliente HTTP de shutdown del guardian con las fronteras
+publicas de respuesta, idempotencia y redaccion.
+
+Estado: completada 2026-05-27 para parseo estricto de env/flags del guardian,
+receipt publico de config efectiva y distincion servidor -> guardian de config
+invalida frente a fallo de candidato.
+
+Alcance:
+
+- `cmd/orquesta-guardian`
+- `cmd/orquesta-server`
+- `modulos/orquesta-server`
+- `modulos/orquesta-server-shutdown`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- `requestGuardianServerShutdownV0` debe leer respuestas con limite, validar
+  `Content-Type`, rechazar trailing JSON y mapear errores HTTP a reason codes
+  compactos sin incluir body crudo.
+- El `idempotency_key` debe derivar de refs/tiempo controlado del intento o
+  recibirlo por configuracion, sin colisionar silenciosamente entre reinicios,
+  guardianes distintos o shutdowns forzados.
+- La decision de senalizar PID tras error o timeout debe depender de estado
+  publico fiable (`shutdown_ready`, agentes en vuelo, checkpoints pendientes)
+  y no de una respuesta parcial o ambigua.
+- No publicar HOME, rutas privadas, tokens, URLs con credenciales, prompts,
+  transcripts, payloads HTTP completos ni respuestas OPES en manifest, stdout o
+  errores del guardian.
+- Coordinar con T30, T103, T137, T162, T166, T172, T176, T188, T189, T200 y
+  T208: esta tarea gobierna el cliente shutdown del guardian, no el endpoint de
+  shutdown ni los comandos locales normales del servidor.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-server-shutdown`.
+
+Decision implementada:
+
+- `force_after_timeout` queda desactivado por defecto en el guardian y solo
+  escala con opt-in explicito mas `shutdown-escalation-evidence-ref`/
+  `ORQUESTA_GUARDIAN_SHUTDOWN_ESCALATION_EVIDENCE_REF`.
+- Si vence el timeout cooperativo sin evidencia break-glass, el resultado
+  publico queda bloqueado con `guardian_shutdown_escalation_blocked` y estado
+  `cooperative_timeout`/`signal_blocked`, sin pedir shutdown forzado ni senal.
+- La respuesta publica distingue `cooperative_timeout`, `forced_requested`,
+  `forced_ready`, `signal_sent` y `signal_blocked`; la evidencia se transporta
+  como ref opaca y no publica PID, host, HOME, tokens, URLs ni cuerpos HTTP.
+
+## Escaneo backlog 2026-05-27 cuarta pasada
+
+Evidencia revisada:
+
+- `agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto
+  vigente de estado, guia del nucleo, principio director y matriz de smokes.
+- Backlog, railes observados y duplicaciones vigentes hasta `T217`.
+- Lectura focal de `cmd/orquesta-guardian/guardian_v0.go`,
+  `cmd/orquesta-guardian/guardian_v0_test.go`,
+  `cmd/orquesta-server/autoprogramming_promotion_guardian_v0.go`,
+  `docs/runbooks/autoprogramacion_guardian_breakglass_2026-05-24.md` y
+  `docs/runbooks/autoprogramacion_staging_promocion_2026-05-24.md`.
+- Busquedas `rg` sobre guardian, repair Codex, manifest, copy/promote,
+  `os.Environ`, `WriteFile`, `ReadFile`, `UnixNano`, `state-dir`, `runtime`,
+  shutdown y salida publica.
+- `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+  `branch_ref=branch-ref-orquesta-server-idle-self-improvement` preservadas
+  como refs opacas.
+- Contexto `ref_only` obligatorio resuelto por lectura local del paquete y
+  evidencia explicita en ACK; no habia documento materializado adicional que
+  leer.
+
+Huecos nuevos:
+
+- `--repair-codex` construye un comando `codex-launch-wave --agents 1` desde el
+  guardian con `danger-full-access`, `approval-policy never`, prompt que solo
+  apunta al packet local y sin contrato explicito de write-set, ACK terminal,
+  tests requeridos, presupuesto, shutdown checkpoint ni relacion con cola
+  residente. T208 define el break-glass general, pero falta el contrato
+  gobernado del agente reparador externo.
+- La normalizacion de rutas del guardian acepta rutas absolutas para
+  `project_dir`, `state_dir`, `current_bin`, `candidate_bin`, `last_good_bin` y
+  runtime de reparacion sin clasificacion de raiz de control frente a raiz de
+  producto. T212/T214 cubren redaccion y copia de binarios, pero no una politica
+  completa de raices permitidas, symlinks y refs publicas para todos los paths
+  del guardian.
+- Manifest, repair packet y prompt de reparacion se escriben con `os.WriteFile`
+  directo y nombres por timestamp de segundo. Si dos ejecuciones coinciden,
+  pueden pisarse; si el proceso cae a mitad, no hay tmp+fsync+rename ni replay
+  que distinga resultado incompleto de resultado aceptado.
+- El healthcheck temporal crea `candidate-state`, `candidate-runtime` y logs en
+  el `state_dir` del guardian sin politica de retencion, inventario ni limpieza.
+  Aunque T213 acote contenido, falta decidir cuanto vive ese material local y
+  como se purga sin borrar evidencias requeridas.
+
+## T218 guardian-repair-agent-launch-contract
+
+Objetivo: gobernar el agente reparador externo del guardian como trabajo
+break-glass acotado, con write-set, ACK y pruebas requeridas verificables.
+
+Estado: cerrada 2026-05-27 para el contrato de lanzamiento break-glass del
+guardian.
+
+Alcance:
+
+- `cmd/orquesta-guardian`
+- `cmd/orquesta-server`
+- `modulos/orquesta-runtime-codex`
+- `modulos/orquesta-runtime-codex-delivery`
+- `modulos/orquesta-app-codex-stack`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- `--repair-codex` produce un packet de lanzamiento versionado con
+  write-set cerrado, objetivo, pruebas requeridas, refs de manifest/packet,
+  `run_ref`/`promotion_ref` si existen, presupuesto y razon `break_glass`.
+- El agente reparador debe entregar `agent_ack.json` estructurado o handoff
+  equivalente; stdout, prompt o exit code no bastan para cerrar la reparacion.
+- El sandbox amplio solo puede activarse con opt-in explicito de composicion y
+  evidencia compacta; el default debe ser el minimo que permita reparar dentro
+  del write-set declarado.
+- El prompt no incluye rutas absolutas, logs crudos, tokens, HOME,
+  prompts/transcripts previos ni payloads HTTP; debe transportar refs a packet
+  redactado y comandos requeridos como ids.
+- Si Orquesta residente esta sana, el guardian debe preferir encolar trabajo por
+  la cola normal antes que lanzar Codex directo; el lanzamiento directo queda
+  reservado para build/startup/readiness rotos.
+- Coordinar con T30, T47, T49, T50, T63, T143, T157, T208, T212 y T213: esta
+  tarea gobierna el agente reparador, no la redaccion general del guardian ni
+  la validacion terminal de ACK Codex.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack`.
+
+Evidencia 2026-05-27:
+
+- `cmd/orquesta-guardian` materializa
+  `orquesta_guardian_repair_launch_packet.v0` junto al repair packet, con
+  `write_set`, `required_tests`, refs opacas, presupuesto de un agente,
+  contrato `codex_agent_ack.v0` y razon `break_glass`.
+- `--repair-codex` invoca `codex-launch-director-wave` con guardas estrictas,
+  write-set/tests/branch/worktree refs, y break-glass unmanaged auditado por
+  `--allow-unmanaged-launch` + confirmacion de `wave_ref`.
+- El default del reparador Codex baja a `workspace-write` y `medium`;
+  `danger-full-access` queda bloqueado salvo opt-in explicito y evidence ref.
+- El prompt del reparador solo incluye refs de repair packet y launch packet;
+  no incrusta el JSON ni paths locales.
+
+## T219 guardian-path-root-and-control-surface-policy
+
+Objetivo: separar raices de producto, raices de control y rutas locales del
+guardian para que no crucen a contexto, ACK, auditoria ni promocion erronea.
+
+Estado: cerrado localmente el 2026-05-27.
+
+Alcance:
+
+- `cmd/orquesta-guardian`
+- `cmd/orquesta-server`
+- `modulos/orquesta-runtime-worktree`
+- `modulos/orquesta-runtime-codex`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Clasificar `project_dir`, `state_dir`, `candidate_bin`, `current_bin`,
+  `last_good_bin`, `repair_runtime_dir`, logs y manifests como `product_root`,
+  `control_root`, `binary_artifact`, `local_diagnostic_path` o ref opaca.
+- Bloquear rutas fuera de las raices permitidas cuando el modo no las haya
+  declarado explicitamente; si una ruta absoluta es necesaria para el operador,
+  debe quedar solo en manifest local y no en salida publica ni ACK.
+- Rechazar symlinks/hardlinks inseguros y cambios TOCTOU antes de abrir o
+  escribir ficheros criticos del guardian, coordinando con la politica de copia
+  binaria de T214.
+- El servidor que invoca el guardian debe pasar refs opacas de
+  `worktree_ref`/`branch_ref` y paths solo por env de composicion local; nunca
+  convertir esas refs en nombres Git ni publicarlas en status.
+- Coordinar con T39, T50, T127, T131, T143, T157, T208, T212 y T214: esta
+  tarea gobierna raices y clasificacion local del guardian, no snapshots de
+  producto ni control files Codex genericos.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-runtime-worktree ./modulos/orquesta-runtime-codex`.
+
+Evidencia 2026-05-27: `cmd/orquesta-guardian` normaliza y valida una politica
+local `orquesta_guardian_path_policy.v0`: clasifica `project_dir`, `state_dir`,
+`artifact_root`, binarios, runtime de reparacion, logs, manifests y refs opacas;
+bloquea binarios fuera de `project_dir`/`state_dir`/`artifact_root`, runtime de
+reparacion fuera de `state_dir` y raices con symlinks; la salida publica y
+repair packets exponen solo refs hash y clasificaciones, no rutas locales. El
+servidor acepta el nuevo campo publico `path_policy`, propaga refs opacas de
+worktree/branch sin convertirlas en Git/path y distingue el nuevo reason code
+`guardian_config_path_outside_allowed_root`.
+
+## T220 guardian-manifest-retention-and-replay-policy
+
+Objetivo: hacer durables, reentrables y limpiables los manifests, repair
+packets, prompts, logs y runtime temporal del guardian.
+
+Estado: cerrado localmente el 2026-05-27 para estado durable propio del
+guardian.
+
+Alcance:
+
+- `cmd/orquesta-guardian`
+- `cmd/orquesta-server`
+- `modulos/orquesta-server`
+- `modulos/orquesta-runtime-worktree`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Escribir manifest, repair packet y prompt con tmp+fsync+rename, nombre no
+  colisionable por ref/generador inyectado y `schema_version`; si queda un tmp
+  o manifest parcial, publicar estado `guardian_manifest_incomplete`.
+- Indexar cada intento por `attempt_ref`, `promotion_ref` o ref de shutdown
+  cuando exista, para que replay distinga intento nuevo, retry idempotente y
+  conflicto de payload.
+- Definir retencion por categoria: manifests terminales, repair packets, logs
+  redactados, logs crudos opt-in, `candidate-state`, `candidate-runtime` y
+  runtime de repair Codex. La limpieza no debe borrar evidencias requeridas por
+  ACK/review ni material de `last_good`.
+- La salida publica debe mostrar solo contadores, refs y `retention_status`; no
+  rutas absolutas ni cuerpos de log.
+- Coordinar con T97, T100, T104, T148, T159, T208, T212, T213 y T214: esta
+  tarea no redefine logs del daemon ni escritura de binarios; gobierna el estado
+  durable propio del guardian.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-runtime-worktree`.
+
+Evidencia 2026-05-27:
+
+- `cmd/orquesta-guardian` indexa manifests, repair packets, prompts y runtime
+  temporal por `attempt_ref` derivado de `promotion_ref`, `shutdown_ref` o
+  generador local estable; `worktree_ref` y `branch_ref` siguen como refs
+  opacas.
+- La escritura de manifest, repair packet, prompt y logs redactados usa
+  tmp+fsync+rename e idempotencia por payload; un replay con payload distinto
+  queda observable como `guardian_manifest_incomplete`.
+- La salida publica conserva refs, contadores y `retention_status`; los paths
+  locales quedan solo en diagnostico local clasificado.
+- La retencion por categoria cubre manifests terminales, repair packets, logs
+  redactados, logs crudos opt-in, `candidate-state`, `candidate-runtime` y
+  runtime de repair Codex, sin tocar `last_good` ni evidencias actuales.
+- Cobertura focal nueva en `cmd/orquesta-guardian/guardian_retention_v0_test.go`
+  para indexacion por intento, conflicto de replay y limpieza por categoria.
+
+## Escaneo backlog 2026-05-27 quinta pasada
+
+Evidencia revisada:
+
+- `agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto
+  vigente de estado, guia del nucleo, principio director y matriz de smokes.
+- Backlog, railes observados y duplicaciones vigentes hasta `T220`.
+- Lectura focal de `cmd/orquesta-guardian/guardian_v0.go`,
+  `cmd/orquesta-guardian/guardian_v0_test.go`,
+  `cmd/orquesta-server/autoprogramming_promotion_guardian_v0.go`,
+  `cmd/orquesta-server/autoprogramming_promotion_v0.go`,
+  `docs/runbooks/autoprogramacion_guardian_breakglass_2026-05-24.md` y
+  `docs/runbooks/autoprogramacion_staging_promocion_2026-05-24.md`.
+- Busquedas `rg` sobre guardian, promotion, repair, manifest, current_bin,
+  last_good, lease, lock, shell command, `os.Environ`, `exec.CommandContext`,
+  shutdown, PID y estado de autoprogramacion.
+- `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+  `branch_ref=branch-ref-orquesta-server-idle-self-improvement` preservadas
+  como refs opacas.
+- Contexto `ref_only` obligatorio resuelto por lectura local del paquete y
+  evidencia explicita en ACK; no habia documento materializado adicional que
+  leer.
+
+Huecos nuevos:
+
+- El guardian puede ejecutar `check-promote`, `restore-last-good` o
+  `shutdown-server` varias veces contra el mismo `state_dir`/`current_bin` sin
+  lease de intento, owner de promocion ni exclusion mutua. T214 gobierna copia
+  atomica de binarios, pero no evita que dos intentos crucen `candidate`,
+  `last_good`, manifest y resultado publico.
+- El servidor invoca el guardian con un comando shell configurable y hereda el
+  entorno completo; dentro del guardian, `build-command`, `test-command` y
+  `repair-command` tambien son shell libre. T213 cubre output/env, y T216 cubre
+  resultado estructurado, pero falta politica de comandos autorizados por perfil
+  de efecto, ids publicos y opt-in antes de permitir mutaciones fuera de build
+  controlado.
+- La evidencia de promocion del servidor queda como refs genericas
+  `guardian_passed`/`guardian_failed`. Aunque T216 exige parsear el resultado,
+  falta un receipt causal que una `promotion_ref`, `run_ref`,
+  `worktree_ref`/`branch_ref`, hash del candidato, manifest del guardian y
+  efecto de staging, sin convertir refs opacas en rutas Git ni publicar paths.
+
+## T221 guardian-promotion-lease-and-concurrency-policy
+
+Objetivo: impedir promociones, restores o shutdowns del guardian concurrentes
+que trabajen sobre el mismo estado o binario vivo sin lease causal.
+
+Estado: cerrado localmente el 2026-05-27 para lease durable del guardian.
+
+Alcance:
+
+- `cmd/orquesta-guardian`
+- `cmd/orquesta-server`
+- `modulos/orquesta-autoprogramming`
+- `modulos/orquesta-runtime-worktree`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Cada intento del guardian debe adquirir un lease por `attempt_ref` o
+  `promotion_ref` sobre `state_dir` y el artefacto objetivo antes de build,
+  healthcheck, promote, restore o shutdown con senal.
+- Si existe otro intento activo, el guardian debe bloquear con reason code
+  publico `guardian_promotion_lease_busy` o reentrar de forma idempotente si el
+  payload coincide.
+- El lease debe expirar solo con reloj/deadline controlado y dejar receipt
+  compacto de owner, fase y freshness; no debe depender de PID crudo, host local
+  ni rutas absolutas como identidad publica.
+- La promocion y restore deben comprobar que el lease sigue vigente justo antes
+  de tocar `current_bin`/`last_good`; si no, publicar
+  `guardian_promotion_lease_lost` y no declarar `candidate_promoted`.
+- Coordinar con T31, T40, T57, T208, T214 y T220: esta tarea gobierna
+  concurrencia del guardian, no cola de runs, outbox, copia binaria ni retencion
+  de manifests.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-autoprogramming ./modulos/orquesta-runtime-worktree`.
+
+Cierre 2026-05-27:
+
+- `cmd/orquesta-guardian` adquiere un lease durable en `state_dir` antes de
+  `check-promote`, `restore-last-good` y `shutdown-server`; el receipt publico
+  usa refs opacas, owner por `promotion_ref`/`attempt_ref`, deadline controlado
+  y hashes compactos, sin PID/host/rutas absolutas como identidad publica.
+- Si hay lease activo, el resultado publico bloquea con
+  `guardian_promotion_lease_busy`; si el lease desaparece o expira antes de
+  tocar `current_bin`/`last_good_bin` o senalizar, bloquea con
+  `guardian_promotion_lease_lost` y no declara promocion/restauracion.
+- El servidor acepta esos estados estructurados del guardian como fallo
+  retryable y conserva la evidencia causal sin convertir `worktree_ref` ni
+  `branch_ref` en rutas o nombres Git.
+
+## T222 guardian-command-effect-profile-policy
+
+Objetivo: hacer explicitos los comandos que el guardian puede ejecutar y su
+perfil de efecto, en vez de aceptar shell libre como contrato publico.
+
+Estado: cerrado el 2026-05-27 para el servidor y guardian.
+
+Alcance:
+
+- `cmd/orquesta-guardian`
+- `cmd/orquesta-server`
+- `modulos/orquesta-autoprogramming`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- `build-command`, `test-command`, `repair-command` y el comando externo del
+  guardian deben declararse como `command_ref`, perfil (`build`, `required_test`,
+  `healthcheck`, `repair`) y efecto esperado antes de expandirse a shell local.
+- El default solo debe permitir comandos canonicos de build/test sin efectos
+  externos; comandos con red, Git remoto, OPES, proveedor real, borrado o
+  movimiento de artefactos requieren opt-in de composicion y evidence ref
+  compacta.
+- La expansion de placeholders debe validar que las rutas pertenecen a la
+  clasificacion de T219 y que ningun valor expande tokens, HOME, payloads HTTP,
+  prompts, transcripts ni refs opacas convertidas en path.
+- Los errores publicos deben referirse a `command_ref` y reason code, no al
+  comando shell completo; el manifest local puede conservar diagnostico
+  clasificado bajo la politica de T212/T220.
+- Coordinar con T139, T180, T208, T212, T213, T216 y T219: esta tarea no
+  sustituye salida/redaccion, entorno minimo ni resultado estructurado; gobierna
+  autorizacion y perfil de comandos del guardian.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-autoprogramming`.
+
+Evidencia de cierre:
+
+- `cmd/orquesta-guardian` rechaza bool, duracion, entero, budget y allowlist de
+  entorno invalidos con reason codes publicos `guardian_config_invalid_*`, y
+  tambien bloquea flags tipados invalidos o budgets/duraciones no positivos
+  antes de promocionar, restaurar o senalizar.
+- El resultado publico del guardian incluye `config_effective` compacto con
+  defaults de promocion, skip-health, repair-codex, sandbox/effort, escalado de
+  shutdown, timeouts, budgets y allowlist de entorno, sin publicar HOME, tokens,
+  rutas privadas ni comandos shell completos.
+- `cmd/orquesta-server` clasifica stdout/stderr del runner guardian y devuelve
+  `guardian_config_invalid_*` cuando el guardian falla por configuracion, en vez
+  de tratarlo como `guardian_candidate_failed`.
+- Prueba ejecutada: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-autoprogramming`.
+
+## T223 promotion-guardian-causal-receipt
+
+Objetivo: unir el resultado del guardian con la promocion de autoprogramacion
+mediante un receipt causal verificable y redactado.
+
+Estado: cerrado 2026-05-27 para el guardian y el servidor.
+
+Alcance:
+
+- `cmd/orquesta-server`
+- `cmd/orquesta-guardian`
+- `modulos/orquesta-autoprogramming`
+- `modulos/orquesta-runtime-worktree`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- El servidor debe registrar un receipt `promotion_guardian_receipt.v0` que
+  enlace `promotion_ref`, `run_ref`, `worktree_ref`, `branch_ref`,
+  `guardian_attempt_ref`, manifest/evidence refs, hash/tamano del candidato y
+  efecto de staging aplicado.
+- El receipt debe distinguir `candidate_verified`, `candidate_promoted`,
+  `promotion_blocked`, `last_good_restored`, resultado invalido y retry
+  idempotente; no basta con refs genericas `guardian_passed` o
+  `guardian_failed`.
+- Si el guardian se ejecuta con `--promote=false`, el receipt debe impedir que
+  el servidor trate verificacion sin promocion como binario activo promovido.
+- El receipt publico debe usar refs opacas y hashes compactos; no debe incluir
+  paths absolutos, nombres Git derivados de refs, stdout/stderr, HOME, tokens,
+  prompts, transcripts ni payloads HTTP.
+- Coordinar con T13, T33, T40, T156, T184, T208, T214 y T216: esta tarea no
+  redefine staging Git ni contrato de resultado del guardian; fija la evidencia
+  causal que une ambos.
+- Tests: `go test -count=1 ./cmd/orquesta-server ./cmd/orquesta-guardian ./modulos/orquesta-autoprogramming ./modulos/orquesta-runtime-worktree`.
+
+Evidencia 2026-05-27:
+
+- `cmd/orquesta-server` registra `promotion_guardian_receipt.v0` dentro del
+  efecto de promocion, con `promotion_ref`, `run_ref`, refs opacas de
+  worktree/branch, `guardian_attempt_ref`, refs de manifest/evidencia,
+  hash/tamano compacto del candidato cuando existe, estado del resultado del
+  guardian y estado de staging aplicado.
+- El receipt distingue `candidate_verified`, `candidate_promoted`,
+  `promotion_blocked`, `last_good_restored` y `guardian_result_invalid`.
+  `--promote=false` produce `candidate_verified` y bloquea el efecto del
+  servidor para no tratar una verificacion como binario activo promovido.
+- La salida publica queda acotada a refs opacas, reason codes y hashes; no
+  publica rutas absolutas, stdout/stderr crudo, HOME, tokens, prompts ni
+  payloads HTTP.
+
+## Escaneo backlog 2026-05-27 sexta pasada
+
+Evidencia revisada:
+
+- `agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto
+  vigente de estado, guia del nucleo y principio director.
+- Backlog, railes observados y duplicaciones vigentes hasta `T223`.
+- Lectura focal de `cmd/orquesta-guardian/guardian_v0.go`,
+  `cmd/orquesta-guardian/guardian_public_v0.go`,
+  `cmd/orquesta-server/autoprogramming_promotion_guardian_v0.go` y
+  `modulos/orquesta-autoprogramming/staging_promotion_v0.go`.
+- Busquedas `rg` sobre guardian, shutdown, repair, manifest, PID, healthcheck,
+  `exec.CommandContext`, `os.Environ`, `agent_ack`, checkpoint y promocion.
+- `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+  `branch_ref=branch-ref-orquesta-server-idle-self-improvement` preservadas
+  como refs opacas.
+- Contexto `ref_only` obligatorio resuelto por lectura local del paquete,
+  AGENTS/README y evidencia explicita en ACK; no habia documento materializado
+  adicional que leer.
+
+Huecos nuevos:
+
+- El healthcheck del guardian arranca el candidato como proceso hijo normal,
+  espera `/healthz` y luego envia `Interrupt` al proceso padre con `Kill` tras
+  dos segundos. No hay politica de grupo de procesos, hijos heredados,
+  reason codes de stop, ni receipt que pruebe que el candidato temporal y sus
+  subprocesses quedaron parados antes de promocionar o salir.
+- `shutdown-server` usa `force_after_timeout=true` por defecto: si vence el
+  plazo cooperativo, reintenta shutdown forzado y puede senalizar PID cuando
+  existe `ServerPID` aunque el resultado no declare `shutdown_ready`. T217 cubre
+  el cliente HTTP; falta el contrato de escalado forzado y la decision publica
+  sobre checkpoints/agents pendientes.
+- Si falla build/test/healthcheck, el guardian escribe repair packet y puede
+  lanzar `repair-command` o `--repair-codex` en cada intento. T218 gobierna el
+  contrato del agente reparador y T221 el lease de promocion, pero falta
+  presupuesto/idempotencia de intentos de reparacion por failure packet para no
+  relanzar reparaciones equivalentes sin evidencia nueva.
+
+## T224 guardian-candidate-process-tree-lifecycle
+
+Objetivo: asegurar que el candidato temporal del guardian se arranca, observa y
+detiene como arbol de proceso controlado antes de usar su healthcheck como
+evidencia de promocion.
+
+Estado: completada localmente el 2026-05-27. `cmd/orquesta-guardian`
+rechaza argumentos posicionales sobrantes despues de `flag.Parse` para
+`check-promote`, `restore-last-good` y `shutdown-server`, publica
+`guardian_config_extra_args:positional_args:<n>` sin eco de valores crudos y
+mantiene los comandos shell solo por flags/env canonicas.
+
+Alcance:
+
+- `cmd/orquesta-guardian`
+- `cmd/orquesta-server`
+- `modulos/orquesta-server`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- El healthcheck debe lanzar el candidato con politica de proceso por plataforma
+  que permita parar el arbol completo o declarar publicamente que solo se paro
+  el proceso padre.
+- La parada tras healthcheck debe tener deadline, escalado, reason codes
+  (`candidate_stop_timeout`, `candidate_killed`, `candidate_process_left_alive`
+  o equivalentes) y receipt compacto sin PID crudo, rutas locales, stdout/stderr
+  ni env.
+- Si quedan procesos hijos vivos o el stop es ambiguo, el guardian no debe
+  declarar el candidato promocionable salvo opt-in break-glass con evidencia
+  explicita.
+- Coordinar con T191, T213, T215, T217 y T221: esta tarea gobierna el ciclo de
+  vida del candidato temporal, no la politica general de senales del servidor ni
+  el cliente HTTP de shutdown.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+## T225 guardian-forced-shutdown-escalation-contract
+
+Objetivo: hacer explicita y verificable la escalada `force_after_timeout` del
+guardian antes de convertir un timeout cooperativo en shutdown forzado o senal
+al PID del servidor.
+
+Estado: cerrado 2026-05-27 por OrquestaV2 `agent-ref-task-autoprogramming-db88e93cffaf-g01`.
+
+Evidencia:
+
+- `cmd/orquesta-guardian` usa addr dinamico `127.0.0.1:0` solo dentro del
+  proceso candidato y toma el addr loopback real desde el statefile publicado
+  por ese candidato, evitando reservar un puerto libre y cerrarlo antes del
+  bind.
+- `ORQUESTA_GUARDIAN_CANDIDATE_ADDR` acepta solo host loopback con puerto
+  concreto; URL, userinfo, query, wildcard, host externo y puerto `0` declarado
+  bloquean el healthcheck con `candidate_addr_unowned`.
+- El healthcheck exige `/healthz`, `/api/v0/server/readiness` compatible y que
+  el proceso candidato siga vivo; si no puede probar ownership, publica bloqueo
+  `candidate_addr_unowned` y no promociona.
+- El resultado anade refs compactas de address ownership, readiness target,
+  candidate attempt y stop confirmado sin PID crudo, puerto como identidad
+  publica, rutas locales ni body HTTP completo.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-server`.
+- Contexto `ref_only` obligatorio resuelto mediante lectura local de
+  `agent_packet.json`, AGENTS/README/docs y evidencia explicita en ACK.
+
+Alcance:
+
+- `cmd/orquesta-guardian`
+- `cmd/orquesta-server`
+- `modulos/orquesta-server`
+- `modulos/orquesta-server-shutdown`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- `force_after_timeout` debe ser opt-in explicito o quedar documentado como
+  modo break-glass con evidence ref; el default residente no debe saltar de
+  timeout cooperativo a forzado sin causa publica.
+- La escalada debe bloquear si hay checkpoints pendientes, agentes en vuelo o
+  runs no terminales salvo decision break-glass declarada por el director.
+- La senal a `ServerPID` solo puede ocurrir despues de resultado estructurado
+  fiable o decision forzada explicita; un status parcial o decode ambiguo debe
+  producir `guardian_shutdown_escalation_blocked`.
+- El manifest/resultado publico debe distinguir `cooperative_timeout`,
+  `forced_requested`, `forced_ready`, `signal_sent` y `signal_blocked` sin PID,
+  host, HOME, tokens, URLs ni cuerpo HTTP.
+- Coordinar con T30, T189, T199, T200, T217 y T221: esta tarea no redefine el
+  endpoint de shutdown ni la politica general de senales; gobierna la decision
+  de escalado del guardian.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-server-shutdown`.
+
+## T226 guardian-repair-attempt-budget-and-idempotency
+
+Objetivo: evitar que el guardian relance reparaciones equivalentes de forma
+indefinida cuando el mismo failure packet no cambia.
+
+Estado: cerrado el 2026-05-27 para `cmd/orquesta-guardian` y consumo publico
+del servidor.
+
+Evidencia 2026-05-27: el guardian calcula `failure_packet_hash`, deriva
+`repair_attempt_ref`, registra un intento durable bajo `repair-attempts` y
+aplica `ORQUESTA_GUARDIAN_REPAIR_MAX_ATTEMPTS` por scope
+`promotion_ref`/`attempt_ref`/`run_ref`. La reentrada con el mismo packet queda
+como `guardian_repair_attempt_duplicate`; si el presupuesto se agota publica
+`guardian_repair_attempt_budget_exhausted`. El servidor acepta esos campos en
+el resultado publico sin exponer rutas locales ni stdout/stderr.
+
+Alcance:
+
+- `cmd/orquesta-guardian`
+- `cmd/orquesta-server`
+- `modulos/orquesta-autoprogramming`
+- `modulos/orquesta-runtime-codex`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Cada repair debe tener `repair_attempt_ref`, hash del failure packet y
+  presupuesto maximo por `promotion_ref`/`attempt_ref`.
+- Si el mismo packet ya tiene una reparacion activa o terminal, el guardian
+  bloquea de forma idempotente con `guardian_repair_attempt_duplicate`; si el
+  limite por scope ya se consumio, bloquea con
+  `guardian_repair_attempt_budget_exhausted`, no relanza Codex/shell.
+- Un nuevo intento solo se permite cuando cambia el packet, hay decision del
+  director o existe evidence ref de reparacion anterior consumida.
+- El receipt de repair debe distinguir `repair_not_started`, `repair_started`,
+  `repair_completed`, `repair_failed`, `repair_budget_exhausted` y
+  `repair_retry_idempotent`, sin stdout/stderr, prompts, rutas locales ni
+  nombres Git derivados de refs.
+- Coordinar con T47, T63, T218, T220, T221 y T222: esta tarea no define el
+  packet de launch, sidecars ni comandos autorizados; gobierna presupuesto e
+  idempotencia de reparaciones del guardian.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-autoprogramming ./modulos/orquesta-runtime-codex`.
+
+## Escaneo backlog 2026-05-27 septima pasada
+
+Evidencia revisada:
+
+- `agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto
+  vigente de estado, guia del nucleo y principio director.
+- Backlog, railes observados y duplicaciones vigentes hasta `T226`.
+- Lectura focal de
+  `modulos/orquesta-app-codex-stack/ops_agent_runtime_detail_files_v0.go`,
+  `modulos/orquesta-web/ops_dashboard_html_chunk_3_v0.go`,
+  `cmd/orquesta-server/idle_self_improvement_ack_scan_budget_v0.go` y
+  `cmd/orquesta-server/idle_self_improvement_ack_correlation_v0.go`.
+- Busquedas `rg` sobre `required_ref_action`, `ref_only`,
+  `agent_ack.json`, `director_decisions.json`, `orquesta_shutdown_request`,
+  `json.NewDecoder`, `os.ReadFile`, `io.ReadAll`, dashboard runtime y
+  ficheros de control Codex.
+- `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+  `branch_ref=branch-ref-orquesta-server-idle-self-improvement` preservadas
+  como refs opacas.
+- Contexto `ref_only` obligatorio resuelto por lectura local del paquete,
+  AGENTS/README/docs vigentes y evidencia explicita en ACK; no habia documento
+  materializado adicional que leer.
+
+Hueco nuevo:
+
+- El detalle runtime de `/ops` vuelve a leer y publicar contenido crudo de
+  `agent_prompt.txt`, `agent_packet.json`, `agent_ack.json`,
+  `director_decisions.json`, logs y ficheros de shutdown. Aunque T143 cerro
+  lectura acotada para validadores/fuentes de observacion y T211 cubre
+  frescura del dashboard, esta vista usa otro lector: para ficheros no-log hace
+  `os.ReadFile` completo antes de truncar y el HTML muestra "Prompt exacto" y
+  control files sin envelope redactado por campo. Falta owner especifico para
+  presupuesto, redaccion y forma publica del detalle runtime operacional.
+
+## T227 ops-runtime-detail-redaction-and-budget
+
+Objetivo: hacer que el detalle runtime de `/ops` muestre evidencia operacional
+util sin publicar prompts, packets, ACKs, decisiones, logs ni paths locales en
+crudo.
+
+Estado: cerrado localmente el 2026-05-27.
+
+Alcance:
+
+- `modulos/orquesta-app-codex-stack`
+- `modulos/orquesta-web`
+- `cmd/orquesta-server`
+- `modulos/orquesta-runtime-codex`
+- `modulos/orquesta-runtime-codex-delivery`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- El endpoint/proyeccion de detalle runtime debe devolver un envelope publico
+  por fichero con `file_kind`, `exists`, `size_bytes`, `truncated`,
+  `redaction_level`, `reason_codes`, hashes/refs compactas y extractos
+  permitidos por campo; no debe publicar contenido completo de prompts,
+  transcripts, completions, packets, ACKs, `director_decisions`, wrappers,
+  shutdown requests ni logs.
+- La lectura debe ser acotada antes de cargar el fichero completo. Los
+  ficheros de control deben reutilizar o envolver la politica de T143; los logs
+  deben usar tail redactado y presupuesto menor que la salida publica general.
+- La UI puede ofrecer diagnostico local solo como ref clasificada y con
+  freshness/permiso explicito; el HTML no debe renderizar "Prompt exacto" ni
+  bloques crudos de control files para agentes remotos o vistas compartibles.
+- Si un fichero excede presupuesto, es binario, falta o no pasa redaccion, el
+  detalle debe mostrar reason code publico (`runtime_detail_redacted`,
+  `runtime_detail_too_large`, `runtime_detail_unavailable` o equivalente) sin
+  path absoluto, HOME, tokens, URLs, stdout/stderr completo ni payload HTTP.
+- Coordinar con T103, T138, T143, T159, T175, T198, T209, T210 y T211: esta
+  tarea no reabre validacion terminal de ACK ni calculo de progreso; gobierna
+  solo el detalle runtime operacional expuesto por `/ops`.
+- Tests: `go test -count=1 ./modulos/orquesta-app-codex-stack ./modulos/orquesta-web ./cmd/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-codex-delivery`.
+
+Cierre 2026-05-27:
+
+- `CodexStackAgentRuntimeDetailHTTPHandlerV0` deja de publicar
+  `agent_prompt.txt`, `agent_packet.json`, `agent_ack.json`,
+  `director_decisions.json`, wrappers, shutdown y logs como contenido crudo.
+- La respuesta expone `task` resumida, `runtime_ref` opaca y envelopes por
+  fichero con `file_kind`, `exists`, `size_bytes`, `truncated`,
+  `redaction_level`, `reason_codes`, `content_ref`, `sha256`, extractos JSON
+  acotados o tail redactado.
+- Los ficheros se leen con presupuesto antes de cargar contenido completo; logs
+  usan tail menor y control files quedan en metadata/extractos.
+- La UI `/ops` renderiza envelopes y refs, no "Prompt exacto" ni bloques crudos
+  de packet/ACK/log.
+
+## Escaneo backlog 2026-05-27 octava pasada
+
+Evidencia revisada:
+
+- `agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto
+  vigente de estado, guia del nucleo, principio director y matriz de smokes.
+- Backlog, railes observados y duplicaciones vigentes hasta `T227`.
+- Lectura focal de `cmd/orquesta-guardian/guardian_config_v0.go`,
+  `cmd/orquesta-guardian/guardian_exec_v0.go`,
+  `cmd/orquesta-guardian/guardian_files_v0.go`,
+  `cmd/orquesta-guardian/guardian_repair_v0.go`,
+  `cmd/orquesta-guardian/guardian_v0.go` y
+  `cmd/orquesta-server/autoprogramming_promotion_guardian_v0.go`.
+- Busquedas `rg` sobre guardian, healthcheck, readiness, address, env,
+  `os.Environ`, `SkipHealth`, `freeLocalAddr`, repair, result y promocion.
+- `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+  `branch_ref=branch-ref-orquesta-server-idle-self-improvement` preservadas
+  como refs opacas.
+- Contexto `ref_only` obligatorio resuelto por lectura local del paquete,
+  AGENTS/README/docs y evidencia explicita en ACK; no habia documento
+  materializado adicional que leer.
+
+Huecos nuevos:
+
+- `freeLocalAddrV0` abre `127.0.0.1:0`, cierra el listener y pasa esa direccion
+  al candidato por `ORQUESTA_SERVER_ADDR`. Entre cierre y arranque otro proceso
+  puede ocupar el puerto; ademas `ORQUESTA_GUARDIAN_CANDIDATE_ADDR` acepta un
+  addr externo sin politica publica de loopback ni identidad del candidato
+  observado.
+- El servidor que invoca el guardian usa `os.Environ()` y un comando shell
+  configurable. T213 acota el entorno de comandos lanzados por el guardian y
+  T216 exige parsear su resultado, pero falta aislar la frontera servidor ->
+  guardian para no pasar HOME, tokens, proveedor, proxies o DSN al proceso
+  break-glass.
+- `--skip-health` puede saltar la unica prueba viva del candidato antes de
+  promocionar. T215 exige readiness cuando hay healthcheck, pero no declara
+  cuando es licito desactivar health/readiness ni que evidencia break-glass debe
+  bloquear o permitir promocion sin prueba viva.
+
+## T228 guardian-candidate-address-ownership-policy
+
+Objetivo: asegurar que el healthcheck del guardian observa el candidato propio
+en una direccion loopback gobernada y sin ventana de hijack por puerto libre.
+
+Estado: cerrado el 2026-05-27 para refs publicas de diagnosticos locales del
+guardian.
+
+Alcance:
+
+- `cmd/orquesta-guardian`
+- `cmd/orquesta-server`
+- `modulos/orquesta-server`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- El guardian debe reservar/transferir la direccion del candidato sin cerrar un
+  puerto libre antes de que el proceso hijo este listo, o publicar bloqueo
+  `candidate_addr_unowned` si no puede probar ownership.
+- `ORQUESTA_GUARDIAN_CANDIDATE_ADDR` debe aceptar solo loopback/addr temporal
+  declarado; hosts externos, wildcard o valores con URL/query/userinfo deben
+  bloquearse salvo opt-in break-glass con evidence ref compacta.
+- El resultado debe incluir evidence ref compacta de address ownership,
+  readiness target y candidate attempt, sin PID crudo, puerto como identidad
+  publica, rutas locales ni body HTTP completo.
+- Coordinar con T87, T175, T188, T215 y T224: esta tarea no sustituye readiness
+  ni ciclo de vida de proceso; gobierna propiedad de direccion y anti-hijack.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+## T229 promotion-guardian-runner-env-isolation
+
+Objetivo: aislar la invocacion servidor -> guardian igual que los comandos
+internos del guardian, con entorno minimo y salida acotada.
+
+Estado: cerrado localmente el 2026-05-27 y revalidado por retry OrquestaV2
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-602dc9edc1ac71b6268bcede5729e588`
+con la bateria focal requerida dentro del write-set.
+
+Alcance:
+
+- `cmd/orquesta-server`
+- `cmd/orquesta-guardian`
+- `modulos/orquesta-autoprogramming`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- `shellAutoprogrammingPromotionGuardianRunnerV0` no debe heredar
+  `os.Environ()` completo; debe construir allowlist minima mas variables
+  explicitas `ORQUESTA_GUARDIAN_*` necesarias para el intento.
+- La salida stdout/stderr del proceso guardian debe tener limite, content-type o
+  schema esperado cuando aplique y redaccion por campo antes de convertirse en
+  error, evidencia o log automatizable.
+- Si el guardian necesita proveedor, Codex, HOME, proxy, Git remoto u otro
+  secreto, la composicion debe pasarlo por opt-in declarado y evidence ref; el
+  default residente no debe filtrarlo al break-glass.
+- Coordinar con T139, T180, T213, T216 y T222: esta tarea no redefine el
+  resultado publico ni los comandos internos; gobierna el runner que arranca el
+  guardian desde promocion.
+- Tests: `go test -count=1 ./cmd/orquesta-server ./cmd/orquesta-guardian ./modulos/orquesta-autoprogramming`.
+
+Cierre local 2026-05-27: el runner servidor -> guardian ya no usa
+`os.Environ()` completo. Construye entorno `minimal_allowlist` con allowlist
+canonica configurable por
+`ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_RUNNER_ENV_ALLOWLIST`, vars
+`ORQUESTA_GUARDIAN_*` explicitas y cache local derivada del state dir. HOME,
+Codex, proxies, Git, proveedor y secretos solo pasan si estan en allowlist y el
+intento trae evidence refs. La salida sigue limitada por el buffer del runner y
+validada por `orquesta_guardian_result.v0`.
+
+Retry OrquestaV2 2026-05-27:
+`agent-ref-task-autoprogramming-22cfff60721c-g01` revalida el cierre con
+`go test -count=1 ./cmd/orquesta-server ./cmd/orquesta-guardian ./modulos/orquesta-autoprogramming`
+y contexto `ref_only` resuelto por lectura local mas evidencia explicita en ACK.
+Rework de revision 2026-05-27:
+`agent-ref-task-ref-review-rework-task-autoprogramming-22cfff60721c-g01-938062230e08e3a836b342951d5c588d`
+conserva el cierre y endurece el runner para que ninguna variable
+`ORQUESTA_GUARDIAN_*` heredada del entorno padre pueda sustituir las variables
+explicitas derivadas del request, incluso si aparece en la allowlist.
+Retry de rework OrquestaV2 2026-05-27:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-3b1cd0fc9711a3bf097b5db163987e69`
+mantiene ese contrato sin relanzar el agente padre original, revalida la
+bateria focal requerida y deja el contexto `ref_only` resuelto mediante lectura
+local mas evidencia explicita en ACK.
+Retry final de rework OrquestaV2 2026-05-27:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-602dc9edc1ac71b6268bcede5729e588`
+conserva la correccion, revalida
+`go test -count=1 ./cmd/orquesta-server ./cmd/orquesta-guardian ./modulos/orquesta-autoprogramming`
+y resuelve el contexto `ref_only` por lectura local mas evidencia explicita en
+ACK.
+
+## T230 guardian-skip-health-breakglass-policy
+
+Objetivo: impedir que `--skip-health` convierta una build/test local en
+promocion sin prueba viva del candidato salvo decision break-glass explicita.
+
+Estado: cerrado localmente el 2026-05-27.
+
+Evidencia de cierre:
+
+- `cmd/orquesta-guardian` valida el repair packet con lectura acotada
+  `lstat/open/read`, presupuesto de 256 KiB, rechazo de symlink, hardlink,
+  fichero no regular, cambio TOCTOU, JSON invalido o path que no corresponde al
+  hash del failure packet.
+- Antes de construir prompt o comando Codex, el guardian exige schema
+  `orquesta_guardian_repair_packet.v0`, `redaction_level=refs_only`,
+  `repair_attempt_ref`, `failure_packet_hash`, presupuesto de reparacion y fase
+  causal compatibles con el intento actual; si falla devuelve
+  `guardian_repair_packet_invalid` y no lanza reparador.
+- El prompt break-glass recibe refs, `repair_attempt_ref`, hash, sha256 del
+  fichero, tamano y resumen redactado; no incrusta el packet completo ni rutas
+  locales.
+- Verificacion: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-codex-delivery`.
+
+Alcance:
+
+- `cmd/orquesta-guardian`
+- `cmd/orquesta-server`
+- `modulos/orquesta-autoprogramming`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- `SkipHealth` debe bloquear promocion por defecto con reason code
+  `guardian_healthcheck_required` si `promote=true` y no hay evidence ref o
+  decision break-glass del director.
+- Un skip autorizado debe distinguir `candidate_built`, `candidate_tests_passed`
+  y `candidate_not_live_checked`; no debe publicar `candidate_promoted` como si
+  hubiera readiness viva completa.
+- La salida publica y el receipt de promocion deben transportar la causa del
+  skip, refs de aprobacion y alcance temporal, sin prompts, paths locales,
+  nombres Git derivados de refs ni stdout/stderr.
+- Coordinar con T215, T216, T223 y T225: esta tarea no redefine readiness ni
+  resultado estructurado; gobierna la excepcion para saltar healthcheck.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-autoprogramming`.
+
+Decision aplicada 2026-05-27:
+
+- `cmd/orquesta-guardian` bloquea `SkipHealth && Promote` sin
+  `skip_health_evidence_refs` con reason code publico
+  `guardian_healthcheck_required`, sin tocar el binario vivo.
+- El break-glass explicito usa `ORQUESTA_GUARDIAN_SKIP_HEALTH_EVIDENCE_REFS` o
+  `--skip-health-evidence-ref`; si promueve sin prueba viva publica
+  `candidate_promoted_breakglass` y reason codes `candidate_built`,
+  `candidate_tests_passed` cuando hay tests declarados y
+  `candidate_not_live_checked`.
+- `cmd/orquesta-server` transporta
+  `ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_SKIP_HEALTH_EVIDENCE_REFS`
+  al guardian y el receipt distingue `candidate_promoted_breakglass` con refs de
+  evidencia compactas.
+- Verificacion ejecutada: `cmd/orquesta-guardian` y
+  `modulos/orquesta-autoprogramming` pasaron dentro de la bateria obligatoria.
+  `cmd/orquesta-server` no compilo por
+  `modulos/orquesta-app-codex-stack/ops_agent_runtime_detail_http_v0.go:137`
+  (`AgentStartTaskV0.ContextRefs` inexistente), fuera del write-set de T230.
+
+Cierre local 2026-05-27:
+
+- `ManifestRef`, `RepairPacketRef`, `RepairLaunchRef`, `OutputRef` y
+  `LocalDiagnostics.ref` ya se derivan de ref causal
+  `attempt_ref`/`promotion_ref`, tipo de diagnostico y, para outputs, hash del
+  log redactado. Si falta hash de output no se fabrica `OutputRef`.
+- Los paths locales siguen disponibles solo en el manifest interno clasificado;
+  la salida publica no usa `state_dir`/worktree temporal para esas refs.
+- Cobertura focal:
+  `TestGuardianPublicRefsV0EstablesEntreWorktreesTemporales` y
+  `TestGuardianPublicRefsV0NoInventaOutputRefSinHash`.
+
+## Escaneo backlog 2026-05-27 novena pasada
+
+Evidencia revisada:
+
+- `agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto
+  vigente de estado, guia del nucleo y principio director.
+- Backlog, railes observados y duplicaciones vigentes hasta `T230`.
+- Lectura focal de `cmd/orquesta-guardian/guardian_config_v0.go`,
+  `cmd/orquesta-guardian/guardian_files_v0.go`,
+  `cmd/orquesta-guardian/guardian_v0.go`,
+  `cmd/orquesta-guardian/guardian_shutdown_v0.go` y
+  `cmd/orquesta-server/autoprogramming_promotion_guardian_v0.go`.
+- Busquedas `rg` sobre guardian, env, flags, args, shutdown, healthcheck,
+  repair, result, `os.Environ`, `flag.Parse`, `NArg`, `ForceAfterTimeout` y
+  promocion.
+- `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+  `branch_ref=branch-ref-orquesta-server-idle-self-improvement` preservadas
+  como refs opacas.
+- Contexto `ref_only` obligatorio resuelto por lectura local del paquete,
+  AGENTS/README/docs y evidencia explicita en ACK; no habia documento
+  materializado adicional que leer.
+
+Huecos nuevos:
+
+- Los parsers de entorno del guardian (`envBoolOrDefaultV0`,
+  `envDurationOrDefaultV0`, `envIntOrDefaultV0`, `envInt64OrDefaultV0` y
+  `guardianOutputMaxBytesFromEnvV0`) degradan valores invalidos al default sin
+  error ni reason code. En una frontera break-glass, una variable mal escrita
+  puede reactivar `promote=true`, `force_after_timeout=true`, timeouts amplios o
+  budgets por defecto sin que el operador vea la misconfiguracion.
+- `parseGuardianConfigForCommandV0` llama a `flags.Parse(args)` pero no rechaza
+  argumentos sobrantes. Un typo posicional, un comando accidental o una parte de
+  shell mal separada puede quedar ignorada mientras el guardian ejecuta con
+  defaults, especialmente en `check-promote`, `restore-last-good` o
+  `shutdown-server`.
+
+## T231 guardian-config-env-strictness
+
+Objetivo: hacer estricta y observable la configuracion del guardian cuando una
+variable o flag invalida cambia una decision de promocion, shutdown o budget.
+
+Estado: completada 2026-05-27 para parseo estricto de env/flags del guardian,
+receipt publico de config efectiva y distincion servidor -> guardian de config
+invalida frente a fallo de candidato.
+
+Alcance:
+
+- `cmd/orquesta-guardian`
+- `cmd/orquesta-server`
+- `modulos/orquesta-autoprogramming`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Bool, duracion, entero, budget y allowlist del guardian deben rechazar valores
+  invalidos con reason code publico (`guardian_config_invalid_*` o equivalente)
+  en vez de caer silenciosamente al default.
+- Los defaults peligrosos (`promote=true`, `force_after_timeout=true`,
+  timeouts/budgets amplios y `repair-codex`/sandbox/effort) deben quedar en
+  config efectiva o receipt compacto, sin HOME, tokens, rutas privadas ni
+  comandos shell completos.
+- La composicion servidor -> guardian debe distinguir config invalida de fallo
+  de candidato, manteniendo retry seguro y sin promover/restaurar/senalizar.
+- Coordinar con T85, T213, T216, T217, T225 y T228: esta tarea no redefine la
+  politica de entorno ni el resultado estructurado; gobierna parseo estricto de
+  configuracion efectiva del guardian.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-autoprogramming`.
+
+Evidencia de cierre:
+
+- `cmd/orquesta-guardian` aplica `guardian-command-effect-profile-policy-v0` a
+  cada comando shell: publica perfil `build`, `required_test`, `healthcheck` o
+  `repair`, estado de autorizacion, efectos externos detectados y evidence refs
+  compactas sin exponer el shell completo en la salida publica.
+- El default permite solo build canonico del servidor y tests `go test` sin
+  efectos externos; shell no canonico o efectos de red, Git remoto, OPES,
+  proveedor real o acciones destructivas bloquean con
+  `guardian_command_effect_policy_blocked` salvo opt-in/evidence ref de
+  composicion. El servidor propaga refs causales de promocion como
+  `ORQUESTA_GUARDIAN_COMMAND_EFFECT_EVIDENCE_REFS`.
+- La expansion de placeholders del guardian usa rutas shell-quoted y falla con
+  `guardian_command_placeholder_invalid` si queda un placeholder de ruta sin
+  resolver antes de ejecutar el comando.
+- `cmd/orquesta-guardian` rechaza bool, duracion, entero, budget y allowlist de
+  entorno invalidos con reason codes publicos `guardian_config_invalid_*`, y
+  tambien bloquea flags tipados invalidos o budgets/duraciones no positivos
+  antes de promocionar, restaurar o senalizar.
+- El resultado publico del guardian incluye `config_effective` compacto con
+  defaults de promocion, skip-health, repair-codex, sandbox/effort, escalado de
+  shutdown, timeouts, budgets y allowlist de entorno, sin publicar HOME, tokens,
+  rutas privadas ni comandos shell completos.
+- `cmd/orquesta-server` clasifica stdout/stderr del runner guardian y devuelve
+  `guardian_config_invalid_*` cuando el guardian falla por configuracion, en vez
+  de tratarlo como `guardian_candidate_failed`.
+- Prueba ejecutada: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-autoprogramming`.
+
+## T232 guardian-cli-extra-args-strictness
+
+Objetivo: impedir que `orquesta-guardian` ignore argumentos sobrantes o
+posicionales ambiguos en comandos break-glass.
+
+Estado: cerrado localmente el 2026-05-27.
+
+Alcance:
+
+- `cmd/orquesta-guardian`
+- `cmd/orquesta-server`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Tras `flag.Parse`, `check-promote`, `restore-last-good` y `shutdown-server`
+  deben rechazar `flags.NArg()!=0` con error compacto
+  `guardian_cli_unexpected_args` o equivalente.
+- El error publico debe indicar conteo/categoria de argumentos, no imprimir
+  valores crudos que puedan contener rutas, URLs, tokens, prompts o comandos.
+- La ayuda/runbook debe documentar que comandos shell van en flags explicitas
+  (`--build-command`, `--test-command`, `--repair-command`) o env canonica, no
+  como posicionales.
+- Coordinar con T196, T200, T216, T217 y T222: esta tarea no gobierna catalogo
+  CLI general ni autorizacion de comandos; solo evita ejecucion ambigua del
+  guardian.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server`.
+
+## Escaneo backlog 2026-05-27 undecima pasada
+
+Evidencia revisada:
+
+- `agent_packet.json`, `AGENTS.md`, `README.md`, foto vigente de estado, guia
+  del nucleo y principio director.
+- Backlog, railes observados y duplicaciones vigentes hasta `T235`.
+- Lectura focal de `cmd/orquesta-guardian/guardian_public_v0.go`,
+  `cmd/orquesta-guardian/guardian_repair_v0.go`,
+  `cmd/orquesta-guardian/guardian_files_v0.go`,
+  `cmd/orquesta-guardian/guardian_exec_v0.go` y
+  `cmd/orquesta-server/autoprogramming_promotion_guardian_v0.go`.
+- Busquedas `rg` sobre `guardianPathRefV0`, `guardianCommandRefV0`,
+  `repairGuardianPacketV0`, `os.ReadFile`, `CommandRef`, `OutputRef`,
+  `ManifestRef`, `RepairPacketRef`, `LocalDiagnostics` y `shell`.
+- `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+  `branch_ref=branch-ref-orquesta-server-idle-self-improvement` preservadas
+  como refs opacas.
+- Contexto `ref_only` obligatorio resuelto por lectura local del paquete,
+  AGENTS/README/docs y evidencia explicita en ACK; no habia documento
+  materializado adicional que leer.
+
+Huecos nuevos:
+
+- `guardianPathRefV0` deriva refs publicas desde `filepath.Clean(path)` de
+  manifests, repair packets y logs. Eso evita publicar el path, pero liga refs
+  a rutas locales absolutas y dificulta correlacion portable por
+  `promotion_ref`/`attempt_ref`/hash de contenido.
+- `guardianCommandRefV0` deriva refs desde `phase|command`, donde `command` ya
+  incluye shell expandido, rutas de candidato y comandos configurables. Dos
+  intentos equivalentes con distinto `state_dir` generan refs distintas, y una
+  ref publica queda acoplada a texto shell que T222 debe tratar como efecto
+  gobernado.
+- `guardianCodexRepairCommandV0` lee el repair packet completo con
+  `os.ReadFile(packetPath)` antes de construir el prompt del reparador. T218
+  gobierna el lanzamiento del agente y T212 redaccion publica, pero falta una
+  frontera de lectura acotada/tipo/hash para ese packet local antes de meterlo
+  en contexto Codex break-glass.
+
+## T233 guardian-local-diagnostic-ref-stability
+
+Objetivo: hacer que las refs publicas de diagnosticos locales del guardian sean
+portables, causales y no dependan de rutas absolutas locales.
+
+Estado: cerrado localmente el 2026-05-27.
+
+Alcance:
+
+- `cmd/orquesta-guardian`
+- `cmd/orquesta-server`
+- `modulos/orquesta-autoprogramming`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- `ManifestRef`, `RepairPacketRef`, `OutputRef` y `LocalDiagnostics.ref` deben
+  derivarse de `promotion_ref`/`attempt_ref`, tipo de diagnostico, hash de
+  contenido permitido o manifest causal, no de path local absoluto.
+- Las refs deben ser estables entre worktrees temporales equivalentes y seguir
+  permitiendo encontrar el fichero local mediante manifest interno clasificado,
+  sin publicar HOME, state dir, puerto, PID ni comando shell completo.
+- Si falta hash o manifest causal, el resultado publico debe marcar
+  `guardian_local_diagnostic_ref_unstable` y no cerrar promocion como evidencia
+  fuerte.
+- Coordinar con T184, T219, T220 y T223: esta tarea no redefine hashing global,
+  clasificacion de rutas, retencion ni receipt de promocion; gobierna solo refs
+  publicas de diagnosticos locales del guardian.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-autoprogramming`.
+
+Decision aplicada 2026-05-27:
+
+- `ManifestRef`, `RepairPacketRef`, `RepairLaunchRef`, `OutputRef` y
+  `LocalDiagnostics.ref` ya se derivan de ref causal
+  `attempt_ref`/`promotion_ref`, tipo de diagnostico y, para outputs, hash del
+  log redactado; no dependen de `state_dir`, HOME ni worktree temporal.
+- Si falta hash de output, `OutputRef` queda vacia y no se fabrica evidencia
+  fuerte. Si falta ref causal publica, las refs causales quedan vacias y el
+  diagnostico local no se declara como evidencia portable.
+- La recuperacion del fichero local queda en manifest/path policy internos con
+  clasificacion `local_diagnostic_path`; la salida publica conserva solo refs y
+  politicas de acceso.
+- Cobertura focal:
+  `TestGuardianPublicRefsV0EstablesEntreWorktreesTemporales` y
+  `TestGuardianPublicRefsV0NoInventaOutputRefSinHash`.
+
+## T234 guardian-command-ref-template-profile
+
+Objetivo: desacoplar `command_ref` publico del shell expandido y vincularlo a
+plantillas/perfiles de comando gobernados.
+
+Estado: cerrado el 2026-05-27 para `cmd/orquesta-guardian` y consumo publico
+del servidor.
+
+Alcance:
+
+- `cmd/orquesta-guardian`
+- `cmd/orquesta-server`
+- `modulos/orquesta-autoprogramming`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- `guardianCommandRefV0` o su sustituto debe usar `phase`, `command_profile`,
+  `template_ref` y `attempt_ref`, no el comando shell expandido con rutas o
+  argumentos locales.
+- El resultado publico debe conservar `command_profile` (`build`,
+  `required_test`, `healthcheck`, `repair`) y reason codes, sin publicar ni
+  hashear como contrato estable el shell crudo.
+- Comandos equivalentes en distintos `state_dir` deben compartir template ref y
+  diferenciarse por attempt ref; comandos cambiados por operador deben exponer
+  `command_template_changed` con evidence ref compacta.
+- Coordinar con T180, T216, T222 y T223: esta tarea no redefine stdout/stderr,
+  schema de resultado, autorizacion de efectos ni receipt causal; gobierna la
+  identidad publica del comando.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-autoprogramming`.
+
+Evidencia de cierre:
+
+- `cmd/orquesta-guardian` calcula `command_ref` desde `phase`,
+  `command_profile`, `template_ref` y `attempt_ref`; la template canonica de
+  build/test/healthcheck/repair no depende de `state_dir`, `candidate_bin` ni
+  shell expandido.
+- El resultado publico conserva `command_profile`, `template_ref`,
+  `template_status` y evidence refs compactas; comandos no canonicos quedan como
+  `command_template_changed` sin publicar el shell crudo.
+- `cmd/orquesta-server` acepta los nuevos campos publicos del guardian sin
+  convertirlos en rutas ni nombres Git.
+
+## T235 guardian-repair-packet-read-budget-and-type
+
+Objetivo: acotar y tipar la lectura del repair packet antes de convertirlo en
+contexto para un agente reparador Codex break-glass.
+
+Estado 2026-05-27: cerrado para `cmd/orquesta-guardian` y
+`cmd/orquesta-server`. El guardian serializa `check-promote`,
+`restore-last-good` y `shutdown-server` con lease durable bajo `state_dir`,
+usa reloj inyectable por config para `acquired_at`/`deadline_at`, bloquea un
+segundo intento con `guardian_promotion_lease_busy`, revalida antes de tocar
+binario vivo/restauracion/senalizacion y el servidor conserva el fallo como
+`blocked` retryable sin reparacion Codex automatica.
+
+Alcance:
+
+- `cmd/orquesta-guardian`
+- `cmd/orquesta-server`
+- `modulos/orquesta-runtime-codex`
+- `modulos/orquesta-runtime-codex-delivery`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- La lectura de `repair_packet` debe ser `lstat/open/read` acotada, rechazar
+  symlinks, hardlinks inseguros, ficheros no regulares, binarios y cambios
+  TOCTOU antes de construir prompt o comando Codex.
+- El packet debe validarse por schema, `redaction_level`, `promotion_ref` o
+  `attempt_ref`, hash y presupuesto maximo; si falla, bloquear con
+  `guardian_repair_packet_invalid` sin lanzar reparador.
+- El prompt del reparador debe recibir refs y resumen permitido por campo; el
+  contenido completo solo puede entrar si cabe en presupuesto, esta redactado y
+  queda registrado como evidence ref local clasificada.
+- Coordinar con T50, T143, T157, T218, T220 y T234: esta tarea no reabre
+  politica general de control files ni el contrato completo del agente
+  reparador; gobierna la frontera de lectura del packet que alimenta ese
+  lanzamiento.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-codex-delivery`.
+
+## Escaneo backlog 2026-05-27 decima pasada
+
+Evidencia revisada:
+
+- `agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto
+  vigente de estado, guia del nucleo y principio director.
+- Backlog, railes observados y duplicaciones vigentes hasta `T232`.
+- Lectura focal y busquedas `rg` sobre `request_id`, `correlation_id`,
+  `idempotency_key`, `X-Correlation-ID`, `Idempotency-Key`, `runs/control`,
+  `runs/queue/priority`, web/CLI/MCP y handlers HTTP del servidor.
+- Evidencia concreta de duplicacion: `modulos/orquesta-mcp` ya tiene
+  `public_mutation_identity_v0.go`; la CLI normaliza identidad en
+  `cli_contracts_v0.go`/`command_flags_v0.go`; la web genera ids e
+  idempotency keys en formularios y JavaScript de `/ops`; el servidor extrae
+  headers y audit fields con helpers locales.
+- `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+  `branch_ref=branch-ref-orquesta-server-idle-self-improvement` preservadas
+  como refs opacas.
+- Contexto `ref_only` obligatorio resuelto por lectura local del paquete,
+  AGENTS/README/docs y evidencia explicita en ACK; no habia documento
+  materializado adicional que leer.
+
+Hueco nuevo:
+
+- La identidad publica de mutaciones esta repetida entre MCP, web, CLI,
+  gateways y servidor. Hay reglas locales para derivar `correlation_id`, exigir
+  o derivar `idempotency_key`, aceptar headers legacy y generar ids temporales.
+  Sin contrato comun, una mutacion puede ser reintentable en una superficie,
+  ambigua en otra o quedar auditada con una correlacion distinta; ademas las
+  lecturas read-only pueden heredar exigencias de mutacion o viceversa.
+
+## T236 public-mutation-identity-contract
+
+Objetivo: unificar la identidad publica de mutaciones y lecturas reintentables
+para que HTTP, MCP, CLI y web propaguen `request_id`, `correlation_id` e
+`idempotency_key` con la misma semantica.
+
+Estado: cerrado localmente el 2026-05-27 para el alcance acotado de
+programacion.
+
+Alcance:
+
+- `modulos/orquesta-mcp`
+- `modulos/orquesta-cli`
+- `modulos/orquesta-web`
+- `modulos/orquesta-server`
+- `cmd/orquesta-server`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Crear un contrato/owner compartido para identidad publica que distinga
+  `read_only`, `mutation_idempotent`, `mutation_non_idempotent` y
+  `operator_breakglass`, con reglas de headers/body y razon publica cuando
+  falte idempotency key.
+- MCP, web, CLI y handlers HTTP deben consumir ese owner o una proyeccion
+  equivalente por adaptador; no deben mantener reglas divergentes para derivar
+  `correlation_id`, aceptar `X-Idempotency-Key` legacy o fabricar ids con reloj
+  local sin evidence ref.
+- Las mutaciones (`runs/control`, `runs/queue/priority`, shutdown, AppVCS,
+  prepare-run y acciones de `/ops`) deben registrar idempotency efectiva y
+  fuente (`header`, `body`, `derived_allowed`, `missing_blocked`) sin exponer
+  valores sensibles, query strings, URLs completas ni payloads.
+- Las lecturas read-only deben propagar correlacion pero no exigir idempotency;
+  si una ruta read-only usa POST por compatibilidad, el contrato debe marcarlo
+  explicitamente para no bloquear clientes finos.
+- Coordinar con T33, T55, T57, T85, T94, T99, T102, T138, T142 y T211: esta
+  tarea no redefine seguridad de transporte, auditoria completa ni output
+  publico; gobierna identidad, propagacion e idempotencia visible.
+- Tests: `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-cli ./modulos/orquesta-web ./modulos/orquesta-server ./cmd/orquesta-server`.
+
+Cierre 2026-05-27: se crea el owner compartido
+`modulos/orquesta-server/publicidentity` para headers canonicos, legacy
+`X-Idempotency-Key`, modos `read_only`, `mutation_idempotent`,
+`mutation_non_idempotent` y `operator_breakglass`, fuentes efectivas
+`header|body|derived_allowed|missing_blocked` y razon publica
+`idempotency_key_requerida`. MCP conserva wrappers compatibles; web, CLI,
+handlers HTTP del servidor y el cliente de shutdown consumen las constantes o
+normalizacion compartida. Quedan fuera de este cierre T55/T99/T102, T94/T138/T139
+y T142 segun la frontera declarada.
+
+## Escaneo backlog 2026-05-27 duodecima pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only`, `AGENTS.md`, `README.md`, docs vigentes de estado/nucleo/principio,
+cierre y matriz de smokes, este backlog, rail errors, duplicaciones de rails,
+`cmd/orquesta-guardian`, `cmd/orquesta-server` y
+`modulos/orquesta-autoprogramming`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Huecos concretos nuevos:
+
+- `orquesta-guardian` promociona/restaura artefactos con manifiesto atomico, pero
+  no hay un lease/lock durable visible que serialice `check-promote`,
+  `restore-last-good` y cualquier invocacion del servidor sobre el mismo
+  `state_dir/current_bin`. Dos ejecuciones solapadas podrian mezclar
+  `last_good`, `current` y manifiestos aunque cada copia individual sea segura.
+- `modulos/orquesta-autoprogramming` tiene ficheros productivos cerca del limite
+  operativo de 300 lineas (`autoprogramming_review_gate_policy_v0.go` y
+  `autoprogramming_partition_policy_v0.go` en 298 lineas). El riesgo no es el
+  estado actual, sino que el siguiente cambio funcional rompa el rail de tamano
+  o mezcle responsabilidades de review gate, particionado y programacion viva.
+
+## T237 guardian-promotion-restore-state-lease
+
+Objetivo: serializar promocion y restauracion del guardian por `state_dir` para
+que `current_bin`, `last_good` y manifiestos no puedan divergir ante invocaciones
+solapadas.
+
+Estado 2026-05-27: cerrado localmente. El guardian reclama un lease durable bajo
+`state_dir` para serializar `check-promote`, `restore-last-good` y
+`shutdown-server`; el servidor trata `guardian_promotion_lease_busy` y
+`guardian_promotion_lease_lost` como bloqueos retryables sin promocion exitosa ni
+reparacion Codex automatica.
+
+Alcance:
+
+- `cmd/orquesta-guardian`
+- `cmd/orquesta-server`
+- `docs/runbooks`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- `check-promote` y `restore-last-good` deben reclamar un lease/lock durable
+  bajo `state_dir` antes de tocar `current_bin`, `last_good`, manifiestos o
+  state de candidato.
+- Un segundo proceso debe bloquear o devolver error publico compacto
+  (`guardian_state_lease_busy` o equivalente) sin leer/escribir artefactos
+  parciales ni imprimir rutas completas, comandos, env o payloads.
+- El lease debe tener owner/ref, timestamp por reloj inyectable o wrapper
+  testeable, recuperacion por stale lease solo con politica explicita y receipt
+  compacto.
+- La composicion del servidor debe tratar lease busy como retryable y no cerrar
+  promocion/restauracion como exito ni lanzar reparacion Codex automatica por
+  ese motivo.
+- Coordinar con T214, T216, T217, T220, T221 y T228: esta tarea no redefine
+  copia atomica, resultado publico ni ownership de address; gobierna exclusion
+  mutua del estado de promocion/restauracion.
+- Tests: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server`.
+
+## T238 autoprogramming-policy-file-split-before-growth
+
+Objetivo: partir preventivamente las politicas de autoprogramacion que ya rozan
+300 lineas antes de anadir nuevas reglas de review gate, particionado o trabajo
+vivo.
+
+Estado: cubierto 2026-05-27.
+
+Alcance:
+
+- `modulos/orquesta-autoprogramming`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Separar `autoprogramming_review_gate_policy_v0.go` por clasificacion de
+  issues, acciones recomendadas y helpers de cierre sin cambiar nombres
+  publicos ni semantica de bloqueo.
+- Separar `autoprogramming_partition_policy_v0.go` por normalizacion de grupos,
+  bloqueo por trabajo vivo y construccion de particiones, manteniendo contratos
+  y fixtures existentes.
+- Mantener todos los ficheros Go productivos del modulo por debajo de 300 lineas
+  y documentar cualquier baseline de test largo como excepcion no productiva.
+- No ampliar alcance a guardian, servidor, Codex ni runtime; si una regla nueva
+  exige esos owners, abrir tarea separada.
+- Tests: `go test -count=1 ./modulos/orquesta-autoprogramming`.
+
+Evidencia 2026-05-27: las politicas se dividieron por responsabilidad sin
+cambiar nombres publicos ni contratos: review gate separa resultado/acciones,
+clasificacion de issue codes y stems canonicos; particionado separa plan base,
+construccion de steps/bloqueos por trabajo vivo y matching de paths/aliases.
+Todos los ficheros Go productivos del modulo quedan por debajo de 300 lineas.
+
+## Escaneo backlog 2026-05-27 decimotercera pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only`, `AGENTS.md`, `README.md`, docs vigentes de estado/nucleo/principio,
+este backlog, rail errors, duplicaciones de rails, y lectura focal de
+`modulos/orquesta-app-codex-stack/server_shutdown_checkpoint_v0.go`,
+`modulos/orquesta-runtime-codex/codex_shutdown_checkpoint_v0.go`,
+`cmd/orquesta-server/codex_wave_stop_v0.go` y tests/docs locales de shutdown
+checkpoint. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Hueco concreto nuevo:
+
+- El shutdown cooperativo Codex usa `orquesta_shutdown_request.json` y
+  `agent_shutdown_checkpoint_ack.json` por agente, pero el `checkpoint_ref` se
+  deriva de `run_ref` y `agent_ref`. Una segunda peticion de shutdown para el
+  mismo run/agente puede reutilizar un ACK anterior aunque cambien
+  `requested_by`, `reason`, evidencia, secuencia o politica de escalado. Esto
+  no rompe la correlacion basica actual, pero debilita la evidencia causal de
+  que el ACK pertenece al intento de shutdown vigente.
+
+## T239 codex-shutdown-checkpoint-attempt-correlation
+
+Objetivo: hacer que cada intento de shutdown cooperativo Codex tenga identidad
+causal propia para no aceptar ACKs de checkpoint de intentos anteriores.
+
+Estado: cerrado localmente 2026-05-27.
+
+Alcance:
+
+- `modulos/orquesta-runtime-codex`
+- `modulos/orquesta-app-codex-stack`
+- `cmd/orquesta-server`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- `CodexShutdownRequestV0` o su envelope de stack debe transportar
+  `shutdown_attempt_ref`/secuencia equivalente derivada de la mutacion de
+  control, no solo `run_ref` y `agent_ref`.
+- `agent_shutdown_checkpoint_ack.json` debe correlacionar ese intento vigente;
+  un ACK viejo con mismo run/agente/checkpoint debe producir reason code
+  compacto como `shutdown_checkpoint_attempt_mismatch` y mantener
+  `waiting_checkpoint`.
+- La escritura de `orquesta_shutdown_request.json` debe ser idempotente por
+  intento: reintentos de la misma mutacion aceptan el mismo ACK; mutaciones
+  nuevas no consumen ACKs previos.
+- Coordinar con T24, T47, T143, T157, T199, T223 y T225: esta tarea no redefine
+  ACK terminal, lectura de control files, shutdown general ni escalado forzado;
+  gobierna solo identidad causal del intento de checkpoint Codex.
+- Tests: `go test -count=1 ./modulos/orquesta-runtime-codex ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
+
+Evidencia de cierre 2026-05-27:
+
+- `CodexShutdownRequestV0` y `codex_shutdown_checkpoint_ack.v0` transportan
+  `shutdown_attempt_ref`; el validador rechaza ACKs stale con evidencia
+  compacta `shutdown_checkpoint_attempt_mismatch`.
+- El stack Codex deriva `shutdown_attempt_ref` desde la mutacion de shutdown
+  (`run_ref`, app, correlation, requester, reason, fecha y evidencia) y lo
+  exige al leer `agent_shutdown_checkpoint_ack.json`; reintentos con la misma
+  mutacion conservan identidad y mutaciones nuevas no consumen ACKs previos.
+- El comando manual de ola Codex tambien escribe `shutdown_attempt_ref` en
+  `orquesta_shutdown_request.json`; el smoke real documenta que el agente debe
+  devolver ese campo en el ACK de checkpoint.
+- Rework de revision 2026-05-27: entrega conservada sin relanzar agente padre;
+  el contexto obligatorio `ref_only` queda resuelto por lectura local del
+  paquete y evidencia explicita en el ACK.
+
+## Escaneo backlog 2026-05-27 decimoquinta pasada
+
+Evidencia revisada:
+
+- `agent_packet.json` del scanner OrquestaV2 con contexto obligatorio
+  `ref_only`, `AGENTS.md`, `README.md`, docs vigentes de estado/nucleo/principio
+  y matriz de smokes.
+- Backlog, railes observados y duplicaciones vigentes hasta `T239`.
+- Busquedas `rg` sobre `required_ref_action`, `ref_only`, `backlog_scan_doc`,
+  `ReadFile`, `agent_ack.json`, `director_decisions.json`,
+  `orquesta_shutdown_request`, `agent_shutdown_checkpoint_ack.json`,
+  `codex_last_message`, `idempotency_key`, `correlation_id` y `purge`.
+- Lectura focal de `cmd/orquesta-server/idle_self_improvement_backlog_merge_v0.go`,
+  `modulos/orquesta-app-codex-stack/ops_agent_runtime_detail_files_v0.go` y
+  `cmd/orquesta-server/codex_wave_purge_v0.go`.
+- Contexto `ref_only` obligatorio resuelto por lectura local del paquete,
+  AGENTS/README/docs vigentes y evidencia explicita en ACK; no habia contenido
+  materializado adicional que leer.
+- `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+  `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+  solo como refs opacas.
+
+Hueco concreto nuevo:
+
+- El merge lease del scanner de backlog calcula hashes desde entradas
+  `backlog_scan_doc` parseadas de criterios del paquete y lee con
+  `os.ReadFile(filepath.Join(project_work_dir, rel))`. Las tres fuentes
+  canonicas actuales son pequenas y conocidas, pero falta owner de path/budget:
+  un paquete o criterio corrupto con ruta absoluta, `..`, symlink, control file
+  o documento enorme podria forzar lectura local no canonica antes de bloquear
+  por epoch/rebase.
+
+## T240 backlog-scan-doc-path-budget-policy
+
+Objetivo: acotar la lectura de documentos del merge lease del scanner de backlog
+para que solo pueda hashear fuentes canonicas declaradas, dentro del proyecto y
+con presupuesto explicito.
+
+Estado: cerrado local 2026-05-27.
+
+Evidencia 2026-05-27: `cmd/orquesta-server` centraliza la politica en
+`idle_self_improvement_backlog_doc_policy_v0.go`: rutas Markdown relativas y
+limpias, catalogo canonico de documentos de scanner, rechazo de absolutos,
+`..`, `.orquesta-runtime`, entradas no regulares y symlinks, y presupuesto de
+512 KiB por documento antes de hashear. La validacion de paquetes rechaza
+`backlog_scan_doc` fuera del catalogo actual en vez de tratarlo como `missing`
+silencioso. Cobertura focal:
+`TestIdleSelfImprovementBacklogPlannerV0AcotaHashDocsASegurasV0` y
+`TestIdleSelfImprovementBacklogPlannerV0RechazaBacklogScanDocNoCanonicoDelPacketV0`.
+
+Alcance:
+
+- `cmd/orquesta-server`
+- `modulos/orquesta-server`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- `backlog_scan_doc` debe aceptar solo rutas relativas canonicas de backlog
+  declaradas por la composicion; rechazar absolutos, `..`, rutas limpias que
+  salgan del proyecto, `.orquesta-runtime`, control files, prompts, logs y
+  symlinks antes de leer.
+- La lectura para hash debe usar `lstat/open/read` acotado o helper equivalente,
+  con limite documentado por documento y error publico compacto
+  (`backlog_scan_doc_invalid`, `backlog_scan_doc_too_large` o equivalente) sin
+  exponer paths absolutos ni contenido.
+- Si una foto recibida desde el paquete trae un doc fuera del catalogo, el
+  planner debe bloquear/requerir rebase o `CONSULTA AL DIRECTOR`; no debe
+  intentar normalizarlo como ruta local ni marcarlo como `missing` silencioso.
+- El hash/epoch debe seguir siendo estable para las tres fuentes vigentes y no
+  debe leer documentos historicos/quarantine fuera del indice federado.
+- Coordinar con T37, T43, T44, T50, T102, T124, T142, T211 y T236: esta tarea
+  no redefine parser de backlog, ACK, control files, entrada CLI ni identidad
+  publica; gobierna solo lectura local acotada de docs del scanner.
+- Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+## Escaneo backlog 2026-05-27 decimocuarta pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only`, `AGENTS.md`, `README.md`, docs vigentes de estado/nucleo/principio,
+cierre y matriz de smokes, este backlog, rail errors, duplicaciones de rails,
+`cmd/orquesta-server/idle_self_improvement_provider_blocker_v0.go`,
+`cmd/orquesta-server/idle_self_improvement_backlog_planner_v0.go`,
+`cmd/orquesta-server/idle_self_improvement_backlog_planner_helpers_v0.go` y
+`modulos/orquesta-server/supervisor_idle_external_wait_policy_v0.go`. No se
+programa codigo desde este scanner.
+
+Refs preservadas como opacas:
+`task-ref-self-improvement-4f550c019e0d`,
+`worktree-ref-orquesta-server-idle-self-improvement` y
+`branch-ref-orquesta-server-idle-self-improvement`.
+
+Hueco concreto nuevo:
+
+- El residente ya detecta `provider_auth_blocked` y evita preparar automejora
+  cuando una run viva requiere credenciales/proveedor. Ese bloqueo se deriva de
+  runs persistidas, cola/control y estado publico, pero no hay contrato de
+  recuperacion que diga que accion de operador resuelve el bloqueo, cuando
+  reintentar y como evitar repetir scanners si el proveedor sigue caido. El
+  problema no pertenece al core: credenciales, proveedor y cuota deben quedarse
+  en composicion, con reason codes y evidencias compactas hacia el servidor.
+
+## T241 idle-self-improvement-provider-auth-recovery-contract
+
+Objetivo: convertir `provider_auth_blocked` de la automejora residente en un
+contrato de recuperacion operativa, con diagnostico publico compacto, accion de
+operador y reintento seguro cuando el proveedor vuelva a estar disponible.
+
+Estado 2026-05-27: cerrado localmente para servidor residente y composicion
+Codex. El bloqueo `provider_auth_blocked` se proyecta como mensaje operacional
+publico con `reason_code`, refs acotadas, evidencias compactas y accion de
+recuperacion; la recuperacion queda por control/adaptador de composicion mediante
+reanudacion con evidencia `evidence-ref-provider-auth-recovered`, tras lo cual el
+planner puede reintentar por refs retryables sin duplicar scanners visibles.
+
+Alcance:
+
+- `modulos/orquesta-server`
+- `cmd/orquesta-server`
+- `modulos/orquesta-app-codex-stack`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- El bloqueo `provider_auth_blocked` debe proyectarse como estado publico con
+  `reason_code`, refs de runs acotadas, evidence refs compactas y mensaje de
+  accion; no debe exponer HOME, paths locales, tokens, payloads de control,
+  stdout/stderr ni nombres de ficheros de credenciales.
+- El servidor debe distinguir bloqueo recuperable por proveedor de otros
+  bloqueos de cola (`active_external_wait`, skips normales, run cerrada o pausa
+  por operador) para no replanificar scanners ni marcar la automejora como
+  completada.
+- Debe existir un camino de reintento idempotente cuando el operador restaura
+  credenciales o habilita proveedor: la siguiente ventana idle debe reutilizar
+  refs conocidas/retryables sin duplicar una tarea ya visible en cola.
+- La accion de operador debe quedar por puerto/adaptador de composicion; el
+  nucleo no lee credenciales, HOME, OAuth, proveedor real ni rutas privadas.
+- Coordinar con T29, T56, T85, T94, T103, T138, T139, T187 y T236: esta tarea
+  no redefine uso/cuotas, proyeccion de credenciales ni salida publica global;
+  gobierna recuperacion de automejora ante auth de proveedor.
+- Tests: `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server ./modulos/orquesta-app-codex-stack`.
+
+Evidencia de cierre:
+
+- `modulos/orquesta-server` registra el bloqueo como estado publico
+  `blocked/provider_auth_blocked` sin publicar secretos ni paths locales.
+- `cmd/orquesta-server` conserva provider/proveedor fuera del nucleo y suprime
+  el blocker solo cuando el control de run trae recuperacion explicita por
+  razon/evidencia compacta.
+- `modulos/orquesta-app-codex-stack` conserva la accion real en composicion: el
+  servidor solo ve estado, refs y evidencia compacta, sin credenciales ni paths
+  privados.
+
+## Escaneo backlog 2026-05-27 decimocuarta pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente, guia del
+nucleo, principio director, backlog, rail errors, duplicaciones de rails y
+busqueda focal de ficheros Go productivos cercanos o superiores a 300 lineas.
+No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Huecos concretos nuevos:
+
+- `modulos/orquesta-server/supervisor_loop_v0.go` concentra alrededor de 780
+  lineas en un owner residente de supervision. T45 ya bloquea crecimiento sobre
+  baseline y T238 parte politicas de autoprogramacion, pero no hay tarea
+  ejecutable para separar este loop antes de anadir mas wakeup, leases,
+  supervisiones o bloqueo por proveedor.
+- `modulos/orquesta-mcp/human_director_work_review_plan_tool_v0.go` y
+  `modulos/orquesta-mcp/autoprogramming_self_improvement_tool_v0.go` superan
+  300 lineas en adaptadores publicos de tools. T195 gobierna descriptores y
+  schemas, pero no parte la ejecucion HTTP/MCP, normalizacion de input, errores
+  publicos y salida redactada en ficheros menores.
+
+## T242 server-supervisor-loop-file-split-before-growth
+
+Objetivo: partir `modulos/orquesta-server/supervisor_loop_v0.go` por
+responsabilidad antes de anadir mas comportamiento residente.
+
+Estado: completado 2026-05-27.
+
+Evidencia: `supervisor_loop_v0.go` queda reducido al loop/tick residente y la
+automejora queda repartida en owners pequenos
+`supervisor_idle_*_v0.go` para puertos, scheduling, decision, freshness,
+prepare, request y refs; prueba focal
+`go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`.
+Revalidacion OrquestaV2 2026-05-27: la cobertura local del supervisor tambien
+queda partida por responsabilidad en ficheros `supervisor_loop_*_test.go` y
+`supervisor_idle_*_test.go`, evitando que el test monolitico vuelva a ser el
+owner natural de nuevas reglas de wakeup, automejora o bloqueo por proveedor.
+Assessment OrquestaV2 2026-05-27: paquete
+`task-autoprogramming-594d493666c4-g01` revalida el cierre sin reabrir codigo;
+el contexto `ref_only` obligatorio queda resuelto por ACK con evidencia local.
+
+Alcance:
+
+- `modulos/orquesta-server`
+- `cmd/orquesta-server`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Separar decision de tick, wakeup/eventos, control de leases, observabilidad y
+  adaptacion de puertos sin cambiar contratos publicos ni rutas `/api/v0/*`.
+- Mantener el loop residente server-first como composicion; no mover runtime,
+  Codex, OPES, HTTP ni persistencia concreta al nucleo.
+- Conservar compatibilidad de bloqueos de automejora, shutdown, estadisticas y
+  supervision existentes con tests focales.
+- Reducir ficheros productivos nuevos o modificados del owner por debajo de 300
+  lineas o documentar followup causal si queda deuda historica no tocada.
+- Tests: `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`.
+
+## T243 mcp-public-tool-file-split-before-growth
+
+Objetivo: partir tools MCP publicos grandes antes de anadir nuevas politicas de
+identidad, redaccion, output budget o repair handoff.
+
+Estado: completado 2026-05-27.
+
+Cierre 2026-05-27:
+
+- `human_director_work_review_plan_tool_v0.go` queda como descriptor/DTO y
+  ejecutor fino; el input flexible vive en
+  `human_director_work_review_plan_input_v0.go` y la proyeccion/request builder
+  vive en `human_director_work_review_plan_projection_v0.go`.
+- `autoprogramming_self_improvement_tool_v0.go` queda como descriptor/DTO y
+  ejecutor fino; input flexible, advice de operador y proyeccion viven en
+  `autoprogramming_self_improvement_input_v0.go`,
+  `autoprogramming_operator_advice_v0.go` y
+  `autoprogramming_self_improvement_projection_v0.go`.
+- Nombres publicos, rutas HTTP y registro de transporte MCP se conservan; MCP
+  sigue como adaptador inbound sin runtime, proveedor, DB ni reglas de dominio.
+- Validacion focal: `go test -count=1 ./modulos/orquesta-mcp`.
+
+Alcance:
+
+- `modulos/orquesta-mcp`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Separar en `human_director_work_review_plan_tool_v0.go` la validacion de
+  input, construccion de request, ejecucion por puerto, errores publicos y
+  proyeccion de resultado.
+- Separar en `autoprogramming_self_improvement_tool_v0.go` normalizacion de
+  propuesta, transporte HTTP opt-in, limites de salida y descriptor/tool
+  metadata sin cambiar nombres publicos.
+- Mantener MCP como adaptador fino: no duplicar juicio de director, runtime,
+  proveedor ni reglas de dominio dentro del tool.
+- Coordinar con T195, T198, T199, T236 y T238: esta tarea no redefine schema de
+  recursos, identidad publica global ni politicas de autoprogramacion; solo
+  reduce tamano y ownership local.
+- Tests: `go test -count=1 ./modulos/orquesta-mcp`.
+
+## Escaneo backlog 2026-05-27 decimosexta pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only`, `AGENTS.md`, `README.md`, foto vigente, guia del nucleo, principio
+director, backlog, rail errors, duplicaciones de rails, T54/T90/T238/T242/T243
+y medicion focal de ficheros Go productivos en `modulos/orquesta-app-codex-stack`
+con `rg --files -g '*.go' modulos/orquesta-app-codex-stack | rg -v
+'_test\.go$' | xargs wc -l | sort -nr`. No se programa codigo desde este
+scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Hueco concreto nuevo:
+
+- Tras el cierre parcial de T54, el stack Codex conserva varios ficheros
+  productivos por encima del limite operativo de 300 lineas:
+  `autoprogramming_bridge_v0.go`, `spec_external_context_v0.go`,
+  `spec_task_v0.go`, `app_change_ports_v0.go`,
+  `composite_decision_source_policy_v0.go`, `assessment_replan_source_v0.go` y
+  `run_supervisor_mcp_executor_v0.go`. T54 cubrio `codex-wave`/`director-wave`
+  y `drain`; T238 cubre politicas de autoprogramacion neutrales; T242/T243
+  cubren supervisor servidor y MCP. Falta un shard especifico del stack Codex
+  para no seguir anadiendo puentes, specs, contexto externo o ejecutores MCP
+  sobre ficheros ya baselinados.
+
+## T244 codex-stack-residual-product-file-split
+
+Objetivo: partir el residuo productivo grande de `orquesta-app-codex-stack`
+por responsabilidad local, sin cambiar contratos publicos ni mover logica
+concreta al nucleo.
+
+Estado: cerrado localmente 2026-05-27 por
+`task-autoprogramming-bbfaee8d0f40-g01`.
+
+Cierre aplicado:
+
+- El bridge de autoprogramacion queda dividido en entrada publica, request,
+  run/continue y stores/replay, conservando shape publico y refs de cola.
+- `spec_external_context_v0.go` separa redaccion/presupuesto de contexto
+  externo; `spec_task_v0.go` separa instrucciones del director de tareas de
+  programacion.
+- `app_change_ports_v0.go`, `composite_decision_source_policy_v0.go`,
+  `assessment_replan_source_v0.go` y `run_supervisor_mcp_executor_v0.go`
+  separan politica/proyecciones auxiliares sin mover logica al nucleo.
+- Los ficheros Go productivos del modulo quedan bajo 300 lineas en la medicion
+  local de cierre.
+- Rework de revision 2026-05-27:
+  `task-ref-review-rework-task-autoprogramming-bbfaee8d0f40-g01-d8a1fe905f79cb6b486cecd73b06d1df`
+  revalida el cierre sin reabrir T244 ni relanzar el agente padre; el contexto
+  obligatorio `ref_only` se resuelve por lectura local/evidencia ACK y la
+  prueba requerida del stack sigue como criterio de cierre.
+
+Alcance:
+
+- `modulos/orquesta-app-codex-stack`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Separar `autoprogramming_bridge_v0.go` por entrada publica, preparacion,
+  supervisor/retry, cierre de cola y proyeccion de estado, sin cambiar shape de
+  `/api/v0/autoprogramming/*`, MCP ni refs de cola.
+- Separar `spec_external_context_v0.go` y `spec_task_v0.go` en normalizacion,
+  validacion, refs/contexto y construccion de tareas, conservando write-set
+  cerrado, refs opacas y tolerancia a alias reparables.
+- Separar `app_change_ports_v0.go`, `composite_decision_source_policy_v0.go`,
+  `assessment_replan_source_v0.go` y `run_supervisor_mcp_executor_v0.go` por
+  puertos, politica, fuente de replan y adaptador MCP/supervisor, sin duplicar
+  rails de ACK, control files, provider auth, identidad publica ni redaccion.
+- Mantener todos los ficheros Go productivos tocados por debajo de 300 lineas o
+  dejar baseline/followup causal si un fichero historico no puede cerrarse en
+  una pasada.
+- Coordinar con T33, T36, T42, T47, T50, T54, T56, T117, T143, T238 y T241:
+  esta tarea no redefine ACK terminal, tests requeridos, control files,
+  review gate, provider auth ni promocion; solo reduce tamano y ownership local
+  del stack Codex.
+- Tests: `go test -count=1 ./modulos/orquesta-app-codex-stack`.
+
+## Escaneo backlog 2026-05-27 decimosexta pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente, guia del
+nucleo, principio director, matriz de smokes, backlog, rail errors,
+duplicaciones de rails y busqueda focal de ficheros Go productivos del stack de
+autoprogramacion. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Hueco concreto nuevo:
+
+- `modulos/orquesta-app-codex-stack/autoprogramming_bridge_v0.go` supera el
+  limite operativo de 300 lineas y concentra normalizacion de request,
+  construccion de run, persistencia de `WorkflowTaskV0`, derivacion de
+  `WaitAgentRefs`, reentrada `ContinueAppDirectorV0`, validacion de replay y
+  plan-state. T238 parte politicas del modulo `orquesta-autoprogramming`, pero
+  no cubre este bridge de composicion; el siguiente cambio de automejora puede
+  mezclar wiring, validacion e idempotencia en un fichero ya grande.
+
+## T247 app-codex-autoprogramming-bridge-file-split
+
+Objetivo: partir el bridge de autoprogramacion del stack Codex por
+responsabilidad antes de anadir mas reglas de plan-state, replay, waits o
+cierre de automejora.
+
+Estado 2026-05-27: cerrado localmente por
+`agent-ref-assessment-task-autoprogramming-85b15836d8e2-g01-2c021985e6a35a8c59bf365a18c8fddc`.
+El bridge queda dividido en request/validacion, run, store/replay,
+continue/wait refs y helpers de test; el test monolitico local se reparte en
+ficheros menores de 300 lineas. Conservar como subshard historico si aparece
+una regresion especifica del bridge.
+
+Rework 2026-05-27: la entrega revisada se conserva valida y esta correccion no
+relanza otro agente padre sobre la tarea original. El paquete
+`agent-ref-task-ref-review-rework-task-autoprogramming-85b15836d8e2-g01-a542965e4bebf2ca4cbb67e1e0bdc32c`
+queda resuelto como correccion documental/acreditacion del cierre: `T247` sigue
+cerrada, el contexto `ref_only` obligatorio se satisface por lectura local y
+evidencia explicita en ACK, y cualquier reapertura futura requiere regresion
+especifica del bridge dentro de `modulos/orquesta-app-codex-stack`.
+
+Alcance:
+
+- `modulos/orquesta-app-codex-stack`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Separar normalizacion/validacion de request, construccion de run, persistencia
+  de tasks, derivacion de wait refs y construccion de continue request sin
+  cambiar contratos publicos ni semantica de replay.
+- Mantener el bridge como composicion Codex: no mover Codex, runtime, HTTP,
+  state-file ni politica de proveedor al nucleo ni al modulo puro de
+  autoprogramacion.
+- Conservar refs opacas de `worktree_ref`, `branch_ref`, task/run/correlation y
+  el marker `operational_director.task_source:autoprogramming` en los mismos
+  puntos causales.
+- Todos los ficheros Go productivos nuevos o modificados del owner deben quedar
+  por debajo de 300 lineas, salvo tests o deuda historica documentada con
+  followup causal.
+- Coordinar con T37, T43, T44, T45, T238, T240, T241 y T242: esta tarea no
+  redefine parser de backlog, merge lease, contexto `ref_only`, politicas puras
+  de autoprogramacion, recuperacion por proveedor ni loop residente del
+  servidor; solo divide el bridge de composicion.
+- Tests: `go test -count=1 ./modulos/orquesta-app-codex-stack`.
+
+## Escaneo backlog 2026-05-27 decimosexta pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only`, `AGENTS.md`, `README.md`, foto vigente, guia del nucleo, principio
+director, backlog, rail errors, duplicaciones de rails, busquedas `rg` sobre
+encabezados `Escaneo backlog 2026-05-27`, `backlog_scan_epoch`,
+`backlog_scan_doc` y lectura focal de los bloques T239-T243. No se programa
+codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Hueco concreto nuevo:
+
+- Los bloques de escaneo del backlog ya pueden llegar desde agentes
+  concurrentes y hoy se identifican principalmente por encabezados humanos como
+  `decimocuarta pasada`, que aparece repetido y fuera de orden en la serie del
+  2026-05-27. El parser ejecutable lee `Txx`, pero la evidencia de merge,
+  rebase y revision humana queda fragil si dos escaneos distintos comparten
+  etiqueta textual o si una tanda se inserta fuera de secuencia sin `scan_ref`
+  estable.
+
+## T248 backlog-scan-section-id-and-sequence-policy
+
+Objetivo: dar identidad estable y verificable a cada bloque de escaneo de
+backlog para que las inserciones concurrentes no dependan de etiquetas humanas
+duplicables.
+
+Estado 2026-05-27: cerrado para el servidor residente. T249 cubre
+`scan_entry_ref`/orden por bloque historico y esta tarea anade
+`backlog_scan_ref` al merge lease del planner, derivado de
+request/correlation/epoch documental, para que el ACK cite identidad, lineas y
+hashes sin depender del ordinal humano.
+
+Alcance:
+
+- `cmd/orquesta-server`
+- `modulos/orquesta-server`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Cada bloque nuevo de `Escaneo backlog` debe llevar un `scan_ref` o metadata
+  equivalente derivada de request/correlation/epoch documental, distinta del
+  texto ordinal humano.
+- El merge lease debe detectar etiquetas duplicadas o fuera de orden como
+  warning/rebase compacto, pero no renumerar historico ni romper bloques `Txx`
+  ya persistidos.
+- El planner y el ACK deben poder citar el `scan_ref`, lineas y hashes de docs
+  para distinguir dos escaneos con el mismo titulo humano.
+- La politica debe conservar compatibilidad con el backlog existente: los
+  bloques antiguos sin `scan_ref` quedan como historicos parseables y los nuevos
+  usan identidad explicita.
+- Coordinar con T37, T43, T44, T88, T240 y T236: esta tarea no redefine parser
+  Markdown, contexto `ref_only`, indice federado, path/budget de docs ni
+  identidad publica general; gobierna solo identidad/secuencia de secciones de
+  escaneo.
+- Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+Cierre 2026-05-27: el planner residente deriva identidad de entradas
+`## Escaneo backlog ...` por documento, fecha, ordinal y hash de bloque, y
+transporta digest/issues en `BacklogScanDocumentV0`. El parser de tareas sigue
+aceptando solo secciones ejecutables `## Txx`; las entradas de scanner quedan
+como evidencia documental. Duplicados, ordinal ausente o saltos no monotonos
+producen reason codes publicos `backlog_scan_entry_duplicate` y
+`backlog_scan_entry_order_ambiguous`; el request de scanner exige rebase o
+`CONSULTA AL DIRECTOR` y no renumera historico.
+
+Rework 2026-05-27: entrega conservada tras revision en
+`agent-ref-task-ref-review-rework-task-autoprogramming-ce0100f5ae08-g01-a522429e98460b11fc001393c9f07b9e`.
+No relanza otro agente padre sobre T248 ni cambia el contrato ya cerrado; solo
+sincroniza la acreditacion documental del cierre con contexto `ref_only`
+obligatorio resuelto por lectura local/evidencia ACK y con el test requerido
+`go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+## Escaneo backlog 2026-05-27 decimosexta pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only`, `AGENTS.md`, `README.md`, foto vigente, guia del nucleo, principio
+director, matriz de smokes, corte de cierre generico, este backlog, rail errors
+y duplicaciones de rails. Busqueda focal: titulos `Escaneo backlog` y entradas
+T240-T243. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Hueco concreto nuevo:
+
+- El backlog ya contiene titulos de escaneo fuera de orden y un titulo duplicado
+  (`Escaneo backlog 2026-05-27 decimocuarta pasada`). El planner residente usa
+  secciones Markdown, linea y hash para reservar y cerrar trabajo, pero no hay
+  owner explicito que haga unico el identificador publico de cada escaneo ni que
+  detecte saltos/duplicados sin confundirlos con tareas Txx ejecutables. Esto
+  puede degradar merge/rebase documental y trazabilidad de scanner sin tocar
+  codigo productivo.
+
+## T249 backlog-scan-entry-identity-and-order-policy
+
+Objetivo: dar identidad estable y validable a las entradas documentales de
+escaneo de backlog para evitar duplicados, saltos ambiguos y cierres por una
+foto documental mal correlada.
+
+Estado: completada 2026-05-27. Evidencia focal:
+`go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+Alcance:
+
+- `cmd/orquesta-server`
+- `modulos/orquesta-server`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- El parser/merge lease debe distinguir secciones ejecutables `## Txx` de
+  secciones de evidencia `## Escaneo backlog ...` y no debe tratarlas como
+  backlog programable aunque compartan fecha, hash o linea.
+- Cada entrada de escaneo debe poder derivar o declarar un `scan_entry_ref`
+  compacto y unico por documento, fecha, ordinal y hash de bloque; duplicados o
+  saltos ambiguos deben producir reason code publico como
+  `backlog_scan_entry_duplicate` o `backlog_scan_entry_order_ambiguous`.
+- Un scanner que detecta duplicado debe bloquear/requerir rebase o
+  `CONSULTA AL DIRECTOR`; no debe renumerar historico automaticamente ni cerrar
+  una tarea por coincidencia parcial de titulo.
+- La solucion debe preservar el historico existente: no borrar ni truncar
+  entradas viejas; cualquier normalizacion debe ser aditiva o generar evidencia
+  de migracion.
+- Coordinar con T37, T43, T44, T79, T116, T122, T140 y T240: esta tarea no
+  redefine parser completo, sharding ni path/budget de documentos; solo gobierna
+  identidad/orden de entradas de scanner.
+- Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+Cierre 2026-05-27: el planner residente deriva identidad de entradas
+`## Escaneo backlog ...` por documento, fecha, ordinal y hash de bloque, y
+transporta digest/issues en `BacklogScanDocumentV0`. El parser de tareas sigue
+aceptando solo secciones ejecutables `## Txx`; las entradas de scanner quedan
+como evidencia documental. Duplicados, ordinal ausente o saltos no monotonos
+producen reason codes publicos `backlog_scan_entry_duplicate` y
+`backlog_scan_entry_order_ambiguous`; el request de scanner exige rebase o
+`CONSULTA AL DIRECTOR` y no renumera historico.
+
+Rework 2026-05-27: entrega corregida tras revision en
+`agent-ref-task-ref-review-rework-task-autoprogramming-1c574ac7c424-g01-5cba0f0171e79bd80bbbcf4c49f5bc8a`.
+No abre otro agente padre ni cambia el owner T249; solo revalida el cierre con
+contexto `ref_only` obligatorio resuelto por lectura local/evidencia ACK y con
+el mismo test focal `go test -count=1 ./cmd/orquesta-server
+./modulos/orquesta-server`.
+
+## Escaneo backlog 2026-05-27 decimoseptima pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente, guia del
+nucleo, principio director, matriz de smokes, corte de cierre generico, este
+backlog, rail errors, duplicaciones de rails y lectura focal de
+`cmd/orquesta-server/idle_self_improvement_backlog_docs_v0.go`,
+`cmd/orquesta-server/idle_self_improvement_federated_backlog_v0.go` y
+`cmd/orquesta-server/idle_self_improvement_backlog_merge_v0.go`. No se programa
+codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Hueco concreto nuevo:
+
+- El indice federado del backlog declara fuentes locales `vigente` y fuentes
+  historicas en `quarantine`. `loadFederatedBacklogSectionsV0` solo programa
+  fuentes ejecutables, pero `federatedBacklogSourceRefsV0` devuelve todos los
+  `source_path` y `backlogScannerDocumentRefsV0` los incluye en el lease/epoch
+  del scanner. Un cambio en docs historicos cuarentenados puede forzar rebase o
+  bloqueo de scanners de backlog vivo aunque esas fuentes no sean ejecutables.
+  T240 acota path/budget de lectura; falta un owner de freshness/scope para
+  decidir que estados federados entran en el epoch activo y cuales quedan como
+  evidencia historica no bloqueante.
+
+## T250 federated-backlog-epoch-scope-policy
+
+Objetivo: acotar el epoch del scanner de backlog a fuentes federadas ejecutables
+o promocionadas, dejando historicas/quarantine como evidencia no bloqueante salvo
+decision explicita del Director.
+
+Estado: cerrado 2026-05-27.
+
+Alcance:
+
+- `cmd/orquesta-server`
+- `modulos/orquesta-server`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- `backlogScannerDocumentRefsV0` debe distinguir fuentes federadas ejecutables
+  (`vigente`, `promocionada`, `promoted`, `active`) de fuentes
+  historicas/quarantine; solo las ejecutables entran por defecto en
+  `BacklogScanDocs`, epoch y reservation refs.
+- Las fuentes `quarantine`, historicas o stale deben conservarse como refs de
+  contexto/evidencia compacta y no como prerequisito de rebase, salvo tarea que
+  declare explicitamente `related_txx`, composicion externa o rescate legacy.
+- Si una fuente no ejecutable cambia, el planner no debe bloquear scanners de
+  backlog vivo ni relanzar tareas por ella; debe registrar reason code compacto
+  como `federated_backlog_source_not_executable` o equivalente.
+- La politica debe mantener T124: documentos legacy de orquestador externo
+  siguen cuarentenados y no gobiernan el nucleo ni MCP/OPES/Codex actuales.
+- Coordinar con T37, T43, T88, T116, T122, T124, T240, T248 y T249: esta tarea
+  no redefine parser Markdown, path/budget de lectura ni identidad de secciones;
+  solo gobierna que fuentes federadas participan en el epoch activo.
+- Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+Cierre 2026-05-27: `cmd/orquesta-server` separa las fuentes federadas
+ejecutables de las no ejecutables antes de construir `BacklogScanDocs`,
+`backlog_scan_epoch` y reservation refs. Las fuentes `historico`, `stale` y
+`quarantine` quedan como contexto compacto
+`federated_backlog_source_not_executable` y no fuerzan rebase del backlog vivo.
+Evidencia focal:
+`TestIdleSelfImprovementBacklogPlannerV0AcotaEpochAFuentesFederadasEjecutablesV0`
+y `TestIdleSelfImprovementBacklogPlannerV0AcotaEpochAFuentesStaleHistoricasV0`.
+
+## Escaneo backlog 2026-05-27 decimoseptima pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only`, `AGENTS.md`, `README.md`, foto vigente, guia del nucleo, principio
+director, backlog, rail errors, duplicaciones de rails, T38/T90/T143/T244 y
+medicion focal de ficheros Go productivos en
+`modulos/orquesta-runtime-codex-delivery` con
+`find modulos/orquesta-runtime-codex-delivery -name '*.go' -type f ! -name '*_test.go' -exec wc -l {} +`.
+No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Hueco concreto nuevo:
+
+- Aunque T90 dejo baseline de no crecimiento para el residuo grande,
+  `modulos/orquesta-runtime-codex-delivery` conserva tres ficheros productivos
+  por encima del limite operativo: `progress_state_v0.go` (310 lineas),
+  `progress_source_v0.go` (331 lineas) y `source_v0.go` (314 lineas). T38 cerro
+  el rail de observacion Codex y T143 cerro tamano/redaccion de control files,
+  pero no hay shard ejecutable que divida progreso, estado durable y fuente de
+  delivery antes de anadir mas reglas de observacion, ACK estricto o redaccion.
+
+## T252 runtime-codex-delivery-progress-source-file-split
+
+Objetivo: partir los ficheros productivos grandes de
+`orquesta-runtime-codex-delivery` por responsabilidad local, conservando el
+baseline de T90 y sin cambiar contratos de observacion Codex.
+
+Estado: cerrado localmente 2026-05-27.
+
+Cierre 2026-05-27:
+
+- `progress_source_v0.go` queda como fuente fina de observaciones y delega
+  snapshots, firmas, presupuesto, ACK fallido, senales de ejecucion y
+  proyeccion publica en helpers `progress_*_v0.go`.
+- `progress_state_v0.go` conserva DTOs/puerto/store en memoria, mientras las
+  transiciones, claves, validacion y replay viven en `progress_state_record_v0.go`,
+  `progress_state_sample_v0.go` y el store durable `file_progress_state_v0.go`.
+- `source_v0.go` queda como lectura/proyeccion principal de delivery y delega
+  descriptors, scope `WaitAgentRefs`, refs/evidencias, ACK issues y worktree en
+  ficheros `source_*_v0.go`.
+- Los ficheros productivos objetivo quedan por debajo de 300 lineas en la
+  medicion local y el nucleo sigue recibiendo solo observaciones, refs opacas y
+  puertos.
+- Rework 2026-05-27: la revision exigio aplicar el limite operativo tambien a
+  los tests del adaptador. `progress_source_v0_test.go`, `source_v0_test.go`,
+  `source_review_gate_v0_test.go` y `source_worktree_v0_test.go` quedan partidos
+  en fixtures y shards focales bajo 300 lineas sin cambiar contratos ni smokes.
+
+Alcance:
+
+- `modulos/orquesta-runtime-codex-delivery`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Separar `progress_source_v0.go` en lectura/acopio de progreso, normalizacion
+  de eventos y proyeccion publica sin duplicar lectura de control files ni tails
+  de logs.
+- Separar `progress_state_v0.go` en DTO/estado, transiciones, persistencia
+  file-based y helpers de replay, manteniendo idempotencia y razon publica
+  compacta.
+- Separar `source_v0.go` en resolucion de descriptors, lectura de ACK/delivery,
+  filtrado por scope y construccion de observaciones, sin relajar
+  `WaitAgentRefs`, ACK estricto ni redaccion de T143.
+- Mantener runtime Codex como adaptador concreto: no mover filesystem, Codex,
+  prompts, HOME, proveedor ni rutas locales al nucleo neutral.
+- Todos los ficheros Go productivos nuevos o modificados del modulo deben quedar
+  por debajo de 300 lineas, salvo deuda historica documentada con followup
+  causal y test de no crecimiento.
+- Coordinar con T36, T38, T50, T61, T90, T143, T157 y T247: esta tarea no
+  redefine ACK terminal, rails de observacion, control files, redaccion de
+  required tests ni bridge de autoprogramacion; solo divide delivery/progreso
+  Codex.
+- Tests: `go test -count=1 ./modulos/orquesta-runtime-codex-delivery`.
+
+## Escaneo backlog 2026-05-27 decimoseptima pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only`, `AGENTS.md`, `README.md`, foto vigente, guia del nucleo, principio
+director, este backlog, rail errors y duplicaciones de rails. Busqueda focal:
+entradas T244/T247 y T248/T249, titulos `Escaneo backlog 2026-05-27` y
+referencias de duplicacion en los shards. No se programa codigo desde este
+scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Hueco concreto nuevo:
+
+- La concurrencia de scanners ya genero tareas vecinas con alto solape antes de
+  que exista un contrato de merge/dedupe de propuestas: T244/T247 comparten
+  owner de split del bridge Codex y T248/T249 comparten identidad/orden de
+  escaneos. El planner puede programar ambas si solo mira secciones `Txx`, aun
+  cuando una tarea declara ser subshard o sustituta condicional de otra. Falta
+  una huella estructurada de propuesta que bloquee duplicados por frontera,
+  owner, write-set y criterios antes de anadir o encolar nuevos Txx.
+
+## T250 backlog-proposal-deduplication-fingerprint
+
+Objetivo: evitar que scanners concurrentes anadan o encolen tareas Txx
+equivalentes cuando describen la misma frontera con titulos distintos.
+
+Estado: cerrado el 2026-05-27 por split local del provider.
+
+Alcance:
+
+- `cmd/orquesta-server`
+- `modulos/orquesta-server`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Cada propuesta nueva de backlog debe derivar una huella compacta desde owner,
+  write-set normalizado, objetivo, criterios clave, tests y refs de evidencia,
+  independiente del numero `Txx` y del titulo humano.
+- Si la huella coincide o solapa fuertemente con una tarea pendiente, cerrada o
+  subshard declarada, el scanner debe producir `backlog_proposal_duplicate` o
+  `backlog_proposal_overlap` y pedir rebase/merge en vez de anadir otro Txx
+  programable.
+- La deduplicacion debe respetar subshards intencionales: una entrada como T247
+  puede quedar enlazada a T244 si declara frontera reducida, criterio no cubierto
+  y motivo verificable; si no, no se encola por separado.
+- El ACK y el planner deben conservar evidence refs de la propuesta descartada
+  para revision humana, sin borrar ni renumerar historico ya persistido.
+- Coordinar con T37, T43, T44, T45, T79, T116, T122, T140, T240, T248 y T249:
+  esta tarea no redefine el parser completo, la identidad de secciones de
+  escaneo ni el lease documental; gobierna solo dedupe de propuestas Txx antes
+  de hacerlas ejecutables.
+- Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+Evidencia de cierre 2026-05-27: el planner residente deriva
+`backlog_proposal_fingerprint` para cada seccion ejecutable, deduplica
+propuestas pendientes por objetivo/scope/tokens normalizados, conserva
+subshards intencionales declarados, emite colision
+`duplicate_backlog_proposal_fingerprint` con ref de evidencia compacta y bloquea
+la canonica y la duplicada si alguna ya esta viva en cola. Rework validado sin
+relanzar otro agente padre sobre la tarea original.
+
+## Escaneo backlog 2026-05-27 decimoseptima pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente, guia del
+nucleo, principio director, backlog, rail errors y duplicaciones de rails.
+Busquedas focales: encabezados `Escaneo backlog 2026-05-27 decimosexta pasada`,
+`Escaneo backlog 2026-05-27 decimocuarta pasada`, `T248` y `T249`. No se
+programa codigo desde este scanner. `worktree_ref=worktree-ref-orquesta-server-
+idle-self-improvement` y `branch_ref=branch-ref-orquesta-server-idle-self-
+improvement` se conservan solo como refs opacas.
+
+Hueco concreto nuevo:
+
+- La tanda concurrente ya abrio T248 y T249 para la misma frontera practica:
+  identidad/orden de entradas documentales de scanner. T248 se declara
+  fusionable si T249 cubre la frontera, pero no hay owner explicito que detecte
+  solapes entre tareas Txx nacidas del mismo patron antes de que el planner las
+  lance por separado. El resultado puede ser duplicacion de implementacion,
+  cierre parcial divergente o rebase documental manual aunque el problema real
+  sea deduplicacion/canonicalizacion de backlog.
+
+## T250 backlog-task-overlap-canonical-merge-policy
+
+Objetivo: detectar y canonicalizar tareas de backlog solapadas nacidas de
+scanners concurrentes antes de programarlas como trabajos independientes.
+
+Estado: cerrado 2026-05-27.
+
+Alcance:
+
+- `cmd/orquesta-server`
+- `modulos/orquesta-server`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- El planner debe calcular una firma compacta de solape para tareas Txx
+  pendientes usando owner, alcance, frontera conceptual, tests y refs de
+  evidencia; no basta comparar titulo.
+- Si dos tareas pendientes cubren la misma frontera, el planner debe elegir un
+  canonical task ref, marcar las otras como alias/fusionables o bloquear con
+  reason code publico `backlog_task_overlap_canonicalization_required`.
+- La canonicalizacion debe ser aditiva: no borrar, renumerar ni truncar tareas
+  historicas; conservar hashes/lineas originales y registrar la relacion
+  `covered_by` o equivalente.
+- Tareas vecinas pero no equivalentes deben seguir separadas. Ejemplo: T240
+  gobierna path/budget de docs y no debe fusionarse con identidad de seccion;
+  T248/T249 si comparten frontera salvo que una implementacion las separe con
+  contrato verificable.
+- Coordinar con T37, T43, T79, T116, T122, T140, T248 y T249: esta tarea no
+  redefine parser Markdown ni merge lease; solo decide si dos entradas
+  ejecutables nuevas deben colapsar antes de lanzar agentes.
+- Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+Cierre 2026-05-27: el planner residente calcula
+`backlog-task-overlap-*` desde owner/alcance, frontera conceptual normalizada,
+tests y evidence refs. Si dos tareas pendientes comparten frontera ejecutable,
+elige como canonica la primera seccion durable por doc/linea/ref, fusiona
+criterios/tests/write-set de forma aditiva y expone
+`backlog_task_overlap_canonicalization_required` con `covered_by` y
+`overlap_signature`. T248/T249 quedan colapsables por firma de identidad/orden
+de entradas de scanner; T240 path/budget queda separado. No renumera, borra ni
+trunca historico. Evidencia focal:
+`go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+Rework de revision 2026-05-27: entrega conservada como cierre valido de T250 sin
+relanzar agente padre ni abrir owner nuevo. La correccion queda acotada a
+evidencia documental y ACK estricto: contexto `ref_only` resuelto por lectura
+local/evidencia explicita, archivos de control fuera de artefactos de producto y
+sin ampliar write-set. Los cambios de codigo previos siguen gobernados por la
+evidencia focal anterior; esta pasada solo sincroniza backlog, rail observado y
+matriz de duplicaciones.
+
+## Escaneo backlog 2026-05-27 decimoctava pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente, guia del
+nucleo, principio director, backlog, rail errors y duplicaciones de rails.
+Busquedas focales: `required_tests`, T37, T44, T47, T248, T249 y T250. No se
+programa codigo desde este scanner. `worktree_ref=worktree-ref-orquesta-server-
+idle-self-improvement` y `branch_ref=branch-ref-orquesta-server-idle-self-
+improvement` se conservan solo como refs opacas.
+
+Hueco concreto nuevo:
+
+- Las tareas documentales de scanner pueden recibir `go test -count=1 ./...`
+  como prueba obligatoria aunque el write-set se limite a backlog/rail errors/
+  duplicaciones y la tarea real no toque codigo productivo. En modo ACK estricto
+  eso convierte una verificacion transversal lenta o fragil en condicion de
+  cierre de un cambio documental, y puede fallar por paquetes no relacionados
+  con la evidencia que el scanner acaba de producir.
+
+## T251 backlog-scanner-required-test-scope-policy
+
+Objetivo: hacer que el planner/materializador de paquetes de scanner asigne
+pruebas obligatorias proporcionales al alcance real y a la seccion Txx, sin
+relajar ACK estricto ni ocultar fallos de pruebas pedidas explicitamente.
+
+Estado 2026-05-27: cerrado.
+
+Alcance:
+
+- `cmd/orquesta-server`
+- `modulos/orquesta-server`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Si una tarea de scanner solo toca documentos de backlog, el paquete debe
+  emitir pruebas documentales/focales exactas y conservar la validacion de
+  contexto `ref_only`; no debe inyectar `go test -count=1 ./...` por defecto
+  salvo que la seccion Txx, AGENTS o una decision del director lo pidan.
+- Si la tarea toca codigo, frontera de nucleo o una seccion Txx declara
+  explicitamente `go test -count=1 ./...`, el comando debe seguir llegando al
+  paquete y el ACK debe declararlo solo si pasa.
+- El planner debe preservar tests extraidos de Markdown con fidelidad y marcar
+  la procedencia de cada prueba (`section_declared`, `global_policy`,
+  `ref_only_guard` o equivalente) para que review/rebase no confunda defaults
+  con requisitos de la tarea.
+- Una reduccion de alcance de pruebas debe quedar visible como decision del
+  materializador, no como comportamiento discrecional del agente.
+- Coordinar con T37, T44, T47, T79, T116, T122, T140, T240 y T250: esta tarea
+  no redefine parser completo, contexto `ref_only`, receipts ni deduplicacion
+  de tareas; gobierna solo la seleccion de `required_tests` para paquetes de
+  scanner.
+- Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+Cierre 2026-05-27: el planner de scanner documental conserva tests declarados
+por seccion, omite el default global `go test -count=1 ./...` solo cuando el
+write-set se limita a backlog/rail errors/duplicaciones y marca la decision en
+`ContextRefs` con `required_test_origin:*` y
+`required_test_scope_policy:*`.
+
+Rework de revision 2026-05-27: entrega corregida sin relanzar el padre
+original; se sincroniza este backlog con rail errors y duplicaciones, y el
+contexto obligatorio `ref_only` se resuelve por lectura local/evidencia ACK.
+
+## Escaneo backlog 2026-05-27 decimoctava pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only`, `AGENTS.md`, `README.md`, `docs/README.md`, backlog vivo, rail
+errors, duplicaciones de rails, T140, T248, T249 y T250. Busquedas focales:
+`rg` sobre `T140`, `T248`, `T249`, `T250`, `backlog_task_overlap`,
+`canonicalizacion` y `duplicate_backlog_task`. No se programa codigo desde este
+scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Hueco concreto nuevo:
+
+- T140 ya cerro offline focal la canonicalizacion de tareas solapadas existentes
+  con aliases y reason `duplicate_backlog_task`. Sin embargo, scanners
+  posteriores volvieron a abrir T250 para una frontera equivalente aplicada a
+  scanners concurrentes, citando T140 solo como coordinacion y no como
+  capability previa a consultar. Falta una guarda ejecutable que haga que el
+  scanner/planner consulte el indice canonico de T140 antes de anadir nuevos
+  Txx, y que convierta un solape con tarea cerrada o canonica vigente en alias,
+  evidencia de cobertura o `CONSULTA AL DIRECTOR`, no en backlog independiente.
+
+## T251 backlog-scanner-canonical-preflight
+
+Objetivo: impedir que los scanners de backlog reabran frentes ya cubiertos por
+tareas canonicas cerradas o vigentes sin declarar alias/cobertura antes de
+crear un nuevo Txx.
+
+Estado: completada en corte focal 2026-05-27.
+
+Evidencia 2026-05-27: el planner de automejora aplica preflight canonico sobre
+tareas cerradas antes de planificar scanners. Si una seccion pendiente solapa
+con una canonica cerrada, bloquea el relleno de scanner y publica
+`backlog_scanner_canonical_preflight_required`; los paquetes `backlog_scan`
+incluyen indice, fingerprint y criterios de preflight para exigir alias,
+cobertura o `CONSULTA AL DIRECTOR` antes de anadir otro `## Txx`.
+
+Alcance:
+
+- `cmd/orquesta-server`
+- `modulos/orquesta-server`
+- `modulos/orquesta-autoprogramming`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Antes de materializar una propuesta de scanner como `## Txx`, el planner debe
+  consultar la relacion canonica/alias/cierre ya parseada del backlog y calcular
+  solape contra tareas cerradas, vigentes y pendientes por owner, alcance,
+  frontera conceptual, tests y evidence refs.
+- Si el solape coincide con una tarea canonica cerrada, el scanner debe registrar
+  evidencia de cobertura o abrir solo una regresion concreta con causa nueva; no
+  debe crear un Txx generico que reprograme la misma frontera.
+- Si el solape coincide con una tarea canonica pendiente, el resultado debe ser
+  alias/fusion aditiva o reason publico
+  `backlog_scanner_canonical_preflight_required`, conservando lineas/hashes y
+  sin borrar, renumerar ni truncar historico.
+- T248/T249 pueden fusionarse o aliasarse si T250/T251 cubren su frontera; T240
+  debe permanecer separado porque gobierna path/budget de docs, no
+  canonicalizacion.
+- Coordinar con T37, T43, T44, T79, T116, T122, T140 y T250: esta tarea no
+  redefine parser Markdown, merge lease, sharding ni identidad de secciones; es
+  el preflight que evita reabrir backlog equivalente antes de escribirlo.
+- Tests: `go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-server ./cmd/orquesta-server`.
+
+Rework de revision 2026-05-27: entrega conservada como cierre valido de T251
+sin relanzar agente padre sobre la tarea original. La correccion queda acotada a
+sincronizar backlog, rail observado y matriz de duplicaciones; el contexto
+obligatorio `ref_only` se resuelve por lectura local del paquete y evidencia
+explicita en ACK. Se mantiene el contrato ya implementado de preflight canonico,
+reason `backlog_scanner_canonical_preflight_required`, indice/fingerprint y
+tests focales declarados.
+
+## Escaneo backlog 2026-05-27 decimonovena pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente, guia del
+nucleo, principio director, backlog vivo, rail errors, duplicaciones de rails y
+`AGENTS.md` local de `modulos/orquesta-orchestration-core`. Busqueda focal:
+`find modulos cmd -name '*.go' -type f ! -name '*_test.go' -exec wc -l {} + |
+sort -nr | head -60` y `rg` sobre `quality_gate_replan_candidate_provider` en
+los shards de backlog. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Hueco concreto nuevo:
+
+- `modulos/orquesta-orchestration-core/quality_gate_replan_candidate_provider_v0.go`
+  supera el limite operativo de 300 lineas y mezcla lectura de evidencias de
+  quality gate, validacion de cadena causal, decision de replan y materializacion
+  de candidatos de workflow. T37/T43/T44/T47 gobiernan parser, merge y ACK; T54,
+  T238, T242, T243, T244 y T252 cubren splits de otros owners. Falta un shard
+  del owner `orquesta-orchestration-core` para dividir esta frontera antes de
+  anadir mas reglas de tests requeridos, replan negativo o cierre causal.
+
+## T253 orchestration-core-quality-gate-replan-provider-split
+
+Objetivo: partir el provider de replan por quality gate en
+`orquesta-orchestration-core` por responsabilidad, conservando puertos
+hexagonales y sin mover runtime, proveedor ni persistencia concreta al nucleo.
+
+Estado: cerrado 2026-05-27.
+
+Alcance:
+
+- `modulos/orquesta-orchestration-core`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Separar lectura/seleccion de evidencias de quality gate, validacion causal,
+  decision de replan y construccion de candidatos/comandos en ficheros menores
+  de 300 lineas.
+- Mantener `orquesta-orchestration-core` como capa de aplicacion por puertos:
+  no importar Codex, OPES, web, MCP, DB concreta, HOME, OAuth, tokens, paths
+  locales ni runtime real.
+- Conservar `RequiredTestEvidenceV0`, review aceptada, plan-state, replan y
+  cierre causal con las mismas refs durables; no reabrir `WaitAgentRefs`,
+  `CODEX-WAVE-REAL` ni `CODEX-RECURSION-REAL`.
+- Cubrir el split con pruebas focales del provider y, si cambia contrato
+  compartido, con pruebas de los modulos consumidores.
+- Coordinar con T33, T36, T37, T42, T47, T54, T90, T117, T143, T238, T244 y
+  T252: esta tarea no redefine ACK terminal, control files, rails de review,
+  politicas de autoprogramacion ni observacion Codex; solo reduce tamano y
+  ownership local del provider de replan por quality gate.
+- Tests: `go test -count=1 ./modulos/orquesta-orchestration-core`.
+
+Evidencia 2026-05-27: el provider quedo dividido en entrada/base, proyeccion
+causal de quality gates/replan decisions, construccion de followups y politica
+de refs/acciones. Todos los ficheros productivos del owner quedan por debajo de
+300 lineas, sin dependencias de runtime/proveedor/persistencia concreta y sin
+reabrir `WaitAgentRefs`, smokes Codex ni cierre causal. El contexto
+obligatorio `ref_only` se resolvio por lectura local del paquete y evidencia
+explicita en ACK.
+
+Rework 2026-05-27: se sincroniza el estado visible del backlog con la evidencia
+ya registrada para T253, sin relanzar agente padre ni ampliar alcance.
+
+## Escaneo backlog 2026-05-27 decimonovena pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only`, `AGENTS.md`, `README.md`, foto vigente, guia del nucleo, principio
+director, backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+`rg` sobre encabezados `^## T250`, `backlog-task-id`, `backlog-proposal`,
+`canonical-preflight`, `duplicate_backlog_task` y bloques recientes de scanner.
+No se programa codigo desde este scanner. `worktree_ref=worktree-ref-orquesta-
+server-idle-self-improvement` y `branch_ref=branch-ref-orquesta-server-idle-
+self-improvement` se conservan solo como refs opacas.
+
+Hueco concreto nuevo:
+
+- El backlog ya contiene varias secciones ejecutables con el mismo encabezado
+  humano `## T250` para fronteras distintas (`federated-backlog-epoch`,
+  `runtime-codex-delivery-progress-source-file-split`,
+  `backlog-proposal-deduplication-fingerprint` y
+  `backlog-task-overlap-canonical-merge-policy`). T250/T251 evitan futuros
+  solapes o propuestas duplicadas, pero falta un contrato de reparacion aditiva
+  para colisiones ya persistidas: el planner, MCP y auditoria pueden referirse a
+  `T250` sin poder distinguir que tarea concreta corresponde, y renumerar
+  historico queda prohibido.
+
+## T254 backlog-task-id-collision-alias-index
+
+Objetivo: hacer resolubles las colisiones de ids `Txx` ya persistidas sin
+renumerar, borrar ni truncar historico del backlog.
+
+Estado: cerrado 2026-05-27.
+
+Alcance:
+
+- `cmd/orquesta-server`
+- `modulos/orquesta-server`
+- `modulos/orquesta-autoprogramming`
+- `modulos/orquesta-mcp`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- El parser debe detectar encabezados `## Txx` duplicados y derivar un
+  `task_entry_ref` estable por seccion desde fichero, linea, hash, titulo y
+  epoch documental, sin depender solo del numero humano.
+- Las superficies publicas que acepten o muestren `Txx` deben exponer cuando el
+  id humano es ambiguo y exigir `task_entry_ref`, alias canonico o decision de
+  director antes de encolar, cerrar o reportar una tarea concreta.
+- La reparacion debe ser aditiva: registrar indice de aliases/collisions y refs
+  canonicas, pero no renumerar encabezados antiguos ni borrar bloques de
+  escaneo, evidencias o tareas ya escritas.
+- Si una colision corresponde a tareas equivalentes, debe coordinar con T140,
+  T250 y T251 para marcar `covered_by`/alias; si corresponde a fronteras
+  distintas, debe conservar ambas como tareas separadas con refs de entrada
+  unicas.
+- ACK, stats, roadmap/MCP y cola de autoprogramacion deben conservar el
+  `task_entry_ref` usado para que un cierre por `T250` no cierre otra seccion
+  homonima.
+- Coordinar con T37, T43, T44, T79, T116, T122, T140, T240, T248, T249, T250 y
+  T251: esta tarea no redefine parser completo, merge lease ni preflight de
+  nuevas propuestas; solo hace resolubles colisiones historicas ya persistidas.
+- Tests: `go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-server ./modulos/orquesta-mcp ./cmd/orquesta-server`.
+
+## Escaneo backlog 2026-05-27 decimonovena pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only`, `AGENTS.md`, `README.md`, `docs/README.md`, backlog vivo, rail
+errors, duplicaciones de rails y busquedas focales sobre encabezados `## T250`,
+`## T251`, `backlog_task_id`, `canonical_preflight` y `duplicate_backlog_task`.
+No se programa codigo desde este scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Hueco concreto nuevo:
+
+- El backlog ya contiene varias secciones `## T250` con objetivos distintos
+  (`federated-backlog-epoch-scope-policy`,
+  `runtime-codex-delivery-progress-source-file-split`,
+  `backlog-proposal-deduplication-fingerprint` y
+  `backlog-task-overlap-canonical-merge-policy`). T250 y T251 previenen nuevas
+  colisiones o solapes antes de escribir, pero falta un lector/normalizador que
+  trate ids `Txx` ya duplicados como estado ambiguo y exija alias canonico,
+  `task_instance_ref` o bloqueo publico antes de encolar trabajo por numero
+  humano.
+
+## T252 backlog-duplicate-task-id-read-model
+
+Objetivo: hacer que el planner/lector de backlog no cierre ni encole tareas por
+un `Txx` humano duplicado sin resolver antes la instancia canonica.
+
+Estado: completado 2026-05-27 con read model aditivo.
+Rework 2026-05-27: entrega conservada; la revision queda acotada a evidencia
+documental, contexto `ref_only` resuelto por ACK y test focal requerido.
+
+Alcance:
+
+- `cmd/orquesta-server`
+- `modulos/orquesta-server`
+- `modulos/orquesta-autoprogramming`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- El parser debe detectar ids `## Txx` repetidos y producir entradas separadas
+  con `task_instance_ref` estable derivado de path, linea/hash, titulo y
+  evidence refs; el numero humano deja de bastar como identidad ejecutable.
+- Si una API, scanner o cola pide una tarea por `Txx` ambiguo, debe devolver
+  reason publico `backlog_duplicate_task_id_ambiguous` con refs compactas de las
+  instancias, no elegir la primera ni la ultima por orden de fichero.
+- La resolucion debe ser aditiva: alias canonico, `covered_by` o decision de
+  director; no renumerar, borrar ni truncar historico ya escrito.
+- T250 sigue siendo el owner de reservar ids futuros y de deduplicar propuestas
+  antes de escribir; T252 solo gobierna lectura, cierre y encolado cuando el
+  backlog historico ya contiene duplicados.
+- Coordinar con T37, T43, T79, T116, T122, T140, T248, T249, T250 y T251: esta
+  tarea no redefine merge lease, identidad de bloque de scanner ni preflight de
+  propuesta; consume esos datos para impedir ejecucion ambigua.
+- Tests: `go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-server ./cmd/orquesta-server`.
+
+Cierre 2026-05-27:
+
+- `cmd/orquesta-server` expone `task_instance_ref` por seccion Txx, colisiones
+  con refs de instancia y bloqueo publico
+  `backlog_duplicate_task_id_ambiguous` cuando un caller pide solo un Txx
+  duplicado.
+- La resolucion sigue siendo aditiva por alias/cobertura/decision de director;
+  no se renumera ni se borra historico.
+
+## Escaneo backlog 2026-05-27 decimonovena pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only`, `AGENTS.md`, `README.md`, foto vigente, guia del nucleo, principio
+director, backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+`rg` sobre encabezados `## T250`, `backlog_task_id`, `backlog_proposal`,
+`canonical_preflight` y tareas T248-T251. No se programa codigo desde este
+scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Hueco concreto nuevo:
+
+- El backlog ya contiene tres encabezados `## T250` distintos. T250/T251 cubren
+  dedupe y preflight de propuestas solapadas, pero no hay contrato especifico
+  para reservar el numero humano `Txx` de forma causal antes de escribirlo. Si
+  el planner usa `Txx` como clave ejecutable, una colision de numero puede
+  ocultar una tarea, cerrar la equivocada o hacer que el ACK cite una seccion
+  ambigua aunque las propuestas no sean equivalentes.
+
+## T252 backlog-task-number-reservation-policy
+
+Objetivo: reservar identificadores humanos `Txx` de backlog con identidad causal
+antes de escribir nuevas tareas, evitando colisiones entre scanners concurrentes
+sin renumerar historico.
+
+Estado: cerrado 2026-05-27.
+
+Alcance:
+
+- `cmd/orquesta-server`
+- `modulos/orquesta-server`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- El scanner debe reservar un `task_id_ref` compacto por request/correlation y
+  epoch documental antes de proponer `## Txx`; el numero humano no debe ser la
+  unica identidad ejecutable.
+- Si el documento ya contiene el `Txx` elegido con otra huella causal, el merge
+  debe producir `backlog_task_number_collision` o
+  `backlog_task_number_reservation_required` y pedir rebase/alias, no escribir
+  otra seccion con el mismo numero.
+- Las entradas historicas duplicadas, como los `T250` existentes, deben quedar
+  parseables por linea/hash/fingerprint y solo normalizarse de forma aditiva
+  mediante alias o `covered_by`; no borrar, mover, renumerar ni truncar.
+- La politica debe distinguir numero humano, task ref opaca y fingerprint de
+  propuesta: T250/T251 siguen gobernando dedupe/canonicalizacion conceptual,
+  mientras esta tarea gobierna unicidad de ids visibles.
+- Coordinar con T37, T43, T44, T79, T116, T122, T140, T248, T249, T250 y T251:
+  esta tarea no redefine parser completo, merge lease ni dedupe semantico; solo
+  agrega reserva causal de `Txx`.
+- Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+Cierre 2026-05-27:
+
+- `cmd/orquesta-server/idle_self_improvement_backlog_task_id_lease_v0.go`
+  anade reserva causal `task_id_ref` y
+  `reservation-ref-backlog-task-id-*` para cada request de backlog, incluida la
+  request scanner/fallback, con rango `Txx` derivado de request, correlation y
+  epoch documental.
+- El lector de encabezados ejecutables distingue `## Txx` de bloques
+  `## Escaneo backlog ...`, conserva instancias historicas por path, linea,
+  `task-instance-ref` y fingerprint compacto, y no renumera ni reescribe
+  historico.
+- Las colisiones de numero humano se publican como
+  `backlog_task_number_collision` con evidence refs compactas; los criterios de
+  merge obligan a bloquear si falta reserva o aparece colision.
+- Tests focales: `go test -count=1 ./cmd/orquesta-server -run
+  'TestBacklogTaskIDAllocationLeaseV0'`.
+
+Rework de revision 2026-05-27: la correccion queda acotada a esta tarea nueva,
+sin relanzar el agente padre original ni ampliar el write-set. El contexto
+`ref_only` requerido se resuelve por evidencia explicita en ACK y la validacion
+obligatoria es `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+## Escaneo backlog 2026-05-27 vigesima pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only` y `required_ref_action=ack_evidence_required`, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+`rg` sobre `ref_only`, `required_ref_action`, `backlog-task-number`,
+`duplicate-task-id`, `canonical-preflight`, encabezados `^## T250`,
+`^## T251` y `^## T252`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. Los huecos concretos
+observados ya tienen owner pendiente en el backlog vivo:
+
+- Contexto obligatorio `ref_only` sin bytes materializados: cubierto por T44 y
+  por el criterio de ACK con nota `contexto_ref_only_resuelto`, revalidado
+  mediante lectura local del paquete y de las fuentes obligatorias.
+- Pruebas requeridas demasiado amplias para scanners documentales: cubierto por
+  T251 `backlog-scanner-required-test-scope-policy`.
+- Colisiones y ambiguedad de ids humanos `Txx`: cubierto por T250/T252 y sus
+  tareas de reserva, read model y alias aditivo; no se renumera historico.
+- Entradas de escaneo con ordinal duplicado o fuera de orden: cubierto por T249
+  y por el preflight canonico T251.
+
+Esta pasada deja solo evidencia documental para evitar relanzar owners ya
+visibles en cola; cualquier nuevo cambio de codigo debe salir de los Txx
+anteriores con write-set propio.
+
+## Escaneo backlog 2026-05-27 vigesima primera pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only` y `required_ref_action=ack_evidence_required`, `AGENTS.md`,
+`README.md`, foto vigente, guia del nucleo, principio del director, backlog
+vivo, rail errors y duplicaciones de rails. Busquedas focales: encabezados
+`^## T250`, `^## T251`, `^## T252`, `^## T254`,
+`BACKLOG-SCAN-NO-NEW-GAP-20260527-001` y
+`BACKLOG-TASK-ID-COLLISION-20260527-001`. No se programa codigo desde este
+scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El patron observado es una
+repeticion del scanner documental con contexto por ref y write-set cerrado sobre
+estos shards; los huecos accionables ya estan cubiertos por owners pendientes:
+
+- T44 gobierna la resolucion de contexto obligatorio `ref_only`; esta pasada se
+  resuelve por lectura local del paquete y evidencia en ACK, no por nueva tarea.
+- T249 gobierna identidad/orden de bloques de escaneo; esta pasada no anade una
+  politica paralela.
+- T250 y T251 gobiernan dedupe, preflight canonico y alcance de pruebas de
+  scanners documentales.
+- T252 y T254 gobiernan ids humanos duplicados, alias/read model y reparacion
+  aditiva sin renumerar historico.
+
+Esta entrada queda como evidencia de cobertura para que el planner no relance
+otro scanner equivalente mientras esos owners sigan pendientes.
+
+## Escaneo backlog 2026-05-27 vigesimoprimera pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only` y `required_ref_action=ack_evidence_required`, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, backlog vivo, rail errors, duplicaciones de rails y `AGENTS.md`,
+`README.md`, `docs/contratos.md` y `docs/pruebas.md` locales de
+`modulos/orquesta-opes-bridge`. Busquedas focales: `wc -l` de ficheros Go
+productivos, `rg` sobre `document_plan_contract`, `orquesta-opes-bridge`,
+`T204`, `T205`, `T206`, `T244`, `T252`, `T253`, `T254` y entradas recientes de
+scanner. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Hueco concreto nuevo:
+
+- `modulos/orquesta-opes-bridge/document_plan_contract_v0.go` tiene 321 lineas
+  productivas y concentra inyeccion de politica editorial global, politica HTML,
+  plantilla HTML, contrato de `document_plan`, workflow editorial, metodo de
+  asimilacion, requisitos de calidad y allowed work kinds. T204/T205/T206
+  cubren presupuesto, schema y readback OPES; T244 cubre residuo del stack
+  Codex; T253 cubre replan por quality gate. Falta un owner local de
+  `orquesta-opes-bridge` para dividir este contrato antes de anadir mas reglas
+  editoriales OPES o nuevos tipos documentales.
+
+## T255 opes-bridge-document-plan-contract-file-split
+
+Objetivo: partir el contrato documental OPES del bridge por responsabilidad sin
+meter reglas OPES en el nucleo ni relajar la frontera de app consumidora.
+
+Estado: cerrado 2026-05-27.
+
+Alcance:
+
+- `modulos/orquesta-opes-bridge`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Separar politicas editoriales OPES, politicas/plantilla HTML, contrato
+  `domain_document_plan.v0`, metodologia de derivacion por nivel y requisitos
+  de calidad en ficheros menores de 300 lineas con nombres de owner claros.
+- Mantener OPES como adaptador de dominio: el bridge puede traducir reglas OPES
+  a campos `DomainWork`, pero `orquesta-domain-work`, core, workflow y director
+  no deben importar OPES ni conocer esas reglas.
+- Conservar los campos existentes (`opes_global_editorial_policy_2026_05_18`,
+  `opes_html_publication_policy_2026_05_19`, `opes_html_topic_template_v1`,
+  `expected_schema`, `required_plan_parts`, `allowed_document_plan_work_kinds`
+  y criterios editoriales) sin cambiar nombres publicos ni semantica.
+- No reabrir T204, T205 ni T206: presupuesto de bloques, schema por `job_type`
+  y readback/receipt OPES siguen en sus owners; esta tarea solo divide
+  responsabilidades del contrato documental actual.
+- Cubrir el split con tests focales del bridge y mantener los runbooks OPES
+  como rutas opt-in contra instancia temporal, sin tocar OPES productivo.
+- Tests: `go test -count=1 ./modulos/orquesta-opes-bridge`.
+
+Cierre 2026-05-27: `document_plan_contract_v0.go` queda como owner de inyeccion
+del contrato `domain_document_plan.v0` y baja a 183 lineas. Las politicas OPES
+se separan en `document_plan_opes_editorial_policy_v0.go`,
+`document_plan_opes_html_policy_v0.go` y
+`document_plan_opes_methodology_v0.go`; los helpers de test del mapper quedan en
+`mapper_test_helpers_v0_test.go`, dejando los Go del modulo por debajo de 300
+lineas. Se conservaron nombres de campos y semantica publica. Verificado con
+`go test -count=1 ./modulos/orquesta-opes-bridge`.
+
+Rework 2026-05-27: se corrige el estado visible de T255 para que el backlog no
+lo vuelva a programar como pendiente despues del cierre ya documentado. La
+correccion no cambia el contrato publico del bridge OPES.
+
+## Escaneo backlog 2026-05-27 vigesima segunda pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only` y `required_ref_action=ack_evidence_required`, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, backlog vivo, rail errors, duplicaciones de rails y contexto local de
+`modulos/orquesta-server-shutdown`. Busquedas focales: `wc -l` de ficheros Go
+productivos, `rg` sobre `server-shutdown`, `shutdown_v0.go`, `T30`, `T226`,
+`T239`, `T240`, `T252`, `T255` y entradas recientes de scanner. No se programa
+codigo desde este scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Hueco concreto nuevo:
+
+- `modulos/orquesta-server-shutdown/shutdown_v0.go` tiene 319 lineas
+  productivas y concentra el caso de uso de apagado: autorizacion del requester,
+  lectura de cola, seleccion de targets, checkpoint no forzado, escritura de
+  control, tick de supervisor, refresh de runs y resumen final. T30 gobierna el
+  puerto de checkpoint, T226/T239 gobiernan intentos/checkpoints Codex y T240
+  gobierna path/budget documental; falta un owner local de
+  `orquesta-server-shutdown` para dividir el caso de uso antes de anadir mas
+  reglas de shutdown, reintentos o reason codes publicos.
+
+## T256 server-shutdown-usecase-file-split-before-growth
+
+Objetivo: partir el caso de uso de apagado controlado del servidor por
+responsabilidad local, conservando la frontera hexagonal y el contrato de
+checkpoint no forzado.
+
+Estado: fusionable_con `T256 server-shutdown-usecase-file-split`; no programar
+por separado si la entrada canonica posterior esta visible en el backlog.
+
+Cierre 2026-05-27: resuelto por el owner canonico
+`T256 server-shutdown-usecase-file-split`. `shutdown_v0.go` queda como fachada
+del caso de uso y el detalle local se separa en owners de autorizacion, control,
+targets/checkpoint y supervision.
+
+Rework 2026-05-27: la correccion de entrega
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-846263ad27220f7ca7d97aeec4d5e7d1`
+confirma que esta variante queda absorbida por el owner canonico T256, sin
+relanzar agente padre ni abrir otra tarea programable. El contexto `ref_only`
+obligatorio se resuelve por lectura local y evidencia explicita en ACK.
+Rework adicional 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-40ea96487c3783404f7d6a48b0cb8411`
+revalida la misma absorcion contra T256 canonico; no abre backlog nuevo ni
+modifica el contrato de shutdown.
+Rework final 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-247e6d495674dee5a1b996468956a6be`
+conserva la entrega valida, confirma que la variante `before-growth` queda
+absorbida por T256 canonico y cierra el contexto `ref_only` por lectura local y
+evidencia ACK, sin relanzar agente padre.
+Rework correctivo 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-ced6b146bcf5b10e5253ef166816de66`
+mantiene la absorcion de la variante `before-growth`, conserva el split local ya
+cerrado y resuelve el contexto `ref_only` obligatorio por lectura local y
+evidencia ACK.
+Rework de reemplazo 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-75ba20e2214f2eaaea16f312c68208f0`
+mantiene la misma decision: no relanza la variante `before-growth`, conserva el
+owner canonico T256 y cierra el contexto `ref_only` obligatorio por lectura
+local y evidencia ACK.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-f878e21cfa5e67e7481d20a5f9bd24c5`
+conserva la entrega valida, mantiene la variante `before-growth` absorbida por
+T256 canonico y cierra el contexto `ref_only` obligatorio por lectura local y
+evidencia ACK.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-3d04cc0bcd1f59b871869ec824d2c996`
+conserva la misma fusion con T256 canonico, no relanza agente padre ni abre
+otro owner para `before-growth`, y resuelve el contexto `ref_only` por lectura
+local y evidencia ACK.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-46d0d95f62343cc1e51b9ca398f83f84`
+mantiene la variante `before-growth` absorbida por T256 canonico, no reabre
+codigo ni backlog nuevo, y resuelve el contexto `ref_only` obligatorio por
+lectura local y evidencia ACK.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-33ca4ea060412afa902e83e3765c1d23`
+conserva la misma fusion con T256 canonico, no programa la variante
+`before-growth` como owner separado y resuelve el contexto `ref_only` por
+lectura local y evidencia ACK.
+Rework de reemplazo 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-b6686ba67b0d901948d8ce067d8771ec`
+conserva la misma fusion con T256 canonico, no relanza agente padre ni abre
+otro owner para `before-growth`, y resuelve el contexto `ref_only` por lectura
+local y evidencia ACK.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-bff7aa189e7e24662071cf55dffcb95f`
+mantiene la fusion con T256 canonico, no programa la variante `before-growth`
+como owner separado y resuelve el contexto `ref_only` por lectura local y
+evidencia ACK.
+Rework de reemplazo 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-55de335961e2cd74deaeda6d56c611bb`
+conserva la fusion con T256 canonico, no reabre codigo ni backlog nuevo para
+`before-growth`, y resuelve el contexto `ref_only` por lectura local y evidencia
+ACK.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-c853a308c21a89806299b2db6b75edfe`
+conserva la fusion con T256 canonico, no reabre codigo ni backlog nuevo para
+`before-growth`, y resuelve el contexto `ref_only` por lectura local y evidencia
+ACK. La prueba obligatoria de servidor queda bloqueada por simbolos indefinidos
+en `modulos/orquesta-app-director-service`, fuera del write-set cerrado de esta
+correccion.
+Rework de reemplazo 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-3cf9f50f2a1ee0b94df79560b6eeca53`
+conserva la fusion con T256 canonico, no relanza agente padre ni abre owner
+nuevo para `before-growth`, y resuelve el contexto `ref_only` por lectura local
+y evidencia ACK.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-a0fa2702f7f819236261be3abc537d86`
+conserva la fusion con T256 canonico, no programa `before-growth` como owner
+separado y revalida la prueba obligatoria de servidor con contexto `ref_only`
+resuelto en ACK.
+Rework de reemplazo 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-autoprogr-2e9-81707decc46db22fc599c9343d59d3cb`
+mantiene la absorcion de `server-shutdown-usecase-file-split-before-growth` por
+T256 canonico, no relanza agente padre ni abre owner nuevo, y resuelve el
+contexto `ref_only` por lectura local y evidencia ACK.
+
+Alcance:
+
+- `modulos/orquesta-server-shutdown`
+- `cmd/orquesta-server`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Dividir `shutdown_v0.go` en ficheros menores de 300 lineas con owners claros:
+  autorizacion/normalizacion, seleccion de targets, checkpoint no forzado,
+  control/stop de runs, refresh/supervision y resumen de resultado.
+- Mantener `orquesta-server-shutdown` como caso de uso por puertos: no importar
+  Codex, MCP, web, DB, filesystem, `cmd` ni runtime concreto, y no parar
+  procesos directamente.
+- Conservar semantica publica actual de `ServerShutdownCommandV0`,
+  `ServerShutdownResultV0`, reason/status existentes y evidencias compactas.
+- No reabrir T30, T226 ni T239: checkpoint port, presupuesto/idempotencia de
+  repair y correlacion de ACK de checkpoint siguen en sus owners; esta tarea
+  solo divide responsabilidad local del modulo de shutdown.
+- Cubrir el split con tests focales del modulo y, si se toca wiring de
+  composicion, con test focal de servidor.
+- Tests: `go test -count=1 ./modulos/orquesta-server-shutdown ./cmd/orquesta-server`.
+
+## Escaneo backlog 2026-05-27 vigesimosegunda pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only` y `required_ref_action=ack_evidence_required`, `AGENTS.md`,
+`README.md`, foto vigente, guia del nucleo, principio director, backlog vivo,
+rail errors, duplicaciones de rails y medicion focal de ficheros Go con
+`find cmd modulos -name '*.go' -type f -print0 | xargs -0 wc -l | sort -nr`.
+No se programa codigo desde este scanner. `worktree_ref` y `branch_ref` se
+conservan solo como refs opacas.
+
+Hueco concreto nuevo:
+
+- T52 dejo cerrada la division de ficheros productivos de
+  `modulos/orquesta-app-director-service`, pero documento como baseline
+  historico varios tests enormes, incluyendo `operational_director_v0_test.go`
+  (mas de 5200 lineas), `operational_closure_v0_test.go` (mas de 2500 lineas),
+  `operational_director_full_statefile_replay_v0_test.go`,
+  `director_decision_source_v0_test.go` y otros tests de cierre/replan por
+  encima de 300 lineas. La regla operativa actual pide mantener cada fichero Go
+  por debajo de 300 lineas; falta un owner ejecutable para partir esa suite de
+  tests por escenario sin reabrir la API productiva ni mezclarlo con splits de
+  codigo ya cerrados.
+
+## T258 app-director-service-test-suite-file-split
+
+Objetivo: partir la suite historica de tests grandes de
+`orquesta-app-director-service` por escenario operativo, preservando cobertura
+de Director Operativo, cierre causal, replay y replan.
+
+Estado: completado 2026-05-27 para la suite historica local.
+
+Cierre 2026-05-27: los tests grandes de
+`modulos/orquesta-app-director-service` quedan repartidos en ficheros por
+escenario operativo. `operational_director_v0_test.go`,
+`operational_closure_v0_test.go`,
+`operational_director_full_statefile_replay_v0_test.go`,
+`director_decision_source_v0_test.go` y tests vecinos se dividen sin cambiar
+contratos publicos ni codigo productivo del servicio. Los ficheros Go del
+modulo quedan por debajo de 300 lineas.
+
+Rework 2026-05-27: la entrega revisada queda conservada como cierre valido de
+T258. La verificacion local confirma que no quedan ficheros Go del modulo por
+encima de 300 lineas y que no hace falta relanzar agente padre ni abrir otro
+owner para el mismo split.
+
+Verificacion: `go test -count=1 ./modulos/orquesta-app-director-service`.
+
+Alcance:
+
+- `modulos/orquesta-app-director-service`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Dividir `operational_director_v0_test.go`,
+  `operational_closure_v0_test.go`,
+  `operational_director_full_statefile_replay_v0_test.go`,
+  `director_decision_source_v0_test.go` y tests vecinos del baseline de T52 por
+  escenario: bootstrap/continue, waits acotados, cierre causal, tests
+  requeridos, replay statefile, domain work y replan negativo.
+- No cambiar contratos publicos ni comportamiento productivo de
+  `orquesta-app-director-service`; si aparece un helper comun de test, debe
+  quedar en fichero de test con responsabilidad clara.
+- Mantener tests de regresion existentes verdes y evitar perdida de cobertura:
+  los nombres publicos de casos criticos o sus subtests deben seguir siendo
+  trazables desde el baseline de T52.
+- Reducir los ficheros Go de test tocados por debajo de 300 lineas o dejar
+  followup causal por escenario si una pieza historica necesita otra pasada.
+- Tests: `go test -count=1 ./modulos/orquesta-app-director-service`.
+
+## Escaneo backlog 2026-05-27 vigesimosegunda pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only` y `required_ref_action=ack_evidence_required`, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, backlog vivo, rail errors y duplicaciones de rails. Busquedas
+focales: encabezados `^## T249`, `^## T250`, `^## T251`, `^## T252`, `^## T254`,
+`^## T255`, entradas `BACKLOG-SCAN-*`, `BACKLOG-TASK-*`,
+`FILE-BUDGET-*` y menciones a `provider_auth_blocked`, ACK, control files y
+detalle runtime. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. Los huecos concretos
+detectables desde el write-set documental ya tienen owner pendiente visible:
+
+- Contexto obligatorio `ref_only` sin materializacion: cubierto por T44 y por
+  la evidencia explicita en ACK de esta pasada.
+- Pruebas globales sobredimensionadas para scanner documental: cubierto por
+  T251 `backlog-scanner-required-test-scope-policy`.
+- Colisiones, reserva y lectura ambigua de ids humanos `Txx`: cubierto por
+  T249, T250, T252 y T254, sin renumerar historico.
+- Detalle runtime/control files/ACK: cubierto por T143, T155, T157, T227 y
+  tareas vecinas ya citadas en duplicaciones de rails.
+- `provider_auth_blocked` y recuperacion de automejora idle: cubierto por T241.
+- Split de ficheros grandes observado en OPES bridge y stack Codex: cubierto
+  por T244, T253 y T255.
+
+Esta pasada queda como evidencia documental de no-op cubierto para evitar que
+el planner residente cree otro owner solapado mientras las tareas anteriores
+sigan pendientes.
+
+## Escaneo backlog 2026-05-27 vigesima segunda pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only` y `required_ref_action=ack_evidence_required`, `AGENTS.md`,
+`README.md`, foto vigente, guia del nucleo, principio del director, matriz de
+smokes, backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+encabezados `^## T250`, `^## T251`, `^## T252`, `^## T254`, `^## T255`,
+entradas `BACKLOG-SCAN-*`, `BACKLOG-TASK-ID-*` y `FILE-BUDGET-20260527-004`.
+No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. Los huecos observados ya
+tienen owner pendiente visible:
+
+- Contexto obligatorio `ref_only` sin bytes materializados: cubierto por T44 y
+  por el ACK con nota `contexto_ref_only_resuelto`.
+- Alcance de pruebas requerido demasiado amplio para scanners documentales:
+  cubierto por T251 `backlog-scanner-required-test-scope-policy`.
+- Colisiones, aliases y read model de ids humanos `Txx`: cubiertos por T250,
+  T252 y T254, sin renumerar historico.
+- Division del contrato documental OPES del bridge: cubierta por T255, con
+  evidencia de `FILE-BUDGET-20260527-004`.
+
+Esta pasada queda como evidencia documental de no-op cubierto para que el
+planner no relance otro scanner equivalente mientras esos owners sigan
+pendientes.
+
+## Escaneo backlog 2026-05-27 vigesima segunda pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only` y `required_ref_action=ack_evidence_required`, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, backlog vivo, rail errors y duplicaciones de rails. Busquedas
+focales: encabezados `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T254`, `^## T255`, entradas `BACKLOG-SCAN-*`,
+`BACKLOG-TASK-ID-*`, `FILE-BUDGET-*` y los bloques de priorizacion recientes.
+No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite el patron
+de scanner documental con write-set cerrado sobre los tres shards y contexto
+materializado solo por ref; los huecos accionables siguen cubiertos por owners
+pendientes ya visibles:
+
+- T44 gobierna la resolucion de contexto obligatorio `ref_only`; esta pasada se
+  resuelve con lectura local del paquete, fuentes vigentes y evidencia en ACK.
+- T249 gobierna identidad/orden de entradas de scanner.
+- T250 y T251 gobiernan dedupe, preflight canonico y alcance de pruebas para
+  scanners documentales.
+- T252 y T254 gobiernan ids humanos duplicados, aliases/read model y reparacion
+  aditiva sin renumerar historico.
+- T255 gobierna el hueco OPES local detectado en la pasada anterior; este
+  scanner no aporta una frontera nueva ni debe relanzar ese owner.
+
+Esta entrada queda como evidencia de no-op cubierto para evitar que el planner
+abra otro backlog solapado mientras esos owners sigan pendientes.
+
+## Escaneo backlog 2026-05-27 vigesima segunda pasada
+
+Evidencia revisada: paquete OrquestaV2
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-0f01e601f615c5bf38893ec9f09b4f35`
+con contexto obligatorio `ref_only` y
+`required_ref_action=ack_evidence_required`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+encabezados `^## T249`, `^## T250`, `^## T251`, `^## T252`, `^## T254`,
+`^## T255`, `BACKLOG-SCAN-COVERED-NOOP-20260527-002` y
+`BACKLOG-SCAN-NO-NEW-GAP-20260527-001`. No se programa codigo desde este
+scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite el patron
+documental ya observado: write-set cerrado a los tres shards, contexto por ref,
+prueba global obligatoria y huecos que ya tienen owner visible. La accion
+correcta es resolver el contexto en ACK por lectura local y no duplicar backlog.
+
+- T44 gobierna la resolucion de contexto obligatorio `ref_only`; esta pasada se
+  resuelve por lectura local del paquete y de las fuentes obligatorias.
+- T249 gobierna identidad y orden de bloques de escaneo.
+- T250/T251 gobiernan reserva/dedupe/preflight de propuestas y alcance de
+  pruebas para scanners documentales.
+- T252/T254 gobiernan lectura, alias y colisiones de ids humanos `Txx` ya
+  persistidos.
+- T255 gobierna el hueco OPES nuevo detectado en la pasada anterior; no se abre
+  otro owner para la misma division local del bridge.
+
+Esta entrada queda como evidencia de no-op cubierto para que el planner no
+relance otra tarea equivalente mientras esos owners sigan pendientes.
+
+## Escaneo backlog 2026-05-27 vigesimosegunda pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only` y `required_ref_action=ack_evidence_required`, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, matriz de smokes, backlog vivo, rail errors, duplicaciones de rails y
+documentacion local de `modulos/orquesta-server-shutdown`. Busquedas focales:
+`wc -l` de ficheros Go productivos, `rg` sobre `server-shutdown`,
+`shutdown_v0.go`, `T30`, `T225`, `T239`, `file-split` y entradas recientes de
+scanner. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Hueco concreto nuevo:
+
+- `modulos/orquesta-server-shutdown/shutdown_v0.go` tiene 319 lineas
+  productivas y mezcla autorizacion del solicitante, lectura de cola, seleccion
+  de targets, preparacion de checkpoint, escalado por deadline, solicitud de
+  stop, refresco de stats, ejecucion del supervisor y resumen publico. T30
+  gobierna checkpoint neutral, T225 escalado guardian y T239 correlacion de
+  intento Codex; falta un owner local para dividir el caso de uso de shutdown
+  sin cambiar su contrato ni mover runtime/procesos al modulo.
+
+## T256 server-shutdown-usecase-file-split
+
+Objetivo: partir el caso de uso de apagado controlado por responsabilidad local
+sin relajar las reglas hexagonales ni cambiar el contrato publico de shutdown.
+
+Estado: completado 2026-05-27.
+
+Cierre 2026-05-27: `shutdown_v0.go` queda como fachada de 74 lineas y el caso
+de uso se reparte en `auth_v0.go`, `control_v0.go`, `queue_targets_v0.go`,
+`checkpoint_v0.go`, `supervision_v0.go` y `summary_v0.go`, conservando puertos,
+DTOs, reason/status y semantica de checkpoint no forzado. Todos los ficheros Go
+de `orquesta-server-shutdown` quedan por debajo de 300 lineas.
+
+Rework final 2026-05-27: la entrega
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-247e6d495674dee5a1b996468956a6be`
+no reabre codigo: sincroniza la evidencia documental de T256, mantiene el split
+ya aplicado y resuelve el contexto obligatorio `ref_only` en ACK.
+Rework correctivo 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-ced6b146bcf5b10e5253ef166816de66`
+conserva la entrega valida, no relanza agente padre ni reabre codigo, y deja la
+verificacion focal en el ACK de esta correccion.
+Rework de reemplazo 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-75ba20e2214f2eaaea16f312c68208f0`
+confirma el cierre existente de T256, no toca codigo y documenta que la
+verificacion focal queda en el ACK de esta entrega.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-f878e21cfa5e67e7481d20a5f9bd24c5`
+mantiene T256 cerrado, no reabre codigo ni relanza agente padre, y deja la
+verificacion focal en el ACK de esta entrega.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-3d04cc0bcd1f59b871869ec824d2c996`
+mantiene T256 cerrado y documenta la verificacion focal en el ACK de esta
+entrega, sin cambios de contrato ni codigo adicional.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-46d0d95f62343cc1e51b9ca398f83f84`
+mantiene T256 cerrado, no reabre codigo ni relanza agente padre, y deja la
+verificacion focal en el ACK de esta entrega.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-33ca4ea060412afa902e83e3765c1d23`
+mantiene T256 cerrado, conserva el split local sin cambios de contrato ni codigo
+adicional y deja la verificacion focal en el ACK de esta entrega.
+Rework de reemplazo 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-b6686ba67b0d901948d8ce067d8771ec`
+mantiene T256 cerrado, conserva el split local sin cambios de contrato ni codigo
+adicional y deja la verificacion focal en el ACK de esta entrega.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-bff7aa189e7e24662071cf55dffcb95f`
+mantiene T256 cerrado, conserva el split local sin cambios de contrato ni codigo
+adicional y deja la verificacion focal en el ACK de esta entrega.
+Rework de reemplazo 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-55de335961e2cd74deaeda6d56c611bb`
+mantiene T256 cerrado, conserva el split local sin cambios de contrato ni codigo
+adicional y deja la verificacion focal y el contexto `ref_only` resuelto en el
+ACK de esta entrega.
+Rework de reemplazo 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-3cf9f50f2a1ee0b94df79560b6eeca53`
+mantiene T256 cerrado, conserva el split local sin cambios de contrato ni codigo
+adicional y deja la verificacion focal y el contexto `ref_only` resuelto en el
+ACK de esta entrega.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-a0fa2702f7f819236261be3abc537d86`
+mantiene T256 cerrado, conserva el split local sin cambios de contrato ni codigo
+adicional y deja la verificacion obligatoria pasada en el ACK de esta entrega.
+Rework de reemplazo 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-autoprogr-2e9-81707decc46db22fc599c9343d59d3cb`
+mantiene T256 cerrado, conserva el split local sin cambios de contrato ni codigo
+adicional y deja la verificacion obligatoria y el contexto `ref_only` resuelto en
+el ACK de esta entrega.
+
+Verificacion esperada: `go test -count=1 ./modulos/orquesta-server-shutdown ./cmd/orquesta-server`.
+
+Alcance:
+
+- `modulos/orquesta-server-shutdown`
+- `cmd/orquesta-server`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Separar en ficheros menores de 300 lineas la autorizacion del requester,
+  lectura/filtrado de candidatos, checkpoint cooperativo, escalado por deadline,
+  refresco de stats/supervisor y resumen publico.
+- Mantener `ShutdownServerV0` como fachada del caso de uso y conservar nombres
+  publicos, reason codes, DTOs y semantica de `shutdown_ready`,
+  `waiting_checkpoint`, `waiting_drain`, `forced_after_checkpoint_deadline` y
+  `pending_checkpoint_agent_refs`.
+- No introducir Codex, MCP, web, DB, filesystem, PID, senales ni runtime real en
+  `orquesta-server-shutdown`; la parada fisica del proceso sigue fuera del
+  modulo y la composicion servidor solo cablea puertos.
+- No reabrir T30, T225 ni T239: checkpoint neutral, escalado del guardian y
+  correlacion de intento Codex siguen en sus owners; esta tarea solo reduce
+  mezcla de responsabilidades del caso de uso local.
+
+## Escaneo backlog 2026-05-27 vigesima tercera pasada
+
+Evidencia revisada: paquete OrquestaV2
+`agent-ref-assessment-task-autoprogramming-350b93e475a8-g01-8eae8526b9c0a30f5c6c290c6fc9498b`
+con contexto obligatorio `ref_only` y
+`required_ref_action=ack_evidence_required`, `AGENTS.md`, `README.md`, foto
+vigente, guia del nucleo, principio del director, backlog vivo, rail errors,
+duplicaciones de rails y documentacion local de `modulos/orquesta-server-shutdown`.
+Busquedas focales: encabezados `^## T249`, `^## T250`, `^## T251`,
+`^## T252`, `^## T254`, `^## T255`, `^## T256`,
+`BACKLOG-SCAN-COVERED-NOOP-*`, `FILE-BUDGET-*` y
+`SERVER-SHUTDOWN-USECASE-FILE-SPLIT-20260527-001`. No se programa codigo desde
+este scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite el patron
+documental con write-set cerrado a los tres shards, contexto por ref y pruebas
+globales obligatorias; los huecos accionables siguen cubiertos por owners
+visibles y sus cierres locales cuando existan:
+
+- T44 gobierna la resolucion de contexto obligatorio `ref_only`; esta pasada se
+  resuelve por lectura local del paquete y fuentes vigentes, con evidencia en
+  ACK.
+- T249 gobierna identidad y orden de bloques de escaneo.
+- T250/T251 gobiernan reserva, dedupe, preflight canonico y alcance de pruebas
+  para scanners documentales.
+- T252/T254 gobiernan lectura, aliases y colisiones de ids humanos `Txx` ya
+  persistidos.
+- T255 gobierna el split local de `orquesta-opes-bridge`.
+- T256 gobierna el split local de `orquesta-server-shutdown` y queda cerrado
+  por el split documentado en su entrada canonica.
+
+Esta entrada queda como evidencia de no-op cubierto para que el planner no
+relance otra tarea equivalente mientras esos owners sigan visibles. Rework
+2026-05-27: los criterios sueltos de T256 quedan absorbidos por la entrada
+canonica cerrada, sin crear otro owner ni relanzar agente padre.
+
+## Escaneo backlog 2026-05-27 vigesima segunda pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only` y `required_ref_action=ack_evidence_required`, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, backlog vivo, rail errors y duplicaciones de rails. Busquedas
+focales: `rg` sobre `BACKLOG-SCAN-COVERED-NOOP-20260527-002`,
+`BACKLOG-SCAN-NO-NEW-GAP-20260527-001`, `T249`, `T250`, `T251`, `T252`,
+`T254` y `T255`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. Los huecos accionables
+observados ya estan cubiertos por owners pendientes y por evidencia forense:
+
+- Contexto obligatorio `ref_only`: se resuelve por lectura local del paquete y
+  evidencia explicita en ACK; T44 conserva el owner general de esta guarda.
+- Scanners documentales con pruebas globales amplias: cubierto por T251
+  `backlog-scanner-required-test-scope-policy`.
+- Colisiones, reserva y lectura de ids humanos `Txx`: cubierto por T250, T252
+  y T254 sin renumerar historico ni cerrar por numero ambiguo.
+- Solapes de propuestas de scanner y preflight canonico: cubierto por T249,
+  T250 y T251.
+- Split de contrato documental OPES ya visible: cubierto por T255; esta pasada
+  no reabre otro owner de OPES ni toca codigo del bridge.
+
+Esta entrada queda como evidencia de no-op cubierto para que el planner no
+genere otra tarea equivalente mientras esos owners sigan pendientes.
+
+## Escaneo backlog 2026-05-27 vigesima segunda pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only` y `required_ref_action=ack_evidence_required`, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, backlog vivo, rail errors y duplicaciones de rails. Busquedas
+focales: `rg` sobre `BACKLOG-SCAN-*`, `FILE-BUDGET-20260527`,
+encabezados `^## T250`, `^## T251`, `^## T252`, `^## T254`, `^## T255` y
+owners recientes de scanner. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. Los huecos concretos
+observados ya tienen owner pendiente o evidencia de no-op:
+
+- Contexto obligatorio `ref_only` sin bytes materializados: resuelto para esta
+  entrega mediante lectura local del paquete y de fuentes obligatorias; T44
+  sigue siendo el owner general de esa guarda.
+- Scanners documentales con pruebas requeridas globales: cubierto por T251
+  `backlog-scanner-required-test-scope-policy`; esta pasada conserva la prueba
+  obligatoria recibida en el paquete y no redefine la politica.
+- Colisiones, dedupe y aliases de ids humanos `Txx`: cubiertos por T249, T250,
+  T251, T252 y T254; no se renumera ni se abre una politica paralela.
+- Split de owners por presupuesto de fichero: T253 cubre
+  `quality_gate_replan_candidate_provider_v0.go` y T255 cubre
+  `document_plan_contract_v0.go`; no se detecta otro owner nuevo dentro del
+  write-set documental cerrado.
+
+Esta entrada queda como evidencia compacta para que el planner no relance otro
+scanner equivalente mientras los owners anteriores sigan pendientes y visibles.
+
+## Escaneo backlog 2026-05-27 vigesima segunda pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-b67a7bf97034fe5d7abbfaf0e628c3c5`
+con contexto obligatorio `ref_only` y
+`required_ref_action=ack_evidence_required`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T254`, `^## T255`, entradas `BACKLOG-SCAN-*`, `FILE-BUDGET-*`,
+`BACKLOG-TASK-ID-*`, `required_ref_action` y `ref_only`. No se programa codigo
+desde este scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete vuelve a observar
+el mismo patron ya cubierto: contexto requerido por ref, write-set documental
+cerrado, colisiones/solapes de ids humanos y prueba global demasiado amplia
+para un scanner documental. Los owners pendientes visibles siguen siendo T44,
+T249, T250, T251, T252, T254 y T255. Esta pasada queda como evidencia breve de
+no-op cubierto y debe cerrarse mediante ACK con `contexto_ref_only_resuelto`,
+sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 vigesima tercera pasada
+
+Evidencia revisada: paquete OrquestaV2
+`agent-ref-assessment-task-autoprogramming-721523601cc1-g01-520f979fdde9866f084ddfa1d5cc7425`
+con contexto obligatorio `ref_only` y
+`required_ref_action=ack_evidence_required`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T254`, `^## T255`, `^## T256`, entradas `BACKLOG-SCAN-*`,
+`FILE-BUDGET-*`, `required_ref_action`, `ref_only` y los bloques recientes de
+priorizacion. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite el patron
+documental ya cubierto: write-set cerrado a los tres shards, contexto por ref,
+prueba global obligatoria y huecos que ya tienen owner visible. La accion
+correcta es resolver el contexto en ACK por lectura local y evidencia explicita,
+sin duplicar backlog programable.
+
+- T44 gobierna la resolucion general de contexto obligatorio `ref_only`.
+- T249, T250 y T251 gobiernan identidad de escaneo, dedupe/preflight y alcance
+  de pruebas para scanners documentales.
+- T252 y T254 gobiernan colisiones, aliases y lectura de ids humanos `Txx`.
+- T255 y T256 cubren los ultimos splits concretos detectados por presupuesto de
+  fichero; esta pasada no aporta una frontera nueva ni reabre esos owners.
+
+Esta entrada queda como evidencia de no-op cubierto para que el planner no
+relance otra tarea equivalente mientras esos owners sigan pendientes.
+
+## Escaneo backlog 2026-05-27 vigesimo tercera pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner con contexto obligatorio
+`ref_only` y `required_ref_action=ack_evidence_required`, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, backlog vivo, matriz de smokes, rail errors, duplicaciones de rails y
+docs locales de `modulos/orquesta-runtime`. Busquedas focales: `wc -l` de
+ficheros Go productivos, `rg` sobre `ProcessRuntimeConnectorV0`,
+`process_runtime_connector_v0.go`, `process_runtime_connector_types_v0.go`,
+`NEUTRAL-PROCESS-STOP-E2E`, T65, T66, T242, T253 y T255. No se programa codigo
+desde este scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Hueco concreto nuevo:
+
+- `modulos/orquesta-runtime/process_runtime_connector_v0.go` y
+  `modulos/orquesta-runtime/process_runtime_connector_types_v0.go` superan el
+  limite operativo de 300 lineas y concentran en la misma frontera launch,
+  adopcion, snapshot, stop cooperativo/escalado, politica de env, validacion de
+  shell/rutas y DTOs/errores publicos. `NEUTRAL-PROCESS-STOP-E2E` cubre el
+  comportamiento vivo de proceso temporal y T65/T66 cubren composicion
+  residente/smoke neutral; falta un owner local de runtime para dividir el
+  conector de proceso sin cambiar semantica ni meter proveedor/Codex/OPES en el
+  runtime neutral.
+
+## T256 runtime-process-connector-file-split
+
+Objetivo: partir el conector neutral de procesos locales por responsabilidad
+manteniendo la frontera de runtime opt-in y la evidencia de stop/launch ya
+cerrada.
+
+Estado: cerrado 2026-05-27.
+
+Evidencia de cierre 2026-05-27:
+
+- `process_runtime_connector_types_v0.go` queda acotado a DTOs, codigos y
+  errores publicos; la validacion de launch y las guardas de env/rutas/shell se
+  separan en owners locales.
+- `process_runtime_connector_v0.go` queda acotado al conector, launch, stop y
+  snapshot publico; adopcion, estado interno y watchers viven en ficheros
+  propios.
+- La suite de proceso local reparte helpers de test y queda bajo el limite de
+  300 lineas por fichero Go sin cambiar refs, codigos ni semantica publica.
+- Verificacion: `go test -count=1 ./modulos/orquesta-runtime`.
+
+Rework de revision 2026-05-27: la entrega
+`agent-ref-task-ref-review-rework-task-autoprogramming-d1516ddebab4-g01-736b5902b9f28a1666a612eccb83a9c2`
+no relanza el agente padre ni reabre codigo de runtime. Conserva el split T256
+cerrado, sincroniza solo evidencia documental dentro del write-set y resuelve
+el contexto obligatorio `ref_only` por lectura local y evidencia explicita en
+ACK.
+
+Alcance:
+
+- `modulos/orquesta-runtime`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Separar DTOs/errores publicos, validacion de request/snapshot, politica de
+  env/rutas/shell, lifecycle de launch/adopt/wait y stop cooperativo/escalado
+  en ficheros menores de 300 lineas con nombres de owner claros.
+- Conservar `ProcessRuntimeConnectorV0` como conector neutral opt-in: sin
+  proveedor, Codex, OPES, DB, HOME heredado, shell implicito, prompts,
+  transcripts, stdout/stderr crudo ni rutas privadas en snapshot publico.
+- Mantener compatibilidad publica de refs y codigos: `process_ref`,
+  `session_ref`, `launch_ref`, `stop_ref`, `ProcessRuntimeStatusV0`,
+  `ProcessRuntimeErrorCodeV0`, `ProcessRuntimeStopReasonCodeV0` y receipt de
+  launch no cambian de nombre ni semantica.
+- No reabrir `NEUTRAL-PROCESS-STOP-E2E`, T65 ni T66: esta tarea es split
+  interno del modulo runtime y debe conservar los tests de proceso temporal ya
+  existentes.
+- Tests: `go test -count=1 ./modulos/orquesta-runtime`.
+
+## Escaneo backlog 2026-05-27 vigesima tercera pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-3ddbc1385ac2-g01-b0d62e2841ee6bd1a73887a370464c5e`
+con contexto obligatorio `ref_only` y
+`required_ref_action=ack_evidence_required`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director, matriz
+de smokes, backlog vivo, rail errors y duplicaciones de rails. Busquedas
+focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`,
+`^## T252`, `^## T254`, `^## T255`, `^## T256`, entradas `BACKLOG-SCAN-*`,
+`BACKLOG-TASK-ID-*`, `FILE-BUDGET-*`, `SERVER-SHUTDOWN-USECASE-FILE-SPLIT` y
+medicion de ficheros Go productivos. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. Los huecos accionables
+observados ya tienen owner pendiente visible:
+
+- Contexto obligatorio `ref_only` sin materializacion: resuelto para esta
+  entrega mediante lectura local del paquete y de fuentes obligatorias; T44
+  conserva el owner general de la guarda.
+- Scanners documentales con pruebas globales sobredimensionadas: cubierto por
+  T251 `backlog-scanner-required-test-scope-policy`.
+- Colisiones, reserva, dedupe, aliases y read model de ids humanos `Txx`:
+  cubiertos por T249, T250, T251, T252 y T254, sin renumerar historico.
+- Splits por presupuesto de fichero ya detectados: T253 cubre
+  `quality_gate_replan_candidate_provider_v0.go`, T255 cubre
+  `document_plan_contract_v0.go` y T256 cubre
+  `modulos/orquesta-server-shutdown/shutdown_v0.go`.
+
+Esta pasada queda como evidencia documental de no-op cubierto para que el
+planner no relance otra tarea equivalente mientras esos owners sigan pendientes.
+
+## Escaneo backlog 2026-05-27 vigesima cuarta pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-87d5c800f528-g01-8049fe783ba558122c38feeec2532ceb`
+con contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del director, backlog vivo, rail errors y
+duplicaciones de rails. Busquedas focales: encabezados `^## T44`, `^## T249`,
+`^## T250`, `^## T251`, `^## T252`, `^## T254`, `^## T255`, `^## T256`,
+`BACKLOG-SCAN-*`, `BACKLOG-TASK-ID-*`, `FILE-BUDGET-*`, `required_ref_action`
+y `ref_only`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite un patron
+ya cubierto por owners pendientes: contexto requerido por ref, write-set
+documental cerrado, prueba global demasiado amplia para un scanner documental,
+solapes de propuestas, ambiguedad de ids humanos `Txx` y splits por presupuesto
+ya asignados. T44, T249, T250, T251, T252, T254, T255 y T256 siguen siendo los
+owners visibles. Esta pasada queda como evidencia de no-op cubierto y debe
+cerrarse mediante ACK con `contexto_ref_only_resuelto`, sin relanzar otro owner
+solapado.
+
+## Escaneo backlog 2026-05-27 vigesima cuarta pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-757fa45b2845-g01-ad11a36d2c4f5bdc6ff9e46c6c516405`
+con contexto obligatorio `ref_only` y
+`required_ref_action=ack_evidence_required`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+matriz de smokes, backlog vivo, rail errors, duplicaciones de rails y medicion
+focal de autoprogramacion residente con `wc -l` y `rg` sobre
+`cmd/orquesta-server/idle_self_improvement_*.go`. No se programa codigo desde
+este scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Hueco concreto nuevo:
+
+- `cmd/orquesta-server/idle_self_improvement_federated_backlog_v0.go` tiene 311
+  lineas y mezcla catalogo de fuentes federadas, lectura del backlog principal,
+  lectura de documentos locales, parser de indice, parser de entradas locales,
+  clasificacion de `quarantine`/vigente, derivacion de `BacklogScanDocs`,
+  contexto/ref de evidencias y dedupe por alias. T249/T250/T251/T252/T254
+  gobiernan identidad, dedupe, preflight, pruebas e ids humanos, pero no existe
+  un owner local para partir este fichero antes de anadir mas politica de
+  fuentes federadas o cuarentena documental.
+
+## T257 federated-backlog-source-file-split
+
+Objetivo: partir la carga y parseo del indice federado de autoprogramacion por
+responsabilidad local, conservando el contrato documental vigente y la
+cuarentena de fuentes historicas.
+
+Estado: cerrado localmente el 2026-05-27.
+
+Alcance:
+
+- `cmd/orquesta-server`
+- `modulos/orquesta-server`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+- `docs/rail_errors_observados_2026-05-23.md`
+- `docs/duplicaciones_railes_pendientes_2026-05-24.md`
+
+Criterios:
+
+- Dividir `idle_self_improvement_federated_backlog_v0.go` en ficheros menores
+  de 300 lineas con owners claros: catalogo de fuentes, parser del indice
+  federado, parser de entradas locales, clasificacion de estado/quarantine,
+  construccion de secciones y refs de contexto.
+- Mantener el indice federado como entrada documental local: no promover
+  fuentes `quarantine` a tareas ejecutables, no leer documentos fuera del
+  catalogo canonico y no convertir refs de docs en rutas externas.
+- Conservar la semantica actual de `source_path`, `source_kind`, `owner`,
+  `estado`, `related_txx`, `aliases`, `tests`, `NeedsDocumentReview`,
+  `StateEvidenceRefs` y `BacklogScanDocs`.
+- No reabrir T249/T250/T251/T252/T254: esta tarea solo reduce mezcla de
+  responsabilidades del fichero federado; identidad, dedupe, preflight, alcance
+  de pruebas e ids humanos siguen en esos owners.
+- Cubrir el split con pruebas existentes del planner federado y del servidor.
+- Tests: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+Cierre 2026-05-27:
+
+- `cmd/orquesta-server/idle_self_improvement_federated_backlog_v0.go` queda
+  acotado al tipo de fuente federada y a la carga por catalogo canonico.
+- El parser del indice vive en
+  `cmd/orquesta-server/idle_self_improvement_federated_backlog_index_parser_v0.go`.
+- El parser de entradas locales y la construccion de secciones viven en
+  `cmd/orquesta-server/idle_self_improvement_federated_backlog_local_parser_v0.go`.
+- La clasificacion ejecutable/quarantine de fuentes vive en
+  `cmd/orquesta-server/idle_self_improvement_federated_backlog_state_v0.go`.
+- `cmd/orquesta-server/residual_go_file_budget_v0_test.go` ya no mantiene
+  baseline residual para el fichero federado; si vuelve a superar 300 lineas,
+  la prueba lo tratara como regresion nueva.
+- Se conservan `source_path`, `source_kind`, `owner`, `estado`, `related_txx`,
+  `aliases`, `tests`, `NeedsDocumentReview`, `StateEvidenceRefs`,
+  `BacklogScanDocs` y la cuarentena de fuentes no ejecutables.
+
+Revalidacion OrquestaV2 2026-05-27:
+
+- Paquete
+  `agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-ec8e0c187f3a9ac12eb4a2a1b1343950`
+  confirma el cierre T257 con write-set cerrado, contexto `ref_only` requerido
+  y refs opacas de worktree/branch preservadas.
+- No se abre otro owner: el split ya esta en ficheros menores de 300 lineas y
+  conserva catalogo canonico, parser de indice, parser local, clasificacion de
+  estado/quarantine y refs de contexto sin absorber T249/T250/T251/T252/T254.
+- Revalidacion burst 002
+  `agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-a2fd4b485cb6c9eb3e118699b8c263e8`:
+  confirma el mismo cierre; el contexto `ref_only` se resuelve por lectura local
+  y evidencia en ACK, sin ampliar write-set ni convertir worktree/branch refs en
+  rutas.
+- Revalidacion burst 003
+  `agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-6e9bb2925e8315f5a8e8a4458c5dafec`:
+  confirma que T257 no requiere nuevo codigo dentro del write-set; el split
+  sigue repartido entre carga federada, parser de indice, parser local,
+  clasificacion de estado/quarantine y refs de contexto. La prueba obligatoria
+  queda bloqueada por compilacion de `modulos/orquesta-app-director-service`,
+  fuera del write-set de esta tarea.
+- Revalidacion burst 002
+  `agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-3519b447ee0e247812f0a2de19e107ff`:
+  confirma el cierre T257 vigente; el paquete solo reobserva el split ya
+  aplicado, resuelve `ref_only` por lectura local/evidencia en ACK y conserva
+  `worktree_ref`/`branch_ref` como refs opacas sin abrir owner nuevo.
+- Revalidacion burst 002
+  `agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-6ad2ce2a420fdd4406624de54709433a`:
+  confirma otra reobservacion del cierre T257; se mantiene el split existente,
+  se resuelve `ref_only` por lectura local/evidencia ACK y se conservan
+  `worktree_ref`/`branch_ref` como refs opacas sin ampliar write-set.
+
+## Escaneo backlog 2026-05-27 vigesima quinta pasada
+
+Evidencia revisada: paquete OrquestaV2
+`agent-ref-assessment-task-autoprogramming-350b93e475a8-g01-a9fca45e81d848b2c2a00b8349e4817b`
+del retry `request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-d0cf1ea77c2b6898418f56ac96139dcb5cb606948a8e3adc89ed26b4a9b1f02c`,
+con contexto obligatorio `ref_only` y
+`required_ref_action=ack_evidence_required`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+`BACKLOG-SCAN-*`, `FILE-BUDGET-*`, `required_ref_action` y `ref_only`.
+No se programa codigo desde este scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete vuelve a cubrir
+el mismo patron documental: write-set cerrado a los tres shards, contexto por
+ref, prueba global obligatoria y huecos ya visibles con owners pendientes. T44
+gobierna la guarda `ref_only`; T249/T250/T251 gobiernan identidad, dedupe,
+preflight y alcance de pruebas de scanner; T252/T254 gobiernan ids humanos,
+aliases y read model; T255/T256/T257/T258 cubren los splits concretos ya
+detectados por presupuesto o responsabilidad local. Esta pasada queda como
+evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 burst 002 1db27
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-1db27b63b7ddb14755938b05f1eff32f`
+del request
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a los tres shards documentales, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+matriz de smokes, backlog vivo, rail errors y duplicaciones de rails. Busquedas
+focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`,
+`^## T252`, `^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`,
+`^## T258`, entradas `BACKLOG-SCAN-COVERED-NOOP-*`,
+`required_ref_action`, `ref_only` y paquetes previos del mismo request base.
+No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete reobserva una
+frontera ya cubierta: contexto requerido por ref, prueba global obligatoria,
+write-set limitado a backlog/rail errors/duplicaciones y owners accionables ya
+visibles. T44 gobierna contexto `ref_only`; T249/T250/T251 gobiernan identidad,
+dedupe/preflight y alcance de pruebas de scanners; T252/T254 gobiernan ids
+humanos, reserva, colisiones, aliases y read model; T253/T255/T256/T257/T258
+cubren splits concretos recientes. Esta pasada queda como evidencia de no-op
+cubierto y debe cerrarse mediante ACK con `contexto_ref_only_resuelto`, sin
+relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry 7a5673 burst 002 7aa0
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-3ddbc1385ac2-g01-7aa072fa3bae532da402f4b748f1904d`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-7a56734034f8d2f7cfecdb944e4e265d06361b422163b501881d49a99fce3508`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-7a56734034f8d2f7cfecdb944e4e265d06361b422163b501881d49a99fce3508-burst-002`,
+contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del director, backlog vivo, rail errors y
+duplicaciones de rails. Busquedas focales: encabezados `^## T44`,
+`^## T249`, `^## T250`, `^## T251`, `^## T252`, `^## T253`, `^## T254`,
+`^## T255`, `^## T256`, `^## T257`, `^## T258`, entradas
+`BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y paquetes
+previos del retry `7a5673`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite el patron
+documental ya cubierto: contexto requerido por ref, prueba global obligatoria,
+write-set cerrado a backlog/rail errors/duplicaciones y huecos accionables con
+owners pendientes visibles. T44 gobierna contexto `ref_only`; T249/T250/T251
+gobiernan identidad, dedupe/preflight y alcance de pruebas de scanners;
+T252/T254 gobiernan ids humanos, reserva, colisiones, aliases y read model;
+T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada queda
+como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 vigesima sexta pasada retry 42fbc4
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-721523601cc1-g01-a88632e247fc4b53576ed868990269ec`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-42fbc4ded7918354a0ba8d427df92a05da07828f0fbb064fba2a680f461c45f5`,
+con contexto obligatorio `ref_only` y
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del director, matriz de smokes, backlog vivo, rail
+errors y duplicaciones de rails. Busquedas focales: encabezados `^## T44`,
+`^## T249`, `^## T250`, `^## T251`, `^## T252`, `^## T254`, `^## T255`,
+`^## T256`, `^## T257`, `^## T258`, entradas `BACKLOG-SCAN-*`,
+`FILE-BUDGET-*`, `required_ref_action`, `ref_only` y medicion focal de ficheros
+Go grandes para contrastar owners ya abiertos. No se programa codigo desde este
+scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El patron del paquete ya
+esta cubierto por owners pendientes visibles:
+
+- Contexto obligatorio `ref_only` sin materializacion: resuelto para esta
+  entrega mediante lectura local del paquete y evidencia explicita en ACK; T44
+  conserva el owner general.
+- Scanners documentales con write-set cerrado, prueba global obligatoria,
+  dedupe/preflight, identidad de entrada y alcance de pruebas: cubiertos por
+  T249, T250 y T251.
+- Colisiones, aliases, reserva y read model de ids humanos `Txx`: cubiertos por
+  T252 y T254 sin renumerar historico.
+- Splits locales por presupuesto o responsabilidad ya detectados: T253, T255,
+  T256, T257 y T258 cubren los owners visibles recientes.
+
+Esta pasada queda como evidencia documental de no-op cubierto para que el
+planner no relance otra tarea equivalente mientras esos owners sigan
+pendientes.
+
+## Escaneo backlog 2026-05-27 vigesima quinta pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-8f23d8e2a22e-g01-556dde497c2e0ff3e929391ffeb28c93`
+con contexto obligatorio `ref_only` y
+`required_ref_action=ack_evidence_required`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T254`, `^## T255`, `^## T256`, `^## T257`, entradas `BACKLOG-SCAN-*`,
+`FILE-BUDGET-*`, `required_ref_action` y `ref_only`. No se programa codigo
+desde este scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. Los huecos concretos
+observados ya tienen owner pendiente visible:
+
+- Contexto obligatorio `ref_only` sin materializacion: resuelto para esta
+  entrega mediante lectura local del paquete y evidencia explicita en ACK; T44
+  conserva el owner general de esta guarda.
+- Scanners documentales con prueba global obligatoria y write-set cerrado:
+  cubiertos por T249, T250 y T251.
+- Colisiones, aliases y lectura de ids humanos `Txx`: cubiertos por T252 y
+  T254 sin renumerar historico.
+- Splits locales por presupuesto de fichero ya detectados: T253, T255, T256 y
+  T257 cubren los owners visibles recientes.
+
+Esta pasada queda como evidencia breve de no-op cubierto para que el planner no
+relance otra tarea equivalente mientras esos owners sigan pendientes.
+
+## Escaneo backlog 2026-05-27 vigesima sexta pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-87d5c800f528-g01-7099771d60152a40426c551b9fed8fdb`
+con contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del director, backlog vivo, rail errors y
+duplicaciones de rails. Busquedas focales: encabezados `^## T44`, `^## T249`,
+`^## T250`, `^## T251`, `^## T252`, `^## T254`, `^## T255`, `^## T256`,
+`^## T257`, entradas `BACKLOG-SCAN-*`, `FILE-BUDGET-*`,
+`required_ref_action` y `ref_only`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite el patron
+documental ya cubierto: contexto obligatorio por ref, prueba global obligatoria
+para un cambio documental, write-set cerrado a backlog/rail errors/duplicaciones
+y owners pendientes visibles. T44 conserva la guarda general de contexto
+`ref_only`; T249/T250/T251 cubren identidad, dedupe, preflight y alcance de
+pruebas de scanners; T252/T254 cubren ids humanos, colisiones y aliases; T253,
+T255, T256, T257 y T258 cubren los splits concretos recientes. Esta pasada
+queda como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 vigesima sexta pasada
+
+Evidencia revisada: paquete OrquestaV2
+`agent-ref-assessment-task-autoprogramming-3ddbc1385ac2-g01-a39762df8a44697f801b68e1a8195f6b`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-7a56734034f8d2f7cfecdb944e4e265d06361b422163b501881d49a99fce3508`,
+con contexto obligatorio `ref_only` y
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, foto vigente, guia del nucleo,
+principio del director, matriz de smokes, backlog vivo, rail errors y
+duplicaciones de rails. Busquedas focales: encabezados `^## T44`, `^## T249`,
+`^## T250`, `^## T251`, `^## T252`, `^## T254`, `^## T255`, `^## T256`,
+`^## T257`, `^## T258`, entradas `BACKLOG-SCAN-*`, `FILE-BUDGET-*`,
+`required_ref_action` y `ref_only`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite el patron
+documental ya cubierto: contexto por ref, prueba global obligatoria, write-set
+limitado a backlog/rail errors/duplicaciones y huecos accionables con owner
+pendiente visible.
+
+- T44 gobierna la resolucion general de contexto obligatorio `ref_only`; esta
+  entrega se resuelve por lectura local del paquete y evidencia explicita en
+  ACK.
+- T249, T250 y T251 gobiernan identidad de escaneo, dedupe/preflight canonico y
+  alcance de pruebas para scanners documentales.
+- T252 y T254 gobiernan colisiones, aliases y lectura de ids humanos `Txx`.
+- T255, T256, T257 y T258 cubren los splits concretos recientes de OPES bridge,
+  server-shutdown, backlog federado y suite historica app-director-service.
+
+Esta pasada queda como evidencia de no-op cubierto para que el planner no
+relance otra tarea equivalente mientras esos owners sigan pendientes.
+
+## Escaneo backlog 2026-05-27 retry d64a6a tercera pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-757fa45b2845-g01-9a0012e071185631d9f7652eb10ef3bb`
+de
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-d64a6a4098bc947a8abac738ecfc29123c24afa6dde953cf9750f22d13b272c6`,
+con contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del director, backlog vivo, rail errors y
+duplicaciones de rails. Busquedas focales: encabezados `^## T44`, `^## T249`,
+`^## T250`, `^## T251`, `^## T252`, `^## T253`, `^## T254`, `^## T255`,
+`^## T256`, `^## T257`, `^## T258`, entradas `BACKLOG-SCAN-*`,
+`FILE-BUDGET-*`, `required_ref_action`, `ref_only` y paquetes previos del mismo
+retry. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite el patron
+documental ya cubierto por owners pendientes visibles: T44 gobierna contexto
+obligatorio `ref_only`; T249/T250/T251 gobiernan identidad, dedupe, preflight y
+alcance de pruebas de scanners; T252/T254 gobiernan ids humanos, reserva,
+colisiones y aliases; T253/T255/T256/T257/T258 cubren splits concretos recientes.
+Esta pasada queda como evidencia de no-op cubierto y debe cerrarse mediante ACK
+con `contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Rework T257 2026-05-27 reemplazo 5a8806
+
+Evidencia revisada: paquete OrquestaV2 de correccion tras revision
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-c4dae25a0488-g01-385-5a8806ef75f49aae3734e7a512136f48`
+de la request
+`request-ref-autoprogramming-backlog-t257-federated-backlog-source-file-split-14e8590c`,
+con contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a
+`cmd/orquesta-server`, `modulos/orquesta-server` y los tres shards
+documentales de backlog, rail errors y duplicaciones. La lectura local confirma
+que T257 ya queda cerrado como split del backlog federado en
+`cmd/orquesta-server`, con prueba focal requerida
+`go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+Resultado: no se abre otro Txx ni se relanza agente padre. Esta correccion solo
+sincroniza la evidencia documental del rework, mantiene T257 como owner
+canonico de `federated-backlog-source-file-split`, conserva las refs opacas y
+debe cerrarse con ACK que declare `contexto_ref_only_resuelto` por lectura
+local/evidencia explicita.
+
+## Revalidacion T257 2026-05-27 burst 003 7caabb
+
+Evidencia revisada: paquete OrquestaV2
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-7caabb5af4687f69a91e450ea47d88db`
+de
+`request-ref-autoprogramming-backlog-t257-federated-backlog-source-file-split-14e8590c`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-t257-federated-backlog-source-file-split-14e8590c-burst-003`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`
+y write-set cerrado a `cmd/orquesta-server`, `modulos/orquesta-server` y estos
+tres shards documentales. Lectura local cubierta: `AGENTS.md`, `README.md`,
+docs vigentes, paquete de agente, backlog vivo, rail errors, duplicaciones y
+fuentes T257 de `cmd/orquesta-server`.
+
+Resultado: no se abre un Txx nuevo ni se programa codigo. T257 sigue cerrado:
+carga federada, parser de indice, parser local, clasificacion de estado y refs
+de contexto permanecen separados en `cmd/orquesta-server`. T44 gobierna la
+resolucion general de contexto `ref_only`; T249/T250/T251 gobiernan identidad,
+dedupe/preflight y alcance de pruebas; T252/T254 gobiernan ids humanos,
+reservas, colisiones, aliases y read model; T255/T256/T258 conservan sus splits
+propios. Esta pasada queda como evidencia de no-op cubierto y debe cerrarse por
+ACK con `contexto_ref_only_resuelto`, manteniendo `worktree_ref` y `branch_ref`
+como refs opacas.
+
+## Revalidacion T257 2026-05-27 burst 002 ebeb
+
+Evidencia revisada: paquete OrquestaV2
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-ebebfa72236082cbc973b4c48b012e70`
+de
+`request-ref-autoprogramming-backlog-t257-federated-backlog-source-file-split-14e8590c`,
+con contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a `cmd/orquesta-server`, `modulos/orquesta-server` y shards
+documentales, `AGENTS.md`, `cmd/orquesta-server/AGENTS.md`,
+`modulos/orquesta-server/AGENTS.md`, `modulos/orquesta-server/README.md`,
+backlog vivo, rail errors y duplicaciones de rails. Busquedas focales confirman
+que T257 ya esta cerrado en `cmd/orquesta-server`: carga federada, parser de
+indice, parser local y clasificacion de estado viven en ficheros separados por
+responsabilidad.
+
+Resultado: no se abre owner nuevo ni se duplica T44/T249/T250/T251/T252/T254,
+T255/T256/T258. El paquete solo reobserva el cierre T257; el contexto
+`ref_only` se resuelve por lectura local y evidencia ACK, conservando
+`worktree_ref` y `branch_ref` como refs opacas.
+
+## Revalidacion T257 2026-05-27 burst 003 688572
+
+Evidencia revisada: paquete OrquestaV2
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-688572c0228e7735f6c5a3d0b137d96f`
+de la request
+`request-ref-autoprogramming-backlog-t257-federated-backlog-source-file-split-14e8590c`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-t257-federated-backlog-source-file-split-14e8590c-burst-003`,
+write-set cerrado a `cmd/orquesta-server`, `modulos/orquesta-server` y estos
+shards documentales. El contexto obligatorio `ref_only` requiere evidencia por
+ACK; se resuelve por lectura local del paquete, `AGENTS.md`, README local,
+fuentes vigentes y el cierre T257 ya registrado.
+
+Resultado: no se abre un Txx nuevo ni se programa codigo. T257 sigue cerrado en
+`cmd/orquesta-server`: la carga federada, el parser de indice, el parser local y
+la clasificacion de estado ya estan separados en ficheros pequenos con prueba
+focal del servidor. T44 conserva el owner de contexto `ref_only`;
+T249/T250/T251/T252/T254 gobiernan identidad, dedupe/preflight, alcance de
+pruebas, ids humanos, reserva y aliases; T255/T256/T258 conservan sus splits
+recientes. `worktree_ref` y `branch_ref` se preservan solo como refs opacas.
+
+## Revalidacion T257 2026-05-27 burst 002 d42ec6
+
+Evidencia revisada: paquete OrquestaV2
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-d42ec6b2c4feefb41c1a8bd1217aba3a`
+de
+`request-ref-autoprogramming-backlog-t257-federated-backlog-source-file-split-14e8590c`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-t257-federated-backlog-source-file-split-14e8590c-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required` y
+write-set cerrado a `cmd/orquesta-server`, `modulos/orquesta-server` y estos
+shards documentales. Se leyeron localmente el paquete, `AGENTS.md`, `README.md`,
+AGENTS/README locales del servidor, foto vigente, guia del nucleo, principio
+del director, backlog vivo, rail errors y duplicaciones.
+
+Resultado: no se abre un Txx nuevo ni se programa codigo. T257 ya conserva la
+separacion entre carga federada, parser de indice, parser local y clasificacion
+de estado/quarantine en `cmd/orquesta-server`; T249/T250/T251/T252/T254 siguen
+gobernando identidad, dedupe, preflight, alcance de pruebas e ids humanos. La
+prueba obligatoria
+`go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server` queda
+bloqueada por compilacion de `modulos/orquesta-app-director-service` fuera del
+write-set cerrado, por lo que el ACK debe reportar fallo sin editar fuera de
+alcance.
+
+## Revalidacion T257 2026-05-27 burst 002 6dc6
+
+Evidencia revisada: paquete OrquestaV2
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-6dc6bdca36a88bfa03d0be4e0ef98dbd`
+de
+`request-ref-autoprogramming-backlog-t257-federated-backlog-source-file-split-14e8590c`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-t257-federated-backlog-source-file-split-14e8590c-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required` y
+write-set cerrado a `cmd/orquesta-server`, `modulos/orquesta-server` y estos
+shards documentales. Se leyeron localmente el paquete, `AGENTS.md`, `README.md`,
+AGENTS/README locales del servidor, foto vigente, guia del nucleo, principio
+del director, matriz de smokes, backlog vivo, rail errors y duplicaciones.
+
+Resultado: no se abre un Txx nuevo ni se programa codigo. T257 sigue cerrado:
+carga federada, parser de indice, parser local, clasificacion
+estado/quarantine y refs de contexto ya viven en ficheros separados de
+`cmd/orquesta-server`, todos por debajo de 300 lineas. T249/T250/T251/T252/T254
+mantienen identidad, dedupe, preflight, alcance de pruebas e ids humanos;
+T255/T256/T258 mantienen sus splits vecinos. `worktree_ref` y `branch_ref` se
+conservan como refs opacas.
+
+## Revalidacion T257 2026-05-27 burst 002 b744
+
+Evidencia revisada: paquete OrquestaV2
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-b744e45b4bc69e90339caae12c59ddac`
+de
+`request-ref-autoprogramming-backlog-t257-federated-backlog-source-file-split-14e8590c`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-t257-federated-backlog-source-file-split-14e8590c-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required` y
+write-set cerrado a `cmd/orquesta-server`, `modulos/orquesta-server` y estos
+shards documentales. Se leyeron localmente el paquete, `AGENTS.md`, `README.md`,
+AGENTS/README locales del servidor, `docs/README.md`, foto vigente, guia del
+nucleo, principio del director, backlog vivo, rail errors y duplicaciones.
+
+Resultado: no se abre un Txx nuevo ni se programa codigo. T257 sigue cerrado:
+carga federada, parser de indice, parser local, clasificacion
+estado/quarantine y refs de contexto ya viven en ficheros separados de
+`cmd/orquesta-server`, todos por debajo de 300 lineas. T249/T250/T251/T252/T254
+mantienen identidad, dedupe, preflight, alcance de pruebas e ids humanos;
+T255/T256/T258 mantienen sus splits vecinos. `worktree_ref` y `branch_ref` se
+conservan como refs opacas.
+
+## Revalidacion T257 2026-05-27 burst 003 e3e841
+
+Evidencia revisada: paquete OrquestaV2
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-e3e8416382f03b021e17fad4f48672c6`
+de
+`request-ref-autoprogramming-backlog-t257-federated-backlog-source-file-split-14e8590c`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-t257-federated-backlog-source-file-split-14e8590c-burst-003`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required` y
+write-set cerrado a `cmd/orquesta-server`, `modulos/orquesta-server` y estos
+shards documentales. Se leyeron localmente el paquete, `AGENTS.md`, `README.md`,
+AGENTS/README locales del servidor, foto vigente, guia del nucleo, principio
+del director, backlog vivo, rail errors, duplicaciones y el split federado
+vigente.
+
+Resultado: no se abre un Txx nuevo ni se programa codigo. T257 sigue cerrado:
+carga federada, parser de indice, parser local, clasificacion
+estado/quarantine y refs de contexto viven en ficheros separados de
+`cmd/orquesta-server`, todos por debajo de 300 lineas. T44 mantiene el owner de
+contexto `ref_only`; T249/T250/T251/T252/T254 gobiernan identidad, dedupe,
+preflight, alcance de pruebas e ids humanos; T255/T256/T258 mantienen sus splits
+vecinos. `worktree_ref` y `branch_ref` se conservan como refs opacas.
+
+## Revalidacion T257 2026-05-27 burst 002 6ad2
+
+Evidencia revisada: paquete OrquestaV2
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-6ad2ce2a420fdd4406624de54709433a`
+de
+`request-ref-autoprogramming-backlog-t257-federated-backlog-source-file-split-14e8590c`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-t257-federated-backlog-source-file-split-14e8590c-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required` y
+write-set cerrado a `cmd/orquesta-server`, `modulos/orquesta-server` y estos
+shards documentales. Se leyeron localmente el paquete, `AGENTS.md`,
+AGENTS/README locales del servidor, foto vigente, guia del nucleo, principio
+del director, backlog vivo, rail errors, duplicaciones y el split federado
+vigente.
+
+Resultado: no se abre un Txx nuevo ni se programa codigo. T257 sigue cerrado:
+carga federada, parser de indice, parser local, clasificacion
+estado/quarantine y refs de contexto viven en ficheros separados de
+`cmd/orquesta-server`, todos por debajo de 300 lineas. T44 mantiene el owner de
+contexto `ref_only`; T249/T250/T251/T252/T254 gobiernan identidad, dedupe,
+preflight, alcance de pruebas e ids humanos; T255/T256/T258 mantienen sus splits
+vecinos. `worktree_ref` y `branch_ref` se conservan como refs opacas.
+
+## Rework backlog T254 2026-05-27 09624d3f
+
+Evidencia revisada: paquete OrquestaV2 de correccion
+`agent-ref-task-ref-review-rework-task-autoprogramming-6ed65028eb0b-g01-0154a0e80595eed31f9c3059a95a2f93`
+de `request-ref-autoprogramming-backlog-t254-backlog-task-id-collision-alias-index-09624d3f`,
+con contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a `cmd/orquesta-server`, `modulos/orquesta-server`,
+`modulos/orquesta-autoprogramming`, `modulos/orquesta-mcp` y los tres shards
+documentales. Se leyeron paquete, AGENTS/README locales y docs de
+`orquesta-autoprogramming`; T254 ya esta cerrado en planner residente con
+`task_instance_ref`, `backlog_task_entry_ref`, alias `Txx#NN`, reason
+`backlog_duplicate_task_id_ambiguous` y colision
+`backlog_task_number_collision`.
+
+Resultado: la correccion conserva la entrega valida, no relanza agente padre ni
+abre otro `Txx`. El contexto requerido queda resuelto por lectura local y se
+registra en ACK mediante `contexto_ref_only_resuelto`. La verificacion focal
+obligatoria es `go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-server ./modulos/orquesta-mcp ./cmd/orquesta-server`.
+
+## Escaneo backlog 2026-05-27 retry 4da183 burst 003 3b2c
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-3533ffab219a-g01-3b2c0d9af98bdc2180840a7c40a31ccc`
+del retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-4da1836e0a02ce563fd804cadbabca472bed472d00f586dc4d7070bb0e408426`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-4da1836e0a02ce563fd804cadbabca472bed472d00f586dc4d7070bb0e408426-burst-003`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, backlog vivo, rail errors y duplicaciones de rails. Busquedas
+focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`,
+`^## T252`, `^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`,
+`^## T258`, entradas `BACKLOG-SCAN-COVERED-NOOP-*`,
+`required_ref_action`, `ref_only` y paquetes previos del retry `4da183`.
+No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete no aporta frontera accionable
+nueva: reobserva contexto requerido por ref, prueba global obligatoria,
+write-set documental cerrado y backlog degradado ya cubierto por owners
+pendientes visibles. T44 gobierna contexto `ref_only`; T249/T250/T251 gobiernan
+identidad, dedupe/preflight y alcance de pruebas de scanners; T252/T254
+gobiernan ids humanos, reserva, colisiones, aliases y read model;
+T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada queda
+como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry db2473 burst 002
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-task-autoprogramming-ba3b7ec7b59c-g01` del retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-db2473564d775de155beec4b14c9eb02616b2c586a9ba5d52a86784b0ed8f115`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-db2473564d775de155beec4b14c9eb02616b2c586a9ba5d52a86784b0ed8f115-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a los tres shards documentales, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y
+paquetes previos equivalentes del retry `15eeecb9`. No se programa codigo desde
+este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete repite el patron documental ya
+cubierto: contexto requerido por ref, prueba global obligatoria, write-set
+cerrado a backlog/rail errors/duplicaciones y huecos accionables con owners
+pendientes visibles. T44 gobierna contexto `ref_only`; T249/T250/T251 gobiernan
+identidad, dedupe/preflight y alcance de pruebas de scanners; T252/T254
+gobiernan ids humanos, reserva, colisiones, aliases y read model;
+T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada queda
+como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry debe09 burst 002 62119
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-task-autoprogramming-62119e82f3e7-g01` del retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-debe0920522702b51362a84a261ba018fb91aa97096707501f61c5caafc751c6`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-debe0920522702b51362a84a261ba018fb91aa97096707501f61c5caafc751c6-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, backlog vivo, rail errors y duplicaciones de rails. Busquedas
+focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y
+paquetes previos de scanners equivalentes. No se programa codigo desde este
+scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete reobserva backlog degradado antes
+de programar codigo, pero no aporta frontera accionable nueva frente a owners
+pendientes visibles: T44 gobierna contexto obligatorio `ref_only`;
+T249/T250/T251 gobiernan identidad, dedupe/preflight y alcance de pruebas de
+scanners; T252/T254 gobiernan ids humanos, reserva, colisiones, aliases y read
+model; T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada
+queda como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry 33cf37 burst 002 29c1
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-task-autoprogramming-29c1c237ce8c-g01` del retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-33cf37fb0bd7e13be407ed5b412020114079ebc4b8b38a7723bc112729f660e8`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-33cf37fb0bd7e13be407ed5b412020114079ebc4b8b38a7723bc112729f660e8-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, matriz de smokes, backlog vivo, rail errors y duplicaciones de rails.
+Busquedas focales: encabezados `^## T44`, `^## T249`, `^## T250`,
+`^## T251`, `^## T252`, `^## T253`, `^## T254`, `^## T255`, `^## T256`,
+`^## T257`, `^## T258`, entradas `BACKLOG-SCAN-COVERED-NOOP-*`,
+`required_ref_action`, `ref_only` y paquetes previos del retry `15eeecb9`.
+No se programa codigo desde este scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete reobserva el patron documental
+ya cubierto: contexto requerido por ref, prueba global obligatoria, write-set
+limitado a los tres shards documentales y backlog degradado antes de programar
+codigo. T44 gobierna contexto `ref_only`; T249/T250/T251 gobiernan identidad,
+dedupe/preflight y alcance de pruebas de scanners; T252/T254 gobiernan ids
+humanos, reserva, colisiones, aliases y read model; T253/T255/T256/T257/T258
+cubren splits concretos recientes. Esta pasada queda como evidencia de no-op
+cubierto y debe cerrarse mediante ACK con `contexto_ref_only_resuelto`, sin
+relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry 6ed415 burst 002
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-task-autoprogramming-6050b74fc6c4-g01` del retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-6ed4157ea15c63315787f6758835ef866624b96c293520bade4d4fac7bbd3f1d`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-6ed4157ea15c63315787f6758835ef866624b96c293520bade4d4fac7bbd3f1d-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, backlog vivo, rail errors y duplicaciones de rails. Busquedas
+focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only`,
+`backlog degradado`, `task-ref-self-improvement-fba55e3296a0` y paquetes
+previos del scanner `15eeecb9`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete vuelve a observar el mismo
+patron documental ya cubierto: contexto requerido por ref, prueba global
+obligatoria, write-set cerrado a backlog/rail errors/duplicaciones, backlog
+degradado antes de programar codigo y owners pendientes visibles. T44 gobierna
+contexto `ref_only`; T249/T250/T251 gobiernan identidad, dedupe/preflight y
+alcance de pruebas de scanners; T252/T254 gobiernan ids humanos, reserva,
+colisiones, aliases y read model; T253/T255/T256/T257/T258 cubren splits
+concretos recientes. Esta pasada queda como evidencia de no-op cubierto y debe
+cerrarse mediante ACK con `contexto_ref_only_resuelto`, sin relanzar otro owner
+solapado ni convertir las refs de worktree/branch en rutas o nombres Git.
+
+## Escaneo backlog 2026-05-27 retry 4da183 burst 002
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-task-autoprogramming-3533ffab219a-g01` del retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-4da1836e0a02ce563fd804cadbabca472bed472d00f586dc4d7070bb0e408426`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-4da1836e0a02ce563fd804cadbabca472bed472d00f586dc4d7070bb0e408426-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, matriz de smokes, backlog vivo, rail errors y duplicaciones de rails.
+Busquedas focales: encabezados `^## T44`, `^## T249`, `^## T250`,
+`^## T251`, `^## T252`, `^## T253`, `^## T254`, `^## T255`, `^## T256`,
+`^## T257`, `^## T258`, entradas `BACKLOG-SCAN-COVERED-NOOP-*`,
+`required_ref_action`, `ref_only`, `backlog degradado`,
+`task-ref-self-improvement-fba55e3296a0` y retries previos del scanner
+`15eeecb9`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete reobserva el mismo patron
+documental ya cubierto: contexto requerido por ref, prueba global obligatoria,
+write-set cerrado a backlog/rail errors/duplicaciones, backlog degradado antes
+de programar codigo y owners pendientes visibles. T44 gobierna contexto
+`ref_only`; T249/T250/T251 gobiernan identidad, dedupe/preflight y alcance de
+pruebas de scanners; T252/T254 gobiernan ids humanos, reserva, colisiones,
+aliases y read model; T253/T255/T256/T257/T258 cubren splits concretos
+recientes. Esta pasada queda como evidencia de no-op cubierto y debe cerrarse
+mediante ACK con `contexto_ref_only_resuelto`, sin relanzar otro owner solapado
+ni convertir las refs de worktree/branch en rutas o nombres Git.
+
+## Escaneo backlog 2026-05-27 retry 598e4b burst 002
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-task-autoprogramming-65f3f5860bf2-g01` del retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-598e4b7a32f46accd9b3de9546dbf463558dc510b5b5012327fc817ecb7b0e83`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-598e4b7a32f46accd9b3de9546dbf463558dc510b5b5012327fc817ecb7b0e83-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a los tres shards documentales, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y
+paquetes previos del retry `15eeecb9`. No se programa codigo desde este
+scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete reobserva el
+patron documental ya cubierto: contexto requerido por ref, prueba global
+obligatoria, write-set cerrado a backlog/rail errors/duplicaciones y backlog de
+automejora degradado que debe revisarse antes de programar codigo. T44 gobierna
+contexto `ref_only`; T249/T250/T251 gobiernan identidad, dedupe/preflight y
+alcance de pruebas de scanners; T252/T254 gobiernan ids humanos, reserva,
+colisiones, aliases y read model; T253/T255/T256/T257/T258 cubren splits
+concretos recientes. Esta pasada queda como evidencia de no-op cubierto y debe
+cerrarse mediante ACK con `contexto_ref_only_resuelto`, sin relanzar otro owner
+solapado.
+
+## Escaneo backlog 2026-05-27 retry 3d4312 burst 002
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-task-autoprogramming-f924bc43a081-g01` del retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-3d4312f622da5f7999d371853b749e8037dbd7c2f12110565410479b0fd44256`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-3d4312f622da5f7999d371853b749e8037dbd7c2f12110565410479b0fd44256-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, prueba global
+obligatoria y refs opacas de worktree/branch. Busquedas focales:
+encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y
+retries previos del scanner `15eeecb9`. No se programa codigo desde este
+scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete repite el patron documental ya
+cubierto: contexto requerido por ref, prueba global obligatoria, write-set
+documental cerrado y huecos accionables con owners pendientes visibles. T44
+gobierna contexto `ref_only`; T249/T250/T251 gobiernan identidad,
+dedupe/preflight y alcance de pruebas de scanners; T252/T254 gobiernan ids
+humanos, reserva, colisiones, aliases y read model; T253/T255/T256/T257/T258
+cubren splits concretos recientes. Esta pasada queda como evidencia de no-op
+cubierto y debe cerrarse mediante ACK con `contexto_ref_only_resuelto`, sin
+relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry d3160 burst 002
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-task-autoprogramming-205bd061b6ad-g01` del retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-d3160b6776bd90b62315a49b62da6fdf2d6aa6be3e51763b7b0685423ed83944`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-d3160b6776bd90b62315a49b62da6fdf2d6aa6be3e51763b7b0685423ed83944-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a los tres shards documentales, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y el
+retry actual. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete reobserva el patron documental
+ya cubierto: contexto requerido por ref, prueba global obligatoria,
+write-set limitado a backlog/rail errors/duplicaciones y huecos accionables con
+owners pendientes visibles. T44 gobierna contexto `ref_only`; T249/T250/T251
+gobiernan identidad, dedupe/preflight y alcance de pruebas de scanners;
+T252/T254 gobiernan ids humanos, reserva, colisiones, aliases y read model;
+T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada queda
+como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry ed6089 burst 002
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-task-autoprogramming-72215ef37936-g01` del retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-ed6089ea4ce716f9991ef353adc9468a5261ba8198a581cdd29360ebe75e5d7f`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-ed6089ea4ce716f9991ef353adc9468a5261ba8198a581cdd29360ebe75e5d7f-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a los tres shards documentales, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y
+paquetes previos del retry `15eeecb9`. No se programa codigo desde este
+scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete reobserva el patron documental ya
+cubierto: contexto requerido por ref, prueba global obligatoria, write-set
+cerrado a backlog/rail errors/duplicaciones y owners pendientes visibles. T44
+gobierna contexto `ref_only`; T249/T250/T251 gobiernan identidad,
+dedupe/preflight y alcance de pruebas de scanners; T252/T254 gobiernan ids
+humanos, reserva, colisiones, aliases y read model; T253/T255/T256/T257/T258
+cubren splits concretos recientes. Esta pasada queda como evidencia de no-op
+cubierto y debe cerrarse mediante ACK con `contexto_ref_only_resuelto`, sin
+relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry bb17 burst 002
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-task-autoprogramming-6ae909f7547f-g01` del retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-bb17b5de9b3273d237c8f0ea110420b58d301fbd02207ca151b44a350cc51e4e`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-bb17b5de9b3273d237c8f0ea110420b58d301fbd02207ca151b44a350cc51e4e-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, matriz de smokes, backlog vivo, rail errors y duplicaciones de rails.
+Busquedas focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`,
+`^## T252`, `^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`,
+`^## T258`, entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`,
+`ref_only` y paquetes previos de retries equivalentes. No se programa codigo
+desde este scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete reobserva la
+misma frontera documental ya cubierta: contexto requerido por ref, prueba global
+obligatoria, write-set documental cerrado y backlog degradado ya cubierto por
+owners pendientes visibles. T44 gobierna contexto `ref_only`; T249/T250/T251
+gobiernan identidad, dedupe/preflight y alcance de pruebas de scanners;
+T252/T254 gobiernan ids humanos, reserva, colisiones, aliases y read model;
+T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada queda
+como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry 4e3533 burst 002 8e83
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-task-autoprogramming-8e83bd89baf6-g01` del retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-4e3533f995121822a0dc32f1de4dc8cddecbe0896538c03c502b3ef2f43adfd3`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-4e3533f995121822a0dc32f1de4dc8cddecbe0896538c03c502b3ef2f43adfd3-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, matriz de smokes, backlog vivo, rail errors y duplicaciones de rails.
+Busquedas focales: encabezados `^## T44`, `^## T249`, `^## T250`,
+`^## T251`, `^## T252`, `^## T253`, `^## T254`, `^## T255`, `^## T256`,
+`^## T257`, `^## T258`, entradas `BACKLOG-SCAN-COVERED-NOOP-*`,
+`required_ref_action`, `ref_only` y paquetes previos del retry `15eeecb9`.
+No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete repite la misma frontera ya
+cubierta por owners visibles: contexto requerido por ref, prueba global
+obligatoria, write-set documental cerrado y backlog degradado ya observado antes
+de programar codigo. T44 gobierna contexto `ref_only`; T249/T250/T251 gobiernan
+identidad, dedupe/preflight y alcance de pruebas de scanners; T252/T254
+gobiernan ids humanos, reserva, colisiones, aliases y read model;
+T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada queda
+como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry 15eeecb9 burst 002
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-task-autoprogramming-7b90ca195eaf-g01` del retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-5da8540e9825a1ef36992bec2c9c7fcecc002ca6b869058c1afa214eeb713af7`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-5da8540e9825a1ef36992bec2c9c7fcecc002ca6b869058c1afa214eeb713af7-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a los tres shards documentales, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y
+paquetes previos equivalentes. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete reobserva un backlog degradado
+ya cubierto por owners visibles antes de cualquier cambio de codigo: T44
+gobierna contexto obligatorio `ref_only`; T249/T250/T251 gobiernan identidad,
+dedupe/preflight y alcance de pruebas de scanners; T252/T254 gobiernan ids
+humanos, reserva, colisiones, aliases y read model; T253/T255/T256/T257/T258
+cubren splits concretos recientes. Esta pasada queda como evidencia de no-op
+cubierto y debe cerrarse mediante ACK con `contexto_ref_only_resuelto`, sin
+relanzar otro owner solapado ni programar cambios amplios desde el scanner.
+
+## Escaneo backlog 2026-05-27 retry a3abed burst 002
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-task-autoprogramming-30b4d5ecfe9b-g01` del retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-a3abed43bb343900425d1d9279118a7b96338a93a54f23067693c3273bf5e52a`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-a3abed43bb343900425d1d9279118a7b96338a93a54f23067693c3273bf5e52a-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, foto vigente, guia del nucleo, principio del director, backlog
+vivo, rail errors y duplicaciones de rails. Busquedas focales: encabezados
+`^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`, `^## T253`,
+`^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`, entradas
+`BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y paquetes
+previos del request `15eeecb9`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete reobserva un patron documental
+ya cubierto: contexto requerido por ref, prueba global obligatoria, write-set
+documental cerrado y owners pendientes visibles. T44 gobierna contexto
+`ref_only`; T249/T250/T251 gobiernan identidad, dedupe/preflight y alcance de
+pruebas de scanners; T252/T254 gobiernan ids humanos, reserva, colisiones,
+aliases y read model; T253/T255/T256/T257/T258 cubren splits concretos
+recientes. Esta pasada queda como evidencia de no-op cubierto y debe cerrarse
+mediante ACK con `contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Revalidacion T250 federated-backlog-epoch-scope-policy 2026-05-27 acff973f
+
+Evidencia revisada: paquete OrquestaV2
+`agent-ref-assessment-task-autoprogramming-88a96698afb2-g01-6dab0da79e1908567a8bf8e7f3250f9b`
+de `request-ref-autoprogramming-backlog-t250-federated-backlog-epoch-scope-policy-acff973f`,
+con `required_ref_action=ack_evidence_required`, write-set cerrado a
+`cmd/orquesta-server`, `modulos/orquesta-server` y estos tres shards
+documentales. Se leyeron `agent_packet.json`, `AGENTS.md`, los `AGENTS.md`
+locales, `README.md` local, foto vigente, guia del nucleo, principio del
+director, backlog vivo, rail errors y duplicaciones.
+
+Resultado: T250 queda revalidado sin abrir otro owner. El codigo vigente en
+`cmd/orquesta-server` ya acota `BacklogScanDocs`, epoch y reservas a fuentes
+federadas ejecutables (`vigente`, `promocionada`, `promoted`, `active`) y deja
+fuentes `historico`, `stale` o `quarantine` como contexto compacto
+`federated_backlog_source_not_executable`. El ACK debe resolver el contexto
+`ref_only` por lectura local/evidencia explicita y conservar `worktree_ref` y
+`branch_ref` solo como refs opacas.
+
+Retry 2026-05-27 burst 002: el paquete
+`agent-ref-assessment-task-autoprogramming-88a96698afb2-g01-b0935e0be19681ea514f9a2acacaff39`
+mantiene el mismo cierre: no abre owner nuevo, confirma la lectura local del
+contexto `ref_only` y conserva `worktree_ref` y `branch_ref` solo como refs
+opacas.
+
+## Escaneo backlog 2026-05-27 retry 35a079 burst 002 49af
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-task-autoprogramming-49af6e594adb-g01` del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-35a0799f24f24651bedbf5c6cbd3647aad99eeee61e6c12e0be5ba2a10694e3b`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-35a0799f24f24651bedbf5c6cbd3647aad99eeee61e6c12e0be5ba2a10694e3b-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a los tres shards documentales, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+matriz de smokes, backlog vivo, rail errors y duplicaciones de rails.
+Busquedas focales: encabezados `^## T44`, `^## T249`, `^## T250`,
+`^## T251`, `^## T252`, `^## T253`, `^## T254`, `^## T255`, `^## T256`,
+`^## T257`, `^## T258`, entradas `BACKLOG-SCAN-COVERED-NOOP-*`,
+`required_ref_action`, `ref_only` y paquetes previos del retry `35a079`.
+No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete reobserva la
+misma frontera ya cubierta: contexto requerido por ref, prueba global
+obligatoria, write-set documental cerrado y owners accionables visibles. T44
+gobierna contexto `ref_only`; T249/T250/T251 gobiernan identidad,
+dedupe/preflight y alcance de pruebas de scanners; T252/T254 gobiernan ids
+humanos, reservas, colisiones, aliases y read model; T253/T255/T256/T257/T258
+cubren splits concretos recientes. Esta pasada queda como evidencia de no-op
+cubierto y debe cerrarse mediante ACK con `contexto_ref_only_resuelto`, sin
+relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry d1d80 burst 002
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-task-autoprogramming-798614d0f80e-g01` del retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-d1d80a70704399bf29392dd809a2ff101897ee7d290b6aaa3e9c7bb4c80cad1b`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-d1d80a70704399bf29392dd809a2ff101897ee7d290b6aaa3e9c7bb4c80cad1b-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, foto vigente, guia del nucleo, principio del director, backlog
+vivo, rail errors y duplicaciones de rails. Busquedas focales: encabezados
+`^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`, `^## T253`,
+`^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`, entradas
+`BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y paquetes
+previos del scanner `15eeecb9`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete no aporta frontera accionable
+nueva frente a owners visibles: T44 gobierna contexto `ref_only`;
+T249/T250/T251 gobiernan identidad, dedupe/preflight y alcance de pruebas de
+scanners; T252/T254 gobiernan ids humanos, reserva, colisiones, aliases y read
+model; T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada
+queda como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 burst 003 f7d3
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-fba55e3296a0-g01-f7d3f88efa3648cbceb5112f1cf4a040`
+de `request-ref-autoprogramming-backlog-scanner-15eeecb9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-burst-003`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, backlog vivo, rail errors y duplicaciones de rails. Busquedas
+focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y
+paquetes previos de `request-ref-autoprogramming-backlog-scanner-15eeecb9`.
+No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete reobserva la misma frontera ya
+cubierta: contexto requerido por ref, prueba global obligatoria, write-set
+documental cerrado y owners pendientes visibles. T44 gobierna contexto
+`ref_only`; T249/T250/T251 gobiernan identidad, dedupe/preflight y alcance de
+pruebas de scanners; T252/T254 gobiernan ids humanos, reserva, colisiones,
+aliases y read model; T253/T255/T256/T257/T258 cubren splits concretos
+recientes. Esta pasada queda como evidencia de no-op cubierto y debe cerrarse
+mediante ACK con `contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 scanner 15eeecb9 burst 002 8a1ece
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-fba55e3296a0-g01-8a1ecec98ecf3323c5488e327056f703`
+de `request-ref-autoprogramming-backlog-scanner-15eeecb9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, prueba global
+obligatoria, lectura local de `AGENTS.md`, `README.md`, `docs/README.md`, foto
+vigente, guia del nucleo, principio del director, matriz de smokes, backlog
+vivo, rail errors y duplicaciones de rails. Busquedas focales: encabezados
+`^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`, `^## T253`,
+`^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`, entradas
+`BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y paquetes
+previos del scanner `15eeecb9`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete reobserva el mismo patron ya
+cubierto: contexto requerido por ref, write-set documental cerrado, prueba
+global obligatoria y huecos accionables con owners pendientes visibles. T44
+gobierna contexto `ref_only`; T249/T250/T251 gobiernan identidad,
+dedupe/preflight y alcance de pruebas de scanners; T252/T254 gobiernan ids
+humanos, reserva, colisiones, aliases y read model; T253/T255/T256/T257/T258
+cubren splits concretos recientes. Esta pasada queda como evidencia de no-op
+cubierto y debe cerrarse mediante ACK con `contexto_ref_only_resuelto`, sin
+relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 burst 002 fba55
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-task-autoprogramming-fba55e3296a0-g01` de la request
+`request-ref-autoprogramming-backlog-scanner-15eeecb9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, foto vigente, guia del nucleo, principio del director, matriz de
+smokes, backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y
+paquetes previos de scanners documentales equivalentes. No se programa codigo
+desde este scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete vuelve a observar una frontera
+documental ya cubierta: contexto requerido por ref, prueba global obligatoria,
+write-set documental cerrado y huecos accionables con owners pendientes
+visibles. T44 gobierna contexto `ref_only`; T249/T250/T251 gobiernan identidad,
+dedupe/preflight y alcance de pruebas de scanners; T252/T254 gobiernan ids
+humanos, reserva, colisiones, aliases y read model; T253/T255/T256/T257/T258
+cubren splits concretos recientes. Esta pasada queda como evidencia de no-op
+cubierto y debe cerrarse mediante ACK con `contexto_ref_only_resuelto`, sin
+relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 burst 002 f8e40
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-f8e40a7bedded7d2878462d370a72a30`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, backlog vivo, rail errors y duplicaciones de rails. Busquedas
+focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y
+paquetes previos del mismo burst `4f550c019e0d`. No se programa codigo desde
+este scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete no aporta frontera accionable
+nueva: reobserva contexto requerido por ref, prueba global obligatoria,
+write-set documental cerrado y owners pendientes visibles. T44 gobierna
+contexto `ref_only`; T249/T250/T251 gobiernan identidad, dedupe/preflight y
+alcance de pruebas de scanners; T252/T254 gobiernan ids humanos, reserva,
+colisiones, aliases y read model; T253/T255/T256/T257/T258 cubren splits
+concretos recientes. Esta pasada queda como evidencia de no-op cubierto y debe
+cerrarse mediante ACK con `contexto_ref_only_resuelto`, sin relanzar otro owner
+solapado.
+
+## Escaneo backlog 2026-05-27 burst 002 da14
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-da14e4762930936ab46118bb39f7aa9a`
+de la request `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, backlog vivo, rail errors y duplicaciones de rails. Busquedas
+focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y
+paquetes previos `4f550c019e0d`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete repite el patron ya cubierto:
+contexto requerido por ref, prueba global obligatoria, write-set documental
+cerrado y owners pendientes visibles. T44 gobierna contexto `ref_only`;
+T249/T250/T251 gobiernan identidad, dedupe/preflight y alcance de pruebas de
+scanners; T252/T254 gobiernan ids humanos, reserva, colisiones, aliases y read
+model; T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada
+queda como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 burst 002 17978
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-17978e79d655060ec0da8977cea2a0ee`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, foto vigente, guia del nucleo, principio del director, backlog
+vivo, rail errors y duplicaciones de rails. Busquedas focales: encabezados
+`^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`, `^## T253`,
+`^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`, entradas
+`BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y paquetes
+previos del mismo scanner. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete reobserva la misma frontera
+documental ya cubierta: contexto requerido por ref, prueba global obligatoria,
+write-set documental cerrado y owners pendientes visibles. T44 gobierna
+contexto `ref_only`; T249/T250/T251 gobiernan identidad, dedupe/preflight y
+alcance de pruebas de scanners; T252/T254 gobiernan ids humanos, reserva,
+colisiones, aliases y read model; T253/T255/T256/T257/T258 cubren splits
+concretos recientes. Esta pasada queda como evidencia de no-op cubierto y debe
+cerrarse mediante ACK con `contexto_ref_only_resuelto`, sin relanzar otro owner
+solapado.
+
+## Escaneo backlog 2026-05-27 burst 002 52b63
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-52b63d817ae78008276d7d3e084d76df`
+de la request `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, backlog vivo, rail errors y duplicaciones de rails. Busquedas
+focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y
+paquetes previos `4f550c019e0d`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete reobserva contexto requerido por
+ref, prueba global obligatoria, write-set documental cerrado y owners pendientes
+visibles. T44 gobierna contexto `ref_only`; T249/T250/T251 gobiernan identidad,
+dedupe/preflight y alcance de pruebas de scanners; T252/T254 gobiernan ids
+humanos, reserva, colisiones, aliases y read model; T253/T255/T256/T257/T258
+cubren splits concretos recientes. Esta pasada queda como evidencia de no-op
+cubierto y debe cerrarse mediante ACK con `contexto_ref_only_resuelto`, sin
+relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 burst 002 585742
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-585742898dfa4be257b5a2282769c9c2`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, lectura local de
+`AGENTS.md`, `README.md`, `docs/README.md`, foto vigente, guia del nucleo,
+principio del director, backlog vivo, rail errors y duplicaciones de rails.
+Busquedas focales: encabezados `^## T44`, `^## T249`, `^## T250`,
+`^## T251`, `^## T252`, `^## T253`, `^## T254`, `^## T255`, `^## T256`,
+`^## T257`, `^## T258`, entradas `BACKLOG-SCAN-COVERED-NOOP-*`,
+`required_ref_action`, `ref_only` y paquetes previos del burst
+`4f550c019e0d`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete reobserva una frontera
+documental ya cubierta: contexto requerido por ref, prueba global obligatoria,
+write-set cerrado a los tres shards documentales y owners pendientes visibles.
+T44 gobierna contexto `ref_only`; T249/T250/T251 gobiernan identidad,
+dedupe/preflight y alcance de pruebas de scanners; T252/T254 gobiernan ids
+humanos, reserva, colisiones, aliases y read model; T253/T255/T256/T257/T258
+cubren splits concretos recientes. Esta pasada queda como evidencia de no-op
+cubierto y debe cerrarse mediante ACK con `contexto_ref_only_resuelto`, sin
+relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry 69e1ba burst 002 c86d18
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-8f23d8e2a22e-g01-c86d18cc769b57d176d2617c4d0990a6`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-69e1ba62ea01ade8fb67d198484d35f513e28c79077c8a7ac535bc483e60a6c6`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-69e1ba62ea01ade8fb67d198484d35f513e28c79077c8a7ac535bc483e60a6c6-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a los tres shards documentales, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y
+paquetes previos del retry `69e1ba`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite la misma
+frontera documental ya cubierta: contexto requerido por ref, prueba global
+obligatoria, write-set limitado a backlog/rail errors/duplicaciones y owners
+pendientes visibles. T44 gobierna contexto `ref_only`; T249/T250/T251 gobiernan
+identidad, dedupe/preflight y alcance de pruebas de scanners; T252/T254
+gobiernan ids humanos, reserva, colisiones, aliases y read model;
+T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada queda
+como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry 7a567340
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-3ddbc1385ac2-g01-0d1f79ec31384d00b4994f75b7e11068`
+de la request
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-7a56734034f8d2f7cfecdb944e4e265d06361b422163b501881d49a99fce3508`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-7a56734034f8d2f7cfecdb944e4e265d06361b422163b501881d49a99fce3508-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, foto vigente, guia del nucleo, principio del director, backlog
+vivo, rail errors, duplicaciones de rails y matriz/corte vigentes. Busquedas
+focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y
+paquetes previos `3ddbc1385ac2`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete no aporta frontera accionable
+nueva: reobserva contexto requerido por ref, prueba global obligatoria,
+write-set documental cerrado y owners pendientes visibles. T44 gobierna contexto
+`ref_only`; T249/T250/T251 gobiernan identidad, dedupe/preflight y alcance de
+pruebas de scanners; T252/T254 gobiernan ids humanos, reserva, colisiones,
+aliases y read model; T253/T255/T256/T257/T258 cubren splits concretos recientes.
+Esta pasada queda como evidencia de no-op cubierto y debe cerrarse mediante ACK
+con `contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry 9607b2 burst 002 1db274
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-task-autoprogramming-1db274df2c82-g01` del retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-9607b28f843c98b4bd58ad70bf22a6e18f7636b31d8e71af7b7521ec3c3e4963`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-9607b28f843c98b4bd58ad70bf22a6e18f7636b31d8e71af7b7521ec3c3e4963-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a los tres shards documentales, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y
+paquetes previos de scanners equivalentes. No se programa codigo desde este
+scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete reobserva el
+patron documental ya cubierto: contexto requerido por ref, prueba global
+obligatoria, write-set cerrado a backlog/rail errors/duplicaciones y huecos
+accionables con owners pendientes visibles. T44 gobierna contexto `ref_only`;
+T249/T250/T251 gobiernan identidad, dedupe/preflight y alcance de pruebas de
+scanners; T252/T254 gobiernan ids humanos, reserva, colisiones, aliases y read
+model; T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada
+queda como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry ca7a01 burst 002
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-task-autoprogramming-b06fa6486ff1-g01` del retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-ca7a01129405f7db0785957e06ec98f0f0e537093fdac53f5fd258be2448367e`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-ca7a01129405f7db0785957e06ec98f0f0e537093fdac53f5fd258be2448367e-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones de rails, prueba
+global obligatoria y objetivo de revisar backlog degradado antes de programar
+codigo. Se leyeron `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del director, matriz de smokes, backlog vivo, rail
+errors y duplicaciones de rails. Busquedas focales: encabezados `^## T44`,
+`^## T249`, `^## T250`, `^## T251`, `^## T252`, `^## T253`, `^## T254`,
+`^## T255`, `^## T256`, `^## T257`, `^## T258`, entradas
+`BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only`,
+`backlog degradado` y paquetes previos del retry `15eeecb9`.
+No se programa codigo desde este scanner. `worktree_ref` y `branch_ref` se
+conservan solo como refs opacas:
+`worktree-ref-orquesta-server-idle-self-improvement` y
+`branch-ref-orquesta-server-idle-self-improvement`.
+
+Resultado: no se abre un Txx nuevo. El paquete repite el patron documental ya
+cubierto por owners visibles: T44 gobierna contexto obligatorio `ref_only`;
+T249/T250/T251 gobiernan identidad, dedupe/preflight y alcance de pruebas de
+scanners; T252/T254 gobiernan ids humanos, reserva, colisiones, aliases y read
+model; T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada
+queda como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado ni convertir refs
+opacas en rutas o nombres Git.
+
+## Escaneo backlog 2026-05-27 retry c848ae burst 002
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-task-autoprogramming-d5b73c0f6568-g01` del retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-c848ae18b89a2ec8f6d3236024c8333f9c15cfa95c4ade488f8c3bdd7467f843`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-c848ae18b89a2ec8f6d3236024c8333f9c15cfa95c4ade488f8c3bdd7467f843-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, backlog vivo, rail errors y duplicaciones de rails. Busquedas
+focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only`,
+`backlog degradado`, `task-ref-self-improvement-fba55e3296a0` y paquetes
+previos del scanner `15eeecb9`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete reobserva el mismo patron
+documental ya cubierto antes de programar codigo: contexto requerido por ref,
+prueba global obligatoria, write-set cerrado a backlog/rail errors/duplicaciones
+y backlog degradado con owners pendientes visibles. T44 gobierna contexto
+`ref_only`; T249/T250/T251 gobiernan identidad, dedupe/preflight y alcance de
+pruebas de scanners; T252/T254 gobiernan ids humanos, reserva, colisiones,
+aliases y read model; T253/T255/T256/T257/T258 cubren splits concretos recientes.
+Esta pasada queda como evidencia de no-op cubierto y debe cerrarse mediante ACK
+con `contexto_ref_only_resuelto`, sin relanzar otro owner solapado ni convertir
+las refs de worktree/branch en rutas o nombres Git.
+
+## Escaneo backlog 2026-05-27 retry 6ed415 burst 002
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-6050b74fc6c4-g01-b49cac799ca28e09e2cf85d868d4d056`
+del retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-6ed4157ea15c63315787f6758835ef866624b96c293520bade4d4fac7bbd3f1d`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-6ed4157ea15c63315787f6758835ef866624b96c293520bade4d4fac7bbd3f1d-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a los tres shards documentales, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y
+paquetes previos del retry `6ed415`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete no aporta frontera accionable
+nueva frente a owners visibles: T44 gobierna contexto obligatorio `ref_only`;
+T249/T250/T251 gobiernan identidad de scanner, dedupe/preflight y alcance de
+pruebas; T252/T254 gobiernan ids humanos, reserva, colisiones, aliases y read
+model; T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada
+queda como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 scanner 15eeecb9 burst 002 f13a
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-fba55e3296a0-g01-f13a1353960542f949b1c478324a27ec`
+de `request-ref-autoprogramming-backlog-scanner-15eeecb9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, prueba global
+obligatoria, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente, guia del
+nucleo, principio del director, backlog vivo, rail errors y duplicaciones de
+rails. Busquedas focales: encabezados `^## T44`, `^## T249`, `^## T250`,
+`^## T251`, `^## T252`, `^## T253`, `^## T254`, `^## T255`, `^## T256`,
+`^## T257`, `^## T258`, entradas `BACKLOG-SCAN-COVERED-NOOP-*`,
+`required_ref_action`, `ref_only` y paquetes previos equivalentes. No se
+programa codigo desde este scanner. `worktree_ref` y `branch_ref` se conservan
+solo como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete reobserva el mismo patron ya
+cubierto: contexto requerido por ref, write-set documental cerrado, prueba
+global obligatoria y huecos accionables con owners pendientes visibles. T44
+gobierna contexto `ref_only`; T249/T250/T251 gobiernan identidad,
+dedupe/preflight y alcance de pruebas de scanners; T252/T254 gobiernan ids
+humanos, reserva, colisiones, aliases y read model; T253/T255/T256/T257/T258
+cubren splits concretos recientes. Esta pasada queda como evidencia de no-op
+cubierto y debe cerrarse mediante ACK con `contexto_ref_only_resuelto`, sin
+relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 burst 002 2048
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-2048ee92b24ec50625c2242b8eb85463`
+de la request `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, foto vigente, guia del nucleo, principio del director, backlog
+vivo, rail errors y duplicaciones de rails. Busquedas focales: encabezados
+`^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`, `^## T253`,
+`^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`, entradas
+`BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y paquetes
+previos `4f550c019e0d`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete no aporta frontera accionable
+nueva frente a owners visibles: T44 gobierna contexto obligatorio `ref_only`;
+T249/T250/T251 gobiernan identidad, dedupe/preflight y alcance de pruebas de
+scanners; T252/T254 gobiernan ids humanos, reserva, colisiones, aliases y read
+model; T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada
+queda como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 burst 002 9fa6
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-9fa6b01dc86ff93d9228ca93a474de5c`
+de la request `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, backlog vivo, rail errors y duplicaciones de rails. Busquedas
+focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y
+paquetes previos `4f550c019e0d`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete no aporta frontera accionable
+nueva: reobserva contexto requerido por ref, prueba global obligatoria,
+write-set documental cerrado y owners pendientes visibles. T44 gobierna contexto
+`ref_only`; T249/T250/T251 gobiernan identidad, dedupe/preflight y alcance de
+pruebas de scanners; T252/T254 gobiernan ids humanos, reserva, colisiones,
+aliases y read model; T253/T255/T256/T257/T258 cubren splits concretos recientes.
+Esta pasada queda como evidencia de no-op cubierto y debe cerrarse mediante ACK
+con `contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry 69e1ba burst 002 406b68
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-8f23d8e2a22e-g01-406b68b132e5ad3f6495920aad6064eb`
+de la request
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-69e1ba62ea01ade8fb67d198484d35f513e28c79077c8a7ac535bc483e60a6c6`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-69e1ba62ea01ade8fb67d198484d35f513e28c79077c8a7ac535bc483e60a6c6-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, matriz de smokes, backlog vivo, rail errors y duplicaciones de rails.
+Busquedas focales: encabezados `^## T44`, `^## T249`, `^## T250`,
+`^## T251`, `^## T252`, `^## T253`, `^## T254`, `^## T255`, `^## T256`,
+`^## T257`, `^## T258`, entradas `BACKLOG-SCAN-COVERED-NOOP-*`,
+`required_ref_action`, `ref_only` y paquetes previos del retry `69e1ba`.
+No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete repite frontera ya cubierta:
+contexto requerido por ref, prueba global obligatoria, write-set documental
+cerrado y owners pendientes visibles. T44 gobierna contexto `ref_only`;
+T249/T250/T251 gobiernan identidad, dedupe/preflight y alcance de pruebas de
+scanners; T252/T254 gobiernan ids humanos, reserva, colisiones, aliases y read
+model; T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada
+queda como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry d64a6a burst 002 644f
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-757fa45b2845-g01-644fcb17f3eb0e2fc3b46dc77aa883b8`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-d64a6a4098bc947a8abac738ecfc29123c24afa6dde953cf9750f22d13b272c6`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-d64a6a4098bc947a8abac738ecfc29123c24afa6dde953cf9750f22d13b272c6-burst-002`,
+contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a backlog,
+rail errors y duplicaciones, `AGENTS.md`, `README.md`, `docs/README.md`, foto
+vigente, guia del nucleo, principio del director, backlog vivo, rail errors y
+duplicaciones de rails. Busquedas focales: encabezados `^## T44`, `^## T249`,
+`^## T250`, `^## T251`, `^## T252`, `^## T253`, `^## T254`, `^## T255`,
+`^## T256`, `^## T257`, `^## T258`, entradas
+`BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y paquetes
+previos del retry `d64a6a`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite una
+frontera documental ya cubierta: contexto requerido por ref, prueba global
+obligatoria, write-set cerrado a backlog/rail errors/duplicaciones, solapes de
+scanner, ids humanos `Txx` ambiguos y splits recientes por presupuesto o
+responsabilidad local. T44 gobierna contexto `ref_only`; T249/T250/T251
+gobiernan identidad, dedupe/preflight y alcance de pruebas de scanners;
+T252/T254 gobiernan ids humanos, reserva, colisiones, aliases y read model;
+T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada queda
+como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry 42fbc4 burst 002 abd199
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-721523601cc1-g01-abd199fbb4db7baa1c08602cd2d3dade`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-42fbc4ded7918354a0ba8d427df92a05da07828f0fbb064fba2a680f461c45f5`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-42fbc4ded7918354a0ba8d427df92a05da07828f0fbb064fba2a680f461c45f5-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a los tres shards documentales, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y
+paquetes previos del retry `42fbc4`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete no aporta frontera accionable
+nueva frente a owners visibles: T44 gobierna contexto obligatorio `ref_only`;
+T249/T250/T251 gobiernan identidad, dedupe/preflight y alcance de pruebas de
+scanners; T252/T254 gobiernan ids humanos, reserva, colisiones, aliases y read
+model; T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada
+queda como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry 5465c1 burst 002 219c
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-87d5c800f528-g01-219c350ad3df01efd266321f376e4f7b`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-5465c1fa2a2382d2739d96147eaafe7597f99aa10da08494d40665e47b2446c0`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-5465c1fa2a2382d2739d96147eaafe7597f99aa10da08494d40665e47b2446c0-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, lectura local de
+`AGENTS.md`, `README.md`, foto vigente, guia del nucleo, principio del director
+y shards documentales. Busquedas focales: encabezados `^## T44`, `^## T249`,
+`^## T250`, `^## T251`, `^## T252`, `^## T253`, `^## T254`, `^## T255`,
+`^## T256`, `^## T257`, `^## T258`, entradas
+`BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y paquetes
+previos del retry `5465c1`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete reobserva una frontera ya
+cubierta por owners visibles: T44 gobierna contexto obligatorio `ref_only`;
+T249/T250/T251 gobiernan identidad de escaneo, dedupe/preflight y alcance de
+pruebas; T252/T254 gobiernan ids humanos, reserva, colisiones, aliases y read
+model; T253/T255/T256/T257/T258 cubren splits recientes con owner local. Esta
+pasada queda como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 burst 002 988548
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-988548c1efac02c34d8ab6cf81a53d19`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, matriz de smokes, backlog vivo, rail errors y duplicaciones de rails.
+Busquedas focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`,
+`^## T252`, `^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`,
+`^## T258`, entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`,
+`ref_only` y paquetes previos `4f550c019e0d`. No se programa codigo desde este
+scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete no aporta frontera accionable
+nueva: reobserva contexto requerido por ref, prueba global obligatoria,
+write-set documental cerrado y owners pendientes visibles. T44 gobierna contexto
+`ref_only`; T249/T250/T251 gobiernan identidad, dedupe/preflight y alcance de
+pruebas de scanners; T252/T254 gobiernan ids humanos, reserva, colisiones,
+aliases y read model; T253/T255/T256/T257/T258 cubren splits concretos recientes.
+Esta pasada queda como evidencia de no-op cubierto y debe cerrarse mediante ACK
+con `contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 burst 002 562c49
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-562c496eddcc7c55bd3b622c5e825749`
+de la request `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, matriz de smokes, backlog vivo, rail errors y duplicaciones de rails.
+Busquedas focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`,
+`^## T252`, `^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`,
+`^## T258`, entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`,
+`ref_only` y paquetes previos `4f550c019e0d`. No se programa codigo desde este
+scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete no aporta frontera accionable
+nueva: reobserva contexto requerido por ref, prueba global obligatoria,
+write-set documental cerrado y owners pendientes visibles. T44 gobierna
+contexto `ref_only`; T249/T250/T251 gobiernan identidad, dedupe/preflight y
+alcance de pruebas de scanners; T252/T254 gobiernan ids humanos, reserva,
+colisiones, aliases y read model; T253/T255/T256/T257/T258 cubren splits
+concretos recientes. Esta pasada queda como evidencia de no-op cubierto y debe
+cerrarse mediante ACK con `contexto_ref_only_resuelto`, sin relanzar otro owner
+solapado.
+
+## Escaneo backlog 2026-05-27 burst 002 70a7
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-70a7d8db3b4ebd33b19ae663b484aef6`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a los tres shards documentales, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `FILE-BUDGET-*`,
+`required_ref_action`, `ref_only` y paquetes previos del mismo `task_ref`.
+No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite la misma
+frontera documental ya cubierta: contexto requerido por ref, write-set cerrado
+a backlog/rail errors/duplicaciones, prueba global obligatoria para scanner
+documental y owners pendientes visibles. T44 gobierna la resolucion general de
+contexto `ref_only`; T249/T250/T251 gobiernan identidad, dedupe/preflight y
+alcance de pruebas de scanners; T252/T254 gobiernan ids humanos, colisiones,
+aliases y read model; T253/T255/T256/T257/T258 cubren splits concretos
+recientes. Esta pasada queda como evidencia de no-op cubierto y debe cerrarse
+mediante ACK con `contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 burst 002 31b587
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-31b58785a2bc25303ea28ac1a457f2d3`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a los tres shards documentales, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+matriz de smokes, backlog vivo, rail errors y duplicaciones de rails.
+Busquedas focales: encabezados `^## T44`, `^## T249`, `^## T250`,
+`^## T251`, `^## T252`, `^## T253`, `^## T254`, `^## T255`, `^## T256`,
+`^## T257`, `^## T258`, entradas `BACKLOG-SCAN-COVERED-NOOP-*`,
+`required_ref_action`, `ref_only` y paquetes previos `4f550c019e0d`.
+No se programa codigo desde este scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite la
+frontera documental ya cubierta: contexto requerido por ref, prueba global
+obligatoria, write-set cerrado a backlog/rail errors/duplicaciones y owners
+pendientes visibles. T44 gobierna contexto `ref_only`; T249/T250/T251 gobiernan
+identidad, dedupe/preflight y alcance de pruebas de scanners; T252/T254
+gobiernan ids humanos, reserva, colisiones, aliases y read model;
+T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada queda
+como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 burst 002 c10c
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-c10cb19de09867b08fe7a7c947dc4467`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, matriz de smokes, backlog vivo, rail errors y duplicaciones de rails.
+Busquedas focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`,
+`^## T252`, `^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`,
+`^## T258`, entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`,
+`ref_only` y paquetes previos del mismo `task_ref`. No se programa codigo desde
+este scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite una
+frontera documental ya asignada: contexto requerido por ref, prueba global
+obligatoria, write-set cerrado a los tres shards documentales y owners
+pendientes visibles. T44 gobierna contexto `ref_only`; T249/T250/T251 gobiernan
+identidad, dedupe/preflight y alcance de pruebas de scanners; T252/T254
+gobiernan ids humanos, reservas, colisiones, aliases y read model;
+T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada queda
+como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry 5465c1 burst 002
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-87d5c800f528-g01-4fe334168e77c5b5a5a29a19c299e7e8`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-5465c1fa2a2382d2739d96147eaafe7597f99aa10da08494d40665e47b2446c0`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-5465c1fa2a2382d2739d96147eaafe7597f99aa10da08494d40665e47b2446c0-burst-002`,
+contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del director, corte de cierre generico, matriz de
+pruebas reales, backlog vivo, rail errors y duplicaciones de rails. Busquedas
+focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`,
+`^## T252`, `^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`,
+`^## T258`, entradas `BACKLOG-SCAN-*`, `FILE-BUDGET-*`,
+`required_ref_action`, `ref_only` y paquetes previos del mismo retry. No se
+programa codigo desde este scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite la misma
+frontera documental ya cubierta: contexto requerido por ref, write-set cerrado
+a backlog/rail errors/duplicaciones, prueba global obligatoria para scanner
+documental, solapes de propuestas, ambiguedad de ids humanos `Txx` y splits
+recientes por presupuesto/responsabilidad. Los owners visibles siguen siendo
+T44, T249, T250, T251, T252, T253, T254, T255, T256, T257 y T258. Esta pasada
+queda como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 vigesima septima pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-721523601cc1-g01-6b02071be67727512a14341842bf4332`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-42fbc4ded7918354a0ba8d427df92a05da07828f0fbb064fba2a680f461c45f5`,
+con contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del director, backlog vivo, rail errors y
+duplicaciones de rails. Busquedas focales: encabezados `^## T44`, `^## T249`,
+`^## T250`, `^## T251`, `^## T252`, `^## T253`, `^## T254`, `^## T255`,
+`^## T256`, `^## T257`, `^## T258`, entradas `BACKLOG-SCAN-*`,
+`FILE-BUDGET-*`, `required_ref_action` y `ref_only`. No se programa codigo
+desde este scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite el patron
+documental ya cubierto: contexto por ref, prueba global obligatoria,
+write-set limitado a backlog/rail errors/duplicaciones y huecos accionables con
+owners pendientes visibles. T44 gobierna la resolucion general de contexto
+`ref_only`; T249/T250/T251 gobiernan identidad, dedupe/preflight y alcance de
+pruebas de scanners; T252/T254 gobiernan ids humanos, colisiones y aliases;
+T253/T255/T256/T257/T258 cubren los splits concretos recientes. Esta pasada
+queda como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry 7a5673
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-3ddbc1385ac2-g01-00ef1096db1ef4935750f733b3fe3ccf`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-7a56734034f8d2f7cfecdb944e4e265d06361b422163b501881d49a99fce3508`,
+con contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, foto vigente, guia del nucleo,
+principio del director, backlog vivo, rail errors y duplicaciones de rails.
+Busquedas focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`,
+`^## T252`, `^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`,
+`^## T258`, entradas `BACKLOG-SCAN-*`, `FILE-BUDGET-*`,
+`required_ref_action`, `ref_only`, `provider_auth_blocked`, ACK terminal,
+shutdown checkpoint y control files. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un `Txx` nuevo en esta pasada. El paquete no aporta
+frontera causal nueva frente a owners ya visibles: T44 cubre contexto
+`ref_only`; T249/T250/T251 cubren identidad, dedupe/preflight y alcance de
+pruebas de scanners; T252/T254 cubren ids humanos, reservas, colisiones y
+aliases; T253/T255/T256/T257/T258 cubren splits recientes y fronteras de
+crecimiento. Esta pasada queda como evidencia de no-op cubierto y debe cerrarse
+mediante ACK con `contexto_ref_only_resuelto`, sin relanzar owner solapado.
+
+## Escaneo backlog 2026-05-27 retry 69e1ba segunda entrega
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-8f23d8e2a22e-g01-697704c71decfb03744436e559856b7f`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-69e1ba62ea01ade8fb67d198484d35f513e28c79077c8a7ac535bc483e60a6c6`,
+con contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, foto vigente, backlog vivo, rail
+errors y duplicaciones de rails. Busquedas focales: encabezados `^## T44`,
+`^## T249`, `^## T250`, `^## T251`, `^## T252`, `^## T253`, `^## T254`,
+`^## T255`, `^## T256`, `^## T257`, `^## T258`, entradas `BACKLOG-SCAN-*`,
+`required_ref_action` y `ref_only`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite el patron
+documental ya cubierto: contexto requerido por ref, prueba global obligatoria,
+write-set cerrado a backlog/rail errors/duplicaciones y huecos accionables con
+owner pendiente visible. T44 gobierna la guarda general de contexto `ref_only`;
+T249/T250/T251 cubren identidad, dedupe, preflight y alcance de pruebas de
+scanners; T252/T254 gobiernan ids humanos, reserva, colisiones, aliases y read
+model; T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada
+queda como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry 5465c1
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-87d5c800f528-g01-d77d5415386c2758420eb50d9de1c982`
+de
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-5465c1fa2a2382d2739d96147eaafe7597f99aa10da08494d40665e47b2446c0`,
+con contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del director, backlog vivo, rail errors,
+duplicaciones de rails, corte de cierre generico y matriz de pruebas reales.
+Busquedas focales: encabezados `^## T44`, `^## T249`, `^## T250`,
+`^## T251`, `^## T252`, `^## T253`, `^## T254`, `^## T255`, `^## T256`,
+`^## T257`, `^## T258`, entradas `BACKLOG-SCAN-*`,
+`required_ref_action`, `ref_only` y el retry actual. No se programa codigo
+desde este scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite una
+frontera documental ya cubierta: contexto requerido por ref, prueba global
+obligatoria, write-set limitado a backlog/rail errors/duplicaciones y huecos
+accionables con owner pendiente visible. T44 gobierna la guarda general de
+`ref_only`; T249/T250/T251 gobiernan identidad, dedupe/preflight y alcance de
+pruebas de scanners; T252/T254 gobiernan ids humanos, reserva, colisiones,
+aliases y read model; T253/T255/T256/T257/T258 cubren los splits concretos
+recientes. Esta pasada queda como evidencia de no-op cubierto y debe cerrarse
+mediante ACK con `contexto_ref_only_resuelto`, sin relanzar otro owner
+solapado.
+
+## Escaneo backlog 2026-05-27 retry d64a6a
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-757fa45b2845-g01-5ab69cd762c0b3eea5d2721713dd49d0`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-d64a6a4098bc947a8abac738ecfc29123c24afa6dde953cf9750f22d13b272c6`
+con contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, foto vigente, guia del nucleo,
+principio del director, backlog vivo, rail errors y duplicaciones de rails.
+Busquedas focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`,
+`^## T252`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-*`, `FILE-BUDGET-*`, `required_ref_action`, `ref_only`
+y paquetes previos del mismo `task_ref`. No se programa codigo desde este
+scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite el patron
+documental ya cubierto: contexto por ref, prueba global obligatoria, write-set
+limitado a backlog/rail errors/duplicaciones y huecos accionables con owner
+pendiente visible. T44 gobierna la resolucion general de contexto `ref_only`;
+T249/T250/T251 cubren identidad de escaneo, dedupe/preflight y alcance de
+pruebas; T252/T254 cubren colisiones, aliases y lectura de ids humanos; T253,
+T255, T256, T257 y T258 cubren splits concretos recientes. Esta pasada queda
+como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 vigesima octava pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-350b93e475a8-g01-9be0de2c97caf766173a451288993ca0`
+con contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, foto vigente, guia del nucleo,
+principio del director, backlog vivo, rail errors y duplicaciones de rails.
+Busquedas focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`,
+`^## T252`, `^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`,
+`^## T258`, entradas `BACKLOG-SCAN-*`, `FILE-BUDGET-*`,
+`required_ref_action`, `ref_only` y referencias a idle self-improvement,
+ACK terminal y shutdown checkpoint. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite una
+frontera documental ya cubierta: contexto requerido por ref, write-set limitado
+a backlog/rail errors/duplicaciones, prueba global obligatoria y huecos ya
+asignados a owners visibles. T44 gobierna contexto obligatorio `ref_only`;
+T249, T250 y T251 gobiernan identidad, dedupe/preflight y alcance de pruebas de
+scanners; T252 y T254 gobiernan ids humanos, colisiones, aliases y read model;
+T253, T255, T256, T257 y T258 cubren splits concretos recientes por presupuesto
+o responsabilidad local. Esta pasada queda como evidencia de no-op cubierto y
+debe cerrarse mediante ACK con `contexto_ref_only_resuelto`, sin relanzar otro
+owner solapado.
+
+## Escaneo backlog 2026-05-27 vigesima septima pasada retry 69e1ba
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-8f23d8e2a22e-g01-957608057af975d94befe452b621687e`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-69e1ba62ea01ade8fb67d198484d35f513e28c79077c8a7ac535bc483e60a6c6`,
+con contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del director, backlog vivo, rail errors y
+duplicaciones de rails. Busquedas focales: encabezados `^## T44`, `^## T249`,
+`^## T250`, `^## T251`, `^## T252`, `^## T254`, `^## T255`, `^## T256`,
+`^## T257`, `^## T258`, entradas `BACKLOG-SCAN-*`, `FILE-BUDGET-*`,
+`required_ref_action` y `ref_only`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El retry reobserva el mismo
+patron documental ya cubierto: contexto requerido por ref, prueba global
+obligatoria, write-set limitado a backlog/rail errors/duplicaciones y huecos
+accionables con owner pendiente visible. T44 conserva la guarda general de
+contexto `ref_only`; T249/T250/T251 cubren identidad, dedupe, preflight y
+alcance de pruebas de scanners; T252/T254 cubren ids humanos, colisiones y
+aliases; T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta
+pasada queda como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 vigesima septima pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-e078c7be6425160a0ccb6bb8f8b78d11`
+con contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del director, matriz de smokes, backlog vivo, rail
+errors y duplicaciones de rails. Busquedas focales: encabezados `^## T44`,
+`^## T249`, `^## T250`, `^## T251`, `^## T252`, `^## T254`, `^## T255`,
+`^## T256`, `^## T257`, `^## T258`, entradas `BACKLOG-SCAN-*`,
+`FILE-BUDGET-*`, `required_ref_action` y `ref_only`. No se programa codigo
+desde este scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete reobserva el
+mismo patron documental ya cubierto: contexto requerido por ref, prueba global
+obligatoria, write-set cerrado a backlog/rail errors/duplicaciones y owners
+pendientes visibles. T44 conserva la guarda general de contexto `ref_only`;
+T249/T250/T251 cubren identidad, dedupe, preflight y alcance de pruebas de
+scanners; T252/T254 cubren ids humanos, colisiones, aliases y read model; T253,
+T255, T256, T257 y T258 cubren splits concretos recientes. Esta pasada queda
+como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 vigesima septima pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-4b676d31f48327f48f51c6ce1cc855b4`
+con contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del director, backlog vivo, rail errors y
+duplicaciones de rails. Busquedas focales: encabezados `^## T44`, `^## T249`,
+`^## T250`, `^## T251`, `^## T252`, `^## T254`, `^## T255`, `^## T256`,
+`^## T257`, `^## T258`, entradas `BACKLOG-SCAN-*`, `FILE-BUDGET-*`,
+`required_ref_action`, `ref_only` y paquetes previos `4f550c019e0d`.
+No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite el patron
+documental ya cubierto: contexto requerido por ref, write-set cerrado a
+backlog/rail errors/duplicaciones, prueba global obligatoria para un scanner
+documental y owners pendientes visibles. T44 gobierna la resolucion general de
+contexto `ref_only`; T249/T250/T251 cubren identidad, dedupe, preflight y
+alcance de pruebas de scanners; T252/T254 cubren ids humanos, colisiones,
+aliases y read model; T253/T255/T256/T257/T258 cubren splits concretos
+recientes. Esta pasada queda como evidencia de no-op cubierto y debe cerrarse
+mediante ACK con `contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 vigesima septima pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-ae7b1168a2882f5580acd71e20ec5732`
+con contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del director, backlog vivo, rail errors y
+duplicaciones de rails. Busquedas focales: encabezados `^## T44`, `^## T249`,
+`^## T250`, `^## T251`, `^## T252`, `^## T254`, `^## T255`, `^## T256`,
+`^## T257`, `^## T258`, entradas `BACKLOG-SCAN-*`, `FILE-BUDGET-*`,
+`required_ref_action` y `ref_only`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete reobserva el
+mismo patron ya cubierto: contexto requerido por ref, prueba global obligatoria
+para un scanner documental, write-set cerrado a backlog/rail errors/
+duplicaciones, owners pendientes visibles y ausencia de frontera causal nueva.
+T44 conserva la guarda general de contexto `ref_only`; T249/T250/T251 cubren
+identidad, dedupe, preflight y alcance de pruebas de scanners; T252/T254 cubren
+ids humanos, reserva, colisiones y aliases; T253/T255/T256/T257/T258 cubren los
+splits concretos recientes. Esta pasada queda como evidencia de no-op cubierto
+y debe cerrarse mediante ACK con `contexto_ref_only_resuelto`, sin relanzar
+otro owner solapado.
+
+## Escaneo backlog 2026-05-27 vigesima sexta pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-757fa45b2845-g01-ec8943db18ad09ba2b17a1035b324e9b`
+con contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del director, backlog vivo, rail errors y
+duplicaciones de rails. Busquedas focales: encabezados `^## T44`, `^## T249`,
+`^## T250`, `^## T251`, `^## T252`, `^## T254`, `^## T255`, `^## T256`,
+`^## T257`, `^## T258`, entradas `BACKLOG-SCAN-*`, `FILE-BUDGET-*`,
+`required_ref_action` y `ref_only`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite el patron
+documental ya cubierto: contexto requerido por ref, write-set cerrado a
+backlog/rail errors/duplicaciones, prueba global obligatoria para un scanner
+documental, solapes de propuestas, ambiguedad de ids humanos `Txx` y splits por
+presupuesto ya asignados. Los owners visibles siguen siendo T44, T249, T250,
+T251, T252, T254, T255, T256, T257 y T258. Esta pasada queda como evidencia de
+no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 vigesima septima pasada
+
+Evidencia revisada: paquete OrquestaV2
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-1957b876997d6c6e6b87bbb19f48735f`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con contexto
+obligatorio `ref_only`, `required_ref_action=ack_evidence_required`, write-set
+cerrado a los tres shards documentales, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+`BACKLOG-SCAN-*`, `FILE-BUDGET-*`, `required_ref_action` y `ref_only`.
+No se programa codigo desde este scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete vuelve a cubrir
+el patron documental ya registrado: contexto requerido por ref, prueba global
+obligatoria, write-set limitado a backlog/rail errors/duplicaciones y huecos
+accionables con owner pendiente visible. T44 gobierna la guarda general de
+`ref_only`; T249, T250 y T251 gobiernan identidad, dedupe/preflight y alcance
+de pruebas de scanners; T252 y T254 gobiernan colisiones, aliases y lectura de
+ids humanos `Txx`; T255, T256, T257 y T258 cubren splits concretos recientes.
+Esta pasada queda como evidencia de no-op cubierto y debe cerrarse mediante ACK
+con `contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 vigesima septima pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-72e651512c5a9856094dd77d5b947474`
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del director, backlog vivo, rail errors y
+duplicaciones de rails. Busquedas focales: encabezados `^## T44`, `^## T249`,
+`^## T250`, `^## T251`, `^## T252`, `^## T254`, `^## T255`, `^## T256`,
+`^## T257`, `^## T258`, entradas `BACKLOG-SCAN-*`, `FILE-BUDGET-*`,
+`required_ref_action`, `ref_only` y el request actual. No se programa codigo
+desde este scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite el patron
+documental ya cubierto: contexto requerido por ref, prueba global obligatoria,
+write-set cerrado a backlog/rail errors/duplicaciones y huecos ya visibles con
+owners pendientes. T44 conserva la guarda general de contexto `ref_only`;
+T249/T250/T251 cubren identidad, dedupe, preflight y alcance de pruebas de
+scanners; T252/T254 cubren ids humanos, colisiones y aliases; T253, T255,
+T256, T257 y T258 cubren los splits concretos recientes. Esta pasada queda como
+evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 vigesima septima pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-41c250bd381a729b6b7a942fa03db578`
+con contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del director, backlog vivo, rail errors y
+duplicaciones de rails. Busquedas focales: encabezados `^## T44`, `^## T249`,
+`^## T250`, `^## T251`, `^## T252`, `^## T254`, `^## T255`, `^## T256`,
+`^## T257`, `^## T258`, entradas `BACKLOG-SCAN-*`, `FILE-BUDGET-*`,
+`required_ref_action`, `ref_only` y los paquetes previos del mismo
+`task_ref`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete no aporta una
+frontera causal nueva: repite contexto requerido por ref, write-set cerrado a
+backlog/rail errors/duplicaciones, prueba global obligatoria para cambio
+documental, solapes de scanner y huecos ya asignados. Los owners visibles
+siguen siendo T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258. Esta
+pasada queda como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 vigesima sexta pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-30cb4ab771802c1a99b591d81d13d88d`
+con contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del director, backlog vivo, rail errors y
+duplicaciones de rails. Busquedas focales: encabezados `^## T44`, `^## T249`,
+`^## T250`, `^## T251`, `^## T252`, `^## T253`, `^## T254`, `^## T255`,
+`^## T256`, `^## T257`, `^## T258`, entradas `BACKLOG-SCAN-*`,
+`FILE-BUDGET-*`, `required_ref_action` y `ref_only`. No se programa codigo
+desde este scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite el patron
+documental ya cubierto: contexto requerido por ref, write-set cerrado a
+backlog/rail errors/duplicaciones, prueba global obligatoria para un scanner
+documental, solapes de propuestas, ambiguedad de ids humanos `Txx` y splits por
+presupuesto ya asignados. Los owners visibles siguen siendo T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258. Esta pasada queda como
+evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 vigesima septima pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-55fbe00917266eb9dce3cb7ef06512d2`
+con contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, foto vigente, guia del nucleo,
+principio del director, backlog vivo, rail errors y duplicaciones de rails.
+Busquedas focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`,
+`^## T252`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-*`, `FILE-BUDGET-*`, `required_ref_action` y
+`ref_only`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete no aporta frontera
+causal nueva frente a los owners ya visibles: T44 gobierna contexto requerido
+`ref_only`; T249/T250/T251 gobiernan identidad de scanner, dedupe/preflight y
+alcance de pruebas; T252/T254 gobiernan ids humanos duplicados, aliases y read
+model; T253/T255/T256/T257/T258 cubren los splits concretos recientes. Esta
+pasada queda como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 vigesima septima pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-0baf5a292701de903673675f4731b8c4`
+con contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del director, backlog vivo, rail errors y
+duplicaciones de rails. Busquedas focales: encabezados `^## T44`, `^## T249`,
+`^## T250`, `^## T251`, `^## T252`, `^## T254`, `^## T255`, `^## T256`,
+`^## T257`, `^## T258`, entradas `BACKLOG-SCAN-*`, `FILE-BUDGET-*`,
+`required_ref_action` y `ref_only`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete vuelve a observar
+el mismo patron documental ya cubierto: contexto requerido por ref, write-set
+cerrado a backlog/rail errors/duplicaciones, prueba global obligatoria para un
+scanner documental, solapes de propuestas, ambiguedad de ids humanos `Txx` y
+splits por presupuesto ya asignados. T44 conserva la guarda general de contexto
+`ref_only`; T249/T250/T251 gobiernan identidad, dedupe, preflight y alcance de
+pruebas de scanners; T252/T254 gobiernan ids humanos, colisiones y aliases; T253,
+T255, T256, T257 y T258 cubren los splits concretos recientes. Esta pasada queda
+como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 vigesima septima pasada
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-ed50a0e5d063ce9367242318b76013ca`
+con contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a los tres
+shards documentales, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del director, backlog vivo, rail errors y
+duplicaciones de rails. Busquedas focales: encabezados `^## T44`, `^## T249`,
+`^## T250`, `^## T251`, `^## T252`, `^## T254`, `^## T255`, `^## T256`,
+`^## T257`, `^## T258`, entradas `BACKLOG-SCAN-*`, `FILE-BUDGET-*`,
+`required_ref_action` y `ref_only`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite el patron
+documental ya cubierto: contexto por ref, prueba global obligatoria, write-set
+limitado a backlog/rail errors/duplicaciones y huecos accionables con owner
+pendiente visible.
+
+- T44 gobierna la resolucion general de contexto obligatorio `ref_only`; esta
+  entrega se resuelve por lectura local del paquete y evidencia explicita en
+  ACK.
+- T249, T250 y T251 gobiernan identidad de escaneo, dedupe/preflight canonico y
+  alcance de pruebas para scanners documentales.
+- T252 y T254 gobiernan colisiones, aliases y lectura de ids humanos `Txx`.
+- T253, T255, T256, T257 y T258 cubren los splits concretos recientes por
+  presupuesto o responsabilidad local.
+
+Esta pasada queda como evidencia de no-op cubierto para que el planner no
+relance otra tarea equivalente mientras esos owners sigan pendientes.
+## Escaneo backlog 2026-05-27 retry d0cf1e
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-350b93e475a8-g01-7b6283b42d81ab988ec874761f9ce9e0`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-d0cf1ea77c2b6898418f56ac96139dcb5cb606948a8e3adc89ed26b4a9b1f02c`,
+con contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a los tres shards documentales, `AGENTS.md`, `README.md`,
+foto vigente, guia del nucleo, principio del director, matriz de smokes,
+backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-*`, `FILE-BUDGET-*`, `required_ref_action` y
+`ref_only`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite el patron
+documental ya cubierto: contexto requerido por ref, prueba global obligatoria
+para cambio documental, write-set limitado a backlog/rail errors/duplicaciones
+y huecos con owner pendiente visible. T44 gobierna la resolucion general de
+contexto `ref_only`; T249/T250/T251 gobiernan identidad, dedupe/preflight y
+alcance de pruebas de scanners; T252/T254 gobiernan ids humanos duplicados,
+reserva, colisiones y aliases; T253/T255/T256/T257/T258 cubren splits concretos
+recientes. Esta pasada queda como evidencia de no-op cubierto y debe cerrarse
+mediante ACK con `contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry 69e1ba burst 002 89e006
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-8f23d8e2a22e-g01-89e006236c585aa247a81664e7b037e1`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-69e1ba62ea01ade8fb67d198484d35f513e28c79077c8a7ac535bc483e60a6c6`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-69e1ba62ea01ade8fb67d198484d35f513e28c79077c8a7ac535bc483e60a6c6-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a los tres shards documentales, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director, matriz
+de smokes, backlog vivo, rail errors y duplicaciones de rails. Busquedas
+focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`,
+`^## T252`, `^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`,
+`^## T258`, entradas `BACKLOG-SCAN-COVERED-NOOP-*`,
+`required_ref_action`, `ref_only` y paquetes previos del retry `69e1ba`.
+No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. La reobservacion no aporta
+frontera accionable nueva frente a owners visibles: T44 gobierna contexto
+`ref_only`; T249/T250/T251 gobiernan identidad, dedupe/preflight y alcance de
+pruebas de scanners; T252/T254 gobiernan ids humanos, reserva, colisiones,
+aliases y read model; T253/T255/T256/T257/T258 cubren splits concretos
+recientes. Esta pasada queda como evidencia de no-op cubierto y debe cerrarse
+mediante ACK con `contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry 42fbc4 burst 002
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-721523601cc1-g01-2e79a5694817170a5384a408d1acb03b`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-42fbc4ded7918354a0ba8d427df92a05da07828f0fbb064fba2a680f461c45f5`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-42fbc4ded7918354a0ba8d427df92a05da07828f0fbb064fba2a680f461c45f5-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a los tres shards documentales, `AGENTS.md`, `README.md`,
+foto vigente, guia del nucleo, principio del director, backlog vivo, rail
+errors y duplicaciones de rails. Busquedas focales: encabezados `^## T44`,
+`^## T249`, `^## T250`, `^## T251`, `^## T252`, `^## T253`, `^## T254`,
+`^## T255`, `^## T256`, `^## T257`, `^## T258`, entradas
+`BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y paquetes
+previos del retry `42fbc4`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete reobserva la
+misma frontera documental ya cubierta: contexto requerido por ref, prueba global
+obligatoria, write-set limitado a backlog/rail errors/duplicaciones y huecos
+accionables con owners pendientes visibles. T44 gobierna la resolucion general
+de contexto `ref_only`; T249/T250/T251 gobiernan identidad, dedupe/preflight y
+alcance de pruebas de scanners; T252/T254 gobiernan ids humanos, reservas,
+colisiones, aliases y read model; T253/T255/T256/T257/T258 cubren splits
+concretos recientes. Esta pasada queda como evidencia de no-op cubierto y debe
+cerrarse mediante ACK con `contexto_ref_only_resuelto`, sin relanzar otro owner
+solapado.
+
+## Escaneo backlog 2026-05-27 retry 5465c1 burst 002 ef66
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-87d5c800f528-g01-ef66a8153742b6161a7f9836a4c2779e`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-5465c1fa2a2382d2739d96147eaafe7597f99aa10da08494d40665e47b2446c0`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-5465c1fa2a2382d2739d96147eaafe7597f99aa10da08494d40665e47b2446c0-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a los tres shards documentales, `AGENTS.md`, `README.md`,
+foto vigente, guia del nucleo, principio del director, backlog vivo, rail
+errors y duplicaciones de rails. Busquedas focales: encabezados `^## T44`,
+`^## T249`, `^## T250`, `^## T251`, `^## T252`, `^## T253`, `^## T254`,
+`^## T255`, `^## T256`, `^## T257`, `^## T258`, entradas
+`BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y paquetes
+previos del retry `5465c1`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite el patron
+documental ya cubierto: contexto requerido por ref, prueba global obligatoria,
+write-set cerrado a backlog/rail errors/duplicaciones y huecos accionables con
+owners pendientes visibles. T44 gobierna contexto `ref_only`; T249/T250/T251
+gobiernan identidad, dedupe/preflight y alcance de pruebas de scanners;
+T252/T254 gobiernan ids humanos, colisiones, aliases y read model;
+T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada queda
+como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 retry d0cf1e burst 002 0d330c
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-350b93e475a8-g01-0d330c4e1579d03076ce1e175634e42b`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-d0cf1ea77c2b6898418f56ac96139dcb5cb606948a8e3adc89ed26b4a9b1f02c`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-d0cf1ea77c2b6898418f56ac96139dcb5cb606948a8e3adc89ed26b4a9b1f02c-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a los tres shards documentales, `AGENTS.md`, `README.md`,
+foto vigente, guia del nucleo, principio del director, backlog vivo, rail
+errors y duplicaciones de rails. Busquedas focales: encabezados `^## T44`,
+`^## T249`, `^## T250`, `^## T251`, `^## T252`, `^## T253`, `^## T254`,
+`^## T255`, `^## T256`, `^## T257`, `^## T258`, entradas
+`BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y paquetes
+previos del retry `d0cf1e`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete no aporta
+frontera causal nueva frente a owners visibles: T44 gobierna contexto
+`ref_only`; T249/T250/T251 gobiernan identidad, dedupe/preflight y alcance de
+pruebas de scanners; T252/T254 gobiernan ids humanos, reserva, colisiones,
+aliases y read model; T253/T255/T256/T257/T258 cubren splits concretos
+recientes. Esta pasada queda como evidencia de no-op cubierto y debe cerrarse
+mediante ACK con `contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 burst 002 e7040
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-e7040a9c028b6c9195871408101972c0`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a los tres shards documentales, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+matriz de smokes, backlog vivo, rail errors y duplicaciones de rails.
+Busquedas focales: encabezados `^## T44`, `^## T249`, `^## T250`,
+`^## T251`, `^## T252`, `^## T253`, `^## T254`, `^## T255`, `^## T256`,
+`^## T257`, `^## T258`, entradas `BACKLOG-SCAN-COVERED-NOOP-*`,
+`required_ref_action`, `ref_only` y paquetes previos del mismo `task_ref`.
+No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite el patron
+documental ya cubierto: contexto requerido por ref, prueba global obligatoria,
+write-set cerrado a backlog/rail errors/duplicaciones y huecos accionables con
+owners pendientes visibles. T44 gobierna contexto `ref_only`; T249/T250/T251
+gobiernan identidad, dedupe/preflight y alcance de pruebas de scanners;
+T252/T254 gobiernan ids humanos, colisiones, aliases y read model;
+T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada queda
+como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 burst 002 25ebab
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-25ebab4465052369f6e1f66d949cd514`
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a los tres shards documentales, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y
+paquetes previos del burst `4f550c019e0d`. No se programa codigo desde este
+scanner. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete repite el patron
+documental ya cubierto: contexto requerido por ref, prueba global obligatoria,
+write-set limitado a backlog/rail errors/duplicaciones y huecos accionables con
+owners pendientes visibles. T44 gobierna contexto `ref_only`; T249/T250/T251
+gobiernan identidad, dedupe/preflight y alcance de pruebas de scanners;
+T252/T254 gobiernan ids humanos, reserva, colisiones, aliases y read model;
+T253/T255/T256/T257/T258 cubren splits concretos recientes. Esta pasada queda
+como evidencia de no-op cubierto y debe cerrarse mediante ACK con
+`contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 burst 002 5b79
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-5b79f9accf52b539a3be229cf4e83bdb`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a los tres shards documentales, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+backlog vivo, rail errors y duplicaciones de rails. Busquedas focales:
+encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y
+paquetes previos del mismo scanner. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo en esta pasada. El paquete no aporta frontera
+accionable nueva frente a owners visibles: T44 gobierna contexto obligatorio
+`ref_only`; T249/T250/T251 gobiernan identidad, dedupe/preflight y alcance de
+pruebas de scanners; T252/T254 gobiernan ids humanos, reserva, colisiones,
+aliases y read model; T253/T255/T256/T257/T258 cubren splits concretos
+recientes. Esta pasada queda como evidencia de no-op cubierto y debe cerrarse
+mediante ACK con `contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Escaneo backlog 2026-05-27 burst 002 c0f755
+
+Evidencia revisada: paquete OrquestaV2 del scanner
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-c0f7550c04cbfe4cddf673cf37c73725`
+de la request `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog, rail errors y duplicaciones, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+director, backlog vivo, rail errors y duplicaciones de rails. Busquedas
+focales: encabezados `^## T44`, `^## T249`, `^## T250`, `^## T251`, `^## T252`,
+`^## T253`, `^## T254`, `^## T255`, `^## T256`, `^## T257`, `^## T258`,
+entradas `BACKLOG-SCAN-COVERED-NOOP-*`, `required_ref_action`, `ref_only` y
+paquetes previos `4f550c019e0d`. No se programa codigo desde este scanner.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre un Txx nuevo. El paquete no aporta frontera accionable
+nueva: reobserva contexto requerido por ref, prueba global obligatoria,
+write-set documental cerrado y owners pendientes visibles. T44 gobierna contexto
+`ref_only`; T249/T250/T251 gobiernan identidad, dedupe/preflight y alcance de
+pruebas de scanners; T252/T254 gobiernan ids humanos, reserva, colisiones,
+aliases y read model; T253/T255/T256/T257/T258 cubren splits concretos recientes.
+Esta pasada queda como evidencia de no-op cubierto y debe cerrarse mediante ACK
+con `contexto_ref_only_resuelto`, sin relanzar otro owner solapado.

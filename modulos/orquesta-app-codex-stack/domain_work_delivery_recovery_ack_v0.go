@@ -1,7 +1,6 @@
 package orquestaappcodexstack
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -97,16 +96,16 @@ func domainWorkRecoveryLastMessageConfirmsAckFailureV0(
 }
 
 func domainWorkRecoveryFileContainsV0(path string, needle string) bool {
-	data, err := os.ReadFile(path)
-	if err != nil {
+	data, ok := codexStackReadTailFileV0(path, codexStackRuntimeLogTailMaxBytesV0)
+	if !ok {
 		return false
 	}
 	return strings.Contains(string(data), needle)
 }
 
 func domainWorkRecoveryFileContainsAnyV0(path string, needles []string) bool {
-	data, err := os.ReadFile(path)
-	if err != nil {
+	data, ok := codexStackReadTailFileV0(path, codexStackRuntimeLogTailMaxBytesV0)
+	if !ok {
 		return false
 	}
 	normalized := strings.ToLower(string(data))

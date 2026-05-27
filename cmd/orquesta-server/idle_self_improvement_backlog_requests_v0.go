@@ -23,7 +23,8 @@ func idleSelfImprovementBacklogScannerRequestV0(
 		"docs/rail_errors_observados_2026-05-23.md",
 		"docs/duplicaciones_railes_pendientes_2026-05-24.md",
 	}
-	request.RequiredTests = append([]string(nil), base.RequiredTests...)
+	var testContextRefs []string
+	request.RequiredTests, testContextRefs = idleSelfImprovementBacklogScannerRequiredTestsV0(base.RequiredTests, request.WriteSet)
 	request.AcceptanceCriteria = compactServerStackStringsV0(append(append([]string(nil), base.AcceptanceCriteria...),
 		"detectar huecos reales de nucleo/director/adaptadores sin duplicar tareas ya en cola",
 		"anadir secciones Txx concretas al backlog con objetivo, alcance, criterios y tests",
@@ -39,6 +40,7 @@ func idleSelfImprovementBacklogScannerRequestV0(
 		"queue_size:"+strconv.Itoa(plan.QueueSize),
 		"free_capacity:"+strconv.Itoa(plan.FreeCapacity),
 	))
+	request.ContextRefs = compactServerStackStringsV0(append(request.ContextRefs, testContextRefs...))
 	request.EvidenceRefs = compactServerStackStringsV0(append(append([]string(nil), base.EvidenceRefs...),
 		"evidence-ref-autoprogramming-backlog-scanner",
 	))
@@ -58,7 +60,10 @@ func idleSelfImprovementRequestForBacklogSectionV0(
 		section.Criteria...,
 	), append(
 		idleSelfImprovementBacklogDependencyAcceptanceCriteriaV0(section),
-		idleSelfImprovementBacklogManualVerificationCriteriaV0(section)...,
+		append(
+			idleSelfImprovementBacklogManualVerificationCriteriaV0(section),
+			idleSelfImprovementBacklogTaskInstanceCriteriaV0(section)...,
+		)...,
 	)...))
 	request.CompactRules = compactServerStackStringsV0(append(append([]string(nil), base.CompactRules...),
 		"el director revisa backlog y genera tareas concretas; no una tarea generica",
@@ -101,18 +106,23 @@ func idleSelfImprovementBaseRequestForBacklogSectionV0(
 	request.RequestRef = idleSelfImprovementRequestRefForBacklogSectionV0(section)
 	request.CorrelationID = "corr-" + request.RequestRef
 	request.SuggestedArea = firstNonEmptyServerStackV0(section.Ref, base.SuggestedArea)
-	request.RequiredTests = append([]string(nil), base.RequiredTests...)
-	if len(section.Tests) > 0 {
-		request.RequiredTests = compactServerStackStringsV0(section.Tests)
-	} else if len(section.ManualVerifications) > 0 {
-		request.RequiredTests = nil
-	}
+	request.WriteSet = idleSelfImprovementBacklogWriteSetV0(base.WriteSet, section.Scope)
+	var testContextRefs []string
+	request.RequiredTests, testContextRefs = idleSelfImprovementBacklogSectionRequiredTestsV0(
+		base.RequiredTests,
+		section.Tests,
+		section.ManualVerifications,
+		request.WriteSet,
+	)
 	request.ContextRefs = compactServerStackStringsV0(append(append([]string(nil), base.ContextRefs...),
 		"backlog-doc-autoprogramacion-2026-05-23",
 		"backlog_doc:"+firstNonEmptyServerStackV0(section.SourcePath, idleSelfImprovementBacklogDocRelV0),
 		"backlog_section:"+section.Ref,
 		"backlog_line:"+strconv.Itoa(section.SourceLine),
 	))
+	request.ContextRefs = compactServerStackStringsV0(append(request.ContextRefs,
+		idleSelfImprovementBacklogTaskInstanceContextRefsV0(section)...))
+	request.ContextRefs = compactServerStackStringsV0(append(request.ContextRefs, testContextRefs...))
 	request.ContextRefs = compactServerStackStringsV0(append(
 		request.ContextRefs,
 		idleSelfImprovementBacklogDependencyContextRefsV0(section)...,
@@ -136,15 +146,6 @@ func idleSelfImprovementBaseRequestForBacklogSectionV0(
 	return request
 }
 
-func idleSelfImprovementRequestRefForBacklogSectionV0(
-	section idleSelfImprovementBacklogSectionV0,
-) string {
-	refSuffix := section.Ref + "-" + idleSelfImprovementBacklogHashV0(
-		idleSelfImprovementBacklogSectionFingerprintV0(section),
-	)
-	return "request-ref-autoprogramming-backlog-" + refSuffix
-}
-
 func idleSelfImprovementBacklogFallbackRequestV0(
 	base orquestaserver.IdleSelfImprovementRequestV0,
 	plan orquestaserver.IdleSelfImprovementPlanRequestV0,
@@ -162,14 +163,6 @@ func idleSelfImprovementBacklogFallbackRequestV0(
 		"evidence-ref-autoprogramming-backlog-planner-fallback",
 	))
 	return request
-}
-
-func idleSelfImprovementBacklogSummaryV0(section idleSelfImprovementBacklogSectionV0) string {
-	objective := strings.TrimSpace(section.Objective)
-	if objective == "" {
-		objective = "cerrar seccion pendiente de autoprogramacion"
-	}
-	return "backlog pendiente " + section.Heading + ": " + objective
 }
 
 func idleSelfImprovementBacklogWriteSetV0(base []string, scope []string) []string {
@@ -253,45 +246,4 @@ func idleSelfImprovementBacklogDependencyAcceptanceCriteriaV0(
 	return []string{
 		"respetar las dependencias declaradas antes de cerrar esta mejora",
 	}
-}
-
-func idleSelfImprovementBacklogWriteSetEntriesV0(value string) []string {
-	value = strings.TrimSpace(value)
-	original := value
-	var out []string
-	for {
-		_, rest, ok := strings.Cut(value, "`")
-		if !ok {
-			break
-		}
-		entry, next, ok := strings.Cut(rest, "`")
-		if !ok {
-			break
-		}
-		out = append(out, idleSelfImprovementCleanWriteSetEntryV0(entry))
-		value = next
-	}
-	if len(out) > 0 {
-		return compactServerStackStringsV0(out)
-	}
-	if entry := idleSelfImprovementCleanWriteSetEntryV0(original); entry != "" {
-		return []string{entry}
-	}
-	return nil
-}
-
-func idleSelfImprovementCleanWriteSetEntryV0(value string) string {
-	value = strings.TrimSpace(strings.Trim(strings.TrimSpace(value), "`"))
-	for len(value) > 1 && strings.ContainsRune(".,;:", rune(value[len(value)-1])) {
-		value = strings.TrimSpace(value[:len(value)-1])
-	}
-	return value
-}
-
-func idleSelfImprovementPlanEvidenceRefsV0(requests []orquestaserver.IdleSelfImprovementRequestV0) []string {
-	refs := []string{"evidence-ref-autoprogramming-backlog-doc"}
-	for _, request := range requests {
-		refs = append(refs, request.EvidenceRefs...)
-	}
-	return compactServerStackStringsV0(refs)
 }

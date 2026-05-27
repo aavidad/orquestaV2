@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
-	"strings"
 )
 
 type DirectorStatsWebEndpointV0 struct {
@@ -36,6 +35,11 @@ func NewDirectorStatsWebEndpointV0(client DirectorStatsClientV0) DirectorStatsWe
 
 func (endpoint DirectorStatsWebEndpointV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	catalog := endpoint.catalog()
+	if err := validateWebPublicQueryV0(r); err != nil {
+		writeDirectorStatsPageV0(w, http.StatusBadRequest, endpoint.page(NuevaAppI18nDefaultLocaleV0, WebDirectorStatsQueryV0{},
+			NewWebDirectorStatsErrorViewModelV0("", WebDirectorStatsErrRespuestaInvalidaV0)))
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
 		endpoint.handleDirectorStats(w, r, directorStatsQueryFromURLV0(r))
@@ -48,8 +52,10 @@ func (endpoint DirectorStatsWebEndpointV0) ServeHTTP(w http.ResponseWriter, r *h
 			return
 		}
 		endpoint.handleDirectorStats(w, r, query)
+	case http.MethodOptions:
+		handleWebPublicHTTPOptionsV0(w, r, http.MethodGet, http.MethodPost)
 	default:
-		w.Header().Set("Allow", strings.Join([]string{http.MethodGet, http.MethodPost}, ", "))
+		setWebPublicHTTPAllowV0(w, http.MethodGet, http.MethodPost)
 		locale := localeFromNuevaAppRequestV0(r, catalog)
 		writeDirectorStatsPageV0(w, http.StatusMethodNotAllowed, endpoint.page(locale, WebDirectorStatsQueryV0{},
 			NewWebDirectorStatsErrorViewModelV0("", WebNuevaAppErrMetodoNoSoportadoV0)))
@@ -137,18 +143,16 @@ func (endpoint DirectorStatsWebEndpointV0) catalog() NuevaAppI18nCatalogV0 {
 }
 
 func decodeDirectorStatsQueryV0(r *http.Request) (WebDirectorStatsQueryV0, error) {
-	contentType := strings.ToLower(r.Header.Get("Content-Type"))
-	if contentType == "" || strings.Contains(contentType, "application/json") {
+	contentType := r.Header.Get("Content-Type")
+	if webControlContentTypeAllowsJSONV0(contentType) {
 		var query WebDirectorStatsQueryV0
-		decoder := json.NewDecoder(r.Body)
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&query); err != nil {
+		if err := decodeWebControlJSONV0(nil, r, &query); err != nil {
 			return query, err
 		}
 		return query, nil
 	}
-	if strings.Contains(contentType, "application/x-www-form-urlencoded") || strings.Contains(contentType, "multipart/form-data") {
-		if err := r.ParseForm(); err != nil {
+	if webControlContentTypeAllowsFormV0(contentType) {
+		if err := parseWebControlFormV0(nil, r); err != nil {
 			return WebDirectorStatsQueryV0{}, err
 		}
 		return directorStatsQueryFromValuesV0(r.Form), nil

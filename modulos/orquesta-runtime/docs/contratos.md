@@ -266,7 +266,7 @@ Entrada:
   - StopV0(context.Context, process_ref)
   - SnapshotV0(process_ref)
 Salida:
-  - ProcessRuntimeSnapshotV0 con schema_version, process_ref, session_ref, launch_ref, stop_ref y status.
+  - ProcessRuntimeSnapshotV0 con schema_version, process_ref, session_ref, launch_ref, stop_ref, status, stop_reason_code y stop_grace_deadline.
 Invariantes:
   - Es runtime real de proceso local solo para pruebas e2e controladas.
   - Arranca con os/exec usando command_path, args, env y working_dir explicitos en config/test.
@@ -276,7 +276,9 @@ Invariantes:
   - stdout y stderr se descartan; no se devuelve output completo, transcript, PID, cwd real, env, HOME, token ni ruta del binario.
   - Las refs publicas process_ref, session_ref, launch_ref y stop_ref son opacas y no codifican PID ni rutas.
   - session_ref identifica la sesion/proceso propiedad de Orquesta de forma opaca; cualquier limpieza o parada operativa debe resolverse desde el registry del run, nunca por barrido de procesos del sistema.
-  - StopV0 usa os.Interrupt como senal portable y fallback a Kill bajo contexto de parada.
+  - StopV0 usa os.Interrupt por defecto como senal portable y permite una senal opt-in inyectada por politica para pruebas controladas.
+  - StopV0 marca status stopping, deadline de gracia y causa publica antes de escalar a Kill.
+  - StopV0 diferencia cooperative_signal_sent, signal_not_supported, process_already_stopped, grace_timeout y kill_failed.
   - StopV0 repetido para un proceso ya parado es idempotente y conserva stop_ref.
   - Un proceso que sale solo queda observable como status stopped sin inventar stop_ref.
 Errores:

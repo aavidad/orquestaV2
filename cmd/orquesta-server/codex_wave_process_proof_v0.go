@@ -49,7 +49,7 @@ func codexWaveAttachProcessProofV0(
 		return err
 	}
 	path := codexWaveProcessProofPathV0(agent.RuntimeWorkDir)
-	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
+	if err := writeCommandDurableFileV0(path, append(data, '\n'), "codex_wave_process_proof"); err != nil {
 		return err
 	}
 	agent.ProcessProofRef = proof.ProcessProofRef

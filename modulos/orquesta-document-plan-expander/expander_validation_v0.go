@@ -62,3 +62,46 @@ func validateRawDocumentPlanExpansionRefListV0(
 	}
 	return nil
 }
+
+func validateDocumentPlanExpandedJobIdentitiesV0(
+	jobs []orquestadomainwork.DomainWorkJobRequestV0,
+) []orquestadomainwork.DomainWorkIssueV0 {
+	seenRequestIDs := map[string]struct{}{}
+	seenIdempotencyKeys := map[string]struct{}{}
+	for _, job := range jobs {
+		if issue := validateDocumentPlanExpandedJobIdentityV0(
+			seenRequestIDs,
+			job.RequestID,
+			"jobs.request_id",
+		); issue != nil {
+			return []orquestadomainwork.DomainWorkIssueV0{*issue}
+		}
+		if issue := validateDocumentPlanExpandedJobIdentityV0(
+			seenIdempotencyKeys,
+			job.IdempotencyKey,
+			"jobs.idempotency_key",
+		); issue != nil {
+			return []orquestadomainwork.DomainWorkIssueV0{*issue}
+		}
+	}
+	return nil
+}
+
+func validateDocumentPlanExpandedJobIdentityV0(
+	seen map[string]struct{},
+	value string,
+	field string,
+) *orquestadomainwork.DomainWorkIssueV0 {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	if _, ok := seen[trimmed]; ok {
+		return &orquestadomainwork.DomainWorkIssueV0{
+			Code:  ErrDomainDocumentPlanDerivedJobDuplicateV0,
+			Field: field,
+		}
+	}
+	seen[trimmed] = struct{}{}
+	return nil
+}

@@ -16,6 +16,20 @@ func compactStringsV0(values []string) []string {
 	return out
 }
 
+func compactCodexStackStringsV0(values []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" || seen[trimmed] {
+			continue
+		}
+		seen[trimmed] = true
+		out = append(out, trimmed)
+	}
+	return out
+}
+
 func stringInSetV0(values []string, want string) bool {
 	want = strings.TrimSpace(want)
 	for _, value := range values {

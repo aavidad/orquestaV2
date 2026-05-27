@@ -38,6 +38,8 @@ func DecideCapacityReasoningPolicyV0(
 		return capacityReasoningDecisionV0("xhigh", CapacityPolicyRefOPESDocumentV0)
 	case capacityReasoningContainsAnyV0(input, []string{
 		"architecture_decision", "arquitectura amplia", "risk:high", "riesgo_alto",
+		"programacion", "programming", "crear_app_completa", "go.mod", "cmd/",
+		"internal/modules",
 	}):
 		return capacityReasoningDecisionV0("high", CapacityPolicyRefHighRiskV0)
 	default:

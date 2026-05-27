@@ -18,7 +18,7 @@ func operationalDirectorPlanAcceptedReviewMatchesV0(
 	if reader == nil {
 		return nil, false, nil
 	}
-	events, err := reader.LoadRunEventsV0(ctx, request.RunRef)
+	events, err := loadOperationalRunEventsV0(ctx, reader, request.RunRef)
 	if err != nil {
 		return nil, false, err
 	}
@@ -49,7 +49,7 @@ func operationalDirectorPlanReviewReworkReplanMatchForActiveStepV0(
 	if reader == nil {
 		return operationalDirectorPlanReviewReworkReplanMatchV0{}, false, nil
 	}
-	events, err := reader.LoadRunEventsV0(ctx, request.RunRef)
+	events, err := loadOperationalRunEventsV0(ctx, reader, request.RunRef)
 	if err != nil {
 		return operationalDirectorPlanReviewReworkReplanMatchV0{}, false, err
 	}

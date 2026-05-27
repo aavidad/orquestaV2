@@ -44,12 +44,10 @@ func (err WebWorkspaceTimelineClientErrorV0) Error() string {
 
 func NewRESTWorkspaceTimelineClientV0(baseURL string, timeout time.Duration) *RESTWorkspaceTimelineClientV0 {
 	return &RESTWorkspaceTimelineClientV0{
-		BaseURL:  strings.TrimRight(baseURL, "/"),
-		Endpoint: WebWorkspaceTimelineInboundEndpointV0,
-		Timeout:  timeout,
-		HTTPClient: &http.Client{
-			Timeout: timeout,
-		},
+		BaseURL:    normalizeWebRESTBaseURLStringV0(baseURL),
+		Endpoint:   WebWorkspaceTimelineInboundEndpointV0,
+		Timeout:    timeout,
+		HTTPClient: newWebLoopbackHTTPClientV0(timeout),
 	}
 }
 
@@ -80,10 +78,11 @@ func (client *RESTWorkspaceTimelineClientV0) ConsultarWorkspaceTimeline(
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		discardWebHTTPResponseBodyV0(resp)
 		return WebWorkspaceTimelineViewModelV0{}, workspaceTimelineClientErrorV0(WebWorkspaceTimelineErrTransporteV0, resp.StatusCode)
 	}
 	var timeline orquestaobservability.WorkspaceTimelineV0
-	if err := json.NewDecoder(resp.Body).Decode(&timeline); err != nil {
+	if !decodeWebHTTPJSONResponseV0(resp, &timeline) {
 		return WebWorkspaceTimelineViewModelV0{}, workspaceTimelineClientErrorV0(WebWorkspaceTimelineErrRespuestaV0, resp.StatusCode)
 	}
 	if err := orquestaobservability.ValidateWorkspaceTimelineV0(timeline); err != nil {
@@ -93,10 +92,7 @@ func (client *RESTWorkspaceTimelineClientV0) ConsultarWorkspaceTimeline(
 }
 
 func (client *RESTWorkspaceTimelineClientV0) httpClient() *http.Client {
-	if client.HTTPClient != nil {
-		return client.HTTPClient
-	}
-	return &http.Client{Timeout: client.Timeout}
+	return webHTTPClientWithRedirectPolicyV0(client.HTTPClient, client.Timeout, client.BaseURL)
 }
 
 func (client *RESTWorkspaceTimelineClientV0) url() string {
@@ -104,7 +100,7 @@ func (client *RESTWorkspaceTimelineClientV0) url() string {
 	if endpoint == "" {
 		endpoint = WebWorkspaceTimelineInboundEndpointV0
 	}
-	return strings.TrimRight(client.BaseURL, "/") + "/" + strings.TrimLeft(endpoint, "/")
+	return webRESTEndpointURLV0(client.BaseURL, endpoint, WebWorkspaceTimelineInboundEndpointV0)
 }
 
 func workspaceTimelineClientErrorV0(code string, statusCode int) WebWorkspaceTimelineClientErrorV0 {

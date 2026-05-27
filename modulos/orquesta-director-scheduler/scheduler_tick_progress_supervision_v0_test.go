@@ -285,20 +285,3 @@ func TestBuildDirectorSchedulerTickV0ProgressAcceptsOpaqueEvidenceRefsWithOperat
 
 	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 1)
 }
-
-func TestBuildDirectorSchedulerTickV0ProgressRejectsForbiddenSummaryDetails(t *testing.T) {
-	tests := []string{
-		"model operativo seleccionado",
-		"home operativo seleccionado",
-	}
-
-	for _, summary := range tests {
-		t.Run(summary, func(t *testing.T) {
-			input := validSchedulerTickInputWithProgressV0(orquestaruntime.AgentLoopDetectedV0)
-			input.ProgressSupervisionCandidates[0].SupervisionInput.Report.Summary = summary
-
-			_, err := BuildDirectorSchedulerTickV0(input)
-			assertSchedulerTickErrorV0(t, err, "payload")
-		})
-	}
-}

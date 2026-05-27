@@ -15,8 +15,10 @@ import (
 )
 
 const (
-	DomainWorkArtifactSubmissionStatusAcceptedV0 = "accepted"
-	DomainWorkArtifactSubmissionStatusRejectedV0 = "rejected"
+	DomainWorkArtifactSubmissionStatusClaimedV0    = "claimed"
+	DomainWorkArtifactSubmissionStatusSubmittingV0 = "submitting"
+	DomainWorkArtifactSubmissionStatusAcceptedV0   = "accepted"
+	DomainWorkArtifactSubmissionStatusRejectedV0   = "rejected"
 )
 
 type DomainWorkDeliveryBridgeConfigV0 struct {
@@ -72,10 +74,11 @@ type DomainWorkArtifactSubmissionRecordV0 struct {
 }
 
 type DomainWorkArtifactSubmissionRecordFilterV0 struct {
-	RunRef      string
-	TaskRef     string
-	DeliveryRef string
-	Status      string
+	IdempotencyKey string
+	RunRef         string
+	TaskRef        string
+	DeliveryRef    string
+	Status         string
 }
 
 func normalizeDomainWorkDeliveryBridgeConfigV0(
@@ -128,6 +131,14 @@ func (ledger *InMemoryDomainWorkArtifactSubmissionLedgerV0) RecordDomainWorkArti
 	record = normalizeDomainWorkArtifactSubmissionRecordV0(record)
 	ledger.mu.Lock()
 	defer ledger.mu.Unlock()
+	if existing, ok := ledger.records[record.IdempotencyKey]; ok {
+		merged, err := mergeDomainWorkArtifactSubmissionRecordV0(existing, record)
+		if err != nil {
+			return err
+		}
+		ledger.records[record.IdempotencyKey] = merged
+		return nil
+	}
 	ledger.records[record.IdempotencyKey] = record
 	return nil
 }
@@ -175,6 +186,7 @@ func normalizeDomainWorkArtifactSubmissionRecordV0(
 func normalizeDomainWorkArtifactSubmissionRecordFilterV0(
 	filter DomainWorkArtifactSubmissionRecordFilterV0,
 ) DomainWorkArtifactSubmissionRecordFilterV0 {
+	filter.IdempotencyKey = strings.TrimSpace(filter.IdempotencyKey)
 	filter.RunRef = strings.TrimSpace(filter.RunRef)
 	filter.TaskRef = strings.TrimSpace(filter.TaskRef)
 	filter.DeliveryRef = strings.TrimSpace(filter.DeliveryRef)
@@ -186,7 +198,8 @@ func domainWorkArtifactSubmissionRecordMatchesFilterV0(
 	record DomainWorkArtifactSubmissionRecordV0,
 	filter DomainWorkArtifactSubmissionRecordFilterV0,
 ) bool {
-	return (filter.RunRef == "" || record.RunRef == filter.RunRef) &&
+	return (filter.IdempotencyKey == "" || record.IdempotencyKey == filter.IdempotencyKey) &&
+		(filter.RunRef == "" || record.RunRef == filter.RunRef) &&
 		(filter.TaskRef == "" || record.TaskRef == filter.TaskRef) &&
 		(filter.DeliveryRef == "" || record.DeliveryRef == filter.DeliveryRef) &&
 		(filter.Status == "" || record.Status == filter.Status)

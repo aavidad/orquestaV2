@@ -35,27 +35,30 @@ func (handler mcpHumanDirectorWorkReviewPlanHTTPHandlerV0) ServeHTTP(
 			r,
 			MCPHumanDirectorWorkReviewPlanToolInputV0{},
 			"path",
-			"ruta_no_soportada",
+			MCPPublicErrPathUnsupportedV0,
 		))
 		return
 	}
+	if handleMCPPublicHTTPOptionsV0(w, r, http.MethodPost) {
+		return
+	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
+		setMCPPublicHTTPAllowV0(w, http.MethodPost)
 		writeMCPHumanDirectorWorkReviewPlanHTTPV0(w, http.StatusMethodNotAllowed, newMCPHumanDirectorWorkReviewPlanHTTPErrorV0(
 			r,
 			MCPHumanDirectorWorkReviewPlanToolInputV0{},
 			"method",
-			"metodo_no_permitido",
+			MCPPublicErrMethodNotAllowedV0,
 		))
 		return
 	}
 	var input MCPHumanDirectorWorkReviewPlanToolInputV0
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+	if code := decodeMCPPublicHTTPJSONV0(w, r, &input); code != "" {
 		writeMCPHumanDirectorWorkReviewPlanHTTPV0(w, http.StatusBadRequest, newMCPHumanDirectorWorkReviewPlanHTTPErrorV0(
 			r,
 			input,
 			"body",
-			"request_body_invalido",
+			code,
 		))
 		return
 	}

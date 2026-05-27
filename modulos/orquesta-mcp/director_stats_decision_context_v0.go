@@ -27,7 +27,7 @@ func buildMCPDirectorDecisionContextV0(
 		Phases:        mcpDirectorDecisionPhasesV0(run, stats, observedAt),
 		Tasks:         mcpDirectorDecisionTasksV0(stats),
 		Agents:        mcpDirectorDecisionAgentsV0(stats),
-		Privacy:       orquestaobservability.DiagnosticoPrivacyV0{},
+		Privacy:       orquestaobservability.NewDiagnosticoPrivacyMetadataOnlyV0(),
 	}
 	context.Blockers = mcpDirectorDecisionBlockersV0(stats)
 	context.Activity = mcpDirectorDecisionActivityV0(context, observedAt)

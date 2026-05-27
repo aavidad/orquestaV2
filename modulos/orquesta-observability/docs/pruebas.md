@@ -2,6 +2,20 @@
 
 Registra pruebas obligatorias del modulo.
 
+```text
+Caso: OBS-CT-012 descriptor_source MCP read-only
+Tipo: contract
+Comando: go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-observability ./modulos/orquesta-governance ./modulos/orquesta-core ./cmd/orquesta-server
+Evidencia esperada: los resources MCP que apuntan a observability declaran
+owner, fuente canonica, DTO/validador y errores publicos sin exponer DB,
+runtime, transcripts, prompts, completions ni payloads completos.
+Ultima ejecucion: 2026-05-27, ok en paquete
+`agent-ref-task-autoprogramming-c3678e9bc306-g01`.
+Riesgos: La prueba no crea un sink productivo; valida contrato y transporte existentes.
+Revalidacion: `agent-ref-task-autoprogramming-c3678e9bc306-g01` conserva el
+comando obligatorio como evidencia de cierre T198.
+```
+
 ## `OrquestaEvent v0`
 
 ```text

@@ -94,6 +94,7 @@ func TestFileCodexProgressStateStoreV0RecuperaReporteMarcado(t *testing.T) {
 		got.ReportedStatus != orquestaruntime.AgentStalledV0 {
 		t.Fatalf("reported=%+v", got)
 	}
+	assertCodexDeliveryFileStoreDurablePolicyV0(t, dir, fileCodexProgressStateNameV0)
 }
 
 func TestFileCodexProgressStateStoreV0NoFiltraPathEnError(t *testing.T) {
@@ -109,6 +110,36 @@ func TestFileCodexProgressStateStoreV0NoFiltraPathEnError(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), dir) || strings.Contains(err.Error(), path) {
 		t.Fatalf("error filtra path: %v", err)
+	}
+}
+
+func TestFileCodexProgressStateStoreV0LimitaLecturaSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, fileCodexProgressStateNameV0)
+	if err := os.WriteFile(path, []byte(strings.Repeat("x", int(codexDeliveryFileSnapshotMaxBytesV0)+1)), 0o600); err != nil {
+		t.Fatalf("write oversized snapshot: %v", err)
+	}
+	_, err := NewFileCodexProgressStateStoreV0(dir)
+	if err == nil || err.Error() != "codex_progress_state_file_store: size_limit_exceeded" {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestFileCodexProgressStateStoreV0LimitaRecordsSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, fileCodexProgressStateNameV0)
+	records := make([]string, 0, codexDeliveryFileSnapshotMaxRecordsV0+1)
+	for index := 0; index <= codexDeliveryFileSnapshotMaxRecordsV0; index++ {
+		records = append(records, `{}`)
+	}
+	body := `{"schema_version":"` + fileCodexProgressStateSchemaVersionV0 +
+		`","records":[` + strings.Join(records, ",") + `]}`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write snapshot: %v", err)
+	}
+	_, err := NewFileCodexProgressStateStoreV0(dir)
+	if err == nil || err.Error() != "codex_progress_state_file_store: records_limit_exceeded" {
+		t.Fatalf("err=%v", err)
 	}
 }
 

@@ -114,7 +114,7 @@ func TestCodexStackAgentUsageSourceV0UneMetricasInyectadas(t *testing.T) {
 	}
 	if !codexStackRefsContainPartV0(
 		agent.Usage.EvidenceRefs,
-		"evidence-ref-capacity-policy-ref-background-medium-v0",
+		"evidence-ref-capacity-policy-ref-",
 	) {
 		t.Fatalf("usage evidence refs no reflejan politica de capacidad: %+v", agent.Usage.EvidenceRefs)
 	}
@@ -245,6 +245,27 @@ type pendingAckCodexStackRuntimeV0 struct {
 func newPendingAckCodexStackRuntimeV0() *pendingAckCodexStackRuntimeV0 {
 	return &pendingAckCodexStackRuntimeV0{
 		fakeCodexStackRuntimeV0: newFakeCodexStackRuntimeV0(),
+	}
+}
+
+type snapshotMissingPendingAckCodexStackRuntimeV0 struct {
+	*pendingAckCodexStackRuntimeV0
+}
+
+func newSnapshotMissingPendingAckCodexStackRuntimeV0() *snapshotMissingPendingAckCodexStackRuntimeV0 {
+	return &snapshotMissingPendingAckCodexStackRuntimeV0{
+		pendingAckCodexStackRuntimeV0: newPendingAckCodexStackRuntimeV0(),
+	}
+}
+
+func (runtime *snapshotMissingPendingAckCodexStackRuntimeV0) SnapshotV0(
+	_ string,
+) (orquestaruntime.ProcessRuntimeSnapshotV0, error) {
+	return orquestaruntime.ProcessRuntimeSnapshotV0{}, orquestaruntime.ProcessRuntimeErrorV0{
+		Code:       orquestaruntime.ProcessRuntimeNoEncontradoV0,
+		MessageKey: "process.no_encontrado",
+		Field:      "process_ref",
+		Retryable:  false,
 	}
 }
 

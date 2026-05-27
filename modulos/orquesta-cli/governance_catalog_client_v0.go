@@ -59,12 +59,10 @@ func NewGovernanceCatalogCliReaderV0(serverURL string, timeout time.Duration) (*
 		return nil, err
 	}
 	return &GovernanceCatalogCliReaderV0{
-		BaseURL:  config.BaseURL,
-		Endpoint: config.Endpoint,
-		Timeout:  config.Timeout,
-		HTTPClient: &http.Client{
-			Timeout: config.Timeout,
-		},
+		BaseURL:    config.BaseURL,
+		Endpoint:   config.Endpoint,
+		Timeout:    config.Timeout,
+		HTTPClient: newCLILoopbackHTTPClientV0(config.Timeout),
 	}, nil
 }
 
@@ -130,7 +128,11 @@ func governanceCatalogRequestFromQueryV0(inv CliInvocationContextV0, query orque
 
 func decodeGovernanceCatalogResponseV0(resp *http.Response, inv CliInvocationContextV0, start time.Time) CliOutputEnvelopeV0 {
 	if resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusServiceUnavailable {
-		issues, ok := decodeGovernanceCatalogIssuesV0(resp.Body)
+		raw, detail := readCLIRESTResponseBodyForCommandV0(resp, inv.Command)
+		if detail != "" {
+			return cliSingleGovernanceErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", detail, resp.StatusCode, false, start)
+		}
+		issues, ok := decodeGovernanceCatalogIssuesV0(bytes.NewReader(raw))
 		if !ok || len(issues) == 0 {
 			return cliSingleGovernanceErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "errors", "respuesta_error_sin_errores_publicos", resp.StatusCode, false, start)
 		}
@@ -143,12 +145,12 @@ func decodeGovernanceCatalogResponseV0(resp *http.Response, inv CliInvocationCon
 		)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode > 299 {
-		return cliSingleGovernanceErrorEnvelopeV0(inv, CliErrErrorTransporteV0, "status_code", "status_no_2xx", resp.StatusCode, retryableStatusV0(resp.StatusCode), start)
+		return cliSingleGovernanceErrorEnvelopeV0(inv, CliErrErrorTransporteV0, "status_code", cliRESTNo2xxDetailForCommandV0(resp, inv.Command), resp.StatusCode, retryableStatusV0(resp.StatusCode), start)
 	}
 
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return cliSingleGovernanceErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", "body_no_legible", resp.StatusCode, false, start)
+	raw, detail := readCLIRESTResponseBodyForCommandV0(resp, inv.Command)
+	if detail != "" {
+		return cliSingleGovernanceErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", detail, resp.StatusCode, false, start)
 	}
 
 	result, err := decodeGovernanceCatalogResultV0(raw)
@@ -179,7 +181,9 @@ func decodeGovernanceCatalogResultV0(raw []byte) (orquestagovernance.GovernanceC
 		Effective: response.Effective,
 		Counters:  response.Counters,
 	}
-	if result.Counters.Effective != len(result.Effective) {
+	if result.Counters.Effective < len(result.Effective) ||
+		(response.OutputBudget.Status != orquestagovernance.GovernanceCatalogPublicBudgetTruncatedV0 &&
+			result.Counters.Effective != len(result.Effective)) {
 		return orquestagovernance.GovernanceCatalogQueryResultV0{}, errors.New("effective_count_no_coincide")
 	}
 	if result.Counters.Proposed < 0 || result.Counters.Quarantine < 0 {

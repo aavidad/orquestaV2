@@ -85,7 +85,7 @@ func TestMCPRunSupervisorHTTPHandlerV0PropagaErrorPublicoDelExecutor(t *testing.
 	}
 }
 
-func TestMCPRunSupervisorHTTPHandlerV0ExponeCausaSanitizadaSiExecutorNoDaPayload(t *testing.T) {
+func TestMCPRunSupervisorHTTPHandlerV0NoPropagaErrorNoCatalogado(t *testing.T) {
 	input := MCPRunSupervisorToolInputV0{
 		RequestID:     "request-ref-run-supervisor-http-cause-001",
 		CorrelationID: "corr-run-supervisor-http-cause-001",
@@ -112,8 +112,8 @@ func TestMCPRunSupervisorHTTPHandlerV0ExponeCausaSanitizadaSiExecutorNoDaPayload
 	}
 	if result.Estado != MCPRunSupervisorEstadoErrorV0 ||
 		len(result.Errores) != 1 ||
-		!strings.Contains(result.Errores[0].Message, "ack_files_mismatch") {
-		t.Fatalf("error sin causa util: %+v", result)
+		result.Errores[0].Message != "run_supervisor_error" {
+		t.Fatalf("error publico inesperado: %+v", result)
 	}
 	if strings.Contains(rec.Body.String(), "/root/Trabajo") ||
 		strings.Contains(rec.Body.String(), "secret123456") {
@@ -138,7 +138,7 @@ func TestMCPRunSupervisorHTTPHandlerV0SoloPOST(t *testing.T) {
 
 	NewMCPRunSupervisorHTTPHandlerV0(&fakeMCPRunSupervisorHTTPExecutorV0{}).ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusMethodNotAllowed || rec.Header().Get("Allow") != http.MethodPost {
+	if rec.Code != http.StatusMethodNotAllowed || rec.Header().Get("Allow") != mcpPublicHTTPAllowHeaderV0(http.MethodPost) {
 		t.Fatalf("status=%d allow=%s", rec.Code, rec.Header().Get("Allow"))
 	}
 }

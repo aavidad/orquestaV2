@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	orquestarails "orquesta/modulos/orquesta-rails"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 )
 
@@ -45,7 +46,7 @@ func codexStackRealSmokeDiagnosticsV0(runtimeDir string) string {
 			orquestaruntimecodex.CodexStderrFileNameV0:
 			data, readErr := os.ReadFile(path)
 			if readErr == nil {
-				parts = append(parts, path+": "+codexStackRealSmokeTruncateV0(string(data)))
+				parts = append(parts, entry.Name()+": "+codexStackRealSmokeTruncateV0(string(data)))
 			}
 		}
 		return nil
@@ -54,6 +55,7 @@ func codexStackRealSmokeDiagnosticsV0(runtimeDir string) string {
 }
 
 func codexStackRealSmokeTruncateV0(value string) string {
+	value, _ = orquestarails.RedactOperationalTextForFieldV0("codex_stack_real_smoke", "diagnostic", value)
 	value = strings.TrimSpace(value)
 	if len(value) <= 1600 {
 		return value

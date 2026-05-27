@@ -106,7 +106,9 @@ func (closer OperationalDirectorClosureV0) CloseOperationalDirectorRunV0(
 		return result, nil
 	}
 	if !operationalDirectorClosureReflectedV0(run.Validations, request.ValidationRef) {
-		if operationalDirectorClosurePhaseV0(run.CurrentPhase) != orquestacoreworkflow.OrchestrationPhaseValidacionFinalV0 {
+		currentPhase := operationalDirectorClosurePhaseV0(run.CurrentPhase)
+		if currentPhase != orquestacoreworkflow.OrchestrationPhaseValidacionFinalV0 &&
+			currentPhase != orquestacoreworkflow.OrchestrationPhaseCierreV0 {
 			if err := closer.applyOperationalDirectorClosureCommandV0(ctx, request, &result, operationalDirectorOpenFinalValidationCommandV0); err != nil {
 				return result, err
 			}
@@ -182,7 +184,7 @@ func (closer OperationalDirectorClosureV0) operationalDirectorClosureEventsV0(
 	if reader == nil {
 		return nil, []ErrorV0{errorV0(ErrNucleoOrquestacionInvalidoV0, "event_reader", "event_reader requerido")}, nil
 	}
-	events, err := reader.LoadRunEventsV0(ctx, request.RunRef)
+	events, err := loadRunEventsWithBudgetV0(ctx, reader, request.RunRef)
 	if err != nil {
 		return nil, nil, err
 	}

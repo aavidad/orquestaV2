@@ -13,6 +13,8 @@ const (
 	DomainWorkSQLDefaultTableV0 = "domain_work_jobs_v0"
 
 	ErrDomainWorkSQLIdempotencyConflictV0 = "domain_work_sql_idempotency_conflict"
+
+	domainWorkSQLJobRefCollisionRetriesV0 = 16
 )
 
 type SQLDomainWorkPlaceholderStyleV0 string
@@ -93,7 +95,14 @@ func (store *SQLDomainWorkJobRecordStoreV0) CreateDomainWorkJobV0(
 		return orquestadomainwork.DomainWorkJobV0{}, err
 	}
 	if found {
-		if existing.Fingerprint == fingerprint {
+		equivalent, err := orquestadomainwork.EquivalentDomainWorkJobRequestsV0(
+			existing.Request,
+			request,
+		)
+		if err != nil {
+			return orquestadomainwork.DomainWorkJobV0{}, err
+		}
+		if equivalent {
 			return cloneDomainWorkSQLJobV0(existing.Job), nil
 		}
 		return invalidDomainWorkSQLJobV0(request, []orquestadomainwork.DomainWorkIssueV0{{
@@ -101,29 +110,35 @@ func (store *SQLDomainWorkJobRecordStoreV0) CreateDomainWorkJobV0(
 			Field: "idempotency_key",
 		}}), nil
 	}
-	jobRef, err := store.nextJobRefV0(ctx, request.DomainRef, request.IdempotencyKey)
-	if err != nil {
-		return orquestadomainwork.DomainWorkJobV0{}, err
-	}
-	job := acceptedDomainWorkSQLJobV0(request, jobRef)
-	if err := ctx.Err(); err != nil {
-		return orquestadomainwork.DomainWorkJobV0{}, err
-	}
-	if err := store.insertRecordV0(ctx, sqlDomainWorkJobRecordV0{
-		Request:     cloneDomainWorkSQLJobRequestV0(request),
-		Job:         cloneDomainWorkSQLJobV0(job),
-		Fingerprint: fingerprint,
-	}); err != nil {
-		if store.uniqueViolationV0(err) {
-			return store.jobAfterUniqueViolationV0(
-				ctx,
-				request,
-				fingerprint,
-			)
+	for attempt := 0; attempt < domainWorkSQLJobRefCollisionRetriesV0; attempt++ {
+		jobRef, err := store.nextJobRefV0(ctx, request.DomainRef, request.IdempotencyKey)
+		if err != nil {
+			return orquestadomainwork.DomainWorkJobV0{}, err
 		}
-		return orquestadomainwork.DomainWorkJobV0{}, err
+		job := acceptedDomainWorkSQLJobV0(request, jobRef)
+		if err := ctx.Err(); err != nil {
+			return orquestadomainwork.DomainWorkJobV0{}, err
+		}
+		if err := store.insertRecordV0(ctx, sqlDomainWorkJobRecordV0{
+			Request:     cloneDomainWorkSQLJobRequestV0(request),
+			Job:         cloneDomainWorkSQLJobV0(job),
+			Fingerprint: fingerprint,
+		}); err != nil {
+			if store.uniqueViolationV0(err) {
+				replayed, resolved, err := store.jobAfterUniqueViolationV0(ctx, request)
+				if err != nil {
+					return orquestadomainwork.DomainWorkJobV0{}, err
+				}
+				if resolved {
+					return replayed, nil
+				}
+				continue
+			}
+			return orquestadomainwork.DomainWorkJobV0{}, err
+		}
+		return cloneDomainWorkSQLJobV0(job), nil
 	}
-	return cloneDomainWorkSQLJobV0(job), nil
+	return orquestadomainwork.DomainWorkJobV0{}, fmt.Errorf("orquesta_domain_work_sql: job_ref_collision_unresolved")
 }
 
 func (store *SQLDomainWorkJobRecordStoreV0) ListDomainWorkJobRecordsV0(

@@ -2,30 +2,41 @@ package main
 
 import (
 	"os"
+	"strings"
 	"testing"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
-func TestEnsureServerDetailRailsDefaultV0MantieneRailAbiertoPorDefecto(t *testing.T) {
+func TestServerDetailRailsEffectiveDefaultsV0NoMutanEntornoGlobal(t *testing.T) {
 	t.Setenv(detailProhibitedRailsEnvV0, "")
 	t.Setenv(detailProhibitedRailsScopeEnvV0, "")
+	t.Setenv(envSecurityModeV0, "")
 
-	ensureServerDetailRailsDefaultV0()
-
-	if got := os.Getenv(detailProhibitedRailsEnvV0); got != "off" {
-		t.Fatalf("default=%q, want off", got)
+	if got := serverSecurityModeEffectiveValueV0(); got != securityModeServerDefaultV0 {
+		t.Fatalf("security_mode=%q, want %q", got, securityModeServerDefaultV0)
 	}
-	if got := os.Getenv(detailProhibitedRailsScopeEnvV0); got != detailProhibitedRailsScopeServerDefaultV0 {
+	if got := serverDetailRailsEffectiveValueV0(); got != "on" {
+		t.Fatalf("default=%q, want on", got)
+	}
+	if got := serverDetailRailsScopeEffectiveValueV0(); got != detailProhibitedRailsScopeServerDefaultV0 {
 		t.Fatalf("scope=%q, want %q", got, detailProhibitedRailsScopeServerDefaultV0)
 	}
 }
 
-func TestServerEnvironmentWithDetailRailsDefaultV0AddReactivaSiFalta(t *testing.T) {
+func TestServerEnvironmentWithDetailRailsDefaultV0AnadeRailReactivoSiFalta(t *testing.T) {
 	got := serverEnvironmentWithDetailRailsDefaultV0([]string{"PATH=/tmp/bin"})
+	if !detailRailsEnvPresentV0(got, envSecurityModeV0) {
+		t.Fatalf("%s no añadido: %v", envSecurityModeV0, got)
+	}
 	if !detailRailsEnvPresentV0(got, detailProhibitedRailsEnvV0) {
 		t.Fatalf("%s no añadido: %v", detailProhibitedRailsEnvV0, got)
 	}
 	if !detailRailsEnvPresentV0(got, detailProhibitedRailsScopeEnvV0) {
 		t.Fatalf("%s no añadido: %v", detailProhibitedRailsScopeEnvV0, got)
+	}
+	if got[len(got)-3] != envSecurityModeV0+"="+securityModeServerDefaultV0 {
+		t.Fatalf("env=%v, want security mode default", got)
 	}
 	if got[len(got)-2] != detailProhibitedRailsEnvV0+"="+detailProhibitedRailsServerDefaultV0 {
 		t.Fatalf("env=%v, want rails default", got)
@@ -35,8 +46,21 @@ func TestServerEnvironmentWithDetailRailsDefaultV0AddReactivaSiFalta(t *testing.
 	}
 }
 
+func TestServerDetailRailsEffectiveV0ModoProgramacionAbreOverrideExplicito(t *testing.T) {
+	t.Setenv(envSecurityModeV0, "programming")
+	t.Setenv(detailProhibitedRailsEnvV0, "on")
+
+	if got := serverSecurityModeEffectiveValueV0(); got != "programming" {
+		t.Fatalf("security_mode=%q, want programming", got)
+	}
+	if got := serverDetailRailsEffectiveValueV0(); got != "off" {
+		t.Fatalf("rails=%q, want off para programming", got)
+	}
+}
+
 func TestServerEnvironmentWithDetailRailsDefaultV0NoPisaValorExplicito(t *testing.T) {
 	env := []string{
+		envSecurityModeV0 + "=production",
 		detailProhibitedRailsEnvV0 + "=off",
 		detailProhibitedRailsScopeEnvV0 + "=context_bundle_request.*",
 	}
@@ -44,4 +68,61 @@ func TestServerEnvironmentWithDetailRailsDefaultV0NoPisaValorExplicito(t *testin
 	if len(got) != len(env) || got[0] != env[0] || got[1] != env[1] {
 		t.Fatalf("env=%v, want %v", got, env)
 	}
+}
+
+func TestServerEnvironmentWithDetailRailsDefaultV0RellenaVaciosV0(t *testing.T) {
+	env := []string{
+		envSecurityModeV0 + "=",
+		detailProhibitedRailsEnvV0 + "=",
+		detailProhibitedRailsScopeEnvV0 + "=",
+	}
+	got := serverEnvironmentWithDetailRailsDefaultV0(env)
+	if !detailRailsEnvHasPairForTestV0(got, envSecurityModeV0, securityModeServerDefaultV0) {
+		t.Fatalf("security mode default no aplicado: %v", got)
+	}
+	if !detailRailsEnvHasPairForTestV0(got, detailProhibitedRailsEnvV0, detailProhibitedRailsServerDefaultV0) {
+		t.Fatalf("detail rails default no aplicado: %v", got)
+	}
+	if !detailRailsEnvHasPairForTestV0(got, detailProhibitedRailsScopeEnvV0, detailProhibitedRailsScopeServerDefaultV0) {
+		t.Fatalf("detail rails scope default no aplicado: %v", got)
+	}
+}
+
+func TestServerEnvironmentWithDetailRailsDefaultV0ProgramacionFuerzaOffV0(t *testing.T) {
+	got := serverEnvironmentWithDetailRailsDefaultV0([]string{
+		envSecurityModeV0 + "=programming",
+		detailProhibitedRailsEnvV0 + "=on",
+	})
+	if !detailRailsEnvHasPairForTestV0(got, detailProhibitedRailsEnvV0, "off") {
+		t.Fatalf("programming debe proyectar rails off: %v", got)
+	}
+}
+
+func TestApplyServerDetailRailsRuntimeDefaultsV0ActivaRunDirectoV0(t *testing.T) {
+	t.Setenv(envSecurityModeV0, "")
+	t.Setenv(detailProhibitedRailsEnvV0, "")
+	t.Setenv(detailProhibitedRailsScopeEnvV0, "")
+
+	if err := applyServerDetailRailsRuntimeDefaultsV0(); err != nil {
+		t.Fatalf("applyServerDetailRailsRuntimeDefaultsV0: %v", err)
+	}
+	if os.Getenv(detailProhibitedRailsEnvV0) != detailProhibitedRailsServerDefaultV0 {
+		t.Fatalf("detail rails env=%q", os.Getenv(detailProhibitedRailsEnvV0))
+	}
+	if !orquestarails.TextContainsOperationalSensitiveDetailForFieldV0("context_bundle_request", "read_set", "api_key=valor") {
+		t.Fatal("run directo no activo rail acotado de contexto")
+	}
+	if orquestarails.TextContainsOperationalSensitiveDetailForFieldV0("codex_wave_tail", "summary", "api_key=valor") {
+		t.Fatal("run directo activo frontera fuera de scope")
+	}
+}
+
+func detailRailsEnvHasPairForTestV0(env []string, key string, value string) bool {
+	for _, item := range env {
+		gotKey, gotValue, ok := strings.Cut(item, "=")
+		if ok && gotKey == key && gotValue == value {
+			return true
+		}
+	}
+	return false
 }

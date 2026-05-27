@@ -130,6 +130,25 @@ func TestNuevaAppHTMLHandlerV0POSTInvalidoRenderizaErrorPublico(t *testing.T) {
 	}
 }
 
+func TestNuevaAppHTMLHandlerV0OptionsNoRenderizaNiDelega(t *testing.T) {
+	client := &fakeNuevaAppClientV0{}
+	handler := NewNuevaAppHTMLHandlerV0(client)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodOptions, "/nueva-app?locale=es", nil)
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if rec.Header().Get("Allow") != webPublicHTTPAllowHeaderV0(http.MethodGet, http.MethodPost) {
+		t.Fatalf("allow=%q", rec.Header().Get("Allow"))
+	}
+	if client.calls != 0 || rec.Body.Len() != 0 {
+		t.Fatalf("options con efectos calls=%d body=%q", client.calls, rec.Body.String())
+	}
+}
+
 func nuevaAppHTMLValidFormValuesV0() url.Values {
 	values := url.Values{}
 	values.Set("request_id", "req-html-001")

@@ -25,8 +25,9 @@ func validRunV0() orquestacoreworkflow.OrchestrationRunV0 {
 		Status:        orquestacoreworkflow.OrchestrationRunStatusActiveV0,
 		CurrentPhase:  orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
 		Phases: []orquestacoreworkflow.OrchestrationPhaseV0{{
-			ID:     orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
-			Status: orquestacoreworkflow.OrchestrationPhaseStatusActiveV0,
+			ID:                  orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+			Status:              orquestacoreworkflow.OrchestrationPhaseStatusActiveV0,
+			RecommendedCapacity: orquestacoreworkflow.OrchestrationCapacityMediumV0,
 		}},
 		Tasks:        []string{"task-ref-state-file-001"},
 		LastEventID:  "evt-run-started-state-file-001",
@@ -81,6 +82,7 @@ func validAgentProcessRecordV0(runRef string) orquestacionnucleoapp.AgentProcess
 		ProcessRef:     "process-ref-state-file-001",
 		SessionRef:     "session-ref-state-file-001",
 		LaunchRef:      "launch-ref-state-file-001",
+		PID:            4321,
 		ReadinessRef:   "readiness-ref-state-file-001",
 		EvidenceRefs:   []string{"evidence-ref-state-file-001"},
 	}

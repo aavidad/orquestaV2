@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 )
 
 type codexWaveControlConfigV0 struct {
@@ -41,7 +43,9 @@ func codexWaveStatusCommandV0(args []string, stdout io.Writer, stderr io.Writer)
 		_, _ = fmt.Fprintf(stderr, "codex-wave-status: %v\n", err)
 		return 1
 	}
-	_ = json.NewEncoder(stdout).Encode(summary)
+	if err := writeCommandJSONOutputV0(stdout, codexWavePublicSummaryFromV0(summary)); err != nil {
+		return reportCommandStdioWriteFailureV0(stderr, "codex-wave-status", "stdout", "json_encode", err)
+	}
 	return 0
 }
 
@@ -62,7 +66,9 @@ func codexWaveStopCommandV0(args []string, stdout io.Writer, stderr io.Writer) i
 		_, _ = fmt.Fprintf(stderr, "codex-wave-stop: %v\n", err)
 		return 1
 	}
-	_ = json.NewEncoder(stdout).Encode(summary)
+	if err := writeCommandJSONOutputV0(stdout, codexWavePublicSummaryFromV0(summary)); err != nil {
+		return reportCommandStdioWriteFailureV0(stderr, "codex-wave-stop", "stdout", "json_encode", err)
+	}
 	if len(summary.Errors) > 0 {
 		return 1
 	}
@@ -88,7 +94,9 @@ func codexWaveTailCommandV0(args []string, stdout io.Writer, stderr io.Writer) i
 		}
 		return 1
 	}
-	_ = json.NewEncoder(stdout).Encode(report)
+	if err := writeCommandJSONOutputV0(stdout, report); err != nil {
+		return reportCommandStdioWriteFailureV0(stderr, "codex-wave-tail", "stdout", "json_encode", err)
+	}
 	return 0
 }
 
@@ -178,10 +186,16 @@ func codexWaveSaveRegistryV0(summary codexWaveLaunchSummaryV0) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(summary.RegistryPath), 0o700); err != nil {
-		return err
-	}
-	return os.WriteFile(summary.RegistryPath, append(data, '\n'), 0o600)
+	_, err = orquestaruntimecodex.WriteCodexControlFileBytesV0(orquestaruntimecodex.CodexControlFileWriteRequestV0{
+		RootDir:     summary.RuntimeWorkDir,
+		Path:        summary.RegistryPath,
+		FileName:    codexWaveRegistryFileNameV0,
+		ControlKind: "codex_wave_registry",
+		Data:        append(data, '\n'),
+		Mode:        orquestaruntimecodex.CodexControlFileWriteCreateOrReplaceV0,
+		Perm:        0o600,
+	})
+	return err
 }
 
 func codexWaveRefreshSummaryV0(summary *codexWaveLaunchSummaryV0) {

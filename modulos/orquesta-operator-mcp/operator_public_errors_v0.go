@@ -17,7 +17,10 @@ func (err OperatorMCPPublicErrorV0) Error() string {
 func PublicOperatorMCPErrorCodeV0(err error) (string, bool) {
 	var publicErr OperatorMCPPublicErrorV0
 	if errors.As(err, &publicErr) && publicErr.Code != "" {
-		return publicErr.Code, true
+		return publicErr.Code, OperatorMCPPublicErrorCodeKnownV0(publicErr.Code)
+	}
+	if err != nil && OperatorMCPPublicErrorCodeKnownV0(err.Error()) {
+		return err.Error(), true
 	}
 	return "", false
 }

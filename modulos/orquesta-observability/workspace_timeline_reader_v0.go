@@ -57,7 +57,7 @@ func (reader WorkspaceTimelineUnavailableReaderV0) QueryWorkspaceTimelineV0(
 			Code:    ErrWorkspaceTimelineNoDisponibleV0,
 			Summary: "Fuentes declaradas sin adaptador residente disponible.",
 		}},
-		Privacy: DiagnosticoPrivacyV0{},
+		Privacy: NewDiagnosticoPrivacyMetadataOnlyV0(),
 	}
 	if err := ValidateWorkspaceTimelineProjectionV0(projection); err != nil {
 		return WorkspaceTimelineProjectionV0{}, err

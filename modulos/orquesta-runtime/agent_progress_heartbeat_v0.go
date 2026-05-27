@@ -72,7 +72,7 @@ func validateAgentProgressHeartbeatInputV0(
 	if snapshot.ProcessRef != current.ProcessRef {
 		v.add(AgentProgressReportInvalidoV0, "snapshot.process_ref")
 	}
-	if !isOneOf(string(snapshot.Status), string(ProcessRuntimeRunningV0), string(ProcessRuntimeStoppedV0)) {
+	if !isOneOf(string(snapshot.Status), string(ProcessRuntimeRunningV0), string(ProcessRuntimeStoppingV0), string(ProcessRuntimeStoppedV0)) {
 		v.add(AgentProgressReportInvalidoV0, "snapshot.status")
 	}
 	if previous != nil {

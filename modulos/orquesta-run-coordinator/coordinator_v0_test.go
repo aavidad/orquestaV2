@@ -249,6 +249,47 @@ func TestCoordinateRunsTickConservaDiagnosticosSiDrainFallaV0(t *testing.T) {
 	}
 }
 
+func TestCoordinateRunsTickContinuaTrasDrainErrorSiPoliticaLoPermiteV0(t *testing.T) {
+	now := time.Date(2026, 5, 26, 10, 0, 0, 0, time.UTC)
+	queue := &fakeQueueStoreV0{candidates: []orquestarunqueue.RunSchedulingCandidateV0{
+		candidateWithUpdatedAtV0("run-error", "app", 10, now.Add(-time.Hour)),
+		candidateWithUpdatedAtV0("run-ok", "app", 9, now.Add(-time.Hour)),
+	}}
+	deps := RunCoordinatorDepsV0{
+		QueueReader:   queue,
+		QueueUpdater:  queue,
+		ControlReader: &fakeControlReaderV0{states: map[string]orquestaruncontrol.RunControlStateV0{}, missing: map[string]bool{}},
+		Drainer: &fakeDrainerV0{
+			errors: map[string]error{
+				"run-error": errors.New("transicion_invalida: payload.phase_id"),
+			},
+		},
+	}
+	command := tickCommandV0(2)
+	command.OccurredAt = now
+	command.RankingPolicy = orquestarunqueue.DefaultRunQueueRankingPolicyV0(now)
+	command.ContinueOnDrainError = true
+
+	result, err := CoordinateRunsTickV0(context.Background(), deps, command)
+	if err != nil {
+		t.Fatalf("coordinate tick: %v", err)
+	}
+
+	assertRunRefsV0(t, executionRefsV0(result.Executions), []string{"run-error", "run-ok"})
+	if len(result.Executions[0].Diagnostics) != 1 ||
+		result.Executions[0].Diagnostics[0].Kind != "drain_error" ||
+		result.Executions[0].Diagnostics[0].Error == "" {
+		t.Fatalf("diagnostico error=%+v", result.Executions[0])
+	}
+	if result.Executions[1].Outcome != "drained" {
+		t.Fatalf("segunda ejecucion=%+v", result.Executions[1])
+	}
+	if queue.candidates[0].UpdatedAt != now ||
+		!containsStringV0(queue.candidates[0].EvidenceRefs, "evidence-ref-run-coordinator-executed") {
+		t.Fatalf("run error no rotado en cola=%+v", queue.candidates[0])
+	}
+}
+
 func TestCoordinateRunsTickAllowsMissingControlReaderV0(t *testing.T) {
 	deps := coordinatorDepsV0([]orquestarunqueue.RunSchedulingCandidateV0{
 		candidateV0("run-no-control", "app", 9),
@@ -363,6 +404,41 @@ func TestCoordinateRunsTickPropagaEstadoTerminalALaColaV0(t *testing.T) {
 	}
 	if len(second.Executions) != 0 {
 		t.Fatalf("second=%+v", second)
+	}
+}
+
+func TestCoordinateRunsTickMarcaRunningSiDrainNoDeclaraEstadoColaV0(t *testing.T) {
+	now := time.Date(2026, 5, 27, 10, 0, 0, 0, time.UTC)
+	queue := &fakeQueueStoreV0{candidates: []orquestarunqueue.RunSchedulingCandidateV0{
+		candidateWithUpdatedAtV0("run-active", "app", 9, now.Add(-time.Hour)),
+	}}
+	drainer := &fakeDrainerV0{
+		results: map[string]RunDrainResultV0{
+			"run-active": {
+				RunRef:  "run-active",
+				AppRef:  "app",
+				Outcome: "external_work_pending",
+			},
+		},
+	}
+	deps := RunCoordinatorDepsV0{
+		QueueReader:   queue,
+		QueueUpdater:  queue,
+		ControlReader: &fakeControlReaderV0{states: map[string]orquestaruncontrol.RunControlStateV0{}, missing: map[string]bool{}},
+		Drainer:       drainer,
+	}
+	command := tickCommandV0(1)
+	command.OccurredAt = now
+	command.RankingPolicy = orquestarunqueue.DefaultRunQueueRankingPolicyV0(now)
+
+	result, err := CoordinateRunsTickV0(context.Background(), deps, command)
+	if err != nil {
+		t.Fatalf("tick: %v", err)
+	}
+	if len(result.Executions) != 1 ||
+		result.Executions[0].QueueStatus != orquestarunqueue.RunStatusRunningV0 ||
+		queue.candidates[0].Status != orquestarunqueue.RunStatusRunningV0 {
+		t.Fatalf("result=%+v queue=%+v", result, queue.candidates)
 	}
 }
 

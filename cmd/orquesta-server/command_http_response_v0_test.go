@@ -20,6 +20,19 @@ func TestReadCommandHTTPResponseBodyV0ValidaJSONYContentType(t *testing.T) {
 	}
 }
 
+func TestReadCommandHTTPResponseBodyV0AceptaLegacyTextPlainJSON(t *testing.T) {
+	response := commandHTTPResponseForTestV0(http.StatusOK, "text/plain; charset=utf-8", `{"estado":"ok"}`)
+
+	body, err := readCommandHTTPResponseBodyV0(response, "status")
+
+	if err != nil {
+		t.Fatalf("readCommandHTTPResponseBodyV0: %v", err)
+	}
+	if string(body) != `{"estado":"ok"}` {
+		t.Fatalf("body=%s", string(body))
+	}
+}
+
 func TestReadCommandHTTPResponseBodyV0NoPropagaBodyNo2xx(t *testing.T) {
 	response := commandHTTPResponseForTestV0(http.StatusInternalServerError, "text/html", "secret_token=abc local_path=/tmp/private")
 
@@ -49,6 +62,16 @@ func TestReadCommandHTTPResponseBodyV0RechazaContentTypeNoJSON(t *testing.T) {
 	_, err := readCommandHTTPResponseBodyV0(response, "status")
 
 	if err == nil || err.Error() != "status_response_content_type" {
+		t.Fatalf("error=%v", err)
+	}
+}
+
+func TestReadCommandHTTPResponseBodyV0RechazaBodyGrande(t *testing.T) {
+	response := commandHTTPResponseForTestV0(http.StatusOK, "application/json", strings.Repeat(" ", int(commandHTTPResponseMaxBytesV0)+1))
+
+	_, err := readCommandHTTPResponseBodyV0(response, "status")
+
+	if err == nil || err.Error() != "status_response_too_large" {
 		t.Fatalf("error=%v", err)
 	}
 }

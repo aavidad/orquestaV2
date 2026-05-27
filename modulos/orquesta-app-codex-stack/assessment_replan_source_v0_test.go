@@ -65,6 +65,100 @@ func TestAssessmentReplanSourceV0PlanificaReemplazoTrasAgentePerdido(t *testing.
 	}
 }
 
+func TestAssessmentReplanSourceV0NoReplanificaScannerSinAssessmentTerminal(t *testing.T) {
+	runRef := "request-ref-autoprogramming-backlog-scanner-test-001"
+	oldAgentRef := "agent-ref-assessment-backlog-scanner-001"
+	taskRef := "task-autoprogramming-backlog-scanner-001"
+	source := AssessmentReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(
+			assessmentReplanDescriptorForTestV0(runRef, oldAgentRef, taskRef),
+		),
+	}
+	request := assessmentReplanRequestForTestV0(runRef, oldAgentRef, taskRef, false)
+	request.Run.AgentAssessments = nil
+
+	plans, err := source.BuildAgentAssessmentReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildAgentAssessmentReplanPlansV0 scanner: %v", err)
+	}
+	if len(plans) != 0 {
+		t.Fatalf("scanner backlog sin assessment terminal no debe abrir replan: %+v", plans)
+	}
+}
+
+func TestAssessmentReplanSourceV0ReemplazaScannerPerdidoConAskDirector(t *testing.T) {
+	runRef := "request-ref-autoprogramming-backlog-scanner-test-ask-director-001"
+	oldAgentRef := "agent-ref-assessment-backlog-scanner-ask-director-001"
+	taskRef := "task-autoprogramming-backlog-scanner-ask-director-001"
+	source := AssessmentReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(
+			assessmentReplanDescriptorForTestV0(runRef, oldAgentRef, taskRef),
+		),
+	}
+	request := assessmentReplanRequestForTestV0(runRef, oldAgentRef, taskRef, false)
+	request.Run.StoppedAgents = nil
+	request.Run.ConfirmedStoppedAgents = nil
+	request.Run.LostAgents = []string{oldAgentRef}
+	request.Run.AgentAssessments = []string{
+		orquestacoreworkflow.AgentAssessmentProjectionRefV0(orquestacoreworkflow.AgentWorkAssessedPayloadV0{
+			AssessmentRef:  "assessment-ref-" + oldAgentRef,
+			PhaseID:        string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			AgentRequestID: oldAgentRef,
+			TaskRef:        taskRef,
+			Verdict:        orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
+			Action:         orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
+			Severity:       orquestacoreworkflow.AgentAssessmentSeverityHighV0,
+		}),
+	}
+
+	plans, err := source.BuildAgentAssessmentReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildAgentAssessmentReplanPlansV0 scanner ask_director: %v", err)
+	}
+	if len(plans) != 1 ||
+		plans[0].TaskRef != taskRef ||
+		plans[0].Assessment.AgentRequestID != oldAgentRef ||
+		plans[0].RequestedAction != "replace_agent" {
+		t.Fatalf("scanner backlog perdido debe abrir replacement: %+v", plans)
+	}
+}
+
+func TestAssessmentReplanSourceV0ConvierteAskDirectorPerdidoEnReemplazoDelDirector(t *testing.T) {
+	runRef := "run-ref-assessment-replan-stack-lost-ask-director-001"
+	oldAgentRef := "agent-ref-assessment-lost-ask-director-001"
+	taskRef := "task-ref-assessment-stack-lost-ask-director-001"
+	source := AssessmentReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(
+			assessmentReplanDescriptorForTestV0(runRef, oldAgentRef, taskRef),
+		),
+	}
+	request := assessmentReplanRequestForTestV0(runRef, oldAgentRef, taskRef, false)
+	request.Run.StoppedAgents = nil
+	request.Run.ConfirmedStoppedAgents = nil
+	request.Run.LostAgents = []string{oldAgentRef}
+	request.Run.AgentAssessments = []string{
+		orquestacoreworkflow.AgentAssessmentProjectionRefV0(orquestacoreworkflow.AgentWorkAssessedPayloadV0{
+			AssessmentRef:  "assessment-ref-" + oldAgentRef,
+			PhaseID:        string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			AgentRequestID: oldAgentRef,
+			TaskRef:        taskRef,
+			Verdict:        orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
+			Action:         orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
+			Severity:       orquestacoreworkflow.AgentAssessmentSeverityHighV0,
+		}),
+	}
+
+	plans, err := source.BuildAgentAssessmentReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildAgentAssessmentReplanPlansV0 lost ask director: %v", err)
+	}
+	if len(plans) != 1 ||
+		plans[0].Assessment.AgentRequestID != oldAgentRef ||
+		plans[0].RequestedAction != "replace_agent" {
+		t.Fatalf("ask_director perdido debe generar replacement del Director: %+v", plans)
+	}
+}
+
 func TestAssessmentReplanSourceV0NoDuplicaSiReplacementYaExiste(t *testing.T) {
 	runRef := "run-ref-assessment-replan-stack-002"
 	oldAgentRef := "agent-ref-assessment-old-002"
@@ -109,6 +203,9 @@ func TestAssessmentReplanSourceV0NoEncadenaReemplazosParaMismaTarea(t *testing.T
 			"#followups:" + replacementAgentRef,
 	}
 	request.Run.Agents = []string{replacementAgentRef}
+	request.Run.StartedAgents = []string{replacementAgentRef}
+	request.Run.StoppedAgents = nil
+	request.Run.ConfirmedStoppedAgents = nil
 
 	plans, err := source.BuildAgentAssessmentReplanPlansV0(context.Background(), request)
 	if err != nil {
@@ -116,6 +213,36 @@ func TestAssessmentReplanSourceV0NoEncadenaReemplazosParaMismaTarea(t *testing.T
 	}
 	if len(plans) != 0 {
 		t.Fatalf("replan encadenado para misma tarea=%+v", plans)
+	}
+}
+
+func TestAssessmentReplanSourceV0NoReintentaEnBucleSiFollowupFallo(t *testing.T) {
+	runRef := "run-ref-assessment-replan-stack-chain-failed-001"
+	oldAgentRef := "agent-ref-assessment-chain-failed-old-001"
+	replacementAgentRef := "agent-ref-assessment-chain-failed-replacement-001"
+	taskRef := "task-ref-assessment-stack-chain-failed-001"
+	source := AssessmentReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(
+			assessmentReplanDescriptorForTestV0(runRef, oldAgentRef, taskRef),
+			assessmentReplanDescriptorForTestV0(runRef, replacementAgentRef, taskRef),
+		),
+	}
+	request := assessmentReplanRequestForTestV0(runRef, replacementAgentRef, taskRef, false)
+	request.Run.ReplanDecisions = []string{
+		"replan-ref-chain-failed-001#source:assessment-ref-chain-old#task:" + taskRef +
+			"#action:" + string(orquestacoreworkflow.ReplanDecisionActionReplaceAgentV0) +
+			"#followups:" + replacementAgentRef,
+	}
+	request.Run.Agents = []string{replacementAgentRef}
+	request.Run.StoppedAgents = []string{replacementAgentRef}
+	request.Run.ConfirmedStoppedAgents = []string{replacementAgentRef}
+
+	plans, err := source.BuildAgentAssessmentReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildAgentAssessmentReplanPlansV0 chain failed: %v", err)
+	}
+	if len(plans) != 0 {
+		t.Fatalf("no debe reintentar indefinidamente si el followup fallo, plans=%+v", plans)
 	}
 }
 

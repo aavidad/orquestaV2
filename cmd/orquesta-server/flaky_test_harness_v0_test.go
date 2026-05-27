@@ -69,9 +69,19 @@ func TestFlakyHarnessV0RepiteCasoDirectorRecursiveFakeRuntimeV0(t *testing.T) {
 		if err := cmd.Run(); err != nil {
 			cancel()
 			if ctx.Err() == context.DeadlineExceeded {
-				t.Fatalf("attempt=%d timeout=%s stdout=%s stderr=%s", attempt, flakyHarnessAttemptTimeoutV0, stdout.String(), stderr.String())
+				t.Fatalf("attempt=%d timeout=%s stdout=%s stderr=%s",
+					attempt,
+					flakyHarnessAttemptTimeoutV0,
+					goSmokeDiagnosticForTestV0(stdout.String()),
+					goSmokeDiagnosticForTestV0(stderr.String()),
+				)
 			}
-			t.Fatalf("attempt=%d err=%v stdout=%s stderr=%s", attempt, err, stdout.String(), stderr.String())
+			t.Fatalf("attempt=%d err=%v stdout=%s stderr=%s",
+				attempt,
+				err,
+				goSmokeDiagnosticForTestV0(stdout.String()),
+				goSmokeDiagnosticForTestV0(stderr.String()),
+			)
 		}
 		cancel()
 	}
@@ -105,6 +115,9 @@ func waitForCodexDirectorTestFileContainsV0(t *testing.T, path string, needles .
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("archivo sin contenido esperado: %s\n%s", path, last)
+	t.Fatalf("archivo sin contenido esperado: %s\n%s",
+		goSmokeDiagnosticForTestV0(path),
+		goSmokeDiagnosticForTestV0(last),
+	)
 	return ""
 }

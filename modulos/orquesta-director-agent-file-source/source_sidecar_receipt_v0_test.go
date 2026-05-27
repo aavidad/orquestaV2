@@ -78,3 +78,50 @@ func TestDirectorAgentDecisionFileSourceV0RechazaSidecarHashCambiante(t *testing
 		t.Fatalf("esperaba error de hash")
 	}
 }
+
+func TestDirectorAgentDecisionFileSourceV0NoIgnoraSidecarInvalido(t *testing.T) {
+	decision := validMicrotaskDecisionForTestV0("run-ref-001")
+	decision.CreateMicrotask.Task.DependsOn = []string{"../task-invalida"}
+	data := mustDecisionFileJSONForTestV0(t, []orquestadirectoragent.DirectorAgentDecisionV0{decision})
+	source := DirectorAgentDecisionFileSourceV0{
+		DescriptorProvider: decisionFileDescriptorProviderForTestV0{
+			Descriptors: []DirectorAgentDecisionFileDescriptorV0{
+				{
+					RunID: "run-ref-001",
+					Path:  "invalid-sidecar.json",
+					SidecarReceipt: &DirectorAgentDecisionSidecarReceiptV0{
+						SchemaVersion: DirectorAgentDecisionSidecarReceiptSchemaV0,
+						ReceiptRef:    "decision-sidecar-receipt-ref-invalid-001",
+						SHA256:        directorAgentDecisionFileSHA256V0(data),
+						SizeBytes:     int64(len(data)),
+						Status:        "pending",
+					},
+				},
+				{
+					RunID: "run-ref-001",
+					Path:  "valid.json",
+				},
+			},
+		},
+		Reader: memoryDecisionFileReaderForTestV0{
+			Files: map[string][]byte{
+				"invalid-sidecar.json": data,
+				"valid.json": mustDecisionFileJSONForTestV0(
+					t,
+					[]orquestadirectoragent.DirectorAgentDecisionV0{
+						validOpenVoteDecisionForTestV0("run-ref-001"),
+					},
+				),
+			},
+		},
+		IgnoreInvalidFiles: true,
+	}
+
+	_, err := source.ListDirectorAgentDecisionsV0(
+		context.Background(),
+		decisionSourceRequestForTestV0("run-ref-001"),
+	)
+	if err == nil {
+		t.Fatalf("esperaba error para sidecar invalido")
+	}
+}

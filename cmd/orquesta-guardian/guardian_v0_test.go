@@ -1,10 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,19 +17,20 @@ func TestGuardianV0PromocionaCandidatoYGuardaLastGood(t *testing.T) {
 	current := filepath.Join(dir, "bin", "orquesta-server-latest")
 	mustWriteGuardianTestFileV0(t, current, "old")
 	config := mustGuardianConfigForTestV0(t, guardianConfigV0{
-		ProjectDir:     dir,
-		StateDir:       filepath.Join(dir, "guardian"),
-		CurrentBin:     current,
-		BuildCommand:   "printf candidate > {candidate_bin}",
-		TestCommands:   []string{"true"},
-		SkipHealth:     true,
-		Promote:        true,
-		CommandTimeout: time.Second,
-		OccurredAt:     time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC),
+		ProjectDir:             dir,
+		StateDir:               filepath.Join(dir, "guardian"),
+		CurrentBin:             current,
+		BuildCommand:           "printf candidate > {candidate_bin}",
+		TestCommands:           []string{"true"},
+		SkipHealth:             true,
+		SkipHealthEvidenceRefs: testGuardianSkipHealthEvidenceRefsV0(),
+		Promote:                true,
+		CommandTimeout:         time.Second,
+		OccurredAt:             time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC),
 	})
 
 	result := runGuardianCheckPromoteV0(context.Background(), config)
-	if result.Status != guardianStatusPromotedV0 || !result.Promoted {
+	if result.Status != guardianStatusPromotedBreakglassV0 || !result.Promoted {
 		t.Fatalf("result=%+v", result)
 	}
 	if got := mustReadGuardianTestFileV0(t, current); got != "candidate" {
@@ -77,39 +78,89 @@ func TestGuardianV0BuildFallidoNoPromocionaYCreaRepairPacket(t *testing.T) {
 	if packet.FailurePhase != "build" || !strings.Contains(packet.Summary, "build") {
 		t.Fatalf("packet=%+v", packet)
 	}
-}
-
-func TestGuardianV0BuildFallidoPuedeLanzarCodexReparadorOptIn(t *testing.T) {
-	dir := t.TempDir()
-	current := filepath.Join(dir, "bin", "orquesta-server-latest")
-	argsPath := filepath.Join(dir, "codex_args.txt")
-	script := "#!/bin/sh\nprintf \"%s\\n\" \"$@\" > " + shellQuoteV0(argsPath) + "\n"
-	mustWriteGuardianTestFileV0(t, current, script)
-	config := mustGuardianConfigForTestV0(t, guardianConfigV0{
-		ProjectDir:     dir,
-		StateDir:       filepath.Join(dir, "guardian"),
-		CurrentBin:     current,
-		BuildCommand:   "exit 7",
-		RepairCodex:    true,
-		SkipHealth:     true,
-		Promote:        true,
-		CommandTimeout: time.Second,
-		OccurredAt:     time.Date(2026, 5, 24, 12, 6, 0, 0, time.UTC),
-	})
-
-	result := runGuardianCheckPromoteV0(context.Background(), config)
-	if result.Status != guardianStatusCandidateFailedV0 || !result.RepairStarted {
-		t.Fatalf("result=%+v", result)
-	}
-	args := mustReadGuardianTestFileV0(t, argsPath)
-	for _, want := range []string{"codex-launch-wave", "--agents", "1", "--prompt-file"} {
-		if !strings.Contains(args, want) {
-			t.Fatalf("args no contiene %q: %s", want, args)
+	encodedPacket := mustReadGuardianTestFileV0(t, result.RepairPacketPath)
+	for _, leaked := range []string{dir, current, config.CandidateBin, config.LastGoodBin, config.BuildCommand} {
+		if strings.Contains(encodedPacket, leaked) {
+			t.Fatalf("repair packet contiene diagnostico local no redactado %q: %s", leaked, encodedPacket)
 		}
 	}
-	promptPath := strings.TrimSuffix(result.RepairPacketPath, filepath.Ext(result.RepairPacketPath)) + ".md"
-	if _, err := os.Stat(promptPath); err != nil {
-		t.Fatalf("repair prompt: %v", err)
+	if packet.RedactionLevel != "refs_only" ||
+		packet.Freshness == "" ||
+		len(packet.RequiredCommandRefs) == 0 ||
+		len(packet.LocalDiagnostics) == 0 {
+		t.Fatalf("repair packet publico incompleto: %+v", packet)
+	}
+}
+
+func TestGuardianV0CLIEmiteResultadoPublicoRedactado(t *testing.T) {
+	dir := t.TempDir()
+	current := filepath.Join(dir, "bin", "orquesta-server-latest")
+	mustWriteGuardianTestFileV0(t, current, "old")
+	var stdout bytes.Buffer
+	exitCode := runMain([]string{
+		"check-promote",
+		"--project-dir", dir,
+		"--state-dir", filepath.Join(dir, "guardian"),
+		"--current-bin", current,
+		"--build-command", "printf token-value >&2; exit 7",
+		"--skip-health",
+	}, &stdout, io.Discard)
+	if exitCode != 1 {
+		t.Fatalf("exitCode=%d stdout=%s", exitCode, stdout.String())
+	}
+	var public guardianPublicResultV0
+	if err := json.Unmarshal(stdout.Bytes(), &public); err != nil {
+		t.Fatalf("decode public: %v stdout=%s", err, stdout.String())
+	}
+	encoded := stdout.String()
+	for _, leaked := range []string{dir, current, "printf token-value", "token-value"} {
+		if strings.Contains(encoded, leaked) {
+			t.Fatalf("resultado publico contiene valor no redactado %q: %s", leaked, encoded)
+		}
+	}
+	if public.RedactionLevel != "refs_only" ||
+		public.ConfigEffective == nil ||
+		!public.ConfigEffective.Promote ||
+		!public.ConfigEffective.SkipHealth ||
+		public.ConfigEffective.CommandTimeoutMS == 0 ||
+		public.ManifestRef == "" ||
+		public.RepairPacketRef == "" ||
+		len(public.Commands) == 0 ||
+		public.Commands[0].CommandRef == "" ||
+		public.Commands[0].CommandProfile != "build" ||
+		public.Commands[0].TemplateRef == "" ||
+		public.Commands[0].TemplateStatus != guardianCommandTemplateChangedReasonV0 ||
+		len(public.Commands[0].TemplateEvidenceRefs) == 0 ||
+		public.Commands[0].OutputRef == "" ||
+		len(public.LocalDiagnostics) == 0 {
+		t.Fatalf("public=%+v", public)
+	}
+}
+
+func TestGuardianV0ConfigEnvEstrictoBloqueaValoresInvalidos(t *testing.T) {
+	t.Setenv("ORQUESTA_GUARDIAN_PROMOTE", "tru")
+	var stderr bytes.Buffer
+	exitCode := runMain([]string{"check-promote", "--current-bin", "orquesta-server"}, io.Discard, &stderr)
+	if exitCode != 2 {
+		t.Fatalf("exitCode=%d stderr=%s", exitCode, stderr.String())
+	}
+	if got := stderr.String(); !strings.Contains(got, guardianConfigInvalidBoolV0) ||
+		strings.Contains(got, "tru") {
+		t.Fatalf("stderr no es reason compacto: %s", got)
+	}
+}
+
+func TestGuardianV0ConfigFlagEstrictoBloqueaBudgetInvalido(t *testing.T) {
+	var stderr bytes.Buffer
+	exitCode := runMain([]string{
+		"shutdown-server",
+		"--command-output-max-bytes", "0",
+	}, io.Discard, &stderr)
+	if exitCode != 2 {
+		t.Fatalf("exitCode=%d stderr=%s", exitCode, stderr.String())
+	}
+	if got := stderr.String(); !strings.Contains(got, guardianConfigInvalidBudgetV0) {
+		t.Fatalf("stderr=%s", got)
 	}
 }
 
@@ -141,6 +192,35 @@ func TestGuardianV0HealthcheckFallidoNoPromociona(t *testing.T) {
 	}
 }
 
+func TestGuardianV0SkipHealthPromoteRequiereBreakglassV0(t *testing.T) {
+	dir := t.TempDir()
+	current := filepath.Join(dir, "bin", "orquesta-server-latest")
+	mustWriteGuardianTestFileV0(t, current, "old")
+	config := mustGuardianConfigForTestV0(t, guardianConfigV0{
+		ProjectDir:     dir,
+		StateDir:       filepath.Join(dir, "guardian"),
+		CurrentBin:     current,
+		BuildCommand:   "printf candidate > {candidate_bin}",
+		SkipHealth:     true,
+		Promote:        true,
+		CommandTimeout: time.Second,
+		OccurredAt:     time.Date(2026, 5, 27, 16, 0, 0, 0, time.UTC),
+	})
+	config.SkipHealthEvidenceRefs = nil
+
+	result := runGuardianCheckPromoteV0(context.Background(), config)
+	public := publicGuardianResultV0(config, result)
+	if result.Status != guardianStatusCandidateFailedV0 ||
+		result.Phase != "healthcheck" ||
+		result.Promoted ||
+		!containsStringForGuardianTestV0(public.ReasonCodes, "guardian_healthcheck_required") {
+		t.Fatalf("result=%+v public=%+v", result, public)
+	}
+	if got := mustReadGuardianTestFileV0(t, current); got != "old" {
+		t.Fatalf("current modificado=%q", got)
+	}
+}
+
 func TestGuardianV0RestauraLastGood(t *testing.T) {
 	dir := t.TempDir()
 	current := filepath.Join(dir, "bin", "orquesta-server-latest")
@@ -162,95 +242,14 @@ func TestGuardianV0RestauraLastGood(t *testing.T) {
 	}
 }
 
-func TestGuardianV0ShutdownServerUsaCooperativoPorDefecto(t *testing.T) {
-	dir := t.TempDir()
-	var received struct {
-		Forced      bool   `json:"forced"`
-		RequestedBy string `json:"requested_by"`
-		QueueLimit  int    `json:"queue_limit"`
-	}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v0/server/shutdown" {
-			t.Fatalf("path=%s", r.URL.Path)
-		}
-		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
-			t.Fatalf("decode: %v", err)
-		}
-		_ = json.NewEncoder(w).Encode(guardianShutdownResultV0{
-			Estado:        "ok",
-			Status:        "ready",
-			ShutdownReady: true,
-		})
-	}))
-	defer server.Close()
-	config := mustGuardianConfigForTestV0(t, guardianConfigV0{
-		ProjectDir:         dir,
-		StateDir:           filepath.Join(dir, "guardian"),
-		ServerAddr:         strings.TrimPrefix(server.URL, "http://"),
-		ShutdownTimeout:    time.Second,
-		ShutdownQueueLimit: 123,
-		OccurredAt:         time.Date(2026, 5, 24, 12, 4, 0, 0, time.UTC),
-	}, false)
-
-	result := runGuardianShutdownServerV0(context.Background(), config)
-	if result.Status != guardianStatusShutdownReadyV0 ||
-		result.Shutdown == nil ||
-		!result.Shutdown.ShutdownReady {
-		t.Fatalf("result=%+v", result)
-	}
-	if received.Forced || received.RequestedBy != "orquesta-director" || received.QueueLimit != 123 {
-		t.Fatalf("received=%+v", received)
-	}
-}
-
-func TestGuardianV0ShutdownServerFuerzaTrasTimeoutCooperativo(t *testing.T) {
-	dir := t.TempDir()
-	var forcedValues []bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var received struct {
-			Forced bool `json:"forced"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
-			t.Fatalf("decode: %v", err)
-		}
-		forcedValues = append(forcedValues, received.Forced)
-		if received.Forced {
-			_ = json.NewEncoder(w).Encode(guardianShutdownResultV0{
-				Estado:        "ok",
-				Status:        "ready",
-				ShutdownReady: true,
-			})
-			return
-		}
-		_ = json.NewEncoder(w).Encode(guardianShutdownResultV0{
-			Estado:        "ok",
-			Status:        "waiting_checkpoint",
-			ShutdownReady: false,
-		})
-	}))
-	defer server.Close()
-	config := mustGuardianConfigForTestV0(t, guardianConfigV0{
-		ProjectDir:        dir,
-		StateDir:          filepath.Join(dir, "guardian"),
-		ServerAddr:        strings.TrimPrefix(server.URL, "http://"),
-		ShutdownTimeout:   time.Millisecond,
-		ForceAfterTimeout: true,
-		OccurredAt:        time.Date(2026, 5, 24, 12, 5, 0, 0, time.UTC),
-	}, false)
-
-	result := runGuardianShutdownServerV0(context.Background(), config)
-	if result.Status != guardianStatusShutdownReadyV0 ||
-		result.Shutdown == nil ||
-		!result.Shutdown.ShutdownReady {
-		t.Fatalf("result=%+v", result)
-	}
-	if len(forcedValues) == 0 || !forcedValues[len(forcedValues)-1] {
-		t.Fatalf("forcedValues=%+v", forcedValues)
-	}
-}
-
 func mustGuardianConfigForTestV0(t *testing.T, config guardianConfigV0, requireCurrentBin ...bool) guardianConfigV0 {
 	t.Helper()
+	if len(config.CommandEffectEvidenceRefs) == 0 {
+		config.CommandEffectEvidenceRefs = []string{"evidence-ref-guardian-test-command-effect"}
+	}
+	if config.SkipHealth && config.Promote && len(config.SkipHealthEvidenceRefs) == 0 {
+		config.SkipHealthEvidenceRefs = []string{"evidence-ref-guardian-test-skip-health"}
+	}
 	require := true
 	if len(requireCurrentBin) > 0 {
 		require = requireCurrentBin[0]
@@ -260,6 +259,10 @@ func mustGuardianConfigForTestV0(t *testing.T, config guardianConfigV0, requireC
 		t.Fatalf("normalize: %v", err)
 	}
 	return normalized
+}
+
+func testGuardianSkipHealthEvidenceRefsV0() []string {
+	return []string{"evidence-ref-guardian-skip-health-test-breakglass"}
 }
 
 func mustWriteGuardianTestFileV0(t *testing.T, path string, content string) {

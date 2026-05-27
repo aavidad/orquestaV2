@@ -64,6 +64,9 @@ func postRunControlStackV0(
 	input orquestamcp.MCPRunControlToolInputV0,
 ) orquestamcp.MCPRunControlToolResultV0 {
 	t.Helper()
+	if input.IdempotencyKey == "" && input.RequestID == "" {
+		input.IdempotencyKey = "idem-stack-run-control-" + input.Action + "-" + input.RunRef + input.ExternalJobRef
+	}
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(input); err != nil {
 		t.Fatalf("encode control: %v", err)
@@ -88,6 +91,10 @@ func postRunQueuePriorityStackV0(
 	input orquestamcp.MCPRunQueuePriorityToolInputV0,
 ) orquestamcp.MCPRunQueuePriorityToolResultV0 {
 	t.Helper()
+	if input.Action == orquestamcp.MCPRunQueuePriorityActionSetV0 &&
+		input.IdempotencyKey == "" && input.RequestID == "" {
+		input.IdempotencyKey = "idem-stack-run-queue-" + input.Action + "-" + input.RunRef + input.AppRef
+	}
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(input); err != nil {
 		t.Fatalf("encode priority: %v", err)

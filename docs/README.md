@@ -21,6 +21,9 @@ adaptadores, no la definicion del nucleo.
   mapa operativo de piezas e invariantes.
 - [principio_orquesta_piensa_director.md](principio_orquesta_piensa_director.md):
   reparto entre juicio de Orquesta y dominio externo.
+- [uso_actual_app_orquesta.md](uso_actual_app_orquesta.md): uso operativo
+  server-first de la composicion actual, rutas `/api/v0/*`, web/CLI como
+  clientes finos y cuarentena de rutas legacy.
 - [matriz_pruebas_reales_y_smoke_2026-05-17.md](matriz_pruebas_reales_y_smoke_2026-05-17.md):
   evidencias, smokes offline/opt-in y pendientes verificables.
 
@@ -49,12 +52,35 @@ adaptadores, no la definicion del nucleo.
 - [duplicaciones_railes_pendientes_2026-05-24.md](duplicaciones_railes_pendientes_2026-05-24.md):
   duplicaciones, rails y fuentes locales federadas.
 
-## Regla para documentos historicos
+## Clasificacion documental
 
-Los documentos de vision, analisis y diseno previo permanecen como contexto. No
-deben abrir trabajo ni cerrar evidencia por si solos si contradicen la foto
-vigente; antes de usarlos como plan hay que enlazarlos a `estado_actual`,
-`guia_nucleo`, la matriz o el backlog vivo.
+- Vigentes: `AGENTS.md`, `README.md`, `00_INDICE.md`, `estado_actual`,
+  `guia_nucleo`, la matriz de smokes y los handoffs de corte.
+- Historicos/stale: vision, analisis y diseno previo, incluido
+  `BIBLIA_APP_ORQUESTA.md`, que se conserva como contexto de Orquesta V1 y debe
+  apuntar a sustitutos vigentes desde su cabecera. Si su cuerpo conserva
+  secciones V1 que se llamen "doctrina", "canonico" o "fuente de verdad", esas
+  frases quedan subordinadas a `doc_estado=historico-stale`.
+- Forenses: rail errors, duplicaciones y evidencias de scanner. Sirven para
+  explicar por que existe una tarea, no para sustituir el backlog ejecutable.
+- Plantillas: documentos reutilizables para generar documentacion; no describen
+  estado del repo.
+
+Ningun documento historico o forense debe abrir trabajo ni cerrar evidencia por
+si solo si contradice la foto vigente; antes de usarlo como plan hay que
+enlazarlo a `estado_actual`, `guia_nucleo`, la matriz o el backlog vivo.
+
+Los manuales de uso con `./orquesta serve`, rutas `/api/*` sin version,
+OpenClaw, AP-077 como requisito operativo o snapshots DBV1 se consideran
+historicos salvo que esten sincronizados con
+`uso_actual_app_orquesta.md` y una ruta `/api/v0/*` vigente.
+T119 queda cerrado aqui como regla documental: clientes nuevos deben partir del
+manual server-first, y cualquier manual V1 conservado solo aporta trazabilidad o
+rescate explicito.
+
+Para T88/T116, los marcadores `doc_no_canonico=true` y
+`doc_no_ejecutable_sin_fuente_vigente=true` pesan mas que cualquier texto
+historico que se autodenomine canonico dentro del documento.
 
 ## Validacion transversal
 

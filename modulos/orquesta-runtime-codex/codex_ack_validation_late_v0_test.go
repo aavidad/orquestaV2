@@ -33,6 +33,50 @@ func TestCodexAgentAckReceiptV0RechazaCompletedConTestsFallidos(t *testing.T) {
 	}
 }
 
+func TestCodexAgentAckDeclaresIncompleteRequiredEvidenceV0(t *testing.T) {
+	cases := []CodexAgentAckV0{
+		{
+			SchemaVersion: CodexAgentAckSchemaVersionV0,
+			Status:        "completed",
+			Tests:         EvidenceListV0{"smoke OPES real no ejecutado por faltar entorno temporal"},
+			Notes:         EvidenceListV0{"falta confirmacion explicita de instancia temporal"},
+		},
+		{
+			SchemaVersion: CodexAgentAckSchemaVersionV0,
+			Status:        "completed",
+			Tests:         EvidenceListV0{"go test ./..."},
+			Notes: EvidenceListV0{
+				"T12 reconciliada como bloqueado verificable; faltan OPES temporal, Orquesta temporal, confirmacion de efectos y cuota/modelo",
+			},
+		},
+	}
+	for _, ack := range cases {
+		if !CodexAgentAckDeclaresIncompleteRequiredEvidenceV0(ack) {
+			t.Fatalf("debe detectar evidencia obligatoria incompleta: %+v", ack)
+		}
+	}
+	ack := CodexAgentAckV0{
+		SchemaVersion: CodexAgentAckSchemaVersionV0,
+		Status:        "completed",
+		Tests:         EvidenceListV0{"go test ./..."},
+		Notes:         EvidenceListV0{"no tests failed; contexto_ref_only_resuelto; no faltan evidencias obligatorias"},
+	}
+	if CodexAgentAckDeclaresIncompleteRequiredEvidenceV0(ack) {
+		t.Fatalf("no debe marcar completitud incompleta para nota inocua")
+	}
+	resolved := CodexAgentAckV0{
+		SchemaVersion: CodexAgentAckSchemaVersionV0,
+		Status:        "completed",
+		Tests:         EvidenceListV0{"go test ./..."},
+		Notes: EvidenceListV0{
+			"contexto_ref_only_resuelto: agent_packet traia materialization_missing y ack_evidence_required resuelto mediante lectura local",
+		},
+	}
+	if CodexAgentAckDeclaresIncompleteRequiredEvidenceV0(resolved) {
+		t.Fatalf("no debe marcar incompleta una evidencia missing ya resuelta")
+	}
+}
+
 func TestCodexAgentAckReceiptV0RechazaCompletedConContextoRequeridoTruncadoSinJustificar(t *testing.T) {
 	spec := codexSpecForTestV0()
 	spec.AgentPacket.Context.Entries[0].Truncated = true
@@ -107,6 +151,7 @@ func TestCodexAgentAckReceiptV0AceptaMarcadoresDudososComoRailPendiente(t *testi
 }
 
 func TestCodexAgentAckReceiptV0RechazaValoresSensiblesEfectivos(t *testing.T) {
+	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "on")
 	spec := codexSpecForTestV0()
 	forbidden := []string{
 		`"notes":["access_token=abc123"]`,
@@ -118,6 +163,32 @@ func TestCodexAgentAckReceiptV0RechazaValoresSensiblesEfectivos(t *testing.T) {
 		data := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."],` + fragment + `}`
 		_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(data), spec)
 		requireCodexIssueV0(t, issues, CodexConnectorAckForbiddenV0)
+	}
+}
+
+func TestCodexAgentAckReceiptV0RechazaRutasLocalesYControlComoEvidenciaProducto(t *testing.T) {
+	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "on")
+	spec := codexSpecForTestV0()
+	forbidden := []string{
+		`"notes":["diagnostico publico en /home/alberto/proyecto"]`,
+		`"tests":["cat .orquesta-runtime/agent_packet.json"]`,
+		`"test_receipts":[{"schema_version":"codex_required_test_receipt.v0","command":"go test ./...","status":"passed","exit_code":0,"evidence_refs":["agent_ack.json"],"occurred_at":"2026-05-24T10:00:00Z","sequence":1,"output_redacted":true}]`,
+	}
+	for _, fragment := range forbidden {
+		data := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."],` + fragment + `}`
+		_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(data), spec)
+		requireCodexIssueV0(t, issues, CodexConnectorAckForbiddenV0)
+	}
+}
+
+func TestCodexAgentAckReceiptV0PermiteVariablesYRefsOpacasDeEstado(t *testing.T) {
+	spec := codexSpecForTestV0()
+	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."],"notes":["estado via ${ORQUESTA_SERVER_STATE_DIR} y state-dir-ref-demo sin valor local"]}`
+
+	_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	if len(issues) != 0 {
+		t.Fatalf("issues inesperadas: %+v", issues)
 	}
 }
 

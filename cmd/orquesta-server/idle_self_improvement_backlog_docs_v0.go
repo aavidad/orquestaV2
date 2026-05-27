@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 )
@@ -11,8 +10,7 @@ func (planner idleSelfImprovementBacklogPlannerV0) loadBacklogSectionsV0() (
 	[]idleSelfImprovementBacklogSectionV0,
 	error,
 ) {
-	projectDir := strings.TrimSpace(planner.ProjectWorkDir)
-	if projectDir == "" {
+	if strings.TrimSpace(planner.ProjectWorkDir) == "" {
 		return nil, errors.New("project_work_dir_required")
 	}
 	docs, err := planner.backlogSectionDocumentRefsV0()
@@ -21,13 +19,14 @@ func (planner idleSelfImprovementBacklogPlannerV0) loadBacklogSectionsV0() (
 	}
 	var sections []idleSelfImprovementBacklogSectionV0
 	for _, rel := range docs {
-		body, err := os.ReadFile(filepath.Join(projectDir, rel))
+		body, err := planner.readBacklogScanDocumentTextV0(rel)
 		if err != nil {
 			return nil, errors.New("autoprogramming_backlog_doc_unavailable")
 		}
-		sections = append(sections, parseIdleSelfImprovementBacklogSectionsFromDocumentV0(string(body), rel)...)
+		sections = append(sections, parseIdleSelfImprovementBacklogSectionsFromDocumentV0(body, rel)...)
 	}
 	sections = append(sections, planner.loadFederatedBacklogSectionsV0()...)
+	idleSelfImprovementAnnotateBacklogTaskIDAliasIndexV0(sections)
 	return sections, nil
 }
 
@@ -54,11 +53,11 @@ func (planner idleSelfImprovementBacklogPlannerV0) backlogSectionDocumentRefsV0(
 	if projectDir == "" {
 		return nil, errors.New("project_work_dir_required")
 	}
-	body, err := os.ReadFile(filepath.Join(projectDir, idleSelfImprovementBacklogDocRelV0))
+	body, err := planner.readBacklogScanDocumentTextV0(idleSelfImprovementBacklogDocRelV0)
 	if err != nil {
 		return nil, errors.New("autoprogramming_backlog_doc_unavailable")
 	}
-	indexed := idleSelfImprovementBacklogIndexDocumentRefsV0(string(body))
+	indexed := idleSelfImprovementBacklogIndexDocumentRefsV0(body)
 	if len(indexed) == 0 {
 		return []string{idleSelfImprovementBacklogDocRelV0}, nil
 	}

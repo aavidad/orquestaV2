@@ -49,6 +49,9 @@ func TestAutoprogrammingReviewGateIssueCodeIsAdvisoryV0(t *testing.T) {
 		"gate-issue:ack-files-mismatch:ack_files_do_not_match_snapshot_changes",
 		"go_file_line_budget_exceeded",
 		"gate-issue:go-file-line-budget-exceeded:modulos/orquesta-mcp/http.go",
+		"replaced_large_delta",
+		"massive_replacement:docs/manual.md",
+		"gate-issue:large_delta_replacement:README.md",
 	} {
 		if !AutoprogrammingReviewGateIssueCodeIsAdvisoryV0(code) {
 			t.Fatalf("code=%q advisory=false", code)
@@ -74,6 +77,7 @@ func TestAutoprogrammingReviewGateAdvisoryIssuesPidenFollowupSinBloquearV0(t *te
 		{Code: "write_set_target_missing:web"},
 		{Code: "gate-issue:ack_files_mismatch"},
 		{Code: "gate-issue:go_file_line_budget_exceeded"},
+		{Code: "gate-issue:replaced_large_delta"},
 	})
 
 	assertAutoprogrammingReviewGateFollowupV0(t, result)

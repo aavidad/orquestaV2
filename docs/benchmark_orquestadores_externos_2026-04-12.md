@@ -7,6 +7,21 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 # Benchmark externo — Patrones a copiar
 
+## Estado de vigencia 2026-05-26
+
+Documento de inspiracion historica en cuarentena T124. Las menciones a OpenClaw,
+`tmux`, Ollama, Claude, Codex u otros runners describen patrones estudiados, no
+una fuente de verdad ni un runtime canonico del nucleo. Cualquier adopcion debe
+entrar como adaptador/composicion opt-in sobre puertos de Orquesta, refs opacas,
+write-set, ACK/checkpoint y tests propios.
+
+El indice federado y la autoprogramacion residente deben excluir este documento
+de planificacion automatica salvo que la tarea declare explicitamente trabajo
+legacy o composicion externa. La frontera viva esta en `AGENTS.md`,
+`docs/estado_actual_2026-05-17.md`, `docs/guia_nucleo_orquestacion_2026-05-17.md`,
+`modulos/orquesta-runtime`, `modulos/orquesta-runtime-codex`,
+`modulos/orquesta-mcp` y `cmd/orquesta-server`.
+
 ## Objetivo
 
 Este documento fija qué copiamos de orquestadores y runtimes externos que ya funcionan mejor que algunas partes de Orquesta.

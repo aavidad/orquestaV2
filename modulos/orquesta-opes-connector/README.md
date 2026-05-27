@@ -49,3 +49,11 @@ para OPES.
 ```sh
 go test -count=1 ./modulos/orquesta-opes-connector
 ```
+
+## Estado T12
+
+Para `T12 opes-consumer-smoke-real-opt-in`, el conector queda validado como
+adaptador REST local por tests y fake aislado, pero el smoke real de
+derivados/cierre permanece bloqueado hasta disponer de OPES temporal, Orquesta
+temporal, confirmacion explicita de efectos y cuota/modelo confirmados. No
+convertir esa falta de entorno en nueva implementacion del conector.

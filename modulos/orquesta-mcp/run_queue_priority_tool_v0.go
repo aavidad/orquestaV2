@@ -102,6 +102,11 @@ func (executor MCPRunQueuePriorityToolExecutorV0) Execute(
 	if action == "" {
 		action = MCPRunQueuePriorityActionRankV0
 	}
+	var issues []MCPValidationIssueV0
+	input, issues = normalizeMCPRunQueuePriorityIdentityV0(input, "", "", action == MCPRunQueuePriorityActionSetV0)
+	if len(issues) > 0 {
+		return newMCPRunQueuePriorityErrorV0(input, issues[0].Code, issues[0].Field, issues[0].Code), nil
+	}
 	switch action {
 	case MCPRunQueuePriorityActionRankV0:
 		return executor.executeRankV0(ctx, input)
@@ -110,6 +115,26 @@ func (executor MCPRunQueuePriorityToolExecutorV0) Execute(
 	default:
 		return newMCPRunQueuePriorityErrorV0(input, "action_no_soportada", "action", "action debe ser rank o set_priority"), nil
 	}
+}
+
+func normalizeMCPRunQueuePriorityIdentityV0(
+	input MCPRunQueuePriorityToolInputV0,
+	headerCorrelationID string,
+	headerIdempotencyKey string,
+	mutating bool,
+) (MCPRunQueuePriorityToolInputV0, []MCPValidationIssueV0) {
+	identity := NormalizeMCPPublicMutationIdentityV0(MCPPublicMutationIdentityInputV0{
+		RequestID:            input.RequestID,
+		CorrelationID:        input.CorrelationID,
+		IdempotencyKey:       input.IdempotencyKey,
+		HeaderCorrelationID:  headerCorrelationID,
+		HeaderIdempotencyKey: headerIdempotencyKey,
+		Mutating:             mutating,
+	})
+	input.RequestID = identity.RequestID
+	input.CorrelationID = identity.CorrelationID
+	input.IdempotencyKey = identity.IdempotencyKey
+	return input, identity.Issues
 }
 
 func (executor MCPRunQueuePriorityToolExecutorV0) executeRankV0(

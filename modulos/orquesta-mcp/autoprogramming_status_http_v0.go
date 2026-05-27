@@ -20,6 +20,7 @@ type mcpAutoprogrammingStatusHTTPHandlerV0 struct {
 
 type mcpAutoprogrammingStatusHTTPInputV0 struct {
 	MCPAutoprogrammingStatusToolInputV0
+	TelemetryFlags string                                 `json:"telemetry_flags,omitempty"`
 	OperatorAdvice mcpAutoprogrammingOperatorAdviceListV0 `json:"operator_advice,omitempty"`
 }
 
@@ -30,16 +31,19 @@ type mcpAutoprogrammingStatusHTTPResultV0 struct {
 
 func (handler mcpAutoprogrammingStatusHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != MCPAutoprogrammingStatusHTTPPathV0 {
-		writeMCPAutoprogrammingStatusHTTPV0(w, http.StatusNotFound, newMCPAutoprogrammingStatusHTTPErrorV0(r, MCPAutoprogrammingStatusToolInputV0{}, "path", "ruta_no_soportada"))
+		writeMCPAutoprogrammingStatusHTTPV0(w, http.StatusNotFound, newMCPAutoprogrammingStatusHTTPErrorV0(r, MCPAutoprogrammingStatusToolInputV0{}, "path", MCPPublicErrPathUnsupportedV0))
+		return
+	}
+	if handleMCPPublicHTTPOptionsV0(w, r, http.MethodPost) {
 		return
 	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
-		writeMCPAutoprogrammingStatusHTTPV0(w, http.StatusMethodNotAllowed, newMCPAutoprogrammingStatusHTTPErrorV0(r, MCPAutoprogrammingStatusToolInputV0{}, "method", "metodo_no_permitido"))
+		setMCPPublicHTTPAllowV0(w, http.MethodPost)
+		writeMCPAutoprogrammingStatusHTTPV0(w, http.StatusMethodNotAllowed, newMCPAutoprogrammingStatusHTTPErrorV0(r, MCPAutoprogrammingStatusToolInputV0{}, "method", MCPPublicErrMethodNotAllowedV0))
 		return
 	}
 	var input mcpAutoprogrammingStatusHTTPInputV0
-	if code := decodeMCPPublicHTTPJSONV0(w, r, &input); code != "" {
+	if code := decodeMCPPublicHTTPJSONProfileV0(w, r, &input, mcpPublicHTTPJSONProfileAutoprogrammingV0); code != "" {
 		writeMCPAutoprogrammingStatusHTTPV0(w, http.StatusBadRequest, newMCPAutoprogrammingStatusHTTPErrorV0(r, input.MCPAutoprogrammingStatusToolInputV0, "body", code))
 		return
 	}

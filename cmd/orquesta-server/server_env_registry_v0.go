@@ -1,6 +1,9 @@
 package main
 
-import orquestaserver "orquesta/modulos/orquesta-server"
+import (
+	orquestarails "orquesta/modulos/orquesta-rails"
+	orquestaserver "orquesta/modulos/orquesta-server"
+)
 
 const (
 	envOrquestaBaseURLV0 = "ORQUESTA_BASE_URL"
@@ -28,6 +31,9 @@ const (
 	envServerDrainMaxExternalWaitsV0                 = "ORQUESTA_SERVER_DRAIN_MAX_EXTERNAL_WAITS"
 	envServerQueueLimitV0                            = "ORQUESTA_SERVER_QUEUE_LIMIT"
 	envServerDefaultPriorityV0                       = "ORQUESTA_SERVER_DEFAULT_PRIORITY"
+	envSecurityModeV0                                = orquestarails.SecurityModeEnvV0
+	envDetailProhibitedRailsV0                       = "ORQUESTA_DETAIL_PROHIBITED_RAILS"
+	envDetailProhibitedRailsScopeV0                  = "ORQUESTA_DETAIL_PROHIBITED_RAILS_SCOPE"
 	envServerIdleSelfImprovementAfterV0              = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS"
 	envServerIdleSelfImprovementProjectRefV0         = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PROJECT_REF"
 	envServerIdleSelfImprovementWorktreeRefV0        = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_WORKTREE_REF"
@@ -100,6 +106,9 @@ const (
 	envCodexWaveIsolateHomeV0                = "ORQUESTA_CODEX_WAVE_ISOLATE_HOME"
 	envCodexWaveStrictCredentialProjectionV0 = "ORQUESTA_CODEX_WAVE_STRICT_CREDENTIAL_PROJECTION"
 	envCodexWaveProjectMemoriesV0            = "ORQUESTA_CODEX_WAVE_PROJECT_MEMORIES"
+	envCodexWaveProjectionMaxFilesV0         = "ORQUESTA_CODEX_WAVE_PROJECTION_MAX_FILES"
+	envCodexWaveProjectionMaxFileBytesV0     = "ORQUESTA_CODEX_WAVE_PROJECTION_MAX_FILE_BYTES"
+	envCodexWaveProjectionMaxTotalBytesV0    = "ORQUESTA_CODEX_WAVE_PROJECTION_MAX_TOTAL_BYTES"
 	envCodexWavePurgeRuntimeV0               = "ORQUESTA_CODEX_WAVE_PURGE_RUNTIME"
 	envCodexWavePurgeRuntimeConfirmV0        = "ORQUESTA_CODEX_WAVE_PURGE_RUNTIME_CONFIRM"
 	envCodexWavePurgeRuntimeReportV0         = "ORQUESTA_CODEX_WAVE_PURGE_RUNTIME_REPORT"
@@ -115,6 +124,10 @@ const (
 
 	envCapacityTierV0            = "ORQUESTA_CAPACITY_TIER"
 	envCapacityReasoningEffortV0 = "ORQUESTA_CAPACITY_REASONING_EFFORT"
+	envCapacityPolicyRefV0       = "ORQUESTA_CAPACITY_POLICY_REF"
+	envCapacityPoolRefV0         = "ORQUESTA_CAPACITY_POOL_REF"
+	envCapacityModelRefV0        = "ORQUESTA_CAPACITY_MODEL_REF"
+	envCapacityQuotaRefV0        = "ORQUESTA_CAPACITY_QUOTA_REF"
 
 	envOPESBaseURLV0                    = "ORQUESTA_OPES_BASE_URL"
 	envOPESBaseURLLegacyV0              = "OPES_BASE_URL"
@@ -135,6 +148,9 @@ const (
 	envOPESBridgeAllowUnfilteredV0      = "ORQUESTA_OPES_BRIDGE_ALLOW_UNFILTERED"
 	envOPESBridgeInputLedgerDisabledV0  = "ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_DISABLED"
 	envOPESBridgeInputLedgerPathV0      = "ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH"
+	envOPESTemporalConfirmV0            = "ORQUESTA_OPES_TEMPORAL_CONFIRM"
+	envOPESBridgeProductiveConfirmV0    = "ORQUESTA_OPES_BRIDGE_PRODUCTIVE_CONFIRM"
+	envOPESBridgeDestinationEvidenceV0  = "ORQUESTA_OPES_BRIDGE_DESTINATION_EVIDENCE_REF"
 	envDomainWorkHTTPBaseURLV0          = "ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL"
 	envDomainWorkFileDirV0              = "ORQUESTA_DOMAIN_WORK_FILE_DIR"
 	envDomainWorkFileEnabledV0          = "ORQUESTA_DOMAIN_WORK_FILE_ENABLED"
@@ -184,6 +200,16 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Label:       "Ejecuciones por tick",
 		Description: "Ejecuciones lanzadas por pulso residente.",
 	},
+	envServerDrainMaxDispatchesV0: {
+		Scope:       "server_supervisor",
+		Label:       "Despachos por espera",
+		Description: "Despachos de agentes que puede emitir cada drain del supervisor residente.",
+	},
+	envServerDrainMaxOutboxV0: {
+		Scope:       "server_supervisor",
+		Label:       "Outbox por ciclo",
+		Description: "Comandos outbox que puede materializar cada ciclo del supervisor residente.",
+	},
 	envServerDrainMaxExternalWaitsV0: {
 		Scope:       "server_supervisor",
 		Label:       "Esperas externas",
@@ -204,6 +230,21 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Label:       "Nuevas tareas por tanda",
 		Description: "Maximo de tareas nuevas por tanda de automejora.",
 	},
+	envSecurityModeV0: {
+		Scope:       "rails",
+		Label:       "Modo seguridad",
+		Description: "programming abre rails para desarrollo; production_low/production/production_high reactivan niveles de seguridad.",
+	},
+	envDetailProhibitedRailsV0: {
+		Scope:       "rails",
+		Label:       "Rails detalle",
+		Description: "Activa o desactiva los rails de detalle prohibido para fronteras con matriz.",
+	},
+	envDetailProhibitedRailsScopeV0: {
+		Scope:       "rails",
+		Label:       "Scope rails detalle",
+		Description: "Fronteras y campos donde se aplican los rails de detalle prohibido.",
+	},
 	envCodexMaxBatchReadyV0: {
 		Scope:       "codex_runtime",
 		Label:       "Batch Codex ready",
@@ -223,6 +264,26 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "capacity",
 		Label:       "Reasoning capacidad",
 		Description: "Recomendacion de capacidad que recibe el stack.",
+	},
+	envCapacityPolicyRefV0: {
+		Scope:       "capacity",
+		Label:       "Politica capacidad",
+		Description: "Ref opaca de la politica de capacidad inyectada por la composicion.",
+	},
+	envCapacityPoolRefV0: {
+		Scope:       "capacity",
+		Label:       "Pool capacidad",
+		Description: "Ref opaca del pool de capacidad usado por la politica.",
+	},
+	envCapacityModelRefV0: {
+		Scope:       "capacity",
+		Label:       "Modelo capacidad",
+		Description: "Ref opaca del modelo logico usado por la politica; no contiene proveedor real.",
+	},
+	envCapacityQuotaRefV0: {
+		Scope:       "capacity",
+		Label:       "Cuota capacidad",
+		Description: "Ref opaca de evidencia de cuota usada por la politica.",
 	},
 	envCodexDirectorWaveAgentsV0: {
 		Scope:       "director_wave",

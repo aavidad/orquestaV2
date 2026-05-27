@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"strings"
+
+	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 )
 
 const DefaultCodexSupervisorContinueMessageV0 = "sigue"
@@ -40,10 +42,11 @@ type CodexSupervisorAgentLifecyclePortV0 interface {
 type CodexSupervisorRuntimePortV0 = CodexSupervisorAgentLifecyclePortV0
 
 type CodexSupervisorRuntimeSnapshotV0 struct {
-	Status       CodexSupervisorRuntimeStateV0 `json:"status"`
-	SessionRef   string                        `json:"session_ref,omitempty"`
-	ProcessRef   string                        `json:"process_ref,omitempty"`
-	EvidenceRefs []string                      `json:"evidence_refs,omitempty"`
+	Status       CodexSupervisorRuntimeStateV0                 `json:"status"`
+	SessionRef   string                                        `json:"session_ref,omitempty"`
+	ProcessRef   string                                        `json:"process_ref,omitempty"`
+	EvidenceRefs []string                                      `json:"evidence_refs,omitempty"`
+	Diagnostics  []orquestaruncoordinator.RunDrainDiagnosticV0 `json:"diagnostics,omitempty"`
 }
 
 type CodexSupervisorDepsV0 struct {

@@ -262,7 +262,7 @@ func TestBuildDirectorRunStatsV0IgnoraAssessmentObsoletoTrasDelivery(t *testing.
 	stats := BuildDirectorRunStatsWithObservationsV0(run, []AgentProgressObservationV0{}, nil)
 
 	if stats.Counts.TasksDelivered != 1 ||
-		stats.Progress.PercentComplete != 0 ||
+		stats.Progress.PercentComplete != 100 ||
 		stats.Progress.ObservedAgents != 0 ||
 		stats.Progress.StalledAgents != 0 ||
 		stats.Progress.TasksObserved != 1 {
@@ -280,6 +280,26 @@ func TestBuildDirectorRunStatsV0IgnoraAssessmentObsoletoTrasDelivery(t *testing.
 		task.DecisionRequired ||
 		task.LastReportRef != "" {
 		t.Fatalf("task=%+v", task)
+	}
+}
+
+func TestBuildDirectorRunStatsV0CuentaEntregasComoProgresoSinCerrarTarea(t *testing.T) {
+	run := mustActiveProgrammingRunV0(t, "run-nucleo-director-progress-delivery-percent-001")
+	run.Tasks = []string{
+		"task-ref-delivery-percent-001",
+		"task-ref-delivery-percent-002",
+		"task-ref-delivery-percent-003",
+	}
+	run.DeliveredTasks = []string{"task-ref-delivery-percent-001"}
+	run.ClosedTasks = []string{"task-ref-delivery-percent-002"}
+
+	stats := BuildDirectorRunStatsV0(run)
+
+	if stats.Progress.PercentComplete != 66 ||
+		stats.Progress.TasksClosed != 1 ||
+		stats.Counts.TasksDelivered != 1 ||
+		stats.Counts.TasksClosed != 1 {
+		t.Fatalf("counts=%+v progress=%+v", stats.Counts, stats.Progress)
 	}
 }
 

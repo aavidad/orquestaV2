@@ -4,9 +4,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/lib/go_tool.sh
 source "$ROOT/scripts/lib/go_tool.sh"
+# shellcheck source=scripts/lib/smoke_common.sh
+source "$ROOT/scripts/lib/smoke_common.sh"
 
 workdir="$(mktemp -d)"
-trap '/bin/rm -rf "$workdir"' EXIT
+smoke_temp_root_prepare "$workdir" "generated"
+trap 'smoke_temp_root_cleanup "$workdir" 0' EXIT
 
 mkdir -p "$workdir/usr-local-go/bin"
 cat >"$workdir/usr-local-go/bin/go" <<'FAKEGO'

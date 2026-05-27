@@ -30,6 +30,7 @@ func NormalizeServerEffectiveConfigV0(config ServerEffectiveConfigV0) ServerEffe
 func NormalizeServerConfigSettingV0(setting ServerConfigSettingV0) ServerConfigSettingV0 {
 	setting.Key = strings.TrimSpace(setting.Key)
 	setting.Value = strings.TrimSpace(setting.Value)
+	setting.Source = strings.TrimSpace(setting.Source)
 	setting.Scope = strings.TrimSpace(setting.Scope)
 	setting.Label = strings.TrimSpace(setting.Label)
 	setting.Description = strings.TrimSpace(setting.Description)

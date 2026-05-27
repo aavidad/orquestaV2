@@ -7,6 +7,7 @@ import (
 
 type mcpAutoprogrammingStatusTransportInputV0 struct {
 	MCPAutoprogrammingStatusToolInputV0
+	TelemetryFlags string                                 `json:"telemetry_flags,omitempty"`
 	OperatorAdvice mcpAutoprogrammingOperatorAdviceListV0 `json:"operator_advice,omitempty"`
 }
 

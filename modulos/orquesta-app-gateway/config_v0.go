@@ -7,6 +7,7 @@ import (
 	orquestacore "orquesta/modulos/orquesta-core"
 	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
 	orquestagovernance "orquesta/modulos/orquesta-governance"
+	orquestahttpgateway "orquesta/modulos/orquesta-http-gateway"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
 	operator "orquesta/modulos/orquesta-operator-mcp"
@@ -34,6 +35,8 @@ type ConfigV0 struct {
 	DomainWork                orquestamcp.MCPDomainWorkExecutorPortV0
 	ExternalWorkRun           orquestamcp.MCPTransportExternalWorkRunExecutorV0
 	AppVCS                    orquestamcp.MCPAppVCSExecutorPortV0
+	WebHTMLRenderObserver     orquestaobservability.WebHTMLRenderObserverV0
+	BrowserMutationIntent     orquestahttpgateway.BrowserMutationIntentGuardConfigV0
 	HTTPClient                *http.Client
 	Timeout                   time.Duration
 }

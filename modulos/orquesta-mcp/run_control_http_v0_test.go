@@ -22,6 +22,7 @@ func TestMCPRunControlHTTPHandlerV0DelegaEnExecutor(t *testing.T) {
 	_ = json.NewEncoder(body).Encode(MCPRunControlToolInputV0{
 		Action:        "pause",
 		RunRef:        "run-ref-control-http-001",
+		RequestID:     "request-ref-run-control-http-001",
 		CorrelationID: "corr-run-control-http-input-001",
 	})
 	rec := httptest.NewRecorder()

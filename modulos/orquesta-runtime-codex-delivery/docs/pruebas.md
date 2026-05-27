@@ -7,6 +7,8 @@ go test -count=1 ./modulos/orquesta-runtime-codex-delivery
 Cobertura:
 
 - lee un ACK valido desde path externo y devuelve una observacion neutral;
+- conserva un ACK `completed` con evidencia de tests fallidos como entrega
+  revisable con `gate-issue:failed_test_evidence`, sin tumbar el tick;
 - omite deliveries ya registradas en el run;
 - omite descriptors ya reflejados antes de invocar el verificador de worktree;
 - omite un ACK con `status=failed` sin bloquear otros ACKs completados del
@@ -72,6 +74,9 @@ Cobertura:
   ACK aun no exista, espera el recibo con timeout y registra entrega o artefacto
   de fase en un segundo loop segun la fase del receipt;
 - no filtra paths ni detalles operacionales al nucleo.
+- T209 queda fuera del parser de delivery: los tests del modulo no usan logs ni
+  ACK completo como fuente de tokens/cuota y la validacion transversal vive en
+  runtime Codex + stack Codex.
 
 Smoke real ejecutado en este entorno:
 

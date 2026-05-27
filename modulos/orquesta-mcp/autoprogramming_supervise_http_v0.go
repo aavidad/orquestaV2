@@ -31,16 +31,19 @@ type mcpAutoprogrammingSuperviseHTTPResultV0 struct {
 
 func (handler mcpAutoprogrammingSuperviseHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != MCPAutoprogrammingSuperviseHTTPPathV0 {
-		writeMCPAutoprogrammingSuperviseHTTPV0(w, http.StatusNotFound, newMCPAutoprogrammingSuperviseHTTPErrorV0(r, MCPRunSupervisorToolInputV0{}, "path", "ruta_no_soportada"))
+		writeMCPAutoprogrammingSuperviseHTTPV0(w, http.StatusNotFound, newMCPAutoprogrammingSuperviseHTTPErrorV0(r, MCPRunSupervisorToolInputV0{}, "path", MCPPublicErrPathUnsupportedV0))
+		return
+	}
+	if handleMCPPublicHTTPOptionsV0(w, r, http.MethodPost) {
 		return
 	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
-		writeMCPAutoprogrammingSuperviseHTTPV0(w, http.StatusMethodNotAllowed, newMCPAutoprogrammingSuperviseHTTPErrorV0(r, MCPRunSupervisorToolInputV0{}, "method", "metodo_no_permitido"))
+		setMCPPublicHTTPAllowV0(w, http.MethodPost)
+		writeMCPAutoprogrammingSuperviseHTTPV0(w, http.StatusMethodNotAllowed, newMCPAutoprogrammingSuperviseHTTPErrorV0(r, MCPRunSupervisorToolInputV0{}, "method", MCPPublicErrMethodNotAllowedV0))
 		return
 	}
 	var input mcpAutoprogrammingSuperviseHTTPInputV0
-	if code := decodeMCPPublicHTTPJSONV0(w, r, &input); code != "" {
+	if code := decodeMCPPublicHTTPJSONProfileV0(w, r, &input, mcpPublicHTTPJSONProfileAutoprogrammingV0); code != "" {
 		writeMCPAutoprogrammingSuperviseHTTPV0(w, http.StatusBadRequest, newMCPAutoprogrammingSuperviseHTTPErrorV0(r, input.MCPRunSupervisorToolInputV0, "body", code))
 		return
 	}

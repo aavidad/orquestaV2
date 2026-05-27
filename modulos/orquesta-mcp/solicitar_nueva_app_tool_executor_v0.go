@@ -5,10 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -36,12 +34,10 @@ func NewMCPNuevaAppToolExecutorV0(serverURL string, timeout time.Duration) (*MCP
 		timeout = MCPNuevaAppToolDefaultTimeoutV0
 	}
 	return &MCPNuevaAppToolExecutorV0{
-		BaseURL:  baseURL,
-		Endpoint: orquestafactoryhttp.AppSpecHTTPPathV0,
-		Timeout:  timeout,
-		HTTPClient: &http.Client{
-			Timeout: timeout,
-		},
+		BaseURL:    baseURL,
+		Endpoint:   orquestafactoryhttp.AppSpecHTTPPathV0,
+		Timeout:    timeout,
+		HTTPClient: newMCPLoopbackHTTPClientV0(timeout),
 	}, nil
 }
 
@@ -59,7 +55,11 @@ func (executor *MCPNuevaAppToolExecutorV0) Execute(ctx context.Context, input MC
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, joinMCPEndpointV0(baseURLMCPV0(executor), endpointMCPV0(executor)), bytes.NewReader(payload))
+	target, err := joinMCPEndpointV0(baseURLMCPV0(executor), endpointMCPV0(executor))
+	if err != nil {
+		return MCPNuevaAppToolResultV0{}, fmt.Errorf("mcp nueva app request: %w", err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(payload))
 	if err != nil {
 		return MCPNuevaAppToolResultV0{}, fmt.Errorf("mcp nueva app request: %w", err)
 	}
@@ -78,18 +78,22 @@ func (executor *MCPNuevaAppToolExecutorV0) Execute(ctx context.Context, input MC
 
 	if resp.StatusCode == http.StatusBadRequest {
 		var out orquestafactoryhttp.AppSpecHTTPErrorResponseV0
-		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		if err := decodeMCPHTTPJSONResponseV0(resp, &out); err != nil {
 			return MCPNuevaAppToolResultV0{}, fmt.Errorf("mcp nueva app decode 400: %w", err)
 		}
 		return NewMCPNuevaAppErrorResultV0(req.RequestID, responseCorrelationIDMCPV0(resp, correlationID), out.Errores), nil
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode > 299 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
-		return MCPNuevaAppToolResultV0{}, fmt.Errorf("mcp nueva app status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		discardMCPHTTPResponseBodyV0(resp)
+		return MCPNuevaAppToolResultV0{}, fmt.Errorf(
+			"mcp nueva app status %d correlation %s",
+			resp.StatusCode,
+			responseCorrelationIDMCPV0(resp, correlationID),
+		)
 	}
 
 	var out orquestafactoryhttp.AppSpecHTTPResponseV0
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := decodeMCPHTTPJSONResponseV0(resp, &out); err != nil {
 		return MCPNuevaAppToolResultV0{}, fmt.Errorf("mcp nueva app decode ok: %w", err)
 	}
 	if strings.TrimSpace(out.AppSpec.SchemaVersion) == "" || strings.TrimSpace(out.Backlog.SchemaVersion) == "" {
@@ -99,24 +103,7 @@ func (executor *MCPNuevaAppToolExecutorV0) Execute(ctx context.Context, input MC
 }
 
 func normalizeMCPServerURLV0(raw string) (string, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return "", fmt.Errorf("server_url requerida")
-	}
-	parsed, err := url.Parse(raw)
-	if err != nil {
-		return "", fmt.Errorf("server_url invalida")
-	}
-	if parsed.User != nil {
-		return "", fmt.Errorf("server_url no debe contener credenciales")
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return "", fmt.Errorf("server_url debe usar http o https")
-	}
-	if strings.TrimSpace(parsed.Host) == "" || parsed.RawQuery != "" || parsed.Fragment != "" {
-		return "", fmt.Errorf("server_url debe ser base http")
-	}
-	return strings.TrimRight(parsed.String(), "/"), nil
+	return normalizeMCPRESTBaseURLV0(raw)
 }
 
 func baseURLMCPV0(executor *MCPNuevaAppToolExecutorV0) string {
@@ -133,15 +120,15 @@ func endpointMCPV0(executor *MCPNuevaAppToolExecutorV0) string {
 	return orquestafactoryhttp.AppSpecHTTPPathV0
 }
 
-func joinMCPEndpointV0(baseURL, endpoint string) string {
-	return strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(endpoint, "/")
+func joinMCPEndpointV0(baseURL, endpoint string) (string, error) {
+	return joinMCPRESTEndpointV0(baseURL, endpoint)
 }
 
 func httpClientMCPV0(executor *MCPNuevaAppToolExecutorV0, timeout time.Duration) *http.Client {
-	if executor != nil && executor.HTTPClient != nil {
-		return executor.HTTPClient
+	if executor != nil {
+		return mcpHTTPClientWithRedirectPolicyV0(executor.HTTPClient, timeout, executor.BaseURL)
 	}
-	return &http.Client{Timeout: timeout}
+	return mcpHTTPClientWithRedirectPolicyV0(nil, timeout, "")
 }
 
 func responseCorrelationIDMCPV0(resp *http.Response, fallback string) string {

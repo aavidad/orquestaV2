@@ -38,6 +38,13 @@ func TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto(t *testing.T) {
 		"Uso comparado",
 		"usage-body",
 		"renderUsageMatrix",
+		"opsStatsProjection",
+		"progress_source",
+		"stats_fetch_status",
+		"stats_reason_code",
+		"stats_unavailable",
+		"completed_snapshot",
+		"usage_report_missing",
 		"tableCell('Tokens'",
 		"tableCell('Atención'",
 		"Tareas completas",
@@ -75,6 +82,7 @@ func TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto(t *testing.T) {
 		"stableSortByFirstSeen",
 		"orquesta.ops.stable_order.v1",
 		"mergeAgentDisplayCache",
+		"taskByAgent",
 		"data-stable-id",
 		"queueStableID",
 		"queueDetail",
@@ -84,7 +92,9 @@ func TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto(t *testing.T) {
 		"setQueueRowPriority",
 		"controlQueueRow",
 		"data-detail-key",
-		"Prompt exacto",
+		"runtimeFileBlock",
+		"Envelope",
+		"redaccion",
 		"agent_packet.json",
 		"agent_ack.json",
 		"Qué se consigue",
@@ -112,7 +122,7 @@ func TestOpsDashboardWebEndpointV0SoloGET(t *testing.T) {
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if rec.Header().Get("Allow") != http.MethodGet {
+	if rec.Header().Get("Allow") != webPublicHTTPAllowHeaderV0(http.MethodGet) {
 		t.Fatalf("allow=%q", rec.Header().Get("Allow"))
 	}
 }

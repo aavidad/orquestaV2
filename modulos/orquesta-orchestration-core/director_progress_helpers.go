@@ -13,6 +13,7 @@ func buildDirectorTaskProgressV0(
 ) []DirectorTaskProgressV0 {
 	closed := autonomousStringSetV0(run.ClosedTasks)
 	delivered := autonomousStringSetV0(run.DeliveredTasks)
+	liveAgents := liveDirectorTaskAgentsV0(run)
 	runTaskSet := autonomousStringSetV0(run.Tasks)
 	reflectedAgents := reflectedDirectorAgentSetV0(run)
 	byTask := latestDirectorProgressByTaskV0(observations)
@@ -32,6 +33,8 @@ func buildDirectorTaskProgressV0(
 				continue
 			}
 			task = directorTaskProgressFromAssessmentV0(assessment)
+		} else if agentRef := liveAgents[taskRef]; agentRef != "" {
+			task = liveDirectorTaskProgressV0(taskRef, agentRef)
 		}
 		if delivered[taskRef] {
 			task.Status = DirectorTaskProgressDeliveredV0
@@ -185,133 +188,6 @@ func countDirectorBudgetClassificationV0(
 	return progress
 }
 
-func applyDirectorAgentProgressV0(
-	stats *DirectorRunStatsV0,
-	run orquestacoreworkflow.OrchestrationRunV0,
-	observations []AgentProgressObservationV0,
-) {
-	if stats == nil {
-		return
-	}
-	applyDirectorAgentAssessmentProgressV0(stats, run)
-	if len(observations) == 0 {
-		return
-	}
-	byAgent := latestDirectorProgressByAgentV0(observations)
-	reflected := reflectedDirectorAgentSetV0(run)
-	for index := range stats.Agents {
-		observation, ok := byAgent[stats.Agents[index].AgentRequestID]
-		if !ok {
-			continue
-		}
-		if directorProgressObservationResolvedV0(run, observation, reflected) {
-			continue
-		}
-		progress := directorAgentProgressFromObservationV0(observation)
-		stats.Agents[index].LastProgress = &progress
-		if progress.Status == string(orquestaruntime.AgentStoppedV0) {
-			wasInFlight := stats.Agents[index].InFlight
-			wasControlRegistered := stats.Agents[index].ControlRegistered
-			wasControlMissing := stats.Agents[index].ControlState == DirectorAgentControlStateMissingV0
-			stats.Agents[index].InFlight = false
-			stats.Agents[index].StopConfirmed = true
-			stats.Agents[index].Status = DirectorAgentStatusStoppedV0
-			stats.Agents[index].ControlState = DirectorAgentControlStateNotNeededV0
-			stats.Agents[index].CanStop = false
-			if wasInFlight && stats.Counts.AgentsInFlight > 0 {
-				stats.Counts.AgentsInFlight--
-			}
-			if wasControlRegistered && stats.Counts.AgentsControlRegistered > 0 {
-				stats.Counts.AgentsControlRegistered--
-			}
-			if wasControlMissing && stats.Counts.AgentsControlMissing > 0 {
-				stats.Counts.AgentsControlMissing--
-			}
-		}
-		if progress.Status == string(orquestaruntime.AgentLoopDetectedV0) ||
-			progress.DecisionRequired {
-			stats.Agents[index].NeedsAttention = true
-		}
-		if protectedDirectionAgentObservationV0(run, observation) &&
-			progress.Status != string(orquestaruntime.AgentLoopDetectedV0) {
-			stats.Agents[index].CanStop = false
-		}
-	}
-}
-
-func applyDirectorAgentAssessmentProgressV0(
-	stats *DirectorRunStatsV0,
-	run orquestacoreworkflow.OrchestrationRunV0,
-) {
-	byAgent := latestDirectorAssessmentByAgentV0(run.AgentAssessments)
-	if len(byAgent) == 0 {
-		return
-	}
-	reflected := reflectedDirectorAgentSetV0(run)
-	for index := range stats.Agents {
-		assessment, ok := byAgent[stats.Agents[index].AgentRequestID]
-		if !ok {
-			continue
-		}
-		if directorAssessmentProgressResolvedV0(run, assessment, reflected) {
-			continue
-		}
-		progress := directorAgentProgressFromAssessmentV0(assessment)
-		stats.Agents[index].LastProgress = &progress
-		if progress.Status == string(orquestaruntime.AgentLoopDetectedV0) ||
-			progress.DecisionRequired {
-			stats.Agents[index].NeedsAttention = true
-		}
-	}
-}
-
-func directorAgentProgressFromObservationV0(
-	observation AgentProgressObservationV0,
-) DirectorAgentProgressV0 {
-	report := observation.Report
-	return DirectorAgentProgressV0{
-		TaskRef:                    strings.TrimSpace(observation.TaskRef),
-		DeliveryRef:                strings.TrimSpace(observation.DeliveryRef),
-		ReportRef:                  strings.TrimSpace(report.ReportID),
-		Status:                     strings.TrimSpace(string(report.Status)),
-		NoProgressTicks:            report.NoProgressTicks,
-		RepeatedActionCount:        report.RepeatedActionCount,
-		DirectorProgressTemporalV0: directorProgressTemporalFromReportV0(report),
-		Summary:                    strings.TrimSpace(report.Summary),
-		EvidenceRefs:               compactStringsV0(append(observation.EvidenceRefs, report.EvidenceRefs...)),
-	}
-}
-
-func directorAgentProgressFromAssessmentV0(
-	assessment orquestacoreworkflow.AgentWorkAssessmentProjectionV0,
-) DirectorAgentProgressV0 {
-	return DirectorAgentProgressV0{
-		TaskRef:     strings.TrimSpace(assessment.TaskRef),
-		DeliveryRef: strings.TrimSpace(assessment.DeliveryRef),
-		ReportRef:   strings.TrimSpace(assessment.AssessmentRef),
-		Status:      directorAssessmentProgressStatusV0(assessment),
-		DirectorProgressTemporalV0: DirectorProgressTemporalV0{
-			DecisionRequired: directorAssessmentDecisionRequiredV0(assessment),
-		},
-	}
-}
-
-func directorTaskProgressFromAssessmentV0(
-	assessment orquestacoreworkflow.AgentWorkAssessmentProjectionV0,
-) DirectorTaskProgressV0 {
-	return DirectorTaskProgressV0{
-		TaskRef:        strings.TrimSpace(assessment.TaskRef),
-		Status:         directorTaskStatusFromAssessmentV0(assessment),
-		AgentRequestID: strings.TrimSpace(assessment.AgentRequestID),
-		DeliveryRef:    strings.TrimSpace(assessment.DeliveryRef),
-		LastReportRef:  strings.TrimSpace(assessment.AssessmentRef),
-		ProgressStatus: directorAssessmentProgressStatusV0(assessment),
-		DirectorProgressTemporalV0: DirectorProgressTemporalV0{
-			DecisionRequired: directorAssessmentDecisionRequiredV0(assessment),
-		},
-	}
-}
-
 func latestDirectorProgressByTaskV0(
 	observations []AgentProgressObservationV0,
 ) map[string]AgentProgressObservationV0 {
@@ -348,113 +224,10 @@ func countObservedDirectorTasksV0(tasks []DirectorTaskProgressV0) int {
 	count := 0
 	for _, task := range tasks {
 		if task.LastReportRef != "" ||
-			task.Status == DirectorTaskProgressDeliveredV0 {
+			task.Status == DirectorTaskProgressDeliveredV0 ||
+			task.ProgressStatus == DirectorTaskProgressProcessRegisteredV0 {
 			count++
 		}
 	}
 	return count
-}
-
-func noSignalDirectorAgentRefsV0(
-	run orquestacoreworkflow.OrchestrationRunV0,
-	byAgent map[string]AgentProgressObservationV0,
-	byAssessmentAgent map[string]orquestacoreworkflow.AgentWorkAssessmentProjectionV0,
-) []string {
-	missing := make([]string, 0)
-	failed := autonomousStringSetV0(run.FailedAgents)
-	lost := autonomousStringSetV0(run.LostAgents)
-	stopRequested := autonomousStringSetV0(run.StoppedAgents)
-	stopConfirmed := autonomousStringSetV0(run.ConfirmedStoppedAgents)
-	reflected := reflectedDirectorAgentSetV0(run)
-	for _, agentRef := range compactStringsV0(run.StartedAgents) {
-		if failed[agentRef] || lost[agentRef] || stopRequested[agentRef] || stopConfirmed[agentRef] || reflected[agentRef] {
-			continue
-		}
-		if _, ok := byAssessmentAgent[agentRef]; ok {
-			continue
-		}
-		if _, ok := byAgent[agentRef]; !ok {
-			missing = append(missing, agentRef)
-		}
-	}
-	return missing
-}
-
-func latestDirectorAssessmentByAgentV0(
-	assessments []string,
-) map[string]orquestacoreworkflow.AgentWorkAssessmentProjectionV0 {
-	latest := map[string]orquestacoreworkflow.AgentWorkAssessmentProjectionV0{}
-	for _, value := range assessments {
-		assessment, ok := orquestacoreworkflow.ParseAgentAssessmentProjectionV0(value)
-		if !ok {
-			continue
-		}
-		agentRef := strings.TrimSpace(assessment.AgentRequestID)
-		if agentRef != "" {
-			latest[agentRef] = assessment
-		}
-	}
-	return latest
-}
-
-func latestDirectorAssessmentByTaskV0(
-	assessments []string,
-) map[string]orquestacoreworkflow.AgentWorkAssessmentProjectionV0 {
-	latest := map[string]orquestacoreworkflow.AgentWorkAssessmentProjectionV0{}
-	for _, value := range assessments {
-		assessment, ok := orquestacoreworkflow.ParseAgentAssessmentProjectionV0(value)
-		if !ok {
-			continue
-		}
-		taskRef := strings.TrimSpace(assessment.TaskRef)
-		if taskRef != "" {
-			latest[taskRef] = assessment
-		}
-	}
-	return latest
-}
-
-func directorAssessmentProgressStatusV0(
-	assessment orquestacoreworkflow.AgentWorkAssessmentProjectionV0,
-) string {
-	switch strings.TrimSpace(assessment.Verdict) {
-	case orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0:
-		return string(orquestaruntime.AgentLoopDetectedV0)
-	case orquestacoreworkflow.AgentAssessmentVerdictGarbageV0,
-		orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
-		orquestacoreworkflow.AgentAssessmentVerdictCapacityLimitedV0:
-		return string(orquestaruntime.AgentStalledV0)
-	}
-	if strings.TrimSpace(assessment.Action) == orquestacoreworkflow.AgentAssessmentActionStopAgentV0 {
-		return string(orquestaruntime.AgentStoppedV0)
-	}
-	return string(orquestaruntime.AgentProgressingV0)
-}
-
-func directorTaskStatusFromAssessmentV0(
-	assessment orquestacoreworkflow.AgentWorkAssessmentProjectionV0,
-) string {
-	switch directorAssessmentProgressStatusV0(assessment) {
-	case string(orquestaruntime.AgentLoopDetectedV0):
-		return DirectorTaskProgressLoopDetectedV0
-	case string(orquestaruntime.AgentStoppedV0):
-		return DirectorTaskProgressStoppedV0
-	case string(orquestaruntime.AgentStalledV0):
-		return DirectorTaskProgressStalledV0
-	default:
-		return DirectorTaskProgressInProgressV0
-	}
-}
-
-func directorAssessmentDecisionRequiredV0(
-	assessment orquestacoreworkflow.AgentWorkAssessmentProjectionV0,
-) bool {
-	switch strings.TrimSpace(assessment.Action) {
-	case orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
-		orquestacoreworkflow.AgentAssessmentActionRequestRevisionV0,
-		orquestacoreworkflow.AgentAssessmentActionStopAgentV0:
-		return true
-	default:
-		return false
-	}
 }

@@ -260,6 +260,28 @@ func TestReviewReworkReplanSourceV0CortaBucleTrasRetriesAmpliosPorTarea(t *testi
 	}
 }
 
+func TestReviewReworkReplanSourceV0ReplanificaAunqueLaEntregaOriginalTengaAckCompletado(t *testing.T) {
+	descriptor := reviewReworkDescriptorForTestV0("delivery-ref-target", "task-ref-target")
+	descriptor.AckPath = writeReviewReworkAckForTestV0(t, descriptor.AgentRef, "task-ref-target", "completed")
+	source := ReviewReworkReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(descriptor),
+	}
+
+	plans, err := source.BuildReviewReworkReplanPlansV0(
+		context.Background(),
+		reviewReworkPlanRequestForTestV0(false),
+	)
+	if err != nil {
+		t.Fatalf("BuildReviewReworkReplanPlansV0: %v", err)
+	}
+	if len(plans) != 1 {
+		t.Fatalf("debe replanificar entrega original rechazada aunque el ACK inicial este completado: %+v", plans)
+	}
+	if plans[0].TaskRef != "task-ref-target" || plans[0].AgentRequestID == descriptor.AgentRef {
+		t.Fatalf("plan de rework debe apuntar a la tarea original con agente followup nuevo: %+v", plans[0])
+	}
+}
+
 func TestReviewReworkReplanSourceV0DescribeWriteSetFaltanteParaElAgente(t *testing.T) {
 	projectDir := t.TempDir()
 	writeStackReviewGateFileForTestV0(t, projectDir, "internal/api/handler.go", "package api\n")

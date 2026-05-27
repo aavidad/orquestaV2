@@ -155,7 +155,7 @@ func (v *agentProgressReportValidatorV0) requireOpaque(field, value string) {
 	switch {
 	case looksLikeSecret(value):
 		v.add(AgentProgressSecretoDetectadoV0, field)
-	case looksLikeProviderDetailV0(value):
+	case looksLikeOperationalRawDetailV0(field, value):
 		v.add(AgentProgressDetalleProveedorV0, field)
 	case !opaqueRefPatternV0.MatchString(value):
 		v.add(AgentProgressReferenciaNoOpacaV0, field)
@@ -183,7 +183,7 @@ func (v *agentProgressReportValidatorV0) requireSummary(field, value string) {
 	switch {
 	case looksLikeSecret(trimmed):
 		v.add(AgentProgressSecretoDetectadoV0, field)
-	case looksLikeProviderDetailV0(trimmed):
+	case looksLikeOperationalRawDetailV0(field, trimmed):
 		v.add(AgentProgressDetalleProveedorV0, field)
 	}
 }
@@ -197,22 +197,10 @@ func (v *agentProgressReportValidatorV0) add(code AgentProgressReportErrorCodeV0
 	})
 }
 
-func looksLikeProviderDetailV0(value string) bool {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return false
-	}
-	low := strings.ToLower(strings.TrimSpace(value))
-	return strings.Contains(low, "openai") ||
-		strings.Contains(low, "anthropic") ||
-		strings.Contains(low, "claude") ||
-		strings.Contains(low, "gpt-") ||
-		strings.Contains(low, "gemini") ||
-		strings.Contains(low, "oauth") ||
-		strings.Contains(low, "provider") ||
-		strings.Contains(low, "proveedor") ||
-		strings.Contains(low, "modelo") ||
-		strings.Contains(low, "home=") ||
-		strings.Contains(low, "provider=") ||
-		strings.Contains(low, "model=") ||
-		strings.Contains(low, "://")
+func looksLikeOperationalRawDetailV0(field string, value string) bool {
+	return orquestarails.TextContainsOperationalRawDetailForFieldV0(
+		"agent_progress_report",
+		field,
+		value,
+	)
 }

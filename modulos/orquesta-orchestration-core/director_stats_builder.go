@@ -27,6 +27,7 @@ func BuildDirectorRunStatsV0(
 	applyDirectorAgentStopReasonsV0(&stats, run)
 	applyDirectorAgentProgressV0(&stats, run, nil)
 	refreshDirectorControlCountsV0(&stats, false)
+	applyDirectorRegisteredProcessProgressV0(&stats)
 	return stats
 }
 
@@ -59,6 +60,7 @@ func BuildDirectorRunStatsWithProcessRegistryV0(
 		stats.Agents[index].ControlRegistered = true
 	}
 	refreshDirectorControlCountsV0(&stats, true)
+	applyDirectorRegisteredProcessProgressV0(&stats)
 	return stats
 }
 

@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 )
 
 type RunQueueWebEndpointV0 struct {
@@ -32,6 +31,11 @@ func NewRunQueueWebEndpointV0(client RunQueueClientV0) RunQueueWebEndpointV0 {
 }
 
 func (endpoint RunQueueWebEndpointV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if err := validateWebPublicQueryV0(r); err != nil {
+		writeRunQueuePageV0(w, http.StatusBadRequest, endpoint.pageV0(WebRunQueueQueryV0{},
+			NewWebRunQueueErrorViewModelV0("", WebRunQueueErrRespuestaInvalidaV0)))
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
 		endpoint.handleRunQueueV0(w, r, runQueueQueryFromURLV0(r))
@@ -43,8 +47,10 @@ func (endpoint RunQueueWebEndpointV0) ServeHTTP(w http.ResponseWriter, r *http.R
 			return
 		}
 		endpoint.handleRunQueueV0(w, r, query)
+	case http.MethodOptions:
+		handleWebPublicHTTPOptionsV0(w, r, http.MethodGet, http.MethodPost)
 	default:
-		w.Header().Set("Allow", strings.Join([]string{http.MethodGet, http.MethodPost}, ", "))
+		setWebPublicHTTPAllowV0(w, http.MethodGet, http.MethodPost)
 		writeRunQueuePageV0(w, http.StatusMethodNotAllowed, endpoint.pageV0(WebRunQueueQueryV0{},
 			NewWebRunQueueErrorViewModelV0("", WebNuevaAppErrMetodoNoSoportadoV0)))
 	}
@@ -109,16 +115,13 @@ func runQueueRefreshV0(query WebRunQueueQueryV0) WebRunQueueRefreshV0 {
 }
 
 func decodeRunQueueQueryV0(r *http.Request) (WebRunQueueQueryV0, error) {
-	contentType := strings.ToLower(r.Header.Get("Content-Type"))
-	if contentType == "" || strings.Contains(contentType, "application/json") {
+	contentType := r.Header.Get("Content-Type")
+	if webControlContentTypeAllowsJSONV0(contentType) {
 		var query WebRunQueueQueryV0
-		decoder := json.NewDecoder(r.Body)
-		decoder.DisallowUnknownFields()
-		return query, decoder.Decode(&query)
+		return query, decodeWebControlJSONV0(nil, r, &query)
 	}
-	if strings.Contains(contentType, "application/x-www-form-urlencoded") ||
-		strings.Contains(contentType, "multipart/form-data") {
-		if err := r.ParseForm(); err != nil {
+	if webControlContentTypeAllowsFormV0(contentType) {
+		if err := parseWebControlFormV0(nil, r); err != nil {
 			return WebRunQueueQueryV0{}, err
 		}
 		return runQueueQueryFromValuesV0(r.Form), nil

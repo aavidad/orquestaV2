@@ -141,6 +141,10 @@ func webOperationalStatusPrivacyOKV0(value orquestaobservability.DiagnosticoPriv
 		!value.ContainsConnectionDetail
 }
 
+func webOperationalStatusRedactionLevelV0(value orquestaobservability.DiagnosticoPrivacyV0) string {
+	return orquestaobservability.DiagnosticoPrivacyRedactionLevelV0(value)
+}
+
 func compactOperationalStringsV0(values []string) []string {
 	seen := map[string]bool{}
 	out := make([]string, 0, len(values))

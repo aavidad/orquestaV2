@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
@@ -13,7 +14,7 @@ import (
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
-func TestIdleSelfImprovementBacklogPlannerV0SaltaTareasYaEnColaYAnadeScannerV0(t *testing.T) {
+func TestIdleSelfImprovementBacklogPlannerV0SaltaTareasYaEnColaSinAnadirScannerSiHayOwnerEjecutableV0(t *testing.T) {
 	projectDir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(projectDir, "docs"), 0o700); err != nil {
 		t.Fatalf("mkdir docs: %v", err)
@@ -43,21 +44,13 @@ func TestIdleSelfImprovementBacklogPlannerV0SaltaTareasYaEnColaYAnadeScannerV0(t
 	if err != nil {
 		t.Fatalf("PlanV0: %v", err)
 	}
-	if len(result.Requests) != 2 || result.Requests[0].SuggestedArea != "t09-sanitizer" {
+	if len(result.Requests) != 1 || result.Requests[0].SuggestedArea != "t09-sanitizer" {
 		t.Fatalf("requests=%+v", result.Requests)
 	}
-	scanner := result.Requests[1]
-	if scanner.SuggestedArea != "backlog-scan" ||
-		scanner.FailureKind != "backlog_scan" ||
-		!containsStringForTestV0(scanner.WriteSet, idleSelfImprovementBacklogDocRelV0) ||
-		!containsStringForTestV0(scanner.ContextRefs, "trigger:capacity_free") ||
-		scanner.BacklogScanEpoch == "" ||
-		len(scanner.BacklogScanDocs) != 3 ||
-		len(scanner.ReservationRefs) == 0 {
-		t.Fatalf("scanner=%+v", scanner)
-	}
-	if !containsStringForTestV0(scanner.ContextRefs, "backlog_scan_epoch:"+scanner.BacklogScanEpoch) {
-		t.Fatalf("context_refs=%+v", scanner.ContextRefs)
+	for _, request := range result.Requests {
+		if request.FailureKind == "backlog_scan" {
+			t.Fatalf("scanner repetido como relleno=%+v", result.Requests)
+		}
 	}
 }
 
@@ -123,6 +116,54 @@ func TestIdleSelfImprovementBacklogPlannerV0AnadeScannerSiTodoEstaEnColaPeroHayC
 	}
 	if len(result.Requests) != 1 || result.Requests[0].FailureKind != "backlog_scan" {
 		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestIdleSelfImprovementBacklogPlannerV0NoRepiteRetryScannerCerradoSiHayOwnerEjecutableV0(t *testing.T) {
+	projectDir := t.TempDir()
+	mustWriteFederatedBacklogIndexTestV0(t, projectDir, "vigente",
+		"go test -count=1 ./modulos/orquesta-autoprogramming")
+	mustWriteFederatedLocalDocTestV0(t, projectDir, "modulos/orquesta-autoprogramming/docs/tareas.md",
+		"- APG-001: tarea ejecutable pendiente tras scanner no-op cerrado.\n")
+	base := orquestaserver.IdleSelfImprovementRequestV0{
+		RequestRef: "request-ref-base",
+		ProjectRef: "project-ref-orquesta",
+	}
+	scannerRef := idleSelfImprovementBacklogScannerRequestV0(base, orquestaserver.IdleSelfImprovementPlanRequestV0{
+		Trigger: "capacity_free",
+	}).RequestRef
+	queue := &fakeIdleSelfRunQueueV0{candidates: []orquestarunqueue.RunSchedulingCandidateV0{{
+		RunRef: scannerRef + "-retry-deadbeef",
+		Status: orquestarunqueue.RunStatusClosedV0,
+	}}}
+	supervisor := serverStackSupervisorV0{
+		stack: &orquestaappcodexstack.StackV0{
+			Stores:   orquestaappcodexstack.StoresV0{RunQueue: queue},
+			RunQueue: orquestaappcodexstack.RunQueueConfigV0{QueueRef: "queue-main"},
+		},
+		projectWorkDir: projectDir,
+	}
+
+	result, err := supervisor.PlanIdleSelfImprovementV0(context.Background(), orquestaserver.IdleSelfImprovementPlanRequestV0{
+		MaxRequests:  2,
+		Trigger:      "capacity_free",
+		QueueSize:    0,
+		FreeCapacity: 2,
+		BaseRequest:  base,
+	})
+	if err != nil {
+		t.Fatalf("PlanIdleSelfImprovementV0: %v", err)
+	}
+	if len(result.Requests) != 1 ||
+		result.Requests[0].FailureKind != "backlog_autoprogramming" ||
+		result.Requests[0].SuggestedArea != "apg-001" ||
+		!queue.lastRead.IncludeNonExecutable {
+		t.Fatalf("result=%+v read=%+v", result, queue.lastRead)
+	}
+	for _, request := range result.Requests {
+		if request.FailureKind == "backlog_scan" || request.RequestRef == scannerRef {
+			t.Fatalf("scanner repetido=%+v result=%+v", request, result)
+		}
 	}
 }
 
@@ -353,6 +394,156 @@ func TestIdleSelfImprovementBacklogPlannerV0SaltaACKCompletadosDelRuntimeV0(t *t
 	}
 	if len(result.Requests) != 1 || result.Requests[0].SuggestedArea != "t09-sanitizer" {
 		t.Fatalf("requests=%+v", result.Requests)
+	}
+}
+
+func TestIdleSelfImprovementBacklogPlannerV0EstadoPendienteExplicitoMandaSobreACKRuntimeV0(t *testing.T) {
+	projectDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(projectDir, "docs"), 0o700); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	content := "## T08 runtime-neutral-e2e\n\nEstado: pendiente. Falta evidencia real vigente.\n\nObjetivo: uno.\n\n## T09 sanitizer\n\nObjetivo: dos.\n"
+	if err := os.WriteFile(filepath.Join(projectDir, idleSelfImprovementBacklogDocRelV0), []byte(content), 0o600); err != nil {
+		t.Fatalf("write backlog: %v", err)
+	}
+	runRef := backlogRequestRefForTestV0(content, 0) + "-retry-deadbeef"
+	ackDir := filepath.Join(projectDir, ".orquesta-runtime", runRef, "agent-ref-t08")
+	if err := os.MkdirAll(ackDir, 0o700); err != nil {
+		t.Fatalf("mkdir ack: %v", err)
+	}
+	writeBacklogPlannerCorrelatedACKForTestV0(t, ackDir, runRef, []string{"go test -count=1 ./cmd/orquesta-server"}, "")
+
+	result, err := (idleSelfImprovementBacklogPlannerV0{ProjectWorkDir: projectDir}).PlanV0(
+		orquestaserver.IdleSelfImprovementPlanRequestV0{
+			MaxRequests: 1,
+			BaseRequest: orquestaserver.IdleSelfImprovementRequestV0{
+				RequestRef:    "request-ref-base",
+				CorrelationID: "corr-request-ref-base",
+				ProjectRef:    "project-ref-orquesta",
+				WriteSet:      []string{"cmd/orquesta-server"},
+				RequiredTests: []string{"go test -count=1 ./cmd/orquesta-server"},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("PlanV0: %v", err)
+	}
+	if len(result.Requests) != 1 || result.Requests[0].SuggestedArea != "t08-runtime-neutral-e2e" {
+		t.Fatalf("requests=%+v", result.Requests)
+	}
+}
+
+func TestIdleSelfImprovementBacklogPlannerV0EstadoPendienteExplicitoReintentaRunCerradaConRefNuevaV0(t *testing.T) {
+	projectDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(projectDir, "docs"), 0o700); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	content := "## T08 runtime-neutral-e2e\n\nEstado: pendiente. Falta cierre canonico.\n\nObjetivo: uno.\n\n## T09 sanitizer\n\nObjetivo: dos.\n"
+	if err := os.WriteFile(filepath.Join(projectDir, idleSelfImprovementBacklogDocRelV0), []byte(content), 0o600); err != nil {
+		t.Fatalf("write backlog: %v", err)
+	}
+	baseRef := backlogRequestRefForTestV0(content, 0)
+	result, err := (idleSelfImprovementBacklogPlannerV0{ProjectWorkDir: projectDir}).PlanV0(
+		orquestaserver.IdleSelfImprovementPlanRequestV0{
+			MaxRequests:      1,
+			KnownRequestRefs: []string{baseRef},
+			BaseRequest: orquestaserver.IdleSelfImprovementRequestV0{
+				RequestRef: "request-ref-base",
+				ProjectRef: "project-ref-orquesta",
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("PlanV0: %v", err)
+	}
+	if len(result.Requests) != 1 ||
+		result.Requests[0].SuggestedArea != "t08-runtime-neutral-e2e" ||
+		!strings.HasPrefix(result.Requests[0].RequestRef, baseRef+"-retry-") ||
+		!containsStringForTestV0(result.Requests[0].ContextRefs, "pending_canonical_overrides_closed_attempt:true") {
+		t.Fatalf("requests=%+v base_ref=%s", result.Requests, baseRef)
+	}
+}
+
+func TestIdleSelfImprovementBacklogPlannerV0EstadoPendienteExplicitoReconciliacionTrasRetryCerradoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(projectDir, "docs"), 0o700); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	content := "## T08 runtime-neutral-e2e\n\nEstado: pendiente. Falta cierre canonico.\n\nObjetivo: uno.\n\nAlcance:\n\n- cmd/orquesta-server\n\n## T09 sanitizer\n\nObjetivo: dos.\n"
+	if err := os.WriteFile(filepath.Join(projectDir, idleSelfImprovementBacklogDocRelV0), []byte(content), 0o600); err != nil {
+		t.Fatalf("write backlog: %v", err)
+	}
+	baseRef := backlogRequestRefForTestV0(content, 0)
+	result, err := (idleSelfImprovementBacklogPlannerV0{ProjectWorkDir: projectDir}).PlanV0(
+		orquestaserver.IdleSelfImprovementPlanRequestV0{
+			MaxRequests: 1,
+			KnownRequestRefs: []string{
+				baseRef,
+				baseRef + "-retry-deadbeef",
+			},
+			BaseRequest: orquestaserver.IdleSelfImprovementRequestV0{
+				RequestRef: "request-ref-base",
+				ProjectRef: "project-ref-orquesta",
+				WriteSet:   []string{"cmd/orquesta-server"},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("PlanV0: %v", err)
+	}
+	if len(result.Requests) != 1 ||
+		result.Requests[0].FailureKind != "backlog_documentation_review" ||
+		result.Requests[0].SuggestedArea != "t08-runtime-neutral-e2e-reconciliacion" ||
+		!strings.HasPrefix(result.Requests[0].RequestRef, baseRef+"-reconcile-") ||
+		!containsStringForTestV0(result.Requests[0].ContextRefs, "pending_canonical_after_multiple_attempts:true") ||
+		!containsStringForTestV0(result.Requests[0].WriteSet, idleSelfImprovementBacklogDocRelV0) {
+		t.Fatalf("requests=%+v base_ref=%s", result.Requests, baseRef)
+	}
+	for _, criterion := range result.Requests[0].AcceptanceCriteria {
+		if strings.Contains(criterion, "no relanzar otra implementacion padre") {
+			return
+		}
+	}
+	t.Fatalf("criterio anti-bucle ausente: %+v", result.Requests[0].AcceptanceCriteria)
+}
+
+func TestIdleSelfImprovementBacklogPlannerV0NoRelanzaReconciliacionCerradaV0(t *testing.T) {
+	projectDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(projectDir, "docs"), 0o700); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	content := "## T08 runtime-neutral-e2e\n\nEstado: pendiente. Falta cierre canonico.\n\nObjetivo: uno.\n\nAlcance:\n\n- cmd/orquesta-server\n\n## T09 sanitizer\n\nObjetivo: dos.\n"
+	if err := os.WriteFile(filepath.Join(projectDir, idleSelfImprovementBacklogDocRelV0), []byte(content), 0o600); err != nil {
+		t.Fatalf("write backlog: %v", err)
+	}
+	baseRef := backlogRequestRefForTestV0(content, 0)
+	reconcileRef := baseRef + "-reconcile-deadbeef"
+	ackDir := filepath.Join(projectDir, ".orquesta-runtime", reconcileRef, "agent-ref-t08")
+	if err := os.MkdirAll(ackDir, 0o700); err != nil {
+		t.Fatalf("mkdir ack: %v", err)
+	}
+	writeBacklogPlannerCorrelatedACKForTestV0(t, ackDir, reconcileRef, []string{"go test -count=1 ./cmd/orquesta-server"}, "")
+
+	result, err := (idleSelfImprovementBacklogPlannerV0{ProjectWorkDir: projectDir}).PlanV0(
+		orquestaserver.IdleSelfImprovementPlanRequestV0{
+			MaxRequests: 1,
+			KnownRequestRefs: []string{
+				baseRef,
+				baseRef + "-retry-deadbeef",
+				reconcileRef,
+			},
+			BaseRequest: orquestaserver.IdleSelfImprovementRequestV0{
+				RequestRef: "request-ref-base",
+				ProjectRef: "project-ref-orquesta",
+				WriteSet:   []string{"cmd/orquesta-server"},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("PlanV0: %v", err)
+	}
+	if len(result.Requests) != 1 || result.Requests[0].SuggestedArea != "t09-sanitizer" {
+		t.Fatalf("debe saltar T08 reconciliada y avanzar: %+v", result.Requests)
 	}
 }
 

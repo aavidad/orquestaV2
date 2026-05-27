@@ -118,6 +118,7 @@ func (source CodexReviewGateObservationSourceV0) observationFromReviewGateDescri
 	}
 	result := orquestaautoprogramming.EvaluateAutoprogrammingReviewGateV0(input)
 	result = codexReviewGateMergeGateIssuesV0(result, fileIssues)
+	result = codexReviewGateMergeIncompleteRequiredEvidenceV0(result, ack)
 	result = codexReviewGateMergeConnectorIssuesV0(result, issues)
 	result = codexReviewGateMergePendingRailEvidenceV0(result, ack)
 	if codexReviewGateTerminalProjectedV0(request.Run, deliveryRef, source.reviewGateStatusV0(result)) {
@@ -199,7 +200,7 @@ func (source CodexReviewGateObservationSourceV0) reviewGateInputV0(
 			Status:  strings.TrimSpace(ack.Status),
 		},
 		RequiredTests:   compactCodexDeliveryRefsV0(descriptor.Spec.AgentPacket.Task.RequiredTests),
-		Tests:           codexReviewGateTestsV0(ack.Tests),
+		Tests:           codexReviewGateTestsV0(ack.TestReceipts),
 		Files:           evidence.Files,
 		WriteSet:        codexReviewGateAllowedFilesV0(descriptor.Spec, ack),
 		MaxLinesPerFile: source.MaxLinesPerFile,
@@ -226,17 +227,32 @@ func (source CodexReviewGateObservationSourceV0) reviewGateFileEvidenceV0(
 }
 
 func codexReviewGateTestsV0(
-	values []string,
+	receipts []orquestaruntimecodex.CodexRequiredTestReceiptV0,
 ) []orquestaautoprogramming.AutoprogrammingReviewGateTestV0 {
-	tests := make([]orquestaautoprogramming.AutoprogrammingReviewGateTestV0, 0, len(values))
-	for _, command := range compactCodexDeliveryRefsV0(values) {
+	tests := make([]orquestaautoprogramming.AutoprogrammingReviewGateTestV0, 0, len(receipts))
+	for _, receipt := range receipts {
+		if !codexReviewGateReceiptHasEvidenceV0(receipt) {
+			continue
+		}
 		tests = append(tests, orquestaautoprogramming.AutoprogrammingReviewGateTestV0{
-			Command: command,
-			Passed:  true,
-			Status:  "passed",
+			Command: strings.TrimSpace(receipt.Command),
+			Passed:  strings.EqualFold(strings.TrimSpace(receipt.Status), "passed") && receipt.ExitCode != nil && *receipt.ExitCode == 0,
+			Status:  strings.TrimSpace(receipt.Status),
 		})
 	}
 	return tests
+}
+
+func codexReviewGateReceiptHasEvidenceV0(receipt orquestaruntimecodex.CodexRequiredTestReceiptV0) bool {
+	return strings.TrimSpace(receipt.SchemaVersion) == orquestaruntimecodex.CodexRequiredTestReceiptSchemaVersionV0 &&
+		strings.TrimSpace(receipt.Command) != "" &&
+		strings.TrimSpace(receipt.Status) != "" &&
+		receipt.ExitCode != nil &&
+		len(compactCodexDeliveryRefsV0(receipt.EvidenceRefs)) > 0 &&
+		strings.TrimSpace(receipt.OccurredAt) != "" &&
+		receipt.Sequence > 0 &&
+		receipt.OutputRedacted != nil &&
+		*receipt.OutputRedacted
 }
 
 func codexReviewGateAllowedFilesV0(
@@ -259,11 +275,8 @@ func codexReviewGatePathAllowedByWriteSetV0(path string, writeSet []string) bool
 		if allowed == "." || path == allowed || strings.HasPrefix(path, allowed+"/") {
 			return true
 		}
-		if codexReviewGateHasGlobV0(allowed) {
-			re, err := codexReviewGateGlobRegexpV0(allowed)
-			if err == nil && re.MatchString(path) {
-				return true
-			}
+		if codexReviewGateHasGlobV0(allowed) && codexReviewGateGlobMatchV0(allowed, path) {
+			return true
 		}
 	}
 	return false

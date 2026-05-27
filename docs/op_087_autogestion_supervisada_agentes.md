@@ -7,6 +7,14 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 # OP-087 — Autogestión supervisada de agentes y resolución autónoma de bloqueos
 
+> Cuarentena T124 2026-05-26
+> Esta OP conserva decisiones historicas sobre autogestion, `pty/process`,
+> Terminator y wrappers manuales. No es fuente viva para abrir runtimes,
+> sesiones, worktrees ni procesos. La autogestion vigente debe pasar por
+> Director, runtime neutral, conectores opt-in, ACK/checkpoint y refs opacas. Si
+> se usa Terminator, `tmux` o wrapper manual, queda como recuperacion asistida o
+> adaptador legacy con decision y pruebas propias.
+
 > Nota de vigencia 2026-04-05
 > La doctrina viva de runtime local interactivo ya no es `pty/process` como primer driver. El criterio vigente está en `docs/BIBLIA_APP_ORQUESTA.md`: `tmux` + `manifest/status/heartbeat` + continuidad por `session_resume`. Las referencias de esta OP a `pty/process` se conservan como contexto histórico y no deben abrir tareas nuevas PTY-first.
 

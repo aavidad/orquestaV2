@@ -38,6 +38,11 @@ Tools MCP relevantes ya publicados por `RegisterMCPTransportV0`:
   inyectada con limites acotados.
 - `orquesta.director.stats.v0`: consulta stats compactas y contexto de decision
   por refs opacas.
+- `orquesta.observability.workspace_timeline.query.v0`: consulta timeline de
+  workspace por puerto inyectado. `time_window` acepta la forma canonica
+  `{ "preset": "last_30m" }` y, por compatibilidad de operador, el alias string
+  `"last_30m"`; ambos se normalizan antes de validar. Entradas de forma invalida
+  devuelven error publico saneado y no exponen rutas locales ni material crudo.
 - `orquesta.server.shutdown.v0`: coordina apagado por caso de uso inyectado,
   RunControl, supervisor y stats.
 - `orquesta.domain_work.v0`: crea jobs de dominio o entrega artefactos por

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
@@ -45,6 +46,26 @@ func TestStackShutdownCheckpointV0RegistraCuandoTodosLosAgentesResponden(t *test
 		result.CheckpointRef != "checkpoint-ref-shutdown-"+safeStackShutdownRefPartV0(fixture.runRef) ||
 		len(result.PendingAgentRefs) != 0 {
 		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestStackShutdownCheckpointV0NoConsumeAckDeIntentoAnterior(t *testing.T) {
+	fixture := newStackShutdownCheckpointFixtureV0(t)
+	firstRequest := stackShutdownRequestForAgentV0(fixture.command, fixture.descriptor)
+	writeStackShutdownAckForTestV0(t, fixture.runtimeDir, firstRequest)
+	fixture.command.CorrelationID = "corr-shutdown-stack-002"
+	fixture.command.Reason = "shutdown controlado por segunda mutacion"
+
+	result, err := fixture.preparer.PrepareAgentShutdownV0(context.Background(), fixture.command)
+	if err != nil {
+		t.Fatalf("PrepareAgentShutdownV0: %v", err)
+	}
+	if result.CheckpointRecorded || len(result.PendingAgentRefs) != 1 ||
+		result.PendingAgentRefs[0] != fixture.agentRef {
+		t.Fatalf("result=%+v", result)
+	}
+	if !hasStackShutdownEvidenceForTestV0(result.EvidenceRefs, "shutdown_checkpoint_attempt_mismatch") {
+		t.Fatalf("evidence sin mismatch de intento: %+v", result.EvidenceRefs)
 	}
 }
 
@@ -131,12 +152,13 @@ func writeStackShutdownAckForTestV0(
 ) {
 	t.Helper()
 	ack := orquestaruntimecodex.CodexShutdownCheckpointAckV0{
-		SchemaVersion: orquestaruntimecodex.CodexShutdownCheckpointAckSchemaVersionV0,
-		RunRef:        request.RunRef,
-		AgentRef:      request.AgentRef,
-		CheckpointRef: request.CheckpointRef,
-		Status:        orquestaruntimecodex.CodexShutdownCheckpointStatusReadyV0,
-		EvidenceRefs:  []string{"evidence-ref-agent-checkpoint"},
+		SchemaVersion:      orquestaruntimecodex.CodexShutdownCheckpointAckSchemaVersionV0,
+		RunRef:             request.RunRef,
+		AgentRef:           request.AgentRef,
+		ShutdownAttemptRef: request.ShutdownAttemptRef,
+		CheckpointRef:      request.CheckpointRef,
+		Status:             orquestaruntimecodex.CodexShutdownCheckpointStatusReadyV0,
+		EvidenceRefs:       []string{"evidence-ref-agent-checkpoint"},
 	}
 	data, err := json.Marshal(ack)
 	if err != nil {
@@ -146,4 +168,13 @@ func writeStackShutdownAckForTestV0(
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatalf("write ack: %v", err)
 	}
+}
+
+func hasStackShutdownEvidenceForTestV0(refs []string, want string) bool {
+	for _, ref := range refs {
+		if strings.Contains(ref, want) {
+			return true
+		}
+	}
+	return false
 }

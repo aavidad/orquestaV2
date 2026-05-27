@@ -15,6 +15,16 @@ Estado:
 ## Backlog inicial
 
 ```text
+ID: NCW-082
+Objetivo: Reconciliar T15 como cierre documental de rails de detalle para evitar relanzar el backlog tras ACKs cerrados.
+Write-set: docs locales, README local y backlog asignado.
+Contrato: core-workflow consume `orquesta-rails` por frontera/campo; refs opacas y vocabulario operativo no son dato sensible por si mismos.
+Validacion: 2026-05-27, go test -count=1 ./modulos/orquesta-rails ./modulos/orquesta-core-workflow ./modulos/orquesta-context ./modulos/orquesta-director-agent ./cmd/orquesta-server.
+Bloqueos: No cambia comandos, eventos ni validadores; nuevos scopes estrictos requieren matriz externa y tarea propia.
+Estado: completada documental
+```
+
+```text
 ID: NCW-081
 Objetivo: Sincronizar docs locales con la politica comun de rails permisivos por campo: vocabulario operativo opaco permitido, valores sensibles efectivos bloqueados.
 Write-set: docs/contratos*.md, docs/pruebas*.md, docs/decisiones.md, docs/tareas.md y docs globales T70.
@@ -408,7 +418,7 @@ Estado: completada
 ```text
 ID: NCW-000
 Objetivo: Crear miniproyecto nuevo del nucleo durable, documentar analisis forense, decisiones, contratos y pruebas.
-Write-set: modulos/orquesta-core-workflow/**, modulos/README.md, docs/reinicio_orquesta_v2/registro_reutilizacion.md, docs/reinicio_orquesta_v2/roadmap_operativo.md
+Write-set historico: modulos/orquesta-core-workflow/**, modulos/README.md. Las refs antiguas al arbol de reinicio v2 quedan stale; el contexto vivo es `AGENTS.md`, `docs/estado_actual_2026-05-17.md`, `docs/guia_nucleo_orquestacion_2026-05-17.md` y este modulo.
 Contrato: N/A
 Validacion: git diff --check; docs locales presentes; snapshot del core actual creado.
 Bloqueos: ninguno.

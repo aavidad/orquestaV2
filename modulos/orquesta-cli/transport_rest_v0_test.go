@@ -24,14 +24,14 @@ func TestNewCLIRESTClientConfigV0NormalizaBaseYTimeout(t *testing.T) {
 }
 
 func TestPrepareCLIRESTRequestV0SeteaHeadersCanonicos(t *testing.T) {
-	req, err := prepareCLIRESTRequestV0(context.Background(), "https://api.example.test", "/api/v0/test", "corr-123", []byte(`{"ok":true}`))
+	req, err := prepareCLIRESTRequestV0(context.Background(), "https://api.example.test/base/", "/api/v0/test", "corr-123", []byte(`{"ok":true}`))
 	if err != nil {
 		t.Fatalf("prepareCLIRESTRequestV0: %v", err)
 	}
 	if req.Method != http.MethodPost {
 		t.Fatalf("method inesperado: %s", req.Method)
 	}
-	if req.URL.String() != "https://api.example.test/api/v0/test" {
+	if req.URL.String() != "https://api.example.test/base/api/v0/test" {
 		t.Fatalf("url inesperada: %s", req.URL.String())
 	}
 	if got := req.Header.Get("Content-Type"); got != "application/json" {
@@ -42,6 +42,20 @@ func TestPrepareCLIRESTRequestV0SeteaHeadersCanonicos(t *testing.T) {
 	}
 	if got := req.Header.Get(CliCorrelationHeaderV0); got != "corr-123" {
 		t.Fatalf("correlation header inesperado: %q", got)
+	}
+}
+
+func TestNewCLIRESTClientConfigV0RechazaEndpointAmbiguo(t *testing.T) {
+	for _, endpoint := range []string{
+		"https://evil.test/api",
+		"//evil.test/api",
+		"/api/v0/test?token=x",
+		"/api/../secret",
+	} {
+		_, err := newCLIRESTClientConfigV0("https://api.example.test", time.Second, endpoint)
+		if err == nil {
+			t.Fatalf("endpoint ambiguo aceptado: %q", endpoint)
+		}
 	}
 }
 

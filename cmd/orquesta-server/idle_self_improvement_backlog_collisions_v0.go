@@ -52,9 +52,18 @@ func compactBacklogScanCollisionsV0(
 		value.Code = strings.TrimSpace(value.Code)
 		value.RequestRef = strings.TrimSpace(value.RequestRef)
 		value.SectionRef = strings.TrimSpace(value.SectionRef)
+		value.TaskID = strings.TrimSpace(value.TaskID)
+		value.InstanceRefs = compactServerStackStringsV0(value.InstanceRefs)
 		value.Message = strings.TrimSpace(value.Message)
 		value.EvidenceRefs = compactServerStackStringsV0(value.EvidenceRefs)
-		key := strings.Join([]string{value.Code, value.RequestRef, value.SectionRef, value.Message}, "|")
+		key := strings.Join([]string{
+			value.Code,
+			value.RequestRef,
+			value.SectionRef,
+			value.TaskID,
+			strings.Join(value.InstanceRefs, ","),
+			value.Message,
+		}, "|")
 		if value.Code == "" || seen[key] {
 			continue
 		}

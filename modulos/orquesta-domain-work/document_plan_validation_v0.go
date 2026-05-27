@@ -47,9 +47,25 @@ func ValidateDomainDocumentPlanV0(plan DomainDocumentPlanV0) []DomainWorkIssueV0
 	issues = append(issues, validateDomainDocumentPlanRefsV0(plan.SourceRefs, "source_refs")...)
 	issues = append(issues, validateDomainDocumentPlanRefsV0(plan.EvidenceRefs, "evidence_refs")...)
 	issues = append(issues, validateDocumentPlanSectionsV0(plan.Sections)...)
+	issues = append(issues, validateDocumentPlanUniqueRefsV0(
+		documentPlanSectionRefsForValidationV0(plan.Sections),
+		"sections.section_ref",
+	)...)
 	issues = append(issues, validateDocumentPlanVisualsV0(plan.Visuals)...)
+	issues = append(issues, validateDocumentPlanUniqueRefsV0(
+		documentPlanVisualRefsForValidationV0(plan.Visuals),
+		"visuals.visual_ref",
+	)...)
 	issues = append(issues, validateDocumentPlanReviewsV0(plan.ReviewSteps)...)
+	issues = append(issues, validateDocumentPlanUniqueRefsV0(
+		documentPlanReviewRefsForValidationV0(plan.ReviewSteps),
+		"review_steps.review_ref",
+	)...)
 	issues = append(issues, validateDocumentPlanDeliverablesV0(plan.Deliverables)...)
+	issues = append(issues, validateDocumentPlanUniqueRefsV0(
+		documentPlanDeliverableRefsForValidationV0(plan.Deliverables),
+		"deliverables.deliverable_ref",
+	)...)
 	return issues
 }
 

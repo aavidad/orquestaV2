@@ -14,7 +14,11 @@ func signalProcessV0(pid int) error {
 	if err != nil {
 		return err
 	}
-	return process.Kill()
+	return process.Signal(serverCooperativeStopSignalV0())
+}
+
+func signalProcessGroupV0(pid int) error {
+	return signalProcessV0(pid)
 }
 
 func processAliveV0(pid int) bool {

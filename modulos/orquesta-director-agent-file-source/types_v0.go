@@ -4,6 +4,7 @@ import (
 	"context"
 
 	orquestadirectoragent "orquesta/modulos/orquesta-director-agent"
+	orquestadirectoragentworkflow "orquesta/modulos/orquesta-director-agent-workflow"
 )
 
 const (
@@ -54,6 +55,7 @@ type DirectorAgentDecisionFileSourceV0 struct {
 	Reader              DirectorAgentDecisionFileReaderPortV0
 	ConsumptionRecorder DirectorAgentDecisionFileConsumptionRecorderPortV0
 	MaxBytes            int
+	BatchBudget         orquestadirectoragentworkflow.DirectorAgentDecisionBatchBudgetV0
 	IgnoreInvalidFiles  bool
 }
 

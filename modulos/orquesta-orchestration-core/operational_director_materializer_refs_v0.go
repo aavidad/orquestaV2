@@ -2,8 +2,6 @@ package orquestacionnucleoapp
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"reflect"
@@ -89,6 +87,6 @@ func operationalDirectorWorkflowTaskConflictRefV0(
 	if err != nil {
 		data = []byte(task.TaskID)
 	}
-	sum := sha256.Sum256(data)
-	return strings.TrimSpace(task.TaskID) + "-contract-" + hex.EncodeToString(sum[:])[:12]
+	return strings.TrimSpace(task.TaskID) + "-contract-" +
+		deterministicRefDigestPrefixV0("workflow_task_conflict", 32, string(data))
 }

@@ -186,3 +186,22 @@ Reglas cerradas:
 - el nucleo solo recibe refs compactas, estado de revision y evidencia opaca;
 - ACK, tests requeridos, write-set, ficheros ausentes y tamano excesivo
   producen aceptacion o `changes_requested` por politica, no parches manuales.
+
+## RTDELIVERY-009 - Frontera de uso Codex T209
+
+Objetivo: mantener delivery como fuente de receipts/progreso y no convertirlo
+en parser de uso, logs ni cuota.
+
+Estado: documentado/cerrado como frontera local.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex-delivery`
+
+Criterios:
+
+- los descriptors registrados siguen siendo la ruta autorizada para que la
+  composicion encuentre el runtime del agente;
+- delivery no lee stdout, stderr ni last-message para calcular tokens o cuota;
+- cualquier uso visible debe venir de `codex_usage_accounting.json` redactado
+  y del puerto de stats de la composicion.

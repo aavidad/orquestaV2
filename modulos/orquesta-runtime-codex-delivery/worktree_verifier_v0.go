@@ -44,9 +44,10 @@ const (
 )
 
 type CodexReceiptWorktreeVerifierV0 struct {
-	SnapshotStore  orquestaruntimeworktree.WorktreeSnapshotStorePortV0
-	IgnorePrefixes []string
-	Mode           CodexReceiptWorktreeVerificationModeV0
+	SnapshotStore      orquestaruntimeworktree.WorktreeSnapshotStorePortV0
+	IgnorePrefixes     []string
+	Mode               CodexReceiptWorktreeVerificationModeV0
+	SnapshotReadBudget orquestaruntimeworktree.WorktreeSnapshotReadBudgetV0
 }
 
 func (source CodexDeliveryObservationSourceV0) verifyDescriptorWorktreeV0(
@@ -60,7 +61,7 @@ func (source CodexDeliveryObservationSourceV0) verifyDescriptorWorktreeV0(
 		strings.TrimSpace(descriptor.AckPath),
 		descriptor.Spec,
 	)
-	if len(issues) > 0 {
+	if len(issues) > 0 && !codexReceiptAckIssuesOnlyReviewableFailedTestEvidenceV0(issues) {
 		return nil, fmt.Errorf("codex_worktree_verification: ack_invalid")
 	}
 	request := CodexReceiptWorktreeVerificationRequestV0{
@@ -107,11 +108,14 @@ func (verifier CodexReceiptWorktreeVerifierV0) VerifyCodexReceiptWorktreeEvidenc
 	result, issues := orquestaruntimeworktree.VerifyWorktreeWriteSetV0(
 		ctx,
 		orquestaruntimeworktree.WorktreeVerifyRequestV0{
-			Baseline:       baseline,
-			ProjectWorkDir: strings.TrimSpace(request.ProjectWorkDir),
-			WriteSet:       request.Spec.AgentPacket.Task.WriteSet,
-			AckFiles:       request.AckFiles,
-			IgnorePrefixes: verifier.IgnorePrefixes,
+			Baseline:              baseline,
+			ProjectWorkDir:        strings.TrimSpace(request.ProjectWorkDir),
+			WriteSet:              request.Spec.AgentPacket.Task.WriteSet,
+			AckFiles:              request.AckFiles,
+			IgnorePrefixes:        verifier.IgnorePrefixes,
+			MaxSnapshotFiles:      verifier.SnapshotReadBudget.MaxFiles,
+			MaxSnapshotFileBytes:  verifier.SnapshotReadBudget.MaxFileBytes,
+			MaxSnapshotTotalBytes: verifier.SnapshotReadBudget.MaxTotalBytes,
 		},
 	)
 	if len(issues) > 0 {
@@ -214,6 +218,14 @@ func codexReceiptWorktreeSoftIssueRefsV0(
 			refs = append(refs, codexReceiptWorktreeIssueEvidenceRefsV0("ack_files_mismatch", issue)...)
 		case orquestaruntimeworktree.WorktreeIssueGoLineBudgetV0:
 			refs = append(refs, codexReceiptWorktreeIssueEvidenceRefsV0("go_file_line_budget_exceeded", issue)...)
+		case orquestaruntimeworktree.WorktreeIssueSnapshotFileTooLargeV0:
+			refs = append(refs, codexReceiptWorktreeIssueEvidenceRefsV0("worktree_snapshot_file_too_large", issue)...)
+		case orquestaruntimeworktree.WorktreeIssueSnapshotTooManyFilesV0:
+			refs = append(refs, codexReceiptWorktreeIssueEvidenceRefsV0("worktree_snapshot_too_many_files", issue)...)
+		case orquestaruntimeworktree.WorktreeIssueSnapshotTooLargeV0:
+			refs = append(refs, codexReceiptWorktreeIssueEvidenceRefsV0("worktree_snapshot_too_large", issue)...)
+		case orquestaruntimeworktree.WorktreeIssueSnapshotUnreadableV0:
+			refs = append(refs, codexReceiptWorktreeIssueEvidenceRefsV0("worktree_snapshot_unreadable", issue)...)
 		default:
 			return nil, false
 		}

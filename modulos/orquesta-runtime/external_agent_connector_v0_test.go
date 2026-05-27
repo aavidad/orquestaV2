@@ -28,6 +28,21 @@ func TestExternalAgentConnectorProfileV0ExigeRefsYPoliticaCerrada(t *testing.T) 
 	requireExternalAgentCodeV0(t, issues, ExternalAgentSecurityInvalidaV0)
 }
 
+func TestExternalAgentConnectorProfileV0PermitePoliticaAbiertaConRailsDetalleOff(t *testing.T) {
+	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "off")
+	profile := externalAgentConnectorProfileValidoV0()
+	profile.Security.OptIn = false
+	profile.Security.ShellPolicy = "allowed"
+	profile.Security.PathInheritancePolicy = "allowed"
+	profile.Security.EnvironmentPolicy = "inherited"
+	profile.Security.NetworkPolicy = "open"
+	profile.Security.TranscriptsPolicy = "allowed"
+
+	if issues := ValidateExternalAgentConnectorProfileV0(profile); len(issues) != 0 {
+		t.Fatalf("rails off no debe bloquear politica abierta: %+v", issues)
+	}
+}
+
 func TestExternalAgentConnectorProfileV0RechazaDetallesOperacionales(t *testing.T) {
 	cases := []struct {
 		name   string

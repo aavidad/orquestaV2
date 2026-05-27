@@ -19,3 +19,6 @@ Resultado: `ok` el 2026-05-06.
 - Progreso ajeno: se filtra antes del scheduler y no bloquea el ciclo.
 - Entrada incompleta: rechaza sin efectos.
 - Integracion: scheduler real produce capacidad y workflow en memoria refleja evento/outbox.
+- T207 no anade cobertura local al runner: la verificacion focal vive en
+  `go test -count=1 ./modulos/orquesta-runtime ./modulos/orquesta-orchestration-core`
+  y la bateria transversal conserva `go test -count=1 ./modulos/orquesta-director-runner`.

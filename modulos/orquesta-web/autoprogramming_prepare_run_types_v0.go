@@ -21,6 +21,7 @@ const (
 type WebAutoprogrammingPrepareRunCommandV0 struct {
 	RequestID            string                                                        `json:"request_id,omitempty"`
 	CorrelationID        string                                                        `json:"correlation_id,omitempty"`
+	IdempotencyKey       string                                                        `json:"idempotency_key,omitempty"`
 	Locale               string                                                        `json:"locale,omitempty"`
 	OccurredAt           string                                                        `json:"occurred_at,omitempty"`
 	RequestedBy          string                                                        `json:"requested_by,omitempty"`

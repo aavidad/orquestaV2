@@ -36,6 +36,17 @@ func operationalDirectorPlanStateAfterRequiredTestsV0(
 	if err != nil || !complete {
 		return state, false, err
 	}
+	requiredTestsByTask, err := operationalDirectorPlanRequiredTestsByTaskV0(
+		ctx,
+		request.RunRef,
+		ports.DirectorTaskStore,
+		activeStep,
+		requiredTests,
+		matches,
+	)
+	if err != nil {
+		return state, false, err
+	}
 	evidence, err := operationalDirectorPlanRequiredTestEvidenceForMatchesV0(
 		ctx,
 		request.RunRef,
@@ -46,7 +57,7 @@ func operationalDirectorPlanStateAfterRequiredTestsV0(
 	if err != nil {
 		return state, false, err
 	}
-	testStatus := operationalDirectorPlanEvaluateRequiredTestEvidenceV0(request.RunRef, requiredTests, matches, evidence)
+	testStatus := operationalDirectorPlanEvaluateRequiredTestEvidenceV0(request.RunRef, requiredTests, matches, evidence, requiredTestsByTask)
 	if len(testStatus.FailedRefs) > 0 {
 		replanned, replannedChanged, err := operationalDirectorPlanStateAfterRequiredTestsReplanV0(
 			ctx,
@@ -70,6 +81,7 @@ func operationalDirectorPlanStateAfterRequiredTestsV0(
 			ports,
 			activeStep,
 			requiredTests,
+			requiredTestsByTask,
 			matches,
 		)
 		if err != nil {
@@ -87,7 +99,7 @@ func operationalDirectorPlanStateAfterRequiredTestsV0(
 			if err != nil {
 				return state, false, err
 			}
-			testStatus = operationalDirectorPlanEvaluateRequiredTestEvidenceV0(request.RunRef, requiredTests, matches, evidence)
+			testStatus = operationalDirectorPlanEvaluateRequiredTestEvidenceV0(request.RunRef, requiredTests, matches, evidence, requiredTestsByTask)
 			if len(testStatus.FailedRefs) > 0 {
 				replanned, replannedChanged, err := operationalDirectorPlanStateAfterRequiredTestsReplanV0(
 					ctx,
@@ -114,7 +126,7 @@ func operationalDirectorPlanStateAfterRequiredTestsV0(
 			loop.Run,
 			activeStep,
 			matches,
-			requiredTests,
+			operationalDirectorPlanRequiredTestsForMatchV0(requiredTestsByTask, requiredTests, matches[0]),
 		); err != nil {
 			return state, false, err
 		}
@@ -156,30 +168,14 @@ func operationalDirectorPlanStateWithRequiredTestsPassedV0(
 			nextStep.Reason = "required-tests-passed"
 		case replanStepID:
 			nextStep.Status = orquestadirectoroperativo.OperationalDirectorStepRunningV0
-			if len(nextStep.TaskRefs) == 0 {
-				nextStep.TaskRefs = append([]string(nil), activeStep.TaskRefs...)
-			}
-			if len(nextStep.AgentRefs) == 0 {
-				nextStep.AgentRefs = append([]string(nil), activeStep.AgentRefs...)
-			}
-			if len(nextStep.DeliveryRefs) == 0 {
-				nextStep.DeliveryRefs = append([]string(nil), activeStep.DeliveryRefs...)
-			}
-			if len(nextStep.ReviewResultRefs) == 0 {
-				nextStep.ReviewResultRefs = append([]string(nil), activeStep.ReviewResultRefs...)
-			}
-			if len(nextStep.RequiredTestEvidenceRefs) == 0 {
-				nextStep.RequiredTestEvidenceRefs = append([]string(nil), passedRefs...)
-			}
-			if nextStep.WaveRef == "" {
-				nextStep.WaveRef = activeStep.WaveRef
-			}
-			if nextStep.CohortRef == "" {
-				nextStep.CohortRef = activeStep.CohortRef
-			}
-			if nextStep.ParentTaskRef == "" {
-				nextStep.ParentTaskRef = activeStep.ParentTaskRef
-			}
+			nextStep.TaskRefs = append([]string(nil), activeStep.TaskRefs...)
+			nextStep.AgentRefs = append([]string(nil), activeStep.AgentRefs...)
+			nextStep.DeliveryRefs = append([]string(nil), activeStep.DeliveryRefs...)
+			nextStep.ReviewResultRefs = append([]string(nil), activeStep.ReviewResultRefs...)
+			nextStep.RequiredTestEvidenceRefs = append([]string(nil), passedRefs...)
+			nextStep.WaveRef = activeStep.WaveRef
+			nextStep.CohortRef = activeStep.CohortRef
+			nextStep.ParentTaskRef = activeStep.ParentTaskRef
 			nextStep.BlockerRefs = nil
 			nextStep.Reason = "required-tests-passed"
 		}

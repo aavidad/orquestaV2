@@ -2,7 +2,6 @@ package orquestaweb
 
 import (
 	"net/http"
-	"strings"
 )
 
 const NuevaAppHTMLHandlerSchemaV0 = "nueva_app_html_handler.v0"
@@ -28,8 +27,10 @@ func (handler NuevaAppHTMLHandlerV0) ServeHTTP(w http.ResponseWriter, r *http.Re
 	case http.MethodPost:
 		status, page := endpoint.postPage(r, catalog)
 		writeNuevaAppHTMLPageV0(w, status, page)
+	case http.MethodOptions:
+		handleWebPublicHTTPOptionsV0(w, r, http.MethodGet, http.MethodPost)
 	default:
-		w.Header().Set("Allow", strings.Join([]string{http.MethodGet, http.MethodPost}, ", "))
+		setWebPublicHTTPAllowV0(w, http.MethodGet, http.MethodPost)
 		locale := localeFromNuevaAppRequestV0(r, catalog)
 		vm := nuevaAppWebPublicErrorViewModelV0("", locale, WebNuevaAppEstadoError, WebNuevaAppErrMetodoNoSoportadoV0)
 		writeNuevaAppHTMLPageV0(w, http.StatusMethodNotAllowed, endpoint.page(locale, vm))

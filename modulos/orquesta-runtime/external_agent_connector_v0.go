@@ -98,6 +98,9 @@ func (v *externalAgentConnectorValidatorV0) validateSecurity(
 	field string,
 	security ExternalAgentSecurityPolicyV0,
 ) {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return
+	}
 	if !security.OptIn {
 		v.add(ExternalAgentSecurityInvalidaV0, field+".opt_in")
 	}

@@ -17,6 +17,9 @@ func VerifyWorktreeWriteSetV0(
 		SnapshotRef:    request.Baseline.SnapshotRef + "-current",
 		ProjectWorkDir: request.ProjectWorkDir,
 		IgnorePrefixes: request.IgnorePrefixes,
+		MaxFiles:       request.MaxSnapshotFiles,
+		MaxFileBytes:   request.MaxSnapshotFileBytes,
+		MaxTotalBytes:  request.MaxSnapshotTotalBytes,
 	})
 	if len(captureIssues) > 0 {
 		return WorktreeVerifyResultV0{}, captureIssues
@@ -100,6 +103,10 @@ func normalizeWorktreeVerifyRequestV0(
 ) (WorktreeVerifyRequestV0, []WorktreeIssueV0) {
 	request.ProjectWorkDir = strings.TrimSpace(request.ProjectWorkDir)
 	request.IgnorePrefixes = normalizeWorktreeIgnorePrefixesV0(request.IgnorePrefixes)
+	budget := worktreeVerifySnapshotBudgetV0(request)
+	request.MaxSnapshotFiles = budget.MaxFiles
+	request.MaxSnapshotFileBytes = budget.MaxFileBytes
+	request.MaxSnapshotTotalBytes = budget.MaxTotalBytes
 	request.AcceptedPartitionFollowups, _ = normalizeWorktreePathListV0(request.AcceptedPartitionFollowups, false)
 	var issues []WorktreeIssueV0
 	if request.Baseline.SchemaVersion != WorktreeSnapshotSchemaVersionV0 ||
@@ -177,6 +184,7 @@ func diffWorktreeSnapshotsV0(
 		)
 	}
 	result.EvidenceRefs = []string{"evidence-ref-worktree-write-set-verified-v0"}
+	result.ExclusionReceipts = current.ExclusionReceipts
 	return result
 }
 

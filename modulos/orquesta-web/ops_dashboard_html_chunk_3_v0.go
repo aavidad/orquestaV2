@@ -229,55 +229,6 @@ const opsDashboardHTMLChunk3V0 = `          currently_visible: true,
       if (!items.length) return '<span class="sub">-</span>';
       return items.map(function(value) { return '<div class="mono">' + esc(value) + '</div>'; }).join('');
     }
-    function prettyJSON(value) {
-      if (!value) return '';
-      try { return JSON.stringify(value, null, 2); } catch (_) { return String(value); }
-    }
-    function detailsBlock(title, content, key) {
-      if (!content) return '';
-      const safeKey = String(key || title || '');
-      const open = openDetailKeys.has(safeKey) ? ' open' : '';
-      return '<details data-detail-key="' + esc(safeKey) + '"' + open + '><summary>' + esc(title) + '</summary><pre>' + esc(content) + '</pre></details>';
-    }
-    function runtimeFileContent(agent, fileName) {
-      const file = ((agent || {}).files || []).find(function(item) { return item.name === fileName; });
-      return file && file.exists ? file.content : '';
-    }
-    function runtimeDetailHTML(run) {
-      const loading = runtimeDetailLoading[run.run_ref];
-      const detail = runtimeDetails[run.run_ref];
-      if (loading && !detail) return '<div class="detail-section"><div class="sub">Cargando detalle runtime...</div></div>';
-      if (!detail) return '<div class="detail-section"><div class="sub">Detalle runtime pendiente.</div></div>';
-      if (detail.estado === 'error') {
-        const issue = ((detail.issues || [])[0] || {}).message || 'detalle runtime no disponible';
-        return '<div class="detail-section"><div class="error">' + esc(issue) + '</div></div>';
-      }
-      const agent = runtimeAgentForRun(run.run_ref);
-      if (!agent) return '<div class="detail-section"><div class="sub">Sin runtime de agente para este run.</div></div>';
-      const packet = agent.agent_packet || {};
-      const task = packet.task || {};
-      const skills = agent.skills || {};
-      const promptText = agent.prompt_text || runtimeFileContent(agent, 'agent_prompt.txt');
-      const packetText = runtimeFileContent(agent, 'agent_packet.json') || prettyJSON(packet);
-      const ackText = runtimeFileContent(agent, 'agent_ack.json') || prettyJSON(agent.ack);
-      const logs = ['codex_last_message.txt', 'codex_stdout.log', 'codex_stderr.log', 'director_decisions.json'].map(function(name) {
-        return detailsBlock(name, runtimeFileContent(agent, name), detailKey(run.run_ref, agent.agent_ref, name));
-      }).join('');
-      return '<div class="detail-section">' +
-        '<div class="kv"><div class="k">Qué se consigue</div><div>' + esc(task.objective || task.title || runTitle(run)) + '</div></div>' +
-        '<div class="kv"><div class="k">Agente seleccionado</div><div class="mono">' + esc(agent.agent_ref || '-') + '</div></div>' +
-        '<div class="kv"><div class="k">Write-set</div><div>' + listInline(task.write_set || []) + '</div></div>' +
-        '<div class="kv"><div class="k">Tests requeridos</div><div>' + listInline(task.required_tests || []) + '</div></div>' +
-        '<div class="kv"><div class="k">Skills/policies</div><div>' +
-          '<div>Caveman: ' + esc(skills.caveman_requested ? 'si' : 'no') + ' · compacto: ' + esc(skills.compact_protocol ? 'si' : 'no') + ' · subagentes max: ' + esc(skills.max_child_agents || '-') + '</div>' +
-          listInline(skills.policies || []) +
-        '</div></div>' +
-        detailsBlock('Prompt exacto', promptText, detailKey(run.run_ref, agent.agent_ref, 'prompt')) +
-        detailsBlock('agent_packet.json', packetText, detailKey(run.run_ref, agent.agent_ref, 'agent_packet.json')) +
-        detailsBlock('agent_ack.json', ackText, detailKey(run.run_ref, agent.agent_ref, 'agent_ack.json')) +
-        logs +
-      '</div>';
-    }
     function runFlowHTML(run, runAgents, tasks) {
       const attention = runNeedsAttention(run);
       return '<div class="run-flow" aria-label="esquema de run">' +

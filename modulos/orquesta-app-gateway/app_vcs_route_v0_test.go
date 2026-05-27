@@ -41,6 +41,9 @@ func TestAppVCSAPIDelegaEnExecutorRESTSinRutasLocalesV0(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	if rec.Header().Get("X-Orquesta-Control-Plane-Header-Policy") != "control-plane-json-v0" {
+		t.Fatalf("security headers=%v", rec.Header())
+	}
 	if executor.Input.AppRef != "app-ref-vcs-gateway-001" ||
 		executor.Input.WorktreeRef != "worktree-ref-app-vcs-workspaces-20260523-06" {
 		t.Fatalf("input no delegado=%+v", executor.Input)
@@ -52,6 +55,41 @@ func TestAppVCSAPIDelegaEnExecutorRESTSinRutasLocalesV0(t *testing.T) {
 	if result.Estado != orquestamcp.MCPAppVCSEstadoOKV0 ||
 		result.CommitRef != "commit-ref-vcs-gateway-001" {
 		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestAppVCSAPIPrecedePrefijoAppChangeV0(t *testing.T) {
+	appVCS := &recordingAppVCSExecutorV0{}
+	appChange := &recordingRequestAppChangeExecutorV0{}
+	handler := NewHTTPHandlerV0(ConfigV0{
+		AppVCS:           appVCS,
+		RequestAppChange: appChange,
+		Timeout:          time.Second,
+	})
+	body, err := json.Marshal(orquestamcp.MCPAppVCSToolInputV0{
+		RequestID:     "request-ref-app-vcs-precedence-001",
+		CorrelationID: "corr-app-vcs-precedence-001",
+		Action:        orquestamcp.MCPAppVCSActionReviewRepoV0,
+		AppRef:        "app-ref-vcs-precedence-001",
+		RepoRef:       "repo-ref-vcs-precedence-001",
+	})
+	if err != nil {
+		t.Fatalf("marshal input: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, orquestamcp.MCPAppVCSHTTPPathV0, strings.NewReader(string(body)))
+	req.Header.Set("Content-Type", "application/json")
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if appVCS.Input.Action != orquestamcp.MCPAppVCSActionReviewRepoV0 {
+		t.Fatalf("app_vcs input=%+v", appVCS.Input)
+	}
+	if appChange.Input.AppChangeRequest.AppRef != "" {
+		t.Fatalf("app_change capturo app_vcs path=%+v", appChange.Input.AppChangeRequest)
 	}
 }
 

@@ -16,6 +16,19 @@ Estado:
 ```
 
 ```text
+ID: MCP-037
+Objetivo: Reconciliar T198 como cierre focal de `descriptor_source` para resources MCP.
+Write-set: docs locales y backlog T198.
+Simbolo foco: MCPTransportResourceEnvelopeV0.DescriptorSource
+Contrato: mcp.resource.descriptor_source.v0
+Validacion: go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-observability ./modulos/orquesta-governance ./modulos/orquesta-core ./cmd/orquesta-server.
+Bloqueos: No reabre codigo; cmd/orquesta-server solo se valida por prueba obligatoria, no por edicion documental.
+Estado: completada_documental 2026-05-27
+Revalidacion: `agent-ref-task-autoprogramming-c3678e9bc306-g01` confirma que
+el pendiente residual era stale y no abre codigo nuevo.
+```
+
+```text
 ID: MCP-036
 Objetivo: Sincronizar resources de roadmap/contratos compartidos con foto vigente y backlog vivo.
 Write-set: project_roadmap_*_v0.go, shared_contracts_*_v0.go, resource_freshness_v0.go, docs locales.

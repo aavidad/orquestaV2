@@ -138,6 +138,13 @@ func (conn *domainWorkSQLFakeConnV0) ExecContext(
 		raceRecord := record
 		if conn.state.insertRaceMode == domainWorkSQLFakeInsertRaceConflictV0 {
 			raceRecord.Fingerprint = "fingerprint-distinta"
+			raceRecord.RequestJSON = []byte(fmt.Sprintf(
+				`{"schema_version":"domain_work_job_request.v0","correlation_id":%q,"idempotency_key":%q,"requested_by":"test","domain_ref":%q,"work_kind":%q,"objective":"conflict"}`,
+				record.CorrelationID,
+				record.IdempotencyKey,
+				record.DomainRef,
+				record.WorkKind,
+			))
 		}
 		conn.state.insertRaceMode = ""
 		if _, exists := conn.state.records[key]; !exists {

@@ -16,6 +16,7 @@ Cobertura:
 - simula unique violation concurrente y verifica replay estable;
 - simula unique violation con fingerprint distinto y verifica conflicto
   idempotente sin sobrescribir;
+- repara colision visible de `job_ref` determinista con sufijo explicito;
 - rechaza `nil *sql.DB`;
 - rechaza nombres de tabla invalidos;
 - rechaza estilos de placeholder desconocidos;

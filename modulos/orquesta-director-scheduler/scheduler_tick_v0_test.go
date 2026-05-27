@@ -175,42 +175,6 @@ func TestBuildDirectorSchedulerTickV0AceptaRefsDeArtefactosSinCortar(t *testing.
 	assertSchedulerWaitingV0(t, plan, SchedulerWaitingOutboxPendingV0)
 }
 
-func TestBuildDirectorSchedulerTickV0RejectsForbiddenPayloadDetails(t *testing.T) {
-	tests := []struct {
-		name   string
-		mutate func(*DirectorSchedulerTickInputV0)
-	}{
-		{
-			name: "summary_provider",
-			mutate: func(input *DirectorSchedulerTickInputV0) {
-				input.WorkCandidates[0].CapacityCandidate.Payload.Summary = "provider operativo seleccionado"
-			},
-		},
-		{
-			name: "summary_model",
-			mutate: func(input *DirectorSchedulerTickInputV0) {
-				input.WorkCandidates[0].AgentCandidate.Payload.Summary = "model operativo seleccionado"
-			},
-		},
-		{
-			name: "reason_home",
-			mutate: func(input *DirectorSchedulerTickInputV0) {
-				input.WorkCandidates[0].CapacityCandidate.Payload.ReasonCode = "home requerido"
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			input := validSchedulerTickInputV0()
-			tt.mutate(&input)
-
-			_, err := BuildDirectorSchedulerTickV0(input)
-			assertSchedulerTickErrorV0(t, err, "payload")
-		})
-	}
-}
-
 func TestBuildDirectorSchedulerTickV0RejectsForeignRunCandidate(t *testing.T) {
 	input := validSchedulerTickInputV0()
 	input.WorkCandidates[0].AgentCandidate.CommandMeta.RunID = "run-externo-001"

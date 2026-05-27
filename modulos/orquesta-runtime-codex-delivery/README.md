@@ -45,6 +45,11 @@ durable los aporta un puerto externo. La observacion devuelta al nucleo solo
 contiene refs compactas: no paths, logs, stdout/stderr, HOME, OAuth, modelo,
 provider, DB ni transcripts.
 
+T209 no mueve el parser de uso a este modulo: delivery conserva descriptors,
+ACK y progreso; el uso redactado lo genera `orquesta-runtime-codex` y lo lee la
+composicion Codex desde el descriptor registrado. Si falta reporte, delivery no
+lee logs para inferir tokens o cuota.
+
 Adaptadores locales:
 
 - `CodexReceiptRecordingSpecResolverV0`: decorador de spec resolver; registra el

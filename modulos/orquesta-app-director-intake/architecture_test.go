@@ -1,6 +1,7 @@
 package orquestaappdirectorintake
 
 import (
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
@@ -8,21 +9,19 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func TestAppDirectorIntakeArchitectureV0NoImportaLegacyNiDBHardcodeada(t *testing.T) {
 	for _, file := range productionGoFilesForDirectorIntakeTestV0(t) {
-		src := readDirectorIntakeSourceFileV0(t, file)
-		for _, forbidden := range forbiddenDirectorIntakeSourceFragmentsV0() {
-			if strings.Contains(strings.ToLower(string(src)), forbidden) {
-				t.Fatalf("%s contiene fragmento prohibido %q", file, forbidden)
-			}
-		}
-		for _, path := range importsForDirectorIntakeSourceFileV0(t, file) {
-			if directorIntakeImportForbiddenV0(path) {
+		parsed := parseDirectorIntakeSourceFileV0(t, file)
+		for _, path := range importsForDirectorIntakeSourceFileV0(t, parsed) {
+			if orquestarails.ArchitectureImportForbiddenV0(path, directorIntakeImportPolicyV0()) {
 				t.Fatalf("%s importa dependencia prohibida %q", file, path)
 			}
 		}
+		assertDirectorIntakeSourceLiteralsSafeV0(t, file, parsed)
 	}
 }
 
@@ -36,7 +35,8 @@ func TestAppDirectorIntakeNeutralCoreV0NoImportaFactory(t *testing.T) {
 		"validation_v0.go",
 		"workflow_v0.go",
 	} {
-		for _, path := range importsForDirectorIntakeSourceFileV0(t, file) {
+		parsed := parseDirectorIntakeSourceFileV0(t, file)
+		for _, path := range importsForDirectorIntakeSourceFileV0(t, parsed) {
 			if path == "orquesta/modulos/orquesta-factory" {
 				t.Fatalf("%s importa factory; usa AppDirectorInputSpecV0 o el adapter dedicado", file)
 			}
@@ -64,22 +64,17 @@ func productionGoFilesForDirectorIntakeTestV0(t *testing.T) []string {
 	return files
 }
 
-func readDirectorIntakeSourceFileV0(t *testing.T, file string) []byte {
+func parseDirectorIntakeSourceFileV0(t *testing.T, file string) *ast.File {
 	t.Helper()
-	src, err := os.ReadFile(filepath.Clean(file))
-	if err != nil {
-		t.Fatalf("read %s: %v", file, err)
-	}
-	return src
-}
-
-func importsForDirectorIntakeSourceFileV0(t *testing.T, file string) []string {
-	t.Helper()
-	src := readDirectorIntakeSourceFileV0(t, file)
-	parsed, err := parser.ParseFile(token.NewFileSet(), file, src, parser.ImportsOnly)
+	parsed, err := parser.ParseFile(token.NewFileSet(), filepath.Clean(file), nil, 0)
 	if err != nil {
 		t.Fatalf("parse %s: %v", file, err)
 	}
+	return parsed
+}
+
+func importsForDirectorIntakeSourceFileV0(t *testing.T, parsed *ast.File) []string {
+	t.Helper()
 	imports := make([]string, 0, len(parsed.Imports))
 	for _, spec := range parsed.Imports {
 		path, err := strconv.Unquote(spec.Path.Value)
@@ -91,37 +86,33 @@ func importsForDirectorIntakeSourceFileV0(t *testing.T, file string) []string {
 	return imports
 }
 
-func forbiddenDirectorIntakeSourceFragmentsV0() []string {
-	return []string{
-		"database/sql",
-		"postgres",
-		"sqlite",
-		"mysql",
-		"oauth",
-		"ollama",
-		"vllm",
-		" codex",
-		" claude",
-		" gemini",
-	}
-}
-
-func directorIntakeImportForbiddenV0(path string) bool {
-	if path == "database/sql" {
-		return true
-	}
-	if strings.HasPrefix(path, "orquesta/cmd") || strings.HasPrefix(path, "orquesta/db") {
-		return true
-	}
-	for _, fragment := range []string{
-		"modernc.org/sqlite",
-		"github.com/mattn/go-sqlite3",
-		"github.com/jackc/pgx",
-		"github.com/go-sql-driver/mysql",
-	} {
-		if strings.Contains(path, fragment) {
+func assertDirectorIntakeSourceLiteralsSafeV0(t *testing.T, file string, parsed *ast.File) {
+	t.Helper()
+	ast.Inspect(parsed, func(node ast.Node) bool {
+		lit, ok := node.(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
 			return true
 		}
+		value, err := strconv.Unquote(lit.Value)
+		if err != nil {
+			return true
+		}
+		if orquestarails.ArchitectureSourceLiteralForbiddenV0("orquesta-app-director-intake", value) {
+			t.Fatalf("%s contiene literal sensible o adaptador concreto %q", file, value)
+		}
+		return true
+	})
+}
+
+func directorIntakeImportPolicyV0() orquestarails.ArchitectureImportPolicyV0 {
+	return orquestarails.ArchitectureImportPolicyV0{
+		ExactImports:   []string{"database/sql"},
+		ImportPrefixes: []string{"orquesta/cmd", "orquesta/db"},
+		ImportFragments: []string{
+			"modernc.org/sqlite",
+			"github.com/mattn/go-sqlite3",
+			"github.com/jackc/pgx",
+			"github.com/go-sql-driver/mysql",
+		},
 	}
-	return false
 }

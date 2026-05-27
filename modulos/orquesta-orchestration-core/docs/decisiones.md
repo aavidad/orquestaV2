@@ -1,0 +1,25 @@
+# Decisiones: orquesta-orchestration-core
+
+```text
+Fecha: 2026-05-27
+Decision: El core distingue fuente de uso no configurada de cuota no observable.
+Motivo: T209 necesitaba que stats/web no mostrasen `not_configured` cuando una
+composicion si inyecto puerto de uso pero el runtime no pudo observar cuota real.
+Impacto: `BuildDirectorRunStatsWithTelemetryPortsV0` solo llama al puerto con
+`IncludeAgentUsage=true`; sin puerto emite `agent_usage_source_not_configured`.
+Con puerto, el core aplica el `quota_status` saneado por el adaptador
+(`unknown`, `available`, `limited` o `exhausted`) y no lee runtime, logs,
+proveedor, HOME, OAuth ni rutas.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-27
+Decision: T207 se representa como directiva de aplicacion, no como runtime.
+Motivo: orchestration-core coordina puertos del nucleo, pero no posee procesos,
+proveedor, HOME, modelo, sesiones reales ni politica de corte.
+Impacto: `BuildSessionRotationDirectiveV0` puede pedir handoff completo o
+permitir relevo opt-in, pero mantiene stop_current deshabilitado y no cambia
+`WaitAgentRefs`.
+Estado: aceptada.
+```

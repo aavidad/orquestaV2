@@ -199,6 +199,37 @@ func TestSQLDomainWorkJobRecordStoreV0UniqueViolationReleeYDevuelveConflicto(t *
 	}
 }
 
+func TestSQLDomainWorkJobRecordStoreV0ReparaColisionDeJobRefVisible(t *testing.T) {
+	db, state := openDomainWorkSQLFakeDBAndStateV0(t)
+	store, err := orquestadomainworksql.NewSQLDomainWorkJobRecordStoreV0(
+		db,
+		orquestadomainworksql.SQLDomainWorkJobRecordStoreConfigV0{},
+	)
+	if err != nil {
+		t.Fatalf("NewSQLDomainWorkJobRecordStoreV0: %v", err)
+	}
+	request := validDomainWorkSQLRequestForTestV0("job-ref-collision")
+	identity, err := orquestadomainwork.BuildDomainWorkJobIdentityV0(request)
+	if err != nil {
+		t.Fatalf("BuildDomainWorkJobIdentityV0: %v", err)
+	}
+	state.mu.Lock()
+	state.records["domain-other\x00idem-other"] = domainWorkSQLFakeRecordV0{
+		DomainRef:      "domain-other",
+		IdempotencyKey: "idem-other",
+		JobRef:         identity.JobRefBase,
+	}
+	state.mu.Unlock()
+	job, err := store.CreateDomainWorkJobV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("CreateDomainWorkJobV0: %v", err)
+	}
+	want := identity.JobRefBase + "-collision-2"
+	if job.JobRef != want {
+		t.Fatalf("job_ref=%q want %q", job.JobRef, want)
+	}
+}
+
 func openDomainWorkSQLFakeDBV0(t testing.TB) *sql.DB {
 	t.Helper()
 	db := openDomainWorkSQLFakeDriverDBV0(t)

@@ -72,7 +72,7 @@ func TestOperationalStatusMemoryAdapterV0ValidaQueryYDiagnosticos(t *testing.T) 
 
 	t.Run("diagnostico invalido en constructor", func(t *testing.T) {
 		diagnostic := validDiagnosticoCompactoV0()
-		diagnostic.Bloqueos[0].Summary = "token operativo no permitido"
+		diagnostic.Bloqueos[0].Summary = "access_token=abc123456"
 
 		_, err := NewOperationalStatusMemoryAdapterV0([]DiagnosticoCompactoV0{diagnostic})
 		assertOperationalStatusIssueV0(t, err, ErrSecretoDetectadoV0)
@@ -127,7 +127,7 @@ func TestOperationalStatusMemoryAdapterV0CopiaDefensiva(t *testing.T) {
 		t.Fatalf("create adapter: %v", err)
 	}
 
-	diagnostic.Bloqueos[0].Summary = "token mutado fuera"
+	diagnostic.Bloqueos[0].Summary = "client_secret mutado fuera"
 	query := validOperationalStatusQueryV0()
 	query.IncludeSections = []string{
 		OperationalStatusSectionEstadoV0,
@@ -139,7 +139,7 @@ func TestOperationalStatusMemoryAdapterV0CopiaDefensiva(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query first: %v", err)
 	}
-	first.Bloqueos[0].Summary = "token mutado en respuesta"
+	first.Bloqueos[0].Summary = "client_secret mutado en respuesta"
 
 	second, err := adapter.QueryOperationalStatusV0(query)
 	if err != nil {

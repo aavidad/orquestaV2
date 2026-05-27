@@ -29,8 +29,9 @@ type CodexReceiptWorktreeBaselineResolutionV0 struct {
 }
 
 type CodexReceiptWorktreeBaselineRecorderV0 struct {
-	SnapshotStore  orquestaruntimeworktree.WorktreeSnapshotStorePortV0
-	IgnorePrefixes []string
+	SnapshotStore      orquestaruntimeworktree.WorktreeSnapshotStorePortV0
+	IgnorePrefixes     []string
+	SnapshotReadBudget orquestaruntimeworktree.WorktreeSnapshotReadBudgetV0
 }
 
 func (recorder CodexReceiptWorktreeBaselineRecorderV0) CaptureCodexReceiptWorktreeBaselineV0(
@@ -47,6 +48,9 @@ func (recorder CodexReceiptWorktreeBaselineRecorderV0) CaptureCodexReceiptWorktr
 			SnapshotRef:    codexReceiptWorktreeBaselineRefV0(request.DescriptorRef),
 			ProjectWorkDir: strings.TrimSpace(request.ProjectWorkDir),
 			IgnorePrefixes: recorder.IgnorePrefixes,
+			MaxFiles:       recorder.SnapshotReadBudget.MaxFiles,
+			MaxFileBytes:   recorder.SnapshotReadBudget.MaxFileBytes,
+			MaxTotalBytes:  recorder.SnapshotReadBudget.MaxTotalBytes,
 		},
 	)
 	if len(issues) > 0 {

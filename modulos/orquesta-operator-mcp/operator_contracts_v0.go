@@ -10,15 +10,17 @@ const (
 	OperatorMCPMaxBurstStepsLimitV0      = 20
 	OperatorMCPMaxOutboxLimitV0          = 50
 	OperatorMCPMaxQuestionRunesV0        = 1000
-	ErrOperatorMCPRequiredFieldV0        = "operator_mcp_required_field"
-	ErrOperatorMCPOpaqueRefV0            = "operator_mcp_opaque_ref_invalid"
-	ErrOperatorMCPBudgetInvalidV0        = "operator_mcp_budget_invalid"
-	ErrOperatorMCPLimitInvalidV0         = "operator_mcp_limit_invalid"
-	ErrOperatorMCPQuestionInvalidV0      = "operator_mcp_question_invalid"
-	ErrOperatorMCPSectionInvalidV0       = "operator_mcp_section_invalid"
-	ErrOperatorMCPPortUnavailableV0      = "operator_mcp_port_unavailable"
-	ErrOperatorMCPPortErrorV0            = "operator_mcp_port_error"
-	ErrOperatorMCPConnectorUnavailableV0 = "operator_mcp_connector_unavailable"
+	ErrOperatorMCPRequiredFieldV0        = i18nPublicOperatorRequiredFieldV0
+	ErrOperatorMCPOpaqueRefV0            = i18nPublicOperatorOpaqueRefV0
+	ErrOperatorMCPBudgetInvalidV0        = i18nPublicOperatorBudgetInvalidV0
+	ErrOperatorMCPLimitInvalidV0         = i18nPublicOperatorLimitInvalidV0
+	ErrOperatorMCPQuestionInvalidV0      = i18nPublicOperatorQuestionV0
+	ErrOperatorMCPSectionInvalidV0       = i18nPublicOperatorSectionV0
+	ErrOperatorMCPPortUnavailableV0      = i18nPublicOperatorPortV0
+	ErrOperatorMCPPortErrorV0            = i18nPublicOperatorPortErrorV0
+	ErrOperatorMCPConnectorUnavailableV0 = i18nPublicOperatorConnectorV0
+	ErrOperatorMCPTimeoutV0              = i18nPublicOperatorTimeoutV0
+	ErrOperatorMCPCancelledV0            = i18nPublicOperatorCancelledV0
 )
 
 type OperatorMCPIssueV0 struct {
@@ -27,11 +29,14 @@ type OperatorMCPIssueV0 struct {
 }
 
 type OperatorMCPToolDescriptorV0 struct {
-	Name         string   `json:"name"`
-	Version      string   `json:"version"`
-	ConnectorRef string   `json:"connector_ref"`
-	InputRefs    []string `json:"input_refs"`
-	OutputShape  string   `json:"output_shape"`
+	Name              string   `json:"name"`
+	Version           string   `json:"version"`
+	ConnectorRef      string   `json:"connector_ref"`
+	InputShape        string   `json:"input_shape"`
+	InputRefs         []string `json:"input_refs"`
+	RequiredInputRefs []string `json:"required_input_refs,omitempty"`
+	OutputShape       string   `json:"output_shape"`
+	PublicErrors      []string `json:"public_errors,omitempty"`
 }
 
 type OperatorMCPCapabilitiesV0 struct {

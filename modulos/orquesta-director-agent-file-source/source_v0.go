@@ -7,6 +7,7 @@ import (
 	"errors"
 	"strings"
 
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoragent "orquesta/modulos/orquesta-director-agent"
 	orquestadirectoragentworkflow "orquesta/modulos/orquesta-director-agent-workflow"
 )
@@ -55,21 +56,50 @@ func (source DirectorAgentDecisionFileSourceV0) decisionsFromDescriptorsV0(
 	runRef string,
 	descriptors []DirectorAgentDecisionFileDescriptorV0,
 ) ([]orquestadirectoragent.DirectorAgentDecisionV0, error) {
-	out := make([]orquestadirectoragent.DirectorAgentDecisionV0, 0, len(descriptors))
-	for _, descriptor := range normalizeDirectorAgentDecisionFileDescriptorsV0(descriptors) {
-		if descriptor.RunID != "" && descriptor.RunID != runRef {
-			continue
-		}
-		decisions, err := source.decisionsFromDescriptorV0(ctx, descriptor)
+	normalized := directorAgentDecisionFileDescriptorsForRunV0(runRef, descriptors)
+	stats := orquestadirectoragentworkflow.DirectorAgentDecisionBatchStatsV0{
+		Descriptors: len(normalized),
+	}
+	if err := source.validateBatchBudgetV0(stats); err != nil {
+		return nil, err
+	}
+	out := make([]orquestadirectoragent.DirectorAgentDecisionV0, 0, len(normalized))
+	for _, descriptor := range normalized {
+		decisions, bytesRead, err := source.decisionsFromDescriptorV0(ctx, descriptor)
 		if err != nil {
-			if source.IgnoreInvalidFiles && directorAgentDecisionFileSourceInvalidFileV0(err) {
+			if source.IgnoreInvalidFiles &&
+				descriptor.SidecarReceipt == nil &&
+				directorAgentDecisionFileSourceInvalidFileV0(err) {
+				stats.OmittedDescriptors++
 				continue
 			}
 			return nil, err
 		}
-		out = append(out, filterDirectorAgentDecisionFileRunV0(runRef, decisions)...)
+		decisions = filterDirectorAgentDecisionFileRunV0(runRef, decisions)
+		nextStats := directorAgentDecisionFileSourceBatchStatsV0(runRef, decisions)
+		nextStats.Bytes = bytesRead
+		stats = orquestadirectoragentworkflow.AddDirectorAgentDecisionBatchStatsV0(stats, nextStats)
+		if err := source.validateBatchBudgetV0(stats); err != nil {
+			return nil, err
+		}
+		out = append(out, decisions...)
 	}
 	return out, nil
+}
+
+func directorAgentDecisionFileDescriptorsForRunV0(
+	runRef string,
+	descriptors []DirectorAgentDecisionFileDescriptorV0,
+) []DirectorAgentDecisionFileDescriptorV0 {
+	normalized := normalizeDirectorAgentDecisionFileDescriptorsV0(descriptors)
+	out := make([]DirectorAgentDecisionFileDescriptorV0, 0, len(normalized))
+	for _, descriptor := range normalized {
+		if descriptor.RunID != "" && descriptor.RunID != runRef {
+			continue
+		}
+		out = append(out, descriptor)
+	}
+	return out
 }
 
 func directorAgentDecisionFileSourceInvalidFileV0(err error) bool {
@@ -90,9 +120,9 @@ func directorAgentDecisionFileSourceInvalidFileV0(err error) bool {
 func (source DirectorAgentDecisionFileSourceV0) decisionsFromDescriptorV0(
 	ctx context.Context,
 	descriptor DirectorAgentDecisionFileDescriptorV0,
-) ([]orquestadirectoragent.DirectorAgentDecisionV0, error) {
+) ([]orquestadirectoragent.DirectorAgentDecisionV0, int, error) {
 	if descriptor.Path == "" {
-		return nil, DirectorAgentFileSourceIssueV0{Field: "descriptor.path"}
+		return nil, 0, DirectorAgentFileSourceIssueV0{Field: "descriptor.path"}
 	}
 	data, err := source.Reader.ReadDirectorAgentDecisionFileV0(
 		ctx,
@@ -100,23 +130,23 @@ func (source DirectorAgentDecisionFileSourceV0) decisionsFromDescriptorV0(
 		source.maxBytesV0(),
 	)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if err := validateDirectorAgentDecisionSidecarReceiptV0(descriptor.SidecarReceipt, data); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	decisions, err := DecodeDirectorAgentDecisionFileV0(data)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	decisions, err = validateDirectorAgentDecisionFileDecisionsV0(decisions)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if err := source.recordDirectorAgentDecisionSidecarConsumedV0(ctx, descriptor.SidecarReceipt); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return decisions, nil
+	return decisions, len(data), nil
 }
 
 func validateDirectorAgentDecisionSidecarReceiptV0(
@@ -179,10 +209,26 @@ func filterDirectorAgentDecisionFileRunV0(
 }
 
 func (source DirectorAgentDecisionFileSourceV0) maxBytesV0() int {
-	if source.MaxBytes > 0 {
-		return source.MaxBytes
-	}
-	return DefaultDirectorAgentDecisionFileMaxBytesV0
+	return source.MaxBytes
+}
+
+func (source DirectorAgentDecisionFileSourceV0) validateBatchBudgetV0(
+	stats orquestadirectoragentworkflow.DirectorAgentDecisionBatchStatsV0,
+) error {
+	return orquestadirectoragentworkflow.ValidateDirectorAgentDecisionBatchBudgetV0(
+		source.BatchBudget,
+		stats,
+	)
+}
+
+func directorAgentDecisionFileSourceBatchStatsV0(
+	runRef string,
+	decisions []orquestadirectoragent.DirectorAgentDecisionV0,
+) orquestadirectoragentworkflow.DirectorAgentDecisionBatchStatsV0 {
+	return orquestadirectoragentworkflow.CountDirectorAgentDecisionBatchV0(
+		orquestacoreworkflow.OrchestrationRunV0{RunID: runRef},
+		decisions,
+	)
 }
 
 func compactDirectorAgentFileSourceRefsV0(values []string) []string {

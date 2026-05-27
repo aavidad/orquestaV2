@@ -13,7 +13,13 @@ Lee primero este archivo y `README.md`. Despues lee solo los docs locales necesa
 - No cruces `internal/`, tablas, structs privados ni detalles de proveedor de otro modulo.
 - Si necesitas informacion o decision de otro grupo, emite `CONSULTA AL DIRECTOR`.
 - No toques `modulos/orquesta-core/` salvo tarea explicita de extraccion registrada.
-- Antes de corregir un bug de nucleo, clasificalo segun `../../docs/reinicio_orquesta_v2/protocolo_anti_bucles.md`.
+- Antes de corregir un bug de bucles/progreso, no uses la ruta historica
+  `../../docs/reinicio_orquesta_v2/protocolo_anti_bucles.md`: no existe en la
+  foto vigente. Clasifica con `../../docs/estado_actual_2026-05-17.md`,
+  `../../docs/guia_nucleo_orquestacion_2026-05-17.md`,
+  `../../docs/autoprogramacion_orquesta_pendientes_2026-05-23.md` y
+  `../../docs/rail_errors_observados_2026-05-23.md`; si falta criterio vivo,
+  emite `CONSULTA AL DIRECTOR`.
 - No hagas parches por sintomas: registra contrato afectado, test rojo minimo e invariante.
 
 ## Alcance local

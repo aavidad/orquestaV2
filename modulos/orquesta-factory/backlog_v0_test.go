@@ -20,6 +20,18 @@ func TestGenerarBacklogInicialPropuestoV0DesdeSpecValida(t *testing.T) {
 	if backlog.SpecID != spec.SpecID {
 		t.Fatalf("spec_id=%q, want %q", backlog.SpecID, spec.SpecID)
 	}
+	if backlog.Estado != BacklogInicialEstadoPreviewNoEjecutableV0 {
+		t.Fatalf("estado=%q", backlog.Estado)
+	}
+	if backlog.Freshness.SourceRef != "app_spec:"+spec.SpecID ||
+		backlog.Freshness.GeneratedFrom != "SolicitarNuevaApp v0" {
+		t.Fatalf("freshness=%+v", backlog.Freshness)
+	}
+	if backlog.DirectorHandoff.Status != BacklogDirectorHandoffStatusPendienteV0 ||
+		backlog.DirectorHandoff.RequiredContract != BacklogDirectorHandoffContractV0 ||
+		backlog.DirectorHandoff.RequiredInputRef != "app_spec:"+spec.SpecID {
+		t.Fatalf("director_handoff=%+v", backlog.DirectorHandoff)
+	}
 	if len(backlog.Fases) != 5 {
 		t.Fatalf("fases=%+v", backlog.Fases)
 	}

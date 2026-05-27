@@ -15,7 +15,12 @@ import (
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
-const idleSelfImprovementProviderAuthBlockedReasonV0 = "provider_auth_blocked"
+const (
+	idleSelfImprovementProviderAuthBlockedReasonV0     = "provider_auth_blocked"
+	idleSelfImprovementProviderAuthRecoveredReasonV0   = "provider_auth_recovered"
+	idleSelfImprovementProviderAuthRecoveredEvidenceV0 = "evidence-ref-provider-auth-recovered"
+	idleSelfImprovementProviderAuthRecoveryActionV0    = "restore_provider_credentials_then_resume_run"
+)
 
 type idleSelfImprovementRunDocumentV0 struct {
 	RunRef string                                  `json:"run_ref"`
@@ -41,7 +46,13 @@ func (supervisor serverStackSupervisorV0) IdleSelfImprovementBlockersV0(
 			"evidence-ref-auth-config-blocker",
 			"evidence-ref-orquesta-provider-auth-blocker",
 		},
-		Message: "Autenticacion externa bloquea agentes; renovar credenciales antes de reintentar automejora.",
+		Message:        "provider_auth_blocked: restaurar proveedor y reanudar run antes de reintentar automejora.",
+		RecoveryAction: idleSelfImprovementProviderAuthRecoveryActionV0,
+		NextActions: []string{
+			"restore_provider_credentials",
+			"confirm_provider_available",
+			"resume_run_with_provider_auth_recovered_evidence",
+		},
 	}, nil
 }
 
@@ -102,20 +113,39 @@ func (supervisor serverStackSupervisorV0) idleSelfImprovementProviderBlockerSupp
 	ctx context.Context,
 	runRef string,
 ) bool {
-	return supervisor.idleSelfImprovementProviderBlockerControlSuppressedV0(ctx, runRef) ||
-		supervisor.idleSelfImprovementProviderBlockerQueueSuppressedV0(ctx, runRef)
+	if strings.TrimSpace(runRef) == "" {
+		return true
+	}
+	controlFound, controlSuppressed := supervisor.idleSelfImprovementProviderBlockerControlStateV0(ctx, runRef)
+	queueFound, queueSuppressed := supervisor.idleSelfImprovementProviderBlockerQueueStateV0(ctx, runRef)
+	if supervisor.idleSelfImprovementProviderBlockerHasLiveStoresV0() && !controlFound && !queueFound {
+		return true
+	}
+	return controlSuppressed || queueSuppressed
 }
 
-func (supervisor serverStackSupervisorV0) idleSelfImprovementProviderBlockerControlSuppressedV0(
+func (supervisor serverStackSupervisorV0) idleSelfImprovementProviderBlockerHasLiveStoresV0() bool {
+	return supervisor.stack != nil &&
+		(supervisor.stack.Stores.RunControl != nil || supervisor.stack.Stores.RunQueue != nil)
+}
+
+func (supervisor serverStackSupervisorV0) idleSelfImprovementProviderBlockerControlStateV0(
 	ctx context.Context,
 	runRef string,
-) bool {
+) (bool, bool) {
 	if supervisor.stack == nil || supervisor.stack.Stores.RunControl == nil || strings.TrimSpace(runRef) == "" {
-		return false
+		return false, false
 	}
 	state, err := supervisor.stack.Stores.RunControl.ReadRunControlStateV0(ctx, orquestaruncontrol.RunControlReadRequestV0{RunRef: runRef})
 	if err != nil {
-		return false
+		var notFound orquestaruncontrol.RunControlStateNotFoundErrorV0
+		if errors.As(err, &notFound) {
+			return false, false
+		}
+		return true, false
+	}
+	if idleSelfImprovementProviderAuthRecoveredControlV0(state) {
+		return true, true
 	}
 	switch state.Status {
 	case orquestaruncontrol.RunControlStatusPausedV0,
@@ -123,18 +153,36 @@ func (supervisor serverStackSupervisorV0) idleSelfImprovementProviderBlockerCont
 		orquestaruncontrol.RunControlStatusStoppedV0,
 		orquestaruncontrol.RunControlStatusCancelRequestedV0,
 		orquestaruncontrol.RunControlStatusCanceledV0:
-		return true
+		return true, true
 	default:
-		return false
+		return true, false
 	}
 }
 
-func (supervisor serverStackSupervisorV0) idleSelfImprovementProviderBlockerQueueSuppressedV0(
+func idleSelfImprovementProviderAuthRecoveredControlV0(
+	state orquestaruncontrol.RunControlStateV0,
+) bool {
+	if orquestaruncontrol.NormalizeRunControlStatusV0(state.Status) !=
+		orquestaruncontrol.RunControlStatusRunningV0 {
+		return false
+	}
+	if strings.TrimSpace(state.Meta.Reason) == idleSelfImprovementProviderAuthRecoveredReasonV0 {
+		return true
+	}
+	for _, ref := range compactServerStackStringsV0(state.EvidenceRefs) {
+		if ref == idleSelfImprovementProviderAuthRecoveredEvidenceV0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (supervisor serverStackSupervisorV0) idleSelfImprovementProviderBlockerQueueStateV0(
 	ctx context.Context,
 	runRef string,
-) bool {
+) (bool, bool) {
 	if supervisor.stack == nil || supervisor.stack.Stores.RunQueue == nil || strings.TrimSpace(runRef) == "" {
-		return false
+		return false, false
 	}
 	queueRef := strings.TrimSpace(supervisor.stack.RunQueue.QueueRef)
 	if queueRef == "" {
@@ -145,7 +193,7 @@ func (supervisor serverStackSupervisorV0) idleSelfImprovementProviderBlockerQueu
 		IncludeNonExecutable: true,
 	})
 	if err != nil {
-		return false
+		return true, false
 	}
 	for _, candidate := range candidates {
 		if idleSelfImprovementNormalizeQueuedRequestRefV0(candidate.RunRef) != idleSelfImprovementNormalizeQueuedRequestRefV0(runRef) {
@@ -156,12 +204,12 @@ func (supervisor serverStackSupervisorV0) idleSelfImprovementProviderBlockerQueu
 			orquestarunqueue.RunStatusStoppedV0,
 			orquestarunqueue.RunStatusCanceledV0,
 			orquestarunqueue.RunStatusClosedV0:
-			return true
+			return true, true
 		default:
-			return false
+			return true, false
 		}
 	}
-	return false
+	return false, false
 }
 
 func readIdleSelfImprovementRunDocumentV0(path string) (

@@ -98,6 +98,12 @@ solo convierte progreso en candidato si la observacion marca
 `loop_detected` o si el proceso esta `stopped`. Asi la web puede mostrar agentes
 sin avance reciente sin obligar al director a intervenir antes de tiempo.
 
+Decision 2026-05-27: T210 queda reconciliada como cerrada para progreso vivo de
+stats. `DirectorRunStatsV0` puede subir `percent_complete` con entregas,
+agentes iniciados o proceso registrado, pero `TasksClosed` sigue siendo cierre
+aceptado. La web y el servidor consumen esa proyeccion; no duplican reglas de
+cierre ni leen runtime/proveedor desde el nucleo.
+
 El contrato operativo de receipt de agente es:
 
 1. el agente externo produce un receipt compacto validado por su conector;
@@ -218,9 +224,24 @@ El contrato operativo de solicitud de autoprogramacion vive fuera del nucleo en
 candidatos y puertos genericos; no valida `write_set`, no decide tests
 obligatorios y no conoce reglas especificas de programacion.
 
+## Stats de uso
+
+`AgentUsageStatsProviderPortV0` es puerto neutral. El core solo mezcla
+observaciones ya saneadas en `DirectorAgentStatsV0.Usage` y
+`DirectorRunStatsV0.UsageSummary` cuando el caller pide
+`include_agent_usage=true`. Si no hay fuente inyectada, agrega issue publico
+`agent_usage_source_not_configured`; si una composicion aporta fuente pero no
+puede observar cuota real, debe enviar `unknown`/`unavailable` como dato ya
+saneado, nunca logs, HOME, OAuth, proveedor, modelo ni rutas.
+
 `branch_ref`, `worktree_ref` y `project_ref`, cuando aparezcan en adaptadores,
 son referencias neutrales. Este paquete no decide Git, proveedor, modelo,
 runtime, DB, HOME, credenciales ni estrategia de merge.
+
+T207 rotacion de sesiones queda acotada a una directiva experimental:
+`BuildSessionRotationDirectiveV0` puede pedir handoff completo o permitir relevo
+opt-in, pero no corta procesos vivos ni convierte la espera en todos los
+agentes del run.
 
 La capacidad real de lanzamiento por proceso queda, por diseno, fuera del
 nucleo: debe vivir en un conector de runtime configurado por el operador. Ese

@@ -20,8 +20,7 @@ func ensureRegisterPhaseArtifactCommandAllowedV0(
 		return commandErrorV0(ErrTransicionInvalidaV0, "payload.agent_ref")
 	}
 	if agentFailedAlreadyReflectedV0(current, payload.AgentRef) ||
-		agentLostAlreadyReflectedV0(current, payload.AgentRef) ||
-		agentStopAlreadyReflectedV0(current, payload.AgentRef) {
+		agentStopConfirmedAlreadyReflectedV0(current, payload.AgentRef) {
 		return commandErrorV0(ErrTransicionInvalidaV0, "payload.agent_ref")
 	}
 	return nil
@@ -45,8 +44,7 @@ func ensurePhaseArtifactRegisteredEventAllowedV0(
 		return eventErrorV0(ErrSecuenciaInvalidaV0, "payload.agent_ref")
 	}
 	if agentFailedAlreadyReflectedV0(current, payload.AgentRef) ||
-		agentLostAlreadyReflectedV0(current, payload.AgentRef) ||
-		agentStopAlreadyReflectedV0(current, payload.AgentRef) {
+		agentStopConfirmedAlreadyReflectedV0(current, payload.AgentRef) {
 		return eventErrorV0(ErrSecuenciaInvalidaV0, "payload.agent_ref")
 	}
 	return nil

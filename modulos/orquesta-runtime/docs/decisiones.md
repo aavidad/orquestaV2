@@ -404,3 +404,21 @@ Impacto:
 Contratos afectados:
 Estado:
 ```
+
+## RUNTIME-DEC-021
+
+```text
+Fecha: 2026-05-27
+Decision: T207 queda como contrato experimental `opt_in_low_priority`.
+Motivo: la rotacion puede ser util para sesiones largas, pero no debe cortar
+procesos vivos ni convertirse en rail estricto sin evidencia real de relevo.
+Alternativas:
+  - Cortar por presupuesto/contexto sin handoff: descartado; perderia contexto y podria duplicar trabajo.
+  - Meter `session_epoch` en core puro: descartado; depende de runtime/adaptador.
+Impacto:
+  - `EvaluateRuntimeSessionRotationV0` solo permite relevo si el handoff es completo y seguro.
+  - `StopCurrentAllowed` permanece `false`.
+  - HOME, secretos, rutas absolutas, proveedor, modelo, PID, prompts y transcripts se rechazan o quedan fuera.
+Contratos afectados: RuntimeSessionRotationRequestV0; RuntimeSessionRotationHandoffV0; RuntimeSessionRotationDecisionV0.
+Estado: aceptada localmente.
+```

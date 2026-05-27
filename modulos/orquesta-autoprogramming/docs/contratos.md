@@ -30,20 +30,52 @@ Limites por defecto:
 - hasta 6 subagentes por padre;
 - presupuesto recursivo por defecto 60 agentes derivados.
 
+Limites ampliados por contrato explicito:
+
+- `max_task_refs`, `max_areas` y `max_write_set_entries` pueden subir hasta 40
+  cuando la composicion/director declara el contrato en la request;
+- si no vienen declarados, siguen aplicando los limites por defecto de 10;
+- valores negativos o superiores a 40 se rechazan como contrato invalido;
+- hints en texto libre, nombres de dominio como OPES o frases de apps grandes no
+  amplian limites por si solos.
+
 Errores frecuentes:
 
 - `scopes`, `scope` u otros terminos de programacion no activan por si solos
   politica documental OPES ni `xhigh`;
 - para reducir una ola bajo 10 padres, declarar limites explicitos mas bajos en
   la request;
-- para ampliar por encima de 10 padres o 6 subagentes por padre hace falta
-  nueva decision de composicion/director, no hints en texto libre.
+- para ampliar por encima de 10 padres, 10 areas o 10 entradas de `write_set`,
+  declarar los campos `max_*` explicitos dentro del contrato; los subagentes por
+  padre siguen limitados a 6 salvo cambio de contrato propio.
 
 Invariantes:
 
 - No ejecuta agentes, tests, comandos, Git ni filesystem.
 - No elige DB, runtime, proveedor, modelo ni HOME.
 - No importa el nucleo de orquestacion.
+
+## AutoprogrammingRequestSourceV0
+
+Envoltura pura para solicitudes reales que entran por una superficie publica
+como web, CLI o MCP. El modulo no ejecuta transporte ni importa adaptadores: solo
+valida que el origen publico queda como evidencia durable y que la request
+interna sigue siendo `AutoprogrammingRequestV0`.
+
+Campos de evidencia:
+
+- `schema_version=autoprogramming_request_source.v0`, `source_ref`,
+  `source_surface`, `transport`, `request_id`, `correlation_id`,
+  `requested_by` y `priority_score`;
+- metadatos opcionales como `endpoint`, `tool_name` o `resource_uri` se
+  transportan como datos opacos, sin semantica de red dentro del modulo;
+- cada tarea debe conservar `context_refs` con `source_surface:*`,
+  `source_ref:*`, `source_transport:*`, `source_request_id:*`,
+  `source_correlation_id:*` y `source_requested_by:*`.
+
+Asi APG-003 queda cerrado por contrato verificable, no solo por fixtures:
+`ValidateAutoprogrammingRequestSourceV0` valida la envoltura y despues delega en
+`ValidateAutoprogrammingRequestV0`.
 
 ## AutoprogrammingReviewGateInputV0
 
@@ -104,6 +136,30 @@ programable compatible con el nucleo:
 - corta refs vivos imposibles y rutas inseguras en `live_works.write_set`.
 - si el core rechaza un `WorkProfileV0`/`WorkflowTaskV0`, conserva el subcampo
   causal en el issue publico para que el director pueda reparar la forma.
+
+## AutoprogrammingRequestV1
+
+Versiona la solicitud `v0` para composiciones que ya tienen perfiles de trabajo
+por tipo de app. No cambia el contrato `v0`: si no hay `work_profiles`, el
+trabajo programable conserva el perfil `implementation`.
+
+Campos nuevos:
+
+- `schema_version=autoprogramming_request.v1`;
+- `app_kind`, normalizado como ref opaca compacta;
+- `work_profiles`, con `app_kind` opcional, selector por `task_ref`, selector
+  por `area` o perfil por defecto de app, `profile_kind` del catalogo neutral
+  de `orquesta-core-workflow` y refs de contrato de funcion opcionales.
+
+Reglas:
+
+- si hay `work_profiles`, `app_kind` es obligatorio;
+- `profile_kind` debe existir en el catalogo neutral del core;
+- prioridad de seleccion: `task_ref`, despues `area`, despues perfil por
+  defecto de app, despues fallback `implementation`;
+- el resultado `BuildAutoprogrammingProgrammableWorkV1` devuelve una envoltura
+  `v1` con `base` compatible con el trabajo programable `v0` y
+  `profile_bindings` para evidencia.
 
 ## BuildAutoprogrammingSelfImprovementRequestV0
 

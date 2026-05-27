@@ -2,7 +2,6 @@ package orquestacli
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -28,7 +27,7 @@ func NewServerStatusCliClientV0(serverURL string, timeout time.Duration) (*Serve
 		BaseURL:    config.BaseURL,
 		Endpoint:   config.Endpoint,
 		Timeout:    config.Timeout,
-		HTTPClient: &http.Client{Timeout: config.Timeout},
+		HTTPClient: newCLILoopbackHTTPClientV0(config.Timeout),
 	}, nil
 }
 
@@ -55,12 +54,10 @@ func (client *ServerStatusCliClientV0) ConsultarEstadoServidor(
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, joinEndpointV0(baseURL, endpointServerStatusV0(client)), nil)
+	req, err := prepareCLIRESTGetRequestV0(ctx, baseURL, endpointServerStatusV0(client), inv.CorrelationID)
 	if err != nil {
 		return serverStatusSingleErrorEnvelopeV0(inv, CliErrErrorTransporteV0, "server_url", "request_http_invalida", 0, true, start)
 	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set(CliCorrelationHeaderV0, strings.TrimSpace(inv.CorrelationID))
 	resp, err := httpClientServerStatusV0(client, timeout).Do(req)
 	if err != nil {
 		return serverStatusTransportEnvelopeV0(inv, err, start)
@@ -71,11 +68,11 @@ func (client *ServerStatusCliClientV0) ConsultarEstadoServidor(
 
 func decodeServerStatusResponseV0(resp *http.Response, inv CliInvocationContextV0, start time.Time) CliOutputEnvelopeV0 {
 	if resp.StatusCode < http.StatusOK || resp.StatusCode > 299 {
-		return serverStatusSingleErrorEnvelopeV0(inv, CliErrErrorTransporteV0, "status_code", "status_no_2xx", resp.StatusCode, retryableStatusV0(resp.StatusCode), start)
+		return serverStatusSingleErrorEnvelopeV0(inv, CliErrErrorTransporteV0, "status_code", cliRESTNo2xxDetailForCommandV0(resp, inv.Command), resp.StatusCode, retryableStatusV0(resp.StatusCode), start)
 	}
 	var state orquestaserver.ServerPublicStatusV0
-	if err := json.NewDecoder(resp.Body).Decode(&state); err != nil {
-		return serverStatusSingleErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", "json_invalido", resp.StatusCode, false, start)
+	if detail := decodeCLIRESTJSONBodyForCommandV0(resp, inv.Command, &state); detail != "" {
+		return serverStatusSingleErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", detail, resp.StatusCode, false, start)
 	}
 	if strings.TrimSpace(state.SchemaVersion) == "" || strings.TrimSpace(state.Status) == "" {
 		return serverStatusSingleErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "data", "server_status_invalido", resp.StatusCode, false, start)

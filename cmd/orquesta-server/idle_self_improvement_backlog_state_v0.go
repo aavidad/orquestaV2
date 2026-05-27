@@ -16,9 +16,13 @@ func (planner idleSelfImprovementBacklogPlannerV0) syncBacklogSectionStateV0(
 			continue
 		}
 		state := planner.documentedBacklogSectionStateV0(sections[index])
-		if state.Completed {
+		if state.Completed && !sections[index].PendingExplicit {
 			sections[index].Completed = true
 			sections[index].NeedsDocumentReview = false
+		}
+		if state.PendingExplicit {
+			sections[index].PendingExplicit = true
+			sections[index].Completed = false
 		}
 		if state.NeedsDocumentReview {
 			sections[index].NeedsDocumentReview = true
@@ -81,6 +85,10 @@ func idleSelfImprovementLocalDocSectionStateV0(
 	}
 	state := idleSelfImprovementSectionStateV0(strings.Split(block, "\n"))
 	if state.Completed {
+		state.EvidenceRefs = append(state.EvidenceRefs, "evidence-ref-autoprogramming-backlog-local-doc-state")
+		return state
+	}
+	if state.PendingExplicit {
 		state.EvidenceRefs = append(state.EvidenceRefs, "evidence-ref-autoprogramming-backlog-local-doc-state")
 		return state
 	}
@@ -165,6 +173,61 @@ func idleSelfImprovementCompletedBacklogSectionsV0(
 		out[requestRef] = true
 	}
 	return out
+}
+
+func idleSelfImprovementMarkReconciledPendingSectionsClosedV0(
+	sections []idleSelfImprovementBacklogSectionV0,
+	completedRequestRefs map[string]bool,
+	knownAttempts map[string]int,
+) {
+	for index := range sections {
+		if !sections[index].PendingExplicit {
+			continue
+		}
+		requestRef := idleSelfImprovementNormalizeDependencyRefV0(
+			idleSelfImprovementRequestRefForBacklogSectionV0(sections[index]),
+		)
+		if !completedRequestRefs[requestRef] || knownAttempts[requestRef] < 3 {
+			continue
+		}
+		sections[index].Completed = true
+		sections[index].PendingExplicit = false
+		sections[index].NeedsDocumentReview = false
+		sections[index].StateEvidenceRefs = compactServerStackStringsV0(append(
+			sections[index].StateEvidenceRefs,
+			"evidence-ref-autoprogramming-backlog-reconciled-pending-ack",
+		))
+	}
+}
+
+func idleSelfImprovementDropExplicitPendingRuntimeCompletionsV0(
+	sections []idleSelfImprovementBacklogSectionV0,
+	completedRequestRefs map[string]bool,
+) {
+	for _, section := range sections {
+		if !section.PendingExplicit {
+			continue
+		}
+		requestRef := idleSelfImprovementNormalizeDependencyRefV0(
+			idleSelfImprovementRequestRefForBacklogSectionV0(section),
+		)
+		delete(completedRequestRefs, requestRef)
+	}
+}
+
+func idleSelfImprovementDropExplicitPendingKnownExclusionsV0(
+	sections []idleSelfImprovementBacklogSectionV0,
+	excluded map[string]bool,
+) {
+	for _, section := range sections {
+		if !section.PendingExplicit {
+			continue
+		}
+		requestRef := idleSelfImprovementNormalizeDependencyRefV0(
+			idleSelfImprovementRequestRefForBacklogSectionV0(section),
+		)
+		delete(excluded, requestRef)
+	}
 }
 
 func idleSelfImprovementBacklogDependenciesSatisfiedV0(

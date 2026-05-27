@@ -1,6 +1,7 @@
 package orquestacionnucleoapp
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -9,21 +10,61 @@ import (
 )
 
 func (executor CapacityDecisionExecutorV0) capacityDecisionCommandV0(
+	ctx context.Context,
 	intent orquestaoutboxdispatch.DispatchIntentV0,
 	request orquestacoreworkflow.CapacityDecisionRequestV0,
 ) (orquestacoreworkflow.OrchestrationCommandV0, error) {
+	decision, err := executor.capacityPolicyDecisionV0(ctx, intent, request)
+	if err != nil {
+		return orquestacoreworkflow.OrchestrationCommandV0{}, err
+	}
 	payload := orquestacoreworkflow.RegisterCapacityDecisionCommandPayloadV0{
 		CapacityRequestID: strings.TrimSpace(request.CapacityRequestID),
-		DecisionRef:       capacityDecisionRefV0(intent.MessageID),
-		Tier:              capacityDecisionTierV0(executor.Tier, request.MinimumRecommendedCapacity),
-		ReasoningEffort:   capacityDecisionTierV0(executor.ReasoningEffort, request.MinimumRecommendedCapacity),
-		Summary:           capacityDecisionSummaryV0(executor.Summary),
-		EvidenceRefs:      executor.capacityDecisionEvidenceRefsV0(intent, request),
+		DecisionRef:       decision.DecisionRef,
+		Tier:              decision.Tier,
+		ReasoningEffort:   decision.ReasoningEffort,
+		Summary:           capacityDecisionSummaryV0(decision.Summary),
+		EvidenceRefs:      executor.capacityDecisionEvidenceRefsFromPolicyV0(intent, request, decision),
 	}
 	return orquestacoreworkflow.NewRegisterCapacityDecisionCommandV0(
 		executor.capacityDecisionCommandMetaV0(intent),
 		payload,
 	)
+}
+
+func (executor CapacityDecisionExecutorV0) capacityPolicyDecisionV0(
+	ctx context.Context,
+	intent orquestaoutboxdispatch.DispatchIntentV0,
+	request orquestacoreworkflow.CapacityDecisionRequestV0,
+) (CapacityDecisionPolicyDecisionV0, error) {
+	policyRequest := CapacityDecisionPolicyRequestV0{
+		Request:                request,
+		DecisionRef:            capacityDecisionRefV0(intent.MessageID),
+		DefaultTier:            executor.Tier,
+		DefaultReasoningEffort: executor.ReasoningEffort,
+		EvidenceRefs:           executor.capacityDecisionEvidenceRefsV0(intent, request),
+	}
+	if executor.Policy == nil {
+		return executor.staticCapacityDecisionV0(policyRequest), nil
+	}
+	decision, err := executor.Policy.DecideCapacityV0(ctx, policyRequest)
+	if err != nil {
+		return CapacityDecisionPolicyDecisionV0{}, err
+	}
+	return decision.normalizeV0(policyRequest), nil
+}
+
+func (executor CapacityDecisionExecutorV0) staticCapacityDecisionV0(
+	request CapacityDecisionPolicyRequestV0,
+) CapacityDecisionPolicyDecisionV0 {
+	return CapacityDecisionPolicyDecisionV0{
+		DecisionRef:     request.DecisionRef,
+		Tier:            capacityDecisionTierV0(executor.Tier, request.Request.MinimumRecommendedCapacity),
+		ReasoningEffort: capacityDecisionTierV0(executor.ReasoningEffort, request.Request.MinimumRecommendedCapacity),
+		Summary:         capacityDecisionSummaryV0(executor.Summary),
+		EvidenceRefs:    request.EvidenceRefs,
+		Motivos:         []string{"legacy-static-capacity-decision"},
+	}.normalizeV0(request)
 }
 
 func (executor CapacityDecisionExecutorV0) capacityDecisionCommandMetaV0(
@@ -47,6 +88,30 @@ func (executor CapacityDecisionExecutorV0) capacityDecisionEvidenceRefsV0(
 	refs = append(refs, request.EvidenceRefs...)
 	refs = append(refs, "evidence-ref-"+capacityDecisionRefV0(intent.MessageID))
 	return compactStringsV0(refs)
+}
+
+func (executor CapacityDecisionExecutorV0) capacityDecisionEvidenceRefsFromPolicyV0(
+	intent orquestaoutboxdispatch.DispatchIntentV0,
+	request orquestacoreworkflow.CapacityDecisionRequestV0,
+	decision CapacityDecisionPolicyDecisionV0,
+) []string {
+	refs := executor.capacityDecisionEvidenceRefsV0(intent, request)
+	refs = append(refs, decision.EvidenceRefs...)
+	refs = appendCapacityDecisionTaggedRefV0(refs, "capacity_policy_ref", decision.PolicyRef)
+	refs = appendCapacityDecisionTaggedRefV0(refs, "capacity_pool_ref", decision.PoolRef)
+	refs = appendCapacityDecisionTaggedRefV0(refs, "capacity_model_ref", decision.ModelRef)
+	refs = appendCapacityDecisionTaggedRefV0(refs, "capacity_quota_ref", decision.QuotaRef)
+	for _, motivo := range decision.Motivos {
+		refs = appendCapacityDecisionTaggedRefV0(refs, "capacity_motivo", motivo)
+	}
+	return compactStringsV0(refs)
+}
+
+func appendCapacityDecisionTaggedRefV0(refs []string, tag string, ref string) []string {
+	if strings.TrimSpace(ref) == "" {
+		return refs
+	}
+	return append(refs, strings.TrimSpace(tag)+":"+strings.TrimSpace(ref))
 }
 
 func capacityDecisionTierV0(

@@ -4,8 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+)
+
+const (
+	fileOutboxLedgerMaxBytesV0   int64 = 16 * 1024 * 1024
+	fileOutboxLedgerMaxRecordsV0       = 10000
 )
 
 func newOutboxLedgerStateV0() outboxLedgerStateV0 {
@@ -16,12 +22,12 @@ func newOutboxLedgerStateV0() outboxLedgerStateV0 {
 }
 
 func loadOutboxLedgerStateV0(path string) (outboxLedgerStateV0, error) {
-	data, err := os.ReadFile(path)
+	data, err := readOutboxLedgerStateBytesV0(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return newOutboxLedgerStateV0(), nil
 	}
 	if err != nil {
-		return outboxLedgerStateV0{}, fmt.Errorf("file_outbox_ledger: read_failed")
+		return outboxLedgerStateV0{}, err
 	}
 	var snapshot outboxLedgerSnapshotV0
 	if err := json.Unmarshal(data, &snapshot); err != nil {
@@ -30,7 +36,36 @@ func loadOutboxLedgerStateV0(path string) (outboxLedgerStateV0, error) {
 	if snapshot.SchemaVersion != fileOutboxLedgerSchemaVersionV0 {
 		return outboxLedgerStateV0{}, fmt.Errorf("file_outbox_ledger: schema_invalid")
 	}
+	if len(snapshot.Records) > fileOutboxLedgerMaxRecordsV0 {
+		return outboxLedgerStateV0{}, fmt.Errorf("file_outbox_ledger: records_limit_exceeded")
+	}
 	return rebuildOutboxLedgerStateV0(snapshot.Records)
+}
+
+func readOutboxLedgerStateBytesV0(path string) ([]byte, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("file_outbox_ledger: read_failed")
+	}
+	if info.Size() > fileOutboxLedgerMaxBytesV0 {
+		return nil, fmt.Errorf("file_outbox_ledger: size_limit_exceeded")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("file_outbox_ledger: read_failed")
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, fileOutboxLedgerMaxBytesV0+1))
+	if err != nil {
+		return nil, fmt.Errorf("file_outbox_ledger: read_failed")
+	}
+	if int64(len(data)) > fileOutboxLedgerMaxBytesV0 {
+		return nil, fmt.Errorf("file_outbox_ledger: size_limit_exceeded")
+	}
+	return data, nil
 }
 
 func persistOutboxLedgerStateV0(path string, state outboxLedgerStateV0) error {

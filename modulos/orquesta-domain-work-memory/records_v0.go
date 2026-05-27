@@ -74,15 +74,26 @@ func domainWorkMemoryExternalRefsContainAllV0(
 func (creator *InMemoryDomainWorkJobCreatorV0) nextJobRefLockedV0(
 	key domainWorkMemoryJobKeyV0,
 ) string {
-	base := "domain-work-job-" + domainWorkMemoryHashV0(
-		key.DomainRef+"\x00"+key.IdempotencyKey,
+	identity, err := orquestadomainwork.BuildDomainWorkJobIdentityV0(
+		orquestadomainwork.DomainWorkJobRequestV0{
+			DomainRef:      key.DomainRef,
+			IdempotencyKey: key.IdempotencyKey,
+		},
 	)
+	if err != nil {
+		return ""
+	}
+	base := identity.JobRefBase
 	jobRef := base
 	for index := 2; ; index++ {
 		existing, ok := creator.jobsByRef[jobRef]
 		if !ok || existing == key {
 			return jobRef
 		}
-		jobRef = base + "-" + strconv.Itoa(index)
+		jobRef = domainWorkMemoryCollisionJobRefV0(base, index)
 	}
+}
+
+func domainWorkMemoryCollisionJobRefV0(base string, index int) string {
+	return base + "-collision-" + strconv.Itoa(index)
 }

@@ -3,6 +3,7 @@ package orquestaoperatormcpclient
 import (
 	"context"
 	"strings"
+	"time"
 
 	operator "orquesta/modulos/orquesta-operator-mcp"
 )
@@ -26,15 +27,19 @@ type OperatorMCPClientConnectorRefsV0 struct {
 }
 
 type OperatorMCPClientConfigV0 struct {
-	Client        GenericMCPClientV0
-	ToolNames     OperatorMCPClientToolNamesV0
-	ConnectorRefs OperatorMCPClientConnectorRefsV0
+	Client         GenericMCPClientV0
+	ToolNames      OperatorMCPClientToolNamesV0
+	ConnectorRefs  OperatorMCPClientConnectorRefsV0
+	Timeout        time.Duration
+	ContextFactory OperatorMCPClientContextFactoryV0
 }
 
 type OperatorMCPClientConnectorV0 struct {
-	client        GenericMCPClientV0
-	toolNames     OperatorMCPClientToolNamesV0
-	connectorRefs OperatorMCPClientConnectorRefsV0
+	client         GenericMCPClientV0
+	toolNames      OperatorMCPClientToolNamesV0
+	connectorRefs  OperatorMCPClientConnectorRefsV0
+	timeout        time.Duration
+	contextFactory OperatorMCPClientContextFactoryV0
 }
 
 type operatorMCPClientToolResultV0 struct {
@@ -52,9 +57,11 @@ func NewOperatorMCPClientConnectorV0(
 	config OperatorMCPClientConfigV0,
 ) OperatorMCPClientConnectorV0 {
 	return OperatorMCPClientConnectorV0{
-		client:        config.Client,
-		toolNames:     normalizeToolNamesV0(config.ToolNames),
-		connectorRefs: normalizeConnectorRefsV0(config.ConnectorRefs),
+		client:         config.Client,
+		toolNames:      normalizeToolNamesV0(config.ToolNames),
+		connectorRefs:  normalizeConnectorRefsV0(config.ConnectorRefs),
+		timeout:        normalizeTimeoutV0(config.Timeout),
+		contextFactory: config.ContextFactory,
 	}
 }
 
@@ -134,11 +141,10 @@ func (connector OperatorMCPClientConnectorV0) callToolV0(
 		return operatorMCPClientToolResultV0{}, publicClientErrorV0(operator.ErrOperatorMCPConnectorUnavailableV0)
 	}
 	var result operatorMCPClientToolResultV0
-	if err := connector.client.CallToolV0(context.Background(), toolName, input, &result); err != nil {
-		if code, ok := operator.PublicOperatorMCPErrorCodeV0(err); ok {
-			return operatorMCPClientToolResultV0{}, publicClientErrorV0(code)
-		}
-		return operatorMCPClientToolResultV0{}, publicClientErrorV0(operator.ErrOperatorMCPPortErrorV0)
+	ctx, cancel := connector.callContextV0()
+	defer cancel()
+	if err := connector.client.CallToolV0(ctx, toolName, input, &result); err != nil {
+		return operatorMCPClientToolResultV0{}, publicClientErrorV0(connectorErrorCodeV0(ctx, err))
 	}
 	return result, nil
 }
@@ -203,6 +209,10 @@ func normalizePublicErrorCodeV0(code string) string {
 		return operator.ErrOperatorMCPPortErrorV0
 	case operator.ErrOperatorMCPConnectorUnavailableV0:
 		return operator.ErrOperatorMCPConnectorUnavailableV0
+	case operator.ErrOperatorMCPTimeoutV0:
+		return operator.ErrOperatorMCPTimeoutV0
+	case operator.ErrOperatorMCPCancelledV0:
+		return operator.ErrOperatorMCPCancelledV0
 	default:
 		return ""
 	}

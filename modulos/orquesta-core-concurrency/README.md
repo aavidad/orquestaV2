@@ -16,6 +16,7 @@ No incluye runtime real, Git real, filesystem productivo, DB, provider, modelo, 
 
 ## Arranque
 
-```bash
-./arrancar_codex.sh "microtarea concreta"
-```
+La ruta vigente para agentes OrquestaV2 es el servidor residente y la cola
+gobernada, no el wrapper local. `./arrancar_codex.sh` queda reservado a
+compatibilidad historica o recuperacion manual con error publico cuando no haya
+contrato versionado.

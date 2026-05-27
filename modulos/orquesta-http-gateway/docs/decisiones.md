@@ -28,3 +28,12 @@ endpoint. El gateway solo decide presencia de ruta.
 Motivo: la web necesita una superficie de operador y el director/MCP necesitan
 un contrato JSON estable; mezclar ambos en la misma ruta fuerza acoplamiento y
 dificulta pruebas verticales.
+
+## D-005: manifiesto canonico de rutas
+
+Las rutas publicas y overlays conocidos se declaran en `PublicRouteManifestV0`.
+Las rutas exactas que viven bajo un prefijo registrado deben declarar el prefijo
+que sombrean para que la precedencia sea intencional y testeable.
+
+Motivo: evitar que nuevas rutas bajo `/api/v0/apps/` o overlays de composicion
+cambien el dispatch por accidente.

@@ -22,16 +22,19 @@ func (handler mcpDirectorStatsHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r 
 	if r.URL.Path != MCPDirectorStatsHTTPPathV0 {
 		writeMCPDirectorStatsHTTPV0(w, http.StatusNotFound, newMCPDirectorStatsHTTPErrorV0(
 			"path",
-			"ruta_no_soportada",
+			MCPPublicErrPathUnsupportedV0,
 			correlationFromDirectorStatsHTTPV0(r, MCPDirectorStatsToolInputV0{}),
 		))
 		return
 	}
+	if handleMCPPublicHTTPOptionsV0(w, r, http.MethodPost) {
+		return
+	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
+		setMCPPublicHTTPAllowV0(w, http.MethodPost)
 		writeMCPDirectorStatsHTTPV0(w, http.StatusMethodNotAllowed, newMCPDirectorStatsHTTPErrorV0(
 			"method",
-			"metodo_no_permitido",
+			MCPPublicErrMethodNotAllowedV0,
 			correlationFromDirectorStatsHTTPV0(r, MCPDirectorStatsToolInputV0{}),
 		))
 		return
@@ -45,10 +48,10 @@ func (handler mcpDirectorStatsHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r 
 		return
 	}
 	var input MCPDirectorStatsToolInputV0
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+	if code := decodeMCPPublicHTTPJSONV0(w, r, &input); code != "" {
 		writeMCPDirectorStatsHTTPV0(w, http.StatusBadRequest, newMCPDirectorStatsHTTPErrorV0(
 			"body",
-			"request_body_invalido",
+			code,
 			correlationFromDirectorStatsHTTPV0(r, input),
 		))
 		return

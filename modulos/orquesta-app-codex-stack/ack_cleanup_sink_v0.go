@@ -30,11 +30,12 @@ func (sink ackRuntimeCleanupEventSinkV0) AppendRunEventsV0(
 			return err
 		}
 	}
-	sink.cleanupAcceptedACKEventsV0(events)
+	sink.cleanupAcceptedACKEventsV0(ctx, events)
 	return nil
 }
 
 func (sink ackRuntimeCleanupEventSinkV0) cleanupAcceptedACKEventsV0(
+	ctx context.Context,
 	events []orquestacoreworkflow.OrchestrationEventV0,
 ) {
 	for _, event := range events {
@@ -42,18 +43,22 @@ func (sink ackRuntimeCleanupEventSinkV0) cleanupAcceptedACKEventsV0(
 		if !ok {
 			continue
 		}
-		sink.cleanupAgentRuntimeV0(event, agentRef)
+		sink.cleanupAgentRuntimeV0(ctx, event, agentRef)
 	}
 }
 
 func (sink ackRuntimeCleanupEventSinkV0) cleanupAgentRuntimeV0(
+	parent context.Context,
 	event orquestacoreworkflow.OrchestrationEventV0,
 	agentRef string,
 ) {
 	if sink.Stopper == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), sink.timeoutV0())
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, sink.timeoutV0())
 	defer cancel()
 	_, _ = sink.Stopper.StopAgentV0(ctx, ackRuntimeCleanupInboundV0(event, agentRef))
 }

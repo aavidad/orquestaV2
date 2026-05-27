@@ -48,8 +48,8 @@ func reviewReworkReplanAgentSuffixV0(
 		rework.DeliveryRef,
 		taskRef,
 	)
-	if len(digest) > 20 {
-		digest = digest[:20]
+	if len(digest) > 32 {
+		digest = digest[:32]
 	}
 	return reviewReworkReplanAgentStemV0(taskRef) + "-" + digest
 }
@@ -63,8 +63,8 @@ func reviewReworkReplanAgentStemV0(taskRef string) string {
 	if stem == "" || stem == "sin-ref" {
 		stem = "review-rework"
 	}
-	if len(stem) > 48 {
-		stem = stem[:48]
+	if len(stem) > 37 {
+		stem = stem[:37]
 	}
 	return stem
 }

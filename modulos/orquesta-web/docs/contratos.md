@@ -284,14 +284,20 @@ Campos:
 - form: `WebNuevaAppFormV0`
 - sections: indice compacto por seccion, campos requeridos, capturados y pendientes
 - field_index: mapa estable campo -> seccion
+- questions: preguntas pendientes como ids de campo y claves i18n
 - pending_questions: ids de campos criticos pendientes
 - decisions: respuestas capturadas como ids de campo y valores compactos
 - app_spec_partial: `AppSpecRequestV0` derivado del formulario parcial
+- handoff: refs opacas y contexto compacto para `orquesta.apps.arrancar_director.v0`
 Invariantes:
 - La sesion conversa y acumula decisiones; no reemplaza a `AppSpecRequestV0`.
 - La web no decide arquitectura ni aplica reglas de negocio de factory.
-- Las preguntas son ids de campo/seccion, no texto visible final; la capa UI debe localizar textos por i18n.
+- Las preguntas son ids de campo/seccion y claves i18n; la capa UI debe
+  localizar textos por catalogo.
 - La UI muestra estado e indice de secciones; no obliga a rellenar todos los campos a mano.
+- Si la sesion queda lista, el handoff entrega solo refs de sesion/request,
+  contexto compacto y la ruta preferente al Director; si el puerto falta, el
+  fallback documentado sigue siendo `SolicitarNuevaApp v0`.
 - No toca DB, runtime, filesystem ni proveedor de agente concreto.
 Errores:
 - No define errores propios en este corte; los errores publicos siguen perteneciendo al cliente/handler que consuma la sesion.
@@ -300,6 +306,7 @@ Pruebas de contrato:
 - Registrar pregunta pendiente, respuesta del usuario e indice campo/seccion.
 - Proyectar AppSpecRequestV0 parcial sin validarlo como definitivo.
 - Marcar `lista_para_solicitar` solo cuando no queden preguntas criticas.
+- Exponer handoff compacto con refs opacas y fallback declarado.
 ```
 
 ```text

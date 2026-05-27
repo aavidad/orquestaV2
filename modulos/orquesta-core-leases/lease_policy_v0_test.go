@@ -115,17 +115,27 @@ func TestAgentHeartbeatReportV0RechazaObservedAtYStatusInvalidos(t *testing.T) {
 	requireAgentLeaseIssueCodeV0(t, report.Validate(), ErrAgentHeartbeatStatusInvalidoV0)
 }
 
-func TestAgentLeaseDTOsRechazanDetallesRuntimeProveedorModeloHomeOAuthPIDDB(t *testing.T) {
+func TestAgentLeaseDTOsPermitenVocabularioOperativoOpaco(t *testing.T) {
+	policy := validAgentLeasePolicyV0()
+	policy.EvidenceRefs = []string{
+		"runtime-provider-model-db-sql-home-ref-001",
+		"progress-report-ref-runtime-provider-001",
+	}
+
+	if issues := ValidateAgentLeasePolicyV0(policy); len(issues) != 0 {
+		t.Fatalf("refs operativas opacas rechazadas: %#v", issues)
+	}
+}
+
+func TestAgentLeaseDTOsRechazanDetallesSensiblesEfectivos(t *testing.T) {
 	policy := validAgentLeasePolicyV0()
 	forbiddenRefs := []string{
-		"runtime-real-001",
-		"provider-real-001",
-		"model-real-001",
+		"api_key=valor",
+		"client_secret=valor",
 		"home-$HOME",
-		"oauth-token-001",
-		"pid-1234",
-		"process-ref-001",
-		"db-engine-001",
+		"pid=1234",
+		"prompt=raw",
+		"postgres://user:pass@host/db",
 	}
 
 	for _, ref := range forbiddenRefs {

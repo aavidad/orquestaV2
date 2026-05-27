@@ -20,12 +20,15 @@ type mcpRunControlHTTPHandlerV0 struct {
 
 func (handler mcpRunControlHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != MCPRunControlHTTPPathV0 {
-		writeMCPRunControlHTTPV0(w, http.StatusNotFound, newMCPRunControlHTTPErrorV0(r, MCPRunControlToolInputV0{}, "path", "ruta_no_soportada"))
+		writeMCPRunControlHTTPV0(w, http.StatusNotFound, newMCPRunControlHTTPErrorV0(r, MCPRunControlToolInputV0{}, "path", MCPPublicErrPathUnsupportedV0))
+		return
+	}
+	if handleMCPPublicHTTPOptionsV0(w, r, http.MethodPost) {
 		return
 	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
-		writeMCPRunControlHTTPV0(w, http.StatusMethodNotAllowed, newMCPRunControlHTTPErrorV0(r, MCPRunControlToolInputV0{}, "method", "metodo_no_permitido"))
+		setMCPPublicHTTPAllowV0(w, http.MethodPost)
+		writeMCPRunControlHTTPV0(w, http.StatusMethodNotAllowed, newMCPRunControlHTTPErrorV0(r, MCPRunControlToolInputV0{}, "method", MCPPublicErrMethodNotAllowedV0))
 		return
 	}
 	if handler.executor == nil {
@@ -33,8 +36,17 @@ func (handler mcpRunControlHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *ht
 		return
 	}
 	var input MCPRunControlToolInputV0
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeMCPRunControlHTTPV0(w, http.StatusBadRequest, newMCPRunControlHTTPErrorV0(r, input, "body", "request_body_invalido"))
+	if code := decodeMCPPublicHTTPJSONV0(w, r, &input); code != "" {
+		writeMCPRunControlHTTPV0(w, http.StatusBadRequest, newMCPRunControlHTTPErrorV0(r, input, "body", code))
+		return
+	}
+	input, issues := normalizeMCPRunControlIdentityV0(
+		input,
+		r.Header.Get(MCPPublicCorrelationHeaderV0),
+		MCPPublicMutationHeaderIdempotencyKeyV0(r.Header.Get),
+	)
+	if len(issues) > 0 {
+		writeMCPRunControlHTTPV0(w, http.StatusBadRequest, newMCPRunControlErrorV0(input, issues[0].Code, issues[0].Field))
 		return
 	}
 	result, err := handler.executor.Execute(r.Context(), input)
@@ -56,7 +68,7 @@ func newMCPRunControlHTTPErrorV0(
 	message string,
 ) MCPRunControlToolResultV0 {
 	result := newMCPRunControlErrorV0(input, "run_control_http_error", field)
-	result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), input.CorrelationID, input.RequestID)
+	result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get(MCPPublicCorrelationHeaderV0), input.CorrelationID, input.RequestID)
 	if len(result.Errores) > 0 {
 		result.Errores[0].Message = strings.TrimSpace(message)
 	}
@@ -70,7 +82,7 @@ func writeMCPRunControlHTTPV0(
 ) {
 	w.Header().Set("Content-Type", "application/json")
 	if result.CorrelationID != "" {
-		w.Header().Set("X-Correlation-ID", result.CorrelationID)
+		w.Header().Set(MCPPublicCorrelationHeaderV0, result.CorrelationID)
 	}
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(result)

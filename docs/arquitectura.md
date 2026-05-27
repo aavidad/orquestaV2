@@ -1,8 +1,16 @@
 # Arquitectura inicial: self-observability
 
-Estado: documentar_app en modo debug. Este documento no marca cierre
-productivo; fija una primera arquitectura y deja trabajo posterior para agentes
+Estado: historico/debug de una app generada. Este documento no marca cierre
+productivo ni gobierna requisitos vivos del repo Orquesta; fija una primera
+arquitectura del corte self-observability y deja trabajo posterior para agentes
 de documentacion, programacion, pruebas, seguridad y revision.
+
+Vigencia 2026-05-26: las piezas `manual_usuario`, `manual_desarrollador`,
+`manual_sistemas_deploy`, `decisiones`, `pruebas_documentales` y `pendientes`
+son tipos de artefacto esperados del proyecto objetivo. Cuando Orquesta genere
+o modifique una app, esos nombres deben viajar como refs/rutas relativas de esa
+app o como plantillas de `docs/plantillas_documentacion/`, no como documentos
+raiz obligatorios del nucleo Orquesta.
 
 ## Alcance
 
@@ -16,7 +24,7 @@ metricas exactas, pantallas, endpoints, eventos visibles, usuarios objetivo y
 criterios de cierre productivo. Hasta recibirlo, este documento solo define una
 base inicial.
 
-## Entregables Minimos
+## Entregables Minimos Historicos
 
 Este corte documental cubre como plan inicial:
 
@@ -28,7 +36,8 @@ Este corte documental cubre como plan inicial:
 - `pendientes`
 
 En modo debug no se declara cierre productivo: solo queda preparada la primera
-entrega accionable del director y el trabajo posterior para ejecucion real.
+entrega accionable del director y el trabajo posterior para ejecucion real. Los
+entregables anteriores pertenecen al proyecto generado de ese corte.
 
 ## Arquitectura
 
@@ -132,9 +141,9 @@ Pendiente para cierre productivo:
 - D-006: emitir decisiones ejecutables solo hasta programacion; revision,
   validacion final y cierre quedan bloqueados hasta tener evidencias reales.
 
-## Pruebas Documentales
+## Pruebas Documentales Historicas
 
-Pruebas esperadas para esta fase:
+Pruebas esperadas para esta fase del proyecto generado:
 
 - `test -s docs/arquitectura.md`
 - `test -s docs/plan_microtareas.md`
@@ -143,6 +152,10 @@ Pruebas esperadas para esta fase:
   pruebas_documentales y pendientes.
 - Validacion de que las decisiones ejecutables no contienen evidencia extensa ni
   referencias humanas largas.
+
+Estas pruebas no exigen crear `docs/manual_desarrollador.md`,
+`docs/manual_sistemas_deploy.md`, `docs/pruebas_documentales.md` ni
+`docs/pendientes.md` en el repo Orquesta vigente.
 
 ## Pendientes
 

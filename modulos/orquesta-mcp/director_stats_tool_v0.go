@@ -156,14 +156,10 @@ func (executor MCPDirectorStatsToolExecutorV0) Execute(
 		externalJob = &resolved
 	}
 	stats := orquestacionnucleoapp.BuildDirectorRunStatsV0(run)
-	if input.IncludeProcessRefs || input.IncludeAgentProgress || input.IncludeAgentUsage {
+	if executor.ProcessRegistry != nil || input.IncludeAgentProgress || input.IncludeAgentUsage {
 		var progressSource orquestacionnucleoapp.AgentProgressObservationProviderPortV0
 		if input.IncludeAgentProgress {
 			progressSource = executor.ProgressSource
-		}
-		var registry orquestacionnucleoapp.AgentProcessRegistryPortV0
-		if input.IncludeProcessRefs {
-			registry = executor.ProcessRegistry
 		}
 		var usageSource orquestacionnucleoapp.AgentUsageStatsProviderPortV0
 		if input.IncludeAgentUsage {
@@ -172,7 +168,7 @@ func (executor MCPDirectorStatsToolExecutorV0) Execute(
 		stats = orquestacionnucleoapp.BuildDirectorRunStatsWithTelemetryPortsV0(
 			ctx,
 			run,
-			registry,
+			executor.ProcessRegistry,
 			progressSource,
 			usageSource,
 			orquestacionnucleoapp.DirectorProgressSourceRequestV0{
@@ -181,6 +177,9 @@ func (executor MCPDirectorStatsToolExecutorV0) Execute(
 				IncludeAgentUsage: input.IncludeAgentUsage,
 			},
 		)
+	}
+	if !input.IncludeProcessRefs {
+		clearMCPDirectorStatsProcessRefsV0(&stats)
 	}
 	return MCPDirectorStatsToolResultV0{
 		Estado:          MCPDirectorStatsEstadoOKV0,
@@ -192,6 +191,15 @@ func (executor MCPDirectorStatsToolExecutorV0) Execute(
 		DecisionContext: buildMCPDirectorDecisionContextV0(run, stats, input.OccurredAt),
 		Errores:         []MCPValidationIssueV0{},
 	}, nil
+}
+
+func clearMCPDirectorStatsProcessRefsV0(stats *orquestacionnucleoapp.DirectorRunStatsV0) {
+	if stats == nil {
+		return
+	}
+	for index := range stats.Agents {
+		stats.Agents[index].Process = nil
+	}
 }
 
 func (executor MCPDirectorStatsToolExecutorV0) resolveExternalJobStatsV0(

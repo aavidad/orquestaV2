@@ -3,6 +3,7 @@ package orquestadirectorrunner
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -229,5 +230,56 @@ func TestRunDirectorCycleV0RejectsInputIncompleto(t *testing.T) {
 	var cycleErr DirectorCycleErrorV0
 	if !errors.As(err, &cycleErr) || cycleErr.Code != ErrDirectorRunnerCycleInvalidoV0 {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunDirectorCycleV0ProgrammingPermiteMuchasEvidenceRefs(t *testing.T) {
+	t.Setenv("ORQUESTA_SECURITY_MODE", "programming")
+	workflowCalls := 0
+	workflow := WorkflowCommandFuncV0(func(context.Context, orquestacoreworkflow.OrchestrationCommandV0) (orquestacoreworkflow.OrchestrationCommandResultV0, error) {
+		workflowCalls++
+		return orquestacoreworkflow.OrchestrationCommandResultV0{}, nil
+	})
+	input := runnerValidInputV0(DirectDirectorSchedulerPortV0{}, workflow)
+	for i := 0; i < maxDirectorCycleRefsV0+20; i++ {
+		input.EvidenceRefs = append(input.EvidenceRefs, fmt.Sprintf("evidence-ref-runner-programming-%03d", i))
+	}
+
+	result, err := RunDirectorCycleV0(context.Background(), input)
+	if err != nil {
+		t.Fatalf("run cycle: %v", err)
+	}
+	if result.Status != DirectorCycleStatusQuiescentV0 || workflowCalls != 0 {
+		t.Fatalf("unexpected result calls=%d result=%+v", workflowCalls, result)
+	}
+}
+
+func TestRunDirectorCycleV0ProgrammingAplicaSoloPresupuestoSiHayDemasiadosComandos(t *testing.T) {
+	t.Setenv("ORQUESTA_SECURITY_MODE", "programming")
+	commands := []orquestacoreworkflow.OrchestrationCommandV0{
+		mustRunnerStartCommandV0(t, "budget-001"),
+		mustRunnerStartCommandV0(t, "budget-002"),
+		mustRunnerStartCommandV0(t, "budget-003"),
+	}
+	scheduler := DirectorSchedulerFuncV0(func(context.Context, orquestadirectorscheduler.DirectorSchedulerTickInputV0) (orquestadirectorscheduler.DirectorSchedulerTickPlanV0, error) {
+		return runnerSchedulerPlanV0(orquestadirectorscheduler.SchedulerTickStatusCommandsReadyV0, commands), nil
+	})
+	calls := 0
+	workflow := WorkflowCommandFuncV0(func(context.Context, orquestacoreworkflow.OrchestrationCommandV0) (orquestacoreworkflow.OrchestrationCommandResultV0, error) {
+		calls++
+		return orquestacoreworkflow.OrchestrationCommandResultV0{}, nil
+	})
+	input := runnerValidInputV0(scheduler, workflow)
+	input.MaxCommands = 2
+
+	result, err := RunDirectorCycleV0(context.Background(), input)
+	if err != nil {
+		t.Fatalf("run cycle: %v", err)
+	}
+	if calls != 2 ||
+		len(result.AppliedCommands) != 2 ||
+		result.Status != DirectorCycleStatusCommandsAppliedV0 ||
+		result.StopReason != DirectorCycleStopCommandsExhaustedV0 {
+		t.Fatalf("unexpected result calls=%d result=%+v", calls, result)
 	}
 }

@@ -32,6 +32,7 @@ type WebOperationalStatusPanelV0 struct {
 	Frescura          WebOperationalStatusFreshnessV0  `json:"frescura"`
 	TieneBloqueos     bool                             `json:"tiene_bloqueos"`
 	PrivacyOK         bool                             `json:"privacy_ok"`
+	RedactionLevel    string                           `json:"redaction_level"`
 }
 
 type WebOperationalStatusProgressV0 struct {
@@ -109,5 +110,6 @@ func NewWebOperationalStatusPanelV0(locale string, diagnostic orquestaobservabil
 		Frescura:          webOperationalStatusFreshnessV0(diagnostic.Freshness),
 		TieneBloqueos:     len(diagnostic.Bloqueos) > 0,
 		PrivacyOK:         webOperationalStatusPrivacyOKV0(diagnostic.Privacy),
+		RedactionLevel:    webOperationalStatusRedactionLevelV0(diagnostic.Privacy),
 	}
 }

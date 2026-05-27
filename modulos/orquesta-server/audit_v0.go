@@ -12,6 +12,11 @@ import (
 
 const AuditSchemaVersionV0 = "orquesta_server_audit.v0"
 
+const (
+	auditPayloadSummaryMaxRefsV0  = 16
+	auditPayloadSummaryMaxBytesV0 = 8 << 10
+)
+
 type AuditEventV0 struct {
 	SchemaVersion string                 `json:"schema_version"`
 	Event         string                 `json:"event"`
@@ -61,27 +66,182 @@ func (sink *FileAuditSinkV0) AppendAuditEventV0(
 	data = append(data, '\n')
 	sink.mu.Lock()
 	defer sink.mu.Unlock()
-	file, err := os.OpenFile(sink.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		return fmt.Errorf("orquesta_server_audit: open_failed")
-	}
-	defer file.Close()
-	if _, err := file.Write(data); err != nil {
-		return fmt.Errorf("orquesta_server_audit: write_failed")
-	}
-	return nil
+	return appendServerDurableFileV0(sink.path, data, "orquesta_server_audit")
 }
 
 func normalizeAuditEventV0(event AuditEventV0) AuditEventV0 {
 	event.SchemaVersion = AuditSchemaVersionV0
-	event.Event = strings.TrimSpace(event.Event)
+	event.Event = compactAuditEventNameV0(event.Event)
 	event.OccurredAt = strings.TrimSpace(event.OccurredAt)
-	event.Status = strings.TrimSpace(event.Status)
-	event.Error = strings.TrimSpace(event.Error)
+	event.Status = compactServerOperationalTokenV0(event.Status)
+	event.Error = projectServerOperationalMessageV0("audit", event.Error)
+	event.Payload = normalizeAuditPayloadV0(event.Payload)
 	if len(event.Payload) == 0 {
 		event.Payload = nil
 	}
 	return event
+}
+
+func normalizeAuditPayloadV0(payload map[string]interface{}) map[string]interface{} {
+	if len(payload) == 0 {
+		return nil
+	}
+	out := make(map[string]interface{}, len(payload))
+	for key, value := range payload {
+		key = compactAuditPayloadKeyV0(key)
+		if key == "" {
+			continue
+		}
+		if auditPayloadNeedsSummaryV0(key) {
+			out[key+"_summary"] = auditPayloadValueSummaryV0(key, value)
+			continue
+		}
+		out[key] = normalizeAuditPayloadValueV0(key, value)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func auditPayloadNeedsSummaryV0(key string) bool {
+	switch key {
+	case "request", "requests", "base_request", "result", "plan", "selected", "command":
+		return true
+	default:
+		return false
+	}
+}
+
+func auditPayloadValueSummaryV0(key string, value interface{}) map[string]interface{} {
+	summary := map[string]interface{}{
+		"kind":     key,
+		"redacted": true,
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		summary["status"] = "summary_unavailable"
+		return summary
+	}
+	summary["json_bytes"] = len(data)
+	if len(data) > auditPayloadSummaryMaxBytesV0 {
+		summary["status"] = "payload_too_large"
+		return summary
+	}
+	var decoded interface{}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		summary["status"] = "summary_unavailable"
+		return summary
+	}
+	refs := auditPayloadCollectRefsV0(decoded, nil)
+	if len(refs) > 0 {
+		summary["refs"] = refs
+		summary["refs_count"] = len(refs)
+	}
+	if count := auditPayloadItemCountV0(decoded); count > 0 {
+		summary["items_count"] = count
+	}
+	summary["status"] = "summary_only"
+	return summary
+}
+
+func normalizeAuditPayloadValueV0(key string, value interface{}) interface{} {
+	switch typed := value.(type) {
+	case string:
+		return normalizeAuditPayloadStringV0(key, typed)
+	case []string:
+		return compactServerOperationalRefsV0(typed)
+	case map[string]interface{}:
+		return normalizeAuditPayloadV0(typed)
+	default:
+		return value
+	}
+}
+
+func normalizeAuditPayloadStringV0(key string, value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if key == "path" || key == "endpoint" {
+		return value
+	}
+	if auditPayloadKeyLooksSensitiveV0(key) {
+		return serverOperationalMessageRedactedV0
+	}
+	return projectServerOperationalMessageV0("audit", value)
+}
+
+func compactAuditPayloadKeyV0(key string) string {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return ""
+	}
+	var builder strings.Builder
+	for _, r := range key {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || r == '_' || r == '-' || r == '.' {
+			builder.WriteRune(r)
+		} else if builder.Len() > 0 {
+			break
+		}
+		if builder.Len() >= 96 {
+			break
+		}
+	}
+	return builder.String()
+}
+
+func auditPayloadKeyLooksSensitiveV0(key string) bool {
+	lower := strings.ToLower(strings.TrimSpace(key))
+	for _, fragment := range []string{"token", "secret", "password", "credential", "prompt", "transcript", "raw"} {
+		if strings.Contains(lower, fragment) {
+			return true
+		}
+	}
+	return false
+}
+
+func auditPayloadCollectRefsV0(value interface{}, refs []string) []string {
+	if len(refs) >= auditPayloadSummaryMaxRefsV0 {
+		return compactServerOperationalRefsV0(refs)
+	}
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		for key, item := range typed {
+			if strings.HasSuffix(key, "_ref") || key == "ref" {
+				if ref, ok := item.(string); ok {
+					refs = append(refs, ref)
+				}
+				continue
+			}
+			if strings.HasSuffix(key, "_refs") {
+				refs = auditPayloadCollectRefsV0(item, refs)
+				continue
+			}
+			refs = auditPayloadCollectRefsV0(item, refs)
+		}
+	case []interface{}:
+		for _, item := range typed {
+			refs = auditPayloadCollectRefsV0(item, refs)
+		}
+	case string:
+		if ref := compactServerOperationalRefV0(typed); strings.Contains(ref, "-ref-") {
+			refs = append(refs, ref)
+		}
+	}
+	return compactServerOperationalRefsV0(refs)
+}
+
+func auditPayloadItemCountV0(value interface{}) int {
+	switch typed := value.(type) {
+	case []interface{}:
+		return len(typed)
+	case map[string]interface{}:
+		return len(typed)
+	default:
+		return 0
+	}
 }
 
 func (runtime *RuntimeV0) auditEventV0(
@@ -101,10 +261,18 @@ func (runtime *RuntimeV0) auditEventV0(
 		Error:      errText,
 		Payload:    payload,
 	}); err != nil {
-		message := "audit_append_failed: " + err.Error()
 		if runtime.tracker != nil {
-			runtime.persistStateTransitionV0(context.Background(), runtime.tracker.MarkErrorV0(message, runtime.clock.Now()), "audit_error")
+			now := runtime.clock.Now()
+			severity := auditWriteFailureSeverityV0(event)
+			runtime.persistStateTransitionV0(
+				context.Background(),
+				runtime.tracker.MarkAuditWriteFailedV0(event, severity, now),
+				"audit_write_failed",
+			)
 		}
-		fmt.Fprintln(os.Stderr, message)
+		return
+	}
+	if runtime.tracker != nil {
+		runtime.tracker.MarkAuditWriteConfirmedV0(runtime.clock.Now())
 	}
 }

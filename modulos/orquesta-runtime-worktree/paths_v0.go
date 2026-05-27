@@ -1,6 +1,7 @@
 package orquestaruntimeworktree
 
 import (
+	pathpkg "path"
 	"sort"
 	"strings"
 
@@ -63,11 +64,62 @@ func worktreeDefaultControlIgnorePrefixV0(prefix string) bool {
 
 func worktreePathAllowedV0(path string, writeSet []string) bool {
 	for _, allowed := range writeSet {
-		if allowed == "." || path == allowed || strings.HasPrefix(path, allowed+"/") {
+		if worktreePathMatchesWriteSetEntryV0(path, allowed) {
 			return true
 		}
 	}
 	return false
+}
+
+func worktreePathMatchesWriteSetEntryV0(path string, entry string) bool {
+	if entry == "." || path == entry || strings.HasPrefix(path, entry+"/") {
+		return true
+	}
+	if strings.HasSuffix(entry, "/**") {
+		prefix := strings.TrimSuffix(entry, "/**")
+		return path == prefix || strings.HasPrefix(path, prefix+"/")
+	}
+	if strings.Contains(entry, "**") && worktreePathGlobstarMatchV0(entry, path) {
+		return true
+	}
+	if !strings.ContainsAny(entry, "*?[") {
+		return false
+	}
+	matched, err := pathpkg.Match(entry, path)
+	return err == nil && matched
+}
+
+func worktreePathGlobstarMatchV0(pattern string, path string) bool {
+	patternParts := strings.Split(pattern, "/")
+	pathParts := strings.Split(path, "/")
+	memo := map[[2]int]bool{}
+	var match func(int, int) bool
+	match = func(patternIndex int, pathIndex int) bool {
+		key := [2]int{patternIndex, pathIndex}
+		if value, ok := memo[key]; ok {
+			return value
+		}
+		ok := false
+		defer func() { memo[key] = ok }()
+		if patternIndex == len(patternParts) {
+			ok = pathIndex == len(pathParts)
+			return ok
+		}
+		if patternParts[patternIndex] == "**" {
+			ok = match(patternIndex+1, pathIndex)
+			for next := pathIndex; !ok && next < len(pathParts); next++ {
+				ok = match(patternIndex+1, next+1)
+			}
+			return ok
+		}
+		if pathIndex >= len(pathParts) {
+			return false
+		}
+		matched, err := pathpkg.Match(patternParts[patternIndex], pathParts[pathIndex])
+		ok = err == nil && matched && match(patternIndex+1, pathIndex+1)
+		return ok
+	}
+	return match(0, 0)
 }
 
 func compactWorktreeStringsV0(values []string) []string {

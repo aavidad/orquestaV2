@@ -26,6 +26,13 @@ func TestHandlerV0ExponeHealthStatusYDelegaV0(t *testing.T) {
 		Ready:        true,
 		Message:      "startup_ready_public",
 		EvidenceRefs: []string{"evidence-ref-startup-ready"},
+		StartupRevision: StartupRevisionSummaryV0{
+			RevisionRef:     "revision-ref-orquesta-startup-20260526t120000z",
+			QueueRemoved:    2,
+			ControlRemoved:  1,
+			RuntimeArchived: 1,
+			RetentionDays:   14,
+		},
 	}, time.Now().UTC())
 	handler := NewHandlerV0(HandlerConfigV0{
 		Tracker: tracker,
@@ -36,8 +43,12 @@ func TestHandlerV0ExponeHealthStatusYDelegaV0(t *testing.T) {
 
 	assertServerPathV0(t, handler, "/healthz", `"ok"`)
 	assertServerPathV0(t, handler, ServerReadinessEndpointV0, `"ready":true`)
-	assertServerPathV0(t, handler, "/api/status", `"running"`)
-	assertServerPathV0(t, handler, "/api/v0/server/status", `"effective_config"`)
+	assertServerPathV0(t, handler, ServerReadinessEndpointV0, `"revision_ref":"revision-ref-orquesta-startup-20260526t120000z"`)
+	assertServerPathV0(t, handler, ServerStatusEndpointV0, `"running"`)
+	assertServerPathV0(t, handler, ServerStatusEndpointV0, `"startup_revision"`)
+	assertServerPathV0(t, handler, ServerStatusEndpointV0, `"daemon_epoch_ref"`)
+	assertServerPathV0(t, handler, ServerStatusEndpointV0, `"effective_config"`)
+	assertLegacyServerStatusAliasV0(t, handler)
 	assertServerPathV0(t, handler, ServerResourcesEndpointV0, ServerResourcesSchemaVersionV0)
 	assertServerPathV0(t, handler, "/nueva-app", "app")
 }
@@ -89,5 +100,38 @@ func assertServerPathV0(t *testing.T, handler http.Handler, path string, want st
 	}
 	if !strings.Contains(rec.Body.String(), want) {
 		t.Fatalf("%s body=%s want contiene %s", path, rec.Body.String(), want)
+	}
+}
+
+func assertLegacyServerStatusAliasV0(t *testing.T, handler http.Handler) {
+	t.Helper()
+	versioned := httptest.NewRecorder()
+	handler.ServeHTTP(versioned, httptest.NewRequest(http.MethodGet, ServerStatusEndpointV0, nil))
+	legacy := httptest.NewRecorder()
+	handler.ServeHTTP(legacy, httptest.NewRequest(http.MethodGet, ServerStatusLegacyEndpointV0, nil))
+	if legacy.Code != http.StatusOK {
+		t.Fatalf("legacy status=%d body=%s", legacy.Code, legacy.Body.String())
+	}
+	if strings.TrimSpace(legacy.Body.String()) != strings.TrimSpace(versioned.Body.String()) {
+		t.Fatalf("legacy body difiere de versionada\nlegacy=%s\nversioned=%s", legacy.Body.String(), versioned.Body.String())
+	}
+	if got := legacy.Header().Get(ServerStatusCanonicalHeaderV0); got != ServerStatusEndpointV0 {
+		t.Fatalf("canonical header=%q", got)
+	}
+	if got := legacy.Header().Get(ServerStatusCompatibilityHeaderV0); got != ServerStatusCompatibilityLegacyV0 {
+		t.Fatalf("compat header=%q", got)
+	}
+	if got := legacy.Header().Get(ServerStatusOwnerHeaderV0); got != ServerStatusOwnerServerV0 {
+		t.Fatalf("owner header=%q", got)
+	}
+	if got := legacy.Header().Get(ServerStatusSunsetHeaderV0); got != ServerStatusSunsetNoNewUseV0 {
+		t.Fatalf("sunset header=%q", got)
+	}
+	if got := legacy.Header().Get("Deprecation"); got != "true" {
+		t.Fatalf("deprecation=%q", got)
+	}
+	if !strings.Contains(legacy.Header().Get("Link"), ServerStatusEndpointV0) ||
+		!strings.Contains(legacy.Header().Get("Warning"), ServerStatusEndpointV0) {
+		t.Fatalf("headers legacy insuficientes: link=%q warning=%q", legacy.Header().Get("Link"), legacy.Header().Get("Warning"))
 	}
 }

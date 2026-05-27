@@ -63,7 +63,7 @@ func codexStackRealShutdownAppendAgentInstructionsV0(
 		"",
 		"## Smoke shutdown cooperativo",
 		"- Antes de escribir agent_ack.json espera hasta 90 segundos comprobando cada 2 segundos si aparece orquesta_shutdown_request.json.",
-		"- Si aparece, lee la request y escribe agent_shutdown_checkpoint_ack.json correlado con checkpoint_ready; despues termina sin ampliar alcance.",
+		"- Si aparece, lee la request y escribe agent_shutdown_checkpoint_ack.json correlado con run_ref, agent_ref, checkpoint_ref y shutdown_attempt_ref, status checkpoint_ready; despues termina sin ampliar alcance.",
 		"",
 	}, "\n"))
 	if err != nil {
@@ -270,7 +270,7 @@ func codexStackRealShutdownDiagnosticsV0(runtimeDir string) string {
 			orquestaruntimecodex.CodexShutdownCheckpointAckFileNameV0:
 			data, readErr := os.ReadFile(path)
 			if readErr == nil {
-				parts = append(parts, path+": "+codexStackRealSmokeTruncateV0(string(data)))
+				parts = append(parts, entry.Name()+": "+codexStackRealSmokeTruncateV0(string(data)))
 			}
 		}
 		return nil

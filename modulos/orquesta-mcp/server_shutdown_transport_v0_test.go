@@ -91,7 +91,7 @@ func TestMCPTransportV0ServerShutdownDevuelvePayloadPublicoSiExecutorFalla(t *te
 	if result.Estado != MCPServerShutdownEstadoErrorV0 ||
 		len(result.Errores) != 1 ||
 		result.Errores[0].Code != "server_shutdown_executor_error" ||
-		!strings.Contains(result.Errores[0].Message, "payload_invalido: payload") ||
+		result.Errores[0].Message != "server_shutdown_executor_error" ||
 		strings.Contains(result.Errores[0].Message, "/root/") ||
 		strings.Contains(result.Errores[0].Message, "sk-123456789") {
 		t.Fatalf("result=%+v", result)

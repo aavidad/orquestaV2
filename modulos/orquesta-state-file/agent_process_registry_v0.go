@@ -23,6 +23,7 @@ type agentProcessRecordJSONV0 struct {
 	ProcessRef     string   `json:"process_ref"`
 	SessionRef     string   `json:"session_ref"`
 	LaunchRef      string   `json:"launch_ref"`
+	PID            int      `json:"pid,omitempty"`
 	ReadinessRef   string   `json:"readiness_ref"`
 	EvidenceRefs   []string `json:"evidence_refs,omitempty"`
 }
@@ -203,6 +204,7 @@ func agentProcessRecordToJSONV0(
 		ProcessRef:     record.ProcessRef,
 		SessionRef:     record.SessionRef,
 		LaunchRef:      record.LaunchRef,
+		PID:            record.PID,
 		ReadinessRef:   record.ReadinessRef,
 		EvidenceRefs:   append(record.EvidenceRefs[:0:0], record.EvidenceRefs...),
 	}
@@ -217,6 +219,7 @@ func agentProcessRecordFromJSONV0(
 		ProcessRef:     record.ProcessRef,
 		SessionRef:     record.SessionRef,
 		LaunchRef:      record.LaunchRef,
+		PID:            record.PID,
 		ReadinessRef:   record.ReadinessRef,
 		EvidenceRefs:   append(record.EvidenceRefs[:0:0], record.EvidenceRefs...),
 	}

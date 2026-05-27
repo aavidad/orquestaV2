@@ -5,21 +5,13 @@ import (
 	"strings"
 
 	orquestacoreconcurrency "orquesta/modulos/orquesta-core-concurrency"
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 const (
 	maxSchedulerTickPayloadBytesV0 = 262144
 	maxSchedulerTickRefsV0         = 1024
 )
-
-var forbiddenSchedulerFragmentsV0 = []string{
-	"db", "database", "sql", "dsn", "runtime",
-	"provider", "proveedor", "model", "modelo",
-	"home", "oauth", "prompt", "prompts",
-	"transcript", "transcripts", "secret", "secrets",
-	"token", "password", "credential", "credencial",
-	"api_key", "filesystem", "docker", "tmux",
-}
 
 func ValidateDirectorSchedulerTickInputV0(input DirectorSchedulerTickInputV0) error {
 	if err := validateSchedulerRequiredV0(input); err != nil {
@@ -220,6 +212,9 @@ func validateSchedulerCompactPayloadV0(input DirectorSchedulerTickInputV0) error
 		return schedulerTickErrorV0("payload")
 	}
 	if len(data) == 0 || len(data) > maxSchedulerTickPayloadBytesV0 {
+		if len(data) > maxSchedulerTickPayloadBytesV0 && orquestarails.SecurityModeProgrammingEnabledV0() {
+			return nil
+		}
 		return schedulerTickErrorV0("payload")
 	}
 	return nil

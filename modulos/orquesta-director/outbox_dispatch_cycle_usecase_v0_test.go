@@ -189,6 +189,7 @@ func TestRunOutboxDispatchCycleV0JSONNoExponeDetallesProhibidos(t *testing.T) {
 
 type cycleFakeOutboxDispatcherV0 struct {
 	failMessageID string
+	errorCode     string
 	calls         []string
 }
 
@@ -205,17 +206,22 @@ func (d *cycleFakeOutboxDispatcherV0) DispatchOutboxMessageV0(
 		return receipt, err
 	}
 	if message.MessageID == d.failMessageID {
-		return receipt, cycleFakeDispatchErrorV0{}
+		return receipt, cycleFakeDispatchErrorV0{code: d.errorCode}
 	}
 	return receipt, nil
 }
 
-type cycleFakeDispatchErrorV0 struct{}
+type cycleFakeDispatchErrorV0 struct {
+	code string
+}
 
 func (cycleFakeDispatchErrorV0) Error() string {
 	return "provider oauth home details must not leak"
 }
 
-func (cycleFakeDispatchErrorV0) OutboxDispatchErrorCodeV0() string {
+func (err cycleFakeDispatchErrorV0) OutboxDispatchErrorCodeV0() string {
+	if err.code != "" {
+		return err.code
+	}
 	return "fake_dispatch_failed"
 }

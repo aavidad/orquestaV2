@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func TestAppDirectorServiceArchitectureV0NoImportaLegacyNiDBHardcodeada(t *testing.T) {
@@ -109,100 +111,44 @@ func serviceSourceStringLiteralsV0(file *ast.File) []string {
 }
 
 func serviceSourceStringLiteralForbiddenV0(value string) bool {
-	lower := strings.ToLower(strings.ReplaceAll(value, `\/`, "/"))
-	for _, forbidden := range forbiddenServiceStringLiteralFragmentsV0() {
-		if strings.Contains(lower, forbidden) {
-			return true
-		}
-	}
-	return false
-}
-
-func forbiddenServiceStringLiteralFragmentsV0() []string {
-	return []string{
-		"postgres://",
-		"mysql://",
-		"sqlite://",
-		"mongodb://",
-		"dsn=",
-		"database_url=",
-		"authorization:",
-		"bearer ",
-		"api_key=",
-		"api-key=",
-		"access_token=",
-		"access-token=",
-		"refresh_token=",
-		"refresh-token=",
-		"client_secret=",
-		"client-secret=",
-		"password=",
-		"passwd=",
-		"pwd=",
-		"secret=",
-		"credential=",
-		"-----begin ",
-		"/home/",
-		"/users/",
-		`c:\users\`,
-		"~/",
-	}
+	return orquestarails.ArchitectureSourceLiteralForbiddenV0("orquesta-app-director-service", value)
 }
 
 func serviceImportForbiddenV0(path string) bool {
-	for _, forbidden := range forbiddenServiceExactImportsV0() {
-		if path == forbidden {
-			return true
-		}
-	}
-	for _, prefix := range forbiddenServiceImportPrefixesV0() {
-		if strings.HasPrefix(path, prefix) {
-			return true
-		}
-	}
-	for _, fragment := range forbiddenServiceImportFragmentsV0() {
-		if strings.Contains(path, fragment) {
-			return true
-		}
-	}
-	return false
+	return orquestarails.ArchitectureImportForbiddenV0(path, serviceImportPolicyV0())
 }
 
-func forbiddenServiceExactImportsV0() []string {
-	return []string{
-		"database/sql",
-		"net",
-		"net/http",
-		"os",
-		"os/exec",
-	}
-}
-
-func forbiddenServiceImportPrefixesV0() []string {
-	return []string{
-		"net/",
-		"orquesta/cmd",
-		"orquesta/db",
-		"orquesta/modulos/orquesta-app-codex-stack",
-		"orquesta/modulos/orquesta-domain-work-sql",
-		"orquesta/modulos/orquesta-http-gateway",
-		"orquesta/modulos/orquesta-mcp",
-		"orquesta/modulos/orquesta-operator-mcp",
-		"orquesta/modulos/orquesta-opes-",
-		"orquesta/modulos/orquesta-run-file",
-		"orquesta/modulos/orquesta-runtime-",
-		"orquesta/modulos/orquesta-state-file",
-		"orquesta/modulos/orquesta-web",
-	}
-}
-
-func forbiddenServiceImportFragmentsV0() []string {
-	return []string{
-		"codex",
-		"modernc.org/sqlite",
-		"github.com/mattn/go-sqlite3",
-		"github.com/jackc/pgx",
-		"github.com/lib/pq",
-		"github.com/go-sql-driver/mysql",
+func serviceImportPolicyV0() orquestarails.ArchitectureImportPolicyV0 {
+	return orquestarails.ArchitectureImportPolicyV0{
+		ExactImports: []string{
+			"database/sql",
+			"net",
+			"net/http",
+			"os",
+			"os/exec",
+		},
+		ImportPrefixes: []string{
+			"net/",
+			"orquesta/cmd",
+			"orquesta/db",
+			"orquesta/modulos/orquesta-app-codex-stack",
+			"orquesta/modulos/orquesta-domain-work-sql",
+			"orquesta/modulos/orquesta-http-gateway",
+			"orquesta/modulos/orquesta-mcp",
+			"orquesta/modulos/orquesta-operator-mcp",
+			"orquesta/modulos/orquesta-opes-",
+			"orquesta/modulos/orquesta-run-file",
+			"orquesta/modulos/orquesta-runtime-",
+			"orquesta/modulos/orquesta-state-file",
+			"orquesta/modulos/orquesta-web",
+		},
+		ImportFragments: []string{
+			"codex",
+			"modernc.org/sqlite",
+			"github.com/mattn/go-sqlite3",
+			"github.com/jackc/pgx",
+			"github.com/lib/pq",
+			"github.com/go-sql-driver/mysql",
+		},
 	}
 }

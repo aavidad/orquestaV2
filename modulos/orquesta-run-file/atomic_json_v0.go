@@ -4,22 +4,54 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
 
+const (
+	runFileSnapshotMaxBytesV0   int64 = 16 * 1024 * 1024
+	runFileSnapshotMaxRecordsV0       = 10000
+)
+
 func readJSONSnapshotV0(path string, target any) (bool, error) {
-	data, err := os.ReadFile(path)
+	data, err := readJSONSnapshotBytesV0(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("orquesta_run_file: read_failed")
+		return false, err
 	}
 	if err := json.Unmarshal(data, target); err != nil {
 		return true, fmt.Errorf("orquesta_run_file: json_invalid")
 	}
 	return true, nil
+}
+
+func readJSONSnapshotBytesV0(path string) ([]byte, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("orquesta_run_file: read_failed")
+	}
+	if info.Size() > runFileSnapshotMaxBytesV0 {
+		return nil, fmt.Errorf("orquesta_run_file: size_limit_exceeded")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("orquesta_run_file: read_failed")
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, runFileSnapshotMaxBytesV0+1))
+	if err != nil {
+		return nil, fmt.Errorf("orquesta_run_file: read_failed")
+	}
+	if int64(len(data)) > runFileSnapshotMaxBytesV0 {
+		return nil, fmt.Errorf("orquesta_run_file: size_limit_exceeded")
+	}
+	return data, nil
 }
 
 func writeAtomicJSONSnapshotV0(path string, snapshot any) error {

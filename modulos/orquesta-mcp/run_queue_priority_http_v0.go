@@ -20,12 +20,15 @@ type mcpRunQueuePriorityHTTPHandlerV0 struct {
 
 func (handler mcpRunQueuePriorityHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != MCPRunQueuePriorityHTTPPathV0 {
-		writeMCPRunQueuePriorityHTTPV0(w, http.StatusNotFound, newMCPRunQueuePriorityHTTPErrorV0(r, MCPRunQueuePriorityToolInputV0{}, "path", "ruta_no_soportada"))
+		writeMCPRunQueuePriorityHTTPV0(w, http.StatusNotFound, newMCPRunQueuePriorityHTTPErrorV0(r, MCPRunQueuePriorityToolInputV0{}, "path", MCPPublicErrPathUnsupportedV0))
+		return
+	}
+	if handleMCPPublicHTTPOptionsV0(w, r, http.MethodPost) {
 		return
 	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
-		writeMCPRunQueuePriorityHTTPV0(w, http.StatusMethodNotAllowed, newMCPRunQueuePriorityHTTPErrorV0(r, MCPRunQueuePriorityToolInputV0{}, "method", "metodo_no_permitido"))
+		setMCPPublicHTTPAllowV0(w, http.MethodPost)
+		writeMCPRunQueuePriorityHTTPV0(w, http.StatusMethodNotAllowed, newMCPRunQueuePriorityHTTPErrorV0(r, MCPRunQueuePriorityToolInputV0{}, "method", MCPPublicErrMethodNotAllowedV0))
 		return
 	}
 	if handler.executor == nil {
@@ -33,8 +36,22 @@ func (handler mcpRunQueuePriorityHTTPHandlerV0) ServeHTTP(w http.ResponseWriter,
 		return
 	}
 	var input MCPRunQueuePriorityToolInputV0
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeMCPRunQueuePriorityHTTPV0(w, http.StatusBadRequest, newMCPRunQueuePriorityHTTPErrorV0(r, input, "body", "request_body_invalido"))
+	if code := decodeMCPPublicHTTPJSONV0(w, r, &input); code != "" {
+		writeMCPRunQueuePriorityHTTPV0(w, http.StatusBadRequest, newMCPRunQueuePriorityHTTPErrorV0(r, input, "body", code))
+		return
+	}
+	action := strings.ToLower(strings.TrimSpace(input.Action))
+	if action == "" {
+		action = MCPRunQueuePriorityActionRankV0
+	}
+	input, issues := normalizeMCPRunQueuePriorityIdentityV0(
+		input,
+		r.Header.Get(MCPPublicCorrelationHeaderV0),
+		MCPPublicMutationHeaderIdempotencyKeyV0(r.Header.Get),
+		action == MCPRunQueuePriorityActionSetV0,
+	)
+	if len(issues) > 0 {
+		writeMCPRunQueuePriorityHTTPV0(w, http.StatusBadRequest, newMCPRunQueuePriorityErrorV0(input, issues[0].Code, issues[0].Field, issues[0].Code))
 		return
 	}
 	result, err := handler.executor.Execute(r.Context(), input)
@@ -56,7 +73,7 @@ func newMCPRunQueuePriorityHTTPErrorV0(
 	message string,
 ) MCPRunQueuePriorityToolResultV0 {
 	result := newMCPRunQueuePriorityErrorV0(input, "run_queue_http_error", field, message)
-	result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), input.CorrelationID, input.RequestID)
+	result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get(MCPPublicCorrelationHeaderV0), input.CorrelationID, input.RequestID)
 	if len(result.Errores) > 0 {
 		result.Errores[0].Message = strings.TrimSpace(message)
 	}
@@ -70,7 +87,7 @@ func writeMCPRunQueuePriorityHTTPV0(
 ) {
 	w.Header().Set("Content-Type", "application/json")
 	if result.CorrelationID != "" {
-		w.Header().Set("X-Correlation-ID", result.CorrelationID)
+		w.Header().Set(MCPPublicCorrelationHeaderV0, result.CorrelationID)
 	}
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(result)

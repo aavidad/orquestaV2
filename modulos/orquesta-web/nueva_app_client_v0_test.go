@@ -5,11 +5,19 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
 	orquestafactory "orquesta/modulos/orquesta-factory"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
+
+type failingWebEntropyV0 struct{}
+
+func (failingWebEntropyV0) Read([]byte) (int, error) {
+	return 0, errors.New("entropy unavailable")
+}
 
 func TestRESTSolicitarNuevaAppClientV0EnviaPOSTJSONCorrelacionYTimeout(t *testing.T) {
 	var received orquestafactory.AppSpecRequestV0
@@ -77,6 +85,22 @@ func TestRESTSolicitarNuevaAppClientV0CreaRequestIDSiFalta(t *testing.T) {
 	}
 	if received.RequestID == "" || correlation == "" || correlation != received.RequestID {
 		t.Fatalf("request_id/correlation no propagados: request_id=%q correlation=%q", received.RequestID, correlation)
+	}
+}
+
+func TestNewWebRequestIDV0FallbackDegradadoObservableV0(t *testing.T) {
+	previous := webRequestIDGeneratorV0
+	webRequestIDGeneratorV0 = orquestaruntime.NewRefGeneratorV0(
+		orquestaruntime.ClockFuncV0(func() time.Time {
+			return time.Date(2026, 5, 24, 10, 0, 0, 0, time.UTC)
+		}),
+		failingWebEntropyV0{},
+	)
+	defer func() { webRequestIDGeneratorV0 = previous }()
+
+	ref := newWebRequestIDV0()
+	if !strings.HasPrefix(ref, "req-web-client-mutation-degraded-") {
+		t.Fatalf("request_id fallback no observable: %q", ref)
 	}
 }
 

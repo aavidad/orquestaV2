@@ -19,6 +19,10 @@ func TestCodexUsageMetricsFromEnvV0OptIn(t *testing.T) {
 	if got := codexUsageMetricsFromEnvV0(nil); got == nil {
 		t.Fatalf("usage metrics no habilitado con opt-in")
 	}
+	t.Setenv("ORQUESTA_CODEX_USAGE_ACCOUNTING", "runtime_usage_report")
+	if got := codexUsageMetricsFromEnvV0(nil); got == nil {
+		t.Fatalf("usage metrics no habilitado con runtime_usage_report")
+	}
 }
 
 func TestInt64EnvOrDefaultV0(t *testing.T) {

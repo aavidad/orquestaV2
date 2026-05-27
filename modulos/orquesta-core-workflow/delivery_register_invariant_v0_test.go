@@ -159,6 +159,29 @@ func TestRegisterDeliveryCommandV0AcceptsStoppedAgentWithLateAck(t *testing.T) {
 	assertSingleEventTypeV0(t, result, OrchestrationEventDeliveryRegisteredV0)
 }
 
+func TestRegisterDeliveryCommandV0AcceptsLostAgentWithLateAckAndClearsLost(t *testing.T) {
+	run := mustDeliveryReadyRunV0(t)
+	lost := mustRegisterAgentLostCommandV0(t, "cmd-agent-lost-before-delivery", "idem-agent-lost-before-delivery", "agent-request-001")
+	run = mustApplySingleCommandEventV0(t, run, lost)
+	command := mustRegisterDeliveryCommandV0(t, "cmd-delivery-lost-agent", "idem-delivery-lost-agent", "delivery-lost-agent")
+
+	result, err := HandleCommandV0(run, command)
+	if err != nil {
+		t.Fatalf("late lost delivery rejected: %v", err)
+	}
+	assertSingleEventTypeV0(t, result, OrchestrationEventDeliveryRegisteredV0)
+	got, err := ApplyEventV0(run, result.Events[0])
+	if err != nil {
+		t.Fatalf("ApplyEventV0: %v", err)
+	}
+	if compactRefInListV0(got.LostAgents, "agent-request-001") {
+		t.Fatalf("late ACK debe retirar lost_agents: %+v", got.LostAgents)
+	}
+	if !compactRefInListV0(got.DeliveredAgents, "agent-request-001") {
+		t.Fatalf("late ACK no marco delivered_agents: %+v", got.DeliveredAgents)
+	}
+}
+
 func TestDeliveryRegisteredEventV0RejectsMissingTask(t *testing.T) {
 	run := mustProgrammingActiveRunWithoutTaskOrAgentV0(t)
 	run = mustApplyCapacityDecisionToRunV0(t, run, defaultAgentCapacityRequestIDV0)

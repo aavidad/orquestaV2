@@ -70,7 +70,7 @@ func (resolver ExternalAgentLaunchSpecResolverV0) ResolveExternalAgentLaunchSpec
 	}
 	return ExternalAgentLaunchSpecResolutionV0{
 		Spec:            spec,
-		CommandResolver: connector.CommandResolver,
+		CommandResolver: orquestaruntime.NewExternalAgentProcessCommandResolverWithReceiptV0(connector.CommandResolver),
 	}, nil
 }
 

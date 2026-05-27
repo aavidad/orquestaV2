@@ -38,6 +38,10 @@ func (runtime *RuntimeV0) shutdownFreezeHTTPHandlerV0(next http.Handler) http.Ha
 	})
 }
 
+func (runtime *RuntimeV0) serverLifecycleHTTPHandlerV0(next http.Handler) http.Handler {
+	return runtime.handoffHTTPHandlerV0(runtime.shutdownFreezeHTTPHandlerV0(next))
+}
+
 func (runtime *RuntimeV0) freezeSupervisorForShutdownV0(ctx context.Context, reason string) {
 	if runtime == nil {
 		return
@@ -93,6 +97,9 @@ func shutdownProjectionFromHTTPV0(statusCode int, body []byte) (ShutdownProjecti
 		CheckpointsPending: payload.CheckpointsPending,
 	}
 	if statusCode >= http.StatusBadRequest || shutdownFreezeResultIsRejectedV0(payload) {
+		return projection, false
+	}
+	if payload.ShutdownReady {
 		return projection, false
 	}
 	return projection, true

@@ -1,0 +1,23 @@
+# Decisiones
+
+## T12: bloqueo real por entorno, no por contrato
+
+Fecha: 2026-05-27.
+
+Los intentos cerrados de T12 validan el contrato local del bridge y el wrapper
+fake hasta `assemble_topic -> assembled_topic`. Eso no cierra el smoke real:
+solo una instancia OPES temporal con confirmacion de efectos, servidor Orquesta
+temporal y cuota/modelo confirmados puede producir la evidencia faltante.
+
+Decision operativa: dejar T12 como `bloqueado verificable` y no como
+`pendiente` generico. El backlog no debe volver a crear una implementacion
+padre para repetir pruebas fake; debe esperar el entorno opt-in o una tarea
+nueva con refs de ejecucion reales.
+
+Fronteras conservadas:
+
+- OPES sigue siendo consumidor por API publica;
+- bridge y conector no leen DB, filesystem ni colas productivas;
+- `worktree_ref` y `branch_ref` se conservan como refs opacas, no como rutas ni
+  nombres Git;
+- el nucleo no recibe reglas OPES ni transporte REST concreto.

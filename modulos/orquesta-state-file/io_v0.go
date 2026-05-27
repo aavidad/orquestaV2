@@ -3,13 +3,17 @@ package orquestastatefile
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
 
+const stateFileJSONMaxBytesV0 int64 = 16 * 1024 * 1024
+
 func readJSONFileV0[T any](path string) (T, bool, error) {
 	var out T
-	data, err := os.ReadFile(path)
+	data, err := readJSONFileBytesV0(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return out, false, nil
 	}
@@ -20,6 +24,32 @@ func readJSONFileV0[T any](path string) (T, bool, error) {
 		return out, true, err
 	}
 	return out, true, nil
+}
+
+func readJSONFileBytesV0(path string) ([]byte, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("orquesta_state_file: read_failed")
+	}
+	if info.Size() > stateFileJSONMaxBytesV0 {
+		return nil, fmt.Errorf("orquesta_state_file: size_limit_exceeded")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, stateFileJSONMaxBytesV0+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > stateFileJSONMaxBytesV0 {
+		return nil, fmt.Errorf("orquesta_state_file: size_limit_exceeded")
+	}
+	return data, nil
 }
 
 func writeJSONAtomicV0(path string, value any) error {

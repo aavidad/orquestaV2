@@ -11,13 +11,21 @@ const opsDashboardHTMLChunk5V0 = `    }
           percent_total: 0,
           attention: 0,
           tasks_total: 0,
-          tasks_closed: 0
+          tasks_closed: 0,
+          tasks_delivered: 0,
+          agents_in_flight: 0,
+          stale: 0,
+          completed_snapshot: 0
         };
         row.runs += 1;
         row.percent_total += Number(run.percent_complete || 0);
         if (runNeedsAttention(run)) row.attention += 1;
         row.tasks_total += Number(run.tasks_total || 0);
         row.tasks_closed += Number(run.tasks_closed || 0);
+        row.tasks_delivered += Number(run.tasks_delivered || 0);
+        row.agents_in_flight += Number(run.agents_in_flight || 0);
+        if (run.freshness === 'stats_unavailable' || run.freshness === 'stale') row.stale += 1;
+        if (run.freshness === 'completed_snapshot') row.completed_snapshot += 1;
         byPhase[phase] = row;
       });
       return Object.values(byPhase).sort(function(a, b) {
@@ -40,7 +48,8 @@ const opsDashboardHTMLChunk5V0 = `    }
           '<div class="phase-title" title="' + esc(row.phase) + '">' + esc(row.phase) + '</div>' +
           bar(avg, bad) +
           '<div class="phase-meta"><span>' + esc(String(avg)) + '% medio</span><span>' + esc(String(row.runs)) + ' runs</span></div>' +
-          '<div class="phase-meta"><span>' + esc(String(row.tasks_closed)) + '/' + esc(String(row.tasks_total)) + ' tareas</span><span>' + esc(row.attention ? (row.attention + ' atención') : 'sin atención') + '</span></div>' +
+          '<div class="phase-meta"><span>' + esc(String(row.tasks_closed)) + '/' + esc(String(row.tasks_delivered)) + '/' + esc(String(row.tasks_total)) + ' cierre/entrega/total</span><span>' + esc(String(row.agents_in_flight)) + ' agentes vuelo</span></div>' +
+          '<div class="phase-meta"><span>' + esc(row.attention ? (row.attention + ' atención') : 'sin atención') + '</span><span>' + esc(row.stale ? (row.stale + ' sin stats frescas') : 'stats frescas') + '</span></div>' +
         '</div>';
       }).join('');
       byId('phase-body').innerHTML = rows.map(function(row) {
@@ -51,7 +60,7 @@ const opsDashboardHTMLChunk5V0 = `    }
           tableCell('Runs', esc(String(row.runs))) +
           tableCell('Progreso medio', bar(avg, bad) + '<span class="sub">' + esc(String(avg)) + '%</span>') +
           tableCell('Atención', statusPill(row.attention ? (row.attention + ' con atención') : 'sin atención')) +
-          tableCell('Tareas cerradas', esc(String(row.tasks_closed)) + ' / ' + esc(String(row.tasks_total))) +
+          tableCell('Tareas cerradas', esc(String(row.tasks_closed)) + ' / ' + esc(String(row.tasks_total)) + '<span class="task-subtitle">' + esc(String(row.tasks_delivered)) + ' entregadas · ' + esc(String(row.agents_in_flight)) + ' agentes en vuelo · freshness ' + (row.stale ? 'stale' : 'live') + '</span>') +
         '</tr>';
       }).join('');
     }
@@ -75,9 +84,11 @@ const opsDashboardHTMLChunk5V0 = `    }
 	      const rows = (runs || []).map(function(run) {
 	        const summary = run.usage_summary || {};
 	        const usage = agentsByRun[run.run_ref] || {tokens: 0, agents: 0, attention: 0, quota: ''};
+	        const quota = usage.quota || summary.quota_status || (opsHasLiveSignals(run) ? 'unknown' : '-');
 	        return {
 	          run: run,
-	          quota: usage.quota || summary.quota_status || '-',
+	          quota: quota,
+	          quota_reason_code: summary.quota_reason_code || run.stats_reason_code || '',
 	          tokens: usage.tokens || Number(summary.total_tokens || 0),
 	          prompt_tokens: Number(summary.prompt_tokens || 0),
 	          completion_tokens: Number(summary.completion_tokens || 0),
@@ -85,7 +96,7 @@ const opsDashboardHTMLChunk5V0 = `    }
 	          attention: usage.attention || 0
 	        };
 	      }).filter(function(row) {
-	        return row.tokens > 0 || row.agents > 0 || row.quota !== '-';
+	        return row.tokens > 0 || row.agents > 0 || row.quota !== '-' || row.run.stats_fetch_status !== 'ok';
 	      }).sort(function(a, b) {
 	        if (b.attention !== a.attention) return b.attention - a.attention;
 	        if (b.tokens !== a.tokens) return b.tokens - a.tokens;
@@ -102,7 +113,7 @@ const opsDashboardHTMLChunk5V0 = `    }
 	        const selected = row.run.run_ref === selectedRunRef ? ' class="selected"' : '';
 	        return '<tr data-run-ref="' + esc(row.run.run_ref || '') + '"' + selected + ' onclick="selectRun(\'' + jsArg(row.run.run_ref || '') + '\')">' +
 	          tableCell('Tarea', taskTitleCell(runTitle(row.run), row.run.app_ref || '-', row.run.task_id || taskIDFromRef(row.run.run_ref))) +
-	          tableCell('Cuota', statusPill(row.quota)) +
+	          tableCell('Cuota', statusPill(row.quota) + '<span class="task-subtitle">' + esc(row.quota_reason_code || row.run.stats_fetch_status || 'live') + '</span>') +
 	          tableCell('Tokens', esc(formatTokens(row.tokens)) + tokenDetail) +
 	          tableCell('Agentes', esc(String(row.agents))) +
 	          tableCell('Atención', statusPill(row.attention ? (row.attention + ' agentes') : 'sin atención')) +

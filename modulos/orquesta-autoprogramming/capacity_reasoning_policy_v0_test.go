@@ -44,6 +44,21 @@ func TestDecideCapacityReasoningPolicyV0NoEscalaOPESPorSubcadena(t *testing.T) {
 	}
 }
 
+func TestDecideCapacityReasoningPolicyV0ProgramacionUsaHigh(t *testing.T) {
+	got := DecideCapacityReasoningPolicyV0(CapacityReasoningPolicyInputV0{
+		DomainRefs: []string{"programacion"},
+		TaskRef:    "task-ref-app-rx-000",
+		Objective:  "crear_app_completa server-first",
+		WriteSet:   []string{"go.mod", "internal/modules/**"},
+	})
+
+	if got.CapacityLevel != "high" ||
+		got.ReasoningEffort != "high" ||
+		got.PolicyRef != CapacityPolicyRefHighRiskV0 {
+		t.Fatalf("policy=%+v", got)
+	}
+}
+
 func TestDecideCapacityReasoningPolicyV0RiesgoAltoUsaHighNoXHigh(t *testing.T) {
 	got := DecideCapacityReasoningPolicyV0(CapacityReasoningPolicyInputV0{
 		Objective: "Decidir arquitectura amplia para runtime externo",

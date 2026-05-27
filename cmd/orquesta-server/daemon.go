@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"time"
 
 	orquestaserver "orquesta/modulos/orquesta-server"
@@ -32,7 +31,9 @@ func startServerCommandV0(stdout io.Writer, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server start pid=%d: %v\n", pid, err)
 		return 1
 	}
-	_, _ = fmt.Fprintf(stdout, "orquesta-server activo pid=%d addr=%s\n", state.PID, state.Addr)
+	if err := writeCommandTextOutputV0(stdout, fmt.Sprintf("orquesta-server activo pid=%d addr=%s\n", state.PID, state.Addr)); err != nil {
+		return reportCommandStdioWriteFailureV0(stderr, "start", "stdout", "text_write", err)
+	}
 	return 0
 }
 
@@ -41,18 +42,14 @@ func startDetachedRunV0(config orquestaserver.ConfigV0) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("executable_unavailable")
 	}
-	stdoutLog, err := openDaemonLogV0(config.StateDir, "stdout.log")
+	stdoutLog, stderrLog, err := openDaemonOutputFilesV0(config)
 	if err != nil {
 		return 0, err
 	}
 	defer stdoutLog.Close()
-	stderrLog, err := openDaemonLogV0(config.StateDir, "stderr.log")
-	if err != nil {
-		return 0, err
-	}
 	defer stderrLog.Close()
 	cmd := exec.Command(exe, "run")
-	cmd.Env = serverEnvironmentWithDetailRailsDefaultV0(os.Environ())
+	cmd.Env = serverDaemonStartEnvironmentV0(os.Environ(), config)
 	cmd.Stdin = nil
 	cmd.Stdout = stdoutLog
 	cmd.Stderr = stderrLog
@@ -61,18 +58,6 @@ func startDetachedRunV0(config orquestaserver.ConfigV0) (int, error) {
 		return 0, fmt.Errorf("daemon_start_failed")
 	}
 	return cmd.Process.Pid, cmd.Process.Release()
-}
-
-func openDaemonLogV0(dir string, name string) (*os.File, error) {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, fmt.Errorf("daemon_log_dir_unavailable")
-	}
-	path := filepath.Join(dir, name)
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		return nil, fmt.Errorf("daemon_log_unavailable")
-	}
-	return file, nil
 }
 
 func waitForStateHealthyV0(
@@ -98,8 +83,16 @@ func waitForStateHealthyV0(
 }
 
 func serverReadinessOKV0(addr string) bool {
-	client := http.Client{Timeout: 1 * time.Second}
-	response, err := client.Get("http://" + addr + orquestaserver.ServerReadinessEndpointV0)
+	baseURL, err := commandRESTBaseURLFromAddrV0(addr)
+	if err != nil {
+		return false
+	}
+	target, err := commandRESTEndpointURLV0(baseURL, orquestaserver.ServerReadinessEndpointV0)
+	if err != nil {
+		return false
+	}
+	client := commandHTTPClientWithRedirectPolicyV0(time.Second, baseURL)
+	response, err := client.Get(target)
 	if err != nil {
 		return false
 	}

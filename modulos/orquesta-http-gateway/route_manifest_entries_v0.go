@@ -1,0 +1,36 @@
+package orquestahttpgateway
+
+func routeManifestEntriesV0() []RouteManifestEntryV0 {
+	return []RouteManifestEntryV0{
+		{Ref: RouteRefNuevaAppV0, Pattern: RouteNuevaAppV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerHTTPGatewayV0, Methods: []string{routeMethodAnyV0}, SecurityProfile: RouteSecurityBrowserHTMLV0},
+		{Ref: RouteRefOpsDashboardV0, Pattern: RouteOpsDashboardV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerHTTPGatewayV0, Methods: []string{routeMethodGetV0}, SecurityProfile: RouteSecurityBrowserHTMLV0},
+		{Ref: RouteRefAppChangePageV0, Pattern: RouteAppChangePageV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerHTTPGatewayV0, Methods: []string{routeMethodAnyV0}, SecurityProfile: RouteSecurityBrowserHTMLV0},
+		{Ref: RouteRefDirectorStatsPageV0, Pattern: RouteDirectorStatsPageV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerHTTPGatewayV0, Methods: []string{routeMethodGetV0}, SecurityProfile: RouteSecurityBrowserHTMLV0},
+		{Ref: RouteRefRunControlPageV0, Pattern: RouteRunControlPageV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerHTTPGatewayV0, Methods: []string{routeMethodAnyV0}, SecurityProfile: RouteSecurityBrowserHTMLV0},
+		{Ref: RouteRefRunQueuePageV0, Pattern: RouteRunQueuePageV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerHTTPGatewayV0, Methods: []string{routeMethodGetV0}, SecurityProfile: RouteSecurityBrowserHTMLV0},
+		{Ref: RouteRefAppSpecV0, Pattern: RouteAppSpecV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerHTTPGatewayV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneMutationV0, ShadowsPrefixRefs: []string{RouteRefAppChangeV0}},
+		{Ref: RouteRefAppDirectorV0, Pattern: RouteAppDirectorV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneMutationV0, ShadowsPrefixRefs: []string{RouteRefAppChangeV0}},
+		{Ref: RouteRefAppChangeV0, Pattern: RouteAppChangeV0, Kind: RouteManifestKindPrefixV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneMutationV0},
+		{Ref: RouteRefAppVCSV0, Pattern: routeAppVCSOverlayV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerAppGatewayV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneMutationV0, ShadowsPrefixRefs: []string{RouteRefAppChangeV0}},
+		{Ref: RouteRefDirectorStatsV0, Pattern: RouteDirectorStatsV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneReadV0},
+		{Ref: RouteRefRunControlV0, Pattern: RouteRunControlV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneMutationV0},
+		{Ref: RouteRefRunQueuePriorityV0, Pattern: RouteRunQueuePriorityV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneMutationV0},
+		{Ref: RouteRefRunSupervisorV0, Pattern: RouteRunSupervisorV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneMutationV0},
+		{Ref: RouteRefOpsAgentRuntimeDetailV0, Pattern: RouteOpsAgentRuntimeDetailV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerAppGatewayV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneReadV0},
+		{Ref: RouteRefOperationalStatusV0, Pattern: RouteOperationalStatusV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneReadV0},
+		{Ref: RouteRefFunctionContractListV0, Pattern: RouteFunctionContractListV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneReadV0},
+		{Ref: RouteRefFunctionContractViewV0, Pattern: RouteFunctionContractViewV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneReadV0},
+		{Ref: RouteRefServerShutdownV0, Pattern: RouteServerShutdownV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneMutationV0},
+		{Ref: RouteRefHumanDirectorWorkReviewPlanV0, Pattern: RouteHumanDirectorWorkReviewPlanV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneMutationV0},
+		{Ref: RouteRefAutoprogrammingValidateRequestV0, Pattern: RouteAutoprogrammingValidateRequestV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneMutationV0},
+		{Ref: RouteRefAutoprogrammingSelfImprovementV0, Pattern: RouteAutoprogrammingSelfImprovementV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneMutationV0},
+		{Ref: RouteRefAutoprogrammingPrepareRunV0, Pattern: RouteAutoprogrammingPrepareRunV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneMutationV0},
+		{Ref: RouteRefAutoprogrammingStatusV0, Pattern: RouteAutoprogrammingStatusV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneReadV0},
+		{Ref: RouteRefAutoprogrammingSuperviseV0, Pattern: RouteAutoprogrammingSuperviseV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneMutationV0},
+		{Ref: RouteRefGovernanceCatalogQueryV0, Pattern: RouteGovernanceCatalogQueryV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerAppGatewayV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneReadV0},
+		{Ref: RouteRefDomainWorkV0, Pattern: RouteDomainWorkV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneMutationV0},
+		{Ref: RouteRefExternalWorkRunV0, Pattern: RouteExternalWorkRunV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneMutationV0},
+		{Ref: RouteRefMCPJSONRPCV0, Pattern: routeMCPJSONRPCOverlayV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerServerV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityMCPJSONRPCV0},
+		{Ref: RouteRefWorkspaceTimelineV0, Pattern: routeWorkspaceTimelineV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerServerV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneReadV0},
+	}
+}

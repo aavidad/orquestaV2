@@ -6,6 +6,16 @@ Comando local:
 go test -count=1 ./modulos/orquesta-director-agent
 ```
 
+Suite T15 reconciliada:
+
+```bash
+go test -count=1 ./modulos/orquesta-rails ./modulos/orquesta-core-workflow ./modulos/orquesta-context ./modulos/orquesta-director-agent ./cmd/orquesta-server
+```
+
+Evidencia esperada: el DTO acepta refs opacas y vocabulario operativo, conserva
+context_refs compactas y rechaza proveedor/modelo reales, rutas privadas,
+prompts/transcripts crudos, secretos o payloads largos.
+
 Cobertura local:
 
 - acepta `request_brainstorm` compacto;

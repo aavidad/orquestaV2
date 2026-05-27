@@ -7,6 +7,11 @@ import (
 )
 
 func TestVerifyWorktreeWriteSetV0PresupuestoLineasGoEstricto(t *testing.T) {
+	if WorktreeGoFileLineBudgetLimitV0(0) != WorktreeDefaultGoFileLineBudgetV0 ||
+		WorktreeGoFileLineBudgetLimitV0(120) != 120 {
+		t.Fatalf("limite Go inesperado")
+	}
+
 	t.Run("bloquea fichero Go nuevo sobre limite", func(t *testing.T) {
 		root := t.TempDir()
 		baseline := captureWorktreeSnapshotForTestV0(t, root, nil)
@@ -60,6 +65,22 @@ func TestVerifyWorktreeWriteSetV0PresupuestoLineasGoEstricto(t *testing.T) {
 			ProjectWorkDir:     root,
 			WriteSet:           []string{"internal/app"},
 			StrictGoLineBudget: true,
+		})
+
+		if len(issues) > 0 || !result.OK {
+			t.Fatalf("result=%+v issues=%+v", result, issues)
+		}
+	})
+
+	t.Run("acepta write-set con globstar seguro", func(t *testing.T) {
+		root := t.TempDir()
+		baseline := captureWorktreeSnapshotForTestV0(t, root, nil)
+		writeWorktreeFileForTestV0(t, root, "internal/api/handler.go", "package api\n")
+
+		result, issues := VerifyWorktreeWriteSetV0(context.Background(), WorktreeVerifyRequestV0{
+			Baseline:       baseline,
+			ProjectWorkDir: root,
+			WriteSet:       []string{"internal/**/*.go"},
 		})
 
 		if len(issues) > 0 || !result.OK {

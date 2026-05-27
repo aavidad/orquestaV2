@@ -49,6 +49,7 @@ func TestRunControlYRunQueueAPIDeleganEnMCPPortsV0(t *testing.T) {
 
 	controlRec := httptest.NewRecorder()
 	controlReq := httptest.NewRequest(http.MethodPost, "/api/v0/runs/control", strings.NewReader(`{
+		"request_id":"request-ref-app-gateway-run-control-001",
 		"action":"pause",
 		"run_ref":"run-app-gateway-control-001"
 	}`))
@@ -61,6 +62,7 @@ func TestRunControlYRunQueueAPIDeleganEnMCPPortsV0(t *testing.T) {
 
 	queueRec := httptest.NewRecorder()
 	queueReq := httptest.NewRequest(http.MethodPost, "/api/v0/runs/queue/priority", strings.NewReader(`{
+		"request_id":"request-ref-app-gateway-run-queue-001",
 		"action":"set_priority",
 		"run_ref":"run-app-gateway-control-001",
 		"priority_score":75
@@ -122,6 +124,7 @@ func TestRunControlPageDelegaEnAPIInternaSinCmdDBRuntimeV0(t *testing.T) {
 	values.Set("forced", "true")
 	req := httptest.NewRequest(http.MethodPost, "/run-control", strings.NewReader(values.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", "http://example.com")
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)
@@ -150,6 +153,7 @@ func TestAppChangePageDelegaEnAPIInternaSinCmdDBRuntimeV0(t *testing.T) {
 	values.Set("user_intent", "Cambiar la web para vista semanal")
 	req := httptest.NewRequest(http.MethodPost, "/app-change", strings.NewReader(values.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", "http://example.com")
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)

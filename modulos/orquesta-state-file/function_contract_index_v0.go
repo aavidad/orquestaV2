@@ -127,7 +127,15 @@ func (store *StoreV0) collectFunctionContractEventsV0(
 	if err := validateEventsDocumentV0(document, document.RunRef); err != nil {
 		return err
 	}
-	for _, event := range document.Events {
+	index, err := store.loadEventIndexV0(document.RunRef)
+	if err != nil {
+		return err
+	}
+	for _, recordRef := range sortedIndexRecordsV0(index) {
+		event, err := loadEventRecordV0(store.eventRecordPathV0(document.RunRef, recordRef), document.RunRef, recordRef)
+		if err != nil {
+			return err
+		}
 		if event.EventType != orquestacoreworkflow.OrchestrationEventFunctionContractPublishedV0 {
 			continue
 		}

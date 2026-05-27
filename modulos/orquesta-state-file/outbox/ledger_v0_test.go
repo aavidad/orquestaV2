@@ -153,6 +153,34 @@ func TestFileOutboxLedgerV0MantieneIdempotenciaYJSONEstructurado(t *testing.T) {
 	}
 }
 
+func TestFileOutboxLedgerV0LimitaLecturaSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, fileOutboxLedgerNameV0)
+	if err := os.WriteFile(path, []byte(strings.Repeat("x", int(fileOutboxLedgerMaxBytesV0)+1)), 0o600); err != nil {
+		t.Fatalf("write oversized ledger: %v", err)
+	}
+	if _, err := NewFileOutboxLedgerV0(dir); err == nil || err.Error() != "file_outbox_ledger: size_limit_exceeded" {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestFileOutboxLedgerV0LimitaRecordsSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, fileOutboxLedgerNameV0)
+	records := make([]string, 0, fileOutboxLedgerMaxRecordsV0+1)
+	for index := 0; index <= fileOutboxLedgerMaxRecordsV0; index++ {
+		records = append(records, `{}`)
+	}
+	body := `{"schema_version":"` + fileOutboxLedgerSchemaVersionV0 +
+		`","records":[` + strings.Join(records, ",") + `]}`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write ledger: %v", err)
+	}
+	if _, err := NewFileOutboxLedgerV0(dir); err == nil || err.Error() != "file_outbox_ledger: records_limit_exceeded" {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 func TestFileOutboxLedgerV0ClaimsConcurrentesNoDuplican(t *testing.T) {
 	ledger := newFileOutboxLedgerForTestV0(t, t.TempDir())
 	message := validLaunchMessageV0(t)

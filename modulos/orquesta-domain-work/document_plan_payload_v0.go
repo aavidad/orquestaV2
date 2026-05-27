@@ -1,6 +1,7 @@
 package orquestadomainwork
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 )
@@ -9,26 +10,62 @@ func CanonicalDomainDocumentPlanPayloadJSONV0(
 	body string,
 	defaults DomainDocumentPlanPayloadDefaultsV0,
 ) (string, bool) {
+	canonical, ok, _ := CanonicalDomainDocumentPlanPayloadJSONWithIssuesV0(body, defaults)
+	return canonical, ok
+}
+
+func CanonicalDomainDocumentPlanPayloadJSONWithIssuesV0(
+	body string,
+	defaults DomainDocumentPlanPayloadDefaultsV0,
+) (string, bool, []DomainWorkIssueV0) {
 	body = strings.TrimSpace(body)
 	if body == "" {
-		return "", false
+		return "", false, nil
 	}
 	var plan DomainDocumentPlanV0
 	if json.Unmarshal([]byte(body), &plan) == nil {
 		plan = applyDocumentPlanDefaultsV0(plan, defaults)
 		if issues := ValidateDomainDocumentPlanV0(plan); len(issues) == 0 {
-			return marshalCanonicalDocumentPlanV0(plan)
+			canonical, ok := marshalCanonicalDocumentPlanV0(plan)
+			return canonical, ok, nil
 		}
 	}
 	var raw map[string]json.RawMessage
 	if json.Unmarshal([]byte(body), &raw) != nil || len(raw) == 0 {
-		return "", false
+		return "", false, nil
+	}
+	if issues := validateDocumentPlanRawArrayFieldsV0(raw); len(issues) > 0 {
+		return "", false, issues
 	}
 	plan = documentPlanFromRawPayloadV0(raw, defaults)
 	if issues := ValidateDomainDocumentPlanV0(plan); len(issues) > 0 {
-		return "", false
+		return "", false, issues
 	}
-	return marshalCanonicalDocumentPlanV0(plan)
+	canonical, ok := marshalCanonicalDocumentPlanV0(plan)
+	return canonical, ok, nil
+}
+
+func validateDocumentPlanRawArrayFieldsV0(
+	raw map[string]json.RawMessage,
+) []DomainWorkIssueV0 {
+	for _, field := range []string{"sections", "visuals", "review_steps", "deliverables"} {
+		value, ok := raw[field]
+		if !ok {
+			continue
+		}
+		trimmed := bytes.TrimSpace(value)
+		if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+			continue
+		}
+		var values []map[string]json.RawMessage
+		if err := json.Unmarshal(trimmed, &values); err != nil {
+			return []DomainWorkIssueV0{{
+				Code:  ErrDomainDocumentPlanArrayInvalidV0,
+				Field: field,
+			}}
+		}
+	}
+	return nil
 }
 
 func documentPlanFromRawPayloadV0(

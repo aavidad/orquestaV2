@@ -136,14 +136,15 @@ func stackShutdownRequestForAgentV0(
 	refs := append([]string(nil), command.EvidenceRefs...)
 	refs = append(refs, descriptor.DescriptorRef)
 	return orquestaruntimecodex.CodexShutdownRequestV0{
-		SchemaVersion: orquestaruntimecodex.CodexShutdownRequestSchemaVersionV0,
-		RunRef:        strings.TrimSpace(command.RunRef),
-		AgentRef:      agentRef,
-		CorrelationID: strings.TrimSpace(command.CorrelationID),
-		RequestedBy:   strings.TrimSpace(command.RequestedBy),
-		Reason:        strings.TrimSpace(command.Reason),
-		CheckpointRef: "checkpoint-ref-shutdown-" + safeStackShutdownRefPartV0(command.RunRef) + "-" + safeStackShutdownRefPartV0(agentRef),
-		EvidenceRefs:  compactStringsV0(refs),
+		SchemaVersion:      orquestaruntimecodex.CodexShutdownRequestSchemaVersionV0,
+		RunRef:             strings.TrimSpace(command.RunRef),
+		AgentRef:           agentRef,
+		CorrelationID:      strings.TrimSpace(command.CorrelationID),
+		RequestedBy:        strings.TrimSpace(command.RequestedBy),
+		Reason:             strings.TrimSpace(command.Reason),
+		ShutdownAttemptRef: stackShutdownAttemptRefV0(command),
+		CheckpointRef:      "checkpoint-ref-shutdown-" + safeStackShutdownRefPartV0(command.RunRef) + "-" + safeStackShutdownRefPartV0(agentRef),
+		EvidenceRefs:       compactStringsV0(refs),
 	}
 }
 
@@ -208,6 +209,9 @@ func stackShutdownIssueEvidenceRefsV0(
 		}
 		ref := "shutdown-checkpoint-issue-" + status + "-" +
 			safeStackShutdownRefPartV0(issue.Field)
+		if len(issue.Evidence) > 0 {
+			ref += "-" + safeStackShutdownRefPartV0(issue.Evidence[0])
+		}
 		refs = append(refs, ref)
 	}
 	return compactStringsV0(refs)

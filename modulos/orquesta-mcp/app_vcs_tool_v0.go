@@ -33,16 +33,17 @@ type MCPAppVCSToolDescriptorV0 struct {
 }
 
 type MCPAppVCSToolInputV0 struct {
-	RequestID     string   `json:"request_id,omitempty"`
-	CorrelationID string   `json:"correlation_id,omitempty"`
-	Action        string   `json:"action"`
-	AppRef        string   `json:"app_ref"`
-	RepoRef       string   `json:"repo_ref"`
-	WorktreeRef   string   `json:"worktree_ref,omitempty"`
-	BranchRef     string   `json:"branch_ref,omitempty"`
-	CommitMessage string   `json:"commit_message,omitempty"`
-	CommitPaths   []string `json:"commit_paths,omitempty"`
-	AllowPush     bool     `json:"allow_push,omitempty"`
+	RequestID      string   `json:"request_id,omitempty"`
+	CorrelationID  string   `json:"correlation_id,omitempty"`
+	IdempotencyKey string   `json:"idempotency_key,omitempty"`
+	Action         string   `json:"action"`
+	AppRef         string   `json:"app_ref"`
+	RepoRef        string   `json:"repo_ref"`
+	WorktreeRef    string   `json:"worktree_ref,omitempty"`
+	BranchRef      string   `json:"branch_ref,omitempty"`
+	CommitMessage  string   `json:"commit_message,omitempty"`
+	CommitPaths    []string `json:"commit_paths,omitempty"`
+	AllowPush      bool     `json:"allow_push,omitempty"`
 }
 
 type MCPAppVCSToolResultV0 struct {
@@ -72,7 +73,7 @@ func MCPAppVCSDescriptorV0() MCPAppVCSToolDescriptorV0 {
 	return MCPAppVCSToolDescriptorV0{
 		Name:        MCPAppVCSToolNameV0,
 		Version:     MCPAppVCSToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,action:prepare_repo|review_repo|commit|push,app_ref,repo_ref,worktree_ref?,branch_ref?,commit_message?,commit_paths?,allow_push?}",
+		InputSchema: "envelope:{request_id?,correlation_id?,idempotency_key?,action:prepare_repo|review_repo|commit|push,app_ref,repo_ref,worktree_ref?,branch_ref?,commit_message?,commit_paths?,allow_push?}",
 		Output:      "ok:{status,commit_ref?,changed_paths?,push_pending?,retryable?,evidence_refs?}|error:{errores_publicos}",
 		ResourceURI: MCPAppVCSResourceURIV0,
 		Invariantes: []string{
@@ -87,6 +88,7 @@ func MCPAppVCSDescriptorV0() MCPAppVCSToolDescriptorV0 {
 func NormalizeMCPAppVCSInputV0(input MCPAppVCSToolInputV0) MCPAppVCSToolInputV0 {
 	input.RequestID = strings.TrimSpace(input.RequestID)
 	input.CorrelationID = strings.TrimSpace(input.CorrelationID)
+	input.IdempotencyKey = strings.TrimSpace(input.IdempotencyKey)
 	input.Action = strings.ToLower(strings.TrimSpace(input.Action))
 	input.AppRef = strings.TrimSpace(input.AppRef)
 	input.RepoRef = strings.TrimSpace(input.RepoRef)
@@ -95,6 +97,25 @@ func NormalizeMCPAppVCSInputV0(input MCPAppVCSToolInputV0) MCPAppVCSToolInputV0 
 	input.CommitMessage = strings.TrimSpace(input.CommitMessage)
 	input.CommitPaths = compactStringsMCPV0(input.CommitPaths)
 	return input
+}
+
+func normalizeMCPAppVCSIdentityV0(
+	input MCPAppVCSToolInputV0,
+	headerCorrelationID string,
+	headerIdempotencyKey string,
+) (MCPAppVCSToolInputV0, []MCPValidationIssueV0) {
+	identity := NormalizeMCPPublicMutationIdentityV0(MCPPublicMutationIdentityInputV0{
+		RequestID:            input.RequestID,
+		CorrelationID:        input.CorrelationID,
+		IdempotencyKey:       input.IdempotencyKey,
+		HeaderCorrelationID:  headerCorrelationID,
+		HeaderIdempotencyKey: headerIdempotencyKey,
+		Mutating:             true,
+	})
+	input.RequestID = identity.RequestID
+	input.CorrelationID = identity.CorrelationID
+	input.IdempotencyKey = identity.IdempotencyKey
+	return input, identity.Issues
 }
 
 func ValidateMCPAppVCSInputV0(input MCPAppVCSToolInputV0) []MCPValidationIssueV0 {

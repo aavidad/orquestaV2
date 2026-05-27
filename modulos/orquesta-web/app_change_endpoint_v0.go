@@ -1,9 +1,7 @@
 package orquestaweb
 
 import (
-	"encoding/json"
 	"net/http"
-	"strings"
 )
 
 type AppChangeWebEndpointV0 struct {
@@ -20,8 +18,10 @@ func (endpoint AppChangeWebEndpointV0) ServeHTTP(w http.ResponseWriter, r *http.
 		writeAppChangeHTMLV0(w, http.StatusOK, appChangePageV0("es", InitialWebAppChangeViewModelV0()))
 	case http.MethodPost:
 		endpoint.handlePostV0(w, r)
+	case http.MethodOptions:
+		handleWebPublicHTTPOptionsV0(w, r, http.MethodGet, http.MethodPost)
 	default:
-		w.Header().Set("Allow", strings.Join([]string{http.MethodGet, http.MethodPost}, ", "))
+		setWebPublicHTTPAllowV0(w, http.MethodGet, http.MethodPost)
 		writeAppChangeHTMLV0(w, http.StatusMethodNotAllowed, appChangePageV0("es", WebAppChangeViewModelV0{Estado: WebAppChangeEstadoErrorV0}))
 	}
 }
@@ -45,15 +45,13 @@ func (endpoint AppChangeWebEndpointV0) handlePostV0(w http.ResponseWriter, r *ht
 }
 
 func decodeAppChangeFormV0(r *http.Request) (WebAppChangeFormV0, error) {
-	contentType := strings.ToLower(r.Header.Get("Content-Type"))
-	if contentType == "" || strings.Contains(contentType, "application/json") {
+	contentType := r.Header.Get("Content-Type")
+	if webControlContentTypeAllowsJSONV0(contentType) {
 		var form WebAppChangeFormV0
-		decoder := json.NewDecoder(r.Body)
-		decoder.DisallowUnknownFields()
-		return form, decoder.Decode(&form)
+		return form, decodeWebControlJSONV0(nil, r, &form)
 	}
-	if strings.Contains(contentType, "application/x-www-form-urlencoded") || strings.Contains(contentType, "multipart/form-data") {
-		if err := r.ParseForm(); err != nil {
+	if webControlContentTypeAllowsFormV0(contentType) {
+		if err := parseWebControlFormV0(nil, r); err != nil {
 			return WebAppChangeFormV0{}, err
 		}
 		return appChangeFormFromValuesV0(r.Form), nil

@@ -141,6 +141,7 @@ func NewWebDirectorStatsPanelV0(
 	vm.Counts = directorStatsCountsV0(*stats)
 	vm.Progress = directorStatsProgressV0(stats.Progress)
 	vm.Resumen = directorStatsSummaryV0(stats.Progress, stats.UsageSummary)
+	applyDirectorStatsLiveCountsPercentV0(&vm)
 	vm.Closure = directorStatsClosureV0(stats.Closure)
 	vm.Checkpoint = directorStatsCheckpointV0(*stats)
 	vm.Agents = directorStatsAgentsV0(stats.Agents)
@@ -201,7 +202,7 @@ func directorStatsCountsV0(stats WebDirectorRunStatsContractV0) WebDirectorStats
 func directorStatsProgressV0(progress WebDirectorProgressStatsContractV0) WebDirectorStatsProgressV0 {
 	return WebDirectorStatsProgressV0{
 		SourceStatus:       trimDirectorStatsV0(progress.SourceStatus),
-		PercentComplete:    progress.PercentComplete,
+		PercentComplete:    webDirectorStatsLivePercentV0(progress),
 		ObservedAgents:     progress.ObservedAgents,
 		ProgressingAgents:  progress.ProgressingAgents,
 		StalledAgents:      progress.StalledAgents,
@@ -219,7 +220,7 @@ func directorStatsSummaryV0(
 		TasksTotal:         progress.TasksTotal,
 		TasksClosed:        progress.TasksClosed,
 		TasksObserved:      progress.TasksObserved,
-		PercentComplete:    progress.PercentComplete,
+		PercentComplete:    webDirectorStatsLivePercentV0(progress),
 		ProgressSource:     trimDirectorStatsV0(progress.SourceStatus),
 		ObservedAgents:     progress.ObservedAgents,
 		ProgressingAgents:  progress.ProgressingAgents,

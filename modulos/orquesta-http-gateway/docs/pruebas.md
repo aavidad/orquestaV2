@@ -13,6 +13,8 @@ git diff --check -- modulos/orquesta-http-gateway
 - Preservacion de path y metodo hacia el handler inyectado.
 - 404 para rutas no configuradas.
 - Barrera de arquitectura para imports productivos prohibidos.
+- Manifiesto canonico de rutas: duplicados exactos, prefijos duplicados, shadows
+  no declarados y paridad entre rutas registradas y manifest.
 - Cobertura de ruta web `/director-stats` separada de API
   `/api/v0/director/stats`.
 - Cobertura de ruta web `/run-control` separada de API

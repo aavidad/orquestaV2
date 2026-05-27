@@ -23,8 +23,36 @@ func TestExternalAgentProcessAdapterV0LanzaProcesoOptInConResolverInyectado(t *t
 	if result.Snapshot.ProcessRef == "" || result.Snapshot.LaunchRef == "" {
 		t.Fatalf("snapshot sin refs publicas: %+v", result.Snapshot)
 	}
+	if result.LaunchReceipt == nil ||
+		result.LaunchReceipt.CommandRef != spec.Command.CommandRef ||
+		result.LaunchReceipt.ExecutableRef != spec.Command.ExecutableRef {
+		t.Fatalf("receipt de resolucion invalido: %+v spec=%+v", result.LaunchReceipt, spec.Command)
+	}
 	assertProcessRuntimeSnapshotDoesNotLeakV0(t, result.Snapshot, req)
 	waitForProcessRuntimeStatusV0(t, connector, result.Snapshot.ProcessRef, ProcessRuntimeStoppedV0)
+}
+
+func TestExternalAgentProcessAdapterV0PropagaReciboDeResolverAlRuntime(t *testing.T) {
+	spec := externalAgentLaunchSpecValidaV0(t)
+	req := processRuntimeLaunchRequestForTestV0(t, "exit")
+	resolver := NewExternalAgentProcessCommandResolverWithReceiptV0(
+		fakeExternalAgentProcessResolverV0{req: req},
+	)
+
+	result := LaunchExternalAgentProcessV0(
+		context.Background(),
+		spec,
+		resolver,
+		NewProcessRuntimeConnectorV0(),
+	)
+
+	requireExternalAgentProcessStatusV0(t, result, ExternalAgentProcessLaunchStartedV0)
+	if result.Snapshot.LaunchReceipt == nil ||
+		result.Snapshot.LaunchReceipt.ReceiptRef == "" ||
+		result.Snapshot.LaunchReceipt.CommandRef != spec.Command.CommandRef {
+		t.Fatalf("receipt launch no propagado: %+v", result.Snapshot.LaunchReceipt)
+	}
+	assertProcessRuntimeSnapshotDoesNotLeakV0(t, result.Snapshot, req)
 }
 
 func TestExternalAgentProcessAdapterV0BloqueaSpecInvalidaAntesDeResolver(t *testing.T) {

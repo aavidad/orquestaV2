@@ -26,6 +26,13 @@ func residentOperationalHealthV0(state StateV0) []orquestaobservability.Diagnost
 			Estado:   supervisorEstadoV0(state),
 			I18nKey:  "server.health.supervisor",
 		},
+		{
+			Area:         "system",
+			Severity:     "info",
+			Estado:       "ok",
+			I18nKey:      "server.health.daemon_logs",
+			EvidenceRefs: []string{NormalizeDaemonLogPolicyV0(state.DaemonLogPolicy).PolicyRef},
+		},
 	}
 }
 
@@ -48,6 +55,22 @@ func residentOperationalBlockersV0(state StateV0) []orquestaobservability.Diagno
 			Summary:    "persistencia de estado degradada",
 		})
 	}
+	if strings.TrimSpace(state.AuditStatus) == "degraded" {
+		blockers = append(blockers, orquestaobservability.DiagnosticoBloqueoV0{
+			BlockerRef: "blocker-ref-server-audit-write",
+			Severity:   firstNonEmptyServerDiagnosticV0(state.AuditLastSeverity, "warning"),
+			OwnerArea:  "system",
+			Summary:    "auditoria de servidor degradada",
+		})
+	}
+	if strings.TrimSpace(state.ResponseWriteLastCode) != "" {
+		blockers = append(blockers, orquestaobservability.DiagnosticoBloqueoV0{
+			BlockerRef: "blocker-ref-server-response-write",
+			Severity:   "warning",
+			OwnerArea:  "system",
+			Summary:    "entrega HTTP degradada",
+		})
+	}
 	return blockers
 }
 
@@ -68,6 +91,8 @@ func residentOperationalActivityV0(state StateV0) []orquestaobservability.Diagno
 	appendActivity("activity-ref-server-supervisor", state.LastSupervisorAt, "runtime", "pulso supervisor observado")
 	appendActivity("activity-ref-server-startup", state.LastStartupCheckAt, "system", "startup check observado")
 	appendActivity("activity-ref-server-state-persist-failed", state.StatePersistLastFailedAt, "system", "fallo de persistencia de estado observado")
+	appendActivity("activity-ref-server-audit-write-failed", state.AuditLastFailedAt, "system", "fallo de escritura de auditoria observado")
+	appendActivity("activity-ref-server-response-write-failed", state.ResponseWriteLastFailedAt, "system", "fallo de entrega HTTP observado")
 	return out
 }
 
@@ -96,5 +121,6 @@ func residentOperationalWarningsV0() []orquestaobservability.DiagnosticoWarningV
 	return []orquestaobservability.DiagnosticoWarningV0{
 		{Code: "runtime_not_available", Section: "salud", Summary: "runtime detallado no disponible por source residente"},
 		{Code: "audit_not_available", Section: "actividad_reciente", Summary: "auditoria historica no agregada en query vivo"},
+		{Code: "daemon-log-summary-only", Section: "salud", Summary: "stdout stderr residentes exponen resumen redactado por defecto"},
 	}
 }

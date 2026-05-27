@@ -38,7 +38,7 @@ func (source codexStackReviewGateRepairSourceV0) BuildReviewGateObservationsV0(
 		return nil, err
 	}
 	for index := range observations {
-		observations[index] = source.repairObservationV0(observations[index], descriptors)
+		observations[index] = source.repairObservationV0(observations[index], descriptors, request.Run)
 	}
 	observations = append(observations, codexStackReviewGateReworkAcceptanceObservationsV0(request, descriptors)...)
 	return observations, nil
@@ -47,10 +47,11 @@ func (source codexStackReviewGateRepairSourceV0) BuildReviewGateObservationsV0(
 func (source codexStackReviewGateRepairSourceV0) repairObservationV0(
 	observation orquestacionnucleoapp.ReviewGateObservationV0,
 	descriptors []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
 ) orquestacionnucleoapp.ReviewGateObservationV0 {
 	if observation.Status == orquestacoreworkflow.ReviewResultStatusAcceptedV0 ||
 		!codexStackReviewGateHasRequiredTestIssueV0(observation.EvidenceRefs) {
-		return observation
+		return codexStackReviewGateSoftReworkAcceptedObservationV0(run, observation)
 	}
 	descriptor, ok := codexStackReviewGateDescriptorForDeliveryV0(descriptors, observation.DeliveryRef)
 	if !ok || !codexStackReviewGateAckTestsEquivalentV0(descriptor) {
@@ -64,7 +65,7 @@ func (source codexStackReviewGateRepairSourceV0) repairObservationV0(
 	observation.AcceptedReviewRef = "accepted-review-ref-" + strings.TrimSpace(observation.DeliveryRef)
 	observation.Summary = "Entrega aceptada por gate de revision."
 	observation.EvidenceRefs = compactStringsV0(append(cleaned, codexStackReviewGateNormalizedTestsEvidenceV0))
-	return observation
+	return codexStackReviewGateSoftReworkAcceptedObservationV0(run, observation)
 }
 
 func codexStackReviewGateDescriptorForDeliveryV0(
@@ -174,7 +175,7 @@ func codexStackReviewGateWithoutRequiredTestIssuesV0(evidenceRefs []string) []st
 
 func codexStackReviewGateRequiredTestIssueV0(code string) bool {
 	switch strings.TrimSpace(code) {
-	case "required_test_missing", "missing_required_test":
+	case "required_test_missing", "missing_required_test", "required_test_not_executed":
 		return true
 	default:
 		return false
@@ -205,10 +206,63 @@ func codexStackReviewGateHasNonTestIssueV0(issues []orquestaruntime.ExternalAgen
 		}
 		for _, evidence := range issue.Evidence {
 			evidence = strings.TrimSpace(evidence)
-			if evidence != "" && !codexStackReviewGateRequiredTestIssueV0(evidence) {
+			if evidence != "" &&
+				!codexStackReviewGateRequiredTestIssueV0(evidence) &&
+				!codexStackReviewGateAdvisoryIssueV0(evidence) {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+func codexStackReviewGateSoftReworkAcceptedObservationV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	observation orquestacionnucleoapp.ReviewGateObservationV0,
+) orquestacionnucleoapp.ReviewGateObservationV0 {
+	if observation.Status != orquestacoreworkflow.ReviewResultStatusAcceptedV0 ||
+		codexStackReviewGateSoftReworkAcceptanceAlreadyDoneV0(run, observation.DeliveryRef) ||
+		!codexStackReviewGateDeliveryHasReworkV0(run, observation.DeliveryRef) {
+		return observation
+	}
+	safe := codexStackOperationalClosureSafeRefV0(observation.DeliveryRef)
+	observation.CandidateRef = "review-gate-candidate-ref-soft-rework-accepted-" + safe
+	observation.ReviewResultRef = "review-result-ref-soft-rework-accepted-" + safe
+	observation.AcceptedReviewRef = "accepted-review-ref-soft-rework-accepted-" + safe
+	observation.QualityGateRef = "quality-gate-ref-soft-rework-accepted-" + safe
+	observation.Summary = "Entrega aceptada tras normalizar rails blandos de revision."
+	evidenceRefs := append(observation.EvidenceRefs, "gate-normalized:soft-rework-accepted")
+	evidenceRefs = append(evidenceRefs, codexStackReviewGateReworkRefsForDeliveryV0(run, observation.DeliveryRef)...)
+	observation.EvidenceRefs = compactStringsV0(evidenceRefs)
+	return observation
+}
+
+func codexStackReviewGateDeliveryHasReworkV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	deliveryRef string,
+) bool {
+	return len(codexStackReviewGateReworkRefsForDeliveryV0(run, deliveryRef)) > 0
+}
+
+func codexStackReviewGateReworkRefsForDeliveryV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	deliveryRef string,
+) []string {
+	deliveryRef = strings.TrimSpace(deliveryRef)
+	refs := []string{}
+	for _, rawRework := range run.ReworkRequests {
+		rework, ok := codexStackReviewGateParseReworkProjectionV0(rawRework)
+		if ok && rework.DeliveryRef == deliveryRef {
+			refs = append(refs, rework.ReworkRequestRef)
+		}
+	}
+	return compactStringsV0(refs)
+}
+
+func codexStackReviewGateSoftReworkAcceptanceAlreadyDoneV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	deliveryRef string,
+) bool {
+	safe := codexStackOperationalClosureSafeRefV0(deliveryRef)
+	return codexStackStringInSetV0(run.AcceptedReviews, "accepted-review-ref-soft-rework-accepted-"+safe)
 }

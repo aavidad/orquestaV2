@@ -1,53 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "${ORQUESTA_OPES_VISUAL_SMOKE_CONFIRM:-0}" != "1" ]]; then
-  echo "smoke visual real desactivado: exporta ORQUESTA_OPES_VISUAL_SMOKE_CONFIRM=1" >&2
-  exit 2
-fi
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/smoke_common.sh
+source "$repo_root/scripts/lib/smoke_common.sh"
+
+smoke_require_confirm ORQUESTA_OPES_VISUAL_SMOKE_CONFIRM 1 \
+  "smoke visual real desactivado: exporta ORQUESTA_OPES_VISUAL_SMOKE_CONFIRM=1"
 
 ORQUESTA_BASE_URL="${ORQUESTA_BASE_URL:-http://127.0.0.1:18787}"
 OPES_BASE_URL="${OPES_BASE_URL:-http://127.0.0.1:18082}"
 SMOKE_ID="${SMOKE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 SMOKE_OUT_DIR="${SMOKE_OUT_DIR:-/tmp/orquesta-opes-visual-smoke/$SMOKE_ID/out}"
-
-require_tool() {
-  if ! command -v "$1" >/dev/null 2>&1; then
-    echo "falta herramienta requerida: $1" >&2
-    exit 2
-  fi
-}
-
-json_id() {
-  jq -r '.id // .ID // empty' "$1"
-}
-
-post_json() {
-  local url="$1"
-  local payload="$2"
-  local output="$3"
-  local status
-  status="$(curl -sS -o "$output" -w "%{http_code}" -X POST "$url" \
-    -H "Content-Type: application/json" \
-    -H "Accept: application/json" \
-    -d "$payload")"
-  if [[ "$status" -lt 200 || "$status" -gt 299 ]]; then
-    echo "POST $url devolvio HTTP $status" >&2
-    cat "$output" >&2 || true
-    exit 1
-  fi
-}
-
-get_json() {
-  local url="$1"
-  local output="$2"
-  curl -sS -f "$url" >"$output"
-}
-
-json_count() {
-  jq 'if type == "array" then length else (.artifacts // .blocks // [] | length) end' \
-    "$1"
-}
 
 create_job_payload() {
   local topic_id="$1"
@@ -190,7 +154,7 @@ artifact_payload() {
 
 assert_visual_block() {
   local blocks_file="$1"
-  if [[ "$(json_count "$blocks_file")" != "1" ]]; then
+  if [[ "$(smoke_json_count "$blocks_file")" != "1" ]]; then
     echo "OPES no materializo exactamente un bloque visual" >&2
     cat "$blocks_file" >&2 || true
     exit 1
@@ -225,28 +189,27 @@ EOF
 }
 
 main() {
-  require_tool curl
-  require_tool jq
+  smoke_require_tools curl jq
   mkdir -p "$SMOKE_OUT_DIR"
 
-  get_json "$ORQUESTA_BASE_URL/api/v0/server/readiness" "$SMOKE_OUT_DIR/orquesta_readiness.json"
-  get_json "$OPES_BASE_URL/api/health" "$SMOKE_OUT_DIR/opes_health.json"
+  smoke_get_json "$ORQUESTA_BASE_URL/api/v0/server/readiness" "$SMOKE_OUT_DIR/orquesta_readiness.json"
+  smoke_get_json "$OPES_BASE_URL/api/health" "$SMOKE_OUT_DIR/opes_health.json"
 
-  post_json "$OPES_BASE_URL/api/topics" \
+  smoke_post_json "$OPES_BASE_URL/api/topics" \
     '{"title":"Smoke visual Orquesta OPES","subject_area":"redes"}' \
     "$SMOKE_OUT_DIR/topic.json"
   local topic_id
-  topic_id="$(json_id "$SMOKE_OUT_DIR/topic.json")"
+  topic_id="$(smoke_json_id "$SMOKE_OUT_DIR/topic.json")"
   if [[ -z "$topic_id" ]]; then
     echo "OPES no devolvio topic id" >&2
     exit 1
   fi
 
-  post_json "$OPES_BASE_URL/api/topics/$topic_id/chapters" \
+  smoke_post_json "$OPES_BASE_URL/api/topics/$topic_id/chapters" \
     '{"title":"Topologias de red","order":1}' \
     "$SMOKE_OUT_DIR/chapter.json"
   local chapter_id
-  chapter_id="$(json_id "$SMOKE_OUT_DIR/chapter.json")"
+  chapter_id="$(smoke_json_id "$SMOKE_OUT_DIR/chapter.json")"
   if [[ -z "$chapter_id" ]]; then
     echo "OPES no devolvio chapter id" >&2
     exit 1
@@ -255,7 +218,7 @@ main() {
   local create_payload
   create_payload="$(create_job_payload "$topic_id" "$chapter_id")"
   printf '%s\n' "$create_payload" >"$SMOKE_OUT_DIR/create_job_request.json"
-  post_json "$ORQUESTA_BASE_URL/api/v0/domain-work" \
+  smoke_post_json "$ORQUESTA_BASE_URL/api/v0/domain-work" \
     "$create_payload" "$SMOKE_OUT_DIR/create_job_response.json"
   local job_ref
   job_ref="$(jq -r '.job.job_ref // empty' "$SMOKE_OUT_DIR/create_job_response.json")"
@@ -270,7 +233,7 @@ main() {
   local submit_payload
   submit_payload="$(artifact_payload "$job_ref" "$topic_id" "$chapter_id" "$svg")"
   printf '%s\n' "$submit_payload" >"$SMOKE_OUT_DIR/submit_artifact_request.json"
-  post_json "$ORQUESTA_BASE_URL/api/v0/domain-work" \
+  smoke_post_json "$ORQUESTA_BASE_URL/api/v0/domain-work" \
     "$submit_payload" "$SMOKE_OUT_DIR/submit_artifact_response.json"
   local receipt_ref
   receipt_ref="$(jq -r '.receipt.receipt_ref // empty' "$SMOKE_OUT_DIR/submit_artifact_response.json")"
@@ -280,14 +243,14 @@ main() {
     exit 1
   fi
 
-  get_json "$OPES_BASE_URL/api/jobs/$job_ref/artifacts" "$SMOKE_OUT_DIR/artifacts.json"
-  get_json "$OPES_BASE_URL/api/topics/$topic_id/blocks" "$SMOKE_OUT_DIR/blocks.json"
+  smoke_get_json "$OPES_BASE_URL/api/jobs/$job_ref/artifacts" "$SMOKE_OUT_DIR/artifacts.json"
+  smoke_get_json "$OPES_BASE_URL/api/topics/$topic_id/blocks" "$SMOKE_OUT_DIR/blocks.json"
   assert_visual_block "$SMOKE_OUT_DIR/blocks.json"
 
   local artifacts_count
   local blocks_count
-  artifacts_count="$(json_count "$SMOKE_OUT_DIR/artifacts.json")"
-  blocks_count="$(json_count "$SMOKE_OUT_DIR/blocks.json")"
+  artifacts_count="$(smoke_json_count "$SMOKE_OUT_DIR/artifacts.json")"
+  blocks_count="$(smoke_json_count "$SMOKE_OUT_DIR/blocks.json")"
   write_summary "$topic_id" "$chapter_id" "$job_ref" "$receipt_ref" "$artifacts_count" "$blocks_count"
   cat "$SMOKE_OUT_DIR/summary.txt"
 }

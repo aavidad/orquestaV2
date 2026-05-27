@@ -46,14 +46,8 @@ func (store *FileStateStoreV0) SaveServerStateV0(
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	tmp := store.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return fmt.Errorf("orquesta_server_state: write_failed")
-	}
-	if err := os.Rename(tmp, store.path); err != nil {
-		return fmt.Errorf("orquesta_server_state: rename_failed")
-	}
-	return nil
+	data = append(data, '\n')
+	return writeServerDurableFileV0(store.path, data, "orquesta_server_state")
 }
 
 func (store *FileStateStoreV0) LoadServerStateV0(ctx context.Context) (StateV0, error) {

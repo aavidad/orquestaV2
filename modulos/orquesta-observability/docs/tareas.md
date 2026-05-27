@@ -2,6 +2,19 @@
 
 Cada tarea debe ser pequena y cerrada.
 
+```text
+ID: OBS-012
+Objetivo: Reconciliar T198 para descriptors MCP de operational-status y workspace timeline.
+Write-set: docs locales y backlog T198.
+Simbolo foco: OperationalStatusQueryV0; WorkspaceTimelineQueryV0.
+Contrato: mcp.resource.descriptor_source.v0 como consumidor de observability.
+Validacion: go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-observability ./modulos/orquesta-governance ./modulos/orquesta-core ./cmd/orquesta-server.
+Bloqueos: No habilita sink, DB, runtime ni lectura de transcripts; solo fija la fuente canonica para el descriptor.
+Estado: completada_documental 2026-05-27
+Revalidacion: `agent-ref-task-autoprogramming-c3678e9bc306-g01` confirma cierre
+stale documental sin codigo nuevo.
+```
+
 ## Backlog inicial desde DB v1
 
 ```text
@@ -11,7 +24,7 @@ Write-set: docs/tareas.md, docs/decisiones.md, docs/contratos.md, docs/pruebas.m
 Simbolo foco: OrquestaEventV0
 Contrato: OrquestaEvent v0
 Validacion: solo agregados, filtros, contadores y ejemplos pequenos; nada de transcripts completos en docs ni prompts.
-Bloqueos: DBV1-000 completada en docs/reinicio_orquesta_v2/inventario_db_v1.md.
+Bloqueos: ninguno vivo; las tablas de DB v1 quedan como evidencia forense historica y no como prerequisito ejecutable de automejora.
 Estado: completada_documental
 ```
 

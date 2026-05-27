@@ -26,16 +26,19 @@ func (handler mcpArrancarDirectorAppHTTPHandlerV0) ServeHTTP(w http.ResponseWrit
 	if r.URL.Path != MCPArrancarDirectorAppHTTPPathV0 {
 		writeMCPArrancarDirectorAppHTTPV0(w, http.StatusNotFound, newMCPArrancarDirectorHTTPErrorV0(
 			"path",
-			"ruta_no_soportada",
+			MCPPublicErrPathUnsupportedV0,
 			correlationFromArrancarDirectorHTTPV0(r, MCPArrancarDirectorAppToolInputV0{}),
 		))
 		return
 	}
+	if handleMCPPublicHTTPOptionsV0(w, r, http.MethodPost) {
+		return
+	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
+		setMCPPublicHTTPAllowV0(w, http.MethodPost)
 		writeMCPArrancarDirectorAppHTTPV0(w, http.StatusMethodNotAllowed, newMCPArrancarDirectorHTTPErrorV0(
 			"method",
-			"metodo_no_permitido",
+			MCPPublicErrMethodNotAllowedV0,
 			correlationFromArrancarDirectorHTTPV0(r, MCPArrancarDirectorAppToolInputV0{}),
 		))
 		return
@@ -49,10 +52,10 @@ func (handler mcpArrancarDirectorAppHTTPHandlerV0) ServeHTTP(w http.ResponseWrit
 		return
 	}
 	var input MCPArrancarDirectorAppToolInputV0
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+	if code := decodeMCPPublicHTTPJSONV0(w, r, &input); code != "" {
 		writeMCPArrancarDirectorAppHTTPV0(w, http.StatusBadRequest, newMCPArrancarDirectorHTTPErrorV0(
 			"body",
-			"request_body_invalido",
+			code,
 			correlationFromArrancarDirectorHTTPV0(r, input),
 		))
 		return

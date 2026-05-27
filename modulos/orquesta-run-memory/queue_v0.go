@@ -92,11 +92,15 @@ func applyPriorityCommandV0(
 	if command.AppRef != "" {
 		candidate.AppRef = command.AppRef
 	}
+	if command.FairnessGroupRef != "" {
+		candidate.FairnessGroupRef = command.FairnessGroupRef
+	}
 	candidate.PriorityScore = command.PriorityScore
 	if !command.UpdatedAt.IsZero() {
 		candidate.UpdatedAt = command.UpdatedAt
 	}
 	candidate.EvidenceRefs = append([]string(nil), command.EvidenceRefs...)
+	candidate.WorksetClaims = cloneRunMemoryWorksetClaimsV0(command.WorksetClaims)
 	entry.candidate = candidate
 	return entry
 }
@@ -105,5 +109,23 @@ func cloneRunSchedulingCandidateV0(
 	candidate orquestarunqueue.RunSchedulingCandidateV0,
 ) orquestarunqueue.RunSchedulingCandidateV0 {
 	candidate.EvidenceRefs = append([]string(nil), candidate.EvidenceRefs...)
+	candidate.WorksetClaims = cloneRunMemoryWorksetClaimsV0(candidate.WorksetClaims)
 	return candidate
+}
+
+func cloneRunMemoryWorksetClaimsV0(
+	claims []orquestarunqueue.WorksetClaimV0,
+) []orquestarunqueue.WorksetClaimV0 {
+	out := make([]orquestarunqueue.WorksetClaimV0, 0, len(claims))
+	for _, claim := range claims {
+		claim.ReadSet = append([]orquestarunqueue.ScopeRefV0(nil), claim.ReadSet...)
+		claim.WriteSet = append([]orquestarunqueue.ScopeRefV0(nil), claim.WriteSet...)
+		claim.DependsOn = append([]string(nil), claim.DependsOn...)
+		claim.EvidenceRefs = append([]string(nil), claim.EvidenceRefs...)
+		out = append(out, claim)
+	}
+	if out == nil {
+		return []orquestarunqueue.WorksetClaimV0{}
+	}
+	return out
 }

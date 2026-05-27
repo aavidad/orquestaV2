@@ -12,6 +12,7 @@ func operationalDirectorPlanRunRequiredTestsV0(
 	ports StartAppDirectorPortsV0,
 	activeStep orquestacionnucleoapp.OperationalDirectorPlanStepStateV0,
 	requiredTests []string,
+	requiredTestsByTask map[string][]string,
 	matches []operationalDirectorPlanAcceptedReviewMatchV0,
 ) (orquestacionnucleoapp.OperationalDirectorPlanStepStateV0, bool, error) {
 	if ports.RequiredTestRunner == nil {
@@ -19,10 +20,14 @@ func operationalDirectorPlanRunRequiredTestsV0(
 	}
 	evidenceRefs := make([]string, 0, len(requiredTests)*len(matches))
 	for _, match := range matches {
+		matchRequiredTests := operationalDirectorPlanRequiredTestsForMatchV0(requiredTestsByTask, requiredTests, match)
+		if len(matchRequiredTests) == 0 {
+			continue
+		}
 		result, err := ports.RequiredTestRunner.RunRequiredTestsV0(ctx, orquestacionnucleoapp.RequiredTestExecutionRequestV0{
 			RunRef:            request.RunRef,
 			TaskRef:           match.TaskRef,
-			TestCommands:      requiredTests,
+			TestCommands:      matchRequiredTests,
 			DeliveryRef:       match.DeliveryRef,
 			ReviewRequestID:   match.ReviewRequestID,
 			ReviewResultRef:   match.ReviewResultRef,

@@ -142,7 +142,7 @@ func continueOperationalDirectorPlanStateCanProgressBlockedRequiredTestsReplanV0
 	if reader == nil {
 		return false, nil
 	}
-	events, err := reader.LoadRunEventsV0(ctx, request.RunRef)
+	events, err := loadOperationalRunEventsV0(ctx, reader, request.RunRef)
 	if err != nil {
 		return false, err
 	}

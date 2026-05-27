@@ -119,9 +119,9 @@ const opsDashboardHTMLChunk1V0 = `      if (!n) return '-';
     function runTitle(run) {
       if (!run) return 'Tarea sin seleccionar';
       const runtimeAgent = runtimeAgentForRun(run.run_ref);
-      const runtimeTask = (((runtimeAgent || {}).agent_packet || {}).task || {});
+      const runtimeTask = ((runtimeAgent || {}).task || {});
       if (runtimeTask.title) return runtimeTask.title;
-      if (runtimeTask.objective) return runtimeTask.objective;
+      if (runtimeTask.objective_summary) return runtimeTask.objective_summary;
       if (run.summary) return run.summary;
       if (run.task_title) return run.task_title;
       if (run.title) return run.title;

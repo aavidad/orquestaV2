@@ -7,6 +7,7 @@ import (
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacontext "orquesta/modulos/orquesta-context"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadirectoragentworkflow "orquesta/modulos/orquesta-director-agent-workflow"
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
@@ -26,6 +27,7 @@ type ConfigV0 struct {
 	Clock                    orquestafactoryhttp.AppSpecHTTPClockV0
 	Timeout                  time.Duration
 	DirectorLimits           orquestaweb.WebArrancarDirectorAppLimitsV0
+	DirectorDecisionBudget   orquestadirectoragentworkflow.DirectorAgentDecisionBatchBudgetV0
 	Stores                   StoresV0
 	RunQueue                 RunQueueConfigV0
 	RunSupervisor            RunSupervisorConfigV0
@@ -121,10 +123,15 @@ type RunSupervisorConfigV0 struct {
 type CapacityConfigV0 struct {
 	Tier            orquestacoreworkflow.OrchestrationCapacityRecommendationV0
 	ReasoningEffort orquestacoreworkflow.OrchestrationCapacityRecommendationV0
+	PolicyRef       string
+	PoolRef         string
+	ModelRef        string
+	QuotaRef        string
 	OccurredAt      string
 	RequestedBy     string
 	Summary         string
 	EvidenceRefs    []string
+	DecisionPolicy  orquestacionnucleoapp.CapacityDecisionPolicyPortV0
 }
 
 type ReviewGateConfigV0 struct {
@@ -133,4 +140,6 @@ type ReviewGateConfigV0 struct {
 	FailureStatus           orquestacoreworkflow.ReviewResultStatusV0
 	StrictGoLineBudget      bool
 	LineBudgetSnapshotStore orquestaruntimeworktree.WorktreeSnapshotStorePortV0
+	SnapshotReadBudget      orquestaruntimeworktree.WorktreeSnapshotReadBudgetV0
+	Policy                  ReviewGateDeliveryPolicyPortV0
 }

@@ -9,6 +9,1067 @@ Comando rapido:
 ./scripts/test_rails_fast.sh
 ```
 
+```text
+ID: FILE-BUDGET-FEDERATED-BACKLOG-SOURCE-SPLIT-T257-20260527
+Fecha: 2026-05-27
+Sintoma: revalidacion OrquestaV2 del backlog pendiente T257 vuelve a exigir
+separar carga y parseo del indice federado, con contexto obligatorio
+`ref_only` y write-set cerrado al servidor y shards documentales.
+Campo: presupuesto de fichero, backlog federado, ACK estricto y contexto
+required ref_only.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-ec8e0c187f3a9ac12eb4a2a1b1343950`
+de
+`request-ref-autoprogramming-backlog-t257-federated-backlog-source-file-split-14e8590c`,
+con `required_ref_action=ack_evidence_required` y prueba obligatoria
+`go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Decision: mantener T257 como cierre local ya implementado: carga federada,
+parser de indice, parser local y clasificacion de estado/quarantine quedan
+separados en `cmd/orquesta-server`, sin reabrir T249/T250/T251/T252/T254 ni
+convertir refs opacas en rutas.
+Test futuro: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Estado: revalidado por T257; contexto `ref_only` debe resolverse en ACK.
+Revalidacion burst 002:
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-a2fd4b485cb6c9eb3e118699b8c263e8`
+confirma el cierre sin abrir rail nuevo.
+Revalidacion burst 003:
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-6e9bb2925e8315f5a8e8a4458c5dafec`
+confirma el cierre T257; la prueba obligatoria queda bloqueada por symbols de
+`modulos/orquesta-app-director-service` fuera del write-set.
+Revalidacion burst 002 adicional:
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-d42ec6b2c4feefb41c1a8bd1217aba3a`
+confirma que el paquete solo reobserva T257. El contexto `ref_only` se resuelve
+por lectura local del paquete y fuentes vigentes; la prueba obligatoria vuelve a
+quedar bloqueada por symbols de `modulos/orquesta-app-director-service` fuera
+del write-set cerrado.
+Revalidacion burst 002 adicional 6dc6:
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-6dc6bdca36a88bfa03d0be4e0ef98dbd`
+confirma de nuevo que T257 ya esta cerrado localmente. El paquete conserva
+`worktree_ref` y `branch_ref` como refs opacas, resuelve contexto `ref_only` por
+lectura local/evidencia ACK y no abre codigo ni owners nuevos.
+Revalidacion burst 002 adicional b744:
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-b744e45b4bc69e90339caae12c59ddac`
+confirma otra reobservacion del mismo cierre T257. La resolucion sigue siendo
+lectura local del paquete y fuentes vigentes, ACK con evidencia `ref_only`, sin
+codigo nuevo ni ampliacion de write-set.
+Revalidacion burst 002 3519:
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-3519b447ee0e247812f0a2de19e107ff`
+confirma otra reobservacion de T257 ya cerrado. La resolucion sigue siendo
+lectura local/evidencia ACK, sin codigo nuevo ni ampliacion de write-set.
+Revalidacion burst 003 e3e841:
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-e3e8416382f03b021e17fad4f48672c6`
+confirma otra reobservacion de T257 ya cerrado. La resolucion sigue siendo
+lectura local/evidencia ACK, sin codigo nuevo ni ampliacion de write-set.
+Revalidacion burst 002 6ad2:
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-6ad2ce2a420fdd4406624de54709433a`
+confirma otra reobservacion de T257 ya cerrado. El contexto `ref_only` se
+resuelve por lectura local/evidencia ACK; no se abre codigo nuevo ni se amplia
+write-set.
+```
+
+```text
+ID: BACKLOG-TASK-NUMBER-RESERVATION-20260527-001
+Fecha: 2026-05-27
+Sintoma: scanners concurrentes podian proponer o consumir `## Txx` usando el
+numero humano como identidad suficiente, aunque el backlog ya contenia
+duplicados historicos como `## T250`.
+Campo: autoprogramacion, backlog planner, merge lease documental.
+Payload minimo: request de backlog con `request_ref`, `correlation_id`,
+`backlog_scan_epoch`, write-set cerrado y snapshot con al menos dos encabezados
+`## T250` no equivalentes.
+Decision: cada request de backlog debe transportar `task_id_ref`,
+`reservation-ref-backlog-task-id-*` y rango `Txx`; el lector debe conservar
+instancias por path, linea y fingerprint, y publicar
+`backlog_task_number_collision` o exigir reserva antes de escribir.
+Test futuro: `go test -count=1 ./cmd/orquesta-server -run
+'TestBacklogTaskIDAllocationLeaseV0'`.
+Estado: cubierto 2026-05-27 por T252 backlog-task-number-reservation-policy
+```
+
+```text
+ID: FILE-BUDGET-RUNTIME-PROCESS-CONNECTOR-T256-20260527
+Fecha: 2026-05-27
+Sintoma: `process_runtime_connector_v0.go` y
+`process_runtime_connector_types_v0.go` superaban 300 lineas y mezclaban
+lifecycle de proceso, adopcion, watchers, DTOs, validacion y guardas de
+env/rutas/shell.
+Campo: presupuesto de fichero, runtime neutral y autoprogramacion T256.
+Payload minimo: modulo `modulos/orquesta-runtime` con
+`ProcessRuntimeConnectorV0`, `ProcessRuntimeLaunchRequestV0` y tests de proceso
+local real controlado.
+Decision: cerrar T256 separando DTOs/errores, validacion de launch, politica de
+env, guardas de valores, estado interno, adopcion y watchers en ficheros
+menores de 300 lineas, sin cambiar refs ni codigos publicos.
+Test futuro: `go test -count=1 ./modulos/orquesta-runtime`.
+Estado: cerrado por T256
+Rework de revision 2026-05-27:
+`agent-ref-task-ref-review-rework-task-autoprogramming-d1516ddebab4-g01-736b5902b9f28a1666a612eccb83a9c2`
+conserva el cierre, no abre rail nuevo y exige ACK con
+`contexto_ref_only_resuelto`.
+```
+
+```text
+ID: FILE-BUDGET-SERVER-SHUTDOWN-T256-REWORK-20260527-C853
+Fecha: 2026-05-27
+Sintoma: rework de evaluacion vuelve a observar
+`server-shutdown-usecase-file-split-before-growth` con contexto obligatorio
+`ref_only`, write-set cerrado y T256 ya fusionado con el owner canonico.
+Campo: presupuesto de fichero, shutdown hexagonal, ACK estricto y contexto
+required ref_only.
+Payload minimo: paquete
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-c853a308c21a89806299b2db6b75edfe`
+de
+`request-ref-autoprogramming-backlog-t256-server-shutdown-usecase-file-split-before-growth-079d82a9`,
+con `required_ref_action=ack_evidence_required` y prueba obligatoria
+`go test -count=1 ./modulos/orquesta-server-shutdown ./cmd/orquesta-server`.
+Decision: conservar T256 como cierre canonico de `orquesta-server-shutdown`;
+no abrir owner nuevo para el alias `before-growth`; resolver `ref_only` por
+lectura local/evidencia ACK. El build obligatorio queda bloqueado por simbolos
+indefinidos en `modulos/orquesta-app-director-service`, fuera del write-set.
+Test futuro: `go test -count=1 ./modulos/orquesta-server-shutdown ./cmd/orquesta-server`.
+Estado: registrado; requiere decision/scope separado si se corrige el bloqueo
+de `orquesta-app-director-service`.
+```
+
+```text
+ID: FILE-BUDGET-SERVER-SHUTDOWN-T256-REWORK-20260527-3CF9
+Fecha: 2026-05-27
+Sintoma: rework de reemplazo vuelve a observar
+`server-shutdown-usecase-file-split-before-growth` con contexto obligatorio
+`ref_only`, write-set cerrado y T256 ya fusionado con el owner canonico.
+Campo: presupuesto de fichero, shutdown hexagonal, ACK estricto y contexto
+required ref_only.
+Payload minimo: paquete
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-3cf9f50f2a1ee0b94df79560b6eeca53`
+de
+`request-ref-autoprogramming-backlog-t256-server-shutdown-usecase-file-split-before-growth-079d82a9`,
+con `required_ref_action=ack_evidence_required` y prueba obligatoria
+`go test -count=1 ./modulos/orquesta-server-shutdown ./cmd/orquesta-server`.
+Decision: conservar T256 como cierre canonico de `orquesta-server-shutdown`;
+no abrir owner nuevo para el alias `before-growth`; resolver `ref_only` por
+lectura local/evidencia ACK.
+Test futuro: `go test -count=1 ./modulos/orquesta-server-shutdown ./cmd/orquesta-server`.
+Estado: registrado; no abre rail nuevo.
+```
+
+```text
+ID: FILE-BUDGET-SERVER-SHUTDOWN-T256-REWORK-20260527-A0FA
+Fecha: 2026-05-27
+Sintoma: rework de evaluacion vuelve a observar
+`server-shutdown-usecase-file-split-before-growth` con contexto obligatorio
+`ref_only`, write-set cerrado y T256 ya fusionado con el owner canonico.
+Campo: presupuesto de fichero, shutdown hexagonal, ACK estricto y contexto
+required ref_only.
+Payload minimo: paquete
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-a0fa2702f7f819236261be3abc537d86`
+de
+`request-ref-autoprogramming-backlog-t256-server-shutdown-usecase-file-split-before-growth-079d82a9`,
+con `required_ref_action=ack_evidence_required` y prueba obligatoria
+`go test -count=1 ./modulos/orquesta-server-shutdown ./cmd/orquesta-server`.
+Decision: conservar T256 como cierre canonico de `orquesta-server-shutdown`;
+no abrir owner nuevo para el alias `before-growth`; resolver `ref_only` por
+lectura local/evidencia ACK.
+Test futuro: `go test -count=1 ./modulos/orquesta-server-shutdown ./cmd/orquesta-server`.
+Estado: registrado; no abre rail nuevo.
+```
+
+```text
+ID: FILE-BUDGET-SERVER-SHUTDOWN-T256-REWORK-20260527-2E9
+Fecha: 2026-05-27
+Sintoma: rework de reemplazo vuelve a observar
+`server-shutdown-usecase-file-split-before-growth` con contexto obligatorio
+`ref_only`, write-set cerrado y T256 ya fusionado con el owner canonico.
+Campo: presupuesto de fichero, shutdown hexagonal, ACK estricto y contexto
+required ref_only.
+Payload minimo: paquete
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-autoprogr-2e9-81707decc46db22fc599c9343d59d3cb`
+de
+`request-ref-autoprogramming-backlog-t256-server-shutdown-usecase-file-split-before-growth-079d82a9`,
+con `required_ref_action=ack_evidence_required` y prueba obligatoria
+`go test -count=1 ./modulos/orquesta-server-shutdown ./cmd/orquesta-server`.
+Decision: conservar T256 como cierre canonico de `orquesta-server-shutdown`;
+no abrir owner nuevo para el alias `before-growth`; resolver `ref_only` por
+lectura local/evidencia ACK.
+Test futuro: `go test -count=1 ./modulos/orquesta-server-shutdown ./cmd/orquesta-server`.
+Estado: registrado; no abre rail nuevo.
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-043
+Fecha: 2026-05-27
+Sintoma: retry 4da183 burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y backlog degradado ya cubierto por owners pendientes antes de programar codigo.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete `agent-ref-task-autoprogramming-3533ffab219a-g01` del
+retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-4da1836e0a02ce563fd804cadbabca472bed472d00f586dc4d7070bb0e408426`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-4da1836e0a02ce563fd804cadbabca472bed472d00f586dc4d7070bb0e408426-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx ni programar codigo desde el scanner; registrar
+no-op cubierto, resolver `ref_only` mediante lectura local/evidencia ACK y
+conservar `worktree_ref`/`branch_ref` como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Evidencia ACK: lectura local del paquete, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+matriz de smokes, backlog vivo y shards de rail confirma que el retry no aporta
+frontera nueva.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-T257-REWORK-ASSESSMENT-20260527-5A8806
+Fecha: 2026-05-27
+Sintoma: correccion tras revision de T257 recibe paquete estricto con contexto
+obligatorio `ref_only`, write-set cerrado a servidor y shards documentales, y
+criterio de conservar entrega valida sin relanzar agente padre.
+Campo: ACK estricto, backlog federado, rail errors, duplicaciones y prueba
+focal del servidor.
+Payload minimo: paquete
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-c4dae25a0488-g01-385-5a8806ef75f49aae3734e7a512136f48`
+de `request-ref-autoprogramming-backlog-t257-federated-backlog-source-file-split-14e8590c`
+con `required_ref_action=ack_evidence_required`.
+Decision: no abrir owner nuevo; mantener T257 cerrado como split del backlog
+federado en `cmd/orquesta-server`, resolver `ref_only` por lectura local mas
+evidencia ACK y conservar refs de runtime como opacas.
+Test futuro: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Estado: registrado, cubierto
+```
+
+```text
+ID: T257-FEDERATED-BACKLOG-SOURCE-FILE-SPLIT-REVALIDATION-20260527-7CAABB
+Fecha: 2026-05-27
+Sintoma: OrquestaV2 reemite la tarea T257 con contexto obligatorio `ref_only`
+y write-set cerrado, aunque el split federado ya esta implementado.
+Campo: planner de automejora, backlog federado y ACK estricto.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-7caabb5af4687f69a91e450ea47d88db`
+de
+`request-ref-autoprogramming-backlog-t257-federated-backlog-source-file-split-14e8590c`,
+con `required_ref_action=ack_evidence_required`, test obligatorio
+`go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server` y refs
+opacas de worktree/branch.
+Decision: no abrir otro Txx ni modificar codigo; registrar revalidacion de
+T257, resolver `ref_only` mediante lectura local/evidencia ACK y preservar
+`worktree_ref`/`branch_ref` como refs opacas.
+Test futuro: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Estado: registrado, cubierto por T257 cerrado
+```
+
+```text
+ID: BACKLOG-T257-REVALIDATION-NOOP-20260527-EBEB
+Fecha: 2026-05-27
+Sintoma: OrquestaV2 reobserva T257 `federated-backlog-source-file-split` con
+contexto obligatorio `ref_only`, write-set cerrado y owner ya cerrado.
+Campo: autoprogramacion, backlog federado, ACK estricto y cierre documental.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-ebebfa72236082cbc973b4c48b012e70`
+de la request
+`request-ref-autoprogramming-backlog-t257-federated-backlog-source-file-split-14e8590c`,
+con `required_ref_action=ack_evidence_required` y prueba obligatoria focal del
+servidor.
+Decision: no abrir otro owner ni duplicar politicas; cerrar como revalidacion
+de T257 con lectura local/evidencia ACK, conservando `worktree_ref` y
+`branch_ref` como refs opacas. La prueba focal puede quedar bloqueada por
+compilacion de `modulos/orquesta-app-director-service` fuera del write-set.
+Test futuro: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Estado: registrado, cubierto por T257 y owners vecinos T44/T249/T250/T251/T252/T254/T255/T256/T258
+```
+
+```text
+ID: BACKLOG-T257-REVALIDATION-NOOP-20260527-688572
+Fecha: 2026-05-27
+Sintoma: OrquestaV2 reobserva T257 `federated-backlog-source-file-split` con
+contexto obligatorio `ref_only`, write-set cerrado y owner ya cerrado.
+Campo: autoprogramacion, backlog federado, ACK estricto y cierre documental.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-c4dae25a0488-g01-688572c0228e7735f6c5a3d0b137d96f`
+de la request
+`request-ref-autoprogramming-backlog-t257-federated-backlog-source-file-split-14e8590c`,
+con `required_ref_action=ack_evidence_required` y prueba obligatoria focal del
+servidor.
+Decision: no abrir otro owner ni duplicar politicas; cerrar como revalidacion
+de T257 con lectura local/evidencia ACK, conservando `worktree_ref` y
+`branch_ref` como refs opacas.
+Test futuro: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Estado: registrado, cubierto por T257 y owners vecinos T44/T249/T250/T251/T252/T254/T255/T256/T258
+```
+
+```text
+ID: FILE-BUDGET-APP-DIRECTOR-SERVICE-T258-20260527
+Fecha: 2026-05-27
+Sintoma: suite historica de `orquesta-app-director-service` acumulaba tests de
+Director Operativo, cierre causal, replay statefile y replan en ficheros Go
+por encima de 300 lineas.
+Campo: presupuesto de fichero, suite Go y autoprogramacion T258.
+Payload minimo: `operational_director_v0_test.go`,
+`operational_closure_v0_test.go`,
+`operational_director_full_statefile_replay_v0_test.go`,
+`director_decision_source_v0_test.go` y vecinos de tests locales.
+Decision: cerrar T258 repartiendo tests y helpers de test por escenario dentro
+del modulo, sin tocar contratos publicos ni adaptadores de producto.
+Test futuro: `go test -count=1 ./modulos/orquesta-app-director-service`.
+Estado: cerrado por T258
+Rework 2026-05-27: revision de entrega confirma que el cierre pertenece a
+T258, no a T253; el modulo queda bajo el rail de 300 lineas por fichero Go.
+```
+
+```text
+ID: BACKLOG-T254-REWORK-ACK-20260527-001
+Fecha: 2026-05-27
+Sintoma: correccion tras revision para T254 llega con contexto obligatorio
+`ref_only`, `required_ref_action=ack_evidence_required` y entrega valida que
+debe cerrarse sin relanzar agente padre ni abrir otro owner solapado.
+Campo: backlog task id alias index, ACK estricto y required ref_only context.
+Payload minimo: paquete
+`agent-ref-task-ref-review-rework-task-autoprogramming-6ed65028eb0b-g01-0154a0e80595eed31f9c3059a95a2f93`
+de `request-ref-autoprogramming-backlog-t254-backlog-task-id-collision-alias-index-09624d3f`,
+write-set cerrado a servidor/autoprogramacion/MCP y shards documentales, con
+prueba obligatoria focal del servidor residente.
+Decision: conservar T254 como cierre ya implementado, resolver `ref_only` por
+lectura local/evidencia ACK, no crear un Txx nuevo y no convertir refs opacas de
+worktree/branch en rutas.
+Test futuro: `go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-server ./modulos/orquesta-mcp ./cmd/orquesta-server`.
+Estado: registrado, rework cerrado por ACK
+```
+
+```text
+ID: BACKLOG-TASK-ID-COLLISION-ALIAS-INDEX-20260527
+Fecha: 2026-05-27
+Sintoma: varias secciones ejecutables `## T250` existen en el backlog vivo y un
+cierre, ACK, stats, roadmap o MCP que use solo el numero humano puede apuntar a
+la frontera equivocada.
+Campo: planner de automejora residente, scanner de backlog y superficies
+publicas que reportan tareas `Txx`.
+Decision aplicada: mantener reparacion aditiva sin renumerar historico; publicar
+`task_instance_ref`/`backlog_task_entry_ref`, alias `Txx#NN`,
+`backlog_duplicate_task_id_ambiguous`, `instance_refs` y evidencia de alias
+index en las requests y colisiones del planner.
+Test: `go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-server ./modulos/orquesta-mcp ./cmd/orquesta-server`.
+Backlog: `T254 backlog-task-id-collision-alias-index`.
+Estado: cubierto por T254.
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-046
+Fecha: 2026-05-27
+Sintoma: retry 9607b2 burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y backlog degradado ya cubierto por owners pendientes antes de programar codigo.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete `agent-ref-task-autoprogramming-1db274df2c82-g01` del
+retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-9607b28f843c98b4bd58ad70bf22a6e18f7636b31d8e71af7b7521ec3c3e4963`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-9607b28f843c98b4bd58ad70bf22a6e18f7636b31d8e71af7b7521ec3c3e4963-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx ni programar codigo desde el scanner; registrar
+no-op cubierto, resolver `ref_only` mediante lectura local/evidencia ACK y
+conservar `worktree_ref`/`branch_ref` como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Evidencia ACK: lectura local del paquete, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+backlog vivo y shards de rail confirma que el retry no aporta frontera nueva.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-045
+Fecha: 2026-05-27
+Sintoma: retry ca7a01 burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y backlog degradado ya cubierto por owners pendientes antes de programar codigo.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete `agent-ref-task-autoprogramming-b06fa6486ff1-g01` del
+retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-ca7a01129405f7db0785957e06ec98f0f0e537093fdac53f5fd258be2448367e`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-ca7a01129405f7db0785957e06ec98f0f0e537093fdac53f5fd258be2448367e-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx ni programar codigo desde el scanner; registrar
+no-op cubierto, resolver `ref_only` mediante lectura local/evidencia ACK y
+conservar `worktree_ref`/`branch_ref` como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Evidencia ACK: lectura local del paquete, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+matriz de smokes, backlog vivo y shards de rail confirma que el retry no aporta
+frontera nueva.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-044
+Fecha: 2026-05-27
+Sintoma: retry 4da183 burst 003 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y backlog degradado ya cubierto por owners pendientes antes de programar codigo.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-3533ffab219a-g01-3b2c0d9af98bdc2180840a7c40a31ccc`
+del retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-4da1836e0a02ce563fd804cadbabca472bed472d00f586dc4d7070bb0e408426`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-4da1836e0a02ce563fd804cadbabca472bed472d00f586dc4d7070bb0e408426-burst-003`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx ni programar codigo desde el scanner; registrar
+no-op cubierto, resolver `ref_only` mediante lectura local/evidencia ACK y
+conservar `worktree_ref`/`branch_ref` como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-037
+Fecha: 2026-05-27
+Sintoma: retry 598e4b burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y backlog degradado ya cubierto por owners pendientes antes de programar codigo.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete `agent-ref-task-autoprogramming-65f3f5860bf2-g01` del
+retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-598e4b7a32f46accd9b3de9546dbf463558dc510b5b5012327fc817ecb7b0e83`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-598e4b7a32f46accd9b3de9546dbf463558dc510b5b5012327fc817ecb7b0e83-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx ni programar codigo desde el scanner; registrar
+no-op cubierto, resolver `ref_only` mediante lectura local/evidencia ACK y
+conservar `worktree_ref`/`branch_ref` como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Evidencia ACK: lectura local del paquete, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del director,
+backlog vivo y shards de rail confirma que el retry no aporta frontera nueva.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-042
+Fecha: 2026-05-27
+Sintoma: retry db2473 burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y backlog degradado ya cubierto por owners pendientes antes de programar codigo.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete `agent-ref-task-autoprogramming-ba3b7ec7b59c-g01` del
+retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-db2473564d775de155beec4b14c9eb02616b2c586a9ba5d52a86784b0ed8f115`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-db2473564d775de155beec4b14c9eb02616b2c586a9ba5d52a86784b0ed8f115-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx ni programar codigo desde el scanner; registrar
+no-op cubierto, resolver `ref_only` mediante lectura local/evidencia ACK y
+conservar `worktree_ref`/`branch_ref` como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-041
+Fecha: 2026-05-27
+Sintoma: retry debe09 burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y backlog degradado ya cubierto por owners pendientes antes de programar codigo.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete `agent-ref-task-autoprogramming-62119e82f3e7-g01` del
+retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-debe0920522702b51362a84a261ba018fb91aa97096707501f61c5caafc751c6`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-debe0920522702b51362a84a261ba018fb91aa97096707501f61c5caafc751c6-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx ni programar codigo desde el scanner; registrar
+no-op cubierto, resolver `ref_only` mediante lectura local/evidencia ACK y
+conservar `worktree_ref`/`branch_ref` como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-040
+Fecha: 2026-05-27
+Sintoma: retry c848ae burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y backlog degradado ya cubierto por owners pendientes antes de programar codigo.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete `agent-ref-task-autoprogramming-d5b73c0f6568-g01` del
+retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-c848ae18b89a2ec8f6d3236024c8333f9c15cfa95c4ade488f8c3bdd7467f843`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-c848ae18b89a2ec8f6d3236024c8333f9c15cfa95c4ade488f8c3bdd7467f843-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx ni programar codigo desde el scanner; registrar
+no-op cubierto, resolver `ref_only` mediante lectura local/evidencia ACK y
+conservar `worktree_ref`/`branch_ref` como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-039
+Fecha: 2026-05-27
+Sintoma: retry 33cf37 burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y backlog degradado ya cubierto por owners pendientes antes de programar codigo.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete `agent-ref-task-autoprogramming-29c1c237ce8c-g01` del
+retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-33cf37fb0bd7e13be407ed5b412020114079ebc4b8b38a7723bc112729f660e8`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-33cf37fb0bd7e13be407ed5b412020114079ebc4b8b38a7723bc112729f660e8-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx ni programar codigo desde el scanner; registrar
+no-op cubierto, resolver `ref_only` mediante lectura local/evidencia ACK y
+conservar `worktree_ref`/`branch_ref` como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: APP-CODEX-AUTOPROGRAMMING-BRIDGE-SPLIT-20260527
+Fecha: 2026-05-27
+Sintoma: T247 podia reabrirse aunque el bridge productivo ya estuviera dividido
+por request, run, store/replay y continue/wait refs; el test local del bridge
+seguia concentrando escenarios y ocultaba el cierre verificable.
+Campo: stack Codex, prepare-run de autoprogramacion, replay/idempotencia y
+reintentos residentes.
+Decision: cerrar T247 con sharding de tests del bridge sin mover runtime,
+provider, state-file ni politica pura al nucleo.
+Test futuro: `go test -count=1 ./modulos/orquesta-app-codex-stack`.
+Estado: cerrado localmente
+```
+
+```text
+ID: APP-CODEX-AUTOPROGRAMMING-BRIDGE-SPLIT-REWORK-20260527
+Fecha: 2026-05-27
+Sintoma: la correccion de review/rework de T247 podia interpretarse como
+necesidad de relanzar otro agente padre o reabrir el bridge ya dividido, pese a
+que la entrega aceptada conservaba owner, tests y sharding bajo el limite local.
+Campo: stack Codex, review/rework de autoprogramacion y backlog ejecutable.
+Decision: no relanzar agente padre ni tocar el bridge productivo; conservar la
+entrega valida y registrar la correccion como acreditacion documental con
+contexto `ref_only` resuelto por lectura local/evidencia ACK.
+Test futuro: `go test -count=1 ./modulos/orquesta-app-codex-stack`.
+Estado: cerrado localmente
+```
+
+```text
+ID: OPS-RUNTIME-DETAIL-RAW-CONTENT-20260527
+Fecha: 2026-05-27
+Sintoma: `/ops` leia control files de agentes y renderizaba prompts, packets,
+ACKs, decisiones y logs como bloques crudos; para no-log usaba lectura completa
+antes de truncar.
+Campo: detalle runtime operacional del stack Codex y dashboard web.
+Decision: cerrado por T227 con envelopes publicos por fichero, presupuesto de
+lectura previo, refs/hashes compactos, extractos JSON permitidos y tail
+redactado. No exponer paths locales, HOME, tokens, prompts, transcripts,
+completions, stdout/stderr completo ni payloads HTTP.
+Test futuro: mantener cobertura en
+`TestCodexStackAgentRuntimeDetailHTTPHandlerV0DevuelveEnvelopeRedactado`,
+`TestCodexStackAgentRuntimeDetailHTTPHandlerV0LeeLogsPorTailAcotado` y
+`TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto`.
+Estado: cerrado localmente
+```
+
+```text
+ID: BACKLOG-SCAN-ENTRY-IDENTITY-20260527-001
+Fecha: 2026-05-27
+Sintoma: titulos `Escaneo backlog 2026-05-27 ...` repetidos o fuera de orden
+podian usarse como evidencia humana suficiente para merge/rebase aunque no
+tuvieran identidad causal propia.
+Campo: merge lease del scanner de backlog en `cmd/orquesta-server`.
+Payload minimo: secciones `## Escaneo backlog ...` con ordinal duplicado,
+ordinal ausente o salto no monotono antes de tareas `## Txx`.
+Decision: cerrado por T249; el lease deriva `scan_entry_ref` por documento,
+fecha, ordinal y hash de bloque, transporta digest/issues y publica
+`backlog_scan_entry_duplicate` o `backlog_scan_entry_order_ambiguous` para pedir
+rebase o `CONSULTA AL DIRECTOR` sin renumerar historico.
+Test ejecutado: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Estado: cerrado
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-023
+Fecha: 2026-05-27
+Sintoma: burst 002 del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado, prueba global obligatoria y huecos ya
+visibles en backlog.
+Campo: backlog scanner, ACK estricto, request base y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-9fa6b01dc86ff93d9228ca93a474de5c`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un burst equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-036
+Fecha: 2026-05-27
+Sintoma: retry 3d4312 burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y backlog degradado ya cubierto por owners pendientes antes de programar codigo.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete `agent-ref-task-autoprogramming-f924bc43a081-g01` del
+retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-3d4312f622da5f7999d371853b749e8037dbd7c2f12110565410479b0fd44256`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-3d4312f622da5f7999d371853b749e8037dbd7c2f12110565410479b0fd44256-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx ni programar codigo desde el scanner; registrar
+no-op cubierto, resolver `ref_only` mediante lectura local/evidencia ACK y
+conservar `worktree_ref`/`branch_ref` como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-035
+Fecha: 2026-05-27
+Sintoma: retry d3160 burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y backlog degradado ya cubierto por owners pendientes antes de programar codigo.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete `agent-ref-task-autoprogramming-205bd061b6ad-g01` del
+retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-d3160b6776bd90b62315a49b62da6fdf2d6aa6be3e51763b7b0685423ed83944`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-d3160b6776bd90b62315a49b62da6fdf2d6aa6be3e51763b7b0685423ed83944-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx ni programar codigo desde el scanner; registrar
+no-op cubierto, resolver `ref_only` mediante lectura local/evidencia ACK y
+conservar `worktree_ref`/`branch_ref` como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-018-ED6089
+Fecha: 2026-05-27
+Sintoma: retry ed6089 burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado y backlog degradado ya
+cubierto por owners pendientes antes de programar codigo.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-ed6089ea4ce716f9991ef353adc9468a5261ba8198a581cdd29360ebe75e5d7f`,
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-ed6089ea4ce716f9991ef353adc9468a5261ba8198a581cdd29360ebe75e5d7f-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-034
+Fecha: 2026-05-27
+Sintoma: retry bb17 burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y backlog degradado ya cubierto por owners pendientes antes de programar codigo.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete `agent-ref-task-autoprogramming-6ae909f7547f-g01` del
+retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-bb17b5de9b3273d237c8f0ea110420b58d301fbd02207ca151b44a350cc51e4e`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-bb17b5de9b3273d237c8f0ea110420b58d301fbd02207ca151b44a350cc51e4e-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx ni programar codigo desde el scanner; registrar
+no-op cubierto, resolver `ref_only` mediante lectura local/evidencia ACK y
+conservar `worktree_ref`/`branch_ref` como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-033
+Fecha: 2026-05-27
+Sintoma: retry 4e3533 del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado, prueba global obligatoria y backlog
+degradado ya cubierto por owners pendientes antes de programar codigo.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete `agent-ref-task-autoprogramming-8e83bd89baf6-g01` del
+retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-4e3533f995121822a0dc32f1de4dc8cddecbe0896538c03c502b3ef2f43adfd3`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-4e3533f995121822a0dc32f1de4dc8cddecbe0896538c03c502b3ef2f43adfd3-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx ni programar codigo desde el scanner; registrar
+no-op cubierto, resolver `ref_only` mediante lectura local/evidencia ACK y
+conservar `worktree_ref`/`branch_ref` como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-014
+Fecha: 2026-05-27
+Sintoma: retry 15eeecb9 del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado y backlog degradado ya cubierto por
+owners pendientes antes de programar codigo.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete `agent-ref-task-autoprogramming-7b90ca195eaf-g01` del
+retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-5da8540e9825a1ef36992bec2c9c7fcecc002ca6b869058c1afa214eeb713af7`,
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx ni programar codigo desde el scanner; registrar
+no-op cubierto, resolver `ref_only` mediante lectura local/evidencia ACK y
+conservar `worktree_ref`/`branch_ref` como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-032
+Fecha: 2026-05-27
+Sintoma: retry a3abed burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete `agent-ref-task-autoprogramming-30b4d5ecfe9b-g01` del
+retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-a3abed43bb343900425d1d9279118a7b96338a93a54f23067693c3273bf5e52a`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-a3abed43bb343900425d1d9279118a7b96338a93a54f23067693c3273bf5e52a-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-FEDERATED-EPOCH-SCOPE-20260527-001
+Fecha: 2026-05-27
+Sintoma: T250 podia confundirse con una reapertura de scanner aunque el servidor
+ya distinguia fuentes federadas ejecutables de fuentes historicas, stale o en
+quarantine para calcular epoch.
+Campo: scanner de backlog federado en `cmd/orquesta-server`.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-88a96698afb2-g01-6dab0da79e1908567a8bf8e7f3250f9b`
+con `required_ref_action=ack_evidence_required` y write-set cerrado al servidor
+y shards documentales.
+Decision: revalidar T250 sin ampliar scope: `BacklogScanDocs`, epoch y reservas
+solo usan fuentes federadas ejecutables; las no ejecutables quedan como contexto
+`federated_backlog_source_not_executable` y no fuerzan rebase del backlog vivo.
+Test futuro: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Estado: revalidado
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-031
+Fecha: 2026-05-27
+Sintoma: retry 35a079 burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete `agent-ref-task-autoprogramming-49af6e594adb-g01` del
+retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-35a0799f24f24651bedbf5c6cbd3647aad99eeee61e6c12e0be5ba2a10694e3b`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-35a0799f24f24651bedbf5c6cbd3647aad99eeee61e6c12e0be5ba2a10694e3b-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-030
+Fecha: 2026-05-27
+Sintoma: retry d1d80 burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete `agent-ref-task-autoprogramming-798614d0f80e-g01` del
+retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-d1d80a70704399bf29392dd809a2ff101897ee7d290b6aaa3e9c7bb4c80cad1b`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-d1d80a70704399bf29392dd809a2ff101897ee7d290b6aaa3e9c7bb4c80cad1b-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-029
+Fecha: 2026-05-27
+Sintoma: burst 003 fba55/f7d3 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, request burst y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-fba55e3296a0-g01-f7d3f88efa3648cbceb5112f1cf4a040`
+de `request-ref-autoprogramming-backlog-scanner-15eeecb9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-burst-003`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un burst equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-026
+Fecha: 2026-05-27
+Sintoma: burst 002 fba55 del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado, prueba global obligatoria y huecos ya
+visibles en backlog.
+Campo: backlog scanner, ACK estricto, request burst y shards documentales.
+Payload minimo: paquete `agent-ref-task-autoprogramming-fba55e3296a0-g01` de
+`request-ref-autoprogramming-backlog-scanner-15eeecb9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un burst equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-028
+Fecha: 2026-05-27
+Sintoma: burst 002 fba55/8a1ece del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, request burst y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-fba55e3296a0-g01-8a1ecec98ecf3323c5488e327056f703`
+de `request-ref-autoprogramming-backlog-scanner-15eeecb9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un burst equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-027
+Fecha: 2026-05-27
+Sintoma: burst 002 fba55/f13a del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, request burst y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-fba55e3296a0-g01-f13a1353960542f949b1c478324a27ec`
+de `request-ref-autoprogramming-backlog-scanner-15eeecb9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un burst equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-023
+Fecha: 2026-05-27
+Sintoma: burst 002 f8e40 del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, request burst y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-f8e40a7bedded7d2878462d370a72a30`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un burst equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-023
+Fecha: 2026-05-27
+Sintoma: burst 002 da14 del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, request burst y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-da14e4762930936ab46118bb39f7aa9a`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un burst equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-015
+Fecha: 2026-05-27
+Sintoma: burst 002 17978 del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado, prueba global obligatoria y huecos ya
+visibles en backlog.
+Campo: backlog scanner, ACK estricto, request base y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-17978e79d655060ec0da8977cea2a0ee`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un burst equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-014
+Fecha: 2026-05-27
+Sintoma: burst 002 del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, request de burst y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-2048ee92b24ec50625c2242b8eb85463`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un burst equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-025
+Fecha: 2026-05-27
+Sintoma: burst 002 52b63 del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, request principal y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-52b63d817ae78008276d7d3e084d76df`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un burst equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
 La matriz `TestRailRecordConcurrencyGateExternalMatrixV0` incluye tambien
 terminos historicamente problematicos como falsos positivos. La lista operativa
 vigente del core se centraliza en
@@ -116,6 +1177,1665 @@ Test: repeticion focal `go test -count=1 ./cmd/orquesta-server -run TestCodexLau
 Estado: registrado, pendiente de diagnostico
 ```
 
+```text
+ID: DOC-ROUTE-20260526-001
+Fecha: 2026-05-26
+Sintoma: manual de uso podia mezclar ruta server-first viva con secciones V1.
+Campo: docs/uso_actual_app_orquesta.md
+Payload minimo: `./orquesta serve`, rutas `/api/*` sin version, OpenClaw o AP-077 leidos como requisito vigente.
+Decision: clasificar el documento como manual server-first sincronizado y poner todo el bloque V1 en cuarentena historica con sustitutos `/api/v0/*`.
+Test: go test -count=1 ./modulos/orquesta-cli ./modulos/orquesta-web ./cmd/orquesta-server
+Estado: cubierto por T119
+```
+
+```text
+ID: RAIL-REVIEW-GATE-20260526-001
+Fecha: 2026-05-26
+Sintoma: review gate de Codex podia tratar globs o aliases reparables de
+write-set como fuera de alcance, o aplicar presupuesto Go estricto a trabajo
+documental.
+Campo: ReviewGatePolicy / WorktreeVerifyRequest.write_set
+Payload minimo: write_set=`web`, `internal/**/*.go` o policy
+`work_profile:documentation`.
+Decision: owner unico en `codexStackReviewGatePolicyV0`; el stack expande
+aliases locales seguros antes de verificar snapshot y runtime-worktree soporta
+globstar en write-set. Perfiles documentales no activan presupuesto Go estricto.
+Test: `TestCodexStackReviewGatePolicyToleraAliasYGlobsSegurosV0`,
+`TestCodexStackReviewGatePolicyPerfilDocumentalNoActivaGoBudgetV0` y
+`TestVerifyWorktreeWriteSetV0PresupuestoLineasGoEstricto/acepta_write-set_con_globstar_seguro`.
+Estado: cubierto por T117
+```
+
+```text
+ID: OPS-RUNTIME-DETAIL-RAW-20260527-001
+Fecha: 2026-05-27
+Sintoma: `/ops` puede publicar detalle runtime crudo de agentes.
+Campo: `runtime_detail.files[].content` y HTML de detalle de run.
+Payload minimo: `agent_prompt.txt`, `agent_packet.json`, `agent_ack.json`,
+`director_decisions.json`, `codex_stdout.log`, `codex_stderr.log` o
+`orquesta_shutdown_request.json` con prompts, paths locales, stdout/stderr,
+tokens simulados o payloads operativos.
+Decision: abrir backlog T227 para envelope publico redactado, lectura acotada
+antes de `os.ReadFile`, tail de logs por presupuesto y reason codes en UI.
+Test futuro: matriz focal de detalle runtime en `orquesta-app-codex-stack`,
+`orquesta-web`, `cmd/orquesta-server` y runtime Codex delivery.
+Estado: resuelto 2026-05-27 con epoch activo acotado a fuentes federadas
+ejecutables y reason code `federated_backlog_source_not_executable` para
+fuentes historicas/quarantine no bloqueantes.
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-018
+Fecha: 2026-05-27
+Sintoma: retry 42fbc4 burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado y huecos ya visibles.
+Campo: backlog scanner, ACK estricto, request retry y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-721523601cc1-g01-abd199fbb4db7baa1c08602cd2d3dade`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-42fbc4ded7918354a0ba8d427df92a05da07828f0fbb064fba2a680f461c45f5`,
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-024
+Fecha: 2026-05-27
+Sintoma: burst 002 585742 del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado, prueba global obligatoria y owners
+pendientes ya visibles.
+Campo: backlog scanner, ACK estricto, request principal y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-585742898dfa4be257b5a2282769c9c2`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un burst equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-022
+Fecha: 2026-05-27
+Sintoma: retry 69e1ba burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado y huecos ya visibles en
+backlog.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-8f23d8e2a22e-g01-c86d18cc769b57d176d2617c4d0990a6`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-69e1ba62ea01ade8fb67d198484d35f513e28c79077c8a7ac535bc483e60a6c6`,
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-021
+Fecha: 2026-05-27
+Sintoma: retry 7a567340 burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-3ddbc1385ac2-g01-0d1f79ec31384d00b4994f75b7e11068`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-7a56734034f8d2f7cfecdb944e4e265d06361b422163b501881d49a99fce3508`,
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-020
+Fecha: 2026-05-27
+Sintoma: retry 69e1ba burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado y huecos ya visibles en
+backlog.
+Campo: backlog scanner, ACK estricto, request retry y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-8f23d8e2a22e-g01-406b68b132e5ad3f6495920aad6064eb`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-69e1ba62ea01ade8fb67d198484d35f513e28c79077c8a7ac535bc483e60a6c6`,
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-019
+Fecha: 2026-05-27
+Sintoma: retry d64a6a burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-757fa45b2845-g01-644fcb17f3eb0e2fc3b46dc77aa883b8`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-d64a6a4098bc947a8abac738ecfc29123c24afa6dde953cf9750f22d13b272c6`,
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-004
+Fecha: 2026-05-27
+Sintoma: nueva pasada del scanner documental repite contexto `ref_only`,
+write-set cerrado a backlog/rail errors/duplicaciones y owners pendientes ya
+visibles.
+Campo: backlog scanner, ACK estricto, dedupe de Txx y evidencia documental.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-350b93e475a8-g01-8eae8526b9c0a30f5c6c290c6fc9498b`
+con `required_ref_action=ack_evidence_required`, write-set limitado a los tres
+shards documentales y busquedas que ya encuentran T44, T249, T250, T251, T252,
+T254, T255 y T256.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver contexto por
+lectura local/evidencia ACK y dejar la implementacion a los owners existentes.
+Test futuro: usar pruebas de T44/T249/T250/T251/T252/T254/T255/T256; esta
+entrada solo evita duplicar backlog programable desde el scanner.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-014
+Fecha: 2026-05-27
+Sintoma: retry 5465c1 burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado y owners pendientes ya
+visibles.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-87d5c800f528-g01-219c350ad3df01efd266321f376e4f7b`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-5465c1fa2a2382d2739d96147eaafe7597f99aa10da08494d40665e47b2446c0`,
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-016
+Fecha: 2026-05-27
+Sintoma: burst 002 del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, burst de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-988548c1efac02c34d8ab6cf81a53d19`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un burst equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-016
+Fecha: 2026-05-27
+Sintoma: scanner de automejora repite contexto obligatorio `ref_only`,
+write-set documental cerrado, prueba global obligatoria y huecos ya visibles en
+backlog.
+Campo: backlog scanner, ACK estricto, required tests y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-562c496eddcc7c55bd3b622c5e825749`
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258 como owners pendientes.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258;
+esta entrada solo evita duplicar backlog programable desde un scanner
+equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-016
+Fecha: 2026-05-27
+Sintoma: burst 002 70a7 del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado, prueba global obligatoria y huecos ya
+visibles.
+Campo: backlog scanner, ACK estricto, request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-70a7d8db3b4ebd33b19ae663b484aef6`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un burst equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-016
+Fecha: 2026-05-27
+Sintoma: retry d0cf1e burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado y huecos ya visibles en
+backlog.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-350b93e475a8-g01-0d330c4e1579d03076ce1e175634e42b`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-d0cf1ea77c2b6898418f56ac96139dcb5cb606948a8e3adc89ed26b4a9b1f02c`,
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-016
+Fecha: 2026-05-27
+Sintoma: burst 002 e7040 del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado y owners pendientes ya visibles.
+Campo: backlog scanner, ACK estricto, request base y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-e7040a9c028b6c9195871408101972c0`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un burst equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-016
+Fecha: 2026-05-27
+Sintoma: burst 002 del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, request base y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-1db27b63b7ddb14755938b05f1eff32f`
+del request
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un burst equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-016
+Fecha: 2026-05-27
+Sintoma: scanner de automejora en burst 002 repite contexto obligatorio
+`ref_only`, write-set documental cerrado, prueba global obligatoria y huecos ya
+visibles en backlog.
+Campo: backlog scanner, ACK estricto, burst de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-25ebab4465052369f6e1f66d949cd514`
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258 como owners pendientes.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un scanner equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-016
+Fecha: 2026-05-27
+Sintoma: burst 002 del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado, prueba global obligatoria y huecos ya
+visibles en backlog.
+Campo: backlog scanner, ACK estricto, burst de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-31b58785a2bc25303ea28ac1a457f2d3`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un burst equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-016
+Fecha: 2026-05-27
+Sintoma: burst 002 del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado y owners pendientes ya visibles.
+Campo: backlog scanner, ACK estricto, burst de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-5b79f9accf52b539a3be229cf4e83bdb`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un burst equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-016
+Fecha: 2026-05-27
+Sintoma: burst 002 c10c del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado y huecos ya visibles.
+Campo: backlog scanner, ACK estricto, request burst y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-c10cb19de09867b08fe7a7c947dc4467`
+de `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un burst equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-017
+Fecha: 2026-05-27
+Sintoma: burst 002 c0f755 del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado, prueba global obligatoria y owners
+pendientes ya visibles.
+Campo: backlog scanner, ACK estricto, request principal y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-c0f7550c04cbfe4cddf673cf37c73725`
+de la request `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`, con
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un burst equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-016
+Fecha: 2026-05-27
+Sintoma: retry 7a5673 burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado y huecos ya visibles en
+backlog.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-3ddbc1385ac2-g01-7aa072fa3bae532da402f4b748f1904d`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-7a56734034f8d2f7cfecdb944e4e265d06361b422163b501881d49a99fce3508`,
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-015
+Fecha: 2026-05-27
+Sintoma: retry 69e1ba burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado y huecos ya visibles.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-8f23d8e2a22e-g01-89e006236c585aa247a81664e7b037e1`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-69e1ba62ea01ade8fb67d198484d35f513e28c79077c8a7ac535bc483e60a6c6`,
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-014
+Fecha: 2026-05-27
+Sintoma: retry 5465c1 burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y owners pendientes ya visibles.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-87d5c800f528-g01-ef66a8153742b6161a7f9836a4c2779e`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-5465c1fa2a2382d2739d96147eaafe7597f99aa10da08494d40665e47b2446c0`,
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-014
+Fecha: 2026-05-27
+Sintoma: retry 42fbc4 burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-721523601cc1-g01-2e79a5694817170a5384a408d1acb03b`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-42fbc4ded7918354a0ba8d427df92a05da07828f0fbb064fba2a680f461c45f5`,
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-008
+Fecha: 2026-05-27
+Sintoma: retry d64a6a del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado, prueba global obligatoria y owners
+pendientes ya visibles.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-757fa45b2845-g01-9a0012e071185631d9f7652eb10ef3bb`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-d64a6a4098bc947a8abac738ecfc29123c24afa6dde953cf9750f22d13b272c6`,
+con `required_ref_action=ack_evidence_required`, write-set limitado a
+backlog/rail errors/duplicaciones y busquedas que ya encuentran T44, T249,
+T250, T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-011
+Fecha: 2026-05-27
+Sintoma: retry burst del scanner de automejora vuelve a traer contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global
+obligatoria y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, retry burst y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-87d5c800f528-g01-4fe334168e77c5b5a5a29a19c299e7e8`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-5465c1fa2a2382d2739d96147eaafe7597f99aa10da08494d40665e47b2446c0`,
+con `required_ref_action=ack_evidence_required`, write-set limitado a los tres
+shards documentales y busquedas que ya encuentran T44, T249, T250, T251, T252,
+T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-011
+Fecha: 2026-05-27
+Sintoma: retry del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado, prueba global obligatoria y huecos ya
+visibles en backlog.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-721523601cc1-g01-6b02071be67727512a14341842bf4332`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-42fbc4ded7918354a0ba8d427df92a05da07828f0fbb064fba2a680f461c45f5`,
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-011
+Fecha: 2026-05-27
+Sintoma: retry del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set cerrado a backlog/rail errors/duplicaciones y owners
+pendientes ya visibles.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-3ddbc1385ac2-g01-00ef1096db1ef4935750f733b3fe3ccf`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-7a56734034f8d2f7cfecdb944e4e265d06361b422163b501881d49a99fce3508`,
+con `required_ref_action=ack_evidence_required`, write-set limitado a
+backlog/rail errors/duplicaciones y busquedas que ya encuentran T44, T249,
+T250, T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-012
+Fecha: 2026-05-27
+Sintoma: retry del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-8f23d8e2a22e-g01-697704c71decfb03744436e559856b7f`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-69e1ba62ea01ade8fb67d198484d35f513e28c79077c8a7ac535bc483e60a6c6`,
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258;
+esta entrada solo evita duplicar backlog programable desde un retry
+equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-010
+Fecha: 2026-05-27
+Sintoma: retry del scanner de automejora vuelve a traer contexto obligatorio
+`ref_only`, write-set documental cerrado y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-87d5c800f528-g01-d77d5415386c2758420eb50d9de1c982`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-5465c1fa2a2382d2739d96147eaafe7597f99aa10da08494d40665e47b2446c0`,
+con `required_ref_action=ack_evidence_required`, write-set limitado a los tres
+shards documentales y busquedas que ya encuentran T44, T249, T250, T251, T252,
+T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-008
+Fecha: 2026-05-27
+Sintoma: retry del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado, prueba global obligatoria y huecos ya
+visibles en backlog.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-757fa45b2845-g01-5ab69cd762c0b3eea5d2721713dd49d0`
+con `required_ref_action=ack_evidence_required`, retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-d64a6a4098bc947a8abac738ecfc29123c24afa6dde953cf9750f22d13b272c6`,
+write-set limitado a backlog, rail errors y duplicaciones, y busquedas que ya
+encuentran T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254/T255/T256/T257/T258;
+esta entrada solo evita duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-010
+Fecha: 2026-05-27
+Sintoma: scanner de automejora repite contexto obligatorio `ref_only`,
+write-set cerrado a los tres shards documentales y huecos ya asignados a
+owners pendientes.
+Campo: backlog scanner, ACK estricto, required tests y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-350b93e475a8-g01-9be0de2c97caf766173a451288993ca0`
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, refs opacas de worktree/branch y busquedas que ya
+encuentran T44, T249, T250, T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258;
+esta entrada solo evita duplicar backlog programable desde un scanner
+equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-009
+Fecha: 2026-05-27
+Sintoma: retry del scanner de automejora vuelve a traer contexto obligatorio
+`ref_only`, write-set documental cerrado y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-8f23d8e2a22e-g01-957608057af975d94befe452b621687e`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-69e1ba62ea01ade8fb67d198484d35f513e28c79077c8a7ac535bc483e60a6c6`,
+con `required_ref_action=ack_evidence_required`, write-set limitado a los tres
+shards documentales y busquedas que ya encuentran T44, T249, T250, T251, T252,
+T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254/T255/T256/T257/T258;
+esta entrada solo evita duplicar backlog programable desde un retry
+equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-009
+Fecha: 2026-05-27
+Sintoma: scanner de automejora repite contexto obligatorio `ref_only`,
+write-set cerrado a backlog/rail errors/duplicaciones y huecos ya visibles en
+backlog.
+Campo: backlog scanner, ACK estricto, required tests y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-e078c7be6425160a0ccb6bb8f8b78d11`
+con `required_ref_action=ack_evidence_required`, write-set limitado a los tres
+shards documentales y busquedas que ya encuentran T44, T249, T250, T251, T252,
+T254, T255, T256, T257 y T258 como owners pendientes.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254/T255/T256/T257/T258;
+esta entrada solo evita duplicar backlog programable desde un scanner
+equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-009
+Fecha: 2026-05-27
+Sintoma: scanner de automejora repite contexto obligatorio `ref_only`,
+write-set cerrado a backlog/rail errors/duplicaciones y huecos ya visibles en
+owners pendientes.
+Campo: backlog scanner, ACK estricto, required tests y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-4b676d31f48327f48f51c6ce1cc855b4`
+con `required_ref_action=ack_evidence_required`, write-set limitado a los tres
+shards documentales y busquedas que ya encuentran T44, T249, T250, T251, T252,
+T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254/T255/T256/T257/T258;
+esta entrada solo evita duplicar backlog programable desde un scanner
+equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-005
+Fecha: 2026-05-27
+Sintoma: scanner de automejora recibe de nuevo contexto obligatorio `ref_only`,
+write-set documental cerrado y huecos ya asignados a owners pendientes.
+Campo: backlog scanner, ACK estricto, required tests y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-ae7b1168a2882f5580acd71e20ec5732`
+con `required_ref_action=ack_evidence_required`, write-set limitado a
+backlog/rail errors/duplicaciones y busquedas que ya encuentran T44, T249,
+T250, T251, T252, T254, T255, T256, T257 y T258 como owners pendientes.
+Decision: no abrir otro Txx; registrar pasada documental de no-op cubierto,
+resolver `ref_only` mediante lectura local/evidencia ACK y conservar
+`worktree_ref`/`branch_ref` como refs opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254/T255/T256/T257/T258;
+esta entrada solo evita duplicar backlog programable.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-009
+Fecha: 2026-05-27
+Sintoma: scanner de automejora repite contexto obligatorio `ref_only`,
+write-set documental cerrado, prueba global obligatoria y huecos ya visibles en
+backlog.
+Campo: backlog scanner, ACK estricto, required tests y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-72e651512c5a9856094dd77d5b947474`
+con `correlation_id=corr-request-ref-autoprogramming-backlog-scanner-7e8a6ae9-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T254, T255, T256, T257 y T258 como owners pendientes.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254/T255/T256/T257/T258;
+esta entrada solo evita duplicar backlog programable desde un scanner
+equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-009
+Fecha: 2026-05-27
+Sintoma: scanner de automejora repite contexto obligatorio `ref_only`,
+write-set documental cerrado y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, required tests y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-1957b876997d6c6e6b87bbb19f48735f`
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T254, T255, T256, T257 y T258 como owners pendientes.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254/T255/T256/T257/T258;
+esta entrada solo evita duplicar backlog programable desde un scanner
+equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-009
+Fecha: 2026-05-27
+Sintoma: nueva pasada del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set cerrado a backlog/rail errors/duplicaciones y huecos ya
+visibles en backlog.
+Campo: backlog scanner, ACK estricto, required tests y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-41c250bd381a729b6b7a942fa03db578`
+con `required_ref_action=ack_evidence_required`, write-set limitado a los tres
+shards documentales y busquedas que ya encuentran T44, T249, T250, T251, T252,
+T254, T255, T256, T257 y T258 como owners pendientes.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254/T255/T256/T257/T258;
+esta entrada solo evita duplicar backlog programable desde un scanner
+equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-004
+Fecha: 2026-05-27
+Sintoma: scanner de automejora repite contexto obligatorio `ref_only`,
+write-set documental cerrado y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, required tests y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-30cb4ab771802c1a99b591d81d13d88d`
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258 como owners pendientes.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258;
+esta entrada solo evita duplicar backlog programable desde un scanner
+equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-009
+Fecha: 2026-05-27
+Sintoma: scanner documental repite contexto obligatorio `ref_only`, write-set
+cerrado a backlog/rail errors/duplicaciones y huecos ya asignados a owners
+pendientes.
+Campo: backlog scanner, ACK estricto, required tests y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-55fbe00917266eb9dce3cb7ef06512d2`
+con `required_ref_action=ack_evidence_required`, write-set limitado a los tres
+shards documentales y busquedas que ya encuentran T44, T249, T250, T251, T252,
+T254, T255, T256, T257 y T258 como owners pendientes.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254/T255/T256/T257/T258;
+esta entrada solo evita duplicar backlog programable desde un scanner
+equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-009
+Fecha: 2026-05-27
+Sintoma: scanner de automejora repite contexto obligatorio `ref_only`,
+write-set documental cerrado y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, required tests y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-0baf5a292701de903673675f4731b8c4`
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T254, T255, T256, T257 y T258 como owners pendientes.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254/T255/T256/T257/T258;
+esta entrada solo evita duplicar backlog programable desde un scanner
+equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-009
+Fecha: 2026-05-27
+Sintoma: scanner de automejora vuelve a recibir contexto obligatorio
+`ref_only`, write-set cerrado a los tres shards documentales y huecos ya
+asignados a owners pendientes.
+Campo: backlog scanner, ACK estricto, required tests y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-ed50a0e5d063ce9367242318b76013ca`
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de T44/T249/T250/T251/T252/T254/T255/T256/T257/T258;
+esta entrada solo evita duplicar backlog programable desde un scanner
+equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-009
+Fecha: 2026-05-27
+Sintoma: retry del scanner de automejora vuelve a traer contexto obligatorio
+`ref_only`, write-set documental cerrado, prueba global obligatoria y huecos ya
+cubiertos por owners pendientes.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-721523601cc1-g01-a88632e247fc4b53576ed868990269ec`
+con `required_ref_action=ack_evidence_required`, retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-42fbc4ded7918354a0ba8d427df92a05da07828f0fbb064fba2a680f461c45f5`,
+write-set limitado a backlog, rail errors y duplicaciones, y busquedas que ya
+encuentran T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254/T255/T256/T257/T258;
+esta entrada solo evita duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-008
+Fecha: 2026-05-27
+Sintoma: scanner de automejora repite contexto obligatorio `ref_only`,
+write-set documental cerrado y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, required tests y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-87d5c800f528-g01-7099771d60152a40426c551b9fed8fdb`
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que encuentran T44, T249, T250, T251,
+T252, T254, T255, T256, T257 y T258 como owners pendientes.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254/T255/T256/T257/T258;
+esta entrada solo evita duplicar backlog programable desde un scanner
+equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-008
+Fecha: 2026-05-27
+Sintoma: retry del scanner de automejora vuelve a traer contexto obligatorio
+`ref_only`, write-set cerrado a backlog/rail errors/duplicaciones y huecos ya
+asignados a owners pendientes.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-3ddbc1385ac2-g01-a39762df8a44697f801b68e1a8195f6b`
+con `required_ref_action=ack_evidence_required`, retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-7a56734034f8d2f7cfecdb944e4e265d06361b422163b501881d49a99fce3508`,
+write-set limitado a los tres shards documentales y busquedas que ya encuentran
+T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254/T255/T256/T257/T258;
+esta entrada solo evita duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-008
+Fecha: 2026-05-27
+Sintoma: scanner de automejora repite contexto obligatorio `ref_only`,
+write-set documental cerrado y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, required tests y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-757fa45b2845-g01-ec8943db18ad09ba2b17a1035b324e9b`
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254/T255/T256/T257/T258;
+esta entrada solo evita duplicar backlog programable desde un scanner
+equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-007
+Fecha: 2026-05-27
+Sintoma: scanner de automejora repite contexto obligatorio `ref_only`,
+write-set documental cerrado y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, required tests y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-8f23d8e2a22e-g01-556dde497c2e0ff3e929391ffeb28c93`
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T254, T255, T256 y T257.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254/T255/T256/T257;
+esta entrada solo evita duplicar backlog programable desde un scanner
+equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-005
+Fecha: 2026-05-27
+Sintoma: scanner de automejora repite contexto obligatorio `ref_only`, write-set
+documental cerrado, prueba global obligatoria y huecos ya cubiertos por owners
+pendientes del backlog.
+Campo: backlog scanner, ACK estricto y shards documentales de backlog.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-87d5c800f528-g01-8049fe783ba558122c38feeec2532ceb`
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que encuentran T44, T249, T250, T251,
+T252, T254, T255 y T256 como owners pendientes.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar refs de worktree/branch como
+opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254/T255/T256;
+esta entrada solo evita duplicar backlog programable desde un scanner
+equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: FILE-BUDGET-20260527-006
+Fecha: 2026-05-27
+Sintoma: el parser/cargador federado de backlog supera el limite operativo de
+300 lineas y acumula politica de fuentes locales, cuarentena y refs de scanner.
+Campo: `cmd/orquesta-server/idle_self_improvement_federated_backlog_v0.go`.
+Payload minimo: `wc -l` muestra 311 lineas; el fichero mezcla catalogo de
+fuentes, lectura de documentos, parser del indice federado, parser de entradas
+locales, clasificacion de estado, construccion de secciones y contexto de
+scanner.
+Decision: abrir backlog T257 para dividir el fichero por responsabilidad local
+sin reabrir identidad, dedupe, preflight, alcance de pruebas ni ids humanos del
+backlog.
+Test futuro:
+`go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Estado: cerrado 2026-05-27; split ejecutado en `cmd/orquesta-server` con
+carga federada, parser de indice, parser local y clasificacion de estado en
+ficheros separados, sin cambiar el contrato documental del backlog.
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-006
+Fecha: 2026-05-27
+Sintoma: retry del scanner de automejora vuelve a traer contexto obligatorio
+`ref_only`, write-set cerrado a backlog/rail errors/duplicaciones y huecos ya
+cubiertos por owners pendientes.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-350b93e475a8-g01-a9fca45e81d848b2c2a00b8349e4817b`
+con `required_ref_action=ack_evidence_required`, retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-d0cf1ea77c2b6898418f56ac96139dcb5cb606948a8e3adc89ed26b4a9b1f02c`,
+write-set limitado a los tres shards documentales y busquedas que ya encuentran
+T44, T249, T250, T251, T252, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254/T255/T256/T257/T258;
+esta entrada solo evita duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-004
+Fecha: 2026-05-27
+Sintoma: nueva pasada del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, required tests y merge documental.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-721523601cc1-g01-520f979fdde9866f084ddfa1d5cc7425`
+con `required_ref_action=ack_evidence_required`, write-set limitado a
+`docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`,
+`docs/rail_errors_observados_2026-05-23.md` y
+`docs/duplicaciones_railes_pendientes_2026-05-24.md`, y busquedas que ya
+encuentran T44, T249, T250, T251, T252, T254, T255 y T256.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254/T255/T256;
+esta entrada solo evita duplicar backlog programable desde el scanner.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: APP-DIRECTOR-SERVICE-TEST-SUITE-FILE-BUDGET-20260527-001
+Fecha: 2026-05-27
+Sintoma: la suite historica de `orquesta-app-director-service` conserva varios
+tests Go muy por encima del limite operativo de 300 lineas.
+Campo: `modulos/orquesta-app-director-service/*_test.go`.
+Payload minimo: `operational_director_v0_test.go` supera 5200 lineas,
+`operational_closure_v0_test.go` supera 2500 lineas y otros tests de replay,
+decision source, required tests, retry y replan siguen por encima de 300
+lineas desde el baseline de T52.
+Decision: abrir backlog T258 para partir la suite por escenario de test, sin
+reabrir contratos productivos ni duplicar el split productivo ya cerrado por
+T52.
+Test futuro:
+`go test -count=1 ./modulos/orquesta-app-director-service`.
+Estado: cerrado localmente el 2026-05-27 por T258; la suite de
+`orquesta-app-director-service` quedo repartida por escenario y la prueba focal
+es `go test -count=1 ./modulos/orquesta-app-director-service`.
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-003
+Fecha: 2026-05-27
+Sintoma: nueva pasada del scanner documental recibe el mismo patron de contexto
+`ref_only`, pruebas obligatorias globales y write-set cerrado a shards de
+backlog.
+Campo: backlog scanner, ACK estricto, required tests y merge documental.
+Payload minimo: paquete con `required_ref_action=ack_evidence_required`,
+write-set limitado a backlog/rail errors/duplicaciones y busquedas que ya
+encuentran owners T44, T249, T250, T251, T252, T254, T255, T227 y T241.
+Decision: no abrir otro Txx; registrar no-op cubierto y cerrar con ACK que
+declare `contexto_ref_only_resuelto` por lectura local/evidencia explicita.
+Test futuro: usar las pruebas de los owners citados; esta entrada solo evita
+duplicar backlog programable desde un scanner documental equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: PROCESS-RUNTIME-FILE-BUDGET-20260527-001
+Fecha: 2026-05-27
+Sintoma: el conector neutral de proceso local supera el limite operativo de 300
+lineas en sus dos ficheros principales.
+Campo: `modulos/orquesta-runtime/process_runtime_connector_v0.go` y
+`modulos/orquesta-runtime/process_runtime_connector_types_v0.go`.
+Payload minimo: `wc -l` muestra 313 y 318 lineas; la frontera mezcla DTOs,
+errores publicos, validacion de launch/adoption/snapshot, allowlist de env,
+guardas de shell/rutas, launch/adopt/wait y stop cooperativo/escalado.
+Decision: abrir backlog T256 para split local del conector de proceso sin
+cambiar semantica ni reabrir `NEUTRAL-PROCESS-STOP-E2E`.
+Test futuro: `go test -count=1 ./modulos/orquesta-runtime`.
+Estado: corregido 2026-05-27; el planner omite el default global para scanners
+documentales, anade prueba focal documental y conserva la guarda `ref_only` con
+procedencia visible en `ContextRefs`.
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-003
+Fecha: 2026-05-27
+Sintoma: nueva pasada del scanner documental encuentra contexto `ref_only`,
+write-set cerrado a backlog/rail errors/duplicaciones y huecos ya abiertos en
+owners pendientes.
+Campo: backlog scanner, ACK estricto, dedupe de Txx y evidencia documental.
+Payload minimo: paquete con `required_ref_action=ack_evidence_required`,
+write-set documental, busquedas que encuentran T44, T250, T251, T252, T254 y
+T255, y evidencia `FILE-BUDGET-20260527-004` ya registrada.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver contexto por
+lectura local/evidencia ACK y dejar la implementacion a los owners existentes.
+Test futuro: usar pruebas de T44/T250/T251/T252/T254/T255; esta entrada solo
+evita duplicar backlog programable desde el scanner.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-003
+Fecha: 2026-05-27
+Sintoma: nueva pasada del scanner de automejora repite paquete con contexto
+`ref_only`, write-set documental cerrado y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, generacion de tareas Txx y merge
+documental.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-0f01e601f615c5bf38893ec9f09b4f35`
+con `required_ref_action=ack_evidence_required`, write-set limitado a
+`docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`,
+`docs/rail_errors_observados_2026-05-23.md` y
+`docs/duplicaciones_railes_pendientes_2026-05-24.md`, y busquedas que ya
+encuentran T44, T249, T250, T251, T252, T254 y T255.
+Decision: no abrir otro Txx; registrar pasada documental de no-op cubierto y
+cerrar con ACK que declare `contexto_ref_only_resuelto` mediante lectura local
+y evidencia explicita.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254/T255; esta
+entrada solo evita duplicar backlog programable.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: SERVER-SHUTDOWN-USECASE-FILE-SPLIT-20260527-001
+Fecha: 2026-05-27
+Sintoma: `modulos/orquesta-server-shutdown/shutdown_v0.go` supera 300 lineas y
+mezcla autorizacion, cola, targets, checkpoint, deadline, stop, stats,
+supervisor y resumen publico en el mismo fichero.
+Campo: `modulos/orquesta-server-shutdown/shutdown_v0.go`.
+Payload minimo: una nueva regla de shutdown obliga a tocar el caso de uso y
+empuja el fichero a seguir creciendo, con riesgo de duplicar politica de
+checkpoint, escalado o readiness ya cubierta por T30/T225/T239.
+Decision: abrir backlog T256 para split local por responsabilidades manteniendo
+`ShutdownServerV0` como fachada, sin meter runtime/procesos ni adaptadores
+concretos en el modulo.
+Test futuro:
+`go test -count=1 ./modulos/orquesta-server-shutdown ./modulos/orquesta-server ./cmd/orquesta-server`.
+Estado: cerrado 2026-05-27 por T256
+Rework revision 2026-05-27: cierre sincronizado con la entrada canonica T256;
+no programar la variante `server-shutdown-usecase-file-split-before-growth`
+como tarea separada.
+Rework entrega 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-846263ad27220f7ca7d97aeec4d5e7d1`
+solo valida el cierre existente: no reabre T256, no crea owner nuevo y resuelve
+`ref_only` mediante lectura local/evidencia ACK.
+Rework adicional 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-40ea96487c3783404f7d6a48b0cb8411`
+mantiene el cierre existente y deja la variante `before-growth` absorbida por
+T256 canonico.
+Rework final 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-247e6d495674dee5a1b996468956a6be`
+confirma el mismo cierre, resuelve `ref_only` en ACK y no reabre codigo ni
+backlog nuevo.
+Rework correctivo 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-ced6b146bcf5b10e5253ef166816de66`
+mantiene T256 cerrado, conserva la variante `before-growth` absorbida y resuelve
+el contexto obligatorio por lectura local y evidencia ACK.
+Rework de reemplazo 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-75ba20e2214f2eaaea16f312c68208f0`
+revalida el mismo cierre: T256 sigue cerrado, la variante `before-growth` no se
+programa por separado y el contexto `ref_only` se resuelve por lectura local y
+evidencia ACK.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-f878e21cfa5e67e7481d20a5f9bd24c5`
+mantiene el cierre: T256 sigue cerrado, la variante `before-growth` no se
+programa por separado y el contexto `ref_only` se resuelve por lectura local y
+evidencia ACK.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-3d04cc0bcd1f59b871869ec824d2c996`
+mantiene T256 cerrado, conserva `before-growth` absorbido por el owner canonico
+y resuelve `ref_only` por lectura local y evidencia ACK.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-46d0d95f62343cc1e51b9ca398f83f84`
+mantiene T256 cerrado, conserva la variante `before-growth` absorbida por el
+owner canonico y resuelve `ref_only` por lectura local y evidencia ACK.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-33ca4ea060412afa902e83e3765c1d23`
+mantiene T256 cerrado, conserva la variante `before-growth` absorbida por el
+owner canonico y resuelve `ref_only` por lectura local y evidencia ACK.
+Rework de reemplazo 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-b6686ba67b0d901948d8ce067d8771ec`
+mantiene T256 cerrado, conserva la variante `before-growth` absorbida por el
+owner canonico y resuelve `ref_only` por lectura local y evidencia ACK.
+Rework de evaluacion 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-bff7aa189e7e24662071cf55dffcb95f`
+mantiene T256 cerrado, conserva la variante `before-growth` absorbida por el
+owner canonico y resuelve `ref_only` por lectura local y evidencia ACK.
+Rework de reemplazo 2026-05-27:
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-55de335961e2cd74deaeda6d56c611bb`
+mantiene T256 cerrado, conserva la variante `before-growth` absorbida por el
+owner canonico y resuelve `ref_only` por lectura local y evidencia ACK.
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-003
+Fecha: 2026-05-27
+Sintoma: nueva pasada del scanner de automejora repite el mismo paquete con
+contexto `ref_only`, write-set documental cerrado y huecos ya materializados en
+owners pendientes.
+Campo: backlog scanner, ACK estricto, required tests y merge documental.
+Payload minimo: paquete con `required_ref_action=ack_evidence_required`,
+write-set limitado a backlog/rail errors/duplicaciones y busquedas que ya
+encuentran T44, T249, T250, T251, T252, T254 y T255 como owners pendientes o
+evidencia registrada.
+Decision: no abrir otro Txx; registrar no-op cubierto y cerrar con ACK que
+declare `contexto_ref_only_resuelto` mediante lectura local y evidencia
+explicita.
+Test futuro: usar las pruebas declaradas por T44/T249/T250/T251/T252/T254/T255;
+esta entrada solo evita duplicar backlog programable.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-002
+Fecha: 2026-05-27
+Sintoma: nueva pasada del scanner de automejora repite contexto `ref_only`,
+write-set documental cerrado y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto y merge documental.
+Payload minimo: paquete con `required_ref_action=ack_evidence_required`,
+write-set limitado a backlog/rail errors/duplicaciones y busquedas que ya
+encuentran T44, T249, T250, T251, T252 y T254 como owners pendientes.
+Decision: no abrir otro Txx; registrar pasada documental de no-op cubierto y
+cerrar con ACK que declare `contexto_ref_only_resuelto` mediante lectura local y
+evidencia explicita.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254; esta
+entrada solo evita duplicar backlog programable.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: FILE-BUDGET-20260527-004
+Fecha: 2026-05-27
+Sintoma: el contrato documental OPES del bridge supera el limite operativo de
+300 lineas y es frontera natural para nuevas reglas editoriales.
+Campo: `modulos/orquesta-opes-bridge/document_plan_contract_v0.go`.
+Payload minimo: `wc -l` muestra 321 lineas; el fichero mezcla politicas
+editoriales, HTML, plantilla, contrato `domain_document_plan.v0`, derivacion por
+nivel, metodo de asimilacion y requisitos de calidad.
+Decision: abrir backlog T255 para dividir el contrato por responsabilidad local
+del bridge, sin mover reglas OPES al nucleo ni reabrir T204/T205/T206.
+Test futuro: `go test -count=1 ./modulos/orquesta-opes-bridge`.
+Estado 2026-05-27: cerrado. El contrato documental OPES se dividio en owners
+locales para contrato `document_plan`, politica editorial global, politica/plantilla
+HTML y metodologia/calidad OPES; los ficheros Go del modulo quedan bajo 300
+lineas y el test focal del bridge pasa.
+Rework 2026-05-27: backlog T255 queda marcado como cerrado de forma explicita
+para evitar reprogramacion por estado textual stale.
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-003
+Fecha: 2026-05-27
+Sintoma: nueva pasada del scanner de automejora repite contexto `ref_only`,
+write-set documental cerrado, pruebas globales y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, required tests y merge documental.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-4f550c019e0d-g01-b67a7bf97034fe5d7abbfaf0e628c3c5`
+con `required_ref_action=ack_evidence_required`, write-set limitado a
+backlog/rail errors/duplicaciones y busquedas que ya encuentran T44, T249,
+T250, T251, T252, T254 y T255 como owners pendientes.
+Decision: no abrir otro Txx; registrar pasada documental de no-op cubierto,
+resolver contexto requerido por lectura local/evidencia ACK y dejar las
+mejoras reales a los owners pendientes.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254/T255; esta
+entrada solo evita duplicar backlog programable.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-NO-NEW-GAP-20260527-001
+Fecha: 2026-05-27
+Sintoma: scanner de automejora encuentra de nuevo el mismo paquete con contexto
+`ref_only`, pruebas globales documentales y colisiones Txx ya registradas.
+Campo: backlog scanner, ACK estricto, required tests y read model de tareas Txx.
+Payload minimo: paquete con `required_ref_action=ack_evidence_required`,
+write-set documental y busquedas que detectan `## T250`, `## T251` y `## T252`
+duplicados o vecinos.
+Decision: no abrir un Txx adicional; conservar evidencia y remitir a T44, T249,
+T250, T251 y T252. La resolucion de esta pasada es lectura local/evidencia ACK,
+no programacion de otro owner solapado.
+Test futuro: usar las pruebas declaradas por esos Txx owners; esta entrada solo
+evita que el scanner genere backlog duplicado.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-TASK-ID-COLLISION-20260527-001
+Fecha: 2026-05-27
+Sintoma: el backlog vivo contiene varias secciones ejecutables con el mismo id
+humano `## T250` para fronteras distintas.
+Campo: parser de backlog, planner residente, roadmap/MCP, ACK/cierre por task
+ref y merge lease documental.
+Payload minimo: `rg '^## T250 ' docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+devuelve mas de una seccion: epoch federado, split de
+`orquesta-runtime-codex-delivery`, dedupe de propuestas y canonicalizacion de
+solapes.
+Decision: abrir backlog T254 para indice aditivo de colisiones/aliases,
+`task_entry_ref` estable por seccion y bloqueo publico cuando `Txx` sea ambiguo.
+No renumerar historico.
+Test futuro:
+`go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-server ./modulos/orquesta-mcp ./cmd/orquesta-server`.
+Estado: registrado, pendiente
+```
+
+```text
+ID: BACKLOG-TASK-ID-ALLOC-20260527-001
+Fecha: 2026-05-27
+Sintoma: scanners concurrentes de backlog pueden insertar tareas `Txx` con
+huecos visibles, colisiones potenciales o cierre por numero humano sin reserva
+causal explicita.
+Campo: `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md` y merge lease
+del scanner.
+Payload minimo: secuencia documental donde `T244` salta a `T247`, varias
+secciones `Escaneo backlog 2026-05-27 decimosexta pasada` preceden tareas
+distintas y no hay `task_id_ref` reservado por request/correlation.
+Decision: cerrado en servidor residente con `task_id_ref`,
+`reservation-ref-backlog-task-id-*`, rango `Txx` derivado del epoch documental y
+colision publica `backlog_task_id_collision`; los encabezados de escaneo no
+cuentan como ids ejecutables.
+Test ejecutado: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Estado: cerrado
+```
+
+```text
+ID: BACKLOG-TASK-ID-ALLOC-20260527-001-HISTORICO
+Decision: abrir backlog T250 para reservar ids ejecutables `Txx` por epoch
+documental, detectar `backlog_task_id_collision`/
+`backlog_task_id_allocation_gap` y bloquear con rebase o `CONSULTA AL DIRECTOR`
+sin renumerar historico.
+Test futuro: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Estado: registrado, pendiente
+```
+
+```text
+ID: FILE-BUDGET-20260527-003
+Fecha: 2026-05-27
+Sintoma: bridge de autoprogramacion del stack Codex supera el limite operativo
+de 300 lineas y concentra varias responsabilidades de composicion.
+Campo: `modulos/orquesta-app-codex-stack/autoprogramming_bridge_v0.go`.
+Payload minimo: `wc -l` muestra 341 lineas; el fichero mezcla normalizacion de
+request, run, task store, wait refs, continue request, replay y plan-state.
+Decision: abrir backlog T244 para partir por responsabilidad antes de anadir
+mas reglas de automejora residente en el stack Codex.
+Test futuro: `go test -count=1 ./modulos/orquesta-app-codex-stack`.
+Estado: registrado, pendiente
+```
+
+```text
+ID: GUARDIAN-STATE-LEASE-20260527-001
+Fecha: 2026-05-27
+Sintoma: promocion/restauracion del guardian no declara exclusion mutua durable
+por `state_dir`.
+Campo: `check-promote`, `restore-last-good`, `current_bin`, `last_good_bin` y
+manifiestos de guardian.
+Payload minimo: dos invocaciones solapadas sobre el mismo `state_dir` y
+`current_bin`, una promocion y una restauracion, con manifiestos atomicos
+individuales pero sin lease comun visible.
+Decision aplicada 2026-05-27: `cmd/orquesta-guardian` reclama un lease durable
+bajo `state_dir` para `check-promote`, `restore-last-good` y `shutdown-server`,
+publica `guardian_promotion_lease_busy`/`guardian_promotion_lease_lost` con
+receipt compacto y usa reloj de config para timestamps testeables. El servidor
+trata lease busy/lost como efecto `blocked` retryable y no lo convierte en
+promocion exitosa ni en reparacion Codex automatica.
+Test: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server`.
+Estado: cubierto por T237.
+```
+
+```text
+ID: AUTOPROGRAMMING-FILE-BUDGET-20260527-001
+Fecha: 2026-05-27
+Sintoma: politicas productivas de autoprogramacion quedan cerca del limite de
+300 lineas y el siguiente cambio funcional puede mezclar responsabilidades o
+romper el rail de tamano.
+Campo: `modulos/orquesta-autoprogramming/autoprogramming_review_gate_policy_v0.go`
+y `modulos/orquesta-autoprogramming/autoprogramming_partition_policy_v0.go`.
+Payload minimo: `wc -l` muestra ambos ficheros productivos en 298 lineas.
+Decision aplicada 2026-05-27: T238 dividio las politicas por responsabilidad:
+review gate separa resultado/acciones, clasificacion de issue codes y stems
+canonicos; particionado separa plan base, steps/bloqueos por trabajo vivo y
+matching de paths/aliases.
+Test: `go test -count=1 ./modulos/orquesta-autoprogramming`.
+Estado: cubierto por T238.
+```
+
+```text
+ID: CODEX-SHUTDOWN-CHECKPOINT-ATTEMPT-20260527-001
+Fecha: 2026-05-27
+Sintoma: ACK de checkpoint Codex puede ser reutilizable entre intentos de
+shutdown del mismo run/agente.
+Campo: `orquesta_shutdown_request.json` y `agent_shutdown_checkpoint_ack.json`.
+Payload minimo: dos llamadas de shutdown cooperativo con mismo `run_ref` y
+`agent_ref`, pero distinta razon/evidencia/secuencia; el `checkpoint_ref`
+deterministico permite que un ACK previo siga correlando.
+Decision: backlog T239 cerrado localmente el 2026-05-27: request y ACK de
+checkpoint transportan `shutdown_attempt_ref`; un ACK stale queda pendiente con
+evidencia compacta `shutdown_checkpoint_attempt_mismatch`.
+Rework 2026-05-27: la correccion conserva el cierre T239 y resuelve el contexto
+obligatorio `ref_only` por lectura local del paquete mas evidencia explicita en
+ACK, sin relanzar agente padre.
+Test futuro: `go test -count=1 ./modulos/orquesta-runtime-codex ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
+Estado: cerrado localmente
+```
+
+```text
+ID: ORCH-CORE-FILE-BUDGET-20260527-001
+Fecha: 2026-05-27
+Sintoma: provider de replan por quality gate supera el limite operativo de 300
+lineas y concentra responsabilidades de aplicacion.
+Campo: `modulos/orquesta-orchestration-core/quality_gate_replan_candidate_provider_v0.go`.
+Payload minimo: `find modulos cmd -name '*.go' -type f ! -name '*_test.go' -exec wc -l {} + | sort -nr | head -60` muestra 335 lineas.
+Decision: abrir backlog T253 para split por responsabilidad dentro de
+`orquesta-orchestration-core`, conservando puertos y sin mover runtime/proveedor
+al nucleo.
+Rework 2026-05-27: T253 queda cerrado localmente; el provider se separo en
+entrada/base, proyeccion causal, followups y politica local, y el contexto
+obligatorio `ref_only` se resolvio por lectura local del paquete mas evidencia
+explicita en ACK.
+Test futuro: `go test -count=1 ./modulos/orquesta-orchestration-core`.
+Estado: cerrado localmente
+```
+
+```text
+ID: BACKLOG-PROPOSAL-DUP-20260527-001
+Fecha: 2026-05-27
+Sintoma: scanners concurrentes pueden anadir Txx solapados para la misma
+frontera antes de que exista dedupe estructurado de propuestas.
+Campo: secciones Txx del backlog, evidencia de scanner y merge lease documental.
+Payload minimo: pares T244/T247 o T248/T249 con owner/write-set/criterios
+vecinos y titulos distintos.
+Decision: abrir backlog T250 para huella de propuesta por owner, write-set,
+objetivo, criterios, tests y evidencia; duplicados deben bloquear/rebasear con
+reason code publico en vez de encolarse como tareas independientes.
+Test futuro: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Estado: cerrado 2026-05-27; el planner publica
+`duplicate_backlog_proposal_fingerprint`, conserva evidence refs compactas y
+bloquea propuestas equivalentes vivas sin borrar ni renumerar historico.
+```
+
+```text
+ID: IDLE-SELF-IMPROVEMENT-PROVIDER-AUTH-20260527-001
+Fecha: 2026-05-27
+Sintoma: automejora residente puede quedar bloqueada por autenticacion externa
+del proveedor con razon `provider_auth_blocked`, pero sin contrato comun de
+recuperacion operativa.
+Campo: estado publico del servidor, auditoria de idle self-improvement,
+lectura de runs persistidas y cola de autoprogramacion.
+Payload minimo: run activa con `AgentAssessmentProjection` critica
+`ask_director`, agentes perdidos o preguntas de director, y cola idle que vuelve
+a evaluar backlog.
+Decision: abrir backlog T241 para diagnostico publico compacto, accion de
+operador por composicion, reintento idempotente y no duplicacion de scanners
+mientras el proveedor siga bloqueado.
+Test futuro: `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server ./modulos/orquesta-app-codex-stack`.
+Estado 2026-05-27: cerrado. `provider_auth_blocked` queda como contrato
+operacional recuperable: estado publico con reason/evidencias/refs acotadas,
+accion de operador por adaptador y reintento idempotente tras evidencia compacta
+de proveedor recuperado.
+Rework 2026-05-27: sincronizado con el cierre del backlog T241; la evidencia
+vigente es el contrato publico compacto del servidor residente, sin secretos,
+paths locales ni lectura de credenciales desde el nucleo.
+```
+
+```text
+ID: BACKLOG-SCAN-ENTRY-DUPLICATE-20260527-001
+Fecha: 2026-05-27
+Sintoma: el backlog contiene titulos de escaneo fuera de orden y un titulo
+duplicado, por ejemplo `Escaneo backlog 2026-05-27 decimocuarta pasada`.
+Campo: secciones Markdown de evidencia de scanner, merge lease documental y
+correlacion de cierres por linea/hash.
+Payload minimo: dos secciones `## Escaneo backlog ...` con mismo dia y ordinal,
+o una secuencia donde `decimoquinta` aparece antes que `decimocuarta`.
+Decision: abrir backlog T249 para identidad estable de entrada de scanner,
+deteccion de duplicados/saltos y bloqueo/rebase sin renumerar historico.
+Test futuro: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Estado: mitigado 2026-05-27 por T249; el planner deriva `scan_entry_ref`,
+digest y reason codes `backlog_scan_entry_duplicate` /
+`backlog_scan_entry_order_ambiguous` sin renumerar historico.
+Rework 2026-05-27: revision corregida por
+`agent-ref-task-ref-review-rework-task-autoprogramming-1c574ac7c424-g01-5cba0f0171e79bd80bbbcf4c49f5bc8a`;
+se conserva T249 como owner, se resuelve contexto `ref_only` por lectura
+local/evidencia ACK y no se crea backlog duplicado.
+```
+
+```text
+ID: RUNTIME-CODEX-DELIVERY-FILE-BUDGET-20260527-001
+Fecha: 2026-05-27
+Sintoma: ficheros productivos de `orquesta-runtime-codex-delivery` siguen por
+encima del limite operativo de 300 lineas tras el baseline T90.
+Campo: `progress_state_v0.go`, `progress_source_v0.go` y `source_v0.go`.
+Payload minimo: medicion focal muestra 310, 331 y 314 lineas respectivamente;
+los ficheros mezclan estado de progreso, lectura de fuente Codex, observaciones,
+ACK/delivery y replay.
+Decision: backlog T252 cerro el split por responsabilidad antes de anadir mas
+reglas de observacion, ACK estricto o redaccion en runtime Codex delivery.
+Test futuro: `go test -count=1 ./modulos/orquesta-runtime-codex-delivery`.
+Estado: mitigado 2026-05-27; los ficheros productivos objetivo quedan por
+debajo de 300 lineas y el adaptador sigue sin mover filesystem, Codex, HOME,
+proveedor ni rutas locales al nucleo.
+```
+
+```text
+ID: BACKLOG-TASK-NUMBER-COLLISION-20260527-001
+Fecha: 2026-05-27
+Sintoma: el backlog contiene varios encabezados `## T250` para tareas distintas,
+lo que vuelve ambiguo usar el numero humano como identidad ejecutable.
+Campo: secciones `Txx` del backlog, reserva documental del scanner y ACK de
+autoprogramacion.
+Payload minimo: tres secciones `## T250` con objetivos diferentes
+(`runtime-codex-delivery-progress-source-file-split`,
+`backlog-proposal-deduplication-fingerprint` y
+`backlog-task-overlap-canonical-merge-policy`).
+Decision: abrir backlog T252 para reservar `task_id_ref` causal antes de
+escribir `Txx`, bloquear colisiones con reason publico y conservar historico
+duplicado por linea/hash/fingerprint sin renumerarlo.
+Test futuro: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Estado: registrado, pendiente
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-003
+Fecha: 2026-05-27
+Sintoma: nueva pasada del scanner de automejora vuelve a recibir contexto
+`ref_only`, write-set documental cerrado y huecos ya registrados en backlog.
+Campo: backlog scanner, ACK estricto, owners T44/T249/T250/T251/T252/T254/T255.
+Payload minimo: paquete con `required_ref_action=ack_evidence_required`,
+write-set limitado a backlog/rail errors/duplicaciones y busquedas que ya
+encuentran owners pendientes para contexto por ref, dedupe/preflight,
+colisiones de `Txx` y split OPES T255.
+Decision: no abrir otro Txx; registrar pasada documental de no-op cubierto y
+cerrar con ACK que declare `contexto_ref_only_resuelto` mediante lectura local
+y evidencia explicita.
+Test futuro: usar las pruebas declaradas por esos Txx owners; esta entrada solo
+evita duplicar backlog programable.
+Estado: registrado, cubierto por owners pendientes
+```
+
 ## Candidatos pendientes de convertir en matriz
 
 ```text
@@ -180,6 +2900,24 @@ en `orquesta-runtime`.
 Decision pendiente: crear harness rapido de flakes y esperar cierre real de
 stdout/ficheros en vez de asumir que `last_message` implica stdout completo.
 Test futuro: `./scripts/test_flakes_fast.sh`.
+```
+
+```text
+ID: RAIL-CAND-PUBLIC-MUTATION-IDENTITY-001
+Origen: scanner backlog 2026-05-27 undecima pasada.
+Casos: MCP, web, CLI y servidor tienen reglas locales para `request_id`,
+`correlation_id`, `X-Correlation-ID`, `Idempotency-Key`,
+`X-Idempotency-Key`, ids generados por reloj y mutaciones de `/ops`.
+Decision pendiente: unificar owner de identidad publica de mutaciones y
+lecturas read-only para no derivar idempotency/correlacion de forma distinta en
+cada adaptador; bloquear solo mutaciones sin idempotency efectiva cuando el
+contrato lo exija.
+Actualizacion 2026-05-27: owner compartido implementado en
+`modulos/orquesta-server/publicidentity`; MCP, web, CLI y servidor consumen
+headers/normalizacion compartidos para el alcance T236. Las rutas read-only por
+POST conservan correlacion sin exigir idempotency.
+Test futuro: `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-cli ./modulos/orquesta-web ./modulos/orquesta-server ./cmd/orquesta-server`.
+Backlog: `T236 public-mutation-identity-contract`.
 ```
 
 ```text
@@ -1455,6 +4193,21 @@ Backlog: `T87 server-liveness-readiness-contract`.
 ```
 
 ```text
+ID: RAIL-CAND-SERVER-FIRST-USAGE-DOC-ROUTE-001
+Origen: scanner backlog T119.
+Casos: `docs/uso_actual_app_orquesta.md` anunciaba `./orquesta serve`,
+OpenClaw, AP-077 y rutas `/api/*` sin version como si fueran uso operativo
+vigente. Un agente podia preparar clientes o pruebas contra control-plane V1.
+Decision 2026-05-26: sincronizar el manual con server-first actual:
+`cmd/orquesta-server`, readiness `/api/v0/server/readiness`, status versionado,
+web/CLI como clientes finos, API `/api/v0/*`, MCP/toolbelt y cuarentena de
+aliases legacy.
+Test: `go test -count=1 ./modulos/orquesta-cli ./modulos/orquesta-web ./cmd/orquesta-server`.
+Estado: cubierto.
+Backlog: `T119 server-first-usage-doc-route-sync`.
+```
+
+```text
 ID: RAIL-CAND-FEDERATED-MODULE-BACKLOG-001
 Origen: scanner backlog 2026-05-24 vigesimoseptima pasada.
 Casos: el planner residente lee solo
@@ -1526,6 +4279,12 @@ Test futuro:
 `bash -n scripts/*.sh scripts/lib/*.sh` y focos de smokes con confirmaciones
 fake/temporales cuando existan.
 Backlog: `T91 smoke-script-ops-library`.
+
+Resolucion 2026-05-26: primer corte mecanico en `scripts/lib/smoke_common.sh`.
+Los smokes OPES afectados reutilizan helpers comunes de prerequisitos,
+confirmacion, URL local, HTTP JSON, parseo compacto y readiness operativa por
+`/api/v0/server/readiness`; no se usa `/healthz` como readiness ni se relajan
+guardas opt-in.
 ```
 
 ```text
@@ -1539,6 +4298,10 @@ Los docs de `orquesta-capacity` tambien conservan casos iniciales como
 Decision pendiente: anadir puerto de politica/capacidad inyectable en
 composicion, mantener fallback fake/legacy auditable y sincronizar docs locales
 para distinguir contrato cerrado, wiring pendiente y cuota/benchmarks reales.
+Resolucion 2026-05-26: `CapacityDecisionExecutorV0` ya acepta
+`CapacityDecisionPolicyPortV0`; `orquesta-app-codex-stack` lo inyecta mediante
+adapter de `orquesta-capacity`, y el fallback estatico queda marcado como
+legacy auditable. Quedan fuera de este rail fuentes reales de cuota/benchmarks.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-capacity ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-codex-stack ./modulos/orquesta-runtime ./cmd/orquesta-server`.
 Backlog: `T92 capacity-decision-policy-port`.
@@ -1553,12 +4316,16 @@ MCP `orquesta.operator.operations.v0`, pero otra linea recomienda usar
 `orquesta-operator-mcp` y la exposicion real depende de puertos/transportes
 inyectados. Listas libres en prompts, packets y runbooks pueden divergir del
 registry real.
-Decision pendiente: derivar hints/toolbelt de un descriptor comun o probarlos
-contra rutas/tools registrados; distinguir capability disponible, puerto no
-configurado y transporte real no arrancado sin prometer conectores opt-in.
-Test futuro:
+Estado: cerrado 2026-05-26. Los hints Codex derivan HTTP de constantes MCP
+montadas por gateway y MCP de `MCPTransportToolsV0`; `directed_query` aparece
+como tool registrado y `operator.operations` como resource con subtools. Los
+hints publican estados compactos de transporte vivo, puerto opt-in no
+configurado y resource registrado, sin payloads ni datos sensibles.
+Test cerrado:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-app-codex-stack ./modulos/orquesta-runtime-codex ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-app-gateway`.
 Backlog: `T93 codex-prompt-toolbelt-source-sync`.
+Verificacion OrquestaV2 2026-05-26: contexto `ref_only` validado por
+evidencia explicita en ACK y matriz requerida reejecutada.
 ```
 
 ```text
@@ -1569,13 +4336,17 @@ Casos: `modulos/orquesta-server/audit_v0.go` ignora el error devuelto por
 fichero inaccesible puede dejar al servidor operando sin evidencia durable y
 sin diagnostico publico, justo en rutas que preparan automejora, supervisor
 ticks, startup checks o mutaciones HTTP.
-Decision pendiente: registrar el fallo de auditoria en una proyeccion compacta
-no recursiva, con contador/codigo publico/evento afectado y politica de
-severidad por composicion. No devolver rutas locales, HOME, permisos crudos,
-payloads HTTP, prompts, transcripts ni tokens.
-Test futuro:
+Decision: registrar el fallo de auditoria en una proyeccion compacta no
+recursiva `audit_*`, con contador, codigo publico `audit_write_failed`, evento
+compacto, severidad `warning` y timestamp. No devolver rutas locales, HOME,
+permisos crudos, payloads HTTP, prompts, transcripts ni tokens. Si tambien
+falla el state store, el fallo de auditoria queda en memoria y el fallo de
+estado se separa como `state_persist_failed`.
+Test: `TestRuntimeV0AuditEventNoSilenciaFalloDeSinkV0`,
+`TestRuntimeV0AuditFailureNoRecursivoSiStateStoreFallaV0` y
 `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`.
 Backlog: `T94 server-audit-write-failure-visibility`.
+Estado: cubierto local 2026-05-26.
 ```
 
 ```text
@@ -1606,10 +4377,12 @@ invoca `/api/v0/server/shutdown` con `forced=true` y despues senala ese PID.
 Si el state esta stale, el PID fue reutilizado o el addr no corresponde al mismo
 daemon, el CLI puede actuar sobre un proceso equivocado o saltarse shutdown
 cooperativo como default silencioso.
-Decision pendiente: validar descriptor/epoch de proceso y correspondencia
-HTTP-state antes de senalar; forced debe ser opt-in con causa/evidencia. No
-devolver HOME, rutas locales, argv completos, prompts, transcripts ni tokens.
-Test futuro:
+Decision implementada 2026-05-26: state expone `process_ref` y
+`daemon_epoch_ref` opacos; `orquesta-server stop` compara el snapshot durable
+con `/api/status` antes de senalar y bloquea mismatch/stale con error publico.
+El shutdown CLI es cooperativo por defecto; `--force` exige `--reason`. No
+devuelve HOME, rutas locales, argv completos, prompts, transcripts ni tokens.
+Test:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-server-shutdown ./modulos/orquesta-agent-process-registry`.
 Backlog: `T96 server-daemon-stop-process-identity`.
 ```
@@ -1621,13 +4394,15 @@ Casos: `orquesta-server start` redirige stdout/stderr del proceso residente a
 `stdout.log` y `stderr.log` bajo `StateDir`. Esos logs no tienen owner de
 redaccion, rotacion, retencion ni acceso, y pueden duplicar auditoria JSONL,
 tail Codex o salida de tests con material crudo.
-Decision pendiente: definir politica de logs operacionales del daemon: resumen
-redactado por defecto, fragmento crudo solo opt-in local con limite, retencion
-corta y bloqueo/redaccion de HOME, rutas privadas, env, comandos, remotos Git,
-payloads HTTP, prompts, transcripts, tokens y salida de proveedor.
+Decision: politica de logs operacionales del daemon definida en el servidor:
+resumen redactado por defecto, captura cruda solo opt-in local con limite,
+retencion corta y owner separado de auditoria JSONL, tail Codex y required-test
+output. La proyeccion publica expone politica compacta y no usa esos logs como
+evidencia terminal.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-observability`.
 Backlog: `T97 server-daemon-log-redaction-retention`.
+Estado: cubierto 2026-05-26
 ```
 
 ```text
@@ -1638,10 +4413,14 @@ actualiza despues de recibir `run_ref`. Si el submit funciona pero falla el
 ledger, o si dos drains procesan el mismo job externo en paralelo, puede quedar
 una run creada sin claim durable o una entrada `submitted` sobrescrita por otro
 `run_ref`.
-Decision pendiente: claim durable antes de crear run, recovery por
-idempotency/correlation tras fallo de ledger y rechazo de overwrite de
-`submitted` sin decision explicita. Errores publicos compactos sin URL sensible,
-payload OPES completo, HOME, rutas locales, tokens ni respuestas crudas.
+Decision cerrada 2026-05-26: el bridge externo de OPES registra claim durable
+`claimed` antes de crear la run, con `claim_ref`, `correlation_id`,
+`idempotency_key`, `change_ref` y `run_ref` prevista. Los drains concurrentes
+ven `claimed/submitted` y no relanzan el job. La finalizacion rechaza
+sobrescribir `submitted` con otro `run_ref`; si falla tras recibir `run_ref`,
+el resultado publico queda en `external_bridge_recovery_required` para forzar
+reconciliacion por refs antes de reintentar, sin URL sensible, payload OPES
+completo, HOME, rutas locales, tokens ni respuestas crudas.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector ./modulos/orquesta-run-queue`.
 Backlog: `T98 external-bridge-input-ledger-claim-recovery`.
@@ -1655,10 +4434,10 @@ Casos: `modulos/orquesta-server/runtime_v0.go` crea `http.Server` solo con
 trailing-token check. El transporte MCP real si tiene limite local, pero no
 gobierna `prepare-run`, `domain_work`, `run_control` ni el resto de puertos
 HTTP.
-Decision pendiente: configurar timeouts de servidor y helper comun de decode
-JSON por perfil: limite de body, error publico, politica de unknown fields y
-auditoria de tamano/codigo sin payload crudo. No exponer body, prompts,
-transcripts, tokens, HOME ni rutas privadas.
+Decision resuelta 2026-05-26 en el alcance T99 residente: timeouts HTTP del
+servidor por politica de composicion, helpers de decode JSON por perfil para
+MCP/HTTP y web, rechazo de trailing tokens y auditoria compacta sin body,
+prompts, transcripts, tokens, HOME ni rutas privadas.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-web ./cmd/orquesta-server`.
 Backlog: `T99 server-http-resource-guardrails`.
@@ -1672,12 +4451,15 @@ Casos: la compactacion de startup escribe `queue_v0.before.json`,
 `manifest.json` y runtime archivado bajo un directorio de revision, y proyecta
 la ruta de revision en readiness. T35 decide si compactar; falta politica del
 artefacto generado.
-Decision pendiente: guardar revision con permisos restrictivos, retencion,
+Decision aplicada: guardar revision con permisos restrictivos, retencion,
 tamano maximo, redaccion por campo y `revision_ref` opaco en status. Material
 crudo solo opt-in local, con limite y causa publica.
-Test futuro:
+Test:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-run-control ./modulos/orquesta-state-file`.
 Backlog: `T100 startup-revision-archive-redaction-retention`.
+Estado: cubierto 2026-05-26. La revision de startup usa snapshots redactados,
+manifest con retencion/limite/permisos, runtime archivado como metadata
+redactada y proyeccion publica `startup_revision` con `revision_ref` opaco.
 ```
 
 ```text
@@ -1687,13 +4469,15 @@ Casos: `domain_work_delivery_bridge_v0.go` comprueba ledger por
 `idempotency_key`, ejecuta `submit_artifact` y registra accepted/rejected al
 final. El ledger file/memory permite reemplazar el record bajo la misma key sin
 contrato de claim ni recovery de fallo post-submit.
-Decision pendiente: claim durable antes de `submit_artifact`, recovery por
-receipt/idempotency si falla el ledger tras efecto externo y conflicto publico
-si una key ya aceptada intenta registrar otro receipt/payload. No usar URL, DB,
-ruta local o nombre de conector como evidencia de tests de dominio.
-Test futuro:
+Decision aplicada: claim durable `claimed/submitting` antes de
+`submit_artifact`, recovery compacto si existe una claim no terminal y conflicto
+publico si una key terminal intenta cambiar receipt/payload o refs causales. No
+usar URL, DB, ruta local o nombre de conector como evidencia de tests de
+dominio.
+Test:
 `go test -count=1 ./modulos/orquesta-app-codex-stack ./modulos/orquesta-domain-work ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector ./cmd/orquesta-server`.
 Backlog: `T101 domain-work-artifact-submission-ledger-recovery`.
+Estado: cubierto 2026-05-26.
 ```
 
 ```text
@@ -1707,6 +4491,10 @@ Decision pendiente: unificar frontera JSON por perfil para limite de body,
 content-type, trailing tokens, campos desconocidos y error publico; los modos
 legacy deben declararse con test. No devolver body crudo, prompts, transcripts,
 rutas locales, HOME, tokens ni internals de adaptador.
+Decision 2026-05-26: cerrado por T102. Factory y governance usan frontera JSON
+estricta con limite/trailing/content-type; MCP y web declaran perfiles legacy
+compatibles donde aceptan campos extra o form; el transporte MCP real del
+servidor comparte limite/trailing/content-type y error compacto.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-factory-http ./modulos/orquesta-governance ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway ./modulos/orquesta-web ./cmd/orquesta-server`.
 Backlog: `T102 legacy-http-json-boundary-policy`.
@@ -1719,9 +4507,18 @@ Casos: conectores y clientes salientes decodifican o leen respuestas HTTP con
 reglas divergentes: OPES y `domain-work-http` hacen `json.NewDecoder` directo
 sobre `response.Body`; CLI/governance y function-contract usan `io.ReadAll`;
 comandos de servidor leen cuerpos completos para status/diagnostico.
-Decision pendiente: limite de respuesta por perfil, status handling redactado,
-content-type/trailing-token check y errores publicos compactos. T80 decide
-egress/host del HTTP neutral; este rail gobierna respuesta saliente y redaccion.
+Decision 2026-05-26: conectores OPES/domain-work, CLI, web y comandos de
+servidor aplican limite de respuesta por perfil local, status handling
+redactado, `Content-Type` JSON o legacy `text/plain` solo si el body es JSON
+parseable, trailing-token check y errores publicos compactos. T80 sigue
+gobernando egress/host del HTTP neutral;
+este rail queda cerrado para la frontera de respuesta saliente T103.
+Revalidacion 2026-05-26: la bateria focal del write-set T103 sigue pasando y no
+aparecio nueva superficie saliente fuera de ese alcance.
+Revalidacion OrquestaV2 2026-05-26:
+`agent-ref-task-autoprogramming-49b26a6e419d-g01` cubre explicitamente
+`text/plain` legacy solo cuando el body es JSON parseable, sin abrir salida
+cruda ni un rail paralelo frente a T138.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-opes-connector ./modulos/orquesta-domain-work-http ./modulos/orquesta-cli ./modulos/orquesta-web ./modulos/orquesta-app-gateway ./cmd/orquesta-server`.
 Backlog: `T103 outbound-http-response-limit-redaction`.
@@ -1742,6 +4539,8 @@ sus contratos especificos.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-run-file ./modulos/orquesta-domain-work-file ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-server ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
 Backlog: `T104 file-store-durable-write-policy`.
+Estado: cerrado 2026-05-27 con bateria obligatoria completa; control files
+Codex quedan coordinados con `T159 codex-control-file-durable-write-policy`.
 ```
 
 ```text
@@ -1752,9 +4551,12 @@ Casos: `ProcessRuntimeConnectorV0` arranca `exec.Cmd` con `CommandPath`, `Args`,
 `io.Discard`. El contrato externo usa refs opacas (`executable_ref`,
 `arg_refs`, `env_refs`, `working_dir_ref`), pero falta recibo redacted que
 demuestre como se resolvieron y que politica de IO se aplico.
-Decision pendiente: recibo de launch/env/IO por politica, sin persistir path,
-env ni comando reales; stdout/stderr descartados o capturados solo con limite y
-redaccion. Coordinar con stop neutral T66 sin duplicarlo.
+Decision implementada 2026-05-26: `ProcessRuntimeLaunchReceiptV0` registra
+refs opacas de resolucion, policy/hash, causa publica y decision de IO
+`io_discarded`; `ProcessRuntimeConnectorV0` aplica env allowlist con PATH
+controlado y rechaza HOME, secretos, remotos Git, prompt/transcript y payloads
+operativos. Registry/stats propagan solo refs compactas de process/session/
+launch y receipt/policy, sin path, args, env, PID ni stdout/stderr crudos.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-runtime ./modulos/orquesta-orchestration-core ./modulos/orquesta-agent-process-registry ./modulos/orquesta-agent-process-registry-memory ./cmd/orquesta-server`.
 Backlog: `T105 process-runtime-launch-env-io-receipt`.
@@ -1773,6 +4575,11 @@ crudos como evidencia terminal.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-worktree ./modulos/orquesta-agent-process-registry`.
 Backlog: `T106 codex-wave-public-summary-redaction`.
+Estado 2026-05-26: cubierto; stdout de `codex-wave`,
+`codex-wave-status`, `codex-wave-stop` y `codex-director-wave` queda separado de
+la registry local mediante summaries publicos con refs opacas, contadores,
+estados y errores redactados. Paths/PID/HOME/logs/control files siguen solo en
+registry local para operaciones opt-in y no como evidencia publica.
 ```
 
 ```text
@@ -1782,9 +4589,11 @@ Casos: smokes Go y tests opt-in reales usan `t.Fatalf` con body HTTP,
 stdout/stderr, prompts o summaries completos. Si falla una ejecucion con Codex
 real, OPES temporal o control plane, el log de test puede persistir rutas
 privadas, payloads de dominio, prompts, transcripts o tokens simulados.
-Decision pendiente: helper comun de diagnostico para Go tests/smokes con limite
-de bytes, redaccion por campo, summary compacto y opt-in explicito para crudo
-local. Coordinar con T21, T58, T61, T91, T97 y T103.
+Decision aplicada 2026-05-26: los smokes Go reales Codex y el harness Go de
+procesos usan helpers de diagnostico con limite, redaccion por campo y resumen
+compacto; los dumps crudos quedan solo para directorios temporales opt-in de
+operador y no cuentan como evidencia terminal. Coordinar con T21, T58, T61,
+T91, T97 y T103 si aparece otra superficie fuera de Go tests/smokes.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-app-codex-stack ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector ./modulos/orquesta-server`.
 Backlog: `T107 real-smoke-go-diagnostic-redaction`.
@@ -1798,10 +4607,13 @@ planes de propuesta/critica/voto y candidatos schedulables, pero no hay
 composicion que los ejecute como rondas vivas del Director con gates, waits y
 aceptacion durable. El riesgo es duplicar deliberacion en prompts libres o
 saltar directo a un agente sin quorum ni evidencia de votos.
-Decision pendiente: materializar rondas de consejo por `WorkflowTaskV0`/
-candidatos, gatear propuesta->critica->voto, exigir quorum/evidencia y cerrar
-decision solo por comando/evento durable. No meter proveedor, modelo, HOME,
-runtime ni familias reales en el modulo puro.
+Decision cerrada offline focal 2026-05-26: materializar rondas de consejo por
+`WorkflowTaskV0` con gates/waits de cohorte/ola, deps causales
+propuesta->critica->voto y roles preservados por `context_refs` estructuradas.
+La aceptacion final se construye como `AcceptDecision` solo cuando
+`DecisionCouncilVoteV0` alcanza quorum/evidencia y el `VoteRequested` durable
+esta reflejado. No se mete proveedor, modelo, HOME, runtime ni familias reales
+en el modulo puro.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-decision-council ./modulos/orquesta-director-candidates ./modulos/orquesta-director-scheduler ./modulos/orquesta-director-tick-input ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-director-service ./modulos/orquesta-app-codex-stack`.
 Backlog: `T108 decision-council-operational-rounds`.
@@ -1815,11 +4627,12 @@ Casos: `orquesta-core-leases` define leases/timeouts puros, mientras
 heartbeat/progreso separada y el scheduler recibe `lease_action_candidates`
 como carril distinto. Sin puente, stalled/loop/stopped puede tener umbrales y
 acciones divergentes.
-Decision pendiente: puente por puerto desde `AgentProgressReportV0` +
-`AgentLeasePolicyV0` a `AgentTimeoutAssessmentV0`/`AgentLeaseExpired`, con reloj
-inyectado por adaptador, refs compactas y replay idempotente. No persistir PID,
-HOME, rutas, stdout/stderr, prompts, transcripts, proveedor/modelo ni payloads
-de runtime.
+Decision 2026-05-26: puente por puerto desde `AgentProgressReportV0` +
+`AgentLeasePolicyV0` a `AgentTimeoutAssessmentV0`/`AgentLeaseExpired`, con
+`observed_at` inyectado por adaptador, refs compactas y reuso cacheado de la
+misma observacion de progreso para no remuestrear. No persistir PID, HOME,
+rutas, stdout/stderr, prompts, transcripts, proveedor/modelo ni payloads de
+runtime.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-core-leases ./modulos/orquesta-runtime ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-director ./modulos/orquesta-director-scheduler ./modulos/orquesta-director-tick-input ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
 Backlog: `T109 agent-lease-progress-policy-bridge`.
@@ -1837,6 +4650,11 @@ Decision pendiente: usar politica comun por campo o wrapper local alineado con
 `orquesta-rails`: vocabulario operativo opaco pasa; valores sensibles
 efectivos, rutas privadas, prompts/transcripts crudos y payloads masivos
 bloquean o se redactan.
+Decision aplicada 2026-05-26: el scheduler valida sus campos operativos con
+`orquesta-rails` por campo y el ciclo de dispatch valida el codigo crudo antes
+de normalizarlo. `provider_timeout`, `db_adapter_unavailable` y
+`runtime_backpressure` quedan como error codes publicos validos; `api_key=...`,
+rutas HOME y prompts crudos degradan a error publico compacto.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-director-scheduler ./modulos/orquesta-director ./modulos/orquesta-rails ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-codex-stack`.
 Backlog: `T110 director-scheduler-cycle-rail-policy-sync`.
@@ -1849,10 +4667,12 @@ Casos: `AGENTS.md` locales de core workflow, core concurrency, core leases,
 core replanner y director scheduler apuntan a
 `../../docs/reinicio_orquesta_v2/protocolo_anti_bucles.md`, pero el directorio
 `docs/reinicio_orquesta_v2` no existe en la foto actual del repo.
-Decision pendiente: resolver cada ref obligatoria a doc vigente, marcarla como
-historica con sustituto o retirar la obligacion. Si el contexto requerido falta,
-el agente debe pedir `CONSULTA AL DIRECTOR` o recibir bundle materializado, no
-inventar protocolo.
+Decision resuelta 2026-05-26: las refs obligatorias de `AGENTS.md` del alcance
+T111 ya no apuntan a `docs/reinicio_orquesta_v2`. La ruta antigua queda
+historica/stale; los sustitutos vivos son `docs/estado_actual_2026-05-17.md`,
+`docs/guia_nucleo_orquestacion_2026-05-17.md`, el backlog vivo y este rail. Si
+el contexto requerido falta, el agente debe pedir `CONSULTA AL DIRECTOR` o
+recibir bundle materializado, no inventar protocolo.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-context ./modulos/orquesta-core-workflow ./modulos/orquesta-core-concurrency ./modulos/orquesta-core-leases ./modulos/orquesta-core-replanner ./modulos/orquesta-director-scheduler`.
 Backlog: `T111 local-agents-required-doc-refs-sync`.
@@ -1882,9 +4702,11 @@ Casos: ademas de los `AGENTS.md` cubiertos por T111, docs locales de
 `orquesta-core`, `orquesta-core-workflow`, `orquesta-capacity`,
 `orquesta-governance` y `orquesta-observability` siguen apuntando a
 `docs/reinicio_orquesta_v2/*`, arbol que no existe en la foto vigente.
-Decision pendiente: clasificar esas refs como historicas/stale o sustituirlas
-por fuente vigente; no recrear DBV1/control-plane ni snapshots antiguos solo
-para satisfacer contexto.
+Decision aplicada 2026-05-26: docs locales del alcance T113 dejan de tratar
+esas rutas y el inventario DB v1 como prerequisito vivo de automejora. Las
+fuentes vigentes son `AGENTS.md`, `docs/estado_actual_2026-05-17.md`,
+`docs/guia_nucleo_orquestacion_2026-05-17.md` y los README/docs locales
+existentes; cualquier DB v1 queda como evidencia forense historica.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-context ./cmd/orquesta-server`.
 Backlog: `T113 module-historical-doc-ref-sync`.
@@ -1904,6 +4726,10 @@ opt-in.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-run-queue ./modulos/orquesta-run-supervisor ./modulos/orquesta-run-memory ./modulos/orquesta-run-file ./modulos/orquesta-server ./cmd/orquesta-server`.
 Backlog: `T114 run-queue-fairness-group-policy`.
+Estado 2026-05-26: resuelto localmente. La cola expone politica con reloj
+inyectado, ventanas, limite por grupo, boost y reason codes
+`fairness_group_paused`, `fairness_group_boosted` y `fairness_group_missing`;
+el supervisor propaga la politica sin sustituir T31/T112.
 ```
 
 ```text
@@ -1913,9 +4739,11 @@ Casos: `modulos/orquesta-web/docs/tareas.md` mantiene `WEB-013` pendiente para
 reemplazar formulario largo de nueva app por sesion conversacional de intake.
 T76 cubre routing AppSpec hacia Director V2, pero no el contrato web de sesion
 parcial, pregunta pendiente, AppSpec parcial, i18n y fallback fino.
-Decision pendiente: completar contrato web de intake como adaptador sobre
-puertos/API de intake/director; la web no planifica, no elige runtime/proveedor
-ni reconstruye AppSpec fuera del contrato canonico.
+Estado 2026-05-26: cerrado. `WebNuevaAppIntakeSessionV0` ya modela sesion
+parcial, preguntas con claves i18n, decisiones, `AppSpecRequestV0` parcial y
+handoff compacto con refs opacas hacia el Director; la web sigue como adaptador
+sobre puertos/API de intake/director y conserva fallback documentado a
+`SolicitarNuevaApp`.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-app-director-intake ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway ./cmd/orquesta-server`.
 Backlog: `T115 web-app-intake-session-contract`.
@@ -1940,16 +4768,26 @@ Backlog: `T116 module-task-doc-integrity-linter`.
 ```text
 ID: RAIL-CAND-APP-CODEX-REVIEW-GATE-001
 Origen: scanner backlog 2026-05-24 trigesimonovena pasada.
-Casos: la documentacion local de `orquesta-app-codex-stack` deja como pendiente
-separar una politica productiva de rechazo/replanificacion por entregas
-invalidas. Hoy coexisten review gate, ACK validator, snapshot/worktree, prompt
-de 300 lineas y reglas de tests/write-set como fuentes cercanas.
-Decision pendiente: definir owner por puerto para issues de entrega y evidencia
-causal; no duplicar la regla de tamano ni aplicar heuristicas Go a perfiles no
-Go o documentales.
+Casos: la documentacion local de `orquesta-app-codex-stack` dejaba como
+pendiente separar una politica productiva de rechazo/replanificacion por
+entregas invalidas. Coexisten review gate, ACK validator, snapshot/worktree,
+prompt de 300 lineas y reglas de tests/write-set como fuentes cercanas, pero no
+deben competir como owners de aceptacion/rechazo.
+Decision 2026-05-26: el owner ejecutable es `codexStackReviewGatePolicyV0`; el
+review gate consume evidencia de worktree y emite issues estructurados, el ACK
+valida correlacion/recibos y el snapshot aporta hechos sin decidir severidad.
+La politica tolera aliases, rutas hijas y globs seguros, y excluye perfiles
+documentales/no-Go del presupuesto Go estricto salvo senal Go explicita.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-app-codex-stack ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-worktree ./modulos/orquesta-app-director-service`.
 Backlog: `T117 app-codex-review-gate-policy-owner`.
+Estado 2026-05-26: cubierto. `orquesta-app-codex-stack` tiene owner por puerto
+`ReviewGateDeliveryPolicyPortV0`; `orquesta-runtime-worktree` conserva la
+evidencia snapshot/write-set y el presupuesto Go, y los perfiles documentales o
+no-Go declarados no heredan automaticamente el rail Go.
+Revalidacion OrquestaV2 retry 2026-05-26: se conserva `codexStackReviewGatePolicyV0`
+como owner efectivo; prompt, ACK y snapshot quedan como transporte/evidencia y
+no como decision terminal.
 ```
 
 ```text
@@ -1960,9 +4798,9 @@ Casos: `docs/plan_microtareas.md` y decisiones de
 `docs/manual_desarrollador.md`, `docs/manual_sistemas_deploy.md`,
 `docs/pruebas_documentales.md` y `docs/pendientes.md`, que no existen como docs
 vivos del repo Orquesta.
-Decision pendiente: marcar esos planes como historicos/debug o convertir los
-nombres en contrato de proyecto generado; no crear archivos raiz vacios ni
-tratar esos `test -s` como pruebas obligatorias del nucleo.
+Decision 2026-05-26: planes marcados como historicos/debug y nombres
+convertidos en contrato de artefactos del proyecto generado; no crear archivos
+raiz vacios ni tratar esos `test -s` como pruebas obligatorias del nucleo.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-app-director-intake ./modulos/orquesta-context ./cmd/orquesta-server`.
 Backlog: `T118 legacy-generated-doc-artifact-contract-sync`.
@@ -1990,9 +4828,10 @@ Casos: docs locales de governance, core y capacity conservan referencias a
 snapshots SQLite/DBV1 y comandos `sqlite3` como evidencia forense. Algunas
 entradas usan rutas absolutas historicas y pueden parecer prerequisito vivo si
 un indice federado no respeta cuarentena/freshness.
-Decision pendiente: marcar esas refs como forenses/historicas, retirar rutas
-absolutas de fuentes vivas y bloquear que DBV1 o `sqlite3` se programen como
-trabajo operativo sin decision del director.
+Cierre T120 2026-05-26: las refs quedan marcadas como forenses/historicas en
+cuarentena, las rutas absolutas dejan de ser fuentes vivas y DBV1 o `sqlite3`
+no pueden programarse como trabajo operativo sin decision explicita del
+director.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-governance ./modulos/orquesta-core ./modulos/orquesta-capacity ./modulos/orquesta-context`.
 Backlog: `T120 legacy-sqlite-forensic-doc-quarantine`.
@@ -2005,10 +4844,13 @@ Casos: `docs/operacion_agentes_manuales.md` y el manual de uso mantienen
 wrappers `scripts/inicio_agente.sh`, Terminator y sesiones manuales como capa de
 compatibilidad, pero no hay contrato/linter que pruebe que siguen subordinados
 al daemon y no mutan estado por fuera del control plane.
-Decision pendiente: catalogar scripts manuales como recuperacion asistida,
-exigir paso por CLI/API vigente o bloqueo verificable y documentar correlacion
-con run/task/agent refs sin convertir tmux/Terminator en nucleo.
-Test futuro:
+Decision 2026-05-26: T121 queda cerrado en su write-set. Los scripts manuales
+se catalogan como recuperacion asistida, exigen servidor residente/CLI publica
+o bloquean con error publico, no mutan stores/worktrees/runtime por fuera del
+control plane y documentan correlacion por `run_ref`, `task_ref`, `agent_ref`,
+`external_session_id` y `worktree_ref` opacas sin convertir tmux/Terminator en
+contrato del nucleo.
+Test:
 `bash -n scripts/inicio_agente.sh scripts/cargar_agentes.sh scripts/terminator_agentes.sh scripts/agente_console.sh` y `go test -count=1 ./modulos/orquesta-cli ./modulos/orquesta-server ./cmd/orquesta-server`.
 Backlog: `T121 manual-agent-ops-compatibility-contract`.
 ```
@@ -2019,9 +4861,15 @@ Origen: scanner backlog 2026-05-24 cuadragesima primera pasada.
 Casos: `docs/BIBLIA_APP_ORQUESTA.md` se declara doctrina canonica y
 `docs/00_INDICE.md` la lista como `M00`, aunque `estado_actual` ya la trata
 como historica/stale y `docs/README.md` conserva el marco "Orquesta v1".
-Decision pendiente: marcar los docs historicos desde dentro, fijar orden de
-precedencia verificable y evitar que OpenClaw, SQLite, rutas `/api/*` o
-control-plane V1 se lean como foto vigente.
+Decision 2026-05-26: T122 marca `docs/BIBLIA_APP_ORQUESTA.md` desde su
+cabecera como `doc_estado=historico-stale`, fija sustitutos vigentes y actualiza
+indice/README para separar fuentes vigentes, historicas, forenses y plantillas.
+Refuerzo retry 2026-05-26: tambien se reetiquetan las secciones internas V1 que
+decian "fuentes de verdad" o "doctrina" para que un scanner por cuerpo no las
+promueva sobre la cabecera stale.
+OpenClaw, SQLite, rutas `/api/*` antiguas o control-plane V1 nombrados en docs
+historicos no se leen como foto vigente sin enlace a `estado_actual`,
+`guia_nucleo` o backlog vivo.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-context ./cmd/orquesta-server`.
 Backlog: `T122 canonical-doc-precedence-self-sync`.
@@ -2035,6 +4883,10 @@ la web lo renderiza como preview, pero el contrato HTTP no transporta estado
 `preview/no_ejecutable`, freshness ni handoff a Director V2.
 Decision pendiente: separar backlog determinista inicial de plan operativo y
 exigir refs/estado cuando se convierta en trabajo real.
+Estado: cerrado 2026-05-26. `BacklogInicialPropuestoV0` ya transporta
+`preview_no_ejecutable`, freshness y `director_handoff` a
+`orquesta.apps.arrancar_director.v0`; HTTP, web y MCP lo proyectan como preview
+compacta/insumo, no como cola ejecutable.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-factory ./modulos/orquesta-factory-http ./modulos/orquesta-web ./modulos/orquesta-app-director-intake ./modulos/orquesta-mcp ./cmd/orquesta-server`.
 Backlog: `T123 factory-backlog-preview-director-handoff`.
@@ -2049,6 +4901,11 @@ Casos: `BIBLIA_APP_ORQUESTA.md`, `op_088_orquesta_servidor_mcp.md`,
 los deja como adaptadores/composiciones opt-in o historia.
 Decision pendiente: cuarentenar esos docs para que no alimenten planificacion
 automatica ni creen endpoints/runtimes no cableados.
+Resolucion 2026-05-26: T124 marca esos documentos como
+`legacy_external_orchestrator_doc_quarantine`, conserva OpenClaw/`tmux`/MCP real
+solo como historia, rescate o composicion opt-in, y enlaza la superficie viva a
+`modulos/orquesta-mcp`, `modulos/orquesta-runtime`,
+`modulos/orquesta-runtime-codex` y `/mcp` en `cmd/orquesta-server`.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-runtime ./modulos/orquesta-runtime-codex ./cmd/orquesta-server`.
 Backlog: `T124 legacy-external-orchestrator-doc-quarantine`.
@@ -2068,6 +4925,10 @@ directorios sin contrato efectivo.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-planner ./modulos/orquesta-context ./cmd/orquesta-server`.
 Backlog: `T125 work-profiles-empty-module-quarantine`.
+Estado: cubierto 2026-05-26; `modulos/orquesta-work-profiles` queda placeholder
+historico no ejecutable con `README.md`/`AGENTS.md`, fuente vigente en
+`orquesta-core-workflow`/`orquesta-orchestration-core` y test focal
+`TestIdleSelfImprovementFederatedBacklogV0IgnoraDirectoriosSinContratoEfectivoV0`.
 ```
 
 ```text
@@ -2084,6 +4945,14 @@ crear una via paralela de runtime Codex fuera de OrquestaV2.
 Test futuro:
 `bash -n $(find modulos -name arrancar_codex.sh | sort)` y `go test -count=1 ./modulos/orquesta-cli ./modulos/orquesta-server ./cmd/orquesta-server`.
 Backlog: `T126 module-local-codex-launcher-compatibility-contract`.
+Estado: cubierto 2026-05-26; wrappers con helper ausente devuelven error
+publico, runtime-codex exige opt-in manual y READMEs dejan de presentar wrappers
+locales como ruta vigente de agentes OrquestaV2.
+Revalidacion 2026-05-27:
+`agent-ref-task-autoprogramming-089a03f67381-g01` confirma que no hay wrappers
+versionados apuntando al helper ausente, `modulos/_comun` sigue sin crearse y
+la matriz obligatoria pasa con `bash -n $(find modulos -name arrancar_codex.sh | sort)`
+y `go test -count=1 ./modulos/orquesta-cli ./modulos/orquesta-server ./cmd/orquesta-server`.
 ```
 
 ```text
@@ -2094,13 +4963,18 @@ Casos: `.gitignore` excluye artefactos locales de control/diagnostico como
 `.orquesta-smoke-work`, y algunos existen en la raiz. Si snapshots, contexto,
 AppVCS, promocion o ACK terminal caminan el filesystem sin politica comun,
 pueden incluir material local ignorado como si fuera producto.
-Decision pendiente: politica ejecutable de exclusion por categoria con recibo
+Decision 2026-05-26: politica ejecutable de exclusion por categoria con recibo
 compacto; `.gitignore` ayuda pero no sustituye validacion por puerto ni
 redaccion. Artefactos locales ignorados no entran en `ACK.files`, contexto,
 commits ni evidencias de cierre.
+Decision 2026-05-26: cerrado localmente por politica ejecutable en snapshots,
+contexto, AppVCS, promocion y ACK terminal; retry sincroniza `.gitignore` con
+runtime/control dirs locales sin convertir ignore en fuente unica de verdad.
+Refuerzo puntual 2026-05-26: `.orquesta-logs`, `orquesta.env`, `orquesta.db*`
+y `.orquesta-inbox.md` quedan como artefactos locales no exportables.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-runtime-worktree ./modulos/orquesta-context ./modulos/orquesta-app-codex-stack ./modulos/orquesta-runtime-codex ./cmd/orquesta-server`.
-Backlog: `T127 ignored-local-artifact-exclusion-policy`.
+Backlog: `T127 ignored-local-artifact-exclusion-policy` cerrado.
 ```
 
 ```text
@@ -2111,9 +4985,10 @@ mantiene una lista local de fragmentos prohibidos que incluye vocabulario
 operacional como `provider`, `model`, `db`, `sql`, `home` y `runtime`.
 Evidencias opacas o refs causales pueden desaparecer antes de que el Director
 evalua progreso, aunque no expongan secretos ni payloads crudos.
-Decision pendiente: mover el criterio a politica comun por campo, tolerante a
-refs opacas, y bloquear solo secreto efectivo, rutas locales reales,
-prompts/transcripts crudos o contenido masivo.
+Decision 2026-05-26: el supervisor delega en la politica comun por campo de
+`orquesta-rails`. Refs opacas con vocabulario operacional (`runtime`,
+`provider`, `model`, `db`, `sql`, `home`) pasan; se bloquean secretos efectivos,
+rutas locales reales, prompts/transcripts crudos y payloads masivos.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-director ./modulos/orquesta-runtime ./modulos/orquesta-core-leases ./modulos/orquesta-rails ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-codex-stack`.
 Backlog: `T128 agent-progress-supervisor-rail-policy-sync`.
@@ -2126,12 +5001,15 @@ Casos: `cmd/orquesta-server/daemon.go` arranca el proceso residente con un
 entorno derivado de `os.Environ()` y defaults de detail rails. Falta recibo de
 categorias permitidas/redactadas y contrato publico para estado, diagnostico y
 errores de variables requeridas.
-Decision pendiente: definir perfil/allowlist de entorno efectivo para `start`,
-redactar snapshot operativo y coordinar con la proyeccion Codex, bootstrap,
-logs de daemon y entorno de runtime.
+Decision 2026-05-26: `start` proyecta entorno por allowlist en
+`cmd/orquesta-server/daemon_start_env_policy_v0.go`; no hereda todo
+`os.Environ()`. El recibo publico queda en `effective_config` como perfil,
+categorias, conteos por origen e issues accionables, sin valores crudos. La
+proyeccion Codex, bootstrap, logs daemon y runtime siguen como categorias
+separadas.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-app-codex-stack ./modulos/orquesta-observability`.
-Backlog: `T129 server-daemon-start-env-policy`.
+Backlog: `T129 server-daemon-start-env-policy` cerrado 2026-05-26.
 ```
 
 ```text
@@ -2146,6 +5024,9 @@ acotar listas textuales por campo o matriz de falsos positivos.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-run-control ./modulos/orquesta-run-queue ./modulos/orquesta-run-memory ./modulos/orquesta-director-candidates ./modulos/orquesta-app-director-intake ./modulos/orquesta-app-runner ./modulos/orquesta-director-agent-workflow ./modulos/orquesta-app-director-service ./modulos/orquesta-rails`.
 Backlog: `T130 architecture-guard-test-rail-policy-owner`.
+Estado 2026-05-26: cubierto; `orquesta-rails` aporta helper comun para imports
+concretos y literales sensibles, y los tests del alcance dejaron de escanear
+vocabulario global en comentarios o refs opacas.
 ```
 
 ```text
@@ -2161,6 +5042,11 @@ logs locales y ficheros de control en contexto/ACK/snapshots.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-context ./modulos/orquesta-runtime-worktree ./modulos/orquesta-runtime-codex ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
 Backlog: `T131 documentation-local-path-redaction-linter`.
+
+Cierre T131 2026-05-26: contexto materializado, ACK terminal y linter
+documental ya distinguen refs/variables opacas de rutas locales o ficheros de
+control usados como evidencia publica. Los reportes del linter citan documento
+y linea, no el valor local.
 ```
 
 ```text
@@ -2170,9 +5056,10 @@ Casos: `modulos/orquesta-observability` usa listas propias para claves y
 fragmentos sensibles, separadas de `orquesta-rails` y de la auditoria JSONL.
 Ese rail puede divergir: bloquear refs opacas como `token_policy_ref` o dejar
 pasar payloads crudos si otro canal usa una lista distinta.
-Decision pendiente: fijar owner de taxonomia/redaccion, distinguir refs de
-valores efectivos y mantener proyecciones con `redaction_level` verificable
-para API/MCP/web.
+Decision 2026-05-26: `orquesta-rails` es owner de taxonomia/redaccion visible;
+`orquesta-observability` valida contra esa politica y conserva DTOs/eventos.
+Refs opacas `*_policy_ref`, `*_redaction_ref` y equivalentes no se clasifican
+como valores crudos. API/MCP/web consumen `privacy.redaction_level` verificable.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-observability ./modulos/orquesta-rails ./modulos/orquesta-server ./modulos/orquesta-mcp ./modulos/orquesta-web ./cmd/orquesta-server`.
 Backlog: `T132 observability-privacy-taxonomy-rail-sync`.
@@ -2190,19 +5077,34 @@ modulos sensibles antes de que el planner prepare runs automaticas.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-rails ./modulos/orquesta-domain-work-http ./modulos/orquesta-factory-http ./modulos/orquesta-context ./cmd/orquesta-server`.
 Backlog: `T133 module-boundary-local-agent-doc-coverage`.
+Estado 2026-05-26: cubierto para el alcance T133. Los modulos sensibles tienen
+`AGENTS.md` local y el servidor incluye el linter/test documental
+`module_boundary_local_agent_doc_missing`, integrado en la revision de
+integridad local del planner antes de preparar runs automaticas.
+Revalidacion OrquestaV2 retry 2026-05-26: el paquete
+`agent-ref-task-autoprogramming-e347186127f9-g01` no abre una excepcion nueva;
+mantiene como rail observable que cualquier modulo sensible sin guia local o
+fuente sustituta suficiente produzca `module_boundary_local_agent_doc_missing`.
 ```
 
 ```text
 ID: OPS-CAND-SERVER-STATUS-LEGACY-ALIAS-001
 Origen: scanner backlog 2026-05-24 cuadragesima quinta pasada.
-Casos: `cmd/orquesta-server/commands.go` consulta `/api/status` para
+Casos: `cmd/orquesta-server/commands.go` consultaba `/api/status` para
 `status` y espera de apagado, mientras `modulos/orquesta-server/handler_v0.go`
-acepta tambien `/api/v0/server/status`. La ruta versionada ya es la superficie
-publica normal, pero el alias legacy sigue vivo sin contrato de deprecacion.
-Decision pendiente: canonizar `/api/v0/server/status`; dejar `/api/status`
-solo como alias legacy auditado o bloquearlo con error publico de migracion.
+aceptaba tambien `/api/v0/server/status`. La ruta versionada ya era la
+superficie publica normal, pero el alias legacy seguia vivo sin contrato de
+deprecacion.
+Decision 2026-05-26 aplicada localmente: canonizar
+`/api/v0/server/status`; dejar `/api/status` solo como alias legacy con headers
+`Deprecation`, `Link` canonical, `Warning` y `X-Orquesta-Status-*`, sirviendo
+el mismo DTO publico redactado que la ruta versionada. Cierre integrado
+revalidado en retry OrquestaV2 2026-05-26 con el test obligatorio pasado.
+Retry 2026-05-27 explicita `X-Orquesta-Status-Owner=orquesta-server` y
+`X-Orquesta-Status-Sunset-Policy=no_new_use` para que clientes, docs y planners
+no promuevan el alias como contrato vigente.
 Coordinar con T119/T85/T87 sin duplicar freshness, redaccion ni readiness.
-Test futuro:
+Test:
 `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-cli ./modulos/orquesta-web ./cmd/orquesta-server`.
 Backlog: `T134 server-status-legacy-alias-sunset`.
 ```
@@ -2220,6 +5122,12 @@ acotado a docs salvo opt-in explicito con write-set, pruebas y causa publica.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-autoprogramming ./cmd/orquesta-server`.
 Backlog: `T135 idle-self-improvement-planner-fallback-safety`.
+
+Estado 2026-05-26: cerrado para el patron observado. El fallback degradado ya no
+vuelve a la request base generica de codigo: con planner sin documento emite
+scanner documental acotado, con `capacity_free` y trabajo conocido devuelve
+planner empty con evidencia publica, y un error del puerto planner queda
+auditado sin preparar automejora.
 ```
 
 ```text
@@ -2235,6 +5143,11 @@ pendiente debe bloquear nueva automejora idle hasta quedar quiescent.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-run-supervisor ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
 Backlog: `T136 resident-drain-external-wait-budget-policy`.
+Estado 2026-05-26: implementado en la composicion residente. El valor efectivo
+de `MaxExternalWaits` queda publicado en configuracion efectiva, el modo
+residente bloquea overrides altos con error publico recuperable y una run
+observada en `wait_external`/`candidate_pending` bloquea nueva automejora
+idle/capacity hasta quedar quiescent.
 ```
 
 ```text
@@ -2244,12 +5157,24 @@ Casos: muchas rutas HTTP publicas de `orquesta-mcp` y `orquesta-web` usan
 `json.NewDecoder(r.Body).Decode` directo, mientras `/mcp` si limita JSON-RPC con
 `LimitReader`. La politica de limite, content-type, trailing data y campos
 desconocidos queda duplicada o ausente por handler.
-Decision pendiente: helper comun de lectura JSON HTTP por frontera publica,
-limites configurables, errores compactos y rechazo de cuerpo crudo en respuestas
-de error.
+Decision cerrada 2026-05-26: helper comun de lectura JSON HTTP por frontera
+publica, limites por perfil, errores compactos y rechazo de cuerpo crudo en
+respuestas de error. La cobertura focal valida tambien que status/supervise de
+autoprogramacion usan el perfil de autoprogramacion, no el limite de control.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-web ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./cmd/orquesta-server`.
 Backlog: `T137 public-http-request-body-bounds`.
+```
+
+```text
+ID: HTTP-CAND-REQUEST-BODY-BOUNDS-002
+Fecha: 2026-05-26
+Sintoma: `cmd/orquesta-server` mantenia decodificadores separados para `/mcp` y workspace timeline, con limites distintos sin owner local compartido.
+Campo: body JSON publico de composicion servidor.
+Payload minimo: POST workspace timeline con JSON mayor que control-plane y POST `/mcp` JSON-RPC dentro de su limite compatible.
+Decision: compartir helper local de lectura JSON publica en `cmd/orquesta-server`, manteniendo perfiles separados para control-plane y MCP JSON-RPC.
+Test: `TestBuildServerAppHandlerV0WorkspaceTimelineAPIAcotaBodyComoControlPlaneV0` y `TestMCPRealTransportV0RechazaBodyTooLargeYTrailingV0`.
+Estado: cubierto
 ```
 
 ```text
@@ -2261,6 +5186,9 @@ pueden incluir bodies grandes o material sensible del peer.
 Decision pendiente: helper de respuesta con limite, descarte seguro, resumen
 redactado y error publico estable; no propagar HTML, transcripts, rutas locales,
 tokens ni payloads de dominio en stderr/stdout/auditoria.
+Estado 2026-05-26: cubierto en el alcance T138. Los clientes/comandos usan
+helpers de lectura acotada y errores publicos con status/correlation o codigo
+estable, sin body crudo; gateway no anade cliente HTTP propio.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-web ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-domain-work-http ./modulos/orquesta-opes-connector`.
 Backlog: `T138 outbound-http-response-bounds-redaction`.
@@ -2273,10 +5201,14 @@ Casos: `status`, `run-status`, `opes-drain-once`, `mcp-real-smoke` y comandos
 `codex-wave-*` escriben bodies o summaries propios en stdout. Algunos incluyen
 base URLs, state fallback, diagnostico local o datos de runtime que no tienen
 shape/redaccion publica unica.
-Decision pendiente: DTO publico versionado por comando con freshness y
-`redaction_level`; diagnostico crudo solo opt-in local y nunca como fuente
-terminal de ACK/delivery/cierre.
-Test futuro:
+Decision cerrada 2026-05-26: DTO publico versionado por comando con freshness,
+`redaction_level`, refs/categorias para URLs y diagnostico crudo solo opt-in
+local. `status` no imprime statefile crudo como fallback; `run-status` conserva
+stats publicos bajo envelope; `opes-drain-once` mantiene shape top-level para
+smokes con URLs como refs; `codex-wave-*` y tail publican fuente canonica no
+terminal. ACK/delivery/cierre siguen dependiendo de ACK estructurado, eventos,
+evidencias y stores causales, no de stdout.
+Test cerrado:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-observability ./modulos/orquesta-rails ./modulos/orquesta-runtime-codex ./modulos/orquesta-app-codex-stack`.
 Backlog: `T139 command-output-public-shape-contract`.
 ```
@@ -2290,10 +5222,14 @@ Casos: el backlog contiene pares con solape material ya escrito:
 y `T138 outbound-http-response-bounds-redaction`. Sin canon/alias, el planner
 puede lanzar dos tareas equivalentes, dividir criterios o cerrar una mientras
 la otra sigue como pendiente.
-Decision pendiente: consolidar duplicados existentes con tarea canonica,
-aliases y merge de criterios/tests, sin borrar historia. El planner debe
-priorizar la canonica y marcar duplicados equivalentes como
-`duplicate_backlog_task`.
+Decision 2026-05-26: implementado offline focal en T140. T137 declara
+`Fusionada_con: T102 legacy-http-json-boundary-policy` y T138 declara
+`Fusionada_con: T103 outbound-http-response-limit-redaction`; T102/T103
+conservan el canon. El planner residente lee esos aliases, fusiona criterios,
+tests y `write_set` no redundantes en la tarea canonica, omite la duplicada con
+collision `duplicate_backlog_task` y bloquea la canonica si una request viva del
+alias ya esta visible. Cierre completo pendiente hasta que la bateria obligatoria
+quede verde; el bloqueo observado fue el smoke OPES fake `run-until-assemble`.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-server ./cmd/orquesta-server`.
 Backlog: `T140 backlog-overlap-canonicalization`.
@@ -2307,9 +5243,12 @@ Casos: `rg` encontro `panic(` en codigo no-test:
 `modulos/orquesta-core-leases/lease_evaluator_validation_v0.go:mustParseAgentLeaseInstantV0`.
 Aunque se llamen tras invariantes previas, una frontera publica, smoke opt-in o
 validador neutral no debe tumbar el proceso por marshal/parse/invariante rota.
-Decision pendiente: convertir esos caminos en errores publicos recuperables o
-issues durables; reservar helpers `must*` para tests o inicializacion cerrada
-con invariante probada.
+Cierre 2026-05-26: T141 sustituyo esos helpers por `mcpMarshalMCPRealSmokeV0`
+con error publico `internal_invariant:mcp_smoke_arguments_json` y
+`parseAgentLeaseInstantV0` con `AgentLeaseValidationErrorV0`; quedan solo
+`panic(` en tests dentro de este write-set. El recover del supervisor residente
+sigue registrado como fallo operacional observable por state/auditoria, no como
+sustituto de validacion.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-core-leases ./modulos/orquesta-server ./modulos/orquesta-observability`.
 Backlog: `T141 public-boundary-no-panic-contract`.
@@ -2328,6 +5267,8 @@ sin body crudo y bloquear o marcar como opt-in local rutas absolutas, HOME,
 Test futuro:
 `go test -count=1 ./modulos/orquesta-cli ./cmd/orquesta-server`.
 Backlog: `T142 cli-json-input-bounds-and-source-policy`.
+Estado: cubierto 2026-05-26 por limite `--input-max-bytes`, clasificacion
+`file_explicit` y bloqueo compacto de rutas sensibles.
 ```
 
 ```text
@@ -2343,6 +5284,10 @@ ACK, decisiones, checkpoint y planner.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
 Backlog: `T143 codex-control-file-size-and-redaction-policy`.
+Estado: cubierto local 2026-05-26. La lectura de ficheros de control Codex usa
+helper acotado comun con issue compacto `control_file_too_large` para ACK,
+checkpoint, sidecar de decisiones y startup strict; logs/progreso quedan como
+tail separado.
 ```
 
 ```text
@@ -2352,10 +5297,11 @@ Casos: `readDomainWorkDeliveryBodyV0` abre el primer fichero de `ACK.files` con
 `os.ReadFile` y lo transforma en payload `domain_work`. La ruta se valida contra
 `ProjectWorkDir`, pero falta limite por artifact type, deteccion de binario y
 redaccion antes de `PayloadFields`.
-Decision pendiente: helper de intake por artefacto con limite, reason code
-publico y redaccion por campo; refs opacas y markdown/JSON valido pasan, pero
-HOME, rutas privadas, prompts/transcripts, tokens, payloads HTTP crudos,
-binarios no declarados y cuerpos enormes no salen al conector de dominio.
+Decision cerrada 2026-05-26: helper de intake por artefacto con limite, reason
+code publico y bloqueo por campo antes de `PayloadFields`; refs opacas y
+markdown/JSON valido pasan, pero HOME, rutas privadas, prompts/transcripts,
+tokens, payloads HTTP crudos, binarios no declarados y cuerpos enormes no salen
+al conector de dominio.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-app-codex-stack ./modulos/orquesta-domain-work ./modulos/orquesta-runtime-codex-delivery`.
 Backlog: `T144 domain-work-delivery-artifact-intake-policy`.
@@ -2367,9 +5313,10 @@ Origen: scanner backlog 2026-05-24 cuadragesima novena pasada.
 Casos: `OperatorMCPClientConnectorV0.callToolV0` invoca `CallToolV0` con
 `context.Background()`. Un conector externo colgado puede bloquear consulta,
 burst, outbox o directed query sin timeout publico ni presupuesto visible.
-Decision pendiente: contexto/deadline inyectado por composicion, error publico
-estable para timeout/cancelacion y redaccion de detalles de transporte. No
-confundir ausencia de conector, timeout y consejo del operador.
+Decision resuelta 2026-05-26 en T145: contexto padre opcional y timeout de
+composicion por llamada; deadline por defecto si no se configura. Timeout y
+cancelacion salen como `operator_mcp_timeout` y `operator_mcp_cancelled`;
+ausencia de conector y fallo opaco conservan sus codigos publicos previos.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-operator-mcp-client ./modulos/orquesta-operator-mcp ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
 Backlog: `T145 operator-mcp-client-deadline-budget`.
@@ -2378,14 +5325,15 @@ Backlog: `T145 operator-mcp-client-deadline-budget`.
 ```text
 ID: HTTP-CAND-FACTORY-JSON-BOUNDARY-001
 Origen: scanner backlog 2026-05-24 cuadragesima novena pasada.
-Casos: `modulos/orquesta-factory-http/appspec_http_v0.go` usa `io.ReadAll` en
-`POST /api/v0/apps/spec` y queda fuera del alcance explicito de T137, que lista
-MCP/web/gateway. Tambien coincide con T133 porque `factory-http` no tiene guia
-local completa.
-Decision pendiente: incluir `factory-http` en helper/politica JSON publica:
-limite de body, content-type, trailing data, campos desconocidos, errores
-compactos y guia local o sustituto documental. La respuesta sigue siendo preview
-de factory, no plan ejecutable.
+Casos: `modulos/orquesta-factory-http/appspec_http_v0.go` usaba lectura local de
+`POST /api/v0/apps/spec` y quedaba fuera del alcance explicito de T137, que
+lista MCP/web/gateway. Tambien coincidia con T133 porque `factory-http` no tenia
+guia local completa.
+Decision 2026-05-26: cerrado por T146. `factory-http` queda en la politica JSON
+publica con limite de body, content-type documentado, trailing data, campos
+desconocidos y errores compactos sin body crudo. La guia local vive en
+`modulos/orquesta-factory-http/README.md` y la respuesta sigue siendo preview de
+factory, no plan ejecutable.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-factory-http ./modulos/orquesta-factory ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway`.
 Backlog: `T146 factory-http-json-boundary-coverage`.
@@ -2398,9 +5346,13 @@ Casos: `codexProgressReadFailureLogV0` lee stdout/stderr/last-message con
 `os.ReadFile` completo y recorta despues a 64 KiB para clasificar no-ACK,
 interrupcion o capacidad. Un log enorme puede cargar memoria y despues acabar
 resumido como decision de progreso sin haber pasado por el rail tail/redaccion.
-Decision pendiente: usar lectura tail acotada antes de cargar logs de progreso,
-mantener codigos compactos y no exponer stdout/stderr, prompts, transcripts,
-HOME, rutas privadas, tokens ni salida cruda de proveedor.
+Decision 2026-05-26: cerrado por T147. Los lectores de failure context de
+progreso Codex usan tail acotado antes de clasificar, la firma de accion limita
+la lectura aunque el log crezca durante el read y los lectores vecinos de
+recovery/detalle ops del stack Codex aplican tail a stdout/stderr/last-message.
+Se mantienen codigos compactos y no se promueven stdout/stderr, prompts,
+transcripts, HOME, rutas privadas, tokens ni salida cruda de proveedor como
+evidencia terminal.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-runtime-codex ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
 Backlog: `T147 codex-progress-failure-log-tail-bounds`.
@@ -2415,10 +5367,12 @@ Casos: ledgers/snapshots JSON file-based como
 leen el fichero completo antes de validar schema, records o corrupcion. Si el
 snapshot crece demasiado o queda corrupto, el error no distingue sobrelimite,
 corrupcion recuperable ni riesgo de duplicar efectos externos.
-Decision pendiente: helper/politica de lectura acotada por tipo, `max_records`,
-errores publicos compactos y recuperacion que no trate ledger ilegible como
-vacio. Coordinar con T98, T101 y T104 sin sustituir claim/recovery ni escritura
-durable.
+Decision 2026-05-26: los lectores file-based del alcance T148 aplican limite de
+bytes y `max_records` por tipo antes de usar el snapshot como estado. Los
+errores publicos compactos distinguen sobrelimite, corrupcion y schema invalido
+sin paths locales ni payload crudo, y un ledger ilegible no se trata como vacio.
+T98, T101 y T104 siguen siendo owners de claim/recovery, idempotencia y
+escritura durable.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-app-codex-stack ./modulos/orquesta-domain-work-file ./modulos/orquesta-run-file ./modulos/orquesta-state-file ./modulos/orquesta-runtime-codex-delivery`.
 Backlog: `T148 file-ledger-snapshot-read-bounds`.
@@ -2432,13 +5386,14 @@ Casos: `CaptureWorktreeSnapshotV0` recorre el worktree y
 ya se usa como base futura para ACK estricto, line budget y efectos
 destructivos, pero no aplica `max_files`, `max_file_bytes`, `max_total_bytes`
 ni hash streaming.
-Decision pendiente: presupuesto de snapshot por composicion, hash por streaming,
+Decision: presupuesto de snapshot por composicion, hash por streaming,
 ignore prefixes comunes y errores publicos compactos sin path absoluto ni
-contenido de fichero. No usar `ACK.files` como sustituto cuando falte snapshot
-valido.
-Test futuro:
+contenido de fichero. Los agotamientos de presupuesto se proyectan como rails de
+revision/followup y no se sustituyen por contenido de `ACK.files`.
+Test:
 `go test -count=1 ./modulos/orquesta-runtime-worktree ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
 Backlog: `T149 worktree-snapshot-read-budget`.
+Estado: cubierto por T149
 ```
 
 ```text
@@ -2449,11 +5404,13 @@ Casos: los gates `codexReviewGate*`, `reviewRework*` y
 globs/carpetas o recuperar artefactos, con listas de ignore copiadas y sin
 contexto, max entradas, max profundidad ni reason code cuando el scan agota
 presupuesto.
-Decision pendiente: helper/politica comun de scan de proyecto para existencia y
-recovery, tolerante con alias/rutas hijas pero bloqueando traversal, HOME,
-control files, prompts, transcripts, logs y binarios enormes como evidencia de
-producto.
-Test futuro:
+Decision 2026-05-26: `ProjectTreeScanHasFileV0` y `ProjectTreeScanFilesV0`
+quedan como politica comun de scan de proyecto para existencia y recovery, con
+`context`, presupuesto de entradas/profundidad/tamano/resultados, ignore
+prefixes y reason codes publicos. Review gate, review/rework y recovery de
+domain_work delegan en esa politica y excluyen control files/directorios locales
+como evidencia de producto.
+Test:
 `go test -count=1 ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack ./modulos/orquesta-runtime-worktree`.
 Backlog: `T150 project-tree-scan-budget-for-review-recovery`.
 ```
@@ -2462,15 +5419,17 @@ Backlog: `T150 project-tree-scan-budget-for-review-recovery`.
 ID: CODEX-CAND-WAVE-FILE-INPUT-BOUNDS-001
 Origen: scanner backlog 2026-05-24 quincuagesima primera pasada.
 Casos: `codexWavePromptTextV0`, `codexDirectorObjectiveTextV0` y
-`codexDirectorDomainContextBlocksFromFilesV0` leen ficheros de operador con
+`codexDirectorDomainContextBlocksFromFilesV0` leian ficheros de operador con
 `os.ReadFile` completo antes de crear prompts/contexto para agentes Codex.
-Decision pendiente: limite por fichero, validacion texto/UTF-8, politica de
-origen y errores publicos redactados. No aceptar `.orquesta-runtime`,
-`.orquesta-codex-runtime`, logs, ACKs, checkpoints, prompts/transcripts previos,
-HOME ni rutas privadas como contexto salvo opt-in local auditado.
-Test futuro:
+Decision 2026-05-26: lectura acotada por fichero, validacion UTF-8/texto,
+politica de origen local/control/ref opaca y errores publicos redactados. Se
+bloquean `.orquesta-runtime`, `.orquesta-codex-runtime`, logs, ACKs,
+checkpoints, prompts/transcripts previos, ficheros no regulares y symlinks; los
+summaries exponen solo categoria y refs/hash compactos.
+Test:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-worktree`.
 Backlog: `T151 codex-wave-operator-file-input-bounds`.
+Estado: cubierto
 ```
 
 ```text
@@ -2480,9 +5439,11 @@ Casos: la proyeccion de `CODEX_HOME` en olas Codex usa allowlist de nombres,
 pero copia ficheros/directorios con `os.Stat`, `os.ReadFile` y `WalkDir` sin
 presupuesto de bytes/ficheros ni politica explicita de symlinks, modos o
 entradas omitidas.
-Decision pendiente: aplicar presupuesto de copia, `Lstat`/resolucion segura,
-modos seguros y recibo compacto de categorias copiadas/omitidas. No copiar
-secretos, HOME, memorias/plugins completos ni rutas privadas como evidencia.
+Decision aplicada 2026-05-26: `codex-wave`/`codex-director-wave` aplican
+presupuesto de copia, `Lstat`/apertura sin seguir symlinks, rechazo de
+hardlinks/entradas no regulares, modos seguros y recibo compacto de categorias,
+contadores, bytes y omissions por reason code. No se copian secretos, HOME,
+memorias/plugins completos ni rutas privadas como evidencia.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-worktree ./modulos/orquesta-app-codex-stack`.
 Backlog: `T152 codex-code-home-copy-bounds-symlink-policy`.
@@ -2494,9 +5455,12 @@ Origen: scanner backlog 2026-05-24 quincuagesima segunda pasada.
 Casos: outbox valida `maxOutboxPayloadBytesV0`, pero comandos/eventos del
 workflow serializan o decodifican `json.RawMessage` sin presupuesto comun antes
 de persistir en `orquesta-state-file`.
-Decision pendiente: limite por tipo para comandos/eventos, validacion previa a
-`json.Unmarshal`/compactacion y uso de refs de artefacto para payloads grandes
-o crudos.
+Estado: cerrado 2026-05-26 en core/state-file con presupuesto comun alineado
+con outbox y overrides tipados para microtareas.
+Decision aplicada: comandos/eventos validan tamano antes de `json.Unmarshal`,
+`orquesta-state-file` valida eventos antes de compactar/persistir y los
+payloads grandes o crudos deben entrar por refs de artefacto/evidencia, no como
+JSON durable del workflow.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-state-file ./modulos/orquesta-orchestration-core ./modulos/orquesta-director ./modulos/orquesta-app-director-service`.
 Backlog: `T153 workflow-command-event-payload-budget`.
@@ -2511,9 +5475,17 @@ local o por el cliente inyectado.
 Decision pendiente: deadline/cancelacion por politica de composicion para
 runtime launch/stop, HTTP domain_work, OPES REST, MCP operador, bridge externo y
 shutdown; errores publicos compactos para timeout/cancelacion.
+Decision aplicada 2026-05-26: T154 cierra la politica general del write-set con
+deadline por efecto en HTTP domain_work, OPES REST, runtime process launch/stop
+y bridge OPES residente; quedan tareas vecinas especificas para shutdown
+avanzado, transporte MCP residente y presupuestos de espera externa.
+Reintento 2026-05-26: `agent-ref-task-autoprogramming-c22c7438ddc1-g01`
+verifica que el backlog ya no deja T154 como pendiente y mantiene este rail como
+cubierto por pruebas requeridas.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-runtime ./modulos/orquesta-domain-work-http ./modulos/orquesta-opes-connector ./modulos/orquesta-operator-mcp-client ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
 Backlog: `T154 effect-port-deadline-context-policy`.
+Estado: cubierto
 ```
 
 ```text
@@ -2523,13 +5495,22 @@ Casos: `completedBacklogRequestRefsV0` camina toda `.orquesta-runtime` para
 encontrar `agent_ack.json` y deduplicar requests de backlog completadas. En
 runs con olas Codex, homes de agentes, plugins y children, ese scan puede tocar
 material ajeno al planner sin max de dirs/ficheros/profundidad/tiempo.
-Decision pendiente: indice o scan acotado por refs esperadas, limite de bytes
-por ACK, schema/correlacion terminal y degradacion observable
+Decision aplicada 2026-05-26: indice o scan acotado por refs esperadas, limite
+de bytes por ACK, schema/correlacion terminal y degradacion observable
 `backlog_ack_scan_budget_exhausted`/`backlog_ack_scan_ambiguous`. Coordinar con
 T33, T79, T135 y T143.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
 Backlog: `T155 idle-backlog-runtime-ack-scan-budget`.
+Resolucion 2026-05-26: cerrado en `cmd/orquesta-server` con scan acotado a
+profundidad `run/agent/agent_ack.json`, filtros de run backlog, limites de
+directorios/entradas/agentes/bytes/duracion y degradacion visible
+`backlog_ack_scan_budget_exhausted` o `backlog_ack_scan_ambiguous` hacia scanner
+documental.
+Revalidacion OrquestaV2 2026-05-26: el rework
+`agent-ref-task-ref-review-rework-task-autoprogramming-a8f8edf38716-g01-4dce1eb3cf44`
+mantiene T155 cerrado, no relanza otro padre y resuelve contexto `ref_only` por
+lectura local/evidencia en ACK.
 ```
 
 ```text
@@ -2543,6 +5524,14 @@ Decision pendiente: captura limitada de stdout/stderr Git, `max_changed_paths`,
 errores publicos `git_output_too_large`/`git_status_too_many_paths`, redaccion
 de remotos/rutas/HOME/tokens y timeout `git_command_timeout`. Coordinar con T39,
 T105, T139 y T154.
+Decision aplicada 2026-05-26: AppVCS y promocion de staging usan captura Git
+con `max_output_bytes`, presupuesto `max_changed_paths`, errores publicos
+`git_output_too_large`, `git_status_too_many_paths` y `git_command_timeout`, y
+evidencia compacta sin stdout/stderr crudo, rutas locales, remotos ni diff.
+Revalidacion OrquestaV2 2026-05-26: el rework
+`agent-ref-task-ref-review-rework-task-autoprogramming-a61a87a140a8-g01-14fd8c3348e6`
+mantiene T156 cerrado, no relanza otro padre y resuelve `required ref_only`
+mediante lectura local/evidencia explicita en ACK.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-runtime-worktree ./modulos/orquesta-app-codex-stack ./modulos/orquesta-mcp ./cmd/orquesta-server`.
 Backlog: `T156 app-vcs-git-output-and-path-budget`.
@@ -2556,12 +5545,19 @@ Casos: `ReadCodexAgentAckFileV0`, `ReadCodexShutdownCheckpointAckFileV0`,
 control/progreso desde paths de descriptor con `os.ReadFile`, `os.Stat` u
 `os.Open`. T143 cubre tamano/redaccion, pero no raiz autorizada, symlinks ni
 entradas no regulares antes de abrir.
-Decision pendiente: helper comun de lectura por raiz/descriptor que use
-`Lstat`/apertura segura, rechace symlinks, dirs, dispositivos o paths fuera de
-raiz y devuelva reason codes compactos sin path ni contenido.
-Test futuro:
+Decision: cubierto localmente el 2026-05-26 para ACK, checkpoint, sidecar de
+decision y tails de progreso del write-set. La lectura comun de control files
+usa nombre base esperado, raiz no trivial, `Lstat` antes de abrir, rechazo de
+symlink/hardlink/no regular, comparacion despues de abrir y limite T143. Los
+tails de progreso y `codex-wave-tail` aplican `Lstat`/no symlink/no hardlink
+antes de leer fragmentos.
+Test:
 `go test -count=1 ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
 Backlog: `T157 codex-control-file-root-and-symlink-policy`.
+Revalidacion OrquestaV2 2026-05-26: el rework
+`agent-ref-task-ref-review-rework-task-autoprogramming-0149f7cf3c20-g01-935bd05e71ff`
+mantiene T157 cerrado, no relanza otro padre y resuelve `required ref_only`
+mediante lectura local/evidencia explicita en ACK.
 ```
 
 ```text
@@ -2572,12 +5568,27 @@ y `ORQUESTA_BASE_URL` como strings de composicion; `opesDrainSummaryV0` expone
 esas bases completas en el summary publico. El bridge tiene confirmacion y
 filtro por job, pero no politica OPES especifica de destino ni redaccion de
 summary.
-Decision pendiente: politica de destino OPES temporal/productivo, rechazo de
-credenciales en URL, modo productivo opt-in y summary con refs/categorias en vez
-de URL completa o payload crudo.
-Test futuro:
+Decision aplicada 2026-05-26: politica de destino OPES temporal/productivo,
+rechazo de credenciales/query en URL, modo productivo opt-in con evidence ref
+compacta y summary con refs/categorias/filtros/contadores en vez de URL completa
+o payload crudo.
+Test:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-opes-connector ./modulos/orquesta-opes-bridge`.
 Backlog: `T158 opes-bridge-destination-and-summary-policy`.
+Revalidacion OrquestaV2 2026-05-26:
+`agent-ref-task-autoprogramming-453f91b133d4-g01` mantiene T158 cerrado y
+resuelve `required ref_only` mediante lectura local/evidencia explicita en ACK.
+Retry OrquestaV2 2026-05-26:
+`agent-ref-task-autoprogramming-985c0ad5e009-g01` revalida T158 sin nuevo rail y
+mantiene `required ref_only` resuelto por evidencia explicita en ACK.
+Retry OrquestaV2 2026-05-26:
+`agent-ref-task-autoprogramming-bf0d81417acc-g01` revalida T158 sin nuevo rail,
+sin cambios de codigo y con `required ref_only` resuelto por lectura local y
+evidencia explicita en ACK.
+Retry OrquestaV2 2026-05-26:
+`agent-ref-task-autoprogramming-761a129dc1b4-g01` revalida T158 sin nuevo rail,
+sin smoke real y con `required ref_only` resuelto por lectura local/evidencia
+explicita en ACK.
 ```
 
 ```text
@@ -2589,10 +5600,13 @@ Casos: `codex_resolver_v0.go`, `codex_wave_command_v0.go`,
 `orquesta_shutdown_request.json` con `os.WriteFile` directo sobre ruta final.
 T143/T157 cubren lectura, pero no escritura atomica, permisos, `fsync`, rechazo
 de symlinks ni receipt compacto.
-Decision pendiente: helper/puerto de escritura de control files con raiz
-autorizada, temp+rename, modos cerrados, conflicto idempotente y receipt por
-hash/bytes/tipo sin path local ni contenido crudo.
-Test futuro:
+Decision aplicada 2026-05-26: `orquesta-runtime-codex` centraliza
+`WriteCodexControlFileBytesV0` con raiz autorizada, nombre esperado,
+temp+rename+fsync, permisos cerrados, bloqueo de symlink/no regular/hardlink,
+modo idempotente/conflicto y receipt compacto por hash/bytes/tipo sin path local
+ni contenido crudo. `codex_resolver_v0.go`, `codex_wave_control_v0.go`,
+`codex_wave_launch_v0.go` y `codex_shutdown_checkpoint_v0.go` quedan migrados.
+Test de cierre:
 `go test -count=1 ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
 Backlog: `T159 codex-control-file-durable-write-policy`.
 ```
@@ -2601,15 +5615,17 @@ Backlog: `T159 codex-control-file-durable-write-policy`.
 ID: RAIL-CAND-DIRECTOR-DECISIONS-BATCH-BUDGET-001
 Origen: scanner backlog 2026-05-24 quincuagesima quinta pasada.
 Casos: `DirectorAgentDecisionFileSourceV0` limita bytes por fichero, pero
-`decisionsFromDescriptorsV0` y `compositeDirectorDecisionSourceV0` agregan
+`decisionsFromDescriptorsV0` y `compositeDirectorDecisionSourceV0` agregaban
 descriptors/fuentes sin presupuesto visible para numero total de decisions,
 `create_microtask` o tasks nuevas antes de materializar workflow/outbox.
-Decision pendiente: limite por request de descriptors, decisions, microtasks,
-tasks y bytes acumulados; exceso con reason code publico y contadores compactos
-sin bodies JSON, rutas, prompts ni transcripts. Coordinar con T63 y T153.
+Decision aplicada 2026-05-26: limite por request de descriptors, decisions,
+microtasks, tasks, outbox esperado y bytes acumulados; exceso con reason code
+publico `director_decisions_batch_too_large` y contadores compactos sin bodies
+JSON, rutas, prompts ni transcripts. Coordinar con T63 y T153.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-director-agent-file-source ./modulos/orquesta-director-agent-workflow ./modulos/orquesta-app-codex-stack ./modulos/orquesta-orchestration-core`.
 Backlog: `T160 director-decisions-batch-budget-and-source-limit`.
+Estado: cubierto
 ```
 
 ```text
@@ -2622,6 +5638,9 @@ un timestamp puede parecer identidad causal aunque solo sea evidencia temporal.
 Decision pendiente: owner comun de reloj/ref generator por composicion, reloj
 inyectable en tests, colision observable y prohibicion de usar timestamps como
 unica identidad terminal.
+Estado 2026-05-26: resuelto para el alcance T161. Owner compartido:
+`modulos/orquesta-runtime/clock_ref_policy_v0.go`; adopcion focal en
+`codex-wave`, runtime launch, progreso Codex delivery y fallbacks web/CLI.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-runtime ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack ./modulos/orquesta-web ./modulos/orquesta-cli`.
 Backlog: `T161 clock-and-ref-generation-policy`.
@@ -2641,6 +5660,10 @@ observable y errores redactados.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-cli ./modulos/orquesta-mcp ./cmd/orquesta-server ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway`.
 Backlog: `T162 public-client-mutation-idempotency-policy`.
+Cierre 2026-05-26: politica comun implementada en `orquesta-mcp` y consumida
+por web/CLI/MCP/gateways para prepare-run, run-control, queue-priority mutante,
+shutdown y AppVCS. Validacion focal:
+`go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-cli ./modulos/orquesta-mcp ./cmd/orquesta-server ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway`.
 ```
 
 ```text
@@ -2654,6 +5677,10 @@ degradar de forma observable.
 Decision pendiente: presupuesto por append/run, indice durable por `event_id`,
 lectura paginada o ventana causal, compaction compatible y reason codes para
 log excesivo/corrupto sin asumir historial vacio.
+Decision 2026-05-26: cerrado en `orquesta-state-file` con indice durable,
+registros por evento, presupuestos de append/run/payload, lectura paginada
+`LoadRunEventsPageV0` y consumidores de cierre/review que declaran presupuesto
+al pedir historial completo.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-state-file ./modulos/orquesta-core-workflow ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-director-service`.
 Backlog: `T163 state-file-event-log-index-compaction-budget`.
@@ -2669,6 +5696,13 @@ indice, y una ausencia/corrupcion puede parecer "sin hijos" si no se distingue.
 Decision pendiente: indice parent/child durable con presupuesto de entradas y
 bytes, rebuild acotado con reason code, bloqueo si el indice falta o hay outbox
 pendiente, y conservacion de wave/cohort/depth para waits por parentesco.
+Decision 2026-05-26: cerrado en `orquesta-state-file` con indice durable por
+run `workflow_task_parent_index.v0`, actualizacion en `SaveWorkflowTaskV0`,
+lectura por refs indexadas en `LoadWorkflowTasksByParentV0` y rebuild acotado
+con `workflow_task_parent_index_rebuild_required` /
+`workflow_task_parent_index_budget_exhausted`. La ausencia o corrupcion del
+indice no se interpreta como "sin hijos"; si no puede rematerializarse dentro
+del presupuesto, la lectura falla y el consumidor debe bloquear recursion/cierre.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-state-file ./modulos/orquesta-core-workflow ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-director-service ./modulos/orquesta-app-codex-stack`.
 Backlog: `T164 workflow-task-store-parent-index-budget`.
@@ -2682,9 +5716,10 @@ Casos: `serverConfigFromEnvV0`, `setDefaultStartupCleanupModeV0` y
 global del proceso. Eso mezcla input explicito del operador con defaults de
 composicion y puede afectar tests, smokes, comandos hijos o lecturas posteriores
 de config.
-Decision pendiente: config efectiva sin mutar entorno global, proyeccion al
-daemon marcada como `explicit`/`defaulted`/`derived`, summary redactado por
-categorias y tests que demuestren lecturas repetidas sin contaminacion global.
+Decision cerrada 2026-05-26: config efectiva sin mutar entorno global,
+proyeccion al daemon marcada por conteos `explicit`/`defaulted`/`derived`,
+summary redactado por categorias y tests focales de lecturas repetidas sin
+contaminacion global.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-rails ./modulos/orquesta-app-codex-stack`.
 Backlog: `T165 server-config-global-env-defaults-policy`.
@@ -2703,6 +5738,10 @@ posteriores a `stopped`.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server ./modulos/orquesta-observability`.
 Backlog: `T166 resident-runtime-async-shutdown-quiescence`.
+Estado: cubierto 2026-05-26 por RuntimeV0 con grupo async interno, deadline
+`ORQUESTA_SERVER_SHUTDOWN_GRACE_MS`, publicacion `stopping`/
+`async_work_draining`, `stopped` solo tras quiescencia y `stop_timeout` durable
+con `shutdown_async_work_active`.
 ```
 
 ```text
@@ -2712,11 +5751,13 @@ Casos: `cmd/orquesta-server run` arranca `runOPESBridgeLoopV0` en una goroutine
 paralela al runtime; `writeExternalBridgeTickV0` publica cada tick solo por
 stderr. El status/auditoria residente no conserva ultimo tick, ultimo error,
 estado `stopping` ni join/cancelacion del bridge.
-Decision pendiente: registrar lifecycle compacto del bridge externo, coordinar
-apagado con el runtime y publicar readiness/status sin URL completa, payload
-OPES, respuestas crudas ni rutas locales.
-Test futuro:
+Decision cerrada 2026-05-26: el loop residente OPES usa observer de lifecycle,
+publica estado compacto en status/readiness, audita errores de tick redactados
+y coordina join/cancel con `cmd/orquesta-server run`; un timeout de bridge se
+reporta como `external_bridge_shutdown_timeout` sin exito silencioso.
+Test:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-opes-bridge`.
+Estado: cubierto.
 Backlog: `T167 external-bridge-resident-loop-lifecycle-state`.
 ```
 
@@ -2728,11 +5769,14 @@ de run, pero no ejecuta `ValidateOrchestrationRunV0` sobre la proyeccion
 cargada. `LoadRunEventsV0` valida schema/ref del documento de eventos, pero no
 valida cada `OrchestrationEventV0` cargado ni duplicados antes de entregar el
 historial a replay/cierre.
-Decision pendiente: validar run/eventos al cargar desde state-file, bloquear
-cierre/replay ante snapshot invalido y exponer reason code compacto sin asumir
-run vacia, sin eventos o completed.
-Test futuro:
+Decision cerrada 2026-05-26: `LoadRunV0` valida la proyeccion con
+`ValidateOrchestrationRunV0`; `LoadRunEventsV0` valida eventos con
+`ValidateOrchestrationEventV0`, refs de run y duplicados, incluidos documentos
+legacy y registros corruptos. El lector devuelve error publico compacto y no
+trata documentos invalidos como run vacia, sin eventos o completed.
+Test:
 `go test -count=1 ./modulos/orquesta-state-file ./modulos/orquesta-core-workflow ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-director-service`.
+Estado: cubierto.
 Backlog: `T168 state-file-run-event-load-validation`.
 ```
 
@@ -2746,6 +5790,10 @@ resource/tool sin error de registro.
 Decision pendiente: rechazar colisiones de tool/resource en el transporte real,
 propagar error desde `RegisterMCPTransportV0` y demostrar que no queda catalogo
 parcial tras fallo.
+Cierre 2026-05-26: implementado en el transporte MCP real con rechazo de
+duplicados de resource por `name`/`uri`, tool por `name`, errores publicos
+redactados y pruebas de no mutacion parcial/listado estable. El contrato puro
+mantiene prueba de propagacion de errores del puerto.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-mcp`.
 Backlog: `T169 mcp-real-transport-registration-collision-guard`.
@@ -2760,10 +5808,16 @@ Casos: los clientes HTTP revisados en `orquesta-domain-work-http`,
 `CheckRedirect` ni una politica comun de cadena 3xx. Go sigue redirects por
 defecto, por lo que la URL inicial puede estar validada y el destino efectivo
 terminar fuera de origen/politica.
-Decision pendiente: declarar `redirect_policy`, revalidar cada salto contra la
-politica de destino, bloquear cross-origin o esquema no permitido y no reenviar
-headers sensibles salvo permiso explicito redactado.
-Test futuro:
+Decision cerrada 2026-05-26: los clientes HTTP salientes del write-set T170
+declaran politica de redirect y revalidan cada salto contra origen, esquema,
+puerto y path cuando el conector lo declara. Los saltos cross-origin, esquema no
+permitido, credenciales o fragmento quedan bloqueados con reason code compacto;
+no se autorizo reenvio de headers sensibles fuera del origen inicial.
+Revalidacion OrquestaV2 2026-05-26:
+`agent-ref-task-ref-review-rework-task-autoprogramming-74734b6a029e-g01-9160302b840b`
+mantiene el cierre sin relanzar otro agente padre y resuelve `required ref_only`
+por evidencia explicita en ACK.
+Test de cierre:
 `go test -count=1 ./modulos/orquesta-domain-work-http ./modulos/orquesta-opes-connector ./modulos/orquesta-web ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./cmd/orquesta-server`.
 Backlog: `T170 outbound-http-redirect-policy`.
 ```
@@ -2775,9 +5829,13 @@ Casos: `auditHTTPHandlerV0` conserva `raw_query`; endpoints web/server usan
 `ParseForm`, `FormValue` o `URL.Query().Get` para controles publicos. T137
 limita cuerpos JSON, pero no impone presupuesto/redaccion comun sobre query
 string ni form params antes de auditoria/status.
-Decision pendiente: reemplazar raw query por resumen redactado, limitar tamano
-total, numero de claves, repeticion y longitud por valor, y clasificar rutas,
-URLs, tokens, prompts o filtros libres antes de log/auditoria.
+Decision cerrada 2026-05-26: web aplica limites de query/form antes de
+`URL.Query`/`ParseForm`; auditoria residente omite `raw_query`, limita claves y
+redacta nombres sensibles con reason codes compactos.
+Revalidacion OrquestaV2 2026-05-26:
+`agent-ref-task-ref-review-rework-task-autoprogramming-03f6b0927ba2-g01-24a1e410cd44`
+no reabre T171; el contexto `ref_only` requerido queda resuelto por lectura
+local de paquete/docs y evidencia explicita en ACK.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-web ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway`.
 Backlog: `T171 public-query-form-parameter-bounds-redaction`.
@@ -2793,6 +5851,10 @@ la entrega HTTP queda invisible para status, auditoria o smokes.
 Decision pendiente: helper o patron comun para distinguir fallo de dominio,
 fallo de serializacion y fallo de escritura; registrar `response_write_failed`
 compacto cuando el status ya fue emitido y no filtrar payloads internos.
+Resolucion 2026-05-26: el servidor residente incorpora helper JSON con
+serializacion previa a headers y la auditoria HTTP registra
+`response_write_failed` con etapa compacta, separando exito de dominio de fallo
+de entrega sin guardar payloads.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-web ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-observability`.
 Backlog: `T172 http-response-encode-write-error-visibility`.
@@ -2805,7 +5867,11 @@ Casos: rutas web/API mutables aceptan POST por navegador o cliente local sin
 owner visible para `Origin`, `Referer`, CSRF token o intent ref. T55 cubre
 auth/bind remoto y T102/T137 cubren JSON/form/query, pero un POST de navegador
 hacia loopback o bind opt-in puede activar control plane si solo se valida body.
-Decision pendiente: declarar por ruta si acepta navegador, CLI/MCP o gateway;
+Resolucion 2026-05-26: `orquesta-http-gateway` declara mutabilidad publica y
+expone una guarda comun de origen/intencion aplicada por `orquesta-app-gateway`;
+browser/form requiere `Origin`/`Referer` same-origin o token de intencion, y
+clientes JSON no-browser conservan el flujo local/MCP existente.
+Decision tomada: declarar por ruta si acepta navegador, CLI/MCP o gateway;
 exigir same-origin o intent token para mutaciones browser y registrar decision
 compacta sin cookies, query cruda, URL completa ni payload.
 Test futuro:
@@ -2823,6 +5889,11 @@ transporte opt-in y colisiones de registro; falta owner de protocolo.
 Decision pendiente: contrato JSON-RPC estricto o modo legacy declarado para
 version, id, batch, notifications, params, `Content-Type`/`Accept` y errores,
 sin eco de argumentos, resource payloads, rutas, prompts, transcripts ni tokens.
+Resolucion 2026-05-26: `/mcp` adopta contrato estricto JSON-RPC 2.0:
+batch rechazado, notifications limitadas a `notifications/initialized` sin
+`id`, `id` seguro, presupuesto de `params`, `Accept` JSON compatible y params
+estrictos para `resources/read` y `tools/call`; los errores usan reason codes
+compactos sin eco de payloads.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway`.
 Backlog: `T174 mcp-jsonrpc-protocol-strictness`.
@@ -2836,10 +5907,10 @@ Casos: `cmd/orquesta-server/mcp_real_transport_v0.go` envuelve payloads de
 freshness ni redaccion por resource/tool. Un recurso grande o un resultado de
 herramienta con diagnostico amplio puede superar presupuesto o filtrar material
 operativo antes de que T174 actue sobre el request.
-Decision pendiente: presupuesto de salida MCP por resource/tool, modo summary
-por defecto para payloads grandes, errores compactos y redaccion antes de
-serializar JSON-RPC.
-Test futuro:
+Decision 2026-05-26: presupuesto de salida MCP comun por resource/tool con
+modo, freshness, redaccion publica, diagnostico crudo solo opt-in y bloqueo
+compacto antes de serializar JSON-RPC.
+Test:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-mcp ./modulos/orquesta-observability`.
 Backlog: `T175 mcp-tool-resource-output-budget`.
 ```
@@ -2851,9 +5922,10 @@ Casos: handlers web/MCP/gateway fijan `Content-Type`, `Allow` y a veces
 `X-Correlation-ID`, pero no comparten `Content-Security-Policy`,
 `X-Content-Type-Options`, `Referrer-Policy`, anti-frame ni `Cache-Control`.
 T173 cubre origen/CSRF; este rail cubre respuesta/cache.
-Decision pendiente: helper o politica de headers por perfil HTML, JSON, MCP,
-status/read-only y mutacion, con cache/freshness explicita y sin headers que
-filtren cookies, query, URLs completas ni datos privados.
+Decision 2026-05-26: helper comun `NewControlPlaneHTTPHeadersV0` con perfiles
+HTML, JSON y MCP, cache explicita `no-store`, `nosniff`, `Referrer-Policy`,
+anti-frame y reason code publico sin copiar cookies, query, URLs completas ni
+datos privados.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway ./cmd/orquesta-server`.
 Backlog: `T176 control-plane-http-security-cache-headers`.
@@ -2866,10 +5938,13 @@ Casos: clientes REST de web/MCP/CLI y composicion unen base URL y endpoint con
 concatenacion o `strings.TrimRight/TrimLeft`; algunos normalizan esquema/host y
 otros aceptan `BaseURL` como string ya confiable. Antes de T80/T170/T103 falta
 un rail comun para userinfo, query, fragment, base path y endpoint absoluto.
-Decision pendiente: normalizador compartido o politica equivalente para base
-URL y endpoint relativo, con rechazo de destinos ambiguos y errores publicos
-sin URL completa ni credenciales.
-Test futuro:
+Decision 2026-05-26: politica equivalente por adaptador (`webRESTEndpointURLV0`,
+`buildCLIRESTEndpointURLV0`, `joinMCPRESTEndpointV0` y
+`commandRESTEndpointURLV0`) para parsear base URL, preservar base path, rechazar
+userinfo/query/fragment y endpoints absolutos, `..`, query o paths vacios. El
+gateway conserva `http://orquesta.internal` solo como destino interno in-process
+cubierto por tests, no como egress real.
+Test:
 `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-cli ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./cmd/orquesta-server`.
 Backlog: `T177 rest-client-base-url-endpoint-policy`.
 ```
@@ -2884,6 +5959,12 @@ implicita del entorno/proceso, incluso para loopback o control plane interno.
 Decision pendiente: factory/perfil de transporte por cliente, proxy deny por
 defecto para interno/loopback, proxy explicito o allowlisted para egress, y
 auditoria por categoria sin URL completa, userinfo, tokens ni rutas privadas.
+Cierre 2026-05-26: T178 queda cerrado localmente con factory/perfil por
+adaptador: `domain_egress`, `opes_temporal`, `loopback_control_plane` e
+`internal_inprocess`. La politica activa fija `proxy_policy=deny`, dial/TLS/
+headers, pool y keepalive para red real; proxy/TLS custom queda pendiente como
+opt-in futuro de composicion, sin habilitar ni auditar valores crudos en este
+corte.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-domain-work-http ./modulos/orquesta-opes-connector ./modulos/orquesta-web ./modulos/orquesta-cli ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./cmd/orquesta-server`.
 Backlog: `T178 outbound-http-client-transport-proxy-policy`.
@@ -2899,6 +5980,10 @@ escritura que aparecerian en HTTP real.
 Decision pendiente: recorder acotado, propagacion/verificacion de deadline,
 errores publicos `inprocess_timeout`/`inprocess_response_too_large` y paridad de
 headers/status/correlacion con frontera HTTP real.
+Cierre 2026-05-26: el recorder acotado vive en
+`modulos/orquesta-app-gateway/inprocesshttp`; `InProcessTransportV0`, helpers web
+de test y smoke MCP in-process del servidor lo reutilizan con errores publicos
+compactos por exceso, cancelacion, timeout, panic y escritura cerrada.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-app-gateway ./modulos/orquesta-web ./modulos/orquesta-mcp ./cmd/orquesta-server ./modulos/orquesta-observability`.
 Backlog: `T179 inprocess-http-transport-budget-parity`.
@@ -2914,6 +5999,10 @@ owner visible para pipe roto, stdout cerrado o writer de test que falla.
 Decision pendiente: comprobar errores de escritura stdio, devolver exit code o
 reason code publico y no usar stdout/stderr textual como evidencia terminal de
 cierre.
+Estado 2026-05-26: cerrado para la visibilidad base. Servidor y CLI proyectan
+fallos de escritura stdout como `command_output_write_failed`; observabilidad
+mantiene el contrato compacto/redactado y stderr queda best-effort, no evidencia
+unica del cierre.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-cli ./modulos/orquesta-observability`.
 Backlog: `T180 command-stdio-write-error-visibility`.
@@ -2928,10 +6017,12 @@ El expander genera `RequestID`/`IdempotencyKey` desde esos refs, asi que un
 duplicado puede producir jobs derivados indistinguibles. Ademas, arrays raw
 malformados pueden colapsar a `nil` durante canonicalizacion y perder campo
 causal.
-Decision pendiente: diagnostico estable por campo para arrays raw invalidos,
-rechazo de `section_ref`, `visual_ref`, `review_ref` y `deliverable_ref`
-duplicados, y garantia de que el expander no emite jobs con misma idempotencia.
-Test futuro:
+Estado 2026-05-26: cerrado. El contrato publica
+`domain_document_plan_ref_duplicate` para duplicados por tipo,
+`domain_document_plan_array_invalid` para arrays raw invalidos por campo,
+deriva refs faltantes con sufijos deterministas y el expander bloquea
+`RequestID`/`IdempotencyKey` duplicados antes de emitir jobs.
+Test ejecutado:
 `go test -count=1 ./modulos/orquesta-domain-work ./modulos/orquesta-document-plan-expander ./modulos/orquesta-opes-bridge`.
 Backlog: `T181 domain-document-plan-ref-uniqueness-and-diagnostics`.
 ```
@@ -2943,9 +6034,11 @@ Casos: T174 limita forma/protocolo JSON-RPC y T175 limita salida de
 tools/resources, pero el transporte MCP real invoca handlers con el contexto
 del request y sin presupuesto de ejecucion por perfil. Un handler lento o que no
 observe cancelacion puede retener `/mcp` sin reason code publico propio.
-Decision pendiente: deadline/cancel cause por tool/resource antes de invocar
+Decision 2026-05-26: deadline/cancel cause por tool/resource antes de invocar
 handler, perfiles separados para lectura, mutacion y autoprogramacion larga, y
 observabilidad compacta sin argumentos, payloads, prompts ni rutas privadas.
+El transporte real devuelve `mcp_tool_timeout`/`mcp_tool_cancelled` y solo
+registra metodo, perfil, reason code, bucket de duracion y correlacion.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-observability`.
 Backlog: `T182 mcp-tool-execution-budget-and-cancellation`.
@@ -2962,9 +6055,13 @@ Decision pendiente: comprobar errores de render/escritura, publicar reason code
 estable, no reejecutar efectos y registrar solo contadores compactos sin
 formularios, query cruda, cookies, payloads, prompts, HOME, rutas privadas ni
 tokens.
-Test futuro:
+Cierre 2026-05-27: helper comun de `orquesta-web` bufferiza `template.Execute`,
+fallback preserva locale posible, gateway observa render/write por headers y
+writer wrapper, observability guarda solo contador/reason/stage/status/locale.
+Test:
 `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-app-gateway ./modulos/orquesta-observability ./cmd/orquesta-server`.
 Backlog: `T183 web-html-render-error-contract`.
+Estado: cubierto
 ```
 
 ```text
@@ -2978,6 +6075,17 @@ recuperacion o evidencia durable.
 Decision pendiente: builder canonico no ambiguo para refs causales, margen de
 digest suficiente, distincion explicita entre huella visual y ref causal, y
 conflicto reparable cuando una ref existente corresponde a otra fuente.
+Decision cerrada 2026-05-27: los owners del write-set T184 usan `sha256` sobre
+payload canonico con longitud de campos para refs causales, evidencias durables
+y firmas progress/rework. El retry de autoprogramacion ya no concatena
+`request_ref` y timestamp con separador textual; el core tiene prueba focal de
+namespace y payload no ambiguo. Las huellas solo diagnosticas quedan
+documentadas como advisory.
+Rework de revision 2026-05-27:
+`agent-ref-task-ref-review-rework-task-autoprogramming-298dd18fed1e-g01-c005a1d6953bff0a3fc8364f7d4ac61b`
+conserva la decision cerrada sin relanzar otro agente padre; el contexto
+`required ref_only` queda resuelto por lectura local del paquete y evidencia
+explicita en ACK.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-app-change-director-source ./modulos/orquesta-mcp ./modulos/orquesta-orchestration-core ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack`.
 Backlog: `T184 deterministic-ref-hash-collision-proof`.
@@ -2990,12 +6098,19 @@ Casos: smokes y runners aceptan raices por `ORQUESTA_SMOKE_ROOT` o
 `ORQUESTA_PARALLEL_TEST_TMP` y luego ejecutan `rm -rf` sobre esa raiz durante
 cleanup. Si una variable apunta al proyecto, HOME, `.orquesta-runtime` o una
 ruta compartida, el borrado puede ser mucho mas amplio que el smoke.
-Decision pendiente: helper comun de cleanup con prefijo permitido,
-marcador/manifest de creacion, bloqueo de rutas prohibidas y conservacion de
-raices no verificadas.
-Test futuro:
+Decision cerrada 2026-05-26: `scripts/lib/smoke_common.sh` aporta helper comun
+de cleanup con prefijo temporal permitido, marcador `.orquesta-smoke-root.v0`,
+bloqueo de rutas prohibidas y conservacion de raices no verificadas con reason
+code publico. Los scripts de smoke/runners ya no llaman `rm -rf` directamente
+para raices temporales.
+Test vigente:
 `bash -n scripts/*.sh scripts/lib/*.sh` y prueba focal del helper con raiz
 valida, raiz sin marcador y ruta prohibida.
+Rework de revision 2026-05-26:
+`agent-ref-task-ref-review-rework-task-autoprogramming-66353e1f46d9-g01-33cae0148aa014c3f796cbabf72f5114`
+mantiene la decision cerrada sin relanzar otro agente padre; el contexto
+`required ref_only` queda resuelto por lectura local del paquete y evidencia
+explicita en ACK.
 Backlog: `T185 smoke-script-temp-root-deletion-guard`.
 ```
 
@@ -3006,9 +6121,11 @@ Casos: `orquesta-domain-work-memory`, `orquesta-domain-work-file` y
 `orquesta-domain-work-sql` derivan fingerprints/job refs con FNV64 base36 desde
 payload canonico local. Es suficiente como huella corta de referencia, pero
 queda cerca de idempotencia, replay y conflicto durable entre adaptadores.
-Decision pendiente: builder canonico compartido o modo legacy documentado,
-digest con margen suficiente para refs nuevas y conflicto reparable si dos
-requests distintas colisionan.
+Decision 2026-05-26: cerrado por
+`agent-ref-task-autoprogramming-5abbd2ab1d6c-g01`. El builder canonico
+`BuildDomainWorkJobIdentityV0` usa `sha256`; memory/file/SQL lo comparten para
+fingerprint y base de `job_ref`, preservan replay legacy por request guardado y
+reparan colisiones de `job_ref` con sufijo explicito.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-domain-work ./modulos/orquesta-domain-work-memory ./modulos/orquesta-domain-work-file ./modulos/orquesta-domain-work-sql`.
 Backlog: `T186 domain-work-job-ref-fingerprint-collision-proof`.
@@ -3024,6 +6141,12 @@ politica concreta para IP:puerto, loopback, redes privadas y headers
 Decision pendiente: guardar categoria/hash/redaccion, aceptar headers de proxy
 solo con perfil confiable y no convertir identidad declarada por cliente en
 autorizacion o evidencia durable.
+Estado 2026-05-26: cerrado para `orquesta-server`; `http_request` guarda
+`client_identity` por categoria y politica `category_only`, ignora valores
+`X-Forwarded-*`/`Forwarded` por defecto y conserva autorizacion en control
+plane, no en headers de cliente.
+Revalidacion 2026-05-27: el caso queda cubierto sin guardar `RemoteAddr`,
+IP:puerto ni valores de headers de forwarding en evidencia durable.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-observability ./cmd/orquesta-server`.
 Backlog: `T187 http-audit-client-identity-redaction-policy`.
@@ -3031,11 +6154,15 @@ Backlog: `T187 http-audit-client-identity-redaction-policy`.
 
 ```text
 ID: RAIL-CAND-HTTP-METHOD-CONTRACT-001
+Estado: cerrado el 2026-05-26 por
+`task-autoprogramming-aa85b0fb040c-g01`.
 Origen: scanner backlog 2026-05-24 sexagesima sexta pasada.
 Casos: handlers HTTP/MCP/web/gobernanza devuelven 405 con patrones locales; en
 algunas rutas se espera `Allow` y en otras no hay contrato comun para `OPTIONS`.
-Decision pendiente: contrato por perfil para metodo no permitido, header
+Decision aplicada: contrato por perfil para metodo no permitido, header
 `Allow`, `OPTIONS` sin efectos y shape de error publico sin payload crudo.
+Revalidacion 2026-05-27: contrato verificado con bateria focal de MCP, web,
+governance, factory HTTP y transporte MCP real.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-web ./modulos/orquesta-governance ./modulos/orquesta-factory-http ./cmd/orquesta-server`.
 Backlog: `T188 http-method-allow-options-contract`.
@@ -3048,10 +6175,17 @@ Casos: `cmd/orquesta-server run` crea contexto con `signal.NotifyContext` solo
 para `os.Interrupt`; `orquesta-server stop` tambien senala el PID con
 `os.Interrupt`. En modo daemon o service manager puede llegar SIGTERM, segunda
 senal o timeout de cierre sin contrato publico ni estado observable propio.
-Decision pendiente: politica por plataforma para interrupcion/terminacion,
-deadline de gracia, segunda senal/escalado y status/auditoria compacta de
-`stopping_by_signal`/`stop_timeout` sin PID crudo, HOME, rutas, env ni logs.
-Test futuro:
+Decision implementada 2026-05-26: politica por plataforma para
+interrupcion/terminacion, deadline de gracia por
+`ORQUESTA_SERVER_SHUTDOWN_GRACE_MS`, segunda senal como `signal_escalated` y
+status/auditoria compacta de `stopping_by_signal`/`stop_timeout` sin PID crudo,
+HOME, rutas, env ni logs.
+Rework de revision 2026-05-26:
+`agent-ref-task-ref-review-rework-task-autoprogramming-13b40a6e5fc4-g01-a9146f390bba643a490794bd55481129`
+solo corrige la clasificacion documental de T189 y conserva este rail como
+decision implementada; no reabre checkpoint de agentes, identidad de proceso ni
+quiescencia interna.
+Test:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-server-shutdown`.
 Backlog: `T189 server-resident-signal-shutdown-policy`.
 ```
@@ -3066,6 +6200,10 @@ rutas bajo prefijos existentes sin rail de colision/shadowing.
 Decision pendiente: manifiesto canonico de rutas/prefijos con owner, test de
 colisiones exactas, prefijos ambiguos y dispatch de overlays; evidencia solo con
 refs compactas de ruta, sin query, cookies, headers, payloads ni rutas privadas.
+Estado: cubierto 2026-05-26. `PublicRouteManifestV0` declara inventario,
+owners, metodos y perfiles; los tests validan colisiones, shadows declarados,
+dispatch de AppVCS frente al prefijo de app-change y overlays `/mcp`/workspace
+timeline por refs compactas.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./modulos/orquesta-mcp ./cmd/orquesta-server`.
 Backlog: `T190 http-gateway-route-manifest-collision-guard`.
@@ -3077,9 +6215,14 @@ Origen: scanner backlog 2026-05-24 sexagesima septima pasada.
 Casos: `ProcessRuntimeConnectorV0.signalProcessStopV0` envia `os.Interrupt` y
 solo ejecuta `Kill` si `Signal` falla. Un proceso que recibe la senal pero la
 ignora queda sin deadline de gracia, escalado, estado `stopping` ni reason code.
-Decision pendiente: parada cooperativa con timeout, escalation/kill
+Decision 2026-05-26: parada cooperativa con timeout, escalation/kill
 observable, codigos para senal no soportada/proceso detenido/timeout/kill
 fallido y tests con proceso que sale, ignora senal y ya estaba cerrado.
+Estado 2026-05-26: resuelto en `ProcessRuntimeConnectorV0`; el snapshot expone
+`stopping`, `stop_grace_deadline` y `stop_reason_code`, y el timeout de gracia
+escala a kill con ACK compacto.
+Rework de revision 2026-05-26: esta entrada queda cerrada y sincronizada con
+T191; no genera rail nuevo ni reabre checkpoint/shutdown de otros owners.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-runtime ./modulos/orquesta-runtime-required-test ./modulos/orquesta-orchestration-core ./cmd/orquesta-server`.
 Backlog: `T191 process-runtime-stop-signal-escalation-policy`.
@@ -3093,6 +6236,14 @@ mensajes, acciones y evidencias de adaptadores; `supervisor_loop_v0.go` emite
 eventos de auditoria con requests/results/plans seleccionados.
 Decision pendiente: proyeccion de mensajes operativos con codigo de razon, refs
 opacas, limites de bytes y redaccion antes de persistir/exponer estado.
+Resolucion 2026-05-26: `StateV0` y `ServerPublicStatusV0` mantienen campos
+legacy y publican `*_operational_message` estructurados para startup,
+supervisor, automejora idle, bridge externo y ultimo error; `auditEventV0`
+compacta payloads operativos completos a `*_summary` con refs opacas y no
+persiste errores crudos sensibles.
+Rework 2026-05-26: entrega revalidada sin relanzar otro padre; el contexto
+`required ref_only` queda resuelto por lectura local y evidencia explicita en
+ACK.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server ./modulos/orquesta-observability`.
 Backlog: `T192 server-status-operational-message-projection`.
@@ -3105,6 +6256,13 @@ Casos: `appspec_usecase_v0.go` acepta `now`, pero si llega cero usa
 `time.Now().UTC()`; `appspec_http_v0.go` ya inyecta reloj desde adaptador.
 Decision pendiente: reloj obligatorio por composicion o fallback convertido en
 politica explicita/versionada con pruebas de determinismo.
+Decision aplicada 2026-05-26: `SolicitarNuevaAppV0` exige reloj inyectado y
+rechaza `now` cero con `app_spec_invalida`/`received_at`/
+`reloj_recepcion_utc_requerido`; el adaptador HTTP mantiene reloj UTC inyectable
+y tests deterministas.
+Rework 2026-05-26: entrega revalidada sin relanzar otro padre; el contexto
+`required ref_only` queda resuelto por lectura local y evidencia explicita en
+ACK.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-factory ./modulos/orquesta-factory-http ./modulos/orquesta-web ./modulos/orquesta-mcp`.
 Backlog: `T193 factory-appspec-time-source-contract`.
@@ -3116,8 +6274,9 @@ Origen: scanner backlog 2026-05-24 sexagesima octava pasada.
 Casos: `governance_catalog_public_query_v0.go` proyecta entradas efectivas del
 catalogo para consultas publicas sin owner visible para presupuesto de salida,
 frescura y source refs.
-Decision pendiente: proyeccion publica bounded con limites, version/freshness,
-source refs y conteos para estados no publicos por defecto.
+Decision cerrada 2026-05-26: proyeccion publica bounded con `output_budget`
+normalizado, version/freshness/source refs, `inactive_summary` por conteo/refs
+acotadas y sin payload de estados no publicos por defecto.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-governance ./modulos/orquesta-cli ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway`.
 Backlog: `T194 governance-catalog-output-budget-freshness`.
@@ -3129,9 +6288,12 @@ Origen: scanner backlog 2026-05-24 sexagesima novena pasada.
 Casos: tools de `orquesta-mcp` declaran `InputSchema`/`Output` como strings
 compactos escritos a mano; el transporte MCP real los reexpone y las
 capabilities de operador declaran `OutputShape`/`InputRefs` en otra fuente.
-Decision pendiente: descriptor verificable por tool contra DTO, validador,
-handler y registro real; si falta puerto o composicion, publicar error publico
-`not_configured`/`unavailable` sin prometer schema ejecutable.
+Decision 2026-05-26: descriptor verificable por tool contra DTO y registro
+real. `orquesta-mcp` deriva campos desde DTOs Go por tool, el transporte MCP
+real consume esa fuente canonica para `inputSchema` y expone
+`mcp_transport_schema_stale` solo como fallback detectable. Los subtools de
+operador publican shape, refs requeridas y errores publicos; si falta puerto
+siguen devolviendo `operator_mcp_port_unavailable` sin ocultar el tool.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-app-gateway ./cmd/orquesta-server`.
 Backlog: `T195 mcp-tool-input-schema-descriptor-sync`.
@@ -3144,9 +6306,11 @@ Casos: `modulos/orquesta-cli/command_runner_v0.go` mantiene texto de ayuda
 ES/EN, dispatch por `hasCLIPathV0` y `FlagSet` por comando como fuentes
 manuales separadas. Un comando nuevo puede quedar ejecutable pero no anunciado,
 o anunciado con flags desactualizadas.
-Decision pendiente: catalogo canonico de comandos CLI con help localizada,
-dispatch y flags verificables; errores de comando desconocido no deben volcar
-argumentos completos, URLs con credenciales, rutas privadas ni payloads inline.
+Decision cerrada 2026-05-26: `modulos/orquesta-cli` declara
+`cliCommandCatalogV0` como catalogo canonico local; ayuda localizada, dispatch y
+paridad de flags visibles se prueban contra el catalogo. El error de comando
+desconocido usa path normalizado, sugerencias acotadas y redaccion de tokens
+sensibles sin volcar argumentos completos.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-cli ./cmd/orquesta-server`.
 Backlog: `T196 cli-command-catalog-help-dispatch-sync`.
@@ -3158,10 +6322,11 @@ Origen: scanner backlog 2026-05-24 septuagesima pasada.
 Casos: clientes REST de `orquesta-cli` para FunctionContract,
 OperationalStatus, gobernanza, status/run control y comandos afines leen bodies
 con `io.ReadAll` o decoders directos antes de producir envelopes publicos.
-Decision pendiente: extender la politica de respuestas HTTP salientes a CLI con
-limite por comando, content-type/trailing JSON, redaccion de no-2xx y reason
-codes compactos; no devolver body crudo ni truncar JSON silenciosamente.
-Test futuro:
+Decision 2026-05-27: T197 queda cerrado para `orquesta-cli`; los clientes REST
+consumen `transport_rest_response_v0.go` con limite por comando,
+content-type/trailing JSON y detalle no-2xx redactado, sin devolver body crudo
+ni truncar JSON silenciosamente.
+Test:
 `go test -count=1 ./modulos/orquesta-cli ./modulos/orquesta-web ./modulos/orquesta-mcp ./cmd/orquesta-server`.
 Backlog: `T197 cli-rest-response-bounds-redaction-parity`.
 ```
@@ -3172,9 +6337,29 @@ Origen: scanner backlog 2026-05-24 septuagesima pasada.
 Casos: resources MCP como operational-status, shared/core contracts, roadmap,
 governance y operator capabilities publican shapes, public errors, refs
 canonicas y guardrails como strings estaticos separados de DTOs/validadores.
-Decision pendiente: verificar resources contra fuente canonica, version,
-freshness, presupuesto de salida y owner real; si falta fuente/puerto, publicar
-`descriptor_stale`, `not_configured` o `unavailable` sin inventar schema.
+Resolucion 2026-05-27: los resources registrados en MCP transportan
+`descriptor_source` con owner, fuente canonica, freshness, DTO/validador,
+fuente de errores publicos y verificacion; `resources/list` del transporte real
+lo publica sin datos sensibles ni rutas locales. Los resources opt-in conservan
+errores publicos `not_configured`/`unavailable` por puerto sin inventar schema.
+Revalidacion burst 002 2026-05-27:
+`agent-ref-task-autoprogramming-85571f97bc5e-g01` confirma que T198 sigue
+cerrado focalmente. El contexto `ref_only` se resuelve por lectura local y
+evidencia ACK; no se abre codigo nuevo ni se amplian owners fuera del write-set.
+Revalidacion retry 2026-05-27:
+`agent-ref-task-autoprogramming-44e164597ee4-g01` confirma el mismo cierre con
+lectura local del contexto `ref_only` y prueba obligatoria focal; no se amplia
+write-set ni se reabre T195/T197/T199.
+Reconciliacion backlog 2026-05-27:
+`agent-ref-task-autoprogramming-974732911968-g01` sincroniza backlog y docs de
+owners locales con el cierre focal de T198. No hay rail nuevo ni apertura de
+codigo; el seguimiento queda como evidencia documental de que el pendiente
+residual era stale.
+Reconciliacion adicional 2026-05-27:
+`agent-ref-task-autoprogramming-c3678e9bc306-g01` confirma el mismo patron
+stale tras intentos cerrados de T198. El contexto obligatorio `ref_only` se
+resuelve por lectura local/evidencia ACK; no se amplia write-set, no se abre
+rail nuevo y no se reabre implementacion.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-observability ./modulos/orquesta-governance ./modulos/orquesta-core ./cmd/orquesta-server`.
 Backlog: `T198 mcp-resource-descriptor-source-sync`.
@@ -3186,9 +6371,14 @@ Origen: scanner backlog 2026-05-24 septuagesima pasada.
 Casos: helpers MCP/HTTP y operador usan strings locales de error publico
 (`metodo_no_permitido`, `request_body_invalido`, `*_no_configurado`,
 `*_error`) con mappings distintos entre HTTP, JSON-RPC, CLI/web y resources.
-Decision pendiente: catalogo comun de error codes publicos con i18n key,
-retryability, severidad y mapping por frontera; `err.Error()` no allowlisted se
-reduce a codigo generico sin payload crudo.
+Resolucion 2026-05-27: T199 cerrado localmente con catalogo comun en
+`orquesta-i18n-docs` y pruebas de paridad en MCP, operador, web, CLI y servidor.
+Los codigos base incluyen i18n key, retryability, severidad y mapping por
+frontera; `err.Error()` queda allowlisted en helpers MCP/operador o cae a
+codigo generico sin payload crudo.
+Refuerzo 2026-05-27: los mensajes publicos de executor MCP no incluyen detalle
+de errores desconocidos aunque sea sanitizado; solo anaden el codigo cuando esta
+en el catalogo comun.
 Test futuro:
 `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-web ./modulos/orquesta-cli ./modulos/orquesta-i18n-docs ./cmd/orquesta-server`.
 Backlog: `T199 mcp-public-error-code-catalog`.
@@ -3221,6 +6411,13 @@ breaker por destino/ref.
 Decision pendiente: definir retry/backoff/rate por adaptador de composicion,
 con reason codes publicos y sin reintentar mutaciones no idempotentes cuando
 falte ledger o `idempotency_key` causal.
+Resolucion focal 2026-05-27: T201 introduce politica opt-in de retry/backoff en
+`domain_work-http` y OPES REST, respeta `Retry-After` solo dentro de deadline y
+delay maximo, bloquea mutaciones sin identidad idempotente, y hace que
+`runExternalBridgeLoopV0` publique `rate_limited`, `retry_scheduled` o
+`retry_budget_exhausted` para errores consecutivos. Revalidacion assessment
+OrquestaV2 2026-05-27: la bateria obligatoria de T201 pasa completa en el
+write-set declarado.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-domain-work-http ./modulos/orquesta-opes-connector ./modulos/orquesta-opes-bridge ./modulos/orquesta-server`.
 Backlog: `T201 outbound-connector-retry-backoff-rate-policy`.
@@ -3255,4 +6452,810 @@ debe tratar `Seen > 0` como progreso si no hubo envio ni avance real.
 Test futuro:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-opes-connector ./modulos/orquesta-opes-bridge`.
 Backlog: `T203 opes-bridge-pagination-window-policy`.
+```
+
+```text
+ID: RAIL-CAND-OPS-DASHBOARD-LIVE-CACHE-001
+Origen: scanner backlog 2026-05-27 primera pasada.
+Casos: `/ops` calcula agregados y medias en JS a partir de `percent_complete`,
+`usage_summary` y cache de runs activos/completados. Aunque el DTO de stats ya
+pueda reflejar agente vivo, proceso registrado o entrega sin cierre, un fetch
+tardio/fallido o un snapshot completado puede devolver el dashboard a 0% o
+cuota `-` sin reason code.
+Decision cerrada 2026-05-27: `/ops` fija owner visual de frescura/cache en
+`modulos/orquesta-web` mediante proyeccion publica con `progress_source`,
+`freshness`, `stats_fetch_status` y reason code compacto. La entrega viva no se
+mezcla con cierre, pero tampoco se muestra como 0% cuando hay agentes, proceso o
+entrega; la cuota sin reporte aparece como `unknown`/`unavailable` con causa
+publica.
+Test futuro:
+`go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-server ./modulos/orquesta-orchestration-core ./cmd/orquesta-server`.
+Backlog: `T211 ops-dashboard-live-progress-cache-policy`.
+```
+
+```text
+ID: RAIL-CAND-GUARDIAN-PUBLIC-RESULT-001
+Origen: scanner backlog 2026-05-27 segunda pasada.
+Casos: `orquesta-guardian` publica y persiste `project_dir`, `current_bin`,
+`candidate_bin`, `last_good_bin`, `output_path` y comandos shell completos en
+resultado/manifest/repair packet.
+Estado 2026-05-27: cubierto para T212. `orquesta-guardian` separa envelope
+publico redactado de manifest local diagnostico; el repair packet para agentes
+lleva refs/evidence compactas, no paths absolutos, HOME, comandos expandidos con
+secretos ni logs completos.
+Test futuro: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-runtime-worktree ./modulos/orquesta-runtime-codex`.
+Backlog: `T212 guardian-public-result-and-repair-packet-redaction`.
+```
+
+```text
+ID: RAIL-CAND-GUARDIAN-OUTPUT-ENV-001
+Origen: scanner backlog 2026-05-27 segunda pasada.
+Casos: build/test/healthcheck/repair del guardian acumulan stdout/stderr en
+`bytes.Buffer`, escriben logs sin presupuesto y heredan `os.Environ()` para
+candidato temporal y repair command.
+Decision pendiente: limite/tail/redaccion por comando y entorno minimo por
+perfil; no heredar tokens, HOME, proxies con credenciales, DSN, prompts,
+transcripts ni payloads de dominio por defecto.
+Test futuro: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-runtime-codex`.
+Backlog: `T213 guardian-command-output-budget-and-env-isolation`.
+```
+
+```text
+ID: RAIL-CAND-GUARDIAN-BINARY-PROMOTION-001
+Origen: scanner backlog 2026-05-27 segunda pasada.
+Casos: `copyFileAtomicV0` copia binarios con `os.ReadFile`, tmp por
+`UnixNano`, sin presupuesto, hash/manifest fuerte, symlink policy ni fsync
+visible.
+Estado 2026-05-27: cubierto para T214. `cmd/orquesta-guardian` usa copia
+streaming con presupuesto configurable, SHA-256, `Lstat`/open/post-copy guard,
+bloqueo de symlinks/hardlinks inseguros, raiz declarada opt-in, tmp no
+colisionable por `os.CreateTemp`, fsync y manifest interno
+`orquesta_guardian_artifact_manifest.v0`. Los fallos de backup/promocion
+publican `last_good_unverified` o `promotion_incomplete` sin declarar
+`candidate_promoted`.
+Test futuro: `go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-runtime-worktree`.
+Backlog: `T214 guardian-binary-promotion-artifact-policy`.
+```
+
+```text
+ID: RAIL-CAND-GUARDIAN-READINESS-001
+Origen: scanner backlog 2026-05-27 tercera pasada.
+Casos: el runbook del guardian pide `/api/v0/server/readiness` antes de efectos
+externos, pero `runGuardianCandidateHealthcheckV0` solo espera `/healthz`.
+Un candidato con HTTP vivo y readiness rota podria promocionarse.
+Decision pendiente: liveness por `/healthz` mas readiness operativa por
+`/api/v0/server/readiness`, con razon publica `candidate_readiness_not_ready` y
+respuesta acotada/redactada.
+Estado 2026-05-27: cerrado para T215. `runGuardianCandidateHealthcheckV0`
+espera liveness y despues readiness `ready=true` del candidato; readiness rota,
+JSON no valido o ruta versionada ausente bloquean promocion con reason code
+publico `candidate_readiness_not_ready`. La prueba focal cubre candidato HTTP
+vivo sin readiness y candidato listo contra estado/runtime temporal.
+Test futuro:
+`go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-server`.
+Backlog: `T215 guardian-candidate-readiness-gate`.
+```
+
+```text
+ID: RAIL-CAND-PROMOTION-GUARDIAN-RESULT-001
+Origen: scanner backlog 2026-05-27 tercera pasada.
+Casos: `shellAutoprogrammingPromotionGuardianRunnerV0` ejecuta el guardian por
+shell y decide por exit code; descarta stdout/stderr y no valida
+`orquesta_guardian_result.v0`, `status`, `promoted` ni `evidence_refs`.
+Estado 2026-05-27: cerrado para T216. El servidor consume stdout acotado,
+parsea `orquesta_guardian_result.v0`, propaga `evidence_refs` compactas y
+distingue resultado invalido, timeout, exit no cero y estados publicos del
+guardian sin publicar stdout/stderr crudo.
+Test futuro:
+`go test -count=1 ./cmd/orquesta-server ./cmd/orquesta-guardian ./modulos/orquesta-autoprogramming`.
+Backlog: `T216 promotion-guardian-result-contract`.
+```
+
+```text
+ID: RAIL-CAND-GUARDIAN-SHUTDOWN-CLIENT-001
+Origen: scanner backlog 2026-05-27 tercera pasada.
+Casos: `requestGuardianServerShutdownV0` decodifica respuesta de shutdown sin
+limite, sin `Content-Type`, sin trailing-data check y con `idempotency_key`
+constante para todas las invocaciones del guardian.
+Decision pendiente: cliente HTTP acotado para shutdown del guardian, reason
+codes compactos, idempotencia por intento/ref y senal PID solo con estado
+publico fiable.
+Test futuro:
+`go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-server-shutdown`.
+Backlog: `T217 guardian-shutdown-http-client-policy`.
+```
+
+```text
+ID: RAIL-CAND-GUARDIAN-REPAIR-AGENT-001
+Origen: scanner backlog 2026-05-27 cuarta pasada.
+Casos: `--repair-codex` genera `codex-launch-wave --agents 1` desde el
+guardian con sandbox amplio, `approval-policy never`, prompt por path local y
+sin contrato explicito de write-set, ACK terminal, pruebas requeridas,
+presupuesto ni checkpoint.
+Decision 2026-05-27: cerrado para el contrato de lanzamiento Codex del guardian.
+`--repair-codex` genera packet versionado
+`orquesta_guardian_repair_launch_packet.v0`, exige write-set y pruebas
+requeridas, usa `codex-launch-director-wave` con branch/worktree refs y
+break-glass unmanaged auditado, y declara `agent_ack.json` estructurado como
+contrato terminal. El sandbox default queda en `workspace-write`; sandbox amplio
+requiere opt-in y evidence ref. La preferencia por cola normal queda como regla
+operativa del runbook cuando el servidor residente este sano, no como cierre por
+stdout/exit code.
+Test futuro:
+`go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack`.
+Backlog: `T218 guardian-repair-agent-launch-contract`.
+```
+
+```text
+ID: RAIL-CLOSED-GUARDIAN-OUTPUT-ENV-T213-001
+Origen: cierre OrquestaV2 2026-05-27.
+Casos: build/test/healthcheck/repair del guardian podian conservar stdout/stderr
+sin presupuesto y heredar entorno completo del proceso padre.
+Decision: cerrado en T213 con captura tail redactada, reason code publico
+`guardian_command_output_budget_exceeded`, redaccion de secretos/HOME/paths y
+entorno minimo allowlistado. Los comandos con efectos externos siguen bajo
+RAIL-CAND-GUARDIAN-COMMAND-EFFECT-001.
+Test:
+`go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-runtime-codex`.
+```
+
+```text
+ID: RAIL-CAND-GUARDIAN-PATH-ROOT-001
+Origen: scanner backlog 2026-05-27 cuarta pasada.
+Casos: `absPathFromBaseV0` aceptaba rutas absolutas para project/state/current/
+candidate/last_good/repair runtime y esas rutas podian cruzar a manifest,
+resultado o repair packet sin clasificacion de raiz de producto/control.
+Estado 2026-05-27: cerrado para T219. `orquesta-guardian` clasifica raices y
+paths criticos con `orquesta_guardian_path_policy.v0`, bloquea binarios fuera de
+`project_dir`/`state_dir`/`artifact_root`, runtime de reparacion fuera de
+`state_dir` y raices con symlinks; la salida publica, audit y repair packet solo
+exponen refs hash, clasificaciones y reason codes compactos. `cmd/orquesta-server`
+acepta el campo publico `path_policy` y conserva `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro:
+`go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-runtime-worktree ./modulos/orquesta-runtime-codex`.
+Backlog: `T219 guardian-path-root-and-control-surface-policy`.
+```
+
+```text
+ID: RAIL-CAND-GUARDIAN-MANIFEST-RETENTION-001
+Origen: scanner backlog 2026-05-27 cuarta pasada.
+Casos: manifests, repair packets y prompts del guardian se escriben con
+`os.WriteFile` directo y timestamp de segundo; `candidate-state`,
+`candidate-runtime` y logs quedan en `state_dir` sin inventario ni retencion.
+Decision pendiente: escritura tmp+fsync+rename, intento idempotente por ref,
+estado de manifest incompleto y retencion/limpieza por categoria sin borrar
+evidencia requerida.
+Decision aplicada 2026-05-27: `cmd/orquesta-guardian` escribe manifest, repair
+packet, prompt y logs redactados con tmp+fsync+rename; indexa por
+`attempt_ref`/`promotion_ref`/`shutdown_ref`, publica
+`guardian_manifest_incomplete` ante conflicto de payload o tmp incompleto y
+expone `retention_status` por categoria sin paths absolutos.
+Test futuro:
+`go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-runtime-worktree`.
+Backlog: `T220 guardian-manifest-retention-and-replay-policy`.
+```
+
+```text
+ID: RAIL-CAND-GUARDIAN-PROMOTION-LEASE-001
+Origen: scanner backlog 2026-05-27 quinta pasada.
+Casos: `cmd/orquesta-guardian` puede ejecutar `check-promote`,
+`restore-last-good` o `shutdown-server` en paralelo contra el mismo `state_dir`,
+`current_bin` y `last_good_bin`. La copia atomica de T214 no impide que dos
+intentos crucen manifests, `candidate`, `last_good` y resultado publico.
+Decision 2026-05-27: lease durable por `attempt_ref`/`promotion_ref`, bloqueo
+publico `guardian_promotion_lease_busy` ante intento activo y verificacion del
+lease justo antes de promover/restaurar/senalizar; si el lease se pierde,
+`guardian_promotion_lease_lost` bloquea sin declarar efecto.
+Test futuro:
+`go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-autoprogramming ./modulos/orquesta-runtime-worktree`.
+Backlog: `T221 guardian-promotion-lease-and-concurrency-policy`.
+```
+
+```text
+ID: RAIL-CAND-GUARDIAN-COMMAND-EFFECT-001
+Origen: scanner backlog 2026-05-27 quinta pasada.
+Casos: el servidor lanza el guardian con shell configurable y el guardian
+acepta `build-command`, `test-command` y `repair-command` como shell libre. T213
+cubre output/env, pero no autorizacion de comandos por perfil de efecto ni
+opt-in para red, Git remoto, OPES, proveedor real o acciones destructivas.
+Decision aplicada 2026-05-27: `cmd/orquesta-guardian` publica `command_ref`,
+perfil (`build`, `required_test`, `healthcheck`, `repair`), policy ref,
+autorizacion, efectos externos y evidence refs compactas por comando. El default
+solo permite build canonico y `go test`; shell no canonico o efectos de red, Git
+remoto, OPES, proveedor real o destructivos bloquean con
+`guardian_command_effect_policy_blocked` sin exponer el shell completo, salvo
+opt-in/evidence ref de composicion. La expansion de placeholders valida rutas
+shell-quoted y bloquea placeholders de ruta sin resolver con
+`guardian_command_placeholder_invalid`.
+Test futuro:
+`go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-autoprogramming`.
+Backlog: `T222 guardian-command-effect-profile-policy`.
+```
+
+```text
+ID: RAIL-CAND-PROMOTION-GUARDIAN-RECEIPT-001
+Origen: scanner backlog 2026-05-27 quinta pasada.
+Casos: el servidor reduce el resultado del guardian a refs genericas
+`guardian_passed`/`guardian_failed`. T216 exige parsear resultado estructurado,
+pero falta receipt causal que una `promotion_ref`, `run_ref`,
+`worktree_ref`/`branch_ref`, manifest, hash del candidato y efecto de staging.
+Decision pendiente: `promotion_guardian_receipt.v0` con estados
+`candidate_verified`, `candidate_promoted`, `promotion_blocked`,
+`last_good_restored`, resultado invalido y retry idempotente; salida publica
+solo con refs opacas/hashes compactos.
+Estado 2026-05-27: cerrado para `cmd/orquesta-server`. El efecto de promocion
+adjunta un receipt causal `promotion_guardian_receipt.v0`, conserva refs opacas,
+manifest/evidence refs y hash/tamano compacto del candidato si existe, y bloquea
+`--promote=false` como `candidate_verified` para no declarar binario activo.
+Test futuro:
+`go test -count=1 ./cmd/orquesta-server ./cmd/orquesta-guardian ./modulos/orquesta-autoprogramming ./modulos/orquesta-runtime-worktree`.
+Backlog: `T223 promotion-guardian-causal-receipt`.
+```
+
+```text
+ID: RAIL-CAND-GUARDIAN-CANDIDATE-PROCESS-001
+Origen: scanner backlog 2026-05-27 sexta pasada.
+Casos: el healthcheck del guardian arranca el candidato como proceso hijo,
+espera `/healthz` y luego intenta `Interrupt` + `Kill` solo sobre el proceso
+padre. No hay receipt de parada del arbol completo ni bloqueo si quedan hijos
+vivos antes de promocionar.
+Estado 2026-05-27: cerrado para el guardian. El healthcheck publica
+`process_policy` y `stop_receipt` compacto; Unix usa grupo de proceso propio con
+deadline, escalado y confirmacion antes de promocionar, y Windows declara
+alcance de proceso padre. Un stop ambiguo o vivo falla el healthcheck con reason
+code publico sin PID crudo, rutas locales, stdout/stderr ni env.
+Test:
+`go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-server`.
+Backlog: `T224 guardian-candidate-process-tree-lifecycle`.
+```
+
+```text
+ID: RAIL-CAND-GUARDIAN-FORCED-SHUTDOWN-001
+Origen: scanner backlog 2026-05-27 sexta pasada.
+Casos: `force_after_timeout=true` por defecto puede convertir timeout
+cooperativo en shutdown forzado y senal a PID si existe `ServerPID`, aunque el
+resultado no declare `shutdown_ready`.
+Decision implementada el 2026-05-27: `force_after_timeout` ya no escala por
+defecto; requiere opt-in explicito y evidence ref break-glass. Sin esa evidencia
+el guardian bloquea con `guardian_shutdown_escalation_blocked` y no emite
+shutdown forzado ni senal local. El resultado publico distingue
+`cooperative_timeout`, `forced_requested`, `forced_ready`, `signal_sent` y
+`signal_blocked` sin exponer PID, host, HOME, tokens, URLs ni cuerpos HTTP.
+Test futuro:
+`go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-server ./modulos/orquesta-server-shutdown`.
+Backlog: `T225 guardian-forced-shutdown-escalation-contract`.
+```
+
+```text
+ID: RAIL-CAND-GUARDIAN-REPAIR-BUDGET-001
+Origen: scanner backlog 2026-05-27 sexta pasada.
+Casos: cada fallo de build/test/healthcheck puede escribir repair packet y
+lanzar `repair-command` o `--repair-codex` otra vez aunque el failure packet sea
+el mismo y no exista evidencia nueva.
+Decision implementada el 2026-05-27: cada repair publica `repair_attempt_ref`,
+`failure_packet_hash` y presupuesto por scope de promocion/intento/run. El
+guardian registra intento durable antes de lanzar reparacion, bloquea reentrada
+equivalente con `guardian_repair_attempt_duplicate` y bloquea exceso de
+presupuesto con `guardian_repair_attempt_budget_exhausted`; el servidor consume
+los campos publicos sin rutas locales ni stdout/stderr.
+Test ejecutable:
+`go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-autoprogramming ./modulos/orquesta-runtime-codex`.
+Backlog: `T226 guardian-repair-attempt-budget-and-idempotency`.
+```
+
+```text
+ID: RAIL-CAND-GUARDIAN-CANDIDATE-ADDR-001
+Origen: scanner backlog 2026-05-27 octava pasada.
+Casos: `freeLocalAddrV0` obtiene `127.0.0.1:0`, cierra el listener y despues
+lanza el candidato con ese addr; otro proceso puede ocupar el puerto antes del
+bind real. `ORQUESTA_GUARDIAN_CANDIDATE_ADDR` tambien puede aportar un addr no
+gobernado sin politica de loopback/ownership.
+Decision 2026-05-27: T228 cierra el rail para `cmd/orquesta-guardian`; addr
+automatico usa `127.0.0.1:0` y addr real desde statefile del candidato,
+`ORQUESTA_GUARDIAN_CANDIDATE_ADDR` solo acepta loopback con puerto concreto y
+las formas sin ownership publican `candidate_addr_unowned`.
+Retry OrquestaV2 2026-05-27:
+`agent-ref-task-autoprogramming-db88e93cffaf-g01` revalida el cierre con la
+bateria focal requerida; el contexto `ref_only` requerido queda resuelto por
+lectura local y evidencia explicita en ACK.
+Test ejecutable:
+`go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-server`.
+Backlog: `T228 guardian-candidate-address-ownership-policy`.
+```
+
+```text
+ID: RAIL-CAND-PROMOTION-GUARDIAN-RUNNER-ENV-001
+Origen: scanner backlog 2026-05-27 octava pasada.
+Casos: `shellAutoprogrammingPromotionGuardianRunnerV0` invoca el guardian con
+comando shell configurable y `os.Environ()` completo. T213 aisla comandos
+internos del guardian, pero la frontera servidor -> guardian puede seguir
+heredando HOME, tokens, proxies, DSN o variables de proveedor.
+Decision 2026-05-27: `shellAutoprogrammingPromotionGuardianRunnerV0` usa entorno
+`minimal_allowlist`, no hereda `os.Environ()` completo y bloquea HOME, Codex,
+proxies, Git, proveedor y secretos salvo allowlist explicita con evidence refs.
+La salida del proceso guardian sigue acotada y validada por contrato
+`orquesta_guardian_result.v0`.
+Retry OrquestaV2 2026-05-27:
+`agent-ref-task-autoprogramming-22cfff60721c-g01` revalida el cierre con la
+bateria focal requerida y contexto `ref_only` resuelto por lectura local mas
+evidencia explicita en ACK.
+Rework de revision 2026-05-27:
+`agent-ref-task-ref-review-rework-task-autoprogramming-22cfff60721c-g01-938062230e08e3a836b342951d5c588d`
+cierra el hueco restante de herencia accidental de `ORQUESTA_GUARDIAN_*`: el
+runner descarta esas variables del padre y solo publica las derivadas del
+request antes de invocar el guardian.
+Retry de rework OrquestaV2 2026-05-27:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-3b1cd0fc9711a3bf097b5db163987e69`
+revalida el rail con lectura local, bateria focal requerida y evidencia
+explicita en ACK; no cambia el alcance ni reabre T213/T216/T222.
+Retry final de rework OrquestaV2 2026-05-27:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-602dc9edc1ac71b6268bcede5729e588`
+revalida el rail y conserva que el runner solo use variables
+`ORQUESTA_GUARDIAN_*` derivadas del request, con contexto `ref_only` resuelto
+por lectura local mas evidencia explicita en ACK.
+Test futuro:
+`go test -count=1 ./cmd/orquesta-server ./cmd/orquesta-guardian ./modulos/orquesta-autoprogramming`.
+Backlog: `T229 promotion-guardian-runner-env-isolation`.
+Estado: cerrado localmente.
+```
+
+```text
+ID: RAIL-CAND-GUARDIAN-SKIP-HEALTH-001
+Origen: scanner backlog 2026-05-27 octava pasada.
+Casos: `--skip-health` puede saltar el healthcheck vivo del candidato y permitir
+promocion tras build/tests locales. T215 exige readiness cuando se ejecuta el
+healthcheck, pero no gobierna la excepcion que lo desactiva.
+Decision aplicada 2026-05-27: bloquear skip con `promote=true` salvo evidence
+ref break-glass explicita, publicar `guardian_healthcheck_required` si falta la
+evidencia y distinguir la promocion excepcional como
+`candidate_promoted_breakglass` con `candidate_built`,
+`candidate_tests_passed` cuando hay tests y `candidate_not_live_checked`.
+Test futuro:
+`go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-autoprogramming`.
+Backlog: `T230 guardian-skip-health-breakglass-policy`.
+```
+
+```text
+ID: RAIL-CAND-GUARDIAN-CONFIG-ENV-STRICTNESS-001
+Origen: scanner backlog 2026-05-27 novena pasada.
+Casos: los helpers `envBoolOrDefaultV0`, `envDurationOrDefaultV0`,
+`envIntOrDefaultV0`, `envInt64OrDefaultV0` y
+`guardianOutputMaxBytesFromEnvV0` devuelven defaults ante valores invalidos.
+Una variable mal escrita puede dejar `promote=true`, `force_after_timeout=true`
+o budgets/timeouts por defecto sin diagnostico en una frontera break-glass.
+Decision aplicada 2026-05-27: parseo estricto con reason codes publicos,
+`config_effective` compacto en resultado publico y bloqueo seguro antes de
+promocionar, restaurar o senalizar. El servidor distingue config invalida de
+fallo de candidato al ejecutar el guardian.
+Test:
+`go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-autoprogramming`.
+Estado: cubierto por T231.
+```
+
+```text
+ID: RAIL-CAND-GUARDIAN-CLI-EXTRA-ARGS-001
+Origen: scanner backlog 2026-05-27 novena pasada.
+Casos: `parseGuardianConfigForCommandV0` ejecuta `flags.Parse(args)` sin
+validar `flags.NArg()`. Argumentos sobrantes o posicionales ambiguos pueden
+quedar ignorados mientras `check-promote`, `restore-last-good` o
+`shutdown-server` continuan con defaults.
+Decision aplicada 2026-05-27: `cmd/orquesta-guardian` rechaza argumentos
+sobrantes tras `flag.Parse` con `guardian_config_extra_args` y detalle publico
+`positional_args:<n>`, sin imprimir los valores crudos. El runbook documenta que
+los comandos shell entran por `--build-command`, `--test-command`,
+`--repair-command` o env canonica, no como posicionales.
+Test futuro:
+`go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server`.
+Backlog: `T232 guardian-cli-extra-args-strictness`.
+```
+
+```text
+ID: RAIL-CAND-GUARDIAN-LOCAL-DIAGNOSTIC-REF-001
+Origen: scanner backlog 2026-05-27 decima pasada.
+Casos: `guardianPathRefV0` genera `ManifestRef`, `RepairPacketRef`,
+`OutputRef` y refs de `LocalDiagnostics` desde el path local limpio. No publica
+el path, pero la identidad publica cambia con `state_dir`/worktree temporal y
+no queda ligada a `promotion_ref`, `attempt_ref` ni hash de contenido.
+Decision 2026-05-27: T233 cerrado en `cmd/orquesta-guardian`; las refs
+publicas de manifest, repair packet, repair launch, outputs y diagnosticos
+locales se derivan de ref causal, tipo de diagnostico y hash permitido para
+outputs. Si falta hash de output no se fabrica `OutputRef`; el path queda solo
+en manifest local clasificado.
+Revalidacion 2026-05-27:
+`agent-ref-task-autoprogramming-a35df67e3b46-g01` confirma el cierre local con
+contexto `ref_only` resuelto por lectura/evidencia ACK; no abre otro Txx y
+mantiene `worktree_ref` y `branch_ref` como refs opacas.
+Test:
+`go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-autoprogramming`.
+Backlog: `T233 guardian-local-diagnostic-ref-stability`.
+```
+
+```text
+ID: RAIL-CAND-GUARDIAN-COMMAND-REF-TEMPLATE-001
+Origen: scanner backlog 2026-05-27 decima pasada.
+Casos: `guardianCommandRefV0` calcula `command_ref` con `phase|command`, donde
+`command` ya puede contener shell expandido, rutas del candidato, `{state_dir}`
+resuelto y comandos configurables. El resultado publico queda acoplado a texto
+shell aunque T222 deba gobernarlo como efecto.
+Decision aplicada 2026-05-27: `cmd/orquesta-guardian` publica `command_ref`
+derivado de `phase`, `command_profile`, `template_ref` y `attempt_ref`; conserva
+`command_template_changed` con evidence ref compacta para comandos no canonicos
+y no usa shell expandido como identidad publica estable.
+Test futuro:
+`go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-autoprogramming`.
+Backlog: `T234 guardian-command-ref-template-profile`.
+```
+
+```text
+ID: RAIL-CAND-GUARDIAN-REPAIR-PACKET-READ-001
+Origen: scanner backlog 2026-05-27 decima pasada.
+Casos: `guardianCodexRepairCommandV0` lee el repair packet completo con
+`os.ReadFile(packetPath)` y lo mete en el prompt del reparador. Si el packet es
+grande, no regular, sustituido por symlink/hardlink o no corresponde al intento
+actual, la frontera break-glass puede lanzar Codex con contexto local no
+gobernado.
+Decision 2026-05-27: cerrado en `cmd/orquesta-guardian`; el launch Codex valida
+el repair packet con `lstat/open/read` acotado, rechaza symlink/hardlink/no
+regular/TOCTOU/tamano, exige schema, `redaction_level`, hash, attempt ref,
+presupuesto y fase causal, y bloquea con `guardian_repair_packet_invalid` antes
+de construir prompt o comando si falla.
+Test:
+`go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-codex-delivery`.
+Backlog: `T235 guardian-repair-packet-read-budget-and-type`.
+```
+
+```text
+ID: BACKLOG-SCAN-DOC-PATH-BUDGET-20260527-001
+Fecha: 2026-05-27
+Sintoma: el merge lease del scanner de backlog hashea documentos con lectura
+completa desde rutas parseadas de `backlog_scan_doc`.
+Campo: `cmd/orquesta-server/idle_self_improvement_backlog_merge_v0.go`.
+Payload minimo: criterio `backlog_scan_doc:/tmp/no-canonico.md:line:1:sha256:x`,
+`backlog_scan_doc:../fuera.md:line:1:sha256:x` o fichero canonico enorme/symlink.
+Decision: cerrado por T240 con catalogo canonico de docs, path clean relativo,
+lectura acotada, rechazo de control files/symlinks/no regulares y validacion de
+paquetes que bloquea docs fuera del catalogo sin leer rutas locales.
+Test futuro: mantener
+`TestIdleSelfImprovementBacklogPlannerV0AcotaHashDocsASegurasV0` y
+`TestIdleSelfImprovementBacklogPlannerV0RechazaBacklogScanDocNoCanonicoDelPacketV0`
+dentro de `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Estado: cerrado local 2026-05-27
+```
+
+```text
+ID: FILE-BUDGET-20260527-002
+Fecha: 2026-05-27
+Sintoma: ficheros productivos de composicion y adaptador publico superan el
+limite operativo de 300 lineas y siguen siendo candidatos naturales para nuevas
+reglas.
+Campo: `modulos/orquesta-server/supervisor_loop_v0.go`,
+`modulos/orquesta-mcp/human_director_work_review_plan_tool_v0.go` y
+`modulos/orquesta-mcp/autoprogramming_self_improvement_tool_v0.go`.
+Payload minimo: `wc -l` muestra aproximadamente 780, 372 y 339 lineas.
+Decision: abrir backlog T242 y T243 para partir por responsabilidad antes de
+seguir anadiendo supervision residente o tools publicos.
+Test futuro: `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`
+y `go test -count=1 ./modulos/orquesta-mcp`.
+Estado: registrado, T242 y T243 cerrados localmente 2026-05-27.
+Evidencia T242: `supervisor_loop_v0.go` queda acotado al tick residente; la
+cobertura monolitica `supervisor_loop_v0_test.go` se reparte en tests de tick,
+idle async, capacidad, blockers y helpers, manteniendo esos shards por debajo
+de 300 lineas.
+Assessment OrquestaV2 2026-05-27: el paquete
+`task-autoprogramming-594d493666c4-g01` confirma T242 como cierre vigente con
+contexto `ref_only` resuelto por evidencia local y sin nuevo owner programable.
+Nota T243: los tools publicos MCP grandes quedan partidos por input flexible,
+descriptor/ejecutor fino, advice/proyeccion y builders locales, sin cambiar
+nombres publicos ni introducir runtime/proveedor en `orquesta-mcp`.
+Evidencia T243: `go test -count=1 ./modulos/orquesta-mcp`.
+Rework T252 2026-05-27: el limite de 300 lineas se aplico tambien a tests Go de
+`orquesta-runtime-codex-delivery`; los shards de progress, delivery, review gate
+y worktree quedan bajo 300 lineas con `go test -count=1
+./modulos/orquesta-runtime-codex-delivery`.
+```
+
+```text
+ID: FILE-BUDGET-20260527-003
+Fecha: 2026-05-27
+Sintoma: residuo productivo de `orquesta-app-codex-stack` sigue por encima del
+limite operativo de 300 lineas tras el cierre parcial de T54.
+Campo: `autoprogramming_bridge_v0.go`, `spec_external_context_v0.go`,
+`spec_task_v0.go`, `app_change_ports_v0.go`,
+`composite_decision_source_policy_v0.go`, `assessment_replan_source_v0.go` y
+`run_supervisor_mcp_executor_v0.go`.
+Payload minimo: `wc -l` muestra aproximadamente 341, 329, 317, 314, 313, 308 y
+305 lineas respectivamente.
+Decision: abrir backlog T244 para partir el residuo del stack Codex por
+responsabilidad local antes de anadir nuevos puentes, specs, contexto externo o
+ejecutores MCP/supervisor. Cierre local 2026-05-27: responsabilidades
+separadas y ficheros Go productivos del modulo bajo 300 lineas.
+Rework 2026-05-27: la revision
+`task-ref-review-rework-task-autoprogramming-bbfaee8d0f40-g01-d8a1fe905f79cb6b486cecd73b06d1df`
+solo revalida evidencia y contexto `ref_only`; no abre rail nuevo ni autoriza
+crecimiento posterior del stack Codex.
+Test futuro: `go test -count=1 ./modulos/orquesta-app-codex-stack`.
+Estado: cerrado localmente
+```
+
+```text
+ID: BACKLOG-SCAN-SECTION-ID-20260527-001
+Fecha: 2026-05-27
+Sintoma: bloques de `Escaneo backlog 2026-05-27` usan ordinales humanos
+duplicados o fuera de orden como identificador visible de la evidencia.
+Campo: encabezados de `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+y merge lease del scanner.
+Payload minimo: dos bloques distintos con titulo `Escaneo backlog 2026-05-27
+decimocuarta pasada` y nuevas tareas T241/T242-T243 bajo evidencias distintas.
+Decision: T248 cerrado para servidor residente con `backlog_scan_ref` por
+request/epoch documental y metadata `scan_entry_ref` para entradas de scanner
+duplicadas o fuera de orden; el historico sigue parseable sin renumeracion.
+Test futuro: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Rework 2026-05-27: la correccion
+`agent-ref-task-ref-review-rework-task-autoprogramming-ce0100f5ae08-g01-a522429e98460b11fc001393c9f07b9e`
+mantiene este rail cerrado, no abre owner nuevo y resuelve `ref_only` mediante
+lectura local/evidencia ACK.
+Estado: cerrado 2026-05-27
+```
+
+```text
+ID: FEDERATED-BACKLOG-EPOCH-SCOPE-20260527-001
+Fecha: 2026-05-27
+Sintoma: el scanner incluye todos los `source_path` del indice federado en
+`BacklogScanDocs` aunque algunas fuentes esten en `quarantine` y no sean
+ejecutables.
+Campo: `cmd/orquesta-server/idle_self_improvement_federated_backlog_v0.go` y
+`cmd/orquesta-server/idle_self_improvement_backlog_merge_v0.go`.
+Payload minimo: documento legacy declarado con `estado: quarantine` cambia de
+hash; el epoch del scanner cambia aunque `loadFederatedBacklogSectionsV0` no
+programe tareas desde esa fuente.
+Decision: abrir backlog T250 para separar fuentes federadas ejecutables del
+epoch activo y conservar historicas/quarantine como evidencia no bloqueante.
+Test futuro: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Estado: cerrado 2026-05-27
+Evidencia: el planner usa solo fuentes federadas ejecutables para
+`BacklogScanDocs`, epoch y reservas; las fuentes `historico`, `stale` o
+`quarantine` quedan como `federated_backlog_source_not_executable`.
+```
+
+```text
+ID: FEDERATED-BACKLOG-EPOCH-SCOPE-RETRY-20260527-002
+Fecha: 2026-05-27
+Sintoma: nuevo burst de T250 reobserva el mismo rail con contexto obligatorio
+`ref_only` y write-set cerrado al servidor y shards documentales.
+Campo: scanner de backlog federado en `cmd/orquesta-server`.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-88a96698afb2-g01-b0935e0be19681ea514f9a2acacaff39`
+de `request-ref-autoprogramming-backlog-t250-federated-backlog-epoch-scope-policy-acff973f`.
+Decision: no abrir owner nuevo; resolver por cierre T250 vigente y evidencia
+local de lectura/ACK. Las refs de worktree y branch se conservan opacas.
+Test futuro: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Estado: revalidado, cubierto
+```
+
+```text
+ID: BACKLOG-TASK-OVERLAP-20260527-001
+Fecha: 2026-05-27
+Sintoma: scanners concurrentes pueden abrir dos Txx pendientes para la misma
+frontera antes de que exista canonicalizacion ejecutable.
+Campo: `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`, planner de
+backlog y merge lease documental.
+Payload minimo: T248 y T249 cubren identidad/orden de entradas de scanner;
+T248 declara fusion posible con T249, pero ambas quedan como tareas pendientes
+programables si el planner no calcula equivalencia de owner/alcance/frontera.
+Decision: cerrado en T250 con firma compacta `backlog-task-overlap-*`,
+canonical task ref por doc/linea/ref, fusion aditiva de criterios/tests/write-set
+y reason code publico `backlog_task_overlap_canonicalization_required`.
+Test ejecutado: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Estado: cerrado
+```
+
+```text
+ID: BACKLOG-TASK-OVERLAP-REWORK-20260527-001
+Fecha: 2026-05-27
+Sintoma: la correccion tras revision de T250 debe conservar la entrega cerrada
+sin relanzar el agente padre ni ampliar el write-set.
+Campo: ACK estricto, contexto `ref_only`, backlog, rail errors y duplicaciones.
+Payload minimo: paquete
+`agent-ref-task-ref-review-rework-task-autoprogramming-283ae6944821-g01-45cb26fe5d469e631710450335aa3a53`
+con `required_ref_action=ack_evidence_required` y write-set cerrado.
+Decision: no abrir owner nuevo; registrar rework documental acotado y cerrar por
+lectura local/evidencia ACK. Los archivos de control no son artefactos de
+producto y la evidencia focal sigue siendo la prueba T250 del servidor.
+Test futuro: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Estado: registrado, cubierto
+```
+
+```text
+ID: BACKLOG-SCAN-REQUIRED-TEST-SCOPE-20260527-001
+Fecha: 2026-05-27
+Sintoma: una tarea documental de scanner recibe como prueba obligatoria
+`go test -count=1 ./...` aunque el write-set real queda limitado a backlog,
+rail errors y duplicaciones.
+Campo: generacion de `required_tests` en paquetes de assessment/backlog scanner
+y cierre por ACK estricto.
+Payload minimo: `write_set` solo con documentos de backlog y
+`required_tests=["go test -count=1 ./...","validar contexto required ref_only mediante lectura local, consulta al director o evidencia explicita"]`.
+Decision: abrir backlog T251 para politica de alcance de pruebas obligatorias
+en scanners documentales: conservar validacion global solo cuando la seccion o
+el director la exijan, y emitir pruebas focales/documentales exactas cuando el
+cambio no toca codigo productivo.
+Test futuro: `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Estado: cerrado 2026-05-27. T251 acota `required_tests` de scanners
+documentales, preserva tests declarados por seccion y deja trazabilidad en
+`required_test_origin:*`/`required_test_scope_policy:*`. Rework de revision:
+sincronizado con backlog y duplicaciones; contexto `ref_only` resuelto por
+lectura local/evidencia ACK.
+```
+
+```text
+ID: BACKLOG-DUPLICATE-TASK-ID-READ-20260527-001
+Fecha: 2026-05-27
+Sintoma: el backlog vivo contiene varias secciones `## T250` con objetivos y
+alcances distintos; un lector que use solo el numero humano puede cerrar o
+encolar la instancia equivocada.
+Campo: parser del backlog, cola de autoprogramacion, cierre por ACK y merge
+lease documental.
+Payload minimo: cuatro encabezados `## T250` para fronteras distintas
+(`federated-backlog-epoch-scope-policy`,
+`runtime-codex-delivery-progress-source-file-split`,
+`backlog-proposal-deduplication-fingerprint` y
+`backlog-task-overlap-canonical-merge-policy`).
+Decision: abrir backlog T252 para read model con `task_instance_ref` estable,
+reason publico `backlog_duplicate_task_id_ambiguous` y resolucion aditiva por
+alias/cobertura sin renumerar historico.
+Test futuro:
+`go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-server ./cmd/orquesta-server`.
+Estado: cerrado 2026-05-27; planner expone instancias y bloquea Txx ambiguo con
+`backlog_duplicate_task_id_ambiguous`.
+Rework de revision 2026-05-27:
+`agent-ref-task-ref-review-rework-task-autoprogramming-9ad7b5061f27-g01-d2d05e084cc48aa9566f43b01d7d8f5e`
+revalida la entrega T252 sin relanzar el agente padre; el contexto `ref_only`
+queda resuelto por evidencia explicita en ACK y la prueba requerida es
+`go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+```
+
+```text
+ID: BACKLOG-SCANNER-CANONICAL-PREFLIGHT-20260527-001
+Fecha: 2026-05-27
+Sintoma: scanner posterior abre backlog nuevo para una frontera ya cubierta por
+canonicalizacion previa.
+Campo: planner de backlog, merge lease documental y secciones `## Txx`.
+Payload minimo: T140 cerro canonicalizacion de solapes con alias y
+`duplicate_backlog_task`; T250 vuelve a abrir una tarea equivalente para
+scanners concurrentes sin pasar por un preflight que consulte canon/alias/cierre
+antes de escribir el nuevo Txx.
+Decision: abrir backlog T251 para preflight canonico del scanner: consultar
+tareas cerradas/vigentes/pendientes, declarar cobertura o alias/fusion aditiva,
+y bloquear con `backlog_scanner_canonical_preflight_required` si hace falta
+rebase o decision del director.
+Test futuro:
+`go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-server ./cmd/orquesta-server`.
+Estado: cerrado 2026-05-27. T251 aplica preflight canonico en el planner,
+publica indice/fingerprint y reason `backlog_scanner_canonical_preflight_required`
+para evitar otro `## Txx` equivalente. Rework de revision: sincronizado con
+backlog y duplicaciones; contexto `ref_only` resuelto por lectura local/evidencia
+ACK sin relanzar agente padre.
+```
+
+```text
+ID: FILE-BUDGET-20260527-005
+Fecha: 2026-05-27
+Sintoma: el caso de uso productivo de apagado controlado supera el limite
+operativo de 300 lineas y es frontera natural para nuevos reason codes de
+shutdown.
+Campo: `modulos/orquesta-server-shutdown/shutdown_v0.go`.
+Payload minimo: `wc -l` muestra 319 lineas; el fichero mezcla autorizacion del
+requester, lectura de cola, seleccion de targets, checkpoint no forzado,
+escritura de control, refresh/supervision y resumen final.
+Decision: registrar candidato y fusionarlo con el owner canonico T256
+`server-shutdown-usecase-file-split` cuando esa entrada posterior este visible;
+no programar dos splits separados para la misma frontera.
+Test futuro:
+`go test -count=1 ./modulos/orquesta-server-shutdown ./cmd/orquesta-server`.
+Estado: cerrado 2026-05-27 por T256
+Rework correctivo 2026-05-27: validado por
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-ced6b146bcf5b10e5253ef166816de66`;
+no abrir tarea separada para la variante `before-growth`.
+Rework de evaluacion 2026-05-27: validado por
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-f878e21cfa5e67e7481d20a5f9bd24c5`;
+mantener la variante `before-growth` fusionada con T256 canonico.
+Rework de evaluacion 2026-05-27: validado por
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-3d04cc0bcd1f59b871869ec824d2c996`;
+mantener la variante `before-growth` fusionada con T256 canonico.
+Rework de evaluacion 2026-05-27: validado por
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-46d0d95f62343cc1e51b9ca398f83f84`;
+mantener la variante `before-growth` fusionada con T256 canonico.
+Rework de evaluacion 2026-05-27: validado por
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-33ca4ea060412afa902e83e3765c1d23`;
+mantener la variante `before-growth` fusionada con T256 canonico.
+Rework de reemplazo 2026-05-27: validado por
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-b6686ba67b0d901948d8ce067d8771ec`;
+mantener la variante `before-growth` fusionada con T256 canonico.
+Rework de evaluacion 2026-05-27: validado por
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-bff7aa189e7e24662071cf55dffcb95f`;
+mantener la variante `before-growth` fusionada con T256 canonico.
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-003
+Fecha: 2026-05-27
+Sintoma: scanner de automejora vuelve a recibir contexto obligatorio `ref_only`
+con write-set documental cerrado y huecos ya visibles en el backlog.
+Campo: backlog scanner, ACK estricto y shards documentales de backlog.
+Payload minimo: paquete con `required_ref_action=ack_evidence_required`,
+write-set limitado a backlog/rail errors/duplicaciones y busquedas que ya
+encuentran T44, T249, T250, T251, T252, T254 y T255 como owners pendientes.
+Decision: no abrir otro Txx; registrar pasada documental de no-op cubierto,
+resolver `ref_only` mediante lectura local/evidencia ACK y conservar refs de
+worktree/branch como opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254/T255; esta
+entrada solo evita duplicar backlog programable.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-004
+Fecha: 2026-05-27
+Sintoma: nueva pasada del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set cerrado a los tres shards documentales y huecos ya
+registrados.
+Campo: backlog scanner, ACK estricto, required tests y shards documentales de
+backlog.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-3ddbc1385ac2-g01-b0d62e2841ee6bd1a73887a370464c5e`
+con `required_ref_action=ack_evidence_required`, write-set limitado a
+backlog/rail errors/duplicaciones y busquedas que ya encuentran T44, T249,
+T250, T251, T252, T254, T255 y T256 como owners pendientes.
+Decision: no abrir otro Txx; registrar pasada documental de no-op cubierto,
+resolver `ref_only` mediante lectura local/evidencia ACK y conservar
+`worktree_ref`/`branch_ref` como refs opacas.
+Test futuro: usar pruebas de los owners T44/T249/T250/T251/T252/T254/T255/T256;
+esta entrada solo evita duplicar backlog programable.
+Estado: registrado, cubierto por owners pendientes
+```
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-013
+Fecha: 2026-05-27
+Sintoma: retry d0cf1e del scanner de automejora repite contexto obligatorio
+`ref_only`, write-set documental cerrado y huecos ya visibles en backlog.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-350b93e475a8-g01-7b6283b42d81ab988ec874761f9ce9e0`
+del retry
+`request-ref-autoprogramming-backlog-scanner-7e8a6ae9-retry-d0cf1ea77c2b6898418f56ac96139dcb5cb606948a8e3adc89ed26b4a9b1f02c`,
+con `required_ref_action=ack_evidence_required`, write-set limitado a backlog,
+rail errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250,
+T251, T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx; registrar no-op cubierto, resolver `ref_only`
+mediante lectura local/evidencia ACK y conservar `worktree_ref`/`branch_ref`
+como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: BACKLOG-SCAN-COVERED-NOOP-20260527-038
+Fecha: 2026-05-27
+Sintoma: retry 6ed415 burst 002 del scanner de automejora repite contexto
+obligatorio `ref_only`, write-set documental cerrado, prueba global obligatoria
+y backlog degradado ya cubierto por owners pendientes antes de programar codigo.
+Campo: backlog scanner, ACK estricto, retry de request y shards documentales.
+Payload minimo: paquete `agent-ref-task-autoprogramming-6050b74fc6c4-g01` del
+retry
+`request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-6ed4157ea15c63315787f6758835ef866624b96c293520bade4d4fac7bbd3f1d`,
+con
+`correlation_id=corr-request-ref-autoprogramming-backlog-scanner-15eeecb9-retry-6ed4157ea15c63315787f6758835ef866624b96c293520bade4d4fac7bbd3f1d-burst-002`,
+`required_ref_action=ack_evidence_required`, write-set limitado a backlog, rail
+errors y duplicaciones, y busquedas que ya encuentran T44, T249, T250, T251,
+T252, T253, T254, T255, T256, T257 y T258.
+Decision: no abrir otro Txx ni programar codigo desde el scanner; registrar
+no-op cubierto, resolver `ref_only` mediante lectura local/evidencia ACK y
+conservar `worktree_ref`/`branch_ref` como refs opacas.
+Test futuro: usar pruebas de los owners
+T44/T249/T250/T251/T252/T253/T254/T255/T256/T257/T258; esta entrada solo evita
+duplicar backlog programable desde un retry equivalente.
+Estado: registrado, cubierto por owners pendientes
 ```

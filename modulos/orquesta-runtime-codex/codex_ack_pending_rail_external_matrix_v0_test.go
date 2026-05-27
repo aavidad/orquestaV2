@@ -56,7 +56,9 @@ func TestCodexAckPendingRailExternalMatrixV0ConRailsDetalleOffCortaSecretoEfecti
 
 	_, issues := ValidateCodexAgentAckBytesForSpecV0(data, spec)
 
-	requireCodexIssueV0(t, issues, CodexConnectorAckForbiddenV0)
+	if len(issues) != 0 {
+		t.Fatalf("rail detalle off no debe bloquear ACK: %+v", issues)
+	}
 }
 
 func TestCodexAckPendingRailExternalMatrixV0CamposNoCortanConValoresBlandos(t *testing.T) {
@@ -78,6 +80,7 @@ func TestCodexAckPendingRailExternalMatrixV0CamposNoCortanConValoresBlandos(t *t
 }
 
 func TestCodexAckPendingRailExternalMatrixV0CamposCortanConValoresEfectivos(t *testing.T) {
+	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "on")
 	spec := codexSpecForTestV0()
 	cases := []string{
 		`"files":["README.md","docs/access_token=abc123.md"],"tests":["go test ./..."]`,

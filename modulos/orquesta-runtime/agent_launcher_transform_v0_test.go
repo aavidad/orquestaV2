@@ -1,6 +1,9 @@
 package orquestaruntime
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestLaunchRuntimeAgentToRuntimeLaunchRequestV0ConstruyeRequestValida(t *testing.T) {
 	base := runtimeLaunchRequestValidaV0()
@@ -61,6 +64,34 @@ func TestLaunchRuntimeAgentToRuntimeLaunchRequestV0BloqueaDependenciasIncompleta
 	requireAgentLauncherCodeV0(t, issues, AgentLauncherRuntimeBindingRefsV0)
 	requireAgentLauncherCodeV0(t, issues, AgentLauncherEvidenceRefsV0)
 	requireAgentLauncherCodeV0(t, issues, AgentLauncherContextBundleNoResueltoV0)
+}
+
+func TestLaunchRuntimeAgentToRuntimeLaunchRequestV0UsaRelojInyectadoV0(t *testing.T) {
+	base := runtimeLaunchRequestValidaV0()
+	resolved := AgentLauncherResolvedDependenciesV0{
+		FunctionContract: base.FunctionContract,
+		CapacityDecision: base.CapacityDecision,
+		RuntimeBinding:   base.RuntimeBinding,
+		EvidenceRefs:     base.EvidenceRefs,
+		ContextBundle:    base.ContextBundle,
+	}
+
+	req, issues := LaunchRuntimeAgentToRuntimeLaunchRequestV0(
+		agentLauncherInboundValidoV0(),
+		resolved,
+		AgentLauncherRuntimeLaunchOptionsV0{
+			Clock: ClockFuncV0(func() time.Time {
+				return time.Date(2026, 5, 24, 10, 11, 12, 0, time.UTC)
+			}),
+		},
+	)
+
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if req.RequestedAt != "2026-05-24T10:11:12Z" {
+		t.Fatalf("requested_at=%q", req.RequestedAt)
+	}
 }
 
 func TestLaunchRuntimeAgentToRuntimeLaunchRequestV0PropagaValidacionRuntime(t *testing.T) {

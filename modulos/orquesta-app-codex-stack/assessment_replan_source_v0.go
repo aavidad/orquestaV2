@@ -33,13 +33,16 @@ func (source AssessmentReplanSourceV0) BuildAgentAssessmentReplanPlansV0(
 		return nil, err
 	}
 	taskByAgent := assessmentReplanTaskByAgentV0(descriptors)
-	plans := make([]orquestacionnucleoapp.AgentAssessmentReplanPlanV0, 0, len(request.Run.ConfirmedStoppedAgents))
-	for _, projection := range assessmentReplanStoppedProjectionsV0(request.Run) {
+	plans := make([]orquestacionnucleoapp.AgentAssessmentReplanPlanV0, 0, len(request.Run.ConfirmedStoppedAgents)+len(request.Run.LostAgents))
+	for _, projection := range assessmentReplanTerminalProjectionsV0(request.Run) {
 		if !assessmentReplanProjectionReadyV0(request.Run, projection) {
 			continue
 		}
 		taskRef := assessmentReplanTaskRefV0(projection, taskByAgent)
 		if taskRef == "" {
+			continue
+		}
+		if assessmentReplanTaskHasTerminalFailedFollowupV0(request.Run, taskRef) {
 			continue
 		}
 		if assessmentReplanTaskHasMaterializedFollowupV0(request.Run, taskRef) {
@@ -68,13 +71,13 @@ func assessmentReplanTaskByAgentV0(
 	return tasks
 }
 
-func assessmentReplanStoppedProjectionsV0(
+func assessmentReplanTerminalProjectionsV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 ) []orquestacoreworkflow.AgentWorkAssessmentProjectionV0 {
 	projections := make([]orquestacoreworkflow.AgentWorkAssessmentProjectionV0, 0, len(run.AgentAssessments))
 	for _, raw := range run.AgentAssessments {
 		projection, ok := orquestacoreworkflow.ParseAgentAssessmentProjectionV0(raw)
-		if !ok || projection.Action != orquestacoreworkflow.AgentAssessmentActionStopAgentV0 {
+		if !ok || !assessmentReplanProjectionActionCanRepairV0(projection) {
 			continue
 		}
 		projections = append(projections, projection)
@@ -82,13 +85,30 @@ func assessmentReplanStoppedProjectionsV0(
 	return projections
 }
 
+func assessmentReplanProjectionActionCanRepairV0(
+	projection orquestacoreworkflow.AgentWorkAssessmentProjectionV0,
+) bool {
+	switch strings.TrimSpace(projection.Action) {
+	case orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
+		orquestacoreworkflow.AgentAssessmentActionAskDirectorV0:
+		return true
+	default:
+		return false
+	}
+}
+
 func assessmentReplanProjectionReadyV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	projection orquestacoreworkflow.AgentWorkAssessmentProjectionV0,
 ) bool {
 	agentRef := strings.TrimSpace(projection.AgentRequestID)
-	return agentRef != "" &&
-		stringInSetV0(run.StoppedAgents, agentRef) &&
+	if agentRef == "" {
+		return false
+	}
+	if projection.Action == orquestacoreworkflow.AgentAssessmentActionAskDirectorV0 {
+		return stringInSetV0(run.LostAgents, agentRef)
+	}
+	return stringInSetV0(run.StoppedAgents, agentRef) &&
 		(stringInSetV0(run.ConfirmedStoppedAgents, agentRef) ||
 			stringInSetV0(run.LostAgents, agentRef))
 }
@@ -110,7 +130,7 @@ func (source AssessmentReplanSourceV0) planForAssessmentV0(
 ) orquestacionnucleoapp.AgentAssessmentReplanPlanV0 {
 	suffix := assessmentReplanSuffixV0(request.Run.RunID, projection, taskRef)
 	evidence := assessmentReplanEvidenceRefsV0(request, projection)
-	summary := "Reemplazar agente detenido tras evaluacion de progreso."
+	summary := "Reemplazar agente bloqueado tras evaluacion de progreso."
 	return orquestacionnucleoapp.AgentAssessmentReplanPlanV0{
 		CandidateRef:               "assessment-replan-candidate-ref-" + suffix,
 		ReplanRef:                  "replan-ref-" + suffix,
@@ -176,52 +196,12 @@ func assessmentReplanTaskHasMaterializedFollowupV0(
 			continue
 		}
 		for _, followupRef := range assessmentReplanFollowupAgentRefsV0(projection) {
-			if assessmentReplanAgentMaterializedV0(run, followupRef) {
+			if assessmentReplanFollowupStillBlocksTaskV0(run, followupRef) {
 				return true
 			}
 		}
 	}
 	return false
-}
-
-func assessmentReplanFollowupAgentRefsV0(projection string) []string {
-	const marker = "#followups:"
-	index := strings.Index(projection, marker)
-	if index < 0 {
-		return nil
-	}
-	value := projection[index+len(marker):]
-	if next := strings.Index(value, "#"); next >= 0 {
-		value = value[:next]
-	}
-	parts := strings.FieldsFunc(value, func(r rune) bool {
-		return r == '+' || r == ',' || r == ';' || r == ' '
-	})
-	refs := make([]string, 0, len(parts))
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if strings.HasPrefix(part, "agent-ref-") {
-			refs = append(refs, part)
-		}
-	}
-	return refs
-}
-
-func assessmentReplanAgentMaterializedV0(
-	run orquestacoreworkflow.OrchestrationRunV0,
-	agentRef string,
-) bool {
-	agentRef = strings.TrimSpace(agentRef)
-	if agentRef == "" {
-		return false
-	}
-	return stringInSetV0(run.Agents, agentRef) ||
-		stringInSetV0(run.StartedAgents, agentRef) ||
-		stringInSetV0(run.DeliveredAgents, agentRef) ||
-		stringInSetV0(run.FailedAgents, agentRef) ||
-		stringInSetV0(run.LostAgents, agentRef) ||
-		stringInSetV0(run.StoppedAgents, agentRef) ||
-		stringInSetV0(run.ConfirmedStoppedAgents, agentRef)
 }
 
 func assessmentReplanCapacityV0(
@@ -243,42 +223,4 @@ func assessmentReplanEvidenceRefsV0(
 		projection.AgentRequestID,
 	}
 	return compactStringsV0(append(refs, request.EvidenceRefs...))
-}
-
-func assessmentReplanSafeRefV0(value string) string {
-	value = strings.TrimSpace(value)
-	replacer := strings.NewReplacer("\\", "-", "/", "-", " ", "-", "#", "-", ":", "-")
-	value = strings.Trim(replacer.Replace(value), "-")
-	if value == "" {
-		return "sin-ref"
-	}
-	if len(value) > 64 {
-		value = strings.Trim(value[:64], "-")
-	}
-	if value == "" {
-		return "sin-ref"
-	}
-	return value
-}
-
-func assessmentReplanSuffixV0(
-	runRef string,
-	projection orquestacoreworkflow.AgentWorkAssessmentProjectionV0,
-	taskRef string,
-) string {
-	base := assessmentReplanSafeRefV0(taskRef)
-	if base == "sin-ref" {
-		base = assessmentReplanSafeRefV0(projection.AgentRequestID)
-	}
-	return base + "-" + assessmentReplanDigestV0(
-		runRef+"|"+projection.AssessmentRef+"|"+projection.AgentRequestID+"|"+taskRef,
-	)
-}
-
-func assessmentReplanDigestV0(value string) string {
-	digest := codexStackDeterministicDigestV0(value)
-	if len(digest) > 12 {
-		return digest[:12]
-	}
-	return digest
 }

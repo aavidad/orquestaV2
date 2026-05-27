@@ -33,7 +33,30 @@ func MCPTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnve
 		mcpOperatorTransportToolV0(operator.OperatorMCPOutboxToolNameV0, mcpOperatorOutboxBindingV0(bindings)),
 		mcpOperatorTransportToolV0(operator.OperatorMCPDirectedQueryToolV0, mcpOperatorQueryBindingV0(bindings)),
 	}
-	return append(tools, mcpOperatorFriendlyTransportToolsV0(bindings)...)
+	tools = append(tools, mcpOperatorFriendlyTransportToolsV0(bindings)...)
+	return applyMCPTransportExecutionProfilesV0(tools)
+}
+
+func applyMCPTransportExecutionProfilesV0(
+	tools []MCPTransportToolEnvelopeV0,
+) []MCPTransportToolEnvelopeV0 {
+	for idx := range tools {
+		profile := MCPTransportExecutionProfileControlPlaneMutationV0
+		switch tools[idx].Name {
+		case MCPAutoprogrammingPrepareRunToolNameV0,
+			MCPAutoprogrammingSelfImprovementToolNameV0,
+			MCPAutoprogrammingSuperviseToolNameV0,
+			MCPDomainWorkToolNameV0,
+			MCPExternalWorkRunToolNameV0:
+			profile = MCPTransportExecutionProfileAutoprogrammingLongV0
+		case MCPWorkspaceTimelineToolNameV0,
+			MCPDirectorStatsToolNameV0,
+			MCPAutoprogrammingStatusToolNameV0:
+			profile = MCPTransportExecutionProfileDefaultToolV0
+		}
+		tools[idx].ExecutionBudget = MCPTransportToolExecutionBudgetV0(profile)
+	}
+	return tools
 }
 
 func mcpOperatorStatusBindingV0(bindings MCPTransportBindingsV0) operator.OperatorMCPStatusPortV0 {

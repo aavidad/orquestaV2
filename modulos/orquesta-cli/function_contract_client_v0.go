@@ -95,7 +95,7 @@ func NewFunctionContractCliClientV0(serverURL string, timeout time.Duration) (*F
 		ListEndpoint: config.Endpoint,
 		ViewEndpoint: FunctionContractCliViewEndpointV0,
 		Timeout:      config.Timeout,
-		HTTPClient:   &http.Client{Timeout: config.Timeout},
+		HTTPClient:   newCLILoopbackHTTPClientV0(config.Timeout),
 	}, nil
 }
 
@@ -176,9 +176,9 @@ func decodeFunctionContractListResponseV0(resp *http.Response, inv CliInvocation
 	if errEnv, handled := decodeFunctionContractErrorStatusV0(resp, inv, start); handled {
 		return errEnv
 	}
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return cliSingleFunctionContractErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", "body_no_legible", resp.StatusCode, false, start)
+	raw, detail := readCLIRESTResponseBodyForCommandV0(resp, inv.Command)
+	if detail != "" {
+		return cliSingleFunctionContractErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", detail, resp.StatusCode, false, start)
 	}
 	result, err := decodeListarFunctionContractsResultV0(raw)
 	if err != nil {
@@ -191,9 +191,9 @@ func decodeFunctionContractViewResponseV0(resp *http.Response, inv CliInvocation
 	if errEnv, handled := decodeFunctionContractErrorStatusV0(resp, inv, start); handled {
 		return errEnv
 	}
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return cliSingleFunctionContractErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", "body_no_legible", resp.StatusCode, false, start)
+	raw, detail := readCLIRESTResponseBodyForCommandV0(resp, inv.Command)
+	if detail != "" {
+		return cliSingleFunctionContractErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", detail, resp.StatusCode, false, start)
 	}
 	result, err := decodeVerFunctionContractResultV0(raw)
 	if err != nil {
@@ -204,14 +204,18 @@ func decodeFunctionContractViewResponseV0(resp *http.Response, inv CliInvocation
 
 func decodeFunctionContractErrorStatusV0(resp *http.Response, inv CliInvocationContextV0, start time.Time) (CliOutputEnvelopeV0, bool) {
 	if resp.StatusCode == http.StatusBadRequest {
-		errs, ok := decodeFunctionContractIssuesV0(resp.Body)
+		raw, detail := readCLIRESTResponseBodyForCommandV0(resp, inv.Command)
+		if detail != "" {
+			return cliSingleFunctionContractErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", detail, resp.StatusCode, false, start), true
+		}
+		errs, ok := decodeFunctionContractIssuesV0(bytes.NewReader(raw))
 		if !ok || len(errs) == 0 {
 			return cliSingleFunctionContractErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "errores", "respuesta_400_sin_errores_publicos", resp.StatusCode, false, start), true
 		}
 		return NewCliOutputErrorEnvelopeV0(inv, FunctionContractCliContractV0, FunctionContractCliContractVersionV0, errs, cliMetaV0(start, resp.StatusCode, false)), true
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode > 299 {
-		return cliSingleFunctionContractErrorEnvelopeV0(inv, CliErrErrorTransporteV0, "status_code", "status_no_2xx", resp.StatusCode, retryableStatusV0(resp.StatusCode), start), true
+		return cliSingleFunctionContractErrorEnvelopeV0(inv, CliErrErrorTransporteV0, "status_code", cliRESTNo2xxDetailForCommandV0(resp, inv.Command), resp.StatusCode, retryableStatusV0(resp.StatusCode), start), true
 	}
 	return CliOutputEnvelopeV0{}, false
 }

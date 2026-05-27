@@ -41,6 +41,36 @@ func TestCodexStackV0ReviewGateNormalizaTestsGoEquivalentesV0(t *testing.T) {
 	}
 }
 
+func TestCodexStackReviewGateAceptaReworkPrevioSiSoloQuedanRailsBlandosV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	spec := codexStackReviewGateSpecForTestV0("ack-ref-stack-review-soft-rework-001")
+	projectDir := t.TempDir()
+	writeStackReviewGateFileForTestV0(t, projectDir, "internal/api/handler.go", "package api\nfunc Handler() {}\n")
+	recordStackReviewDescriptorForTestV0(t, stack, projectDir, spec, []string{"internal/api/handler.go"})
+
+	reviewRequestRef := "review-request-ref-" + spec.AgentPacket.DeliveryRefs.AckRef
+	reviewResultRef := "review-result-ref-" + spec.AgentPacket.DeliveryRefs.AckRef
+	reworkRequestRef := "rework-request-ref-" + reviewResultRef
+	request := codexStackReviewGateRequestForTestV0(spec, []string{
+		reviewResultRef + "#review_result:changes_requested#review_request:" + reviewRequestRef + "#delivery:" + spec.AgentPacket.DeliveryRefs.AckRef,
+	})
+	request.Run.ReworkRequests = []string{
+		reworkRequestRef + "#review_result:" + reviewResultRef + "#review_request:" + reviewRequestRef + "#delivery:" + spec.AgentPacket.DeliveryRefs.AckRef,
+	}
+
+	observations, err := stack.Ports.ReviewGateSource.BuildReviewGateObservationsV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildReviewGateObservationsV0: %v", err)
+	}
+	if len(observations) != 1 ||
+		observations[0].Status != orquestacoreworkflow.ReviewResultStatusAcceptedV0 ||
+		observations[0].ReviewResultRef != "review-result-ref-soft-rework-accepted-"+codexStackOperationalClosureSafeRefV0(spec.AgentPacket.DeliveryRefs.AckRef) ||
+		observations[0].AcceptedReviewRef == "" ||
+		!codexStackReviewGateHasEvidenceForTestV0(observations[0].EvidenceRefs, "gate-normalized:soft-rework-accepted") {
+		t.Fatalf("observations=%+v", observations)
+	}
+}
+
 func TestReviewReworkMissingWriteSetTargetsV0NormalizaWebAdminComoWebV0(t *testing.T) {
 	spec := codexStackReviewGateSpecForTestV0("ack-ref-stack-review-webadmin-001")
 	spec.AgentPacket.Task.WriteSet = []string{"web"}

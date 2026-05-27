@@ -33,3 +33,5 @@ Cobertura:
 - rechaza decisiones invalidas;
 - exige `occurred_at`;
 - no importa legacy, DB ni conectores operativos.
+- T207 se valida fuera de este puente con runtime/orchestration; la prueba local
+  requerida sigue siendo `go test -count=1 ./modulos/orquesta-director-agent-workflow`.

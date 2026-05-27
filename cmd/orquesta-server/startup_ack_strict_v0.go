@@ -47,7 +47,10 @@ func startupAgentHasStrictCompletedACKV0(agentDir string) bool {
 }
 
 func startupReadAgentPacketV0(path string) (orquestaruntime.AgentStartPacketV0, bool) {
-	data, err := os.ReadFile(path)
+	data, err := orquestaruntimecodex.ReadCodexControlFileBytesV0(
+		path,
+		orquestaruntimecodex.CodexAgentPacketFileNameV0,
+	)
 	if err != nil {
 		return orquestaruntime.AgentStartPacketV0{}, false
 	}

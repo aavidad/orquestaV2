@@ -34,7 +34,7 @@ func consumeStartAppDirectorDecisionsV0(
 			request,
 			ports,
 			loop,
-			startAppDirectorDecisionSourceRecoveryV0(),
+			startAppDirectorDecisionSourceRecoveryV0(err),
 		)
 		return recovered, false, recoveryErr
 	}

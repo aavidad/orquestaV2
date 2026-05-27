@@ -98,6 +98,23 @@ func TestValidateAgentProgressReportV0RechazaSecreto(t *testing.T) {
 	requireAgentProgressReportCodeV0(t, ValidateAgentProgressReportV0(report), AgentProgressSecretoDetectadoV0)
 }
 
+func TestValidateAgentProgressReportV0PermiteVocabularioOperativoOpaco(t *testing.T) {
+	report := agentProgressReportValidoV0()
+	report.Summary = "Refs opacas de runtime provider model db sql home conservadas."
+	report.EvidenceRefs = []string{"evidence-ref-runtime-provider-model-db-sql-home-001"}
+
+	if issues := ValidateAgentProgressReportV0(report); len(issues) != 0 {
+		t.Fatalf("vocabulario operativo opaco rechazado: %#v", issues)
+	}
+}
+
+func TestValidateAgentProgressReportV0RechazaDetalleCrudoDeProgreso(t *testing.T) {
+	report := agentProgressReportValidoV0()
+	report.Summary = "prompt=raw no debe viajar en el reporte"
+
+	requireAgentProgressReportCodeV0(t, ValidateAgentProgressReportV0(report), AgentProgressDetalleProveedorV0)
+}
+
 func TestValidateAgentProgressReportV0RechazaLoopDetectedSinContadores(t *testing.T) {
 	report := agentProgressReportValidoV0()
 	report.Status = AgentLoopDetectedV0

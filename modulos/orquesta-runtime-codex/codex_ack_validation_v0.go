@@ -2,9 +2,9 @@ package orquestaruntimecodex
 
 import (
 	"encoding/json"
-	"os"
 	"strings"
 
+	orquestarails "orquesta/modulos/orquesta-rails"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
@@ -14,14 +14,11 @@ func ReadAndValidateCodexAgentAckFileV0(
 	path string,
 	spec orquestaruntime.ExternalAgentLaunchSpecV0,
 ) (CodexAgentAckV0, []orquestaruntime.ExternalAgentConnectorErrorV0) {
-	data, err := os.ReadFile(path)
+	data, err := ReadCodexControlFileBytesV0(path, CodexAgentAckFileNameV0)
 	if err != nil {
-		issue := codexIssueV0(CodexConnectorAckInvalidV0, CodexAgentAckFileNameV0, spec.CorrelationID, "read_failed")
-		if os.IsNotExist(err) {
-			issue.Retryable = true
-			issue.Evidence = []string{"ack_not_ready"}
+		return CodexAgentAckV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{
+			CodexControlFileReadIssueV0(err, CodexAgentAckFileNameV0, spec.CorrelationID, "ack_not_ready"),
 		}
-		return CodexAgentAckV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{issue}
 	}
 	return ValidateCodexAgentAckBytesForSpecV0(data, spec)
 }
@@ -159,7 +156,10 @@ func (v *codexAckValidatorV0) validateCorrelation(
 }
 
 func (v *codexAckValidatorV0) validateSensitiveDetails(ack CodexAgentAckV0) {
-	if codexAckContainsSensitiveDetailV0(ack) {
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return
+	}
+	if codexAckContainsSensitiveDetailV0(ack) || codexAckContainsLocalProductDetailV0(ack) {
 		v.add(CodexConnectorAckForbiddenV0, "agent_ack", "forbidden_sensitive_detail")
 	}
 }
@@ -176,7 +176,7 @@ func (v *codexAckValidatorV0) validateCompletedEvidence(
 			return
 		}
 		if codexAckHasForbiddenArtifactPathV0(files) {
-			v.add(CodexConnectorAckArtifactV0, "files", "artifact_path_forbidden")
+			v.add(CodexConnectorAckArtifactV0, "files", codexAckForbiddenArtifactEvidenceV0(files))
 			return
 		}
 		if len(writeSet) > 0 && len(files) == 0 && len(ack.Tests) == 0 && len(ack.Notes) == 0 {

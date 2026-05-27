@@ -50,7 +50,8 @@ func codexUsageJSONKeySensitiveV0(key string) bool {
 		"home", "home_dir", "path", "token", "access_token", "refresh_token",
 		"secret", "credential", "api_key", "provider", "model", "model_name",
 		"cost", "cost_micros", "price", "billing", "organization", "org",
-		"user", "username", "license", "subscription":
+		"user", "username", "license", "subscription", "cwd", "working_dir",
+		"workdir", "dir", "file", "filename", "log", "logs":
 		return true
 	default:
 		return false
@@ -65,6 +66,7 @@ func codexUsageJSONStringSensitiveV0(value string) bool {
 		strings.Contains(low, "api_key=") ||
 		strings.Contains(low, "client_secret=") ||
 		strings.Contains(low, "@") ||
+		strings.HasPrefix(low, "/") ||
 		strings.Contains(low, "/users/") ||
 		strings.Contains(low, "\\users\\") ||
 		strings.Contains(low, "-----begin ")

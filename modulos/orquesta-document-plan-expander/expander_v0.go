@@ -5,6 +5,7 @@ import orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 const (
 	DomainDocumentPlanExpansionSchemaVersionV0 = "domain_document_plan_expansion.v0"
 	DomainDocumentPlanExpansionRequestedByV0   = "orquesta-document-plan-expander"
+	ErrDomainDocumentPlanDerivedJobDuplicateV0 = "domain_document_plan_derived_job_duplicate"
 )
 
 type DomainDocumentPlanExpansionRequestV0 struct {
@@ -51,6 +52,10 @@ func ExpandDomainDocumentPlanV0(
 	}
 	if len(issues) > 0 {
 		result.Issues = issues
+		return result
+	}
+	if identityIssues := validateDocumentPlanExpandedJobIdentitiesV0(normalized); len(identityIssues) > 0 {
+		result.Issues = identityIssues
 		return result
 	}
 	result.Jobs = normalized

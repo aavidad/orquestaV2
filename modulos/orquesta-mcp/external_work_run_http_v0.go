@@ -11,9 +11,9 @@ const (
 	MCPExternalWorkRunHTTPErrorCodeV0             = "external_work_run_http_error"
 	MCPExternalWorkRunHTTPNotConfiguredCodeV0     = "external_work_run_no_configurado"
 	MCPExternalWorkRunHTTPExecutorErrorCodeV0     = "external_work_run_error"
-	MCPExternalWorkRunHTTPInvalidBodyCodeV0       = "request_body_invalido"
-	MCPExternalWorkRunHTTPUnsupportedPathCodeV0   = "ruta_no_soportada"
-	MCPExternalWorkRunHTTPUnsupportedMethodCodeV0 = "metodo_no_permitido"
+	MCPExternalWorkRunHTTPInvalidBodyCodeV0       = MCPPublicErrBodyInvalidV0
+	MCPExternalWorkRunHTTPUnsupportedPathCodeV0   = MCPPublicErrPathUnsupportedV0
+	MCPExternalWorkRunHTTPUnsupportedMethodCodeV0 = MCPPublicErrMethodNotAllowedV0
 )
 
 func NewMCPExternalWorkRunHTTPHandlerV0(
@@ -36,8 +36,11 @@ func (handler mcpExternalWorkRunHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, 
 		))
 		return
 	}
+	if handleMCPPublicHTTPOptionsV0(w, r, http.MethodPost) {
+		return
+	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
+		setMCPPublicHTTPAllowV0(w, http.MethodPost)
 		writeMCPExternalWorkRunHTTPV0(w, http.StatusMethodNotAllowed, newMCPExternalWorkRunHTTPErrorV0(
 			r,
 			MCPExternalWorkRunToolInputV0{},
@@ -56,12 +59,12 @@ func (handler mcpExternalWorkRunHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, 
 		return
 	}
 	var input MCPExternalWorkRunToolInputV0
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+	if code := decodeMCPPublicHTTPJSONProfileV0(w, r, &input, mcpPublicHTTPJSONProfileDomainWorkV0); code != "" {
 		writeMCPExternalWorkRunHTTPV0(w, http.StatusBadRequest, newMCPExternalWorkRunHTTPErrorV0(
 			r,
 			input,
 			"body",
-			MCPExternalWorkRunHTTPInvalidBodyCodeV0,
+			code,
 		))
 		return
 	}

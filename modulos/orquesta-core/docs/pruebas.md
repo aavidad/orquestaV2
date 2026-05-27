@@ -2,6 +2,20 @@
 
 Registra pruebas obligatorias del modulo.
 
+```text
+Caso: CORE-CT-012 descriptor_source MCP sobre contratos core
+Tipo: contract
+Comando: go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-observability ./modulos/orquesta-governance ./modulos/orquesta-core ./cmd/orquesta-server
+Evidencia esperada: los descriptors MCP que apuntan a core declaran owner,
+fuente canonica, DTO/validador y errores publicos sin que core importe MCP,
+HTTP, CLI, DB, runtime ni proveedor.
+Ultima ejecucion: 2026-05-27, ok en paquete
+`agent-ref-task-autoprogramming-c3678e9bc306-g01`.
+Riesgos: Esta prueba valida el contrato cruzado existente; no crea adaptadores nuevos.
+Revalidacion: `agent-ref-task-autoprogramming-c3678e9bc306-g01` usa el comando
+obligatorio ampliado para conservar el cierre T198.
+```
+
 ## Plantilla
 
 ```text

@@ -3,8 +3,6 @@ package orquestastatefile
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"reflect"
 	"sort"
 
@@ -94,14 +92,38 @@ func (store *StoreV0) saveWorkflowTaskLockedV0(
 		if !compatible {
 			return storeErrorV0("workflow_task", "microtarea existente con contrato distinto")
 		}
-		if !reflect.DeepEqual(existingTask, reconciled) {
-			return writeJSONAtomicV0(path, workflowTaskDocumentV0{
-				SchemaVersion: workflowTaskDocumentSchemaV0,
-				RunRef:        runRef,
-				TaskRef:       taskRef,
-				Task:          reconciled,
-			})
+		return store.writeWorkflowTaskAndParentIndexLockedV0(
+			path,
+			runRef,
+			taskRef,
+			reconciled,
+			!reflect.DeepEqual(existingTask, reconciled),
+		)
+	}
+	return store.writeWorkflowTaskAndParentIndexLockedV0(path, runRef, taskRef, task, true)
+}
+
+func (store *StoreV0) writeWorkflowTaskAndParentIndexLockedV0(
+	path string,
+	runRef string,
+	taskRef string,
+	task orquestacoreworkflow.WorkflowTaskV0,
+	writeTask bool,
+) error {
+	index, err := store.loadWorkflowTaskParentIndexV0(runRef)
+	if err != nil {
+		return err
+	}
+	next := workflowTaskParentIndexWithTaskV0(index, task)
+	if err := store.workflowTasks.validateParentIndexV0(next); err != nil {
+		return err
+	}
+	if !reflect.DeepEqual(index, next) {
+		if err := writeJSONAtomicV0(store.workflowTaskParentIndexPathV0(runRef), next); err != nil {
+			return err
 		}
+	}
+	if !writeTask {
 		return nil
 	}
 	return writeJSONAtomicV0(path, workflowTaskDocumentV0{
@@ -187,34 +209,13 @@ func (store *StoreV0) loadWorkflowTasksByParentLockedV0(
 	runRef string,
 	parentTaskRef string,
 ) ([]orquestacoreworkflow.WorkflowTaskV0, error) {
-	dir := filepath.Join(store.rootDir, workflowTasksDirV0, hashRefsV0(runRef))
-	entries, err := os.ReadDir(dir)
+	index, err := store.loadWorkflowTaskParentIndexV0(runRef)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
 		return nil, err
 	}
-	out := make([]orquestacoreworkflow.WorkflowTaskV0, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
-			continue
-		}
-		document, ok, err := readJSONFileV0[workflowTaskDocumentV0](filepath.Join(dir, entry.Name()))
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			continue
-		}
-		taskRef := normalizeRefV0(document.TaskRef)
-		task, err := validateWorkflowTaskDocumentV0(document, runRef, taskRef)
-		if err != nil {
-			return nil, err
-		}
-		if normalizeRefV0(task.ParentTaskRef) == parentTaskRef {
-			out = append(out, task)
-		}
+	out, err := store.loadWorkflowTasksLockedV0(runRef, index.Parents[parentTaskRef])
+	if err != nil {
+		return nil, err
 	}
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].TaskID < out[j].TaskID

@@ -1,6 +1,10 @@
 package orquestaobservability
 
-import "regexp"
+import (
+	"regexp"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
+)
 
 const (
 	OrquestaEventSchemaVersionV0 = "orquesta_event.v0"
@@ -26,10 +30,10 @@ const (
 
 	OrquestaEventPrivacyPublicOperationalV0   = "public_operational"
 	OrquestaEventPrivacyInternalOperationalV0 = "internal_operational"
-	OrquestaEventPrivacyRedactionNoneV0       = "none"
-	OrquestaEventPrivacyMetadataOnlyV0        = "metadata_only"
-	OrquestaEventPrivacySummarizedV0          = "summarized"
-	OrquestaEventPrivacyRedactedV0            = "redacted"
+	OrquestaEventPrivacyRedactionNoneV0       = orquestarails.OperationalPrivacyRedactionNoneV0
+	OrquestaEventPrivacyMetadataOnlyV0        = orquestarails.OperationalPrivacyRedactionMetadataOnlyV0
+	OrquestaEventPrivacySummarizedV0          = orquestarails.OperationalPrivacyRedactionSummarizedV0
+	OrquestaEventPrivacyRedactedV0            = orquestarails.OperationalPrivacyRedactionRedactedV0
 
 	ErrOrquestaEventInvalidoV0   = "orquesta_event_invalido"
 	ErrEventoDemasiadoExtensoV0  = "evento_demasiado_extenso"
@@ -65,25 +69,18 @@ const (
 )
 
 var (
-	eventTypePatternV0      = regexp.MustCompile(`^(core|runtime|capacity|review)\.[a-z0-9_]+(\.[a-z0-9_]+)?$`)
-	opaqueIDPatternV0       = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:-]*(-[A-Za-z0-9_.:-]+)*$`)
-	payloadKeyPatternV0     = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
-	producerTokenPatternV0  = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.:-]*$`)
-	subjectVersionPatternV0 = regexp.MustCompile(`^[A-Za-z0-9_.:-]+$`)
-	forbiddenPayloadKeysV0  = []string{
-		"secret", "secreto", "token", "password", "credential", "credencial", "api_key", "oauth",
-		"transcript", "prompt", "completion", "raw_text", "full_text", "sql", "dsn",
-		"connection", "conexion", "table", "tabla", "provider", "proveedor", "model_name",
-		"home_path", "home",
-	}
-	secretPayloadKeyPartsV0  = []string{"secret", "secreto", "token", "password", "credential", "credencial", "api_key", "oauth"}
+	eventTypePatternV0       = regexp.MustCompile(`^(core|runtime|capacity|review)\.[a-z0-9_]+(\.[a-z0-9_]+)?$`)
+	opaqueIDPatternV0        = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:-]*(-[A-Za-z0-9_.:-]+)*$`)
+	payloadKeyPatternV0      = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+	producerTokenPatternV0   = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.:-]*$`)
+	subjectVersionPatternV0  = regexp.MustCompile(`^[A-Za-z0-9_.:-]+$`)
 	allowedSourceAreasV0     = setV0(OrquestaEventSourceAreaCoreV0, OrquestaEventSourceAreaRuntimeV0, OrquestaEventSourceAreaCapacityV0, OrquestaEventSourceAreaReviewV0)
 	allowedSeveritiesV0      = setV0(OrquestaEventSeverityDebugV0, OrquestaEventSeverityInfoV0, OrquestaEventSeverityWarningV0, OrquestaEventSeverityErrorV0)
 	allowedOutcomesV0        = setV0(OrquestaEventOutcomeObservedV0, OrquestaEventOutcomeAcceptedV0, OrquestaEventOutcomeRejectedV0, OrquestaEventOutcomeRunningV0, OrquestaEventOutcomeCompletedV0, OrquestaEventOutcomeFailedV0, OrquestaEventOutcomeDegradedV0, OrquestaEventOutcomeSkippedV0)
 	allowedSubjectKindsV0    = setV0("project", "task", "agent_run", "capacity_decision", "review", "merge", "artifact", "system")
 	allowedProducerModulesV0 = setV0("orquesta-core", "orquesta-runtime", "orquesta-capacity", "orquesta-review")
 	allowedClassificationsV0 = setV0(OrquestaEventPrivacyPublicOperationalV0, OrquestaEventPrivacyInternalOperationalV0)
-	allowedRedactionLevelsV0 = setV0(OrquestaEventPrivacyRedactionNoneV0, OrquestaEventPrivacyMetadataOnlyV0, OrquestaEventPrivacySummarizedV0, OrquestaEventPrivacyRedactedV0)
+	allowedRedactionLevelsV0 = setV0(orquestarails.OperationalPrivacyRedactionLevelsV0()...)
 	allowedLinkRelsV0        = setV0("caused_by", "part_of", "related_to", "artifact", "run", "parent", "follow_up")
 	allowedLinkTargetsV0     = setV0("event", "project", "task", "agent_run", "capacity_decision", "review", "artifact")
 )

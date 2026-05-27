@@ -9,6 +9,7 @@ import (
 
 	orquestadirectoragentfilesource "orquesta/modulos/orquesta-director-agent-file-source"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
+	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 )
 
 func TestCodexReceiptDirectorDecisionFileDescriptorProviderV0MapeaDecisionJuntoAlACK(t *testing.T) {
@@ -186,6 +187,33 @@ func TestCodexReceiptDirectorDecisionFileDescriptorProviderV0RechazaFileNameInva
 	}
 	if store.Calls != 0 {
 		t.Fatalf("store calls=%d want 0", store.Calls)
+	}
+}
+
+func TestCodexReceiptDirectorDecisionFileDescriptorProviderV0RechazaSidecarGrande(t *testing.T) {
+	baseDir := t.TempDir()
+	ackPath := filepath.Join(baseDir, "run-ref-001", "agent-ref-001", "agent_ack.json")
+	writeCodexReceiptFileForTestV0(t, ackPath, []byte(`{"status":"completed"}`))
+	decisionPath := filepath.Join(filepath.Dir(ackPath), DefaultDirectorAgentDecisionFileNameV0)
+	large := strings.Repeat("x", int(orquestaruntimecodex.CodexControlFileMaxBytesV0)+1)
+	writeCodexReceiptFileForTestV0(t, decisionPath, []byte(large))
+	store := &directorDecisionReceiptStoreForTestV0{
+		Descriptors: []CodexReceiptDescriptorV0{{
+			DescriptorRef: "codex-receipt-ref-run-ref-001-agent-ref-001",
+			RunID:         "run-ref-001",
+			AgentRef:      "agent-ref-001",
+			AckPath:       ackPath,
+		}},
+	}
+	provider := CodexReceiptDirectorDecisionFileDescriptorProviderV0{Store: store}
+
+	_, err := provider.ListDirectorAgentDecisionFilesV0(
+		context.Background(),
+		orquestadirectoragentfilesource.DirectorAgentDecisionFileListRequestV0{RunID: "run-ref-001"},
+	)
+	if err == nil || !strings.Contains(err.Error(), "control_file_too_large") ||
+		strings.Contains(err.Error(), baseDir) {
+		t.Fatalf("err=%v", err)
 	}
 }
 

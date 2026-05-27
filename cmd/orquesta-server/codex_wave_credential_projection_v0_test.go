@@ -43,10 +43,7 @@ func TestCodexWaveCredentialProjectionV0DeclaraCategoriasSinValores(t *testing.T
 		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 
-	var summary codexWaveLaunchSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("json invalido: %v", err)
-	}
+	summary := mustReadCodexWaveCommandSummaryForTest(t, stdout.Bytes(), runtimeDir)
 	receipt := summary.Agents[0].CredentialProjection
 	if receipt == nil {
 		t.Fatalf("receipt ausente: %+v", summary.Agents[0])
@@ -99,10 +96,7 @@ func TestCodexWaveCredentialProjectionV0StrictBloqueaAuthConfigFaltante(t *testi
 	if exitCode != 1 {
 		t.Fatalf("exit=%d want 1 stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
-	var summary codexWaveLaunchSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("json invalido: %v", err)
-	}
+	summary := mustReadCodexWaveCommandSummaryForTest(t, stdout.Bytes(), filepath.Join(root, "runtime"))
 	if len(summary.Errors) != 1 || !strings.Contains(summary.Errors[0].Message, "credential_projection_missing_required") {
 		t.Fatalf("error publico inesperado: %+v", summary.Errors)
 	}

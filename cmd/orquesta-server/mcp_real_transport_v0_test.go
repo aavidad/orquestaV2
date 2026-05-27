@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -31,21 +32,6 @@ func TestMCPRealTransportSmokeOptInV0(t *testing.T) {
 		t.Fatalf("summary=%+v", summary)
 	}
 }
-
-func TestMCPRealSmokeCommandV0RequiereConfirmacion(t *testing.T) {
-	t.Setenv(mcpRealSmokeConfirmEnvV0, "")
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-
-	exitCode := mcpRealSmokeCommandV0(&stdout, &stderr)
-	if exitCode != 2 {
-		t.Fatalf("exit=%d stdout=%s stderr=%s", exitCode, stdout.String(), stderr.String())
-	}
-	if !strings.Contains(stderr.String(), mcpRealSmokeConfirmEnvV0) {
-		t.Fatalf("stderr=%s", stderr.String())
-	}
-}
-
 func TestMCPRealTransportV0ExponeJSONRPCListasCompactas(t *testing.T) {
 	handler, err := newMCPRealHTTPHandlerV0(orquestamcp.MCPTransportBindingsV0{})
 	if err != nil {
@@ -58,6 +44,12 @@ func TestMCPRealTransportV0ExponeJSONRPCListasCompactas(t *testing.T) {
 	callMCPJSONRPCTestV0(t, server.URL+mcpRealHTTPPathV0, "resources/list", map[string]any{}, &resources)
 	if len(resources.Resources) == 0 {
 		t.Fatalf("resources vacio")
+	}
+	for _, resource := range resources.Resources {
+		if !orquestamcp.ValidateMCPResourceDescriptorSourceV0(resource.DescriptorSource) {
+			t.Fatalf("resource %s sin descriptor_source valido: %+v", resource.Name, resource.DescriptorSource)
+		}
+		assertMCPRealDescriptorSourceNoSensitiveTestV0(t, resource.DescriptorSource)
 	}
 	var tools mcpToolListResultV0
 	callMCPJSONRPCTestV0(t, server.URL+mcpRealHTTPPathV0, "tools/list", map[string]any{}, &tools)
@@ -79,6 +71,38 @@ func TestMCPRealTransportV0ExponeJSONRPCListasCompactas(t *testing.T) {
 	required, _ := operatorTool.InputSchema["required"].([]any)
 	if len(required) == 0 {
 		t.Fatalf("operator status sin required schema: %+v", operatorTool.InputSchema)
+	}
+}
+
+func TestMCPRealTransportV0RechazaBodyTooLargeYTrailingV0(t *testing.T) {
+	handler, err := newMCPRealHTTPHandlerV0(orquestamcp.MCPTransportBindingsV0{})
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	for _, tc := range []struct {
+		name        string
+		contentType string
+		body        string
+		want        string
+	}{
+		{name: "content_type", contentType: "text/plain", body: `{"jsonrpc":"2.0","id":1,"method":"ping"}`, want: "request_content_type_invalido"},
+		{name: "trailing", body: `{"jsonrpc":"2.0","id":1,"method":"ping"} {}`, want: "request_body_trailing_data"},
+		{name: "too_large", body: `{"jsonrpc":"2.0","id":1,"method":"ping","params":{"x":"` + strings.Repeat("a", mcpJSONRPCMaxBodyBytesV0+1) + `"}}`, want: "request_body_too_large"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, mcpRealHTTPPathV0, strings.NewReader(tc.body))
+			if tc.contentType != "" {
+				req.Header.Set("Content-Type", tc.contentType)
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+			if rec.Header().Get("X-Orquesta-Control-Plane-Header-Policy") != "control-plane-mcp-v0" {
+				t.Fatalf("security headers=%v", rec.Header())
+			}
+			if !strings.Contains(rec.Body.String(), tc.want) {
+				t.Fatalf("body=%s want=%s", rec.Body.String(), tc.want)
+			}
+		})
 	}
 }
 
@@ -142,6 +166,81 @@ func TestMCPRealTransportV0ArgumentsStringInvalidoDevuelveInvalidParamsV0(t *tes
 		rpc.Error.Message != "mcp_invalid_params" ||
 		rpc.Error.Data["error_code"] != "mcp_tool_arguments_string_not_json_object" {
 		t.Fatalf("rpc error inesperado: %+v", rpc.Error)
+	}
+}
+
+func TestMCPRealTransportV0WorkspaceTimelineAceptaLast30mComoStringV0(t *testing.T) {
+	handler, err := newMCPRealHTTPHandlerV0(orquestamcp.MCPTransportBindingsV0{
+		WorkspaceTimeline: newServerWorkspaceTimelineSourceV0(orquestamcp.MCPTransportBindingsV0{
+			RunQueuePriority: fakeWorkspaceTimelineQueueV0{now: time.Now().UTC()},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	server := newLocalHTTPServerForTestV0(t, handler)
+	defer server.Close()
+
+	var result mcpToolCallResultV0
+	callMCPJSONRPCTestV0(t, server.URL+mcpRealHTTPPathV0, "tools/call", map[string]any{
+		"name": orquestamcp.MCPWorkspaceTimelineToolNameV0,
+		"arguments": map[string]any{
+			"schema_version": "workspace_timeline_query.v0",
+			"request_id":     "request-ref-mcp-workspace-timeline-last30m",
+			"correlation_id": "corr-mcp-workspace-timeline-last30m",
+			"scope":          "workspace",
+			"time_window":    "last_30m",
+			"page":           map[string]any{"limit": 10},
+			"sources":        []string{"run_queue"},
+		},
+	}, &result)
+	if result.IsError || len(result.Content) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	var toolResult orquestamcp.MCPWorkspaceTimelineToolResultV0
+	if err := json.Unmarshal([]byte(result.Content[0].Text), &toolResult); err != nil {
+		t.Fatalf("decode tool result: %v", err)
+	}
+	if toolResult.Estado != orquestamcp.MCPWorkspaceTimelineEstadoOKV0 ||
+		toolResult.Timeline == nil ||
+		toolResult.Timeline.TimeWindow.Preset != "last_30m" ||
+		toolResult.Timeline.Counters["tasks_closed"] != 1 ||
+		toolResult.Timeline.Counters["events"] != 2 {
+		t.Fatalf("toolResult=%+v", toolResult)
+	}
+}
+
+func TestMCPRealTransportV0WorkspaceTimelineEntradaInvalidaNoHandlerErrorV0(t *testing.T) {
+	handler, err := newMCPRealHTTPHandlerV0(orquestamcp.MCPTransportBindingsV0{
+		WorkspaceTimeline: newServerWorkspaceTimelineSourceV0(orquestamcp.MCPTransportBindingsV0{
+			RunQueuePriority: fakeWorkspaceTimelineQueueV0{now: time.Now().UTC()},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	server := newLocalHTTPServerForTestV0(t, handler)
+	defer server.Close()
+
+	rpc := callMCPJSONRPCRawTestV0(t, server.URL+mcpRealHTTPPathV0, "tools/call", map[string]any{
+		"name": orquestamcp.MCPWorkspaceTimelineToolNameV0,
+		"arguments": map[string]any{
+			"schema_version": "workspace_timeline_query.v0",
+			"request_id":     "request-ref-mcp-workspace-timeline-invalid",
+			"correlation_id": "corr-mcp-workspace-timeline-invalid",
+			"task_ref":       "/home/alberto/prompts/raw.txt",
+			"scope":          "workspace",
+			"time_window":    123,
+			"page":           map[string]any{"limit": 10},
+			"sources":        []string{"run_queue"},
+		},
+	})
+	encoded, _ := json.Marshal(rpc)
+	if rpc.Error == nil ||
+		rpc.Error.Message == "mcp_tool_handler_error" ||
+		rpc.Error.Data["error_code"] != "workspace_timeline_time_window_invalid" ||
+		strings.Contains(string(encoded), "/home/alberto") {
+		t.Fatalf("rpc=%s", string(encoded))
 	}
 }
 

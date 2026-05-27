@@ -73,6 +73,7 @@ func ValidateAutoprogrammingRequestV0(
 
 	groups, groupIssues := autoprogrammingRequestGroupsV0(request.Tasks)
 	issues = append(issues, groupIssues...)
+	issues = append(issues, autoprogrammingRequestLimitContractIssuesV0(request)...)
 	issues = append(issues, autoprogrammingRequestScopeIssuesV0(request, groups)...)
 
 	writeSet := compactStringsV0(request.WriteSet)

@@ -1,0 +1,66 @@
+{
+  "schema_version": "autoprogramming_request_fixture.v0",
+  "fixture_ref": "fixture-ref-autoprogramming-web-prepare-run-real-v0",
+  "source_surface": "web",
+  "transport": "http",
+  "endpoint": "/api/v0/autoprogramming/prepare-run",
+  "request_id": "request-ref-web-autoprogramming-prepare-run-real-001",
+  "correlation_id": "corr-web-autoprogramming-prepare-run-real-001",
+  "requested_by": "operator-ref-web",
+  "priority_score": 10,
+  "autoprogramming_request": {
+    "request_ref": "request-ref-web-autoprogramming-prepare-run-real-001",
+    "project_ref": "project-ref-orquesta",
+    "worktree_ref": "worktree-ref-orquesta-server-idle-self-improvement",
+    "worktree_isolated": true,
+    "branch_ref": "branch-ref-orquesta-server-idle-self-improvement",
+    "tasks": [
+      {
+        "task_ref": "task-ref-self-improvement-ab390583089c-web",
+        "area": "orquesta-web",
+        "title": "Autoprogramacion prepare-run web",
+        "objective": "Validar que la entrada web conserva refs opacas y contrato explicito.",
+        "context": [
+          "Solicitud capturada desde el cliente web de prepare-run.",
+          "No convertir worktree_ref ni branch_ref en rutas o nombres Git."
+        ],
+        "context_refs": [
+          "source_ref:fixture-ref-autoprogramming-web-prepare-run-real-v0",
+          "source_surface:web",
+          "source_transport:http",
+          "source_request_id:request-ref-web-autoprogramming-prepare-run-real-001",
+          "source_correlation_id:corr-web-autoprogramming-prepare-run-real-001",
+          "source_requested_by:operator-ref-web",
+          "source_task_ref:task-ref-self-improvement-ab390583089c",
+          "backlog_scan_epoch:backlog-scan-epoch-ca63ba789be2"
+        ],
+        "acceptance_criteria": [
+          "La request valida con worktree aislada.",
+          "El write-set queda acotado a orquesta-web.",
+          "Los tests obligatorios viajan como contrato externo."
+        ],
+        "required_tests": [
+          "go test -count=1 ./modulos/orquesta-web"
+        ],
+        "compact_rules": [
+          "final breve con cambios pruebas bloqueos",
+          "refs opacas sin rutas locales"
+        ]
+      }
+    ],
+    "write_set": [
+      "modulos/orquesta-web/autoprogramming_prepare_run_client_v0.go",
+      "modulos/orquesta-web/autoprogramming_prepare_run_client_v0_test.go"
+    ],
+    "required_tests": [
+      "go test -count=1 ./modulos/orquesta-web",
+      "go test -count=1 ./modulos/orquesta-autoprogramming"
+    ],
+    "max_task_refs": 1,
+    "max_areas": 1,
+    "max_write_set_entries": 2,
+    "max_delegation_depth": 1,
+    "max_subagents_per_agent": 4,
+    "max_recursive_agents": 8
+  }
+}

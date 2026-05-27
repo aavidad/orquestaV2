@@ -1,6 +1,7 @@
 package orquestacli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -49,12 +50,10 @@ func NewBootstrapAppSpecCliClientV0(serverURL string, timeout time.Duration) (*B
 		return nil, err
 	}
 	return &BootstrapAppSpecCliClientV0{
-		BaseURL:  config.BaseURL,
-		Endpoint: config.Endpoint,
-		Timeout:  config.Timeout,
-		HTTPClient: &http.Client{
-			Timeout: config.Timeout,
-		},
+		BaseURL:    config.BaseURL,
+		Endpoint:   config.Endpoint,
+		Timeout:    config.Timeout,
+		HTTPClient: newCLILoopbackHTTPClientV0(config.Timeout),
 	}, nil
 }
 
@@ -80,19 +79,23 @@ func (client *BootstrapAppSpecCliClientV0) BootstrapProyectoDesdeAppSpec(ctx con
 
 func decodeBootstrapAppSpecResponseV0(resp *http.Response, inv CliInvocationContextV0, start time.Time) CliOutputEnvelopeV0 {
 	if resp.StatusCode == http.StatusBadRequest {
-		errs, ok := decodeBootstrapAppSpecIssuesV0(resp.Body)
+		raw, detail := readCLIRESTResponseBodyForCommandV0(resp, inv.Command)
+		if detail != "" {
+			return cliSingleBootstrapAppSpecErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", detail, resp.StatusCode, false, start)
+		}
+		errs, ok := decodeBootstrapAppSpecIssuesV0(bytes.NewReader(raw))
 		if !ok || len(errs) == 0 {
 			return cliSingleBootstrapAppSpecErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "errores", "respuesta_400_sin_errores_publicos", resp.StatusCode, false, start)
 		}
 		return NewCliOutputErrorEnvelopeV0(inv, BootstrapAppSpecCliContractV0, BootstrapAppSpecCliContractVersionV0, errs, cliMetaV0(start, resp.StatusCode, false))
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode > 299 {
-		return cliSingleBootstrapAppSpecErrorEnvelopeV0(inv, CliErrErrorTransporteV0, "status_code", "status_no_2xx", resp.StatusCode, retryableStatusV0(resp.StatusCode), start)
+		return cliSingleBootstrapAppSpecErrorEnvelopeV0(inv, CliErrErrorTransporteV0, "status_code", cliRESTNo2xxDetailForCommandV0(resp, inv.Command), resp.StatusCode, retryableStatusV0(resp.StatusCode), start)
 	}
 
 	var result orquestadirector.BootstrapProyectoDesdeAppSpecResultV0
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return cliSingleBootstrapAppSpecErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", "json_invalido", resp.StatusCode, false, start)
+	if detail := decodeCLIRESTJSONBodyForCommandV0(resp, inv.Command, &result); detail != "" {
+		return cliSingleBootstrapAppSpecErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", detail, resp.StatusCode, false, start)
 	}
 	if !validBootstrapAppSpecResultV0(result) {
 		return cliSingleBootstrapAppSpecErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "data", "bootstrap_result_invalido", resp.StatusCode, false, start)

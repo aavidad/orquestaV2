@@ -10,6 +10,7 @@ import (
 	"time"
 
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	publicidentity "orquesta/modulos/orquesta-server/publicidentity"
 )
 
 type RunQueueClientV0 interface {
@@ -34,12 +35,10 @@ func (err WebRunQueueClientErrorV0) Error() string {
 
 func NewRESTRunQueueClientV0(baseURL string, timeout time.Duration) *RESTRunQueueClientV0 {
 	return &RESTRunQueueClientV0{
-		BaseURL:  strings.TrimRight(baseURL, "/"),
-		Endpoint: WebRunQueueInboundEndpointV0,
-		Timeout:  timeout,
-		HTTPClient: &http.Client{
-			Timeout: timeout,
-		},
+		BaseURL:    normalizeWebRESTBaseURLStringV0(baseURL),
+		Endpoint:   WebRunQueueInboundEndpointV0,
+		Timeout:    timeout,
+		HTTPClient: newWebLoopbackHTTPClientV0(timeout),
 	}
 }
 
@@ -67,6 +66,9 @@ func (client *RESTRunQueueClientV0) ConsultarRunQueue(
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set(AppChangeCorrelationV0, query.CorrelationID)
+	if strings.TrimSpace(query.IdempotencyKey) != "" {
+		req.Header.Set(AppChangeIdempotencyKeyV0, strings.TrimSpace(query.IdempotencyKey))
+	}
 
 	resp, err := client.httpClient().Do(req)
 	if err != nil {
@@ -82,6 +84,15 @@ func normalizeRunQueueQueryV0(query WebRunQueueQueryV0) WebRunQueueQueryV0 {
 		query.RequestID = newWebRequestIDV0()
 	}
 	query.CorrelationID = firstDirectorStatsNonEmptyV0(query.CorrelationID, query.RequestID)
+	mutating := strings.ToLower(trimV0(query.Action)) == WebRunQueueActionSetV0
+	identity := publicidentity.NormalizePublicIdentityV0(publicidentity.PublicIdentityInputV0{
+		RequestID:      query.RequestID,
+		CorrelationID:  query.CorrelationID,
+		IdempotencyKey: query.IdempotencyKey,
+		Mutating:       mutating,
+	})
+	query.CorrelationID = identity.CorrelationID
+	query.IdempotencyKey = identity.IdempotencyKey
 	query.Locale = normalizeDirectorStatsLocaleV0(query.Locale)
 	query.Action = strings.ToLower(trimV0(query.Action))
 	if query.Action == "" {
@@ -94,7 +105,6 @@ func normalizeRunQueueQueryV0(query WebRunQueueQueryV0) WebRunQueueQueryV0 {
 	query.Status = trimV0(query.Status)
 	query.RequestedBy = trimV0(query.RequestedBy)
 	query.Reason = trimV0(query.Reason)
-	query.IdempotencyKey = trimV0(query.IdempotencyKey)
 	query.OccurredAt = trimV0(query.OccurredAt)
 	return query
 }
@@ -123,10 +133,11 @@ func decodeRunQueueResponseV0(
 	query WebRunQueueQueryV0,
 ) (WebRunQueueViewModelV0, error) {
 	if (resp.StatusCode < 200 || resp.StatusCode > 299) && resp.StatusCode != http.StatusBadRequest {
+		discardWebHTTPResponseBodyV0(resp)
 		return WebRunQueueViewModelV0{}, runQueueClientErrorV0(WebRunQueueErrTransporteV0, resp.StatusCode)
 	}
 	var result orquestamcp.MCPRunQueuePriorityToolResultV0
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if !decodeWebHTTPJSONResponseV0(resp, &result) {
 		return WebRunQueueViewModelV0{}, runQueueClientErrorV0(WebRunQueueErrRespuestaInvalidaV0, resp.StatusCode)
 	}
 	if result.Estado == "" {
@@ -139,10 +150,7 @@ func decodeRunQueueResponseV0(
 }
 
 func (client *RESTRunQueueClientV0) httpClient() *http.Client {
-	if client.HTTPClient != nil {
-		return client.HTTPClient
-	}
-	return &http.Client{Timeout: client.Timeout}
+	return webHTTPClientWithRedirectPolicyV0(client.HTTPClient, client.Timeout, client.BaseURL)
 }
 
 func (client *RESTRunQueueClientV0) url() string {
@@ -150,7 +158,7 @@ func (client *RESTRunQueueClientV0) url() string {
 	if endpoint == "" {
 		endpoint = WebRunQueueInboundEndpointV0
 	}
-	return strings.TrimRight(client.BaseURL, "/") + "/" + strings.TrimLeft(endpoint, "/")
+	return webRESTEndpointURLV0(client.BaseURL, endpoint, WebRunQueueInboundEndpointV0)
 }
 
 func runQueueClientErrorV0(code string, statusCode int) WebRunQueueClientErrorV0 {

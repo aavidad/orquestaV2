@@ -84,6 +84,10 @@ scripts/inicio_agente.sh <agente>
 ```
 
 Este script no debe considerarse la vía principal de operación de Orquesta. Su papel es de compatibilidad, recuperación y operación manual controlada.
+Contrato T121: estos wrappers son recuperacion/operacion asistida. No pueden
+arrancar flotas por seed, mutar DB/stores/worktrees ni lanzar runtime directo
+por fuera del servidor residente. Si el servidor no responde con readiness
+versionada, deben bloquear con un error publico recuperable.
 
 El resto de scripts del directorio `scripts/` cumplen funciones de:
 
@@ -97,10 +101,11 @@ Hace en una sola llamada:
 
 1. `orquesta sesion inicio <agente>`
 2. `orquesta tarea listar <agente>`
-3. inicia una tarea si:
-   - se indica `--tarea <id>`, o
-   - existe una única tarea `asignada`, o
-   - detecta una única tarea ya `en_progreso`
+3. inicia una tarea solo si se indica `--tarea <id>`; si no, bloquea el
+   autoarranque o exige `--no-auto`
+
+No debe autoasignar una tarea por heuristica local ni inferir estado desde DB,
+tmux, Terminator, ficheros de runtime o rutas privadas.
 
 Ejemplos:
 
@@ -128,6 +133,23 @@ agente|rol|ruta_proyecto|titulo_tarea|prioridad|modulo|nota_asignacion|conector|
 6. Ejecutar el runtime.
 7. Al salir, guardar continuidad y cerrar sesion.
 
+## Correlacion operativa
+
+La continuidad se correlaciona por refs opacas:
+
+- `agent_ref` o nombre publico de agente para iniciar sesion.
+- `task_ref` y `run_ref` si la consola se abre para una tarea viva.
+- `external_session_id` solo como identificador de sesion del runtime concreto,
+  registrado por el adaptador correspondiente.
+- `worktree_ref` como referencia opaca del espacio de trabajo; no se documenta
+  ni se valida una ruta local como contrato.
+- cierre de sesion por CLI/API del servidor, con resumen de continuidad
+  redactado y evidencia compacta.
+
+Terminator, tmux u otra terminal grafica solo son contenedores de consola. No
+son fuente de verdad del nucleo ni autorizan saltarse `readiness`, run/task refs
+o shutdown/checkpoint gobernados.
+
 ## Limitaciones conocidas
 
 - el arranque de Terminator depende del entorno grafico real del usuario
@@ -153,4 +175,6 @@ Debe usarse solo cuando:
 - no hay locks, worktrees ni runtime vivo asociados al origen
 - interesa preservar trazabilidad histórica sin tocar la BD a mano
 
-Mientras eso no exista completo, los wrappers manuales siguen siendo una capa operativa valida.
+Mientras eso no exista completo, los wrappers manuales siguen siendo una capa
+operativa valida solo para recuperacion asistida y siempre subordinada al
+servidor residente.

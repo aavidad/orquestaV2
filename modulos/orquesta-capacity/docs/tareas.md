@@ -11,7 +11,7 @@ Write-set: docs/tareas.md, docs/decisiones.md, docs/contratos.md, docs/pruebas.m
 Simbolo foco: CapacityDecisionV0
 Contrato: CapacityDecision v0
 Validacion: no hardcodea proveedores ni plataformas historicas; permite remoto/local y escalado por evidencia.
-Bloqueos: DBV1-000 completada en docs/reinicio_orquesta_v2/inventario_db_v1.md.
+Bloqueos: ninguno vivo; el inventario forense de DB v1 quedo como contexto historico y no es prerequisito ejecutable de automejora.
 Estado: completada el 2026-05-04.
 Resultado: CapacityDecisionV0 documentado con PoolCapacidadV0, ModelCapacityRefV0, AgentHomeV0 preliminar, QuotaSnapshotV0 y ModelEvidenceScoreV0. Incluye invariantes, errores, pruebas previstas y CONSULTA AL DIRECTOR para promocion global.
 ```

@@ -85,10 +85,7 @@ printf '/home/alberto/privado\n'
 		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 
-	var summary codexWaveLaunchSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
-	}
+	summary := mustReadCodexWaveCommandSummaryForTest(t, stdout.Bytes(), runtimeDir)
 	if summary.SchemaVersion != codexWaveSummarySchemaVersionV0 {
 		t.Fatalf("schema=%q", summary.SchemaVersion)
 	}
@@ -210,10 +207,7 @@ func TestCodexLaunchWaveCommandV0BloqueaLaunchRealNoGestionadoPorDefecto(t *test
 	if exitCode != 1 {
 		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
-	var summary codexWaveLaunchSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("json invalido: %v\n%s", err, stdout.String())
-	}
+	summary := mustReadCodexWaveCommandSummaryForTest(t, stdout.Bytes(), runtimeDir)
 	if len(summary.Errors) != 1 || summary.Errors[0].Code != "unmanaged_launch_blocked" {
 		t.Fatalf("error esperado ausente: %+v", summary.Errors)
 	}
@@ -241,11 +235,7 @@ func waitForCodexWaveStatusStoppedV0(t *testing.T, runtimeDir string) codexWaveL
 			time.Sleep(10 * time.Millisecond)
 			continue
 		}
-		if err := json.Unmarshal(statusOut.Bytes(), &last); err != nil {
-			lastErr = err.Error()
-			time.Sleep(10 * time.Millisecond)
-			continue
-		}
+		last = mustReadCodexWaveCommandSummaryForTest(t, statusOut.Bytes(), runtimeDir)
 		allStopped := len(last.Agents) > 0
 		for _, agent := range last.Agents {
 			if agent.Status != "stopped" || agent.StdoutBytes == 0 || agent.LastMessageBytes == 0 {
@@ -294,10 +284,7 @@ func TestCodexLaunchWaveCommandV0DryRunNoExigeCodexReal(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
-	var summary codexWaveLaunchSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("json invalido: %v", err)
-	}
+	summary := mustReadCodexWaveCommandSummaryForTest(t, stdout.Bytes(), filepath.Join(root, "runtime", "wave-dry-run"))
 	if !summary.DryRun || len(summary.Agents) != 1 || summary.Agents[0].Status != "dry_run" {
 		t.Fatalf("dry-run inesperado: %+v", summary)
 	}

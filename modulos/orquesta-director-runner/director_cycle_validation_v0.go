@@ -7,6 +7,7 @@ import (
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectorscheduler "orquesta/modulos/orquesta-director-scheduler"
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 const (
@@ -40,7 +41,7 @@ func validateDirectorCycleInputV0(ctx context.Context, input DirectorCycleInputV
 	if input.MaxOutbox < 1 || input.MaxOutbox > DirectorCycleMaxOutboxV0 {
 		return directorCycleErrorV0(input, ErrDirectorRunnerCycleInvalidoV0, "max_outbox fuera de rango", "max_outbox", false, nil)
 	}
-	if refsInvalidDirectorCycleV0(input.EvidenceRefs) {
+	if refsInvalidDirectorCycleV0(input.EvidenceRefs) && !orquestarails.SecurityModeProgrammingEnabledV0() {
 		return directorCycleErrorV0(input, ErrDirectorRunnerCycleInvalidoV0, "refs invalidas", "evidence_refs", false, nil)
 	}
 	if err := orquestadirectorscheduler.ValidateDirectorSchedulerTickInputV0(input.SchedulerInput); err != nil {
@@ -62,7 +63,7 @@ func validateDirectorCyclePlanV0(
 	if !directorCycleSchedulerStatusKnownV0(plan.Status) {
 		return directorCycleErrorV0(input, ErrDirectorRunnerCycleInvalidoV0, "status scheduler no soportado", "plan.status", false, nil)
 	}
-	if len(plan.Commands) > input.MaxCommands {
+	if len(plan.Commands) > input.MaxCommands && !orquestarails.SecurityModeProgrammingEnabledV0() {
 		return directorCycleErrorV0(input, ErrDirectorRunnerCycleInvalidoV0, "demasiados comandos", "plan.commands", false, nil)
 	}
 	return validateDirectorCyclePlanCommandsV0(input, plan)

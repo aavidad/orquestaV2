@@ -4,6 +4,8 @@ import "context"
 
 const RunControlSchemaVersionV0 = "run_control.v0"
 
+const RunControlEvidenceAutoResumeAllowedV0 = "evidence-ref-run-control-auto-resume-allowed"
+
 type RunControlStatusV0 string
 
 const (

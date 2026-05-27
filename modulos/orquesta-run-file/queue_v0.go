@@ -139,11 +139,15 @@ func applyRunFilePriorityCommandV0(
 	if command.AppRef != "" {
 		candidate.AppRef = command.AppRef
 	}
+	if command.FairnessGroupRef != "" {
+		candidate.FairnessGroupRef = command.FairnessGroupRef
+	}
 	candidate.PriorityScore = command.PriorityScore
 	if !command.UpdatedAt.IsZero() {
 		candidate.UpdatedAt = command.UpdatedAt
 	}
 	candidate.EvidenceRefs = append([]string(nil), command.EvidenceRefs...)
+	candidate.WorksetClaims = cloneRunFileWorksetClaimsV0(command.WorksetClaims)
 	entry.candidate = candidate
 	return entry
 }
@@ -159,6 +163,9 @@ func loadRunFileQueueV0(path string) (map[string]runFileQueueEntryV0, error) {
 	}
 	if snapshot.SchemaVersion != runFileQueueSchemaVersionV0 {
 		return nil, fmt.Errorf("orquesta_run_file: queue_schema_invalid")
+	}
+	if len(snapshot.Records) > runFileSnapshotMaxRecordsV0 {
+		return nil, fmt.Errorf("orquesta_run_file: queue_records_limit_exceeded")
 	}
 	records := map[string]runFileQueueEntryV0{}
 	for _, record := range snapshot.Records {
@@ -235,5 +242,23 @@ func cloneRunFileCandidateV0(
 	candidate orquestarunqueue.RunSchedulingCandidateV0,
 ) orquestarunqueue.RunSchedulingCandidateV0 {
 	candidate.EvidenceRefs = append([]string(nil), candidate.EvidenceRefs...)
+	candidate.WorksetClaims = cloneRunFileWorksetClaimsV0(candidate.WorksetClaims)
 	return candidate
+}
+
+func cloneRunFileWorksetClaimsV0(
+	claims []orquestarunqueue.WorksetClaimV0,
+) []orquestarunqueue.WorksetClaimV0 {
+	out := make([]orquestarunqueue.WorksetClaimV0, 0, len(claims))
+	for _, claim := range claims {
+		claim.ReadSet = append([]orquestarunqueue.ScopeRefV0(nil), claim.ReadSet...)
+		claim.WriteSet = append([]orquestarunqueue.ScopeRefV0(nil), claim.WriteSet...)
+		claim.DependsOn = append([]string(nil), claim.DependsOn...)
+		claim.EvidenceRefs = append([]string(nil), claim.EvidenceRefs...)
+		out = append(out, claim)
+	}
+	if out == nil {
+		return []orquestarunqueue.WorksetClaimV0{}
+	}
+	return out
 }

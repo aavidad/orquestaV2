@@ -2,6 +2,8 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/smoke_common.sh
+source "$repo_root/scripts/lib/smoke_common.sh"
 
 MODE="${ORQUESTA_OPES_PLAN_TEMARIO_SMOKE_MODE:-dry-run-once}"
 SMOKE_ID="${SMOKE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
@@ -14,40 +16,26 @@ FAKE_SERVER="${ORQUESTA_OPES_PLAN_TEMARIO_FAKE_SERVER:-0}"
 FAKE_DIR=""
 FAKE_PID=""
 
-require_tool() {
-  if ! command -v "$1" >/dev/null 2>&1; then
-    echo "falta herramienta requerida: $1" >&2
-    exit 2
-  fi
-}
-
-is_local_url() {
-  case "$1" in
-    http://127.0.0.1|http://127.0.0.1:*|http://localhost|http://localhost:*|http://[::1]|http://[::1]:*)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-
 cleanup() {
   if [[ -n "$FAKE_PID" ]]; then
     kill "$FAKE_PID" >/dev/null 2>&1 || true
     wait "$FAKE_PID" >/dev/null 2>&1 || true
   fi
+  if [[ -n "$FAKE_DIR" && -d "$FAKE_DIR" ]]; then
+    smoke_temp_root_cleanup "$FAKE_DIR" "${ORQUESTA_KEEP_SMOKE_DIR:-0}"
+  fi
 }
 trap cleanup EXIT
 
 start_fake_opes() {
-  require_tool python3
+  smoke_require_tool python3
   if [[ "$MODE" != "dry-run-once" ]]; then
     echo "fake OPES solo soporta dry-run-once" >&2
     exit 2
   fi
   JOB_REF="${JOB_REF:-job-ref-fake-plan-temario-operadores-001}"
   FAKE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/opes-plan-temario-fake.XXXXXX")"
+  smoke_temp_root_prepare "$FAKE_DIR" "generated"
   local server_py="$FAKE_DIR/fake_opes.py"
   local url_file="$FAKE_DIR/url.txt"
   cat >"$server_py" <<'PY'
@@ -134,7 +122,7 @@ require_plan_temario_guard() {
     echo "falta ORQUESTA_OPES_BASE_URL u OPES_BASE_URL apuntando a OPES temporal" >&2
     exit 2
   fi
-  if ! is_local_url "$OPES_BASE_URL_EFFECTIVE" &&
+  if ! smoke_is_local_url "$OPES_BASE_URL_EFFECTIVE" &&
     [[ "${ORQUESTA_OPES_ALLOW_NONLOCAL_TEMPORAL:-0}" != "1" ]]; then
     echo "OPES_BASE_URL no parece local: $OPES_BASE_URL_EFFECTIVE" >&2
     echo "si es temporal no local, exporta ORQUESTA_OPES_ALLOW_NONLOCAL_TEMPORAL=1" >&2
@@ -200,8 +188,7 @@ run_execute_drain_once() {
 }
 
 main() {
-  require_tool go
-  require_tool tee
+  smoke_require_tools go tee
   require_plan_temario_guard
   write_metadata
   cd "$repo_root"

@@ -16,6 +16,7 @@ func capacityDispatcherV0(config ConfigV0) orquestacionnucleoapp.OutboxDispatche
 		Executor: orquestacionnucleoapp.CapacityDecisionExecutorV0{
 			RunStore:        config.Stores.RunStore,
 			EventSink:       config.Stores.EventSink,
+			Policy:          capacityDecisionPolicyV0(config.Capacity),
 			Tier:            config.Capacity.Tier,
 			ReasoningEffort: config.Capacity.ReasoningEffort,
 			OccurredAt:      config.Capacity.OccurredAt,
@@ -135,7 +136,8 @@ func codexStackWorktreeBaselineRecorderV0(
 		return nil
 	}
 	return orquestaruntimecodexdelivery.CodexReceiptWorktreeBaselineRecorderV0{
-		SnapshotStore:  config.ReviewGate.LineBudgetSnapshotStore,
-		IgnorePrefixes: codexStackWorktreeIgnorePrefixesV0(),
+		SnapshotStore:      config.ReviewGate.LineBudgetSnapshotStore,
+		IgnorePrefixes:     codexStackWorktreeIgnorePrefixesV0(),
+		SnapshotReadBudget: config.ReviewGate.SnapshotReadBudget,
 	}
 }

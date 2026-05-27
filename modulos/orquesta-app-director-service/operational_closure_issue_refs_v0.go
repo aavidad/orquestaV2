@@ -21,6 +21,22 @@ func appDirectorClosureOnlyOpenTasksIssuesV0(issues []orquestacionnucleoapp.Erro
 	return true
 }
 
+func appDirectorClosureClosedTaskProgressV0(
+	before orquestacoreworkflow.OrchestrationRunV0,
+	after orquestacoreworkflow.OrchestrationRunV0,
+) bool {
+	beforeClosed := map[string]bool{}
+	for _, taskRef := range compactServiceRefsV0(before.ClosedTasks) {
+		beforeClosed[taskRef] = true
+	}
+	for _, taskRef := range compactServiceRefsV0(after.ClosedTasks) {
+		if !beforeClosed[taskRef] {
+			return true
+		}
+	}
+	return false
+}
+
 func operationalDirectorPlanStateReplanClosureIssuesV0(
 	ctx context.Context,
 	request ContinueAppDirectorRequestV0,

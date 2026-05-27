@@ -12,6 +12,9 @@ con Codex y OPES son composiciones consumidoras, no la definicion del nucleo.
   nuevo nucleo.
 - `docs/principio_orquesta_piensa_director.md`: principio de reparto entre
   Orquesta y apps de dominio.
+- `docs/uso_actual_app_orquesta.md`: uso operativo server-first de la
+  composicion actual, rutas `/api/v0/*`, web/CLI como clientes finos y
+  cuarentena de aliases legacy.
 - `docs/matriz_pruebas_reales_y_smoke_2026-05-17.md`: matriz de pruebas reales,
   opt-in y offline.
 
@@ -23,6 +26,15 @@ autoprogramacion enumera trabajo ejecutable y no debe relanzar
 `CODEX-WAVE-REAL` ni `CODEX-RECURSION-REAL` salvo regresion demostrada. Los
 documentos historicos deben citar una fuente vigente antes de usarse para
 planificar.
+
+El uso operativo vigente es server-first: `cmd/orquesta-server` expone rutas
+publicas versionadas y readiness en `/api/v0/server/readiness`; web, CLI y MCP
+son adaptadores finos sobre esas superficies. Las rutas `/api/*` sin version y
+los manuales V1 quedan como compatibilidad historica salvo que una fuente
+vigente los nombre explicitamente.
+Si una guia antigua contradice `docs/uso_actual_app_orquesta.md`, no debe abrir
+tareas de codigo ni pruebas contra rutas legacy sin pasar antes por una fuente
+vigente.
 
 ## Validacion rapida
 

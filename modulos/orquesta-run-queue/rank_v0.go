@@ -13,9 +13,14 @@ func RankRunCandidatesV0(candidates []RunSchedulingCandidateV0, policy RunQueueR
 			continue
 		}
 		copied := cloneRunSchedulingCandidateV0(candidate)
+		fairness := evaluateCandidateFairnessV0(copied, policy)
+		copied.FairnessGroupRef = fairness.groupRef
 		ranked = append(ranked, RankedRunCandidateV0{
 			RunSchedulingCandidateV0: copied,
 			AgingBoost:               agingBoostV0(copied, policy),
+			FairnessBoost:            fairness.boost,
+			FairnessPaused:           fairness.paused,
+			FairnessReasonCodes:      fairness.reasonCodes,
 		})
 	}
 
@@ -25,12 +30,21 @@ func RankRunCandidatesV0(candidates []RunSchedulingCandidateV0, policy RunQueueR
 		if left.PriorityScore != right.PriorityScore {
 			return left.PriorityScore > right.PriorityScore
 		}
+		if left.FairnessPaused != right.FairnessPaused {
+			return !left.FairnessPaused
+		}
+		if left.FairnessBoost != right.FairnessBoost {
+			return left.FairnessBoost > right.FairnessBoost
+		}
 		if left.AgingBoost != right.AgingBoost {
 			return left.AgingBoost > right.AgingBoost
 		}
 		return updatedAtBeforeV0(left.UpdatedAt, right.UpdatedAt, policy.MissingUpdatedAtLast)
 	})
 
+	ranked = filterRankedRunCandidatesByWorksetV0(ranked, RunQueueWorksetPolicyV0{
+		RequireClaims: policy.RequireWorksetClaims,
+	})
 	for index := range ranked {
 		ranked[index].Rank = index + 1
 	}
@@ -90,5 +104,6 @@ func cloneRunSchedulingCandidateV0(candidate RunSchedulingCandidateV0) RunSchedu
 	if candidate.EvidenceRefs != nil {
 		candidate.EvidenceRefs = append([]string(nil), candidate.EvidenceRefs...)
 	}
+	candidate.WorksetClaims = cloneRunQueueWorksetClaimsV0(candidate.WorksetClaims)
 	return candidate
 }

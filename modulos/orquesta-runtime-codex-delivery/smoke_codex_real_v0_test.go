@@ -273,28 +273,3 @@ func codexRealSmokeErrorDetailsV0(err error) string {
 	}
 	return err.Error()
 }
-
-func codexRealSmokeDiagnosticsV0(runtimeDir string) string {
-	parts := []string{}
-	for _, name := range []string{
-		orquestaruntimecodex.CodexAgentAckFileNameV0,
-		orquestaruntimecodex.CodexLastMessageFileNameV0,
-		orquestaruntimecodex.CodexStdoutFileNameV0,
-		orquestaruntimecodex.CodexStderrFileNameV0,
-	} {
-		data, err := os.ReadFile(filepath.Join(runtimeDir, name))
-		if err != nil {
-			continue
-		}
-		parts = append(parts, name+": "+codexRealSmokeTruncateV0(string(data)))
-	}
-	return strings.Join(parts, "\n")
-}
-
-func codexRealSmokeTruncateV0(value string) string {
-	value = strings.TrimSpace(value)
-	if len(value) <= 1600 {
-		return value
-	}
-	return value[:1600] + "\n[truncated]"
-}

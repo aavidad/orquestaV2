@@ -1,7 +1,6 @@
 package orquestaruntimecodexdelivery
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -63,6 +62,6 @@ func codexProgressDescriptorHasVisibleSignalV0(
 }
 
 func codexProgressFileHasVisibleSignalV0(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir() && info.Size() > 0
+	info, ok := codexProgressSafeLogInfoV0(path)
+	return ok && info.Size() > 0
 }

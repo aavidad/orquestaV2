@@ -12,12 +12,6 @@ import (
 	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
-var forbiddenOutboxDispatchCycleTermsV0 = []string{
-	"sqlite", "postgres", "mysql", "mongo", "database", "db", "dsn", "sql",
-	"provider", "proveedor", "home", "oauth", "transcript", "prompt",
-	"secret", "secreto", "token", "password", "credential", "credencial",
-}
-
 func normalizeOutboxDispatchCycleInputV0(input OutboxDispatchCycleInputV0) OutboxDispatchCycleInputV0 {
 	input.RunID = strings.TrimSpace(input.RunID)
 	input.TargetPort = strings.TrimSpace(input.TargetPort)
@@ -106,8 +100,11 @@ func compactOutboxDispatchErrorCodeV0(err error) string {
 	if code == "" {
 		code = ErrOutboxDispatchFailedV0
 	}
+	if outboxDispatchCycleHasSensitiveCodeV0(code) {
+		return ErrOutboxDispatchFailedV0
+	}
 	code = compactOutboxDispatchCycleCodeV0(code)
-	if code == "" || outboxDispatchCycleHasForbiddenTermV0(code) {
+	if code == "" {
 		return ErrOutboxDispatchFailedV0
 	}
 	return code
@@ -226,15 +223,10 @@ func indexedCycleFieldV0(index int, field string) string {
 	return "messages." + strconv.Itoa(index) + "." + field
 }
 
-func outboxDispatchCycleHasForbiddenTermV0(value string) bool {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return false
-	}
-	normalized := strings.ToLower(strings.TrimSpace(value))
-	for _, term := range forbiddenOutboxDispatchCycleTermsV0 {
-		if strings.Contains(normalized, term) {
-			return true
-		}
-	}
-	return false
+func outboxDispatchCycleHasSensitiveCodeV0(value string) bool {
+	return orquestarails.TextContainsOperationalRawDetailForFieldV0(
+		"director_outbox_dispatch_cycle",
+		"error_code",
+		value,
+	)
 }

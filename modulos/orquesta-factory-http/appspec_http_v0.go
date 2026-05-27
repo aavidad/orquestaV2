@@ -2,6 +2,7 @@ package orquestafactoryhttp
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -11,6 +12,8 @@ import (
 )
 
 const AppSpecHTTPPathV0 = "/api/v0/apps/spec"
+
+const appSpecHTTPJSONMaxBytesV0 int64 = 256 << 10
 
 type AppSpecHTTPClockV0 func() time.Time
 
@@ -38,29 +41,24 @@ func (h appSpecHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}, correlationIDFromHeaderV0(r))
 		return
 	}
+	if handleAppSpecHTTPOptionsV0(w, r, http.MethodPost) {
+		return
+	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
+		setAppSpecHTTPAllowV0(w, http.MethodPost)
 		writeAppSpecHTTPErrorsV0(w, http.StatusMethodNotAllowed, []orquestafactory.ValidationIssue{
 			issue(orquestafactory.ErrAppSpecInvalida, "method", "metodo no permitido"),
 		}, correlationIDFromHeaderV0(r))
 		return
 	}
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		writeAppSpecHTTPErrorsV0(w, http.StatusBadRequest, []orquestafactory.ValidationIssue{
-			issue(orquestafactory.ErrAppSpecInvalida, "body", "request body invalido"),
-		}, correlationIDFromHeaderV0(r))
-		return
-	}
-
-	req, issues := orquestafactory.DecodeAppSpecRequestV0(body)
-	correlationID := correlationIDV0(r, req)
+	req, issues := decodeAppSpecHTTPJSONRequestV0(w, r)
 	if len(issues) > 0 {
-		writeAppSpecHTTPErrorsV0(w, http.StatusBadRequest, issues, correlationID)
+		writeAppSpecHTTPErrorsV0(w, http.StatusBadRequest, issues, correlationIDV0(r, req))
 		return
 	}
 
+	correlationID := correlationIDV0(r, req)
 	spec, issues := orquestafactory.SolicitarNuevaAppV0(req, h.now())
 	if len(issues) > 0 {
 		writeAppSpecHTTPErrorsV0(w, http.StatusBadRequest, issues, correlationID)
@@ -76,6 +74,44 @@ func (h appSpecHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		AppSpec: spec,
 		Backlog: backlog,
 	}, correlationID)
+}
+
+func decodeAppSpecHTTPJSONRequestV0(w http.ResponseWriter, r *http.Request) (orquestafactory.AppSpecRequestV0, []orquestafactory.ValidationIssue) {
+	var req orquestafactory.AppSpecRequestV0
+	if !appSpecHTTPContentTypeAllowsJSONV0(r.Header.Get("Content-Type")) {
+		return req, []orquestafactory.ValidationIssue{
+			issue(orquestafactory.ErrAppSpecInvalida, "content_type", "content_type_no_soportado"),
+		}
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, appSpecHTTPJSONMaxBytesV0))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			return req, []orquestafactory.ValidationIssue{
+				issue(orquestafactory.ErrAppSpecInvalida, "body", "request_body_too_large"),
+			}
+		}
+		return req, []orquestafactory.ValidationIssue{
+			issue(orquestafactory.ErrAppSpecInvalida, "body", "request_body_invalido"),
+		}
+	}
+	var extra json.RawMessage
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return req, []orquestafactory.ValidationIssue{
+			issue(orquestafactory.ErrAppSpecInvalida, "body", "request_body_trailing_data"),
+		}
+	}
+	return req, orquestafactory.ValidateAppSpecRequestV0(req)
+}
+
+func appSpecHTTPContentTypeAllowsJSONV0(value string) bool {
+	value = strings.TrimSpace(strings.ToLower(value))
+	if value == "" {
+		return true
+	}
+	mediaType := strings.TrimSpace(strings.Split(value, ";")[0])
+	return mediaType == "application/json" || strings.HasSuffix(mediaType, "+json")
 }
 
 func (h appSpecHTTPHandlerV0) now() time.Time {

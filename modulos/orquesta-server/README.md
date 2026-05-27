@@ -4,8 +4,10 @@ Servidor residente de Orquesta.
 
 Este modulo permite ejecutar Orquesta como proceso independiente de la consola
 que lo lanza. Expone `/healthz` como liveness del proceso,
-`/api/v0/server/readiness` como readiness operativa, `/api/status` y delega el
-resto del trafico al handler de aplicacion inyectado.
+`/api/v0/server/readiness` como readiness operativa,
+`/api/v0/server/status` como estado publico y delega el resto del trafico al
+handler de aplicacion inyectado. `/api/status` queda solo como alias legacy con
+headers de deprecacion/canonical.
 
 El supervisor global se ejecuta por pulsos acotados mediante un puerto. Si el
 usuario cierra la sesion de Codex, el daemon sigue vivo y el operador puede
@@ -36,6 +38,12 @@ por entorno:
 
 Estos valores alimentan estadisticas de director y no pertenecen al nucleo.
 
+La proyeccion viva de progreso cerrada por T210 se transporta desde
+`DirectorRunStatsV0`: entregas, agentes iniciados y proceso registrado pueden
+elevar `percent_complete`, pero `TasksClosed` permanece ligado a cierre/review
+aceptada. El servidor residente no debe rellenar 0% por defecto si la fuente
+trae una senal viva ni recalcular esa semantica desde runtime o filesystem.
+
 ## Bridge OPES residente
 
 `cmd/orquesta-server run` puede arrancar el bridge OPES por opt-in:
@@ -51,3 +59,11 @@ go run ./cmd/orquesta-server run
 
 La secuencia de tipos es composicion OPES, no contrato del runtime residente.
 Cada tick usa el loop generico y drena solo el primer tipo que siga pendiente.
+
+## Guardian de autoprogramacion
+
+La promocion residente puede exigir guardian externo por opt-in. En ese modo el
+servidor consume `orquesta_guardian_result.v0`, trata bloqueos del guardian como
+retryables y no sustituye el binario vivo si el candidato no queda promovido.
+T208 queda reconciliado como umbrella historico; nuevos huecos deben abrir owner
+focal.

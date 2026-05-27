@@ -1,37 +1,27 @@
 package orquestaopesconnector
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"io"
-	"net/http"
+	"errors"
 	"strings"
+	"time"
 )
+
+const defaultOPESHTTPTimeoutV0 = 30 * time.Second
 
 func (client RESTClientV0) getJSONV0(
 	ctx context.Context,
 	path string,
 	target any,
 ) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, client.baseURL+path, nil)
+	ctx, cancel := client.effectContextV0(ctx)
+	defer cancel()
+	requestURL, err := client.controlledURLV0(path)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Accept", "application/json")
-	res, err := client.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
-		_, _ = io.Copy(io.Discard, res.Body)
-		return connectorErrorV0{code: ErrOPESHTTPStatusV0}
-	}
-	if err := json.NewDecoder(res.Body).Decode(target); err != nil {
-		return connectorErrorV0{code: ErrOPESResponseInvalidV0}
-	}
-	return nil
+	return client.doJSONWithRetryV0(ctx, "GET", requestURL, nil, "", target)
 }
 
 func (client RESTClientV0) postJSONV0(
@@ -40,30 +30,50 @@ func (client RESTClientV0) postJSONV0(
 	payload any,
 	target any,
 ) error {
+	ctx, cancel := client.effectContextV0(ctx)
+	defer cancel()
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, client.baseURL+path, bytes.NewReader(body))
+	requestURL, err := client.controlledURLV0(path)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	res, err := client.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
-		_, _ = io.Copy(io.Discard, res.Body)
-		return connectorErrorV0{code: ErrOPESHTTPStatusV0}
-	}
-	if err := json.NewDecoder(res.Body).Decode(target); err != nil {
-		return connectorErrorV0{code: ErrOPESResponseInvalidV0}
-	}
-	return nil
+	return client.doJSONWithRetryV0(ctx, "POST", requestURL, body, opesRetryKeyFromPayloadV0(payload), target)
 }
 
 func trimTrailingSlashV0(value string) string {
 	return strings.TrimRight(strings.TrimSpace(value), "/")
+}
+
+func (client RESTClientV0) effectContextV0(ctx context.Context) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if _, ok := ctx.Deadline(); ok {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, client.timeout)
+}
+
+func opesRESTTimeoutV0(timeout time.Duration) time.Duration {
+	if timeout <= 0 {
+		return defaultOPESHTTPTimeoutV0
+	}
+	return timeout
+}
+
+func opesHTTPErrorCodeV0(ctx context.Context, err error) string {
+	if code, ok := opesHTTPRedirectErrorCodeV0(err); ok {
+		return code
+	}
+	switch {
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(ctx.Err(), context.DeadlineExceeded):
+		return ErrOPESHTTPTimeoutV0
+	case errors.Is(err, context.Canceled), errors.Is(ctx.Err(), context.Canceled):
+		return ErrOPESHTTPCancelledV0
+	default:
+		return ErrOPESHTTPRequestFailedV0
+	}
 }

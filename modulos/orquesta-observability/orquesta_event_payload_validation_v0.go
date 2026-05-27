@@ -27,6 +27,9 @@ func validateCompactValueV0(field string, value any, depth int, add func(string,
 		if utf8.RuneCountInString(typed) > maxPayloadStringRunesV0 {
 			add(ErrEventoDemasiadoExtensoV0, field)
 		}
+		if code := forbiddenOperationalTextCodeV0(typed); code != "" {
+			add(eventCodeFromOperationalPrivacyCodeV0(code), field)
+		}
 		return
 	case bool:
 		return
@@ -68,6 +71,9 @@ func validateCompactValueV0(field string, value any, depth int, add func(string,
 	case reflect.String:
 		if utf8.RuneCountInString(valueRef.String()) > maxPayloadStringRunesV0 {
 			add(ErrEventoDemasiadoExtensoV0, field)
+		}
+		if code := forbiddenOperationalTextCodeV0(valueRef.String()); code != "" {
+			add(eventCodeFromOperationalPrivacyCodeV0(code), field)
 		}
 	case reflect.Bool:
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -131,20 +137,24 @@ func validatePayloadKeyV0(key string, field string, add func(string, string)) {
 }
 
 func forbiddenPayloadKeyCodeV0(key string) string {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return ""
+	finding := orquestarails.ClassifyOperationalPrivacyTextV0(strings.ToLower(key))
+	if finding.ContainsSecret {
+		return ErrSecretoDetectadoV0
 	}
-	lower := strings.ToLower(key)
-	for _, forbidden := range forbiddenPayloadKeysV0 {
-		if strings.Contains(lower, forbidden) {
-			if forbidden == "transcript" {
-				return ErrTranscriptNoPermitidoV0
-			}
-			if containsAnyV0(lower, secretPayloadKeyPartsV0) {
-				return ErrSecretoDetectadoV0
-			}
-			return ErrOrquestaEventInvalidoV0
-		}
+	if finding.ContainsTranscript {
+		return ErrTranscriptNoPermitidoV0
+	}
+	if finding.ContainsPrompt || finding.ContainsCompletion || finding.ContainsConnectionDetail {
+		return ErrOrquestaEventInvalidoV0
 	}
 	return ""
+}
+
+func eventCodeFromOperationalPrivacyCodeV0(code string) string {
+	switch code {
+	case ErrSecretoDetectadoV0, ErrTranscriptNoPermitidoV0:
+		return code
+	default:
+		return ErrOrquestaEventInvalidoV0
+	}
 }

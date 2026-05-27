@@ -2,9 +2,10 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -35,7 +36,9 @@ if [ -n "$out" ]; then
   printf 'started\n' > "$out"
 fi
 trap 'printf stopped > "$HOME/stopped.txt"; exit 0' INT TERM
-while :; do /bin/sleep 1; done
+/bin/sleep 30 &
+printf '%s\n' "$!" > "$HOME/child.pid"
+wait "$!"
 `
 	if err := os.WriteFile(fakeCodex, []byte(fakeScript), 0o700); err != nil {
 		t.Fatalf("crear codex falso: %v", err)
@@ -61,14 +64,17 @@ while :; do /bin/sleep 1; done
 	if exitCode != 0 {
 		t.Fatalf("launch exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
-	var summary codexWaveLaunchSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
-		t.Fatalf("launch json invalido: %v", err)
-	}
+	summary := mustReadCodexWaveCommandSummaryForTest(t, stdout.Bytes(), runtimeDir)
 	if len(summary.Agents) != 1 || summary.Agents[0].PID <= 0 {
 		t.Fatalf("launch sin pid: %+v", summary)
 	}
+	t.Cleanup(func() {
+		if processAliveV0(summary.Agents[0].PID) {
+			_ = signalProcessGroupV0(summary.Agents[0].PID)
+		}
+	})
 	waitForCodexWaveTestFileV0(t, summary.Agents[0].LastMessagePath)
+	childPID := mustReadCodexWavePIDForTestV0(t, filepath.Join(summary.Agents[0].HomeDir, "child.pid"))
 
 	stdout.Reset()
 	stderr.Reset()
@@ -91,14 +97,26 @@ while :; do /bin/sleep 1; done
 	if exitCode != 0 {
 		t.Fatalf("status exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
-	var stopped codexWaveLaunchSummaryV0
-	if err := json.Unmarshal(stdout.Bytes(), &stopped); err != nil {
-		t.Fatalf("status json invalido: %v", err)
-	}
+	stopped := mustReadCodexWaveCommandSummaryForTest(t, stdout.Bytes(), summary.RuntimeWorkDir)
 	if stopped.Agents[0].Status != "stopped" {
 		t.Fatalf("status final=%q, want stopped: %+v", stopped.Agents[0].Status, stopped.Agents[0])
 	}
 	if stopped.Agents[0].StopRequestedAt == "" {
 		t.Fatalf("stop_requested_at vacio: %+v", stopped.Agents[0])
 	}
+	waitForCodexWaveProcessStoppedForTestV0(t, childPID)
+}
+
+func mustReadCodexWavePIDForTestV0(t *testing.T, path string) int {
+	t.Helper()
+	waitForCodexWaveTestFileV0(t, path)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("leer pid %s: %v", path, err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 0 {
+		t.Fatalf("pid invalido %q err=%v", string(data), err)
+	}
+	return pid
 }

@@ -55,6 +55,22 @@ func RunDomainWorkJobRecordStoreContractV0(
 			t.Fatalf("records after conflict=%+v first=%+v", records, first)
 		}
 
+		requiredTestConflict := request
+		requiredTestConflict.RequiredTests = []orquestadomainwork.DomainWorkRequiredTestV0{{
+			TestRef: "domain-test-ref-contract-conflict",
+		}}
+		requiredTestJob, err := store.CreateDomainWorkJobV0(
+			context.Background(),
+			requiredTestConflict,
+		)
+		if err != nil {
+			t.Fatalf("required tests conflict CreateDomainWorkJobV0: %v", err)
+		}
+		if requiredTestJob.Status != orquestadomainwork.DomainWorkStatusInvalidV0 ||
+			len(requiredTestJob.Issues) == 0 {
+			t.Fatalf("requiredTestJob=%+v", requiredTestJob)
+		}
+
 		invalid := validDomainWorkContractJobRequestV0("invalid")
 		invalid.DomainRef = ""
 		invalidJob, err := store.CreateDomainWorkJobV0(context.Background(), invalid)

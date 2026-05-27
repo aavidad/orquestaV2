@@ -5,7 +5,7 @@ import (
 	orquestadirectorscheduler "orquesta/modulos/orquesta-director-scheduler"
 )
 
-const defaultWorkflowTaskCandidateFrontierLimitV0 = 4
+const defaultWorkflowTaskCandidateFrontierLimitV0 = 0
 
 func workflowTaskCandidateFrontierV0(
 	activeClaims []orquestacoreconcurrency.WorksetClaimV0,

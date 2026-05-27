@@ -15,6 +15,14 @@ func TestTextPolicyV0PermiteVocabularioOperativoOpaco(t *testing.T) {
 	}
 }
 
+func TestTextPolicyV0DetalleProhibidoDesactivadoPorDefecto(t *testing.T) {
+	t.Setenv(DetailProhibitedRailsEnvV0, "")
+	if DetailProhibitedRailsEnabledV0() ||
+		TextContainsOperationalSensitiveDetailV0("access_token=valor") {
+		t.Fatal("detalle prohibido debe estar desactivado por defecto")
+	}
+}
+
 func TestTextPolicyV0RechazaPatronesConValorSensible(t *testing.T) {
 	t.Setenv(DetailProhibitedRailsEnvV0, "on")
 	values := []string{

@@ -3,6 +3,7 @@ package orquestaruntimecodex
 import (
 	pathpkg "path"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -11,9 +12,19 @@ var codexAckForbiddenControlDirBasesV0 = []string{
 	".orquesta-codex-runtime",
 	".orquesta-local-runtime",
 	".orquesta-control",
+	".orquesta-server",
+	".orquesta-smoke-work",
+	".orquesta-runs",
+	".orquesta-worktrees",
+	".orquesta-logs",
 	"orquesta-runtime",
 	"orquesta-codex-runtime",
 	"orquesta-local-runtime",
+	"logs",
+	"tmp",
+	".cache",
+	"backups",
+	"certs",
 }
 
 func codexAckHasInvalidPathV0(values []string) bool {
@@ -42,6 +53,14 @@ func codexAckArtifactPathForbiddenV0(value string) bool {
 	if codexAckControlDirPathForbiddenV0(path) {
 		return true
 	}
+	segment, _, _ := strings.Cut(path, "/")
+	lowerSegment := strings.ToLower(segment)
+	if lowerSegment == "orquesta.env" ||
+		lowerSegment == "orquesta.db" ||
+		strings.HasPrefix(lowerSegment, "orquesta.db-") ||
+		lowerSegment == ".orquesta-inbox.md" {
+		return true
+	}
 	switch pathpkg.Base(path) {
 	case CodexAgentAckFileNameV0,
 		CodexAgentPacketFileNameV0,
@@ -51,10 +70,12 @@ func codexAckArtifactPathForbiddenV0(value string) bool {
 		"codex_stdout.log",
 		"codex_stderr.log",
 		"codex_last_message.txt",
-		"orquesta_shutdown_request.json":
+		"orquesta_shutdown_request.json",
+		"server.log",
+		".ssl-key.log":
 		return true
 	default:
-		return false
+		return strings.HasSuffix(strings.ToLower(pathpkg.Base(path)), ".log")
 	}
 }
 
@@ -66,6 +87,57 @@ func codexAckControlDirPathForbiddenV0(path string) bool {
 		}
 	}
 	return false
+}
+
+func codexAckForbiddenArtifactEvidenceV0(values []string) string {
+	categories := map[string]bool{}
+	for _, value := range values {
+		path, ok := normalizeCodexAckFilePathV0(value)
+		if !ok {
+			categories["invalid_path"] = true
+			continue
+		}
+		if category := codexAckForbiddenArtifactCategoryV0(path); category != "" {
+			categories[category] = true
+		}
+	}
+	if len(categories) == 0 {
+		return "local_artifact_excluded"
+	}
+	out := make([]string, 0, len(categories))
+	for category := range categories {
+		out = append(out, category)
+	}
+	sort.Strings(out)
+	return "local_artifact_excluded:" + strings.Join(out, ",")
+}
+
+func codexAckForbiddenArtifactCategoryV0(path string) string {
+	segment, _, _ := strings.Cut(path, "/")
+	base := strings.ToLower(pathpkg.Base(path))
+	lowerSegment := strings.ToLower(segment)
+	switch {
+	case lowerSegment == ".orquesta-server":
+		return "server_state_dir"
+	case lowerSegment == ".orquesta-smoke-work":
+		return "smoke_work_dir"
+	case lowerSegment == "orquesta.env":
+		return "local_operator_config"
+	case lowerSegment == "orquesta.db" || strings.HasPrefix(lowerSegment, "orquesta.db-"):
+		return "local_database_state"
+	case lowerSegment == ".orquesta-inbox.md":
+		return "local_operator_notes"
+	case lowerSegment == "certs" || base == ".ssl-key.log":
+		return "local_secret_diagnostics"
+	case lowerSegment == "logs" || lowerSegment == ".orquesta-logs" || strings.HasSuffix(base, ".log"):
+		return "local_logs"
+	case codexAckControlDirPathForbiddenV0(path):
+		return "runtime_control_dir"
+	case codexAckArtifactPathForbiddenV0(path):
+		return "control_file"
+	default:
+		return ""
+	}
 }
 
 func normalizeCodexAckPathsV0(values []string) []string {

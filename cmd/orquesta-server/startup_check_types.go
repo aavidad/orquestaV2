@@ -20,7 +20,11 @@ type startupStateStoreReloaderV0 interface {
 }
 
 type startupStateCompactionV0 struct {
-	RevisionDir      string `json:"revision_dir,omitempty"`
+	RevisionDir      string `json:"-"`
+	RevisionRef      string `json:"revision_ref,omitempty"`
+	RetentionDays    int    `json:"retention_days,omitempty"`
+	MaxBytes         int64  `json:"max_bytes,omitempty"`
+	Artifacts        int    `json:"artifacts,omitempty"`
 	QueueRemoved     int    `json:"queue_removed"`
 	QueueKept        int    `json:"queue_kept"`
 	ControlRemoved   int    `json:"control_removed"`

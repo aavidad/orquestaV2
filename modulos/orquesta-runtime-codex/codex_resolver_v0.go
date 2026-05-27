@@ -92,7 +92,7 @@ func (r CodexExecResolverV0) materializeFilesV0(
 	}
 	packetPath := filepath.Join(r.profile.RuntimeWorkDir, CodexAgentPacketFileNameV0)
 	promptPath := filepath.Join(r.profile.RuntimeWorkDir, CodexAgentPromptFileNameV0)
-	if err := writeJSONFileV0(packetPath, spec.AgentPacket); err != nil {
+	if err := writeJSONFileV0(r.profile.RuntimeWorkDir, packetPath, spec.AgentPacket); err != nil {
 		return []orquestaruntime.ExternalAgentConnectorErrorV0{
 			codexIssueV0(CodexConnectorFilesystemV0, CodexAgentPacketFileNameV0, spec.CorrelationID, err.Error()),
 		}
@@ -110,13 +110,13 @@ func (r CodexExecResolverV0) materializeFilesV0(
 			ShutdownAckPath:     filepath.Join(r.profile.RuntimeWorkDir, CodexShutdownCheckpointAckFileNameV0),
 		},
 	)
-	if err := os.WriteFile(promptPath, []byte(prompt), 0o600); err != nil {
+	if err := writeControlFileV0(r.profile.RuntimeWorkDir, promptPath, CodexAgentPromptFileNameV0, "agent_prompt", []byte(prompt), 0o600); err != nil {
 		return []orquestaruntime.ExternalAgentConnectorErrorV0{
 			codexIssueV0(CodexConnectorFilesystemV0, CodexAgentPromptFileNameV0, spec.CorrelationID, err.Error()),
 		}
 	}
 	wrapper := BuildCodexWrapperScriptV0(r.profile)
-	if err := os.WriteFile(filepath.Join(r.profile.RuntimeWorkDir, CodexWrapperFileNameV0), []byte(wrapper), 0o700); err != nil {
+	if err := writeControlFileV0(r.profile.RuntimeWorkDir, filepath.Join(r.profile.RuntimeWorkDir, CodexWrapperFileNameV0), CodexWrapperFileNameV0, "codex_wrapper", []byte(wrapper), 0o700); err != nil {
 		return []orquestaruntime.ExternalAgentConnectorErrorV0{
 			codexIssueV0(CodexConnectorFilesystemV0, CodexWrapperFileNameV0, spec.CorrelationID, err.Error()),
 		}
@@ -135,12 +135,32 @@ func codexRuntimeWorkDirPromptHintV0(profile CodexConnectorProfileV0) string {
 	}
 }
 
-func writeJSONFileV0(path string, value any) error {
+func writeJSONFileV0(rootDir string, path string, value any) error {
 	data, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o600)
+	return writeControlFileV0(rootDir, path, filepath.Base(path), filepath.Base(path), data, 0o600)
+}
+
+func writeControlFileV0(
+	rootDir string,
+	path string,
+	fileName string,
+	controlKind string,
+	data []byte,
+	perm os.FileMode,
+) error {
+	_, err := WriteCodexControlFileBytesV0(CodexControlFileWriteRequestV0{
+		RootDir:     rootDir,
+		Path:        path,
+		FileName:    fileName,
+		ControlKind: controlKind,
+		Data:        data,
+		Mode:        CodexControlFileWriteCreateOrReplaceV0,
+		Perm:        perm,
+	})
+	return err
 }
 
 func codexIssueV0(

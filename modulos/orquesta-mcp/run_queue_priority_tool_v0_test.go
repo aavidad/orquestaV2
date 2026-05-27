@@ -79,7 +79,12 @@ func TestMCPRunQueuePriorityExecutorV0ValidaActionYPuerto(t *testing.T) {
 
 	result, err = MCPRunQueuePriorityToolExecutorV0{}.Execute(
 		context.Background(),
-		MCPRunQueuePriorityToolInputV0{Action: "set_priority", RunRef: "run-1", PriorityScore: 30},
+		MCPRunQueuePriorityToolInputV0{
+			RequestID:     "request-ref-run-queue-priority-writer-001",
+			Action:        "set_priority",
+			RunRef:        "run-1",
+			PriorityScore: 30,
+		},
 	)
 	if err != nil {
 		t.Fatalf("execute set_priority sin writer: %v", err)

@@ -565,6 +565,19 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-05-27
+Decision: El stack Codex consume uso real solo desde reporte runtime redactado.
+Motivo: T209 necesitaba distinguir fuente no configurada de reporte ausente o
+cuota no observable, sin leer logs completos ni publicar detalles de proveedor.
+Impacto: `CodexStackRuntimeUsageMetricsSourceV0` lee
+`codex_usage_accounting.json` por descriptor registrado. Reporte valido aporta
+tokens y `quota_status`; reporte ausente, vacio o rechazado produce
+`unknown`/`quota_observed_unavailable`; sin fuente inyectada el core conserva
+`agent_usage_source_not_configured`.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-11
 Decision: El control de una app completa vive fuera del core workflow y entra
 por puertos `RunControl`.

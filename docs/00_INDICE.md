@@ -89,7 +89,14 @@ por el orden de autoridad documental indicado abajo.
 Estos documentos conservan contexto de producto, diagnostico o diseno previo.
 Antes de usarlos como evidencia o plan, enlazalos a una fuente vigente.
 
-- [BIBLIA_APP_ORQUESTA.md](BIBLIA_APP_ORQUESTA.md)
+Historicos/stale con sustituto vigente:
+
+- [BIBLIA_APP_ORQUESTA.md](BIBLIA_APP_ORQUESTA.md): Orquesta V1 y vision
+  previa. Marcado internamente como `doc_estado=historico-stale`; sustituido
+  para trabajo actual por `AGENTS.md`, `README.md`, `estado_actual`,
+  `guia_nucleo` y backlog vivo. Aunque conserve secciones historicas llamadas
+  "fuentes de verdad" o "doctrina", esas secciones no gobiernan trabajo vigente
+  sin enlace nuevo a la autoridad documental anterior.
 - [orquesta_v1_vision.md](orquesta_v1_vision.md)
 - [orquesta_v1_roadmap.md](orquesta_v1_roadmap.md)
 - [uso_actual_app_orquesta.md](uso_actual_app_orquesta.md)
@@ -98,6 +105,19 @@ Antes de usarlos como evidencia o plan, enlazalos a una fuente vigente.
 - [informe_ecosistema_orquestacion_2026-03-29.md](informe_ecosistema_orquestacion_2026-03-29.md)
 - [analisis_repos_control_agentes_2026-03-23.md](analisis_repos_control_agentes_2026-03-23.md)
 - [unificacion_ramas_2026-05-11.md](unificacion_ramas_2026-05-11.md)
+
+Forenses:
+
+- [rail_errors_observados_2026-05-23.md](rail_errors_observados_2026-05-23.md):
+  evidencia y diagnostico de rails observados; no sustituye al backlog vivo.
+- [duplicaciones_railes_pendientes_2026-05-24.md](duplicaciones_railes_pendientes_2026-05-24.md):
+  matriz de duplicaciones y priorizacion; no sustituye al backlog vivo.
+
+Marcadores detectables para T88/T116: `doc_estado=historico-stale`,
+`doc_no_canonico=true`, `doc_no_ejecutable_sin_fuente_vigente=true` y
+`doc_excluir_planificacion_automatica=true` obligan al indice federado a tratar
+la fuente como historica aunque el cuerpo conserve texto V1 con palabras como
+"canonico", "doctrina" o "fuente de verdad".
 
 ## Plantillas
 

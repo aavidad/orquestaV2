@@ -228,14 +228,19 @@ func operationalDirectorPlanEvaluateRequiredTestEvidenceV0(
 	requiredTests []string,
 	matches []operationalDirectorPlanAcceptedReviewMatchV0,
 	evidence []orquestacionnucleoapp.RequiredTestEvidenceV0,
+	requiredTestsByTask map[string][]string,
 ) operationalDirectorPlanRequiredTestEvidenceEvaluationV0 {
 	passedRefs := []string(nil)
 	failedRefs := []string(nil)
+	expected := 0
+	passedCount := 0
 	for _, match := range matches {
-		for _, required := range requiredTests {
+		for _, required := range operationalDirectorPlanRequiredTestsForMatchV0(requiredTestsByTask, requiredTests, match) {
+			expected++
 			passedRef, failedRef := operationalDirectorPlanRequiredTestEvidenceRefV0(runRef, required, match, evidence)
 			if passedRef != "" {
 				passedRefs = append(passedRefs, passedRef)
+				passedCount++
 				continue
 			}
 			if failedRef != "" {
@@ -243,12 +248,11 @@ func operationalDirectorPlanEvaluateRequiredTestEvidenceV0(
 			}
 		}
 	}
-	expected := len(compactServiceRefsV0(requiredTests)) * len(matches)
 	passedRefs = compactServiceRefsV0(passedRefs)
 	return operationalDirectorPlanRequiredTestEvidenceEvaluationV0{
 		PassedRefs: passedRefs,
 		FailedRefs: compactServiceRefsV0(failedRefs),
-		Complete:   expected > 0 && len(passedRefs) == expected,
+		Complete:   expected > 0 && passedCount == expected,
 	}
 }
 
@@ -277,5 +281,40 @@ func operationalDirectorPlanRequiredTestEvidenceRefV0(
 			failedRef = strings.TrimSpace(item.EvidenceRef)
 		}
 	}
+	if passedRef == "" && failedRef == "" && operationalDirectorPlanRunScopedRequiredTestV0(required) {
+		return operationalDirectorPlanRunScopedRequiredTestEvidenceRefV0(runRef, required, evidence)
+	}
 	return passedRef, failedRef
+}
+
+func operationalDirectorPlanRunScopedRequiredTestEvidenceRefV0(
+	runRef string,
+	required string,
+	evidence []orquestacionnucleoapp.RequiredTestEvidenceV0,
+) (string, string) {
+	passedRef := ""
+	failedRef := ""
+	for _, item := range evidence {
+		if strings.TrimSpace(item.RunRef) != strings.TrimSpace(runRef) ||
+			strings.TrimSpace(item.TestCommand) != strings.TrimSpace(required) {
+			continue
+		}
+		switch item.Status {
+		case orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0:
+			passedRef = strings.TrimSpace(item.EvidenceRef)
+		case orquestacionnucleoapp.RequiredTestEvidenceStatusFailedV0:
+			failedRef = strings.TrimSpace(item.EvidenceRef)
+		}
+	}
+	return passedRef, failedRef
+}
+
+func operationalDirectorPlanRunScopedRequiredTestV0(required string) bool {
+	required = strings.ToLower(strings.TrimSpace(required))
+	return strings.Contains(required, "smoke") ||
+		strings.Contains(required, "arquitectura") ||
+		strings.Contains(required, "architecture") ||
+		strings.Contains(required, "si se toca") ||
+		strings.Contains(required, "if touched") ||
+		strings.Contains(required, "global")
 }

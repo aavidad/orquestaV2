@@ -34,6 +34,23 @@ type RunEventReaderPortV0 interface {
 	LoadRunEventsV0(ctx context.Context, runRef string) ([]orquestacoreworkflow.OrchestrationEventV0, error)
 }
 
+type RunEventPagedReaderPortV0 interface {
+	LoadRunEventsPageV0(ctx context.Context, request RunEventPageRequestV0) (RunEventPageResultV0, error)
+}
+
+type RunEventPageRequestV0 struct {
+	RunRef string
+	Limit  int
+	Cursor string
+}
+
+type RunEventPageResultV0 struct {
+	Events     []orquestacoreworkflow.OrchestrationEventV0
+	NextCursor string
+	HasMore    bool
+	Total      int
+}
+
 type CandidateProviderPortV0 interface {
 	BuildSchedulerCandidatesV0(
 		ctx context.Context,

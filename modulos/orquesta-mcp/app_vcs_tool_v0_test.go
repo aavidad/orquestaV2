@@ -20,7 +20,12 @@ func TestMCPAppVCSDescriptorV0EsAdaptadorFino(t *testing.T) {
 func TestMCPAppVCSExecutorV0ValidaRefsYOptInPush(t *testing.T) {
 	result, err := NewMCPAppVCSToolExecutorV0(&fakeMCPAppVCSExecutorV0{}).Execute(
 		context.Background(),
-		MCPAppVCSToolInputV0{Action: MCPAppVCSActionPushV0, AppRef: "app-ref-1", RepoRef: "repo-ref-1"},
+		MCPAppVCSToolInputV0{
+			RequestID: "request-ref-app-vcs-push-001",
+			Action:    MCPAppVCSActionPushV0,
+			AppRef:    "app-ref-1",
+			RepoRef:   "repo-ref-1",
+		},
 	)
 	if err != nil {
 		t.Fatalf("execute: %v", err)

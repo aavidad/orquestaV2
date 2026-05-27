@@ -1,9 +1,8 @@
 package orquestaappcodexstack
 
 import (
-	"os"
+	"context"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
@@ -47,15 +46,13 @@ func reviewReworkProjectTargetExistsV0(projectDir string, rawTarget string) bool
 	if reviewReworkTargetHasGlobV0(target) {
 		return reviewReworkProjectGlobHasFileV0(projectDir, target)
 	}
-	path := filepath.Join(projectDir, filepath.FromSlash(target))
-	info, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	if !info.IsDir() {
-		return info.Size() > 0
-	}
-	return reviewReworkDirHasFileV0(path)
+	result := orquestaruntimeworktree.ProjectTreeScanHasFileV0(context.Background(), orquestaruntimeworktree.ProjectTreeScanRequestV0{
+		ProjectRoot:    projectDir,
+		Target:         target,
+		Mode:           orquestaruntimeworktree.ProjectTreeScanModeTargetV0,
+		IgnorePrefixes: orquestaruntimeworktree.DefaultWorktreeControlIgnorePrefixesV0(),
+	})
+	return result.Found
 }
 
 func reviewReworkTargetAliasesV0(target string) []string {
@@ -72,53 +69,23 @@ func reviewReworkTargetAliasesV0(target string) []string {
 }
 
 func reviewReworkProjectGlobHasFileV0(projectDir string, pattern string) bool {
-	re, err := reviewReworkGlobRegexpV0(pattern)
-	if err != nil {
-		return false
-	}
-	found := false
-	_ = filepath.WalkDir(projectDir, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil || entry == nil || found {
-			return nil
-		}
-		if entry.IsDir() {
-			if reviewReworkSkipProjectDirV0(entry.Name()) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		info, err := entry.Info()
-		if err != nil || info.Size() == 0 {
-			return nil
-		}
-		rel, err := filepath.Rel(projectDir, path)
-		if err == nil && re.MatchString(filepath.ToSlash(rel)) {
-			found = true
-		}
-		return nil
+	result := orquestaruntimeworktree.ProjectTreeScanHasFileV0(context.Background(), orquestaruntimeworktree.ProjectTreeScanRequestV0{
+		ProjectRoot:    projectDir,
+		Target:         pattern,
+		Mode:           orquestaruntimeworktree.ProjectTreeScanModeGlobV0,
+		IgnorePrefixes: orquestaruntimeworktree.DefaultWorktreeControlIgnorePrefixesV0(),
 	})
-	return found
+	return result.Found
 }
 
 func reviewReworkDirHasFileV0(dir string) bool {
-	found := false
-	_ = filepath.WalkDir(dir, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil || entry == nil || found {
-			return nil
-		}
-		if entry.IsDir() {
-			if path != dir && reviewReworkSkipProjectDirV0(entry.Name()) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		info, err := entry.Info()
-		if err == nil && info.Size() > 0 {
-			found = true
-		}
-		return nil
+	result := orquestaruntimeworktree.ProjectTreeScanHasFileV0(context.Background(), orquestaruntimeworktree.ProjectTreeScanRequestV0{
+		ProjectRoot:    dir,
+		Target:         ".",
+		Mode:           orquestaruntimeworktree.ProjectTreeScanModeDirV0,
+		IgnorePrefixes: orquestaruntimeworktree.DefaultWorktreeControlIgnorePrefixesV0(),
 	})
-	return found
+	return result.Found
 }
 
 func reviewReworkRelTargetV0(value string) (string, bool) {
@@ -140,28 +107,6 @@ func reviewReworkRelTargetV0(value string) (string, bool) {
 
 func reviewReworkTargetHasGlobV0(value string) bool {
 	return strings.ContainsAny(value, "*?[")
-}
-
-func reviewReworkGlobRegexpV0(pattern string) (*regexp.Regexp, error) {
-	var b strings.Builder
-	b.WriteString("^")
-	for i := 0; i < len(pattern); i++ {
-		if strings.HasPrefix(pattern[i:], "**") {
-			b.WriteString(".*")
-			i++
-			continue
-		}
-		switch pattern[i] {
-		case '*':
-			b.WriteString("[^/]*")
-		case '?':
-			b.WriteString("[^/]")
-		default:
-			b.WriteString(regexp.QuoteMeta(string(pattern[i])))
-		}
-	}
-	b.WriteString("$")
-	return regexp.Compile(b.String())
 }
 
 func reviewReworkSkipProjectDirV0(name string) bool {

@@ -11,64 +11,103 @@ const (
 )
 
 type ServerPublicStatusV0 struct {
-	SchemaVersion              string                  `json:"schema_version"`
-	Status                     string                  `json:"status"`
-	Addr                       string                  `json:"addr,omitempty"`
-	StartedAt                  string                  `json:"started_at,omitempty"`
-	LastHeartbeatAt            string                  `json:"last_heartbeat_at,omitempty"`
-	StartupStatus              string                  `json:"startup_status,omitempty"`
-	StartupReady               bool                    `json:"startup_ready,omitempty"`
-	StartupMessage             string                  `json:"startup_message,omitempty"`
-	EffectiveConfig            ServerEffectiveConfigV0 `json:"effective_config,omitempty"`
-	ConfigVisibility           string                  `json:"config_visibility,omitempty"`
-	HiddenConfigFields         []string                `json:"hidden_config_fields,omitempty"`
-	ProjectWorkDirRef          string                  `json:"project_work_dir_ref,omitempty"`
-	RuntimeWorkDirRef          string                  `json:"runtime_work_dir_ref,omitempty"`
-	LastStartupCheckAt         string                  `json:"last_startup_check_at,omitempty"`
-	LastSupervisorAt           string                  `json:"last_supervisor_at,omitempty"`
-	LastSupervisorStatus       string                  `json:"last_supervisor_status,omitempty"`
-	LastSupervisorStopPublic   string                  `json:"last_supervisor_stop_public,omitempty"`
-	LastSupervisorStopCategory string                  `json:"last_supervisor_stop_category,omitempty"`
-	LastSupervisorError        string                  `json:"last_supervisor_error,omitempty"`
-	SupervisorLastErrorAt      string                  `json:"supervisor_last_error_at,omitempty"`
-	SupervisorLastError        string                  `json:"supervisor_last_error,omitempty"`
-	LastSupervisorQueueRef     string                  `json:"last_supervisor_queue_ref,omitempty"`
-	LastSupervisorQueueSize    int                     `json:"last_supervisor_queue_size,omitempty"`
-	LastSupervisorTickNumber   int                     `json:"last_supervisor_tick_number,omitempty"`
-	LastSupervisorResultTicks  int                     `json:"last_supervisor_result_ticks,omitempty"`
-	LastSupervisorExecutions   int                     `json:"last_supervisor_executions,omitempty"`
-	LastSupervisorSkips        int                     `json:"last_supervisor_skips,omitempty"`
-	SupervisorTickActive       bool                    `json:"supervisor_tick_active,omitempty"`
-	SupervisorFrozen           bool                    `json:"supervisor_frozen,omitempty"`
-	SupervisorTicks            int                     `json:"supervisor_ticks"`
-	SupervisorErrorTicks       int                     `json:"supervisor_error_ticks,omitempty"`
-	SupervisorExecutions       int                     `json:"supervisor_executions,omitempty"`
-	SupervisorSkips            int                     `json:"supervisor_skips,omitempty"`
-	ShutdownInProgress         bool                    `json:"shutdown_in_progress,omitempty"`
-	ShutdownStatus             string                  `json:"shutdown_status,omitempty"`
-	ShutdownReady              bool                    `json:"shutdown_ready"`
-	ShutdownHTTPStatus         int                     `json:"shutdown_http_status,omitempty"`
-	ShutdownRunsRequested      int                     `json:"shutdown_runs_requested,omitempty"`
-	ShutdownRunsStopped        int                     `json:"shutdown_runs_stopped,omitempty"`
-	ShutdownAgentsInFlight     int                     `json:"shutdown_agents_in_flight,omitempty"`
-	ShutdownCheckpointsPending int                     `json:"shutdown_checkpoints_pending,omitempty"`
-	LastShutdownAt             string                  `json:"last_shutdown_at,omitempty"`
-	IdleSelfImprovementAfter   string                  `json:"idle_self_improvement_after,omitempty"`
-	IdleSelfImprovementTarget  int                     `json:"idle_self_improvement_target_queue,omitempty"`
-	IdleSelfImprovementCheck   string                  `json:"idle_self_improvement_check,omitempty"`
-	IdleSelfImprovementReason  string                  `json:"idle_self_improvement_reason,omitempty"`
-	IdleSelfImprovementFlight  bool                    `json:"idle_self_improvement_in_flight,omitempty"`
-	IdleSelfImprovementRuns    int                     `json:"idle_self_improvement_runs,omitempty"`
-	IdleSelfImprovementOK      int                     `json:"idle_self_improvement_ok,omitempty"`
-	LastError                  string                  `json:"last_error,omitempty"`
-	StartupEvidenceRefs        []string                `json:"startup_evidence_refs,omitempty"`
-	StatePersistStatus         string                  `json:"state_persist_status,omitempty"`
-	StatePersistFailures       int                     `json:"state_persist_failures,omitempty"`
-	StatePersistLastFailedAt   string                  `json:"state_persist_last_failed_at,omitempty"`
-	StatePersistLastCode       string                  `json:"state_persist_last_code,omitempty"`
-	StatePersistLastTransition string                  `json:"state_persist_last_transition,omitempty"`
-	StatePersistLastConfirmed  string                  `json:"state_persist_last_confirmed_at,omitempty"`
-	RecentErrors               []ServerDiagnosticV0    `json:"recent_errors,omitempty"`
+	SchemaVersion                         string                      `json:"schema_version"`
+	Status                                string                      `json:"status"`
+	Addr                                  string                      `json:"addr,omitempty"`
+	ProcessRef                            string                      `json:"process_ref,omitempty"`
+	DaemonEpochRef                        string                      `json:"daemon_epoch_ref,omitempty"`
+	StartedAt                             string                      `json:"started_at,omitempty"`
+	LastHeartbeatAt                       string                      `json:"last_heartbeat_at,omitempty"`
+	StartupStatus                         string                      `json:"startup_status,omitempty"`
+	StartupReady                          bool                        `json:"startup_ready,omitempty"`
+	StartupMessage                        string                      `json:"startup_message,omitempty"`
+	StartupOperationalMessage             *ServerOperationalMessageV0 `json:"startup_operational_message,omitempty"`
+	StartupRevision                       StartupRevisionSummaryV0    `json:"startup_revision,omitempty"`
+	DaemonLogPolicy                       DaemonLogPolicyV0           `json:"daemon_log_policy,omitempty"`
+	ShutdownSignalPolicy                  ShutdownSignalPolicyV0      `json:"shutdown_signal_policy,omitempty"`
+	EffectiveConfig                       ServerEffectiveConfigV0     `json:"effective_config,omitempty"`
+	ConfigVisibility                      string                      `json:"config_visibility,omitempty"`
+	HiddenConfigFields                    []string                    `json:"hidden_config_fields,omitempty"`
+	ProjectWorkDirRef                     string                      `json:"project_work_dir_ref,omitempty"`
+	RuntimeWorkDirRef                     string                      `json:"runtime_work_dir_ref,omitempty"`
+	LastStartupCheckAt                    string                      `json:"last_startup_check_at,omitempty"`
+	LastSupervisorAt                      string                      `json:"last_supervisor_at,omitempty"`
+	LastSupervisorStatus                  string                      `json:"last_supervisor_status,omitempty"`
+	LastSupervisorStopPublic              string                      `json:"last_supervisor_stop_public,omitempty"`
+	LastSupervisorStopCategory            string                      `json:"last_supervisor_stop_category,omitempty"`
+	LastSupervisorError                   string                      `json:"last_supervisor_error,omitempty"`
+	LastSupervisorOperationalMessage      *ServerOperationalMessageV0 `json:"last_supervisor_operational_message,omitempty"`
+	SupervisorLastErrorAt                 string                      `json:"supervisor_last_error_at,omitempty"`
+	SupervisorLastError                   string                      `json:"supervisor_last_error,omitempty"`
+	LastSupervisorQueueRef                string                      `json:"last_supervisor_queue_ref,omitempty"`
+	LastSupervisorQueueSize               int                         `json:"last_supervisor_queue_size,omitempty"`
+	LastSupervisorTickNumber              int                         `json:"last_supervisor_tick_number,omitempty"`
+	LastSupervisorResultTicks             int                         `json:"last_supervisor_result_ticks,omitempty"`
+	LastSupervisorExecutions              int                         `json:"last_supervisor_executions,omitempty"`
+	LastSupervisorSkips                   int                         `json:"last_supervisor_skips,omitempty"`
+	SupervisorTickActive                  bool                        `json:"supervisor_tick_active,omitempty"`
+	SupervisorFrozen                      bool                        `json:"supervisor_frozen,omitempty"`
+	SupervisorTicks                       int                         `json:"supervisor_ticks"`
+	SupervisorErrorTicks                  int                         `json:"supervisor_error_ticks,omitempty"`
+	SupervisorExecutions                  int                         `json:"supervisor_executions,omitempty"`
+	SupervisorSkips                       int                         `json:"supervisor_skips,omitempty"`
+	ShutdownInProgress                    bool                        `json:"shutdown_in_progress,omitempty"`
+	ShutdownStatus                        string                      `json:"shutdown_status,omitempty"`
+	ShutdownReady                         bool                        `json:"shutdown_ready"`
+	ShutdownHTTPStatus                    int                         `json:"shutdown_http_status,omitempty"`
+	ShutdownRunsRequested                 int                         `json:"shutdown_runs_requested,omitempty"`
+	ShutdownRunsStopped                   int                         `json:"shutdown_runs_stopped,omitempty"`
+	ShutdownAgentsInFlight                int                         `json:"shutdown_agents_in_flight,omitempty"`
+	ShutdownCheckpointsPending            int                         `json:"shutdown_checkpoints_pending,omitempty"`
+	ShutdownAsyncWorkActive               int                         `json:"shutdown_async_work_active,omitempty"`
+	ShutdownStopTimeoutAt                 string                      `json:"shutdown_stop_timeout_at,omitempty"`
+	ShutdownSignalName                    string                      `json:"shutdown_signal_name,omitempty"`
+	ShutdownSignalCount                   int                         `json:"shutdown_signal_count,omitempty"`
+	ShutdownSignalEscalated               bool                        `json:"shutdown_signal_escalated,omitempty"`
+	LastShutdownAt                        string                      `json:"last_shutdown_at,omitempty"`
+	IdleSelfImprovementAfter              string                      `json:"idle_self_improvement_after,omitempty"`
+	IdleSelfImprovementTarget             int                         `json:"idle_self_improvement_target_queue,omitempty"`
+	IdleSelfImprovementCheck              string                      `json:"idle_self_improvement_check,omitempty"`
+	IdleSelfImprovementReason             string                      `json:"idle_self_improvement_reason,omitempty"`
+	IdleSelfImprovementOperationalMessage *ServerOperationalMessageV0 `json:"idle_self_improvement_operational_message,omitempty"`
+	IdleSelfImprovementFlight             bool                        `json:"idle_self_improvement_in_flight,omitempty"`
+	IdleSelfImprovementRuns               int                         `json:"idle_self_improvement_runs,omitempty"`
+	IdleSelfImprovementOK                 int                         `json:"idle_self_improvement_ok,omitempty"`
+	ExternalBridgeComponent               string                      `json:"external_bridge_component,omitempty"`
+	ExternalBridgeStatus                  string                      `json:"external_bridge_status,omitempty"`
+	ExternalBridgeTickActive              bool                        `json:"external_bridge_tick_active,omitempty"`
+	ExternalBridgeLastTickRef             string                      `json:"external_bridge_last_tick_ref,omitempty"`
+	ExternalBridgeLastTickAt              string                      `json:"external_bridge_last_tick_at,omitempty"`
+	ExternalBridgeLastSuccess             string                      `json:"external_bridge_last_success_at,omitempty"`
+	ExternalBridgeLastErrorAt             string                      `json:"external_bridge_last_error_at,omitempty"`
+	ExternalBridgeLastError               string                      `json:"external_bridge_last_error_code,omitempty"`
+	ExternalBridgeOperationalMessage      *ServerOperationalMessageV0 `json:"external_bridge_operational_message,omitempty"`
+	ExternalBridgeStopReason              string                      `json:"external_bridge_stop_reason,omitempty"`
+	ExternalBridgeTicks                   int                         `json:"external_bridge_ticks,omitempty"`
+	ExternalBridgeErrorTicks              int                         `json:"external_bridge_error_ticks,omitempty"`
+	ExternalBridgeFilters                 []string                    `json:"external_bridge_filters,omitempty"`
+	ExternalBridgeCounters                map[string]int              `json:"external_bridge_counters,omitempty"`
+	LastError                             string                      `json:"last_error,omitempty"`
+	LastErrorOperationalMessage           *ServerOperationalMessageV0 `json:"last_error_operational_message,omitempty"`
+	StartupEvidenceRefs                   []string                    `json:"startup_evidence_refs,omitempty"`
+	StatePersistStatus                    string                      `json:"state_persist_status,omitempty"`
+	StatePersistFailures                  int                         `json:"state_persist_failures,omitempty"`
+	StatePersistLastFailedAt              string                      `json:"state_persist_last_failed_at,omitempty"`
+	StatePersistLastCode                  string                      `json:"state_persist_last_code,omitempty"`
+	StatePersistLastTransition            string                      `json:"state_persist_last_transition,omitempty"`
+	StatePersistLastConfirmed             string                      `json:"state_persist_last_confirmed_at,omitempty"`
+	AuditStatus                           string                      `json:"audit_status,omitempty"`
+	AuditFailures                         int                         `json:"audit_failures,omitempty"`
+	AuditLastFailedAt                     string                      `json:"audit_last_failed_at,omitempty"`
+	AuditLastCode                         string                      `json:"audit_last_code,omitempty"`
+	AuditLastEvent                        string                      `json:"audit_last_event,omitempty"`
+	AuditLastSeverity                     string                      `json:"audit_last_severity,omitempty"`
+	AuditLastConfirmed                    string                      `json:"audit_last_confirmed_at,omitempty"`
+	ResponseWriteFailures                 int                         `json:"response_write_failures,omitempty"`
+	ResponseWriteLastFailedAt             string                      `json:"response_write_last_failed_at,omitempty"`
+	ResponseWriteLastCode                 string                      `json:"response_write_last_code,omitempty"`
+	ResponseWriteLastStage                string                      `json:"response_write_last_stage,omitempty"`
+	RecentErrors                          []ServerDiagnosticV0        `json:"recent_errors,omitempty"`
 }
 
 func NewServerPublicStatusV0(state StateV0) ServerPublicStatusV0 {
@@ -82,64 +121,103 @@ func NewServerPublicStatusV0(state StateV0) ServerPublicStatusV0 {
 	config, configHidden := PublicServerEffectiveConfigV0(state.EffectiveConfig)
 	hidden = append(hidden, configHidden...)
 	return ServerPublicStatusV0{
-		SchemaVersion:              StateSchemaVersionV0,
-		Status:                     strings.TrimSpace(state.Status),
-		Addr:                       strings.TrimSpace(state.Addr),
-		StartedAt:                  state.StartedAt,
-		LastHeartbeatAt:            state.LastHeartbeatAt,
-		StartupStatus:              state.StartupStatus,
-		StartupReady:               state.StartupReady,
-		StartupMessage:             state.StartupMessage,
-		EffectiveConfig:            config,
-		ConfigVisibility:           ServerStatusConfigVisibilityPublicRedactedV0,
-		HiddenConfigFields:         compactConfigStringsV0(hidden),
-		ProjectWorkDirRef:          publicStatusRefIfConfiguredV0(state.ProjectWorkDir, "server-config-ref-project-work-dir"),
-		RuntimeWorkDirRef:          publicStatusRefIfConfiguredV0(state.RuntimeWorkDir, "server-config-ref-runtime-work-dir"),
-		LastStartupCheckAt:         state.LastStartupCheckAt,
-		LastSupervisorAt:           state.LastSupervisorAt,
-		LastSupervisorStatus:       state.LastSupervisorStatus,
-		LastSupervisorStopPublic:   state.LastSupervisorStopPublic,
-		LastSupervisorStopCategory: state.LastSupervisorStopCategory,
-		LastSupervisorError:        state.LastSupervisorError,
-		SupervisorLastErrorAt:      state.SupervisorLastErrorAt,
-		SupervisorLastError:        state.SupervisorLastError,
-		LastSupervisorQueueRef:     state.LastSupervisorQueueRef,
-		LastSupervisorQueueSize:    state.LastSupervisorQueueSize,
-		LastSupervisorTickNumber:   state.LastSupervisorTickNumber,
-		LastSupervisorResultTicks:  state.LastSupervisorResultTicks,
-		LastSupervisorExecutions:   state.LastSupervisorExecutions,
-		LastSupervisorSkips:        state.LastSupervisorSkips,
-		SupervisorTickActive:       state.SupervisorTickActive,
-		SupervisorFrozen:           state.SupervisorFrozen,
-		SupervisorTicks:            state.SupervisorTicks,
-		SupervisorErrorTicks:       state.SupervisorErrorTicks,
-		SupervisorExecutions:       state.SupervisorExecutions,
-		SupervisorSkips:            state.SupervisorSkips,
-		ShutdownInProgress:         state.ShutdownInProgress,
-		ShutdownStatus:             state.ShutdownStatus,
-		ShutdownReady:              state.ShutdownReady,
-		ShutdownHTTPStatus:         state.ShutdownHTTPStatus,
-		ShutdownRunsRequested:      state.ShutdownRunsRequested,
-		ShutdownRunsStopped:        state.ShutdownRunsStopped,
-		ShutdownAgentsInFlight:     state.ShutdownAgentsInFlight,
-		ShutdownCheckpointsPending: state.ShutdownCheckpointsPending,
-		LastShutdownAt:             state.LastShutdownAt,
-		IdleSelfImprovementAfter:   state.IdleSelfImprovementAfter,
-		IdleSelfImprovementTarget:  state.IdleSelfImprovementTarget,
-		IdleSelfImprovementCheck:   state.IdleSelfImprovementCheck,
-		IdleSelfImprovementReason:  state.IdleSelfImprovementReason,
-		IdleSelfImprovementFlight:  state.IdleSelfImprovementFlight,
-		IdleSelfImprovementRuns:    state.IdleSelfImprovementRuns,
-		IdleSelfImprovementOK:      state.IdleSelfImprovementOK,
-		LastError:                  state.LastError,
-		StartupEvidenceRefs:        append([]string(nil), state.StartupEvidenceRefs...),
-		StatePersistStatus:         state.StatePersistStatus,
-		StatePersistFailures:       state.StatePersistFailures,
-		StatePersistLastFailedAt:   state.StatePersistLastFailedAt,
-		StatePersistLastCode:       state.StatePersistLastCode,
-		StatePersistLastTransition: state.StatePersistLastTransition,
-		StatePersistLastConfirmed:  state.StatePersistLastConfirmed,
-		RecentErrors:               append([]ServerDiagnosticV0(nil), state.RecentErrors...),
+		SchemaVersion:                         StateSchemaVersionV0,
+		Status:                                strings.TrimSpace(state.Status),
+		Addr:                                  strings.TrimSpace(state.Addr),
+		ProcessRef:                            strings.TrimSpace(state.ProcessRef),
+		DaemonEpochRef:                        strings.TrimSpace(state.DaemonEpochRef),
+		StartedAt:                             state.StartedAt,
+		LastHeartbeatAt:                       state.LastHeartbeatAt,
+		StartupStatus:                         state.StartupStatus,
+		StartupReady:                          state.StartupReady,
+		StartupMessage:                        state.StartupMessage,
+		StartupOperationalMessage:             copyServerOperationalMessageV0(state.StartupOperationalMessage),
+		StartupRevision:                       normalizeStartupRevisionSummaryV0(state.StartupRevision),
+		DaemonLogPolicy:                       NormalizeDaemonLogPolicyV0(state.DaemonLogPolicy),
+		ShutdownSignalPolicy:                  NormalizeShutdownSignalPolicyV0(state.ShutdownSignalPolicy),
+		EffectiveConfig:                       config,
+		ConfigVisibility:                      ServerStatusConfigVisibilityPublicRedactedV0,
+		HiddenConfigFields:                    compactConfigStringsV0(hidden),
+		ProjectWorkDirRef:                     publicStatusRefIfConfiguredV0(state.ProjectWorkDir, "server-config-ref-project-work-dir"),
+		RuntimeWorkDirRef:                     publicStatusRefIfConfiguredV0(state.RuntimeWorkDir, "server-config-ref-runtime-work-dir"),
+		LastStartupCheckAt:                    state.LastStartupCheckAt,
+		LastSupervisorAt:                      state.LastSupervisorAt,
+		LastSupervisorStatus:                  state.LastSupervisorStatus,
+		LastSupervisorStopPublic:              state.LastSupervisorStopPublic,
+		LastSupervisorStopCategory:            state.LastSupervisorStopCategory,
+		LastSupervisorError:                   state.LastSupervisorError,
+		LastSupervisorOperationalMessage:      copyServerOperationalMessageV0(state.LastSupervisorOperationalMessage),
+		SupervisorLastErrorAt:                 state.SupervisorLastErrorAt,
+		SupervisorLastError:                   state.SupervisorLastError,
+		LastSupervisorQueueRef:                state.LastSupervisorQueueRef,
+		LastSupervisorQueueSize:               state.LastSupervisorQueueSize,
+		LastSupervisorTickNumber:              state.LastSupervisorTickNumber,
+		LastSupervisorResultTicks:             state.LastSupervisorResultTicks,
+		LastSupervisorExecutions:              state.LastSupervisorExecutions,
+		LastSupervisorSkips:                   state.LastSupervisorSkips,
+		SupervisorTickActive:                  state.SupervisorTickActive,
+		SupervisorFrozen:                      state.SupervisorFrozen,
+		SupervisorTicks:                       state.SupervisorTicks,
+		SupervisorErrorTicks:                  state.SupervisorErrorTicks,
+		SupervisorExecutions:                  state.SupervisorExecutions,
+		SupervisorSkips:                       state.SupervisorSkips,
+		ShutdownInProgress:                    state.ShutdownInProgress,
+		ShutdownStatus:                        state.ShutdownStatus,
+		ShutdownReady:                         state.ShutdownReady,
+		ShutdownHTTPStatus:                    state.ShutdownHTTPStatus,
+		ShutdownRunsRequested:                 state.ShutdownRunsRequested,
+		ShutdownRunsStopped:                   state.ShutdownRunsStopped,
+		ShutdownAgentsInFlight:                state.ShutdownAgentsInFlight,
+		ShutdownCheckpointsPending:            state.ShutdownCheckpointsPending,
+		ShutdownAsyncWorkActive:               state.ShutdownAsyncWorkActive,
+		ShutdownStopTimeoutAt:                 state.ShutdownStopTimeoutAt,
+		ShutdownSignalName:                    state.ShutdownSignalName,
+		ShutdownSignalCount:                   state.ShutdownSignalCount,
+		ShutdownSignalEscalated:               state.ShutdownSignalEscalated,
+		LastShutdownAt:                        state.LastShutdownAt,
+		IdleSelfImprovementAfter:              state.IdleSelfImprovementAfter,
+		IdleSelfImprovementTarget:             state.IdleSelfImprovementTarget,
+		IdleSelfImprovementCheck:              state.IdleSelfImprovementCheck,
+		IdleSelfImprovementReason:             state.IdleSelfImprovementReason,
+		IdleSelfImprovementOperationalMessage: copyServerOperationalMessageV0(state.IdleSelfImprovementOperationalMessage),
+		IdleSelfImprovementFlight:             state.IdleSelfImprovementFlight,
+		IdleSelfImprovementRuns:               state.IdleSelfImprovementRuns,
+		IdleSelfImprovementOK:                 state.IdleSelfImprovementOK,
+		ExternalBridgeComponent:               state.ExternalBridgeComponent,
+		ExternalBridgeStatus:                  state.ExternalBridgeStatus,
+		ExternalBridgeTickActive:              state.ExternalBridgeTickActive,
+		ExternalBridgeLastTickRef:             state.ExternalBridgeLastTickRef,
+		ExternalBridgeLastTickAt:              state.ExternalBridgeLastTickAt,
+		ExternalBridgeLastSuccess:             state.ExternalBridgeLastSuccess,
+		ExternalBridgeLastErrorAt:             state.ExternalBridgeLastErrorAt,
+		ExternalBridgeLastError:               state.ExternalBridgeLastError,
+		ExternalBridgeOperationalMessage:      copyServerOperationalMessageV0(state.ExternalBridgeOperationalMessage),
+		ExternalBridgeStopReason:              state.ExternalBridgeStopReason,
+		ExternalBridgeTicks:                   state.ExternalBridgeTicks,
+		ExternalBridgeErrorTicks:              state.ExternalBridgeErrorTicks,
+		ExternalBridgeFilters:                 compactConfigStringsV0(state.ExternalBridgeFilters),
+		ExternalBridgeCounters:                copyServerIntMapV0(state.ExternalBridgeCounters),
+		LastError:                             state.LastError,
+		LastErrorOperationalMessage:           copyServerOperationalMessageV0(state.LastErrorOperationalMessage),
+		StartupEvidenceRefs:                   append([]string(nil), state.StartupEvidenceRefs...),
+		StatePersistStatus:                    state.StatePersistStatus,
+		StatePersistFailures:                  state.StatePersistFailures,
+		StatePersistLastFailedAt:              state.StatePersistLastFailedAt,
+		StatePersistLastCode:                  state.StatePersistLastCode,
+		StatePersistLastTransition:            state.StatePersistLastTransition,
+		StatePersistLastConfirmed:             state.StatePersistLastConfirmed,
+		AuditStatus:                           state.AuditStatus,
+		AuditFailures:                         state.AuditFailures,
+		AuditLastFailedAt:                     state.AuditLastFailedAt,
+		AuditLastCode:                         state.AuditLastCode,
+		AuditLastEvent:                        state.AuditLastEvent,
+		AuditLastSeverity:                     state.AuditLastSeverity,
+		AuditLastConfirmed:                    state.AuditLastConfirmed,
+		ResponseWriteFailures:                 state.ResponseWriteFailures,
+		ResponseWriteLastFailedAt:             state.ResponseWriteLastFailedAt,
+		ResponseWriteLastCode:                 state.ResponseWriteLastCode,
+		ResponseWriteLastStage:                state.ResponseWriteLastStage,
+		RecentErrors:                          append([]ServerDiagnosticV0(nil), state.RecentErrors...),
 	}
 }
 

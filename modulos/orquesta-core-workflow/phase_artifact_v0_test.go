@@ -140,6 +140,48 @@ func TestRegisterPhaseArtifactCommandV0RequiresStartedAgent(t *testing.T) {
 	assertCommandErrorV0(t, err, ErrTransicionInvalidaV0, "payload.agent_ref")
 }
 
+func TestRegisterPhaseArtifactCommandV0AcceptsStoppedAgentWithLateAck(t *testing.T) {
+	run := mustRunWithStartedPhaseAgentV0(t, OrchestrationPhaseBrainstormingArquitecturaV0, "agent-director-stopped-late")
+	run = mustApplySingleCommandEventV0(t, run, mustStopAgentCommandV0(t, "cmd-stop-before-phase-artifact", "idem-stop-before-phase-artifact", "agent-director-stopped-late"))
+	command := mustRegisterPhaseArtifactCommandV0(t, "cmd-phase-artifact-stopped-agent", "idem-phase-artifact-stopped-agent", "artifact-stopped-agent", "agent-director-stopped-late")
+
+	result, err := HandleCommandV0(run, command)
+	if err != nil {
+		t.Fatalf("late stopped phase artifact rejected: %v", err)
+	}
+	assertSingleEventTypeV0(t, result, OrchestrationEventPhaseArtifactRegisteredV0)
+}
+
+func TestRegisterPhaseArtifactCommandV0AcceptsLostAgentWithLateAckAndClearsLost(t *testing.T) {
+	run := mustRunWithStartedPhaseAgentV0(t, OrchestrationPhaseBrainstormingArquitecturaV0, "agent-director-lost-late")
+	run = mustApplySingleCommandEventV0(t, run, mustRegisterAgentLostCommandV0(t, "cmd-lost-before-phase-artifact", "idem-lost-before-phase-artifact", "agent-director-lost-late"))
+	command := mustRegisterPhaseArtifactCommandV0(t, "cmd-phase-artifact-lost-agent", "idem-phase-artifact-lost-agent", "artifact-lost-agent", "agent-director-lost-late")
+
+	result, err := HandleCommandV0(run, command)
+	if err != nil {
+		t.Fatalf("late lost phase artifact rejected: %v", err)
+	}
+	assertSingleEventTypeV0(t, result, OrchestrationEventPhaseArtifactRegisteredV0)
+	got := mustApplyReducerEventV0(t, run, result.Events[0])
+	if !phaseArtifactInRunForTestV0(got, "artifact-lost-agent") {
+		t.Fatalf("phase_artifacts=%v missing late lost artifact", got.PhaseArtifacts)
+	}
+	if compactRefInListV0(got.LostAgents, "agent-director-lost-late") {
+		t.Fatalf("late phase artifact debe retirar lost_agents: %+v", got.LostAgents)
+	}
+}
+
+func TestRegisterPhaseArtifactCommandV0RejectsConfirmedStoppedAgent(t *testing.T) {
+	run := mustRunWithStartedPhaseAgentV0(t, OrchestrationPhaseBrainstormingArquitecturaV0, "agent-director-confirmed-stop")
+	run = mustApplySingleCommandEventV0(t, run, mustStopAgentCommandV0(t, "cmd-stop-confirmed-before-phase-artifact", "idem-stop-confirmed-before-phase-artifact", "agent-director-confirmed-stop"))
+	run = mustApplySingleCommandEventV0(t, run, mustRegisterAgentStopConfirmedCommandV0(t, "cmd-stop-confirm-before-phase-artifact", "idem-stop-confirm-before-phase-artifact", "agent-director-confirmed-stop"))
+	command := mustRegisterPhaseArtifactCommandV0(t, "cmd-phase-artifact-confirmed-stop-agent", "idem-phase-artifact-confirmed-stop-agent", "artifact-confirmed-stop-agent", "agent-director-confirmed-stop")
+
+	_, err := HandleCommandV0(run, command)
+
+	assertCommandErrorV0(t, err, ErrTransicionInvalidaV0, "payload.agent_ref")
+}
+
 func TestRegisterPhaseArtifactCommandV0RejectsProgrammingPhase(t *testing.T) {
 	payload := validRegisterPhaseArtifactPayloadV0("artifact-programacion", "agent-director-programacion", OrchestrationPhaseProgramacionV0)
 

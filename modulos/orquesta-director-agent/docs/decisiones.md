@@ -1,6 +1,14 @@
 # Decisiones locales
 
 ```text
+Fecha: 2026-05-27
+Decision: T15 no se relanza desde `orquesta-director-agent`; el DTO consume la politica comun de rails por campo y conserva vocabulario operativo opaco.
+Motivo: los cierres de T15 ya activaron el default acotado en servidor y validaron la suite requerida. Reabrir desde el DTO duplicaria owner y podria bloquear decisiones validas por palabras como runtime, provider, model, db, sql o codex.
+Impacto: el director puede seguir expresando refs compactas, context_refs y politicas de prompt/transcript como referencias; valores reales, rutas privadas, prompts/transcripts crudos y secretos siguen rechazados.
+Estado: aceptada_local
+```
+
+```text
 Fecha: 2026-05-10
 Decision: El DTO intercambiable del director cubre consultas, capacidad, agentes, retrabajo y replan como comandos compactos.
 Motivo: una app completa no debe depender de la sesion humana para pedir informacion faltante, capacidad, agentes especializados o replanificacion tras revision.

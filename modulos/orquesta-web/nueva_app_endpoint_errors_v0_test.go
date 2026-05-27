@@ -55,7 +55,7 @@ func TestNuevaAppWebEndpointV0MetodoNoSoportadoNoDelega(t *testing.T) {
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if rec.Header().Get("Allow") != "GET, POST" {
+	if rec.Header().Get("Allow") != webPublicHTTPAllowHeaderV0(http.MethodGet, http.MethodPost) {
 		t.Fatalf("allow=%q", rec.Header().Get("Allow"))
 	}
 	if client.calls != 0 {
@@ -64,5 +64,24 @@ func TestNuevaAppWebEndpointV0MetodoNoSoportadoNoDelega(t *testing.T) {
 	if page.ViewModel.Estado != WebNuevaAppEstadoError ||
 		page.ViewModel.ErroresPublicos[0].Code != WebNuevaAppErrMetodoNoSoportadoV0 {
 		t.Fatalf("page metodo no soportado: %+v", page)
+	}
+}
+
+func TestNuevaAppWebEndpointV0OptionsNoDelega(t *testing.T) {
+	client := &fakeNuevaAppClientV0{}
+	endpoint := NewNuevaAppWebEndpointV0(client)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodOptions, "/nueva-app?locale=es", nil)
+
+	endpoint.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if rec.Header().Get("Allow") != webPublicHTTPAllowHeaderV0(http.MethodGet, http.MethodPost) {
+		t.Fatalf("allow=%q", rec.Header().Get("Allow"))
+	}
+	if client.calls != 0 || rec.Body.Len() != 0 {
+		t.Fatalf("options con efectos calls=%d body=%q", client.calls, rec.Body.String())
 	}
 }

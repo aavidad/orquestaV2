@@ -79,6 +79,10 @@ campos redactados como `usage.input_tokens`, `usage.output_tokens` y
 `quota.status`; si el reporte trae proveedor, modelo, coste, cuenta, HOME,
 tokens o payload crudo, se descarta entero. `stdout`, `stderr` y
 `codex_last_message.txt` no son fuente de uso.
+Si la fuente opt-in esta activa pero el reporte falta, esta vacio o se rechaza
+por no redactado, el agente queda con `quota_status=unknown` y evidencia compacta
+`quota_observed_unavailable`; no se publica `not_configured` ni se bloquea el
+director.
 Las consultas web/API que no envian ese flag mantienen solo progreso, refs de
 proceso y agentes observados; el uso queda ausente aunque haya fuente opt-in.
 Si una superficie pide `include_agent_usage=true` y la composicion no inyecto

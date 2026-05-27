@@ -103,28 +103,16 @@ func operationalDirectorPlanStateAfterReviewAcceptedV0(
 				nextStep.DeliveryRefs = append([]string(nil), deliveryRefs...)
 				nextStep.ReviewResultRefs = append([]string(nil), reviewResultRefs...)
 				nextStep.RequiredTestEvidenceRefs = nil
-			} else if len(nextStep.TaskRefs) == 0 {
+			} else {
 				nextStep.TaskRefs = append([]string(nil), activeStep.TaskRefs...)
-			}
-			if nextStepKind != orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0 && len(nextStep.AgentRefs) == 0 {
 				nextStep.AgentRefs = append([]string(nil), activeStep.AgentRefs...)
-			}
-			if nextStepKind != orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0 && len(nextStep.DeliveryRefs) == 0 {
 				nextStep.DeliveryRefs = append([]string(nil), deliveryRefs...)
-			}
-			if nextStepKind != orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0 && len(nextStep.ReviewResultRefs) == 0 {
 				nextStep.ReviewResultRefs = append([]string(nil), reviewResultRefs...)
 			}
 			nextStep.EvidenceRefs = compactServiceRefsV0(append(nextStep.EvidenceRefs, evidenceRefs...))
-			if nextStep.WaveRef == "" {
-				nextStep.WaveRef = activeStep.WaveRef
-			}
-			if nextStep.CohortRef == "" {
-				nextStep.CohortRef = activeStep.CohortRef
-			}
-			if nextStep.ParentTaskRef == "" {
-				nextStep.ParentTaskRef = activeStep.ParentTaskRef
-			}
+			nextStep.WaveRef = activeStep.WaveRef
+			nextStep.CohortRef = activeStep.CohortRef
+			nextStep.ParentTaskRef = activeStep.ParentTaskRef
 			if nextStepKind == orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0 {
 				nextStep.BlockerRefs = []string{"required-tests-pending"}
 				nextStep.Reason = "required-tests-pending"

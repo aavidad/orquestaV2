@@ -2,6 +2,30 @@
 
 Cada tarea debe ser pequena y cerrada.
 
+## CTX-004
+
+Estado: completada documental.
+
+Objetivo: reconciliar T15 para contexto materializado: required `ref_only`
+debe resolverse por accion explicita, y rails de detalle solo bloquean campos
+activados con evidencia de valor sensible o material crudo.
+
+Write-set:
+
+- `docs/tareas.md`
+- `docs/decisiones.md`
+- `docs/pruebas.md`
+- `README.md`
+
+Contrato: `ContextMaterializedBundleV0` conserva refs opacas y clasifica
+required `ref_only` con `required_ref_action`; no transporta prompts,
+transcripts, HOME, OAuth, tokens ni contenido crudo.
+
+Validacion: `go test -count=1 ./modulos/orquesta-rails ./modulos/orquesta-core-workflow ./modulos/orquesta-context ./modulos/orquesta-director-agent ./cmd/orquesta-server`.
+
+Bloqueos: ampliar scopes de contexto requiere matriz externa propia; T15 no se
+reabre por docs historicas.
+
 ## CTX-000
 
 Estado: completada inicial.

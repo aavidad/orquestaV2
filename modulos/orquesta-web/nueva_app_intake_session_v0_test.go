@@ -28,6 +28,11 @@ func TestWebNuevaAppIntakeSessionV0CreaSesionDesdeIdeaYPideCamposCriticos(t *tes
 	if len(session.PendingQuestions) != 1 || session.PendingQuestions[0] != "tipo_app" {
 		t.Fatalf("preguntas=%+v", session.PendingQuestions)
 	}
+	if len(session.Questions) != 1 ||
+		session.Questions[0].LabelKey != "nueva_app.campo.tipo_app" ||
+		!session.Questions[0].Required {
+		t.Fatalf("questions i18n=%+v", session.Questions)
+	}
 	if session.AppSpecPartial.ExecutionMode != orquestafactory.ExecutionModeNormalV0 {
 		t.Fatalf("execution_mode=%q", session.AppSpecPartial.ExecutionMode)
 	}
@@ -55,6 +60,17 @@ func TestApplyWebNuevaAppIntakeAnswerV0RegistraDecisionYDejaDraftListo(t *testin
 	}
 	if sectionStatusV0(session.Sections, "identidad") != "complete" {
 		t.Fatalf("sections=%+v", session.Sections)
+	}
+	if !session.Handoff.Ready ||
+		session.Handoff.TargetTool != WebNuevaAppDirectorTargetToolV0 ||
+		session.Handoff.TargetPath != ArrancarDirectorAppEndpointV0 ||
+		session.Handoff.FallbackTool != WebNuevaAppFallbackTargetToolV0 {
+		t.Fatalf("handoff=%+v", session.Handoff)
+	}
+	if session.Handoff.RequestRef != "session-1" ||
+		len(session.Handoff.ContextRefs) != 2 ||
+		!hasIntakeContextValueV0(session.Handoff.ContextSummary, "tipo_app", "web") {
+		t.Fatalf("handoff refs/context=%+v", session.Handoff)
 	}
 }
 
@@ -105,4 +121,13 @@ func sectionStatusV0(sections []WebNuevaAppIntakeSectionV0, id string) string {
 		}
 	}
 	return ""
+}
+
+func hasIntakeContextValueV0(values []WebNuevaAppIntakeContextV0, key string, value string) bool {
+	for _, item := range values {
+		if item.Key == key && item.Value == value {
+			return true
+		}
+	}
+	return false
 }

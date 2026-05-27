@@ -27,6 +27,18 @@ That catalog explains which pieces are mandatory, which are recommended, and whe
 - [FAQ](faq_en.md)
 - [Contextual help](ayuda_contextual_en.md)
 - [Operational runbook](runbook_operativo_en.md)
+- [Documentary tests](pruebas_documentales_en.md)
+- [Pending work](pendientes_en.md)
+
+## Generated artifact contract
+
+Historical names `manual_desarrollador`, `manual_sistemas_deploy`,
+`pruebas_documentales`, and `pendientes` describe artifacts of the project
+generated or modified by Orquesta. They are not requirements to create root
+documents in the Orquesta repo.
+
+`manual_sistemas_deploy` is a compatibility alias: use `manual_sysadmin` for
+operations and `guia_despliegue` for deployment when both pieces apply.
 
 ## Usage rules
 
@@ -48,3 +60,8 @@ If the project has a real user-facing interface for non-technical staff, also ad
 
 - user manual
 - contextual help
+
+If the project starts from a director plan with verifiable closure, also add:
+
+- documentary tests
+- pending work, only when real gaps or deferred decisions remain

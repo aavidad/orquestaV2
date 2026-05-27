@@ -210,13 +210,57 @@ Implementado:
 
 Pendiente operativo:
 
-- reproducir el mismo ciclo con Codex real de ola/cohorte amplia y recursion;
+- Codex real de ola/cohorte amplia y recursion ya queda cerrado por
+  `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL` en la matriz vigente; reabrirlo
+  solo ante regresion demostrada;
 - cerrar derivados OPES reales solo desde conector/adaptador de dominio.
 
 Validacion:
 
 ```sh
 go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-state-file ./modulos/orquesta-app-director-service -run 'Test.*OperationalDirectorPlanState|Test.*PlanState|TestContinueAppDirectorV0.*PlanState|TestContinueRequestWithOperationalDirectorPlanStateV0'
+```
+
+## ORCH-CORE-STATS-001: puerto neutral de uso por agente
+
+Estado: hecho para T209 como contrato neutral.
+
+Objetivo: exponer uso por agente y resumen por run sin que el core conozca
+Codex, proveedor, HOME, OAuth, prompts, transcripts, coste ni rutas runtime.
+
+Validacion:
+
+```sh
+go test -count=1 ./modulos/orquesta-orchestration-core
+```
+
+Criterios cerrados:
+
+- el uso solo se consulta cuando `IncludeAgentUsage=true`;
+- si falta fuente, el core conserva stats basicas y agrega
+  `agent_usage_source_not_configured`;
+- si la fuente devuelve observaciones saneadas, el core proyecta tokens,
+  capacidad y `quota_status`;
+- `not_configured` solo significa fuente ausente, no reporte runtime ausente.
+
+## ORCH-CORE-STATS-009: progreso vivo sin cerrar tareas
+
+Estado: cerrado por T210.
+
+Objetivo: evitar que una run con agentes vivos, proceso registrado o entregas
+pendientes de review siga apareciendo al 0% en stats.
+
+Contrato:
+
+- `TasksClosed` solo cuenta `ClosedTasks` y review/cierre aceptado.
+- `DeliveredTasks`, agentes vivos y senales de proceso aportan progreso parcial
+  y `progress_source`, sin inventar completitud.
+- Los datos parciales no bloquean al director; degradan con reason code publico.
+
+Validacion:
+
+```sh
+go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-server ./modulos/orquesta-web ./cmd/orquesta-server
 ```
 
 ## ORCH-CORE-DIR-009: perfiles neutrales de WorkflowTask
@@ -289,4 +333,19 @@ Validacion:
 
 ```sh
 go test -count=1 ./modulos/orquesta-state-file ./modulos/orquesta-orchestration-core -run 'Test.*ReplayState'
+```
+
+## ORCH-CORE-DIR-013: directiva T207 de rotacion opt-in
+
+Estado: hecho offline.
+
+`BuildSessionRotationDirectiveV0` consume la decision neutral de runtime y la
+convierte en directiva de aplicacion: continuar, pedir handoff completo o
+permitir sesion de relevo. No despacha runtime, no detiene la sesion actual y
+no cambia el wait scope del Director.
+
+Validacion:
+
+```sh
+go test -count=1 ./modulos/orquesta-orchestration-core -run TestBuildSessionRotationDirectiveV0
 ```

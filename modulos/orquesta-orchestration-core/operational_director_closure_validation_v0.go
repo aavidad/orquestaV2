@@ -1,14 +1,15 @@
 package orquestacionnucleoapp
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"strings"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 )
 
-const maxOperationalDirectorClosureEvidenceRefsV0 = 20
+const (
+	maxOperationalDirectorClosureEvidenceRefsV0  = 20
+	maxOperationalDirectorClosureEvidenceBytesV0 = 900
+)
 
 func operationalDirectorClosedRunRequestIssuesV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
@@ -145,17 +146,40 @@ func operationalDirectorClosureEvidenceRefsV0(
 	request OperationalDirectorClosureRequestV0,
 ) []string {
 	refs := compactStringsV0(append(append([]string(nil), request.RequiredTestEvidenceRefs...), request.EvidenceRefs...))
-	if len(refs) <= maxOperationalDirectorClosureEvidenceRefsV0 {
+	if operationalDirectorClosureEvidenceRefsFitV0(refs) {
 		return refs
 	}
 	overflow := operationalDirectorClosureEvidenceOverflowRefV0(refs)
-	keep := maxOperationalDirectorClosureEvidenceRefsV0 - 1
-	return compactStringsV0(append(refs[:keep], overflow))
+	keep := make([]string, 0, maxOperationalDirectorClosureEvidenceRefsV0)
+	used := len(overflow)
+	for _, ref := range refs {
+		if len(keep) >= maxOperationalDirectorClosureEvidenceRefsV0-1 {
+			break
+		}
+		nextUsed := used + len(ref)
+		if nextUsed > maxOperationalDirectorClosureEvidenceBytesV0 && len(keep) > 0 {
+			break
+		}
+		keep = append(keep, ref)
+		used = nextUsed
+	}
+	return compactStringsV0(append(keep, overflow))
+}
+
+func operationalDirectorClosureEvidenceRefsFitV0(refs []string) bool {
+	if len(refs) > maxOperationalDirectorClosureEvidenceRefsV0 {
+		return false
+	}
+	total := 0
+	for _, ref := range refs {
+		total += len(ref)
+	}
+	return total <= maxOperationalDirectorClosureEvidenceBytesV0
 }
 
 func operationalDirectorClosureEvidenceOverflowRefV0(refs []string) string {
-	hash := sha256.Sum256([]byte(strings.Join(refs, "\x00")))
-	return "evidence-ref-operational-director-closure-overflow-" + hex.EncodeToString(hash[:])[:16]
+	return "evidence-ref-operational-director-closure-overflow-" +
+		deterministicRefDigestPrefixV0("operational_director_closure_overflow", 32, refs...)
 }
 
 func operationalDirectorClosureSummaryV0(

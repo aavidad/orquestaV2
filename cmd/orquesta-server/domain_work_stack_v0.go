@@ -1,8 +1,8 @@
 package main
 
 import (
+	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,10 +36,8 @@ func domainWorkExecutorFromEnvV0(
 	}
 	if baseURL != "" {
 		client := orquestaopesconnector.NewRESTClientV0(orquestaopesconnector.RESTClientConfigV0{
-			BaseURL: baseURL,
-			HTTPClient: &http.Client{
-				Timeout: time.Duration(intEnvOrDefaultV0(envOPESTimeoutSecondsV0, 30)) * time.Second,
-			},
+			BaseURL:            baseURL,
+			HTTPClient:         commandOPESTemporalHTTPClientV0(time.Duration(intEnvOrDefaultV0(envOPESTimeoutSecondsV0, 30)) * time.Second),
 			DefaultMaxAttempts: intEnvOrDefaultV0(envOPESDefaultMaxAttemptsV0, 1),
 		})
 		return orquestamcp.NewMCPDomainWorkToolExecutorV0(client, client), nil
@@ -86,11 +84,11 @@ func domainWorkHTTPEgressPolicyFromEnvV0() (orquestadomainworkhttp.EgressPolicyV
 	case orquestadomainworkhttp.EgressModeAllowlistV0:
 		allowedHosts := splitCSVEnvV0(os.Getenv(envDomainWorkHTTPAllowedHostsV0))
 		if len(allowedHosts) == 0 {
-			return orquestadomainworkhttp.EgressPolicyV0{}, fmt.Errorf(orquestadomainworkhttp.ErrDomainWorkHTTPEgressPolicyRequiredV0)
+			return orquestadomainworkhttp.EgressPolicyV0{}, errors.New(orquestadomainworkhttp.ErrDomainWorkHTTPEgressPolicyRequiredV0)
 		}
 		return orquestadomainworkhttp.AllowlistEgressPolicyV0(allowedHosts...), nil
 	default:
-		return orquestadomainworkhttp.EgressPolicyV0{}, fmt.Errorf(orquestadomainworkhttp.ErrDomainWorkHTTPEgressPolicyRequiredV0)
+		return orquestadomainworkhttp.EgressPolicyV0{}, errors.New(orquestadomainworkhttp.ErrDomainWorkHTTPEgressPolicyRequiredV0)
 	}
 }
 

@@ -1,5 +1,14 @@
 ## Runtime Worker Contract
 
+> Estado 2026-05-26: documento en cuarentena T124. El contenido de `tmux`,
+> `manifest/status/heartbeat`, brokers remotos y launchers equivalentes queda
+> como compatibilidad historica o recuperacion asistida. No declara `tmux` como
+> runtime canonico del nucleo neutral ni autoriza crear procesos por fuera de
+> `orquesta-runtime`, `orquesta-runtime-codex` o la composicion opt-in. Para
+> trabajo vigente, usar contratos runtime con refs opacas, ACK/checkpoint
+> durable y tests propios; el indice federado debe excluir este doc de
+> planificacion automatica salvo tarea legacy explicita.
+
 Este bloque copia lo útil del runtime de `oh-my-codex` y asume `tmux` como transporte local canónico para agentes interactivos, sin convertir el terminal en frontera del dominio.
 
 ### Objetivo

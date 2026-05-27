@@ -91,3 +91,14 @@ Validacion:
 - `TestBuildDirectorAgentWorkflowCommandV0AskUserMantieneTargetUser`;
 - `TestBuildDirectorAgentCompactStatsV0ResumeRunSinDetallesOperativos`;
 - `go test -count=1 ./modulos/orquesta-director-agent-workflow`.
+
+## DAW-008
+
+Objetivo: reconciliar T207 sin abrir comando nuevo del workflow.
+
+Estado: cerrado documentalmente el 2026-05-27.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-director-agent-workflow`;
+- la cobertura funcional de T207 vive en runtime/orchestration.

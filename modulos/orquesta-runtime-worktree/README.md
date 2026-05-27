@@ -15,6 +15,14 @@ git diff --check -- modulos/orquesta-runtime-worktree
 
 ## Arranque
 
-```bash
-./arrancar_codex.sh "microtarea concreta"
-```
+La ruta vigente para agentes OrquestaV2 es el servidor residente y la cola
+gobernada, no el wrapper local. `./arrancar_codex.sh` queda reservado a
+compatibilidad historica o recuperacion manual con error publico cuando no haya
+contrato versionado.
+
+## Reconciliacion T208
+
+En el guardian break-glass, este modulo solo verifica efectos sobre worktrees y
+preserva refs opacas. No convierte `worktree_ref` ni `branch_ref` en rutas,
+ramas Git o ubicaciones de control; la promocion/restart vive en servidor,
+guardian y adaptadores opt-in.

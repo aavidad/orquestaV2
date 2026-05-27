@@ -17,7 +17,7 @@ func runCLIAppSpecSolicitarV0(ctx context.Context, args []string, runner Orquest
 	inv := invocationFromCLIFlagsV0(CliDefaultCommandSolicitarAppV0, common)
 
 	var req orquestafactory.AppSpecRequestV0
-	if err := readCLIJSONInputV0(runner, common.InputPath, &req); err != nil {
+	if err := readCLIJSONInputWithLimitV0(runner, common.InputPath, common.InputMaxBytes, &req); err != nil {
 		return cliParseErrorEnvelopeV0(CliDefaultCommandSolicitarAppV0, err)
 	}
 	client, err := NewSolicitarNuevaAppCliClientV0(common.ServerURL, common.Timeout)

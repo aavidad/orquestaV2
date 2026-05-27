@@ -25,8 +25,11 @@ func (handler mcpDomainWorkHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *ht
 		))
 		return
 	}
+	if handleMCPPublicHTTPOptionsV0(w, r, http.MethodPost) {
+		return
+	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
+		setMCPPublicHTTPAllowV0(w, http.MethodPost)
 		writeMCPDomainWorkHTTPV0(w, http.StatusMethodNotAllowed, newMCPDomainWorkHTTPErrorV0(
 			r,
 			MCPDomainWorkToolInputV0{},
@@ -45,12 +48,12 @@ func (handler mcpDomainWorkHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *ht
 		return
 	}
 	var input MCPDomainWorkToolInputV0
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+	if code := decodeMCPPublicHTTPJSONProfileV0(w, r, &input, mcpPublicHTTPJSONProfileDomainWorkV0); code != "" {
 		writeMCPDomainWorkHTTPV0(w, http.StatusBadRequest, newMCPDomainWorkHTTPErrorV0(
 			r,
 			input,
 			"body",
-			MCPDomainWorkHTTPInvalidBodyCodeV0,
+			code,
 		))
 		return
 	}

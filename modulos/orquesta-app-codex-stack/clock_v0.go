@@ -4,15 +4,12 @@ import (
 	"time"
 
 	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func stackNowV0(clock orquestafactoryhttp.AppSpecHTTPClockV0) time.Time {
 	if clock == nil {
-		return time.Now().UTC()
+		return orquestaruntime.NowUTCV0(nil)
 	}
-	now := clock().UTC()
-	if now.IsZero() {
-		return time.Now().UTC()
-	}
-	return now
+	return orquestaruntime.NowUTCV0(orquestaruntime.ClockFuncV0(clock))
 }

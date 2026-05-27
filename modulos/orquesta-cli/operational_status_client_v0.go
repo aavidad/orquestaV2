@@ -1,9 +1,9 @@
 package orquestacli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -29,12 +29,10 @@ func NewOperationalStatusCliClientV0(serverURL string, timeout time.Duration) (*
 		return nil, err
 	}
 	return &OperationalStatusCliClientV0{
-		BaseURL:  config.BaseURL,
-		Endpoint: config.Endpoint,
-		Timeout:  config.Timeout,
-		HTTPClient: &http.Client{
-			Timeout: config.Timeout,
-		},
+		BaseURL:    config.BaseURL,
+		Endpoint:   config.Endpoint,
+		Timeout:    config.Timeout,
+		HTTPClient: newCLILoopbackHTTPClientV0(config.Timeout),
 	}, nil
 }
 
@@ -100,7 +98,11 @@ func (client *OperationalStatusCliClientV0) ConsultarEstadoOperativo(ctx context
 
 func decodeOperationalStatusResponseV0(resp *http.Response, inv CliInvocationContextV0, start time.Time) CliOutputEnvelopeV0 {
 	if resp.StatusCode == http.StatusBadRequest {
-		issues, ok := decodeOperationalStatusIssuesV0(resp.Body)
+		raw, detail := readCLIRESTResponseBodyForCommandV0(resp, inv.Command)
+		if detail != "" {
+			return cliSingleOperationalErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", detail, resp.StatusCode, false, start)
+		}
+		issues, ok := decodeOperationalStatusIssuesV0(bytes.NewReader(raw))
 		if !ok || len(issues) == 0 {
 			return cliSingleOperationalErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "errores", "respuesta_400_sin_errores_publicos", resp.StatusCode, false, start)
 		}
@@ -113,12 +115,12 @@ func decodeOperationalStatusResponseV0(resp *http.Response, inv CliInvocationCon
 		)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode > 299 {
-		return cliSingleOperationalErrorEnvelopeV0(inv, CliErrErrorTransporteV0, "status_code", "status_no_2xx", resp.StatusCode, retryableStatusV0(resp.StatusCode), start)
+		return cliSingleOperationalErrorEnvelopeV0(inv, CliErrErrorTransporteV0, "status_code", cliRESTNo2xxDetailForCommandV0(resp, inv.Command), resp.StatusCode, retryableStatusV0(resp.StatusCode), start)
 	}
 
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return cliSingleOperationalErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", "body_no_legible", resp.StatusCode, false, start)
+	raw, detail := readCLIRESTResponseBodyForCommandV0(resp, inv.Command)
+	if detail != "" {
+		return cliSingleOperationalErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", detail, resp.StatusCode, false, start)
 	}
 	diagnostic, err := orquestaobservability.DecodeDiagnosticoCompactoV0(raw)
 	if err != nil {
@@ -134,7 +136,7 @@ func decodeOperationalStatusResponseV0(resp *http.Response, inv CliInvocationCon
 	)
 }
 
-func decodeOperationalStatusIssuesV0(body io.Reader) ([]orquestaobservability.OperationalStatusValidationIssueV0, bool) {
+func decodeOperationalStatusIssuesV0(body interface{ Read([]byte) (int, error) }) ([]orquestaobservability.OperationalStatusValidationIssueV0, bool) {
 	var out orquestaobservability.OperationalStatusValidationErrorV0
 	if err := json.NewDecoder(body).Decode(&out); err != nil {
 		return nil, false

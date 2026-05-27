@@ -16,24 +16,26 @@ const (
 )
 
 type CodexShutdownRequestV0 struct {
-	SchemaVersion string   `json:"schema_version"`
-	RunRef        string   `json:"run_ref"`
-	AgentRef      string   `json:"agent_ref"`
-	CorrelationID string   `json:"correlation_id,omitempty"`
-	RequestedBy   string   `json:"requested_by,omitempty"`
-	Reason        string   `json:"reason,omitempty"`
-	CheckpointRef string   `json:"checkpoint_ref"`
-	EvidenceRefs  []string `json:"evidence_refs,omitempty"`
+	SchemaVersion      string   `json:"schema_version"`
+	RunRef             string   `json:"run_ref"`
+	AgentRef           string   `json:"agent_ref"`
+	CorrelationID      string   `json:"correlation_id,omitempty"`
+	RequestedBy        string   `json:"requested_by,omitempty"`
+	Reason             string   `json:"reason,omitempty"`
+	ShutdownAttemptRef string   `json:"shutdown_attempt_ref"`
+	CheckpointRef      string   `json:"checkpoint_ref"`
+	EvidenceRefs       []string `json:"evidence_refs,omitempty"`
 }
 
 type CodexShutdownCheckpointAckV0 struct {
-	SchemaVersion string   `json:"schema_version"`
-	RunRef        string   `json:"run_ref"`
-	AgentRef      string   `json:"agent_ref"`
-	CheckpointRef string   `json:"checkpoint_ref"`
-	Status        string   `json:"status"`
-	Summary       string   `json:"summary,omitempty"`
-	EvidenceRefs  []string `json:"evidence_refs,omitempty"`
+	SchemaVersion      string   `json:"schema_version"`
+	RunRef             string   `json:"run_ref"`
+	AgentRef           string   `json:"agent_ref"`
+	ShutdownAttemptRef string   `json:"shutdown_attempt_ref"`
+	CheckpointRef      string   `json:"checkpoint_ref"`
+	Status             string   `json:"status"`
+	Summary            string   `json:"summary,omitempty"`
+	EvidenceRefs       []string `json:"evidence_refs,omitempty"`
 }
 
 func WriteCodexShutdownRequestFileV0(
@@ -55,7 +57,7 @@ func WriteCodexShutdownRequestFileV0(
 			codexIssueV0(CodexConnectorFilesystemV0, CodexShutdownRequestFileNameV0, request.CorrelationID, "mkdir_failed"),
 		}
 	}
-	if err := writeJSONFileV0(path, request); err != nil {
+	if err := writeJSONFileV0(filepath.Dir(path), path, request); err != nil {
 		return []orquestaruntime.ExternalAgentConnectorErrorV0{
 			codexIssueV0(CodexConnectorFilesystemV0, CodexShutdownRequestFileNameV0, request.CorrelationID, "write_failed"),
 		}
@@ -67,16 +69,16 @@ func ReadCodexShutdownCheckpointAckFileV0(
 	path string,
 	request CodexShutdownRequestV0,
 ) (CodexShutdownCheckpointAckV0, []orquestaruntime.ExternalAgentConnectorErrorV0) {
-	data, err := os.ReadFile(strings.TrimSpace(path))
+	data, err := ReadCodexControlFileBytesV0(strings.TrimSpace(path), CodexShutdownCheckpointAckFileNameV0)
 	if err != nil {
-		issue := codexIssueV0(
-			CodexConnectorAckInvalidV0,
-			CodexShutdownCheckpointAckFileNameV0,
-			request.CorrelationID,
-			"checkpoint_ack_not_ready",
-		)
-		issue.Retryable = true
-		return CodexShutdownCheckpointAckV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{issue}
+		return CodexShutdownCheckpointAckV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{
+			CodexControlFileReadIssueV0(
+				err,
+				CodexShutdownCheckpointAckFileNameV0,
+				request.CorrelationID,
+				"checkpoint_ack_not_ready",
+			),
+		}
 	}
 	if codexShutdownBytesForbiddenV0(data) {
 		return CodexShutdownCheckpointAckV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{
@@ -102,6 +104,7 @@ func ValidateCodexShutdownRequestV0(
 	}
 	v.required("run_ref", request.RunRef)
 	v.required("agent_ref", request.AgentRef)
+	v.required("shutdown_attempt_ref", request.ShutdownAttemptRef)
 	v.required("checkpoint_ref", request.CheckpointRef)
 	v.noForbidden("requested_by", request.RequestedBy)
 	v.noForbidden("reason", request.Reason)
@@ -130,6 +133,10 @@ func ValidateCodexShutdownCheckpointAckV0(
 		strings.TrimSpace(ack.CheckpointRef) != strings.TrimSpace(request.CheckpointRef) {
 		v.add(CodexConnectorAckCorrelationV0, "shutdown_checkpoint_ack", "correlation_mismatch")
 	}
+	if strings.TrimSpace(request.ShutdownAttemptRef) != "" &&
+		strings.TrimSpace(ack.ShutdownAttemptRef) != strings.TrimSpace(request.ShutdownAttemptRef) {
+		v.add(CodexConnectorAckCorrelationV0, "shutdown_attempt_ref", "shutdown_checkpoint_attempt_mismatch")
+	}
 	v.noForbidden("summary", ack.Summary)
 	v.noForbiddenList("evidence_refs", ack.EvidenceRefs)
 	return v.issues
@@ -142,6 +149,7 @@ func normalizeCodexShutdownRequestV0(request CodexShutdownRequestV0) CodexShutdo
 	request.CorrelationID = strings.TrimSpace(request.CorrelationID)
 	request.RequestedBy = strings.TrimSpace(request.RequestedBy)
 	request.Reason = strings.TrimSpace(request.Reason)
+	request.ShutdownAttemptRef = strings.TrimSpace(request.ShutdownAttemptRef)
 	request.CheckpointRef = strings.TrimSpace(request.CheckpointRef)
 	request.EvidenceRefs = compactCodexIssueEvidenceV0(request.EvidenceRefs)
 	return request
@@ -153,6 +161,7 @@ func normalizeCodexShutdownCheckpointAckV0(
 	ack.SchemaVersion = strings.TrimSpace(ack.SchemaVersion)
 	ack.RunRef = strings.TrimSpace(ack.RunRef)
 	ack.AgentRef = strings.TrimSpace(ack.AgentRef)
+	ack.ShutdownAttemptRef = strings.TrimSpace(ack.ShutdownAttemptRef)
 	ack.CheckpointRef = strings.TrimSpace(ack.CheckpointRef)
 	ack.Status = strings.TrimSpace(ack.Status)
 	ack.Summary = strings.TrimSpace(ack.Summary)

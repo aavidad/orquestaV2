@@ -60,8 +60,15 @@ func CoordinateRunsTickV0(
 		}
 		executed, drainErr := deps.Drainer.DrainRunV0(ctx, drainRequestV0(candidate, command))
 		if drainErr != nil {
+			executed = runDrainResultWithErrorDiagnosticV0(candidate, executed, drainErr)
+			if err := rotateExecutedRunV0(ctx, deps.QueueUpdater, candidate, command, executed); err != nil {
+				return RunCoordinatorTickResultV0{}, err
+			}
 			result.Executions = append(result.Executions, executionSummaryV0(candidate, executed))
-			return result, drainErr
+			if !command.ContinueOnDrainError {
+				return result, drainErr
+			}
+			continue
 		}
 		if err := rotateExecutedRunV0(ctx, deps.QueueUpdater, candidate, command, executed); err != nil {
 			return RunCoordinatorTickResultV0{}, err
@@ -169,11 +176,12 @@ func rotateExecutedRunV0(
 	}
 	refs := append([]string(nil), candidate.EvidenceRefs...)
 	refs = append(refs, "evidence-ref-run-coordinator-executed")
+	queueStatus := effectiveExecutedRunQueueStatusV0(candidate, result)
 	_, err := updater.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
 		RunRef:        candidate.RunRef,
 		QueueRef:      command.QueueRef,
 		AppRef:        candidate.AppRef,
-		Status:        strings.TrimSpace(result.QueueStatus),
+		Status:        queueStatus,
 		PriorityScore: candidate.PriorityScore,
 		UpdatedAt:     command.OccurredAt,
 		RequestedBy:   "orquesta-run-coordinator",
@@ -181,6 +189,20 @@ func rotateExecutedRunV0(
 		EvidenceRefs:  refs,
 	})
 	return err
+}
+
+func effectiveExecutedRunQueueStatusV0(
+	candidate orquestarunqueue.RankedRunCandidateV0,
+	result RunDrainResultV0,
+) string {
+	status := strings.TrimSpace(result.QueueStatus)
+	if status != "" {
+		return status
+	}
+	if orquestarunqueue.IsExecutableRunStatusV0(candidate.Status) {
+		return orquestarunqueue.RunStatusRunningV0
+	}
+	return strings.TrimSpace(candidate.Status)
 }
 
 func compactRankedV0(ranked []orquestarunqueue.RankedRunCandidateV0) []RankedRunSummaryV0 {
@@ -231,19 +253,4 @@ func stringSetV0(values []string) map[string]struct{} {
 		out[trimmed] = struct{}{}
 	}
 	return out
-}
-
-func executionSummaryV0(
-	candidate orquestarunqueue.RankedRunCandidateV0,
-	result RunDrainResultV0,
-) RunExecutionSummaryV0 {
-	return RunExecutionSummaryV0{
-		RunRef:       candidate.RunRef,
-		AppRef:       candidate.AppRef,
-		Rank:         candidate.Rank,
-		Outcome:      result.Outcome,
-		QueueStatus:  strings.TrimSpace(result.QueueStatus),
-		EvidenceRefs: append([]string(nil), result.EvidenceRefs...),
-		Diagnostics:  append([]RunDrainDiagnosticV0(nil), result.Diagnostics...),
-	}
 }

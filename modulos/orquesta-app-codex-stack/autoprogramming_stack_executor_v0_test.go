@@ -13,6 +13,8 @@ import (
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
+	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
+	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
 	orquestaservershutdown "orquesta/modulos/orquesta-server-shutdown"
 )
 
@@ -211,7 +213,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0EncolaYSupervisorGlobalArranca(
 	}
 }
 
-func TestCodexStackAutoprogrammingSupervisorGlobalSupervisaAgenteParado(t *testing.T) {
+func TestCodexStackAutoprogrammingSupervisorGlobalReemplazaAskDirectorPerdido(t *testing.T) {
 	ctx := context.Background()
 	runtime := newPendingAckCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)
@@ -281,6 +283,117 @@ func TestCodexStackAutoprogrammingSupervisorGlobalSupervisaAgenteParado(t *testi
 		autoprogrammingBridgeStringInSetForTestV0(run.ConfirmedStoppedAgents, agentRef) ||
 		!codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionAskDirectorV0) {
 		t.Fatalf("supervisor global no activo revision recuperable: lost=%v stopped=%v confirmed=%v assessments=%v", run.LostAgents, run.StoppedAgents, run.ConfirmedStoppedAgents, run.AgentAssessments)
+	}
+
+	third := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:            "request-autoprogramming-global-stopped-supervisor-003",
+		CorrelationID:        "corr-autoprogramming-global-stopped-001",
+		QueueRef:             DefaultRunQueueRefV0,
+		MaxTicks:             1,
+		MaxRunsPerTick:       1,
+		MaxExecutions:        1,
+		MaxBursts:            8,
+		MaxStepsPerBurst:     6,
+		MaxDispatchesPerWait: 8,
+		MaxCommands:          20,
+		MaxOutboxPerCycle:    8,
+		AllowRepeatedRuns:    true,
+	})
+	if third.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 {
+		t.Fatalf("third=%+v", third)
+	}
+	run, err = stack.Ports.RunStore.LoadRunV0(ctx, prepared.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 third: %v", err)
+	}
+	if len(run.StartedAgents) != 2 || runtime.launchCountV0() != 2 ||
+		!codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionAskDirectorV0) ||
+		!codexStackRefsContainPartV0(run.ReplanDecisions, "#action:"+string(orquestacoreworkflow.ReplanDecisionActionReplaceAgentV0)) {
+		t.Fatalf("supervisor no reemplazo ask_director perdido: started=%v launches=%d assessments=%v replans=%v run=%+v",
+			run.StartedAgents,
+			runtime.launchCountV0(),
+			run.AgentAssessments,
+			run.ReplanDecisions,
+			run,
+		)
+	}
+}
+
+func TestCodexStackAutoprogrammingSupervisorResidenteReemplazaAskDirectorPerdido(t *testing.T) {
+	ctx := context.Background()
+	runtime := newPendingAckCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-autoprogramming-resident-lost-001",
+		CorrelationID:          "corr-autoprogramming-resident-lost-001",
+		OccurredAt:             "2026-05-22T11:45:00Z",
+		RequestedBy:            "orquesta-stack-resident-test",
+		AutoprogrammingRequest: autoprogrammingBridgeRequestForTestV0(),
+		MaxBursts:              3,
+		MaxStepsPerBurst:       3,
+		MaxDispatchesPerWait:   3,
+		MaxCommands:            5,
+		MaxOutboxPerCycle:      5,
+	})
+	if !prepared.Accepted || len(prepared.WaitAgentRefs) != 1 {
+		t.Fatalf("prepared=%+v", prepared)
+	}
+	command := orquestarunsupervisor.RunSupervisorCommandV0{
+		QueueRef:          DefaultRunQueueRefV0,
+		MaxTicks:          1,
+		MaxRunsPerTick:    1,
+		MaxExecutions:     1,
+		AllowRepeatedRuns: true,
+		CorrelationID:     "corr-autoprogramming-resident-lost-001",
+		DrainLimits: orquestaruncoordinator.RunDrainLimitsV0{
+			MaxBursts:            8,
+			MaxStepsPerBurst:     6,
+			MaxDispatchesPerWait: 8,
+			MaxCommands:          20,
+			MaxOutboxPerCycle:    8,
+			MaxDecisionCycles:    1,
+		},
+	}
+	if result, err := stack.RunGlobalSupervisorV0(ctx, command); err != nil || runtime.launchCountV0() != 1 {
+		t.Fatalf("first result=%+v err=%v launches=%d", result, err, runtime.launchCountV0())
+	}
+	agentRef := prepared.WaitAgentRefs[0]
+	record, err := stack.Stores.ProcessRegistry.ResolveAgentProcessV0(ctx, prepared.RunRef, agentRef)
+	if err != nil {
+		t.Fatalf("ResolveAgentProcessV0: %v", err)
+	}
+	runtime.markStoppedForTestV0(record.ProcessRef)
+
+	if result, err := stack.RunGlobalSupervisorV0(ctx, command); err != nil {
+		t.Fatalf("second result=%+v err=%v", result, err)
+	}
+	run, err := stack.Ports.RunStore.LoadRunV0(ctx, prepared.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 second: %v", err)
+	}
+	if !autoprogrammingBridgeStringInSetForTestV0(run.LostAgents, agentRef) ||
+		!codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionAskDirectorV0) {
+		t.Fatalf("second no dejo assessment recuperable: lost=%v assessments=%v run=%+v", run.LostAgents, run.AgentAssessments, run)
+	}
+
+	if result, err := stack.RunGlobalSupervisorV0(ctx, command); err != nil {
+		t.Fatalf("third result=%+v err=%v", result, err)
+	}
+	run, err = stack.Ports.RunStore.LoadRunV0(ctx, prepared.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 third: %v", err)
+	}
+	if len(run.StartedAgents) != 2 || runtime.launchCountV0() != 2 ||
+		!codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionAskDirectorV0) ||
+		!codexStackRefsContainPartV0(run.ReplanDecisions, "#action:"+string(orquestacoreworkflow.ReplanDecisionActionReplaceAgentV0)) {
+		t.Fatalf("supervisor residente no reemplazo ask_director perdido: started=%v launches=%d assessments=%v replans=%v run=%+v",
+			run.StartedAgents,
+			runtime.launchCountV0(),
+			run.AgentAssessments,
+			run.ReplanDecisions,
+			run,
+		)
 	}
 }
 

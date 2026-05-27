@@ -1,20 +1,24 @@
 package orquestadirectorcandidates
 
 import (
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
-	"regexp"
+	"strconv"
 	"strings"
 	"testing"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func TestArquitecturaV0BloqueaImportsYTerminosProhibidos(t *testing.T) {
 	files := productionGoFilesV0(t)
 	for _, file := range files {
-		assertAllowedImportsV0(t, file)
-		assertNoForbiddenTermsV0(t, file)
+		parsed := parseProductionGoFileV0(t, file)
+		assertAllowedImportsV0(t, file, parsed)
+		assertNoForbiddenLiteralsV0(t, file, parsed)
 	}
 }
 
@@ -37,53 +41,48 @@ func productionGoFilesV0(t *testing.T) []string {
 	return files
 }
 
-func assertAllowedImportsV0(t *testing.T, file string) {
+func parseProductionGoFileV0(t *testing.T, file string) *ast.File {
 	t.Helper()
-	parsed, err := parser.ParseFile(token.NewFileSet(), file, nil, parser.ImportsOnly)
+	parsed, err := parser.ParseFile(token.NewFileSet(), file, nil, 0)
 	if err != nil {
 		t.Fatalf("parse %s: %v", file, err)
 	}
+	return parsed
+}
+
+func assertAllowedImportsV0(t *testing.T, file string, parsed *ast.File) {
+	t.Helper()
 	for _, spec := range parsed.Imports {
 		path := strings.Trim(spec.Path.Value, `"`)
-		if forbiddenImportV0(path) {
+		if orquestarails.ArchitectureImportForbiddenV0(path, importPolicyV0()) {
 			t.Fatalf("%s imports forbidden package %q", file, path)
 		}
 	}
 }
 
-func forbiddenImportV0(path string) bool {
-	for _, banned := range forbiddenImportsV0() {
-		if path == banned || strings.HasPrefix(path, banned+"/") {
+func importPolicyV0() orquestarails.ArchitectureImportPolicyV0 {
+	return orquestarails.ArchitectureImportPolicyV0{
+		ExactImports: []string{"database/sql", "net", "os", "path/filepath", "runtime"},
+		ImportFragments: []string{
+			"github.com/go-sql-driver/mysql", "github.com/jackc/pgx", "modernc.org/sqlite",
+		},
+	}
+}
+
+func assertNoForbiddenLiteralsV0(t *testing.T, file string, parsed *ast.File) {
+	t.Helper()
+	ast.Inspect(parsed, func(node ast.Node) bool {
+		lit, ok := node.(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
 			return true
 		}
-	}
-	return false
-}
-
-func forbiddenImportsV0() []string {
-	return []string{
-		"database/sql", "net", "os", "path/filepath", "runtime",
-		"github.com/go-sql-driver/mysql", "github.com/jackc/pgx", "modernc.org/sqlite",
-	}
-}
-
-func assertNoForbiddenTermsV0(t *testing.T, file string) {
-	t.Helper()
-	data, err := os.ReadFile(file)
-	if err != nil {
-		t.Fatalf("read %s: %v", file, err)
-	}
-	lower := strings.ToLower(string(data))
-	for _, term := range forbiddenTermsV0() {
-		if regexp.MustCompile(`\b`+regexp.QuoteMeta(term)+`\b`).FindStringIndex(lower) != nil {
-			t.Fatalf("%s contains forbidden term %q", file, term)
+		value, err := strconv.Unquote(lit.Value)
+		if err != nil {
+			return true
 		}
-	}
-}
-
-func forbiddenTermsV0() []string {
-	return []string{
-		"db", "sqlite", "postgres", "runtime", "provider", "proveedor",
-		"model", "modelo", "home", "oauth", "filesystem", "network",
-	}
+		if orquestarails.ArchitectureSourceLiteralForbiddenV0("orquesta-director-candidates", value) {
+			t.Fatalf("%s contiene literal sensible o adaptador concreto %q", file, value)
+		}
+		return true
+	})
 }

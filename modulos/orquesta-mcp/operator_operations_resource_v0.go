@@ -1,6 +1,10 @@
 package orquestamcp
 
-import operator "orquesta/modulos/orquesta-operator-mcp"
+import (
+	"encoding/json"
+
+	operator "orquesta/modulos/orquesta-operator-mcp"
+)
 
 const (
 	MCPOperatorOperationsResourceNameV0    = "orquesta.operator.operations.v0"
@@ -25,6 +29,20 @@ type MCPOperatorOperationsResourceV0 struct {
 	Tools         []operator.OperatorMCPToolDescriptorV0 `json:"tools"`
 	PublicErrors  []string                               `json:"errores_publicos"`
 	Guardrails    []string                               `json:"guardrails"`
+}
+
+type mcpOperatorOperationsResourceJSONV0 struct {
+	URI           string                               `json:"uri"`
+	Version       string                               `json:"version"`
+	SchemaVersion string                               `json:"schema_version"`
+	Tools         []mcpOperatorOperationsToolCompactV0 `json:"tools"`
+	PublicErrors  []string                             `json:"errores_publicos"`
+	Guardrails    []string                             `json:"guardrails"`
+}
+
+type mcpOperatorOperationsToolCompactV0 struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
 }
 
 func MCPOperatorOperationsDescriptorV0() MCPOperatorOperationsResourceDescriptorV0 {
@@ -62,4 +80,22 @@ func NewMCPOperatorOperationsResourceV0() MCPOperatorOperationsResourceV0 {
 			"sin_payloads_extensos_ni_internals",
 		},
 	}
+}
+
+func (resource MCPOperatorOperationsResourceV0) MarshalJSON() ([]byte, error) {
+	tools := make([]mcpOperatorOperationsToolCompactV0, 0, len(resource.Tools))
+	for _, tool := range resource.Tools {
+		tools = append(tools, mcpOperatorOperationsToolCompactV0{
+			Name:    tool.Name,
+			Version: tool.Version,
+		})
+	}
+	return json.Marshal(mcpOperatorOperationsResourceJSONV0{
+		URI:           resource.URI,
+		Version:       resource.Version,
+		SchemaVersion: resource.SchemaVersion,
+		Tools:         tools,
+		PublicErrors:  resource.PublicErrors,
+		Guardrails:    resource.Guardrails,
+	})
 }

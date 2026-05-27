@@ -40,7 +40,7 @@ func programmingTeamSmokeStateDiagnosticsV0(
 	}
 	run, err := store.LoadRunV0(ctx, runRef)
 	if err != nil {
-		return "run diagnostics unavailable: " + err.Error()
+		return realSmokeDiagnosticTextV0("programming_team_smoke", "run diagnostics unavailable: "+err.Error())
 	}
 	fmt.Fprintf(&out, "run phase=%s tasks=%v agents=%v started=%v deliveries=%v phase_artifacts=%v questions=%v assessments=%v\n",
 		run.CurrentPhase, run.Tasks, run.Agents, run.StartedAgents, run.Deliveries,
@@ -76,7 +76,7 @@ func programmingTeamSmokeStateDiagnosticsV0(
 		ctx, &out, receiptStore, processRegistry, snapshotSource, worktreeStore, run)
 	fmt.Fprintf(&out, "events_by_type=%v events=%v",
 		programmingTeamEventCountsV0(sink.EventsV0()), programmingTeamEventTypesV0(sink.EventsV0()))
-	return out.String()
+	return realSmokeDiagnosticTextV0("programming_team_smoke", out.String())
 }
 
 func programmingTeamTaskRefsV0(tasks []programmingTeamTaskV0) []string {

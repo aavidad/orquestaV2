@@ -104,6 +104,9 @@ func TestNewMCPNuevaAppOKResultV0ContieneSpecYBacklogCompactos(t *testing.T) {
 	}
 	if result.Backlog.SchemaVersion != testBacklogInicialPropuestoV0 ||
 		result.Backlog.SpecID != "spec-agenda" ||
+		result.Backlog.Estado != orquestafactory.BacklogInicialEstadoPreviewNoEjecutableV0 ||
+		result.Backlog.DirectorHandoff != orquestafactory.BacklogDirectorHandoffContractV0 ||
+		result.Backlog.DirectorHandoffRef != "app_spec:spec-agenda" ||
 		result.Backlog.Fases != 2 ||
 		result.Backlog.Microtareas != 1 ||
 		len(result.Backlog.ContratosRequeridos) != 2 {
@@ -153,6 +156,27 @@ func TestNewMCPNuevaAppToolExecutorV0RejectsCredentialsInServerURL(t *testing.T)
 	_, err := NewMCPNuevaAppToolExecutorV0("https://user:secret@example.com", time.Second)
 	if err == nil || !strings.Contains(err.Error(), "credenciales") {
 		t.Fatalf("error credenciales esperado: %v", err)
+	}
+}
+
+func TestMCPNuevaAppToolExecutorV0RechazaEndpointAmbiguo(t *testing.T) {
+	executor, err := NewMCPNuevaAppToolExecutorV0("http://operator-mcp-test.local/base", time.Second)
+	if err != nil {
+		t.Fatalf("new executor: %v", err)
+	}
+	executor.Endpoint = "https://evil.test/api"
+	_, err = executor.Execute(context.Background(), MCPNuevaAppToolInputV0{
+		RequestID: "req-endpoint",
+		AppSpecRequest: orquestafactory.AppSpecRequestV0{
+			SchemaVersion: orquestafactory.AppSpecRequestSchemaV0,
+			Locale:        "es",
+			Nombre:        "Agenda",
+			Objetivo:      "Coordinar ensayos",
+			TipoApp:       "web",
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "endpoint debe ser path relativo") {
+		t.Fatalf("error endpoint esperado: %v", err)
 	}
 }
 
@@ -291,6 +315,15 @@ func validMCPBacklogV0() orquestafactory.BacklogInicialPropuestoV0 {
 	return orquestafactory.BacklogInicialPropuestoV0{
 		SchemaVersion: testBacklogInicialPropuestoV0,
 		SpecID:        "spec-agenda",
+		Estado:        orquestafactory.BacklogInicialEstadoPreviewNoEjecutableV0,
+		Freshness: orquestafactory.BacklogFreshnessV0{
+			SourceRef: "app_spec:spec-agenda",
+		},
+		DirectorHandoff: orquestafactory.BacklogDirectorHandoffV0{
+			Status:           orquestafactory.BacklogDirectorHandoffStatusPendienteV0,
+			RequiredContract: orquestafactory.BacklogDirectorHandoffContractV0,
+			RequiredInputRef: "app_spec:spec-agenda",
+		},
 		Fases: []orquestafactory.FaseInicialV0{
 			{ID: "discovery"},
 			{ID: "implementacion"},

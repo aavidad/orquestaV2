@@ -23,10 +23,13 @@ const (
 type AppVCSIssueCodeV0 string
 
 const (
-	AppVCSIssueInvalidRequestV0 AppVCSIssueCodeV0 = "app_vcs_request_invalida"
-	AppVCSIssueGitErrorV0       AppVCSIssueCodeV0 = "app_vcs_git_error"
-	AppVCSIssuePushPendingV0    AppVCSIssueCodeV0 = "app_vcs_push_pending"
-	AppVCSIssueControlPathV0    AppVCSIssueCodeV0 = "app_vcs_control_path"
+	AppVCSIssueInvalidRequestV0        AppVCSIssueCodeV0 = "app_vcs_request_invalida"
+	AppVCSIssueGitErrorV0              AppVCSIssueCodeV0 = "app_vcs_git_error"
+	AppVCSIssuePushPendingV0           AppVCSIssueCodeV0 = "app_vcs_push_pending"
+	AppVCSIssueControlPathV0           AppVCSIssueCodeV0 = "app_vcs_control_path"
+	AppVCSIssueGitOutputTooLargeV0     AppVCSIssueCodeV0 = "git_output_too_large"
+	AppVCSIssueGitStatusTooManyPathsV0 AppVCSIssueCodeV0 = "git_status_too_many_paths"
+	AppVCSIssueGitCommandTimeoutV0     AppVCSIssueCodeV0 = "git_command_timeout"
 )
 
 type AppVCSRequestV0 struct {
@@ -46,20 +49,21 @@ type AppVCSRequestV0 struct {
 }
 
 type AppVCSResultV0 struct {
-	SchemaVersion  string          `json:"schema_version"`
-	Status         AppVCSStatusV0  `json:"status"`
-	Action         AppVCSActionV0  `json:"action"`
-	AppRef         string          `json:"app_ref,omitempty"`
-	RepoRef        string          `json:"repo_ref,omitempty"`
-	WorktreeRef    string          `json:"worktree_ref,omitempty"`
-	BranchRef      string          `json:"branch_ref,omitempty"`
-	CommitRef      string          `json:"commit_ref,omitempty"`
-	CommitShortRef string          `json:"commit_short_ref,omitempty"`
-	ChangedPaths   []string        `json:"changed_paths,omitempty"`
-	PushPending    bool            `json:"push_pending,omitempty"`
-	Retryable      bool            `json:"retryable,omitempty"`
-	EvidenceRefs   []string        `json:"evidence_refs,omitempty"`
-	Issues         []AppVCSIssueV0 `json:"issues,omitempty"`
+	SchemaVersion     string                                    `json:"schema_version"`
+	Status            AppVCSStatusV0                            `json:"status"`
+	Action            AppVCSActionV0                            `json:"action"`
+	AppRef            string                                    `json:"app_ref,omitempty"`
+	RepoRef           string                                    `json:"repo_ref,omitempty"`
+	WorktreeRef       string                                    `json:"worktree_ref,omitempty"`
+	BranchRef         string                                    `json:"branch_ref,omitempty"`
+	CommitRef         string                                    `json:"commit_ref,omitempty"`
+	CommitShortRef    string                                    `json:"commit_short_ref,omitempty"`
+	ChangedPaths      []string                                  `json:"changed_paths,omitempty"`
+	PushPending       bool                                      `json:"push_pending,omitempty"`
+	Retryable         bool                                      `json:"retryable,omitempty"`
+	EvidenceRefs      []string                                  `json:"evidence_refs,omitempty"`
+	ExclusionReceipts []WorktreeLocalArtifactExclusionReceiptV0 `json:"exclusion_receipts,omitempty"`
+	Issues            []AppVCSIssueV0                           `json:"issues,omitempty"`
 }
 
 type AppVCSIssueV0 struct {

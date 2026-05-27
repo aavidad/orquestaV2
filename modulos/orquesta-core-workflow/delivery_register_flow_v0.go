@@ -15,14 +15,8 @@ func ensureRegisterDeliveryCommandAllowedV0(current OrchestrationRunV0, command 
 	if !agentRequestAlreadyReflectedV0(current, payload.AgentRef) {
 		return commandErrorV0(ErrTransicionInvalidaV0, "payload.agent_ref")
 	}
-	if agentFailedAlreadyReflectedV0(current, payload.AgentRef) {
-		return commandErrorV0(ErrTransicionInvalidaV0, "payload.agent_ref")
-	}
-	if agentLostAlreadyReflectedV0(current, payload.AgentRef) {
-		return commandErrorV0(ErrTransicionInvalidaV0, "payload.agent_ref")
-	}
-	if !agentStartedAlreadyReflectedV0(current, payload.AgentRef) {
-		return commandErrorV0(ErrTransicionInvalidaV0, "payload.agent_ref")
+	if err := ensureDeliveryAgentLifecycleAllowsRegistrationV0(current, payload.AgentRef, true); err != nil {
+		return err
 	}
 	return nil
 }
@@ -40,14 +34,8 @@ func ensureDeliveryRegisteredEventAllowedV0(current OrchestrationRunV0, event Or
 	if !agentRequestAlreadyReflectedV0(current, payload.AgentRef) {
 		return eventErrorV0(ErrSecuenciaInvalidaV0, "payload.agent_ref")
 	}
-	if agentFailedAlreadyReflectedV0(current, payload.AgentRef) {
-		return eventErrorV0(ErrSecuenciaInvalidaV0, "payload.agent_ref")
-	}
-	if agentLostAlreadyReflectedV0(current, payload.AgentRef) {
-		return eventErrorV0(ErrSecuenciaInvalidaV0, "payload.agent_ref")
-	}
-	if !agentStartedAlreadyReflectedV0(current, payload.AgentRef) {
-		return eventErrorV0(ErrSecuenciaInvalidaV0, "payload.agent_ref")
+	if err := ensureDeliveryAgentLifecycleAllowsRegistrationV0(current, payload.AgentRef, false); err != nil {
+		return err
 	}
 	return nil
 }
@@ -72,4 +60,24 @@ func deliveryProgrammingPhaseCurrentV0(run OrchestrationRunV0, phaseID string) b
 		return false
 	}
 	return phaseIsCurrentAndActiveV0(run, phase)
+}
+
+func ensureDeliveryAgentLifecycleAllowsRegistrationV0(
+	run OrchestrationRunV0,
+	agentRef string,
+	command bool,
+) error {
+	if !agentStartedAlreadyReflectedV0(run, agentRef) ||
+		agentFailedAlreadyReflectedV0(run, agentRef) ||
+		agentStopConfirmedAlreadyReflectedV0(run, agentRef) {
+		return deliveryAgentLifecycleErrorV0(command)
+	}
+	return nil
+}
+
+func deliveryAgentLifecycleErrorV0(command bool) error {
+	if command {
+		return commandErrorV0(ErrTransicionInvalidaV0, "payload.agent_ref")
+	}
+	return eventErrorV0(ErrSecuenciaInvalidaV0, "payload.agent_ref")
 }

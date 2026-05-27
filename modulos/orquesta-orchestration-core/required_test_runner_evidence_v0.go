@@ -2,9 +2,6 @@ package orquestacionnucleoapp
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"strings"
 )
 
 func requiredTestRunnerExistingEvidenceForCommandV0(
@@ -47,7 +44,7 @@ func requiredTestEvidenceRefForCommandV0(
 	request RequiredTestExecutionRequestV0,
 	command string,
 ) string {
-	hash := sha256.Sum256([]byte(strings.Join([]string{
+	return "test-evidence-ref-v0-" + deterministicRefDigestV0("required_test_evidence",
 		request.RunRef,
 		request.TaskRef,
 		command,
@@ -55,6 +52,5 @@ func requiredTestEvidenceRefForCommandV0(
 		request.ReviewRequestID,
 		request.ReviewResultRef,
 		request.AcceptedReviewRef,
-	}, "\x00")))
-	return "test-evidence-ref-v0-" + hex.EncodeToString(hash[:])[:24]
+	)
 }

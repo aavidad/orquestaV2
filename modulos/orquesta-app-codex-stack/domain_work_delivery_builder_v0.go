@@ -3,14 +3,10 @@ package orquestaappcodexstack
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
-	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
-	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 )
 
 type defaultDomainWorkArtifactSubmissionBuilderV0 struct{}
@@ -23,15 +19,22 @@ func (defaultDomainWorkArtifactSubmissionBuilderV0) BuildDomainWorkArtifactSubmi
 	if work == nil || strings.TrimSpace(work.JobRef) == "" {
 		return orquestadomainwork.DomainWorkArtifactSubmissionV0{}, false, nil
 	}
-	body := readDomainWorkDeliveryBodyV0(input.Descriptor, input.Ack)
 	fields := copyDomainWorkFieldsForContextV0(work.InputFields)
 	artifactType := domainWorkArtifactTypeForWorkKindV0(work.WorkKind)
+	intake, err := readDomainWorkDeliveryArtifactV0(input.Descriptor, input.Ack, artifactType)
+	if err != nil {
+		return orquestadomainwork.DomainWorkArtifactSubmissionV0{}, false, err
+	}
+	body := intake.Body
 	payloadBody := domainWorkDeliveryPayloadBodyV0(body, artifactType)
 	payloadBody = canonicalDomainWorkDeliveryPayloadBodyV0(artifactType, payloadBody, input)
 	if err := validateDomainWorkDeliveryQualityV0(fields, artifactType, body, payloadBody); err != nil {
 		return orquestadomainwork.DomainWorkArtifactSubmissionV0{}, false, err
 	}
 	fields = domainWorkDeliveryPayloadFieldsV0(fields, artifactType, input.Task.Title, payloadBody)
+	if err := validateDomainWorkArtifactPayloadFieldsForIntakeV0(fields); err != nil {
+		return orquestadomainwork.DomainWorkArtifactSubmissionV0{}, false, err
+	}
 	return orquestadomainwork.NormalizeDomainWorkArtifactSubmissionV0(
 		orquestadomainwork.DomainWorkArtifactSubmissionV0{
 			RequestID:      domainWorkArtifactRequestIDV0(work, artifactType),
@@ -263,44 +266,4 @@ func domainWorkArtifactExternalRefsV0(
 		})
 	}
 	return refs
-}
-
-func readDomainWorkDeliveryBodyV0(
-	descriptor orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
-	ack orquestaruntimecodex.CodexAgentAckV0,
-) string {
-	for _, file := range ack.Files {
-		path, ok := safeDomainWorkDeliveryFilePathV0(descriptor.ProjectWorkDir, string(file))
-		if !ok {
-			continue
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		return strings.TrimSpace(string(data))
-	}
-	return ""
-}
-
-func safeDomainWorkDeliveryFilePathV0(baseDir string, rel string) (string, bool) {
-	baseDir = strings.TrimSpace(baseDir)
-	rel = filepath.ToSlash(filepath.Clean(strings.TrimSpace(rel)))
-	if baseDir == "" || rel == "" || rel == "." || rel == ".." || strings.HasPrefix(rel, "../") ||
-		filepath.IsAbs(rel) {
-		return "", false
-	}
-	path := filepath.Join(baseDir, filepath.FromSlash(rel))
-	cleanBase, err := filepath.Abs(baseDir)
-	if err != nil {
-		return "", false
-	}
-	cleanPath, err := filepath.Abs(path)
-	if err != nil {
-		return "", false
-	}
-	if cleanPath != cleanBase && !strings.HasPrefix(cleanPath, cleanBase+string(filepath.Separator)) {
-		return "", false
-	}
-	return cleanPath, true
 }

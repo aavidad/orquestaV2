@@ -303,8 +303,9 @@ Pruebas de contrato:
 ## Evidencia DB v1 usada para este contrato
 
 ```text
-Fuente: /home/alberto/Trabajo/orquesta/backups/legacy-sqlite-20260422/orquesta.db
-Modo: SQLite URI readonly `mode=ro`.
+Fuente forense en cuarentena: ref relativo opaco `backups/legacy-sqlite-20260422/orquesta.db` cuando exista localmente.
+Estado documental: `forense`/`historico`/`quarantine`; no es prerequisito vivo ni fuente operativa para agentes.
+Modo historico: SQLite URI readonly `mode=ro`, solo como evidencia pasada.
 Tablas consultadas: politicas_modelo, pools_capacidad, pool_modelos, agentes, presupuestos_sesion, agente_scores_locales.
 Hallazgos:
   - politicas_modelo: 52 filas activas; scopes global, perfil, fase y agente; prioridad por fila; reasoning observado vacio, medium, high y xhigh.

@@ -22,12 +22,15 @@ type mcpOperationalStatusHTTPHandlerV0 struct {
 
 func (handler mcpOperationalStatusHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != MCPOperationalStatusHTTPPathV0 {
-		writeMCPOperationalStatusIssuesV0(w, http.StatusNotFound, r.Header.Get("X-Correlation-ID"), "path", "ruta_no_soportada")
+		writeMCPOperationalStatusIssuesV0(w, http.StatusNotFound, r.Header.Get("X-Correlation-ID"), "path", MCPPublicErrPathUnsupportedV0)
+		return
+	}
+	if handleMCPPublicHTTPOptionsV0(w, r, http.MethodPost) {
 		return
 	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
-		writeMCPOperationalStatusIssuesV0(w, http.StatusMethodNotAllowed, r.Header.Get("X-Correlation-ID"), "method", "metodo_no_permitido")
+		setMCPPublicHTTPAllowV0(w, http.MethodPost)
+		writeMCPOperationalStatusIssuesV0(w, http.StatusMethodNotAllowed, r.Header.Get("X-Correlation-ID"), "method", MCPPublicErrMethodNotAllowedV0)
 		return
 	}
 	if handler.source == nil {
@@ -35,8 +38,8 @@ func (handler mcpOperationalStatusHTTPHandlerV0) ServeHTTP(w http.ResponseWriter
 		return
 	}
 	var query orquestaobservability.OperationalStatusQueryV0
-	if err := json.NewDecoder(r.Body).Decode(&query); err != nil {
-		writeMCPOperationalStatusIssuesV0(w, http.StatusBadRequest, r.Header.Get("X-Correlation-ID"), "body", "request_body_invalido")
+	if code := decodeMCPPublicHTTPJSONV0(w, r, &query); code != "" {
+		writeMCPOperationalStatusIssuesV0(w, http.StatusBadRequest, r.Header.Get("X-Correlation-ID"), "body", code)
 		return
 	}
 	diagnostic, err := handler.source.QueryOperationalStatusV0(query)

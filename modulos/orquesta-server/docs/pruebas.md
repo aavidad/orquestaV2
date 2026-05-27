@@ -39,6 +39,9 @@
   capacidad libre con cola visible, incluso con skips no terminales si queda
   hueco bajo el objetivo, y que no se prepara si la cola ya alcanzo el objetivo
   configurado.
+- `modulos/orquesta-server` prueba que refs de request retryables descuentan
+  presion de cola igual que refs de run y llegan al planner con evidencia
+  compacta del guardian/promocion.
 - `modulos/orquesta-server` prueba que un bloqueo posterior del supervisor no
   pisa la razon de una automejora aceptada y la conserva como intento pendiente.
 - `modulos/orquesta-server` prueba que la auditoria de blockers de automejora
@@ -57,8 +60,14 @@
   store, y que una escritura posterior confirmada devuelve la proyeccion a `ok`.
 - `cmd/orquesta-server` prueba que el daemon espera readiness y no acepta
   `/healthz` como senal suficiente.
+- T210 requiere que el transporte de stats no degrade progreso vivo:
+  `go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-server ./modulos/orquesta-web ./cmd/orquesta-server`.
+- T208 reconciliado requiere la bateria cruzada de guardian, servidor,
+  autoprogramacion, worktree y Codex sin promover smokes reales.
 - Prueba manual recomendada:
   - `go run ./cmd/orquesta-server run`
   - `curl http://127.0.0.1:8787/healthz`
   - `curl http://127.0.0.1:8787/api/v0/server/readiness`
-  - `curl http://127.0.0.1:8787/api/status`
+  - `curl http://127.0.0.1:8787/api/v0/server/status`
+  - `curl -i http://127.0.0.1:8787/api/status` solo para validar headers del
+    alias legacy.

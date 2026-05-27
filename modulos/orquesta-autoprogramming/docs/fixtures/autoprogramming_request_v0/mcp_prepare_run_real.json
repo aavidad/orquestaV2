@@ -1,0 +1,67 @@
+{
+  "schema_version": "autoprogramming_request_fixture.v0",
+  "fixture_ref": "fixture-ref-autoprogramming-mcp-prepare-run-real-v0",
+  "source_surface": "mcp",
+  "transport": "tool",
+  "tool_name": "orquesta.autoprogramming.prepare_run.v0",
+  "resource_uri": "orquesta://contracts/autoprogramming-prepare-run/v0",
+  "request_id": "request-ref-mcp-autoprogramming-prepare-run-real-001",
+  "correlation_id": "corr-mcp-autoprogramming-prepare-run-real-001",
+  "requested_by": "operator-ref-mcp",
+  "priority_score": 10,
+  "autoprogramming_request": {
+    "request_ref": "request-ref-mcp-autoprogramming-prepare-run-real-001",
+    "project_ref": "project-ref-orquesta",
+    "worktree_ref": "worktree-ref-orquesta-server-idle-self-improvement",
+    "worktree_isolated": true,
+    "branch_ref": "branch-ref-orquesta-server-idle-self-improvement",
+    "tasks": [
+      {
+        "task_ref": "task-ref-self-improvement-ab390583089c-mcp",
+        "area": "orquesta-mcp",
+        "title": "Autoprogramacion prepare-run MCP",
+        "objective": "Validar que el tool MCP transporta AutoprogrammingRequestV0 sin reinterpretar runtime.",
+        "context": [
+          "Solicitud capturada desde el contrato MCP prepare-run.",
+          "El executor real queda inyectado por composicion externa."
+        ],
+        "context_refs": [
+          "source_ref:fixture-ref-autoprogramming-mcp-prepare-run-real-v0",
+          "source_surface:mcp",
+          "source_transport:tool",
+          "source_request_id:request-ref-mcp-autoprogramming-prepare-run-real-001",
+          "source_correlation_id:corr-mcp-autoprogramming-prepare-run-real-001",
+          "source_requested_by:operator-ref-mcp",
+          "source_task_ref:task-ref-self-improvement-ab390583089c",
+          "backlog_scan_epoch:backlog-scan-epoch-ca63ba789be2"
+        ],
+        "acceptance_criteria": [
+          "La request valida con refs opacas.",
+          "El write-set queda acotado a orquesta-mcp.",
+          "El contrato no introduce HTTP, VCS ni runtime en orquesta-autoprogramming."
+        ],
+        "required_tests": [
+          "go test -count=1 ./modulos/orquesta-mcp"
+        ],
+        "compact_rules": [
+          "no secretos ni transcripts",
+          "solo cambios pruebas bloqueos"
+        ]
+      }
+    ],
+    "write_set": [
+      "modulos/orquesta-mcp/autoprogramming_prepare_run_tool_v0.go",
+      "modulos/orquesta-mcp/autoprogramming_prepare_run_tool_v0_test.go"
+    ],
+    "required_tests": [
+      "go test -count=1 ./modulos/orquesta-mcp",
+      "go test -count=1 ./modulos/orquesta-autoprogramming"
+    ],
+    "max_task_refs": 1,
+    "max_areas": 1,
+    "max_write_set_entries": 2,
+    "max_delegation_depth": 1,
+    "max_subagents_per_agent": 4,
+    "max_recursive_agents": 8
+  }
+}

@@ -20,6 +20,7 @@ type opesDrainConfigV0 struct {
 	HTTPTimeout     time.Duration
 	RunConfig       orquestaopesbridge.JobRunConfigV0
 	InputLedger     externalBridgeInputLedgerV0
+	Destination     opesDrainDestinationPolicyV0
 }
 
 func opesDrainConfigFromEnvV0() (opesDrainConfigV0, error) {
@@ -42,6 +43,10 @@ func opesDrainConfigFromEnvWithBaseURLV0(
 		return opesDrainConfigV0{}, err
 	}
 	inputLedger, err := opesBridgeInputLedgerFromEnvV0(dryRun)
+	if err != nil {
+		return opesDrainConfigV0{}, err
+	}
+	destination, err := opesDrainDestinationPolicyFromEnvV0(opesBaseURL, orquestaBaseURL, dryRun)
 	if err != nil {
 		return opesDrainConfigV0{}, err
 	}
@@ -68,6 +73,7 @@ func opesDrainConfigFromEnvWithBaseURLV0(
 			RequestedBy:   "orquesta-opes-bridge",
 		},
 		InputLedger: inputLedger,
+		Destination: destination,
 	}, nil
 }
 

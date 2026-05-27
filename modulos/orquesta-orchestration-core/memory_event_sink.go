@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -78,6 +79,49 @@ func (sink *InMemoryEventSinkV0) LoadRunEventsV0(
 		}
 	}
 	return cloneEventsV0(events), nil
+}
+
+func (sink *InMemoryEventSinkV0) LoadRunEventsPageV0(
+	ctx context.Context,
+	request RunEventPageRequestV0,
+) (RunEventPageResultV0, error) {
+	events, err := sink.LoadRunEventsV0(ctx, request.RunRef)
+	if err != nil {
+		return RunEventPageResultV0{}, err
+	}
+	offset, err := runEventCursorOffsetV0(request.Cursor)
+	if err != nil {
+		return RunEventPageResultV0{}, err
+	}
+	limit := request.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+	if offset > len(events) {
+		offset = len(events)
+	}
+	end := offset + limit
+	if end > len(events) {
+		end = len(events)
+	}
+	result := RunEventPageResultV0{Events: cloneEventsV0(events[offset:end]), Total: len(events)}
+	if end < len(events) {
+		result.HasMore = true
+		result.NextCursor = strconv.Itoa(end)
+	}
+	return result, nil
+}
+
+func runEventCursorOffsetV0(cursor string) (int, error) {
+	cursor = strings.TrimSpace(cursor)
+	if cursor == "" {
+		return 0, nil
+	}
+	offset, err := strconv.Atoi(cursor)
+	if err != nil || offset < 0 {
+		return 0, fmt.Errorf("cursor invalido")
+	}
+	return offset, nil
 }
 
 func cloneEventsV0(

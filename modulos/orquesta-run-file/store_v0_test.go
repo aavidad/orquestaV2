@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -54,6 +55,65 @@ func TestRunFileStoreWritesStructuredJSONSnapshotsV0(t *testing.T) {
 	assertStructuredSnapshotV0(t, filepath.Join(dir, runFileAppChangeNameV0))
 }
 
+func TestRunFileStoreRunControlPreservaEvidenciasPreviasV0(t *testing.T) {
+	dir := t.TempDir()
+	store := mustNewRunFileStoreV0(t, dir)
+	ctx := context.Background()
+
+	if _, err := store.StopRunV0(ctx, orquestaruncontrol.StopRunCommandV0{
+		RunRef:       "run-evidence-history",
+		RequestedBy:  "operador",
+		Reason:       "parada solicitada",
+		EvidenceRefs: []string{"evidence-ref-stop-origin"},
+	}); err != nil {
+		t.Fatalf("StopRunV0: %v", err)
+	}
+	state, err := store.CompleteRunControlV0(ctx, orquestaruncontrol.CompleteRunControlCommandV0{
+		RunRef:       "run-evidence-history",
+		TargetStatus: orquestaruncontrol.RunControlStatusStoppedV0,
+		RequestedBy:  "orquesta-run-control",
+		Reason:       "agentes drenados",
+		EvidenceRefs: []string{"evidence-ref-stop-complete"},
+	})
+	if err != nil {
+		t.Fatalf("CompleteRunControlV0: %v", err)
+	}
+	if !runFileStringInSetV0(state.EvidenceRefs, "evidence-ref-stop-origin") ||
+		!runFileStringInSetV0(state.EvidenceRefs, "evidence-ref-stop-complete") {
+		t.Fatalf("state evidence=%+v", state.EvidenceRefs)
+	}
+}
+
+func TestRunFileStoreLimitaLecturaSnapshotV0(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, runFileControlNameV0)
+	if err := os.WriteFile(path, []byte(strings.Repeat("x", int(runFileSnapshotMaxBytesV0)+1)), 0o600); err != nil {
+		t.Fatalf("write oversized snapshot: %v", err)
+	}
+	_, err := NewRunFileStoreV0(dir)
+	if err == nil || err.Error() != "orquesta_run_file: size_limit_exceeded" {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestRunFileStoreLimitaRecordsSnapshotV0(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, runFileControlNameV0)
+	records := make([]string, 0, runFileSnapshotMaxRecordsV0+1)
+	for index := 0; index <= runFileSnapshotMaxRecordsV0; index++ {
+		records = append(records, `{}`)
+	}
+	body := `{"schema_version":"` + runFileControlSchemaVersionV0 +
+		`","records":[` + strings.Join(records, ",") + `]}`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write snapshot: %v", err)
+	}
+	_, err := NewRunFileStoreV0(dir)
+	if err == nil || err.Error() != "orquesta_run_file: control_records_limit_exceeded" {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 func mustNewRunFileStoreV0(t *testing.T, dir string) *RunFileStoreV0 {
 	t.Helper()
 	store, err := NewRunFileStoreV0(dir)
@@ -83,4 +143,13 @@ func assertStructuredSnapshotV0(t *testing.T, path string) {
 	if len(records) == 0 {
 		t.Fatalf("%s records empty", path)
 	}
+}
+
+func runFileStringInSetV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

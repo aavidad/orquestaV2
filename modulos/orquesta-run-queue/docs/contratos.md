@@ -37,7 +37,9 @@ Campos minimos:
 - `status`: estado publico de la run.
 - `priority_score`: prioridad base, ordenada de mayor a menor.
 - `updated_at`: instante de ultima actualizacion usado para aging/fairness.
-- `fairness_group_ref`: ref opcional para evolucion futura de fairness.
+- `fairness_group_ref`: ref opcional de grupo de fairness. Si falta, el ranking
+  deriva un grupo estable `app:<app_ref>` o `run:<run_ref>` y expone
+  `fairness_group_missing`.
 - `evidence_refs`: refs opacas de evidencia.
 
 ## RankRunCandidatesV0
@@ -53,7 +55,11 @@ Reglas:
 
 1. filtra `paused`, `delivered`, `canceled`, `stopped` y `closed`;
 2. ordena por `priority_score` descendente;
-3. desempata por `aging_boost` descendente;
-4. desempata por `updated_at` ascendente con orden estable.
+3. dentro de la misma prioridad aplica `fairness_group_paused` y
+   `fairness_group_boosted` segun ventana, limite y reloj inyectado;
+4. desempata por `aging_boost` descendente;
+5. desempata por `updated_at` ascendente con orden estable.
 
 El `aging_boost` es secundario en v0: no se suma a `priority_score`.
+La fairness tambien es secundaria: no eleva un grupo por encima de una prioridad
+manual mayor ni sustituye guardas opt-in de smokes, proveedor o efectos externos.

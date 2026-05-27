@@ -66,9 +66,30 @@ func TestMCPAutoprogrammingPrepareRunHTTPHandlerV0SoloPOST(t *testing.T) {
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	if got := rec.Header().Get("Allow"); got != mcpPublicHTTPAllowHeaderV0(http.MethodPost) {
+		t.Fatalf("allow=%q", got)
+	}
 }
 
-func TestMCPAutoprogrammingPrepareRunHTTPHandlerV0ExponeCausaSanitizadaSiExecutorFalla(t *testing.T) {
+func TestMCPAutoprogrammingPrepareRunHTTPHandlerV0OptionsSinEfectos(t *testing.T) {
+	executor := &fakeMCPAutoprogrammingPrepareRunHTTPExecutorV0{}
+	req := httptest.NewRequest(http.MethodOptions, MCPAutoprogrammingPrepareRunHTTPPathV0, nil)
+	rec := httptest.NewRecorder()
+
+	NewMCPAutoprogrammingPrepareRunHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Allow"); got != mcpPublicHTTPAllowHeaderV0(http.MethodPost) {
+		t.Fatalf("allow=%q", got)
+	}
+	if rec.Body.Len() != 0 || executor.input.RequestID != "" {
+		t.Fatalf("options con efectos body=%q input=%+v", rec.Body.String(), executor.input)
+	}
+}
+
+func TestMCPAutoprogrammingPrepareRunHTTPHandlerV0NoPropagaErrorNoCatalogado(t *testing.T) {
 	executor := &fakeMCPAutoprogrammingPrepareRunHTTPExecutorV0{
 		err: errors.New("prepare failed at /root/Trabajo/orquesta token=secret123456 request-ref-prepare-error-001"),
 	}
@@ -87,8 +108,7 @@ func TestMCPAutoprogrammingPrepareRunHTTPHandlerV0ExponeCausaSanitizadaSiExecuto
 	if result.Estado != MCPAutoprogrammingPrepareRunEstadoErrorV0 ||
 		len(result.Errores) != 1 ||
 		result.Errores[0].Code != MCPAutoprogrammingPrepareRunHTTPExecutorErrorCodeV0 ||
-		!strings.Contains(result.Errores[0].Message, "prepare failed") ||
-		!strings.Contains(result.Errores[0].Message, "request-ref-prepare-error-001") {
+		result.Errores[0].Message != MCPAutoprogrammingPrepareRunHTTPExecutorErrorCodeV0 {
 		t.Fatalf("payload publico incompleto: %+v", result)
 	}
 	if strings.Contains(rec.Body.String(), "/root/Trabajo") ||
@@ -119,8 +139,7 @@ func TestMCPAutoprogrammingPrepareRunTransportV0DevuelvePayloadPublicoSiExecutor
 	if result.Estado != MCPAutoprogrammingPrepareRunEstadoErrorV0 ||
 		len(result.Errores) != 1 ||
 		result.Errores[0].Code != "autoprogramming_prepare_run_executor_error" ||
-		!strings.Contains(result.Errores[0].Message, "prepare failed") ||
-		!strings.Contains(result.Errores[0].Message, "request-ref-prepare-transport-error-001") {
+		result.Errores[0].Message != "autoprogramming_prepare_run_executor_error" {
 		t.Fatalf("payload publico incompleto: %+v", result)
 	}
 	if strings.Contains(string(output), "/root/Trabajo") ||

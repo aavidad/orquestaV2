@@ -13,6 +13,13 @@ func maybeCloseOperationalDirectorV0(
 	loop orquestacionnucleoapp.ProgressiveLoopResultV0,
 	loopRequest orquestacionnucleoapp.ProgressiveLoopRequestV0,
 ) (orquestacionnucleoapp.ProgressiveLoopResultV0, []orquestacionnucleoapp.ErrorV0, error) {
+	if loop.Status == orquestacionnucleoapp.ProgressiveLoopStatusNeedsDirectorV0 {
+		atReplanOrClose, err := operationalDirectorPlanStateIsAtReplanOrCloseV0(ctx, request, ports)
+		if err != nil || !atReplanOrClose {
+			return loop, nil, err
+		}
+		loop.Status = orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0
+	}
 	if loop.Status != orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0 {
 		return loop, nil, nil
 	}
@@ -102,6 +109,7 @@ func maybeCloseOperationalDirectorV0(
 		return loop, nil, err
 	}
 	closureRequest = appDirectorClosureRequestWithDefaultsV0(request, closureRequest)
+	beforeClosureRun := loop.Run
 	closure, err := (orquestacionnucleoapp.OperationalDirectorClosureV0{
 		RunStore:                  ports.RunStore,
 		EventSink:                 ports.EventSink,
@@ -116,7 +124,24 @@ func maybeCloseOperationalDirectorV0(
 	if len(closure.Issues) > 0 || closure.Run.RunID == "" {
 		if closure.Run.RunID != "" && appDirectorClosureOnlyOpenTasksIssuesV0(closure.Issues) {
 			loop.Run = closure.Run
-			return loop, nil, nil
+			if appDirectorClosureClosedTaskProgressV0(beforeClosureRun, closure.Run) {
+				loop.Status = orquestacionnucleoapp.ProgressiveLoopStatusNeedsDirectorV0
+				return loop, nil, nil
+			}
+			reopened, reopenErr := operationalDirectorPlanStateReopenReviewForClosureOpenTasksNoProgressV0(
+				ctx,
+				request,
+				ports,
+				closure.Run,
+			)
+			if reopenErr != nil {
+				return loop, closure.Issues, reopenErr
+			}
+			loop.Status = orquestacionnucleoapp.ProgressiveLoopStatusNeedsDirectorV0
+			if reopened {
+				return loop, nil, nil
+			}
+			return loop, closure.Issues, nil
 		}
 		replanRefs, replanErr := operationalDirectorPlanStateReplanClosureIssuesV0(
 			ctx,

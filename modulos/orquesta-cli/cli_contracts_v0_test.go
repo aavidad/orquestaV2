@@ -2,9 +2,19 @@ package orquestacli
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
+	"time"
+
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
+
+type failingCliEntropyV0 struct{}
+
+func (failingCliEntropyV0) Read([]byte) (int, error) {
+	return 0, errors.New("entropy unavailable")
+}
 
 func TestNormalizeCliInvocationContextV0GeneraRequestYCorrelationID(t *testing.T) {
 	inv := NormalizeCliInvocationContextV0(CliInvocationContextV0{})
@@ -17,6 +27,22 @@ func TestNormalizeCliInvocationContextV0GeneraRequestYCorrelationID(t *testing.T
 	}
 	if inv.OutputFormat != CliOutputFormatJSONV0 || inv.InputSource != CliInputSourceArgV0 {
 		t.Fatalf("defaults inesperados: output=%q input=%q", inv.OutputFormat, inv.InputSource)
+	}
+}
+
+func TestNewCliRequestIDV0FallbackDegradadoObservableV0(t *testing.T) {
+	previous := cliRequestIDGeneratorV0
+	cliRequestIDGeneratorV0 = orquestaruntime.NewRefGeneratorV0(
+		orquestaruntime.ClockFuncV0(func() time.Time {
+			return time.Date(2026, 5, 24, 10, 0, 0, 0, time.UTC)
+		}),
+		failingCliEntropyV0{},
+	)
+	defer func() { cliRequestIDGeneratorV0 = previous }()
+
+	ref := newCliRequestIDV0()
+	if !strings.HasPrefix(ref, CliDefaultRequestIDPrefixV0+"client-mutation-degraded-") {
+		t.Fatalf("request_id fallback no observable: %q", ref)
 	}
 }
 

@@ -16,30 +16,47 @@ type mcpAppVCSHTTPHandlerV0 struct {
 func (handler mcpAppVCSHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != MCPAppVCSHTTPPathV0 {
 		writeMCPAppVCSHTTPV0(w, http.StatusNotFound, NewMCPAppVCSErrorResultV0(
-			MCPAppVCSToolInputV0{CorrelationID: r.Header.Get("X-Correlation-ID")},
-			"ruta_no_soportada",
+			MCPAppVCSToolInputV0{CorrelationID: r.Header.Get(MCPPublicCorrelationHeaderV0)},
+			MCPPublicErrPathUnsupportedV0,
 			"path",
-			"ruta_no_soportada",
+			MCPPublicErrPathUnsupportedV0,
 		))
 		return
 	}
+	if handleMCPPublicHTTPOptionsV0(w, r, http.MethodPost) {
+		return
+	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
+		setMCPPublicHTTPAllowV0(w, http.MethodPost)
 		writeMCPAppVCSHTTPV0(w, http.StatusMethodNotAllowed, NewMCPAppVCSErrorResultV0(
-			MCPAppVCSToolInputV0{CorrelationID: r.Header.Get("X-Correlation-ID")},
-			"metodo_no_permitido",
+			MCPAppVCSToolInputV0{CorrelationID: r.Header.Get(MCPPublicCorrelationHeaderV0)},
+			MCPPublicErrMethodNotAllowedV0,
 			"method",
-			"metodo_no_permitido",
+			MCPPublicErrMethodNotAllowedV0,
 		))
 		return
 	}
 	var input MCPAppVCSToolInputV0
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+	if code := decodeMCPPublicHTTPJSONV0(w, r, &input); code != "" {
 		writeMCPAppVCSHTTPV0(w, http.StatusBadRequest, NewMCPAppVCSErrorResultV0(
 			input,
-			"request_body_invalido",
+			code,
 			"body",
-			"request_body_invalido",
+			code,
+		))
+		return
+	}
+	input, issues := normalizeMCPAppVCSIdentityV0(
+		input,
+		r.Header.Get(MCPPublicCorrelationHeaderV0),
+		MCPPublicMutationHeaderIdempotencyKeyV0(r.Header.Get),
+	)
+	if len(issues) > 0 {
+		writeMCPAppVCSHTTPV0(w, http.StatusBadRequest, NewMCPAppVCSErrorResultV0(
+			input,
+			issues[0].Code,
+			issues[0].Field,
+			issues[0].Message,
 		))
 		return
 	}
@@ -63,7 +80,7 @@ func (handler mcpAppVCSHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *http.R
 func writeMCPAppVCSHTTPV0(w http.ResponseWriter, status int, result MCPAppVCSToolResultV0) {
 	w.Header().Set("Content-Type", "application/json")
 	if result.CorrelationID != "" {
-		w.Header().Set("X-Correlation-ID", result.CorrelationID)
+		w.Header().Set(MCPPublicCorrelationHeaderV0, result.CorrelationID)
 	}
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(result)

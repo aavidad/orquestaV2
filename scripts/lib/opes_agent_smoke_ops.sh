@@ -1,39 +1,11 @@
 #!/usr/bin/env bash
 
+smoke_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/smoke_common.sh
+source "$smoke_lib_dir/smoke_common.sh"
+
 smoke_require_commands() {
-  local cmd
-  for cmd in curl go jq; do
-    if ! command -v "$cmd" >/dev/null 2>&1; then
-      echo "falta comando requerido: $cmd" >&2
-      exit 127
-    fi
-  done
-}
-
-smoke_post_json() {
-  local url="$1"
-  local payload="$2"
-  local output="$3"
-  local status
-  status="$(curl -sS -o "$output" -w "%{http_code}" -X POST "$url" \
-    -H "Content-Type: application/json" \
-    -H "Accept: application/json" \
-    -d "$payload")"
-  if [[ "$status" -lt 200 || "$status" -gt 299 ]]; then
-    echo "POST $url devolvio HTTP $status" >&2
-    cat "$output" >&2 || true
-    return 1
-  fi
-}
-
-smoke_get_json() {
-  local url="$1"
-  local output="$2"
-  curl -sS -f "$url" >"$output"
-}
-
-smoke_json_id() {
-  jq -r '.id // .ID // empty' "$1"
+  smoke_require_tools curl go jq
 }
 
 smoke_compact_ref() {
@@ -61,9 +33,9 @@ smoke_cleanup() {
     wait "$server_pid" >/dev/null 2>&1 || true
   fi
   if [[ "$KEEP_DIR" == "1" ]]; then
-    echo "directorio conservado: $SMOKE_ROOT" >&2
+    smoke_temp_root_cleanup "$SMOKE_ROOT" 1
   else
-    rm -rf "$SMOKE_ROOT"
+    smoke_temp_root_cleanup "$SMOKE_ROOT" 0
   fi
 }
 
@@ -92,18 +64,10 @@ smoke_start_orquesta_server() {
   server_pid="$!"
 
   local state_file="$STATE_DIR/orquesta_server_state_v0.json"
-  for _ in $(seq 1 80); do
-    if [[ -s "$state_file" ]]; then
-      local addr
-      addr="$(jq -r '.addr // empty' "$state_file")"
-      if [[ -n "$addr" ]] && curl -fsS -m 2 "http://$addr/api/v0/server/readiness" >/dev/null; then
-        base_url="http://$addr"
-        echo "orquesta-server listo: $base_url"
-        return
-      fi
-    fi
-    sleep 0.5
-  done
+  if smoke_wait_orquesta_readiness_from_state_file "$state_file" 80 0.5 base_url; then
+    echo "orquesta-server listo: $base_url"
+    return
+  fi
   echo "orquesta-server no llego a readiness OK" >&2
   tail -n 80 "$SMOKE_OUT_DIR/orquesta-server.stderr.log" >&2 || true
   exit 1
@@ -231,11 +195,6 @@ smoke_assert_final_stats() {
     cat "$stats" >&2
     exit 1
   fi
-}
-
-smoke_json_count() {
-  jq 'if type == "array" then length else (.artifacts // .blocks // [] | length) end' \
-    "$1" 2>/dev/null || echo 0
 }
 
 smoke_write_summary() {

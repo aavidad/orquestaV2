@@ -51,3 +51,19 @@ func TestCodexWaveTailReportV0ExigeRazon(t *testing.T) {
 		t.Fatalf("err nil")
 	}
 }
+
+func TestCodexWaveTailFileLimitedV0RechazaSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.log")
+	path := filepath.Join(dir, "codex_stdout.log")
+	if err := os.WriteFile(target, []byte("linea\n"), 0o600); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	if err := os.Symlink(target, path); err != nil {
+		t.Skipf("symlink no disponible: %v", err)
+	}
+
+	if _, _, _, err := codexWaveTailFileLimitedV0(path, 1, 1024); err == nil {
+		t.Fatalf("tail de symlink no debe leerse")
+	}
+}

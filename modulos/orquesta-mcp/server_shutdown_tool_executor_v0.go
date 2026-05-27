@@ -23,6 +23,11 @@ func (executor MCPServerShutdownToolExecutorV0) Execute(
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	var issues []MCPValidationIssueV0
+	input, issues = normalizeMCPServerShutdownIdentityV0(input, "", "")
+	if len(issues) > 0 {
+		return newMCPServerShutdownErrorV0(input, issues[0].Code, issues[0].Field, issues[0].Code), nil
+	}
 	result, err := orquestaservershutdown.ShutdownServerV0(
 		ctx,
 		executor.Deps,

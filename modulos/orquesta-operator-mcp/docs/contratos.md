@@ -158,6 +158,9 @@ Contrato consumidor:
 - Los handlers operativos reciben solo DTOs publicos y llaman a `OperatorMCP*PortV0` inyectados.
 - Si se inyecta `OperatorMCPConnectorV0`, `orquesta-mcp` lo usa como fallback
   para los cuatro tools cuando no hay puerto especifico por tool.
+- Los adaptadores externos que llamen operadores reales deben publicar
+  cancelacion y deadline como errores estables (`operator_mcp_cancelled` y
+  `operator_mcp_timeout`) sin filtrar detalles de transporte.
 
 Invariantes:
 

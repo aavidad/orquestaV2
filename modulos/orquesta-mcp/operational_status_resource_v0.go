@@ -51,10 +51,12 @@ type MCPOperationalStatusRequestGuideV0 struct {
 }
 
 type MCPOperationalStatusResponseGuideV0 struct {
-	SchemaVersion string   `json:"schema_version"`
-	Estados       []string `json:"estados"`
-	Sections      []string `json:"sections"`
-	PrivacyFlags  []string `json:"privacy_flags"`
+	SchemaVersion          string   `json:"schema_version"`
+	Estados                []string `json:"estados"`
+	Sections               []string `json:"sections"`
+	PrivacyFlags           []string `json:"privacy_flags"`
+	RedactionLevelField    string   `json:"redaction_level_field"`
+	AllowedRedactionLevels []string `json:"allowed_redaction_levels"`
 }
 
 func MCPOperationalStatusDescriptorV0() MCPOperationalStatusResourceDescriptorV0 {
@@ -118,8 +120,10 @@ func NewMCPOperationalStatusResourceV0() MCPOperationalStatusResourceV0 {
 				orquestaobservability.DiagnosticoEstadoFailedV0,
 				orquestaobservability.DiagnosticoEstadoUnknownV0,
 			},
-			Sections:     []string{"progreso", "salud", "bloqueos", "actividad_reciente", "contadores", "referencias", "warnings"},
-			PrivacyFlags: []string{"contains_secret=false", "contains_transcript=false", "contains_prompt=false", "contains_completion=false", "contains_connection_detail=false"},
+			Sections:               []string{"progreso", "salud", "bloqueos", "actividad_reciente", "contadores", "referencias", "warnings"},
+			PrivacyFlags:           []string{"contains_secret=false", "contains_transcript=false", "contains_prompt=false", "contains_completion=false", "contains_connection_detail=false"},
+			RedactionLevelField:    "privacy.redaction_level",
+			AllowedRedactionLevels: orquestaobservability.OperationalPrivacyRedactionLevelsForConsumersV0(),
 		},
 		PublicErrors: []string{
 			orquestaobservability.ErrOperationalStatusQueryInvalidaV0,
@@ -137,6 +141,7 @@ func NewMCPOperationalStatusResourceV0() MCPOperationalStatusResourceV0 {
 			"resource_puro_sin_tool_ni_servidor_mcp",
 			"read_only_sin_db_runtime_filesystem_productivo",
 			"diagnostico_compacto_sin_secretos_transcripts_sql_dsn_home",
+			"privacy_redaction_level_verificable_desde_observability",
 			"contrato_canonico_en_observability_y_contratos_globales",
 		},
 	}

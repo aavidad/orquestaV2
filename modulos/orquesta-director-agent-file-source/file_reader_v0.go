@@ -23,14 +23,14 @@ func (reader OSDirectorAgentDecisionFileReaderV0) ReadDirectorAgentDecisionFileV
 	if path == "" {
 		return nil, DirectorAgentFileSourceIssueV0{Field: "path"}
 	}
-	if maxBytes <= 0 {
-		maxBytes = DefaultDirectorAgentDecisionFileMaxBytesV0
-	}
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
+	if maxBytes <= 0 {
+		return io.ReadAll(file)
+	}
 	data, err := io.ReadAll(io.LimitReader(file, int64(maxBytes)+1))
 	if err != nil {
 		return nil, err

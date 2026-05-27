@@ -4,28 +4,32 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"sort"
+	"strconv"
 	"strings"
 )
 
 type idleSelfImprovementBacklogSectionV0 struct {
-	Ref, Heading, Objective        string
-	SourcePath                     string
-	SourceKind, Owner              string
-	LocalAlias, RelatedTXX         string
-	LocalState, LocalEntryHash     string
-	Scope, Criteria, Tests         []string
-	ManualVerifications            []string
-	Dependencies, Inputs, Outputs  []string
-	StateEvidenceRefs              []string
-	Completed, NeedsDocumentReview bool
-	SourceLine                     int
-	SourceIndexLine                int
+	Ref, Heading, Objective                         string
+	SourcePath                                      string
+	SourceKind, Owner                               string
+	LocalAlias, RelatedTXX                          string
+	LocalState, LocalEntryHash                      string
+	CanonicalRef, TaskInstanceRef                   string
+	TaskID, TaskAlias, TaskIDIssue                  string
+	Scope, Criteria, Tests                          []string
+	ManualVerifications                             []string
+	Dependencies, Inputs, Outputs                   []string
+	StateEvidenceRefs                               []string
+	Completed, PendingExplicit, NeedsDocumentReview bool
+	SourceLine                                      int
+	SourceIndexLine                                 int
+	TaskIDCollisionCount                            int
 }
 
 type idleSelfImprovementBacklogStateV0 struct {
-	Completed           bool
-	NeedsDocumentReview bool
-	EvidenceRefs        []string
+	Completed, PendingExplicit bool
+	NeedsDocumentReview        bool
+	EvidenceRefs               []string
 }
 
 func parseIdleSelfImprovementBacklogSectionsV0(content string) []idleSelfImprovementBacklogSectionV0 {
@@ -52,6 +56,7 @@ func parseIdleSelfImprovementBacklogSectionsFromDocumentV0(
 		}
 		section := idleSelfImprovementParseBacklogSectionV0(heading, lines[index+1:next], index+1)
 		section.SourcePath = firstNonEmptyServerStackV0(strings.TrimSpace(sourcePath), idleSelfImprovementBacklogDocRelV0)
+		section.TaskInstanceRef = idleSelfImprovementBacklogTaskInstanceRefV0(section)
 		sections = append(sections, section)
 	}
 	return sections
@@ -70,6 +75,7 @@ func idleSelfImprovementParseBacklogSectionV0(
 		Objective:           idleSelfImprovementSectionValueV0(lines, "Objetivo:"),
 		Scope:               idleSelfImprovementSectionListV0(lines, "Alcance:"),
 		Criteria:            idleSelfImprovementSectionListV0(lines, "Criterios:"),
+		CanonicalRef:        idleSelfImprovementSectionCanonicalRefV0(lines),
 		Dependencies:        idleSelfImprovementSectionDependenciesV0(lines),
 		Inputs:              idleSelfImprovementSectionIOV0(lines, "Entrada:", "Entradas:"),
 		Outputs:             idleSelfImprovementSectionIOV0(lines, "Salida:", "Salidas:"),
@@ -77,6 +83,7 @@ func idleSelfImprovementParseBacklogSectionV0(
 		ManualVerifications: manualVerifications,
 		StateEvidenceRefs:   state.EvidenceRefs,
 		Completed:           state.Completed,
+		PendingExplicit:     state.PendingExplicit,
 		NeedsDocumentReview: state.NeedsDocumentReview,
 		SourceLine:          sourceLine,
 	}
@@ -90,6 +97,14 @@ func idleSelfImprovementSectionStateV0(lines []string) idleSelfImprovementBacklo
 		return idleSelfImprovementBacklogStateV0{
 			Completed:    true,
 			EvidenceRefs: []string{"evidence-ref-autoprogramming-backlog-state-canonical"},
+		}
+	}
+	if idleSelfImprovementBacklogTextContainsAnyV0(stateValue,
+		"pendiente", "abierta", "abierto", "pending", "open",
+	) {
+		return idleSelfImprovementBacklogStateV0{
+			PendingExplicit: true,
+			EvidenceRefs:    []string{"evidence-ref-autoprogramming-backlog-state-pending-canonical"},
 		}
 	}
 	if strings.TrimSpace(stateValue) != "" {
@@ -244,6 +259,20 @@ func idleSelfImprovementHeadingRefV0(heading string) string {
 func idleSelfImprovementBacklogHashV0(value string) string {
 	sum := sha256.Sum256([]byte(strings.TrimSpace(value)))
 	return hex.EncodeToString(sum[:])[:8]
+}
+
+func idleSelfImprovementBacklogTaskInstanceRefV0(
+	section idleSelfImprovementBacklogSectionV0,
+) string {
+	seed := strings.Join([]string{
+		firstNonEmptyServerStackV0(section.SourcePath, idleSelfImprovementBacklogDocRelV0),
+		strconv.Itoa(section.SourceLine),
+		section.Ref,
+		section.Heading,
+		idleSelfImprovementBacklogSectionFingerprintV0(section),
+		strings.Join(compactServerStackStringsV0(section.StateEvidenceRefs), ","),
+	}, "|")
+	return "task-instance-ref-backlog-" + idleSelfImprovementBacklogHashV0(seed)
 }
 
 func compactServerStackStringsV0(values []string) []string {

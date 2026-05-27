@@ -12,6 +12,7 @@ import (
 type CapacityDecisionExecutorV0 struct {
 	RunStore        RunStorePortV0
 	EventSink       EventSinkPortV0
+	Policy          CapacityDecisionPolicyPortV0
 	Tier            orquestacoreworkflow.OrchestrationCapacityRecommendationV0
 	ReasoningEffort orquestacoreworkflow.OrchestrationCapacityRecommendationV0
 	OccurredAt      string
@@ -32,7 +33,7 @@ func (executor CapacityDecisionExecutorV0) ExecuteOutboxDispatchV0(
 	if err != nil {
 		return orquestaoutboxdispatch.OutboxDispatchExecutionResultV0{}, err
 	}
-	command, err := executor.capacityDecisionCommandV0(intent, request)
+	command, err := executor.capacityDecisionCommandV0(context.Background(), intent, request)
 	if err != nil {
 		return orquestaoutboxdispatch.OutboxDispatchExecutionResultV0{}, err
 	}

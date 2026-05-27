@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 )
 
@@ -38,6 +39,14 @@ func TestShutdownServerV0SolicitaStopDrenaYQuedaReady(t *testing.T) {
 	}
 	if got := deps.control.stopped; !reflect.DeepEqual(got, []string{"run-a", "run-b"}) {
 		t.Fatalf("stopped=%v", got)
+	}
+	for _, runRef := range []string{"run-a", "run-b"} {
+		if !serverShutdownStringsContainForTestV0(
+			deps.control.states[runRef].EvidenceRefs,
+			orquestaruncontrol.RunControlEvidenceAutoResumeAllowedV0,
+		) {
+			t.Fatalf("run %s sin evidencia de auto-resume: %+v", runRef, deps.control.states[runRef])
+		}
 	}
 }
 
@@ -277,4 +286,13 @@ func TestShutdownServerV0SinRunsQuedaReady(t *testing.T) {
 		deps.supervisor.calls != 0 {
 		t.Fatalf("result=%+v supervisor=%+v", result, deps.supervisor)
 	}
+}
+
+func serverShutdownStringsContainForTestV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

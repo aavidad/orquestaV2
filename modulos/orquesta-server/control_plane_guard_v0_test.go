@@ -102,7 +102,7 @@ func TestControlPlaneGuardV0MantieneStatusLecturaSinTokenV0(t *testing.T) {
 func TestAuditQueryKeysV0NoGuardaValoresDeQueryV0(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v0/runs/control?token=secret&run_ref=run-ref-001", nil)
 	keys := auditQueryKeysV0(req)
-	if len(keys) != 2 || keys[0] != "run_ref" || keys[1] != "token" {
+	if len(keys) != 2 || keys[0] != "run_ref" || keys[1] != "sensitive_query_key_redacted" {
 		t.Fatalf("query keys=%v", keys)
 	}
 }

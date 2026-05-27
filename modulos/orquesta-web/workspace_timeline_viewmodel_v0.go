@@ -9,17 +9,18 @@ import (
 const WebWorkspaceTimelineSchemaV0 = "web_workspace_timeline.v0"
 
 type WebWorkspaceTimelineViewModelV0 struct {
-	SchemaVersion string                               `json:"schema_version"`
-	Locale        string                               `json:"locale"`
-	TimelineID    string                               `json:"timeline_id"`
-	Scope         string                               `json:"scope"`
-	AgentRef      string                               `json:"agent_ref,omitempty"`
-	ProjectRef    string                               `json:"project_ref,omitempty"`
-	TaskRef       string                               `json:"task_ref,omitempty"`
-	Items         []WebWorkspaceTimelineItemV0         `json:"items"`
-	Sources       []WebWorkspaceTimelineSourceStatusV0 `json:"sources"`
-	Frescura      WebWorkspaceTimelinePageV0           `json:"page"`
-	PrivacyOK     bool                                 `json:"privacy_ok"`
+	SchemaVersion  string                               `json:"schema_version"`
+	Locale         string                               `json:"locale"`
+	TimelineID     string                               `json:"timeline_id"`
+	Scope          string                               `json:"scope"`
+	AgentRef       string                               `json:"agent_ref,omitempty"`
+	ProjectRef     string                               `json:"project_ref,omitempty"`
+	TaskRef        string                               `json:"task_ref,omitempty"`
+	Items          []WebWorkspaceTimelineItemV0         `json:"items"`
+	Sources        []WebWorkspaceTimelineSourceStatusV0 `json:"sources"`
+	Frescura       WebWorkspaceTimelinePageV0           `json:"page"`
+	PrivacyOK      bool                                 `json:"privacy_ok"`
+	RedactionLevel string                               `json:"redaction_level"`
 }
 
 type WebWorkspaceTimelineItemV0 struct {
@@ -50,17 +51,18 @@ func NewWebWorkspaceTimelineV0(
 	timeline orquestaobservability.WorkspaceTimelineV0,
 ) WebWorkspaceTimelineViewModelV0 {
 	return WebWorkspaceTimelineViewModelV0{
-		SchemaVersion: WebWorkspaceTimelineSchemaV0,
-		Locale:        strings.TrimSpace(locale),
-		TimelineID:    firstWebWorkspaceTimelineV0(timeline.TimelineID, timeline.TimelineRef),
-		Scope:         firstWebWorkspaceTimelineV0(timeline.Scope, orquestaobservability.WorkspaceTimelineScopeWorkspaceV0),
-		AgentRef:      firstWebWorkspaceTimelineV0(timeline.Filters.AgentRef, timeline.AgentRef),
-		ProjectRef:    firstWebWorkspaceTimelineV0(timeline.Filters.ProjectRef, timeline.ProjectRef),
-		TaskRef:       firstWebWorkspaceTimelineV0(timeline.Filters.TaskRef, timeline.TaskRef),
-		Items:         webWorkspaceTimelineItemsV0(timeline.Items),
-		Sources:       webWorkspaceTimelineSourcesV0(timeline.Sources),
-		Frescura:      webWorkspaceTimelinePageV0(timeline.Page),
-		PrivacyOK:     webOperationalStatusPrivacyOKV0(timeline.Privacy),
+		SchemaVersion:  WebWorkspaceTimelineSchemaV0,
+		Locale:         strings.TrimSpace(locale),
+		TimelineID:     firstWebWorkspaceTimelineV0(timeline.TimelineID, timeline.TimelineRef),
+		Scope:          firstWebWorkspaceTimelineV0(timeline.Scope, orquestaobservability.WorkspaceTimelineScopeWorkspaceV0),
+		AgentRef:       firstWebWorkspaceTimelineV0(timeline.Filters.AgentRef, timeline.AgentRef),
+		ProjectRef:     firstWebWorkspaceTimelineV0(timeline.Filters.ProjectRef, timeline.ProjectRef),
+		TaskRef:        firstWebWorkspaceTimelineV0(timeline.Filters.TaskRef, timeline.TaskRef),
+		Items:          webWorkspaceTimelineItemsV0(timeline.Items),
+		Sources:        webWorkspaceTimelineSourcesV0(timeline.Sources),
+		Frescura:       webWorkspaceTimelinePageV0(timeline.Page),
+		PrivacyOK:      webOperationalStatusPrivacyOKV0(timeline.Privacy),
+		RedactionLevel: webOperationalStatusRedactionLevelV0(timeline.Privacy),
 	}
 }
 

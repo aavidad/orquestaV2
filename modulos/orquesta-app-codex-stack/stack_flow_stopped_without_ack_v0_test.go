@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 )
@@ -87,10 +88,140 @@ func TestDrainRunV0WaitAgentRefsProcesoParadoSinACKActivaSupervision(t *testing.
 	if !codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionAskDirectorV0) {
 		t.Fatalf("WaitAgentRefs no paso por supervision de progreso: assessments=%+v run=%+v", run.AgentAssessments, run)
 	}
+	if len(compactStringsV0(run.DirectorQuestions)) == 0 {
+		t.Fatalf("reconciliacion ask_director debe persistir pregunta no bloqueante para que el Director pueda decidir: %+v", run)
+	}
 	if !codexStackHasRefV0(run.LostAgents, agentRef) ||
 		codexStackHasRefV0(run.StoppedAgents, agentRef) ||
 		codexStackHasRefV0(run.ConfirmedStoppedAgents, agentRef) {
 		t.Fatalf("agente acotado no quedo reconciliado como lost: status=%s lost=%v stopped=%v confirmed=%v", drain.Status, run.LostAgents, run.StoppedAgents, run.ConfirmedStoppedAgents)
+	}
+}
+
+func TestDrainRunV0ProcesoParadoConACKCompletoIngiereAntesDeLost(t *testing.T) {
+	ctx := context.Background()
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	director := postDirectorAPIV0(t, stack)
+	agentRef := strings.TrimSpace(director.DirectorTask.AgentRequestID)
+	if agentRef == "" {
+		t.Fatalf("director sin agente: %+v", director)
+	}
+	record, err := stack.Stores.ProcessRegistry.ResolveAgentProcessV0(ctx, director.RunRef, agentRef)
+	if err != nil {
+		t.Fatalf("ResolveAgentProcessV0: %v", err)
+	}
+	if _, err := runtime.StopV0(ctx, record.ProcessRef); err != nil {
+		t.Fatalf("StopV0: %v", err)
+	}
+
+	descriptors := codexStackDescriptorsForTestV0(t, stack)
+	var stoppedObservation orquestacionnucleoapp.AgentDeliveryObservationV0
+	var ackPath string
+	var descriptorFound bool
+	for _, descriptor := range descriptors {
+		if strings.TrimSpace(descriptor.AgentRef) != agentRef {
+			continue
+		}
+		stoppedObservation = drainObservationFromDescriptorForTestV0(descriptor)
+		ackPath = strings.TrimSpace(descriptor.AckPath)
+		descriptorFound = true
+		break
+	}
+	if !descriptorFound {
+		t.Fatalf("descriptor no encontrado agent=%s descriptors=%v", agentRef, codexStackRealSmokeDescriptorAgentsV0(descriptors))
+	}
+	if _, err := os.Stat(ackPath); err != nil {
+		t.Fatalf("precondicion ACK completed inexistente path=%s err=%v", ackPath, err)
+	}
+
+	drain, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+		RunRef:               director.RunRef,
+		CorrelationID:        "corr-stack-stopped-with-completed-ack-001",
+		WaitAgentRefs:        []string{agentRef},
+		MaxBursts:            4,
+		MaxStepsPerBurst:     4,
+		MaxDispatchesPerWait: 4,
+		MaxCommands:          12,
+		MaxOutboxPerCycle:    4,
+		MaxExternalWaits:     1,
+	})
+	if err != nil {
+		t.Fatalf("DrainRunV0: %v status=%s final=%+v", err, drain.Status, drain.Final)
+	}
+	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	if !drainObservationAlreadyRegisteredV0(run, stoppedObservation) {
+		t.Fatalf(
+			"ACK completed no se ingirio antes de lost: agents=%v started=%v delivered=%v deliveries=%v artifacts=%v lost=%v assessments=%v observation=%+v",
+			run.Agents,
+			run.StartedAgents,
+			run.DeliveredAgents,
+			run.Deliveries,
+			run.PhaseArtifacts,
+			run.LostAgents,
+			run.AgentAssessments,
+			stoppedObservation,
+		)
+	}
+	if codexStackHasRefV0(run.LostAgents, agentRef) {
+		t.Fatalf("agente con ACK completed no debe quedar lost: delivered=%v lost=%v assessments=%v", run.DeliveredAgents, run.LostAgents, run.AgentAssessments)
+	}
+	if codexStackRefsContainPartV0(run.AgentAssessments, "evidence-ref-no-ack") {
+		t.Fatalf("ACK completed no debe pasar por reconciliacion no_ack: assessments=%v", run.AgentAssessments)
+	}
+}
+
+func TestDrainRunV0SnapshotRuntimePerdidoNoBloqueaSupervisorV0(t *testing.T) {
+	ctx := context.Background()
+	runtime := newSnapshotMissingPendingAckCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	director := postDirectorAPIV0(t, stack)
+	agentRef := strings.TrimSpace(director.DirectorTask.AgentRequestID)
+	if agentRef == "" {
+		t.Fatalf("director sin agente: %+v", director)
+	}
+
+	drain, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+		RunRef:               director.RunRef,
+		CorrelationID:        "corr-stack-missing-runtime-snapshot-001",
+		WaitAgentRefs:        []string{agentRef},
+		MaxBursts:            8,
+		MaxStepsPerBurst:     6,
+		MaxDispatchesPerWait: 8,
+		MaxCommands:          20,
+		MaxOutboxPerCycle:    8,
+		MaxExternalWaits:     1,
+	})
+	if err != nil {
+		t.Fatalf("DrainRunV0 no debe bloquear por process_runtime_no_encontrado: %v status=%s final=%+v", err, drain.Status, drain.Final)
+	}
+	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	if !codexStackHasRefV0(run.LostAgents, agentRef) ||
+		codexStackHasRefV0(run.StoppedAgents, agentRef) ||
+		codexStackHasRefV0(run.ConfirmedStoppedAgents, agentRef) {
+		t.Fatalf("snapshot perdido debe reconciliar como lost: status=%s lost=%v stopped=%v confirmed=%v", drain.Status, run.LostAgents, run.StoppedAgents, run.ConfirmedStoppedAgents)
+	}
+	if !codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionAskDirectorV0) {
+		t.Fatalf("sin assessment de director tras snapshot perdido: %+v", run.AgentAssessments)
+	}
+}
+
+func TestRunGlobalTickV0SnapshotRuntimePerdidoNoBloqueaSupervisorV0(t *testing.T) {
+	ctx := context.Background()
+	runtime := newSnapshotMissingPendingAckCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	director := postDirectorAPIV0(t, stack)
+
+	result, err := stack.RunGlobalTickV0(ctx, globalTickCommandForTestV0())
+	if err != nil {
+		t.Fatalf("RunGlobalTickV0 no debe bloquear por process_runtime_no_encontrado: %v result=%+v", err, result)
+	}
+	if len(result.Executions) == 0 {
+		t.Fatalf("tick sin ejecuciones tras recuperar process_runtime_no_encontrado: %+v", result)
+	}
+	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	if !codexStackHasRefV0(run.LostAgents, strings.TrimSpace(director.DirectorTask.AgentRequestID)) {
+		t.Fatalf("run no reconciliado como lost: %+v", run)
 	}
 }
 

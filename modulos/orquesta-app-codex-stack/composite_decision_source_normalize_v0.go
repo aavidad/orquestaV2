@@ -104,6 +104,7 @@ func normalizeCompositeGoAppWriteSetsV0(
 ) []orquestadirectoragent.DirectorAgentDecisionV0 {
 	decisions = normalizeCompositeGoAppRootWriteSetsV0(decisions)
 	decisions = normalizeCompositeGoAppWebWriteSetsV0(decisions)
+	decisions = normalizeCompositeGoAppParallelWriteSetsV0(decisions)
 	if compositeAnyTaskWriteSetHasPathV0(compositeProgrammingMicrotasksV0(decisions), "README.md") {
 		return decisions
 	}

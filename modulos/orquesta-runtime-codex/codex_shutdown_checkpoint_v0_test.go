@@ -22,13 +22,14 @@ func TestCodexShutdownCheckpointV0EscribeRequestYValidaAck(t *testing.T) {
 		t.Fatalf("request no escrito: %v", err)
 	}
 	writeCodexShutdownAckForTestV0(t, ackPath, CodexShutdownCheckpointAckV0{
-		SchemaVersion: CodexShutdownCheckpointAckSchemaVersionV0,
-		RunRef:        request.RunRef,
-		AgentRef:      request.AgentRef,
-		CheckpointRef: request.CheckpointRef,
-		Status:        CodexShutdownCheckpointStatusReadyV0,
-		Summary:       "checkpoint coherente",
-		EvidenceRefs:  []string{"evidence-ref-checkpoint"},
+		SchemaVersion:      CodexShutdownCheckpointAckSchemaVersionV0,
+		RunRef:             request.RunRef,
+		AgentRef:           request.AgentRef,
+		ShutdownAttemptRef: request.ShutdownAttemptRef,
+		CheckpointRef:      request.CheckpointRef,
+		Status:             CodexShutdownCheckpointStatusReadyV0,
+		Summary:            "checkpoint coherente",
+		EvidenceRefs:       []string{"evidence-ref-checkpoint"},
 	})
 
 	ack, issues := ReadCodexShutdownCheckpointAckFileV0(ackPath, request)
@@ -60,11 +61,12 @@ func TestCodexShutdownCheckpointV0RechazaAckDeOtroAgente(t *testing.T) {
 	request := codexShutdownRequestForTestV0()
 	ackPath := filepath.Join(dir, CodexShutdownCheckpointAckFileNameV0)
 	writeCodexShutdownAckForTestV0(t, ackPath, CodexShutdownCheckpointAckV0{
-		SchemaVersion: CodexShutdownCheckpointAckSchemaVersionV0,
-		RunRef:        request.RunRef,
-		AgentRef:      "agent-ref-otro",
-		CheckpointRef: request.CheckpointRef,
-		Status:        CodexShutdownCheckpointStatusReadyV0,
+		SchemaVersion:      CodexShutdownCheckpointAckSchemaVersionV0,
+		RunRef:             request.RunRef,
+		AgentRef:           "agent-ref-otro",
+		ShutdownAttemptRef: request.ShutdownAttemptRef,
+		CheckpointRef:      request.CheckpointRef,
+		Status:             CodexShutdownCheckpointStatusReadyV0,
 	})
 
 	_, issues := ReadCodexShutdownCheckpointAckFileV0(ackPath, request)
@@ -78,13 +80,14 @@ func TestCodexShutdownCheckpointV0PermiteDetalleConRailsDesactivados(t *testing.
 	request := codexShutdownRequestForTestV0()
 	ackPath := filepath.Join(dir, CodexShutdownCheckpointAckFileNameV0)
 	writeCodexShutdownAckForTestV0(t, ackPath, CodexShutdownCheckpointAckV0{
-		SchemaVersion: CodexShutdownCheckpointAckSchemaVersionV0,
-		RunRef:        request.RunRef,
-		AgentRef:      request.AgentRef,
-		CheckpointRef: request.CheckpointRef,
-		Status:        CodexShutdownCheckpointStatusReadyV0,
-		Summary:       "checkpoint con token policy y prompt policy como refs operativas",
-		EvidenceRefs:  []string{"evidence-ref-token-policy"},
+		SchemaVersion:      CodexShutdownCheckpointAckSchemaVersionV0,
+		RunRef:             request.RunRef,
+		AgentRef:           request.AgentRef,
+		ShutdownAttemptRef: request.ShutdownAttemptRef,
+		CheckpointRef:      request.CheckpointRef,
+		Status:             CodexShutdownCheckpointStatusReadyV0,
+		Summary:            "checkpoint con token policy y prompt policy como refs operativas",
+		EvidenceRefs:       []string{"evidence-ref-token-policy"},
 	})
 
 	_, issues := ReadCodexShutdownCheckpointAckFileV0(ackPath, request)
@@ -100,12 +103,13 @@ func TestCodexShutdownCheckpointV0ConRailsDetalleOffRechazaSecretoEfectivo(t *te
 	request := codexShutdownRequestForTestV0()
 	ackPath := filepath.Join(dir, CodexShutdownCheckpointAckFileNameV0)
 	writeCodexShutdownAckForTestV0(t, ackPath, CodexShutdownCheckpointAckV0{
-		SchemaVersion: CodexShutdownCheckpointAckSchemaVersionV0,
-		RunRef:        request.RunRef,
-		AgentRef:      request.AgentRef,
-		CheckpointRef: request.CheckpointRef,
-		Status:        CodexShutdownCheckpointStatusReadyV0,
-		Summary:       "access_token=abc123",
+		SchemaVersion:      CodexShutdownCheckpointAckSchemaVersionV0,
+		RunRef:             request.RunRef,
+		AgentRef:           request.AgentRef,
+		ShutdownAttemptRef: request.ShutdownAttemptRef,
+		CheckpointRef:      request.CheckpointRef,
+		Status:             CodexShutdownCheckpointStatusReadyV0,
+		Summary:            "access_token=abc123",
 	})
 
 	_, issues := ReadCodexShutdownCheckpointAckFileV0(ackPath, request)
@@ -119,13 +123,14 @@ func TestCodexShutdownCheckpointV0NoCortaPorRailsGenericos(t *testing.T) {
 	request.EvidenceRefs = []string{"evidence-ref-token-policy"}
 	ackPath := filepath.Join(dir, CodexShutdownCheckpointAckFileNameV0)
 	writeCodexShutdownAckForTestV0(t, ackPath, CodexShutdownCheckpointAckV0{
-		SchemaVersion: CodexShutdownCheckpointAckSchemaVersionV0,
-		RunRef:        request.RunRef,
-		AgentRef:      request.AgentRef,
-		CheckpointRef: request.CheckpointRef,
-		Status:        CodexShutdownCheckpointStatusReadyV0,
-		Summary:       "checkpoint con token provider home prompt como refs blandas",
-		EvidenceRefs:  []string{"evidence-ref-provider-policy"},
+		SchemaVersion:      CodexShutdownCheckpointAckSchemaVersionV0,
+		RunRef:             request.RunRef,
+		AgentRef:           request.AgentRef,
+		ShutdownAttemptRef: request.ShutdownAttemptRef,
+		CheckpointRef:      request.CheckpointRef,
+		Status:             CodexShutdownCheckpointStatusReadyV0,
+		Summary:            "checkpoint con token provider home prompt como refs blandas",
+		EvidenceRefs:       []string{"evidence-ref-provider-policy"},
 	})
 
 	if issues := ValidateCodexShutdownRequestV0(request); len(issues) != 0 {
@@ -142,28 +147,50 @@ func TestCodexShutdownCheckpointV0RechazaDetalleSensibleEfectivo(t *testing.T) {
 	request := codexShutdownRequestForTestV0()
 	ackPath := filepath.Join(dir, CodexShutdownCheckpointAckFileNameV0)
 	writeCodexShutdownAckForTestV0(t, ackPath, CodexShutdownCheckpointAckV0{
-		SchemaVersion: CodexShutdownCheckpointAckSchemaVersionV0,
-		RunRef:        request.RunRef,
-		AgentRef:      request.AgentRef,
-		CheckpointRef: request.CheckpointRef,
-		Status:        CodexShutdownCheckpointStatusReadyV0,
-		Summary:       "access_token=abc123",
+		SchemaVersion:      CodexShutdownCheckpointAckSchemaVersionV0,
+		RunRef:             request.RunRef,
+		AgentRef:           request.AgentRef,
+		ShutdownAttemptRef: request.ShutdownAttemptRef,
+		CheckpointRef:      request.CheckpointRef,
+		Status:             CodexShutdownCheckpointStatusReadyV0,
+		Summary:            "access_token=abc123",
 	})
 
 	_, issues := ReadCodexShutdownCheckpointAckFileV0(ackPath, request)
 	requireCodexIssueV0(t, issues, CodexConnectorAckForbiddenV0)
 }
 
+func TestCodexShutdownCheckpointV0RechazaAckDeIntentoAnterior(t *testing.T) {
+	dir := t.TempDir()
+	request := codexShutdownRequestForTestV0()
+	ackPath := filepath.Join(dir, CodexShutdownCheckpointAckFileNameV0)
+	writeCodexShutdownAckForTestV0(t, ackPath, CodexShutdownCheckpointAckV0{
+		SchemaVersion:      CodexShutdownCheckpointAckSchemaVersionV0,
+		RunRef:             request.RunRef,
+		AgentRef:           request.AgentRef,
+		ShutdownAttemptRef: "shutdown-attempt-ref-anterior",
+		CheckpointRef:      request.CheckpointRef,
+		Status:             CodexShutdownCheckpointStatusReadyV0,
+	})
+
+	_, issues := ReadCodexShutdownCheckpointAckFileV0(ackPath, request)
+	requireCodexIssueV0(t, issues, CodexConnectorAckCorrelationV0)
+	if !codexAckIssueHasEvidenceV0(issues[0], "shutdown_checkpoint_attempt_mismatch") {
+		t.Fatalf("issues sin mismatch de intento: %+v", issues)
+	}
+}
+
 func codexShutdownRequestForTestV0() CodexShutdownRequestV0 {
 	return CodexShutdownRequestV0{
-		SchemaVersion: CodexShutdownRequestSchemaVersionV0,
-		RunRef:        "run-ref-shutdown-001",
-		AgentRef:      "agent-ref-shutdown-001",
-		CorrelationID: "corr-shutdown-001",
-		RequestedBy:   "test",
-		Reason:        "shutdown controlado",
-		CheckpointRef: "checkpoint-ref-shutdown-001",
-		EvidenceRefs:  []string{"evidence-ref-shutdown"},
+		SchemaVersion:      CodexShutdownRequestSchemaVersionV0,
+		RunRef:             "run-ref-shutdown-001",
+		AgentRef:           "agent-ref-shutdown-001",
+		CorrelationID:      "corr-shutdown-001",
+		RequestedBy:        "test",
+		Reason:             "shutdown controlado",
+		ShutdownAttemptRef: "shutdown-attempt-ref-001",
+		CheckpointRef:      "checkpoint-ref-shutdown-001",
+		EvidenceRefs:       []string{"evidence-ref-shutdown"},
 	}
 }
 

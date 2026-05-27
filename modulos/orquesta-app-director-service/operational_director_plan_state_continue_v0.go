@@ -77,11 +77,26 @@ func continueRequestWithOperationalDirectorPlanStateV0(
 		return ContinueAppDirectorRequestV0{}, err
 	}
 	reopened = reopened || reopenedLateWaitDelivery
+	state, reopenedDeliveredTasks, err := continueOperationalDirectorPlanStateAfterBlockedWaitDeliveredTasksV0(ctx, request, ports, state)
+	if err != nil {
+		return ContinueAppDirectorRequestV0{}, err
+	}
+	reopened = reopened || reopenedDeliveredTasks
 	state, reopenedClosurePrerequisite, err := continueOperationalDirectorPlanStateAfterBlockedClosurePrerequisiteV0(request, ports, state)
 	if err != nil {
 		return ContinueAppDirectorRequestV0{}, err
 	}
 	reopened = reopened || reopenedClosurePrerequisite
+	state, reopenedClosureNoProgress, err := continueOperationalDirectorPlanStateAfterClosureOpenTasksNoProgressV0(ctx, request, ports, state)
+	if err != nil {
+		return ContinueAppDirectorRequestV0{}, err
+	}
+	reopened = reopened || reopenedClosureNoProgress
+	state, refreshedClosureScope, err := continueOperationalDirectorPlanStateRefreshStaleClosureScopeV0(ctx, request, ports, state)
+	if err != nil {
+		return ContinueAppDirectorRequestV0{}, err
+	}
+	reopened = reopened || refreshedClosureScope
 	state, reopenedClosureReplan, err := continueOperationalDirectorPlanStateAfterBlockedClosureIssuesReplanV0(ctx, request, ports, state)
 	if err != nil {
 		return ContinueAppDirectorRequestV0{}, err

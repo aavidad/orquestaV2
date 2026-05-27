@@ -2,8 +2,8 @@
 
 ## SRV-001
 
-Crear handler residente con `healthz`, `/api/status` y delegacion al handler de
-aplicacion.
+Crear handler residente con `healthz`, `/api/v0/server/status`, alias legacy
+`/api/status` y delegacion al handler de aplicacion.
 
 ## SRV-002
 
@@ -20,6 +20,8 @@ logica del nucleo en `cmd`.
 
 ## SRV-TASK-004: cablear estado durable
 
+Estado: hecho local.
+
 Objetivo: el servidor residente debe arrancar con conectores persistentes para
 estado operativo, de forma que una ejecucion de autoprogramacion pueda
 reanudarse tras corte o reinicio.
@@ -32,8 +34,12 @@ Write-set previsto:
 
 Validacion:
 
-- los stores recuperan estado al recrear instancia;
-- `go test -count=1 ./...`;
+- `TestFileStateStoreV0RecuperaStateV0` cubre recuperacion del statefile;
+- `TestRuntimeV0RestauraEstadoDurableAlRecrearInstanciaV0` cubre recreacion de
+  runtime desde estado durable y reinicio de campos volatiles;
+- `TestRuntimeV0PersistStateFailureVisibleSinFiltrarDetallesV0` cubre estado
+  degradado observable cuando falla la persistencia;
+- `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`;
 - ninguna dependencia de DB concreta queda en el servidor.
 
 ## SRV-TASK-005: conector OPES opt-in desde cmd
@@ -130,3 +136,41 @@ Validacion:
 - `TestRuntimeV0PersistStateConfirmedRecuperaEstadoDegradadoV0` cubre que una
   persistencia posterior correcta marca `state_persist_status=ok` y conserva el
   contador historico de fallos.
+
+## SRV-TASK-010: transportar progreso vivo T210 sin recalcular cierre
+
+Estado: cerrado por reconciliacion documental T210.
+
+Objetivo: el servidor residente y `cmd/orquesta-server` deben exponer la
+proyeccion de stats generada por la capa de orquestacion sin degradarla a 0% ni
+mezclar entrega con cierre.
+
+Contrato:
+
+- `TasksClosed` sigue saliendo de cierre/review aceptada.
+- `percent_complete`, `progress_source` y senales de agente/proceso llegan ya
+  saneadas desde `DirectorRunStatsV0`.
+- El servidor no lee runtime, filesystem, HOME, proveedor, prompts ni logs para
+  recomputar progreso.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-server ./modulos/orquesta-web ./cmd/orquesta-server`.
+
+## SRV-TASK-011: reconciliacion T208 guardian
+
+Estado: documentado 2026-05-27.
+
+Objetivo: reflejar que el servidor residente ya trata el guardian break-glass
+como opt-in estructurado, no como pendiente generico de backlog.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-server`
+- bateria T208 cruzada del paquete OrquestaV2.
+
+Frontera:
+
+- El servidor consume resultado estructurado y conserva retry seguro.
+- `cmd/orquesta-guardian` conserva build/test/readiness/artefactos/repair.
+- Codex, HOME, proveedor y paths locales no entran en `orquesta-server`.

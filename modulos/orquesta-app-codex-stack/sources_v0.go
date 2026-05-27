@@ -1,7 +1,10 @@
 package orquestaappcodexstack
 
 import (
+	"time"
+
 	orquestaappchangedirectorsource "orquesta/modulos/orquesta-app-change-director-source"
+	orquestacoreleases "orquesta/modulos/orquesta-core-leases"
 	orquestadirectoragentfilesource "orquesta/modulos/orquesta-director-agent-file-source"
 	orquestadirectoragentworkflow "orquesta/modulos/orquesta-director-agent-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -38,8 +41,9 @@ func codexStackWorktreeVerifierV0(
 		return nil
 	}
 	return orquestaruntimecodexdelivery.CodexReceiptWorktreeVerifierV0{
-		SnapshotStore:  config.ReviewGate.LineBudgetSnapshotStore,
-		IgnorePrefixes: codexStackWorktreeIgnorePrefixesV0(),
+		SnapshotStore:      config.ReviewGate.LineBudgetSnapshotStore,
+		IgnorePrefixes:     codexStackWorktreeIgnorePrefixesV0(),
+		SnapshotReadBudget: config.ReviewGate.SnapshotReadBudget,
 	}
 }
 
@@ -49,10 +53,11 @@ func codexStackWorktreeIgnorePrefixesV0() []string {
 }
 
 func reviewGateSourceV0(config ConfigV0) orquestacionnucleoapp.ReviewGateObservationProviderPortV0 {
+	policy := codexStackReviewGatePolicyFromConfigV0(config.ReviewGate)
 	base := orquestaruntimecodexdelivery.CodexReviewGateObservationSourceV0{
 		Store:              config.Stores.ReceiptStore,
 		FileEvidenceResult: codexStackReviewGateFileEvidenceV0(config.ReviewGate),
-		MaxLinesPerFile:    config.ReviewGate.MaxLinesPerFile,
+		MaxLinesPerFile:    policy.MaxGoFileLinesV0(),
 		FailureStatus:      config.ReviewGate.FailureStatus,
 	}
 	return codexStackReviewGateRepairSourceV0{
@@ -85,6 +90,65 @@ func progressSourceV0(config ConfigV0) orquestaruntimecodexdelivery.CodexProgres
 		BudgetPolicy:               config.Codex.ProgressBudget,
 		MinUnchangedSampleInterval: config.Codex.WaitInterval,
 	}
+}
+
+func progressAndLeaseSourcesV0(
+	config ConfigV0,
+) (orquestacionnucleoapp.AgentProgressObservationProviderPortV0, orquestacionnucleoapp.AgentLeaseAssessmentProviderPortV0) {
+	progress := progressSourceV0(config)
+	leasePolicy, ok := codexStackLeasePolicyV0(config)
+	if !ok {
+		return progress, nil
+	}
+	bridge := &orquestacionnucleoapp.AgentProgressLeaseBridgeV0{
+		ProgressSource: progress,
+		PolicySource: orquestacionnucleoapp.StaticAgentProgressLeasePolicyProviderV0{
+			Policy:       leasePolicy,
+			EvidenceRefs: []string{"evidence-ref-codex-stack-progress-lease-policy"},
+		},
+	}
+	return bridge, bridge
+}
+
+func codexStackLeasePolicyV0(
+	config ConfigV0,
+) (orquestacoreleases.AgentLeasePolicyV0, bool) {
+	if config.Codex.ProgressBudget.MaxExpected <= 0 && config.Codex.ProgressBudget.NoActivityLimit <= 0 {
+		return orquestacoreleases.AgentLeasePolicyV0{}, false
+	}
+	noActivitySeconds := codexStackDurationSecondsV0(config.Codex.ProgressBudget.NoActivityLimit)
+	maxExpectedSeconds := codexStackDurationSecondsV0(config.Codex.ProgressBudget.MaxExpected)
+	if noActivitySeconds <= 0 {
+		noActivitySeconds = int64(codexStackProgressPolicyV0(config.Codex.ProgressPolicy).StalledAfterNoProgressTicks)
+	}
+	if maxExpectedSeconds <= 0 || maxExpectedSeconds < noActivitySeconds {
+		maxExpectedSeconds = noActivitySeconds * 2
+	}
+	return orquestacoreleases.AgentLeasePolicyV0{
+		LeasePolicyRef:          "lease-policy-ref-codex-progress-budget-v0",
+		LaunchTimeoutSeconds:    codexStackLeaseSecondsV0(noActivitySeconds),
+		HeartbeatTimeoutSeconds: codexStackLeaseSecondsV0(noActivitySeconds),
+		TotalTimeoutSeconds:     codexStackLeaseSecondsV0(maxExpectedSeconds),
+		TimeoutAction:           orquestacoreleases.AgentLeaseTimeoutStopAgentV0,
+		EvidenceRefs:            []string{"evidence-ref-codex-stack-progress-budget-v0"},
+	}, true
+}
+
+func codexStackDurationSecondsV0(value time.Duration) int64 {
+	if value <= 0 {
+		return 0
+	}
+	return int64(value / time.Second)
+}
+
+func codexStackLeaseSecondsV0(value int64) int {
+	if value < 1 {
+		return 1
+	}
+	if value > 86400 {
+		return 86400
+	}
+	return int(value)
 }
 
 func statsProgressSourceV0(config ConfigV0) orquestaruntimecodexdelivery.CodexProgressObservationSourceV0 {
@@ -127,10 +191,14 @@ func directorDecisionSourceV0(config ConfigV0) orquestadirectoragentworkflow.Dir
 	return compositeDirectorDecisionSourceV0{
 		AppChangeStore:       config.Stores.AppChangeStore,
 		DomainRequiredPolicy: config.DomainTests.Policy,
+		Budget:               config.DirectorDecisionBudget,
 		Sources: []orquestadirectoragentworkflow.DirectorAgentDecisionSourcePortV0{
 			directorDecisionFileSourceV0(config),
 			orquestaappchangedirectorsource.AppChangeDirectorDecisionSourceV0{
 				Store: config.Stores.AppChangeStore,
+			},
+			ProjectBacklogDirectorDecisionSourceV0{
+				ProjectWorkDir: config.Codex.ProjectWorkDir,
 			},
 			AutoprogrammingDirectorDecisionSourceV0{
 				TaskStore: config.Stores.TaskStore,
@@ -146,6 +214,7 @@ func directorDecisionFileSourceV0(config ConfigV0) orquestadirectoragentfilesour
 		},
 		Reader:              orquestadirectoragentfilesource.OSDirectorAgentDecisionFileReaderV0{},
 		ConsumptionRecorder: directorDecisionFileConsumptionRecorderV0(config.Stores.ReceiptStore),
+		BatchBudget:         config.DirectorDecisionBudget,
 		IgnoreInvalidFiles:  true,
 	}
 }

@@ -22,10 +22,23 @@ type StartupCheckCommandV0 struct {
 }
 
 type StartupCheckResultV0 struct {
-	Status       string   `json:"status"`
-	Ready        bool     `json:"ready"`
-	Message      string   `json:"message,omitempty"`
-	EvidenceRefs []string `json:"evidence_refs,omitempty"`
+	Status          string                   `json:"status"`
+	Ready           bool                     `json:"ready"`
+	Message         string                   `json:"message,omitempty"`
+	EvidenceRefs    []string                 `json:"evidence_refs,omitempty"`
+	StartupRevision StartupRevisionSummaryV0 `json:"startup_revision,omitempty"`
+}
+
+type StartupRevisionSummaryV0 struct {
+	RevisionRef     string `json:"revision_ref,omitempty"`
+	QueueRemoved    int    `json:"queue_removed,omitempty"`
+	QueueKept       int    `json:"queue_kept,omitempty"`
+	ControlRemoved  int    `json:"control_removed,omitempty"`
+	ControlKept     int    `json:"control_kept,omitempty"`
+	RuntimeArchived int    `json:"runtime_archived,omitempty"`
+	Artifacts       int    `json:"artifacts,omitempty"`
+	RetentionDays   int    `json:"retention_days,omitempty"`
+	MaxBytes        int64  `json:"max_bytes,omitempty"`
 }
 
 type StartupNotReadyErrorV0 struct {
@@ -117,19 +130,24 @@ func startupCheckCommandAuditSummaryV0(command StartupCheckCommandV0) map[string
 
 func startupCheckResultAuditSummaryV0(result StartupCheckResultV0) map[string]interface{} {
 	evidenceRefs := compactServerStringsV0(result.EvidenceRefs)
-	return map[string]interface{}{
+	summary := map[string]interface{}{
 		"status":              strings.TrimSpace(result.Status),
 		"ready":               result.Ready,
 		"message":             publicReadinessMessageV0(result.Message),
 		"evidence_refs":       append([]string(nil), evidenceRefs...),
 		"evidence_refs_count": len(evidenceRefs),
 	}
+	if revision := normalizeStartupRevisionSummaryV0(result.StartupRevision); revision.RevisionRef != "" {
+		summary["startup_revision"] = revision
+	}
+	return summary
 }
 
 func normalizeStartupCheckResultV0(result StartupCheckResultV0) StartupCheckResultV0 {
 	result.Status = strings.TrimSpace(result.Status)
 	result.Message = strings.TrimSpace(result.Message)
 	result.EvidenceRefs = compactServerStringsV0(result.EvidenceRefs)
+	result.StartupRevision = normalizeStartupRevisionSummaryV0(result.StartupRevision)
 	if result.Ready && result.Status == "" {
 		result.Status = StartupCheckStatusReadyV0
 	}
@@ -140,6 +158,35 @@ func normalizeStartupCheckResultV0(result StartupCheckResultV0) StartupCheckResu
 		result.Message = "orquesta_startup_ready"
 	}
 	return result
+}
+
+func normalizeStartupRevisionSummaryV0(summary StartupRevisionSummaryV0) StartupRevisionSummaryV0 {
+	summary.RevisionRef = strings.TrimSpace(summary.RevisionRef)
+	if summary.QueueRemoved < 0 {
+		summary.QueueRemoved = 0
+	}
+	if summary.QueueKept < 0 {
+		summary.QueueKept = 0
+	}
+	if summary.ControlRemoved < 0 {
+		summary.ControlRemoved = 0
+	}
+	if summary.ControlKept < 0 {
+		summary.ControlKept = 0
+	}
+	if summary.RuntimeArchived < 0 {
+		summary.RuntimeArchived = 0
+	}
+	if summary.Artifacts < 0 {
+		summary.Artifacts = 0
+	}
+	if summary.RetentionDays < 0 {
+		summary.RetentionDays = 0
+	}
+	if summary.MaxBytes < 0 {
+		summary.MaxBytes = 0
+	}
+	return summary
 }
 
 func compactServerStringsV0(values []string) []string {

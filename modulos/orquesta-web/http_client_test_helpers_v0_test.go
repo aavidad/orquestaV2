@@ -7,7 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
+
+	"orquesta/modulos/orquesta-app-gateway/inprocesshttp"
 )
 
 const webHTTPClientTestBaseURLV0 = "http://orquesta-web.test"
@@ -22,8 +23,9 @@ type webHTTPClientRoundTripperV0 struct {
 }
 
 type webHTTPClientTestServerV0 struct {
-	URL  string
-	host string
+	URL    string
+	host   string
+	server *httptest.Server
 }
 
 type webHTTPClientRegistryRoundTripperV0 struct {
@@ -41,10 +43,12 @@ func newWebHTTPTestServerV0(t *testing.T, handler http.Handler) *webHTTPClientTe
 	}
 	id := webHTTPClientTestServerSeqV0.Add(1)
 	host := "orquesta-web-test-" + strconv.FormatUint(id, 10) + ".local"
+	server := httptest.NewServer(handler)
 	webHTTPClientTestServerRegistryV0.Store(host, handler)
 	return &webHTTPClientTestServerV0{
-		URL:  "http://" + host,
-		host: host,
+		URL:    server.URL,
+		host:   host,
+		server: server,
 	}
 }
 
@@ -53,6 +57,9 @@ func (server *webHTTPClientTestServerV0) Close() {
 		return
 	}
 	webHTTPClientTestServerRegistryV0.Delete(server.host)
+	if server.server != nil {
+		server.server.Close()
+	}
 }
 
 func newWebHTTPClientForHandlerV0(handler http.Handler) *http.Client {
@@ -62,30 +69,14 @@ func newWebHTTPClientForHandlerV0(handler http.Handler) *http.Client {
 }
 
 func (transport webHTTPClientRoundTripperV0) RoundTrip(req *http.Request) (*http.Response, error) {
-	if deadline, ok := req.Context().Deadline(); ok && time.Until(deadline) <= 5*time.Millisecond {
-		responseCh := make(chan *http.Response, 1)
-		go func() {
-			responseCh <- transport.roundTripNowV0(req)
-		}()
-		select {
-		case response := <-responseCh:
-			return response, nil
-		case <-req.Context().Done():
-			return nil, req.Context().Err()
-		}
-	}
-	if err := req.Context().Err(); err != nil {
+	response, err := inprocesshttp.TransportV0{Handler: transport.handler}.RoundTrip(req)
+	if err != nil {
 		return nil, err
 	}
-	return transport.roundTripNowV0(req), nil
-}
-
-func (transport webHTTPClientRoundTripperV0) roundTripNowV0(req *http.Request) *http.Response {
-	recorder := httptest.NewRecorder()
-	transport.handler.ServeHTTP(recorder, req)
-	response := recorder.Result()
-	response.Request = req
-	return response
+	if response.Header.Get("Content-Type") == "" && response.ContentLength > 0 {
+		response.Header.Set("Content-Type", "application/json")
+	}
+	return response, nil
 }
 
 func (transport webHTTPClientRegistryRoundTripperV0) RoundTrip(req *http.Request) (*http.Response, error) {

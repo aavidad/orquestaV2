@@ -35,6 +35,9 @@ func (store *StoreV0) LoadRunV0(
 	if err := validateRunDocumentV0(document, runRef); err != nil {
 		return orquestacoreworkflow.OrchestrationRunV0{}, err
 	}
+	if err := validateLoadedRunProjectionV0(document.Run); err != nil {
+		return orquestacoreworkflow.OrchestrationRunV0{}, err
+	}
 	return document.Run, nil
 }
 

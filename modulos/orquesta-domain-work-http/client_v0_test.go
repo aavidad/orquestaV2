@@ -181,7 +181,7 @@ func TestClientV0DevuelveErrorConTimeoutOCancelacion(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 	_, err = client.CreateDomainWorkJobV0(ctx, validJobRequestV0())
-	requireErrorCodeV0(t, err, orquestadomainworkhttp.ErrDomainWorkHTTPRequestFailedV0)
+	requireErrorCodeV0(t, err, orquestadomainworkhttp.ErrDomainWorkHTTPTimeoutV0)
 }
 
 func TestClientV0DevuelveErrorConPayloadInvalido(t *testing.T) {

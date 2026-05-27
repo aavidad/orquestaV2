@@ -162,6 +162,7 @@ func (store *RunFileStoreV0) setControlStateV0(
 	store.ensureLockedV0()
 	if previous, ok := store.control[command.runRef]; ok {
 		state.CheckpointRecorded = previous.CheckpointRecorded
+		state.EvidenceRefs = compactRunFileStringsV0(append(previous.EvidenceRefs, state.EvidenceRefs...))
 	}
 	next := cloneRunFileControlMapV0(store.control)
 	next[command.runRef] = cloneRunFileControlStateV0(state)
@@ -201,6 +202,9 @@ func loadRunFileControlV0(
 	}
 	if snapshot.SchemaVersion != runFileControlSchemaVersionV0 {
 		return nil, fmt.Errorf("orquesta_run_file: control_schema_invalid")
+	}
+	if len(snapshot.Records) > runFileSnapshotMaxRecordsV0 {
+		return nil, fmt.Errorf("orquesta_run_file: control_records_limit_exceeded")
 	}
 	records := map[string]orquestaruncontrol.RunControlStateV0{}
 	for _, record := range snapshot.Records {

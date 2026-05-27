@@ -9,10 +9,12 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	publicidentity "orquesta/modulos/orquesta-server/publicidentity"
 )
 
 const (
-	CliCorrelationHeaderV0  = "X-Correlation-ID"
+	CliCorrelationHeaderV0  = publicidentity.PublicCorrelationHeaderV0
 	CliDefaultTimeoutRESTV0 = 10 * time.Second
 )
 
@@ -28,15 +30,23 @@ func newCLIRESTClientConfigV0(serverURL string, timeout time.Duration, endpoint 
 	if err != nil {
 		return cliRESTClientConfigV0{}, err
 	}
+	normalizedEndpoint, err := normalizeCLIEndpointV0(endpoint)
+	if err != nil {
+		return cliRESTClientConfigV0{}, err
+	}
 	return cliRESTClientConfigV0{
 		BaseURL:  baseURL,
-		Endpoint: strings.TrimSpace(endpoint),
+		Endpoint: normalizedEndpoint,
 		Timeout:  effectiveTimeoutV0(timeout, 0),
 	}, nil
 }
 
 func prepareCLIRESTRequestV0(ctx context.Context, baseURL string, endpoint string, correlationID string, payload []byte) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, joinEndpointV0(baseURL, endpoint), bytes.NewReader(payload))
+	target, err := buildCLIRESTEndpointURLV0(baseURL, endpoint)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(payload))
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +60,7 @@ func httpClientFromConfigV0(config cliRESTClientConfigV0, timeout time.Duration)
 	if config.HTTPClient != nil {
 		return config.HTTPClient
 	}
-	return &http.Client{Timeout: timeout}
+	return newCLILoopbackHTTPClientV0(timeout)
 }
 
 func clientTimeoutFromConfigV0(config cliRESTClientConfigV0) time.Duration {
@@ -88,8 +98,69 @@ func normalizeServerURLV0(raw string) (string, error) {
 	return strings.TrimRight(parsed.String(), "/"), nil
 }
 
+func normalizeCLIEndpointV0(endpoint string) (string, error) {
+	endpoint = strings.TrimSpace(endpoint)
+	if endpoint == "" || strings.HasPrefix(endpoint, "//") || strings.Contains(endpoint, "\\") {
+		return "", NewCliClientErrorV0(CliErrConfiguracionInvalidaV0, "endpoint", "endpoint_debe_ser_path_relativo", 0, false)
+	}
+	parsed, err := url.Parse(endpoint)
+	if err != nil || parsed.IsAbs() || parsed.Host != "" || parsed.User != nil ||
+		parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", NewCliClientErrorV0(CliErrConfiguracionInvalidaV0, "endpoint", "endpoint_debe_ser_path_relativo", 0, false)
+	}
+	parts := strings.Split(strings.TrimLeft(parsed.Path, "/"), "/")
+	for _, part := range parts {
+		if part == "" || part == "." || part == ".." {
+			return "", NewCliClientErrorV0(CliErrConfiguracionInvalidaV0, "endpoint", "endpoint_debe_ser_path_relativo", 0, false)
+		}
+	}
+	return "/" + strings.Join(parts, "/"), nil
+}
+
+func buildCLIRESTEndpointURLV0(baseURL, endpoint string) (string, error) {
+	normalizedBase, err := normalizeServerURLV0(baseURL)
+	if err != nil {
+		return "", err
+	}
+	normalizedEndpoint, err := normalizeCLIEndpointV0(endpoint)
+	if err != nil {
+		return "", err
+	}
+	parsed, err := url.Parse(normalizedBase)
+	if err != nil {
+		return "", NewCliClientErrorV0(CliErrConfiguracionInvalidaV0, "server_url", "server_url_invalida", 0, false)
+	}
+	basePath := strings.TrimRight(parsed.Path, "/")
+	if basePath == "" || basePath == "/" {
+		parsed.Path = normalizedEndpoint
+	} else {
+		parsed.Path = basePath + normalizedEndpoint
+	}
+	parsed.RawPath = ""
+	parsed.ForceQuery = false
+	return parsed.String(), nil
+}
+
 func joinEndpointV0(baseURL, endpoint string) string {
-	return strings.TrimRight(baseURL, "/") + "/" + strings.TrimLeft(endpoint, "/")
+	target, err := buildCLIRESTEndpointURLV0(baseURL, endpoint)
+	if err != nil {
+		return ""
+	}
+	return target
+}
+
+func prepareCLIRESTGetRequestV0(ctx context.Context, baseURL string, endpoint string, correlationID string) (*http.Request, error) {
+	target, err := buildCLIRESTEndpointURLV0(baseURL, endpoint)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set(CliCorrelationHeaderV0, strings.TrimSpace(correlationID))
+	return req, nil
 }
 
 func retryableStatusV0(statusCode int) bool {

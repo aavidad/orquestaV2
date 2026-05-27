@@ -2,6 +2,7 @@ package orquestacionnucleoapp
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -75,6 +76,51 @@ func TestCapacityDecisionExecutorV0AdvancesFromCapacityToAgentOutbox(t *testing.
 	assertOneAgentLaunchOutboxV0(t, ledger, runRef)
 }
 
+func TestCapacityDecisionExecutorV0DelegaEnPolicyPort(t *testing.T) {
+	runRef := "run-nucleo-capacity-policy-001"
+	run := mustActiveProgrammingRunV0(t, runRef)
+	run.CapacityRequests = []string{"capacity-ref-policy-001"}
+	store := NewInMemoryRunStoreV0(run)
+	sink := NewInMemoryEventSinkV0()
+	intent := capacityDecisionIntentForPolicyTestV0(t, runRef)
+	_, err := CapacityDecisionExecutorV0{
+		RunStore:   store,
+		EventSink:  sink,
+		Policy:     fakeCapacityPolicyPortV0{},
+		OccurredAt: "2026-05-24T10:10:00Z",
+	}.ExecuteOutboxDispatchV0(intent)
+	if err != nil {
+		t.Fatalf("ExecuteOutboxDispatchV0: %v", err)
+	}
+	events, err := sink.LoadRunEventsV0(context.Background(), runRef)
+	if err != nil {
+		t.Fatalf("LoadRunEventsV0: %v", err)
+	}
+	var payload orquestacoreworkflow.CapacityDecidedPayloadV0
+	for _, event := range events {
+		if event.EventType == orquestacoreworkflow.OrchestrationEventCapacityDecidedV0 {
+			if err := json.Unmarshal(event.Payload, &payload); err != nil {
+				t.Fatalf("payload: %v", err)
+			}
+		}
+	}
+	if payload.Tier != orquestacoreworkflow.OrchestrationCapacityHighV0 ||
+		payload.ReasoningEffort != orquestacoreworkflow.OrchestrationCapacityMediumV0 {
+		t.Fatalf("payload=%+v", payload)
+	}
+	for _, want := range []string{
+		"capacity_policy_ref:capacity-policy-ref-policy-test",
+		"capacity_pool_ref:capacity-pool-ref-policy-test",
+		"capacity_model_ref:capacity-model-ref-policy-test",
+		"capacity_quota_ref:capacity-quota-ref-policy-test",
+		"capacity_motivo:policy-port-test",
+	} {
+		if !containsNucleoRefV0(payload.EvidenceRefs, want) {
+			t.Fatalf("evidence refs=%v, falta %s", payload.EvidenceRefs, want)
+		}
+	}
+}
+
 func runTestBurstV0(
 	t *testing.T,
 	service ServiceV0,
@@ -144,6 +190,52 @@ func containsNucleoRefV0(values []string, ref string) bool {
 		}
 	}
 	return false
+}
+
+type fakeCapacityPolicyPortV0 struct{}
+
+func (fakeCapacityPolicyPortV0) DecideCapacityV0(
+	_ context.Context,
+	request CapacityDecisionPolicyRequestV0,
+) (CapacityDecisionPolicyDecisionV0, error) {
+	return CapacityDecisionPolicyDecisionV0{
+		DecisionRef:     request.DecisionRef,
+		Tier:            orquestacoreworkflow.OrchestrationCapacityHighV0,
+		ReasoningEffort: orquestacoreworkflow.OrchestrationCapacityMediumV0,
+		Summary:         "Decision por policy fake.",
+		PolicyRef:       "capacity-policy-ref-policy-test",
+		PoolRef:         "capacity-pool-ref-policy-test",
+		ModelRef:        "capacity-model-ref-policy-test",
+		QuotaRef:        "capacity-quota-ref-policy-test",
+		Motivos:         []string{"policy-port-test"},
+		EvidenceRefs:    []string{"evidence-ref-policy-port-test"},
+	}, nil
+}
+
+func capacityDecisionIntentForPolicyTestV0(
+	t *testing.T,
+	runRef string,
+) orquestaoutboxdispatch.DispatchIntentV0 {
+	t.Helper()
+	payload, err := json.Marshal(orquestacoreworkflow.CapacityDecisionRequestV0{
+		CapacityRequestID:          "capacity-ref-policy-001",
+		RunID:                      runRef,
+		PhaseID:                    string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+		ReasonCode:                 "policy-port",
+		Summary:                    "Validar puerto de politica.",
+		MinimumRecommendedCapacity: orquestacoreworkflow.OrchestrationCapacityLowV0,
+		EvidenceRefs:               []string{"evidence-ref-policy-request"},
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	return orquestaoutboxdispatch.DispatchIntentV0{
+		MessageID:   "outbox-capacity-policy-001",
+		MessageType: orquestacoreworkflow.OutboxMessageRequestCapacityDecisionV0,
+		RunID:       runRef,
+		TargetPort:  orquestacoreworkflow.OutboxTargetCapacityV0,
+		Payload:     payload,
+	}
 }
 
 func containsNucleoAssessmentRefV0(values []string, ref string) bool {

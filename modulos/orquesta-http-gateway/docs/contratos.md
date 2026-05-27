@@ -70,6 +70,18 @@ Campos:
 - `RouteDomainWorkV0`: `/api/v0/domain-work`.
 - `RouteExternalWorkRunV0`: `/api/v0/external-work/run`.
 
+## Manifiesto de rutas
+
+`PublicRouteManifestV0` publica el inventario canonico de rutas exactas,
+prefijos y overlays externos con `ref`, `owner`, metodo esperado y perfil de
+seguridad. Las rutas exactas bajo un prefijo, como `/api/v0/apps/director` o el
+overlay AppVCS `/api/v0/apps/vcs`, deben declarar explicitamente que preceden al
+prefijo `/api/v0/apps/`.
+
+`ValidateRouteManifestV0` detecta duplicados exactos, prefijos duplicados y
+shadows no declarados. El builder del mux valida que las rutas que registra
+existan en el manifiesto y que su patron coincida con la entrada canonica.
+
 `RouteDirectorStatsPageV0` y `RouteDirectorStatsV0` son rutas separadas: la
 primera apunta al handler web inyectado y la segunda al contrato REST que
 transporta `DirectorRunStatsV0` completo. El gateway no inspecciona campos de

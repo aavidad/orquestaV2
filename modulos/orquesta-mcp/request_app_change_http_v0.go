@@ -27,16 +27,19 @@ func (handler mcpRequestAppChangeHTTPHandlerV0) ServeHTTP(w http.ResponseWriter,
 	if !requestAppChangePathSupportedV0(r.URL.Path) {
 		writeMCPRequestAppChangeHTTPV0(w, http.StatusNotFound, newMCPRequestAppChangeHTTPErrorV0(
 			"path",
-			"ruta_no_soportada",
+			MCPPublicErrPathUnsupportedV0,
 			correlationFromRequestAppChangeHTTPV0(r, MCPRequestAppChangeToolInputV0{}),
 		))
 		return
 	}
+	if handleMCPPublicHTTPOptionsV0(w, r, http.MethodPost) {
+		return
+	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
+		setMCPPublicHTTPAllowV0(w, http.MethodPost)
 		writeMCPRequestAppChangeHTTPV0(w, http.StatusMethodNotAllowed, newMCPRequestAppChangeHTTPErrorV0(
 			"method",
-			"metodo_no_permitido",
+			MCPPublicErrMethodNotAllowedV0,
 			correlationFromRequestAppChangeHTTPV0(r, MCPRequestAppChangeToolInputV0{}),
 		))
 		return
@@ -50,10 +53,10 @@ func (handler mcpRequestAppChangeHTTPHandlerV0) ServeHTTP(w http.ResponseWriter,
 		return
 	}
 	var input MCPRequestAppChangeToolInputV0
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+	if code := decodeMCPPublicHTTPJSONV0(w, r, &input); code != "" {
 		writeMCPRequestAppChangeHTTPV0(w, http.StatusBadRequest, newMCPRequestAppChangeHTTPErrorV0(
 			"body",
-			"request_body_invalido",
+			code,
 			correlationFromRequestAppChangeHTTPV0(r, input),
 		))
 		return

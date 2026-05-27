@@ -45,6 +45,9 @@ func TestWebNuevaAppBacklogPreviewV0CompactaFasesYMicrotareas(t *testing.T) {
 	vm := NewWebNuevaAppViewModelV0(validSpecForViewModelV0(), backlogForViewModelV0())
 
 	if vm.BacklogPreview.SchemaVersion != NuevaAppBacklogPreviewSchemaV0 ||
+		vm.BacklogPreview.Estado != orquestafactory.BacklogInicialEstadoPreviewNoEjecutableV0 ||
+		vm.BacklogPreview.DirectorHandoff == nil ||
+		vm.BacklogPreview.DirectorHandoff.RequiredContract != orquestafactory.BacklogDirectorHandoffContractV0 ||
 		vm.BacklogPreview.TotalFases != 1 ||
 		vm.BacklogPreview.TotalMicrotareas != 1 ||
 		!vm.BacklogPreview.TieneBloqueos {
@@ -72,6 +75,22 @@ func TestWebNuevaAppBacklogPreviewV0CompactaFasesYMicrotareas(t *testing.T) {
 	got := string(raw)
 	want := `{
   "schema_version": "nueva_app_backlog_preview.v0",
+  "estado": "preview_no_ejecutable",
+  "freshness": {
+    "source_kind": "AppSpecV0",
+    "source_ref": "app_spec:spec-agenda-req-1",
+    "source_created_at": "2026-05-04T12:30:00Z",
+    "generated_from": "SolicitarNuevaApp v0"
+  },
+  "director_handoff": {
+    "status": "pendiente_director_v2",
+    "required_contract": "orquesta.apps.arrancar_director.v0",
+    "required_input_ref": "app_spec:spec-agenda-req-1",
+    "reason": "backlog_preview_requires_director_handoff",
+    "evidence_refs": [
+      "evidence-ref-backlog-preview-spec-agenda-req-1"
+    ]
+  },
   "fases": [
     {
       "key": "discovery",
@@ -178,6 +197,20 @@ func backlogForViewModelV0() orquestafactory.BacklogInicialPropuestoV0 {
 	return orquestafactory.BacklogInicialPropuestoV0{
 		SchemaVersion: orquestafactory.BacklogInicialPropuestoSchemaV0,
 		SpecID:        "spec-agenda-req-1",
+		Estado:        orquestafactory.BacklogInicialEstadoPreviewNoEjecutableV0,
+		Freshness: orquestafactory.BacklogFreshnessV0{
+			SourceKind:      "AppSpecV0",
+			SourceRef:       "app_spec:spec-agenda-req-1",
+			SourceCreatedAt: "2026-05-04T12:30:00Z",
+			GeneratedFrom:   "SolicitarNuevaApp v0",
+		},
+		DirectorHandoff: orquestafactory.BacklogDirectorHandoffV0{
+			Status:              orquestafactory.BacklogDirectorHandoffStatusPendienteV0,
+			RequiredContract:    orquestafactory.BacklogDirectorHandoffContractV0,
+			RequiredInputRef:    "app_spec:spec-agenda-req-1",
+			Reason:              "backlog_preview_requires_director_handoff",
+			HandoffEvidenceRefs: []string{"evidence-ref-backlog-preview-spec-agenda-req-1"},
+		},
 		Fases: []orquestafactory.FaseInicialV0{{
 			ID:       "discovery",
 			Nombre:   "Descubrimiento",

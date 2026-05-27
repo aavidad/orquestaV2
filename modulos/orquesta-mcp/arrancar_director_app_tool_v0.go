@@ -65,7 +65,7 @@ func MCPArrancarDirectorAppDescriptorV0() MCPArrancarDirectorAppToolDescriptorV0
 	return MCPArrancarDirectorAppToolDescriptorV0{
 		Name:        MCPArrancarDirectorAppToolNameV0,
 		Version:     MCPArrancarDirectorAppToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,app_spec_request:AppSpecRequestV0(request_kind?,execution_mode?),limits?:{max_external_waits?}}",
+		InputSchema: "envelope:{request_id?,correlation_id?,respuesta?,app_spec_request:AppSpecRequestV0(request_kind?,execution_mode?),max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,max_external_waits?}",
 		Output:      "ok:{route_policy,app_spec,run_ref,phase_id,director_task,director_tasks,loop_status}|error:{route_policy,errores_publicos}",
 		ResourceURI: MCPArrancarDirectorAppResourceURIV0,
 		Invariantes: []string{

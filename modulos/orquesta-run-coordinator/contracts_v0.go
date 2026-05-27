@@ -22,15 +22,16 @@ type RunCoordinatorDepsV0 struct {
 }
 
 type RunCoordinatorTickCommandV0 struct {
-	QueueRef       string                                   `json:"queue_ref,omitempty"`
-	AppRefs        []string                                 `json:"app_refs,omitempty"`
-	ExcludeRunRefs []string                                 `json:"exclude_run_refs,omitempty"`
-	QueueLimit     int                                      `json:"queue_limit,omitempty"`
-	MaxRuns        int                                      `json:"max_runs,omitempty"`
-	OccurredAt     time.Time                                `json:"occurred_at"`
-	CorrelationID  string                                   `json:"correlation_id,omitempty"`
-	DrainLimits    RunDrainLimitsV0                         `json:"drain_limits,omitempty"`
-	RankingPolicy  orquestarunqueue.RunQueueRankingPolicyV0 `json:"ranking_policy,omitempty"`
+	QueueRef             string                                   `json:"queue_ref,omitempty"`
+	AppRefs              []string                                 `json:"app_refs,omitempty"`
+	ExcludeRunRefs       []string                                 `json:"exclude_run_refs,omitempty"`
+	QueueLimit           int                                      `json:"queue_limit,omitempty"`
+	MaxRuns              int                                      `json:"max_runs,omitempty"`
+	OccurredAt           time.Time                                `json:"occurred_at"`
+	CorrelationID        string                                   `json:"correlation_id,omitempty"`
+	DrainLimits          RunDrainLimitsV0                         `json:"drain_limits,omitempty"`
+	RankingPolicy        orquestarunqueue.RunQueueRankingPolicyV0 `json:"ranking_policy,omitempty"`
+	ContinueOnDrainError bool                                     `json:"continue_on_drain_error,omitempty"`
 }
 
 type RunDrainLimitsV0 struct {

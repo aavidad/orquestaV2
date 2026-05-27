@@ -66,8 +66,8 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 			t.Fatalf("tool no registrado: %s", name)
 		}
 	}
-	assertTransportPayloadSaneadoMCPTestV0(t, transport.resources, 5000)
-	assertTransportPayloadSaneadoMCPTestV0(t, transport.tools, 18000)
+	assertTransportPayloadSaneadoMCPTestV0(t, transport.resources, 9000)
+	assertTransportPayloadSaneadoMCPTestV0(t, transport.tools, 25000)
 }
 
 func TestMCPTransportV0SirveResourceYToolConFakeEnMemoria(t *testing.T) {

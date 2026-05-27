@@ -241,6 +241,10 @@ func drainObservationPhaseIDV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	observation orquestacionnucleoapp.AgentDeliveryObservationV0,
 ) string {
+	if drainObservationIsTaskDeliveryV0(run, observation) &&
+		strings.TrimSpace(string(run.CurrentPhase)) != "" {
+		return strings.TrimSpace(string(run.CurrentPhase))
+	}
 	phaseID := strings.TrimSpace(observation.PhaseID)
 	if phaseID != "" {
 		return phaseID

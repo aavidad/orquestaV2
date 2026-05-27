@@ -94,15 +94,27 @@ func (v *agentLeaseValidatorV0) validateEvaluationClockOrder(input AgentLeaseEva
 	if !validAgentLeaseUTCInstantV0(input.LaunchObservedAt) || !validAgentLeaseUTCInstantV0(input.NowObservedAt) {
 		return
 	}
-	launchObservedAt := mustParseAgentLeaseInstantV0(input.LaunchObservedAt)
-	nowObservedAt := mustParseAgentLeaseInstantV0(input.NowObservedAt)
+	launchObservedAt, err := parseAgentLeaseInstantV0(input.LaunchObservedAt)
+	if err != nil {
+		v.add(ErrAgentLeaseObservedAtV0, "launch_observed_at")
+		return
+	}
+	nowObservedAt, err := parseAgentLeaseInstantV0(input.NowObservedAt)
+	if err != nil {
+		v.add(ErrAgentLeaseObservedAtV0, "now_observed_at")
+		return
+	}
 	if nowObservedAt.Before(launchObservedAt) {
 		v.add(ErrAgentLeaseTiempoInvalidoV0, "now_observed_at")
 	}
 	if input.LastHeartbeat == nil || !validAgentLeaseUTCInstantV0(input.LastHeartbeat.ObservedAt) {
 		return
 	}
-	heartbeatObservedAt := mustParseAgentLeaseInstantV0(input.LastHeartbeat.ObservedAt)
+	heartbeatObservedAt, err := parseAgentLeaseInstantV0(input.LastHeartbeat.ObservedAt)
+	if err != nil {
+		v.add(ErrAgentLeaseObservedAtV0, "last_heartbeat.observed_at")
+		return
+	}
 	if heartbeatObservedAt.Before(launchObservedAt) {
 		v.add(ErrAgentLeaseTiempoInvalidoV0, "last_heartbeat.observed_at")
 	}
@@ -111,12 +123,8 @@ func (v *agentLeaseValidatorV0) validateEvaluationClockOrder(input AgentLeaseEva
 	}
 }
 
-func mustParseAgentLeaseInstantV0(value string) time.Time {
-	parsed, err := time.Parse(agentLeaseInstantLayoutV0, value)
-	if err != nil {
-		panic(err)
-	}
-	return parsed
+func parseAgentLeaseInstantV0(value string) (time.Time, error) {
+	return time.Parse(agentLeaseInstantLayoutV0, value)
 }
 
 func agentLeaseDeadlineReachedV0(now time.Time, observedAt time.Time, timeoutSeconds int) bool {

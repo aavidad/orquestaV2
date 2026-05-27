@@ -2,42 +2,51 @@
 
 Registra pruebas obligatorias del modulo.
 
-## Pruebas previstas para CAP-001
+## Historico CAP-001 cerrado por DTO/fixtures/tests Go
+
+Los casos CAP-CT-001..004 empezaron como contrato documental. Desde CAP-007 y
+CAP-008 estan cubiertos por DTOs, fixtures y tests Go de
+`CapacityDecisionV0`, `ModelEscalationPolicyV0` y por el puerto ejecutable
+`DefaultCapacityPolicyV0`. Ya no deben reabrirse como "Comando: pendiente";
+queda pendiente solo conectar fuentes reales de cuota, benchmarks vivos o
+politicas de composicion nuevas.
+
+## Pruebas historicas para CAP-001
 
 ```text
 Caso: CAP-CT-001 resolver capacidad sin proveedor hardcodeado
 Tipo: contract
-Comando: pendiente; validar fixture CapacityDecisionV0 con provider_kind remote/local/hybrid y model_ref opaco.
+Comando: historico; cubierto por go test -count=1 ./modulos/orquesta-capacity.
 Evidencia esperada: La decision devuelve nivel_capacidad, pool, modelo, cuota y motivos sin nombres canonicos de proveedores historicos.
-Ultima ejecucion: No ejecutada; contrato documental v0.
-Riesgos: Requiere fixtures cuando exista schema JSON o tipos del modulo.
+Ultima ejecucion: 2026-05-26; DTO/fixtures/tests Go y policy port local.
+Riesgos: Las fuentes reales de cuota siguen siendo adaptadores de composicion.
 ```
 
 ```text
 Caso: CAP-CT-002 rechazar xhigh sin evidencia
 Tipo: contract
-Comando: pendiente; validar solicitud con nivel xhigh deseado y evidencia vacia.
+Comando: historico; cubierto por go test -count=1 ./modulos/orquesta-capacity.
 Evidencia esperada: Error `evidencia_insuficiente_para_xhigh` o degradacion a high/medium con motivo auditable.
-Ultima ejecucion: No ejecutada; contrato documental v0.
-Riesgos: Requiere fixtures cuando ModelEscalationPolicyV0 tenga schema ejecutable.
+Ultima ejecucion: 2026-05-26; DTO/fixtures/tests Go y DefaultCapacityPolicyV0 degrada xhigh sin evidencia.
+Riesgos: xhigh real sigue exigiendo evidencia de composicion.
 ```
 
 ```text
 Caso: CAP-CT-003 cuota obsoleta fuerza degradacion o handoff
 Tipo: contract
-Comando: pendiente; validar QuotaSnapshotV0 con freshness obsolete y ventana insuficiente.
+Comando: historico; cubierto por go test -count=1 ./modulos/orquesta-capacity.
 Evidencia esperada: No escala a high/xhigh; devuelve `cuota_obsoleta`, `ventana_insuficiente`, handoff preventivo o degradacion.
-Ultima ejecucion: No ejecutada; contrato documental v0.
+Ultima ejecucion: 2026-05-26; DTO/fixtures/tests Go.
 Riesgos: La fuente real de cuota dependera de adaptadores runtime/observability.
 ```
 
 ```text
 Caso: CAP-CT-004 modelo local requiere score probado
 Tipo: contract
-Comando: pendiente; validar pool local con ModelEvidenceScoreV0 sin muestras ni benchmarks.
+Comando: historico; cubierto por go test -count=1 ./modulos/orquesta-capacity.
 Evidencia esperada: Error `local_sin_score_suficiente` o alternativa remota/local probada; no se habilita local por deseo.
-Ultima ejecucion: No ejecutada; contrato documental v0.
-Riesgos: Falta decidir umbral minimo de confianza y muestras.
+Ultima ejecucion: 2026-05-26; DTO/fixtures/tests Go.
+Riesgos: Benchmarks reales siguen pendientes por adaptador/fuente viva.
 ```
 
 ## Pruebas previstas para CAP-002
@@ -159,7 +168,10 @@ Riesgos: La aprobacion humana debe ser evidencia opaca, no prompt, transcript ni
 ```text
 Caso: CAP-DBV1-001 extraccion readonly de evidencia CAP-001
 Tipo: smoke
-Comando: sqlite3 'file:/home/alberto/Trabajo/orquesta/backups/legacy-sqlite-20260422/orquesta.db?mode=ro' con PRAGMA table_info y agregados de tablas capacity.
+Comando historico en cuarentena: `sqlite3` readonly sobre el ref relativo
+opaco `backups/legacy-sqlite-20260422/orquesta.db` con PRAGMA table_info y
+agregados de tablas capacity; no es prueba operativa obligatoria ni trabajo
+programable sin decision del director.
 Evidencia esperada: Se leen esquemas/agregados de politicas_modelo, pools_capacidad, pool_modelos, agentes, presupuestos_sesion y agente_scores_locales sin modificar la DB.
 Ultima ejecucion: 2026-05-04; ejecutada manualmente durante CAP-001.
 Riesgos: La evidencia es forense; no se importa como configuracion viva.
@@ -230,6 +242,15 @@ Comando: go test -count=1 ./modulos/orquesta-capacity
 Evidencia esperada: JSON con campo no contratado devuelve `model_escalation_policy_json_invalido`; policy_ref con proveedor hardcodeado devuelve `referencia_no_opaca`; xhigh sin evidencia fresca devuelve `evidencia_insuficiente_para_xhigh`; texto con HOME real se rechaza.
 Ultima ejecucion: 2026-05-05; ok.
 Riesgos: No valida disponibilidad real de runtime, cuota ni OAuth; solo coherencia declarativa de la politica.
+```
+
+```text
+Caso: CAP-CT-024 DefaultCapacityPolicyV0 ejecuta puerto de decision
+Tipo: unit
+Comando: go test -count=1 ./modulos/orquesta-capacity
+Evidencia esperada: La politica produce nivel, reasoning, policy/pool/model/quota refs opacas, motivos y evidencias compactas; xhigh sin evidencia degrada a high.
+Ultima ejecucion: 2026-05-26; ok.
+Riesgos: No sustituye fuente real de cuota ni benchmarks; esos adaptadores siguen siendo opt-in de composicion.
 ```
 
 ## Plantilla

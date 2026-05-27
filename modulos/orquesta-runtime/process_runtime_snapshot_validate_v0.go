@@ -13,8 +13,12 @@ func validateProcessRuntimeSnapshotV0(snapshot ProcessRuntimeSnapshotV0) []Proce
 	issues = append(issues, validateProcessRuntimeSnapshotRefV0("session_ref", snapshot.SessionRef, false)...)
 	issues = append(issues, validateProcessRuntimeSnapshotRefV0("launch_ref", snapshot.LaunchRef, false)...)
 	issues = append(issues, validateProcessRuntimeSnapshotRefV0("stop_ref", snapshot.StopRef, false)...)
+	for _, ref := range snapshot.LaunchReceiptRefs {
+		issues = append(issues, validateProcessRuntimeSnapshotRefV0("launch_receipt_refs", ref, true)...)
+	}
+	issues = append(issues, validateProcessRuntimeLaunchReceiptV0(snapshot.LaunchReceipt)...)
 	switch snapshot.Status {
-	case ProcessRuntimeRunningV0, ProcessRuntimeStoppedV0:
+	case ProcessRuntimeRunningV0, ProcessRuntimeStoppingV0, ProcessRuntimeStoppedV0:
 	default:
 		issues = append(issues, processRuntimeErrorV0(ProcessRuntimeConfigInvalidaV0, "status"))
 	}

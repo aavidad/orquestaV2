@@ -1,5 +1,7 @@
 package orquestamcp
 
+import orquestacore "orquesta/modulos/orquesta-core"
+
 const (
 	MCPFunctionContractResourceNameV0    = "orquesta.core.function_contracts.v0"
 	MCPFunctionContractResourceVersionV0 = "v0"
@@ -53,19 +55,23 @@ func NewMCPFunctionContractResourceV0() MCPFunctionContractResourceV0 {
 			"archivar",
 			"reemplazar",
 		},
-		PublicErrors: []string{
-			"function_contract_incompleto",
-			"consulta_function_contract_no_disponible",
-			"filtro_no_soportado",
-			"cursor_invalido",
-			"evidencia_insuficiente",
-			"function_contract_no_encontrado",
-		},
+		PublicErrors: functionContractPublicErrorsMCPV0(),
 		Guardrails: []string{
 			"read_only_por_puerto_inyectado",
 			"estado_vivo_desde_eventos_o_stores_causales",
 			"sin_markdown_historico_ni_db_v1_como_canon",
 			"registro_mutante_bloqueado_hasta_decision_director_workflow_outbox",
 		},
+	}
+}
+
+func functionContractPublicErrorsMCPV0() []string {
+	return []string{
+		orquestacore.FunctionContractQueryErrIncompletoV0,
+		orquestacore.FunctionContractQueryErrConsultaNoDisponibleV0,
+		orquestacore.FunctionContractQueryErrFiltroNoSoportadoV0,
+		orquestacore.FunctionContractQueryErrCursorInvalidoV0,
+		orquestacore.FunctionContractQueryErrEvidenciaInsuficienteV0,
+		orquestacore.FunctionContractQueryErrNoEncontradoV0,
 	}
 }

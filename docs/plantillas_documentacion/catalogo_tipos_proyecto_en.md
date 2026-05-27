@@ -26,6 +26,14 @@ This catalog is aligned with the architecture policy by project type and avoids 
 - `faq`: recurring questions and quick answers
 - `ayuda_contextual`: micro-help by screen, workflow, state, or action
 - `runbook_operativo`: operational response for incidents and recurring tasks
+- `pruebas_documentales`: compact evidence for executed validations or
+  documentary reviews of the generated project
+- `pendientes`: real gaps, deferred decisions, and follow-up work for the
+  generated project
+
+Historical alias: `manual_sistemas_deploy` is not a new root piece; resolve it
+as `manual_sysadmin` plus `guia_despliegue` when operations and deployment both
+apply.
 
 ## Selection rules
 
@@ -35,6 +43,9 @@ This catalog is aligned with the architecture policy by project type and avoids 
 - if there is ongoing operation or on-call responsibility, include `runbook_operativo`
 - if development and operations are separated, include `manual_sysadmin`
 - if third parties will extend or integrate the system, include `manual_desarrollador`
+- if the director requires closure with documentary evidence, include
+  `pruebas_documentales`
+- if real gaps or deferred decisions remain, include `pendientes`
 
 ## Minimum set by project type
 
@@ -54,12 +65,14 @@ Minimum documentation:
 - `guia_despliegue`
 - `runbook_operativo`
 - `faq`
+- `pruebas_documentales`
 
 Recommended documentation:
 
 - `manual_sysadmin`
 - `manual_usuario` if there is a dashboard or functional console
 - `ayuda_contextual` if people directly operate an interface
+- `pendientes` only if verifiable work remains
 
 ### 2. Quick operational scripts and tools
 
@@ -76,12 +89,14 @@ Minimum documentation:
 - `guia_instalacion`
 - `faq`
 - `runbook_operativo`
+- `pruebas_documentales` if there is assisted execution or migration
 
 Recommended documentation:
 
 - `manual_desarrollador` if the tool will evolve or accept contributions
 - `manual_usuario` if non-technical profiles will use it
 - `guia_despliegue` if it is distributed beyond the author's local environment
+- `pendientes` if risks or deferred tasks remain
 
 ### 3. Infrastructure controllers
 
@@ -99,11 +114,13 @@ Minimum documentation:
 - `manual_sysadmin`
 - `runbook_operativo`
 - `faq`
+- `pruebas_documentales`
 
 Recommended documentation:
 
 - `guia_instalacion` if it can be tested or started locally
 - `manual_usuario` and `ayuda_contextual` only if it exposes a real human-operated interface
+- `pendientes` if integrations or permissions remain open
 
 ## Suggested combinations
 
@@ -121,6 +138,7 @@ Recommended documentation:
 - `guia_despliegue`
 - `faq`
 - `runbook_operativo`
+- `pruebas_documentales`
 
 ### Functional UI profile
 

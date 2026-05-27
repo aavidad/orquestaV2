@@ -12,6 +12,22 @@
   conector simulado offline.
 - [ ] Implementar adaptador externo de servidor/transporte MCP real.
 
+## OPMCP-011 - Reconciliacion T198 descriptor_source
+
+Estado: completada documental 2026-05-27.
+
+Contrato: `OperatorMCPCapabilitiesV0` sigue siendo fuente canonica del resource
+operativo registrado por `orquesta-mcp`; T198 no convierte el operador en
+transporte real ni expone DB/runtime.
+
+Validacion: `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-observability ./modulos/orquesta-governance ./modulos/orquesta-core ./cmd/orquesta-server`.
+
+Bloqueos: ninguno para documentar el cierre; el servidor/transporte MCP real
+continua como adaptador opt-in separado.
+
+Revalidacion: `agent-ref-task-autoprogramming-c3678e9bc306-g01` trata el
+pendiente residual como stale y no abre codigo nuevo.
+
 ## OPMCP-007 - Conector operador hexagonal
 
 Estado: completada local.

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+STATUS_SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/smoke_common.sh
+source "$STATUS_SCRIPT_ROOT/scripts/lib/smoke_common.sh"
+
 usage() {
   cat <<'USAGE'
 Uso:
@@ -79,7 +83,8 @@ collect_local_processes_json() {
 fetch_snapshot_json() {
   local tmpdir request_id server_file auto_file local_file body
   tmpdir="$(mktemp -d)"
-  trap 'rm -rf "$tmpdir"' RETURN
+  smoke_temp_root_prepare "$tmpdir" "generated"
+  trap 'smoke_temp_root_cleanup "$tmpdir" 0' RETURN
   request_id="status-now-$(date -u +%Y%m%dT%H%M%SZ)"
   server_file="$tmpdir/server.json"
   auto_file="$tmpdir/autoprogramming.json"

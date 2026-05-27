@@ -19,7 +19,7 @@ func operationalDirectorClosureIssueAcceptedReviewMatchV0(
 	if reader == nil {
 		return operationalDirectorPlanAcceptedReviewMatchV0{}, operationalDirectorPlanReviewTraceV0{}, false, nil
 	}
-	events, err := reader.LoadRunEventsV0(ctx, request.RunRef)
+	events, err := loadOperationalRunEventsV0(ctx, reader, request.RunRef)
 	if err != nil {
 		return operationalDirectorPlanAcceptedReviewMatchV0{}, operationalDirectorPlanReviewTraceV0{}, false, err
 	}

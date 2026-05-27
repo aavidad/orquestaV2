@@ -9,9 +9,148 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 ## Objetivo
 
-Explicar cómo se usa hoy Orquesta con el estado operativo real ya alcanzado por el control plane.
+Explicar como se usa hoy Orquesta sin volver a presentar la operativa V1 como
+camino vigente del servidor actual.
 
-## Capas actuales
+Este documento queda clasificado como manual server-first sincronizado. Las
+secciones historicas preservadas mas abajo sirven solo como contexto de
+compatibilidad y no deben alimentar clientes nuevos, tareas de autoprogramacion
+ni pruebas de cierre.
+La superficie viva se limita a las rutas versionadas y comandos de esta primera
+seccion. Cualquier ruta, comando o politica que aparezca despues de
+`Contenido historico V1 preservado` queda en cuarentena historica aunque su texto
+original use presente.
+
+## Uso vigente server-first
+
+El servidor residente es la fuente operativa. Web, CLI, API HTTP y MCP son
+clientes finos sobre contratos publicos; no leen DB, stores internos,
+runtime dirs ni ficheros de control como sustituto del servidor.
+
+Arranque vigente:
+
+```bash
+go run ./cmd/orquesta-server run
+```
+
+Daemon:
+
+```bash
+go run ./cmd/orquesta-server daemon start
+```
+
+El puerto por defecto lo fija la composicion `orquesta-server`; en esta rama se
+usa `127.0.0.1:8787` salvo configuracion explicita.
+
+Salud y readiness:
+
+- `GET /healthz`: liveness de proceso. No significa que Orquesta este lista
+  para lanzar trabajo.
+- `GET /api/v0/server/readiness`: readiness operativa. Scripts, smokes y
+  operadores deben esperar esta ruta antes de preparar o drenar trabajo.
+- `GET /api/v0/server/status`: estado publico compacto y configuracion efectiva
+  redactada. `/api/status` queda solo como alias legacy de compatibilidad.
+
+Web vigente:
+
+- `/nueva-app`: pedir app por `SolicitarNuevaApp` o arrancar Director segun
+  wiring.
+- `/director-stats`: estadisticas/progreso por `run_ref`.
+- `/run-queue`: cola multiapp y prioridad.
+- `/run-control`: pausa, reanudacion, parada o cancelacion por run.
+- `/ops`: panel operativo de cola, ejecucion, atencion y acciones seguras.
+
+API HTTP versionada:
+
+- `POST /api/v0/apps/spec`
+- `POST /api/v0/apps/director`
+- `POST /api/v0/apps/{app_ref}/changes`
+- `POST /api/v0/director/stats`
+- `POST /api/v0/director/human-work/review-plan`
+- `POST /api/v0/runs/supervise`
+- `POST /api/v0/runs/control`
+- `POST /api/v0/runs/queue/priority`
+- `POST /api/v0/autoprogramming/validate-request`
+- `POST /api/v0/autoprogramming/self-improvement`
+- `POST /api/v0/autoprogramming/prepare-run`
+- `POST /api/v0/autoprogramming/status`
+- `POST /api/v0/autoprogramming/supervise`
+- `POST /api/v0/governance/catalog/query`
+- `POST /api/v0/core/function-contracts/list`
+- `POST /api/v0/core/function-contracts/view`
+- `POST /api/v0/operational-status/query`
+- `POST /api/v0/domain-work`
+- `POST /api/v0/external-work/run`
+- `POST /api/v0/ops/agent-runtime-detail`
+- `POST /api/v0/server/shutdown`
+- `GET /api/v0/server/resources`
+- `GET /api/v0/workspace/timeline`
+
+CLI vigente:
+
+- `app spec solicitar`: cliente fino de `POST /api/v0/apps/spec`.
+- `app spec bootstrap`: cuarentena legacy; informa `route_policy` y remite a
+  `/api/v0/apps/director`.
+- `doctor contratos`: `POST /api/v0/operational-status/query`.
+- `contratos funcion listar|ver`: rutas read-only
+  `/api/v0/core/function-contracts/list|view`.
+- `gobernanza catalogo listar|ver`: `POST /api/v0/governance/catalog/query`.
+- Autoprogramacion: `prepare-run`, `status`, `supervise`, cola, stats y control
+  por las rutas `/api/v0/*` correspondientes.
+
+MCP/toolbelt vigente para IA cuando el transporte esta disponible:
+
+- `orquesta.apps.arrancar_director.v0`
+- `orquesta.autoprogramming.prepare_run.v0`
+- `orquesta.autoprogramming.status.v0`
+- `orquesta.autoprogramming.supervise.v0`
+- `orquesta.autoprogramming.self_improvement.propose.v0`
+- `orquesta.director.stats.v0`
+- `orquesta.runs.supervisor.v0`
+- `orquesta.runs.control.v0`
+- `orquesta.run_queue.priority.v0`
+- `orquesta.domain_work.v0`
+- `orquesta.external_work.run.v0`
+
+No vigente como requisito operativo:
+
+- `./orquesta serve`: forma V1; usar `cmd/orquesta-server`.
+- rutas `/api/*` sin `/api/v0`: historicas o aliases legacy, no contrato nuevo.
+- OpenClaw como requisito de notificaciones: historico/externo, no composicion
+  vigente del nucleo.
+- AP-077 como politica vigente de esta composicion: contexto historico de DBV1,
+  no permiso para leer o mutar persistencia local.
+- wrappers `scripts/inicio_agente.sh` y Terminator: rescate manual, no runtime
+  paralelo ni fuente de verdad.
+- SQLite/DBV1, `cmd/db/internal` y `ensureLocalDB`: no se reintroducen.
+
+Contrato T121 para wrappers manuales:
+
+- `scripts/inicio_agente.sh`, `scripts/cargar_agentes.sh`,
+  `scripts/terminator_agentes.sh` y `scripts/agente_console.sh` son recuperacion
+  u operacion asistida.
+- Exigen servidor residente listo por `/api/v0/server/readiness` antes de
+  actuar, salvo `--dry-run`.
+- Delegan en CLI/API publica; no mutan DB, stores, worktrees ni runtime por una
+  ruta lateral.
+- `cargar_agentes.sh` y `terminator_agentes.sh` son dry-run por defecto y no
+  arrancan flotas legacy sin `--confirm`.
+- `agente_console.sh` rechaza comandos de runtime directo; cualquier runtime
+  vivo debe estar gobernado por OrquestaV2.
+- La correlacion durable usa `agent_ref`, `task_ref`, `run_ref`,
+  `external_session_id` y `worktree_ref` como refs opacas, sin publicar rutas
+  privadas.
+
+## Contenido historico V1 preservado
+
+El contenido siguiente se conserva para trazabilidad. No es manual vigente, no
+declara endpoints publicos nuevos y no debe generar tareas de codigo salvo
+compatibilidad o rescate explicitamente autorizados. Si contradice la seccion
+server-first anterior, gana la seccion server-first y las fuentes vigentes:
+`AGENTS.md`, `docs/estado_actual_2026-05-17.md` y
+`docs/guia_nucleo_orquestacion_2026-05-17.md`.
+
+## Historico V1: capas actuales
 
 Orquesta se usa hoy por tres vías complementarias, pero con un único plano operativo válido:
 
@@ -24,7 +163,7 @@ Orquesta se usa hoy por tres vías complementarias, pero con un único plano ope
 3. CLI y API HTTP/JSON
    Actúan como clientes del servicio. El modo local queda solo para recuperación explícita.
 
-## Arranque del panel web
+## Historico V1: arranque del panel web
 
 ```bash
 cd ~/Trabajo/orquesta
@@ -37,7 +176,7 @@ Por defecto queda en:
 http://127.0.0.1:16543
 ```
 
-## Qué ofrece hoy la web
+## Historico V1: que ofrecia la web
 
 Rutas HTML disponibles:
 
@@ -57,7 +196,7 @@ La web actual sirve para:
 - crear propuestas
 - votar o cerrar propuestas desde sus vistas
 
-## Qué ofrece hoy la API
+## Historico V1: que ofrecia la API
 
 Rutas JSON principales:
 
@@ -118,7 +257,7 @@ Estado actual del catalogo de skills:
 - mutaciones versionadas y auditadas
 - anti-duplicado funcional por equivalencia canonica, no solo por nombre exacto
 
-## Flujo correcto para un agente manual
+## Historico V1: flujo para un agente manual
 
 Entrada manual de compatibilidad o recuperación:
 
@@ -140,7 +279,7 @@ Ese wrapper hace:
 2. muestra tareas activas del agente
 3. inicia la tarea si se le pasa o si hay una única candidata clara
 
-## Regla práctica para documentadores
+## Historico V1: regla practica para documentadores
 
 Los agentes documentadores como `antigravity` deben usar:
 
@@ -148,7 +287,7 @@ Los agentes documentadores como `antigravity` deben usar:
 - la CLI para iniciar sesión, tomar tarea y votar
 - la API solo cuando se documente o se pruebe integración
 
-## Limitaciones actuales
+## Historico V1: limitaciones registradas
 
 - la web todavía no cubre todo el modelo de proyectos, conectores y control activo de agentes
 - el arranque autónomo persistente ya opera con supervisor residente; los scripts manuales siguen existiendo como compatibilidad y rescate
@@ -157,7 +296,7 @@ Los agentes documentadores como `antigravity` deben usar:
 - parte del gobierno operativo sigue pasando por CLI y scripts
 - el control total ya cubre agente/proyecto; lo pendiente queda en la agregación global del workspace y en la homogeneización global de coste/tokens
 
-## Estado actual de Ollama local
+## Historico V1: estado de Ollama local
 
 La política vigente para agentes locales de Ollama es dual:
 
@@ -177,13 +316,17 @@ Regla operativa:
 - pero la promoción de modelos locales y el camino preferente de producción deben moverse al pool compartido gobernado por la app
 - con recursos actuales, `gemma4:26b` es el worker local preferente y Qwen queda en estado experimental mientras no supere la smoke canónica de Orquesta
 
-## Política de Acceso a Persistencia (AP-077)
+## Historico V1: Politica de Acceso a Persistencia (AP-077)
+
+AP-077 queda preservada como politica historica de DBV1 y no como requisito
+vigente de la composicion server-first. No autoriza ni exige acceso directo a
+persistencia local para clientes nuevos.
 
 No se permite el acceso directo a la base de datos (p. ej. mediante `sqlite3`) para realizar mutaciones o escrituras en el flujo normal de trabajo. 
 
 La lectura e inspección directa es excepcional y solo se tolera mientras la CLI/API no proporcione la observabilidad y administración necesarias. Cuando la cobertura sea total, el acceso externo quedará bloqueado. Para más detalles, ver [Política de Acceso a Persistencia (ES)](politica_acceso_persistencia_es.md) y [Persistence Access Policy (EN)](politica_acceso_persistencia_en.md).
 
-## Estado objetivo
+## Historico V1: estado objetivo
 
 La dirección de producto es:
 

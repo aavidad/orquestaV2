@@ -27,6 +27,7 @@ func TestCodexAgentAckPendingRailEvidenceRefsV0ClasificaSinValores(t *testing.T)
 }
 
 func TestCodexAgentAckPendingRailEvidenceRefsV0NoClasificaSecretoEfectivo(t *testing.T) {
+	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "on")
 	spec := codexSpecForTestV0()
 	data := []byte(codexAckJSONWithNoteForPendingRailTestV0("access_token=abc123"))
 	ack, issues := ValidateCodexAgentAckBytesForSpecV0(data, spec)

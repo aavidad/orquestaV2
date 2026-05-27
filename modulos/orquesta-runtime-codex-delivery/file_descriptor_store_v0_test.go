@@ -67,6 +67,7 @@ func TestFileCodexReceiptDescriptorStoreV0ReemplazaDescriptorPorRef(t *testing.T
 	if err != nil || len(got) != 1 || got[0].AckPath != second.AckPath {
 		t.Fatalf("descriptors=%+v err=%v", got, err)
 	}
+	assertCodexDeliveryFileStoreDurablePolicyV0(t, dir, fileCodexReceiptDescriptorStoreNameV0)
 }
 
 func TestFileCodexReceiptDescriptorStoreV0NoFiltraPathEnError(t *testing.T) {
@@ -85,6 +86,36 @@ func TestFileCodexReceiptDescriptorStoreV0NoFiltraPathEnError(t *testing.T) {
 	}
 }
 
+func TestFileCodexReceiptDescriptorStoreV0LimitaLecturaSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, fileCodexReceiptDescriptorStoreNameV0)
+	if err := os.WriteFile(path, []byte(strings.Repeat("x", int(codexDeliveryFileSnapshotMaxBytesV0)+1)), 0o600); err != nil {
+		t.Fatalf("write oversized snapshot: %v", err)
+	}
+	_, err := NewFileCodexReceiptDescriptorStoreV0(dir)
+	if err == nil || err.Error() != "codex_receipt_descriptor_file_store: size_limit_exceeded" {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestFileCodexReceiptDescriptorStoreV0LimitaRecordsSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, fileCodexReceiptDescriptorStoreNameV0)
+	descriptors := make([]string, 0, codexDeliveryFileSnapshotMaxRecordsV0+1)
+	for index := 0; index <= codexDeliveryFileSnapshotMaxRecordsV0; index++ {
+		descriptors = append(descriptors, `{}`)
+	}
+	body := `{"schema_version":"` + fileCodexReceiptDescriptorStoreSchemaVersionV0 +
+		`","descriptors":[` + strings.Join(descriptors, ",") + `]}`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write snapshot: %v", err)
+	}
+	_, err := NewFileCodexReceiptDescriptorStoreV0(dir)
+	if err == nil || err.Error() != "codex_receipt_descriptor_file_store: records_limit_exceeded" {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 func newFileCodexReceiptDescriptorStoreForTestV0(
 	t *testing.T,
 	dir string,
@@ -95,4 +126,25 @@ func newFileCodexReceiptDescriptorStoreForTestV0(
 		t.Fatalf("NewFileCodexReceiptDescriptorStoreV0: %v", err)
 	}
 	return store
+}
+
+func assertCodexDeliveryFileStoreDurablePolicyV0(t *testing.T, dir string, name string) {
+	t.Helper()
+	info, err := os.Stat(filepath.Join(dir, name))
+	if err != nil {
+		t.Fatalf("stat snapshot: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("snapshot mode=%#o", got)
+	}
+	leftovers, err := filepath.Glob(filepath.Join(dir, "."+name+".*.tmp"))
+	if err != nil {
+		t.Fatalf("glob temp: %v", err)
+	}
+	if len(leftovers) != 0 {
+		t.Fatalf("temps persistidos=%v", leftovers)
+	}
+	if _, err := os.Stat(filepath.Join(dir, name+".tmp")); !os.IsNotExist(err) {
+		t.Fatalf("temp fijo presente err=%v", err)
+	}
 }

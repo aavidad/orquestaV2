@@ -7,6 +7,7 @@ import (
 	"time"
 
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	publicidentity "orquesta/modulos/orquesta-server/publicidentity"
 )
 
 func autoprogClientErrorEnvelopeV0(inv CliInvocationContextV0, err error, start time.Time) CliOutputEnvelopeV0 {
@@ -95,4 +96,18 @@ func firstNonEmptyCliStringV0(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func normalizeCLIPublicMutationInvocationV0(inv CliInvocationContextV0) CliInvocationContextV0 {
+	inv = NormalizeCliInvocationContextV0(inv)
+	identity := publicidentity.NormalizePublicIdentityV0(publicidentity.PublicIdentityInputV0{
+		RequestID:      inv.RequestID,
+		CorrelationID:  inv.CorrelationID,
+		IdempotencyKey: inv.IdempotencyKey,
+		Mutating:       true,
+	})
+	inv.RequestID = identity.RequestID
+	inv.CorrelationID = identity.CorrelationID
+	inv.IdempotencyKey = identity.IdempotencyKey
+	return inv
 }

@@ -1,8 +1,6 @@
 package orquestacionnucleoapp
 
 import (
-	"fmt"
-	"hash/fnv"
 	"strings"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -72,9 +70,8 @@ func agentStopConfirmationRefV0(
 	if strings.TrimSpace(stop.ConfirmationRef) != "" {
 		return strings.TrimSpace(stop.ConfirmationRef)
 	}
-	hash := fnv.New32a()
-	_, _ = hash.Write([]byte(strings.TrimSpace(intent.MessageID)))
-	return fmt.Sprintf("agent-stop-confirmation-ref-%08x", hash.Sum32())
+	return "agent-stop-confirmation-ref-" +
+		deterministicRefDigestPrefixV0("agent_stop_confirmation", 32, intent.MessageID)
 }
 
 func agentStopConfirmedSummaryV0(summary string) string {
@@ -113,9 +110,7 @@ func agentStopperOpaqueControlRefV0(prefix string, value string) string {
 	if !agentStopperControlRefNeedsCompactionV0(trimmed) {
 		return trimmed
 	}
-	hash := fnv.New64a()
-	_, _ = hash.Write([]byte(trimmed))
-	return fmt.Sprintf("%s-%016x", prefix, hash.Sum64())
+	return prefix + "-" + deterministicRefDigestPrefixV0("agent_stop_control_ref", 32, trimmed)
 }
 
 func agentStopperControlRefNeedsCompactionV0(value string) bool {

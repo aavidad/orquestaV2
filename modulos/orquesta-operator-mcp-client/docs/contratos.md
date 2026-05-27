@@ -19,6 +19,10 @@ Entrada de configuracion:
   consulta dirigida.
 - `OperatorMCPClientConnectorRefsV0`: refs opacas que el adaptador puede usar
   para sobreescribir las refs entrantes antes de llamar al MCP remoto.
+- `Timeout`: presupuesto maximo por invocacion. Si no se configura, el
+  adaptador aplica `DefaultOperatorMCPClientTimeoutV0`.
+- `ContextFactory`: contexto padre opcional inyectado por la composicion para
+  propagar cancelacion o deadline externo.
 
 Invariantes:
 
@@ -27,6 +31,10 @@ Invariantes:
 - El cliente remoto devuelve el envelope compacto `estado`, payload especifico
   y `error_code` publico.
 - Si el cliente no existe, falla con `operator_mcp_connector_unavailable`.
+- Cada llamada a `CallToolV0` recibe un contexto con deadline; no se invoca con
+  `context.Background()` sin limite.
+- Si vence el deadline, falla con `operator_mcp_timeout`.
+- Si el contexto padre se cancela, falla con `operator_mcp_cancelled`.
 - Si el cliente falla sin error publico, falla con `operator_mcp_port_error`.
 - Si el MCP remoto devuelve un `error_code` no catalogado como error publico
   de `orquesta-operator-mcp`, el adaptador lo reduce a `operator_mcp_port_error`.

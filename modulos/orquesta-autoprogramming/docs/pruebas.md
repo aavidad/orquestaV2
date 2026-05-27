@@ -9,7 +9,13 @@ go test -count=1 ./modulos/orquesta-autoprogramming
 Cobertura actual:
 
 - acepta solicitud pequena con worktree aislada;
+- valida fixtures versionadas de solicitud real web/MCP mediante
+  `AutoprogrammingRequestSourceV0` y construye trabajo programable preservando
+  refs opacas de origen;
 - acepta ola de 10 tareas padre dentro de los limites vigentes;
+- acepta ola amplia de 21 tareas padre cuando `max_task_refs`, `max_areas` y
+  `max_write_set_entries` vienen declarados por contrato;
+- rechaza contratos de limites negativos o superiores a 40;
 - rechaza presupuestos de delegacion fuera de rango y preserva limites
   explicitos validos en `WorkflowTaskV0`;
 - rechaza branch/ref/isolation incompletos;
@@ -22,6 +28,8 @@ Cobertura actual:
   payload durable por debajo del limite del core;
 - transforma solicitudes validas en `WorkProfileV0`/`WorkflowTaskV0` con refs
   opacas y pruebas requeridas preservadas;
+- `v1` materializa perfiles de trabajo por tipo de app/area/tarea, prioriza
+  `task_ref` sobre area y conserva fallback `v0`;
 - particiona `write_set` por area, normaliza aliases y rechaza rutas no
   asignables;
 - secuencia rutas que coinciden con varias areas compatibles;
@@ -37,9 +45,18 @@ Cobertura actual:
 - politica de capacidad usa tokens operativos para OPES/riesgo alto y no escala
   a `xhigh` por subcadenas inocuas como `scopes`;
 - arquitectura impide importar core, runtime, DB, `cmd` o adaptadores.
+- reconciliacion T208 no requiere codigo en este modulo; la evidencia se valida
+  con la bateria cruzada del paquete y con ACK que declara
+  `contexto_ref_only_resuelto`.
 
 ## Integracion focal
 
 ```sh
 go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-mcp ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-orchestration-core
+```
+
+## Reconciliacion T208
+
+```sh
+go test -count=1 ./cmd/orquesta-guardian ./cmd/orquesta-server ./modulos/orquesta-autoprogramming ./modulos/orquesta-runtime-worktree ./modulos/orquesta-runtime-codex ./modulos/orquesta-server
 ```

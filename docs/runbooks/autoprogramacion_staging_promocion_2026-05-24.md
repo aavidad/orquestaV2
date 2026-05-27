@@ -31,6 +31,18 @@ run autoprogramming cerrada causalmente
   promocion local.
 - `ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_ARCHIVE_DIR`: directorio operativo
   del adaptador para manifests; no cruza al nucleo.
+- `ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_ENABLED=1`: exige guardian
+  externo antes de cerrar el efecto de promocion como completo.
+- `ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_COMMAND`: comando opt-in
+  del guardian. Default: `go run ./cmd/orquesta-guardian check-promote`.
+- `ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_CURRENT_BIN`,
+  `CANDIDATE_BIN`, `LAST_GOOD_BIN`, `STATE_DIR`, `BUILD_COMMAND`,
+  `TEST_COMMANDS`, `HEALTH_TIMEOUT`, `COMMAND_TIMEOUT`, `ARTIFACT_ROOT`,
+  `ARTIFACT_MAX_BYTES`, `REPAIR_COMMAND` y `REPAIR_CODEX_*`: superficie
+  canonica del servidor para pasar datos al guardian sin meter runtime, HOME,
+  proveedor ni rutas de binarios en el nucleo. El reparador Codex es opt-in; si
+  se activa, el servidor proyecta write-set/tests declarados y conserva las refs
+  `run_ref`, `promotion_ref`, `worktree_ref` y `branch_ref` como opacas.
 
 ## Guardas
 
@@ -44,6 +56,15 @@ run autoprogramming cerrada causalmente
 - Si promocion, push o archivo devuelve `pending`, `pending_push` o `blocked`,
   la cola no se marca como `closed`; el retry debe conservar evidence refs
   compactas.
+- Si el guardian esta activo y el candidato no compila, no pasa tests o no
+  responde al healthcheck temporal, el puerto devuelve `blocked` retryable con
+  evidencia `guardian_failed`; el binario vivo no se sustituye y la cola no se
+  cierra como promocion completa.
+- Si el guardian detecta artefacto mayor al presupuesto, symlink/hardlink
+  inseguro, destino no regular, ruta fuera de la raiz declarada o cambio entre
+  `Lstat`/open/post-copy, publica un reason code de artefacto y estado
+  recuperable (`promotion_incomplete` o `last_good_unverified`) sin declarar
+  `candidate_promoted`.
 
 ## Nota operativa
 

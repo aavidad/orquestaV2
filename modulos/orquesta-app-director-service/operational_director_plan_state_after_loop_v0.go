@@ -53,6 +53,14 @@ func applyOperationalDirectorPlanStateAfterLoopV0(
 		next = afterTerminalWait
 		changed = true
 	}
+	afterDeliveredTasks, deliveredTasksChanged, err := operationalDirectorPlanStateAfterWaitDeliveredTasksV0(request, next, loop.Run)
+	if err != nil {
+		return false, err
+	}
+	if deliveredTasksChanged {
+		next = afterDeliveredTasks
+		changed = true
+	}
 	afterReview, reviewChanged, err := operationalDirectorPlanStateAfterReviewAcceptedV0(ctx, request, ports, next, loop)
 	if err != nil {
 		return false, err
@@ -80,7 +88,7 @@ func applyOperationalDirectorPlanStateAfterLoopV0(
 	if !changed {
 		return false, nil
 	}
-	if waitChanged {
+	if waitChanged || deliveredTasksChanged {
 		if err := markOperationalDirectorWorkflowTaskWaitStateContinuedV0(ctx, request, ports, state); err != nil {
 			return false, err
 		}

@@ -19,10 +19,12 @@ func BuildCodexWrapperScriptV0(profile CodexConnectorProfileV0) string {
 		args = append(args, shellQuoteV0(arg))
 	}
 	args = append(args, "-C", shellQuoteV0(profile.ProjectWorkDir), "-")
+	command := strings.Join(args, " ")
 
 	var b strings.Builder
 	b.WriteString("#!/bin/sh\n")
 	b.WriteString("set -eu\n")
+	b.WriteString(codexUsageAccountingShellFunctionV0(profile))
 	if profile.HomeDir != "" {
 		b.WriteString("export HOME=")
 		b.WriteString(shellQuoteV0(profile.HomeDir))
@@ -41,15 +43,24 @@ func BuildCodexWrapperScriptV0(profile CodexConnectorProfileV0) string {
 	b.WriteString("cd ")
 	b.WriteString(shellQuoteV0(profile.ProjectWorkDir))
 	b.WriteString("\n")
-	b.WriteString("exec ")
-	b.WriteString(strings.Join(args, " "))
+	b.WriteString("set +e\n")
+	b.WriteString(command)
 	b.WriteString(" < ")
 	b.WriteString(shellQuoteV0(profile.RuntimeWorkDir + "/" + CodexAgentPromptFileNameV0))
 	b.WriteString(" > ")
 	b.WriteString(shellQuoteV0(profile.RuntimeWorkDir + "/" + CodexStdoutFileNameV0))
 	b.WriteString(" 2> ")
 	b.WriteString(shellQuoteV0(profile.RuntimeWorkDir + "/" + CodexStderrFileNameV0))
-	b.WriteString("\n")
+	b.WriteString(" &\n")
+	b.WriteString("orquesta_codex_child_v0=$!\n")
+	b.WriteString("trap 'kill \"$orquesta_codex_child_v0\" 2>/dev/null; ")
+	b.WriteString("wait \"$orquesta_codex_child_v0\" 2>/dev/null; exit 143' INT TERM\n")
+	b.WriteString("wait \"$orquesta_codex_child_v0\"\n")
+	b.WriteString("orquesta_codex_status_v0=$?\n")
+	b.WriteString("trap - INT TERM\n")
+	b.WriteString("set -e\n")
+	b.WriteString("orquesta_codex_write_usage_accounting_v0 || true\n")
+	b.WriteString("exit \"$orquesta_codex_status_v0\"\n")
 	return b.String()
 }
 

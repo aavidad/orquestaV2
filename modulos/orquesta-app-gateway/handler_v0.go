@@ -13,12 +13,18 @@ import (
 func NewHTTPHandlerV0(config ConfigV0) http.Handler {
 	handler := orquestahttpgateway.NewAppGatewayMuxV0(NewRouteHandlersV0(config))
 	if config.AppVCS == nil {
-		return handler
+		secured := orquestahttpgateway.NewControlPlaneHTTPHeadersV0(
+			orquestahttpgateway.NewBrowserMutationIntentGuardV0(config.BrowserMutationIntent, handler),
+		)
+		return ObserveWebHTMLRenderErrorsV0(secured, config.WebHTMLRenderObserver)
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/", handler)
 	mux.Handle(orquestamcp.MCPAppVCSHTTPPathV0, orquestamcp.NewMCPAppVCSHTTPHandlerV0(config.AppVCS))
-	return mux
+	secured := orquestahttpgateway.NewControlPlaneHTTPHeadersV0(
+		orquestahttpgateway.NewBrowserMutationIntentGuardV0(config.BrowserMutationIntent, mux),
+	)
+	return ObserveWebHTMLRenderErrorsV0(secured, config.WebHTMLRenderObserver)
 }
 
 func NewRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 {

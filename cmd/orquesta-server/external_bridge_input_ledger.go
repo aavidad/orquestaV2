@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +17,14 @@ type externalBridgeInputLedgerV0 interface {
 		ctx context.Context,
 		key string,
 	) (externalBridgeInputLedgerEntryV0, bool, error)
+	ClaimExternalBridgeInputV0(
+		ctx context.Context,
+		entry externalBridgeInputLedgerEntryV0,
+	) (externalBridgeInputLedgerEntryV0, bool, error)
+	RecordExternalBridgeInputSubmittedV0(
+		ctx context.Context,
+		entry externalBridgeInputLedgerEntryV0,
+	) error
 	UpsertExternalBridgeInputV0(
 		ctx context.Context,
 		entry externalBridgeInputLedgerEntryV0,
@@ -27,6 +36,9 @@ type externalBridgeInputLedgerEntryV0 struct {
 	ExternalSystem string    `json:"external_system"`
 	ExternalJobRef string    `json:"external_job_ref"`
 	Status         string    `json:"status"`
+	ClaimRef       string    `json:"claim_ref,omitempty"`
+	CorrelationID  string    `json:"correlation_id,omitempty"`
+	IdempotencyKey string    `json:"idempotency_key,omitempty"`
 	RunRef         string    `json:"run_ref,omitempty"`
 	ChangeRef      string    `json:"change_ref,omitempty"`
 	LastError      string    `json:"last_error,omitempty"`
@@ -34,7 +46,13 @@ type externalBridgeInputLedgerEntryV0 struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
-const externalBridgeInputStatusSubmittedV0 = "submitted"
+const (
+	externalBridgeInputStatusClaimedV0   = "claimed"
+	externalBridgeInputStatusSubmittedV0 = "submitted"
+
+	externalBridgeInputLedgerMaxBytesV0   int64 = 8 * 1024 * 1024
+	externalBridgeInputLedgerMaxRecordsV0       = 10000
+)
 
 type fileExternalBridgeInputLedgerV0 struct {
 	path string
@@ -101,7 +119,7 @@ func externalBridgeRecordSubmittedInputV0(
 	}
 	cleanExternalSystem := strings.TrimSpace(externalSystem)
 	cleanExternalJobRef := strings.TrimSpace(externalJobRef)
-	return ledger.UpsertExternalBridgeInputV0(ctx, externalBridgeInputLedgerEntryV0{
+	return ledger.RecordExternalBridgeInputSubmittedV0(ctx, externalBridgeInputLedgerEntryV0{
 		Key:            externalBridgeInputLedgerKeyV0(cleanExternalSystem, cleanExternalJobRef),
 		ExternalSystem: cleanExternalSystem,
 		ExternalJobRef: cleanExternalJobRef,
@@ -151,6 +169,11 @@ func (ledger *fileExternalBridgeInputLedgerV0) UpsertExternalBridgeInputV0(
 		return err
 	}
 	if previous, ok := entries[entry.Key]; ok && entry.Attempts <= 0 {
+		if previous.Status == externalBridgeInputStatusSubmittedV0 &&
+			entry.Status == externalBridgeInputStatusSubmittedV0 &&
+			strings.TrimSpace(previous.RunRef) != strings.TrimSpace(entry.RunRef) {
+			return fmt.Errorf("external_bridge_submitted_conflict")
+		}
 		entry.Attempts = previous.Attempts + 1
 	}
 	if entry.Attempts <= 0 {
@@ -161,16 +184,19 @@ func (ledger *fileExternalBridgeInputLedgerV0) UpsertExternalBridgeInputV0(
 }
 
 func (ledger *fileExternalBridgeInputLedgerV0) loadV0() (map[string]externalBridgeInputLedgerEntryV0, error) {
-	data, err := os.ReadFile(ledger.path)
+	data, err := readExternalBridgeInputLedgerBytesV0(ledger.path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return map[string]externalBridgeInputLedgerEntryV0{}, nil
 		}
-		return nil, fmt.Errorf("external_bridge_input_ledger_read_error")
+		return nil, err
 	}
 	var snapshot externalBridgeInputLedgerSnapshotV0
 	if err := json.Unmarshal(data, &snapshot); err != nil {
 		return nil, fmt.Errorf("external_bridge_input_ledger_decode_error")
+	}
+	if len(snapshot.Entries) > externalBridgeInputLedgerMaxRecordsV0 {
+		return nil, fmt.Errorf("external_bridge_input_ledger_records_limit_exceeded")
 	}
 	entries := make(map[string]externalBridgeInputLedgerEntryV0, len(snapshot.Entries))
 	for _, entry := range snapshot.Entries {
@@ -198,12 +224,36 @@ func (ledger *fileExternalBridgeInputLedgerV0) saveV0(
 	if err := os.MkdirAll(filepath.Dir(ledger.path), 0o700); err != nil {
 		return fmt.Errorf("external_bridge_input_ledger_dir_error")
 	}
-	tempPath := ledger.path + ".tmp"
-	if err := os.WriteFile(tempPath, data, 0o600); err != nil {
-		return fmt.Errorf("external_bridge_input_ledger_write_error")
+	data = append(data, '\n')
+	return writeCommandDurableFileV0(
+		ledger.path,
+		data,
+		"external_bridge_input_ledger",
+	)
+}
+
+func readExternalBridgeInputLedgerBytesV0(path string) ([]byte, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
 	}
-	if err := os.Rename(tempPath, ledger.path); err != nil {
-		return fmt.Errorf("external_bridge_input_ledger_replace_error")
+	if info.IsDir() {
+		return nil, fmt.Errorf("external_bridge_input_ledger_read_error")
 	}
-	return nil
+	if info.Size() > externalBridgeInputLedgerMaxBytesV0 {
+		return nil, fmt.Errorf("external_bridge_input_ledger_size_limit_exceeded")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("external_bridge_input_ledger_read_error")
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, externalBridgeInputLedgerMaxBytesV0+1))
+	if err != nil {
+		return nil, fmt.Errorf("external_bridge_input_ledger_read_error")
+	}
+	if int64(len(data)) > externalBridgeInputLedgerMaxBytesV0 {
+		return nil, fmt.Errorf("external_bridge_input_ledger_size_limit_exceeded")
+	}
+	return data, nil
 }

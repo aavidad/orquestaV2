@@ -8,8 +8,12 @@ import (
 )
 
 const (
-	WebHTMLRenderFailedV0    = "web_html_render_failed"
-	WebResponseWriteFailedV0 = "web_response_write_failed"
+	WebHTMLRenderFailedV0      = "web_html_render_failed"
+	WebResponseWriteFailedV0   = "web_response_write_failed"
+	WebHTMLErrorCodeHeaderV0   = "X-Orquesta-Web-Error-Code"
+	WebHTMLLocaleHeaderV0      = "X-Orquesta-Web-Locale"
+	WebHTMLContentTypeHeaderV0 = "text/html; charset=utf-8"
+	WebHTMLContentLanguageV0   = "Content-Language"
 )
 
 type WebHTMLWriteResultV0 struct {
@@ -32,7 +36,7 @@ func writeWebHTMLTemplateResponseV0(
 	if err := tmpl.Execute(&body, data); err != nil {
 		return writeWebHTMLFallbackV0(w, http.StatusInternalServerError, WebHTMLRenderFailedV0, locale)
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	setWebHTMLResponseHeadersV0(w, locale)
 	w.WriteHeader(status)
 	if _, err := w.Write(body.Bytes()); err != nil {
 		return WebHTMLWriteResultV0{OK: false, ReasonCode: WebResponseWriteFailedV0, StatusCode: status}
@@ -46,7 +50,7 @@ func writeWebHTMLStringResponseV0(
 	body string,
 	locale string,
 ) WebHTMLWriteResultV0 {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	setWebHTMLResponseHeadersV0(w, locale)
 	w.WriteHeader(status)
 	if _, err := w.Write([]byte(body)); err != nil {
 		return WebHTMLWriteResultV0{OK: false, ReasonCode: WebResponseWriteFailedV0, StatusCode: status}
@@ -70,8 +74,8 @@ func writeWebHTMLFallbackV0(
 		`"><head><meta charset="utf-8"><title>` + template.HTMLEscapeString(reason) +
 		`</title></head><body><main><h1>` + template.HTMLEscapeString(reason) +
 		`</h1></main></body></html>`
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("X-Orquesta-Web-Error-Code", reason)
+	setWebHTMLResponseHeadersV0(w, locale)
+	w.Header().Set(WebHTMLErrorCodeHeaderV0, reason)
 	w.WriteHeader(status)
 	if _, err := w.Write([]byte(body)); err != nil {
 		return WebHTMLWriteResultV0{OK: false, ReasonCode: WebResponseWriteFailedV0, StatusCode: status}
@@ -88,4 +92,11 @@ func safeWebHTMLLocaleV0(locale string) string {
 		return locale[:index]
 	}
 	return locale
+}
+
+func setWebHTMLResponseHeadersV0(w http.ResponseWriter, locale string) {
+	safeLocale := safeWebHTMLLocaleV0(locale)
+	w.Header().Set("Content-Type", WebHTMLContentTypeHeaderV0)
+	w.Header().Set(WebHTMLContentLanguageV0, safeLocale)
+	w.Header().Set(WebHTMLLocaleHeaderV0, safeLocale)
 }

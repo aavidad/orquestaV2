@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	publicidentity "orquesta/modulos/orquesta-server/publicidentity"
 )
 
 const (
@@ -89,12 +90,19 @@ func normalizeRunControlCommandV0(command WebRunControlCommandV0) WebRunControlC
 		command.RequestID = newWebRequestIDV0()
 	}
 	command.CorrelationID = firstDirectorStatsNonEmptyV0(command.CorrelationID, command.RequestID)
+	identity := publicidentity.NormalizePublicIdentityV0(publicidentity.PublicIdentityInputV0{
+		RequestID:      command.RequestID,
+		CorrelationID:  command.CorrelationID,
+		IdempotencyKey: command.IdempotencyKey,
+		Mutating:       true,
+	})
+	command.CorrelationID = identity.CorrelationID
+	command.IdempotencyKey = identity.IdempotencyKey
 	command.Locale = normalizeDirectorStatsLocaleV0(command.Locale)
 	command.Action = strings.ToLower(trimV0(command.Action))
 	command.RunRef = trimV0(command.RunRef)
 	command.RequestedBy = trimV0(command.RequestedBy)
 	command.Reason = trimV0(command.Reason)
-	command.IdempotencyKey = trimV0(command.IdempotencyKey)
 	command.EvidenceRefs = compactStringsV0(command.EvidenceRefs)
 	return command
 }

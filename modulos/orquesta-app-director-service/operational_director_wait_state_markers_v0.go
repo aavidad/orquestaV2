@@ -140,7 +140,7 @@ func operationalDirectorPlanStateAfterWaitTerminalWithoutDeliveryV0(
 	return next, true, nil
 }
 
-func operationalDirectorPlanStateAfterWaitConsumedV0(
+func operationalDirectorPlanStateAfterWaitDeliveredTasksV0(
 	request ContinueAppDirectorRequestV0,
 	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
 	run orquestacoreworkflow.OrchestrationRunV0,
@@ -148,14 +148,18 @@ func operationalDirectorPlanStateAfterWaitConsumedV0(
 	activeStep, ok := operationalDirectorPlanStateActiveStepV0(state)
 	if !ok ||
 		activeStep.Kind != orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0 ||
-		activeStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 {
+		!operationalDirectorPlanStateWaitStepCanRecoverByTaskDeliveryV0(state, activeStep) {
 		return state, false, nil
 	}
-	pendingAgentRefs := compactServiceRefsV0(append(activeStep.PendingAgentRefs, state.PendingAgentRefs...))
-	if len(pendingAgentRefs) == 0 || !allServiceRefsInSetV0(pendingAgentRefs, run.DeliveredAgents) {
+	taskRefs := compactServiceRefsV0(activeStep.TaskRefs)
+	if len(taskRefs) == 0 || !allServiceRefsInSetV0(taskRefs, run.DeliveredTasks) {
 		return state, false, nil
 	}
 	reviewStepID := ""
+	agentRefs := compactServiceRefsV0(run.DeliveredAgents)
+	if len(agentRefs) == 0 {
+		agentRefs = compactServiceRefsV0(activeStep.AgentRefs)
+	}
 	nextSteps := make([]orquestacionnucleoapp.OperationalDirectorPlanStepStateV0, 0, len(state.Steps))
 	for _, step := range state.Steps {
 		nextStep := step
@@ -163,13 +167,18 @@ func operationalDirectorPlanStateAfterWaitConsumedV0(
 		case step.StepID == activeStep.StepID:
 			nextStep.Status = orquestadirectoroperativo.OperationalDirectorStepAcceptedV0
 			nextStep.PendingAgentRefs = nil
-			nextStep.Reason = "wait-subagents-consumed"
+			nextStep.BlockerRefs = nil
+			nextStep.Reason = "wait-subagents-consumed-by-task-delivery"
+			nextStep.EvidenceRefs = compactServiceRefsV0(append(
+				nextStep.EvidenceRefs,
+				"evidence-ref-app-director-wait-subagents-delivered-task-recovery-v0",
+			))
 		case step.Kind == orquestadirectoroperativo.OperationalDirectorStepReviewDeliveriesV0 &&
 			(reviewStepID == "" || step.StepID == state.ActiveStepID):
 			reviewStepID = step.StepID
 			nextStep.Status = orquestadirectoroperativo.OperationalDirectorStepRunningV0
-			nextStep.TaskRefs = append([]string(nil), activeStep.TaskRefs...)
-			nextStep.AgentRefs = append([]string(nil), activeStep.AgentRefs...)
+			nextStep.TaskRefs = append([]string(nil), taskRefs...)
+			nextStep.AgentRefs = append([]string(nil), agentRefs...)
 			nextStep.WaveRef = activeStep.WaveRef
 			nextStep.CohortRef = activeStep.CohortRef
 			nextStep.ParentTaskRef = activeStep.ParentTaskRef
@@ -179,17 +188,27 @@ func operationalDirectorPlanStateAfterWaitConsumedV0(
 			nextStep.ReworkRequestRefs = nil
 			nextStep.ReplanDecisionRefs = nil
 			nextStep.BlockerRefs = nil
-			nextStep.Reason = "wait-subagents-consumed"
+			nextStep.Reason = "wait-subagents-consumed-by-task-delivery"
+			nextStep.EvidenceRefs = compactServiceRefsV0(append(
+				nextStep.EvidenceRefs,
+				"evidence-ref-app-director-review-deliveries-delivered-task-recovery-v0",
+			))
 		}
 		nextSteps = append(nextSteps, nextStep)
 	}
 	if reviewStepID == "" {
 		return state, false, nil
 	}
+	state.Status = orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0
 	state.ActiveStepID = reviewStepID
 	state.PendingAgentRefs = nil
+	state.BlockerRefs = nil
+	state.ClosureReason = ""
 	state.Steps = nextSteps
-	state.EvidenceRefs = compactServiceRefsV0(append(state.EvidenceRefs, "evidence-ref-app-director-operational-plan-state-wait-consumed-v0"))
+	state.EvidenceRefs = compactServiceRefsV0(append(
+		state.EvidenceRefs,
+		"evidence-ref-app-director-operational-plan-state-delivered-task-recovery-v0",
+	))
 	state.UpdatedAt = request.OccurredAt
 	next, err := orquestacionnucleoapp.NewOperationalDirectorPlanStateV0(state)
 	if err != nil {

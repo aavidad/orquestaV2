@@ -17,6 +17,21 @@ Estado:
 ## Decisiones tomadas
 
 ```text
+Fecha: 2026-05-27
+Decision: Tratar T198 como owner documental vigente de `descriptor_source` para resources MCP.
+Motivo: Los intentos cerrados dejaron implementacion y pruebas focales, pero el
+backlog podia seguir pareciendo pendiente para scanners posteriores.
+Alternativas: Reabrir codigo; crear una tarea nueva duplicada por modulo.
+Impacto: `orquesta-mcp` conserva el envelope/registro y cada modulo owner
+mantiene DTO/validador/fuente canonica. La reconciliacion es documental y no
+amplia el transporte ni los contratos de tools.
+Contratos afectados: MCPTransportResourceEnvelopeV0; MCPResourceDescriptorSourceV0.
+Estado: aceptada localmente
+Revalidacion 2026-05-27: `agent-ref-task-autoprogramming-c3678e9bc306-g01`
+conserva esta decision y no amplia el contrato.
+```
+
+```text
 Fecha: 2026-05-13
 Decision: Exponer `orquesta.external_work.run.v0` como tool MCP/REST propio.
 Motivo: las apps externas como OPES necesitan pedir ejecucion de un job ya

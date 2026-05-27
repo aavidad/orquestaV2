@@ -5,15 +5,16 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strings"
 	"time"
 
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	publicidentity "orquesta/modulos/orquesta-server/publicidentity"
 )
 
 const (
 	AppChangeEndpointV0        = "/api/v0/apps/change"
-	AppChangeCorrelationV0     = "X-Correlation-ID"
+	AppChangeCorrelationV0     = publicidentity.PublicCorrelationHeaderV0
+	AppChangeIdempotencyKeyV0  = publicidentity.PublicIdempotencyKeyHeaderV0
 	WebAppChangeErrTransportV0 = "app_change_error_transporte"
 	WebAppChangeErrResponseV0  = "app_change_respuesta_invalida"
 )
@@ -31,12 +32,10 @@ type RESTAppChangeClientV0 struct {
 
 func NewRESTAppChangeClientV0(baseURL string, timeout time.Duration) *RESTAppChangeClientV0 {
 	return &RESTAppChangeClientV0{
-		BaseURL:  strings.TrimRight(baseURL, "/"),
-		Endpoint: AppChangeEndpointV0,
-		Timeout:  timeout,
-		HTTPClient: &http.Client{
-			Timeout: timeout,
-		},
+		BaseURL:    normalizeWebRESTBaseURLStringV0(baseURL),
+		Endpoint:   AppChangeEndpointV0,
+		Timeout:    timeout,
+		HTTPClient: newWebLoopbackHTTPClientV0(timeout),
 	}
 }
 
@@ -83,10 +82,11 @@ func (client *RESTAppChangeClientV0) RequestAppChange(
 
 func decodeAppChangeResponseV0(resp *http.Response) (WebAppChangeViewModelV0, error) {
 	if (resp.StatusCode < 200 || resp.StatusCode > 299) && resp.StatusCode != http.StatusBadRequest {
+		discardWebHTTPResponseBodyV0(resp)
 		return WebAppChangeViewModelV0{}, webNuevaAppClientErrorV0(WebAppChangeErrTransportV0, resp.StatusCode)
 	}
 	var result orquestamcp.MCPRequestAppChangeToolResultV0
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if !decodeWebHTTPJSONResponseV0(resp, &result) {
 		return WebAppChangeViewModelV0{}, webNuevaAppClientErrorV0(WebAppChangeErrResponseV0, resp.StatusCode)
 	}
 	if result.Estado == "" {
@@ -96,10 +96,7 @@ func decodeAppChangeResponseV0(resp *http.Response) (WebAppChangeViewModelV0, er
 }
 
 func (client *RESTAppChangeClientV0) httpClient() *http.Client {
-	if client.HTTPClient != nil {
-		return client.HTTPClient
-	}
-	return &http.Client{Timeout: client.Timeout}
+	return webHTTPClientWithRedirectPolicyV0(client.HTTPClient, client.Timeout, client.BaseURL)
 }
 
 func (client *RESTAppChangeClientV0) url() string {
@@ -107,5 +104,5 @@ func (client *RESTAppChangeClientV0) url() string {
 	if endpoint == "" {
 		endpoint = AppChangeEndpointV0
 	}
-	return strings.TrimRight(client.BaseURL, "/") + "/" + strings.TrimLeft(endpoint, "/")
+	return webRESTEndpointURLV0(client.BaseURL, endpoint, AppChangeEndpointV0)
 }

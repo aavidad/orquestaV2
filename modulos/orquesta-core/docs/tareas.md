@@ -2,6 +2,23 @@
 
 Cada tarea debe ser pequena y cerrada.
 
+```text
+ID: CORE-012
+Objetivo: Reconciliar T198 para descriptors MCP que referencian FunctionContract y contratos core.
+Write-set:
+  - docs/tareas.md
+  - docs/decisiones.md
+  - docs/pruebas.md
+  - README.md
+Simbolo foco: FunctionContractV0; contratos core publicados.
+Contrato: mcp.resource.descriptor_source.v0 como consumidor externo de core.
+Validacion: go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-observability ./modulos/orquesta-governance ./modulos/orquesta-core ./cmd/orquesta-server.
+Bloqueos: Core no importa MCP, HTTP, CLI ni transporte; la reconciliacion queda en docs y backlog.
+Estado: completada_documental 2026-05-27
+Revalidacion: `agent-ref-task-autoprogramming-c3678e9bc306-g01` confirma cierre
+stale documental sin codigo nuevo.
+```
+
 ## Plantilla
 
 ```text
@@ -112,14 +129,15 @@ Write-set:
 Simbolo foco: FunctionContractV0
 Contrato: FunctionContract v0
 Validacion: contrato incluye objetivo, archivo/simbolo foco, write-set, dependencias permitidas/prohibidas, pre/postcondiciones, tests obligatorios y formato de entrega.
-Bloqueos: DBV1-000 completada en docs/reinicio_orquesta_v2/inventario_db_v1.md.
+Bloqueos: ninguno vivo; la DB v1 fue solo fuente forense historica y no prerequisito ejecutable de automejora.
 Estado: completada; detalle canonico en docs/contratos.md, pruebas en docs/pruebas.md, decision en docs/decisiones.md y resumen minimo promovido a ../../CONTRATOS.md desde este documento.
 ```
 
 ## CORE-005 evidencia
 
 ```text
-Fuente readonly: /home/alberto/Trabajo/orquesta/backups/legacy-sqlite-20260422/orquesta.db
+Fuente forense en cuarentena: ref relativo opaco `backups/legacy-sqlite-20260422/orquesta.db` cuando exista localmente.
+Estado documental: `forense`/`historico`/`quarantine`; no es prerequisito vivo ni fuente operativa para agentes.
 Tabla revisada: especificaciones_funcion
 Campos reutilizados como forma contractual: titulo, archivo_objetivo, simbolo_objetivo, descripcion, precondiciones_json, postcondiciones_json, dependencias_permitidas_json, dependencias_prohibidas_json, tests_obligatorios_json, write_set_json, formato_salida, estado, version.
 Filas importadas como canon: ninguna.

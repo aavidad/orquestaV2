@@ -151,7 +151,7 @@ func operationalDirectorPlanRequiredTestsReplanDecisionV0(
 	if reader == nil {
 		return orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{}, "", false, nil
 	}
-	events, err := reader.LoadRunEventsV0(ctx, request.RunRef)
+	events, err := loadOperationalRunEventsV0(ctx, reader, request.RunRef)
 	if err != nil {
 		return orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{}, "", false, err
 	}

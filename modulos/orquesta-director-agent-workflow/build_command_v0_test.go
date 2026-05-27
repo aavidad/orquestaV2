@@ -6,6 +6,7 @@ import (
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoragent "orquesta/modulos/orquesta-director-agent"
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func TestBuildDirectorAgentWorkflowCommandV0TraduceBrainstorm(t *testing.T) {
@@ -118,6 +119,7 @@ func TestBuildDirectorAgentWorkflowCommandV0IdempotenciaUsaCommandRef(t *testing
 }
 
 func TestBuildDirectorAgentWorkflowCommandV0RechazaDecisionInvalida(t *testing.T) {
+	t.Setenv(orquestarails.DetailProhibitedRailsEnvV0, "on")
 	request := validDirectorAgentWorkflowRequestForTestV0()
 	request.Decision.Summary = "usar client_secret=abc123"
 

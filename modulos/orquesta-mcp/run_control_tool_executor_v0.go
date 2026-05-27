@@ -25,6 +25,11 @@ func (executor MCPRunControlToolExecutorV0) Execute(
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	var issues []MCPValidationIssueV0
+	input, issues = normalizeMCPRunControlIdentityV0(input, "", "")
+	if len(issues) > 0 {
+		return newMCPRunControlErrorV0(input, issues[0].Code, issues[0].Field), nil
+	}
 	resolved, ok, err := executor.resolveRunControlInputV0(ctx, input)
 	if err != nil {
 		return newMCPRunControlErrorV0(input, "external_job_run_ref_error", "external_job_ref"), nil
@@ -97,7 +102,7 @@ func (executor MCPRunControlToolExecutorV0) executeActionV0(
 			EvidenceRefs:   compactStringsMCPV0(input.EvidenceRefs),
 		})
 	case "stop":
-		return executor.Port.StopRunV0(ctx, orquestaruncontrol.StopRunCommandV0{
+		state, err := executor.Port.StopRunV0(ctx, orquestaruncontrol.StopRunCommandV0{
 			RunRef:         strings.TrimSpace(input.RunRef),
 			RequestedBy:    strings.TrimSpace(input.RequestedBy),
 			Reason:         strings.TrimSpace(input.Reason),
@@ -105,8 +110,12 @@ func (executor MCPRunControlToolExecutorV0) executeActionV0(
 			IdempotencyKey: strings.TrimSpace(input.IdempotencyKey),
 			EvidenceRefs:   compactStringsMCPV0(input.EvidenceRefs),
 		})
+		if err != nil {
+			return state, err
+		}
+		return executor.recordStopCheckpointIfAvailableV0(ctx, input, state)
 	case "cancel":
-		return executor.Port.CancelRunV0(ctx, orquestaruncontrol.CancelRunCommandV0{
+		state, err := executor.Port.CancelRunV0(ctx, orquestaruncontrol.CancelRunCommandV0{
 			RunRef:         strings.TrimSpace(input.RunRef),
 			RequestedBy:    strings.TrimSpace(input.RequestedBy),
 			Reason:         strings.TrimSpace(input.Reason),
@@ -114,9 +123,39 @@ func (executor MCPRunControlToolExecutorV0) executeActionV0(
 			IdempotencyKey: strings.TrimSpace(input.IdempotencyKey),
 			EvidenceRefs:   compactStringsMCPV0(input.EvidenceRefs),
 		})
+		if err != nil {
+			return state, err
+		}
+		return executor.recordStopCheckpointIfAvailableV0(ctx, input, state)
 	default:
 		return orquestaruncontrol.RunControlStateV0{}, nil
 	}
+}
+
+func (executor MCPRunControlToolExecutorV0) recordStopCheckpointIfAvailableV0(
+	ctx context.Context,
+	input MCPRunControlToolInputV0,
+	state orquestaruncontrol.RunControlStateV0,
+) (orquestaruncontrol.RunControlStateV0, error) {
+	if state.CheckpointRecorded {
+		return state, nil
+	}
+	checkpointWriter, ok := executor.Port.(orquestaruncontrol.RunControlCheckpointWriterPortV0)
+	if !ok {
+		return state, nil
+	}
+	action := normalizeMCPRunControlActionV0(input.Action)
+	recorded, err := checkpointWriter.RecordRunCheckpointV0(ctx, orquestaruncontrol.RecordRunCheckpointCommandV0{
+		RunRef:         strings.TrimSpace(input.RunRef),
+		RequestedBy:    firstNonEmptyMCPV0(input.RequestedBy, "orquesta-mcp-run-control"),
+		Reason:         firstNonEmptyMCPV0(input.Reason, "checkpoint registrado por control MCP de run"),
+		IdempotencyKey: firstNonEmptyMCPV0(input.IdempotencyKey, "idem-mcp-run-control-checkpoint-"+action+"-"+strings.TrimSpace(input.RunRef)),
+		EvidenceRefs:   compactStringsMCPV0(append(input.EvidenceRefs, "evidence-ref-mcp-run-control-checkpoint-recorded")),
+	})
+	if err != nil {
+		return state, err
+	}
+	return recorded, nil
 }
 
 func isMCPRunControlActionSupportedV0(action string) bool {

@@ -16,6 +16,11 @@ func mcpAutoprogrammingPrepareRunTransportHandlerV0(
 		if port == nil {
 			return mcpTransportToolErrorPayloadV0(MCPAutoprogrammingPrepareRunToolNameV0, MCPTransportToolUnboundV0)
 		}
+		var issues []MCPValidationIssueV0
+		input, issues = normalizeMCPAutoprogrammingPrepareRunIdentityV0(input, "", "")
+		if len(issues) > 0 {
+			return json.Marshal(NewMCPAutoprogrammingPrepareRunIssuesResultV0(input, issues))
+		}
 		result, err := port.Execute(ctx, input)
 		if err != nil {
 			if result.Estado == MCPAutoprogrammingPrepareRunEstadoErrorV0 && len(result.Errores) > 0 {

@@ -1,0 +1,153 @@
+package orquestaappcodexstack
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	orquestaappchange "orquesta/modulos/orquesta-app-change"
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
+	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
+)
+
+func TestDomainWorkDeliveryArtifactIntakeV0LimitaLecturaSinFiltrarContenido(t *testing.T) {
+	projectDir := t.TempDir()
+	writeDomainWorkArtifactIntakeTestFileV0(
+		t,
+		projectDir,
+		"external/opes/draft_content_block",
+		[]byte(strings.Repeat("x", domainWorkArtifactDefaultMaxBytesV0+1)),
+	)
+
+	_, _, err := buildDomainWorkArtifactIntakeSubmissionForTestV0(
+		projectDir,
+		"external/opes/draft_content_block",
+		"draft_content_block",
+	)
+	if err == nil || !strings.Contains(err.Error(), "domain_work_artifact_too_large") {
+		t.Fatalf("err=%v", err)
+	}
+	if strings.Contains(err.Error(), projectDir) || strings.Contains(err.Error(), strings.Repeat("x", 64)) {
+		t.Fatalf("error filtra detalle local o cuerpo: %v", err)
+	}
+}
+
+func TestDomainWorkDeliveryArtifactIntakeV0RechazaBinarioComoPayload(t *testing.T) {
+	projectDir := t.TempDir()
+	writeDomainWorkArtifactIntakeTestFileV0(
+		t,
+		projectDir,
+		"external/opes/generate_visual_asset",
+		[]byte{0xff, 0x00, 0x01, 0x02},
+	)
+
+	_, _, err := buildDomainWorkArtifactIntakeSubmissionForTestV0(
+		projectDir,
+		"external/opes/generate_visual_asset",
+		"generate_visual_asset",
+	)
+	if err == nil || !strings.Contains(err.Error(), "domain_work_artifact_binary_requires_attachment") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestDomainWorkDeliveryArtifactIntakeV0BloqueaCamposSensibles(t *testing.T) {
+	projectDir := t.TempDir()
+	writeDomainWorkArtifactIntakeTestFileV0(
+		t,
+		projectDir,
+		"external/opes/draft_content_block",
+		[]byte(`{"title":"Bloque","body":"Contenido publico.","access_token":"sk-secret-local"}`),
+	)
+
+	_, _, err := buildDomainWorkArtifactIntakeSubmissionForTestV0(
+		projectDir,
+		"external/opes/draft_content_block",
+		"draft_content_block",
+	)
+	if err == nil || !strings.Contains(err.Error(), "domain_work_artifact_payload_sensitive") {
+		t.Fatalf("err=%v", err)
+	}
+	if strings.Contains(err.Error(), "sk-secret-local") {
+		t.Fatalf("error filtra secreto: %v", err)
+	}
+}
+
+func TestDomainWorkDeliveryArtifactIntakeV0AceptaJSONEstructuradoSeguro(t *testing.T) {
+	projectDir := t.TempDir()
+	writeDomainWorkArtifactIntakeTestFileV0(
+		t,
+		projectDir,
+		"external/opes/summarize_topic",
+		[]byte(`{"markdown":"Resumen publico.","source_refs":["fuente-ref-001"]}`),
+	)
+
+	submission, ok, err := buildDomainWorkArtifactIntakeSubmissionForTestV0(
+		projectDir,
+		"external/opes/summarize_topic",
+		"summarize_topic",
+	)
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+	if !domainWorkFieldValueForTestV0(submission.PayloadFields, "markdown", "Resumen publico.") ||
+		!domainWorkFieldValuesForTestV0(submission.PayloadFields, "source_refs", []string{"fuente-ref-001"}) {
+		t.Fatalf("payload_fields=%+v", submission.PayloadFields)
+	}
+}
+
+func writeDomainWorkArtifactIntakeTestFileV0(
+	t *testing.T,
+	projectDir string,
+	rel string,
+	content []byte,
+) {
+	t.Helper()
+	path := filepath.Join(projectDir, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+}
+
+func buildDomainWorkArtifactIntakeSubmissionForTestV0(
+	projectDir string,
+	rel string,
+	workKind string,
+) (orquestadomainwork.DomainWorkArtifactSubmissionV0, bool, error) {
+	return (defaultDomainWorkArtifactSubmissionBuilderV0{}).BuildDomainWorkArtifactSubmissionV0(
+		context.Background(),
+		DomainWorkArtifactSubmissionBuildInputV0{
+			Run:  orquestacoreworkflow.OrchestrationRunV0{RunID: "run-ref-intake-001"},
+			Task: orquestacoreworkflow.WorkflowTaskV0{TaskID: "task-ref-intake-001", Title: "Entrega dominio"},
+			Record: orquestaappchange.AppChangeRecordV0{
+				Request: orquestaappchange.AppChangeRequestV0{
+					CorrelationID: "corr-ref-intake-001",
+					ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+						ProjectRef: "opes",
+						JobRef:     "job-ref-intake-001",
+						WorkKind:   workKind,
+					},
+				},
+			},
+			Descriptor: orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+				DescriptorRef:  "descriptor-ref-intake-001",
+				ProjectWorkDir: projectDir,
+			},
+			Ack: orquestaruntimecodex.CodexAgentAckV0{Files: []string{rel}},
+			Observation: orquestacionnucleoapp.AgentDeliveryObservationV0{
+				DeliveryRef:  "ack-ref-intake-001",
+				AgentRef:     "agent-ref-intake-001",
+				Summary:      "Entrega domain_work.",
+				EvidenceRefs: []string{"ack-ref-intake-001"},
+			},
+		},
+	)
+}

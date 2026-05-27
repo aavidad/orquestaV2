@@ -13,6 +13,8 @@
 - `OPMCP-CT-009`: transporte sin conector devuelve `operator_mcp_port_unavailable` y con conector agregado simulado delega correctamente.
 - `OPMCP-CT-010`: transporte propaga errores publicos del conector y cubre
   estado, outbox y consulta dirigida mediante conector agregado simulado.
+- `OPMCP-CT-011`: T198 conserva paridad entre `OperatorMCPCapabilitiesV0` y el
+  `descriptor_source` MCP, sin exponer internos ni transporte real.
 
 ## Comando
 
@@ -21,3 +23,10 @@ go test -count=1 ./modulos/orquesta-operator-mcp ./modulos/orquesta-mcp
 ```
 
 Ultima ejecucion: 2026-05-23, ok.
+
+Reconciliacion T198: ejecutada el 2026-05-27 en el paquete
+`agent-ref-task-autoprogramming-c3678e9bc306-g01` con el comando obligatorio
+ampliado de T198.
+
+Revalidacion T198 adicional: `agent-ref-task-autoprogramming-c3678e9bc306-g01`
+usa el mismo comando obligatorio para conservar el cierre documental.

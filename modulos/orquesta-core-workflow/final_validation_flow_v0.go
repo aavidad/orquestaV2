@@ -47,8 +47,12 @@ func finalValidationPhaseCurrentV0(run OrchestrationRunV0, phaseID string) bool 
 	if phase != OrchestrationPhaseValidacionFinalV0 {
 		return false
 	}
-	if normalizePhaseIDV0(run.CurrentPhase) != phase {
-		return false
+	current := normalizePhaseIDV0(run.CurrentPhase)
+	if current == phase {
+		return phaseIsCurrentAndActiveV0(run, phase)
 	}
-	return phaseIsCurrentAndActiveV0(run, phase)
+	if current == OrchestrationPhaseCierreV0 {
+		return phaseIsCurrentAndActiveV0(run, OrchestrationPhaseCierreV0)
+	}
+	return false
 }

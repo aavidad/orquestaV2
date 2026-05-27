@@ -127,6 +127,10 @@ Referencia ejecutable:
 - `modulos/orquesta-domain-work-sql` implementa
   `DomainWorkJobRecordStorePortV0` sobre `database/sql` con `*sql.DB` inyectado,
   sin registrar drivers ni decidir dialecto desde el contrato puro.
+- `BuildDomainWorkJobIdentityV0` es el builder canonico compartido para
+  identidad de jobs: produce fingerprint `sha256` del request normalizado
+  completo, sin `request_id`, y base de `job_ref` por
+  `schema_version + domain_ref + idempotency_key`.
 
 Reglas minimas de adaptadores durables:
 
@@ -134,6 +138,11 @@ Reglas minimas de adaptadores durables:
 - persisten request normalizado, job aceptado y huella idempotente;
 - replay equivalente devuelve el mismo `job_ref`;
 - conflicto de idempotencia no sobrescribe;
+- si una base determinista de `job_ref` ya existe para otra clave, el adaptador
+  debe asignar una ref con sufijo de colision sin aliasar ni sobrescribir;
+- snapshots/filas legacy con fingerprint antiguo se comparan por el request
+  guardado para preservar replay sin aceptar cambios de contrato bajo la misma
+  clave;
 - corrupcion de estado debe ser visible, no reparada en silencio;
 - no introducen plan, runtime, agente, modelo, cuota, red ni dominio concreto.
 

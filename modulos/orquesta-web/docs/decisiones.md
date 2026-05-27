@@ -250,6 +250,22 @@ Estado: aceptada localmente.
 ```
 
 ```text
+Fecha: 2026-05-27
+Decision: La web muestra uso T209 solo desde stats saneadas y nunca desde
+runtime local.
+Motivo: `/ops` y `/director-stats` deben diferenciar fuente no configurada,
+reporte ausente y cuota no observable sin filtrar provider, modelo, HOME,
+OAuth, coste, rutas, prompts ni transcripts.
+Impacto: `include_agent_usage=true` sigue siendo opt-in de consulta. Si llega
+`usage_summary.quota_status`, se proyecta. Si hay senales vivas pero no reporte,
+la UI degrada a `unknown`/`unavailable` con reason code publico. La web no crea
+parser propio ni endpoint nuevo.
+Contratos afectados: `WebDirectorRunStatsContractV0`,
+`WebDirectorStatsSummaryV0`, `/ops`.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-05-11
 Decision: El panel de estadisticas proyecta uso agregado sin conocer proveedor.
 Motivo: la web debe poder mostrar cuanto ha consumido una app al terminar o en
@@ -272,6 +288,22 @@ Alternativas: Crear endpoint nuevo de progreso; leer registry/progress source de
 Impacto: El endpoint web activa `include_agent_progress=true` cuando hay `run_ref`, conserva senales compactas por agente (`in_flight`, ticks sin progreso y repeticiones) y devuelve metadatos de polling GET localizados.
 Contratos afectados: `DirectorStatsClientV0`, `WebDirectorStatsPageV0`, `WebDirectorStatsAgentV0`.
 Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-05-27
+Decision: T210 queda cerrada en web como consumo de progreso vivo desde
+`director.stats`, no como regla UI local de cierre.
+Motivo: La UI debe dejar de mostrar 0% cuando stats trae entregas, agentes vivos
+o proceso registrado, pero `tasks_closed` sigue siendo cierre aceptado.
+Alternativas: recalcular progreso en JavaScript; tratar toda entrega como cierre;
+mantener fallback `percent_complete || 0` sin reason code.
+Impacto: `WebDirectorStatsProgressV0` y `/ops` proyectan `percent_complete`,
+`progress_source`, frescura y reason code. T211 conserva el owner de cache y
+agregacion visual; no reabre la proyeccion base T210.
+Contratos afectados: `DirectorStatsClientV0`, `WebDirectorStatsProgressV0`,
+ops dashboard live projection.
+Estado: aceptada localmente por reconciliacion T210.
 ```
 
 ## Inventario acotado de herencia

@@ -1,6 +1,35 @@
 # Decisiones: orquesta-runtime-codex-delivery
 
 ```text
+Fecha: 2026-05-27
+Decision: `orquesta-runtime-codex-delivery` no infiere uso desde logs ni ACKs.
+Motivo: T209 cierra el reporte de uso en runtime/stack; duplicar parseo aqui
+haria que stdout, stderr, last-message o ACK completos se convirtieran en otra
+fuente de fuga de prompts, rutas, HOME o proveedor.
+Impacto: delivery conserva descriptors, ACK, progreso y review gate. El uso
+redactado se publica por el wrapper Codex y se consume por el stack mediante
+puerto de metricas, con fallback `unknown`/`quota_observed_unavailable` fuera de
+este modulo.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-05-26
+Decision: Un ACK `completed` con evidencia de tests fallidos se ingiere como
+entrega revisable con rail `gate-issue:failed_test_evidence`, no como error fatal
+del tick.
+Motivo: el agente ya produjo un ACK correlado y puede haber trabajo util; tumbar
+`BuildAgentDeliveryObservationsV0` bloquea la supervision de la cola completa y
+pierde la ruta causal para review/rework. La evidencia de test fallido debe llegar
+al Director como rail de revision, conservando refs compactas de test receipts.
+Impacto: `orquesta-runtime-codex` solo relaja este caso cuando las unicas issues
+son de test fallido. ACKs corruptos, correlacion invalida, detalles sensibles,
+paths prohibidos y receipts ausentes siguen siendo bloqueo fuerte. No se exponen
+paths locales, stdout/stderr, prompts, transcripts ni detalles de proveedor.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-25
 Decision: Un borrado detectado por el verificador Codex se ingiere como rail de
 revision, no como error fatal del tick.

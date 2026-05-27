@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	operator "orquesta/modulos/orquesta-operator-mcp"
 )
@@ -123,10 +124,46 @@ func TestOperatorMCPClientConnectorV0PropagaErroresPublicosEstables(t *testing.T
 	assertPublicCodeV0(t, err, operator.ErrOperatorMCPPortErrorV0)
 }
 
+func TestOperatorMCPClientConnectorV0AplicaDeadlineYMapeaCancelacion(t *testing.T) {
+	fake := &fakeGenericMCPClientV0{}
+	connector := NewOperatorMCPClientConnectorV0(OperatorMCPClientConfigV0{
+		Client:  fake,
+		Timeout: 50 * time.Millisecond,
+	})
+	_, err := connector.QueryOperatorStatusV0(operator.OperatorStatusQueryV0{})
+	if err != nil {
+		t.Fatalf("status con deadline inesperado: %v", err)
+	}
+	if !fake.sawDeadline {
+		t.Fatalf("CallToolV0 no recibio deadline")
+	}
+
+	fake = &fakeGenericMCPClientV0{err: context.DeadlineExceeded}
+	connector = NewOperatorMCPClientConnectorV0(OperatorMCPClientConfigV0{
+		Client:  fake,
+		Timeout: time.Second,
+	})
+	_, err = connector.ListOperatorPendingOutboxV0(operator.OperatorPendingOutboxQueryV0{})
+	assertPublicCodeV0(t, err, operator.ErrOperatorMCPTimeoutV0)
+
+	parent, cancel := context.WithCancel(context.Background())
+	cancel()
+	fake = &fakeGenericMCPClientV0{returnContextErr: true}
+	connector = NewOperatorMCPClientConnectorV0(OperatorMCPClientConfigV0{
+		Client:         fake,
+		Timeout:        time.Second,
+		ContextFactory: func() context.Context { return parent },
+	})
+	_, err = connector.RaiseOperatorDirectedQueryV0(operator.OperatorDirectedQueryV0{})
+	assertPublicCodeV0(t, err, operator.ErrOperatorMCPCancelledV0)
+}
+
 type fakeGenericMCPClientV0 struct {
-	calls     []fakeMCPClientCallV0
-	err       error
-	errorCode string
+	calls            []fakeMCPClientCallV0
+	err              error
+	errorCode        string
+	sawDeadline      bool
+	returnContextErr bool
 }
 
 type fakeMCPClientCallV0 struct {
@@ -135,15 +172,19 @@ type fakeMCPClientCallV0 struct {
 }
 
 func (fake *fakeGenericMCPClientV0) CallToolV0(
-	_ context.Context,
+	ctx context.Context,
 	toolName string,
 	input any,
 	output any,
 ) error {
+	_, fake.sawDeadline = ctx.Deadline()
 	fake.calls = append(fake.calls, fakeMCPClientCallV0{
 		toolName:     toolName,
 		connectorRef: connectorRefFromInputV0(input),
 	})
+	if fake.returnContextErr {
+		return ctx.Err()
+	}
 	if fake.err != nil {
 		return fake.err
 	}

@@ -14,16 +14,19 @@ func TestRunMemoryStorePriorityWriterCreatesCandidateInQueueV0(t *testing.T) {
 	now := time.Date(2026, 5, 11, 13, 0, 0, 0, time.UTC)
 
 	updated, err := store.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
-		RunRef:        "run-created",
-		QueueRef:      "global",
-		AppRef:        "app-created",
-		PriorityScore: 50,
-		UpdatedAt:     now,
+		RunRef:           "run-created",
+		QueueRef:         "global",
+		AppRef:           "app-created",
+		FairnessGroupRef: "group-created",
+		PriorityScore:    50,
+		UpdatedAt:        now,
 	})
 	if err != nil {
 		t.Fatalf("set priority: %v", err)
 	}
-	if updated.Status != "ready" || !updated.UpdatedAt.Equal(now) {
+	if updated.Status != "ready" ||
+		updated.FairnessGroupRef != "group-created" ||
+		!updated.UpdatedAt.Equal(now) {
 		t.Fatalf("updated=%+v", updated)
 	}
 
@@ -34,7 +37,9 @@ func TestRunMemoryStorePriorityWriterCreatesCandidateInQueueV0(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
-	if len(listed) != 1 || listed[0].RunRef != "run-created" {
+	if len(listed) != 1 ||
+		listed[0].RunRef != "run-created" ||
+		listed[0].FairnessGroupRef != "group-created" {
 		t.Fatalf("listed=%+v", listed)
 	}
 }
@@ -102,6 +107,39 @@ func TestRunMemoryStorePriorityWriterPuedeMarcarEstadoTerminalV0(t *testing.T) {
 		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
 	}
 	if len(listed) != 0 {
+		t.Fatalf("listed=%+v", listed)
+	}
+}
+
+func TestRunMemoryStorePriorityWriterConservaWorksetClaimsV0(t *testing.T) {
+	store := NewRunMemoryStoreV0()
+	ctx := context.Background()
+	now := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
+
+	updated, err := store.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        "run-workset",
+		QueueRef:      "global",
+		AppRef:        "app",
+		PriorityScore: 50,
+		UpdatedAt:     now,
+		WorksetClaims: []orquestarunqueue.WorksetClaimV0{{
+			SchemaVersion: orquestarunqueue.WorksetClaimSchemaVersionV0,
+			ClaimRef:      "claim-workset",
+			RunRef:        "run-workset",
+			TaskRef:       "task-workset",
+			WriteSet:      []orquestarunqueue.ScopeRefV0{{Ref: "modulos/orquesta-run-memory"}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("SetRunPriorityV0: %v", err)
+	}
+	updated.WorksetClaims[0].WriteSet[0].Ref = "changed"
+
+	listed, err := store.ListRunSchedulingCandidatesV0(ctx, orquestarunqueue.RunQueueReadRequestV0{QueueRef: "global"})
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	if len(listed) != 1 || listed[0].WorksetClaims[0].WriteSet[0].Ref != "modulos/orquesta-run-memory" {
 		t.Fatalf("listed=%+v", listed)
 	}
 }

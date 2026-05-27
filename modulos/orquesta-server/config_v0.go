@@ -15,6 +15,7 @@ const (
 	DefaultStateFileV0                        = "orquesta_server_state_v0.json"
 	DefaultAuditFileV0                        = "orquesta_server_audit_v0.jsonl"
 	DefaultTickIntervalV0                     = 5 * time.Second
+	DefaultShutdownGracePeriodV0              = 10 * time.Second
 	DefaultSupervisorMaxTicksV0               = 1
 	DefaultIdleSelfImprovementAfterV0         = 60 * time.Second
 	DefaultIdleSelfImprovementProjectRefV0    = "project-ref-orquesta-server"
@@ -33,11 +34,15 @@ type ConfigV0 struct {
 	StateFile                        string
 	AuditFile                        string
 	AuditDisabled                    bool
+	DaemonLogPolicy                  DaemonLogPolicyV0
+	HTTPResourceLimits               HTTPResourceLimitsV0
 	ControlPlane                     ControlPlaneConfigV0
 	EffectiveConfig                  ServerEffectiveConfigV0
 	ProjectWorkDir                   string
 	RuntimeWorkDir                   string
+	ShutdownSignalPolicy             ShutdownSignalPolicyV0
 	TickInterval                     time.Duration
+	ShutdownGracePeriod              time.Duration
 	SupervisorCommand                orquestarunsupervisor.RunSupervisorCommandV0
 	IdleSelfImprovementDisabled      bool
 	IdleSelfImprovementAfter         time.Duration
@@ -78,6 +83,8 @@ func NormalizeConfigV0(config ConfigV0) ConfigV0 {
 	if config.AuditFile == "" {
 		config.AuditFile = DefaultAuditFileV0
 	}
+	config.DaemonLogPolicy = NormalizeDaemonLogPolicyV0(config.DaemonLogPolicy)
+	config.HTTPResourceLimits = NormalizeHTTPResourceLimitsV0(config.HTTPResourceLimits)
 	config.ControlPlane.Token = strings.TrimSpace(config.ControlPlane.Token)
 	config.ControlPlane.Principal = strings.TrimSpace(config.ControlPlane.Principal)
 	config.ControlPlane.PermissionRef = strings.TrimSpace(config.ControlPlane.PermissionRef)
@@ -94,8 +101,12 @@ func NormalizeConfigV0(config ConfigV0) ConfigV0 {
 	config.EffectiveConfig = NormalizeServerEffectiveConfigV0(config.EffectiveConfig)
 	config.ProjectWorkDir = strings.TrimSpace(config.ProjectWorkDir)
 	config.RuntimeWorkDir = strings.TrimSpace(config.RuntimeWorkDir)
+	config.ShutdownSignalPolicy = NormalizeShutdownSignalPolicyV0(config.ShutdownSignalPolicy)
 	if config.TickInterval <= 0 {
 		config.TickInterval = DefaultTickIntervalV0
+	}
+	if config.ShutdownGracePeriod <= 0 {
+		config.ShutdownGracePeriod = DefaultShutdownGracePeriodV0
 	}
 	if config.SupervisorCommand.MaxTicks <= 0 {
 		config.SupervisorCommand.MaxTicks = DefaultSupervisorMaxTicksV0

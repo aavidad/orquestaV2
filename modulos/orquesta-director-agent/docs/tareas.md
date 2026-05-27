@@ -1,5 +1,24 @@
 # Tareas locales
 
+## DAG-009 - Reconciliacion T15 en DTO de director
+
+Estado: hecho documental.
+
+Write-set:
+
+- `docs/tareas.md`
+- `docs/decisiones.md`
+- `docs/pruebas.md`
+- `README.md`
+
+Cierre:
+
+- T15 queda cerrado como rail acotado por frontera/campo;
+- el DTO del director conserva refs opacas, vocabulario operativo y
+  `context_refs`;
+- siguen prohibidos proveedor/modelo reales, HOME, OAuth, DB concreta,
+  prompts/transcripts crudos, secretos y payloads largos.
+
 ## DAG-008 - Refs de contexto opacas en microtareas
 
 Estado: hecho.

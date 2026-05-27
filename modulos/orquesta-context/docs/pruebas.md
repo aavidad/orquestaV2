@@ -1,5 +1,25 @@
 # Pruebas locales: orquesta-context
 
+## CTX-P004 contexto required ref_only en T15
+
+Tipo: contract | regression
+
+Comando: `go test -count=1 ./modulos/orquesta-rails ./modulos/orquesta-core-workflow ./modulos/orquesta-context ./modulos/orquesta-director-agent ./cmd/orquesta-server`
+
+Evidencia esperada:
+
+- cada entrada required `ref_only` conserva razon y accion requerida;
+- ACK completed incluye evidencia explicita cuando `required_ref_action` es
+  `ack_evidence_required`;
+- refs opacas y vocabulario operativo no se tratan como dato sensible;
+- contenido crudo, prompts/transcripts, HOME, OAuth y tokens no se materializan.
+
+Ultima ejecucion documentada: 2026-05-27, ACKs cerrados de T15 con suite
+requerida pasada.
+
+Riesgos: la prueba no habilita nuevos scopes de detalle; solo valida el cierre
+documental y el contrato de contexto.
+
 ## CTX-P001 builder de contexto pequeno
 
 Tipo: unit_contract

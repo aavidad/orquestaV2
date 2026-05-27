@@ -2,7 +2,10 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/smoke_common.sh
+source "$repo_root/scripts/lib/smoke_common.sh"
 work_root="$(mktemp -d "${TMPDIR:-/tmp}/orquesta-server-rest-smoke.XXXXXX")"
+smoke_temp_root_prepare "$work_root" "generated"
 state_dir="$work_root/state"
 project_dir="$work_root/project"
 runtime_dir="$project_dir/.orquesta-runtime"
@@ -43,11 +46,7 @@ cleanup() {
     fi
     wait "$server_pid" >/dev/null 2>&1 || true
   fi
-  if [[ "$keep_dir" == "1" ]]; then
-    echo "directorio conservado: $work_root" >&2
-  else
-    rm -rf "$work_root"
-  fi
+  smoke_temp_root_cleanup "$work_root" "$keep_dir"
 }
 
 trap cleanup EXIT

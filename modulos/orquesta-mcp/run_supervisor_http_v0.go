@@ -20,12 +20,15 @@ type mcpRunSupervisorHTTPHandlerV0 struct {
 
 func (handler mcpRunSupervisorHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != MCPRunSupervisorHTTPPathV0 {
-		writeMCPRunSupervisorHTTPV0(w, http.StatusNotFound, newMCPRunSupervisorHTTPErrorV0(r, MCPRunSupervisorToolInputV0{}, "path", "ruta_no_soportada"))
+		writeMCPRunSupervisorHTTPV0(w, http.StatusNotFound, newMCPRunSupervisorHTTPErrorV0(r, MCPRunSupervisorToolInputV0{}, "path", MCPPublicErrPathUnsupportedV0))
+		return
+	}
+	if handleMCPPublicHTTPOptionsV0(w, r, http.MethodPost) {
 		return
 	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
-		writeMCPRunSupervisorHTTPV0(w, http.StatusMethodNotAllowed, newMCPRunSupervisorHTTPErrorV0(r, MCPRunSupervisorToolInputV0{}, "method", "metodo_no_permitido"))
+		setMCPPublicHTTPAllowV0(w, http.MethodPost)
+		writeMCPRunSupervisorHTTPV0(w, http.StatusMethodNotAllowed, newMCPRunSupervisorHTTPErrorV0(r, MCPRunSupervisorToolInputV0{}, "method", MCPPublicErrMethodNotAllowedV0))
 		return
 	}
 	if handler.executor == nil {
@@ -33,8 +36,8 @@ func (handler mcpRunSupervisorHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r 
 		return
 	}
 	var input MCPRunSupervisorToolInputV0
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeMCPRunSupervisorHTTPV0(w, http.StatusBadRequest, newMCPRunSupervisorHTTPErrorV0(r, input, "body", "request_body_invalido"))
+	if code := decodeMCPPublicHTTPJSONV0(w, r, &input); code != "" {
+		writeMCPRunSupervisorHTTPV0(w, http.StatusBadRequest, newMCPRunSupervisorHTTPErrorV0(r, input, "body", code))
 		return
 	}
 	result, err := handler.executor.Execute(r.Context(), input)

@@ -61,3 +61,46 @@ profundidad recursiva 1, hasta 6 subagentes por padre y presupuesto derivado de
 Motivo: la ola complementaria de autoprogramacion necesita expresar capacidad
 10 padres + 6 subagentes por padre sin mover runtime, proveedor ni lanzamiento
 real dentro del contrato puro.
+
+## 2026-05-27: limites ampliados por contrato explicito
+
+Decision: `AutoprogrammingRequestV0` permite ampliar `max_task_refs`,
+`max_areas` y `max_write_set_entries` hasta 40 cuando la request lo declara de
+forma estructurada.
+
+Motivo: OPES u otras apps grandes pueden necesitar olas de mas de 10 padres sin
+microfragmentar contenido. La ampliacion debe ser verificable por contrato, no
+por hints en texto libre ni por deteccion de dominio.
+
+Consecuencia: el valor por defecto sigue siendo 10. Valores negativos o mayores
+de 40 quedan rechazados con issues publicos de contrato; la delegacion por padre
+sigue gobernada por su limite propio.
+
+## 2026-05-27: contratos v1 para perfiles por tipo de app
+
+Decision: `AutoprogrammingRequestV1` envuelve la solicitud `v0` y agrega
+`app_kind` + `work_profiles` para seleccionar `profile_kind` por `task_ref`,
+area o app completa. `BuildAutoprogrammingProgrammableWorkV1` produce una
+envoltura versionada y mantiene un `base` compatible con `v0`.
+
+Motivo: APG-002 pedia versionar el contrato solo cuando existan perfiles de
+trabajo por tipo de app, sin cambiar el comportamiento historico.
+
+Consecuencia: las composiciones con perfiles propios pueden transportar esa
+decision como contrato puro; las que siguen usando `v0` reciben
+`implementation` como antes.
+
+## 2026-05-27: T208 queda como umbrella reconciliado
+
+Decision: el item T208 `autoprogramming-guardian-breakglass` deja de tratarse
+como pendiente generico dentro de `orquesta-autoprogramming`.
+
+Motivo: los intentos posteriores cerraron las fronteras concretas del guardian
+en owners especificos: salida publica, redaccion, entorno, artefactos,
+readiness, resultado estructurado, shutdown, reparador, refs, lectura acotada y
+lease. Reabrir el umbrella duplicaria trabajo y mezclaria contratos puros con
+runtime/servidor.
+
+Consecuencia: este modulo solo mantiene validacion y politicas puras de
+autoprogramacion. Nuevos huecos del guardian deben documentarse como Txx
+focales con evidencia propia y write-set de su owner real.

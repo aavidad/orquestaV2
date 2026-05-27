@@ -1,7 +1,6 @@
 package orquestaweb
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -10,14 +9,22 @@ import (
 
 func (endpoint NuevaAppWebEndpointV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	catalog := endpoint.catalog()
+	if err := validateWebPublicQueryV0(r); err != nil {
+		locale := NuevaAppI18nDefaultLocaleV0
+		vm := nuevaAppWebPublicErrorViewModelV0("", locale, WebNuevaAppEstadoError, WebNuevaAppErrRespuestaInvalidaV0)
+		writeNuevaAppWebPageV0(w, http.StatusBadRequest, endpoint.page(locale, vm))
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
 		locale := localeFromNuevaAppRequestV0(r, catalog)
 		writeNuevaAppWebPageV0(w, http.StatusOK, endpoint.page(locale, initialNuevaAppViewModelV0(locale)))
 	case http.MethodPost:
 		endpoint.handlePost(w, r, catalog)
+	case http.MethodOptions:
+		handleWebPublicHTTPOptionsV0(w, r, http.MethodGet, http.MethodPost)
 	default:
-		w.Header().Set("Allow", strings.Join([]string{http.MethodGet, http.MethodPost}, ", "))
+		setWebPublicHTTPAllowV0(w, http.MethodGet, http.MethodPost)
 		locale := localeFromNuevaAppRequestV0(r, catalog)
 		vm := nuevaAppWebPublicErrorViewModelV0("", locale, WebNuevaAppEstadoError, WebNuevaAppErrMetodoNoSoportadoV0)
 		writeNuevaAppWebPageV0(w, http.StatusMethodNotAllowed, endpoint.page(locale, vm))
@@ -30,18 +37,16 @@ func (endpoint NuevaAppWebEndpointV0) handlePost(w http.ResponseWriter, r *http.
 }
 
 func decodeNuevaAppWebFormV0(r *http.Request) (WebNuevaAppFormV0, error) {
-	contentType := strings.ToLower(r.Header.Get("Content-Type"))
-	if contentType == "" || strings.Contains(contentType, "application/json") {
+	contentType := r.Header.Get("Content-Type")
+	if webControlContentTypeAllowsJSONV0(contentType) {
 		var form WebNuevaAppFormV0
-		decoder := json.NewDecoder(r.Body)
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&form); err != nil {
+		if err := decodeWebControlJSONV0(nil, r, &form); err != nil {
 			return form, err
 		}
 		return form, nil
 	}
-	if strings.Contains(contentType, "application/x-www-form-urlencoded") || strings.Contains(contentType, "multipart/form-data") {
-		if err := r.ParseForm(); err != nil {
+	if webControlContentTypeAllowsFormV0(contentType) {
+		if err := parseWebControlFormV0(nil, r); err != nil {
 			return WebNuevaAppFormV0{}, err
 		}
 		return nuevaAppFormFromValuesV0(r.Form), nil

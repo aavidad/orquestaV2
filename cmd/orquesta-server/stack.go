@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -8,8 +9,11 @@ import (
 	"time"
 
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
+	orquestaappgateway "orquesta/modulos/orquesta-app-gateway"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestahttpgateway "orquesta/modulos/orquesta-http-gateway"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestaobservability "orquesta/modulos/orquesta-observability"
 	orquestapersistence "orquesta/modulos/orquesta-persistence"
 	orquestarunfile "orquesta/modulos/orquesta-run-file"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
@@ -54,11 +58,19 @@ func buildServerAppHandlerV0(stack orquestaappcodexstack.StackV0) (http.Handler,
 	}
 	mux := http.NewServeMux()
 	mux.Handle(mcpRealHTTPPathV0, mcpHandler)
-	mux.Handle(orquestamcp.MCPWorkspaceTimelineEndpointV0, orquestamcp.NewMCPWorkspaceTimelineHTTPHandlerV0(
+	mux.Handle(orquestamcp.MCPWorkspaceTimelineEndpointV0, newServerWorkspaceTimelineHTTPHandlerV0(
 		stack.MCPTransportBindings.WorkspaceTimeline,
 	))
-	mux.Handle("/", withGovernanceCatalogRouteV0(stack.Handler))
-	return mux, nil
+	observedWeb := orquestaappgateway.ObserveWebHTMLRenderErrorsV0(
+		stack.Handler,
+		serverWebHTMLRenderObserverV0(),
+	)
+	mux.Handle("/", withGovernanceCatalogRouteV0(observedWeb))
+	return orquestahttpgateway.NewControlPlaneHTTPHeadersV0(mux), nil
+}
+
+func serverWebHTMLRenderObserverV0() orquestaobservability.WebHTMLRenderObserverV0 {
+	return orquestaobservability.NewInMemoryWebHTMLRenderObserverV0()
 }
 
 func buildStackFromEnvV0(
@@ -142,6 +154,7 @@ func buildStackFromEnvV0(
 			FileEvidence:            orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 			StrictGoLineBudget:      boolEnvOrDefaultV0(envReviewGateStrictGoLineBudgetV0, false),
 			LineBudgetSnapshotStore: worktreeSnapshotStore,
+			SnapshotReadBudget:      codexServerWorktreeSnapshotReadBudgetFromEnvV0(),
 		},
 		RequiredTests:            requiredTestRunner,
 		DomainTests:              domainWorkRequiredTestConfigFromEnvV0(),
@@ -164,6 +177,10 @@ func codexStackCapacityConfigFromEnvV0() orquestaappcodexstack.CapacityConfigV0 
 	return orquestaappcodexstack.CapacityConfigV0{
 		Tier:            envConfig.Tier,
 		ReasoningEffort: envConfig.ReasoningEffort,
+		PolicyRef:       envConfig.PolicyRef,
+		PoolRef:         envConfig.PoolRef,
+		ModelRef:        envConfig.ModelRef,
+		QuotaRef:        envConfig.QuotaRef,
 		OccurredAt:      time.Now().UTC().Format(time.RFC3339),
 		RequestedBy:     "orquesta-server",
 		Summary:         "Capacidad inicial del servidor residente.",
@@ -174,6 +191,10 @@ func codexStackCapacityConfigFromEnvV0() orquestaappcodexstack.CapacityConfigV0 
 type codexStackCapacityEnvConfigV0 struct {
 	Tier            orquestacoreworkflow.OrchestrationCapacityRecommendationV0
 	ReasoningEffort orquestacoreworkflow.OrchestrationCapacityRecommendationV0
+	PolicyRef       string
+	PoolRef         string
+	ModelRef        string
+	QuotaRef        string
 }
 
 func codexStackCapacityEnvConfigFromEnvV0() codexStackCapacityEnvConfigV0 {
@@ -189,7 +210,32 @@ func codexStackCapacityEnvConfigFromEnvV0() codexStackCapacityEnvConfigV0 {
 				orquestacoreworkflow.OrchestrationCapacityMediumV0,
 			),
 		),
+		PolicyRef: envOrDefaultV0(envCapacityPolicyRefV0, "capacity-policy-ref-server-default-v0"),
+		PoolRef:   envOrDefaultV0(envCapacityPoolRefV0, "capacity-pool-ref-server-default-v0"),
+		ModelRef:  envOrDefaultV0(envCapacityModelRefV0, "capacity-model-ref-server-default-v0"),
+		QuotaRef:  envOrDefaultV0(envCapacityQuotaRefV0, "capacity-quota-ref-server-default-v0"),
 	}
+}
+
+func (supervisor serverStackSupervisorV0) FilterIdleSelfImprovementRequestsV0(
+	_ context.Context,
+	request orquestaserver.IdleSelfImprovementRequestFilterRequestV0,
+) (orquestaserver.IdleSelfImprovementRequestFilterResultV0, error) {
+	out := make([]orquestaserver.IdleSelfImprovementRequestV0, 0, len(request.Requests))
+	dropped := 0
+	for _, candidate := range request.Requests {
+		if serverStackIdleSelfImprovementBacklogRequestAllowedV0(candidate) {
+			out = append(out, candidate)
+			continue
+		}
+		dropped++
+	}
+	result := orquestaserver.IdleSelfImprovementRequestFilterResultV0{Requests: out}
+	if dropped > 0 {
+		result.EvidenceRefs = []string{"evidence-ref-idle-self-improvement-backlog-non-task-section-filtered"}
+		result.Message = "backlog_non_task_sections_filtered"
+	}
+	return result, nil
 }
 
 func capacityRecommendationEnvOrDefaultV0(
@@ -228,108 +274,6 @@ func directorLimitsV0() orquestaweb.WebArrancarDirectorAppLimitsV0 {
 		MaxCommands:          intEnvOrDefaultV0(envDirectorMaxCommandsV0, 20),
 		MaxOutboxPerCycle:    intEnvOrDefaultV0(envDirectorMaxOutboxV0, 8),
 		MaxExternalWaits:     intEnvOrDefaultV0(envDirectorMaxExternalWaitsV0, 120),
-	}
-}
-
-func codexRuntimeConfigV0(
-	serverConfig orquestaserver.ConfigV0,
-	processRuntime *orquestaruntime.ProcessRuntimeConnectorV0,
-	usageMetrics ...orquestaappcodexstack.CodexStackAgentUsageMetricsProviderPortV0,
-) orquestaappcodexstack.CodexRuntimeConfigV0 {
-	var usageSource orquestaappcodexstack.CodexStackAgentUsageMetricsProviderPortV0
-	if len(usageMetrics) > 0 {
-		usageSource = usageMetrics[0]
-	}
-	envConfig := codexRuntimeEnvConfigFromEnvV0()
-	return orquestaappcodexstack.CodexRuntimeConfigV0{
-		CommandPath:              envConfig.CommandPath,
-		ProjectWorkDir:           serverConfig.ProjectWorkDir,
-		RuntimeWorkDir:           serverConfig.RuntimeWorkDir,
-		CodeHomeDir:              envConfig.CodeHomeDir,
-		HomeDir:                  envConfig.HomeDir,
-		PathEnv:                  envConfig.PathEnv,
-		Model:                    envConfig.Model,
-		ReasoningEffort:          envConfig.ReasoningEffort,
-		Profile:                  envConfig.Profile,
-		Sandbox:                  envConfig.Sandbox,
-		ApprovalPolicy:           envConfig.ApprovalPolicy,
-		DirectorSandbox:          envConfig.DirectorSandbox,
-		DirectorApprovalPolicy:   envConfig.DirectorApprovalPolicy,
-		InteractiveApprovalOptIn: envConfig.InteractiveApprovalOptIn,
-		ExtraArgs:                envConfig.ExtraArgs,
-		PromptHints:              codexServerPromptHintsV0(serverConfig),
-		Runtime:                  processRuntime,
-		ProcessStopper:           processRuntime,
-		SnapshotSource:           processRuntime,
-		MaxBatchReady:            envConfig.Limits.MaxBatchReady,
-		MaxConcurrency:           envConfig.Limits.MaxLiveProcesses,
-		WaitInterval:             envConfig.WaitInterval,
-		ProgressPolicy:           envConfig.ProgressPolicy,
-		ProgressBudget:           envConfig.ProgressBudget,
-		UsageMetrics:             usageSource,
-	}
-}
-
-type codexRuntimeEnvConfigV0 struct {
-	CommandPath              string
-	CodeHomeDir              string
-	HomeDir                  string
-	PathEnv                  string
-	Model                    string
-	ReasoningEffort          string
-	Profile                  string
-	Sandbox                  string
-	ApprovalPolicy           string
-	DirectorSandbox          string
-	DirectorApprovalPolicy   string
-	InteractiveApprovalOptIn bool
-	ExtraArgs                []string
-	Limits                   codexRuntimeLimitsV0
-	WaitInterval             time.Duration
-	ProgressPolicy           orquestaruntime.AgentProgressHeartbeatPolicyV0
-	ProgressBudget           orquestaruntimecodexdelivery.CodexBudgetActivityPolicyV0
-}
-
-func codexRuntimeEnvConfigFromEnvV0() codexRuntimeEnvConfigV0 {
-	return codexRuntimeEnvConfigV0{
-		CommandPath: codexCommandPathV0(),
-		CodeHomeDir: codeHomeDirV0(),
-		HomeDir:     homeDirV0(),
-		PathEnv:     envOrDefaultV0(envCodexPathV0, os.Getenv("PATH")),
-		Model:       strings.TrimSpace(os.Getenv(envCodexModelV0)),
-		ReasoningEffort: codexReasoningEffortPolicyV0(envOrDefaultV0(
-			envCodexReasoningEffortV0,
-			string(orquestacoreworkflow.OrchestrationCapacityMediumV0),
-		)),
-		Profile:                  strings.TrimSpace(os.Getenv(envCodexProfileV0)),
-		Sandbox:                  codexSandboxFromEnvV0(envCodexSandboxV0, "danger-full-access"),
-		ApprovalPolicy:           envOrDefaultV0(envCodexApprovalPolicyV0, "never"),
-		DirectorSandbox:          codexOptionalSandboxFromEnvV0(envCodexDirectorSandboxV0),
-		DirectorApprovalPolicy:   strings.TrimSpace(os.Getenv(envCodexDirectorApprovalPolicyV0)),
-		InteractiveApprovalOptIn: boolEnvOrDefaultV0(envCodexAllowInteractiveApprovalV0, false),
-		ExtraArgs:                strings.Fields(os.Getenv(envCodexExtraArgsV0)),
-		Limits:                   codexRuntimeLimitsFromEnvV0(),
-		WaitInterval:             time.Duration(intEnvOrDefaultV0(envCodexWaitIntervalMSV0, defaultCodexWaitIntervalMSV0)) * time.Millisecond,
-		ProgressPolicy: orquestaruntime.AgentProgressHeartbeatPolicyV0{
-			StalledAfterNoProgressTicks: intEnvOrDefaultV0(envCodexStalledTicksV0, defaultCodexStalledTicksV0),
-			LoopAfterRepeatedActions:    intEnvOrDefaultV0(envCodexLoopTicksV0, defaultCodexLoopTicksV0),
-		},
-		ProgressBudget: orquestaruntimecodexdelivery.CodexBudgetActivityPolicyV0{
-			MaxExpected:     time.Duration(intEnvOrDefaultV0(envCodexMaxExpectedSecondsV0, defaultCodexMaxExpectedSecondsV0)) * time.Second,
-			NoActivityLimit: time.Duration(intEnvOrDefaultV0(envCodexNoActivitySecondsV0, defaultCodexNoActivitySecondsV0)) * time.Second,
-		},
-	}
-}
-
-type codexRuntimeLimitsV0 struct {
-	MaxBatchReady    int
-	MaxLiveProcesses int
-}
-
-func codexRuntimeLimitsFromEnvV0() codexRuntimeLimitsV0 {
-	return codexRuntimeLimitsV0{
-		MaxBatchReady:    intEnvOrDefaultV0(envCodexMaxBatchReadyV0, defaultCodexMaxBatchReadyV0),
-		MaxLiveProcesses: intEnvOrDefaultV0(envCodexMaxConcurrencyV0, defaultCodexMaxConcurrencyV0),
 	}
 }
 

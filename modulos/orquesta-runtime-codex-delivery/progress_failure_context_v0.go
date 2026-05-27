@@ -169,15 +169,9 @@ func codexProgressTextHasInterruptedNoACKSignalV0(text string) bool {
 }
 
 func codexProgressReadFailureLogV0(path string) (string, bool) {
-	if strings.TrimSpace(path) == "" {
+	data, ok := codexProgressReadTailV0(path, maxCodexProgressFailureLogBytesV0)
+	if !ok {
 		return "", false
-	}
-	data, err := os.ReadFile(path)
-	if err != nil || len(data) == 0 {
-		return "", false
-	}
-	if len(data) > maxCodexProgressFailureLogBytesV0 {
-		data = data[len(data)-maxCodexProgressFailureLogBytesV0:]
 	}
 	return string(data), true
 }

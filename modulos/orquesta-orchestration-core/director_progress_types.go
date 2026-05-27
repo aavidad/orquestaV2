@@ -16,6 +16,8 @@ const (
 	DirectorTaskProgressClosedV0       = "closed"
 )
 
+const DirectorTaskProgressProcessRegisteredV0 = "process_registered"
+
 const (
 	DirectorProgressClassificationWorkingV0              = "working"
 	DirectorProgressClassificationStalledV0              = "stalled"

@@ -3,8 +3,10 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
@@ -94,4 +96,69 @@ func requestByAreaForBacklogDocsTestV0(
 		}
 	}
 	return orquestaserver.IdleSelfImprovementRequestV0{}
+}
+
+func TestIdleSelfImprovementBacklogPlannerV0AcotaHashDocsASegurasV0(t *testing.T) {
+	projectDir := t.TempDir()
+	docsDir := filepath.Join(projectDir, "docs")
+	if err := os.MkdirAll(docsDir, 0o700); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	mainPath := filepath.Join(projectDir, idleSelfImprovementBacklogDocRelV0)
+	if err := os.WriteFile(mainPath, []byte("## T01 safe\n\nObjetivo: seguro.\n"), 0o600); err != nil {
+		t.Fatalf("write main: %v", err)
+	}
+	planner := idleSelfImprovementBacklogPlannerV0{ProjectWorkDir: projectDir}
+	if hash, missing := planner.backlogScanDocumentHashV0(idleSelfImprovementBacklogDocRelV0); missing || hash == "" {
+		t.Fatalf("hash=%s missing=%v", hash, missing)
+	}
+	for _, rel := range []string{
+		"../outside.md",
+		"/tmp/outside.md",
+		".orquesta-runtime/control.md",
+		"docs/../docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+	} {
+		if _, missing := planner.backlogScanDocumentHashV0(rel); !missing {
+			t.Fatalf("rel=%s accepted", rel)
+		}
+	}
+	if err := os.Symlink(mainPath, filepath.Join(docsDir, "link.md")); err == nil {
+		if _, missing := planner.backlogScanDocumentHashV0("docs/link.md"); !missing {
+			t.Fatalf("symlink accepted")
+		}
+	}
+	if err := os.WriteFile(filepath.Join(docsDir, "huge.md"),
+		[]byte(strings.Repeat("x", idleSelfImprovementBacklogScanMaxDocumentBytesV0+1)), 0o600); err != nil {
+		t.Fatalf("write huge: %v", err)
+	}
+	if _, missing := planner.backlogScanDocumentHashV0("docs/huge.md"); !missing {
+		t.Fatalf("huge doc accepted")
+	}
+}
+
+func TestIdleSelfImprovementBacklogPlannerV0RechazaBacklogScanDocNoCanonicoDelPacketV0(t *testing.T) {
+	projectDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(projectDir, "docs"), 0o700); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	content := "## T01 safe\n\nObjetivo: seguro.\n"
+	if err := os.WriteFile(filepath.Join(projectDir, idleSelfImprovementBacklogDocRelV0), []byte(content), 0o600); err != nil {
+		t.Fatalf("write main: %v", err)
+	}
+	planner := idleSelfImprovementBacklogPlannerV0{ProjectWorkDir: projectDir}
+	docs := planner.backlogScanDocumentsV0("t01-safe", 1, []string{idleSelfImprovementBacklogDocRelV0})
+	packet := orquestaruntime.AgentStartPacketV0{
+		Task: orquestaruntime.AgentStartTaskV0{DoneCriteria: []string{backlogScanDocTokenV0(docs[0])}},
+	}
+	if !planner.packetBacklogDocsCurrentV0(packet) {
+		t.Fatalf("canonical packet rejected")
+	}
+	packet.Task.DoneCriteria = []string{"backlog_scan_doc:../outside.md:line:1:sha256:" + docs[0].SHA256}
+	if planner.packetBacklogDocsCurrentV0(packet) {
+		t.Fatalf("non canonical packet accepted")
+	}
+	packet.Task.DoneCriteria = []string{"backlog_scan_doc:docs/no-index.md:line:1:sha256:" + docs[0].SHA256}
+	if planner.packetBacklogDocsCurrentV0(packet) {
+		t.Fatalf("doc outside current catalog accepted")
+	}
 }

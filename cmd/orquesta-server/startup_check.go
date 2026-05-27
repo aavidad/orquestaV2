@@ -67,6 +67,10 @@ func (check serverStartupCheckV0) diagnoseStartupV0(
 	ctx context.Context,
 	command orquestaserver.StartupCheckCommandV0,
 ) (orquestaserver.StartupCheckResultV0, error) {
+	adoption, err := check.adoptStartupLiveProcessesV0(ctx)
+	if err != nil {
+		return orquestaserver.StartupCheckResultV0{}, err
+	}
 	cleanup, err := check.startupCleanupCandidatesV0(ctx)
 	if err != nil {
 		return orquestaserver.StartupCheckResultV0{}, err
@@ -75,8 +79,8 @@ func (check serverStartupCheckV0) diagnoseStartupV0(
 		return orquestaserver.StartupCheckResultV0{
 			Status:       orquestaserver.StartupCheckStatusReadyV0,
 			Ready:        true,
-			Message:      "director: orquesta preparada; autodiagnostico sin runs transitorios ni cola sucia",
-			EvidenceRefs: []string{"evidence-ref-orquesta-startup-diagnose-ready"},
+			Message:      startupAdoptionMessageV0("director: orquesta preparada; autodiagnostico sin runs transitorios ni cola sucia", adoption),
+			EvidenceRefs: startupAdoptionEvidenceRefsV0([]string{"evidence-ref-orquesta-startup-diagnose-ready"}, adoption),
 		}, nil
 	}
 	synced, err := check.reconcileStartupQueueCandidatesV0(ctx, command, cleanup)
@@ -90,17 +94,34 @@ func (check serverStartupCheckV0) diagnoseStartupV0(
 		}
 		if len(cleanup) == 0 {
 			return orquestaserver.StartupCheckResultV0{
-				Status:  orquestaserver.StartupCheckStatusReadyV0,
-				Ready:   true,
-				Message: fmt.Sprintf("director: orquesta preparada; cola terminal reconciliada=%d", synced),
-				EvidenceRefs: []string{
+				Status: orquestaserver.StartupCheckStatusReadyV0,
+				Ready:  true,
+				Message: startupAdoptionMessageV0(
+					fmt.Sprintf("director: orquesta preparada; cola terminal reconciliada=%d", synced),
+					adoption,
+				),
+				EvidenceRefs: startupAdoptionEvidenceRefsV0([]string{
 					"evidence-ref-orquesta-startup-diagnose-ready",
 					"evidence-ref-orquesta-startup-queue-reconciled",
-				},
+				}, adoption),
 			}, nil
 		}
 	}
 	active, queueDirty := countStartupCleanupCandidatesV0(cleanup)
+	if active > 0 && queueDirty == 0 {
+		return orquestaserver.StartupCheckResultV0{
+			Status: orquestaserver.StartupCheckStatusReadyV0,
+			Ready:  true,
+			Message: startupAdoptionMessageV0(
+				fmt.Sprintf("director: orquesta preparada; runs activos asumidos=%d sin purga", active),
+				adoption,
+			),
+			EvidenceRefs: startupAdoptionEvidenceRefsV0([]string{
+				"evidence-ref-orquesta-startup-diagnose-ready",
+				"evidence-ref-orquesta-startup-active-runs-adopted",
+			}, adoption),
+		}, nil
+	}
 	return orquestaserver.StartupCheckResultV0{
 		Status:       "startup_dirty_runs_detected",
 		Ready:        false,
@@ -123,10 +144,11 @@ func (check serverStartupCheckV0) forceStopStartupStateV0(
 			return orquestaserver.StartupCheckResultV0{}, err
 		}
 		return orquestaserver.StartupCheckResultV0{
-			Status:       orquestaserver.StartupCheckStatusReadyV0,
-			Ready:        true,
-			Message:      startupReadyMessageV0("director: orquesta preparada; no habia runs transitorios activos", compaction),
-			EvidenceRefs: startupReadyEvidenceRefsV0([]string{"evidence-ref-orquesta-startup-cleanup-empty"}, compaction),
+			Status:          orquestaserver.StartupCheckStatusReadyV0,
+			Ready:           true,
+			Message:         startupReadyMessageV0("director: orquesta preparada; no habia runs transitorios activos", compaction),
+			EvidenceRefs:    startupReadyEvidenceRefsV0([]string{"evidence-ref-orquesta-startup-cleanup-empty"}, compaction),
+			StartupRevision: startupRevisionSummaryFromCompactionV0(compaction),
 		}, nil
 	}
 	completed := 0
@@ -163,7 +185,8 @@ func (check serverStartupCheckV0) forceStopStartupStateV0(
 				completed,
 				queueSynced,
 			), compaction),
-			EvidenceRefs: startupReadyEvidenceRefsV0([]string{"evidence-ref-orquesta-startup-ready-after-cleanup"}, compaction),
+			EvidenceRefs:    startupReadyEvidenceRefsV0([]string{"evidence-ref-orquesta-startup-ready-after-cleanup"}, compaction),
+			StartupRevision: startupRevisionSummaryFromCompactionV0(compaction),
 		}, nil
 	}
 	return orquestaserver.StartupCheckResultV0{

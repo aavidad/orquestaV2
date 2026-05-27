@@ -2,7 +2,6 @@ package orquestaserver
 
 import (
 	"crypto/subtle"
-	"encoding/json"
 	"net/http"
 	"strings"
 )
@@ -67,7 +66,7 @@ func isMutableControlPlaneRequestV0(r *http.Request) bool {
 		return false
 	}
 	path := r.URL.Path
-	if path == "/healthz" || path == "/api/status" || path == "/api/v0/server/status" {
+	if path == "/healthz" || path == ServerStatusLegacyEndpointV0 || path == ServerStatusEndpointV0 {
 		return false
 	}
 	if path == "/mcp" || strings.HasPrefix(path, "/api/v0/") {
@@ -149,9 +148,7 @@ func (runtime *RuntimeV0) auditControlPlaneDecisionV0(r *http.Request, decision 
 }
 
 func writeControlPlaneDeniedV0(w http.ResponseWriter, reason string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusUnauthorized)
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = writeServerJSONResponseV0(w, http.StatusUnauthorized, map[string]interface{}{
 		"status": "error",
 		"errores_publicos": []map[string]string{{
 			"code":    controlPlaneDeniedCodeV0,

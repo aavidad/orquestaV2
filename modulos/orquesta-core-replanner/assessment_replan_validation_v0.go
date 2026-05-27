@@ -77,7 +77,9 @@ func agentReworkAssessmentActionMatchesVerdictV0(verdict string, assessmentActio
 
 func agentReworkRequestedActionMatchesAssessmentActionV0(assessmentAction string, requestedAction ReplanRecommendedActionV0) bool {
 	if assessmentAction == orquestacoreworkflow.AgentAssessmentActionAskDirectorV0 {
-		return requestedAction == ReplanActionAskDirectorV0
+		return requestedAction == ReplanActionAskDirectorV0 ||
+			requestedAction == ReplanActionRetryTaskV0 ||
+			requestedAction == ReplanActionReplaceAgentV0
 	}
 	if assessmentAction == orquestacoreworkflow.AgentAssessmentActionRequestRevisionV0 {
 		return requestedAction == ReplanActionRetryTaskV0 ||

@@ -2,6 +2,19 @@
 
 Cada tarea debe ser pequena y cerrada.
 
+```text
+ID: GOV-008
+Objetivo: Reconciliar T198 para descriptor MCP de governance.
+Write-set: docs locales y backlog T198.
+Simbolo foco: GovernanceCatalogPublicQuery v0.
+Contrato: mcp.resource.descriptor_source.v0 como consumidor de governance.
+Validacion: go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp ./modulos/orquesta-observability ./modulos/orquesta-governance ./modulos/orquesta-core ./cmd/orquesta-server.
+Bloqueos: No activa historicos DB v1 ni amplia permisos; solo documenta fuente canonica y freshness.
+Estado: completada_documental 2026-05-27
+Revalidacion: `agent-ref-task-autoprogramming-c3678e9bc306-g01` confirma cierre
+stale documental sin owner nuevo.
+```
+
 ## Backlog inicial desde DB v1
 
 ```text
@@ -11,7 +24,7 @@ Write-set: docs/tareas.md, docs/decisiones.md, docs/contratos.md, docs/pruebas.m
 Simbolo foco: GovernanceCatalogV0
 Contrato: GovernanceCatalog v0
 Validacion: catalogo separa reglas globales, reglas por rol, workflows y skills; cada entrada conserva origen DB v1, estado propuesto y criterio de promocion.
-Bloqueos: DBV1-000 completada en docs/reinicio_orquesta_v2/inventario_db_v1.md.
+Bloqueos: ninguno vivo; la fuente DB v1 queda clasificada como evidencia forense historica, no como prerequisito ejecutable de automejora.
 Estado: completada 2026-05-04; catalogo documental v0 registrado en docs/contratos.md, decisiones en docs/decisiones.md y pruebas previstas en docs/pruebas.md.
 ```
 

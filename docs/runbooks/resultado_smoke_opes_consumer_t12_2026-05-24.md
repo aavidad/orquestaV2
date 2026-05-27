@@ -84,6 +84,35 @@ Revalidaciones acotadas posteriores:
   ejecuto smoke real OPES por faltar `ORQUESTA_OPES_BASE_URL`,
   `ORQUESTA_BASE_URL`, `ORQUESTA_OPES_TEMPORAL_CONFIRM=1` y confirmacion de
   efectos sobre una instancia temporal.
+- `agent-ref-task-autoprogramming-371cdd32141a-g01` (2026-05-27): tests
+  obligatorios pasados; sintaxis de wrappers pasada. El smoke fake aislado quedo
+  bloqueado antes de crear runs porque `go run ./cmd/orquesta-server
+  opes-drain-once` no compilo por una referencia fuera del write-set
+  (`modulos/orquesta-mcp/workspace_timeline_http_v0.go:68`). No se edito fuera
+  del alcance asignado. No se ejecuto smoke real OPES por faltar
+  `ORQUESTA_OPES_BASE_URL`, `ORQUESTA_BASE_URL`,
+  `ORQUESTA_OPES_TEMPORAL_CONFIRM=1` y confirmacion de efectos sobre una
+  instancia temporal.
+- `agent-ref-task-autoprogramming-5373ad36695c-g01` (2026-05-27): tests
+  obligatorios pasados; sintaxis de wrappers pasada; smoke fake aislado
+  `run-until-assemble` pasado con
+  `SMOKE_ID=agent-ref-task-autoprogramming-5373ad36695c-g01`. Evidencia:
+  `/tmp/opes-salidas/derivatives-rest-agent-ref-task-autoprogramming-5373ad36695c-g01/`.
+  La secuencia fake creo y superviso una run por fase hasta
+  `assemble_topic -> assembled_topic` y cerro con tick final sin pendientes. No
+  se ejecuto smoke real OPES por faltar `ORQUESTA_OPES_BASE_URL`,
+  `ORQUESTA_BASE_URL`, `ORQUESTA_OPES_TEMPORAL_CONFIRM=1` y confirmacion de
+  efectos sobre una instancia temporal.
+- `agent-ref-task-autoprogramming-51f9a01810a0-g01` (2026-05-27): tests
+  obligatorios pasados; sintaxis de wrappers pasada; smoke fake aislado
+  `run-until-assemble` pasado con
+  `SMOKE_ID=agent-ref-task-autoprogramming-51f9a01810a0-g01`. Evidencia:
+  `/tmp/opes-salidas/derivatives-rest-agent-ref-task-autoprogramming-51f9a01810a0-g01/`.
+  La secuencia fake creo y superviso una run por fase hasta
+  `assemble_topic -> assembled_topic` y cerro con tick final sin pendientes. No
+  se ejecuto smoke real OPES por faltar `ORQUESTA_OPES_BASE_URL`,
+  `ORQUESTA_BASE_URL`, `ORQUESTA_OPES_TEMPORAL_CONFIRM=1` y confirmacion de
+  efectos sobre una instancia temporal.
 
 Resumen observado del fake:
 

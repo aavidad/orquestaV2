@@ -2,7 +2,14 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/smoke_common.sh
+source "$ROOT_DIR/scripts/lib/smoke_common.sh"
+smoke_root_source="generated"
+if [[ -n "${ORQUESTA_SMOKE_ROOT:-}" ]]; then
+  smoke_root_source="env:ORQUESTA_SMOKE_ROOT"
+fi
 SMOKE_ROOT="${ORQUESTA_SMOKE_ROOT:-$(mktemp -d "${TMPDIR:-/tmp}/orquesta-codex-director-recursive-smoke.XXXXXX")}"
+smoke_temp_root_prepare "$SMOKE_ROOT" "$smoke_root_source"
 SMOKE_ID="${SMOKE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 OUT_DIR="$SMOKE_ROOT/$SMOKE_ID"
 PROJECT_DIR="$OUT_DIR/project"
@@ -12,11 +19,7 @@ FAKE_CODEX="$OUT_DIR/codex-fake"
 KEEP_DIR="${ORQUESTA_KEEP_SMOKE_DIR:-0}"
 
 cleanup() {
-  if [[ "$KEEP_DIR" == "1" ]]; then
-    echo "directorio conservado: $SMOKE_ROOT" >&2
-  else
-    rm -rf "$SMOKE_ROOT"
-  fi
+  smoke_temp_root_cleanup "$SMOKE_ROOT" "$KEEP_DIR"
 }
 trap cleanup EXIT
 

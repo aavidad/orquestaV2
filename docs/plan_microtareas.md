@@ -1,8 +1,15 @@
 # Plan de microtareas: self-observability
 
-Estado: primera entrega accionable del director en modo debug. El plan abre la
-ruta hacia programacion documental, pero no emite revision, validacion final ni
-cierre.
+Estado: historico/debug. Este documento conserva la primera entrega accionable
+del director en modo debug para auditoria, pero no gobierna requisitos vivos del
+repo Orquesta ni obliga a crear documentos raiz vacios.
+
+Vigencia 2026-05-26: los nombres `manual_usuario`, `manual_desarrollador`,
+`manual_sistemas_deploy`, `decisiones`, `pruebas_documentales` y `pendientes`
+son artefactos esperados de una app generada o modificada por Orquesta. Si una
+composicion los materializa, debe hacerlo dentro del proyecto objetivo o como
+refs de artefacto de ese proyecto, no como nuevos documentos obligatorios del
+nucleo Orquesta.
 
 ## Workflow
 
@@ -25,7 +32,22 @@ Funciones cubiertas:
 - `DocumentDecisionsTestsPending`: decisiones, pruebas documentales y
   pendientes.
 
-## Microtareas Propuestas
+## Contrato de artefactos generado
+
+Este plan usa rutas `docs/...` como rutas relativas del proyecto generado. Para
+el repo Orquesta vigente, la fuente reutilizable de esas piezas vive en
+`docs/plantillas_documentacion/`:
+
+- `manual_usuario`: manual funcional de la app generada.
+- `manual_desarrollador`: arquitectura, contratos y desarrollo de la app
+  generada.
+- `manual_sistemas_deploy`: alias historico compuesto por `manual_sysadmin` y
+  `guia_despliegue` cuando aplique operacion/despliegue.
+- `pruebas_documentales`: evidencia documental de validaciones de la app
+  generada.
+- `pendientes`: backlog publico y verificable de la app generada.
+
+## Microtareas Propuestas Historicas
 
 ### task-selfobs-doc-manuals-v0
 
@@ -43,7 +65,7 @@ Criterios:
 - Manual de desarrollador con hexagono, puertos, DTOs e i18n.
 - CONSULTA AL DIRECTOR si falta alcance funcional concreto.
 
-Pruebas requeridas:
+Pruebas historicas del proyecto generado:
 
 - `test -s docs/manual_usuario.md`
 - `test -s docs/manual_desarrollador.md`
@@ -63,7 +85,7 @@ Criterios:
 - Configuracion y conectores descritos sin fijar persistencia concreta.
 - Operacion, seguridad y recuperacion descritas a nivel documental.
 
-Pruebas requeridas:
+Pruebas historicas del proyecto generado:
 
 - `test -s docs/manual_sistemas_deploy.md`
 
@@ -85,7 +107,7 @@ Criterios:
 - Pendientes separados por producto, arquitectura, pruebas, seguridad y
   revision final.
 
-Pruebas requeridas:
+Pruebas historicas del proyecto generado:
 
 - `test -s docs/decisiones.md`
 - `test -s docs/pruebas_documentales.md`
@@ -106,4 +128,5 @@ No se omiten los minimos documentales en este plan: manual_usuario,
 manual_desarrollador, manual_sistemas_deploy, decisiones,
 pruebas_documentales y pendientes quedan cubiertos como trabajo planificado. Lo
 omitido por modo debug es el cierre productivo y la ejecucion de revision final
-sin evidencias reales.
+sin evidencias reales. Esta afirmacion pertenece al proyecto generado de aquel
+corte debug; no declara requisitos vivos para la documentacion raiz de Orquesta.

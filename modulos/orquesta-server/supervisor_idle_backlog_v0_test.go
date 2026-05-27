@@ -83,6 +83,9 @@ func (fake *fakeSupervisorV0) PlanIdleSelfImprovementV0(
 ) (IdleSelfImprovementPlanResultV0, error) {
 	fake.planCalls++
 	fake.lastPlanRequest = request
+	if fake.planErr != nil {
+		return IdleSelfImprovementPlanResultV0{}, fake.planErr
+	}
 	requests := append([]IdleSelfImprovementRequestV0(nil), fake.planRequests...)
 	if fake.planRequests == nil {
 		requests = []IdleSelfImprovementRequestV0{request.BaseRequest}

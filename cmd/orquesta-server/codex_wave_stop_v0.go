@@ -85,7 +85,7 @@ func codexWaveStopOneAgentV0(
 		return
 	}
 	if !config.ForceStop {
-		if err := codexWaveRequestCooperativeStopV0(*summary, *agent, config); err != nil {
+		if err := codexWaveRequestCooperativeStopV0(*summary, *agent, config, now); err != nil {
 			summary.Errors = append(summary.Errors, codexWavePublicErrorV0{
 				AgentRef: agent.AgentRef,
 				Code:     "cooperative_stop_request_failed",
@@ -96,7 +96,7 @@ func codexWaveStopOneAgentV0(
 		agent.Status = "stop_requested"
 		return
 	}
-	if err := signalProcessV0(agent.PID); err != nil {
+	if err := signalProcessGroupV0(agent.PID); err != nil {
 		summary.Errors = append(summary.Errors, codexWavePublicErrorV0{
 			AgentRef: agent.AgentRef,
 			Code:     "stop_failed",
@@ -111,16 +111,18 @@ func codexWaveRequestCooperativeStopV0(
 	summary codexWaveLaunchSummaryV0,
 	agent codexWaveAgentSummaryV0,
 	config codexWaveControlConfigV0,
+	now time.Time,
 ) error {
 	request := orquestaruntimecodex.CodexShutdownRequestV0{
-		SchemaVersion: orquestaruntimecodex.CodexShutdownRequestSchemaVersionV0,
-		RunRef:        "run-ref-" + safeCodexWavePurgeRefPartV0(summary.WaveRef),
-		AgentRef:      agent.AgentRef,
-		CorrelationID: "corr-codex-wave-stop-" + safeCodexWavePurgeRefPartV0(agent.AgentRef),
-		RequestedBy:   "codex-wave-stop",
-		Reason:        config.Reason,
-		CheckpointRef: "checkpoint-ref-" + safeCodexWavePurgeRefPartV0(agent.AgentRef),
-		EvidenceRefs:  []string{"codex-wave-stop-cooperative-ref-" + safeCodexWavePurgeRefPartV0(summary.WaveRef)},
+		SchemaVersion:      orquestaruntimecodex.CodexShutdownRequestSchemaVersionV0,
+		RunRef:             "run-ref-" + safeCodexWavePurgeRefPartV0(summary.WaveRef),
+		AgentRef:           agent.AgentRef,
+		CorrelationID:      "corr-codex-wave-stop-" + safeCodexWavePurgeRefPartV0(agent.AgentRef),
+		RequestedBy:        "codex-wave-stop",
+		Reason:             config.Reason,
+		ShutdownAttemptRef: codexWaveStopAttemptRefV0(summary, agent, config, now),
+		CheckpointRef:      "checkpoint-ref-" + safeCodexWavePurgeRefPartV0(agent.AgentRef),
+		EvidenceRefs:       []string{"codex-wave-stop-cooperative-ref-" + safeCodexWavePurgeRefPartV0(summary.WaveRef)},
 	}
 	path := filepath.Join(agent.RuntimeWorkDir, orquestaruntimecodex.CodexShutdownRequestFileNameV0)
 	if issues := orquestaruntimecodex.WriteCodexShutdownRequestFileV0(path, request); len(issues) > 0 {

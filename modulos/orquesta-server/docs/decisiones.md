@@ -10,7 +10,8 @@ ordenes por API/MCP.
 
 El servidor publica un statefile con PID, direccion HTTP, hora de arranque,
 estado y ultima supervision. Al reconectar, el operador consulta ese fichero y
-despues valida `healthz` o `/api/status`.
+despues valida `/api/v0/server/readiness` o `/api/v0/server/status`; `/api/status`
+queda solo como alias legacy.
 
 ## SRV-003: supervisor por puerto
 
@@ -84,12 +85,32 @@ supervisor durante minutos.
 
 Por defecto `ORQUESTA_SERVER_DRAIN_MAX_EXTERNAL_WAITS` usa una espera externa
 en linea. Esto permite materializar el arranque y una observacion inicial sin
-impedir que otros runs entren en ticks posteriores. Si una prueba real necesita
-un drain sincrono largo, puede elevar el entorno de forma explicita, pero no
-debe ser el modo desatendido normal.
+impedir que otros runs entren en ticks posteriores. El modo residente acepta
+subir ese margen hasta el maximo publicado de `70` cuando la tanda real lo
+necesita; valores por encima siguen bloqueados para detectar configuraciones
+descontroladas en vez de dejarlas ambiguas.
 
 El pulso residente se ejecuta de forma asincrona con una guarda atomica de
 actividad: un segundo tick no se solapa con el primero, pero la siguiente
 iteracion puede avanzar en cuanto el pulso anterior libera el slot. La
 preparacion de automejora se lanza aparte para no mezclar trabajo secundario con
 el tick principal.
+
+## SRV-010: stats T210 son contrato de transporte
+
+El servidor no recalcula la semantica de progreso vivo ni cierre. Transporta la
+proyeccion de `DirectorRunStatsV0` y conserva `include_agent_progress` como
+opcion publica. Si una senal de progreso llega degradada, se publica con reason
+code; no se rellena con 0% silencioso ni se convierte entrega en task cerrada.
+
+## SRV-011: T208 reconciliado por resultado estructurado
+
+El servidor no debe inferir exito del guardian por exit code ni tratar cualquier
+fallo break-glass como cierre de promocion. La frontera vigente consume
+`orquesta_guardian_result.v0`, reason codes y evidence refs compactas; solo
+`candidate_promoted` cierra el efecto cuando la promocion real esta habilitada.
+
+T208 queda como umbrella historico porque los huecos concretos se cerraron en
+owners focales. Nuevos blockers deben entrar como tareas separadas, manteniendo
+guardian, Codex, filesystem, proveedor y configuracion operacional fuera del
+modulo residente puro.

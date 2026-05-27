@@ -3,8 +3,6 @@ package orquestacionnucleoapp
 import (
 	"context"
 	"errors"
-	"fmt"
-	"hash/fnv"
 	"strings"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -91,7 +89,5 @@ func (executor AgentStopperExecutorV0) agentLostEvidenceRefsV0(
 func agentLostRefFromStopIntentV0(
 	intent orquestaoutboxdispatch.DispatchIntentV0,
 ) string {
-	hash := fnv.New32a()
-	_, _ = hash.Write([]byte(strings.TrimSpace(intent.MessageID)))
-	return fmt.Sprintf("agent-loss-ref-%08x", hash.Sum32())
+	return "agent-loss-ref-" + deterministicRefDigestPrefixV0("agent_stop_loss", 32, intent.MessageID)
 }

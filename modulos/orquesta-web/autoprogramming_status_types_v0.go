@@ -113,7 +113,7 @@ func webAutoprogrammingRunProgressV0(result *orquestamcp.MCPDirectorStatsToolRes
 			RunRef: trimV0(stats.RunRef), AppRef: trimV0(stats.ProjectRef), Status: trimV0(stats.Status),
 		},
 		CurrentPhase:       trimV0(stats.CurrentPhase),
-		PercentComplete:    stats.Progress.PercentComplete,
+		PercentComplete:    webAutoprogrammingLivePercentV0(stats),
 		TasksTotal:         stats.Counts.TasksTotal,
 		TasksClosed:        stats.Counts.TasksClosed,
 		AgentsInFlight:     stats.Counts.AgentsInFlight,

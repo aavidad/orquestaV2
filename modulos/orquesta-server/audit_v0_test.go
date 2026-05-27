@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -54,6 +55,7 @@ func TestFileAuditSinkV0AppendJSONLCompletoV0(t *testing.T) {
 		event.Payload["run_ref"] != "run-ref-001" {
 		t.Fatalf("event=%+v", event)
 	}
+	assertServerDurableFilePolicyV0(t, filepath.Dir(path), filepath.Base(path))
 }
 
 func TestRuntimeV0SupervisorEscribeAuditoriaJSONLV0(t *testing.T) {
@@ -118,6 +120,44 @@ func TestRuntimeV0HandlerAuditaPeticionesHTTPV0(t *testing.T) {
 	}
 }
 
+func TestRuntimeV0HandlerAuditaQueryPublicaAcotadaYRedactadaV0(t *testing.T) {
+	stateDir := t.TempDir()
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir: stateDir,
+	}, RuntimeDepsV0{
+		StateStore: &memoryStateStoreV0{},
+		Clock:      fixedClockV0{now: time.Date(2026, 5, 24, 10, 0, 0, 0, time.UTC)},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/healthz?token=secret&raw_query=x&debug=1", nil)
+	runtime.HandlerV0().ServeHTTP(rec, req)
+
+	events := readAuditEventsForTestV0(t, AuditPathV0(runtime.config))
+	last := events[len(events)-1]
+	encoded, _ := json.Marshal(last.Payload)
+	body := string(encoded)
+	if last.Payload["raw_query"] != nil ||
+		strings.Contains(body, "secret") ||
+		strings.Contains(body, "raw_query") ||
+		!strings.Contains(body, "sensitive_query_key_redacted") ||
+		!strings.Contains(body, "debug") {
+		t.Fatalf("payload query sin redaccion: %s", body)
+	}
+}
+
+func TestAuditQueryKeysV0NoParseaRawQueryExcesivaV0(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/healthz?q="+strings.Repeat("x", auditQueryRawMaxBytesV0+1), nil)
+
+	keys := auditQueryKeysV0(req)
+
+	if len(keys) != 1 || keys[0] != "query_too_large" {
+		t.Fatalf("keys=%+v", keys)
+	}
+}
+
 func TestRuntimeV0AuditEventNoSilenciaFalloDeSinkV0(t *testing.T) {
 	store := &memoryStateStoreV0{}
 	runtime, err := NewRuntimeV0(ConfigV0{
@@ -134,14 +174,58 @@ func TestRuntimeV0AuditEventNoSilenciaFalloDeSinkV0(t *testing.T) {
 
 	runtime.auditEventV0(context.Background(), "supervisor_tick_result", "ok", "", map[string]interface{}{"run_ref": "run-ref-001"})
 
-	if store.last.LastError == "" ||
-		store.last.LastError != "audit_append_failed: audit sink roto" {
-		t.Fatalf("fallo audit no visible en estado: %+v", store.last)
+	if store.last.AuditStatus != "degraded" ||
+		store.last.AuditFailures != 1 ||
+		store.last.AuditLastCode != auditWriteFailureCodeV0 ||
+		store.last.AuditLastEvent != "supervisor_tick_result" ||
+		store.last.AuditLastSeverity != "warning" {
+		t.Fatalf("fallo audit no visible en proyeccion compacta: %+v", store.last)
 	}
 	if len(store.last.RecentErrors) != 1 ||
-		store.last.RecentErrors[0].Code != "server_error" ||
-		store.last.RecentErrors[0].Message != "audit_append_failed: audit sink roto" {
+		store.last.RecentErrors[0].Code != auditWriteFailureCodeV0 ||
+		store.last.RecentErrors[0].Message != auditWriteFailureCodeV0 {
 		t.Fatalf("recent_errors no registra audit failure: %+v", store.last.RecentErrors)
+	}
+	body, _ := json.Marshal(store.last)
+	for _, forbidden := range []string{"sink roto", "runtime-secret", "state.json", "HOME", "token"} {
+		if strings.Contains(string(body), forbidden) {
+			t.Fatalf("audit failure filtra detalle privado %q: %s", forbidden, string(body))
+		}
+	}
+	readiness := NewServerReadinessV0(store.last)
+	if readiness.Ready || readiness.LivenessStatus != "ok" {
+		t.Fatalf("readiness/liveness inesperado: %+v", readiness)
+	}
+}
+
+func TestRuntimeV0AuditFailureNoRecursivoSiStateStoreFallaV0(t *testing.T) {
+	store := &failingStateStoreV0{err: errors.New("write failed at /tmp/runtime-secret/state.json")}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:      t.TempDir(),
+		AuditDisabled: true,
+	}, RuntimeDepsV0{
+		StateStore: store,
+		AuditSink:  failingAuditSinkV0{},
+		Clock:      fixedClockV0{now: time.Date(2026, 5, 24, 10, 0, 0, 0, time.UTC)},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	runtime.auditEventV0(context.Background(), "http_request?token=raw", "500", "", nil)
+
+	state := runtime.StateV0()
+	if state.AuditFailures != 1 ||
+		state.AuditLastEvent != "http_request" ||
+		state.StatePersistStatus != "degraded" ||
+		state.StatePersistLastTransition != "audit_write_failed" {
+		t.Fatalf("estado degradado=%+v", state)
+	}
+	body, _ := json.Marshal(state)
+	for _, forbidden := range []string{"runtime-secret", "state.json", "sink roto", "token=raw", "tokenraw"} {
+		if strings.Contains(string(body), forbidden) {
+			t.Fatalf("estado filtra detalle privado %q: %s", forbidden, string(body))
+		}
 	}
 }
 

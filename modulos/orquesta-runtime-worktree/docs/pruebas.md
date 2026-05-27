@@ -20,3 +20,5 @@ Cobertura:
 - rechaza `branch_ref` con forma de ruta y preparacion no aislada;
 - revisa un repo Git limpio con `review_repo` sin modificarlo y sin filtrar
   rutas absolutas.
+- reconciliacion T208 se valida con la bateria cruzada requerida, sin ampliar el
+  contrato local ni convertir refs opacas en rutas.

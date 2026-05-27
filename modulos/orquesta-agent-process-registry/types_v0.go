@@ -26,6 +26,7 @@ type AgentProcessRegistryRecordV0 struct {
 	ProcessRef     string
 	SessionRef     string
 	LaunchRef      string
+	PID            int
 	ReadinessRef   string
 	EvidenceRefs   []string
 }

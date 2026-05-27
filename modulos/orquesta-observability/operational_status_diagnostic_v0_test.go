@@ -94,7 +94,7 @@ func TestValidateDiagnosticoCompactoV0ContenidoProhibido(t *testing.T) {
 		{
 			name: "secreto en contador",
 			edit: func(diagnostic *DiagnosticoCompactoV0) {
-				diagnostic.Contadores["token_count"] = 3
+				diagnostic.Contadores["access_token_count"] = 3
 			},
 			code: ErrSecretoDetectadoV0,
 		},
@@ -148,10 +148,19 @@ func TestValidateDiagnosticoCompactoV0PermiteVocabularioOperativoOpaco(t *testin
 	diagnostic := validDiagnosticoCompactoV0()
 	diagnostic.Progreso.Summary = "runtime provider model como contexto opaco"
 	diagnostic.Warnings[0].Summary = "provider model not_available sin valor concreto"
+	diagnostic.Referencias[0].TargetRef = "token_policy_ref-runtime-redaction-v0"
+	diagnostic.Privacy.RedactionLevel = DiagnosticoPrivacyRedactionMetadataOnlyV0
 
 	if err := ValidateDiagnosticoCompactoV0(diagnostic); err != nil {
 		t.Fatalf("diagnostic should allow opaque operational vocabulary: %v", err)
 	}
+}
+
+func TestValidateDiagnosticoCompactoV0RedactionLevelVerificable(t *testing.T) {
+	diagnostic := validDiagnosticoCompactoV0()
+	diagnostic.Privacy.RedactionLevel = "raw"
+
+	assertOperationalStatusIssueV0(t, ValidateDiagnosticoCompactoV0(diagnostic), ErrOperationalStatusQueryInvalidaV0)
 }
 
 func TestValidateDiagnosticoCompactoV0ListasCompactas(t *testing.T) {

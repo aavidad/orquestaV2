@@ -39,7 +39,11 @@ func applyDirectorCycleCommandsV0(
 	result DirectorCycleResultV0,
 	plan orquestadirectorscheduler.DirectorSchedulerTickPlanV0,
 ) (DirectorCycleResultV0, error) {
-	for _, command := range plan.Commands {
+	commands := plan.Commands
+	if len(commands) > input.MaxCommands {
+		commands = commands[:input.MaxCommands]
+	}
+	for _, command := range commands {
 		if err := ctx.Err(); err != nil {
 			return resultWithDirectorCycleIssueV0(result, input, ErrDirectorRunnerCycleInvalidoV0, "context", "context cancelado", true)
 		}
@@ -61,6 +65,11 @@ func applyDirectorCycleCommandsV0(
 	}
 	if len(result.Outbox) > 0 {
 		return finishDirectorCycleWithOutboxV0(result), nil
+	}
+	if len(commands) < len(plan.Commands) {
+		result.Status = DirectorCycleStatusCommandsAppliedV0
+		result.StopReason = DirectorCycleStopCommandsExhaustedV0
+		return result, nil
 	}
 	return finishDirectorCycleAfterCommandsV0(result, plan), nil
 }

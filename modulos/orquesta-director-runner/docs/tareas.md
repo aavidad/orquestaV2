@@ -15,3 +15,6 @@
 - DCR-007: conector superior que prepare candidates/snapshot desde contratos compactos.
 - DCR-008: persistencia/event-store como puerto externo, sin elegir DB en nucleo.
 - DCR-009: ciclo progresivo multi-fase con orquestacion real de app de prueba.
+- DCR-010: T207 rotacion de sesiones queda sin tarea de codigo en runner; el
+  contrato opt-in vive en runtime/orchestration y el runner sigue como tick
+  acotado sin daemon ni runtime real. Estado: reconciliado el 2026-05-27.

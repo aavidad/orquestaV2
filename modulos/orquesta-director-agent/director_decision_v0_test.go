@@ -118,6 +118,21 @@ func TestValidateDirectorAgentDecisionV0AceptaChildRefsHastaLimiteRecursivo(t *t
 	}
 }
 
+func TestValidateDirectorAgentDecisionV0AceptaMicrotareaConMuchasDependencias(t *testing.T) {
+	decision := validDirectorAgentCreateMicrotaskDecisionV0()
+	decision.CreateMicrotask.Task.DependsOn = make([]string, 0, 18)
+	for index := 0; index < 18; index++ {
+		decision.CreateMicrotask.Task.DependsOn = append(
+			decision.CreateMicrotask.Task.DependsOn,
+			fmt.Sprintf("task-ref-bootstrap-%03d", index+1),
+		)
+	}
+
+	if issues := ValidateDirectorAgentDecisionV0(decision); len(issues) != 0 {
+		t.Fatalf("issues inesperados: %+v", issues)
+	}
+}
+
 func TestValidateDirectorAgentDecisionV0PermiteProveedorYModeloComoRefsOpacas(t *testing.T) {
 	decision := validDirectorAgentDecisionV0()
 	decision.Summary = "usar provider y modelo concretos"

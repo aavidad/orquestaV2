@@ -8,9 +8,10 @@ import (
 
 const (
 	MCPTransportModeOptInV0           = "adapter_opt_in"
-	MCPTransportToolUnboundV0         = "mcp_transport_tool_unbound"
-	MCPTransportToolInputInvalidV0    = "mcp_transport_tool_input_invalid"
-	MCPTransportPortUnavailableV0     = "mcp_transport_port_unavailable"
+	MCPTransportToolUnboundV0         = MCPPublicErrTransportUnboundV0
+	MCPTransportToolInputInvalidV0    = MCPPublicErrTransportInputV0
+	MCPTransportPortUnavailableV0     = MCPPublicErrTransportPortV0
+	MCPTransportSchemaStaleV0         = MCPPublicErrTransportSchemaV0
 	MCPTransportResourceShapeV0       = "resource_payload_compacto_v0"
 	MCPTransportOperatorOutputShapeV0 = "operator_tool_result_compacto_v0"
 )
@@ -27,24 +28,29 @@ type MCPTransportResourceHandlerV0 func(context.Context) (json.RawMessage, error
 type MCPTransportToolHandlerV0 func(context.Context, json.RawMessage) (json.RawMessage, error)
 
 type MCPTransportResourceEnvelopeV0 struct {
-	Name        string                        `json:"name"`
-	Version     string                        `json:"version"`
-	URI         string                        `json:"uri"`
-	ContentType string                        `json:"content_type"`
-	SummaryKey  string                        `json:"summary_key,omitempty"`
-	Shape       string                        `json:"shape"`
-	Mode        string                        `json:"mode"`
-	Handler     MCPTransportResourceHandlerV0 `json:"-"`
+	Name             string                        `json:"name"`
+	Version          string                        `json:"version"`
+	URI              string                        `json:"uri"`
+	ContentType      string                        `json:"content_type"`
+	SummaryKey       string                        `json:"summary_key,omitempty"`
+	Shape            string                        `json:"shape"`
+	Mode             string                        `json:"mode"`
+	DescriptorSource MCPResourceDescriptorSourceV0 `json:"descriptor_source"`
+	OutputBudget     MCPTransportOutputBudgetV0    `json:"output_budget"`
+	ExecutionBudget  MCPTransportExecutionBudgetV0 `json:"execution_budget"`
+	Handler          MCPTransportResourceHandlerV0 `json:"-"`
 }
 
 type MCPTransportToolEnvelopeV0 struct {
-	Name        string                    `json:"name"`
-	Version     string                    `json:"version"`
-	ResourceURI string                    `json:"resource_uri"`
-	InputShape  string                    `json:"input_shape"`
-	OutputShape string                    `json:"output_shape"`
-	Mode        string                    `json:"mode"`
-	Handler     MCPTransportToolHandlerV0 `json:"-"`
+	Name            string                        `json:"name"`
+	Version         string                        `json:"version"`
+	ResourceURI     string                        `json:"resource_uri"`
+	InputShape      string                        `json:"input_shape"`
+	OutputShape     string                        `json:"output_shape"`
+	Mode            string                        `json:"mode"`
+	OutputBudget    MCPTransportOutputBudgetV0    `json:"output_budget"`
+	ExecutionBudget MCPTransportExecutionBudgetV0 `json:"execution_budget"`
+	Handler         MCPTransportToolHandlerV0     `json:"-"`
 }
 
 func RegisterMCPTransportV0(port MCPTransportPortV0, bindings MCPTransportBindingsV0) error {
@@ -94,13 +100,16 @@ func mcpTransportResourceEnvelopeV0(
 	payload func() any,
 ) MCPTransportResourceEnvelopeV0 {
 	return MCPTransportResourceEnvelopeV0{
-		Name:        name,
-		Version:     version,
-		URI:         uri,
-		ContentType: contentType,
-		SummaryKey:  summaryKey,
-		Shape:       MCPTransportResourceShapeV0,
-		Mode:        MCPTransportModeOptInV0,
+		Name:             name,
+		Version:          version,
+		URI:              uri,
+		ContentType:      contentType,
+		SummaryKey:       summaryKey,
+		Shape:            MCPTransportResourceShapeV0,
+		Mode:             MCPTransportModeOptInV0,
+		DescriptorSource: mcpResourceDescriptorSourceForResourceV0(name),
+		OutputBudget:     MCPTransportResourceOutputBudgetV0(MCPTransportOutputFreshnessStaticV0),
+		ExecutionBudget:  MCPTransportResourceExecutionBudgetV0(),
 		Handler: func(context.Context) (json.RawMessage, error) {
 			return json.Marshal(payload())
 		},
@@ -116,13 +125,15 @@ func mcpTransportToolEnvelopeV0(
 	handler MCPTransportToolHandlerV0,
 ) MCPTransportToolEnvelopeV0 {
 	return MCPTransportToolEnvelopeV0{
-		Name:        name,
-		Version:     version,
-		ResourceURI: resourceURI,
-		InputShape:  inputShape,
-		OutputShape: outputShape,
-		Mode:        MCPTransportModeOptInV0,
-		Handler:     handler,
+		Name:            name,
+		Version:         version,
+		ResourceURI:     resourceURI,
+		InputShape:      inputShape,
+		OutputShape:     outputShape,
+		Mode:            MCPTransportModeOptInV0,
+		OutputBudget:    MCPTransportToolOutputBudgetV0(MCPTransportOutputFreshnessLiveV0),
+		ExecutionBudget: MCPTransportToolExecutionBudgetV0(MCPTransportExecutionProfileControlPlaneMutationV0),
+		Handler:         handler,
 	}
 }
 

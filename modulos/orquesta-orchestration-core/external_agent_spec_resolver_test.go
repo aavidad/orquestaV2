@@ -3,6 +3,7 @@ package orquestacionnucleoapp
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	orquestacontext "orquesta/modulos/orquesta-context"
@@ -38,13 +39,14 @@ func TestExternalProcessAgentLauncherV0UsaSpecResolverPorPuertos(t *testing.T) {
 	runtime := &recordingExternalProcessRuntimeV0{
 		connector: orquestaruntime.NewProcessRuntimeConnectorV0(),
 	}
+	registry := NewInMemoryAgentProcessRegistryV0()
 	launcher := ExternalProcessAgentLauncherV0{
 		SpecResolver: externalAgentLaunchSpecResolverForTestV0(
 			externalProcessRuntimeRequestForTestV0(t, "exit"),
 		),
 		Runtime:         runtime,
 		ProcessStopper:  runtime,
-		ProcessRegistry: NewInMemoryAgentProcessRegistryV0(),
+		ProcessRegistry: registry,
 	}
 
 	result, err := launcher.LaunchAgentV0(context.Background(), inbound)
@@ -55,6 +57,16 @@ func TestExternalProcessAgentLauncherV0UsaSpecResolverPorPuertos(t *testing.T) {
 		result.LaunchRef == "" ||
 		result.AckRef == "" {
 		t.Fatalf("resultado inesperado: %+v", result)
+	}
+	if !containsStringPrefixForTestV0(result.EvidenceRefs, "receipt-ref-process-runtime-launch-") {
+		t.Fatalf("resultado sin receipt ref compacta: %+v", result.EvidenceRefs)
+	}
+	record, err := registry.ResolveAgentProcessV0(context.Background(), inbound.Payload.RunID, inbound.Payload.AgentRequestID)
+	if err != nil {
+		t.Fatalf("resolve registry: %v", err)
+	}
+	if !containsStringPrefixForTestV0(record.EvidenceRefs, "receipt-ref-process-runtime-launch-") {
+		t.Fatalf("registry sin receipt ref compacta: %+v", record.EvidenceRefs)
 	}
 	waitExternalProcessRuntimeStatusV0(t, runtime.connector, runtime.lastSnapshot.ProcessRef, orquestaruntime.ProcessRuntimeStoppedV0)
 }
@@ -241,4 +253,13 @@ func (fakeContextRefReaderV0) ReadContextRefV0(
 		Content:   content,
 		Bytes:     len(content),
 	}, nil
+}
+
+func containsStringPrefixForTestV0(values []string, prefix string) bool {
+	for _, value := range values {
+		if strings.HasPrefix(value, prefix) {
+			return true
+		}
+	}
+	return false
 }

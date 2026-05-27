@@ -1,6 +1,7 @@
 package orquestacli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -36,12 +37,10 @@ func NewSolicitarNuevaAppCliClientV0(serverURL string, timeout time.Duration) (*
 		return nil, err
 	}
 	return &SolicitarNuevaAppCliClientV0{
-		BaseURL:  config.BaseURL,
-		Endpoint: config.Endpoint,
-		Timeout:  config.Timeout,
-		HTTPClient: &http.Client{
-			Timeout: config.Timeout,
-		},
+		BaseURL:    config.BaseURL,
+		Endpoint:   config.Endpoint,
+		Timeout:    config.Timeout,
+		HTTPClient: newCLILoopbackHTTPClientV0(config.Timeout),
 	}, nil
 }
 
@@ -91,7 +90,11 @@ func (client *SolicitarNuevaAppCliClientV0) SolicitarNuevaApp(ctx context.Contex
 
 func decodeSolicitarNuevaAppResponseV0(resp *http.Response, inv CliInvocationContextV0, start time.Time) CliOutputEnvelopeV0 {
 	if resp.StatusCode == http.StatusBadRequest {
-		issues, ok := decodeSolicitarNuevaAppValidationIssuesV0(resp.Body)
+		raw, detail := readCLIRESTResponseBodyForCommandV0(resp, inv.Command)
+		if detail != "" {
+			return cliSingleErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", detail, resp.StatusCode, false, start)
+		}
+		issues, ok := decodeSolicitarNuevaAppValidationIssuesV0(bytes.NewReader(raw))
 		if !ok || len(issues) == 0 {
 			return cliSingleErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "errores", "respuesta_400_sin_errores_publicos", resp.StatusCode, false, start)
 		}
@@ -104,12 +107,12 @@ func decodeSolicitarNuevaAppResponseV0(resp *http.Response, inv CliInvocationCon
 		)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode > 299 {
-		return cliSingleErrorEnvelopeV0(inv, CliErrErrorTransporteV0, "status_code", "status_no_2xx", resp.StatusCode, retryableStatusV0(resp.StatusCode), start)
+		return cliSingleErrorEnvelopeV0(inv, CliErrErrorTransporteV0, "status_code", cliRESTNo2xxDetailForCommandV0(resp, inv.Command), resp.StatusCode, retryableStatusV0(resp.StatusCode), start)
 	}
 
 	var out solicitarNuevaAppCliHTTPResponseV0
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return cliSingleErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", "json_invalido", resp.StatusCode, false, start)
+	if detail := decodeCLIRESTJSONBodyForCommandV0(resp, inv.Command, &out); detail != "" {
+		return cliSingleErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", detail, resp.StatusCode, false, start)
 	}
 	spec := out.AppSpecValue()
 	backlog := out.BacklogValue()

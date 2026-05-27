@@ -51,7 +51,14 @@ func (creator *InMemoryDomainWorkJobCreatorV0) CreateDomainWorkJobV0(
 	defer creator.mu.Unlock()
 	creator.ensureLockedV0()
 	if existing, ok := creator.records[key]; ok {
-		if existing.Fingerprint == fingerprint {
+		equivalent, err := orquestadomainwork.EquivalentDomainWorkJobRequestsV0(
+			existing.Request,
+			request,
+		)
+		if err != nil {
+			return orquestadomainwork.DomainWorkJobV0{}, err
+		}
+		if equivalent {
 			return cloneDomainWorkMemoryJobV0(existing.Job), nil
 		}
 		return invalidDomainWorkMemoryJobV0(request, []orquestadomainwork.DomainWorkIssueV0{{

@@ -43,6 +43,10 @@ func TestAppSpecHTTPV0PostValidoDevuelveEnvelopeCanonico(t *testing.T) {
 	if envelope.Backlog.SchemaVersion != orquestafactory.BacklogInicialPropuestoSchemaV0 {
 		t.Fatalf("backlog schema=%q", envelope.Backlog.SchemaVersion)
 	}
+	if envelope.Backlog.Estado != orquestafactory.BacklogInicialEstadoPreviewNoEjecutableV0 ||
+		envelope.Backlog.DirectorHandoff.RequiredContract != orquestafactory.BacklogDirectorHandoffContractV0 {
+		t.Fatalf("backlog preview/handoff=%+v", envelope.Backlog)
+	}
 	if envelope.Backlog.SpecID != envelope.AppSpec.SpecID {
 		t.Fatalf("backlog spec_id=%q, app_spec spec_id=%q", envelope.Backlog.SpecID, envelope.AppSpec.SpecID)
 	}
@@ -81,6 +85,53 @@ func TestAppSpecHTTPV0JSONDesconocidoDevuelve400ErroresPublicos(t *testing.T) {
 	}
 }
 
+func TestAppSpecHTTPV0FronteraJSONPublicaRechazaContentTypeTrailingYLimite(t *testing.T) {
+	handler := NewAppSpecHTTPHandlerV0(fixedHTTPClockV0())
+	validBody := mustJSONV0(t, validMinimalRequestV0())
+	for _, tc := range []struct {
+		name        string
+		contentType string
+		body        []byte
+		wantCode    string
+	}{
+		{
+			name:        "content_type",
+			contentType: "text/plain",
+			body:        validBody,
+			wantCode:    orquestafactory.ErrAppSpecInvalida,
+		},
+		{
+			name:     "trailing",
+			body:     append(append([]byte{}, validBody...), []byte(` {}`)...),
+			wantCode: orquestafactory.ErrAppSpecInvalida,
+		},
+		{
+			name:     "too_large",
+			body:     []byte(`{"schema_version":"app_spec_request.v0","request_id":"req-too-large","source":"orquesta-web","locale":"es-ES","nombre":"` + strings.Repeat("a", int(appSpecHTTPJSONMaxBytesV0)+1) + `"}`),
+			wantCode: orquestafactory.ErrAppSpecInvalida,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, AppSpecHTTPPathV0, bytes.NewReader(tc.body))
+			req.Header.Set("X-Correlation-ID", "corr-boundary")
+			if tc.contentType != "" {
+				req.Header.Set("Content-Type", tc.contentType)
+			}
+			rec := httptest.NewRecorder()
+
+			handler.ServeHTTP(rec, req)
+
+			assertHTTPErrorV0(t, rec, http.StatusBadRequest, tc.wantCode)
+			if got := rec.Header().Get("X-Correlation-ID"); got != "corr-boundary" {
+				t.Fatalf("correlation=%q", got)
+			}
+			if strings.Contains(rec.Body.String(), string(tc.body)) {
+				t.Fatalf("error response should not echo request body")
+			}
+		})
+	}
+}
+
 func TestAppSpecHTTPV0RequestInvalidaDevuelve400ErroresPublicos(t *testing.T) {
 	handler := NewAppSpecHTTPHandlerV0(fixedHTTPClockV0())
 	reqBody := validMinimalRequestV0()
@@ -106,11 +157,29 @@ func TestAppSpecHTTPV0MetodoNoPermitido(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 
 	assertHTTPErrorV0(t, rec, http.StatusMethodNotAllowed, orquestafactory.ErrAppSpecInvalida)
-	if got := rec.Header().Get("Allow"); got != http.MethodPost {
+	if got := rec.Header().Get("Allow"); got != appSpecHTTPAllowHeaderV0(http.MethodPost) {
 		t.Fatalf("allow=%q", got)
 	}
 	if got := rec.Header().Get("X-Correlation-ID"); got != "corr-method" {
 		t.Fatalf("correlation=%q", got)
+	}
+}
+
+func TestAppSpecHTTPV0OptionsSinEfectos(t *testing.T) {
+	handler := NewAppSpecHTTPHandlerV0(fixedHTTPClockV0())
+	req := httptest.NewRequest(http.MethodOptions, AppSpecHTTPPathV0, nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Allow"); got != appSpecHTTPAllowHeaderV0(http.MethodPost) {
+		t.Fatalf("allow=%q", got)
+	}
+	if rec.Body.Len() != 0 {
+		t.Fatalf("body=%q", rec.Body.String())
 	}
 }
 

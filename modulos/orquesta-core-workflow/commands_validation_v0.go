@@ -10,6 +10,9 @@ func ValidateOrchestrationCommandV0(command OrchestrationCommandV0) error {
 	if err := validateCommandEnvelopeV0(command); err != nil {
 		return err
 	}
+	if err := validateCommandPayloadBudgetV0(command); err != nil {
+		return err
+	}
 	return validateCommandPayloadV0(command)
 }
 

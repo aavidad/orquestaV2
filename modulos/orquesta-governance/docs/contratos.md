@@ -265,10 +265,19 @@ Campos:
   request.filters.role: string opcional. Filtra por rol exacto.
   request.filters.phase: string opcional. Filtra por fase exacta.
   request.filters.tags: string[] opcional. Todas las tags pedidas deben existir en la entrada para que coincida.
+  request.output_budget.max_entries: entero opcional. Default seguro 50; maximo canonico 200.
+  request.output_budget.max_bytes: entero opcional. Default seguro 64 KiB; maximo canonico 256 KiB.
+  response.schema_version: const governance_catalog_public_query.v0.
   response.request_id: eco compacto del request cuando existe.
   response.correlation_id: eco compacto para trazabilidad.
+  response.catalog_version: version publica del catalogo o `v0` si la fuente no la declaro.
+  response.current_block: const effective.
+  response.freshness: estado derivado de refs del catalogo o razon estable `catalog_source_refs_unavailable`.
+  response.source_refs: refs opacas acotadas a las fuentes/decisiones usadas para frescura.
   response.effective: GovernanceCatalogEntryV0[] filtrado; solo entradas vigentes.
-  response.counters: GovernanceCatalogCountersV0. Incluye `effective`, `proposed` y `quarantine` tras aplicar el mismo filtro.
+  response.counters: GovernanceCatalogCountersV0. Incluye totales filtrados `effective`, `proposed` y `quarantine`.
+  response.inactive_summary: conteos y refs acotadas de `proposed`/`quarantine`, sin payload completo.
+  response.output_budget: presupuesto normalizado y estado `complete|truncated`.
   error.request_id: eco compacto del request cuando se pudo parsear.
   error.correlation_id: eco compacto cuando se pudo parsear.
   error.errors[].code: codigo publico estable.
@@ -276,8 +285,9 @@ Campos:
 Invariantes:
   - Es un puerto read-only y compacto; no crea, promueve, rescata ni muta reglas.
   - Solo `response.effective` se puede tratar como vigente.
-  - `proposed` y `quarantine` nunca se devuelven como reglas activas; solo aparecen como contadores.
-  - No se publican `current_block`, `inactive_blocks`, rowids DB v1, rutas HOME, prompts, transcripts ni catalogos completos de cuarentena.
+  - `proposed` y `quarantine` nunca se devuelven como reglas activas; solo aparecen como conteos y refs opacas acotadas.
+  - No se publican `inactive_blocks`, rowids DB v1, rutas HOME, prompts, transcripts ni catalogos completos de cuarentena.
+  - Si se excede `output_budget`, la respuesta conserva contadores totales filtrados y devuelve un prefijo acotado con razon estable.
   - Reutiliza `GovernanceCatalogV0` y `QueryEffectiveGovernanceCatalogV0` como fuente semantica.
   - El proveedor del catalogo es inyectable; el contrato no exige DB real, runtime ni filesystem productivo.
 Errores:
@@ -300,7 +310,11 @@ Pruebas de contrato:
 
 ## Catalogo documental v0 extraido de DB v1
 
-Fuente readonly forense: `backups/legacy-sqlite-20260422/orquesta.db` desde la raiz del repositorio cuando exista el snapshot local.
+Fuente readonly forense en cuarentena: ref relativo opaco
+`backups/legacy-sqlite-20260422/orquesta.db` desde la raiz del repositorio
+cuando exista el snapshot local. Estado documental: `forense`/`historico`/
+`quarantine`; no es prerequisito vivo, persistencia global ni entrada
+programable sin decision explicita del director.
 
 Tablas consultadas:
 

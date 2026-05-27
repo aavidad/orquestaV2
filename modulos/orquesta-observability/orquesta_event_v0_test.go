@@ -179,15 +179,14 @@ func TestValidateOrquestaEventV0RechazaClavesProhibidas(t *testing.T) {
 		code string
 	}{
 		{key: "api_key_hint", code: ErrSecretoDetectadoV0},
-		{key: "token_count", code: ErrSecretoDetectadoV0},
-		{key: "transcript_ref", code: ErrTranscriptNoPermitidoV0},
-		{key: "prompt_ref", code: ErrOrquestaEventInvalidoV0},
-		{key: "completion_ref", code: ErrOrquestaEventInvalidoV0},
+		{key: "access_token_value", code: ErrSecretoDetectadoV0},
+		{key: "transcript_text", code: ErrTranscriptNoPermitidoV0},
+		{key: "prompt_text", code: ErrOrquestaEventInvalidoV0},
+		{key: "completion_text", code: ErrOrquestaEventInvalidoV0},
 		{key: "sql_query", code: ErrOrquestaEventInvalidoV0},
-		{key: "dsn_ref", code: ErrOrquestaEventInvalidoV0},
-		{key: "tabla_ref", code: ErrOrquestaEventInvalidoV0},
-		{key: "home_ref", code: ErrOrquestaEventInvalidoV0},
-		{key: "proveedor_ref", code: ErrOrquestaEventInvalidoV0},
+		{key: "dsn_value", code: ErrOrquestaEventInvalidoV0},
+		{key: "tabla_name", code: ErrOrquestaEventInvalidoV0},
+		{key: "home_path", code: ErrOrquestaEventInvalidoV0},
 	}
 
 	for _, test := range tests {
@@ -195,6 +194,18 @@ func TestValidateOrquestaEventV0RechazaClavesProhibidas(t *testing.T) {
 			event := validOrquestaEventV0(t)
 			event.Payload[test.key] = "ref_20260504_000001"
 			assertOrquestaEventIssueV0(t, ValidateOrquestaEventV0(event), test.code)
+		})
+	}
+}
+
+func TestValidateOrquestaEventV0PermiteRefsPrivacidadOpacas(t *testing.T) {
+	for _, key := range []string{"token_policy_ref", "payload_redaction_ref", "transcript_ref", "home_ref", "dsn_ref"} {
+		t.Run(key, func(t *testing.T) {
+			event := validOrquestaEventV0(t)
+			event.Payload[key] = "privacy-policy-ref-20260504-000001"
+			if err := ValidateOrquestaEventV0(event); err != nil {
+				t.Fatalf("event should allow opaque privacy ref %q: %v", key, err)
+			}
 		})
 	}
 }

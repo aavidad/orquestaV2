@@ -15,6 +15,18 @@ Estado:
 ```
 
 ```text
+Fecha: 2026-05-27
+Decision: Permitir que T198 referencie contratos core como fuentes canonicas de descriptors MCP sin acoplar core a MCP.
+Motivo: FunctionContract y contratos core ya tienen owner y validacion local; el adaptador MCP debe evitar strings stale y conservar frontera hexagonal.
+Alternativas: Importar MCP desde core; duplicar el shape en el transporte; dejar el resource como stale permanente.
+Impacto: `orquesta-mcp` puede declarar `descriptor_source` hacia core, pero core no conoce transporte, HTTP, CLI ni runtime.
+Contratos afectados: FunctionContractV0; MCPResourceDescriptorSourceV0.
+Estado: aceptada_local
+Revalidacion 2026-05-27: `agent-ref-task-autoprogramming-c3678e9bc306-g01`
+mantiene esta decision y no acopla core al adaptador MCP.
+```
+
+```text
 Fecha: 2026-05-04
 Decision: El arranque de core expone un puerto de entrada provisional `RegistrarProyectoDesdeAppSpec v0`.
 Motivo: El mapa global ya asigna a orquesta-core la responsabilidad de registrar proyecto y backlog, pero ProyectoPlan aun esta pendiente. Hace falta un borde pequeno para recibir AppSpecV0 validada y BacklogInicialPropuestoV0 desde factory sin bloquear a otros grupos.

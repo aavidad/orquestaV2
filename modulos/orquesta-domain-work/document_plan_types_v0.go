@@ -19,6 +19,8 @@ const (
 	ErrDomainDocumentPlanSectionsRequiredV0     = "domain_document_plan_sections_required"
 	ErrDomainDocumentPlanDeliverablesRequiredV0 = "domain_document_plan_deliverables_required"
 	ErrDomainDocumentPlanRangeInvalidV0         = "domain_document_plan_range_invalid"
+	ErrDomainDocumentPlanRefDuplicateV0         = "domain_document_plan_ref_duplicate"
+	ErrDomainDocumentPlanArrayInvalidV0         = "domain_document_plan_array_invalid"
 )
 
 type DomainDocumentPlanV0 struct {

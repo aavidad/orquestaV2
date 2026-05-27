@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadecisioncouncil "orquesta/modulos/orquesta-decision-council"
 )
 
 type WorkflowTaskProfileResolverPortV0 interface {
@@ -38,6 +39,9 @@ func (DefaultWorkflowTaskProfileResolverV0) ResolveWorkflowTaskProfileV0(
 	_ context.Context,
 	request WorkflowTaskProfileRequestV0,
 ) (WorkflowTaskProfileResolutionV0, error) {
+	if councilRole := decisionCouncilRoleFromContextRefsV0(request.Task.ContextRefs); councilRole != "" {
+		return workflowTaskCouncilProfileResolutionV0(councilRole, request.DefaultCapacity), nil
+	}
 	kind := workflowTaskProfileKindV0(request.Task)
 	return workflowTaskProfileResolutionForKindV0(kind, request.DefaultCapacity), nil
 }
@@ -105,6 +109,29 @@ func workflowTaskProfileResolutionForKindV0(
 		CapacitySummary:            workflowTaskProfileCapacitySummaryV0(kind),
 		AgentSummary:               workflowTaskProfileAgentSummaryV0(kind),
 		MinimumRecommendedCapacity: capacity,
+	}
+}
+
+func workflowTaskCouncilProfileResolutionV0(
+	role string,
+	defaultCapacity orquestacoreworkflow.OrchestrationCapacityRecommendationV0,
+) WorkflowTaskProfileResolutionV0 {
+	capacity := defaultCapacity
+	if strings.TrimSpace(string(capacity)) == "" {
+		capacity = orquestacoreworkflow.OrchestrationCapacityHighV0
+	}
+	kind := orquestacoreworkflow.WorkProfileCodeStudyV0
+	if role == orquestadecisioncouncil.CouncilRoleVoteV0 {
+		kind = orquestacoreworkflow.WorkProfileReviewV0
+	}
+	return WorkflowTaskProfileResolutionV0{
+		ProfileKind:                kind,
+		Role:                       role,
+		ReasonCode:                 "decision_council_" + decisionCouncilRoleScopeV0(role),
+		CapacitySummary:            "Capacidad para ronda de consejo multiagente.",
+		AgentSummary:               "Ronda de consejo lista.",
+		MinimumRecommendedCapacity: capacity,
+		EvidenceRefs:               []string{decisionCouncilRoleContextRefV0(role)},
 	}
 }
 

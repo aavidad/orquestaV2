@@ -35,3 +35,19 @@ Comando:
 ```sh
 go test -count=1 ./modulos/orquesta-opes-bridge
 ```
+
+## Reconciliacion T12 2026-05-27
+
+Para el alcance T12, los tests focales de bridge/conector y el smoke fake
+aislado ya pasaron en intentos cerrados. La prueba obligatoria vigente para
+revalidar este modulo junto al conector es:
+
+```sh
+go test -count=1 ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector
+```
+
+El smoke real de derivados/cierre sigue bloqueado hasta tener OPES temporal,
+Orquesta temporal, `ORQUESTA_OPES_TEMPORAL_CONFIRM=1`,
+`ORQUESTA_OPES_BASE_URL`, `ORQUESTA_BASE_URL`, limite bajo y confirmacion de
+efectos. Sin esas precondiciones, el resultado correcto es bloqueo verificable,
+no nuevo relanzamiento de implementacion.

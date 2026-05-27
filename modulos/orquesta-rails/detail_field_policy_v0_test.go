@@ -35,6 +35,7 @@ func TestDetailRailExternalMatrixV0(t *testing.T) {
 
 	allowed := []string{
 		"runtime provider model codex git db sql por refs opacas",
+		"process ref y pid policy como vocabulario, no valor",
 		"prompt policy ref y transcript policy ref sin contenido crudo",
 		"token budget y secrets policy como politica, no valor",
 		"web_application como alias reparable",
@@ -70,6 +71,8 @@ func TestDetailRailRawContentMatrixV0(t *testing.T) {
 		"sk-test-value",
 		"postgres://user:pass@host/db",
 		"/home/user/private",
+		"pid=1234",
+		"process_ref=runtime-ref-001",
 		"prompt=raw text",
 		"transcript=raw text",
 	}

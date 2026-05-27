@@ -58,3 +58,14 @@ integracion y puede recibir estado durable antiguo de otros runs.
 
 Consecuencia: no se construyen candidatos nuevos ni se corrige contenido; solo
 se evita que progreso ajeno bloquee el ciclo del Director.
+
+## DCR-DEC-008: T207 No Introduce Rotacion En El Runner
+
+Decision: la rotacion experimental de sesiones no modifica
+`RunDirectorCycleV0`.
+
+Motivo: T207 requiere handoff durable y relevo opt-in, pero el runner no posee
+sesiones, procesos, runtime ni politica de relanzamiento.
+
+Consecuencia: el runner sigue parando por outbox/bloqueo/error; la directiva de
+relevo se construye fuera y reingresa como trabajo normal del ciclo.

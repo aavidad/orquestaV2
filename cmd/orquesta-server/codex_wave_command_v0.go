@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 )
@@ -11,20 +10,21 @@ const codexWaveSummarySchemaVersionV0 = "orquesta_codex_wave_launch.v0"
 const codexWaveRegistryFileNameV0 = "codex_wave_registry_v0.json"
 
 type codexWaveLaunchSummaryV0 struct {
-	SchemaVersion  string                    `json:"schema_version"`
-	WaveRef        string                    `json:"wave_ref"`
-	AgentCount     int                       `json:"agent_count"`
-	ProjectWorkDir string                    `json:"project_work_dir"`
-	RuntimeWorkDir string                    `json:"runtime_work_dir"`
-	RegistryPath   string                    `json:"registry_path,omitempty"`
-	Sandbox        string                    `json:"sandbox"`
-	ApprovalPolicy string                    `json:"approval_policy"`
-	CreatedAt      string                    `json:"created_at,omitempty"`
-	UpdatedAt      string                    `json:"updated_at,omitempty"`
-	DryRun         bool                      `json:"dry_run,omitempty"`
-	PurgeReport    *codexWavePurgeReportV0   `json:"purge_report,omitempty"`
-	Agents         []codexWaveAgentSummaryV0 `json:"agents"`
-	Errors         []codexWavePublicErrorV0  `json:"errors,omitempty"`
+	SchemaVersion  string                            `json:"schema_version"`
+	WaveRef        string                            `json:"wave_ref"`
+	AgentCount     int                               `json:"agent_count"`
+	ProjectWorkDir string                            `json:"project_work_dir"`
+	RuntimeWorkDir string                            `json:"runtime_work_dir"`
+	RegistryPath   string                            `json:"registry_path,omitempty"`
+	Sandbox        string                            `json:"sandbox"`
+	ApprovalPolicy string                            `json:"approval_policy"`
+	CreatedAt      string                            `json:"created_at,omitempty"`
+	UpdatedAt      string                            `json:"updated_at,omitempty"`
+	DryRun         bool                              `json:"dry_run,omitempty"`
+	PurgeReport    *codexWavePurgeReportV0           `json:"purge_report,omitempty"`
+	OperatorInputs []codexWaveOperatorInputReceiptV0 `json:"operator_inputs,omitempty"`
+	Agents         []codexWaveAgentSummaryV0         `json:"agents"`
+	Errors         []codexWavePublicErrorV0          `json:"errors,omitempty"`
 }
 
 type codexWaveAgentSummaryV0 struct {
@@ -52,13 +52,6 @@ type codexWaveAgentSummaryV0 struct {
 	CredentialProjection *codexWaveCredentialProjectionReceiptV0 `json:"credential_projection,omitempty"`
 }
 
-type codexWavePublicErrorV0 struct {
-	AgentRef string `json:"agent_ref,omitempty"`
-	Code     string `json:"code"`
-	Field    string `json:"field,omitempty"`
-	Message  string `json:"message,omitempty"`
-}
-
 type codexWaveConfigV0 struct {
 	Agents                     int
 	WaveRef                    string
@@ -84,6 +77,7 @@ type codexWaveConfigV0 struct {
 	UnmanagedLaunchConfirm     string
 	AgentPrompts               []string
 	CredentialProjectionPolicy codexWaveCredentialProjectionPolicyV0
+	OperatorInputs             []codexWaveOperatorInputReceiptV0
 }
 
 func codexLaunchWaveCommandV0(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -97,7 +91,9 @@ func codexLaunchWaveCommandV0(args []string, stdout io.Writer, stderr io.Writer)
 		_, _ = fmt.Fprintf(stderr, "codex-launch-wave: %v\n", err)
 		return 1
 	}
-	_ = json.NewEncoder(stdout).Encode(summary)
+	if err := writeCommandJSONOutputV0(stdout, codexWavePublicSummaryFromV0(summary)); err != nil {
+		return reportCommandStdioWriteFailureV0(stderr, "codex-launch-wave", "stdout", "json_encode", err)
+	}
 	if len(summary.Errors) > 0 {
 		return 1
 	}

@@ -78,12 +78,15 @@ func (handler mcpFunctionContractViewHTTPHandlerV0) ServeHTTP(w http.ResponseWri
 
 func validateFunctionContractHTTPRouteV0(w http.ResponseWriter, r *http.Request, path string) bool {
 	if r.URL.Path != path {
-		writeFunctionContractHTTPErrorV0(w, http.StatusNotFound, "ruta_no_soportada", "path", nil)
+		writeFunctionContractHTTPErrorV0(w, http.StatusNotFound, MCPPublicErrPathUnsupportedV0, "path", nil)
+		return false
+	}
+	if handleMCPPublicHTTPOptionsV0(w, r, http.MethodPost) {
 		return false
 	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
-		writeFunctionContractHTTPErrorV0(w, http.StatusMethodNotAllowed, "metodo_no_permitido", "method", nil)
+		setMCPPublicHTTPAllowV0(w, http.MethodPost)
+		writeFunctionContractHTTPErrorV0(w, http.StatusMethodNotAllowed, MCPPublicErrMethodNotAllowedV0, "method", nil)
 		return false
 	}
 	return true

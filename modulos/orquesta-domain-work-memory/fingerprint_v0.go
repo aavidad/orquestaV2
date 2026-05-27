@@ -2,13 +2,39 @@ package orquestadomainworkmemory
 
 import (
 	"encoding/json"
-	"hash/fnv"
-	"strconv"
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 )
 
 func domainWorkMemoryRequestFingerprintV0(
+	request orquestadomainwork.DomainWorkJobRequestV0,
+) (string, error) {
+	identity, err := orquestadomainwork.BuildDomainWorkJobIdentityV0(request)
+	if err != nil {
+		return "", err
+	}
+	return identity.Fingerprint, nil
+}
+
+type domainWorkMemoryRequestFingerprintInputV0 struct {
+	SchemaVersion      string                                       `json:"schema_version"`
+	CorrelationID      string                                       `json:"correlation_id"`
+	IdempotencyKey     string                                       `json:"idempotency_key"`
+	RequestedBy        string                                       `json:"requested_by"`
+	DomainRef          string                                       `json:"domain_ref"`
+	InterfaceRefs      []string                                     `json:"interface_refs"`
+	WorkKind           string                                       `json:"work_kind"`
+	WorkRefs           []string                                     `json:"work_refs"`
+	Objective          string                                       `json:"objective"`
+	InputFields        []orquestadomainwork.DomainWorkFieldV0       `json:"input_fields"`
+	InputRefs          []string                                     `json:"input_refs"`
+	Constraints        []string                                     `json:"constraints"`
+	AcceptanceCriteria []string                                     `json:"acceptance_criteria"`
+	ExternalRefs       []orquestadomainwork.DomainWorkExternalRefV0 `json:"external_refs"`
+	EvidenceRefs       []string                                     `json:"evidence_refs"`
+}
+
+func domainWorkMemoryRequestLegacyFingerprintV0(
 	request orquestadomainwork.DomainWorkJobRequestV0,
 ) (string, error) {
 	value := domainWorkMemoryRequestFingerprintInputV0{
@@ -33,28 +59,4 @@ func domainWorkMemoryRequestFingerprintV0(
 		return "", err
 	}
 	return string(data), nil
-}
-
-type domainWorkMemoryRequestFingerprintInputV0 struct {
-	SchemaVersion      string                                       `json:"schema_version"`
-	CorrelationID      string                                       `json:"correlation_id"`
-	IdempotencyKey     string                                       `json:"idempotency_key"`
-	RequestedBy        string                                       `json:"requested_by"`
-	DomainRef          string                                       `json:"domain_ref"`
-	InterfaceRefs      []string                                     `json:"interface_refs"`
-	WorkKind           string                                       `json:"work_kind"`
-	WorkRefs           []string                                     `json:"work_refs"`
-	Objective          string                                       `json:"objective"`
-	InputFields        []orquestadomainwork.DomainWorkFieldV0       `json:"input_fields"`
-	InputRefs          []string                                     `json:"input_refs"`
-	Constraints        []string                                     `json:"constraints"`
-	AcceptanceCriteria []string                                     `json:"acceptance_criteria"`
-	ExternalRefs       []orquestadomainwork.DomainWorkExternalRefV0 `json:"external_refs"`
-	EvidenceRefs       []string                                     `json:"evidence_refs"`
-}
-
-func domainWorkMemoryHashV0(value string) string {
-	hash := fnv.New64a()
-	_, _ = hash.Write([]byte(value))
-	return strconv.FormatUint(hash.Sum64(), 36)
 }

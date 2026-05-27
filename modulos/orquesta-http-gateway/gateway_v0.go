@@ -64,36 +64,18 @@ type RouteHandlersV0 struct {
 
 func NewAppGatewayMuxV0(handlers RouteHandlersV0) http.Handler {
 	mux := http.NewServeMux()
+	if issue := validateGatewayRouteManifestPublicV0(); issue.Code != "" {
+		panic(issue.Code)
+	}
+	if issue := validateGatewayRouteRegistrationsV0(gatewayRouteRegistrationsV0(handlers)); issue.Code != "" {
+		panic(issue.Code)
+	}
 
-	handleIfPresent(mux, RouteNuevaAppV0, handlers.NuevaApp)
-	handleIfPresent(mux, RouteOpsDashboardV0, handlers.OpsDashboard)
-	handleIfPresent(mux, RouteAppChangePageV0, handlers.AppChangePage)
-	handleIfPresent(mux, RouteDirectorStatsPageV0, handlers.DirectorStatsPage)
-	handleIfPresent(mux, RouteRunControlPageV0, handlers.RunControlPage)
-	handleIfPresent(mux, RouteRunQueuePageV0, handlers.RunQueuePage)
-	handleIfPresent(mux, RouteAppSpecV0, handlers.AppSpec)
-	handleIfPresent(mux, RouteAppDirectorV0, handlers.AppDirector)
-	handleIfPresent(mux, RouteAppChangeV0, handlers.AppChange)
-	handleIfPresent(mux, RouteDirectorStatsV0, handlers.DirectorStats)
-	handleIfPresent(mux, RouteRunControlV0, handlers.RunControl)
-	handleIfPresent(mux, RouteRunQueuePriorityV0, handlers.RunQueuePriority)
-	handleIfPresent(mux, RouteRunSupervisorV0, handlers.RunSupervisor)
-	handleIfPresent(mux, RouteOpsAgentRuntimeDetailV0, handlers.OpsAgentRuntimeDetail)
-	handleIfPresent(mux, RouteOperationalStatusV0, handlers.OperationalStatus)
-	handleIfPresent(mux, RouteFunctionContractListV0, handlers.FunctionContractList)
-	handleIfPresent(mux, RouteFunctionContractViewV0, handlers.FunctionContractView)
-	handleIfPresent(mux, RouteServerShutdownV0, handlers.ServerShutdown)
-	handleIfPresent(mux, RouteHumanDirectorWorkReviewPlanV0, handlers.HumanDirectorWorkReviewPlan)
-	handleIfPresent(mux, RouteAutoprogrammingValidateRequestV0, handlers.AutoprogrammingValidateRequest)
-	handleIfPresent(mux, RouteAutoprogrammingSelfImprovementV0, handlers.AutoprogrammingSelfImprovement)
-	handleIfPresent(mux, RouteAutoprogrammingPrepareRunV0, handlers.AutoprogrammingPrepareRun)
-	handleIfPresent(mux, RouteAutoprogrammingStatusV0, handlers.AutoprogrammingStatus)
-	handleIfPresent(mux, RouteAutoprogrammingSuperviseV0, handlers.AutoprogrammingSupervise)
-	handleIfPresent(mux, RouteGovernanceCatalogQueryV0, handlers.GovernanceCatalogQuery)
-	handleIfPresent(mux, RouteDomainWorkV0, handlers.DomainWork)
-	handleIfPresent(mux, RouteExternalWorkRunV0, handlers.ExternalWorkRun)
+	for _, registration := range gatewayRouteRegistrationsV0(handlers) {
+		handleIfPresent(mux, registration.route, registration.handler)
+	}
 
-	return mux
+	return NewControlPlaneHTTPHeadersV0(mux)
 }
 
 func handleIfPresent(mux *http.ServeMux, route string, handler http.Handler) {
@@ -102,4 +84,42 @@ func handleIfPresent(mux *http.ServeMux, route string, handler http.Handler) {
 	}
 
 	mux.Handle(route, handler)
+}
+
+type gatewayRouteRegistrationV0 struct {
+	ref     string
+	route   string
+	handler http.Handler
+}
+
+func gatewayRouteRegistrationsV0(handlers RouteHandlersV0) []gatewayRouteRegistrationV0 {
+	return []gatewayRouteRegistrationV0{
+		{ref: RouteRefNuevaAppV0, route: RouteNuevaAppV0, handler: handlers.NuevaApp},
+		{ref: RouteRefOpsDashboardV0, route: RouteOpsDashboardV0, handler: handlers.OpsDashboard},
+		{ref: RouteRefAppChangePageV0, route: RouteAppChangePageV0, handler: handlers.AppChangePage},
+		{ref: RouteRefDirectorStatsPageV0, route: RouteDirectorStatsPageV0, handler: handlers.DirectorStatsPage},
+		{ref: RouteRefRunControlPageV0, route: RouteRunControlPageV0, handler: handlers.RunControlPage},
+		{ref: RouteRefRunQueuePageV0, route: RouteRunQueuePageV0, handler: handlers.RunQueuePage},
+		{ref: RouteRefAppSpecV0, route: RouteAppSpecV0, handler: handlers.AppSpec},
+		{ref: RouteRefAppDirectorV0, route: RouteAppDirectorV0, handler: handlers.AppDirector},
+		{ref: RouteRefAppChangeV0, route: RouteAppChangeV0, handler: handlers.AppChange},
+		{ref: RouteRefDirectorStatsV0, route: RouteDirectorStatsV0, handler: handlers.DirectorStats},
+		{ref: RouteRefRunControlV0, route: RouteRunControlV0, handler: handlers.RunControl},
+		{ref: RouteRefRunQueuePriorityV0, route: RouteRunQueuePriorityV0, handler: handlers.RunQueuePriority},
+		{ref: RouteRefRunSupervisorV0, route: RouteRunSupervisorV0, handler: handlers.RunSupervisor},
+		{ref: RouteRefOpsAgentRuntimeDetailV0, route: RouteOpsAgentRuntimeDetailV0, handler: handlers.OpsAgentRuntimeDetail},
+		{ref: RouteRefOperationalStatusV0, route: RouteOperationalStatusV0, handler: handlers.OperationalStatus},
+		{ref: RouteRefFunctionContractListV0, route: RouteFunctionContractListV0, handler: handlers.FunctionContractList},
+		{ref: RouteRefFunctionContractViewV0, route: RouteFunctionContractViewV0, handler: handlers.FunctionContractView},
+		{ref: RouteRefServerShutdownV0, route: RouteServerShutdownV0, handler: handlers.ServerShutdown},
+		{ref: RouteRefHumanDirectorWorkReviewPlanV0, route: RouteHumanDirectorWorkReviewPlanV0, handler: handlers.HumanDirectorWorkReviewPlan},
+		{ref: RouteRefAutoprogrammingValidateRequestV0, route: RouteAutoprogrammingValidateRequestV0, handler: handlers.AutoprogrammingValidateRequest},
+		{ref: RouteRefAutoprogrammingSelfImprovementV0, route: RouteAutoprogrammingSelfImprovementV0, handler: handlers.AutoprogrammingSelfImprovement},
+		{ref: RouteRefAutoprogrammingPrepareRunV0, route: RouteAutoprogrammingPrepareRunV0, handler: handlers.AutoprogrammingPrepareRun},
+		{ref: RouteRefAutoprogrammingStatusV0, route: RouteAutoprogrammingStatusV0, handler: handlers.AutoprogrammingStatus},
+		{ref: RouteRefAutoprogrammingSuperviseV0, route: RouteAutoprogrammingSuperviseV0, handler: handlers.AutoprogrammingSupervise},
+		{ref: RouteRefGovernanceCatalogQueryV0, route: RouteGovernanceCatalogQueryV0, handler: handlers.GovernanceCatalogQuery},
+		{ref: RouteRefDomainWorkV0, route: RouteDomainWorkV0, handler: handlers.DomainWork},
+		{ref: RouteRefExternalWorkRunV0, route: RouteExternalWorkRunV0, handler: handlers.ExternalWorkRun},
+	}
 }

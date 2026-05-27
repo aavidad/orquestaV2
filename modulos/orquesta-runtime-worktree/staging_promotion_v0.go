@@ -36,22 +36,23 @@ type StagingPromotionRequestV0 struct {
 }
 
 type StagingPromotionResultV0 struct {
-	SchemaVersion  string            `json:"schema_version"`
-	Status         string            `json:"status"`
-	PromotionRef   string            `json:"promotion_ref,omitempty"`
-	ArchiveRef     string            `json:"archive_ref,omitempty"`
-	RunRef         string            `json:"run_ref,omitempty"`
-	ProjectRef     string            `json:"project_ref,omitempty"`
-	AppRef         string            `json:"app_ref,omitempty"`
-	RepoRef        string            `json:"repo_ref,omitempty"`
-	WorktreeRef    string            `json:"worktree_ref,omitempty"`
-	BranchRef      string            `json:"branch_ref,omitempty"`
-	CommitRef      string            `json:"commit_ref,omitempty"`
-	CommitShortRef string            `json:"commit_short_ref,omitempty"`
-	ChangedPaths   []string          `json:"changed_paths,omitempty"`
-	Retryable      bool              `json:"retryable,omitempty"`
-	EvidenceRefs   []string          `json:"evidence_refs,omitempty"`
-	Issues         []WorktreeIssueV0 `json:"issues,omitempty"`
+	SchemaVersion     string                                    `json:"schema_version"`
+	Status            string                                    `json:"status"`
+	PromotionRef      string                                    `json:"promotion_ref,omitempty"`
+	ArchiveRef        string                                    `json:"archive_ref,omitempty"`
+	RunRef            string                                    `json:"run_ref,omitempty"`
+	ProjectRef        string                                    `json:"project_ref,omitempty"`
+	AppRef            string                                    `json:"app_ref,omitempty"`
+	RepoRef           string                                    `json:"repo_ref,omitempty"`
+	WorktreeRef       string                                    `json:"worktree_ref,omitempty"`
+	BranchRef         string                                    `json:"branch_ref,omitempty"`
+	CommitRef         string                                    `json:"commit_ref,omitempty"`
+	CommitShortRef    string                                    `json:"commit_short_ref,omitempty"`
+	ChangedPaths      []string                                  `json:"changed_paths,omitempty"`
+	Retryable         bool                                      `json:"retryable,omitempty"`
+	EvidenceRefs      []string                                  `json:"evidence_refs,omitempty"`
+	ExclusionReceipts []WorktreeLocalArtifactExclusionReceiptV0 `json:"exclusion_receipts,omitempty"`
+	Issues            []WorktreeIssueV0                         `json:"issues,omitempty"`
 }
 
 type GitStagingPromotionConnectorV0 struct {
@@ -78,7 +79,7 @@ func (connector GitStagingPromotionConnectorV0) PromoteStagingWorktreeV0(
 	}
 	if len(changed) == 0 {
 		if request.AllowPush {
-			return connector.pushCleanPromotionV0(ctx, request)
+			return connector.pushCleanPromotionV0(ctx, request, controlIssues)
 		}
 		return connector.cleanPromotionResultV0(ctx, request, nil, controlIssues)
 	}
@@ -100,9 +101,6 @@ func (connector GitStagingPromotionConnectorV0) PromoteStagingWorktreeV0(
 }
 
 func (connector GitStagingPromotionConnectorV0) vcsV0() GitAppVCSConnectorV0 {
-	if connector.VCS.CommandTimeout <= 0 {
-		return GitAppVCSConnectorV0{}
-	}
 	return connector.VCS
 }
 
@@ -166,7 +164,10 @@ func (connector GitStagingPromotionConnectorV0) gitStatusEntriesV0(
 ) ([]stagingPromotionGitStatusEntryV0, []WorktreeIssueV0) {
 	raw, issue := connector.vcsV0().gitOutputRawV0(ctx, repo, "status", "--porcelain", "--untracked-files=all")
 	if issue != nil {
-		return nil, []WorktreeIssueV0{stagingPromotionGitIssueV0("git.status", issue.Evidence...)}
+		return nil, []WorktreeIssueV0{stagingPromotionGitIssueFromAppVCSV0("git.status", *issue)}
+	}
+	if issue := connector.vcsV0().gitStatusPathBudgetIssueV0(parseAppVCSStatusPathsV0(raw)); issue != nil {
+		return nil, []WorktreeIssueV0{stagingPromotionGitIssueFromAppVCSV0("git.status", *issue)}
 	}
 	return parseStagingPromotionGitStatusV0(raw), nil
 }
@@ -211,8 +212,9 @@ func (connector GitStagingPromotionConnectorV0) cleanPromotionResultV0(
 func (connector GitStagingPromotionConnectorV0) pushCleanPromotionV0(
 	ctx context.Context,
 	request StagingPromotionRequestV0,
+	controlIssues []WorktreeIssueV0,
 ) (StagingPromotionResultV0, []WorktreeIssueV0) {
-	result, issues := connector.cleanPromotionResultV0(ctx, request, nil, nil)
+	result, issues := connector.cleanPromotionResultV0(ctx, request, nil, controlIssues)
 	if len(issues) > 0 {
 		return result, issues
 	}
@@ -244,7 +246,7 @@ func newStagingPromotionResultV0(
 	changed []string,
 	issues []WorktreeIssueV0,
 ) StagingPromotionResultV0 {
-	return StagingPromotionResultV0{
+	result := StagingPromotionResultV0{
 		SchemaVersion: StagingPromotionResultSchemaVersionV0,
 		Status:        status,
 		PromotionRef:  request.PromotionRef,
@@ -262,8 +264,23 @@ func newStagingPromotionResultV0(
 		)),
 		Issues: issues,
 	}
+	result.ExclusionReceipts = worktreeLocalArtifactReceiptsV0(worktreeControlPathIssueEvidenceV0(issues))
+	return result
 }
 
 func stagingPromotionGitIssueV0(field string, evidence ...string) WorktreeIssueV0 {
 	return worktreeIssueV0(WorktreeIssueFilesystemV0, field, evidence...)
+}
+
+func stagingPromotionGitIssueFromAppVCSV0(field string, issue AppVCSIssueV0) WorktreeIssueV0 {
+	code := WorktreeIssueFilesystemV0
+	switch issue.Code {
+	case AppVCSIssueGitOutputTooLargeV0:
+		code = WorktreeIssueGitOutputTooLargeV0
+	case AppVCSIssueGitStatusTooManyPathsV0:
+		code = WorktreeIssueGitStatusTooManyPathsV0
+	case AppVCSIssueGitCommandTimeoutV0:
+		code = WorktreeIssueGitCommandTimeoutV0
+	}
+	return worktreeIssueV0(code, field, issue.Evidence...)
 }

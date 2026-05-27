@@ -52,6 +52,26 @@ func TestAgentPacketV0DirectorNormalUsaMediumConPoliticaAuditable(t *testing.T) 
 	}
 }
 
+func TestAgentPacketV0ProgramacionUsaHighConPoliticaAuditable(t *testing.T) {
+	packet := agentPacketV0(
+		"agent-ref-programacion-001",
+		"corr-spec-packet-programacion-001",
+		"programacion",
+		"programacion",
+		orquestaruntime.AgentStartTaskV0{
+			TaskRef:   "task-programacion-001",
+			Objective: "crear_app_completa server-first",
+			WriteSet:  []string{"go.mod", "internal/modules/**"},
+		},
+	)
+
+	if packet.CapacityLevel != "high" ||
+		!agentPacketHasPolicyForTestV0(packet, "capacity_policy_ref:capacity-policy-ref-high-risk-v0") ||
+		!agentPacketHasPolicyForTestV0(packet, "capacity_policy_evidence_ref:evidence-ref-capacity-policy-ref-high-risk-v0") {
+		t.Fatalf("capacity=%q policies=%v", packet.CapacityLevel, packet.Policies)
+	}
+}
+
 func TestAgentPacketV0PlanTemarioUsaXHigh(t *testing.T) {
 	packet := agentPacketV0(
 		"agent-ref-plan-temario-001",

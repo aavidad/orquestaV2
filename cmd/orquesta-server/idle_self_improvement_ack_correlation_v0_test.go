@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	orquestaserver "orquesta/modulos/orquesta-server"
@@ -90,6 +91,56 @@ func TestIdleSelfImprovementBacklogPlannerV0NoCierraACKConFotoDocumentalObsoleta
 		t.Fatalf("evidence_refs=%+v", result.EvidenceRefs)
 	}
 	if len(result.Collisions) == 0 || result.Collisions[0].Code != "backlog_docs_changed_after_plan" {
+		t.Fatalf("collisions=%+v", result.Collisions)
+	}
+}
+
+func TestIdleSelfImprovementBacklogPlannerV0AcotaScanACKRuntimePorPresupuestoV0(t *testing.T) {
+	projectDir, _, _ := writeBacklogPlannerDocAndRuntimeDirForTestV0(t)
+	for index := 0; index <= idleSelfImprovementAckScanMaxRuntimeDirsV0; index++ {
+		runRef := fmt.Sprintf("request-ref-autoprogramming-backlog-budget-%03d", index)
+		if err := os.MkdirAll(filepath.Join(projectDir, ".orquesta-runtime", runRef), 0o700); err != nil {
+			t.Fatalf("mkdir runtime run: %v", err)
+		}
+	}
+
+	result, err := (idleSelfImprovementBacklogPlannerV0{ProjectWorkDir: projectDir}).PlanV0(
+		orquestaserverBacklogBasePlanForTestV0([]string{"go test -count=1 ./cmd/orquesta-server"}),
+	)
+	if err != nil {
+		t.Fatalf("PlanV0: %v", err)
+	}
+	if len(result.Requests) == 0 || result.Requests[0].SuggestedArea == "backlog-scan" {
+		t.Fatalf("requests=%+v", result.Requests)
+	}
+	if result.Message != "backlog_autoprogramming_planned" {
+		t.Fatalf("message=%s", result.Message)
+	}
+	if collision := backlogCollisionForTestV0(result.Collisions, "backlog_ack_scan_budget_exhausted"); collision.Code == "" {
+		t.Fatalf("collisions=%+v", result.Collisions)
+	}
+}
+
+func TestIdleSelfImprovementBacklogPlannerV0ACKSobredimensionadoEsAmbiguoV0(t *testing.T) {
+	projectDir, runRef, ackDir := writeBacklogPlannerDocAndRuntimeDirForTestV0(t)
+	requiredTests := []string{"go test -count=1 ./cmd/orquesta-server"}
+	writeBacklogPlannerCorrelatedACKForTestV0(t, ackDir, runRef, requiredTests, "")
+	hugeACK := strings.Repeat("x", idleSelfImprovementAckScanMaxControlFileBytesV0+1)
+	mustWriteFileForBacklogAckTestV0(t, filepath.Join(ackDir, "agent_ack.json"), hugeACK)
+
+	result, err := (idleSelfImprovementBacklogPlannerV0{ProjectWorkDir: projectDir}).PlanV0(
+		orquestaserverBacklogBasePlanForTestV0(requiredTests),
+	)
+	if err != nil {
+		t.Fatalf("PlanV0: %v", err)
+	}
+	if len(result.Requests) == 0 || result.Requests[0].SuggestedArea == "backlog-scan" {
+		t.Fatalf("requests=%+v", result.Requests)
+	}
+	if result.Message != "backlog_autoprogramming_planned" {
+		t.Fatalf("message=%s", result.Message)
+	}
+	if collision := backlogCollisionForTestV0(result.Collisions, "backlog_ack_scan_ambiguous"); collision.RequestRef == "" {
 		t.Fatalf("collisions=%+v", result.Collisions)
 	}
 }

@@ -3,6 +3,7 @@ package orquestacionnucleoapp
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -57,7 +58,7 @@ func TestOperationalDirectorClosureV0CompactaEvidenciaExcesiva(t *testing.T) {
 	request := operationalDirectorClosureRequestForTestV0(runRef)
 	request.EvidenceRefs = []string{"evidence-ref-operational-director-closure-001"}
 	for index := 0; index < 30; index++ {
-		request.EvidenceRefs = append(request.EvidenceRefs, "evidence-ref-operational-director-extra")
+		request.EvidenceRefs = append(request.EvidenceRefs, "evidence-ref-operational-director-extra-"+strings.Repeat("x", 120))
 		request.EvidenceRefs[len(request.EvidenceRefs)-1] += string(rune('a' + index%26))
 	}
 
@@ -83,6 +84,47 @@ func TestOperationalDirectorClosureV0CompactaEvidenciaExcesiva(t *testing.T) {
 	}
 	if !hasEvidencePrefixForTestV0(payload.EvidenceRefs, "evidence-ref-operational-director-closure-overflow-") {
 		t.Fatalf("evidence_refs sin overflow auditable: %+v", payload.EvidenceRefs)
+	}
+}
+
+func TestOperationalDirectorClosureV0RecuperaCierreAbiertoSinValidacionFinal(t *testing.T) {
+	runRef := "run-operational-director-closure-late-final-validation-001"
+	runStore, sink, _ := mustOperationalDirectorClosureReadyStoreV0(t, runRef)
+	taskStore := NewInMemoryWorkflowTaskStoreV0(
+		operationalDirectorClosureTaskForTestV0(runRef, "task-ref-nucleo-001", []string{"go test ./..."}),
+	)
+	request := operationalDirectorClosureRequestForTestV0(runRef)
+	closeTask, err := operationalDirectorCloseTaskCommandV0(request)
+	if err != nil {
+		t.Fatalf("operationalDirectorCloseTaskCommandV0: %v", err)
+	}
+	openClosure, err := operationalDirectorOpenClosureCommandV0(request)
+	if err != nil {
+		t.Fatalf("operationalDirectorOpenClosureCommandV0: %v", err)
+	}
+	for _, command := range []orquestacoreworkflow.OrchestrationCommandV0{closeTask, openClosure} {
+		if _, err := HandleStoredWorkflowCommandV0(context.Background(), runStore, sink, command); err != nil {
+			t.Fatalf("HandleStoredWorkflowCommandV0(%s): %v", command.CommandType, err)
+		}
+	}
+
+	result, err := (OperationalDirectorClosureV0{
+		RunStore:                  runStore,
+		EventSink:                 sink,
+		TaskStore:                 taskStore,
+		RequiredTestEvidenceStore: NewInMemoryRequiredTestEvidenceStoreV0(requiredTestEvidenceForTestV0(runRef, "task-ref-nucleo-001", "go test ./...")),
+		RequestedBy:               "operational-director-closure-test",
+	}).CloseOperationalDirectorRunV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("CloseOperationalDirectorRunV0: %v", err)
+	}
+	if len(result.Issues) > 0 {
+		t.Fatalf("issues=%+v", result.Issues)
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		!containsNucleoRefV0(result.Run.Validations, "validation-ref-operational-director-001") ||
+		!containsNucleoRefV0(result.Run.Closures, "closure-ref-operational-director-001") {
+		t.Fatalf("run no recuperado desde cierre sin validacion: %+v", result.Run)
 	}
 }
 

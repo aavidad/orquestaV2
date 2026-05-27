@@ -17,6 +17,18 @@ Estado:
 ## Decisiones iniciales desde DB v1
 
 ```text
+Fecha: 2026-05-27
+Decision: T198 referencia governance mediante la consulta publica compacta y no mediante historicos.
+Motivo: El descriptor MCP necesita owner/freshness verificable sin reactivar reglas DB v1 ni duplicar shapes en el adaptador.
+Alternativas: Exponer el catalogo completo; marcar governance como stale aunque exista puerto publico; copiar reglas en MCP.
+Impacto: MCP puede publicar `descriptor_source` hacia `GovernanceCatalogPublicQuery v0`; governance conserva autoridad sobre estados effective/proposed/quarantine.
+Contratos afectados: GovernanceCatalogPublicQuery v0; MCPResourceDescriptorSourceV0.
+Estado: aceptada_local
+Revalidacion 2026-05-27: `agent-ref-task-autoprogramming-c3678e9bc306-g01`
+conserva esta decision y no activa historicos.
+```
+
+```text
 Fecha: 2026-05-04
 Decision: Usar DB v1 como fuente forense para governance, pero no importar reglas, skills ni workflows como activos por defecto.
 Motivo: La DB historica contiene reglas versionadas y workflows utiles, pero tambien refleja etapas antiguas, CLI como camino principal y decisiones de dominio que no deben gobernar OrquestaV2.
@@ -63,6 +75,16 @@ Motivo: Los IDs historicos son artefactos de SQLite y no deben convertirse en id
 Alternativas: Conservar `id`/`*_id` como claves externas; generar codigos canonicos nuevos en GOV-001.
 Impacto: El catalogo conserva trazabilidad suficiente sin acoplarse a la base historica. Cualquier identificador estable futuro debe definirse en contrato separado.
 Contratos afectados: `GovernanceCatalogEntryV0`.
+Estado: aceptada_local
+```
+
+```text
+Fecha: 2026-05-26
+Decision: La proyeccion publica de `GovernanceCatalogPublicQuery v0` debe salir siempre con presupuesto normalizado, frescura derivada de refs y resumen acotado de bloques inactivos.
+Motivo: Sin owner visible de presupuesto/freshness, CLI/MCP/gateway podian convertir el catalogo publico en dump creciente o en estado stale sin trazabilidad.
+Alternativas: Dejar el limite al transporte HTTP/MCP; devolver solo contadores sin refs; exigir que toda fuente tenga freshness externa obligatoria.
+Impacto: La respuesta publica incluye `schema_version`, `catalog_version`, `current_block`, `freshness`, `source_refs`, `inactive_summary` y `output_budget`. Los contadores preservan totales filtrados y `effective` puede venir truncado con razon estable.
+Contratos afectados: `GovernanceCatalogPublicQuery v0`.
 Estado: aceptada_local
 ```
 

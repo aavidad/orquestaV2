@@ -10,6 +10,9 @@ const BacklogInicialPropuestoSchemaV0 = "backlog_inicial_propuesto.v0"
 type BacklogInicialPropuestoV0 struct {
 	SchemaVersion       string                  `json:"schema_version"`
 	SpecID              string                  `json:"spec_id"`
+	Estado              string                  `json:"estado"`
+	Freshness           BacklogFreshnessV0      `json:"freshness"`
+	DirectorHandoff     BacklogDirectorHandoffV0 `json:"director_handoff"`
 	Fases               []FaseInicialV0         `json:"fases"`
 	Microtareas         []MicrotareaPropuestaV0 `json:"microtareas"`
 	ContratosRequeridos []string                `json:"contratos_requeridos"`
@@ -43,6 +46,9 @@ func GenerarBacklogInicialPropuestoV0(spec AppSpecV0) (BacklogInicialPropuestoV0
 	return BacklogInicialPropuestoV0{
 		SchemaVersion:       BacklogInicialPropuestoSchemaV0,
 		SpecID:              strings.TrimSpace(spec.SpecID),
+		Estado:              BacklogInicialEstadoPreviewNoEjecutableV0,
+		Freshness:           buildBacklogFreshnessV0(spec),
+		DirectorHandoff:     buildBacklogDirectorHandoffV0(spec),
 		Fases:               builder.fases(),
 		Microtareas:         builder.microtareas(),
 		ContratosRequeridos: builder.contratosRequeridos(),

@@ -9,13 +9,6 @@ import (
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
-var agentProgressSupervisorForbiddenFragmentsV0 = strings.Fields(
-	"secret secreto token password credential credencial api_key oauth transcript prompt completion " +
-		"raw_text full_text full_context contexto_completo massive_context db database sql dsn " +
-		"table tabla provider proveedor model modelo home openai anthropic claude gpt gemini " +
-		"mysql postgres sqlite mongodb redis",
-)
-
 func assessmentFromAgentProgressReportV0(
 	input AgentProgressSupervisionInputV0,
 ) orquestacoreworkflow.AssessAgentWorkCommandPayloadV0 {
@@ -294,14 +287,13 @@ func compactSupervisorStringsV0(values []string) []string {
 }
 
 func supervisorHasForbiddenDetailV0(value string) bool {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return false
+	if orquestarails.TextContainsOperationalRawDetailForFieldV0(
+		"agent_progress_supervisor",
+		"evidence_refs",
+		value,
+	) {
+		return true
 	}
 	lower := strings.ToLower(strings.TrimSpace(value))
-	for _, fragment := range agentProgressSupervisorForbiddenFragmentsV0 {
-		if strings.Contains(lower, fragment) {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(lower, "prompt-ref") || strings.Contains(lower, "transcript-ref")
 }

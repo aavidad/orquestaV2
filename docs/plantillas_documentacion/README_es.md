@@ -27,6 +27,19 @@ Ese catálogo indica qué piezas son mínimas, cuáles son recomendables y cuán
 - [FAQ](faq_es.md)
 - [Ayuda contextual](ayuda_contextual_es.md)
 - [Runbook operativo](runbook_operativo_es.md)
+- [Pruebas documentales](pruebas_documentales_es.md)
+- [Pendientes](pendientes_es.md)
+
+## Contrato de artefactos generados
+
+Los nombres historicos `manual_desarrollador`, `manual_sistemas_deploy`,
+`pruebas_documentales` y `pendientes` describen artefactos del proyecto
+generado o modificado por Orquesta. No son requisitos para crear documentos raiz
+en el repo Orquesta.
+
+`manual_sistemas_deploy` queda como alias de compatibilidad: usar
+`manual_sysadmin` para operacion y `guia_despliegue` para despliegue cuando
+ambas piezas apliquen.
 
 ## Reglas de uso
 
@@ -48,3 +61,8 @@ Si el proyecto tiene interfaz de usuario real para personal no técnico, añadir
 
 - manual de usuario
 - ayuda contextual
+
+Si el proyecto nace desde un plan de director con cierre verificable, añadir:
+
+- pruebas documentales
+- pendientes, solo si quedan huecos reales o decisiones diferidas

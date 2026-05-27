@@ -9,12 +9,22 @@ import (
 const (
 	DefaultOPESCreateJobPathV0 = "/api/jobs"
 
-	ErrOPESBaseURLRequiredV0     = "opes_base_url_required"
-	ErrOPESHTTPStatusV0          = "opes_http_status"
-	ErrOPESResponseInvalidV0     = "opes_response_invalid"
-	ErrOPESJobRefMissingV0       = "opes_job_ref_missing"
-	ErrOPESDomainWorkInvalidV0   = "opes_domain_work_invalid"
-	ErrOPESArtifactJobRequiredV0 = "opes_artifact_job_required"
+	ErrOPESBaseURLRequiredV0      = "opes_base_url_required"
+	ErrOPESHTTPRequestFailedV0    = "opes_http_request_failed"
+	ErrOPESHTTPStatusV0           = "opes_http_status"
+	ErrOPESHTTPTimeoutV0          = "opes_http_timeout"
+	ErrOPESHTTPCancelledV0        = "opes_http_cancelled"
+	ErrOPESResponseInvalidV0      = "opes_response_invalid"
+	ErrOPESResponseBodyTooLargeV0 = "opes_response_body_too_large"
+	ErrOPESResponseContentTypeV0  = "opes_response_content_type"
+	ErrOPESResponseTrailingDataV0 = "opes_response_trailing_data"
+	ErrOPESJobRefMissingV0        = "opes_job_ref_missing"
+	ErrOPESDomainWorkInvalidV0    = "opes_domain_work_invalid"
+	ErrOPESArtifactJobRequiredV0  = "opes_artifact_job_required"
+	ErrOPESPathInvalidV0          = "opes_path_invalid"
+	ErrOPESHTTPRedirectDeniedV0   = "opes_http_redirect_denied"
+	ErrOPESRetryBlockedV0         = "non_idempotent_mutation_retry_blocked"
+	ErrOPESRetryBudgetExhaustedV0 = "retry_budget_exhausted"
 )
 
 type ExternalJobQueryV0 struct {
@@ -61,20 +71,25 @@ type TopicBlockV0 struct {
 type RESTClientConfigV0 struct {
 	BaseURL            string
 	HTTPClient         *http.Client
+	Timeout            time.Duration
 	DefaultMaxAttempts int
+	RetryPolicy        RetryPolicyV0
 }
 
 type RESTClientV0 struct {
 	baseURL            string
 	httpClient         *http.Client
+	timeout            time.Duration
 	defaultMaxAttempts int
+	retryPolicy        RetryPolicyV0
 }
 
 func NewRESTClientV0(config RESTClientConfigV0) RESTClientV0 {
 	client := config.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
+		client = newOPESHTTPClientV0(opesRESTTimeoutV0(config.Timeout))
 	}
+	client = opesHTTPClientWithRedirectPolicyV0(client, opesRESTTimeoutV0(config.Timeout), config.BaseURL)
 	maxAttempts := config.DefaultMaxAttempts
 	if maxAttempts <= 0 {
 		maxAttempts = 1
@@ -82,7 +97,9 @@ func NewRESTClientV0(config RESTClientConfigV0) RESTClientV0 {
 	return RESTClientV0{
 		baseURL:            trimTrailingSlashV0(config.BaseURL),
 		httpClient:         client,
+		timeout:            opesRESTTimeoutV0(config.Timeout),
 		defaultMaxAttempts: maxAttempts,
+		retryPolicy:        normalizeRetryPolicyV0(config.RetryPolicy),
 	}
 }
 

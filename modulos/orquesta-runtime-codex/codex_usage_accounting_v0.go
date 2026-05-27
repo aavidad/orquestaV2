@@ -12,6 +12,10 @@ const (
 	CodexUsageQuotaAvailableV0     = "available"
 	CodexUsageQuotaLimitedV0       = "limited"
 	CodexUsageQuotaExhaustedV0     = "exhausted"
+
+	CodexUsageQuotaReasonNotReportedV0         = "quota_not_reported_in_redacted_usage_report"
+	CodexUsageQuotaReasonUnknownReportedV0     = "quota_status_unknown_in_redacted_usage_report"
+	CodexUsageQuotaReasonObservedUnavailableV0 = "quota_observed_unavailable"
 )
 
 type CodexUsageAccountingSnapshotV0 struct {
@@ -22,6 +26,7 @@ type CodexUsageAccountingSnapshotV0 struct {
 	PromptTokens     int64
 	CompletionTokens int64
 	TotalTokens      int64
+	QuotaReason      string
 }
 
 func BuildCodexUsageAccountingSnapshotV0(
@@ -36,6 +41,7 @@ func BuildCodexUsageAccountingSnapshotV0(
 	if snapshot.TotalTokens == 0 && snapshot.PromptTokens+snapshot.CompletionTokens > 0 {
 		snapshot.TotalTokens = snapshot.PromptTokens + snapshot.CompletionTokens
 	}
+	finalizeCodexUsageAccountingSnapshotV0(&snapshot)
 	return snapshot
 }
 
@@ -50,6 +56,9 @@ func parseCodexUsageSampleV0(sample string) CodexUsageAccountingSnapshotV0 {
 	snapshot := CodexUsageAccountingSnapshotV0{
 		QuotaStatus: codexUsageQuotaStatusFromTextV0(text),
 	}
+	if snapshot.QuotaStatus == CodexUsageQuotaUnknownV0 {
+		snapshot.QuotaReason = codexUsageUnknownReasonFromTextV0(text)
+	}
 	snapshot.PromptTokens = codexUsageFirstIntV0(text, codexUsagePromptTokenPatternsV0())
 	snapshot.CompletionTokens = codexUsageFirstIntV0(text, codexUsageCompletionTokenPatternsV0())
 	snapshot.TotalTokens = codexUsageFirstIntV0(text, codexUsageTotalTokenPatternsV0())
@@ -61,7 +70,28 @@ func parseCodexUsageSampleV0(sample string) CodexUsageAccountingSnapshotV0 {
 		snapshot.TotalTokens > 0 ||
 		snapshot.QuotaRemaining > 0 ||
 		snapshot.QuotaLimit > 0
+	finalizeCodexUsageAccountingSnapshotV0(&snapshot)
 	return snapshot
+}
+
+func finalizeCodexUsageAccountingSnapshotV0(snapshot *CodexUsageAccountingSnapshotV0) {
+	if snapshot == nil || !snapshot.Observed {
+		return
+	}
+	if snapshot.QuotaStatus == "" || snapshot.QuotaStatus == CodexUsageQuotaNotConfiguredV0 {
+		snapshot.QuotaStatus = CodexUsageQuotaUnknownV0
+		snapshot.QuotaReason = CodexUsageQuotaReasonNotReportedV0
+		return
+	}
+	if snapshot.QuotaStatus == CodexUsageQuotaUnknownV0 && strings.TrimSpace(snapshot.QuotaReason) == "" {
+		snapshot.QuotaReason = CodexUsageQuotaReasonNotReportedV0
+		return
+	}
+	if snapshot.QuotaStatus == CodexUsageQuotaAvailableV0 ||
+		snapshot.QuotaStatus == CodexUsageQuotaLimitedV0 ||
+		snapshot.QuotaStatus == CodexUsageQuotaExhaustedV0 {
+		snapshot.QuotaReason = ""
+	}
 }
 
 func mergeCodexUsageSnapshotV0(
@@ -81,6 +111,9 @@ func mergeCodexUsageSnapshotV0(
 	}
 	if next.TotalTokens > 0 {
 		current.TotalTokens = next.TotalTokens
+	}
+	if strings.TrimSpace(next.QuotaReason) != "" {
+		current.QuotaReason = strings.TrimSpace(next.QuotaReason)
 	}
 	if next.QuotaRemaining > 0 {
 		current.QuotaRemaining = next.QuotaRemaining
@@ -112,12 +145,22 @@ func codexUsageQuotaStatusFromTextV0(text string) string {
 		{"quota status: unknown", CodexUsageQuotaUnknownV0},
 		{"quota_status\":\"unknown", CodexUsageQuotaUnknownV0},
 		{"quota_status\": \"unknown", CodexUsageQuotaUnknownV0},
+		{"quota status: unavailable", CodexUsageQuotaUnknownV0},
+		{"quota_status\":\"unavailable", CodexUsageQuotaUnknownV0},
+		{"quota_status\": \"unavailable", CodexUsageQuotaUnknownV0},
 	} {
 		if strings.Contains(low, pattern.needle) {
 			return pattern.status
 		}
 	}
 	return CodexUsageQuotaNotConfiguredV0
+}
+
+func codexUsageUnknownReasonFromTextV0(text string) string {
+	if strings.Contains(strings.ToLower(text), "unavailable") {
+		return CodexUsageQuotaReasonObservedUnavailableV0
+	}
+	return CodexUsageQuotaReasonUnknownReportedV0
 }
 
 func codexUsageQuotaPrecedenceV0(current string, next string) string {

@@ -10,6 +10,7 @@ import (
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
 	orquestaserver "orquesta/modulos/orquesta-server"
@@ -192,19 +193,38 @@ func (supervisor serverStackSupervisorV0) ensureIdleSelfImprovementQueueVisibleV
 		}
 		return result
 	}
+	runStatus, runOK := supervisor.idleSelfImprovementPreparedRunStatusV0(ctx, runRef)
+	if runOK && runStatus == orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+		if err := supervisor.markIdleSelfImprovementQueueCandidateClosedV0(ctx, queueRef, candidates, runRef); err != nil {
+			result.Accepted = false
+			result.Message = "idle_self_improvement_queue_candidate_close_sync_failed"
+			return result
+		}
+		result.Message = firstNonEmptyServerStackV0(
+			result.Message,
+			"idle_self_improvement_queue_candidate_already_closed_advisory",
+		)
+		result.NextActions = compactServerStackStringsV0(append(result.NextActions,
+			"queue_candidate_closed_after_prepare",
+			"planner_should_skip_closed_backlog_ref",
+		))
+		result.EvidenceRefs = compactServerStackStringsV0(append(result.EvidenceRefs,
+			"evidence-ref-idle-self-improvement-queue-candidate-already-closed",
+			"evidence-ref-idle-self-improvement-queue-candidate-closed-synced",
+		))
+		return result
+	}
 	if !orquestarunqueue.IsExecutableRunStatusV0(status) {
-		runStatus, runOK := supervisor.idleSelfImprovementPreparedRunStatusV0(ctx, runRef)
-		if runOK && runStatus == orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
-			result.Message = firstNonEmptyServerStackV0(
-				result.Message,
-				"idle_self_improvement_queue_candidate_already_closed_advisory",
-			)
+		if controlStatus, controlBlocked := supervisor.idleSelfImprovementPreparedRunControlBlocksSchedulingV0(ctx, runRef); controlBlocked {
+			result.Accepted = false
+			result.Message = "idle_self_improvement_queue_candidate_control_blocked"
 			result.NextActions = compactServerStackStringsV0(append(result.NextActions,
-				"queue_candidate_already_closed_after_prepare",
-				"planner_should_skip_closed_backlog_ref",
+				"queue_candidate_previous_status="+status,
+				"run_control_status="+string(controlStatus),
+				"planner_should_skip_control_blocked_backlog_ref",
 			))
 			result.EvidenceRefs = compactServerStackStringsV0(append(result.EvidenceRefs,
-				"evidence-ref-idle-self-improvement-queue-candidate-already-closed",
+				"evidence-ref-idle-self-improvement-control-blocked",
 			))
 			return result
 		}
@@ -251,83 +271,26 @@ func (supervisor serverStackSupervisorV0) ensureIdleSelfImprovementQueueVisibleV
 	return result
 }
 
-func (supervisor serverStackSupervisorV0) idleSelfImprovementPreparedRunPersistedV0(
+func (supervisor serverStackSupervisorV0) idleSelfImprovementPreparedRunControlBlocksSchedulingV0(
 	ctx context.Context,
 	runRef string,
-) bool {
-	runRef = strings.TrimSpace(runRef)
-	if runRef == "" || supervisor.stack == nil || supervisor.stack.Stores.RunStore == nil {
-		return false
-	}
-	_, err := supervisor.stack.Stores.RunStore.LoadRunV0(ctx, runRef)
-	return err == nil
-}
-
-func (supervisor serverStackSupervisorV0) idleSelfImprovementPreparedRunStatusV0(
-	ctx context.Context,
-	runRef string,
-) (orquestacoreworkflow.OrchestrationRunStatusV0, bool) {
-	runRef = strings.TrimSpace(runRef)
-	if runRef == "" || supervisor.stack == nil || supervisor.stack.Stores.RunStore == nil {
+) (orquestaruncontrol.RunControlStatusV0, bool) {
+	state, ok := supervisor.idleSelfImprovementPreparedRunControlStateV0(ctx, runRef)
+	if !ok {
 		return "", false
 	}
-	run, err := supervisor.stack.Stores.RunStore.LoadRunV0(ctx, runRef)
-	if err != nil {
-		return "", false
+	evaluation := orquestaruncontrol.EvaluateRunControlV0(state)
+	if evaluation.SchedulingAllowed {
+		return state.Status, false
 	}
-	return run.Status, true
-}
-
-func idleSelfImprovementQueueCandidateStatusV0(
-	candidates []orquestarunqueue.RunSchedulingCandidateV0,
-	runRef string,
-) (string, bool) {
-	for _, candidate := range candidates {
-		if strings.TrimSpace(candidate.RunRef) == runRef {
-			return strings.TrimSpace(candidate.Status), true
-		}
-	}
-	return "", false
-}
-
-func idleSelfImprovementCandidatePriorityScoreV0(
-	candidates []orquestarunqueue.RunSchedulingCandidateV0,
-	runRef string,
-) int {
-	for _, candidate := range candidates {
-		if strings.TrimSpace(candidate.RunRef) == strings.TrimSpace(runRef) {
-			return candidate.PriorityScore
-		}
-	}
-	return 0
-}
-
-func idleSelfImprovementCanRequeueNonExecutableStatusV0(status string) bool {
-	switch strings.ToLower(strings.TrimSpace(status)) {
-	case orquestarunqueue.RunStatusDeliveredV0, orquestarunqueue.RunStatusStoppedV0:
-		return true
+	switch orquestaruncontrol.NormalizeRunControlStatusV0(state.Status) {
+	case orquestaruncontrol.RunControlStatusPausedV0,
+		orquestaruncontrol.RunControlStatusStopRequestedV0,
+		orquestaruncontrol.RunControlStatusStoppedV0,
+		orquestaruncontrol.RunControlStatusCancelRequestedV0,
+		orquestaruncontrol.RunControlStatusCanceledV0:
+		return orquestaruncontrol.NormalizeRunControlStatusV0(state.Status), true
 	default:
-		return false
+		return state.Status, false
 	}
-}
-
-func firstPrepareRunIssueMessageServerStackV0(issues []orquestamcp.MCPValidationIssueV0) string {
-	for _, issue := range issues {
-		if message := strings.TrimSpace(issue.Message); message != "" {
-			return message
-		}
-		if code := strings.TrimSpace(issue.Code); code != "" {
-			return code
-		}
-	}
-	return ""
-}
-
-func firstNonEmptyServerStackV0(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
 }

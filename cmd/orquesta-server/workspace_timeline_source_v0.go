@@ -52,6 +52,7 @@ func (source serverWorkspaceTimelineSourceV0) QueryWorkspaceTimelineV0(
 		statuses = append(statuses, source.statusV0(sourceName, available))
 	}
 	limit := source.limitV0(query)
+	items = serverWorkspaceTimelineFilterItemsV0(items, query, occurredAt)
 	if limit > 0 && len(items) > limit {
 		items = items[:limit]
 	}
@@ -75,12 +76,10 @@ func (source serverWorkspaceTimelineSourceV0) QueryWorkspaceTimelineV0(
 			MaxAgeSeconds: 30,
 			Partial:       len(items) == 0,
 		},
-		Sources: statuses,
-		Items:   items,
-		Counters: map[string]float64{
-			"events": float64(len(items)),
-		},
-		Privacy: orquestaobservability.DiagnosticoPrivacyV0{},
+		Sources:  statuses,
+		Items:    items,
+		Counters: serverWorkspaceTimelineCountersV0(items),
+		Privacy:  orquestaobservability.NewDiagnosticoPrivacyMetadataOnlyV0(),
 	}
 	if err := orquestaobservability.ValidateWorkspaceTimelineV0(timeline); err != nil {
 		return orquestaobservability.WorkspaceTimelineV0{}, err
