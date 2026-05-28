@@ -3,6 +3,7 @@ package orquestacionnucleoapp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -105,6 +106,45 @@ func TestExternalProcessAgentBatchExecutorV0MarksInvalidItemFailed(t *testing.T)
 	}
 	if len(acks) != 1 || acks[0].Status != orquestaoutboxdispatch.OutboxDispatchAckObservationFailedV0 {
 		t.Fatalf("acks=%+v", acks)
+	}
+}
+
+func TestExternalProcessAgentBatchExecutorV0ConservaDetalleDeSpecFailed(t *testing.T) {
+	runRef := "run-nucleo-process-batch-spec-failed-001"
+	inbound := externalProcessLauncherInboundV0(runRef, "agent-ref-spec-failed")
+	payload, err := json.Marshal(inbound.Payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	acks, err := (ExternalProcessAgentBatchExecutorV0{
+		RunStore:        NewInMemoryRunStoreV0(mustActiveProgrammingRunV0(t, runRef)),
+		EventSink:       NewInMemoryEventSinkV0(),
+		SpecResolver:    batchSpecResolverErrorV0{err: errors.New("external_agent_connector: connector_no_resuelto")},
+		Runtime:         orquestaruntime.NewProcessRuntimeConnectorV0(),
+		ProcessStopper:  orquestaruntime.NewProcessRuntimeConnectorV0(),
+		ProcessRegistry: NewInMemoryAgentProcessRegistryV0(),
+		OccurredAt:      "2026-05-09T11:07:00Z",
+	}).ExecuteOutboxDispatchBatchV0(context.Background(), []orquestaoutboxdispatch.DispatchIntentV0{{
+		MessageID:      "outbox-process-batch-spec-failed-001",
+		RunID:          runRef,
+		TargetPort:     orquestacoreworkflow.OutboxTargetAgentLauncherV0,
+		MessageType:    orquestacoreworkflow.OutboxMessageLaunchRuntimeAgentV0,
+		IdempotencyKey: inbound.IdempotencyKey,
+		CorrelationID:  inbound.CorrelationID,
+		PayloadVersion: orquestacoreworkflow.OutboxPayloadVersionV0,
+		Payload:        payload,
+	}})
+	if err != nil {
+		t.Fatalf("ExecuteOutboxDispatchBatchV0: %v", err)
+	}
+	if len(acks) != 1 || acks[0].Status != orquestaoutboxdispatch.OutboxDispatchAckObservationFailedV0 {
+		t.Fatalf("acks=%+v", acks)
+	}
+	if len(acks[0].Issues) != 1 ||
+		acks[0].Issues[0].Code != "external_process_batch_spec_failed" ||
+		acks[0].Issues[0].Message != "external_agent_connector: connector_no_resuelto" {
+		t.Fatalf("issues=%+v", acks[0].Issues)
 	}
 }
 
@@ -219,6 +259,17 @@ func TestExternalProcessAgentBatchExecutorV0CierraOutboxSiAgenteYaEsTerminal(t *
 
 type batchSpecResolverMustNotRunV0 struct {
 	t *testing.T
+}
+
+type batchSpecResolverErrorV0 struct {
+	err error
+}
+
+func (resolver batchSpecResolverErrorV0) ResolveExternalAgentLaunchSpecV0(
+	context.Context,
+	orquestaruntime.AgentLauncherInboundV0,
+) (ExternalAgentLaunchSpecResolutionV0, error) {
+	return ExternalAgentLaunchSpecResolutionV0{}, resolver.err
 }
 
 func (resolver batchSpecResolverMustNotRunV0) ResolveExternalAgentLaunchSpecV0(

@@ -89,12 +89,24 @@ func (executor ExternalProcessAgentBatchExecutorV0) prepareBatchV0(
 	for _, raw := range intents {
 		intent := normalizeAgentLauncherIntentV0(raw)
 		if err := validateExternalProcessBatchIntentV0(intent); err != nil {
-			prepared.Failed = append(prepared.Failed, failedBatchObservationV0(intent, "evidence-ref-external-process-batch-invalid"))
+			prepared.Failed = append(prepared.Failed, failedBatchObservationFromErrorV0(
+				intent,
+				"evidence-ref-external-process-batch-invalid",
+				"external_process_batch_invalid",
+				"dispatch_intent",
+				err,
+			))
 			continue
 		}
 		inbound, err := agentLauncherInboundFromIntentV0(intent)
 		if err != nil {
-			prepared.Failed = append(prepared.Failed, failedBatchObservationV0(intent, "evidence-ref-external-process-batch-inbound"))
+			prepared.Failed = append(prepared.Failed, failedBatchObservationFromErrorV0(
+				intent,
+				"evidence-ref-external-process-batch-inbound",
+				"external_process_batch_inbound_failed",
+				"agent_launcher_inbound",
+				err,
+			))
 			continue
 		}
 		if executor.agentLaunchAlreadyTerminalV0(ctx, inbound) {
@@ -103,7 +115,13 @@ func (executor ExternalProcessAgentBatchExecutorV0) prepareBatchV0(
 		}
 		resolution, err := executor.SpecResolver.ResolveExternalAgentLaunchSpecV0(ctx, inbound)
 		if err != nil {
-			prepared.Failed = append(prepared.Failed, failedBatchObservationV0(intent, "evidence-ref-external-process-batch-spec"))
+			prepared.Failed = append(prepared.Failed, failedBatchObservationFromErrorV0(
+				intent,
+				"evidence-ref-external-process-batch-spec",
+				"external_process_batch_spec_failed",
+				"external_agent_launch_spec",
+				err,
+			))
 			continue
 		}
 		prepared.Intents = append(prepared.Intents, intent)

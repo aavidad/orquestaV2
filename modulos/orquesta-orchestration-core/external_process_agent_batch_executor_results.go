@@ -250,6 +250,28 @@ func failedBatchObservationV0(
 	return failedBatchObservationWithIssuesV0(intent, evidenceRef, nil)
 }
 
+func failedBatchObservationFromErrorV0(
+	intent orquestaoutboxdispatch.DispatchIntentV0,
+	evidenceRef string,
+	code string,
+	field string,
+	err error,
+) orquestaoutboxdispatch.OutboxDispatchAckObservationV0 {
+	message := ""
+	if err != nil {
+		message = strings.TrimSpace(err.Error())
+	}
+	return failedBatchObservationWithIssuesV0(
+		intent,
+		evidenceRef,
+		[]orquestaoutboxdispatch.DispatchIssueV0{{
+			Code:    strings.TrimSpace(code),
+			Field:   strings.TrimSpace(field),
+			Message: message,
+		}},
+	)
+}
+
 func failedBatchObservationWithIssuesV0(
 	intent orquestaoutboxdispatch.DispatchIntentV0,
 	evidenceRef string,
