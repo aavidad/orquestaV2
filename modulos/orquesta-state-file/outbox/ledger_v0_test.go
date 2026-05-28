@@ -100,6 +100,52 @@ func TestFileOutboxLedgerV0LiberaClaimSinAckEnMismaInstancia(t *testing.T) {
 	}
 }
 
+func TestFileOutboxLedgerV0PersisteDetalleDeAckObservationFallido(t *testing.T) {
+	dir := t.TempDir()
+	ledger := newFileOutboxLedgerForTestV0(t, dir)
+	message := validLaunchMessageV0(t)
+	if _, issues := ledger.SavePending(context.Background(), []orquestacoreworkflow.OutboxMessageV0{message}); len(issues) != 0 {
+		t.Fatalf("save issues=%+v", issues)
+	}
+	ack := orquestaoutboxdispatch.OutboxDispatchAckObservationV0{
+		MessageID:    message.MessageID,
+		RunID:        message.RunID,
+		TargetPort:   message.TargetPort,
+		Status:       orquestaoutboxdispatch.OutboxDispatchAckObservationFailedV0,
+		EvidenceRefs: []string{"evidence-ref-external-process-batch-spec"},
+		Issues: []orquestaoutboxdispatch.DispatchIssueV0{{
+			Code:    "external_process_batch_spec_failed",
+			Field:   "external_agent_launch_spec",
+			Message: "external_agent_connector: connector_no_resuelto",
+		}},
+	}
+	if issues := ledger.AckOutboxDispatchObservationV0(ack); len(issues) != 0 {
+		t.Fatalf("ack observation issues=%+v", issues)
+	}
+
+	reopened := newFileOutboxLedgerForTestV0(t, dir)
+	if pending, issues := reopened.ListPendingOutboxV0(orquestaoutboxdispatch.PendingOutboxFilterV0{
+		RunID: message.RunID,
+	}); len(issues) != 0 || len(pending) != 0 {
+		t.Fatalf("pending=%+v issues=%+v", pending, issues)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, fileOutboxLedgerNameV0))
+	if err != nil {
+		t.Fatalf("read ledger json: %v", err)
+	}
+	text := string(data)
+	for _, want := range []string{
+		`"status": "failed"`,
+		`"code": "external_process_batch_spec_failed"`,
+		`"field": "external_agent_launch_spec"`,
+		`"message": "external_agent_connector: connector_no_resuelto"`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("ledger json no contiene %q: %s", want, text)
+		}
+	}
+}
+
 func TestFileOutboxLedgerV0MantieneIdempotenciaYJSONEstructurado(t *testing.T) {
 	dir := t.TempDir()
 	ledger := newFileOutboxLedgerForTestV0(t, dir)

@@ -82,6 +82,7 @@ func cloneOutboxRecordV0(record *outboxLedgerRecordV0) *outboxLedgerRecordV0 {
 	if record.Ack != nil {
 		ack := *record.Ack
 		ack.EvidenceRefs = append([]string(nil), record.Ack.EvidenceRefs...)
+		ack.Issues = append([]outboxLedgerAckIssueV0(nil), record.Ack.Issues...)
 		cloned.Ack = &ack
 	}
 	return cloned

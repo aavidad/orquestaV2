@@ -105,6 +105,20 @@ func normalizeDispatchAckV0(
 	}
 }
 
+func normalizeDispatchAckObservationV0(
+	ack orquestaoutboxdispatch.OutboxDispatchAckObservationV0,
+) orquestaoutboxdispatch.OutboxDispatchAckObservationV0 {
+	return orquestaoutboxdispatch.OutboxDispatchAckObservationV0{
+		MessageID:    trimV0(ack.MessageID),
+		RunID:        trimV0(ack.RunID),
+		TargetPort:   trimV0(ack.TargetPort),
+		Status:       ack.Status,
+		DispatchRef:  trimV0(ack.DispatchRef),
+		EvidenceRefs: compactStringsV0(ack.EvidenceRefs),
+		Issues:       normalizeDispatchIssuesV0(ack.Issues),
+	}
+}
+
 func storedAckFromDispatchV0(ack orquestaoutboxdispatch.OutboxDispatchAckV0) outboxLedgerAckV0 {
 	return outboxLedgerAckV0{
 		MessageID:    ack.MessageID,
@@ -112,6 +126,20 @@ func storedAckFromDispatchV0(ack orquestaoutboxdispatch.OutboxDispatchAckV0) out
 		TargetPort:   ack.TargetPort,
 		DispatchRef:  ack.DispatchRef,
 		EvidenceRefs: append([]string(nil), ack.EvidenceRefs...),
+	}
+}
+
+func storedAckFromDispatchObservationV0(
+	ack orquestaoutboxdispatch.OutboxDispatchAckObservationV0,
+) outboxLedgerAckV0 {
+	return outboxLedgerAckV0{
+		MessageID:    ack.MessageID,
+		RunID:        ack.RunID,
+		TargetPort:   ack.TargetPort,
+		Status:       string(ack.Status),
+		DispatchRef:  ack.DispatchRef,
+		EvidenceRefs: append([]string(nil), ack.EvidenceRefs...),
+		Issues:       ledgerAckIssuesFromDispatchV0(ack.Issues),
 	}
 }
 
@@ -125,6 +153,55 @@ func dispatchAckFromStoredV0(ack outboxLedgerAckV0) orquestaoutboxdispatch.Outbo
 	}
 }
 
+func dispatchAckFromObservationV0(
+	ack orquestaoutboxdispatch.OutboxDispatchAckObservationV0,
+) orquestaoutboxdispatch.OutboxDispatchAckV0 {
+	return orquestaoutboxdispatch.OutboxDispatchAckV0{
+		MessageID:    ack.MessageID,
+		RunID:        ack.RunID,
+		TargetPort:   ack.TargetPort,
+		DispatchRef:  ack.DispatchRef,
+		EvidenceRefs: append([]string(nil), ack.EvidenceRefs...),
+	}
+}
+
 func storedAckEqualV0(a, b outboxLedgerAckV0) bool {
 	return reflect.DeepEqual(dispatchAckFromStoredV0(a), dispatchAckFromStoredV0(b))
+}
+
+func storedAckFullEqualV0(a, b outboxLedgerAckV0) bool {
+	return reflect.DeepEqual(normalizeStoredAckV0(a), normalizeStoredAckV0(b))
+}
+
+func normalizeDispatchIssuesV0(
+	issues []orquestaoutboxdispatch.DispatchIssueV0,
+) []orquestaoutboxdispatch.DispatchIssueV0 {
+	out := make([]orquestaoutboxdispatch.DispatchIssueV0, 0, len(issues))
+	for _, issue := range issues {
+		normalized := orquestaoutboxdispatch.DispatchIssueV0{
+			Code:    trimV0(issue.Code),
+			Field:   trimV0(issue.Field),
+			Message: trimV0(issue.Message),
+		}
+		if normalized.Code == "" && normalized.Field == "" && normalized.Message == "" {
+			continue
+		}
+		out = append(out, normalized)
+	}
+	return out
+}
+
+func ledgerAckIssuesFromDispatchV0(
+	issues []orquestaoutboxdispatch.DispatchIssueV0,
+) []outboxLedgerAckIssueV0 {
+	normalized := normalizeDispatchIssuesV0(issues)
+	out := make([]outboxLedgerAckIssueV0, 0, len(normalized))
+	for _, issue := range normalized {
+		out = append(out, outboxLedgerAckIssueV0{
+			Code:    issue.Code,
+			Field:   issue.Field,
+			Message: issue.Message,
+		})
+	}
+	return out
 }

@@ -151,6 +151,49 @@ func (ledger *FileOutboxLedgerV0) AckOutboxDispatchV0(
 	return nil
 }
 
+func (ledger *FileOutboxLedgerV0) AckOutboxDispatchObservationV0(
+	ack orquestaoutboxdispatch.OutboxDispatchAckObservationV0,
+) []orquestaoutboxdispatch.DispatchIssueV0 {
+	if ledger == nil {
+		return dispatchPersistenceIssueV0()
+	}
+	ack = normalizeDispatchAckObservationV0(ack)
+	dispatchAck := dispatchAckFromObservationV0(ack)
+	if issues := validateAckV0(dispatchAck); len(issues) > 0 {
+		return issues
+	}
+
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+
+	next := ledger.state.cloneV0()
+	record := next.recordsByMessageID[ack.MessageID]
+	if record == nil {
+		return []orquestaoutboxdispatch.DispatchIssueV0{
+			dispatchIssueV0(errPayloadInvalidV0, "message_id", "mensaje pendiente no encontrado"),
+		}
+	}
+	if issues := ackConflictsV0(record, dispatchAck); len(issues) > 0 {
+		return issues
+	}
+	nextAck := storedAckFromDispatchObservationV0(ack)
+	if record.Ack != nil {
+		if storedAckFullEqualV0(*record.Ack, nextAck) {
+			return nil
+		}
+		return []orquestaoutboxdispatch.DispatchIssueV0{
+			dispatchIssueV0(errIdempotencyConflictV0, "ack", "ack incompatible"),
+		}
+	}
+	record.Ack = &nextAck
+	record.Claim = nil
+	if err := persistOutboxLedgerStateV0(ledger.path, next); err != nil {
+		return dispatchPersistenceIssueV0()
+	}
+	ledger.state = next
+	return nil
+}
+
 func pendingEntryFromRecordV0(record *outboxLedgerRecordV0) orquestaoutboxdispatch.OutboxPendingEntryV0 {
 	message := record.Message
 	return orquestaoutboxdispatch.OutboxPendingEntryV0{

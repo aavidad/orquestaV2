@@ -47,11 +47,19 @@ type outboxLedgerClaimV0 struct {
 }
 
 type outboxLedgerAckV0 struct {
-	MessageID    string   `json:"message_id"`
-	RunID        string   `json:"run_id,omitempty"`
-	TargetPort   string   `json:"target_port,omitempty"`
-	DispatchRef  string   `json:"dispatch_ref,omitempty"`
-	EvidenceRefs []string `json:"evidence_refs,omitempty"`
+	MessageID    string                   `json:"message_id"`
+	RunID        string                   `json:"run_id,omitempty"`
+	TargetPort   string                   `json:"target_port,omitempty"`
+	Status       string                   `json:"status,omitempty"`
+	DispatchRef  string                   `json:"dispatch_ref,omitempty"`
+	EvidenceRefs []string                 `json:"evidence_refs,omitempty"`
+	Issues       []outboxLedgerAckIssueV0 `json:"issues,omitempty"`
+}
+
+type outboxLedgerAckIssueV0 struct {
+	Code    string `json:"code,omitempty"`
+	Field   string `json:"field,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 type outboxLedgerCandidateV0 struct {
