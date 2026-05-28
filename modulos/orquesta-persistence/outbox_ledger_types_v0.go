@@ -13,25 +13,27 @@ type OutboxPendingFilterV0 struct {
 }
 
 type OutboxDispatchAckV0 struct {
-	MessageID    string   `json:"message_id"`
-	RunID        string   `json:"run_id"`
-	TargetPort   string   `json:"target_port"`
-	Status       string   `json:"status"`
-	DispatchRef  string   `json:"dispatch_ref"`
-	DispatchedAt string   `json:"dispatched_at"`
-	ErrorCode    string   `json:"error_code,omitempty"`
-	EvidenceRefs []string `json:"evidence_refs,omitempty"`
+	MessageID    string                `json:"message_id"`
+	RunID        string                `json:"run_id"`
+	TargetPort   string                `json:"target_port"`
+	Status       string                `json:"status"`
+	DispatchRef  string                `json:"dispatch_ref"`
+	DispatchedAt string                `json:"dispatched_at"`
+	ErrorCode    string                `json:"error_code,omitempty"`
+	EvidenceRefs []string              `json:"evidence_refs,omitempty"`
+	Issues       []OutboxLedgerIssueV0 `json:"issues,omitempty"`
 }
 
 type OutboxDispatchSnapshotV0 struct {
-	MessageID    string   `json:"message_id"`
-	RunID        string   `json:"run_id"`
-	TargetPort   string   `json:"target_port"`
-	Status       string   `json:"status"`
-	DispatchRef  string   `json:"dispatch_ref"`
-	DispatchedAt string   `json:"dispatched_at"`
-	ErrorCode    string   `json:"error_code,omitempty"`
-	EvidenceRefs []string `json:"evidence_refs,omitempty"`
+	MessageID    string                `json:"message_id"`
+	RunID        string                `json:"run_id"`
+	TargetPort   string                `json:"target_port"`
+	Status       string                `json:"status"`
+	DispatchRef  string                `json:"dispatch_ref"`
+	DispatchedAt string                `json:"dispatched_at"`
+	ErrorCode    string                `json:"error_code,omitempty"`
+	EvidenceRefs []string              `json:"evidence_refs,omitempty"`
+	Issues       []OutboxLedgerIssueV0 `json:"issues,omitempty"`
 }
 
 type OutboxLedgerIssueV0 struct {

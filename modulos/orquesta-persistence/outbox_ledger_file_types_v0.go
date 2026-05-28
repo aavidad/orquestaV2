@@ -47,11 +47,12 @@ type fileOutboxLedgerClaimV0 struct {
 }
 
 type fileOutboxLedgerAckV0 struct {
-	MessageID    string   `json:"message_id"`
-	RunID        string   `json:"run_id,omitempty"`
-	TargetPort   string   `json:"target_port,omitempty"`
-	Status       string   `json:"status"`
-	DispatchRef  string   `json:"dispatch_ref,omitempty"`
-	EvidenceRefs []string `json:"evidence_refs,omitempty"`
-	IssueCodes   []string `json:"issue_codes,omitempty"`
+	MessageID    string                `json:"message_id"`
+	RunID        string                `json:"run_id,omitempty"`
+	TargetPort   string                `json:"target_port,omitempty"`
+	Status       string                `json:"status"`
+	DispatchRef  string                `json:"dispatch_ref,omitempty"`
+	EvidenceRefs []string              `json:"evidence_refs,omitempty"`
+	IssueCodes   []string              `json:"issue_codes,omitempty"`
+	Issues       []OutboxLedgerIssueV0 `json:"issues,omitempty"`
 }

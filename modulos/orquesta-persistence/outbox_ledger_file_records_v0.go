@@ -112,6 +112,7 @@ func cloneFileOutboxRecordV0(record *fileOutboxLedgerRecordV0) *fileOutboxLedger
 		ack := *record.Ack
 		ack.EvidenceRefs = append([]string(nil), record.Ack.EvidenceRefs...)
 		ack.IssueCodes = append([]string(nil), record.Ack.IssueCodes...)
+		ack.Issues = append([]OutboxLedgerIssueV0(nil), record.Ack.Issues...)
 		cloned.Ack = &ack
 	}
 	return cloned

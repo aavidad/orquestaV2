@@ -113,7 +113,17 @@ func outboxLedgerAckFingerprintV0(ack OutboxDispatchAckV0) ([]byte, error) {
 }
 
 func outboxLedgerSnapshotFromAckV0(ack OutboxDispatchAckV0) OutboxDispatchSnapshotV0 {
-	return OutboxDispatchSnapshotV0(ack)
+	return OutboxDispatchSnapshotV0{
+		MessageID:    ack.MessageID,
+		RunID:        ack.RunID,
+		TargetPort:   ack.TargetPort,
+		Status:       ack.Status,
+		DispatchRef:  ack.DispatchRef,
+		DispatchedAt: ack.DispatchedAt,
+		ErrorCode:    ack.ErrorCode,
+		EvidenceRefs: append([]string(nil), ack.EvidenceRefs...),
+		Issues:       append([]OutboxLedgerIssueV0(nil), ack.Issues...),
+	}
 }
 
 func cloneOutboxMessageV0(message orquestacoreworkflow.OutboxMessageV0) orquestacoreworkflow.OutboxMessageV0 {
@@ -123,6 +133,7 @@ func cloneOutboxMessageV0(message orquestacoreworkflow.OutboxMessageV0) orquesta
 
 func cloneOutboxAckV0(ack OutboxDispatchAckV0) OutboxDispatchAckV0 {
 	ack.EvidenceRefs = append([]string(nil), ack.EvidenceRefs...)
+	ack.Issues = append([]OutboxLedgerIssueV0(nil), ack.Issues...)
 	return ack
 }
 

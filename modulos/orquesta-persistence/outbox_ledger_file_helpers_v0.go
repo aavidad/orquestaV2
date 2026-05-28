@@ -76,11 +76,15 @@ func normalizeStoredFileOutboxAckV0(ack fileOutboxLedgerAckV0) fileOutboxLedgerA
 	ack.DispatchRef = trimV0(ack.DispatchRef)
 	ack.EvidenceRefs = compactOutboxLedgerStringsV0(ack.EvidenceRefs)
 	ack.IssueCodes = compactOutboxLedgerStringsV0(ack.IssueCodes)
+	ack.Issues = compactFileOutboxIssuesV0(ack.Issues)
 	if len(ack.EvidenceRefs) == 0 {
 		ack.EvidenceRefs = nil
 	}
 	if len(ack.IssueCodes) == 0 {
 		ack.IssueCodes = nil
+	}
+	if len(ack.Issues) == 0 {
+		ack.Issues = nil
 	}
 	return ack
 }
@@ -124,6 +128,7 @@ func fileOutboxAckFromObservationV0(
 		DispatchRef:  ack.DispatchRef,
 		EvidenceRefs: ack.EvidenceRefs,
 		IssueCodes:   fileOutboxIssueCodesV0(ack.Issues),
+		Issues:       fileOutboxIssuesV0(ack.Issues),
 	})
 }
 
@@ -135,6 +140,38 @@ func fileOutboxIssueCodesV0(issues []orquestaoutboxdispatch.DispatchIssueV0) []s
 		}
 	}
 	return compactOutboxLedgerStringsV0(codes)
+}
+
+func fileOutboxIssuesV0(issues []orquestaoutboxdispatch.DispatchIssueV0) []OutboxLedgerIssueV0 {
+	out := make([]OutboxLedgerIssueV0, 0, len(issues))
+	for _, issue := range issues {
+		normalized := OutboxLedgerIssueV0{
+			Code:    trimV0(issue.Code),
+			Field:   trimV0(issue.Field),
+			Message: trimV0(issue.Message),
+		}
+		if normalized.Code == "" && normalized.Field == "" && normalized.Message == "" {
+			continue
+		}
+		out = append(out, normalized)
+	}
+	return out
+}
+
+func compactFileOutboxIssuesV0(issues []OutboxLedgerIssueV0) []OutboxLedgerIssueV0 {
+	out := make([]OutboxLedgerIssueV0, 0, len(issues))
+	for _, issue := range issues {
+		normalized := OutboxLedgerIssueV0{
+			Code:    trimV0(issue.Code),
+			Field:   trimV0(issue.Field),
+			Message: trimV0(issue.Message),
+		}
+		if normalized.Code == "" && normalized.Field == "" && normalized.Message == "" {
+			continue
+		}
+		out = append(out, normalized)
+	}
+	return out
 }
 
 func fileOutboxClaimMatchesRecordV0(
@@ -211,5 +248,6 @@ func fileOutboxSnapshotFromAckV0(ack fileOutboxLedgerAckV0) OutboxDispatchSnapsh
 		Status:       ack.Status,
 		DispatchRef:  ack.DispatchRef,
 		EvidenceRefs: append([]string(nil), ack.EvidenceRefs...),
+		Issues:       append([]OutboxLedgerIssueV0(nil), ack.Issues...),
 	}
 }

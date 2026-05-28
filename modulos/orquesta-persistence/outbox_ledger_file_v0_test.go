@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -55,6 +56,25 @@ func TestFileOutboxLedgerV0RehidrataClaimYAckDurableTrasReinicio(t *testing.T) {
 	if len(snapshots) != 1 || snapshots[0].MessageID != "outbox-stop-001" ||
 		snapshots[0].Status != OutboxDispatchStatusFailedV0 {
 		t.Fatalf("snapshots=%+v", snapshots)
+	}
+	if len(snapshots[0].Issues) != 1 ||
+		snapshots[0].Issues[0].Code != "external_process_batch_spec_failed" ||
+		snapshots[0].Issues[0].Message != "external_agent_connector: connector_no_resuelto" {
+		t.Fatalf("snapshot issues=%+v", snapshots[0].Issues)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, fileOutboxLedgerNameV0))
+	if err != nil {
+		t.Fatalf("read ledger: %v", err)
+	}
+	for _, want := range []string{
+		`"issue_codes"`,
+		`"issues"`,
+		`"field": "external_agent_launch_spec"`,
+		`"message": "external_agent_connector: connector_no_resuelto"`,
+	} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("ledger no contiene %q: %s", want, string(data))
+		}
 	}
 	if issues := reopened.AckOutboxDispatchObservationV0(failed); len(issues) != 0 {
 		t.Fatalf("failed ack replay issues=%+v", issues)
@@ -189,7 +209,7 @@ func fileTestAckObservationV0(
 	message orquestacoreworkflow.OutboxMessageV0,
 	status orquestaoutboxdispatch.OutboxDispatchAckObservationStatusV0,
 ) orquestaoutboxdispatch.OutboxDispatchAckObservationV0 {
-	return orquestaoutboxdispatch.OutboxDispatchAckObservationV0{
+	ack := orquestaoutboxdispatch.OutboxDispatchAckObservationV0{
 		MessageID:    message.MessageID,
 		RunID:        message.RunID,
 		TargetPort:   message.TargetPort,
@@ -197,6 +217,14 @@ func fileTestAckObservationV0(
 		DispatchRef:  "dispatch-" + message.MessageID,
 		EvidenceRefs: []string{"evidence-" + message.MessageID},
 	}
+	if status == orquestaoutboxdispatch.OutboxDispatchAckObservationFailedV0 {
+		ack.Issues = []orquestaoutboxdispatch.DispatchIssueV0{{
+			Code:    "external_process_batch_spec_failed",
+			Field:   "external_agent_launch_spec",
+			Message: "external_agent_connector: connector_no_resuelto",
+		}}
+	}
+	return ack
 }
 
 func fileTestEntryIDsV0(entries []orquestaoutboxdispatch.OutboxPendingEntryV0) []string {
