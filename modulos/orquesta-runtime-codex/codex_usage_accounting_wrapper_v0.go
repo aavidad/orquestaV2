@@ -74,7 +74,7 @@ BEGIN {
     total = digits(low)
   }
   expect_total = 0
-  if (low ~ /usage limit reached|quota exceeded/) apply_status("exhausted")
+  if (low ~ /hit your usage limit|usage limit reached|quota exceeded/) apply_status("exhausted")
   else if (low ~ /rate limit exceeded|rate limit|quota status:[[:space:]]*limited|quota_status[^a-z0-9_]*limited/) apply_status("limited")
   else if (low ~ /quota status:[[:space:]]*available|quota_status[^a-z0-9_]*available/) apply_status("available")
   else if (low ~ /quota status:[[:space:]]*unknown|quota_status[^a-z0-9_]*unknown/) apply_status("unknown")

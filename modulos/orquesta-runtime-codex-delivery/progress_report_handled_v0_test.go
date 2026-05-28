@@ -44,3 +44,28 @@ func TestCodexProgressReportAlreadyHandledV0TimeoutNoQuedaTapadoPorStalledPrevio
 		t.Fatalf("timeout ya parado debe quedar tratado")
 	}
 }
+
+func TestCodexProgressReportAlreadyHandledV0StoppedNoQuedaTapadoPorStopRequested(t *testing.T) {
+	const agentRef = "agent-request-ref-progress-stopped-001"
+	report := orquestaruntime.AgentProgressReportV0{
+		ReportID:         "agent-progress-report-ref-progress-stopped-001",
+		RunID:            "run-ref-progress-stopped-001",
+		AgentRequestID:   agentRef,
+		Status:           orquestaruntime.AgentStoppedV0,
+		DecisionRequired: true,
+		Summary:          "Proceso observado como parado.",
+	}
+	run := orquestacoreworkflow.OrchestrationRunV0{
+		RunID:         "run-ref-progress-stopped-001",
+		StoppedAgents: []string{agentRef},
+	}
+
+	if codexProgressReportAlreadyHandledV0(run, report) {
+		t.Fatalf("stop_requested sin confirmacion no debe ocultar stopped real")
+	}
+
+	run.ConfirmedStoppedAgents = []string{agentRef}
+	if !codexProgressReportAlreadyHandledV0(run, report) {
+		t.Fatalf("stopped confirmado si debe quedar tratado")
+	}
+}

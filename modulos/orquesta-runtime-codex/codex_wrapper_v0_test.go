@@ -156,7 +156,7 @@ func writeFakeCodexUsageCommandV0(t *testing.T, dir string) string {
 		"cat >/dev/null\n" +
 		"echo 'input tokens: 123' >&2\n" +
 		"echo 'output tokens: 45' >&2\n" +
-		"echo 'usage limit reached' >&2\n" +
+		"echo \"ERROR: You've hit your usage limit. Upgrade to Pro or try again at 1:57 PM.\" >&2\n" +
 		"exit 7\n"
 	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
 		t.Fatalf("write fake codex: %v", err)

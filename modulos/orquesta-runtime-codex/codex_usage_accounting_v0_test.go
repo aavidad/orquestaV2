@@ -29,6 +29,17 @@ func TestBuildCodexUsageAccountingSnapshotV0ParseaTokensUsed(t *testing.T) {
 	}
 }
 
+func TestBuildCodexUsageAccountingSnapshotV0ParseaUsageLimitActual(t *testing.T) {
+	snapshot := BuildCodexUsageAccountingSnapshotV0([]string{
+		"ERROR: You've hit your usage limit. Upgrade to Pro or try again at 1:57 PM.",
+	})
+	if !snapshot.Observed ||
+		snapshot.QuotaStatus != CodexUsageQuotaExhaustedV0 ||
+		snapshot.QuotaReason != "" {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+}
+
 func TestBuildCodexUsageAccountingSnapshotV0ParseaAliasesDeProveedor(t *testing.T) {
 	snapshot := BuildCodexUsageAccountingSnapshotV0([]string{
 		`{"usage":{"input_tokens":1200,"output_tokens":300},"quota_status": "available"}`,

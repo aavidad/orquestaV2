@@ -52,7 +52,7 @@ func codexProgressAgentStopHandledV0(
 	report orquestaruntime.AgentProgressReportV0,
 	agentRef string,
 ) bool {
-	if codexProgressAgentTerminalHandledV0(run, agentRef) {
+	if codexProgressAgentStopConfirmedHandledV0(run, agentRef) {
 		return true
 	}
 	if report.Status == orquestaruntime.AgentLoopDetectedV0 &&
@@ -61,6 +61,16 @@ func codexProgressAgentStopHandledV0(
 	}
 	projection, ok := codexProgressExactAssessmentForReportV0(run.AgentAssessments, report)
 	return ok && projection.Action == orquestacoreworkflow.AgentAssessmentActionAskDirectorV0
+}
+
+func codexProgressAgentStopConfirmedHandledV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	agentRef string,
+) bool {
+	return codexProgressStringInSetV0(run.ConfirmedStoppedAgents, agentRef) ||
+		codexProgressStringInSetV0(run.FailedAgents, agentRef) ||
+		codexProgressStringInSetV0(run.LostAgents, agentRef) ||
+		codexProgressStringInSetV0(run.DeliveredAgents, agentRef)
 }
 
 func codexProgressAssessmentHandledV0(

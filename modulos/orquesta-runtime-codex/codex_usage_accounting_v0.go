@@ -132,6 +132,7 @@ func codexUsageQuotaStatusFromTextV0(text string) string {
 		{"quota status: exhausted", CodexUsageQuotaExhaustedV0},
 		{"quota_status\":\"exhausted", CodexUsageQuotaExhaustedV0},
 		{"quota_status\": \"exhausted", CodexUsageQuotaExhaustedV0},
+		{"hit your usage limit", CodexUsageQuotaExhaustedV0},
 		{"usage limit reached", CodexUsageQuotaExhaustedV0},
 		{"quota exceeded", CodexUsageQuotaExhaustedV0},
 		{"rate limit exceeded", CodexUsageQuotaLimitedV0},
