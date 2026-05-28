@@ -5,9 +5,12 @@ import "strings"
 var worktreeDefaultControlPrefixesV0 = []string{
 	".orquesta-runtime",
 	".orquesta-codex-runtime",
+	".orquesta-local",
 	".orquesta-local-runtime",
 	".orquesta-control",
 	".orquesta-server",
+	".orquesta-guardian",
+	".orquesta-logs",
 	".orquesta-local-state",
 	".orquesta-state",
 	".orquesta-purged",

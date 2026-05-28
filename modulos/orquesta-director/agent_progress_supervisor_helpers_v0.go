@@ -33,11 +33,6 @@ func assessmentDecisionFromProgressStatusV0(input AgentProgressSupervisionInputV
 			orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
 			orquestacoreworkflow.AgentAssessmentSeverityCriticalV0
 	}
-	if agentProgressNoACKV0(input.Report) {
-		return orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
-			orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
-			orquestacoreworkflow.AgentAssessmentSeverityHighV0
-	}
 	if agentProgressCapacityLimitedV0(input.Report) {
 		if !agentProgressStopAllowedV0(input) {
 			return orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
@@ -46,6 +41,11 @@ func assessmentDecisionFromProgressStatusV0(input AgentProgressSupervisionInputV
 		}
 		return orquestacoreworkflow.AgentAssessmentVerdictCapacityLimitedV0,
 			orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
+			orquestacoreworkflow.AgentAssessmentSeverityHighV0
+	}
+	if agentProgressNoACKV0(input.Report) {
+		return orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
+			orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
 			orquestacoreworkflow.AgentAssessmentSeverityHighV0
 	}
 	if agentProgressOverBudgetNoActivityV0(input.Report) {
@@ -159,6 +159,9 @@ func assessmentSummaryFromProgressReportV0(report orquestaruntime.AgentProgressR
 	if agentProgressAuthConfigBlockerV0(report) {
 		return "Autenticacion externa invalida; pausar reintentos y solicitar reautorizacion."
 	}
+	if agentProgressCapacityLimitedV0(report) {
+		return "Capacidad externa limitada; cerrar agente y replanificar."
+	}
 	if agentProgressNoACKV0(report) {
 		if agentProgressHasArtifactWithoutAckV0(report) {
 			return "Entrega sin ACK con artefacto materializado; validar antes de replanificar."
@@ -186,9 +189,6 @@ func assessmentSummaryFromProgressReportV0(report orquestaruntime.AgentProgressR
 		}
 		return compactCounterSummaryV0("Bucle detectado; detener agente logico.", report)
 	case orquestaruntime.AgentStoppedV0:
-		if agentProgressCapacityLimitedV0(report) {
-			return "Capacidad externa limitada; cerrar agente y replanificar."
-		}
 		if agentProgressHasArtifactWithoutAckV0(report) {
 			return "Entrega sin ACK con artefacto materializado; validar antes de replanificar."
 		}

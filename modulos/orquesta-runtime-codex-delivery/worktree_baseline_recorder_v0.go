@@ -55,13 +55,41 @@ func (recorder CodexReceiptWorktreeBaselineRecorderV0) CaptureCodexReceiptWorktr
 	)
 	if len(issues) > 0 {
 		return CodexReceiptWorktreeBaselineResolutionV0{},
-			fmt.Errorf("codex_worktree_baseline: capture_failed")
+			fmt.Errorf("codex_worktree_baseline: capture_failed: %s",
+				codexWorktreeBaselineIssueSummaryV0(issues))
 	}
 	if err := recorder.SnapshotStore.RecordWorktreeSnapshotV0(ctx, snapshot); err != nil {
 		return CodexReceiptWorktreeBaselineResolutionV0{},
 			fmt.Errorf("codex_worktree_baseline: record_failed")
 	}
 	return CodexReceiptWorktreeBaselineResolutionV0{BaselineRef: snapshot.SnapshotRef}, nil
+}
+
+func codexWorktreeBaselineIssueSummaryV0(
+	issues []orquestaruntimeworktree.WorktreeIssueV0,
+) string {
+	for _, issue := range issues {
+		code := strings.TrimSpace(string(issue.Code))
+		field := strings.TrimSpace(issue.Field)
+		evidence := ""
+		if len(issue.Evidence) > 0 {
+			evidence = strings.TrimSpace(issue.Evidence[0])
+		}
+		parts := make([]string, 0, 3)
+		if code != "" {
+			parts = append(parts, "code="+code)
+		}
+		if field != "" {
+			parts = append(parts, "field="+field)
+		}
+		if evidence != "" {
+			parts = append(parts, "evidence="+evidence)
+		}
+		if len(parts) > 0 {
+			return strings.Join(parts, " ")
+		}
+	}
+	return "issue_unavailable"
 }
 
 func codexReceiptWorktreeBaselineRefV0(descriptorRef string) string {

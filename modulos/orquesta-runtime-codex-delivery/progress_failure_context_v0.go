@@ -15,13 +15,25 @@ const maxCodexProgressFailureLogBytesV0 = 64 * 1024
 type codexProgressFailureClassV0 string
 
 const (
-	codexProgressFailureNoACKV0           codexProgressFailureClassV0 = "no_ack"
-	codexProgressFailureInterruptedV0     codexProgressFailureClassV0 = "interrupted"
-	codexProgressFailureCapacityWarningV0 codexProgressFailureClassV0 = "capacity_warning"
-	codexProgressFailureAuthInvalidV0     codexProgressFailureClassV0 = "auth_invalid"
+	CodexProgressFailureNoACKV0           codexProgressFailureClassV0 = "no_ack"
+	CodexProgressFailureInterruptedV0     codexProgressFailureClassV0 = "interrupted"
+	CodexProgressFailureCapacityWarningV0 codexProgressFailureClassV0 = "capacity_warning"
+	CodexProgressFailureAuthInvalidV0     codexProgressFailureClassV0 = "auth_invalid"
+
+	codexProgressFailureNoACKV0           = CodexProgressFailureNoACKV0
+	codexProgressFailureInterruptedV0     = CodexProgressFailureInterruptedV0
+	codexProgressFailureCapacityWarningV0 = CodexProgressFailureCapacityWarningV0
+	codexProgressFailureAuthInvalidV0     = CodexProgressFailureAuthInvalidV0
 )
 
 func codexProgressReportWithProcessFailureContextV0(
+	descriptor CodexReceiptDescriptorV0,
+	report orquestaruntime.AgentProgressReportV0,
+) orquestaruntime.AgentProgressReportV0 {
+	return CodexProgressReportWithProcessFailureContextV0(descriptor, report)
+}
+
+func CodexProgressReportWithProcessFailureContextV0(
 	descriptor CodexReceiptDescriptorV0,
 	report orquestaruntime.AgentProgressReportV0,
 ) orquestaruntime.AgentProgressReportV0 {
@@ -40,14 +52,14 @@ func codexProgressReportWithProcessFailureContextV0(
 	}
 	failure := codexProgressFailureClassFromDescriptorV0(descriptor)
 	switch failure {
-	case codexProgressFailureAuthInvalidV0:
+	case CodexProgressFailureAuthInvalidV0:
 		report.Summary = "Autenticacion externa invalida; requiere reautorizacion del operador."
 		report.DecisionRequired = true
 		report.EvidenceRefs = compactCodexDeliveryRefsV0(append(
 			report.EvidenceRefs,
 			"evidence-ref-auth-config-blocker",
 		))
-	case codexProgressFailureCapacityWarningV0:
+	case CodexProgressFailureCapacityWarningV0:
 		report.Summary = "Proceso detenido por aviso de capacidad externa; requiere relevo."
 		report.BudgetStatus = orquestaruntime.AgentProgressBudgetCapacityLimitedV0
 		report.BudgetReason = "Aviso de capacidad externa antes de ACK."
@@ -57,7 +69,7 @@ func codexProgressReportWithProcessFailureContextV0(
 			"evidence-ref-capacity-warning",
 			"evidence-ref-capacity-limited",
 		))
-	case codexProgressFailureInterruptedV0:
+	case CodexProgressFailureInterruptedV0:
 		if materialized {
 			report.Summary = "Proceso detenido sin ACK tras interrupcion compacta pero con artefacto en write-set; requiere validacion."
 		} else {
@@ -69,7 +81,7 @@ func codexProgressReportWithProcessFailureContextV0(
 			"evidence-ref-no-ack",
 			"evidence-ref-no-ack-interrupted",
 		))
-	case codexProgressFailureNoACKV0:
+	case CodexProgressFailureNoACKV0:
 		if materialized {
 			report.Summary = "Proceso detenido sin ACK pero con artefacto en write-set; requiere validacion."
 		} else {
@@ -100,23 +112,29 @@ func codexProgressStatusNeedsMaterializedArtifactReviewV0(
 func codexProgressFailureClassFromDescriptorV0(
 	descriptor CodexReceiptDescriptorV0,
 ) codexProgressFailureClassV0 {
+	return CodexProgressFailureClassFromDescriptorV0(descriptor)
+}
+
+func CodexProgressFailureClassFromDescriptorV0(
+	descriptor CodexReceiptDescriptorV0,
+) codexProgressFailureClassV0 {
 	logs := codexProgressFailureLogsFromDescriptorV0(descriptor)
 	for _, log := range logs {
 		if codexProgressTextHasAuthInvalidSignalV0(log) {
-			return codexProgressFailureAuthInvalidV0
+			return CodexProgressFailureAuthInvalidV0
 		}
 	}
 	for _, log := range logs {
 		if codexProgressTextHasCapacitySignalV0(log) {
-			return codexProgressFailureCapacityWarningV0
+			return CodexProgressFailureCapacityWarningV0
 		}
 	}
 	for _, log := range logs {
 		if codexProgressTextHasInterruptedNoACKSignalV0(log) {
-			return codexProgressFailureInterruptedV0
+			return CodexProgressFailureInterruptedV0
 		}
 	}
-	return codexProgressFailureNoACKV0
+	return CodexProgressFailureNoACKV0
 }
 
 func codexProgressFailureLogsFromDescriptorV0(

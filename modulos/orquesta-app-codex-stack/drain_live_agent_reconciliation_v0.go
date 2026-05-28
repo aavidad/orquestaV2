@@ -194,7 +194,7 @@ func stoppedSnapshotProgressReportV0(
 	if len(digest) > 32 {
 		digest = digest[:32]
 	}
-	return orquestaruntime.AgentProgressReportV0{
+	report := orquestaruntime.AgentProgressReportV0{
 		ReportID:         "agent-progress-report-ref-live-reconciliation-" + digest,
 		RunID:            strings.TrimSpace(run.RunID),
 		AgentRequestID:   strings.TrimSpace(descriptor.AgentRef),
@@ -206,6 +206,10 @@ func stoppedSnapshotProgressReportV0(
 			"evidence-ref-live-agent-reconciliation-direct",
 		}),
 	}
+	return orquestaruntimecodexdelivery.CodexProgressReportWithProcessFailureContextV0(
+		descriptor,
+		report,
+	)
 }
 
 func shouldDirectlyReconcileStoppedAgentV0(
@@ -214,7 +218,8 @@ func shouldDirectlyReconcileStoppedAgentV0(
 	report := observation.Report
 	return report.Status == orquestaruntime.AgentStoppedV0 &&
 		(reportEvidenceContainsV0(report, "evidence-ref-no-ack") ||
-			reportEvidenceContainsV0(report, "evidence-ref-auth-config-blocker"))
+			reportEvidenceContainsV0(report, "evidence-ref-auth-config-blocker") ||
+			report.BudgetStatus == orquestaruntime.AgentProgressBudgetCapacityLimitedV0)
 }
 
 func (stack StackV0) applyStoppedAgentReconciliationV0(
