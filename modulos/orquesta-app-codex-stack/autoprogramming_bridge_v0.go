@@ -48,6 +48,15 @@ func PrepareAutoprogrammingRunV0(
 		return AutoprogrammingBridgeResultV0{}, err
 	}
 	work := orquestaautoprogramming.BuildAutoprogrammingProgrammableWorkV0(request.Request)
+	return prepareAutoprogrammingRunWithWorkV0(ctx, request, ports, work)
+}
+
+func prepareAutoprogrammingRunWithWorkV0(
+	ctx context.Context,
+	request AutoprogrammingBridgeRequestV0,
+	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
+	work orquestaautoprogramming.AutoprogrammingProgrammableWorkResultV0,
+) (AutoprogrammingBridgeResultV0, error) {
 	if work.Accepted {
 		tasks, issue := autoprogrammingBridgeOperationalTasksV0(work.Work.Tasks)
 		if issue.Code != "" {

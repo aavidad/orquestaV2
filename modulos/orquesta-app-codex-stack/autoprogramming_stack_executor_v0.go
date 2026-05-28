@@ -3,6 +3,8 @@ package orquestaappcodexstack
 import (
 	"context"
 	"fmt"
+
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 )
 
 type CodexStackAutoprogrammingExecutorV0 struct {
@@ -30,5 +32,21 @@ func PrepareAutoprogrammingRunFromStackV0(
 	stack StackV0,
 	request AutoprogrammingBridgeRequestV0,
 ) (AutoprogrammingBridgeResultV0, error) {
-	return PrepareAutoprogrammingRunV0(ctx, request, stack.Ports)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	request = normalizeAutoprogrammingBridgeRequestV0(request)
+	if err := validateAutoprogrammingBridgePortsV0(stack.Ports); err != nil {
+		return AutoprogrammingBridgeResultV0{}, err
+	}
+	work := orquestaautoprogramming.BuildAutoprogrammingProgrammableWorkV0(request.Request)
+	if work.Accepted {
+		prepared, issues := autoprogrammingPrepareWorktreeIsolationV0(ctx, stack.Codex.ProjectWorkDir, work.Work)
+		if len(issues) > 0 {
+			work.Accepted = false
+			work.Issues = append(work.Issues, issues...)
+		}
+		work.Work = prepared
+	}
+	return prepareAutoprogrammingRunWithWorkV0(ctx, request, stack.Ports, work)
 }

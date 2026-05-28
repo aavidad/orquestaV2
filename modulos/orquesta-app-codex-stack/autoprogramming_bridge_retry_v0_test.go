@@ -53,6 +53,7 @@ func TestCodexStackAutoprogrammingPrepareRunV0CreaRetrySiRunPrevioEstaAtascado(t
 			TaskStore: taskStore,
 			RunQueue:  queue,
 		},
+		Codex:    CodexRuntimeConfigV0{ProjectWorkDir: t.TempDir()},
 		RunQueue: RunQueueConfigV0{QueueRef: "queue-main", DefaultPriorityScore: 10},
 	}
 	executor := NewCodexStackAutoprogrammingPrepareRunExecutorV0(
@@ -150,6 +151,7 @@ func TestCodexStackAutoprogrammingPrepareRunV0CreaRetrySiAssessmentTerminalQuedo
 			TaskStore: taskStore,
 			RunQueue:  queue,
 		},
+		Codex:    CodexRuntimeConfigV0{ProjectWorkDir: t.TempDir()},
 		RunQueue: RunQueueConfigV0{QueueRef: "queue-main", DefaultPriorityScore: 10},
 	}
 	executor := NewCodexStackAutoprogrammingPrepareRunExecutorV0(
@@ -229,6 +231,7 @@ func TestCodexStackAutoprogrammingPrepareRunV0CreaRetrySiLaunchFalloSinStartedAg
 			TaskStore: taskStore,
 			RunQueue:  queue,
 		},
+		Codex:    CodexRuntimeConfigV0{ProjectWorkDir: t.TempDir()},
 		RunQueue: RunQueueConfigV0{QueueRef: "queue-main", DefaultPriorityScore: 10},
 	}
 	executor := NewCodexStackAutoprogrammingPrepareRunExecutorV0(

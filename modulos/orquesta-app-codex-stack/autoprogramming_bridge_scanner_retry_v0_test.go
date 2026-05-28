@@ -68,6 +68,7 @@ func TestCodexStackAutoprogrammingPrepareRunV0ReintentaScannerParadoPorControlV0
 			RunQueue:   queue,
 			RunControl: queue,
 		},
+		Codex:    CodexRuntimeConfigV0{ProjectWorkDir: t.TempDir()},
 		RunQueue: RunQueueConfigV0{QueueRef: "queue-main", DefaultPriorityScore: 10},
 	}
 	executor := NewCodexStackAutoprogrammingPrepareRunExecutorV0(
@@ -132,6 +133,7 @@ func TestCodexStackAutoprogrammingPrepareRunV0ReencuadraRetryRepetido(t *testing
 			TaskStore: taskStore,
 			RunQueue:  queue,
 		},
+		Codex:    CodexRuntimeConfigV0{ProjectWorkDir: t.TempDir()},
 		RunQueue: RunQueueConfigV0{QueueRef: "queue-main", DefaultPriorityScore: 10},
 	}
 	executor := NewCodexStackAutoprogrammingPrepareRunExecutorV0(

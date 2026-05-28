@@ -42,6 +42,9 @@ func (resolver CodexLaunchSpecResolverV0) ResolveExternalAgentLaunchSpecV0(
 	if err != nil {
 		return orquestacionnucleoapp.ExternalAgentLaunchSpecResolutionV0{}, err
 	}
+	if err := resolver.ensureLaunchWorktreeIsolationV0(ctx, *inbound.Payload); err != nil {
+		return orquestacionnucleoapp.ExternalAgentLaunchSpecResolutionV0{}, err
+	}
 	contextBundle, err := resolver.agentContextV0(ctx, *inbound.Payload, area, task)
 	if err != nil {
 		return orquestacionnucleoapp.ExternalAgentLaunchSpecResolutionV0{}, err
