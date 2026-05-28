@@ -167,6 +167,46 @@ func TestServerConfigFromEnvV0UsaCapacidadCanonicaDiezPadresSeisHijos(t *testing
 	}
 }
 
+func TestServerConfigFromEnvV0ModoSerialCapaAgentesCodexV0(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", t.TempDir())
+	t.Setenv("ORQUESTA_CODEX_EXECUTION_MODE", "serial")
+	t.Setenv("ORQUESTA_SERVER_MAX_RUNS_PER_TICK", "20")
+	t.Setenv("ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK", "20")
+	t.Setenv("ORQUESTA_SERVER_DRAIN_MAX_DISPATCHES", "20")
+	t.Setenv("ORQUESTA_SERVER_DRAIN_MAX_COMMANDS", "20")
+	t.Setenv("ORQUESTA_SERVER_DRAIN_MAX_OUTBOX", "20")
+	t.Setenv("ORQUESTA_CODEX_MAX_BATCH_READY", "20")
+	t.Setenv("ORQUESTA_CODEX_MAX_CONCURRENCY", "20")
+	t.Setenv("ORQUESTA_CODEX_DIRECTOR_WAVE_AGENTS", "20")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if config.SupervisorCommand.MaxRunsPerTick != 1 ||
+		config.SupervisorCommand.MaxExecutions != 1 ||
+		config.SupervisorCommand.DrainLimits.MaxDispatchesPerWait != 1 ||
+		config.SupervisorCommand.DrainLimits.MaxCommands != 1 ||
+		config.SupervisorCommand.DrainLimits.MaxOutboxPerCycle != 1 {
+		t.Fatalf("serial supervisor=%+v", config.SupervisorCommand)
+	}
+	runtimeConfig := codexRuntimeConfigV0(config, nil)
+	if runtimeConfig.MaxBatchReady != 1 || runtimeConfig.MaxConcurrency != 1 {
+		t.Fatalf("serial codex limits batch=%d concurrency=%d", runtimeConfig.MaxBatchReady, runtimeConfig.MaxConcurrency)
+	}
+	settings := config.EffectiveConfig.Settings
+	for key, want := range map[string]string{
+		"ORQUESTA_CODEX_EXECUTION_MODE":       "serial",
+		"ORQUESTA_CODEX_MAX_BATCH_READY":      "1",
+		"ORQUESTA_CODEX_MAX_CONCURRENCY":      "1",
+		"ORQUESTA_CODEX_DIRECTOR_WAVE_AGENTS": "1",
+	} {
+		if got := effectiveSettingValueForTestV0(settings, key); got != want {
+			t.Fatalf("%s=%q want %q settings=%+v", key, got, want, settings)
+		}
+	}
+}
+
 func TestServerStackIdleSelfImprovementFiltraSeccionesNoTxxV0(t *testing.T) {
 	supervisor := serverStackSupervisorV0{}
 	result, err := supervisor.FilterIdleSelfImprovementRequestsV0(context.Background(), orquestaserver.IdleSelfImprovementRequestFilterRequestV0{

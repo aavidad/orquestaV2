@@ -84,6 +84,7 @@ const (
 	envCodexLoopTicksV0                    = "ORQUESTA_CODEX_LOOP_TICKS"
 	envCodexMaxExpectedSecondsV0           = "ORQUESTA_CODEX_MAX_EXPECTED_SECONDS"
 	envCodexNoActivitySecondsV0            = "ORQUESTA_CODEX_NO_ACTIVITY_SECONDS"
+	envCodexExecutionModeV0                = "ORQUESTA_CODEX_EXECUTION_MODE"
 	envCodexMaxBatchReadyV0                = "ORQUESTA_CODEX_MAX_BATCH_READY"
 	envCodexMaxConcurrencyV0               = "ORQUESTA_CODEX_MAX_CONCURRENCY"
 	envCodexDirectorWaveAgentsV0           = "ORQUESTA_CODEX_DIRECTOR_WAVE_AGENTS"
@@ -172,6 +173,7 @@ const (
 	defaultCodexLoopTicksV0                    = 300
 	defaultCodexMaxExpectedSecondsV0           = 1200
 	defaultCodexNoActivitySecondsV0            = 600
+	defaultCodexExecutionModeV0                = "parallel"
 	defaultCodexMaxBatchReadyV0                = 10
 	defaultCodexMaxConcurrencyV0               = 10
 	defaultCodexServerMaxRunsPerTickV0         = 10
@@ -249,6 +251,11 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "codex_runtime",
 		Label:       "Batch Codex ready",
 		Description: "Agentes ready a despachar por tanda Codex.",
+	},
+	envCodexExecutionModeV0: {
+		Scope:       "codex_runtime",
+		Label:       "Modo ejecucion Codex",
+		Description: "parallel respeta limites configurados; serial fuerza ejecucion de agentes de uno en uno.",
 	},
 	envCodexMaxConcurrencyV0: {
 		Scope:       "codex_runtime",

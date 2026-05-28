@@ -52,6 +52,12 @@ Configuracion externa relacionada:
   el dispatcher batch consulta la capacidad viva antes de reclamar outbox de
   `LaunchRuntimeAgent` y, si no hay hueco, deja los mensajes pendientes sin
   consumirlos. No se aplica a `StopRuntimeAgent` ni a otros mensajes.
+- `ORQUESTA_CODEX_EXECUTION_MODE=parallel|serial` controla la ejecucion de
+  agentes Codex. `parallel` conserva los limites configurados.
+  `serial` fuerza a 1 los limites efectivos de runs por tick, ejecuciones por
+  tick, dispatch/outbox de agentes, batch ready, procesos Codex vivos y agentes
+  padre por ola del Director. Sirve para ahorrar cuota/tokens o depurar sin
+  pisadas entre agentes.
 - `ORQUESTA_CODEX_MAX_BATCH_READY` conserva su significado separado: maximo de
   agentes ready que se intentan despachar en una tanda cuando existe capacidad.
 - El runtime Codex del servidor debe leer entorno mediante

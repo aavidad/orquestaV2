@@ -8,8 +8,6 @@ import (
 	"strings"
 	"time"
 
-	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
-	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
@@ -33,6 +31,7 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 	if err != nil {
 		return orquestaserver.ConfigV0{}, err
 	}
+	executionMode := codexExecutionModeFromEnvV0()
 	config := orquestaserver.ConfigV0{
 		Addr:          envOrDefaultV0(envServerAddrV0, orquestaserver.DefaultAddrV0),
 		StateDir:      stateDir,
@@ -86,23 +85,7 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 		IdleSelfImprovementPriorityScore: intEnvOrDefaultV0(envServerIdleSelfImprovementPriorityScoreV0, orquestaserver.DefaultIdleSelfImprovementPriorityScoreV0),
 		IdleSelfImprovementMaxRequests:   intEnvOrDefaultV0(envServerIdleSelfImprovementMaxRequestsV0, orquestaserver.DefaultIdleSelfImprovementMaxRequestsV0),
 		IdleSelfImprovementTargetQueue:   intEnvOrDefaultV0(envServerIdleSelfImprovementTargetQueueV0, orquestaserver.DefaultIdleSelfImprovementTargetQueueV0),
-		SupervisorCommand: orquestarunsupervisor.RunSupervisorCommandV0{
-			QueueRef:          "global",
-			MaxRunsPerTick:    intEnvOrDefaultV0(envServerMaxRunsPerTickV0, defaultCodexServerMaxRunsPerTickV0),
-			MaxTicks:          intEnvOrDefaultV0(envServerSupervisorMaxTicksV0, orquestaserver.DefaultSupervisorMaxTicksV0),
-			MaxExecutions:     intEnvOrDefaultV0(envServerMaxExecutionsPerTickV0, defaultCodexServerMaxExecutionsV0),
-			StopOnNoExecution: true,
-			AllowRepeatedRuns: boolEnvOrDefaultV0(envServerAllowRepeatedRunsV0, false),
-			DrainLimits: orquestaruncoordinator.RunDrainLimitsV0{
-				MaxBursts:            intEnvOrDefaultV0(envServerDrainMaxBurstsV0, 4),
-				MaxStepsPerBurst:     intEnvOrDefaultV0(envServerDrainMaxStepsV0, 6),
-				MaxDispatchesPerWait: intEnvOrDefaultV0(envServerDrainMaxDispatchesV0, defaultServerSupervisorMaxDispatchesV0),
-				MaxCommands:          intEnvOrDefaultV0(envServerDrainMaxCommandsV0, 20),
-				MaxOutboxPerCycle:    intEnvOrDefaultV0(envServerDrainMaxOutboxV0, defaultServerSupervisorMaxOutboxV0),
-				MaxDecisionCycles:    intEnvOrDefaultV0(envServerDrainMaxDecisionsV0, 1),
-				MaxExternalWaits:     supervisorMaxExternalWaits,
-			},
-		},
+		SupervisorCommand:                serverSupervisorCommandFromEnvV0(executionMode, supervisorMaxExternalWaits),
 	}
 	config.EffectiveConfig = serverEffectiveConfigFromEnvV0(config)
 	return orquestaserver.NormalizeConfigV0(config), orquestaserver.ValidateConfigV0(config)

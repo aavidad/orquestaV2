@@ -288,8 +288,9 @@ type codexDirectorWaveLimitsEnvConfigV0 struct {
 }
 
 func codexDirectorWaveLimitsEnvConfigFromEnvV0() codexDirectorWaveLimitsEnvConfigV0 {
+	executionMode := codexExecutionModeFromEnvV0()
 	return codexDirectorWaveLimitsEnvConfigV0{
-		Agents:               intEnvOrDefaultV0(envCodexDirectorWaveAgentsV0, defaultCodexDirectorWaveAgentsV0),
+		Agents:               codexExecutionModeCapPositiveV0(executionMode, intEnvOrDefaultV0(envCodexDirectorWaveAgentsV0, defaultCodexDirectorWaveAgentsV0)),
 		MaxSubagentsPerAgent: intEnvOrDefaultV0(envCodexDirectorMaxSubagentsPerAgentV0, defaultCodexDirectorMaxSubagentsPerAgentV0),
 		RecursiveAgentBudget: intEnvOrDefaultV0(envCodexDirectorRecursiveAgentBudgetV0, defaultCodexDirectorRecursiveAgentBudgetV0),
 	}

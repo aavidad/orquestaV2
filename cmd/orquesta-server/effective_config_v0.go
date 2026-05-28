@@ -39,6 +39,7 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 		serverConfigSettingFromRegistryV0(envSecurityModeV0, serverSecurityModeEffectiveValueV0()),
 		serverConfigSettingFromRegistryV0(envDetailProhibitedRailsV0, detailRailsEffectiveValueV0()),
 		serverConfigSettingFromRegistryV0(envDetailProhibitedRailsScopeV0, detailRailsScopeEffectiveValueV0()),
+		serverConfigSettingFromRegistryV0(envCodexExecutionModeV0, codexExecutionModeFromEnvV0()),
 		serverConfigSettingFromRegistryV0(envCodexMaxBatchReadyV0, strconv.Itoa(codexRuntime.Limits.MaxBatchReady)),
 		serverConfigSettingFromRegistryV0(envCodexMaxConcurrencyV0, strconv.Itoa(codexRuntime.Limits.MaxLiveProcesses)),
 		serverConfigSettingFromRegistryV0(envCodexReasoningEffortV0, codexRuntime.ReasoningEffort),

@@ -108,8 +108,9 @@ type codexRuntimeLimitsV0 struct {
 }
 
 func codexRuntimeLimitsFromEnvV0() codexRuntimeLimitsV0 {
+	executionMode := codexExecutionModeFromEnvV0()
 	return codexRuntimeLimitsV0{
-		MaxBatchReady:    intEnvOrDefaultV0(envCodexMaxBatchReadyV0, defaultCodexMaxBatchReadyV0),
-		MaxLiveProcesses: intEnvOrDefaultV0(envCodexMaxConcurrencyV0, defaultCodexMaxConcurrencyV0),
+		MaxBatchReady:    codexExecutionModeCapPositiveV0(executionMode, intEnvOrDefaultV0(envCodexMaxBatchReadyV0, defaultCodexMaxBatchReadyV0)),
+		MaxLiveProcesses: codexExecutionModeCapPositiveV0(executionMode, intEnvOrDefaultV0(envCodexMaxConcurrencyV0, defaultCodexMaxConcurrencyV0)),
 	}
 }
