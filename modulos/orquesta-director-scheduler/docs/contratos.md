@@ -53,9 +53,17 @@ Invariantes:
   - Si `snapshot.blocking_quality_gate_refs` trae refs y no hay `replan_followup_candidates` cuyo `decision_payload.source_ref` coincida con una de esas refs opacas, bloquea antes de evaluar work.
   - Un quality gate bloqueante no prepara candidates de documentacion/avance de fase como trabajo normal; requiere followup de replan explicito para ese gate o bloqueo contractual.
   - No evalua politicas de lease ni parsea expiraciones del workflow; solo consume candidates explicitos.
-  - Si `lease_ref` ya esta en `expired_lease_refs`, no repite `RegisterAgentLeaseExpired` y queda `quiescent`.
+  - Si `lease_ref` ya esta en `expired_lease_refs`, no repite `RegisterAgentLeaseExpired`.
+  - Si el lease expirado recomendaba `stop_agent`, puede reemitir solo `StopAgent`
+    para que `core-workflow` reconstruya outbox perdida mientras el agente no
+    este en `failed_agents`, `lost_agents` ni `confirmed_stopped_agents`.
   - Si el agente del lease no existe en `agents` ni `started_agents`, devuelve `needs_director/candidate_missing`.
   - Si el agente ya esta solicitado o arrancado, no repite RequestAgent.
+  - Si una solicitud de capacidad o agente ya existe en el snapshot durable y
+    el caller marca `recover_capacity_outbox` o `recover_agent_outbox`, puede
+    reemitir el mismo comando para que `core-workflow` reconstruya solo la
+    outbox pendiente. Esta recuperacion no aplica a refs planificadas solo en
+    el mismo tick.
   - No repite `AssessAgentWork` si `assessment_ref` ya esta en `agent_assessments`.
   - No repite `AskDirector` si `question_id` ya esta en `director_questions`; si ya esta en `director_answered_questions`, queda `quiescent`.
   - No repite `RecordReplanDecision` si `replan_ref` ya esta en `replan_refs`.
@@ -83,7 +91,9 @@ Campos:
   - agents
   - started_agents
   - failed_agents
+  - lost_agents
   - stopped_agents
+  - confirmed_stopped_agents
   - tasks
   - phase_artifacts
   - deliveries
@@ -182,7 +192,10 @@ Invariantes:
   - `command_meta.run_id` debe coincidir con `run_ref`.
   - `task_id` debe existir en `snapshot.tasks`.
   - `agent_ref` debe existir en `snapshot.agents` y `snapshot.started_agents`.
-  - No registra entrega si el agente esta en `failed_agents` o `stopped_agents`.
+  - No registra entrega si el agente esta en `failed_agents` o
+    `confirmed_stopped_agents`.
+  - `stopped_agents` sin confirmacion aun permite ACK/delivery tardio; el
+    workflow mantiene la validacion final con `confirmed_stopped_agents`.
   - No repite `RegisterDelivery` si `delivery_ref` ya esta en `snapshot.deliveries`
     o ya fue planificada en el mismo tick.
 ```
@@ -195,12 +208,19 @@ Estado: candidato implementado
 Campos:
   - candidate_ref
   - post_lease_action_input de orquesta-director.PostLeaseActionInputV0
+  - recover_stop_outbox opcional
   - evidence_refs
 Invariantes:
   - El scheduler no crea ni evalua leases; consume candidates explicitos del caller.
   - `post_lease_action_input.run_ref` y `command_meta.run_id` deben coincidir con `run_ref`.
   - `agent_request_id` debe estar observado en `agents` o `started_agents`.
   - `BuildPostLeaseActionV0` construye RegisterAgentLeaseExpired, StopAgent o AskDirector.
+  - Si `lease_ref` ya esta en `expired_lease_refs`, no duplica la expiracion.
+  - Si el followup `StopAgent` aun no aparece en `stopped_agents`, puede
+    emitirlo para completar la accion separada.
+  - Si `StopAgent` ya esta en `stopped_agents`, reemitirlo para reconstruir
+    outbox perdida exige `recover_stop_outbox=true`; el caller debe aportar el
+    mismo `command_meta` y payload causal que produjo la parada durable.
   - Acciones sin followup local quedan como `needs_director` con solo RegisterAgentLeaseExpired.
 ```
 
@@ -215,6 +235,8 @@ Campos:
   - claims locales del candidato; si `work_claims` existe, no contienen la ola completa
   - capacity_candidate opcional
   - agent_candidate opcional
+  - recover_capacity_outbox opcional
+  - recover_agent_outbox opcional
   - gate_command_meta
   - gate_evidence_refs
   - evidence_refs
@@ -224,6 +246,14 @@ Invariantes:
   - Si `work_claims` existe, los gates evaluan la concurrencia con ese claim-set compartido.
   - Si `work_claims` no existe, se usa `claims` del candidate para compatibilidad.
   - `RequestAgent` se construye solo despues de capacidad decidida y gate allow.
+  - `recover_capacity_outbox` solo pide repetir `RequestCapacity` cuando
+    `capacity_request_id` ya esta observado en `snapshot.capacity_requests` y
+    aun no hay decision de capacidad.
+  - `recover_agent_outbox` solo pide repetir `RequestAgent` cuando
+    `agent_request_id` ya esta observado en `snapshot.agents` y no hay estado
+    terminal de lifecycle.
+  - La recuperacion exige que el caller aporte el mismo `command_meta` y payload
+    causal; el scheduler no reconstruye payloads desde eventos ni desde outbox.
 ```
 
 ## `SchedulableProgressSupervisionCandidateV0`

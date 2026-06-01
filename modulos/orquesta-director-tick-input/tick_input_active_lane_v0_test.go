@@ -3,6 +3,7 @@ package orquestadirectortickinput
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -42,6 +43,51 @@ func TestBuildDirectorSchedulerTickInputV0CompactaCarrilReviewGate(t *testing.T)
 	}
 }
 
+func TestBuildDirectorSchedulerTickInputV0FiltraConfirmedStoppedAgentsEnCarrilDelivery(t *testing.T) {
+	run := tickInputProgramacionRunV0(t)
+	run.Tasks = append(run.Tasks, "task-ref-delivery-target")
+	run.Agents = append(run.Agents, "agent-ref-delivery-target", "agent-ref-delivery-other")
+	run.StartedAgents = append(run.StartedAgents, "agent-ref-delivery-target", "agent-ref-delivery-other")
+	run.StoppedAgents = append(run.StoppedAgents, "agent-ref-delivery-target", "agent-ref-delivery-other")
+	run.ConfirmedStoppedAgents = append(run.ConfirmedStoppedAgents, "agent-ref-delivery-target", "agent-ref-delivery-other")
+
+	input, err := BuildDirectorSchedulerTickInputV0(DirectorTickInputBuildRequestV0{
+		TickRef:            "tick-ref-delivery-confirmed-compact-001",
+		OccurredAt:         "2026-05-06T12:08:00Z",
+		Run:                run,
+		DeliveryCandidates: []orquestadirectorscheduler.SchedulableDeliveryCandidateV0{tickInputDeliveryCandidateV0()},
+		EvidenceRefs:       []string{"evidence-ref-delivery-confirmed-compact-001"},
+	})
+	if err != nil {
+		t.Fatalf("BuildDirectorSchedulerTickInputV0: %v", err)
+	}
+	if !reflect.DeepEqual(input.Snapshot.ConfirmedStoppedAgents, []string{"agent-ref-delivery-target"}) {
+		t.Fatalf("confirmed_stopped_agents=%v", input.Snapshot.ConfirmedStoppedAgents)
+	}
+}
+
+func TestBuildDirectorSchedulerTickInputV0FiltraConfirmedStoppedAgentsEnCarrilPhaseArtifact(t *testing.T) {
+	run := tickInputRevisionRunWithHistoryV0(t)
+	run.Agents = append(run.Agents, "agent-ref-artifact-target", "agent-ref-artifact-other")
+	run.StartedAgents = append(run.StartedAgents, "agent-ref-artifact-target", "agent-ref-artifact-other")
+	run.StoppedAgents = append(run.StoppedAgents, "agent-ref-artifact-target", "agent-ref-artifact-other")
+	run.ConfirmedStoppedAgents = append(run.ConfirmedStoppedAgents, "agent-ref-artifact-target", "agent-ref-artifact-other")
+
+	input, err := BuildDirectorSchedulerTickInputV0(DirectorTickInputBuildRequestV0{
+		TickRef:                 "tick-ref-artifact-confirmed-compact-001",
+		OccurredAt:              "2026-05-06T12:09:00Z",
+		Run:                     run,
+		PhaseArtifactCandidates: []orquestadirectorscheduler.SchedulablePhaseArtifactCandidateV0{tickInputPhaseArtifactCandidateV0()},
+		EvidenceRefs:            []string{"evidence-ref-artifact-confirmed-compact-001"},
+	})
+	if err != nil {
+		t.Fatalf("BuildDirectorSchedulerTickInputV0: %v", err)
+	}
+	if !reflect.DeepEqual(input.Snapshot.ConfirmedStoppedAgents, []string{"agent-ref-artifact-target"}) {
+		t.Fatalf("confirmed_stopped_agents=%v", input.Snapshot.ConfirmedStoppedAgents)
+	}
+}
+
 func tickInputRevisionRunWithHistoryV0(t *testing.T) orquestacoreworkflow.OrchestrationRunV0 {
 	t.Helper()
 	run := tickInputProgramacionRunV0(t)
@@ -67,6 +113,51 @@ func tickInputRevisionRunWithHistoryV0(t *testing.T) orquestacoreworkflow.Orches
 		t.Fatalf("run invalido: %+v", issues)
 	}
 	return run
+}
+
+func tickInputPhaseArtifactCandidateV0() orquestadirectorscheduler.SchedulablePhaseArtifactCandidateV0 {
+	return orquestadirectorscheduler.SchedulablePhaseArtifactCandidateV0{
+		CandidateRef: "phase-artifact-candidate-ref-tick-input-target",
+		CommandMeta: orquestacoreworkflow.OrchestrationCommandMetaV0{
+			CommandID:      "cmd-phase-artifact-tick-input-target",
+			RunID:          tickInputRunRefV0,
+			IdempotencyKey: "idem-tick-input-phase-artifact-target",
+			CorrelationID:  "corr-tick-input-001",
+			RequestedBy:    "director-tick-input-test",
+			OccurredAt:     "2026-05-06T12:09:00Z",
+		},
+		Payload: orquestacoreworkflow.RegisterPhaseArtifactCommandPayloadV0{
+			ArtifactRef:  "artifact-ref-tick-input-target",
+			PhaseID:      string(orquestacoreworkflow.OrchestrationPhaseRevisionV0),
+			AgentRef:     "agent-ref-artifact-target",
+			Summary:      "Artefacto compacto para carril acotado.",
+			EvidenceRefs: []string{"evidence-ref-artifact-target"},
+		},
+		EvidenceRefs: []string{"evidence-ref-artifact-candidate-target"},
+	}
+}
+
+func tickInputDeliveryCandidateV0() orquestadirectorscheduler.SchedulableDeliveryCandidateV0 {
+	return orquestadirectorscheduler.SchedulableDeliveryCandidateV0{
+		CandidateRef: "delivery-candidate-ref-tick-input-target",
+		CommandMeta: orquestacoreworkflow.OrchestrationCommandMetaV0{
+			CommandID:      "cmd-delivery-tick-input-target",
+			RunID:          tickInputRunRefV0,
+			IdempotencyKey: "idem-tick-input-delivery-target",
+			CorrelationID:  "corr-tick-input-001",
+			RequestedBy:    "director-tick-input-test",
+			OccurredAt:     "2026-05-06T12:08:00Z",
+		},
+		Payload: orquestacoreworkflow.RegisterDeliveryCommandPayloadV0{
+			DeliveryRef:  "delivery-ref-tick-input-target",
+			PhaseID:      string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			TaskID:       "task-ref-delivery-target",
+			AgentRef:     "agent-ref-delivery-target",
+			Summary:      "Entrega compacta para carril acotado.",
+			EvidenceRefs: []string{"evidence-ref-delivery-target"},
+		},
+		EvidenceRefs: []string{"evidence-ref-delivery-candidate-target"},
+	}
 }
 
 func tickInputOpenRevisionCommandV0(t *testing.T) orquestacoreworkflow.OrchestrationCommandV0 {

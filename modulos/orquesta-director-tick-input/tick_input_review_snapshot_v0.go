@@ -26,6 +26,7 @@ func compactTickInputSnapshotForReviewGateV0(
 	snapshot.FailedAgents = nil
 	snapshot.LostAgents = nil
 	snapshot.StoppedAgents = nil
+	snapshot.ConfirmedStoppedAgents = nil
 	snapshot.PhaseArtifacts = nil
 	snapshot.Deliveries = filterTickInputRefsByExactV0(snapshot.Deliveries, refs.Deliveries)
 	snapshot.Reviews = filterTickInputRefsByExactV0(snapshot.Reviews, refs.Reviews)

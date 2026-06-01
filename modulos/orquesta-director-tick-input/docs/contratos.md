@@ -57,6 +57,16 @@ Normalizacion de proyecciones:
 - `run.review_results` alimenta `snapshot.review_results`
 - `run.accepted_reviews` alimenta `snapshot.accepted_reviews`
 - `run.rework_requests` alimenta `snapshot.rework_requests`
+- `run.stopped_agents` alimenta `snapshot.stopped_agents`
+- `run.confirmed_stopped_agents` alimenta `snapshot.confirmed_stopped_agents`
+
+Compactacion por carril:
+
+- En carriles de delivery o artefacto de fase, `agents`, `started_agents`,
+  `failed_agents`, `lost_agents`, `stopped_agents` y
+  `confirmed_stopped_agents` se filtran a los agentes citados por los
+  candidates.
+- En carril de review, el snapshot no transporta lifecycle de agentes.
 
 Quality gates:
 

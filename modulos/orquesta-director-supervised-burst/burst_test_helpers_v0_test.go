@@ -14,8 +14,9 @@ import (
 const burstTestRunRefV0 = "run-burst-001"
 
 type burstRecordingBuilderV0 struct {
-	err      error
-	requests []DirectorSupervisedBurstStepRequestV0
+	err            error
+	runRefOverride string
+	requests       []DirectorSupervisedBurstStepRequestV0
 }
 
 func (builder *burstRecordingBuilderV0) BuildDirectorCycleStepInputV0(
@@ -27,17 +28,22 @@ func (builder *burstRecordingBuilderV0) BuildDirectorCycleStepInputV0(
 		return orquestadirectorcycle.DirectorCycleStepInputV0{}, builder.err
 	}
 	step := strconv.Itoa(request.StepNumber)
+	runRef := request.RunRef
+	if builder.runRefOverride != "" {
+		runRef = builder.runRefOverride
+	}
 	return orquestadirectorcycle.DirectorCycleStepInputV0{
-		RunRef:   request.RunRef,
+		RunRef:   runRef,
 		CycleRef: "cycle-ref-burst-" + step,
 		TickRef:  "tick-ref-burst-" + step,
 	}, nil
 }
 
 type burstScriptedExecutorV0 struct {
-	statuses []orquestadirectorrunner.DirectorCycleStatusV0
-	errs     []error
-	calls    int
+	statuses         []orquestadirectorrunner.DirectorCycleStatusV0
+	errs             []error
+	resultRunRefOnce string
+	calls            int
 }
 
 func (executor *burstScriptedExecutorV0) ExecuteDirectorCycleStepV0(
@@ -52,6 +58,9 @@ func (executor *burstScriptedExecutorV0) ExecuteDirectorCycleStepV0(
 		CycleRef: input.CycleRef,
 		TickRef:  input.TickRef,
 		Status:   status,
+	}
+	if executor.resultRunRefOnce != "" && index == 0 {
+		result.RunRef = executor.resultRunRefOnce
 	}
 	if status == orquestadirectorrunner.DirectorCycleStatusOutboxPendingV0 {
 		result.PendingOutboxAfterRefs = []string{"outbox-ref-burst-001"}

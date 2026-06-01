@@ -45,7 +45,9 @@ func normalizeRunSchedulingSnapshotV0(snapshot RunSchedulingSnapshotV0, fallback
 		Agents:                    compactSchedulerStringsV0(snapshot.Agents),
 		StartedAgents:             compactSchedulerStringsV0(snapshot.StartedAgents),
 		FailedAgents:              compactSchedulerStringsV0(snapshot.FailedAgents),
+		LostAgents:                compactSchedulerStringsV0(snapshot.LostAgents),
 		StoppedAgents:             compactSchedulerStringsV0(snapshot.StoppedAgents),
+		ConfirmedStoppedAgents:    compactSchedulerStringsV0(snapshot.ConfirmedStoppedAgents),
 		PhaseArtifacts:            compactSchedulerStringsV0(snapshot.PhaseArtifacts),
 		Deliveries:                compactSchedulerStringsV0(snapshot.Deliveries),
 		Reviews:                   compactSchedulerStringsV0(snapshot.Reviews),
@@ -75,15 +77,17 @@ func normalizeSchedulableWorkCandidatesV0(candidates []SchedulableWorkCandidateV
 
 func normalizeSchedulableWorkCandidateV0(candidate SchedulableWorkCandidateV0) SchedulableWorkCandidateV0 {
 	return SchedulableWorkCandidateV0{
-		CandidateRef:      strings.TrimSpace(candidate.CandidateRef),
-		SubjectClaimRefs:  compactSchedulerStringsV0(candidate.SubjectClaimRefs),
-		Claims:            normalizeSchedulerWorkClaimsV0(candidate.Claims),
-		CapacityCandidate: normalizeSchedulerCapacityCandidateV0(candidate.CapacityCandidate),
-		AgentCandidate:    normalizeSchedulerAgentCandidateV0(candidate.AgentCandidate),
-		LiveWorkPolicy:    normalizeSchedulerLiveWorkPolicyV0(candidate.LiveWorkPolicy),
-		GateCommandMeta:   normalizeSchedulerCommandMetaV0(candidate.GateCommandMeta),
-		GateEvidenceRefs:  compactSchedulerStringsV0(candidate.GateEvidenceRefs),
-		EvidenceRefs:      compactSchedulerStringsV0(candidate.EvidenceRefs),
+		CandidateRef:          strings.TrimSpace(candidate.CandidateRef),
+		SubjectClaimRefs:      compactSchedulerStringsV0(candidate.SubjectClaimRefs),
+		Claims:                normalizeSchedulerWorkClaimsV0(candidate.Claims),
+		CapacityCandidate:     normalizeSchedulerCapacityCandidateV0(candidate.CapacityCandidate),
+		AgentCandidate:        normalizeSchedulerAgentCandidateV0(candidate.AgentCandidate),
+		RecoverCapacityOutbox: candidate.RecoverCapacityOutbox,
+		RecoverAgentOutbox:    candidate.RecoverAgentOutbox,
+		LiveWorkPolicy:        normalizeSchedulerLiveWorkPolicyV0(candidate.LiveWorkPolicy),
+		GateCommandMeta:       normalizeSchedulerCommandMetaV0(candidate.GateCommandMeta),
+		GateEvidenceRefs:      compactSchedulerStringsV0(candidate.GateEvidenceRefs),
+		EvidenceRefs:          compactSchedulerStringsV0(candidate.EvidenceRefs),
 	}
 }
 
@@ -200,6 +204,7 @@ func normalizeSchedulableLeaseActionCandidateV0(
 	return SchedulableLeaseActionCandidateV0{
 		CandidateRef:         strings.TrimSpace(candidate.CandidateRef),
 		PostLeaseActionInput: normalizeSchedulerPostLeaseActionInputV0(candidate.PostLeaseActionInput),
+		RecoverStopOutbox:    candidate.RecoverStopOutbox,
 		EvidenceRefs:         compactSchedulerStringsV0(candidate.EvidenceRefs),
 	}
 }

@@ -3,8 +3,8 @@ package orquestadirectorscheduler
 import (
 	"strings"
 
+	orquestaagentprogress "orquesta/modulos/orquesta-agent-progress"
 	orquestadirector "orquesta/modulos/orquesta-director"
-	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func normalizeSchedulableProgressSupervisionCandidatesV0(
@@ -42,10 +42,10 @@ func normalizeSchedulerProgressSupervisionInputV0(
 	input.Report.ReportID = strings.TrimSpace(input.Report.ReportID)
 	input.Report.RunID = strings.TrimSpace(input.Report.RunID)
 	input.Report.AgentRequestID = strings.TrimSpace(input.Report.AgentRequestID)
-	input.Report.Status = orquestaruntime.AgentProgressStatusV0(
+	input.Report.Status = orquestaagentprogress.AgentProgressStatusV0(
 		strings.TrimSpace(string(input.Report.Status)),
 	)
-	input.Report.BudgetStatus = orquestaruntime.AgentProgressBudgetStatusV0(
+	input.Report.BudgetStatus = orquestaagentprogress.AgentProgressBudgetStatusV0(
 		strings.TrimSpace(string(input.Report.BudgetStatus)),
 	)
 	input.Report.BudgetReason = strings.TrimSpace(input.Report.BudgetReason)

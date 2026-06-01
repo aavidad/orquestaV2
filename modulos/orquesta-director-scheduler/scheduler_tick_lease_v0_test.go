@@ -48,6 +48,55 @@ func TestBuildDirectorSchedulerTickV0DoesNotRepeatExpiredLease(t *testing.T) {
 	input := validSchedulerTickInputWithLeaseV0(orquestacoreworkflow.AgentLeaseActionStopAgentV0)
 	input.WorkCandidates = nil
 	input.Snapshot.ExpiredLeaseRefs = []string{"lease-ref-scheduler-001"}
+	input.Snapshot.StoppedAgents = []string{"agent-ref-scheduler-001"}
+	input.Snapshot.ConfirmedStoppedAgents = []string{"agent-ref-scheduler-001"}
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusQuiescentV0, 0)
+}
+
+func TestBuildDirectorSchedulerTickV0CompletesLeaseStopAfterExpiredLeaseWithoutStopRef(t *testing.T) {
+	input := validSchedulerTickInputWithLeaseV0(orquestacoreworkflow.AgentLeaseActionStopAgentV0)
+	input.WorkCandidates = nil
+	input.Snapshot.ExpiredLeaseRefs = []string{"lease-ref-scheduler-001"}
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 1)
+	assertSchedulerCommandTypesV0(t, plan, orquestacoreworkflow.OrchestrationCommandStopAgentV0)
+}
+
+func TestBuildDirectorSchedulerTickV0DoesNotRecoverLeaseStopOutboxWithoutExplicitFlag(t *testing.T) {
+	input := validSchedulerTickInputWithLeaseV0(orquestacoreworkflow.AgentLeaseActionStopAgentV0)
+	input.WorkCandidates = nil
+	input.Snapshot.ExpiredLeaseRefs = []string{"lease-ref-scheduler-001"}
+	input.Snapshot.StoppedAgents = []string{"agent-ref-scheduler-001"}
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusQuiescentV0, 0)
+}
+
+func TestBuildDirectorSchedulerTickV0RecoversLeaseStopOutboxAfterExpiredLease(t *testing.T) {
+	input := validSchedulerTickInputWithLeaseV0(orquestacoreworkflow.AgentLeaseActionStopAgentV0)
+	input.WorkCandidates = nil
+	input.Snapshot.ExpiredLeaseRefs = []string{"lease-ref-scheduler-001"}
+	input.Snapshot.StoppedAgents = []string{"agent-ref-scheduler-001"}
+	input.LeaseActionCandidates[0].RecoverStopOutbox = true
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 1)
+	assertSchedulerCommandTypesV0(t, plan, orquestacoreworkflow.OrchestrationCommandStopAgentV0)
+}
+
+func TestBuildDirectorSchedulerTickV0DoesNotRecoverLeaseStopOutboxAfterConfirmedStop(t *testing.T) {
+	input := validSchedulerTickInputWithLeaseV0(orquestacoreworkflow.AgentLeaseActionStopAgentV0)
+	input.WorkCandidates = nil
+	input.Snapshot.ExpiredLeaseRefs = []string{"lease-ref-scheduler-001"}
+	input.Snapshot.StoppedAgents = []string{"agent-ref-scheduler-001"}
+	input.Snapshot.ConfirmedStoppedAgents = []string{"agent-ref-scheduler-001"}
 
 	plan := mustSchedulerTickPlanV0(t, input)
 

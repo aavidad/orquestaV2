@@ -35,6 +35,29 @@ func TestBuildDirectorSchedulerTickV0PhaseArtifactWaitsForStartedAgent(t *testin
 	assertSchedulerWaitingV0(t, plan, SchedulerWaitingAgentLifecyclePendingV0)
 }
 
+func TestBuildDirectorSchedulerTickV0RegistersLatePhaseArtifactFromStoppedUnconfirmedAgent(t *testing.T) {
+	input := validSchedulerTickInputWithPhaseArtifactV0()
+	input.Snapshot.StoppedAgents = []string{"agent-ref-scheduler-001"}
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 1)
+	assertSchedulerCommandTypesV0(t, plan, orquestacoreworkflow.OrchestrationCommandRegisterPhaseArtifactV0)
+}
+
+func TestBuildDirectorSchedulerTickV0BlocksPhaseArtifactFromConfirmedStoppedAgent(t *testing.T) {
+	input := validSchedulerTickInputWithPhaseArtifactV0()
+	input.Snapshot.StoppedAgents = []string{"agent-ref-scheduler-001"}
+	input.Snapshot.ConfirmedStoppedAgents = []string{"agent-ref-scheduler-001"}
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusBlockedV0, 0)
+	if len(plan.BlockedRefs) != 1 || plan.BlockedRefs[0] != "agent-ref-scheduler-001" {
+		t.Fatalf("blocked_refs=%v", plan.BlockedRefs)
+	}
+}
+
 func TestBuildDirectorSchedulerTickV0RejectsForeignRunPhaseArtifactCandidate(t *testing.T) {
 	input := validSchedulerTickInputWithPhaseArtifactV0()
 	input.PhaseArtifactCandidates[0].CommandMeta.RunID = "run-externo-001"

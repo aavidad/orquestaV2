@@ -3,7 +3,7 @@ package orquestadirector
 import (
 	"strings"
 
-	orquestaruntime "orquesta/modulos/orquesta-runtime"
+	orquestaagentprogress "orquesta/modulos/orquesta-agent-progress"
 )
 
 func normalizeAgentProgressSupervisionInputV0(
@@ -29,7 +29,7 @@ func normalizeAgentProgressSupervisionInputV0(
 }
 
 func validateAgentProgressSupervisionInputV0(input AgentProgressSupervisionInputV0) error {
-	if issues := orquestaruntime.ValidateAgentProgressReportV0(input.Report); len(issues) != 0 {
+	if issues := orquestaagentprogress.ValidateAgentProgressReportV0(input.Report); len(issues) != 0 {
 		return agentProgressSupervisionReportErrorV0(input, issues)
 	}
 	required := map[string]string{
@@ -70,8 +70,8 @@ func progressSupervisionNeedsQuestionV0(input AgentProgressSupervisionInputV0) b
 	if agentProgressHasArtifactWithoutAckV0(input.Report) {
 		return true
 	}
-	return input.Report.Status == orquestaruntime.AgentStalledV0 ||
-		(input.Report.Status == orquestaruntime.AgentLoopDetectedV0 && !agentProgressStopAllowedV0(input))
+	return input.Report.Status == orquestaagentprogress.AgentStalledV0 ||
+		(input.Report.Status == orquestaagentprogress.AgentLoopDetectedV0 && !agentProgressStopAllowedV0(input))
 }
 
 func validateSupervisorOutputFieldsV0(input AgentProgressSupervisionInputV0) error {
@@ -80,7 +80,7 @@ func validateSupervisorOutputFieldsV0(input AgentProgressSupervisionInputV0) err
 
 func agentProgressSupervisionReportErrorV0(
 	input AgentProgressSupervisionInputV0,
-	issues []orquestaruntime.AgentProgressReportErrorV0,
+	issues []orquestaagentprogress.AgentProgressReportErrorV0,
 ) AgentProgressSupervisionErrorV0 {
 	evidence := make([]string, 0, len(issues))
 	for _, issue := range issues {

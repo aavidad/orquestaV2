@@ -1,8 +1,8 @@
 package orquestadirector
 
 import (
+	orquestaagentprogress "orquesta/modulos/orquesta-agent-progress"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
-	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 const (
@@ -14,7 +14,7 @@ const (
 
 type AgentProgressSupervisionInputV0 struct {
 	CommandMeta   orquestacoreworkflow.OrchestrationCommandMetaV0 `json:"command_meta"`
-	Report        orquestaruntime.AgentProgressReportV0           `json:"report"`
+	Report        orquestaagentprogress.AgentProgressReportV0     `json:"report"`
 	PhaseID       string                                          `json:"phase_id"`
 	TaskRef       string                                          `json:"task_ref,omitempty"`
 	DeliveryRef   string                                          `json:"delivery_ref,omitempty"`

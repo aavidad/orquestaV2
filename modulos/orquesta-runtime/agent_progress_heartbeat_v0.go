@@ -54,7 +54,7 @@ func validateAgentProgressHeartbeatInputV0(
 	previous *AgentProgressHeartbeatV0,
 	current AgentProgressHeartbeatV0,
 ) []AgentProgressReportErrorV0 {
-	v := agentProgressReportValidatorV0{}
+	v := agentProgressHeartbeatValidatorV0{}
 	v.requireOpaque("report_id", reportID)
 	v.requireOpaque("heartbeat_ref", current.HeartbeatRef)
 	v.requireOpaque("run_id", current.RunID)
@@ -93,6 +93,39 @@ func validateAgentProgressHeartbeatInputV0(
 		}
 	}
 	return v.errors
+}
+
+type agentProgressHeartbeatValidatorV0 struct {
+	errors []AgentProgressReportErrorV0
+}
+
+func (v *agentProgressHeartbeatValidatorV0) requireOpaque(field, value string) {
+	if value == "" {
+		v.add(AgentProgressReportInvalidoV0, field)
+		return
+	}
+	if looksLikeSecret(value) {
+		v.add(AgentProgressSecretoDetectadoV0, field)
+		return
+	}
+	if !opaqueRefPatternV0.MatchString(value) {
+		v.add(AgentProgressReferenciaNoOpacaV0, field)
+	}
+}
+
+func (v *agentProgressHeartbeatValidatorV0) requireNonNegative(field string, value int) {
+	if value < 0 {
+		v.add(AgentProgressReportInvalidoV0, field)
+	}
+}
+
+func (v *agentProgressHeartbeatValidatorV0) add(code AgentProgressReportErrorCodeV0, field string) {
+	v.errors = append(v.errors, AgentProgressReportErrorV0{
+		Code:       code,
+		MessageKey: "orquesta.runtime.agent_progress_report." + string(code),
+		Field:      field,
+		Retryable:  false,
+	})
 }
 
 func normalizeAgentProgressHeartbeatPolicyV0(

@@ -1,6 +1,41 @@
 # Pruebas locales: orquesta-director-scheduler
 
 ```text
+Caso: scheduler_tick_confirmed_stop_delimita_ack_tardio
+Tipo: unit
+Comando: go test -count=1 ./modulos/orquesta-director-scheduler -run 'TestBuildDirectorSchedulerTickV0(RegistersLateDeliveryFromStoppedUnconfirmedAgent|BlocksDeliveryFromConfirmedStoppedAgent|RegistersLatePhaseArtifactFromStoppedUnconfirmedAgent|BlocksPhaseArtifactFromConfirmedStoppedAgent)'
+Evidencia esperada: `stopped_agents` sin confirmacion no bloquea
+RegisterDelivery ni RegisterPhaseArtifact tardios; `confirmed_stopped_agents`
+si bloquea ambos candidates.
+Estado: completada en SCH-018
+```
+
+```text
+Caso: scheduler_tick_lease_stop_outbox_recovery
+Tipo: unit
+Comando: go test -count=1 ./modulos/orquesta-director-scheduler -run 'TestBuildDirectorSchedulerTickV0(RecoversLeaseStopOutboxAfterExpiredLease|DoesNotRecoverLeaseStopOutboxAfterConfirmedStop)'
+Evidencia esperada: con `lease_ref` ya durable en `expired_lease_refs`, el
+scheduler no repite `RegisterAgentLeaseExpired`; si falta `stopped_agents`,
+emite solo `StopAgent` para completar el followup. Si `stopped_agents` ya
+existe, reconstruir outbox exige `recover_stop_outbox=true`; con
+`confirmed_stopped_agents` queda quiescent.
+Estado: completada en SCH-017
+```
+
+```text
+Caso: scheduler_tick_recover_outbox_perdida
+Tipo: unit
+Comando: go test -count=1 ./modulos/orquesta-director-scheduler -run 'TestBuildDirectorSchedulerTickV0Recover(Capacity|Agent)Outbox'
+Evidencia esperada: un work candidate con `recover_capacity_outbox` reemite
+`RequestCapacity` cuando la capacidad ya esta en `snapshot.capacity_requests`;
+un candidate con `recover_agent_outbox` reemite `RequestAgent` cuando el agente
+ya esta en `snapshot.agents`. Sin esos flags, los mismos snapshots siguen en
+waiting por capacity/agent pending. Si la ref solo fue planificada en el mismo
+tick, el recovery no duplica el comando.
+Estado: completada en SCH-016
+```
+
+```text
 Caso: scheduler_tick_live_work_sequence_policy
 Tipo: unit
 Comando: go test -count=1 ./modulos/orquesta-director-scheduler -run 'TestBuildDirectorSchedulerTickV0(WaitsForRepairableLiveWorkOverlap|QueuesCandidateAfterLiveDependency|CreatesReviewTaskForLiveOverlap|CreatesStudyTaskWhenLiveOverlapNeedsContext|LiveOverlapDoesNotBlockIndependentWork)'
@@ -271,10 +306,12 @@ Estado: completada en SCH-004
 ```
 
 ```text
-Caso: scheduler_tick_lease_expired_quiescent
+Caso: scheduler_tick_lease_expired_confirmed_quiescent
 Tipo: unit
 Comando: go test -count=1 .
-Evidencia esperada: lease_ref ya presente en expired_lease_refs no repite RegisterAgentLeaseExpired.
+Evidencia esperada: lease_ref ya presente en expired_lease_refs no repite
+RegisterAgentLeaseExpired; si el stop ya esta confirmado no reconstruye
+StopAgent.
 Estado: completada en SCH-004
 ```
 

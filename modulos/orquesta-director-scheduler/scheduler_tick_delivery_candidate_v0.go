@@ -18,7 +18,7 @@ func (collector *schedulerTickCollectorV0) collectDeliveryCandidateV0(
 		collector.addNeedsDirectorV0(SchedulerWaitingCandidateMissingV0)
 		return nil
 	}
-	if collector.failedAgents[payload.AgentRef] || collector.stoppedAgents[payload.AgentRef] {
+	if collector.failedAgents[payload.AgentRef] || collector.confirmedStoppedAgents[payload.AgentRef] {
 		collector.addBlockedRefsV0([]string{payload.AgentRef})
 		return nil
 	}

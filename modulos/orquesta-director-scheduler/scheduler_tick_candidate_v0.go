@@ -17,10 +17,33 @@ func (collector *schedulerTickCollectorV0) collectCandidateV0(
 	if collector.capacityDecisions[capacityRef] {
 		return collector.collectAgentCandidateV0(candidate)
 	}
-	if collector.capacityRequests[capacityRef] || collector.plannedCapacityRequests[capacityRef] {
+	if collector.capacityRequests[capacityRef] {
+		if candidate.RecoverCapacityOutbox {
+			return collector.collectRecoverCapacityOutboxV0(candidate, capacityRef)
+		}
 		collector.addWaitingV0(SchedulerWaitingCapacityPendingV0)
 		return nil
 	}
+	if collector.plannedCapacityRequests[capacityRef] {
+		collector.addWaitingV0(SchedulerWaitingCapacityPendingV0)
+		return nil
+	}
+	command, err := orquestacoreworkflow.NewRequestCapacityCommandV0(
+		candidate.CapacityCandidate.CommandMeta,
+		candidate.CapacityCandidate.Payload,
+	)
+	if err != nil {
+		return err
+	}
+	collector.addReadyCommandV0(command)
+	collector.plannedCapacityRequests[capacityRef] = true
+	return nil
+}
+
+func (collector *schedulerTickCollectorV0) collectRecoverCapacityOutboxV0(
+	candidate SchedulableWorkCandidateV0,
+	capacityRef string,
+) error {
 	command, err := orquestacoreworkflow.NewRequestCapacityCommandV0(
 		candidate.CapacityCandidate.CommandMeta,
 		candidate.CapacityCandidate.Payload,
@@ -48,11 +71,34 @@ func (collector *schedulerTickCollectorV0) collectAgentCandidateV0(
 		collector.addBlockedRefsV0([]string{agentRef})
 		return nil
 	}
-	if collector.agents[agentRef] || collector.plannedAgents[agentRef] {
+	if collector.agents[agentRef] {
+		if candidate.RecoverAgentOutbox {
+			return collector.collectRecoverAgentOutboxV0(candidate, agentRef)
+		}
+		collector.addWaitingV0(SchedulerWaitingAgentLifecyclePendingV0)
+		return nil
+	}
+	if collector.plannedAgents[agentRef] {
 		collector.addWaitingV0(SchedulerWaitingAgentLifecyclePendingV0)
 		return nil
 	}
 	return collector.collectGateAgentCandidateV0(candidate, agentRef)
+}
+
+func (collector *schedulerTickCollectorV0) collectRecoverAgentOutboxV0(
+	candidate SchedulableWorkCandidateV0,
+	agentRef string,
+) error {
+	command, err := orquestacoreworkflow.NewRequestAgentCommandV0(
+		candidate.AgentCandidate.CommandMeta,
+		candidate.AgentCandidate.Payload,
+	)
+	if err != nil {
+		return err
+	}
+	collector.addReadyCommandV0(command)
+	collector.plannedAgents[agentRef] = true
+	return nil
 }
 
 func (collector *schedulerTickCollectorV0) collectGateAgentCandidateV0(

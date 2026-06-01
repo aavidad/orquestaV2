@@ -25,6 +25,10 @@ func TestBuildDirectorSchedulerTickInputV0ConstruyeSnapshotCanonico(t *testing.T
 	run.ReworkRequests = []string{
 		"rework-request-ref-001#review_result:review-result-ref-001#review_request:review-request-ref-001#delivery:delivery-ref-001",
 	}
+	run.Agents = append(run.Agents, "agent-ref-stopped-001")
+	run.StartedAgents = append(run.StartedAgents, "agent-ref-stopped-001")
+	run.StoppedAgents = append(run.StoppedAgents, "agent-ref-stopped-001")
+	run.ConfirmedStoppedAgents = append(run.ConfirmedStoppedAgents, "agent-ref-stopped-001")
 	request := DirectorTickInputBuildRequestV0{
 		TickRef:           "tick-ref-001",
 		OccurredAt:        "2026-05-06T12:00:00Z",
@@ -51,6 +55,9 @@ func TestBuildDirectorSchedulerTickInputV0ConstruyeSnapshotCanonico(t *testing.T
 	}
 	if !reflect.DeepEqual(input.Snapshot.PendingOutboxRefs, []string{"outbox-ref-001"}) {
 		t.Fatalf("pending outbox=%v", input.Snapshot.PendingOutboxRefs)
+	}
+	if !reflect.DeepEqual(input.Snapshot.ConfirmedStoppedAgents, []string{"agent-ref-stopped-001"}) {
+		t.Fatalf("confirmed_stopped_agents=%v", input.Snapshot.ConfirmedStoppedAgents)
 	}
 }
 

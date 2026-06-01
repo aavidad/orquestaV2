@@ -65,3 +65,15 @@ anteriores; el scheduler debe seguir estricto y no recibir candidates ajenos.
 Consecuencia: tick-input no evalua progreso ni corrige candidates; solo aplica
 un filtro de frontera por identidad causal suficiente antes de validar el input
 compacto.
+
+## DTI-DEC-008: Parada Confirmada Viaja Como Ref De Scheduler
+
+Decision: `OrchestrationRunV0.ConfirmedStoppedAgents` se proyecta en
+`RunSchedulingSnapshotV0.ConfirmedStoppedAgents`.
+
+Motivo: el scheduler distingue parada solicitada (`stopped_agents`) de parada
+efectiva confirmada (`confirmed_stopped_agents`) para ACK/deliveries tardios y
+recuperacion de outbox.
+
+Consecuencia: tick-input transporta y compacta esa lista como refs opacas, sin
+consultar runtime, outbox, DB ni adaptadores.

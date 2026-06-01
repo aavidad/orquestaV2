@@ -1,6 +1,60 @@
 # Tareas locales: orquesta-director-scheduler
 
 ```text
+ID: SCH-018
+Objetivo: Alinear ACK tardio con `confirmed_stopped_agents`.
+Causa raiz: el scheduler bloqueaba Delivery/PhaseArtifact con
+`stopped_agents`, pero el workflow acepta evidencia tardia hasta que la parada
+esta confirmada.
+Tipo: contrato_scheduler
+Contrato afectado: RunSchedulingSnapshotV0 + SchedulableDeliveryCandidateV0 + SchedulablePhaseArtifactCandidateV0
+Test rojo minimo: stopped sin confirmacion registra delivery/phase artifact;
+confirmed_stopped bloquea ambos candidates.
+Write-set: scheduler_tick_*candidate_v0.go, scheduler_tick_types_v0.go, tests,
+docs locales
+Validacion: go test -count=1 ./modulos/orquesta-director-scheduler
+Riesgo de acoplamiento: bajo; no lee runtime ni ACK bruto, solo refs compactas.
+Estado: completada
+```
+
+```text
+ID: SCH-017
+Objetivo: Recuperar outbox `StopAgent` de leases ya expirados.
+Causa raiz: si `AgentLeaseExpired` ya estaba en snapshot, el scheduler quedaba
+quiescent aunque el followup `StopAgent` pudiera reconstruir outbox perdida por
+idempotencia del workflow.
+Tipo: contrato_scheduler
+Contrato afectado: BuildDirectorSchedulerTick v0 + SchedulableLeaseActionCandidateV0
+Test rojo minimo: lease_ref durable sin `stopped_agents` emite solo StopAgent;
+lease_ref durable con `stopped_agents` no reemite salvo
+`recover_stop_outbox=true`; con stop confirmado no reemite nada.
+Write-set: scheduler_tick_lease_candidate_v0.go, scheduler_tick_types_v0.go,
+scheduler_tick_lease_v0_test.go, docs locales
+Validacion: go test -count=1 ./modulos/orquesta-director-scheduler
+Riesgo de acoplamiento: bajo; no reconstruye desde eventos ni outbox, usa el
+candidate explicito ya aportado.
+Estado: completada
+```
+
+```text
+ID: SCH-016
+Objetivo: Reemitir comandos idempotentes para recuperar outbox perdida.
+Causa raiz: `core-workflow` puede reconstruir outbox de `RequestCapacity` y
+`RequestAgent` sin eventos nuevos, pero el scheduler bloqueaba antes al ver la
+solicitud durable en el snapshot.
+Tipo: contrato_scheduler
+Contrato afectado: BuildDirectorSchedulerTick v0 + SchedulableWorkCandidateV0
+Test rojo minimo: con capacity/agent durable y ledger sin outbox, un candidate
+explicito de recovery produce el mismo comando; sin recovery conserva espera.
+Write-set: scheduler_tick_candidate_v0.go, scheduler_tick_types_v0.go,
+scheduler_tick_v0_test.go, docs locales
+Validacion: go test -count=1 ./modulos/orquesta-director-scheduler
+Riesgo de acoplamiento: bajo; no lee eventos completos, outbox, DB, runtime,
+proveedor, modelo, HOME ni OAuth.
+Estado: completada
+```
+
+```text
 ID: SCH-015
 Objetivo: Secuenciar antes que competir con trabajo vivo.
 Causa raiz: ante solapes reparables con agentes arrancados, el scheduler solo

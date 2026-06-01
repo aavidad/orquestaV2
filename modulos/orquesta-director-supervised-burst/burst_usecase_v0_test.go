@@ -70,6 +70,37 @@ func TestRunDirectorSupervisedBurstV0PropagaErroresControlados(t *testing.T) {
 	}
 }
 
+func TestRunDirectorSupervisedBurstV0RechazaStepInputDeOtroRun(t *testing.T) {
+	builder := &burstRecordingBuilderV0{runRefOverride: "run-burst-externo"}
+	executor := &burstScriptedExecutorV0{statuses: []orquestadirectorrunner.DirectorCycleStatusV0{
+		orquestadirectorrunner.DirectorCycleStatusCommandsAppliedV0,
+	}}
+
+	result, err := RunDirectorSupervisedBurstV0(nil, burstValidInputV0(builder, executor, 2))
+
+	assertBurstErrorV0(t, err, ErrDirectorSupervisedBurstStepInputV0, "step_input.run_ref")
+	if result.ExecutedSteps != 0 || executor.calls != 0 {
+		t.Fatalf("foreign step input should not execute: result=%+v calls=%d", result, executor.calls)
+	}
+}
+
+func TestRunDirectorSupervisedBurstV0RechazaStepResultDeOtroRun(t *testing.T) {
+	builder := &burstRecordingBuilderV0{}
+	executor := &burstScriptedExecutorV0{
+		statuses: []orquestadirectorrunner.DirectorCycleStatusV0{
+			orquestadirectorrunner.DirectorCycleStatusCommandsAppliedV0,
+		},
+		resultRunRefOnce: "run-burst-externo",
+	}
+
+	result, err := RunDirectorSupervisedBurstV0(nil, burstValidInputV0(builder, executor, 2))
+
+	assertBurstErrorV0(t, err, ErrDirectorSupervisedBurstStepV0, "step.run_ref")
+	if result.ExecutedSteps != 0 || executor.calls != 1 {
+		t.Fatalf("foreign step result should stop before recording step: result=%+v calls=%d", result, executor.calls)
+	}
+}
+
 func TestRunDirectorSupervisedBurstV0StepErrorRegistraStopError(t *testing.T) {
 	builder := &burstRecordingBuilderV0{}
 	executor := &burstScriptedExecutorV0{

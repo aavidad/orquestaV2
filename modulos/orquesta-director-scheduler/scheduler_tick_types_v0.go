@@ -69,6 +69,7 @@ type RunSchedulingSnapshotV0 struct {
 	FailedAgents              []string `json:"failed_agents,omitempty"`
 	LostAgents                []string `json:"lost_agents,omitempty"`
 	StoppedAgents             []string `json:"stopped_agents,omitempty"`
+	ConfirmedStoppedAgents    []string `json:"confirmed_stopped_agents,omitempty"`
 	PhaseArtifacts            []string `json:"phase_artifacts,omitempty"`
 	Deliveries                []string `json:"deliveries,omitempty"`
 	Reviews                   []string `json:"reviews,omitempty"`
@@ -85,15 +86,17 @@ type RunSchedulingSnapshotV0 struct {
 }
 
 type SchedulableWorkCandidateV0 struct {
-	CandidateRef      string                                          `json:"candidate_ref"`
-	SubjectClaimRefs  []string                                        `json:"subject_claim_refs"`
-	Claims            []orquestacoreconcurrency.WorksetClaimV0        `json:"claims"`
-	CapacityCandidate *SchedulerCapacityCommandCandidateV0            `json:"capacity_candidate,omitempty"`
-	AgentCandidate    *SchedulerAgentCommandCandidateV0               `json:"agent_candidate,omitempty"`
-	LiveWorkPolicy    *SchedulerLiveWorkSequencePolicyV0              `json:"live_work_policy,omitempty"`
-	GateCommandMeta   orquestacoreworkflow.OrchestrationCommandMetaV0 `json:"gate_command_meta"`
-	GateEvidenceRefs  []string                                        `json:"gate_evidence_refs,omitempty"`
-	EvidenceRefs      []string                                        `json:"evidence_refs,omitempty"`
+	CandidateRef          string                                          `json:"candidate_ref"`
+	SubjectClaimRefs      []string                                        `json:"subject_claim_refs"`
+	Claims                []orquestacoreconcurrency.WorksetClaimV0        `json:"claims"`
+	CapacityCandidate     *SchedulerCapacityCommandCandidateV0            `json:"capacity_candidate,omitempty"`
+	AgentCandidate        *SchedulerAgentCommandCandidateV0               `json:"agent_candidate,omitempty"`
+	RecoverCapacityOutbox bool                                            `json:"recover_capacity_outbox,omitempty"`
+	RecoverAgentOutbox    bool                                            `json:"recover_agent_outbox,omitempty"`
+	LiveWorkPolicy        *SchedulerLiveWorkSequencePolicyV0              `json:"live_work_policy,omitempty"`
+	GateCommandMeta       orquestacoreworkflow.OrchestrationCommandMetaV0 `json:"gate_command_meta"`
+	GateEvidenceRefs      []string                                        `json:"gate_evidence_refs,omitempty"`
+	EvidenceRefs          []string                                        `json:"evidence_refs,omitempty"`
 }
 
 type SchedulerLiveWorkSequencePolicyV0 struct {
@@ -122,6 +125,7 @@ type SchedulerAgentCommandCandidateV0 struct {
 type SchedulableLeaseActionCandidateV0 struct {
 	CandidateRef         string                                  `json:"candidate_ref"`
 	PostLeaseActionInput orquestadirector.PostLeaseActionInputV0 `json:"post_lease_action_input"`
+	RecoverStopOutbox    bool                                    `json:"recover_stop_outbox,omitempty"`
 	EvidenceRefs         []string                                `json:"evidence_refs,omitempty"`
 }
 

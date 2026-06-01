@@ -1,6 +1,64 @@
 # Decisiones locales: orquesta-director-scheduler
 
 ```text
+Fecha: 2026-06-01
+Decision: `confirmed_stopped_agents` delimita el bloqueo fuerte de ACK tardio.
+Motivo: `stopped_agents` representa una parada solicitada por el core, no una
+parada efectiva del adaptador. Bloquear Delivery/PhaseArtifact solo por
+`stopped_agents` hacia perder evidencia tardia que `core-workflow` todavia
+acepta causalmente.
+Alternativas:
+  - Mantener el bloqueo por `stopped_agents`: descartado por divergencia con el workflow.
+  - Consultar runtime antes de aceptar candidates: descartado porque el scheduler es puro.
+  - Aceptar tambien confirmed stop: descartado porque permitiria evidencia tras cierre efectivo.
+Impacto: `RunSchedulingSnapshotV0` agrega `confirmed_stopped_agents`; delivery
+y phase artifact bloquean por `failed_agents` o `confirmed_stopped_agents`.
+La deteccion de trabajo vivo sigue usando `stopped_agents` para no esperar
+trabajo nuevo de un agente ya detenido logicamente.
+Estado: aceptada
+```
+
+```text
+Fecha: 2026-06-01
+Decision: La recuperacion de `StopAgent` por lease expirado reemite solo el followup.
+Motivo: `AgentLeaseExpired` es un evento durable sin outbox; si ya esta en
+snapshot no debe repetirse. El followup `StopAgent` si puede reconstruir outbox
+idempotente hasta que haya perdida o parada confirmada.
+Alternativas:
+  - Repetir tambien `RegisterAgentLeaseExpired`: descartado porque duplica la senal causal.
+  - Reemitir stop sin candidate: descartado porque el scheduler no inventa payloads.
+  - Delegar todo al ledger: descartado porque el tick necesita una senal compacta para recuperar.
+Impacto: un lease candidate con `lease_ref` durable y `stop_agent` puede emitir
+solo `StopAgent` si la parada logica aun no aparece en `stopped_agents`. Si la
+parada ya es durable, reconstruir outbox exige `recover_stop_outbox=true` y el
+caller debe aportar el mismo `command_meta` y payload causal. No se reemite si
+el agente esta failed/lost/confirmed_stopped.
+Estado: aceptada
+```
+
+```text
+Fecha: 2026-06-01
+Decision: La recuperacion de outbox perdida para capacity/agent entra como
+senal explicita del `SchedulableWorkCandidateV0`.
+Motivo: `core-workflow` ya reconstruye outbox idempotente cuando se repite
+`RequestCapacity` o `RequestAgent` con el evento durable proyectado, pero el
+scheduler no debe inferir perdida de ledger desde el snapshot ni reemitir
+automaticamente comandos pendientes.
+Alternativas:
+  - Reemitir siempre si falta decision/lifecycle: descartado porque duplicaria
+    efectos externos cuando la outbox sigue viva fuera del snapshot.
+  - Resolverlo solo en el ledger: descartado porque el tick necesita una forma
+    contractual de pedir la reparacion al workflow.
+  - Parsear eventos completos: descartado porque el scheduler consume snapshot
+    compacto y candidates explicitos.
+Impacto: `recover_capacity_outbox` y `recover_agent_outbox` autorizan reemitir
+el mismo comando solo si la ref ya esta observada durablemente en
+`capacity_requests` o `agents`. Las refs planificadas en el mismo tick siguen
+siendo espera, no recovery.
+Estado: aceptada
+```
+
+```text
 Fecha: 2026-05-23
 Decision: Los solapes reparables con trabajo vivo se secuencian en el scheduler
 antes de evaluar RequestAgent.
@@ -179,7 +237,7 @@ Fecha: 2026-05-09
 Decision: Las entregas llegan al scheduler como `SchedulableDeliveryCandidateV0`.
 Motivo: el nucleo necesita registrar `DeliveryRegistered` cuando un agente termina, pero no debe leer ACKs, ficheros, logs, transcripts ni detalles de proveedor.
 Alternativas: leer el ACK desde scheduler; registrar entregas desde el conector saltando el workflow; esperar a una fase posterior manual.
-Impacto: el caller convierte receipts externos en payload compacto; el scheduler valida snapshot minimo, deduplica por `deliveries` y solo emite `RegisterDelivery` si task/agente/started_agent existen y el agente no esta failed/stopped.
+Impacto: el caller convierte receipts externos en payload compacto; el scheduler valida snapshot minimo, deduplica por `deliveries` y solo emite `RegisterDelivery` si task/agente/started_agent existen y el agente no esta failed/confirmed_stopped.
 Estado: aceptada
 ```
 
@@ -266,11 +324,15 @@ Estado: aceptada
 
 ```text
 Fecha: 2026-05-06
-Decision: Una lease ya incluida en `expired_lease_refs` deja el tick `quiescent`, aunque el candidate recomiende `stop_agent`.
-Motivo: La expiracion ya fue observada y el scheduler no debe producir StopAgent o AskDirector tardios sin una observacion nueva del caller.
-Alternativas: Emitir solo StopAgent si el agente no esta failed/stopped; repetir RegisterAgentLeaseExpired y delegar idempotencia al workflow.
-Impacto: El caller debe aportar un nuevo candidate/observacion si necesita materializar una accion secundaria omitida en un tick anterior.
-Estado: aceptada
+Decision: Una lease ya incluida en `expired_lease_refs` no repite `RegisterAgentLeaseExpired`.
+Motivo: La expiracion ya fue observada; solo los followups separados pueden
+completarse o recuperarse segun su propia evidencia durable.
+Alternativas: Dejar siempre el tick `quiescent`; repetir
+RegisterAgentLeaseExpired y delegar idempotencia al workflow.
+Impacto: Reemplazada por SCH-017. Si falta el followup `StopAgent`, el
+scheduler puede emitirlo; si el stop ya esta reflejado, la recuperacion de
+outbox exige `recover_stop_outbox=true`.
+Estado: reemplazada por decision de 2026-06-01
 ```
 
 ```text

@@ -21,6 +21,7 @@ type schedulerTickCollectorV0 struct {
 	failedAgents              map[string]bool
 	lostAgents                map[string]bool
 	stoppedAgents             map[string]bool
+	confirmedStoppedAgents    map[string]bool
 	phaseArtifacts            map[string]bool
 	deliveries                map[string]bool
 	reviews                   map[string]bool
@@ -60,6 +61,7 @@ func newSchedulerTickCollectorV0(input DirectorSchedulerTickInputV0) *schedulerT
 		failedAgents:              schedulerStringSetV0(input.Snapshot.FailedAgents),
 		lostAgents:                schedulerStringSetV0(input.Snapshot.LostAgents),
 		stoppedAgents:             schedulerStringSetV0(input.Snapshot.StoppedAgents),
+		confirmedStoppedAgents:    schedulerStringSetV0(input.Snapshot.ConfirmedStoppedAgents),
 		phaseArtifacts:            schedulerStringSetV0(input.Snapshot.PhaseArtifacts),
 		deliveries:                schedulerStringSetV0(input.Snapshot.Deliveries),
 		reviews:                   schedulerStringSetV0(input.Snapshot.Reviews),

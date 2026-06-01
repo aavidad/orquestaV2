@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	orquestadirectorcycle "orquesta/modulos/orquesta-director-cycle"
 	orquestadirectorsupervisor "orquesta/modulos/orquesta-director-supervisor"
@@ -86,7 +87,19 @@ func runDirectorSupervisedBurstStepV0(
 			nil,
 			burstErrorV0(input, ErrDirectorSupervisedBurstStepInputV0, fmt.Sprintf("%T: %v", err, err), "step_input_builder", true)
 	}
+	if err := validateBurstStepInputForRunV0(input, stepInput); err.Code != "" {
+		return orquestadirectorcycle.DirectorCycleStepResultV0{},
+			orquestadirectorsupervisor.DirectorSupervisorDecisionV0{},
+			nil,
+			err
+	}
 	stepResult, stepErr := input.StepExecutor.ExecuteDirectorCycleStepV0(ctx, stepInput)
+	if err := validateBurstStepResultForRunV0(input, stepResult); err.Code != "" {
+		return stepResult,
+			orquestadirectorsupervisor.DirectorSupervisorDecisionV0{},
+			stepErr,
+			err
+	}
 	decision, decisionErr := input.Supervisor.DecideDirectorSupervisorNextActionV0(
 		burstSupervisorInputV0(input, stepNumber, stepResult, publicCycleStepErrorCodeV0(stepErr)),
 	)
@@ -97,6 +110,39 @@ func runDirectorSupervisedBurstStepV0(
 			burstErrorV0(input, ErrDirectorSupervisedBurstSupervisorV0, "supervisor fallo", "supervisor", false)
 	}
 	return stepResult, decision, stepErr, DirectorSupervisedBurstErrorV0{}
+}
+
+func validateBurstStepInputForRunV0(
+	input DirectorSupervisedBurstInputV0,
+	stepInput orquestadirectorcycle.DirectorCycleStepInputV0,
+) DirectorSupervisedBurstErrorV0 {
+	if strings.TrimSpace(stepInput.RunRef) == input.RunRef {
+		return DirectorSupervisedBurstErrorV0{}
+	}
+	return burstErrorV0(
+		input,
+		ErrDirectorSupervisedBurstStepInputV0,
+		"step_input.run_ref no coincide con run_ref de la rafaga",
+		"step_input.run_ref",
+		true,
+	)
+}
+
+func validateBurstStepResultForRunV0(
+	input DirectorSupervisedBurstInputV0,
+	stepResult orquestadirectorcycle.DirectorCycleStepResultV0,
+) DirectorSupervisedBurstErrorV0 {
+	resultRunRef := strings.TrimSpace(stepResult.RunRef)
+	if resultRunRef == "" || resultRunRef == input.RunRef {
+		return DirectorSupervisedBurstErrorV0{}
+	}
+	return burstErrorV0(
+		input,
+		ErrDirectorSupervisedBurstStepV0,
+		"step.run_ref no coincide con run_ref de la rafaga",
+		"step.run_ref",
+		true,
+	)
 }
 
 func capBurstDecisionAtMaxStepsV0(

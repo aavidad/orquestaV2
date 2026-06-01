@@ -27,3 +27,5 @@ Resultado: `ok` el 2026-05-13.
   reinterpretar candidates en tick-input.
 - `progress_supervision_candidates` de otro run se descartan en la frontera de
   tick-input; los candidates del run actual siguen llegando al scheduler.
+- `confirmed_stopped_agents` se proyecta desde el run al snapshot y se filtra
+  junto al agente objetivo en carriles acotados de delivery.

@@ -217,6 +217,41 @@ func TestNeutralOrchestrationPackagesDoNotDependOnProductAdapters(t *testing.T) 
 	}
 }
 
+func TestDirectorV2NeutralPackagesDoNotDependOnRuntimeOrProductAdapters(t *testing.T) {
+	for _, pkg := range []string{
+		"orquesta/modulos/orquesta-agent-progress",
+		"orquesta/modulos/orquesta-director",
+		"orquesta/modulos/orquesta-director-cycle",
+		"orquesta/modulos/orquesta-director-cycle-outbox",
+		"orquesta/modulos/orquesta-director-runner",
+		"orquesta/modulos/orquesta-director-scheduler",
+		"orquesta/modulos/orquesta-director-supervised-burst",
+		"orquesta/modulos/orquesta-director-supervisor",
+		"orquesta/modulos/orquesta-director-tick-input",
+	} {
+		deps := packageDepsForBoundaryTest(t, pkg)
+		forbiddenDeps := append([]string(nil), forbiddenNeutralDBImportsV0()...)
+		forbiddenDeps = append(forbiddenDeps,
+			"net/http",
+			"orquesta/cmd",
+			"orquesta/db",
+			"orquesta/modulos/orquesta-app-codex-stack",
+			"orquesta/modulos/orquesta-mcp",
+			"orquesta/modulos/orquesta-opes-",
+			"orquesta/modulos/orquesta-runtime",
+			"orquesta/modulos/orquesta-runtime-codex",
+			"os/exec",
+		)
+		for _, forbidden := range forbiddenDeps {
+			for _, dep := range deps {
+				if strings.Contains(dep, forbidden) {
+					t.Fatalf("%s depends on forbidden Director V2 dependency %s", pkg, dep)
+				}
+			}
+		}
+	}
+}
+
 func TestNeutralOrchestrationPackagesDoNotDependOnFactoryOrHTTP(t *testing.T) {
 	for _, pkg := range []string{
 		"orquesta/modulos/orquesta-app-change",

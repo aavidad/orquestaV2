@@ -31,6 +31,34 @@ func TestBuildDirectorSchedulerTickV0WaitsWhenCapacityPending(t *testing.T) {
 	assertSchedulerWaitingV0(t, plan, SchedulerWaitingCapacityPendingV0)
 }
 
+func TestBuildDirectorSchedulerTickV0RecoverCapacityOutbox(t *testing.T) {
+	input := validSchedulerTickInputV0()
+	input.Snapshot.CapacityRequests = []string{"capacity-ref-scheduler-001"}
+	input.WorkCandidates[0].RecoverCapacityOutbox = true
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 1)
+	if plan.Commands[0].CommandType != orquestacoreworkflow.OrchestrationCommandRequestCapacityV0 {
+		t.Fatalf("command_type=%s", plan.Commands[0].CommandType)
+	}
+}
+
+func TestBuildDirectorSchedulerTickV0RecoverCapacityOutboxDoesNotRepeatPlannedCapacity(t *testing.T) {
+	input := validSchedulerTickInputV0()
+	duplicate := input.WorkCandidates[0]
+	duplicate.CandidateRef = "schedulable-ref-planned-capacity-recovery"
+	duplicate.RecoverCapacityOutbox = true
+	input.WorkCandidates = append(input.WorkCandidates, duplicate)
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 1)
+	if plan.Commands[0].CommandType != orquestacoreworkflow.OrchestrationCommandRequestCapacityV0 {
+		t.Fatalf("command_type=%s", plan.Commands[0].CommandType)
+	}
+}
+
 func TestBuildDirectorSchedulerTickV0BuildsGateAndAgentAfterCapacity(t *testing.T) {
 	input := validSchedulerTickInputV0()
 	input.Snapshot.CapacityDecisions = []string{"capacity-ref-scheduler-001"}
@@ -79,6 +107,42 @@ func TestBuildDirectorSchedulerTickV0DoesNotRepeatRequestedAgent(t *testing.T) {
 
 	assertSchedulerPlanV0(t, plan, SchedulerTickStatusWaitingV0, 0)
 	assertSchedulerWaitingV0(t, plan, SchedulerWaitingAgentLifecyclePendingV0)
+}
+
+func TestBuildDirectorSchedulerTickV0RecoverAgentOutbox(t *testing.T) {
+	input := validSchedulerTickInputV0()
+	input.Snapshot.CapacityDecisions = []string{"capacity-ref-scheduler-001"}
+	input.Snapshot.Agents = []string{"agent-ref-scheduler-001"}
+	input.WorkCandidates[0].RecoverAgentOutbox = true
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 1)
+	if plan.Commands[0].CommandType != orquestacoreworkflow.OrchestrationCommandRequestAgentV0 {
+		t.Fatalf("command_type=%s", plan.Commands[0].CommandType)
+	}
+}
+
+func TestBuildDirectorSchedulerTickV0RecoverAgentOutboxDoesNotRepeatPlannedAgent(t *testing.T) {
+	input := validSchedulerTickInputV0()
+	input.Snapshot.CapacityDecisions = []string{"capacity-ref-scheduler-001"}
+	duplicate := input.WorkCandidates[0]
+	duplicate.CandidateRef = "schedulable-ref-planned-agent-recovery"
+	duplicate.RecoverAgentOutbox = true
+	input.WorkCandidates = append(input.WorkCandidates, duplicate)
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 2)
+	requestAgentCommands := 0
+	for _, command := range plan.Commands {
+		if command.CommandType == orquestacoreworkflow.OrchestrationCommandRequestAgentV0 {
+			requestAgentCommands++
+		}
+	}
+	if requestAgentCommands != 1 {
+		t.Fatalf("request_agent_commands=%d, commands=%+v", requestAgentCommands, plan.Commands)
+	}
 }
 
 func TestBuildDirectorSchedulerTickV0WaitsWhenStartedAgentHasNoDelivery(t *testing.T) {

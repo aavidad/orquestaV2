@@ -47,6 +47,7 @@ func compactTickInputSnapshotForAgentsV0(
 	snapshot.FailedAgents = filterTickInputRefsByExactV0(snapshot.FailedAgents, agents)
 	snapshot.LostAgents = filterTickInputRefsByExactV0(snapshot.LostAgents, agents)
 	snapshot.StoppedAgents = filterTickInputRefsByExactV0(snapshot.StoppedAgents, agents)
+	snapshot.ConfirmedStoppedAgents = filterTickInputRefsByExactV0(snapshot.ConfirmedStoppedAgents, agents)
 	return snapshot
 }
 

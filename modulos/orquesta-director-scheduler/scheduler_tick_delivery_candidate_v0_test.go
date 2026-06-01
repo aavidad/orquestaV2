@@ -35,6 +35,29 @@ func TestBuildDirectorSchedulerTickV0DeliveryWaitsForStartedAgent(t *testing.T) 
 	assertSchedulerWaitingV0(t, plan, SchedulerWaitingAgentLifecyclePendingV0)
 }
 
+func TestBuildDirectorSchedulerTickV0RegistersLateDeliveryFromStoppedUnconfirmedAgent(t *testing.T) {
+	input := validSchedulerTickInputWithDeliveryV0()
+	input.Snapshot.StoppedAgents = []string{"agent-ref-scheduler-001"}
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 1)
+	assertSchedulerCommandTypesV0(t, plan, orquestacoreworkflow.OrchestrationCommandRegisterDeliveryV0)
+}
+
+func TestBuildDirectorSchedulerTickV0BlocksDeliveryFromConfirmedStoppedAgent(t *testing.T) {
+	input := validSchedulerTickInputWithDeliveryV0()
+	input.Snapshot.StoppedAgents = []string{"agent-ref-scheduler-001"}
+	input.Snapshot.ConfirmedStoppedAgents = []string{"agent-ref-scheduler-001"}
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusBlockedV0, 0)
+	if len(plan.BlockedRefs) != 1 || plan.BlockedRefs[0] != "agent-ref-scheduler-001" {
+		t.Fatalf("blocked_refs=%v", plan.BlockedRefs)
+	}
+}
+
 func TestBuildDirectorSchedulerTickV0RejectsForeignRunDeliveryCandidate(t *testing.T) {
 	input := validSchedulerTickInputWithDeliveryV0()
 	input.DeliveryCandidates[0].CommandMeta.RunID = "run-externo-001"

@@ -4,9 +4,9 @@ import (
 	"strconv"
 	"strings"
 
+	orquestaagentprogress "orquesta/modulos/orquesta-agent-progress"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestarails "orquesta/modulos/orquesta-rails"
-	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func assessmentFromAgentProgressReportV0(
@@ -69,11 +69,11 @@ func assessmentDecisionFromProgressStatusV0(input AgentProgressSupervisionInputV
 			orquestacoreworkflow.AgentAssessmentSeverityHighV0
 	}
 	switch input.Report.Status {
-	case orquestaruntime.AgentStalledV0:
+	case orquestaagentprogress.AgentStalledV0:
 		return orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
 			orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
 			stalledSeverityFromCountersV0(input.Report)
-	case orquestaruntime.AgentLoopDetectedV0:
+	case orquestaagentprogress.AgentLoopDetectedV0:
 		if !agentProgressStopAllowedV0(input) {
 			return orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
 				orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
@@ -82,7 +82,7 @@ func assessmentDecisionFromProgressStatusV0(input AgentProgressSupervisionInputV
 		return orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0,
 			orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
 			orquestacoreworkflow.AgentAssessmentSeverityCriticalV0
-	case orquestaruntime.AgentStoppedV0:
+	case orquestaagentprogress.AgentStoppedV0:
 		if agentProgressHasArtifactWithoutAckV0(input.Report) {
 			return orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
 				orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
@@ -103,19 +103,19 @@ func assessmentDecisionFromProgressStatusV0(input AgentProgressSupervisionInputV
 	}
 }
 
-func agentProgressCapacityLimitedV0(report orquestaruntime.AgentProgressReportV0) bool {
-	return report.BudgetStatus == orquestaruntime.AgentProgressBudgetCapacityLimitedV0
+func agentProgressCapacityLimitedV0(report orquestaagentprogress.AgentProgressReportV0) bool {
+	return report.BudgetStatus == orquestaagentprogress.AgentProgressBudgetCapacityLimitedV0
 }
 
-func agentProgressOverBudgetNoActivityV0(report orquestaruntime.AgentProgressReportV0) bool {
-	return report.BudgetStatus == orquestaruntime.AgentProgressBudgetOverBudgetNoActivityV0
+func agentProgressOverBudgetNoActivityV0(report orquestaagentprogress.AgentProgressReportV0) bool {
+	return report.BudgetStatus == orquestaagentprogress.AgentProgressBudgetOverBudgetNoActivityV0
 }
 
-func agentProgressOverBudgetButActiveV0(report orquestaruntime.AgentProgressReportV0) bool {
-	return report.BudgetStatus == orquestaruntime.AgentProgressBudgetOverBudgetButActiveV0
+func agentProgressOverBudgetButActiveV0(report orquestaagentprogress.AgentProgressReportV0) bool {
+	return report.BudgetStatus == orquestaagentprogress.AgentProgressBudgetOverBudgetButActiveV0
 }
 
-func agentProgressHasArtifactWithoutAckV0(report orquestaruntime.AgentProgressReportV0) bool {
+func agentProgressHasArtifactWithoutAckV0(report orquestaagentprogress.AgentProgressReportV0) bool {
 	for _, ref := range report.EvidenceRefs {
 		if strings.TrimSpace(ref) == "evidence-ref-artifact-without-ack" {
 			return true
@@ -124,7 +124,7 @@ func agentProgressHasArtifactWithoutAckV0(report orquestaruntime.AgentProgressRe
 	return false
 }
 
-func agentProgressNoACKV0(report orquestaruntime.AgentProgressReportV0) bool {
+func agentProgressNoACKV0(report orquestaagentprogress.AgentProgressReportV0) bool {
 	for _, ref := range report.EvidenceRefs {
 		switch strings.TrimSpace(ref) {
 		case "evidence-ref-no-ack", "evidence-ref-no-ack-interrupted":
@@ -134,7 +134,7 @@ func agentProgressNoACKV0(report orquestaruntime.AgentProgressReportV0) bool {
 	return false
 }
 
-func agentProgressAuthConfigBlockerV0(report orquestaruntime.AgentProgressReportV0) bool {
+func agentProgressAuthConfigBlockerV0(report orquestaagentprogress.AgentProgressReportV0) bool {
 	for _, ref := range report.EvidenceRefs {
 		if strings.TrimSpace(ref) == "evidence-ref-auth-config-blocker" {
 			return true
@@ -147,7 +147,7 @@ func agentProgressStopAllowedV0(input AgentProgressSupervisionInputV0) bool {
 	return input.StopAllowed == nil || *input.StopAllowed
 }
 
-func stalledSeverityFromCountersV0(report orquestaruntime.AgentProgressReportV0) string {
+func stalledSeverityFromCountersV0(report orquestaagentprogress.AgentProgressReportV0) string {
 	if report.NoProgressTicks >= stalledHighNoProgressTicksV0 ||
 		report.RepeatedActionCount >= stalledHighRepeatedActionCountV0 {
 		return orquestacoreworkflow.AgentAssessmentSeverityHighV0
@@ -155,7 +155,7 @@ func stalledSeverityFromCountersV0(report orquestaruntime.AgentProgressReportV0)
 	return orquestacoreworkflow.AgentAssessmentSeverityMediumV0
 }
 
-func assessmentSummaryFromProgressReportV0(report orquestaruntime.AgentProgressReportV0) string {
+func assessmentSummaryFromProgressReportV0(report orquestaagentprogress.AgentProgressReportV0) string {
 	if agentProgressAuthConfigBlockerV0(report) {
 		return "Autenticacion externa invalida; pausar reintentos y solicitar reautorizacion."
 	}
@@ -178,17 +178,17 @@ func assessmentSummaryFromProgressReportV0(report orquestaruntime.AgentProgressR
 		return "Tiempo excedido con actividad reciente; consultar direccion antes de intervenir."
 	}
 	switch report.Status {
-	case orquestaruntime.AgentStalledV0:
+	case orquestaagentprogress.AgentStalledV0:
 		if agentProgressHasArtifactWithoutAckV0(report) {
 			return "Entrega sin ACK con artefacto materializado; validar antes de replanificar."
 		}
 		return compactCounterSummaryV0("Estancamiento observado; consultar direccion.", report)
-	case orquestaruntime.AgentLoopDetectedV0:
+	case orquestaagentprogress.AgentLoopDetectedV0:
 		if agentProgressHasArtifactWithoutAckV0(report) {
 			return "Entrega sin ACK con artefacto materializado; validar antes de replanificar."
 		}
 		return compactCounterSummaryV0("Bucle detectado; detener agente logico.", report)
-	case orquestaruntime.AgentStoppedV0:
+	case orquestaagentprogress.AgentStoppedV0:
 		if agentProgressHasArtifactWithoutAckV0(report) {
 			return "Entrega sin ACK con artefacto materializado; validar antes de replanificar."
 		}
@@ -198,7 +198,7 @@ func assessmentSummaryFromProgressReportV0(report orquestaruntime.AgentProgressR
 	}
 }
 
-func compactCounterSummaryV0(prefix string, report orquestaruntime.AgentProgressReportV0) string {
+func compactCounterSummaryV0(prefix string, report orquestaagentprogress.AgentProgressReportV0) string {
 	return prefix +
 		" ticks_sin_avance=" + strconv.Itoa(report.NoProgressTicks) +
 		" acciones_repetidas=" + strconv.Itoa(report.RepeatedActionCount) + "."
@@ -236,7 +236,7 @@ func registerLostMetaFromSupervisionV0(
 }
 
 func registerLostPayloadFromProgressReportV0(
-	report orquestaruntime.AgentProgressReportV0,
+	report orquestaagentprogress.AgentProgressReportV0,
 	occurredAt string,
 ) orquestacoreworkflow.RegisterAgentLostCommandPayloadV0 {
 	return orquestacoreworkflow.RegisterAgentLostCommandPayloadV0{
@@ -250,15 +250,15 @@ func registerLostPayloadFromProgressReportV0(
 }
 
 func agentProgressShouldRegisterLostV0(
-	report orquestaruntime.AgentProgressReportV0,
+	report orquestaagentprogress.AgentProgressReportV0,
 	assessment orquestacoreworkflow.AssessAgentWorkCommandPayloadV0,
 ) bool {
-	return report.Status == orquestaruntime.AgentStoppedV0 &&
+	return report.Status == orquestaagentprogress.AgentStoppedV0 &&
 		assessment.Action == orquestacoreworkflow.AgentAssessmentActionAskDirectorV0 &&
 		(agentProgressNoACKV0(report) || agentProgressAuthConfigBlockerV0(report))
 }
 
-func supervisionEvidenceRefsV0(report orquestaruntime.AgentProgressReportV0) []string {
+func supervisionEvidenceRefsV0(report orquestaagentprogress.AgentProgressReportV0) []string {
 	candidates := append([]string{report.ReportID}, report.EvidenceRefs...)
 	result := make([]string, 0, len(candidates))
 	seen := map[string]struct{}{}

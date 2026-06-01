@@ -6,7 +6,6 @@ import (
 
 	orquestacontext "orquesta/modulos/orquesta-context"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
-	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func BuildLaunchContextBundleV0(input LaunchContextBundleInputV0) (LaunchContextBundleResultV0, error) {
@@ -45,20 +44,21 @@ func BuildLaunchContextBundleV0(input LaunchContextBundleInputV0) (LaunchContext
 
 func launchContextBundlePayloadV0(
 	message orquestacoreworkflow.OutboxMessageV0,
-) (orquestaruntime.LaunchRuntimeAgentRequestV0, error) {
+) (orquestacoreworkflow.LaunchRuntimeAgentRequestV0, error) {
 	if err := orquestacoreworkflow.ValidateOutboxMessageV0(message); err != nil {
-		return orquestaruntime.LaunchRuntimeAgentRequestV0{}, err
+		return orquestacoreworkflow.LaunchRuntimeAgentRequestV0{}, err
 	}
 	if message.MessageType != orquestacoreworkflow.OutboxMessageLaunchRuntimeAgentV0 ||
 		message.TargetPort != orquestacoreworkflow.OutboxTargetAgentLauncherV0 {
-		return orquestaruntime.LaunchRuntimeAgentRequestV0{}, launchContextBundleErrorV0(ErrDirectorContextBundleOutboxV0, "message_type", nil)
+		return orquestacoreworkflow.LaunchRuntimeAgentRequestV0{}, launchContextBundleErrorV0(ErrDirectorContextBundleOutboxV0, "message_type", nil)
 	}
-	var payload orquestaruntime.LaunchRuntimeAgentRequestV0
+	var payload orquestacoreworkflow.LaunchRuntimeAgentRequestV0
 	if err := json.Unmarshal(message.Payload, &payload); err != nil {
-		return orquestaruntime.LaunchRuntimeAgentRequestV0{}, err
+		return orquestacoreworkflow.LaunchRuntimeAgentRequestV0{}, err
 	}
-	if issues := orquestaruntime.ValidateLaunchRuntimeAgentRequestV0(payload); len(issues) > 0 {
-		return orquestaruntime.LaunchRuntimeAgentRequestV0{}, launchContextBundleErrorV0(ErrDirectorContextBundleOutboxV0, "payload", nil)
+	payload = normalizeLaunchContextBundlePayloadV0(payload)
+	if err := validateLaunchContextBundlePayloadV0(payload); err != nil {
+		return orquestacoreworkflow.LaunchRuntimeAgentRequestV0{}, err
 	}
 	return payload, nil
 }

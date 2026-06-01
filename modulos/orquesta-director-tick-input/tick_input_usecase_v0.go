@@ -76,6 +76,7 @@ func buildRunSchedulingSnapshotV0(
 		FailedAgents:              compactTickInputRefsV0(run.FailedAgents),
 		LostAgents:                compactTickInputRefsV0(run.LostAgents),
 		StoppedAgents:             compactTickInputRefsV0(run.StoppedAgents),
+		ConfirmedStoppedAgents:    compactTickInputRefsV0(run.ConfirmedStoppedAgents),
 		PhaseArtifacts:            schedulerPhaseArtifactRefsV0(run.PhaseArtifacts),
 		Deliveries:                compactTickInputRefsV0(run.Deliveries),
 		Reviews:                   compactTickInputRefsV0(run.Reviews),

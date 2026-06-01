@@ -1,24 +1,24 @@
 package orquestadirectorscheduler
 
 import (
+	orquestaagentprogress "orquesta/modulos/orquesta-agent-progress"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirector "orquesta/modulos/orquesta-director"
-	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func schedulerProgressBudgetPreparedInputV0(
 	input orquestadirector.AgentProgressSupervisionInputV0,
 ) orquestadirector.AgentProgressSupervisionInputV0 {
 	switch input.Report.BudgetStatus {
-	case orquestaruntime.AgentProgressBudgetOverBudgetButActiveV0:
-		input.Report.Status = orquestaruntime.AgentStalledV0
+	case orquestaagentprogress.AgentProgressBudgetOverBudgetButActiveV0:
+		input.Report.Status = orquestaagentprogress.AgentStalledV0
 		return schedulerProgressWithStopAllowedV0(input, false)
-	case orquestaruntime.AgentProgressBudgetOverBudgetNoActivityV0:
+	case orquestaagentprogress.AgentProgressBudgetOverBudgetNoActivityV0:
 		if schedulerProgressBudgetNoActivityCanStopV0(input) {
-			input.Report.Status = orquestaruntime.AgentLoopDetectedV0
+			input.Report.Status = orquestaagentprogress.AgentLoopDetectedV0
 			return input
 		}
-		input.Report.Status = orquestaruntime.AgentStalledV0
+		input.Report.Status = orquestaagentprogress.AgentStalledV0
 		return schedulerProgressWithStopAllowedV0(input, false)
 	}
 	if schedulerProgressBudgetForcesDirectorReviewV0(input) {
@@ -30,7 +30,7 @@ func schedulerProgressBudgetPreparedInputV0(
 func schedulerProgressBudgetForcesDirectorReviewV0(
 	input orquestadirector.AgentProgressSupervisionInputV0,
 ) bool {
-	return input.Report.Status == orquestaruntime.AgentLoopDetectedV0 &&
+	return input.Report.Status == orquestaagentprogress.AgentLoopDetectedV0 &&
 		!progressSupervisionStopAllowedV0(input)
 }
 
@@ -51,7 +51,7 @@ func schedulerProgressBudgetNoActivityCanStopV0(
 func schedulerProgressBudgetNeedsDirectorQuestionV0(
 	input orquestadirector.AgentProgressSupervisionInputV0,
 ) bool {
-	return input.Report.Status == orquestaruntime.AgentStalledV0 ||
+	return input.Report.Status == orquestaagentprogress.AgentStalledV0 ||
 		schedulerProgressBudgetForcesDirectorReviewV0(input)
 }
 

@@ -53,6 +53,43 @@ func TestBuildLaunchContextBundleV0RechazaSinWriteSet(t *testing.T) {
 	requireLaunchContextIssueV0(t, result.Issues, string(orquestacontext.ErrContextBundleCampoRequeridoV0))
 }
 
+func TestBuildLaunchContextBundleV0RechazaPayloadLaunchSinTaskRefONoOpaco(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(*orquestacoreworkflow.LaunchRuntimeAgentRequestV0)
+	}{
+		{
+			name: "sin_task_ref",
+			mutate: func(payload *orquestacoreworkflow.LaunchRuntimeAgentRequestV0) {
+				payload.TaskRef = ""
+			},
+		},
+		{
+			name: "task_ref_no_opaca",
+			mutate: func(payload *orquestacoreworkflow.LaunchRuntimeAgentRequestV0) {
+				payload.TaskRef = "ab"
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			input := validLaunchContextBundleInputV0(t)
+			var payload orquestacoreworkflow.LaunchRuntimeAgentRequestV0
+			if err := json.Unmarshal(input.Message.Payload, &payload); err != nil {
+				t.Fatalf("unmarshal payload: %v", err)
+			}
+			tc.mutate(&payload)
+			input.Message.Payload = mustLaunchContextPayloadV0(t, payload)
+
+			result, err := BuildLaunchContextBundleV0(input)
+			if err == nil {
+				t.Fatalf("expected error, result=%+v", result)
+			}
+			requireLaunchContextIssueV0(t, result.Issues, ErrDirectorContextBundleOutboxV0)
+		})
+	}
+}
+
 func validLaunchContextBundleInputV0(t *testing.T) LaunchContextBundleInputV0 {
 	t.Helper()
 	payload := orquestacoreworkflow.LaunchRuntimeAgentRequestV0{
