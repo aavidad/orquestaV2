@@ -69,3 +69,76 @@ sesiones, procesos, runtime ni politica de relanzamiento.
 
 Consecuencia: el runner sigue parando por outbox/bloqueo/error; la directiva de
 relevo se construye fuera y reingresa como trabajo normal del ciclo.
+
+## DCR-DEC-010: Workflow Persistido Por Event-Store Externo
+
+Decision: `StoredWorkflowCommandPortV0` aplica comandos de `core-workflow`
+reconstruyendo el run desde eventos durables y anexando nuevos eventos mediante
+`WorkflowEventStorePortV0`.
+
+Motivo: el runner necesitaba una implementacion neutral de su puerto workflow
+sin elegir DB ni guardar proyecciones propias. El event-store es una frontera
+hexagonal: archivo, SQL o cualquier store real quedan en composiciones externas.
+
+Consecuencia: `RunDirectorCycleV0` no cambia de responsabilidad. Quien use el
+adaptador debe inyectar un store que devuelva eventos ordenados por run y acepte
+append idempotente/causal. El runner sigue sin filesystem productivo, runtime,
+daemon ni despacho de outbox.
+
+## DCR-DEC-011: Presupuesto De Comandos No Es Rail De Rechazo
+
+Decision: si el scheduler propone mas comandos que `max_commands`, el runner no
+rechaza el plan completo; valida y aplica solo el prefijo dentro del presupuesto.
+
+Motivo: el presupuesto es una compuerta de avance reentrable, no una regla de
+strings exactos. Un plan razonable puede traer mas trabajo listo del que cabe en
+un tick y el Director debe poder continuar en el siguiente ciclo.
+
+Consecuencia: comandos fuera del presupuesto no tienen efectos en ese tick. El
+estado queda `commands_applied` con `commands_exhausted`, salvo que el prefijo
+aplicado genere outbox, bloqueo o necesidad de director.
+
+## DCR-DEC-012: DCR-009 Es Ciclo Superior, No Runner
+
+Decision: el ciclo progresivo multi-fase con app de prueba no se implementa en
+`orquesta-director-runner`.
+
+Motivo: requiere repeticion, snapshots actualizados y posible composicion/smoke
+real. Esas responsabilidades viven por encima del tick acotado y ya empiezan en
+`orquesta-director-cycle` con `ExecuteDirectorCycleStepsV0`.
+
+Consecuencia: el runner mantiene una sola pasada sin daemon ni runtime real. La
+evidencia local valida que recibe un tick preparado, aplica comandos por puerto
+y corta en outbox/espera/bloqueo; los smokes reales deben documentarse en la
+composicion que inyecte snapshots, event-store y dispatcher opt-in.
+
+## DCR-DEC-009: DCR-007 Vive Fuera Del Runner
+
+Decision: el conector superior que prepara candidates/snapshot desde contratos
+compactos no se implementa en `orquesta-director-runner`.
+
+Motivo: el runner es la frontera que ejecuta un ciclo con
+`DirectorSchedulerTickInputV0` ya construido. Si leyera estado durable,
+clasificara candidates o reconstruyera snapshots, mezclaria tick-input,
+scheduler y persistencia en un modulo que debe seguir siendo hexagonal y
+acotado.
+
+Consecuencia: `orquesta-director-tick-input` y `orquesta-director-cycle`
+pueden componer el tick desde contratos compactos; el runner solo valida,
+filtra progreso ajeno por causalidad de `run_ref`, pide plan al scheduler y
+aplica comandos al workflow por puerto.
+
+## DCR-DEC-011: DCR-009 Vive En Composicion Externa
+
+Decision: el ciclo progresivo multi-fase con orquestacion real de una app de
+prueba no se implementa en `orquesta-director-runner`.
+
+Motivo: el runner ejecuta un tick acotado. Una app real implica preparar
+snapshots/candidates entre steps, supervisar presupuesto, tratar outbox y
+posiblemente runtime; esas responsabilidades pertenecen a composiciones sobre
+`orquesta-director-cycle`, `orquesta-director-supervised-burst` u
+`orquesta-orchestration-core`.
+
+Consecuencia: `DCR-009` queda reconciliado como tarea fuera del runner. El
+runner conserva su contrato: scheduler por puerto, workflow/event-store por
+puerto, sin daemon, sin runtime real y sin despacho de outbox.

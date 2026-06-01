@@ -10,13 +10,13 @@ import (
 )
 
 func TestRunDirectorCycleV0ConSchedulerRealYWorkflowEnMemoriaPideCapacidad(t *testing.T) {
-	workflow := newRunnerMemoryWorkflowProgramacionV0(t)
+	store, workflow, run := newRunnerWorkflowEventStoreProgramacionV0(t)
 	input := DirectorCycleInputV0{
 		Scheduler:      DirectDirectorSchedulerPortV0{},
 		Workflow:       workflow,
 		CycleRef:       "cycle-ref-runner-real-001",
-		RunRef:         workflow.run.RunID,
-		SchedulerInput: runnerCapacitySchedulerInputV0(workflow.run),
+		RunRef:         run.RunID,
+		SchedulerInput: runnerCapacitySchedulerInputV0(run),
 	}
 
 	result, err := RunDirectorCycleV0(context.Background(), input)
@@ -32,68 +32,16 @@ func TestRunDirectorCycleV0ConSchedulerRealYWorkflowEnMemoriaPideCapacidad(t *te
 	if len(result.AppliedCommands) != 1 || result.AppliedCommands[0].CommandType != orquestacoreworkflow.OrchestrationCommandRequestCapacityV0 {
 		t.Fatalf("unexpected commands: %+v", result.AppliedCommands)
 	}
-	if !runnerContainsRefV0(workflow.run.CapacityRequests, "capacity-ref-runner-real-001") {
-		t.Fatalf("capacity request not reflected: %+v", workflow.run.CapacityRequests)
+	reloaded, err := LoadWorkflowRunFromEventStoreV0(context.Background(), store, run.RunID)
+	if err != nil {
+		t.Fatalf("reload workflow after cycle: %v", err)
+	}
+	if !runnerContainsRefV0(reloaded.CapacityRequests, "capacity-ref-runner-real-001") {
+		t.Fatalf("capacity request not reflected: %+v", reloaded.CapacityRequests)
 	}
 	if len(result.Outbox) != 1 || result.Outbox[0].MessageType != orquestacoreworkflow.OutboxMessageRequestCapacityDecisionV0 {
 		t.Fatalf("unexpected outbox: %+v", result.Outbox)
 	}
-}
-
-type runnerMemoryWorkflowPortV0 struct {
-	run   orquestacoreworkflow.OrchestrationRunV0
-	calls []string
-}
-
-func newRunnerMemoryWorkflowProgramacionV0(t *testing.T) *runnerMemoryWorkflowPortV0 {
-	t.Helper()
-	port := &runnerMemoryWorkflowPortV0{}
-	port.mustApplyCommandV0(t, mustRunnerStartCommandV0(t, "memory-start"))
-	port.mustApplyCommandV0(t, mustRunnerOpenProgramacionCommandV0(t, "memory-open"))
-	return port
-}
-
-func (port *runnerMemoryWorkflowPortV0) HandleWorkflowCommandV0(
-	ctx context.Context,
-	command orquestacoreworkflow.OrchestrationCommandV0,
-) (orquestacoreworkflow.OrchestrationCommandResultV0, error) {
-	if err := ctx.Err(); err != nil {
-		return orquestacoreworkflow.OrchestrationCommandResultV0{}, err
-	}
-	result, err := orquestacoreworkflow.HandleCommandV0(port.run, command)
-	if err != nil {
-		return result, err
-	}
-	if err := port.applyEventsV0(result.Events); err != nil {
-		return result, err
-	}
-	port.calls = append(port.calls, command.CommandType)
-	return result, nil
-}
-
-func (port *runnerMemoryWorkflowPortV0) mustApplyCommandV0(
-	t *testing.T,
-	command orquestacoreworkflow.OrchestrationCommandV0,
-) {
-	t.Helper()
-	result, err := port.HandleWorkflowCommandV0(context.Background(), command)
-	if err != nil {
-		t.Fatalf("apply command %s: %v", command.CommandType, err)
-	}
-	if len(result.Events) == 0 {
-		t.Fatalf("command %s produced no events", command.CommandType)
-	}
-}
-
-func (port *runnerMemoryWorkflowPortV0) applyEventsV0(events []orquestacoreworkflow.OrchestrationEventV0) error {
-	var err error
-	for _, event := range events {
-		port.run, err = orquestacoreworkflow.ApplyEventV0(port.run, event)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func runnerCapacitySchedulerInputV0(

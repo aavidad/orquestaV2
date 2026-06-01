@@ -46,6 +46,72 @@ func TestExecuteDirectorCycleStepV0RegistraOutboxYSegundoPasoEspera(t *testing.T
 	}
 }
 
+func TestExecuteDirectorCycleStepV0ReplayConEventoDurableYLedgerVacioReemiteOutbox(t *testing.T) {
+	workflow := newCycleStepWorkflowV0(t)
+	ledger := newCycleStepLedgerAdapterV0()
+
+	first, err := ExecuteDirectorCycleStepV0(
+		context.Background(),
+		validCycleStepInputV0(workflow, ledger, "cycle-ref-step-replay-first", "tick-ref-step-replay-first"),
+	)
+	if err != nil {
+		t.Fatalf("first step: %v", err)
+	}
+	if first.EventsCount != 1 || first.OutboxSavedCount != 1 {
+		t.Fatalf("first did not seed durable event and outbox: %+v", first)
+	}
+
+	recoveredLedger := newCycleStepLedgerAdapterV0()
+	recoverInput := validCycleStepInputV0(
+		workflow,
+		recoveredLedger,
+		"cycle-ref-step-replay-recover",
+		"tick-ref-step-replay-recover",
+	)
+	recoverInput.WorkCandidates[0].RecoverCapacityOutbox = true
+
+	recovered, err := ExecuteDirectorCycleStepV0(context.Background(), recoverInput)
+	if err != nil {
+		t.Fatalf("recover step: %v", err)
+	}
+	if recovered.Status != orquestadirectorrunner.DirectorCycleStatusOutboxPendingV0 {
+		t.Fatalf("recover status: %+v", recovered)
+	}
+	if len(recovered.AppliedCommands) != 1 ||
+		recovered.AppliedCommands[0].CommandType != string(orquestacoreworkflow.OrchestrationCommandRequestCapacityV0) ||
+		recovered.AppliedCommands[0].EventCount != 0 ||
+		recovered.AppliedCommands[0].OutboxCount != 1 {
+		t.Fatalf("recover applied commands: %+v", recovered.AppliedCommands)
+	}
+	if recovered.EventsCount != 0 || recovered.OutboxSavedCount != 1 ||
+		recovered.OutboxPendingAfterCount != 1 {
+		t.Fatalf("recover counters: %+v", recovered)
+	}
+	if len(workflow.run.CapacityRequests) != 1 ||
+		!cycleStepContainsRefV0(workflow.run.CapacityRequests, "capacity-ref-cycle-step-001") {
+		t.Fatalf("capacity duplicated or missing: %+v", workflow.run.CapacityRequests)
+	}
+
+	second, err := ExecuteDirectorCycleStepV0(
+		context.Background(),
+		validCycleStepInputV0(workflow, recoveredLedger, "cycle-ref-step-replay-wait", "tick-ref-step-replay-wait"),
+	)
+	if err != nil {
+		t.Fatalf("second step: %v", err)
+	}
+	if second.Status != orquestadirectorrunner.DirectorCycleStatusWaitingV0 ||
+		second.SchedulerStatus != orquestadirectorscheduler.SchedulerTickStatusWaitingV0 {
+		t.Fatalf("second status: %+v", second)
+	}
+	if len(second.AppliedCommands) != 0 || second.OutboxSavedCount != 0 {
+		t.Fatalf("second duplicated work: %+v", second)
+	}
+	if len(second.WaitingReasons) != 1 ||
+		second.WaitingReasons[0] != orquestadirectorscheduler.SchedulerWaitingOutboxPendingV0 {
+		t.Fatalf("second waiting reasons: %+v", second.WaitingReasons)
+	}
+}
+
 func TestExecuteDirectorCycleStepV0PasaOutboxPendientePreviaAlTickInput(t *testing.T) {
 	workflow := newCycleStepWorkflowV0(t)
 	ledger := newCycleStepLedgerAdapterV0()

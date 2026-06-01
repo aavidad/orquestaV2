@@ -63,9 +63,6 @@ func validateDirectorCyclePlanV0(
 	if !directorCycleSchedulerStatusKnownV0(plan.Status) {
 		return directorCycleErrorV0(input, ErrDirectorRunnerCycleInvalidoV0, "status scheduler no soportado", "plan.status", false, nil)
 	}
-	if len(plan.Commands) > input.MaxCommands && !orquestarails.SecurityModeProgrammingEnabledV0() {
-		return directorCycleErrorV0(input, ErrDirectorRunnerCycleInvalidoV0, "demasiados comandos", "plan.commands", false, nil)
-	}
 	return validateDirectorCyclePlanCommandsV0(input, plan)
 }
 
@@ -82,7 +79,11 @@ func validateDirectorCyclePlanCommandsV0(
 	if !directorCycleStatusAllowsCommandsV0(plan.Status) {
 		return directorCycleErrorV0(input, ErrDirectorRunnerCycleInvalidoV0, "status no permite comandos", "plan.status", false, nil)
 	}
-	for _, command := range plan.Commands {
+	commands := plan.Commands
+	if len(commands) > input.MaxCommands {
+		commands = commands[:input.MaxCommands]
+	}
+	for _, command := range commands {
 		if strings.TrimSpace(command.RunID) != input.RunRef {
 			return directorCycleErrorV0(input, ErrDirectorRunnerCycleInvalidoV0, "comando de otro run", "plan.commands.run_id", false, nil)
 		}

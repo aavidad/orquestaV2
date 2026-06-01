@@ -27,19 +27,40 @@ Invariantes:
 - Si `max_outbox>1`, el runner puede acumular varios outbox del mismo plan antes
   de devolver `outbox_pending`; no los persiste ni despacha.
 - Si un comando falla, no se aplican comandos posteriores.
-- `max_commands` limita el lote; por defecto es pequeno.
+- `max_commands` limita el lote; por defecto es pequeno. Si el scheduler
+  propone mas comandos, el runner valida y aplica solo el prefijo que cabe en
+  el presupuesto y deja el ciclo reentrable como `commands_applied`.
 - `max_outbox` limita el lote de outbox; por defecto es 1.
 
 Puertos:
 
 - `DirectorSchedulerPortV0`: adaptador hexagonal del scheduler.
 - `WorkflowCommandPortV0`: adaptador hexagonal del workflow/event-store.
+- `WorkflowEventStorePortV0`: puerto externo opcional para cargar y anexar
+  eventos durables de un run.
+
+## StoredWorkflowCommandPortV0
+
+Adaptador neutral opcional que implementa `WorkflowCommandPortV0` sobre
+`WorkflowEventStorePortV0`.
+
+Invariantes:
+
+- carga eventos por `LoadRunEventsV0`;
+- reconstruye el run con `ReplayDurableEventsV0`;
+- aplica el comando con `HandleCommandV0`;
+- valida y anexa solo eventos del mismo `run_ref`;
+- recarga por replay despues de anexar para verificar que la historia durable
+  reconstruye el run;
+- no guarda proyecciones, no elige DB, no usa filesystem, red ni runtime real.
 
 Errores publicos:
 
 - `director_runner_cycle_invalido`: entrada, contexto o plan invalido.
 - `director_runner_scheduler`: fallo del puerto scheduler.
 - `director_runner_workflow`: fallo del puerto workflow.
+- `director_runner_workflow_store`: entrada invalida del adaptador de
+  event-store.
 
 Estados de salida:
 
@@ -64,5 +85,7 @@ No forman parte de este modulo:
 - conectores de runtime;
 - seleccion de modelos;
 - OAuth/HOME/cuotas;
+- conectores superiores que preparan `DirectorSchedulerTickInputV0`;
+- construccion de candidatos o snapshots desde estado durable;
 - preparacion de contexto de agentes;
 - despacho de outbox.

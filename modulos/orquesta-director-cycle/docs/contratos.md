@@ -43,6 +43,10 @@ Invariantes:
 - Si el runner produce outbox, se registra antes de devolver resultado.
 - La consulta de outbox pendiente se hace por `OutboxLedger` inyectado y sus
   refs se pasan a `orquesta-director-tick-input` como datos.
+- Si el run trae un evento durable pero el ledger inyectado no lista la outbox
+  correspondiente, solo puede recuperar esa outbox cuando el candidate externo
+  trae la senal explicita de recovery. El step no infiere ni construye esa
+  reparacion por su cuenta.
 
 Errores publicos:
 
@@ -50,6 +54,51 @@ Errores publicos:
 - `director_cycle_step_outbox`
 - `director_cycle_step_tick_input`
 - `director_cycle_step_runner`
+
+## ExecuteDirectorCycleStepsV0
+
+Entrada canonica: `DirectorCycleStepsInputV0`.
+
+Campos obligatorios:
+
+- `initial_step`: primer `DirectorCycleStepInputV0` completo.
+- `max_steps`: presupuesto externo explicito, entre 1 y 50.
+
+Campos opcionales:
+
+- `snapshot_port`: puerto para cargar el siguiente snapshot del run cuando el
+  ultimo paso queda en `commands_applied` y aun hay presupuesto;
+- `correlation_id`;
+- `evidence_refs`.
+
+Salida:
+
+- pasos ejecutados;
+- ultimo resultado de step;
+- historial compacto de resultados;
+- status final;
+- `stop_reason`: `wait_outbox`, `wait_external`, `blocked`,
+  `needs_director`, `stop_quiescent`, `stop_max_steps` o `stop_error`;
+- refs compactas de outbox, espera y bloqueo.
+
+Invariantes:
+
+- No cambia la semantica de `ExecuteDirectorCycleStepV0`: cada llamada al step
+  sigue ejecutando un unico tick.
+- No construye candidates, no despacha outbox y no registra ACK.
+- No usa daemon, goroutines, sleeps, filesystem productivo ni runtime real.
+- Solo repite cuando el step anterior queda en `commands_applied`, sin outbox
+  pendiente y con presupuesto disponible.
+- Para ejecutar un segundo step necesita `snapshot_port`; el snapshot debe traer
+  `run`, `cycle_ref`, `tick_ref` y `occurred_at` actualizados.
+- Si aparece outbox pendiente, waiting, blocked, needs_director, quiescent,
+  error o `max_steps`, el coordinador devuelve el corte sin relanzar trabajo.
+
+Errores publicos:
+
+- `director_cycle_steps_invalido`
+- `director_cycle_steps_snapshot`
+- `director_cycle_steps_step`
 
 ## No Contratos
 

@@ -171,6 +171,38 @@ func TestRunDirectorCycleV0FiltraProgressCandidatesAjenosAntesDeScheduler(t *tes
 	}
 }
 
+func TestRunDirectorCycleV0EntregaTickPreparadoAlScheduler(t *testing.T) {
+	var captured orquestadirectorscheduler.DirectorSchedulerTickInputV0
+	scheduler := DirectorSchedulerFuncV0(func(_ context.Context, input orquestadirectorscheduler.DirectorSchedulerTickInputV0) (orquestadirectorscheduler.DirectorSchedulerTickPlanV0, error) {
+		captured = input
+		return runnerSchedulerPlanV0(orquestadirectorscheduler.SchedulerTickStatusWaitingV0, nil), nil
+	})
+	workflowCalls := 0
+	workflow := WorkflowCommandFuncV0(func(context.Context, orquestacoreworkflow.OrchestrationCommandV0) (orquestacoreworkflow.OrchestrationCommandResultV0, error) {
+		workflowCalls++
+		return orquestacoreworkflow.OrchestrationCommandResultV0{}, nil
+	})
+	input := runnerValidInputV0(scheduler, workflow)
+	input.SchedulerInput.Snapshot.Tasks = []string{"task-ref-runner-prepared-001"}
+	input.SchedulerInput.WorkCandidates = []orquestadirectorscheduler.SchedulableWorkCandidateV0{
+		runnerCapacityWorkCandidateV0(runnerRunRefV0),
+	}
+
+	result, err := RunDirectorCycleV0(context.Background(), input)
+	if err != nil {
+		t.Fatalf("run cycle: %v", err)
+	}
+	if result.Status != DirectorCycleStatusWaitingV0 || workflowCalls != 0 {
+		t.Fatalf("unexpected result calls=%d result=%+v", workflowCalls, result)
+	}
+	if len(captured.WorkCandidates) != 1 ||
+		captured.WorkCandidates[0].CandidateRef != "candidate-ref-runner-real-001" ||
+		len(captured.Snapshot.Tasks) != 1 ||
+		captured.Snapshot.Tasks[0] != "task-ref-runner-prepared-001" {
+		t.Fatalf("runner should pass prepared scheduler input through, got %+v", captured)
+	}
+}
+
 func TestRunDirectorCycleV0NeedsDirectorAplicaComandoDurablePrevio(t *testing.T) {
 	command := mustRunnerStartCommandV0(t, "needs-director")
 	scheduler := DirectorSchedulerFuncV0(func(context.Context, orquestadirectorscheduler.DirectorSchedulerTickInputV0) (orquestadirectorscheduler.DirectorSchedulerTickPlanV0, error) {
@@ -254,8 +286,7 @@ func TestRunDirectorCycleV0ProgrammingPermiteMuchasEvidenceRefs(t *testing.T) {
 	}
 }
 
-func TestRunDirectorCycleV0ProgrammingAplicaSoloPresupuestoSiHayDemasiadosComandos(t *testing.T) {
-	t.Setenv("ORQUESTA_SECURITY_MODE", "programming")
+func TestRunDirectorCycleV0AplicaSoloPresupuestoSiHayMasComandos(t *testing.T) {
 	commands := []orquestacoreworkflow.OrchestrationCommandV0{
 		mustRunnerStartCommandV0(t, "budget-001"),
 		mustRunnerStartCommandV0(t, "budget-002"),
