@@ -2,14 +2,11 @@ package orquestaexternalworkrun
 
 import (
 	"context"
-	"reflect"
 	"strings"
-	"time"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
-	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 )
 
 func StartExternalWorkRunV0(
@@ -213,93 +210,4 @@ func externalWorkRunCommandMetaV0(
 		RequestedBy:    request.RequestedBy,
 		OccurredAt:     request.OccurredAt,
 	}
-}
-
-func enqueueExternalWorkRunV0(
-	ctx context.Context,
-	request StartExternalWorkRunRequestV0,
-	writer orquestarunqueue.RunQueuePriorityWriterPortV0,
-) error {
-	occurredAt, err := time.Parse(time.RFC3339, request.OccurredAt)
-	if err != nil {
-		return err
-	}
-	_, err = writer.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
-		RunRef:         request.RunRef,
-		QueueRef:       request.QueueRef,
-		AppRef:         request.AppChangeRequest.AppRef,
-		PriorityScore:  request.PriorityScore,
-		UpdatedAt:      occurredAt,
-		RequestedBy:    request.RequestedBy,
-		Reason:         "external_work_run_created",
-		IdempotencyKey: "idem-external-work-run-queue-" + request.RunRef,
-		EvidenceRefs: []string{
-			"evidence-ref-external-work-run-queued",
-			request.AppChangeRequest.ChangeRef,
-		},
-	})
-	return err
-}
-
-func requestExternalWorkAppChangeOnceV0(
-	ctx context.Context,
-	request StartExternalWorkRunRequestV0,
-	ports orquestaappchange.AppChangePortsV0,
-) (orquestaappchange.AppChangeResultV0, error) {
-	if source, ok := ports.Store.(orquestaappchange.AppChangeRecordSourcePortV0); ok {
-		result, found, err := existingExternalWorkAppChangeResultV0(ctx, request, source)
-		if err != nil || found {
-			return result, err
-		}
-	}
-	return orquestaappchange.RequestAppChangeV0(ctx, request.AppChangeRequest, ports)
-}
-
-func existingExternalWorkAppChangeResultV0(
-	ctx context.Context,
-	request StartExternalWorkRunRequestV0,
-	source orquestaappchange.AppChangeRecordSourcePortV0,
-) (orquestaappchange.AppChangeResultV0, bool, error) {
-	records, err := source.ListAppChangeRecordsV0(
-		ctx,
-		orquestaappchange.AppChangeRecordFilterV0{RunRef: request.RunRef},
-	)
-	if err != nil {
-		return orquestaappchange.AppChangeResultV0{}, false, err
-	}
-	for _, record := range records {
-		if strings.TrimSpace(record.Request.ChangeRef) != request.AppChangeRequest.ChangeRef {
-			continue
-		}
-		if !reflect.DeepEqual(
-			orquestaappchange.PrepareAppChangeRequestV0(record.Request),
-			request.AppChangeRequest,
-		) {
-			return orquestaappchange.AppChangeResultV0{
-				SchemaVersion: orquestaappchange.AppChangeResultSchemaV0,
-				Status:        orquestaappchange.AppChangeStatusInvalidV0,
-				RequestID:     request.RequestID,
-				CorrelationID: request.CorrelationID,
-				RunRef:        request.RunRef,
-				AppRef:        request.AppChangeRequest.AppRef,
-				ChangeRef:     request.AppChangeRequest.ChangeRef,
-				Issues: []orquestaappchange.AppChangeIssueV0{{
-					Code:  ErrExternalWorkRunExistingChangeConflictV0,
-					Field: "change_ref",
-				}},
-			}, true, nil
-		}
-		return orquestaappchange.AppChangeResultV0{
-			SchemaVersion:       orquestaappchange.AppChangeResultSchemaV0,
-			Status:              orquestaappchange.AppChangeStatusAcceptedV0,
-			RequestID:           request.AppChangeRequest.RequestID,
-			CorrelationID:       request.AppChangeRequest.CorrelationID,
-			RunRef:              request.RunRef,
-			AppRef:              request.AppChangeRequest.AppRef,
-			ChangeRef:           request.AppChangeRequest.ChangeRef,
-			DirectorQuestionRef: "question-ref-app-change-" + request.AppChangeRequest.ChangeRef,
-			EvidenceRefs:        []string{"evidence-ref-external-work-app-change-existing"},
-		}, true, nil
-	}
-	return orquestaappchange.AppChangeResultV0{}, false, nil
 }

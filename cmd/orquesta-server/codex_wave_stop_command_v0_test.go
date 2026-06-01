@@ -88,6 +88,7 @@ wait "$!"
 		t.Fatalf("stop exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
 	waitForCodexWaveTestFileV0(t, filepath.Join(summary.Agents[0].HomeDir, "stopped.txt"))
+	waitForCodexWaveProcessStoppedForTestV0(t, summary.Agents[0].PID)
 
 	stdout.Reset()
 	stderr.Reset()
