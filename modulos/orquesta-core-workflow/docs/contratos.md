@@ -108,7 +108,7 @@ Notas:
   - NCW-067 implementa `RecordQualityGate`; ver `docs/contratos_quality_gates.md`.
   - NCW-068 implementa `RegisterPhaseArtifact`; ver `docs/contratos_artefactos_fase.md`.
   - NCW-049 implementa `RegisterAgentStopConfirmed`; ver `docs/contratos_agentes.md`.
-  - NCW-050/NCW-051 endurecen `RegisterDelivery`: exige agente arrancado y rechaza agentes parados o fallidos.
+  - NCW-050/NCW-051 endurecen `RegisterDelivery`: exige agente arrancado y rechaza agentes fallidos; tras NCW-049 solo bloquea parada confirmada.
   - NCW-052 endurece lifecycle de agente: start/fail/stop no pueden contradecirse.
   - NCW-053 endurece `StopAgent`: no emite parada si el lanzamiento ya fallo.
   - NCW-054 permite `RecordReplanDecision` desde `AgentFailed` en `programacion`.
@@ -186,7 +186,7 @@ Pruebas de contrato:
   - `RegisterAgentStarted` y `RegisterAgentFailed` rechazan lifecycle contradictorio con failed/started/stopped ya proyectado.
   - `AssessAgentWork` produce `AgentWorkAssessed`, exige agente ya solicitado, valida `delivery_ref` si existe y repetir assessment ya reflejado no duplica.
   - `RecordQualityGate` produce `QualityGateRecorded`, no emite outbox, exige fase actual activa y proyecta `quality_gates`.
-  - `RegisterDelivery` exige `AgentStarted` previo y rechaza agentes fallidos o con parada solicitada.
+  - `RegisterDelivery` exige `AgentStarted` previo y rechaza agentes fallidos o con parada confirmada.
   - `CloseTask` produce `TaskClosed`, no emite outbox y no cierra fase ni run.
   - `RegisterFinalValidation` debe producir `FinalValidationRegistered`, no emitir outbox y no cerrar fase ni run.
   - `CloseRun` debe producir `RunClosed`, no emitir outbox, exigir validacion ya proyectada y no cerrar fase automaticamente.
@@ -324,7 +324,7 @@ Invariantes:
   - Eventos de arquitectura proyectan refs compactas en `brainstorms`, `votes` y `decisions`.
   - `MicrotaskCreated` proyecta `task_id` en `tasks` y refs compactas de contratos de funcion en `function_contracts`.
   - `DeliveryRegistered` proyecta `delivery_ref` en `deliveries`, `task_id` en `delivered_tasks` y `agent_ref` en `delivered_agents`; registra huella `CommandEffects`.
-  - `DeliveryRegistered` exige agente arrancado y rechaza agentes fallidos o con parada solicitada.
+  - `DeliveryRegistered` exige agente arrancado y rechaza agentes fallidos o con parada confirmada.
   - `ReviewRequested` proyecta `review_request_id` en `reviews` y registra huella `CommandEffects`.
   - `ReviewAccepted` proyecta `accepted_review_ref` en `accepted_reviews` y registra huella `CommandEffects`.
   - `TaskClosed` proyecta `task_id` en `closed_tasks` y registra huella `CommandEffects`.

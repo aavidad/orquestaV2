@@ -218,7 +218,7 @@ Pendiente consciente:
 Fecha: 2026-05-06
 Cambios:
   - NCW-049 implementado: `RegisterAgentStopConfirmed -> AgentStopConfirmed`.
-  - NCW-050 implementado: `RegisterDelivery` rechaza agentes con parada solicitada.
+  - NCW-050 implementado y actualizado por NCW-049: `RegisterDelivery` rechaza agentes con parada confirmada, no solo solicitada.
   - NCW-051 implementado: `RegisterDelivery` exige `AgentStarted` y rechaza `AgentFailed`.
   - NCW-052 implementado: `AgentStarted`, `AgentFailed` y `AgentStopRequested` no aceptan outcomes contradictorios.
   - NCW-053 implementado: `StopAgent` no se emite si `AgentFailed` ya quedo proyectado.

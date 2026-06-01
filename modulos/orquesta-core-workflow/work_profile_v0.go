@@ -107,22 +107,29 @@ func NormalizeWorkProfileV0(profile WorkProfileV0) WorkProfileV0 {
 }
 
 func NormalizeWorkProfileKindV0(kind WorkProfileKindV0) WorkProfileKindV0 {
-	value := strings.ToLower(strings.TrimSpace(string(kind)))
-	value = strings.ReplaceAll(value, "-", "_")
+	value := normalizeLooseEnumTokenV0(string(kind))
 	switch value {
-	case "study_code", "code_analysis", "estudio_codigo", "analisis_codigo":
+	case string(WorkProfileCodeStudyV0), "study_code", "code_analysis", "analysis_code",
+		"estudio_codigo", "analisis_codigo", "analisis", "analysis", "architecture_study":
 		return WorkProfileCodeStudyV0
-	case "programming", "programacion", "implementacion":
+	case string(WorkProfileImplementationV0), "programming", "programacion", "implementacion",
+		"implement", "coding", "development", "desarrollo", "build", "feature", "bugfix",
+		"fix", "web_app", "web_application":
 		return WorkProfileImplementationV0
-	case "refactorizacion":
+	case string(WorkProfileRefactorV0), "refactorizacion", "refactoring", "cleanup", "clean_up",
+		"reorganizacion":
 		return WorkProfileRefactorV0
-	case "tests", "testing", "pruebas", "run_tests":
+	case string(WorkProfileRequiredTestsV0), "required_test", "tests", "testing", "pruebas",
+		"run_tests", "test_run", "verification_tests", "validation_tests":
 		return WorkProfileRequiredTestsV0
-	case "docs", "documentacion":
+	case string(WorkProfileDocumentationV0), "docs", "doc", "document", "documents",
+		"documentacion", "writing_docs", "redaccion":
 		return WorkProfileDocumentationV0
-	case "revision":
+	case string(WorkProfileReviewV0), "revision", "revisar", "qa", "quality_review",
+		"technical_review", "review_technical", "revision_tecnica":
 		return WorkProfileReviewV0
-	case "external_work", "trabajo_dominio":
+	case string(WorkProfileDomainWorkV0), "external_work", "trabajo_dominio", "trabajo_externo",
+		"domain", "domain_task", "domain_job", "domain_operation":
 		return WorkProfileDomainWorkV0
 	default:
 		return WorkProfileKindV0(value)

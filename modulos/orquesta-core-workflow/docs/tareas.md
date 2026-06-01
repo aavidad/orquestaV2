@@ -35,6 +35,21 @@ Estado: completada local
 ```
 
 ```text
+ID: NCW-077
+Objetivo: Evitar que alias textuales reparables de agentes rompan validaciones
+cerradas del core.
+Write-set: loose_enum_token_v0.go, work_profile_v0.go, work_items_*_v0.go,
+agent_work_assessment_*_v0.go, replan_decision_*_v0.go, review_result_v0.go,
+tests y docs locales.
+Contrato: WorkflowTaskV0, WorkProfileV0, AssessAgentWork, AgentWorkAssessed,
+RecordReplanDecision, ReviewResultV0.
+Validacion: 2026-06-01, ok, go test -count=1 ./modulos/orquesta-core-workflow.
+Bloqueos: No relaja refs, causalidad, secretos, rutas externas ni efectos no
+autorizados; alias nuevos deben agregarse de forma cerrada con prueba focal.
+Estado: completada local
+```
+
+```text
 ID: NCW-080
 Objetivo: Crear matriz externa y rapida de railes observados para acumular casos reales antes de recompilar servidor.
 Write-set: rail_external_v0_test.go, scripts/test_rails_fast.sh, docs/rail_errors_observados_2026-05-23.md, docs locales/globales.
@@ -266,12 +281,12 @@ Estado: completada
 
 ```text
 ID: NCW-050
-Objetivo: Impedir `RegisterDelivery` cuando el agente citado ya tiene parada solicitada.
+Objetivo: Impedir `RegisterDelivery` cuando el agente citado ya tiene parada confirmada.
 Write-set: delivery_register_flow_v0.go, delivery_register_invariant_v0_test.go, docs locales.
-Contrato: RegisterDelivery, DeliveryRegistered, AgentStopRequested.
-Validacion: 2026-05-06, ok, go test -count=1 ./modulos/orquesta-core-workflow; E2E programacion basura rechaza delivery posterior.
+Contrato: RegisterDelivery, DeliveryRegistered, AgentStopRequested, AgentStopConfirmed.
+Validacion: 2026-06-01, ok, go test -count=1 ./modulos/orquesta-core-workflow.
 Bloqueos: No decide recuperacion ni replan; solo protege la frontera de entregas.
-Estado: completada
+Estado: completada; semantica actualizada por NCW-049 para permitir entrega tardia hasta confirmacion.
 ```
 
 ```text

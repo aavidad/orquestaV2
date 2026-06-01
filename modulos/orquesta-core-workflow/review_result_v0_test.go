@@ -47,6 +47,29 @@ func TestReviewResultV0ChangesRequestedAndRejectedDoNotCloseTask(t *testing.T) {
 	}
 }
 
+func TestNewReviewResultV0NormalizesReparableStatusAliases(t *testing.T) {
+	for _, item := range []struct {
+		status ReviewResultStatusV0
+		want   ReviewResultStatusV0
+	}{
+		{status: "approved", want: ReviewResultStatusAcceptedV0},
+		{status: "changes requested", want: ReviewResultStatusChangesRequestedV0},
+		{status: "needs-review", want: ReviewResultStatusChangesRequestedV0},
+		{status: "reject", want: ReviewResultStatusRejectedV0},
+	} {
+		result := validReviewResultV0()
+		result.Status = item.status
+
+		got, err := NewReviewResultV0(result)
+		if err != nil {
+			t.Fatalf("NewReviewResultV0 status=%q: %v", item.status, err)
+		}
+		if got.Status != item.want {
+			t.Fatalf("status=%q got=%q want=%q", item.status, got.Status, item.want)
+		}
+	}
+}
+
 func TestValidateReviewResultV0RejectsForbiddenDetails(t *testing.T) {
 	cases := map[string]func(*ReviewResultV0){
 		"api_key":       func(result *ReviewResultV0) { result.Summary = "depende de api_key=valor" },
@@ -98,7 +121,7 @@ func TestValidateReviewResultV0RejectsEmptyRefs(t *testing.T) {
 
 func TestValidateReviewResultV0RejectsUnknownStatus(t *testing.T) {
 	result := validReviewResultV0()
-	result.Status = ReviewResultStatusV0("approved")
+	result.Status = ReviewResultStatusV0("partial")
 
 	err := ValidateReviewResultV0(NormalizeReviewResultV0(result))
 	assertReviewResultErrorV0(t, err, ErrReviewResultStatusNoSoportadoV0, "status")

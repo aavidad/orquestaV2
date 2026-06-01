@@ -210,19 +210,28 @@ Fecha: 2026-05-06
 Decision: `RegisterDelivery` exige agente arrancado y rechaza agentes fallidos.
 Motivo: `AgentRequested` solo significa que el core pidio un agente; sin `AgentStarted` la entrega podria venir de trabajo no confirmado. Si `AgentFailed` ya quedo durable, aceptar entrega posterior contaminaria revision y cierre con una fuente invalida.
 Alternativas: Reinterpretar `agents` como arrancados; resolverlo solo en revision; permitir entregas hasta parada confirmada; dejar que el adaptador descarte entregas tarde.
-Impacto: `RegisterDelivery` y `DeliveryRegistered` requieren `agent_ref` en `started_agents`, rechazan `failed_agents` y mantienen tambien el bloqueo por `stopped_agents`.
-Contratos afectados: RegisterDelivery, DeliveryRegistered, AgentStarted, AgentFailed, AgentStopRequested.
-Estado: aceptada e implementada en NCW-051
+Impacto: `RegisterDelivery` y `DeliveryRegistered` requieren `agent_ref` en
+`started_agents`, rechazan `failed_agents` y, tras NCW-049, bloquean solo
+cuando el agente aparece en `confirmed_stopped_agents`.
+Contratos afectados: RegisterDelivery, DeliveryRegistered, AgentStarted,
+AgentFailed, AgentStopRequested, AgentStopConfirmed.
+Estado: aceptada e implementada en NCW-051; actualizada por NCW-049
 ```
 
 ```text
 Fecha: 2026-05-06
-Decision: `RegisterDelivery` no acepta entregas de agentes con parada solicitada.
-Motivo: Si `StopAgent` ya quedo en la historia durable, aceptar una entrega posterior permitiria que trabajo basura o en bucle contaminara revision/cierre.
-Alternativas: Permitir entrega hasta confirmacion de parada; resolverlo en revision; reabrir agente con otro comando; dejarlo al adaptador.
-Impacto: `RegisterDelivery` y `DeliveryRegistered` rechazan `agent_ref` en `stopped_agents`; replan o relanzamiento deben crear comandos separados.
-Contratos afectados: RegisterDelivery, DeliveryRegistered, AgentStopRequested.
-Estado: aceptada e implementada en NCW-050
+Decision: `RegisterDelivery` acepta entrega tardia tras parada solicitada hasta confirmacion efectiva.
+Motivo: `AgentStopRequested` registra que el core pidio parar, pero no prueba
+que el adaptador haya detenido el trabajo. Una entrega causal tardia puede ser
+evidencia valida hasta que exista `AgentStopConfirmed`.
+Alternativas: Bloquear por `stopped_agents`; resolverlo solo en revision;
+reabrir agente con otro comando; dejarlo al adaptador.
+Impacto: `RegisterDelivery` y `DeliveryRegistered` rechazan `agent_ref` en
+`confirmed_stopped_agents`, no en `stopped_agents`; replan o relanzamiento
+siguen siendo comandos separados tras una parada efectiva.
+Contratos afectados: RegisterDelivery, DeliveryRegistered, AgentStopRequested,
+AgentStopConfirmed.
+Estado: reemplaza la regla NCW-050 tras NCW-049
 ```
 
 ```text
@@ -864,4 +873,22 @@ Motivo: el scheduler necesita derivar rol y capacidad sin inspeccionar textos ni
 Impacto: `WorkflowTaskFromWorkProfileV0` rellena `work_profile_kind`; `NewWorkflowTaskV0` rechaza perfiles no soportados. Las tareas legacy sin perfil siguen validando y se resuelven por fase en la capa de orquestacion.
 Contratos afectados: WorkflowTaskV0, WorkProfileV0, WorkflowTaskFromWorkProfileV0.
 Estado: aceptada local en NCW-076
+```
+
+```text
+Fecha: 2026-06-01
+Decision: Normalizar alias reparables de enums operativos cerrados antes de validar.
+Motivo: los agentes pueden devolver formas equivalentes como `web application`,
+`approved`, `changes requested`, `Loop Detected`, `stop agent` o `retry` sin
+que eso deba tirar trabajo valido. La frontera correcta es canonicalizar alias
+seguros y cortar solo por valores desconocidos, refs imposibles, datos sensibles
+o efectos no autorizados.
+Impacto: `work_profile_kind`, `ReviewResult.status`, `AssessAgentWork`
+verdict/action/severity y `ReplanDecision.accepted_action` aceptan alias
+controlados. `WorkflowTask.write_set` normaliza sufijos de carpeta `/*`, `/**`
+y `/`, pero conserva rechazo de rutas absolutas, escapes, URLs, variables,
+separadores Windows y secretos.
+Contratos afectados: WorkflowTaskV0, WorkProfileV0, ReviewResultV0,
+AssessAgentWork, AgentWorkAssessed, RecordReplanDecision.
+Estado: aceptada local en NCW-077
 ```

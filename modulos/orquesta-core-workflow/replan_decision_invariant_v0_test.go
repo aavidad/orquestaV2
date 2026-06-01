@@ -67,6 +67,14 @@ func TestRecordReplanDecisionCommandV0RejectsProjectionSeparators(t *testing.T) 
 	assertRecordReplanDecisionCommandErrorV0(t, err, ErrPayloadInvalidoV0)
 }
 
+func TestRecordReplanDecisionCommandV0RejectsUnknownAction(t *testing.T) {
+	payload := validReplanDecisionPayloadV0("replan-decision-unknown-action")
+	payload.AcceptedAction = "delete_task"
+
+	_, err := NewRecordReplanDecisionCommandV0(validCommandMetaV0("cmd-record-replan-unknown-action", "idem-record-replan-unknown-action"), payload)
+	assertRecordReplanDecisionCommandErrorV0(t, err, ErrPayloadInvalidoV0)
+}
+
 func TestReplanDecisionRecordedEventV0RejectsForbiddenDetails(t *testing.T) {
 	payload := validReplanDecisionPayloadV0("replan-decision-event-forbidden")
 	payload.Summary = "usar authorization: bearer valor"

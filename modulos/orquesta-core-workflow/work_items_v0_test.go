@@ -203,12 +203,25 @@ func TestValidateWorkflowTaskV0AcceptsWriteSetRepoPathsWithOperationalNames(t *t
 	task := validWorkflowTaskV0()
 	task.WriteSet = []string{
 		"server/api.go",
-		"internal/storage/schema.go",
+		"internal/storage/schema.go/",
+		"modulos/orquesta-core-workflow/**",
 		"modulos/orquesta-runtime-codex/README.md",
+		"docs/runbooks/*",
 	}
 
-	if _, err := NewWorkflowTaskV0(task); err != nil {
+	got, err := NewWorkflowTaskV0(task)
+	if err != nil {
 		t.Fatalf("NewWorkflowTaskV0 with repo write_set paths: %v", err)
+	}
+	want := []string{
+		"server/api.go",
+		"internal/storage/schema.go",
+		"modulos/orquesta-core-workflow",
+		"modulos/orquesta-runtime-codex/README.md",
+		"docs/runbooks",
+	}
+	if !reflect.DeepEqual(got.WriteSet, want) {
+		t.Fatalf("write_set=%+v want %+v", got.WriteSet, want)
 	}
 }
 
@@ -223,6 +236,7 @@ func TestValidateWorkflowTaskV0RejectsUnsafeWriteSetPaths(t *testing.T) {
 		"url":              {path: "https://example.test/file.go", code: ErrWorkflowTaskInvalidaV0},
 		"env_ref":          {path: "$HOME/config.go", code: ErrWorkflowTaskInvalidaV0},
 		"tilde_ref":        {path: "~/repo/file.go", code: ErrWorkflowTaskInvalidaV0},
+		"windows_path":     {path: `modulos\orquesta-core-workflow\file.go`, code: ErrWorkflowTaskInvalidaV0},
 		"api_key":          {path: "config/api_key=valor.env", code: ErrDetalleProhibidoV0},
 		"access_token":     {path: "runtime/access_token=valor.txt", code: ErrDetalleProhibidoV0},
 	}

@@ -81,8 +81,17 @@ func TestValidateWorkflowTaskV0RejectsUnknownWorkProfileKind(t *testing.T) {
 	task := validWorkflowTaskV0()
 	task.WorkProfileKind = "perfil_desconocido"
 
-	err := ValidateWorkflowTaskV0(NormalizeWorkflowTaskV0(task))
+	err := ValidateWorkflowTaskV0(task)
 	assertWorkflowTaskErrorV0(t, err, ErrWorkflowTaskInvalidaV0, "work_profile_kind")
+}
+
+func TestValidateWorkflowTaskV0AcceptsReparableWorkProfileKind(t *testing.T) {
+	task := validWorkflowTaskV0()
+	task.WorkProfileKind = " web application "
+
+	if err := ValidateWorkflowTaskV0(task); err != nil {
+		t.Fatalf("ValidateWorkflowTaskV0 con alias reparable: %v", err)
+	}
 }
 
 func TestNormalizeWorkProfileKindV0Aliases(t *testing.T) {
@@ -91,9 +100,17 @@ func TestNormalizeWorkProfileKindV0Aliases(t *testing.T) {
 		want  WorkProfileKindV0
 	}{
 		{alias: "programacion", want: WorkProfileImplementationV0},
+		{alias: "implementaci\u00f3n", want: WorkProfileImplementationV0},
+		{alias: "web application", want: WorkProfileImplementationV0},
 		{alias: "estudio-codigo", want: WorkProfileCodeStudyV0},
+		{alias: "code analysis", want: WorkProfileCodeStudyV0},
 		{alias: "refactorizacion", want: WorkProfileRefactorV0},
+		{alias: "clean-up", want: WorkProfileRefactorV0},
 		{alias: "pruebas", want: WorkProfileRequiredTestsV0},
+		{alias: "Required Tests", want: WorkProfileRequiredTestsV0},
+		{alias: "DOCUMENTACI\u00d3N", want: WorkProfileDocumentationV0},
+		{alias: "quality review", want: WorkProfileReviewV0},
+		{alias: "domain work", want: WorkProfileDomainWorkV0},
 		{alias: "external-work", want: WorkProfileDomainWorkV0},
 	} {
 		got := NormalizeWorkProfileKindV0(WorkProfileKindV0(item.alias))

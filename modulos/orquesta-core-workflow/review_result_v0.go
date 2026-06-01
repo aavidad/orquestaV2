@@ -15,7 +15,7 @@ func NormalizeReviewResultV0(result ReviewResultV0) ReviewResultV0 {
 		ReviewResultRef: strings.TrimSpace(result.ReviewResultRef),
 		ReviewRequestID: strings.TrimSpace(result.ReviewRequestID),
 		DeliveryRef:     strings.TrimSpace(result.DeliveryRef),
-		Status:          ReviewResultStatusV0(strings.TrimSpace(string(result.Status))),
+		Status:          NormalizeReviewResultStatusV0(result.Status),
 		Summary:         strings.TrimSpace(result.Summary),
 		EvidenceRefs:    normalizeReviewResultStringsV0(result.EvidenceRefs),
 		QualityGateRef:  strings.TrimSpace(result.QualityGateRef),
@@ -42,13 +42,27 @@ func ValidateReviewResultV0(result ReviewResultV0) error {
 }
 
 func IsSupportedReviewResultStatusV0(status ReviewResultStatusV0) bool {
-	switch ReviewResultStatusV0(strings.TrimSpace(string(status))) {
+	switch NormalizeReviewResultStatusV0(status) {
 	case ReviewResultStatusAcceptedV0,
 		ReviewResultStatusChangesRequestedV0,
 		ReviewResultStatusRejectedV0:
 		return true
 	default:
 		return false
+	}
+}
+
+func NormalizeReviewResultStatusV0(status ReviewResultStatusV0) ReviewResultStatusV0 {
+	switch normalized := normalizeLooseEnumTokenV0(string(status)); normalized {
+	case string(ReviewResultStatusAcceptedV0), "approved", "approve", "accept", "ok", "pass":
+		return ReviewResultStatusAcceptedV0
+	case string(ReviewResultStatusChangesRequestedV0), "changes", "needs_changes", "change_requested",
+		"request_changes", "needs_revision", "needs_review", "rework":
+		return ReviewResultStatusChangesRequestedV0
+	case string(ReviewResultStatusRejectedV0), "reject", "declined", "denied", "not_accepted":
+		return ReviewResultStatusRejectedV0
+	default:
+		return ReviewResultStatusV0(normalized)
 	}
 }
 

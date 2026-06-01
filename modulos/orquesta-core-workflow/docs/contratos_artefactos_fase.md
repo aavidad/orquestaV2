@@ -19,7 +19,9 @@ Invariantes:
   - `phase_id` debe ser una fase soportada, actual y activa.
   - `phase_id` no puede ser `programacion`; las entregas de codigo usan `RegisterDelivery`.
   - `agent_ref` debe existir en `agents` y en `started_agents`.
-  - `agent_ref` no puede estar fallido ni parado antes de registrar el artefacto.
+  - `agent_ref` no puede estar fallido ni con parada confirmada antes de
+    registrar el artefacto. Una parada solicitada sin confirmacion aun permite
+    artefacto tardio causal.
   - Si `artifact_ref` ya esta reflejado, solo se acepta retry exacto por `CommandEffects`.
   - No emite outbox.
   - No transporta codigo, transcript/prompt crudo ni valores reales de runtime, DB, proveedor, modelo, HOME, OAuth, Docker, tmux, Git o secretos.

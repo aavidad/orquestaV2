@@ -11,7 +11,7 @@ func NormalizeWorkflowTaskV0(task WorkflowTaskV0) WorkflowTaskV0 {
 		WorkProfileKind:      NormalizeWorkProfileKindV0(task.WorkProfileKind),
 		Title:                strings.TrimSpace(task.Title),
 		Summary:              strings.TrimSpace(task.Summary),
-		WriteSet:             normalizeWorkflowTaskStringsV0(task.WriteSet),
+		WriteSet:             normalizeWorkflowTaskWriteSetV0(task.WriteSet),
 		AcceptanceCriteria:   normalizeWorkflowTaskStringsV0(task.AcceptanceCriteria),
 		RequiredTests:        normalizeWorkflowTaskStringsV0(task.RequiredTests),
 		DependsOn:            normalizeWorkflowTaskStringsV0(task.DependsOn),

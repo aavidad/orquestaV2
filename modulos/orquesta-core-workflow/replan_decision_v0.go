@@ -138,10 +138,29 @@ func normalizeRecordReplanDecisionPayloadV0(payload RecordReplanDecisionCommandP
 		RunRef:         strings.TrimSpace(payload.RunRef),
 		TaskRef:        strings.TrimSpace(payload.TaskRef),
 		SourceRef:      strings.TrimSpace(payload.SourceRef),
-		AcceptedAction: ReplanDecisionActionV0(strings.TrimSpace(string(payload.AcceptedAction))),
+		AcceptedAction: NormalizeReplanDecisionActionV0(payload.AcceptedAction),
 		FollowupRefs:   compactUniqueStringsV0(payload.FollowupRefs),
 		Summary:        strings.TrimSpace(payload.Summary),
 		EvidenceRefs:   compactUniqueStringsV0(payload.EvidenceRefs),
+	}
+}
+
+func NormalizeReplanDecisionActionV0(action ReplanDecisionActionV0) ReplanDecisionActionV0 {
+	switch normalized := normalizeLooseEnumTokenV0(string(action)); normalized {
+	case string(ReplanDecisionActionSplitTaskV0), "split":
+		return ReplanDecisionActionSplitTaskV0
+	case string(ReplanDecisionActionRetryTaskV0), "retry", "rerun", "repeat":
+		return ReplanDecisionActionRetryTaskV0
+	case string(ReplanDecisionActionReplaceAgentV0), "replace", "replace_worker", "new_agent":
+		return ReplanDecisionActionReplaceAgentV0
+	case string(ReplanDecisionActionEscalateCapacityV0), "escalate", "capacity", "capacity_escalation":
+		return ReplanDecisionActionEscalateCapacityV0
+	case string(ReplanDecisionActionAskDirectorV0), "ask", "director", "ask_supervisor":
+		return ReplanDecisionActionAskDirectorV0
+	case string(ReplanDecisionActionAbortTaskV0), "abort", "cancel_task":
+		return ReplanDecisionActionAbortTaskV0
+	default:
+		return ReplanDecisionActionV0(normalized)
 	}
 }
 

@@ -25,9 +25,9 @@ func normalizeAssessAgentWorkPayloadV0(payload AssessAgentWorkCommandPayloadV0) 
 		AgentRequestID: strings.TrimSpace(payload.AgentRequestID),
 		TaskRef:        strings.TrimSpace(payload.TaskRef),
 		DeliveryRef:    strings.TrimSpace(payload.DeliveryRef),
-		Verdict:        strings.TrimSpace(payload.Verdict),
-		Action:         strings.TrimSpace(payload.Action),
-		Severity:       strings.TrimSpace(payload.Severity),
+		Verdict:        normalizeAgentAssessmentVerdictV0(payload.Verdict),
+		Action:         normalizeAgentAssessmentActionV0(payload.Action),
+		Severity:       normalizeAgentAssessmentSeverityV0(payload.Severity),
 		Summary:        strings.TrimSpace(payload.Summary),
 		EvidenceRefs:   compactStringsV0(payload.EvidenceRefs),
 	}

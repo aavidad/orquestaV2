@@ -4,7 +4,12 @@
 Caso: register_delivery_handler_emite_evento_sin_outbox
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-core
-Evidencia esperada: `HandleCommandV0` acepta `RegisterDelivery` solo con fase `programacion` activa, tarea ya creada y agente ya solicitado, emite `DeliveryRegistered`, no emite outbox y rechaza fase no actual, tarea/agente ausentes o detalles prohibidos.
+Evidencia esperada: `HandleCommandV0` acepta `RegisterDelivery` solo con fase
+`programacion` activa, tarea ya creada y agente arrancado, emite
+`DeliveryRegistered`, no emite outbox y rechaza fase no actual, tarea/agente
+ausentes, agentes fallidos, agentes con parada confirmada o detalles
+prohibidos. Una parada solicitada sin confirmacion aun admite entrega tardia
+causal.
 Ultima ejecucion: 2026-05-04, ok.
 Riesgos: No solicita revision; `RequestReview` debe quedar en otro corte.
 ```

@@ -24,6 +24,20 @@ func TestHandleRecordReplanDecisionCommandV0ReturnsEventAndNoOutbox(t *testing.T
 	}
 }
 
+func TestRecordReplanDecisionCommandV0NormalizesReparableActionAlias(t *testing.T) {
+	payload := validReplanDecisionPayloadV0("replan-decision-alias")
+	payload.AcceptedAction = "retry"
+
+	command := mustRecordReplanDecisionCommandWithPayloadV0(t, "cmd-record-replan-alias", "idem-record-replan-alias", payload)
+	got, err := decodeRecordReplanDecisionCommandPayloadV0(command.Payload)
+	if err != nil {
+		t.Fatalf("decode RecordReplanDecision alias payload: %v", err)
+	}
+	if got.AcceptedAction != ReplanDecisionActionRetryTaskV0 {
+		t.Fatalf("accepted_action=%s want %s", got.AcceptedAction, ReplanDecisionActionRetryTaskV0)
+	}
+}
+
 func TestApplyReplanDecisionRecordedV0ProjectsCompactDecisionOnce(t *testing.T) {
 	run := mustReplanDecisionReadyRunV0(t)
 	payload := validReplanDecisionPayloadV0("replan-decision-001")

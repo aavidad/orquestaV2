@@ -197,11 +197,13 @@ Riesgos: No relanza ni sustituye agentes fallidos; esas acciones pertenecen a re
 ```
 
 ```text
-Caso: register_delivery_rechaza_agente_parado
+Caso: register_delivery_delimita_por_parada_confirmada
 Tipo: contract | replay | e2e
 Comando: go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-e2e
-Evidencia esperada: `RegisterDelivery` y `DeliveryRegistered` rechazan `agent_ref` si ese agente ya esta en `stopped_agents`; el E2E de programacion basura verifica que no se puede registrar delivery despues de `AssessAgentWork(garbage, stop_agent)`.
-Ultima ejecucion: 2026-05-06, ok, go test -count=1 ./modulos/orquesta-core-workflow; go test -count=1 ./modulos/orquesta-e2e -run TestE2EProgramacionTrabajoBasuraSolicitaParadaSinEntregaV0.
+Evidencia esperada: `RegisterDelivery` y `DeliveryRegistered` aceptan entrega
+tardia tras `stopped_agents` si falta confirmacion, pero rechazan `agent_ref`
+si ese agente ya esta en `confirmed_stopped_agents`.
+Ultima ejecucion: 2026-06-01, ok, go test -count=1 ./modulos/orquesta-core-workflow.
 Riesgos: No relanza agentes ni replanifica; esas acciones pertenecen a replan/director.
 ```
 
@@ -874,4 +876,19 @@ Comando: go test -count=1 ./modulos/orquesta-core-workflow -run 'TestRegisterPha
 Evidencia esperada: `AgentRequested` proyecta la fase de arranque del agente; `RegisterPhaseArtifact` acepta un artefacto tardio de esa fase aunque el run ya haya abierto otra fase, y rechaza el mismo agente si declara una fase distinta.
 Ultima ejecucion: 2026-05-21, ok, comando focal anterior.
 Riesgos: No relaja identidad de agente ni `programacion` como fase de artefacto; solo evita que una transicion posterior invalide ACKs tardios legitimos.
+```
+
+```text
+Caso: ncw_077_aliases_reparables_enums_operativos
+Tipo: contrato
+Comando: go test -count=1 ./modulos/orquesta-core-workflow
+Evidencia esperada: `work_profile_kind` acepta alias reparables como `web application`;
+`write_set` normaliza carpetas declaradas con `/*`, `/**` o `/`; `AssessAgentWork`
+canonicaliza verdict/action/severity equivalentes; `RecordReplanDecision` acepta
+`retry` como `retry_task`; `ReviewResult` acepta `approved` como `accepted`.
+Valores desconocidos como `delete_task` o `partial`, rutas con escape/URL/HOME
+y secretos siguen rechazados.
+Ultima ejecucion: 2026-06-01, ok, go test -count=1 ./modulos/orquesta-core-workflow.
+Riesgos: Los alias son cerrados y no sustituyen validacion causal ni autorizacion
+de efectos externos.
 ```

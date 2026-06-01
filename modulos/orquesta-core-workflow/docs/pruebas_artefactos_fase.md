@@ -33,5 +33,17 @@ Tipo: invariant
 Comando: go test -count=1 ./modulos/orquesta-core-workflow -run 'TestRegisterPhaseArtifactCommandV0RequiresStartedAgent|TestValidateOrchestrationRunV0RejectsInvalidPhaseArtifactProjection'
 Evidencia esperada: no se aceptan artefactos de agentes no arrancados y el validador rechaza proyecciones huerfanas.
 Ultima ejecucion: 2026-05-09, ok.
-Riesgos: Parar un agente despues de registrar su artefacto no invalida historico; solo se rechaza registrar si ya estaba parado antes.
+Riesgos: Parar un agente despues de registrar su artefacto no invalida historico; solo se rechaza registrar si ya tiene parada confirmada.
+```
+
+```text
+Caso: phase_artifact_late_stopped_until_confirmed
+Tipo: invariant
+Comando: go test -count=1 ./modulos/orquesta-core-workflow -run 'TestRegisterPhaseArtifactCommandV0AcceptsStoppedAgentWithLateAck|TestRegisterPhaseArtifactCommandV0RejectsConfirmedStoppedAgent'
+Evidencia esperada: `RegisterPhaseArtifact` acepta artefacto tardio de un
+agente con `stopped_agents` sin confirmacion y rechaza el mismo flujo cuando el
+agente ya esta en `confirmed_stopped_agents`.
+Ultima ejecucion: 2026-06-01, ok.
+Riesgos: El cierre/replan posterior sigue usando comandos separados; este caso
+solo conserva evidencia causal tardia.
 ```

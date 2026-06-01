@@ -39,6 +39,24 @@ func TestHandleAssessAgentWorkCommandV0RejectsMissingDelivery(t *testing.T) {
 	assertAssessmentCommandErrorV0(t, err, ErrTransicionInvalidaV0, "payload.delivery_ref")
 }
 
+func TestAssessAgentWorkCommandV0NormalizesReparableEnumAliases(t *testing.T) {
+	payload := validAssessmentPayloadV0("assessment-alias", "agent-request-alias")
+	payload.Verdict = "Loop Detected"
+	payload.Action = "stop agent"
+	payload.Severity = "High"
+
+	command := mustAssessAgentWorkCommandV0(t, "cmd-assess-alias", "idem-assess-alias", payload)
+	got, err := decodeAssessAgentWorkCommandPayloadV0(command.Payload)
+	if err != nil {
+		t.Fatalf("decode AssessAgentWork alias payload: %v", err)
+	}
+	if got.Verdict != AgentAssessmentVerdictLoopDetectedV0 ||
+		got.Action != AgentAssessmentActionStopAgentV0 ||
+		got.Severity != AgentAssessmentSeverityHighV0 {
+		t.Fatalf("payload normalizado=%+v", got)
+	}
+}
+
 func TestReplayDurableEventsV0AcceptsAgentWorkAssessedAndExactDuplicate(t *testing.T) {
 	events := []OrchestrationEventV0{
 		mustReplayRunStartedEventWithKeyV0(t, "evt-durable-start-assessment", 1, "idem-start-assessment"),

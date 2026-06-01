@@ -22,7 +22,8 @@ Invariantes:
   - `agent_ref` debe existir ya en `OrchestrationRunV0.Agents`.
   - `agent_ref` debe existir en `started_agents`; `AgentRequested` no basta para entregar.
   - `agent_ref` no puede estar en `failed_agents`.
-  - `agent_ref` no puede estar en `stopped_agents`; una parada solicitada corta entregas posteriores.
+  - `agent_ref` no puede estar en `confirmed_stopped_agents`; una parada
+    solicitada sin confirmacion aun permite entrega tardia causal.
   - Si `delivery_ref` ya esta reflejado, el retry solo es no-op si coincide la huella durable de comando y payload normalizado.
   - No contiene codigo, commits, rutas locales ni valores reales de runtime, DB, proveedor, modelo, HOME, OAuth, Docker, tmux o secretos.
   - No emite outbox ni solicita revision.
@@ -31,7 +32,7 @@ Errores:
   - fase_no_soportada
   - transicion_invalida
   - detalle_prohibido
-Estado: implementado local en NCW-019, endurecido en NCW-050/NCW-051 e identidad fuerte extendida en NCW-062.
+Estado: implementado local en NCW-019, endurecido en NCW-050/NCW-051, actualizado por NCW-049 e identidad fuerte extendida en NCW-062.
 ```
 
 ## `DeliveryRegistered`
@@ -55,7 +56,7 @@ Invariantes:
   - `task_id` y `agent_ref` deben existir ya en la proyeccion del run antes de aplicar.
   - `agent_ref` debe tener `AgentStarted` previo.
   - `agent_ref` no puede tener `AgentFailed` previo.
-  - `agent_ref` no puede estar en `stopped_agents`.
+  - `agent_ref` no puede estar en `confirmed_stopped_agents`.
   - `ApplyEventV0` proyecta `delivery_ref` en `deliveries`, `task_id` en `delivered_tasks` y `agent_ref` en `delivered_agents` sin duplicar.
   - La proyeccion `delivered_agents` es la fuente canonica para stats de agentes completados por entrega; no se infiere desde nombres de ACK.
   - Registra/verifica `CommandEffects`.
@@ -65,5 +66,5 @@ Errores:
   - payload_invalido
   - secuencia_invalida
   - detalle_prohibido
-Estado: implementado local en NCW-019, endurecido en NCW-050/NCW-051 e identidad fuerte extendida en NCW-062.
+Estado: implementado local en NCW-019, endurecido en NCW-050/NCW-051, actualizado por NCW-049 e identidad fuerte extendida en NCW-062.
 ```

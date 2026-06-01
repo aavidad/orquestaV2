@@ -80,7 +80,7 @@ func replanDecisionPayloadErrorV0(command bool, field string) error {
 }
 
 func isSupportedReplanDecisionActionV0(action ReplanDecisionActionV0) bool {
-	switch ReplanDecisionActionV0(strings.TrimSpace(string(action))) {
+	switch NormalizeReplanDecisionActionV0(action) {
 	case ReplanDecisionActionSplitTaskV0,
 		ReplanDecisionActionRetryTaskV0,
 		ReplanDecisionActionReplaceAgentV0,
