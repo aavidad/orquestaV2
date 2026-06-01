@@ -59,7 +59,7 @@ ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
 ORQUESTA_OPES_BRIDGE_ENABLED=1 \
 ORQUESTA_OPES_BRIDGE_CONFIRM=1 \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
-ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=draft_content_block,generate_visual_asset,review_legal,review_pedagogical,review_quality,validate_topic,assemble_topic \
+ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=draft_content_block,generate_visual_asset,review_legal,review_pedagogical,review_quality,validate_topic,assemble_topic,generate_audio_asset \
 go run ./cmd/orquesta-server run
 ```
 
@@ -71,7 +71,25 @@ tipo.
 ## Estado T12
 
 T12 queda reconciliada como bloqueo verificable para smoke real OPES temporal:
-los tests de bridge/conector y el fake `run-until-assemble` ya validan la ruta
-local hasta `assemble_topic -> assembled_topic`, pero falta entorno OPES
-temporal, servidor Orquesta temporal, confirmacion de efectos y cuota/modelo
-real. No repetir implementaciones padre para generar la misma evidencia fake.
+los tests de bridge/conector y el fake `run-until-assemble` validan la ruta
+local de derivados; historicamente llegaba a `assemble_topic -> assembled_topic`
+y la secuencia vigente anade `generate_audio_asset -> audio_asset`. Falta
+entorno OPES temporal, servidor Orquesta temporal, confirmacion de efectos y
+cuota/modelo real. No repetir implementaciones padre para generar la misma
+evidencia fake.
+
+## Audio accesible
+
+OPES debe crear tambien jobs `generate_audio_asset` para producir el artefacto
+`audio_asset` de cada tema publicable. El bridge lo trata como trabajo de
+dominio posterior a `assemble_topic`: recibe refs opacas del tema ensamblado o
+paquete final y devuelve un manifest de audio con idioma, formatos, duracion y
+refs/checksums de artefactos.
+
+La app local que use la RTX4090 o una integracion `edge-tts` de Microsoft es un
+adaptador de composicion OPES. Por calidad observada, `edge-tts` puede ser la
+opcion preferente del adaptador de audio OPES, pero no forma parte del nucleo
+Orquesta ni del contrato `orquesta-domain-work`: hacia Orquesta solo deben
+viajar `work_kind=generate_audio_asset`, `artifact_type=audio_asset`,
+`audio_profile_ref` y refs opacas. Alias como `generate_topic_audio`,
+`tts_topic` o `audio_tema` se normalizan sin tirar el trabajo.

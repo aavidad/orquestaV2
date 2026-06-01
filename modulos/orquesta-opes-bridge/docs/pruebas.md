@@ -23,7 +23,8 @@
 - Mapper de derivados OPES:
   `draft_content_block -> content_block`,
   `generate_visual_asset -> visual_asset`, revisiones y `validate_topic` a
-  `block_revision`, y `assemble_topic -> assembled_topic`.
+  `block_revision`, `assemble_topic -> assembled_topic` y
+  `generate_audio_asset -> audio_asset`.
 - Preservacion de `worktree_ref` y `branch_ref` de autoprogramacion como refs
   opacas, sin usarlas como ruta, rama Git ni componente del write-set.
 - Preservacion de payload JSON como `input_fields`.

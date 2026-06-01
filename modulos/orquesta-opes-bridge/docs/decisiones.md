@@ -9,6 +9,11 @@ fake hasta `assemble_topic -> assembled_topic`. Eso no cierra el smoke real:
 solo una instancia OPES temporal con confirmacion de efectos, servidor Orquesta
 temporal y cuota/modelo confirmados puede producir la evidencia faltante.
 
+Nota 2026-06-02: la secuencia vigente de derivados anade
+`generate_audio_asset -> audio_asset` para accesibilidad auditiva. Esta extension
+no cambia la decision T12 ni convierte el motor de audio en contrato Orquesta:
+RTX4090, `edge-tts` de Microsoft u otro motor quedan en el adaptador OPES.
+
 Decision operativa: dejar T12 como `bloqueado verificable` y no como
 `pendiente` generico. El backlog no debe volver a crear una implementacion
 padre para repetir pruebas fake; debe esperar el entorno opt-in o una tarea

@@ -156,9 +156,16 @@ review_pedagogical
 review_quality
 validate_topic
 assemble_topic
+generate_audio_asset
 export_topic
 verify_sources
 ```
 
 La unidad de redaccion recomendada es `draft_content_block`, no el tema
 completo.
+
+`generate_audio_asset` es el trabajo OPES para accesibilidad auditiva. Debe
+producir `artifact_type=audio_asset` desde el tema ensamblado o refs opacas del
+paquete final. La generacion con RTX4090, `edge-tts` de Microsoft u otro motor
+queda fuera de este conector REST: OPES la implementa como adaptador propio y
+Orquesta solo ve jobs, artefactos, `audio_profile_ref` y receipts publicos.

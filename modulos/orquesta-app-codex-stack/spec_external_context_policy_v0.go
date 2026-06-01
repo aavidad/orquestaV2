@@ -80,6 +80,11 @@ func externalWorkContextLongformKindV0(
 		"review_quality",
 		"validate_topic",
 		"assemble_topic",
+		"generate_audio_asset",
+		"generate_topic_audio",
+		"tts_topic",
+		"audio_tema",
+		"generacion_audio",
 		"verify_sources":
 		return true
 	default:

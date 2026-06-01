@@ -502,6 +502,9 @@ func TestDomainWorkArtifactTypeForWorkKindV0NormalizaAliasPedagogicosYEnsamblado
 		"revision calidad":         "block_revision",
 		"validacion_tema":          "block_revision",
 		"ensamblado_y_exportacion": "assembled_topic",
+		"audio_tema":               "audio_asset",
+		"generacion audio":         "audio_asset",
+		"tts_topic":                "audio_asset",
 		"redaccion documental":     "content_block",
 		"plan visual":              "visual_asset",
 	}
@@ -512,6 +515,85 @@ func TestDomainWorkArtifactTypeForWorkKindV0NormalizaAliasPedagogicosYEnsamblado
 		if !domainWorkDeliveryArtifactTypeMatchesV0(workKind, want) {
 			t.Fatalf("work_kind %q no matchea artifact %q", workKind, want)
 		}
+	}
+}
+
+func TestDefaultDomainWorkArtifactSubmissionBuilderV0EntregaAudioAssetOPES(t *testing.T) {
+	projectDir := t.TempDir()
+	bodyPath := filepath.Join(projectDir, "external", "opes", "generate_audio_asset")
+	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	payload := `{
+		"tema_id":"topic-ref-001",
+		"tema_ensamblado_ref":"artifact-assembled-topic-001",
+		"idioma":"es",
+		"formato":"mp3",
+		"tipo_mime":"audio/mpeg",
+		"duracion_segundos":"1830",
+		"ref_audio":"audio-ref-topic-001-mp3",
+		"ref_manifest":"manifest-ref-topic-001-audio",
+		"sha256":"sha256-ref-audio-001"
+	}`
+	if err := os.WriteFile(bodyPath, []byte(payload), 0o600); err != nil {
+		t.Fatalf("write body: %v", err)
+	}
+
+	submission, ok, err := (defaultDomainWorkArtifactSubmissionBuilderV0{}).
+		BuildDomainWorkArtifactSubmissionV0(
+			context.Background(),
+			DomainWorkArtifactSubmissionBuildInputV0{
+				Run:  orquestacoreworkflow.OrchestrationRunV0{RunID: "run-ref-audio-001"},
+				Task: orquestacoreworkflow.WorkflowTaskV0{TaskID: "task-ref-audio-001", Title: "Generar audio accesible OPES"},
+				Record: orquestaappchange.AppChangeRecordV0{
+					Request: orquestaappchange.AppChangeRequestV0{
+						CorrelationID: "corr-ref-audio-001",
+						ChangeRef:     "change-ref-audio-001",
+						ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+							ProjectRef: "opes",
+							JobRef:     "job-ref-audio-001",
+							WorkKind:   "audio_tema",
+							InputFields: []orquestadomainwork.DomainWorkFieldV0{
+								{Name: "audio_profile_ref", Value: "audio-profile-accessible-es-001"},
+							},
+						},
+					},
+				},
+				Descriptor: orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+					DescriptorRef:  "descriptor-ref-audio-001",
+					ProjectWorkDir: projectDir,
+				},
+				Ack: orquestaruntimecodex.CodexAgentAckV0{
+					Files: []string{"external/opes/generate_audio_asset"},
+				},
+				Observation: orquestacionnucleoapp.AgentDeliveryObservationV0{
+					DeliveryRef:  "ack-ref-audio-001",
+					AgentRef:     "agent-ref-audio-001",
+					Summary:      "Audio accesible generado.",
+					EvidenceRefs: []string{"ack-ref-audio-001"},
+				},
+			},
+		)
+
+	if err != nil || !ok {
+		t.Fatalf("BuildDomainWorkArtifactSubmissionV0 ok=%v err=%v", ok, err)
+	}
+	if submission.ArtifactType != "audio_asset" ||
+		submission.ArtifactType == "work_delivery" ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "content_type", "application/json") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "topic_id", "topic-ref-001") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "assembled_topic_artifact_id", "artifact-assembled-topic-001") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "language_code", "es") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "format", "mp3") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "mime_type", "audio/mpeg") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "duration_seconds", "1830") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "audio_ref", "audio-ref-topic-001-mp3") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "manifest_ref", "manifest-ref-topic-001-audio") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "checksum", "sha256-ref-audio-001") {
+		t.Fatalf("submission=%+v", submission)
+	}
+	if issues := orquestadomainwork.ValidateDomainWorkArtifactSubmissionV0(submission); len(issues) != 0 {
+		t.Fatalf("submission invalida: %+v", issues)
 	}
 }
 

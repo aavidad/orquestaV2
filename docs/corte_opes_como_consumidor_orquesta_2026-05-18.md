@@ -206,7 +206,10 @@ Corte anadido el 2026-05-18:
   `already_submitted`, bloquea igualmente las fases posteriores hasta que OPES
   deje de exponer pendientes de ese tipo. Esto automatiza el flujo
   `draft_content_block -> generate_visual_asset -> review_* -> validate_topic
-  -> assemble_topic` sin meter OPES en el nucleo.
+  -> assemble_topic -> generate_audio_asset` sin meter OPES en el nucleo.
+  Desde el 2026-06-02, `generate_audio_asset -> audio_asset` queda como fase
+  OPES para accesibilidad auditiva y debe ejecutarse por adaptador OPES, no por
+  el nucleo.
 
 Smoke real acotado del 2026-05-18:
 
@@ -218,6 +221,10 @@ Smoke real acotado del 2026-05-18:
   10 `draft_content_block`, 4 `generate_visual_asset`, 2 `review_quality`,
   1 `review_legal`, 1 `review_pedagogical`, 1 `validate_topic` y
   1 `assemble_topic`.
+
+Nota historica: este smoke del 2026-05-18 no cubrio audio. La secuencia vigente
+posterior anade `generate_audio_asset -> audio_asset`; su smoke real completo
+debe ejecutarse contra OPES temporal igual que el resto de derivados.
 
 Documento de evidencia:
 

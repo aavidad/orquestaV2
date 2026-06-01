@@ -29,13 +29,17 @@ func TestCanonicalDomainDocumentPlanPayloadJSONV0NormalizaWorkKindsDeAgente(t *t
 			{"review_ref":"rev-01","order":1,"work_kind":"validacion_contrato","objective":"Validar contrato"},
 			{"review_ref":"rev-02","order":2,"work_kind":"revision_psicologia","objective":"Revisar contenido"},
 			{"review_ref":"rev-03","order":3,"work_kind":"revision_pedagogica","objective":"Revisar pedagogia"},
-			{"review_ref":"rev-04","order":4,"work_kind":"ensamblado_y_exportacion","objective":"Preparar ensamblado"}
+			{"review_ref":"rev-04","order":4,"work_kind":"ensamblado_y_exportacion","objective":"Preparar ensamblado"},
+			{"review_ref":"rev-05","order":5,"work_kind":"generacion_audio","objective":"Crear audio accesible del tema"}
 		],
 		"quality_criteria":[
 			{"title":"Lectura pedagogica y clara","rule":"Debe leerse con facilidad"},
 			{"title":"Autores relevantes y teorias","rule":"Debe cubrir autores"}
 		],
-		"deliverables":[{"deliverable_ref":"del-01","artifact_type":"tema_grande","title":"Tema grande","required":true}]
+		"deliverables":[
+			{"deliverable_ref":"del-01","artifact_type":"tema_grande","title":"Tema grande","required":true},
+			{"deliverable_ref":"del-02","artifact_type":"audio_asset","title":"Audio accesible del tema","required":true}
+		]
 	}`
 
 	canonical, ok := CanonicalDomainDocumentPlanPayloadJSONV0(payload, DomainDocumentPlanPayloadDefaultsV0{
@@ -59,6 +63,7 @@ func TestCanonicalDomainDocumentPlanPayloadJSONV0NormalizaWorkKindsDeAgente(t *t
 		plan.ReviewSteps[1].WorkKind != "review_quality" ||
 		plan.ReviewSteps[2].WorkKind != "review_pedagogical" ||
 		plan.ReviewSteps[3].WorkKind != "assemble_topic" ||
+		plan.ReviewSteps[4].WorkKind != "generate_audio_asset" ||
 		len(plan.QualityCriteria) != 2 {
 		t.Fatalf("plan=%+v", plan)
 	}

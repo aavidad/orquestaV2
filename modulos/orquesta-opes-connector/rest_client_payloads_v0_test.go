@@ -110,3 +110,32 @@ func opesDocumentPlanArtifactSubmissionForTestV0() orquestadomainwork.DomainWork
 		CompleteJob: true,
 	})
 }
+
+func opesAudioArtifactSubmissionForTestV0() orquestadomainwork.DomainWorkArtifactSubmissionV0 {
+	return orquestadomainwork.NormalizeDomainWorkArtifactSubmissionV0(orquestadomainwork.DomainWorkArtifactSubmissionV0{
+		RequestID:      "req-audio-delivery-001",
+		CorrelationID:  "corr-audio-001",
+		IdempotencyKey: "idem-audio-delivery-001",
+		RequestedBy:    "orquesta",
+		DomainRef:      "opes",
+		JobRef:         "job-ref-audio-001",
+		ArtifactRef:    "artifact-ref-audio-001",
+		ArtifactType:   orquestadomainwork.DomainWorkArtifactTypeAudioAssetV0,
+		Summary:        "Audio accesible del tema",
+		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+			{Name: "topic_id", Value: "topic-ref-001"},
+			{Name: "assembled_topic_artifact_id", Value: "artifact-assembled-topic-001"},
+			{Name: "language_code", Value: "es"},
+			{Name: "format", Value: "mp3"},
+			{Name: "mime_type", Value: "audio/mpeg"},
+			{Name: "duration_seconds", Value: "1830"},
+			{Name: "audio_ref", Value: "audio-ref-topic-001-mp3"},
+			{Name: "manifest_ref", Value: "manifest-ref-topic-001-audio"},
+			{Name: "source_artifact_ref", Value: "artifact-assembled-topic-001"},
+		},
+		ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
+			{Kind: "delivery_ref", Ref: "delivery-ref-audio-001"},
+		},
+		CompleteJob: true,
+	})
+}

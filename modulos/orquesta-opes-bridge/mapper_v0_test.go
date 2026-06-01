@@ -232,6 +232,8 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 		{workKind: "review_quality", artifactType: "block_revision", context: "large"},
 		{workKind: "validate_topic", artifactType: "block_revision", context: "large"},
 		{workKind: "assemble_topic", artifactType: "assembled_topic", context: "large"},
+		{workKind: "generate_audio_asset", artifactType: "audio_asset", context: "large"},
+		{workKind: "generate_topic_audio", artifactType: "audio_asset", context: "large"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.workKind, func(t *testing.T) {
@@ -256,6 +258,11 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 				!containsStringForTestV0(req.AppChangeRequest.AcceptanceCriteria, "devolver artifact_type="+tc.artifactType) ||
 				strings.Contains(req.AppChangeRequest.AllowedWriteSet[0], "work_delivery") {
 				t.Fatalf("req=%+v work=%+v", req, work)
+			}
+			if tc.artifactType == "audio_asset" &&
+				(!strings.Contains(strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n"), "devolver manifest de audio") ||
+					!strings.Contains(strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n"), "no incluir rutas locales, proveedor, GPU, modelo ni procesos internos")) {
+				t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
 			}
 		})
 	}

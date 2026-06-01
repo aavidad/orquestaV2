@@ -1102,6 +1102,8 @@ Cobertura:
 - si un bloque trae `citations` con `ref`/`source_ref` y omite `source_refs`,
   el adaptador deriva una lista compacta deduplicada sin perder las citas;
 - `topic_summary` conserva `markdown` para no romper contratos existentes;
+- `audio_tema`, `generacion_audio`, `tts_topic` y equivalentes se normalizan a
+  `audio_asset` sin exponer proveedor, modelo, GPU ni rutas;
 - la entrega sigue bloqueada si el payload no es materializable.
 
 Validacion director `crear_app_completa` con mas manga 2026-05-22:

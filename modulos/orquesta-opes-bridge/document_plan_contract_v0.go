@@ -147,7 +147,7 @@ func documentPlanAllowedWorkKindsV0() []string {
 		"root: plan_documento|plan_tema|plan_temario",
 		"sections: draft_content_block",
 		"visuals: generate_visual_asset",
-		"review_steps: review_legal|review_pedagogical|review_quality|validate_topic|assemble_topic",
+		"review_steps: review_legal|review_pedagogical|review_quality|validate_topic|assemble_topic|generate_audio_asset",
 	}
 }
 
@@ -174,6 +174,7 @@ func documentPlanAcceptanceCriteriaV0() []string {
 		"devolver DomainDocumentPlanV0 valido",
 		"incluir sections y deliverables obligatorios",
 		"incluir quality_criteria y review_steps aplicables",
+		"para OPES, incluir generate_audio_asset y deliverable audio_asset para accesibilidad auditiva del tema publicable",
 		"no redactar el documento final dentro del plan",
 		"para OPES, respetar flujo editorial: inventario, agrupacion, mapa de dependencias, temas maestros, derivacion por nivel, revision y HTML publicable",
 		"si existe maestro A1/A2 o A1 equivalente, planificar primero ese maestro y despues derivar B/C1/C2/AP por resumen, reduccion editorial y adaptacion de nivel",

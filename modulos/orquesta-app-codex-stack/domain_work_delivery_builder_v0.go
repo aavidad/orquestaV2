@@ -81,6 +81,9 @@ func domainWorkCanonicalWorkKindForArtifactV0(workKind string) string {
 		return "validate_topic"
 	case "ensamblado_y_exportacion", "ensamblado", "exportacion":
 		return "assemble_topic"
+	case "generacion_audio", "generar_audio", "crear_audio_tema", "audio_tema",
+		"narracion_tema", "sintesis_voz_tema", "topic_audio":
+		return "generate_audio_asset"
 	default:
 		return key
 	}
@@ -220,6 +223,9 @@ func domainWorkDeliveryContentTypeV0(
 	artifactType string,
 ) string {
 	if artifactType == orquestadomainwork.DomainDocumentPlanArtifactTypeV0 {
+		return "application/json"
+	}
+	if artifactType == "audio_asset" {
 		return "application/json"
 	}
 	if artifactType != "visual_asset" {

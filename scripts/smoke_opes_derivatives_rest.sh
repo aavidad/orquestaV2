@@ -5,7 +5,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/lib/smoke_common.sh
 source "$repo_root/scripts/lib/smoke_common.sh"
 
-DEFAULT_SEQUENCE="draft_content_block,generate_visual_asset,review_legal,review_pedagogical,review_quality,validate_topic,assemble_topic"
+DEFAULT_SEQUENCE="draft_content_block,generate_visual_asset,review_legal,review_pedagogical,review_quality,validate_topic,assemble_topic,generate_audio_asset"
 MODE="${ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE:-dry-run-once}"
 SMOKE_ID="${SMOKE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 SMOKE_OUT_DIR="${SMOKE_OUT_DIR:-/tmp/opes-salidas/derivatives-rest-$SMOKE_ID}"
@@ -84,6 +84,13 @@ payload_by_type = {
         "visual_asset_artifact_refs": ["artifact-visual-fake-001"],
         "review_artifact_refs": ["artifact-review-fake-001"],
         "validation_artifact_ref": "artifact-validation-fake-001",
+    },
+    "generate_audio_asset": {
+        "program_id": "program-ref-fake-operario-001",
+        "topic_id": "topic-ref-fake-operario-001",
+        "assembled_topic_artifact_id": "artifact-assembled-topic-fake-001",
+        "audio_profile_ref": "audio-profile-accessible-es-001",
+        "language_code": "es",
     },
 }
 
@@ -390,7 +397,9 @@ post_supervise_run() {
 
 run_until_assemble() {
   smoke_require_tools python3 curl
-  local assemble_seen=0
+  local final_type
+  final_type="${SEQUENCE##*,}"
+  local final_seen=0
   local final_summary=""
   for tick in $(seq 1 "$MAX_TICKS"); do
     local summary_file="$SMOKE_OUT_DIR/opes_derivatives_rest_tick_${tick}_drain_summary.json"
@@ -398,18 +407,19 @@ run_until_assemble() {
     local selected
     selected="$(json_summary_field "$summary_file" "selected_job_type")"
     if [[ -z "$selected" ]]; then
-      if [[ "$assemble_seen" == "1" ]]; then
+      if [[ "$final_seen" == "1" ]]; then
         final_summary="$summary_file"
-        echo "run_until_status=assembled"
+        echo "run_until_status=completed"
+        echo "final_job_type=$final_type"
         echo "final_summary=$final_summary"
         return
       fi
-      echo "sin pendientes antes de alcanzar assemble_topic en tick $tick" >&2
+      echo "sin pendientes antes de alcanzar $final_type en tick $tick" >&2
       echo "summary=$summary_file" >&2
       exit 1
     fi
-    if [[ "$selected" == "assemble_topic" ]]; then
-      assemble_seen=1
+    if [[ "$selected" == "$final_type" ]]; then
+      final_seen=1
     fi
     local run_refs=()
     while IFS= read -r run_ref; do
@@ -428,7 +438,7 @@ run_until_assemble() {
       sleep "$TICK_SLEEP_SECONDS"
     fi
   done
-  echo "no se alcanzo assembled_topic en $MAX_TICKS ticks" >&2
+  echo "no se alcanzo $final_type en $MAX_TICKS ticks" >&2
   exit 1
 }
 

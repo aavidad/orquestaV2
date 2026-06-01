@@ -209,7 +209,8 @@ go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-state-
 - Repetir la garantia con Codex real de ola/cohorte amplia (`CODEX-WAVE-REAL`).
 - Repetir la recursion con proveedor Codex real: hijos/nietos, ACK/entregas
   vivas, review causal y cierre del arbol.
-- Cerrar OPES temporal real de derivados/cierre hasta `assemble_topic`.
+- Cerrar OPES temporal real de derivados/cierre hasta
+  `generate_audio_asset -> audio_asset`.
 - Documentar como pendiente cada composicion que no tenga fuente real de
   validacion/cierre o persistencia/lectura del plan state.
 

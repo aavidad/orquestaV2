@@ -53,7 +53,7 @@ ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
 ORQUESTA_OPES_BRIDGE_ENABLED=1 \
 ORQUESTA_OPES_BRIDGE_CONFIRM=1 \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
-ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=draft_content_block,generate_visual_asset,review_legal,review_pedagogical,review_quality,validate_topic,assemble_topic \
+ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=draft_content_block,generate_visual_asset,review_legal,review_pedagogical,review_quality,validate_topic,assemble_topic,generate_audio_asset \
 go run ./cmd/orquesta-server run
 ```
 

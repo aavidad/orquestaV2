@@ -26,6 +26,11 @@ func TestExpectedDomainWorkArtifactTypeForWorkKindV0(t *testing.T) {
 		"plan_tema":                    DomainDocumentPlanArtifactTypeV0,
 		"plan_temario":                 DomainDocumentPlanArtifactTypeV0,
 		"assemble_topic":               DomainWorkArtifactTypeAssembledTopicV0,
+		"generate_audio_asset":         DomainWorkArtifactTypeAudioAssetV0,
+		"generate_topic_audio":         DomainWorkArtifactTypeAudioAssetV0,
+		"audio_tema":                   DomainWorkArtifactTypeAudioAssetV0,
+		"generacion_audio":             DomainWorkArtifactTypeAudioAssetV0,
+		"tts_topic":                    DomainWorkArtifactTypeAudioAssetV0,
 		"unknown_work_kind":            DomainWorkArtifactTypeGenericWorkDeliveryV0,
 	}
 	for workKind, want := range cases {

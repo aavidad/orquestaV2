@@ -34,6 +34,7 @@ func TestExpandDomainDocumentPlanV0ProduceJobsDerivadosCompatibles(t *testing.T)
 		"review_quality",
 		"validate_topic",
 		"assemble_topic",
+		"generate_audio_asset",
 	}
 	if len(result.Jobs) != len(wantKinds) {
 		t.Fatalf("jobs=%d want=%d %+v", len(result.Jobs), len(wantKinds), result.Jobs)
@@ -64,10 +65,15 @@ func TestExpandDomainDocumentPlanV0ProduceJobsDerivadosCompatibles(t *testing.T)
 			t.Fatalf("work_kind=%s expected_artifact_type=%q want=%q", job.WorkKind, got, want)
 		}
 	}
-	assemble := result.Jobs[len(result.Jobs)-1]
+	assemble := result.Jobs[len(result.Jobs)-2]
 	if assemble.WorkKind != "assemble_topic" ||
 		!fieldValuesContainForDocumentPlanExpanderTestV0(assemble.InputFields, "deliverable_artifact_types", "assembled_topic") {
 		t.Fatalf("assemble job=%+v", assemble)
+	}
+	audio := result.Jobs[len(result.Jobs)-1]
+	if audio.WorkKind != "generate_audio_asset" ||
+		!fieldValuesContainForDocumentPlanExpanderTestV0(audio.InputFields, "deliverable_artifact_types", "audio_asset") {
+		t.Fatalf("audio job=%+v", audio)
 	}
 }
 
@@ -182,13 +188,27 @@ func validDocumentPlanForExpanderTestV0() orquestadomainwork.DomainDocumentPlanV
 				WorkKind:  "ensamblado_y_exportacion",
 				Objective: "Ensamblar tema final.",
 			},
+			{
+				ReviewRef: "audio-topic",
+				Order:     6,
+				WorkKind:  "generacion_audio",
+				Objective: "Crear audio accesible del tema ensamblado.",
+			},
 		},
-		Deliverables: []orquestadomainwork.DomainDocumentPlanDeliverableV0{{
-			DeliverableRef: "del-assembled-topic",
-			ArtifactType:   "assembled_topic",
-			Title:          "Tema ensamblado",
-			Required:       true,
-		}},
+		Deliverables: []orquestadomainwork.DomainDocumentPlanDeliverableV0{
+			{
+				DeliverableRef: "del-assembled-topic",
+				ArtifactType:   "assembled_topic",
+				Title:          "Tema ensamblado",
+				Required:       true,
+			},
+			{
+				DeliverableRef: "del-topic-audio",
+				ArtifactType:   "audio_asset",
+				Title:          "Audio accesible del tema",
+				Required:       true,
+			},
+		},
 		QualityCriteria: []string{"calidad_editorial", "trazabilidad"},
 		Constraints:     []string{"sin_placeholder"},
 		SourceRefs:      []string{"source-001"},

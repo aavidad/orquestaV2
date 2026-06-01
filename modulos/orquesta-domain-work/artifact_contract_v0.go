@@ -12,6 +12,7 @@ const (
 	DomainWorkArtifactTypeTopicSummaryV0          = "topic_summary"
 	DomainWorkArtifactTypeTopicExpansionPackageV0 = "topic_expansion_package"
 	DomainWorkArtifactTypeAssembledTopicV0        = "assembled_topic"
+	DomainWorkArtifactTypeAudioAssetV0            = "audio_asset"
 	DomainWorkArtifactTypeGenericWorkDeliveryV0   = "work_delivery"
 )
 
@@ -37,6 +38,11 @@ func ExpectedDomainWorkArtifactTypeForWorkKindV0(workKind string) string {
 		return DomainDocumentPlanArtifactTypeV0
 	case "assemble_topic":
 		return DomainWorkArtifactTypeAssembledTopicV0
+	case "generate_audio_asset", "generate_topic_audio", "create_topic_audio",
+		"create_audio_asset", "synthesize_topic_audio", "narrate_topic", "tts_topic",
+		"generacion_audio", "generar_audio", "crear_audio_tema", "audio_tema",
+		"narracion_tema", "sintesis_voz_tema", "topic_audio":
+		return DomainWorkArtifactTypeAudioAssetV0
 	default:
 		return DomainWorkArtifactTypeGenericWorkDeliveryV0
 	}

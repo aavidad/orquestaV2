@@ -192,8 +192,8 @@ eventos. Actualizacion 2026-05-23: `CODEX-WAVE-REAL` y
 `CODEX-RECURSION-REAL` ya cerraron ola/cohorte Codex amplia y recursion con
 proveedor real opt-in; no son backlog abierto salvo regresion demostrada. El
 pendiente real vigente para este frente es OPES temporal real de
-derivados/cierre hasta `assemble_topic`, que pertenece a la composicion/bridge
-OPES y no al nucleo del servicio.
+derivados/cierre hasta `generate_audio_asset -> audio_asset`, que pertenece a
+la composicion/bridge OPES y no al nucleo del servicio.
 
 Alcance esperado:
 

@@ -11,8 +11,8 @@ Evidencia ya cerrada:
   paso en los intentos `agent-ref-task-autoprogramming-5373ad36695c-g01` y
   `agent-ref-task-autoprogramming-51f9a01810a0-g01`.
 - El smoke fake aislado `run-until-assemble` paso y recorrio
-  `draft_content_block`, `generate_visual_asset`, revisiones, `validate_topic`
-  y `assemble_topic -> assembled_topic`.
+  `draft_content_block`, `generate_visual_asset`, revisiones, `validate_topic`,
+  `assemble_topic -> assembled_topic` y `generate_audio_asset -> audio_asset`.
 
 Bloqueo real:
 

@@ -678,8 +678,11 @@ func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilAssembleV0(t *testing.
 	output := stdout.String()
 	if !strings.Contains(output, `"selected_job_type":"draft_content_block"`) ||
 		!strings.Contains(output, `"selected_job_type":"assemble_topic"`) ||
+		!strings.Contains(output, `"selected_job_type":"generate_audio_asset"`) ||
 		!strings.Contains(output, `"artifact_type": "assembled_topic"`) ||
-		!strings.Contains(output, `run_until_status=assembled`) {
+		!strings.Contains(output, `"artifact_type": "audio_asset"`) ||
+		!strings.Contains(output, `run_until_status=completed`) ||
+		!strings.Contains(output, `final_job_type=generate_audio_asset`) {
 		t.Fatalf("stdout=%s stderr=%s", output, stderr.String())
 	}
 }

@@ -16,6 +16,7 @@ const (
 	appChangeExternalWorkKindExpansionV0         appChangeExternalWorkKindClassV0 = "expansion"
 	appChangeExternalWorkKindDocumentPlanV0      appChangeExternalWorkKindClassV0 = "document_plan"
 	appChangeExternalWorkKindVisualV0            appChangeExternalWorkKindClassV0 = "visual"
+	appChangeExternalWorkKindAudioV0             appChangeExternalWorkKindClassV0 = "audio"
 )
 
 type appChangeExternalWorkKindRuleV0 struct {
@@ -45,6 +46,11 @@ var appChangeExternalWorkKindRulesV0 = map[string]appChangeExternalWorkKindRuleV
 	"review_quality":            {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Resolver revision de calidad externa"},
 	"validate_topic":            {Class: appChangeExternalWorkKindDocumentaryV0},
 	"assemble_topic":            {Class: appChangeExternalWorkKindDocumentaryV0},
+	"generate_audio_asset":      {Class: appChangeExternalWorkKindAudioV0, Title: "Generar audio accesible externo"},
+	"generate_topic_audio":      {Class: appChangeExternalWorkKindAudioV0, Title: "Generar audio accesible externo"},
+	"tts_topic":                 {Class: appChangeExternalWorkKindAudioV0, Title: "Generar audio accesible externo"},
+	"audio_tema":                {Class: appChangeExternalWorkKindAudioV0, Title: "Generar audio accesible externo"},
+	"generacion_audio":          {Class: appChangeExternalWorkKindAudioV0, Title: "Generar audio accesible externo"},
 	"export_topic":              {Class: appChangeExternalWorkKindDocumentaryV0},
 	"verify_sources":            {Class: appChangeExternalWorkKindDocumentaryV0},
 	"documentation":             {Class: appChangeExternalWorkKindDocumentaryV0, ScopedTitlePrefix: "Resolver trabajo documental "},
@@ -104,6 +110,9 @@ func appChangeTaskSummaryV0(request orquestaappchange.AppChangeRequestV0) string
 	if appChangeIsVisualExternalWorkV0(request) {
 		return appChangeVisualTaskSummaryV0()
 	}
+	if appChangeIsAudioExternalWorkV0(request) {
+		return appChangeAudioTaskSummaryV0()
+	}
 	if appChangeIsSummaryExternalWorkV0(request) {
 		return "Crear resumen derivado compacto con trazabilidad a bloques, capitulos, tema y fuentes de origen."
 	}
@@ -131,6 +140,12 @@ func appChangeExternalWorkCriteriaV0(
 	criteria := []string{"Resolver solo el contrato externo de dominio con refs opacas."}
 	if appChangeIsVisualExternalWorkV0(request) {
 		return append(criteria, appChangeVisualWorkCriteriaV0(request)...)
+	}
+	if appChangeIsAudioExternalWorkV0(request) {
+		criteria = append(criteria, appChangeAudioWorkCriteriaV0(request)...)
+		return append(criteria,
+			"Si falta un campo de input_fields requerido por el job, declararlo como bloqueo de dominio y no inventarlo.",
+		)
 	}
 	if !appChangeIsDocumentaryExternalWorkV0(request) {
 		return criteria
@@ -234,7 +249,8 @@ func (rule appChangeExternalWorkKindRuleV0) isDocumentaryV0() bool {
 		appChangeExternalWorkKindDraftContentBlockV0,
 		appChangeExternalWorkKindSummaryV0,
 		appChangeExternalWorkKindExpansionV0,
-		appChangeExternalWorkKindDocumentPlanV0:
+		appChangeExternalWorkKindDocumentPlanV0,
+		appChangeExternalWorkKindAudioV0:
 		return true
 	default:
 		return false

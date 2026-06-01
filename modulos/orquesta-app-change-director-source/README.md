@@ -15,6 +15,9 @@ Para OPES, esa microtarea es una unidad durable de workflow, no necesariamente
 un trozo pequeno: la redaccion de temarios largos debe mantenerse como bloque,
 subcapitulo o capitulo coherente. Los trabajos `summarize_*` si pueden ser
 pequenos porque son derivados y trazables.
+Los trabajos de audio como `generate_audio_asset` se proyectan como trabajo
+documental externo con `audio_asset`, manifest y refs opacas; el motor de audio
+queda en la app propietaria.
 Cuando el cambio ya tiene microtarea entregada y las entregas de programacion
 cubren las tareas abiertas, emite la decision compacta para abrir `revision`;
 el review gate generico valida la entrega despues.

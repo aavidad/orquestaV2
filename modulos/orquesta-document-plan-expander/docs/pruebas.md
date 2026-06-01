@@ -8,10 +8,11 @@ go test -count=1 ./modulos/orquesta-document-plan-expander
 
 Cobertura:
 
-- plan valido con seccion, visual, reviews y ensamblado produce jobs derivados
-  compatibles con `DomainWorkJobRequestV0`;
+- plan valido con seccion, visual, reviews, ensamblado y audio declarado produce
+  jobs derivados compatibles con `DomainWorkJobRequestV0`;
 - aliases de `DomainDocumentPlanV0` se normalizan antes de expandir;
 - `assemble_topic` produce `expected_artifact_type=assembled_topic`;
+- `generate_audio_asset` produce `expected_artifact_type=audio_asset`;
 - plan invalido no produce jobs parciales;
 - refs invalidas que el plan proyecta a jobs derivados se detectan antes de
   normalizar el plan, para no compactar y ocultar refs opacas defectuosas;

@@ -60,6 +60,10 @@ func documentPlanReviewWorkKindV0(value string) string {
 		return "review_pedagogical"
 	case "ensamblado_y_exportacion", "ensamblado", "exportacion":
 		return "assemble_topic"
+	case "generate_topic_audio", "generacion_audio", "generar_audio",
+		"crear_audio_tema", "audio_tema", "narracion_tema", "sintesis_voz_tema",
+		"topic_audio", "audio_asset", "tts_topic":
+		return "generate_audio_asset"
 	default:
 		return compactDocumentPlanRefTextV0(value)
 	}

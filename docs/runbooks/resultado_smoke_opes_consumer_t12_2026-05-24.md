@@ -7,7 +7,7 @@ Fecha: 2026-05-24.
 Validacion acotada del backlog `T12 opes-consumer-smoke-real-opt-in` dentro de
 Orquesta. No se toco OPES productivo ni se dreno una cola real amplia.
 
-La ruta verificada es el wrapper opt-in de derivados OPES hasta
+La ruta verificada historicamente fue el wrapper opt-in de derivados OPES hasta
 `assemble_topic`, usando el fake HTTP local del propio script para demostrar:
 
 - consulta por `execution_mode=external`, `status=pending`, `job_type` y limite;
@@ -17,6 +17,10 @@ La ruta verificada es el wrapper opt-in de derivados OPES hasta
 - supervision de cada `run_ref`;
 - mapeo final `assemble_topic -> assembled_topic`;
 - parada cuando ya no queda `assemble_topic` pendiente.
+
+Nota 2026-06-02: la secuencia vigente anade
+`generate_audio_asset -> audio_asset`. Este resultado del 2026-05-24 no prueba
+audio; la revalidacion nueva debe llegar al ultimo tipo configurado.
 
 ## Comandos ejecutados
 
@@ -124,6 +128,9 @@ Resumen observado del fake:
 - `validate_topic -> block_revision`;
 - `assemble_topic -> assembled_topic`;
 - tick final sin pendientes tras supervisar `assemble_topic`.
+
+Secuencia vigente posterior: anadir `generate_audio_asset -> audio_asset` antes
+del tick final sin pendientes.
 
 ## Frontera real opt-in
 

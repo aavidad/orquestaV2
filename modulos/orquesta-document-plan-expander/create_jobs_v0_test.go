@@ -29,9 +29,12 @@ func TestCreateDomainDocumentPlanDerivedJobsV0CreaJobsPorPuerto(t *testing.T) {
 		result.CorrelationID != "corr-docplan-crear-001" {
 		t.Fatalf("result=%+v", result)
 	}
-	if len(result.RequestedJobs) != 7 ||
-		len(result.CreatedJobs) != 7 ||
-		len(creator.requests) != 7 {
+	wantJobs := len(validDocumentPlanForExpanderTestV0().Sections) +
+		len(validDocumentPlanForExpanderTestV0().Visuals) +
+		len(validDocumentPlanForExpanderTestV0().ReviewSteps)
+	if len(result.RequestedJobs) != wantJobs ||
+		len(result.CreatedJobs) != wantJobs ||
+		len(creator.requests) != wantJobs {
 		t.Fatalf("requested=%d created=%d calls=%d", len(result.RequestedJobs), len(result.CreatedJobs), len(creator.requests))
 	}
 	for i, job := range result.CreatedJobs {
@@ -141,7 +144,10 @@ func TestCreateDomainDocumentPlanDerivedJobsV0DevuelveErrorDePuertoConProgreso(t
 	if !errors.Is(err, creator.err) {
 		t.Fatalf("err=%v", err)
 	}
-	if len(result.RequestedJobs) != 7 ||
+	wantJobs := len(validDocumentPlanForExpanderTestV0().Sections) +
+		len(validDocumentPlanForExpanderTestV0().Visuals) +
+		len(validDocumentPlanForExpanderTestV0().ReviewSteps)
+	if len(result.RequestedJobs) != wantJobs ||
 		len(result.CreatedJobs) != 3 ||
 		len(creator.requests) != 4 {
 		t.Fatalf("result=%+v calls=%d", result, len(creator.requests))

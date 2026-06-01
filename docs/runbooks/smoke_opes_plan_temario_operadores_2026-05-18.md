@@ -288,16 +288,17 @@ Semantica:
   a la siguiente;
 - la cobertura offline verifica la secuencia completa
   `draft_content_block -> generate_visual_asset -> review_legal ->
-  review_pedagogical -> review_quality -> validate_topic -> assemble_topic`,
-  con ledger/idempotencia por fase y `assemble_topic` mapeado a
-  `assembled_topic`;
+  review_pedagogical -> review_quality -> validate_topic -> assemble_topic ->
+  generate_audio_asset`, con ledger/idempotencia por fase,
+  `assemble_topic` mapeado a `assembled_topic` y `generate_audio_asset`
+  mapeado a `audio_asset`;
 - la secuencia vive en `cmd/orquesta-server`; el nucleo de orquestacion sigue
   sin conocer OPES.
 
 Secuencia recomendada para temario Operario:
 
 ```bash
-export ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=draft_content_block,generate_visual_asset,review_legal,review_pedagogical,review_quality,validate_topic,assemble_topic
+export ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=draft_content_block,generate_visual_asset,review_legal,review_pedagogical,review_quality,validate_topic,assemble_topic,generate_audio_asset
 ```
 
 Arranque residente conservador:
@@ -307,7 +308,7 @@ ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
 ORQUESTA_OPES_BRIDGE_ENABLED=1 \
 ORQUESTA_OPES_BRIDGE_CONFIRM=1 \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
-ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=draft_content_block,generate_visual_asset,review_legal,review_pedagogical,review_quality,validate_topic,assemble_topic \
+ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=draft_content_block,generate_visual_asset,review_legal,review_pedagogical,review_quality,validate_topic,assemble_topic,generate_audio_asset \
 ORQUESTA_OPES_BRIDGE_INITIAL_DELAY_SECONDS=5 \
 ORQUESTA_OPES_BRIDGE_INTERVAL_SECONDS=60 \
 ORQUESTA_SERVER_MAX_RUNS_PER_TICK=1 \
@@ -327,7 +328,7 @@ ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
 ORQUESTA_OPES_BRIDGE_ENABLED=1 \
 ORQUESTA_OPES_BRIDGE_CONFIRM=1 \
 ORQUESTA_OPES_BRIDGE_LIMIT=10 \
-ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=draft_content_block,generate_visual_asset,review_legal,review_pedagogical,review_quality,validate_topic,assemble_topic \
+ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=draft_content_block,generate_visual_asset,review_legal,review_pedagogical,review_quality,validate_topic,assemble_topic,generate_audio_asset \
 ORQUESTA_OPES_BRIDGE_INITIAL_DELAY_SECONDS=5 \
 ORQUESTA_OPES_BRIDGE_INTERVAL_SECONDS=60 \
 ORQUESTA_SERVER_MAX_RUNS_PER_TICK=10 \
@@ -367,13 +368,15 @@ ORQUESTA_OPES_PLAN_TEMARIO_FAKE_SERVER=1 \
 
 Estas pruebas no ejecutan Codex ni llaman a OPES real. El fake REST de
 derivados permite una lectura seca de la fase pendiente y el wrapper
-`smoke_opes_consumer_isolated.sh` recorre la secuencia completa hasta
-`assemble_topic` contra un fake HTTP local, supervisando cada `run_ref` sin
-Codex ni OPES real. El fake rechaza consultas sin `job_type`, `status=pending`,
+`smoke_opes_consumer_isolated.sh` recorre la secuencia completa hasta el ultimo
+tipo configurado, hoy `generate_audio_asset`, contra un fake HTTP local,
+supervisando cada `run_ref` sin Codex ni OPES real. El fake rechaza consultas
+sin `job_type`, `status=pending`,
 `execution_mode=external` y `limit` esperado.
 El smoke real de derivados sigue siendo opt-in, contra instancia temporal, y
 debe comprobar que OPES recibe artefactos validos y deduplica reintentos; en
-particular, `assemble_topic` debe entregar `artifact_type=assembled_topic`.
+particular, `assemble_topic` debe entregar `artifact_type=assembled_topic` y
+`generate_audio_asset` debe entregar `artifact_type=audio_asset`.
 
 Wrapper operador para derivados:
 
@@ -409,11 +412,12 @@ ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 scripts/smoke_opes_derivatives_rest.sh
 ```
 
-Para dejar avanzar la secuencia completa hasta que OPES deje de exponer
-`assemble_topic` pendiente despues de supervisar su run, usar el modo
-`run-until-assemble`. Sigue siendo opt-in y temporal: crea runs fase a fase,
-supervisa cada `run_ref` devuelto por Orquesta y repite la secuencia hasta
-observar que `assemble_topic` ya no queda pendiente.
+Para dejar avanzar la secuencia completa hasta que OPES deje de exponer el
+ultimo tipo configurado pendiente despues de supervisar su run, usar el modo
+`run-until-assemble`. El nombre del modo queda por compatibilidad historica.
+Sigue siendo opt-in y temporal: crea runs fase a fase, supervisa cada `run_ref`
+devuelto por Orquesta y repite la secuencia hasta observar que
+`generate_audio_asset` ya no queda pendiente en la secuencia vigente.
 
 ```bash
 ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
@@ -446,7 +450,8 @@ El wrapper rechaza `ORQUESTA_OPES_BRIDGE_JOB_TYPE` y
 secuencia completa por fases. Cada ejecucion real debe revisar el JSON de salida
 en `/tmp/opes-salidas/derivatives-rest-<smoke_id>/` antes de repetir o subir el
 limite. El fake offline cubre tambien `run-until-assemble` y comprueba que
-`assemble_topic` se mapea a `assembled_topic` sin meter OPES en el nucleo.
+`assemble_topic` se mapea a `assembled_topic` y `generate_audio_asset` a
+`audio_asset` sin meter OPES en el nucleo.
 
 Estado de cierre OPES real: la composicion Orquesta ya declara tests de dominio
 por job OPES, genera evidencia durable desde el ledger de `submit_artifact` y
@@ -455,11 +460,12 @@ la fuente de cierre del stack solo cierra tareas OPES con review aceptada,
 ledger de entrega conserva tambien `domain_ref=opes`, `job_ref`,
 `artifact_ref`, `artifact_type`, `complete_job` e idempotency key; el cierre no
 acepta receipts que no empaten con el job externo, la delivery revisada y el
-artefacto esperado (`assemble_topic -> assembled_topic`). El conector REST trata
-como invalido un receipt OPES con `job_id`, `artifact.type` o `job.status`
-incoherentes. El smoke real completo de derivados sigue exigiendo OPES temporal
-vivo, cuota/modelo confirmados y evidencia de que cada derivado fue aceptado por
-OPES con refs causales suficientes; no se declara cerrado desde dry-run.
+artefacto esperado (`assemble_topic -> assembled_topic`,
+`generate_audio_asset -> audio_asset`). El conector REST trata como invalido un
+receipt OPES con `job_id`, `artifact.type` o `job.status` incoherentes. El smoke
+real completo de derivados sigue exigiendo OPES temporal vivo, cuota/modelo
+confirmados y evidencia de que cada derivado fue aceptado por OPES con refs
+causales suficientes; no se declara cerrado desde dry-run.
 
 Bloqueo verificable T12 si no hay entorno temporal: ejecutar primero el smoke
 fake aislado y despues repetir el comando `run-until-assemble` anterior cuando

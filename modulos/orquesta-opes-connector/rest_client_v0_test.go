@@ -205,3 +205,56 @@ func TestRESTClientV0SubmitDomainWorkArtifactEnviaDocumentPlan(t *testing.T) {
 		t.Fatalf("payload=%+v", received)
 	}
 }
+
+func TestRESTClientV0SubmitDomainWorkArtifactEnviaAudioAsset(t *testing.T) {
+	var received opesArtifactRequestV0
+	client := newRESTClientForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs/job-ref-audio-001/artifacts" || r.Method != http.MethodPost {
+			t.Fatalf("request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":              "artifact-receipt-ref-audio-001",
+			"artifact_id":     "artifact-receipt-ref-audio-001",
+			"job_id":          "job-ref-audio-001",
+			"correlation_id":  "corr-audio-001",
+			"idempotency_key": "idem-audio-delivery-001",
+			"external_refs":   map[string]string{"delivery_ref": "delivery-ref-audio-001"},
+			"artifact": map[string]any{
+				"id":     "artifact-receipt-ref-audio-001",
+				"job_id": "job-ref-audio-001",
+				"type":   "audio_asset",
+			},
+			"job": map[string]any{
+				"id":             "job-ref-audio-001",
+				"status":         "completed",
+				"execution_mode": "external",
+			},
+		})
+	}))
+
+	result, err := client.SubmitDomainWorkArtifactV0(
+		context.Background(),
+		opesAudioArtifactSubmissionForTestV0(),
+	)
+
+	if err != nil {
+		t.Fatalf("SubmitDomainWorkArtifactV0: %v", err)
+	}
+	if result.Status != orquestadomainwork.DomainWorkStatusAcceptedV0 ||
+		result.JobRef != "job-ref-audio-001" ||
+		result.ReceiptRef != "artifact-receipt-ref-audio-001" {
+		t.Fatalf("result=%+v", result)
+	}
+	if received.ArtifactType != orquestadomainwork.DomainWorkArtifactTypeAudioAssetV0 ||
+		received.PayloadJSON["assembled_topic_artifact_id"] != "artifact-assembled-topic-001" ||
+		received.PayloadJSON["language_code"] != "es" ||
+		received.PayloadJSON["format"] != "mp3" ||
+		received.PayloadJSON["audio_ref"] != "audio-ref-topic-001-mp3" ||
+		received.PayloadJSON["manifest_ref"] != "manifest-ref-topic-001-audio" ||
+		received.PayloadJSON["source_artifact_ref"] != "artifact-assembled-topic-001" {
+		t.Fatalf("payload=%+v", received)
+	}
+}

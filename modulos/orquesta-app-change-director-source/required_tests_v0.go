@@ -21,6 +21,8 @@ func appChangeTaskRequiredTestsV0(
 			)
 		} else if appChangeIsVisualExternalWorkV0(request) {
 			tests = append(tests, appChangeVisualRequiredTestsV0(request)...)
+		} else if appChangeIsAudioExternalWorkV0(request) {
+			tests = append(tests, appChangeAudioRequiredTestsV0(request)...)
 		} else if appChangeIsSummaryExternalWorkV0(request) {
 			tests = append(tests,
 				"validar trazabilidad del resumen",

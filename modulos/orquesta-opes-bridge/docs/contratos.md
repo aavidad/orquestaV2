@@ -52,6 +52,10 @@ Reglas:
 - para `expand_topic_from_summary`, el bridge exige paquete editorial
   multiformato: `tema_grande`, `tema_mediano`, `resumen`,
   `esquema_repaso` y `plan_visuales`;
+- para `generate_audio_asset`, el bridge exige `expected_artifact_type=audio_asset`
+  y el job debe derivar audio desde `assembled_topic` o refs opacas del paquete
+  final; cualquier app RTX/GPU queda como adaptador OPES externo y no se expone
+  como proveedor, ruta local ni proceso en el contrato publico;
 - para `plan_tema`, `plan_temario` y `plan_documento`, el bridge declara
   `expected_artifact_type=document_plan`, `expected_schema=domain_document_plan.v0`
   y partes minimas del plan: `sections`, `deliverables`, `quality_criteria`,
@@ -63,6 +67,9 @@ Reglas:
   A1/A2 o A1 equivalente, se planifica primero ese maestro y despues se derivan
   B/C1/C2/AP por resumen, reduccion editorial y adaptacion de nivel; si no hay
   equivalente superior, el plan debe marcar `creacion_directa_nivel`;
+- para temas publicables OPES, el plan debe incluir una fase
+  `generate_audio_asset` y un deliverable `audio_asset`, de forma que personas
+  invidentes o cualquier alumno puedan escuchar el contenido del tema;
 - `allowed_write_set` se limita a `external/opes/<work_kind>/<job_id>` para que
   cada job tenga una entrega unica y varios agentes del mismo tipo no se pisen;
 - si OPES aporta `worktree_ref` o `branch_ref` en `external_refs`, el bridge los

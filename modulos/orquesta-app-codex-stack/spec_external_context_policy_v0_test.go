@@ -44,6 +44,18 @@ func TestExternalWorkContextPolicyV0RespetaPerfilExplicito(t *testing.T) {
 	}
 }
 
+func TestExternalWorkContextPolicyV0TrataAudioComoTrabajoDocumentalLargo(t *testing.T) {
+	policy := externalWorkContextPolicyForWorkV0(
+		&orquestaappchange.AppChangeExternalWorkV0{
+			WorkKind: "generate_audio_asset",
+		},
+	)
+	if policy.FieldMaxBytes != externalWorkContextLargeFieldBytesV0 ||
+		policy.TotalMaxBytes != externalWorkContextLargeTotalBytesV0 {
+		t.Fatalf("policy=%+v", policy)
+	}
+}
+
 func TestCodexLaunchSpecResolverV0PermiteContextoAmplioEnTrabajoDocumentalLargo(t *testing.T) {
 	changeRef := "opes-job-job-ref-longform-001"
 	taskRef := orquestaappchangedirectorsource.AppChangeTaskRefV0(changeRef)

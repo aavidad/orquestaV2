@@ -46,6 +46,11 @@ func domainWorkDeliveryCanonicalArtifactTypeV0(value string) string {
 	case "assembled_topic", "assemble_topic", "tema_ensamblado", "ensamblado",
 		"ensamblado_y_exportacion", "exportacion":
 		return "assembled_topic"
+	case "audio_asset", "generate_audio_asset", "generate_topic_audio", "create_topic_audio",
+		"create_audio_asset", "synthesize_topic_audio", "narrate_topic", "tts_topic",
+		"generacion_audio", "generar_audio", "crear_audio_tema", "audio_tema",
+		"narracion_tema", "sintesis_voz_tema", "topic_audio":
+		return "audio_asset"
 	case "work_delivery", "entrega", "resultado":
 		return "work_delivery"
 	default:
@@ -134,6 +139,36 @@ func domainWorkDeliveryCanonicalPayloadFieldNameV0(artifactType string, name str
 			return "title"
 		case "markdown", "body", "content", "contenido", "texto", "text":
 			return "markdown"
+		case "source_refs", "sources", "fuentes", "source_ids", "source_references":
+			return "source_refs"
+		}
+	case "audio_asset":
+		switch key {
+		case "topic_id", "topicid", "topic", "tema_id", "id_tema", "idtema":
+			return "topic_id"
+		case "assembled_topic_artifact_id", "assembled_topic_ref", "assembled_ref",
+			"tema_ensamblado_ref", "artifact_assembled_topic", "source_artifact_ref":
+			return "assembled_topic_artifact_id"
+		case "language_code", "language", "locale", "idioma":
+			return "language_code"
+		case "voice_profile_ref", "voice_ref", "voz_ref", "perfil_voz":
+			return "voice_profile_ref"
+		case "audio_profile_ref", "profile_ref", "perfil_audio":
+			return "audio_profile_ref"
+		case "format", "formato":
+			return "format"
+		case "mime_type", "mimetype", "content_type", "tipo_mime":
+			return "mime_type"
+		case "duration_seconds", "duration", "duracion", "duracion_segundos":
+			return "duration_seconds"
+		case "audio_ref", "audio_asset_ref", "ref_audio":
+			return "audio_ref"
+		case "manifest_ref", "ref_manifest", "manifest":
+			return "manifest_ref"
+		case "checksum", "sha256", "digest":
+			return "checksum"
+		case "segments", "segmentos":
+			return "segments"
 		case "source_refs", "sources", "fuentes", "source_ids", "source_references":
 			return "source_refs"
 		}

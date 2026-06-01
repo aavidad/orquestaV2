@@ -74,7 +74,9 @@ func contextProfileForJobTypeV0(jobType string) string {
 		"review_pedagogical",
 		"review_quality",
 		"validate_topic",
-		"assemble_topic":
+		"assemble_topic",
+		"generate_audio_asset",
+		"generate_topic_audio":
 		return "large"
 	default:
 		return "standard"
@@ -101,7 +103,20 @@ func acceptanceCriteriaForJobV0(jobType string) []string {
 	if isDocumentPlanJobTypeV0(jobType) {
 		criteria = append(criteria, documentPlanAcceptanceCriteriaV0()...)
 	}
+	switch strings.TrimSpace(jobType) {
+	case "generate_audio_asset", "generate_topic_audio":
+		criteria = append(criteria, topicAudioAcceptanceCriteriaV0()...)
+	}
 	return criteria
+}
+
+func topicAudioAcceptanceCriteriaV0() []string {
+	return []string{
+		"derivar el audio desde el tema ensamblado aprobado o refs de paquete final",
+		"devolver manifest de audio con idioma, formatos, duracion aproximada y checksum o refs de artefactos",
+		"mantener texto narrado trazable a secciones del tema sin inventar contenido nuevo",
+		"no incluir rutas locales, proveedor, GPU, modelo ni procesos internos en el payload publico",
+	}
 }
 
 func constraintsForJobV0() []string {

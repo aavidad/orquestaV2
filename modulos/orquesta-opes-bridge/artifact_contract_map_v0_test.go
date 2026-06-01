@@ -18,6 +18,8 @@ func TestOPESBridgeArtifactContractMapConsumeOwnerNeutralV0(t *testing.T) {
 		"validate_topic",
 		"expand_topic_from_summary",
 		"assemble_topic",
+		"generate_audio_asset",
+		"generate_topic_audio",
 		"unknown_work_kind",
 	} {
 		t.Run(workKind, func(t *testing.T) {

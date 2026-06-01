@@ -28,6 +28,10 @@ Regla de error: si hay issues, el resultado no devuelve jobs parciales.
 - Cada review produce un job con su `work_kind`; `review_*` y `validate_topic`
   esperan `block_revision`.
 - `assemble_topic` espera `assembled_topic`.
+- Si el plan declara `generate_audio_asset` o alias normalizado, espera
+  `audio_asset` y solo transporta refs opacas del tema ensamblado o paquete
+  final. El motor de sintesis de audio pertenece al adaptador de la app externa,
+  no al expander.
 
 El expander solo materializa lo declarado por el plan. No crea taxonomia de
 ninguna app externa ni decide si faltan secciones, revisiones o entregables mas

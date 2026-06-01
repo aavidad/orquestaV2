@@ -7,8 +7,9 @@ temporal.
 
 El conector REST ya cubre la frontera publica necesaria para T12: listar jobs,
 crear jobs y enviar artefactos con receipts validados. Los intentos cerrados
-demostraron los tests focales y el recorrido fake del bridge hasta
-`assemble_topic -> assembled_topic`.
+demostraron los tests focales y el recorrido fake historico del bridge hasta
+`assemble_topic -> assembled_topic`; la secuencia vigente anade
+`generate_audio_asset -> audio_asset` para accesibilidad auditiva.
 
 Pendiente real:
 

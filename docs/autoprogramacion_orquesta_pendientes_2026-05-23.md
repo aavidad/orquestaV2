@@ -805,10 +805,12 @@ aislada, sin tocar OPES productivo.
 Estado: bloqueado verificable 2026-05-27 para smoke real OPES temporal.
 Los paquetes del bridge/conector compilan y los intentos cerrados de T12 ya
 demostraron el recorrido fake `run-until-assemble` hasta
-`assemble_topic -> assembled_topic`, pero no hay evidencia real de OPES temporal
-vivo, Orquesta temporal, cuota/modelo confirmados ni confirmacion explicita de
-efectos. No relanzar otra implementacion padre para esta misma tarea: la
-reapertura valida es una ejecucion opt-in con entorno temporal y comando exacto.
+`assemble_topic -> assembled_topic`. Desde el 2026-06-02 la secuencia vigente
+anade `generate_audio_asset -> audio_asset`, pero no hay evidencia real de OPES
+temporal vivo, Orquesta temporal, cuota/modelo confirmados ni confirmacion
+explicita de efectos. No relanzar otra implementacion padre para esta misma
+tarea: la reapertura valida es una ejecucion opt-in con entorno temporal y
+comando exacto.
 
 Alcance:
 
@@ -820,8 +822,9 @@ Alcance:
 Criterios:
 
 - Usar solo instancia temporal/confirmacion explicita y filtro por tipo de job.
-- Cubrir derivados/cierre hasta `assemble_topic` cuando el conector temporal lo
-  permita; si falta entorno, dejar bloqueo verificable con comando exacto.
+- Cubrir derivados/cierre hasta `generate_audio_asset -> audio_asset` cuando el
+  conector temporal lo permita; si falta entorno, dejar bloqueo verificable con
+  comando exacto.
 - No drenar colas amplias ni tocar OPES productivo.
 - Tests: `go test -count=1 ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector`.
 - Evidencia parcial 2026-05-26:
@@ -1100,7 +1103,8 @@ Criterios:
 
 - La composicion OPES debe aportar fuente/validador de cierre por puerto: job
   externo, artefacto aceptado, receipt, deduplicacion, validacion de dominio y
-  `assemble_topic -> assembled_topic` via refs opacas.
+  `assemble_topic -> assembled_topic` mas `generate_audio_asset -> audio_asset`
+  via refs opacas.
 - El nucleo no debe leer DB/filesystem OPES ni deducir aceptacion por URL,
   ruta local, nombre de conector o summary textual.
 - El smoke real debe exigir OPES temporal, confirmacion explicita, filtro por
@@ -4057,7 +4061,7 @@ Criterios:
 - Elegir un owner neutral para `draft_content_block -> content_block`,
   `generate_visual_asset -> visual_asset`, `review_*`/`validate_topic ->
   block_revision`, `expand_topic_from_summary -> topic_expansion_package` y
-  `assemble_topic -> assembled_topic`.
+  `assemble_topic -> assembled_topic`, `generate_audio_asset -> audio_asset`.
 - El owner no debe importar OPES, Codex, HTTP, MCP, runtime, DB ni servidor; los
   adaptadores consumen el mapa o una proyeccion por puerto.
 - Unknown work kinds deben conservar fallback explicito (`work_delivery`) o

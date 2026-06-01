@@ -116,6 +116,33 @@ Ejemplo visual:
 }
 ```
 
+Ejemplo audio accesible:
+
+```json
+{
+  "artifact_type": "audio_asset",
+  "summary": "Audio accesible del tema",
+  "idempotency_key": "orquesta-audio-delivery-id",
+  "payload_json": {
+    "topic_id": "TOPIC_ID",
+    "assembled_topic_artifact_id": "ASSEMBLED_TOPIC_ARTIFACT_ID",
+    "language_code": "es",
+    "format": "mp3",
+    "mime_type": "audio/mpeg",
+    "duration_seconds": 1830,
+    "audio_ref": "AUDIO_REF",
+    "manifest_ref": "AUDIO_MANIFEST_REF",
+    "source_artifact_ref": "ASSEMBLED_TOPIC_ARTIFACT_ID"
+  },
+  "external_refs": {
+    "run_ref": "run-id",
+    "task_ref": "task-id",
+    "delivery_ref": "delivery-id"
+  },
+  "complete_job": true
+}
+```
+
 ## Confirmacion OPES 2026-05-13
 
 OPES confirma que:
@@ -129,6 +156,9 @@ OPES confirma que:
 - OPES publica `generate_visual_asset` y acepta `visual_asset` como artefacto
   preferente para esquemas, vinetas, flujogramas, mapas conceptuales e
   infografias;
+- OPES debe publicar `generate_audio_asset` y aceptar `audio_asset` como
+  artefacto accesible derivado de `assembled_topic` o refs opacas del paquete
+  final;
 - la deduplicacion funciona por `idempotency_key` en jobs y por
   `(job_id, idempotency_key)` en artefactos;
 - replay de job puede devolver HTTP `200` con `created=false`; creacion nueva
@@ -144,6 +174,14 @@ Para materializar un `visual_asset`, Orquesta debe enviar `asset_type`,
 `language_code` y `source_refs` si aplica. Cuando `format=svg`, el SVG debe
 ser autocontenido y sin scripts, eventos JavaScript, `foreignObject` ni URLs
 remotas.
+
+Para materializar un `audio_asset`, Orquesta debe enviar un manifest publico con
+`topic_id`, `assembled_topic_artifact_id` o `source_artifact_ref`,
+`language_code`, `format`, `mime_type`, `duration_seconds`, `audio_ref` y
+`manifest_ref` si aplica. La implementacion OPES puede usar `edge-tts` de
+Microsoft como adaptador de sintesis por su calidad observada; esa decision no
+debe viajar en el payload publico ni en refs de Orquesta. Proveedor, modelo,
+GPU, rutas locales y procesos internos quedan en logs privados de OPES.
 
 Respuesta de job aceptada por el conector:
 
@@ -217,7 +255,7 @@ Aceptado como contrato local. Implementado corte REST para:
 - leer bloques publicos de tema con `GET /api/topics/{id}/blocks`;
 - crear jobs externos con `POST /api/jobs`;
 - enviar artefactos con `POST /api/jobs/{id}/artifacts`, incluido
-  `document_plan`.
+  `document_plan` y `audio_asset`.
 
 Orquesta ya expone el adaptador MCP generico `orquesta.domain_work.v0`, que
 puede usar este conector cuando la composicion lo inyecta. Queda fuera de este
