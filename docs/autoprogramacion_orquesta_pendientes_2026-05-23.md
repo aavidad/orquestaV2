@@ -5038,7 +5038,7 @@ Objetivo: sincronizar los documentos locales y obligatorios del Director
 Operativo con la foto vigente, sin reabrir WaitAgentRefs ni smokes Codex ya
 cerrados.
 
-Estado: hecho.
+Estado: cerrado.
 
 Alcance:
 
@@ -5370,7 +5370,7 @@ Hueco concreto nuevo:
 Objetivo: hacer visible y verificable el fallo de escritura de auditoria del
 servidor residente sin bloquear liveness ni persistir detalles sensibles.
 
-Estado: hecho local 2026-05-26.
+Estado: cerrado local 2026-05-26.
 
 Alcance:
 
@@ -6224,7 +6224,7 @@ Objetivo: unificar redaccion y limites de diagnosticos en tests/smokes Go
 opt-in que pueden tocar Codex real, OPES temporal, control plane o payloads de
 dominio.
 
-Estado: hecho local 2026-05-26.
+Estado: cerrado local 2026-05-26.
 
 Alcance:
 
@@ -7998,7 +7998,7 @@ Huecos detectados:
 Objetivo: unificar limites y decodificacion estricta para cuerpos de entrada en
 HTTP publico/MCP/web sin duplicar reglas por handler.
 
-Estado: fusionada_con T102 legacy-http-json-boundary-policy 2026-05-26.
+Estado: reconciliado con T102 legacy-http-json-boundary-policy 2026-05-26.
 
 Fusionada_con: T102 legacy-http-json-boundary-policy
 
@@ -8058,7 +8058,7 @@ Evidencia 2026-05-26:
 Objetivo: limitar y redactar respuestas HTTP leidas por clientes/comandos antes
 de escribirlas en stdout, errores publicos o auditoria.
 
-Estado: fusionada_con T103 outbound-http-response-limit-redaction 2026-05-26.
+Estado: reconciliado con T103 outbound-http-response-limit-redaction 2026-05-26.
 
 Fusionada_con: T103 outbound-http-response-limit-redaction
 
@@ -10609,7 +10609,7 @@ Hueco nuevo:
 Objetivo: hacer visibles los fallos de escritura en stdout/stderr de comandos
 locales sin convertir stdout en evidencia terminal ni filtrar diagnostico crudo.
 
-Estado 2026-05-26: cerrado localmente para la visibilidad base de fallos de
+Estado: cerrado localmente 2026-05-26 para la visibilidad base de fallos de
 escritura stdio en comandos de servidor y runner CLI. `orquesta-observability`
 define `CommandStdioWriteFailureV0` con reason codes compactos
 `command_output_write_failed`/`command_error_write_failed`; los comandos que
@@ -11664,8 +11664,9 @@ Evidencia 2026-05-27:
 Objetivo: verificar que los resources MCP publicados reflejan DTOs,
 validadores, public errors y fuentes vigentes, no strings estaticos stale.
 
-Estado: implementado en codigo focal el 2026-05-27; validacion global pendiente
-por baseline T90 ajeno al write-set de producto de T201.
+Estado: cerrado 2026-06-01 tras validacion global. Implementado en codigo
+focal el 2026-05-27; el pendiente residual era stale tras revalidaciones
+cerradas y `go test -count=1 ./...` verde el 2026-06-01.
 
 Evidencia 2026-05-27:
 
@@ -14114,13 +14115,11 @@ Evidencia de cierre:
 Objetivo: acotar y tipar la lectura del repair packet antes de convertirlo en
 contexto para un agente reparador Codex break-glass.
 
-Estado 2026-05-27: cerrado para `cmd/orquesta-guardian` y
-`cmd/orquesta-server`. El guardian serializa `check-promote`,
-`restore-last-good` y `shutdown-server` con lease durable bajo `state_dir`,
-usa reloj inyectable por config para `acquired_at`/`deadline_at`, bloquea un
-segundo intento con `guardian_promotion_lease_busy`, revalida antes de tocar
-binario vivo/restauracion/senalizacion y el servidor conserva el fallo como
-`blocked` retryable sin reparacion Codex automatica.
+Estado: cerrado 2026-05-27 para `cmd/orquesta-guardian` y
+`cmd/orquesta-server`. El guardian lee `repair_packet` con presupuesto acotado,
+rechaza symlinks, hardlinks inseguros, ficheros no regulares, cambios TOCTOU,
+packets demasiado grandes y envelopes con schema/redaccion/hash/attempt
+incompatibles antes de construir el lanzamiento Codex break-glass.
 
 Alcance:
 
@@ -14263,7 +14262,7 @@ Objetivo: serializar promocion y restauracion del guardian por `state_dir` para
 que `current_bin`, `last_good` y manifiestos no puedan divergir ante invocaciones
 solapadas.
 
-Estado 2026-05-27: cerrado localmente. El guardian reclama un lease durable bajo
+Estado: cerrado localmente 2026-05-27. El guardian reclama un lease durable bajo
 `state_dir` para serializar `check-promote`, `restore-last-good` y
 `shutdown-server`; el servidor trata `guardian_promotion_lease_busy` y
 `guardian_promotion_lease_lost` como bloqueos retryables sin promocion exitosa ni
@@ -14514,7 +14513,7 @@ Objetivo: convertir `provider_auth_blocked` de la automejora residente en un
 contrato de recuperacion operativa, con diagnostico publico compacto, accion de
 operador y reintento seguro cuando el proveedor vuelva a estar disponible.
 
-Estado 2026-05-27: cerrado localmente para servidor residente y composicion
+Estado: cerrado localmente 2026-05-27 para servidor residente y composicion
 Codex. El bloqueo `provider_auth_blocked` se proyecta como mensaje operacional
 publico con `reason_code`, refs acotadas, evidencias compactas y accion de
 recuperacion; la recuperacion queda por control/adaptador de composicion mediante
@@ -14776,7 +14775,7 @@ Objetivo: partir el bridge de autoprogramacion del stack Codex por
 responsabilidad antes de anadir mas reglas de plan-state, replay, waits o
 cierre de automejora.
 
-Estado 2026-05-27: cerrado localmente por
+Estado: cerrado localmente 2026-05-27 por
 `agent-ref-assessment-task-autoprogramming-85b15836d8e2-g01-2c021985e6a35a8c59bf365a18c8fddc`.
 El bridge queda dividido en request/validacion, run, store/replay,
 continue/wait refs y helpers de test; el test monolitico local se reparte en
@@ -14846,7 +14845,7 @@ Objetivo: dar identidad estable y verificable a cada bloque de escaneo de
 backlog para que las inserciones concurrentes no dependan de etiquetas humanas
 duplicables.
 
-Estado 2026-05-27: cerrado para el servidor residente. T249 cubre
+Estado: cerrado 2026-05-27 para el servidor residente. T249 cubre
 `scan_entry_ref`/orden por bloque historico y esta tarea anade
 `backlog_scan_ref` al merge lease del planner, derivado de
 request/correlation/epoch documental, para que el ACK cite identidad, lineas y
@@ -15282,7 +15281,7 @@ Objetivo: hacer que el planner/materializador de paquetes de scanner asigne
 pruebas obligatorias proporcionales al alcance real y a la seccion Txx, sin
 relajar ACK estricto ni ocultar fallos de pruebas pedidas explicitamente.
 
-Estado 2026-05-27: cerrado.
+Estado: cerrado 2026-05-27.
 
 Alcance:
 
@@ -15835,7 +15834,7 @@ Objetivo: partir el caso de uso de apagado controlado del servidor por
 responsabilidad local, conservando la frontera hexagonal y el contrato de
 checkpoint no forzado.
 
-Estado: fusionable_con `T256 server-shutdown-usecase-file-split`; no programar
+Estado: reconciliado con `T256 server-shutdown-usecase-file-split`; no programar
 por separado si la entrada canonica posterior esta visible en el backlog.
 
 Cierre 2026-05-27: resuelto por el owner canonico
