@@ -32,7 +32,7 @@ por el orden de autoridad documental indicado abajo.
 | Runtime y composicion | `modulos/orquesta-runtime*`, `modulos/orquesta-app-codex-stack`, `cmd/orquesta-server`, `modulos/orquesta-server` | [matriz](matriz_pruebas_reales_y_smoke_2026-05-17.md), runbooks en `docs/runbooks/` |
 | Web/MCP/API | `modulos/orquesta-web`, `modulos/orquesta-mcp`, `cmd/orquesta-server` | [backlog autoprogramacion](autoprogramacion_orquesta_pendientes_2026-05-23.md), runbooks de API/web/MCP |
 | Ola autoprogramacion 10x6 | `docs`, write-set autorizado por Director | [mapa 10x6](mapa_autoprogramacion_capacidad_10x6_2026-05-26.md), [backlog autoprogramacion](autoprogramacion_orquesta_pendientes_2026-05-23.md) |
-| OPES como consumidor | `modulos/orquesta-opes-*` | [corte OPES](corte_opes_como_consumidor_orquesta_2026-05-18.md), [runbook plan_temario](runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md) |
+| OPES como consumidor | `modulos/orquesta-opes-*` | [flujo temario operativo](opes_flujo_temario_operativo_2026-06-02.md), [corte OPES](corte_opes_como_consumidor_orquesta_2026-05-18.md), [runbook plan_temario](runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md) |
 
 ## Ruta de lectura para agentes
 
@@ -43,6 +43,7 @@ por el orden de autoridad documental indicado abajo.
   [corte_director_funcionando_tarde_2026-05-17.md](corte_director_funcionando_tarde_2026-05-17.md)
   y [corte_cierre_generico_director_operativo_2026-05-17.md](corte_cierre_generico_director_operativo_2026-05-17.md).
 - OPES, bridge o `domain_work` aplicado a OPES: anade
+  [opes_flujo_temario_operativo_2026-06-02.md](opes_flujo_temario_operativo_2026-06-02.md),
   [corte_opes_como_consumidor_orquesta_2026-05-18.md](corte_opes_como_consumidor_orquesta_2026-05-18.md)
   y su runbook temporal.
 - Smokes reales, runtime, shutdown o proveedor: usa la matriz y el runbook

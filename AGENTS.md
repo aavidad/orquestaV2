@@ -79,8 +79,12 @@ Tras los cortes del 2026-05-17, el estado real es:
   adaptador inyectado hoy, y MCPO/servidor MCP real debe quedar como transporte
   opt-in. El smoke real acotado de `plan_temario` contra OPES temporal ya cerro
   solo el plan y la creacion de derivados pendientes; sigue pendiente smoke real
-  completo de derivados/cierre OPES hasta `assemble_topic`, sin tocar OPES
-  productivo ni drenar colas amplias.
+  completo de derivados/cierre OPES hasta `generate_html_site`, sin tocar OPES
+  productivo ni drenar colas amplias. El flujo vigente de temario completo esta
+  en `docs/opes_flujo_temario_operativo_2026-06-02.md`: investigacion web de
+  examenes relacionados, redaccion, infografias, banco de tests, revisiones,
+  ensamblado, audios por tema/apartado, tutor/bots y HTML local USO/TCAE antes
+  de produccion.
 - La recursion Codex real ya tiene evidencia opt-in: arbol 1 -> 2 -> 4 con
   parent/child refs, presupuesto global, profundidad/fanout, waits acotados,
   entregas vivas, review causal y cierre del arbol por
@@ -129,7 +133,8 @@ Documentos de entrada obligatorios para cambios transversales:
 - `docs/corte_cierre_generico_director_operativo_2026-05-17.md` si cambias
   cierre causal, review por ola, tests requeridos durables, replan/close o
   estado vivo del plan.
-- `docs/corte_opes_como_consumidor_orquesta_2026-05-18.md` y
+- `docs/opes_flujo_temario_operativo_2026-06-02.md`,
+  `docs/corte_opes_como_consumidor_orquesta_2026-05-18.md` y
   `docs/runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md` si tocas
   OPES, `orquesta-opes-*`, `DomainWork` aplicado a OPES, bridge/drain OPES o
   reglas editoriales de temarios.

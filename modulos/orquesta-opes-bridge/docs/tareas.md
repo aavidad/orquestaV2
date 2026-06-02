@@ -13,6 +13,11 @@ Evidencia ya cerrada:
 - El smoke fake aislado `run-until-assemble` paso y recorrio
   `draft_content_block`, `generate_visual_asset`, revisiones, `validate_topic`,
   `assemble_topic -> assembled_topic` y `generate_audio_asset -> audio_asset`.
+  La secuencia vigente posterior amplia el cierre de temario con
+  `research_exam_precedents -> exam_research_report`,
+  `generate_question_bank -> question_bank`,
+  `generate_tutor_assets -> tutor_bot_package` y
+  `generate_html_site -> local_html_site`.
 
 Bloqueo real:
 

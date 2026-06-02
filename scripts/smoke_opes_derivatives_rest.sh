@@ -5,7 +5,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/lib/smoke_common.sh
 source "$repo_root/scripts/lib/smoke_common.sh"
 
-DEFAULT_SEQUENCE="draft_content_block,generate_visual_asset,review_legal,review_pedagogical,review_quality,validate_topic,assemble_topic,generate_audio_asset"
+DEFAULT_SEQUENCE="research_exam_precedents,draft_content_block,generate_visual_asset,generate_question_bank,review_legal,review_pedagogical,review_quality,validate_topic,assemble_topic,generate_audio_asset,generate_tutor_assets,generate_html_site"
 MODE="${ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE:-dry-run-once}"
 SMOKE_ID="${SMOKE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 SMOKE_OUT_DIR="${SMOKE_OUT_DIR:-/tmp/opes-salidas/derivatives-rest-$SMOKE_ID}"
@@ -64,6 +64,12 @@ if mode != "dry-run-once":
 runs = {}
 
 payload_by_type = {
+    "research_exam_precedents": {
+        "program_id": "program-ref-fake-operario-001",
+        "topic_id": "topic-ref-fake-operario-001",
+        "scope": "examenes y temarios relacionados fake",
+        "category": "operario",
+    },
     "draft_content_block": {
         "program_id": "program-ref-fake-operario-001",
         "topic_id": "topic-ref-fake-operario-001",
@@ -75,6 +81,12 @@ payload_by_type = {
         "topic_id": "topic-ref-fake-operario-001",
         "visual_ref": "visual-ref-fake-001",
         "objective": "Diagrama fake Operario",
+    },
+    "generate_question_bank": {
+        "program_id": "program-ref-fake-operario-001",
+        "topic_id": "topic-ref-fake-operario-001",
+        "question_bank_ref": "question-bank-ref-fake-001",
+        "minimum_questions": 50,
     },
     "assemble_topic": {
         "program_id": "program-ref-fake-operario-001",
@@ -91,6 +103,19 @@ payload_by_type = {
         "assembled_topic_artifact_id": "artifact-assembled-topic-fake-001",
         "audio_profile_ref": "audio-profile-accessible-es-001",
         "language_code": "es",
+    },
+    "generate_tutor_assets": {
+        "program_id": "program-ref-fake-operario-001",
+        "topic_id": "topic-ref-fake-operario-001",
+        "assembled_topic_artifact_id": "artifact-assembled-topic-fake-001",
+        "question_bank_artifact_id": "artifact-question-bank-fake-001",
+    },
+    "generate_html_site": {
+        "program_id": "program-ref-fake-operario-001",
+        "topic_id": "topic-ref-fake-operario-001",
+        "assembled_topic_artifact_id": "artifact-assembled-topic-fake-001",
+        "audio_manifest_artifact_id": "artifact-audio-fake-001",
+        "tutor_package_artifact_id": "artifact-tutor-fake-001",
     },
 }
 

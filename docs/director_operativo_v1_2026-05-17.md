@@ -171,7 +171,7 @@ Pendiente:
 - conectar el expander neutral `DomainDocumentPlanV0 -> DomainWorkJobRequestV0[]`
   con el ciclo real de OPES derivados/cierre. Ya existe conector durable
   file-based de referencia para `DomainWorkJobCreatorPortV0`, pero el cierre
-  OPES real hasta `generate_audio_asset -> audio_asset` sigue pendiente;
+  OPES real hasta `generate_html_site -> local_html_site` sigue pendiente;
 - mantener todos esos smokes reales opt-in, sobre instancias temporales y sin
   colas amplias.
 

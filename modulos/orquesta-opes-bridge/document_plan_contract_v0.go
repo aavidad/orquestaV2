@@ -145,9 +145,12 @@ func documentPlanRequiredPartsV0() []string {
 func documentPlanAllowedWorkKindsV0() []string {
 	return []string{
 		"root: plan_documento|plan_tema|plan_temario",
+		"research: research_exam_precedents|research_exam_results|research_related_administration_exams",
 		"sections: draft_content_block",
 		"visuals: generate_visual_asset",
-		"review_steps: review_legal|review_pedagogical|review_quality|validate_topic|assemble_topic|generate_audio_asset",
+		"tests: generate_question_bank|generate_topic_tests|create_topic_tests",
+		"review_steps: review_legal|review_pedagogical|review_quality|validate_topic",
+		"assembly: assemble_topic|generate_audio_asset|generate_tutor_assets|generate_html_site",
 	}
 }
 
@@ -164,6 +167,7 @@ func documentPlanQualityGatesV0() []string {
 		"deliverables DomainDocumentPlanDeliverableV0: deliverable_ref, artifact_type, title, required",
 		"sections ejecutables con work_kind y acceptance_criteria",
 		"deliverables obligatorios declarados",
+		"plan_temario OPES debe incluir investigacion de examenes relacionados, redaccion, infografias por tema, banco de tests, revisiones, ensamblado, audio por apartado, tutor/bots y HTML local operativo antes de produccion",
 		"sin redactar contenido final en la planificacion",
 		"quality_criteria/constraints deben incorporar politica editorial OPES cuando domain_ref=opes",
 	}
@@ -174,9 +178,14 @@ func documentPlanAcceptanceCriteriaV0() []string {
 		"devolver DomainDocumentPlanV0 valido",
 		"incluir sections y deliverables obligatorios",
 		"incluir quality_criteria y review_steps aplicables",
-		"para OPES, incluir generate_audio_asset y deliverable audio_asset para accesibilidad auditiva del tema publicable",
+		"para OPES, incluir research_exam_precedents para buscar examenes, convocatorias y temarios de administraciones relacionadas por internet usando fuentes publicas verificables",
+		"para OPES, incluir generate_visual_asset para crear infografias utiles de todos los temas o apartados que lo requieran",
+		"para OPES, incluir generate_question_bank y deliverable question_bank para tests por tema",
+		"para OPES, incluir generate_audio_asset y deliverable audio_asset para audio accesible por tema y por apartado/seccion",
+		"para OPES, incluir generate_tutor_assets para tutor y bots del temario",
+		"para OPES, incluir generate_html_site y deliverable local_html_site para HTML local operativo con logos USO y aspecto USO/TCAE promocion interna antes de subir a produccion",
 		"no redactar el documento final dentro del plan",
-		"para OPES, respetar flujo editorial: inventario, agrupacion, mapa de dependencias, temas maestros, derivacion por nivel, revision y HTML publicable",
+		"para OPES, respetar flujo editorial: inventario, investigacion externa, agrupacion, mapa de dependencias, temas maestros, derivacion por nivel, redaccion, infografias, tests, revision, ensamblado, audio, tutor/bots y HTML local publicable",
 		"si existe maestro A1/A2 o A1 equivalente, planificar primero ese maestro y despues derivar B/C1/C2/AP por resumen, reduccion editorial y adaptacion de nivel",
 		"si no existe equivalente superior, marcar creacion_directa_nivel en criterios, constraints o secciones",
 		"aplicar metodo OPES de asimilacion: recuperacion activa, repaso espaciado, ejemplos trabajados, carga cognitiva controlada, visuales utiles, elaboracion e intercalado",

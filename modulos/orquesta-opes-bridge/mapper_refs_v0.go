@@ -69,14 +69,20 @@ func contextProfileForJobTypeV0(jobType string) string {
 		"plan_documento",
 		"plan_tema",
 		"plan_temario",
+		"research_exam_precedents",
+		"research_exam_results",
 		"draft_content_block",
+		"generate_question_bank",
 		"review_legal",
 		"review_pedagogical",
 		"review_quality",
 		"validate_topic",
 		"assemble_topic",
+		"generate_html_site",
 		"generate_audio_asset",
-		"generate_topic_audio":
+		"generate_topic_audio",
+		"generate_tutor_assets",
+		"configure_temario_bots":
 		return "large"
 	default:
 		return "standard"
@@ -104,18 +110,76 @@ func acceptanceCriteriaForJobV0(jobType string) []string {
 		criteria = append(criteria, documentPlanAcceptanceCriteriaV0()...)
 	}
 	switch strings.TrimSpace(jobType) {
+	case "research_exam_precedents", "research_exam_results", "research_related_administration_exams":
+		criteria = append(criteria, examResearchAcceptanceCriteriaV0()...)
+	case "generate_visual_asset":
+		criteria = append(criteria, visualAssetAcceptanceCriteriaV0()...)
+	case "generate_question_bank", "generate_topic_tests", "create_topic_tests":
+		criteria = append(criteria, questionBankAcceptanceCriteriaV0()...)
+	case "generate_html_site", "generate_local_html_site", "assemble_local_html_site":
+		criteria = append(criteria, localHTMLSiteAcceptanceCriteriaV0()...)
 	case "generate_audio_asset", "generate_topic_audio":
 		criteria = append(criteria, topicAudioAcceptanceCriteriaV0()...)
+	case "generate_tutor_assets", "configure_temario_tutor", "configure_temario_bots":
+		criteria = append(criteria, tutorBotAcceptanceCriteriaV0()...)
 	}
 	return criteria
+}
+
+func examResearchAcceptanceCriteriaV0() []string {
+	return []string{
+		"buscar examenes, convocatorias, temarios y pruebas publicas de administraciones relacionadas con la OPE",
+		"priorizar boletines oficiales, sedes administrativas, tribunales, institutos publicos y sindicatos con documentacion verificable",
+		"devolver informe con URLs publicas, fecha de consulta, administracion, anio, cuerpo/categoria, coincidencia de epigrafes y utilidad editorial",
+		"separar evidencia confirmada de inferencias; no inventar examenes ni preguntas",
+	}
+}
+
+func visualAssetAcceptanceCriteriaV0() []string {
+	return []string{
+		"crear o especificar infografias utiles para el tema completo, no decorativas",
+		"cubrir todos los temas o apartados marcados por el document_plan",
+		"devolver assets o prompts trazables con placement_ref, texto alternativo y objetivo didactico",
+		"si se usa Gemini, Claude, Codex u otro proveedor, Orquesta lo decide por rol; OPES solo recibe visual_asset",
+	}
+}
+
+func questionBankAcceptanceCriteriaV0() []string {
+	return []string{
+		"crear banco de tests por tema con minimo configurable, por defecto 50 preguntas",
+		"cada pregunta debe tener 4 opciones, respuesta correcta identificable y distractores plausibles",
+		"incluir explicacion tutor: por que es correcta, por que fallan las distractoras y donde repasar",
+		"separar banco privado de afiliados del HTML publico abierto",
+	}
+}
+
+func localHTMLSiteAcceptanceCriteriaV0() []string {
+	return []string{
+		"crear HTML local operativo del temario completo antes de produccion",
+		"usar logos USO y aspecto visual coherente con la web USO/TCAE promocion interna aportada por el adaptador OPES/USO",
+		"integrar temas, infografias, tests visibles permitidos, tutor, audios por apartado y navegacion local",
+		"validar HTML offline, enlaces relativos, assets locales, responsive movil y ausencia de rutas internas",
+	}
 }
 
 func topicAudioAcceptanceCriteriaV0() []string {
 	return []string{
 		"derivar el audio desde el tema ensamblado aprobado o refs de paquete final",
-		"devolver manifest de audio con idioma, formatos, duracion aproximada y checksum o refs de artefactos",
+		"crear audio por tema y por apartado/seccion cuando el tema este dividido en apartados",
+		"devolver manifest de audio con idioma, formatos, duracion aproximada, mapa section_ref -> audio_ref y checksum o refs de artefactos",
 		"mantener texto narrado trazable a secciones del tema sin inventar contenido nuevo",
+		"revisar lectura de numeros romanos como numeros antes de TTS",
+		"validar escucha/transcripcion automatica cuando el adaptador OPES lo soporte",
 		"no incluir rutas locales, proveedor, GPU, modelo ni procesos internos en el payload publico",
+	}
+}
+
+func tutorBotAcceptanceCriteriaV0() []string {
+	return []string{
+		"crear paquete de tutor y bots del temario para uso local antes de produccion",
+		"incluir intents, prompts o configuracion opaca, mapa tema/apartado, fuentes permitidas y limites de respuesta",
+		"el tutor debe explicar errores de test, proponer repaso, responder dudas por tema y no inventar fuera de fuentes",
+		"devolver configuracion portable sin secretos, rutas internas, proveedor ni modelo fijado en OPES",
 	}
 }
 

@@ -161,6 +161,7 @@ func TestBuildExternalWorkRunRequestV0MapeaPlanTemarioOperadoresComoDocumentPlan
 		t.Fatalf("request no construida")
 	}
 	fields := req.AppChangeRequest.ExternalWork.InputFields
+	criteriaText := strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n")
 	if req.AppChangeRequest.AllowedWriteSet[0] != "external/opes/plan_temario/job-ref-plan-operadores-001" ||
 		req.AppChangeRequest.ExternalWork.WorkKind != "plan_temario" ||
 		!fieldValueForTestV0(fields, "expected_artifact_type", orquestadomainwork.DomainDocumentPlanArtifactTypeV0) ||
@@ -191,7 +192,11 @@ func TestBuildExternalWorkRunRequestV0MapeaPlanTemarioOperadoresComoDocumentPlan
 		!fieldValuesForTestV0(fields, "opes_level_derivation_policy", documentPlanOPESLevelDerivationPolicyV0()) ||
 		!fieldValuesForTestV0(fields, "opes_quality_requirements", documentPlanOPESQualityRequirementsV0()) ||
 		!containsStringForTestV0(req.AppChangeRequest.AcceptanceCriteria, "devolver DomainDocumentPlanV0 valido") ||
-		!containsStringForTestV0(req.AppChangeRequest.AcceptanceCriteria, "para OPES, respetar flujo editorial: inventario, agrupacion, mapa de dependencias, temas maestros, derivacion por nivel, revision y HTML publicable") {
+		!strings.Contains(criteriaText, "incluir research_exam_precedents") ||
+		!strings.Contains(criteriaText, "incluir generate_question_bank") ||
+		!strings.Contains(criteriaText, "incluir generate_tutor_assets") ||
+		!strings.Contains(criteriaText, "incluir generate_html_site") ||
+		!strings.Contains(criteriaText, "respetar flujo editorial: inventario, investigacion externa") {
 		t.Fatalf("request=%+v", req)
 	}
 }
@@ -225,8 +230,10 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 		artifactType string
 		context      string
 	}{
+		{workKind: "research_exam_precedents", artifactType: "exam_research_report", context: "large"},
 		{workKind: "draft_content_block", artifactType: "content_block", context: "large"},
 		{workKind: "generate_visual_asset", artifactType: "visual_asset", context: "standard"},
+		{workKind: "generate_question_bank", artifactType: "question_bank", context: "large"},
 		{workKind: "review_legal", artifactType: "block_revision", context: "large"},
 		{workKind: "review_pedagogical", artifactType: "block_revision", context: "large"},
 		{workKind: "review_quality", artifactType: "block_revision", context: "large"},
@@ -234,6 +241,8 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 		{workKind: "assemble_topic", artifactType: "assembled_topic", context: "large"},
 		{workKind: "generate_audio_asset", artifactType: "audio_asset", context: "large"},
 		{workKind: "generate_topic_audio", artifactType: "audio_asset", context: "large"},
+		{workKind: "generate_tutor_assets", artifactType: "tutor_bot_package", context: "large"},
+		{workKind: "generate_html_site", artifactType: "local_html_site", context: "large"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.workKind, func(t *testing.T) {

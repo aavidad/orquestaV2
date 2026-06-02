@@ -3,13 +3,20 @@ package orquestaopesbridge
 func documentPlanOPESEditorialWorkflowV0() []string {
 	return []string{
 		"inventario completo del temario",
+		"investigacion por internet de examenes, convocatorias y temarios de administraciones relacionadas con evidencia verificable",
 		"agrupacion por comunes, transversales y especificos",
 		"mapa de dependencias",
 		"identificacion de temas maestros",
 		"redaccion o validacion del maestro superior",
 		"derivacion por nivel",
+		"redaccion de todos los temas y apartados",
+		"infografias utiles para todos los temas o apartados que lo requieran",
+		"banco de tests por tema",
 		"revision editorial",
-		"HTML publicable como salida canonica",
+		"validacion legal, pedagogica, calidad, ortografia y consistencia",
+		"audio accesible por tema y por apartado",
+		"tutor y bots del temario",
+		"HTML local operativo con logos USO y aspecto USO/TCAE promocion interna como salida canonica antes de produccion",
 	}
 }
 
@@ -45,8 +52,13 @@ func documentPlanOPESQualityRequirementsV0() []string {
 		"procedimientos paso a paso, tablas comparativas y esquemas utiles",
 		"ejemplos de oposicion, errores frecuentes y claves de examen",
 		"preguntas de recuperacion por capitulo y preguntas finales",
+		"banco de tests por tema con respuestas, distractores plausibles y explicacion tutor",
 		"plan de repaso espaciado",
 		"conexiones con temas relacionados",
+		"infografias por tema con texto alternativo y placement_ref",
+		"audios por apartado con manifest trazable y revision de numeros romanos",
+		"tutor/bots con alcance por tema, fuentes permitidas y diagnostico de errores",
+		"HTML local revisable antes de produccion con marca USO/TCAE promocion interna",
 		"fuentes locales o descargadas sin depender de enlaces fragiles",
 		"modo tutor completo: que significa, por que importa, con que se confunde y como se reconoce en examen",
 		"tono adulto, claro y tecnico; facil pedagogicamente, no infantilizar",

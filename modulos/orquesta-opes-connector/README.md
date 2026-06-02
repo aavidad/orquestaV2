@@ -7,6 +7,13 @@ externos, leer bloques publicos de tema, crear jobs externos y enviar
 artefactos mediante endpoints publicos de OPES. El artefacto `document_plan`
 queda cubierto para `plan_tema`, `plan_temario` y `plan_documento`.
 
+Para `plan_temario`, la frontera vigente apunta al flujo local completo
+documentado en `../../docs/opes_flujo_temario_operativo_2026-06-02.md`:
+investigacion de examenes, redaccion, infografias, banco de tests, revisiones,
+ensamblado, audio por tema/apartado, tutor/bots y HTML local USO/TCAE antes de
+produccion. El conector transporta jobs y artefactos; OPES decide producto,
+marca, UI, fuentes y adaptadores.
+
 MCP de Orquesta ya existe como adaptador generico `orquesta.domain_work.v0` y
 puede delegar en este conector cuando el stack lo inyecta. Lo que no hay aqui
 es un cliente MCP especifico contra tools OPES; REST es la ruta funcional actual

@@ -10,16 +10,21 @@ import (
 
 func TestOPESBridgeArtifactContractMapConsumeOwnerNeutralV0(t *testing.T) {
 	for _, workKind := range []string{
+		"research_exam_precedents",
 		"draft_content_block",
 		"generate_visual_asset",
+		"generate_question_bank",
 		"review_legal",
 		"review_pedagogical",
 		"review_quality",
 		"validate_topic",
 		"expand_topic_from_summary",
 		"assemble_topic",
+		"generate_html_site",
 		"generate_audio_asset",
 		"generate_topic_audio",
+		"generate_tutor_assets",
+		"configure_temario_bots",
 		"unknown_work_kind",
 	} {
 		t.Run(workKind, func(t *testing.T) {

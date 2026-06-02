@@ -19,6 +19,10 @@ Evidencia reconciliada 2026-05-27:
   obligatorios;
 - el fake `run-until-assemble` paso historicamente hasta
   `assemble_topic -> assembled_topic`; la revalidacion vigente debe cubrir
-  tambien `generate_audio_asset -> audio_asset`;
+  tambien `research_exam_precedents -> exam_research_report`,
+  `generate_question_bank -> question_bank`,
+  `generate_audio_asset -> audio_asset`,
+  `generate_tutor_assets -> tutor_bot_package` y
+  `generate_html_site -> local_html_site`;
 - el smoke real OPES sigue bloqueado sin OPES temporal, Orquesta temporal,
   confirmacion de efectos y cuota/modelo confirmados.

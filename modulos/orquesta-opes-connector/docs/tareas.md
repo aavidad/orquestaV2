@@ -9,7 +9,10 @@ El conector REST ya cubre la frontera publica necesaria para T12: listar jobs,
 crear jobs y enviar artefactos con receipts validados. Los intentos cerrados
 demostraron los tests focales y el recorrido fake historico del bridge hasta
 `assemble_topic -> assembled_topic`; la secuencia vigente anade
-`generate_audio_asset -> audio_asset` para accesibilidad auditiva.
+investigacion externa, `generate_question_bank -> question_bank`,
+`generate_audio_asset -> audio_asset`, `generate_tutor_assets ->
+tutor_bot_package` y `generate_html_site -> local_html_site` para cerrar el
+temario operativo local.
 
 Pendiente real:
 

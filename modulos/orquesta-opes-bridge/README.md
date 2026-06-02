@@ -12,6 +12,13 @@ particular, si existe maestro A1/A2 o A1 equivalente, el plan debe crear o
 validar primero ese maestro y despues derivar B/C1/C2/AP por resumen,
 reduccion editorial y adaptacion de nivel.
 
+Para `plan_temario`, el contrato vigente exige el flujo local completo antes de
+produccion: investigacion de examenes y temarios relacionados, redaccion,
+infografias, banco de tests, revisiones, ensamblado, audios por tema/apartado,
+tutor/bots y HTML local con logos USO y aspecto USO/TCAE promocion interna. La
+secuencia canonica esta en
+`docs/opes_flujo_temario_operativo_2026-06-02.md`.
+
 El HTML de temas OPES no queda a criterio de cada agente: el contrato inyecta
 `opes_html_topic_template_v1` y el renderer
 `modulos/orquesta-opes-bridge/scripts/opes_render_topic_html_v1.py`, basado en
@@ -59,7 +66,7 @@ ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
 ORQUESTA_OPES_BRIDGE_ENABLED=1 \
 ORQUESTA_OPES_BRIDGE_CONFIRM=1 \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
-ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=draft_content_block,generate_visual_asset,review_legal,review_pedagogical,review_quality,validate_topic,assemble_topic,generate_audio_asset \
+ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=research_exam_precedents,draft_content_block,generate_visual_asset,generate_question_bank,review_legal,review_pedagogical,review_quality,validate_topic,assemble_topic,generate_audio_asset,generate_tutor_assets,generate_html_site \
 go run ./cmd/orquesta-server run
 ```
 
@@ -73,18 +80,19 @@ tipo.
 T12 queda reconciliada como bloqueo verificable para smoke real OPES temporal:
 los tests de bridge/conector y el fake `run-until-assemble` validan la ruta
 local de derivados; historicamente llegaba a `assemble_topic -> assembled_topic`
-y la secuencia vigente anade `generate_audio_asset -> audio_asset`. Falta
-entorno OPES temporal, servidor Orquesta temporal, confirmacion de efectos y
-cuota/modelo real. No repetir implementaciones padre para generar la misma
-evidencia fake.
+y la secuencia vigente anade investigacion externa, tests, audio, tutor/bots y
+HTML local. Falta entorno OPES temporal, servidor Orquesta temporal,
+confirmacion de efectos y cuota/modelo real. No repetir implementaciones padre
+para generar la misma evidencia fake.
 
 ## Audio accesible
 
 OPES debe crear tambien jobs `generate_audio_asset` para producir el artefacto
-`audio_asset` de cada tema publicable. El bridge lo trata como trabajo de
-dominio posterior a `assemble_topic`: recibe refs opacas del tema ensamblado o
-paquete final y devuelve un manifest de audio con idioma, formatos, duracion y
-refs/checksums de artefactos.
+`audio_asset` de cada tema publicable y de sus apartados/secciones. El bridge lo
+trata como trabajo de dominio posterior a `assemble_topic`: recibe refs opacas
+del tema ensamblado o paquete final y devuelve un manifest de audio con idioma,
+formatos, duracion, refs/checksums de artefactos y mapa `section_ref ->
+audio_ref`.
 
 La app local que use la RTX4090 o una integracion `edge-tts` de Microsoft es un
 adaptador de composicion OPES. Por calidad observada, `edge-tts` puede ser la
@@ -93,3 +101,7 @@ Orquesta ni del contrato `orquesta-domain-work`: hacia Orquesta solo deben
 viajar `work_kind=generate_audio_asset`, `artifact_type=audio_asset`,
 `audio_profile_ref` y refs opacas. Alias como `generate_topic_audio`,
 `tts_topic` o `audio_tema` se normalizan sin tirar el trabajo.
+
+Antes de TTS, el adaptador OPES debe revisar titulos con numeros romanos para
+que se lean como numeros. Tras generar audio, debe escuchar o validar con
+transcripcion automatica cuando el adaptador lo soporte.

@@ -54,8 +54,23 @@ Reglas:
   `esquema_repaso` y `plan_visuales`;
 - para `generate_audio_asset`, el bridge exige `expected_artifact_type=audio_asset`
   y el job debe derivar audio desde `assembled_topic` o refs opacas del paquete
-  final; cualquier app RTX/GPU queda como adaptador OPES externo y no se expone
-  como proveedor, ruta local ni proceso en el contrato publico;
+  final, con audio por tema y por apartado/seccion; cualquier app RTX/GPU queda
+  como adaptador OPES externo y no se expone como proveedor, ruta local ni
+  proceso en el contrato publico;
+- para `research_exam_precedents`, el bridge exige
+  `expected_artifact_type=exam_research_report` y el job debe buscar por
+  internet examenes, convocatorias, temarios y pruebas de administraciones
+  relacionadas con fuentes publicas verificables;
+- para `generate_question_bank`, el bridge exige
+  `expected_artifact_type=question_bank` y tests por tema con respuesta,
+  distractores y explicacion tutor;
+- para `generate_tutor_assets`, el bridge exige
+  `expected_artifact_type=tutor_bot_package` y debe producir tutor/bots del
+  temario por refs opacas;
+- para `generate_html_site`, el bridge exige
+  `expected_artifact_type=local_html_site` y debe producir un HTML local
+  operativo con logos USO, aspecto USO/TCAE promocion interna, assets locales,
+  audios, infografias, tests permitidos y tutor/bots;
 - para `plan_tema`, `plan_temario` y `plan_documento`, el bridge declara
   `expected_artifact_type=document_plan`, `expected_schema=domain_document_plan.v0`
   y partes minimas del plan: `sections`, `deliverables`, `quality_criteria`,
@@ -69,7 +84,9 @@ Reglas:
   equivalente superior, el plan debe marcar `creacion_directa_nivel`;
 - para temas publicables OPES, el plan debe incluir una fase
   `generate_audio_asset` y un deliverable `audio_asset`, de forma que personas
-  invidentes o cualquier alumno puedan escuchar el contenido del tema;
+  invidentes o cualquier alumno puedan escuchar el contenido del tema y de sus
+  apartados. Tambien debe incluir investigacion externa, banco de tests,
+  tutor/bots y HTML local antes de produccion;
 - `allowed_write_set` se limita a `external/opes/<work_kind>/<job_id>` para que
   cada job tenga una entrega unica y varios agentes del mismo tipo no se pisen;
 - si OPES aporta `worktree_ref` o `branch_ref` en `external_refs`, el bridge los

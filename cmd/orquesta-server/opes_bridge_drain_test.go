@@ -638,7 +638,7 @@ func TestSmokeOPESDerivativesRESTWrapperFakeServerV0(t *testing.T) {
 	output := stdout.String()
 	if !strings.Contains(output, `"dry_run":true`) ||
 		!strings.Contains(output, `"selected_job_type":"assemble_topic"`) ||
-		!strings.Contains(output, `"empty_job_types":["draft_content_block","generate_visual_asset","review_legal","review_pedagogical","review_quality","validate_topic"]`) ||
+		!strings.Contains(output, `"empty_job_types":["research_exam_precedents","draft_content_block","generate_visual_asset","generate_question_bank","review_legal","review_pedagogical","review_quality","validate_topic"]`) ||
 		!strings.Contains(output, `"job_ref":"job-ref-fake-assemble-topic-001"`) ||
 		!strings.Contains(output, `"status":"dry_run"`) {
 		t.Fatalf("stdout=%s stderr=%s", output, stderr.String())
@@ -662,7 +662,7 @@ func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilAssembleV0(t *testing.
 		"ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-assemble",
 		"ORQUESTA_OPES_DERIVATIVES_EXECUTE=1",
 		"ORQUESTA_OPES_BRIDGE_LIMIT=1",
-		"ORQUESTA_OPES_BRIDGE_MAX_TICKS=10",
+		"ORQUESTA_OPES_BRIDGE_MAX_TICKS=20",
 		"ORQUESTA_OPES_DERIVATIVES_TICK_SLEEP_SECONDS=0",
 		"SMOKE_ID=test-derivatives-rest-run-until-fake",
 		"SMOKE_OUT_DIR="+filepath.Join(t.TempDir(), "out"),
@@ -676,13 +676,19 @@ func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilAssembleV0(t *testing.
 		t.Fatalf("script err=%v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	output := stdout.String()
-	if !strings.Contains(output, `"selected_job_type":"draft_content_block"`) ||
+	if !strings.Contains(output, `"selected_job_type":"research_exam_precedents"`) ||
+		!strings.Contains(output, `"selected_job_type":"draft_content_block"`) ||
 		!strings.Contains(output, `"selected_job_type":"assemble_topic"`) ||
 		!strings.Contains(output, `"selected_job_type":"generate_audio_asset"`) ||
+		!strings.Contains(output, `"selected_job_type":"generate_tutor_assets"`) ||
+		!strings.Contains(output, `"selected_job_type":"generate_html_site"`) ||
+		!strings.Contains(output, `"artifact_type": "exam_research_report"`) ||
 		!strings.Contains(output, `"artifact_type": "assembled_topic"`) ||
 		!strings.Contains(output, `"artifact_type": "audio_asset"`) ||
+		!strings.Contains(output, `"artifact_type": "tutor_bot_package"`) ||
+		!strings.Contains(output, `"artifact_type": "local_html_site"`) ||
 		!strings.Contains(output, `run_until_status=completed`) ||
-		!strings.Contains(output, `final_job_type=generate_audio_asset`) {
+		!strings.Contains(output, `final_job_type=generate_html_site`) {
 		t.Fatalf("stdout=%s stderr=%s", output, stderr.String())
 	}
 }

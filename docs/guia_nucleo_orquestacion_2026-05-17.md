@@ -337,7 +337,7 @@ smoke real opt-in. No se importa desde core, director, domain-work ni expander.
   composicion los inyecta; el nucleo sigue sin conocer shell/runtime concreto.
 - OPES tiene integracion real documentada para `plan_tema` y `plan_temario`
   acotados a plan, smokes REST de `domain_work`/visual y automatizacion offline
-  de derivados hasta `generate_audio_asset -> audio_asset`; falta smoke real
+  de derivados hasta `generate_html_site -> local_html_site`; falta smoke real
   completo de derivados y cierre OPES temporal.
 - El stack Codex entrega artefactos de domain-work y recupera algunos casos de
   ACK ausente con artefacto valido.

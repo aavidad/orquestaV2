@@ -131,7 +131,8 @@ Para `plan_tema`, `plan_temario` y `plan_documento`, Orquesta entrega
 `artifact_type=document_plan` con payload compatible con
 `DomainDocumentPlanV0`. OPES valida ese plan como `PlanTemaV0` o
 `PlanTemarioV0` y decide despues que jobs concretos crear para redaccion,
-visuales, revision, ensamblado y exportacion.
+investigacion de examenes, visuales, tests, revision, ensamblado, audio,
+tutor/bots, HTML local y exportacion.
 
 Para otros objetos de dominio, el conector debe usar endpoints OPES especificos
 cuando OPES los publique. No debe resolverlos por DB ni ficheros.
@@ -151,12 +152,25 @@ draft_content_block
 summarize_topic
 expand_topic_from_summary
 generate_visual_asset
+research_exam_precedents
+research_exam_results
+research_related_administration_exams
+generate_question_bank
+generate_topic_tests
+create_topic_tests
 review_legal
 review_pedagogical
 review_quality
 validate_topic
 assemble_topic
 generate_audio_asset
+generate_topic_audio
+generate_tutor_assets
+configure_temario_tutor
+configure_temario_bots
+generate_html_site
+generate_local_html_site
+assemble_local_html_site
 export_topic
 verify_sources
 ```
@@ -166,6 +180,14 @@ completo.
 
 `generate_audio_asset` es el trabajo OPES para accesibilidad auditiva. Debe
 producir `artifact_type=audio_asset` desde el tema ensamblado o refs opacas del
-paquete final. La generacion con RTX4090, `edge-tts` de Microsoft u otro motor
-queda fuera de este conector REST: OPES la implementa como adaptador propio y
-Orquesta solo ve jobs, artefactos, `audio_profile_ref` y receipts publicos.
+paquete final, con audio por tema y por apartado/seccion. La generacion con
+RTX4090, `edge-tts` de Microsoft u otro motor queda fuera de este conector REST:
+OPES la implementa como adaptador propio y Orquesta solo ve jobs, artefactos,
+`audio_profile_ref` y receipts publicos.
+
+`research_exam_precedents`, `generate_question_bank`, `generate_tutor_assets` y
+`generate_html_site` son trabajos OPES de flujo completo de temario. Sus
+artefactos esperados son, respectivamente, `exam_research_report`,
+`question_bank`, `tutor_bot_package` y `local_html_site`. OPES conserva la
+decision de fuentes, marca USO, UI local y adaptadores; Orquesta solo orquesta
+roles y entrega por refs opacas.

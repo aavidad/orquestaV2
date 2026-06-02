@@ -213,11 +213,13 @@ Corte anadido el 2026-05-18:
   orden y drena solo el primer tipo con jobs `pending`; si el ledger indica
   `already_submitted`, bloquea igualmente las fases posteriores hasta que OPES
   deje de exponer pendientes de ese tipo. Esto automatiza el flujo
-  `draft_content_block -> generate_visual_asset -> review_* -> validate_topic
-  -> assemble_topic -> generate_audio_asset` sin meter OPES en el nucleo.
-  Desde el 2026-06-02, `generate_audio_asset -> audio_asset` queda como fase
-  OPES para accesibilidad auditiva y debe ejecutarse por adaptador OPES, no por
-  el nucleo.
+  `research_exam_precedents -> draft_content_block -> generate_visual_asset ->
+  generate_question_bank -> review_* -> validate_topic -> assemble_topic ->
+  generate_audio_asset -> generate_tutor_assets -> generate_html_site` sin
+  meter OPES en el nucleo. Desde el 2026-06-02, el flujo local completo de
+  temario queda fijado en `docs/opes_flujo_temario_operativo_2026-06-02.md`:
+  investigacion externa, tests, audios por tema/apartado, tutor/bots e HTML
+  local USO/TCAE son derivados obligatorios antes de produccion.
 
 Smoke real acotado del 2026-05-18:
 
@@ -230,9 +232,12 @@ Smoke real acotado del 2026-05-18:
   1 `review_legal`, 1 `review_pedagogical`, 1 `validate_topic` y
   1 `assemble_topic`.
 
-Nota historica: este smoke del 2026-05-18 no cubrio audio. La secuencia vigente
-posterior anade `generate_audio_asset -> audio_asset`; su smoke real completo
-debe ejecutarse contra OPES temporal igual que el resto de derivados.
+Nota historica: este smoke del 2026-05-18 no cubrio audio, tests, tutor/bots ni
+HTML local. La secuencia vigente posterior anade investigacion de examenes,
+`generate_question_bank -> question_bank`, `generate_audio_asset ->
+audio_asset`, `generate_tutor_assets -> tutor_bot_package` y
+`generate_html_site -> local_html_site`; su smoke real completo debe ejecutarse
+contra OPES temporal igual que el resto de derivados.
 
 Documento de evidencia:
 

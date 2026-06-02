@@ -13,6 +13,10 @@ const (
 	DomainWorkArtifactTypeTopicExpansionPackageV0 = "topic_expansion_package"
 	DomainWorkArtifactTypeAssembledTopicV0        = "assembled_topic"
 	DomainWorkArtifactTypeAudioAssetV0            = "audio_asset"
+	DomainWorkArtifactTypeExamResearchReportV0    = "exam_research_report"
+	DomainWorkArtifactTypeQuestionBankV0          = "question_bank"
+	DomainWorkArtifactTypeLocalHTMLSiteV0         = "local_html_site"
+	DomainWorkArtifactTypeTutorBotPackageV0       = "tutor_bot_package"
 	DomainWorkArtifactTypeGenericWorkDeliveryV0   = "work_delivery"
 )
 
@@ -26,6 +30,10 @@ func ExpectedDomainWorkArtifactTypeForWorkKindV0(workKind string) string {
 		return DomainWorkArtifactTypeBlockRevisionV0
 	case "research_sources", "download_source", "verify_sources":
 		return DomainWorkArtifactTypeSourceV0
+	case "research_exam_precedents", "research_exam_results",
+		"research_related_administration_exams", "buscar_examenes_ope",
+		"investigar_examenes_administraciones":
+		return DomainWorkArtifactTypeExamResearchReportV0
 	case "split_syllabus_topic":
 		return DomainWorkArtifactTypeTopicStructureV0
 	case "draft_topic_outline", "create_exam_outline":
@@ -38,11 +46,20 @@ func ExpectedDomainWorkArtifactTypeForWorkKindV0(workKind string) string {
 		return DomainDocumentPlanArtifactTypeV0
 	case "assemble_topic":
 		return DomainWorkArtifactTypeAssembledTopicV0
+	case "generate_question_bank", "generate_topic_tests", "create_topic_tests",
+		"crear_tests_tema", "banco_preguntas_tema":
+		return DomainWorkArtifactTypeQuestionBankV0
+	case "generate_html_site", "generate_local_html_site",
+		"assemble_local_html_site", "crear_html_temario", "html_temario_local":
+		return DomainWorkArtifactTypeLocalHTMLSiteV0
 	case "generate_audio_asset", "generate_topic_audio", "create_topic_audio",
 		"create_audio_asset", "synthesize_topic_audio", "narrate_topic", "tts_topic",
 		"generacion_audio", "generar_audio", "crear_audio_tema", "audio_tema",
 		"narracion_tema", "sintesis_voz_tema", "topic_audio":
 		return DomainWorkArtifactTypeAudioAssetV0
+	case "generate_tutor_assets", "configure_temario_tutor", "configure_temario_bots",
+		"create_tutor_bot_package", "crear_tutor_temario", "bots_temario":
+		return DomainWorkArtifactTypeTutorBotPackageV0
 	default:
 		return DomainWorkArtifactTypeGenericWorkDeliveryV0
 	}

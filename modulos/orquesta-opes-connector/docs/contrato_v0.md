@@ -156,9 +156,18 @@ OPES confirma que:
 - OPES publica `generate_visual_asset` y acepta `visual_asset` como artefacto
   preferente para esquemas, vinetas, flujogramas, mapas conceptuales e
   infografias;
+- OPES debe publicar `research_exam_precedents` y aceptar
+  `exam_research_report` para busqueda externa verificable de examenes,
+  convocatorias y temarios relacionados;
+- OPES debe publicar `generate_question_bank` y aceptar `question_bank` para
+  tests por tema con respuesta, distractores y explicacion tutor;
 - OPES debe publicar `generate_audio_asset` y aceptar `audio_asset` como
   artefacto accesible derivado de `assembled_topic` o refs opacas del paquete
   final;
+- OPES debe publicar `generate_tutor_assets` y aceptar `tutor_bot_package` para
+  tutor y bots del temario;
+- OPES debe publicar `generate_html_site` y aceptar `local_html_site` para el
+  HTML local operativo con logos USO y aspecto USO/TCAE promocion interna;
 - la deduplicacion funciona por `idempotency_key` en jobs y por
   `(job_id, idempotency_key)` en artefactos;
 - replay de job puede devolver HTTP `200` con `created=false`; creacion nueva
@@ -238,6 +247,10 @@ El conector futuro debe adaptar OPES a:
 - `DomainDocumentPlanV0` cuando OPES pida `plan_tema`, `plan_temario` o
   `plan_documento`; OPES lo tratara como `PlanTemaV0`/`PlanTemarioV0`
   validable por sus reglas de dominio.
+  Para `plan_temario`, el plan debe poder crear el flujo local completo:
+  investigacion de examenes relacionados, redaccion, infografias, banco de
+  tests, revisiones, ensamblado, audios por tema/apartado, tutor/bots y HTML
+  local USO/TCAE antes de produccion.
 
 `domain_ref` debe ser `opes`. `interface_refs` debe apuntar a refs publicas
 REST/MCP, no a rutas locales ni internals de OPES.
@@ -248,6 +261,13 @@ REST/MCP, no a rutas locales ni internals de OPES.
 cuando no bastan `value` ni `values`.
 
 ## Estado
+
+Corte vigente 2026-06-02: `plan_temario` debe poder materializar el flujo
+completo local antes de produccion. El contrato documental ya nombra los
+artefactos nuevos (`exam_research_report`, `question_bank`,
+`tutor_bot_package`, `local_html_site`) y el adaptador REST debe tratarlos como
+artefactos publicos de OPES, sin resolver DB, rutas internas, proveedores ni
+marca desde Orquesta.
 
 Aceptado como contrato local. Implementado corte REST para:
 

@@ -21,10 +21,14 @@
 - Contrato multiformato de expansion: tema grande, tema mediano, resumen,
   esquema de repaso y plan de visuales.
 - Mapper de derivados OPES:
+  `research_exam_precedents -> exam_research_report`,
   `draft_content_block -> content_block`,
   `generate_visual_asset -> visual_asset`, revisiones y `validate_topic` a
   `block_revision`, `assemble_topic -> assembled_topic` y
-  `generate_audio_asset -> audio_asset`.
+  `generate_question_bank -> question_bank`,
+  `generate_audio_asset -> audio_asset`,
+  `generate_tutor_assets -> tutor_bot_package` y
+  `generate_html_site -> local_html_site`.
 - Preservacion de `worktree_ref` y `branch_ref` de autoprogramacion como refs
   opacas, sin usarlas como ruta, rama Git ni componente del write-set.
 - Preservacion de payload JSON como `input_fields`.

@@ -53,7 +53,7 @@ Resultado: HTTP 200 con `AppSpecV0` valido y `BacklogInicialPropuestoV0`.
 
 ## No bloqueante para esta prueba
 
-- OPES temporal real hasta `generate_audio_asset -> audio_asset`: pertenece al
+- OPES temporal real hasta `generate_html_site -> local_html_site`: pertenece al
   conector OPES, no a una app externa generica.
 - Smoke manual largo de shutdown cooperativo Codex real: importante para
   operaciones, no prerequisito de crear una app nueva controlada.

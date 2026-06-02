@@ -404,7 +404,7 @@ y cierre por refs opacas.
 Los huecos restantes no se consideran cerrados hasta tener evidencia propia:
 
 - OPES temporal real de derivados/cierre hasta
-  `generate_audio_asset -> audio_asset`, con refs causales suficientes y sin
+  `generate_html_site -> local_html_site`, con refs causales suficientes y sin
   asumir cierre desde dry-run o automatizacion offline;
 - cualquier blocker nuevo no cubierto debe traer prueba focal de replan y replay
   idempotente antes de declararse parte del tramo cerrado.
