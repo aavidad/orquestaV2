@@ -32,7 +32,9 @@ Validacion esperada: smoke API-only contra instancia temporal de Hermes:
 acotado y `directed_query`, sin DB, sin rutas internas y sin CLI de proveedor.
 
 Validacion ejecutada: `go test -count=1 ./modulos/orquesta-operator-mcp-hermes
-./cmd/orquesta-server`.
+./cmd/orquesta-server`. El test de servidor cubre descubrimiento MCP y las
+cuatro operaciones de operador contra Hermes fake HTTP: `status`,
+`pending_outbox`, `supervised_burst` y `directed_query`.
 
 Bloqueos: falta endpoint/credenciales Hermes reales para smoke externo.
 T16/T23/T124/T145 no se reabren salvo regresion: el pendiente restante es smoke

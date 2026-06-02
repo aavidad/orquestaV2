@@ -53,5 +53,10 @@ Variables canonicas del conector Hermes de servidor:
 go test -count=1 ./modulos/orquesta-operator-mcp ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp-client ./modulos/orquesta-operator-mcp-hermes ./cmd/orquesta-server
 ```
 
+La validacion offline de servidor usa un Hermes HTTP fake y debe cubrir
+descubrimiento MCP y las cuatro operaciones de operador. El smoke externo real
+solo queda cerrado cuando `ORQUESTA_HERMES_BASE_URL` apunta a una instancia
+temporal real y todas las llamadas pasan por API/MCP.
+
 El contrato no lee DB, outbox real, runtime, filesystem productivo, HOME,
 OAuth, proveedor, modelo, prompts ni transcripts.

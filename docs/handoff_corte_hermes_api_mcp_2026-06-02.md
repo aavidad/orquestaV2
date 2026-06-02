@@ -48,6 +48,8 @@ Alcance:
   `OperatorMCPClientConnectorV0`.
 - `ORQUESTA_HERMES_BASE_URL` y `ORQUESTA_HERMES_API_KEY` quedan como settings
   sensibles/redacted en configuracion efectiva.
+- `stack_wiring_test` valida por API HTTP fake: `resources/list`, `tools/list`,
+  `status`, `supervised_burst`, `pending_outbox` y `directed_query`.
 
 ## Pruebas
 
@@ -66,7 +68,7 @@ go test -count=1 ./modulos/orquesta-operator-mcp-hermes ./modulos/orquesta-opera
 ## Riesgos
 
 - Falta smoke real contra Hermes externo; el test actual usa `httptest.Server`
-  remoto y valida API HTTP/MCP sin CLI.
+  remoto y valida API HTTP/MCP completa sin CLI.
 - No se debe renombrar ni reutilizar el proveedor Gemini CLI como Hermes.
 - No usar Orquesta CLI ni proveedor CLI para cerrar evidencia Hermes; solo API
   publica o MCP JSON-RPC con refs opacas.
