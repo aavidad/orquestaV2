@@ -80,6 +80,9 @@ func codexAckNotesContainLocalProductDetailV0(notes []string) bool {
 		if codexAckNoteClassifiesPendingRailV0(note) {
 			continue
 		}
+		if codexAckNoteIsAllowedRefOnlyEvidenceV0(note) {
+			continue
+		}
 		if codexAckTextContainsLocalProductDetailV0(note) {
 			return true
 		}
@@ -92,4 +95,18 @@ func codexAckNoteClassifiesPendingRailV0(note string) bool {
 	return strings.Contains(normalized, "rail pendiente") ||
 		strings.Contains(normalized, "pending rail") ||
 		strings.Contains(normalized, CodexAgentAckPendingRailEvidenceRefV0)
+}
+
+func codexAckNoteIsAllowedRefOnlyEvidenceV0(note string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(note))
+	if !strings.HasPrefix(normalized, "contexto_ref_only_resuelto:") &&
+		!strings.HasPrefix(normalized, "contexto_ref_only_resuelto ") {
+		return false
+	}
+	if codexAckTextContainsEffectiveSensitiveDetailV0(note) {
+		return false
+	}
+	return strings.Contains(normalized, "ack_evidence_required") ||
+		strings.Contains(normalized, "evidencia explicita") ||
+		strings.Contains(normalized, "evidence")
 }

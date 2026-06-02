@@ -95,14 +95,15 @@ func externalWorkContextEntriesV0(
 		return nil
 	}
 	policy := externalWorkContextPolicyForWorkV0(work)
-	limit := len(work.InputFields)
+	fields := externalWorkPrioritizedContextFieldsV0(work.InputFields)
+	limit := len(fields)
 	if limit > policy.MaxFields {
 		limit = policy.MaxFields
 	}
 	entries := make([]orquestacontext.ContextMaterializedEntryV0, 0, limit+1)
 	remaining := policy.TotalMaxBytes
-	omitted := len(work.InputFields) - limit
-	for index, field := range work.InputFields[:limit] {
+	omitted := len(fields) - limit
+	for index, field := range fields[:limit] {
 		if remaining <= 0 {
 			omitted += limit - index
 			break
@@ -131,6 +132,65 @@ func externalWorkContextEntriesV0(
 		entries = append(entries, externalWorkContextBudgetEntryV0(area, taskRef, omitted))
 	}
 	return entries
+}
+
+func externalWorkPrioritizedContextFieldsV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	if len(fields) == 0 {
+		return nil
+	}
+	priority := make([]orquestadomainwork.DomainWorkFieldV0, 0, len(fields))
+	rest := make([]orquestadomainwork.DomainWorkFieldV0, 0, len(fields))
+	for _, field := range fields {
+		if externalWorkFieldIsCriticalContextV0(field.Name) {
+			priority = append(priority, field)
+			continue
+		}
+		rest = append(rest, field)
+	}
+	return append(priority, rest...)
+}
+
+func externalWorkFieldIsCriticalContextV0(name string) bool {
+	switch normalizedExternalWorkFieldNameV0(name) {
+	case "job_id",
+		"job_ref",
+		"job_type",
+		"work_kind",
+		"expected_artifact_type",
+		"artifact_type",
+		"title",
+		"topic_title",
+		"planned_title",
+		"objective",
+		"language_code",
+		"level",
+		"source_refs",
+		"official_topic_ref",
+		"topic_ref",
+		"official_topic_text",
+		"official_text",
+		"topic_official_text",
+		"topic_text",
+		"source_text",
+		"document_plan",
+		"target_words_min",
+		"target_words_max",
+		"audio_roman_numeral_policy":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizedExternalWorkFieldNameV0(name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	name = strings.NewReplacer("-", "_", " ", "_", ".", "_").Replace(name)
+	for strings.Contains(name, "__") {
+		name = strings.ReplaceAll(name, "__", "_")
+	}
+	return strings.Trim(name, "_")
 }
 
 func externalWorkFieldContentV0(

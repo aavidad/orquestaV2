@@ -95,6 +95,16 @@ Los perfiles `code_study`, `implementation`, `refactor`, `required_tests`,
 capacidad por `WorkflowTaskProfileResolverPortV0`; Codex, OPES o cualquier otro
 conector solo mapean ese perfil a su ejecucion concreta.
 
+Hasta nueva orden, no se introducen filtros heurísticos, rails ni cortes por
+palabras en el flujo de agentes. Un artefacto que no cumple el destino previsto
+se conserva y se revisa para reaprovecharlo como otro artefacto, borrador,
+insumo, evidencia, nota de revision o tarea derivada. Alias, nombres cercanos,
+JSON reparable, contexto omitido o palabras ambiguas en logs no justifican
+`stop_agent`, `failed`, `garbage`, `capacity_limited` ni rechazo automatico. El
+Director normaliza, revisa, pide rework o replanifica. Cada Codex padre puede
+usar hasta 6 subagentes y no hay limite global artificial de Codex padres salvo
+frontera dura externa o instruccion explicita del operador.
+
 ## Corte Director Operativo
 
 El corte vigente del Director Operativo esta en
@@ -235,6 +245,10 @@ Checklist antes de extenderlo:
   adaptadores pueden normalizar alias y formas equivalentes; el director debe
   poder reparar nombres cercanos. La validacion deterministica corta solo cuando
   no puede preservar seguridad, causalidad, refs opacas o permisos.
+- No uses clasificadores por substring para tomar decisiones fuertes de runtime
+  o calidad. Un log con una palabra como `capacity`, una entrega con alias o una
+  forma JSON cercana no justifica parar agentes, fallar tareas ni descartar
+  trabajo; requiere normalizacion, revision o rework conservando evidencias.
 - Los adaptadores pueden ser concretos, pero deben vivir fuera del nucleo y ser
   opt-in si tocan red, procesos, proveedor o datos reales.
 - La persistencia real actual es file-based JSON, no una verdad arquitectonica.

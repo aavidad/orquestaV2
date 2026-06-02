@@ -172,6 +172,19 @@ Documentos de entrada obligatorios para cambios transversales:
   por carpeta), normaliza en el adaptador o deja que el director repare la
   forma. Corta fuerte solo por seguridad, causalidad, refs imposibles, datos
   sensibles o efectos externos no autorizados.
+- Regla de fuego vigente hasta nueva orden: no anadas filtros, rails,
+  cinturones ni clasificadores por palabras para cortar trabajo de agentes. No
+  pares, rechaces, marques
+  `capacity_limited`, `garbage`, `failed` ni descartes una entrega por un string
+  suelto, alias, nombre cercano, formato recuperable, contexto omitido por
+  presupuesto o heuristica de logs. Las formas recuperables se normalizan en el
+  adaptador o las corrige el Director con rework/replan; el trabajo se conserva.
+  En OPES y otros dominios, si un texto o artefacto no cumple el uso previsto,
+  revisalo para aprovecharlo total o parcialmente como otro artefacto, borrador,
+  insumo documental, evidencia, nota de revision o tarea derivada antes de
+  descartarlo.
+  Los unicos cortes fuertes aceptables son seguridad, causalidad, refs
+  imposibles, datos sensibles o efectos externos no autorizados.
 - Si una decision requiere producto, runtime, modelo, cuota o proveedor,
   documenta la frontera y dejala en adaptador/composicion.
 - Configuracion canonica: Orquesta y cualquier app generada o modificada por
@@ -191,8 +204,12 @@ Documentos de entrada obligatorios para cambios transversales:
   siguiendo el patron local antes de seguir añadiendo codigo.
 - Delegacion operativa: si un agente necesita ayuda y el runtime/composicion lo
   permite, debe activar subagentes para paralelizar analisis, implementacion,
-  pruebas o revision. Limite por defecto: hasta 6 subagentes por agente, siempre
-  conservando refs/parentesco, write-set, presupuesto y evidencia en el ACK.
+  pruebas o revision. Cada Codex padre puede usar hasta 6 subagentes. No hay
+  limite global artificial de Codex padres ni de agentes vivos salvo limite duro
+  del proveedor/runtime/OS o instruccion explicita del operador; si existe un
+  limite duro, documentalo como frontera externa temporal, no como politica del
+  nucleo. Conserva refs/parentesco, write-set, presupuesto y evidencia en el
+  ACK.
 - Economia de tokens: al lanzar agentes o subagentes, pide comunicacion compacta
   y tecnicas de ahorro como `caveman` si estan disponibles. Para exploracion y
   pruebas usa razonamiento `medium` por defecto; no uses `xhigh` salvo orden
@@ -213,8 +230,10 @@ Documentos de entrada obligatorios para cambios transversales:
    "todos los agentes del run". Conserva la regla cerrada: `WaitAgentRefs` no
    vacio limita pending, wait e ingesta de ACK/deliveries; `WaitAgentRefs`
    vacio conserva compatibilidad legacy.
-5. Si tocas OPES, exige instancia temporal, guarda de confirmacion y filtro por
-   tipo de job.
+5. Si tocas OPES, exige instancia temporal y guarda de confirmacion. Usa
+   `job_type`/`job_ref` solo como scope opt-in para no tocar jobs ajenos o OPES
+   productivo; no lo conviertas en filtro de agentes, de capacidad ni de
+   entregas.
 6. Si tocas recursion Codex, conserva parent/child refs, limites de
    profundidad/fanout, presupuesto y review causal.
 7. El tramo `OperationalDirectorPlanMaterializerV0 -> WorkflowTaskStore ->

@@ -211,6 +211,70 @@ func TestCanonicalDomainDocumentPlanPayloadJSONV0CompactaRefsConRutasDeAgente(t 
 	}
 }
 
+func TestCanonicalDomainDocumentPlanPayloadJSONV0AceptaAliasesDePlanOperario(t *testing.T) {
+	payload := `{
+		"schema_version":"domain_document_plan_v0",
+		"artifact_type":"document_plan",
+		"job_id":"cc93fbb0a41c1b04b2a4a82bb7ac3ed2",
+		"program_id":"6e6cc9dd7275f6c32d4f9d044a12d98d",
+		"document_kind":"temario_oposicion",
+		"language_code":"es",
+		"title":"Temario Operario AP completo",
+		"sections":[{
+			"section_id":"tema_01",
+			"ordinal":1,
+			"planned_title":"Tema 1 - Constitucion Espanola de 1978 y Administracion local",
+			"official_topic_ref":"OPES/administracion-especial/Operario/Operario.txt#tema-01",
+			"primary_source_refs":[
+				"opes-salidas/codex_directo/operario/AP/produccion_externa_2026-05-19/markdown_importable/tema_01_constitucion_administracion_local.md",
+				"OPES/administracion-especial/Materias-comunes-Grupo-AP/Materias-comunes-Grupo-AP.txt"
+			],
+			"production_action":"reuse_existing_common_topic_when_compatible",
+			"planned_work":[
+				"Validar correspondencia con el epigrafe oficial de Operario AP.",
+				"Ajustar solo referencias, nivel AP y controles de coherencia."
+			]
+		}],
+		"review_steps":[{
+			"step_id":"validate_topic_count",
+			"description":"Comprobar que sections contiene los ordinales sin duplicados."
+		}],
+		"deliverables":[{
+			"deliverable_id":"topic_work_orders",
+			"artifact_type":"execution_plan",
+			"description":"Unidades de trabajo posteriores para reutilizar comunes y crear temas restantes."
+		}]
+	}`
+	canonical, ok := CanonicalDomainDocumentPlanPayloadJSONV0(
+		payload,
+		DomainDocumentPlanPayloadDefaultsV0{
+			PlanRef:      "plan-cc93fbb0a41c1b04b2a4a82bb7ac3ed2",
+			DomainRef:    "opes",
+			WorkKind:     "plan_temario",
+			Objective:    "Planificar el temario completo sin redactarlo.",
+			DocumentKind: "temario_oposicion",
+		},
+	)
+	if !ok {
+		t.Fatalf("payload no canonicalizado")
+	}
+	var plan DomainDocumentPlanV0
+	if err := json.Unmarshal([]byte(canonical), &plan); err != nil {
+		t.Fatalf("json canonico invalido: %v", err)
+	}
+	if issues := ValidateDomainDocumentPlanV0(plan); len(issues) != 0 {
+		t.Fatalf("issues=%+v canonical=%s", issues, canonical)
+	}
+	if plan.SchemaVersion != DomainDocumentPlanSchemaV0 ||
+		plan.Sections[0].Title != "Tema 1 - Constitucion Espanola de 1978 y Administracion local" ||
+		plan.Sections[0].Objective == "" ||
+		plan.Sections[0].SourceRefs[0] != "opes-salidas_codex_directo_operario_ap_produccion_externa_2026-05-19_markdown_importable_tema_01_constitucion_administracion_local.md" ||
+		plan.ReviewSteps[0].ReviewRef != "validate_topic_count" ||
+		plan.ReviewSteps[0].Objective == "" {
+		t.Fatalf("plan=%+v", plan)
+	}
+}
+
 func validDomainDocumentPlanForTestV0() DomainDocumentPlanV0 {
 	return DomainDocumentPlanV0{
 		PlanRef:           " plan-tema-psicologia-001 ",

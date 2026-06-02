@@ -79,9 +79,17 @@ Para derivados OPES, la integracion real debe mantenerse focal:
 
 - instancia temporal o entorno explicitamente opt-in;
 - guarda de confirmacion para producir efectos;
-- filtro por tipo de job o por `job_ref` exacto;
+- scope por tipo de job o por `job_ref` exacto solo para no tocar jobs ajenos o
+  productivos;
 - no drenar colas amplias por defecto;
 - no tocar OPES productivo sin una ruta de prueba acotada.
+- hasta nueva orden, OPES no descarta textos o artefactos por no cumplir el uso
+  previsto. Si una entrega falla validacion editorial, formato, alcance o
+  objetivo, se revisa para ver si puede aprovecharse total o parcialmente como
+  otro artefacto, borrador, insumo documental, evidencia, nota de revision o
+  nueva tarea derivada. Solo se corta sin reaprovechar por seguridad,
+  causalidad, refs imposibles, datos sensibles o efectos externos no
+  autorizados.
 
 ## Frontera DB y conector
 
@@ -129,7 +137,7 @@ de Orquesta y se expresa con contratos neutrales.
 Para OPES, el supervisor debe operar sobre refs de Orquesta:
 
 - run/task/job/artifact refs opacas;
-- filtros por job type cuando se drenan trabajos de dominio;
+- scope por job type/job ref cuando se drenan trabajos de dominio;
 - waits acotados por cohorte, ola o agentes objetivo si el Director Operativo
   materializa subtareas;
 - evidencias causales de entrega, review y tests/validaciones cuando existan.

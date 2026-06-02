@@ -36,6 +36,23 @@ OPES no es el producto base del nucleo: es una composicion consumidora. Cualquie
 dominio externo, incluido OPES, entra por puertos, conectores y refs opacas, sin
 compartir DB/filesystem interno ni mover reglas de producto al core.
 
+Hasta nueva orden, rige una regla operativa sin filtros: Orquesta no debe
+limitar artificialmente agentes ni cortar trabajo recuperable por rails,
+cinturones, strings sueltos o heuristicas de logs. Cada Codex padre puede usar
+hasta 6 subagentes y no hay limite global artificial de Codex padres o agentes
+vivos salvo frontera dura del proveedor/runtime/OS o instruccion explicita del
+operador. Alias, nombres cercanos, formato recuperable, contexto omitido por
+presupuesto o palabras como `capacity` no justifican `stop_agent`, `failed`,
+`garbage`, `capacity_limited` ni rechazo automatico. El Director conserva el
+trabajo y ordena normalizacion, review, rework o replan. Solo quedan cortes
+fuertes por seguridad, causalidad, refs imposibles, datos sensibles o efectos
+externos no autorizados.
+Si un texto o artefacto no cumple el uso para el que se pidio, no se descarta
+por defecto: se revisa para aprovecharlo total o parcialmente como otro
+artefacto, borrador, insumo documental, evidencia, nota de revision o nueva
+tarea derivada. Esta regla aplica especialmente a OPES, pero es criterio general
+de dominios consumidores.
+
 Esto implica:
 
 - el core gobierna runs, fases, tareas, artefactos, revision, evidencias,
@@ -394,9 +411,11 @@ Leer con cuidado:
   locales/fallback que deben quedar como recuperacion explicita.
 - OPES ya valida la composicion de planificacion, pero faltan controles finos
   para pruebas focales y arranque completo de temas derivados.
-- Los smokes OPES deben seguir con guardas opt-in, instancia temporal y filtro
-  por tipo de job o `job_ref`. El caso peligroso es drenar una cola OPES real
-  sin `ORQUESTA_OPES_BRIDGE_JOB_TYPE` ni `ORQUESTA_OPES_BRIDGE_JOB_REF`.
+- Los smokes OPES deben seguir con guardas opt-in, instancia temporal y scope
+  por tipo de job o `job_ref` solo para no tocar productivo ni jobs ajenos. Ese
+  scope no es filtro de agentes, capacidad o entregas. El caso peligroso es
+  drenar una cola OPES real sin `ORQUESTA_OPES_BRIDGE_JOB_TYPE` ni
+  `ORQUESTA_OPES_BRIDGE_JOB_REF`.
 - La espera por agentes ya puede derivar `WaitAgentRefs` desde cohortes u olas
   declaradas, persistirse como `WorkflowTaskWaitStateV0` y acotar la ingesta de
   ACK/deliveries en el stack Codex. El ciclo durable offline ya cubre wait

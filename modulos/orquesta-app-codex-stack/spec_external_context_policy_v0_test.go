@@ -141,6 +141,58 @@ func TestCodexLaunchSpecResolverV0MarcaPresupuestoTotalAgotado(t *testing.T) {
 	}
 }
 
+func TestCodexLaunchSpecResolverV0PriorizaCamposCriticosAntesDelLimite(t *testing.T) {
+	changeRef := "opes-job-job-ref-critical-context-001"
+	taskRef := orquestaappchangedirectorsource.AppChangeTaskRefV0(changeRef)
+	runRef := "run-ref-opes-context-critical-001"
+	fields := make([]orquestadomainwork.DomainWorkFieldV0, 0, externalWorkContextMaxFieldsV0+2)
+	for i := 0; i < externalWorkContextMaxFieldsV0+1; i++ {
+		fields = append(fields, orquestadomainwork.DomainWorkFieldV0{
+			Name:  fmt.Sprintf("secondary_field_%02d", i+1),
+			Value: "contexto secundario",
+		})
+	}
+	fields = append(fields, orquestadomainwork.DomainWorkFieldV0{
+		Name:  "official_topic_text",
+		Value: "Texto oficial imprescindible del Tema 1 para redactar sin inventar.",
+	})
+	task := externalContextPolicyTaskForTestV0(runRef, taskRef)
+	resolver := codexLaunchSpecResolverForExternalContextPolicyTestV0(
+		t,
+		task,
+		orquestaappchange.AppChangeRecordV0{
+			Request: orquestaappchange.AppChangeRequestV0{
+				RunRef:     runRef,
+				AppRef:     "opes",
+				ChangeRef:  changeRef,
+				UserIntent: "Crear tema con fuente oficial.",
+				ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+					ProjectRef:  "opes",
+					JobRef:      "job-ref-critical-context-001",
+					WorkKind:    "draft_content_block",
+					InputFields: fields,
+				},
+			},
+		},
+	)
+
+	resolution, err := resolver.ResolveExternalAgentLaunchSpecV0(
+		context.Background(),
+		agentLaunchInboundForExternalContextPolicyTestV0(runRef, taskRef, "agent-ref-opes-context-critical-001"),
+	)
+	if err != nil {
+		t.Fatalf("ResolveExternalAgentLaunchSpecV0: %v", err)
+	}
+
+	packet := resolution.Spec.AgentPacket
+	if !codexStackContextContainsForTestV0(packet.Context.Entries, "Texto oficial imprescindible del Tema 1") {
+		t.Fatalf("texto oficial critico no materializado: %+v", packet.Context.Entries)
+	}
+	if contextBundleHasRequiredTruncatedEntryV0(packet.Context) {
+		t.Fatalf("omitir campos secundarios no debe activar rail requerido truncado: %+v", packet.Context.Entries)
+	}
+}
+
 func TestExternalWorkFieldContentV0RedactaValoresSensiblesAntesDelPacket(t *testing.T) {
 	content := externalWorkFieldContentV0(orquestadomainwork.DomainWorkFieldV0{
 		Name:      "api_key",

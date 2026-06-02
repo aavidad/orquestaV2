@@ -161,12 +161,8 @@ func codexProgressFailureLogsFromDescriptorV0(
 }
 
 func codexProgressTextHasCapacitySignalV0(text string) bool {
-	normalized := strings.ToLower(text)
-	return strings.Contains(normalized, "usage limit") ||
-		strings.Contains(normalized, "quota") ||
-		strings.Contains(normalized, "at capacity") ||
-		strings.Contains(normalized, "capacity") ||
-		strings.Contains(normalized, "credits")
+	_ = text
+	return false
 }
 
 func codexProgressTextHasAuthInvalidSignalV0(text string) bool {

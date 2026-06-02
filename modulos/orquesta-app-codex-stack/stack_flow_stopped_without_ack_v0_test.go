@@ -225,7 +225,7 @@ func TestRunGlobalTickV0SnapshotRuntimePerdidoNoBloqueaSupervisorV0(t *testing.T
 	}
 }
 
-func TestDrainRunV0ProcesoParadoPorCapacidadLimitadaNoMarcaBasura(t *testing.T) {
+func TestDrainRunV0ProcesoParadoConTextoCapacidadNoDisparaFiltroDeCapacidad(t *testing.T) {
 	ctx := context.Background()
 	runtime := newCapacityLimitedPendingAckCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)
@@ -245,15 +245,22 @@ func TestDrainRunV0ProcesoParadoPorCapacidadLimitadaNoMarcaBasura(t *testing.T) 
 	}
 	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
 	if drainRunHasPendingExternalAgentsV0(run, nil) {
-		t.Fatalf("run sigue pendiente tras capacidad limitada: stopped=%v confirmed=%v", run.StoppedAgents, run.ConfirmedStoppedAgents)
+		t.Fatalf("run sigue pendiente tras texto de capacidad: lost=%v stopped=%v confirmed=%v", run.LostAgents, run.StoppedAgents, run.ConfirmedStoppedAgents)
 	}
-	if !codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictCapacityLimitedV0) ||
-		!codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionStopAgentV0) {
-		t.Fatalf("sin assessment capacity_limited stop_agent: %+v", run.AgentAssessments)
+	if !codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0) ||
+		!codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionAskDirectorV0) {
+		t.Fatalf("texto de capacidad debe quedar como revision recuperable: %+v", run.AgentAssessments)
 	}
-	if codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictGarbageV0) ||
+	if codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictCapacityLimitedV0) ||
+		codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionStopAgentV0) ||
+		codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictGarbageV0) ||
 		codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0) {
-		t.Fatalf("capacity_limited no debe clasificarse como basura/bucle: %+v", run.AgentAssessments)
+		t.Fatalf("texto de capacidad no debe clasificar fuerte: %+v", run.AgentAssessments)
+	}
+	if len(compactStringsV0(run.LostAgents)) == 0 ||
+		len(compactStringsV0(run.StoppedAgents)) != 0 ||
+		len(compactStringsV0(run.ConfirmedStoppedAgents)) != 0 {
+		t.Fatalf("texto de capacidad debe reconciliar como lost sin stop runtime: lost=%v stopped=%v confirmed=%v", run.LostAgents, run.StoppedAgents, run.ConfirmedStoppedAgents)
 	}
 }
 

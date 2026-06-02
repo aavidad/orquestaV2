@@ -115,7 +115,7 @@ func (missingSnapshotSourceForProgressTestV0) SnapshotV0(
 	}
 }
 
-func TestCodexProgressObservationSourceV0ClasificaCapacidadLimitadaSinACK(t *testing.T) {
+func TestCodexProgressObservationSourceV0NoClasificaCapacidadPorTextoSinACK(t *testing.T) {
 	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
 	source := codexProgressSourceForTestV0(t, spec, ackPath)
 	source.SnapshotSource = stoppedSnapshotSourceForProgressTestV0{}
@@ -140,12 +140,13 @@ func TestCodexProgressObservationSourceV0ClasificaCapacidadLimitadaSinACK(t *tes
 	}
 	report := got[0].Report
 	if report.Status != orquestaruntime.AgentStoppedV0 ||
-		report.BudgetStatus != orquestaruntime.AgentProgressBudgetCapacityLimitedV0 ||
-		!report.DecisionRequired {
-		t.Fatalf("report capacity inesperado: %+v", report)
+		report.BudgetStatus != "" ||
+		!report.DecisionRequired ||
+		!stringInCodexDeliverySetV0(report.EvidenceRefs, "evidence-ref-no-ack") {
+		t.Fatalf("report no_ack inesperado: %+v", report)
 	}
-	if !stringInCodexDeliverySetV0(report.EvidenceRefs, "evidence-ref-capacity-warning") {
-		t.Fatalf("evidence refs sin capacity_warning compacto: %+v", report.EvidenceRefs)
+	if stringInCodexDeliverySetV0(report.EvidenceRefs, "evidence-ref-capacity-warning") {
+		t.Fatalf("texto de capacidad no debe generar capacity_warning: %+v", report.EvidenceRefs)
 	}
 	if codexProgressObservationLeaksPathV0(got[0], ackPath) {
 		t.Fatalf("observacion filtra path: %+v", got[0])

@@ -10,7 +10,7 @@ import (
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 )
 
-func TestCodexProgressReportWithProcessFailureContextV0ClasificaCuotaSinFiltrarProveedor(t *testing.T) {
+func TestCodexProgressReportWithProcessFailureContextV0NoClasificaCapacidadPorTexto(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(
 		filepath.Join(dir, orquestaruntimecodex.CodexStderrFileNameV0),
@@ -29,13 +29,13 @@ func TestCodexProgressReportWithProcessFailureContextV0ClasificaCuotaSinFiltrarP
 	)
 
 	if !got.DecisionRequired ||
-		got.BudgetStatus != orquestaruntime.AgentProgressBudgetCapacityLimitedV0 ||
-		got.BudgetReason != "Aviso de capacidad externa antes de ACK." ||
-		got.Summary != "Proceso detenido por aviso de capacidad externa; requiere relevo." {
+		got.Summary != "Proceso detenido sin ACK." ||
+		!stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-no-ack") {
 		t.Fatalf("report=%+v", got)
 	}
-	if !stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-capacity-warning") {
-		t.Fatalf("evidence refs sin capacity_warning compacto: %+v", got.EvidenceRefs)
+	if got.BudgetStatus != "" || got.BudgetReason != "" ||
+		stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-capacity-warning") {
+		t.Fatalf("texto de capacidad no debe clasificar presupuesto: %+v", got)
 	}
 	if issues := orquestaruntime.ValidateAgentProgressReportV0(got); len(issues) > 0 {
 		t.Fatalf("progress report invalido: %+v", issues)
@@ -188,9 +188,9 @@ func TestCodexProgressFailureClassFromDescriptorV0ClasificaSenalesCompactas(t *t
 			want:    codexProgressFailureInterruptedV0,
 		},
 		{
-			name:    "capacity_warning_priority",
+			name:    "capacity_text_does_not_override_interrupted",
 			content: "turn interrupted\nlow remaining capacity for this model\n",
-			want:    codexProgressFailureCapacityWarningV0,
+			want:    codexProgressFailureInterruptedV0,
 		},
 		{
 			name:    "auth_invalid_priority",

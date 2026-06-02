@@ -5,7 +5,7 @@ import "strings"
 func NormalizeDomainDocumentPlanV0(
 	plan DomainDocumentPlanV0,
 ) DomainDocumentPlanV0 {
-	plan.SchemaVersion = defaultDomainWorkSchemaV0(plan.SchemaVersion, DomainDocumentPlanSchemaV0)
+	plan.SchemaVersion = normalizeDomainDocumentPlanSchemaVersionV0(plan.SchemaVersion)
 	plan.PlanRef = strings.TrimSpace(plan.PlanRef)
 	plan.DomainRef = strings.TrimSpace(plan.DomainRef)
 	plan.WorkKind = strings.TrimSpace(plan.WorkKind)
@@ -24,6 +24,18 @@ func NormalizeDomainDocumentPlanV0(
 	plan.SourceRefs = compactDocumentPlanRefsV0(plan.SourceRefs)
 	plan.EvidenceRefs = compactDocumentPlanRefsV0(plan.EvidenceRefs)
 	return plan
+}
+
+func normalizeDomainDocumentPlanSchemaVersionV0(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return DomainDocumentPlanSchemaV0
+	}
+	normalized := strings.ToLower(strings.NewReplacer(".", "_", "-", "_").Replace(trimmed))
+	if normalized == "domain_document_plan_v0" {
+		return DomainDocumentPlanSchemaV0
+	}
+	return trimmed
 }
 
 func compactDocumentPlanSectionsV0(

@@ -457,6 +457,7 @@ func TestCodexRuntimeConfigV0InyectaToolbeltOperativoDelServidor(t *testing.T) {
 		"http://127.0.0.1:18787",
 		"/api/v0/autoprogramming/supervise",
 		"orquesta.operator.operations.v0",
+		"artifact_submission",
 		"codigo reutilizable",
 		"no metas HTTP, MCP, Codex, OPES",
 		"centraliza configuracion/env",

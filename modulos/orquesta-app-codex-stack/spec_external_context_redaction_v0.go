@@ -154,7 +154,7 @@ func externalWorkContextBudgetEntryV0(
 		Content:   content,
 		Bytes:     len(content),
 		Truncated: true,
-		Required:  true,
+		Required:  false,
 	}
 }
 

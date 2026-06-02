@@ -12,6 +12,7 @@ func codexServerPromptHintsV0(config orquestaserver.ConfigV0) []string {
 		"Puedes usar las APIs operativas de Orquesta expuestas por este servidor si estan vivas: " + baseURL + ".",
 		codexToolbeltHTTPHintV0(),
 		codexToolbeltMCPHintV0(),
+		"En trabajos DomainWork/OPES ya asignados, no crees ni subas jobs manualmente: genera el artefacto en el write-set y el ACK; el bridge de Orquesta ejecuta submit_artifact. Si una tarea pide usar /api/v0/domain-work, el envelope correcto usa job_request para create_job y artifact_submission para submit_artifact.",
 		"Antes de programar codigo nuevo, busca codigo reutilizable compatible con rg en modulos, cmd, docs, scripts y variantes v0/v1/v2/v3/legacy.",
 		"Si una API o entrega falla por forma reparable, normaliza alias/campos/rutas o pide correccion; no descartes trabajo completo salvo seguridad, causalidad, refs imposibles, datos sensibles o efectos externos no autorizados.",
 		"Estas APIs son adaptadores de composicion: no metas HTTP, MCP, Codex, OPES, DB, directorios de usuario, credenciales, proveedor ni rutas locales dentro del nucleo.",

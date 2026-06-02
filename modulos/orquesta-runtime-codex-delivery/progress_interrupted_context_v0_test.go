@@ -62,7 +62,7 @@ func TestCodexProgressObservationSourceV0ClasificaInterrupcionSinACKComoStopped(
 	)
 }
 
-func TestCodexProgressObservationSourceV0PriorizaCapacidadSobreInterrupcion(t *testing.T) {
+func TestCodexProgressObservationSourceV0NoConvierteTextoCapacidadEnCapacityLimited(t *testing.T) {
 	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
 	source := codexProgressSourceForTestV0(t, spec, ackPath)
 	source.SnapshotSource = stoppedSnapshotSourceForProgressTestV0{}
@@ -85,15 +85,15 @@ func TestCodexProgressObservationSourceV0PriorizaCapacidadSobreInterrupcion(t *t
 	}
 	report := got[0].Report
 	if report.Status != orquestaruntime.AgentStoppedV0 ||
-		report.BudgetStatus != orquestaruntime.AgentProgressBudgetCapacityLimitedV0 ||
+		report.BudgetStatus == orquestaruntime.AgentProgressBudgetCapacityLimitedV0 ||
 		!report.DecisionRequired {
-		t.Fatalf("report capacity inesperado: %+v", report)
+		t.Fatalf("report interrupcion inesperado: %+v", report)
 	}
-	if !stringInCodexDeliverySetV0(report.EvidenceRefs, "evidence-ref-capacity-limited") {
-		t.Fatalf("evidence refs sin capacity compacto: %+v", report.EvidenceRefs)
+	if stringInCodexDeliverySetV0(report.EvidenceRefs, "evidence-ref-capacity-limited") {
+		t.Fatalf("texto capacity no debe generar capacity_limited: %+v", report.EvidenceRefs)
 	}
-	if stringInCodexDeliverySetV0(report.EvidenceRefs, "evidence-ref-no-ack-interrupted") {
-		t.Fatalf("capacity no debe mezclar evidencia no_ack: %+v", report.EvidenceRefs)
+	if !stringInCodexDeliverySetV0(report.EvidenceRefs, "evidence-ref-no-ack-interrupted") {
+		t.Fatalf("interrupcion debe conservar evidencia no_ack: %+v", report.EvidenceRefs)
 	}
 }
 

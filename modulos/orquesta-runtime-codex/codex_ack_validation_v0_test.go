@@ -100,6 +100,52 @@ func TestCodexAgentAckReceiptV0NoBloqueaDetalleConRailOffPorDefecto(t *testing.T
 	}
 }
 
+func TestCodexAgentAckReceiptV0RailEstrictoAceptaEvidenciaRefOnlyOPES(t *testing.T) {
+	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "on")
+	spec := codexSpecForTestV0()
+	spec.AgentPacket.Context = orquestacontext.ContextMaterializedBundleV0{
+		SchemaVersion: orquestacontext.ContextMaterializedBundleSchemaVersionV0,
+		Entries: []orquestacontext.ContextMaterializedEntryV0{{
+			Required:          true,
+			Mode:              orquestacontext.ContextMaterializationModeRefOnlyV0,
+			RequiredRefAction: orquestacontext.ContextRequiredRefActionAckEvidenceV0,
+		}},
+	}
+	spec.AgentPacket.Task.RequiredTests = append(
+		spec.AgentPacket.Task.RequiredTests,
+		"validar contexto required ref_only mediante lectura local, consulta al director o evidencia explicita",
+	)
+	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./...","validar contexto required ref_only mediante lectura local, consulta al director o evidencia explicita"],"notes":["contexto_ref_only_resuelto: entrada required ref_only con required_ref_action ack_evidence_required resuelta mediante lectura de agent_packet.json y evidencia explicita en test_receipts"]}`
+
+	_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	if len(issues) != 0 {
+		t.Fatalf("evidencia ref_only OPES no debe bloquear con rail estricto: %+v", issues)
+	}
+}
+
+func TestCodexAgentAckReceiptV0RailEstrictoRefOnlySigueCortandoSecretoEfectivo(t *testing.T) {
+	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "on")
+	spec := codexSpecForTestV0()
+	spec.AgentPacket.Context = orquestacontext.ContextMaterializedBundleV0{
+		SchemaVersion: orquestacontext.ContextMaterializedBundleSchemaVersionV0,
+		Entries: []orquestacontext.ContextMaterializedEntryV0{{
+			Required:          true,
+			Mode:              orquestacontext.ContextMaterializationModeRefOnlyV0,
+			RequiredRefAction: orquestacontext.ContextRequiredRefActionAckEvidenceV0,
+		}},
+	}
+	spec.AgentPacket.Task.RequiredTests = append(
+		spec.AgentPacket.Task.RequiredTests,
+		"validar contexto required ref_only mediante lectura local, consulta al director o evidencia explicita",
+	)
+	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./...","validar contexto required ref_only mediante lectura local, consulta al director o evidencia explicita"],"notes":["contexto_ref_only_resuelto: required_ref_action ack_evidence_required con access_token=abc123"]}`
+
+	_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	requireCodexIssueV0(t, issues, CodexConnectorAckForbiddenV0)
+}
+
 func TestCodexAgentAckReceiptV0AceptaACKMinimoHidratadoDesdeSpec(t *testing.T) {
 	spec := codexSpecForTestV0()
 	spec.AgentPacket.Task.RequiredTests = nil

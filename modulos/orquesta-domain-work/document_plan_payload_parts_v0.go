@@ -3,6 +3,7 @@ package orquestadomainwork
 import (
 	"encoding/json"
 	"strconv"
+	"strings"
 )
 
 func documentPlanSectionsFromRawV0(raw json.RawMessage) []DomainDocumentPlanSectionV0 {
@@ -18,16 +19,16 @@ func documentPlanSectionsFromRawV0(raw json.RawMessage) []DomainDocumentPlanSect
 		section := DomainDocumentPlanSectionV0{
 			SectionRef:         sectionRef,
 			ParentRef:          firstDocumentPlanStringV0(value, "parent_ref"),
-			Order:              firstPositiveDocumentPlanIntV0(index+1, documentPlanIntV0(value, "order")),
-			Title:              firstDocumentPlanStringV0(value, "title"),
-			Objective:          firstDocumentPlanStringV0(value, "objective", "description"),
+			Order:              firstPositiveDocumentPlanIntV0(index+1, documentPlanIntV0(value, "order"), documentPlanIntV0(value, "ordinal")),
+			Title:              firstDocumentPlanStringV0(value, "title", "planned_title"),
+			Objective:          firstDocumentPlanTextV0(value, "objective", "description", "planned_work", "production_action", "official_topic_ref"),
 			WorkKind:           documentPlanSectionWorkKindV0(firstDocumentPlanStringV0(value, "work_kind")),
 			DependsOn:          firstDocumentPlanRefsV0(value, "depends_on"),
 			TargetWordsMin:     firstPositiveDocumentPlanIntV0(plannedPages*300, documentPlanIntV0(value, "target_words_min")),
 			TargetWordsMax:     firstPositiveDocumentPlanIntV0(plannedPages*450, documentPlanIntV0(value, "target_words_max")),
 			RequiredElements:   firstDocumentPlanStringsV0(value, "required_elements", "required_points"),
 			AcceptanceCriteria: firstDocumentPlanStringsV0(value, "acceptance_criteria"),
-			SourceRefs:         firstDocumentPlanRefsV0(value, "source_refs"),
+			SourceRefs:         documentPlanRefsFromRawKeysV0(value, "source_refs", "primary_source_refs", "official_topic_ref"),
 		}
 		if sectionRef == "" {
 			section.SectionRef = nextGeneratedDocumentPlanRefV0(usedRefs, "section", section.Title)
@@ -75,12 +76,12 @@ func documentPlanReviewsFromRawV0(raw json.RawMessage) []DomainDocumentPlanRevie
 	out := make([]DomainDocumentPlanReviewV0, 0, len(values))
 	usedRefs := map[string]struct{}{}
 	for index, value := range values {
-		reviewRef := firstDocumentPlanStringV0(value, "review_ref", "review_id", "id")
+		reviewRef := firstDocumentPlanStringV0(value, "review_ref", "review_id", "step_id", "id")
 		review := DomainDocumentPlanReviewV0{
 			ReviewRef:          reviewRef,
 			Order:              firstPositiveDocumentPlanIntV0(index+1, documentPlanIntV0(value, "order")),
 			WorkKind:           documentPlanReviewWorkKindV0(firstDocumentPlanStringV0(value, "work_kind")),
-			Objective:          firstDocumentPlanStringV0(value, "objective", "scope", "title"),
+			Objective:          firstDocumentPlanTextV0(value, "objective", "scope", "title", "description"),
 			AcceptanceCriteria: firstDocumentPlanStringsV0(value, "acceptance_criteria"),
 		}
 		if reviewRef == "" {
@@ -91,6 +92,26 @@ func documentPlanReviewsFromRawV0(raw json.RawMessage) []DomainDocumentPlanRevie
 		out = append(out, review)
 	}
 	return out
+}
+
+func firstDocumentPlanTextV0(raw map[string]json.RawMessage, keys ...string) string {
+	for _, key := range keys {
+		if value := documentPlanStringV0(raw[key]); value != "" {
+			return value
+		}
+		if values := documentPlanStringsV0(raw[key]); len(values) > 0 {
+			return strings.Join(values, " ")
+		}
+	}
+	return ""
+}
+
+func documentPlanRefsFromRawKeysV0(raw map[string]json.RawMessage, keys ...string) []string {
+	values := []string{}
+	for _, key := range keys {
+		values = append(values, documentPlanStringsV0(raw[key])...)
+	}
+	return compactDocumentPlanRefsV0(values)
 }
 
 func documentPlanDeliverablesFromRawV0(raw json.RawMessage) []DomainDocumentPlanDeliverableV0 {
