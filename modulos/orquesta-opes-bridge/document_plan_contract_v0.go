@@ -179,7 +179,7 @@ func documentPlanAcceptanceCriteriaV0() []string {
 		"incluir sections y deliverables obligatorios",
 		"incluir quality_criteria y review_steps aplicables",
 		"para OPES, incluir research_exam_precedents para buscar examenes, convocatorias y temarios de administraciones relacionadas por internet usando fuentes publicas verificables",
-		"para OPES, incluir generate_visual_asset para crear infografias utiles de todos los temas o apartados que lo requieran",
+		"para OPES, incluir generate_visual_asset para crear infografias utiles y no excesivas en puntos importantes, dificiles, comparativos o procedimentales donde aporten aprendizaje, incluidos apartados criticos cuando proceda",
 		"para OPES, incluir generate_question_bank y deliverable question_bank para tests por tema",
 		"para OPES, incluir generate_audio_asset y deliverable audio_asset para audio accesible por tema y por apartado/seccion",
 		"para OPES, incluir generate_tutor_assets para tutor y bots del temario",

@@ -273,6 +273,14 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 					!strings.Contains(strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n"), "no incluir rutas locales, proveedor, GPU, modelo ni procesos internos")) {
 				t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
 			}
+			if tc.artifactType == "visual_asset" {
+				criteriaText := strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n")
+				if !strings.Contains(criteriaText, "no saturar el tema") ||
+					!strings.Contains(criteriaText, "visuales de relleno") ||
+					!strings.Contains(criteriaText, "puntos importantes, dificiles, comparativos o procedimentales") {
+					t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
+				}
+			}
 			if tc.artifactType == "question_bank" {
 				criteriaText := strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n")
 				if !strings.Contains(criteriaText, "no sobrescribir ni borrar bancos originales") ||

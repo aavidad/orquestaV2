@@ -12,7 +12,8 @@ Antes de produccion debe existir un paquete local revisable con:
 
 - temario completo por temas y apartados;
 - fuentes oficiales y evidencias de busqueda externa;
-- infografias utiles de todos los temas o apartados que lo requieran;
+- infografias utiles y no excesivas en puntos importantes, dificiles,
+  comparativos o procedimentales donde aporten aprendizaje;
 - banco de tests por tema;
 - revisiones legal, pedagogica, calidad, ortografia y consistencia;
 - HTML local con logos USO y aspecto coherente con la web USO/TCAE promocion
@@ -64,9 +65,11 @@ categoria, epigrafes relacionados y utilidad editorial. No inventa examenes.
 nivel, lenguaje claro y enfoque de examen.
 
 `generate_visual_asset`: crea infografias o diagramas utiles por tema/apartado,
-con `placement_ref`, texto alternativo y objetivo didactico. OPES no decide si
-las hace Gemini, Codex, Claude u otro agente; Orquesta asigna roles y OPES solo
-recibe `visual_asset`.
+con `placement_ref`, texto alternativo y objetivo didactico. Debe integrarlas
+con criterio editorial: puntos importantes, dificiles, comparativos o
+procedimentales, incluidos apartados criticos cuando proceda, pero sin saturar
+el tema ni crear visuales de relleno. OPES no decide si las hace Gemini, Codex,
+Claude u otro agente; Orquesta asigna roles y OPES solo recibe `visual_asset`.
 
 `generate_question_bank`: crea tests por tema. Por defecto: minimo 50 preguntas,
 4 opciones A/B/C/D, una sola respuesta correcta exacta, distractores plausibles

@@ -138,7 +138,9 @@ func examResearchAcceptanceCriteriaV0() []string {
 func visualAssetAcceptanceCriteriaV0() []string {
 	return []string{
 		"crear o especificar infografias utiles para el tema completo, no decorativas",
-		"cubrir todos los temas o apartados marcados por el document_plan",
+		"integrar infografias con criterio editorial en puntos importantes, dificiles, comparativos o procedimentales donde aporten aprendizaje",
+		"no saturar el tema con demasiadas infografias ni crear visuales de relleno; cada visual debe tener utilidad didactica clara",
+		"cubrir los temas o apartados marcados por el document_plan, incluidos los criticos cuando proceda, sin limitarse solo a ellos",
 		"devolver assets o prompts trazables con placement_ref, texto alternativo y objetivo didactico",
 		"si se usa Gemini, Claude, Codex u otro proveedor, Orquesta lo decide por rol; OPES solo recibe visual_asset",
 	}
