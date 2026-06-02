@@ -147,8 +147,16 @@ func visualAssetAcceptanceCriteriaV0() []string {
 func questionBankAcceptanceCriteriaV0() []string {
 	return []string{
 		"crear banco de tests por tema con minimo configurable, por defecto 50 preguntas",
-		"cada pregunta debe tener 4 opciones, respuesta correcta identificable y distractores plausibles",
-		"incluir explicacion tutor: por que es correcta, por que fallan las distractoras y donde repasar",
+		"crear salida nueva separada por bank_id/test_id; no sobrescribir ni borrar bancos originales",
+		"cada pregunta debe tener 4 opciones A, B, C y D, una sola respuesta correcta exacta y distractores plausibles de dificultad real",
+		"evitar opciones ridiculas, obvias, mecanicas, descartables por longitud o repetidas por plantilla",
+		"todo texto visible debe ser localizable/i18n: preguntas, opciones, explicaciones, titulos, feedback y mensajes",
+		"incluir explicacion tutor con respuesta correcta, por que fallan las distractoras y donde repasar en el temario",
+		"en temas comunes no mencionar TCAE si el contenido debe valer para cualquier OPE; en temas especificos TCAE no usar Auxiliar de Enfermeria como nombre principal",
+		"entregar JSON por tema, HTML revisable por tema, index.html, metadata.json e informe Markdown",
+		"ejecutar o pedir validacion estructural: temas esperados, 50 preguntas por tema en banco estandar, 4 opciones por pregunta y 1 correcta por pregunta",
+		"ejecutar o pedir validacion de dificultad/proximidad y busqueda rg de patrones prohibidos; corregir sin tirar bancos aprovechables",
+		"si el adaptador OPES/USO importa en Postgres local, exigir backup previo, SQL con DELETE acotado al patron del banco nuevo y verificacion de conteos",
 		"separar banco privado de afiliados del HTML publico abierto",
 	}
 }

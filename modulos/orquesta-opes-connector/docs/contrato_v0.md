@@ -160,7 +160,9 @@ OPES confirma que:
   `exam_research_report` para busqueda externa verificable de examenes,
   convocatorias y temarios relacionados;
 - OPES debe publicar `generate_question_bank` y aceptar `question_bank` para
-  tests por tema con respuesta, distractores y explicacion tutor;
+  tests por tema con 4 opciones A-D, una correcta exacta, distractores
+  plausibles, explicacion tutor, JSON/HTML revisable, metadata, informe y
+  validaciones limpias; no debe mezclar ni sobrescribir bancos anteriores;
 - OPES debe publicar `generate_audio_asset` y aceptar `audio_asset` como
   artefacto accesible derivado de `assembled_topic` o refs opacas del paquete
   final;

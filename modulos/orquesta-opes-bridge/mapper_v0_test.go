@@ -273,6 +273,16 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 					!strings.Contains(strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n"), "no incluir rutas locales, proveedor, GPU, modelo ni procesos internos")) {
 				t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
 			}
+			if tc.artifactType == "question_bank" {
+				criteriaText := strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n")
+				if !strings.Contains(criteriaText, "no sobrescribir ni borrar bancos originales") ||
+					!strings.Contains(criteriaText, "4 opciones A, B, C y D") ||
+					!strings.Contains(criteriaText, "localizable/i18n") ||
+					!strings.Contains(criteriaText, "validacion de dificultad/proximidad") ||
+					!strings.Contains(criteriaText, "backup previo") {
+					t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
+				}
+			}
 		})
 	}
 }

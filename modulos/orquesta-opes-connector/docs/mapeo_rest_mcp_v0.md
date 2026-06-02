@@ -191,3 +191,12 @@ artefactos esperados son, respectivamente, `exam_research_report`,
 `question_bank`, `tutor_bot_package` y `local_html_site`. OPES conserva la
 decision de fuentes, marca USO, UI local y adaptadores; Orquesta solo orquesta
 roles y entrega por refs opacas.
+
+`generate_question_bank` debe seguir la guia editorial vigente de tests OPES:
+no sobrescribir bancos originales, 4 opciones A-D, una correcta exacta,
+distractores plausibles, texto visible i18n/localizable, explicacion tutor,
+JSON/HTML revisable por tema, `metadata.json`, informe Markdown, validacion
+estructural, validacion de dificultad/proximidad y busqueda de patrones
+prohibidos. La importacion Postgres local, si procede, pertenece al adaptador
+OPES/USO y requiere backup previo, SQL con borrado acotado al banco nuevo y
+verificacion de conteos.

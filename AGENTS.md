@@ -138,6 +138,9 @@ Documentos de entrada obligatorios para cambios transversales:
   `docs/runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md` si tocas
   OPES, `orquesta-opes-*`, `DomainWork` aplicado a OPES, bridge/drain OPES o
   reglas editoriales de temarios.
+- `/home/alberto/Trabajo/OPES/opes-salidas/coordinacion_temarios/GUIA_AGENTES_CREACION_TESTS_TEMARIOS_TCAE_OPES_2026-06-02.md`
+  si tocas bancos de preguntas, tests, `generate_question_bank` o importacion
+  local de tests OPES/TCAE.
 - `docs/matriz_pruebas_reales_y_smoke_2026-05-17.md` si cambias smokes,
   runtime, OPES, shutdown o pruebas reales.
 

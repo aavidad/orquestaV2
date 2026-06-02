@@ -69,9 +69,15 @@ las hace Gemini, Codex, Claude u otro agente; Orquesta asigna roles y OPES solo
 recibe `visual_asset`.
 
 `generate_question_bank`: crea tests por tema. Por defecto: minimo 50 preguntas,
-4 opciones, respuesta correcta, distractores plausibles y explicacion tutor de
-por que cada opcion falla o acierta. El banco completo queda para afiliados; no
-se publica como test abierto completo.
+4 opciones A/B/C/D, una sola respuesta correcta exacta, distractores plausibles
+y explicacion tutor de por que cada opcion falla o acierta y donde repasar. El
+banco completo queda para afiliados; no se publica como test abierto completo.
+Debe crear salida nueva, no sobrescribir bancos originales, y entregar JSON por
+tema, HTML revisable por tema, `index.html`, `metadata.json`, informe Markdown y
+validaciones estructural/dificultad limpias. Si OPES/USO importa en Postgres
+local, antes debe existir backup, SQL con borrado limitado al banco nuevo y
+verificacion de conteos. Para TCAE, seguir tambien la guia externa:
+`/home/alberto/Trabajo/OPES/opes-salidas/coordinacion_temarios/GUIA_AGENTES_CREACION_TESTS_TEMARIOS_TCAE_OPES_2026-06-02.md`.
 
 `review_legal`, `review_pedagogical`, `review_quality`: revisan legalidad,
 pedagogia, calidad editorial, ortografia, consistencia, nivel, trazabilidad,
