@@ -10,12 +10,14 @@
 - [x] Publicar frontera de registro para servidor/transporte MCP real opt-in.
 - [x] Anadir puerto agregado `OperatorMCPConnectorV0`, modo sin conector y
   conector simulado offline.
-- [ ] Implementar adaptador externo de servidor/transporte MCP real.
-- [ ] Implementar adaptador Hermes API/MCP concreto, no CLI.
+- [x] Implementar adaptador externo de servidor/transporte MCP real.
+- [x] Implementar adaptador Hermes API/MCP concreto, no CLI.
+- [ ] Ejecutar smoke real Hermes API/MCP opt-in contra instancia temporal.
 
 ## OPMCP-012 - Hermes API/MCP no CLI
 
-Estado: implementada offline/API fake 2026-06-02; smoke real externo pendiente.
+Estado: implementada offline/API fake 2026-06-02; smoke real externo pendiente
+hasta tener endpoint/token Hermes temporal.
 
 Contrato: Hermes debe entrar como adaptador externo de composicion sobre
 `OperatorMCPConnectorV0` o cliente MCP/API equivalente. No debe usar CLI,
@@ -27,16 +29,26 @@ Implementado: `modulos/orquesta-operator-mcp-hermes` y wiring opt-in
 `ORQUESTA_HERMES_*` en `cmd/orquesta-server`, inyectando `OperatorConnector`
 para `/mcp`.
 
-Validacion esperada: smoke API-only contra instancia temporal de Hermes:
-`resources/list`, `tools/list`, `status`, `pending_outbox`, `supervised_burst`
-acotado y `directed_query`, sin DB, sin rutas internas y sin CLI de proveedor.
+Validacion esperada: smoke API-only contra instancia temporal de Hermes mediante
+`go test -count=1 ./cmd/orquesta-server -run 'TestHermesOperatorRealSmoke' -v`,
+con `ORQUESTA_HERMES_REAL_SMOKE_CONFIRM=1`, `ORQUESTA_HERMES_BASE_URL`,
+`ORQUESTA_HERMES_API_KEY` opcional y los nombres/refs
+`ORQUESTA_HERMES_*` ya cableados. El harness valida `resources/list` y
+`tools/list` en el `/mcp` local con Hermes inyectado, y valida `status`,
+`pending_outbox` y `directed_query` atravesando Hermes remoto por `tools/call`.
+Solo debe validar `supervised_burst` si tambien recibe
+`ORQUESTA_HERMES_REAL_SMOKE_BURST_CONFIRM=1` y una
+`ORQUESTA_HERMES_BURST_CONNECTOR_REF` acotada. Sin esa confirmacion extra, el
+burst queda omitido.
 
 Validacion ejecutada: `go test -count=1 ./modulos/orquesta-operator-mcp-hermes
 ./cmd/orquesta-server`. El test de servidor cubre descubrimiento MCP y las
 cuatro operaciones de operador contra Hermes fake HTTP: `status`,
 `pending_outbox`, `supervised_burst` y `directed_query`.
 
-Bloqueos: falta endpoint/credenciales Hermes reales para smoke externo.
+Bloqueos: falta endpoint/credenciales Hermes reales para smoke externo. No hay
+evidencia de ejecucion contra Hermes productivo y no debe marcarse como cerrado
+hasta que el smoke opt-in pase contra instancia temporal o de smoke aprobada.
 T16/T23/T124/T145 no se reabren salvo regresion: el pendiente restante es smoke
 real con Hermes temporal, no los contratos puros ya cerrados.
 

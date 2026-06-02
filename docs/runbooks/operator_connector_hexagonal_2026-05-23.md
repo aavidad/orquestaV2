@@ -47,6 +47,75 @@ Variables canonicas del conector Hermes de servidor:
 - `ORQUESTA_HERMES_*_CONNECTOR_REF`
 - `ORQUESTA_HERMES_TIMEOUT_SECONDS`
 
+## Smoke real Hermes API/MCP opt-in
+
+Estado: pendiente hasta tener una instancia Hermes temporal, endpoint y token si
+aplica. No usar Hermes productivo para cerrar esta evidencia salvo confirmacion
+operativa explicita, alcance acotado y salida publica sin secretos.
+
+El harness existe en
+`cmd/orquesta-server/hermes_operator_real_smoke_v0_test.go` y se ejecuta como
+prueba Go. Esta guardado por `ORQUESTA_HERMES_REAL_SMOKE_CONFIRM=1`; si falta
+esa confirmacion, si falta `ORQUESTA_HERMES_BASE_URL` o si el endpoint no es el
+Hermes temporal aprobado, la prueba salta o bloquea sin tocar CLI, DB ni
+internals.
+
+Comando base:
+
+```bash
+ORQUESTA_HERMES_REAL_SMOKE_CONFIRM=1 \
+ORQUESTA_HERMES_ENABLED=1 \
+ORQUESTA_HERMES_BASE_URL="https://hermes-temporal.example" \
+ORQUESTA_HERMES_MCP_PATH="/mcp" \
+ORQUESTA_HERMES_API_KEY="$HERMES_API_KEY" \
+ORQUESTA_HERMES_STATUS_CONNECTOR_REF="hermes-status-ref-smoke" \
+ORQUESTA_HERMES_OUTBOX_CONNECTOR_REF="hermes-outbox-ref-smoke" \
+ORQUESTA_HERMES_QUERY_CONNECTOR_REF="hermes-query-ref-smoke" \
+go test -count=1 ./cmd/orquesta-server -run 'TestHermesOperatorRealSmokeStatusOutboxQueryV0' -v
+```
+
+`ORQUESTA_HERMES_API_KEY` es opcional si la instancia temporal no exige token.
+Los nombres de tools se toman de `ORQUESTA_HERMES_STATUS_TOOL`,
+`ORQUESTA_HERMES_OUTBOX_TOOL`, `ORQUESTA_HERMES_QUERY_TOOL` y
+`ORQUESTA_HERMES_BURST_TOOL`; si no se definen, aplican los defaults del
+contrato operador. Las refs remotas son opacas y deben venir por
+`ORQUESTA_HERMES_*_CONNECTOR_REF`, no por rutas ni ids internos.
+
+Cobertura esperada sin efectos amplios:
+
+- `resources/list` en el `/mcp` local de Orquesta con Hermes inyectado como
+  conector;
+- `tools/list` en el `/mcp` local de Orquesta;
+- `status` por `OperatorMCPConnectorV0`, atravesando Hermes remoto por
+  `tools/call`;
+- `pending_outbox` por ref opaca, atravesando Hermes remoto por `tools/call`;
+- `directed_query` con consulta acotada y respuesta compacta, atravesando
+  Hermes remoto por `tools/call`.
+
+`supervised_burst` solo puede entrar en el mismo harness si tambien se exporta
+`ORQUESTA_HERMES_REAL_SMOKE_BURST_CONFIRM=1` y existe
+`ORQUESTA_HERMES_BURST_CONNECTOR_REF` acotada. Sin esa confirmacion extra, el
+smoke real debe omitir el burst y seguir validando descubrimiento, estado,
+outbox y consulta dirigida.
+
+Comando de burst acotado:
+
+```bash
+ORQUESTA_HERMES_REAL_SMOKE_CONFIRM=1 \
+ORQUESTA_HERMES_REAL_SMOKE_BURST_CONFIRM=1 \
+ORQUESTA_HERMES_ENABLED=1 \
+ORQUESTA_HERMES_BASE_URL="https://hermes-temporal.example" \
+ORQUESTA_HERMES_MCP_PATH="/mcp" \
+ORQUESTA_HERMES_API_KEY="$HERMES_API_KEY" \
+ORQUESTA_HERMES_BURST_CONNECTOR_REF="hermes-burst-ref-smoke" \
+go test -count=1 ./cmd/orquesta-server -run 'TestHermesOperatorRealSmokeSupervisedBurstV0' -v
+```
+
+El criterio de cierre real es: todas las llamadas pasan por API/MCP publica,
+las respuestas contienen refs/evidencia publica compacta, no aparecen tokens,
+URLs privadas, prompts, transcripts, DB, paths locales ni outbox interno en la
+salida, y el operador confirma que la instancia usada era temporal o de smoke.
+
 ## Validacion
 
 ```bash
@@ -55,8 +124,10 @@ go test -count=1 ./modulos/orquesta-operator-mcp ./modulos/orquesta-mcp ./modulo
 
 La validacion offline de servidor usa un Hermes HTTP fake y debe cubrir
 descubrimiento MCP y las cuatro operaciones de operador. El smoke externo real
-solo queda cerrado cuando `ORQUESTA_HERMES_BASE_URL` apunta a una instancia
-temporal real y todas las llamadas pasan por API/MCP.
+solo queda cerrado cuando el harness opt-in anterior se ejecute con
+`ORQUESTA_HERMES_REAL_SMOKE_CONFIRM=1`, `ORQUESTA_HERMES_BASE_URL` apunte a una
+instancia temporal real y todas las llamadas pasen por API/MCP. Hasta entonces,
+la evidencia real Hermes queda pendiente, no ejecutada contra productivo.
 
 El contrato no lee DB, outbox real, runtime, filesystem productivo, HOME,
 OAuth, proveedor, modelo, prompts ni transcripts.

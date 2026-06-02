@@ -16,6 +16,14 @@ La prueba real API-only de Hermes sigue pendiente porque en esta sesion no habia
 servidor local en `127.0.0.1:16543` ni endpoint/token Hermes reales. La
 configuracion canonica es `ORQUESTA_HERMES_*`.
 
+Actualizacion: el harness real opt-in ya existe en
+`cmd/orquesta-server/hermes_operator_real_smoke_v0_test.go`. Se activa con
+`ORQUESTA_HERMES_REAL_SMOKE_CONFIRM=1` y apunta a `ORQUESTA_HERMES_BASE_URL` de
+una instancia Hermes temporal. `ORQUESTA_HERMES_API_KEY` es opcional y debe
+tratarse como secreto. `supervised_burst` queda en un test separado y requiere
+`ORQUESTA_HERMES_REAL_SMOKE_BURST_CONFIRM=1`; sin esa confirmacion extra, el
+harness valida solo descubrimiento local, estado, outbox y consulta dirigida.
+
 ## Cambios
 
 Modulo nuevo:
@@ -34,6 +42,8 @@ Wiring servidor:
 - `cmd/orquesta-server/effective_config_v0.go`
 - tests en `cmd/orquesta-server/config_test.go` y
   `cmd/orquesta-server/stack_wiring_test.go`
+- harness real opt-in en
+  `cmd/orquesta-server/hermes_operator_real_smoke_v0_test.go`
 
 Alcance:
 
@@ -50,6 +60,50 @@ Alcance:
   sensibles/redacted en configuracion efectiva.
 - `stack_wiring_test` valida por API HTTP fake: `resources/list`, `tools/list`,
   `status`, `supervised_burst`, `pending_outbox` y `directed_query`.
+
+## Smoke real opt-in
+
+Comando para validar lectura/consulta con Hermes temporal:
+
+```bash
+ORQUESTA_HERMES_REAL_SMOKE_CONFIRM=1 \
+ORQUESTA_HERMES_ENABLED=1 \
+ORQUESTA_HERMES_BASE_URL="https://hermes-temporal.example" \
+ORQUESTA_HERMES_MCP_PATH="/mcp" \
+ORQUESTA_HERMES_API_KEY="$HERMES_API_KEY" \
+ORQUESTA_HERMES_STATUS_CONNECTOR_REF="hermes-status-ref-smoke" \
+ORQUESTA_HERMES_OUTBOX_CONNECTOR_REF="hermes-outbox-ref-smoke" \
+ORQUESTA_HERMES_QUERY_CONNECTOR_REF="hermes-query-ref-smoke" \
+go test -count=1 ./cmd/orquesta-server -run 'TestHermesOperatorRealSmokeStatusOutboxQueryV0' -v
+```
+
+Con `ORQUESTA_HERMES_REAL_SMOKE_BURST_CONFIRM=1` y una
+`ORQUESTA_HERMES_BURST_CONNECTOR_REF` acotada, ejecutar ademas:
+
+```bash
+ORQUESTA_HERMES_REAL_SMOKE_CONFIRM=1 \
+ORQUESTA_HERMES_REAL_SMOKE_BURST_CONFIRM=1 \
+ORQUESTA_HERMES_ENABLED=1 \
+ORQUESTA_HERMES_BASE_URL="https://hermes-temporal.example" \
+ORQUESTA_HERMES_MCP_PATH="/mcp" \
+ORQUESTA_HERMES_API_KEY="$HERMES_API_KEY" \
+ORQUESTA_HERMES_BURST_CONNECTOR_REF="hermes-burst-ref-smoke" \
+go test -count=1 ./cmd/orquesta-server -run 'TestHermesOperatorRealSmokeSupervisedBurstV0' -v
+```
+
+Sin esa confirmacion, no debe disparar burst.
+
+Cobertura esperada:
+
+- `resources/list` y `tools/list` en el `/mcp` local de Orquesta con Hermes
+  inyectado como conector;
+- `status`, `pending_outbox` y `directed_query` atravesando Hermes remoto por
+  API/MCP `tools/call` y `OperatorMCPConnectorV0`;
+- `supervised_burst` solo con confirmacion extra.
+
+El smoke real no esta cerrado todavia. No hay evidencia de ejecucion contra
+Hermes productivo ni debe afirmarse como hecho hasta contar con endpoint/token,
+instancia aprobada y salida con refs compactas sin secretos ni internals.
 
 ## Pruebas
 
@@ -69,6 +123,9 @@ go test -count=1 ./modulos/orquesta-operator-mcp-hermes ./modulos/orquesta-opera
 
 - Falta smoke real contra Hermes externo; el test actual usa `httptest.Server`
   remoto y valida API HTTP/MCP completa sin CLI.
+- Si el harness real se ejecuta sin confirmacion de burst, debe omitir
+  `supervised_burst`; si lo ejecuta, debe usar ref acotada y confirmacion
+  `ORQUESTA_HERMES_REAL_SMOKE_BURST_CONFIRM=1`.
 - No se debe renombrar ni reutilizar el proveedor Gemini CLI como Hermes.
 - No usar Orquesta CLI ni proveedor CLI para cerrar evidencia Hermes; solo API
   publica o MCP JSON-RPC con refs opacas.
