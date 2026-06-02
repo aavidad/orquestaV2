@@ -32,6 +32,7 @@ type ConfigV0 struct {
 	RunQueue                 RunQueueConfigV0
 	RunSupervisor            RunSupervisorConfigV0
 	Codex                    CodexRuntimeConfigV0
+	Gemini                   GeminiRuntimeConfigV0
 	Capacity                 CapacityConfigV0
 	ReviewGate               ReviewGateConfigV0
 	RequiredTests            orquestacionnucleoapp.RequiredTestRunnerPortV0
@@ -104,6 +105,20 @@ type CodexRuntimeConfigV0 struct {
 	ProgressPolicy orquestaruntime.AgentProgressHeartbeatPolicyV0
 	ProgressBudget orquestaruntimecodexdelivery.CodexBudgetActivityPolicyV0
 	UsageMetrics   CodexStackAgentUsageMetricsProviderPortV0
+}
+
+type GeminiRuntimeConfigV0 struct {
+	Enabled        bool
+	CommandPath    string
+	ProjectWorkDir string
+	RuntimeWorkDir string
+	HomeDir        string
+	PathEnv        string
+	Model          string
+	ApprovalMode   string
+	OutputFormat   string
+	ExtraArgs      []string
+	PromptHints    []string
 }
 
 type RunQueueConfigV0 struct {

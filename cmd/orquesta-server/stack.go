@@ -149,6 +149,7 @@ func buildStackFromEnvV0(
 			processRuntime,
 			codexUsageMetricsFromEnvV0(receiptStore),
 		),
+		Gemini:   geminiRuntimeConfigV0(serverConfig),
 		Capacity: codexStackCapacityConfigFromEnvV0(),
 		ReviewGate: orquestaappcodexstack.ReviewGateConfigV0{
 			FileEvidence:            orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},

@@ -115,15 +115,23 @@ func recordingSpecResolverV0(
 	config ConfigV0,
 ) orquestaruntimecodexdelivery.CodexReceiptRecordingSpecResolverV0 {
 	return orquestaruntimecodexdelivery.CodexReceiptRecordingSpecResolverV0{
-		Inner: CodexLaunchSpecResolverV0{
-			Config:         config.Codex,
-			TaskStore:      config.Stores.TaskStore,
-			AppChangeStore: config.Stores.AppChangeStore,
+		Inner: providerLaunchSpecResolverV0{
+			Codex: CodexLaunchSpecResolverV0{
+				Config:         config.Codex,
+				TaskStore:      config.Stores.TaskStore,
+				AppChangeStore: config.Stores.AppChangeStore,
+			},
+			Gemini: GeminiLaunchSpecResolverV0{
+				Config:         config.Gemini,
+				CodexConfig:    config.Codex,
+				TaskStore:      config.Stores.TaskStore,
+				AppChangeStore: config.Stores.AppChangeStore,
+			},
 		},
 		Recorder: config.Stores.ReceiptStore,
-		AckPathResolver: orquestaruntimecodexdelivery.AgentScopedCodexReceiptAckPathResolverV0{
-			BaseDir:        config.Codex.RuntimeWorkDir,
-			ProjectWorkDir: config.Codex.ProjectWorkDir,
+		AckPathResolver: providerAwareAckPathResolverV0{
+			Codex:  config.Codex,
+			Gemini: config.Gemini,
 		},
 		WorktreeBaselineRecorder: codexStackWorktreeBaselineRecorderV0(config),
 	}
