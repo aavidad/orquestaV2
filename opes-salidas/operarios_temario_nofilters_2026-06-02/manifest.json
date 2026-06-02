@@ -1,7 +1,6 @@
 {
   "schema_version": "opes_review_bundle.v0",
-  "created_at": "2026-06-02T10:35:47.857414+00:00",
-  "source_tmp": "/tmp/opes-operario-api-u1UPV2/orquesta-nofilters-8eE6yd/project/external/opes/draft_content_block",
+  "updated_at": "2026-06-02T10:48:27.739477+00:00",
   "raw_artifacts_dir": "raw",
   "topics": [
     {
@@ -29,8 +28,10 @@
       "job_id": "6ccc7aa743d30c85edc32309fe4ec4af",
       "title": "Tema 3. La plancha y el planchado",
       "raw_file": "raw/6ccc7aa743d30c85edc32309fe4ec4af/content_block.json",
-      "extra_files": [],
-      "schema_version": "opes_content_block.v0",
+      "extra_files": [
+        "raw/6ccc7aa743d30c85edc32309fe4ec4af/content_block_outline_original.json"
+      ],
+      "schema_version": "opes_content_block.v1",
       "format": "json"
     },
     {

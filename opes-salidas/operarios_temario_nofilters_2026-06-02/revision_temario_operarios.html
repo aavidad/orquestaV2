@@ -5,68 +5,46 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Revision temario operarios OPES</title>
   <style>
-    :root {
-      --bg: #f6f7f9;
-      --panel: #ffffff;
-      --ink: #1f2933;
-      --muted: #667085;
-      --line: #d7dde5;
-      --accent: #2f6f73;
-      --accent-2: #8a5a2b;
-      --good: #1f7a4d;
-    }
+    :root { --bg:#f6f7f9; --panel:#ffffff; --ink:#1f2933; --muted:#667085; --line:#d7dde5; --accent:#2f6f73; --accent-2:#8a5a2b; --good:#1f7a4d; }
     * { box-sizing: border-box; }
-    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, -apple-system, Segoe UI, sans-serif; }
-    header.page { background: #24343f; color: white; padding: 28px clamp(18px, 4vw, 48px); }
-    header.page h1 { margin: 0 0 8px; font-size: clamp(28px, 4vw, 44px); line-height: 1.08; letter-spacing: 0; }
-    header.page p { max-width: 980px; margin: 0; color: #dce5ea; }
-    .layout { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 22px; padding: 22px clamp(14px, 3vw, 36px) 48px; }
-    nav { position: sticky; top: 16px; align-self: start; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; max-height: calc(100vh - 32px); overflow: auto; }
-    nav h2 { font-size: 14px; margin: 4px 6px 10px; color: var(--muted); text-transform: uppercase; }
-    nav a { display: grid; grid-template-columns: 28px 1fr; gap: 8px; align-items: start; color: var(--ink); text-decoration: none; padding: 8px 6px; border-radius: 6px; font-size: 14px; }
-    nav a:hover { background: #eef3f4; }
-    nav span { display: inline-grid; place-items: center; min-width: 24px; height: 24px; color: white; background: var(--accent); border-radius: 999px; font-size: 12px; }
-    .toolbar { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin-bottom: 16px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-    .toolbar input { flex: 1 1 280px; min-height: 40px; border: 1px solid var(--line); border-radius: 6px; padding: 0 12px; font-size: 16px; }
-    .badge { color: var(--good); font-weight: 700; }
-    .topic { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 18px; overflow: hidden; }
-    .topic-header { display: flex; justify-content: space-between; gap: 16px; padding: 22px 24px; border-bottom: 1px solid var(--line); background: #fbfcfd; }
-    .topic-header h2 { margin: 0; font-size: clamp(22px, 2.4vw, 32px); line-height: 1.18; letter-spacing: 0; }
-    .eyebrow { margin: 0 0 8px; color: var(--muted); font-size: 13px; text-transform: uppercase; font-weight: 700; }
-    .raw-link { white-space: nowrap; color: var(--accent); font-weight: 700; text-decoration: none; }
-    .official { margin: 18px 24px 0; padding: 12px 14px; border-left: 4px solid var(--accent-2); background: #fff8ef; }
-    .content { padding: 10px 24px 22px; }
-    .content h2 { font-size: 24px; margin: 22px 0 10px; letter-spacing: 0; }
-    .content h3 { font-size: 20px; margin: 24px 0 8px; letter-spacing: 0; }
-    .content h4 { font-size: 17px; margin: 18px 0 6px; letter-spacing: 0; }
-    .content p { margin: 0 0 12px; }
-    .content ul { margin: 0 0 14px 22px; padding: 0; }
-    dl { display: grid; grid-template-columns: minmax(160px, 240px) 1fr; gap: 8px 14px; }
-    dt { font-weight: 700; }
-    dd { margin: 0; }
-    .meta { border-top: 1px solid var(--line); padding: 14px 24px 20px; background: #f8fafb; }
-    .meta summary { cursor: pointer; font-weight: 700; color: var(--accent); }
-    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; padding: 12px; background: #18242d; color: #e8eef2; border-radius: 6px; }
-    .hidden { display: none; }
-    @media (max-width: 860px) {
-      .layout { grid-template-columns: 1fr; }
-      nav { position: static; max-height: none; }
-      .topic-header { display: block; }
-      .raw-link { display: inline-block; margin-top: 12px; }
-      dl { grid-template-columns: 1fr; }
-    }
+    body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 system-ui,-apple-system,Segoe UI,sans-serif; }
+    header.page { background:#24343f; color:white; padding:28px clamp(18px,4vw,48px); }
+    header.page h1 { margin:0 0 8px; font-size:clamp(28px,4vw,44px); line-height:1.08; letter-spacing:0; }
+    header.page p { max-width:980px; margin:0; color:#dce5ea; }
+    .layout { display:grid; grid-template-columns:minmax(220px,300px) minmax(0,1fr); gap:22px; padding:22px clamp(14px,3vw,36px) 48px; }
+    nav { position:sticky; top:16px; align-self:start; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; max-height:calc(100vh - 32px); overflow:auto; }
+    nav h2 { font-size:14px; margin:4px 6px 10px; color:var(--muted); text-transform:uppercase; }
+    nav a { display:grid; grid-template-columns:28px 1fr; gap:8px; align-items:start; color:var(--ink); text-decoration:none; padding:8px 6px; border-radius:6px; font-size:14px; }
+    nav a:hover { background:#eef3f4; }
+    nav span { display:inline-grid; place-items:center; min-width:24px; height:24px; color:white; background:var(--accent); border-radius:999px; font-size:12px; }
+    .toolbar { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px; margin-bottom:16px; display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    .toolbar input { flex:1 1 280px; min-height:40px; border:1px solid var(--line); border-radius:6px; padding:0 12px; font-size:16px; }
+    .badge { color:var(--good); font-weight:700; }
+    .topic { background:var(--panel); border:1px solid var(--line); border-radius:8px; margin-bottom:18px; overflow:hidden; }
+    .topic-header { display:flex; justify-content:space-between; gap:16px; padding:22px 24px; border-bottom:1px solid var(--line); background:#fbfcfd; }
+    .topic-header h2 { margin:0; font-size:clamp(22px,2.4vw,32px); line-height:1.18; letter-spacing:0; }
+    .eyebrow { margin:0 0 8px; color:var(--muted); font-size:13px; text-transform:uppercase; font-weight:700; }
+    .raw-link { white-space:nowrap; color:var(--accent); font-weight:700; text-decoration:none; }
+    .official { margin:18px 24px 0; padding:12px 14px; border-left:4px solid var(--accent-2); background:#fff8ef; }
+    .content { padding:10px 24px 22px; }
+    .content h2 { font-size:24px; margin:22px 0 10px; letter-spacing:0; }
+    .content h3 { font-size:20px; margin:24px 0 8px; letter-spacing:0; }
+    .content h4 { font-size:17px; margin:18px 0 6px; letter-spacing:0; }
+    .content p { margin:0 0 12px; }
+    .content ul { margin:0 0 14px 22px; padding:0; }
+    dl { display:grid; grid-template-columns:minmax(160px,240px) 1fr; gap:8px 14px; }
+    dt { font-weight:700; } dd { margin:0; }
+    .meta { border-top:1px solid var(--line); padding:14px 24px 20px; background:#f8fafb; }
+    .meta summary { cursor:pointer; font-weight:700; color:var(--accent); }
+    code, pre { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+    pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:420px; overflow:auto; padding:12px; background:#18242d; color:#e8eef2; border-radius:6px; }
+    .hidden { display:none; }
+    @media (max-width:860px) { .layout { grid-template-columns:1fr; } nav { position:static; max-height:none; } .topic-header { display:block; } .raw-link { display:inline-block; margin-top:12px; } dl { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
-  <header class="page">
-    <h1>Temario operarios OPES</h1>
-    <p>Revision de los 10 bloques generados por Orquesta/OPES en la prueba nofilters-v3. Estado: <span class="badge">10/10 aceptados por Orquesta y completados en OPES</span>.</p>
-  </header>
-  <div class="layout">
-    <nav>
-      <h2>Indice</h2>
-      <a href="#tema-1"><span>1</span>Tema 1 - Constitución Española de 1978 y Administración local</a>
+  <header class="page"><h1>Temario operarios OPES</h1><p>Revision de los 10 bloques generados por Orquesta/OPES en la prueba nofilters-v3. Estado: <span class="badge">10/10 aceptados por Orquesta y completados en OPES</span>.</p></header>
+  <div class="layout"><nav><h2>Indice</h2><a href="#tema-1"><span>1</span>Tema 1 - Constitución Española de 1978 y Administración local</a>
 <a href="#tema-2"><span>2</span>Tema 2 - Empleados públicos</a>
 <a href="#tema-3"><span>3</span>Tema 3. La plancha y el planchado</a>
 <a href="#tema-4"><span>4</span>Tema 4. El lavado de prendas</a>
@@ -75,14 +53,7 @@
 <a href="#tema-7"><span>7</span>Tema 7. Los alimentos. Clasificacion y caracteristicas de los diferentes tipos de alimentos. Tipos de dietas: conceptos basicos</a>
 <a href="#tema-8"><span>8</span>Tema 8</a>
 <a href="#tema-9"><span>9</span>Tema 9. Preparación, conservación, emplatado y transporte de los alimentos</a>
-<a href="#tema-10"><span>10</span>Tema 10. Conceptos básicos en la prevención de riesgos laborales: clasificación y prevención de riesgos. Medidas preventivas con los productos de limpieza en su uso y almacenamiento en relación al trabajador y al usuario. Riesgo de incendio en la cocina: conceptos básicos, medidas preventivas y actuaciones a realizar.</a>
-    </nav>
-    <main>
-      <section class="toolbar">
-        <input id="search" type="search" placeholder="Buscar en titulos y epigrafes">
-        <span id="count">10 temas visibles</span>
-      </section>
-      
+<a href="#tema-10"><span>10</span>Tema 10. Conceptos básicos en la prevención de riesgos laborales: clasificación y prevención de riesgos. Medidas preventivas con los productos de limpieza en su uso y almacenamiento en relación al trabajador y al usuario. Riesgo de incendio en la cocina: conceptos básicos, medidas preventivas y actuaciones a realizar.</a></nav><main><section class="toolbar"><input id="search" type="search" placeholder="Buscar en titulos y epigrafes"><span id="count">10 temas visibles</span></section>
 <article class="topic" id="tema-1" data-search="tema 1 - constitución española de 1978 y administración local la constitución española de 1978: estructura y contenido. derechos y deberes fundamentales. la administración local: regulación constitucional. tipología de los entes locales. el municipio: organización y competencias municipales. la provincia: organización, competencias.">
   <header class="topic-header">
     <div>
@@ -600,33 +571,95 @@ El tema puede resumirse en una idea: trabajar para una Administración pública 
 <article class="topic" id="tema-3" data-search="tema 3. la plancha y el planchado la plancha y el planchado. clasificación de prendas, colores y textiles. ropa plana. símbolos internacionales para el tratado de las prendas. el trabajo en cadena. maquinaria. técnicas y procedimientos.">
   <header class="topic-header">
     <div>
-      <p class="eyebrow">Tema 3 · JSON · opes_content_block.v0</p>
+      <p class="eyebrow">Tema 3 · JSON · opes_content_block.v1</p>
       <h2>Tema 3. La plancha y el planchado</h2>
     </div>
     <a class="raw-link" href="raw/6ccc7aa743d30c85edc32309fe4ec4af/content_block.json">Artefacto original</a>
   </header>
   <section class="official"><strong>Epigrafe oficial:</strong> La plancha y el planchado. Clasificación de prendas, colores y textiles. Ropa plana. Símbolos internacionales para el tratado de las prendas. El trabajo en cadena. Maquinaria. Técnicas y procedimientos.</section>
   <section class="content"><h3>1. La plancha y el planchado</h3>
+<p>El planchado es la operación destinada a eliminar arrugas, recuperar la forma de las prendas y mejorar su presentación mediante la acción combinada de calor, presión, humedad y, en muchos casos, vapor. En un servicio de lavandería, lencería, cocina, residencia, centro sanitario, colegio, instalación municipal o edificio público, el planchado no es una tarea estética menor: forma parte del acabado final de la ropa y contribuye a que las prendas se entreguen limpias, ordenadas, secas y listas para su uso.</p>
+<p>La plancha transmite calor al tejido. Ese calor relaja temporalmente las fibras y permite modificar la forma de la prenda. La presión ayuda a alisar la superficie. La humedad y el vapor facilitan que la fibra se vuelva más flexible, especialmente en tejidos como algodón o lino. Sin embargo, si se aplica demasiado calor, demasiada presión o vapor inadecuado, pueden aparecer brillos, deformaciones, quemaduras, marcas, encogimientos o pérdida de textura.</p>
+<p>Para un operario de nivel AP, lo importante es actuar con método. Antes de planchar se comprueba que la prenda esté limpia, sin manchas pendientes, con humedad adecuada y con etiqueta legible si existe. También se revisa que la zona de trabajo esté despejada, que la plancha o máquina esté en buen estado y que se disponga de perchas, carros, mesas, paños protectores y espacio para separar ropa pendiente, ropa planchada y ropa con incidencias.</p>
+<p>El resultado correcto de un planchado profesional es una prenda lisa, sin arrugas principales, sin humedad excesiva, sin brillos producidos por calor, sin marcas de costuras mal colocadas y sin deformaciones. La prenda debe quedar preparada para plegarse, colgarse, empaquetarse o entregarse según el circuito del centro. Cuando no se pueda obtener un acabado correcto por mancha, rotura, etiqueta dudosa o tejido delicado, se comunica la incidencia en lugar de forzar el tratamiento.</p>
 <h3>2. Clasificación de prendas, colores y textiles</h3>
+<p>La clasificación previa es una de las fases más importantes del planchado. No todas las prendas admiten la misma temperatura, la misma presión ni el mismo vapor. Una clasificación incorrecta puede estropear una prenda, provocar brillos, fijar una mancha, producir encogimientos o retrasar el trabajo porque obliga a repetir tareas.</p>
+<p>La primera clasificación se realiza por tipo de prenda. No se planchan igual camisas, pantalones, batas, manteles, sábanas, servilletas, uniformes, paños, cortinas o prendas delicadas. Las prendas de forma, como camisas o chaquetas, requieren atención a cuellos, puños, costuras, pinzas y volumen. La ropa plana, como sábanas o manteles, exige alineación, estirado, doblado y, en muchos casos, maquinaria específica.</p>
+<p>La segunda clasificación se realiza por color. Las prendas blancas o claras permiten una inspección visual más sencilla de manchas y amarilleos. Las prendas oscuras pueden mostrar brillos si se planchan directamente a temperatura alta, por lo que puede ser necesario planchar del revés o utilizar paño protector. Las prendas de colores intensos deben tratarse con prudencia para evitar marcas, desteñidos o transferencias si conservan humedad.</p>
+<p>La tercera clasificación se realiza por tejido. El algodón y el lino suelen tolerar más temperatura y vapor, aunque pueden requerir humedad para quedar bien alisados. El poliéster y otros sintéticos necesitan temperaturas más bajas porque pueden deformarse o adquirir brillos. La lana requiere cuidado, vapor moderado y poca presión directa para no aplastar la fibra. La seda, viscosa, tejidos técnicos, prendas con elastano o adornos deben tratarse con especial precaución.</p>
+<p>También se clasifica por grado de humedad, urgencia del servicio, tamaño de la pieza y estado de conservación. Una prenda demasiado seca puede necesitar vapor o humedecido controlado. Una prenda demasiado húmeda puede no quedar lista para guardar. Una prenda con mancha residual no debe plancharse sin revisar, porque el calor puede fijar la mancha y hacerla más difícil de eliminar.</p>
 <h3>3. Ropa plana</h3>
+<p>Se llama ropa plana a las piezas textiles sin forma corporal compleja, como sábanas, fundas, manteles, servilletas, paños, toallas ligeras, cortinas simples o piezas rectangulares similares. En lavanderías de volumen, la ropa plana suele ocupar una parte importante del trabajo porque se maneja en grandes cantidades y requiere acabado uniforme.</p>
+<p>La ropa plana debe prepararse antes de planchar. Conviene extender la pieza, sacudirla suavemente si procede, comprobar que no haya objetos, revisar manchas visibles y alinear bordes y costuras. En piezas grandes, como sábanas o manteles, puede ser necesario trabajar entre dos personas o utilizar una mesa amplia para evitar que la prenda toque el suelo o se arrugue de nuevo.</p>
+<p>El planchado de ropa plana busca una superficie regular. Las arrugas se eliminan mejor si la pieza entra bien estirada en la máquina o si se coloca de forma ordenada sobre la mesa. Los bordes doblados, esquinas mal alineadas o costuras retorcidas producen un acabado deficiente y dificultan el plegado posterior. Por eso el operario debe trabajar con ritmo, pero sin perder el control visual de la prenda.</p>
+<p>En servicios industriales, la ropa plana puede pasar por calandras, rodillos o máquinas de planchado continuo. Estas máquinas aplican presión y calor a piezas extendidas. Su uso exige atención a la entrada de la prenda, distancia de seguridad, ausencia de arrugas gruesas, cuidado con manos y mangas, y retirada ordenada de la pieza al final del recorrido. No deben introducirse prendas inadecuadas ni piezas con objetos, botones grandes o elementos que puedan dañar la máquina.</p>
+<p>Después del planchado, la ropa plana se pliega, se apila o se prepara para transporte. El plegado debe ser uniforme para facilitar almacenamiento, recuento y reparto. El control final incluye comprobar que no haya humedad, arrugas principales, manchas visibles o restos de suciedad. Si aparece una incidencia, la pieza se separa para revisión.</p>
 <h3>4. Símbolos internacionales para el tratado de las prendas</h3>
+<p>Las etiquetas de conservación indican cómo debe tratarse una prenda para evitar daños. En ellas aparecen símbolos internacionales relacionados con lavado, blanqueado, secado, planchado y limpieza profesional. Aunque el operario no memorice todos los símbolos especializados, sí debe reconocer los más habituales y saber que la etiqueta prevalece sobre la intuición.</p>
+<p>El símbolo de lavado suele representarse con una cubeta. Indica si la prenda puede lavarse en agua, la temperatura máxima y si requiere ciclo normal, suave o muy suave. El triángulo se relaciona con el uso de blanqueantes. El cuadrado informa sobre secado. El círculo se refiere a limpieza profesional. La plancha indica las condiciones de planchado.</p>
+<p>En el símbolo de planchado, los puntos indican temperatura. Una plancha con un punto significa temperatura baja, adecuada para tejidos sensibles. Una plancha con dos puntos indica temperatura media. Una plancha con tres puntos permite temperatura alta, propia de tejidos resistentes. Una plancha tachada significa que la prenda no debe plancharse. Si el símbolo limita o prohíbe vapor, debe respetarse para evitar daños.</p>
+<p>Cuando la etiqueta falta, está cortada o es ilegible, se actúa con prudencia. Se puede empezar por temperatura baja, planchar del revés, usar paño protector y probar en una zona poco visible si el procedimiento del centro lo permite. No se debe aplicar temperatura alta a una prenda dudosa solo para acelerar el trabajo.</p>
+<p>Interpretar correctamente los símbolos reduce deterioros y reclamaciones. Además, ayuda a organizar el trabajo: las prendas de baja temperatura se agrupan, las resistentes se tratan en otro bloque y las prendas que no admiten planchado se separan. Esta clasificación mejora la seguridad y evita cambios constantes de temperatura en la plancha.</p>
 <h3>5. El trabajo en cadena</h3>
+<p>El trabajo en cadena consiste en ordenar las tareas para que la ropa avance por fases sucesivas: recepción, clasificación, preparación, planchado, revisión, plegado o colgado, empaquetado, almacenamiento y entrega. En vez de actuar de forma improvisada, cada fase tiene una función y evita mezclas entre ropa pendiente, ropa limpia, ropa planchada y ropa con incidencias.</p>
+<p>En una cadena bien organizada, la ropa sucia o pendiente de lavado no se cruza con la ropa limpia. La ropa limpia pendiente de planchado se coloca en carros o zonas señaladas. La ropa planchada se retira con cuidado para que no vuelva a arrugarse. Las prendas con manchas, roturas, botones sueltos, etiquetas dudosas o resultado no conforme se separan y se comunican.</p>
+<p>La coordinación es fundamental. Un operario puede preparar y clasificar, otro puede manejar la máquina, otro puede plegar y otro revisar o colocar en carros. Aunque una persona realice varias fases, debe mantener el orden mental de la cadena. Saltarse fases genera pérdidas de tiempo, errores de destino, prendas mal acabadas o mezclas de ropa.</p>
+<p>El trabajo en cadena también mejora la prevención de riesgos. Si el espacio está ordenado, hay menos tropiezos, menos manipulación innecesaria, menor riesgo de quemaduras y mejor control de cargas. Las zonas de paso deben mantenerse libres, los cables recogidos, las superficies calientes señaladas y los carros colocados de forma estable.</p>
+<p>La calidad final depende de pequeños controles en cada fase. No basta con revisar al final. Si se detecta una mancha antes de planchar, se evita fijarla con calor. Si se detecta una costura mal colocada antes de pasar por calandra, se evita una marca. Si se comprueba el plegado antes de apilar, se evita repetir trabajo.</p>
 <h3>6. Maquinaria</h3>
-<h3>7. Técnicas y procedimientos</h3></section>
+<p>La maquinaria de planchado puede variar según el centro. En servicios pequeños puede utilizarse plancha manual y tabla. En servicios con más volumen pueden emplearse centros de planchado, mesas aspirantes o soplantes, prensas, calandras, rodillos, maniquíes de planchado, carros, percheros y sistemas de transporte interno. El operario debe conocer el uso básico de cada equipo que tenga asignado y respetar las instrucciones del centro.</p>
+<p>La plancha manual permite tratar prendas variadas y zonas concretas como cuellos, puños, costuras o acabados. Puede ser seca o con vapor. Debe apoyarse en lugar seguro, no dejarse boca abajo sobre el tejido, no dirigir vapor hacia manos o cuerpo y no usarse si presenta cable dañado, fugas, olor anómalo o fallos de temperatura.</p>
+<p>El centro de planchado genera vapor de forma más continua y suele permitir mayor rendimiento. Requiere controlar depósito, presión, manguera, salida de vapor y superficie de apoyo. El vapor facilita el alisado, pero puede causar quemaduras. Por eso se evita acercar la mano a la salida de vapor y se manipulan las prendas con movimientos seguros.</p>
+<p>Las mesas aspirantes o soplantes ayudan a fijar la prenda, retirar humedad o crear una superficie de aire que protege tejidos delicados. Las prensas aplican presión sobre superficies concretas. Las calandras y rodillos se usan especialmente en ropa plana. Los maniquíes de planchado ayudan a dar forma a prendas como batas, camisas o chaquetas ligeras.</p>
+<p>El mantenimiento básico incluye limpiar superficies, retirar pelusas, vaciar o rellenar depósitos según indicación, comprobar cables y conexiones visibles, dejar enfriar antes de guardar y comunicar averías. El operario no debe desmontar maquinaria ni manipular elementos técnicos para los que no esté autorizado. Ante un fallo, se detiene el uso y se avisa.</p>
+<h3>7. Técnicas y procedimientos</h3>
+<p>Las técnicas de planchado se aplican según prenda y tejido. Una regla general es empezar por las zonas pequeñas o de forma, continuar por partes amplias y terminar revisando el conjunto. En camisas, por ejemplo, se atienden cuello, canesú, puños, mangas, delanteros y espalda. En pantalones se cuidan bolsillos, cinturilla, perneras y raya si corresponde. En ropa plana se busca extender y alinear antes de aplicar calor.</p>
+<p>La temperatura debe ajustarse al tejido más delicado si se trabaja con prendas mezcladas. Es preferible subir gradualmente la temperatura que quemar una prenda por exceso de calor. El vapor se usa cuando ayuda a relajar la fibra, pero no debe aplicarse si la etiqueta lo prohíbe o si el tejido puede deformarse. En prendas oscuras o delicadas puede plancharse del revés o con paño protector para evitar brillos.</p>
+<p>La plancha debe moverse de forma continua y controlada. No se deja inmóvil sobre el tejido. No se presiona con fuerza excesiva salvo que el procedimiento lo requiera, porque la presión puede marcar costuras o aplastar fibras. Las zonas con botones, cremalleras, bordados, estampados, termosellados o adornos se tratan con precaución, evitando el contacto directo si puede dañarlas.</p>
+<p>El procedimiento de trabajo incluye preparar la prenda, seleccionar temperatura, comprobar la etiqueta, planchar siguiendo un orden, revisar el acabado, plegar o colgar y colocar en el destino correcto. Si la prenda queda húmeda, se deja terminar el secado según circuito. Si queda con arrugas persistentes, se repasa sin exceder temperatura. Si aparece daño, olor extraño o mancha fijada, se separa y comunica.</p>
+<p>La ergonomía también forma parte del procedimiento. La altura de mesa debe permitir trabajar sin inclinar excesivamente la espalda. Los movimientos repetitivos se reducen organizando las prendas y alternando tareas cuando sea posible. Los carros no se sobrecargan y se empujan con visibilidad. El calor, el vapor y la presión exigen concentración para evitar quemaduras y atrapamientos.</p>
+<h3>8. Errores frecuentes y control final</h3>
+<p>Entre los errores frecuentes están planchar una prenda manchada, usar temperatura alta por rapidez, no leer la etiqueta, dejar la plancha parada, aplicar vapor a tejidos que no lo admiten, planchar directamente prendas oscuras que producen brillo, no alinear ropa plana, mezclar ropa limpia con ropa pendiente y guardar prendas húmedas.</p>
+<p>También es un error considerar que todas las arrugas se resuelven con más presión o más temperatura. A veces la solución es humedecer de forma controlada, recolocar la prenda, usar vapor, proteger el tejido, cambiar el orden de planchado o separar la prenda para tratamiento previo. La prisa no justifica deteriorar ropa ni poner en riesgo al usuario o al trabajador.</p>
+<p>El control final verifica presentación, sequedad, ausencia de arrugas principales, ausencia de brillos o quemaduras, plegado correcto, destino adecuado y separación de incidencias. En un servicio público, la calidad del acabado transmite orden y cuidado. El operario contribuye a esa calidad aplicando procedimientos sencillos de forma constante.</p>
+<h3>9. Síntesis para repaso AP</h3>
+<p>El planchado combina calor, presión, humedad y vapor para eliminar arrugas y mejorar la presentación de la ropa. Antes de planchar se clasifica por prenda, color, tejido, humedad, estado y prioridad. La etiqueta de conservación es la referencia principal para decidir temperatura y uso de vapor.</p>
+<p>La ropa plana incluye sábanas, manteles, fundas, servilletas y piezas similares. Requiere alineación, estirado, maquinaria adecuada cuando exista y plegado uniforme. El trabajo en cadena ordena recepción, clasificación, preparación, planchado, revisión, plegado o colgado y entrega, evitando cruces entre ropa limpia y sucia.</p>
+<p>La maquinaria puede incluir plancha manual, centro de planchado, mesas aspirantes o soplantes, prensas, calandras, rodillos y maniquíes. Los riesgos principales son quemaduras, vapor, presión, atrapamientos, cables, posturas y movimientos repetitivos. La respuesta correcta en examen suele ser la que respeta etiqueta, seguridad, orden de trabajo, comunicación de incidencias y control final.</p>
+<h3>Repaso</h3>
+<h4>Terminos clave</h4><dl>
+<dt>Planchado</dt><dd>Operación de acabado que elimina arrugas y recupera la forma de la prenda mediante calor, presión, humedad o vapor.</dd>
+<dt>Ropa plana</dt><dd>Piezas textiles de forma simple, como sábanas, manteles, fundas, servilletas o paños.</dd>
+<dt>Calandra</dt><dd>Máquina usada habitualmente para planchar ropa plana mediante rodillos, calor y presión.</dd>
+<dt>Paño protector</dt><dd>Tela intermedia que evita brillos, marcas o daños por contacto directo de la plancha.</dd>
+<dt>Trabajo en cadena</dt><dd>Organización del proceso en fases sucesivas para mantener ritmo, seguridad y calidad.</dd>
+</dl>
+<h4>Preguntas de control</h4>
+<p><strong>¿Por qué no debe plancharse una prenda con mancha visible?</strong><br>Porque el calor puede fijar la mancha y dificultar o impedir su eliminación posterior.</p>
+<p><strong>¿Qué significa una plancha con un punto en la etiqueta?</strong><br>Que la prenda debe plancharse a baja temperatura.</p>
+<p><strong>¿Qué debe hacerse si la etiqueta falta o es ilegible?</strong><br>Actuar con prudencia: temperatura baja, prueba si procede, paño protector y consulta o separación de la prenda si hay duda.</p>
+<p><strong>¿Qué caracteriza a la ropa plana?</strong><br>Su forma simple y amplia, como sábanas o manteles, que requiere extender, alinear, planchar y plegar de forma uniforme.</p></section>
   <details class="meta"><summary>Trazabilidad y raw</summary>
     <p><strong>job_id:</strong> <code>6ccc7aa743d30c85edc32309fe4ec4af</code></p>
     <p><strong>archivo principal:</strong> <a href="raw/6ccc7aa743d30c85edc32309fe4ec4af/content_block.json">raw/6ccc7aa743d30c85edc32309fe4ec4af/content_block.json</a></p>
-    
+    <p><strong>archivos extra:</strong></p><ul><li><a href="raw/6ccc7aa743d30c85edc32309fe4ec4af/content_block_outline_original.json">raw/6ccc7aa743d30c85edc32309fe4ec4af/content_block_outline_original.json</a></li></ul>
     <p><strong>source_refs:</strong></p><ul><li>opes_administracion-especial_operario_operario.txt#tema-03</li></ul>
     <pre>{
-  &quot;schema_version&quot;: &quot;opes_content_block.v0&quot;,
+  &quot;schema_version&quot;: &quot;opes_content_block.v1&quot;,
   &quot;artifact_type&quot;: &quot;content_block&quot;,
   &quot;job_id&quot;: &quot;6ccc7aa743d30c85edc32309fe4ec4af&quot;,
   &quot;work_kind&quot;: &quot;draft_content_block&quot;,
   &quot;language_code&quot;: &quot;es&quot;,
   &quot;level&quot;: &quot;AP&quot;,
   &quot;document_kind&quot;: &quot;temario_oposicion&quot;,
-  &quot;status&quot;: &quot;draft_outline_not_final&quot;,
+  &quot;status&quot;: &quot;final_content_from_review&quot;,
+  &quot;plan_ref&quot;: &quot;plan-cc93fbb0a41c1b04b2a4a82bb7ac3ed2&quot;,
+  &quot;plan_part_ref&quot;: &quot;tema_03&quot;,
+  &quot;plan_part_kind&quot;: &quot;section&quot;,
+  &quot;order&quot;: 3,
+  &quot;title&quot;: &quot;Tema 3. La plancha y el planchado&quot;,
+  &quot;official_topic_text&quot;: &quot;La plancha y el planchado. Clasificación de prendas, colores y textiles. Ropa plana. Símbolos internacionales para el tratado de las prendas. El trabajo en cadena. Maquinaria. Técnicas y procedimientos.&quot;,
+  &quot;official_source_id&quot;: &quot;OPES/administracion-especial/Operario/Operario.txt&quot;,
   &quot;source_refs&quot;: [
     &quot;opes_administracion-especial_operario_operario.txt#tema-03&quot;
   ],
@@ -636,177 +669,159 @@ El tema puede resumirse en una idea: trabajar para una Administración pública 
     &quot;opes-salidas/codex_directo/operario/AP/produccion_externa_2026-05-19/markdown_importable/tema_01_constitucion_administracion_local.md&quot;,
     &quot;opes-salidas/codex_directo/operario/AP/produccion_externa_2026-05-19/markdown_importable/tema_02_empleados_publicos.md&quot;
   ],
-  &quot;traceability&quot;: {
-    &quot;plan_ref&quot;: &quot;plan-cc93fbb0a41c1b04b2a4a82bb7ac3ed2&quot;,
-    &quot;plan_part_ref&quot;: &quot;tema_03&quot;,
-    &quot;plan_part_kind&quot;: &quot;section&quot;,
-    &quot;order&quot;: 3,
-    &quot;source_refs&quot;: [
-      &quot;opes_administracion-especial_operario_operario.txt#tema-03&quot;
-    ],
-    &quot;official_source_id&quot;: &quot;OPES/administracion-especial/Operario/Operario.txt&quot;,
-    &quot;context_ref_only_resolution&quot;: &quot;ack_evidence_required atendido mediante evidencia explicita en ACK&quot;
-  },
-  &quot;title&quot;: &quot;Tema 3. La plancha y el planchado&quot;,
-  &quot;official_topic_text&quot;: &quot;La plancha y el planchado. Clasificación de prendas, colores y textiles. Ropa plana. Símbolos internacionales para el tratado de las prendas. El trabajo en cadena. Maquinaria. Técnicas y procedimientos.&quot;,
-  &quot;editorial_contract&quot;: {
-    &quot;objective&quot;: &quot;Extraer título y límites del tema desde la referencia oficial y preparar un esquema didáctico AP sin redactar el contenido final en esta unidad.&quot;,
-    &quot;target_words_min&quot;: 0,
-    &quot;target_words_max&quot;: 0,
-    &quot;final_content_included&quot;: false,
-    &quot;content_boundary&quot;: &quot;Unidad completa de planificación para el Tema 3: cubre definición, clasificación, ropa plana, símbolos, trabajo en cadena, maquinaria y técnicas de planchado sin desarrollar el temario final.&quot;
-  },
-  &quot;content_block&quot;: {
-    &quot;kind&quot;: &quot;didactic_plan&quot;,
-    &quot;audience&quot;: &quot;Aspirantes de nivel AP para operario&quot;,
-    &quot;learning_goal&quot;: &quot;Reconocer los elementos básicos del planchado profesional, ordenar prendas y textiles para su tratamiento, interpretar símbolos de cuidado y situar el trabajo en cadena, la maquinaria y los procedimientos dentro de un servicio de lavandería o lencería.&quot;,
-    &quot;sections&quot;: [
-      {
-        &quot;heading&quot;: &quot;1. La plancha y el planchado&quot;,
-        &quot;scope&quot;: &quot;Definir la finalidad del planchado: eliminar arrugas, recuperar forma, mejorar presentación e higiene visual de la prenda. Diferenciar planchado doméstico y planchado profesional por volumen de trabajo, seguridad, ritmo, maquinaria y control de calidad.&quot;,
-        &quot;key_points&quot;: [
-          &quot;Función del calor, la presión, la humedad y el vapor.&quot;,
-          &quot;Preparación previa de la prenda: revisión, humedad adecuada, posición y protección de tejidos delicados.&quot;,
-          &quot;Resultado esperado: prenda lisa, seca, sin brillos, marcas, quemaduras ni deformaciones.&quot;
-        ]
-      },
-      {
-        &quot;heading&quot;: &quot;2. Clasificación de prendas, colores y textiles&quot;,
-        &quot;scope&quot;: &quot;Organizar el contenido desde criterios prácticos de operario: tipo de prenda, color, tejido, resistencia al calor, grado de humedad, suciedad residual y prioridad del servicio.&quot;,
-        &quot;key_points&quot;: [
-          &quot;Separar prendas claras, oscuras y de color intenso para evitar transferencias o tratamientos inadecuados.&quot;,
-          &quot;Distinguir algodón, lino, poliéster, lana, seda, mezclas y tejidos técnicos por tolerancia al calor y al vapor.&quot;,
-          &quot;Relacionar clasificación con temperatura, presión, uso de paño protector y necesidad de prueba en zona no visible.&quot;
-        ]
-      },
-      {
-        &quot;heading&quot;: &quot;3. Ropa plana&quot;,
-        &quot;scope&quot;: &quot;Tratar ropa plana como bloque propio: sábanas, fundas, manteles, servilletas, paños y piezas similares. Enfocar el aprendizaje en doblado, alineación de bordes, eliminación de pliegues y acabado uniforme.&quot;,
-        &quot;key_points&quot;: [
-          &quot;Identificar piezas grandes que requieren apoyo, calandra, rodillo o trabajo coordinado.&quot;,
-          &quot;Mantener costuras y esquinas alineadas para facilitar el plegado posterior.&quot;,
-          &quot;Aplicar control visual final: ausencia de arrugas principales, manchas persistentes y humedad.&quot;
-        ]
-      },
-      {
-        &quot;heading&quot;: &quot;4. Símbolos internacionales para el tratado de las prendas&quot;,
-        &quot;scope&quot;: &quot;Incluir lectura funcional de etiquetas de conservación. El bloque final deberá explicar símbolos de lavado, blanqueado, secado, planchado y limpieza profesional, con atención al símbolo de plancha y sus puntos de temperatura.&quot;,
-        &quot;key_points&quot;: [
-          &quot;Plancha con un punto: baja temperatura para tejidos sensibles.&quot;,
-          &quot;Plancha con dos puntos: temperatura media.&quot;,
-          &quot;Plancha con tres puntos: temperatura alta para tejidos resistentes.&quot;,
-          &quot;Plancha tachada: no planchar.&quot;,
-          &quot;Símbolo de vapor restringido o tachado: evitar vapor cuando la etiqueta lo indique.&quot;
-        ]
-      },
-      {
-        &quot;heading&quot;: &quot;5. El trabajo en cadena&quot;,
-        &quot;scope&quot;: &quot;Presentar el proceso como una secuencia ordenada, no como acciones aisladas: recepción, clasificación, preparación, planchado, plegado, revisión, empaquetado y entrega.&quot;,
-        &quot;key_points&quot;: [
-          &quot;Asignar tareas para mantener ritmo, seguridad y calidad constante.&quot;,
-          &quot;Evitar cruces entre ropa limpia y sucia.&quot;,
-          &quot;Comunicar incidencias: manchas, roturas, etiquetas ilegibles, prendas delicadas o resultados no conformes.&quot;
-        ]
-      },
-      {
-        &quot;heading&quot;: &quot;6. Maquinaria&quot;,
-        &quot;scope&quot;: &quot;Nombrar y diferenciar equipos habituales sin convertir el tema en un manual técnico avanzado: plancha manual, centro de planchado, mesa aspirante o soplante, prensa, calandra, maniquí de planchado, rodillos, carros y perchas.&quot;,
-        &quot;key_points&quot;: [
-          &quot;Relacionar cada máquina con el tipo de prenda o volumen de trabajo.&quot;,
-          &quot;Incluir normas básicas de seguridad: calor, vapor, presión, cables, superficies calientes y ergonomía.&quot;,
-          &quot;Prever limpieza y mantenimiento básico según instrucciones del centro.&quot;
-        ]
-      },
-      {
-        &quot;heading&quot;: &quot;7. Técnicas y procedimientos&quot;,
-        &quot;scope&quot;: &quot;Ordenar técnicas por dificultad y riesgo: control de temperatura, uso de vapor, planchado del revés, paño protector, dirección del movimiento, presión moderada, zonas con costuras, pinzas, cuellos, puños y acabados.&quot;,
-        &quot;key_points&quot;: [
-          &quot;No dejar la plancha inmóvil sobre el tejido.&quot;,
-          &quot;Planchar primero zonas pequeñas o interiores cuando proceda.&quot;,
-          &quot;Respetar etiqueta, tejido y prioridad de la prenda.&quot;,
-          &quot;Revisar acabado antes de plegar o colgar.&quot;
-        ]
-      }
-    ],
-    &quot;assessment_cues&quot;: [
-      &quot;El aspirante debe poder asociar tejido y símbolo con temperatura de planchado.&quot;,
-      &quot;Debe distinguir ropa plana de prendas de forma.&quot;,
-      &quot;Debe ordenar una cadena básica de trabajo sin mezclar fases limpias y sucias.&quot;,
-      &quot;Debe identificar riesgos comunes de maquinaria de planchado.&quot;
-    ],
-    &quot;excluded_from_this_unit&quot;: [
-      &quot;Redacción final extensa del tema.&quot;,
-      &quot;Desarrollo normativo ajeno al epígrafe oficial.&quot;,
-      &quot;Fichas técnicas completas de fabricantes concretos.&quot;
-    ]
-  },
-  &quot;coverage&quot;: [
+  &quot;revision_notes&quot;: [
+    &quot;El artefacto recibido por Orquesta era un esquema didáctico, no contenido final.&quot;,
+    &quot;Se conserva el esquema original en content_block_outline_original.json.&quot;,
+    &quot;Este bloque final desarrolla el epígrafe completo para revisión manual del temario de operarios.&quot;
+  ],
+  &quot;audio_roman_numeral_policy&quot;: &quot;Cuando aparezcan números romanos en títulos, artículos o apartados, deben leerse como números y revisarse antes de generar TTS.&quot;,
+  &quot;audio_review_notes&quot;: [
+    &quot;Leer AP como grupo A P o nivel A P según criterio editorial OPES.&quot;,
+    &quot;Leer símbolos de planchado de forma descriptiva: plancha con un punto, dos puntos o tres puntos.&quot;,
+    &quot;Evitar leer abreviaturas técnicas sin expandir si se generan audios.&quot;
+  ],
+  &quot;content&quot;: [
     {
-      &quot;official_segment&quot;: &quot;La plancha y el planchado&quot;,
-      &quot;covered_by&quot;: [
-        &quot;1&quot;
+      &quot;heading&quot;: &quot;1. La plancha y el planchado&quot;,
+      &quot;paragraphs&quot;: [
+        &quot;El planchado es la operación destinada a eliminar arrugas, recuperar la forma de las prendas y mejorar su presentación mediante la acción combinada de calor, presión, humedad y, en muchos casos, vapor. En un servicio de lavandería, lencería, cocina, residencia, centro sanitario, colegio, instalación municipal o edificio público, el planchado no es una tarea estética menor: forma parte del acabado final de la ropa y contribuye a que las prendas se entreguen limpias, ordenadas, secas y listas para su uso.&quot;,
+        &quot;La plancha transmite calor al tejido. Ese calor relaja temporalmente las fibras y permite modificar la forma de la prenda. La presión ayuda a alisar la superficie. La humedad y el vapor facilitan que la fibra se vuelva más flexible, especialmente en tejidos como algodón o lino. Sin embargo, si se aplica demasiado calor, demasiada presión o vapor inadecuado, pueden aparecer brillos, deformaciones, quemaduras, marcas, encogimientos o pérdida de textura.&quot;,
+        &quot;Para un operario de nivel AP, lo importante es actuar con método. Antes de planchar se comprueba que la prenda esté limpia, sin manchas pendientes, con humedad adecuada y con etiqueta legible si existe. También se revisa que la zona de trabajo esté despejada, que la plancha o máquina esté en buen estado y que se disponga de perchas, carros, mesas, paños protectores y espacio para separar ropa pendiente, ropa planchada y ropa con incidencias.&quot;,
+        &quot;El resultado correcto de un planchado profesional es una prenda lisa, sin arrugas principales, sin humedad excesiva, sin brillos producidos por calor, sin marcas de costuras mal colocadas y sin deformaciones. La prenda debe quedar preparada para plegarse, colgarse, empaquetarse o entregarse según el circuito del centro. Cuando no se pueda obtener un acabado correcto por mancha, rotura, etiqueta dudosa o tejido delicado, se comunica la incidencia en lugar de forzar el tratamiento.&quot;
       ]
     },
     {
-      &quot;official_segment&quot;: &quot;Clasificación de prendas, colores y textiles&quot;,
-      &quot;covered_by&quot;: [
-        &quot;2&quot;
+      &quot;heading&quot;: &quot;2. Clasificación de prendas, colores y textiles&quot;,
+      &quot;paragraphs&quot;: [
+        &quot;La clasificación previa es una de las fases más importantes del planchado. No todas las prendas admiten la misma temperatura, la misma presión ni el mismo vapor. Una clasificación incorrecta puede estropear una prenda, provocar brillos, fijar una mancha, producir encogimientos o retrasar el trabajo porque obliga a repetir tareas.&quot;,
+        &quot;La primera clasificación se realiza por tipo de prenda. No se planchan igual camisas, pantalones, batas, manteles, sábanas, servilletas, uniformes, paños, cortinas o prendas delicadas. Las prendas de forma, como camisas o chaquetas, requieren atención a cuellos, puños, costuras, pinzas y volumen. La ropa plana, como sábanas o manteles, exige alineación, estirado, doblado y, en muchos casos, maquinaria específica.&quot;,
+        &quot;La segunda clasificación se realiza por color. Las prendas blancas o claras permiten una inspección visual más sencilla de manchas y amarilleos. Las prendas oscuras pueden mostrar brillos si se planchan directamente a temperatura alta, por lo que puede ser necesario planchar del revés o utilizar paño protector. Las prendas de colores intensos deben tratarse con prudencia para evitar marcas, desteñidos o transferencias si conservan humedad.&quot;,
+        &quot;La tercera clasificación se realiza por tejido. El algodón y el lino suelen tolerar más temperatura y vapor, aunque pueden requerir humedad para quedar bien alisados. El poliéster y otros sintéticos necesitan temperaturas más bajas porque pueden deformarse o adquirir brillos. La lana requiere cuidado, vapor moderado y poca presión directa para no aplastar la fibra. La seda, viscosa, tejidos técnicos, prendas con elastano o adornos deben tratarse con especial precaución.&quot;,
+        &quot;También se clasifica por grado de humedad, urgencia del servicio, tamaño de la pieza y estado de conservación. Una prenda demasiado seca puede necesitar vapor o humedecido controlado. Una prenda demasiado húmeda puede no quedar lista para guardar. Una prenda con mancha residual no debe plancharse sin revisar, porque el calor puede fijar la mancha y hacerla más difícil de eliminar.&quot;
       ]
     },
     {
-      &quot;official_segment&quot;: &quot;Ropa plana&quot;,
-      &quot;covered_by&quot;: [
-        &quot;3&quot;
+      &quot;heading&quot;: &quot;3. Ropa plana&quot;,
+      &quot;paragraphs&quot;: [
+        &quot;Se llama ropa plana a las piezas textiles sin forma corporal compleja, como sábanas, fundas, manteles, servilletas, paños, toallas ligeras, cortinas simples o piezas rectangulares similares. En lavanderías de volumen, la ropa plana suele ocupar una parte importante del trabajo porque se maneja en grandes cantidades y requiere acabado uniforme.&quot;,
+        &quot;La ropa plana debe prepararse antes de planchar. Conviene extender la pieza, sacudirla suavemente si procede, comprobar que no haya objetos, revisar manchas visibles y alinear bordes y costuras. En piezas grandes, como sábanas o manteles, puede ser necesario trabajar entre dos personas o utilizar una mesa amplia para evitar que la prenda toque el suelo o se arrugue de nuevo.&quot;,
+        &quot;El planchado de ropa plana busca una superficie regular. Las arrugas se eliminan mejor si la pieza entra bien estirada en la máquina o si se coloca de forma ordenada sobre la mesa. Los bordes doblados, esquinas mal alineadas o costuras retorcidas producen un acabado deficiente y dificultan el plegado posterior. Por eso el operario debe trabajar con ritmo, pero sin perder el control visual de la prenda.&quot;,
+        &quot;En servicios industriales, la ropa plana puede pasar por calandras, rodillos o máquinas de planchado continuo. Estas máquinas aplican presión y calor a piezas extendidas. Su uso exige atención a la entrada de la prenda, distancia de seguridad, ausencia de arrugas gruesas, cuidado con manos y mangas, y retirada ordenada de la pieza al final del recorrido. No deben introducirse prendas inadecuadas ni piezas con objetos, botones grandes o elementos que puedan dañar la máquina.&quot;,
+        &quot;Después del planchado, la ropa plana se pliega, se apila o se prepara para transporte. El plegado debe ser uniforme para facilitar almacenamiento, recuento y reparto. El control final incluye comprobar que no haya humedad, arrugas principales, manchas visibles o restos de suciedad. Si aparece una incidencia, la pieza se separa para revisión.&quot;
       ]
     },
     {
-      &quot;official_segment&quot;: &quot;Símbolos internacionales para el tratado de las prendas&quot;,
-      &quot;covered_by&quot;: [
-        &quot;4&quot;
+      &quot;heading&quot;: &quot;4. Símbolos internacionales para el tratado de las prendas&quot;,
+      &quot;paragraphs&quot;: [
+        &quot;Las etiquetas de conservación indican cómo debe tratarse una prenda para evitar daños. En ellas aparecen símbolos internacionales relacionados con lavado, blanqueado, secado, planchado y limpieza profesional. Aunque el operario no memorice todos los símbolos especializados, sí debe reconocer los más habituales y saber que la etiqueta prevalece sobre la intuición.&quot;,
+        &quot;El símbolo de lavado suele representarse con una cubeta. Indica si la prenda puede lavarse en agua, la temperatura máxima y si requiere ciclo normal, suave o muy suave. El triángulo se relaciona con el uso de blanqueantes. El cuadrado informa sobre secado. El círculo se refiere a limpieza profesional. La plancha indica las condiciones de planchado.&quot;,
+        &quot;En el símbolo de planchado, los puntos indican temperatura. Una plancha con un punto significa temperatura baja, adecuada para tejidos sensibles. Una plancha con dos puntos indica temperatura media. Una plancha con tres puntos permite temperatura alta, propia de tejidos resistentes. Una plancha tachada significa que la prenda no debe plancharse. Si el símbolo limita o prohíbe vapor, debe respetarse para evitar daños.&quot;,
+        &quot;Cuando la etiqueta falta, está cortada o es ilegible, se actúa con prudencia. Se puede empezar por temperatura baja, planchar del revés, usar paño protector y probar en una zona poco visible si el procedimiento del centro lo permite. No se debe aplicar temperatura alta a una prenda dudosa solo para acelerar el trabajo.&quot;,
+        &quot;Interpretar correctamente los símbolos reduce deterioros y reclamaciones. Además, ayuda a organizar el trabajo: las prendas de baja temperatura se agrupan, las resistentes se tratan en otro bloque y las prendas que no admiten planchado se separan. Esta clasificación mejora la seguridad y evita cambios constantes de temperatura en la plancha.&quot;
       ]
     },
     {
-      &quot;official_segment&quot;: &quot;El trabajo en cadena&quot;,
-      &quot;covered_by&quot;: [
-        &quot;5&quot;
+      &quot;heading&quot;: &quot;5. El trabajo en cadena&quot;,
+      &quot;paragraphs&quot;: [
+        &quot;El trabajo en cadena consiste en ordenar las tareas para que la ropa avance por fases sucesivas: recepción, clasificación, preparación, planchado, revisión, plegado o colgado, empaquetado, almacenamiento y entrega. En vez de actuar de forma improvisada, cada fase tiene una función y evita mezclas entre ropa pendiente, ropa limpia, ropa planchada y ropa con incidencias.&quot;,
+        &quot;En una cadena bien organizada, la ropa sucia o pendiente de lavado no se cruza con la ropa limpia. La ropa limpia pendiente de planchado se coloca en carros o zonas señaladas. La ropa planchada se retira con cuidado para que no vuelva a arrugarse. Las prendas con manchas, roturas, botones sueltos, etiquetas dudosas o resultado no conforme se separan y se comunican.&quot;,
+        &quot;La coordinación es fundamental. Un operario puede preparar y clasificar, otro puede manejar la máquina, otro puede plegar y otro revisar o colocar en carros. Aunque una persona realice varias fases, debe mantener el orden mental de la cadena. Saltarse fases genera pérdidas de tiempo, errores de destino, prendas mal acabadas o mezclas de ropa.&quot;,
+        &quot;El trabajo en cadena también mejora la prevención de riesgos. Si el espacio está ordenado, hay menos tropiezos, menos manipulación innecesaria, menor riesgo de quemaduras y mejor control de cargas. Las zonas de paso deben mantenerse libres, los cables recogidos, las superficies calientes señaladas y los carros colocados de forma estable.&quot;,
+        &quot;La calidad final depende de pequeños controles en cada fase. No basta con revisar al final. Si se detecta una mancha antes de planchar, se evita fijarla con calor. Si se detecta una costura mal colocada antes de pasar por calandra, se evita una marca. Si se comprueba el plegado antes de apilar, se evita repetir trabajo.&quot;
       ]
     },
     {
-      &quot;official_segment&quot;: &quot;Maquinaria&quot;,
-      &quot;covered_by&quot;: [
-        &quot;6&quot;
+      &quot;heading&quot;: &quot;6. Maquinaria&quot;,
+      &quot;paragraphs&quot;: [
+        &quot;La maquinaria de planchado puede variar según el centro. En servicios pequeños puede utilizarse plancha manual y tabla. En servicios con más volumen pueden emplearse centros de planchado, mesas aspirantes o soplantes, prensas, calandras, rodillos, maniquíes de planchado, carros, percheros y sistemas de transporte interno. El operario debe conocer el uso básico de cada equipo que tenga asignado y respetar las instrucciones del centro.&quot;,
+        &quot;La plancha manual permite tratar prendas variadas y zonas concretas como cuellos, puños, costuras o acabados. Puede ser seca o con vapor. Debe apoyarse en lugar seguro, no dejarse boca abajo sobre el tejido, no dirigir vapor hacia manos o cuerpo y no usarse si presenta cable dañado, fugas, olor anómalo o fallos de temperatura.&quot;,
+        &quot;El centro de planchado genera vapor de forma más continua y suele permitir mayor rendimiento. Requiere controlar depósito, presión, manguera, salida de vapor y superficie de apoyo. El vapor facilita el alisado, pero puede causar quemaduras. Por eso se evita acercar la mano a la salida de vapor y se manipulan las prendas con movimientos seguros.&quot;,
+        &quot;Las mesas aspirantes o soplantes ayudan a fijar la prenda, retirar humedad o crear una superficie de aire que protege tejidos delicados. Las prensas aplican presión sobre superficies concretas. Las calandras y rodillos se usan especialmente en ropa plana. Los maniquíes de planchado ayudan a dar forma a prendas como batas, camisas o chaquetas ligeras.&quot;,
+        &quot;El mantenimiento básico incluye limpiar superficies, retirar pelusas, vaciar o rellenar depósitos según indicación, comprobar cables y conexiones visibles, dejar enfriar antes de guardar y comunicar averías. El operario no debe desmontar maquinaria ni manipular elementos técnicos para los que no esté autorizado. Ante un fallo, se detiene el uso y se avisa.&quot;
       ]
     },
     {
-      &quot;official_segment&quot;: &quot;Técnicas y procedimientos&quot;,
-      &quot;covered_by&quot;: [
-        &quot;7&quot;
+      &quot;heading&quot;: &quot;7. Técnicas y procedimientos&quot;,
+      &quot;paragraphs&quot;: [
+        &quot;Las técnicas de planchado se aplican según prenda y tejido. Una regla general es empezar por las zonas pequeñas o de forma, continuar por partes amplias y terminar revisando el conjunto. En camisas, por ejemplo, se atienden cuello, canesú, puños, mangas, delanteros y espalda. En pantalones se cuidan bolsillos, cinturilla, perneras y raya si corresponde. En ropa plana se busca extender y alinear antes de aplicar calor.&quot;,
+        &quot;La temperatura debe ajustarse al tejido más delicado si se trabaja con prendas mezcladas. Es preferible subir gradualmente la temperatura que quemar una prenda por exceso de calor. El vapor se usa cuando ayuda a relajar la fibra, pero no debe aplicarse si la etiqueta lo prohíbe o si el tejido puede deformarse. En prendas oscuras o delicadas puede plancharse del revés o con paño protector para evitar brillos.&quot;,
+        &quot;La plancha debe moverse de forma continua y controlada. No se deja inmóvil sobre el tejido. No se presiona con fuerza excesiva salvo que el procedimiento lo requiera, porque la presión puede marcar costuras o aplastar fibras. Las zonas con botones, cremalleras, bordados, estampados, termosellados o adornos se tratan con precaución, evitando el contacto directo si puede dañarlas.&quot;,
+        &quot;El procedimiento de trabajo incluye preparar la prenda, seleccionar temperatura, comprobar la etiqueta, planchar siguiendo un orden, revisar el acabado, plegar o colgar y colocar en el destino correcto. Si la prenda queda húmeda, se deja terminar el secado según circuito. Si queda con arrugas persistentes, se repasa sin exceder temperatura. Si aparece daño, olor extraño o mancha fijada, se separa y comunica.&quot;,
+        &quot;La ergonomía también forma parte del procedimiento. La altura de mesa debe permitir trabajar sin inclinar excesivamente la espalda. Los movimientos repetitivos se reducen organizando las prendas y alternando tareas cuando sea posible. Los carros no se sobrecargan y se empujan con visibilidad. El calor, el vapor y la presión exigen concentración para evitar quemaduras y atrapamientos.&quot;
+      ]
+    },
+    {
+      &quot;heading&quot;: &quot;8. Errores frecuentes y control final&quot;,
+      &quot;paragraphs&quot;: [
+        &quot;Entre los errores frecuentes están planchar una prenda manchada, usar temperatura alta por rapidez, no leer la etiqueta, dejar la plancha parada, aplicar vapor a tejidos que no lo admiten, planchar directamente prendas oscuras que producen brillo, no alinear ropa plana, mezclar ropa limpia con ropa pendiente y guardar prendas húmedas.&quot;,
+        &quot;También es un error considerar que todas las arrugas se resuelven con más presión o más temperatura. A veces la solución es humedecer de forma controlada, recolocar la prenda, usar vapor, proteger el tejido, cambiar el orden de planchado o separar la prenda para tratamiento previo. La prisa no justifica deteriorar ropa ni poner en riesgo al usuario o al trabajador.&quot;,
+        &quot;El control final verifica presentación, sequedad, ausencia de arrugas principales, ausencia de brillos o quemaduras, plegado correcto, destino adecuado y separación de incidencias. En un servicio público, la calidad del acabado transmite orden y cuidado. El operario contribuye a esa calidad aplicando procedimientos sencillos de forma constante.&quot;
+      ]
+    },
+    {
+      &quot;heading&quot;: &quot;9. Síntesis para repaso AP&quot;,
+      &quot;paragraphs&quot;: [
+        &quot;El planchado combina calor, presión, humedad y vapor para eliminar arrugas y mejorar la presentación de la ropa. Antes de planchar se clasifica por prenda, color, tejido, humedad, estado y prioridad. La etiqueta de conservación es la referencia principal para decidir temperatura y uso de vapor.&quot;,
+        &quot;La ropa plana incluye sábanas, manteles, fundas, servilletas y piezas similares. Requiere alineación, estirado, maquinaria adecuada cuando exista y plegado uniforme. El trabajo en cadena ordena recepción, clasificación, preparación, planchado, revisión, plegado o colgado y entrega, evitando cruces entre ropa limpia y sucia.&quot;,
+        &quot;La maquinaria puede incluir plancha manual, centro de planchado, mesas aspirantes o soplantes, prensas, calandras, rodillos y maniquíes. Los riesgos principales son quemaduras, vapor, presión, atrapamientos, cables, posturas y movimientos repetitivos. La respuesta correcta en examen suele ser la que respeta etiqueta, seguridad, orden de trabajo, comunicación de incidencias y control final.&quot;
       ]
     }
   ],
-  &quot;audio_policy&quot;: {
-    &quot;roman_numerals&quot;: &quot;Si aparecen números romanos en fases posteriores, deben revisarse para lectura ordinal o cardinal antes de TTS.&quot;
+  &quot;review_pack&quot;: {
+    &quot;key_terms&quot;: [
+      {
+        &quot;term&quot;: &quot;Planchado&quot;,
+        &quot;definition&quot;: &quot;Operación de acabado que elimina arrugas y recupera la forma de la prenda mediante calor, presión, humedad o vapor.&quot;
+      },
+      {
+        &quot;term&quot;: &quot;Ropa plana&quot;,
+        &quot;definition&quot;: &quot;Piezas textiles de forma simple, como sábanas, manteles, fundas, servilletas o paños.&quot;
+      },
+      {
+        &quot;term&quot;: &quot;Calandra&quot;,
+        &quot;definition&quot;: &quot;Máquina usada habitualmente para planchar ropa plana mediante rodillos, calor y presión.&quot;
+      },
+      {
+        &quot;term&quot;: &quot;Paño protector&quot;,
+        &quot;definition&quot;: &quot;Tela intermedia que evita brillos, marcas o daños por contacto directo de la plancha.&quot;
+      },
+      {
+        &quot;term&quot;: &quot;Trabajo en cadena&quot;,
+        &quot;definition&quot;: &quot;Organización del proceso en fases sucesivas para mantener ritmo, seguridad y calidad.&quot;
+      }
+    ],
+    &quot;control_questions&quot;: [
+      {
+        &quot;question&quot;: &quot;¿Por qué no debe plancharse una prenda con mancha visible?&quot;,
+        &quot;answer&quot;: &quot;Porque el calor puede fijar la mancha y dificultar o impedir su eliminación posterior.&quot;
+      },
+      {
+        &quot;question&quot;: &quot;¿Qué significa una plancha con un punto en la etiqueta?&quot;,
+        &quot;answer&quot;: &quot;Que la prenda debe plancharse a baja temperatura.&quot;
+      },
+      {
+        &quot;question&quot;: &quot;¿Qué debe hacerse si la etiqueta falta o es ilegible?&quot;,
+        &quot;answer&quot;: &quot;Actuar con prudencia: temperatura baja, prueba si procede, paño protector y consulta o separación de la prenda si hay duda.&quot;
+      },
+      {
+        &quot;question&quot;: &quot;¿Qué caracteriza a la ropa plana?&quot;,
+        &quot;answer&quot;: &quot;Su forma simple y amplia, como sábanas o manteles, que requiere extender, alinear, planchar y plegar de forma uniforme.&quot;
+      }
+    ]
   },
   &quot;coherence_controls&quot;: {
     &quot;matches_official_topic&quot;: true,
-    &quot;content_block_final&quot;: false,
+    &quot;content_block_final&quot;: true,
     &quot;not_over_atomized&quot;: true,
     &quot;audience_level&quot;: &quot;AP&quot;,
     &quot;domain_blocking_missing_input&quot;: false,
-    &quot;target_words_min&quot;: 0,
-    &quot;target_words_max&quot;: 0,
-    &quot;context_ref_only_handling&quot;: &quot;Entrada required ref_only con required_ref_action=ack_evidence_required; se resuelve mediante nota y test_receipt en agent_ack.json.&quot;
+    &quot;context_ref_only_handling&quot;: &quot;El esquema original se reaprovecho como plan de redaccion y se conserva como evidencia.&quot;
   },
   &quot;i18n&quot;: {
     &quot;locale&quot;: &quot;es-ES&quot;,
     &quot;plain_language&quot;: true,
     &quot;audio_ready&quot;: true
-  },
-  &quot;quality_notes&quot;: [
-    &quot;Bloque trazado al epígrafe oficial de Tema 3 y nivel AP.&quot;,
-    &quot;La unidad conserva continuidad editorial como esquema completo de tema, sin sobreatomizar en fragmentos independientes.&quot;,
-    &quot;No se incluye contenido final porque el paquete fija target_words_min=0, target_words_max=0 y objetivo de esquema didáctico.&quot;
-  ]
+  }
 }</pre>
   </details>
 </article>
@@ -2714,24 +2729,7 @@ Antes de convertir este bloque en version final de temario debe realizarse contr
   }
 }</pre>
   </details>
-</article>
-    </main>
-  </div>
-  <script>
-    const input = document.getElementById('search');
-    const count = document.getElementById('count');
-    const topics = Array.from(document.querySelectorAll('.topic'));
-    input.addEventListener('input', () => {
-      const q = input.value.trim().toLowerCase();
-      let visible = 0;
-      for (const topic of topics) {
-        const text = (topic.dataset.search + ' ' + topic.innerText).toLowerCase();
-        const show = !q || text.includes(q);
-        topic.classList.toggle('hidden', !show);
-        if (show) visible++;
-      }
-      count.textContent = visible + ' temas visibles';
-    });
-  </script>
+</article></main></div>
+  <script>const input=document.getElementById('search');const count=document.getElementById('count');const topics=Array.from(document.querySelectorAll('.topic'));input.addEventListener('input',()=>{const q=input.value.trim().toLowerCase();let visible=0;for(const topic of topics){const text=(topic.dataset.search+' '+topic.innerText).toLowerCase();const show=!q||text.includes(q);topic.classList.toggle('hidden',!show);if(show)visible++;}count.textContent=visible+' temas visibles';});</script>
 </body>
 </html>

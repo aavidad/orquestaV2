@@ -1,0 +1,190 @@
+{
+  "schema_version": "opes_content_block.v0",
+  "artifact_type": "content_block",
+  "job_id": "6ccc7aa743d30c85edc32309fe4ec4af",
+  "work_kind": "draft_content_block",
+  "language_code": "es",
+  "level": "AP",
+  "document_kind": "temario_oposicion",
+  "status": "draft_outline_not_final",
+  "source_refs": [
+    "opes_administracion-especial_operario_operario.txt#tema-03"
+  ],
+  "common_source_refs": [
+    "OPES/administracion-especial/Materias-comunes-Grupo-AP/Materias-comunes-Grupo-AP.txt",
+    "OPES/administracion-especial/Materias-comunes-de-los-programas-que-han-de-regir-en-las-pruebas-selectivas-en-los-procesos-de-estabilizacion-temporal-Subgrupo-AP-00003/Materias-comunes-de-los-programas-que-han-de-regir-en-las-pruebas-selectivas-en-los-procesos-de-estabilizacion-temporal-Subgrupo-AP-00003.txt",
+    "opes-salidas/codex_directo/operario/AP/produccion_externa_2026-05-19/markdown_importable/tema_01_constitucion_administracion_local.md",
+    "opes-salidas/codex_directo/operario/AP/produccion_externa_2026-05-19/markdown_importable/tema_02_empleados_publicos.md"
+  ],
+  "traceability": {
+    "plan_ref": "plan-cc93fbb0a41c1b04b2a4a82bb7ac3ed2",
+    "plan_part_ref": "tema_03",
+    "plan_part_kind": "section",
+    "order": 3,
+    "source_refs": [
+      "opes_administracion-especial_operario_operario.txt#tema-03"
+    ],
+    "official_source_id": "OPES/administracion-especial/Operario/Operario.txt",
+    "context_ref_only_resolution": "ack_evidence_required atendido mediante evidencia explicita en ACK"
+  },
+  "title": "Tema 3. La plancha y el planchado",
+  "official_topic_text": "La plancha y el planchado. Clasificación de prendas, colores y textiles. Ropa plana. Símbolos internacionales para el tratado de las prendas. El trabajo en cadena. Maquinaria. Técnicas y procedimientos.",
+  "editorial_contract": {
+    "objective": "Extraer título y límites del tema desde la referencia oficial y preparar un esquema didáctico AP sin redactar el contenido final en esta unidad.",
+    "target_words_min": 0,
+    "target_words_max": 0,
+    "final_content_included": false,
+    "content_boundary": "Unidad completa de planificación para el Tema 3: cubre definición, clasificación, ropa plana, símbolos, trabajo en cadena, maquinaria y técnicas de planchado sin desarrollar el temario final."
+  },
+  "content_block": {
+    "kind": "didactic_plan",
+    "audience": "Aspirantes de nivel AP para operario",
+    "learning_goal": "Reconocer los elementos básicos del planchado profesional, ordenar prendas y textiles para su tratamiento, interpretar símbolos de cuidado y situar el trabajo en cadena, la maquinaria y los procedimientos dentro de un servicio de lavandería o lencería.",
+    "sections": [
+      {
+        "heading": "1. La plancha y el planchado",
+        "scope": "Definir la finalidad del planchado: eliminar arrugas, recuperar forma, mejorar presentación e higiene visual de la prenda. Diferenciar planchado doméstico y planchado profesional por volumen de trabajo, seguridad, ritmo, maquinaria y control de calidad.",
+        "key_points": [
+          "Función del calor, la presión, la humedad y el vapor.",
+          "Preparación previa de la prenda: revisión, humedad adecuada, posición y protección de tejidos delicados.",
+          "Resultado esperado: prenda lisa, seca, sin brillos, marcas, quemaduras ni deformaciones."
+        ]
+      },
+      {
+        "heading": "2. Clasificación de prendas, colores y textiles",
+        "scope": "Organizar el contenido desde criterios prácticos de operario: tipo de prenda, color, tejido, resistencia al calor, grado de humedad, suciedad residual y prioridad del servicio.",
+        "key_points": [
+          "Separar prendas claras, oscuras y de color intenso para evitar transferencias o tratamientos inadecuados.",
+          "Distinguir algodón, lino, poliéster, lana, seda, mezclas y tejidos técnicos por tolerancia al calor y al vapor.",
+          "Relacionar clasificación con temperatura, presión, uso de paño protector y necesidad de prueba en zona no visible."
+        ]
+      },
+      {
+        "heading": "3. Ropa plana",
+        "scope": "Tratar ropa plana como bloque propio: sábanas, fundas, manteles, servilletas, paños y piezas similares. Enfocar el aprendizaje en doblado, alineación de bordes, eliminación de pliegues y acabado uniforme.",
+        "key_points": [
+          "Identificar piezas grandes que requieren apoyo, calandra, rodillo o trabajo coordinado.",
+          "Mantener costuras y esquinas alineadas para facilitar el plegado posterior.",
+          "Aplicar control visual final: ausencia de arrugas principales, manchas persistentes y humedad."
+        ]
+      },
+      {
+        "heading": "4. Símbolos internacionales para el tratado de las prendas",
+        "scope": "Incluir lectura funcional de etiquetas de conservación. El bloque final deberá explicar símbolos de lavado, blanqueado, secado, planchado y limpieza profesional, con atención al símbolo de plancha y sus puntos de temperatura.",
+        "key_points": [
+          "Plancha con un punto: baja temperatura para tejidos sensibles.",
+          "Plancha con dos puntos: temperatura media.",
+          "Plancha con tres puntos: temperatura alta para tejidos resistentes.",
+          "Plancha tachada: no planchar.",
+          "Símbolo de vapor restringido o tachado: evitar vapor cuando la etiqueta lo indique."
+        ]
+      },
+      {
+        "heading": "5. El trabajo en cadena",
+        "scope": "Presentar el proceso como una secuencia ordenada, no como acciones aisladas: recepción, clasificación, preparación, planchado, plegado, revisión, empaquetado y entrega.",
+        "key_points": [
+          "Asignar tareas para mantener ritmo, seguridad y calidad constante.",
+          "Evitar cruces entre ropa limpia y sucia.",
+          "Comunicar incidencias: manchas, roturas, etiquetas ilegibles, prendas delicadas o resultados no conformes."
+        ]
+      },
+      {
+        "heading": "6. Maquinaria",
+        "scope": "Nombrar y diferenciar equipos habituales sin convertir el tema en un manual técnico avanzado: plancha manual, centro de planchado, mesa aspirante o soplante, prensa, calandra, maniquí de planchado, rodillos, carros y perchas.",
+        "key_points": [
+          "Relacionar cada máquina con el tipo de prenda o volumen de trabajo.",
+          "Incluir normas básicas de seguridad: calor, vapor, presión, cables, superficies calientes y ergonomía.",
+          "Prever limpieza y mantenimiento básico según instrucciones del centro."
+        ]
+      },
+      {
+        "heading": "7. Técnicas y procedimientos",
+        "scope": "Ordenar técnicas por dificultad y riesgo: control de temperatura, uso de vapor, planchado del revés, paño protector, dirección del movimiento, presión moderada, zonas con costuras, pinzas, cuellos, puños y acabados.",
+        "key_points": [
+          "No dejar la plancha inmóvil sobre el tejido.",
+          "Planchar primero zonas pequeñas o interiores cuando proceda.",
+          "Respetar etiqueta, tejido y prioridad de la prenda.",
+          "Revisar acabado antes de plegar o colgar."
+        ]
+      }
+    ],
+    "assessment_cues": [
+      "El aspirante debe poder asociar tejido y símbolo con temperatura de planchado.",
+      "Debe distinguir ropa plana de prendas de forma.",
+      "Debe ordenar una cadena básica de trabajo sin mezclar fases limpias y sucias.",
+      "Debe identificar riesgos comunes de maquinaria de planchado."
+    ],
+    "excluded_from_this_unit": [
+      "Redacción final extensa del tema.",
+      "Desarrollo normativo ajeno al epígrafe oficial.",
+      "Fichas técnicas completas de fabricantes concretos."
+    ]
+  },
+  "coverage": [
+    {
+      "official_segment": "La plancha y el planchado",
+      "covered_by": [
+        "1"
+      ]
+    },
+    {
+      "official_segment": "Clasificación de prendas, colores y textiles",
+      "covered_by": [
+        "2"
+      ]
+    },
+    {
+      "official_segment": "Ropa plana",
+      "covered_by": [
+        "3"
+      ]
+    },
+    {
+      "official_segment": "Símbolos internacionales para el tratado de las prendas",
+      "covered_by": [
+        "4"
+      ]
+    },
+    {
+      "official_segment": "El trabajo en cadena",
+      "covered_by": [
+        "5"
+      ]
+    },
+    {
+      "official_segment": "Maquinaria",
+      "covered_by": [
+        "6"
+      ]
+    },
+    {
+      "official_segment": "Técnicas y procedimientos",
+      "covered_by": [
+        "7"
+      ]
+    }
+  ],
+  "audio_policy": {
+    "roman_numerals": "Si aparecen números romanos en fases posteriores, deben revisarse para lectura ordinal o cardinal antes de TTS."
+  },
+  "coherence_controls": {
+    "matches_official_topic": true,
+    "content_block_final": false,
+    "not_over_atomized": true,
+    "audience_level": "AP",
+    "domain_blocking_missing_input": false,
+    "target_words_min": 0,
+    "target_words_max": 0,
+    "context_ref_only_handling": "Entrada required ref_only con required_ref_action=ack_evidence_required; se resuelve mediante nota y test_receipt en agent_ack.json."
+  },
+  "i18n": {
+    "locale": "es-ES",
+    "plain_language": true,
+    "audio_ready": true
+  },
+  "quality_notes": [
+    "Bloque trazado al epígrafe oficial de Tema 3 y nivel AP.",
+    "La unidad conserva continuidad editorial como esquema completo de tema, sin sobreatomizar en fragmentos independientes.",
+    "No se incluye contenido final porque el paquete fija target_words_min=0, target_words_max=0 y objetivo de esquema didáctico."
+  ]
+}
