@@ -15,7 +15,7 @@
 
 ## OPMCP-012 - Hermes API/MCP no CLI
 
-Estado: pendiente.
+Estado: implementada offline/API fake 2026-06-02; smoke real externo pendiente.
 
 Contrato: Hermes debe entrar como adaptador externo de composicion sobre
 `OperatorMCPConnectorV0` o cliente MCP/API equivalente. No debe usar CLI,
@@ -23,13 +23,20 @@ wrapper shell, `CommandPath`, `HOME`, `PATH` ni proceso local como superficie
 principal. La configuracion debe ser opt-in, con endpoint, token redacted,
 nombres de tools, refs opacas, timeout, cancelacion y errores publicos.
 
+Implementado: `modulos/orquesta-operator-mcp-hermes` y wiring opt-in
+`ORQUESTA_HERMES_*` en `cmd/orquesta-server`, inyectando `OperatorConnector`
+para `/mcp`.
+
 Validacion esperada: smoke API-only contra instancia temporal de Hermes:
 `resources/list`, `tools/list`, `status`, `pending_outbox`, `supervised_burst`
 acotado y `directed_query`, sin DB, sin rutas internas y sin CLI de proveedor.
 
-Bloqueos: falta endpoint/credenciales Hermes en esta sesion. T16/T23/T124/T145
-no se reabren salvo regresion: el pendiente es el adaptador Hermes concreto, no
-los contratos puros ya cerrados.
+Validacion ejecutada: `go test -count=1 ./modulos/orquesta-operator-mcp-hermes
+./cmd/orquesta-server`.
+
+Bloqueos: falta endpoint/credenciales Hermes reales para smoke externo.
+T16/T23/T124/T145 no se reabren salvo regresion: el pendiente restante es smoke
+real con Hermes temporal, no los contratos puros ya cerrados.
 
 ## OPMCP-011 - Reconciliacion T198 descriptor_source
 

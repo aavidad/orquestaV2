@@ -12,10 +12,15 @@ La revision externa se limito a superficies publicas:
 - variables de entorno presentes o ausentes, sin imprimir secretos
 
 Resultado: no hay servidor local escuchando en `127.0.0.1:16543` y no existen
-`HERMES_BASE_URL`, `HERMES_API_KEY`, `GEMINI_API_KEY` ni `GOOGLE_API_KEY` en el
+`ORQUESTA_HERMES_BASE_URL`, `ORQUESTA_HERMES_API_KEY`, `GEMINI_API_KEY` ni `GOOGLE_API_KEY` en el
 entorno de esta sesion. Por tanto no se puede cerrar un smoke real API-only de
 Hermes ni de Gemini API sin inventar accesos, arrancar caminos por CLI o tocar
 persistencia interna.
+
+Actualizacion posterior del mismo dia: se implemento
+`modulos/orquesta-operator-mcp-hermes` y el wiring opt-in `ORQUESTA_HERMES_*` en
+`cmd/orquesta-server`. La prueba real externa sigue pendiente por falta de
+endpoint/token reales.
 
 ## Frontera confirmada
 
@@ -34,8 +39,8 @@ persistencia interna.
 
 ## Hallazgos
 
-- No existe un adaptador concreto `orquesta-operator-mcp-hermes` ni configuracion
-  `HERMES_*` cableada en `cmd/orquesta-server`.
+- Ya existe un adaptador concreto `orquesta-operator-mcp-hermes` y configuracion
+  canonica `ORQUESTA_HERMES_*` cableada en `cmd/orquesta-server`.
 - El paquete `modulos/orquesta-runtime-gemini` creado para infografias es CLI
   headless. Puede quedar como proveedor Gemini CLI opt-in, pero no representa a
   Hermes.
@@ -48,11 +53,11 @@ persistencia interna.
 
 ## Tareas
 
-- `HERMES-API-001`: crear adaptador externo Hermes sobre
-  `OperatorMCPConnectorV0`. Entrada: `HERMES_BASE_URL`, token opt-in, nombres de
+- `HERMES-API-001`: hecho offline. Crear adaptador externo Hermes sobre
+  `OperatorMCPConnectorV0`. Entrada: `ORQUESTA_HERMES_BASE_URL`, token opt-in, nombres de
   tools, refs opacas, timeout y context factory. Salida: errores publicos
   estables y payload compacto.
-- `HERMES-API-002`: cablear configuracion opt-in en composicion/servidor sin
+- `HERMES-API-002`: hecho offline. Cablear configuracion opt-in en composicion/servidor sin
   tocar core. La configuracion efectiva debe aparecer redacted y canonica.
 - `HERMES-API-003`: anadir smoke API-only con instancia temporal de Hermes:
   `resources/list`, `tools/list`, `status`, `pending_outbox`,

@@ -32,14 +32,25 @@ outbox pendiente y consulta dirigida por MCP sin conocer internals de Orquesta.
   `/api/v0/*` cuando aplique.
 - No usar `/api/mcp`, `/api/*` legacy, OpenClaw V1 ni CLI de proveedor para
   cerrar evidencias nuevas.
-- Si faltan `HERMES_BASE_URL` o credenciales opt-in, reportar
+- Si faltan `ORQUESTA_HERMES_BASE_URL` o credenciales opt-in, reportar
   `operator_mcp_connector_unavailable` o dejar el smoke bloqueado; no leer DB,
   filesystem productivo ni outbox interno como alternativa.
+
+Variables canonicas del conector Hermes de servidor:
+
+- `ORQUESTA_HERMES_ENABLED=1`
+- `ORQUESTA_HERMES_BASE_URL=https://...`
+- `ORQUESTA_HERMES_MCP_PATH=/mcp`
+- `ORQUESTA_HERMES_API_KEY=...`
+- `ORQUESTA_HERMES_STATUS_TOOL`, `ORQUESTA_HERMES_BURST_TOOL`,
+  `ORQUESTA_HERMES_OUTBOX_TOOL`, `ORQUESTA_HERMES_QUERY_TOOL`
+- `ORQUESTA_HERMES_*_CONNECTOR_REF`
+- `ORQUESTA_HERMES_TIMEOUT_SECONDS`
 
 ## Validacion
 
 ```bash
-go test -count=1 ./modulos/orquesta-operator-mcp ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp-client
+go test -count=1 ./modulos/orquesta-operator-mcp ./modulos/orquesta-mcp ./modulos/orquesta-operator-mcp-client ./modulos/orquesta-operator-mcp-hermes ./cmd/orquesta-server
 ```
 
 El contrato no lee DB, outbox real, runtime, filesystem productivo, HOME,

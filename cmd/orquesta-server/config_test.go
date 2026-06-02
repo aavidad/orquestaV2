@@ -110,6 +110,11 @@ func TestServerConfigFromEnvV0PublicaConfiguracionEfectivaCanonica(t *testing.T)
 	t.Setenv("ORQUESTA_CODEX_MAX_CONCURRENCY", "10")
 	t.Setenv("ORQUESTA_CODEX_REASONING_EFFORT", "high")
 	t.Setenv("ORQUESTA_CODEX_DIRECTOR_MAX_SUBAGENTS_PER_AGENT", "6")
+	t.Setenv("ORQUESTA_HERMES_ENABLED", "1")
+	t.Setenv("ORQUESTA_HERMES_BASE_URL", "https://hermes.local/mcp")
+	t.Setenv("ORQUESTA_HERMES_API_KEY", "secret-hermes-test")
+	t.Setenv("ORQUESTA_HERMES_STATUS_TOOL", "hermes.status")
+	t.Setenv("ORQUESTA_HERMES_STATUS_CONNECTOR_REF", "hermes-status-ref")
 
 	config, err := serverConfigFromEnvV0()
 	if err != nil {
@@ -127,10 +132,21 @@ func TestServerConfigFromEnvV0PublicaConfiguracionEfectivaCanonica(t *testing.T)
 		"ORQUESTA_CODEX_MAX_CONCURRENCY":                     "10",
 		"ORQUESTA_CODEX_REASONING_EFFORT":                    "high",
 		"ORQUESTA_CODEX_DIRECTOR_MAX_SUBAGENTS_PER_AGENT":    "6",
+		"ORQUESTA_HERMES_ENABLED":                            "true",
+		"ORQUESTA_HERMES_BASE_URL":                           "hermes-base-url-configured",
+		"ORQUESTA_HERMES_API_KEY":                            "hermes-api-key-configured",
+		"ORQUESTA_HERMES_STATUS_TOOL":                        "hermes.status",
+		"ORQUESTA_HERMES_STATUS_CONNECTOR_REF":               "hermes-status-ref",
 	} {
 		got := effectiveSettingValueForTestV0(settings, key)
 		if got != want {
 			t.Fatalf("%s=%q want %q settings=%+v", key, got, want, settings)
+		}
+	}
+	for _, key := range []string{"ORQUESTA_HERMES_BASE_URL", "ORQUESTA_HERMES_API_KEY"} {
+		setting := effectiveSettingForTestV0(settings, key)
+		if !setting.Sensitive {
+			t.Fatalf("%s debe quedar marcado como sensible: %+v", key, setting)
 		}
 	}
 }
@@ -312,12 +328,16 @@ func TestCodexDirectorWaveConfigFromEnvV0UsaSubagentesCanonicos(t *testing.T) {
 }
 
 func effectiveSettingValueForTestV0(settings []orquestaserver.ServerConfigSettingV0, key string) string {
+	return effectiveSettingForTestV0(settings, key).Value
+}
+
+func effectiveSettingForTestV0(settings []orquestaserver.ServerConfigSettingV0, key string) orquestaserver.ServerConfigSettingV0 {
 	for _, setting := range settings {
 		if setting.Key == key {
-			return setting.Value
+			return setting
 		}
 	}
-	return ""
+	return orquestaserver.ServerConfigSettingV0{}
 }
 
 func pathIsInsideForTestV0(t *testing.T, child string, parent string) bool {

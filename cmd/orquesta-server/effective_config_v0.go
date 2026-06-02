@@ -53,6 +53,7 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 		serverConfigSettingFromRegistryV0(envCodexDirectorRecursiveAgentBudgetV0, strconv.Itoa(directorWaveLimits.RecursiveAgentBudget)),
 	}
 	settings = append(settings, codexServerWorktreeSnapshotBudgetSettingsV0(worktreeSnapshotBudget)...)
+	settings = append(settings, hermesOperatorEffectiveConfigSettingsV0()...)
 	settings = append(settings, daemonStartEnvSettingsV0(daemonEnvPolicy)...)
 	return orquestaserver.NormalizeServerEffectiveConfigV0(orquestaserver.ServerEffectiveConfigV0{
 		SchemaVersion: orquestaserver.ServerEffectiveConfigSchemaVersionV0,

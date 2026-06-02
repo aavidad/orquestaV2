@@ -107,6 +107,10 @@ func buildStackFromEnvV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
+	operatorConnector, err := hermesOperatorConnectorFromEnvV0()
+	if err != nil {
+		return orquestaappcodexstack.StackV0{}, err
+	}
 	requiredTestRunner, err := requiredTestRunnerFromEnvV0(serverConfig, stateStore)
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
@@ -168,6 +172,9 @@ func buildStackFromEnvV0(
 	})
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
+	}
+	if operatorConnector != nil {
+		stack.MCPTransportBindings.OperatorConnector = operatorConnector
 	}
 	stack.Handler = withFunctionContractRoutesV0(stack.Handler, stateStore)
 	return stack, nil
