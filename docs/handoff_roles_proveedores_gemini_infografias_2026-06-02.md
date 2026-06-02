@@ -6,6 +6,10 @@ Primer corte implementado y probado offline. Hay adaptador Gemini CLI opt-in y
 router de proveedor en la composicion actual. No hay smoke real con Gemini CLI
 ni credenciales: queda como prueba opt-in de operador.
 
+Correccion posterior: Hermes no debe usar CLI. Hermes debe entrar como conector
+API/MCP externo sobre `OperatorMCPConnectorV0`. El adaptador Gemini CLI no es
+Hermes y no debe usarse como evidencia de Hermes.
+
 Correccion arquitectonica aceptada: OPES no debe saber nada de Gemini, Codex,
 Claude ni agentes. OPES debe conservar solo contratos de dominio como
 `generate_visual_asset`, `visual_asset`, refs opacas, validacion y ensamblado.
@@ -20,6 +24,7 @@ Orquesta debe decidir que agente/proveedor ejecuta cada rol.
   `Claude documenta` pertenece a composicion/adaptadores de Orquesta.
 - Mantener Codex como default legacy del stack actual.
 - Habilitar Gemini solo opt-in y por rol/capacidad/configuracion explicita.
+- Tratar Hermes como operador API/MCP, no como runtime CLI.
 
 ## Contexto revisado
 

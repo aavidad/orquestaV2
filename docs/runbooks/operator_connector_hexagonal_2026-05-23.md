@@ -11,6 +11,8 @@ outbox pendiente y consulta dirigida por MCP sin conocer internals de Orquesta.
   cliente MCP generico, sin importar el transporte local.
 - Hermes, OpenClaw u otro operador real deben vivir como adaptadores externos
   opt-in que implementen `OperatorMCPConnectorV0`.
+- Hermes se consume por API/MCP. No usar CLI de proveedor, wrappers de proceso
+  local ni rutas internas como sustituto de su conector.
 
 ## Uso
 
@@ -23,6 +25,16 @@ outbox pendiente y consulta dirigida por MCP sin conocer internals de Orquesta.
    cliente MCP fake en `NewOperatorMCPClientConnectorV0`.
 5. Para Hermes u OpenClaw, configurar nombres de tool y refs de conector en
    `OperatorMCPClientConfigV0`; Orquesta trata esas refs como opacas.
+
+## Hermes API-only
+
+- Usar el transporte MCP JSON-RPC opt-in en `/mcp` o la API publica versionada
+  `/api/v0/*` cuando aplique.
+- No usar `/api/mcp`, `/api/*` legacy, OpenClaw V1 ni CLI de proveedor para
+  cerrar evidencias nuevas.
+- Si faltan `HERMES_BASE_URL` o credenciales opt-in, reportar
+  `operator_mcp_connector_unavailable` o dejar el smoke bloqueado; no leer DB,
+  filesystem productivo ni outbox interno como alternativa.
 
 ## Validacion
 

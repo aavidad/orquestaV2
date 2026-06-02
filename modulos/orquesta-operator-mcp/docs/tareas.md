@@ -11,6 +11,25 @@
 - [x] Anadir puerto agregado `OperatorMCPConnectorV0`, modo sin conector y
   conector simulado offline.
 - [ ] Implementar adaptador externo de servidor/transporte MCP real.
+- [ ] Implementar adaptador Hermes API/MCP concreto, no CLI.
+
+## OPMCP-012 - Hermes API/MCP no CLI
+
+Estado: pendiente.
+
+Contrato: Hermes debe entrar como adaptador externo de composicion sobre
+`OperatorMCPConnectorV0` o cliente MCP/API equivalente. No debe usar CLI,
+wrapper shell, `CommandPath`, `HOME`, `PATH` ni proceso local como superficie
+principal. La configuracion debe ser opt-in, con endpoint, token redacted,
+nombres de tools, refs opacas, timeout, cancelacion y errores publicos.
+
+Validacion esperada: smoke API-only contra instancia temporal de Hermes:
+`resources/list`, `tools/list`, `status`, `pending_outbox`, `supervised_burst`
+acotado y `directed_query`, sin DB, sin rutas internas y sin CLI de proveedor.
+
+Bloqueos: falta endpoint/credenciales Hermes en esta sesion. T16/T23/T124/T145
+no se reabren salvo regresion: el pendiente es el adaptador Hermes concreto, no
+los contratos puros ya cerrados.
 
 ## OPMCP-011 - Reconciliacion T198 descriptor_source
 
