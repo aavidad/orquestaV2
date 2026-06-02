@@ -47,6 +47,16 @@ presupuesto o palabras como `capacity` no justifican `stop_agent`, `failed`,
 trabajo y ordena normalizacion, review, rework o replan. Solo quedan cortes
 fuertes por seguridad, causalidad, refs imposibles, datos sensibles o efectos
 externos no autorizados.
+Los rails de detalle operativo/local son advisory tambien en produccion:
+referencias a runtime, provider, modelo, ficheros de control, HOME como
+diagnostico sin valor sensible o evidencia ref-only se conservan como evidencia
+o nota, pero no paran agentes ni rechazan entregas. Si un rail de ese tipo
+vuelve a bloquear trabajo valido, debe retirarse del camino de ejecucion y
+quedar solo como observabilidad/revision.
+La autoridad de decision no pertenece al rail: el Director o el agente
+orquestador decide si una regla blanda se ignora, se elimina, se conserva como
+diagnostico o se convierte en tarea de mejora. El codigo no debe convertir
+heuristicas blandas en veto automatico.
 Si un texto o artefacto no cumple el uso para el que se pidio, no se descarta
 por defecto: se revisa para aprovecharlo total o parcialmente como otro
 artefacto, borrador, insumo documental, evidencia, nota de revision o nueva

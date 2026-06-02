@@ -1,0 +1,102 @@
+{
+  "schema_version": "opes_review_bundle.v0",
+  "created_at": "2026-06-02T10:35:47.857414+00:00",
+  "source_tmp": "/tmp/opes-operario-api-u1UPV2/orquesta-nofilters-8eE6yd/project/external/opes/draft_content_block",
+  "raw_artifacts_dir": "raw",
+  "topics": [
+    {
+      "order": 1,
+      "job_id": "7a0cf9c149c9e07a261ece298694a552",
+      "title": "Tema 1 - Constitución Española de 1978 y Administración local",
+      "raw_file": "raw/7a0cf9c149c9e07a261ece298694a552/content_block.json",
+      "extra_files": [],
+      "schema_version": "opes_content_block.v1",
+      "format": "json"
+    },
+    {
+      "order": 2,
+      "job_id": "5cfcc4984b3ff1975af10101680454bc",
+      "title": "Tema 2 - Empleados públicos",
+      "raw_file": "raw/5cfcc4984b3ff1975af10101680454bc/content_block.md",
+      "extra_files": [
+        "raw/5cfcc4984b3ff1975af10101680454bc/manifest.json"
+      ],
+      "schema_version": "",
+      "format": "md"
+    },
+    {
+      "order": 3,
+      "job_id": "6ccc7aa743d30c85edc32309fe4ec4af",
+      "title": "Tema 3. La plancha y el planchado",
+      "raw_file": "raw/6ccc7aa743d30c85edc32309fe4ec4af/content_block.json",
+      "extra_files": [],
+      "schema_version": "opes_content_block.v0",
+      "format": "json"
+    },
+    {
+      "order": 4,
+      "job_id": "0eada4101e92d34e0c28d3ed1af181a0",
+      "title": "Tema 4. El lavado de prendas",
+      "raw_file": "raw/0eada4101e92d34e0c28d3ed1af181a0/content_block.md",
+      "extra_files": [],
+      "schema_version": "opes_content_block.v0",
+      "format": "md"
+    },
+    {
+      "order": 5,
+      "job_id": "73ff772c5c45254bb990d575b7ed6d7c",
+      "title": "Tema 5. Productos a emplear en la limpieza. Utensilios y maquinaria de limpieza. Limpieza integral y desinfección de los centros de trabajo. Limpieza de habitaciones. Limpieza de oficinas y despachos. Limpieza de pistas deportivas y exteriores.",
+      "raw_file": "raw/73ff772c5c45254bb990d575b7ed6d7c/content_block.md",
+      "extra_files": [],
+      "schema_version": "opes_content_block.v0",
+      "format": "md"
+    },
+    {
+      "order": 6,
+      "job_id": "1eb10f2e0b35f98a9bb76eb3b99bc304",
+      "title": "Tema 6. Limpieza de cocinas: características, productos, medios y normas de utilización",
+      "raw_file": "raw/1eb10f2e0b35f98a9bb76eb3b99bc304/content_block.md",
+      "extra_files": [],
+      "schema_version": "",
+      "format": "md"
+    },
+    {
+      "order": 7,
+      "job_id": "4dad1eb2c567ded031736b65b5084117",
+      "title": "Tema 7. Los alimentos. Clasificacion y caracteristicas de los diferentes tipos de alimentos. Tipos de dietas: conceptos basicos",
+      "raw_file": "raw/4dad1eb2c567ded031736b65b5084117/content_block.md",
+      "extra_files": [],
+      "schema_version": "opes_content_block.v0",
+      "format": "md"
+    },
+    {
+      "order": 8,
+      "job_id": "ab68a143853edbb90d76fd1087643891",
+      "title": "Tema 8",
+      "raw_file": "raw/ab68a143853edbb90d76fd1087643891/content_block.md",
+      "extra_files": [
+        "raw/ab68a143853edbb90d76fd1087643891/artifact.json"
+      ],
+      "schema_version": "",
+      "format": "md"
+    },
+    {
+      "order": 9,
+      "job_id": "c58688d2ae40b17de2dec2145730655d",
+      "title": "Tema 9. Preparación, conservación, emplatado y transporte de los alimentos",
+      "raw_file": "raw/c58688d2ae40b17de2dec2145730655d/content_block.json",
+      "extra_files": [],
+      "schema_version": "opes_content_block.v0",
+      "format": "json"
+    },
+    {
+      "order": 10,
+      "job_id": "5ddd69cf3d789ee07eab52bfef846097",
+      "title": "Tema 10. Conceptos básicos en la prevención de riesgos laborales: clasificación y prevención de riesgos. Medidas preventivas con los productos de limpieza en su uso y almacenamiento en relación al trabajador y al usuario. Riesgo de incendio en la cocina: conceptos básicos, medidas preventivas y actuaciones a realizar.",
+      "raw_file": "raw/5ddd69cf3d789ee07eab52bfef846097/content_block.json",
+      "extra_files": [],
+      "schema_version": "opes_content_block.v0",
+      "format": "json"
+    }
+  ]
+}

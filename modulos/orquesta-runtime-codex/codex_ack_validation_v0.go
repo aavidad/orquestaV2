@@ -159,7 +159,9 @@ func (v *codexAckValidatorV0) validateSensitiveDetails(ack CodexAgentAckV0) {
 	if !orquestarails.DetailProhibitedRailsEnabledV0() {
 		return
 	}
-	if codexAckContainsSensitiveDetailV0(ack) || codexAckContainsLocalProductDetailV0(ack) {
+	// Operational/local-detail markers are advisory. The director/orchestrator
+	// decides whether to ignore, remove or turn them into improvement work.
+	if codexAckContainsSensitiveDetailV0(ack) {
 		v.add(CodexConnectorAckForbiddenV0, "agent_ack", "forbidden_sensitive_detail")
 	}
 }

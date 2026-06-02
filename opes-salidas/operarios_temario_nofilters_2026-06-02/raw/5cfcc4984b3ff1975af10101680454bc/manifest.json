@@ -1,0 +1,27 @@
+{
+  "schema_version": "opes_content_block_manifest.v0",
+  "artifact_type": "content_block",
+  "job_id": "5cfcc4984b3ff1975af10101680454bc",
+  "title": "Tema 2 - Empleados públicos",
+  "official_topic_text": "Los empleados públicos. Clases y régimen jurídico. Derechos y deberes de los empleados públicos.",
+  "level": "AP",
+  "language_code": "es",
+  "plan_ref": "plan-cc93fbb0a41c1b04b2a4a82bb7ac3ed2",
+  "plan_part_ref": "tema_02",
+  "plan_part_kind": "section",
+  "order": 2,
+  "content_file": "content_block.md",
+  "traceability": {
+    "official_source_id": "OPES/administracion-especial/Operario/Operario.txt",
+    "source_refs": [
+      "opes-salidas_codex_directo_operario_ap_produccion_externa_2026-05-19_markdown_importable_tema_02_empleados_publicos.md",
+      "opes_administracion-especial_materias-comunes-de-los-programas-que-han-de-regir-en-las-pruebas-selectivas-en-los-procesos-de-estabilizacion-temporal-subgrupo-ap-00003_materias-comunes-de-los-programas-que-han-de-regir-en-las-pruebas-selectivas-en-los-procesos-de-estabilizacion-temporal-subgrupo-ap-00003.txt",
+      "opes_administracion-especial_operario_operario.txt#tema-02"
+    ]
+  },
+  "required_ref_only_resolution": {
+    "entry_ref": "entry-ref-app-stack-task-ref-app-change-appchange-39abb89054cc376968d0c7a00aff6871",
+    "required_ref_action": "ack_evidence_required",
+    "resolution": "Se conserva evidencia en ACK; el paquete materializado aporta campos de dominio suficientes para redactar el bloque."
+  }
+}

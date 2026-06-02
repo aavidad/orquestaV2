@@ -1,0 +1,193 @@
+{
+  "schema_version": "opes_content_block.v0",
+  "artifact_type": "content_block",
+  "job_id": "c58688d2ae40b17de2dec2145730655d",
+  "work_kind": "draft_content_block",
+  "language_code": "es",
+  "level": "AP",
+  "document_kind": "temario_oposicion",
+  "plan_ref": "plan-cc93fbb0a41c1b04b2a4a82bb7ac3ed2",
+  "plan_part_ref": "tema_09",
+  "plan_part_kind": "section",
+  "order": 9,
+  "title": "Tema 9. Preparación, conservación, emplatado y transporte de los alimentos",
+  "official_topic_text": "Preparación, conservación, emplatado y transporte de los alimentos.",
+  "source_refs": [
+    "opes_administracion-especial_operario_operario.txt#tema-09"
+  ],
+  "common_source_refs": [
+    "OPES/administracion-especial/Materias-comunes-Grupo-AP/Materias-comunes-Grupo-AP.txt",
+    "OPES/administracion-especial/Materias-comunes-de-los-programas-que-han-de-regir-en-las-pruebas-selectivas-en-los-procesos-de-estabilizacion-temporal-Subgrupo-AP-00003/Materias-comunes-de-los-programas-que-han-de-regir-en-las-pruebas-selectivas-en-los-procesos-de-estabilizacion-temporal-Subgrupo-AP-00003.txt",
+    "opes-salidas/codex_directo/operario/AP/produccion_externa_2026-05-19/markdown_importable/tema_01_constitucion_administracion_local.md",
+    "opes-salidas/codex_directo/operario/AP/produccion_externa_2026-05-19/markdown_importable/tema_02_empleados_publicos.md"
+  ],
+  "traceability": {
+    "official_source_id": "OPES/administracion-especial/Operario/Operario.txt",
+    "document_kind": "temario_oposicion",
+    "expected_artifact_type": "content_block",
+    "scope_limits": "Unidad editorial AP centrada en el epígrafe oficial: preparación, conservación, emplatado y transporte de alimentos. No incorpora legislación específica no suministrada en el paquete; formula principios operativos generales aplicables al puesto."
+  },
+  "content_block": {
+    "summary": "El bloque desarrolla el ciclo básico de trabajo con alimentos desde la recepción y preparación inicial hasta el servicio o traslado, con énfasis en higiene, seguridad, orden de trabajo, control de temperaturas, presentación y protección durante el transporte.",
+    "learning_objectives": [
+      "Reconocer las fases principales de la manipulación alimentaria en un entorno de servicio público.",
+      "Distinguir preparación, conservación, emplatado y transporte como operaciones conectadas que mantienen calidad y seguridad.",
+      "Aplicar criterios básicos de limpieza, separación, temperatura, protección física, trazabilidad interna y comunicación de incidencias.",
+      "Preparar repasos, preguntas de control y vocabulario clave para nivel AP."
+    ],
+    "sections": [
+      {
+        "heading": "1. Sentido del tema y cadena de trabajo",
+        "paragraphs": [
+          "La preparación, conservación, emplatado y transporte de alimentos forman una cadena de trabajo. Cada fase condiciona la siguiente: una preparación desordenada dificulta conservar con seguridad; una conservación incorrecta afecta al emplatado; un emplatado sin protección se deteriora durante el traslado. Por eso el operario debe entender el proceso como una secuencia continua, no como tareas aisladas.",
+          "En nivel AP interesa dominar criterios prácticos: mantener limpieza personal y del puesto, separar materias primas y alimentos listos para consumo, respetar tiempos y temperaturas indicados por la organización, usar recipientes adecuados, proteger los alimentos de contaminación y comunicar cualquier incidencia. La finalidad es que el alimento llegue al usuario en condiciones adecuadas de higiene, temperatura, presentación y calidad."
+        ]
+      },
+      {
+        "heading": "2. Preparación de los alimentos",
+        "paragraphs": [
+          "Preparar alimentos comprende operaciones previas al consumo o al cocinado: recepción, revisión visual, lavado cuando proceda, pelado, corte, racionado, mezcla, condimentación, descongelación controlada, calentamiento o montaje previo. No todas las tareas aparecen en todos los servicios, pero todas exigen orden y prevención.",
+          "Antes de empezar se revisa el espacio de trabajo. Las superficies deben estar limpias, los utensilios disponibles y diferenciados cuando sea necesario, los residuos retirados y los productos colocados de forma que se eviten cruces entre alimentos crudos, cocinados y listos para el consumo. La higiene de manos y el uso correcto de ropa, guantes u otros elementos de protección dependen de las instrucciones internas, pero nunca sustituyen a la limpieza efectiva ni al cambio cuando se contaminan.",
+          "Durante la preparación se trabaja con lotes manejables. Conviene sacar solo la cantidad necesaria, mantener cubiertos los productos que esperan, evitar esperas innecesarias a temperatura ambiente y devolver a conservación lo que no se vaya a usar de inmediato si la organización lo permite. Los alimentos no deben apoyarse directamente sobre superficies no destinadas a contacto alimentario.",
+          "La descongelación es una fase sensible. Como principio de seguridad, no debe hacerse de manera improvisada en zonas calientes ni dejando el alimento sin control. Deben respetarse los procedimientos del centro, normalmente orientados a descongelar en frío, en recipientes que recojan líquidos y evitando contacto con otros alimentos. Si se detectan envases rotos, olores anómalos, cambios de color, suciedad o pérdida de identificación, la actuación prudente es apartar el producto y comunicarlo.",
+          "El corte y racionado requieren uniformidad. Raciones similares facilitan cocción, servicio y control de cantidades. Los utensilios deben estar en buen estado: cuchillos afilados reducen esfuerzos y accidentes, tablas estables evitan movimientos y recipientes limpios impiden mezclas no deseadas. El orden en mesa de trabajo mejora la rapidez y reduce errores."
+        ]
+      },
+      {
+        "heading": "3. Conservación de los alimentos",
+        "paragraphs": [
+          "Conservar alimentos significa mantenerlos en condiciones que retrasen el deterioro y reduzcan riesgos. Incluye refrigeración, congelación, mantenimiento en caliente, protección en recipientes cerrados, control de fechas, rotación de existencias y separación por tipo de producto. La conservación empieza desde la recepción y continúa hasta el consumo o retirada.",
+          "La temperatura es un punto central. Los alimentos que requieren frío deben permanecer en equipos adecuados y no estar fuera más tiempo del necesario. Los alimentos que deben servirse calientes han de conservarse conforme al procedimiento del centro para evitar enfriamientos prolongados. El operario no decide temperaturas por intuición: comprueba instrucciones, indicadores y registros cuando formen parte del sistema de trabajo.",
+          "El orden en cámaras, neveras, congeladores o armarios evita contaminación y pérdidas. Los envases deben estar cerrados o protegidos, identificados cuando sea necesario, sin contacto con el suelo y colocados de forma que permitan circulación de aire si el equipo lo requiere. Es mala práctica sobrecargar equipos, bloquear rejillas, mezclar productos incompatibles o guardar alimentos sin protección.",
+          "La rotación evita que queden productos antiguos detrás de los nuevos. Como regla operativa, se usa primero lo que caduca o se preparó antes, siempre que conserve condiciones correctas. Si hay duda sobre fecha, procedencia o estado, no se intenta resolver sirviendo el alimento: se aparta y se informa a la persona responsable.",
+          "La conservación también incluye limpieza de equipos y control de incidencias. Derrames, condensaciones, envases abiertos, puertas mal cerradas, fallos de frío, olores extraños o presencia de suciedad deben comunicarse. El operario contribuye a la seguridad alimentaria observando, registrando si procede y no normalizando anomalías."
+        ]
+      },
+      {
+        "heading": "4. Emplatado y presentación",
+        "paragraphs": [
+          "Emplatar es disponer el alimento en plato, bandeja, recipiente o envase para su servicio. No es solo una cuestión estética: afecta a temperatura, ración, identificación, comodidad del usuario y protección frente a contaminación. Un buen emplatado es limpio, ordenado, rápido y coherente con la dieta o menú indicado.",
+          "Antes de emplatar se comprueba que vajilla, bandejas y utensilios estén limpios, secos cuando proceda y en buen estado. No deben usarse platos rotos, recipientes sucios, tapas deformadas ni envases no aptos para el uso previsto. La zona de emplatado debe permitir separar alimentos, montar raciones sin confusión y retirar restos con rapidez.",
+          "La ración debe ajustarse a las instrucciones recibidas. En comedores, hospitales, residencias, centros educativos u otros servicios colectivos, puede haber dietas especiales, restricciones, alergias comunicadas por los canales internos o necesidades de textura. El operario no improvisa sustituciones; si falta un componente o aparece una duda, pregunta a la persona responsable.",
+          "La presentación debe favorecer consumo y control. Los alimentos líquidos o con salsa se colocan de forma estable; los elementos calientes se sirven de manera que conserven temperatura; los fríos no deben calentarse por esperas indebidas; las tapas o cubiertas se colocan cuando el circuito lo exija. Las manos no deben tocar la parte de contacto alimentario de platos, vasos, cubiertos o envases.",
+          "El emplatado final debe ser revisable: ración correcta, plato limpio en bordes, ausencia de cuerpos extraños visibles, temperatura coherente con el servicio, correspondencia con menú y destino. Esta revisión es especialmente importante cuando se preparan varias bandejas o carros, porque un error repetido puede afectar a muchos usuarios."
+        ]
+      },
+      {
+        "heading": "5. Transporte de alimentos",
+        "paragraphs": [
+          "Transportar alimentos consiste en moverlos desde la zona de preparación o conservación hasta el punto de consumo, reparto o entrega manteniendo sus condiciones. Puede hacerse dentro del mismo edificio, entre dependencias o en vehículo autorizado por la organización. En todos los casos se busca proteger el alimento, mantener temperatura, evitar derrames y conservar identificación.",
+          "Los recipientes de transporte deben ser adecuados al producto: cerrados cuando sea necesario, limpios, resistentes, fáciles de manipular y compatibles con frío o calor si se requiere. Las tapas, carros, contenedores isotermos o bandejas evitan exposición al polvo, contacto accidental, caída de objetos y pérdida de temperatura. No se mezclan alimentos con productos de limpieza, residuos, ropa sucia u otros materiales incompatibles.",
+          "Durante el traslado se reduce el tiempo de exposición. La ruta debe estar preparada: puertas accesibles, superficies despejadas, carros en buen estado y cargas equilibradas. Un carro sobrecargado aumenta riesgo de caída, golpes y derrames. Los recipientes con líquidos o salsas deben colocarse de forma estable y, si procede, separados de alimentos que puedan contaminarse por derrame.",
+          "Si el transporte incluye carros o vehículos, el operario debe comprobar limpieza, cierre, sujeción y condiciones generales antes de cargar. Los alimentos se manipulan con cuidado para evitar roturas de envases o mezcla de raciones. Al llegar al destino se entrega conforme al circuito establecido, sin dejar alimentos abandonados en pasillos, muelles, zonas de paso o lugares sin control.",
+          "Cualquier incidencia durante el transporte debe comunicarse: caída de bandeja, apertura de envase, pérdida de temperatura apreciable, retraso, confusión de destino, derrame, contaminación visible o fallo del carro. La seguridad del usuario prevalece sobre la urgencia del reparto."
+        ]
+      },
+      {
+        "heading": "6. Errores frecuentes que debe evitar el operario",
+        "paragraphs": [
+          "Los errores más frecuentes se relacionan con la prisa y la falta de orden: sacar demasiados productos a la vez, dejar alimentos descubiertos, usar el mismo utensilio para crudo y preparado sin limpieza, olvidar tapas, mezclar destinos, no revisar etiquetas, sobrecargar cámaras o carros, ignorar derrames y retrasar avisos.",
+          "También son errores confiar solo en el aspecto del alimento, probar productos para decidir si sirven, recolocar alimentos caídos, retirar una parte visible de suciedad y servir el resto, o considerar que una incidencia menor no debe comunicarse. En un servicio colectivo, pequeñas desviaciones pueden multiplicarse. La actuación profesional es preventiva: si algo no está claro, se aparta, se identifica y se consulta."
+        ]
+      },
+      {
+        "heading": "7. Criterio práctico de examen",
+        "paragraphs": [
+          "Para responder preguntas de oposición, conviene asociar cada fase con su verbo clave. Preparar es ordenar y transformar con higiene. Conservar es proteger mediante temperatura, envase, identificación y rotación. Emplatar es racionar y presentar sin contaminación ni confusión. Transportar es trasladar manteniendo protección, temperatura e identificación.",
+          "Si una pregunta plantea varias opciones, suele ser correcta la que prioriza higiene, separación, control de temperatura, comunicación de incidencias y respeto de instrucciones del centro. Suelen ser incorrectas las opciones que normalizan improvisación, mezcla de alimentos incompatibles, exposición prolongada, uso de envases sucios o decisión individual ante dudas relevantes."
+        ]
+      }
+    ],
+    "review_pack": {
+      "key_terms": [
+        {
+          "term": "Contaminación cruzada",
+          "definition": "Paso de microorganismos, suciedad o sustancias no deseadas de un alimento, utensilio, superficie o mano a otro alimento."
+        },
+        {
+          "term": "Conservación en frío",
+          "definition": "Mantenimiento de alimentos en equipos y condiciones de baja temperatura indicadas por el procedimiento del centro."
+        },
+        {
+          "term": "Mantenimiento en caliente",
+          "definition": "Conservación temporal de alimentos preparados calientes hasta su servicio evitando enfriamientos indebidos."
+        },
+        {
+          "term": "Rotación de existencias",
+          "definition": "Uso ordenado de productos para consumir antes los que tienen fecha anterior o preparación más antigua."
+        },
+        {
+          "term": "Emplatado",
+          "definition": "Disposición de alimentos en plato, bandeja o envase conforme a ración, menú, dieta, presentación y servicio."
+        },
+        {
+          "term": "Transporte protegido",
+          "definition": "Traslado de alimentos en recipientes, carros o contenedores adecuados que evitan contaminación, derrames y pérdida de condiciones."
+        }
+      ],
+      "control_questions": [
+        {
+          "question": "¿Por qué preparación, conservación, emplatado y transporte deben entenderse como una cadena?",
+          "answer": "Porque un fallo en una fase afecta a las siguientes y puede comprometer higiene, temperatura, presentación o seguridad del alimento."
+        },
+        {
+          "question": "¿Qué debe hacer el operario ante un alimento con envase roto, olor extraño o identificación dudosa?",
+          "answer": "Apartarlo, evitar su uso y comunicar la incidencia a la persona responsable según el procedimiento del centro."
+        },
+        {
+          "question": "¿Qué riesgos reduce la separación entre alimentos crudos, cocinados y listos para consumo?",
+          "answer": "Reduce la contaminación cruzada y evita que alimentos listos para comer entren en contacto con fuentes de riesgo."
+        },
+        {
+          "question": "¿Qué elementos se revisan antes del emplatado?",
+          "answer": "Limpieza y estado de vajilla, bandejas, utensilios, zona de trabajo, raciones, menú, dietas y recipientes."
+        },
+        {
+          "question": "¿Qué debe mantenerse durante el transporte de alimentos?",
+          "answer": "Protección física, temperatura adecuada, identificación, estabilidad de recipientes, limpieza y separación de materiales incompatibles."
+        },
+        {
+          "question": "¿Cuál es la respuesta prudente ante una caída, derrame o retraso durante el traslado?",
+          "answer": "Comunicar la incidencia, no servir alimentos comprometidos y seguir instrucciones de la persona responsable."
+        }
+      ],
+      "exam_clues": [
+        "Elegir respuestas que mencionen higiene, separación, temperatura, protección e identificación.",
+        "Desconfiar de opciones que propongan improvisar, ocultar incidencias o servir alimentos dudosos.",
+        "Recordar que guantes o utensilios no sustituyen limpieza, cambio y orden de trabajo.",
+        "Asociar transporte correcto con recipientes cerrados, rutas preparadas y tiempos mínimos de exposición."
+      ]
+    },
+    "tts_notes": {
+      "audio_roman_numeral_policy": "No aparecen títulos con números romanos en este bloque. Si se añadieran referencias como Título I o Título II, deben revisarse para lectura ordinal o cardinal antes de TTS.",
+      "pronunciation_focus": [
+        "contaminación cruzada",
+        "conservación en frío",
+        "mantenimiento en caliente",
+        "rotación de existencias",
+        "transporte protegido"
+      ]
+    }
+  },
+  "quality_notes": [
+    "Contenido trazable al epígrafe oficial y adaptado a nivel AP.",
+    "Unidad editorial continua, no fragmentada en párrafos inconexos.",
+    "Sin dependencia de normativa concreta no incluida en el paquete de entrada.",
+    "target_words_min y target_words_max venían a 0; se interpreta como ausencia de límite cuantitativo cerrado."
+  ],
+  "coherence_controls": {
+    "matches_official_topic": true,
+    "content_block_final": true,
+    "not_over_atomized": true,
+    "audience_level": "AP",
+    "domain_blocking_missing_input": false,
+    "target_words_min": 0,
+    "target_words_max": 0,
+    "context_ref_only_handling": "Entrada required ref_only con required_ref_action=ack_evidence_required; se resuelve mediante nota y test_receipt en agent_ack.json."
+  },
+  "i18n": {
+    "locale": "es-ES",
+    "plain_language": true,
+    "audio_ready": true
+  }
+}

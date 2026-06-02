@@ -104,6 +104,15 @@ JSON reparable, contexto omitido o palabras ambiguas en logs no justifican
 Director normaliza, revisa, pide rework o replanifica. Cada Codex padre puede
 usar hasta 6 subagentes y no hay limite global artificial de Codex padres salvo
 frontera dura externa o instruccion explicita del operador.
+Los rails de detalle operativo/local no son una condicion de parada en
+produccion. Si una entrega menciona `agent_packet.json`, runtime, provider,
+modelo, HOME como diagnostico sin secreto efectivo, receipts o evidencia
+ref-only, Orquesta debe conservar esa informacion como evidencia/advisory y
+seguir el flujo. Solo seguridad real, causalidad rota, refs imposibles, datos
+sensibles efectivos o efectos externos no autorizados justifican un corte duro.
+La decision de retirar, ignorar, mantener o convertir una regla blanda en tarea
+de mejora corresponde al Director o al agente orquestador del flujo. Un rail
+blando no debe tener autoridad automatica para vetar trabajo.
 
 ## Corte Director Operativo
 

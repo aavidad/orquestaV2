@@ -1,0 +1,114 @@
+{
+  "schema_version": "opes_content_block.v1",
+  "artifact_type": "content_block",
+  "job_id": "7a0cf9c149c9e07a261ece298694a552",
+  "work_kind": "draft_content_block",
+  "language_code": "es",
+  "level": "AP",
+  "document_kind": "temario_oposicion",
+  "plan_ref": "plan-cc93fbb0a41c1b04b2a4a82bb7ac3ed2",
+  "plan_part_ref": "tema_01",
+  "plan_part_kind": "section",
+  "order": 1,
+  "title": "Tema 1 - Constitución Española de 1978 y Administración local",
+  "official_topic_text": "La Constitución Española de 1978: estructura y contenido. Derechos y deberes fundamentales. La Administración Local: regulación constitucional. Tipología de los entes locales. El municipio: Organización y competencias municipales. La Provincia: Organización, competencias.",
+  "official_source_id": "OPES/administracion-especial/Operario/Operario.txt",
+  "source_refs": [
+    "opes-salidas_codex_directo_operario_ap_produccion_externa_2026-05-19_markdown_importable_tema_01_constitucion_administracion_local.md",
+    "opes_administracion-especial_materias-comunes-grupo-ap_materias-comunes-grupo-ap.txt",
+    "opes_administracion-especial_operario_operario.txt#tema-01"
+  ],
+  "common_source_refs": [
+    "OPES/administracion-especial/Materias-comunes-Grupo-AP/Materias-comunes-Grupo-AP.txt",
+    "OPES/administracion-especial/Materias-comunes-de-los-programas-que-han-de-regir-en-las-pruebas-selectivas-en-los-procesos-de-estabilizacion-temporal-Subgrupo-AP-00003/Materias-comunes-de-los-programas-que-han-de-regir-en-las-pruebas-selectivas-en-los-procesos-de-estabilizacion-temporal-Subgrupo-AP-00003.txt",
+    "opes-salidas/codex_directo/operario/AP/produccion_externa_2026-05-19/markdown_importable/tema_01_constitucion_administracion_local.md",
+    "opes-salidas/codex_directo/operario/AP/produccion_externa_2026-05-19/markdown_importable/tema_02_empleados_publicos.md"
+  ],
+  "audio_roman_numeral_policy": "Cuando aparezcan Título I, II, III, IV, V, VI, VII, VIII, IX, X u otros números romanos, deben leerse como números ordinales/cardinales en audio y revisarse antes de generar TTS.",
+  "audio_review_notes": [
+    "Leer Título I como Título primero.",
+    "Leer Título VIII como Título octavo.",
+    "Leer artículo 137 como artículo ciento treinta y siete.",
+    "Leer artículo 140 como artículo ciento cuarenta.",
+    "Leer artículo 141 como artículo ciento cuarenta y uno."
+  ],
+  "content": [
+    {
+      "heading": "1. La Constitución Española de 1978: estructura y contenido",
+      "paragraphs": [
+        "La Constitución Española de 1978 es la norma superior del ordenamiento jurídico español. Todas las normas y todos los poderes públicos quedan sujetos a ella. Para una prueba de nivel AP interesa comprender su función práctica: fija las reglas básicas de convivencia, organiza las instituciones del Estado, reconoce derechos y deberes de la ciudadanía y establece el marco general de la organización territorial.",
+        "Su estructura formal se compone de un preámbulo, un título preliminar, diez títulos, disposiciones adicionales, transitorias, derogatoria y final. El preámbulo expresa los fines generales del texto constitucional. El título preliminar recoge principios esenciales como el Estado social y democrático de Derecho, la soberanía nacional, la monarquía parlamentaria, la unidad de la Nación española, el reconocimiento de la autonomía de nacionalidades y regiones, el castellano como lengua oficial del Estado y el papel de partidos, sindicatos, asociaciones empresariales y Fuerzas Armadas.",
+        "Los títulos constitucionales desarrollan materias diferenciadas. El Título I regula los derechos y deberes fundamentales. El Título II se ocupa de la Corona. El Título III regula las Cortes Generales. El Título IV trata del Gobierno y de la Administración. El Título V regula las relaciones entre el Gobierno y las Cortes Generales. El Título VI se refiere al Poder Judicial. El Título VII aborda economía y hacienda. El Título VIII regula la organización territorial del Estado. El Título IX establece el Tribunal Constitucional. El Título X regula la reforma constitucional.",
+        "El contenido de la Constitución combina principios, instituciones y garantías. No es solo una declaración política: vincula a legisladores, administraciones, jueces y ciudadanos. Por eso las leyes estatales, autonómicas y locales deben respetarla. En materia local, la Constitución no regula todos los detalles de ayuntamientos y diputaciones, pero sí fija bases imprescindibles: autonomía local, gobierno municipal democrático, provincia como entidad local y participación de los entes locales en la organización territorial."
+      ]
+    },
+    {
+      "heading": "2. Derechos y deberes fundamentales",
+      "paragraphs": [
+        "Los derechos y deberes fundamentales se encuentran en el Título I. Antes de enumerarlos, la Constitución proclama la dignidad de la persona, los derechos inviolables que le son inherentes, el libre desarrollo de la personalidad, el respeto a la ley y el respeto a los derechos de los demás como fundamento del orden político y de la paz social.",
+        "En el bloque de derechos más protegidos se incluyen, entre otros, el derecho a la vida y a la integridad física y moral, la libertad ideológica, religiosa y de culto, la libertad y seguridad, la inviolabilidad del domicilio, el secreto de las comunicaciones, la libertad de residencia y circulación, la libertad de expresión e información, el derecho de reunión, el derecho de asociación, la participación en asuntos públicos, la tutela judicial efectiva, el principio de legalidad penal, la educación, la libertad sindical y el derecho de petición.",
+        "La Constitución también reconoce derechos y deberes de la ciudadanía, como el deber de defender España en los términos previstos legalmente, el deber de contribuir al sostenimiento de los gastos públicos según la capacidad económica mediante un sistema tributario justo, el derecho a contraer matrimonio con igualdad jurídica, el derecho a la propiedad privada y a la herencia, y el derecho al trabajo. Además, recoge principios rectores de la política social y económica, como la protección de la familia, la Seguridad Social, la protección de la salud, el acceso a la cultura, el medio ambiente adecuado, la vivienda digna, la protección de consumidores y usuarios, y la atención a personas mayores y personas con discapacidad.",
+        "Para estudiar este bloque conviene distinguir entre derechos fundamentales, derechos y deberes ordinarios, y principios rectores. Los derechos fundamentales gozan de protección reforzada y condicionan de forma intensa la actuación administrativa. Los principios rectores orientan la legislación, la práctica judicial y la actuación de los poderes públicos, aunque normalmente necesitan desarrollo legal para poder exigirse en todos sus efectos."
+      ]
+    },
+    {
+      "heading": "3. La Administración Local: regulación constitucional",
+      "paragraphs": [
+        "La Administración Local forma parte de la organización territorial del Estado. La Constitución reconoce municipios, provincias y comunidades autónomas, y garantiza la autonomía de todos ellos para la gestión de sus respectivos intereses. Esta autonomía no significa independencia ni soberanía propia, sino capacidad de actuar dentro del ordenamiento jurídico para atender los intereses de la colectividad local.",
+        "El artículo 137 establece que el Estado se organiza territorialmente en municipios, provincias y comunidades autónomas. El artículo 140 garantiza la autonomía de los municipios, indica que gozarán de personalidad jurídica plena y señala que su gobierno y administración corresponde a sus respectivos ayuntamientos, integrados por alcaldes y concejales. Los concejales son elegidos por los vecinos mediante sufragio universal, igual, libre, directo y secreto, y los alcaldes son elegidos por los concejales o por los vecinos, según establezca la ley.",
+        "El artículo 141 define la provincia como entidad local con personalidad jurídica propia, determinada por la agrupación de municipios, y como división territorial para el cumplimiento de actividades del Estado. Su gobierno y administración autónoma se encomienda a diputaciones u otras corporaciones de carácter representativo. La Constitución también permite crear agrupaciones de municipios distintas de la provincia y regula de forma específica los archipiélagos mediante cabildos o consejos.",
+        "La regulación constitucional se completa con la legislación básica de régimen local y con normas autonómicas de desarrollo. Para nivel AP basta retener la idea central: la Constitución fija la existencia y autonomía de las entidades locales esenciales, y las leyes concretan su organización, sus competencias, sus servicios y su funcionamiento."
+      ]
+    },
+    {
+      "heading": "4. Tipología de los entes locales",
+      "paragraphs": [
+        "Los entes locales son administraciones públicas territoriales o de base local que gestionan intereses propios de una comunidad vecinal o supramunicipal. Los entes locales básicos son el municipio, la provincia y la isla en los archipiélagos. Junto a ellos pueden existir otras entidades locales reconocidas por la legislación, como comarcas, áreas metropolitanas, mancomunidades de municipios y entidades de ámbito territorial inferior al municipio, según el marco legal aplicable.",
+        "El municipio es la entidad local básica de convivencia. Representa a la comunidad vecinal y presta servicios cercanos: limpieza, alumbrado, cementerio, abastecimiento de agua, vías públicas, parques, instalaciones municipales y otros servicios que dependen del tamaño y de la normativa aplicable. La provincia agrupa municipios y tiene una función de cooperación, asistencia y coordinación, especialmente importante para municipios pequeños con menos medios técnicos o económicos.",
+        "Las islas tienen entidad propia en los archipiélagos. En Canarias se articulan mediante cabildos insulares y en Baleares mediante consejos insulares. Las mancomunidades permiten que varios municipios se unan voluntariamente para prestar obras o servicios comunes. Las comarcas y áreas metropolitanas responden a necesidades de gestión supramunicipal, como transporte, residuos, urbanismo o servicios compartidos, cuando la ley las configure.",
+        "La clave de examen es no confundir ente local con órgano. El municipio es un ente local; el ayuntamiento es el órgano de gobierno y administración del municipio. La provincia es un ente local; la diputación provincial es, con carácter general, su órgano de gobierno y administración. Esta distinción ayuda a ordenar todo el tema."
+      ]
+    },
+    {
+      "heading": "5. El municipio: organización y competencias municipales",
+      "paragraphs": [
+        "El municipio tiene personalidad jurídica plena y autonomía para gestionar sus intereses. Sus elementos clásicos son el territorio, la población y la organización. El territorio es el término municipal. La población está formada por los vecinos inscritos en el padrón municipal. La organización se articula a través del ayuntamiento y de sus órganos.",
+        "La organización municipal básica incluye el alcalde, los tenientes de alcalde, el pleno y, en los municipios donde proceda, la junta de gobierno local. El alcalde dirige el gobierno y la administración municipal, representa al ayuntamiento, convoca y preside sesiones, dicta bandos y ejerce las atribuciones que le reconocen las leyes. Los tenientes de alcalde sustituyen al alcalde por el orden de nombramiento en casos de ausencia, vacante o enfermedad. El pleno está integrado por todos los concejales y presidido por el alcalde; debate y decide asuntos esenciales de la vida municipal. La junta de gobierno local colabora con el alcalde y ejerce las atribuciones que le deleguen o le atribuya la ley.",
+        "Las competencias municipales son los ámbitos materiales en los que el municipio puede actuar. Comprenden materias próximas a la vida diaria: urbanismo, medio ambiente urbano, abastecimiento de agua, alumbrado público, cementerio, recogida de residuos, limpieza viaria, tráfico y movilidad urbana, protección civil, instalaciones deportivas, cultura, servicios sociales en los términos legales y participación en la vigilancia del cumplimiento de la escolaridad obligatoria, entre otras. No todos los municipios prestan los mismos servicios con la misma intensidad, porque la ley atiende a la población, capacidad y condiciones de cada municipio.",
+        "En la práctica administrativa, el municipio presta servicios, dicta ordenanzas, aprueba presupuestos, gestiona tributos locales, mantiene instalaciones y atiende expedientes. Para una plaza de operario AP es importante vincular el tema con tareas reales: conservación de edificios municipales, apoyo a servicios básicos, mantenimiento de espacios públicos, colaboración en instalaciones y cumplimiento de instrucciones dentro de la organización municipal."
+      ]
+    },
+    {
+      "heading": "6. La provincia: organización y competencias",
+      "paragraphs": [
+        "La provincia es una entidad local con personalidad jurídica propia formada por la agrupación de municipios. También funciona como división territorial para el cumplimiento de actividades del Estado. Su finalidad local principal es apoyar a los municipios, coordinar servicios y garantizar que la ciudadanía reciba prestaciones básicas con independencia del tamaño o recursos del municipio donde resida.",
+        "La organización provincial se articula, con carácter general, a través de la diputación provincial. Sus órganos principales son el presidente, los vicepresidentes, la junta de gobierno y el pleno. El presidente dirige el gobierno y administración provincial y representa a la diputación. Los vicepresidentes sustituyen al presidente cuando proceda. La junta de gobierno asiste al presidente y ejerce funciones delegadas. El pleno provincial reúne a los diputados provinciales y adopta decisiones de especial relevancia, como presupuestos, planes provinciales y asuntos normativos.",
+        "Las competencias provinciales se orientan a la cooperación municipal. Destacan la asistencia y cooperación jurídica, económica y técnica a los municipios, especialmente a los de menor capacidad; la coordinación de servicios municipales para asegurar una prestación adecuada; la prestación de servicios públicos de carácter supramunicipal; el fomento y administración de intereses peculiares de la provincia; y la aprobación de planes provinciales de obras y servicios.",
+        "La provincia no sustituye al municipio en sus responsabilidades ordinarias, sino que lo apoya y complementa. Esta idea es esencial: el ayuntamiento atiende el interés municipal inmediato, mientras la diputación ayuda a que el conjunto de municipios de la provincia pueda prestar servicios de forma equilibrada. En oposiciones de nivel AP conviene estudiar la provincia como estructura de apoyo, coordinación y garantía de servicios, no como una administración alejada de la realidad municipal."
+      ]
+    },
+    {
+      "heading": "7. Síntesis para repaso AP",
+      "paragraphs": [
+        "La Constitución de 1978 es la norma suprema y organiza el Estado como social y democrático de Derecho. Su estructura incluye preámbulo, título preliminar, diez títulos y disposiciones finales. El Título I regula derechos y deberes; el Título VIII contiene la base constitucional de la organización territorial.",
+        "La Administración Local se apoya en la autonomía local. El municipio es la entidad básica, gobernada y administrada por el ayuntamiento. La provincia agrupa municipios y se gobierna, con carácter general, mediante diputación provincial. Las competencias municipales se centran en servicios próximos a la ciudadanía; las competencias provinciales se centran en cooperación, asistencia y coordinación municipal.",
+        "La respuesta de examen debe usar vocabulario preciso: autonomía no es independencia; ente local no es lo mismo que órgano; municipio no es lo mismo que ayuntamiento; provincia no es lo mismo que diputación. Con estas distinciones, el tema queda conectado y trazable al epígrafe oficial."
+      ]
+    }
+  ],
+  "coherence_controls": {
+    "matches_official_topic": true,
+    "content_block_final": true,
+    "not_over_atomized": true,
+    "audience_level": "AP",
+    "domain_blocking_missing_input": false,
+    "target_words_min": 0,
+    "target_words_max": 0,
+    "context_ref_only_handling": "Entrada required ref_only con required_ref_action=ack_evidence_required; se resolverá mediante nota y test_receipt en agent_ack.json."
+  },
+  "i18n": {
+    "locale": "es-ES",
+    "plain_language": true,
+    "audio_ready": true
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "schema_version": "opes_content_block.v0",
+  "job_id": "ab68a143853edbb90d76fd1087643891",
+  "artifact_type": "content_block",
+  "language_code": "es",
+  "level": "AP",
+  "document_kind": "temario_oposicion",
+  "plan_ref": "plan-cc93fbb0a41c1b04b2a4a82bb7ac3ed2",
+  "plan_part_ref": "tema_08",
+  "plan_part_kind": "section",
+  "order": 8,
+  "source_refs": [
+    "opes_administracion-especial_operario_operario.txt#tema-08"
+  ],
+  "official_source_id": "OPES/administracion-especial/Operario/Operario.txt",
+  "title": "Tema 8. Manipulacion de alimentos, proteccion medioambiental, residuos hosteleros y trazabilidad",
+  "official_topic_text": "Manipulacion de alimentos. Requisitos de los manipuladores de alimentos. Proteccion medioambiental. Nociones basicas sobre contaminacion ambiental. Tratamiento de residuos hosteleros, normas sanitarias para su control y eliminacion. Trazabilidad, conceptos basicos.",
+  "content_file": "content_block.md",
+  "editorial_status": "draft_pending_normative_currency_review",
+  "normative_currency_review_required": true,
+  "notes": [
+    "Bloque editorial amplio y continuo para nivel AP.",
+    "No se incorporan citas legales cerradas hasta control de actualidad normativa.",
+    "Politica de numeros romanos para audio revisada: el bloque no usa titulos con numeros romanos."
+  ]
+}

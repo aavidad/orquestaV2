@@ -185,6 +185,16 @@ Documentos de entrada obligatorios para cambios transversales:
   descartarlo.
   Los unicos cortes fuertes aceptables son seguridad, causalidad, refs
   imposibles, datos sensibles o efectos externos no autorizados.
+  Los rails de detalle operativo/local (`detalle_prohibido`, nombres de
+  ficheros de control, runtime, provider, modelo, HOME escrito como referencia
+  o diagnostico sin valor sensible) son advisory en produccion: se registran
+  como evidencia o nota de revision, pero no bloquean una entrega ni paran un
+  agente. Si vuelven a bloquear trabajo valido, hay que quitarlos del camino de
+  ejecucion, no endurecerlos.
+  El rail no decide: el Director o el agente que orquesta el trabajo decide si
+  una regla blanda se ignora, se elimina, se conserva como diagnostico o se
+  transforma en tarea de mejora. El codigo no debe convertir una heuristica
+  blanda en veto automatico.
 - Si una decision requiere producto, runtime, modelo, cuota o proveedor,
   documenta la frontera y dejala en adaptador/composicion.
 - Configuracion canonica: Orquesta y cualquier app generada o modificada por

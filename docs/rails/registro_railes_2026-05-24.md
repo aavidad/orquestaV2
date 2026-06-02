@@ -20,6 +20,17 @@ comando ni ficheros sueltos sin propietario.
   defecto si el operador no fija un valor explicito, para no bloquear
   autoprogramacion por falsos positivos. Las listas y tests estrictos se
   conservan y pueden reactivarse con `ORQUESTA_DETAIL_PROHIBITED_RAILS=on`.
+- 2026-06-02: la regla vigente cambia para produccion: los rails de detalle
+  operativo/local no bloquean entregas aunque el modo de detalle este activo.
+  Referencias a runtime, provider, modelo, ficheros de control, HOME usado como
+  diagnostico sin valor sensible, receipts o evidencia `ref_only` quedan como
+  advisory/evidencia. Solo datos sensibles efectivos, refs imposibles,
+  causalidad rota, salida del workdir, borrados no autorizados o efectos
+  externos no autorizados siguen siendo cortes fuertes.
+  La autoridad de decision queda en el Director o agente orquestador: el rail
+  produce senal, no veto. Si una regla blanda entorpece trabajo valido, el
+  Director/orquestador puede ignorarla, retirarla del flujo o convertirla en
+  tarea de mejora.
 
 ## Adaptadores actuales
 

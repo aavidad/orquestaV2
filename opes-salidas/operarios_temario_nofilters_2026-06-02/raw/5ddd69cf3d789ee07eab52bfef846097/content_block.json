@@ -1,0 +1,125 @@
+{
+  "schema_version": "opes_content_block.v0",
+  "artifact_type": "content_block",
+  "job_id": "5ddd69cf3d789ee07eab52bfef846097",
+  "language_code": "es",
+  "level": "AP",
+  "document_kind": "temario_oposicion",
+  "plan_ref": "plan-cc93fbb0a41c1b04b2a4a82bb7ac3ed2",
+  "plan_part_ref": "tema_10",
+  "plan_part_kind": "section",
+  "order": 10,
+  "title": "Tema 10. Conceptos básicos en la prevención de riesgos laborales: clasificación y prevención de riesgos. Medidas preventivas con los productos de limpieza en su uso y almacenamiento en relación al trabajador y al usuario. Riesgo de incendio en la cocina: conceptos básicos, medidas preventivas y actuaciones a realizar.",
+  "official_topic_text": "Conceptos básicos en la prevención de riesgos laborales: clasificación y prevención de riesgos. Medidas preventivas con los productos de limpieza en su uso y almacenamiento en relación al trabajador y al usuario. Riesgo de incendio en la cocina: conceptos básicos, medidas preventivas y actuaciones a realizar.",
+  "source_refs": [
+    "opes_administracion-especial_operario_operario.txt#tema-10"
+  ],
+  "audio_notes": [
+    "No se han usado números romanos en el cuerpo del bloque. Si se incorporan en una versión posterior, deben revisarse para lectura ordinal o cardinal antes de generar TTS."
+  ],
+  "content": [
+    {
+      "heading": "1. Sentido de la prevención de riesgos laborales",
+      "paragraphs": [
+        "La prevención de riesgos laborales es el conjunto de actividades, medidas y hábitos destinados a evitar que el trabajo cause daños a la salud de las personas. En el puesto de operario, esta idea no se limita a cumplir instrucciones generales: afecta a la forma de manipular cargas, utilizar herramientas, limpiar espacios, almacenar productos, circular por zonas de trabajo, actuar ante derrames y responder ante una emergencia. La prevención empieza antes de que aparezca el daño, porque busca reconocer los peligros, valorar cuándo pueden convertirse en riesgo y aplicar medidas que reduzcan la probabilidad de accidente o la gravedad de sus consecuencias.",
+        "Un peligro es una fuente con capacidad de producir daño, como una superficie mojada, una sustancia irritante, un cable deteriorado o una sartén con aceite caliente. El riesgo aparece cuando una persona puede entrar en contacto con ese peligro en unas condiciones concretas. Por ejemplo, un producto desengrasante concentrado es un peligro por su composición química, pero el riesgo aumenta si se usa sin guantes, se mezcla con otros productos, se trasvasa a una botella sin etiqueta o se almacena al alcance de usuarios no autorizados. Por eso la prevención requiere observar la tarea real, no solo conocer normas de forma abstracta.",
+        "La actuación preventiva se apoya en una secuencia sencilla: identificar peligros, eliminar lo que sea evitable, reducir lo que no pueda eliminarse, organizar el trabajo de forma segura, utilizar equipos adecuados y comunicar cualquier incidencia. En servicios de limpieza, cocina, almacén o mantenimiento básico, muchas medidas preventivas son simples pero decisivas: mantener el orden, no bloquear salidas, limpiar derrames de inmediato, señalizar zonas húmedas, revisar el estado de útiles y aparatos, separar productos incompatibles, respetar instrucciones de uso y pedir ayuda cuando una tarea exceda la formación o los medios disponibles."
+      ]
+    },
+    {
+      "heading": "2. Clasificación general de los riesgos",
+      "paragraphs": [
+        "Los riesgos laborales pueden clasificarse según el origen del daño. Los riesgos de seguridad se relacionan con accidentes inmediatos: caídas al mismo nivel por suelos resbaladizos, caídas a distinto nivel al usar escaleras de mano, golpes contra objetos, cortes con útiles, atrapamientos, quemaduras, contactos eléctricos o incendios. En el trabajo de operario son frecuentes cuando se improvisan medios, se dejan objetos en zonas de paso, se manipulan herramientas sin revisión o se trabaja con prisa en espacios compartidos.",
+        "Los riesgos higiénicos derivan de la exposición a agentes que pueden afectar a la salud por inhalación, contacto o ingestión accidental. Incluyen productos químicos de limpieza, polvo, vapores, humos, ruido, temperaturas extremas y agentes biológicos presentes en residuos, aseos, comedores o zonas con restos orgánicos. La prevención exige usar productos en las concentraciones indicadas, ventilar, evitar salpicaduras, no comer ni beber durante la manipulación de sustancias, lavarse las manos tras la tarea y utilizar equipos de protección cuando proceda.",
+        "Los riesgos ergonómicos aparecen cuando la tarea exige posturas forzadas, movimientos repetitivos, esfuerzos intensos o manipulación manual de cargas. Son habituales al fregar grandes superficies, mover carros, levantar cubos, transportar bolsas, alcanzar zonas altas o trabajar durante mucho tiempo inclinado. La medida preventiva no consiste solo en hacer fuerza con cuidado, sino en organizar el trabajo: repartir cargas, usar carros, acercar el objeto al cuerpo, flexionar las piernas, evitar giros bruscos del tronco, alternar tareas y solicitar apoyo para pesos o volúmenes que no puedan manejarse con seguridad.",
+        "También existen riesgos psicosociales y organizativos, vinculados a ritmos de trabajo, falta de información, conflictos, turnos, urgencias mal planificadas o interrupciones constantes. Aunque parezcan alejados de un puesto operativo, influyen en la seguridad porque la presión y la desorganización favorecen descuidos. Una instrucción clara, una comunicación respetuosa, la coordinación con otros servicios y la notificación temprana de incidencias forman parte de la prevención."
+      ]
+    },
+    {
+      "heading": "3. Principios prácticos de prevención",
+      "paragraphs": [
+        "La medida preventiva preferente es eliminar el riesgo en su origen. Si un cable cruza una zona de paso, lo correcto no es acostumbrarse a saltarlo, sino retirarlo, protegerlo o modificar el recorrido. Si una estantería está sobrecargada, no basta con manipular con cuidado los paquetes: debe corregirse la colocación. Cuando no sea posible eliminar el riesgo, se reducirá mediante medidas técnicas, organizativas y personales.",
+        "Las medidas colectivas protegen a varias personas a la vez y tienen prioridad sobre las individuales. Son ejemplos la ventilación, la señalización de suelo mojado, las barandillas, los resguardos de maquinaria, las zonas separadas de almacenamiento, los extintores accesibles, las instrucciones visibles y el mantenimiento preventivo. Los equipos de protección individual, como guantes, gafas, mascarillas o calzado antideslizante, completan la protección cuando el riesgo persiste, pero no sustituyen a una organización segura del trabajo.",
+        "La información y la formación son esenciales. Cada trabajador debe saber qué producto usa, para qué sirve, cómo se diluye, qué incompatibilidades tiene, qué protección requiere y qué hacer si se produce una salpicadura, un derrame o una intoxicación. Del mismo modo, debe conocer las vías de evacuación, la ubicación de extintores y avisadores, el procedimiento de aviso interno y las limitaciones de su intervención en emergencias. Ante una duda razonable, la conducta segura es detener la tarea si existe peligro inmediato, informar al responsable y no improvisar soluciones que puedan agravar el riesgo."
+      ]
+    },
+    {
+      "heading": "4. Productos de limpieza: uso seguro",
+      "paragraphs": [
+        "Los productos de limpieza pueden ser detergentes, desengrasantes, desinfectantes, lejías, amoniacales, limpiadores ácidos, limpiacristales u otros preparados. Su peligrosidad depende de la composición, la concentración, la forma de aplicación y el contacto con otros productos. Algunos irritan la piel o los ojos, otros desprenden vapores, otros pueden ser corrosivos y otros aumentan el riesgo de resbalón si quedan restos sobre el suelo. Por ello debe leerse la etiqueta y seguir la ficha o instrucciones disponibles en el centro.",
+        "Una regla básica es no mezclar productos. La mezcla de lejía con amoniaco, ácidos u otros limpiadores puede generar gases peligrosos. Tampoco deben aumentarse las dosis por creer que así se limpia mejor: una concentración superior a la indicada puede dañar superficies, irritar a trabajadores y usuarios, dejar residuos y empeorar el ambiente de trabajo. Si se prepara una disolución, debe hacerse en el recipiente adecuado, con agua según la instrucción del producto, evitando salpicaduras y usando protección cuando sea necesaria.",
+        "Durante el uso deben mantenerse ventiladas las zonas cerradas siempre que sea posible. Los envases han de permanecer cerrados cuando no se estén utilizando. No se deben trasvasar productos a botellas de agua, refrescos u otros recipientes que puedan inducir a error. Si el trasvase está autorizado por el procedimiento del centro, el nuevo recipiente debe quedar etiquetado de forma clara, con el nombre del producto y las advertencias necesarias. La ausencia de etiqueta convierte un producto en un riesgo añadido porque impide actuar con rapidez ante una exposición accidental.",
+        "La protección del trabajador incluye guantes adecuados al producto, calzado antideslizante, gafas si existe riesgo de salpicadura y mascarilla o protección respiratoria si así lo indican las instrucciones. La protección del usuario exige organizar la tarea para que no acceda a zonas mojadas, recién tratadas o con productos expuestos. En edificios con público, personas mayores, menores o personas con movilidad reducida, la señalización y el cierre temporal de la zona son medidas especialmente importantes."
+      ]
+    },
+    {
+      "heading": "5. Almacenamiento de productos de limpieza",
+      "paragraphs": [
+        "El almacenamiento seguro evita accidentes antes de que empiece la tarea. Los productos deben guardarse en lugares destinados a ese fin, ventilados cuando sea necesario, separados de alimentos, menaje, ropa personal y fuentes de calor. Deben mantenerse fuera del alcance de usuarios no autorizados y, si procede, en armarios cerrados. Los envases se colocarán estables, con la etiqueta visible y sin sobrecargar estanterías. Los productos más pesados deben situarse en zonas bajas para evitar caídas o esfuerzos innecesarios.",
+        "La separación de productos incompatibles es una medida esencial. Los ácidos no deben almacenarse junto a lejías u otros productos con los que puedan reaccionar. Los productos inflamables, si existen, requieren especial atención: lejos de llamas, chispas, superficies calientes y zonas sin ventilación. También debe controlarse el estado de los envases. Un tapón defectuoso, una garrafa hinchada, una etiqueta ilegible o restos cristalizados en el exterior son señales que requieren comunicar la incidencia y no usar el producto hasta recibir instrucciones.",
+        "El almacén debe mantenerse limpio y ordenado, con pasillos despejados y sin acumulación de materiales innecesarios. El orden no es una cuestión estética, sino preventiva: permite encontrar lo necesario, reduce manipulaciones, evita tropiezos y facilita una respuesta rápida si hay derrame. Ante un derrame, debe limitarse el acceso, ventilar si procede, usar protección, recoger según las instrucciones del producto y comunicar la incidencia. Nunca se debe evacuar un producto químico por desagües o contenedores si las instrucciones del centro lo prohíben."
+      ]
+    },
+    {
+      "heading": "6. Riesgo de incendio en la cocina",
+      "paragraphs": [
+        "La cocina concentra varios factores de incendio: calor, llamas, aceites, grasas, aparatos eléctricos, gas, campanas extractoras, papel, cartón, textiles, productos de limpieza y prisas en el servicio. Un incendio puede iniciarse por una sartén olvidada, una freidora sobrecalentada, grasa acumulada en filtros, un enchufe sobrecargado, un cable deteriorado o un paño colocado cerca de una fuente de calor. La prevención exige vigilancia constante y limpieza adecuada de las zonas donde se acumula grasa.",
+        "Para que se produzca fuego suelen coincidir combustible, oxígeno, calor y una reacción que mantiene la combustión. En la cocina, el combustible puede ser aceite, grasa, papel, gas o un material plástico; el calor puede proceder de fogones, hornos, resistencias o chispas eléctricas. Comprender esta idea ayuda a prevenir: se evita acercar combustibles a fuentes de calor, se apagan equipos que no se usan, se revisan anomalías, se mantiene la ventilación y se conserva el orden en superficies de trabajo.",
+        "Las medidas preventivas básicas son no abandonar recipientes al fuego, controlar temperaturas de aceites y freidoras, limpiar derrames de grasa, mantener filtros y campanas según el programa de limpieza, no sobrecargar enchufes, no usar aparatos con cables dañados, cerrar llaves o suministros cuando proceda y mantener libres las salidas y los accesos a extintores. Los productos inflamables o aerosoles no deben guardarse cerca de hornos, fuegos o zonas calientes. Los paños, servilletas y cartones deben alejarse de llamas y placas.",
+        "El orden durante el trabajo reduce la probabilidad de incendio y mejora la reacción ante un incidente. Un extintor oculto por cajas, una salida bloqueada o una alfombrilla desplazada pueden transformar un conato controlable en una emergencia grave. Por ello es obligación preventiva no obstaculizar vías de evacuación, puertas cortafuegos, cuadros eléctricos ni equipos de emergencia. Si se detecta olor a gas, humo anormal, chisporroteo eléctrico o calentamiento excesivo de un aparato, debe avisarse de inmediato y seguir el procedimiento del centro."
+      ]
+    },
+    {
+      "heading": "7. Actuaciones ante un incendio o conato en cocina",
+      "paragraphs": [
+        "La primera actuación es proteger la vida. Ante humo, llamas o una situación que no se controla de forma inmediata, se debe avisar según el protocolo del centro y activar la alarma o comunicación interna prevista. Si hay personas en peligro, se prioriza alejarlas de la zona sin exponerse. Las actuaciones deben ser proporcionadas al riesgo y a la formación disponible: solo se intentará actuar sobre un conato si es pequeño, se dispone del medio adecuado, se tiene una vía de salida libre y la persona está formada o autorizada para hacerlo. En caso contrario, se cerrará la zona si puede hacerse sin riesgo y se esperará a los equipos de emergencia.",
+        "No todos los fuegos se apagan igual. En fuegos de aceite o grasa no debe echarse agua, porque puede provocar proyecciones y extender las llamas. Si es seguro, puede cortarse la fuente de calor y cubrirse el recipiente con una tapa o manta ignífuga adecuada, evitando moverlo. En fuegos eléctricos, si es posible y seguro, debe cortarse la corriente antes de intervenir y no usar agua. Los extintores deben emplearse conforme a su tipo y a las instrucciones recibidas, dirigiendo la descarga a la base de las llamas y manteniendo siempre una salida a la espalda.",
+        "Si se ordena evacuar, se abandonará la zona con calma, sin recoger objetos personales y sin volver atrás. Las puertas pueden cerrarse al salir si eso no retrasa ni pone en riesgo la evacuación, porque ayuda a limitar la propagación de humo y fuego. No se deben usar ascensores. En el punto de encuentro o zona segura se informará de personas afectadas, ubicación del fuego, presencia de gas, productos químicos u otros riesgos relevantes. La información clara facilita la intervención y evita exposiciones innecesarias.",
+        "Después del incidente, aunque el conato parezca resuelto, se comunicará para que se revise el equipo, la instalación y las causas. Volver a usar una freidora, un horno, una campana o un enchufe afectado sin revisión puede reactivar el riesgo. La prevención posterior incluye analizar qué ocurrió, retirar materiales dañados, reponer extintores usados, limpiar residuos con protección adecuada y corregir la condición que originó el problema."
+      ]
+    },
+    {
+      "heading": "8. Cierre operativo para el puesto de operario",
+      "paragraphs": [
+        "Para un puesto de nivel AP, la clave del tema es aplicar criterios claros y constantes: reconocer peligros, mantener orden y limpieza, respetar instrucciones, usar equipos de protección cuando correspondan, proteger también a los usuarios del servicio y comunicar incidencias. En prevención no se premia la improvisación, sino la conducta segura y coordinada.",
+        "En productos de limpieza, las ideas esenciales son etiqueta, dosis, no mezcla, ventilación, protección, almacenamiento separado y señalización de zonas tratadas. En cocina, las ideas esenciales son control del calor, control de grasas, equipos en buen estado, salidas despejadas, extintores accesibles, aviso rápido y actuación limitada al conato cuando sea seguro. La suma de estas medidas reduce accidentes y permite que el servicio se preste con seguridad para trabajadores, usuarios y bienes públicos."
+      ]
+    }
+  ],
+  "coverage": [
+    {
+      "official_segment": "Conceptos básicos en la prevención de riesgos laborales",
+      "covered_by": [
+        "1",
+        "3",
+        "8"
+      ]
+    },
+    {
+      "official_segment": "Clasificación y prevención de riesgos",
+      "covered_by": [
+        "2",
+        "3"
+      ]
+    },
+    {
+      "official_segment": "Medidas preventivas con los productos de limpieza en su uso y almacenamiento en relación al trabajador y al usuario",
+      "covered_by": [
+        "4",
+        "5"
+      ]
+    },
+    {
+      "official_segment": "Riesgo de incendio en la cocina: conceptos básicos, medidas preventivas y actuaciones a realizar",
+      "covered_by": [
+        "6",
+        "7"
+      ]
+    }
+  ],
+  "traceability": {
+    "official_source_id": "OPES/administracion-especial/Operario/Operario.txt",
+    "primary_ref": "opes_administracion-especial_operario_operario.txt#tema-10",
+    "context_ref_only_resolution": "ack_evidence_required atendido mediante evidencia explicita en ACK"
+  }
+}

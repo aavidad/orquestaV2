@@ -166,18 +166,20 @@ func TestCodexAgentAckReceiptV0RechazaValoresSensiblesEfectivos(t *testing.T) {
 	}
 }
 
-func TestCodexAgentAckReceiptV0RechazaRutasLocalesYControlComoEvidenciaProducto(t *testing.T) {
+func TestCodexAgentAckReceiptV0NoBloqueaDetalleOperativoComoEvidenciaProducto(t *testing.T) {
 	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "on")
 	spec := codexSpecForTestV0()
-	forbidden := []string{
+	cases := []string{
 		`"notes":["diagnostico publico en /home/alberto/proyecto"]`,
-		`"tests":["cat .orquesta-runtime/agent_packet.json"]`,
+		`"tests":["go test ./...","cat .orquesta-runtime/agent_packet.json"]`,
 		`"test_receipts":[{"schema_version":"codex_required_test_receipt.v0","command":"go test ./...","status":"passed","exit_code":0,"evidence_refs":["agent_ack.json"],"occurred_at":"2026-05-24T10:00:00Z","sequence":1,"output_redacted":true}]`,
 	}
-	for _, fragment := range forbidden {
+	for _, fragment := range cases {
 		data := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."],` + fragment + `}`
 		_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(data), spec)
-		requireCodexIssueV0(t, issues, CodexConnectorAckForbiddenV0)
+		if len(issues) != 0 {
+			t.Fatalf("detalle operativo no debe bloquear produccion issues=%+v fragment=%s", issues, fragment)
+		}
 	}
 }
 
