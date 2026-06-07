@@ -27,6 +27,23 @@ Estado: aceptada localmente.
 ```
 
 ```text
+Fecha: 2026-06-08
+Decision: `/ops` muestra una recomendacion operativa del Director y el estado
+del run seleccionado calculados en la propia proyeccion del panel.
+Motivo: antes de crear el cockpit completo, el operador necesita ver si el
+estado actual pide replan/rework, espera de entregas, lanzar ola, cierre o
+nuevo objetivo. Los datos ya estan en cola, stats y agentes; no hace falta
+endpoint nuevo.
+Alternativas: esperar a timeline causal completa; crear un backend nuevo solo
+para la tarjeta; duplicar `/director-stats`.
+Impacto: `directorDecisionSummary`, `renderDirectorDecision` y el bloque
+`Estado del Director` quedan como proyeccion UI no durable. No cambian
+contratos REST ni introducen acceso a DB, stores, runtime, OPES, proveedor o
+filesystem.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-05-04
 Decision: `orquesta-web` arrancara el flujo de nueva app como adaptador fino de `SolicitarNuevaApp v0`.
 Motivo: El contrato publico de `orquesta-factory` define que el puerto valida, normaliza y propone, sin persistir estado, crear tareas directas, arrancar runtime ni decidir reglas de negocio en la UI.

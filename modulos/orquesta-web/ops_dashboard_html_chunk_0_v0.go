@@ -45,6 +45,11 @@ const opsDashboardHTMLChunk0V0 = `<!doctype html>
     .flow-card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; }
     .flow-card .metric { margin-top: 6px; font-size: 24px; font-weight: 750; }
     .flow-card.attention { border-color: rgba(253,176,34,.7); }
+    .director-callout { border: 1px solid var(--line); background: rgba(124,212,253,.06); border-radius: 8px; margin-bottom: 12px; padding: 12px 14px; display: grid; gap: 8px; }
+    .director-callout.attention { border-color: rgba(253,176,34,.7); background: rgba(253,176,34,.08); }
+    .director-callout .label { color: var(--muted); font-size: 12px; text-transform: uppercase; }
+    .director-callout .decision { font-size: 18px; font-weight: 750; overflow-wrap: anywhere; }
+    .director-callout .reason { color: var(--muted); overflow-wrap: anywhere; }
     .panel { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; overflow: hidden; }
     .panel h2 { margin: 0; padding: 12px 14px; font-size: 14px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.02); }
     .pad { padding: 12px 14px; }
@@ -168,6 +173,11 @@ const opsDashboardHTMLChunk0V0 = `<!doctype html>
 
     <main class="grid layout">
       <section class="stack">
+        <div id="director-callout" class="director-callout" aria-label="director autónomo">
+          <div class="label">Director</div>
+          <div id="director-decision" class="decision">Esperando datos</div>
+          <div id="director-reason" class="reason">Aún no hay snapshot operativo.</div>
+        </div>
         <div class="panel">
           <h2>Proyectos / runs</h2>
           <div class="filters" aria-label="filtros de proyectos">

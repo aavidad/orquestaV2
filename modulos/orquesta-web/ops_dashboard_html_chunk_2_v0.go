@@ -91,6 +91,7 @@ const opsDashboardHTMLChunk2V0 = `    }
       text('kpi-disk', worstDisk ? ((worstDisk.used_percent || 0) + '%') : '-');
       text('kpi-disk-hint', worstDisk ? shortRef(worstDisk.path) : '-');
       renderFlowSummary(ranked, runs, agents, queueCount, activeAgentCount);
+      renderDirectorDecision(ranked, runs, agents, queueCount, activeAgentCount);
       updateCompletedHistory(runs, ranked);
       lastSnapshot = {runs: runs, agents: agents, ranked: ranked, tasks: tasks};
       if (!selectedRunRef && runs.length) selectedRunRef = runs[0].run_ref;
@@ -131,6 +132,55 @@ const opsDashboardHTMLChunk2V0 = `    }
       byId('flow-attention-card').className = 'flow-card' + (attentionRuns + attentionAgents > 0 ? ' attention' : '');
       text('flow-closure', terminalRuns);
       text('flow-closure-hint', taskTotals.closed + '/' + taskTotals.total + ' tareas cerradas');
+    }
+    function directorDecisionSummary(ranked, runs, agents, queueCount, activeAgentCount) {
+      const attentionRuns = (runs || []).filter(runNeedsAttention);
+      const attentionAgents = (agents || []).filter(function(agent) {
+        return agent.needs_attention || Number(agent.no_progress_ticks || 0) > 0 || String(agent.progress_status || '').toLowerCase().includes('stall');
+      });
+      const activeRuns = (runs || []).filter(function(run) {
+        return matchesStatus(run.status || run.closure_status, 'running') && !isTerminalRun(run);
+      });
+      const terminalRuns = (runs || []).filter(isTerminalRun);
+      if (attentionRuns.length || attentionAgents.length) {
+        return {
+          attention: true,
+          decision: 'Revisar y replanificar',
+          reason: attentionRuns.length + ' runs y ' + attentionAgents.length + ' agentes requieren atención antes de abrir más trabajo.'
+        };
+      }
+      if (activeRuns.length || Number(activeAgentCount || 0) > 0) {
+        return {
+          attention: false,
+          decision: 'Esperar entregas acotadas',
+          reason: activeRuns.length + ' runs activos y ' + Number(activeAgentCount || 0) + ' agentes en vuelo; mantener supervisión y waits por refs.'
+        };
+      }
+      if (Number(queueCount || 0) > 0 || (ranked || []).length > 0) {
+        return {
+          attention: false,
+          decision: 'Lanzar siguiente ola',
+          reason: (queueCount || (ranked || []).length) + ' trabajos preparados en cola; el supervisor puede tomar el siguiente lote.'
+        };
+      }
+      if (terminalRuns.length) {
+        return {
+          attention: false,
+          decision: 'Cerrar o preparar nuevo objetivo',
+          reason: terminalRuns.length + ' runs terminales observados; revisar evidencia y pendientes futuros.'
+        };
+      }
+      return {
+        attention: false,
+        decision: 'Sin trabajo activo',
+        reason: 'No hay cola ni runs activos publicados por las fuentes actuales.'
+      };
+    }
+    function renderDirectorDecision(ranked, runs, agents, queueCount, activeAgentCount) {
+      const summary = directorDecisionSummary(ranked, runs, agents, queueCount, activeAgentCount);
+      byId('director-callout').className = 'director-callout' + (summary.attention ? ' attention' : '');
+      text('director-decision', summary.decision);
+      text('director-reason', summary.reason);
     }
     function runNeedsAttention(run) {
       return !!run.blocked ||

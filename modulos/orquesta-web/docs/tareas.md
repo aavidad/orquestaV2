@@ -186,6 +186,24 @@ Estado: completada.
 ```
 
 ```text
+ID: WEB-028
+Objetivo: Mostrar en `/ops` una decision operativa del Director y el estado del
+run seleccionado derivados de cola, runs y agentes ya publicados, sin endpoint
+nuevo.
+Write-set: ops_dashboard_html_chunk_0_v0.go, ops_dashboard_html_chunk_2_v0.go,
+ops_dashboard_html_chunk_4_v0.go, ops_dashboard_endpoint_v0_test.go, docs
+locales.
+Simbolo foco: directorDecisionSummary
+Contrato: Consume snapshots de `autoprogramming/status`, `director/stats` y
+cola ya usados por `/ops`; el detalle muestra fase, cierre, tareas, agentes y
+frescura publicos del run seleccionado.
+Validacion: `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto`.
+Bloqueos: No es decision canonica durable; es proyeccion UI para operador hasta
+que timeline causal completa publique decisiones del Director.
+Estado: completada.
+```
+
+```text
 ID: WEB-022
 Objetivo: Exponer panel web JSON para pausar, reanudar, parar o cancelar runs
 sin que la web conozca RunControl, runtime ni stores.

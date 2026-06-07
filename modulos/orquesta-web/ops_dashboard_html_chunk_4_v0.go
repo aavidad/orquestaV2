@@ -6,6 +6,11 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
         '<div class="task-title">' + esc(runTitle(run)) + '</div>' +
         '<div class="task-subtitle mono">' + esc(run.run_ref || '-') + '</div>' +
         runFlowHTML(run, runAgents, tasks) +
+        '<div class="kv"><div class="k">Estado del Director</div><div>' +
+          '<div class="sub">fase <span class="mono">' + esc(run.current_phase || '-') + '</span> · cierre <span class="mono">' + esc(run.closure_status || '-') + '</span> · bloqueo <span class="mono">' + esc(run.blocked ? 'sí' : 'no') + '</span></div>' +
+          '<div class="sub">tareas ' + esc(String(run.tasks_closed || 0)) + '/' + esc(String(run.tasks_total || tasks.length || 0)) + ' · agentes vuelo ' + esc(String(run.agents_in_flight || 0)) + ' · avanzan ' + esc(String(run.progressing_agents || 0)) + ' · parados ' + esc(String(run.stalled_agents || 0)) + '</div>' +
+          '<div class="sub">frescura <span class="mono">' + esc(run.progress_source || '-') + '</span> · stats <span class="mono">' + esc(run.stats_fetch_status || '-') + '</span> · motivo <span class="mono">' + esc(run.stats_reason_code || '-') + '</span></div>' +
+        '</div></div>' +
         '<div class="kv"><div class="k">ID tarea</div><div><span class="task-id">' + esc(run.task_id || taskIDFromRef(run.run_ref)) + '</span></div></div>' +
         '<div class="kv"><div class="k">Proyecto</div><div class="mono">' + esc(run.app_ref || '-') + '</div></div>' +
         '<div class="kv"><div class="k">Estado</div><div>' + statusPill(run.status || 'unknown') + '</div></div>' +
