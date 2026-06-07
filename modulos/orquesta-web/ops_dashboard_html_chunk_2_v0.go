@@ -21,6 +21,7 @@ const opsDashboardHTMLChunk2V0 = `    }
       let server = {};
       let resources = {};
       let auto = {};
+      let timeline = {};
       try {
         const result = await Promise.allSettled([
           fetchJSON('/api/v0/server/status'),
@@ -36,11 +37,29 @@ const opsDashboardHTMLChunk2V0 = `    }
               include_agent_progress: true,
               include_agent_usage: true
             })
+          }),
+          fetchJSON('/api/v0/observability/workspace-timeline', {
+            method: 'POST',
+            headers: {'content-type': 'application/json'},
+            body: JSON.stringify({
+              schema_version: 'workspace_timeline_query.v0',
+              request_id: 'ops-timeline-' + Date.now(),
+              correlation_id: 'corr-ops-timeline-' + Date.now(),
+              consumer: {module: 'orquesta-web', channel: 'web'},
+              locale: 'es-ES',
+              scope: 'workspace',
+              time_window: {preset: 'last_hour'},
+              page: {limit: 12},
+              sources: ['director_stats', 'run_queue', 'runtime_progress'],
+              include_sources: ['director_stats', 'run_queue', 'runtime_progress'],
+              freshness: {max_age_seconds: 30}
+            })
           })
         ]);
         if (result[0].status === 'fulfilled') server = result[0].value; else diagnostics.push(result[0].reason.message);
         if (result[1].status === 'fulfilled') resources = result[1].value; else diagnostics.push(result[1].reason.message);
         if (result[2].status === 'fulfilled') auto = result[2].value; else diagnostics.push(result[2].reason.message);
+        if (result[3].status === 'fulfilled') timeline = result[3].value; else diagnostics.push(result[3].reason.message);
         const queue = auto.queue || {};
         const ranked = queue.ranked || [];
         const runRefs = ranked.slice(0, maxRuns).map(function(item) { return item.run_ref; }).filter(Boolean);
@@ -50,11 +69,11 @@ const opsDashboardHTMLChunk2V0 = `    }
           if (projection.stats_fetch_status !== 'ok') diagnostics.push(runRefs[index] + ': ' + projection.stats_reason_code);
           return projection;
         });
-        render({server: server, resources: resources, auto: auto, ranked: ranked, stats: stats, diagnostics: diagnostics});
+        render({server: server, resources: resources, auto: auto, timeline: timeline, ranked: ranked, stats: stats, diagnostics: diagnostics});
         markLive(true);
       } catch (err) {
         diagnostics.push(err.message || String(err));
-        render({server: server, resources: resources, auto: auto, ranked: [], stats: [], diagnostics: diagnostics});
+        render({server: server, resources: resources, auto: auto, timeline: timeline, ranked: [], stats: [], diagnostics: diagnostics});
         markLive(false);
       }
     }
@@ -106,7 +125,8 @@ const opsDashboardHTMLChunk2V0 = `    }
       renderServer(data.server);
       renderAdminConfig(data.server);
       renderResources(data.resources);
-      renderDiagnostics((data.auto.diagnostics || []).concat((data.resources.issues || [])).concat((data.diagnostics || []).map(function(message) { return {code: 'fetch_error', message: message}; })));
+      renderWorkspaceSources(data.timeline || {});
+      renderDiagnostics((data.auto.diagnostics || []).concat((data.resources.issues || [])).concat((data.timeline || {}).warnings || []).concat((data.diagnostics || []).map(function(message) { return {code: 'fetch_error', message: message}; })));
       saveStableOrders();
       ensureRuntimeDetail(selectedRunRef);
     }

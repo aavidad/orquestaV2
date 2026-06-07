@@ -48,6 +48,10 @@ func (source serverWorkspaceTimelineSourceV0) QueryWorkspaceTimelineV0(
 			var statsItems []orquestaobservability.WorkspaceTimelineItemV0
 			statsItems, available = source.statsItemsV0(ctx, query, occurredAt)
 			items = append(items, statsItems...)
+		case orquestaobservability.WorkspaceTimelineSourceDirectorStatsV0:
+			var directorItems []orquestaobservability.WorkspaceTimelineItemV0
+			directorItems, available = source.directorStatsItemsV0(ctx, query, occurredAt)
+			items = append(items, directorItems...)
 		}
 		statuses = append(statuses, source.statusV0(sourceName, available))
 	}
@@ -63,10 +67,17 @@ func (source serverWorkspaceTimelineSourceV0) QueryWorkspaceTimelineV0(
 		GeneratedAt:   occurredAt,
 		CorrelationID: strings.TrimSpace(query.CorrelationID),
 		Scope:         orquestaobservability.WorkspaceTimelineScopeWorkspaceV0,
+		WorkspaceRef:  strings.TrimSpace(query.WorkspaceRef),
 		ProjectRef:    strings.TrimSpace(query.ProjectRef),
 		AgentRef:      strings.TrimSpace(query.AgentRef),
 		TaskRef:       strings.TrimSpace(query.TaskRef),
-		TimeWindow:    query.TimeWindow,
+		RunRef:        strings.TrimSpace(query.RunRef),
+		Filters: orquestaobservability.WorkspaceTimelineFiltersV0{
+			AgentRef:   strings.TrimSpace(query.AgentRef),
+			ProjectRef: strings.TrimSpace(query.ProjectRef),
+			TaskRef:    strings.TrimSpace(query.TaskRef),
+		},
+		TimeWindow: query.TimeWindow,
 		Page: orquestaobservability.WorkspaceTimelinePageV0{
 			Limit:     limit,
 			CursorRef: strings.TrimSpace(query.Page.CursorRef),

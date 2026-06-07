@@ -40,6 +40,48 @@ Errores publicos:
 
 - `director_supervisor_decision_invalida`
 
+## BuildDirectorSupervisorBriefingV0
+
+Entrada canonica: `DirectorSupervisorBriefingInputV0`.
+
+Campos:
+
+- `decision`: `DirectorSupervisorDecisionV0` ya calculada.
+- `objective_ref`: ref opcional del objetivo externo.
+- `context_refs`: refs opacas opcionales de contexto.
+
+Salida:
+
+- `DirectorSupervisorBriefingV0` con `schema_version`,
+  `run_ref`, `decision_action`, `autonomous_recommendation` y `reason_code`.
+- `next_action`: primera accion recomendada para el supervisor externo.
+- `action_queue`: cola tipada de acciones recomendadas.
+- `timeline`: evento compacto derivado de la decision.
+- refs deduplicadas de outbox, espera, bloqueos, contexto y evidencia.
+
+Acciones tipadas:
+
+- `run_director_step`
+- `dispatch_outbox`
+- `wait_external_signal`
+- `ask_director`
+- `review_blocker`
+- `close_or_idle`
+- `stop_budget_exhausted`
+- `inspect_error`
+
+Invariantes:
+
+- No ejecuta la accion recomendada.
+- No despacha outbox, no espera, no arranca agentes y no persiste.
+- No conoce runtime, proveedor, modelo, DB, web, OPES ni Codex.
+- No corta por strings recuperables: proyecta solo enums/refs ya validados.
+- Los refs de contexto/evidencia se compactan y deduplican.
+
+Errores publicos:
+
+- `director_supervisor_decision_invalida`
+
 ## No Contratos
 
 No forman parte de este modulo:

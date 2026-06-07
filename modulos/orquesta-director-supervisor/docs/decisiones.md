@@ -38,3 +38,18 @@ Motivo:
   candidatos pendientes equivalen a esperar.
 - `candidate_missing` bajo `needs_director` puede representar una fuente externa
   de candidatos aun no lista, por lo que se conserva como espera sin efectos.
+
+## DSV-005: briefing antes que cockpit
+
+El primer corte de Director autonomo expone `DirectorSupervisorBriefingV0` como
+contrato puro: decision, `next_action`, `action_queue`, timeline compacta y refs
+de evidencia/contexto.
+
+Motivo:
+
+- `/ops`, MCP o cualquier app consumidora necesitan una cola de accion canonica,
+  no recomponer la decision desde strings de UI.
+- El briefing no ejecuta nada: los efectos siguen en adaptadores/supervisor
+  externo.
+- No se introducen filtros de contenido ni rails blandos; solo se proyectan
+  acciones desde enums ya validados por el supervisor.

@@ -281,6 +281,10 @@ const opsDashboardHTMLChunk0V0 = `<!doctype html>
           <div id="resources-detail" class="pad"></div>
         </div>
         <div class="panel">
+          <h2>Fuentes</h2>
+          <div id="sources-detail" class="pad"></div>
+        </div>
+        <div class="panel">
           <h2>Diagnóstico</h2>
           <div id="diagnostics" class="pad"></div>
         </div>

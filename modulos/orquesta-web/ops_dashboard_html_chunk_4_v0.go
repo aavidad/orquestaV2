@@ -391,6 +391,20 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
         diskRows || kv('Disco', 'sin datos')
       ].join('');
     }
+    function renderWorkspaceSources(timeline) {
+      timeline = timeline || {};
+      const freshness = timeline.freshness || {};
+      const sources = Array.isArray(timeline.sources) ? timeline.sources : [];
+      const sourceRows = sources.map(function(source) {
+        return kv(source.source || '-', (source.status || '-') + (source.reason_code ? ' · ' + source.reason_code : ''));
+      }).join('');
+      byId('sources-detail').innerHTML = [
+        kv('Timeline', timeline.timeline_ref || timeline.timeline_id || '-'),
+        kv('Generado', timeline.generated_at || '-'),
+        kv('Frescura', 'watermark ' + (freshness.watermark_ref || '-') + ' · edad ' + String(freshness.max_age_seconds == null ? '-' : freshness.max_age_seconds) + 's · parcial ' + String(!!freshness.partial) + ' · stale ' + String(!!freshness.stale)),
+        sourceRows || kv('Fuentes', 'workspace_timeline no publicado')
+      ].join('');
+    }
     function renderDiagnostics(items) {
       if (!items.length) {
         byId('diagnostics').innerHTML = '<div class="sub">Sin incidencias publicadas.</div>';

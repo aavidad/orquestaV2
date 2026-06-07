@@ -42,3 +42,18 @@ Cierre:
 
 - la decision expone `autonomous_recommendation`;
 - outbox y candidatos pendientes recomiendan `wait` sin operador manual.
+
+### DSV-005 - Briefing canonico del Director
+
+Write-set: `supervisor_briefing_*_v0.go`, tests y docs locales.
+
+Cierre:
+
+- una `DirectorSupervisorDecisionV0` se proyecta a
+  `DirectorSupervisorBriefingV0`;
+- el briefing expone `next_action`, `action_queue` y `timeline` compacta;
+- las acciones quedan tipadas (`run_director_step`, `dispatch_outbox`,
+  `wait_external_signal`, `ask_director`, `review_blocker`,
+  `close_or_idle`, `stop_budget_exhausted`, `inspect_error`);
+- el modulo no ejecuta acciones, no arranca runtime y no conoce proveedor,
+  modelo, DB, web, OPES ni Codex.

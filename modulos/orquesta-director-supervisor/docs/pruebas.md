@@ -22,7 +22,12 @@ Cobertura esperada:
 - `needs_director`, `blocked` y `quiescent` se conservan como decisiones terminales;
 - error del ultimo paso produce `stop_error`;
 - inputs invalidos devuelven error publico.
+- `BuildDirectorSupervisorBriefingV0` convierte la decision en briefing con
+  `next_action`, `action_queue`, timeline compacta, refs deduplicadas y
+  validacion publica de decision incompleta.
 
 Resultado:
 
 - ok el 2026-05-06.
+- ok el 2026-06-08 con
+  `go test -count=1 ./modulos/orquesta-director-supervisor`.
