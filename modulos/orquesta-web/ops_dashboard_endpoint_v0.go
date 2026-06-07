@@ -29,10 +29,8 @@ func opsDashboardHTMLV0() string {
 	return strings.TrimSpace(strings.Join([]string{
 		opsDashboardHTMLChunk0V0,
 		opsDashboardHTMLChunk1V0,
-		opsDashboardHTMLLiveCachePolicyV0,
 		opsDashboardHTMLChunk2V0,
 		opsDashboardHTMLChunk3V0,
-		opsDashboardHTMLChunk3RuntimeDetailV0,
 		opsDashboardHTMLChunk4V0,
 		opsDashboardHTMLChunk5V0,
 	}, "\n")) + "\n"

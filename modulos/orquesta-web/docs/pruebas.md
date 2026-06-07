@@ -421,6 +421,19 @@ timeline causal del Director.
 ```
 
 ```text
+Caso: WEB-UT-029 panel ops no anida helpers live/runtime dentro de chunks partidos
+Tipo: unit/html contract
+Comando: `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0`
+Evidencia esperada: `opsDashboardHTMLV0` ensambla `opsDashboardHTMLChunk3RuntimeDetailV0`
+y `opsDashboardHTMLLiveCachePolicyV0` en el punto final previo al primer
+refresh; `refreshAll` puede ver `runtimeDetailHTML`, `buildRuns` y las
+funciones de stats en scope global del script.
+Ultima ejecucion: 2026-06-08, pasa con `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0`; validacion local adicional con Orquesta temporal `127.0.0.1:8788`, API `validate-request`/`prepare-run`/`runs/supervise`, CDP mostrando `live` y captura `/tmp/orquesta-ops-ui-8788-final.png`.
+Riesgos: Cubre el orden de chunks; la prueba visual/API local sigue siendo
+necesaria para comprobar el refresco real del navegador.
+```
+
+```text
 Caso: WEB-UT-027 tablas responsivas de panel ops
 Tipo: unit/html contract
 Comando: `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto`

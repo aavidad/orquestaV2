@@ -44,6 +44,21 @@ Estado: aceptada localmente.
 ```
 
 ```text
+Fecha: 2026-06-08
+Decision: Los helpers runtime y live/cache de `/ops` se inyectan en el punto
+final estable previo al primer `refreshAll()`.
+Motivo: el orden anterior dejaba `opsClampPercent`, `opsStatsProjection`,
+`buildRuns` o `runtimeDetailHTML` dentro del scope de funciones partidas; el
+navegador quedaba en `conectando` o `error` por `ReferenceError`.
+Alternativas: duplicar helpers en otro chunk; mover solo `buildRuns`; crear
+bundle nuevo. Se elige ordenar los chunks porque conserva la frontera actual y
+no cambia contratos.
+Impacto: solo cambia el ensamblado HTML/JS de `/ops` y el contrato HTML de
+test. No anade endpoint, store, runtime, DB, OPES, proveedor ni filesystem.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-05-04
 Decision: `orquesta-web` arrancara el flujo de nueva app como adaptador fino de `SolicitarNuevaApp v0`.
 Motivo: El contrato publico de `orquesta-factory` define que el puerto valida, normaliza y propone, sin persistir estado, crear tareas directas, arrancar runtime ni decidir reglas de negocio en la UI.

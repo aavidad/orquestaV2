@@ -1,6 +1,6 @@
 package orquestaweb
 
-const opsDashboardHTMLChunk5V0 = `    }
+const opsDashboardHTMLChunk5BeforeLiveCacheV0 = `    }
     function buildPhaseSummary(runs) {
       const byPhase = {};
       (runs || []).forEach(function(run) {
@@ -120,8 +120,13 @@ const opsDashboardHTMLChunk5V0 = `    }
 	        '</tr>';
 	      }).join('');
 	    }
-	    refreshAll();
+	    // ops-live-cache-policy injection point: despues de renderUsageMatrix y antes del primer refresh.
+	    `
+
+const opsDashboardHTMLChunk5AfterLiveCacheV0 = `refreshAll();
     timer = setInterval(refreshAll, refreshMs);
   </script>
 </body>
 </html>`
+
+const opsDashboardHTMLChunk5V0 = opsDashboardHTMLChunk5BeforeLiveCacheV0 + "\n" + opsDashboardHTMLChunk3RuntimeDetailV0 + "\n" + opsDashboardHTMLLiveCachePolicyV0 + "\n" + opsDashboardHTMLChunk5AfterLiveCacheV0

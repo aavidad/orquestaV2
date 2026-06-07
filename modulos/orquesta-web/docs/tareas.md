@@ -204,6 +204,23 @@ Estado: completada.
 ```
 
 ```text
+ID: WEB-029
+Objetivo: Corregir el ensamblado de `/ops` para que los helpers runtime y la
+politica live/cache no queden dentro de funciones partidas y `buildRuns`,
+helpers de stats y `runtimeDetailHTML` sean visibles por `refreshAll`.
+Write-set: ops_dashboard_endpoint_v0.go, ops_dashboard_html_chunk_5_v0.go,
+ops_dashboard_endpoint_v0_test.go y docs locales.
+Simbolo foco: opsDashboardHTMLV0
+Contrato: Solo cambia el orden de ensamblado HTML/JS; no anade endpoint, store,
+runtime, DB ni proveedor.
+Validacion: `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0`.
+Bloqueos: La validacion CDP detecto los fallos como `ReferenceError: buildRuns
+is not defined` y `runtimeDetailHTML is not defined`; debe validarse de nuevo
+con API local viva.
+Estado: completada.
+```
+
+```text
 ID: WEB-022
 Objetivo: Exponer panel web JSON para pausar, reanudar, parar o cancelar runs
 sin que la web conozca RunControl, runtime ni stores.

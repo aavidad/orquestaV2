@@ -123,6 +123,35 @@ func TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto(t *testing.T) {
 	}
 }
 
+func TestOpsDashboardWebEndpointV0CacheLiveNoQuedaDentroDeFetchRuntimeDetail(t *testing.T) {
+	body := opsDashboardHTMLV0()
+	fetchRuntime := strings.Index(body, "async function fetchRuntimeDetail")
+	ensureRuntime := strings.Index(body, "async function ensureRuntimeDetail")
+	refreshFunction := strings.Index(body, "async function refreshAll")
+	injectionPoint := strings.Index(body, "ops-live-cache-policy injection point")
+	runtimeDetail := strings.Index(body, "function runtimeDetailHTML")
+	clamp := strings.Index(body, "function opsClampPercent")
+	buildRuns := strings.Index(body, "function buildRuns")
+	refreshCall := -1
+	if injectionPoint >= 0 {
+		if relative := strings.Index(body[injectionPoint:], "refreshAll();"); relative >= 0 {
+			refreshCall = injectionPoint + relative
+		}
+	}
+	if fetchRuntime < 0 || ensureRuntime < 0 || refreshFunction < 0 || injectionPoint < 0 || runtimeDetail < 0 || clamp < 0 || buildRuns < 0 || refreshCall < 0 {
+		t.Fatalf("html incompleto: fetch=%d ensure=%d refreshFn=%d injection=%d runtime=%d clamp=%d buildRuns=%d refreshCall=%d", fetchRuntime, ensureRuntime, refreshFunction, injectionPoint, runtimeDetail, clamp, buildRuns, refreshCall)
+	}
+	if !(fetchRuntime < ensureRuntime && ensureRuntime < refreshFunction && refreshFunction < injectionPoint && injectionPoint < runtimeDetail && runtimeDetail < clamp && clamp < buildRuns && buildRuns < refreshCall) {
+		t.Fatalf("orden invalido: fetch=%d ensure=%d refreshFn=%d injection=%d runtime=%d clamp=%d buildRuns=%d refreshCall=%d", fetchRuntime, ensureRuntime, refreshFunction, injectionPoint, runtimeDetail, clamp, buildRuns, refreshCall)
+	}
+	if strings.Contains(body[fetchRuntime:ensureRuntime], "function opsClampPercent") {
+		t.Fatalf("ops cache policy no debe quedar dentro de fetchRuntimeDetail")
+	}
+	if strings.Contains(body[fetchRuntime:injectionPoint], "function runtimeDetailHTML") {
+		t.Fatalf("runtime detail helpers no deben quedar dentro de chunks partidos antes del punto de inyeccion")
+	}
+}
+
 func TestOpsDashboardWebEndpointV0SoloGET(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, WebOpsDashboardPageEndpointV0, nil)
