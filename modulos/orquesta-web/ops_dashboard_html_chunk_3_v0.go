@@ -20,7 +20,7 @@ const opsDashboardHTMLChunk3V0 = `          currently_visible: true,
       const status = String(agent.status || '').toLowerCase();
       const pstatus = String(progress.status || '').toLowerCase();
       if (status.includes('completed') || status.includes('delivered')) return 100;
-      if (agent.needs_attention || pstatus.includes('stalled')) return 35;
+      if (agentNeedsAttention(agent)) return 35;
       if (agent.in_flight && pstatus) return 65;
       if (agent.in_flight) return 45;
       return 0;
@@ -44,7 +44,7 @@ const opsDashboardHTMLChunk3V0 = `          currently_visible: true,
       if (!filter) return true;
       if (filter === 'running') return value.includes('running') || value.includes('ready') || value.includes('progress') || value.includes('wait');
       if (filter === 'completed') return value.includes('completed') || value.includes('closed') || value.includes('delivered');
-      if (filter === 'blocked') return value.includes('block') || value.includes('fail') || value.includes('error') || value.includes('stalled');
+      if (filter === 'blocked') return value.includes('block') || value.includes('fail') || value.includes('error');
       if (filter === 'open') return !matchesStatus(status, 'completed');
       if (filter === 'closed') return matchesStatus(status, 'completed');
       return value.includes(filter);
@@ -73,7 +73,7 @@ const opsDashboardHTMLChunk3V0 = `          currently_visible: true,
       }
       byId('projects-body').innerHTML = runs.map(function(run) {
         const percent = Number(run.percent_complete || 0);
-        const bad = run.blocked || Number(run.stalled_agents || 0) > 0 || Number(run.agents_failed || 0) > 0;
+        const bad = runNeedsAttention(run);
         const selected = run.run_ref === selectedRunRef ? ' class="selected"' : '';
         return '<tr data-run-ref="' + esc(run.run_ref || '') + '"' + selected + ' onclick="selectRun(\'' + jsArg(run.run_ref || '') + '\')">' +
           tableCell('Tarea', taskTitleCell(runTitle(run), run.app_ref || '-', run.task_id || taskIDFromRef(run.run_ref)), 'title="' + esc(runTitle(run)) + '"') +
@@ -117,7 +117,7 @@ const opsDashboardHTMLChunk3V0 = `          currently_visible: true,
       const signal = filterValue('filter-agent-signal');
       agents = (agents || []).filter(function(agent) {
         return matchesText(agent, query) &&
-          (status !== 'attention' ? matchesStatus(agent.status || agent.progress_status || '', status) : !!agent.needs_attention) &&
+          (status !== 'attention' ? matchesStatus(agent.status || agent.progress_status || '', status) : agentNeedsAttention(agent)) &&
           (signal !== 'progressing' || String(agent.progress_status || '').toLowerCase().includes('progress')) &&
           (signal !== 'stalled' || Number(agent.no_progress_ticks || 0) > 0 || String(agent.progress_status || '').toLowerCase().includes('stall'));
       });
@@ -132,7 +132,7 @@ const opsDashboardHTMLChunk3V0 = `          currently_visible: true,
           tableCell('Run', esc(shortRef(agent.run_ref || '-')), 'class="mono" title="' + esc(agent.run_ref || '-') + '"') +
 	  tableCell('Estado', statusPill(agent.status || 'unknown')) +
 	  tableCell('Tarea', taskTitleCell(agent.task_title || titleFromRef(agent.task_ref), shortRef(agent.task_ref || ''), agent.task_id || taskIDFromRef(agent.task_ref)), 'title="' + esc(agent.task_ref || '-') + '"') +
-	  tableCell('Progreso', bar(agent.percent, agent.needs_attention) + '<span class="sub">' + agent.percent + '%</span>') +
+	  tableCell('Progreso', bar(agent.percent, agentNeedsAttention(agent)) + '<span class="sub">' + agent.percent + '%</span>') +
 	  tableCell('Capacidad / uso', esc(agentUsageLabel(agent)), 'title="' + esc(agentUsageLabel(agent)) + '"') +
 	  tableCell('Señal', esc(agent.progress_status || '-') + ' · ticks ' + esc(String(agent.no_progress_ticks || 0)) + (agent.currently_visible === false ? ' · visto ' + esc(agent.last_seen_at || '-') : '')) +
         '</tr>';
@@ -160,6 +160,7 @@ const opsDashboardHTMLChunk3V0 = `          currently_visible: true,
             '<button class="small" type="button" title="Bajar prioridad" onclick="event.stopPropagation(); setQueueRowPriority(\'' + jsArg(item.run_ref || '') + '\', -25)">↓</button>' +
             '<button class="small" type="button" title="Pausar run" onclick="event.stopPropagation(); controlQueueRow(\'' + jsArg(item.run_ref || '') + '\', \'pause\')">Ⅱ</button>' +
             '<button class="small" type="button" title="Reanudar run" onclick="event.stopPropagation(); controlQueueRow(\'' + jsArg(item.run_ref || '') + '\', \'resume\')">▶</button>' +
+            '<button class="small" type="button" title="Avanzar run desde fila" onclick="event.stopPropagation(); superviseQueueRow(\'' + jsArg(item.run_ref || '') + '\')">↪</button>' +
           '</div>') +
         '</tr>';
       }).join('');

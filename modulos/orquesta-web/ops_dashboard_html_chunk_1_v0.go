@@ -9,7 +9,8 @@ const opsDashboardHTMLChunk1V0 = `      if (!n) return '-';
     function statusClass(value) {
       const v = String(value || '').toLowerCase();
       if (['ok','running','ready','completed','accepted','validada','validated'].includes(v)) return 'ok';
-      if (v.includes('block') || v.includes('fail') || v.includes('error') || v.includes('stalled')) return 'bad';
+      if (v.includes('block') || v.includes('fail') || v.includes('error')) return 'bad';
+      if (v.includes('stalled') || v.includes('stall')) return 'warn';
       if (v.includes('pending') || v.includes('wait') || v.includes('unknown')) return 'warn';
       return 'info';
     }

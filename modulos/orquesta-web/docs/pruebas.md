@@ -434,6 +434,32 @@ necesaria para comprobar el refresco real del navegador.
 ```
 
 ```text
+Caso: WEB-UT-030 panel ops no convierte stalled en atencion dura
+Tipo: unit/html contract
+Comando: `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0`
+Evidencia esperada: `agentNeedsAttention` y `runNeedsAttention` no usan
+`stalled_agents`, `no_progress_ticks` ni `stall` para marcar atencion; el panel
+sigue mostrando la señal stalled como telemetria/filtro.
+Ultima ejecucion: 2026-06-08, pasa con `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0`.
+Riesgos: No cambia la semantica de `director-stats`; solo evita que `/ops`
+duplique el rail blando en la decision visible del Director.
+```
+
+```text
+Caso: WEB-UT-031 panel ops invoca run supervisor
+Tipo: unit/html contract
+Comando: `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0`
+Evidencia esperada: `/ops` contiene botones `Lanzar ola`, `Avanzar run` y
+`Avanzar run desde fila`,
+funciones `superviseGlobalWave`, `superviseSelectedRun` y `superviseOps`, y
+consume `POST /api/v0/runs/supervise` mostrando `stop_reason`, `ticks`,
+`last.status` e historial de respuesta.
+Ultima ejecucion: 2026-06-08, pasa con `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0`.
+Riesgos: La prueba HTML fija el contrato de UI; una prueba local con servidor
+temporal debe validar que el executor real/fake responde.
+```
+
+```text
 Caso: WEB-UT-027 tablas responsivas de panel ops
 Tipo: unit/html contract
 Comando: `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto`

@@ -221,6 +221,42 @@ Estado: completada.
 ```
 
 ```text
+ID: WEB-030
+Objetivo: Alinear `/ops` con la regla vigente de que `stalled`/ticks sin
+progreso son telemetria, no atencion dura ni motivo de replan automatico.
+Write-set: ops_dashboard_html_chunk_*_v0.go, ops_dashboard_live_cache_policy_v0.go,
+ops_dashboard_endpoint_v0_test.go y docs locales.
+Simbolo foco: agentNeedsAttention, runNeedsAttention
+Contrato: La atencion del cockpit se activa por `needs_attention`,
+`loop_detected`, agente parado/fallido/error, checkpoint pendiente, bloqueo o
+validacion bloqueada. `stalled` se mantiene visible como señal/filtro, pero no
+marca atencion ni colorea como error.
+Validacion: `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0`.
+Bloqueos: No cambia endpoints ni contratos REST; solo la proyeccion UI del
+panel ops.
+Estado: completada.
+```
+
+```text
+ID: WEB-031
+Objetivo: Permitir que `/ops` lance una ola global o avance el run seleccionado
+o una fila de cola usando el supervisor publico, sin meter runtime ni stores en
+web.
+Write-set: ops_dashboard_html_chunk_0_v0.go, ops_dashboard_html_chunk_4_v0.go,
+ops_dashboard_endpoint_v0_test.go y docs locales.
+Simbolo foco: superviseOps
+Contrato: La UI consume `POST /api/v0/runs/supervise`; `run_ref` acota un run y
+sin `run_ref` usa `queue_ref=global`. La tabla de cola reutiliza el mismo helper
+con `run_ref`, sin relanzar toda la cola. La respuesta visible conserva `estado`,
+`run_ref`, `stop_reason`, `ticks`, `last.status`, `history`, diagnosticos y
+siguientes acciones.
+Validacion: `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0`.
+Bloqueos: La web no decide planificacion ni abre agentes directamente; solo
+pide un tick acotado al supervisor inyectado por la composicion.
+Estado: completada.
+```
+
+```text
 ID: WEB-022
 Objetivo: Exponer panel web JSON para pausar, reanudar, parar o cancelar runs
 sin que la web conozca RunControl, runtime ni stores.

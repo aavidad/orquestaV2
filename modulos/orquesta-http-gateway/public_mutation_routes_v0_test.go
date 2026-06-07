@@ -5,8 +5,10 @@ import "testing"
 func TestPublicRouteMutabilityV0ClasificaMutacionesPublicas(t *testing.T) {
 	for _, route := range []string{
 		RouteAutoprogrammingPrepareRunV0,
+		RouteAutoprogrammingSuperviseV0,
 		RouteRunControlV0,
 		RouteRunQueuePriorityV0,
+		RouteRunSupervisorV0,
 		RouteServerShutdownV0,
 		RouteNuevaAppV0,
 		RouteAppChangePageV0,

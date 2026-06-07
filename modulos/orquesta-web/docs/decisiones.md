@@ -28,6 +28,41 @@ Estado: aceptada localmente.
 
 ```text
 Fecha: 2026-06-08
+Decision: `/ops` no usa `stalled`, ticks sin progreso ni texto `stall` como
+disparador de atencion dura.
+Motivo: el panel habia vuelto a clasificar señales blandas como motivo de
+replanificacion visible del Director. Eso contradice la regla vigente: un agente
+puede estar pensando o sin escribir artefactos varios ticks sin que haya que
+parar, rechazar ni replanificar.
+Alternativas: mantener la alerta; ocultar stalled; usar solo `director-stats`.
+Se elige mostrar la telemetria y filtrar por ella, pero no usarla como veto.
+Impacto: `agentNeedsAttention` y `runNeedsAttention` solo marcan atencion por
+senales duras o explicitas: `needs_attention`, `loop_detected`, stopped,
+failed/error, checkpoint pendiente, bloqueo o validacion bloqueada. No cambian
+endpoints, stores, runtime, DB, OPES ni proveedor.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-06-08
+Decision: `/ops` puede pedir un tick acotado del supervisor desde la tarjeta del
+Director o desde el run seleccionado.
+Motivo: para probar Orquesta desde la propia app hacia su API, el operador
+necesita una accion visible que avance la cola/run sin usar CLI ni tocar stores.
+Alternativas: seguir usando solo llamadas externas a API; crear backend web
+nuevo; hacer que la web abra agentes directamente. Se elige consumir el
+endpoint publico existente.
+Impacto: se anaden botones `Lanzar ola` y `Avanzar run` que llaman
+`POST /api/v0/runs/supervise` con un tick y limites acotados de prueba. La web
+solo muestra la respuesta (`estado`, `stop_reason`, `ticks`, `last.status`,
+`history`, diagnosticos y siguientes acciones). No cambia core, runtime, DB,
+stores, OPES ni proveedor.
+Contratos afectados: consume `orquesta.runs.supervisor.v0` por REST interno.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-06-08
 Decision: `/ops` muestra una recomendacion operativa del Director y el estado
 del run seleccionado calculados en la propia proyeccion del panel.
 Motivo: antes de crear el cockpit completo, el operador necesita ver si el

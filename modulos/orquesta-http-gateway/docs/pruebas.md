@@ -23,3 +23,6 @@ git diff --check -- modulos/orquesta-http-gateway
   `/api/v0/runs/queue/priority`.
 - La auditoria de stats se limita al routing: el contenido de
   `DirectorRunStatsV0` pertenece al handler inyectado, no al gateway HTTP fino.
+- `PublicRouteMutabilityV0` clasifica las rutas de supervision
+  `/api/v0/runs/supervise` y `/api/v0/autoprogramming/supervise` como
+  mutaciones, y el guard browser bloquea origen cruzado antes de delegar.

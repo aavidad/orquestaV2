@@ -177,6 +177,10 @@ const opsDashboardHTMLChunk0V0 = `<!doctype html>
           <div class="label">Director</div>
           <div id="director-decision" class="decision">Esperando datos</div>
           <div id="director-reason" class="reason">Aún no hay snapshot operativo.</div>
+          <div class="button-row">
+            <button type="button" onclick="superviseGlobalWave()">Lanzar ola</button>
+            <span id="director-supervisor-message" class="sub"></span>
+          </div>
         </div>
         <div class="panel">
           <h2>Proyectos / runs</h2>
@@ -292,6 +296,7 @@ const opsDashboardHTMLChunk0V0 = `<!doctype html>
     let selectedRunRef = '';
     let selectedAgentRef = '';
     let controlMessage = '';
+    let supervisorMessage = '';
     let lastSnapshot = {runs: [], agents: [], ranked: [], tasks: []};
     let completedHistory = loadCompletedHistory();
     let runtimeDetails = {};

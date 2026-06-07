@@ -21,6 +21,8 @@ git diff --check -- modulos/orquesta-app-gateway
   en el catch-all de app-change.
 - `/api/v0/runs/control` y `/api/v0/runs/queue/priority` delegan en executors
   MCP inyectados.
+- `/api/v0/runs/supervise` delega en executor MCP inyectado y queda protegido
+  por el guard browser de mutaciones para origen cruzado.
 - `/api/v0/director/stats` mantiene el contrato MCP/API completo de
   `DirectorRunStatsV0` y `DirectorDecisionContextV0`; el gateway solo compone
   rutas y transporte in-process.

@@ -32,6 +32,28 @@ func TestAppGatewayBrowserMutationIntentGuardV0BloqueaOriginCruzado(t *testing.T
 	}
 }
 
+func TestAppGatewayBrowserMutationIntentGuardV0BloqueaSupervisorConOriginCruzado(t *testing.T) {
+	supervisor := &recordingRunSupervisorExecutorV0{}
+	handler := NewHTTPHandlerV0(ConfigV0{
+		RunSupervisor: supervisor,
+		Timeout:       time.Second,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/runs/supervise", strings.NewReader(`{
+		"request_id":"request-ref-origin-cross-supervise-001",
+		"run_ref":"run-origin-cross-supervise-001",
+		"max_ticks":1
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://evil.example")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden || supervisor.Input.RunRef != "" {
+		t.Fatalf("status=%d input=%+v body=%s", rec.Code, supervisor.Input, rec.Body.String())
+	}
+}
+
 func TestAppGatewayBrowserMutationIntentGuardV0PermiteOriginSameOrigin(t *testing.T) {
 	control := &recordingRunControlExecutorV0{}
 	handler := NewHTTPHandlerV0(ConfigV0{
@@ -57,3 +79,4 @@ func TestAppGatewayBrowserMutationIntentGuardV0PermiteOriginSameOrigin(t *testin
 }
 
 var _ orquestamcp.MCPTransportRunControlExecutorV0 = (*recordingRunControlExecutorV0)(nil)
+var _ orquestamcp.MCPTransportRunSupervisorExecutorV0 = (*recordingRunSupervisorExecutorV0)(nil)

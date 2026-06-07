@@ -114,9 +114,7 @@ const opsDashboardHTMLChunk2V0 = `    }
       const readyQueued = (ranked || []).filter(function(item) { return matchesStatus(item.status, 'running'); }).length;
       const activeRuns = (runs || []).filter(function(run) { return matchesStatus(run.status || run.closure_status, 'running') && !isTerminalRun(run); }).length;
       const attentionRuns = (runs || []).filter(runNeedsAttention).length;
-      const attentionAgents = (agents || []).filter(function(agent) {
-        return agent.needs_attention || Number(agent.no_progress_ticks || 0) > 0 || String(agent.progress_status || '').toLowerCase().includes('stall');
-      }).length;
+      const attentionAgents = (agents || []).filter(agentNeedsAttention).length;
       const terminalRuns = (runs || []).filter(isTerminalRun).length;
       const taskTotals = (runs || []).reduce(function(acc, run) {
         acc.total += Number(run.tasks_total || 0);
@@ -135,9 +133,7 @@ const opsDashboardHTMLChunk2V0 = `    }
     }
     function directorDecisionSummary(ranked, runs, agents, queueCount, activeAgentCount) {
       const attentionRuns = (runs || []).filter(runNeedsAttention);
-      const attentionAgents = (agents || []).filter(function(agent) {
-        return agent.needs_attention || Number(agent.no_progress_ticks || 0) > 0 || String(agent.progress_status || '').toLowerCase().includes('stall');
-      });
+      const attentionAgents = (agents || []).filter(agentNeedsAttention);
       const activeRuns = (runs || []).filter(function(run) {
         return matchesStatus(run.status || run.closure_status, 'running') && !isTerminalRun(run);
       });
@@ -181,12 +177,31 @@ const opsDashboardHTMLChunk2V0 = `    }
       byId('director-callout').className = 'director-callout' + (summary.attention ? ' attention' : '');
       text('director-decision', summary.decision);
       text('director-reason', summary.reason);
+      text('director-supervisor-message', supervisorMessage);
+    }
+    function agentNeedsAttention(agent) {
+      const status = String((agent || {}).status || '').toLowerCase();
+      const progressStatus = String((agent || {}).progress_status || '').toLowerCase();
+      return !!((agent || {}).needs_attention) ||
+        progressStatus.includes('loop_detected') ||
+        progressStatus.includes('stopped') ||
+        progressStatus.includes('failed') ||
+        progressStatus.includes('error') ||
+        status.includes('loop_detected') ||
+        status.includes('stopped') ||
+        status.includes('failed') ||
+        status.includes('error');
     }
     function runNeedsAttention(run) {
       return !!run.blocked ||
-        Number(run.stalled_agents || 0) > 0 ||
         Number(run.agents_failed || 0) > 0 ||
         Number(run.agents_need_attention || 0) > 0 ||
+        Number(run.loop_detected_agents || 0) > 0 ||
+        Number(run.stopped_agents || 0) > 0 ||
+        Number(run.checkpoint_agents_pending || 0) > 0 ||
+        String(run.validation || '').toLowerCase().includes('blocked') ||
+        String(run.validation || '').toLowerCase().includes('failed') ||
+        String(run.validation || '').toLowerCase().includes('error') ||
         String(run.validation || '').toLowerCase().includes('bloqueada');
     }
     function buildAgents(statsResults) {

@@ -15,8 +15,10 @@ func PublicRouteMutabilityV0(route string) string {
 	switch route {
 	case RouteAutoprogrammingPrepareRunV0,
 		RouteAutoprogrammingSelfImprovementV0,
+		RouteAutoprogrammingSuperviseV0,
 		RouteRunControlV0,
 		RouteRunQueuePriorityV0,
+		RouteRunSupervisorV0,
 		RouteServerShutdownV0,
 		RouteNuevaAppV0,
 		RouteAppChangePageV0,

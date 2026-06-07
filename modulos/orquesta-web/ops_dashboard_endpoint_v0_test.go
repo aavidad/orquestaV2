@@ -66,11 +66,24 @@ func TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto(t *testing.T) {
 		"orquesta.ops.pending_env.v1",
 		"/api/v0/runs/control",
 		"/api/v0/runs/queue/priority",
+		"/api/v0/runs/supervise",
 		"controlSelectedRun(\\'pause\\')",
 		"controlSelectedRun(\\'resume\\')",
 		"controlSelectedRun(\\'stop\\')",
 		"controlSelectedRun(\\'cancel\\')",
 		"reactivateSelectedRun()",
+		"superviseGlobalWave()",
+		"superviseSelectedRun()",
+		"superviseQueueRow",
+		"function superviseOps",
+		"Lanzar ola",
+		"Avanzar run",
+		"Avanzar run desde fila",
+		"max_runs_per_tick",
+		"max_external_waits",
+		"stop_reason",
+		"last.status",
+		"history",
 		"Quitar de cola",
 		"Memoria proceso",
 		"Disco peor uso",
@@ -78,6 +91,7 @@ func TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto(t *testing.T) {
 		"director autónomo",
 		"directorDecisionSummary",
 		"renderDirectorDecision",
+		"agentNeedsAttention",
 		"Revisar y replanificar",
 		"Esperar entregas acotadas",
 		"Lanzar siguiente ola",
@@ -85,6 +99,9 @@ func TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto(t *testing.T) {
 		"closure_status",
 		"progress_source",
 		"stats_reason_code",
+		"loop_detected_agents",
+		"stopped_agents",
+		"checkpoint_agents_pending",
 		"flow-attention-card",
 		"renderFlowSummary",
 		"runNeedsAttention",
@@ -121,6 +138,71 @@ func TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto(t *testing.T) {
 			t.Fatalf("html no contiene %q", want)
 		}
 	}
+}
+
+func TestOpsDashboardWebEndpointV0StalledNoDisparaAtencion(t *testing.T) {
+	body := opsDashboardHTMLV0()
+	agentFn := htmlFunctionSliceForTest(t, body, "function agentNeedsAttention", "function runNeedsAttention")
+	runFn := htmlFunctionSliceForTest(t, body, "function runNeedsAttention", "function buildAgents")
+
+	for _, forbidden := range []string{"no_progress_ticks", "stalled_agents", "stall"} {
+		if strings.Contains(agentFn, forbidden) {
+			t.Fatalf("agentNeedsAttention no debe usar %q como atencion dura:\n%s", forbidden, agentFn)
+		}
+		if strings.Contains(runFn, forbidden) {
+			t.Fatalf("runNeedsAttention no debe usar %q como atencion dura:\n%s", forbidden, runFn)
+		}
+	}
+	for _, want := range []string{"needs_attention", "loop_detected", "stopped", "failed", "error"} {
+		if !strings.Contains(agentFn, want) {
+			t.Fatalf("agentNeedsAttention no contiene %q:\n%s", want, agentFn)
+		}
+	}
+	for _, want := range []string{"blocked", "agents_failed", "agents_need_attention", "loop_detected_agents", "stopped_agents", "checkpoint_agents_pending"} {
+		if !strings.Contains(runFn, want) {
+			t.Fatalf("runNeedsAttention no contiene %q:\n%s", want, runFn)
+		}
+	}
+}
+
+func TestOpsDashboardWebEndpointV0SupervisorPayloadAcotado(t *testing.T) {
+	body := opsDashboardHTMLV0()
+	fn := htmlFunctionSliceForTest(t, body, "async function superviseOps", "function supervisorResultText")
+
+	for _, want := range []string{
+		"queue_ref: (scope || {}).queue_ref || ''",
+		"run_ref: (scope || {}).run_ref || ''",
+		"continue_message",
+		"max_ticks: 1",
+		"max_runs_per_tick: 1",
+		"max_executions: 1",
+		"max_bursts: 1",
+		"max_steps_per_burst: 1",
+		"max_dispatches_per_wait: 1",
+		"max_commands: 1",
+		"max_outbox_per_cycle: 1",
+		"max_decision_cycles: 1",
+		"max_external_waits: 1",
+		"idempotency_key",
+		"/api/v0/runs/supervise",
+	} {
+		if !strings.Contains(fn, want) {
+			t.Fatalf("superviseOps no contiene %q:\n%s", want, fn)
+		}
+	}
+}
+
+func htmlFunctionSliceForTest(t *testing.T, body, startMarker, endMarker string) string {
+	t.Helper()
+	start := strings.Index(body, startMarker)
+	if start < 0 {
+		t.Fatalf("html no contiene %q", startMarker)
+	}
+	end := strings.Index(body[start:], endMarker)
+	if end < 0 {
+		t.Fatalf("html no contiene fin %q tras %q", endMarker, startMarker)
+	}
+	return body[start : start+end]
 }
 
 func TestOpsDashboardWebEndpointV0CacheLiveNoQuedaDentroDeFetchRuntimeDetail(t *testing.T) {

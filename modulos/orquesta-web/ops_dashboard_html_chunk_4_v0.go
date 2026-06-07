@@ -24,6 +24,7 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
           '<button type="button" onclick="controlSelectedRun(\'pause\')">Pausar</button>' +
           '<button type="button" onclick="controlSelectedRun(\'resume\')">Reanudar</button>' +
           '<button type="button" onclick="reactivateSelectedRun()">Reactivar</button>' +
+          '<button type="button" onclick="superviseSelectedRun()">Avanzar run</button>' +
           '<button type="button" onclick="controlSelectedRun(\'stop\')">Parar</button>' +
           '<button type="button" onclick="controlSelectedRun(\'cancel\')">Cancelar</button>' +
           '<button type="button" onclick="deactivateSelectedRun()">Quitar de cola</button>' +
@@ -95,6 +96,21 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
 	        await mutateRunControl(run, action);
 	        if (action === 'resume') await mutateQueue(run, run.priority_score || 50, 'ready', 'reanudar desde fila de cola');
 	        controlMessage = 'Acción de fila aplicada: ' + action + '.';
+	      } catch (err) {
+	        controlMessage = err.message || String(err);
+	      }
+	      await refreshAll();
+	    }
+	    async function superviseQueueRow(runRef) {
+	      const run = runByRef(runRef);
+	      if (!run) return;
+	      selectedRunRef = run.run_ref || runRef || '';
+	      selectedAgentRef = '';
+	      controlMessage = 'Avanzando run desde fila...';
+	      renderSelectedDetail();
+	      try {
+	        const result = await superviseOps({run_ref: run.run_ref || runRef}, 'run desde fila');
+	        controlMessage = supervisorResultText(result);
 	      } catch (err) {
 	        controlMessage = err.message || String(err);
 	      }
@@ -190,6 +206,74 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
 	        controlMessage = err.message || String(err);
       }
       await refreshAll();
+    }
+    async function superviseGlobalWave() {
+      supervisorMessage = 'Lanzando ola...';
+      text('director-supervisor-message', supervisorMessage);
+      try {
+        const result = await superviseOps({queue_ref: 'global'}, 'ola global');
+        supervisorMessage = supervisorResultText(result);
+      } catch (err) {
+        supervisorMessage = err.message || String(err);
+      }
+      text('director-supervisor-message', supervisorMessage);
+      await refreshAll();
+    }
+    async function superviseSelectedRun() {
+      const run = runByRef(selectedRunRef);
+      if (!run) return;
+      controlMessage = 'Avanzando run...';
+      renderSelectedDetail();
+      try {
+        const result = await superviseOps({run_ref: run.run_ref}, 'run seleccionado');
+        controlMessage = supervisorResultText(result);
+      } catch (err) {
+        controlMessage = err.message || String(err);
+      }
+      await refreshAll();
+    }
+    async function superviseOps(scope, label) {
+      const now = Date.now();
+      const payload = {
+        request_id: 'ops-supervise-' + now,
+        correlation_id: 'corr-ops-supervise-' + now,
+        queue_ref: (scope || {}).queue_ref || '',
+        run_ref: (scope || {}).run_ref || '',
+        continue_message: 'supervision desde panel ops: ' + (label || 'tick'),
+        max_ticks: 1,
+        max_runs_per_tick: 1,
+        max_executions: 1,
+        max_bursts: 1,
+        max_steps_per_burst: 1,
+        max_dispatches_per_wait: 1,
+        max_commands: 1,
+        max_outbox_per_cycle: 1,
+        max_decision_cycles: 1,
+        max_external_waits: 1,
+        idempotency_key: 'ops-supervise-' + ((scope || {}).run_ref || (scope || {}).queue_ref || 'global') + '-' + now
+      };
+      if (!payload.queue_ref && !payload.run_ref) payload.queue_ref = 'global';
+      return await fetchJSON('/api/v0/runs/supervise', {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+    }
+    function supervisorResultText(result) {
+      result = result || {};
+      const last = result.last || {};
+      const history = Array.isArray(result.history) ? result.history : [];
+      const diagnostics = Array.isArray(result.diagnostics) ? result.diagnostics : [];
+      const nextActions = Array.isArray(result.next_actions) ? result.next_actions : [];
+      let message = 'estado ' + (result.estado || '-') +
+        ' · run ' + shortRef(result.run_ref || '-') +
+        ' · stop_reason ' + (result.stop_reason || '-') +
+        ' · ticks ' + String(result.ticks || history.length || 0) +
+        ' · last.status ' + (last.status || '-') +
+        ' · history ' + String(history.length);
+      if (diagnostics.length) message += ' · diagnosticos ' + diagnostics.length;
+      if (nextActions.length) message += ' · siguiente ' + nextActions.slice(0, 2).join(' | ');
+      return message;
     }
     function effectiveConfigSettings(server) {
       const config = (server || {}).effective_config || {};

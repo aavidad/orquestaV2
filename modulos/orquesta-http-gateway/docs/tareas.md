@@ -17,6 +17,9 @@
   MCP de trabajo de dominio externo.
 - Cubrir que `/api/v0/domain-work` se registra solo con handler inyectado y
   queda en 404 cuando no se inyecta handler.
+- Clasificar `/api/v0/runs/supervise` y
+  `/api/v0/autoprogramming/supervise` como mutaciones publicas para que el
+  guard de intencion browser coincida con el manifiesto de control-plane.
 
 ## Pendiente
 

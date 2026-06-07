@@ -77,7 +77,7 @@ const opsDashboardHTMLChunk5BeforeLiveCacheV0 = `    }
 	        };
 	        row.agents += 1;
 	        row.tokens += Number(agent.total_tokens || 0);
-	        if (agent.needs_attention || Number(agent.no_progress_ticks || 0) > 0 || String(agent.progress_status || '').toLowerCase().includes('stall')) row.attention += 1;
+	        if (agentNeedsAttention(agent)) row.attention += 1;
 	        if (!row.quota && agent.quota_status) row.quota = agent.quota_status;
 	        agentsByRun[agent.run_ref] = row;
 	      });

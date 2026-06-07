@@ -37,3 +37,12 @@ que sombrean para que la precedencia sea intencional y testeable.
 
 Motivo: evitar que nuevas rutas bajo `/api/v0/apps/` o overlays de composicion
 cambien el dispatch por accidente.
+
+## D-006: supervision es mutacion de control-plane
+
+`/api/v0/runs/supervise` y `/api/v0/autoprogramming/supervise` se clasifican
+como mutaciones publicas igual que indica el manifiesto.
+
+Motivo: supervisar puede lanzar, drenar o avanzar trabajo; por tanto el guard
+browser debe exigir mismo origen, cliente no-browser o token de intencion antes
+de delegar al handler inyectado.
