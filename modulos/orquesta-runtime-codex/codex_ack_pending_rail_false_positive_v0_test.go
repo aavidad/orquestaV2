@@ -3,6 +3,7 @@ package orquestaruntimecodex
 import "testing"
 
 func TestCodexAckPendingRailFalsePositiveVocabularyV0(t *testing.T) {
+	enableCodexRailsModeEnforcedForTestV0(t)
 	spec := codexSpecForTestV0()
 	cases := []string{
 		"secrets_policy",
@@ -20,8 +21,8 @@ func TestCodexAckPendingRailFalsePositiveVocabularyV0(t *testing.T) {
 		if len(issues) != 0 {
 			t.Fatalf("vocabulario operativo no debe bloquear issues=%+v note=%q", issues, note)
 		}
-		if !CodexAgentAckHasPendingRailV0(ack) {
-			t.Fatalf("rail pendiente no conservado note=%q ack=%+v", note, ack)
+		if CodexAgentAckHasPendingRailV0(ack) {
+			t.Fatalf("rail pendiente no debe conservarse note=%q ack=%+v", note, ack)
 		}
 		observation, issues := BuildCodexDeliveryObservationV0(ack, spec)
 		if len(issues) != 0 {
@@ -34,6 +35,7 @@ func TestCodexAckPendingRailFalsePositiveVocabularyV0(t *testing.T) {
 }
 
 func TestCodexAckPendingRailFalsePositiveVocabularySinMarcadorExplicitoV0(t *testing.T) {
+	enableCodexRailsModeEnforcedForTestV0(t)
 	spec := codexSpecForTestV0()
 	cases := []string{
 		"token budget policy",
@@ -49,8 +51,8 @@ func TestCodexAckPendingRailFalsePositiveVocabularySinMarcadorExplicitoV0(t *tes
 		if len(issues) != 0 {
 			t.Fatalf("vocabulario generico no debe bloquear issues=%+v note=%q", issues, note)
 		}
-		if !CodexAgentAckHasPendingRailV0(ack) {
-			t.Fatalf("rail pendiente generico no conservado note=%q ack=%+v", note, ack)
+		if CodexAgentAckHasPendingRailV0(ack) {
+			t.Fatalf("rail pendiente generico no debe conservarse note=%q ack=%+v", note, ack)
 		}
 		observation, issues := BuildCodexDeliveryObservationV0(ack, spec)
 		if len(issues) != 0 {

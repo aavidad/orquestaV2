@@ -7,14 +7,9 @@ import (
 	"regexp"
 	"strings"
 	"unicode/utf8"
-
-	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func detectForbiddenModelEscalationShapeV0(data []byte) []ModelEscalationPolicyIssueV0 {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return nil
-	}
 	var value any
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	if err := decoder.Decode(&value); err != nil {
@@ -54,7 +49,7 @@ func joinModelEscalationPathV0(path, key string) string {
 
 func isForbiddenModelEscalationKeyV0(key string) bool {
 	switch strings.ToLower(key) {
-	case "role", "role_model", "role_model_table", "model_ref", "provider", "provider_ref", "home", "home_path":
+	case "role_model", "role_model_table", "role_models", "role_to_model", "roles_to_models":
 		return true
 	default:
 		return false
@@ -120,8 +115,7 @@ func (v *modelEscalationPolicyValidatorV0) optionalSafeText(field, value string)
 	if value == "" {
 		return
 	}
-	if utf8.RuneCountInString(value) > 320 ||
-		(orquestarails.DetailProhibitedRailsEnabledV0() && forbiddenSafeTextPatternV0.MatchString(value)) {
+	if utf8.RuneCountInString(value) > 320 || forbiddenSafeTextPatternV0.MatchString(value) {
 		v.add(ErrModelEscalationPolicyInvalidaV0, field)
 	}
 }

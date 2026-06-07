@@ -112,7 +112,7 @@ func TestValidateRuntimeLaunchRequestV0RechazaSafetyAbierta(t *testing.T) {
 	requireRuntimeLaunchCodeV0(t, ValidateRuntimeLaunchRequestV0(req), RuntimeLaunchRequestInvalidaV0)
 }
 
-func TestValidateRuntimeLaunchRequestV0PermiteSafetyAbiertaConRailsDetalleOff(t *testing.T) {
+func TestValidateRuntimeLaunchRequestV0RechazaSafetyAbiertaAunqueRailsDetalleOff(t *testing.T) {
 	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "off")
 	req := runtimeLaunchRequestValidaV0()
 	req.Safety.WriteSetPolicy = "open"
@@ -120,9 +120,7 @@ func TestValidateRuntimeLaunchRequestV0PermiteSafetyAbiertaConRailsDetalleOff(t 
 	req.Safety.HomePathsPolicy = "open"
 	req.Safety.ProviderPolicy = "open"
 
-	if issues := ValidateRuntimeLaunchRequestV0(req); len(issues) != 0 {
-		t.Fatalf("rails off no debe bloquear safety abierta: %#v", issues)
-	}
+	requireRuntimeLaunchCodeV0(t, ValidateRuntimeLaunchRequestV0(req), RuntimeLaunchRequestInvalidaV0)
 }
 
 func TestValidateRuntimeLaunchRequestV0RechazaModeloDistintoACapacity(t *testing.T) {

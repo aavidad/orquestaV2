@@ -50,3 +50,11 @@ transcribe-app/
 berserk-salidas/
 __pycache__/
 *.pyc
+
+# Salidas generadas por smokes/conectores OPES. La fuente versionada queda en
+# codigo/docs; los artefactos reales se archivan fuera del repo de Orquesta.
+external/opes/**
+!external/opes/
+!external/opes/plan_temario/
+!external/opes/plan_temario/9784a562f074769a08043707fdd79eb2
+validaciones/

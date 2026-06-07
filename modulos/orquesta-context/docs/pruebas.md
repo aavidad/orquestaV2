@@ -12,7 +12,10 @@ Evidencia esperada:
 - ACK completed incluye evidencia explicita cuando `required_ref_action` es
   `ack_evidence_required`;
 - refs opacas y vocabulario operativo no se tratan como dato sensible;
-- contenido crudo, prompts/transcripts, HOME, OAuth y tokens no se materializan.
+- vocabulario operativo o local no bloquea el bundle por strings sueltos;
+- valores sensibles efectivos o material crudo siguen bloqueando/saneandose;
+- sanitizacion de metadata no persiste valores sensibles efectivos en refs de
+  evidencia.
 
 Ultima ejecucion documentada: 2026-05-27, ACKs cerrados de T15 con suite
 requerida pasada.
@@ -32,7 +35,8 @@ Evidencia esperada:
 - brainstorming incluye `docs/decisiones.md`;
 - refs cruzadas quedan en `contract_context`;
 - si falta contexto externo, la politica obliga a `CONSULTA AL DIRECTOR`;
-- detalles de HOME/OAuth/proveedor/motor/secreto se rechazan;
+- vocabulario HOME/OAuth/proveedor/motor/secreto no reactiva veto automatico
+  por palabra suelta;
 - exceso de entradas falla con error publico.
 
 Ultima ejecucion: 2026-05-05, ejecutada correctamente.

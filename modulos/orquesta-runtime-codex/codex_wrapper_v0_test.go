@@ -40,6 +40,25 @@ func TestCodexWrapperV0FijaEsfuerzoDeRazonamiento(t *testing.T) {
 	}
 }
 
+func TestCodexWrapperV0PermiteWorkspacesSinGitPorDefecto(t *testing.T) {
+	profile := codexProfileForTestV0(t)
+
+	wrapper := BuildCodexWrapperScriptV0(profile)
+	if !strings.Contains(wrapper, "exec --skip-git-repo-check ") {
+		t.Fatalf("wrapper no permite workspace sin git:\n%s", wrapper)
+	}
+}
+
+func TestCodexWrapperV0NoDuplicaSkipGitRepoCheck(t *testing.T) {
+	profile := codexProfileForTestV0(t)
+	profile.ExtraArgs = []string{"--skip-git-repo-check"}
+
+	wrapper := BuildCodexWrapperScriptV0(profile)
+	if strings.Count(wrapper, "--skip-git-repo-check") != 1 {
+		t.Fatalf("wrapper duplica skip git repo check:\n%s", wrapper)
+	}
+}
+
 func TestCodexWrapperV0GeneraReporteUsoRedactadoYConservaExitCode(t *testing.T) {
 	profile := codexProfileForTestV0(t)
 	if err := os.MkdirAll(profile.ProjectWorkDir, 0o700); err != nil {

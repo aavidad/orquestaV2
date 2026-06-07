@@ -12,6 +12,7 @@ var eventAppliersV0 = map[string]eventApplierV0{
 	OrchestrationEventPhaseOpenedV0:                  applyPhaseOpenedEventV0,
 	OrchestrationEventPhaseClosedV0:                  applyPhaseClosedEventV0,
 	OrchestrationEventRunBlockedV0:                   applyRunBlockedEventV0,
+	OrchestrationEventRunBlockerResolvedV0:           applyRunBlockerResolvedEventV0,
 	OrchestrationEventDirectorQuestionRaisedV0:       applyDirectorQuestionRaisedEventV0,
 	OrchestrationEventDirectorQuestionAnsweredV0:     applyDirectorQuestionAnsweredEventV0,
 	OrchestrationEventBrainstormRequestedV0:          applyBrainstormRequestedEventV0,

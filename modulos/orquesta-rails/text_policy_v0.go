@@ -29,6 +29,7 @@ var OperationalSensitiveFragmentsV0 = []string{
 	"client-secret:",
 	"authorization:",
 	"bearer ",
+	"sk-",
 	"password=",
 	"password:",
 	"passwd=",
@@ -44,6 +45,15 @@ var OperationalSensitiveFragmentsV0 = []string{
 	"credencial=",
 	"credencial:",
 	"-----begin ",
+	"prompt=",
+	"completion=",
+	"transcript=",
+	"raw_prompt=",
+	"raw_transcript=",
+	"raw_text=",
+	"full_text=",
+	"dsn=",
+	"database_url=",
 }
 
 // OperationalDetailMarkersV0 centralizes legacy strict rail markers that are
@@ -111,9 +121,6 @@ func BytesContainOperationalDetailMarkerV0(data []byte) bool {
 }
 
 func TextContainsOperationalSensitiveDetailV0(value string) bool {
-	if !DetailProhibitedRailsEnabledForFieldV0("*", "*") {
-		return false
-	}
 	return textContainsOperationalSensitiveDetailIgnoringEnvV0(value)
 }
 
@@ -124,10 +131,13 @@ func textContainsOperationalSensitiveDetailIgnoringEnvV0(value string) bool {
 			return true
 		}
 	}
-	return false
+	return textContainsCredentialDSNV0(lower)
 }
 
 func DetailProhibitedRailsEnabledV0() bool {
+	if !RailsEnforcedV0() {
+		return false
+	}
 	if SecurityModeProgrammingEnabledV0() {
 		return false
 	}
@@ -172,4 +182,33 @@ func hasTokenBoundaryForFragmentV0(value string, fragment string, start int, end
 
 func isASCIIAlnumV0(ch byte) bool {
 	return (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')
+}
+
+func textContainsCredentialDSNV0(lower string) bool {
+	for _, scheme := range []string{
+		"postgres://",
+		"postgresql://",
+		"mysql://",
+		"mongodb://",
+		"redis://",
+	} {
+		start := 0
+		for {
+			index := strings.Index(lower[start:], scheme)
+			if index < 0 {
+				break
+			}
+			absolute := start + index + len(scheme)
+			end := strings.IndexAny(lower[absolute:], "/?# \t\r\n")
+			authority := lower[absolute:]
+			if end >= 0 {
+				authority = lower[absolute : absolute+end]
+			}
+			if at := strings.LastIndex(authority, "@"); at > 0 && strings.Contains(authority[:at], ":") {
+				return true
+			}
+			start = absolute
+		}
+	}
+	return false
 }

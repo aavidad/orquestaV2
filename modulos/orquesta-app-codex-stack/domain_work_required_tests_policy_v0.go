@@ -13,6 +13,12 @@ import (
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
+const (
+	maxCodexStackDirectorTaskAcceptanceCriteriaV0       = 24
+	maxCodexStackDirectorTaskAcceptanceCriterionCharsV0 = 260
+	domainWorkRequiredTestsCriteriaOverflowMarkerV0     = "criterios domain_work adicionales disponibles en required_tests y refs de dominio"
+)
+
 func (source compositeDirectorDecisionSourceV0) normalizeDomainWorkRequiredTestsV0(
 	ctx context.Context,
 	run orquestacoreworkflow.OrchestrationRunV0,
@@ -43,11 +49,64 @@ func (source compositeDirectorDecisionSourceV0) normalizeDomainWorkRequiredTests
 			continue
 		}
 		task.RequiredTests = domainWorkRequiredTestRefsFromPlanV0(plan)
-		task.AcceptanceCriteria = compactCodexStackStringsV0(
-			append(task.AcceptanceCriteria, plan.AcceptanceCriteria...),
+		task.AcceptanceCriteria = domainWorkAcceptanceCriteriaForDirectorTaskV0(
+			task.AcceptanceCriteria,
+			plan.AcceptanceCriteria,
 		)
 	}
 	return out, nil
+}
+
+func domainWorkAcceptanceCriteriaForDirectorTaskV0(
+	taskCriteria []string,
+	planCriteria []string,
+) []string {
+	criteria := compactDomainWorkTaskAcceptanceCriteriaTextsV0(
+		append(append([]string(nil), taskCriteria...), planCriteria...),
+	)
+	if len(criteria) <= maxCodexStackDirectorTaskAcceptanceCriteriaV0 {
+		return criteria
+	}
+	limit := maxCodexStackDirectorTaskAcceptanceCriteriaV0 - 1
+	if limit < 1 {
+		return []string{domainWorkRequiredTestsCriteriaOverflowMarkerV0}
+	}
+	out := append([]string(nil), criteria[:limit]...)
+	if stringInSetV0(out, domainWorkRequiredTestsCriteriaOverflowMarkerV0) {
+		return out
+	}
+	return append(out, domainWorkRequiredTestsCriteriaOverflowMarkerV0)
+}
+
+func compactDomainWorkTaskAcceptanceCriteriaTextsV0(values []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		compact := compactDomainWorkTaskAcceptanceCriterionTextV0(value)
+		if compact == "" || seen[compact] {
+			continue
+		}
+		seen[compact] = true
+		out = append(out, compact)
+	}
+	return out
+}
+
+func compactDomainWorkTaskAcceptanceCriterionTextV0(value string) string {
+	value = strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
+	if len(value) <= maxCodexStackDirectorTaskAcceptanceCriterionCharsV0 {
+		return value
+	}
+	suffix := " (detalle completo en paquete externo)"
+	limit := maxCodexStackDirectorTaskAcceptanceCriterionCharsV0 - len(suffix)
+	if limit < 1 {
+		return strings.TrimSpace(suffix)
+	}
+	prefix := strings.TrimSpace(value[:limit])
+	if cut := strings.LastIndex(prefix, " "); cut > 80 {
+		prefix = strings.TrimSpace(prefix[:cut])
+	}
+	return prefix + suffix
 }
 
 func domainWorkRequiredTestPlansByTaskV0(

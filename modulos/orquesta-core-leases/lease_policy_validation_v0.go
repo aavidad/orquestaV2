@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func ValidateAgentLeasePolicyV0(policy AgentLeasePolicyV0) []AgentLeaseIssueV0 {
@@ -123,20 +121,56 @@ func (v *agentLeaseValidatorV0) add(code AgentLeaseIssueCodeV0, field string) {
 	v.issues = append(v.issues, AgentLeaseIssueV0{Code: code, Field: field})
 }
 
-func detectForbiddenAgentLeaseJSONKeysV0(data []byte) []AgentLeaseIssueV0 {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return nil
-	}
-	var raw map[string]json.RawMessage
+func detectForbiddenAgentLeaseJSONDetailsV0(data []byte) []AgentLeaseIssueV0 {
+	var raw any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil
 	}
+	return detectSensitiveAgentLeaseJSONDetailsV0(raw, "")
+}
+
+func detectSensitiveAgentLeaseJSONDetailsV0(value any, field string) []AgentLeaseIssueV0 {
 	var issues []AgentLeaseIssueV0
-	for key := range raw {
-		lowerKey := strings.ToLower(key)
-		if forbiddenAgentLeaseJSONKeysV0[lowerKey] || containsForbiddenAgentLeaseDetailV0(lowerKey) {
-			issues = append(issues, AgentLeaseIssueV0{Code: ErrAgentLeaseDetalleProhibidoV0, Field: key})
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, nested := range typed {
+			nestedField := joinAgentLeaseJSONFieldV0(field, key)
+			if containsSensitiveAgentLeaseJSONKeyValueV0(key, nested) {
+				issues = append(issues, AgentLeaseIssueV0{Code: ErrAgentLeaseDetalleProhibidoV0, Field: nestedField})
+				continue
+			}
+			issues = append(issues, detectSensitiveAgentLeaseJSONDetailsV0(nested, nestedField)...)
+		}
+	case []any:
+		for i, nested := range typed {
+			issues = append(issues, detectSensitiveAgentLeaseJSONDetailsV0(nested, fmt.Sprintf("%s[%d]", field, i))...)
+		}
+	case string:
+		if containsForbiddenAgentLeaseDetailV0(typed) {
+			issues = append(issues, AgentLeaseIssueV0{Code: ErrAgentLeaseDetalleProhibidoV0, Field: field})
 		}
 	}
 	return issues
+}
+
+func containsSensitiveAgentLeaseJSONKeyValueV0(key string, value any) bool {
+	key = strings.ToLower(strings.TrimSpace(key))
+	if !sensitiveAgentLeaseJSONValueKeysV0[key] {
+		return false
+	}
+	switch typed := value.(type) {
+	case nil:
+		return false
+	case string:
+		return strings.TrimSpace(typed) != ""
+	default:
+		return true
+	}
+}
+
+func joinAgentLeaseJSONFieldV0(parent, child string) string {
+	if parent == "" {
+		return child
+	}
+	return parent + "." + child
 }

@@ -221,10 +221,7 @@ func (stack StackV0) domainWorkRecoveryBuildsValidSubmissionV0(
 		return false, err
 	}
 	submission = orquestadomainwork.NormalizeDomainWorkArtifactSubmissionV0(submission)
-	submitted, err := stack.DomainDelivery.Ledger.HasDomainWorkArtifactSubmissionV0(
-		ctx,
-		submission.IdempotencyKey,
-	)
+	submitted, err := stack.domainWorkSubmissionAlreadyRecordedV0(ctx, run, task, observation, submission)
 	if err != nil || submitted {
 		return false, err
 	}

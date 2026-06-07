@@ -53,18 +53,15 @@ func ValuesContainOperationalSensitiveDetailForFieldV0(
 }
 
 func TextContainsOperationalSensitiveDetailForFieldV0(boundary string, field string, value string) bool {
-	if !DetailProhibitedRailsEnabledForFieldV0(boundary, field) {
-		return false
-	}
 	return textContainsOperationalSensitiveDetailIgnoringEnvV0(value)
 }
 
 func TextContainsOperationalRawDetailForFieldV0(boundary string, field string, value string) bool {
-	if !DetailProhibitedRailsEnabledForFieldV0(boundary, field) {
-		return false
-	}
 	if textContainsOperationalSensitiveDetailIgnoringEnvV0(value) {
 		return true
+	}
+	if !DetailProhibitedRailsEnabledForFieldV0(boundary, field) {
+		return false
 	}
 	lower := strings.ToLower(strings.ReplaceAll(value, `\/`, "/"))
 	for _, fragment := range OperationalRawDetailFragmentsV0 {

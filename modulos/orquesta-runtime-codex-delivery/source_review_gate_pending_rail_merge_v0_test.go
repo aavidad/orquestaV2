@@ -46,7 +46,7 @@ func TestCodexReviewGateMergeConnectorIssuesV0NormalizaRailBlandoDeArtifact(t *t
 	}
 }
 
-func TestCodexReviewGateMergePendingRailEvidenceV0MantieneACKRailComoFollowup(t *testing.T) {
+func TestCodexReviewGateMergePendingRailEvidenceV0NoConvierteVocabularioGenericoEnFollowup(t *testing.T) {
 	ack := orquestaruntimecodex.CodexAgentAckV0{
 		Notes: []string{"rail pendiente: token/provider/home como vocabulario operativo"},
 	}
@@ -56,13 +56,8 @@ func TestCodexReviewGateMergePendingRailEvidenceV0MantieneACKRailComoFollowup(t 
 		ack,
 	)
 
-	if !result.Accepted || !result.PreserveOutput || !result.RequiresFollowup ||
-		result.RecommendedAction != orquestaautoprogramming.AutoprogrammingReviewGateActionRequestFollowupReviewV0 {
-		t.Fatalf("pending rail debe quedar como followup advisory: %+v", result)
-	}
-	if !codexReviewGateResultHasIssueV0(result, orquestaruntimecodex.CodexAgentAckPendingRailEvidenceRefV0) ||
-		!codexReviewGateResultHasIssueV0(result, "ack-pending-rail:token") {
-		t.Fatalf("pending rail evidence perdido: %+v", result.Issues)
+	if !result.Accepted || !result.PreserveOutput || result.RequiresFollowup || len(result.Issues) != 0 {
+		t.Fatalf("vocabulario generico no debe crear followup automatico: %+v", result)
 	}
 }
 

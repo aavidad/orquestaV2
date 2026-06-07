@@ -12,6 +12,7 @@ const (
 	OrchestrationEventPhaseOpenedV0                  = "PhaseOpened"
 	OrchestrationEventPhaseClosedV0                  = "PhaseClosed"
 	OrchestrationEventRunBlockedV0                   = "RunBlocked"
+	OrchestrationEventRunBlockerResolvedV0           = "RunBlockerResolved"
 	OrchestrationEventDirectorQuestionRaisedV0       = "DirectorQuestionRaised"
 	OrchestrationEventDirectorQuestionAnsweredV0     = "DirectorQuestionAnswered"
 	OrchestrationEventBrainstormRequestedV0          = "BrainstormRequested"
@@ -99,6 +100,13 @@ type RunBlockedPayloadV0 struct {
 	EvidenceRefs []string `json:"evidence_refs,omitempty"`
 }
 
+type RunBlockerResolvedPayloadV0 struct {
+	BlockerID    string   `json:"blocker_id"`
+	ReasonCode   string   `json:"reason_code"`
+	Summary      string   `json:"summary"`
+	EvidenceRefs []string `json:"evidence_refs,omitempty"`
+}
+
 type OrchestrationEventErrorV0 struct {
 	Code  string `json:"code"`
 	Field string `json:"field,omitempty"`
@@ -122,6 +130,10 @@ func NewPhaseClosedEventV0(meta OrchestrationEventMetaV0, payload PhaseClosedPay
 
 func NewRunBlockedEventV0(meta OrchestrationEventMetaV0, payload RunBlockedPayloadV0) (OrchestrationEventV0, error) {
 	return newOrchestrationEventV0(meta, OrchestrationEventRunBlockedV0, payload)
+}
+
+func NewRunBlockerResolvedEventV0(meta OrchestrationEventMetaV0, payload RunBlockerResolvedPayloadV0) (OrchestrationEventV0, error) {
+	return newOrchestrationEventV0(meta, OrchestrationEventRunBlockerResolvedV0, normalizeRunBlockerResolvedPayloadV0(payload))
 }
 
 func ValidateOrchestrationEventV0(event OrchestrationEventV0) error {

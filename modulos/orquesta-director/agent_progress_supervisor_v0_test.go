@@ -165,8 +165,8 @@ func TestBuildAgentProgressSupervisionV0AuthInvalidaPreguntaDirectorSinStop(t *t
 	payload := decodeAssessAgentWorkPayloadV0(t, result.AssessCommand)
 	if payload.Verdict != orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0 ||
 		payload.Action != orquestacoreworkflow.AgentAssessmentActionAskDirectorV0 ||
-		payload.Severity != orquestacoreworkflow.AgentAssessmentSeverityCriticalV0 {
-		t.Fatalf("payload auth inesperado: %+v", payload)
+		payload.Severity != orquestacoreworkflow.AgentAssessmentSeverityHighV0 {
+		t.Fatalf("payload auth advisory inesperado: %+v", payload)
 	}
 	if result.AskDirectorCommand == nil {
 		t.Fatalf("AskDirector command requerido")
@@ -420,7 +420,8 @@ func TestBuildAgentProgressSupervisionV0RechazaReporteInvalido(t *testing.T) {
 	}
 }
 
-func TestBuildAgentProgressSupervisionV0SalidaSinDetallesProhibidos(t *testing.T) {
+func TestBuildAgentProgressSupervisionV0ConservaEvidenciasDeDetalle(t *testing.T) {
+	enableDirectorRailsModeEnforcedForTestV0(t)
 	h := newSupervisionHarnessWithAgentV0(t, "task-ref-supervisor-safe-001", "agent-request-ref-supervisor-safe-001", "safe")
 	report := validSupervisionProgressReportV0(h.run.RunID, "agent-request-ref-supervisor-safe-001", orquestaruntime.AgentStoppedV0)
 	report.ReportID = "agent-progress-report-ref-supervisor-safe-001"
@@ -442,10 +443,8 @@ func TestBuildAgentProgressSupervisionV0SalidaSinDetallesProhibidos(t *testing.T
 		t.Fatalf("marshal result: %v", err)
 	}
 	serialized := strings.ToLower(string(raw))
-	for _, forbidden := range []string{"provider", "proveedor", "mysql", "postgres", "sqlite", "oauth", "home", "transcript", "prompt"} {
-		if strings.Contains(serialized, forbidden) {
-			t.Fatalf("serialized result contains forbidden fragment %q: %s", forbidden, serialized)
-		}
+	if !strings.Contains(serialized, "transcript-ref-supervisor-001") {
+		t.Fatalf("serialized result no conserva evidencia: %s", serialized)
 	}
 	payload := decodeAssessAgentWorkPayloadV0(t, result.AssessCommand)
 	if payload.Verdict != orquestacoreworkflow.AgentAssessmentVerdictGarbageV0 ||

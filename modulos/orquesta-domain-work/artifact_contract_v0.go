@@ -17,6 +17,15 @@ const (
 	DomainWorkArtifactTypeQuestionBankV0          = "question_bank"
 	DomainWorkArtifactTypeLocalHTMLSiteV0         = "local_html_site"
 	DomainWorkArtifactTypeTutorBotPackageV0       = "tutor_bot_package"
+	DomainWorkArtifactTypeInteractivePracticeV0   = "interactive_practice_package"
+	DomainWorkArtifactTypeHelpPackageV0           = "help_package"
+	DomainWorkArtifactTypeAgentReviewReportV0     = "agent_review_report"
+	DomainWorkArtifactTypeAgentPairReviewReportV0 = "agent_pair_review_report"
+	DomainWorkArtifactTypeAgentCandidateV0        = "agent_candidate_artifact"
+	DomainWorkArtifactTypeAgentCandidateVoteV0    = "agent_candidate_vote_report"
+	DomainWorkArtifactTypeAgentCandidateSelectV0  = "agent_candidate_selection_matrix"
+	DomainWorkArtifactTypeDirectorReviewMatrixV0  = "director_review_matrix"
+	DomainWorkArtifactTypeFinalDomainPackageV0    = "final_domain_package"
 	DomainWorkArtifactTypeGenericWorkDeliveryV0   = "work_delivery"
 )
 
@@ -60,6 +69,25 @@ func ExpectedDomainWorkArtifactTypeForWorkKindV0(workKind string) string {
 	case "generate_tutor_assets", "configure_temario_tutor", "configure_temario_bots",
 		"create_tutor_bot_package", "crear_tutor_temario", "bots_temario":
 		return DomainWorkArtifactTypeTutorBotPackageV0
+	case "generate_interactive_practice", "create_interactive_practice",
+		"generate_practice_package":
+		return DomainWorkArtifactTypeInteractivePracticeV0
+	case "generate_help_package", "create_help_package", "help_package":
+		return DomainWorkArtifactTypeHelpPackageV0
+	case "review_agent_independent", "review_independent_agent":
+		return DomainWorkArtifactTypeAgentReviewReportV0
+	case "review_agent_pair", "review_peer_pair", "review_pair":
+		return DomainWorkArtifactTypeAgentPairReviewReportV0
+	case "generate_agent_candidate":
+		return DomainWorkArtifactTypeAgentCandidateV0
+	case "vote_agent_candidates":
+		return DomainWorkArtifactTypeAgentCandidateVoteV0
+	case "select_agent_candidate_director":
+		return DomainWorkArtifactTypeAgentCandidateSelectV0
+	case "review_director_consolidation", "review_consensus_director":
+		return DomainWorkArtifactTypeDirectorReviewMatrixV0
+	case "finalize_domain_package", "close_domain_package":
+		return DomainWorkArtifactTypeFinalDomainPackageV0
 	default:
 		return DomainWorkArtifactTypeGenericWorkDeliveryV0
 	}

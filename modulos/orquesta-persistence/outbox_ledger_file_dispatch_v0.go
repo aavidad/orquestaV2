@@ -50,7 +50,7 @@ func (ledger *FileOutboxLedgerV0) ClaimOutboxDispatchV0(
 	if issues := fileClaimConflictsV0(record, claim); len(issues) > 0 {
 		return fileUnclaimedResultV0(claim), issues
 	}
-	if record.Ack != nil || (record.Claim != nil && !record.Claim.Recovered) {
+	if record.Ack != nil || (record.Claim != nil && !fileOutboxClaimRecoverableInProcessV0(record.Claim)) {
 		return orquestaoutboxdispatch.OutboxDispatchClaimResultV0{
 			AlreadyClaimed: true, MessageID: claim.MessageID, TargetPort: claim.TargetPort,
 		}, nil

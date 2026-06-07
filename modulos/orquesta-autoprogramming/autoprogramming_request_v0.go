@@ -2,9 +2,8 @@ package orquestaautoprogramming
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
-
-	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 const (
@@ -255,7 +254,39 @@ func autoprogrammingRequestTaskRefsV0(groups []AutoprogrammingTaskGroupV0) []str
 }
 
 func autoprogrammingRequestWriteSetPathAllowedV0(path string) bool {
-	return orquestarails.WorkspaceRelativePathAllowedV0(path, true)
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" ||
+		trimmed == "." ||
+		strings.Contains(trimmed, "://") ||
+		strings.HasPrefix(trimmed, "~") ||
+		strings.Contains(trimmed, "$") ||
+		strings.Contains(trimmed, "\\") ||
+		strings.ContainsAny(trimmed, "\x00\r\n") ||
+		filepath.IsAbs(trimmed) ||
+		autoprogrammingPathHasDrivePrefixV0(trimmed) {
+		return false
+	}
+	for _, segment := range strings.Split(trimmed, "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return false
+		}
+	}
+	cleaned := filepath.ToSlash(filepath.Clean(trimmed))
+	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return false
+	}
+	for _, segment := range strings.Split(cleaned, "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return false
+		}
+	}
+	return true
+}
+
+func autoprogrammingPathHasDrivePrefixV0(path string) bool {
+	return len(path) >= 2 &&
+		((path[0] >= 'a' && path[0] <= 'z') || (path[0] >= 'A' && path[0] <= 'Z')) &&
+		path[1] == ':'
 }
 
 func autoprogrammingRequestMaxTaskRefsV0(request AutoprogrammingRequestV0) int {

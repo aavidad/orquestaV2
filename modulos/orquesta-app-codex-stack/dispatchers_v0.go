@@ -127,11 +127,18 @@ func recordingSpecResolverV0(
 				TaskStore:      config.Stores.TaskStore,
 				AppChangeStore: config.Stores.AppChangeStore,
 			},
+			Claude: ClaudeLaunchSpecResolverV0{
+				Config:         config.Claude,
+				CodexConfig:    config.Codex,
+				TaskStore:      config.Stores.TaskStore,
+				AppChangeStore: config.Stores.AppChangeStore,
+			},
 		},
 		Recorder: config.Stores.ReceiptStore,
 		AckPathResolver: providerAwareAckPathResolverV0{
 			Codex:  config.Codex,
 			Gemini: config.Gemini,
+			Claude: config.Claude,
 		},
 		WorktreeBaselineRecorder: codexStackWorktreeBaselineRecorderV0(config),
 	}

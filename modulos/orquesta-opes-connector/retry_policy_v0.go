@@ -86,7 +86,7 @@ func (client RESTClientV0) doJSONWithRetryV0(
 		}
 		if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
 			discardOPESResponseBodyV0(res)
-			return connectorErrorV0{code: ErrOPESHTTPStatusV0}
+			return connectorErrorV0{code: opesHTTPStatusErrorCodeV0(res.StatusCode)}
 		}
 		err = decodeOPESJSONResponseV0(res, target)
 		res.Body.Close()
@@ -221,6 +221,21 @@ func sleepOPESRetryDecisionV0(ctx context.Context, policy RetryPolicyV0, delay t
 
 func opesRetryableHTTPStatusV0(status int) bool {
 	return status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable || status == http.StatusBadGateway || status == http.StatusGatewayTimeout
+}
+
+func opesHTTPStatusErrorCodeV0(status int) string {
+	if status <= 0 {
+		return ErrOPESHTTPStatusV0
+	}
+	return ErrOPESHTTPStatusV0 + "_" + strconv.Itoa(status)
+}
+
+func opesHTTPStatusErrorCodeIs4xxV0(code string) bool {
+	if !strings.HasPrefix(code, ErrOPESHTTPStatusV0+"_") {
+		return false
+	}
+	status, err := strconv.Atoi(strings.TrimPrefix(code, ErrOPESHTTPStatusV0+"_"))
+	return err == nil && status >= http.StatusBadRequest && status < http.StatusInternalServerError
 }
 
 func opesRetryKeyFromPayloadV0(payload any) string {

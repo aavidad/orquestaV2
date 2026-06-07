@@ -45,6 +45,7 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 		MCPBootstrapToolNameV0,
 		MCPCoreWorkflowCommandToolNameV0,
 		MCPRunControlToolNameV0,
+		MCPRuntimeModelsToolNameV0,
 		MCPRunQueuePriorityToolNameV0,
 		MCPRunSupervisorToolNameV0,
 		MCPWorkspaceTimelineToolNameV0,

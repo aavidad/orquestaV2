@@ -87,9 +87,20 @@ func TestValidateReviewReworkSignalV0RejectsAcceptedAndInvalidActions(t *testing
 	}
 }
 
-func TestValidateReviewReworkSignalV0RejectsForbiddenDetails(t *testing.T) {
+func TestValidateReviewReworkSignalV0AllowsOperationalLabels(t *testing.T) {
 	signal := validReviewReworkSignalV0()
 	signal.ReasonRef = "oauth-policy"
+	signal.Summary = "prompt policy y transcript policy refs."
+
+	err := ValidateReviewReworkSignalV0(NormalizeReviewReworkSignalV0(signal))
+	if err != nil {
+		t.Fatalf("ValidateReviewReworkSignalV0: %v", err)
+	}
+}
+
+func TestValidateReviewReworkSignalV0RejectsSensitiveDetails(t *testing.T) {
+	signal := validReviewReworkSignalV0()
+	signal.ReasonRef = "authorization: bearer valor"
 
 	err := ValidateReviewReworkSignalV0(NormalizeReviewReworkSignalV0(signal))
 	assertReviewReworkSignalErrorV0(t, err, ErrDetalleProhibidoV0, "payload")

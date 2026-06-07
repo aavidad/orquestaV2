@@ -31,7 +31,7 @@ func assessmentDecisionFromProgressStatusV0(input AgentProgressSupervisionInputV
 	if agentProgressAuthConfigBlockerV0(input.Report) {
 		return orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
 			orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
-			orquestacoreworkflow.AgentAssessmentSeverityCriticalV0
+			orquestacoreworkflow.AgentAssessmentSeverityHighV0
 	}
 	if agentProgressCapacityLimitedV0(input.Report) {
 		if !agentProgressStopAllowedV0(input) {
@@ -157,7 +157,7 @@ func stalledSeverityFromCountersV0(report orquestaagentprogress.AgentProgressRep
 
 func assessmentSummaryFromProgressReportV0(report orquestaagentprogress.AgentProgressReportV0) string {
 	if agentProgressAuthConfigBlockerV0(report) {
-		return "Autenticacion externa invalida; pausar reintentos y solicitar reautorizacion."
+		return "Evidencia de autenticacion no estructurada; revisar sin pausar automaticamente."
 	}
 	if agentProgressCapacityLimitedV0(report) {
 		return "Capacidad externa limitada; cerrar agente y replanificar."
@@ -287,6 +287,9 @@ func compactSupervisorStringsV0(values []string) []string {
 }
 
 func supervisorHasForbiddenDetailV0(value string) bool {
+	if !orquestarails.RailsEnforcedV0() {
+		return false
+	}
 	if orquestarails.TextContainsOperationalRawDetailForFieldV0(
 		"agent_progress_supervisor",
 		"evidence_refs",

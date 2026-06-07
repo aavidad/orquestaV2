@@ -101,6 +101,7 @@ func TestCodexAgentAckReceiptV0NoBloqueaDetalleConRailOffPorDefecto(t *testing.T
 }
 
 func TestCodexAgentAckReceiptV0RailEstrictoAceptaEvidenciaRefOnlyOPES(t *testing.T) {
+	enableCodexRailsModeEnforcedForTestV0(t)
 	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "on")
 	spec := codexSpecForTestV0()
 	spec.AgentPacket.Context = orquestacontext.ContextMaterializedBundleV0{
@@ -124,7 +125,8 @@ func TestCodexAgentAckReceiptV0RailEstrictoAceptaEvidenciaRefOnlyOPES(t *testing
 	}
 }
 
-func TestCodexAgentAckReceiptV0RailEstrictoRefOnlySigueCortandoSecretoEfectivo(t *testing.T) {
+func TestCodexAgentAckReceiptV0RailEstrictoRefOnlyNoCortaSecretoEfectivo(t *testing.T) {
+	enableCodexRailsModeEnforcedForTestV0(t)
 	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "on")
 	spec := codexSpecForTestV0()
 	spec.AgentPacket.Context = orquestacontext.ContextMaterializedBundleV0{
@@ -143,7 +145,9 @@ func TestCodexAgentAckReceiptV0RailEstrictoRefOnlySigueCortandoSecretoEfectivo(t
 
 	_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
 
-	requireCodexIssueV0(t, issues, CodexConnectorAckForbiddenV0)
+	if len(issues) != 0 {
+		t.Fatalf("rails quitados no deben bloquear secreto efectivo: %+v", issues)
+	}
 }
 
 func TestCodexAgentAckReceiptV0AceptaACKMinimoHidratadoDesdeSpec(t *testing.T) {
@@ -182,13 +186,15 @@ func TestCodexAgentAckReceiptV0NormalizaRefsRedundantesSiLaIdentidadCuadra(t *te
 	}
 }
 
-func TestCodexAgentAckReceiptV0RechazaACKMinimoConRequiredTests(t *testing.T) {
+func TestCodexAgentAckReceiptV0AceptaACKMinimoHidratableConRequiredTests(t *testing.T) {
 	spec := codexSpecForTestV0()
 	ack := `{"schema_version":"codex_agent_ack.v0","status":"completed"}`
 
 	_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
 
-	requireCodexIssueV0(t, issues, CodexConnectorAckArtifactV0)
+	if len(issues) != 0 {
+		t.Fatalf("ACK minimo hidratable debe llegar a review, no bloquear: %+v", issues)
+	}
 }
 
 func TestCodexAgentAckReceiptV0RechazaCorruptoEIncompleto(t *testing.T) {
@@ -243,13 +249,15 @@ func TestCodexAgentAckReceiptV0AceptaRetrySoloConTestsSinArtifacts(t *testing.T)
 	}
 }
 
-func TestCodexAgentAckReceiptV0RechazaArtifactsFaltantesSinEvidencia(t *testing.T) {
+func TestCodexAgentAckReceiptV0AceptaArtifactsFaltantesComoReview(t *testing.T) {
 	spec := codexSpecForTestV0()
 	data := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":[]}`
 
 	_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(data), spec)
 
-	requireCodexIssueV0(t, issues, CodexConnectorAckArtifactV0)
+	if len(issues) != 0 {
+		t.Fatalf("artefactos faltantes deben llegar a review, no bloquear ACK: %+v", issues)
+	}
 }
 
 func TestCodexAgentAckReceiptV0AceptaArtifactFueraDeWriteSetComoRailBlando(t *testing.T) {

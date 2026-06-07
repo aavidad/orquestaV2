@@ -34,9 +34,24 @@ func (r GeminiExecResolverV0) ResolveExternalAgentProcessCommandV0(
 	if issues := ValidateGeminiConnectorProfileV0(r.profile); len(issues) > 0 {
 		return orquestaruntime.ProcessRuntimeLaunchRequestV0{}, geminiCorrelateIssuesV0(spec.CorrelationID, issues)
 	}
-	if !spec.Valid() {
+	if specIssues := spec.Validate(); len(specIssues) > 0 {
+		evidence := []string{"invalid_spec"}
+		for _, issue := range specIssues {
+			evidence = append(evidence, string(issue.Code))
+			if strings.TrimSpace(issue.Field) != "" {
+				evidence = append(evidence, string(issue.Code)+":"+strings.TrimSpace(issue.Field))
+			}
+			evidence = append(evidence, issue.Evidence...)
+		}
+		issue := geminiIssueV0(
+			GeminiConnectorProfileInvalidV0,
+			"external_agent_launch_spec",
+			spec.CorrelationID,
+			"",
+		)
+		issue.Evidence = compactGeminiIssueEvidenceV0(evidence)
 		return orquestaruntime.ProcessRuntimeLaunchRequestV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{
-			geminiIssueV0(GeminiConnectorProfileInvalidV0, "external_agent_launch_spec", spec.CorrelationID, "invalid_spec"),
+			issue,
 		}
 	}
 	req := r.processRuntimeLaunchRequestV0()
@@ -99,13 +114,16 @@ func (r GeminiExecResolverV0) materializeFilesV0(
 		}
 	}
 	promptHints := append([]string(nil), r.profile.PromptHints...)
-	promptHints = append(promptHints, "runtime_work_dir debe usarse solo para ficheros de control del agente.")
+	promptHints = append(promptHints, geminiRuntimeWorkDirPromptHintV0(r.profile))
 	prompt := BuildGeminiAgentPromptWithControlFilesV0(
 		spec.AgentPacket,
 		promptHints,
 		GeminiControlFilesV0{
-			PacketPath: packetPath,
-			AckPath:    filepath.Join(r.profile.RuntimeWorkDir, GeminiAgentAckFileNameV0),
+			PacketPath:          packetPath,
+			AckPath:             filepath.Join(r.profile.RuntimeWorkDir, GeminiAgentAckFileNameV0),
+			DecisionPath:        filepath.Join(r.profile.RuntimeWorkDir, GeminiDirectorDecisionsFileNameV0),
+			ShutdownRequestPath: filepath.Join(r.profile.RuntimeWorkDir, GeminiShutdownRequestFileNameV0),
+			ShutdownAckPath:     filepath.Join(r.profile.RuntimeWorkDir, GeminiShutdownCheckpointAckFileNameV0),
 		},
 	)
 	if err := writeGeminiControlFileV0(r.profile.RuntimeWorkDir, promptPath, GeminiAgentPromptFileNameV0, []byte(prompt), 0o600); err != nil {
@@ -120,6 +138,17 @@ func (r GeminiExecResolverV0) materializeFilesV0(
 		}
 	}
 	return nil
+}
+
+func geminiRuntimeWorkDirPromptHintV0(profile GeminiConnectorProfileV0) string {
+	switch strings.TrimSpace(profile.RuntimeWorkDirPlacement) {
+	case GeminiRuntimeWorkDirExternalRootV0:
+		return "runtime_work_dir es writable root externo solo para control; no crees docs/codigo alli ni lo trates como workdir de producto."
+	case GeminiRuntimeWorkDirInsideProjectV0:
+		return "runtime_work_dir es directorio de control dentro del proyecto; no incluyas sus ficheros en ACK.files ni en artefactos de producto."
+	default:
+		return "runtime_work_dir debe usarse solo para ficheros de control del agente."
+	}
 }
 
 func writeGeminiJSONFileV0(rootDir string, path string, value any) error {

@@ -50,7 +50,11 @@ Invariantes:
 - `docs/pruebas.md` entra en fases de programacion, integracion, revision, validacion y cierre.
 - `docs/decisiones.md` entra en fases de brainstorming, votacion, integracion, revision y cierre.
 - Si un agente necesita informacion externa no incluida, debe emitir `CONSULTA AL DIRECTOR`.
-- Los detalles de HOME real, OAuth, tokens, secretos, transcripts, prompts completos, proveedores y motores concretos se rechazan.
+- Detalles operativos, HOME, OAuth, tokens, prompts, transcripts, proveedores y
+  motores concretos no se usan como veto automatico con rails offline. Si
+  aparecen en refs/evidencias, el adaptador o sanitizador los minimiza cuando
+  sea un valor sensible efectivo; el Director decide aprovechamiento, rework o
+  tarea derivada.
 - Si el bundle supera limites, se rechaza en vez de crecer sin control.
 
 Regla de evolucion:
@@ -91,7 +95,9 @@ Reglas:
 - Toda entrada requerida que quede como `ref_only` declara `ref_only_reason` y
   `required_ref_action` para distinguir refs opacas por diseno de refs que
   debian materializarse, requerir lectura local o requerir consulta al director.
-- Si se detectan patrones de secreto o ruta real sensible en contenido materializado, se rechaza.
+- Con rails offline, detalles locales o de control en contenido materializado no
+  bloquean por si mismos; el Director o sanitizador decide si se aprovechan,
+  reducen o convierten en tarea.
 - Si falta una ref requerida, la materializacion falla y el agente debe emitir `CONSULTA AL DIRECTOR` o esperar correccion del director.
 
 Errores publicos:
@@ -102,7 +108,8 @@ Errores publicos:
 - `context_materialization_ref_invalida`
 - `context_materialization_ref_no_encontrada`
 - `context_materialization_tamano_invalido`
-- `context_materialization_detalle_prohibido`
+- `context_materialization_detalle_prohibido` queda como codigo historico o de
+  adaptador explicito, no como veto automatico por palabras con rails offline.
 
 ## ContextSanitizerPortV0
 
@@ -122,8 +129,8 @@ Salida:
 Reglas:
 
 - El puerto no conoce IA, proveedor, modelo, transporte, HOME ni runtime real.
-- Si no hay sanitizador inyectado, la materializacion conserva el bloqueo
-  historico por `context_materialization_detalle_prohibido`.
+- Si no hay sanitizador inyectado, la materializacion no reactiva rails de
+  detalle historicos mientras siga vigente `RAILS-D016`.
 - Si el sanitizador limpia el contenido, `sanitization_evidence` viaja junto al
   bundle con categorias y contador, nunca con el secreto original.
 - Si el sanitizador duda, la entrada requerida se degrada a `ref_only`, se marca

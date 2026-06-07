@@ -17,7 +17,10 @@ Campos:
   - summary
   - evidence_refs opcional
 Invariantes:
-  - No transporta runtime, provider, modelo concreto, HOME, OAuth, DB, credenciales, prompts ni transcripts.
+  - Puede transportar refs/etiquetas opacas como runtime, provider, modelo,
+    HOME, OAuth o DB si no contienen valor sensible.
+  - No transporta credenciales, secretos efectivos, prompt/transcript/completion
+    crudos con contenido, DSN con credenciales ni paths reales.
   - `source_ref` apunta a review, assessment, timeout, failed_agent o pregunta del director.
   - No ejecuta la replanificacion; solo propone una decision compacta.
 ```
@@ -64,7 +67,8 @@ Invariantes:
   - No para agentes ni relanza capacidad; solo traduce evidencia a propuesta.
   - `capacity_limited` y `timeout` son veredictos validos del workflow para
     replanificar despues de `stop_agent`; no equivalen a retry automatico.
-  - Si la fuente fue runtime, se guarda como ref compacta, no como log/transcript.
+  - Si la fuente fue runtime, se guarda como ref compacta, no como log,
+    transcript crudo ni credencial.
 ```
 
 ## Contrato candidato: AgentFailedReplanSignalV0
@@ -89,7 +93,10 @@ Invariantes:
   - `source_ref` debe ser el `agent_request_id` fallido ya proyectado por workflow.
   - `replace_agent` exige `replacement_role` y no reutiliza implicitamente el agente fallido.
   - No acepta `retry_task`; un nuevo intento requiere decision durable y followups separados.
-  - No transporta runtime, provider, modelo concreto, HOME, OAuth, DB, credenciales, prompts ni transcripts.
+  - Puede transportar refs/etiquetas opacas como runtime, provider, modelo,
+    HOME, OAuth o DB si no contienen valor sensible.
+  - No transporta credenciales, secretos efectivos, prompt/transcript/completion
+    crudos con contenido, DSN con credenciales ni paths reales.
 ```
 
 ## Contrato candidato: ReplanDecisionV0
@@ -111,7 +118,10 @@ Invariantes:
   - `replan_ref`, `run_ref`, `task_ref`, `source_ref` y `followup_refs` son refs opacas obligatorias.
   - Debe ser idempotente por `replan_ref`.
   - Si crea nuevas tareas/agentes/capacidad, esos efectos se materializan con comandos separados o outbox.
-  - No transporta DB, runtime, provider, HOME, OAuth, modelo, secretos, prompts ni transcripts.
+  - Puede transportar refs/etiquetas opacas como runtime, provider, modelo,
+    HOME, OAuth o DB si no contienen valor sensible.
+  - No transporta credenciales, secretos efectivos, prompt/transcript/completion
+    crudos con contenido, DSN con credenciales ni paths reales.
 ```
 
 ## Contratos promocionados a core-workflow

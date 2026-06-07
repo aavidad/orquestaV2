@@ -142,17 +142,21 @@ func TestProcessRuntimeConnectorV0RechazaShellYEnvHeredado(t *testing.T) {
 	requireProcessRuntimeCodeV0(t, err, ProcessRuntimeEnvProhibidoV0)
 }
 
-func TestValidateProcessRuntimeLaunchRequestV0PermiteShellYEnvAmplioConRailsDetalleOff(t *testing.T) {
+func TestValidateProcessRuntimeLaunchRequestV0RechazaShellYEnvAmplioAunqueRailsDetalleOff(t *testing.T) {
 	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "off")
 	req := processRuntimeLaunchRequestForTestV0(t, "wait")
 	req.CommandPath = filepath.Join(string(filepath.Separator), "bin", "sh")
+
+	requireProcessRuntimeCodeV0(t, validateProcessRuntimeLaunchRequestV0(req), ProcessRuntimeShellProhibidaV0)
+
+	req = processRuntimeLaunchRequestForTestV0(t, "wait")
 	req.Env = []string{
 		"HOME=/home/alberto",
 		"OPENAI_TOKEN=token-real-proyectado-por-operador",
 		"PATH=/usr/bin",
 	}
 
-	requireNoProcessRuntimeErrorV0(t, validateProcessRuntimeLaunchRequestV0(req))
+	requireProcessRuntimeCodeV0(t, validateProcessRuntimeLaunchRequestV0(req), ProcessRuntimeEnvProhibidoV0)
 }
 
 func TestProcessRuntimeConnectorV0NoHeredaEntornoPadre(t *testing.T) {

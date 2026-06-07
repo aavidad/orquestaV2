@@ -11,10 +11,11 @@ el core no guarda son valores reales de proveedor/runtime/DB/HOME/adaptador,
 secretos efectivos, rutas privadas, prompts/transcripts crudos ni payloads
 masivos.
 
-Actualizacion 2026-05-27: T15 queda cerrada y reconciliada. El core-workflow no
-debe relanzar validadores por la frase historica de servidor `off`; el owner
-real es `orquesta-rails` por frontera/campo, con default de servidor `on`
-acotado y modo `programming` abierto.
+Actualizacion 2026-06-02: T15 queda historica. El core-workflow no debe
+relanzar validadores ni cortar por detalle operativo salvo modo explicito
+`ORQUESTA_RAILS_MODE=enforced`; el owner real es `orquesta-rails` por
+frontera/campo. En runtime normal los rails estan offline y el director/agente
+debe reparar o aprovechar la evidencia.
 
 ## Plantilla
 

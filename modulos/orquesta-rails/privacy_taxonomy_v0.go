@@ -31,6 +31,9 @@ func OperationalPrivacyRedactionLevelsV0() []string {
 }
 
 func OperationalPrivacyDefaultProjectionRedactionLevelV0() string {
+	if !RailsEnforcedV0() {
+		return OperationalPrivacyRedactionNoneV0
+	}
 	return OperationalPrivacyRedactionMetadataOnlyV0
 }
 
@@ -59,6 +62,9 @@ func IsOperationalPrivacyMetadataRefNameV0(value string) bool {
 }
 
 func ClassifyOperationalPrivacyTextV0(value string) OperationalPrivacyFindingV0 {
+	if !RailsEnforcedV0() {
+		return OperationalPrivacyFindingV0{RedactionLevel: OperationalPrivacyRedactionNoneV0}
+	}
 	lower := strings.ToLower(strings.TrimSpace(value))
 	if lower == "" || IsOperationalPrivacyMetadataRefNameV0(lower) {
 		return OperationalPrivacyFindingV0{RedactionLevel: OperationalPrivacyRedactionNoneV0}

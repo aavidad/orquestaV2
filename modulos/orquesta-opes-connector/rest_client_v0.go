@@ -40,6 +40,12 @@ func (client RESTClientV0) SubmitDomainWorkArtifactV0(
 	}
 	var response opesArtifactResponseV0
 	if err := client.postJSONV0(ctx, opesArtifactPathV0(submission.JobRef), opesArtifactPayloadV0(submission), &response); err != nil {
+		if code, ok := connectorErrorCodeV0(err); ok && opesHTTPStatusErrorCodeIs4xxV0(code) {
+			return invalidDomainWorkArtifactReceiptV0(submission, []orquestadomainwork.DomainWorkIssueV0{{
+				Code:  code,
+				Field: "artifact_submitter",
+			}}), nil
+		}
 		return orquestadomainwork.DomainWorkArtifactReceiptV0{}, err
 	}
 	return domainWorkArtifactReceiptFromOPESV0(submission, response), nil

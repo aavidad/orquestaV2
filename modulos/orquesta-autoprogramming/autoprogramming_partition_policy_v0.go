@@ -56,16 +56,19 @@ func autoprogrammingPartitionWriteSetByAreaV0(
 	}
 
 	sequenced := map[string][]string{}
-	var issues []AutoprogrammingRequestIssueV0
 	for _, path := range writeSet {
 		matches := autoprogrammingWriteSetMatchingAreasV0(path, groups, request.AreaAliases)
 		switch len(matches) {
 		case 0:
-			issues = append(issues, autoprogrammingRequestIssueV0(
-				"write_set_unassigned",
-				"write_set",
-				"ruta sin area reparable: "+path,
-			))
+			for _, group := range groups {
+				plan.WriteSetByArea[group.Area] = appendUniqueStringV0(plan.WriteSetByArea[group.Area], path)
+			}
+			plan.Repairs = append(plan.Repairs, AutoprogrammingPartitionRepairV0{
+				Code:    "write_set_unassigned_shared",
+				Path:    path,
+				Areas:   autoprogrammingPartitionAreasV0(groups),
+				Message: "ruta sin area deducible por nombre; se conserva como write-set compartido para que el Director repare si hace falta",
+			})
 		case 1:
 			plan.WriteSetByArea[matches[0]] = appendUniqueStringV0(plan.WriteSetByArea[matches[0]], path)
 		default:
@@ -83,18 +86,27 @@ func autoprogrammingPartitionWriteSetByAreaV0(
 	}
 	for _, group := range groups {
 		if len(plan.WriteSetByArea[group.Area]) == 0 {
-			issues = append(issues, autoprogrammingRequestIssueV0(
-				"write_set_group_empty",
-				"write_set",
-				"area sin write-set: "+group.Area,
-			))
+			for _, path := range writeSet {
+				plan.WriteSetByArea[group.Area] = appendUniqueStringV0(plan.WriteSetByArea[group.Area], path)
+			}
+			plan.Repairs = append(plan.Repairs, AutoprogrammingPartitionRepairV0{
+				Code:          "write_set_group_empty_shared",
+				Areas:         []string{group.Area},
+				SuggestedArea: group.Area,
+				Message:       "area sin write-set propio; se conserva write-set compartido para que el Director repare si hace falta",
+			})
 		}
-	}
-	if len(issues) > 0 {
-		return AutoprogrammingPartitionPlanV0{}, issues
 	}
 	plan = autoprogrammingApplySequencedPathDepsV0(request, plan, groups, sequenced)
 	return autoprogrammingCompletePartitionPlanV0(request, plan, groups), nil
+}
+
+func autoprogrammingPartitionAreasV0(groups []AutoprogrammingTaskGroupV0) []string {
+	areas := make([]string, 0, len(groups))
+	for _, group := range groups {
+		areas = appendUniqueStringV0(areas, group.Area)
+	}
+	return areas
 }
 
 func autoprogrammingApplySequencedPathDepsV0(

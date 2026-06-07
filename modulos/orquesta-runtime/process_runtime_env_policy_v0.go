@@ -3,8 +3,6 @@ package orquestaruntime
 import (
 	"path/filepath"
 	"strings"
-
-	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func processRuntimeCommandIsShellV0(commandPath string) bool {
@@ -24,9 +22,6 @@ func processRuntimeEnvEntryAllowedV0(item string) bool {
 		return false
 	}
 	key = strings.TrimSpace(key)
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return processRuntimeEnvKeySyntaxAllowedV0(key) && !strings.ContainsRune(value, 0)
-	}
 	if !processRuntimeEnvKeyAllowedV0(key) {
 		return false
 	}
@@ -69,9 +64,6 @@ func processRuntimeEnvKeySyntaxAllowedV0(key string) bool {
 }
 
 func processRuntimeEnvKeyForbiddenV0(key string) bool {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return false
-	}
 	upper := strings.ToUpper(strings.TrimSpace(key))
 	for _, marker := range []string{
 		"HOME",

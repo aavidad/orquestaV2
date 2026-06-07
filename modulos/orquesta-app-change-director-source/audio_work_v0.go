@@ -24,8 +24,8 @@ func appChangeAudioWorkCriteriaV0(
 		"Devolver audio_asset con manifest de idioma, formato, duracion y refs/checksums de artefactos.",
 		"Derivar el audio desde assembled_topic o refs opacas del paquete final aprobado.",
 		"Mantener el texto narrado trazable a secciones del tema sin inventar contenido nuevo.",
-		"No incluir rutas locales, proveedor, GPU, modelo ni procesos internos en el payload publico.",
-		"Si falta el tema ensamblado o audio_profile_ref requerido, declararlo como bloqueo de dominio y no inventarlo.",
+		"Si aparecen rutas locales, proveedor, GPU, modelo o procesos internos, registrarlos como nota de saneamiento antes del payload publico.",
+		"Si falta el tema ensamblado o audio_profile_ref requerido, conservar manifest parcial y dejar nota de rework de dominio.",
 	}
 }
 
@@ -38,6 +38,6 @@ func appChangeAudioRequiredTestsV0(
 		"validar artifact_type=audio_asset",
 		"validar manifest de audio accesible",
 		"validar trazabilidad al tema ensamblado",
-		"validar que no filtra proveedor, GPU, modelo, rutas ni procesos internos",
+		"validar notas de saneamiento de proveedor, GPU, modelo, rutas o procesos internos",
 	}
 }

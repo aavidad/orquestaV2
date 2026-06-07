@@ -95,6 +95,7 @@ func (builder daemonStartEnvBuilderV0) addDerivedV0(config orquestaserver.Config
 	builder.setV0(envCodexCodeHomeV0, codeHomeDirV0(), "derived", "codex_runtime", false)
 	builder.setV0(envCodexPathV0, envOrDefaultV0(envCodexPathV0, getenvRawV0("PATH")), "derived", "codex_runtime", false)
 	builder.setConfigV0(envSecurityModeV0, serverSecurityModeEffectiveValueV0(), "defaulted", "rails", false)
+	builder.setConfigV0(envRailsModeV0, serverRailsModeEffectiveValueV0(), "defaulted", "rails", false)
 	builder.setConfigV0(detailProhibitedRailsEnvV0, serverDetailRailsEffectiveValueV0(), "defaulted", "rails", false)
 	builder.setConfigV0(detailProhibitedRailsScopeEnvV0, serverDetailRailsScopeEffectiveValueV0(), "defaulted", "rails", false)
 	builder.setConfigV0(envStartupCleanupModeV0, startupCleanupModeEffectiveValueV0(), "defaulted", "startup", false)
@@ -191,6 +192,7 @@ func daemonStartEnvPrefixRulesV0() []daemonStartEnvPrefixRuleV0 {
 	return []daemonStartEnvPrefixRuleV0{
 		{"ORQUESTA_SERVER_", "server"},
 		{"ORQUESTA_STARTUP_", "startup"},
+		{"ORQUESTA_RAILS_", "rails"},
 		{"ORQUESTA_DETAIL_", "rails"},
 		{"ORQUESTA_CODEX_", "codex_runtime"},
 		{"ORQUESTA_CAPACITY_", "capacity"},

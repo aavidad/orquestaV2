@@ -2,14 +2,21 @@ package orquestaruntimeworktree
 
 import (
 	pathpkg "path"
+	"path/filepath"
 	"sort"
 	"strings"
-
-	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func normalizeWorktreeRelPathV0(value string, allowRoot bool) (string, bool) {
-	return orquestarails.NormalizeWorkspaceRelativePathV0(value, allowRoot)
+	trimmed := strings.TrimSpace(value)
+	if !worktreeRelPathStructurallySafeV0(trimmed, allowRoot) {
+		return "", false
+	}
+	cleaned := filepath.ToSlash(filepath.Clean(trimmed))
+	if !worktreeRelPathStructurallySafeV0(cleaned, allowRoot) {
+		return "", false
+	}
+	return cleaned, true
 }
 
 func normalizeWorktreePathListV0(values []string, allowRoot bool) ([]string, []WorktreeIssueV0) {
@@ -30,6 +37,37 @@ func normalizeWorktreePathListV0(values []string, allowRoot bool) ([]string, []W
 	}
 	sort.Strings(paths)
 	return paths, issues
+}
+
+func worktreeRelPathStructurallySafeV0(value string, allowRoot bool) bool {
+	if value == "" ||
+		strings.Contains(value, "://") ||
+		strings.HasPrefix(value, "~") ||
+		strings.Contains(value, "$") ||
+		strings.Contains(value, "\\") ||
+		strings.ContainsAny(value, "\x00\r\n") ||
+		filepath.IsAbs(value) ||
+		worktreePathHasDrivePrefixV0(value) {
+		return false
+	}
+	if value == "." {
+		return allowRoot
+	}
+	if value == ".." || strings.HasPrefix(value, "../") {
+		return false
+	}
+	for _, segment := range strings.Split(value, "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return false
+		}
+	}
+	return true
+}
+
+func worktreePathHasDrivePrefixV0(value string) bool {
+	return len(value) >= 2 &&
+		((value[0] >= 'a' && value[0] <= 'z') || (value[0] >= 'A' && value[0] <= 'Z')) &&
+		value[1] == ':'
 }
 
 func worktreePathIgnoredV0(path string, prefixes []string) bool {

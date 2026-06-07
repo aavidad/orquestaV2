@@ -85,17 +85,41 @@ func TestValidateReplanDecisionV0RejectsUnknownAction(t *testing.T) {
 	assertReplanDecisionErrorV0(t, err, ErrReplanDecisionActionInvalidaV0, "accepted_action")
 }
 
-func TestValidateReplanDecisionV0RejectsForbiddenDetails(t *testing.T) {
+func TestValidateReplanDecisionV0AllowsOperationalLabels(t *testing.T) {
 	cases := map[string]func(*ReplanDecisionV0){
 		"DB":          func(decision *ReplanDecisionV0) { decision.ReplanRef = "db-decision" },
 		"runtime":     func(decision *ReplanDecisionV0) { decision.SourceRef = "runtime-assessment" },
 		"provider":    func(decision *ReplanDecisionV0) { decision.Summary = "depende de provider externo" },
 		"HOME":        func(decision *ReplanDecisionV0) { decision.FollowupRefs = []string{"$HOME/rework"} },
 		"OAuth":       func(decision *ReplanDecisionV0) { decision.SourceRef = "oauth-source" },
-		"modelo":      func(decision *ReplanDecisionV0) { decision.Summary = "cambiar modelo" },
-		"secretos":    func(decision *ReplanDecisionV0) { decision.EvidenceRefs = []string{"secretos-ref"} },
-		"prompts":     func(decision *ReplanDecisionV0) { decision.Summary = "ver prompts completos" },
-		"transcripts": func(decision *ReplanDecisionV0) { decision.EvidenceRefs = []string{"transcripts/full"} },
+		"modelo":      func(decision *ReplanDecisionV0) { decision.Summary = "cambiar modelo por ref de politica" },
+		"secretos":    func(decision *ReplanDecisionV0) { decision.EvidenceRefs = []string{"secretos-policy-ref"} },
+		"prompts":     func(decision *ReplanDecisionV0) { decision.Summary = "prompt policy ref sin contenido crudo" },
+		"transcripts": func(decision *ReplanDecisionV0) { decision.EvidenceRefs = []string{"transcripts/policy-ref"} },
+	}
+
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			decision := validReplanDecisionV0()
+			mutate(&decision)
+
+			err := ValidateReplanDecisionV0(NormalizeReplanDecisionV0(decision))
+			if err != nil {
+				t.Fatalf("ValidateReplanDecisionV0: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateReplanDecisionV0RejectsSensitiveDetails(t *testing.T) {
+	cases := map[string]func(*ReplanDecisionV0){
+		"api_key":       func(decision *ReplanDecisionV0) { decision.Summary = "depende de api_key=valor" },
+		"authorization": func(decision *ReplanDecisionV0) { decision.EvidenceRefs = []string{"authorization: bearer valor"} },
+		"dsn":           func(decision *ReplanDecisionV0) { decision.SourceRef = "postgres://user:pass@host/db" },
+		"raw_completion": func(decision *ReplanDecisionV0) {
+			decision.Summary = "completion=raw payload"
+		},
+		"real_path": func(decision *ReplanDecisionV0) { decision.FollowupRefs = []string{"/home/operator/rework"} },
 	}
 
 	for name, mutate := range cases {

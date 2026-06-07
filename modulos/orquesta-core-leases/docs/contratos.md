@@ -16,6 +16,8 @@ Campos:
 Invariantes:
   - No contiene reloj real, PID, runtime, provider, modelo, HOME, OAuth ni DB.
   - Los tiempos son umbrales de politica, no timers ejecutados por el core.
+  - Las refs opacas pueden contener vocabulario operativo generico; se rechazan
+    secretos o datos reales efectivos, no palabras sueltas.
 ```
 
 ## Contrato candidato: AgentHeartbeatReportV0
@@ -35,7 +37,9 @@ Campos:
 Invariantes:
   - `observed_at` llega desde fuera; no se calcula en core.
   - Heartbeat de vida y progreso semantico no son lo mismo. Pueden enlazarse por `progress_report_ref`.
-  - No contiene PID, process_ref real, HOME, provider, modelo, OAuth, transcript ni log completo.
+  - No contiene PID, process_ref real, HOME, provider, modelo, OAuth, transcript ni log completo como campos contratados.
+  - Campos no contratados se rechazan como JSON invalido; secretos efectivos se
+    rechazan como `detalle_prohibido`.
 ```
 
 ## Contrato candidato: AgentTimeoutAssessmentV0
@@ -77,7 +81,11 @@ Invariantes:
   - Conserva refs compactas (`run_ref`, `agent_request_id`, `lease_ref`, `evidence_refs`).
   - La traduccion desde assessment es idempotente y no comparte slices mutables de evidencia.
   - `mark_stopped` y `mark_failed` son senales terminales; no paran procesos ni consultan runtime.
-  - No acepta campos ni refs con DB, runtime, provider, HOME, OAuth, modelo ni secretos.
+  - No acepta campos no contratados con DB, runtime, provider, HOME, OAuth o
+    modelo como estructura del evento; refs opacas con vocabulario operativo no
+    bloquean por palabra generica.
+  - Rechaza secretos, credenciales, DSN con password y contenido raw efectivo
+    como `detalle_prohibido`.
   - Puede derivar en StopAgent, AskDirector o Replan por comandos separados.
 ```
 

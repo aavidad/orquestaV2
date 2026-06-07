@@ -20,6 +20,7 @@ func TestBuildGeminiWrapperScriptV0UsaPromptPorStdin(t *testing.T) {
 		"--model 'gemini-2.5-pro'",
 		"--approval-mode 'auto_edit'",
 		"--output-format 'json'",
+		"--include-directories '" + filepath.Join(root, "runtime") + "'",
 		"--prompt ''",
 		"< '" + filepath.Join(root, "runtime", GeminiAgentPromptFileNameV0) + "'",
 	} {

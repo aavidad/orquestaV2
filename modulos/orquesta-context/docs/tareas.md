@@ -2,6 +2,31 @@
 
 Cada tarea debe ser pequena y cerrada.
 
+## CTX-006
+
+Estado: pendiente futuro.
+
+Objetivo: evaluar y cablear un adaptador opt-in tipo Graphify/Obsidian para
+alimentar un indice contextual compacto antes de lanzar agentes.
+
+Write-set previsto:
+
+- adaptador de composicion o MCP, no nucleo puro;
+- docs de runbook y smoke real acotado.
+
+Contrato futuro: el adaptador debe producir documentos compactos desde refs
+opacas y evidencias. No debe leer contexto global sin scope, no debe copiar
+documentos completos en prompts y no debe introducir rails por palabras.
+
+Validacion futura:
+
+- smoke con servidor temporal limpio;
+- prueba de que consultas con palabras ambiguas generan resultados/advisories y
+  no paran agentes.
+
+Bloqueos: aplazado hasta cerrar los problemas previos de Orquesta: rails stale,
+redaccion no bloqueante, tests transversales y flujo autonomo residente.
+
 ## CTX-004
 
 Estado: completada documental.

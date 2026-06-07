@@ -33,6 +33,8 @@ para OPES.
   OPES;
 - devolver artefactos mediante `POST /api/jobs/{id}/artifacts` o
   `submit_job_artifact`.
+- tratar un HTTP 4xx de OPES al entregar artefactos como `receipt` invalido de
+  dominio con codigo `opes_http_status_<status>`, no como puerto no disponible.
 
 ## Fuera de alcance
 

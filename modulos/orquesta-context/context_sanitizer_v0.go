@@ -1,6 +1,10 @@
 package orquestacontext
 
-import "strings"
+import (
+	"strings"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
+)
 
 const contextSanitizationReviewHintV0 = "CONSULTA_AL_DIRECTOR: context_sanitization_review_required"
 
@@ -169,7 +173,18 @@ func contextSanitizationSafeRefValueV0(value string, prefix string, fallback str
 }
 
 func contextSanitizationRefHasForbiddenDetailV0(value string) bool {
-	return contextMaterializedRefHasForbiddenDetailV0(value)
+	return contextSanitizationRefHasSensitiveLiteralV0(value) ||
+		contextLocalPathPublicDetailForbiddenV0(value)
+}
+
+func contextSanitizationRefHasSensitiveLiteralV0(value string) bool {
+	lower := strings.ToLower(value)
+	for _, fragment := range orquestarails.OperationalSensitiveFragmentsV0 {
+		if orquestarails.ContainsFragmentWithBoundaryV0(lower, fragment) {
+			return true
+		}
+	}
+	return false
 }
 
 func contextSanitizationSafeRefPartV0(value string) string {

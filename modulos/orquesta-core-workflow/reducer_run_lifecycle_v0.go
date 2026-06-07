@@ -134,3 +134,60 @@ func applyRunBlockedEventV0(current OrchestrationRunV0, event OrchestrationEvent
 	next.LastSequence = event.Sequence
 	return next, nil
 }
+
+func applyRunBlockerResolvedEventV0(
+	current OrchestrationRunV0,
+	event OrchestrationEventV0,
+) (OrchestrationRunV0, error) {
+	var payload RunBlockerResolvedPayloadV0
+	if err := decodePayloadV0(event.Payload, &payload); err != nil {
+		return current, err
+	}
+	payload = normalizeRunBlockerResolvedPayloadV0(payload)
+	if err := ensureRunCanApplyEventV0(current, event); err != nil {
+		return current, err
+	}
+	if err := ensureEventEffectCompatibleV0(current, event, payload.BlockerID); err != nil {
+		return current, err
+	}
+	alreadyApplied, err := runBlockerResolvedEventAlreadyAppliedV0(current, event, payload)
+	if err != nil {
+		return current, err
+	}
+	if !blockerAlreadyReflectedV0(current, payload.BlockerID) {
+		if alreadyApplied {
+			return current, nil
+		}
+		return current, eventErrorV0(ErrSecuenciaInvalidaV0, "payload.blocker_id")
+	}
+
+	next := cloneRunForReducerV0(current)
+	next.Blockers = removeCompactRefV0(next.Blockers, payload.BlockerID)
+	if len(next.Blockers) == 0 && next.Status == OrchestrationRunStatusBlockedV0 {
+		next.Status = OrchestrationRunStatusActiveV0
+	}
+	if alreadyApplied {
+		return next, nil
+	}
+	effects, err := appendCommandEffectFromEventV0(next.CommandEffects, event, payload.BlockerID)
+	if err != nil {
+		return current, err
+	}
+	next.CommandEffects = effects
+	next.LastEventID = strings.TrimSpace(event.EventID)
+	next.LastSequence = event.Sequence
+	return next, nil
+}
+
+func runBlockerResolvedEventAlreadyAppliedV0(
+	current OrchestrationRunV0,
+	event OrchestrationEventV0,
+	payload RunBlockerResolvedPayloadV0,
+) (bool, error) {
+	_, ok, err := commandEffectForSubjectV0(
+		current,
+		event.EventType,
+		payload.BlockerID,
+	)
+	return ok, err
+}

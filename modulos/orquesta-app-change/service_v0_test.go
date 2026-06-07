@@ -73,43 +73,57 @@ func TestRequestAppChangeV0RechazaWriteSetInseguro(t *testing.T) {
 	}
 }
 
-func TestRequestAppChangeV0RechazaRefsNoCompactas(t *testing.T) {
+func TestRequestAppChangeV0NormalizaRefsNoCompactasRecuperables(t *testing.T) {
+	store := &fakeAppChangeStoreV0{}
 	request := validAppChangeRequestForTestV0()
 	request.ChangeRef = "change/ref"
+	request.MetadataRefs = []string{"fuentes/programa/Auxiliar-Administrativo.txt"}
 
 	result, err := RequestAppChangeV0(
 		context.Background(),
 		request,
-		AppChangePortsV0{Store: &fakeAppChangeStoreV0{}, DirectorNotifier: &fakeAppChangeNotifierV0{}},
+		AppChangePortsV0{Store: store, DirectorNotifier: &fakeAppChangeNotifierV0{}},
 	)
 	if err != nil {
 		t.Fatalf("RequestAppChangeV0: %v", err)
 	}
-	if result.Status != AppChangeStatusInvalidV0 || result.Issues[0].Code != ErrAppChangeChangeRefInvalidV0 {
-		t.Fatalf("result=%+v", result)
+	if result.Status != AppChangeStatusAcceptedV0 ||
+		store.saved.Request.ChangeRef != "change-ref" ||
+		len(store.saved.Request.MetadataRefs) != 1 ||
+		store.saved.Request.MetadataRefs[0] != "fuentes-programa-Auxiliar-Administrativo.txt" {
+		t.Fatalf("result=%+v store=%+v", result, store.saved)
 	}
 }
 
-func TestRequestAppChangeV0RechazaExternalWorkNoCompacto(t *testing.T) {
+func TestRequestAppChangeV0NormalizaExternalWorkNoCompactoRecuperable(t *testing.T) {
+	store := &fakeAppChangeStoreV0{}
 	request := validAppChangeRequestForTestV0()
 	request.ExternalWork = &AppChangeExternalWorkV0{
 		ProjectRef: "project ref unsafe",
+		JobRef:     "jobs/tema 01",
+		WorkKind:   "draft content block",
+		WorkRefs:   []string{"program_ref:fuentes/programa/Auxiliar-Administrativo.txt"},
 	}
 
 	result, err := RequestAppChangeV0(
 		context.Background(),
 		request,
-		AppChangePortsV0{Store: &fakeAppChangeStoreV0{}, DirectorNotifier: &fakeAppChangeNotifierV0{}},
+		AppChangePortsV0{Store: store, DirectorNotifier: &fakeAppChangeNotifierV0{}},
 	)
 	if err != nil {
 		t.Fatalf("RequestAppChangeV0: %v", err)
 	}
-	if result.Status != AppChangeStatusInvalidV0 || result.Issues[0].Code != ErrAppChangeExternalWorkRefV0 {
-		t.Fatalf("result=%+v", result)
+	if result.Status != AppChangeStatusAcceptedV0 ||
+		store.saved.Request.ExternalWork.ProjectRef != "project-ref-unsafe" ||
+		store.saved.Request.ExternalWork.JobRef != "jobs-tema-01" ||
+		store.saved.Request.ExternalWork.WorkKind != "draft-content-block" ||
+		store.saved.Request.ExternalWork.WorkRefs[0] != "program_ref:fuentes-programa-Auxiliar-Administrativo.txt" {
+		t.Fatalf("result=%+v store=%+v", result, store.saved)
 	}
 }
 
-func TestRequestAppChangeV0RechazaExternalWorkInputFieldNoCompacto(t *testing.T) {
+func TestRequestAppChangeV0NormalizaExternalWorkInputFieldNoCompacto(t *testing.T) {
+	store := &fakeAppChangeStoreV0{}
 	request := validAppChangeRequestForTestV0()
 	request.ExternalWork.InputFields = []orquestadomainwork.DomainWorkFieldV0{
 		{Name: "topic id", Value: "topic-ref-week-view"},
@@ -118,15 +132,14 @@ func TestRequestAppChangeV0RechazaExternalWorkInputFieldNoCompacto(t *testing.T)
 	result, err := RequestAppChangeV0(
 		context.Background(),
 		request,
-		AppChangePortsV0{Store: &fakeAppChangeStoreV0{}, DirectorNotifier: &fakeAppChangeNotifierV0{}},
+		AppChangePortsV0{Store: store, DirectorNotifier: &fakeAppChangeNotifierV0{}},
 	)
 	if err != nil {
 		t.Fatalf("RequestAppChangeV0: %v", err)
 	}
-	if result.Status != AppChangeStatusInvalidV0 ||
-		result.Issues[0].Code != ErrAppChangeExternalWorkFieldNameV0 ||
-		result.Issues[0].Field != "external_work.input_fields" {
-		t.Fatalf("result=%+v", result)
+	if result.Status != AppChangeStatusAcceptedV0 ||
+		store.saved.Request.ExternalWork.InputFields[0].Name != "topic_id" {
+		t.Fatalf("result=%+v store=%+v", result, store.saved)
 	}
 }
 

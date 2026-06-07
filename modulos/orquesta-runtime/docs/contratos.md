@@ -638,6 +638,47 @@ Pruebas de contrato:
   - go test -count=1 ./modulos/orquesta-runtime
 ```
 
+## RuntimeModelManagerPort v0
+
+```text
+Nombre: RuntimeModelManagerPortV0
+Tipo: puerto_salida_runtime_opt_in
+Version: v0
+Propietario: orquesta-runtime
+Consumidores: composiciones de servidor, MCP/HTTP y UI operativa.
+Implementacion local:
+  - model_manager_v0.go
+Entrada:
+  - RuntimeModelListRequestV0: provider_ref, endpoint_ref y tags.
+  - RuntimeModelActionRequestV0: provider_ref, endpoint_ref, model,
+    keep_alive, tags y evidence_refs.
+Salida:
+  - RuntimeModelListResultV0 con modelos, evidencia y metadata saneada.
+  - RuntimeModelActionResultV0 con aceptacion, status, modelo y evidencia.
+Operaciones:
+  - list
+  - status
+  - pull
+  - serve
+  - stop
+Invariantes:
+  - Puerto neutral: no conoce Ollama, Codex, Claude, Gemini, OPES, DB ni UI.
+  - La peticion publica no transporta `base_url`, token, HOME, OAuth, PATH ni
+    credenciales. Esos datos pertenecen al adaptador/composicion opt-in.
+  - `provider_ref` y `endpoint_ref` son refs de configuracion, no URLs ni
+    secretos.
+  - Cualquier URL devuelta es diagnostico redaccionado por el adaptador, nunca
+    entrada gobernada por el agente.
+  - El puerto gestiona disponibilidad de modelos; no decide que modelo debe
+    usar una tarea ni sustituye a capacidad/scheduler/Director.
+Errores:
+  - runtime_model_manager_unavailable
+  - runtime_model_request_invalid
+  - runtime_model_action_failed
+Pruebas de contrato:
+  - go test -count=1 ./modulos/orquesta-runtime
+```
+
 ## Plantilla
 
 ```text

@@ -119,7 +119,7 @@ func EvaluateAgentLeaseV0(input AgentLeaseEvaluationInputV0) (AgentTimeoutAssess
 }
 
 func DecodeAgentTimeoutAssessmentV0(data []byte) (AgentTimeoutAssessmentV0, error) {
-	if issues := detectForbiddenAgentLeaseJSONKeysV0(data); len(issues) > 0 {
+	if issues := detectForbiddenAgentLeaseJSONDetailsV0(data); len(issues) > 0 {
 		return AgentTimeoutAssessmentV0{}, AgentLeaseValidationErrorV0{Issues: issues}
 	}
 	var assessment AgentTimeoutAssessmentV0

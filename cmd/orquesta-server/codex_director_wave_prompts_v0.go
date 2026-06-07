@@ -296,7 +296,7 @@ func codexDirectorChildRoleChecklistV0(profile codexDirectorChildRoleProfileKind
 	}
 	if profile == codexDirectorChildRoleProfileDocumentDomainV0 {
 		return []string{
-			"Revisa coherencia pedagogica, tono adulto, transiciones y ausencia de placeholders.",
+			"Revisa coherencia pedagogica, tono adulto y transiciones; si hay marcadores editoriales reparables, pide correccion dirigida sin tirar la entrega.",
 			"Ensambla solo artefactos existentes o entregas del subarbol; no redactes relleno doctrinal para inflar palabras.",
 			"Valida el conteo de palabras A1 con metodo reproducible cuando el dominio o los tests lo exijan.",
 			"Contrasta el checklist A1 declarado por contexto: estructura, fuentes/refs, visuales o preguntas requeridas y pruebas obligatorias.",
@@ -304,7 +304,7 @@ func codexDirectorChildRoleChecklistV0(profile codexDirectorChildRoleProfileKind
 		}
 	}
 	return []string{
-		"Revisa coherencia tecnica, limites hexagonales, refs opacas y ausencia de placeholders.",
+		"Revisa coherencia tecnica, limites hexagonales y refs opacas; si hay marcadores editoriales reparables, pide correccion dirigida sin tirar la entrega.",
 		"Ensambla solo evidencias existentes del subarbol; no declares cierres que correspondan al Director.",
 		"Valida que write-set, tests requeridos y rutas tocadas coinciden con el alcance autorizado.",
 		"Contrasta el checklist de cierre: cambios pequenos, pruebas focales, pruebas obligatorias y bloqueos explicitos.",

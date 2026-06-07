@@ -49,6 +49,60 @@ func TestGeminiExecResolverV0MaterializaPromptWrapperYAckPath(t *testing.T) {
 	}
 }
 
+func TestGeminiExecResolverV0PromptUsaControlFilesOperativos(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project")
+	runtimeDir := filepath.Join(root, "runtime")
+	spec := geminiSpecForTestV0()
+	spec.AgentPacket.Task.RequiredTests = []string{"go test ./..."}
+	spec.AgentPacket.Context.Entries[0].Mode = orquestacontext.ContextMaterializationModeRefOnlyV0
+	spec.AgentPacket.Context.Entries[0].Content = ""
+	spec.AgentPacket.Context.Entries[0].Bytes = 0
+	spec.AgentPacket.Context.Entries[0].RefOnlyReason = orquestacontext.ContextRefOnlyReasonMaterializationMissingV0
+	spec.AgentPacket.Context.Entries[0].RequiredRefAction = orquestacontext.ContextRequiredRefActionReadLocalV0
+	profile := GeminiConnectorProfileV0{
+		SchemaVersion:  GeminiConnectorProfileSchemaVersionV0,
+		OptIn:          true,
+		CommandPath:    filepath.Join(root, "gemini"),
+		ProjectWorkDir: projectDir,
+		RuntimeWorkDir: runtimeDir,
+		Model:          "gemini-2.5-pro",
+		ApprovalMode:   "auto_edit",
+	}
+
+	_, issues := NewGeminiExecResolverV0(profile).ResolveExternalAgentProcessCommandV0(
+		context.Background(),
+		spec,
+	)
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	prompt := mustReadGeminiFileForTestV0(t, filepath.Join(runtimeDir, GeminiAgentPromptFileNameV0))
+	for _, want := range []string{
+		filepath.Join(runtimeDir, GeminiAgentPacketFileNameV0),
+		filepath.Join(runtimeDir, GeminiAgentAckFileNameV0),
+		filepath.Join(runtimeDir, GeminiDirectorDecisionsFileNameV0),
+		filepath.Join(runtimeDir, GeminiShutdownRequestFileNameV0),
+		filepath.Join(runtimeDir, GeminiShutdownCheckpointAckFileNameV0),
+		"decision_path:",
+		"CHECKPOINT DE APAGADO",
+		"codex_shutdown_checkpoint_ack.v0",
+		"checkpoint_ready",
+		"CONTEXTO REF_ONLY REQUERIDO",
+		"required_ref_action",
+		"contexto_ref_only_resuelto",
+		"test_receipts",
+		"codex_required_test_receipt.v0",
+		"No uses git status como criterio obligatorio",
+		"No incluyas archivos de control en ACK.files",
+		"files debe listar rutas reales",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("prompt no contiene %q:\n%s", want, prompt)
+		}
+	}
+}
+
 func geminiSpecForTestV0() orquestaruntime.ExternalAgentLaunchSpecV0 {
 	return orquestaruntime.ExternalAgentLaunchSpecV0{
 		SchemaVersion: orquestaruntime.ExternalAgentLaunchSpecSchemaVersionV0,

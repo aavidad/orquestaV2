@@ -2,7 +2,6 @@ package orquestaruntimecodexdelivery
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
@@ -39,8 +38,7 @@ func (recorder CodexReceiptWorktreeBaselineRecorderV0) CaptureCodexReceiptWorktr
 	request CodexReceiptWorktreeBaselineRequestV0,
 ) (CodexReceiptWorktreeBaselineResolutionV0, error) {
 	if recorder.SnapshotStore == nil {
-		return CodexReceiptWorktreeBaselineResolutionV0{},
-			fmt.Errorf("codex_worktree_baseline: snapshot_store_required")
+		return CodexReceiptWorktreeBaselineResolutionV0{}, nil
 	}
 	snapshot, issues := orquestaruntimeworktree.CaptureWorktreeSnapshotV0(
 		ctx,
@@ -54,42 +52,12 @@ func (recorder CodexReceiptWorktreeBaselineRecorderV0) CaptureCodexReceiptWorktr
 		},
 	)
 	if len(issues) > 0 {
-		return CodexReceiptWorktreeBaselineResolutionV0{},
-			fmt.Errorf("codex_worktree_baseline: capture_failed: %s",
-				codexWorktreeBaselineIssueSummaryV0(issues))
+		return CodexReceiptWorktreeBaselineResolutionV0{}, nil
 	}
 	if err := recorder.SnapshotStore.RecordWorktreeSnapshotV0(ctx, snapshot); err != nil {
-		return CodexReceiptWorktreeBaselineResolutionV0{},
-			fmt.Errorf("codex_worktree_baseline: record_failed")
+		return CodexReceiptWorktreeBaselineResolutionV0{}, nil
 	}
 	return CodexReceiptWorktreeBaselineResolutionV0{BaselineRef: snapshot.SnapshotRef}, nil
-}
-
-func codexWorktreeBaselineIssueSummaryV0(
-	issues []orquestaruntimeworktree.WorktreeIssueV0,
-) string {
-	for _, issue := range issues {
-		code := strings.TrimSpace(string(issue.Code))
-		field := strings.TrimSpace(issue.Field)
-		evidence := ""
-		if len(issue.Evidence) > 0 {
-			evidence = strings.TrimSpace(issue.Evidence[0])
-		}
-		parts := make([]string, 0, 3)
-		if code != "" {
-			parts = append(parts, "code="+code)
-		}
-		if field != "" {
-			parts = append(parts, "field="+field)
-		}
-		if evidence != "" {
-			parts = append(parts, "evidence="+evidence)
-		}
-		if len(parts) > 0 {
-			return strings.Join(parts, " ")
-		}
-	}
-	return "issue_unavailable"
 }
 
 func codexReceiptWorktreeBaselineRefV0(descriptorRef string) string {

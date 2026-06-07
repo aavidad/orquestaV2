@@ -16,6 +16,9 @@ type opesDrainConfigV0 struct {
 	JobType         string
 	JobTypeSequence []string
 	JobRef          string
+	ProgramID       string
+	TopicID         string
+	CorrelationID   string
 	DryRun          bool
 	HTTPTimeout     time.Duration
 	RunConfig       orquestaopesbridge.JobRunConfigV0
@@ -53,6 +56,9 @@ func opesDrainConfigFromEnvWithBaseURLV0(
 	jobType := strings.TrimSpace(os.Getenv(envOPESBridgeJobTypeV0))
 	jobTypeSequence := opesBridgeJobTypeSequenceFromEnvV0()
 	jobRef := strings.TrimSpace(os.Getenv(envOPESBridgeJobRefV0))
+	programID := strings.TrimSpace(os.Getenv(envOPESBridgeProgramIDV0))
+	topicID := strings.TrimSpace(os.Getenv(envOPESBridgeTopicIDV0))
+	correlationID := strings.TrimSpace(os.Getenv(envOPESBridgeCorrelationIDV0))
 	if len(jobTypeSequence) > 0 && jobType != "" {
 		return opesDrainConfigV0{}, fmt.Errorf("ORQUESTA_OPES_BRIDGE_JOB_TYPE incompatible con ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE")
 	}
@@ -66,6 +72,9 @@ func opesDrainConfigFromEnvWithBaseURLV0(
 		JobType:         jobType,
 		JobTypeSequence: jobTypeSequence,
 		JobRef:          jobRef,
+		ProgramID:       programID,
+		TopicID:         topicID,
+		CorrelationID:   correlationID,
 		DryRun:          dryRun,
 		HTTPTimeout:     time.Duration(intEnvOrDefaultV0(envOPESBridgeTimeoutSecondsV0, 30)) * time.Second,
 		RunConfig: orquestaopesbridge.JobRunConfigV0{

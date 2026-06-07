@@ -113,9 +113,6 @@ func (v *runtimeLaunchRequestValidatorV0) validateDelivery(delivery *RuntimeDeli
 }
 
 func (v *runtimeLaunchRequestValidatorV0) validateSafety(safety *RuntimeSafetyV0) {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return
-	}
 	if safety == nil {
 		v.add(RuntimeLaunchRequestInvalidaV0, "safety")
 		return

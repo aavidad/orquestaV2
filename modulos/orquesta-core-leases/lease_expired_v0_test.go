@@ -160,7 +160,7 @@ func TestAgentLeaseExpiredFromAssessmentV0StoppedFailedSonSenalesTerminalesSinPr
 	}
 }
 
-func TestAgentLeaseExpiredV0RechazaContinueYDetallesRuntime(t *testing.T) {
+func TestAgentLeaseExpiredV0RechazaContinueYCamposNoContratados(t *testing.T) {
 	expired := validAgentLeaseExpiredV0()
 	expired.RecommendedAction = AgentTimeoutDecisionContinueV0
 	requireAgentLeaseIssueCodeV0(t, expired.Validate(), ErrAgentLeaseDecisionInvalidaV0)
@@ -175,10 +175,10 @@ func TestAgentLeaseExpiredV0RechazaContinueYDetallesRuntime(t *testing.T) {
 		"process_ref":"process-real-001"
 	}`)
 	_, err := DecodeAgentLeaseExpiredV0(raw)
-	requireAgentLeaseErrorCodeV0(t, err, ErrAgentLeaseDetalleProhibidoV0)
+	requireAgentLeaseErrorCodeV0(t, err, ErrAgentLeaseJSONInvalidoV0)
 }
 
-func TestAgentLeaseExpiredV0RechazaDBRuntimeProviderHomeOAuthModeloSecretos(t *testing.T) {
+func TestAgentLeaseExpiredV0DistingueCamposOperativosYSecretosReales(t *testing.T) {
 	tests := []string{
 		"DB",
 		"runtime_provider",
@@ -201,12 +201,29 @@ func TestAgentLeaseExpiredV0RechazaDBRuntimeProviderHomeOAuthModeloSecretos(t *t
 				"` + field + `":"detalle-real-prohibido"
 			}`)
 			_, err := DecodeAgentLeaseExpiredV0(raw)
-			requireAgentLeaseErrorCodeV0(t, err, ErrAgentLeaseDetalleProhibidoV0)
+			requireAgentLeaseErrorCodeV0(t, err, ErrAgentLeaseJSONInvalidoV0)
 		})
 	}
 
+	raw := []byte(`{
+		"run_ref":"run-lse-001",
+		"agent_request_id":"agent-request-lse-001",
+		"lease_ref":"lease-lse-001",
+		"reason_code":"heartbeat_timeout",
+		"observed_at":"2026-05-06T10:17:01Z",
+		"recommended_action":"stop_agent",
+		"client_secret":"valor"
+	}`)
+	_, err := DecodeAgentLeaseExpiredV0(raw)
+	requireAgentLeaseErrorCodeV0(t, err, ErrAgentLeaseDetalleProhibidoV0)
+
 	expired := validAgentLeaseExpiredV0()
 	expired.EvidenceRefs = []string{"secret-token-ref-lse-003"}
+	if issues := expired.Validate(); len(issues) > 0 {
+		t.Fatalf("ref opaca con vocabulario token/secret rechazada: %#v", issues)
+	}
+
+	expired.EvidenceRefs = []string{"api_key=valor"}
 	requireAgentLeaseIssueCodeV0(t, expired.Validate(), ErrAgentLeaseDetalleProhibidoV0)
 }
 

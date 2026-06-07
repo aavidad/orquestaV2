@@ -11,7 +11,8 @@ const (
 	detailProhibitedRailsEnvV0                = envDetailProhibitedRailsV0
 	detailProhibitedRailsScopeEnvV0           = envDetailProhibitedRailsScopeV0
 	securityModeServerDefaultV0               = orquestarails.SecurityModeProductionV0
-	detailProhibitedRailsServerDefaultV0      = "on"
+	railsModeServerDefaultV0                  = orquestarails.RailsModeOfflineV0
+	detailProhibitedRailsServerDefaultV0      = "off"
 	detailProhibitedRailsScopeServerDefaultV0 = "core_workflow.*,context_bundle_request.*," +
 		"context_materialization.content,context_materialization.ref,director_agent_decision.*"
 )
@@ -20,11 +21,12 @@ func serverSecurityModeEffectiveValueV0() string {
 	return orquestarails.NormalizeSecurityModeV0(envOrDefaultV0(envSecurityModeV0, securityModeServerDefaultV0))
 }
 
+func serverRailsModeEffectiveValueV0() string {
+	return orquestarails.NormalizeRailsModeV0(envOrDefaultV0(envRailsModeV0, railsModeServerDefaultV0))
+}
+
 func serverDetailRailsEffectiveValueV0() string {
-	if serverSecurityModeEffectiveValueV0() == orquestarails.SecurityModeProgrammingV0 {
-		return "off"
-	}
-	return envOrDefaultV0(detailProhibitedRailsEnvV0, detailProhibitedRailsServerDefaultV0)
+	return "off"
 }
 
 func serverDetailRailsScopeEffectiveValueV0() string {
@@ -36,12 +38,14 @@ func serverEnvironmentWithDetailRailsDefaultV0(env []string) []string {
 	securityMode := orquestarails.NormalizeSecurityModeV0(
 		detailRailsEnvValueOrDefaultV0(out, envSecurityModeV0, securityModeServerDefaultV0),
 	)
+	railsMode := orquestarails.NormalizeRailsModeV0(
+		detailRailsEnvValueOrDefaultV0(out, envRailsModeV0, railsModeServerDefaultV0),
+	)
 	detailRails := detailRailsEnvValueOrDefaultV0(out, detailProhibitedRailsEnvV0, detailProhibitedRailsServerDefaultV0)
-	if securityMode == orquestarails.SecurityModeProgrammingV0 {
-		detailRails = "off"
-	}
+	detailRails = "off"
 	scope := detailRailsEnvValueOrDefaultV0(out, detailProhibitedRailsScopeEnvV0, detailProhibitedRailsScopeServerDefaultV0)
 	out = detailRailsEnvUpsertV0(out, envSecurityModeV0, securityMode)
+	out = detailRailsEnvUpsertV0(out, envRailsModeV0, railsMode)
 	out = detailRailsEnvUpsertV0(out, detailProhibitedRailsEnvV0, detailRails)
 	out = detailRailsEnvUpsertV0(out, detailProhibitedRailsScopeEnvV0, scope)
 	return out
@@ -49,7 +53,7 @@ func serverEnvironmentWithDetailRailsDefaultV0(env []string) []string {
 
 func applyServerDetailRailsRuntimeDefaultsV0() error {
 	env := serverEnvironmentWithDetailRailsDefaultV0(os.Environ())
-	for _, key := range []string{envSecurityModeV0, detailProhibitedRailsEnvV0, detailProhibitedRailsScopeEnvV0} {
+	for _, key := range []string{envSecurityModeV0, envRailsModeV0, detailProhibitedRailsEnvV0, detailProhibitedRailsScopeEnvV0} {
 		value := detailRailsEnvValueOrDefaultV0(env, key, "")
 		if value == "" {
 			continue

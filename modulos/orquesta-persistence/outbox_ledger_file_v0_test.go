@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
@@ -101,6 +102,80 @@ func TestFileOutboxLedgerV0NoListaAckSuccessTrasReinicio(t *testing.T) {
 	})
 	if len(issues) != 0 || len(pending) != 0 {
 		t.Fatalf("pending=%+v issues=%+v", pending, issues)
+	}
+}
+
+func TestFileOutboxLedgerV0ClaimFrescoNoDuplicaDespacho(t *testing.T) {
+	dir := t.TempDir()
+	ledger := newFileOutboxLedgerForTestV0(t, dir)
+	message := validLaunchOutboxLedgerMessageV0(t)
+	if _, issues := ledger.SavePending(context.Background(), []orquestacoreworkflow.OutboxMessageV0{message}); len(issues) != 0 {
+		t.Fatalf("save issues=%+v", issues)
+	}
+	claim := fileTestClaimFromMessageV0(message)
+	if result, issues := ledger.ClaimOutboxDispatchV0(claim); len(issues) != 0 || !result.Claimed {
+		t.Fatalf("claim result=%+v issues=%+v", result, issues)
+	}
+
+	pending, issues := ledger.ListPendingOutboxV0(orquestaoutboxdispatch.PendingOutboxFilterV0{
+		RunID:       message.RunID,
+		TargetPort:  message.TargetPort,
+		MessageType: message.MessageType,
+	})
+	if len(issues) != 0 || len(pending) != 0 {
+		t.Fatalf("pending=%+v issues=%+v", pending, issues)
+	}
+	repeated, issues := ledger.ClaimOutboxDispatchV0(claim)
+	if len(issues) != 0 || !repeated.AlreadyClaimed || repeated.Claimed {
+		t.Fatalf("repeated=%+v issues=%+v", repeated, issues)
+	}
+}
+
+func TestFileOutboxLedgerV0RecuperaClaimExpiradoSinReinicio(t *testing.T) {
+	dir := t.TempDir()
+	ledger := newFileOutboxLedgerForTestV0(t, dir)
+	message := validLaunchOutboxLedgerMessageV0(t)
+	if _, issues := ledger.SavePending(context.Background(), []orquestacoreworkflow.OutboxMessageV0{message}); len(issues) != 0 {
+		t.Fatalf("save issues=%+v", issues)
+	}
+	claim := fileTestClaimFromMessageV0(message)
+	if result, issues := ledger.ClaimOutboxDispatchV0(claim); len(issues) != 0 || !result.Claimed {
+		t.Fatalf("claim result=%+v issues=%+v", result, issues)
+	}
+	record := ledger.state.recordsByMessageID[message.MessageID]
+	record.Claim.ClaimedAt = time.Now().UTC().Add(-fileOutboxClaimLeaseV0 - time.Second).Format(time.RFC3339)
+
+	pending, issues := ledger.ListPendingOutboxV0(orquestaoutboxdispatch.PendingOutboxFilterV0{
+		RunID:       message.RunID,
+		TargetPort:  message.TargetPort,
+		MessageType: message.MessageType,
+	})
+	if len(issues) != 0 || len(pending) != 1 || pending[0].MessageID != message.MessageID {
+		t.Fatalf("pending=%+v issues=%+v", pending, issues)
+	}
+	reclaimed, issues := ledger.ClaimOutboxDispatchV0(claim)
+	if len(issues) != 0 || !reclaimed.Claimed || reclaimed.AlreadyClaimed {
+		t.Fatalf("reclaimed=%+v issues=%+v", reclaimed, issues)
+	}
+}
+
+func TestFileOutboxLedgerV0RecuperaClaimLegacySinFechaEnCaliente(t *testing.T) {
+	dir := t.TempDir()
+	ledger := newFileOutboxLedgerForTestV0(t, dir)
+	message := validLaunchOutboxLedgerMessageV0(t)
+	if _, issues := ledger.SavePending(context.Background(), []orquestacoreworkflow.OutboxMessageV0{message}); len(issues) != 0 {
+		t.Fatalf("save issues=%+v", issues)
+	}
+	claim := fileTestClaimFromMessageV0(message)
+	if result, issues := ledger.ClaimOutboxDispatchV0(claim); len(issues) != 0 || !result.Claimed {
+		t.Fatalf("claim result=%+v issues=%+v", result, issues)
+	}
+	record := ledger.state.recordsByMessageID[message.MessageID]
+	record.Claim.ClaimedAt = ""
+
+	reclaimed, issues := ledger.ClaimOutboxDispatchV0(claim)
+	if len(issues) != 0 || !reclaimed.Claimed || reclaimed.AlreadyClaimed {
+		t.Fatalf("reclaimed=%+v issues=%+v", reclaimed, issues)
 	}
 }
 

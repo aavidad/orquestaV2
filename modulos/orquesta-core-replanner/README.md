@@ -16,8 +16,8 @@ No incluye:
 
 - runtime real;
 - DB concreta;
-- proveedor/modelo/HOME/OAuth;
-- prompts completos o transcripts;
+- proveedor/modelo/HOME/OAuth como configuracion concreta;
+- credenciales, secrets, prompts/transcripts/completions crudos o paths reales;
 - cambios directos de ficheros de otros modulos sin tarea separada.
 
 ## Arranque

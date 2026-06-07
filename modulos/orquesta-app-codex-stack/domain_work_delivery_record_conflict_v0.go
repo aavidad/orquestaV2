@@ -49,8 +49,7 @@ func domainWorkRecordFieldCompatibleV0(left string, right string) bool {
 }
 
 func domainWorkSubmissionTerminalStatusV0(status string) bool {
-	return status == DomainWorkArtifactSubmissionStatusAcceptedV0 ||
-		status == DomainWorkArtifactSubmissionStatusRejectedV0
+	return status == DomainWorkArtifactSubmissionStatusAcceptedV0
 }
 
 func domainWorkSubmissionSameTerminalRecordV0(
@@ -76,7 +75,15 @@ func domainWorkSubmissionStatusTransitionAllowedV0(existing string, incoming str
 			domainWorkSubmissionTerminalStatusV0(incoming)
 	}
 	if existing == DomainWorkArtifactSubmissionStatusSubmittingV0 {
-		return incoming == DomainWorkArtifactSubmissionStatusSubmittingV0 ||
+		return incoming == DomainWorkArtifactSubmissionStatusClaimedV0 ||
+			incoming == DomainWorkArtifactSubmissionStatusSubmittingV0 ||
+			incoming == DomainWorkArtifactSubmissionStatusRejectedV0 ||
+			domainWorkSubmissionTerminalStatusV0(incoming)
+	}
+	if existing == DomainWorkArtifactSubmissionStatusRejectedV0 {
+		return incoming == DomainWorkArtifactSubmissionStatusClaimedV0 ||
+			incoming == DomainWorkArtifactSubmissionStatusSubmittingV0 ||
+			incoming == DomainWorkArtifactSubmissionStatusRejectedV0 ||
 			domainWorkSubmissionTerminalStatusV0(incoming)
 	}
 	return false

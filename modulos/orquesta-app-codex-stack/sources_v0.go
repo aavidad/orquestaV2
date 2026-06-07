@@ -48,7 +48,12 @@ func codexStackWorktreeVerifierV0(
 }
 
 func codexStackWorktreeIgnorePrefixesV0() []string {
-	prefixes := []string{".git"}
+	prefixes := []string{
+		".git",
+		"bin",
+		"orquesta_state",
+		"runtime_orquesta",
+	}
 	return append(prefixes, orquestaruntimeworktree.DefaultWorktreeControlIgnorePrefixesV0()...)
 }
 

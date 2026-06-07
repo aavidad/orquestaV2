@@ -63,3 +63,27 @@ func TestRESTClientV0SubmitDomainWorkArtifactRechazaReceiptNoCausal(t *testing.T
 		})
 	}
 }
+
+func TestRESTClientV0SubmitDomainWorkArtifactDevuelveReceiptInvalidoConHTTP4xx(t *testing.T) {
+	client := newRESTClientForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs/job-ref-opes-001/artifacts" {
+			t.Fatalf("path=%s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"invalid job artifact"}`))
+	}))
+
+	result, err := client.SubmitDomainWorkArtifactV0(context.Background(), opesArtifactSubmissionForTestV0())
+
+	if err != nil {
+		t.Fatalf("SubmitDomainWorkArtifactV0: %v", err)
+	}
+	if result.Status != orquestadomainwork.DomainWorkStatusInvalidV0 ||
+		result.JobRef != "job-ref-opes-001" ||
+		result.ArtifactRef != "artifact-ref-001" ||
+		len(result.Issues) != 1 ||
+		result.Issues[0].Code != ErrOPESHTTPStatusV0+"_400" ||
+		result.Issues[0].Field != "artifact_submitter" {
+		t.Fatalf("receipt=%+v", result)
+	}
+}

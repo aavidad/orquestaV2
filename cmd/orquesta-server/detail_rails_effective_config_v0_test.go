@@ -10,6 +10,7 @@ func TestServerEffectiveConfigV0PublicaRailsDetalleCanonicos(t *testing.T) {
 	t.Setenv(envDetailProhibitedRailsV0, "")
 	t.Setenv(envDetailProhibitedRailsScopeV0, "")
 	t.Setenv(envSecurityModeV0, "")
+	t.Setenv(envRailsModeV0, "")
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 
 	config, err := serverConfigFromEnvV0()
@@ -19,6 +20,7 @@ func TestServerEffectiveConfigV0PublicaRailsDetalleCanonicos(t *testing.T) {
 	settings := config.EffectiveConfig.Settings
 	for key, want := range map[string]string{
 		envSecurityModeV0:               securityModeServerDefaultV0,
+		envRailsModeV0:                  railsModeServerDefaultV0,
 		envDetailProhibitedRailsV0:      detailProhibitedRailsServerDefaultV0,
 		envDetailProhibitedRailsScopeV0: detailProhibitedRailsScopeServerDefaultV0,
 	} {

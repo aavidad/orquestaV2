@@ -12,6 +12,7 @@ var commandHandlersV0 = map[string]commandHandlerV0{
 	OrchestrationCommandOpenPhaseV0:                  handleOpenPhaseCommandV0,
 	OrchestrationCommandClosePhaseV0:                 handleClosePhaseCommandV0,
 	OrchestrationCommandBlockRunV0:                   handleBlockRunCommandV0,
+	OrchestrationCommandResolveRunBlockerV0:          handleResolveRunBlockerCommandV0,
 	OrchestrationCommandAskDirectorV0:                HandleAskDirectorCommandV0,
 	OrchestrationCommandAnswerDirectorQuestionV0:     HandleAnswerDirectorQuestionCommandV0,
 	OrchestrationCommandRequestBrainstormV0:          handleRequestBrainstormCommandV0,

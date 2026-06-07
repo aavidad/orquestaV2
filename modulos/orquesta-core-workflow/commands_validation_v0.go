@@ -71,6 +71,16 @@ func validateCommandPayloadV0(command OrchestrationCommandV0) error {
 			"reason_code": payload.ReasonCode,
 			"summary":     payload.Summary,
 		})
+	case OrchestrationCommandResolveRunBlockerV0:
+		payload, err := decodeResolveRunBlockerCommandPayloadV0(command.Payload)
+		if err != nil {
+			return err
+		}
+		return requireCommandPayloadFieldsV0(map[string]string{
+			"blocker_id":  payload.BlockerID,
+			"reason_code": payload.ReasonCode,
+			"summary":     payload.Summary,
+		})
 	default:
 		return validateExtendedCommandPayloadV0(command)
 	}

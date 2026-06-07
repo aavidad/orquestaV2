@@ -42,6 +42,9 @@ func codexAckBytesContainForbiddenDetailV0(data []byte) bool {
 }
 
 func codexTextContainsOperationalDetailMarkerV0(value string) bool {
+	if !orquestarails.RailsEnforcedV0() {
+		return false
+	}
 	lower := strings.ToLower(strings.ReplaceAll(value, `\/`, "/"))
 	for _, marker := range orquestarails.OperationalDetailMarkersV0 {
 		if strings.Contains(lower, strings.ToLower(marker)) {
@@ -80,9 +83,7 @@ func codexAckValuesContainSensitiveDetailV0(values []string) bool {
 }
 
 func CodexAgentAckHasPendingRailV0(ack CodexAgentAckV0) bool {
-	return codexAckValuesHaveFieldPendingRailV0(ack.Files) ||
-		codexAckValuesHaveFieldPendingRailV0(ack.Tests) ||
-		codexAckValuesHavePendingRailV0(ack.Notes)
+	return false
 }
 
 func codexAckValuesHavePendingRailV0(values []string) bool {
@@ -95,12 +96,7 @@ func codexAckValuesHavePendingRailV0(values []string) bool {
 }
 
 func codexAckValueHasPendingRailV0(value string) bool {
-	if codexAckTextContainsEffectiveSensitiveDetailV0(value) {
-		return false
-	}
-	return codexTextContainsOperationalDetailMarkerV0(value) ||
-		codexTextHasExplicitSoftRailMarkerV0(value) ||
-		codexTextHasLegacyPendingMarkerV0(value)
+	return false
 }
 
 func codexAckValuesHaveFieldPendingRailV0(values []string) bool {
@@ -113,12 +109,7 @@ func codexAckValuesHaveFieldPendingRailV0(values []string) bool {
 }
 
 func codexAckFieldValueHasPendingRailV0(value string) bool {
-	if codexAckTextContainsEffectiveSensitiveDetailV0(value) {
-		return false
-	}
-	return codexTextContainsOperationalDetailMarkerV0(value) ||
-		codexTextHasExplicitSoftRailMarkerV0(value) ||
-		codexTextHasPendingRailMarkerV0(value)
+	return false
 }
 
 func codexAckNotesContainSensitiveDetailV0(notes []string) bool {
@@ -230,70 +221,9 @@ func isCodexAckASCIIAlnumV0(ch byte) bool {
 }
 
 func codexTextHasLegacyPendingMarkerV0(value string) bool {
-	lower := strings.ToLower(strings.TrimSpace(value))
-	for _, fragment := range []string{
-		"db",
-		"database",
-		"sql",
-		"dsn",
-		"runtime",
-		"provider",
-		"proveedor",
-		"model",
-		"modelo",
-		"home",
-		"oauth", "authorization",
-		"codex",
-		"claude",
-		"ollama",
-		"vllm",
-		"adapter",
-		"adaptador",
-		"filesystem",
-		"git",
-		"docker",
-		"tmux",
-		"prompt",
-		"completion",
-		"transcript",
-		"secret",
-		"secreto",
-		"token",
-		"password",
-		"credential",
-		"credencial",
-		"api_key", "private key",
-	} {
-		if codexDeliveryObservationContainsFragmentV0(lower, fragment) {
-			return true
-		}
-	}
 	return false
 }
 
 func codexTextHasPendingRailMarkerV0(value string) bool {
-	lower := strings.ToLower(strings.TrimSpace(value))
-	for _, fragment := range []string{
-		"provider",
-		"proveedor",
-		"model",
-		"modelo",
-		"home",
-		"oauth", "authorization",
-		"prompt",
-		"completion",
-		"transcript",
-		"secret",
-		"secreto",
-		"token",
-		"password",
-		"credential",
-		"credencial",
-		"api_key", "private key",
-	} {
-		if codexDeliveryObservationContainsFragmentV0(lower, fragment) {
-			return true
-		}
-	}
 	return false
 }

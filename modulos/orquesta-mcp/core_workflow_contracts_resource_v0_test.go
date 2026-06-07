@@ -33,7 +33,9 @@ func TestNewMCPCoreWorkflowContractsResourceV0CompactoTrasNCW025(t *testing.T) {
 	if resource.StateShape.SchemaVersion != "orchestration_run.v0" {
 		t.Fatalf("schema de estado inesperado: %+v", resource.StateShape)
 	}
-	if len(resource.Phases) != 10 || len(resource.Commands) != 33 || len(resource.Events) != 33 {
+	if len(resource.Phases) != len(orquestacoreworkflow.SupportedOrchestrationPhaseIDsV0()) ||
+		len(resource.Commands) != len(orquestacoreworkflow.SupportedOrchestrationCommandTypesV0()) ||
+		len(resource.Events) != len(orquestacoreworkflow.SupportedOrchestrationEventTypesV0()) {
 		t.Fatalf("catalogo incompleto: phases=%d commands=%d events=%d", len(resource.Phases), len(resource.Commands), len(resource.Events))
 	}
 	assertTransitionNamesMCPTestV0(t, resource.Commands, orquestacoreworkflow.SupportedOrchestrationCommandTypesV0())

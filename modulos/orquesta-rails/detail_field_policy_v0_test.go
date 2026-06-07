@@ -2,34 +2,36 @@ package orquestarails
 
 import "testing"
 
-func TestDetailRailFieldScopeV0(t *testing.T) {
+func TestDetailRailFieldScopeV0DetectaSecretosEfectivosPeroNoReactivaRailsBlandos(t *testing.T) {
+	t.Setenv(RailsModeEnvV0, RailsModeEnforcedV0)
 	t.Setenv(DetailProhibitedRailsEnvV0, "on")
 	t.Setenv(DetailProhibitedRailsScopeEnvV0, "context_bundle_request.read_set")
 
-	if !TextContainsOperationalSensitiveDetailForFieldV0("context_bundle_request", "read_set", "api_key=valor") {
-		t.Fatal("scope exacto no activo")
+	if !TextContainsOperationalSensitiveDetailForFieldV0("context_bundle_request", "objective", "api_key=valor") {
+		t.Fatal("secreto efectivo debe detectarse sin depender del scope blando")
 	}
-	if TextContainsOperationalSensitiveDetailForFieldV0("context_bundle_request", "objective", "api_key=valor") {
-		t.Fatal("scope de otro campo activo")
+	if !TextContainsOperationalSensitiveDetailForFieldV0("context_bundle_request", "read_set", "api_key=valor") {
+		t.Fatal("secreto efectivo debe detectarse en scope exacto")
 	}
 
 	t.Setenv(DetailProhibitedRailsScopeEnvV0, "context_materialization.*")
 	if !TextContainsOperationalRawDetailForFieldV0("context_materialization", "content", "prompt=raw") {
-		t.Fatal("scope de frontera no activo")
+		t.Fatal("prompt crudo debe detectarse como dato sensible efectivo")
 	}
 
 	t.Setenv(DetailProhibitedRailsScopeEnvV0, "*.summary")
 	if !TextContainsOperationalSensitiveDetailForFieldV0("director_agent_decision", "summary", "client_secret=valor") {
-		t.Fatal("scope wildcard por campo no activo")
+		t.Fatal("client_secret efectivo debe detectarse")
 	}
 
 	t.Setenv(DetailProhibitedRailsEnvV0, "off")
-	if TextContainsOperationalSensitiveDetailForFieldV0("director_agent_decision", "summary", "client_secret=valor") {
-		t.Fatal("rail activo con env off")
+	if !TextContainsOperationalSensitiveDetailForFieldV0("director_agent_decision", "summary", "client_secret=valor") {
+		t.Fatal("env off no debe apagar secretos efectivos")
 	}
 }
 
-func TestDetailRailExternalMatrixV0(t *testing.T) {
+func TestDetailRailExternalMatrixV0PermaneceDormida(t *testing.T) {
+	t.Setenv(RailsModeEnvV0, RailsModeEnforcedV0)
 	t.Setenv(DetailProhibitedRailsEnvV0, "on")
 	t.Setenv(DetailProhibitedRailsScopeEnvV0, "*")
 
@@ -58,12 +60,13 @@ func TestDetailRailExternalMatrixV0(t *testing.T) {
 	}
 	for _, value := range rejected {
 		if !TextContainsOperationalSensitiveDetailForFieldV0("core_workflow", "summary", value) {
-			t.Fatalf("valor sensible aceptado: %q", value)
+			t.Fatalf("valor sensible no detectado: %q", value)
 		}
 	}
 }
 
-func TestDetailRailRawContentMatrixV0(t *testing.T) {
+func TestDetailRailRawContentMatrixV0PermaneceDormida(t *testing.T) {
+	t.Setenv(RailsModeEnvV0, RailsModeEnforcedV0)
 	t.Setenv(DetailProhibitedRailsEnvV0, "on")
 	t.Setenv(DetailProhibitedRailsScopeEnvV0, "context_materialization.content")
 
@@ -77,8 +80,13 @@ func TestDetailRailRawContentMatrixV0(t *testing.T) {
 		"transcript=raw text",
 	}
 	for _, value := range rejected {
-		if !TextContainsOperationalRawDetailForFieldV0("context_materialization", "content", value) {
-			t.Fatalf("raw sensible aceptado: %q", value)
+		want := value == "sk-test-value" ||
+			value == "postgres://user:pass@host/db" ||
+			value == "prompt=raw text" ||
+			value == "transcript=raw text"
+		got := TextContainsOperationalRawDetailForFieldV0("context_materialization", "content", value)
+		if got != want {
+			t.Fatalf("raw detail=%v want %v para %q", got, want, value)
 		}
 	}
 

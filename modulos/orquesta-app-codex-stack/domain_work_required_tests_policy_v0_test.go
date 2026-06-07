@@ -2,6 +2,8 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
@@ -46,6 +48,53 @@ func TestCompositeDirectorDecisionSourceV0UsaPoliticaDomainWorkRequiredTests(t *
 	if len(tests) != 1 || tests[0] != "domain-test-ref-policy" ||
 		codexStackStringInSetForTestV0(tests, "validar contrato externo de dominio") {
 		t.Fatalf("required_tests=%+v", tests)
+	}
+}
+
+func TestCompositeDirectorDecisionSourceV0CompactaCriteriosDomainWorkTrasFusion(t *testing.T) {
+	record := codexStackDomainWorkPolicyRecordForTestV0("criteria-cap")
+	record.Request.AcceptanceCriteria = codexStackCriteriaForDomainWorkPolicyTestV0(
+		30,
+		"criterio de dominio amplio",
+	)
+	record.Request.AcceptanceCriteria[0] = strings.Repeat("criterio largo de dominio externo ", 20)
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	taskRef := orquestaappchangedirectorsource.AppChangeTaskRefV0(record.Request.ChangeRef)
+	decision := codexStackDomainWorkPolicyMicrotaskDecisionForTestV0(
+		record.Request.RunRef,
+		taskRef,
+		codexStackCriteriaForDomainWorkPolicyTestV0(10, "criterio compacto de tarea"),
+	)
+	source := compositeDirectorDecisionSourceV0{
+		AppChangeStore:       store,
+		DomainRequiredPolicy: orquestadomainwork.DeclaredDomainWorkRequiredTestPolicyV0{},
+	}
+
+	got, err := source.normalizeDomainWorkRequiredTestsV0(
+		context.Background(),
+		orquestacoreworkflow.OrchestrationRunV0{RunID: record.Request.RunRef},
+		[]orquestadirectoragent.DirectorAgentDecisionV0{decision},
+	)
+
+	if err != nil {
+		t.Fatalf("normalizeDomainWorkRequiredTestsV0: %v", err)
+	}
+	task := got[0].CreateMicrotask.Task
+	if len(task.AcceptanceCriteria) > 24 ||
+		!codexStackStringInSetForTestV0(
+			task.AcceptanceCriteria,
+			"criterios domain_work adicionales disponibles en required_tests y refs de dominio",
+		) {
+		t.Fatalf("acceptance_criteria=%+v", task.AcceptanceCriteria)
+	}
+	if !codexStackContainsFragmentForDomainWorkPolicyTestV0(
+		task.AcceptanceCriteria,
+		"detalle completo en paquete externo",
+	) {
+		t.Fatalf("criterio largo sin compactar: %+v", task.AcceptanceCriteria)
+	}
+	if issues := orquestadirectoragent.ValidateDirectorAgentDecisionV0(got[0]); len(issues) != 0 {
+		t.Fatalf("decision invalida tras fusion domain_work: %+v criteria=%+v", issues, task.AcceptanceCriteria)
 	}
 }
 
@@ -103,6 +152,39 @@ func TestDomainWorkRequiredTestRunnerV0DistingueLatenciaRechazoYAceptacion(t *te
 	}
 }
 
+func codexStackDomainWorkPolicyMicrotaskDecisionForTestV0(
+	runRef string,
+	taskRef string,
+	criteria []string,
+) orquestadirectoragent.DirectorAgentDecisionV0 {
+	return orquestadirectoragent.DirectorAgentDecisionV0{
+		SchemaVersion: orquestadirectoragent.DirectorAgentDecisionSchemaVersionV0,
+		DecisionRef:   "decision-ref-" + taskRef,
+		RunID:         runRef,
+		PhaseID:       orquestadirectoragent.DirectorAgentPlanningPhaseIDV0,
+		CommandType:   orquestadirectoragent.DirectorAgentCommandCreateMicrotaskV0,
+		CommandRef:    "command-ref-" + taskRef,
+		Summary:       "Crear microtarea de dominio externo.",
+		CreateMicrotask: &orquestadirectoragent.DirectorAgentCreateMicrotaskCommandV0{
+			Task: orquestadirectoragent.DirectorAgentMicrotaskV0{
+				SchemaVersion:      orquestadirectoragent.DirectorAgentMicrotaskSchemaVersionV0,
+				TaskID:             taskRef,
+				RunID:              runRef,
+				PhaseID:            "programacion",
+				Title:              "Resolver trabajo externo",
+				Summary:            "Aplicar contrato domain_work con refs opacas y entrega por artefacto.",
+				WriteSet:           []string{"external/domain/job-ref-policy"},
+				AcceptanceCriteria: criteria,
+				RequiredTests:      []string{"validar contrato externo de dominio"},
+				FunctionContractRefs: []orquestadirectoragent.DirectorAgentFunctionContractRefV0{{
+					ContractRef:  "contract:function:domain-work:v0",
+					FunctionName: "ApplyExternalDomainWorkV0",
+				}},
+			},
+		},
+	}
+}
+
 func codexStackDomainWorkPolicyRecordForTestV0(
 	suffix string,
 ) orquestaappchange.AppChangeRecordV0 {
@@ -125,6 +207,27 @@ func codexStackDomainWorkPolicyRecordForTestV0(
 			},
 		}),
 	}
+}
+
+func codexStackCriteriaForDomainWorkPolicyTestV0(count int, prefix string) []string {
+	out := make([]string, 0, count)
+	for index := 0; index < count; index++ {
+		out = append(out, fmt.Sprintf("%s %02d", prefix, index+1))
+	}
+	return out
+}
+
+func codexStackContainsFragmentForDomainWorkPolicyTestV0(
+	values []string,
+	fragment string,
+) bool {
+	fragment = strings.TrimSpace(fragment)
+	for _, value := range values {
+		if strings.Contains(strings.TrimSpace(value), fragment) {
+			return true
+		}
+	}
+	return false
 }
 
 func codexStackDomainWorkRequiredTestRequestForTestV0(

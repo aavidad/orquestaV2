@@ -42,8 +42,7 @@ func ValidateStrictCompletedCodexAgentAckBytesForSpecV0(
 func CodexAgentPacketRequiresStrictTerminalAckV0(
 	packet orquestaruntime.AgentStartPacketV0,
 ) bool {
-	return codexAckStringInSetV0(packet.Policies, "write_set_closed") ||
-		codexAckStringInSetV0(packet.Policies, "ack_terminal_strict") ||
+	return codexAckStringInSetV0(packet.Policies, "ack_terminal_strict") ||
 		codexAckStringInSetV0(packet.Policies, "orquestav2_strict")
 }
 

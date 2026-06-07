@@ -5,6 +5,7 @@ import (
 
 	orquestaobservability "orquesta/modulos/orquesta-observability"
 	operator "orquesta/modulos/orquesta-operator-mcp"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 type MCPTransportBindingsV0 struct {
@@ -15,6 +16,7 @@ type MCPTransportBindingsV0 struct {
 	DirectorDecision          MCPTransportDirectorAgentDecisionExecutorV0
 	DirectorStats             MCPTransportDirectorStatsExecutorV0
 	RunControl                MCPTransportRunControlExecutorV0
+	RuntimeModels             orquestaruntime.RuntimeModelManagerPortV0
 	RunQueuePriority          MCPTransportRunQueuePriorityExecutorV0
 	RunSupervisor             MCPTransportRunSupervisorExecutorV0
 	WorkspaceTimeline         orquestaobservability.WorkspaceTimelineSourcePortV0

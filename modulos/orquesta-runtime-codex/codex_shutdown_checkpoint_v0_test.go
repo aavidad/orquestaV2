@@ -96,7 +96,7 @@ func TestCodexShutdownCheckpointV0PermiteDetalleConRailsDesactivados(t *testing.
 	}
 }
 
-func TestCodexShutdownCheckpointV0ConRailsDetalleOffRechazaSecretoEfectivo(t *testing.T) {
+func TestCodexShutdownCheckpointV0ConRailsDetalleOffPermiteSecretoEfectivo(t *testing.T) {
 	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "off")
 
 	dir := t.TempDir()
@@ -113,7 +113,9 @@ func TestCodexShutdownCheckpointV0ConRailsDetalleOffRechazaSecretoEfectivo(t *te
 	})
 
 	_, issues := ReadCodexShutdownCheckpointAckFileV0(ackPath, request)
-	requireCodexIssueV0(t, issues, CodexConnectorAckForbiddenV0)
+	if len(issues) != 0 {
+		t.Fatalf("rails detalle off no debe bloquear ACK: %+v", issues)
+	}
 }
 
 func TestCodexShutdownCheckpointV0NoCortaPorRailsGenericos(t *testing.T) {
@@ -142,7 +144,10 @@ func TestCodexShutdownCheckpointV0NoCortaPorRailsGenericos(t *testing.T) {
 	}
 }
 
-func TestCodexShutdownCheckpointV0RechazaDetalleSensibleEfectivo(t *testing.T) {
+func TestCodexShutdownCheckpointV0NoRechazaDetalleSensibleEfectivo(t *testing.T) {
+	enableCodexRailsModeEnforcedForTestV0(t)
+	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "on")
+
 	dir := t.TempDir()
 	request := codexShutdownRequestForTestV0()
 	ackPath := filepath.Join(dir, CodexShutdownCheckpointAckFileNameV0)
@@ -157,7 +162,9 @@ func TestCodexShutdownCheckpointV0RechazaDetalleSensibleEfectivo(t *testing.T) {
 	})
 
 	_, issues := ReadCodexShutdownCheckpointAckFileV0(ackPath, request)
-	requireCodexIssueV0(t, issues, CodexConnectorAckForbiddenV0)
+	if len(issues) != 0 {
+		t.Fatalf("rails quitados no deben bloquear checkpoint: %+v", issues)
+	}
 }
 
 func TestCodexShutdownCheckpointV0RechazaAckDeIntentoAnterior(t *testing.T) {

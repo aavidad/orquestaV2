@@ -88,20 +88,6 @@ func validateOperationalTextV0(value string, field string, maxRunes int, require
 	}
 }
 
-func forbiddenOperationalTextCodeV0(value string) string {
-	finding := orquestarails.ClassifyOperationalPrivacyTextV0(value)
-	if finding.ContainsSecret {
-		return ErrSecretoDetectadoV0
-	}
-	if finding.ContainsTranscript {
-		return ErrTranscriptNoPermitidoV0
-	}
-	if finding.ContainsPrompt || finding.ContainsCompletion || finding.ContainsConnectionDetail {
-		return ErrOperationalStatusQueryInvalidaV0
-	}
-	return ""
-}
-
 func DiagnosticoPrivacyRedactionLevelV0(value DiagnosticoPrivacyV0) string {
 	trimmed := strings.TrimSpace(value.RedactionLevel)
 	if orquestarails.IsOperationalPrivacyRedactionLevelV0(trimmed) {

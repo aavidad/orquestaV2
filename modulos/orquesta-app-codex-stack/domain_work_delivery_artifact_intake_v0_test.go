@@ -15,29 +15,29 @@ import (
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 )
 
-func TestDomainWorkDeliveryArtifactIntakeV0LimitaLecturaSinFiltrarContenido(t *testing.T) {
+func TestDomainWorkDeliveryArtifactIntakeV0AceptaArtefactoGrandeSinRailDeTamano(t *testing.T) {
 	projectDir := t.TempDir()
 	writeDomainWorkArtifactIntakeTestFileV0(
 		t,
 		projectDir,
-		"external/opes/draft_content_block",
-		[]byte(strings.Repeat("x", domainWorkArtifactDefaultMaxBytesV0+1)),
+		"external/opes/generate_question_bank",
+		[]byte(`{"artifact_type":"question_bank","payload_json":{"body":"`+strings.Repeat("x", 1024*1024)+`"}}`),
 	)
 
-	_, _, err := buildDomainWorkArtifactIntakeSubmissionForTestV0(
+	submission, ok, err := buildDomainWorkArtifactIntakeSubmissionForTestV0(
 		projectDir,
-		"external/opes/draft_content_block",
-		"draft_content_block",
+		"external/opes/generate_question_bank",
+		"generate_question_bank",
 	)
-	if err == nil || !strings.Contains(err.Error(), "domain_work_artifact_too_large") {
-		t.Fatalf("err=%v", err)
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v", ok, err)
 	}
-	if strings.Contains(err.Error(), projectDir) || strings.Contains(err.Error(), strings.Repeat("x", 64)) {
-		t.Fatalf("error filtra detalle local o cuerpo: %v", err)
+	if submission.ArtifactType != orquestadomainwork.DomainWorkArtifactTypeQuestionBankV0 {
+		t.Fatalf("submission=%+v", submission)
 	}
 }
 
-func TestDomainWorkDeliveryArtifactIntakeV0RechazaBinarioComoPayload(t *testing.T) {
+func TestDomainWorkDeliveryArtifactIntakeV0NoBloqueaBinarioLoConservaComoRef(t *testing.T) {
 	projectDir := t.TempDir()
 	writeDomainWorkArtifactIntakeTestFileV0(
 		t,
@@ -46,17 +46,20 @@ func TestDomainWorkDeliveryArtifactIntakeV0RechazaBinarioComoPayload(t *testing.
 		[]byte{0xff, 0x00, 0x01, 0x02},
 	)
 
-	_, _, err := buildDomainWorkArtifactIntakeSubmissionForTestV0(
+	submission, ok, err := buildDomainWorkArtifactIntakeSubmissionForTestV0(
 		projectDir,
 		"external/opes/generate_visual_asset",
 		"generate_visual_asset",
 	)
-	if err == nil || !strings.Contains(err.Error(), "domain_work_artifact_binary_requires_attachment") {
-		t.Fatalf("err=%v", err)
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+	if !domainWorkFieldValueForTestV0(submission.PayloadFields, "file_ref", "external/opes/generate_visual_asset") {
+		t.Fatalf("payload_fields=%+v", submission.PayloadFields)
 	}
 }
 
-func TestDomainWorkDeliveryArtifactIntakeV0BloqueaCamposSensibles(t *testing.T) {
+func TestDomainWorkDeliveryArtifactIntakeV0SaneaCamposSensiblesSinBloquear(t *testing.T) {
 	projectDir := t.TempDir()
 	writeDomainWorkArtifactIntakeTestFileV0(
 		t,
@@ -65,16 +68,41 @@ func TestDomainWorkDeliveryArtifactIntakeV0BloqueaCamposSensibles(t *testing.T) 
 		[]byte(`{"title":"Bloque","body":"Contenido publico.","access_token":"sk-secret-local"}`),
 	)
 
-	_, _, err := buildDomainWorkArtifactIntakeSubmissionForTestV0(
+	submission, ok, err := buildDomainWorkArtifactIntakeSubmissionForTestV0(
 		projectDir,
 		"external/opes/draft_content_block",
 		"draft_content_block",
 	)
-	if err == nil || !strings.Contains(err.Error(), "domain_work_artifact_payload_sensitive") {
-		t.Fatalf("err=%v", err)
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v", ok, err)
 	}
-	if strings.Contains(err.Error(), "sk-secret-local") {
-		t.Fatalf("error filtra secreto: %v", err)
+	if submission.ArtifactType != orquestadomainwork.DomainWorkArtifactTypeContentBlockV0 ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "access_token", "<redacted-sensitive-field>") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "body", "Contenido publico.") {
+		t.Fatalf("submission=%+v", submission)
+	}
+}
+
+func TestDomainWorkDeliveryArtifactIntakeV0SaneaTokenSKLargoSinBloquearTaskRef(t *testing.T) {
+	projectDir := t.TempDir()
+	writeDomainWorkArtifactIntakeTestFileV0(
+		t,
+		projectDir,
+		"reviews/review_codex_orquesta_real.md",
+		[]byte("Referencia de tarea: task-ref-app-change-appchange-001\nToken literal: sk-abcdefghijklmnopqrstuvwxyz0123456789\n\nRevision publica."),
+	)
+
+	submission, ok, err := buildDomainWorkArtifactIntakeSubmissionForTestV0(
+		projectDir,
+		"reviews/review_codex_orquesta_real.md",
+		"review_codex",
+	)
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+	if submission.ArtifactType != "agent_review_report" ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "body", "Referencia de tarea: task-ref-app-change-appchange-001\nToken literal: <secret-token-redacted>\n\nRevision publica.") {
+		t.Fatalf("submission=%+v", submission)
 	}
 }
 

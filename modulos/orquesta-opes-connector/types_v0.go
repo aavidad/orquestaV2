@@ -2,6 +2,7 @@ package orquestaopesconnector
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 )
@@ -32,6 +33,9 @@ type ExternalJobQueryV0 struct {
 	Status        string
 	JobType       string
 	JobRef        string
+	ProgramID     string
+	TopicID       string
+	CorrelationID string
 	Limit         int
 }
 
@@ -109,4 +113,12 @@ type connectorErrorV0 struct {
 
 func (err connectorErrorV0) Error() string {
 	return err.code
+}
+
+func connectorErrorCodeV0(err error) (string, bool) {
+	var publicErr connectorErrorV0
+	if !errors.As(err, &publicErr) {
+		return "", false
+	}
+	return publicErr.code, true
 }

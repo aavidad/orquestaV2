@@ -11,6 +11,7 @@ import (
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
 	operator "orquesta/modulos/orquesta-operator-mcp"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaweb "orquesta/modulos/orquesta-web"
 )
 
@@ -23,6 +24,7 @@ type ConfigV0 struct {
 	DirectorLimits            orquestaweb.WebArrancarDirectorAppLimitsV0
 	DirectorStats             orquestamcp.MCPTransportDirectorStatsExecutorV0
 	RunControl                orquestamcp.MCPTransportRunControlExecutorV0
+	RuntimeModels             orquestaruntime.RuntimeModelManagerPortV0
 	RunQueuePriority          orquestamcp.MCPTransportRunQueuePriorityExecutorV0
 	RunSupervisor             orquestamcp.MCPTransportRunSupervisorExecutorV0
 	OpsAgentRuntimeDetail     http.Handler

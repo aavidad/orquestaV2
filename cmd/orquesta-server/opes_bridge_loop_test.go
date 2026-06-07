@@ -78,6 +78,30 @@ func TestOPESBridgeLoopConfigAceptaSecuenciaComoFiltroSeguroV0(t *testing.T) {
 	}
 }
 
+func TestOPESBridgeLoopConfigAceptaProgramIDComoFiltroSeguroV0(t *testing.T) {
+	t.Setenv("ORQUESTA_BASE_URL", "")
+	t.Setenv("ORQUESTA_OPES_BRIDGE_ENABLED", "1")
+	t.Setenv("ORQUESTA_OPES_BRIDGE_CONFIRM", "1")
+	t.Setenv("ORQUESTA_OPES_BASE_URL", "http://127.0.0.1:18082")
+	t.Setenv("ORQUESTA_OPES_BRIDGE_PROGRAM_ID", "program-conductores")
+	t.Setenv("ORQUESTA_OPES_BRIDGE_CORRELATION_ID", "conductores-20260602")
+
+	config, err := opesBridgeLoopConfigFromEnvV0("http://127.0.0.1:18100")
+
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	if !config.Loop.Enabled ||
+		config.DrainConfig.ProgramID != "program-conductores" ||
+		config.DrainConfig.CorrelationID != "conductores-20260602" {
+		t.Fatalf("config=%+v", config)
+	}
+	if !containsStringOPESBridgeLoopTestV0(config.Loop.FilterSummary, "program_id=configured") ||
+		!containsStringOPESBridgeLoopTestV0(config.Loop.FilterSummary, "correlation_id=configured") {
+		t.Fatalf("filter summary=%+v", config.Loop.FilterSummary)
+	}
+}
+
 func TestOPESBridgeLoopConfigRechazaSecuenciaAmbiguaConJobTypeV0(t *testing.T) {
 	t.Setenv("ORQUESTA_OPES_BRIDGE_ENABLED", "1")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_CONFIRM", "1")
@@ -92,6 +116,15 @@ func TestOPESBridgeLoopConfigRechazaSecuenciaAmbiguaConJobTypeV0(t *testing.T) {
 		config.Loop.Enabled {
 		t.Fatalf("config=%+v err=%v", config, err)
 	}
+}
+
+func containsStringOPESBridgeLoopTestV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestOPESBridgeLoopConfigRequiereConfirmacionV0(t *testing.T) {

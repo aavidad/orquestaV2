@@ -39,8 +39,8 @@ func BuildCodexAgentPromptWithControlFilesV0(
 	b.WriteString("Lee ")
 	b.WriteString(packetPath)
 	b.WriteString(" antes de tocar archivos.\n")
-	b.WriteString("RAIL ESTRICTO: no borres, no muevas fuera, no trunques archivos existentes y no salgas del workdir del proyecto.\n")
-	b.WriteString("Si para cumplir la tarea crees imprescindible borrar, mover fuera del proyecto o trabajar fuera del workdir, no lo hagas: escribe CONSULTA AL DIRECTOR en el ACK.\n")
+	b.WriteString("Seguridad: no borres, no muevas fuera, no trunques archivos existentes y no salgas del workdir del proyecto.\n")
+	b.WriteString("Si una parte requiere un efecto externo no autorizado, conserva el avance posible dentro del workdir y deja la limitacion como nota o tarea derivada en el ACK.\n")
 	writeWriteSetPrecedenceProtocolV0(&b, packet)
 	b.WriteString("Las rutas del write-set son relativas al workdir del proyecto, no al directorio de control ni a .orquesta-runtime; crea docs/codigo en el proyecto.\n")
 	b.WriteString("Archivos de control permitidos fuera del write-set: ")
@@ -57,16 +57,16 @@ func BuildCodexAgentPromptWithControlFilesV0(
 	}
 	b.WriteString(".\n")
 	b.WriteString("Mantén cada fichero Go por debajo de 300 lineas; divide responsabilidades si se acerca a ese limite.\n")
-	b.WriteString("PROTOCOLO COMPACTO OBLIGATORIO: activa $caveman full si existe; si no existe, usa compact equivalente.\n")
-	b.WriteString("Sin narrativa visible. Final visible maximo una linea: ACK ")
+	b.WriteString("Comunicacion compacta: activa $caveman full si existe; si no existe, usa compact equivalente.\n")
+	b.WriteString("Final visible recomendado: ACK ")
 	b.WriteString(packet.DeliveryRefs.AckRef)
-	b.WriteString(" <status>. Incumplir este protocolo invalida la entrega.\n")
-	b.WriteString("Si falta contexto, no inventes: escribe una nota CONSULTA AL DIRECTOR en el ACK.\n")
+	b.WriteString(" <status>.\n")
+	b.WriteString("Si falta contexto, no inventes: usa lo disponible, guarda el avance y deja la falta como nota de revision en el ACK.\n")
 	if codexPacketHasRequiredTruncatedContextV0(packet) {
-		b.WriteString("CONTEXTO TRUNCADO REQUERIDO: agent_packet.context contiene entradas required=true y truncated=true. No completes salvo que puedas resolverlo con refs/materializacion externa; si completas, notes debe incluir contexto_truncado_resuelto: <motivo>. Si no, usa status failed y CONSULTA AL DIRECTOR.\n")
+		b.WriteString("CONTEXTO TRUNCADO: agent_packet.context contiene entradas required=true y truncated=true. Trabaja con refs/materializacion externa cuando este disponible; si no, guarda avance parcial y anota contexto_truncado_pendiente o contexto_truncado_resuelto en notes.\n")
 	}
 	if codexPacketHasRequiredRefOnlyContextV0(packet) {
-		b.WriteString("CONTEXTO REF_ONLY REQUERIDO: agent_packet.context contiene entradas required=true y mode=ref_only. Sigue required_ref_action por entrada: read_local_document, ask_director o ack_evidence_required. Si completas una entrada que no es ref_only_by_design, notes debe incluir contexto_ref_only_resuelto: <motivo>. Si no, usa status failed y CONSULTA AL DIRECTOR.\n")
+		b.WriteString("CONTEXTO REF_ONLY REQUERIDO: agent_packet.context contiene entradas required=true y mode=ref_only. Sigue required_ref_action si ayuda; si no alcanza, guarda avance parcial y anota contexto_ref_only_pendiente o contexto_ref_only_resuelto en notes.\n")
 	}
 	b.WriteString("Aplica arquitectura hexagonal e i18n si la tarea genera app o UI.\n")
 	b.WriteString("La persistencia concreta solo pertenece a la app generada si la tarea la pide; Orquesta no usa DB por defecto.\n")
@@ -85,15 +85,15 @@ func BuildCodexAgentPromptWithControlFilesV0(
 		b.WriteString(" solo para decisiones ejecutables del director; no pertenece al write-set.\n")
 		b.WriteString("Es obligatorio solo si objetivo o criterios de cierre lo piden.\n")
 		if codexPacketTargetsDirectorV0(packet) {
-			b.WriteString("Como target_module de director, ACK completed solo es valido despues de escribir decision_path con decisiones ejecutables; si no puedes, usa ACK failed con CONSULTA AL DIRECTOR. Docs sin decision_path no completan la tarea.\n")
+			b.WriteString("Como target_module de director, escribe decision_path con las decisiones ejecutables que puedas; si no esta completo, conserva el diagnostico y deja follow-up en ACK.\n")
 		}
 		b.WriteString("Si escribes decision_path, completa antes los ficheros pedidos del write-set, despues escribe ACK y termina; no sigas pensando ni ampliando alcance.\n")
 	}
 	b.WriteString("En el ACK, files debe listar rutas reales de archivos de producto tocados, no globs, directorios ni el write-set completo; ejemplo cmd/server/main.go, no cmd/server/**.\n")
 	b.WriteString("No incluyas archivos de control en ACK.files: agent_ack.json, director_decisions.json, agent_packet.json, prompts, logs ni checkpoints.\n")
-	b.WriteString("Si detectas que algun archivo necesario queda fuera del write-set, no lo edites: ACK failed con CONSULTA AL DIRECTOR.\n")
+	b.WriteString("Si detectas que algun archivo necesario queda fuera del write-set, no lo edites; continua con lo permitido y registra el faltante como nota o tarea derivada.\n")
 	b.WriteString("En el ACK, tests debe listar solo pruebas pasadas; cada test obligatorio pasado debe aparecer exactamente como aparece en el paquete.\n")
-	b.WriteString("Si una prueba obligatoria falla, el ACK debe usar status failed y no declarar esa prueba en tests como pasada.\n")
+	b.WriteString("Si una prueba obligatoria falla, conserva la evidencia en test_receipts/notes y no la declares como pasada.\n")
 	b.WriteString("En modo estricto, anade test_receipts por cada test pasado con comando exacto, status passed, exit_code 0, evidence_refs compactas, occurred_at, sequence y output_redacted=true.\n")
 	b.WriteString("No incluyas HOME real, tokens, secretos, prompts, completions ni transcripts completos.\n")
 	b.WriteString("files y tests deben ser arrays de strings; no metas stdout/stderr crudo en test_receipts ni notes.\n\n")
@@ -145,12 +145,12 @@ func writeWriteSetPrecedenceProtocolV0(
 	packet orquestaruntime.AgentStartPacketV0,
 ) {
 	if orquestaruntime.AgentStartPacketWriteSetClosedV0(packet) {
-		b.WriteString("Usa el write-set del paquete como alcance cerrado; si contiene '.', el alcance es todo el repo del proyecto, pero sigue prohibido borrar o salir del workdir.\n")
-		b.WriteString("PRECEDENCIA WRITE-SET: policy write_set_closed domina objetivo, criterios, hints y documentos locales. Ninguna frase autoriza ampliar alcance; si falta archivo, no lo edites y usa ACK failed con CONSULTA AL DIRECTOR salvo decision explicita del director o policy opt-in distinta.\n")
-		b.WriteString("No edites fuera del write-set; si falta alcance, escribe CONSULTA AL DIRECTOR en el ACK. La unica excepcion son archivos de control indicados por Orquesta.\n")
+		b.WriteString("Usa el write-set del paquete como alcance de escritura; si contiene '.', el alcance es todo el repo del proyecto, pero sigue prohibido borrar o salir del workdir.\n")
+		b.WriteString("Si falta alcance, no edites fuera: conserva lo util dentro del write-set y registra el faltante como nota de revision o tarea derivada.\n")
+		b.WriteString("La unica excepcion son archivos de control indicados por Orquesta.\n")
 		return
 	}
-	b.WriteString("MODO COMPATIBILIDAD LEGACY: el packet no declara write_set_closed. Usa el write-set como alcance primario y no amplíes alcance sin decision explicita del director cuando haya riesgo de causalidad, seguridad o efectos externos.\n")
+	b.WriteString("MODO COMPATIBILIDAD LEGACY: usa el write-set como alcance primario y no amplíes alcance cuando haya riesgo de causalidad, seguridad o efectos externos.\n")
 }
 
 func codexPacketTargetsDirectorV0(packet orquestaruntime.AgentStartPacketV0) bool {

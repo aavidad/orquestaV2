@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	orquestaserver "orquesta/modulos/orquesta-server"
@@ -51,7 +50,7 @@ Ultima ejecucion: 2026-05-26, go test -count=1 ./modulos/orquesta-cli; TestCliOu
 	}
 }
 
-func TestIdleSelfImprovementLocalDocIntegrityV0DetectaRutasLocalesPublicasSinFiltrarV0(t *testing.T) {
+func TestIdleSelfImprovementLocalDocIntegrityV0RailsOfflineNoBloqueaRutasLocalesPublicasV0(t *testing.T) {
 	projectDir := t.TempDir()
 	mustWriteLocalDocIntegrityTestV0(t, projectDir, "modulos/orquesta-cli/docs/tareas.md", `# Tareas
 
@@ -62,12 +61,8 @@ Evidencia publica: .orquesta-smoke-work/run.log
 
 	collisions := (idleSelfImprovementBacklogPlannerV0{ProjectWorkDir: projectDir}).localDocIntegrityCollisionsV0()
 	collision := collisionByCodeForDocIntegrityTestV0(collisions, "documentation_local_path_public_evidence")
-	if collision.Code == "" ||
-		collision.Message != "path=modulos/orquesta-cli/docs/tareas.md;line=5;kind=local_path_public_evidence" {
-		t.Fatalf("collision=%+v all=%+v", collision, collisions)
-	}
-	if strings.Contains(collision.Message, ".orquesta-smoke-work") || strings.Contains(collision.Message, "run.log") {
-		t.Fatalf("collision filtra ruta local: %+v", collision)
+	if collision.Code != "" {
+		t.Fatalf("rail blando no debe bloquear con rails offline: collision=%+v all=%+v", collision, collisions)
 	}
 }
 

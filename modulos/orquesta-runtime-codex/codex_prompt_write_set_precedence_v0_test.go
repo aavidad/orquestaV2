@@ -1,22 +1,32 @@
 package orquestaruntimecodex
 
-import "strings"
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
-func TestBuildCodexAgentPromptV0DeclaraPrecedenciaWriteSetClosed(t *testing.T) {
+func TestBuildCodexAgentPromptV0WriteSetClosedNoBloqueaEntrega(t *testing.T) {
 	packet := codexPacketForTestV0()
 	packet.Policies = []string{"write_set_closed", "ack_required"}
 
 	prompt := BuildCodexAgentPromptV0(packet, nil)
 
 	for _, want := range []string{
-		"PRECEDENCIA WRITE-SET",
-		"policy write_set_closed domina objetivo, criterios, hints y documentos locales",
-		"Ninguna frase autoriza ampliar alcance",
-		"ACK failed con CONSULTA AL DIRECTOR",
+		"Usa el write-set del paquete como alcance de escritura",
+		"conserva lo util dentro del write-set",
+		"nota de revision o tarea derivada",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("prompt no contiene %q:\n%s", want, prompt)
+		}
+	}
+	for _, forbidden := range []string{
+		"PRECEDENCIA WRITE-SET",
+		"policy write_set_closed domina",
+		"ACK failed con CONSULTA AL DIRECTOR",
+	} {
+		if strings.Contains(prompt, forbidden) {
+			t.Fatalf("prompt conserva rail %q:\n%s", forbidden, prompt)
 		}
 	}
 	if strings.Contains(prompt, "MODO COMPATIBILIDAD LEGACY") {

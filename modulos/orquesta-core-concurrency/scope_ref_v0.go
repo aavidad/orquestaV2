@@ -4,8 +4,6 @@ import (
 	"path"
 	"sort"
 	"strings"
-
-	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 type ScopeRefV0 struct {
@@ -136,9 +134,6 @@ func hasTraversalScopeRefV0(value string) bool {
 }
 
 func hasForbiddenScopeSegmentV0(value string) bool {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return false
-	}
 	segments := strings.Split(value, "/")
 	if len(segments) == 0 {
 		return false
@@ -170,10 +165,12 @@ func isSecretScopeSegmentV0(segment string) bool {
 	lower := strings.ToLower(segment)
 	switch lower {
 	case "secret", "secrets", "secreto", "secretos",
-		"credential", "credentials":
+		"credential", "credentials",
+		"token", "tokens",
+		"password", "passwords":
 		return true
 	default:
-		return strings.Contains(lower, "token") || strings.Contains(lower, "password")
+		return false
 	}
 }
 

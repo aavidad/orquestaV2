@@ -61,6 +61,14 @@ Toda entrega hacia OPES debe:
 - enviar `external_refs` con refs de Orquesta;
 - registrar en Orquesta una entrega propia con `evidence_refs` hacia OPES.
 
+Si OPES devuelve HTTP 4xx al entregar un artefacto, el conector debe preservar
+la causa saneada como `DomainWorkArtifactReceiptV0` invalido, con issue
+`opes_http_status_<status>` y `field=artifact_submitter`. No debe convertir ese
+caso en `domain_work_port_no_disponible`: un 4xx es rechazo de contrato remoto
+o validacion de dominio, reparable por director/agente sin tirar el trabajo. Los
+fallos de transporte, ausencia de base URL, timeout o estados 5xx/retry agotado
+siguen siendo errores del puerto/adaptador.
+
 Ejemplo documental:
 
 ```json
@@ -132,7 +140,18 @@ Ejemplo audio accesible:
     "duration_seconds": 1830,
     "audio_ref": "AUDIO_REF",
     "manifest_ref": "AUDIO_MANIFEST_REF",
-    "source_artifact_ref": "ASSEMBLED_TOPIC_ARTIFACT_ID"
+    "source_artifact_ref": "ASSEMBLED_TOPIC_ARTIFACT_ID",
+    "segments": [
+      {
+        "topic_ref": "TOPIC_REF",
+        "section_ref": "SECTION_REF",
+        "audio_ref": "SECTION_AUDIO_REF",
+        "manifest_ref": "AUDIO_MANIFEST_REF",
+        "duration_seconds": 42,
+        "text_hash": "TEXT_HASH",
+        "reuse_status": "reused_common|generated|derived"
+      }
+    ]
   },
   "external_refs": {
     "run_ref": "run-id",
@@ -188,11 +207,14 @@ remotas.
 
 Para materializar un `audio_asset`, Orquesta debe enviar un manifest publico con
 `topic_id`, `assembled_topic_artifact_id` o `source_artifact_ref`,
-`language_code`, `format`, `mime_type`, `duration_seconds`, `audio_ref` y
-`manifest_ref` si aplica. La implementacion OPES puede usar `edge-tts` de
-Microsoft como adaptador de sintesis por su calidad observada; esa decision no
-debe viajar en el payload publico ni en refs de Orquesta. Proveedor, modelo,
-GPU, rutas locales y procesos internos quedan en logs privados de OPES.
+`language_code`, `format`, `mime_type`, `duration_seconds`, `audio_ref`,
+`manifest_ref` y `segments` cuando el tema tenga apartados. Cada entrada de
+`segments` debe enlazar `section_ref` con su `audio_ref` y conservar duracion,
+hash/ref de texto y estado de reutilizacion o generacion. La implementacion OPES
+puede usar `edge-tts` de Microsoft como adaptador de sintesis por su calidad
+observada; esa decision no debe viajar en el payload publico ni en refs de
+Orquesta. Proveedor, modelo, GPU, rutas locales y procesos internos quedan en
+logs privados de OPES.
 
 Respuesta de job aceptada por el conector:
 

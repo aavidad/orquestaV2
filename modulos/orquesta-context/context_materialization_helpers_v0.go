@@ -95,7 +95,7 @@ func contextMaterializedContentHasForbiddenDetailV0(content string) bool {
 		contextMaterializationRailBoundaryV0,
 		"content",
 		content,
-	) || contextLocalPathPublicDetailForbiddenV0(content)
+	)
 }
 
 func contextMaterializedRefHasForbiddenDetailV0(ref string) bool {
@@ -103,7 +103,7 @@ func contextMaterializedRefHasForbiddenDetailV0(ref string) bool {
 		contextMaterializationRailBoundaryV0,
 		"ref",
 		ref,
-	) || contextLocalPathPublicDetailForbiddenV0(ref)
+	)
 }
 
 func contextRefOnlyReasonForEntryV0(entry ContextBundleEntryV0) string {

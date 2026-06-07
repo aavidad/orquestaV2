@@ -138,6 +138,9 @@ Documentos de entrada obligatorios para cambios transversales:
   `docs/runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md` si tocas
   OPES, `orquesta-opes-*`, `DomainWork` aplicado a OPES, bridge/drain OPES o
   reglas editoriales de temarios.
+- `/home/alberto/Trabajo/OPES/AGENTS.md` si tocas reglas editoriales,
+  operativas o de produccion de temarios OPES. Ese canon se aplica como dominio
+  OPES/composicion y no como regla del nucleo generico.
 - `/home/alberto/Trabajo/OPES/opes-salidas/coordinacion_temarios/GUIA_AGENTES_CREACION_TESTS_TEMARIOS_TCAE_OPES_2026-06-02.md`
   si tocas bancos de preguntas, tests, `generate_question_bank` o importacion
   local de tests OPES/TCAE.
@@ -191,6 +194,13 @@ Documentos de entrada obligatorios para cambios transversales:
   revisalo para aprovecharlo total o parcialmente como otro artefacto, borrador,
   insumo documental, evidencia, nota de revision o tarea derivada antes de
   descartarlo.
+  Para temarios y cursos, no rehagas material existente por defecto. Primero
+  inventaria temas, comunes, tests, audios, visuales, HTML, tutor/RAG y paquetes
+  ya creados; revisalos contra el canon oficial del nuevo curso; copia o enlaza
+  lo valido al nuevo trabajo; marca como borrador/revision lo recuperable; y
+  rehace solo lo que este obsoleto, sea incorrecto, no cubra el programa o tenga
+  un fallo estructural real. Esta regla aplica a todos los Orquesta/agentes que
+  preparen temarios, no solo al curso en curso.
   Los unicos cortes fuertes aceptables son seguridad, causalidad, refs
   imposibles, datos sensibles o efectos externos no autorizados.
   Los rails de detalle operativo/local (`detalle_prohibido`, nombres de
@@ -226,8 +236,9 @@ Documentos de entrada obligatorios para cambios transversales:
   limite global artificial de Codex padres ni de agentes vivos salvo limite duro
   del proveedor/runtime/OS o instruccion explicita del operador; si existe un
   limite duro, documentalo como frontera externa temporal, no como politica del
-  nucleo. Conserva refs/parentesco, write-set, presupuesto y evidencia en el
-  ACK.
+  nucleo. La composicion Codex debe arrancar con 70 padres/ejecuciones por tick
+  como default operativo amplio, no con 10 como cuello de botella silencioso.
+  Conserva refs/parentesco, write-set, presupuesto y evidencia en el ACK.
 - Economia de tokens: al lanzar agentes o subagentes, pide comunicacion compacta
   y tecnicas de ahorro como `caveman` si estan disponibles. Para exploracion y
   pruebas usa razonamiento `medium` por defecto; no uses `xhigh` salvo orden

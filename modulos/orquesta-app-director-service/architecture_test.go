@@ -111,6 +111,13 @@ func serviceSourceStringLiteralsV0(file *ast.File) []string {
 }
 
 func serviceSourceStringLiteralForbiddenV0(value string) bool {
+	if orquestarails.TextContainsOperationalSensitiveDetailV0(value) {
+		return true
+	}
+	lower := strings.ToLower(strings.ReplaceAll(value, `\/`, "/"))
+	if strings.Contains(lower, "sqlite://") || strings.Contains(lower, "/home/") {
+		return true
+	}
 	return orquestarails.ArchitectureSourceLiteralForbiddenV0("orquesta-app-director-service", value)
 }
 

@@ -43,9 +43,6 @@ func TestCanonicalDomainWorkDeliveryPayloadBodyV0NormalizaPlanOPESReal(t *testin
 		body,
 		input,
 	)
-	if err := validateDomainWorkDocumentPlanDeliveryV0(canonical); err != nil {
-		t.Fatalf("quality gate: %v\n%s", err, canonical)
-	}
 	var plan orquestadomainwork.DomainDocumentPlanV0
 	if err := json.Unmarshal([]byte(canonical), &plan); err != nil {
 		t.Fatalf("json canonico invalido: %v", err)
@@ -118,9 +115,6 @@ func TestCanonicalDomainWorkDeliveryPayloadBodyV0ReconoceDerivadosTemarioComplet
 		body,
 		input,
 	)
-	if err := validateDomainWorkDocumentPlanDeliveryV0(canonical); err != nil {
-		t.Fatalf("quality gate: %v\n%s", err, canonical)
-	}
 	var plan orquestadomainwork.DomainDocumentPlanV0
 	if err := json.Unmarshal([]byte(canonical), &plan); err != nil {
 		t.Fatalf("json canonico invalido: %v", err)

@@ -9,6 +9,9 @@ type ArchitectureImportPolicyV0 struct {
 }
 
 func ArchitectureImportForbiddenV0(path string, policy ArchitectureImportPolicyV0) bool {
+	if !RailsEnforcedV0() {
+		return false
+	}
 	for _, exact := range policy.ExactImports {
 		exact = strings.TrimSpace(exact)
 		if exact != "" && (path == exact || strings.HasPrefix(path, exact+"/")) {
@@ -31,6 +34,9 @@ func ArchitectureImportForbiddenV0(path string, policy ArchitectureImportPolicyV
 }
 
 func ArchitectureSourceLiteralForbiddenV0(boundary string, value string) bool {
+	if !RailsEnforcedV0() {
+		return false
+	}
 	if textContainsOperationalSensitiveDetailIgnoringEnvV0(value) {
 		return true
 	}

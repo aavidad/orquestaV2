@@ -29,15 +29,15 @@ func TestAppChangeDirectorDecisionSourceV0ProyectaAudioAssetOPES(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
 	}
-	task := decisions[6].CreateMicrotask.Task
+	task := microtaskDecisionForTestV0(t, decisions).CreateMicrotask.Task
 	if task.Title != "Generar audio accesible externo" ||
 		task.Summary != appChangeAudioTaskSummaryV0() ||
 		!stringInSetV0(task.WriteSet, "external/opes/generate_audio_asset") ||
 		!stringInSetV0(task.AcceptanceCriteria, "Devolver audio_asset con manifest de idioma, formato, duracion y refs/checksums de artefactos.") ||
-		!stringInSetV0(task.AcceptanceCriteria, "No incluir rutas locales, proveedor, GPU, modelo ni procesos internos en el payload publico.") ||
+		!stringInSetV0(task.AcceptanceCriteria, "Si aparecen rutas locales, proveedor, GPU, modelo o procesos internos, registrarlos como nota de saneamiento antes del payload publico.") ||
 		!stringInSetV0(task.RequiredTests, "validar contrato audio OPES") ||
 		!stringInSetV0(task.RequiredTests, "validar artifact_type=audio_asset") ||
-		!stringInSetV0(task.RequiredTests, "validar que no filtra proveedor, GPU, modelo, rutas ni procesos internos") {
+		!stringInSetV0(task.RequiredTests, "validar notas de saneamiento de proveedor, GPU, modelo, rutas o procesos internos") {
 		t.Fatalf("task=%+v", task)
 	}
 }
@@ -63,7 +63,7 @@ func TestAppChangeDirectorDecisionSourceV0AudioAssetExternoSinOPES(t *testing.T)
 	if err != nil {
 		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
 	}
-	task := decisions[6].CreateMicrotask.Task
+	task := microtaskDecisionForTestV0(t, decisions).CreateMicrotask.Task
 	if task.Title != "Generar audio accesible externo" ||
 		!stringInSetV0(task.RequiredTests, "validar contrato audio externo") ||
 		stringInSetV0(task.RequiredTests, "validar contrato audio OPES") ||

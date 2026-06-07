@@ -215,7 +215,8 @@ Corte anadido el 2026-05-18:
   deje de exponer pendientes de ese tipo. Esto automatiza el flujo
   `research_exam_precedents -> draft_content_block -> generate_visual_asset ->
   generate_question_bank -> review_* -> validate_topic -> assemble_topic ->
-  generate_audio_asset -> generate_tutor_assets -> generate_html_site` sin
+  generate_audio_asset -> generate_tutor_assets -> generate_learning_games ->
+  generate_html_site` sin
   meter OPES en el nucleo. Desde el 2026-06-02, el flujo local completo de
   temario queda fijado en `docs/opes_flujo_temario_operativo_2026-06-02.md`:
   investigacion externa, tests, audios por tema/apartado, tutor/bots e HTML
@@ -238,6 +239,9 @@ HTML local. La secuencia vigente posterior anade investigacion de examenes,
 audio_asset`, `generate_tutor_assets -> tutor_bot_package` y
 `generate_html_site -> local_html_site`; su smoke real completo debe ejecutarse
 contra OPES temporal igual que el resto de derivados.
+
+Handoff vigente de ese tramo:
+`docs/runbooks/handoff_opes_derivados_reales_hasta_local_html_site_2026-06-07.md`.
 
 Documento de evidencia:
 

@@ -288,8 +288,8 @@ func TestDrainRunV0ProcesoParadoPorAuthInvalidaPreguntaDirectorSinBasura(t *test
 	}
 	if !codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0) ||
 		!codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionAskDirectorV0) ||
-		!codexStackRefsContainPartV0(run.AgentAssessments, "#severity:"+orquestacoreworkflow.AgentAssessmentSeverityCriticalV0) {
-		t.Fatalf("sin assessment auth ask_director critical: %+v", run.AgentAssessments)
+		!codexStackRefsContainPartV0(run.AgentAssessments, "#severity:"+orquestacoreworkflow.AgentAssessmentSeverityHighV0) {
+		t.Fatalf("sin assessment auth ask_director high: %+v", run.AgentAssessments)
 	}
 	if codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictGarbageV0) ||
 		codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionStopAgentV0) {

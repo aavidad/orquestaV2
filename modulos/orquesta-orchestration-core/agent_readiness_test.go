@@ -125,13 +125,25 @@ func TestProbeAgentReadinessV0PermiteVocabularioOperativoOpaco(t *testing.T) {
 	}
 }
 
-func TestProbeAgentReadinessV0RechazaValorSensibleEnRefOpaca(t *testing.T) {
+func TestProbeAgentReadinessV0AceptaValorSensibleEnRefOpaca(t *testing.T) {
+	enableOrchestrationCoreRailsModeEnforcedForTestV0(t)
 	request := validAgentReadinessProbeRequestV0()
 	request.EvidenceRefs = []string{"client-secret:valor"}
+	probe := &fakeAgentReadinessProbeV0{
+		result: AgentReadinessProbeResultV0{
+			Status:       AgentReadinessReadyV0,
+			EvidenceRefs: request.EvidenceRefs,
+		},
+	}
 
-	_, err := ProbeAgentReadinessV0(context.Background(), &fakeAgentReadinessProbeV0{}, request)
+	result, err := ProbeAgentReadinessV0(context.Background(), probe, request)
 
-	assertNucleoErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "agent_readiness.evidence_refs")
+	if err != nil {
+		t.Fatalf("probe readiness no debe bloquear por contenido: %v", err)
+	}
+	if !containsNucleoRefV0(result.EvidenceRefs, "client-secret:valor") {
+		t.Fatalf("result no conserva evidence refs: %+v", result)
+	}
 }
 
 func TestProbeAgentReadinessV0AceptaRefsInternasAnidadas(t *testing.T) {

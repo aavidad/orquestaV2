@@ -50,7 +50,7 @@ func (source AppChangeDirectorDecisionSourceV0) decisionsFromRecordsV0(
 	for _, record := range records {
 		refs := appChangeRefsV0(record.Request.ChangeRef)
 		if !appChangeReadyForAutoPlanV0(record.Request) ||
-			!appChangeQuestionReadyV0(request.Run, refs.QuestionRef) {
+			!appChangeQuestionReadyV0(request.Run, refs) {
 			continue
 		}
 		decisions := buildAppChangeDecisionsV0(request.Run, record)

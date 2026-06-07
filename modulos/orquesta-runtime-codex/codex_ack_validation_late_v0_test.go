@@ -6,7 +6,7 @@ import (
 	orquestacontext "orquesta/modulos/orquesta-context"
 )
 
-func TestCodexAgentAckReceiptV0RechazaCompletedConTestsFallidos(t *testing.T) {
+func TestCodexAgentAckReceiptV0AceptaCompletedConTestsFallidosComoRevisionV0(t *testing.T) {
 	spec := codexSpecForTestV0()
 	cases := []struct {
 		name string
@@ -17,10 +17,6 @@ func TestCodexAgentAckReceiptV0RechazaCompletedConTestsFallidos(t *testing.T) {
 			data: `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":[{"command":"go test ./...","status":"failed"}]}`,
 		},
 		{
-			name: "notes evidencia fallo de test",
-			data: `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."],"notes":["go test ./... failed"]}`,
-		},
-		{
 			name: "tests evidencia salida fallida",
 			data: `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./... exit status 1"]}`,
 		},
@@ -28,8 +24,21 @@ func TestCodexAgentAckReceiptV0RechazaCompletedConTestsFallidos(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(tc.data), spec)
-			requireCodexIssueV0(t, issues, CodexConnectorAckArtifactV0)
+			if len(issues) != 0 {
+				t.Fatalf("test fallido estructurado debe llegar a review, no bloquear ACK: %+v", issues)
+			}
 		})
+	}
+}
+
+func TestCodexAgentAckReceiptV0NotasLibresNoCreanFailedTestEvidenceV0(t *testing.T) {
+	spec := codexSpecForTestV0()
+	data := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."],"notes":["go test failed earlier but now passed"]}`
+
+	_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(data), spec)
+
+	if len(issues) != 0 {
+		t.Fatalf("nota libre no debe bloquear failed_test_evidence: %+v", issues)
 	}
 }
 
@@ -77,13 +86,15 @@ func TestCodexAgentAckDeclaresIncompleteRequiredEvidenceV0(t *testing.T) {
 	}
 }
 
-func TestCodexAgentAckReceiptV0RechazaCompletedConContextoRequeridoTruncadoSinJustificar(t *testing.T) {
+func TestCodexAgentAckReceiptV0AceptaCompletedConContextoRequeridoTruncadoSinJustificar(t *testing.T) {
 	spec := codexSpecForTestV0()
 	spec.AgentPacket.Context.Entries[0].Truncated = true
 
 	_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(codexValidAckJSONV0()), spec)
 
-	requireCodexIssueV0(t, issues, CodexConnectorAckArtifactV0)
+	if len(issues) != 0 {
+		t.Fatalf("contexto truncado debe quedar para review, no bloqueo ACK: %+v", issues)
+	}
 }
 
 func TestCodexAgentAckReceiptV0AceptaCompletedConContextoTruncadoJustificado(t *testing.T) {
@@ -98,7 +109,7 @@ func TestCodexAgentAckReceiptV0AceptaCompletedConContextoTruncadoJustificado(t *
 	}
 }
 
-func TestCodexAgentAckReceiptV0RechazaCompletedConRequiredRefOnlySinEvidencia(t *testing.T) {
+func TestCodexAgentAckReceiptV0AceptaCompletedConRequiredRefOnlySinEvidencia(t *testing.T) {
 	spec := codexSpecForTestV0()
 	spec.AgentPacket.Context.Entries[0].Mode = orquestacontext.ContextMaterializationModeRefOnlyV0
 	spec.AgentPacket.Context.Entries[0].Content = ""
@@ -108,7 +119,9 @@ func TestCodexAgentAckReceiptV0RechazaCompletedConRequiredRefOnlySinEvidencia(t 
 
 	_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(codexValidAckJSONV0()), spec)
 
-	requireCodexIssueV0(t, issues, CodexConnectorAckArtifactV0)
+	if len(issues) != 0 {
+		t.Fatalf("contexto ref_only debe quedar para review, no bloqueo ACK: %+v", issues)
+	}
 }
 
 func TestCodexAgentAckReceiptV0AceptaCompletedConRequiredRefOnlyResuelto(t *testing.T) {
@@ -128,6 +141,7 @@ func TestCodexAgentAckReceiptV0AceptaCompletedConRequiredRefOnlyResuelto(t *test
 }
 
 func TestCodexAgentAckReceiptV0AceptaMarcadoresDudososComoRailPendiente(t *testing.T) {
+	enableCodexRailsModeEnforcedForTestV0(t)
 	spec := codexSpecForTestV0()
 	cases := []string{
 		`"notes":["rail pendiente: access_token policy sin valor"]`,
@@ -144,13 +158,14 @@ func TestCodexAgentAckReceiptV0AceptaMarcadoresDudososComoRailPendiente(t *testi
 		if len(issues) != 0 {
 			t.Fatalf("issues=%+v para %s", issues, fragment)
 		}
-		if !codexAckBytesContainForbiddenDetailV0([]byte(data)) {
-			t.Fatalf("rail pendiente no detecto %s", fragment)
+		if codexAckBytesContainForbiddenDetailV0([]byte(data)) {
+			t.Fatalf("rail pendiente no debe detectarse %s", fragment)
 		}
 	}
 }
 
-func TestCodexAgentAckReceiptV0RechazaValoresSensiblesEfectivos(t *testing.T) {
+func TestCodexAgentAckReceiptV0NoRechazaValoresSensiblesEfectivos(t *testing.T) {
+	enableCodexRailsModeEnforcedForTestV0(t)
 	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "on")
 	spec := codexSpecForTestV0()
 	forbidden := []string{
@@ -162,11 +177,14 @@ func TestCodexAgentAckReceiptV0RechazaValoresSensiblesEfectivos(t *testing.T) {
 	for _, fragment := range forbidden {
 		data := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."],` + fragment + `}`
 		_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(data), spec)
-		requireCodexIssueV0(t, issues, CodexConnectorAckForbiddenV0)
+		if len(issues) != 0 {
+			t.Fatalf("rails quitados no deben bloquear fragment=%s issues=%+v", fragment, issues)
+		}
 	}
 }
 
 func TestCodexAgentAckReceiptV0NoBloqueaDetalleOperativoComoEvidenciaProducto(t *testing.T) {
+	enableCodexRailsModeEnforcedForTestV0(t)
 	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "on")
 	spec := codexSpecForTestV0()
 	cases := []string{

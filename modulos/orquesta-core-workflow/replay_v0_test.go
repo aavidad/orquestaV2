@@ -100,6 +100,22 @@ func TestReplayDurableEventsV0ExactDuplicateDoesNotDuplicateProgress(t *testing.
 	}
 }
 
+func TestReplayDurableEventsV0RunBlockerResolvedActivaRun(t *testing.T) {
+	events := []OrchestrationEventV0{
+		mustReplayRunStartedEventWithKeyV0(t, "evt-durable-start-resolve", 1, "idem-durable-start-resolve"),
+		mustReplayRunBlockedEventWithKeyV0(t, "evt-durable-block-resolve", 2, "idem-durable-block-resolve"),
+		mustReplayRunBlockerResolvedEventWithKeyV0(t, "evt-durable-resolve", 3, "idem-durable-resolve", "blocker-001"),
+	}
+
+	got, err := ReplayDurableEventsV0(events)
+	if err != nil {
+		t.Fatalf("replay durable resolve: %v", err)
+	}
+	if got.Status != OrchestrationRunStatusActiveV0 || len(got.Blockers) != 0 {
+		t.Fatalf("got=%+v", got)
+	}
+}
+
 func TestReplayDurableEventsV0ConflictingDuplicateFails(t *testing.T) {
 	first := mustReplayPhaseEventWithKeyV0(t, "evt-durable-phase-004-a", 2, "idem-phase-conflict", OrchestrationPhaseProgramacionV0)
 	conflict := mustReplayPhaseEventWithKeyV0(t, "evt-durable-phase-004-b", 2, "idem-phase-conflict", OrchestrationPhaseRevisionV0)
@@ -178,6 +194,25 @@ func mustReplayRunBlockedEventWithKeyV0(t *testing.T, eventID string, sequence i
 		Summary:      "Falta una decision de contrato antes de continuar.",
 		SourceGroup:  "workflow",
 		EvidenceRefs: []string{"docs/contratos.md#OrchestrationEventV0"},
+	})
+	return mustReducerEventV0(t, event, err)
+}
+
+func mustReplayRunBlockerResolvedEventWithKeyV0(
+	t *testing.T,
+	eventID string,
+	sequence int64,
+	idempotencyKey string,
+	blockerID string,
+) OrchestrationEventV0 {
+	t.Helper()
+	meta := reducerEventMetaV0(eventID, sequence)
+	meta.IdempotencyKey = idempotencyKey
+	event, err := NewRunBlockerResolvedEventV0(meta, RunBlockerResolvedPayloadV0{
+		BlockerID:    blockerID,
+		ReasonCode:   "bloqueo_resuelto",
+		Summary:      "El criterio pendiente queda resuelto con evidencia durable.",
+		EvidenceRefs: []string{"docs/contratos.md#RunBlockerResolved"},
 	})
 	return mustReducerEventV0(t, event, err)
 }

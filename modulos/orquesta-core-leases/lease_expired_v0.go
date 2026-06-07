@@ -40,7 +40,7 @@ func AgentLeaseExpiredFromAssessmentV0(assessment AgentTimeoutAssessmentV0) (Age
 }
 
 func DecodeAgentLeaseExpiredV0(data []byte) (AgentLeaseExpiredV0, error) {
-	if issues := detectForbiddenAgentLeaseJSONKeysV0(data); len(issues) > 0 {
+	if issues := detectForbiddenAgentLeaseJSONDetailsV0(data); len(issues) > 0 {
 		return AgentLeaseExpiredV0{}, AgentLeaseValidationErrorV0{Issues: issues}
 	}
 	var expired AgentLeaseExpiredV0

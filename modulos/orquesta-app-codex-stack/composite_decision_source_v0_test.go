@@ -284,6 +284,99 @@ func TestCompositeDirectorDecisionSourceV0NoInventaPublishContractSinAcceptPrevi
 	}
 }
 
+func TestCompositeDirectorDecisionSourceV0AceptaAppChangeDirectoSinAcceptPrevio(t *testing.T) {
+	runRef := "run-ref-stack-app-change-direct-001"
+	contractRef := "contract:function:app-change:appchange-direct-001:v0"
+	decisions := []orquestadirectoragent.DirectorAgentDecisionV0{
+		{
+			SchemaVersion: orquestadirectoragent.DirectorAgentDecisionSchemaVersionV0,
+			DecisionRef:   "director-decision-app-change-answer-direct-001",
+			RunID:         runRef,
+			PhaseID:       string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			CommandType:   orquestadirectoragent.DirectorAgentCommandAnswerQuestionV0,
+			CommandRef:    "command-ref-app-change-answer-direct-001",
+			Summary:       "Responder pregunta directa de app-change.",
+			EvidenceRefs:  []string{"evidence-ref-app-change-direct-001"},
+			AnswerQuestion: &orquestadirectoragent.DirectorAgentAnswerQuestionCommandV0{
+				AnswerID:     "answer-ref-app-change-appchange-direct-001",
+				QuestionID:   "question-ref-app-change-direct-001",
+				Decision:     orquestadirectoragent.DirectorAgentAnswerReplanV0,
+				Summary:      "Aceptar trabajo externo directo.",
+				EvidenceRefs: []string{"evidence-ref-app-change-direct-001"},
+			},
+		},
+		{
+			SchemaVersion: orquestadirectoragent.DirectorAgentDecisionSchemaVersionV0,
+			DecisionRef:   "director-decision-app-change-contract-direct-001",
+			RunID:         runRef,
+			PhaseID:       string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			CommandType:   orquestadirectoragent.DirectorAgentCommandPublishContractV0,
+			CommandRef:    "command-ref-app-change-contract-direct-001",
+			Summary:       "Publicar contrato directo de app-change para trabajo externo.",
+			EvidenceRefs:  []string{"evidence-ref-app-change-direct-001"},
+			PublishContract: &orquestadirectoragent.DirectorAgentPublishContractCommandV0{
+				ContractRef:   contractRef,
+				PhaseID:       string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+				DecisionRef:   "answer-ref-app-change-appchange-direct-001",
+				Summary:       "Contrato directo de trabajo externo.",
+				FunctionNames: []string{"ApplyExternalDomainWorkV0"},
+				EvidenceRefs:  []string{"evidence-ref-app-change-direct-001"},
+			},
+		},
+		{
+			SchemaVersion: orquestadirectoragent.DirectorAgentDecisionSchemaVersionV0,
+			DecisionRef:   "director-decision-app-change-task-direct-001",
+			RunID:         runRef,
+			PhaseID:       string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			CommandType:   orquestadirectoragent.DirectorAgentCommandCreateMicrotaskV0,
+			CommandRef:    "command-ref-app-change-task-direct-001",
+			Summary:       "Crear microtarea OPES directa.",
+			EvidenceRefs:  []string{"evidence-ref-app-change-direct-001"},
+			CreateMicrotask: &orquestadirectoragent.DirectorAgentCreateMicrotaskCommandV0{
+				Task: orquestadirectoragent.DirectorAgentMicrotaskV0{
+					SchemaVersion:   orquestadirectoragent.DirectorAgentMicrotaskSchemaVersionV0,
+					TaskID:          "task-ref-app-change-appchange-direct-001",
+					RunID:           runRef,
+					PhaseID:         string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+					WorkProfileKind: "domain_work",
+					Title:           "Resolver trabajo documental OPES",
+					Summary:         "Resolver trabajo documental con paquete de dominio suficiente.",
+					AcceptanceCriteria: []string{
+						"Conservar el paquete externo aunque el resultado requiera revision posterior.",
+					},
+					RequiredTests: []string{"validar contrato externo de dominio"},
+					FunctionContractRefs: []orquestadirectoragent.DirectorAgentFunctionContractRefV0{{
+						ContractRef:  contractRef,
+						FunctionName: "ApplyExternalDomainWorkV0",
+					}},
+				},
+			},
+		},
+	}
+	source := compositeDirectorDecisionSourceV0{
+		Sources: []orquestadirectoragentworkflow.DirectorAgentDecisionSourcePortV0{
+			codexStackStaticDecisionSourceForTestV0{Decisions: decisions},
+		},
+	}
+
+	got, err := source.ListDirectorAgentDecisionsV0(
+		context.Background(),
+		orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{
+			Run: orquestacoreworkflow.OrchestrationRunV0{
+				RunID:        runRef,
+				CurrentPhase: orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+			},
+		},
+	)
+
+	if err != nil {
+		t.Fatalf("err=%v", err)
+	}
+	if len(got) != len(decisions) {
+		t.Fatalf("decisions=%+v", got)
+	}
+}
+
 func TestCompositeDirectorDecisionSourceV0CompletaReadmeParaAppGoCompleta(t *testing.T) {
 	decisions := codexStackDirectorDecisionsForTestV0(
 		"run-ref-stack-policy-readme-001",

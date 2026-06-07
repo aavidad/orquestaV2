@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func BuildExternalAgentLaunchSpecV0(
@@ -98,9 +96,6 @@ func (v *externalAgentConnectorValidatorV0) validateSecurity(
 	field string,
 	security ExternalAgentSecurityPolicyV0,
 ) {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return
-	}
 	if !security.OptIn {
 		v.add(ExternalAgentSecurityInvalidaV0, field+".opt_in")
 	}
@@ -230,9 +225,6 @@ func externalAgentErrorsFromRuntimeLaunchV0(
 }
 
 func externalAgentPacketHasForbiddenDetailV0(packet AgentStartPacketV0) bool {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return false
-	}
 	if agentStartPacketHasForbiddenOperationalDetailV0(packet) {
 		return true
 	}
@@ -244,33 +236,23 @@ func externalAgentPacketHasForbiddenDetailV0(packet AgentStartPacketV0) bool {
 }
 
 func externalAgentUnsafeValueV0(value string) bool {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return false
-	}
 	trimmed := strings.TrimSpace(value)
 	low := strings.ToLower(trimmed)
 	return looksLikeSecret(trimmed) ||
 		looksLikeConcreteProviderValueV0(trimmed) ||
 		looksLikeConcreteModelValueV0(trimmed) ||
-		processRuntimeContainsForbiddenMarkerV0(trimmed) ||
 		externalAgentLooksLikeShellV0(low) ||
-		strings.Contains(low, "provider") ||
-		strings.Contains(low, "proveedor") ||
-		strings.Contains(low, "model") ||
-		strings.Contains(low, "modelo") ||
-		strings.Contains(low, "home-ref") ||
-		strings.Contains(low, "credential-ref") ||
 		externalAgentUnsafeTextV0(trimmed)
 }
 
 func externalAgentUnsafeTextV0(value string) bool {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return false
-	}
 	low := strings.ToLower(strings.TrimSpace(value))
-	return strings.Contains(low, "transcript") ||
+	return strings.Contains(low, "transcript=") ||
+		strings.Contains(low, "transcript:") ||
 		strings.Contains(low, "prompt=") ||
+		strings.Contains(low, "prompt:") ||
 		strings.Contains(low, "completion=") ||
+		strings.Contains(low, "completion:") ||
 		strings.Contains(low, "://") ||
 		strings.HasPrefix(low, "/") ||
 		strings.HasPrefix(low, `\`) ||

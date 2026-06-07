@@ -124,6 +124,7 @@ func TestStrictCompletedCodexAgentAckV0AceptaSinFilesConRecibosYNotasV0(t *testi
 }
 
 func TestStrictCompletedCodexAgentAckV0NoBloqueaRailsPendientesGenericosV0(t *testing.T) {
+	enableCodexRailsModeEnforcedForTestV0(t)
 	spec := codexSpecForTestV0()
 	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."],"test_receipts":[{"schema_version":"codex_required_test_receipt.v0","command":"go test ./...","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-001"],"occurred_at":"2026-05-24T10:00:00Z","sequence":1,"output_redacted":true}],"notes":["rail pendiente: token provider home prompt sin valor operativo"]}`
 
@@ -132,13 +133,14 @@ func TestStrictCompletedCodexAgentAckV0NoBloqueaRailsPendientesGenericosV0(t *te
 	if len(issues) != 0 {
 		t.Fatalf("rail pendiente generico no debe bloquear ACK estricto: %+v", issues)
 	}
-	if !CodexAgentAckHasPendingRailV0(validated) {
-		t.Fatalf("rail pendiente generico debe conservarse como evidencia")
+	if CodexAgentAckHasPendingRailV0(validated) {
+		t.Fatalf("rail pendiente generico no debe conservarse como evidencia")
 	}
 }
 
 func TestCodexDeliveryObservationV0RechazaACKStrictSinRecibosV0(t *testing.T) {
 	spec := codexSpecForTestV0()
+	spec.AgentPacket.Policies = append(spec.AgentPacket.Policies, "ack_terminal_strict")
 	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."],"notes":["contexto_ref_only_resuelto: fixture local sin contexto externo"]}`
 
 	_, regularIssues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
@@ -176,11 +178,16 @@ func TestStrictCompletedCodexAgentAckV0RechazaSiFaltaTestObligatorioAunqueHayaEx
 	requireCodexIssueEvidenceV0(t, issues, "required_tests_mismatch")
 }
 
-func TestCodexAgentPacketRequiresStrictTerminalAckV0PorPolicyV0(t *testing.T) {
+func TestCodexAgentPacketRequiresStrictTerminalAckV0SoloPorPolicyExplicitaV0(t *testing.T) {
 	spec := codexSpecForTestV0()
 
+	if CodexAgentPacketRequiresStrictTerminalAckV0(spec.AgentPacket) {
+		t.Fatalf("write_set_closed no debe activar strict: %+v", spec.AgentPacket.Policies)
+	}
+
+	spec.AgentPacket.Policies = []string{"ack_terminal_strict"}
 	if !CodexAgentPacketRequiresStrictTerminalAckV0(spec.AgentPacket) {
-		t.Fatalf("policy strict no detectada: %+v", spec.AgentPacket.Policies)
+		t.Fatalf("policy strict explicita no detectada: %+v", spec.AgentPacket.Policies)
 	}
 
 	spec.AgentPacket.Policies = nil

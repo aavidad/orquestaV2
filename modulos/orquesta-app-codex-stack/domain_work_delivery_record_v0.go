@@ -24,6 +24,23 @@ func domainWorkRejectedSubmissionRecordV0(
 	return record
 }
 
+func domainWorkRejectedSubmissionRecordWithIssueRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	task orquestacoreworkflow.WorkflowTaskV0,
+	observation orquestacionnucleoapp.AgentDeliveryObservationV0,
+	submission orquestadomainwork.DomainWorkArtifactSubmissionV0,
+	issueRefs []string,
+	occurredAt string,
+) DomainWorkArtifactSubmissionRecordV0 {
+	record := domainWorkSubmissionRecordFromSubmissionV0(run, task, observation, submission, occurredAt)
+	record.Status = DomainWorkArtifactSubmissionStatusRejectedV0
+	record.EvidenceRefs = submission.EvidenceRefs
+	record.IssueRefs = compactStringsV0(append([]string{
+		"domain-work-submit-artifact-rejected",
+	}, issueRefs...))
+	return record
+}
+
 func domainWorkClaimedSubmissionRecordV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	task orquestacoreworkflow.WorkflowTaskV0,

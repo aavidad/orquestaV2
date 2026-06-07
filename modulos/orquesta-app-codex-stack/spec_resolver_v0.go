@@ -118,6 +118,7 @@ func codexPromptHintsV0(values []string) []string {
 		"Trabajo real lanzado por Orquesta; edita solo el write-set.",
 		"Lee AGENTS.md, README.md y docs locales del directorio de trabajo.",
 		"Ficheros pequenos; divide responsabilidades si se acerca a 300 lineas.",
+		"Para revisiones OPES review_codex/review_gemini/review_claude o por pares, entrega agent_review_report o agent_pair_review_report como fichero de producto con veredicto, hallazgos, riesgos y rework causal.",
 	}, values...))
 }
 

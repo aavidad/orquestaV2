@@ -25,9 +25,9 @@ func TestNormalizeMCPExecutionObservationV0CompactaSinDatosSensibles(t *testing.
 		CorrelationID: "corr-token",
 	})
 	if redacted.Method != "mcp_unknown" ||
-		redacted.Profile != "unknown" ||
+		redacted.Profile != "secret-profile" ||
 		redacted.ReasonCode != MCPExecutionReasonOKV0 ||
-		redacted.CorrelationID != "" {
+		redacted.CorrelationID != "corr-token" {
 		t.Fatalf("redacted=%+v", redacted)
 	}
 }

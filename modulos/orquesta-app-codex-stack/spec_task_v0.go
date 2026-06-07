@@ -144,7 +144,7 @@ func programmingProfileObjectiveLineV0(
 	case orquestacoreworkflow.WorkProfileCodeStudyV0:
 		return "Estudia el codigo y documenta el mapa de cambio del " + unit + "; no cambies implementacion salvo que sea imprescindible para producir evidencia verificable."
 	case orquestacoreworkflow.WorkProfileRefactorV0:
-		return "Refactoriza solo el " + unit + " conservando comportamiento publico; si falta alcance, pide decision del director en el ACK."
+		return "Refactoriza solo el " + unit + " conservando comportamiento publico; si falta alcance, conserva avance util y deja nota de revision en el ACK."
 	case orquestacoreworkflow.WorkProfileRequiredTestsV0:
 		return "Completa o ejecuta las pruebas requeridas del " + unit + " y deja evidencia clara del resultado."
 	default:
@@ -153,7 +153,7 @@ func programmingProfileObjectiveLineV0(
 }
 
 func strictWriteSetObjectiveLineV0() string {
-	return "Usa el write-set como alcance cerrado. Si falta alcance para cumplir el objetivo o arreglar pruebas, no edites fuera: deja CONSULTA AL DIRECTOR en el ACK y cierra failed salvo decision explicita del director o policy opt-in distinta."
+	return "Usa el write-set como alcance de escritura. Si falta alcance para cumplir todo el objetivo o arreglar pruebas, no edites fuera: conserva lo util y deja el faltante como nota de revision o tarea derivada en el ACK."
 }
 
 func programmingReworkContextV0(payload orquestaruntime.LaunchRuntimeAgentRequestV0) string {

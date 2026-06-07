@@ -26,6 +26,7 @@ const (
 	RouteRefAppVCSV0                         = "route-ref-app-vcs-v0"
 	RouteRefDirectorStatsV0                  = "route-ref-director-stats-v0"
 	RouteRefRunControlV0                     = "route-ref-run-control-v0"
+	RouteRefRuntimeModelsV0                  = "route-ref-runtime-models-v0"
 	RouteRefRunQueuePriorityV0               = "route-ref-run-queue-priority-v0"
 	RouteRefRunSupervisorV0                  = "route-ref-run-supervisor-v0"
 	RouteRefOpsAgentRuntimeDetailV0          = "route-ref-ops-agent-runtime-detail-v0"

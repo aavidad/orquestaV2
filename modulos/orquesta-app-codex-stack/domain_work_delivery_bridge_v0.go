@@ -203,7 +203,20 @@ func (stack StackV0) submitDomainWorkArtifactForObservationV0(
 		ArtifactSubmission: submission,
 	})
 	if err != nil {
-		return err
+		if recordErr := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
+			ctx,
+			domainWorkRejectedSubmissionRecordWithIssueRefsV0(
+				run,
+				task,
+				observation,
+				submission,
+				[]string{"domain-work-submit-execute-error"},
+				request.OccurredAt,
+			),
+		); recordErr != nil {
+			return fmt.Errorf("domain_work_submit_recovery_required")
+		}
+		return nil
 	}
 	if result.Estado != orquestamcp.MCPDomainWorkEstadoOKV0 || result.Receipt == nil {
 		if recordErr := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
@@ -212,7 +225,7 @@ func (stack StackV0) submitDomainWorkArtifactForObservationV0(
 		); recordErr != nil {
 			return fmt.Errorf("domain_work_submit_recovery_required")
 		}
-		return fmt.Errorf("domain_work_submit_artifact_failed")
+		return nil
 	}
 	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
 		ctx,

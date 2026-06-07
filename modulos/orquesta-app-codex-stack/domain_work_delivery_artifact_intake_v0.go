@@ -10,19 +10,14 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
-)
-
-const (
-	domainWorkArtifactDefaultMaxBytesV0 = 256 * 1024
-	domainWorkArtifactJSONMaxBytesV0    = 512 * 1024
 )
 
 type domainWorkDeliveryArtifactIntakeV0 struct {
 	Body        string
 	ContentKind string
+	FileRef     string
 }
 
 func readDomainWorkDeliveryArtifactV0(
@@ -39,13 +34,14 @@ func readDomainWorkDeliveryArtifactV0(
 				"invalid_declared_path",
 			)
 		}
-		return readDomainWorkDeliveryArtifactFileV0(path, artifactType)
+		return readDomainWorkDeliveryArtifactFileV0(path, string(file), artifactType)
 	}
 	return domainWorkDeliveryArtifactIntakeV0{}, nil
 }
 
 func readDomainWorkDeliveryArtifactFileV0(
 	path string,
+	fileRef string,
 	artifactType string,
 ) (domainWorkDeliveryArtifactIntakeV0, error) {
 	info, err := os.Stat(path)
@@ -56,7 +52,6 @@ func readDomainWorkDeliveryArtifactFileV0(
 			"artifact_file_unreadable",
 		)
 	}
-	limit := domainWorkDeliveryArtifactMaxBytesV0(artifactType)
 	file, err := os.Open(path)
 	if err != nil {
 		return domainWorkDeliveryArtifactIntakeV0{}, domainWorkArtifactIntakeErrorV0(
@@ -66,7 +61,7 @@ func readDomainWorkDeliveryArtifactFileV0(
 		)
 	}
 	defer file.Close()
-	data, err := io.ReadAll(io.LimitReader(file, int64(limit)+1))
+	data, err := io.ReadAll(file)
 	if err != nil {
 		return domainWorkDeliveryArtifactIntakeV0{}, domainWorkArtifactIntakeErrorV0(
 			"domain_work_artifact_unreadable",
@@ -74,26 +69,15 @@ func readDomainWorkDeliveryArtifactFileV0(
 			"artifact_file_unreadable",
 		)
 	}
-	if len(data) > limit {
-		return domainWorkDeliveryArtifactIntakeV0{}, domainWorkArtifactIntakeErrorV0(
-			"domain_work_artifact_too_large",
-			"files.content",
-			"artifact_limit_exceeded",
-		)
-	}
 	if domainWorkDeliveryArtifactLooksBinaryV0(data) {
-		return domainWorkDeliveryArtifactIntakeV0{}, domainWorkArtifactIntakeErrorV0(
-			"domain_work_artifact_binary_requires_attachment",
-			"files.content",
-			"binary_payload_must_use_ref",
-		)
+		return domainWorkDeliveryArtifactIntakeV0{
+			ContentKind: "binary_file_ref",
+			FileRef:     strings.TrimSpace(fileRef),
+		}, nil
 	}
 	body := strings.TrimSpace(string(data))
-	kind, err := domainWorkDeliveryArtifactContentKindV0(body)
-	if err != nil {
-		return domainWorkDeliveryArtifactIntakeV0{}, err
-	}
-	return domainWorkDeliveryArtifactIntakeV0{Body: body, ContentKind: kind}, nil
+	kind := domainWorkDeliveryArtifactContentKindV0(body)
+	return domainWorkDeliveryArtifactIntakeV0{Body: body, ContentKind: kind, FileRef: strings.TrimSpace(fileRef)}, nil
 }
 
 func safeDomainWorkDeliveryFilePathV0(baseDir string, rel string) (string, bool) {
@@ -118,33 +102,15 @@ func safeDomainWorkDeliveryFilePathV0(baseDir string, rel string) (string, bool)
 	return cleanPath, true
 }
 
-func domainWorkDeliveryArtifactMaxBytesV0(artifactType string) int {
-	switch strings.TrimSpace(artifactType) {
-	case orquestadomainwork.DomainDocumentPlanArtifactTypeV0,
-		orquestadomainwork.DomainWorkArtifactTypeTopicExpansionPackageV0,
-		orquestadomainwork.DomainWorkArtifactTypeAssembledTopicV0:
-		return domainWorkArtifactJSONMaxBytesV0
-	default:
-		return domainWorkArtifactDefaultMaxBytesV0
-	}
-}
-
-func domainWorkDeliveryArtifactContentKindV0(body string) (string, error) {
+func domainWorkDeliveryArtifactContentKindV0(body string) string {
 	trimmed := strings.TrimSpace(body)
 	if trimmed == "" {
-		return "text", nil
+		return "text"
 	}
-	if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
-		if !json.Valid([]byte(trimmed)) {
-			return "", domainWorkArtifactIntakeErrorV0(
-				"domain_work_artifact_unreadable",
-				"files.content",
-				"invalid_structured_json",
-			)
-		}
-		return "json", nil
+	if (strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[")) && json.Valid([]byte(trimmed)) {
+		return "json"
 	}
-	return "text", nil
+	return "text"
 }
 
 func domainWorkDeliveryArtifactLooksBinaryV0(data []byte) bool {
@@ -161,89 +127,6 @@ func domainWorkDeliveryArtifactLooksBinaryV0(data []byte) bool {
 		}
 	}
 	return control > 0 && control*20 > len(data)
-}
-
-func validateDomainWorkArtifactPayloadFieldsForIntakeV0(
-	fields []orquestadomainwork.DomainWorkFieldV0,
-) error {
-	for _, field := range fields {
-		if domainWorkArtifactFieldNameRequiresAttachmentV0(field.Name) {
-			return domainWorkArtifactIntakeErrorV0(
-				"domain_work_artifact_binary_requires_attachment",
-				"payload_fields."+strings.TrimSpace(field.Name),
-				"binary_payload_must_use_ref",
-			)
-		}
-		if domainWorkArtifactFieldSensitiveV0(field) {
-			return domainWorkArtifactIntakeErrorV0(
-				"domain_work_artifact_payload_sensitive",
-				"payload_fields."+strings.TrimSpace(field.Name),
-				"sensitive_payload_blocked",
-			)
-		}
-	}
-	return nil
-}
-
-func domainWorkArtifactFieldSensitiveV0(field orquestadomainwork.DomainWorkFieldV0) bool {
-	if domainWorkArtifactSensitiveFieldNameV0(field.Name) {
-		return true
-	}
-	if domainWorkArtifactSensitiveTextV0(field.Value) || domainWorkArtifactSensitiveTextV0(string(field.ValueJSON)) {
-		return true
-	}
-	for _, value := range field.Values {
-		if domainWorkArtifactSensitiveTextV0(value) {
-			return true
-		}
-	}
-	return false
-}
-
-func domainWorkArtifactSensitiveFieldNameV0(name string) bool {
-	switch normalizeDomainWorkDeliveryAliasV0(name) {
-	case "access_token", "refresh_token", "api_key", "secret", "client_secret",
-		"password", "credential", "prompt", "completion", "transcript",
-		"raw_http", "http_request", "http_response", "provider_payload",
-		"provider_response", "model_payload":
-		return true
-	default:
-		return false
-	}
-}
-
-func domainWorkArtifactFieldNameRequiresAttachmentV0(name string) bool {
-	switch normalizeDomainWorkDeliveryAliasV0(name) {
-	case "image_data_uri", "data_uri", "binary", "binary_payload", "file_bytes":
-		return true
-	default:
-		return false
-	}
-}
-
-func domainWorkArtifactSensitiveTextV0(value string) bool {
-	lower := strings.ToLower(strings.TrimSpace(value))
-	if lower == "" {
-		return false
-	}
-	for _, fragment := range []string{
-		"/home/", "/users/", "\\users\\", "$home", "~/", "bearer ",
-		"access_token=", "refresh_token=", "api_key=", "client_secret=",
-		"secret=", "password=", "authorization:", "sk-", "\"prompt\"",
-		"prompt=", "\"transcript\"", "transcript=",
-	} {
-		if strings.Contains(lower, fragment) {
-			return true
-		}
-	}
-	return domainWorkArtifactRawHTTPPayloadV0(lower)
-}
-
-func domainWorkArtifactRawHTTPPayloadV0(lower string) bool {
-	return strings.HasPrefix(lower, "http/1.") ||
-		((strings.HasPrefix(lower, "get ") || strings.HasPrefix(lower, "post ") ||
-			strings.HasPrefix(lower, "put ") || strings.HasPrefix(lower, "delete ")) &&
-			strings.Contains(lower, "\nhost:"))
 }
 
 func domainWorkArtifactIntakeErrorV0(code, field, reason string) error {

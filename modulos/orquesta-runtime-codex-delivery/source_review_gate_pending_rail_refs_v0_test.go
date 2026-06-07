@@ -8,7 +8,7 @@ import (
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 )
 
-func TestCodexReviewGateObservationSourceV0PropagaCategoriasDeRailPendiente(t *testing.T) {
+func TestCodexReviewGateObservationSourceV0NoPropagaCategoriasDeRailPendienteGenerico(t *testing.T) {
 	spec := codexDeliverySpecForTestV0()
 	ack := codexDeliveryAckForTestV0(spec)
 	ack.Notes = orquestaruntimecodex.EvidenceListV0{
@@ -32,15 +32,15 @@ func TestCodexReviewGateObservationSourceV0PropagaCategoriasDeRailPendiente(t *t
 		observations[0].Status != orquestacoreworkflow.ReviewResultStatusAcceptedV0 {
 		t.Fatalf("observations=%+v", observations)
 	}
-	for _, want := range []string{
+	for _, forbidden := range []string{
 		orquestaruntimecodex.CodexAgentAckPendingRailEvidenceRefV0,
 		"ack-pending-rail:token",
 		"ack-pending-rail:provider",
 		"ack-pending-rail:home",
 		"ack-pending-rail:prompt",
 	} {
-		if !stringInCodexDeliverySetV0(observations[0].EvidenceRefs, want) {
-			t.Fatalf("evidence_refs sin %q: %v", want, observations[0].EvidenceRefs)
+		if stringInCodexDeliverySetV0(observations[0].EvidenceRefs, forbidden) {
+			t.Fatalf("evidence_refs contiene rail generico %q: %v", forbidden, observations[0].EvidenceRefs)
 		}
 	}
 }

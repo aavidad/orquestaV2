@@ -48,17 +48,42 @@ func TestValidateReplanProposalV0SupportsContractActions(t *testing.T) {
 	}
 }
 
-func TestValidateReplanProposalV0RejectsForbiddenDetails(t *testing.T) {
+func TestValidateReplanProposalV0AllowsOperationalLabels(t *testing.T) {
 	cases := map[string]func(*ReplanProposalV0){
 		"DB":          func(proposal *ReplanProposalV0) { proposal.ReplanRef = "db-replan" },
 		"provider":    func(proposal *ReplanProposalV0) { proposal.Summary = "depende de provider externo" },
 		"model":       func(proposal *ReplanProposalV0) { proposal.ReasonCode = "model_limit" },
 		"HOME":        func(proposal *ReplanProposalV0) { proposal.EvidenceRefs = []string{"$HOME/replan.txt"} },
 		"OAuth":       func(proposal *ReplanProposalV0) { proposal.SourceRef = "oauth-source" },
-		"runtime":     func(proposal *ReplanProposalV0) { proposal.Summary = "runtime log incluido" },
-		"prompts":     func(proposal *ReplanProposalV0) { proposal.Summary = "ver prompts completos" },
-		"transcripts": func(proposal *ReplanProposalV0) { proposal.EvidenceRefs = []string{"transcripts/full.txt"} },
-		"diffs":       func(proposal *ReplanProposalV0) { proposal.Summary = "incluye diffs grandes" },
+		"runtime":     func(proposal *ReplanProposalV0) { proposal.Summary = "runtime log ref incluido" },
+		"prompts":     func(proposal *ReplanProposalV0) { proposal.Summary = "prompt policy ref sin contenido crudo" },
+		"transcripts": func(proposal *ReplanProposalV0) { proposal.EvidenceRefs = []string{"transcripts/policy-ref"} },
+		"diffs":       func(proposal *ReplanProposalV0) { proposal.Summary = "diff ref compacto" },
+	}
+
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			proposal := validReplanProposalV0()
+			mutate(&proposal)
+
+			err := ValidateReplanProposalV0(NormalizeReplanProposalV0(proposal))
+			if err != nil {
+				t.Fatalf("ValidateReplanProposalV0: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateReplanProposalV0RejectsSensitiveDetails(t *testing.T) {
+	cases := map[string]func(*ReplanProposalV0){
+		"api_key":       func(proposal *ReplanProposalV0) { proposal.Summary = "depende de api_key=valor" },
+		"authorization": func(proposal *ReplanProposalV0) { proposal.EvidenceRefs = []string{"authorization: bearer valor"} },
+		"dsn":           func(proposal *ReplanProposalV0) { proposal.SourceRef = "postgres://user:pass@host/db" },
+		"raw_prompt":    func(proposal *ReplanProposalV0) { proposal.Summary = "prompt=raw payload" },
+		"raw_transcript": func(proposal *ReplanProposalV0) {
+			proposal.EvidenceRefs = []string{"transcript=raw text"}
+		},
+		"real_path": func(proposal *ReplanProposalV0) { proposal.EvidenceRefs = []string{"/home/operator/.config/orquesta"} },
 	}
 
 	for name, mutate := range cases {

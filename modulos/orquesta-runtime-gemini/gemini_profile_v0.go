@@ -11,12 +11,15 @@ import (
 const (
 	GeminiConnectorProfileSchemaVersionV0 = "gemini_connector_profile.v0"
 
-	GeminiAgentPacketFileNameV0 = "agent_packet.json"
-	GeminiAgentPromptFileNameV0 = "agent_prompt.txt"
-	GeminiAgentAckFileNameV0    = "agent_ack.json"
-	GeminiStdoutFileNameV0      = "gemini_stdout.log"
-	GeminiStderrFileNameV0      = "gemini_stderr.log"
-	GeminiWrapperFileNameV0     = "orquesta_gemini_exec_v0.sh"
+	GeminiAgentPacketFileNameV0           = "agent_packet.json"
+	GeminiAgentPromptFileNameV0           = "agent_prompt.txt"
+	GeminiAgentAckFileNameV0              = "agent_ack.json"
+	GeminiDirectorDecisionsFileNameV0     = "director_decisions.json"
+	GeminiShutdownRequestFileNameV0       = "orquesta_shutdown_request.json"
+	GeminiShutdownCheckpointAckFileNameV0 = "agent_shutdown_checkpoint_ack.json"
+	GeminiStdoutFileNameV0                = "gemini_stdout.log"
+	GeminiStderrFileNameV0                = "gemini_stderr.log"
+	GeminiWrapperFileNameV0               = "orquesta_gemini_exec_v0.sh"
 )
 
 type GeminiConnectorIssueCodeV0 string
@@ -29,19 +32,25 @@ const (
 	GeminiConnectorFilesystemV0     GeminiConnectorIssueCodeV0 = "gemini_connector_filesystem_error"
 )
 
+const (
+	GeminiRuntimeWorkDirInsideProjectV0 = "inside_project_control_dir"
+	GeminiRuntimeWorkDirExternalRootV0  = "external_control_root"
+)
+
 type GeminiConnectorProfileV0 struct {
-	SchemaVersion  string   `json:"schema_version"`
-	OptIn          bool     `json:"opt_in"`
-	CommandPath    string   `json:"command_path"`
-	ProjectWorkDir string   `json:"project_work_dir"`
-	RuntimeWorkDir string   `json:"runtime_work_dir"`
-	HomeDir        string   `json:"home_dir,omitempty"`
-	PathEnv        string   `json:"path_env,omitempty"`
-	Model          string   `json:"model,omitempty"`
-	ApprovalMode   string   `json:"approval_mode,omitempty"`
-	OutputFormat   string   `json:"output_format,omitempty"`
-	ExtraArgs      []string `json:"extra_args,omitempty"`
-	PromptHints    []string `json:"prompt_hints,omitempty"`
+	SchemaVersion           string   `json:"schema_version"`
+	OptIn                   bool     `json:"opt_in"`
+	CommandPath             string   `json:"command_path"`
+	ProjectWorkDir          string   `json:"project_work_dir"`
+	RuntimeWorkDir          string   `json:"runtime_work_dir"`
+	RuntimeWorkDirPlacement string   `json:"runtime_work_dir_placement,omitempty"`
+	HomeDir                 string   `json:"home_dir,omitempty"`
+	PathEnv                 string   `json:"path_env,omitempty"`
+	Model                   string   `json:"model,omitempty"`
+	ApprovalMode            string   `json:"approval_mode,omitempty"`
+	OutputFormat            string   `json:"output_format,omitempty"`
+	ExtraArgs               []string `json:"extra_args,omitempty"`
+	PromptHints             []string `json:"prompt_hints,omitempty"`
 }
 
 func ValidateGeminiConnectorProfileV0(
@@ -57,6 +66,8 @@ func ValidateGeminiConnectorProfileV0(
 	v.requireAbsPath("command_path", profile.CommandPath)
 	v.requireAbsPath("project_work_dir", profile.ProjectWorkDir)
 	v.requireAbsPath("runtime_work_dir", profile.RuntimeWorkDir)
+	v.validateRuntimeWorkDirPlacementV0(profile)
+	v.validateRuntimeWorkDirIsolationV0(profile)
 	v.optionalAbsPath("home_dir", profile.HomeDir)
 	v.optionalSafeValue("path_env", profile.PathEnv)
 	v.optionalSafeValue("model", profile.Model)
@@ -71,6 +82,18 @@ func ValidateGeminiConnectorProfileV0(
 		v.optionalSafeValue(fmt.Sprintf("prompt_hints[%d]", i), value)
 	}
 	return v.issues
+}
+
+func InferGeminiRuntimeWorkDirPlacementV0(projectWorkDir string, runtimeWorkDir string) string {
+	project := filepath.Clean(strings.TrimSpace(projectWorkDir))
+	runtime := filepath.Clean(strings.TrimSpace(runtimeWorkDir))
+	if project == "." || runtime == "." {
+		return ""
+	}
+	if runtime == project || geminiPathInsideV0(runtime, project) {
+		return GeminiRuntimeWorkDirInsideProjectV0
+	}
+	return GeminiRuntimeWorkDirExternalRootV0
 }
 
 type geminiProfileValidatorV0 struct {
@@ -96,6 +119,36 @@ func (v *geminiProfileValidatorV0) optionalSafeValue(field, value string) {
 	}
 	if geminiHasControlCharsV0(value) || strings.ContainsAny(value, "\x00\r\n") {
 		v.add(GeminiConnectorValueInvalidV0, field)
+	}
+}
+
+func (v *geminiProfileValidatorV0) validateRuntimeWorkDirPlacementV0(
+	profile GeminiConnectorProfileV0,
+) {
+	declared := strings.TrimSpace(profile.RuntimeWorkDirPlacement)
+	if declared == "" {
+		return
+	}
+	expected := InferGeminiRuntimeWorkDirPlacementV0(
+		profile.ProjectWorkDir,
+		profile.RuntimeWorkDir,
+	)
+	if expected != "" && declared != expected {
+		v.add(GeminiConnectorValueInvalidV0, "runtime_work_dir_placement")
+	}
+	v.optionalSafeValue("runtime_work_dir_placement", declared)
+}
+
+func (v *geminiProfileValidatorV0) validateRuntimeWorkDirIsolationV0(
+	profile GeminiConnectorProfileV0,
+) {
+	if strings.TrimSpace(profile.ProjectWorkDir) == "" ||
+		strings.TrimSpace(profile.RuntimeWorkDir) == "" {
+		return
+	}
+	if filepath.Clean(profile.RuntimeWorkDir) == filepath.Clean(profile.ProjectWorkDir) ||
+		geminiPathInsideV0(profile.ProjectWorkDir, profile.RuntimeWorkDir) {
+		v.add(GeminiConnectorPathInvalidV0, "runtime_work_dir")
 	}
 }
 
@@ -133,6 +186,15 @@ func (v *geminiProfileValidatorV0) add(code GeminiConnectorIssueCodeV0, field st
 		Field:      field,
 		Retryable:  false,
 	})
+}
+
+func geminiPathInsideV0(child string, parent string) bool {
+	rel, err := filepath.Rel(filepath.Clean(parent), filepath.Clean(child))
+	if err != nil || rel == "." || rel == ".." ||
+		strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false
+	}
+	return !filepath.IsAbs(rel)
 }
 
 func geminiHasControlCharsV0(value string) bool {

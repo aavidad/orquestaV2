@@ -185,7 +185,7 @@ func TestSanitizeMaterializedContextBundleV0PermiteRefsDePoliticaOpaca(t *testin
 	}
 }
 
-func TestMaterializeContextBundleV0RechazaRutasLocalesYControlComoContextoProducto(t *testing.T) {
+func TestMaterializeContextBundleV0RailsOfflineNoBloqueaRutasLocalesYControl(t *testing.T) {
 	root := createContextMaterializationRepoV0(t)
 	for _, content := range []string{
 		"ver .orquesta-smoke-work/run.log",
@@ -200,7 +200,9 @@ func TestMaterializeContextBundleV0RechazaRutasLocalesYControlComoContextoProduc
 
 		materialized := MaterializeContextBundleV0(bundle, store)
 
-		requireMaterializationIssueV0(t, materialized.Issues, ErrContextMaterializationDetalleProhibidoV0)
+		if !materialized.Valid() {
+			t.Fatalf("rails offline no debe bloquear contenido %q: %+v", content, materialized.Issues)
+		}
 	}
 }
 

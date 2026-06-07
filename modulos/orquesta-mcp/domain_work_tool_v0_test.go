@@ -109,6 +109,47 @@ func TestMCPDomainWorkExecutorV0SubmitArtifactDelegaEnSubmitter(t *testing.T) {
 	}
 }
 
+func TestMCPDomainWorkExecutorV0PropagaReceiptInvalidoSinPuertoCaido(t *testing.T) {
+	submitter := &fakeMCPDomainWorkSubmitterV0{
+		receipt: orquestadomainwork.DomainWorkArtifactReceiptV0{
+			SchemaVersion: orquestadomainwork.DomainWorkArtifactReceiptSchemaV0,
+			Status:        orquestadomainwork.DomainWorkStatusInvalidV0,
+			JobRef:        "job-domain-001",
+			ArtifactRef:   "artifact-domain-001",
+			Issues: []orquestadomainwork.DomainWorkIssueV0{{
+				Code:  "opes_http_status_400",
+				Field: "artifact_submitter",
+			}},
+		},
+	}
+	executor := MCPDomainWorkToolExecutorV0{ArtifactSubmitter: submitter}
+
+	result, err := executor.Execute(context.Background(), MCPDomainWorkToolInputV0{
+		RequestID: "req-domain-invalid-001",
+		Action:    MCPDomainWorkActionSubmitArtifactV0,
+		ArtifactSubmission: orquestadomainwork.DomainWorkArtifactSubmissionV0{
+			IdempotencyKey: "idem-domain-invalid-001",
+			RequestedBy:    "director",
+			DomainRef:      "domain-academic",
+			JobRef:         "job-domain-001",
+			ArtifactRef:    "artifact-domain-001",
+			ArtifactType:   "lesson_plan",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if result.Estado != MCPDomainWorkEstadoErrorV0 ||
+		result.Receipt == nil ||
+		result.Receipt.Status != orquestadomainwork.DomainWorkStatusInvalidV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "opes_http_status_400" ||
+		result.Errores[0].Code == MCPDomainWorkPortUnavailableV0 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPDomainWorkExecutorV0ValidaActionYPuertos(t *testing.T) {
 	result, err := MCPDomainWorkToolExecutorV0{}.Execute(
 		context.Background(),

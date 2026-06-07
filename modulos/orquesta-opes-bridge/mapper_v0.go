@@ -57,6 +57,7 @@ func BuildExternalWorkRunRequestWithContextV0(
 	fields = withOPESGlobalEditorialPolicyFieldV0(fields)
 	fields = withOPESHTMLPublicationPolicyFieldV0(fields)
 	fields = withOPESHTMLTopicTemplateFieldV0(fields)
+	fields = withOPESTemarioAgentRulesFieldV0(fields)
 	fields = appendFieldIfMissingV0(fields, "job_id", job.ID)
 	fields = appendFieldIfMissingV0(fields, "job_type", job.Type)
 	var opaqueOK bool

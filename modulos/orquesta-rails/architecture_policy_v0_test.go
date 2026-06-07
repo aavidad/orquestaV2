@@ -2,7 +2,8 @@ package orquestarails
 
 import "testing"
 
-func TestArchitectureImportForbiddenV0BloqueaSoloImportsConcretos(t *testing.T) {
+func TestArchitectureImportForbiddenV0PermaneceDormido(t *testing.T) {
+	t.Setenv(RailsModeEnvV0, RailsModeEnforcedV0)
 	policy := ArchitectureImportPolicyV0{
 		ExactImports:    []string{"database/sql", "net", "runtime"},
 		ImportPrefixes:  []string{"orquesta/modulos/orquesta-runtime-"},
@@ -16,8 +17,8 @@ func TestArchitectureImportForbiddenV0BloqueaSoloImportsConcretos(t *testing.T) 
 		"modernc.org/sqlite",
 	}
 	for _, path := range blocked {
-		if !ArchitectureImportForbiddenV0(path, policy) {
-			t.Fatalf("import no bloqueado: %q", path)
+		if ArchitectureImportForbiddenV0(path, policy) {
+			t.Fatalf("import bloqueado con rails quitados: %q", path)
 		}
 	}
 	allowed := []string{
@@ -47,7 +48,8 @@ func TestArchitectureSourceLiteralForbiddenV0PermiteRefsOpacas(t *testing.T) {
 	}
 }
 
-func TestArchitectureSourceLiteralForbiddenV0BloqueaDetalleReal(t *testing.T) {
+func TestArchitectureSourceLiteralForbiddenV0PermaneceDormido(t *testing.T) {
+	t.Setenv(RailsModeEnvV0, RailsModeEnforcedV0)
 	blocked := []string{
 		"api_key=valor-real",
 		"authorization: Bearer token-real",
@@ -56,8 +58,19 @@ func TestArchitectureSourceLiteralForbiddenV0BloqueaDetalleReal(t *testing.T) {
 		"/home/alberto/.config/orquesta",
 	}
 	for _, value := range blocked {
-		if !ArchitectureSourceLiteralForbiddenV0("architecture-test", value) {
-			t.Fatalf("literal sensible no bloqueado: %q", value)
+		if ArchitectureSourceLiteralForbiddenV0("architecture-test", value) {
+			t.Fatalf("literal sensible bloqueado con rails quitados: %q", value)
 		}
+	}
+}
+
+func TestArchitecturePolicyV0OfflinePorDefecto(t *testing.T) {
+	t.Setenv(RailsModeEnvV0, "")
+	policy := ArchitectureImportPolicyV0{ExactImports: []string{"database/sql"}}
+	if ArchitectureImportForbiddenV0("database/sql", policy) {
+		t.Fatal("modo offline no debe bloquear imports")
+	}
+	if ArchitectureSourceLiteralForbiddenV0("architecture-test", "api_key=valor-real") {
+		t.Fatal("modo offline no debe bloquear literales")
 	}
 }

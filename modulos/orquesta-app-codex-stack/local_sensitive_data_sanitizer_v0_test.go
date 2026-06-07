@@ -78,11 +78,12 @@ func TestLocalSensitiveDataSanitizerV0DudaYActivaRevisionDirector(t *testing.T) 
 		t.Fatalf("ResolveExternalAgentLaunchSpecV0: %v", err)
 	}
 	packet := resolution.Spec.AgentPacket
-	if !stringInSetV0(packet.Task.RequiredTests, externalContextRefOnlyRequiredTestV0) ||
-		!stringInSetV0(packet.Task.DoneCriteria, externalContextRefOnlyDoneCriteriaV0) {
+	if !stringInSetV0(packet.Task.DoneCriteria, externalContextRefOnlyDoneCriteriaV0) ||
+		!stringInSetV0(packet.Task.DoneCriteria, externalContextSanitizedDoneCriteriaV0) {
 		t.Fatalf("sanitization guard missing: %+v", packet.Task)
 	}
-	if !stringInSetV0(packet.Policies, "required_ref_only_context_guard") {
+	if !stringInSetV0(packet.Policies, "required_ref_only_context_guard") ||
+		!stringInSetV0(packet.Policies, "ask_director_on_sanitization_review") {
 		t.Fatalf("ref-only context policy missing: %+v", packet.Policies)
 	}
 	if !contextBundleHasRequiredTruncatedEntryV0(packet.Context) {

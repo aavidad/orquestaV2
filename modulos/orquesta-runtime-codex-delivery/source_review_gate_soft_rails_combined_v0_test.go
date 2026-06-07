@@ -47,7 +47,7 @@ func TestCodexReviewGateObservationSourceV0SoftRailsCombinadosNoBloqueanV0(t *te
 	if len(observations) != 1 ||
 		observations[0].Status != orquestacoreworkflow.ReviewResultStatusAcceptedV0 ||
 		observations[0].AcceptedReviewRef == "" ||
-		!stringInCodexDeliverySetV0(observations[0].EvidenceRefs, orquestaruntimecodex.CodexAgentAckPendingRailEvidenceRefV0) ||
+		stringInCodexDeliverySetV0(observations[0].EvidenceRefs, orquestaruntimecodex.CodexAgentAckPendingRailEvidenceRefV0) ||
 		!stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-followup-required") ||
 		!stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-action:request_followup_review") ||
 		!stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-issue:file_too_large") ||

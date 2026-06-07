@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	orquestarails "orquesta/modulos/orquesta-rails"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
@@ -209,6 +210,9 @@ func codexShutdownBytesForbiddenV0(data []byte) bool {
 func codexShutdownValueForbiddenV0(value string) bool {
 	if codexHasControlCharsV0(value) {
 		return true
+	}
+	if !orquestarails.DetailProhibitedRailsEnabledV0() {
+		return false
 	}
 	return codexTextContainsSensitiveDetailIgnoringRailEnvV0(value)
 }

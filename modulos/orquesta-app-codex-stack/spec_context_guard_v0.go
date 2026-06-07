@@ -9,11 +9,11 @@ import (
 
 const (
 	externalContextTruncatedRequiredTestV0 = "validar contexto externo no truncado o justificar materializacion externa"
-	externalContextTruncatedDoneCriteriaV0 = "Si agent_packet.context tiene entradas required=true y truncated=true, no completar salvo que el trabajo sea resoluble con refs/materializacion externa; en ese caso incluir nota contexto_truncado_resuelto: ..."
 	externalContextSanitizedRequiredTestV0 = "validar evidencia de saneamiento de contexto o pedir revision al director"
-	externalContextSanitizedDoneCriteriaV0 = "Si agent_packet.context.sanitization_evidence tiene review_required=true, no completar salvo resolucion por director/revision humana documentada."
 	externalContextRefOnlyRequiredTestV0   = "validar contexto required ref_only mediante lectura local, consulta al director o evidencia explicita"
-	externalContextRefOnlyDoneCriteriaV0   = "Si agent_packet.context tiene entradas required=true y mode=ref_only, no completar salvo accion requerida resuelta; en ese caso incluir nota contexto_ref_only_resuelto: ..."
+	externalContextTruncatedDoneCriteriaV0 = "Si agent_packet.context tiene entradas required=true y truncated=true, usa refs/materializacion externa cuando sea posible y deja nota contexto_truncado_resuelto o contexto_truncado_pendiente."
+	externalContextSanitizedDoneCriteriaV0 = "Si agent_packet.context.sanitization_evidence tiene review_required=true, conserva la senal como nota de revision; no bloquees trabajo recuperable por ella."
+	externalContextRefOnlyDoneCriteriaV0   = "Si agent_packet.context tiene entradas required=true y mode=ref_only, usa required_ref_action cuando ayude y deja nota contexto_ref_only_resuelto o contexto_ref_only_pendiente."
 )
 
 func taskWithContextGuardV0(
@@ -26,15 +26,12 @@ func taskWithContextGuardV0(
 		return task
 	}
 	if contextBundleHasRequiredTruncatedEntryV0(bundle) {
-		task.RequiredTests = compactStringsV0(append(task.RequiredTests, externalContextTruncatedRequiredTestV0))
 		task.DoneCriteria = compactStringsV0(append(task.DoneCriteria, externalContextTruncatedDoneCriteriaV0))
 	}
 	if contextBundleHasRequiredRefOnlyEntryV0(bundle) {
-		task.RequiredTests = compactStringsV0(append(task.RequiredTests, externalContextRefOnlyRequiredTestV0))
 		task.DoneCriteria = compactStringsV0(append(task.DoneCriteria, externalContextRefOnlyDoneCriteriaV0))
 	}
 	if contextBundleHasSanitizationReviewSignalV0(bundle) {
-		task.RequiredTests = compactStringsV0(append(task.RequiredTests, externalContextSanitizedRequiredTestV0))
 		task.DoneCriteria = compactStringsV0(append(task.DoneCriteria, externalContextSanitizedDoneCriteriaV0))
 	}
 	return task

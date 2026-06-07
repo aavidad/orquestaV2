@@ -43,6 +43,17 @@ func validateEventPayloadV0(event OrchestrationEventV0) error {
 			"reason_code": payload.ReasonCode,
 			"summary":     payload.Summary,
 		})
+	case OrchestrationEventRunBlockerResolvedV0:
+		var payload RunBlockerResolvedPayloadV0
+		if err := decodePayloadV0(event.Payload, &payload); err != nil {
+			return err
+		}
+		payload = normalizeRunBlockerResolvedPayloadV0(payload)
+		return requirePayloadFieldsV0(map[string]string{
+			"blocker_id":  payload.BlockerID,
+			"reason_code": payload.ReasonCode,
+			"summary":     payload.Summary,
+		})
 	case OrchestrationEventDirectorQuestionRaisedV0:
 		return validateDirectorQuestionRaisedPayloadV0(event)
 	case OrchestrationEventDirectorQuestionAnsweredV0:

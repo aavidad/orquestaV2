@@ -118,6 +118,9 @@ func opesBridgeHasSafeFilterV0(config opesDrainConfigV0) bool {
 	}
 	return strings.TrimSpace(config.JobType) != "" ||
 		strings.TrimSpace(config.JobRef) != "" ||
+		strings.TrimSpace(config.ProgramID) != "" ||
+		strings.TrimSpace(config.TopicID) != "" ||
+		strings.TrimSpace(config.CorrelationID) != "" ||
 		len(config.JobTypeSequence) > 0
 }
 
@@ -128,6 +131,15 @@ func opesBridgeFilterSummaryV0(config opesDrainConfigV0) []string {
 	}
 	if strings.TrimSpace(config.JobRef) != "" {
 		filters = append(filters, "job_ref=configured")
+	}
+	if strings.TrimSpace(config.ProgramID) != "" {
+		filters = append(filters, "program_id=configured")
+	}
+	if strings.TrimSpace(config.TopicID) != "" {
+		filters = append(filters, "topic_id=configured")
+	}
+	if strings.TrimSpace(config.CorrelationID) != "" {
+		filters = append(filters, "correlation_id=configured")
 	}
 	if len(config.JobTypeSequence) > 0 {
 		filters = append(filters, "job_type_sequence_count="+fmt.Sprint(len(config.JobTypeSequence)))

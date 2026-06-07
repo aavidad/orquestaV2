@@ -18,14 +18,53 @@ func buildAppChangeDecisionsV0(
 		current = orquestacoreworkflow.OrchestrationPhaseProgramacionV0
 	}
 	if current == orquestacoreworkflow.OrchestrationPhaseProgramacionV0 {
-		decisionRef, ok := appChangeBasisDecisionRefV0(run, refs)
-		if ok {
-			return []orquestadirectoragent.DirectorAgentDecisionV0{
-				appChangeAnswerDecisionV0(runRef, current, refs),
-				appChangeContractDecisionV0(runRef, current, decisionRef, request, refs),
-				appChangeMicrotaskDecisionV0(runRef, current, request, refs),
-			}
+		decisionRef, _ := appChangeBasisDecisionRefV0(run, refs)
+		return []orquestadirectoragent.DirectorAgentDecisionV0{
+			appChangeAnswerDecisionV0(runRef, current, refs),
+			appChangeContractDecisionV0(runRef, current, decisionRef, request, refs),
+			appChangeMicrotaskDecisionV0(runRef, current, request, refs),
 		}
+	}
+	if current == orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0 {
+		decisions := []orquestadirectoragent.DirectorAgentDecisionV0{
+			appChangeAnswerDecisionV0(runRef, current, refs),
+		}
+		decisionRef, hasDecision := appChangeBasisDecisionRefV0(run, refs)
+		if !hasDecision {
+			decisionRef = refs.AnswerRef
+			hasDecision = true
+		}
+		contractReady := stringInSetV0(run.FunctionContracts, refs.ContractRef)
+		if !contractReady && hasDecision {
+			decisions = append(decisions, appChangeContractDecisionV0(
+				runRef,
+				orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0,
+				decisionRef,
+				request,
+				refs,
+			))
+			contractReady = true
+		}
+		taskReady := stringInSetV0(run.Tasks, refs.TaskRef)
+		if !taskReady && contractReady {
+			decisions = append(decisions, appChangeMicrotaskDecisionV0(
+				runRef,
+				orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0,
+				request,
+				refs,
+			))
+			taskReady = true
+		}
+		if taskReady {
+			decisions = append(decisions, appChangeOpenPhaseV0(
+				runRef,
+				orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0,
+				orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+				"open-program",
+				refs,
+			))
+		}
+		return decisions
 	}
 
 	return []orquestadirectoragent.DirectorAgentDecisionV0{
@@ -146,5 +185,10 @@ func appChangeBasisDecisionRefV0(
 			return run.Decisions[i], true
 		}
 	}
-	return refs.DecisionRef, false
+	for i := len(run.DirectorAnswers) - 1; i >= 0; i-- {
+		if run.DirectorAnswers[i] != "" {
+			return run.DirectorAnswers[i], true
+		}
+	}
+	return refs.AnswerRef, false
 }

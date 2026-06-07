@@ -31,8 +31,14 @@ func (stack StackV0) domainWorkSubmissionAlreadyRecordedV0(
 	if !domainWorkSubmissionSameCausalSurfaceV0(record, current) {
 		return true, fmt.Errorf("domain_work_submit_conflict")
 	}
-	if domainWorkSubmissionTerminalStatusV0(record.Status) {
+	if record.Status == DomainWorkArtifactSubmissionStatusAcceptedV0 {
 		return true, nil
 	}
-	return true, fmt.Errorf("domain_work_submit_recovery_required")
+	if record.Status == DomainWorkArtifactSubmissionStatusRejectedV0 {
+		if codexStackStringInSetV0(record.IssueRefs, "domain-work-submit-execute-error") {
+			return false, nil
+		}
+		return true, nil
+	}
+	return false, nil
 }

@@ -14,9 +14,12 @@ func validateCompositeDirectorDecisionRefsV0(
 ) error {
 	votes := compositeStringSetV0(run.Votes)
 	accepted := compositeStringSetV0(run.Decisions)
+	answers := compositeStringSetV0(run.DirectorAnswers)
 	contracts := compositeStringSetV0(run.FunctionContracts)
 	for _, decision := range decisions {
 		switch {
+		case decision.AnswerQuestion != nil:
+			compositeAddRefV0(answers, decision.AnswerQuestion.AnswerID)
 		case decision.RequestVote != nil:
 			compositeAddRefV0(votes, decision.RequestVote.VoteRequestID)
 		case decision.AcceptDecision != nil:
@@ -25,7 +28,8 @@ func validateCompositeDirectorDecisionRefsV0(
 			}
 			compositeAddRefV0(accepted, decision.AcceptDecision.DecisionRef)
 		case decision.PublishContract != nil:
-			if !accepted[strings.TrimSpace(decision.PublishContract.DecisionRef)] {
+			decisionRef := strings.TrimSpace(decision.PublishContract.DecisionRef)
+			if !accepted[decisionRef] && !answers[decisionRef] {
 				return fmt.Errorf("director_decisions invalidas: publish_function_contract.decision_ref sin accept_decision previo")
 			}
 			compositeAddRefV0(contracts, decision.PublishContract.ContractRef)

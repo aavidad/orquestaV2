@@ -95,7 +95,7 @@ func TestValidateOperatorDirectedQueryRejectsSensitiveRefsV0(t *testing.T) {
 		QueryRef:          "query-1",
 		TargetRef:         "director-1",
 		QueryConnectorRef: "query-connector-1",
-		Question:          "revisa token de operador",
+		Question:          "revisa access_token=valor-real",
 	})
 	if !hasIssueCodeV0(issues, ErrOperatorMCPQuestionInvalidV0) {
 		t.Fatalf("expected sensitive question issue, got %#v", issues)

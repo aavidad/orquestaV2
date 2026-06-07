@@ -816,28 +816,27 @@ Reglas cerradas:
 
 ## APP-CODEX-STACK-027
 
-Objetivo: hacer que la validacion de calidad de `domain_work` reporte issues
-estructurados con campo causal para review/rework, sin endurecer la politica por
-palabras ni mover reglas de dominio al core.
+Objetivo: historico. La validacion de calidad de `domain_work` que bloqueaba
+entregas por contenido se retiro del camino de ejecucion.
 
-Estado: completada localmente.
+Estado: sustituida por politica de conservacion.
 
 Trabajo aplicado:
 
-- `topic_expansion_package` conserva el rail actual para placeholders visibles
-  y palabras minimas, pero devuelve `DomainWorkIssueV0` en el error local;
-- `document_plan` conserva validacion por `orquesta-domain-work` y propaga el
-  primer issue de contrato como causa;
-- el error publico mantiene `domain_work_artifact_quality_gate_failed` para
-  compatibilidad con callers existentes.
+- `domain_work` no debe parar agentes ni descartar entregas por palabras,
+  longitud, placeholders, paths locales, nombres de campos o texto recuperable;
+- una entrega que no sirva se conserva como borrador/evidencia/insumo y pasa a
+  review/rework/director;
+- los tests de bloqueo `domain_work_artifact_quality_gate_failed` fueron
+  eliminados.
 
 Validacion:
 
-- `GOCACHE=/tmp/orquesta-go-cache go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestValidateDomainWorkDeliveryQualityV0|TestDefaultDomainWorkArtifactSubmissionBuilderV0'`
+- `GOCACHE=/tmp/orquesta-go-cache go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestDomainWorkDeliveryArtifactIntakeV0|TestDefaultDomainWorkArtifactSubmissionBuilderV0'`
 - `GOCACHE=/tmp/orquesta-go-cache go test -count=1 ./modulos/orquesta-domain-work`
 
 Reglas cerradas:
 
-- no introduce lista nueva de palabras prohibidas;
+- no reintroducir rails de contenido en `domain_work`;
 - no toca core, OPES bridge, runtime, servidor ni conectores externos;
 - no declara cerrado el smoke real OPES de derivados/cierre.

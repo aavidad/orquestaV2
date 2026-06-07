@@ -165,4 +165,70 @@ Campos ya soportados por API para crear/editar:
 - `db/schema.go`
 - `db/post_migraciones_compat.go`
 - `cmd/catalogo_briefing.go`
-- `cmd/api.go`
+
+## Semillas de skills por composicion
+
+Regla general: si un contrato se repite como procedimiento para agentes, se
+plasma tambien como skill. El contrato mantiene la forma tecnica; la skill
+explica al agente como trabajar sin cargar todo el contexto.
+
+### Orquesta transversal
+
+Estas skills viven en este repo y valen para cualquier consumidor:
+
+- `skills/orquesta-director-agentes/SKILL.md`
+  Direccion de agentes/subagentes, revisores, votacion, rework y cierre.
+- `skills/orquesta-ordenacion-trabajo/SKILL.md`
+  Ordenacion transversal de objetivo, backlog, plan, olas, tareas, agentes,
+  artefactos, revisiones, pruebas y cierre.
+- `skills/orquesta-programacion-autonoma/SKILL.md`
+  Programacion, arreglos, pruebas, limpieza de worktree y cierre con evidencia.
+- `skills/orquesta-programacion-integracion/SKILL.md`
+  Integraciones hexagonales, puertos, adaptadores opt-in y configuracion.
+- `skills/orquesta-programacion-tests/SKILL.md`
+  Pruebas focales, suite completa, fallos reparables y evidencia.
+- `skills/orquesta-programacion-revision/SKILL.md`
+  Revision tecnica, arquitectura, producto/UI, tests y rework causal.
+- `skills/orquesta-programacion-web-local/SKILL.md`
+  Validacion web local con i18n, responsive, capturas y assets.
+- `skills/orquesta-programacion-release/SKILL.md`
+  Worktree limpio, archivado, commit, push y despliegue seguro.
+- `skills/orquesta-revision-consejo-votacion/SKILL.md`
+  Debate, critica, voto y decision del Director sobre candidatos.
+- `skills/orquesta-artefacto-modular/SKILL.md`
+  Artefactos enchufables para cualquier app: juegos, tutor, paneles, ayudas,
+  web, assets o paquetes.
+- `skills/orquesta-runtime-modelos/SKILL.md`
+  Gestion de modelos locales/cloud por puerto runtime opt-in.
+
+### OPES como consumidor independiente
+
+Las skills de cursos OPES no viven dentro del nucleo Orquesta. Estan en:
+
+`/home/alberto/Trabajo/OPES/skills/`
+
+Familias vigentes:
+
+- director Orquesta para OPES;
+- inventario y reutilizacion;
+- investigacion de bases;
+- redaccion de temarios;
+- corrector ortografico;
+- tests de 4 respuestas;
+- infografias y revision visual;
+- audio edge-tts + Whisper;
+- RAG, tutor y bots;
+- juegos y retos;
+- HTML web USO;
+- QA final y paquete/API de produccion.
+
+### Programacion como consumidor
+
+Para programacion no se usan reglas OPES. El agente debe usar
+`orquesta-director-agentes`, `orquesta-ordenacion-trabajo`,
+`orquesta-programacion-autonoma`, `orquesta-programacion-integracion`,
+`orquesta-programacion-tests`, `orquesta-programacion-web-local`,
+`orquesta-programacion-release`, `orquesta-revision-consejo-votacion`,
+`orquesta-artefacto-modular` y las reglas locales del repo objetivo. Cualquier
+skill especifica de un repo de programacion debe vivir en ese repo o en una
+composicion propia, no en OPES ni en el nucleo generico.

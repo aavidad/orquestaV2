@@ -25,9 +25,9 @@ func appChangeVisualWorkCriteriaV0(
 		"Preferir SVG autocontenido cuando format=svg; sin scripts, eventos JavaScript, foreignObject ni URLs remotas.",
 		"No incluir pacientes, menores, personas identificables, datos personales, fotos decorativas ni marcas innecesarias.",
 		"Usar etiquetas legibles en A4 y estilo sobrio de temario profesional.",
-		"No entregar placeholders; si falta contenido visual suficiente, declararlo como bloqueo de dominio.",
+		"No usar placeholders como arte final; si falta contenido visual suficiente, guardar brief o maqueta y nota de rework.",
 		"Incluir source_refs si el visual deriva de normativa, datos historicos o contenido tecnico verificable.",
-		"Si falta un campo requerido por el job visual, declararlo como bloqueo de dominio y no inventarlo.",
+		"Si falta un campo requerido por el job visual, conservar avance parcial y dejar nota de rework de dominio.",
 	}
 }
 
@@ -40,6 +40,6 @@ func appChangeVisualRequiredTestsV0(
 		"validar formato visual solicitado",
 		"validar SVG seguro si format=svg",
 		"validar titulo, caption y alt_text",
-		"validar ausencia de placeholders",
+		"validar estado de placeholder, maqueta o arte final",
 	}
 }

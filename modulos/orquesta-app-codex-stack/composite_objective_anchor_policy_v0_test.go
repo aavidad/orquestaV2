@@ -2,14 +2,13 @@ package orquestaappcodexstack
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	orquestadirectoragent "orquesta/modulos/orquesta-director-agent"
 	orquestadirectoragentworkflow "orquesta/modulos/orquesta-director-agent-workflow"
 )
 
-func TestCompositeDirectorDecisionSourceV0RechazaMicrotareaSinObjetivoActual(t *testing.T) {
+func TestCompositeDirectorDecisionSourceV0NoBloqueaMicrotareaSinObjetivoActual(t *testing.T) {
 	source := codexStackAnchoredSourceForTestV0(
 		codexStackDirectorDecisionsForTestV0(
 			"run-ref-anchor-missing-001",
@@ -17,17 +16,20 @@ func TestCompositeDirectorDecisionSourceV0RechazaMicrotareaSinObjetivoActual(t *
 		),
 	)
 
-	_, err := source.ListDirectorAgentDecisionsV0(
+	decisions, err := source.ListDirectorAgentDecisionsV0(
 		context.Background(),
 		codexStackAnchorRequestForTestV0("validacion autoprogramming gateway"),
 	)
 
-	if err == nil || !strings.Contains(err.Error(), "sin objetivo_actual") {
+	if err != nil {
 		t.Fatalf("err=%v", err)
+	}
+	if len(decisions) == 0 {
+		t.Fatalf("decisions vacias")
 	}
 }
 
-func TestCompositeDirectorDecisionSourceV0RechazaObjetivoActualDesviado(t *testing.T) {
+func TestCompositeDirectorDecisionSourceV0NoBloqueaObjetivoActualDesviado(t *testing.T) {
 	decisions := codexStackMutateFirstMicrotaskForPolicyTestV0(
 		codexStackDirectorDecisionsForTestV0(
 			"run-ref-anchor-token-001",
@@ -39,13 +41,16 @@ func TestCompositeDirectorDecisionSourceV0RechazaObjetivoActualDesviado(t *testi
 	)
 	source := codexStackAnchoredSourceForTestV0(decisions)
 
-	_, err := source.ListDirectorAgentDecisionsV0(
+	got, err := source.ListDirectorAgentDecisionsV0(
 		context.Background(),
 		codexStackAnchorRequestForTestV0("validacion autoprogramming gateway"),
 	)
 
-	if err == nil || !strings.Contains(err.Error(), "sin token del objetivo actual") {
+	if err != nil {
 		t.Fatalf("err=%v", err)
+	}
+	if len(got) == 0 {
+		t.Fatalf("decisions vacias")
 	}
 }
 

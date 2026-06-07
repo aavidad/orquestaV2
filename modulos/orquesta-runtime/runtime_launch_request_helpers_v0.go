@@ -137,9 +137,6 @@ func isRelativeContractPath(value string) bool {
 }
 
 func looksLikeHomePath(value string) bool {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return false
-	}
 	low := strings.ToLower(value)
 	return strings.HasPrefix(value, "/") ||
 		strings.HasPrefix(value, "~") ||
@@ -150,9 +147,6 @@ func looksLikeHomePath(value string) bool {
 }
 
 func looksLikeSecret(value string) bool {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return false
-	}
 	low := strings.ToLower(strings.TrimSpace(value))
 	return strings.HasPrefix(low, "bearer") ||
 		strings.HasPrefix(low, "sk-") ||
@@ -166,28 +160,29 @@ func looksLikeSecret(value string) bool {
 }
 
 func looksLikeConcreteProviderValueV0(value string) bool {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return false
-	}
 	low := strings.ToLower(strings.TrimSpace(value))
-	return strings.Contains(low, "openai") ||
-		strings.Contains(low, "anthropic") ||
-		strings.Contains(low, "gemini") ||
-		strings.Contains(low, "mistral") ||
-		strings.Contains(low, "bedrock") ||
-		strings.Contains(low, "openrouter")
+	switch low {
+	case "openai", "anthropic", "gemini", "google-gemini", "mistral", "bedrock", "openrouter":
+		return true
+	default:
+		return strings.HasPrefix(low, "provider=") ||
+			strings.HasPrefix(low, "provider:") ||
+			strings.HasPrefix(low, "proveedor=") ||
+			strings.HasPrefix(low, "proveedor:")
+	}
 }
 
 func looksLikeConcreteModelValueV0(value string) bool {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return false
-	}
 	low := strings.ToLower(strings.TrimSpace(value))
-	return strings.Contains(low, "gpt-") ||
-		strings.Contains(low, "claude") ||
-		strings.Contains(low, "gemini") ||
-		strings.Contains(low, "llama") ||
-		strings.Contains(low, "mistral") ||
+	return strings.HasPrefix(low, "gpt-") ||
+		strings.HasPrefix(low, "claude-") ||
+		strings.HasPrefix(low, "gemini-") ||
+		strings.HasPrefix(low, "llama-") ||
+		strings.HasPrefix(low, "mistral-") ||
+		strings.HasPrefix(low, "model=") ||
+		strings.HasPrefix(low, "model:") ||
+		strings.HasPrefix(low, "modelo=") ||
+		strings.HasPrefix(low, "modelo:") ||
 		strings.HasPrefix(low, "o1") ||
 		strings.HasPrefix(low, "o3") ||
 		strings.HasPrefix(low, "o4-")

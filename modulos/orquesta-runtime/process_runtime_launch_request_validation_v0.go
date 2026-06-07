@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-
-	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func validateProcessRuntimeLaunchRequestV0(req ProcessRuntimeLaunchRequestV0) error {
@@ -18,7 +16,7 @@ func validateProcessRuntimeLaunchRequestV0(req ProcessRuntimeLaunchRequestV0) er
 	if processRuntimeOperationalPathUnsafeV0(req.CommandPath) || looksLikeSecret(req.CommandPath) {
 		return processRuntimeErrorV0(ProcessRuntimeConfigInvalidaV0, "command_path")
 	}
-	if orquestarails.DetailProhibitedRailsEnabledV0() && processRuntimeCommandIsShellV0(req.CommandPath) {
+	if processRuntimeCommandIsShellV0(req.CommandPath) {
 		return processRuntimeErrorV0(ProcessRuntimeShellProhibidaV0, "command_path")
 	}
 	if strings.TrimSpace(req.WorkingDir) == "" {

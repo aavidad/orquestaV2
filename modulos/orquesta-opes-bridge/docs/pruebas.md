@@ -28,7 +28,19 @@
   `generate_question_bank -> question_bank`,
   `generate_audio_asset -> audio_asset`,
   `generate_tutor_assets -> tutor_bot_package` y
-  `generate_html_site -> local_html_site`.
+  `generate_html_site -> local_html_site`,
+  `generate_help_manual_assets -> help_manual_package`,
+  revisiones independientes `review_codex|review_gemini|review_claude ->
+  agent_review_report`, revisiones por pares
+  `review_pair_codex_gemini|review_pair_codex_claude|review_pair_gemini_claude
+  -> agent_pair_review_report`, `review_director_consolidation ->
+  director_review_matrix` y `finalize_temario_package ->
+  completed_syllabus_package`.
+- Routing de proveedores en Orquesta:
+  `go test -count=1 ./modulos/orquesta-runtime-claude ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server -run 'TestClaude|TestProviderLaunchSpecResolverV0RuteaReview|TestProviderAwareAckPathResolverV0UsaRuntimeClaude|TestGeminiRuntimeConfig|TestClaudeRuntimeConfig'`.
+  Debe demostrar que `review_gemini` se materializa por Gemini cuando esta
+  activado, `review_claude` por Claude cuando esta activado, y que los ACK se
+  buscan en el runtime del proveedor correspondiente.
 - Preservacion de `worktree_ref` y `branch_ref` de autoprogramacion como refs
   opacas, sin usarlas como ruta, rama Git ni componente del write-set.
 - Preservacion de payload JSON como `input_fields`.

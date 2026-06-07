@@ -65,9 +65,19 @@ func TestValidateAgentReworkSignalV0RejectsUnsupportedVerdictAndActions(t *testi
 	}
 }
 
-func TestValidateAgentReworkSignalV0RejectsForbiddenDetails(t *testing.T) {
+func TestValidateAgentReworkSignalV0AllowsOperationalLabels(t *testing.T) {
 	signal := validAgentReworkSignalV0()
-	signal.Summary = "Incluye transcript completo."
+	signal.Summary = "Incluye transcript policy ref y runtime provider ref."
+
+	err := ValidateAgentReworkSignalV0(NormalizeAgentReworkSignalV0(signal))
+	if err != nil {
+		t.Fatalf("ValidateAgentReworkSignalV0: %v", err)
+	}
+}
+
+func TestValidateAgentReworkSignalV0RejectsSensitiveDetails(t *testing.T) {
+	signal := validAgentReworkSignalV0()
+	signal.Summary = "transcript=raw text"
 
 	err := ValidateAgentReworkSignalV0(NormalizeAgentReworkSignalV0(signal))
 	assertAgentReworkSignalErrorV0(t, err, ErrDetalleProhibidoV0, "payload")

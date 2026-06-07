@@ -195,7 +195,13 @@ func TestBuildExternalWorkRunRequestV0MapeaPlanTemarioOperadoresComoDocumentPlan
 		!strings.Contains(criteriaText, "incluir research_exam_precedents") ||
 		!strings.Contains(criteriaText, "incluir generate_question_bank") ||
 		!strings.Contains(criteriaText, "incluir generate_tutor_assets") ||
+		!strings.Contains(criteriaText, "incluir generate_learning_games") ||
 		!strings.Contains(criteriaText, "incluir generate_html_site") ||
+		!strings.Contains(criteriaText, "incluir generate_help_manual_assets") ||
+		!strings.Contains(criteriaText, "incluir review_codex, review_gemini y review_claude") ||
+		!strings.Contains(criteriaText, "incluir review_pair_codex_gemini, review_pair_codex_claude y review_pair_gemini_claude") ||
+		!strings.Contains(criteriaText, "incluir review_director_consolidation") ||
+		!strings.Contains(criteriaText, "incluir finalize_temario_package") ||
 		!strings.Contains(criteriaText, "respetar flujo editorial: inventario, investigacion externa") {
 		t.Fatalf("request=%+v", req)
 	}
@@ -237,12 +243,22 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 		{workKind: "review_legal", artifactType: "block_revision", context: "large"},
 		{workKind: "review_pedagogical", artifactType: "block_revision", context: "large"},
 		{workKind: "review_quality", artifactType: "block_revision", context: "large"},
+		{workKind: "review_codex", artifactType: "agent_review_report", context: "large"},
+		{workKind: "review_gemini", artifactType: "agent_review_report", context: "large"},
+		{workKind: "review_claude", artifactType: "agent_review_report", context: "large"},
+		{workKind: "review_pair_codex_gemini", artifactType: "agent_pair_review_report", context: "large"},
+		{workKind: "review_pair_codex_claude", artifactType: "agent_pair_review_report", context: "large"},
+		{workKind: "review_pair_gemini_claude", artifactType: "agent_pair_review_report", context: "large"},
+		{workKind: "review_director_consolidation", artifactType: "director_review_matrix", context: "large"},
 		{workKind: "validate_topic", artifactType: "block_revision", context: "large"},
 		{workKind: "assemble_topic", artifactType: "assembled_topic", context: "large"},
 		{workKind: "generate_audio_asset", artifactType: "audio_asset", context: "large"},
 		{workKind: "generate_topic_audio", artifactType: "audio_asset", context: "large"},
 		{workKind: "generate_tutor_assets", artifactType: "tutor_bot_package", context: "large"},
+		{workKind: "generate_learning_games", artifactType: "learning_games_package", context: "large"},
 		{workKind: "generate_html_site", artifactType: "local_html_site", context: "large"},
+		{workKind: "generate_help_manual_assets", artifactType: "help_manual_package", context: "large"},
+		{workKind: "finalize_temario_package", artifactType: "completed_syllabus_package", context: "large"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.workKind, func(t *testing.T) {
@@ -270,8 +286,21 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 			}
 			if tc.artifactType == "audio_asset" &&
 				(!strings.Contains(strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n"), "devolver manifest de audio") ||
+					!strings.Contains(strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n"), "reutilizar audio comun compatible") ||
 					!strings.Contains(strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n"), "no incluir rutas locales, proveedor, GPU, modelo ni procesos internos")) {
 				t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
+			}
+			if tc.artifactType == "local_html_site" {
+				criteriaText := strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n")
+				if !strings.Contains(criteriaText, "formato real de curso USO/TCAE") ||
+					!strings.Contains(criteriaText, "audio/manifests") ||
+					!strings.Contains(criteriaText, "locales/i18n") ||
+					!strings.Contains(criteriaText, "#uso-material-watermark") ||
+					!strings.Contains(criteriaText, "ubicar cada infografia junto al apartado") ||
+					!strings.Contains(criteriaText, "no mostrar al alumnado notas de generacion") ||
+					!strings.Contains(criteriaText, "no entregar visores single-file") {
+					t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
+				}
 			}
 			if tc.artifactType == "visual_asset" {
 				criteriaText := strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n")
@@ -286,8 +315,50 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 				if !strings.Contains(criteriaText, "no sobrescribir ni borrar bancos originales") ||
 					!strings.Contains(criteriaText, "4 opciones A, B, C y D") ||
 					!strings.Contains(criteriaText, "localizable/i18n") ||
+					!strings.Contains(criteriaText, opesTCAETestCreationGuideRefV0) ||
 					!strings.Contains(criteriaText, "validacion de dificultad/proximidad") ||
 					!strings.Contains(criteriaText, "backup previo") {
+					t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
+				}
+			}
+			if tc.artifactType == "help_manual_package" {
+				criteriaText := strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n")
+				if !strings.Contains(criteriaText, "SCREENSHOT_HELP_MANUALS.md") ||
+					!strings.Contains(criteriaText, "manual.pdf exportado desde HTML") ||
+					!strings.Contains(criteriaText, "correo uso@dipgra.es") ||
+					!strings.Contains(criteriaText, "datos personales") {
+					t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
+				}
+			}
+			if tc.artifactType == "agent_review_report" {
+				criteriaText := strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n")
+				if !strings.Contains(criteriaText, "revision independiente") ||
+					!strings.Contains(criteriaText, "100% de preguntas") ||
+					!strings.Contains(criteriaText, "no tirar trabajo recuperable") {
+					t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
+				}
+			}
+			if tc.artifactType == "agent_pair_review_report" {
+				criteriaText := strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n")
+				if !strings.Contains(criteriaText, "revision por pares") ||
+					!strings.Contains(criteriaText, "acuerdos, desacuerdos") ||
+					!strings.Contains(criteriaText, "agent_pair_review_report") {
+					t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
+				}
+			}
+			if tc.artifactType == "director_review_matrix" {
+				criteriaText := strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n")
+				if !strings.Contains(criteriaText, "Codex, Gemini y Claude") ||
+					!strings.Contains(criteriaText, "Codex-Gemini, Codex-Claude y Gemini-Claude") ||
+					!strings.Contains(criteriaText, "director_review_matrix") {
+					t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
+				}
+			}
+			if tc.artifactType == "completed_syllabus_package" {
+				criteriaText := strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n")
+				if !strings.Contains(criteriaText, "temario terminado al 100%") ||
+					!strings.Contains(criteriaText, "triple visto bueno") ||
+					!strings.Contains(criteriaText, "listo_para_revision_operador") {
 					t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
 				}
 			}

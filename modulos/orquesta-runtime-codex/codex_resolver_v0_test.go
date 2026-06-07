@@ -155,19 +155,18 @@ func TestCodexExecResolverV0PromptUsaControlFilesDelRuntime(t *testing.T) {
 		"No crees docs/codigo en ese directorio de control",
 		"La linea visible ACK no sustituye este JSON",
 		"Es obligatorio solo si objetivo o criterios de cierre lo piden.",
-		"PROTOCOLO COMPACTO OBLIGATORIO",
+		"Comunicacion compacta",
 		"$caveman full",
-		"Incumplir este protocolo invalida la entrega.",
 		"No uses git status como criterio obligatorio",
 		"ACK status completed aunque git no aplique",
 		"No imprimas diffs ni pegues artefactos completos",
 		"Si escribes decision_path, completa antes los ficheros pedidos del write-set",
 		"files debe listar rutas reales de archivos de producto tocados",
-		"RAIL ESTRICTO",
+		"Seguridad",
 		"no borres",
 		"no salgas del workdir del proyecto",
-		"No edites fuera del write-set",
-		"si falta alcance, escribe CONSULTA AL DIRECTOR",
+		"Si detectas que algun archivo necesario queda fuera del write-set",
+		"registra el faltante como nota o tarea derivada",
 		"Las rutas del write-set son relativas al workdir del proyecto",
 		"No incluyas archivos de control en ACK.files",
 		"Write-set permitido:",
@@ -222,9 +221,8 @@ func TestCodexExecResolverV0PromptExigeDecisionPathAlDirector(t *testing.T) {
 
 	for _, want := range []string{
 		"Como target_module de director",
-		"ACK completed solo es valido despues de escribir decision_path",
-		"si no puedes, usa ACK failed con CONSULTA AL DIRECTOR",
-		"Docs sin decision_path no completan la tarea.",
+		"escribe decision_path con las decisiones ejecutables que puedas",
+		"conserva el diagnostico y deja follow-up en ACK",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("prompt no contiene %q:\n%s", want, prompt)
@@ -247,10 +245,10 @@ func TestCodexExecResolverV0PromptAdvierteContextoRequeridoTruncado(t *testing.T
 		t.Fatalf("read prompt: %v", err)
 	}
 	for _, want := range []string{
-		"CONTEXTO TRUNCADO REQUERIDO",
+		"CONTEXTO TRUNCADO",
 		"contexto_truncado_resuelto",
 		`"notes":["contexto_truncado_resuelto: \u003cmotivo\u003e"]`,
-		"CONSULTA AL DIRECTOR",
+		"guarda avance parcial",
 	} {
 		if !strings.Contains(string(prompt), want) {
 			t.Fatalf("prompt no contiene %q:\n%s", want, string(prompt))

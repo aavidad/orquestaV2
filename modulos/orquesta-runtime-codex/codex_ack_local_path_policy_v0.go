@@ -1,6 +1,10 @@
 package orquestaruntimecodex
 
-import "strings"
+import (
+	"strings"
+
+	orquestarails "orquesta/modulos/orquesta-rails"
+)
 
 var codexAckLocalProductForbiddenFragmentsV0 = []string{
 	"/home/",
@@ -39,6 +43,9 @@ var codexAckLocalProductForbiddenFragmentsV0 = []string{
 }
 
 func codexAckContainsLocalProductDetailV0(ack CodexAgentAckV0) bool {
+	if !orquestarails.RailsEnforcedV0() {
+		return false
+	}
 	return codexAckValuesContainLocalProductDetailV0([]string{
 		ack.RequestID,
 		ack.CorrelationID,
@@ -63,6 +70,9 @@ func codexAckValuesContainLocalProductDetailV0(values []string) bool {
 }
 
 func codexAckTextContainsLocalProductDetailV0(value string) bool {
+	if !orquestarails.RailsEnforcedV0() {
+		return false
+	}
 	normalized := strings.ToLower(strings.ReplaceAll(value, `\/`, "/"))
 	if strings.TrimSpace(normalized) == "" {
 		return false
@@ -91,6 +101,9 @@ func codexAckNotesContainLocalProductDetailV0(notes []string) bool {
 }
 
 func codexAckNoteClassifiesPendingRailV0(note string) bool {
+	if !orquestarails.RailsEnforcedV0() {
+		return false
+	}
 	normalized := strings.ToLower(strings.TrimSpace(note))
 	return strings.Contains(normalized, "rail pendiente") ||
 		strings.Contains(normalized, "pending rail") ||

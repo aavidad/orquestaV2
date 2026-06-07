@@ -80,6 +80,66 @@ func TestHandleCommandV0BlockRunReturnsRunBlocked(t *testing.T) {
 	}
 }
 
+func TestHandleCommandV0ResolveRunBlockerReturnsRunBlockerResolved(t *testing.T) {
+	run := mustHandlerStartedRunV0(t)
+	run = mustApplySingleCommandEventV0(t, run, mustBlockRunCommandV0(t, "cmd-block-resolve-001", "idem-block-resolve-001", "blocker-resolve-001"))
+	command := mustResolveRunBlockerCommandV0(t, "cmd-resolve-001", "idem-resolve-001", "blocker-resolve-001")
+
+	result, err := HandleCommandV0(run, command)
+	if err != nil {
+		t.Fatalf("handle ResolveRunBlocker: %v", err)
+	}
+
+	assertSingleEventTypeV0(t, result, OrchestrationEventRunBlockerResolvedV0)
+	next := mustApplyReducerEventV0(t, run, result.Events[0])
+	if next.Status != OrchestrationRunStatusActiveV0 || len(next.Blockers) != 0 {
+		t.Fatalf("run no refleja ResolveRunBlocker: %+v", next)
+	}
+	repeated, err := HandleCommandV0(next, command)
+	if err != nil {
+		t.Fatalf("handle ResolveRunBlocker repeat: %v", err)
+	}
+	if !repeated.Idempotent || len(repeated.Events) != 0 {
+		t.Fatalf("repeat result=%+v", repeated)
+	}
+}
+
+func TestHandleCommandV0ResolveRunBlockerRepairsPartialProjection(t *testing.T) {
+	run := mustHandlerStartedRunV0(t)
+	blocked := mustApplySingleCommandEventV0(t, run, mustBlockRunCommandV0(t, "cmd-block-partial-001", "idem-block-partial-001", "blocker-partial-001"))
+	command := mustResolveRunBlockerCommandV0(t, "cmd-resolve-partial-001", "idem-resolve-partial-001", "blocker-partial-001")
+	resolved := mustApplySingleCommandEventV0(t, blocked, command)
+	partial := blocked
+	partial.CommandEffects = resolved.CommandEffects
+
+	result, err := HandleCommandV0(partial, command)
+	if err != nil {
+		t.Fatalf("handle ResolveRunBlocker partial: %v", err)
+	}
+	assertSingleEventTypeV0(t, result, OrchestrationEventRunBlockerResolvedV0)
+	if result.Events[0].Sequence != partial.LastSequence {
+		t.Fatalf("repair sequence=%d, want current last_sequence=%d", result.Events[0].Sequence, partial.LastSequence)
+	}
+	repaired := mustApplyReducerEventV0(t, partial, result.Events[0])
+	if repaired.Status != OrchestrationRunStatusActiveV0 || len(repaired.Blockers) != 0 {
+		t.Fatalf("partial projection no queda reparada: %+v", repaired)
+	}
+	if repaired.LastEventID != partial.LastEventID || repaired.LastSequence != partial.LastSequence {
+		t.Fatalf("repair movio historial: last_event=%q/%q last_sequence=%d/%d", repaired.LastEventID, partial.LastEventID, repaired.LastSequence, partial.LastSequence)
+	}
+	if len(repaired.CommandEffects) != len(partial.CommandEffects) {
+		t.Fatalf("repair duplico command_effects: got %d want %d", len(repaired.CommandEffects), len(partial.CommandEffects))
+	}
+
+	repeated, err := HandleCommandV0(repaired, command)
+	if err != nil {
+		t.Fatalf("handle ResolveRunBlocker repaired repeat: %v", err)
+	}
+	if !repeated.Idempotent || len(repeated.Events) != 0 {
+		t.Fatalf("repaired repeat result=%+v", repeated)
+	}
+}
+
 func mustHandlerStartedRunV0(t *testing.T) OrchestrationRunV0 {
 	t.Helper()
 	return mustApplySingleCommandEventV0(t, OrchestrationRunV0{}, mustStartRunCommandV0(t, "cmd-start-base", "idem-start-base"))
@@ -123,6 +183,17 @@ func mustBlockRunCommandV0(t *testing.T, commandID string, idempotencyKey string
 		Summary:      "Falta una decision de contrato antes de continuar.",
 		SourceGroup:  "workflow",
 		EvidenceRefs: []string{"docs/contratos.md#OrchestrationCommandV0"},
+	})
+	return mustCommandV0(t, command, err)
+}
+
+func mustResolveRunBlockerCommandV0(t *testing.T, commandID string, idempotencyKey string, blockerID string) OrchestrationCommandV0 {
+	t.Helper()
+	command, err := NewResolveRunBlockerCommandV0(validCommandMetaV0(commandID, idempotencyKey), ResolveRunBlockerCommandPayloadV0{
+		BlockerID:    blockerID,
+		ReasonCode:   "bloqueo_resuelto",
+		Summary:      "El criterio pendiente queda resuelto con evidencia durable.",
+		EvidenceRefs: []string{"docs/contratos.md#ResolveRunBlocker"},
 	})
 	return mustCommandV0(t, command, err)
 }

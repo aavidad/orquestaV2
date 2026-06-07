@@ -30,6 +30,15 @@ Reglas:
   umbral A1 de 20.250-22.500 palabras y regla de correccion incremental: si ya
   existe tema o artefacto previo, se estudia que falla y se modifica lo
   necesario; rehacer completo exige justificacion;
+- todos los jobs OPES reciben `opes_temario_agent_rules_2026_06_04` como regla
+  operativa de dominio para temarios. Resume y referencia el canon externo
+  `/home/alberto/Trabajo/OPES/AGENTS.md`: lectura obligatoria de
+  `ENTRADA_UNICA_SIGUIENTE_AGENTE_OPES.md`,
+  `GUIA_ESTILO_TEMARIOS_OPES_GLOBAL_2026-05-18.md` y
+  `USO_ORQUESTA_TEMARIOS_OPES_GUIA_AGENTES_2026-06-04.md`, direccion editorial,
+  reutilizacion antes de rehacer, paralelismo por tema, visuales/audios/tests,
+  triple visto bueno e i18n/hexagonal. Es politica de la composicion OPES, no
+  contrato del nucleo Orquesta;
 - todos los jobs OPES reciben tambien
   `opes_html_publication_policy_2026_05_19` para trabajos que generen HTML:
   patron web tipo Tema 11, barra lateral plegable, primera lectura activa por
@@ -54,9 +63,11 @@ Reglas:
   `esquema_repaso` y `plan_visuales`;
 - para `generate_audio_asset`, el bridge exige `expected_artifact_type=audio_asset`
   y el job debe derivar audio desde `assembled_topic` o refs opacas del paquete
-  final, con audio por tema y por apartado/seccion; cualquier app RTX/GPU queda
-  como adaptador OPES externo y no se expone como proveedor, ruta local ni
-  proceso en el contrato publico;
+  final, con audio por tema y por apartado/seccion; antes de TTS debe resolver
+  `common_topic_ref`, `source_content_ref`, `audio_manifest_ref` y `audio_ref`
+  para reutilizar audio comun compatible; cualquier app RTX/GPU queda como
+  adaptador OPES externo y no se expone como proveedor, ruta local ni proceso en
+  el contrato publico;
 - para `research_exam_precedents`, el bridge exige
   `expected_artifact_type=exam_research_report` y el job debe buscar por
   internet examenes, convocatorias, temarios y pruebas de administraciones
@@ -73,8 +84,60 @@ Reglas:
   temario por refs opacas;
 - para `generate_html_site`, el bridge exige
   `expected_artifact_type=local_html_site` y debe producir un HTML local
-  operativo con logos USO, aspecto USO/TCAE promocion interna, assets locales,
-  audios, infografias, tests permitidos y tutor/bots;
+  operativo con logos USO y formato real de curso USO/TCAE promocion interna:
+  `index.html`, `html_final/` por tema, assets locales, `audio/manifests/`,
+  locales/i18n, audios, infografias, tests permitidos y tutor/bots; no debe
+  entregar como salida final una maqueta single-file con estilo propio;
+- para `generate_help_manual_assets`, el bridge exige
+  `expected_artifact_type=help_manual_package` y debe producir manuales
+  graficos de ayuda USO derivados del HTML local: YAML de escenario, capturas
+  anotadas, `index.html` canonico, `manual.pdf` exportado desde HTML,
+  `manual.md`, capturas `img/`/`raw/` y revision visual. La guia vigente es
+  `/home/alberto/Trabajo/USO/web/docs/SCREENSHOT_HELP_MANUALS.md` y la regla de
+  marca USO es
+  `/home/alberto/Trabajo/OPES/opes-salidas/coordinacion_temarios/REGLA_ARTEFACTOS_USO_BRANDING_2026-06-02.md`;
+- para `review_codex`, `review_gemini` y `review_claude`, el bridge exige
+  `expected_artifact_type=agent_review_report` y cada job debe emitir una
+  revision independiente del curso o artefacto asignado. En bancos publicables
+  la revision cubre el 100% de preguntas/opciones/respuestas/distractores y
+  explicaciones tutor, por lotes si hace falta;
+- para `review_pair_codex_gemini`, `review_pair_codex_claude` y
+  `review_pair_gemini_claude`, el bridge exige
+  `expected_artifact_type=agent_pair_review_report` y debe producir matriz de
+  acuerdos, discrepancias, accepted_refs, rework_refs, blocked_refs y
+  evidence_refs. No descarta trabajo recuperable por alias, formato reparable o
+  texto blando;
+- para `generate_agent_candidate_codex`, `generate_agent_candidate_gemini` y
+  `generate_agent_candidate_claude`, el bridge exige
+  `expected_artifact_type=agent_candidate_artifact`. Cada job propone una
+  version alternativa acotada para una pieza floja y conserva el original y los
+  demas candidatos;
+- para `vote_agent_candidates_codex`, `vote_agent_candidates_gemini` y
+  `vote_agent_candidates_claude`, el bridge exige
+  `expected_artifact_type=agent_candidate_vote_report`. Cada agente compara
+  original y candidatos, ordena opciones, propone fusion si procede y deja
+  evidencia;
+- para `select_agent_candidate_director`, el bridge exige
+  `expected_artifact_type=agent_candidate_selection_matrix`. El Director elige
+  ganador, fusiona partes aprovechables o pide rework acotado; los candidatos no
+  ganadores se conservan como borrador/evidencia;
+- para `review_director_consolidation`, el bridge exige
+  `expected_artifact_type=director_review_matrix` y debe consolidar revisiones
+  independientes y por pares, aceptar artefactos, pedir rework localizado,
+  conservar material recuperable o bloquear solo por causa real;
+- para `finalize_temario_package`, el bridge exige
+  `expected_artifact_type=completed_syllabus_package` y debe entregar el
+  temario terminado al 100% para revision local: resumido, ampliado, fuentes,
+  investigacion, tests, visuales finales, audios por apartado, tutor/bots, HTML
+  local, manuales graficos, manifest, checksums, matriz de revisiones y
+  validacion visual. Sin este artefacto el curso no se marca `ready`;
+- la asignacion a Codex, Gemini o Claude no pertenece a OPES ni al bridge. La
+  composicion Orquesta puede enrutar `review_gemini` y
+  `review_pair_codex_gemini` al adaptador Gemini CLI opt-in, y
+  `review_claude`, `review_pair_codex_claude` y
+  `review_pair_gemini_claude` al adaptador Claude CLI opt-in. Si esos
+  adaptadores no estan activados, el trabajo conserva el contrato y cae por el
+  runtime Codex configurado, sin descartar entregas recuperables;
 - para `plan_tema`, `plan_temario` y `plan_documento`, el bridge declara
   `expected_artifact_type=document_plan`, `expected_schema=domain_document_plan.v0`
   y partes minimas del plan: `sections`, `deliverables`, `quality_criteria`,
@@ -90,7 +153,7 @@ Reglas:
   `generate_audio_asset` y un deliverable `audio_asset`, de forma que personas
   invidentes o cualquier alumno puedan escuchar el contenido del tema y de sus
   apartados. Tambien debe incluir investigacion externa, banco de tests,
-  tutor/bots y HTML local antes de produccion;
+  tutor/bots, HTML local y manuales graficos de ayuda antes de produccion;
 - `allowed_write_set` se limita a `external/opes/<work_kind>/<job_id>` para que
   cada job tenga una entrega unica y varios agentes del mismo tipo no se pisen;
 - si OPES aporta `worktree_ref` o `branch_ref` en `external_refs`, el bridge los

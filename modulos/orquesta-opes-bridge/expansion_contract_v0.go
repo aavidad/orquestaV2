@@ -51,8 +51,8 @@ func expansionQualityGatesV0() []string {
 		"tema_grande_min_words=16000",
 		"aplicar opes_global_editorial_policy_2026_05_18",
 		"si level=A1/A1_A2, tema_grande debe cumplir minimo 20.250 palabras salvo target superior declarado",
-		"sin secciones Pendiente de ampliacion",
-		"sin placeholders ni TODO",
+		"resolver marcadores editoriales visibles mediante correccion o rework, sin bloquear por coincidencias literales reparables",
+		"no tirar contenido aprovechable por etiquetas de borrador, alias, titulos o metadatos reparables",
 		"cada capitulo debe aportar desarrollo propio y trazable",
 	}
 }
@@ -62,7 +62,7 @@ func expansionAcceptanceCriteriaV0() []string {
 		"paquete apto para tema_grande con capitulos y bloques trazables",
 		"tema_grande debe alcanzar target_words_min si esta declarado",
 		"aplicar opes_global_editorial_policy_2026_05_18: modo tutor completo, no infantilizar, notas de test separadas y visuales utiles",
-		"no dejar secciones Pendiente de ampliacion ni material borrador sin resolver",
+		"resolver material borrador visible mediante correccion localizada o rework sin descartar el paquete completo",
 		"conservar base para tema_mediano sin perder autores normativa ni procedimientos",
 		"incluir resumen/memoria de repaso derivado del tema desarrollado",
 		"incluir esquema de examen y plan de visuales cuando aporten valor",

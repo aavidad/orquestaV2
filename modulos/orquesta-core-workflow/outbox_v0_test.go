@@ -197,7 +197,7 @@ func assertOutboxNoForbiddenFragmentsV0(t *testing.T, serialized string) {
 
 	lower := strings.ToLower(serialized)
 	for _, fragment := range forbidden {
-		if strings.Contains(lower, fragment) {
+		if containsForbiddenFragmentV0(lower, fragment) {
 			t.Fatalf("serialized outbox contains forbidden fragment %q: %s", fragment, serialized)
 		}
 	}

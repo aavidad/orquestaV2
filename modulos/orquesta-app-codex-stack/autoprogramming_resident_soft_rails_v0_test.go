@@ -53,6 +53,32 @@ func TestAutoprogrammingResidentModeV0NoConfundeNoBloqueanteConBloqueoV0(t *test
 	}
 }
 
+func TestAutoprogrammingResidentModeV0NoBloqueaPorBlockedGenericoV0(t *testing.T) {
+	for _, evidenceRef := range []string{
+		"capacity_blocked",
+		"provider_auth_blocked",
+		"model_switch_blocked",
+		"runtime_blocked",
+		"quality-gate-ref-001#decision:blocked",
+		"nota: blocked por cuota externa recuperable",
+	} {
+		shouldRepair := autoprogrammingResidentShouldRepairV0(
+			orquestamcp.MCPRunSupervisorToolInputV0{ResidentMode: true},
+			CodexSupervisorResultV0{
+				Last: CodexSupervisorRuntimeSnapshotV0{Status: CodexSupervisorRuntimeStoppedV0},
+			},
+			orquestamcp.MCPRunSupervisorToolResultV0{
+				Estado:       orquestamcp.MCPRunSupervisorEstadoOKV0,
+				RunRef:       "run-ref-generic-blocked-001",
+				EvidenceRefs: []string{evidenceRef},
+			},
+		)
+		if shouldRepair {
+			t.Fatalf("blocked generico no debe disparar self-repair: %s", evidenceRef)
+		}
+	}
+}
+
 func TestAutoprogrammingResidentModeV0AliasesDeRailBlandoNoBloqueanV0(t *testing.T) {
 	for _, evidenceRef := range []string{
 		"gate-issue:artifact_path_outside_write_set:docs/extra.md#policy_blocked",

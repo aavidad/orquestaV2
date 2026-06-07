@@ -57,6 +57,7 @@ Campos:
 - `RouteAppChangeV0`: `/api/v0/apps/`;
 - `RouteDirectorStatsV0`: `/api/v0/director/stats`.
 - `RouteRunControlV0`: `/api/v0/runs/control`;
+- `RouteRuntimeModelsV0`: `/api/v0/runtime/models`;
 - `RouteRunQueuePriorityV0`: `/api/v0/runs/queue/priority`;
 - `RouteRunSupervisorV0`: `/api/v0/runs/supervise`;
 - `RouteAutoprogrammingValidateRequestV0`: `/api/v0/autoprogramming/validate-request`;
@@ -94,6 +95,10 @@ cola. El gateway no conoce ranking, prioridad, aging, fairness ni stores.
 `RouteRunControlPageV0` y `RouteRunControlV0` son rutas separadas: la primera
 apunta al panel web inyectado y la segunda al contrato REST/MCP de control. El
 gateway no conoce pausa, parada, checkpoint, procesos ni runtime.
+
+`RouteRuntimeModelsV0` apunta al contrato REST/MCP de gestion opt-in de modelos
+runtime. El gateway solo monta el handler inyectado; no conoce Ollama, base URL,
+token, HOME, proveedor, scheduler ni politica de seleccion de modelo.
 
 `RouteRunSupervisorV0` apunta al contrato REST/MCP que ejecuta una pasada
 acotada de supervision sobre una run o sobre la cola inyectada. El gateway solo

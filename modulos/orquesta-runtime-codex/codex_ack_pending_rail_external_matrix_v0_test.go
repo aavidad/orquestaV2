@@ -7,6 +7,7 @@ import (
 )
 
 func TestCodexAckPendingRailExternalMatrixV0(t *testing.T) {
+	enableCodexRailsModeEnforcedForTestV0(t)
 	spec := codexSpecForTestV0()
 	terms := []string{
 		"access_token", "refresh_token", "oauth", "token", "secret",
@@ -24,14 +25,15 @@ func TestCodexAckPendingRailExternalMatrixV0(t *testing.T) {
 			if len(issues) != 0 {
 				t.Fatalf("rail pendiente no debe bloquear issues=%+v note=%q", issues, note)
 			}
-			if !codexAckBytesContainForbiddenDetailV0(data) {
-				t.Fatalf("rail pendiente no detecto note=%q", note)
+			if codexAckBytesContainForbiddenDetailV0(data) {
+				t.Fatalf("rail pendiente no debe detectarse con rails quitados note=%q", note)
 			}
 		})
 	}
 }
 
 func TestCodexAckPendingRailExternalMatrixV0ConRailsDetalleOff(t *testing.T) {
+	enableCodexRailsModeEnforcedForTestV0(t)
 	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "off")
 	spec := codexSpecForTestV0()
 	data := []byte(codexAckJSONWithNoteForPendingRailTestV0(
@@ -43,9 +45,9 @@ func TestCodexAckPendingRailExternalMatrixV0ConRailsDetalleOff(t *testing.T) {
 	if len(issues) != 0 {
 		t.Fatalf("rail pendiente no debe bloquear issues=%+v", issues)
 	}
-	if !CodexAgentAckHasPendingRailV0(ack) ||
-		!codexAckBytesContainForbiddenDetailV0(data) {
-		t.Fatalf("rail pendiente no conservado ack=%+v", ack)
+	if CodexAgentAckHasPendingRailV0(ack) ||
+		codexAckBytesContainForbiddenDetailV0(data) {
+		t.Fatalf("rail pendiente no debe conservarse con rails quitados ack=%+v", ack)
 	}
 }
 
@@ -79,7 +81,8 @@ func TestCodexAckPendingRailExternalMatrixV0CamposNoCortanConValoresBlandos(t *t
 	}
 }
 
-func TestCodexAckPendingRailExternalMatrixV0CamposCortanConValoresEfectivos(t *testing.T) {
+func TestCodexAckPendingRailExternalMatrixV0CamposNoCortanConValoresEfectivos(t *testing.T) {
+	enableCodexRailsModeEnforcedForTestV0(t)
 	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "on")
 	spec := codexSpecForTestV0()
 	cases := []string{
@@ -89,7 +92,9 @@ func TestCodexAckPendingRailExternalMatrixV0CamposCortanConValoresEfectivos(t *t
 	for _, fragment := range cases {
 		data := []byte(codexAckJSONWithFragmentForPendingRailTestV0(fragment))
 		_, issues := ValidateCodexAgentAckBytesForSpecV0(data, spec)
-		requireCodexIssueV0(t, issues, CodexConnectorAckForbiddenV0)
+		if len(issues) != 0 {
+			t.Fatalf("rails quitados no deben bloquear fragment=%s issues=%+v", fragment, issues)
+		}
 	}
 }
 

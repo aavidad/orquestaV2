@@ -155,3 +155,85 @@ func TestInMemoryDomainWorkArtifactSubmissionLedgerV0ClaimYConflicto(t *testing.
 		t.Fatalf("records=%+v err=%v", records, err)
 	}
 }
+
+func TestInMemoryDomainWorkArtifactSubmissionLedgerV0PermiteRecuperarRejected(t *testing.T) {
+	ctx := context.Background()
+	ledger := NewInMemoryDomainWorkArtifactSubmissionLedgerV0()
+	base := DomainWorkArtifactSubmissionRecordV0{
+		IdempotencyKey: "idem-rejected-retry-001",
+		RunRef:         "run-ref-rejected-retry-001",
+		TaskRef:        "task-ref-rejected-retry-001",
+		DeliveryRef:    "delivery-ref-rejected-retry-001",
+		DomainRef:      "opes",
+		JobRef:         "job-ref-rejected-retry",
+		ArtifactRef:    "artifact-ref-rejected-retry",
+		ArtifactType:   "visual_asset",
+	}
+	rejected := base
+	rejected.Status = DomainWorkArtifactSubmissionStatusRejectedV0
+	rejected.IssueRefs = []string{"domain-work-submit-artifact-rejected"}
+	if err := ledger.RecordDomainWorkArtifactSubmissionV0(ctx, rejected); err != nil {
+		t.Fatalf("record rejected: %v", err)
+	}
+	submitting := base
+	submitting.Status = DomainWorkArtifactSubmissionStatusSubmittingV0
+	if err := ledger.RecordDomainWorkArtifactSubmissionV0(ctx, submitting); err != nil {
+		t.Fatalf("record submitting tras rejected: %v", err)
+	}
+	accepted := base
+	accepted.Status = DomainWorkArtifactSubmissionStatusAcceptedV0
+	accepted.ReceiptRef = "receipt-ref-rejected-retry"
+	if err := ledger.RecordDomainWorkArtifactSubmissionV0(ctx, accepted); err != nil {
+		t.Fatalf("record accepted tras retry: %v", err)
+	}
+	records, err := ledger.ListDomainWorkArtifactSubmissionsV0(ctx, DomainWorkArtifactSubmissionRecordFilterV0{
+		IdempotencyKey: "idem-rejected-retry-001",
+	})
+	if err != nil || len(records) != 1 ||
+		records[0].Status != DomainWorkArtifactSubmissionStatusAcceptedV0 ||
+		records[0].ReceiptRef != "receipt-ref-rejected-retry" {
+		t.Fatalf("records=%+v err=%v", records, err)
+	}
+}
+
+func TestInMemoryDomainWorkArtifactSubmissionLedgerV0PermiteRecuperarSubmitting(t *testing.T) {
+	ctx := context.Background()
+	ledger := NewInMemoryDomainWorkArtifactSubmissionLedgerV0()
+	base := DomainWorkArtifactSubmissionRecordV0{
+		IdempotencyKey: "idem-submitting-retry-001",
+		RunRef:         "run-ref-submitting-retry-001",
+		TaskRef:        "task-ref-submitting-retry-001",
+		DeliveryRef:    "delivery-ref-submitting-retry-001",
+		DomainRef:      "opes",
+		JobRef:         "job-ref-submitting-retry",
+		ArtifactRef:    "artifact-ref-submitting-retry",
+		ArtifactType:   "visual_asset",
+	}
+	for _, status := range []string{
+		DomainWorkArtifactSubmissionStatusSubmittingV0,
+		DomainWorkArtifactSubmissionStatusRejectedV0,
+		DomainWorkArtifactSubmissionStatusClaimedV0,
+		DomainWorkArtifactSubmissionStatusSubmittingV0,
+		DomainWorkArtifactSubmissionStatusAcceptedV0,
+	} {
+		record := base
+		record.Status = status
+		if status == DomainWorkArtifactSubmissionStatusRejectedV0 {
+			record.IssueRefs = []string{"domain-work-submit-execute-error"}
+		}
+		if status == DomainWorkArtifactSubmissionStatusAcceptedV0 {
+			record.ReceiptRef = "receipt-ref-submitting-retry"
+		}
+		if err := ledger.RecordDomainWorkArtifactSubmissionV0(ctx, record); err != nil {
+			t.Fatalf("record status=%s: %v", status, err)
+		}
+	}
+	records, err := ledger.ListDomainWorkArtifactSubmissionsV0(ctx, DomainWorkArtifactSubmissionRecordFilterV0{
+		IdempotencyKey: "idem-submitting-retry-001",
+	})
+	if err != nil || len(records) != 1 ||
+		records[0].Status != DomainWorkArtifactSubmissionStatusAcceptedV0 ||
+		records[0].ReceiptRef != "receipt-ref-submitting-retry" {
+		t.Fatalf("records=%+v err=%v", records, err)
+	}
+}

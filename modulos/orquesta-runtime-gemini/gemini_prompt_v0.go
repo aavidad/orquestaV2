@@ -2,6 +2,7 @@ package orquestaruntimegemini
 
 import (
 	"encoding/json"
+	pathpkg "path"
 	"path/filepath"
 	"strings"
 
@@ -9,8 +10,11 @@ import (
 )
 
 type GeminiControlFilesV0 struct {
-	PacketPath string
-	AckPath    string
+	PacketPath          string
+	AckPath             string
+	DecisionPath        string
+	ShutdownRequestPath string
+	ShutdownAckPath     string
 }
 
 func BuildGeminiAgentPromptV0(packet orquestaruntime.AgentStartPacketV0, hints []string) string {
@@ -27,28 +31,74 @@ func BuildGeminiAgentPromptWithControlFilesV0(
 ) string {
 	packetPath := cleanGeminiControlPathV0(control.PacketPath, GeminiAgentPacketFileNameV0)
 	ackPath := cleanGeminiControlPathV0(control.AckPath, GeminiAgentAckFileNameV0)
+	decisionPath := cleanGeminiControlPathV0(control.DecisionPath, "")
+	shutdownRequestPath := cleanGeminiControlPathV0(control.ShutdownRequestPath, "")
+	shutdownAckPath := cleanGeminiControlPathV0(control.ShutdownAckPath, "")
 	var b strings.Builder
 	b.WriteString("Eres un agente externo gobernado por OrquestaV2.\n")
 	b.WriteString("Lee ")
 	b.WriteString(packetPath)
 	b.WriteString(" antes de tocar archivos.\n")
-	b.WriteString("Usa el write-set del paquete como alcance cerrado para producto. No borres, no muevas fuera del proyecto y no salgas del workdir.\n")
-	b.WriteString("Si falta contexto o alcance, no tires el trabajo por una palabra exacta: completa lo recuperable y deja CONSULTA AL DIRECTOR en notes cuando haga falta.\n")
-	b.WriteString("Corta fuerte solo por seguridad, refs imposibles, datos sensibles o efectos externos no autorizados.\n")
+	b.WriteString("Seguridad: no borres, no muevas fuera, no trunques archivos existentes y no salgas del workdir del proyecto.\n")
+	b.WriteString("Si una parte requiere un efecto externo no autorizado, conserva el avance posible dentro del workdir y deja la limitacion como nota o tarea derivada en el ACK.\n")
+	writeGeminiWriteSetPrecedenceProtocolV0(&b, packet)
+	b.WriteString("Las rutas del write-set son relativas al workdir del proyecto, no al directorio de control ni a .orquesta-runtime; crea docs/codigo en el proyecto.\n")
 	b.WriteString("Archivos de control permitidos fuera del write-set: ")
 	b.WriteString(ackPath)
-	b.WriteString(". No incluyas control files en ACK.files.\n")
-	b.WriteString("PROTOCOLO COMPACTO OBLIGATORIO: usa salida compacta; no pegues diffs ni artefactos completos en stdout.\n")
-	b.WriteString("Final visible maximo una linea: ACK ")
+	if decisionPath != "" {
+		b.WriteString(", ")
+		b.WriteString(decisionPath)
+	}
+	if shutdownRequestPath != "" && shutdownAckPath != "" {
+		b.WriteString(", ")
+		b.WriteString(shutdownRequestPath)
+		b.WriteString(" y ")
+		b.WriteString(shutdownAckPath)
+	}
+	b.WriteString(".\n")
+	b.WriteString("Manten cada fichero Go por debajo de 300 lineas; divide responsabilidades si se acerca a ese limite.\n")
+	b.WriteString("Comunicacion compacta: activa $caveman full si existe; si no existe, usa compact equivalente.\n")
+	b.WriteString("Final visible recomendado: ACK ")
 	b.WriteString(packet.DeliveryRefs.AckRef)
-	b.WriteString(" <status>. La linea visible no sustituye el JSON durable.\n")
+	b.WriteString(" <status>.\n")
+	b.WriteString("Si falta contexto, no inventes: usa lo disponible, guarda el avance y deja la falta como nota de revision en el ACK.\n")
+	if geminiPacketHasRequiredTruncatedContextV0(packet) {
+		b.WriteString("CONTEXTO TRUNCADO: agent_packet.context contiene entradas required=true y truncated=true. Trabaja con refs/materializacion externa cuando este disponible; si no, guarda avance parcial y anota contexto_truncado_pendiente o contexto_truncado_resuelto en notes.\n")
+	}
+	if geminiPacketHasRequiredRefOnlyContextV0(packet) {
+		b.WriteString("CONTEXTO REF_ONLY REQUERIDO: agent_packet.context contiene entradas required=true y mode=ref_only. Sigue required_ref_action si ayuda; si no alcanza, guarda avance parcial y anota contexto_ref_only_pendiente o contexto_ref_only_resuelto en notes.\n")
+	}
+	b.WriteString("Aplica arquitectura hexagonal e i18n si la tarea genera app o UI.\n")
+	b.WriteString("La persistencia concreta solo pertenece a la app generada si la tarea la pide; Orquesta no usa DB por defecto.\n")
 	b.WriteString("Para tareas generate_visual_asset, visual_asset o infografia, crea un fichero de producto dentro del write-set con JSON valido: {\"artifact_type\":\"visual_asset\",\"payload_json\":{\"format\":\"svg\",\"title\":\"...\",\"caption\":\"...\",\"alt_text\":\"...\",\"svg\":\"...\"}}. Tambien son validos mermaid, html_panel o markdown si el contrato lo pide. No uses binarios, data_uri ni URLs remotas.\n")
 	b.WriteString("En visuales educativos, incluye alt_text accesible, caption breve, formato claro y contenido autocontenido.\n")
-	b.WriteString("Ejecuta las pruebas obligatorias si son razonables para el workdir. Si no aplican por ser trabajo externo, explica la razon en notes sin bloquear por una frase exacta.\n")
+	b.WriteString("Ejecuta las pruebas obligatorias que aparezcan en el paquete si son razonables para el workdir.\n")
+	b.WriteString("No uses git status como criterio obligatorio; si el workdir no es repositorio git, ignora esa comprobacion.\n")
+	b.WriteString("Si los tests obligatorios pasan y los ficheros del write-set existen, escribe ACK status completed aunque git no aplique.\n")
+	b.WriteString("No imprimas diffs ni pegues artefactos completos; valida en compacto, escribe agent_ack.json y termina con la linea ACK.\n")
+	writeGeminiShutdownProtocolV0(&b, shutdownRequestPath, shutdownAckPath)
 	b.WriteString("Al terminar, escribe ")
 	b.WriteString(ackPath)
 	b.WriteString(" con schema codex_agent_ack.v0.\n\n")
 	writeGeminiAckWriteProtocolV0(&b, ackPath)
+	if decisionPath != "" {
+		b.WriteString("decision_path: ")
+		b.WriteString(decisionPath)
+		b.WriteString(" solo para decisiones ejecutables del director; no pertenece al write-set.\n")
+		b.WriteString("Es obligatorio solo si objetivo o criterios de cierre lo piden.\n")
+		if geminiPacketTargetsDirectorV0(packet) {
+			b.WriteString("Como target_module de director, escribe decision_path con las decisiones ejecutables que puedas; si no esta completo, conserva el diagnostico y deja follow-up en ACK.\n")
+		}
+		b.WriteString("Si escribes decision_path, completa antes los ficheros pedidos del write-set, despues escribe ACK y termina; no sigas pensando ni ampliando alcance.\n")
+	}
+	b.WriteString("En el ACK, files debe listar rutas reales de archivos de producto tocados, no globs, directorios ni el write-set completo; ejemplo cmd/server/main.go, no cmd/server/**.\n")
+	b.WriteString("No incluyas archivos de control en ACK.files: agent_ack.json, director_decisions.json, agent_packet.json, prompts, logs ni checkpoints.\n")
+	b.WriteString("Si detectas que algun archivo necesario queda fuera del write-set, no lo edites; continua con lo permitido y registra el faltante como nota o tarea derivada.\n")
+	b.WriteString("En el ACK, tests debe listar solo pruebas pasadas; cada test obligatorio pasado debe aparecer exactamente como aparece en el paquete.\n")
+	b.WriteString("Si una prueba obligatoria falla, conserva la evidencia en test_receipts/notes y no la declares como pasada.\n")
+	b.WriteString("En modo estricto, anade test_receipts por cada test pasado con comando exacto, status passed, exit_code 0, evidence_refs compactas, occurred_at, sequence y output_redacted=true.\n")
+	b.WriteString("No incluyas HOME real, tokens, secretos, prompts, completions ni transcripts completos.\n")
+	b.WriteString("files y tests deben ser arrays de strings; no metas stdout/stderr crudo en test_receipts ni notes.\n\n")
 	b.WriteString("ACK esperado:\n")
 	b.WriteString("{\"schema_version\":\"codex_agent_ack.v0\",\"request_id\":\"")
 	b.WriteString(packet.RequestID)
@@ -64,7 +114,13 @@ func BuildGeminiAgentPromptWithControlFilesV0(
 	b.WriteString(geminiPromptJSONStringArrayV0(geminiPromptACKFilesV0(packet)))
 	b.WriteString(",\"tests\":")
 	b.WriteString(geminiPromptJSONStringArrayV0(packet.Task.RequiredTests))
-	b.WriteString(",\"notes\":[]}\n\n")
+	if len(geminiCompactPromptValuesV0(packet.Task.RequiredTests)) > 0 {
+		b.WriteString(",\"test_receipts\":")
+		b.WriteString(geminiPromptACKTestReceiptsJSONV0(packet.Task.RequiredTests))
+	}
+	b.WriteString(",\"notes\":")
+	b.WriteString(geminiPromptJSONStringArrayV0(geminiPromptACKNotesV0(packet)))
+	b.WriteString("}\n\n")
 	b.WriteString("Titulo: ")
 	b.WriteString(packet.Task.Title)
 	b.WriteString("\nObjetivo: ")
@@ -86,6 +142,23 @@ func BuildGeminiAgentPromptWithControlFilesV0(
 	return b.String()
 }
 
+func writeGeminiWriteSetPrecedenceProtocolV0(
+	b *strings.Builder,
+	packet orquestaruntime.AgentStartPacketV0,
+) {
+	if orquestaruntime.AgentStartPacketWriteSetClosedV0(packet) {
+		b.WriteString("Usa el write-set del paquete como alcance de escritura; si contiene '.', el alcance es todo el repo del proyecto, pero sigue prohibido borrar o salir del workdir.\n")
+		b.WriteString("Si falta alcance, no edites fuera: conserva lo util dentro del write-set y registra el faltante como nota de revision o tarea derivada.\n")
+		b.WriteString("La unica excepcion son archivos de control indicados por Orquesta.\n")
+		return
+	}
+	b.WriteString("MODO COMPATIBILIDAD LEGACY: usa el write-set como alcance primario y no amplies alcance cuando haya riesgo de causalidad, seguridad o efectos externos.\n")
+}
+
+func geminiPacketTargetsDirectorV0(packet orquestaruntime.AgentStartPacketV0) bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(packet.TargetModule)), "director")
+}
+
 func writeGeminiAckWriteProtocolV0(b *strings.Builder, ackPath string) {
 	if !filepath.IsAbs(ackPath) {
 		return
@@ -93,6 +166,30 @@ func writeGeminiAckWriteProtocolV0(b *strings.Builder, ackPath string) {
 	b.WriteString("PROTOCOLO ACK FUERA DEL PROYECTO: ")
 	b.WriteString(ackPath)
 	b.WriteString(" es fichero de control, no artefacto del proyecto. Escribelo desde su directorio de control y no crees producto alli.\n\n")
+}
+
+func writeGeminiShutdownProtocolV0(b *strings.Builder, requestPath string, ackPath string) {
+	if requestPath == "" || ackPath == "" {
+		return
+	}
+	b.WriteString("CHECKPOINT DE APAGADO: antes de cada bloque de edicion o prueba comprueba si existe ")
+	b.WriteString(requestPath)
+	b.WriteString(".\n")
+	b.WriteString("Si existe, lee ese JSON, para en un punto consistente, no amplias alcance y escribe ")
+	b.WriteString(ackPath)
+	b.WriteString(" con schema codex_shutdown_checkpoint_ack.v0, run_ref, agent_ref, checkpoint_ref y status checkpoint_ready.\n")
+	b.WriteString("Despues del ACK de checkpoint no sigas ejecutando trabajo largo; termina con salida compacta.\n")
+}
+
+func geminiPromptACKNotesV0(packet orquestaruntime.AgentStartPacketV0) []string {
+	notes := []string{}
+	if geminiPacketHasRequiredTruncatedContextV0(packet) {
+		notes = append(notes, "contexto_truncado_resuelto: <motivo>")
+	}
+	if geminiPacketRequiresRefOnlyAckEvidenceV0(packet) {
+		notes = append(notes, "contexto_ref_only_resuelto: <motivo>")
+	}
+	return notes
 }
 
 func geminiPromptJSONStringArrayV0(values []string) string {
@@ -119,11 +216,20 @@ func geminiPromptACKFilesV0(packet orquestaruntime.AgentStartPacketV0) []string 
 
 func geminiPromptACKFileLooksConcreteV0(value string) bool {
 	value = strings.TrimSpace(value)
-	return value != "" &&
-		value != "." &&
-		!strings.HasSuffix(value, "/") &&
-		!strings.Contains(value, "*") &&
-		filepath.Base(value) != "."
+	if value == "" || value == "." || strings.ContainsAny(value, "*?[") ||
+		strings.HasSuffix(value, "/") {
+		return false
+	}
+	base := pathpkg.Base(value)
+	if strings.Contains(base, ".") {
+		return true
+	}
+	switch strings.ToLower(base) {
+	case "makefile", "readme", "license":
+		return true
+	default:
+		return false
+	}
 }
 
 func writeGeminiPromptListSectionV0(b *strings.Builder, title string, values []string) {
@@ -161,5 +267,37 @@ func cleanGeminiControlPathV0(value string, fallback string) string {
 	if value == "" {
 		return fallback
 	}
-	return value
+	return filepath.Clean(value)
+}
+
+func geminiPromptACKTestReceiptsJSONV0(commands []string) string {
+	type promptReceiptV0 struct {
+		SchemaVersion  string   `json:"schema_version"`
+		Command        string   `json:"command"`
+		Status         string   `json:"status"`
+		ExitCode       int      `json:"exit_code"`
+		EvidenceRefs   []string `json:"evidence_refs"`
+		OccurredAt     string   `json:"occurred_at"`
+		Sequence       int      `json:"sequence"`
+		OutputRedacted bool     `json:"output_redacted"`
+	}
+	compact := geminiCompactPromptValuesV0(commands)
+	receipts := make([]promptReceiptV0, 0, len(compact))
+	for index, command := range compact {
+		receipts = append(receipts, promptReceiptV0{
+			SchemaVersion:  "codex_required_test_receipt.v0",
+			Command:        command,
+			Status:         "passed",
+			ExitCode:       0,
+			EvidenceRefs:   []string{"required-test-receipt-ref-<compacta>"},
+			OccurredAt:     "<RFC3339>",
+			Sequence:       index + 1,
+			OutputRedacted: true,
+		})
+	}
+	data, err := json.Marshal(receipts)
+	if err != nil {
+		return "[]"
+	}
+	return string(data)
 }

@@ -17,7 +17,7 @@ func TestWorkspaceRelativePathAllowedV0AceptaRutasRelativasSeguras(t *testing.T)
 	}
 }
 
-func TestWorkspaceRelativePathAllowedV0RaizSoloSiSePermite(t *testing.T) {
+func TestWorkspaceRelativePathAllowedV0PermiteRaizSoloConAllowRoot(t *testing.T) {
 	if !WorkspaceRelativePathAllowedV0(".", true) {
 		t.Fatal("root write-set deberia permitirse con allowRoot")
 	}
@@ -26,9 +26,11 @@ func TestWorkspaceRelativePathAllowedV0RaizSoloSiSePermite(t *testing.T) {
 	}
 }
 
-func TestWorkspaceRelativePathAllowedV0RechazaSalidaDelWorkspace(t *testing.T) {
+func TestWorkspaceRelativePathAllowedV0RechazaRutasEstructuralmenteInseguras(t *testing.T) {
+	if WorkspaceRelativePathAllowedV0("", true) {
+		t.Fatal("ruta vacia no debe aceptarse")
+	}
 	for _, path := range []string{
-		"",
 		"/tmp/fuera",
 		"../fuera",
 		"modulos/../fuera",
@@ -57,10 +59,10 @@ func TestPathInsideWorkspaceV0(t *testing.T) {
 	}
 }
 
-func TestCommandTextContainsDestructiveFilesystemOperationV0(t *testing.T) {
+func TestCommandTextContainsDestructiveFilesystemOperationV0RailsOfflineNoBloquea(t *testing.T) {
 	for _, command := range []string{"rm -rf docs", "rmdir build", "os.RemoveAll(path)"} {
-		if !CommandTextContainsDestructiveFilesystemOperationV0(command) {
-			t.Fatalf("operacion destructiva no detectada: %q", command)
+		if CommandTextContainsDestructiveFilesystemOperationV0(command) {
+			t.Fatalf("rails offline no debe marcar comando por heuristica: %q", command)
 		}
 	}
 	for _, command := range []string{"go test ./...", "git status --short", "mkdir -p docs"} {

@@ -16,7 +16,7 @@ var residualGoFileBudgetBaselineV0 = map[string]int{
 	"cmd/orquesta-server/idle_self_improvement_backlog_planner_v0.go":                319,
 	"cmd/orquesta-server/idle_self_improvement_stack_v0.go":                          333,
 	"cmd/orquesta-server/mcp_real_transport_v0.go":                                   610,
-	"cmd/orquesta-server/server_env_registry_v0.go":                                  319,
+	"cmd/orquesta-server/server_env_registry_v0.go":                                  321,
 	"cmd/orquesta-server/stack.go":                                                   352,
 	"modulos/orquesta-core-workflow/run_state_validation_v0.go":                      303,
 	"modulos/orquesta-core-workflow/work_items_validation_v0.go":                     306,

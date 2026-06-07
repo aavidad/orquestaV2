@@ -41,6 +41,7 @@ func TestServerDaemonStartEnvironmentV0UsaAllowlistYDerivaRuntime(t *testing.T) 
 		"ORQUESTA_CODEX_PROJECT_WORKDIR=" + projectDir,
 		"ORQUESTA_CODEX_RUNTIME_WORKDIR=" + runtimeDir,
 		envStartupCleanupModeV0 + "=" + startupCleanupModeDiagnoseV0,
+		envRailsModeV0 + "=" + railsModeServerDefaultV0,
 		detailProhibitedRailsEnvV0 + "=" + detailProhibitedRailsServerDefaultV0,
 	} {
 		if !strings.Contains(body, want) {

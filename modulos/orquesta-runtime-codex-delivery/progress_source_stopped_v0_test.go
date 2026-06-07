@@ -153,7 +153,7 @@ func TestCodexProgressObservationSourceV0NoClasificaCapacidadPorTextoSinACK(t *t
 	}
 }
 
-func TestCodexProgressObservationSourceV0ClasificaAuthInvalidaSinACK(t *testing.T) {
+func TestCodexProgressObservationSourceV0NoClasificaAuthPorTextoLibreSinACK(t *testing.T) {
 	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
 	source := codexProgressSourceForTestV0(t, spec, ackPath)
 	source.SnapshotSource = stoppedSnapshotSourceForProgressTestV0{}
@@ -179,13 +179,13 @@ func TestCodexProgressObservationSourceV0ClasificaAuthInvalidaSinACK(t *testing.
 	report := got[0].Report
 	if report.Status != orquestaruntime.AgentStoppedV0 ||
 		!report.DecisionRequired ||
-		!stringInCodexDeliverySetV0(report.EvidenceRefs, "evidence-ref-auth-config-blocker") {
-		t.Fatalf("report auth inesperado: %+v", report)
+		!stringInCodexDeliverySetV0(report.EvidenceRefs, "evidence-ref-no-ack") {
+		t.Fatalf("report no_ack inesperado: %+v", report)
 	}
 	if report.BudgetStatus != "" ||
-		stringInCodexDeliverySetV0(report.EvidenceRefs, "evidence-ref-no-ack") ||
+		stringInCodexDeliverySetV0(report.EvidenceRefs, "evidence-ref-auth-config-blocker") ||
 		stringInCodexDeliverySetV0(report.EvidenceRefs, "evidence-ref-capacity-warning") {
-		t.Fatalf("auth invalida no debe mezclarse con no_ack/capacity: %+v", report)
+		t.Fatalf("texto libre no debe generar auth/capacity: %+v", report)
 	}
 	if codexProgressObservationLeaksPathV0(got[0], ackPath) {
 		t.Fatalf("observacion filtra path: %+v", got[0])

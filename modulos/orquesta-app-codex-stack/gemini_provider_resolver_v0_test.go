@@ -33,10 +33,107 @@ func TestProviderLaunchSpecResolverV0RuteaVisualAssetAGemini(t *testing.T) {
 		resolution.Spec,
 	)
 	if len(issues) != 0 {
+		t.Fatalf("issues=%+v evidence=%v", issues, issues[0].Evidence)
+	}
+	if !strings.HasPrefix(req.CommandPath, geminiRuntimeDir) {
+		t.Fatalf("command path=%s want under %s", req.CommandPath, geminiRuntimeDir)
+	}
+}
+
+func TestProviderLaunchSpecResolverV0RuteaReviewGeminiAGemini(t *testing.T) {
+	resolver, inbound, geminiRuntimeDir := geminiProviderResolverForTestV0(
+		t,
+		"review_gemini",
+	)
+	resolution, err := resolver.ResolveExternalAgentLaunchSpecV0(context.Background(), inbound)
+	if err != nil {
+		t.Fatalf("ResolveExternalAgentLaunchSpecV0: %v", err)
+	}
+	if !strings.Contains(resolution.Spec.ConnectorRef, "gemini") {
+		t.Fatalf("spec no ruteada a Gemini: %+v", resolution.Spec)
+	}
+	req, issues := resolution.CommandResolver.ResolveExternalAgentProcessCommandV0(
+		context.Background(),
+		resolution.Spec,
+	)
+	if len(issues) != 0 {
 		t.Fatalf("issues=%+v", issues)
 	}
 	if !strings.HasPrefix(req.CommandPath, geminiRuntimeDir) {
 		t.Fatalf("command path=%s want under %s", req.CommandPath, geminiRuntimeDir)
+	}
+}
+
+func TestProviderLaunchSpecResolverV0RuteaCandidatoGeminiAGemini(t *testing.T) {
+	resolver, inbound, geminiRuntimeDir := geminiProviderResolverForTestV0(
+		t,
+		"generate_agent_candidate_gemini",
+	)
+	resolution, err := resolver.ResolveExternalAgentLaunchSpecV0(context.Background(), inbound)
+	if err != nil {
+		t.Fatalf("ResolveExternalAgentLaunchSpecV0: %v", err)
+	}
+	if !strings.Contains(resolution.Spec.ConnectorRef, "gemini") {
+		t.Fatalf("spec no ruteada a Gemini: %+v", resolution.Spec)
+	}
+	req, issues := resolution.CommandResolver.ResolveExternalAgentProcessCommandV0(
+		context.Background(),
+		resolution.Spec,
+	)
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if !strings.HasPrefix(req.CommandPath, geminiRuntimeDir) {
+		t.Fatalf("command path=%s want under %s", req.CommandPath, geminiRuntimeDir)
+	}
+}
+
+func TestProviderLaunchSpecResolverV0RuteaReviewClaudeAClaude(t *testing.T) {
+	resolver, inbound, _, claudeRuntimeDir := providerResolverForTestV0(
+		t,
+		"review_claude",
+	)
+	resolution, err := resolver.ResolveExternalAgentLaunchSpecV0(context.Background(), inbound)
+	if err != nil {
+		t.Fatalf("ResolveExternalAgentLaunchSpecV0: %v", err)
+	}
+	if !strings.Contains(resolution.Spec.ConnectorRef, "claude") ||
+		resolution.Spec.AgentPacket.TargetModule != "orquesta-app-stack-revision" {
+		t.Fatalf("spec no ruteada a Claude: %+v", resolution.Spec)
+	}
+	req, issues := resolution.CommandResolver.ResolveExternalAgentProcessCommandV0(
+		context.Background(),
+		resolution.Spec,
+	)
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if !strings.HasPrefix(req.CommandPath, claudeRuntimeDir) {
+		t.Fatalf("command path=%s want under %s", req.CommandPath, claudeRuntimeDir)
+	}
+}
+
+func TestProviderLaunchSpecResolverV0RuteaVotoClaudeAClaude(t *testing.T) {
+	resolver, inbound, _, claudeRuntimeDir := providerResolverForTestV0(
+		t,
+		"vote_agent_candidates_claude",
+	)
+	resolution, err := resolver.ResolveExternalAgentLaunchSpecV0(context.Background(), inbound)
+	if err != nil {
+		t.Fatalf("ResolveExternalAgentLaunchSpecV0: %v", err)
+	}
+	if !strings.Contains(resolution.Spec.ConnectorRef, "claude") {
+		t.Fatalf("spec no ruteada a Claude: %+v", resolution.Spec)
+	}
+	req, issues := resolution.CommandResolver.ResolveExternalAgentProcessCommandV0(
+		context.Background(),
+		resolution.Spec,
+	)
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if !strings.HasPrefix(req.CommandPath, claudeRuntimeDir) {
+		t.Fatalf("command path=%s want under %s", req.CommandPath, claudeRuntimeDir)
 	}
 }
 
@@ -78,15 +175,47 @@ func TestProviderAwareAckPathResolverV0UsaRuntimeGeminiParaSpecGemini(t *testing
 	}
 }
 
+func TestProviderAwareAckPathResolverV0UsaRuntimeClaudeParaSpecClaude(t *testing.T) {
+	root := t.TempDir()
+	codexRuntime := filepath.Join(root, "codex-runtime")
+	claudeRuntime := filepath.Join(root, "claude-runtime")
+	path, err := (providerAwareAckPathResolverV0{
+		Codex: CodexRuntimeConfigV0{
+			ProjectWorkDir: filepath.Join(root, "project"),
+			RuntimeWorkDir: codexRuntime,
+		},
+		Claude: ClaudeRuntimeConfigV0{
+			Enabled:        true,
+			ProjectWorkDir: filepath.Join(root, "project"),
+			RuntimeWorkDir: claudeRuntime,
+		},
+	}).ResolveCodexReceiptAckPathV0(context.Background(), orquestaruntimecodexdeliveryRequestWithConnectorForTestV0("connector-ref-app-stack-claude-review"))
+	if err != nil {
+		t.Fatalf("ResolveCodexReceiptAckPathV0: %v", err)
+	}
+	if !strings.HasPrefix(path.AckPath, claudeRuntime) {
+		t.Fatalf("ack_path=%s want under %s", path.AckPath, claudeRuntime)
+	}
+}
+
 func geminiProviderResolverForTestV0(
 	t *testing.T,
 	workKind string,
 ) (providerLaunchSpecResolverV0, orquestaruntime.AgentLauncherInboundV0, string) {
+	resolver, inbound, geminiRuntimeDir, _ := providerResolverForTestV0(t, workKind)
+	return resolver, inbound, geminiRuntimeDir
+}
+
+func providerResolverForTestV0(
+	t *testing.T,
+	workKind string,
+) (providerLaunchSpecResolverV0, orquestaruntime.AgentLauncherInboundV0, string, string) {
 	t.Helper()
 	root := t.TempDir()
 	projectDir := filepath.Join(root, "project")
 	codexRuntimeDir := filepath.Join(root, "codex-runtime")
 	geminiRuntimeDir := filepath.Join(root, "gemini-runtime")
+	claudeRuntimeDir := filepath.Join(root, "claude-runtime")
 	changeRef := "change-ref-provider-visual"
 	runRef := "run-ref-provider-visual"
 	taskRef := orquestaappchangedirectorsource.AppChangeTaskRefV0(changeRef)
@@ -150,6 +279,19 @@ func geminiProviderResolverForTestV0(
 			TaskStore:      taskStore,
 			AppChangeStore: appChangeStore,
 		},
+		Claude: ClaudeLaunchSpecResolverV0{
+			Config: ClaudeRuntimeConfigV0{
+				Enabled:        true,
+				CommandPath:    filepath.Join(root, "claude"),
+				ProjectWorkDir: projectDir,
+				RuntimeWorkDir: claudeRuntimeDir,
+				PermissionMode: "dontAsk",
+				OutputFormat:   "text",
+			},
+			CodexConfig:    codexConfig,
+			TaskStore:      taskStore,
+			AppChangeStore: appChangeStore,
+		},
 	}
 	return resolver, orquestaruntime.AgentLauncherInboundV0{
 		CorrelationID: "correlation-ref-provider-visual",
@@ -162,15 +304,19 @@ func geminiProviderResolverForTestV0(
 			CapacityRequestRef: "capacity-ref-provider-visual",
 			Summary:            "external_work",
 		},
-	}, geminiRuntimeDir
+	}, geminiRuntimeDir, claudeRuntimeDir
 }
 
 func orquestaruntimecodexdeliveryRequestForTestV0() orquestaruntimecodexdelivery.CodexReceiptAckPathRequestV0 {
+	return orquestaruntimecodexdeliveryRequestWithConnectorForTestV0("connector-ref-app-stack-gemini-visual")
+}
+
+func orquestaruntimecodexdeliveryRequestWithConnectorForTestV0(connectorRef string) orquestaruntimecodexdelivery.CodexReceiptAckPathRequestV0 {
 	return orquestaruntimecodexdelivery.CodexReceiptAckPathRequestV0{
 		RunID:    "run-ref-provider-visual",
 		AgentRef: "agent-ref-provider-visual",
 		Spec: orquestaruntime.ExternalAgentLaunchSpecV0{
-			ConnectorRef: "connector-ref-app-stack-gemini-visual",
+			ConnectorRef: connectorRef,
 		},
 	}
 }

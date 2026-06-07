@@ -4,13 +4,12 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
 )
 
-func TestCodexReceiptWorktreeBaselineRecorderV0ConservaDetalleDeIssue(t *testing.T) {
+func TestCodexReceiptWorktreeBaselineRecorderV0NoBloqueaIssueDeSnapshot(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "grande.txt"), []byte("contenido"), 0o600); err != nil {
 		t.Fatalf("write fixture: %v", err)
@@ -24,28 +23,17 @@ func TestCodexReceiptWorktreeBaselineRecorderV0ConservaDetalleDeIssue(t *testing
 		},
 	}
 
-	_, err := recorder.CaptureCodexReceiptWorktreeBaselineV0(
+	resolution, err := recorder.CaptureCodexReceiptWorktreeBaselineV0(
 		context.Background(),
 		CodexReceiptWorktreeBaselineRequestV0{
 			DescriptorRef:  "descriptor-ref-baseline-detail",
 			ProjectWorkDir: root,
 		},
 	)
-	if err == nil {
-		t.Fatalf("CaptureCodexReceiptWorktreeBaselineV0 sin error")
+	if err != nil {
+		t.Fatalf("CaptureCodexReceiptWorktreeBaselineV0 bloqueo launch: %v", err)
 	}
-	got := err.Error()
-	for _, want := range []string{
-		"codex_worktree_baseline: capture_failed",
-		"code=worktree_snapshot_file_too_large",
-		"field=file",
-		"evidence=grande.txt",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("error=%q missing=%q", got, want)
-		}
-	}
-	if strings.Contains(got, root) {
-		t.Fatalf("error filtra path absoluto: %q", got)
+	if resolution.BaselineRef != "" {
+		t.Fatalf("baseline inesperada=%q", resolution.BaselineRef)
 	}
 }

@@ -10,7 +10,10 @@ import (
 	"testing"
 	"time"
 
+	orquestaappchangedirectorsource "orquesta/modulos/orquesta-app-change-director-source"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadirectoragent "orquesta/modulos/orquesta-director-agent"
+	orquestadirectoragentworkflow "orquesta/modulos/orquesta-director-agent-workflow"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
@@ -292,6 +295,141 @@ func TestCodexStackV0RecoverNoReanudaStoppedSiRetryCerradoExisteV0(t *testing.T)
 	}
 }
 
+func TestCodexStackV0RecoverReanudaAppChangeAutoplanBloqueadoSinMicrotareaV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	director := postDirectorAPIV0(t, stack)
+	change := postOPESExternalWorkChangeV0(t, stack, opesExternalWorkChangeV0(director.RunRef))
+	run, err := stack.Stores.RunStore.LoadRunV0(context.Background(), director.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	refs := appChangeAutoPlanRefsForRecoveryTestV0(t, stack, run)
+	run = codexStackRunWithActivePhaseForTestV0(run, orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0)
+	run.Status = orquestacoreworkflow.OrchestrationRunStatusBlockedV0
+	run.DirectorAnsweredQuestions = []string{change.DirectorQuestionRef}
+	run.DirectorAnswers = nil
+	run.Decisions = []string{refs.DecisionRef}
+	run.FunctionContracts = nil
+	run.Tasks = nil
+	run.Blockers = []string{
+		"app-director-decision-director-decision-apply-error-director-decision-" + refs.TaskDecisionRef,
+	}
+	if err := stack.Stores.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0 blocked: %v", err)
+	}
+	setRunQueueCandidateForTestV0(
+		t,
+		stack,
+		director.RunRef,
+		orquestarunqueue.RunStatusReadyV0,
+		90,
+		time.Date(2026, 6, 2, 12, 0, 0, 0, time.UTC),
+	)
+
+	if err := stack.recoverQueuedStoppedActiveRunsV0(context.Background(), globalTickCommandForTestV0()); err != nil {
+		t.Fatalf("recoverQueuedStoppedActiveRunsV0: %v", err)
+	}
+	recovered, err := stack.Stores.RunStore.LoadRunV0(context.Background(), director.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 recovered: %v", err)
+	}
+	if recovered.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 || len(recovered.Blockers) != 0 {
+		t.Fatalf("run no recuperada: status=%s blockers=%v", recovered.Status, recovered.Blockers)
+	}
+
+	if _, err := stack.DrainRunV0(context.Background(), DrainRunRequestV0{
+		RunRef:               director.RunRef,
+		CorrelationID:        "corr-recover-app-change-autoplan",
+		MaxBursts:            16,
+		MaxStepsPerBurst:     8,
+		MaxDispatchesPerWait: 8,
+		MaxExternalWaits:     2,
+	}); err != nil {
+		t.Fatalf("DrainRunV0: %v", err)
+	}
+	drained, err := stack.Stores.RunStore.LoadRunV0(context.Background(), director.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 drained: %v", err)
+	}
+	if !codexStackStringInSetForTestV0(drained.Tasks, refs.TaskRef) {
+		t.Fatalf("microtarea no materializada: tasks=%v want=%s blockers=%v", drained.Tasks, refs.TaskRef, drained.Blockers)
+	}
+}
+
+func TestCodexStackV0RecoverNoReanudaAppChangeConBlockerAjenoV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	director := postDirectorAPIV0(t, stack)
+	change := postOPESExternalWorkChangeV0(t, stack, opesExternalWorkChangeV0(director.RunRef))
+	run, err := stack.Stores.RunStore.LoadRunV0(context.Background(), director.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	refs := appChangeAutoPlanRefsForRecoveryTestV0(t, stack, run)
+	run = codexStackRunWithActivePhaseForTestV0(run, orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0)
+	run.Status = orquestacoreworkflow.OrchestrationRunStatusBlockedV0
+	run.DirectorAnsweredQuestions = []string{change.DirectorQuestionRef}
+	run.Decisions = []string{refs.DecisionRef}
+	run.Blockers = []string{
+		"app-director-decision-director-decision-apply-error-director-decision-" + refs.TaskDecisionRef,
+		"security-sensitive-payload-blocked",
+	}
+	if err := stack.Stores.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0 blocked: %v", err)
+	}
+
+	recovered, ok, err := stack.recoverBlockedAppChangeAutoPlanRunV0(
+		context.Background(),
+		globalTickCommandForTestV0(),
+		orquestaruncontrol.DefaultRunControlStateV0(director.RunRef),
+		run,
+	)
+	if err != nil {
+		t.Fatalf("recoverBlockedAppChangeAutoPlanRunV0: %v", err)
+	}
+	if ok || recovered.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 {
+		t.Fatalf("no debe recuperar blockers mixtos: ok=%v recovered=%+v", ok, recovered)
+	}
+}
+
+func TestCodexStackV0RecoverNoReanudaAppChangeConStopHumanoV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	director := postDirectorAPIV0(t, stack)
+	change := postOPESExternalWorkChangeV0(t, stack, opesExternalWorkChangeV0(director.RunRef))
+	run, err := stack.Stores.RunStore.LoadRunV0(context.Background(), director.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	refs := appChangeAutoPlanRefsForRecoveryTestV0(t, stack, run)
+	run = codexStackRunWithActivePhaseForTestV0(run, orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0)
+	run.Status = orquestacoreworkflow.OrchestrationRunStatusBlockedV0
+	run.DirectorAnsweredQuestions = []string{change.DirectorQuestionRef}
+	run.Decisions = []string{refs.DecisionRef}
+	run.Blockers = []string{
+		"app-director-decision-director-decision-apply-error-director-decision-" + refs.TaskDecisionRef,
+	}
+	stopped, err := stack.Stores.RunControl.StopRunV0(context.Background(), orquestaruncontrol.StopRunCommandV0{
+		RunRef:      director.RunRef,
+		RequestedBy: "operador-humano",
+		Reason:      "parada manual",
+	})
+	if err != nil {
+		t.Fatalf("StopRunV0: %v", err)
+	}
+
+	recovered, ok, err := stack.recoverBlockedAppChangeAutoPlanRunV0(
+		context.Background(),
+		globalTickCommandForTestV0(),
+		stopped,
+		run,
+	)
+	if err != nil {
+		t.Fatalf("recoverBlockedAppChangeAutoPlanRunV0: %v", err)
+	}
+	if ok || recovered.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 {
+		t.Fatalf("no debe recuperar stop humano: ok=%v recovered=%+v", ok, recovered)
+	}
+}
+
 func TestCodexStackV0RecoverReanudaSoloUltimoStoppedUtilV0(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	baseRef := "request-ref-autoprogramming-backlog-tx-latest-001"
@@ -481,6 +619,71 @@ func TestCodexStackV0RecoverTerminalizaRunRunningConStopCheckpointSinAgentesPend
 		all[0].Status != orquestarunqueue.RunStatusStoppedV0 ||
 		!codexStackStringInSetV0(all[0].EvidenceRefs, "evidence-ref-run-queue-run-control-blocked-reconciled") {
 		t.Fatalf("queue all=%+v", all)
+	}
+}
+
+func TestCodexStackV0RecoverNoTerminalizaStopConDomainWorkPendienteV0(t *testing.T) {
+	ledger := NewInMemoryDomainWorkArtifactSubmissionLedgerV0()
+	stack := mustBuildCodexStackWithDomainWorkForTestV0(
+		t,
+		newFakeCodexStackRuntimeV0(),
+		&fakeCodexStackDomainWorkExecutorV0{},
+	)
+	stack.DomainDelivery.Ledger = ledger
+	runRef := "request-ref-domain-work-stop-pending-001"
+	if err := ledger.RecordDomainWorkArtifactSubmissionV0(context.Background(), DomainWorkArtifactSubmissionRecordV0{
+		IdempotencyKey: "idem-domain-work-stop-pending-001",
+		Status:         DomainWorkArtifactSubmissionStatusSubmittingV0,
+		RunRef:         runRef,
+		TaskRef:        "task-ref-domain-work-stop-pending-001",
+		DeliveryRef:    "delivery-ref-domain-work-stop-pending-001",
+		DomainRef:      "opes",
+		JobRef:         "job-ref-domain-work-stop-pending-001",
+		ArtifactRef:    "artifact-ref-domain-work-stop-pending-001",
+		ArtifactType:   "visual_asset",
+	}); err != nil {
+		t.Fatalf("RecordDomainWorkArtifactSubmissionV0: %v", err)
+	}
+	state, err := stack.Stores.RunControl.StopRunV0(context.Background(), orquestaruncontrol.StopRunCommandV0{
+		RunRef:       runRef,
+		RequestedBy:  "orquesta-director",
+		Reason:       "reinicio ordenado con domain work pendiente",
+		EvidenceRefs: []string{"evidence-ref-test-domain-work-pending-stop"},
+	})
+	if err != nil {
+		t.Fatalf("StopRunV0: %v", err)
+	}
+
+	if err := stack.completeQueuedRunControlIfStopHasNoPendingAgentsV0(
+		context.Background(),
+		globalTickCommandForTestV0(),
+		orquestarunqueue.RunSchedulingCandidateV0{
+			RunRef:        runRef,
+			AppRef:        "project-ref-orquesta-server",
+			Status:        orquestarunqueue.RunStatusRunningV0,
+			PriorityScore: 80,
+			UpdatedAt:     time.Date(2026, 5, 27, 14, 30, 0, 0, time.UTC),
+		},
+		state,
+		orquestacoreworkflow.OrchestrationRunV0{
+			SchemaVersion: orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
+			RunID:         runRef,
+			Status:        orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+			CurrentPhase:  orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		},
+	); err != nil {
+		t.Fatalf("completeQueuedRunControlIfStopHasNoPendingAgentsV0: %v", err)
+	}
+	state, err = stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: runRef},
+	)
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0: %v", err)
+	}
+	if state.Status == orquestaruncontrol.RunControlStatusStoppedV0 ||
+		codexStackStringInSetV0(state.EvidenceRefs, "evidence-ref-run-control-complete-no-pending-agents") {
+		t.Fatalf("run-control terminalizado con domain work pendiente: %+v", state)
 	}
 }
 
@@ -827,6 +1030,96 @@ func setStackRunPriorityForTestV0(
 	if result.Estado != orquestamcp.MCPRunQueuePriorityEstadoOKV0 {
 		t.Fatalf("priority result=%+v", result)
 	}
+}
+
+type appChangeAutoPlanRefsForRecoveryV0 struct {
+	AnswerRef       string
+	DecisionRef     string
+	ContractRef     string
+	TaskDecisionRef string
+	TaskRef         string
+}
+
+func appChangeAutoPlanRefsForRecoveryTestV0(
+	t *testing.T,
+	stack StackV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) appChangeAutoPlanRefsForRecoveryV0 {
+	t.Helper()
+	decisions, err := (orquestaappchangedirectorsource.AppChangeDirectorDecisionSourceV0{
+		Store: stack.Stores.AppChangeStore,
+	}).ListDirectorAgentDecisionsV0(
+		context.Background(),
+		orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+	)
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	refs := appChangeAutoPlanRefsForRecoveryV0{}
+	for _, decision := range decisions {
+		switch decision.CommandType {
+		case orquestadirectoragent.DirectorAgentCommandAnswerQuestionV0:
+			if decision.AnswerQuestion != nil {
+				refs.AnswerRef = decision.AnswerQuestion.AnswerID
+			}
+		case orquestadirectoragent.DirectorAgentCommandAcceptDecisionV0:
+			if decision.AcceptDecision != nil {
+				refs.DecisionRef = decision.AcceptDecision.DecisionRef
+			}
+		case orquestadirectoragent.DirectorAgentCommandPublishContractV0:
+			if decision.PublishContract != nil {
+				refs.ContractRef = decision.PublishContract.ContractRef
+			}
+		case orquestadirectoragent.DirectorAgentCommandCreateMicrotaskV0:
+			refs.TaskDecisionRef = decision.DecisionRef
+			if decision.CreateMicrotask != nil {
+				refs.TaskRef = decision.CreateMicrotask.Task.TaskID
+			}
+		}
+	}
+	if refs.AnswerRef == "" ||
+		refs.DecisionRef == "" ||
+		refs.ContractRef == "" ||
+		refs.TaskDecisionRef == "" ||
+		refs.TaskRef == "" {
+		t.Fatalf("refs incompletas desde decisiones: refs=%+v decisions=%+v", refs, decisions)
+	}
+	return refs
+}
+
+func codexStackRunWithActivePhaseForTestV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	phase orquestacoreworkflow.OrchestrationPhaseIDV0,
+) orquestacoreworkflow.OrchestrationRunV0 {
+	run.CurrentPhase = phase
+	hasTarget := false
+	hasProgramming := false
+	for index := range run.Phases {
+		if run.Phases[index].ID == phase {
+			run.Phases[index].Status = orquestacoreworkflow.OrchestrationPhaseStatusActiveV0
+			hasTarget = true
+			continue
+		}
+		if run.Phases[index].ID == orquestacoreworkflow.OrchestrationPhaseProgramacionV0 {
+			hasProgramming = true
+		}
+		if run.Phases[index].Status == orquestacoreworkflow.OrchestrationPhaseStatusActiveV0 {
+			run.Phases[index].Status = orquestacoreworkflow.OrchestrationPhaseStatusPendingV0
+		}
+	}
+	if !hasTarget {
+		run.Phases = append(run.Phases, orquestacoreworkflow.OrchestrationPhaseV0{
+			ID:     phase,
+			Status: orquestacoreworkflow.OrchestrationPhaseStatusActiveV0,
+		})
+	}
+	if !hasProgramming {
+		run.Phases = append(run.Phases, orquestacoreworkflow.OrchestrationPhaseV0{
+			ID:     orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+			Status: orquestacoreworkflow.OrchestrationPhaseStatusPendingV0,
+		})
+	}
+	return run
 }
 
 func setRunQueueCandidateForTestV0(

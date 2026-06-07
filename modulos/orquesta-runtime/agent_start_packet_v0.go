@@ -1,11 +1,9 @@
 package orquestaruntime
 
 import (
-	"encoding/json"
 	"strings"
 
 	orquestacontext "orquesta/modulos/orquesta-context"
-	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func BuildAgentStartPacketV0(
@@ -136,24 +134,90 @@ func runtimeLaunchIssueV0(code RuntimeLaunchErrorCodeV0, field string) RuntimeLa
 }
 
 func agentStartPacketHasForbiddenOperationalDetailV0(packet AgentStartPacketV0) bool {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return false
+	values := []string{
+		packet.RequestID,
+		packet.CorrelationID,
+		packet.WorkOrderRef,
+		packet.TargetModule,
+		packet.Phase,
+		packet.CapacityLevel,
+		packet.Locale,
+		packet.Task.TaskRef,
+		packet.Task.Title,
+		packet.Task.Objective,
+		packet.Task.TargetSymbol,
+		packet.Task.ParentTaskRef,
+		packet.Task.CohortRef,
+		packet.Task.WaveRef,
+		packet.DeliveryRefs.MailboxRef,
+		packet.DeliveryRefs.AckRef,
+		packet.DeliveryRefs.ReadinessRef,
+		packet.DeliveryRefs.CheckpointRef,
+		packet.Context.BundleRef,
+		packet.Context.WorkOrderRef,
+		packet.Context.TargetModule,
+		packet.Context.DirectorQuestionHint,
 	}
-	data, err := json.Marshal(packet)
-	if err != nil {
-		return true
+	values = append(values, packet.Task.WriteSet...)
+	values = append(values, packet.Task.RequiredTests...)
+	values = append(values, packet.Task.DoneCriteria...)
+	values = append(values, packet.Task.ChildTaskRefs...)
+	values = append(values, packet.Policies...)
+	for _, entry := range packet.Context.Entries {
+		values = append(values,
+			entry.EntryRef,
+			entry.SourceRef,
+			string(entry.Layer),
+			string(entry.Kind),
+			string(entry.Mode),
+			entry.Content,
+			entry.RefOnlyReason,
+			entry.RequiredRefAction,
+		)
 	}
-	lower := strings.ToLower(string(data))
-	for _, fragment := range []string{
-		"provider-ref", "home-ref", "credential-ref", "oauth_ref",
-		"model-ref", "bearer ", "access_token", "refresh_token",
-	} {
-		if strings.Contains(lower, fragment) {
+	for _, evidence := range packet.Context.SanitizationEvidence {
+		values = append(values,
+			evidence.EvidenceRef,
+			evidence.BundleRef,
+			evidence.WorkOrderRef,
+			evidence.TargetModule,
+			evidence.EntryRef,
+			evidence.SourceRef,
+			evidence.SanitizerRef,
+			string(evidence.Status),
+		)
+		values = append(values, evidence.Categories...)
+	}
+	for _, value := range values {
+		if agentStartPacketValueHasForbiddenOperationalDetailV0(value) {
 			return true
 		}
 	}
-	if agentStartPacketHasSecretPrefixV0(lower) {
+	return false
+}
+
+func agentStartPacketValueHasForbiddenOperationalDetailV0(value string) bool {
+	lower := strings.ToLower(strings.TrimSpace(value))
+	if lower == "" {
+		return false
+	}
+	if looksLikeSecret(lower) || agentStartPacketHasSecretPrefixV0(lower) {
 		return true
+	}
+	for _, marker := range []string{
+		"authorization:",
+		"bearer ",
+		"prompt=",
+		"prompt:",
+		"completion=",
+		"completion:",
+		"transcript=",
+		"transcript:",
+		"-----begin ",
+	} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
 	}
 	return false
 }

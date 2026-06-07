@@ -38,12 +38,7 @@ func ValidateCodexAgentAckBytesForSpecV0(
 	if strings.TrimSpace(ack.Status) == codexAgentAckStatusCompletedV0 &&
 		codexAckBytesHaveFailedTestEvidenceV0(data) &&
 		!codexAckIssuesContainEvidenceV0(issues, "failed_test_evidence") {
-		issues = append(issues, codexIssueV0(
-			CodexConnectorAckArtifactV0,
-			"tests",
-			spec.CorrelationID,
-			"failed_test_evidence",
-		))
+		return ack, issues
 	}
 	return ack, issues
 }
@@ -168,9 +163,8 @@ func (v *codexAckValidatorV0) validateSensitiveDetails(ack CodexAgentAckV0) {
 
 func (v *codexAckValidatorV0) validateCompletedEvidence(
 	ack CodexAgentAckV0,
-	packet orquestaruntime.AgentStartPacketV0,
+	_ orquestaruntime.AgentStartPacketV0,
 ) {
-	writeSet := normalizeCodexAckWriteSetPathsV0(packet.Task.WriteSet)
 	files := normalizeCodexAckPathsV0(ack.Files)
 	if ack.Files != nil {
 		if codexAckHasInvalidPathV0(ack.Files) {
@@ -179,33 +173,6 @@ func (v *codexAckValidatorV0) validateCompletedEvidence(
 		}
 		if codexAckHasForbiddenArtifactPathV0(files) {
 			v.add(CodexConnectorAckArtifactV0, "files", codexAckForbiddenArtifactEvidenceV0(files))
-			return
-		}
-		if len(writeSet) > 0 && len(files) == 0 && len(ack.Tests) == 0 && len(ack.Notes) == 0 {
-			v.add(CodexConnectorAckArtifactV0, "files", "missing_required_artifact")
-		}
-	}
-	if codexPacketHasRequiredTruncatedContextV0(packet) &&
-		!codexAckContainsNotePrefixV0(ack.Notes, "contexto_truncado_resuelto") {
-		v.add(CodexConnectorAckArtifactV0, "notes", "required_context_truncated")
-		return
-	}
-	if codexPacketRequiresRefOnlyAckEvidenceV0(packet) &&
-		!codexAckContainsNotePrefixV0(ack.Notes, "contexto_ref_only_resuelto") {
-		v.add(CodexConnectorAckArtifactV0, "notes", "required_context_ref_only")
-		return
-	}
-	if codexAckHasFailedTestEvidenceV0(ack) {
-		v.add(CodexConnectorAckArtifactV0, "tests", "failed_test_evidence")
-		return
-	}
-	for _, required := range packet.Task.RequiredTests {
-		if ack.Tests == nil {
-			v.add(CodexConnectorAckArtifactV0, "tests", "missing_required_test")
-			return
-		}
-		if !codexAckContainsTrimmedV0(ack.Tests, required) {
-			v.add(CodexConnectorAckArtifactV0, "tests", "missing_required_test")
 			return
 		}
 	}

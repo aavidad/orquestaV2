@@ -75,7 +75,15 @@ func TestRunOPESDrainOnceV0ClaimExisteAntesDeSubmitV0(t *testing.T) {
 	opesServer := opesClaimTestOPESServerV0(t, job)
 	defer opesServer.Close()
 
+	submitChecks := 0
 	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if writeOrquestaRunSuperviseOKForDrainTestV0(t, w, r) {
+			return
+		}
+		if r.URL.Path != "/api/v0/external-work/run" || r.Method != http.MethodPost {
+			t.Fatalf("orquesta request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		submitChecks++
 		entry, found, err := opesBridgeSubmittedLedgerEntryV0(context.Background(), ledger, job)
 		if err != nil {
 			t.Fatalf("lookup submitted: %v", err)
@@ -97,8 +105,8 @@ func TestRunOPESDrainOnceV0ClaimExisteAntesDeSubmitV0(t *testing.T) {
 	summary, err := runOPESDrainOnceV0(context.Background(), opesClaimDrainConfigV0(
 		opesServer.URL, orquestaServer.URL, ledger,
 	))
-	if err != nil || summary.Submitted != 1 || summary.Results[0].Status != "submitted" {
-		t.Fatalf("summary=%+v err=%v", summary, err)
+	if err != nil || submitChecks != 1 || summary.Submitted != 1 || summary.Results[0].Status != "submitted" {
+		t.Fatalf("submitChecks=%d summary=%+v err=%v", submitChecks, summary, err)
 	}
 }
 
@@ -136,14 +144,59 @@ func TestRunOPESDrainOnceV0ClaimPrevioBloqueaReenvioV0(t *testing.T) {
 	}
 }
 
+func TestRunOPESDrainOnceV0ClaimRaceSubmittedSupervisaSinReenviarV0(t *testing.T) {
+	job := opesClaimTestJobV0("job-ref-race-submitted-001")
+	ledger := &raceSubmittedExternalBridgeInputLedgerV0{
+		entry: externalBridgeInputLedgerEntryV0{
+			Key:            opesBridgeInputLedgerKeyV0(job.ID),
+			ExternalSystem: opesBridgeExternalSystemV0,
+			ExternalJobRef: job.ID,
+			Status:         externalBridgeInputStatusSubmittedV0,
+			RunRef:         "run-ref-race-submitted-001",
+			ChangeRef:      "opes-job-job-ref-race-submitted-001",
+		},
+	}
+	opesServer := opesClaimTestOPESServerV0(t, job)
+	defer opesServer.Close()
+	supervisions := 0
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if writeOrquestaRunSuperviseOKForDrainTestV0(t, w, r) {
+			supervisions++
+			return
+		}
+		t.Fatalf("orquesta no debe recibir submit, recibido %s %s", r.Method, r.URL.Path)
+	}))
+	defer orquestaServer.Close()
+
+	summary, err := runOPESDrainOnceV0(context.Background(), opesClaimDrainConfigV0(
+		opesServer.URL, orquestaServer.URL, ledger,
+	))
+	if err != nil ||
+		supervisions != 1 ||
+		summary.AlreadySubmitted != 1 ||
+		summary.Submitted != 0 ||
+		summary.Results[0].Status != "already_submitted" ||
+		summary.Results[0].SupervisionStatus != "running" {
+		t.Fatalf("supervisions=%d summary=%+v err=%v", supervisions, summary, err)
+	}
+}
+
 func TestRunOPESDrainOnceV0FalloFinalLedgerExigeRecoveryV0(t *testing.T) {
 	ledger := &failingSubmitExternalBridgeInputLedgerV0{entries: map[string]externalBridgeInputLedgerEntryV0{}}
 	job := opesClaimTestJobV0("job-ref-recovery-001")
 	opesServer := opesClaimTestOPESServerV0(t, job)
 	defer opesServer.Close()
-	posts := 0
+	externalPosts := 0
+	supervisions := 0
 	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		posts++
+		if writeOrquestaRunSuperviseOKForDrainTestV0(t, w, r) {
+			supervisions++
+			return
+		}
+		if r.URL.Path != "/api/v0/external-work/run" || r.Method != http.MethodPost {
+			t.Fatalf("orquesta request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		externalPosts++
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"run_ref": "run-ref-recovery-001", "estado": "accepted"})
 	}))
@@ -152,10 +205,11 @@ func TestRunOPESDrainOnceV0FalloFinalLedgerExigeRecoveryV0(t *testing.T) {
 	summary, err := runOPESDrainOnceV0(context.Background(), opesClaimDrainConfigV0(
 		opesServer.URL, orquestaServer.URL, ledger,
 	))
-	if err != nil || posts != 1 || summary.Submitted != 1 ||
+	if err != nil || externalPosts != 1 || supervisions != 1 || summary.Submitted != 1 ||
 		summary.Results[0].Status != "recovery_required" ||
+		summary.Results[0].SupervisionStatus != "running" ||
 		summary.Errors[0].Code != externalBridgeRecoveryRequiredCodeV0 {
-		t.Fatalf("posts=%d summary=%+v err=%v", posts, summary, err)
+		t.Fatalf("externalPosts=%d supervisions=%d summary=%+v err=%v", externalPosts, supervisions, summary, err)
 	}
 }
 
@@ -207,6 +261,38 @@ func opesClaimDrainConfigV0(
 
 type failingSubmitExternalBridgeInputLedgerV0 struct {
 	entries map[string]externalBridgeInputLedgerEntryV0
+}
+
+type raceSubmittedExternalBridgeInputLedgerV0 struct {
+	entry externalBridgeInputLedgerEntryV0
+}
+
+func (ledger *raceSubmittedExternalBridgeInputLedgerV0) LookupExternalBridgeInputV0(
+	context.Context,
+	string,
+) (externalBridgeInputLedgerEntryV0, bool, error) {
+	return externalBridgeInputLedgerEntryV0{}, false, nil
+}
+
+func (ledger *raceSubmittedExternalBridgeInputLedgerV0) ClaimExternalBridgeInputV0(
+	context.Context,
+	externalBridgeInputLedgerEntryV0,
+) (externalBridgeInputLedgerEntryV0, bool, error) {
+	return ledger.entry, false, nil
+}
+
+func (ledger *raceSubmittedExternalBridgeInputLedgerV0) RecordExternalBridgeInputSubmittedV0(
+	context.Context,
+	externalBridgeInputLedgerEntryV0,
+) error {
+	return fmt.Errorf("unexpected_submit_record")
+}
+
+func (ledger *raceSubmittedExternalBridgeInputLedgerV0) UpsertExternalBridgeInputV0(
+	ctx context.Context,
+	entry externalBridgeInputLedgerEntryV0,
+) error {
+	return ledger.RecordExternalBridgeInputSubmittedV0(ctx, entry)
 }
 
 func (ledger *failingSubmitExternalBridgeInputLedgerV0) LookupExternalBridgeInputV0(

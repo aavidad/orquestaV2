@@ -38,12 +38,28 @@ func mustReducerPhaseOpenedEventV0(t *testing.T, eventID string, sequence int64,
 
 func mustReducerRunBlockedEventV0(t *testing.T, eventID string, sequence int64) OrchestrationEventV0 {
 	t.Helper()
+	return mustReducerRunBlockedWithRefEventV0(t, eventID, sequence, "blocker-001")
+}
+
+func mustReducerRunBlockedWithRefEventV0(t *testing.T, eventID string, sequence int64, blockerID string) OrchestrationEventV0 {
+	t.Helper()
 	event, err := NewRunBlockedEventV0(reducerEventMetaV0(eventID, sequence), RunBlockedPayloadV0{
-		BlockerID:    "blocker-001",
+		BlockerID:    blockerID,
 		ReasonCode:   "consulta_director_requerida",
 		Summary:      "Falta una decision de contrato antes de continuar.",
 		SourceGroup:  "workflow",
 		EvidenceRefs: []string{"docs/contratos.md#OrchestrationEventV0"},
+	})
+	return mustReducerEventV0(t, event, err)
+}
+
+func mustReducerRunBlockerResolvedEventV0(t *testing.T, eventID string, sequence int64, blockerID string) OrchestrationEventV0 {
+	t.Helper()
+	event, err := NewRunBlockerResolvedEventV0(reducerEventMetaV0(eventID, sequence), RunBlockerResolvedPayloadV0{
+		BlockerID:    blockerID,
+		ReasonCode:   "bloqueo_resuelto",
+		Summary:      "El criterio pendiente queda resuelto con evidencia durable.",
+		EvidenceRefs: []string{"docs/contratos.md#RunBlockerResolved"},
 	})
 	return mustReducerEventV0(t, event, err)
 }

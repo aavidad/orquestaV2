@@ -41,7 +41,8 @@ func TestOutboxDispatchCycleRailPolicyV0PreservaCodigosOperativos(t *testing.T) 
 	}
 }
 
-func TestOutboxDispatchCycleRailPolicyV0RedactaCodigoSensible(t *testing.T) {
+func TestOutboxDispatchCycleRailPolicyV0SaneaCodigoSensible(t *testing.T) {
+	enableDirectorRailsModeEnforcedForTestV0(t)
 	ledger := &cycleAcceptingLedgerV0{}
 	message := validCycleOutboxMessageV0(t, "sensitive")
 	dispatcher := &cycleFakeOutboxDispatcherV0{

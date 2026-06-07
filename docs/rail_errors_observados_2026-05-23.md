@@ -1157,13 +1157,15 @@ Campo: payload de ciclo del director y datos de runtime persistidos.
 Payload minimo: trazas locales con detalles operativos reales o de test
 (`access_token=...`, `Bearer ...`, HOME, prompt/transcript policy) dentro de
 estado/log de runtime.
-Decision: abrir temporalmente todos los rails de detalle por
-`ORQUESTA_DETAIL_PROHIBITED_RAILS=off`; el servidor usa ese valor por defecto
-si no hay valor explicito. No borrar listas ni evidencias. Reendurecer solo con
-matrices externas amplias y preservando detalle crudo local para diagnostico.
+Decision: abrir los rails por defecto y, desde 2026-06-02, dejarlos
+inoperativos hasta nueva orden. `ORQUESTA_RAILS_MODE` se normaliza a `offline`
+y `ORQUESTA_DETAIL_PROHIBITED_RAILS=on` no reactiva bloqueo. No borrar listas
+ni evidencias. Reendurecer solo con tarea futura, matrices externas amplias y
+preservando detalle crudo local para diagnostico.
 Test: `TestTextPolicyV0DetalleProhibidoDesactivadoTemporalmente`,
 `TestServerEnvironmentWithDetailRailsDefaultV0AddAperturaSiFalta`.
-Estado: cubierto como apertura temporal; pendiente matriz de reactivacion.
+Estado: cubierto como rails offline hasta nueva orden; pendiente matriz nueva
+solo si se decide reintroducir algun rail.
 ```
 
 ```text
@@ -2937,6 +2939,11 @@ defecto el rail con `ORQUESTA_DETAIL_PROHIBITED_RAILS=on` y scope acotado. El
 pendiente ya no es "reactivar todo", sino sincronizar docs/matriz y evitar que
 esa reactivacion se use para persistir payloads crudos o bloquear vocabulario
 operativo fuera de los scopes probados.
+Actualizacion 2026-06-02: esta foto queda superada. Los rails de detalle quedan
+offline por defecto mediante `ORQUESTA_RAILS_MODE=offline` y el servidor
+proyecta `ORQUESTA_DETAIL_PROHIBITED_RAILS=off`. No hay reactivacion por env;
+cualquier vuelta a bloqueo requiere tarea futura y cambio explicito de
+codigo/configuracion.
 ```
 
 ```text
@@ -3038,9 +3045,12 @@ Casos: el codigo de `cmd/orquesta-server` fija
 docs de rails fuera de este write-set aun describen el servidor como `off` por
 defecto. Esa divergencia puede hacer que el planner reabra T15 de forma
 incorrecta o que un operador reactive/desactive rails con una foto antigua.
-Decision pendiente: sincronizar registro vivo, rail errors, duplicaciones y
-matriz rapida; conservar `off` solo como override explicito del operador y no
-como estado declarado del servidor.
+Actualizacion 2026-06-02: el codigo vuelve a default offline y agrega
+`ORQUESTA_RAILS_MODE=offline`. Este candidato queda historico salvo regresion
+que reactive bloqueos por detalle sin opt-in.
+Decision pendiente: mantener sincronizado registro vivo, rail errors,
+duplicaciones y matriz rapida; conservar `off` como estado declarado del
+servidor hasta nueva orden.
 Test futuro: `./scripts/test_rails_fast.sh` y
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-rails`.
 Backlog: `T22 detail-rails-doc-state-sync`.

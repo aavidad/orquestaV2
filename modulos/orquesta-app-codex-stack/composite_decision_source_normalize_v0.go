@@ -70,6 +70,7 @@ func normalizeCompositePublishContractDecisionRefsV0(
 	decisions []orquestadirectoragent.DirectorAgentDecisionV0,
 ) []orquestadirectoragent.DirectorAgentDecisionV0 {
 	accepted := compositeStringSetV0(run.Decisions)
+	answers := compositeStringSetV0(run.DirectorAnswers)
 	latestAccepted := ""
 	for _, decisionRef := range run.Decisions {
 		decisionRef = strings.TrimSpace(decisionRef)
@@ -87,11 +88,15 @@ func normalizeCompositePublishContractDecisionRefsV0(
 			}
 			continue
 		}
+		if decisions[i].AnswerQuestion != nil {
+			compositeAddRefV0(answers, decisions[i].AnswerQuestion.AnswerID)
+			continue
+		}
 		if decisions[i].PublishContract == nil {
 			continue
 		}
 		ref := strings.TrimSpace(decisions[i].PublishContract.DecisionRef)
-		if ref == "" || accepted[ref] || latestAccepted == "" {
+		if ref == "" || accepted[ref] || answers[ref] || latestAccepted == "" {
 			continue
 		}
 		decisions[i].PublishContract.DecisionRef = latestAccepted

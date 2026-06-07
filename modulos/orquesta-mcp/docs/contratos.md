@@ -1330,3 +1330,39 @@ Invariantes:
   - El consejo del operador no detiene ni reemplaza la decision del supervisor.
   - No conoce scheduler, runtime, Codex, DB, filesystem ni proveedor.
 ```
+
+```text
+Nombre: mcp.tool.orquesta.runtime.models.v0
+Tipo: puerto_entrada
+Version: v0
+Propietario: orquesta-mcp
+Consumidores: cliente IA MCP, bridge HTTP local, UI operativa y composiciones
+opt-in de runtime.
+Campos:
+  descriptor:
+    name: orquesta.runtime.models.v0
+    resource_uri: orquesta://contracts/runtime-models/v0
+  rest:
+    method: POST
+    path: /api/v0/runtime/models
+  input:
+    action: list|status|pull|serve|stop
+    provider_ref?, endpoint_ref?, model?, keep_alive?, tags?, evidence_refs?
+  output_ok:
+    estado: ok
+    action
+    list_result? o action_result?
+  output_error:
+    estado: error
+    errores_publicos
+Invariantes:
+  - Adaptador inbound fino para `RuntimeModelManagerPortV0`.
+  - No acepta `base_url` en el input publico; endpoints, tokens y timeouts se
+    configuran en la composicion opt-in.
+  - Sin puerto inyectado devuelve `mcp_transport_tool_unbound` por MCP o
+    `runtime_models_no_configurado` por HTTP, sin intentar instalar nada.
+  - No decide proveedor/modelo de una tarea, no arranca agentes, no toca DB,
+    scheduler, OPES ni programacion.
+Pruebas de contrato:
+  - go test -count=1 ./modulos/orquesta-mcp
+```

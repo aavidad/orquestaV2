@@ -32,6 +32,17 @@ func domainWorkDeliveryCanonicalArtifactTypeV0(value string) string {
 		"revision_editorial", "revision_calidad", "validacion_contrato",
 		"validacion_documental", "validacion_tema", "validar_tema":
 		return "block_revision"
+	case "agent_review_report", "review_agent_independent", "review_independent_agent",
+		"review_codex", "review_gemini", "review_claude":
+		return "agent_review_report"
+	case "agent_pair_review_report", "review_agent_pair", "review_peer_pair", "review_pair",
+		"review_pair_codex_gemini", "review_pair_codex_claude", "review_pair_gemini_claude":
+		return "agent_pair_review_report"
+	case "director_review_matrix", "review_director_consolidation", "review_consensus_director":
+		return "director_review_matrix"
+	case "completed_syllabus_package", "finalize_temario_package", "finalize_syllabus_package",
+		"close_temario_package":
+		return "completed_syllabus_package"
 	case "source", "fuente", "research_sources", "download_source", "verify_sources":
 		return "source"
 	case "topic_summary", "summary", "resumen", "summarize_block", "summarize_chapter",
@@ -167,7 +178,10 @@ func domainWorkDeliveryCanonicalPayloadFieldNameV0(artifactType string, name str
 			return "manifest_ref"
 		case "checksum", "sha256", "digest":
 			return "checksum"
-		case "segments", "segmentos":
+		case "segments", "segmentos", "audio_segments", "segmentos_audio",
+			"section_audio_segments", "section_audio_links", "section_audios",
+			"apartado_audio_segments", "apartado_audios", "mapa_apartados_audio",
+			"section_audio_map", "audio_manifest_segments":
 			return "segments"
 		case "source_refs", "sources", "fuentes", "source_ids", "source_references":
 			return "source_refs"

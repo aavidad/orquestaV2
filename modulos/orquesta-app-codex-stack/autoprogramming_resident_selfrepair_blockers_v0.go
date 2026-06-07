@@ -20,11 +20,6 @@ func autoprogrammingResidentEvidenceIsBlockingV0(ref string) bool {
 	if autoprogrammingResidentEvidenceIsSoftRailV0(value) {
 		return false
 	}
-	for _, token := range strings.FieldsFunc(value, autoprogrammingResidentEvidenceTokenSeparatorV0) {
-		if autoprogrammingResidentEvidenceTokenIsBlockingV0(token) {
-			return true
-		}
-	}
 	return false
 }
 
@@ -99,18 +94,4 @@ func autoprogrammingResidentSoftRailSegmentsV0(value string) []string {
 	return strings.FieldsFunc(value, func(r rune) bool {
 		return r == '#' || r == ' ' || r == '\t' || r == '\n' || r == '\r'
 	})
-}
-
-func autoprogrammingResidentEvidenceTokenSeparatorV0(r rune) bool {
-	return r == '#' || r == ':' || r == '/' || r == ' ' || r == '\t' || r == '\n' || r == '\r'
-}
-
-func autoprogrammingResidentEvidenceTokenIsBlockingV0(token string) bool {
-	token = strings.Trim(strings.TrimSpace(token), ".,;")
-	if token == "" || token == "not-blocked" || token == "non-blocked" ||
-		token == "not_blocked" || token == "non_blocked" || token == "unblocked" {
-		return false
-	}
-	return token == "blocked" || token == "policy_blocked" || token == "policy-blocked" ||
-		strings.HasSuffix(token, "_blocked") || strings.HasSuffix(token, "-blocked")
 }

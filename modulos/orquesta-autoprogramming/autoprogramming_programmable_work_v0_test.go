@@ -413,7 +413,7 @@ func TestBuildAutoprogrammingProgrammableWorkV0ConstruyeDiezPadresConLimitesExpl
 	}
 }
 
-func TestBuildAutoprogrammingProgrammableWorkV0RejectsUnpartitionableWriteSet(t *testing.T) {
+func TestBuildAutoprogrammingProgrammableWorkV0ConservaWriteSetNoParticionableComoReparable(t *testing.T) {
 	result := BuildAutoprogrammingProgrammableWorkV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
 		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{
 			{TaskRef: "task-ref-group-a", Area: "Task Group"},
@@ -422,12 +422,18 @@ func TestBuildAutoprogrammingProgrammableWorkV0RejectsUnpartitionableWriteSet(t 
 		request.WriteSet = []string{"modulos/orquesta-autoprogramming/README.md"}
 	}))
 
-	if result.Accepted {
-		t.Fatalf("accepted=true")
+	if !result.Accepted {
+		t.Fatalf("accepted=false issues=%+v", result.Issues)
 	}
-	assertAutoprogrammingRequestIssueV0(t, AutoprogrammingRequestValidationResultV0{
-		Issues: result.Issues,
-	}, "write_set_unassigned")
+	if len(result.Work.Partition.Repairs) != 1 ||
+		result.Work.Partition.Repairs[0].Code != "write_set_unassigned_shared" {
+		t.Fatalf("repairs=%+v", result.Work.Partition.Repairs)
+	}
+	for _, group := range result.Work.Groups {
+		if !stringsSliceContainsForAutoprogrammingTestV0(group.WriteSet, "modulos/orquesta-autoprogramming/README.md") {
+			t.Fatalf("group %s write_set=%v", group.Area, group.WriteSet)
+		}
+	}
 }
 
 func TestBuildAutoprogrammingProgrammableWorkV0SequencesRepairableWriteSetOverlap(t *testing.T) {

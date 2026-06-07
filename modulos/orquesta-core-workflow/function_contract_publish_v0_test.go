@@ -24,6 +24,21 @@ func TestHandlePublishFunctionContractCommandV0ReturnsEventAndNoOutbox(t *testin
 	}
 }
 
+func TestHandlePublishFunctionContractCommandV0AcceptsDirectorAnswerRef(t *testing.T) {
+	run := mustPlanificationActiveRunWithoutDecisionV0(t)
+	run.DirectorAnswers = []string{"answer-ref-function-contract-001"}
+	payload := validPublishFunctionContractPayloadV0("contract:function:answer-basis:v0")
+	payload.DecisionRef = "answer-ref-function-contract-001"
+	command := mustPublishFunctionContractCommandWithPayloadV0(t, "cmd-function-contract-answer", "idem-function-contract-answer", payload)
+
+	result, err := HandleCommandV0(run, command)
+	if err != nil {
+		t.Fatalf("handle PublishFunctionContract: %v", err)
+	}
+
+	assertSingleEventTypeV0(t, result, OrchestrationEventFunctionContractPublishedV0)
+}
+
 func TestApplyFunctionContractPublishedV0ProjectsRefOnce(t *testing.T) {
 	run := mustFunctionContractPlanRunV0(t)
 	event := mustFunctionContractPublishedEventV0(t, "evt-function-contract-reducer-001", run.LastSequence+1, "contract:function:workflow-task:v0")
@@ -38,6 +53,25 @@ func TestApplyFunctionContractPublishedV0ProjectsRefOnce(t *testing.T) {
 	again := mustApplyReducerEventV0(t, got, event)
 	if !reflect.DeepEqual(again.FunctionContracts, got.FunctionContracts) {
 		t.Fatalf("function contracts duplicated: %v", again.FunctionContracts)
+	}
+}
+
+func TestApplyFunctionContractPublishedV0AcceptsDirectorAnswerRef(t *testing.T) {
+	run := mustPlanificationActiveRunWithoutDecisionV0(t)
+	run.DirectorAnswers = []string{"answer-ref-function-contract-event-001"}
+	payload := functionContractPublishedPayloadFromCommandV0(validPublishFunctionContractPayloadV0("contract:function:answer-event-basis:v0"))
+	payload.DecisionRef = "answer-ref-function-contract-event-001"
+	event, err := NewFunctionContractPublishedEventV0(reducerEventMetaV0("evt-function-contract-answer", run.LastSequence+1), payload)
+	if err != nil {
+		t.Fatalf("event: %v", err)
+	}
+
+	got, err := ApplyEventV0(run, event)
+	if err != nil {
+		t.Fatalf("apply FunctionContractPublished: %v", err)
+	}
+	if !reflect.DeepEqual(got.FunctionContracts, []string{"contract:function:answer-event-basis:v0"}) {
+		t.Fatalf("function_contracts=%v", got.FunctionContracts)
 	}
 }
 

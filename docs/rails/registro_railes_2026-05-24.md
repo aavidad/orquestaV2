@@ -12,21 +12,24 @@ comando ni ficheros sueltos sin propietario.
 - `modulos/orquesta-rails/filesystem_policy_v0.go`: rail estricto comun de
   filesystem. Rechaza rutas absolutas, `..`, HOME/variables, URLs, rutas
   Windows ambiguas, caracteres de control y comandos destructivos conocidos.
-  Este rail no depende de `ORQUESTA_DETAIL_PROHIBITED_RAILS`: salir del workdir
-  o borrar queda como corte duro.
+  Estado vigente 2026-06-02: queda dormido como el resto de `orquesta-rails`;
+  no veta rutas ni comandos mientras `ORQUESTA_RAILS_MODE` este normalizado a
+  `offline`.
 - 2026-05-24: los rails de `detalle_prohibido`,
   `detalle_operacional_prohibido` y `secreto_detectado` quedan desactivables por
   `ORQUESTA_DETAIL_PROHIBITED_RAILS=off`. El servidor Orquesta usa `off` por
   defecto si el operador no fija un valor explicito, para no bloquear
   autoprogramacion por falsos positivos. Las listas y tests estrictos se
-  conservan y pueden reactivarse con `ORQUESTA_DETAIL_PROHIBITED_RAILS=on`.
+  conservaban como reactivables con `ORQUESTA_DETAIL_PROHIBITED_RAILS=on`; esta
+  foto queda superada por la decision del 2026-06-02.
 - 2026-06-02: la regla vigente cambia para produccion: los rails de detalle
-  operativo/local no bloquean entregas aunque el modo de detalle este activo.
+  operativo/local quedan offline por defecto y no bloquean entregas aunque
+  existan listas, scopes o `ORQUESTA_DETAIL_PROHIBITED_RAILS=on` heredado.
   Referencias a runtime, provider, modelo, ficheros de control, HOME usado como
-  diagnostico sin valor sensible, receipts o evidencia `ref_only` quedan como
-  advisory/evidencia. Solo datos sensibles efectivos, refs imposibles,
-  causalidad rota, salida del workdir, borrados no autorizados o efectos
-  externos no autorizados siguen siendo cortes fuertes.
+  diagnostico, receipts o evidencia `ref_only` quedan como evidencia util.
+  No hay reactivacion por env: `ORQUESTA_RAILS_MODE=enforced` se normaliza a
+  `offline` hasta nueva orden. Cualquier vuelta a bloqueo exige tarea futura,
+  owner claro, cambio explicito de codigo/configuracion y prueba viva.
   La autoridad de decision queda en el Director o agente orquestador: el rail
   produce senal, no veto. Si una regla blanda entorpece trabajo valido, el
   Director/orquestador puede ignorarla, retirarla del flujo o convertirla en
@@ -76,7 +79,8 @@ que revisarlos con matriz externa antes de endurecer o relajar:
 - Crear matrices externas por rail antes de volver a endurecer: runtime,
   runtime-codex ACK, core-workflow, context, scheduler, director, persistence,
   capacity, observability, leases y concurrency.
-- Reintroducir cortes de seguridad de forma progresiva solo cuando no corten
-  refs operativas razonables ni datos necesarios para diagnostico.
+- Reintroducir cortes solo por tarea explicita y despues de comprobar que no
+  cortan refs operativas razonables, alias, datos reutilizables ni diagnostico
+  necesario.
 - Mantener evidencia cruda en estado/log local privado; no sustituirla por
   `detalle_prohibido` sin guardar el detalle original.

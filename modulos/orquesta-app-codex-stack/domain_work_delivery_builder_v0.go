@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"sort"
+	"strconv"
 	"strings"
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
+	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 type defaultDomainWorkArtifactSubmissionBuilderV0 struct{}
@@ -20,7 +22,7 @@ func (defaultDomainWorkArtifactSubmissionBuilderV0) BuildDomainWorkArtifactSubmi
 		return orquestadomainwork.DomainWorkArtifactSubmissionV0{}, false, nil
 	}
 	fields := copyDomainWorkFieldsForContextV0(work.InputFields)
-	artifactType := domainWorkArtifactTypeForWorkKindV0(work.WorkKind)
+	artifactType := domainWorkExpectedArtifactTypeV0(fields, work.WorkKind)
 	intake, err := readDomainWorkDeliveryArtifactV0(input.Descriptor, input.Ack, artifactType)
 	if err != nil {
 		return orquestadomainwork.DomainWorkArtifactSubmissionV0{}, false, err
@@ -28,13 +30,9 @@ func (defaultDomainWorkArtifactSubmissionBuilderV0) BuildDomainWorkArtifactSubmi
 	body := intake.Body
 	payloadBody := domainWorkDeliveryPayloadBodyV0(body, artifactType)
 	payloadBody = canonicalDomainWorkDeliveryPayloadBodyV0(artifactType, payloadBody, input)
-	if err := validateDomainWorkDeliveryQualityV0(fields, artifactType, body, payloadBody); err != nil {
-		return orquestadomainwork.DomainWorkArtifactSubmissionV0{}, false, err
-	}
 	fields = domainWorkDeliveryPayloadFieldsV0(fields, artifactType, input.Task.Title, payloadBody)
-	if err := validateDomainWorkArtifactPayloadFieldsForIntakeV0(fields); err != nil {
-		return orquestadomainwork.DomainWorkArtifactSubmissionV0{}, false, err
-	}
+	fields = appendDomainWorkFieldIfMissingV0(fields, "file_ref", intake.FileRef)
+	fields = redactDomainWorkDeliveryPayloadFieldsV0(fields)
 	return orquestadomainwork.NormalizeDomainWorkArtifactSubmissionV0(
 		orquestadomainwork.DomainWorkArtifactSubmissionV0{
 			RequestID:      domainWorkArtifactRequestIDV0(work, artifactType),
@@ -60,6 +58,16 @@ func domainWorkArtifactTypeForWorkKindV0(workKind string) string {
 	)
 }
 
+func domainWorkExpectedArtifactTypeV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	workKind string,
+) string {
+	if expected := domainWorkFieldStringValueV0(fields, "expected_artifact_type"); expected != "" {
+		return expected
+	}
+	return domainWorkArtifactTypeForWorkKindV0(workKind)
+}
+
 func domainWorkCanonicalWorkKindForArtifactV0(workKind string) string {
 	key := normalizeDomainWorkDeliveryAliasV0(workKind)
 	switch key {
@@ -77,6 +85,10 @@ func domainWorkCanonicalWorkKindForArtifactV0(workKind string) string {
 	case "revision_psicologia", "revision_contenido", "revision_contenido_tecnico",
 		"revision_editorial", "revision_calidad":
 		return "review_quality"
+	case "review_codex", "review_gemini", "review_claude":
+		return "review_agent_independent"
+	case "review_pair_codex_gemini", "review_pair_codex_claude", "review_pair_gemini_claude":
+		return "review_agent_pair"
 	case "validacion_contrato", "validacion_documental", "validacion_tema", "validar_tema":
 		return "validate_topic"
 	case "ensamblado_y_exportacion", "ensamblado", "exportacion":
@@ -205,6 +217,69 @@ func appendDomainWorkFieldIfMissingV0(
 	return append(fields, orquestadomainwork.DomainWorkFieldV0{Name: name, Value: value})
 }
 
+func redactDomainWorkDeliveryPayloadFieldsV0(fields []orquestadomainwork.DomainWorkFieldV0) []orquestadomainwork.DomainWorkFieldV0 {
+	out := make([]orquestadomainwork.DomainWorkFieldV0, 0, len(fields))
+	for _, field := range fields {
+		out = append(out, redactDomainWorkDeliveryPayloadFieldV0(field))
+	}
+	return out
+}
+
+func redactDomainWorkDeliveryPayloadFieldV0(
+	field orquestadomainwork.DomainWorkFieldV0,
+) orquestadomainwork.DomainWorkFieldV0 {
+	if domainWorkDeliveryFieldNameRequiresRedactionV0(field.Name) {
+		field.Value = "<redacted-sensitive-field>"
+		field.Values = nil
+		field.ValueJSON = nil
+		return field
+	}
+	if domainWorkDeliveryReferenceFieldV0(field.Name) {
+		return field
+	}
+	field.Value, _ = orquestarails.RedactOperationalTextForFieldV0(
+		"codex_stack_domain_work_delivery",
+		field.Name,
+		field.Value,
+	)
+	for i, value := range field.Values {
+		field.Values[i], _ = orquestarails.RedactOperationalTextForFieldV0(
+			"codex_stack_domain_work_delivery",
+			field.Name,
+			value,
+		)
+	}
+	if len(field.ValueJSON) > 0 {
+		redacted, _ := orquestarails.RedactOperationalTextForFieldV0(
+			"codex_stack_domain_work_delivery",
+			field.Name,
+			string(field.ValueJSON),
+		)
+		field.ValueJSON = []byte(redacted)
+	}
+	return field
+}
+
+func domainWorkDeliveryReferenceFieldV0(name string) bool {
+	key := normalizeDomainWorkDeliveryAliasV0(name)
+	return strings.HasSuffix(key, "_ref") ||
+		strings.HasSuffix(key, "_refs") ||
+		strings.Contains(key, "artifact_ref") ||
+		strings.Contains(key, "package_ref")
+}
+
+func domainWorkDeliveryFieldNameRequiresRedactionV0(name string) bool {
+	switch normalizeDomainWorkDeliveryAliasV0(name) {
+	case "api_key", "access_token", "refresh_token", "client_secret", "password",
+		"passwd", "pwd", "secret", "secreto", "credential", "credencial",
+		"authorization", "raw_http", "http_request", "http_response",
+		"provider_payload", "provider_response", "model_payload":
+		return true
+	default:
+		return false
+	}
+}
+
 func domainWorkFieldHasNameV0(
 	fields []orquestadomainwork.DomainWorkFieldV0,
 	name string,
@@ -254,6 +329,22 @@ func domainWorkFieldStringValueV0(
 		}
 	}
 	return ""
+}
+
+func domainWorkFieldIntV0(fields []orquestadomainwork.DomainWorkFieldV0, name string) int {
+	for _, field := range fields {
+		if strings.TrimSpace(field.Name) != name {
+			continue
+		}
+		if value, err := strconv.Atoi(strings.TrimSpace(field.Value)); err == nil && value > 0 {
+			return value
+		}
+		var decoded int
+		if len(field.ValueJSON) > 0 && json.Unmarshal(field.ValueJSON, &decoded) == nil && decoded > 0 {
+			return decoded
+		}
+	}
+	return 0
 }
 
 func domainWorkArtifactExternalRefsV0(

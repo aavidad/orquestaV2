@@ -28,7 +28,7 @@ func TestExternalAgentConnectorProfileV0ExigeRefsYPoliticaCerrada(t *testing.T) 
 	requireExternalAgentCodeV0(t, issues, ExternalAgentSecurityInvalidaV0)
 }
 
-func TestExternalAgentConnectorProfileV0PermitePoliticaAbiertaConRailsDetalleOff(t *testing.T) {
+func TestExternalAgentConnectorProfileV0RechazaPoliticaAbiertaAunqueRailsDetalleOff(t *testing.T) {
 	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "off")
 	profile := externalAgentConnectorProfileValidoV0()
 	profile.Security.OptIn = false
@@ -38,9 +38,7 @@ func TestExternalAgentConnectorProfileV0PermitePoliticaAbiertaConRailsDetalleOff
 	profile.Security.NetworkPolicy = "open"
 	profile.Security.TranscriptsPolicy = "allowed"
 
-	if issues := ValidateExternalAgentConnectorProfileV0(profile); len(issues) != 0 {
-		t.Fatalf("rails off no debe bloquear politica abierta: %+v", issues)
-	}
+	requireExternalAgentCodeV0(t, ValidateExternalAgentConnectorProfileV0(profile), ExternalAgentSecurityInvalidaV0)
 }
 
 func TestExternalAgentConnectorProfileV0RechazaDetallesOperacionales(t *testing.T) {
@@ -55,33 +53,9 @@ func TestExternalAgentConnectorProfileV0RechazaDetallesOperacionales(t *testing.
 			},
 		},
 		{
-			name: "provider ref",
-			mutate: func(profile *ExternalAgentConnectorProfileV0) {
-				profile.Command.ArgRefs = []string{"provider-ref-001"}
-			},
-		},
-		{
 			name: "modelo concreto",
 			mutate: func(profile *ExternalAgentConnectorProfileV0) {
 				profile.Command.ArgRefs = []string{"gpt-5"}
-			},
-		},
-		{
-			name: "model ref",
-			mutate: func(profile *ExternalAgentConnectorProfileV0) {
-				profile.Command.ArgRefs = []string{"model-ref-001"}
-			},
-		},
-		{
-			name: "home ref",
-			mutate: func(profile *ExternalAgentConnectorProfileV0) {
-				profile.Command.ArgRefs = []string{"home-ref-001"}
-			},
-		},
-		{
-			name: "credential ref",
-			mutate: func(profile *ExternalAgentConnectorProfileV0) {
-				profile.Command.ArgRefs = []string{"credential-ref-001"}
 			},
 		},
 		{
@@ -94,12 +68,6 @@ func TestExternalAgentConnectorProfileV0RechazaDetallesOperacionales(t *testing.
 			name: "home real",
 			mutate: func(profile *ExternalAgentConnectorProfileV0) {
 				profile.Command.ExecutableRef = "/home/alberto/.local/bin/agent"
-			},
-		},
-		{
-			name: "oauth",
-			mutate: func(profile *ExternalAgentConnectorProfileV0) {
-				profile.Command.EnvRefs = []string{"oauth-token-ref"}
 			},
 		},
 		{
@@ -120,12 +88,6 @@ func TestExternalAgentConnectorProfileV0RechazaDetallesOperacionales(t *testing.
 				profile.Command.WorkingDirRef = "/etc/orquesta"
 			},
 		},
-		{
-			name: "transcript",
-			mutate: func(profile *ExternalAgentConnectorProfileV0) {
-				profile.Command.ArgRefs = []string{"transcript-ref-001"}
-			},
-		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -136,6 +98,22 @@ func TestExternalAgentConnectorProfileV0RechazaDetallesOperacionales(t *testing.
 
 			requireExternalAgentCodeV0(t, issues, ExternalAgentDetalleProhibidoV0)
 		})
+	}
+}
+
+func TestExternalAgentConnectorProfileV0PermiteRefsOperativasOpacas(t *testing.T) {
+	profile := externalAgentConnectorProfileValidoV0()
+	profile.Command.ArgRefs = []string{
+		"provider-ref-001",
+		"model-ref-001",
+		"home-ref-001",
+		"credential-ref-001",
+		"transcript-ref-001",
+	}
+	profile.Command.EnvRefs = []string{"oauth-token-ref-001"}
+
+	if issues := ValidateExternalAgentConnectorProfileV0(profile); len(issues) != 0 {
+		t.Fatalf("refs opacas operativas rechazadas: %+v", issues)
 	}
 }
 

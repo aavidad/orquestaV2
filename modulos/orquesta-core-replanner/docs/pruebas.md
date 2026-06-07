@@ -12,7 +12,10 @@ Estado: completada en RPL-008
 Caso: replan_proposal_compacto
 Tipo: unit | contract
 Comando: go test -count=1 ./modulos/orquesta-core-replanner
-Evidencia esperada: propuesta valida acepta refs opacas y rechaza DB/provider/model/HOME/OAuth/runtime/prompts/transcripts.
+Evidencia esperada: propuesta valida acepta refs opacas y etiquetas operativas
+DB/provider/model/HOME/OAuth/runtime cuando no contienen valor sensible; rechaza
+credenciales, secretos efectivos, prompt/transcript/completion crudos con
+contenido, DSN con credenciales y paths reales.
 Estado: completada en RPL-001
 ```
 
@@ -36,7 +39,12 @@ Estado: completada en RPL-003
 Caso: replan_decision_compacto
 Tipo: unit | contract
 Comando: go test -count=1 ./modulos/orquesta-core-replanner
-Evidencia esperada: decision valida acepta refs opacas, acciones del catalogo y followups; rechaza refs obligatorias vacias, acciones desconocidas y DB/runtime/provider/HOME/OAuth/modelo/secretos/prompts/transcripts; clona slices y es determinista/idempotente para el mismo payload.
+Evidencia esperada: decision valida acepta refs opacas, acciones del catalogo,
+followups y etiquetas operativas DB/runtime/provider/HOME/OAuth/modelo cuando no
+contienen valor sensible; rechaza refs obligatorias vacias, acciones
+desconocidas, credenciales, secretos efectivos, prompt/transcript/completion
+crudos con contenido, DSN con credenciales y paths reales; clona slices y es
+determinista/idempotente para el mismo payload.
 Estado: completada en RPL-006
 ```
 
@@ -52,6 +60,10 @@ Estado: completada en RPL-004/RPL-005 el 2026-05-06
 Caso: agent_failed_to_replan
 Tipo: unit | contract
 Comando: go test -count=1 ./modulos/orquesta-core-replanner
-Evidencia esperada: `AgentFailed` produce propuesta `replace_agent` o `ask_director` con `source_ref=agent_request_id`; `replace_agent` exige `replacement_role`; retry/reuse implicito y detalles runtime/DB/provider/HOME/OAuth/modelo quedan rechazados.
+Evidencia esperada: `AgentFailed` produce propuesta `replace_agent` o
+`ask_director` con `source_ref=agent_request_id`; `replace_agent` exige
+`replacement_role`; retry/reuse implicito queda rechazado; refs/etiquetas
+runtime/DB/provider/HOME/OAuth/modelo se aceptan solo si no contienen valor
+sensible.
 Estado: completada en RPL-007
 ```

@@ -168,7 +168,10 @@ func normalizeCodexAckWriteSetPathsV0(values []string) []string {
 
 func normalizeCodexAckFilePathV0(value string) (string, bool) {
 	path, ok := normalizeCodexAckPathV0(value)
-	if !ok || strings.ContainsAny(path, "*?[") {
+	if !ok {
+		return "", false
+	}
+	if strings.ContainsAny(path, "*?[") {
 		return "", false
 	}
 	return path, true

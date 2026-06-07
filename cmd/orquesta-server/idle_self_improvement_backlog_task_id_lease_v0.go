@@ -79,8 +79,8 @@ func (allocation backlogTaskIDAllocationV0) AcceptanceCriteria() []string {
 	return []string{
 		"backlog_task_id_ref:" + allocation.TaskIDRef,
 		"backlog_task_id_range:" + allocation.rangeTextV0(),
-		"antes de insertar nuevas tareas ## Txx, usar solo el rango reservado por task_id_ref; si falta rango, ACK failed con CONSULTA AL DIRECTOR",
-		"si aparece backlog_task_number_collision, backlog_task_number_reservation_required, backlog_task_id_collision o backlog_task_id_allocation_gap durante el merge, bloquear y pedir rebase/CONSULTA AL DIRECTOR",
+		"antes de insertar nuevas tareas ## Txx, usar solo el rango reservado por task_id_ref; si falta rango, conservar propuesta como borrador y anotar reserva pendiente",
+		"si aparece backlog_task_number_collision, backlog_task_number_reservation_required, backlog_task_id_collision o backlog_task_id_allocation_gap durante el merge, conservar borrador y anotar rebase pendiente",
 	}
 }
 

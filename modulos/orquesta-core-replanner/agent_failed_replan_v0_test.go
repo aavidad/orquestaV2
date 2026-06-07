@@ -53,9 +53,19 @@ func TestAgentFailedToReplanProposalV0RejectsUnsupportedAction(t *testing.T) {
 	assertAgentFailedReplanSignalErrorV0(t, err, ErrAgentFailedReplanActionNoSoportadaV0, "requested_action")
 }
 
-func TestAgentFailedToReplanProposalV0RejectsForbiddenDetails(t *testing.T) {
+func TestAgentFailedToReplanProposalV0AllowsOperationalLabels(t *testing.T) {
 	input := validAgentFailedReplanInputV0(ReplanActionAskDirectorV0)
-	input.Summary = "Incluye runtime externo."
+	input.Summary = "Incluye runtime provider ref externo."
+
+	_, err := AgentFailedToReplanProposalV0(input)
+	if err != nil {
+		t.Fatalf("AgentFailedToReplanProposalV0: %v", err)
+	}
+}
+
+func TestAgentFailedToReplanProposalV0RejectsSensitiveDetails(t *testing.T) {
+	input := validAgentFailedReplanInputV0(ReplanActionAskDirectorV0)
+	input.Summary = "client_secret=valor"
 
 	_, err := AgentFailedToReplanProposalV0(input)
 	assertAgentFailedReplanSignalErrorV0(t, err, ErrDetalleProhibidoV0, "payload")

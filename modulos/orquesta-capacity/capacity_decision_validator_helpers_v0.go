@@ -6,8 +6,6 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-
-	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func (v *capacityDecisionValidatorV0) requireOpaque(field, value string) {
@@ -53,8 +51,7 @@ func (v *capacityDecisionValidatorV0) optionalSafeText(field, value string) {
 	if value == "" {
 		return
 	}
-	if utf8.RuneCountInString(value) > 320 ||
-		(orquestarails.DetailProhibitedRailsEnabledV0() && forbiddenSafeTextPatternV0.MatchString(value)) {
+	if utf8.RuneCountInString(value) > 320 || forbiddenSafeTextPatternV0.MatchString(value) {
 		v.add(ErrCapacityDecisionInvalidaV0, field)
 	}
 }
@@ -172,9 +169,6 @@ func windowInsufficientV0(ctx ContextoEstimadoV0, quota QuotaSnapshotV0) bool {
 }
 
 func looksLikeHomePathV0(value string) bool {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return false
-	}
 	trimmed := strings.TrimSpace(value)
 	low := strings.ToLower(trimmed)
 	return strings.HasPrefix(trimmed, "/") ||
@@ -186,9 +180,6 @@ func looksLikeHomePathV0(value string) bool {
 }
 
 func looksLikeSecretV0(value string) bool {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return false
-	}
 	low := strings.ToLower(strings.TrimSpace(value))
 	return strings.HasPrefix(low, "bearer") ||
 		strings.HasPrefix(low, "sk-") ||
@@ -205,9 +196,6 @@ func looksLikeSecretV0(value string) bool {
 }
 
 func containsForbiddenBrandV0(value string) bool {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return false
-	}
 	for _, token := range strings.FieldsFunc(strings.ToLower(value), func(r rune) bool {
 		return (r < 'a' || r > 'z') && (r < '0' || r > '9')
 	}) {
@@ -245,7 +233,7 @@ var (
 	phaseRefPatternV0          = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$`)
 	utcInstantPatternV0        = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$`)
 	jwtLikePatternV0           = regexp.MustCompile(`^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$`)
-	forbiddenSafeTextPatternV0 = regexp.MustCompile(`(?i)([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|(^|\s)(/home/|/Users/|[A-Za-z]:\\|~|\$HOME)|(^|\s)(sk-[A-Za-z0-9]|ghp_[A-Za-z0-9]|xox[baprs]-|ya29\.)|[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|(^|[^a-z0-9])(openai|anthropic|google|gemini|claude|gpt|openrouter|mistral|deepseek|ollama|azure|bedrock|vertex|groq|cohere)([^a-z0-9]|$))`)
+	forbiddenSafeTextPatternV0 = regexp.MustCompile(`(?i)([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|(^|\s)(/home/|/Users/|[A-Za-z]:\\|~|\$HOME)|(^|\s)(sk-[A-Za-z0-9]|ghp_[A-Za-z0-9]|xox[baprs]-|ya29\.)|[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)`)
 	forbiddenBrandTokensV0     = map[string]bool{
 		"openai": true, "anthropic": true, "google": true, "gemini": true, "claude": true,
 		"gpt": true, "openrouter": true, "mistral": true, "deepseek": true, "ollama": true,

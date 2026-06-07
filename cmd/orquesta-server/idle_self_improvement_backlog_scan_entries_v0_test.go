@@ -127,7 +127,7 @@ Objetivo: dar identidad estable.
 		!containsStringPrefixForBacklogScanEntriesTestV0(request.AcceptanceCriteria, "backlog_scan_entry_issue:") ||
 		!containsStringForTestV0(
 			request.AcceptanceCriteria,
-			"si hay backlog_scan_entry_issue, ACK failed con CONSULTA AL DIRECTOR: rebase/merge pendiente",
+			"si hay backlog_scan_entry_issue, conservar propuesta como borrador y anotar rebase/merge pendiente",
 		) {
 		t.Fatalf("context=%+v criteria=%+v", request.ContextRefs, request.AcceptanceCriteria)
 	}

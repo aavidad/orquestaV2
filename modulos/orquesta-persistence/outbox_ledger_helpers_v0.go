@@ -4,11 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
-	"strings"
 	"time"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
-	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 const maxOutboxLedgerEvidenceRefsV0 = 20
@@ -197,15 +195,9 @@ func validateOutboxLedgerSafeTextV0(ack OutboxDispatchAckV0) []OutboxLedgerIssue
 }
 
 func outboxLedgerContainsForbiddenTermV0(value string) bool {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return false
-	}
-	normalized := strings.ToLower(trimV0(value))
-	for _, term := range forbiddenOutboxLedgerTermsV0 {
-		if containsSeparatedTermV0(normalized, term) {
-			return true
-		}
-	}
+	// Ledger text rails are offline. The ledger must keep causal evidence even
+	// when refs contain operational vocabulary such as provider, model, token,
+	// db or sql. Effective secrets are handled at ingress/redaction boundaries.
 	return false
 }
 

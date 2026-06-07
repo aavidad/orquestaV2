@@ -23,16 +23,29 @@ func TestContextBundleDetailRailExternalMatrixV0(t *testing.T) {
 	}
 }
 
-func TestContextBundleDetailRailMatrixRejectsSensitiveValuesV0(t *testing.T) {
+func TestContextBundleDetailRailMatrixNoBloqueaVocabularioOperativoV0(t *testing.T) {
 	t.Setenv(orquestarails.DetailProhibitedRailsEnvV0, "on")
 	t.Setenv(orquestarails.DetailProhibitedRailsScopeEnvV0, "context_bundle_request.*")
 
 	request := validContextBundleRequestV0()
-	request.ReadSet = []string{"/home/user/.codex/auth.json"}
+	request.Objective = "Usar refs opacas de runtime provider model home prompt policy."
+	request.ReadSet = []string{"read-ref-runtime-provider-home"}
+	request.EvidenceRefs = []string{"evidence-ref-token-budget"}
+
+	bundle := BuildContextBundleV0(request)
+	if !bundle.Valid() {
+		t.Fatalf("vocabulario operativo no debe bloquear contexto: %+v", bundle.Issues)
+	}
+}
+
+func TestContextBundleDetailRailMatrixBloqueaValoresSensiblesEfectivosV0(t *testing.T) {
+	request := validContextBundleRequestV0()
 	request.EvidenceRefs = []string{"evidence-ref-client_secret=valor"}
 
 	bundle := BuildContextBundleV0(request)
-	requireContextIssueV0(t, bundle.Issues, ErrContextBundleDetalleProhibidoV0)
+	if bundle.Valid() {
+		t.Fatalf("valor sensible efectivo no debe validarse: %+v", bundle)
+	}
 }
 
 func TestContextMaterializationDetailRailExternalMatrixV0(t *testing.T) {
@@ -42,9 +55,14 @@ func TestContextMaterializationDetailRailExternalMatrixV0(t *testing.T) {
 	if contextMaterializedContentHasForbiddenDetailV0("runtime provider model prompt policy transcript policy") {
 		t.Fatal("contenido operacional opaco bloqueado")
 	}
-	for _, value := range []string{"prompt=raw text", "/home/user/private", "sk-test-value"} {
+	for _, value := range []string{"prompt policy ref", "transcript policy ref", "home ref opaca"} {
+		if contextMaterializedContentHasForbiddenDetailV0(value) {
+			t.Fatalf("vocabulario opaco no debe bloquear contenido: %q", value)
+		}
+	}
+	for _, value := range []string{"prompt=raw text", "sk-test-value"} {
 		if !contextMaterializedContentHasForbiddenDetailV0(value) {
-			t.Fatalf("contenido sensible aceptado: %q", value)
+			t.Fatalf("contenido sensible efectivo debe bloquearse: %q", value)
 		}
 	}
 }

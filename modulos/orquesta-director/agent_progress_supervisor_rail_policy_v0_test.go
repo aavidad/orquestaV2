@@ -25,7 +25,8 @@ func TestAgentProgressSupervisorRailPolicyV0ConservaRefsOpacasOperativas(t *test
 	}
 }
 
-func TestAgentProgressSupervisorRailPolicyV0FiltraDetalleSensibleEfectivo(t *testing.T) {
+func TestAgentProgressSupervisorRailPolicyV0ConservaDetalleSensibleEfectivo(t *testing.T) {
+	enableDirectorRailsModeEnforcedForTestV0(t)
 	report := orquestaruntime.AgentProgressReportV0{
 		ReportID: "agent-progress-report-ref-rail-policy-001",
 		EvidenceRefs: []string{
@@ -43,8 +44,12 @@ func TestAgentProgressSupervisorRailPolicyV0FiltraDetalleSensibleEfectivo(t *tes
 	want := []string{
 		"agent-progress-report-ref-rail-policy-001",
 		"evidence-ref-provider-model-db-sql-001",
+		"api_key=valor",
+		"/home/operador/proyecto",
+		"prompt=raw",
+		"raw_text=payload-completo",
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("refs sensibles no filtradas: got=%v want=%v", got, want)
+		t.Fatalf("refs no conservadas: got=%v want=%v", got, want)
 	}
 }

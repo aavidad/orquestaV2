@@ -9,7 +9,7 @@ func ensureFunctionContractPublishCommandAllowedV0(current OrchestrationRunV0, c
 	if err := ensureFunctionContractPublishCommandPhaseCurrentV0(current, payload.PhaseID); err != nil {
 		return err
 	}
-	if !decisionAlreadyReflectedV0(current, payload.DecisionRef) {
+	if !functionContractDecisionBasisReflectedV0(current, payload.DecisionRef) {
 		return commandErrorV0(ErrTransicionInvalidaV0, "payload.decision_ref")
 	}
 	return nil
@@ -23,10 +23,14 @@ func ensureFunctionContractPublishedEventAllowedV0(current OrchestrationRunV0, e
 	if err := ensureFunctionContractPublishedEventPhaseCurrentV0(current, payload.PhaseID); err != nil {
 		return err
 	}
-	if !decisionAlreadyReflectedV0(current, payload.DecisionRef) {
+	if !functionContractDecisionBasisReflectedV0(current, payload.DecisionRef) {
 		return eventErrorV0(ErrSecuenciaInvalidaV0, "payload.decision_ref")
 	}
 	return nil
+}
+
+func functionContractDecisionBasisReflectedV0(current OrchestrationRunV0, ref string) bool {
+	return decisionAlreadyReflectedV0(current, ref) || directorAnswerAlreadyReflectedV0(current, ref)
 }
 
 func ensureFunctionContractPublishCommandPhaseCurrentV0(run OrchestrationRunV0, phaseID string) error {

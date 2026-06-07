@@ -21,6 +21,9 @@ type opesDrainSummaryV0 struct {
 	SelectedJobType  string                       `json:"selected_job_type,omitempty"`
 	EmptyJobTypes    []string                     `json:"empty_job_types,omitempty"`
 	JobRef           string                       `json:"job_ref,omitempty"`
+	ProgramID        string                       `json:"program_id,omitempty"`
+	TopicID          string                       `json:"topic_id,omitempty"`
+	CorrelationID    string                       `json:"correlation_id,omitempty"`
 	DryRun           bool                         `json:"dry_run,omitempty"`
 	Seen             int                          `json:"seen"`
 	Submitted        int                          `json:"submitted"`
@@ -33,12 +36,18 @@ type opesDrainSummaryV0 struct {
 }
 
 type opesDrainJobResultV0 struct {
-	JobRef        string `json:"job_ref"`
-	WorkKind      string `json:"work_kind"`
-	ContextBlocks int    `json:"context_blocks,omitempty"`
-	RunRef        string `json:"run_ref,omitempty"`
-	ChangeRef     string `json:"change_ref,omitempty"`
-	Status        string `json:"status"`
+	JobRef                 string `json:"job_ref"`
+	WorkKind               string `json:"work_kind"`
+	ContextBlocks          int    `json:"context_blocks,omitempty"`
+	RunRef                 string `json:"run_ref,omitempty"`
+	ChangeRef              string `json:"change_ref,omitempty"`
+	Status                 string `json:"status"`
+	SupervisionStatus      string `json:"supervision_status,omitempty"`
+	SupervisionStopReason  string `json:"supervision_stop_reason,omitempty"`
+	SupervisionProcessRef  string `json:"supervision_process_ref,omitempty"`
+	SupervisionEvidenceRef string `json:"supervision_evidence_ref,omitempty"`
+	RunRecoveryStatus      string `json:"run_recovery_status,omitempty"`
+	RunRecoveryEvidenceRef string `json:"run_recovery_evidence_ref,omitempty"`
 }
 
 type opesDrainPublicErrorV0 struct {
@@ -114,6 +123,9 @@ func runOPESDrainSequenceOnceV0(
 		OrquestaBaseURL: config.OrquestaBaseURL,
 		Limit:           config.Limit,
 		JobTypeSequence: sequence,
+		ProgramID:       config.ProgramID,
+		TopicID:         config.TopicID,
+		CorrelationID:   config.CorrelationID,
 		EmptyJobTypes:   emptyJobTypes,
 		DryRun:          config.DryRun,
 		Destination:     config.Destination,
@@ -135,6 +147,9 @@ func runOPESDrainSingleOnceV0(
 		Status:        "pending",
 		JobType:       config.JobType,
 		JobRef:        config.JobRef,
+		ProgramID:     config.ProgramID,
+		TopicID:       config.TopicID,
+		CorrelationID: config.CorrelationID,
 		Limit:         opesBridgeScanLimitV0(config),
 	})
 	if err != nil {
@@ -146,6 +161,9 @@ func runOPESDrainSingleOnceV0(
 		Limit:           config.Limit,
 		JobType:         config.JobType,
 		JobRef:          config.JobRef,
+		ProgramID:       config.ProgramID,
+		TopicID:         config.TopicID,
+		CorrelationID:   config.CorrelationID,
 		DryRun:          config.DryRun,
 		Seen:            len(jobs),
 		Destination:     config.Destination,
@@ -162,6 +180,10 @@ func runOPESDrainSingleOnceV0(
 			&summary,
 			&result,
 		) {
+			opesBridgeSuperviseSubmittedRunV0(ctx, &orquestaHTTPClient, config, &summary, &result)
+			if len(summary.Results) > 0 {
+				summary.Results[len(summary.Results)-1] = result
+			}
 			continue
 		}
 		jobContext, err := opesJobContextV0(ctx, client, job)
@@ -196,6 +218,10 @@ func runOPESDrainSingleOnceV0(
 			&result,
 		)
 		if claimedSkip {
+			opesBridgeSuperviseSubmittedRunV0(ctx, &orquestaHTTPClient, config, &summary, &result)
+			if len(summary.Results) > 0 {
+				summary.Results[len(summary.Results)-1] = result
+			}
 			continue
 		}
 		runRef, err := submitOPESExternalWorkRunV0(ctx, &orquestaHTTPClient, config.OrquestaBaseURL, request)
@@ -212,6 +238,7 @@ func runOPESDrainSingleOnceV0(
 			result.Status = "recovery_required"
 			appendOPESDrainErrorV0(&summary, job.ID, externalBridgeRecoveryRequiredCodeV0)
 		}
+		opesBridgeSuperviseSubmittedRunV0(ctx, &orquestaHTTPClient, config, &summary, &result)
 		summary.Submitted++
 		summary.Results = append(summary.Results, result)
 	}

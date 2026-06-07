@@ -14,7 +14,7 @@ import (
 	orquestastatefile "orquesta/modulos/orquesta-state-file"
 )
 
-func TestIdleSelfImprovementBlockersV0DetectaAuthBloqueadaEnRunActivo(t *testing.T) {
+func TestIdleSelfImprovementBlockersV0NoInfiereAuthBloqueadaDeAssessmentCritico(t *testing.T) {
 	stateDir := t.TempDir()
 	saveIdleSelfImprovementBlockerRunForTestV0(t, stateDir, orquestacoreworkflow.OrchestrationRunV0{
 		SchemaVersion:     orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
@@ -39,12 +39,9 @@ func TestIdleSelfImprovementBlockersV0DetectaAuthBloqueadaEnRunActivo(t *testing
 	if err != nil {
 		t.Fatalf("IdleSelfImprovementBlockersV0: %v", err)
 	}
-	if !got.Blocked ||
-		got.Reason != idleSelfImprovementProviderAuthBlockedReasonV0 ||
-		len(got.RunRefs) != 1 ||
-		got.RunRefs[0] != "run-ref-provider-auth-blocked-001" ||
-		!containsStringServerStackForTestV0(got.EvidenceRefs, "evidence-ref-auth-config-blocker") {
-		t.Fatalf("blocker=%+v", got)
+	if got.Blocked || len(got.RunRefs) != 0 || got.Reason != "" ||
+		containsStringServerStackForTestV0(got.EvidenceRefs, "evidence-ref-auth-config-blocker") {
+		t.Fatalf("assessment critico generico no debe bloquear automejora=%+v", got)
 	}
 }
 
@@ -160,7 +157,7 @@ func TestIdleSelfImprovementBlockersV0IgnoraRunHistoricoFueraDeColaYControlV0(t 
 	}
 }
 
-func TestIdleSelfImprovementBlockersV0BloqueaRunAuthActivoEnColaV0(t *testing.T) {
+func TestIdleSelfImprovementBlockersV0NoBloqueaRunAuthInferidoActivoEnColaV0(t *testing.T) {
 	ctx := context.Background()
 	stateDir := t.TempDir()
 	runRef := "run-ref-provider-auth-ready-001"
@@ -190,8 +187,8 @@ func TestIdleSelfImprovementBlockersV0BloqueaRunAuthActivoEnColaV0(t *testing.T)
 	if err != nil {
 		t.Fatalf("IdleSelfImprovementBlockersV0: %v", err)
 	}
-	if !got.Blocked || len(got.RunRefs) != 1 || got.RunRefs[0] != runRef {
-		t.Fatalf("run auth activo en cola debe bloquear=%+v", got)
+	if got.Blocked || len(got.RunRefs) != 0 {
+		t.Fatalf("run auth inferido en cola no debe bloquear=%+v", got)
 	}
 }
 
@@ -240,7 +237,7 @@ func TestIdleSelfImprovementBlockersV0IgnoraRunAuthRecuperadoPorControlV0(t *tes
 	}
 }
 
-func TestIdleSelfImprovementBlockersV0RespetaScopeDeRunsConocidas(t *testing.T) {
+func TestIdleSelfImprovementBlockersV0NoBloqueaScopePorAuthInferidaV0(t *testing.T) {
 	stateDir := t.TempDir()
 	saveIdleSelfImprovementBlockerRunForTestV0(t, stateDir, providerAuthBlockedRunForTestV0("run-ref-provider-auth-old-001"))
 	saveIdleSelfImprovementBlockerRunForTestV0(t, stateDir, providerAuthBlockedRunForTestV0("run-ref-provider-auth-current-001"))
@@ -255,7 +252,7 @@ func TestIdleSelfImprovementBlockersV0RespetaScopeDeRunsConocidas(t *testing.T) 
 	if err != nil {
 		t.Fatalf("IdleSelfImprovementBlockersV0: %v", err)
 	}
-	if !got.Blocked || len(got.RunRefs) != 1 || got.RunRefs[0] != "run-ref-provider-auth-current-001" {
+	if got.Blocked || len(got.RunRefs) != 0 {
 		t.Fatalf("blocker=%+v", got)
 	}
 }

@@ -48,14 +48,8 @@ func compactMCPObservationTokenV0(value string) string {
 	if value == "" || len(value) > 96 || strings.ContainsAny(value, "\r\n\t /\\") {
 		return ""
 	}
-	lower := strings.ToLower(value)
-	for _, forbidden := range []string{
-		"token", "secret", "password", "oauth", "bearer", "sk-", "home",
-		"prompt", "transcript",
-	} {
-		if strings.Contains(lower, forbidden) {
-			return ""
-		}
+	if forbiddenOperationalTextCodeV0(value) != "" {
+		return ""
 	}
 	return value
 }

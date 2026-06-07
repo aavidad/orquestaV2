@@ -36,7 +36,7 @@ func validAgentLeaseUTCInstantV0(value string) bool {
 }
 
 func containsForbiddenAgentLeaseDetailV0(value string) bool {
-	return orquestarails.TextContainsOperationalRawDetailForFieldV0(
+	return orquestarails.TextContainsOperationalSensitiveDetailForFieldV0(
 		"agent_lease",
 		"ref",
 		value,
@@ -76,16 +76,15 @@ func isAgentLeaseLeapYearV0(year int) bool {
 }
 
 var (
-	agentLeaseOpaqueRefPatternV0  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{2,511}$`)
-	agentLeaseUTCInstantPatternV0 = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$`)
-	forbiddenAgentLeaseJSONKeysV0 = map[string]bool{
-		"access_token": true, "api_key": true, "authorization": true,
-		"client_secret": true, "db": true, "database": true,
-		"home": true, "model": true, "modelo": true,
-		"oauth": true, "password": true, "pid": true,
-		"process": true, "process_ref": true, "provider": true,
-		"proveedor": true, "prompt": true, "raw_prompt": true,
-		"raw_text": true, "raw_transcript": true, "runtime": true,
-		"runtime_provider": true, "secrets": true, "transcript": true,
+	agentLeaseOpaqueRefPatternV0       = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{2,511}$`)
+	agentLeaseUTCInstantPatternV0      = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$`)
+	sensitiveAgentLeaseJSONValueKeysV0 = map[string]bool{
+		"access_token": true, "access-token": true,
+		"api_key": true, "api-key": true, "apikey": true,
+		"authorization": true, "client_secret": true,
+		"client-secret": true, "password": true, "passwd": true,
+		"pwd": true, "refresh_token": true, "refresh-token": true,
+		"secret": true, "secret_key": true, "secret-key": true,
+		"credential": true, "credentials": true,
 	}
 )

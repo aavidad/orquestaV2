@@ -17,7 +17,10 @@ Evidencia ya cerrada:
   `research_exam_precedents -> exam_research_report`,
   `generate_question_bank -> question_bank`,
   `generate_tutor_assets -> tutor_bot_package` y
-  `generate_html_site -> local_html_site`.
+  `generate_html_site -> local_html_site`,
+  `generate_help_manual_assets -> help_manual_package`,
+  revisiones independientes y por pares hasta `review_director_consolidation`
+  y cierre `finalize_temario_package -> completed_syllabus_package`.
 
 Bloqueo real:
 

@@ -233,24 +233,7 @@ func readIdleSelfImprovementRunDocumentV0(path string) (
 func idleSelfImprovementRunHasProviderAuthBlockerV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 ) bool {
-	if run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
-		return false
-	}
-	if len(compactServerStackStringsV0(run.LostAgents)) == 0 &&
-		len(compactServerStackStringsV0(run.DirectorQuestions)) == 0 {
-		return false
-	}
-	for _, raw := range compactServerStackStringsV0(run.AgentAssessments) {
-		projection, ok := orquestacoreworkflow.ParseAgentAssessmentProjectionV0(raw)
-		if !ok {
-			continue
-		}
-		if projection.Verdict == orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0 &&
-			projection.Action == orquestacoreworkflow.AgentAssessmentActionAskDirectorV0 &&
-			projection.Severity == orquestacoreworkflow.AgentAssessmentSeverityCriticalV0 {
-			return true
-		}
-	}
+	_ = run
 	return false
 }
 

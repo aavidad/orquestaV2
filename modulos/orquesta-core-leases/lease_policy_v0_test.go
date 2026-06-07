@@ -132,8 +132,6 @@ func TestAgentLeaseDTOsRechazanDetallesSensiblesEfectivos(t *testing.T) {
 	forbiddenRefs := []string{
 		"api_key=valor",
 		"client_secret=valor",
-		"home-$HOME",
-		"pid=1234",
 		"prompt=raw",
 		"postgres://user:pass@host/db",
 	}
@@ -146,7 +144,24 @@ func TestAgentLeaseDTOsRechazanDetallesSensiblesEfectivos(t *testing.T) {
 	}
 }
 
-func TestDecodeAgentHeartbeatReportV0RechazaCamposDesconocidosYProhibidos(t *testing.T) {
+func TestAgentLeaseDTOsNoConviertenDiagnosticoLocalEnDetalleProhibido(t *testing.T) {
+	policy := validAgentLeasePolicyV0()
+	refs := []string{
+		"home-$HOME",
+		"pid=1234",
+	}
+
+	for _, ref := range refs {
+		t.Run(ref, func(t *testing.T) {
+			policy.EvidenceRefs = []string{ref}
+			issues := ValidateAgentLeasePolicyV0(policy)
+			requireAgentLeaseIssueCodeV0(t, issues, ErrAgentLeaseReferenciaNoOpacaV0)
+			rejectAgentLeaseIssueCodeV0(t, issues, ErrAgentLeaseDetalleProhibidoV0)
+		})
+	}
+}
+
+func TestDecodeAgentHeartbeatReportV0DistingueJSONInvalidoYDetalleSensible(t *testing.T) {
 	_, err := DecodeAgentHeartbeatReportV0([]byte(`{
 		"heartbeat_ref":"heartbeat-lse-001",
 		"run_ref":"run-lse-001",
@@ -166,6 +181,17 @@ func TestDecodeAgentHeartbeatReportV0RechazaCamposDesconocidosYProhibidos(t *tes
 		"observed_at":"2026-05-06T10:15:00Z",
 		"status":"alive",
 		"pid":1234
+	}`))
+	requireAgentLeaseErrorCodeV0(t, err, ErrAgentLeaseJSONInvalidoV0)
+
+	_, err = DecodeAgentHeartbeatReportV0([]byte(`{
+		"heartbeat_ref":"heartbeat-lse-001",
+		"run_ref":"run-lse-001",
+		"agent_request_id":"agent-request-lse-001",
+		"lease_ref":"lease-lse-001",
+		"observed_at":"2026-05-06T10:15:00Z",
+		"status":"alive",
+		"api_key":"valor"
 	}`))
 	requireAgentLeaseErrorCodeV0(t, err, ErrAgentLeaseDetalleProhibidoV0)
 }
@@ -215,4 +241,13 @@ func requireAgentLeaseIssueCodeV0(t *testing.T, issues []AgentLeaseIssueV0, code
 		}
 	}
 	t.Fatalf("no se encontro codigo %q en %#v", code, issues)
+}
+
+func rejectAgentLeaseIssueCodeV0(t *testing.T, issues []AgentLeaseIssueV0, code AgentLeaseIssueCodeV0) {
+	t.Helper()
+	for _, issue := range issues {
+		if issue.Code == code {
+			t.Fatalf("no se esperaba codigo %q en %#v", code, issues)
+		}
+	}
 }

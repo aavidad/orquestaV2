@@ -37,3 +37,11 @@ func decodeBlockRunCommandPayloadV0(raw json.RawMessage) (BlockRunCommandPayload
 	payload.EvidenceRefs = compactStringsV0(payload.EvidenceRefs)
 	return payload, nil
 }
+
+func decodeResolveRunBlockerCommandPayloadV0(raw json.RawMessage) (ResolveRunBlockerCommandPayloadV0, error) {
+	var payload ResolveRunBlockerCommandPayloadV0
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return ResolveRunBlockerCommandPayloadV0{}, commandErrorV0(ErrPayloadInvalidoV0, "payload")
+	}
+	return normalizeResolveRunBlockerPayloadV0(payload), nil
+}

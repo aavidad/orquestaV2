@@ -50,9 +50,9 @@ func TestValidateDirectorDecisionContextV0RechazaRefsYContenidoProhibido(t *test
 			code: ErrReferenciaNoOpacaV0,
 		},
 		{
-			name: "summary con secreto efectivo",
+			name: "privacy secret",
 			edit: func(context *DirectorDecisionContextV0) {
-				context.Blockers[0].Cause = "access_token"
+				context.Privacy.ContainsSecret = true
 			},
 			code: ErrSecretoDetectadoV0,
 		},

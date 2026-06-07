@@ -138,9 +138,6 @@ func outboxEnvelopeHasForbiddenDetailV0(message OutboxMessageV0) bool {
 }
 
 func containsForbiddenOutboxDetailV0(value any) bool {
-	if !detailProhibitedRailsEnabledV0() {
-		return false
-	}
 	switch typed := value.(type) {
 	case map[string]any:
 		return mapContainsForbiddenOutboxDetailV0(typed)
@@ -160,9 +157,6 @@ func containsForbiddenOutboxDetailV0(value any) bool {
 }
 
 func mapContainsForbiddenOutboxDetailV0(values map[string]any) bool {
-	if !detailProhibitedRailsEnabledV0() {
-		return false
-	}
 	if len(values) > maxOutboxCollectionLenV0 {
 		return true
 	}
@@ -175,12 +169,9 @@ func mapContainsForbiddenOutboxDetailV0(values map[string]any) bool {
 }
 
 func containsForbiddenOutboxKeyV0(value string) bool {
-	if !detailProhibitedRailsEnabledV0() {
-		return false
-	}
-	lower := strings.ToLower(value)
+	lower := strings.ToLower(strings.TrimSpace(value))
 	for _, fragment := range forbiddenOutboxPayloadKeysV0 {
-		if strings.Contains(lower, fragment) {
+		if lower == fragment {
 			return true
 		}
 	}

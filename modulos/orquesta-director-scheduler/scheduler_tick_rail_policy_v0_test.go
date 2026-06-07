@@ -30,9 +30,9 @@ func TestSchedulerTickRailPolicyV0RejectsSensitiveWorkText(t *testing.T) {
 			},
 		},
 		{
-			name: "summary_home_path",
+			name: "summary_bearer_token",
 			mutate: func(input *DirectorSchedulerTickInputV0) {
-				input.WorkCandidates[0].AgentCandidate.Payload.Summary = "/home/operador/proyecto"
+				input.WorkCandidates[0].AgentCandidate.Payload.Summary = "authorization: Bearer valor-real"
 			},
 		},
 		{
@@ -54,6 +54,17 @@ func TestSchedulerTickRailPolicyV0RejectsSensitiveWorkText(t *testing.T) {
 			assertSchedulerTickErrorV0(t, err, "payload")
 		})
 	}
+}
+
+func TestSchedulerTickRailPolicyV0PermiteHomeDiagnostico(t *testing.T) {
+	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "on")
+	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS_SCOPE", "*")
+	input := validSchedulerTickInputV0()
+	input.WorkCandidates[0].AgentCandidate.Payload.Summary = "/home/operador/proyecto"
+
+	plan := mustSchedulerTickPlanV0(t, input)
+
+	assertSchedulerPlanV0(t, plan, SchedulerTickStatusCommandsReadyV0, 1)
 }
 
 func TestSchedulerTickRailPolicyV0ProgrammingPermitePayloadGrande(t *testing.T) {

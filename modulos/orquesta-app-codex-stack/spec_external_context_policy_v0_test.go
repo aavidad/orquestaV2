@@ -136,7 +136,7 @@ func TestCodexLaunchSpecResolverV0MarcaPresupuestoTotalAgotado(t *testing.T) {
 	packet := resolution.Spec.AgentPacket
 	if !contextBundleHasRequiredTruncatedEntryV0(packet.Context) ||
 		!codexStackContextContainsForTestV0(packet.Context.Entries, "external_context_budget") ||
-		!stringInSetV0(packet.Task.RequiredTests, externalContextTruncatedRequiredTestV0) {
+		!stringInSetV0(packet.Task.DoneCriteria, externalContextTruncatedDoneCriteriaV0) {
 		t.Fatalf("packet=%+v", packet)
 	}
 }

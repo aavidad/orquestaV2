@@ -125,7 +125,7 @@ func validateDiagnosticoContadoresV0(counters map[string]float64, prefix string,
 			add(ErrOperationalStatusQueryInvalidaV0, field)
 			continue
 		}
-		if code := forbiddenOperationalTextCodeV0(key); code != "" {
+		if code := forbiddenOperationalKeyCodeV0(key); code != "" {
 			add(code, field)
 		}
 		if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 {

@@ -1,9 +1,13 @@
 package orquestapersistence
 
 import (
+	"time"
+
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
 	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
 )
+
+const fileOutboxClaimLeaseV0 = 5 * time.Minute
 
 func directorIssuesFromOutboxLedgerV0(
 	issues []OutboxLedgerIssueV0,
@@ -59,6 +63,7 @@ func normalizeStoredFileOutboxClaimV0(claim fileOutboxLedgerClaimV0) fileOutboxL
 	claim.IdempotencyKey = trimV0(claim.IdempotencyKey)
 	claim.ClaimRef = trimV0(claim.ClaimRef)
 	claim.LeaseRef = trimV0(claim.LeaseRef)
+	claim.ClaimedAt = trimV0(claim.ClaimedAt)
 	if claim.ClaimRef == "" {
 		claim.ClaimRef = "claim-ref-" + claim.MessageID
 	}
@@ -97,7 +102,27 @@ func fileOutboxClaimFromDispatchV0(
 		RunID:          claim.RunID,
 		TargetPort:     claim.TargetPort,
 		IdempotencyKey: claim.IdempotencyKey,
+		ClaimedAt:      fileOutboxClaimedAtNowV0(),
 	})
+}
+
+func fileOutboxClaimRecoverableInProcessV0(claim *fileOutboxLedgerClaimV0) bool {
+	if claim == nil || claim.Recovered {
+		return true
+	}
+	claimedAt := trimV0(claim.ClaimedAt)
+	if claimedAt == "" {
+		return true
+	}
+	parsed, err := time.Parse(time.RFC3339, claimedAt)
+	if err != nil {
+		return true
+	}
+	return time.Since(parsed) >= fileOutboxClaimLeaseV0
+}
+
+func fileOutboxClaimedAtNowV0() string {
+	return time.Now().UTC().Format(time.RFC3339)
 }
 
 func fileOutboxAckFromSuccessV0(
@@ -213,7 +238,7 @@ func fileOutboxRecordPendingForDispatchV0(
 	if record == nil || record.Ack != nil {
 		return false
 	}
-	if record.Claim != nil && !record.Claim.Recovered {
+	if record.Claim != nil && !fileOutboxClaimRecoverableInProcessV0(record.Claim) {
 		return false
 	}
 	message := record.Message

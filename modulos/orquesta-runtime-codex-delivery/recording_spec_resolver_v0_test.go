@@ -107,6 +107,46 @@ func TestCodexReceiptRecordingSpecResolverV0RegistraBaselineWorktree(t *testing.
 	}
 }
 
+func TestCodexReceiptRecordingSpecResolverV0NoBloqueaSiBaselineNoCabe(t *testing.T) {
+	spec := codexDeliverySpecForTestV0()
+	projectDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(projectDir, "binario-local"), []byte("base"), 0o600); err != nil {
+		t.Fatalf("write base: %v", err)
+	}
+	ackPath := filepath.Join(t.TempDir(), "agent_ack.json")
+	receiptStore := NewInMemoryCodexReceiptDescriptorStoreV0()
+	resolver := CodexReceiptRecordingSpecResolverV0{
+		Inner:    staticExternalAgentSpecResolverV0{Spec: spec},
+		Recorder: receiptStore,
+		AckPathResolver: StaticCodexReceiptAckPathResolverV0{
+			AckPath:        ackPath,
+			ProjectWorkDir: projectDir,
+		},
+		WorktreeBaselineRecorder: CodexReceiptWorktreeBaselineRecorderV0{
+			SnapshotStore: orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0(),
+			SnapshotReadBudget: orquestaruntimeworktree.WorktreeSnapshotReadBudgetV0{
+				MaxFiles:      10,
+				MaxFileBytes:  1,
+				MaxTotalBytes: 1024,
+			},
+		},
+	}
+
+	if _, err := resolver.ResolveExternalAgentLaunchSpecV0(context.Background(), codexReceiptInboundForTestV0(spec)); err != nil {
+		t.Fatalf("ResolveExternalAgentLaunchSpecV0 bloqueo por baseline: %v", err)
+	}
+	descriptors, err := receiptStore.ListCodexReceiptDescriptorsV0(context.Background(), CodexReceiptDescriptorRequestV0{
+		RunID:         "run-ref-001",
+		StartedAgents: []string{spec.RequestID},
+	})
+	if err != nil || len(descriptors) != 1 {
+		t.Fatalf("descriptors=%+v err=%v", descriptors, err)
+	}
+	if descriptors[0].WorktreeBaselineRef != "" {
+		t.Fatalf("baseline no deberia bloquear ni registrarse: %+v", descriptors[0])
+	}
+}
+
 func TestInMemoryCodexReceiptDescriptorStoreV0FiltraRunAgenteYDelivery(t *testing.T) {
 	spec := codexDeliverySpecForTestV0()
 	other := codexDeliverySpecForTestV0()

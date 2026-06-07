@@ -15,20 +15,20 @@ func TestOperationalPrivacyTaxonomyV0DistingueRefsDeValores(t *testing.T) {
 	}
 }
 
-func TestOperationalPrivacyTaxonomyV0ClasificaValoresEfectivos(t *testing.T) {
-	tests := []struct {
-		value string
-		check func(OperationalPrivacyFindingV0) bool
-	}{
-		{value: "access_token=abc123456", check: func(f OperationalPrivacyFindingV0) bool { return f.ContainsSecret }},
-		{value: "prompt=texto completo", check: func(f OperationalPrivacyFindingV0) bool { return f.ContainsPrompt }},
-		{value: "transcript completo", check: func(f OperationalPrivacyFindingV0) bool { return f.ContainsTranscript }},
-		{value: "/home/user/private", check: func(f OperationalPrivacyFindingV0) bool { return f.ContainsConnectionDetail }},
-	}
-	for _, test := range tests {
-		t.Run(test.value, func(t *testing.T) {
-			if finding := ClassifyOperationalPrivacyTextV0(test.value); !test.check(finding) {
-				t.Fatalf("valor no clasificado: %+v", finding)
+func TestOperationalPrivacyTaxonomyV0RailsOfflineNoClasificaValoresEfectivos(t *testing.T) {
+	for _, value := range []string{
+		"access_token=abc123456",
+		"prompt=texto completo",
+		"transcript completo",
+		"/home/user/private",
+	} {
+		t.Run(value, func(t *testing.T) {
+			if finding := ClassifyOperationalPrivacyTextV0(value); finding.RedactionLevel != OperationalPrivacyRedactionNoneV0 ||
+				finding.ContainsSecret ||
+				finding.ContainsPrompt ||
+				finding.ContainsTranscript ||
+				finding.ContainsConnectionDetail {
+				t.Fatalf("rails offline no debe clasificar ni bloquear valor: %+v", finding)
 			}
 		})
 	}

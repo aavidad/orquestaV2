@@ -442,7 +442,9 @@ Esto cierra el scope de ingesta y separa la evidencia por frente. El ciclo
 funcional de ola esta probado offline/fake-runtime con review, tests durables,
 `replan_or_close`, `close` y plan state; tambien quedo reproducido con Codex
 real de ola/cohorte amplia y recursion real. Queda pendiente OPES temporal real
-de derivados/cierre. El handoff de ese tramo es
+de derivados/cierre. El handoff operativo de ese tramo es
+`docs/runbooks/handoff_opes_derivados_reales_hasta_local_html_site_2026-06-07.md`;
+el corte generico de cierre sigue en
 `corte_cierre_generico_director_operativo_2026-05-17.md`.
 
 ## Como trabajar sin romper el nucleo

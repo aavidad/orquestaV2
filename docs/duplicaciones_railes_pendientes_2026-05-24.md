@@ -363,10 +363,10 @@ Prioridad alta:
 - `modulos/orquesta-director-agent/director_decision_helpers_v0.go`, porque
   participa en decisiones y reviews donde ya se observaron falsos positivos por
   vocabulario operativo.
-- `cmd/orquesta-server` y scripts de rails, porque hoy fijan
-  `ORQUESTA_DETAIL_PROHIBITED_RAILS=on` por defecto con scope acotado y deben
-  mantener sincronizados registro vivo, matriz y docs antes de ampliar ese
-  scope o volver a cambiar el default.
+- `cmd/orquesta-server` y scripts de rails, porque desde 2026-06-02 deben
+  mantener `ORQUESTA_RAILS_MODE=offline` y
+  `ORQUESTA_DETAIL_PROHIBITED_RAILS=off` por defecto, con matriz y docs
+  sincronizados antes de cualquier reactivacion opt-in.
 
 Prioridad media:
 
@@ -413,12 +413,12 @@ Backlog asociado: `T22 detail-rails-doc-state-sync` y
 Prioridad alta:
 
 - Sincronizar `docs/rails/registro_railes_2026-05-24.md` con el default real de
-  `cmd/orquesta-server`: `ORQUESTA_DETAIL_PROHIBITED_RAILS=on` con scope
-  acotado. El registro actual no pertenece a este write-set, por lo que queda
-  como tarea separada y no como cambio silencioso.
-- Asegurar que `./scripts/test_rails_fast.sh` siga siendo la matriz rapida que
-  prueba default, override `off`, scopes y falsos positivos de vocabulario
-  operativo antes de compilar servidor completo.
+  `cmd/orquesta-server`: `ORQUESTA_RAILS_MODE=offline` y
+  `ORQUESTA_DETAIL_PROHIBITED_RAILS=off`. Cualquier vuelta a bloqueo no se
+  reactiva por env: debe ser tarea futura, con owner y prueba viva.
+- Sustituir la matriz rapida antigua de bloqueo por una comprobacion de build y
+  smoke API que confirme que los rails quedan offline aunque el entorno intente
+  activar `enforced`, scopes o `ORQUESTA_DETAIL_PROHIBITED_RAILS=on`.
 
 Prioridad media:
 

@@ -21,7 +21,9 @@ La ruta verificada historicamente fue el wrapper opt-in de derivados OPES hasta
 Nota 2026-06-02: la secuencia vigente anade investigacion externa,
 `generate_question_bank -> question_bank`, `generate_audio_asset ->
 audio_asset`, `generate_tutor_assets -> tutor_bot_package` y
-`generate_html_site -> local_html_site`. Este resultado del 2026-05-24 no
+`generate_html_site -> local_html_site`. Actualizacion 2026-06-02: el flujo
+vigente anade tambien `generate_help_manual_assets -> help_manual_package` para
+manuales graficos de ayuda USO. Este resultado del 2026-05-24 no
 prueba esos derivados; la revalidacion nueva debe llegar al ultimo tipo
 configurado.
 

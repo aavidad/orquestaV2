@@ -33,6 +33,7 @@ type ConfigV0 struct {
 	RunSupervisor            RunSupervisorConfigV0
 	Codex                    CodexRuntimeConfigV0
 	Gemini                   GeminiRuntimeConfigV0
+	Claude                   ClaudeRuntimeConfigV0
 	Capacity                 CapacityConfigV0
 	ReviewGate               ReviewGateConfigV0
 	RequiredTests            orquestacionnucleoapp.RequiredTestRunnerPortV0
@@ -40,6 +41,7 @@ type ConfigV0 struct {
 	AppChange                orquestaappchange.AppChangePortsV0
 	AutoprogrammingPromotion AutoprogrammingPromotionConfigV0
 	DomainWork               orquestamcp.MCPDomainWorkExecutorPortV0
+	RuntimeModels            orquestaruntime.RuntimeModelManagerPortV0
 	DomainDelivery           DomainWorkDeliveryBridgeConfigV0
 }
 
@@ -117,6 +119,21 @@ type GeminiRuntimeConfigV0 struct {
 	Model          string
 	ApprovalMode   string
 	OutputFormat   string
+	ExtraArgs      []string
+	PromptHints    []string
+}
+
+type ClaudeRuntimeConfigV0 struct {
+	Enabled        bool
+	CommandPath    string
+	ProjectWorkDir string
+	RuntimeWorkDir string
+	HomeDir        string
+	PathEnv        string
+	Model          string
+	PermissionMode string
+	OutputFormat   string
+	Effort         string
 	ExtraArgs      []string
 	PromptHints    []string
 }

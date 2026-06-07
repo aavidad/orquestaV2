@@ -8,6 +8,7 @@ import (
 	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 	orquestaweb "orquesta/modulos/orquesta-web"
 )
@@ -23,6 +24,7 @@ type StackV0 struct {
 	Clock                    orquestafactoryhttp.AppSpecHTTPClockV0
 	AutoprogrammingPromotion AutoprogrammingPromotionConfigV0
 	DomainWork               orquestamcp.MCPDomainWorkExecutorPortV0
+	RuntimeModels            orquestaruntime.RuntimeModelManagerPortV0
 	DomainDelivery           DomainWorkDeliveryBridgeConfigV0
 	Codex                    CodexRuntimeConfigV0
 	CodexRuntimeWorkDir      string
@@ -46,6 +48,7 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 		Clock:                    config.Clock,
 		AutoprogrammingPromotion: config.AutoprogrammingPromotion,
 		DomainWork:               config.DomainWork,
+		RuntimeModels:            config.RuntimeModels,
 		DomainDelivery:           config.DomainDelivery,
 		Codex:                    config.Codex,
 		CodexRuntimeWorkDir:      config.Codex.RuntimeWorkDir,
@@ -84,6 +87,7 @@ func buildStackMCPTransportBindingsV0(
 			Port:              config.Stores.RunControl,
 			ExternalJobSource: externalJobStatsSourceV0(config),
 		},
+		RuntimeModels: config.RuntimeModels,
 		RunQueuePriority: orquestamcp.MCPRunQueuePriorityToolExecutorV0{
 			Reader: config.Stores.RunQueue,
 			Writer: config.Stores.RunQueue,
@@ -118,6 +122,7 @@ func buildStackHTTPHandlerV0(
 		RequestAppChange:          bindings.RequestAppChange,
 		DirectorStats:             bindings.DirectorStats,
 		RunControl:                bindings.RunControl,
+		RuntimeModels:             bindings.RuntimeModels,
 		RunQueuePriority:          bindings.RunQueuePriority,
 		RunSupervisor:             bindings.RunSupervisor,
 		AppVCS:                    bindings.AppVCS,

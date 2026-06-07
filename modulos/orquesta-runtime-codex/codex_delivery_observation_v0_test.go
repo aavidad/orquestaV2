@@ -54,6 +54,7 @@ func TestReadCodexDeliveryObservationFileV0AceptaACKLegacySinTestReceipts(t *tes
 
 func TestReadCodexDeliveryObservationFileV0RechazaACKEstrictoSinTestReceipts(t *testing.T) {
 	spec := codexNeutralSpecForDeliveryObservationTestV0()
+	spec.AgentPacket.Policies = append(spec.AgentPacket.Policies, "ack_terminal_strict")
 	ack := codexNeutralAckForDeliveryObservationTestV0(spec)
 	ack.TestReceipts = nil
 	data, err := json.Marshal(ack)
@@ -72,6 +73,7 @@ func TestReadCodexDeliveryObservationFileV0RechazaACKEstrictoSinTestReceipts(t *
 
 func TestReadCodexDeliveryObservationFileV0NoAceptaTestReceiptsInvalidosComoLegacy(t *testing.T) {
 	spec := codexNeutralSpecForDeliveryObservationTestV0()
+	spec.AgentPacket.Policies = append(spec.AgentPacket.Policies, "ack_terminal_strict")
 	ack := codexNeutralAckForDeliveryObservationTestV0(spec)
 	ack.TestReceipts = []CodexRequiredTestReceiptV0{{
 		SchemaVersion: CodexRequiredTestReceiptSchemaVersionV0,
@@ -94,6 +96,7 @@ func TestReadCodexDeliveryObservationFileV0NoAceptaTestReceiptsInvalidosComoLega
 
 func TestReadCodexDeliveryObservationFileV0RechazaACKMinimoHidratableV0(t *testing.T) {
 	spec := codexNeutralSpecForDeliveryObservationTestV0()
+	spec.AgentPacket.Policies = append(spec.AgentPacket.Policies, "ack_terminal_strict")
 	spec.AgentPacket.Task.RequiredTests = nil
 	path := filepath.Join(t.TempDir(), CodexAgentAckFileNameV0)
 	if err := os.WriteFile(
@@ -169,6 +172,7 @@ func TestBuildCodexDeliveryObservationV0AceptaACKCompletoNeutral(t *testing.T) {
 }
 
 func TestBuildCodexDeliveryObservationV0ConservaRailPendienteCompacto(t *testing.T) {
+	enableCodexRailsModeEnforcedForTestV0(t)
 	spec := codexNeutralSpecForDeliveryObservationTestV0()
 	ack := codexNeutralAckForDeliveryObservationTestV0(spec)
 	ack.Notes = EvidenceListV0{
@@ -180,15 +184,16 @@ func TestBuildCodexDeliveryObservationV0ConservaRailPendienteCompacto(t *testing
 	if len(issues) > 0 {
 		t.Fatalf("issues=%+v", issues)
 	}
-	if !evidenceContainsCodexDeliveryObservationTestV0(
+	if evidenceContainsCodexDeliveryObservationTestV0(
 		observation.EvidenceRefs,
 		CodexAgentAckPendingRailEvidenceRefV0,
 	) {
-		t.Fatalf("evidence_refs sin rail pendiente compacto: %v", observation.EvidenceRefs)
+		t.Fatalf("evidence_refs no deben incluir rail pendiente: %v", observation.EvidenceRefs)
 	}
 }
 
 func TestBuildCodexDeliveryObservationV0ConservaRailsPendientesEnCamposACK(t *testing.T) {
+	enableCodexRailsModeEnforcedForTestV0(t)
 	spec := codexNeutralSpecForDeliveryObservationTestV0()
 	ack := codexNeutralAckForDeliveryObservationTestV0(spec)
 	ack.Files = EvidenceListV0{"README.md", "docs/prompt-policy.md"}
@@ -198,11 +203,11 @@ func TestBuildCodexDeliveryObservationV0ConservaRailsPendientesEnCamposACK(t *te
 	if len(issues) > 0 {
 		t.Fatalf("issues=%+v", issues)
 	}
-	if !evidenceContainsCodexDeliveryObservationTestV0(
+	if evidenceContainsCodexDeliveryObservationTestV0(
 		observation.EvidenceRefs,
 		CodexAgentAckPendingRailEvidenceRefV0,
 	) {
-		t.Fatalf("evidence_refs sin rail pendiente compacto: %v", observation.EvidenceRefs)
+		t.Fatalf("evidence_refs no deben incluir rail pendiente: %v", observation.EvidenceRefs)
 	}
 }
 
@@ -225,6 +230,7 @@ func TestBuildCodexDeliveryObservationV0RechazaACKNoCompletado(t *testing.T) {
 }
 
 func TestBuildCodexDeliveryObservationV0AceptaRefConRailPendiente(t *testing.T) {
+	enableCodexRailsModeEnforcedForTestV0(t)
 	spec := codexNeutralSpecForDeliveryObservationTestV0()
 	spec.RequestID = "agent-codex-001"
 	spec.AgentPacket.RequestID = spec.RequestID
@@ -237,12 +243,14 @@ func TestBuildCodexDeliveryObservationV0AceptaRefConRailPendiente(t *testing.T) 
 	if codexDeliveryObservationUnsafeForCoreV0(observation) {
 		t.Fatalf("rail pendiente corto observation=%+v", observation)
 	}
-	if !codexDeliveryObservationHasPendingRailV0(observation) {
-		t.Fatalf("rail pendiente no detecto observation=%+v", observation)
+	if codexDeliveryObservationHasPendingRailV0(observation) {
+		t.Fatalf("rail pendiente no debe detectarse observation=%+v", observation)
 	}
 }
 
-func TestBuildCodexDeliveryObservationV0MarcaSoloValorSensibleComoUnsafe(t *testing.T) {
+func TestBuildCodexDeliveryObservationV0MarcaValorSensibleComoUnsafe(t *testing.T) {
+	enableCodexRailsModeEnforcedForTestV0(t)
+	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "on")
 	observation := CodexDeliveryObservationV0{
 		DeliveryRef: "ack-ref-001",
 		PhaseID:     "programacion",
@@ -260,6 +268,7 @@ func TestBuildCodexDeliveryObservationV0MarcaSoloValorSensibleComoUnsafe(t *test
 }
 
 func TestCodexDeliveryObservationV0ConservaValorRedactadoComoRailPendiente(t *testing.T) {
+	enableCodexRailsModeEnforcedForTestV0(t)
 	observation := CodexDeliveryObservationV0{
 		DeliveryRef: "ack-ref-001",
 		PhaseID:     "programacion",
@@ -271,7 +280,7 @@ func TestCodexDeliveryObservationV0ConservaValorRedactadoComoRailPendiente(t *te
 	if codexDeliveryObservationUnsafeForCoreV0(observation) {
 		t.Fatalf("rail blando redactado marcado unsafe: %+v", observation)
 	}
-	if !codexDeliveryObservationHasPendingRailV0(observation) {
-		t.Fatalf("rail blando no conservado como pendiente: %+v", observation)
+	if codexDeliveryObservationHasPendingRailV0(observation) {
+		t.Fatalf("rail blando no debe conservarse como pendiente: %+v", observation)
 	}
 }

@@ -98,7 +98,7 @@ func (planner idleSelfImprovementBacklogPlannerV0) withBacklogScannerCanonicalPr
 		"backlog_scanner_canonical_preflight_required",
 		"antes de anadir un nuevo ## Txx, comparar owner/alcance/frontera/tests/evidencia contra backlog_scanner_canonical_preflight_index",
 		"si solapa con canonica cerrada, documentar cobertura o regresion concreta; no crear Txx generico",
-		"si solapa con canonica pendiente, declarar alias/fusion aditiva o ACK failed con CONSULTA AL DIRECTOR y reason backlog_scanner_canonical_preflight_required",
+		"si solapa con canonica pendiente, declarar alias/fusion aditiva o conservar propuesta como borrador con reason backlog_scanner_canonical_preflight_required",
 	))
 	request.EvidenceRefs = compactServerStackStringsV0(append(request.EvidenceRefs,
 		"evidence-ref-autoprogramming-backlog-scanner-canonical-preflight",

@@ -11,19 +11,8 @@ const (
 	maxReplanProposalPayloadBytesV0 = 2048
 	maxReplanProposalStringV0       = 600
 	maxReplanProposalEvidenceRefsV0 = 20
+	coreReplannerDetailBoundaryV0   = "core_replanner"
 )
-
-var forbiddenReplanProposalFragmentsV0 = []string{
-	"db", "database", "sql", "dsn", "runtime",
-	"provider", "providers", "proveedor", "proveedores",
-	"model", "models", "modelo", "modelos",
-	"home", "oauth", "prompt", "prompts",
-	"transcript", "transcripts", "diff", "diffs",
-	"completion", "raw_text", "full_text",
-	"filesystem", "git", "docker", "tmux",
-	"secret", "secrets", "secreto", "secretos", "token", "password",
-	"credential", "credencial", "api_key",
-}
 
 func validateReplanProposalRequiredFieldsV0(proposal ReplanProposalV0) error {
 	fields := map[string]string{
@@ -105,15 +94,16 @@ func replanProposalHasLongStringV0(values []string) bool {
 }
 
 func replanProposalHasForbiddenDetailsV0(values []string) bool {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return false
+	if orquestarails.ValuesContainOperationalSensitiveDetailForFieldV0(
+		coreReplannerDetailBoundaryV0,
+		"*",
+		values,
+	) {
+		return true
 	}
 	for _, value := range values {
-		lower := strings.ToLower(value)
-		for _, fragment := range forbiddenReplanProposalFragmentsV0 {
-			if containsForbiddenReplanProposalFragmentV0(lower, fragment) {
-				return true
-			}
+		if replanProposalContainsRealHomePathV0(value) {
+			return true
 		}
 	}
 	return false
@@ -130,33 +120,50 @@ func normalizeReplanProposalStringsV0(values []string) []string {
 	return normalized
 }
 
-func containsForbiddenReplanProposalFragmentV0(lowerValue string, fragment string) bool {
-	fragment = strings.ToLower(strings.TrimSpace(fragment))
-	if fragment == "" {
-		return false
-	}
+func replanProposalContainsRealHomePathV0(value string) bool {
+	normalized := strings.ToLower(strings.ReplaceAll(value, `\`, "/"))
+	return replanProposalContainsHomePathPrefixV0(normalized, "/home/") ||
+		replanProposalContainsHomePathPrefixV0(normalized, "/users/") ||
+		replanProposalContainsHomePathPrefixV0(normalized, "c:/users/")
+}
+
+func replanProposalContainsHomePathPrefixV0(value string, prefix string) bool {
 	start := 0
 	for {
-		index := strings.Index(lowerValue[start:], fragment)
+		index := strings.Index(value[start:], prefix)
 		if index < 0 {
 			return false
 		}
 		absolute := start + index
-		if hasReplanProposalTokenBoundaryV0(lowerValue, absolute, absolute+len(fragment)) {
+		if replanProposalPathPrefixBoundaryV0(value, absolute) &&
+			replanProposalPathPrefixHasUserSegmentV0(value, absolute+len(prefix)) {
 			return true
 		}
-		start = absolute + len(fragment)
+		start = absolute + len(prefix)
 	}
 }
 
-func hasReplanProposalTokenBoundaryV0(value string, start int, end int) bool {
-	before := start == 0 || !isAsciiLetterOrDigitV0(value[start-1])
-	after := end >= len(value) || !isAsciiLetterOrDigitV0(value[end])
-	return before && after
+func replanProposalPathPrefixBoundaryV0(value string, index int) bool {
+	if index == 0 {
+		return true
+	}
+	switch value[index-1] {
+	case ' ', '\t', '\n', '\r', '"', '\'', '`', '=', ':':
+		return true
+	default:
+		return false
+	}
 }
 
-func isAsciiLetterOrDigitV0(ch byte) bool {
-	return (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')
+func replanProposalPathPrefixHasUserSegmentV0(value string, start int) bool {
+	if start >= len(value) || value[start] == '/' {
+		return false
+	}
+	end := strings.IndexByte(value[start:], '/')
+	if end < 0 {
+		return true
+	}
+	return end > 0
 }
 
 func replanProposalErrorV0(code string, field string) ReplanProposalErrorV0 {

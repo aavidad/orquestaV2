@@ -64,6 +64,10 @@ func documentPlanReviewWorkKindV0(value string) string {
 		"crear_audio_tema", "audio_tema", "narracion_tema", "sintesis_voz_tema",
 		"topic_audio", "audio_asset", "tts_topic":
 		return "generate_audio_asset"
+	case "interactive_practice", "practice_package", "create_interactive_practice":
+		return "generate_interactive_practice"
+	case "help_package", "create_help_package":
+		return "generate_help_package"
 	default:
 		return compactDocumentPlanRefTextV0(value)
 	}

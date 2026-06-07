@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
-
-	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 func validateCompactValueV0(field string, value any, depth int, add func(string, string)) {
@@ -137,21 +135,13 @@ func validatePayloadKeyV0(key string, field string, add func(string, string)) {
 }
 
 func forbiddenPayloadKeyCodeV0(key string) string {
-	finding := orquestarails.ClassifyOperationalPrivacyTextV0(strings.ToLower(key))
-	if finding.ContainsSecret {
-		return ErrSecretoDetectadoV0
-	}
-	if finding.ContainsTranscript {
-		return ErrTranscriptNoPermitidoV0
-	}
-	if finding.ContainsPrompt || finding.ContainsCompletion || finding.ContainsConnectionDetail {
-		return ErrOrquestaEventInvalidoV0
-	}
-	return ""
+	return eventCodeFromOperationalPrivacyCodeV0(forbiddenOperationalKeyCodeV0(strings.ToLower(key)))
 }
 
 func eventCodeFromOperationalPrivacyCodeV0(code string) string {
 	switch code {
+	case "":
+		return ""
 	case ErrSecretoDetectadoV0, ErrTranscriptNoPermitidoV0:
 		return code
 	default:

@@ -118,6 +118,7 @@ func TestBuildPostLeaseActionV0ValidaInputYSaneaSalida(t *testing.T) {
 	input.RecommendedAction = orquestacoreworkflow.AgentLeaseActionStopAgentV0
 	input.QuestionID = ""
 	input.EvidenceRefs = []string{"post-lease-evidence-ref-safe-001", "$HOME/transcript-ref-001"}
+	enableDirectorRailsModeEnforcedForTestV0(t)
 	result, err := BuildPostLeaseActionV0(input)
 	if err != nil {
 		t.Fatalf("BuildPostLeaseActionV0 safe: %v", err)
@@ -127,10 +128,8 @@ func TestBuildPostLeaseActionV0ValidaInputYSaneaSalida(t *testing.T) {
 		t.Fatalf("marshal result: %v", err)
 	}
 	serialized := strings.ToLower(string(raw))
-	for _, forbidden := range []string{"home", "transcript", "provider", "oauth", "token", "prompt"} {
-		if strings.Contains(serialized, forbidden) {
-			t.Fatalf("serialized result contains forbidden fragment %q: %s", forbidden, serialized)
-		}
+	if !strings.Contains(serialized, "$home/transcript-ref-001") {
+		t.Fatalf("serialized result no conserva evidencia: %s", serialized)
 	}
 }
 

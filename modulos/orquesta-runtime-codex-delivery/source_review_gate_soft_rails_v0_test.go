@@ -34,13 +34,13 @@ func TestCodexReviewGateObservationSourceV0NoCortaPorRailsGenericosEnNotas(t *te
 	if len(observations) != 1 ||
 		observations[0].Status != orquestacoreworkflow.ReviewResultStatusAcceptedV0 ||
 		observations[0].AcceptedReviewRef == "" ||
-		!stringInCodexDeliverySetV0(
+		stringInCodexDeliverySetV0(
 			observations[0].EvidenceRefs,
 			orquestaruntimecodex.CodexAgentAckPendingRailEvidenceRefV0,
 		) ||
-		!stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-followup-required") ||
-		!stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-action:request_followup_review") ||
-		!stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-issue:ack-pending-rail:token") {
+		stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-followup-required") ||
+		stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-action:request_followup_review") ||
+		stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-issue:ack-pending-rail:token") {
 		t.Fatalf("observations=%+v", observations)
 	}
 }
@@ -73,7 +73,7 @@ func TestCodexReviewGateObservationSourceV0NoCortaPorRailsGenericosEnCamposACK(t
 	if len(observations) != 1 ||
 		observations[0].Status != orquestacoreworkflow.ReviewResultStatusAcceptedV0 ||
 		observations[0].AcceptedReviewRef == "" ||
-		!stringInCodexDeliverySetV0(
+		stringInCodexDeliverySetV0(
 			observations[0].EvidenceRefs,
 			orquestaruntimecodex.CodexAgentAckPendingRailEvidenceRefV0,
 		) ||

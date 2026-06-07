@@ -101,35 +101,35 @@ func TestValidateDiagnosticoCompactoV0ContenidoProhibido(t *testing.T) {
 		{
 			name: "transcript en actividad",
 			edit: func(diagnostic *DiagnosticoCompactoV0) {
-				diagnostic.ActividadReciente[0].Summary = "transcript completo detectado"
+				diagnostic.ActividadReciente[0].Summary = "transcript=Usuario: contenido completo"
 			},
 			code: ErrTranscriptNoPermitidoV0,
 		},
 		{
 			name: "prompt en bloqueo",
 			edit: func(diagnostic *DiagnosticoCompactoV0) {
-				diagnostic.Bloqueos[0].Summary = "prompt completo no permitido"
+				diagnostic.Bloqueos[0].Summary = "prompt=contenido crudo no permitido"
 			},
 			code: ErrOperationalStatusQueryInvalidaV0,
 		},
 		{
-			name: "sql en referencia",
+			name: "dsn con credenciales en warning",
 			edit: func(diagnostic *DiagnosticoCompactoV0) {
-				diagnostic.Referencias[0].TargetRef = "event_sql_20260504_000001"
+				diagnostic.Warnings[0].Summary = "database_url=postgres://user:pass@host/db"
 			},
 			code: ErrOperationalStatusQueryInvalidaV0,
 		},
 		{
 			name: "completion en progreso",
 			edit: func(diagnostic *DiagnosticoCompactoV0) {
-				diagnostic.Progreso.Summary = "completion completa no permitida"
+				diagnostic.Progreso.Summary = "completion=contenido crudo no permitido"
 			},
 			code: ErrOperationalStatusQueryInvalidaV0,
 		},
 		{
-			name: "dsn en warning",
+			name: "path real en warning",
 			edit: func(diagnostic *DiagnosticoCompactoV0) {
-				diagnostic.Warnings[0].Summary = "dsn oculto"
+				diagnostic.Warnings[0].Summary = "artefacto escrito en /home/alberto/proyecto"
 			},
 			code: ErrOperationalStatusQueryInvalidaV0,
 		},
@@ -147,6 +147,7 @@ func TestValidateDiagnosticoCompactoV0ContenidoProhibido(t *testing.T) {
 func TestValidateDiagnosticoCompactoV0PermiteVocabularioOperativoOpaco(t *testing.T) {
 	diagnostic := validDiagnosticoCompactoV0()
 	diagnostic.Progreso.Summary = "runtime provider model como contexto opaco"
+	diagnostic.Bloqueos[0].Summary = "prompt policy y transcript policy sin contenido crudo"
 	diagnostic.Warnings[0].Summary = "provider model not_available sin valor concreto"
 	diagnostic.Referencias[0].TargetRef = "token_policy_ref-runtime-redaction-v0"
 	diagnostic.Privacy.RedactionLevel = DiagnosticoPrivacyRedactionMetadataOnlyV0

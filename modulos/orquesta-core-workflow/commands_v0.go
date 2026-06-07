@@ -12,6 +12,7 @@ const (
 	OrchestrationCommandOpenPhaseV0                  = "OpenPhase"
 	OrchestrationCommandClosePhaseV0                 = "ClosePhase"
 	OrchestrationCommandBlockRunV0                   = "BlockRun"
+	OrchestrationCommandResolveRunBlockerV0          = "ResolveRunBlocker"
 	OrchestrationCommandAskDirectorV0                = "AskDirector"
 	OrchestrationCommandAnswerDirectorQuestionV0     = "AnswerDirectorQuestion"
 	OrchestrationCommandRequestBrainstormV0          = "RequestBrainstorm"
@@ -94,6 +95,13 @@ type BlockRunCommandPayloadV0 struct {
 	EvidenceRefs []string `json:"evidence_refs,omitempty"`
 }
 
+type ResolveRunBlockerCommandPayloadV0 struct {
+	BlockerID    string   `json:"blocker_id"`
+	ReasonCode   string   `json:"reason_code"`
+	Summary      string   `json:"summary"`
+	EvidenceRefs []string `json:"evidence_refs,omitempty"`
+}
+
 type OrchestrationCommandErrorV0 struct {
 	Code  string `json:"code"`
 	Field string `json:"field,omitempty"`
@@ -117,6 +125,10 @@ func NewClosePhaseCommandV0(meta OrchestrationCommandMetaV0, payload ClosePhaseC
 
 func NewBlockRunCommandV0(meta OrchestrationCommandMetaV0, payload BlockRunCommandPayloadV0) (OrchestrationCommandV0, error) {
 	return newOrchestrationCommandV0(meta, OrchestrationCommandBlockRunV0, payload)
+}
+
+func NewResolveRunBlockerCommandV0(meta OrchestrationCommandMetaV0, payload ResolveRunBlockerCommandPayloadV0) (OrchestrationCommandV0, error) {
+	return newOrchestrationCommandV0(meta, OrchestrationCommandResolveRunBlockerV0, normalizeResolveRunBlockerPayloadV0(payload))
 }
 
 func newOrchestrationCommandV0(meta OrchestrationCommandMetaV0, commandType string, payload any) (OrchestrationCommandV0, error) {

@@ -199,6 +199,21 @@ func (v *agentProgressReportValidatorV0) add(code AgentProgressReportErrorCodeV0
 }
 
 func looksLikeOperationalRawDetailV0(field string, value string) bool {
+	low := strings.ToLower(strings.TrimSpace(value))
+	for _, marker := range []string{
+		"prompt=",
+		"prompt:",
+		"completion=",
+		"completion:",
+		"transcript=",
+		"transcript:",
+		"stdout=",
+		"stderr=",
+	} {
+		if strings.Contains(low, marker) {
+			return true
+		}
+	}
 	return orquestarails.TextContainsOperationalRawDetailForFieldV0(
 		"agent_progress_report",
 		field,
@@ -216,9 +231,6 @@ func isOneOfV0(value string, allowed ...string) bool {
 }
 
 func agentProgressLooksLikeSecretV0(value string) bool {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return false
-	}
 	low := strings.ToLower(strings.TrimSpace(value))
 	return strings.HasPrefix(low, "bearer") ||
 		strings.HasPrefix(low, "sk-") ||

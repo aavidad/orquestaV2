@@ -15,6 +15,16 @@ Estado:
 ## Backlog inicial
 
 ```text
+ID: NCW-083
+Objetivo: Resolver blockers durables exactos sin mutar estado fuera del event log.
+Write-set: commands_v0.go, events_v0.go, run_lifecycle_effects_v0.go, handler_v0.go, reducer_run_lifecycle_v0.go, routers/catalogos, tests y docs locales.
+Contrato: ResolveRunBlocker, RunBlockerResolved, OrchestrationRunV0.Blockers.
+Validacion: 2026-06-02, ok, go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-app-change-director-source ./modulos/orquesta-app-codex-stack.
+Bloqueos: No interpreta origen del blocker ni conoce OPES/Codex; las composiciones deciden si una recuperacion es autorizada antes de emitir el comando.
+Estado: completada local
+```
+
+```text
 ID: NCW-082
 Objetivo: Reconciliar T15 como cierre documental de rails de detalle para evitar relanzar el backlog tras ACKs cerrados.
 Write-set: docs locales, README local y backlog asignado.

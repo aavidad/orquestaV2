@@ -178,7 +178,9 @@ Precondiciones:
 - OPES expone un job pendiente `type=plan_temario`, `execution_mode=external`;
 - `payload_json` del job es un string JSON, no un objeto embebido;
 - Orquesta server esta arrancado con Codex real y `ORQUESTA_CODEX_REASONING_EFFORT=xhigh`;
-- usar siempre filtro por tipo o por `job_ref` exacto, y limite bajo.
+- usar siempre scope de temario: `job_ref` exacto o `program_id`/`correlation_id`
+  junto al tipo o secuencia, y limite bajo. Ese scope evita mezclar colas de
+  otro temario; no descarta entregas por estilo, sinonimos o formato reparable.
 
 Dry-run:
 
@@ -190,6 +192,8 @@ smoke; si no se conoce, eliminar esa variable y conservar
 ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
 ORQUESTA_OPES_BRIDGE_DRY_RUN=1 \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
+ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id> \
+ORQUESTA_OPES_BRIDGE_CORRELATION_ID=<correlation_id> \
 ORQUESTA_OPES_BRIDGE_JOB_TYPE=plan_temario \
 ORQUESTA_OPES_BRIDGE_JOB_REF=job-ref-plan-temario-operario-001 \
 go run ./cmd/orquesta-server opes-drain-once
@@ -287,40 +291,44 @@ Semantica:
 - cuando OPES deja de mostrar pendientes de una fase, el siguiente tick avanza
   a la siguiente;
 - la cobertura offline verifica la secuencia completa
-  `research_exam_precedents -> draft_content_block -> generate_visual_asset ->
-  generate_question_bank -> review_legal -> review_pedagogical ->
-  review_quality -> validate_topic -> assemble_topic -> generate_audio_asset ->
-  generate_tutor_assets -> generate_html_site`, con ledger/idempotencia por
-  fase, `assemble_topic` mapeado a `assembled_topic`, `generate_audio_asset`
-  mapeado a `audio_asset`, `generate_question_bank` mapeado a `question_bank`,
-  `generate_tutor_assets` mapeado a `tutor_bot_package` y `generate_html_site`
-  mapeado a `local_html_site`;
-- la secuencia vive en `cmd/orquesta-server`; el nucleo de orquestacion sigue
-  sin conocer OPES.
+  `plan_temario -> research_exam_precedents -> draft_content_block ->
+  generate_visual_asset -> generate_question_bank -> review_legal -> review_pedagogical ->
+  review_quality -> review_codex -> review_gemini -> review_claude ->
+  review_pair_codex_gemini -> review_pair_codex_claude ->
+  review_pair_gemini_claude -> review_director_consolidation ->
+  validate_topic -> assemble_topic -> generate_audio_asset ->
+  generate_tutor_assets -> generate_learning_games -> generate_html_site -> generate_help_manual_assets ->
+  finalize_temario_package`, con ledger/idempotencia por fase,
+  `assemble_topic` mapeado a `assembled_topic`, `generate_audio_asset` mapeado
+  a `audio_asset`, `generate_question_bank` mapeado a `question_bank`,
+  `generate_tutor_assets` mapeado a `tutor_bot_package`,
+  `generate_learning_games` mapeado a `learning_games_package`, `generate_html_site`
+  mapeado a `local_html_site`, `generate_help_manual_assets` mapeado a
+  `help_manual_package` y `finalize_temario_package` mapeado a
+  `completed_syllabus_package`;
+- la secuencia canonica vive en `modulos/orquesta-opes-bridge` y el comando de
+  ciclo en `cmd/orquesta-server`; el nucleo de orquestacion sigue sin conocer
+  OPES.
 
-Secuencia recomendada para temario Operario:
+Secuencia recomendada para temario Operario si se quiere fijar explicitamente:
 
 ```bash
-export ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=research_exam_precedents,draft_content_block,generate_visual_asset,generate_question_bank,review_legal,review_pedagogical,review_quality,validate_topic,assemble_topic,generate_audio_asset,generate_tutor_assets,generate_html_site
+export ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=plan_temario,research_exam_precedents,draft_content_block,generate_visual_asset,generate_question_bank,review_legal,review_pedagogical,review_quality,review_codex,review_gemini,review_claude,review_pair_codex_gemini,review_pair_codex_claude,review_pair_gemini_claude,review_director_consolidation,validate_topic,assemble_topic,generate_audio_asset,generate_tutor_assets,generate_learning_games,generate_html_site,generate_help_manual_assets,finalize_temario_package
 ```
 
-Arranque residente conservador:
+Arranque autonomo acotado hasta cierre:
 
 ```bash
 ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
-ORQUESTA_OPES_BRIDGE_ENABLED=1 \
+ORQUESTA_BASE_URL=http://127.0.0.1:<puerto-orquesta> \
 ORQUESTA_OPES_BRIDGE_CONFIRM=1 \
-ORQUESTA_OPES_BRIDGE_LIMIT=1 \
-ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=research_exam_precedents,draft_content_block,generate_visual_asset,generate_question_bank,review_legal,review_pedagogical,review_quality,validate_topic,assemble_topic,generate_audio_asset,generate_tutor_assets,generate_html_site \
-ORQUESTA_OPES_BRIDGE_INITIAL_DELAY_SECONDS=5 \
-ORQUESTA_OPES_BRIDGE_INTERVAL_SECONDS=60 \
-ORQUESTA_SERVER_MAX_RUNS_PER_TICK=1 \
-ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK=1 \
-ORQUESTA_CODEX_MAX_BATCH_READY=1 \
-ORQUESTA_CODEX_MAX_CONCURRENCY=1 \
-ORQUESTA_CODEX_MODEL=gpt-5.5 \
-ORQUESTA_CODEX_REASONING_EFFORT=xhigh \
-go run ./cmd/orquesta-server run
+ORQUESTA_OPES_BRIDGE_LIMIT=3 \
+ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id> \
+ORQUESTA_OPES_BRIDGE_CORRELATION_ID=<correlation_id> \
+ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH=<ledger-temario>.json \
+ORQUESTA_OPES_BRIDGE_MAX_TICKS=1000 \
+ORQUESTA_OPES_BRIDGE_INTERVAL_SECONDS=5 \
+go run ./cmd/orquesta-server opes-temario-cycle
 ```
 
 Arranque paralelo objetivo para continuar Operario cuando OPES temporal este
@@ -331,7 +339,7 @@ ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
 ORQUESTA_OPES_BRIDGE_ENABLED=1 \
 ORQUESTA_OPES_BRIDGE_CONFIRM=1 \
 ORQUESTA_OPES_BRIDGE_LIMIT=10 \
-ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=research_exam_precedents,draft_content_block,generate_visual_asset,generate_question_bank,review_legal,review_pedagogical,review_quality,validate_topic,assemble_topic,generate_audio_asset,generate_tutor_assets,generate_html_site \
+ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=research_exam_precedents,draft_content_block,generate_visual_asset,generate_question_bank,review_legal,review_pedagogical,review_quality,review_codex,review_gemini,review_claude,review_pair_codex_gemini,review_pair_codex_claude,review_pair_gemini_claude,review_director_consolidation,validate_topic,assemble_topic,generate_audio_asset,generate_tutor_assets,generate_learning_games,generate_html_site,generate_help_manual_assets,finalize_temario_package \
 ORQUESTA_OPES_BRIDGE_INITIAL_DELAY_SECONDS=5 \
 ORQUESTA_OPES_BRIDGE_INTERVAL_SECONDS=60 \
 ORQUESTA_SERVER_MAX_RUNS_PER_TICK=10 \
@@ -372,7 +380,7 @@ ORQUESTA_OPES_PLAN_TEMARIO_FAKE_SERVER=1 \
 Estas pruebas no ejecutan Codex ni llaman a OPES real. El fake REST de
 derivados permite una lectura seca de la fase pendiente y el wrapper
 `smoke_opes_consumer_isolated.sh` recorre la secuencia completa hasta el ultimo
-tipo configurado, hoy `generate_html_site`, contra un fake HTTP local,
+tipo configurado, hoy `generate_help_manual_assets`, contra un fake HTTP local,
 supervisando cada `run_ref` sin Codex ni OPES real. El fake rechaza consultas
 sin `job_type`, `status=pending`,
 `execution_mode=external` y `limit` esperado.
@@ -382,7 +390,8 @@ particular, `assemble_topic` debe entregar `artifact_type=assembled_topic` y
 `generate_audio_asset` debe entregar `artifact_type=audio_asset`. Para el flujo
 completo, `research_exam_precedents` entrega `exam_research_report`,
 `generate_question_bank` entrega `question_bank`, `generate_tutor_assets`
-entrega `tutor_bot_package` y `generate_html_site` entrega `local_html_site`
+entrega `tutor_bot_package`, `generate_html_site` entrega `local_html_site` y
+`generate_help_manual_assets` entrega `help_manual_package`
 operativo en local con logos USO y aspecto USO/TCAE promocion interna.
 
 Wrapper operador para derivados:
@@ -424,7 +433,8 @@ ultimo tipo configurado pendiente despues de supervisar su run, usar el modo
 `run-until-assemble`. El nombre del modo queda por compatibilidad historica.
 Sigue siendo opt-in y temporal: crea runs fase a fase, supervisa cada `run_ref`
 devuelto por Orquesta y repite la secuencia hasta observar que
-`generate_html_site` ya no queda pendiente en la secuencia vigente.
+`generate_html_site` y `generate_help_manual_assets` ya no quedan pendientes en
+la secuencia vigente.
 
 ```bash
 ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
@@ -458,7 +468,8 @@ secuencia completa por fases. Cada ejecucion real debe revisar el JSON de salida
 en `/tmp/opes-salidas/derivatives-rest-<smoke_id>/` antes de repetir o subir el
 limite. El fake offline cubre tambien `run-until-assemble` y comprueba que
 `research_exam_precedents`, `assemble_topic`, `generate_question_bank`,
-`generate_audio_asset`, `generate_tutor_assets` y `generate_html_site` se
+`generate_audio_asset`, `generate_tutor_assets`, `generate_html_site` y
+`generate_help_manual_assets` se
 mapean a sus artefactos esperados sin meter OPES en el nucleo.
 
 Estado de cierre OPES real: la composicion Orquesta ya declara tests de dominio
@@ -471,7 +482,8 @@ acepta receipts que no empaten con el job externo, la delivery revisada y el
 artefacto esperado (`assemble_topic -> assembled_topic`,
 `generate_audio_asset -> audio_asset`, `generate_question_bank ->
 question_bank`, `generate_tutor_assets -> tutor_bot_package`,
-`generate_html_site -> local_html_site`). El conector REST trata como invalido
+`generate_html_site -> local_html_site`,
+`generate_help_manual_assets -> help_manual_package`). El conector REST trata como invalido
 un receipt OPES con `job_id`, `artifact.type` o `job.status` incoherentes. El
 smoke real completo de derivados sigue exigiendo OPES temporal vivo,
 cuota/modelo confirmados y evidencia de que cada derivado fue aceptado por OPES

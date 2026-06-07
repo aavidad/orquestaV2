@@ -63,6 +63,8 @@ func mcpTransportToolInputDTOByNameV0(name string) (any, bool) {
 		return MCPCoreWorkflowCommandToolInputV0{}, true
 	case MCPRunControlToolNameV0:
 		return MCPRunControlToolInputV0{}, true
+	case MCPRuntimeModelsToolNameV0:
+		return MCPRuntimeModelsToolInputV0{}, true
 	case MCPRunQueuePriorityToolNameV0:
 		return MCPRunQueuePriorityToolInputV0{}, true
 	case MCPRunSupervisorToolNameV0:
@@ -163,6 +165,8 @@ func mcpTransportToolEnumsV0(name string) map[string][]string {
 	switch strings.TrimSpace(name) {
 	case MCPRunControlToolNameV0:
 		return map[string][]string{"action": []string{"pause", "resume", "stop", "cancel"}}
+	case MCPRuntimeModelsToolNameV0:
+		return map[string][]string{"action": []string{"list", "status", "pull", "serve", "stop"}}
 	case MCPRunQueuePriorityToolNameV0:
 		return map[string][]string{"action": []string{"rank", "set_priority"}}
 	case MCPDomainWorkToolNameV0:

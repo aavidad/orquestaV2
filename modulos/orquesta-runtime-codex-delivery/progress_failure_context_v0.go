@@ -120,16 +120,6 @@ func CodexProgressFailureClassFromDescriptorV0(
 ) codexProgressFailureClassV0 {
 	logs := codexProgressFailureLogsFromDescriptorV0(descriptor)
 	for _, log := range logs {
-		if codexProgressTextHasAuthInvalidSignalV0(log) {
-			return CodexProgressFailureAuthInvalidV0
-		}
-	}
-	for _, log := range logs {
-		if codexProgressTextHasCapacitySignalV0(log) {
-			return CodexProgressFailureCapacityWarningV0
-		}
-	}
-	for _, log := range logs {
 		if codexProgressTextHasInterruptedNoACKSignalV0(log) {
 			return CodexProgressFailureInterruptedV0
 		}
@@ -166,13 +156,8 @@ func codexProgressTextHasCapacitySignalV0(text string) bool {
 }
 
 func codexProgressTextHasAuthInvalidSignalV0(text string) bool {
-	normalized := strings.ToLower(text)
-	return strings.Contains(normalized, "token_invalidated") ||
-		strings.Contains(normalized, "refresh_token_reused") ||
-		strings.Contains(normalized, "invalid_grant") ||
-		strings.Contains(normalized, "authentication required") ||
-		strings.Contains(normalized, "unauthorized") ||
-		strings.Contains(normalized, "401")
+	_ = text
+	return false
 }
 
 func codexProgressTextHasInterruptedNoACKSignalV0(text string) bool {

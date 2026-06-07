@@ -8,13 +8,16 @@ Decision: las entradas `required ref_only` se resuelven por
 `required_ref_action` y evidencia ACK; no se materializa contexto faltante ni se
 relaja el rail para completar una tarea.
 
-Motivo: T15 ya quedo cerrado para default acotado de detalle. El contexto debe
-mantener refs pequenas y verificables, no transportar payloads crudos para
-evitar falsos positivos.
+Motivo: T15 quedo historico; desde 2026-06-02 los rails de detalle estan
+offline y no se reactivan por entorno mientras siga vigente `RAILS-D016`. El
+contexto debe mantener refs pequenas y verificables sin usar payloads crudos
+como sustituto de conectores.
 
 Consecuencia: `orquesta-context` consume la politica comun por campo y conserva
-tolerancia a refs opacas; secretos, HOME, prompts/transcripts y material crudo
-siguen bloqueados o quedan como consulta al director.
+tolerancia a refs opacas. Los cortes por detalle quedan offline; en runtime
+normal, el director/agente decide si una evidencia se aprovecha, repara o
+convierte en tarea. El saneamiento de metadata sigue anonimizando valores
+sensibles efectivos en evidencias, sin usar palabras genericas como veto.
 
 ## CTX-D001 - Builder puro antes que adaptador de filesystem
 

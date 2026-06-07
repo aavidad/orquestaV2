@@ -162,6 +162,9 @@ func codexDeliveryObservationFromAckV0(
 	}
 	evidenceRefs = append(evidenceRefs, CodexRequiredTestReceiptEvidenceRefsV0(ack.TestReceipts)...)
 	evidenceRefs = append(evidenceRefs, CodexAgentAckPendingRailEvidenceRefsV0(ack)...)
+	if codexAckHasFailedTestEvidenceV0(ack) {
+		evidenceRefs = append(evidenceRefs, "gate-issue:failed_test_evidence")
+	}
 	return CodexDeliveryObservationV0{
 		DeliveryRef:  strings.TrimSpace(ack.AckRef),
 		PhaseID:      strings.TrimSpace(packet.Phase),

@@ -240,7 +240,7 @@ func TestCapacityRequestedOutboxPayloadDoesNotContainProviderModelRuntimeHome(t 
 	}
 	serialized := strings.ToLower(string(result.Outbox[0].Payload))
 	for _, forbidden := range operationalSensitiveFragmentsForTestV0() {
-		if strings.Contains(serialized, forbidden) {
+		if containsForbiddenFragmentV0(serialized, forbidden) {
 			t.Fatalf("outbox payload contains forbidden fragment %q: %s", forbidden, serialized)
 		}
 	}

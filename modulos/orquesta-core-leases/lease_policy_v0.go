@@ -80,7 +80,7 @@ func (err AgentLeaseValidationErrorV0) Error() string {
 }
 
 func DecodeAgentLeasePolicyV0(data []byte) (AgentLeasePolicyV0, error) {
-	if issues := detectForbiddenAgentLeaseJSONKeysV0(data); len(issues) > 0 {
+	if issues := detectForbiddenAgentLeaseJSONDetailsV0(data); len(issues) > 0 {
 		return AgentLeasePolicyV0{}, AgentLeaseValidationErrorV0{Issues: issues}
 	}
 	var policy AgentLeasePolicyV0
@@ -94,7 +94,7 @@ func DecodeAgentLeasePolicyV0(data []byte) (AgentLeasePolicyV0, error) {
 }
 
 func DecodeAgentHeartbeatReportV0(data []byte) (AgentHeartbeatReportV0, error) {
-	if issues := detectForbiddenAgentLeaseJSONKeysV0(data); len(issues) > 0 {
+	if issues := detectForbiddenAgentLeaseJSONDetailsV0(data); len(issues) > 0 {
 		return AgentHeartbeatReportV0{}, AgentLeaseValidationErrorV0{Issues: issues}
 	}
 	var report AgentHeartbeatReportV0

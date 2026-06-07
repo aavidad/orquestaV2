@@ -60,7 +60,7 @@ func assertTransportPayloadSaneadoMCPTestV0(t *testing.T, value any, maxBytes in
 	} {
 		text = strings.ReplaceAll(text, allowedFalseFlag, "")
 	}
-	for _, forbidden := range []string{"password", "oauth", "provider", "model", "/home/", "home=", "event-store", "internal/", "transcript", "secret", "dsn", "sql"} {
+	for _, forbidden := range []string{"password", "oauth", "/home/", "home=", "event-store", "internal/", "transcript", "secret", "dsn", "sql"} {
 		if strings.Contains(text, forbidden) {
 			t.Fatalf("payload contiene %q: %s", forbidden, text)
 		}

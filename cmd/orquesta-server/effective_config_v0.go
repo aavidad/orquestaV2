@@ -19,6 +19,7 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 	settings := []orquestaserver.ServerConfigSettingV0{
 		serverConfigSettingFromRegistryV0(envServerMaxRunsPerTickV0, strconv.Itoa(config.SupervisorCommand.MaxRunsPerTick)),
 		serverConfigSettingFromRegistryV0(envServerMaxExecutionsPerTickV0, strconv.Itoa(config.SupervisorCommand.MaxExecutions)),
+		serverConfigSettingFromRegistryV0(envServerQueueLimitV0, strconv.Itoa(serverRunQueueLimitFromEnvV0())),
 		serverConfigSettingFromRegistryV0(envServerDrainMaxDispatchesV0, strconv.Itoa(config.SupervisorCommand.DrainLimits.MaxDispatchesPerWait)),
 		serverConfigSettingFromRegistryV0(envServerDrainMaxOutboxV0, strconv.Itoa(config.SupervisorCommand.DrainLimits.MaxOutboxPerCycle)),
 		serverConfigSettingFromRegistryV0(envServerDrainMaxExternalWaitsV0, strconv.Itoa(config.SupervisorCommand.DrainLimits.MaxExternalWaits)),
@@ -37,6 +38,7 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 		serverConfigSettingFromRegistryV0(envServerDaemonLogRetentionDaysV0, strconv.Itoa(config.DaemonLogPolicy.RetentionDays)),
 		serverConfigSettingFromRegistryV0(envServerDaemonLogRawEnabledV0, strconv.FormatBool(config.DaemonLogPolicy.LocalRawEnabled)),
 		serverConfigSettingFromRegistryV0(envSecurityModeV0, serverSecurityModeEffectiveValueV0()),
+		serverConfigSettingFromRegistryV0(envRailsModeV0, serverRailsModeEffectiveValueV0()),
 		serverConfigSettingFromRegistryV0(envDetailProhibitedRailsV0, detailRailsEffectiveValueV0()),
 		serverConfigSettingFromRegistryV0(envDetailProhibitedRailsScopeV0, detailRailsScopeEffectiveValueV0()),
 		serverConfigSettingFromRegistryV0(envCodexExecutionModeV0, codexExecutionModeFromEnvV0()),
@@ -54,6 +56,7 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 	}
 	settings = append(settings, codexServerWorktreeSnapshotBudgetSettingsV0(worktreeSnapshotBudget)...)
 	settings = append(settings, hermesOperatorEffectiveConfigSettingsV0()...)
+	settings = append(settings, ollamaModelManagerEffectiveConfigSettingsV0()...)
 	settings = append(settings, daemonStartEnvSettingsV0(daemonEnvPolicy)...)
 	return orquestaserver.NormalizeServerEffectiveConfigV0(orquestaserver.ServerEffectiveConfigV0{
 		SchemaVersion: orquestaserver.ServerEffectiveConfigSchemaVersionV0,

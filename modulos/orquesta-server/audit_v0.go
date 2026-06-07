@@ -254,7 +254,7 @@ func (runtime *RuntimeV0) auditEventV0(
 	if runtime == nil || runtime.auditSink == nil {
 		return
 	}
-	if err := runtime.auditSink.AppendAuditEventV0(ctx, AuditEventV0{
+	if err := runtime.auditSink.AppendAuditEventV0(context.Background(), AuditEventV0{
 		Event:      event,
 		OccurredAt: formatTimeV0(runtime.clock.Now()),
 		Status:     status,

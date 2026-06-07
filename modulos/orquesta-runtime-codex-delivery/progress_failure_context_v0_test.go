@@ -42,7 +42,7 @@ func TestCodexProgressReportWithProcessFailureContextV0NoClasificaCapacidadPorTe
 	}
 }
 
-func TestCodexProgressReportWithProcessFailureContextV0ClasificaAuthInvalidaComoBloqueoRecuperable(t *testing.T) {
+func TestCodexProgressReportWithProcessFailureContextV0NoClasificaAuthPorTextoLibre(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(
 		filepath.Join(dir, orquestaruntimecodex.CodexStderrFileNameV0),
@@ -61,16 +61,14 @@ func TestCodexProgressReportWithProcessFailureContextV0ClasificaAuthInvalidaComo
 	)
 
 	if !got.DecisionRequired ||
-		got.Summary != "Autenticacion externa invalida; requiere reautorizacion del operador." ||
-		!stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-auth-config-blocker") {
-		t.Fatalf("report=%+v", got)
+		got.Summary != "Proceso detenido sin ACK." ||
+		!stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-no-ack") {
+		t.Fatalf("report no_ack inesperado=%+v", got)
 	}
-	if got.BudgetStatus != "" || got.BudgetReason != "" {
-		t.Fatalf("auth invalida no debe confundirse con capacidad: %+v", got)
-	}
-	if stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-capacity-warning") ||
-		stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-no-ack") {
-		t.Fatalf("auth invalida no debe mezclar evidencias de capacidad/no_ack: %+v", got.EvidenceRefs)
+	if got.BudgetStatus != "" || got.BudgetReason != "" ||
+		stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-auth-config-blocker") ||
+		stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-capacity-warning") {
+		t.Fatalf("texto libre no debe clasificar auth/capacity: %+v", got)
 	}
 	if issues := orquestaruntime.ValidateAgentProgressReportV0(got); len(issues) > 0 {
 		t.Fatalf("progress report invalido: %+v", issues)
@@ -193,9 +191,9 @@ func TestCodexProgressFailureClassFromDescriptorV0ClasificaSenalesCompactas(t *t
 			want:    codexProgressFailureInterruptedV0,
 		},
 		{
-			name:    "auth_invalid_priority",
+			name:    "auth_text_does_not_block",
 			content: "ERROR 401 token_invalidated selected service is at capacity",
-			want:    codexProgressFailureAuthInvalidV0,
+			want:    codexProgressFailureNoACKV0,
 		},
 		{
 			name:    "no_ack_without_signal",

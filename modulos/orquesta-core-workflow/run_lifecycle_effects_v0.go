@@ -28,6 +28,66 @@ func runBlockedPayloadFromCommandV0(payload BlockRunCommandPayloadV0) RunBlocked
 	}
 }
 
+func runBlockerResolvedPayloadFromCommandV0(
+	payload ResolveRunBlockerCommandPayloadV0,
+) RunBlockerResolvedPayloadV0 {
+	return RunBlockerResolvedPayloadV0{
+		BlockerID:    payload.BlockerID,
+		ReasonCode:   payload.ReasonCode,
+		Summary:      payload.Summary,
+		EvidenceRefs: cloneStringsV0(payload.EvidenceRefs),
+	}
+}
+
+func normalizeResolveRunBlockerPayloadV0(
+	payload ResolveRunBlockerCommandPayloadV0,
+) ResolveRunBlockerCommandPayloadV0 {
+	payload.BlockerID = strings.TrimSpace(payload.BlockerID)
+	payload.ReasonCode = strings.TrimSpace(payload.ReasonCode)
+	payload.Summary = strings.TrimSpace(payload.Summary)
+	payload.EvidenceRefs = compactStringsV0(payload.EvidenceRefs)
+	return payload
+}
+
+func normalizeRunBlockerResolvedPayloadV0(
+	payload RunBlockerResolvedPayloadV0,
+) RunBlockerResolvedPayloadV0 {
+	payload.BlockerID = strings.TrimSpace(payload.BlockerID)
+	payload.ReasonCode = strings.TrimSpace(payload.ReasonCode)
+	payload.Summary = strings.TrimSpace(payload.Summary)
+	payload.EvidenceRefs = compactStringsV0(payload.EvidenceRefs)
+	return payload
+}
+
+func ensureRunBlockerResolvedEffectMatchesV0(
+	run OrchestrationRunV0,
+	command OrchestrationCommandV0,
+	payload ResolveRunBlockerCommandPayloadV0,
+) error {
+	return ensureCommandEffectMatchesV0(
+		run,
+		command,
+		OrchestrationEventRunBlockerResolvedV0,
+		payload.BlockerID,
+		runBlockerResolvedPayloadFromCommandV0(payload),
+	)
+}
+
+func runBlockerResolvedEffectKnownV0(
+	run OrchestrationRunV0,
+	blockerID string,
+) (bool, error) {
+	_, ok, err := commandEffectForSubjectV0(
+		run,
+		OrchestrationEventRunBlockerResolvedV0,
+		blockerID,
+	)
+	if err != nil {
+		return false, commandErrorV0(ErrTransicionInvalidaV0, "command_effects")
+	}
+	return ok, nil
+}
+
 func ensurePhaseOpenedEffectMatchesV0(
 	run OrchestrationRunV0,
 	command OrchestrationCommandV0,

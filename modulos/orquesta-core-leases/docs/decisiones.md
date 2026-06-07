@@ -44,3 +44,20 @@ Alternativas: Usar solo AgentProgressReport; usar solo snapshots runtime; asumir
 Impacto: `AgentHeartbeatReportV0` puede referenciar progress, pero `EvaluateAgentLeaseV0` decide con ambos tipos de evidencia.
 Estado: aceptada inicial
 ```
+
+```text
+Fecha: 2026-06-04
+Decision: La validacion de leases no bloquea por palabras genericas como token,
+provider, modelo, runtime, HOME, DB, PID o prompt cuando aparecen como
+vocabulario operativo o refs opacas.
+Motivo: La regla vigente del nucleo elimina rails blandos que descartaban
+trabajo valido por diagnosticos locales o nombres cercanos. `detalle_prohibido`
+queda reservado a secretos, credenciales, DSN con password o contenido raw
+efectivo; los campos no contratados se informan como JSON invalido.
+Alternativas: Mantener la lista historica de claves prohibidas; depender de
+rails blandos reactivables por entorno; aceptar campos no contratados.
+Impacto: `$HOME` o `pid=1234` en refs no opacas se clasifican como
+`referencia_no_opaca`, no como `detalle_prohibido`. Campos como `process_ref`,
+`provider` o `HOME` fuera del contrato se rechazan por estructura JSON estricta.
+Estado: aceptada por regla raiz vigente.
+```

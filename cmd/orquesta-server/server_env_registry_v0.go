@@ -32,6 +32,7 @@ const (
 	envServerQueueLimitV0                            = "ORQUESTA_SERVER_QUEUE_LIMIT"
 	envServerDefaultPriorityV0                       = "ORQUESTA_SERVER_DEFAULT_PRIORITY"
 	envSecurityModeV0                                = orquestarails.SecurityModeEnvV0
+	envRailsModeV0                                   = orquestarails.RailsModeEnvV0
 	envDetailProhibitedRailsV0                       = "ORQUESTA_DETAIL_PROHIBITED_RAILS"
 	envDetailProhibitedRailsScopeV0                  = "ORQUESTA_DETAIL_PROHIBITED_RAILS_SCOPE"
 	envServerIdleSelfImprovementAfterV0              = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS"
@@ -139,6 +140,9 @@ const (
 	envOPESBridgeDryRunV0               = "ORQUESTA_OPES_BRIDGE_DRY_RUN"
 	envOPESBridgeJobTypeV0              = "ORQUESTA_OPES_BRIDGE_JOB_TYPE"
 	envOPESBridgeJobRefV0               = "ORQUESTA_OPES_BRIDGE_JOB_REF"
+	envOPESBridgeProgramIDV0            = "ORQUESTA_OPES_BRIDGE_PROGRAM_ID"
+	envOPESBridgeTopicIDV0              = "ORQUESTA_OPES_BRIDGE_TOPIC_ID"
+	envOPESBridgeCorrelationIDV0        = "ORQUESTA_OPES_BRIDGE_CORRELATION_ID"
 	envOPESBridgeJobTypeSequenceV0      = "ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE"
 	envOPESBridgeLimitV0                = "ORQUESTA_OPES_BRIDGE_LIMIT"
 	envOPESBridgeTimeoutSecondsV0       = "ORQUESTA_OPES_BRIDGE_TIMEOUT_SECONDS"
@@ -174,13 +178,13 @@ const (
 	defaultCodexMaxExpectedSecondsV0           = 1200
 	defaultCodexNoActivitySecondsV0            = 600
 	defaultCodexExecutionModeV0                = "parallel"
-	defaultCodexMaxBatchReadyV0                = 10
-	defaultCodexMaxConcurrencyV0               = 10
-	defaultCodexServerMaxRunsPerTickV0         = 10
-	defaultCodexServerQueueLimitV0             = 20
+	defaultCodexMaxBatchReadyV0                = 70
+	defaultCodexMaxConcurrencyV0               = 70
+	defaultCodexServerMaxRunsPerTickV0         = 70
+	defaultCodexServerQueueLimitV0             = 70
 	defaultCodexServerDefaultPriorityV0        = 50
-	defaultCodexServerMaxExecutionsV0          = 10
-	defaultCodexDirectorWaveAgentsV0           = 10
+	defaultCodexServerMaxExecutionsV0          = 70
+	defaultCodexDirectorWaveAgentsV0           = 70
 	defaultCodexDirectorMaxSubagentsPerAgentV0 = 6
 	defaultCodexDirectorRecursiveAgentBudgetV0 = 70
 )
@@ -201,6 +205,11 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "server_supervisor",
 		Label:       "Ejecuciones por tick",
 		Description: "Ejecuciones lanzadas por pulso residente.",
+	},
+	envServerQueueLimitV0: {
+		Scope:       "server_supervisor",
+		Label:       "Limite de cola",
+		Description: "Runs activos que el supervisor residente considera por cola antes de posponer nuevos lanzamientos.",
 	},
 	envServerDrainMaxDispatchesV0: {
 		Scope:       "server_supervisor",
@@ -232,20 +241,17 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Label:       "Nuevas tareas por tanda",
 		Description: "Maximo de tareas nuevas por tanda de automejora.",
 	},
-	envSecurityModeV0: {
-		Scope:       "rails",
-		Label:       "Modo seguridad",
-		Description: "programming abre rails para desarrollo; production_low/production/production_high reactivan niveles de seguridad.",
-	},
+	envSecurityModeV0: {Scope: "rails", Label: "Modo seguridad", Description: "Modo historico de seguridad; no reactiva rails offline hasta nueva orden."},
+	envRailsModeV0:    {Scope: "rails", Label: "Modo rails", Description: "offline fijo hasta nueva orden; no reactiva politicas de bloqueo."},
 	envDetailProhibitedRailsV0: {
 		Scope:       "rails",
 		Label:       "Rails detalle",
-		Description: "Activa o desactiva los rails de detalle prohibido para fronteras con matriz.",
+		Description: "off fijo hasta nueva orden; los rails de detalle no se reactivan por env.",
 	},
 	envDetailProhibitedRailsScopeV0: {
 		Scope:       "rails",
 		Label:       "Scope rails detalle",
-		Description: "Fronteras y campos donde se aplican los rails de detalle prohibido.",
+		Description: "Inventario historico de scopes; no aplica bloqueo mientras los rails esten offline.",
 	},
 	envCodexMaxBatchReadyV0: {
 		Scope:       "codex_runtime",

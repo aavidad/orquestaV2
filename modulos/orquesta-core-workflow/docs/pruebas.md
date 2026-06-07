@@ -16,6 +16,15 @@ Detalle quality gates: `docs/pruebas_quality_gates.md`.
 ## Pruebas previstas
 
 ```text
+Caso: ncw_083_resolve_run_blocker_durable
+Tipo: contrato
+Comando: go test -count=1 ./modulos/orquesta-core-workflow
+Evidencia esperada: `ResolveRunBlocker` produce `RunBlockerResolved`, quita solo el `blocker_id` exacto, deja la run bloqueada si quedan blockers, reactiva si era el ultimo, y replay durable conserva el desbloqueo.
+Ultima ejecucion: 2026-06-02, ok, go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-app-change-director-source ./modulos/orquesta-app-codex-stack.
+Riesgos: El core no decide si un blocker es recuperable; esa autorizacion queda en adaptadores/composiciones con evidencia causal.
+```
+
+```text
 Caso: detail_rails_t15_reconciliado
 Tipo: contract | regression
 Comando: go test -count=1 ./modulos/orquesta-rails ./modulos/orquesta-core-workflow ./modulos/orquesta-context ./modulos/orquesta-director-agent ./cmd/orquesta-server

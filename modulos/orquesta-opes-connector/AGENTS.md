@@ -15,6 +15,9 @@ Lee este archivo y `README.md` antes de editar este modulo.
   modelos hacia OPES.
 - Todo texto visible futuro debera pasar por i18n; los documentos de contrato
   pueden usar castellano como idioma de trabajo.
+- Si el cambio afecta jobs de temarios o politicas editoriales, tratar
+  `/home/alberto/Trabajo/OPES/AGENTS.md` como canon de dominio externo. El
+  conector no lo lee en runtime; OPES/bridge lo referencian por politica.
 
 ## Write-set preferente
 

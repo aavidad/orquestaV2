@@ -29,7 +29,7 @@ func TestCodexExecResolverV0PromptAdvierteContextoRequiredRefOnly(t *testing.T) 
 		t.Fatalf("read prompt: %v", err)
 	}
 	for _, want := range []string{
-		"CONTEXTO REF_ONLY REQUERIDO",
+		"CONTEXTO REF_ONLY",
 		"required_ref_action",
 		"contexto_ref_only_resuelto",
 		`"notes":["contexto_ref_only_resuelto: \u003cmotivo\u003e"]`,

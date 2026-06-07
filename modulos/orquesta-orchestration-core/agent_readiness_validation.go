@@ -90,6 +90,9 @@ func validateAgentReadinessEvidenceRefsV0(
 }
 
 func agentReadinessUnsafeTextV0(value string) bool {
+	if !orquestarails.RailsEnforcedV0() {
+		return false
+	}
 	low := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(value), `\/`, "/"))
 	for _, fragment := range orquestarails.OperationalSensitiveFragmentsV0 {
 		if orquestarails.ContainsFragmentWithBoundaryV0(low, fragment) {

@@ -88,6 +88,43 @@ func handleBlockRunCommandV0(current OrchestrationRunV0, command OrchestrationCo
 	return eventCommandResultV0(event, err)
 }
 
+func handleResolveRunBlockerCommandV0(
+	current OrchestrationRunV0,
+	command OrchestrationCommandV0,
+) (OrchestrationCommandResultV0, error) {
+	payload, err := decodeResolveRunBlockerCommandPayloadV0(command.Payload)
+	if err != nil {
+		return emptyCommandResultV0(), err
+	}
+	repairPartialProjection := false
+	if reflected, err := runBlockerResolvedEffectKnownV0(current, payload.BlockerID); err != nil {
+		return emptyCommandResultV0(), err
+	} else if reflected {
+		if err := ensureRunBlockerResolvedEffectMatchesV0(current, command, payload); err != nil {
+			return emptyCommandResultV0(), err
+		}
+		if !blockerAlreadyReflectedV0(current, payload.BlockerID) {
+			return idempotentCommandResultV0(), nil
+		}
+		repairPartialProjection = true
+	}
+	if err := ensureExistingRunForCommandV0(current, command); err != nil {
+		return emptyCommandResultV0(), err
+	}
+	if !blockerAlreadyReflectedV0(current, payload.BlockerID) {
+		return emptyCommandResultV0(), commandErrorV0(ErrTransicionInvalidaV0, "payload.blocker_id")
+	}
+	meta := commandEventMetaV0(current, command, OrchestrationEventRunBlockerResolvedV0)
+	if repairPartialProjection {
+		meta.Sequence = current.LastSequence
+	}
+	event, err := NewRunBlockerResolvedEventV0(
+		meta,
+		runBlockerResolvedPayloadFromCommandV0(payload),
+	)
+	return eventCommandResultV0(event, err)
+}
+
 func ensureExistingRunForCommandV0(current OrchestrationRunV0, command OrchestrationCommandV0) error {
 	if orchestrationRunIsEmptyV0(current) {
 		return commandErrorV0(ErrTransicionInvalidaV0, "run")

@@ -198,6 +198,33 @@ func TestRuntimeV0AuditEventNoSilenciaFalloDeSinkV0(t *testing.T) {
 	}
 }
 
+func TestRuntimeV0AuditEventUsaContextoDurablePropioV0(t *testing.T) {
+	stateDir := t.TempDir()
+	store := &memoryStateStoreV0{}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir: stateDir,
+	}, RuntimeDepsV0{
+		StateStore: store,
+		Clock:      fixedClockV0{now: time.Date(2026, 5, 24, 10, 0, 0, 0, time.UTC)},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	runtime.auditEventV0(ctx, "http_request", "200", "", map[string]interface{}{"path": "/healthz"})
+
+	events := readAuditEventsForTestV0(t, AuditPathV0(runtime.config))
+	if len(events) != 1 || events[0].Event != "http_request" || events[0].Status != "200" {
+		t.Fatalf("events=%+v", events)
+	}
+	state := runtime.StateV0()
+	if state.AuditStatus != "ok" || state.AuditFailures != 0 {
+		t.Fatalf("audit degradado por contexto cancelado: %+v", state)
+	}
+}
+
 func TestRuntimeV0AuditFailureNoRecursivoSiStateStoreFallaV0(t *testing.T) {
 	store := &failingStateStoreV0{err: errors.New("write failed at /tmp/runtime-secret/state.json")}
 	runtime, err := NewRuntimeV0(ConfigV0{

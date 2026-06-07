@@ -29,16 +29,16 @@ func TestAppChangeDirectorDecisionSourceV0ProyectaVisualAssetOPES(t *testing.T) 
 	if err != nil {
 		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
 	}
-	task := decisions[6].CreateMicrotask.Task
+	task := microtaskDecisionForTestV0(t, decisions).CreateMicrotask.Task
 	if task.Title != "Generar recurso visual OPES" ||
 		task.Summary != appChangeVisualTaskSummaryV0() ||
 		!stringInSetV0(task.WriteSet, "external/opes/generate_visual_asset") ||
 		!stringInSetV0(task.AcceptanceCriteria, "Devolver visual_asset con title, caption, alt_text, format y body.") ||
 		!stringInSetV0(task.AcceptanceCriteria, "Preferir SVG autocontenido cuando format=svg; sin scripts, eventos JavaScript, foreignObject ni URLs remotas.") ||
-		!stringInSetV0(task.AcceptanceCriteria, "No entregar placeholders; si falta contenido visual suficiente, declararlo como bloqueo de dominio.") ||
+		!stringInSetV0(task.AcceptanceCriteria, "No usar placeholders como arte final; si falta contenido visual suficiente, guardar brief o maqueta y nota de rework.") ||
 		!stringInSetV0(task.RequiredTests, "validar contrato visual OPES") ||
 		!stringInSetV0(task.RequiredTests, "validar SVG seguro si format=svg") ||
-		!stringInSetV0(task.RequiredTests, "validar ausencia de placeholders") {
+		!stringInSetV0(task.RequiredTests, "validar estado de placeholder, maqueta o arte final") {
 		t.Fatalf("task=%+v", task)
 	}
 }
@@ -64,7 +64,7 @@ func TestAppChangeDirectorDecisionSourceV0ProyectaVisualAssetExternoSinOPES(t *t
 	if err != nil {
 		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
 	}
-	task := decisions[6].CreateMicrotask.Task
+	task := microtaskDecisionForTestV0(t, decisions).CreateMicrotask.Task
 	if task.Title != "Generar recurso visual externo" ||
 		!stringInSetV0(task.RequiredTests, "validar contrato visual externo") ||
 		stringInSetV0(task.RequiredTests, "validar contrato visual OPES") {

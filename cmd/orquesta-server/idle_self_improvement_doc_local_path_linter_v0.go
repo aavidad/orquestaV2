@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	orquestarails "orquesta/modulos/orquesta-rails"
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
@@ -44,6 +45,9 @@ var localDocPathRedactionForbiddenFragmentsV0 = []string{
 func (planner idleSelfImprovementBacklogPlannerV0) localDocPathRedactionCollisionsV0(
 	projectDir string,
 ) []orquestaserver.BacklogScanCollisionV0 {
+	if !orquestarails.RailsEnforcedV0() {
+		return nil
+	}
 	var collisions []orquestaserver.BacklogScanCollisionV0
 	for _, rel := range localDocPathRedactionRefsV0(projectDir) {
 		body, err := os.ReadFile(filepath.Join(projectDir, rel))
@@ -101,6 +105,9 @@ func localDocPathRedactionProblemLinesV0(content string) []int {
 }
 
 func localDocPathLineNeedsRedactionV0(line string) bool {
+	if !orquestarails.RailsEnforcedV0() {
+		return false
+	}
 	normalized := strings.ToLower(strings.ReplaceAll(line, `\/`, "/"))
 	if localDocPathLineMarkedNonExportableV0(normalized) {
 		return false

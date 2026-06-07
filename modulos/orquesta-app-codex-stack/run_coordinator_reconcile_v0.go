@@ -138,7 +138,14 @@ func (stack StackV0) recoverQueuedStoppedCandidateV0(
 		return err
 	}
 	if !stackRunIsActiveV0(run) {
-		return stack.completeQueuedRunControlWithoutActiveRunV0(ctx, command, candidate, state)
+		recovered, ok, err := stack.recoverBlockedAppChangeAutoPlanRunV0(ctx, command, state, run)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return stack.completeQueuedRunControlWithoutActiveRunV0(ctx, command, candidate, state)
+		}
+		run = recovered
 	}
 	if err := stack.recoverQueuedStoppedAgentProgressV0(ctx, command, run); err != nil {
 		return err
@@ -162,6 +169,9 @@ func (stack StackV0) completeQueuedRunControlIfStopHasNoPendingAgentsV0(
 	evaluation := orquestaruncontrol.EvaluateRunControlV0(state)
 	if !evaluation.StopAgentsAllowed || len(stackDrainPendingStartedAgentRefsV0(run)) > 0 {
 		return nil
+	}
+	if pending, err := stack.domainWorkRunHasPendingSubmissionWithoutAcceptedReceiptV0(ctx, run); err != nil || pending {
+		return err
 	}
 	target, ok := codexStackTerminalStatusForRunControlRequestV0(state.Status)
 	if !ok {

@@ -31,6 +31,44 @@ func TestApplyEventV0RunBlockedMarksRunAndAddsCompactBlocker(t *testing.T) {
 	}
 }
 
+func TestApplyEventV0RunBlockerResolvedActivaSoloSiNoQuedanBlockers(t *testing.T) {
+	run := mustReducerStartedRunV0(t)
+	run = mustApplyReducerEventV0(t, run, mustReducerRunBlockedWithRefEventV0(t, "evt-run-blocked-resolve-001", 2, "blocker-a"))
+	run = mustApplyReducerEventV0(t, run, mustReducerRunBlockedWithRefEventV0(t, "evt-run-blocked-resolve-002", 3, "blocker-b"))
+
+	first, err := ApplyEventV0(run, mustReducerRunBlockerResolvedEventV0(t, "evt-run-blocker-resolved-001", 4, "blocker-a"))
+	if err != nil {
+		t.Fatalf("apply RunBlockerResolved first: %v", err)
+	}
+	if first.Status != OrchestrationRunStatusBlockedV0 ||
+		!reflect.DeepEqual(first.Blockers, []string{"blocker-b"}) {
+		t.Fatalf("first=%+v", first)
+	}
+
+	second, err := ApplyEventV0(first, mustReducerRunBlockerResolvedEventV0(t, "evt-run-blocker-resolved-002", 5, "blocker-b"))
+	if err != nil {
+		t.Fatalf("apply RunBlockerResolved second: %v", err)
+	}
+	if second.Status != OrchestrationRunStatusActiveV0 || len(second.Blockers) != 0 {
+		t.Fatalf("second=%+v", second)
+	}
+}
+
+func TestApplyEventV0RunBlockerResolvedEsIdempotente(t *testing.T) {
+	run := mustReducerStartedRunV0(t)
+	run = mustApplyReducerEventV0(t, run, mustReducerRunBlockedWithRefEventV0(t, "evt-run-blocked-idem-001", 2, "blocker-idem"))
+	event := mustReducerRunBlockerResolvedEventV0(t, "evt-run-blocker-resolved-idem-001", 3, "blocker-idem")
+	first := mustApplyReducerEventV0(t, run, event)
+
+	second, err := ApplyEventV0(first, event)
+	if err != nil {
+		t.Fatalf("apply duplicate RunBlockerResolved: %v", err)
+	}
+	if second.Status != OrchestrationRunStatusActiveV0 || len(second.Blockers) != 0 {
+		t.Fatalf("second=%+v", second)
+	}
+}
+
 func TestApplyEventV0DirectorQuestionRaisedAddsCompactRef(t *testing.T) {
 	run := mustReducerStartedRunV0(t)
 	event := mustReducerDirectorQuestionRaisedEventV0(t, "evt-director-question-reducer-001", 2, false)

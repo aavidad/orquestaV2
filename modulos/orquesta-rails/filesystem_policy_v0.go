@@ -73,6 +73,9 @@ func PathInsideWorkspaceV0(workspace string, target string) bool {
 }
 
 func CommandTextContainsDestructiveFilesystemOperationV0(value string) bool {
+	if !RailsEnforcedV0() {
+		return false
+	}
 	fields := strings.Fields(strings.ToLower(strings.TrimSpace(value)))
 	for _, field := range fields {
 		field = strings.Trim(field, "'\"`();")

@@ -43,7 +43,8 @@ Casos focales:
   crea microtarea en vez de dejar la pregunta pendiente.
 - `TestAppChangeDirectorDecisionSourceV0BloqueaDetalleSensibleEnAutoPlan`:
   reproduce un criterio con `api_key=` y valida que no se cree microtarea
-  automatica.
+  automatica; el vocabulario operativo sin valor efectivo sigue permitido por
+  `TestAppChangeDirectorDecisionSourceV0SaneaCriteriosOperativosSinBloquearAutoPlan`.
 - `TestAppChangeDirectorDecisionSourceV0CompactaCriteriosExternosAlLimiteDelDirector`:
   reproduce un job OPES con criterios generados y de usuario que antes excedian
   el limite compacto del DTO del director.

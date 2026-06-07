@@ -43,6 +43,7 @@ type fileOutboxLedgerClaimV0 struct {
 	IdempotencyKey string `json:"idempotency_key,omitempty"`
 	ClaimRef       string `json:"claim_ref"`
 	LeaseRef       string `json:"lease_ref"`
+	ClaimedAt      string `json:"claimed_at,omitempty"`
 	Recovered      bool   `json:"recovered_after_restart,omitempty"`
 }
 

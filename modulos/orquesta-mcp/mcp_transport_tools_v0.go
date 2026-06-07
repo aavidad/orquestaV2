@@ -21,6 +21,7 @@ func MCPTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnve
 		mcpTransportToolEnvelopeV0(descriptors.bootstrap.Name, descriptors.bootstrap.Version, descriptors.bootstrap.ResourceURI, descriptors.bootstrap.InputSchema, descriptors.bootstrap.Output, mcpBootstrapTransportHandlerV0),
 		mcpTransportToolEnvelopeV0(descriptors.workflow.Name, descriptors.workflow.Version, descriptors.workflow.ResourceURI, descriptors.workflow.InputSchema, descriptors.workflow.Output, mcpCoreWorkflowTransportHandlerV0),
 		mcpTransportToolEnvelopeV0(descriptors.runControl.Name, descriptors.runControl.Version, descriptors.runControl.ResourceURI, descriptors.runControl.InputSchema, descriptors.runControl.Output, mcpRunControlTransportHandlerV0(bindings.RunControl)),
+		mcpTransportToolEnvelopeV0(descriptors.runtimeModels.Name, descriptors.runtimeModels.Version, descriptors.runtimeModels.ResourceURI, descriptors.runtimeModels.InputSchema, descriptors.runtimeModels.Output, mcpRuntimeModelsTransportHandlerV0(bindings.RuntimeModels)),
 		mcpTransportToolEnvelopeV0(descriptors.runQueue.Name, descriptors.runQueue.Version, descriptors.runQueue.ResourceURI, descriptors.runQueue.InputSchema, descriptors.runQueue.Output, mcpRunQueuePriorityTransportHandlerV0(bindings.RunQueuePriority)),
 		mcpTransportToolEnvelopeV0(descriptors.runSupervisor.Name, descriptors.runSupervisor.Version, descriptors.runSupervisor.ResourceURI, descriptors.runSupervisor.InputSchema, descriptors.runSupervisor.Output, mcpRunSupervisorTransportHandlerV0(bindings.RunSupervisor)),
 		mcpTransportToolEnvelopeV0(descriptors.workspaceTimeline.Name, descriptors.workspaceTimeline.Version, descriptors.workspaceTimeline.ResourceURI, descriptors.workspaceTimeline.InputSchema, descriptors.workspaceTimeline.Output, mcpWorkspaceTimelineTransportHandlerV0(bindings.WorkspaceTimeline)),
@@ -46,6 +47,7 @@ func applyMCPTransportExecutionProfilesV0(
 		case MCPAutoprogrammingPrepareRunToolNameV0,
 			MCPAutoprogrammingSelfImprovementToolNameV0,
 			MCPAutoprogrammingSuperviseToolNameV0,
+			MCPRuntimeModelsToolNameV0,
 			MCPDomainWorkToolNameV0,
 			MCPExternalWorkRunToolNameV0:
 			profile = MCPTransportExecutionProfileAutoprogrammingLongV0

@@ -17,6 +17,7 @@ type mcpTransportToolDescriptorsV0 struct {
 	bootstrap                MCPBootstrapToolDescriptorV0
 	workflow                 MCPCoreWorkflowCommandToolDescriptorV0
 	runControl               MCPRunControlToolDescriptorV0
+	runtimeModels            MCPRuntimeModelsToolDescriptorV0
 	runQueue                 MCPRunQueuePriorityToolDescriptorV0
 	runSupervisor            MCPRunSupervisorToolDescriptorV0
 	workspaceTimeline        MCPWorkspaceTimelineToolDescriptorV0
@@ -44,6 +45,7 @@ func newMCPTransportToolDescriptorsV0() mcpTransportToolDescriptorsV0 {
 		bootstrap:                MCPBootstrapToolDescriptorV0Value(),
 		workflow:                 MCPCoreWorkflowCommandToolDescriptorV0Value(),
 		runControl:               MCPRunControlDescriptorV0(),
+		runtimeModels:            MCPRuntimeModelsDescriptorV0(),
 		runQueue:                 MCPRunQueuePriorityDescriptorV0(),
 		runSupervisor:            MCPRunSupervisorDescriptorV0(),
 		workspaceTimeline:        MCPWorkspaceTimelineToolDescriptorV0Value(),

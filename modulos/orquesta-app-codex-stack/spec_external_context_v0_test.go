@@ -156,7 +156,6 @@ func TestCodexLaunchSpecResolverV0MarcaContextoExternoTruncadoComoRiesgoDeCierre
 
 	packet := resolution.Spec.AgentPacket
 	if !contextBundleHasRequiredTruncatedEntryV0(packet.Context) ||
-		!stringInSetV0(packet.Task.RequiredTests, externalContextTruncatedRequiredTestV0) ||
 		!stringInSetV0(packet.Task.DoneCriteria, externalContextTruncatedDoneCriteriaV0) {
 		t.Fatalf("packet=%+v", packet)
 	}

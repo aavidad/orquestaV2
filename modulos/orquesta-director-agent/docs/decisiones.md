@@ -3,8 +3,8 @@
 ```text
 Fecha: 2026-05-27
 Decision: T15 no se relanza desde `orquesta-director-agent`; el DTO consume la politica comun de rails por campo y conserva vocabulario operativo opaco.
-Motivo: los cierres de T15 ya activaron el default acotado en servidor y validaron la suite requerida. Reabrir desde el DTO duplicaria owner y podria bloquear decisiones validas por palabras como runtime, provider, model, db, sql o codex.
-Impacto: el director puede seguir expresando refs compactas, context_refs y politicas de prompt/transcript como referencias; valores reales, rutas privadas, prompts/transcripts crudos y secretos siguen rechazados.
+Motivo: desde 2026-06-02 los rails de detalle quedan offline por defecto. Reabrir desde el DTO duplicaria owner y volveria a bloquear decisiones validas por palabras como runtime, provider, model, db, sql o codex.
+Impacto: el director puede seguir expresando refs compactas, context_refs y politicas de prompt/transcript como referencias. Los cortes por detalle solo existen con `ORQUESTA_RAILS_MODE=enforced`; en runtime normal el director/agente repara o aprovecha la evidencia.
 Estado: aceptada_local
 ```
 

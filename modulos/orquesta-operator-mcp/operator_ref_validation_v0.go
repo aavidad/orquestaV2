@@ -25,5 +25,5 @@ func hasOpaqueRefLeakV0(ref string) bool {
 }
 
 func hasOperatorSensitiveMarkerV0(text string) bool {
-	return orquestarails.TextContainsOperationalDetailMarkerV0(text)
+	return orquestarails.TextContainsOperationalSensitiveDetailV0(text)
 }

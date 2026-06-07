@@ -184,7 +184,7 @@ func backlogScanAcceptanceCriteriaV0(request orquestaserver.IdleSelfImprovementR
 	out := []string{
 		"backlog_scan_epoch:" + request.BacklogScanEpoch,
 		"backlog_scan_ref:" + request.BacklogScanRef,
-		"si los documentos del scanner cambiaron desde esta foto, ACK failed con CONSULTA AL DIRECTOR: rebase/merge pendiente",
+		"si los documentos del scanner cambiaron desde esta foto, conservar propuesta como borrador y anotar rebase/merge pendiente",
 		"el ACK debe citar backlog_scan_ref, lineas y hashes de docs para bloques Escaneo backlog nuevos",
 	}
 	for _, ref := range request.ReservationRefs {
@@ -194,7 +194,7 @@ func backlogScanAcceptanceCriteriaV0(request orquestaserver.IdleSelfImprovementR
 		out = append(out, backlogScanDocTokenV0(doc))
 		out = append(out, backlogScanEntryTokensV0(doc)...)
 		if len(doc.ScanEntryIssues) > 0 {
-			out = append(out, "si hay backlog_scan_entry_issue, ACK failed con CONSULTA AL DIRECTOR: rebase/merge pendiente")
+			out = append(out, "si hay backlog_scan_entry_issue, conservar propuesta como borrador y anotar rebase/merge pendiente")
 		}
 	}
 	return out

@@ -39,6 +39,7 @@ var appChangeExternalWorkKindRulesV0 = map[string]appChangeExternalWorkKindRuleV
 	"plan_temario":              {Class: appChangeExternalWorkKindDocumentPlanV0, Title: "Planificar temario externo"},
 	"create_exam_outline":       {Class: appChangeExternalWorkKindSummaryV0, Title: "Crear esquema de examen externo"},
 	"research_sources":          {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Resolver investigacion externa"},
+	"research_exam_precedents":  {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Investigar precedentes de examen externos"},
 	"split_syllabus_topic":      {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Dividir tema de temario externo"},
 	"draft_topic_outline":       {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Preparar esquema de tema externo"},
 	"review_legal":              {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Resolver revision legal externa"},
@@ -144,7 +145,7 @@ func appChangeExternalWorkCriteriaV0(
 	if appChangeIsAudioExternalWorkV0(request) {
 		criteria = append(criteria, appChangeAudioWorkCriteriaV0(request)...)
 		return append(criteria,
-			"Si falta un campo de input_fields requerido por el job, declararlo como bloqueo de dominio y no inventarlo.",
+			"Si falta un campo de input_fields requerido por el job, conservar avance parcial y dejar nota de rework de dominio.",
 		)
 	}
 	if !appChangeIsDocumentaryExternalWorkV0(request) {
@@ -158,7 +159,7 @@ func appChangeExternalWorkCriteriaV0(
 		owner := appChangeExternalWorkOwnerLabelV0(request.ExternalWork)
 		criteria = append(criteria,
 			"Para draft_content_block, usar paquete editorial suficiente y no sobreatomizar: bloque, subcapitulo o capitulo coherente si "+owner+" lo envio asi.",
-			"No redactar un tema de 50 folios sin paquete suficiente; pedir division editorial a "+owner+" si excede contexto o trazabilidad.",
+			"Si el paquete no da para una version larga trazable, redactar version parcial usable y dejar tarea de ampliacion editorial para "+owner+".",
 		)
 	} else if appChangeIsDocumentPlanWorkV0(request) {
 		criteria = append(criteria,
@@ -178,7 +179,7 @@ func appChangeExternalWorkCriteriaV0(
 		)
 	}
 	return append(criteria,
-		"Si falta un campo de input_fields requerido por el job, declararlo como bloqueo de dominio y no inventarlo.",
+		"Si falta un campo de input_fields requerido por el job, conservar avance parcial y dejar nota de rework de dominio.",
 	)
 }
 

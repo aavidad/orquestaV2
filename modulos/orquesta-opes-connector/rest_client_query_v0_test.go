@@ -48,6 +48,53 @@ func TestRESTClientV0ListExternalJobsConsultaColaPublica(t *testing.T) {
 	}
 }
 
+func TestRESTClientV0ListExternalJobsConsultaColaPorPrograma(t *testing.T) {
+	client := newRESTClientForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+			t.Fatalf("request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		if r.URL.Query().Get("program_id") != "program-conductores" ||
+			r.URL.Query().Get("correlation_id") != "conductores-20260602" ||
+			r.URL.Query().Get("job_type") != "draft_content_block" {
+			t.Fatalf("query=%s", r.URL.RawQuery)
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			{
+				"id":             "job-ref-conductores-001",
+				"type":           "draft_content_block",
+				"status":         "pending",
+				"execution_mode": "external",
+				"payload_json":   `{"program_id":"program-conductores","topic_id":"topic-1"}`,
+				"correlation_id": "conductores-20260602",
+			},
+			{
+				"id":             "job-ref-operario-001",
+				"type":           "draft_content_block",
+				"status":         "pending",
+				"execution_mode": "external",
+				"payload_json":   `{"program_id":"program-operario","topic_id":"topic-1"}`,
+				"correlation_id": "operario-20260518",
+			},
+		})
+	}))
+
+	jobs, err := client.ListExternalJobsV0(context.Background(), ExternalJobQueryV0{
+		ExecutionMode: "external",
+		Status:        "pending",
+		JobType:       "draft_content_block",
+		ProgramID:     "program-conductores",
+		CorrelationID: "conductores-20260602",
+		Limit:         10,
+	})
+
+	if err != nil {
+		t.Fatalf("ListExternalJobsV0: %v", err)
+	}
+	if len(jobs) != 1 || jobs[0].ID != "job-ref-conductores-001" {
+		t.Fatalf("jobs=%+v", jobs)
+	}
+}
+
 func TestRESTClientV0ListExternalJobsFiltraRespuestaMixta(t *testing.T) {
 	client := newRESTClientForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs/job-ref-plan-001" || r.Method != http.MethodGet {

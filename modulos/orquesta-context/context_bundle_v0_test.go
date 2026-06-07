@@ -56,12 +56,14 @@ func TestBuildContextBundleV0CrossModuleQuedaComoContratoYPreguntaDirector(t *te
 	}
 }
 
-func TestBuildContextBundleV0RechazaDetallesProhibidos(t *testing.T) {
+func TestBuildContextBundleV0RailsOfflineNoBloqueaDetalleOperativo(t *testing.T) {
 	request := validContextBundleRequestV0()
 	request.ReadSet = []string{"/home/user/.codex/auth.json"}
 
 	bundle := BuildContextBundleV0(request)
-	requireContextIssueV0(t, bundle.Issues, ErrContextBundleDetalleProhibidoV0)
+	if !bundle.Valid() {
+		t.Fatalf("rails offline no debe bloquear bundle: %+v", bundle.Issues)
+	}
 }
 
 func TestBuildContextBundleV0RechazaExcesoEntradas(t *testing.T) {

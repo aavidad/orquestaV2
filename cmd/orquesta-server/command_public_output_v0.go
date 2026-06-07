@@ -63,6 +63,9 @@ type opesDrainPublicSummaryV0 struct {
 	SelectedJobType        string                  `json:"selected_job_type,omitempty"`
 	EmptyJobTypes          []string                `json:"empty_job_types,omitempty"`
 	JobRef                 string                  `json:"job_ref,omitempty"`
+	ProgramID              string                  `json:"program_id,omitempty"`
+	TopicID                string                  `json:"topic_id,omitempty"`
+	CorrelationID          string                  `json:"correlation_id,omitempty"`
 	DryRun                 bool                    `json:"dry_run,omitempty"`
 	Seen                   int                     `json:"seen"`
 	Submitted              int                     `json:"submitted"`
@@ -79,6 +82,9 @@ type opesDrainPublicFilterV0 struct {
 	JobTypeSequence []string `json:"job_type_sequence,omitempty"`
 	SelectedJobType string   `json:"selected_job_type,omitempty"`
 	JobRef          string   `json:"job_ref,omitempty"`
+	ProgramID       string   `json:"program_id,omitempty"`
+	TopicID         string   `json:"topic_id,omitempty"`
+	CorrelationID   string   `json:"correlation_id,omitempty"`
 }
 
 type runStatusPublicSummaryV0 struct {
@@ -183,6 +189,9 @@ func commandPublicOPESDrainPayloadV0(summary opesDrainSummaryV0) opesDrainPublic
 		SelectedJobType:        strings.TrimSpace(summary.SelectedJobType),
 		EmptyJobTypes:          append([]string(nil), summary.EmptyJobTypes...),
 		JobRef:                 strings.TrimSpace(summary.JobRef),
+		ProgramID:              strings.TrimSpace(summary.ProgramID),
+		TopicID:                strings.TrimSpace(summary.TopicID),
+		CorrelationID:          strings.TrimSpace(summary.CorrelationID),
 		DryRun:                 summary.DryRun,
 		Seen:                   summary.Seen,
 		Submitted:              summary.Submitted,
@@ -200,12 +209,21 @@ func commandPublicOPESDrainFilterV0(summary opesDrainSummaryV0) opesDrainPublicF
 		JobTypeSequence: append([]string(nil), summary.JobTypeSequence...),
 		SelectedJobType: strings.TrimSpace(summary.SelectedJobType),
 		JobRef:          strings.TrimSpace(summary.JobRef),
+		ProgramID:       strings.TrimSpace(summary.ProgramID),
+		TopicID:         strings.TrimSpace(summary.TopicID),
+		CorrelationID:   strings.TrimSpace(summary.CorrelationID),
 	}
 	switch {
 	case filter.JobRef != "":
 		filter.Mode = "job_ref"
 	case len(filter.JobTypeSequence) > 0:
 		filter.Mode = "job_type_sequence"
+	case filter.ProgramID != "":
+		filter.Mode = "program_id"
+	case filter.TopicID != "":
+		filter.Mode = "topic_id"
+	case filter.CorrelationID != "":
+		filter.Mode = "correlation_id"
 	case filter.JobType != "":
 		filter.Mode = "job_type"
 	default:

@@ -60,3 +60,22 @@ func TestRESTClientV0RetryPolicyBloqueaMutationSinIdempotenciaV0(t *testing.T) {
 		t.Fatalf("attempts=%d err=%v", attempts, err)
 	}
 }
+
+func TestRESTClientV0RetryPolicyConservaStatusNoRetryableV0(t *testing.T) {
+	client := NewRESTClientV0(RESTClientConfigV0{
+		BaseURL: "http://opes.test",
+		HTTPClient: &http.Client{Transport: restClientTestTransportV0{t: t, handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"invalid job artifact"}`))
+		})}},
+		RetryPolicy: RetryPolicyV0{MaxAttempts: 1},
+	})
+
+	err := client.postJSONV0(context.Background(), "/api/jobs", opesCreateJobRequestV0{
+		IdempotencyKey: "idem-status-400",
+	}, &opesJobResponseV0{})
+
+	if err == nil || err.Error() != ErrOPESHTTPStatusV0+"_400" {
+		t.Fatalf("err=%v", err)
+	}
+}

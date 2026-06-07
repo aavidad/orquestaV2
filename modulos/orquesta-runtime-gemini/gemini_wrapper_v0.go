@@ -7,6 +7,7 @@ func BuildGeminiWrapperScriptV0(profile GeminiConnectorProfileV0) string {
 	args = append(args, geminiOptionalFlagArgsV0("--model", profile.Model)...)
 	args = append(args, geminiOptionalFlagArgsV0("--approval-mode", profile.ApprovalMode)...)
 	args = append(args, geminiOptionalFlagArgsV0("--output-format", profile.OutputFormat)...)
+	args = append(args, geminiOptionalFlagArgsV0("--include-directories", profile.RuntimeWorkDir)...)
 	args = append(args, "--prompt", geminiShellQuoteV0(""))
 	for _, arg := range profile.ExtraArgs {
 		args = append(args, geminiShellQuoteV0(arg))

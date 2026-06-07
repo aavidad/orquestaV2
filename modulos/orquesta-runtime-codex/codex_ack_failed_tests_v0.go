@@ -7,8 +7,7 @@ import (
 
 func codexAckHasFailedTestEvidenceV0(ack CodexAgentAckV0) bool {
 	return codexAckEvidenceStringsHaveFailureV0(ack.Tests, true) ||
-		codexRequiredTestReceiptsHaveFailureV0(ack.TestReceipts) ||
-		codexAckEvidenceStringsHaveFailureV0(ack.Notes, false)
+		codexRequiredTestReceiptsHaveFailureV0(ack.TestReceipts)
 }
 
 func CodexAgentAckDeclaresIncompleteRequiredEvidenceV0(ack CodexAgentAckV0) bool {
@@ -27,8 +26,7 @@ func codexAckBytesHaveFailedTestEvidenceV0(data []byte) bool {
 		return false
 	}
 	return codexAckRawEvidenceHasFailureV0(raw.Tests, true) ||
-		codexAckRawEvidenceHasFailureV0(raw.TestReceipts, true) ||
-		codexAckRawEvidenceHasFailureV0(raw.Notes, false)
+		codexAckRawEvidenceHasFailureV0(raw.TestReceipts, true)
 }
 
 func codexRequiredTestReceiptsHaveFailureV0(receipts []CodexRequiredTestReceiptV0) bool {
