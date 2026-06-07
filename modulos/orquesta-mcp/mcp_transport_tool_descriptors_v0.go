@@ -5,6 +5,7 @@ type mcpTransportToolDescriptorsV0 struct {
 	director                 MCPArrancarDirectorAppToolDescriptorV0
 	change                   MCPRequestAppChangeToolDescriptorV0
 	decision                 MCPDirectorAgentDecisionToolDescriptorV0
+	supervisorBriefing       MCPDirectorSupervisorBriefingToolDescriptorV0
 	stats                    MCPDirectorStatsToolDescriptorV0
 	preparar                 MCPPrepararOrquestacionAppToolDescriptorV0
 	ejecutar                 MCPEjecutarOrquestacionAppToolDescriptorV0
@@ -33,6 +34,7 @@ func newMCPTransportToolDescriptorsV0() mcpTransportToolDescriptorsV0 {
 		director:                 MCPArrancarDirectorAppDescriptorV0(),
 		change:                   MCPRequestAppChangeDescriptorV0(),
 		decision:                 MCPDirectorAgentDecisionDescriptorV0(),
+		supervisorBriefing:       MCPDirectorSupervisorBriefingDescriptorV0(),
 		stats:                    MCPDirectorStatsDescriptorV0(),
 		preparar:                 MCPPrepararOrquestacionAppDescriptorV0(),
 		ejecutar:                 MCPEjecutarOrquestacionAppDescriptorV0(),

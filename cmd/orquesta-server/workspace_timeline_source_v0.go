@@ -8,21 +8,31 @@ import (
 
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 type serverWorkspaceTimelineSourceV0 struct {
-	queue orquestamcp.MCPTransportRunQueuePriorityExecutorV0
-	stats orquestamcp.MCPTransportDirectorStatsExecutorV0
-	now   func() time.Time
+	queue       orquestamcp.MCPTransportRunQueuePriorityExecutorV0
+	stats       orquestamcp.MCPTransportDirectorStatsExecutorV0
+	eventReader orquestacionnucleoapp.RunEventReaderPortV0
+	now         func() time.Time
 }
 
 func newServerWorkspaceTimelineSourceV0(
 	bindings orquestamcp.MCPTransportBindingsV0,
 ) orquestaobservability.WorkspaceTimelineSourcePortV0 {
+	return newServerWorkspaceTimelineSourceWithEventsV0(bindings, nil)
+}
+
+func newServerWorkspaceTimelineSourceWithEventsV0(
+	bindings orquestamcp.MCPTransportBindingsV0,
+	eventReader orquestacionnucleoapp.RunEventReaderPortV0,
+) orquestaobservability.WorkspaceTimelineSourcePortV0 {
 	return serverWorkspaceTimelineSourceV0{
-		queue: bindings.RunQueuePriority,
-		stats: bindings.DirectorStats,
-		now:   time.Now,
+		queue:       bindings.RunQueuePriority,
+		stats:       bindings.DirectorStats,
+		eventReader: eventReader,
+		now:         time.Now,
 	}
 }
 
@@ -40,6 +50,10 @@ func (source serverWorkspaceTimelineSourceV0) QueryWorkspaceTimelineV0(
 		sourceName := strings.TrimSpace(requested)
 		available := false
 		switch sourceName {
+		case orquestaobservability.WorkspaceTimelineSourceEventsV0:
+			var eventItems []orquestaobservability.WorkspaceTimelineItemV0
+			eventItems, available = source.eventItemsV0(ctx, query)
+			items = append(items, eventItems...)
 		case orquestaobservability.WorkspaceTimelineSourceRunQueueV0:
 			var queueItems []orquestaobservability.WorkspaceTimelineItemV0
 			queueItems, available = source.queueItemsV0(ctx, query, occurredAt)

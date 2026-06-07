@@ -48,10 +48,15 @@ func runDirectorSupervisedBurstLoopV0(
 			return resultWithBurstErrorV0(result, err)
 		}
 		decision = capBurstDecisionAtMaxStepsV0(input, stepNumber, decision)
+		briefing, briefingErr := buildBurstBriefingV0(input, decision)
+		if briefingErr.Code != "" {
+			return resultWithBurstErrorV0(result, briefingErr)
+		}
 		errorCode := publicCycleStepErrorCodeV0(stepErr)
-		result.Steps = append(result.Steps, burstStepResultV0(stepNumber, stepResult, decision, errorCode))
+		result.Steps = append(result.Steps, burstStepResultV0(stepNumber, stepResult, decision, briefing, errorCode))
 		result.ExecutedSteps = stepNumber
 		result.FinalAction = decision.Action
+		result.FinalBriefing = &briefing
 		result.StopProjection = burstStopProjectionV0(result, decision)
 		previousStep = &stepResult
 		previousDecision = &decision

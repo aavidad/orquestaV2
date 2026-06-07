@@ -9,6 +9,7 @@ func MCPTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnve
 		mcpTransportToolEnvelopeV0(descriptors.director.Name, descriptors.director.Version, descriptors.director.ResourceURI, descriptors.director.InputSchema, descriptors.director.Output, mcpArrancarDirectorAppTransportHandlerV0(bindings.ArrancarDirector)),
 		mcpTransportToolEnvelopeV0(descriptors.change.Name, descriptors.change.Version, descriptors.change.ResourceURI, descriptors.change.InputSchema, descriptors.change.Output, mcpRequestAppChangeTransportHandlerV0(bindings.RequestAppChange)),
 		mcpTransportToolEnvelopeV0(descriptors.decision.Name, descriptors.decision.Version, descriptors.decision.ResourceURI, descriptors.decision.InputSchema, descriptors.decision.Output, mcpDirectorAgentDecisionTransportHandlerV0(bindings.DirectorDecision)),
+		mcpTransportToolEnvelopeV0(descriptors.supervisorBriefing.Name, descriptors.supervisorBriefing.Version, descriptors.supervisorBriefing.ResourceURI, descriptors.supervisorBriefing.InputSchema, descriptors.supervisorBriefing.Output, mcpDirectorSupervisorBriefingTransportHandlerV0(bindings.DirectorSupervisorBriefing)),
 		mcpTransportToolEnvelopeV0(descriptors.stats.Name, descriptors.stats.Version, descriptors.stats.ResourceURI, descriptors.stats.InputSchema, descriptors.stats.Output, mcpDirectorStatsTransportHandlerV0(bindings.DirectorStats)),
 		mcpTransportToolEnvelopeV0(descriptors.preparar.Name, descriptors.preparar.Version, descriptors.preparar.ResourceURI, descriptors.preparar.InputSchema, descriptors.preparar.Output, mcpPrepararOrquestacionAppTransportHandlerV0),
 		mcpTransportToolEnvelopeV0(descriptors.ejecutar.Name, descriptors.ejecutar.Version, descriptors.ejecutar.ResourceURI, descriptors.ejecutar.InputSchema, descriptors.ejecutar.Output, mcpEjecutarOrquestacionAppTransportHandlerV0(bindings.EjecutarOrquestacion)),
@@ -53,6 +54,7 @@ func applyMCPTransportExecutionProfilesV0(
 			profile = MCPTransportExecutionProfileAutoprogrammingLongV0
 		case MCPWorkspaceTimelineToolNameV0,
 			MCPDirectorStatsToolNameV0,
+			MCPDirectorSupervisorBriefingToolNameV0,
 			MCPAutoprogrammingStatusToolNameV0:
 			profile = MCPTransportExecutionProfileDefaultToolV0
 		}

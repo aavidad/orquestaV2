@@ -9,27 +9,28 @@ import (
 )
 
 type MCPTransportBindingsV0 struct {
-	NuevaApp                  MCPTransportNuevaAppExecutorV0
-	ArrancarDirector          MCPTransportArrancarDirectorAppExecutorV0
-	RequestAppChange          MCPTransportRequestAppChangeExecutorV0
-	EjecutarOrquestacion      MCPTransportEjecutarOrquestacionAppExecutorV0
-	DirectorDecision          MCPTransportDirectorAgentDecisionExecutorV0
-	DirectorStats             MCPTransportDirectorStatsExecutorV0
-	RunControl                MCPTransportRunControlExecutorV0
-	RuntimeModels             orquestaruntime.RuntimeModelManagerPortV0
-	RunQueuePriority          MCPTransportRunQueuePriorityExecutorV0
-	RunSupervisor             MCPTransportRunSupervisorExecutorV0
-	WorkspaceTimeline         orquestaobservability.WorkspaceTimelineSourcePortV0
-	AutoprogrammingPrepareRun MCPTransportAutoprogrammingPrepareRunExecutorV0
-	ServerShutdown            MCPTransportServerShutdownExecutorV0
-	DomainWork                MCPDomainWorkExecutorPortV0
-	ExternalWorkRun           MCPTransportExternalWorkRunExecutorV0
-	AppVCS                    MCPAppVCSExecutorPortV0
-	OperatorConnector         operator.OperatorMCPConnectorV0
-	OperatorStatus            operator.OperatorMCPStatusPortV0
-	OperatorBurst             operator.OperatorMCPBurstPortV0
-	OperatorOutbox            operator.OperatorMCPOutboxPortV0
-	OperatorQuery             operator.OperatorMCPDirectedQueryPortV0
+	NuevaApp                   MCPTransportNuevaAppExecutorV0
+	ArrancarDirector           MCPTransportArrancarDirectorAppExecutorV0
+	RequestAppChange           MCPTransportRequestAppChangeExecutorV0
+	EjecutarOrquestacion       MCPTransportEjecutarOrquestacionAppExecutorV0
+	DirectorDecision           MCPTransportDirectorAgentDecisionExecutorV0
+	DirectorSupervisorBriefing MCPTransportDirectorSupervisorBriefingExecutorV0
+	DirectorStats              MCPTransportDirectorStatsExecutorV0
+	RunControl                 MCPTransportRunControlExecutorV0
+	RuntimeModels              orquestaruntime.RuntimeModelManagerPortV0
+	RunQueuePriority           MCPTransportRunQueuePriorityExecutorV0
+	RunSupervisor              MCPTransportRunSupervisorExecutorV0
+	WorkspaceTimeline          orquestaobservability.WorkspaceTimelineSourcePortV0
+	AutoprogrammingPrepareRun  MCPTransportAutoprogrammingPrepareRunExecutorV0
+	ServerShutdown             MCPTransportServerShutdownExecutorV0
+	DomainWork                 MCPDomainWorkExecutorPortV0
+	ExternalWorkRun            MCPTransportExternalWorkRunExecutorV0
+	AppVCS                     MCPAppVCSExecutorPortV0
+	OperatorConnector          operator.OperatorMCPConnectorV0
+	OperatorStatus             operator.OperatorMCPStatusPortV0
+	OperatorBurst              operator.OperatorMCPBurstPortV0
+	OperatorOutbox             operator.OperatorMCPOutboxPortV0
+	OperatorQuery              operator.OperatorMCPDirectedQueryPortV0
 }
 
 type MCPTransportNuevaAppExecutorV0 interface {

@@ -33,6 +33,7 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 		MCPNuevaAppToolNameV0,
 		MCPArrancarDirectorAppToolNameV0,
 		MCPDirectorAgentDecisionToolNameV0,
+		MCPDirectorSupervisorBriefingToolNameV0,
 		MCPDirectorStatsToolNameV0,
 		MCPPrepararOrquestacionAppToolNameV0,
 		MCPEjecutarOrquestacionAppToolNameV0,

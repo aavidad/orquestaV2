@@ -14,6 +14,7 @@ import (
 	orquestahttpgateway "orquesta/modulos/orquesta-http-gateway"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestapersistence "orquesta/modulos/orquesta-persistence"
 	orquestarunfile "orquesta/modulos/orquesta-run-file"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
@@ -51,7 +52,11 @@ func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 }
 
 func buildServerAppHandlerV0(stack orquestaappcodexstack.StackV0) (http.Handler, error) {
-	stack.MCPTransportBindings.WorkspaceTimeline = newServerWorkspaceTimelineSourceV0(stack.MCPTransportBindings)
+	eventReader, _ := stack.Stores.EventSink.(orquestacionnucleoapp.RunEventReaderPortV0)
+	stack.MCPTransportBindings.WorkspaceTimeline = newServerWorkspaceTimelineSourceWithEventsV0(
+		stack.MCPTransportBindings,
+		eventReader,
+	)
 	mcpHandler, err := newMCPRealHTTPHandlerV0(stack.MCPTransportBindings)
 	if err != nil {
 		return nil, err

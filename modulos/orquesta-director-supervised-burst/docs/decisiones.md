@@ -28,3 +28,16 @@ Motivo:
 
 - outbox, espera externa, bloqueo, pregunta al director y error son cortes reales;
 - el modulo no interpreta efectos externos ni simula ACKs.
+
+## DSB-004: briefing visible, efectos fuera
+
+La rafaga proyecta cada decision a `DirectorSupervisorBriefingV0`, pero no aplica
+el `next_action`.
+
+Motivo:
+
+- el supervisor externo necesita una cola de accion canonica para automatizar;
+- este modulo ya esta en el punto correcto del ciclo para saber que decision
+  resulto de cada paso;
+- ejecutar outbox, espera, cierre o preguntas al director sigue perteneciendo a
+  adaptadores externos.

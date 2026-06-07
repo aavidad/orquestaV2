@@ -131,6 +131,21 @@ Estado: aceptada localmente
 ```
 
 ```text
+Fecha: 2026-06-08
+Decision: Exponer `orquesta.director_supervisor.briefing.v0` como tool MCP puro.
+Motivo: Hermes y otros directores externos necesitan consultar la siguiente
+accion canonica del supervisor por API, sin CLI y sin interpretar structs
+internos del burst.
+Alternativas: depender solo del resultado de `run_supervisor`; duplicar la
+proyeccion en web; acoplar el servidor al modulo de burst.
+Impacto: MCP proyecta `DirectorSupervisorDecisionV0` a
+`DirectorSupervisorBriefingV0`, sin aplicar efectos y sin conocer Codex, OPES,
+runtime ni stores.
+Contratos afectados: DirectorSupervisorBriefingV0; mcp.transport.registry.v0.
+Estado: aceptada localmente
+```
+
+```text
 Fecha: 2026-05-10
 Decision: MCP-031 publica `POST /api/v0/director/stats` como bridge REST fino sobre `orquesta.director.stats.v0`.
 Motivo: Web y adaptadores HTTP locales necesitan consultar stats del director sin conocer MCP ni crear puertos productivos dentro del handler.

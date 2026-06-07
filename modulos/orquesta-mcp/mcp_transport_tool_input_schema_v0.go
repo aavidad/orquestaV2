@@ -39,6 +39,8 @@ func mcpTransportToolInputDTOByNameV0(name string) (any, bool) {
 		return MCPRequestAppChangeToolInputV0{}, true
 	case MCPDirectorAgentDecisionToolNameV0:
 		return MCPDirectorAgentDecisionToolInputV0{}, true
+	case MCPDirectorSupervisorBriefingToolNameV0:
+		return MCPDirectorSupervisorBriefingToolInputV0{}, true
 	case MCPDirectorStatsToolNameV0:
 		return MCPDirectorStatsToolInputV0{}, true
 	case MCPPrepararOrquestacionAppToolNameV0:
@@ -148,6 +150,8 @@ func mcpTransportToolRequiredFieldsV0(name string) map[string]bool {
 	switch strings.TrimSpace(name) {
 	case MCPAppVCSToolNameV0:
 		return map[string]bool{"action": true, "app_ref": true, "repo_ref": true}
+	case MCPDirectorSupervisorBriefingToolNameV0:
+		return map[string]bool{"briefing_input": true}
 	case operator.OperatorMCPStatusToolNameV0:
 		return map[string]bool{"request_ref": true, "subject_ref": true, "status_connector_ref": true}
 	case operator.OperatorMCPBurstToolNameV0:

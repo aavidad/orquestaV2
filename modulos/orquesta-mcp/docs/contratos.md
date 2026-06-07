@@ -293,6 +293,40 @@ Pruebas de contrato:
 ```
 
 ```text
+Nombre: mcp.tool.orquesta.director_supervisor.briefing.v0
+Tipo: puerto_entrada
+Version: v0
+Propietario: orquesta-mcp
+Consumidores: Hermes/API, web operativa y directores externos
+Campos:
+  descriptor:
+    name: orquesta.director_supervisor.briefing.v0
+    version: v0
+    resource_uri: orquesta://contracts/director-supervisor-briefing/v0
+  input:
+    request_id, correlation_id: refs externas opcionales
+    briefing_input: DirectorSupervisorBriefingInputV0
+  output_ok:
+    estado: ok
+    run_ref
+    briefing: DirectorSupervisorBriefingV0 con next_action, action_queue y timeline
+  output_error:
+    estado: error
+    errores_publicos
+Invariantes:
+  - Tool puro y opt-in; si no se inyecta executor usa el ejecutor local puro.
+  - Delegacion exclusiva en `orquesta-director-supervisor`.
+  - No ejecuta la accion, no despacha outbox, no espera agentes y no persiste.
+  - No conoce Codex, OPES, web, DB, runtime, proveedor, modelo, HOME ni OAuth.
+  - No corta por strings recuperables; solo proyecta decisiones ya validadas.
+Pruebas de contrato:
+  - Executor puro devuelve briefing canonico.
+  - Errores de decision incompleta salen como `errores_publicos`.
+  - Registro MCP expone el tool y sus campos de entrada.
+  - Transporte MCP real JSON-RPC puede invocarlo por `tools/call`.
+```
+
+```text
 Nombre: mcp.tool.orquesta.director_agent.apply_decision.v0
 Tipo: puerto_entrada
 Version: v0

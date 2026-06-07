@@ -16,7 +16,10 @@ Salida:
 
 - `executed_steps`: pasos realmente ejecutados.
 - `final_action`: ultima decision del supervisor.
+- `final_briefing`: briefing canonico de la ultima decision del supervisor.
 - `steps`: traza compacta de paso, status, decision y error publico si existe.
+  Cada paso puede incluir `briefing` con `next_action`, `action_queue` y timeline
+  compacta.
 
 Invariantes:
 
@@ -24,6 +27,8 @@ Invariantes:
 - No ejecuta mas de `max_steps`.
 - No continua si el supervisor devuelve cualquier accion distinta de `continue`.
 - No despacha outbox ni registra ACK.
+- No ejecuta el `next_action` del briefing; solo lo publica para el adaptador
+  externo.
 - No genera candidates ni lee estado productivo por si mismo.
 - No contiene DB, provider, modelo, HOME, OAuth, secretos, prompts ni transcripts.
 
@@ -39,6 +44,7 @@ Errores publicos:
 - `director_supervised_burst_step_input`
 - `director_supervised_burst_step`
 - `director_supervised_burst_supervisor`
+- `director_supervised_burst_briefing`
 
 ## No Contratos
 

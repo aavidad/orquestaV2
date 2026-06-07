@@ -121,6 +121,18 @@ transporte productivo debe inyectar puertos y fuente del director.
 ```
 
 ```text
+Caso: MCP-CT-028 briefing de supervisor por MCP
+Tipo: contract
+Comando: go test -count=1 ./modulos/orquesta-mcp ./cmd/orquesta-server -run 'TestMCPDirectorSupervisorBriefing|TestMCPRealTransportV0DirectorSupervisorBriefingJSONRPCV0'
+Evidencia esperada: `orquesta.director_supervisor.briefing.v0` recibe
+`DirectorSupervisorBriefingInputV0`, delega en `orquesta-director-supervisor`,
+devuelve `DirectorSupervisorBriefingV0` con `next_action`, `action_queue` y
+timeline compacta, y puede invocarse por JSON-RPC real sin CLI.
+Ultima ejecucion: 2026-06-08; pasa.
+Riesgos: es proyeccion pura; la aplicacion de la accion sigue fuera del modulo.
+```
+
+```text
 Caso: MCP-CT-026 catalogo workflow con quality gate durable
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-mcp

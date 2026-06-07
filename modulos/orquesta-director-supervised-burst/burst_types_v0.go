@@ -14,6 +14,7 @@ const (
 	ErrDirectorSupervisedBurstStepInputV0  = "director_supervised_burst_step_input"
 	ErrDirectorSupervisedBurstStepV0       = "director_supervised_burst_step"
 	ErrDirectorSupervisedBurstSupervisorV0 = "director_supervised_burst_supervisor"
+	ErrDirectorSupervisedBurstBriefingV0   = "director_supervised_burst_briefing"
 )
 
 type DirectorCycleStepInputBuilderPortV0 interface {
@@ -57,24 +58,26 @@ type DirectorSupervisedBurstStepRequestV0 struct {
 }
 
 type DirectorSupervisedBurstResultV0 struct {
-	RunRef         string                                                `json:"run_ref"`
-	MaxSteps       int                                                   `json:"max_steps"`
-	ExecutedSteps  int                                                   `json:"executed_steps"`
-	FinalAction    orquestadirectorsupervisor.DirectorSupervisorActionV0 `json:"final_action,omitempty"`
-	Steps          []DirectorSupervisedBurstStepResultV0                 `json:"steps,omitempty"`
-	Issues         []DirectorSupervisedBurstIssueV0                      `json:"issues,omitempty"`
-	EvidenceRefs   []string                                              `json:"evidence_refs,omitempty"`
-	StopProjection stopreason.ProjectionV0                               `json:"stop_projection,omitempty"`
+	RunRef         string                                                   `json:"run_ref"`
+	MaxSteps       int                                                      `json:"max_steps"`
+	ExecutedSteps  int                                                      `json:"executed_steps"`
+	FinalAction    orquestadirectorsupervisor.DirectorSupervisorActionV0    `json:"final_action,omitempty"`
+	FinalBriefing  *orquestadirectorsupervisor.DirectorSupervisorBriefingV0 `json:"final_briefing,omitempty"`
+	Steps          []DirectorSupervisedBurstStepResultV0                    `json:"steps,omitempty"`
+	Issues         []DirectorSupervisedBurstIssueV0                         `json:"issues,omitempty"`
+	EvidenceRefs   []string                                                 `json:"evidence_refs,omitempty"`
+	StopProjection stopreason.ProjectionV0                                  `json:"stop_projection,omitempty"`
 }
 
 type DirectorSupervisedBurstStepResultV0 struct {
-	StepNumber   int                                                   `json:"step_number"`
-	CycleRef     string                                                `json:"cycle_ref,omitempty"`
-	TickRef      string                                                `json:"tick_ref,omitempty"`
-	CycleStatus  string                                                `json:"cycle_status,omitempty"`
-	Action       orquestadirectorsupervisor.DirectorSupervisorActionV0 `json:"action,omitempty"`
-	ErrorCode    string                                                `json:"error_code,omitempty"`
-	ShouldRepeat bool                                                  `json:"should_repeat"`
+	StepNumber   int                                                      `json:"step_number"`
+	CycleRef     string                                                   `json:"cycle_ref,omitempty"`
+	TickRef      string                                                   `json:"tick_ref,omitempty"`
+	CycleStatus  string                                                   `json:"cycle_status,omitempty"`
+	Action       orquestadirectorsupervisor.DirectorSupervisorActionV0    `json:"action,omitempty"`
+	Briefing     *orquestadirectorsupervisor.DirectorSupervisorBriefingV0 `json:"briefing,omitempty"`
+	ErrorCode    string                                                   `json:"error_code,omitempty"`
+	ShouldRepeat bool                                                     `json:"should_repeat"`
 }
 
 type DirectorSupervisedBurstIssueV0 struct {

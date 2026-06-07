@@ -33,3 +33,14 @@ Write-set: `modulos/README.md`, `modulos/CONTRATOS.md`, estado del nucleo y veri
 Cierre:
 
 - el modulo entra en `verificar_nucleo_orquesta_v2.sh`.
+
+### DSB-004 - Briefing canonico por rafaga
+
+Write-set: tipos, helpers, caso de uso, tests y docs locales.
+
+Cierre:
+
+- cada paso ejecutado expone `briefing`;
+- la rafaga expone `final_briefing`;
+- el briefing publica `next_action`, `action_queue` y timeline compacta;
+- la rafaga no ejecuta el briefing ni introduce efectos externos nuevos.

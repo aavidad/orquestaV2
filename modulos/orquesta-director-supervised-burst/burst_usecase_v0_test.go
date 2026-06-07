@@ -25,9 +25,23 @@ func TestRunDirectorSupervisedBurstV0ContinuaYParaEnOutbox(t *testing.T) {
 	if result.FinalAction != orquestadirectorsupervisor.DirectorSupervisorActionWaitOutboxV0 {
 		t.Fatalf("final action=%s", result.FinalAction)
 	}
+	if result.FinalBriefing == nil ||
+		result.FinalBriefing.NextAction == nil ||
+		result.FinalBriefing.NextAction.Kind != orquestadirectorsupervisor.DirectorSupervisorActionKindDispatchOutboxV0 {
+		t.Fatalf("final briefing=%+v", result.FinalBriefing)
+	}
 	if result.Steps[0].Action != orquestadirectorsupervisor.DirectorSupervisorActionContinueV0 ||
 		result.Steps[1].Action != orquestadirectorsupervisor.DirectorSupervisorActionWaitOutboxV0 {
 		t.Fatalf("steps=%+v", result.Steps)
+	}
+	if result.Steps[0].Briefing == nil ||
+		result.Steps[0].Briefing.NextAction == nil ||
+		result.Steps[0].Briefing.NextAction.Kind != orquestadirectorsupervisor.DirectorSupervisorActionKindRunStepV0 ||
+		result.Steps[1].Briefing == nil ||
+		result.Steps[1].Briefing.NextAction == nil ||
+		len(result.Steps[1].Briefing.NextAction.TargetRefs) != 1 ||
+		result.Steps[1].Briefing.NextAction.TargetRefs[0] != "outbox-ref-burst-001" {
+		t.Fatalf("step briefings=%+v", result.Steps)
 	}
 	if builder.requests[1].PreviousStepResult == nil || builder.requests[1].PreviousDecision == nil {
 		t.Fatalf("builder did not receive previous step/decision: %+v", builder.requests[1])
@@ -50,6 +64,11 @@ func TestRunDirectorSupervisedBurstV0CortaEnMaxSteps(t *testing.T) {
 	}
 	if result.FinalAction != orquestadirectorsupervisor.DirectorSupervisorActionStopMaxStepsV0 {
 		t.Fatalf("final action=%s", result.FinalAction)
+	}
+	if result.FinalBriefing == nil ||
+		result.FinalBriefing.NextAction == nil ||
+		result.FinalBriefing.NextAction.Kind != orquestadirectorsupervisor.DirectorSupervisorActionKindStopBudgetV0 {
+		t.Fatalf("final briefing=%+v", result.FinalBriefing)
 	}
 	if result.Steps[1].ShouldRepeat ||
 		result.StopProjection.PublicReason != "budget_max_steps" {

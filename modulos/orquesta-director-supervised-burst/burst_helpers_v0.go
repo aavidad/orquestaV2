@@ -67,6 +67,7 @@ func burstStepResultV0(
 	stepNumber int,
 	stepResult orquestadirectorcycle.DirectorCycleStepResultV0,
 	decision orquestadirectorsupervisor.DirectorSupervisorDecisionV0,
+	briefing orquestadirectorsupervisor.DirectorSupervisorBriefingV0,
 	errorCode string,
 ) DirectorSupervisedBurstStepResultV0 {
 	return DirectorSupervisedBurstStepResultV0{
@@ -75,9 +76,28 @@ func burstStepResultV0(
 		TickRef:      stepResult.TickRef,
 		CycleStatus:  string(stepResult.Status),
 		Action:       decision.Action,
+		Briefing:     &briefing,
 		ErrorCode:    errorCode,
 		ShouldRepeat: decision.ShouldContinue,
 	}
+}
+
+func buildBurstBriefingV0(
+	input DirectorSupervisedBurstInputV0,
+	decision orquestadirectorsupervisor.DirectorSupervisorDecisionV0,
+) (orquestadirectorsupervisor.DirectorSupervisorBriefingV0, DirectorSupervisedBurstErrorV0) {
+	briefing, err := orquestadirectorsupervisor.BuildDirectorSupervisorBriefingV0(
+		orquestadirectorsupervisor.DirectorSupervisorBriefingInputV0{
+			Decision:     decision,
+			ObjectiveRef: "director-supervised-burst:" + input.RunRef,
+			ContextRefs:  compactBurstStringsV0(append([]string{"context-ref-director-supervised-burst"}, input.EvidenceRefs...)),
+		},
+	)
+	if err == nil {
+		return briefing, DirectorSupervisedBurstErrorV0{}
+	}
+	return orquestadirectorsupervisor.DirectorSupervisorBriefingV0{},
+		burstErrorV0(input, ErrDirectorSupervisedBurstBriefingV0, "briefing del supervisor invalido", "briefing", true)
 }
 
 func burstStopProjectionV0(
