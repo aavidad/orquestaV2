@@ -221,6 +221,14 @@ Documentos de entrada obligatorios para cambios transversales:
   dupliques variables con nombres distintos repartidas por el codigo; los
   adaptadores deben consumir constantes/registro canonico y documentar ahi los
   cambios que requieran reinicio.
+- Pendiente prioritario 2026-06-08: ver T259 en
+  `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`. Orquesta debe
+  autoverificarse y parar cooperativamente cuando consuma CPU de forma sostenida
+  sin causa operativa ni progreso observable. Esto pertenece a servidor/
+  composicion por puertos de telemetria y shutdown, no al core puro, y no debe
+  convertirse en rail de contenido para agentes. Al cerrar sesiones manuales,
+  comprueba que no quedan `orquesta-server run` locales de prueba activos salvo
+  instruccion expresa del usuario.
 - No borres documentos o codigo antiguo sin revisar. Si algo es historico,
   marcalo como historico y apunta al documento vigente.
 - No borres archivos, docs, tests ni piezas "legacy" solo porque parezcan

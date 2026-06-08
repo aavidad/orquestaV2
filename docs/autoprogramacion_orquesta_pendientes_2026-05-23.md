@@ -120,6 +120,60 @@ legacy.
   y adaptarlo a la arquitectura actual sin romper hexagonal, refs opacas,
   i18n, conectores ni reglas vigentes de esta version.
 
+## T259 server-autoverificacion-cpu-sin-trabajo
+
+Objetivo: Orquesta debe autoverificarse en runtime y parar de forma cooperativa
+si consume CPU de manera sostenida sin causa operativa ni progreso observable.
+
+Estado: pendiente prioritario para la siguiente sesion. Registrado el
+2026-06-08 tras observar varios `orquesta-server run` locales vivos y una
+instancia de pruebas en `127.0.0.1:8789` consumiendo alrededor del 80% de CPU
+durante mas de 20 minutos sin uso activo; el total percibido rondaba el 150%
+por coexistencia con otras instancias antiguas.
+
+Alcance:
+
+- `cmd/orquesta-server`
+- `modulos/orquesta-server`
+- `modulos/orquesta-run-supervisor`
+- `modulos/orquesta-observability` o puerto neutral equivalente si hace falta
+  observar proceso/CPU sin meter runtime concreto en el nucleo.
+
+Criterios:
+
+- Crear un watchdog/health supervisor de servidor por composicion, no dentro
+  del core puro, que observe CPU, memoria, uptime y actividad reciente por
+  puertos/adaptadores. El nucleo solo debe ver refs/estado neutral.
+- Correlacionar CPU alta con causa antes de actuar: runs activos, outbox
+  pendiente, agentes vivos, procesos registrados, ticks recientes, eventos
+  nuevos, tests en curso, despacho de runtime o peticion humana reciente. CPU
+  alta con trabajo causal no debe parar la app.
+- Si durante una ventana configurable hay CPU alta sostenida y no hay causa ni
+  progreso durable, registrar diagnostico publico, marcar `unhealthy` en
+  `/ops`/health, emitir evidencia y pedir parada cooperativa del servidor o de
+  los procesos propios de Orquesta.
+- No usar `pkill`, barridos por nombre ni matar procesos ajenos. Solo se pueden
+  parar procesos/sesiones propios registrados por Orquesta, o el propio servidor
+  que detecta el bucle, con cierre ordenado.
+- Los umbrales, ventanas y politica de accion deben vivir en la configuracion
+  canonica del servidor/composicion; no hardcodear valores repartidos.
+- Esto no es un rail de contenido ni un filtro para entregas de agentes. Es
+  autogobierno operativo basado en telemetria y causalidad observable.
+- Al cerrar una sesion manual, los agentes deben comprobar y parar servidores
+  locales de prueba que ya no se usen, dejando `git status` limpio y sin
+  procesos `orquesta-server run` residuales salvo que el usuario pida mantenerlos.
+
+Tests requeridos:
+
+- Test unitario con reloj/fuente de metricas fake: CPU alta + progreso reciente
+  no dispara parada.
+- Test unitario con CPU alta sostenida + ausencia de eventos/outbox/agentes
+  dispara diagnostico y solicitud de parada cooperativa.
+- Test de frontera: el watchdog no importa Codex, OPES, DB concreta, HOME,
+  OAuth ni proveedor.
+- Smoke local opt-in con servidor temporal que demuestre que el health reporta
+  la condicion y que el shutdown es ordenado, sin matar procesos externos.
+
 ## Aperturas de rail pendientes de revision futura
 
 ### R01 concurrency-gate-detalle-prohibido
