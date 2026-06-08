@@ -191,15 +191,16 @@ los siguientes cortes.
 
 Pendientes priorizados:
 
-- `propose_autonomous_plan_team` debe quedar probado de punta a punta desde
-  `app-director-service`, no solo como contrato aislado. Evidencia local en
-  curso: decision de equipo -> microtareas causales -> `WorkflowTaskStore` ->
-  reentrada al loop de programacion.
-- Crear una proyeccion read-only `DirectorAutonomousOpsSnapshotV0` por puerto,
-  provider-agnostic, que una runs, olas, cohortes, parent/child agents, waits,
-  progreso, cola, decisiones, rework/replan, modelos y cuotas. `/ops` debe
-  consumir esa proyeccion en vez de reconstruir "decision" con heuristica de
-  navegador.
+- `propose_autonomous_plan_team` quedo probado de punta a punta desde
+  `app-director-service` el 2026-06-08: decision de equipo -> microtareas
+  causales -> `WorkflowTaskStore` -> reentrada al loop de programacion y
+  arranque de agentes. Evidencia: commit `ed03c7b3`.
+- `DirectorAutonomousOpsSnapshotV0` queda creado en el corte 2026-06-08 como
+  DTO read-only provider-agnostic y publicado por `director.stats` y
+  `autoprogramming.status`; `/ops` lo consume para la llamada visible del
+  Director, con fallback legacy. Siguen pendientes de ampliar en cortes
+  posteriores: olas, cohortes, parent/child agents, waits y catalogo/modelos si
+  no llegan por los puertos publicos actuales.
 - Conectar skills/contratos al ciclo residente del Director. El briefing ya
   sirve como contrato de siguiente accion, pero falta un controlador opt-in que
   itere briefing -> ejecucion -> nuevo briefing hasta idle/cierre, active

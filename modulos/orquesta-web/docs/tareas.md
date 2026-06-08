@@ -469,6 +469,24 @@ Estado: completada para la proyeccion T209; si el stack entrega
 publico.
 ```
 
+```text
+ID: WEB-032
+Objetivo: Hacer que `/ops` consuma `DirectorAutonomousOpsSnapshotV0` para la
+llamada visible del Director.
+Write-set: ops_dashboard_html_chunk_2_v0.go,
+ops_dashboard_live_cache_policy_v0.go, ops_dashboard_endpoint_v0_test.go y docs
+locales.
+Simbolo foco: opsSnapshotDecision
+Contrato: `/ops` prefiere `ops_snapshot` publicado por
+`autoprogramming/status` o `director/stats`; el resumen JS queda como fallback
+legacy.
+Validacion: go test -count=1 ./modulos/orquesta-web -run
+TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto
+Bloqueos: El snapshot actual no incorpora todavia runtime models, waits, olas o
+cohortes si no llegan por los contratos publicos existentes.
+Estado: completada localmente.
+```
+
 ## CONSULTA AL DIRECTOR
 
 ```text

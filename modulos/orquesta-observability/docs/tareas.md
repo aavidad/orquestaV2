@@ -138,6 +138,19 @@ Bloqueos: ninguno; no toca codigo productivo, `orquesta_event_*`, runtime, web, 
 Estado: completada
 ```
 
+```text
+ID: OBS-012
+Objetivo: Definir el DTO neutral `DirectorAutonomousOpsSnapshotV0` para cockpit
+del Director.
+Write-set: director_autonomous_ops_snapshot_types_v0.go y docs locales.
+Simbolo foco: DirectorAutonomousOpsSnapshotV0
+Contrato: snapshot read-only con cola, runs, agentes y decision compacta.
+Validacion: gofmt; go test -count=1 ./modulos/orquesta-observability
+Bloqueos: No implementa builder productivo ni endpoint; MCP/Web lo consumen por
+contratos separados.
+Estado: completada
+```
+
 ## Plantilla
 
 ```text

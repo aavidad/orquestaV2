@@ -533,11 +533,13 @@ Campos:
 - query: request_id, correlation_id, locale, run_ref?, app_ref?,
   external_job_ref?, queue_ref?, app_refs?, queue_limit? y flags de telemetria.
 - viewmodel: queue_live, run_live, queue_ref, run_ref, runs, agents,
-  diagnostics y errores_publicos.
+  ops_snapshot, diagnostics y errores_publicos.
 Invariantes:
 - Consume `POST /api/v0/autoprogramming/status`.
 - Delega estado de cola/run en `orquesta.autoprogramming.status.v0`.
 - Pide progreso de agentes por defecto cuando no se explicitan flags.
+- Consume `ops_snapshot` si el servidor lo publica; no reconstruye la decision
+  del Director salvo fallback legacy de compatibilidad.
 - Proyecta refs opacas; no convierte worktree_ref/branch_ref en rutas ni ramas.
 - No lee stores, DB, runtime, filesystem, Codex, OPES ni proveedor.
 Errores:

@@ -412,12 +412,14 @@ Caso: WEB-UT-028 panel ops muestra decision del Director
 Tipo: unit/html contract
 Comando: `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto`
 Evidencia esperada: `/ops` contiene el bloque `director autónomo`, `Estado del
-Director`, `directorDecisionSummary` y `renderDirectorDecision`; la decision se
-deriva de cola, runs y agentes ya publicados y no anade endpoint, store, DB,
-runtime ni proveedor.
+Director`, `ops_snapshot`, `opsSnapshotDecision` y `renderDirectorDecision`;
+la decision visible prefiere `DirectorAutonomousOpsSnapshotV0` publicado por
+`director.stats`/`autoprogramming.status` y conserva fallback legacy si el
+servidor aun no envia snapshot. No anade endpoint, store, DB, runtime ni
+proveedor.
 Ultima ejecucion: 2026-06-08, pasa con `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto`.
-Riesgos: Proyeccion UI no durable; la fuente canonica futura debe venir de la
-timeline causal del Director.
+Riesgos: La fuente contractual ya es `ops_snapshot`; falta ampliar el snapshot
+con modelos/runtime, waits, olas y cohortes cuando esos puertos se publiquen.
 ```
 
 ```text

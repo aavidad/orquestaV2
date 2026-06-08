@@ -49,6 +49,18 @@ Estado: aceptada_local
 ```
 
 ```text
+Fecha: 2026-06-08
+Decision: Definir `DirectorAutonomousOpsSnapshotV0` como DTO neutral read-only.
+Motivo: MCP/Web necesitan una proyeccion compacta para el cockpit del Director
+sin meter proveedor, runtime, OPES ni logica de UI en el nucleo.
+Impacto: Observability define solo el shape y las invariantes; el builder vive
+en el adaptador que ya dispone de stats/cola/contexto. El snapshot no ejecuta
+efectos, no filtra entregas y no sustituye el cierre causal del Director.
+Contratos afectados: `DirectorAutonomousOpsSnapshotV0`.
+Estado: aceptada_local
+```
+
+```text
 Fecha: 2026-05-04
 Decision: Arrancar `OrquestaEvent v0` como envelope local compacto, validable por JSON Schema draft7.
 Motivo: Core, runtime, capacity y review necesitan un formato comun de observacion antes de que exista DB, bus o proyecciones reales.

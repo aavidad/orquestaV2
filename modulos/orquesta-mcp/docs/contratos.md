@@ -231,6 +231,8 @@ Campos:
     stats: DirectorRunStatsV0 completo serializado como contrato publico
     decision_context: DirectorDecisionContextV0 compacto para decision del
       director/API/MCP/web
+    ops_snapshot: DirectorAutonomousOpsSnapshotV0 read-only para `/ops` y
+      cockpit operativo
   output_error:
     estado: error
     errores_publicos
@@ -249,13 +251,23 @@ Cobertura de decision_context:
   - bloqueos y causas de cierre bloqueado;
   - rework/replan con refs opacas;
   - duraciones de fase cuando hay timestamps y quietud por falta de senal/ticks.
+Cobertura de ops_snapshot:
+  - cola opcional, runs, agentes, progreso, cierre, rework/replan y uso/cuota
+    observado;
+  - decision operativa compacta (`action`, `scope`, `reason_code`, refs) para
+    que `/ops` no reconstruya la llamada del Director con heuristica cliente;
+  - waits, olas y cohortes quedan como campos opcionales vacios si la fuente no
+    los publico todavia.
 Invariantes:
   - Delegacion en `RunStorePortV0`, `AgentProcessRegistryPortV0` opcional y
     `AgentProgressObservationProviderPortV0` opcional.
   - No crea stores, no lee DB, no consulta runtime real, no usa cmd y no expone
     rutas locales, credenciales, proveedor, modelo ni HOME.
-  - No duplica reglas de cierre ni progreso; serializa lo disponible en
-    `DirectorRunStatsV0`.
+  - No duplica reglas de cierre ni progreso; `ops_snapshot` deriva de
+    `DirectorRunStatsV0`, `DirectorDecisionContextV0` y cola inyectada cuando
+    existe.
+  - `ops_snapshot` no bloquea, filtra ni descarta entregas; solo resume estado
+    observable.
 Pruebas de contrato:
   - `TestMCPDirectorStatsToolExecutorV0DevuelveStatsDeRunStore`.
   - `TestMCPDirectorStatsToolExecutorV0DecisionContextCompletoParaDirector`.
@@ -275,7 +287,8 @@ Campos:
   output: mismo resultado compacto del tool, con `stats` como
     `DirectorRunStatsV0` completo para tareas, agentes, rework, replan,
     progreso y bloqueo de cierre; tambien incluye `decision_context`
-    `DirectorDecisionContextV0`
+    `DirectorDecisionContextV0` y `ops_snapshot`
+    `DirectorAutonomousOpsSnapshotV0`
 Invariantes:
   - Bridge REST fino; no abre servidor por si mismo ni crea puertos productivos.
   - Usa executor inyectado de `orquesta.director.stats.v0`.
@@ -1321,6 +1334,8 @@ Campos:
     estado: ok
     queue?: resultado compacto de orquesta.run_queue.priority.v0
     run?: resultado compacto de orquesta.director.stats.v0
+    ops_snapshot?: DirectorAutonomousOpsSnapshotV0 agregado de cola/run para
+      `/ops` y cockpit operativo
     diagnostics?: diagnostico publico de puertos/errores y consejo no bloqueante
   output_error:
     estado: error
@@ -1332,6 +1347,8 @@ Invariantes:
   - Delega cola en `run_queue.priority` y run en `director.stats`.
   - El bridge HTTP puede transportar consejo del operador como observacion no
     bloqueante sin tocar el caso de uso.
+  - `ops_snapshot` es read-only, no decide runtime ni corta entregas; deriva de
+    `queue` y `run` ya publicados.
   - No conoce stores, runtime, Codex, DB, filesystem ni proveedor.
 ```
 

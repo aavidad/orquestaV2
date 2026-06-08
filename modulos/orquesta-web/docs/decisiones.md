@@ -28,6 +28,21 @@ Estado: aceptada localmente.
 
 ```text
 Fecha: 2026-06-08
+Decision: `/ops` prefiere `ops_snapshot` para la llamada visible del Director.
+Motivo: la UI reconstruia la decision con una heuristica cliente sobre cola,
+runs y agentes. Eso servia como panel inicial, pero el Director autonomo
+necesita un contrato operativo leible por web/API/agentes.
+Impacto: `renderDirectorDecision` consume `DirectorAutonomousOpsSnapshotV0`
+desde `autoprogramming.status` o `director.stats`; `directorDecisionSummary`
+queda como fallback para servidores antiguos sin snapshot. No cambia endpoints,
+no lee stores/runtime/DB y no introduce rails de contenido.
+Contratos afectados: `/ops`, `orquesta.director.stats.v0`,
+`orquesta.autoprogramming.status.v0`, `DirectorAutonomousOpsSnapshotV0`.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-06-08
 Decision: `/ops` no usa `stalled`, ticks sin progreso ni texto `stall` como
 disparador de atencion dura.
 Motivo: el panel habia vuelto a clasificar señales blandas como motivo de

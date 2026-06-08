@@ -503,3 +503,18 @@ cola, stats y supervisor siguen siendo inyectados; si falta un puerto o falla el
 executor, el error publico sigue siendo reparable y el bridge HTTP devuelve el
 consejo normalizado como observacion no bloqueante sin descartar evidencia de
 automejora.
+
+## Prueba snapshot operativo del Director 2026-06-08
+
+Comando:
+
+```bash
+go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-observability
+```
+
+Evidencia esperada: `orquesta.director.stats.v0` devuelve
+`ops_snapshot` con `DirectorAutonomousOpsSnapshotV0` derivado de
+`DirectorRunStatsV0` y `DirectorDecisionContextV0`; `orquesta.autoprogramming.status.v0`
+agrega `queue` y `run` en el mismo snapshot. La decision contiene solo
+`action`, `scope`, `reason_code` y refs opacas para UI/cockpit, sin arrancar
+runtime, filtrar entregas ni leer Codex, OPES, DB, HOME o proveedor.

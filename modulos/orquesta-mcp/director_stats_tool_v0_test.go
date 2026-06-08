@@ -57,7 +57,8 @@ func TestMCPDirectorStatsToolExecutorV0DevuelveStatsDeRunStore(t *testing.T) {
 	if result.Estado != MCPDirectorStatsEstadoOKV0 ||
 		result.RunRef != run.RunID ||
 		result.Stats == nil ||
-		result.DecisionContext == nil {
+		result.DecisionContext == nil ||
+		result.OpsSnapshot == nil {
 		t.Fatalf("result=%+v", result)
 	}
 	if result.Stats.SchemaVersion != orquestacionnucleoapp.DirectorRunStatsSchemaVersionV0 ||
@@ -86,7 +87,14 @@ func TestMCPDirectorStatsToolExecutorV0DevuelveStatsDeRunStore(t *testing.T) {
 		len(result.DecisionContext.Activity) == 0 {
 		t.Fatalf("decision context incompleto=%+v", result.DecisionContext)
 	}
-	assertTransportPayloadSaneadoMCPTestV0(t, result, 12000)
+	if result.OpsSnapshot.SchemaVersion != orquestaobservability.DirectorAutonomousOpsSnapshotSchemaVersionV0 ||
+		len(result.OpsSnapshot.Runs) != 1 ||
+		len(result.OpsSnapshot.Agents) == 0 ||
+		result.OpsSnapshot.Decision.Action != orquestaobservability.DirectorAutonomousOpsActionReviewReplanV0 ||
+		!result.OpsSnapshot.Decision.Attention {
+		t.Fatalf("ops_snapshot incompleto=%+v", result.OpsSnapshot)
+	}
+	assertTransportPayloadSaneadoMCPTestV0(t, result, 13000)
 }
 
 func TestMCPDirectorStatsToolExecutorV0CalculaControlSinExponerProcessRefs(t *testing.T) {
@@ -125,6 +133,9 @@ func TestMCPDirectorStatsToolExecutorV0CalculaControlSinExponerProcessRefs(t *te
 	if result.DecisionContext != nil && len(result.DecisionContext.Agents) > 0 &&
 		result.DecisionContext.Agents[0].SessionRef != "" {
 		t.Fatalf("decision context expuso session ref sin opt-in: %+v", result.DecisionContext.Agents[0])
+	}
+	if result.OpsSnapshot == nil || len(result.OpsSnapshot.Agents) == 0 {
+		t.Fatalf("ops_snapshot ausente: %+v", result)
 	}
 }
 
@@ -179,7 +190,7 @@ func TestMCPDirectorStatsToolExecutorV0ResuelveRunPorJobExterno(t *testing.T) {
 		result.Stats == nil {
 		t.Fatalf("result=%+v", result)
 	}
-	assertTransportPayloadSaneadoMCPTestV0(t, result, 12000)
+	assertTransportPayloadSaneadoMCPTestV0(t, result, 13000)
 }
 
 func TestMCPDirectorStatsToolExecutorV0RecuperaRunCanonicoSiRunRefObsoleto(t *testing.T) {

@@ -24,6 +24,10 @@ convertir Orquesta en una app clonica:
   `modulos/orquesta-runtime-ollama`.
 - MCP/HTTP expone:
   `orquesta.runtime.models.v0` y `POST /api/v0/runtime/models`.
+- Primer corte de cockpit operativo:
+  `DirectorAutonomousOpsSnapshotV0` viaja en `orquesta.director.stats.v0` y
+  `orquesta.autoprogramming.status.v0`; `/ops` lo consume para la llamada
+  visible del Director.
 
 ## Fronteras
 
@@ -38,8 +42,8 @@ convertir Orquesta en una app clonica:
 
 ## Pendiente Para Director Autonomo
 
-- UI de cockpit que una `/ops`, stats, timeline, cola, control y runtime models
-  en una vista de decisiones del Director.
+- Ampliar `DirectorAutonomousOpsSnapshotV0` con runtime models, waits, olas,
+  cohortes y arbol recursivo cuando esas fuentes entren por puertos publicos.
 - Timeline causal completa con decisiones, replan/rework, cierres, bloqueos y
   arbol recursivo de agentes.
 - Politica de seleccion/escalado de modelos por perfil de tarea y presupuesto,

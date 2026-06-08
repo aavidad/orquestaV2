@@ -110,7 +110,7 @@ const opsDashboardHTMLChunk2V0 = `    }
       text('kpi-disk', worstDisk ? ((worstDisk.used_percent || 0) + '%') : '-');
       text('kpi-disk-hint', worstDisk ? shortRef(worstDisk.path) : '-');
       renderFlowSummary(ranked, runs, agents, queueCount, activeAgentCount);
-      renderDirectorDecision(ranked, runs, agents, queueCount, activeAgentCount);
+      renderDirectorDecision((data.auto || {}).ops_snapshot, ranked, runs, agents, queueCount, activeAgentCount);
       updateCompletedHistory(runs, ranked);
       lastSnapshot = {runs: runs, agents: agents, ranked: ranked, tasks: tasks};
       if (!selectedRunRef && runs.length) selectedRunRef = runs[0].run_ref;
@@ -151,7 +151,9 @@ const opsDashboardHTMLChunk2V0 = `    }
       text('flow-closure', terminalRuns);
       text('flow-closure-hint', taskTotals.closed + '/' + taskTotals.total + ' tareas cerradas');
     }
-    function directorDecisionSummary(ranked, runs, agents, queueCount, activeAgentCount) {
+    function directorDecisionSummary(opsSnapshot, ranked, runs, agents, queueCount, activeAgentCount) {
+      const snapshotSummary = opsSnapshotDecision(opsSnapshot, runs);
+      if (snapshotSummary) return snapshotSummary;
       const attentionRuns = (runs || []).filter(runNeedsAttention);
       const attentionAgents = (agents || []).filter(agentNeedsAttention);
       const activeRuns = (runs || []).filter(function(run) {
@@ -192,8 +194,57 @@ const opsDashboardHTMLChunk2V0 = `    }
         reason: 'No hay cola ni runs activos publicados por las fuentes actuales.'
       };
     }
-    function renderDirectorDecision(ranked, runs, agents, queueCount, activeAgentCount) {
-      const summary = directorDecisionSummary(ranked, runs, agents, queueCount, activeAgentCount);
+    function opsSnapshotDecision(opsSnapshot, runs) {
+      const snapshots = [];
+      if (opsSnapshot && opsSnapshot.decision) snapshots.push(opsSnapshot);
+      (runs || []).forEach(function(run) {
+        if (run.ops_snapshot && run.ops_snapshot.decision) snapshots.push(run.ops_snapshot);
+      });
+      if (!snapshots.length) return null;
+      const selected = snapshots.find(function(snapshot) { return !!((snapshot.decision || {}).attention); }) ||
+        snapshots.find(function(snapshot) { return String((snapshot.decision || {}).action || '') !== 'idle'; }) ||
+        snapshots[0];
+      const decision = selected.decision || {};
+      if (!decision.action) return null;
+      return {
+        attention: !!decision.attention,
+        decision: opsDecisionLabel(decision.action),
+        reason: opsDecisionReason(selected, decision)
+      };
+    }
+    function opsDecisionLabel(action) {
+      switch (String(action || '')) {
+        case 'review_replan':
+          return 'Revisar y replanificar';
+        case 'wait_deliveries':
+          return 'Esperar entregas acotadas';
+        case 'supervise_queue':
+          return 'Lanzar siguiente ola';
+        case 'close_or_validate':
+          return 'Cerrar o validar';
+        case 'closed':
+          return 'Run cerrada';
+        case 'continue_run':
+          return 'Continuar run';
+        default:
+          return 'Sin trabajo activo';
+      }
+    }
+    function opsDecisionReason(snapshot, decision) {
+      const queue = (snapshot || {}).queue || {};
+      const runs = (snapshot || {}).runs || [];
+      const run = runs.find(function(item) { return item.run_ref === decision.run_ref; }) || runs[0] || {};
+      const reason = decision.reason_code || 'ops_snapshot';
+      if (decision.action === 'supervise_queue') return (queue.count || 0) + ' trabajos preparados en cola; decision del snapshot operativo (' + reason + ').';
+      if (decision.action === 'wait_deliveries') return (run.agents_in_flight || 0) + ' agentes en vuelo; mantener waits por refs (' + reason + ').';
+      if (decision.action === 'review_replan') return 'Atencion requerida en ' + (decision.run_ref || run.run_ref || 'run') + '; revisar evidencia y replan si procede (' + reason + ').';
+      if (decision.action === 'continue_run') return (run.tasks_open || 0) + ' tareas abiertas; continuar supervision causal (' + reason + ').';
+      if (decision.action === 'close_or_validate') return 'Cierre listo o validacion final pendiente (' + reason + ').';
+      if (decision.action === 'closed') return 'La run aparece cerrada en el snapshot operativo (' + reason + ').';
+      return 'Snapshot operativo sin cola ni runs activos (' + reason + ').';
+    }
+    function renderDirectorDecision(opsSnapshot, ranked, runs, agents, queueCount, activeAgentCount) {
+      const summary = directorDecisionSummary(opsSnapshot, ranked, runs, agents, queueCount, activeAgentCount);
       byId('director-callout').className = 'director-callout' + (summary.attention ? ' attention' : '');
       text('director-decision', summary.decision);
       text('director-reason', summary.reason);

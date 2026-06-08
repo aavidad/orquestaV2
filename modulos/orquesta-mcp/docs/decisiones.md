@@ -434,6 +434,25 @@ Estado: aceptada localmente.
 ```
 
 ```text
+Fecha: 2026-06-08
+Decision: `director.stats` y `autoprogramming.status` publican
+`ops_snapshot` read-only para el cockpit del Director.
+Motivo: `/ops` estaba reconstruyendo la llamada visible del Director con
+JavaScript a partir de cola, runs y agentes. El Director/cockpit necesita una
+proyeccion contractual compacta y provider-agnostic sin abrir todavia un
+daemon nuevo ni una ruta duplicada.
+Impacto: `MCPDirectorStatsToolResultV0` y
+`MCPAutoprogrammingStatusToolResultV0` incluyen
+`DirectorAutonomousOpsSnapshotV0`. El snapshot deriva de stats, decision
+context y cola inyectada; no conoce Codex, Gemini, Claude, OPES, DB, HOME,
+modelo ni runtime real. La decision del snapshot es diagnostica/read-only y no
+filtra, corta ni descarta entregas.
+Contratos afectados: orquesta.director.stats.v0,
+orquesta.autoprogramming.status.v0, DirectorAutonomousOpsSnapshotV0.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-05-13
 Decision: El apagado de servidor se expone como tool MCP/REST propio y no como
 senal directa desde MCP.

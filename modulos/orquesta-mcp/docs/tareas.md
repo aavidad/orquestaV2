@@ -419,6 +419,25 @@ Bloqueos: No implementa servidor MCP real ni conoce `PrepareAutoprogrammingRunV0
 Estado: hecho
 ```
 
+```text
+ID: MCP-036
+Objetivo: Publicar `DirectorAutonomousOpsSnapshotV0` en stats/status para que
+`/ops` consuma una decision operativa contractual en vez de reconstruirla en
+cliente.
+Write-set: director_autonomous_ops_snapshot_v0.go, director_stats_tool_v0.go,
+autoprogramming_status_tool_v0.go, tests y docs locales.
+Simbolo foco: DirectorAutonomousOpsSnapshotV0
+Contrato: `ops_snapshot` read-only en `orquesta.director.stats.v0` y
+`orquesta.autoprogramming.status.v0`.
+Validacion: gofmt; go test -count=1 ./modulos/orquesta-mcp
+./modulos/orquesta-observability; git diff --check -- modulos/orquesta-mcp
+modulos/orquesta-observability.
+Bloqueos: No crea endpoint nuevo ni integra runtime models/waits/olas si no
+estan publicados por los puertos actuales; esos campos quedan opcionales para
+el siguiente corte.
+Estado: hecho
+```
+
 ## Consultas
 
 ```text

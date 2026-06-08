@@ -38,14 +38,15 @@ type MCPDirectorStatsToolInputV0 struct {
 }
 
 type MCPDirectorStatsToolResultV0 struct {
-	Estado          string                                           `json:"estado"`
-	RequestID       string                                           `json:"request_id,omitempty"`
-	CorrelationID   string                                           `json:"correlation_id,omitempty"`
-	RunRef          string                                           `json:"run_ref,omitempty"`
-	ExternalJob     *MCPDirectorExternalJobStatsV0                   `json:"external_job,omitempty"`
-	Stats           *orquestacionnucleoapp.DirectorRunStatsV0        `json:"stats,omitempty"`
-	DecisionContext *orquestaobservability.DirectorDecisionContextV0 `json:"decision_context,omitempty"`
-	Errores         []MCPValidationIssueV0                           `json:"errores_publicos,omitempty"`
+	Estado          string                                                 `json:"estado"`
+	RequestID       string                                                 `json:"request_id,omitempty"`
+	CorrelationID   string                                                 `json:"correlation_id,omitempty"`
+	RunRef          string                                                 `json:"run_ref,omitempty"`
+	ExternalJob     *MCPDirectorExternalJobStatsV0                         `json:"external_job,omitempty"`
+	Stats           *orquestacionnucleoapp.DirectorRunStatsV0              `json:"stats,omitempty"`
+	DecisionContext *orquestaobservability.DirectorDecisionContextV0       `json:"decision_context,omitempty"`
+	OpsSnapshot     *orquestaobservability.DirectorAutonomousOpsSnapshotV0 `json:"ops_snapshot,omitempty"`
+	Errores         []MCPValidationIssueV0                                 `json:"errores_publicos,omitempty"`
 }
 
 type MCPDirectorExternalJobStatsRequestV0 struct {
@@ -89,7 +90,7 @@ func MCPDirectorStatsDescriptorV0() MCPDirectorStatsToolDescriptorV0 {
 		Name:        MCPDirectorStatsToolNameV0,
 		Version:     MCPDirectorStatsToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,app_ref?,external_job_ref?,occurred_at?,include_process_refs?,include_agent_progress?,include_agent_usage?}",
-		Output:      "ok:{run_ref,external_job?,stats{progress,closure},decision_context}|error:{errores_publicos}",
+		Output:      "ok:{run_ref,external_job?,stats{progress,closure},decision_context,ops_snapshot}|error:{errores_publicos}",
 		ResourceURI: MCPDirectorStatsResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -181,6 +182,7 @@ func (executor MCPDirectorStatsToolExecutorV0) Execute(
 	if !input.IncludeProcessRefs {
 		clearMCPDirectorStatsProcessRefsV0(&stats)
 	}
+	decisionContext := buildMCPDirectorDecisionContextV0(run, stats, input.OccurredAt)
 	return MCPDirectorStatsToolResultV0{
 		Estado:          MCPDirectorStatsEstadoOKV0,
 		RequestID:       strings.TrimSpace(input.RequestID),
@@ -188,7 +190,8 @@ func (executor MCPDirectorStatsToolExecutorV0) Execute(
 		RunRef:          stats.RunRef,
 		ExternalJob:     externalJob,
 		Stats:           &stats,
-		DecisionContext: buildMCPDirectorDecisionContextV0(run, stats, input.OccurredAt),
+		DecisionContext: decisionContext,
+		OpsSnapshot:     buildMCPDirectorStatsOpsSnapshotV0(stats, decisionContext, input.OccurredAt),
 		Errores:         []MCPValidationIssueV0{},
 	}, nil
 }

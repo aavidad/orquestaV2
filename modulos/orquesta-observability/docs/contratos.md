@@ -409,6 +409,43 @@ Pruebas de contrato:
 - Integracion MCP/API: `orquesta.director.stats.v0` devuelve
   `decision_context` junto a `stats`.
 
+## `DirectorAutonomousOpsSnapshotV0`
+
+Nombre: `DirectorAutonomousOpsSnapshotV0`
+Tipo: dto | proyeccion_compacta
+Version: `v0`
+Propietario: `orquesta-observability`
+Consumidores autorizados:
+
+- `orquesta-mcp`, `/ops`, API REST y agentes directores como lectores de
+  estado operativo.
+
+Campos:
+
+- `queue`: ref de cola, estado live, count y refs de runs ordenadas.
+- `runs`: run, app, estado, fase, cierre, progreso, agentes, rework/replan,
+  uso/cuota y campos opcionales para waits, olas y cohortes.
+- `agents`: run, agente, tarea, estado, progreso, capacidad, runtime kind y
+  uso/cuota si ya fueron publicados por puertos neutrales.
+- `decision`: action, scope, run_ref, attention, reason_code, summary_key y
+  evidence_refs.
+- `privacy`: metadata-only.
+
+Invariantes:
+
+- Es read-only: no arranca runtime, no pausa agentes, no cierra runs y no
+  decide efectos externos.
+- No filtra, corta ni descarta entregas; solo resume estado observable para
+  cockpit/UI/director.
+- No conoce Codex, Gemini, Claude, OPES, DB, HOME, OAuth, proveedor ni modelo.
+- Las formas no disponibles se dejan vacias; waits, olas, cohortes y modelos se
+  rellenaran cuando entren por puertos publicos.
+
+Pruebas de contrato:
+
+- Integracion MCP/API: `orquesta.director.stats.v0` y
+  `orquesta.autoprogramming.status.v0` devuelven `ops_snapshot`.
+
 ## Plantilla
 
 ```text

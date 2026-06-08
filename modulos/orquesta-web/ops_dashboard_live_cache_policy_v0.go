@@ -139,6 +139,7 @@ const opsDashboardHTMLLiveCachePolicyV0 = `    function opsClampPercent(value) {
         stats_reason_code: projection.stats_reason_code || '',
         closure_status: closure.status,
         usage_summary: stats.usage_summary || (existing || {}).usage_summary,
+        ops_snapshot: payload.ops_snapshot || (existing || {}).ops_snapshot,
         blocked: closure.blocked,
         validation: (existing || {}).validation || 'pendiente'
       });

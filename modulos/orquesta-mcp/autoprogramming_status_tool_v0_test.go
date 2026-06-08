@@ -39,6 +39,7 @@ func TestMCPAutoprogrammingStatusExecutorV0DelegaEnColaYRun(t *testing.T) {
 		result.Queue == nil ||
 		result.Run == nil ||
 		result.Operator == nil ||
+		result.OpsSnapshot == nil ||
 		result.RunRef != "run-ref-autop-status-001" {
 		t.Fatalf("result=%+v", result)
 	}
@@ -65,6 +66,12 @@ func TestMCPAutoprogrammingStatusExecutorV0DelegaEnColaYRun(t *testing.T) {
 		result.Agents[0].TotalTokens != 123 ||
 		len(result.Agents[0].EvidenceRefs) != 3 {
 		t.Fatalf("projects=%+v tasks=%+v agents=%+v", result.Projects, result.Tasks, result.Agents)
+	}
+	if result.OpsSnapshot.Queue.Count != 1 ||
+		len(result.OpsSnapshot.Runs) != 1 ||
+		result.OpsSnapshot.Decision.Action != "review_replan" ||
+		!result.OpsSnapshot.Decision.Attention {
+		t.Fatalf("ops_snapshot=%+v", result.OpsSnapshot)
 	}
 	if queue.input.Action != MCPRunQueuePriorityActionRankV0 ||
 		queue.input.Limit != 3 ||
@@ -100,6 +107,11 @@ func TestMCPAutoprogrammingStatusExecutorV0DeclaraSuperviseColaAunqueFaltenStats
 	}
 	if result.Operator == nil {
 		t.Fatalf("operator nil: %+v", result)
+	}
+	if result.OpsSnapshot == nil ||
+		result.OpsSnapshot.Decision.Action != "supervise_queue" ||
+		result.OpsSnapshot.Queue.Count != 1 {
+		t.Fatalf("ops_snapshot cola=%+v", result.OpsSnapshot)
 	}
 	foundSuperviseQueue := false
 	for _, action := range result.Operator.SafeActions {
