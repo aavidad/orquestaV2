@@ -219,6 +219,24 @@ al loop progresivo historico de `app-director-service`. Los pendientes de esta
 linea deben decir si falta codigo offline, composicion residente/restart, smoke
 real neutral, proveedor real u OPES temporal.
 
+## Ejecutor de briefing
+
+`ExecuteDirectorBriefingActionV0` consume una accion recomendada por
+`DirectorSupervisorBriefingV0` y aplica solo ese siguiente paso:
+
+- `run_director_step` ejecuta una rafaga supervisada de un paso;
+- `dispatch_outbox` despacha outbox por los puertos inyectados;
+- `wait_external_signal`, `ask_director`, `review_blocker`,
+  `stop_budget_exhausted` e `inspect_error` se delegan a un handler externo si
+  existe, o quedan como accion pendiente;
+- `close_or_idle` no cierra por si solo: si una composicion tiene cierre real,
+  debe inyectarlo por puerto.
+
+Este caso de uso no es daemon, no hace polling, no arranca runtime y no conoce
+Codex, OPES, MCP, DB, HOME ni proveedor. Solo enruta una accion estructurada;
+las acciones recuperables siguen siendo trabajo del Director/adaptador, no de
+rails por texto.
+
 El contrato operativo de solicitud de autoprogramacion vive fuera del nucleo en
 `modulos/orquesta-autoprogramming`. Este paquete solo ve observaciones,
 candidatos y puertos genericos; no valida `write_set`, no decide tests
