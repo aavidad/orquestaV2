@@ -28,8 +28,12 @@ Cobertura:
 - aplica contrato y microtarea sobre un run en planificacion con decision aceptada;
 - guarda la microtarea completa en `TaskStore`, incluido su linaje operativo,
   y sus `context_refs`, para que el scheduler pueda programarla despues;
+- aplica `propose_autonomous_plan_team` como varias microtareas causales,
+  guarda cada `WorkflowTaskV0` completo y no duplica eventos en retry exacto;
 - rechaza `create_microtask` sin `TaskStore`;
-- rechaza `propose_autonomous_plan_team` como comando workflow hasta que exista comando publico del core;
+- rechaza `propose_autonomous_plan_team` en `BuildDirectorAgentWorkflowCommandV0`
+  porque no existe comando publico unico del core; la ruta aplicativa
+  materializa sus `work_units` por `CreateMicrotask`;
 - rechaza decisiones invalidas;
 - exige `occurred_at`;
 - no importa legacy, DB ni conectores operativos.

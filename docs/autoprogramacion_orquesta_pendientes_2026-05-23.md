@@ -125,11 +125,12 @@ legacy.
 Objetivo: Orquesta debe autoverificarse en runtime y parar de forma cooperativa
 si consume CPU de manera sostenida sin causa operativa ni progreso observable.
 
-Estado: pendiente prioritario para la siguiente sesion. Registrado el
-2026-06-08 tras observar varios `orquesta-server run` locales vivos y una
-instancia de pruebas en `127.0.0.1:8789` consumiendo alrededor del 80% de CPU
-durante mas de 20 minutos sin uso activo; el total percibido rondaba el 150%
-por coexistencia con otras instancias antiguas.
+Estado: cerrado 2026-06-08 en commit `48251635`
+(`Añade autovigilancia de CPU del servidor`). Registrado el 2026-06-08 tras
+observar varios `orquesta-server run` locales vivos y una instancia de pruebas
+en `127.0.0.1:8789` consumiendo alrededor del 80% de CPU durante mas de 20
+minutos sin uso activo; el total percibido rondaba el 150% por coexistencia con
+otras instancias antiguas.
 
 Alcance:
 
@@ -173,6 +174,47 @@ Tests requeridos:
   OAuth ni proveedor.
 - Smoke local opt-in con servidor temporal que demuestre que el health reporta
   la condicion y que el shutdown es ordenado, sin matar procesos externos.
+
+Validacion ejecutada:
+
+- `go test -count=1 ./modulos/orquesta-server`
+- `go test -count=1 ./cmd/orquesta-server`
+- `go test -count=1 ./modulos/orquesta-run-supervisor ./modulos/orquesta-runtime ./modulos/orquesta-agent-process-registry ./modulos/orquesta-observability`
+- `go test -count=1 ./...`
+- `git diff --check`
+
+## Revision subagentes 2026-06-08: pendientes antes del Director autonomo residente
+
+Estado: revision paralela sin edicion directa de los subagentes. No abrir Txx
+duplicados sin comprobar owners existentes; usar esta seccion como brujula de
+los siguientes cortes.
+
+Pendientes priorizados:
+
+- `propose_autonomous_plan_team` debe quedar probado de punta a punta desde
+  `app-director-service`, no solo como contrato aislado. Evidencia local en
+  curso: decision de equipo -> microtareas causales -> `WorkflowTaskStore` ->
+  reentrada al loop de programacion.
+- Crear una proyeccion read-only `DirectorAutonomousOpsSnapshotV0` por puerto,
+  provider-agnostic, que una runs, olas, cohortes, parent/child agents, waits,
+  progreso, cola, decisiones, rework/replan, modelos y cuotas. `/ops` debe
+  consumir esa proyeccion en vez de reconstruir "decision" con heuristica de
+  navegador.
+- Conectar skills/contratos al ciclo residente del Director. El briefing ya
+  sirve como contrato de siguiente accion, pero falta un controlador opt-in que
+  itere briefing -> ejecucion -> nuevo briefing hasta idle/cierre, active
+  consejo/votacion cuando haya varias opciones y resuelva `SkillRefs` por rol.
+- Completar el smoke OPES temporal real de derivados/cierre hasta
+  `generate_html_site -> local_html_site`, sin tocar OPES productivo y
+  reutilizando el owner existente T12/T18 donde aplique.
+- Hacer el detalle runtime provider-agnostic: Codex, Gemini y Claude pueden
+  compartir packet/prompt/ack, pero los logs y artefactos no deben quedar
+  hardcodeados a nombres `codex_*`.
+
+Regla transversal: nada de rails de contenido genericos. Seguridad real,
+causalidad, refs imposibles y efectos externos no autorizados siguen siendo
+cortes fuertes; alias, nombres cercanos y formatos recuperables se normalizan o
+se convierten en rework/replan conservando el trabajo.
 
 ## Aperturas de rail pendientes de revision futura
 

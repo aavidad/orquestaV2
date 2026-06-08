@@ -93,6 +93,14 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-06-08
+Decision: `ApplyDirectorAgentDecisionV0` materializa `propose_autonomous_plan_team` como serie causal de `CreateMicrotask`.
+Motivo: el Director autonomo necesita emitir un plan/equipo compacto y que la capa de aplicacion lo convierta en trabajo programable sin crear un comando nuevo del core ni duplicar logica en el director.
+Impacto: `BuildDirectorAgentWorkflowCommandV0` sigue rechazando el DTO como comando unico; la ruta aplicativa exige `TaskStore`, crea una microtarea por `work_unit`, conserva idempotencia en retry y no arranca runtime, proveedor, DB ni modelo.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-27
 Decision: T207 no anade comando publico al puente director-agent-workflow.
 Motivo: la rotacion experimental opera sobre handoff runtime y directiva de

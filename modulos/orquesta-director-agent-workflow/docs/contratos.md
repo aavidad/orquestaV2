@@ -34,7 +34,10 @@ Comandos soportados en v0:
 
 DTOs no traducidos en v0:
 
-- `propose_autonomous_plan_team`: validable en `orquesta-director-agent`, pero sin comando publico equivalente en `orquesta-core-workflow`.
+- `propose_autonomous_plan_team`: no se traduce mediante
+  `BuildDirectorAgentWorkflowCommandV0` porque no existe un comando unico del
+  core; `ApplyDirectorAgentDecisionV0` si lo puede materializar como una serie
+  causal de `CreateMicrotask`, una por `work_unit`, usando `TaskStore`.
 
 Invariantes:
 
@@ -67,6 +70,9 @@ Invariantes:
 - aplica solo comandos publicos del workflow;
 - no abre fases ni inventa decisiones: `PublishFunctionContract` requiere fase de planificacion activa y decision ya reflejada en el run.
 - materializa la microtarea completa por `TaskStore` antes de guardar run/eventos; si falta, devuelve issue publico para no crear tareas imposibles de programar.
+- materializa `propose_autonomous_plan_team` como microtareas ejecutables por
+  `TaskStore`; un retry exacto conserva idempotencia, no duplica eventos y
+  deja las tareas completas disponibles para el scheduler.
 - preserva el linaje operativo neutral de `create_microtask` en
   `WorkflowTaskV0`: parent task, cohorte, ola, profundidad, fanout e hijos
   conocidos. El puente no interpreta ese linaje ni arranca runtime.

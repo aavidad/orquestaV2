@@ -61,6 +61,29 @@ func TestApplyDirectorAgentDecisionV0MaterializaPlanEquipoComoMicrotareas(t *tes
 	if !directorAgentWorkflowSinkHasEventV0(sink, orquestacoreworkflow.OrchestrationEventMicrotaskCreatedV0) {
 		t.Fatalf("sink sin MicrotaskCreated: %+v", sink.EventsV0())
 	}
+
+	second, err := ApplyDirectorAgentDecisionV0(
+		context.Background(),
+		ApplyDirectorAgentDecisionRequestV0(validDirectorAgentWorkflowPlanTeamApplyRequestForTestV0()),
+		ports,
+	)
+	if err != nil {
+		t.Fatalf("ApplyDirectorAgentDecisionV0 plan team retry: %v", err)
+	}
+	if len(second.Issues) != 0 || second.EventsCount != 0 || len(second.Commands) != 2 || !second.Idempotent {
+		t.Fatalf("second=%+v", second)
+	}
+	storedAgain, err := taskStore.LoadWorkflowTasksV0(
+		context.Background(),
+		"run-ref-001",
+		[]string{"task-ref-agenda-domain-001", "task-ref-agenda-api-001"},
+	)
+	if err != nil {
+		t.Fatalf("LoadWorkflowTasksV0 retry: %v", err)
+	}
+	if len(storedAgain) != 2 || storedAgain[0].TaskID != storedTasks[0].TaskID || storedAgain[1].TaskID != storedTasks[1].TaskID {
+		t.Fatalf("stored retry=%+v", storedAgain)
+	}
 }
 
 func TestApplyDirectorAgentDecisionV0RequiereTaskStoreParaPlanEquipo(t *testing.T) {

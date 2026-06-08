@@ -102,3 +102,20 @@ Validacion:
 
 - `go test -count=1 ./modulos/orquesta-director-agent-workflow`;
 - la cobertura funcional de T207 vive en runtime/orchestration.
+
+## DAW-009
+
+Objetivo: sincronizar y blindar la materializacion aplicativa de
+`propose_autonomous_plan_team`.
+
+Estado: hecho 2026-06-08.
+
+Validacion:
+
+- `TestApplyDirectorAgentDecisionV0MaterializaPlanEquipoComoMicrotareas`
+  demuestra que la aplicacion crea una microtarea por `work_unit`, guarda cada
+  `WorkflowTaskV0` completo en `TaskStore` y conserva idempotencia en retry
+  exacto.
+- `TestBuildDirectorAgentWorkflowCommandV0RechazaPlanEquipoComoComandoWorkflow`
+  conserva la frontera: no hay comando publico unico del core para el plan/equipo.
+- `go test -count=1 ./modulos/orquesta-director-agent-workflow`.
