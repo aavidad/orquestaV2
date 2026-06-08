@@ -189,6 +189,15 @@ func externalWorkFieldIsCriticalContextV0(name string) bool {
 		"topic_official_text",
 		"topic_text",
 		"source_text",
+		"bank_path",
+		"course_tests_path",
+		"question_bank_path",
+		"questions_path",
+		"analysis_path",
+		"report_path",
+		"review_packet_path",
+		"package_path",
+		"manifest_path",
 		"document_plan",
 		"target_words_min",
 		"target_words_max",
@@ -223,5 +232,5 @@ func externalWorkFieldContentV0(
 	if err != nil {
 		return ""
 	}
-	return sanitizeExternalWorkContextContentV0(string(raw))
+	return sanitizeExternalWorkContextContentV0(string(raw), field.Name)
 }

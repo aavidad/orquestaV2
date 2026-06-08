@@ -11,6 +11,18 @@ con Codex y OPES son composiciones consumidoras, no el nucleo.
 El nucleo generico tampoco es producto OPES: OPES entra solo por conectores de
 dominio sobre puertos/refs opacas, igual que cualquier otra app externa.
 
+Regla principal operativa: cuando el trabajo implique OPES, temarios, tests,
+audios, visuales, paquetes, produccion, coordinacion de agentes o subagentes,
+el director debe usar Orquesta como superficie de direccion por defecto. Codex
+directo no sustituye a Orquesta como flujo productivo principal; puede observar,
+integrar, auditar, reparar un tapon acotado o preparar scripts auxiliares, pero
+debe volver a lanzar/coordinar el trabajo por Orquesta. Si Orquesta no puede
+ejecutar por trust, runtime, puerto, proveedor o bloqueo externo, se informa al
+operador con el comando/accion necesaria y se documenta la excepcion; no se
+trabaja media hora alrededor del bloqueo ni se convierte la excepcion en nuevo
+flujo normal. Gemini y Claude se usan como revisores compactos cuando aporten
+valor, no como lectores de contexto bruto completo salvo necesidad justificada.
+
 Tras los cortes del 2026-05-17, el estado real es:
 
 - `modulos/orquesta-director-operativo` existe como contrato puro del Director

@@ -29,25 +29,12 @@ func redactExternalWorkSensitiveFieldV0(
 		field.ValueJSON = nil
 		return field
 	}
-	field.Value, _ = orquestarails.RedactOperationalTextForFieldV0(
-		"codex_stack_external_context",
-		field.Name,
-		field.Value,
-	)
+	field.Value = redactExternalWorkFieldValueV0(field.Name, field.Value)
 	for index, value := range field.Values {
-		field.Values[index], _ = orquestarails.RedactOperationalTextForFieldV0(
-			"codex_stack_external_context",
-			field.Name,
-			value,
-		)
+		field.Values[index] = redactExternalWorkFieldValueV0(field.Name, value)
 	}
 	if len(field.ValueJSON) > 0 {
-		redacted, _ := orquestarails.RedactOperationalTextForFieldV0(
-			"codex_stack_external_context",
-			field.Name,
-			string(field.ValueJSON),
-		)
-		field.ValueJSON = []byte(redacted)
+		field.ValueJSON = []byte(redactExternalWorkFieldValueV0(field.Name, string(field.ValueJSON)))
 	}
 	if reviewRequired {
 		field.Value = "non_public_context_review_required"
@@ -55,6 +42,23 @@ func redactExternalWorkSensitiveFieldV0(
 		field.ValueJSON = nil
 	}
 	return field
+}
+
+func redactExternalWorkFieldValueV0(fieldName string, value string) string {
+	if externalWorkFieldAllowsLocalPathV0(fieldName) {
+		redacted, _ := orquestarails.RedactOperationalTextForFieldPreservingLocalPathsV0(
+			"codex_stack_external_context",
+			fieldName,
+			value,
+		)
+		return redacted
+	}
+	redacted, _ := orquestarails.RedactOperationalTextForFieldV0(
+		"codex_stack_external_context",
+		fieldName,
+		value,
+	)
+	return redacted
 }
 
 func externalWorkFieldNeedsSanitizationReviewV0(field orquestadomainwork.DomainWorkFieldV0) bool {
@@ -92,7 +96,15 @@ func boundedExternalWorkContextContentV0(value string, maxBytes int) (string, bo
 	return truncateExternalWorkContextByBytesV0(value, maxBytes), true
 }
 
-func sanitizeExternalWorkContextContentV0(value string) string {
+func sanitizeExternalWorkContextContentV0(value string, fieldName string) string {
+	if externalWorkFieldAllowsLocalPathV0(fieldName) {
+		replacer := strings.NewReplacer(
+			"://", "_url_",
+			"$HOME", "HOME_REF",
+			"~/", "HOME_REF/",
+		)
+		return replacer.Replace(strings.TrimSpace(value))
+	}
 	replacer := strings.NewReplacer(
 		"://", "_url_",
 		"/home/", "/home-redacted/",
@@ -102,6 +114,35 @@ func sanitizeExternalWorkContextContentV0(value string) string {
 		"~/", "HOME_REF/",
 	)
 	return replacer.Replace(strings.TrimSpace(value))
+}
+
+func externalWorkFieldAllowsLocalPathV0(name string) bool {
+	switch normalizedExternalWorkFieldNameV0(name) {
+	case "bank_path",
+		"course_tests_path",
+		"course_test_path",
+		"question_bank_path",
+		"question_banks_path",
+		"questions_path",
+		"analysis_path",
+		"report_path",
+		"review_packet_path",
+		"package_path",
+		"manifest_path",
+		"source_path",
+		"input_path",
+		"output_path",
+		"workdir",
+		"working_dir",
+		"workspace_path",
+		"artifact_path",
+		"html_path",
+		"audio_path",
+		"rag_path":
+		return true
+	default:
+		return false
+	}
 }
 
 func externalContextRefPartV0(value string) string {

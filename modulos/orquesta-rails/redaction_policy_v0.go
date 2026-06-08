@@ -5,10 +5,12 @@ import (
 	"strings"
 )
 
-var operationalRedactionPatternsV0 = []struct {
+type operationalRedactionPatternV0 struct {
 	pattern     *regexp.Regexp
 	replacement string
-}{
+}
+
+var operationalSecretRedactionPatternsV0 = []operationalRedactionPatternV0{
 	{regexp.MustCompile(`(?i)"(api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|passwd|pwd|secret|secreto|credential|credencial|authorization)"\s*:\s*"[^"]*"`), `"$1":"<redacted>"`},
 	{regexp.MustCompile(`(?i)'(api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|passwd|pwd|secret|secreto|credential|credencial|authorization)'\s*:\s*'[^']*'`), `'$1':'<redacted>'`},
 	{regexp.MustCompile(`(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|passwd|pwd|secret|secreto|credential|credencial)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^,\s"'\\]+)`), `$1=<redacted>`},
@@ -17,6 +19,9 @@ var operationalRedactionPatternsV0 = []struct {
 	{regexp.MustCompile(`(?i)\bsk-[a-z0-9][a-z0-9_-]{12,}\b`), `<secret-token-redacted>`},
 	{regexp.MustCompile(`(?i)\b((?:postgres|postgresql|mysql|mongodb|redis)://[^:\s/@]+:)[^@\s"']+(@)`), `${1}<redacted>${2}`},
 	{regexp.MustCompile(`(?i)\b(prompt|transcript|completion|raw_text|payload)\s*[:=]\s*[^,\n]+`), `$1=<redacted>`},
+}
+
+var operationalLocalPathRedactionPatternsV0 = []operationalRedactionPatternV0{
 	{regexp.MustCompile(`(?i)/home/[^ \t\r\n"']+`), `<home-path-redacted>`},
 	{regexp.MustCompile(`(?i)/users/[^ \t\r\n"']+`), `<home-path-redacted>`},
 	{regexp.MustCompile(`(?i)[a-z]:\\users\\[^ \t\r\n"']+`), `<home-path-redacted>`},
@@ -28,13 +33,33 @@ var operationalRedactionPatternsV0 = []struct {
 // soft rail enforcement: callers may keep agent flow alive while projecting a
 // safer diagnostic/output value.
 func RedactOperationalTextForFieldV0(boundary string, field string, value string) (string, bool) {
+	return redactOperationalTextForFieldWithOptionsV0(boundary, field, value, true)
+}
+
+// RedactOperationalTextForFieldPreservingLocalPathsV0 keeps local filesystem
+// references that are the actual operational input for a local agent, while
+// still redacting effective secrets and private material.
+func RedactOperationalTextForFieldPreservingLocalPathsV0(boundary string, field string, value string) (string, bool) {
+	return redactOperationalTextForFieldWithOptionsV0(boundary, field, value, false)
+}
+
+func redactOperationalTextForFieldWithOptionsV0(boundary string, field string, value string, redactLocalPaths bool) (string, bool) {
 	redacted := value
 	changed := false
-	for _, item := range operationalRedactionPatternsV0 {
+	for _, item := range operationalSecretRedactionPatternsV0 {
 		next := item.pattern.ReplaceAllString(redacted, item.replacement)
 		if next != redacted {
 			changed = true
 			redacted = next
+		}
+	}
+	if redactLocalPaths {
+		for _, item := range operationalLocalPathRedactionPatternsV0 {
+			next := item.pattern.ReplaceAllString(redacted, item.replacement)
+			if next != redacted {
+				changed = true
+				redacted = next
+			}
 		}
 	}
 	next, blockChanged := redactPrivateKeyBlocksV0(redacted)

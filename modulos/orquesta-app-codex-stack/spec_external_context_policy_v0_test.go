@@ -222,6 +222,33 @@ func TestExternalWorkFieldContentV0RedactaValoresSensiblesAntesDelPacket(t *test
 	}
 }
 
+func TestExternalWorkFieldContentV0PreservaRutaOperativaDeBanco(t *testing.T) {
+	content := externalWorkFieldContentV0(orquestadomainwork.DomainWorkFieldV0{
+		Name:  "bank_path",
+		Value: "/home/alberto/Trabajo/OPES/opes-salidas/curso/course_tests.json",
+		Values: []string{
+			"Authorization: Bearer token-real",
+		},
+	})
+
+	if !strings.Contains(content, "/home/alberto/Trabajo/OPES/opes-salidas/curso/course_tests.json") {
+		t.Fatalf("ruta operativa de banco perdida: %s", content)
+	}
+	for _, forbidden := range []string{"token-real", "<home-path-redacted>", "/home-redacted/"} {
+		if strings.Contains(content, forbidden) {
+			t.Fatalf("fragmento no esperado %q en %s", forbidden, content)
+		}
+	}
+
+	normal := externalWorkFieldContentV0(orquestadomainwork.DomainWorkFieldV0{
+		Name:  "nota",
+		Value: "/home/alberto/Trabajo/OPES/opes-salidas/curso/course_tests.json",
+	})
+	if strings.Contains(normal, "/home/alberto") || !strings.Contains(normal, `\u003chome-path-redacted\u003e`) {
+		t.Fatalf("campo no path debe conservar saneamiento de ruta: %s", normal)
+	}
+}
+
 func externalContextPolicyTaskForTestV0(
 	runRef string,
 	taskRef string,

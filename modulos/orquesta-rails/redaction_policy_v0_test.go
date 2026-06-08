@@ -62,3 +62,29 @@ func TestRedactOperationalTextForFieldV0NoUsaMarcadoresBlandosGenericos(t *testi
 		t.Fatalf("texto operativo debe preservarse: %q", got)
 	}
 }
+
+func TestRedactOperationalTextForFieldPreservingLocalPathsV0MantieneRutaYRedactaSecretos(t *testing.T) {
+	input := strings.Join([]string{
+		`bank_path=/home/alberto/Trabajo/OPES/course_tests.json`,
+		`access_token=abc123`,
+		`Authorization: Bearer token-real`,
+		`postgres://user:pass-real@db.local/app`,
+	}, "\n")
+
+	got, changed := RedactOperationalTextForFieldPreservingLocalPathsV0(
+		"codex_stack_external_context",
+		"bank_path",
+		input,
+	)
+	if !changed {
+		t.Fatalf("se esperaban secretos redactados")
+	}
+	if !strings.Contains(got, "/home/alberto/Trabajo/OPES/course_tests.json") {
+		t.Fatalf("ruta local operativa perdida: %q", got)
+	}
+	for _, forbidden := range []string{"abc123", "token-real", "pass-real", "<home-path-redacted>"} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("fragmento no esperado %q en %q", forbidden, got)
+		}
+	}
+}
