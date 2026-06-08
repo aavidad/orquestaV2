@@ -20,6 +20,21 @@ func (resolver CodexLaunchSpecResolverV0) agentContextV0(
 	task orquestaruntime.AgentStartTaskV0,
 ) (orquestacontext.ContextMaterializedBundleV0, error) {
 	bundle := contextBundleV0(area, task.TaskRef)
+	if councilPayloadRequiresWorkflowTaskV0(payload) {
+		if workflowTask, ok, err := resolver.tryWorkflowTaskForPayloadV0(ctx, payload); err != nil {
+			return bundle, err
+		} else if ok && decisionCouncilRoleFromTaskV0(workflowTask, payload) != "" {
+			entries := decisionCouncilContextEntriesV0(area, task.TaskRef, workflowTask)
+			if len(entries) > 0 {
+				bundle.Entries = entries
+				bundle.TotalBytes = 0
+			}
+			for _, entry := range entries {
+				bundle.TotalBytes += entry.Bytes
+			}
+			return bundle, nil
+		}
+	}
 	if !isProgrammingPhaseV0(payload.PhaseID) || resolver.AppChangeStore == nil {
 		return bundle, nil
 	}

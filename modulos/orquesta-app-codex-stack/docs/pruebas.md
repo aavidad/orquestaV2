@@ -86,6 +86,13 @@ Cobertura Go actual:
   valida que `TaskRef` une voto y tarea, `VoteRef` puede ser independiente y
   `agent_ref`/`family_ref` durables mandan sobre valores devueltos por el
   adaptador.
+- `TestCodexLaunchSpecResolverV0MaterializaPacketConsejoPropuestaCriticaVoto`
+  valida que propuesta, critica y voto del consejo se resuelven como area
+  `decision_council`, no como director generico, con objetivo especifico,
+  artefacto esperado y contexto `decision_council_context.v0`.
+- `TestCodexLaunchSpecResolverV0DetectaConsejoPorMetadataSinRolPayloadV0`
+  valida que el resolver detecta una tarea de consejo por metadata durable
+  aunque el payload no traiga `role`.
 - `TestCodexStackResidentCouncilHandlerV0NoMaterializaSinContratoFuncionalV0`
   confirma que sin contrato funcional publicado el handler deja evidencia
   pendiente y no inventa microtareas.
@@ -208,8 +215,8 @@ Estado de huecos restantes:
 - OPES `plan_temario` real quedo cerrado para `document_plan` y creacion de
   derivados pendientes; falta smoke real completo de derivados/cierre OPES.
 - El consejo residente ya llega offline/fake hasta `AcceptDecision` con votos
-  estructurados. Falta fuente real de artefactos `architecture_vote.v0` y
-  paquete Codex especifico para tareas de consejo fuera de `programacion`.
+  estructurados y packet Codex especifico para propuesta, critica y voto. Falta
+  fuente real de artefactos `architecture_vote.v0`.
 - Falta un smoke canonico opt-in de `Director residente + Codex real`. Los
   smokes reales vigentes cubren ola/recursion Codex, pero el smoke residente
   actual usa `codex-fake`; no debe marcarse como evidencia de proveedor real

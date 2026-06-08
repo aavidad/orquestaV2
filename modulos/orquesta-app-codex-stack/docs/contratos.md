@@ -104,6 +104,12 @@ Manejo real de agentes en Orquesta:
   parent/cohorte/ola/profundidad/fanout/hijos para que el agente conozca su
   posicion causal sin recibir proveedor, HOME, modelo ni control directo de
   spawn;
+- si la tarea es de consejo residente (`architecture_proposal`,
+  `architecture_critique`, `architecture_vote` o `task-council-p/c/v-*`), el
+  paquete se materializa como area `decision_council`, conserva rol,
+  assignment, `agent_ref`, `family_ref`, artefacto esperado, gate, deps, cohorte
+  y ola en `decision_council_context.v0`, y no cae en objetivo de director
+  generico ni exige `director_decisions.json`;
 - `CodexReceiptRecordingSpecResolverV0` deja descriptor ACK por agente;
 - `CodexDeliveryObservationSourceV0` observa `agent_ack.json` y devuelve
   `AgentDeliveryObservationV0`;
@@ -383,6 +389,10 @@ Contrato de composicion:
   `task-council-*` en el run o en `DirectorTaskStore`, el handler responde como
   aplicada y no duplica trabajo. Si faltan contratos funcionales publicados o
   puertos requeridos, queda pendiente con evidencia compacta y no crea tareas.
+- Las tareas resultantes tienen metadata suficiente para paquetes Codex de
+  propuesta, critica y voto: refs `decision-council-role-p/c/v`,
+  `assignment_ref`, `agent_ref`, `family_ref`, artefacto esperado, gate, deps,
+  cohorte y ola.
 - El dispatch usa los `Dispatchers`/`BatchDispatchers` ya inyectados en el
   stack. Codex real sigue viviendo solo en el batch executor y el runtime
   configurado.

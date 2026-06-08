@@ -32,7 +32,7 @@ web/API/MCP/servidor opt-in
 | Area | Ficheros guia | Responsabilidad |
 | --- | --- | --- |
 | Composicion y config | `config_v0.go`, `stack_v0.go`, `sources_v0.go`, `dispatchers_v0.go` | Construir puertos reales/fakes, handlers y dispatchers sin defaults ocultos. |
-| Paquete de agente | `spec_packet_v0.go`, `spec_task_v0.go`, `spec_resolver_v0.go`, `director_decision_contract_v0.go` | Convertir tareas Orquesta en contexto Codex compacto con linaje, write-set, criterios y refs. |
+| Paquete de agente | `spec_packet_v0.go`, `spec_task_v0.go`, `spec_task_council_v0.go`, `spec_resolver_v0.go`, `director_decision_contract_v0.go` | Convertir tareas Orquesta en contexto Codex compacto con linaje, write-set, criterios y refs; `CODEX-COUNCIL-PACKET-V0` deja propuesta/critica/voto como `decision_council`, no como director generico. |
 | Wait/drain/observacion | `waiter_v0.go`, `drain_v0.go`, `drain_wait_scope_v0.go`, `drain_observations_v0.go` | Esperar solo `WaitAgentRefs` cuando existan, ingerir ACK/deliveries y reentrar al director. |
 | Supervision residente | `run_supervisor_v0.go`, `run_coordinator_v0.go`, `codex_supervisor_stack_lifecycle_v0.go` | Avanzar runs por ticks acotados, cola global y ciclo normal de drain/outbox. |
 | Autoprogramacion | `autoprogramming_bridge_v0.go`, `autoprogramming_prepare_run_mcp_executor_v0.go`, `autoprogramming_resident_*` | Preparar runs desde backlog, conservar plan-state y crear self-repair solo ante bloqueo real. |

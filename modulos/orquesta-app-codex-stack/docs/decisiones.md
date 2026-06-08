@@ -2,6 +2,24 @@
 
 ```text
 Fecha: 2026-06-08
+Decision: Las tareas Codex del consejo residente tienen packet propio y no
+caen como director generico.
+Motivo: propuestas, criticas y votos viven en fases distintas de
+`programacion`; si el resolver solo carga `WorkflowTaskStore` en programacion,
+`task-council-*` recibe objetivo de director web/API/MCP y puede pedir
+`director_decisions.json` aunque solo deba producir un artefacto de consejo.
+Impacto: el stack clasifica roles `architecture_proposal`,
+`architecture_critique`, `architecture_vote` y refs `task-council-p/c/v-*`
+como area `decision_council`; carga `WorkflowTaskV0` fuera de programacion;
+materializa objetivo y contexto `decision_council_context.v0` con refs
+estructuradas (`decision-council-role-p/c/v`, assignment, agente, familia,
+gate, deps, cohorte y ola). No cambia core, no mete proveedor/modelo y no
+parsea logs, summaries ni texto libre.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-06-08
 Decision: El consejo residente acepta decisiones solo desde votos
 estructurados inyectados por composicion.
 Motivo: los agentes pueden redactar resúmenes con alias o nombres cercanos; el

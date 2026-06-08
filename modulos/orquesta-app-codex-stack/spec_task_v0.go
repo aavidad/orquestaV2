@@ -14,10 +14,47 @@ func (resolver CodexLaunchSpecResolverV0) agentTaskV0(
 	payload orquestaruntime.LaunchRuntimeAgentRequestV0,
 	area string,
 ) (orquestaruntime.AgentStartTaskV0, error) {
+	if councilPayloadRequiresWorkflowTaskV0(payload) {
+		task, ok, err := resolver.tryWorkflowTaskForPayloadV0(ctx, payload)
+		if err != nil {
+			return orquestaruntime.AgentStartTaskV0{}, err
+		}
+		if ok && decisionCouncilRoleFromTaskV0(task, payload) != "" {
+			return councilTaskV0(task, payload), nil
+		}
+		return orquestaruntime.AgentStartTaskV0{}, fmt.Errorf("workflow_task de consejo requerida")
+	}
 	if isProgrammingPhaseV0(payload.PhaseID) {
 		return resolver.programmingTaskV0(ctx, payload)
 	}
 	return directorTaskV0(payload, area), nil
+}
+
+func councilPayloadRequiresWorkflowTaskV0(
+	payload orquestaruntime.LaunchRuntimeAgentRequestV0,
+) bool {
+	return councilRoleFromPayloadV0(payload.Role) != "" || councilTaskRefRoleV0(payload.TaskRef) != ""
+}
+
+func (resolver CodexLaunchSpecResolverV0) tryWorkflowTaskForPayloadV0(
+	ctx context.Context,
+	payload orquestaruntime.LaunchRuntimeAgentRequestV0,
+) (orquestacoreworkflow.WorkflowTaskV0, bool, error) {
+	if resolver.TaskStore == nil {
+		return orquestacoreworkflow.WorkflowTaskV0{}, false, nil
+	}
+	tasks, err := resolver.TaskStore.LoadWorkflowTasksV0(
+		ctx,
+		strings.TrimSpace(payload.RunID),
+		[]string{strings.TrimSpace(payload.TaskRef)},
+	)
+	if err != nil {
+		return orquestacoreworkflow.WorkflowTaskV0{}, false, err
+	}
+	if len(tasks) != 1 {
+		return orquestacoreworkflow.WorkflowTaskV0{}, false, nil
+	}
+	return tasks[0], true, nil
 }
 
 func (resolver CodexLaunchSpecResolverV0) programmingTaskV0(

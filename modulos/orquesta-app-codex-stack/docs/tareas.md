@@ -1,5 +1,37 @@
 # Tareas: orquesta-app-codex-stack
 
+## APP-CODEX-STACK-042
+
+Objetivo: especializar el paquete Codex de las tareas del consejo residente.
+
+Estado: hecho.
+
+Write-set aplicado:
+
+- `codexAreaV0` clasifica `architecture_proposal`, `architecture_critique`,
+  `architecture_vote` y refs `task-council-p/c/v-*` como `decision_council`,
+  no como `director`;
+- el resolver carga `WorkflowTaskV0` para tareas de consejo aunque la fase sea
+  `brainstorming_arquitectura` o `votacion_y_decision`;
+- `councilTaskV0` conserva titulo, write-set, skills, cohorte, ola, linaje y
+  criterios durables, y genera objetivo especifico para propuesta, critica o
+  voto;
+- el contexto del packet incluye `decision_council_context.v0` con
+  `task_ref`, rol, `assignment_ref`, `agent_ref`, `family_ref`,
+  `expected_artifact`, `gate_ref`, `context_refs`, `depends_on`, cohorte y ola;
+- la deteccion usa refs estructuradas `decision-council-role-p/c/v`,
+  `payload.Role` enum y prefijo de task como fallback, sin parsear summaries,
+  logs ni texto libre.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexLaunchSpecResolverV0MaterializaPacketConsejoPropuestaCriticaVoto|TestCodexLaunchSpecResolverV0DetectaConsejoPorMetadataSinRolPayloadV0'`
+
+Pendiente siguiente:
+
+- fuente real de `architecture_vote.v0` desde entregas/artefactos Codex;
+- smoke opt-in `Director residente + Codex real` con servidor temporal.
+
 ## APP-CODEX-STACK-041
 
 Objetivo: cerrar el consejo residente desde votos estructurados hasta
@@ -29,9 +61,6 @@ Validacion:
 
 Pendiente siguiente:
 
-- `CODEX-COUNCIL-PACKET-V0`: enriquecer el paquete Codex de tareas de consejo
-  fuera de `programacion` para que propuesta, critica y voto reciban contexto
-  especifico y no caigan como director generico;
 - fuente real de `architecture_vote.v0` desde entregas/artefactos Codex;
 - smoke opt-in `Director residente + Codex real` con servidor temporal.
 
@@ -59,7 +88,7 @@ Validacion:
 
 Pendiente siguiente:
 
-- prompt/paquete enriquecido para tareas de consejo fuera de `programacion`;
+- fuente real de `architecture_vote.v0` desde entregas/artefactos Codex;
 - smoke opt-in `Director residente + Codex real`.
 
 ## APP-CODEX-STACK-001

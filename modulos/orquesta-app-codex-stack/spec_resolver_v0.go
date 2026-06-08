@@ -161,6 +161,9 @@ func codexSecurityV0() orquestaruntime.ExternalAgentSecurityPolicyV0 {
 }
 
 func codexAreaV0(role string, taskRef string) string {
+	if councilRoleFromPayloadV0(role) != "" || councilTaskRefRoleV0(taskRef) != "" {
+		return "decision_council"
+	}
 	value := strings.TrimSpace(role + "-" + taskRef)
 	switch {
 	case strings.Contains(value, "implementacion"):
