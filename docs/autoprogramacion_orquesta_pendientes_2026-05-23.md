@@ -212,9 +212,11 @@ Pendientes priorizados:
   inyecto en `cmd/orquesta-server` un adaptador real opt-in sobre el stack Codex:
   cola/ranking neutral -> `BuildContinueAppDirectorLoopRuntimeV0` ->
   `RunResidentDirectorBriefingLoopV0` con fuente reentrable desde stores vivos y
-  cierre externo delegado al app-director-service. Queda pendiente separado:
-  smoke largo real del residente, activar consejo/votacion cuando haya varias
-  opciones y resolver `SkillRefs` por rol.
+  cierre externo delegado al app-director-service. Procesa lotes por
+  `MaxRunsPerTick`/`MaxExecutions` y no convierte `stop_max_steps` interno en
+  rail de contenido. Queda pendiente separado: smoke largo real del residente,
+  activar consejo/votacion cuando haya varias opciones y resolver `SkillRefs`
+  por rol.
 - Completar el smoke OPES temporal real de derivados/cierre hasta
   `generate_html_site -> local_html_site`, sin tocar OPES productivo y
   reutilizando el owner existente T12/T18 donde aplique.

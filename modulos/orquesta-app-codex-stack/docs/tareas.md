@@ -850,7 +850,8 @@ Estado: hecho local.
 Trabajo aplicado:
 
 - `RunCodexStackResidentDirectorV0` coordina runs ejecutables desde `RunQueue`,
-  respeta el ranking neutral y acota el lote por `MaxRunsPerTick`;
+  respeta el ranking neutral y acota el lote por
+  `MaxRunsPerTick`/`MaxExecutions`;
 - reutiliza `BuildContinueAppDirectorLoopRuntimeV0` para no duplicar el camino
   de `ContinueAppDirectorV0`;
 - ejecuta `RunResidentDirectorBriefingLoopV0` con una fuente reentrable basada
@@ -867,5 +868,7 @@ Reglas cerradas:
 - no mete Codex, servidor ni OPES en el core;
 - no convierte `close_or_idle` en cierre inventado del tick residente: delega
   en `ContinueAppDirectorV0`;
+- no convierte `stop_max_steps` interno en rechazo de trabajo: el siguiente
+  pulso reevalua outbox/stores vivos y sigue o espera;
 - no usa filtros de contenido para decidir si un agente vale: conserva el
   trabajo en stores/outbox y deja rework/cierre al Director.

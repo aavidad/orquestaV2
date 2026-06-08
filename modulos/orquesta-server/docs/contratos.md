@@ -40,6 +40,8 @@ Configuracion externa relacionada:
   del Director si la composicion ha inyectado `ResidentDirectorPortV0`.
 - `ORQUESTA_SERVER_RESIDENT_DIRECTOR_MAX_ACTIONS`: acciones maximas de briefing
   que el Director residente puede ejecutar por tick.
+- Estas dos variables son configuracion de arranque del servidor residente; un
+  cambio en proceso vivo requiere reiniciar esa composicion.
 - `ORQUESTA_SERVER_SUPERVISOR_MAX_TICKS`: numero maximo de ticks internos por
   pulso del supervisor residente. Por defecto se conserva acotado a `1`.
 - `ORQUESTA_SERVER_ALLOW_REPEATED_RUNS=true`: permite que un mismo pulso del

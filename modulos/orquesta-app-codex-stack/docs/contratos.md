@@ -368,7 +368,10 @@ Contrato de composicion:
   stores y limites del `ContinueAppDirectorV0` existente.
 - La fuente de briefing es reentrante: si hay outbox pendiente emite
   `wait_outbox`; si no hay outbox emite `continue`; si el burst anterior ya
-  dejo `FinalBriefing`, lo reaprovecha para no perder causalidad del paso.
+  dejo `FinalBriefing`, lo reaprovecha para no perder causalidad del paso,
+  excepto cuando ese briefing representa un corte interno de presupuesto
+  (`stop_max_steps`/`stop_budget_exhausted`). Ese caso no es rail de contenido:
+  el siguiente pulso vuelve a mirar stores/outbox vivos y continua o espera.
 - El dispatch usa los `Dispatchers`/`BatchDispatchers` ya inyectados en el
   stack. Codex real sigue viviendo solo en el batch executor y el runtime
   configurado.

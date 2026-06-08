@@ -190,13 +190,15 @@ Implementado:
   opt-in explicito;
 - loop async con anti-solape, coalescing y recuperacion de panic;
 - estado publico `resident_director_*`, contadores operacionales y actividad;
-- self-watchdog reconoce ticks, progreso y errores del Director residente.
+- self-watchdog reconoce ticks, progreso y errores del Director residente;
 - `cmd/orquesta-server` lee
   `ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED` y
   `ORQUESTA_SERVER_RESIDENT_DIRECTOR_MAX_ACTIONS`, publica ambos en
   `effective_config` e inyecta `ResidentDirectorPortV0` solo con opt-in;
 - el adaptador real delega en el stack Codex y ejecuta
-  `RunResidentDirectorBriefingLoopV0` sobre stores vivos.
+  `RunResidentDirectorBriefingLoopV0` sobre stores vivos;
+- el adaptador respeta `MaxRunsPerTick`/`MaxExecutions`, no se queda en un unico
+  run candidato por pulso.
 
 Validacion:
 
@@ -204,13 +206,8 @@ Validacion:
 - `go test -count=1 ./cmd/orquesta-server`
 - `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'CodexStackResidentDirector'`
 
-Riesgos pendientes:
+Pendiente separado:
 
-- el cierre terminal `close_or_idle` no debe inventarse en el tick residente:
-  sigue perteneciendo al cierre causal ya cableado por `ContinueAppDirectorV0`
-  y sus fuentes reales;
-- la idempotencia depende de outbox ledger, run store, run queue y wait state
-  persistentes. Un adaptador nuevo debe conservar esos stores y no crear rutas
-  paralelas de dispatch;
-- la reentrada esta acotada por anti-solape del runtime y por presupuesto de
-  acciones; no introducir sleeps largos ni waits globales de todos los agentes.
+- smoke largo real con servidor residente opt-in y cola amplia;
+- consejo/votacion y resolucion de `SkillRefs` por rol pertenecen al Director,
+  no a `orquesta-server`.

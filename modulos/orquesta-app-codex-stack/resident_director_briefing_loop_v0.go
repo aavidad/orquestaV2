@@ -150,6 +150,11 @@ func normalizeCodexStackResidentDirectorCommandV0(
 		command.RunQueueReadLimit = command.MaxRunsPerTick
 	}
 	if command.QueueRankingPolicyNow.IsZero() {
+		if parsed, err := time.Parse(time.RFC3339, command.OccurredAt); err == nil {
+			command.QueueRankingPolicyNow = parsed
+		}
+	}
+	if command.QueueRankingPolicyNow.IsZero() {
 		command.QueueRankingPolicyNow = stackNowV0(stack.Clock)
 	}
 	return command
