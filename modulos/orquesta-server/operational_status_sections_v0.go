@@ -51,6 +51,14 @@ func residentOperationalBlockersV0(state StateV0) []orquestaobservability.Diagno
 			EvidenceRefs: sanitizeServerEvidenceRefsV0(state.StartupEvidenceRefs),
 		})
 	}
+	if strings.TrimSpace(state.ResidentDirectorLastError) != "" || state.ResidentDirectorErrorTicks > 0 {
+		blockers = append(blockers, orquestaobservability.DiagnosticoBloqueoV0{
+			BlockerRef: "blocker-ref-server-resident-director",
+			Severity:   "warning",
+			OwnerArea:  "runtime",
+			Summary:    "director residente degradado",
+		})
+	}
 	if strings.TrimSpace(state.StatePersistStatus) == "degraded" {
 		blockers = append(blockers, orquestaobservability.DiagnosticoBloqueoV0{
 			BlockerRef: "blocker-ref-server-state-persist",
@@ -93,6 +101,7 @@ func residentOperationalActivityV0(state StateV0) []orquestaobservability.Diagno
 	}
 	appendActivity("activity-ref-server-heartbeat", state.LastHeartbeatAt, "system", "heartbeat residente observado")
 	appendActivity("activity-ref-server-supervisor", state.LastSupervisorAt, "runtime", "pulso supervisor observado")
+	appendActivity("activity-ref-server-resident-director", state.ResidentDirectorLastTickAt, "runtime", "pulso director residente observado")
 	appendActivity("activity-ref-server-startup", state.LastStartupCheckAt, "system", "startup check observado")
 	appendActivity("activity-ref-server-state-persist-failed", state.StatePersistLastFailedAt, "system", "fallo de persistencia de estado observado")
 	appendActivity("activity-ref-server-audit-write-failed", state.AuditLastFailedAt, "system", "fallo de escritura de auditoria observado")

@@ -74,15 +74,16 @@ func (observer *ProcessSelfWatchdogObserverV0) ObserveSelfWatchdogV0(
 	}
 	observer.lastProgress = counters
 	observation := SelfWatchdogObservationV0{
-		ObservedAt:           now,
-		CPUPercent:           cpuPercent,
-		HighCPUSince:         observer.highCPUSince,
-		LastProgressAt:       observer.lastProgressAt,
-		ActiveRuns:           nonNegativeServerIntV0(request.State.LastSupervisorQueueSize),
-		ActiveAgents:         nonNegativeServerIntV0(request.State.ShutdownAgentsInFlight),
-		SupervisorTickActive: request.State.SupervisorTickActive,
-		ShutdownInProgress:   request.State.ShutdownInProgress,
-		EvidenceRefs:         selfWatchdogObservationEvidenceRefsV0(request.State, cpuOK),
+		ObservedAt:                 now,
+		CPUPercent:                 cpuPercent,
+		HighCPUSince:               observer.highCPUSince,
+		LastProgressAt:             observer.lastProgressAt,
+		ActiveRuns:                 nonNegativeServerIntV0(request.State.LastSupervisorQueueSize),
+		ActiveAgents:               nonNegativeServerIntV0(request.State.ShutdownAgentsInFlight),
+		SupervisorTickActive:       request.State.SupervisorTickActive,
+		ResidentDirectorTickActive: request.State.ResidentDirectorTickActive,
+		ShutdownInProgress:         request.State.ShutdownInProgress,
+		EvidenceRefs:               selfWatchdogObservationEvidenceRefsV0(request.State, cpuOK),
 	}
 	return observation, nil
 }
@@ -130,6 +131,9 @@ func (observer *ProcessSelfWatchdogObserverV0) restoreProgressFromStateLockedV0(
 	if parsed := parseServerTimeV0(state.ExternalBridgeLastSuccess); parsed.After(observer.lastProgressAt) {
 		observer.lastProgressAt = parsed
 	}
+	if parsed := parseServerTimeV0(state.ResidentDirectorLastSuccessAt); parsed.After(observer.lastProgressAt) {
+		observer.lastProgressAt = parsed
+	}
 }
 
 type selfWatchdogProgressCountersV0 struct {
@@ -138,6 +142,9 @@ type selfWatchdogProgressCountersV0 struct {
 	IdleSelfImprovementOK    int
 	ExternalBridgeTicks      int
 	ExternalBridgeErrorTicks int
+	ResidentDirectorTicks    int
+	ResidentDirectorErrors   int
+	ResidentDirectorActions  int
 }
 
 func selfWatchdogProgressCountersFromStateV0(state StateV0) selfWatchdogProgressCountersV0 {
@@ -147,6 +154,9 @@ func selfWatchdogProgressCountersFromStateV0(state StateV0) selfWatchdogProgress
 		IdleSelfImprovementOK:    nonNegativeServerIntV0(state.IdleSelfImprovementOK),
 		ExternalBridgeTicks:      nonNegativeServerIntV0(state.ExternalBridgeTicks),
 		ExternalBridgeErrorTicks: nonNegativeServerIntV0(state.ExternalBridgeErrorTicks),
+		ResidentDirectorTicks:    nonNegativeServerIntV0(state.ResidentDirectorTicks),
+		ResidentDirectorErrors:   nonNegativeServerIntV0(state.ResidentDirectorErrorTicks),
+		ResidentDirectorActions:  nonNegativeServerIntV0(state.ResidentDirectorExecutedActions),
 	}
 }
 
@@ -155,7 +165,10 @@ func (counters selfWatchdogProgressCountersV0) progressedV0(next selfWatchdogPro
 		next.IdleSelfImprovementRuns > counters.IdleSelfImprovementRuns ||
 		next.IdleSelfImprovementOK > counters.IdleSelfImprovementOK ||
 		next.ExternalBridgeTicks > counters.ExternalBridgeTicks ||
-		next.ExternalBridgeErrorTicks > counters.ExternalBridgeErrorTicks
+		next.ExternalBridgeErrorTicks > counters.ExternalBridgeErrorTicks ||
+		next.ResidentDirectorTicks > counters.ResidentDirectorTicks ||
+		next.ResidentDirectorErrors > counters.ResidentDirectorErrors ||
+		next.ResidentDirectorActions > counters.ResidentDirectorActions
 }
 
 func selfWatchdogObservationEvidenceRefsV0(state StateV0, cpuOK bool) []string {
@@ -170,6 +183,9 @@ func selfWatchdogObservationEvidenceRefsV0(state StateV0, cpuOK bool) []string {
 	}
 	if state.SupervisorTickActive {
 		refs = append(refs, "evidence-ref-self-watchdog-supervisor-active")
+	}
+	if state.ResidentDirectorTickActive {
+		refs = append(refs, "evidence-ref-self-watchdog-resident-director-active")
 	}
 	if state.ShutdownInProgress {
 		refs = append(refs, "evidence-ref-self-watchdog-shutdown-active")

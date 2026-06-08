@@ -9,31 +9,35 @@ import (
 )
 
 type RuntimeDepsV0 struct {
-	AppHandler   http.Handler
-	Supervisor   SupervisorPortV0
-	StateStore   StateStorePortV0
-	AuditSink    AuditSinkPortV0
-	StartupCheck StartupCheckPortV0
-	SelfWatchdog SelfWatchdogObservationPortV0
-	Clock        ClockPortV0
+	AppHandler       http.Handler
+	Supervisor       SupervisorPortV0
+	ResidentDirector ResidentDirectorPortV0
+	StateStore       StateStorePortV0
+	AuditSink        AuditSinkPortV0
+	StartupCheck     StartupCheckPortV0
+	SelfWatchdog     SelfWatchdogObservationPortV0
+	Clock            ClockPortV0
 }
 
 type RuntimeV0 struct {
-	config                ConfigV0
-	appHandler            http.Handler
-	supervisor            SupervisorPortV0
-	asyncWork             runtimeAsyncWorkGroupV0
-	supervisorTickActive  int32
-	supervisorTickPending int32
-	shutdownInProgress    int32
-	stateStore            StateStorePortV0
-	auditSink             AuditSinkPortV0
-	startupCheck          StartupCheckPortV0
-	selfWatchdog          SelfWatchdogObservationPortV0
-	clock                 ClockPortV0
-	tracker               *StatusTrackerV0
-	handoffRequested      chan struct{}
-	handoffOnce           sync.Once
+	config                      ConfigV0
+	appHandler                  http.Handler
+	supervisor                  SupervisorPortV0
+	residentDirector            ResidentDirectorPortV0
+	asyncWork                   runtimeAsyncWorkGroupV0
+	supervisorTickActive        int32
+	supervisorTickPending       int32
+	residentDirectorTickActive  int32
+	residentDirectorTickPending int32
+	shutdownInProgress          int32
+	stateStore                  StateStorePortV0
+	auditSink                   AuditSinkPortV0
+	startupCheck                StartupCheckPortV0
+	selfWatchdog                SelfWatchdogObservationPortV0
+	clock                       ClockPortV0
+	tracker                     *StatusTrackerV0
+	handoffRequested            chan struct{}
+	handoffOnce                 sync.Once
 }
 
 func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
@@ -66,6 +70,7 @@ func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
 		config:           config,
 		appHandler:       deps.AppHandler,
 		supervisor:       deps.Supervisor,
+		residentDirector: deps.ResidentDirector,
 		stateStore:       deps.StateStore,
 		auditSink:        deps.AuditSink,
 		startupCheck:     deps.StartupCheck,
@@ -115,6 +120,11 @@ func (runtime *RuntimeV0) RunWithShutdownCauseV0(
 	selfWatchdogStop := make(chan SelfWatchdogDecisionV0, 1)
 	runtime.runAsyncWorkV0("http_serve", func() { serverDone <- server.Serve(listener) })
 	runtime.runAsyncWorkV0("supervisor_loop", func() { runtime.runSupervisorLoopV0(runCtx) })
+	if runtime.residentDirector != nil && runtime.config.ResidentDirectorEnabled {
+		runtime.runAsyncWorkV0("resident_director_loop", func() {
+			runtime.runResidentDirectorLoopV0(runCtx)
+		})
+	}
 	if runtime.selfWatchdog != nil && !runtime.config.SelfWatchdog.Disabled {
 		runtime.runAsyncWorkV0("self_watchdog_loop", func() {
 			runtime.runSelfWatchdogLoopV0(runCtx, selfWatchdogStop)

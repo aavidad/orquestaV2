@@ -24,18 +24,19 @@ type SelfWatchdogConfigV0 struct {
 }
 
 type SelfWatchdogObservationV0 struct {
-	ObservedAt           time.Time
-	CPUPercent           int
-	HighCPUSince         time.Time
-	LastProgressAt       time.Time
-	ActiveRuns           int
-	PendingOutbox        int
-	ActiveAgents         int
-	RegisteredProcesses  int
-	SupervisorTickActive bool
-	AsyncWorkActive      int
-	ShutdownInProgress   bool
-	EvidenceRefs         []string
+	ObservedAt                 time.Time
+	CPUPercent                 int
+	HighCPUSince               time.Time
+	LastProgressAt             time.Time
+	ActiveRuns                 int
+	PendingOutbox              int
+	ActiveAgents               int
+	RegisteredProcesses        int
+	SupervisorTickActive       bool
+	ResidentDirectorTickActive bool
+	AsyncWorkActive            int
+	ShutdownInProgress         bool
+	EvidenceRefs               []string
 }
 
 type SelfWatchdogDecisionV0 struct {

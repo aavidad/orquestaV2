@@ -5,6 +5,9 @@
 Entrada:
 - `http.Handler` de aplicacion.
 - `SupervisorPortV0` opcional.
+- `ResidentDirectorPortV0` opcional. Solo se ejecuta si
+  `ConfigV0.ResidentDirectorEnabled=true`; por defecto queda apagado aunque la
+  composicion inyecte el puerto.
 - `StateStorePortV0` para publicar reenganche.
 - `StartupCheckPortV0` opcional para autodiagnostico/purga antes de exponer
   HTTP y antes de activar el supervisor.
@@ -12,6 +15,9 @@ Entrada:
   que tambien actua como `SupervisorPortV0`, para veto preventivo de
   automejora residente cuando hay blockers externos conocidos.
 - Configuracion explicita de direccion, statefile y ritmo de supervision.
+- Configuracion explicita del Director residente: `ResidentDirectorEnabled` y
+  `ResidentDirectorMaxActions`. El servidor no construye briefings ni conoce
+  Codex, OPES, modelos o MCP; solo llama al puerto inyectado.
 
 Salida:
 - `GET /healthz`: liveness del proceso HTTP; no autoriza trabajo externo ni
@@ -22,7 +28,8 @@ Salida:
 - `GET /api/v0/server/status`: estado/diagnostico publico canonico.
   Incluye la proyeccion compacta `state_persist_*` para distinguir estado vivo
   en memoria de persistencia durable confirmada o degradada, sin detalles del
-  filesystem ni errores crudos del store.
+  filesystem ni errores crudos del store. Tambien expone
+  `resident_director_*` cuando el Director residente ha ejecutado algun pulso.
 - `GET /api/status`: alias legacy compatible del estado publico. Debe devolver
   el mismo DTO redactado que la ruta versionada y publicar headers de
   deprecacion/canonical para que clientes nuevos no lo promuevan.
@@ -113,6 +120,12 @@ Invariantes:
   no solapa ticks, libera el slot al terminar y permite reentrada posterior. La
   preparacion de automejora corre fuera del tick principal y no debe retener el
   bucle global.
+- el Director residente ejecuta pulsos asincronos opt-in por
+  `ResidentDirectorPortV0`: no solapa ticks, coalescea un unico pulso pendiente,
+  recupera `panic` como error durable y publica progreso/errores en
+  `resident_director_*`. El self-watchdog debe tratar
+  `resident_director_tick_active` y sus contadores como causa operativa, no como
+  rail de contenido.
 - `IdleSelfImprovementBlockerPortV0` no es dependencia obligatoria del runtime:
   si la composicion no lo implementa, la comprobacion queda omitida y el resto
   de guardas decide. Si existe, solo puede bloquear automejora por causas

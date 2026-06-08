@@ -10,7 +10,9 @@ import (
 func residentOperationalEstadoV0(state StateV0) string {
 	if strings.TrimSpace(state.LastError) != "" ||
 		state.SupervisorErrorTicks > 0 ||
+		state.ResidentDirectorErrorTicks > 0 ||
 		state.ExternalBridgeErrorTicks > 0 ||
+		strings.TrimSpace(state.ResidentDirectorStatus) == "error" ||
 		strings.TrimSpace(state.ExternalBridgeStatus) == "blocked" ||
 		strings.TrimSpace(state.ExternalBridgeStatus) == "degraded" ||
 		strings.TrimSpace(state.ExternalBridgeStatus) == "timeout" ||
@@ -33,11 +35,11 @@ func residentOperationalEstadoV0(state StateV0) string {
 }
 
 func residentOperationalProgressV0(state StateV0) orquestaobservability.DiagnosticoProgresoV0 {
-	total := state.SupervisorTicks + state.IdleSelfImprovementTarget
+	total := state.SupervisorTicks + state.ResidentDirectorTicks + state.IdleSelfImprovementTarget
 	if total <= 0 {
 		total = 1
 	}
-	completed := state.SupervisorExecutions + state.IdleSelfImprovementOK
+	completed := state.SupervisorExecutions + state.ResidentDirectorExecutedActions + state.IdleSelfImprovementOK
 	percent := float64(completed) * 100 / float64(total)
 	if percent > 100 {
 		percent = 100
@@ -60,6 +62,9 @@ func residentOperationalCountersV0(state StateV0) map[string]float64 {
 		"queue_size":                 float64(nonNegativeServerIntV0(state.LastSupervisorQueueSize)),
 		"idle_improvement_runs":      float64(nonNegativeServerIntV0(state.IdleSelfImprovementRuns)),
 		"idle_improvement_accepted":  float64(nonNegativeServerIntV0(state.IdleSelfImprovementOK)),
+		"resident_director_ticks":    float64(nonNegativeServerIntV0(state.ResidentDirectorTicks)),
+		"resident_director_errors":   float64(nonNegativeServerIntV0(state.ResidentDirectorErrorTicks)),
+		"resident_director_actions":  float64(nonNegativeServerIntV0(state.ResidentDirectorExecutedActions)),
 		"shutdown_async_work_active": float64(nonNegativeServerIntV0(state.ShutdownAsyncWorkActive)),
 		"external_bridge_ticks":      float64(nonNegativeServerIntV0(state.ExternalBridgeTicks)),
 		"external_bridge_errors":     float64(nonNegativeServerIntV0(state.ExternalBridgeErrorTicks)),

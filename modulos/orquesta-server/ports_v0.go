@@ -14,6 +14,26 @@ type SupervisorPortV0 interface {
 	) (orquestarunsupervisor.RunSupervisorResultV0, error)
 }
 
+type ResidentDirectorPortV0 interface {
+	RunResidentDirectorV0(
+		context.Context,
+		ResidentDirectorCommandV0,
+	) (ResidentDirectorResultV0, error)
+}
+
+type ResidentDirectorCommandV0 struct {
+	MaxActions    int
+	CorrelationID string
+	EvidenceRefs  []string
+}
+
+type ResidentDirectorResultV0 struct {
+	Status          string
+	RunRef          string
+	ExecutedActions int
+	EvidenceRefs    []string
+}
+
 type IdleSelfImprovementPortV0 interface {
 	PrepareIdleSelfImprovementV0(
 		context.Context,

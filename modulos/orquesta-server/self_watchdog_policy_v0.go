@@ -63,6 +63,7 @@ func selfWatchdogHasOperationalCauseV0(observation SelfWatchdogObservationV0) bo
 		observation.ActiveAgents > 0 ||
 		observation.RegisteredProcesses > 0 ||
 		observation.SupervisorTickActive ||
+		observation.ResidentDirectorTickActive ||
 		observation.AsyncWorkActive > 0 ||
 		observation.ShutdownInProgress
 }

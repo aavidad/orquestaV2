@@ -206,9 +206,13 @@ Pendientes priorizados:
   `RunResidentDirectorBriefingLoopV0` quedo probado el 2026-06-08: itera
   briefing -> ejecucion -> nuevo briefing hasta idle/cierre, accion externa
   pendiente, falta de progreso, necesidad de Director o presupuesto operativo.
-  Sigue pendiente cablearlo como residente opt-in en servidor/composicion,
-  activar consejo/votacion cuando haya varias opciones y resolver `SkillRefs`
-  por rol.
+  El servidor residente quedo preparado por puerto opt-in el 2026-06-08:
+  `ResidentDirectorPortV0`, anti-solape, coalescing, panic durable, status
+  `resident_director_*` y self-watchdog consciente del Director. Sigue pendiente
+  inyectar en `cmd/orquesta-server` el adaptador real que use
+  `RunResidentDirectorBriefingLoopV0` con fuente de briefing reentrable desde
+  stores vivos, activar consejo/votacion cuando haya varias opciones y resolver
+  `SkillRefs` por rol.
 - Completar el smoke OPES temporal real de derivados/cierre hasta
   `generate_html_site -> local_html_site`, sin tocar OPES productivo y
   reutilizando el owner existente T12/T18 donde aplique.

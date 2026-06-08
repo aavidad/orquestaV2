@@ -114,3 +114,20 @@ T208 queda como umbrella historico porque los huecos concretos se cerraron en
 owners focales. Nuevos blockers deben entrar como tareas separadas, manteniendo
 guardian, Codex, filesystem, proveedor y configuracion operacional fuera del
 modulo residente puro.
+
+## SRV-012: Director residente opt-in por puerto
+
+El servidor puede alojar un pulso residente del Director, pero no debe construir
+briefings ni conocer Codex, OPES, MCP, modelos, HOME o persistencia concreta.
+Por eso el contrato es `ResidentDirectorPortV0` y se activa solo con
+`ConfigV0.ResidentDirectorEnabled=true`.
+
+El pulso usa el mismo patron operativo que el supervisor: tick inicial, ticker,
+guarda atomica de anti-solape, coalescing de un pulso pendiente, panic convertido
+en error durable y estado publico `resident_director_*`. El self-watchdog trata
+actividad y progreso del Director residente como causa operativa observable.
+
+Pendiente de composicion: `cmd/orquesta-server` debe inyectar un adaptador real
+que use `RunResidentDirectorBriefingLoopV0` cuando exista una fuente de briefing
+reentrable desde stores vivos. Hasta entonces, el servidor queda preparado y
+probado por puerto.

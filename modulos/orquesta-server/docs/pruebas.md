@@ -25,6 +25,11 @@
   asincronos sin solaparse, coalescea un unico tick pendiente si otro pulso llega
   durante la supervision activa y puede preparar automejora en segundo plano sin
   bloquear nuevos pulsos.
+- `modulos/orquesta-server` prueba que el Director residente opt-in ejecuta
+  ticks asincronos por puerto, no arranca sin `ResidentDirectorEnabled`,
+  coalescea un tick pendiente, persiste OK/error, recupera panic como error
+  durable, aparece en status/operational status y cuenta como causa operativa
+  para el self-watchdog.
 - `cmd/orquesta-server` prueba que el planner de automejora salta tareas ya
   visibles en cola y anade una tarea scanner cuando hay capacidad libre para
   descubrir nuevos huecos.

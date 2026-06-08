@@ -174,3 +174,33 @@ Frontera:
 - El servidor consume resultado estructurado y conserva retry seguro.
 - `cmd/orquesta-guardian` conserva build/test/readiness/artefactos/repair.
 - Codex, HOME, proveedor y paths locales no entran en `orquesta-server`.
+
+## SRV-TASK-012: loop residente opt-in del Director
+
+Estado: hecho en `orquesta-server` por puerto; pendiente adaptador real en
+`cmd/orquesta-server`.
+
+Objetivo: permitir que el proceso residente ejecute el Director autonomo sin
+meter el nucleo, Codex, OPES, MCP ni proveedores dentro del servidor.
+
+Implementado:
+
+- `ResidentDirectorPortV0`, `ResidentDirectorCommandV0` y
+  `ResidentDirectorResultV0`;
+- `RuntimeDepsV0.ResidentDirector` y `ConfigV0.ResidentDirectorEnabled` como
+  opt-in explicito;
+- loop async con anti-solape, coalescing y recuperacion de panic;
+- estado publico `resident_director_*`, contadores operacionales y actividad;
+- self-watchdog reconoce ticks, progreso y errores del Director residente.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-server -run 'TestRuntimeV0ResidentDirector|TestRuntimeV0RestauraEstadoDurable|TestEvaluateSelfWatchdogV0NoParaSiDirectorResidenteActivo|TestProcessSelfWatchdogObserverV0TransportaDirectorResidenteActivo'`
+- `go test -count=1 ./modulos/orquesta-server`
+
+Pendiente:
+
+- inyectar desde `cmd/orquesta-server` un adaptador real que llame a
+  `RunResidentDirectorBriefingLoopV0` con una fuente de briefing reentrable
+  desde stores vivos;
+- exponer configuracion por entorno solo cuando ese adaptador real exista.

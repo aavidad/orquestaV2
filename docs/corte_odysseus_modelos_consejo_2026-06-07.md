@@ -47,6 +47,10 @@ convertir Orquesta en una app clonica:
   vuelve a pedir briefing hasta idle/cierre, accion externa pendiente, falta de
   progreso, necesidad de Director o presupuesto operativo. No es daemon ni
   proveedor real.
+- Primer alojamiento residente preparado el 2026-06-08 en `orquesta-server` por
+  `ResidentDirectorPortV0`: opt-in explicito, anti-solape, coalescing, panic
+  durable, status publico y self-watchdog consciente del Director. Falta
+  adaptador real en `cmd/orquesta-server`.
 - Ampliar `DirectorAutonomousOpsSnapshotV0` con runtime models, waits, olas,
   cohortes y arbol recursivo cuando esas fuentes entren por puertos publicos.
 - Timeline causal completa con decisiones, replan/rework, cierres, bloqueos y

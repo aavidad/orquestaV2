@@ -65,6 +65,18 @@ type StateV0 struct {
 	IdleSelfImprovementFlight             bool                        `json:"idle_self_improvement_in_flight,omitempty"`
 	IdleSelfImprovementRuns               int                         `json:"idle_self_improvement_runs,omitempty"`
 	IdleSelfImprovementOK                 int                         `json:"idle_self_improvement_ok,omitempty"`
+	ResidentDirectorStatus                string                      `json:"resident_director_status,omitempty"`
+	ResidentDirectorTickActive            bool                        `json:"resident_director_tick_active,omitempty"`
+	ResidentDirectorLastTickAt            string                      `json:"resident_director_last_tick_at,omitempty"`
+	ResidentDirectorLastSuccessAt         string                      `json:"resident_director_last_success_at,omitempty"`
+	ResidentDirectorLastErrorAt           string                      `json:"resident_director_last_error_at,omitempty"`
+	ResidentDirectorLastError             string                      `json:"resident_director_last_error,omitempty"`
+	ResidentDirectorLastRunRef            string                      `json:"resident_director_last_run_ref,omitempty"`
+	ResidentDirectorLastResult            string                      `json:"resident_director_last_result,omitempty"`
+	ResidentDirectorTicks                 int                         `json:"resident_director_ticks,omitempty"`
+	ResidentDirectorErrorTicks            int                         `json:"resident_director_error_ticks,omitempty"`
+	ResidentDirectorExecutedActions       int                         `json:"resident_director_executed_actions,omitempty"`
+	ResidentDirectorOperationalMessage    *ServerOperationalMessageV0 `json:"resident_director_operational_message,omitempty"`
 	ExternalBridgeComponent               string                      `json:"external_bridge_component,omitempty"`
 	ExternalBridgeStatus                  string                      `json:"external_bridge_status,omitempty"`
 	ExternalBridgeTickActive              bool                        `json:"external_bridge_tick_active,omitempty"`

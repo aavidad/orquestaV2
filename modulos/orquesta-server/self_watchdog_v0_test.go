@@ -42,6 +42,23 @@ func TestEvaluateSelfWatchdogV0NoParaSiHayTrabajoCausal(t *testing.T) {
 	}
 }
 
+func TestEvaluateSelfWatchdogV0NoParaSiDirectorResidenteActivo(t *testing.T) {
+	now := time.Date(2026, 6, 8, 12, 7, 0, 0, time.UTC)
+	decision := EvaluateSelfWatchdogV0(SelfWatchdogConfigV0{}, SelfWatchdogObservationV0{
+		ObservedAt:                 now,
+		CPUPercent:                 95,
+		HighCPUSince:               now.Add(-10 * time.Minute),
+		ResidentDirectorTickActive: true,
+		EvidenceRefs:               []string{"evidence-ref-resident-director-active"},
+	})
+
+	if decision.ShouldRequestShutdown ||
+		decision.Status != SelfWatchdogStatusHighCPUWithCauseV0 ||
+		decision.ReasonCode != SelfWatchdogReasonOperationalCauseV0 {
+		t.Fatalf("decision=%+v", decision)
+	}
+}
+
 func TestEvaluateSelfWatchdogV0PideParadaSiCPUSostenidaSinCausa(t *testing.T) {
 	now := time.Date(2026, 6, 8, 12, 10, 0, 0, time.UTC)
 	decision := EvaluateSelfWatchdogV0(SelfWatchdogConfigV0{}, SelfWatchdogObservationV0{
@@ -206,6 +223,41 @@ func TestProcessSelfWatchdogObserverV0ReconoceProgresoPorEjecuciones(t *testing.
 	}
 	decision := EvaluateSelfWatchdogV0(config, second)
 	if decision.ShouldRequestShutdown || decision.ReasonCode != SelfWatchdogReasonRecentProgressV0 {
+		t.Fatalf("decision=%+v observation=%+v", decision, second)
+	}
+}
+
+func TestProcessSelfWatchdogObserverV0TransportaDirectorResidenteActivo(t *testing.T) {
+	now := time.Date(2026, 6, 8, 12, 35, 0, 0, time.UTC)
+	observer := NewProcessSelfWatchdogObserverV0(&fakeSelfWatchdogCPUSamplerV0{
+		samples: []SelfWatchdogCPUSampleV0{
+			{ProcessTicks: 100, TotalTicks: 1000},
+			{ProcessTicks: 300, TotalTicks: 1100},
+		},
+	})
+	config := SelfWatchdogConfigV0{CPUHighPercent: 50, SustainedFor: time.Second, NoProgressFor: time.Second}
+	_, err := observer.ObserveSelfWatchdogV0(context.Background(), SelfWatchdogObservationRequestV0{
+		State:      StateV0{ResidentDirectorTickActive: true},
+		Config:     config,
+		ObservedAt: now,
+	})
+	if err != nil {
+		t.Fatalf("Observe first: %v", err)
+	}
+	second, err := observer.ObserveSelfWatchdogV0(context.Background(), SelfWatchdogObservationRequestV0{
+		State:      StateV0{ResidentDirectorTickActive: true},
+		Config:     config,
+		ObservedAt: now.Add(5 * time.Second),
+	})
+	if err != nil {
+		t.Fatalf("Observe second: %v", err)
+	}
+	if !second.ResidentDirectorTickActive ||
+		!containsStringForTestV0(second.EvidenceRefs, "evidence-ref-self-watchdog-resident-director-active") {
+		t.Fatalf("observation=%+v", second)
+	}
+	decision := EvaluateSelfWatchdogV0(config, second)
+	if decision.ShouldRequestShutdown || decision.ReasonCode != SelfWatchdogReasonOperationalCauseV0 {
 		t.Fatalf("decision=%+v observation=%+v", decision, second)
 	}
 }
