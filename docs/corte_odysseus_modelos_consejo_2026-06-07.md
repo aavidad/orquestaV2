@@ -28,6 +28,11 @@ convertir Orquesta en una app clonica:
   `DirectorAutonomousOpsSnapshotV0` viaja en `orquesta.director.stats.v0` y
   `orquesta.autoprogramming.status.v0`; `/ops` lo consume para la llamada
   visible del Director.
+- Director residente opt-in cableado en servidor el 2026-06-08:
+  `cmd/orquesta-server` inyecta una implementacion real de
+  `ResidentDirectorPortV0` sobre el stack Codex en los commits `8944ca9f` y
+  `f619e899`. Esto deja servidor, reentrada y cierre externo conectados; no
+  declara todavia smoke largo real.
 
 ## Fronteras
 
@@ -39,6 +44,9 @@ convertir Orquesta en una app clonica:
   en capacidad/scheduler/Director o en la composicion consumidora.
 - El debate/voto no es mayoria simple: el Director consolida criterios,
   evidencias, coste, riesgo y calidad antes de aceptar o pedir rework.
+- `SkillRefs` debe ser contrato neutral de refs opacas. No debe transportar
+  rutas locales, proveedor, modelo, HOME, OAuth, token ni contenido completo de
+  una skill en el core.
 
 ## Pendiente Para Director Autonomo
 
@@ -47,10 +55,17 @@ convertir Orquesta en una app clonica:
   vuelve a pedir briefing hasta idle/cierre, accion externa pendiente, falta de
   progreso, necesidad de Director o presupuesto operativo. No es daemon ni
   proveedor real.
-- Primer alojamiento residente preparado el 2026-06-08 en `orquesta-server` por
+- Primer alojamiento residente conectado el 2026-06-08 en `orquesta-server` por
   `ResidentDirectorPortV0`: opt-in explicito, anti-solape, coalescing, panic
-  durable, status publico y self-watchdog consciente del Director. Falta
-  adaptador real en `cmd/orquesta-server`.
+  durable, status publico, self-watchdog consciente del Director y adaptador
+  real en `cmd/orquesta-server` sobre el stack Codex. Pendiente: smoke largo
+  real del residente con servidor temporal y evidencias durables.
+- Materializar `SkillRefs` como contrato Go neutral y transportar esas refs de
+  perfil/tarea hasta runtime/packet/prompt sin meter proveedores en el nucleo.
+- Activar consejo/votacion en el ciclo residente cuando existan varias opciones
+  comparables: lanzar rondas, esperar por cohorte/ola, recoger votos/evidencias
+  y dejar que el Director acepte, pida rework o replantee. La skill existe; el
+  wiring live no debe darse por probado hasta tener test/smoke propio.
 - Ampliar `DirectorAutonomousOpsSnapshotV0` con runtime models, waits, olas,
   cohortes y arbol recursivo cuando esas fuentes entren por puertos publicos.
 - Timeline causal completa con decisiones, replan/rework, cierres, bloqueos y

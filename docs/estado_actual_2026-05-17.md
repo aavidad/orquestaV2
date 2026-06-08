@@ -87,6 +87,10 @@ Esto implica:
 - los perfiles de trabajo (`code_study`, `implementation`, `refactor`,
   `required_tests`, `documentation`, `review`, `domain_work`) son neutrales y se
   transportan como `WorkProfileV0`/`WorkflowTaskV0.work_profile_kind`;
+- las skills operativas deben viajar, cuando se implemente el siguiente corte,
+  como `SkillRefs` neutrales y opacas derivadas por perfil/tarea/composicion.
+  No deben meter proveedor, modelo, rutas locales, HOME, OAuth, token ni
+  contenido completo de la skill dentro del core;
 - ninguna app externa debe copiar internals, compartir DB/filesystem interno ni
   decidir plan, runtime, modelo o paralelismo sin director de Orquesta.
 - la espina `DirectorCycleStepV0 -> director-runner -> director-scheduler ->
@@ -271,6 +275,12 @@ El primer corte ya no esta solo en documentos:
   stack Codex. El supervisor residente del servidor o
   `POST /api/v0/runs/supervise` pueden arrancarla sin `run_ref`; esto sigue
   siendo politica de composicion Codex, no contrato del nucleo ni de MCP/gateway.
+- Desde el 2026-06-08, `cmd/orquesta-server` puede inyectar por opt-in un
+  Director residente real sobre el stack Codex mediante `ResidentDirectorPortV0`
+  (`8944ca9f`, afinado en `f619e899`): ranking/cola neutral,
+  `BuildContinueAppDirectorLoopRuntimeV0`, briefing reentrable y cierre externo
+  delegado a `app-director-service`. Esto no declara smoke largo real ni wiring
+  live de consejo/votacion; ambos siguen pendientes con evidencia propia.
 - Tambien existe harness de ola/cohorte amplia en el stack Codex:
   `TestCodexStackOperationalWaveFakeRuntimeV0` cierra una ola de tres tasks con
   runtime fake, `WaitAgentRefs`, review causal, runner de tests y cierre; el
