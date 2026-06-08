@@ -32,7 +32,11 @@ convertir Orquesta en una app clonica:
   `cmd/orquesta-server` inyecta una implementacion real de
   `ResidentDirectorPortV0` sobre el stack Codex en los commits `8944ca9f` y
   `f619e899`. Esto deja servidor, reentrada y cierre externo conectados; no
-  declara todavia smoke largo real.
+  declara por si solo proveedor real.
+- Smoke temporal supervisado del Director residente cerrado el 2026-06-08:
+  `docs/smoke_director_residente_temporal_2026-06-08.md` registra ejecucion con
+  servidor temporal, `codex-fake`, OPES desactivado, 19 ticks residentes y 20
+  acciones ejecutadas sin errores.
 - `SkillRefs` queda materializado como contrato Go neutral el 2026-06-08:
   viaja desde `WorkflowTaskV0`/`WorkProfileV0` y la resolucion de perfil hasta
   `RequestAgent`, `LaunchRuntimeAgent`, runtime launch, `AgentStartPacketV0` y
@@ -63,8 +67,10 @@ convertir Orquesta en una app clonica:
 - Primer alojamiento residente conectado el 2026-06-08 en `orquesta-server` por
   `ResidentDirectorPortV0`: opt-in explicito, anti-solape, coalescing, panic
   durable, status publico, self-watchdog consciente del Director y adaptador
-  real en `cmd/orquesta-server` sobre el stack Codex. Pendiente: smoke largo
-  real del residente con servidor temporal y evidencias durables.
+  real en `cmd/orquesta-server` sobre el stack Codex. Smoke temporal con
+  servidor real y `codex-fake` cerrado en
+  `docs/smoke_director_residente_temporal_2026-06-08.md`; pendiente: proveedor
+  real y OPES temporal real, cada uno con evidencia propia.
 - Resolver/materializar catalogo real de `SkillRefs` en composiciones, sin
   meter proveedores ni rutas locales en el nucleo. El transporte V0 por refs
   opacas ya existe.

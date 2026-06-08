@@ -219,8 +219,12 @@ Pendientes priorizados:
   desde `WorkflowTaskV0`/`WorkProfileV0` hasta `RequestAgent`,
   `LaunchRuntimeAgent`, runtime launch, `AgentStartPacketV0` y prompt Codex; no
   transporta rutas locales, proveedor, modelo, HOME, OAuth, token ni contenido
-  de skill dentro del nucleo. Queda pendiente separado: smoke largo real del
-  residente y activar consejo/votacion cuando haya varias opciones comparables.
+  de skill dentro del nucleo. El mismo dia queda documentado un smoke temporal
+  supervisado del residente en
+  `docs/smoke_director_residente_temporal_2026-06-08.md`: servidor temporal,
+  `codex-fake`, OPES desactivado, 19 ticks y 20 acciones sin errores. Queda
+  pendiente separado: proveedor real, OPES temporal real y activar
+  consejo/votacion cuando haya varias opciones comparables.
 - Completar el smoke OPES temporal real de derivados/cierre hasta
   `generate_html_site -> local_html_site`, sin tocar OPES productivo y
   reutilizando el owner existente T12/T18 donde aplique.
