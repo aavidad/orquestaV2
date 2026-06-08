@@ -59,6 +59,19 @@ Cobertura Go actual:
 - `TestCodexStackResidentBriefingSourceV0NoReutilizaStopMaxStepsInternoV0`
   evita que un `stop_max_steps` interno de un burst se convierta en parada
   terminal del residente.
+- `TestCodexStackResidentBriefingSourceV0EmiteConsejoConEstadoEstructuralV0`
+  valida que el residente solo propone `materialize_decision_council` cuando el
+  run tiene estado durable suficiente (`Brainstorms`, `Votes`) y contratos
+  publicados.
+- `TestCodexStackResidentBriefingSourceV0NoEmiteConsejoFueraDeFaseDeCreacionV0`
+  cubre que no se fuerza el consejo en fases donde `CreateMicrotask` no es
+  causalmente aplicable.
+- `TestCodexStackResidentCouncilHandlerV0MaterializaUnaVezConContratoPublicadoV0`
+  valida la materializacion idempotente de tareas `task-council-*` por puertos
+  del stack.
+- `TestCodexStackResidentCouncilHandlerV0NoMaterializaSinContratoFuncionalV0`
+  confirma que sin contrato funcional publicado el handler deja evidencia
+  pendiente y no inventa microtareas.
 - las refs publicas del paquete de agente son neutrales y no filtran el
   conector real;
 - el resolver de tareas de programacion conserva en el paquete de agente el

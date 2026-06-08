@@ -372,6 +372,17 @@ Contrato de composicion:
   excepto cuando ese briefing representa un corte interno de presupuesto
   (`stop_max_steps`/`stop_budget_exhausted`). Ese caso no es rail de contenido:
   el siguiente pulso vuelve a mirar stores/outbox vivos y continua o espera.
+- Si el run ya tiene `Brainstorms`, `Votes`, contratos funcionales publicados
+  y esta en una fase donde el core permite `CreateMicrotask`, la fuente puede
+  emitir la accion externa `materialize_decision_council`. El handler del stack
+  convierte esa accion en tareas `task-council-*` mediante
+  `DecisionCouncilPlanMaterializerV0`, usando solo `RunStore`, `EventSink` y
+  `DirectorTaskStore`. La deteccion es estructural por estado durable; no lee
+  prompts, logs ni palabras sueltas.
+- La materializacion del consejo es idempotente: si ya existen tareas
+  `task-council-*` en el run o en `DirectorTaskStore`, el handler responde como
+  aplicada y no duplica trabajo. Si faltan contratos funcionales publicados o
+  puertos requeridos, queda pendiente con evidencia compacta y no crea tareas.
 - El dispatch usa los `Dispatchers`/`BatchDispatchers` ya inyectados en el
   stack. Codex real sigue viviendo solo en el batch executor y el runtime
   configurado.

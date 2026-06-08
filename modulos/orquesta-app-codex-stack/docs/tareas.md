@@ -856,6 +856,9 @@ Trabajo aplicado:
   de `ContinueAppDirectorV0`;
 - ejecuta `RunResidentDirectorBriefingLoopV0` con una fuente reentrable basada
   en outbox vivo;
+- materializa consejos `DecisionCouncilPlanMaterializerV0` como accion externa
+  idempotente cuando el run trae estado durable, contratos publicados y fase
+  compatible con `CreateMicrotask`;
 - `cmd/orquesta-server` inyecta el puerto solo con opt-in del servidor.
 
 Validacion:
@@ -870,5 +873,8 @@ Reglas cerradas:
   en `ContinueAppDirectorV0`;
 - no convierte `stop_max_steps` interno en rechazo de trabajo: el siguiente
   pulso reevalua outbox/stores vivos y sigue o espera;
+- no dispara consejos por texto, logs ni `needs_director` generico: usa
+  `Brainstorms`, `Votes`, contratos funcionales y tareas `task-council-*`
+  persistidas;
 - no usa filtros de contenido para decidir si un agente vale: conserva el
   trabajo en stores/outbox y deja rework/cierre al Director.

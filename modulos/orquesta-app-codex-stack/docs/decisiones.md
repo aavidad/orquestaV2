@@ -1,6 +1,24 @@
 # Decisiones: orquesta-app-codex-stack
 
 ```text
+Fecha: 2026-06-08
+Decision: El Director residente del stack materializa consejos solo desde
+estado durable del run.
+Motivo: el consejo/votacion debe ayudar al Director, no convertirse en otro
+rail de contenido ni dispararse por `needs_director`, logs o palabras del
+agente. El core ya tiene `DecisionCouncilPlanMaterializerV0`; la composicion
+Codex solo debe invocarlo cuando existen refs causales suficientes.
+Impacto: `codexStackResidentBriefingSourceV0` puede emitir
+`materialize_decision_council` si el run activo tiene `Brainstorms`, `Votes`,
+contratos funcionales publicados y una fase que permite `CreateMicrotask`. El
+handler usa `RunStore`, `EventSink` y `DirectorTaskStore`, reutiliza contratos
+del run, crea tareas `task-council-*` de forma idempotente y deja pendiente con
+evidencia si faltan puertos o contratos. No analiza texto libre ni bloquea
+entregas por strings.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-15
 Decision: El paquete Codex distingue director global de worker de area.
 Motivo: la prueba real de "director total" demostro que el stack podia lanzar

@@ -2,6 +2,7 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -174,6 +175,152 @@ func TestCodexStackResidentBriefingSourceV0NoReutilizaStopMaxStepsInternoV0(t *t
 	}
 }
 
+func TestCodexStackResidentBriefingSourceV0EmiteConsejoConEstadoEstructuralV0(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	run := codexStackResidentCouncilRunForTestV0(
+		"run-resident-council-source-001",
+		orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0,
+		[]string{"contract:function:decision-council:v0"},
+	)
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	source := codexStackResidentBriefingSourceV0{
+		RunStore:     stack.Ports.RunStore,
+		TaskStore:    stack.Ports.DirectorTaskStore,
+		ObjectiveRef: "resident-director:" + run.RunID,
+		ContextRefs:  []string{"context-ref-codex-stack-resident-director"},
+	}
+
+	briefing, err := source.BuildResidentDirectorBriefingV0(
+		ctx,
+		orquestacionnucleoapp.ResidentDirectorBriefingBuildRequestV0{
+			RunRef:       run.RunID,
+			StepNumber:   1,
+			EvidenceRefs: []string{"evidence-ref-resident-council-source"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("BuildResidentDirectorBriefingV0: %v", err)
+	}
+	if briefing.NextAction == nil ||
+		briefing.NextAction.Kind != codexStackResidentActionKindMaterializeDecisionCouncilV0 ||
+		!briefing.NextAction.SafeToApply ||
+		briefing.NextAction.RequiresDirector {
+		t.Fatalf("briefing=%+v", briefing)
+	}
+}
+
+func TestCodexStackResidentBriefingSourceV0NoEmiteConsejoFueraDeFaseDeCreacionV0(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	run := codexStackResidentCouncilRunForTestV0(
+		"run-resident-council-source-phase-001",
+		orquestacoreworkflow.OrchestrationPhaseBrainstormingArquitecturaV0,
+		[]string{"contract:function:decision-council:v0"},
+	)
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	source := codexStackResidentBriefingSourceV0{
+		RunStore:  stack.Ports.RunStore,
+		TaskStore: stack.Ports.DirectorTaskStore,
+	}
+
+	briefing, err := source.BuildResidentDirectorBriefingV0(
+		ctx,
+		orquestacionnucleoapp.ResidentDirectorBriefingBuildRequestV0{
+			RunRef:     run.RunID,
+			StepNumber: 1,
+		},
+	)
+	if err != nil {
+		t.Fatalf("BuildResidentDirectorBriefingV0: %v", err)
+	}
+	if briefing.NextAction == nil ||
+		briefing.NextAction.Kind == codexStackResidentActionKindMaterializeDecisionCouncilV0 ||
+		briefing.NextAction.Kind != orquestadirectorsupervisor.DirectorSupervisorActionKindRunStepV0 {
+		t.Fatalf("briefing=%+v", briefing)
+	}
+}
+
+func TestCodexStackResidentCouncilHandlerV0MaterializaUnaVezConContratoPublicadoV0(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	run := codexStackResidentCouncilRunForTestV0(
+		"run-resident-council-handler-001",
+		orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0,
+		[]string{"contract:function:decision-council:v0"},
+	)
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	handler := codexStackResidentExternalActionHandlerV0{Ports: stack.Ports}
+	request := codexStackResidentCouncilExternalActionRequestForTestV0(run.RunID)
+
+	first, err := handler.ExecuteDirectorBriefingExternalActionV0(ctx, request)
+	if err != nil {
+		t.Fatalf("ExecuteDirectorBriefingExternalActionV0 first: %v", err)
+	}
+	if first.Status != orquestacionnucleoapp.DirectorBriefingExecutionStatusExternalAppliedV0 {
+		t.Fatalf("first=%+v", first)
+	}
+	afterFirst := codexStackResidentCouncilRunFromStoreForTestV0(t, ctx, stack, run.RunID)
+	firstTaskRefs := codexStackResidentCouncilTaskRefsFromRunForTestV0(afterFirst)
+	if len(firstTaskRefs) == 0 {
+		t.Fatalf("no se materializaron tareas de consejo: %+v", afterFirst.Tasks)
+	}
+	tasks, err := stack.Ports.DirectorTaskStore.LoadWorkflowTasksV0(ctx, run.RunID, firstTaskRefs)
+	if err != nil {
+		t.Fatalf("LoadWorkflowTasksV0: %v", err)
+	}
+	for _, task := range tasks {
+		if len(task.FunctionContractRefs) == 0 ||
+			task.FunctionContractRefs[0].ContractRef != "contract:function:decision-council:v0" {
+			t.Fatalf("task sin contrato esperado: %+v", task)
+		}
+	}
+
+	second, err := handler.ExecuteDirectorBriefingExternalActionV0(ctx, request)
+	if err != nil {
+		t.Fatalf("ExecuteDirectorBriefingExternalActionV0 second: %v", err)
+	}
+	afterSecond := codexStackResidentCouncilRunFromStoreForTestV0(t, ctx, stack, run.RunID)
+	secondTaskRefs := codexStackResidentCouncilTaskRefsFromRunForTestV0(afterSecond)
+	if second.Status != orquestacionnucleoapp.DirectorBriefingExecutionStatusExternalAppliedV0 ||
+		len(secondTaskRefs) != len(firstTaskRefs) {
+		t.Fatalf("second=%+v first_tasks=%v second_tasks=%v", second, firstTaskRefs, secondTaskRefs)
+	}
+}
+
+func TestCodexStackResidentCouncilHandlerV0NoMaterializaSinContratoFuncionalV0(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	run := codexStackResidentCouncilRunForTestV0(
+		"run-resident-council-handler-no-contract-001",
+		orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0,
+		nil,
+	)
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	handler := codexStackResidentExternalActionHandlerV0{Ports: stack.Ports}
+
+	result, err := handler.ExecuteDirectorBriefingExternalActionV0(
+		ctx,
+		codexStackResidentCouncilExternalActionRequestForTestV0(run.RunID),
+	)
+	if err != nil {
+		t.Fatalf("ExecuteDirectorBriefingExternalActionV0: %v", err)
+	}
+	latest := codexStackResidentCouncilRunFromStoreForTestV0(t, ctx, stack, run.RunID)
+	if result.Status != orquestacionnucleoapp.DirectorBriefingExecutionStatusExternalPendingV0 ||
+		len(codexStackResidentCouncilTaskRefsFromRunForTestV0(latest)) != 0 {
+		t.Fatalf("result=%+v run=%+v", result, latest)
+	}
+}
+
 func seedCodexStackResidentDirectorRunV0(
 	t *testing.T,
 	ctx context.Context,
@@ -258,4 +405,78 @@ func residentDirectorSupervisorRecommendationForTestV0(
 	default:
 		return orquestadirectorsupervisor.DirectorSupervisorAutonomousStopV0
 	}
+}
+
+func codexStackResidentCouncilRunForTestV0(
+	runRef string,
+	phaseID orquestacoreworkflow.OrchestrationPhaseIDV0,
+	functionContracts []string,
+) orquestacoreworkflow.OrchestrationRunV0 {
+	phases := orquestacoreworkflow.OrchestrationPhaseCatalogV0()
+	for index := range phases {
+		if phases[index].ID == phaseID {
+			phases[index].Status = orquestacoreworkflow.OrchestrationPhaseStatusActiveV0
+		}
+	}
+	return orquestacoreworkflow.OrchestrationRunV0{
+		SchemaVersion:     orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
+		RunID:             runRef,
+		ProjectRef:        "project-ref-resident-council",
+		AppSpecRef:        "app-spec-ref-resident-council",
+		Status:            orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+		CurrentPhase:      phaseID,
+		Phases:            phases,
+		Brainstorms:       []string{"brainstorm-ref-resident-council-" + runRef},
+		Votes:             []string{"vote-ref-resident-council-" + runRef},
+		FunctionContracts: append([]string(nil), functionContracts...),
+	}
+}
+
+func codexStackResidentCouncilExternalActionRequestForTestV0(
+	runRef string,
+) orquestacionnucleoapp.DirectorBriefingExternalActionRequestV0 {
+	return orquestacionnucleoapp.DirectorBriefingExternalActionRequestV0{
+		Briefing: orquestadirectorsupervisor.DirectorSupervisorBriefingV0{
+			SchemaVersion: orquestadirectorsupervisor.DirectorSupervisorBriefingSchemaV0,
+			RunRef:        runRef,
+		},
+		Action: orquestadirectorsupervisor.DirectorSupervisorRecommendedActionV0{
+			ActionRef:        "director-action-" + runRef + "-materialize-council",
+			Kind:             codexStackResidentActionKindMaterializeDecisionCouncilV0,
+			RunRef:           runRef,
+			ReasonCode:       codexStackResidentCouncilReasonV0,
+			SafeToApply:      true,
+			RequiresDirector: false,
+			SourceAction:     orquestadirectorsupervisor.DirectorSupervisorActionContinueV0,
+		},
+		OccurredAt:    "2026-06-08T12:00:00Z",
+		CorrelationID: "corr-" + runRef,
+		EvidenceRefs:  []string{"evidence-ref-" + runRef + "-test"},
+	}
+}
+
+func codexStackResidentCouncilRunFromStoreForTestV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	runRef string,
+) orquestacoreworkflow.OrchestrationRunV0 {
+	t.Helper()
+	run, err := stack.Ports.RunStore.LoadRunV0(ctx, runRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	return run
+}
+
+func codexStackResidentCouncilTaskRefsFromRunForTestV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) []string {
+	refs := []string{}
+	for _, taskRef := range run.Tasks {
+		if strings.HasPrefix(taskRef, codexStackResidentCouncilTaskPrefixV0) {
+			refs = append(refs, taskRef)
+		}
+	}
+	return refs
 }
