@@ -21,6 +21,10 @@ func TestBuildSchedulableWorkCandidateV0DesdeScopes(t *testing.T) {
 	if candidate.AgentCandidate.Payload.AgentRequestID != "agent-candidates-001" {
 		t.Fatalf("agent_request_id = %q", candidate.AgentCandidate.Payload.AgentRequestID)
 	}
+	if len(candidate.AgentCandidate.Payload.SkillRefs) != 1 ||
+		candidate.AgentCandidate.Payload.SkillRefs[0] != "skill-ref-orquesta-programacion-autonoma-v0" {
+		t.Fatalf("skill_refs = %+v", candidate.AgentCandidate.Payload.SkillRefs)
+	}
 	if got := candidate.Claims[0].WriteSet[0].Ref; got != "modulos/demo/main.go" {
 		t.Fatalf("write scope = %q", got)
 	}

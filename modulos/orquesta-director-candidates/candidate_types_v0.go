@@ -48,6 +48,7 @@ type WorkCandidateAgentInputV0 struct {
 	Role           string   `json:"role"`
 	Summary        string   `json:"summary"`
 	EvidenceRefs   []string `json:"evidence_refs,omitempty"`
+	SkillRefs      []string `json:"skill_refs,omitempty"`
 }
 
 type WorkCandidateScopeClaimV0 struct {

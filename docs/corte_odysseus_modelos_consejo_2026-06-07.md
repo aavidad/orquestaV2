@@ -33,6 +33,11 @@ convertir Orquesta en una app clonica:
   `ResidentDirectorPortV0` sobre el stack Codex en los commits `8944ca9f` y
   `f619e899`. Esto deja servidor, reentrada y cierre externo conectados; no
   declara todavia smoke largo real.
+- `SkillRefs` queda materializado como contrato Go neutral el 2026-06-08:
+  viaja desde `WorkflowTaskV0`/`WorkProfileV0` y la resolucion de perfil hasta
+  `RequestAgent`, `LaunchRuntimeAgent`, runtime launch, `AgentStartPacketV0` y
+  prompt Codex. Son solo refs opacas; la resolucion de rutas o material real de
+  skill pertenece a composiciones/adaptadores.
 
 ## Fronteras
 
@@ -60,8 +65,9 @@ convertir Orquesta en una app clonica:
   durable, status publico, self-watchdog consciente del Director y adaptador
   real en `cmd/orquesta-server` sobre el stack Codex. Pendiente: smoke largo
   real del residente con servidor temporal y evidencias durables.
-- Materializar `SkillRefs` como contrato Go neutral y transportar esas refs de
-  perfil/tarea hasta runtime/packet/prompt sin meter proveedores en el nucleo.
+- Resolver/materializar catalogo real de `SkillRefs` en composiciones, sin
+  meter proveedores ni rutas locales en el nucleo. El transporte V0 por refs
+  opacas ya existe.
 - Activar consejo/votacion en el ciclo residente cuando existan varias opciones
   comparables: lanzar rondas, esperar por cohorte/ola, recoger votos/evidencias
   y dejar que el Director acepte, pida rework o replantee. La skill existe; el

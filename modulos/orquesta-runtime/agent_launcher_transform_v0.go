@@ -35,9 +35,10 @@ func LaunchRuntimeAgentToRuntimeLaunchRequestV0(
 		Locale:     runtimeLaunchLocaleV0(options.Locale),
 		LaunchMode: RuntimeLaunchModeNewSessionV0,
 		Task: &RuntimeLaunchTaskV0{
-			TaskRef:  strings.TrimSpace(payload.TaskRef),
-			PhaseRef: strings.TrimSpace(payload.PhaseID),
-			Priority: "normal",
+			TaskRef:   strings.TrimSpace(payload.TaskRef),
+			PhaseRef:  strings.TrimSpace(payload.PhaseID),
+			Priority:  "normal",
+			SkillRefs: append([]string(nil), payload.SkillRefs...),
 		},
 		FunctionContract: cloneRuntimeFunctionContractV0(resolved.FunctionContract),
 		CapacityDecision: cloneRuntimeCapacityDecisionV0(resolved.CapacityDecision),

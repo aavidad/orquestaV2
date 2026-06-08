@@ -44,5 +44,6 @@ func normalizeAgentV0(agent WorkCandidateAgentInputV0) WorkCandidateAgentInputV0
 	agent.Role = strings.TrimSpace(agent.Role)
 	agent.Summary = strings.TrimSpace(agent.Summary)
 	agent.EvidenceRefs = normalizeRefsV0(agent.EvidenceRefs)
+	agent.SkillRefs = normalizeRefsV0(agent.SkillRefs)
 	return agent
 }

@@ -126,6 +126,7 @@ func BuildCodexAgentPromptWithControlFilesV0(
 	b.WriteString("\n")
 	writePromptListSectionV0(&b, "Write-set permitido:", packet.Task.WriteSet)
 	writePromptListSectionV0(&b, "Tests obligatorios:", packet.Task.RequiredTests)
+	writePromptListSectionV0(&b, "SkillRefs solicitadas:", packet.Task.SkillRefs)
 	if len(hints) > 0 {
 		b.WriteString("\nNotas operativas del conector:\n")
 		for _, hint := range hints {

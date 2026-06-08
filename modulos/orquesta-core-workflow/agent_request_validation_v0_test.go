@@ -140,6 +140,30 @@ func TestRequestAgentCommandV0RejectsSensitiveDetails(t *testing.T) {
 	}
 }
 
+func TestRequestAgentCommandV0RejectsInvalidSkillRefs(t *testing.T) {
+	for name, refs := range map[string][]string{
+		"with_space":          {"skill ref invalid"},
+		"with_path_separator": {"skills/orquesta-programacion-autonoma"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			payload := validRequestAgentPayloadV0("agent-request-invalid-skill")
+			payload.SkillRefs = refs
+
+			_, err := NewRequestAgentCommandV0(
+				validCommandMetaV0("cmd-agent-invalid-skill-"+name, "idem-agent-invalid-skill-"+name),
+				payload,
+			)
+			var publicErr OrchestrationCommandErrorV0
+			if !errors.As(err, &publicErr) {
+				t.Fatalf("expected command error, got %T %v", err, err)
+			}
+			if publicErr.Code != ErrPayloadInvalidoV0 || publicErr.Field != "payload.skill_refs" {
+				t.Fatalf("error=%+v, want payload.skill_refs", publicErr)
+			}
+		})
+	}
+}
+
 func TestReplayDurableEventsV0RejectsForbiddenAgentRequested(t *testing.T) {
 	event := mustAgentRequestedEventWithKeyV0(t, "evt-agent-forbidden", 2, "idem-agent-forbidden", "agent-request-forbidden")
 	event.Payload = json.RawMessage(`{"agent_request_id":"agent-request-forbidden","phase_id":"programacion","capacity_request_ref":"capacity-request-010","role":"implementacion","summary":"client_secret=abc123"}`)

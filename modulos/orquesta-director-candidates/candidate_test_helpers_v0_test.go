@@ -41,6 +41,7 @@ func validCandidateInputV0() SchedulableWorkCandidateInputV0 {
 			Role:           "implementacion",
 			Summary:        "Agente explicito para trabajo listo.",
 			EvidenceRefs:   []string{"evidence-agent-001"},
+			SkillRefs:      []string{"skill-ref-orquesta-programacion-autonoma-v0"},
 		},
 		GateEvidenceRefs: []string{"evidence-gate-001"},
 		EvidenceRefs:     []string{"evidence-candidate-001"},

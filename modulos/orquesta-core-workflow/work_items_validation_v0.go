@@ -56,6 +56,9 @@ func validateWorkflowTaskCollectionsV0(task WorkflowTaskV0) error {
 	if err := validateWorkflowTaskContextRefsV0(task.ContextRefs); err != nil {
 		return err
 	}
+	if err := validateWorkflowTaskSkillRefsV0(task.SkillRefs); err != nil {
+		return err
+	}
 	if err := validateWorkflowTaskLineageV0(task); err != nil {
 		return err
 	}
@@ -111,6 +114,19 @@ func validateWorkflowTaskContextRefsV0(refs []string) error {
 		ref = strings.TrimSpace(ref)
 		if ref == "" || !workflowTaskContextRefIsCompactV0(ref) {
 			return workflowTaskErrorV0(ErrWorkflowTaskInvalidaV0, "context_refs")
+		}
+	}
+	return nil
+}
+
+func validateWorkflowTaskSkillRefsV0(refs []string) error {
+	if len(refs) > maxWorkflowTaskCollectionV0 {
+		return workflowTaskErrorV0(ErrWorkflowTaskInvalidaV0, "skill_refs")
+	}
+	for _, ref := range refs {
+		ref = strings.TrimSpace(ref)
+		if ref == "" || !workflowTaskContextRefIsCompactV0(ref) {
+			return workflowTaskErrorV0(ErrWorkflowTaskInvalidaV0, "skill_refs")
 		}
 	}
 	return nil
@@ -173,6 +189,7 @@ func workflowTaskTextFieldsV0(task WorkflowTaskV0) map[string][]string {
 		"acceptance_criteria":    task.AcceptanceCriteria,
 		"depends_on":             task.DependsOn,
 		"context_refs":           task.ContextRefs,
+		"skill_refs":             task.SkillRefs,
 		"parent_task_ref":        []string{task.ParentTaskRef},
 		"cohort_ref":             []string{task.CohortRef},
 		"wave_ref":               []string{task.WaveRef},

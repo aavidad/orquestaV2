@@ -29,6 +29,7 @@ func TestProgrammingTaskV0PropagaRequiredTestsYContratoGoCompleto(t *testing.T) 
 		MaxChildAgents:       6,
 		MaxSubagentsPerAgent: 6,
 		ChildTaskRefs:        []string{"task-ref-child-002"},
+		SkillRefs:            []string{"skill-ref-orquesta-programacion-autonoma-v0"},
 		RequiredTests:        []string{"go test ./..."},
 		FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
 			ContractRef:  "contract:function:agenda-api:v0",
@@ -43,6 +44,10 @@ func TestProgrammingTaskV0PropagaRequiredTestsYContratoGoCompleto(t *testing.T) 
 		RunID:   task.RunID,
 		PhaseID: string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
 		TaskRef: task.TaskID,
+		SkillRefs: []string{
+			"skill-ref-orquesta-programacion-integracion-v0",
+			"skill-ref-orquesta-programacion-autonoma-v0",
+		},
 	}, "programacion")
 	if err != nil {
 		t.Fatalf("agentTaskV0: %v", err)
@@ -58,6 +63,14 @@ func TestProgrammingTaskV0PropagaRequiredTestsYContratoGoCompleto(t *testing.T) 
 		len(got.ChildTaskRefs) != 1 ||
 		got.ChildTaskRefs[0] != "task-ref-child-002" {
 		t.Fatalf("linaje no propagado: %+v", got)
+	}
+	for _, want := range []string{
+		"skill-ref-orquesta-programacion-integracion-v0",
+		"skill-ref-orquesta-programacion-autonoma-v0",
+	} {
+		if !stringInSetV0(got.SkillRefs, want) {
+			t.Fatalf("skill_refs no propagadas: %+v", got.SkillRefs)
+		}
 	}
 	for _, want := range []string{
 		"contrato de esta tarea completa",

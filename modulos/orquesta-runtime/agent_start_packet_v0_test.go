@@ -29,6 +29,24 @@ func TestBuildAgentStartPacketV0GeneraPaqueteNeutral(t *testing.T) {
 	assertAgentStartPacketNoOperationalDetailsV0(t, packet)
 }
 
+func TestBuildAgentStartPacketV0PropagaSkillRefs(t *testing.T) {
+	request := runtimeLaunchRequestValidaV0()
+	request.Task.SkillRefs = []string{"skill-ref-orquesta-programacion-v0", "skill-ref-orquesta-revision-v0"}
+	materialized := runtimeMaterializedContextValidoV0(t, *request.ContextBundle)
+
+	packet := BuildAgentStartPacketV0(request, materialized)
+
+	if !packet.Valid() {
+		t.Fatalf("packet invalid: %+v", packet.Issues)
+	}
+	if len(packet.Task.SkillRefs) != 2 ||
+		packet.Task.SkillRefs[0] != "skill-ref-orquesta-programacion-v0" ||
+		packet.Task.SkillRefs[1] != "skill-ref-orquesta-revision-v0" {
+		t.Fatalf("skill_refs perdidas en packet: %+v", packet.Task.SkillRefs)
+	}
+	assertAgentStartPacketNoOperationalDetailsV0(t, packet)
+}
+
 func TestAgentStartTaskV0ConservaLinajeRecursivoEnJSON(t *testing.T) {
 	packet := AgentStartPacketV0{
 		SchemaVersion: AgentStartPacketSchemaVersionV0,

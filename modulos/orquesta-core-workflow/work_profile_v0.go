@@ -35,6 +35,7 @@ type WorkProfileV0 struct {
 	AcceptanceCriteria   []string                        `json:"acceptance_criteria,omitempty"`
 	RequiredTests        []string                        `json:"required_tests,omitempty"`
 	DependsOn            []string                        `json:"depends_on,omitempty"`
+	SkillRefs            []string                        `json:"skill_refs,omitempty"`
 	ParentTaskRef        string                          `json:"parent_task_ref,omitempty"`
 	CohortRef            string                          `json:"cohort_ref,omitempty"`
 	WaveRef              string                          `json:"wave_ref,omitempty"`
@@ -93,6 +94,7 @@ func NormalizeWorkProfileV0(profile WorkProfileV0) WorkProfileV0 {
 		AcceptanceCriteria:   compactStringsV0(profile.AcceptanceCriteria),
 		RequiredTests:        compactStringsV0(profile.RequiredTests),
 		DependsOn:            compactStringsV0(profile.DependsOn),
+		SkillRefs:            compactUniqueStringsV0(profile.SkillRefs),
 		ParentTaskRef:        strings.TrimSpace(profile.ParentTaskRef),
 		CohortRef:            strings.TrimSpace(profile.CohortRef),
 		WaveRef:              strings.TrimSpace(profile.WaveRef),

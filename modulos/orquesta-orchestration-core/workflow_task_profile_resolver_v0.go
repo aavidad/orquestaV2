@@ -29,6 +29,7 @@ type WorkflowTaskProfileResolutionV0 struct {
 	AgentSummary               string
 	MinimumRecommendedCapacity orquestacoreworkflow.OrchestrationCapacityRecommendationV0
 	EvidenceRefs               []string
+	SkillRefs                  []string
 }
 
 type DefaultWorkflowTaskProfileResolverV0 struct{}
@@ -71,6 +72,10 @@ func normalizeWorkflowTaskProfileResolutionV0(
 		resolution.MinimumRecommendedCapacity = defaults.MinimumRecommendedCapacity
 	}
 	resolution.EvidenceRefs = compactStringsV0(resolution.EvidenceRefs)
+	resolution.SkillRefs = compactStringsV0(append(
+		append([]string(nil), defaults.SkillRefs...),
+		append(resolution.SkillRefs, request.Task.SkillRefs...)...,
+	))
 	return resolution, nil
 }
 
@@ -109,6 +114,7 @@ func workflowTaskProfileResolutionForKindV0(
 		CapacitySummary:            workflowTaskProfileCapacitySummaryV0(kind),
 		AgentSummary:               workflowTaskProfileAgentSummaryV0(kind),
 		MinimumRecommendedCapacity: capacity,
+		SkillRefs:                  workflowTaskProfileSkillRefsV0(kind),
 	}
 }
 
@@ -132,6 +138,29 @@ func workflowTaskCouncilProfileResolutionV0(
 		AgentSummary:               "Ronda de consejo lista.",
 		MinimumRecommendedCapacity: capacity,
 		EvidenceRefs:               []string{decisionCouncilRoleContextRefV0(role)},
+		SkillRefs:                  []string{"skill-ref-orquesta-revision-consejo-votacion-v0"},
+	}
+}
+
+func workflowTaskProfileSkillRefsV0(kind orquestacoreworkflow.WorkProfileKindV0) []string {
+	switch kind {
+	case orquestacoreworkflow.WorkProfileCodeStudyV0:
+		return []string{"skill-ref-orquesta-ordenacion-trabajo-v0"}
+	case orquestacoreworkflow.WorkProfileRefactorV0:
+		return []string{"skill-ref-orquesta-programacion-integracion-v0"}
+	case orquestacoreworkflow.WorkProfileRequiredTestsV0:
+		return []string{"skill-ref-orquesta-programacion-tests-v0"}
+	case orquestacoreworkflow.WorkProfileDocumentationV0:
+		return []string{"skill-ref-orquesta-artefacto-modular-v0"}
+	case orquestacoreworkflow.WorkProfileReviewV0:
+		return []string{"skill-ref-orquesta-programacion-revision-v0"}
+	case orquestacoreworkflow.WorkProfileDomainWorkV0:
+		return []string{"skill-ref-orquesta-ordenacion-trabajo-v0"}
+	default:
+		return []string{
+			"skill-ref-orquesta-programacion-autonoma-v0",
+			"skill-ref-orquesta-programacion-integracion-v0",
+		}
 	}
 }
 

@@ -157,6 +157,9 @@ func TestWorkflowTaskCandidateProviderV0UsesWorkProfileKindForRoleAndCapacity(t 
 	if candidate.CapacityCandidate.Payload.ReasonCode != "work_profile_review" {
 		t.Fatalf("reason=%s", candidate.CapacityCandidate.Payload.ReasonCode)
 	}
+	if !stringInSetV0("skill-ref-orquesta-programacion-revision-v0", candidate.AgentCandidate.Payload.SkillRefs) {
+		t.Fatalf("skill_refs=%v", candidate.AgentCandidate.Payload.SkillRefs)
+	}
 }
 
 func TestWorkflowTaskCandidateProviderV0UsesInjectedProfileResolver(t *testing.T) {
@@ -178,6 +181,7 @@ func TestWorkflowTaskCandidateProviderV0UsesInjectedProfileResolver(t *testing.T
 				AgentSummary:               "Refactor acotado listo.",
 				MinimumRecommendedCapacity: orquestacoreworkflow.OrchestrationCapacityXHighV0,
 				EvidenceRefs:               []string{profileEvidenceRef},
+				SkillRefs:                  []string{"skill-ref-orquesta-programacion-integracion-v0"},
 			},
 		},
 	}).BuildSchedulerCandidatesV0(context.Background(), SchedulerCandidateRequestV0{
@@ -193,8 +197,40 @@ func TestWorkflowTaskCandidateProviderV0UsesInjectedProfileResolver(t *testing.T
 	candidate := candidates.WorkCandidates[0]
 	if candidate.AgentCandidate.Payload.Role != "refactor" ||
 		candidate.CapacityCandidate.Payload.MinimumRecommendedCapacity != orquestacoreworkflow.OrchestrationCapacityXHighV0 ||
-		!stringInSetV0(profileEvidenceRef, candidate.EvidenceRefs) {
+		!stringInSetV0(profileEvidenceRef, candidate.EvidenceRefs) ||
+		!stringInSetV0("skill-ref-orquesta-programacion-integracion-v0", candidate.AgentCandidate.Payload.SkillRefs) {
 		t.Fatalf("candidate=%+v", candidate)
+	}
+}
+
+func TestWorkflowTaskCandidateProviderV0AddsTaskSkillRefsToProfileDefaults(t *testing.T) {
+	runRef := "run-nucleo-workflow-task-skill-refs-001"
+	task := workflowTaskForCandidateProviderTestV0(runRef, "task-workitem-skill-refs", []string{"app/skills.go"})
+	task.SkillRefs = []string{"skill-ref-orquesta-director-agentes-v0"}
+	run := mustActiveProgrammingRunV0(t, runRef)
+	run.Tasks = []string{task.TaskID}
+
+	candidates, err := (WorkflowTaskCandidateProviderV0{
+		TaskStore: NewInMemoryWorkflowTaskStoreV0(task),
+	}).BuildSchedulerCandidatesV0(context.Background(), SchedulerCandidateRequestV0{
+		Run:        run,
+		OccurredAt: "2026-06-08T12:00:00Z",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	if len(candidates.WorkCandidates) != 1 {
+		t.Fatalf("work candidates=%+v", candidates.WorkCandidates)
+	}
+	refs := candidates.WorkCandidates[0].AgentCandidate.Payload.SkillRefs
+	for _, want := range []string{
+		"skill-ref-orquesta-programacion-autonoma-v0",
+		"skill-ref-orquesta-programacion-integracion-v0",
+		"skill-ref-orquesta-director-agentes-v0",
+	} {
+		if !stringInSetV0(want, refs) {
+			t.Fatalf("skill_refs=%v missing %s", refs, want)
+		}
 	}
 }
 

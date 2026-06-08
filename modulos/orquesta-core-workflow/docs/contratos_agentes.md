@@ -427,11 +427,13 @@ Campos:
   - role
   - summary
   - evidence_refs opcional
+  - skill_refs opcional, solo refs opacas de skills solicitadas
 Invariantes:
   - Se entrega como `LaunchRuntimeAgent` con target `agent_launcher`.
   - Es una solicitud logica de lanzamiento, no una decision de runtime.
   - Solo se emite despues de una `CapacityDecided` durable para `capacity_request_ref`.
   - `ValidateOutboxMessageV0` valida sus campos obligatorios y `run_id`.
+  - `skill_refs` no contiene rutas, proveedor, modelo, HOME, OAuth, token ni contenido de skill.
   - No incluye valores reales de proveedor, modelo, cuenta, HOME, OAuth, runtime ni adaptador.
-Estado: implementado local en NCW-011 y endurecido en NCW-039.
+Estado: implementado local en NCW-011, endurecido en NCW-039 y extendido con `skill_refs` el 2026-06-08.
 ```

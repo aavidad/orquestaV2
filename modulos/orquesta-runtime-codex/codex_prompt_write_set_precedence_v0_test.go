@@ -47,3 +47,30 @@ func TestBuildCodexAgentPromptV0NombraCompatibilidadLegacySinPolicy(t *testing.T
 		t.Fatalf("prompt legacy mezclo precedencia estricta:\n%s", prompt)
 	}
 }
+
+func TestBuildCodexAgentPromptV0MuestraSkillRefsSolicitadas(t *testing.T) {
+	packet := codexPacketForTestV0()
+	packet.Task.SkillRefs = []string{
+		"skill-ref-orquesta-programacion-v0",
+		"skill-ref-orquesta-programacion-v0",
+		"skill-ref-orquesta-revision-v0",
+	}
+
+	prompt := BuildCodexAgentPromptV0(packet, nil)
+
+	for _, want := range []string{
+		"SkillRefs solicitadas:",
+		"- skill-ref-orquesta-programacion-v0",
+		"- skill-ref-orquesta-revision-v0",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("prompt no contiene %q:\n%s", want, prompt)
+		}
+	}
+	if strings.Count(prompt, "- skill-ref-orquesta-programacion-v0") != 1 {
+		t.Fatalf("prompt no compacta skill_refs duplicadas:\n%s", prompt)
+	}
+	if strings.Contains(prompt, "SKILL.md") || strings.Contains(prompt, "skills/") {
+		t.Fatalf("prompt no debe resolver skill_refs a rutas:\n%s", prompt)
+	}
+}

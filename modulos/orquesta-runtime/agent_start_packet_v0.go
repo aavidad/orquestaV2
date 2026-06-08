@@ -71,6 +71,7 @@ func agentStartTaskFromLaunchV0(request RuntimeLaunchRequestV0) AgentStartTaskV0
 		WriteSet:      append([]string(nil), request.FunctionContract.WriteSet...),
 		RequiredTests: append([]string(nil), request.FunctionContract.TestsObligatorios...),
 		DoneCriteria:  append([]string(nil), request.FunctionContract.CriterioCierre...),
+		SkillRefs:     append([]string(nil), request.Task.SkillRefs...),
 	}
 }
 
@@ -161,6 +162,7 @@ func agentStartPacketHasForbiddenOperationalDetailV0(packet AgentStartPacketV0) 
 	values = append(values, packet.Task.WriteSet...)
 	values = append(values, packet.Task.RequiredTests...)
 	values = append(values, packet.Task.DoneCriteria...)
+	values = append(values, packet.Task.SkillRefs...)
 	values = append(values, packet.Task.ChildTaskRefs...)
 	values = append(values, packet.Policies...)
 	for _, entry := range packet.Context.Entries {

@@ -214,12 +214,13 @@ Pendientes priorizados:
   `RunResidentDirectorBriefingLoopV0` con fuente reentrable desde stores vivos y
   cierre externo delegado al app-director-service. Procesa lotes por
   `MaxRunsPerTick`/`MaxExecutions` y no convierte `stop_max_steps` interno en
-  rail de contenido. Evidencia de commit: `8944ca9f` y `f619e899`. Queda
-  pendiente separado: smoke largo real del residente, activar consejo/votacion
-  cuando haya varias opciones y materializar `SkillRefs` como contrato neutral
-  por refs opacas desde perfil/tarea hasta runtime/packet/prompt. `SkillRefs`
-  no debe transportar rutas locales, proveedor, modelo, HOME, OAuth, token ni
-  contenido de skill dentro del nucleo.
+  rail de contenido. Evidencia de commit: `8944ca9f` y `f619e899`. El corte
+  2026-06-08 materializa `SkillRefs` como contrato neutral por refs opacas
+  desde `WorkflowTaskV0`/`WorkProfileV0` hasta `RequestAgent`,
+  `LaunchRuntimeAgent`, runtime launch, `AgentStartPacketV0` y prompt Codex; no
+  transporta rutas locales, proveedor, modelo, HOME, OAuth, token ni contenido
+  de skill dentro del nucleo. Queda pendiente separado: smoke largo real del
+  residente y activar consejo/votacion cuando haya varias opciones comparables.
 - Completar el smoke OPES temporal real de derivados/cierre hasta
   `generate_html_site -> local_html_site`, sin tocar OPES productivo y
   reutilizando el owner existente T12/T18 donde aplique.

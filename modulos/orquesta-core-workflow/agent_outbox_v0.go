@@ -14,6 +14,7 @@ type LaunchRuntimeAgentRequestV0 struct {
 	Role               string   `json:"role"`
 	Summary            string   `json:"summary"`
 	EvidenceRefs       []string `json:"evidence_refs,omitempty"`
+	SkillRefs          []string `json:"skill_refs,omitempty"`
 }
 
 func newLaunchRuntimeAgentOutboxV0(command OrchestrationCommandV0, event OrchestrationEventV0, payload RequestAgentCommandPayloadV0) (OutboxMessageV0, error) {
@@ -26,6 +27,7 @@ func newLaunchRuntimeAgentOutboxV0(command OrchestrationCommandV0, event Orchest
 		Role:               payload.Role,
 		Summary:            payload.Summary,
 		EvidenceRefs:       cloneStringsV0(payload.EvidenceRefs),
+		SkillRefs:          cloneStringsV0(payload.SkillRefs),
 	}
 	payloadJSON, err := json.Marshal(outboxPayload)
 	if err != nil {
@@ -70,6 +72,7 @@ func normalizeLaunchRuntimeAgentPayloadV0(payload LaunchRuntimeAgentRequestV0) L
 		Role:               strings.TrimSpace(payload.Role),
 		Summary:            strings.TrimSpace(payload.Summary),
 		EvidenceRefs:       compactStringsV0(payload.EvidenceRefs),
+		SkillRefs:          compactUniqueStringsV0(payload.SkillRefs),
 	}
 }
 
@@ -98,6 +101,9 @@ func validateLaunchRuntimeAgentPayloadDataV0(payload LaunchRuntimeAgentRequestV0
 	if agentRequestStringsInvalidV0(payload.EvidenceRefs) {
 		return outboxErrorV0(ErrOutboxPayloadInvalidoV0, "payload.evidence_refs")
 	}
+	if agentSkillRefsInvalidV0(payload.SkillRefs) {
+		return outboxErrorV0(ErrOutboxPayloadInvalidoV0, "payload.skill_refs")
+	}
 	if agentRequestHasForbiddenDetailsV0(launchRuntimeAgentTextFieldsV0(payload)) {
 		return outboxErrorV0(ErrOutboxDetalleProhibidoV0, "payload")
 	}
@@ -117,5 +123,6 @@ func validateLaunchRuntimeAgentPayloadSizeV0(payload LaunchRuntimeAgentRequestV0
 
 func launchRuntimeAgentTextFieldsV0(payload LaunchRuntimeAgentRequestV0) []string {
 	values := []string{payload.AgentRequestID, payload.RunID, payload.PhaseID, payload.TaskRef, payload.CapacityRequestRef, payload.Role, payload.Summary}
-	return append(values, payload.EvidenceRefs...)
+	values = append(values, payload.EvidenceRefs...)
+	return append(values, payload.SkillRefs...)
 }

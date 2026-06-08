@@ -71,6 +71,7 @@ func buildAgentCandidateV0(
 			Role:               input.Agent.Role,
 			Summary:            input.Agent.Summary,
 			EvidenceRefs:       input.Agent.EvidenceRefs,
+			SkillRefs:          input.Agent.SkillRefs,
 		},
 	}
 }

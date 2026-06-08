@@ -87,10 +87,10 @@ Esto implica:
 - los perfiles de trabajo (`code_study`, `implementation`, `refactor`,
   `required_tests`, `documentation`, `review`, `domain_work`) son neutrales y se
   transportan como `WorkProfileV0`/`WorkflowTaskV0.work_profile_kind`;
-- las skills operativas deben viajar, cuando se implemente el siguiente corte,
-  como `SkillRefs` neutrales y opacas derivadas por perfil/tarea/composicion.
-  No deben meter proveedor, modelo, rutas locales, HOME, OAuth, token ni
-  contenido completo de la skill dentro del core;
+- las skills operativas viajan desde el corte 2026-06-08 como `SkillRefs`
+  neutrales y opacas derivadas por perfil/tarea/composicion hasta runtime,
+  packet y prompt. No meten proveedor, modelo, rutas locales, HOME, OAuth,
+  token ni contenido completo de la skill dentro del core;
 - ninguna app externa debe copiar internals, compartir DB/filesystem interno ni
   decidir plan, runtime, modelo o paralelismo sin director de Orquesta.
 - la espina `DirectorCycleStepV0 -> director-runner -> director-scheduler ->

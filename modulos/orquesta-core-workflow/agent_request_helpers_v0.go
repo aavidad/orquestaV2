@@ -11,6 +11,7 @@ func normalizeRequestAgentPayloadV0(payload RequestAgentCommandPayloadV0) Reques
 		Role:               strings.TrimSpace(payload.Role),
 		Summary:            strings.TrimSpace(payload.Summary),
 		EvidenceRefs:       compactStringsV0(payload.EvidenceRefs),
+		SkillRefs:          compactUniqueStringsV0(payload.SkillRefs),
 	}
 }
 
@@ -21,5 +22,6 @@ func normalizeAgentRequestedPayloadV0(payload AgentRequestedPayloadV0) AgentRequ
 
 func agentRequestTextFieldsV0(payload RequestAgentCommandPayloadV0) []string {
 	values := []string{payload.AgentRequestID, payload.PhaseID, payload.TaskRef, payload.CapacityRequestRef, payload.Role, payload.Summary}
-	return append(values, payload.EvidenceRefs...)
+	values = append(values, payload.EvidenceRefs...)
+	return append(values, payload.SkillRefs...)
 }

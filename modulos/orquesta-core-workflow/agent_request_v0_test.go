@@ -38,6 +38,44 @@ func TestHandleRequestAgentCommandV0ReturnsEventAndOutbox(t *testing.T) {
 	}
 }
 
+func TestHandleRequestAgentCommandV0PropagatesSkillRefs(t *testing.T) {
+	run := mustRunWithCapacityDecisionV0(t, defaultAgentCapacityRequestIDV0)
+	payload := validRequestAgentPayloadV0("agent-request-skills")
+	payload.SkillRefs = []string{
+		" skill-ref-orquesta-programacion-autonoma-v0 ",
+		"skill-ref-orquesta-programacion-revision-v0",
+		"skill-ref-orquesta-programacion-autonoma-v0",
+	}
+	command, err := NewRequestAgentCommandV0(
+		validCommandMetaV0("cmd-agent-skills", "idem-agent-skills"),
+		payload,
+	)
+	command = mustCommandV0(t, command, err)
+
+	result, err := HandleCommandV0(run, command)
+	if err != nil {
+		t.Fatalf("handle RequestAgent with skill refs: %v", err)
+	}
+	var eventPayload AgentRequestedPayloadV0
+	if err := json.Unmarshal(result.Events[0].Payload, &eventPayload); err != nil {
+		t.Fatalf("decode event payload: %v", err)
+	}
+	want := []string{
+		"skill-ref-orquesta-programacion-autonoma-v0",
+		"skill-ref-orquesta-programacion-revision-v0",
+	}
+	if !reflect.DeepEqual(eventPayload.SkillRefs, want) {
+		t.Fatalf("event skill_refs=%v want %v", eventPayload.SkillRefs, want)
+	}
+	var outboxPayload LaunchRuntimeAgentRequestV0
+	if err := json.Unmarshal(result.Outbox[0].Payload, &outboxPayload); err != nil {
+		t.Fatalf("decode outbox payload: %v", err)
+	}
+	if !reflect.DeepEqual(outboxPayload.SkillRefs, want) {
+		t.Fatalf("outbox skill_refs=%v want %v", outboxPayload.SkillRefs, want)
+	}
+}
+
 func TestApplyAgentRequestedV0ProjectsRefOnce(t *testing.T) {
 	run := mustReducerRunWithCapacityDecisionV0(t, defaultAgentCapacityRequestIDV0)
 	event := mustAgentRequestedEventV0(t, "evt-agent-reducer-001", run.LastSequence+1, "agent-request-001")

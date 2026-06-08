@@ -8,6 +8,7 @@ import (
 func TestLaunchRuntimeAgentToRuntimeLaunchRequestV0ConstruyeRequestValida(t *testing.T) {
 	base := runtimeLaunchRequestValidaV0()
 	inbound := agentLauncherInboundValidoV0()
+	inbound.Payload.SkillRefs = []string{"skill-ref-orquesta-runtime-v0"}
 	resolved := AgentLauncherResolvedDependenciesV0{
 		FunctionContract: base.FunctionContract,
 		CapacityDecision: base.CapacityDecision,
@@ -43,6 +44,10 @@ func TestLaunchRuntimeAgentToRuntimeLaunchRequestV0ConstruyeRequestValida(t *tes
 	}
 	if req.Task == nil || req.Task.TaskRef != inbound.Payload.TaskRef || req.Task.Priority != "normal" {
 		t.Fatalf("task inesperada: %+v", req.Task)
+	}
+	if len(req.Task.SkillRefs) != len(inbound.Payload.SkillRefs) ||
+		req.Task.SkillRefs[0] != inbound.Payload.SkillRefs[0] {
+		t.Fatalf("skill_refs no propagadas: %+v", req.Task.SkillRefs)
 	}
 	if req.Delivery == nil || !req.Delivery.AckRequired || req.Delivery.ReadinessTimeoutSeconds != 45 {
 		t.Fatalf("delivery inesperado: %+v", req.Delivery)
@@ -91,6 +96,37 @@ func TestLaunchRuntimeAgentToRuntimeLaunchRequestV0UsaRelojInyectadoV0(t *testin
 	}
 	if req.RequestedAt != "2026-05-24T10:11:12Z" {
 		t.Fatalf("requested_at=%q", req.RequestedAt)
+	}
+}
+
+func TestLaunchRuntimeAgentToRuntimeLaunchRequestV0ConservaSkillRefsSolicitadas(t *testing.T) {
+	base := runtimeLaunchRequestValidaV0()
+	inbound := agentLauncherInboundValidoV0()
+	inbound.Payload.SkillRefs = []string{
+		"skill-ref-orquesta-programacion-v0",
+		"skill-ref-orquesta-revision-v0",
+	}
+	resolved := AgentLauncherResolvedDependenciesV0{
+		FunctionContract: base.FunctionContract,
+		CapacityDecision: base.CapacityDecision,
+		RuntimeBinding:   base.RuntimeBinding,
+		EvidenceRefs:     base.EvidenceRefs,
+		ContextBundle:    base.ContextBundle,
+	}
+
+	req, issues := LaunchRuntimeAgentToRuntimeLaunchRequestV0(
+		inbound,
+		resolved,
+		AgentLauncherRuntimeLaunchOptionsV0{RequestedAt: "2026-05-08T10:00:00Z"},
+	)
+
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if len(req.Task.SkillRefs) != 2 ||
+		req.Task.SkillRefs[0] != "skill-ref-orquesta-programacion-v0" ||
+		req.Task.SkillRefs[1] != "skill-ref-orquesta-revision-v0" {
+		t.Fatalf("skill_refs perdidas: %+v", req.Task.SkillRefs)
 	}
 }
 

@@ -98,6 +98,18 @@ func TestValidateRuntimeLaunchRequestV0RechazaReferenciasNoOpacas(t *testing.T) 
 	requireRuntimeLaunchCodeV0(t, ValidateRuntimeLaunchRequestV0(req), ReferenciaNoOpacaV0)
 }
 
+func TestValidateRuntimeLaunchRequestV0ValidaSkillRefsOpacas(t *testing.T) {
+	req := runtimeLaunchRequestValidaV0()
+	req.Task.SkillRefs = []string{"skill-ref-orquesta-programacion-v0"}
+
+	if issues := ValidateRuntimeLaunchRequestV0(req); len(issues) != 0 {
+		t.Fatalf("skill_refs opacas rechazadas: %#v", issues)
+	}
+
+	req.Task.SkillRefs = []string{"../skills/orquesta-programacion"}
+	requireRuntimeLaunchCodeV0(t, ValidateRuntimeLaunchRequestV0(req), ReferenciaNoOpacaV0)
+}
+
 func TestValidateRuntimeLaunchRequestV0RechazaSecretosEnRefs(t *testing.T) {
 	req := runtimeLaunchRequestValidaV0()
 	req.RuntimeBinding.CredentialRef = "sk-test-token"

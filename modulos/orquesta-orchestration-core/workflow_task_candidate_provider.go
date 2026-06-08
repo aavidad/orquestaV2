@@ -147,6 +147,7 @@ func (provider WorkflowTaskCandidateProviderV0) workflowTaskCandidateV0(
 					[]string{"evidence-ref-agent-" + suffix},
 					profile.EvidenceRefs...,
 				)),
+				SkillRefs: profile.SkillRefs,
 			},
 			GateEvidenceRefs: []string{"evidence-ref-gate-" + suffix},
 			EvidenceRefs: compactStringsV0(append(

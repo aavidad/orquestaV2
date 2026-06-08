@@ -16,6 +16,7 @@ func NormalizeWorkflowTaskV0(task WorkflowTaskV0) WorkflowTaskV0 {
 		RequiredTests:        normalizeWorkflowTaskStringsV0(task.RequiredTests),
 		DependsOn:            normalizeWorkflowTaskStringsV0(task.DependsOn),
 		ContextRefs:          normalizeWorkflowTaskContextRefsV0(task.ContextRefs),
+		SkillRefs:            normalizeWorkflowTaskContextRefsV0(task.SkillRefs),
 		ParentTaskRef:        strings.TrimSpace(task.ParentTaskRef),
 		CohortRef:            strings.TrimSpace(task.CohortRef),
 		WaveRef:              strings.TrimSpace(task.WaveRef),

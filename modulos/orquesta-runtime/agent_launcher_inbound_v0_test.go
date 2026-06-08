@@ -78,6 +78,22 @@ func TestValidateLaunchRuntimeAgentRequestV0RechazaReferenciasNoOpacas(t *testin
 	requireAgentLauncherCodeV0(t, ValidateLaunchRuntimeAgentRequestV0(req), AgentLauncherReferenciaNoOpacaV0)
 }
 
+func TestValidateLaunchRuntimeAgentRequestV0TransportaSkillRefsOpacas(t *testing.T) {
+	req := launchRuntimeAgentRequestValidaV0()
+	req.SkillRefs = []string{"skill-ref-orquesta-programacion-v0", "skill-ref-orquesta-revision-v0"}
+
+	if issues := ValidateLaunchRuntimeAgentRequestV0(req); len(issues) != 0 {
+		t.Fatalf("skill_refs opacas rechazadas: %#v", issues)
+	}
+}
+
+func TestValidateLaunchRuntimeAgentRequestV0RechazaSkillRefsNoOpacas(t *testing.T) {
+	req := launchRuntimeAgentRequestValidaV0()
+	req.SkillRefs = []string{"skills/orquesta-programacion/SKILL.md"}
+
+	requireAgentLauncherCodeV0(t, ValidateLaunchRuntimeAgentRequestV0(req), AgentLauncherReferenciaNoOpacaV0)
+}
+
 func TestValidateLaunchRuntimeAgentRequestV0AceptaRefsInternasAnidadas(t *testing.T) {
 	req := launchRuntimeAgentRequestValidaV0()
 	req.AgentRequestID = "agent-ref-assessment-assessment-ref-agent-progress-report-ref-agent-ref-assessment-assessment-ref-agent-progress-report-ref-agent-ref-task-autoprogramming-d6f0b05f2e4d-g01-000088-000016"

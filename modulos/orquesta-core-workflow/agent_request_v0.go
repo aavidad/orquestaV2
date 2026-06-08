@@ -8,6 +8,7 @@ type RequestAgentCommandPayloadV0 struct {
 	Role               string   `json:"role"`
 	Summary            string   `json:"summary"`
 	EvidenceRefs       []string `json:"evidence_refs,omitempty"`
+	SkillRefs          []string `json:"skill_refs,omitempty"`
 }
 
 type AgentRequestedPayloadV0 struct {
@@ -18,6 +19,7 @@ type AgentRequestedPayloadV0 struct {
 	Role               string   `json:"role"`
 	Summary            string   `json:"summary"`
 	EvidenceRefs       []string `json:"evidence_refs,omitempty"`
+	SkillRefs          []string `json:"skill_refs,omitempty"`
 }
 
 func NewRequestAgentCommandV0(meta OrchestrationCommandMetaV0, payload RequestAgentCommandPayloadV0) (OrchestrationCommandV0, error) {
@@ -37,5 +39,6 @@ func agentRequestedPayloadFromCommandV0(payload RequestAgentCommandPayloadV0) Ag
 		Role:               payload.Role,
 		Summary:            payload.Summary,
 		EvidenceRefs:       cloneStringsV0(payload.EvidenceRefs),
+		SkillRefs:          compactUniqueStringsV0(payload.SkillRefs),
 	}
 }

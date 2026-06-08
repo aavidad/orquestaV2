@@ -45,6 +45,7 @@ func (resolver CodexLaunchSpecResolverV0) programmingTaskV0(
 		Title:           task.Title,
 		Objective:       programmingObjectiveV0(task, payload),
 		WriteSet:        append([]string(nil), task.WriteSet...),
+		SkillRefs:       compactStringsV0(append(append([]string(nil), payload.SkillRefs...), task.SkillRefs...)),
 		ParentTaskRef:   task.ParentTaskRef,
 		CohortRef:       task.CohortRef,
 		WaveRef:         task.WaveRef,
@@ -185,5 +186,6 @@ func directorTaskV0(
 		Objective:    directorObjectiveV0(payload, area),
 		WriteSet:     writeSet,
 		DoneCriteria: directorDoneCriteriaV0(payload, area),
+		SkillRefs:    compactStringsV0(payload.SkillRefs),
 	}
 }

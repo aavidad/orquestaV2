@@ -48,6 +48,7 @@ type LaunchRuntimeAgentRequestV0 struct {
 	Role               string   `json:"role"`
 	Summary            string   `json:"summary"`
 	EvidenceRefs       []string `json:"evidence_refs,omitempty"`
+	SkillRefs          []string `json:"skill_refs,omitempty"`
 }
 
 type AgentLauncherResolvedDependenciesV0 struct {
@@ -167,6 +168,9 @@ func (v *agentLauncherInboundValidatorV0) validatePayload(req LaunchRuntimeAgent
 	v.requireSummary("payload.summary", req.Summary)
 	for i, ref := range req.EvidenceRefs {
 		v.requireOpaque(fmt.Sprintf("payload.evidence_refs[%d]", i), ref, AgentLauncherReferenciaNoOpacaV0)
+	}
+	for i, ref := range req.SkillRefs {
+		v.requireOpaque(fmt.Sprintf("payload.skill_refs[%d]", i), ref, AgentLauncherReferenciaNoOpacaV0)
 	}
 }
 

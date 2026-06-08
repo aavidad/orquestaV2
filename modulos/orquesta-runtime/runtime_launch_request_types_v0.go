@@ -75,10 +75,11 @@ type RuntimeLaunchSourceV0 struct {
 }
 
 type RuntimeLaunchTaskV0 struct {
-	TaskRef    string `json:"task_ref"`
-	ProjectRef string `json:"project_ref,omitempty"`
-	PhaseRef   string `json:"phase_ref,omitempty"`
-	Priority   string `json:"priority"`
+	TaskRef    string   `json:"task_ref"`
+	ProjectRef string   `json:"project_ref,omitempty"`
+	PhaseRef   string   `json:"phase_ref,omitempty"`
+	Priority   string   `json:"priority"`
+	SkillRefs  []string `json:"skill_refs,omitempty"`
 }
 
 type RuntimeFunctionContractV0 struct {

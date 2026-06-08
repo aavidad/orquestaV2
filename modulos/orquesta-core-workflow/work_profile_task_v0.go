@@ -27,6 +27,7 @@ func workflowTaskFromWorkProfileUncheckedV0(profile WorkProfileV0) (WorkflowTask
 		AcceptanceCriteria:   workProfileTaskCriteriaV0(definition, profile),
 		RequiredTests:        append([]string(nil), profile.RequiredTests...),
 		DependsOn:            append([]string(nil), profile.DependsOn...),
+		SkillRefs:            append([]string(nil), profile.SkillRefs...),
 		ParentTaskRef:        profile.ParentTaskRef,
 		CohortRef:            profile.CohortRef,
 		WaveRef:              profile.WaveRef,

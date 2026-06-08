@@ -1,5 +1,7 @@
 package orquestaruntime
 
+import "fmt"
+
 func ValidateRuntimeLaunchRequestV0(req RuntimeLaunchRequestV0) []RuntimeLaunchErrorV0 {
 	v := runtimeLaunchRequestValidatorV0{correlationID: req.CorrelationID}
 
@@ -53,6 +55,9 @@ func (v *runtimeLaunchRequestValidatorV0) validateTask(task *RuntimeLaunchTaskV0
 	v.requireOpaque("task.task_ref", task.TaskRef, RuntimeLaunchRequestInvalidaV0)
 	v.optionalOpaque("task.project_ref", task.ProjectRef)
 	v.optionalOpaque("task.phase_ref", task.PhaseRef)
+	for i, ref := range task.SkillRefs {
+		v.optionalOpaque(fmt.Sprintf("task.skill_refs[%d]", i), ref)
+	}
 	if !isOneOf(task.Priority, "low", "normal", "high", "critical") {
 		v.add(RuntimeLaunchRequestInvalidaV0, "task.priority")
 	}

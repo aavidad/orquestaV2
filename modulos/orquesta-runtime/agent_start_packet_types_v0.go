@@ -35,6 +35,7 @@ type AgentStartTaskV0 struct {
 	WriteSet        []string `json:"write_set"`
 	RequiredTests   []string `json:"required_tests"`
 	DoneCriteria    []string `json:"done_criteria"`
+	SkillRefs       []string `json:"skill_refs,omitempty"`
 	ParentTaskRef   string   `json:"parent_task_ref,omitempty"`
 	CohortRef       string   `json:"cohort_ref,omitempty"`
 	WaveRef         string   `json:"wave_ref,omitempty"`

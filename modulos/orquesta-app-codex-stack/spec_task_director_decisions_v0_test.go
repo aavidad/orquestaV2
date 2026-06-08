@@ -142,6 +142,21 @@ func TestDirectorTaskV0IncluyeContratoDeDecisionesEjecutables(t *testing.T) {
 	}
 }
 
+func TestDirectorTaskV0PropagaSkillRefs(t *testing.T) {
+	payload := orquestaruntime.LaunchRuntimeAgentRequestV0{
+		RunID:     "run-ref-skills-001",
+		TaskRef:   "task-director-skills-001",
+		Summary:   "Coordinar trabajo autonomo.",
+		SkillRefs: []string{" skill-ref-orquesta-director-agentes-v0 ", "skill-ref-orquesta-director-agentes-v0"},
+	}
+
+	task := directorTaskV0(payload, "director")
+
+	if len(task.SkillRefs) != 1 || task.SkillRefs[0] != "skill-ref-orquesta-director-agentes-v0" {
+		t.Fatalf("skill_refs=%v", task.SkillRefs)
+	}
+}
+
 func TestDirectorTaskV0NoOrdenaCierreEnPrimeraEntrega(t *testing.T) {
 	payload := orquestaruntime.LaunchRuntimeAgentRequestV0{
 		RunID:   "run-ref-agenda-001",

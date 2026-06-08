@@ -93,6 +93,27 @@ func TestWorkflowTaskV0AcceptsContextRefs(t *testing.T) {
 	}
 }
 
+func TestWorkflowTaskV0AcceptsSkillRefs(t *testing.T) {
+	task := validWorkflowTaskV0()
+	task.SkillRefs = []string{
+		" skill-ref-orquesta-programacion-autonoma-v0 ",
+		"skill-ref-orquesta-programacion-revision-v0",
+		"skill-ref-orquesta-programacion-autonoma-v0",
+	}
+
+	got, err := NewWorkflowTaskV0(task)
+	if err != nil {
+		t.Fatalf("NewWorkflowTaskV0 skill refs: %v", err)
+	}
+	want := []string{
+		"skill-ref-orquesta-programacion-autonoma-v0",
+		"skill-ref-orquesta-programacion-revision-v0",
+	}
+	if !reflect.DeepEqual(got.SkillRefs, want) {
+		t.Fatalf("skill_refs=%+v want %+v", got.SkillRefs, want)
+	}
+}
+
 func TestValidateWorkflowTaskV0RejectsInvalidContextRefs(t *testing.T) {
 	for name, mutate := range map[string]func(*WorkflowTaskV0){
 		"with_space": func(task *WorkflowTaskV0) {
@@ -108,6 +129,25 @@ func TestValidateWorkflowTaskV0RejectsInvalidContextRefs(t *testing.T) {
 
 			err := ValidateWorkflowTaskV0(NormalizeWorkflowTaskV0(task))
 			assertWorkflowTaskErrorV0(t, err, ErrWorkflowTaskInvalidaV0, "context_refs")
+		})
+	}
+}
+
+func TestValidateWorkflowTaskV0RejectsInvalidSkillRefs(t *testing.T) {
+	for name, mutate := range map[string]func(*WorkflowTaskV0){
+		"with_space": func(task *WorkflowTaskV0) {
+			task.SkillRefs = []string{"skill ref invalid"}
+		},
+		"with_path_separator": func(task *WorkflowTaskV0) {
+			task.SkillRefs = []string{"skills/orquesta-programacion-autonoma"}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			task := validWorkflowTaskV0()
+			mutate(&task)
+
+			err := ValidateWorkflowTaskV0(NormalizeWorkflowTaskV0(task))
+			assertWorkflowTaskErrorV0(t, err, ErrWorkflowTaskInvalidaV0, "skill_refs")
 		})
 	}
 }

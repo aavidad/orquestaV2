@@ -18,6 +18,9 @@ func validateRequestAgentCommandPayloadDataV0(payload RequestAgentCommandPayload
 	if agentRequestStringsInvalidV0(payload.EvidenceRefs) {
 		return commandErrorV0(ErrPayloadInvalidoV0, "payload.evidence_refs")
 	}
+	if agentSkillRefsInvalidV0(payload.SkillRefs) {
+		return commandErrorV0(ErrPayloadInvalidoV0, "payload.skill_refs")
+	}
 	if agentRequestHasForbiddenDetailsV0(agentRequestTextFieldsV0(payload)) {
 		return commandErrorV0(ErrDetalleProhibidoV0, "payload")
 	}
@@ -39,6 +42,9 @@ func validateAgentRequestedPayloadDataV0(payload AgentRequestedPayloadV0) error 
 	}
 	if agentRequestStringsInvalidV0(payload.EvidenceRefs) {
 		return eventErrorV0(ErrPayloadInvalidoV0, "payload.evidence_refs")
+	}
+	if agentSkillRefsInvalidV0(payload.SkillRefs) {
+		return eventErrorV0(ErrPayloadInvalidoV0, "payload.skill_refs")
 	}
 	if agentRequestHasForbiddenDetailsV0(agentRequestTextFieldsV0(RequestAgentCommandPayloadV0(payload))) {
 		return eventErrorV0(ErrDetalleProhibidoV0, "payload")
@@ -83,6 +89,18 @@ func agentRequestStringsInvalidV0(values []string) bool {
 	}
 	for _, value := range values {
 		if strings.TrimSpace(value) == "" || len(value) > maxAgentRequestStringV0 {
+			return true
+		}
+	}
+	return false
+}
+
+func agentSkillRefsInvalidV0(values []string) bool {
+	if agentRequestStringsInvalidV0(values) {
+		return true
+	}
+	for _, value := range values {
+		if strings.ContainsAny(value, " /\\\t\r\n") {
 			return true
 		}
 	}
