@@ -349,3 +349,35 @@ Validacion:
 ```sh
 go test -count=1 ./modulos/orquesta-orchestration-core -run TestBuildSessionRotationDirectiveV0
 ```
+
+## ORCH-CORE-DIR-014: loop autonomo de briefing del Director
+
+Estado: hecho primer corte offline.
+
+Objetivo: cerrar la prueba minima de autonomia del Director sin daemon:
+`briefing -> ejecutar accion -> briefing -> ... -> idle/cierre`.
+
+Implementado:
+
+- `ResidentDirectorBriefingSourcePortV0` como puerto para que una composicion
+  construya el siguiente briefing desde estado vivo, skills, consejo o modelos;
+- `RunResidentDirectorBriefingLoopV0` como controlador acotado que ejecuta solo
+  acciones estructuradas seguras;
+- parada por `close_or_idle`, accion externa pendiente, falta de progreso,
+  necesidad de Director o presupuesto operativo `MaxActions`;
+- propagacion de contexto, evidencias, `WaitAgentRefs`, dispatchers y handler
+  externo sin conocer Codex, OPES, proveedor, DB ni rutas locales.
+
+Validacion:
+
+```sh
+go test -count=1 ./modulos/orquesta-orchestration-core -run TestRunResidentDirectorBriefingLoopV0
+```
+
+Pendiente operativo:
+
+- cablear fuente real de briefing en servidor/composicion residente con
+  anti-solape y restart;
+- conectar catalogo de skills/roles, consejo/votacion y seleccion de modelos
+  por puertos;
+- smoke real opt-in con runtime temporal, sin OPES productivo.

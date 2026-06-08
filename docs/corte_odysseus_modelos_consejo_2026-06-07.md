@@ -42,6 +42,11 @@ convertir Orquesta en una app clonica:
 
 ## Pendiente Para Director Autonomo
 
+- Primer loop offline probado el 2026-06-08:
+  `RunResidentDirectorBriefingLoopV0` itera briefing, ejecuta acciones seguras y
+  vuelve a pedir briefing hasta idle/cierre, accion externa pendiente, falta de
+  progreso, necesidad de Director o presupuesto operativo. No es daemon ni
+  proveedor real.
 - Ampliar `DirectorAutonomousOpsSnapshotV0` con runtime models, waits, olas,
   cohortes y arbol recursivo cuando esas fuentes entren por puertos publicos.
 - Timeline causal completa con decisiones, replan/rework, cierres, bloqueos y

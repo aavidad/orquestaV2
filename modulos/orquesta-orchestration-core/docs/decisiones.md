@@ -14,6 +14,22 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-06-08
+Decision: El primer loop autonomo del Director vive como controlador offline por
+puertos en orchestration-core.
+Motivo: ya existia el ejecutor de una accion de briefing, pero faltaba una
+pieza que reentrase en el Director y demostrase autonomia minima sin levantar
+daemon ni proveedor real.
+Impacto: `RunResidentDirectorBriefingLoopV0` pide briefing por
+`ResidentDirectorBriefingSourcePortV0`, ejecuta acciones seguras con
+`ExecuteDirectorBriefingActionV0` y se detiene por idle/cierre, accion externa
+pendiente, falta de progreso, necesidad de Director o presupuesto operativo.
+No conoce Codex, OPES, modelos, DB, HOME ni runtime real; esas decisiones quedan
+en la composicion residente.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-27
 Decision: T207 se representa como directiva de aplicacion, no como runtime.
 Motivo: orchestration-core coordina puertos del nucleo, pero no posee procesos,

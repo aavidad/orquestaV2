@@ -18,6 +18,31 @@ Cobertura:
 - ignora observaciones de agentes fuera del run;
 - el core no importa runtime Codex, web, MCP, DB, HOME ni proveedor.
 
+## ORCH-CORE-DIR-014
+
+Comando:
+
+```bash
+go test -count=1 ./modulos/orquesta-orchestration-core -run TestRunResidentDirectorBriefingLoopV0
+```
+
+Cobertura:
+
+- `RunResidentDirectorBriefingLoopV0` itera
+  `briefing -> ExecuteDirectorBriefingActionV0 -> briefing` hasta cierre;
+- una ruta offline ejecuta un step del Director, genera outbox, despacha por
+  puerto y termina en `close_or_idle`;
+- no autoaplica acciones marcadas como `requires_director`;
+- conserva como pendiente una accion externa sin handler;
+- respeta `MaxActions` como presupuesto operativo del loop.
+
+Riesgos:
+
+- no es daemon ni servidor residente;
+- no prueba proveedor real, OPES ni modelos;
+- skills, consejo/votacion y seleccion de modelos siguen pendientes de wiring
+  por composicion.
+
 ## T207 Rotacion De Sesiones
 
 ```text

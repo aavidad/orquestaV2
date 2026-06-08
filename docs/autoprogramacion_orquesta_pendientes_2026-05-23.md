@@ -202,9 +202,13 @@ Pendientes priorizados:
   posteriores: olas, cohortes, parent/child agents, waits y catalogo/modelos si
   no llegan por los puertos publicos actuales.
 - Conectar skills/contratos al ciclo residente del Director. El briefing ya
-  sirve como contrato de siguiente accion, pero falta un controlador opt-in que
-  itere briefing -> ejecucion -> nuevo briefing hasta idle/cierre, active
-  consejo/votacion cuando haya varias opciones y resuelva `SkillRefs` por rol.
+  sirve como contrato de siguiente accion y el primer controlador offline
+  `RunResidentDirectorBriefingLoopV0` quedo probado el 2026-06-08: itera
+  briefing -> ejecucion -> nuevo briefing hasta idle/cierre, accion externa
+  pendiente, falta de progreso, necesidad de Director o presupuesto operativo.
+  Sigue pendiente cablearlo como residente opt-in en servidor/composicion,
+  activar consejo/votacion cuando haya varias opciones y resolver `SkillRefs`
+  por rol.
 - Completar el smoke OPES temporal real de derivados/cierre hasta
   `generate_html_site -> local_html_site`, sin tocar OPES productivo y
   reutilizando el owner existente T12/T18 donde aplique.

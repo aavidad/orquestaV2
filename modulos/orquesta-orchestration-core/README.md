@@ -237,6 +237,15 @@ Codex, OPES, MCP, DB, HOME ni proveedor. Solo enruta una accion estructurada;
 las acciones recuperables siguen siendo trabajo del Director/adaptador, no de
 rails por texto.
 
+`RunResidentDirectorBriefingLoopV0` es el primer controlador autonomo offline
+encima de ese ejecutor. Recibe un puerto `ResidentDirectorBriefingSourcePortV0`,
+pide briefing, ejecuta la accion segura, vuelve a pedir briefing con la
+ejecucion anterior y repite hasta `close_or_idle`, accion externa pendiente,
+falta de progreso, necesidad de Director o presupuesto de acciones. Sigue sin
+ser daemon: no hace sleep, no abre proveedores, no conoce Codex/OPES y no decide
+por strings de contenido. La composicion residente debe inyectar fuente de
+briefing, dispatchers, cierre real y politica de restart.
+
 El contrato operativo de solicitud de autoprogramacion vive fuera del nucleo en
 `modulos/orquesta-autoprogramming`. Este paquete solo ve observaciones,
 candidatos y puertos genericos; no valida `write_set`, no decide tests
