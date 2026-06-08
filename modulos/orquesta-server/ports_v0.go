@@ -177,6 +177,19 @@ type StartupCheckPortV0 interface {
 	PrepareStartupV0(context.Context, StartupCheckCommandV0) (StartupCheckResultV0, error)
 }
 
+type SelfWatchdogObservationPortV0 interface {
+	ObserveSelfWatchdogV0(
+		context.Context,
+		SelfWatchdogObservationRequestV0,
+	) (SelfWatchdogObservationV0, error)
+}
+
+type SelfWatchdogObservationRequestV0 struct {
+	State      StateV0
+	Config     SelfWatchdogConfigV0
+	ObservedAt time.Time
+}
+
 type ClockPortV0 interface {
 	Now() time.Time
 }

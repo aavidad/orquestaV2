@@ -14,6 +14,7 @@ type RuntimeDepsV0 struct {
 	StateStore   StateStorePortV0
 	AuditSink    AuditSinkPortV0
 	StartupCheck StartupCheckPortV0
+	SelfWatchdog SelfWatchdogObservationPortV0
 	Clock        ClockPortV0
 }
 
@@ -28,6 +29,7 @@ type RuntimeV0 struct {
 	stateStore            StateStorePortV0
 	auditSink             AuditSinkPortV0
 	startupCheck          StartupCheckPortV0
+	selfWatchdog          SelfWatchdogObservationPortV0
 	clock                 ClockPortV0
 	tracker               *StatusTrackerV0
 	handoffRequested      chan struct{}
@@ -67,6 +69,7 @@ func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
 		stateStore:       deps.StateStore,
 		auditSink:        deps.AuditSink,
 		startupCheck:     deps.StartupCheck,
+		selfWatchdog:     deps.SelfWatchdog,
 		clock:            deps.Clock,
 		tracker:          tracker,
 		handoffRequested: make(chan struct{}),
@@ -109,14 +112,22 @@ func (runtime *RuntimeV0) RunWithShutdownCauseV0(
 	runCtx, cancelRun := context.WithCancel(ctx)
 	defer cancelRun()
 	serverDone := make(chan error, 1)
+	selfWatchdogStop := make(chan SelfWatchdogDecisionV0, 1)
 	runtime.runAsyncWorkV0("http_serve", func() { serverDone <- server.Serve(listener) })
 	runtime.runAsyncWorkV0("supervisor_loop", func() { runtime.runSupervisorLoopV0(runCtx) })
+	if runtime.selfWatchdog != nil && !runtime.config.SelfWatchdog.Disabled {
+		runtime.runAsyncWorkV0("self_watchdog_loop", func() {
+			runtime.runSelfWatchdogLoopV0(runCtx, selfWatchdogStop)
+		})
+	}
 
 	select {
 	case <-ctx.Done():
 		return runtime.shutdownRuntimeV0(server, cancelRun, shutdownCauseFromFuncV0(cause))
 	case <-runtime.handoffRequested:
 		return runtime.handoffRuntimeV0(server, cancelRun)
+	case decision := <-selfWatchdogStop:
+		return runtime.shutdownRuntimeV0(server, cancelRun, selfWatchdogShutdownCauseV0(decision))
 	case err := <-serverDone:
 		if errors.Is(err, http.ErrServerClosed) {
 			return runtime.stopRuntimeAfterServeClosedV0(cancelRun)

@@ -26,6 +26,9 @@ const (
 	DefaultIdleSelfImprovementPriorityScoreV0 = 10
 	DefaultIdleSelfImprovementMaxRequestsV0   = 10
 	DefaultIdleSelfImprovementTargetQueueV0   = 10
+	DefaultSelfWatchdogCPUHighPercentV0       = 75
+	DefaultSelfWatchdogSustainedForV0         = 2 * time.Minute
+	DefaultSelfWatchdogNoProgressForV0        = 1 * time.Minute
 )
 
 type ConfigV0 struct {
@@ -59,6 +62,7 @@ type ConfigV0 struct {
 	IdleSelfImprovementPriorityScore int
 	IdleSelfImprovementMaxRequests   int
 	IdleSelfImprovementTargetQueue   int
+	SelfWatchdog                     SelfWatchdogConfigV0
 }
 
 type ControlPlaneConfigV0 struct {
@@ -154,6 +158,7 @@ func NormalizeConfigV0(config ConfigV0) ConfigV0 {
 	if config.IdleSelfImprovementTargetQueue < config.IdleSelfImprovementMaxRequests {
 		config.IdleSelfImprovementTargetQueue = config.IdleSelfImprovementMaxRequests
 	}
+	config.SelfWatchdog = NormalizeSelfWatchdogConfigV0(config.SelfWatchdog)
 	return config
 }
 

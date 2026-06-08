@@ -7,7 +7,7 @@ import (
 )
 
 func residentOperationalHealthV0(state StateV0) []orquestaobservability.DiagnosticoSaludCheckV0 {
-	return []orquestaobservability.DiagnosticoSaludCheckV0{
+	health := []orquestaobservability.DiagnosticoSaludCheckV0{
 		{
 			Area:     "system",
 			Severity: "info",
@@ -34,6 +34,10 @@ func residentOperationalHealthV0(state StateV0) []orquestaobservability.Diagnost
 			EvidenceRefs: []string{NormalizeDaemonLogPolicyV0(state.DaemonLogPolicy).PolicyRef},
 		},
 	}
+	if check := selfWatchdogHealthCheckV0(state); check.I18nKey != "" {
+		health = append(health, check)
+	}
+	return health
 }
 
 func residentOperationalBlockersV0(state StateV0) []orquestaobservability.DiagnosticoBloqueoV0 {

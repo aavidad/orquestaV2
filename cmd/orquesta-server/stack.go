@@ -48,6 +48,9 @@ func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 		AppHandler:   appHandler,
 		Supervisor:   supervisor,
 		StartupCheck: startupCheckFromEnvV0(stack, serverConfig),
+		SelfWatchdog: orquestaserver.NewProcessSelfWatchdogObserverV0(
+			orquestaserver.NewProcSelfCPUSamplerV0(),
+		),
 	})
 }
 

@@ -32,6 +32,9 @@ func NewServerReadinessV0(state StateV0) ServerReadinessV0 {
 		strings.TrimSpace(state.AuditLastSeverity) == "warning" {
 		ready = false
 	}
+	if state.SelfWatchdogShutdownRequested {
+		ready = false
+	}
 	if status == "" {
 		status = "unknown"
 	}
