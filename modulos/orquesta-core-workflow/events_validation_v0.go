@@ -12,7 +12,9 @@ func validateEventPayloadV0(event OrchestrationEventV0) error {
 	if err := json.Unmarshal(event.Payload, &decoded); err != nil {
 		return eventErrorV0(ErrPayloadInvalidoV0, "payload")
 	}
-	if event.EventType != OrchestrationEventConcurrencyGateRecordedV0 && containsForbiddenEventDetailV0(decoded) {
+	if event.EventType != OrchestrationEventConcurrencyGateRecordedV0 &&
+		event.EventType != OrchestrationEventArchitectureDecisionAcceptedV0 &&
+		containsForbiddenEventDetailV0(decoded) {
 		return eventErrorV0(ErrDetalleProhibidoV0, "payload")
 	}
 	switch event.EventType {

@@ -22,11 +22,11 @@ Invariantes:
   - Si `decision_ref` ya esta proyectada, el comando debe coincidir con la huella `CommandEffects` original.
   - No decide proveedor, modelo, HOME, OAuth, cuenta, adaptador ni secreto.
   - No emite outbox ni abre la siguiente fase.
+  - Detalles operativos blandos en texto se tratan como diagnostico externo; no bloquean este comando.
 Errores:
   - payload_invalido
   - fase_no_soportada
   - transicion_invalida
-  - detalle_prohibido
 Estado: implementado local en NCW-015; identidad durable endurecida en NCW-057.
 ```
 
@@ -53,10 +53,10 @@ Invariantes:
   - Proyecta una huella `CommandEffects` por `(ArchitectureDecisionAccepted, decision_ref)`.
   - Rechaza otra decision durable con la misma `decision_ref` y distinta key, event_id, causation_id o payload.
   - No contiene actas completas, prompts, transcripts ni detalles de runtime.
+  - Detalles operativos blandos en texto se tratan como diagnostico externo; no bloquean este evento.
 Errores:
   - evento_invalido
   - payload_invalido
   - secuencia_invalida
-  - detalle_prohibido
 Estado: implementado local en NCW-015; identidad durable endurecida en NCW-057.
 ```

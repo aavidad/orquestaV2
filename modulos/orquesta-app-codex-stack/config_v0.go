@@ -42,6 +42,7 @@ type ConfigV0 struct {
 	AutoprogrammingPromotion AutoprogrammingPromotionConfigV0
 	DomainWork               orquestamcp.MCPDomainWorkExecutorPortV0
 	RuntimeModels            orquestaruntime.RuntimeModelManagerPortV0
+	DecisionCouncil          DecisionCouncilConfigV0
 	DomainDelivery           DomainWorkDeliveryBridgeConfigV0
 }
 

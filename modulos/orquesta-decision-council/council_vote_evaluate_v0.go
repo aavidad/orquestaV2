@@ -5,10 +5,12 @@ func buildDecisionCouncilVoteResultV0(
 ) DecisionCouncilVoteResultV0 {
 	result := DecisionCouncilVoteResultV0{DecisionTopicRef: input.DecisionTopicRef}
 	approvalsByOption := map[string]int{}
+	consideredVotes := []CouncilVoteV0{}
 	for _, vote := range input.Votes {
 		if vote.Position == CouncilVoteAbstainV0 {
 			continue
 		}
+		consideredVotes = append(consideredVotes, vote)
 		result.EvidenceRefs = append(result.EvidenceRefs, vote.EvidenceRefs...)
 		result.ConsideredVotes++
 		if vote.VoterRef != input.AuthorAgentRef {
@@ -25,7 +27,7 @@ func buildDecisionCouncilVoteResultV0(
 		result.DissentVoteRefs = append(result.DissentVoteRefs, vote.VoteRef)
 	}
 	result.EvidenceRefs = compactCouncilStringsV0(result.EvidenceRefs)
-	result.DistinctFamilies = len(councilVoteFamiliesV0(input.Votes))
+	result.DistinctFamilies = len(councilVoteFamiliesV0(consideredVotes))
 	result.AcceptedOptionRef, result.ApprovalPct = bestCouncilOptionV0(
 		input.OptionRefs,
 		approvalsByOption,

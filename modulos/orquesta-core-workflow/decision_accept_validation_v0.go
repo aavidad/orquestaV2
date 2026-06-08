@@ -12,9 +12,6 @@ func validateAcceptDecisionCommandPayloadDataV0(payload AcceptDecisionCommandPay
 	if decisionAcceptStringsInvalidV0(payload.EvidenceRefs) || decisionAcceptHasLongStringV0(acceptDecisionTextFieldsV0(payload)) {
 		return commandErrorV0(ErrPayloadInvalidoV0, "payload")
 	}
-	if decisionAcceptHasForbiddenDetailsV0(acceptDecisionTextFieldsV0(payload)) {
-		return commandErrorV0(ErrDetalleProhibidoV0, "payload")
-	}
 	return validateAcceptDecisionPayloadSizeV0(payload)
 }
 
@@ -33,9 +30,6 @@ func validateArchitectureDecisionAcceptedPayloadDataV0(payload ArchitectureDecis
 	}
 	if decisionAcceptStringsInvalidV0(payload.EvidenceRefs) || decisionAcceptHasLongStringV0(architectureDecisionAcceptedTextFieldsV0(payload)) {
 		return eventErrorV0(ErrPayloadInvalidoV0, "payload")
-	}
-	if decisionAcceptHasForbiddenDetailsV0(architectureDecisionAcceptedTextFieldsV0(payload)) {
-		return eventErrorV0(ErrDetalleProhibidoV0, "payload")
 	}
 	return validateArchitectureDecisionAcceptedPayloadSizeV0(payload)
 }
@@ -116,10 +110,6 @@ func decisionAcceptHasLongStringV0(values []string) bool {
 		}
 	}
 	return false
-}
-
-func decisionAcceptHasForbiddenDetailsV0(values []string) bool {
-	return textValuesContainForbiddenOperationalSensitiveDetailV0(values)
 }
 
 func acceptDecisionTextFieldsV0(payload AcceptDecisionCommandPayloadV0) []string {

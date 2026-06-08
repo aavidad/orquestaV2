@@ -42,8 +42,30 @@ Riesgos:
 
 - no es daemon ni servidor residente;
 - no prueba proveedor real, OPES ni modelos;
-- skills, consejo/votacion y seleccion de modelos siguen pendientes de wiring
-  por composicion.
+- skills, fuente real de votos del consejo y seleccion de modelos siguen
+  pendientes de wiring por composicion.
+
+## ORCH-CORE-COUNCIL-001
+
+Comando:
+
+```bash
+go test -count=1 ./modulos/orquesta-orchestration-core -run 'DecisionCouncil|WorkflowTaskProfile|AcceptDecision'
+```
+
+Cobertura:
+
+- las tareas materializadas por el consejo conservan metadata estructurada de
+  rol, `assignment_ref`, `agent_ref` y `family_ref` en criterios durables;
+- el builder de `AcceptDecision` sigue neutral: recibe un resultado de voto ya
+  evaluado y no conoce Codex, OPES, runtime ni fuente de artefactos;
+- la composicion externa puede evaluar quorum/familias sin parsear texto libre
+  de agentes.
+
+Riesgos:
+
+- la fuente real de votos `architecture_vote.v0` vive en la composicion/adaptador
+  y no queda probada por este paquete.
 
 ## T207 Rotacion De Sesiones
 

@@ -37,6 +37,8 @@ func decisionCouncilTaskCriteriaV0(
 	return compactStringsV0([]string{
 		"decision_council_role:" + assignment.Role,
 		"assignment_ref:" + assignment.AssignmentRef,
+		"agent_ref:" + assignment.AgentRef,
+		"family_ref:" + assignment.FamilyRef,
 		"expected_artifact:" + assignment.ExpectedArtifact,
 		"gate_ref:" + round.GateRef,
 		fmt.Sprintf("minimum_artifacts:%d", round.MinimumArtifacts),

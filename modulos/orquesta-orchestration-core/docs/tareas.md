@@ -378,6 +378,6 @@ Pendiente operativo:
 
 - cablear fuente real de briefing en servidor/composicion residente con
   anti-solape y restart;
-- conectar catalogo de skills/roles, consejo/votacion y seleccion de modelos
-  por puertos;
+- conectar catalogo de skills/roles, fuente real de votos del consejo y
+  seleccion de modelos por puertos;
 - smoke real opt-in con runtime temporal, sin OPES productivo.

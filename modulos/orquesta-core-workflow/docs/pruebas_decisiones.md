@@ -4,8 +4,8 @@
 Caso: accept_decision_handler_emite_evento_sin_outbox
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-core
-Evidencia esperada: `HandleCommandV0` acepta `AcceptDecision` solo con fase `votacion_y_decision` actual activa y `vote_ref` ya proyectado, emite `ArchitectureDecisionAccepted`, no emite outbox y rechaza fase no actual, voto ausente o payload con detalles prohibidos.
-Ultima ejecucion: 2026-05-04, ok.
+Evidencia esperada: `HandleCommandV0` acepta `AcceptDecision` solo con fase `votacion_y_decision` actual activa y `vote_ref` ya proyectado, emite `ArchitectureDecisionAccepted`, no emite outbox y rechaza fase no actual o voto ausente. Detalles operativos blandos en `summary` no bloquean la decision.
+Ultima ejecucion: 2026-06-08, ok focal.
 Riesgos: No abre planificacion; la apertura de fase sigue perteneciendo a `OpenPhase`.
 ```
 

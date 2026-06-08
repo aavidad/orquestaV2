@@ -54,6 +54,27 @@ func TestEvaluateDecisionCouncilVotesV0RechazaQuorumFamiliasInsuficiente(t *test
 	}
 }
 
+func TestEvaluateDecisionCouncilVotesV0FamiliasNoCuentaAbstenciones(t *testing.T) {
+	input := validCouncilVoteInputV0()
+	input.MinimumVotes = 2
+	input.MinimumNonAuthorVotes = 1
+	input.MinimumDistinctFamilies = 3
+	input.Votes[2].Position = CouncilVoteAbstainV0
+	input.Votes[2].OptionRef = ""
+	input.Votes[2].EvidenceRefs = nil
+
+	result, err := EvaluateDecisionCouncilVotesV0(input)
+	if err != nil {
+		t.Fatalf("EvaluateDecisionCouncilVotesV0: %v", err)
+	}
+	if result.Accepted {
+		t.Fatalf("accepted=true with abstained family counted")
+	}
+	if result.DistinctFamilies != 2 || result.ReasonCode != "minimum_distinct_families" {
+		t.Fatalf("result=%+v, want 2 considered families and minimum_distinct_families", result)
+	}
+}
+
 func TestEvaluateDecisionCouncilVotesV0ConservaDisenso(t *testing.T) {
 	input := validCouncilVoteInputV0()
 	input.ApprovalThresholdPct = 50

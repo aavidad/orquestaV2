@@ -122,31 +122,21 @@ func TestAcceptDecisionCommandV0RejectsNonCurrentPhase(t *testing.T) {
 	}
 }
 
-func TestAcceptDecisionCommandV0RejectsForbiddenDetails(t *testing.T) {
+func TestAcceptDecisionCommandV0NoBloqueaDetalleOperativoBlando(t *testing.T) {
 	payload := validAcceptDecisionPayloadV0("decision-forbidden")
 	payload.Summary = "aceptar api_key=valor"
 
-	_, err := NewAcceptDecisionCommandV0(validCommandMetaV0("cmd-decision-forbidden", "idem-decision-forbidden"), payload)
-	var publicErr OrchestrationCommandErrorV0
-	if !errors.As(err, &publicErr) {
-		t.Fatalf("expected public command error, got %T %v", err, err)
-	}
-	if publicErr.Code != ErrDetalleProhibidoV0 {
-		t.Fatalf("code=%q, want %q", publicErr.Code, ErrDetalleProhibidoV0)
+	if _, err := NewAcceptDecisionCommandV0(validCommandMetaV0("cmd-decision-forbidden", "idem-decision-forbidden"), payload); err != nil {
+		t.Fatalf("NewAcceptDecisionCommandV0: %v", err)
 	}
 }
 
-func TestArchitectureDecisionAcceptedEventV0RejectsForbiddenDetails(t *testing.T) {
+func TestArchitectureDecisionAcceptedEventV0NoBloqueaDetalleOperativoBlando(t *testing.T) {
 	payload := architectureDecisionAcceptedPayloadFromCommandV0(validAcceptDecisionPayloadV0("decision-event-forbidden"))
 	payload.Summary = "usar authorization: bearer valor"
 
-	_, err := NewArchitectureDecisionAcceptedEventV0(reducerEventMetaV0("evt-decision-forbidden", 3), payload)
-	var publicErr OrchestrationEventErrorV0
-	if !errors.As(err, &publicErr) {
-		t.Fatalf("expected public event error, got %T %v", err, err)
-	}
-	if publicErr.Code != ErrDetalleProhibidoV0 {
-		t.Fatalf("code=%q, want %q", publicErr.Code, ErrDetalleProhibidoV0)
+	if _, err := NewArchitectureDecisionAcceptedEventV0(reducerEventMetaV0("evt-decision-forbidden", 3), payload); err != nil {
+		t.Fatalf("NewArchitectureDecisionAcceptedEventV0: %v", err)
 	}
 }
 

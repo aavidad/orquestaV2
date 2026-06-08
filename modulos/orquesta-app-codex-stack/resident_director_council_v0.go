@@ -16,9 +16,11 @@ const (
 	codexStackResidentActionKindMaterializeDecisionCouncilV0 = "materialize_decision_council"
 	codexStackResidentActionKindOpenCouncilBrainstormV0      = "open_decision_council_brainstorm_phase"
 	codexStackResidentActionKindOpenCouncilVoteV0            = "open_decision_council_vote_phase"
+	codexStackResidentActionKindAcceptCouncilDecisionV0      = "accept_decision_council_result"
 	codexStackResidentCouncilReasonV0                        = "resident_decision_council_ready"
 	codexStackResidentCouncilOpenBrainstormReasonV0          = "resident_decision_council_open_brainstorm"
 	codexStackResidentCouncilOpenVoteReasonV0                = "resident_decision_council_open_vote"
+	codexStackResidentCouncilAcceptReasonV0                  = "resident_decision_council_accept_result"
 	codexStackResidentCouncilTaskPrefixV0                    = "task-council-"
 	codexStackResidentCouncilProposalTaskPrefixV0            = "task-council-p-"
 	codexStackResidentCouncilCritiqueTaskPrefixV0            = "task-council-c-"
@@ -223,8 +225,9 @@ func (source codexStackResidentBriefingSourceV0) decisionCouncilOpenPhaseBriefin
 }
 
 type codexStackResidentExternalActionHandlerV0 struct {
-	Request orquestaappdirectorservice.ContinueAppDirectorRequestV0
-	Ports   orquestaappdirectorservice.StartAppDirectorPortsV0
+	Request         orquestaappdirectorservice.ContinueAppDirectorRequestV0
+	Ports           orquestaappdirectorservice.StartAppDirectorPortsV0
+	DecisionCouncil DecisionCouncilConfigV0
 }
 
 func (handler codexStackResidentExternalActionHandlerV0) ExecuteDirectorBriefingExternalActionV0(
@@ -248,6 +251,8 @@ func (handler codexStackResidentExternalActionHandlerV0) ExecuteDirectorBriefing
 			orquestacoreworkflow.OrchestrationPhaseVotacionYDecisionV0,
 			codexStackResidentCouncilOpenVoteReasonV0,
 		)
+	case codexStackResidentActionKindAcceptCouncilDecisionV0:
+		return handler.acceptDecisionCouncilResultV0(ctx, request)
 	}
 	return (codexStackResidentCloseHandlerV0{
 		Request: handler.Request,

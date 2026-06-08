@@ -2,6 +2,25 @@
 
 ```text
 Fecha: 2026-06-08
+Decision: El consejo residente acepta decisiones solo desde votos
+estructurados inyectados por composicion.
+Motivo: los agentes pueden redactar resúmenes con alias o nombres cercanos; el
+stack no debe convertir texto libre en un rail fragil para decidir una
+arquitectura. La votacion live necesita payload causal (`architecture_vote.v0`)
+o una fuente equivalente por puerto.
+Impacto: `ConfigV0.DecisionCouncil` inyecta `VoteSource`; cuando las tareas
+`task-council-v-*` ya estan entregadas y existe fuente de voto, el residente
+propone `accept_decision_council_result`. El handler une votos por `TaskRef`,
+conserva `VoteRef` independiente, fuerza `VoterRef` desde `agent_ref` y
+`FamilyRef` desde `family_ref` en tareas/plan durables, evalua
+quorum/evidencia con `orquesta-decision-council` y aplica `AcceptDecision` por
+`HandleStoredWorkflowCommandV0`. Si faltan votos completos o evidencia, queda
+pendiente con evidencia; no parsea logs, summary ni palabras sueltas.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-06-08
 Decision: El consejo residente abre fases ejecutables por eventos del workflow,
 no por estado implicito del materializador.
 Motivo: `DecisionCouncilPlanMaterializerV0` crea tareas `task-council-*`, pero
@@ -13,8 +32,8 @@ Impacto: tras materializar un consejo, el handler del stack abre
 estan entregadas o cerradas, la fuente residente propone abrir
 `votacion_y_decision`. La logica vive en la composicion Codex, usa
 `RunStore`/`DirectorTaskStore` y no cambia core ni introduce filtros de
-contenido. El agregador live de votos y `AcceptDecision` sigue como siguiente
-corte.
+contenido. El cierre live de votos queda delegado al puerto estructurado del
+consejo residente.
 Estado: aceptada.
 ```
 

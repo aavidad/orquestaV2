@@ -25,6 +25,7 @@ type StackV0 struct {
 	AutoprogrammingPromotion AutoprogrammingPromotionConfigV0
 	DomainWork               orquestamcp.MCPDomainWorkExecutorPortV0
 	RuntimeModels            orquestaruntime.RuntimeModelManagerPortV0
+	DecisionCouncil          DecisionCouncilConfigV0
 	DomainDelivery           DomainWorkDeliveryBridgeConfigV0
 	Codex                    CodexRuntimeConfigV0
 	CodexRuntimeWorkDir      string
@@ -49,6 +50,7 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 		AutoprogrammingPromotion: config.AutoprogrammingPromotion,
 		DomainWork:               config.DomainWork,
 		RuntimeModels:            config.RuntimeModels,
+		DecisionCouncil:          config.DecisionCouncil,
 		DomainDelivery:           config.DomainDelivery,
 		Codex:                    config.Codex,
 		CodexRuntimeWorkDir:      config.Codex.RuntimeWorkDir,

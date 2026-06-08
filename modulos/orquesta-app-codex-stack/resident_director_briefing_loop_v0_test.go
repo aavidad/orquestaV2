@@ -7,6 +7,7 @@ import (
 	"time"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadecisioncouncil "orquesta/modulos/orquesta-decision-council"
 	orquestadirectorsupervisedburst "orquesta/modulos/orquesta-director-supervised-burst"
 	orquestadirectorsupervisor "orquesta/modulos/orquesta-director-supervisor"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -224,8 +225,9 @@ func TestCodexStackResidentBriefingSourceV0NoEmiteConsejoFueraDeFaseDeCreacionV0
 		t.Fatalf("SaveRunV0: %v", err)
 	}
 	source := codexStackResidentBriefingSourceV0{
-		RunStore:  stack.Ports.RunStore,
-		TaskStore: stack.Ports.DirectorTaskStore,
+		RunStore:        stack.Ports.RunStore,
+		TaskStore:       stack.Ports.DirectorTaskStore,
+		DecisionCouncil: DecisionCouncilConfigV0{VoteSource: fakeDecisionCouncilVoteSourceForTestV0{}},
 	}
 
 	briefing, err := source.BuildResidentDirectorBriefingV0(
@@ -338,8 +340,9 @@ func TestCodexStackResidentCouncilV0AbreVotacionCuandoTerminaBrainstormV0(t *tes
 		t.Fatalf("SaveRunV0 brainstorm delivered: %v", err)
 	}
 	source := codexStackResidentBriefingSourceV0{
-		RunStore:  stack.Ports.RunStore,
-		TaskStore: stack.Ports.DirectorTaskStore,
+		RunStore:        stack.Ports.RunStore,
+		TaskStore:       stack.Ports.DirectorTaskStore,
+		DecisionCouncil: DecisionCouncilConfigV0{VoteSource: fakeDecisionCouncilVoteSourceForTestV0{}},
 	}
 	briefing, err := source.BuildResidentDirectorBriefingV0(
 		ctx,
@@ -371,6 +374,235 @@ func TestCodexStackResidentCouncilV0AbreVotacionCuandoTerminaBrainstormV0(t *tes
 		voteRun.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseVotacionYDecisionV0 ||
 		!codexStackResidentCouncilHasTaskRefWithPrefixForTestV0(voteCandidates, codexStackResidentCouncilVoteTaskPrefixV0) {
 		t.Fatalf("result=%+v phase=%s candidates=%v", result, voteRun.CurrentPhase, voteCandidates)
+	}
+}
+
+func TestCodexStackResidentCouncilV0AceptaDecisionConVotosEstructuradosV0(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	run := codexStackResidentCouncilRunForTestV0(
+		"run-resident-council-accept-001",
+		orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0,
+		[]string{"contract:function:decision-council:v0"},
+	)
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	handler := codexStackResidentExternalActionHandlerV0{
+		Ports: stack.Ports,
+		DecisionCouncil: DecisionCouncilConfigV0{
+			VoteSource: fakeDecisionCouncilVoteSourceForTestV0{},
+		},
+	}
+	if _, err := handler.ExecuteDirectorBriefingExternalActionV0(
+		ctx,
+		codexStackResidentCouncilExternalActionRequestForTestV0(run.RunID),
+	); err != nil {
+		t.Fatalf("materialize council: %v", err)
+	}
+	brainstorm := codexStackResidentCouncilRunFromStoreForTestV0(t, ctx, stack, run.RunID)
+	tasks := codexStackResidentCouncilTasksForTestV0(t, ctx, stack, brainstorm)
+	brainstorm = codexStackResidentCouncilMarkRolesDeliveredForTestV0(brainstorm, tasks, "p", "c")
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, brainstorm); err != nil {
+		t.Fatalf("SaveRunV0 brainstorm delivered: %v", err)
+	}
+	source := codexStackResidentBriefingSourceV0{
+		RunStore:        stack.Ports.RunStore,
+		TaskStore:       stack.Ports.DirectorTaskStore,
+		DecisionCouncil: DecisionCouncilConfigV0{VoteSource: fakeDecisionCouncilVoteSourceForTestV0{}},
+	}
+	openVote, err := source.BuildResidentDirectorBriefingV0(
+		ctx,
+		orquestacionnucleoapp.ResidentDirectorBriefingBuildRequestV0{
+			RunRef:     run.RunID,
+			StepNumber: 2,
+		},
+	)
+	if err != nil {
+		t.Fatalf("BuildResidentDirectorBriefingV0 open vote: %v", err)
+	}
+	if openVote.NextAction == nil || openVote.NextAction.Kind != codexStackResidentActionKindOpenCouncilVoteV0 {
+		t.Fatalf("openVote=%+v", openVote)
+	}
+	if _, err := handler.ExecuteDirectorBriefingExternalActionV0(ctx, orquestacionnucleoapp.DirectorBriefingExternalActionRequestV0{
+		Briefing:      openVote,
+		Action:        *openVote.NextAction,
+		OccurredAt:    "2026-06-08T12:20:00Z",
+		CorrelationID: "corr-" + run.RunID + "-open-vote",
+		EvidenceRefs:  []string{"evidence-ref-" + run.RunID + "-open-vote-test"},
+	}); err != nil {
+		t.Fatalf("open vote phase: %v", err)
+	}
+	voteRun := codexStackResidentCouncilRunFromStoreForTestV0(t, ctx, stack, run.RunID)
+	voteRun = codexStackResidentCouncilMarkRolesDeliveredForTestV0(voteRun, tasks, "v")
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, voteRun); err != nil {
+		t.Fatalf("SaveRunV0 votes delivered: %v", err)
+	}
+	accept, err := source.BuildResidentDirectorBriefingV0(
+		ctx,
+		orquestacionnucleoapp.ResidentDirectorBriefingBuildRequestV0{
+			RunRef:     run.RunID,
+			StepNumber: 3,
+		},
+	)
+	if err != nil {
+		t.Fatalf("BuildResidentDirectorBriefingV0 accept: %v", err)
+	}
+	if accept.NextAction == nil || accept.NextAction.Kind != codexStackResidentActionKindAcceptCouncilDecisionV0 {
+		t.Fatalf("accept=%+v", accept)
+	}
+	first, err := handler.ExecuteDirectorBriefingExternalActionV0(ctx, orquestacionnucleoapp.DirectorBriefingExternalActionRequestV0{
+		Briefing:      accept,
+		Action:        *accept.NextAction,
+		OccurredAt:    "2026-06-08T12:30:00Z",
+		CorrelationID: "corr-" + run.RunID + "-accept",
+		EvidenceRefs:  []string{"evidence-ref-" + run.RunID + "-accept-test"},
+	})
+	if err != nil {
+		t.Fatalf("accept decision first: %v", err)
+	}
+	acceptedRun := codexStackResidentCouncilRunFromStoreForTestV0(t, ctx, stack, run.RunID)
+	decisionRef := codexStackResidentCouncilDecisionRefV0(run.RunID)
+	if first.Status != orquestacionnucleoapp.DirectorBriefingExecutionStatusExternalAppliedV0 ||
+		!codexStackStringInSetForTestV0(acceptedRun.Decisions, decisionRef) {
+		t.Fatalf("first=%+v decisions=%v want %s", first, acceptedRun.Decisions, decisionRef)
+	}
+	second, err := handler.ExecuteDirectorBriefingExternalActionV0(ctx, orquestacionnucleoapp.DirectorBriefingExternalActionRequestV0{
+		Briefing:      accept,
+		Action:        *accept.NextAction,
+		OccurredAt:    "2026-06-08T12:31:00Z",
+		CorrelationID: "corr-" + run.RunID + "-accept-repeat",
+		EvidenceRefs:  []string{"evidence-ref-" + run.RunID + "-accept-repeat-test"},
+	})
+	if err != nil {
+		t.Fatalf("accept decision second: %v", err)
+	}
+	afterRepeat := codexStackResidentCouncilRunFromStoreForTestV0(t, ctx, stack, run.RunID)
+	if second.Status != orquestacionnucleoapp.DirectorBriefingExecutionStatusExternalAppliedV0 ||
+		len(afterRepeat.Decisions) != len(acceptedRun.Decisions) {
+		t.Fatalf("second=%+v before=%v after=%v", second, acceptedRun.Decisions, afterRepeat.Decisions)
+	}
+}
+
+func TestCodexStackResidentCouncilV0NoProponeAceptarSinVoteSourceV0(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	run := codexStackResidentCouncilRunForTestV0(
+		"run-resident-council-no-vote-source-001",
+		orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0,
+		[]string{"contract:function:decision-council:v0"},
+	)
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	handler := codexStackResidentExternalActionHandlerV0{Ports: stack.Ports}
+	if _, err := handler.ExecuteDirectorBriefingExternalActionV0(
+		ctx,
+		codexStackResidentCouncilExternalActionRequestForTestV0(run.RunID),
+	); err != nil {
+		t.Fatalf("materialize council: %v", err)
+	}
+	brainstorm := codexStackResidentCouncilRunFromStoreForTestV0(t, ctx, stack, run.RunID)
+	tasks := codexStackResidentCouncilTasksForTestV0(t, ctx, stack, brainstorm)
+	brainstorm = codexStackResidentCouncilMarkRolesDeliveredForTestV0(brainstorm, tasks, "p", "c")
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, brainstorm); err != nil {
+		t.Fatalf("SaveRunV0 brainstorm delivered: %v", err)
+	}
+	source := codexStackResidentBriefingSourceV0{
+		RunStore:  stack.Ports.RunStore,
+		TaskStore: stack.Ports.DirectorTaskStore,
+	}
+	openVote, err := source.BuildResidentDirectorBriefingV0(ctx, orquestacionnucleoapp.ResidentDirectorBriefingBuildRequestV0{
+		RunRef:     run.RunID,
+		StepNumber: 2,
+	})
+	if err != nil {
+		t.Fatalf("BuildResidentDirectorBriefingV0 open vote: %v", err)
+	}
+	if openVote.NextAction == nil || openVote.NextAction.Kind != codexStackResidentActionKindOpenCouncilVoteV0 {
+		t.Fatalf("openVote=%+v", openVote)
+	}
+	if _, err := handler.ExecuteDirectorBriefingExternalActionV0(ctx, orquestacionnucleoapp.DirectorBriefingExternalActionRequestV0{
+		Briefing:      openVote,
+		Action:        *openVote.NextAction,
+		OccurredAt:    "2026-06-08T12:40:00Z",
+		CorrelationID: "corr-" + run.RunID + "-open-vote",
+		EvidenceRefs:  []string{"evidence-ref-" + run.RunID + "-open-vote-test"},
+	}); err != nil {
+		t.Fatalf("open vote phase: %v", err)
+	}
+	voteRun := codexStackResidentCouncilRunFromStoreForTestV0(t, ctx, stack, run.RunID)
+	voteRun = codexStackResidentCouncilMarkRolesDeliveredForTestV0(voteRun, tasks, "v")
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, voteRun); err != nil {
+		t.Fatalf("SaveRunV0 votes delivered: %v", err)
+	}
+	briefing, err := source.BuildResidentDirectorBriefingV0(ctx, orquestacionnucleoapp.ResidentDirectorBriefingBuildRequestV0{
+		RunRef:     run.RunID,
+		StepNumber: 3,
+	})
+	if err != nil {
+		t.Fatalf("BuildResidentDirectorBriefingV0: %v", err)
+	}
+	if briefing.NextAction != nil && briefing.NextAction.Kind == codexStackResidentActionKindAcceptCouncilDecisionV0 {
+		t.Fatalf("briefing propone accept sin VoteSource: %+v", briefing)
+	}
+}
+
+func TestCodexStackResidentCouncilHydrateVotesV0NormalizaMetadataDurableV0(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	run := codexStackResidentCouncilRunForTestV0(
+		"run-resident-council-hydrate-001",
+		orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0,
+		[]string{"contract:function:decision-council:v0"},
+	)
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	handler := codexStackResidentExternalActionHandlerV0{Ports: stack.Ports}
+	if _, err := handler.ExecuteDirectorBriefingExternalActionV0(
+		ctx,
+		codexStackResidentCouncilExternalActionRequestForTestV0(run.RunID),
+	); err != nil {
+		t.Fatalf("materialize council: %v", err)
+	}
+	materialized := codexStackResidentCouncilRunFromStoreForTestV0(t, ctx, stack, run.RunID)
+	tasks := codexStackResidentCouncilTasksForTestV0(t, ctx, stack, materialized)
+	plan, err := codexStackResidentCouncilPlanFromRunV0(materialized, []string{"evidence-ref-hydrate-test"})
+	if err != nil {
+		t.Fatalf("codexStackResidentCouncilPlanFromRunV0: %v", err)
+	}
+	optionRefs := codexStackResidentCouncilOptionRefsV0(tasks)
+	voteTasks := codexStackResidentCouncilTasksByRoleV0(tasks, "v")
+	rawVotes := make([]orquestadecisioncouncil.CouncilVoteV0, 0, len(voteTasks))
+	for _, task := range voteTasks {
+		rawVotes = append(rawVotes, orquestadecisioncouncil.CouncilVoteV0{
+			TaskRef:      task.TaskID,
+			VoteRef:      "vote-ref-external-" + task.TaskID,
+			VoterRef:     "agent-ref-spoof",
+			FamilyRef:    "family-ref-spoof",
+			OptionRef:    optionRefs[0],
+			Position:     orquestadecisioncouncil.CouncilVoteApproveV0,
+			EvidenceRefs: []string{"evidence-ref-external-" + task.TaskID},
+		})
+	}
+	hydrated := codexStackResidentCouncilHydrateVotesV0(plan, voteTasks, rawVotes)
+	if len(hydrated) != len(voteTasks) {
+		t.Fatalf("hydrated=%d want %d", len(hydrated), len(voteTasks))
+	}
+	for index, vote := range hydrated {
+		task := voteTasks[index]
+		assignment, ok := codexStackResidentCouncilAssignmentForTaskV0(plan, task)
+		if !ok {
+			t.Fatalf("assignment missing for %s", task.TaskID)
+		}
+		if vote.TaskRef != task.TaskID ||
+			vote.VoteRef == task.TaskID ||
+			vote.VoterRef != assignment.AgentRef ||
+			vote.FamilyRef != assignment.FamilyRef ||
+			codexStackStringInSetForTestV0(vote.EvidenceRefs, task.TaskID) {
+			t.Fatalf("vote=%+v assignment=%+v task=%s", vote, assignment, task.TaskID)
+		}
 	}
 }
 
@@ -588,6 +820,42 @@ func codexStackResidentCouncilCandidateTaskRefsForTestV0(
 	return compactStringsV0(refs)
 }
 
+func codexStackResidentCouncilTasksForTestV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) []orquestacoreworkflow.WorkflowTaskV0 {
+	t.Helper()
+	tasks, err := stack.Ports.DirectorTaskStore.LoadWorkflowTasksV0(
+		ctx,
+		run.RunID,
+		codexStackResidentCouncilTaskRefsFromRunForTestV0(run),
+	)
+	if err != nil {
+		t.Fatalf("LoadWorkflowTasksV0: %v", err)
+	}
+	return tasks
+}
+
+func codexStackResidentCouncilMarkRolesDeliveredForTestV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	tasks []orquestacoreworkflow.WorkflowTaskV0,
+	roles ...string,
+) orquestacoreworkflow.OrchestrationRunV0 {
+	roleSet := map[string]bool{}
+	for _, role := range roles {
+		roleSet[strings.TrimSpace(role)] = true
+	}
+	for _, task := range tasks {
+		if roleSet[codexStackResidentCouncilTaskRoleV0(task)] {
+			run.DeliveredTasks = append(run.DeliveredTasks, task.TaskID)
+		}
+	}
+	run.DeliveredTasks = compactStringsV0(run.DeliveredTasks)
+	return run
+}
+
 func codexStackResidentCouncilHasTaskRefWithPrefixForTestV0(
 	refs []string,
 	prefix string,
@@ -598,4 +866,35 @@ func codexStackResidentCouncilHasTaskRefWithPrefixForTestV0(
 		}
 	}
 	return false
+}
+
+type fakeDecisionCouncilVoteSourceForTestV0 struct{}
+
+func (fakeDecisionCouncilVoteSourceForTestV0) BuildDecisionCouncilVotesV0(
+	ctx context.Context,
+	request DecisionCouncilVoteBuildRequestV0,
+) (DecisionCouncilVoteBuildResultV0, error) {
+	if err := ctx.Err(); err != nil {
+		return DecisionCouncilVoteBuildResultV0{}, err
+	}
+	optionRef := ""
+	if len(request.OptionRefs) > 0 {
+		optionRef = request.OptionRefs[0]
+	}
+	votes := make([]orquestadecisioncouncil.CouncilVoteV0, 0, len(request.VoteTasks))
+	for _, task := range request.VoteTasks {
+		votes = append(votes, orquestadecisioncouncil.CouncilVoteV0{
+			TaskRef:      task.TaskID,
+			VoteRef:      "vote-ref-source-" + task.TaskID,
+			VoterRef:     "agent-ref-source-spoof",
+			FamilyRef:    "family-ref-source-spoof",
+			OptionRef:    optionRef,
+			Position:     orquestadecisioncouncil.CouncilVoteApproveV0,
+			EvidenceRefs: []string{"evidence-ref-vote-" + task.TaskID},
+		})
+	}
+	return DecisionCouncilVoteBuildResultV0{
+		Votes:        votes,
+		EvidenceRefs: []string{"evidence-ref-fake-structured-votes"},
+	}, nil
 }

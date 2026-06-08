@@ -1,5 +1,40 @@
 # Tareas: orquesta-app-codex-stack
 
+## APP-CODEX-STACK-041
+
+Objetivo: cerrar el consejo residente desde votos estructurados hasta
+`AcceptDecision`.
+
+Estado: hecho.
+
+Write-set aplicado:
+
+- `ConfigV0.DecisionCouncil` y `StackV0.DecisionCouncil` permiten inyectar una
+  fuente de votos por composicion;
+- cuando las tareas `task-council-v-*` estan entregadas, el briefing residente
+  propone `accept_decision_council_result` solo si existe `VoteSource`
+  inyectado para no entrar en un pendiente externo repetitivo;
+- el handler pide votos estructurados al puerto `VoteSource`, hidrata
+  `TaskRef`/`VoteRef`, fuerza `VoterRef` desde `agent_ref` y `FamilyRef` desde
+  `family_ref` en tareas/plan durables, evalua quorum con
+  `orquesta-decision-council` y aplica `AcceptDecision` por el workflow;
+- la ruta queda idempotente si la decision ya esta reflejada;
+- no se parsean summaries, logs ni texto libre de agentes.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'ResidentCouncil|ResidentDirector'`
+- `go test -count=1 ./modulos/orquesta-orchestration-core -run 'DecisionCouncil|WorkflowTaskProfile|AcceptDecision'`
+- `go test -count=1 ./modulos/orquesta-decision-council`
+
+Pendiente siguiente:
+
+- `CODEX-COUNCIL-PACKET-V0`: enriquecer el paquete Codex de tareas de consejo
+  fuera de `programacion` para que propuesta, critica y voto reciban contexto
+  especifico y no caigan como director generico;
+- fuente real de `architecture_vote.v0` desde entregas/artefactos Codex;
+- smoke opt-in `Director residente + Codex real` con servidor temporal.
+
 ## APP-CODEX-STACK-040
 
 Objetivo: hacer que el consejo residente materializado sea trabajo vivo del
@@ -24,7 +59,6 @@ Validacion:
 
 Pendiente siguiente:
 
-- agregador live de votos `task-council-v-*` hacia `AcceptDecision`;
 - prompt/paquete enriquecido para tareas de consejo fuera de `programacion`;
 - smoke opt-in `Director residente + Codex real`.
 

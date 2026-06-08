@@ -254,15 +254,20 @@ func (stack StackV0) runCodexStackResidentDirectorRunV0(
 		WaitAgentRefs:        runtime.LoopRequest.WaitAgentRefs,
 		WaitScopeApplied:     runtime.LoopRequest.WaitScopeApplied,
 		BriefingSource: codexStackResidentBriefingSourceV0{
-			OutboxLedger: stack.Stores.OutboxLedger,
-			RunStore:     stack.Ports.RunStore,
-			TaskStore:    stack.Ports.DirectorTaskStore,
-			ObjectiveRef: "resident-director:" + continueRequest.RunRef,
-			ContextRefs:  []string{"context-ref-codex-stack-resident-director"},
+			OutboxLedger:    stack.Stores.OutboxLedger,
+			RunStore:        stack.Ports.RunStore,
+			TaskStore:       stack.Ports.DirectorTaskStore,
+			DecisionCouncil: stack.DecisionCouncil,
+			ObjectiveRef:    "resident-director:" + continueRequest.RunRef,
+			ContextRefs:     []string{"context-ref-codex-stack-resident-director"},
 		},
-		Dispatchers:           runtime.LoopRequest.Dispatchers,
-		BatchDispatchers:      runtime.LoopRequest.BatchDispatchers,
-		ExternalActionHandler: codexStackResidentExternalActionHandlerV0{Request: runtime.Request, Ports: stack.Ports},
+		Dispatchers:      runtime.LoopRequest.Dispatchers,
+		BatchDispatchers: runtime.LoopRequest.BatchDispatchers,
+		ExternalActionHandler: codexStackResidentExternalActionHandlerV0{
+			Request:         runtime.Request,
+			Ports:           stack.Ports,
+			DecisionCouncil: stack.DecisionCouncil,
+		},
 	})
 	result := CodexStackResidentDirectorRunResultV0{
 		Status:          firstNonEmptyQueuedSourceV0(loop.Status, CodexStackResidentDirectorStatusCompletedV0),
@@ -347,11 +352,12 @@ func codexStackResidentResultFromCoordinatorV0(
 }
 
 type codexStackResidentBriefingSourceV0 struct {
-	OutboxLedger orquestadirectorcycleoutbox.DirectorCycleOutboxLedgerPortV0
-	RunStore     orquestacionnucleoapp.RunStorePortV0
-	TaskStore    orquestacionnucleoapp.WorkflowTaskStorePortV0
-	ObjectiveRef string
-	ContextRefs  []string
+	OutboxLedger    orquestadirectorcycleoutbox.DirectorCycleOutboxLedgerPortV0
+	RunStore        orquestacionnucleoapp.RunStorePortV0
+	TaskStore       orquestacionnucleoapp.WorkflowTaskStorePortV0
+	DecisionCouncil DecisionCouncilConfigV0
+	ObjectiveRef    string
+	ContextRefs     []string
 }
 
 func (source codexStackResidentBriefingSourceV0) BuildResidentDirectorBriefingV0(
@@ -386,6 +392,14 @@ func (source codexStackResidentBriefingSourceV0) BuildResidentDirectorBriefingV0
 				pendingOutboxRefsForResidentDirectorV0(pending),
 			)
 		}
+	}
+	if source.shouldAcceptDecisionCouncilVotesV0(ctx, request) {
+		return source.decisionCouncilOpenPhaseBriefingV0(
+			request,
+			codexStackResidentActionKindAcceptCouncilDecisionV0,
+			codexStackResidentCouncilAcceptReasonV0,
+			18,
+		), nil
 	}
 	if source.shouldOpenDecisionCouncilVotePhaseV0(ctx, request) {
 		return source.decisionCouncilOpenPhaseBriefingV0(

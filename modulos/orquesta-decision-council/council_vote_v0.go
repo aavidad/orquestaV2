@@ -21,6 +21,7 @@ type DecisionCouncilVoteInputV0 struct {
 }
 
 type CouncilVoteV0 struct {
+	TaskRef      string   `json:"task_ref,omitempty"`
 	VoteRef      string   `json:"vote_ref"`
 	VoterRef     string   `json:"voter_ref"`
 	FamilyRef    string   `json:"family_ref"`
@@ -80,6 +81,7 @@ func normalizeDecisionCouncilVoteInputV0(
 }
 
 func normalizeCouncilVoteV0(vote CouncilVoteV0) CouncilVoteV0 {
+	vote.TaskRef = strings.TrimSpace(vote.TaskRef)
 	vote.VoteRef = strings.TrimSpace(vote.VoteRef)
 	vote.VoterRef = strings.TrimSpace(vote.VoterRef)
 	vote.FamilyRef = strings.TrimSpace(vote.FamilyRef)

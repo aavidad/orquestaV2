@@ -74,6 +74,18 @@ Cobertura Go actual:
   valida que, tras propuestas y criticas entregadas, la fuente residente emite
   `open_decision_council_vote_phase`, el handler abre `votacion_y_decision` y
   los votos quedan schedulables.
+- `TestCodexStackResidentCouncilV0AceptaDecisionConVotosEstructuradosV0`
+  valida la cadena live del consejo residente: propuestas y criticas
+  entregadas, apertura de votacion, votos `architecture_vote.v0` simulados por
+  `VoteSource`, evaluacion de quorum/evidencia/familias y aplicacion
+  idempotente de `AcceptDecision`.
+- `TestCodexStackResidentCouncilV0NoProponeAceptarSinVoteSourceV0` valida que
+  el residente no emite una accion de aceptacion que no puede aplicar por falta
+  de fuente estructurada de votos.
+- `TestCodexStackResidentCouncilHydrateVotesV0NormalizaMetadataDurableV0`
+  valida que `TaskRef` une voto y tarea, `VoteRef` puede ser independiente y
+  `agent_ref`/`family_ref` durables mandan sobre valores devueltos por el
+  adaptador.
 - `TestCodexStackResidentCouncilHandlerV0NoMaterializaSinContratoFuncionalV0`
   confirma que sin contrato funcional publicado el handler deja evidencia
   pendiente y no inventa microtareas.
@@ -195,6 +207,9 @@ Estado de huecos restantes:
   politica productiva de tests de dominio ni un proveedor Codex real.
 - OPES `plan_temario` real quedo cerrado para `document_plan` y creacion de
   derivados pendientes; falta smoke real completo de derivados/cierre OPES.
+- El consejo residente ya llega offline/fake hasta `AcceptDecision` con votos
+  estructurados. Falta fuente real de artefactos `architecture_vote.v0` y
+  paquete Codex especifico para tareas de consejo fuera de `programacion`.
 - Falta un smoke canonico opt-in de `Director residente + Codex real`. Los
   smokes reales vigentes cubren ola/recursion Codex, pero el smoke residente
   actual usa `codex-fake`; no debe marcarse como evidencia de proveedor real
