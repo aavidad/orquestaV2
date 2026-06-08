@@ -140,7 +140,7 @@ func executeDirectorBriefingExternalActionV0(
 	if external.ActionRef == "" {
 		external.ActionRef = action.ActionRef
 	}
-	status := DirectorBriefingExecutionStatusExternalAppliedV0
+	status := external.Status
 	if err != nil {
 		status = DirectorBriefingExecutionStatusExternalFailedV0
 		if external.Status == "" {
@@ -148,6 +148,7 @@ func executeDirectorBriefingExternalActionV0(
 		}
 	} else if external.Status == "" {
 		external.Status = DirectorBriefingExecutionStatusExternalAppliedV0
+		status = external.Status
 	}
 	result := DirectorBriefingExecutionResultV0{
 		Status:       status,

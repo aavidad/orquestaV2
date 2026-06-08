@@ -34,6 +34,8 @@ Cobertura:
   puerto y termina en `close_or_idle`;
 - no autoaplica acciones marcadas como `requires_director`;
 - conserva como pendiente una accion externa sin handler;
+- propaga como `external_action_pending` una accion externa cuyo handler queda
+  pendiente, sin convertirla falsamente en `external_action_applied`;
 - respeta `MaxActions` como presupuesto operativo del loop.
 
 Riesgos:

@@ -2,6 +2,24 @@
 
 ```text
 Fecha: 2026-06-08
+Decision: El consejo residente abre fases ejecutables por eventos del workflow,
+no por estado implicito del materializador.
+Motivo: `DecisionCouncilPlanMaterializerV0` crea tareas `task-council-*`, pero
+el scheduler solo considera tareas de la fase actual. Si el run permanece en
+`planificacion_microtareas` o `programacion`, las propuestas, criticas y votos
+quedan durables pero no lanzables.
+Impacto: tras materializar un consejo, el handler del stack abre
+`brainstorming_arquitectura` por `OpenPhase`; cuando propuestas y criticas
+estan entregadas o cerradas, la fuente residente propone abrir
+`votacion_y_decision`. La logica vive en la composicion Codex, usa
+`RunStore`/`DirectorTaskStore` y no cambia core ni introduce filtros de
+contenido. El agregador live de votos y `AcceptDecision` sigue como siguiente
+corte.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-06-08
 Decision: El Director residente del stack materializa consejos solo desde
 estado durable del run.
 Motivo: el consejo/votacion debe ayudar al Director, no convertirse en otro

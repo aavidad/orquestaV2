@@ -68,7 +68,12 @@ Cobertura Go actual:
   causalmente aplicable.
 - `TestCodexStackResidentCouncilHandlerV0MaterializaUnaVezConContratoPublicadoV0`
   valida la materializacion idempotente de tareas `task-council-*` por puertos
-  del stack.
+  del stack, abre `brainstorming_arquitectura` y deja candidatos de propuesta
+  visibles para `WorkflowTaskCandidateProviderV0`.
+- `TestCodexStackResidentCouncilV0AbreVotacionCuandoTerminaBrainstormV0`
+  valida que, tras propuestas y criticas entregadas, la fuente residente emite
+  `open_decision_council_vote_phase`, el handler abre `votacion_y_decision` y
+  los votos quedan schedulables.
 - `TestCodexStackResidentCouncilHandlerV0NoMaterializaSinContratoFuncionalV0`
   confirma que sin contrato funcional publicado el handler deja evidencia
   pendiente y no inventa microtareas.
@@ -190,6 +195,13 @@ Estado de huecos restantes:
   politica productiva de tests de dominio ni un proveedor Codex real.
 - OPES `plan_temario` real quedo cerrado para `document_plan` y creacion de
   derivados pendientes; falta smoke real completo de derivados/cierre OPES.
+- Falta un smoke canonico opt-in de `Director residente + Codex real`. Los
+  smokes reales vigentes cubren ola/recursion Codex, pero el smoke residente
+  actual usa `codex-fake`; no debe marcarse como evidencia de proveedor real
+  hasta crear script o flag dedicado.
+- Gemini/Claude aun heredan contratos de ACK/receipt con nombres `codex_*`.
+  Pendiente neutralizar a `orquesta_agent_ack.v0` y mantener `codex_*` solo
+  como alias legacy del adaptador Codex.
 
 Guardas esperadas para pruebas futuras:
 

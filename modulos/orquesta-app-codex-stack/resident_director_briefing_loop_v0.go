@@ -387,6 +387,22 @@ func (source codexStackResidentBriefingSourceV0) BuildResidentDirectorBriefingV0
 			)
 		}
 	}
+	if source.shouldOpenDecisionCouncilVotePhaseV0(ctx, request) {
+		return source.decisionCouncilOpenPhaseBriefingV0(
+			request,
+			codexStackResidentActionKindOpenCouncilVoteV0,
+			codexStackResidentCouncilOpenVoteReasonV0,
+			17,
+		), nil
+	}
+	if source.shouldOpenDecisionCouncilBrainstormPhaseV0(ctx, request) {
+		return source.decisionCouncilOpenPhaseBriefingV0(
+			request,
+			codexStackResidentActionKindOpenCouncilBrainstormV0,
+			codexStackResidentCouncilOpenBrainstormReasonV0,
+			16,
+		), nil
+	}
 	if source.shouldMaterializeDecisionCouncilV0(ctx, request) {
 		return source.decisionCouncilBriefingV0(request), nil
 	}

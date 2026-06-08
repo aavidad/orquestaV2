@@ -267,6 +267,9 @@ func TestCodexStackResidentCouncilHandlerV0MaterializaUnaVezConContratoPublicado
 		t.Fatalf("first=%+v", first)
 	}
 	afterFirst := codexStackResidentCouncilRunFromStoreForTestV0(t, ctx, stack, run.RunID)
+	if afterFirst.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseBrainstormingArquitecturaV0 {
+		t.Fatalf("current_phase=%s, want %s", afterFirst.CurrentPhase, orquestacoreworkflow.OrchestrationPhaseBrainstormingArquitecturaV0)
+	}
 	firstTaskRefs := codexStackResidentCouncilTaskRefsFromRunForTestV0(afterFirst)
 	if len(firstTaskRefs) == 0 {
 		t.Fatalf("no se materializaron tareas de consejo: %+v", afterFirst.Tasks)
@@ -281,6 +284,11 @@ func TestCodexStackResidentCouncilHandlerV0MaterializaUnaVezConContratoPublicado
 			t.Fatalf("task sin contrato esperado: %+v", task)
 		}
 	}
+	candidateTaskRefs := codexStackResidentCouncilCandidateTaskRefsForTestV0(t, ctx, stack, afterFirst)
+	if !codexStackResidentCouncilHasTaskRefWithPrefixForTestV0(candidateTaskRefs, codexStackResidentCouncilProposalTaskPrefixV0) ||
+		codexStackResidentCouncilHasTaskRefWithPrefixForTestV0(candidateTaskRefs, codexStackResidentCouncilVoteTaskPrefixV0) {
+		t.Fatalf("candidate_task_refs=%v", candidateTaskRefs)
+	}
 
 	second, err := handler.ExecuteDirectorBriefingExternalActionV0(ctx, request)
 	if err != nil {
@@ -291,6 +299,78 @@ func TestCodexStackResidentCouncilHandlerV0MaterializaUnaVezConContratoPublicado
 	if second.Status != orquestacionnucleoapp.DirectorBriefingExecutionStatusExternalAppliedV0 ||
 		len(secondTaskRefs) != len(firstTaskRefs) {
 		t.Fatalf("second=%+v first_tasks=%v second_tasks=%v", second, firstTaskRefs, secondTaskRefs)
+	}
+}
+
+func TestCodexStackResidentCouncilV0AbreVotacionCuandoTerminaBrainstormV0(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	run := codexStackResidentCouncilRunForTestV0(
+		"run-resident-council-vote-phase-001",
+		orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0,
+		[]string{"contract:function:decision-council:v0"},
+	)
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	handler := codexStackResidentExternalActionHandlerV0{Ports: stack.Ports}
+	if _, err := handler.ExecuteDirectorBriefingExternalActionV0(
+		ctx,
+		codexStackResidentCouncilExternalActionRequestForTestV0(run.RunID),
+	); err != nil {
+		t.Fatalf("materialize council: %v", err)
+	}
+	brainstorm := codexStackResidentCouncilRunFromStoreForTestV0(t, ctx, stack, run.RunID)
+	tasks, err := stack.Ports.DirectorTaskStore.LoadWorkflowTasksV0(
+		ctx,
+		run.RunID,
+		codexStackResidentCouncilTaskRefsFromRunForTestV0(brainstorm),
+	)
+	if err != nil {
+		t.Fatalf("LoadWorkflowTasksV0: %v", err)
+	}
+	for _, task := range tasks {
+		if codexStackResidentCouncilTaskRoleV0(task) != "v" {
+			brainstorm.DeliveredTasks = append(brainstorm.DeliveredTasks, task.TaskID)
+		}
+	}
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, brainstorm); err != nil {
+		t.Fatalf("SaveRunV0 brainstorm delivered: %v", err)
+	}
+	source := codexStackResidentBriefingSourceV0{
+		RunStore:  stack.Ports.RunStore,
+		TaskStore: stack.Ports.DirectorTaskStore,
+	}
+	briefing, err := source.BuildResidentDirectorBriefingV0(
+		ctx,
+		orquestacionnucleoapp.ResidentDirectorBriefingBuildRequestV0{
+			RunRef:     run.RunID,
+			StepNumber: 2,
+		},
+	)
+	if err != nil {
+		t.Fatalf("BuildResidentDirectorBriefingV0: %v", err)
+	}
+	if briefing.NextAction == nil ||
+		briefing.NextAction.Kind != codexStackResidentActionKindOpenCouncilVoteV0 {
+		t.Fatalf("briefing=%+v", briefing)
+	}
+	result, err := handler.ExecuteDirectorBriefingExternalActionV0(ctx, orquestacionnucleoapp.DirectorBriefingExternalActionRequestV0{
+		Briefing:      briefing,
+		Action:        *briefing.NextAction,
+		OccurredAt:    "2026-06-08T12:10:00Z",
+		CorrelationID: "corr-" + run.RunID + "-vote",
+		EvidenceRefs:  []string{"evidence-ref-" + run.RunID + "-vote-test"},
+	})
+	if err != nil {
+		t.Fatalf("open vote phase: %v", err)
+	}
+	voteRun := codexStackResidentCouncilRunFromStoreForTestV0(t, ctx, stack, run.RunID)
+	voteCandidates := codexStackResidentCouncilCandidateTaskRefsForTestV0(t, ctx, stack, voteRun)
+	if result.Status != orquestacionnucleoapp.DirectorBriefingExecutionStatusExternalAppliedV0 ||
+		voteRun.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseVotacionYDecisionV0 ||
+		!codexStackResidentCouncilHasTaskRefWithPrefixForTestV0(voteCandidates, codexStackResidentCouncilVoteTaskPrefixV0) {
+		t.Fatalf("result=%+v phase=%s candidates=%v", result, voteRun.CurrentPhase, voteCandidates)
 	}
 }
 
@@ -479,4 +559,43 @@ func codexStackResidentCouncilTaskRefsFromRunForTestV0(
 		}
 	}
 	return refs
+}
+
+func codexStackResidentCouncilCandidateTaskRefsForTestV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) []string {
+	t.Helper()
+	candidates, err := (orquestacionnucleoapp.WorkflowTaskCandidateProviderV0{
+		TaskStore: stack.Ports.DirectorTaskStore,
+	}).BuildSchedulerCandidatesV0(ctx, orquestacionnucleoapp.SchedulerCandidateRequestV0{
+		Run:           run,
+		OccurredAt:    "2026-06-08T12:05:00Z",
+		CorrelationID: "corr-" + run.RunID + "-candidates",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	refs := []string{}
+	for _, candidate := range candidates.WorkCandidates {
+		if candidate.AgentCandidate == nil {
+			continue
+		}
+		refs = append(refs, candidate.AgentCandidate.Payload.TaskRef)
+	}
+	return compactStringsV0(refs)
+}
+
+func codexStackResidentCouncilHasTaskRefWithPrefixForTestV0(
+	refs []string,
+	prefix string,
+) bool {
+	for _, ref := range refs {
+		if strings.HasPrefix(ref, prefix) {
+			return true
+		}
+	}
+	return false
 }

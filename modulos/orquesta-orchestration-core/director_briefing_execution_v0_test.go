@@ -149,6 +149,25 @@ func TestExecuteDirectorBriefingActionV0DelegatesExternalHandler(t *testing.T) {
 	}
 }
 
+func TestExecuteDirectorBriefingActionV0PropagaExternalPendingDelHandler(t *testing.T) {
+	runRef := "run-briefing-handler-pending-001"
+	handler := &recordingBriefingExternalHandlerV0{
+		status: DirectorBriefingExecutionStatusExternalPendingV0,
+	}
+	result, err := (ServiceV0{}).ExecuteDirectorBriefingActionV0(context.Background(), DirectorBriefingExecutionRequestV0{
+		Briefing:              briefingWithActionV0(runRef, briefingActionV0(runRef, "action-pending", orquestadirectorsupervisor.DirectorSupervisorActionKindAskDirectorV0)),
+		ExternalActionHandler: handler,
+	})
+	if err != nil {
+		t.Fatalf("execute handler action: %v", err)
+	}
+	if result.Status != DirectorBriefingExecutionStatusExternalPendingV0 ||
+		result.External == nil ||
+		result.External.Status != DirectorBriefingExecutionStatusExternalPendingV0 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestExecuteDirectorBriefingActionV0RechazaRunRefInconsistente(t *testing.T) {
 	runRef := "run-briefing-invalid-001"
 	_, err := (ServiceV0{}).ExecuteDirectorBriefingActionV0(context.Background(), DirectorBriefingExecutionRequestV0{
@@ -188,8 +207,9 @@ func TestExecuteDirectorBriefingActionV0PermiteKindNuevoPorHandler(t *testing.T)
 }
 
 type recordingBriefingExternalHandlerV0 struct {
-	calls int
-	err   error
+	calls  int
+	status string
+	err    error
 }
 
 func (handler *recordingBriefingExternalHandlerV0) ExecuteDirectorBriefingExternalActionV0(
@@ -201,6 +221,7 @@ func (handler *recordingBriefingExternalHandlerV0) ExecuteDirectorBriefingExtern
 	}
 	handler.calls++
 	return DirectorBriefingExternalActionResultV0{
+		Status:       handler.status,
 		RunRef:       request.Briefing.RunRef,
 		ActionRef:    request.Action.ActionRef,
 		EvidenceRefs: []string{"evidence-external-handler"},

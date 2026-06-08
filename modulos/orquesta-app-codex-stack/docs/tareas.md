@@ -1,5 +1,33 @@
 # Tareas: orquesta-app-codex-stack
 
+## APP-CODEX-STACK-040
+
+Objetivo: hacer que el consejo residente materializado sea trabajo vivo del
+scheduler, no solo tareas persistidas.
+
+Estado: hecho.
+
+Write-set aplicado:
+
+- `materialize_decision_council` abre `brainstorming_arquitectura` tras crear
+  `task-council-*`;
+- la fuente residente detecta propuestas y criticas ya entregadas y propone
+  `open_decision_council_vote_phase`;
+- el handler abre `votacion_y_decision` y conserva idempotencia por comando
+  `OpenPhase`;
+- tests fake validan candidatos de propuesta y voto por `WorkflowTaskStore`.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack`
+- `go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-decision-council ./modulos/orquesta-app-director-service`
+
+Pendiente siguiente:
+
+- agregador live de votos `task-council-v-*` hacia `AcceptDecision`;
+- prompt/paquete enriquecido para tareas de consejo fuera de `programacion`;
+- smoke opt-in `Director residente + Codex real`.
+
 ## APP-CODEX-STACK-001
 
 Objetivo: crear contexto local del mini-proyecto exterior sin tocar core ni
