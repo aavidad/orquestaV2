@@ -353,6 +353,38 @@ Reglas:
   PID visible;
 - la verificacion de write-set se hace fuera del core y antes de aceptar el ACK.
 
+## Director residente del stack
+
+Contrato de composicion:
+
+- `RunCodexStackResidentDirectorV0` es el adaptador real para el puerto
+  `orquestaserver.ResidentDirectorPortV0` usado por `cmd/orquesta-server`.
+- Coordina runs ejecutables desde `RunQueue`, ordenados por
+  `RankRunCandidatesV0` y acotados por `MaxRunsPerTick`/`MaxExecutions`; no
+  inventa runs ni escanea todos los agentes vivos.
+- Antes de ejecutar el briefing loop reutiliza
+  `BuildContinueAppDirectorLoopRuntimeV0`; por tanto conserva materializacion
+  de plan operativo, waits por refs/cohorte/ola, required tests, review phase,
+  stores y limites del `ContinueAppDirectorV0` existente.
+- La fuente de briefing es reentrante: si hay outbox pendiente emite
+  `wait_outbox`; si no hay outbox emite `continue`; si el burst anterior ya
+  dejo `FinalBriefing`, lo reaprovecha para no perder causalidad del paso.
+- El dispatch usa los `Dispatchers`/`BatchDispatchers` ya inyectados en el
+  stack. Codex real sigue viviendo solo en el batch executor y el runtime
+  configurado.
+- `close_or_idle` se aplica por handler externo que delega en
+  `ContinueAppDirectorV0`; el adaptador no muta estados terminales a mano ni
+  sustituye las fuentes reales de cierre causal.
+
+Riesgos:
+
+- reentrada: el servidor evita solape de ticks; el stack debe seguir usando
+  stores persistentes y no rutas paralelas de dispatch.
+- idempotencia: outbox ledger, run queue, run store y wait state son la barrera
+  real. No sustituirla por filtros de texto ni sleeps.
+- presupuesto: `MaxActions` limita el numero de acciones por tick; si se agota,
+  el siguiente tick debe continuar desde eventos/outbox persistidos.
+
 ## Review gate de programacion
 
 Contrato de composicion:

@@ -47,6 +47,18 @@ Cobertura Go actual:
 - `DrainRunV0` ejecuta `submitPendingDomainWorkArtifactsV0` tambien despues de
   `ContinueAppDirectorV0`; asi una entrega registrada dentro del mismo ciclo no
   queda como run `quiescent` antes de enviar el artefacto al conector de dominio.
+- `TestCodexStackResidentDirectorV0IdleSinCandidatosV0` valida que el Director
+  residente del stack queda idle cuando la cola no tiene runs ejecutables.
+- `TestCodexStackResidentDirectorV0EjecutaRunEnColaConBriefingLoopV0` valida
+  el adaptador real con runtime fake: el residente elige el run de `RunQueue`,
+  usa el briefing loop, materializa outbox y despacha hasta registrar un agente
+  Codex iniciado sin lanzar procesos reales.
+- `TestCodexStackResidentDirectorV0ProcesaLoteSegunMaxRunsPerTickV0` valida que
+  el residente puede ejecutar mas de un run por tick cuando los limites
+  normalizados lo permiten.
+- `TestCodexStackResidentBriefingSourceV0NoReutilizaStopMaxStepsInternoV0`
+  evita que un `stop_max_steps` interno de un burst se convierta en parada
+  terminal del residente.
 - las refs publicas del paquete de agente son neutrales y no filtran el
   conector real;
 - el resolver de tareas de programacion conserva en el paquete de agente el

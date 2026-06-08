@@ -23,6 +23,7 @@ type ResidentDirectorPortV0 interface {
 
 type ResidentDirectorCommandV0 struct {
 	MaxActions    int
+	OccurredAt    string
 	CorrelationID string
 	EvidenceRefs  []string
 }

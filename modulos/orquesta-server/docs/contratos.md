@@ -36,6 +36,10 @@ Salida:
 - statefile JSON `orquesta_server_state.v0`
 
 Configuracion externa relacionada:
+- `ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=true`: activa el pulso residente
+  del Director si la composicion ha inyectado `ResidentDirectorPortV0`.
+- `ORQUESTA_SERVER_RESIDENT_DIRECTOR_MAX_ACTIONS`: acciones maximas de briefing
+  que el Director residente puede ejecutar por tick.
 - `ORQUESTA_SERVER_SUPERVISOR_MAX_TICKS`: numero maximo de ticks internos por
   pulso del supervisor residente. Por defecto se conserva acotado a `1`.
 - `ORQUESTA_SERVER_ALLOW_REPEATED_RUNS=true`: permite que un mismo pulso del
@@ -126,6 +130,9 @@ Invariantes:
   `resident_director_*`. El self-watchdog debe tratar
   `resident_director_tick_active` y sus contadores como causa operativa, no como
   rail de contenido.
+- `cmd/orquesta-server` puede inyectar un adaptador real del stack Codex que
+  llama a `RunResidentDirectorBriefingLoopV0`; el modulo `orquesta-server` no
+  conoce ese stack ni construye briefings.
 - `IdleSelfImprovementBlockerPortV0` no es dependencia obligatoria del runtime:
   si la composicion no lo implementa, la comprobacion queda omitida y el resto
   de guardas decide. Si existe, solo puede bloquear automejora por causas

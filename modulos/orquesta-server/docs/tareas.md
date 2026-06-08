@@ -177,8 +177,7 @@ Frontera:
 
 ## SRV-TASK-012: loop residente opt-in del Director
 
-Estado: hecho en `orquesta-server` por puerto; pendiente adaptador real en
-`cmd/orquesta-server`.
+Estado: hecho local con adaptador real opt-in desde `cmd/orquesta-server`.
 
 Objetivo: permitir que el proceso residente ejecute el Director autonomo sin
 meter el nucleo, Codex, OPES, MCP ni proveedores dentro del servidor.
@@ -192,15 +191,26 @@ Implementado:
 - loop async con anti-solape, coalescing y recuperacion de panic;
 - estado publico `resident_director_*`, contadores operacionales y actividad;
 - self-watchdog reconoce ticks, progreso y errores del Director residente.
+- `cmd/orquesta-server` lee
+  `ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED` y
+  `ORQUESTA_SERVER_RESIDENT_DIRECTOR_MAX_ACTIONS`, publica ambos en
+  `effective_config` e inyecta `ResidentDirectorPortV0` solo con opt-in;
+- el adaptador real delega en el stack Codex y ejecuta
+  `RunResidentDirectorBriefingLoopV0` sobre stores vivos.
 
 Validacion:
 
-- `go test -count=1 ./modulos/orquesta-server -run 'TestRuntimeV0ResidentDirector|TestRuntimeV0RestauraEstadoDurable|TestEvaluateSelfWatchdogV0NoParaSiDirectorResidenteActivo|TestProcessSelfWatchdogObserverV0TransportaDirectorResidenteActivo'`
 - `go test -count=1 ./modulos/orquesta-server`
+- `go test -count=1 ./cmd/orquesta-server`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'CodexStackResidentDirector'`
 
-Pendiente:
+Riesgos pendientes:
 
-- inyectar desde `cmd/orquesta-server` un adaptador real que llame a
-  `RunResidentDirectorBriefingLoopV0` con una fuente de briefing reentrable
-  desde stores vivos;
-- exponer configuracion por entorno solo cuando ese adaptador real exista.
+- el cierre terminal `close_or_idle` no debe inventarse en el tick residente:
+  sigue perteneciendo al cierre causal ya cableado por `ContinueAppDirectorV0`
+  y sus fuentes reales;
+- la idempotencia depende de outbox ledger, run store, run queue y wait state
+  persistentes. Un adaptador nuevo debe conservar esos stores y no crear rutas
+  paralelas de dispatch;
+- la reentrada esta acotada por anti-solape del runtime y por presupuesto de
+  acciones; no introducir sleeps largos ni waits globales de todos los agentes.

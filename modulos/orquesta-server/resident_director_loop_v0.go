@@ -78,6 +78,7 @@ func (runtime *RuntimeV0) runResidentDirectorTickV0(ctx context.Context) {
 	}
 	command := ResidentDirectorCommandV0{
 		MaxActions:    runtime.config.ResidentDirectorMaxActions,
+		OccurredAt:    runtime.clock.Now().Format(time.RFC3339),
 		CorrelationID: "resident-director-" + strconv.Itoa(runtime.tracker.SnapshotV0().ResidentDirectorTicks+1),
 		EvidenceRefs:  []string{"evidence-ref-resident-director-loop"},
 	}

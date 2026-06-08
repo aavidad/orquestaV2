@@ -44,10 +44,12 @@ func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 		runtimeWorkDir: serverConfig.RuntimeWorkDir,
 		stateDir:       serverConfig.StateDir,
 	}
+	residentDirector := newServerResidentDirectorV0(&stack, serverConfig)
 	return orquestaserver.NewRuntimeV0(serverConfig, orquestaserver.RuntimeDepsV0{
-		AppHandler:   appHandler,
-		Supervisor:   supervisor,
-		StartupCheck: startupCheckFromEnvV0(stack, serverConfig),
+		AppHandler:       appHandler,
+		Supervisor:       supervisor,
+		ResidentDirector: residentDirector,
+		StartupCheck:     startupCheckFromEnvV0(stack, serverConfig),
 		SelfWatchdog: orquestaserver.NewProcessSelfWatchdogObserverV0(
 			orquestaserver.NewProcSelfCPUSamplerV0(),
 		),

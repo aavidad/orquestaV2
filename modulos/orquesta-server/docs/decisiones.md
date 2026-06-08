@@ -127,7 +127,7 @@ guarda atomica de anti-solape, coalescing de un pulso pendiente, panic convertid
 en error durable y estado publico `resident_director_*`. El self-watchdog trata
 actividad y progreso del Director residente como causa operativa observable.
 
-Pendiente de composicion: `cmd/orquesta-server` debe inyectar un adaptador real
-que use `RunResidentDirectorBriefingLoopV0` cuando exista una fuente de briefing
-reentrable desde stores vivos. Hasta entonces, el servidor queda preparado y
-probado por puerto.
+Composicion cerrada: `cmd/orquesta-server` inyecta un adaptador real opt-in que
+usa `RunResidentDirectorBriefingLoopV0` con fuente de briefing reentrable desde
+stores vivos. El modulo `orquesta-server` sigue puro: no construye briefings ni
+conoce Codex, OPES, MCP, modelos, HOME ni persistencia concreta.

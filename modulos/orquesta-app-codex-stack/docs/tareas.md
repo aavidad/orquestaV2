@@ -840,3 +840,32 @@ Reglas cerradas:
 - no reintroducir rails de contenido en `domain_work`;
 - no toca core, OPES bridge, runtime, servidor ni conectores externos;
 - no declara cerrado el smoke real OPES de derivados/cierre.
+
+## APP-CODEX-STACK-028
+
+Objetivo: exponer adaptador real para el Director residente del servidor.
+
+Estado: hecho local.
+
+Trabajo aplicado:
+
+- `RunCodexStackResidentDirectorV0` coordina runs ejecutables desde `RunQueue`,
+  respeta el ranking neutral y acota el lote por `MaxRunsPerTick`;
+- reutiliza `BuildContinueAppDirectorLoopRuntimeV0` para no duplicar el camino
+  de `ContinueAppDirectorV0`;
+- ejecuta `RunResidentDirectorBriefingLoopV0` con una fuente reentrable basada
+  en outbox vivo;
+- `cmd/orquesta-server` inyecta el puerto solo con opt-in del servidor.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'CodexStackResidentDirector'`
+- `go test -count=1 ./cmd/orquesta-server -run 'ResidentDirector|ServerConfigFromEnvV0ConfiguraResidentDirector'`
+
+Reglas cerradas:
+
+- no mete Codex, servidor ni OPES en el core;
+- no convierte `close_or_idle` en cierre inventado del tick residente: delega
+  en `ContinueAppDirectorV0`;
+- no usa filtros de contenido para decidir si un agente vale: conserva el
+  trabajo en stores/outbox y deja rework/cierre al Director.

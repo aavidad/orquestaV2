@@ -30,6 +30,10 @@
   coalescea un tick pendiente, persiste OK/error, recupera panic como error
   durable, aparece en status/operational status y cuenta como causa operativa
   para el self-watchdog.
+- `cmd/orquesta-server` prueba que `ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED`
+  y `ORQUESTA_SERVER_RESIDENT_DIRECTOR_MAX_ACTIONS` se publican en
+  `effective_config`, y que el adaptador del Director residente solo se inyecta
+  con opt-in y stack disponible.
 - `cmd/orquesta-server` prueba que el planner de automejora salta tareas ya
   visibles en cola y anade una tarea scanner cuando hay capacidad libre para
   descubrir nuevos huecos.

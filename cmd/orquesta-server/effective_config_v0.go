@@ -23,6 +23,8 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 		serverConfigSettingFromRegistryV0(envServerDrainMaxDispatchesV0, strconv.Itoa(config.SupervisorCommand.DrainLimits.MaxDispatchesPerWait)),
 		serverConfigSettingFromRegistryV0(envServerDrainMaxOutboxV0, strconv.Itoa(config.SupervisorCommand.DrainLimits.MaxOutboxPerCycle)),
 		serverConfigSettingFromRegistryV0(envServerDrainMaxExternalWaitsV0, strconv.Itoa(config.SupervisorCommand.DrainLimits.MaxExternalWaits)),
+		serverConfigSettingFromRegistryV0(envServerResidentDirectorEnabledV0, strconv.FormatBool(config.ResidentDirectorEnabled)),
+		serverConfigSettingFromRegistryV0(envServerResidentDirectorMaxActionsV0, strconv.Itoa(config.ResidentDirectorMaxActions)),
 		serverConfigSettingFromRegistryV0(envServerTickIntervalMSV0, strconv.Itoa(int(config.TickInterval/time.Millisecond))),
 		serverConfigSettingFromRegistryV0(envServerShutdownGraceMSV0, strconv.Itoa(int(config.ShutdownGracePeriod/time.Millisecond))),
 		serverConfigSettingFromRegistryV0(envServerReadHeaderTimeoutMSV0, strconv.Itoa(int(config.HTTPResourceLimits.ReadHeaderTimeout/time.Millisecond))),
