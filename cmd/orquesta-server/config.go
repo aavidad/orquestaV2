@@ -14,8 +14,8 @@ import (
 const (
 	defaultServerSupervisorMaxExternalWaitsV0 = 1
 	maxServerSupervisorMaxExternalWaitsV0     = 70
-	defaultServerSupervisorMaxDispatchesV0    = 10
-	defaultServerSupervisorMaxOutboxV0        = 10
+	defaultServerSupervisorMaxDispatchesV0    = 70
+	defaultServerSupervisorMaxOutboxV0        = 70
 )
 
 func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
@@ -23,6 +23,10 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 	if err != nil {
 		return orquestaserver.ConfigV0{}, err
 	}
+	idleSelfImprovementProjectDir := absDirEnvOrDefaultV0(
+		envServerIdleSelfImprovementProjectWorkDirV0,
+		projectDir,
+	)
 	stateDir := absDirEnvOrDefaultV0(envServerStateDirV0,
 		filepath.Join(defaultControlDirV0(projectDir), "state"))
 	runtimeDir := absDirEnvOrDefaultV0(envCodexRuntimeWorkDirV0,
@@ -59,10 +63,11 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 			PermissionRef:     envOrDefaultV0(envServerControlPermissionRefV0, "permission-ref-loopback-control-plane"),
 			PublicReason:      envOrDefaultV0(envServerControlPublicReasonV0, "loopback_control_plane"),
 		},
-		ProjectWorkDir:       projectDir,
-		RuntimeWorkDir:       runtimeDir,
-		ShutdownSignalPolicy: serverShutdownSignalPolicyV0(),
-		TickInterval:         time.Duration(intEnvOrDefaultV0(envServerTickIntervalMSV0, 5000)) * time.Millisecond,
+		ProjectWorkDir:                    projectDir,
+		RuntimeWorkDir:                    runtimeDir,
+		IdleSelfImprovementProjectWorkDir: idleSelfImprovementProjectDir,
+		ShutdownSignalPolicy:              serverShutdownSignalPolicyV0(),
+		TickInterval:                      time.Duration(intEnvOrDefaultV0(envServerTickIntervalMSV0, 5000)) * time.Millisecond,
 		ShutdownGracePeriod: time.Duration(intEnvOrDefaultV0(
 			envServerShutdownGraceMSV0,
 			int(orquestaserver.DefaultShutdownGracePeriodV0/time.Millisecond),
@@ -81,7 +86,10 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 		IdleSelfImprovementContextRefs:   csvEnvOrDefaultV0(envServerIdleSelfImprovementContextRefsV0, nil),
 		IdleSelfImprovementEvidenceRefs:  csvEnvOrDefaultV0(envServerIdleSelfImprovementEvidenceRefsV0, nil),
 		IdleSelfImprovementAcceptance:    csvEnvOrDefaultV0(envServerIdleSelfImprovementAcceptanceV0, defaultIdleSelfImprovementAcceptanceV0()),
-		IdleSelfImprovementCompactRules:  csvEnvOrDefaultV0(envServerIdleSelfImprovementCompactRulesV0, defaultIdleSelfImprovementCompactRulesV0()),
+		IdleSelfImprovementCompactRules: csvEnvOrDefaultV0(envServerIdleSelfImprovementCompactRulesV0, []string{
+			"comunicacion compacta",
+			"trabajo secundario: no bloquear ni mezclar con el trabajo principal",
+		}),
 		IdleSelfImprovementPriorityScore: intEnvOrDefaultV0(envServerIdleSelfImprovementPriorityScoreV0, orquestaserver.DefaultIdleSelfImprovementPriorityScoreV0),
 		IdleSelfImprovementMaxRequests:   intEnvOrDefaultV0(envServerIdleSelfImprovementMaxRequestsV0, orquestaserver.DefaultIdleSelfImprovementMaxRequestsV0),
 		IdleSelfImprovementTargetQueue:   intEnvOrDefaultV0(envServerIdleSelfImprovementTargetQueueV0, orquestaserver.DefaultIdleSelfImprovementTargetQueueV0),
@@ -127,15 +135,11 @@ func defaultIdleSelfImprovementAcceptanceV0() []string {
 		"el servidor prepara automejora cuando hay idle o capacidad libre por debajo de " + envServerIdleSelfImprovementTargetQueueV0,
 		"el planner salta tareas ya visibles en cola y puede crear una tarea scanner para descubrir nuevos huecos",
 		"las secciones narrativas del backlog se filtran y no se convierten en runs de automejora",
+		"la proyeccion publica distingue outbox pendiente, wait_external y proceso externo verificado",
 		"usar evidencia del fallo y corregir la causa general si es posible",
 	}
 }
-func defaultIdleSelfImprovementCompactRulesV0() []string {
-	return []string{
-		"comunicacion compacta",
-		"trabajo secundario: no bloquear ni mezclar con el trabajo principal",
-	}
-}
+
 func serverSupervisorMaxExternalWaitsV0() (int, error) {
 	raw := strings.TrimSpace(os.Getenv(envServerDrainMaxExternalWaitsV0))
 	if raw == "" {

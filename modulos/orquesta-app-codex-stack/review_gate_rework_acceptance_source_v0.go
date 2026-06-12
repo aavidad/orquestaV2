@@ -34,7 +34,11 @@ func codexStackReviewGateReworkAcceptanceObservationsV0(
 		if !ok || codexStackReviewGateReworkAcceptanceAlreadyDoneV0(request.Run, rework.DeliveryRef) {
 			continue
 		}
-		parentTaskRef := taskByDelivery[rework.DeliveryRef]
+		parentTaskRef := codexStackReviewGateParentTaskRefForReworkV0(
+			request.Run,
+			rework,
+			taskByDelivery,
+		)
 		if parentTaskRef == "" {
 			continue
 		}
@@ -67,6 +71,31 @@ func codexStackReviewGateDescriptorTaskMapsV0(
 		deliveryByTask[taskRef] = deliveryRef
 	}
 	return taskByDelivery, deliveryByTask
+}
+
+func codexStackReviewGateParentTaskRefForReworkV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	rework codexStackReviewGateReworkProjectionV0,
+	taskByDelivery map[string]string,
+) string {
+	if parentTaskRef := strings.TrimSpace(taskByDelivery[rework.DeliveryRef]); parentTaskRef != "" {
+		return parentTaskRef
+	}
+	parentRefs := []string{}
+	for _, rawReplan := range run.ReplanDecisions {
+		replan, ok := codexStackReviewGateParseReplanProjectionV0(rawReplan)
+		if !ok ||
+			replan.SourceRef != rework.ReworkRequestRef ||
+			replan.AcceptedAction != string(orquestacoreworkflow.ReplanDecisionActionSplitTaskV0) {
+			continue
+		}
+		parentRefs = append(parentRefs, replan.TaskRef)
+	}
+	parentRefs = compactStringsV0(parentRefs)
+	if len(parentRefs) != 1 {
+		return ""
+	}
+	return parentRefs[0]
 }
 
 func codexStackReviewGateFollowupsForReworkV0(

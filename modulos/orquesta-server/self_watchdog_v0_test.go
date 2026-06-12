@@ -2,6 +2,7 @@ package orquestaserver
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -50,6 +51,23 @@ func TestEvaluateSelfWatchdogV0NoParaSiDirectorResidenteActivo(t *testing.T) {
 		HighCPUSince:               now.Add(-10 * time.Minute),
 		ResidentDirectorTickActive: true,
 		EvidenceRefs:               []string{"evidence-ref-resident-director-active"},
+	})
+
+	if decision.ShouldRequestShutdown ||
+		decision.Status != SelfWatchdogStatusHighCPUWithCauseV0 ||
+		decision.ReasonCode != SelfWatchdogReasonOperationalCauseV0 {
+		t.Fatalf("decision=%+v", decision)
+	}
+}
+
+func TestEvaluateSelfWatchdogV0NoParaSiBridgeExternoActivo(t *testing.T) {
+	now := time.Date(2026, 6, 8, 12, 8, 0, 0, time.UTC)
+	decision := EvaluateSelfWatchdogV0(SelfWatchdogConfigV0{}, SelfWatchdogObservationV0{
+		ObservedAt:               now,
+		CPUPercent:               95,
+		HighCPUSince:             now.Add(-10 * time.Minute),
+		ExternalBridgeTickActive: true,
+		EvidenceRefs:             []string{"evidence-ref-external-bridge-active"},
 	})
 
 	if decision.ShouldRequestShutdown ||
@@ -158,6 +176,47 @@ func TestRuntimeSelfWatchdogV0ApagaServidorSinTrabajo(t *testing.T) {
 	}
 }
 
+func TestRunSelfWatchdogTickV0RespetaDirectorResidenteAtomico(t *testing.T) {
+	now := time.Date(2026, 6, 8, 12, 22, 0, 0, time.UTC)
+	runtime, err := NewRuntimeV0(ConfigV0{
+		Addr:          "127.0.0.1:0",
+		StateDir:      t.TempDir(),
+		AuditDisabled: true,
+		SelfWatchdog: SelfWatchdogConfigV0{
+			SustainedFor:  time.Nanosecond,
+			NoProgressFor: time.Nanosecond,
+		},
+	}, RuntimeDepsV0{
+		StateStore: &threadSafeStateStoreV0{},
+		Clock:      fixedClockV0{now: now},
+		SelfWatchdog: &fakeSelfWatchdogObserverV0{observation: SelfWatchdogObservationV0{
+			ObservedAt:   now,
+			CPUPercent:   99,
+			HighCPUSince: now.Add(-10 * time.Minute),
+			EvidenceRefs: []string{"evidence-ref-runtime-watchdog"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	atomic.StoreInt32(&runtime.residentDirectorTickActive, 1)
+
+	stop := make(chan SelfWatchdogDecisionV0, 1)
+	if stopped := runtime.runSelfWatchdogTickV0(context.Background(), stop); stopped {
+		t.Fatalf("watchdog pidio parada con director residente activo")
+	}
+	select {
+	case decision := <-stop:
+		t.Fatalf("stop inesperado: %+v", decision)
+	default:
+	}
+	state := runtime.StateV0()
+	if state.SelfWatchdogStatus != SelfWatchdogStatusHighCPUWithCauseV0 ||
+		state.SelfWatchdogReason != SelfWatchdogReasonOperationalCauseV0 {
+		t.Fatalf("state=%+v", state)
+	}
+}
+
 func TestProcessSelfWatchdogObserverV0DerivaCPUYVentanaAlta(t *testing.T) {
 	now := time.Date(2026, 6, 8, 12, 25, 0, 0, time.UTC)
 	observer := NewProcessSelfWatchdogObserverV0(&fakeSelfWatchdogCPUSamplerV0{
@@ -227,7 +286,7 @@ func TestProcessSelfWatchdogObserverV0ReconoceProgresoPorEjecuciones(t *testing.
 	}
 }
 
-func TestProcessSelfWatchdogObserverV0TransportaDirectorResidenteActivo(t *testing.T) {
+func TestProcessSelfWatchdogObserverV0TransportaCausasOperativasVivas(t *testing.T) {
 	now := time.Date(2026, 6, 8, 12, 35, 0, 0, time.UTC)
 	observer := NewProcessSelfWatchdogObserverV0(&fakeSelfWatchdogCPUSamplerV0{
 		samples: []SelfWatchdogCPUSampleV0{
@@ -237,7 +296,11 @@ func TestProcessSelfWatchdogObserverV0TransportaDirectorResidenteActivo(t *testi
 	})
 	config := SelfWatchdogConfigV0{CPUHighPercent: 50, SustainedFor: time.Second, NoProgressFor: time.Second}
 	_, err := observer.ObserveSelfWatchdogV0(context.Background(), SelfWatchdogObservationRequestV0{
-		State:      StateV0{ResidentDirectorTickActive: true},
+		State: StateV0{
+			ResidentDirectorTickActive: true,
+			ExternalBridgeTickActive:   true,
+			ShutdownAsyncWorkActive:    2,
+		},
 		Config:     config,
 		ObservedAt: now,
 	})
@@ -245,7 +308,11 @@ func TestProcessSelfWatchdogObserverV0TransportaDirectorResidenteActivo(t *testi
 		t.Fatalf("Observe first: %v", err)
 	}
 	second, err := observer.ObserveSelfWatchdogV0(context.Background(), SelfWatchdogObservationRequestV0{
-		State:      StateV0{ResidentDirectorTickActive: true},
+		State: StateV0{
+			ResidentDirectorTickActive: true,
+			ExternalBridgeTickActive:   true,
+			ShutdownAsyncWorkActive:    2,
+		},
 		Config:     config,
 		ObservedAt: now.Add(5 * time.Second),
 	})
@@ -253,7 +320,11 @@ func TestProcessSelfWatchdogObserverV0TransportaDirectorResidenteActivo(t *testi
 		t.Fatalf("Observe second: %v", err)
 	}
 	if !second.ResidentDirectorTickActive ||
-		!containsStringForTestV0(second.EvidenceRefs, "evidence-ref-self-watchdog-resident-director-active") {
+		!second.ExternalBridgeTickActive ||
+		second.AsyncWorkActive != 2 ||
+		!containsStringForTestV0(second.EvidenceRefs, "evidence-ref-self-watchdog-resident-director-active") ||
+		!containsStringForTestV0(second.EvidenceRefs, "evidence-ref-self-watchdog-external-bridge-active") ||
+		!containsStringForTestV0(second.EvidenceRefs, "evidence-ref-self-watchdog-async-work-active") {
 		t.Fatalf("observation=%+v", second)
 	}
 	decision := EvaluateSelfWatchdogV0(config, second)

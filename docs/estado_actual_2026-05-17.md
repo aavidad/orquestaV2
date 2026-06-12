@@ -67,6 +67,12 @@ Esto implica:
 
 - el core gobierna runs, fases, tareas, artefactos, revision, evidencias,
   capacidad, handoff, shutdown logico y supervision;
+- la autovigilancia de CPU sostenida sin progreso pertenece a la composicion
+  residente del servidor por puertos de telemetria y shutdown cooperativo; sus
+  umbrales canonicos se publican en `effective_config` de `cmd/orquesta-server`
+  y no son rails de contenido ni filtros para entregas de agentes;
+  rework OrquestaV2 del 2026-06-11 la revalida con pruebas obligatorias pasadas,
+  sin drenar OPES/TCAE ni mover la politica al core;
 - la seleccion de modelo, runtime, cuotas y proveedor pertenece a composiciones
   y adaptadores, no al core puro;
 - REST, MCP, web y CLI son adaptadores sobre puertos, no el dominio;
@@ -74,6 +80,14 @@ Esto implica:
   `orquesta.domain_work.v0`, tools de director/supervisor y resources compactos;
   el bridge HTTP local existe como adaptador fino, y un servidor MCP/MCPO real
   productivo sigue siendo adaptador opt-in, no logica de core;
+- para OPES, cualquier efecto real por bridge sigue limitado por guardas de
+  composicion: confirmacion explicita de instancia, destino sin credenciales ni
+  query, loopback tratado solo como local no como temporal confirmado,
+  productivo solo con opt-in y evidence ref compacta, filtro por `job_ref`,
+  `job_type` o scope duro, limite bajo y ledger idempotente. La secuencia
+  `ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE` no habilita efectos por si sola:
+  debe ir acotada por `program_id`, `topic_id`, `correlation_id` o filtro
+  equivalente para no tocar jobs ajenos;
 - desde el 2026-05-24, `orquesta.project.roadmap.v0` y
   `orquesta.contracts.shared.v0` incluyen freshness y refs vivas al backlog para
   no presentar estados `pendiente_*` historicos como backlog actual;

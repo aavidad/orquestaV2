@@ -165,6 +165,59 @@ func TestOperationalClosureSourceV0NoCierraRunNoActivo(t *testing.T) {
 	}
 }
 
+func TestOperationalClosureSourceV0NoCierraAgentBlockedAceptadoSinReplan(t *testing.T) {
+	runRef := "run-stack-operational-closure-agent-blocked-no-replan"
+	task := stackOperationalClosureTaskForTestV0(runRef, "task-stack-operational-closure-agent-blocked", nil)
+	deliveryRef := "delivery-ref-stack-operational-closure-agent-blocked"
+	run := stackOperationalClosureRunForTestV0(runRef, task.TaskID)
+	run.Deliveries = []string{deliveryRef}
+	run.DeliveredTasks = []string{task.TaskID}
+	run.DeliveredAgents = []string{orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(task.TaskID)}
+	run.AcceptedReviews = []string{"accepted-review-ref-" + deliveryRef}
+	reader := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	if err := reader.AppendRunEventsV0(context.Background(), runRef, []orquestacoreworkflow.OrchestrationEventV0{
+		stackOperationalClosureEventForTestV0(t, runRef, 1, orquestacoreworkflow.OrchestrationEventDeliveryRegisteredV0, orquestacoreworkflow.DeliveryRegisteredPayloadV0{
+			DeliveryRef: deliveryRef,
+			PhaseID:     string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			TaskID:      task.TaskID,
+			AgentRef:    orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(task.TaskID),
+			Summary:     "ACK blocked conservado como delivery reviewable.",
+			EvidenceRefs: []string{
+				"ack-ref-stack-operational-closure-agent-blocked",
+				"gate-issue:agent_blocked",
+			},
+		}),
+		stackOperationalClosureReviewRequestedEventForTestV0(t, runRef, 2, deliveryRef),
+		stackOperationalClosureReviewResultEventForTestV0(t, runRef, 3, deliveryRef, orquestacoreworkflow.ReviewResultStatusAcceptedV0),
+		stackOperationalClosureAcceptedReviewEventForTestV0(t, runRef, 4, deliveryRef),
+	}); err != nil {
+		t.Fatalf("AppendRunEventsV0: %v", err)
+	}
+	source := codexStackOperationalClosureSourceV0{
+		TaskStore:   orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(task),
+		EventReader: reader,
+	}
+
+	got, ok, err := source.BuildOperationalDirectorClosureRequestV0(
+		context.Background(),
+		orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0{
+			Run:              run,
+			LoopStatus:       orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+			OccurredAt:       "2026-06-12T10:30:00Z",
+			CorrelationID:    "corr-stack-operational-closure-agent-blocked",
+			RequestedBy:      "orquesta-app-codex-stack-test",
+			WaitScopeApplied: true,
+			WaitAgentRefs:    []string{orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(task.TaskID)},
+		},
+	)
+	if err != nil {
+		t.Fatalf("BuildOperationalDirectorClosureRequestV0: %v", err)
+	}
+	if ok {
+		t.Fatalf("agent_blocked aceptado sin replan no debe cerrar automaticamente: %+v", got)
+	}
+}
+
 func TestOperationalClosureSourceV0CierraAutoprogrammingConAckTestReceipts(t *testing.T) {
 	runRef := "run-stack-operational-closure-autoprogramming-legacy-001"
 	task := stackAutoprogrammingClosureTaskForTestV0(runRef, "task-autoprogramming-closure-legacy-001", []string{"go test -count=1 ./..."})

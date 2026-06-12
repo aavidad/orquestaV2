@@ -66,7 +66,7 @@ func codexStrictCompletedAckIssuesV0(
 			v.add(CodexConnectorAckInvalidV0, field, "required")
 		}
 	}
-	if strings.TrimSpace(ack.Status) != codexAgentAckStatusCompletedV0 {
+	if !codexAgentAckStatusCarriesReviewableWorkV0(ack.Status) {
 		v.add(CodexConnectorAckInvalidV0, "status", "status_not_completed")
 	}
 	if ack.Files == nil && !codexAckHasNonFileCompletionEvidenceV0(ack) {

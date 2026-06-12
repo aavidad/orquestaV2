@@ -112,6 +112,57 @@ func TestFileDomainWorkJobCreatorV0RequestInvalidoNoEscribeEstado(t *testing.T) 
 	}
 }
 
+func TestFileDomainWorkJobCreatorV0SubmitArtifactPersisteYReproduceRecibo(t *testing.T) {
+	dir := t.TempDir()
+	creator := mustNewFileDomainWorkJobCreatorV0(t, dir)
+	submission := validDomainWorkFileArtifactSubmissionV0()
+
+	first, err := creator.SubmitDomainWorkArtifactV0(context.Background(), submission)
+	if err != nil {
+		t.Fatalf("SubmitDomainWorkArtifactV0 first: %v", err)
+	}
+	reopened := mustNewFileDomainWorkJobCreatorV0(t, dir)
+	second, err := reopened.SubmitDomainWorkArtifactV0(context.Background(), submission)
+	if err != nil {
+		t.Fatalf("SubmitDomainWorkArtifactV0 second: %v", err)
+	}
+	if first.Status != orquestadomainwork.DomainWorkStatusAcceptedV0 ||
+		first.ReceiptRef == "" ||
+		second.ReceiptRef != first.ReceiptRef ||
+		second.ArtifactRef != first.ArtifactRef {
+		t.Fatalf("first=%+v second=%+v", first, second)
+	}
+	if !pathExistsForDomainWorkFileTestV0(filepath.Join(dir, "domain_work_artifacts_v0.json")) {
+		t.Fatalf("snapshot de artefactos no creado")
+	}
+}
+
+func TestFileDomainWorkJobCreatorV0SubmitArtifactConflictoIdempotenciaNoSobrescribe(t *testing.T) {
+	dir := t.TempDir()
+	creator := mustNewFileDomainWorkJobCreatorV0(t, dir)
+	submission := validDomainWorkFileArtifactSubmissionV0()
+	first, err := creator.SubmitDomainWorkArtifactV0(context.Background(), submission)
+	if err != nil {
+		t.Fatalf("SubmitDomainWorkArtifactV0 first: %v", err)
+	}
+	conflict := submission
+	conflict.ArtifactRef = "artifact-ref-domain-work-file-conflict"
+	second, err := creator.SubmitDomainWorkArtifactV0(context.Background(), conflict)
+	if err != nil {
+		t.Fatalf("SubmitDomainWorkArtifactV0 conflict: %v", err)
+	}
+	retry, err := creator.SubmitDomainWorkArtifactV0(context.Background(), submission)
+	if err != nil {
+		t.Fatalf("SubmitDomainWorkArtifactV0 retry: %v", err)
+	}
+	if second.Status != orquestadomainwork.DomainWorkStatusInvalidV0 ||
+		len(second.Issues) != 1 ||
+		second.Issues[0].Code != orquestadomainworkfile.ErrDomainWorkFileArtifactIdempotencyConflictV0 ||
+		retry.ReceiptRef != first.ReceiptRef {
+		t.Fatalf("first=%+v second=%+v retry=%+v", first, second, retry)
+	}
+}
+
 func TestFileDomainWorkJobCreatorV0EscribeSnapshotEstructurado(t *testing.T) {
 	creator := mustNewFileDomainWorkJobCreatorV0(t, t.TempDir())
 	job, err := creator.CreateDomainWorkJobV0(context.Background(), validDomainWorkFileJobRequestV0())

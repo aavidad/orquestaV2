@@ -36,7 +36,7 @@ func ValidateOperationalDirectorPlanStateV0(state OperationalDirectorPlanStateV0
 		return errorV0(ErrNucleoOrquestacionInvalidoV0, "steps", "steps requerido")
 	}
 	steps := map[string]bool{}
-	acceptedReviewRefs := map[string]bool{}
+	reviewOwnerAcceptedReviewRefs := map[string]bool{}
 	var activeStep OperationalDirectorPlanStepStateV0
 	activeStepFound := false
 	for _, step := range state.Steps {
@@ -51,15 +51,31 @@ func ValidateOperationalDirectorPlanStateV0(state OperationalDirectorPlanStateV0
 			activeStep = step
 			activeStepFound = true
 		}
-		for _, acceptedReviewRef := range step.AcceptedReviewRefs {
-			if acceptedReviewRefs[acceptedReviewRef] {
-				return errorV0(ErrNucleoOrquestacionInvalidoV0, "steps.accepted_review_refs", "accepted_review_ref duplicado")
+		if step.Kind == orquestadirectoroperativo.OperationalDirectorStepReviewDeliveriesV0 {
+			for _, acceptedReviewRef := range step.AcceptedReviewRefs {
+				if reviewOwnerAcceptedReviewRefs[acceptedReviewRef] {
+					return errorV0(ErrNucleoOrquestacionInvalidoV0, "steps.accepted_review_refs", "accepted_review_ref duplicado en review_deliveries")
+				}
+				reviewOwnerAcceptedReviewRefs[acceptedReviewRef] = true
 			}
-			acceptedReviewRefs[acceptedReviewRef] = true
 		}
 	}
 	if state.ActiveStepID != "" && !activeStepFound {
 		return errorV0(ErrNucleoOrquestacionInvalidoV0, "active_step_id", "active_step_id no existe")
+	}
+	for _, step := range state.Steps {
+		if step.Kind == orquestadirectoroperativo.OperationalDirectorStepReviewDeliveriesV0 {
+			continue
+		}
+		if !operationalDirectorPlanStepAllowsAcceptedReviewRefsV0(step.Kind) {
+			continue
+		}
+		for _, acceptedReviewRef := range step.AcceptedReviewRefs {
+			if !reviewOwnerAcceptedReviewRefs[acceptedReviewRef] &&
+				!operationalDirectorPlanStepCarriesAcceptedReviewCausalChainV0(step) {
+				return errorV0(ErrNucleoOrquestacionInvalidoV0, "steps.accepted_review_refs", "accepted_review_ref causal sin review_deliveries")
+			}
+		}
 	}
 	if activeStepFound {
 		if err := validateOperationalDirectorPlanStateActiveStepV0(state, activeStep); err != nil {
@@ -104,8 +120,8 @@ func ValidateOperationalDirectorPlanStepStateV0(step OperationalDirectorPlanStep
 		return errorV0(ErrNucleoOrquestacionInvalidoV0, "steps.attempts", "attempts invalido")
 	}
 	if len(step.AcceptedReviewRefs) > 0 &&
-		step.Kind != orquestadirectoroperativo.OperationalDirectorStepReviewDeliveriesV0 {
-		return errorV0(ErrNucleoOrquestacionInvalidoV0, "steps.accepted_review_refs", "accepted_review_refs solo aplica a review_deliveries")
+		!operationalDirectorPlanStepAllowsAcceptedReviewRefsV0(step.Kind) {
+		return errorV0(ErrNucleoOrquestacionInvalidoV0, "steps.accepted_review_refs", "accepted_review_refs solo aplica a review_deliveries, run_required_tests o replan_or_close")
 	}
 	if step.Kind == orquestadirectoroperativo.OperationalDirectorStepReviewDeliveriesV0 &&
 		(step.Status == orquestadirectoroperativo.OperationalDirectorStepAcceptedV0 ||
@@ -114,6 +130,21 @@ func ValidateOperationalDirectorPlanStepStateV0(step OperationalDirectorPlanStep
 		return errorV0(ErrNucleoOrquestacionInvalidoV0, "steps.accepted_review_refs", "review_deliveries aceptado requiere refs causales")
 	}
 	return nil
+}
+
+func operationalDirectorPlanStepAllowsAcceptedReviewRefsV0(kind orquestadirectoroperativo.OperationalDirectorStepKindV0) bool {
+	switch kind {
+	case orquestadirectoroperativo.OperationalDirectorStepReviewDeliveriesV0,
+		orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0,
+		orquestadirectoroperativo.OperationalDirectorStepReplanOrCloseV0:
+		return true
+	default:
+		return false
+	}
+}
+
+func operationalDirectorPlanStepCarriesAcceptedReviewCausalChainV0(step OperationalDirectorPlanStepStateV0) bool {
+	return len(step.DeliveryRefs) > 0 && len(step.ReviewResultRefs) > 0
 }
 
 func operationalDirectorPlanStepKindValidV0(kind orquestadirectoroperativo.OperationalDirectorStepKindV0) bool {

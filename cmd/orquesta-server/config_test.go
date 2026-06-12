@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectorrunner "orquesta/modulos/orquesta-director-runner"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
@@ -98,6 +99,9 @@ func TestServerConfigFromEnvV0ExponeSupervisorDesatendidoV0(t *testing.T) {
 	if config.IdleSelfImprovementTargetQueue != orquestaserver.DefaultIdleSelfImprovementTargetQueueV0 {
 		t.Fatalf("idle target_queue=%d", config.IdleSelfImprovementTargetQueue)
 	}
+	if !containsStringV0(config.IdleSelfImprovementAcceptance, "la proyeccion publica distingue outbox pendiente, wait_external y proceso externo verificado") {
+		t.Fatalf("acceptance=%v", config.IdleSelfImprovementAcceptance)
+	}
 }
 
 func TestServerConfigFromEnvV0PublicaConfiguracionEfectivaCanonica(t *testing.T) {
@@ -105,6 +109,8 @@ func TestServerConfigFromEnvV0PublicaConfiguracionEfectivaCanonica(t *testing.T)
 	t.Setenv("ORQUESTA_SERVER_MAX_RUNS_PER_TICK", "10")
 	t.Setenv("ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK", "10")
 	t.Setenv("ORQUESTA_SERVER_QUEUE_LIMIT", "10")
+	t.Setenv("ORQUESTA_SERVER_DRAIN_MAX_DISPATCHES", "10")
+	t.Setenv("ORQUESTA_SERVER_DRAIN_MAX_OUTBOX", "10")
 	t.Setenv("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_TARGET_QUEUE", "25")
 	t.Setenv("ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_MAX_REQUESTS", "10")
 	t.Setenv("ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED", "true")
@@ -161,6 +167,192 @@ func TestServerConfigFromEnvV0PublicaConfiguracionEfectivaCanonica(t *testing.T)
 		if !setting.Sensitive {
 			t.Fatalf("%s debe quedar marcado como sensible: %+v", key, setting)
 		}
+	}
+}
+
+func TestServerConfigFromEnvV0SeparaProyectoPrincipalDeAutomejoraIdleV0(t *testing.T) {
+	root := t.TempDir()
+	opesDir := filepath.Join(root, "OPES")
+	orquestaDir := filepath.Join(root, "orquesta")
+	t.Setenv(envCodexProjectWorkDirV0, opesDir)
+	t.Setenv(envServerIdleSelfImprovementProjectWorkDirV0, orquestaDir)
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if config.ProjectWorkDir != opesDir {
+		t.Fatalf("project_work_dir=%q want %q", config.ProjectWorkDir, opesDir)
+	}
+	if config.IdleSelfImprovementProjectWorkDir != orquestaDir {
+		t.Fatalf("idle_self_improvement_project_work_dir=%q want %q", config.IdleSelfImprovementProjectWorkDir, orquestaDir)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerIdleSelfImprovementProjectWorkDirV0)
+	if setting.Value != "idle-self-improvement-project-workdir-configured" || !setting.Sensitive {
+		t.Fatalf("idle self improvement project workdir setting=%+v", setting)
+	}
+	rawEffectiveConfig, err := json.Marshal(config.EffectiveConfig)
+	if err != nil {
+		t.Fatalf("marshal effective config: %v", err)
+	}
+	if strings.Contains(string(rawEffectiveConfig), opesDir) ||
+		strings.Contains(string(rawEffectiveConfig), orquestaDir) {
+		t.Fatalf("effective_config filtra rutas locales: %s", string(rawEffectiveConfig))
+	}
+}
+
+func TestServerStackSupervisorV0PreparaAutomejoraConWorkdirSeparadoSinMutarStackV0(t *testing.T) {
+	root := t.TempDir()
+	opesDir := filepath.Join(root, "OPES")
+	orquestaDir := filepath.Join(root, "orquesta")
+	stack := orquestaappcodexstack.StackV0{
+		Codex: orquestaappcodexstack.CodexRuntimeConfigV0{
+			ProjectWorkDir: opesDir,
+		},
+	}
+	supervisor := serverStackSupervisorV0{
+		stack:          &stack,
+		projectWorkDir: orquestaDir,
+	}
+
+	prepareStack := supervisor.autoprogrammingPrepareStackV0()
+
+	if prepareStack == nil {
+		t.Fatalf("prepare stack nil")
+	}
+	if prepareStack.Codex.ProjectWorkDir != orquestaDir {
+		t.Fatalf("prepare project_work_dir=%q want %q", prepareStack.Codex.ProjectWorkDir, orquestaDir)
+	}
+	if stack.Codex.ProjectWorkDir != opesDir {
+		t.Fatalf("stack principal mutado: %q want %q", stack.Codex.ProjectWorkDir, opesDir)
+	}
+}
+
+func TestServerConfigFromEnvV0PublicaEgressSanitizerCanonicoRedactadoV0(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", t.TempDir())
+	rawModelPath := "/home/alberto/private/models/openai-privacy-filter.gguf"
+	rawSidecarCommand := "/home/alberto/bin/privacy-filter --model " + rawModelPath
+	rawSidecarEndpoint := "http://127.0.0.1:17777/filter?token=secret-endpoint"
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_ENABLED", "true")
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_REF", "sanitizer-ref-server-test")
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_LOCAL_MODEL_ENABLED", "true")
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_LOCAL_MODEL_REF", "model-ref-sensitive-test")
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_LOCAL_MODEL_PATH", rawModelPath)
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_LOCAL_RUNTIME_REF", "runtime-ref-sensitive-test")
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_LOCAL_EVIDENCE_REF", "evidence-ref-sensitive-test")
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_SIDECAR_ENABLED", "true")
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_SIDECAR_REF", "sidecar-ref-server-test")
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_SIDECAR_ADAPTER_REF", "adapter-ref-server-test")
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_SIDECAR_TRANSPORT_REF", "transport-ref-server-test")
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_SIDECAR_EVIDENCE_REF", "evidence-ref-sidecar-test")
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_SIDECAR_COMMAND", rawSidecarCommand)
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_SIDECAR_LOCAL_ENDPOINT", rawSidecarEndpoint)
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	settings := config.EffectiveConfig.Settings
+	for key, want := range map[string]string{
+		"ORQUESTA_EGRESS_SANITIZER_ENABLED":                "true",
+		"ORQUESTA_EGRESS_SANITIZER_REF":                    "sanitizer-ref-server-test",
+		"ORQUESTA_EGRESS_SANITIZER_LOCAL_MODEL_ENABLED":    "true",
+		"ORQUESTA_EGRESS_SANITIZER_LOCAL_MODEL_REF":        "egress-sanitizer-local-model-ref-configured",
+		"ORQUESTA_EGRESS_SANITIZER_LOCAL_MODEL_PATH":       "egress-sanitizer-local-model-path-configured",
+		"ORQUESTA_EGRESS_SANITIZER_LOCAL_RUNTIME_REF":      "egress-sanitizer-local-runtime-ref-configured",
+		"ORQUESTA_EGRESS_SANITIZER_LOCAL_EVIDENCE_REF":     "egress-sanitizer-local-evidence-ref-configured",
+		"ORQUESTA_EGRESS_SANITIZER_SIDECAR_ENABLED":        "true",
+		"ORQUESTA_EGRESS_SANITIZER_SIDECAR_REF":            "sidecar-ref-server-test",
+		"ORQUESTA_EGRESS_SANITIZER_SIDECAR_ADAPTER_REF":    "adapter-ref-server-test",
+		"ORQUESTA_EGRESS_SANITIZER_SIDECAR_TRANSPORT_REF":  "transport-ref-server-test",
+		"ORQUESTA_EGRESS_SANITIZER_SIDECAR_EVIDENCE_REF":   "evidence-ref-sidecar-test",
+		"ORQUESTA_EGRESS_SANITIZER_SIDECAR_COMMAND":        "egress-sanitizer-sidecar-command-configured",
+		"ORQUESTA_EGRESS_SANITIZER_SIDECAR_LOCAL_ENDPOINT": "egress-sanitizer-sidecar-local-endpoint-configured",
+	} {
+		if got := effectiveSettingValueForTestV0(settings, key); got != want {
+			t.Fatalf("%s=%q want %q settings=%+v", key, got, want, settings)
+		}
+	}
+	for _, key := range []string{
+		"ORQUESTA_EGRESS_SANITIZER_LOCAL_MODEL_REF",
+		"ORQUESTA_EGRESS_SANITIZER_LOCAL_MODEL_PATH",
+		"ORQUESTA_EGRESS_SANITIZER_LOCAL_RUNTIME_REF",
+		"ORQUESTA_EGRESS_SANITIZER_LOCAL_EVIDENCE_REF",
+		"ORQUESTA_EGRESS_SANITIZER_SIDECAR_COMMAND",
+		"ORQUESTA_EGRESS_SANITIZER_SIDECAR_LOCAL_ENDPOINT",
+	} {
+		if setting := effectiveSettingForTestV0(settings, key); !setting.Sensitive {
+			t.Fatalf("%s debe quedar marcado como sensible: %+v", key, setting)
+		}
+	}
+	rawEffectiveConfig, err := json.Marshal(config.EffectiveConfig)
+	if err != nil {
+		t.Fatalf("marshal effective config: %v", err)
+	}
+	for _, forbidden := range []string{rawModelPath, rawSidecarCommand, rawSidecarEndpoint} {
+		if strings.Contains(string(rawEffectiveConfig), forbidden) {
+			t.Fatalf("effective_config filtra valor crudo %q: %s", forbidden, string(rawEffectiveConfig))
+		}
+	}
+	publicConfig, hidden := orquestaserver.PublicServerEffectiveConfigV0(config.EffectiveConfig)
+	if got := effectiveSettingValueForTestV0(publicConfig.Settings, "ORQUESTA_EGRESS_SANITIZER_LOCAL_MODEL_REF"); got != orquestaserver.ServerStatusConfigHiddenValueV0 {
+		t.Fatalf("public model ref=%q want hidden", got)
+	}
+	for _, wantHidden := range []string{
+		"effective_config.ORQUESTA_EGRESS_SANITIZER_LOCAL_MODEL_REF",
+		"effective_config.ORQUESTA_EGRESS_SANITIZER_LOCAL_MODEL_PATH",
+		"effective_config.ORQUESTA_EGRESS_SANITIZER_SIDECAR_COMMAND",
+		"effective_config.ORQUESTA_EGRESS_SANITIZER_SIDECAR_LOCAL_ENDPOINT",
+	} {
+		if !containsStringV0(hidden, wantHidden) {
+			t.Fatalf("hidden no contiene %s: %v", wantHidden, hidden)
+		}
+	}
+}
+
+func TestBuildStackFromEnvV0CableaEgressSanitizerCanonicoV0(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", t.TempDir())
+	t.Setenv("ORQUESTA_SERVER_STATE_DIR", t.TempDir())
+	t.Setenv("ORQUESTA_CODEX_RUNTIME_WORKDIR", t.TempDir())
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_ENABLED", "true")
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_REF", "sanitizer-ref-stack-test")
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_SIDECAR_ENABLED", "true")
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_SIDECAR_REF", "sidecar-ref-stack-test")
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_SIDECAR_ADAPTER_REF", "adapter-ref-stack-test")
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_SIDECAR_TRANSPORT_REF", "transport-ref-stack-test")
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_SIDECAR_EVIDENCE_REF", "evidence-ref-stack-test")
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_SIDECAR_COMMAND", "/home/alberto/bin/privacy-filter")
+	t.Setenv("ORQUESTA_EGRESS_SANITIZER_SIDECAR_LOCAL_ENDPOINT", "http://127.0.0.1:17777/filter")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	stack, err := buildStackFromEnvV0(config)
+	if err != nil {
+		t.Fatalf("buildStackFromEnvV0: %v", err)
+	}
+	if !stack.EgressSanitizer.Enabled ||
+		stack.EgressSanitizer.SanitizerRef != "sanitizer-ref-stack-test" ||
+		stack.EgressSanitizer.ProviderRef != orquestaappcodexstack.EgressSanitizerProviderOpenAIPrivacyLocalV0 ||
+		!stack.EgressSanitizer.Sidecar.Enabled ||
+		stack.EgressSanitizer.Sidecar.SidecarRef != "sidecar-ref-stack-test" ||
+		!stack.EgressSanitizer.Sidecar.CommandConfigured ||
+		!stack.EgressSanitizer.Sidecar.LocalEndpointConfigured {
+		t.Fatalf("egress sanitizer=%+v", stack.EgressSanitizer)
+	}
+	if stack.EgressSanitizer.Sidecar.Port == nil {
+		t.Fatalf("BuildStackFromEnvV0 debe cablear el puerto HTTP local del sidecar")
+	}
+	provider := runtimeProviderForTestV0(stack.ProviderRuntimes, orquestaappcodexstack.EgressSanitizerProviderOpenAIPrivacyLocalV0)
+	if !provider.Enabled || !provider.CommandConfigured || !provider.LocalEndpointConfigured || provider.ModelRef != "" {
+		t.Fatalf("provider egress sanitizer=%+v", provider)
+	}
+	if stack.Codex.ContextSanitizer == nil {
+		t.Fatalf("BuildStackV0 debe activar sanitizer local en contexto/egress")
+	}
+	if _, ok := stack.Codex.ContextSanitizer.(orquestaappcodexstack.EgressSanitizerContextSanitizerV0); !ok {
+		t.Fatalf("BuildStackV0 debe inyectar el wrapper egress sanitizer, got %T", stack.Codex.ContextSanitizer)
 	}
 }
 
@@ -250,15 +442,18 @@ func TestServerStackIdleSelfImprovementFiltraSeccionesNoTxxV0(t *testing.T) {
 		}, {
 			RequestRef: "request-ref-autoprogramming-backlog-t33-autoprogramming-backlog-ack-correlation-a1b2c3d4",
 		}, {
+			RequestRef: "request-ref-autoprogramming-backlog-t260-corregir-estados-falsos-running-en-agentes-externos-a1b2c3d4",
+		}, {
 			RequestRef: "request-ref-autoprogramming-backlog-scanner-abc123",
 		}},
 	})
 	if err != nil {
 		t.Fatalf("FilterIdleSelfImprovementRequestsV0: %v", err)
 	}
-	if len(result.Requests) != 2 ||
+	if len(result.Requests) != 3 ||
 		result.Requests[0].RequestRef != "request-ref-autoprogramming-backlog-t33-autoprogramming-backlog-ack-correlation-a1b2c3d4" ||
-		result.Requests[1].RequestRef != "request-ref-autoprogramming-backlog-scanner-abc123" ||
+		result.Requests[1].RequestRef != "request-ref-autoprogramming-backlog-t260-corregir-estados-falsos-running-en-agentes-externos-a1b2c3d4" ||
+		result.Requests[2].RequestRef != "request-ref-autoprogramming-backlog-scanner-abc123" ||
 		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-idle-self-improvement-backlog-non-task-section-filtered") {
 		t.Fatalf("result=%+v", result)
 	}
@@ -353,6 +548,18 @@ func effectiveSettingForTestV0(settings []orquestaserver.ServerConfigSettingV0, 
 		}
 	}
 	return orquestaserver.ServerConfigSettingV0{}
+}
+
+func runtimeProviderForTestV0(
+	providers []orquestaappcodexstack.RuntimeProviderConfigV0,
+	kind orquestaappcodexstack.RuntimeProviderKindV0,
+) orquestaappcodexstack.RuntimeProviderConfigV0 {
+	for _, provider := range providers {
+		if provider.Kind == kind {
+			return provider
+		}
+	}
+	return orquestaappcodexstack.RuntimeProviderConfigV0{}
 }
 
 func pathIsInsideForTestV0(t *testing.T, child string, parent string) bool {
@@ -627,6 +834,7 @@ func TestDomainWorkExecutorFromEnvV0ConectaOPESOptIn(t *testing.T) {
 	}))
 	defer server.Close()
 	t.Setenv("ORQUESTA_OPES_BASE_URL", server.URL)
+	t.Setenv("ORQUESTA_OPES_TEMPORAL_CONFIRM", "1")
 	t.Setenv("ORQUESTA_OPES_TIMEOUT_SECONDS", "1")
 	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_ENABLED", "")
 	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_DIR", "")
@@ -708,6 +916,7 @@ func TestDomainWorkExecutorFromEnvV0ConectaOPESBaseURLFallback(t *testing.T) {
 	defer server.Close()
 	t.Setenv("ORQUESTA_OPES_BASE_URL", "")
 	t.Setenv("OPES_BASE_URL", server.URL)
+	t.Setenv("ORQUESTA_OPES_TEMPORAL_CONFIRM", "1")
 	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_ENABLED", "")
 	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_DIR", "")
 
@@ -797,15 +1006,36 @@ func TestDomainWorkExecutorFromEnvV0ConectaFileCreatorOptIn(t *testing.T) {
 	}
 
 	submitResult, err := executor.Execute(context.Background(), orquestamcp.MCPDomainWorkToolInputV0{
-		Action: orquestamcp.MCPDomainWorkActionSubmitArtifactV0,
+		RequestID:     "request-ref-file-env-artifact-001",
+		CorrelationID: "corr-file-env-001",
+		Action:        orquestamcp.MCPDomainWorkActionSubmitArtifactV0,
+		ArtifactSubmission: orquestadomainwork.DomainWorkArtifactSubmissionV0{
+			SchemaVersion:  orquestadomainwork.DomainWorkArtifactSubmissionSchemaV0,
+			RequestID:      "request-ref-file-env-artifact-001",
+			CorrelationID:  "corr-file-env-001",
+			IdempotencyKey: "idem-file-env-artifact-001",
+			RequestedBy:    "orquesta",
+			DomainRef:      "dominio-demo",
+			JobRef:         first.Job.JobRef,
+			ArtifactRef:    "artifact-ref-file-env-001",
+			ArtifactType:   "content_package",
+			PayloadFields: []orquestadomainwork.DomainWorkFieldV0{{
+				Name:  "body",
+				Value: "contenido",
+			}},
+			CompleteJob: true,
+		},
 	})
 	if err != nil {
 		t.Fatalf("Execute submit: %v", err)
 	}
-	if submitResult.Estado != orquestamcp.MCPDomainWorkEstadoErrorV0 ||
-		len(submitResult.Errores) != 1 ||
-		submitResult.Errores[0].Code != orquestamcp.MCPDomainWorkSubmitterUnavailableV0 {
+	if submitResult.Estado != orquestamcp.MCPDomainWorkEstadoOKV0 ||
+		submitResult.Receipt == nil ||
+		submitResult.Receipt.ReceiptRef == "" {
 		t.Fatalf("submitResult=%+v", submitResult)
+	}
+	if !pathExistsForTestV0(filepath.Join(stateDir, "domain-work-jobs", "domain_work_artifacts_v0.json")) {
+		t.Fatalf("snapshot artifact domain-work file no creado")
 	}
 }
 
@@ -910,6 +1140,17 @@ func TestDomainWorkExecutorFromEnvV0ConectaHTTPNeutralOptIn(t *testing.T) {
 		submitResult.Receipt.ReceiptRef != "receipt-ref-http-neutral-001" ||
 		gotSubmission.JobRef != "job-ref-http-neutral-001" {
 		t.Fatalf("submitResult=%+v got=%+v", submitResult, gotSubmission)
+	}
+}
+
+func TestDomainWorkDeliveryEnabledFromEnvV0IncluyeBackendFile(t *testing.T) {
+	t.Setenv("ORQUESTA_OPES_BASE_URL", "")
+	t.Setenv("OPES_BASE_URL", "")
+	t.Setenv("ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL", "")
+	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_ENABLED", "1")
+
+	if !domainWorkDeliveryEnabledFromEnvV0() {
+		t.Fatalf("domain work delivery debe activarse con backend file")
 	}
 }
 

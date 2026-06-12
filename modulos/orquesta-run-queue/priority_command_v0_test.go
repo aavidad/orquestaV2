@@ -4,13 +4,13 @@ import "testing"
 
 func TestNormalizeRunQueuePriorityCommandV0CompactaRefs(t *testing.T) {
 	got := NormalizeRunQueuePriorityCommandV0(RunQueuePriorityCommandV0{
-		RunRef:       " run-ref-001 ",
-		QueueRef:     " global ",
-		AppRef:       " app-ref-001 ",
-		Status:       " closed ",
+		RunRef:           " run-ref-001 ",
+		QueueRef:         " global ",
+		AppRef:           " app-ref-001 ",
+		Status:           " closed ",
 		FairnessGroupRef: " group-ref-001 ",
-		RequestedBy:  " director ",
-		EvidenceRefs: []string{" evidence-1 ", "evidence-1", ""},
+		RequestedBy:      " director ",
+		EvidenceRefs:     []string{" evidence-1 ", "evidence-1", ""},
 	})
 
 	if got.RunRef != "run-ref-001" ||

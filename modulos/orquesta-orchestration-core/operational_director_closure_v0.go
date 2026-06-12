@@ -71,7 +71,7 @@ func (closer OperationalDirectorClosureV0) CloseOperationalDirectorRunV0(
 		result.Issues = append(result.Issues, issues...)
 		return result, nil
 	}
-	events, issues, err := closer.operationalDirectorClosureEventsV0(ctx, request)
+	events, issues, err := closer.operationalDirectorClosureEventsV0(ctx, run, tasks, request)
 	if err != nil || len(issues) > 0 {
 		result.Issues = append(result.Issues, issues...)
 		return result, err
@@ -175,6 +175,8 @@ func (closer OperationalDirectorClosureV0) operationalDirectorClosureTasksV0(
 
 func (closer OperationalDirectorClosureV0) operationalDirectorClosureEventsV0(
 	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	tasks []orquestacoreworkflow.WorkflowTaskV0,
 	request OperationalDirectorClosureRequestV0,
 ) ([]orquestacoreworkflow.OrchestrationEventV0, []ErrorV0, error) {
 	reader := closer.EventReader
@@ -189,6 +191,9 @@ func (closer OperationalDirectorClosureV0) operationalDirectorClosureEventsV0(
 		return nil, nil, err
 	}
 	if len(events) == 0 {
+		if projected, ok := operationalDirectorClosureProjectionEventsV0(run, tasks, request); ok {
+			return projected, nil, nil
+		}
 		return nil, []ErrorV0{errorV0(ErrNucleoOrquestacionInvalidoV0, "events", "historial de eventos requerido")}, nil
 	}
 	return events, nil, nil

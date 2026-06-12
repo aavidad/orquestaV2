@@ -56,6 +56,10 @@ type RunQueuePriorityCommandV0 struct {
 	PriorityScore    int                                      `json:"priority_score"`
 	UpdatedAt        time.Time                                `json:"updated_at,omitempty"`
 	FairnessGroupRef string                                   `json:"fairness_group_ref,omitempty"`
+	AttemptGroup     RunQueueAttemptGroupV0                   `json:"attempt_group,omitempty"`
+	ParentRunRef     string                                   `json:"parent_run_ref,omitempty"`
+	SupersedesRunRef string                                   `json:"supersedes_run_ref,omitempty"`
+	RescueReason     string                                   `json:"rescue_reason,omitempty"`
 	RequestedBy      string                                   `json:"requested_by,omitempty"`
 	Reason           string                                   `json:"reason,omitempty"`
 	IdempotencyKey   string                                   `json:"idempotency_key,omitempty"`
@@ -70,8 +74,35 @@ type RunSchedulingCandidateV0 struct {
 	PriorityScore    int                                      `json:"priority_score"`
 	UpdatedAt        time.Time                                `json:"updated_at"`
 	FairnessGroupRef string                                   `json:"fairness_group_ref,omitempty"`
+	AttemptGroup     RunQueueAttemptGroupV0                   `json:"attempt_group,omitempty"`
+	ParentRunRef     string                                   `json:"parent_run_ref,omitempty"`
+	SupersedesRunRef string                                   `json:"supersedes_run_ref,omitempty"`
+	RescueReason     string                                   `json:"rescue_reason,omitempty"`
 	EvidenceRefs     []string                                 `json:"evidence_refs,omitempty"`
 	WorksetClaims    []orquestacoreconcurrency.WorksetClaimV0 `json:"workset_claims,omitempty"`
+}
+
+type RunQueueAttemptGroupV0 struct {
+	GroupRef     string   `json:"group_ref,omitempty"`
+	ConsumerRef  string   `json:"consumer_ref,omitempty"`
+	ObjectiveRef string   `json:"objective_ref,omitempty"`
+	WorkItemRef  string   `json:"work_item_ref,omitempty"`
+	WriteSetRefs []string `json:"write_set_refs,omitempty"`
+}
+
+type RunQueueAttemptProjectionV0 struct {
+	GroupRef         string                 `json:"group_ref"`
+	AttemptGroup     RunQueueAttemptGroupV0 `json:"attempt_group,omitempty"`
+	OriginalRunRef   string                 `json:"original_run_ref,omitempty"`
+	RunRefs          []string               `json:"run_refs,omitempty"`
+	RescueRunRefs    []string               `json:"rescue_run_refs,omitempty"`
+	ActiveAttemptRef string                 `json:"active_attempt_ref,omitempty"`
+	ParentRunRef     string                 `json:"parent_run_ref,omitempty"`
+	SupersedesRunRef string                 `json:"supersedes_run_ref,omitempty"`
+	RescueReason     string                 `json:"rescue_reason,omitempty"`
+	Status           string                 `json:"status,omitempty"`
+	StatusCounts     map[string]int         `json:"status_counts,omitempty"`
+	EvidenceRefs     []string               `json:"evidence_refs,omitempty"`
 }
 
 type RankedRunCandidateV0 struct {

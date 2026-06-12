@@ -235,6 +235,47 @@ func TestCodexStackV0RunGlobalTickRecuperaDomainWorkParadoAntesFiltroControl(t *
 	}
 }
 
+func TestCodexStackV0RunGlobalTickRecuperaDomainWorkPerdidoConArtefactoValidoV0(t *testing.T) {
+	runtime := newDomainWorkRunningMissingACKRuntimeV0()
+	domainWork := &fakeCodexStackDomainWorkExecutorV0{}
+	stack := mustBuildCodexStackWithDomainWorkForTestV0(t, runtime, domainWork)
+	result := postExternalWorkRunStackV0(t, stack)
+
+	if _, err := stack.DrainRunV0(context.Background(), DrainRunRequestV0{
+		RunRef:               result.RunRef,
+		CorrelationID:        "corr-domain-work-lost-prep",
+		MaxBursts:            16,
+		MaxStepsPerBurst:     8,
+		MaxDispatchesPerWait: 8,
+		MaxExternalWaits:     0,
+	}); err != nil {
+		t.Fatalf("DrainRunV0: %v (%#v)", err, err)
+	}
+	if _, ok := findDomainWorkSubmitForTestV0(domainWork.inputs); ok {
+		t.Fatalf("submit_artifact no debe ocurrir sin evidencia de fallo de ACK")
+	}
+	markDomainWorkRunLostForTestV0(t, stack, result.RunRef)
+	writeDomainWorkAckFailureLastMessageForTestV0(t, stack, result.RunRef)
+	if _, err := stack.Stores.RunControl.CompleteRunControlV0(
+		context.Background(),
+		orquestaruncontrol.CompleteRunControlCommandV0{
+			RunRef:       result.RunRef,
+			TargetStatus: orquestaruncontrol.RunControlStatusStoppedV0,
+			RequestedBy:  "stack-test",
+			Reason:       "simula run terminal historico con artefacto valido y agente perdido",
+		},
+	); err != nil {
+		t.Fatalf("CompleteRunControlV0: %v", err)
+	}
+
+	if _, err := stack.RunGlobalTickV0(context.Background(), globalTickCommandForTestV0()); err != nil {
+		t.Fatalf("RunGlobalTickV0: %v", err)
+	}
+	if _, ok := findDomainWorkSubmitForTestV0(domainWork.inputs); !ok {
+		t.Fatalf("submit_artifact no invocado para agente perdido: inputs=%+v", domainWork.inputs)
+	}
+}
+
 func markDomainWorkRunStoppedForTestV0(t *testing.T, stack StackV0, runRef string) {
 	t.Helper()
 	descriptors, err := stack.Stores.ReceiptStore.ListCodexReceiptDescriptorsV0(
@@ -253,6 +294,28 @@ func markDomainWorkRunStoppedForTestV0(t *testing.T, stack StackV0, runRef strin
 	}
 	run.StoppedAgents = append(run.StoppedAgents, descriptors[0].AgentRef)
 	run.ConfirmedStoppedAgents = append(run.ConfirmedStoppedAgents, descriptors[0].AgentRef)
+	if err := stack.Stores.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+}
+
+func markDomainWorkRunLostForTestV0(t *testing.T, stack StackV0, runRef string) {
+	t.Helper()
+	descriptors, err := stack.Stores.ReceiptStore.ListCodexReceiptDescriptorsV0(
+		context.Background(),
+		orquestaruntimecodexdelivery.CodexReceiptDescriptorRequestV0{RunID: runRef},
+	)
+	if err != nil {
+		t.Fatalf("ListCodexReceiptDescriptorsV0: %v", err)
+	}
+	if len(descriptors) != 1 {
+		t.Fatalf("descriptors=%+v", descriptors)
+	}
+	run, err := stack.Stores.RunStore.LoadRunV0(context.Background(), runRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	run.LostAgents = append(run.LostAgents, descriptors[0].AgentRef)
 	if err := stack.Stores.RunStore.SaveRunV0(context.Background(), run); err != nil {
 		t.Fatalf("SaveRunV0: %v", err)
 	}

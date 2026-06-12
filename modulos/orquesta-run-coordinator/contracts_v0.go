@@ -51,12 +51,17 @@ type RunCoordinatorTickResultV0 struct {
 }
 
 type RunDrainRequestV0 struct {
-	RunRef        string           `json:"run_ref"`
-	AppRef        string           `json:"app_ref,omitempty"`
-	Rank          int              `json:"rank"`
-	OccurredAt    time.Time        `json:"occurred_at"`
-	CorrelationID string           `json:"correlation_id,omitempty"`
-	Limits        RunDrainLimitsV0 `json:"limits,omitempty"`
+	RunRef           string                                  `json:"run_ref"`
+	AppRef           string                                  `json:"app_ref,omitempty"`
+	Rank             int                                     `json:"rank"`
+	OccurredAt       time.Time                               `json:"occurred_at"`
+	CorrelationID    string                                  `json:"correlation_id,omitempty"`
+	AttemptGroup     orquestarunqueue.RunQueueAttemptGroupV0 `json:"attempt_group,omitempty"`
+	ParentRunRef     string                                  `json:"parent_run_ref,omitempty"`
+	SupersedesRunRef string                                  `json:"supersedes_run_ref,omitempty"`
+	RescueReason     string                                  `json:"rescue_reason,omitempty"`
+	ActiveAttemptRef string                                  `json:"active_attempt_ref,omitempty"`
+	Limits           RunDrainLimitsV0                        `json:"limits,omitempty"`
 }
 
 type RunDrainResultV0 struct {
@@ -96,27 +101,42 @@ type RunDrainDiagnosticV0 struct {
 }
 
 type RunExecutionSummaryV0 struct {
-	RunRef       string                 `json:"run_ref"`
-	AppRef       string                 `json:"app_ref,omitempty"`
-	Rank         int                    `json:"rank"`
-	Outcome      string                 `json:"outcome,omitempty"`
-	QueueStatus  string                 `json:"queue_status,omitempty"`
-	EvidenceRefs []string               `json:"evidence_refs,omitempty"`
-	Diagnostics  []RunDrainDiagnosticV0 `json:"diagnostics,omitempty"`
+	RunRef           string                                  `json:"run_ref"`
+	AppRef           string                                  `json:"app_ref,omitempty"`
+	Rank             int                                     `json:"rank"`
+	Outcome          string                                  `json:"outcome,omitempty"`
+	QueueStatus      string                                  `json:"queue_status,omitempty"`
+	AttemptGroup     orquestarunqueue.RunQueueAttemptGroupV0 `json:"attempt_group,omitempty"`
+	ParentRunRef     string                                  `json:"parent_run_ref,omitempty"`
+	SupersedesRunRef string                                  `json:"supersedes_run_ref,omitempty"`
+	RescueReason     string                                  `json:"rescue_reason,omitempty"`
+	ActiveAttemptRef string                                  `json:"active_attempt_ref,omitempty"`
+	EvidenceRefs     []string                                `json:"evidence_refs,omitempty"`
+	Diagnostics      []RunDrainDiagnosticV0                  `json:"diagnostics,omitempty"`
 }
 
 type RunSkipSummaryV0 struct {
-	RunRef string `json:"run_ref"`
-	AppRef string `json:"app_ref,omitempty"`
-	Rank   int    `json:"rank"`
-	Reason string `json:"reason"`
-	Status string `json:"status,omitempty"`
+	RunRef           string                                  `json:"run_ref"`
+	AppRef           string                                  `json:"app_ref,omitempty"`
+	Rank             int                                     `json:"rank"`
+	Reason           string                                  `json:"reason"`
+	Status           string                                  `json:"status,omitempty"`
+	AttemptGroup     orquestarunqueue.RunQueueAttemptGroupV0 `json:"attempt_group,omitempty"`
+	ParentRunRef     string                                  `json:"parent_run_ref,omitempty"`
+	SupersedesRunRef string                                  `json:"supersedes_run_ref,omitempty"`
+	RescueReason     string                                  `json:"rescue_reason,omitempty"`
+	ActiveAttemptRef string                                  `json:"active_attempt_ref,omitempty"`
 }
 
 type RankedRunSummaryV0 struct {
-	RunRef        string `json:"run_ref"`
-	AppRef        string `json:"app_ref,omitempty"`
-	Rank          int    `json:"rank"`
-	PriorityScore int    `json:"priority_score"`
-	AgingBoost    int    `json:"aging_boost"`
+	RunRef           string                                  `json:"run_ref"`
+	AppRef           string                                  `json:"app_ref,omitempty"`
+	Rank             int                                     `json:"rank"`
+	PriorityScore    int                                     `json:"priority_score"`
+	AgingBoost       int                                     `json:"aging_boost"`
+	AttemptGroup     orquestarunqueue.RunQueueAttemptGroupV0 `json:"attempt_group,omitempty"`
+	ParentRunRef     string                                  `json:"parent_run_ref,omitempty"`
+	SupersedesRunRef string                                  `json:"supersedes_run_ref,omitempty"`
+	RescueReason     string                                  `json:"rescue_reason,omitempty"`
+	ActiveAttemptRef string                                  `json:"active_attempt_ref,omitempty"`
 }

@@ -2,6 +2,7 @@ package orquestaappcodexstack
 
 import (
 	"net/http"
+	"strings"
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestaappgateway "orquesta/modulos/orquesta-app-gateway"
@@ -27,12 +28,15 @@ type StackV0 struct {
 	RuntimeModels            orquestaruntime.RuntimeModelManagerPortV0
 	DecisionCouncil          DecisionCouncilConfigV0
 	DomainDelivery           DomainWorkDeliveryBridgeConfigV0
+	ProviderRuntimes         []RuntimeProviderConfigV0
+	EgressSanitizer          EgressSanitizerConfigV0
 	Codex                    CodexRuntimeConfigV0
 	CodexRuntimeWorkDir      string
 	CodexSnapshotSource      orquestaruntimecodexdelivery.CodexProcessSnapshotSourcePortV0
 }
 
 func BuildStackV0(config ConfigV0) (StackV0, error) {
+	config = configWithCanonicalEgressSanitizerV0(config)
 	if err := validateConfigV0(config); err != nil {
 		return StackV0{}, err
 	}
@@ -52,6 +56,8 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 		RuntimeModels:            config.RuntimeModels,
 		DecisionCouncil:          config.DecisionCouncil,
 		DomainDelivery:           config.DomainDelivery,
+		ProviderRuntimes:         CanonicalRuntimeProviderConfigsV0(config),
+		EgressSanitizer:          NormalizeEgressSanitizerConfigV0(config.EgressSanitizer),
 		Codex:                    config.Codex,
 		CodexRuntimeWorkDir:      config.Codex.RuntimeWorkDir,
 		CodexSnapshotSource:      config.Codex.SnapshotSource,
@@ -105,13 +111,27 @@ func buildStackMCPTransportBindingsV0(
 			config.Clock,
 			config.Codex.RuntimeWorkDir,
 		),
-		ServerShutdown: serverShutdownExecutorV0(config, stack),
-		DomainWork:     config.DomainWork,
-		ExternalWorkRun: externalWorkRunExecutorV0(
-			config,
-			queueConfig,
-		),
+		ServerShutdown:  serverShutdownExecutorV0(config, stack),
+		DomainWork:      config.DomainWork,
+		ExternalWorkRun: externalWorkRunGuardedExecutorV0(config, queueConfig),
 	}
+}
+
+func externalWorkRunGuardedExecutorV0(
+	config ConfigV0,
+	queueConfig RunQueueConfigV0,
+) orquestamcp.MCPTransportExternalWorkRunExecutorV0 {
+	executor := orquestamcp.MCPTransportExternalWorkRunExecutorV0(
+		externalWorkRunExecutorV0(config, queueConfig),
+	)
+	guard := config.ExternalWorkRunGuard
+	if len(guard.Rules) == 0 {
+		return executor
+	}
+	if strings.TrimSpace(guard.ProjectWorkDir) == "" {
+		guard.ProjectWorkDir = strings.TrimSpace(config.Codex.ProjectWorkDir)
+	}
+	return NewExternalWorkRunProjectWorkDirGuardExecutorV0(executor, guard)
 }
 
 func buildStackHTTPHandlerV0(

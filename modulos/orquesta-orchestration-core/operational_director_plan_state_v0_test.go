@@ -79,11 +79,48 @@ func TestOperationalDirectorPlanStateV0NormalizaAcceptedReviewRefs(t *testing.T)
 	}
 }
 
-func TestOperationalDirectorPlanStateV0RechazaAcceptedReviewRefsFueraDeReview(t *testing.T) {
+func TestOperationalDirectorPlanStateV0PermiteAcceptedReviewRefsEnPasosCausales(t *testing.T) {
+	state := operationalDirectorPlanStateWithReviewAcceptedForTestV0()
+	state.Steps = append(state.Steps, OperationalDirectorPlanStepStateV0{
+		StepID:             "step-run-required-tests",
+		Kind:               orquestadirectoroperativo.OperationalDirectorStepRunRequiredTestsV0,
+		Status:             orquestadirectoroperativo.OperationalDirectorStepAcceptedV0,
+		WaveRef:            "wave-001",
+		CohortRef:          "cohort-001",
+		TaskRefs:           []string{"task-ref-plan-state-001"},
+		AgentRefs:          []string{"agent-ref-plan-state-001"},
+		DeliveryRefs:       []string{"delivery-ref-plan-state-001"},
+		ReviewResultRefs:   []string{"review-result-ref-plan-state-001"},
+		AcceptedReviewRefs: []string{"accepted-review-ref-plan-state-001"},
+	})
+	state.Steps[3].AcceptedReviewRefs = []string{"accepted-review-ref-plan-state-001"}
+	got, err := NewOperationalDirectorPlanStateV0(state)
+	if err != nil {
+		t.Fatalf("NewOperationalDirectorPlanStateV0: %v", err)
+	}
+	if len(got.Steps[3].AcceptedReviewRefs) != 1 ||
+		got.Steps[3].AcceptedReviewRefs[0] != "accepted-review-ref-plan-state-001" {
+		t.Fatalf("replan accepted_review_refs=%+v", got.Steps[3].AcceptedReviewRefs)
+	}
+	if len(got.Steps[4].AcceptedReviewRefs) != 1 ||
+		got.Steps[4].AcceptedReviewRefs[0] != "accepted-review-ref-plan-state-001" {
+		t.Fatalf("required-tests accepted_review_refs=%+v", got.Steps[4].AcceptedReviewRefs)
+	}
+}
+
+func TestOperationalDirectorPlanStateV0RechazaAcceptedReviewRefsFueraDePasosCausales(t *testing.T) {
 	state := operationalDirectorPlanStateForTestV0()
 	state.Steps[1].AcceptedReviewRefs = []string{"accepted-review-ref-plan-state-001"}
 	if _, err := NewOperationalDirectorPlanStateV0(state); err == nil {
-		t.Fatal("err=nil, want accepted_review_refs fuera de review")
+		t.Fatal("err=nil, want accepted_review_refs fuera de pasos causales")
+	}
+}
+
+func TestOperationalDirectorPlanStateV0RechazaAcceptedReviewRefsCausalesSinReviewPropietaria(t *testing.T) {
+	state := operationalDirectorPlanStateWithReviewAcceptedForTestV0()
+	state.Steps[3].AcceptedReviewRefs = []string{"accepted-review-ref-plan-state-fantasma"}
+	if _, err := NewOperationalDirectorPlanStateV0(state); err == nil {
+		t.Fatal("err=nil, want accepted_review_refs causal sin review propietaria")
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -104,7 +105,7 @@ func TestCodexWaveStopCommandV0CooperativoAntesDeForceV0(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("force stop exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
-	waitForCodexWaveProcessStoppedForTestV0(t, summary.Agents[0].PID)
+	waitForCodexWaveProcessGroupStoppedForTestV0(t, summary.Agents[0].PID)
 }
 
 func waitForCodexWaveProcessStoppedForTestV0(t *testing.T, pid int) {
@@ -117,6 +118,25 @@ func waitForCodexWaveProcessStoppedForTestV0(t *testing.T, pid int) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("proceso %d sigue vivo tras force stop", pid)
+}
+
+func waitForCodexWaveProcessGroupStoppedForTestV0(t *testing.T, pid int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if !codexWaveProcessGroupAliveForTestV0(pid) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("grupo de proceso %d sigue vivo tras force stop", pid)
+}
+
+func codexWaveProcessGroupAliveForTestV0(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	return exec.Command("pgrep", "-g", strconv.Itoa(pid)).Run() == nil
 }
 
 func launchCodexWaveStopTestAgentV0(t *testing.T, waveRef string) codexWaveLaunchSummaryV0 {
@@ -154,5 +174,15 @@ func launchCodexWaveStopTestAgentV0(t *testing.T, waveRef string) codexWaveLaunc
 	if exitCode != 0 {
 		t.Fatalf("launch exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
-	return mustReadCodexWaveCommandSummaryForTest(t, stdout.Bytes(), runtimeDir)
+	summary := mustReadCodexWaveCommandSummaryForTest(t, stdout.Bytes(), runtimeDir)
+	t.Cleanup(func() {
+		for _, agent := range summary.Agents {
+			if agent.PID <= 0 {
+				continue
+			}
+			_ = signalProcessGroupV0(agent.PID)
+			waitForCodexWaveProcessGroupStoppedForTestV0(t, agent.PID)
+		}
+	})
+	return summary
 }

@@ -90,9 +90,11 @@ func idleSelfImprovementParseBacklogSectionV0(
 }
 
 func idleSelfImprovementSectionStateV0(lines []string) idleSelfImprovementBacklogStateV0 {
-	stateValue := strings.ToLower(idleSelfImprovementSectionValueV0(lines, "Estado:"))
+	stateValue := idleSelfImprovementSectionStateValueV0(lines)
 	if idleSelfImprovementBacklogTextContainsAnyV0(stateValue,
 		"completada", "completado", "cerrada", "cerrado", "hecha", "hecho", "done",
+		"resuelta", "resuelto", "sincronizado", "no-op", "no op", "aparcado",
+		"cerrada localmente", "cerrado localmente",
 	) {
 		return idleSelfImprovementBacklogStateV0{
 			Completed:    true,

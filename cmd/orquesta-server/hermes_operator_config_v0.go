@@ -29,6 +29,8 @@ type hermesOperatorEnvConfigV0 struct {
 	MaxResponseBytes int
 }
 
+var newHermesOperatorMCPConnectorV0 = operatorhermes.NewHermesOperatorMCPConnectorV0
+
 func hermesOperatorEnvConfigFromEnvV0() hermesOperatorEnvConfigV0 {
 	return hermesOperatorEnvConfigV0{
 		Enabled: boolEnvOrDefaultV0(envHermesEnabledV0, false),
@@ -58,7 +60,7 @@ func hermesOperatorConnectorFromEnvV0() (operator.OperatorMCPConnectorV0, error)
 	if !config.Enabled {
 		return nil, nil
 	}
-	return operatorhermes.NewHermesOperatorMCPConnectorV0(operatorhermes.HermesOperatorMCPConfigV0{
+	return newHermesOperatorMCPConnectorV0(operatorhermes.HermesOperatorMCPConfigV0{
 		BaseURL:          config.BaseURL,
 		MCPPath:          config.MCPPath,
 		APIKey:           config.APIKey,

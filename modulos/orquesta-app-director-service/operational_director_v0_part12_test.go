@@ -90,9 +90,11 @@ func TestUpdateOperationalDirectorPlanStateAfterLoopV0BloqueaTestsSinEvidenciaNi
 		state.ActiveStepID != "step-replan-or-close" ||
 		len(state.BlockerRefs) != 0 ||
 		testsStep.Status != orquestadirectoroperativo.OperationalDirectorStepAcceptedV0 ||
+		!serviceStringInSetV0(testsStep.AcceptedReviewRefs, fixture.AcceptedReviewRef) ||
 		!serviceStringInSetV0(testsStep.RequiredTestEvidenceRefs, fixture.RequiredTestEvidenceRef) ||
 		len(testsStep.BlockerRefs) != 0 ||
 		replanStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
+		!serviceStringInSetV0(replanStep.AcceptedReviewRefs, fixture.AcceptedReviewRef) ||
 		!serviceStringInSetV0(replanStep.RequiredTestEvidenceRefs, fixture.RequiredTestEvidenceRef) {
 		t.Fatalf("state=%+v testsStep=%+v replanStep=%+v", state, testsStep, replanStep)
 	}

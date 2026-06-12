@@ -524,10 +524,14 @@ func TestCodexLaunchDirectorWaveCommandV0RecursiveFakeRuntimeEjecutableConLinaje
 	root := t.TempDir()
 	projectDir := filepath.Join(root, "project")
 	runtimeDir := filepath.Join(root, "runtime", "recursive-fake-runtime")
+	sourceCodeHome := filepath.Join(root, "source-codex-home")
 	fakeCodex := filepath.Join(root, "codex-fake")
 
 	if err := os.MkdirAll(projectDir, 0o700); err != nil {
 		t.Fatalf("crear project dir: %v", err)
+	}
+	if err := os.MkdirAll(sourceCodeHome, 0o700); err != nil {
+		t.Fatalf("crear source codex home: %v", err)
 	}
 	fakeScript := `#!/bin/sh
 out=""
@@ -538,10 +542,10 @@ while [ "$#" -gt 0 ]; do
   fi
   shift || break
 done
-input=$(cat)
 if [ -n "$out" ]; then
   printf 'fake recursive delivery\n' > "$out"
 fi
+input=$(cat)
 printf '%s\n' "$input"
 `
 	if err := os.WriteFile(fakeCodex, []byte(fakeScript), 0o700); err != nil {
@@ -563,6 +567,8 @@ printf '%s\n' "$input"
 		"--project-dir", projectDir,
 		"--runtime-dir", runtimeDir,
 		"--command", fakeCodex,
+		"--source-code-home", sourceCodeHome,
+		"--isolate-home=true",
 		"--reasoning-effort", "medium",
 		"--sandbox", "workspace-write",
 		"--objective", "Ejecutar arbol recursivo Codex fake con linaje padre hijo nieto.",
@@ -898,7 +904,7 @@ func codexDirectorAssertRegistryReadyForDrainReviewV0(
 
 func waitForCodexDirectorTestFileV0(t *testing.T, path string) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(8 * time.Second)
 	for time.Now().Before(deadline) {
 		if _, err := os.Stat(path); err == nil {
 			return

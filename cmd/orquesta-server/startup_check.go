@@ -93,17 +93,22 @@ func (check serverStartupCheckV0) diagnoseStartupV0(
 			return orquestaserver.StartupCheckResultV0{}, err
 		}
 		if len(cleanup) == 0 {
+			compaction, err := check.compactStartupStateFilesV0(command)
+			if err != nil {
+				return orquestaserver.StartupCheckResultV0{}, err
+			}
 			return orquestaserver.StartupCheckResultV0{
 				Status: orquestaserver.StartupCheckStatusReadyV0,
 				Ready:  true,
-				Message: startupAdoptionMessageV0(
+				Message: startupReadyMessageV0(startupAdoptionMessageV0(
 					fmt.Sprintf("director: orquesta preparada; cola terminal reconciliada=%d", synced),
 					adoption,
-				),
-				EvidenceRefs: startupAdoptionEvidenceRefsV0([]string{
+				), compaction),
+				EvidenceRefs: startupReadyEvidenceRefsV0(startupAdoptionEvidenceRefsV0([]string{
 					"evidence-ref-orquesta-startup-diagnose-ready",
 					"evidence-ref-orquesta-startup-queue-reconciled",
-				}, adoption),
+				}, adoption), compaction),
+				StartupRevision: startupRevisionSummaryFromCompactionV0(compaction),
 			}, nil
 		}
 	}

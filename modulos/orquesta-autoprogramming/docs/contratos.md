@@ -104,6 +104,12 @@ del `write_set`), el gate devuelve `accepted=true`, conserva la salida y adjunta
 arreglo util no queda bloqueado por falsos positivos, pero la evidencia no se
 pierde.
 
+Los rails de presupuesto de snapshot (`worktree_snapshot_file_too_large`,
+`worktree_snapshot_too_many_files`, `worktree_snapshot_too_large` y
+`worktree_snapshot_unreadable`) siguen la misma politica advisory cuando llegan
+desde un adaptador de review: no autorizan efectos externos ni ignoran tests,
+pero tampoco convierten una limitacion de observabilidad en veto automatico.
+
 Las refs `ack-pending-rail:*` se tratan igual: son evidencia de detector dudoso,
 no razon suficiente para relanzar otro agente si el ACK y los tests estan
 verdes.

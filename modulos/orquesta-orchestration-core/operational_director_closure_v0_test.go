@@ -49,6 +49,35 @@ func TestOperationalDirectorClosureV0CierraRunConReviewYTests(t *testing.T) {
 	}
 }
 
+func TestOperationalDirectorClosureV0CierraConProyeccionDurableSinEventos(t *testing.T) {
+	runRef := "run-operational-director-closure-projection-events-001"
+	run := mustOperationalDirectorClosureReadyRunV0(t, runRef)
+	runStore := NewInMemoryRunStoreV0(run)
+	sink := NewInMemoryEventSinkV0()
+	taskStore := NewInMemoryWorkflowTaskStoreV0(
+		operationalDirectorClosureTaskForTestV0(runRef, "task-ref-nucleo-001", []string{"go test ./..."}),
+	)
+
+	result, err := (OperationalDirectorClosureV0{
+		RunStore:                  runStore,
+		EventSink:                 sink,
+		TaskStore:                 taskStore,
+		RequiredTestEvidenceStore: NewInMemoryRequiredTestEvidenceStoreV0(requiredTestEvidenceForTestV0(runRef, "task-ref-nucleo-001", "go test ./...")),
+		RequestedBy:               "operational-director-closure-test",
+	}).CloseOperationalDirectorRunV0(context.Background(), operationalDirectorClosureRequestForTestV0(runRef))
+	if err != nil {
+		t.Fatalf("CloseOperationalDirectorRunV0: %v", err)
+	}
+	if len(result.Issues) > 0 ||
+		result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		!containsNucleoRefV0(result.Run.ClosedTasks, "task-ref-nucleo-001") {
+		t.Fatalf("no cerro desde proyeccion durable sin eventos: result=%+v", result)
+	}
+	if !sinkHasEventTypeV0(sink, orquestacoreworkflow.OrchestrationEventRunClosedV0) {
+		t.Fatalf("sink sin cierre escrito: %+v", sink.EventsV0())
+	}
+}
+
 func TestOperationalDirectorClosureV0CompactaEvidenciaExcesiva(t *testing.T) {
 	runRef := "run-operational-director-closure-evidence-overflow-001"
 	runStore, sink, _ := mustOperationalDirectorClosureReadyStoreV0(t, runRef)

@@ -81,7 +81,7 @@ func fillExternalWorkRunEnvelopeV0(
 	if request.AppSpecRef == "" {
 		request.AppSpecRef = "app-spec-external-work-" + compactExternalWorkRunRefV0(request.ProjectRef)
 	}
-	if request.QueueRef == "" {
+	if request.QueueRef == "" || queueRefIsDefaultAliasV0(request.QueueRef) {
 		request.QueueRef = config.QueueRef
 	}
 	if request.PriorityScore <= 0 {
@@ -94,6 +94,10 @@ func fillExternalWorkRunEnvelopeV0(
 		request.RequestedBy = config.RequestedBy
 	}
 	return request
+}
+
+func queueRefIsDefaultAliasV0(value string) bool {
+	return strings.EqualFold(strings.TrimSpace(value), "default")
 }
 
 func firstExternalWorkProjectRefV0(change orquestaappchange.AppChangeRequestV0) string {

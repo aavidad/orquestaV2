@@ -11,14 +11,15 @@ const (
 )
 
 type WorktreeIsolationRequestV0 struct {
-	IsolationRef   string   `json:"isolation_ref"`
-	ProjectRef     string   `json:"project_ref"`
-	WorktreeRef    string   `json:"worktree_ref"`
-	BranchRef      string   `json:"branch_ref"`
-	ProjectWorkDir string   `json:"project_work_dir"`
-	Isolated       bool     `json:"isolated"`
-	BaselineRef    string   `json:"baseline_ref,omitempty"`
-	IgnorePrefixes []string `json:"ignore_prefixes,omitempty"`
+	IsolationRef         string   `json:"isolation_ref"`
+	ProjectRef           string   `json:"project_ref"`
+	WorktreeRef          string   `json:"worktree_ref"`
+	BranchRef            string   `json:"branch_ref"`
+	ProjectWorkDir       string   `json:"project_work_dir"`
+	Isolated             bool     `json:"isolated"`
+	BaselineRef          string   `json:"baseline_ref,omitempty"`
+	IgnorePrefixes       []string `json:"ignore_prefixes,omitempty"`
+	AllowPartialSnapshot bool     `json:"allow_partial_snapshot,omitempty"`
 }
 
 type WorktreeIsolationV0 struct {
@@ -45,6 +46,7 @@ func PrepareIsolatedWorktreeV0(
 		SnapshotRef:    worktreeIsolationBaselineRefV0(request),
 		ProjectWorkDir: request.ProjectWorkDir,
 		IgnorePrefixes: request.IgnorePrefixes,
+		AllowPartial:   request.AllowPartialSnapshot,
 	})
 	if len(issues) > 0 {
 		return WorktreeIsolationV0{}, issues
@@ -58,7 +60,7 @@ func PrepareIsolatedWorktreeV0(
 		Mode:          WorktreeIsolationModeIsolatedV0,
 		BaselineRef:   snapshot.SnapshotRef,
 		Snapshot:      snapshot,
-		EvidenceRefs:  []string{"evidence-ref-worktree-isolation-v0"},
+		EvidenceRefs:  worktreeIsolationEvidenceRefsV0(snapshot),
 	}, nil
 }
 
@@ -102,4 +104,10 @@ func worktreeIsolationBaselineRefV0(request WorktreeIsolationRequestV0) string {
 		return request.BaselineRef
 	}
 	return request.IsolationRef + "-baseline"
+}
+
+func worktreeIsolationEvidenceRefsV0(snapshot WorktreeSnapshotV0) []string {
+	refs := []string{"evidence-ref-worktree-isolation-v0"}
+	refs = append(refs, worktreeSnapshotBudgetEvidenceRefsV0(snapshot.ExclusionReceipts)...)
+	return compactWorktreeStringsV0(refs)
 }

@@ -50,6 +50,32 @@ export ORQUESTA_CODEX_MODEL=gpt-5.5
 export ORQUESTA_CODEX_REASONING_EFFORT=xhigh
 ```
 
+Nota 2026-06-11: la autovigilancia del servidor por CPU sostenida sin progreso
+no cambia las guardas OPES. No autoriza drenados amplios, no toca OPES/TCAE
+productivo y no sustituye `ORQUESTA_OPES_BRIDGE_JOB_TYPE`,
+`ORQUESTA_OPES_BRIDGE_JOB_REF`, `ORQUESTA_OPES_BRIDGE_LIMIT` ni las
+confirmaciones de instancia temporal.
+Rework OrquestaV2 2026-06-11: la correccion
+`agent-ref-task-ref-review-rework-task-autoprogramming-7c02f2568e45-g01-449fcc36b3c508d55429e771db52f5fb`
+solo revalida pruebas de Orquesta y evidencia `ref_only`; no es permiso para
+ejecutar `opes-drain-once` ni para ampliar scope de temario.
+
+Guardas de destino y scope 2026-06-11:
+
+- Loopback (`127.0.0.1`, `localhost`) solo demuestra destino local. No cuenta
+  como OPES temporal confirmado ni autoriza efectos reales sin
+  `ORQUESTA_OPES_BRIDGE_CONFIRM=1` y confirmacion de instancia temporal o
+  productiva segun corresponda.
+- Productivo requiere confirmacion explicita de operador y evidence ref
+  compacta; no se usa para smokes de temario ni derivados.
+- `ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE` ordena fases, pero no acota por si
+  sola. En modo real debe combinarse con `ORQUESTA_OPES_BRIDGE_PROGRAM_ID`,
+  `ORQUESTA_OPES_BRIDGE_TOPIC_ID`, `ORQUESTA_OPES_BRIDGE_CORRELATION_ID` o
+  scope equivalente, y con `ORQUESTA_OPES_BRIDGE_LIMIT=1` salvo decision
+  operatoria documentada.
+- Si falta scope duro, ejecutar solo dry-run o parar con bloqueo verificable;
+  no drenar jobs ajenos para "ver que pasa".
+
 ## Handoff Operario paralelo
 
 Estado operativo que deben heredar futuros agentes antes de seguir el smoke de
@@ -424,6 +450,7 @@ ORQUESTA_OPES_DERIVATIVES_REST_CONFIRM=1 \
 ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
 ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=drain-once \
+ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 scripts/smoke_opes_derivatives_rest.sh
 ```
@@ -443,6 +470,7 @@ ORQUESTA_OPES_DERIVATIVES_REST_CONFIRM=1 \
 ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
 ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-assemble \
+ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 ORQUESTA_OPES_BRIDGE_MAX_TICKS=20 \
 scripts/smoke_opes_derivatives_rest.sh
@@ -457,6 +485,7 @@ ORQUESTA_OPES_DERIVATIVES_SMOKE_CONFIRM=1 \
 ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
 ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-assemble \
+ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 ORQUESTA_OPES_BRIDGE_MAX_TICKS=20 \
 scripts/smoke_opes_derivatives_real.sh

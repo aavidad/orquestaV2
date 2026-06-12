@@ -172,9 +172,11 @@ func TestRequiredTestsEvidenceMissingStateFileRestartNoDuplicaGateYReentraConEvi
 		state.ReplanAttempts != 0 ||
 		testsStep.Status != orquestadirectoroperativo.OperationalDirectorStepAcceptedV0 ||
 		testsStep.Reason != "required-tests-passed" ||
+		!serviceStringInSetV0(testsStep.AcceptedReviewRefs, fixture.AcceptedReviewRef) ||
 		!serviceStringInSetV0(testsStep.RequiredTestEvidenceRefs, fixture.RequiredTestEvidenceRef) ||
 		replanStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
 		replanStep.Reason != "required-tests-passed" ||
+		!serviceStringInSetV0(replanStep.AcceptedReviewRefs, fixture.AcceptedReviewRef) ||
 		!serviceStringInSetV0(replanStep.RequiredTestEvidenceRefs, fixture.RequiredTestEvidenceRef) {
 		t.Fatalf("state=%+v testsStep=%+v replanStep=%+v", state, testsStep, replanStep)
 	}

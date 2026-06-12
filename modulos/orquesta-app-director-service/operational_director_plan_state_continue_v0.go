@@ -121,7 +121,9 @@ func continueRequestWithOperationalDirectorPlanStateV0(
 	if !applied && hasWaitScope && explicitPlanRef == "" {
 		return request, nil
 	}
-	if explicitPlanRef != "" && (!applied || !continueRequestHasWaitScopeV0(next)) {
+	canContinueWithoutWaitScope := operationalDirectorPlanStateReplanOrCloseRunningV0(state)
+	if explicitPlanRef != "" &&
+		(!applied || (!continueRequestHasWaitScopeV0(next) && !canContinueWithoutWaitScope)) {
 		canProgress, err := continueOperationalDirectorPlanStateCanProgressBlockedRequiredTestsReplanV0(ctx, request, ports, state)
 		if err != nil {
 			return ContinueAppDirectorRequestV0{}, err
@@ -142,6 +144,16 @@ func continueRequestWithOperationalDirectorPlanStateV0(
 		}
 	}
 	return next, nil
+}
+
+func operationalDirectorPlanStateReplanOrCloseRunningV0(
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+) bool {
+	activeStep, ok := operationalDirectorPlanStateActiveStepV0(state)
+	return ok &&
+		state.Status == orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0 &&
+		activeStep.Kind == orquestadirectoroperativo.OperationalDirectorStepReplanOrCloseV0 &&
+		activeStep.Status == orquestadirectoroperativo.OperationalDirectorStepRunningV0
 }
 
 func operationalDirectorPlanStateBlockedRequiredTestsEvidenceMissingV0(

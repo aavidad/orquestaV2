@@ -8,7 +8,10 @@ import (
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
-const codexAgentAckStatusCompletedV0 = "completed"
+const (
+	codexAgentAckStatusCompletedV0 = "completed"
+	codexAgentAckStatusBlockedV0   = "blocked"
+)
 
 func ReadAndValidateCodexAgentAckFileV0(
 	path string,
@@ -52,7 +55,7 @@ func ValidateCodexAgentAckForSpecV0(
 	v.validateShape(ack)
 	v.validateCorrelation(ack, spec)
 	v.validateSensitiveDetails(ack)
-	if strings.TrimSpace(ack.Status) == codexAgentAckStatusCompletedV0 {
+	if codexAgentAckStatusCarriesReviewableWorkV0(ack.Status) {
 		v.validateCompletedEvidence(ack, spec.AgentPacket)
 	}
 	return v.issues
@@ -129,8 +132,18 @@ func (v *codexAckValidatorV0) validateShape(ack CodexAgentAckV0) {
 		}
 	}
 	if strings.TrimSpace(ack.Status) != codexAgentAckStatusCompletedV0 &&
+		strings.TrimSpace(ack.Status) != codexAgentAckStatusBlockedV0 &&
 		strings.TrimSpace(ack.Status) != "failed" {
 		v.add(CodexConnectorAckInvalidV0, "status", "status_invalid")
+	}
+}
+
+func codexAgentAckStatusCarriesReviewableWorkV0(status string) bool {
+	switch strings.TrimSpace(status) {
+	case codexAgentAckStatusCompletedV0, codexAgentAckStatusBlockedV0:
+		return true
+	default:
+		return false
 	}
 }
 

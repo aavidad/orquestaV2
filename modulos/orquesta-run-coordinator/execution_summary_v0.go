@@ -9,16 +9,22 @@ import (
 func executionSummaryV0(
 	candidate orquestarunqueue.RankedRunCandidateV0,
 	result RunDrainResultV0,
+	attempt orquestarunqueue.RunQueueAttemptProjectionV0,
 ) RunExecutionSummaryV0 {
 	queueStatus := effectiveExecutedRunQueueStatusV0(candidate, result)
 	return RunExecutionSummaryV0{
-		RunRef:       candidate.RunRef,
-		AppRef:       candidate.AppRef,
-		Rank:         candidate.Rank,
-		Outcome:      result.Outcome,
-		QueueStatus:  queueStatus,
-		EvidenceRefs: append([]string(nil), result.EvidenceRefs...),
-		Diagnostics:  append([]RunDrainDiagnosticV0(nil), result.Diagnostics...),
+		RunRef:           candidate.RunRef,
+		AppRef:           candidate.AppRef,
+		Rank:             candidate.Rank,
+		Outcome:          result.Outcome,
+		QueueStatus:      queueStatus,
+		AttemptGroup:     candidate.AttemptGroup,
+		ParentRunRef:     strings.TrimSpace(candidate.ParentRunRef),
+		SupersedesRunRef: strings.TrimSpace(candidate.SupersedesRunRef),
+		RescueReason:     strings.TrimSpace(candidate.RescueReason),
+		ActiveAttemptRef: strings.TrimSpace(attempt.ActiveAttemptRef),
+		EvidenceRefs:     append([]string(nil), result.EvidenceRefs...),
+		Diagnostics:      append([]RunDrainDiagnosticV0(nil), result.Diagnostics...),
 	}
 }
 

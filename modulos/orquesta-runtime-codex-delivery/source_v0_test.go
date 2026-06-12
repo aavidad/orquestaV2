@@ -116,6 +116,66 @@ func TestCodexDeliveryObservationSourceV0IngiereACKTardioDeAgenteMarcadoLost(t *
 	}
 }
 
+func TestCodexDeliveryObservationSourceV0IngiereACKTardioSinProcesoVivoConWaitAgentRefs(t *testing.T) {
+	scopedSpec := codexDeliverySpecWithRefsForTestV0(
+		"agent-ref-late-scoped-001",
+		"task-ref-late-scoped-001",
+		"ack-ref-late-scoped-001",
+	)
+	outOfScopeSpec := codexDeliverySpecWithRefsForTestV0(
+		"agent-ref-late-out-of-scope-001",
+		"task-ref-late-out-of-scope-001",
+		"ack-ref-late-out-of-scope-001",
+	)
+	store := &staticCodexReceiptStoreV0{
+		Descriptors: []CodexReceiptDescriptorV0{
+			{
+				DescriptorRef: "receipt-ref-late-out-of-scope-001",
+				Spec:          outOfScopeSpec,
+				AckPath:       writeCodexDeliveryAckForTestV0(t, outOfScopeSpec, codexDeliveryAckForTestV0(outOfScopeSpec)),
+			},
+			{
+				DescriptorRef: "receipt-ref-late-scoped-001",
+				Spec:          scopedSpec,
+				AckPath:       writeCodexDeliveryAckForTestV0(t, scopedSpec, codexDeliveryAckForTestV0(scopedSpec)),
+			},
+		},
+	}
+	request := codexDeliveryRequestForTestV0(scopedSpec, nil)
+	request.Run.Agents = []string{scopedSpec.RequestID, outOfScopeSpec.RequestID}
+	request.Run.StartedAgents = nil
+	request.Run.StoppedAgents = []string{scopedSpec.RequestID}
+	request.Run.ConfirmedStoppedAgents = []string{scopedSpec.RequestID}
+	request.Run.LostAgents = []string{scopedSpec.RequestID}
+	request.Run.AgentAssessments = []string{"agent-assessment-ref-stalled-previo-001"}
+	request.WaitAgentRefs = []string{" " + scopedSpec.RequestID + " "}
+
+	observations, err := (CodexDeliveryObservationSourceV0{
+		Store: store,
+		WorktreeVerifier: staticCodexReceiptWorktreeEvidenceVerifierV0{
+			Refs: []string{"gate-issue:file_outside_write_set"},
+		},
+	}).BuildAgentDeliveryObservationsV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildAgentDeliveryObservationsV0: %v", err)
+	}
+	if len(observations) != 1 ||
+		observations[0].AgentRef != scopedSpec.RequestID ||
+		observations[0].DeliveryRef != scopedSpec.AgentPacket.DeliveryRefs.AckRef {
+		t.Fatalf("ACK tardio scoped no observado: %+v", observations)
+	}
+	if !codexDeliveryEvidenceContainsForTestV0(
+		observations[0].EvidenceRefs,
+		"gate-issue:file_outside_write_set",
+	) {
+		t.Fatalf("rail blando write-set no conservado: %+v", observations[0].EvidenceRefs)
+	}
+	if len(store.LastRequest.StartedAgents) != 1 ||
+		store.LastRequest.StartedAgents[0] != scopedSpec.RequestID {
+		t.Fatalf("scope store=%+v", store.LastRequest.StartedAgents)
+	}
+}
+
 func TestCodexDeliveryObservationSourceV0CompactaEvidenciasParaCore(t *testing.T) {
 	spec := codexDeliverySpecForTestV0()
 	path := writeCodexDeliveryAckForTestV0(t, spec, codexDeliveryAckForTestV0(spec))

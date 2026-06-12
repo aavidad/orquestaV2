@@ -10,6 +10,10 @@ Invariantes:
 - Los paths del snapshot son relativos, normalizados con `/` y sin `..`.
 - No se capturan symlinks ni rutas absolutas.
 - Los prefijos de control a ignorar se inyectan por request.
+- Por defecto, superar el presupuesto de lectura devuelve issue y no snapshot.
+  Si el adaptador activa `allow_partial`, los ficheros omitidos por presupuesto
+  quedan como `omitted_paths` relativos y `exclusion_receipts`, sin bloquear la
+  captura ni filtrar rutas absolutas.
 
 ## VerifyWorktreeWriteSetV0
 
@@ -30,6 +34,9 @@ Invariantes:
 - No conoce Codex, Claude, Gemini, DB, HOME, OAuth ni modelos.
 - El adaptador que consuma el resultado decide si registra entrega, pide
   revision o corta agente.
+- Si el snapshot actual es parcial por presupuesto, los paths omitidos no se
+  clasifican como borrados; la incertidumbre queda como recibo/evidencia de
+  snapshot parcial para que el Director decida follow-up.
 
 ## PrepareIsolatedWorktreeV0
 
@@ -46,6 +53,8 @@ Invariantes:
   Git, rutas, proveedor ni HOME.
 - La evidencia publica contiene snapshot con paths relativos e ignora prefijos
   de control inyectados.
+- En autoprogramacion residente, la composicion puede pedir snapshot parcial
+  para que un artefacto local grande no bloquee la preparacion de la worktree.
 - La recuperacion tras reinicio debe reabrir o rematerializar el baseline por
   `baseline_ref` y las refs opacas guardadas; no debe reconstruir una rama desde
   nombres Git ni desde paths locales.

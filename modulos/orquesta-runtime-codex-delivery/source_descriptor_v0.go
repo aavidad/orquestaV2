@@ -80,16 +80,11 @@ func codexReceiptDescriptorRequestFromNucleoV0(
 func codexDeliveryObservationStartedAgentsForDescriptorRequestV0(
 	request orquestacionnucleoapp.AgentDeliveryObservationRequestV0,
 ) []string {
-	startedAgents := compactCodexDeliveryRefsV0(request.Run.StartedAgents)
 	waitAgentRefs := compactCodexDeliveryRefsV0(request.WaitAgentRefs)
 	if len(waitAgentRefs) == 0 {
-		return startedAgents
+		return compactCodexDeliveryRefsV0(
+			append(append([]string{}, request.Run.StartedAgents...), request.Run.Agents...),
+		)
 	}
-	scoped := make([]string, 0, len(startedAgents))
-	for _, agentRef := range startedAgents {
-		if stringInCodexDeliverySetV0(waitAgentRefs, agentRef) {
-			scoped = append(scoped, agentRef)
-		}
-	}
-	return scoped
+	return waitAgentRefs
 }

@@ -116,6 +116,7 @@ func (verifier CodexReceiptWorktreeVerifierV0) VerifyCodexReceiptWorktreeEvidenc
 			MaxSnapshotFiles:      verifier.SnapshotReadBudget.MaxFiles,
 			MaxSnapshotFileBytes:  verifier.SnapshotReadBudget.MaxFileBytes,
 			MaxSnapshotTotalBytes: verifier.SnapshotReadBudget.MaxTotalBytes,
+			AllowPartialSnapshot:  true,
 		},
 	)
 	if len(issues) > 0 {

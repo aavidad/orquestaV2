@@ -169,6 +169,16 @@ func TestStrictCompletedCodexAgentAckV0AceptaTestsExtraConRecibosValidosV0(t *te
 	}
 }
 
+func TestStrictCompletedCodexAgentAckV0RechazaReceiptFaltanteParaCadaRequiredTestV0(t *testing.T) {
+	spec := codexSpecForTestV0()
+	spec.AgentPacket.Task.RequiredTests = []string{"go test ./...", "git diff --check"}
+	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./...","git diff --check"],"test_receipts":[{"schema_version":"codex_required_test_receipt.v0","command":"go test ./...","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-001"],"occurred_at":"2026-05-24T10:00:00Z","sequence":1,"output_redacted":true}]}`
+
+	_, issues := ValidateStrictCompletedCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	requireCodexIssueEvidenceV0(t, issues, "missing_required_test_receipt")
+}
+
 func TestStrictCompletedCodexAgentAckV0RechazaSiFaltaTestObligatorioAunqueHayaExtrasV0(t *testing.T) {
 	spec := codexSpecForTestV0()
 	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["node --check web/app.js"],"test_receipts":[{"schema_version":"codex_required_test_receipt.v0","command":"node --check web/app.js","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-002"],"occurred_at":"2026-05-24T10:01:00Z","sequence":2,"output_redacted":true}]}`

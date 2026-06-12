@@ -15,11 +15,17 @@ func CoordinateRunsTickV0(
 	deps RunCoordinatorDepsV0,
 	command RunCoordinatorTickCommandV0,
 ) (RunCoordinatorTickResultV0, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if deps.QueueReader == nil {
 		return RunCoordinatorTickResultV0{}, fmt.Errorf("run_coordinator: queue_reader requerido")
 	}
 	if deps.Drainer == nil {
 		return RunCoordinatorTickResultV0{}, fmt.Errorf("run_coordinator: drainer requerido")
+	}
+	if err := ctx.Err(); err != nil {
+		return RunCoordinatorTickResultV0{}, err
 	}
 	candidates, err := deps.QueueReader.ListRunSchedulingCandidatesV0(ctx, queueReadRequestV0(command))
 	if err != nil {
@@ -31,7 +37,8 @@ func CoordinateRunsTickV0(
 		policy = orquestarunqueue.DefaultRunQueueRankingPolicyV0(command.OccurredAt)
 	}
 	ranked := orquestarunqueue.RankRunCandidatesV0(candidates, policy)
-	result := RunCoordinatorTickResultV0{Ranked: compactRankedV0(ranked)}
+	attempts := activeAttemptsByRunRefV0(candidates)
+	result := RunCoordinatorTickResultV0{Ranked: compactRankedV0(ranked, attempts)}
 
 	maxRuns := command.MaxRuns
 	if maxRuns <= 0 {
@@ -39,12 +46,18 @@ func CoordinateRunsTickV0(
 	}
 	excluded := stringSetV0(command.ExcludeRunRefs)
 	for _, candidate := range ranked {
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
 		if len(result.Executions) >= maxRuns {
 			break
 		}
 		if _, ok := excluded[candidate.RunRef]; ok {
-			result.Skips = append(result.Skips, excludedSkipV0(candidate))
+			result.Skips = append(result.Skips, excludedSkipV0(candidate, attempts[candidate.RunRef]))
 			continue
+		}
+		if err := ctx.Err(); err != nil {
+			return result, err
 		}
 		state, readErr := readRunControlStateV0(ctx, deps.ControlReader, candidate.RunRef)
 		if readErr != nil {
@@ -55,16 +68,19 @@ func CoordinateRunsTickV0(
 			if err := syncControlBlockedQueueStatusV0(ctx, deps.QueueUpdater, candidate, command, state); err != nil {
 				return RunCoordinatorTickResultV0{}, err
 			}
-			result.Skips = append(result.Skips, controlSkipV0(candidate, state))
+			result.Skips = append(result.Skips, controlSkipV0(candidate, state, attempts[candidate.RunRef]))
 			continue
 		}
-		executed, drainErr := deps.Drainer.DrainRunV0(ctx, drainRequestV0(candidate, command))
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
+		executed, drainErr := deps.Drainer.DrainRunV0(ctx, drainRequestV0(candidate, command, attempts[candidate.RunRef]))
 		if drainErr != nil {
 			executed = runDrainResultWithErrorDiagnosticV0(candidate, executed, drainErr)
 			if err := rotateExecutedRunV0(ctx, deps.QueueUpdater, candidate, command, executed); err != nil {
 				return RunCoordinatorTickResultV0{}, err
 			}
-			result.Executions = append(result.Executions, executionSummaryV0(candidate, executed))
+			result.Executions = append(result.Executions, executionSummaryV0(candidate, executed, attempts[candidate.RunRef]))
 			if !command.ContinueOnDrainError {
 				return result, drainErr
 			}
@@ -73,7 +89,10 @@ func CoordinateRunsTickV0(
 		if err := rotateExecutedRunV0(ctx, deps.QueueUpdater, candidate, command, executed); err != nil {
 			return RunCoordinatorTickResultV0{}, err
 		}
-		result.Executions = append(result.Executions, executionSummaryV0(candidate, executed))
+		result.Executions = append(result.Executions, executionSummaryV0(candidate, executed, attempts[candidate.RunRef]))
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
 	}
 	return result, nil
 }
@@ -153,14 +172,20 @@ func readRunControlStateV0(
 func drainRequestV0(
 	candidate orquestarunqueue.RankedRunCandidateV0,
 	command RunCoordinatorTickCommandV0,
+	attempt orquestarunqueue.RunQueueAttemptProjectionV0,
 ) RunDrainRequestV0 {
 	return RunDrainRequestV0{
-		RunRef:        candidate.RunRef,
-		AppRef:        candidate.AppRef,
-		Rank:          candidate.Rank,
-		OccurredAt:    command.OccurredAt,
-		CorrelationID: strings.TrimSpace(command.CorrelationID),
-		Limits:        command.DrainLimits,
+		RunRef:           candidate.RunRef,
+		AppRef:           candidate.AppRef,
+		Rank:             candidate.Rank,
+		OccurredAt:       command.OccurredAt,
+		CorrelationID:    strings.TrimSpace(command.CorrelationID),
+		AttemptGroup:     candidate.AttemptGroup,
+		ParentRunRef:     strings.TrimSpace(candidate.ParentRunRef),
+		SupersedesRunRef: strings.TrimSpace(candidate.SupersedesRunRef),
+		RescueReason:     strings.TrimSpace(candidate.RescueReason),
+		ActiveAttemptRef: strings.TrimSpace(attempt.ActiveAttemptRef),
+		Limits:           command.DrainLimits,
 	}
 }
 
@@ -205,15 +230,24 @@ func effectiveExecutedRunQueueStatusV0(
 	return strings.TrimSpace(candidate.Status)
 }
 
-func compactRankedV0(ranked []orquestarunqueue.RankedRunCandidateV0) []RankedRunSummaryV0 {
+func compactRankedV0(
+	ranked []orquestarunqueue.RankedRunCandidateV0,
+	attempts map[string]orquestarunqueue.RunQueueAttemptProjectionV0,
+) []RankedRunSummaryV0 {
 	summaries := make([]RankedRunSummaryV0, 0, len(ranked))
 	for _, candidate := range ranked {
+		attempt := attempts[candidate.RunRef]
 		summaries = append(summaries, RankedRunSummaryV0{
-			RunRef:        candidate.RunRef,
-			AppRef:        candidate.AppRef,
-			Rank:          candidate.Rank,
-			PriorityScore: candidate.PriorityScore,
-			AgingBoost:    candidate.AgingBoost,
+			RunRef:           candidate.RunRef,
+			AppRef:           candidate.AppRef,
+			Rank:             candidate.Rank,
+			PriorityScore:    candidate.PriorityScore,
+			AgingBoost:       candidate.AgingBoost,
+			AttemptGroup:     candidate.AttemptGroup,
+			ParentRunRef:     strings.TrimSpace(candidate.ParentRunRef),
+			SupersedesRunRef: strings.TrimSpace(candidate.SupersedesRunRef),
+			RescueReason:     strings.TrimSpace(candidate.RescueReason),
+			ActiveAttemptRef: strings.TrimSpace(attempt.ActiveAttemptRef),
 		})
 	}
 	return summaries
@@ -222,35 +256,37 @@ func compactRankedV0(ranked []orquestarunqueue.RankedRunCandidateV0) []RankedRun
 func controlSkipV0(
 	candidate orquestarunqueue.RankedRunCandidateV0,
 	state orquestaruncontrol.RunControlStateV0,
+	attempt orquestarunqueue.RunQueueAttemptProjectionV0,
 ) RunSkipSummaryV0 {
 	status := string(orquestaruncontrol.NormalizeRunControlStatusV0(state.Status))
 	return RunSkipSummaryV0{
-		RunRef: candidate.RunRef,
-		AppRef: candidate.AppRef,
-		Rank:   candidate.Rank,
-		Reason: "run_control_blocked",
-		Status: status,
+		RunRef:           candidate.RunRef,
+		AppRef:           candidate.AppRef,
+		Rank:             candidate.Rank,
+		Reason:           "run_control_blocked",
+		Status:           status,
+		AttemptGroup:     candidate.AttemptGroup,
+		ParentRunRef:     strings.TrimSpace(candidate.ParentRunRef),
+		SupersedesRunRef: strings.TrimSpace(candidate.SupersedesRunRef),
+		RescueReason:     strings.TrimSpace(candidate.RescueReason),
+		ActiveAttemptRef: strings.TrimSpace(attempt.ActiveAttemptRef),
 	}
 }
 
-func excludedSkipV0(candidate orquestarunqueue.RankedRunCandidateV0) RunSkipSummaryV0 {
+func excludedSkipV0(
+	candidate orquestarunqueue.RankedRunCandidateV0,
+	attempt orquestarunqueue.RunQueueAttemptProjectionV0,
+) RunSkipSummaryV0 {
 	return RunSkipSummaryV0{
-		RunRef: candidate.RunRef,
-		AppRef: candidate.AppRef,
-		Rank:   candidate.Rank,
-		Reason: "run_excluded",
-		Status: candidate.Status,
+		RunRef:           candidate.RunRef,
+		AppRef:           candidate.AppRef,
+		Rank:             candidate.Rank,
+		Reason:           "run_excluded",
+		Status:           candidate.Status,
+		AttemptGroup:     candidate.AttemptGroup,
+		ParentRunRef:     strings.TrimSpace(candidate.ParentRunRef),
+		SupersedesRunRef: strings.TrimSpace(candidate.SupersedesRunRef),
+		RescueReason:     strings.TrimSpace(candidate.RescueReason),
+		ActiveAttemptRef: strings.TrimSpace(attempt.ActiveAttemptRef),
 	}
-}
-
-func stringSetV0(values []string) map[string]struct{} {
-	out := map[string]struct{}{}
-	for _, value := range values {
-		trimmed := strings.TrimSpace(value)
-		if trimmed == "" {
-			continue
-		}
-		out[trimmed] = struct{}{}
-	}
-	return out
 }

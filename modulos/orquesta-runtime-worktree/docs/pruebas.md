@@ -7,6 +7,8 @@ go test -count=1 ./modulos/orquesta-runtime-worktree
 Cobertura:
 
 - snapshot de ficheros regulares con paths relativos;
+- modo estricto de presupuesto de snapshot y modo parcial opt-in con
+  `omitted_paths` relativos y recibos de exclusion;
 - ignora prefijos de control inyectados;
 - acepta cambios dentro del write-set;
 - rechaza cambios fuera del write-set;
@@ -17,6 +19,8 @@ Cobertura:
 - rechaza project workdir invalido y write-set inseguro;
 - prepara worktree aislada preservando `branch_ref` opaco y sin filtrar paths
   absolutos;
+- prepara worktree aislada con snapshot parcial opt-in si un fichero supera el
+  presupuesto de lectura;
 - rechaza `branch_ref` con forma de ruta y preparacion no aislada;
 - revisa un repo Git limpio con `review_repo` sin modificarlo y sin filtrar
   rutas absolutas.

@@ -20,6 +20,60 @@ espera a todos los agentes del run. Evidencia: `go test -count=1 ./...`,
 `go build -o /tmp/orquesta-server-resigrx-fix ./cmd/orquesta-server` y run
 ResiGRX cerrado con 21/21 tareas, 1 validacion y 1 closure.
 
+Actualizacion 2026-06-11: `ContinueAppDirectorV0` ya no trata
+`replan_or_close/running` sin `agent_refs` como `active_step` invalido. Ese step
+es puerta de cierre, no espera obligatoria de agentes; si no hay agentes que
+esperar, el servicio conserva el scope disponible por ola/cohorte/parent y deja
+que el cierre causal use `OperationalClosureSource`, `WorkflowTaskStore`,
+reviews aceptadas y `RequiredTestEvidenceV0`. La prueba focal
+`TestContinueAppDirectorV0CierraPlanStateReplanOrCloseSinAgentRefs` cubre el
+caso con entregas, reviews y tests aceptados, y
+`TestContinueAppDirectorV0CierraPlanStateReplanOrCloseSinAgentRefsTrasRecarga`
+cubre la misma puerta tras recargar `state-file` sin scope activo materializable.
+
+Actualizacion 2026-06-11 P0-F: la aceptacion de un rework causal ya no depende
+solo del descriptor historico de la entrega padre. Si el descriptor del padre no
+esta disponible, el stack Codex deriva la tarea original desde
+`ReworkRequested -> ReplanDecisionRecorded(split_task)` y solo acepta la entrega
+padre cuando los followups causales estan cerrados y aceptados. El test focal
+`TestCodexStackReviewGateReworkAcceptanceDerivaPadreDesdeReplanSinDescriptorV0`
+cubre el caso `parent delivered/open + rework accepted` y mantiene el corte
+fuerte: sin `replan` causal no se infiere ni se acepta la tarea padre.
+
+Actualizacion 2026-06-11 P0-G: auditoria acotada de rails/runtime/review gate
+para palabras genericas o malinterpretadas. En el write-set revisado,
+`orquesta-rails` mantiene `RailsEnforcedV0=false`, `DetailProhibitedRailsEnabledV0=false`
+y los detectores de detalle operativo solo como inventario/redaccion no
+bloqueante; `provider`, `model`, `runtime`, `capacity`, `token`, `prompt`,
+`transcript`, `HOME` redactado y refs de politica sin valor efectivo no cortan
+entregas. `orquesta-runtime-codex` conserva ACKs con vocabulario operativo
+generico y solo bloquea forma/correlacion/paths imposibles o datos sensibles
+efectivos; los rails pendientes de detalle no se proyectan como veto duro.
+`orquesta-autoprogramming` clasifica `file_too_large`,
+`file_outside_write_set`, `write_set_target_missing`, `ack_pending_rail`,
+`ack_files_mismatch`, `go_file_line_budget_exceeded` y reemplazos grandes como
+follow-up advisory cuando ACK y tests requeridos estan verdes, sin ocultar
+`ack_missing`, tests requeridos ausentes/fallidos, destruccion de paths ni
+truncados/movidos. `orquesta-app-codex-stack` no dispara self-repair residente
+por `blocked` generico de capacidad/proveedor/modelo/runtime ni por rails
+blandos aceptados; conserva self-repair solo ante fallos reales de tests o ACK.
+La evidencia de esta auditoria queda en la prueba obligatoria del paquete:
+`go test -count=1 ./modulos/orquesta-rails ./modulos/orquesta-runtime-codex ./modulos/orquesta-autoprogramming ./modulos/orquesta-app-codex-stack`.
+
+Actualizacion 2026-06-12: el cierre de `domain_work` no puede depender de
+palabras exactas de dominio como `opes`, `opes_informatica`, `opes-a1-*` ni del
+nombre libre que devuelva un agente. Esas etiquetas quedan como evidencia blanda
+o diagnostico para el Director. Si la composicion inyecta ledger/submission de
+dominio, el cierre solo debe cortar por causalidad estructural rota:
+run/task/delivery no coincidente, `job_ref` distinto, `artifact_ref` ajeno, tipo
+de artefacto incompatible, receipt ausente, submission no aceptada,
+`complete_job=false`, refs imposibles, seguridad o datos sensibles. Las
+composiciones legacy sin ledger conservan su cierre por la cadena causal de
+entrega/review/tests, sin inventar un veto por etiqueta textual. La regresion focal
+`TestOperationalClosureSourceV0CierraDomainWorkConNombresNoCanonicos` cubre un
+caso con `AppRef`, `ProjectRef` y `DomainRef` no canonicos que debe cerrar si el
+receipt causal es valido.
+
 Autoridad documental: este corte gobierna el cierre causal del Director
 Operativo; la matriz gobierna el estado de smokes. Si el backlog o un doc local
 contradice `CODEX-WAVE-REAL` o `CODEX-RECURSION-REAL`, prevalece la evidencia de

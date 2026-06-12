@@ -9,7 +9,7 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 )
 
-func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureTaskIsOPESDomainWorkV0(
+func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureTaskIsAppChangeExternalWorkV0(
 	ctx context.Context,
 	runRef string,
 	task orquestacoreworkflow.WorkflowTaskV0,
@@ -17,11 +17,8 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureT
 	if !workflowTaskHasDomainWorkContractV0(task) || source.AppChangeStore == nil {
 		return false, nil
 	}
-	record, ok, err := source.codexStackOperationalClosureOPESRecordForTaskV0(ctx, runRef, task.TaskID)
-	if err != nil || !ok {
-		return false, err
-	}
-	return codexStackOperationalClosureRecordIsOPESV0(record), nil
+	_, ok, err := source.codexStackOperationalClosureAppChangeRecordForTaskV0(ctx, runRef, task.TaskID)
+	return ok, err
 }
 
 func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureDomainWorkEvidenceRefsForDeliveryV0(
@@ -33,12 +30,12 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureD
 	if !workflowTaskHasDomainWorkContractV0(task) {
 		return nil, false, false, nil
 	}
-	record, ok, err := source.codexStackOperationalClosureOPESRecordForTaskV0(ctx, request.Run.RunID, task.TaskID)
-	if err != nil || !ok || !codexStackOperationalClosureRecordIsOPESV0(record) {
+	record, ok, err := source.codexStackOperationalClosureAppChangeRecordForTaskV0(ctx, request.Run.RunID, task.TaskID)
+	if err != nil || !ok || record.Request.ExternalWork == nil {
 		return nil, false, false, err
 	}
 	if source.DomainSubmissionLedger == nil {
-		return nil, true, false, nil
+		return nil, false, false, nil
 	}
 	records, err := source.DomainSubmissionLedger.ListDomainWorkArtifactSubmissionsV0(
 		ctx,
@@ -53,15 +50,18 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureD
 		return nil, true, false, err
 	}
 	accepted := normalizeDomainWorkArtifactSubmissionRecordV0(records[0])
-	if !codexStackOperationalClosureOPESSubmissionIsCausalV0(accepted, record, deliveryRef) {
+	if !codexStackOperationalClosureDomainWorkSubmissionIsCausalV0(accepted, record, deliveryRef) {
 		return nil, true, false, nil
 	}
 	refs := append([]string(nil), accepted.EvidenceRefs...)
-	refs = append(refs, accepted.ReceiptRef, "evidence-ref-opes-domain-work-accepted")
+	refs = append(refs, accepted.ReceiptRef, "evidence-ref-domain-work-accepted")
+	if codexStackOperationalClosureRecordIsOPESV0(record) {
+		refs = append(refs, "evidence-ref-opes-domain-work-accepted")
+	}
 	return codexStackOperationalClosureCompactRefsV0(refs), true, true, nil
 }
 
-func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureOPESRecordForTaskV0(
+func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureAppChangeRecordForTaskV0(
 	ctx context.Context,
 	runRef string,
 	taskRef string,
@@ -90,7 +90,7 @@ func codexStackOperationalClosureRecordIsOPESV0(
 		strings.TrimSpace(record.Request.AppRef) == "opes"
 }
 
-func codexStackOperationalClosureOPESSubmissionIsCausalV0(
+func codexStackOperationalClosureDomainWorkSubmissionIsCausalV0(
 	submission DomainWorkArtifactSubmissionRecordV0,
 	record orquestaappchange.AppChangeRecordV0,
 	deliveryRef string,
@@ -108,7 +108,6 @@ func codexStackOperationalClosureOPESSubmissionIsCausalV0(
 		strings.TrimSpace(submission.ArtifactRef) != strings.TrimSpace(deliveryRef) {
 		return false
 	}
-	return strings.TrimSpace(submission.DomainRef) == "opes" &&
-		strings.TrimSpace(submission.JobRef) == strings.TrimSpace(work.JobRef) &&
+	return strings.TrimSpace(submission.JobRef) == strings.TrimSpace(work.JobRef) &&
 		strings.TrimSpace(submission.ArtifactType) == domainWorkArtifactTypeForWorkKindV0(work.WorkKind)
 }

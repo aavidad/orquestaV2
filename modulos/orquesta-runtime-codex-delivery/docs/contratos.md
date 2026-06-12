@@ -80,6 +80,9 @@ Invariantes:
 - Si falta inner resolver, recorder o path resolver, falla explicitamente.
 - Si se inyecta `CodexReceiptWorktreeBaselineRecorderPortV0`, captura baseline
   antes del launch y registra `worktree_baseline_ref` junto al descriptor.
+- Si el snapshot de baseline supera presupuesto de lectura, el recorder guarda
+  un baseline parcial con recibos de exclusion en vez de dejar al agente sin
+  baseline, siempre sin exponer `project_work_dir`.
 
 ## CodexDeliveryObservationSourceV0
 
@@ -118,6 +121,9 @@ Invariantes:
   `gate-issue:file_outside_write_set` o `gate-issue:removed_path` sin filtrar
   `project_work_dir`, `ack_path` ni rutas absolutas al nucleo. Requests
   invalidas siguen devolviendo error compacto.
+- Los limites de presupuesto de snapshot son observabilidad: si el snapshot
+  verificable es parcial, se devuelven refs de evidencia compactas y no se
+  fabrican borrados por paths omitidos.
 - No usa Git, DB, HOME, OAuth, provider ni modelo.
 
 ## CodexProgressObservationSourceV0

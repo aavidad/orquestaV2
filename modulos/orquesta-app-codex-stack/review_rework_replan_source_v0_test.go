@@ -2,11 +2,13 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 
 	orquestacorereplanner "orquesta/modulos/orquesta-core-replanner"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 )
 
@@ -282,6 +284,30 @@ func TestReviewReworkReplanSourceV0ReplanificaAunqueLaEntregaOriginalTengaAckCom
 	}
 }
 
+func TestReviewReworkReplanSourceV0NoRelanzaBucleDocumentalPorGoTestGlobalNoEjecutable(t *testing.T) {
+	descriptor := reviewReworkDescriptorForTestV0("delivery-ref-target", "task-ref-target")
+	descriptor.Spec.AgentPacket.Task.WriteSet = []string{
+		"docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+		"docs/runbooks",
+	}
+	descriptor.Spec.AgentPacket.Task.RequiredTests = []string{"go test -count=1 ./..."}
+	descriptor.AckPath = writeReviewReworkExternalRailAckForTestV0(t, descriptor.AgentRef, "task-ref-target")
+	source := ReviewReworkReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(descriptor),
+	}
+
+	plans, err := source.BuildReviewReworkReplanPlansV0(
+		context.Background(),
+		reviewReworkPlanRequestForTestV0(false),
+	)
+	if err != nil {
+		t.Fatalf("BuildReviewReworkReplanPlansV0: %v", err)
+	}
+	if len(plans) != 0 {
+		t.Fatalf("no debe relanzar rework documental por rail externo no ejecutable: %+v", plans)
+	}
+}
+
 func TestReviewReworkReplanSourceV0DescribeWriteSetFaltanteParaElAgente(t *testing.T) {
 	projectDir := t.TempDir()
 	writeStackReviewGateFileForTestV0(t, projectDir, "internal/api/handler.go", "package api\n")
@@ -315,4 +341,38 @@ func TestBuildStackV0CableaReviewReworkReplanSource(t *testing.T) {
 	if stack.Ports.ReviewReworkReplanSource == nil {
 		t.Fatalf("ReviewReworkReplanSource no cableado")
 	}
+}
+
+func writeReviewReworkExternalRailAckForTestV0(t interface {
+	Helper()
+	Fatalf(string, ...any)
+	TempDir() string
+}, agentRef string, taskRef string) string {
+	t.Helper()
+	path := t.TempDir() + "/" + orquestaruntimecodex.CodexAgentAckFileNameV0
+	data := []byte(`{
+		"schema_version":"codex_agent_ack.v0",
+		"request_id":"` + agentRef + `",
+		"correlation_id":"corr-review-rework-ack-test",
+		"ack_ref":"delivery-ref-target",
+		"target_module":"orquesta-app-codex-stack",
+		"task_ref":"` + taskRef + `",
+		"status":"completed",
+		"files":["docs/autoprogramacion_orquesta_pendientes_2026-05-23.md"],
+		"test_receipts":[{
+			"schema_version":"codex_required_test_receipt.v0",
+			"command":"go test -count=1 ./...",
+			"status":"failed",
+			"exit_code":75,
+			"evidence_refs":["GOCACHE read-only; httptest socket denied; codex wrapper exit 75"],
+			"occurred_at":"2026-06-11T10:00:00Z",
+			"sequence":1,
+			"output_redacted":true
+		}],
+		"notes":["solo fallo de entorno/sandbox, entrega documental completada"]
+	}`)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write ack: %v", err)
+	}
+	return path
 }

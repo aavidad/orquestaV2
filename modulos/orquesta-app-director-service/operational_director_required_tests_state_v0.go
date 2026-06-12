@@ -163,6 +163,7 @@ func operationalDirectorPlanStateWithRequiredTestsPassedV0(
 		switch step.StepID {
 		case activeStep.StepID:
 			nextStep.Status = orquestadirectoroperativo.OperationalDirectorStepAcceptedV0
+			nextStep.AcceptedReviewRefs = append([]string(nil), activeStep.AcceptedReviewRefs...)
 			nextStep.RequiredTestEvidenceRefs = append([]string(nil), passedRefs...)
 			nextStep.BlockerRefs = nil
 			nextStep.Reason = "required-tests-passed"
@@ -172,6 +173,7 @@ func operationalDirectorPlanStateWithRequiredTestsPassedV0(
 			nextStep.AgentRefs = append([]string(nil), activeStep.AgentRefs...)
 			nextStep.DeliveryRefs = append([]string(nil), activeStep.DeliveryRefs...)
 			nextStep.ReviewResultRefs = append([]string(nil), activeStep.ReviewResultRefs...)
+			nextStep.AcceptedReviewRefs = append([]string(nil), activeStep.AcceptedReviewRefs...)
 			nextStep.RequiredTestEvidenceRefs = append([]string(nil), passedRefs...)
 			nextStep.WaveRef = activeStep.WaveRef
 			nextStep.CohortRef = activeStep.CohortRef

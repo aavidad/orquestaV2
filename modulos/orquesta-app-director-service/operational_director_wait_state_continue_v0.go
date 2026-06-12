@@ -57,9 +57,6 @@ func continueRequestWithLoadedOperationalDirectorPlanStateV0(
 		if step.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 {
 			return request, false, nil
 		}
-		if len(step.AgentRefs) == 0 {
-			return request, false, nil
-		}
 		request = continueRequestWithOperationalDirectorPlanStepScopeV0(request, state, step)
 		request.WaitAgentRefs = compactServiceRefsV0(append(request.WaitAgentRefs, step.AgentRefs...))
 		return request, true, nil

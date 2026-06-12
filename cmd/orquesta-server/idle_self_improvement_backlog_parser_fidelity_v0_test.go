@@ -166,6 +166,85 @@ Revalidacion final: pendiente de ejecutar.
 	}
 }
 
+func TestIdleSelfImprovementBacklogPlannerV0EstadoFechadoConFechaNoRelanzaAliasV0(t *testing.T) {
+	projectDir := t.TempDir()
+	mustWriteBacklogForParserFidelityTestV0(t, projectDir, `# Backlog
+
+## T256 server-shutdown-usecase-file-split
+
+Objetivo: dividir shutdown_v0.go.
+
+Estado 2026-05-27: T256 queda resuelto dentro de orquesta-server-shutdown.
+
+Alcance:
+
+- modulos/orquesta-server-shutdown
+`)
+
+	result, err := (idleSelfImprovementBacklogPlannerV0{ProjectWorkDir: projectDir}).PlanV0(
+		orquestaserver.IdleSelfImprovementPlanRequestV0{
+			MaxRequests: 1,
+			KnownRequestRefs: []string{
+				"request-ref-autoprogramming-backlog-t256-server-shutdown-usecase-file-split-before-growth-live",
+			},
+			BaseRequest: orquestaserver.IdleSelfImprovementRequestV0{
+				RequestRef: "request-ref-base",
+				WriteSet:   []string{"modulos/orquesta-server-shutdown"},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("PlanV0: %v", err)
+	}
+	if len(result.Requests) != 0 || result.Message != "backlog_tareas_ya_visibles_en_cola" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestIdleSelfImprovementBacklogPlannerV0EstadoSincronizadoNoOpNoRelanzaT260V0(t *testing.T) {
+	projectDir := t.TempDir()
+	content := `# Backlog
+
+## T260 corregir-estados-falsos-running-en-agentes-externos
+
+Objetivo: evitar estados falsos running en agentes externos.
+
+Estado: sincronizado/no-op documental; cerrado localmente y pendiente solo validacion opt-in futura.
+
+Alcance:
+
+- cmd/orquesta-server
+- modulos/orquesta-app-codex-stack
+`
+	mustWriteBacklogForParserFidelityTestV0(t, projectDir, content)
+
+	sections := parseIdleSelfImprovementBacklogSectionsV0(content)
+	if len(sections) != 1 || !sections[0].Completed || sections[0].PendingExplicit {
+		t.Fatalf("sections=%+v", sections)
+	}
+	result, err := (idleSelfImprovementBacklogPlannerV0{ProjectWorkDir: projectDir}).PlanV0(
+		orquestaserver.IdleSelfImprovementPlanRequestV0{
+			MaxRequests: 1,
+			BaseRequest: orquestaserver.IdleSelfImprovementRequestV0{
+				RequestRef: "request-ref-base",
+				WriteSet:   []string{"cmd/orquesta-server"},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("PlanV0: %v", err)
+	}
+	for _, request := range result.Requests {
+		if request.FailureKind == "backlog_autoprogramming" ||
+			request.SuggestedArea == "t260-corregir-estados-falsos-running-en-agentes-externos" {
+			t.Fatalf("result=%+v", result)
+		}
+	}
+	if len(result.Requests) > 1 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func mustPlanParserFidelityTestV0(
 	t *testing.T,
 	projectDir string,

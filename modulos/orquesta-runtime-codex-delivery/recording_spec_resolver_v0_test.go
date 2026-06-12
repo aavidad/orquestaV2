@@ -115,6 +115,7 @@ func TestCodexReceiptRecordingSpecResolverV0NoBloqueaSiBaselineNoCabe(t *testing
 	}
 	ackPath := filepath.Join(t.TempDir(), "agent_ack.json")
 	receiptStore := NewInMemoryCodexReceiptDescriptorStoreV0()
+	snapshotStore := orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0()
 	resolver := CodexReceiptRecordingSpecResolverV0{
 		Inner:    staticExternalAgentSpecResolverV0{Spec: spec},
 		Recorder: receiptStore,
@@ -123,7 +124,7 @@ func TestCodexReceiptRecordingSpecResolverV0NoBloqueaSiBaselineNoCabe(t *testing
 			ProjectWorkDir: projectDir,
 		},
 		WorktreeBaselineRecorder: CodexReceiptWorktreeBaselineRecorderV0{
-			SnapshotStore: orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0(),
+			SnapshotStore: snapshotStore,
 			SnapshotReadBudget: orquestaruntimeworktree.WorktreeSnapshotReadBudgetV0{
 				MaxFiles:      10,
 				MaxFileBytes:  1,
@@ -142,9 +143,17 @@ func TestCodexReceiptRecordingSpecResolverV0NoBloqueaSiBaselineNoCabe(t *testing
 	if err != nil || len(descriptors) != 1 {
 		t.Fatalf("descriptors=%+v err=%v", descriptors, err)
 	}
-	if descriptors[0].WorktreeBaselineRef != "" {
-		t.Fatalf("baseline no deberia bloquear ni registrarse: %+v", descriptors[0])
+	if descriptors[0].WorktreeBaselineRef == "" {
+		t.Fatalf("baseline parcial no registrada: %+v", descriptors[0])
 	}
+	snapshot, err := snapshotStore.LoadWorktreeSnapshotV0(context.Background(), descriptors[0].WorktreeBaselineRef)
+	if err != nil {
+		t.Fatalf("LoadWorktreeSnapshotV0: %v", err)
+	}
+	if len(snapshot.Files) != 0 {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+	requireCodexDeliveryReceiptReasonV0(t, snapshot.ExclusionReceipts, orquestaruntimeworktree.WorktreeIssueSnapshotFileTooLargeV0)
 }
 
 func TestInMemoryCodexReceiptDescriptorStoreV0FiltraRunAgenteYDelivery(t *testing.T) {

@@ -12,6 +12,7 @@ func TestBuildStackFromEnvV0CableaRequiredTestsDeDominioConOPES(t *testing.T) {
 	t.Setenv("ORQUESTA_CODEX_RUNTIME_WORKDIR", filepath.Join(t.TempDir(), "runtime"))
 	t.Setenv("ORQUESTA_CODEX_COMMAND", filepath.Join(projectDir, "codex-bin"))
 	t.Setenv("ORQUESTA_OPES_BASE_URL", "http://127.0.0.1:18082")
+	t.Setenv("ORQUESTA_OPES_TEMPORAL_CONFIRM", "1")
 	t.Setenv("OPES_BASE_URL", "")
 	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_ENABLED", "")
 	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_DIR", "")

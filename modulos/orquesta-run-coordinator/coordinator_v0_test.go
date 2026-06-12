@@ -26,6 +26,57 @@ func TestCoordinateRunsTickChoosesHighestPriorityV0(t *testing.T) {
 	assertRunRefsV0(t, rankedRefsV0(result.Ranked), []string{"run-high", "run-low"})
 }
 
+func TestCoordinateRunsTickPropagaMetadataCausalDeRescateV0(t *testing.T) {
+	now := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	group := orquestarunqueue.RunQueueAttemptGroupV0{
+		ConsumerRef:  "consumer",
+		ObjectiveRef: "objective",
+		WorkItemRef:  "topic-001",
+		WriteSetRefs: []string{"topic/001"},
+	}
+	deps := coordinatorDepsV0([]orquestarunqueue.RunSchedulingCandidateV0{
+		{
+			RunRef:        "run-original",
+			AppRef:        "app",
+			Status:        "queued",
+			PriorityScore: 1,
+			UpdatedAt:     now.Add(-20 * time.Minute),
+			AttemptGroup:  group,
+		},
+		{
+			RunRef:           "run-rescue",
+			AppRef:           "app",
+			Status:           "queued",
+			PriorityScore:    9,
+			UpdatedAt:        now,
+			AttemptGroup:     group,
+			ParentRunRef:     "run-original",
+			SupersedesRunRef: "run-original",
+			RescueReason:     "estado_incierto",
+		},
+	})
+
+	result, err := CoordinateRunsTickV0(context.Background(), deps, tickCommandV0(1))
+	if err != nil {
+		t.Fatalf("coordinate tick: %v", err)
+	}
+
+	if len(result.Executions) != 1 ||
+		result.Executions[0].RunRef != "run-rescue" ||
+		result.Executions[0].ActiveAttemptRef != "run-rescue" ||
+		result.Executions[0].ParentRunRef != "run-original" ||
+		result.Ranked[0].ActiveAttemptRef != "run-rescue" {
+		t.Fatalf("result=%+v", result)
+	}
+	drainer := deps.Drainer.(*fakeDrainerV0)
+	if len(drainer.requests) != 1 ||
+		drainer.requests[0].ActiveAttemptRef != "run-rescue" ||
+		drainer.requests[0].SupersedesRunRef != "run-original" ||
+		drainer.requests[0].AttemptGroup.WorkItemRef != "topic-001" {
+		t.Fatalf("requests=%+v", drainer.requests)
+	}
+}
+
 func TestCoordinateRunsTickSkipsPausedV0(t *testing.T) {
 	deps := coordinatorDepsV0([]orquestarunqueue.RunSchedulingCandidateV0{
 		candidateV0("run-paused", "app", 9),
@@ -334,6 +385,34 @@ func TestCoordinateRunsTickExecutesUntilMaxRunsV0(t *testing.T) {
 	assertRunRefsV0(t, executionRefsV0(result.Executions), []string{"run-a", "run-b"})
 }
 
+func TestCoordinateRunsTickCortaCooperativamenteTrasCancelarContextoV0(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	deps := coordinatorDepsV0([]orquestarunqueue.RunSchedulingCandidateV0{
+		candidateV0("run-a", "app", 9),
+		candidateV0("run-b", "app", 8),
+	})
+	deps.QueueUpdater = &fakeQueueStoreV0{candidates: []orquestarunqueue.RunSchedulingCandidateV0{
+		candidateV0("run-a", "app", 9),
+		candidateV0("run-b", "app", 8),
+	}}
+	drainer := deps.Drainer.(*fakeDrainerV0)
+	drainer.afterDrain = func(_ context.Context, request RunDrainRequestV0) {
+		if request.RunRef == "run-a" {
+			cancel()
+		}
+	}
+
+	result, err := CoordinateRunsTickV0(ctx, deps, tickCommandV0(2))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err=%v want context.Canceled result=%+v", err, result)
+	}
+	assertRunRefsV0(t, executionRefsV0(result.Executions), []string{"run-a"})
+	if len(drainer.requests) != 1 || drainer.requests[0].RunRef != "run-a" {
+		t.Fatalf("drain requests=%+v", drainer.requests)
+	}
+}
+
 func TestCoordinateRunsTickRotaRunsEjecutadosConMismaPrioridadV0(t *testing.T) {
 	now := time.Date(2026, 5, 11, 10, 0, 0, 0, time.UTC)
 	queue := &fakeQueueStoreV0{candidates: []orquestarunqueue.RunSchedulingCandidateV0{
@@ -585,19 +664,23 @@ func (fake *fakeControlReaderV0) ReadRunControlStateV0(
 }
 
 type fakeDrainerV0 struct {
-	requests []RunDrainRequestV0
-	results  map[string]RunDrainResultV0
-	errors   map[string]error
+	requests   []RunDrainRequestV0
+	results    map[string]RunDrainResultV0
+	errors     map[string]error
+	afterDrain func(context.Context, RunDrainRequestV0)
 }
 
 func (fake *fakeDrainerV0) DrainRunV0(
-	_ context.Context,
+	ctx context.Context,
 	request RunDrainRequestV0,
 ) (RunDrainResultV0, error) {
 	if request.RunRef == "" {
 		return RunDrainResultV0{}, errors.New("missing run ref")
 	}
 	fake.requests = append(fake.requests, request)
+	if fake.afterDrain != nil {
+		fake.afterDrain(ctx, request)
+	}
 	if result, ok := fake.results[request.RunRef]; ok {
 		return result, fake.errors[request.RunRef]
 	}
@@ -657,6 +740,7 @@ func cloneCandidatesV0(
 ) []orquestarunqueue.RunSchedulingCandidateV0 {
 	cloned := append([]orquestarunqueue.RunSchedulingCandidateV0(nil), candidates...)
 	for index := range cloned {
+		cloned[index].AttemptGroup.WriteSetRefs = append([]string(nil), cloned[index].AttemptGroup.WriteSetRefs...)
 		cloned[index].EvidenceRefs = append([]string(nil), cloned[index].EvidenceRefs...)
 	}
 	return cloned

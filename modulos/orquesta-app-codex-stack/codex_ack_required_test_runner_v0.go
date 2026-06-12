@@ -89,9 +89,6 @@ func (runner codexAckRequiredTestRunnerV0) resultFromCodexAckDescriptorV0(
 	if len(issues) > 0 || !codexAckRequiredTestAckMatchesRequestV0(ack, descriptor, request) {
 		return orquestacionnucleoapp.RequiredTestExecutionResultV0{}, false, nil
 	}
-	if orquestaruntimecodex.CodexAgentAckDeclaresIncompleteRequiredEvidenceV0(ack) {
-		return orquestacionnucleoapp.RequiredTestExecutionResultV0{}, false, nil
-	}
 	result := orquestacionnucleoapp.RequiredTestExecutionResultV0{}
 	for _, command := range request.TestCommands {
 		evidenceRef := codexAckRequiredTestEvidenceRefV0(request, command)

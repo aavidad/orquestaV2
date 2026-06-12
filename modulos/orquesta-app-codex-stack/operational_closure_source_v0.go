@@ -67,7 +67,7 @@ func (source codexStackOperationalClosureSourceV0) BuildOperationalDirectorClosu
 	if err != nil {
 		return orquestacionnucleoapp.OperationalDirectorClosureRequestV0{}, false, err
 	}
-	trace := codexStackOperationalClosureTraceFromEventsV0(events)
+	trace := codexStackOperationalClosureTraceFromEventsAndRunV0(events, request.Run)
 	candidates, err := source.codexStackOperationalClosureCandidateTasksV0(ctx, request, trace, tasks)
 	if err != nil {
 		return orquestacionnucleoapp.OperationalDirectorClosureRequestV0{}, false, err
@@ -280,7 +280,10 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureT
 		codexStackOperationalClosureTaskIsOperationalReplanFollowupV0(request.Run, task, tasks) {
 		return true, nil
 	}
-	return source.codexStackOperationalClosureTaskIsOPESDomainWorkV0(ctx, request.Run.RunID, task)
+	if appChangeExternal, err := source.codexStackOperationalClosureTaskIsAppChangeExternalWorkV0(ctx, request.Run.RunID, task); err != nil || appChangeExternal {
+		return appChangeExternal, err
+	}
+	return false, nil
 }
 
 func codexStackOperationalClosureTaskIsOperationalReplanFollowupV0(
@@ -371,6 +374,10 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureR
 		if !ok {
 			continue
 		}
+		if codexStackOperationalClosureDeliveryHasAgentBlockedGateV0(delivery, reviewRequest, accepted, result) &&
+			!codexStackOperationalClosureRunHasExplicitAgentBlockedResolutionV0(request.Run, task.TaskID, delivery.DeliveryRef) {
+			continue
+		}
 		requiredTestEvidenceRefs := []string(nil)
 		if len(task.RequiredTests) > 0 {
 			if source.RequiredTestEvidenceStore == nil {
@@ -429,4 +436,39 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureR
 		}, true, nil
 	}
 	return orquestacionnucleoapp.OperationalDirectorClosureRequestV0{}, false, nil
+}
+
+func codexStackOperationalClosureDeliveryHasAgentBlockedGateV0(
+	delivery orquestacoreworkflow.DeliveryRegisteredPayloadV0,
+	reviewRequest orquestacoreworkflow.ReviewRequestedPayloadV0,
+	accepted orquestacoreworkflow.ReviewAcceptedPayloadV0,
+	result orquestacoreworkflow.ReviewResultV0,
+) bool {
+	for _, refs := range [][]string{
+		delivery.EvidenceRefs,
+		reviewRequest.EvidenceRefs,
+		accepted.EvidenceRefs,
+		result.EvidenceRefs,
+	} {
+		if codexStackOperationalClosureContainsV0(refs, "gate-issue:agent_blocked") {
+			return true
+		}
+	}
+	return false
+}
+
+func codexStackOperationalClosureRunHasExplicitAgentBlockedResolutionV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	taskRef string,
+	deliveryRef string,
+) bool {
+	taskRef = strings.TrimSpace(taskRef)
+	for _, rawReplan := range run.ReplanDecisions {
+		replan, ok := codexStackReviewGateParseReplanProjectionV0(rawReplan)
+		if !ok || strings.TrimSpace(replan.TaskRef) != taskRef {
+			continue
+		}
+		return true
+	}
+	return false
 }

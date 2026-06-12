@@ -28,6 +28,34 @@ func TestReadCodexDeliveryObservationFileV0LeeACKYConstruyeObservacion(t *testin
 	}
 }
 
+func TestReadCodexDeliveryObservationFileV0AceptaACKBlockedComoReplan(t *testing.T) {
+	spec := codexNeutralSpecForDeliveryObservationTestV0()
+	spec.AgentPacket.Policies = append(spec.AgentPacket.Policies, "ack_terminal_strict")
+	ack := codexNeutralAckForDeliveryObservationTestV0(spec)
+	ack.Status = codexAgentAckStatusBlockedV0
+	ack.Notes = append(ack.Notes, "blocked: prueba amplia falla fuera del write-set; requiere replan causal")
+	data, err := json.Marshal(ack)
+	if err != nil {
+		t.Fatalf("marshal ack: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), CodexAgentAckFileNameV0)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write ack: %v", err)
+	}
+
+	observation, issues := ReadCodexDeliveryObservationFileV0(path, spec)
+
+	if len(issues) > 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if observation.DeliveryRef != spec.AgentPacket.DeliveryRefs.AckRef {
+		t.Fatalf("observation no correlacionada: %+v", observation)
+	}
+	if !evidenceContainsCodexDeliveryObservationTestV0(observation.EvidenceRefs, "gate-issue:agent_blocked") {
+		t.Fatalf("evidence_refs=%v", observation.EvidenceRefs)
+	}
+}
+
 func TestReadCodexDeliveryObservationFileV0AceptaACKLegacySinTestReceipts(t *testing.T) {
 	spec := codexNeutralSpecForDeliveryObservationTestV0()
 	spec.AgentPacket.Policies = nil

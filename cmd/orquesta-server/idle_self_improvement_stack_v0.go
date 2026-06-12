@@ -40,14 +40,15 @@ func (supervisor serverStackSupervisorV0) PrepareIdleSelfImprovementV0(
 	if supervisor.stack == nil {
 		return orquestaserver.IdleSelfImprovementResultV0{}, fmt.Errorf("stack requerido")
 	}
+	prepareStack := supervisor.autoprogrammingPrepareStackV0()
 	prepare := orquestaappcodexstack.NewCodexStackAutoprogrammingPrepareRunExecutorV0(
-		supervisor.stack,
+		prepareStack,
 		request.OccurredAt,
 		firstNonEmptyServerStackV0(request.RequestedBy, "orquesta-server"),
-		supervisor.stack.Stores.RunQueue,
-		supervisor.stack.RunQueue,
-		supervisor.stack.Clock,
-		firstNonEmptyServerStackV0(supervisor.runtimeWorkDir, supervisor.stack.CodexRuntimeWorkDir),
+		prepareStack.Stores.RunQueue,
+		prepareStack.RunQueue,
+		prepareStack.Clock,
+		firstNonEmptyServerStackV0(supervisor.runtimeWorkDir, prepareStack.CodexRuntimeWorkDir),
 	)
 	self := orquestamcp.NewMCPAutoprogrammingSelfImprovementToolExecutorV0(prepare)
 	out, err := self.Execute(ctx, orquestamcp.MCPAutoprogrammingSelfImprovementToolInputV0{
@@ -60,6 +61,17 @@ func (supervisor serverStackSupervisorV0) PrepareIdleSelfImprovementV0(
 		return orquestaserver.IdleSelfImprovementResultV0{}, err
 	}
 	return supervisor.ensureIdleSelfImprovementQueueVisibleV0(ctx, idleSelfImprovementResultToServerV0(out)), nil
+}
+
+func (supervisor serverStackSupervisorV0) autoprogrammingPrepareStackV0() *orquestaappcodexstack.StackV0 {
+	if supervisor.stack == nil {
+		return nil
+	}
+	stack := *supervisor.stack
+	if projectWorkDir := strings.TrimSpace(supervisor.projectWorkDir); projectWorkDir != "" {
+		stack.Codex.ProjectWorkDir = projectWorkDir
+	}
+	return &stack
 }
 
 func idleSelfImprovementProposalFromServerV0(

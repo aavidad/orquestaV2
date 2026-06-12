@@ -162,8 +162,10 @@ func TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaDeTestsAReplanConEvi
 	replanStep := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-replan-or-close")
 	if state.ActiveStepID != "step-replan-or-close" ||
 		testsStep.Status != orquestadirectoroperativo.OperationalDirectorStepAcceptedV0 ||
+		!serviceStringInSetV0(testsStep.AcceptedReviewRefs, fixture.AcceptedReviewRef) ||
 		!serviceStringInSetV0(testsStep.RequiredTestEvidenceRefs, fixture.RequiredTestEvidenceRef) ||
 		replanStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
+		!serviceStringInSetV0(replanStep.AcceptedReviewRefs, fixture.AcceptedReviewRef) ||
 		!serviceStringInSetV0(replanStep.RequiredTestEvidenceRefs, fixture.RequiredTestEvidenceRef) {
 		t.Fatalf("state=%+v testsStep=%+v replanStep=%+v", state, testsStep, replanStep)
 	}
@@ -222,8 +224,10 @@ func TestUpdateOperationalDirectorPlanStateAfterLoopV0EjecutaRunnerDeTestsRequer
 	}
 	if state.ActiveStepID != "step-replan-or-close" ||
 		testsStep.Status != orquestadirectoroperativo.OperationalDirectorStepAcceptedV0 ||
+		!serviceStringInSetV0(testsStep.AcceptedReviewRefs, fixture.AcceptedReviewRef) ||
 		len(testsStep.RequiredTestEvidenceRefs) != 1 ||
 		replanStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
+		!serviceStringInSetV0(replanStep.AcceptedReviewRefs, fixture.AcceptedReviewRef) ||
 		len(replanStep.RequiredTestEvidenceRefs) != 1 {
 		t.Fatalf("state=%+v testsStep=%+v replanStep=%+v", state, testsStep, replanStep)
 	}

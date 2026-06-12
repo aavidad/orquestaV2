@@ -121,19 +121,16 @@ func (tracker *StatusTrackerV0) MarkStartupBlockedV0(
 	})
 }
 
-func (tracker *StatusTrackerV0) MarkSupervisorV0(
-	command orquestarunsupervisor.RunSupervisorCommandV0,
-	result orquestarunsupervisor.RunSupervisorResultV0,
-	now time.Time,
-) StateV0 {
+func (tracker *StatusTrackerV0) MarkSupervisorV0(command orquestarunsupervisor.RunSupervisorCommandV0, result orquestarunsupervisor.RunSupervisorResultV0, now time.Time) StateV0 {
 	metrics := collectSupervisorResultMetricsV0(result)
+	projection := supervisorPublicProjectionV0(result, metrics)
 	return tracker.updateV0(func(state *StateV0) {
 		state.LastHeartbeatAt = formatTimeV0(now)
 		state.LastSupervisorAt = formatTimeV0(now)
-		state.LastSupervisorStatus = "ok"
+		state.LastSupervisorStatus = projection.Status
 		state.LastSupervisorStop = strings.TrimSpace(metrics.StopReason)
-		state.LastSupervisorStopPublic = strings.TrimSpace(metrics.PublicStop)
-		state.LastSupervisorStopCategory = strings.TrimSpace(metrics.StopCategory)
+		state.LastSupervisorStopPublic = strings.TrimSpace(projection.StopPublic)
+		state.LastSupervisorStopCategory = strings.TrimSpace(projection.StopCategory)
 		state.LastSupervisorError = ""
 		state.LastSupervisorQueueRef = strings.TrimSpace(command.QueueRef)
 		state.LastSupervisorQueueSize = metrics.QueueSize
@@ -141,6 +138,15 @@ func (tracker *StatusTrackerV0) MarkSupervisorV0(
 		state.LastSupervisorResultTicks = metrics.ResultTicks
 		state.LastSupervisorExecutions = metrics.Executions
 		state.LastSupervisorSkips = metrics.Skips
+		state.LastSupervisorOperationalMessage = projectServerOperationalMessageRecordV0(
+			serverOperationalMessageInputV0{
+				Scope:      "supervisor",
+				ReasonCode: projection.Status,
+				Status:     projection.Status,
+				Message:    "supervisor_projection",
+				Counters:   supervisorPublicCountersV0(result),
+			},
+		)
 		tracker.markSupervisorIdleWindowV0(result, now)
 		state.SupervisorTicks++
 		state.SupervisorExecutions += metrics.Executions
@@ -148,6 +154,45 @@ func (tracker *StatusTrackerV0) MarkSupervisorV0(
 		state.LastError = ""
 		state.LastErrorOperationalMessage = nil
 	})
+}
+
+func supervisorPublicProjectionV0(result orquestarunsupervisor.RunSupervisorResultV0, metrics supervisorResultMetricsV0) SupervisorPublicProjectionV0 {
+	projection := SupervisorPublicProjectionV0{
+		Status:       SupervisorPublicStatusOKV0,
+		StopPublic:   strings.TrimSpace(metrics.PublicStop),
+		StopCategory: strings.TrimSpace(metrics.StopCategory),
+	}
+	if supervisorResultHasLaunchFailedV0(result) {
+		projection.Status = SupervisorPublicStatusLaunchFailedV0
+		projection.StopPublic = SupervisorPublicStopLaunchFailedV0
+		projection.StopCategory = SupervisorPublicCategoryExternalProcessV0
+		return projection
+	}
+	if supervisorResultHasRunningLiveV0(result) {
+		projection.Status = SupervisorPublicStatusRunningLiveV0
+		projection.StopPublic = SupervisorPublicStopRunningLiveV0
+		projection.StopCategory = SupervisorPublicCategoryExternalProcessV0
+		return projection
+	}
+	if supervisorResultHasUnverifiedRunningV0(result) {
+		projection.Status = SupervisorPublicStatusStalledV0
+		projection.StopPublic = SupervisorPublicStopStalledV0
+		projection.StopCategory = SupervisorPublicCategoryExternalProcessV0
+		return projection
+	}
+	if supervisorResultHasExternalWaitV0(result) {
+		projection.Status = SupervisorPublicStatusWaitingExternalV0
+		projection.StopPublic = SupervisorPublicStopWaitingExternalV0
+		projection.StopCategory = SupervisorPublicCategoryWaitExternalV0
+		return projection
+	}
+	if supervisorResultHasUnhandledOutboxWaitV0(result) {
+		projection.Status = SupervisorPublicStatusWaitingOutboxV0
+		projection.StopPublic = SupervisorPublicStopWaitingOutboxV0
+		projection.StopCategory = SupervisorPublicCategoryWaitOutboxV0
+		return projection
+	}
+	return projection
 }
 
 func (tracker *StatusTrackerV0) MarkSupervisorTickActiveV0(active bool, now time.Time) StateV0 {

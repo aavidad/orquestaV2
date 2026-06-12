@@ -1229,6 +1229,7 @@ Validacion sanitizador local de contexto sensible:
 
 ```bash
 go test -count=1 ./modulos/orquesta-app-codex-stack
+go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestLocalSensitiveDataSanitizerV0|Test.*Sanitizer|Test.*Egress'
 ```
 
 Cobertura:
@@ -1239,6 +1240,16 @@ Cobertura:
 - `TestLocalSensitiveDataSanitizerV0DudaYActivaRevisionDirector` verifica que
   material privado ambiguo se degrada a refs y agrega criterios de revision por
   director/humano con policy de consulta al director.
+- `TestEgressSanitizerConfigV0CentralizaRuntimePorProveedor` verifica la
+  proyeccion canonica de Codex, Gemini, Claude y egress sanitizer sin filtrar
+  rutas crudas.
+- `TestEgressSanitizerConfigV0InyectaPrivacyFilterLocalOptIn` verifica que
+  `openai_privacy_filter_local` se declara como modelo local opt-in y que la
+  evidencia conserva categoria sin guardar el secreto.
+- `TestLocalSensitiveDataSanitizerV0NoBloqueaPorProviderModelRuntime` fija que
+  palabras blandas de runtime/config no bloquean ni fuerzan revision.
+- `TestEgressSanitizerConfigV0RespetaSanitizerExplicito` fija que un puerto
+  explicito prevalece sobre la config canonica.
 
 Validacion de calidad `domain_work` con issues estructurados:
 

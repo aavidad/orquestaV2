@@ -83,7 +83,7 @@ func codexRuntimeEnvConfigFromEnvV0() codexRuntimeEnvConfigV0 {
 			string(orquestacoreworkflow.OrchestrationCapacityMediumV0),
 		)),
 		Profile:                  strings.TrimSpace(os.Getenv(envCodexProfileV0)),
-		Sandbox:                  codexSandboxFromEnvV0(envCodexSandboxV0, "danger-full-access"),
+		Sandbox:                  codexSandboxFromEnvV0(envCodexSandboxV0, "workspace-write"),
 		ApprovalPolicy:           envOrDefaultV0(envCodexApprovalPolicyV0, "never"),
 		DirectorSandbox:          codexOptionalSandboxFromEnvV0(envCodexDirectorSandboxV0),
 		DirectorApprovalPolicy:   strings.TrimSpace(os.Getenv(envCodexDirectorApprovalPolicyV0)),

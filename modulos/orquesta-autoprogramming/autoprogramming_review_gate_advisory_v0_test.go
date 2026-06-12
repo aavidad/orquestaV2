@@ -52,6 +52,11 @@ func TestAutoprogrammingReviewGateIssueCodeIsAdvisoryV0(t *testing.T) {
 		"replaced_large_delta",
 		"massive_replacement:docs/manual.md",
 		"gate-issue:large_delta_replacement:README.md",
+		"worktree_snapshot_file_too_large",
+		"gate-issue:worktree_snapshot_file_too_large",
+		"worktree-snapshot-too-many-files",
+		"gate-issue:worktree_snapshot_too_large",
+		"worktree_snapshot_unreadable",
 	} {
 		if !AutoprogrammingReviewGateIssueCodeIsAdvisoryV0(code) {
 			t.Fatalf("code=%q advisory=false", code)
@@ -78,6 +83,7 @@ func TestAutoprogrammingReviewGateAdvisoryIssuesPidenFollowupSinBloquearV0(t *te
 		{Code: "gate-issue:ack_files_mismatch"},
 		{Code: "gate-issue:go_file_line_budget_exceeded"},
 		{Code: "gate-issue:replaced_large_delta"},
+		{Code: "gate-issue:worktree_snapshot_file_too_large"},
 	})
 
 	assertAutoprogrammingReviewGateFollowupV0(t, result)

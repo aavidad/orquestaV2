@@ -35,6 +35,9 @@ func domainWorkExecutorFromEnvV0(
 		return nil, fmt.Errorf("domain_work_backend_ambiguous")
 	}
 	if baseURL != "" {
+		if err := opesDomainWorkDestinationPolicyFromEnvV0(baseURL); err != nil {
+			return nil, err
+		}
 		client := orquestaopesconnector.NewRESTClientV0(orquestaopesconnector.RESTClientConfigV0{
 			BaseURL:            baseURL,
 			HTTPClient:         commandOPESTemporalHTTPClientV0(time.Duration(intEnvOrDefaultV0(envOPESTimeoutSecondsV0, 30)) * time.Second),
@@ -73,7 +76,7 @@ func domainWorkExecutorFromEnvV0(
 	if err != nil {
 		return nil, err
 	}
-	return orquestamcp.NewMCPDomainWorkToolExecutorV0(creator, nil), nil
+	return orquestamcp.NewMCPDomainWorkToolExecutorV0(creator, creator), nil
 }
 
 func domainWorkHTTPEgressPolicyFromEnvV0() (orquestadomainworkhttp.EgressPolicyV0, error) {
@@ -92,6 +95,21 @@ func domainWorkHTTPEgressPolicyFromEnvV0() (orquestadomainworkhttp.EgressPolicyV
 	}
 }
 
+func opesDomainWorkDestinationPolicyFromEnvV0(baseURL string) error {
+	destination, err := opesBridgeDestinationFromURLV0("opes", baseURL, false)
+	if err != nil {
+		return err
+	}
+	if err := opesBridgeRequireRealOPESConfirmationV0(destination, false); err != nil {
+		return err
+	}
+	evidenceRef := strings.TrimSpace(os.Getenv(envOPESBridgeDestinationEvidenceV0))
+	if needsProductiveEvidenceV0(destination) && !compactEvidenceRefV0(evidenceRef) {
+		return fmt.Errorf("opes_destination_evidence_ref_required")
+	}
+	return nil
+}
+
 func splitCSVEnvV0(raw string) []string {
 	var values []string
 	for _, item := range strings.Split(raw, ",") {
@@ -105,7 +123,9 @@ func splitCSVEnvV0(raw string) []string {
 
 func domainWorkDeliveryEnabledFromEnvV0() bool {
 	return firstNonEmptyEnvV0(envOPESBaseURLV0, envOPESBaseURLLegacyV0) != "" ||
-		strings.TrimSpace(os.Getenv(envDomainWorkHTTPBaseURLV0)) != ""
+		strings.TrimSpace(os.Getenv(envDomainWorkHTTPBaseURLV0)) != "" ||
+		strings.TrimSpace(os.Getenv(envDomainWorkFileEnabledV0)) == "1" ||
+		strings.TrimSpace(os.Getenv(envDomainWorkFileDirV0)) != ""
 }
 
 func domainWorkRequiredTestConfigFromEnvV0() orquestaappcodexstack.DomainWorkRequiredTestConfigV0 {

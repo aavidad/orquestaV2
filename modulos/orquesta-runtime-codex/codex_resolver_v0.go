@@ -115,7 +115,12 @@ func (r CodexExecResolverV0) materializeFilesV0(
 			codexIssueV0(CodexConnectorFilesystemV0, CodexAgentPromptFileNameV0, spec.CorrelationID, err.Error()),
 		}
 	}
-	wrapper := BuildCodexWrapperScriptV0(r.profile)
+	wrapperProfile := r.profile
+	wrapperProfile.ReasoningEffort = codexEffectiveReasoningEffortV0(
+		r.profile.ReasoningEffort,
+		spec.AgentPacket.CapacityLevel,
+	)
+	wrapper := BuildCodexWrapperScriptV0(wrapperProfile)
 	if err := writeControlFileV0(r.profile.RuntimeWorkDir, filepath.Join(r.profile.RuntimeWorkDir, CodexWrapperFileNameV0), CodexWrapperFileNameV0, "codex_wrapper", []byte(wrapper), 0o700); err != nil {
 		return []orquestaruntime.ExternalAgentConnectorErrorV0{
 			codexIssueV0(CodexConnectorFilesystemV0, CodexWrapperFileNameV0, spec.CorrelationID, err.Error()),

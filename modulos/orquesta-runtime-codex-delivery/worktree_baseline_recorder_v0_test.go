@@ -33,7 +33,29 @@ func TestCodexReceiptWorktreeBaselineRecorderV0NoBloqueaIssueDeSnapshot(t *testi
 	if err != nil {
 		t.Fatalf("CaptureCodexReceiptWorktreeBaselineV0 bloqueo launch: %v", err)
 	}
-	if resolution.BaselineRef != "" {
-		t.Fatalf("baseline inesperada=%q", resolution.BaselineRef)
+	if resolution.BaselineRef == "" {
+		t.Fatalf("baseline parcial no registrada")
 	}
+	snapshot, err := recorder.SnapshotStore.LoadWorktreeSnapshotV0(context.Background(), resolution.BaselineRef)
+	if err != nil {
+		t.Fatalf("LoadWorktreeSnapshotV0: %v", err)
+	}
+	if len(snapshot.Files) != 0 {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+	requireCodexDeliveryReceiptReasonV0(t, snapshot.ExclusionReceipts, orquestaruntimeworktree.WorktreeIssueSnapshotFileTooLargeV0)
+}
+
+func requireCodexDeliveryReceiptReasonV0(
+	t *testing.T,
+	receipts []orquestaruntimeworktree.WorktreeLocalArtifactExclusionReceiptV0,
+	code orquestaruntimeworktree.WorktreeIssueCodeV0,
+) {
+	t.Helper()
+	for _, receipt := range receipts {
+		if receipt.ReasonCode == string(code) && receipt.Count > 0 {
+			return
+		}
+	}
+	t.Fatalf("receipts=%+v sin reason=%s", receipts, code)
 }

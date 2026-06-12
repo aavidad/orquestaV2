@@ -490,6 +490,14 @@ local `LocalSensitiveDataSanitizerV0` es determinista y opt-in: sustituye
 tokens, claves, rutas privadas, URLs y material no publicable por refs opacas y
 adjunta `ContextSanitizationEvidenceV0`.
 
+`EgressSanitizerConfigV0` es la superficie canonica de la composicion para
+activar el saneamiento de salida. `PrivacyFilterModelConfigV0` declara el modelo
+local `openai_privacy_filter_local` como metadata opt-in sin mover proveedor,
+modelo, transporte ni HOME al nucleo. `CanonicalRuntimeProviderConfigsV0`
+proyecta Codex, Gemini, Claude y egress sanitizer como proveedores de runtime
+uniformes para observabilidad/configuracion de composicion, usando flags/refs
+compactas en vez de rutas crudas.
+
 Invariantes:
 
 - si no se inyecta sanitizador, el stack conserva el comportamiento anterior;
@@ -497,3 +505,7 @@ Invariantes:
 - la evidencia incluye categorias y contador, no el dato sensible;
 - si hay duda, el contexto requerido se reduce a refs y el task exige revision
   por director/humano antes del cierre.
+- si existe un `ContextSanitizerPortV0` explicito, prevalece sobre la config
+  canonica;
+- palabras blandas de operacion como provider, model, runtime o capacity no son
+  veto automatico.

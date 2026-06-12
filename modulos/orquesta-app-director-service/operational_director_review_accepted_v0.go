@@ -102,12 +102,14 @@ func operationalDirectorPlanStateAfterReviewAcceptedV0(
 				nextStep.AgentRefs = append([]string(nil), activeStep.AgentRefs...)
 				nextStep.DeliveryRefs = append([]string(nil), deliveryRefs...)
 				nextStep.ReviewResultRefs = append([]string(nil), reviewResultRefs...)
+				nextStep.AcceptedReviewRefs = append([]string(nil), acceptedReviewRefs...)
 				nextStep.RequiredTestEvidenceRefs = nil
 			} else {
 				nextStep.TaskRefs = append([]string(nil), activeStep.TaskRefs...)
 				nextStep.AgentRefs = append([]string(nil), activeStep.AgentRefs...)
 				nextStep.DeliveryRefs = append([]string(nil), deliveryRefs...)
 				nextStep.ReviewResultRefs = append([]string(nil), reviewResultRefs...)
+				nextStep.AcceptedReviewRefs = append([]string(nil), acceptedReviewRefs...)
 			}
 			nextStep.EvidenceRefs = compactServiceRefsV0(append(nextStep.EvidenceRefs, evidenceRefs...))
 			nextStep.WaveRef = activeStep.WaveRef

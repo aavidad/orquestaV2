@@ -226,7 +226,8 @@ func (stack StackV0) runCodexStackResidentDirectorRunV0(
 		}, err
 	}
 	continueRequest := codexStackResidentContinueRequestV0(command, enriched)
-	runtime, err := orquestaappdirectorservice.BuildContinueAppDirectorLoopRuntimeV0(ctx, continueRequest, stack.Ports)
+	ports := stack.directorPortsWithClosureSourceV0(stack.Ports)
+	runtime, err := orquestaappdirectorservice.BuildContinueAppDirectorLoopRuntimeV0(ctx, continueRequest, ports)
 	if err != nil {
 		return CodexStackResidentDirectorRunResultV0{
 			Status:       "error",
@@ -255,8 +256,8 @@ func (stack StackV0) runCodexStackResidentDirectorRunV0(
 		WaitScopeApplied:     runtime.LoopRequest.WaitScopeApplied,
 		BriefingSource: codexStackResidentBriefingSourceV0{
 			OutboxLedger:    stack.Stores.OutboxLedger,
-			RunStore:        stack.Ports.RunStore,
-			TaskStore:       stack.Ports.DirectorTaskStore,
+			RunStore:        ports.RunStore,
+			TaskStore:       ports.DirectorTaskStore,
 			DecisionCouncil: stack.DecisionCouncil,
 			ObjectiveRef:    "resident-director:" + continueRequest.RunRef,
 			ContextRefs:     []string{"context-ref-codex-stack-resident-director"},
@@ -265,7 +266,7 @@ func (stack StackV0) runCodexStackResidentDirectorRunV0(
 		BatchDispatchers: runtime.LoopRequest.BatchDispatchers,
 		ExternalActionHandler: codexStackResidentExternalActionHandlerV0{
 			Request:         runtime.Request,
-			Ports:           stack.Ports,
+			Ports:           ports,
 			DecisionCouncil: stack.DecisionCouncil,
 		},
 	})
@@ -280,6 +281,42 @@ func (stack StackV0) runCodexStackResidentDirectorRunV0(
 		return result, err
 	}
 	return result, nil
+}
+
+func (stack StackV0) directorPortsWithClosureSourceV0(
+	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
+) orquestaappdirectorservice.StartAppDirectorPortsV0 {
+	if ports.OperationalClosureSource != nil {
+		return ports
+	}
+	reader := ports.EventReader
+	if reader == nil {
+		reader, _ = stack.Stores.EventSink.(orquestacionnucleoapp.RunEventReaderPortV0)
+	}
+	if ports.DirectorTaskStore == nil || reader == nil {
+		return ports
+	}
+	evidenceReader := ports.RequiredTestEvidenceStore
+	var evidenceWriter orquestacionnucleoapp.RequiredTestEvidenceWriterPortV0
+	if stack.Stores.RequiredTestEvidenceStore != nil {
+		if evidenceReader == nil {
+			evidenceReader = stack.Stores.RequiredTestEvidenceStore
+		}
+		evidenceWriter = stack.Stores.RequiredTestEvidenceStore
+	} else if writer, ok := evidenceReader.(orquestacionnucleoapp.RequiredTestEvidenceWriterPortV0); ok {
+		evidenceWriter = writer
+	}
+	ports.OperationalClosureSource = codexStackOperationalClosureSourceV0{
+		TaskStore:                  ports.DirectorTaskStore,
+		EventReader:                reader,
+		RequiredTestEvidenceStore:  evidenceReader,
+		RequiredTestEvidenceWriter: evidenceWriter,
+		ReceiptStore:               stack.Stores.ReceiptStore,
+		RuntimeWorkDir:             firstNonEmptyQueuedSourceV0(stack.Codex.RuntimeWorkDir, stack.CodexRuntimeWorkDir),
+		AppChangeStore:             stack.Stores.AppChangeStore,
+		DomainSubmissionLedger:     domainWorkSubmissionRecordReaderV0(stack.DomainDelivery.Ledger),
+	}
+	return ports
 }
 
 func codexStackResidentContinueRequestV0(

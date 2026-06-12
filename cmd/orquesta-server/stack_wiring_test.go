@@ -1,18 +1,15 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"testing"
 
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
-	operator "orquesta/modulos/orquesta-operator-mcp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestapersistence "orquesta/modulos/orquesta-persistence"
 	orquestarunfile "orquesta/modulos/orquesta-run-file"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
@@ -44,7 +41,7 @@ func TestBuildStackFromEnvV0UsaConectoresDurablesFileBased(t *testing.T) {
 	assertServerStackDurableStoresV0(t, stack)
 }
 
-func TestBuildServerAppHandlerV0MontaMCPNativoV0(t *testing.T) {
+func TestBuildStackFromEnvV0CableaOperationalClosureSourceV0(t *testing.T) {
 	projectDir := t.TempDir()
 	stateDir := t.TempDir()
 	runtimeDir := filepath.Join(t.TempDir(), "runtime")
@@ -54,6 +51,8 @@ func TestBuildServerAppHandlerV0MontaMCPNativoV0(t *testing.T) {
 	t.Setenv("ORQUESTA_CODEX_COMMAND", filepath.Join(projectDir, "codex-bin"))
 	t.Setenv("ORQUESTA_OPES_BASE_URL", "")
 	t.Setenv("OPES_BASE_URL", "")
+	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_ENABLED", "")
+	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_DIR", "")
 
 	config, err := serverConfigFromEnvV0()
 	if err != nil {
@@ -63,70 +62,23 @@ func TestBuildServerAppHandlerV0MontaMCPNativoV0(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildStackFromEnvV0: %v", err)
 	}
-	handler, err := buildServerAppHandlerV0(stack)
-	if err != nil {
-		t.Fatalf("buildServerAppHandlerV0: %v", err)
-	}
-	body := bytes.NewBufferString(`{"jsonrpc":"2.0","id":"mcp-test","method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"0"}}}`)
-	req := httptest.NewRequest(http.MethodPost, mcpRealHTTPPathV0, body)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	var response mcpJSONRPCResponseV0
-	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if response.Error != nil {
-		t.Fatalf("rpc error=%+v", response.Error)
+	if stack.Ports.OperationalClosureSource == nil {
+		t.Fatalf("OperationalClosureSource debe quedar cableado en el stack servidor")
 	}
 }
 
-func TestBuildServerAppHandlerV0CableaHermesAPIComoOperatorConnector(t *testing.T) {
+func TestBuildStackFromEnvV0DirectorStatsExponeProgressSourceConfiguradoV0(t *testing.T) {
 	projectDir := t.TempDir()
 	stateDir := t.TempDir()
 	runtimeDir := filepath.Join(t.TempDir(), "runtime")
-	remoteRefs := map[string]string{}
-	hermes := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/mcp" {
-			t.Fatalf("hermes path=%s want /mcp", r.URL.Path)
-		}
-		if r.Header.Get("Authorization") != "Bearer token-ref-hermes-stack-test" {
-			t.Fatalf("authorization header inesperado")
-		}
-		var request struct {
-			Method string `json:"method"`
-			Params struct {
-				Name      string          `json:"name"`
-				Arguments json.RawMessage `json:"arguments"`
-			} `json:"params"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			t.Fatalf("decode hermes request: %v", err)
-		}
-		remoteRefs[request.Params.Name] = hermesConnectorRefFromStackWiringInputV0(t, request.Params.Name, request.Params.Arguments)
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(hermesJSONRPCResponseForStackWiringV0(request.Params.Name)))
-	}))
-	defer hermes.Close()
 	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", projectDir)
 	t.Setenv("ORQUESTA_SERVER_STATE_DIR", stateDir)
 	t.Setenv("ORQUESTA_CODEX_RUNTIME_WORKDIR", runtimeDir)
 	t.Setenv("ORQUESTA_CODEX_COMMAND", filepath.Join(projectDir, "codex-bin"))
 	t.Setenv("ORQUESTA_OPES_BASE_URL", "")
 	t.Setenv("OPES_BASE_URL", "")
-	t.Setenv("ORQUESTA_HERMES_ENABLED", "1")
-	t.Setenv("ORQUESTA_HERMES_BASE_URL", hermes.URL)
-	t.Setenv("ORQUESTA_HERMES_API_KEY", "token-ref-hermes-stack-test")
-	t.Setenv("ORQUESTA_HERMES_STATUS_TOOL", "hermes.status")
-	t.Setenv("ORQUESTA_HERMES_BURST_TOOL", "hermes.burst")
-	t.Setenv("ORQUESTA_HERMES_OUTBOX_TOOL", "hermes.outbox")
-	t.Setenv("ORQUESTA_HERMES_QUERY_TOOL", "hermes.query")
-	t.Setenv("ORQUESTA_HERMES_STATUS_CONNECTOR_REF", "hermes-status-ref")
-	t.Setenv("ORQUESTA_HERMES_BURST_CONNECTOR_REF", "hermes-burst-ref")
-	t.Setenv("ORQUESTA_HERMES_OUTBOX_CONNECTOR_REF", "hermes-outbox-ref")
-	t.Setenv("ORQUESTA_HERMES_QUERY_CONNECTOR_REF", "hermes-query-ref")
+	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_ENABLED", "")
+	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_DIR", "")
 
 	config, err := serverConfigFromEnvV0()
 	if err != nil {
@@ -136,204 +88,42 @@ func TestBuildServerAppHandlerV0CableaHermesAPIComoOperatorConnector(t *testing.
 	if err != nil {
 		t.Fatalf("buildStackFromEnvV0: %v", err)
 	}
-	handler, err := buildServerAppHandlerV0(stack)
+	runRef := "run-ref-server-progress-source-configured-001"
+	if err := stack.Stores.RunStore.SaveRunV0(context.Background(), orquestacoreworkflow.OrchestrationRunV0{
+		SchemaVersion: orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
+		RunID:         runRef,
+		ProjectRef:    "project-ref-server-progress-source-configured-001",
+		AppSpecRef:    "app-spec-ref-server-progress-source-configured-001",
+		Status:        orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+		CurrentPhase:  orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		Phases: []orquestacoreworkflow.OrchestrationPhaseV0{{
+			ID:                  orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+			Status:              orquestacoreworkflow.OrchestrationPhaseStatusActiveV0,
+			RecommendedCapacity: orquestacoreworkflow.OrchestrationCapacityMediumV0,
+		}},
+		Tasks:         []string{"task-ref-server-progress-source-configured-001"},
+		Agents:        []string{"agent-ref-server-progress-source-configured-001"},
+		StartedAgents: []string{"agent-ref-server-progress-source-configured-001"},
+	}); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+
+	result, err := stack.MCPTransportBindings.DirectorStats.Execute(
+		context.Background(),
+		orquestamcp.MCPDirectorStatsToolInputV0{
+			RunRef:               runRef,
+			IncludeAgentProgress: true,
+		},
+	)
 	if err != nil {
-		t.Fatalf("buildServerAppHandlerV0: %v", err)
+		t.Fatalf("DirectorStats.Execute: %v", err)
 	}
-
-	resources := callMCPStackWiringV0(t, handler, "resources/list", map[string]any{})
-	assertMCPListContainsStackWiringV0(t, resources.Result, "resources", orquestamcp.MCPOperatorOperationsResourceNameV0)
-	tools := callMCPStackWiringV0(t, handler, "tools/list", map[string]any{})
-	for _, name := range []string{
-		operator.OperatorMCPStatusToolNameV0,
-		operator.OperatorMCPBurstToolNameV0,
-		operator.OperatorMCPOutboxToolNameV0,
-		operator.OperatorMCPDirectedQueryToolV0,
-	} {
-		assertMCPListContainsStackWiringV0(t, tools.Result, "tools", name)
+	if result.Estado != orquestamcp.MCPDirectorStatsEstadoOKV0 || result.Stats == nil {
+		t.Fatalf("result=%+v", result)
 	}
-
-	for _, item := range []struct {
-		localTool      string
-		remoteTool     string
-		wantRef        string
-		arguments      map[string]any
-		wantPayloadKey string
-	}{
-		{
-			localTool:      operator.OperatorMCPStatusToolNameV0,
-			remoteTool:     "hermes.status",
-			wantRef:        "hermes-status-ref",
-			wantPayloadKey: "status",
-			arguments: map[string]any{
-				"request_ref":          "request-ref-hermes-status",
-				"subject_ref":          "run-ref-hermes-status",
-				"status_connector_ref": "ignored-local-status-ref",
-			},
-		},
-		{
-			localTool:      operator.OperatorMCPBurstToolNameV0,
-			remoteTool:     "hermes.burst",
-			wantRef:        "hermes-burst-ref",
-			wantPayloadKey: "burst",
-			arguments: map[string]any{
-				"request_ref":         "request-ref-hermes-burst",
-				"run_ref":             "run-ref-hermes-burst",
-				"burst_connector_ref": "ignored-local-burst-ref",
-				"supervision_ref":     "supervision-ref-hermes-burst",
-				"max_steps":           3,
-			},
-		},
-		{
-			localTool:      operator.OperatorMCPOutboxToolNameV0,
-			remoteTool:     "hermes.outbox",
-			wantRef:        "hermes-outbox-ref",
-			wantPayloadKey: "outbox",
-			arguments: map[string]any{
-				"request_ref":          "request-ref-hermes-outbox",
-				"subject_ref":          "run-ref-hermes-outbox",
-				"outbox_connector_ref": "ignored-local-outbox-ref",
-				"limit":                5,
-			},
-		},
-		{
-			localTool:      operator.OperatorMCPDirectedQueryToolV0,
-			remoteTool:     "hermes.query",
-			wantRef:        "hermes-query-ref",
-			wantPayloadKey: "directed_query",
-			arguments: map[string]any{
-				"query_ref":           "query-ref-hermes",
-				"target_ref":          "director-ref-hermes",
-				"query_connector_ref": "ignored-local-query-ref",
-				"question":            "Falta alguna decision publica?",
-			},
-		},
-	} {
-		response := callMCPStackWiringV0(t, handler, "tools/call", map[string]any{
-			"name":      item.localTool,
-			"arguments": item.arguments,
-		})
-		payload := mcpToolPayloadStackWiringV0(t, response.Result)
-		if payload["estado"] != "ok" || payload[item.wantPayloadKey] == nil ||
-			remoteRefs[item.remoteTool] != item.wantRef {
-			t.Fatalf("tool=%s payload=%+v remoteRefs=%+v", item.localTool, payload, remoteRefs)
-		}
+	if result.Stats.Progress.SourceStatus != orquestacionnucleoapp.DirectorProgressSourceLoadedV0 {
+		t.Fatalf("source_status=%s issues=%+v", result.Stats.Progress.SourceStatus, result.Stats.Progress.Issues)
 	}
-}
-
-func hermesConnectorRefFromStackWiringInputV0(t *testing.T, tool string, raw json.RawMessage) string {
-	t.Helper()
-	switch tool {
-	case "hermes.status":
-		var input operator.OperatorStatusQueryV0
-		if err := json.Unmarshal(raw, &input); err != nil {
-			t.Fatalf("decode status args: %v", err)
-		}
-		return input.StatusConnectorRef
-	case "hermes.burst":
-		var input operator.OperatorSupervisedBurstRequestV0
-		if err := json.Unmarshal(raw, &input); err != nil {
-			t.Fatalf("decode burst args: %v", err)
-		}
-		return input.BurstConnectorRef
-	case "hermes.outbox":
-		var input operator.OperatorPendingOutboxQueryV0
-		if err := json.Unmarshal(raw, &input); err != nil {
-			t.Fatalf("decode outbox args: %v", err)
-		}
-		return input.OutboxConnectorRef
-	case "hermes.query":
-		var input operator.OperatorDirectedQueryV0
-		if err := json.Unmarshal(raw, &input); err != nil {
-			t.Fatalf("decode query args: %v", err)
-		}
-		return input.QueryConnectorRef
-	default:
-		t.Fatalf("tool remoto inesperado: %s", tool)
-		return ""
-	}
-}
-
-func hermesJSONRPCResponseForStackWiringV0(tool string) string {
-	payloads := map[string]string{
-		"hermes.status": `{\"estado\":\"ok\",\"status\":{\"status\":\"healthy\",\"evidence_refs\":[\"evidence-ref-hermes-stack-status\"]}}`,
-		"hermes.burst":  `{\"estado\":\"ok\",\"burst\":{\"burst_ref\":\"burst-ref-hermes-stack\",\"executed_steps\":3,\"final_action\":\"continue\"}}`,
-		"hermes.outbox": `{\"estado\":\"ok\",\"outbox\":{\"pending_count\":1,\"items\":[{\"message_ref\":\"message-ref-hermes-stack\",\"kind\":\"director_question\"}]}}`,
-		"hermes.query":  `{\"estado\":\"ok\",\"directed_query\":{\"accepted\":true,\"answer_ref\":\"answer-ref-hermes-stack\",\"next_action\":\"wait\"}}`,
-	}
-	payload := payloads[tool]
-	if payload == "" {
-		payload = `{\"estado\":\"error\",\"error_code\":\"operator_mcp_port_error\"}`
-	}
-	return `{"jsonrpc":"2.0","id":"hermes-stack-test","result":{"content":[{"type":"text","mimeType":"application/json","text":"` + payload + `"}]}}`
-}
-
-type mcpStackWiringResponseV0 struct {
-	Error  *mcpJSONRPCErrorV0 `json:"error,omitempty"`
-	Result json.RawMessage    `json:"result,omitempty"`
-}
-
-func callMCPStackWiringV0(t *testing.T, handler http.Handler, method string, params map[string]any) mcpStackWiringResponseV0 {
-	t.Helper()
-	body, err := json.Marshal(map[string]any{
-		"jsonrpc": "2.0",
-		"id":      "mcp-hermes-stack-test",
-		"method":  method,
-		"params":  params,
-	})
-	if err != nil {
-		t.Fatalf("marshal request: %v", err)
-	}
-	req := httptest.NewRequest(http.MethodPost, mcpRealHTTPPathV0, bytes.NewReader(body))
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("method=%s status=%d body=%s", method, rec.Code, rec.Body.String())
-	}
-	var response mcpStackWiringResponseV0
-	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if response.Error != nil {
-		t.Fatalf("method=%s rpc error=%+v", method, response.Error)
-	}
-	return response
-}
-
-func assertMCPListContainsStackWiringV0(t *testing.T, raw json.RawMessage, field string, name string) {
-	t.Helper()
-	var result map[string][]struct {
-		Name string `json:"name"`
-	}
-	if err := json.Unmarshal(raw, &result); err != nil {
-		t.Fatalf("decode %s list: %v", field, err)
-	}
-	for _, item := range result[field] {
-		if item.Name == name {
-			return
-		}
-	}
-	t.Fatalf("%s no contiene %s: %+v", field, name, result[field])
-}
-
-func mcpToolPayloadStackWiringV0(t *testing.T, raw json.RawMessage) map[string]any {
-	t.Helper()
-	var result struct {
-		Content []struct {
-			Text string `json:"text"`
-		} `json:"content"`
-	}
-	if err := json.Unmarshal(raw, &result); err != nil {
-		t.Fatalf("decode tool result: %v", err)
-	}
-	if len(result.Content) != 1 {
-		t.Fatalf("content inesperado: %+v", result.Content)
-	}
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(result.Content[0].Text), &payload); err != nil {
-		t.Fatalf("decode payload: %v text=%s", err, result.Content[0].Text)
-	}
-	return payload
 }
 
 func TestBuildStackFromEnvV0CableaDomainWorkFileOptIn(t *testing.T) {
@@ -358,8 +148,8 @@ func TestBuildStackFromEnvV0CableaDomainWorkFileOptIn(t *testing.T) {
 	if stack.DomainWork == nil {
 		t.Fatalf("DomainWork file no cableado")
 	}
-	if stack.DomainDelivery.Enabled {
-		t.Fatalf("DomainDelivery no debe activarse con domain-work-file sin submitter")
+	if !stack.DomainDelivery.Enabled {
+		t.Fatalf("DomainDelivery debe activarse con domain-work-file porque ya tiene submitter local")
 	}
 	result, err := stack.DomainWork.Execute(context.Background(), orquestamcp.MCPDomainWorkToolInputV0{
 		Action: orquestamcp.MCPDomainWorkActionCreateJobV0,
@@ -381,6 +171,32 @@ func TestBuildStackFromEnvV0CableaDomainWorkFileOptIn(t *testing.T) {
 		result.Job.JobRef == "" {
 		t.Fatalf("result=%+v", result)
 	}
+	submitted, err := stack.DomainWork.Execute(context.Background(), orquestamcp.MCPDomainWorkToolInputV0{
+		Action: orquestamcp.MCPDomainWorkActionSubmitArtifactV0,
+		ArtifactSubmission: orquestadomainwork.DomainWorkArtifactSubmissionV0{
+			RequestID:      "request-ref-stack-file-artifact-001",
+			CorrelationID:  "corr-stack-file-001",
+			IdempotencyKey: "idem-stack-file-artifact-001",
+			RequestedBy:    "test",
+			DomainRef:      "dominio-demo",
+			JobRef:         result.Job.JobRef,
+			ArtifactRef:    "artifact-ref-stack-file-001",
+			ArtifactType:   "content_package",
+			PayloadFields: []orquestadomainwork.DomainWorkFieldV0{{
+				Name:  "body",
+				Value: "contenido",
+			}},
+			CompleteJob: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("DomainWork.Execute submit: %v", err)
+	}
+	if submitted.Estado != orquestamcp.MCPDomainWorkEstadoOKV0 ||
+		submitted.Receipt == nil ||
+		submitted.Receipt.ReceiptRef == "" {
+		t.Fatalf("submitted=%+v", submitted)
+	}
 }
 
 func TestBuildStackFromEnvV0CableaOPESFallbackParaDomainWorkYDeliveryV0(t *testing.T) {
@@ -392,6 +208,7 @@ func TestBuildStackFromEnvV0CableaOPESFallbackParaDomainWorkYDeliveryV0(t *testi
 	t.Setenv("ORQUESTA_CODEX_COMMAND", filepath.Join(projectDir, "codex-bin"))
 	t.Setenv("ORQUESTA_OPES_BASE_URL", "")
 	t.Setenv("OPES_BASE_URL", "http://127.0.0.1:18082")
+	t.Setenv("ORQUESTA_OPES_TEMPORAL_CONFIRM", "1")
 	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_ENABLED", "")
 	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_DIR", "")
 

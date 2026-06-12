@@ -143,3 +143,62 @@ func TestRuntimeV0PrepareIdleSelfImprovementBatchNoMezclaFalloConRunAceptadoV0(t
 		t.Fatalf("reason mezcla fallo con run aceptado=%q", reason)
 	}
 }
+
+func TestRuntimeV0PrepareIdleSelfImprovementBatchExponeFalloAccionableV0(t *testing.T) {
+	now := time.Date(2026, 6, 12, 10, 0, 0, 0, time.UTC)
+	store := &memoryStateStoreV0{}
+	supervisor := &fakeSupervisorV0{
+		selfResults: []IdleSelfImprovementResultV0{{
+			Accepted:    false,
+			RequestRef:  "request-ref-autoprogramming-backlog-t999",
+			Status:      "error",
+			Message:     "idle_self_improvement_queue_candidate_not_executable",
+			NextActions: []string{"planner_should_skip_control_blocked_backlog_ref"},
+			EvidenceRefs: []string{
+				"evidence-ref-idle-self-improvement-control-blocked",
+			},
+		}},
+	}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:      t.TempDir(),
+		TickInterval:  time.Hour,
+		AuditDisabled: true,
+	}, RuntimeDepsV0{
+		Supervisor: supervisor,
+		StateStore: store,
+		Clock:      fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	runtime.prepareIdleSelfImprovementBatchV0(context.Background(), supervisor, []IdleSelfImprovementRequestV0{{
+		RequestRef: "request-ref-autoprogramming-backlog-t999",
+	}})
+
+	reason := store.last.IdleSelfImprovementReason
+	if !strings.HasPrefix(reason, "error:prepare_failed") ||
+		!strings.Contains(reason, "request_ref=request-ref-autoprogramming-backlog-t999") ||
+		!strings.Contains(reason, "message=idle_self_improvement_queue_candidate_not_executable") ||
+		!strings.Contains(reason, "planner_should_skip_control_blocked_backlog_ref") {
+		t.Fatalf("reason=%q", reason)
+	}
+	if store.last.IdleSelfImprovementOperationalMessage == nil ||
+		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != "prepare_failed" ||
+		store.last.IdleSelfImprovementOperationalMessage.RequestRefs[0] != "request-ref-autoprogramming-backlog-t999" ||
+		store.last.IdleSelfImprovementOperationalMessage.EvidenceRefs[0] != "evidence-ref-idle-self-improvement-control-blocked" {
+		t.Fatalf("operational_message=%+v", store.last.IdleSelfImprovementOperationalMessage)
+	}
+	if len(store.last.RecentErrors) == 0 ||
+		store.last.RecentErrors[0].Code != "idle_self_improvement_prepare_failed" ||
+		store.last.RecentErrors[0].EvidenceRefs[0] != "evidence-ref-idle-self-improvement-control-blocked" {
+		t.Fatalf("recent_errors=%+v", store.last.RecentErrors)
+	}
+
+	runtime.markIdleSelfImprovementCheckedV0(context.Background(), "attempt_blocked", now.Add(time.Second))
+	reason = store.last.IdleSelfImprovementReason
+	if !strings.Contains(reason, "pending=failed_attempt") ||
+		!strings.Contains(reason, "request_ref=request-ref-autoprogramming-backlog-t999") {
+		t.Fatalf("reason tras attempt_blocked=%q", reason)
+	}
+}

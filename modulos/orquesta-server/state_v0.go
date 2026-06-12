@@ -91,6 +91,7 @@ type StateV0 struct {
 	ExternalBridgeErrorTicks              int                         `json:"external_bridge_error_ticks,omitempty"`
 	ExternalBridgeFilters                 []string                    `json:"external_bridge_filters,omitempty"`
 	ExternalBridgeCounters                map[string]int              `json:"external_bridge_counters,omitempty"`
+	ExternalBridgeEvidenceRefs            []string                    `json:"external_bridge_evidence_refs,omitempty"`
 	SelfWatchdogStatus                    string                      `json:"self_watchdog_status,omitempty"`
 	SelfWatchdogReason                    string                      `json:"self_watchdog_reason,omitempty"`
 	SelfWatchdogObservedAt                string                      `json:"self_watchdog_observed_at,omitempty"`

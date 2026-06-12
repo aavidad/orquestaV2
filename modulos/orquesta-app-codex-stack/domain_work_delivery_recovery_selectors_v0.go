@@ -44,7 +44,8 @@ func domainWorkRecoveryDirectSubmitEligibleV0(
 		return false
 	}
 	return stringInDrainSetV0(run.StoppedAgents, agentRef) ||
-		stringInDrainSetV0(run.ConfirmedStoppedAgents, agentRef)
+		stringInDrainSetV0(run.ConfirmedStoppedAgents, agentRef) ||
+		stringInDrainSetV0(run.LostAgents, agentRef)
 }
 
 func domainWorkRecoveryAgentIsAssessmentV0(agentRef string) bool {

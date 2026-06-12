@@ -9,8 +9,8 @@ func codexDeliveryObservationAgentEligibleV0(
 	if !codexDeliveryObservationAgentMatchesWaitAgentRefsV0(request, agentRef) {
 		return false
 	}
-	return stringInCodexDeliverySetV0(request.Run.Agents, agentRef) &&
-		stringInCodexDeliverySetV0(request.Run.StartedAgents, agentRef) &&
+	return (stringInCodexDeliverySetV0(request.Run.Agents, agentRef) ||
+		stringInCodexDeliverySetV0(request.Run.StartedAgents, agentRef)) &&
 		!stringInCodexDeliverySetV0(request.Run.FailedAgents, agentRef)
 }
 

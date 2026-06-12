@@ -99,6 +99,7 @@ type ServerPublicStatusV0 struct {
 	ExternalBridgeErrorTicks              int                         `json:"external_bridge_error_ticks,omitempty"`
 	ExternalBridgeFilters                 []string                    `json:"external_bridge_filters,omitempty"`
 	ExternalBridgeCounters                map[string]int              `json:"external_bridge_counters,omitempty"`
+	ExternalBridgeEvidenceRefs            []string                    `json:"external_bridge_evidence_refs,omitempty"`
 	SelfWatchdogStatus                    string                      `json:"self_watchdog_status,omitempty"`
 	SelfWatchdogReason                    string                      `json:"self_watchdog_reason,omitempty"`
 	SelfWatchdogObservedAt                string                      `json:"self_watchdog_observed_at,omitempty"`
@@ -227,6 +228,7 @@ func NewServerPublicStatusV0(state StateV0) ServerPublicStatusV0 {
 		ExternalBridgeErrorTicks:              state.ExternalBridgeErrorTicks,
 		ExternalBridgeFilters:                 compactConfigStringsV0(state.ExternalBridgeFilters),
 		ExternalBridgeCounters:                copyServerIntMapV0(state.ExternalBridgeCounters),
+		ExternalBridgeEvidenceRefs:            compactConfigStringsV0(state.ExternalBridgeEvidenceRefs),
 		SelfWatchdogStatus:                    strings.TrimSpace(state.SelfWatchdogStatus),
 		SelfWatchdogReason:                    strings.TrimSpace(state.SelfWatchdogReason),
 		SelfWatchdogObservedAt:                strings.TrimSpace(state.SelfWatchdogObservedAt),

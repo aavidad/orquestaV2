@@ -4228,6 +4228,17 @@ Rework de reemplazo 2026-05-27:
 mantiene la fusion con T256 canonico, no crea owner nuevo para el alias
 `server-shutdown-usecase-file-split-before-growth` y resuelve el contexto
 `ref_only` por lectura local, evidencia ACK y prueba obligatoria pasada.
+Revalidacion OrquestaV2 2026-06-11:
+`agent-ref-assessment-task-autoprogramming-fe9cf6f32e89-g01-d18f387e937eb820ba9d7cf0b788b9a3`
+mantiene T256 como owner canonico, conserva la absorcion del alias
+`server-shutdown-usecase-file-split-before-growth`, separa la validacion de
+dependencias de la fachada `ShutdownServerV0` y resuelve el contexto
+obligatorio `ref_only` mediante lectura local del paquete y fuentes vigentes.
+Revalidacion OrquestaV2 2026-06-11 retry b1c7:
+`agent-ref-task-autoprogramming-f02e03774215-g01` conserva la fusion con T256
+canonico, no abre owner nuevo para el alias `before-growth` y anade cobertura
+del parser para estados fechados (`Estado 2026-..:`/`Cierre local 2026-..:`),
+evitando que el scanner trate notas cerradas como secciones pendientes.
 
 Duplicaciones a evitar:
 
@@ -4987,6 +4998,36 @@ Duplicaciones a evitar:
   siguen ahi.
 - No duplicar T253/T255/T256/T257/T258: los splits concretos recientes ya tienen
   owner local y test asociado.
+
+## Priorizacion scanner 2026-06-11 T256 burst 002
+
+Backlog asociado: `T256 server-shutdown-usecase-file-split`.
+
+Prioridad alta:
+
+- Cerrar el paquete `agent-ref-task-autoprogramming-7a851a71f125-g01` como
+  revalidacion del owner canonico T256, no como nuevo owner para el alias
+  `server-shutdown-usecase-file-split-before-growth`.
+- Cerrar tambien el retry f39e
+  `agent-ref-task-autoprogramming-510467d5758e-g01` como revalidacion cubierta
+  del mismo owner canonico, sin convertir `worktree_ref` ni `branch_ref` en
+  rutas o nombres Git.
+- Mantener el split dentro de `orquesta-server-shutdown` y el wiring opcional
+  en `cmd/orquesta-server`; el modulo neutral sigue coordinando por puertos y
+  no mata procesos ni importa runtime concreto, Codex, MCP, web, DB,
+  filesystem ni `cmd`.
+- Conservar `worktree_ref` y `branch_ref` como refs opacas y resolver el
+  contexto obligatorio `ref_only` mediante lectura local y evidencia en ACK.
+
+Duplicaciones a evitar:
+
+- No duplicar T256: el alias `before-growth` queda absorbido por el owner
+  canonico y solo se refuerza con una prueba de presupuesto de ficheros Go.
+- No duplicar T30/T225/T239/T199/T217: checkpoint cooperativo, escalado
+  guardian, correlacion de ACK, catalogo de errores y politica de senales siguen
+  en sus owners vecinos.
+- No duplicar T52/T54/T90/T242: splits de app-director-service, stack Codex,
+  residuo general y supervisor residente no pertenecen a este cierre local.
 
 ## Priorizacion T257 2026-05-27 burst 003 7caabb
 

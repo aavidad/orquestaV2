@@ -76,7 +76,16 @@ func TestExternalBridgeLoopObserverRecibeLifecycleCompactoV0(t *testing.T) {
 	}
 
 	runExternalBridgeLoopV0(context.Background(), config, nil, func(context.Context) (any, error) {
-		return opesDrainSummaryV0{Seen: 2, Submitted: 0, Skipped: 2}, nil
+		return opesRegistryFinalPkgSummaryV0{
+			Seen:                 2,
+			Submitted:            0,
+			Skipped:              2,
+			CompletedNonTerminal: 1,
+			CompletedNonTerminalRefs: []opesRegistryFinalPkgCompletionDriftV0{{
+				RunRef: "run-ref-opes-a1-t002-finalpkg-20260612",
+				Reason: "package_complete_run_non_terminal",
+			}},
+		}, nil
 	})
 
 	if len(events) < 4 {
@@ -85,6 +94,9 @@ func TestExternalBridgeLoopObserverRecibeLifecycleCompactoV0(t *testing.T) {
 	lastTick := events[2]
 	if lastTick.Status != "idle" ||
 		lastTick.Counters["seen"] != 2 ||
+		lastTick.Counters["completed_nonterminal"] != 1 ||
+		len(lastTick.EvidenceRefs) != 1 ||
+		lastTick.EvidenceRefs[0] != "run-ref-opes-a1-t002-finalpkg-20260612" ||
 		!strings.Contains(strings.Join(lastTick.FilterSummary, ","), "job_ref=configured") {
 		t.Fatalf("last_tick=%+v", lastTick)
 	}

@@ -209,7 +209,8 @@ func TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaDeReviewAReplanSinTe
 	}
 	replanStep := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-replan-or-close")
 	if state.ActiveStepID != "step-replan-or-close" ||
-		replanStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 {
+		replanStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
+		!serviceStringInSetV0(replanStep.AcceptedReviewRefs, fixture.AcceptedReviewRef) {
 		t.Fatalf("state=%+v replanStep=%+v", state, replanStep)
 	}
 }

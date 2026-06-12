@@ -32,14 +32,15 @@ func codexDirectorPrepareWorktreeIsolationV0(
 	isolation, issues := orquestaruntimeworktree.PrepareIsolatedWorktreeV0(
 		ctx,
 		orquestaruntimeworktree.WorktreeIsolationRequestV0{
-			IsolationRef:   codexDirectorDefaultRefV0("", "worktree-isolation", config.Wave.WaveRef),
-			ProjectRef:     config.ProjectRef,
-			WorktreeRef:    config.WorktreeRef,
-			BranchRef:      config.BranchRef,
-			ProjectWorkDir: config.Wave.ProjectWorkDir,
-			Isolated:       true,
-			BaselineRef:    codexDirectorDefaultRefV0("", "worktree-baseline", config.Wave.WaveRef),
-			IgnorePrefixes: codexDirectorWorktreeIgnorePrefixesV0(config),
+			IsolationRef:         codexDirectorDefaultRefV0("", "worktree-isolation", config.Wave.WaveRef),
+			ProjectRef:           config.ProjectRef,
+			WorktreeRef:          config.WorktreeRef,
+			BranchRef:            config.BranchRef,
+			ProjectWorkDir:       config.Wave.ProjectWorkDir,
+			Isolated:             true,
+			BaselineRef:          codexDirectorDefaultRefV0("", "worktree-baseline", config.Wave.WaveRef),
+			IgnorePrefixes:       codexDirectorWorktreeIgnorePrefixesV0(config),
+			AllowPartialSnapshot: true,
 		},
 	)
 	summary := codexDirectorWorktreeIsolationSummaryFromV0(isolation)

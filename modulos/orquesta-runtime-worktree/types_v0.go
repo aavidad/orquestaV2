@@ -63,6 +63,7 @@ type WorktreeSnapshotV0 struct {
 	SnapshotRef       string                                    `json:"snapshot_ref"`
 	ReadBudget        WorktreeSnapshotReadBudgetV0              `json:"read_budget,omitempty"`
 	Files             []WorktreeSnapshotFileV0                  `json:"files"`
+	OmittedPaths      []string                                  `json:"omitted_paths,omitempty"`
 	ExclusionReceipts []WorktreeLocalArtifactExclusionReceiptV0 `json:"exclusion_receipts,omitempty"`
 }
 
@@ -73,6 +74,7 @@ type WorktreeSnapshotRequestV0 struct {
 	MaxFiles       int      `json:"max_files,omitempty"`
 	MaxFileBytes   int64    `json:"max_file_bytes,omitempty"`
 	MaxTotalBytes  int64    `json:"max_total_bytes,omitempty"`
+	AllowPartial   bool     `json:"allow_partial,omitempty"`
 }
 
 type WorktreeVerifyRequestV0 struct {
@@ -84,6 +86,7 @@ type WorktreeVerifyRequestV0 struct {
 	MaxSnapshotFiles           int                `json:"max_snapshot_files,omitempty"`
 	MaxSnapshotFileBytes       int64              `json:"max_snapshot_file_bytes,omitempty"`
 	MaxSnapshotTotalBytes      int64              `json:"max_snapshot_total_bytes,omitempty"`
+	AllowPartialSnapshot       bool               `json:"allow_partial_snapshot,omitempty"`
 	StrictGoLineBudget         bool               `json:"strict_go_line_budget,omitempty"`
 	MaxGoFileLines             int                `json:"max_go_file_lines,omitempty"`
 	AcceptedPartitionFollowups []string           `json:"accepted_partition_followups,omitempty"`

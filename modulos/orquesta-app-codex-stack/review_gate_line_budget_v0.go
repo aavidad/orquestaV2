@@ -94,6 +94,7 @@ func (provider codexStackReviewGateLineBudgetEvidenceV0) destructiveIssuesV0(
 		MaxSnapshotFiles:      provider.Config.SnapshotReadBudget.MaxFiles,
 		MaxSnapshotFileBytes:  provider.Config.SnapshotReadBudget.MaxFileBytes,
 		MaxSnapshotTotalBytes: provider.Config.SnapshotReadBudget.MaxTotalBytes,
+		AllowPartialSnapshot:  true,
 		StrictGoLineBudget:    policy.StrictGoLineBudgetForDeliveryV0(ack, descriptor.Spec.AgentPacket),
 		MaxGoFileLines:        policy.MaxGoFileLinesV0(),
 	})

@@ -17,12 +17,32 @@ type domainWorkFileJobRecordV0 struct {
 	Fingerprint string
 }
 
+type domainWorkFileArtifactKeyV0 struct {
+	DomainRef      string
+	IdempotencyKey string
+}
+
+type domainWorkFileArtifactRecordV0 struct {
+	Submission  orquestadomainwork.DomainWorkArtifactSubmissionV0
+	Receipt     orquestadomainwork.DomainWorkArtifactReceiptV0
+	Fingerprint string
+}
+
 func domainWorkFileJobKeyFromRequestV0(
 	request orquestadomainwork.DomainWorkJobRequestV0,
 ) domainWorkFileJobKeyV0 {
 	return domainWorkFileJobKeyV0{
 		DomainRef:      request.DomainRef,
 		IdempotencyKey: request.IdempotencyKey,
+	}
+}
+
+func domainWorkFileArtifactKeyFromSubmissionV0(
+	submission orquestadomainwork.DomainWorkArtifactSubmissionV0,
+) domainWorkFileArtifactKeyV0 {
+	return domainWorkFileArtifactKeyV0{
+		DomainRef:      submission.DomainRef,
+		IdempotencyKey: submission.IdempotencyKey,
 	}
 }
 

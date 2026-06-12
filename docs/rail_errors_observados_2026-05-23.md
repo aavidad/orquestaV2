@@ -195,6 +195,28 @@ Estado: registrado; no abre rail nuevo.
 ```
 
 ```text
+ID: FILE-BUDGET-SERVER-SHUTDOWN-T256-REVALIDACION-20260611-D18F
+Fecha: 2026-06-11
+Sintoma: OrquestaV2 vuelve a observar
+`server-shutdown-usecase-file-split-before-growth` con contexto obligatorio
+`ref_only`, write-set cerrado y T256 ya fusionado con el owner canonico.
+Campo: presupuesto de fichero, shutdown hexagonal, ACK estricto y contexto
+required ref_only.
+Payload minimo: paquete
+`agent-ref-assessment-task-autoprogramming-fe9cf6f32e89-g01-d18f387e937eb820ba9d7cf0b788b9a3`
+de
+`request-ref-autoprogramming-backlog-t256-server-shutdown-usecase-file-split-before-growth-079d82a9-retry-659cd992a1204bf061b34ebb4ebd653f0ec1e531ef16e95b8a72d7bf179bae58`,
+con `required_ref_action=ack_evidence_required` y prueba obligatoria
+`go test -count=1 ./modulos/orquesta-server-shutdown ./cmd/orquesta-server`.
+Decision: conservar T256 como cierre canonico de `orquesta-server-shutdown`,
+no abrir owner nuevo para el alias `before-growth`, mantener
+`ShutdownServerV0` como fachada y separar validacion de dependencias en fichero
+propio del modulo.
+Test futuro: `go test -count=1 ./modulos/orquesta-server-shutdown ./cmd/orquesta-server`.
+Estado: revalidado por T256; contexto `ref_only` debe resolverse en ACK.
+```
+
+```text
 ID: BACKLOG-SCAN-COVERED-NOOP-20260527-043
 Fecha: 2026-05-27
 Sintoma: retry 4da183 burst 002 del scanner de automejora repite contexto
@@ -220,6 +242,57 @@ Evidencia ACK: lectura local del paquete, `AGENTS.md`, `README.md`,
 matriz de smokes, backlog vivo y shards de rail confirma que el retry no aporta
 frontera nueva.
 Estado: registrado, cubierto por owners pendientes
+```
+
+```text
+ID: FILE-BUDGET-SERVER-SHUTDOWN-T256-REWORK-20260611-7A851
+Fecha: 2026-06-11
+Sintoma: OrquestaV2 relanza el alias
+`server-shutdown-usecase-file-split-before-growth` con contexto obligatorio
+`ref_only`, write-set cerrado y T256 ya cerrado como owner canonico.
+Campo: `modulos/orquesta-server-shutdown/shutdown_v0.go` y presupuesto de
+ficheros Go del modulo.
+Payload minimo: paquete `agent-ref-task-autoprogramming-7a851a71f125-g01` con
+`required_ref_action=ack_evidence_required`, prueba obligatoria focal y refs de
+worktree/branch opacas.
+Decision: no abrir owner nuevo para el alias `before-growth`; conservar T256
+como cierre canonico, resolver `ref_only` por lectura local/evidencia ACK y
+anadir guarda de no-crecimiento en `architecture_v0_test.go`.
+Test futuro: `go test -count=1 ./modulos/orquesta-server-shutdown ./cmd/orquesta-server`.
+Estado: cerrado por revalidacion T256
+```
+
+```text
+ID: FILE-BUDGET-SERVER-SHUTDOWN-T256-REWORK-20260611-F02E
+Fecha: 2026-06-11
+Sintoma: retry OrquestaV2 vuelve a materializar
+`server-shutdown-usecase-file-split-before-growth` pese a T256 cerrado.
+Campo: parser de backlog/automejora en `cmd/orquesta-server` y documentos de
+rail que usan estado fechado.
+Payload minimo: paquete `agent-ref-task-autoprogramming-f02e03774215-g01` con
+contexto `ref_only` obligatorio y write-set cerrado.
+Decision: conservar el cierre canonico T256 y hacer que el planner reconozca
+`Estado 2026-..:`/`Cierre local 2026-..:` como estado local fechado antes de
+generar nuevas peticiones.
+Test futuro: `go test -count=1 ./modulos/orquesta-server-shutdown ./cmd/orquesta-server`.
+Estado: cerrado por revalidacion T256
+```
+
+```text
+ID: FILE-BUDGET-SERVER-SHUTDOWN-T256-REWORK-20260611-510467
+Fecha: 2026-06-11
+Sintoma: retry OrquestaV2 f39e vuelve a materializar el alias
+`server-shutdown-usecase-file-split-before-growth` con contexto obligatorio
+`ref_only`, aunque T256 ya esta cerrado.
+Campo: `orquesta-server-shutdown`, presupuesto de ficheros Go y planner de
+automejora que no debe abrir owner nuevo para aliases absorbidos.
+Payload minimo: paquete `agent-ref-task-autoprogramming-510467d5758e-g01` con
+write-set cerrado, prueba obligatoria focal y refs de worktree/branch opacas.
+Decision: conservar T256 como cierre canonico, no tocar codigo ya separado,
+resolver `ref_only` por lectura local/evidencia ACK y usar la guarda existente
+de `architecture_v0_test.go` como prueba de no-crecimiento.
+Test futuro: `go test -count=1 ./modulos/orquesta-server-shutdown ./cmd/orquesta-server`.
+Estado: cerrado por revalidacion T256
 ```
 
 ```text

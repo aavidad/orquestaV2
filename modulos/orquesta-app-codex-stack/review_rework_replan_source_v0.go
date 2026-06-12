@@ -61,6 +61,9 @@ func (source ReviewReworkReplanSourceV0) BuildReviewReworkReplanPlansV0(
 		if reviewReworkReplanSkipSoftRailOnlyV0(request, rework, result) {
 			continue
 		}
+		if reviewReworkReplanSkipExternalRailDocsLoopV0(rework, descriptors) {
+			continue
+		}
 		plan := source.planForReworkV0(request, rework, result, descriptors)
 		plan = reviewReworkPlanWithTaskBoundaryV0(request, plan, descriptors)
 		if strings.TrimSpace(plan.CandidateRef) == "" {

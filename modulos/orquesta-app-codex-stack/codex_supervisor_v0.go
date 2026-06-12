@@ -13,11 +13,15 @@ const DefaultCodexSupervisorContinueMessageV0 = "sigue"
 type CodexSupervisorRuntimeStateV0 string
 
 const (
-	CodexSupervisorRuntimePendingV0 CodexSupervisorRuntimeStateV0 = "pending"
-	CodexSupervisorRuntimeRunningV0 CodexSupervisorRuntimeStateV0 = "running"
-	CodexSupervisorRuntimeStoppedV0 CodexSupervisorRuntimeStateV0 = "stopped"
-	CodexSupervisorRuntimeDoneV0    CodexSupervisorRuntimeStateV0 = "done"
-	CodexSupervisorRuntimeFailedV0  CodexSupervisorRuntimeStateV0 = "failed"
+	CodexSupervisorRuntimePendingV0       CodexSupervisorRuntimeStateV0 = "pending"
+	CodexSupervisorRuntimeRunningV0       CodexSupervisorRuntimeStateV0 = "running"
+	CodexSupervisorRuntimeRunningLiveV0   CodexSupervisorRuntimeStateV0 = "running_live"
+	CodexSupervisorRuntimeWaitingOutboxV0 CodexSupervisorRuntimeStateV0 = "waiting_outbox"
+	CodexSupervisorRuntimeStalledV0       CodexSupervisorRuntimeStateV0 = "stalled"
+	CodexSupervisorRuntimeLaunchFailedV0  CodexSupervisorRuntimeStateV0 = "launch_failed"
+	CodexSupervisorRuntimeStoppedV0       CodexSupervisorRuntimeStateV0 = "stopped"
+	CodexSupervisorRuntimeDoneV0          CodexSupervisorRuntimeStateV0 = "done"
+	CodexSupervisorRuntimeFailedV0        CodexSupervisorRuntimeStateV0 = "failed"
 )
 
 type CodexSupervisorStopReasonV0 string
@@ -44,6 +48,7 @@ type CodexSupervisorRuntimePortV0 = CodexSupervisorAgentLifecyclePortV0
 type CodexSupervisorRuntimeSnapshotV0 struct {
 	Status       CodexSupervisorRuntimeStateV0                 `json:"status"`
 	SessionRef   string                                        `json:"session_ref,omitempty"`
+	AgentRef     string                                        `json:"agent_ref,omitempty"`
 	ProcessRef   string                                        `json:"process_ref,omitempty"`
 	EvidenceRefs []string                                      `json:"evidence_refs,omitempty"`
 	Diagnostics  []orquestaruncoordinator.RunDrainDiagnosticV0 `json:"diagnostics,omitempty"`
@@ -174,7 +179,7 @@ func codexSupervisorRuntimeDoneV0(state CodexSupervisorRuntimeStateV0) bool {
 
 func codexSupervisorRuntimeFailedV0(state CodexSupervisorRuntimeStateV0) bool {
 	switch strings.TrimSpace(string(state)) {
-	case string(CodexSupervisorRuntimeFailedV0), "error", "errored":
+	case string(CodexSupervisorRuntimeFailedV0), string(CodexSupervisorRuntimeLaunchFailedV0), "error", "errored":
 		return true
 	default:
 		return false

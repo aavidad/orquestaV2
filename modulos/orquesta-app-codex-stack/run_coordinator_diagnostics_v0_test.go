@@ -112,6 +112,27 @@ func TestStackDrainDiagnosticsWithErrorV0UsaRunRefDeRequestSiFinalVacio(t *testi
 	}
 }
 
+func TestCodexStackQueuedRecoveryAdvisoryErrorV0SoloPayloadRecuperable(t *testing.T) {
+	if !codexStackQueuedRecoveryAdvisoryErrorV0(orquestacoreworkflow.OrchestrationCommandErrorV0{
+		Code:  orquestacoreworkflow.ErrTransicionInvalidaV0,
+		Field: "payload.phase_id",
+	}) {
+		t.Fatalf("payload transicion_invalida debe ser advisory en reconciliacion")
+	}
+	if !codexStackQueuedRecoveryAdvisoryErrorV0(orquestacionnucleoapp.ErrorV0{
+		Code:  orquestacionnucleoapp.ErrNucleoOrquestacionInvalidoV0,
+		Field: "payload",
+	}) {
+		t.Fatalf("payload nucleo_orquestacion_invalido debe ser advisory en reconciliacion")
+	}
+	if codexStackQueuedRecoveryAdvisoryErrorV0(orquestacoreworkflow.OrchestrationCommandErrorV0{
+		Code:  orquestacoreworkflow.ErrTransicionInvalidaV0,
+		Field: "run_ref",
+	}) {
+		t.Fatalf("refs imposibles no deben degradarse a advisory")
+	}
+}
+
 func stackDiagnosticsHasV0(
 	diagnostics []orquestaruncoordinator.RunDrainDiagnosticV0,
 	kind string,

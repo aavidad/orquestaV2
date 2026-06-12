@@ -199,6 +199,7 @@ func daemonStartEnvPrefixRulesV0() []daemonStartEnvPrefixRuleV0 {
 		{"ORQUESTA_DIRECTOR_", "director"},
 		{"ORQUESTA_OPES_", "opes_bridge"},
 		{"ORQUESTA_DOMAIN_WORK_", "domain_work"},
+		{"ORQUESTA_EGRESS_", "egress_sanitizer"},
 		{"ORQUESTA_REQUIRED_TEST_", "required_tests"},
 		{"ORQUESTA_REVIEW_", "review"},
 	}

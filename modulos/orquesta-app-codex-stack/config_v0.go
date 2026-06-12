@@ -34,6 +34,7 @@ type ConfigV0 struct {
 	Codex                    CodexRuntimeConfigV0
 	Gemini                   GeminiRuntimeConfigV0
 	Claude                   ClaudeRuntimeConfigV0
+	EgressSanitizer          EgressSanitizerConfigV0
 	Capacity                 CapacityConfigV0
 	ReviewGate               ReviewGateConfigV0
 	RequiredTests            orquestacionnucleoapp.RequiredTestRunnerPortV0
@@ -44,6 +45,7 @@ type ConfigV0 struct {
 	RuntimeModels            orquestaruntime.RuntimeModelManagerPortV0
 	DecisionCouncil          DecisionCouncilConfigV0
 	DomainDelivery           DomainWorkDeliveryBridgeConfigV0
+	ExternalWorkRunGuard     ExternalWorkRunProjectWorkDirGuardConfigV0
 }
 
 type DomainWorkRequiredTestConfigV0 struct {

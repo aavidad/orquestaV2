@@ -46,6 +46,7 @@ type MCPRunSupervisorToolInputV0 struct {
 type MCPRunSupervisorSnapshotV0 struct {
 	Status       string   `json:"status,omitempty"`
 	SessionRef   string   `json:"session_ref,omitempty"`
+	AgentRef     string   `json:"agent_ref,omitempty"`
 	ProcessRef   string   `json:"process_ref,omitempty"`
 	EvidenceRefs []string `json:"evidence_refs,omitempty"`
 }

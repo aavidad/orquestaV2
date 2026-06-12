@@ -95,6 +95,18 @@ func applyPriorityCommandV0(
 	if command.FairnessGroupRef != "" {
 		candidate.FairnessGroupRef = command.FairnessGroupRef
 	}
+	if !orquestarunqueue.RunQueueAttemptGroupEmptyV0(command.AttemptGroup) {
+		candidate.AttemptGroup = command.AttemptGroup
+	}
+	if command.ParentRunRef != "" {
+		candidate.ParentRunRef = command.ParentRunRef
+	}
+	if command.SupersedesRunRef != "" {
+		candidate.SupersedesRunRef = command.SupersedesRunRef
+	}
+	if command.RescueReason != "" {
+		candidate.RescueReason = command.RescueReason
+	}
 	candidate.PriorityScore = command.PriorityScore
 	if !command.UpdatedAt.IsZero() {
 		candidate.UpdatedAt = command.UpdatedAt
@@ -108,6 +120,7 @@ func applyPriorityCommandV0(
 func cloneRunSchedulingCandidateV0(
 	candidate orquestarunqueue.RunSchedulingCandidateV0,
 ) orquestarunqueue.RunSchedulingCandidateV0 {
+	candidate.AttemptGroup = orquestarunqueue.NormalizeRunQueueAttemptGroupV0(candidate.AttemptGroup)
 	candidate.EvidenceRefs = append([]string(nil), candidate.EvidenceRefs...)
 	candidate.WorksetClaims = cloneRunMemoryWorksetClaimsV0(candidate.WorksetClaims)
 	return candidate

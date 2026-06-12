@@ -160,8 +160,12 @@ func TestOperationalDirectorOlaCohorteAmpliaOfflineScopeReviewTestsClose(t *test
 		replanStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
 		!serviceStringInSetV0(reviewStep.DeliveryRefs, childA.DeliveryRef) ||
 		!serviceStringInSetV0(reviewStep.DeliveryRefs, childB.DeliveryRef) ||
+		!serviceStringInSetV0(testsStep.AcceptedReviewRefs, childA.AcceptedRef) ||
+		!serviceStringInSetV0(testsStep.AcceptedReviewRefs, childB.AcceptedRef) ||
 		!serviceStringInSetV0(testsStep.RequiredTestEvidenceRefs, childA.TestEvidenceRef) ||
-		!serviceStringInSetV0(testsStep.RequiredTestEvidenceRefs, childB.TestEvidenceRef) {
+		!serviceStringInSetV0(testsStep.RequiredTestEvidenceRefs, childB.TestEvidenceRef) ||
+		!serviceStringInSetV0(replanStep.AcceptedReviewRefs, childA.AcceptedRef) ||
+		!serviceStringInSetV0(replanStep.AcceptedReviewRefs, childB.AcceptedRef) {
 		t.Fatalf("state=%+v review=%+v tests=%+v replan=%+v", state, reviewStep, testsStep, replanStep)
 	}
 
@@ -237,7 +241,8 @@ func TestUpdateOperationalDirectorPlanStateAfterLoopV0AvanzaDeReviewATestsRequer
 	}
 	if testsStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
 		!serviceStringInSetV0(testsStep.BlockerRefs, "required-tests-pending") ||
-		!serviceStringInSetV0(testsStep.TaskRefs, fixture.TaskRef) {
+		!serviceStringInSetV0(testsStep.TaskRefs, fixture.TaskRef) ||
+		!serviceStringInSetV0(testsStep.AcceptedReviewRefs, fixture.AcceptedReviewRef) {
 		t.Fatalf("testsStep=%+v", testsStep)
 	}
 }

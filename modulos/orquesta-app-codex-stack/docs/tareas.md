@@ -969,3 +969,32 @@ Reglas cerradas:
   persistidas;
 - no usa filtros de contenido para decidir si un agente vale: conserva el
   trabajo en stores/outbox y deja rework/cierre al Director.
+
+## APP-CODEX-STACK-029
+
+Objetivo: centralizar runtime por proveedor y egress sanitizer en la
+composicion, dejando OpenAI Privacy Filter como modelo local opt-in.
+
+Estado: hecho local.
+
+Trabajo aplicado:
+
+- `EgressSanitizerConfigV0`;
+- `PrivacyFilterModelConfigV0`;
+- `RuntimeProviderConfigV0`;
+- `CanonicalRuntimeProviderConfigsV0`;
+- inyeccion automatica de `LocalSensitiveDataSanitizerV0` solo si la config
+  canonica esta activa y no hay puerto explicito;
+- proyeccion de providers con flags/refs compactas, sin filtrar rutas crudas;
+- runbooks de operacion para configuracion y saneamiento.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-context`;
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestLocalSensitiveDataSanitizerV0|Test.*Sanitizer|Test.*Egress'`.
+
+Reglas cerradas:
+
+- no mueve proveedor, modelo, HOME, transporte ni OpenAI al nucleo;
+- no convierte el sanitizer en rail de contenido o bloqueo por palabras;
+- no toca OPES productivo ni procesos externos.

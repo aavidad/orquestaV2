@@ -88,7 +88,11 @@ func AutoprogrammingReviewGateIssueCodeIsAdvisoryV0(code string) bool {
 			stem == "ack_pending_rail" ||
 			stem == "ack_files_mismatch" ||
 			stem == "go_file_line_budget_exceeded" ||
-			stem == "replaced_large_delta" {
+			stem == "replaced_large_delta" ||
+			stem == "worktree_snapshot_file_too_large" ||
+			stem == "worktree_snapshot_too_many_files" ||
+			stem == "worktree_snapshot_too_large" ||
+			stem == "worktree_snapshot_unreadable" {
 			return true
 		}
 	}

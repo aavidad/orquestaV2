@@ -35,3 +35,25 @@ func TestServerShutdownModuleV0NoImportaAdaptadoresConcretos(t *testing.T) {
 		}
 	}
 }
+
+func TestServerShutdownModuleV0MantieneFicherosGoBajoPresupuesto(t *testing.T) {
+	const maxLines = 299
+
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+	for _, file := range files {
+		raw, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatalf("read %s: %v", file, err)
+		}
+		lines := strings.Count(string(raw), "\n")
+		if len(raw) > 0 && raw[len(raw)-1] != '\n' {
+			lines++
+		}
+		if lines > maxLines {
+			t.Fatalf("%s tiene %d lineas; presupuesto maximo %d", file, lines, maxLines)
+		}
+	}
+}

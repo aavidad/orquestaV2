@@ -34,6 +34,9 @@ func opesDrainDestinationPolicyFromEnvV0(
 	if err != nil {
 		return opesDrainDestinationPolicyV0{}, err
 	}
+	if err := opesBridgeRequireRealOPESConfirmationV0(opes, dryRun); err != nil {
+		return opesDrainDestinationPolicyV0{}, err
+	}
 	evidenceRef := strings.TrimSpace(os.Getenv(envOPESBridgeDestinationEvidenceV0))
 	if needsProductiveEvidenceV0(opes, orquesta) && !compactEvidenceRefV0(evidenceRef) {
 		return opesDrainDestinationPolicyV0{}, fmt.Errorf("opes_destination_evidence_ref_required")
@@ -105,7 +108,18 @@ func opesBridgeHostIsLoopbackV0(host string) bool {
 		return true
 	}
 	ip := net.ParseIP(host)
-	return ip != nil && (ip.IsLoopback() || ip.IsUnspecified())
+	return ip != nil && ip.IsLoopback()
+}
+
+func opesBridgeRequireRealOPESConfirmationV0(destination opesDrainDestinationV0, dryRun bool) error {
+	if dryRun || destination.Category == "dry_run" {
+		return nil
+	}
+	if strings.TrimSpace(os.Getenv(envOPESBridgeProductiveConfirmV0)) == "1" ||
+		strings.TrimSpace(os.Getenv(envOPESTemporalConfirmV0)) == "1" {
+		return nil
+	}
+	return fmt.Errorf("opes_destination_confirmation_required")
 }
 
 func needsProductiveEvidenceV0(destinations ...opesDrainDestinationV0) bool {

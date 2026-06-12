@@ -148,12 +148,30 @@ func (stack StackV0) recoverQueuedStoppedCandidateV0(
 		run = recovered
 	}
 	if err := stack.recoverQueuedStoppedAgentProgressV0(ctx, command, run); err != nil {
+		if codexStackQueuedRecoveryAdvisoryErrorV0(err) {
+			return stack.recoverQueuedRunControlV0(ctx, command, candidate, state)
+		}
 		return err
 	}
-	if err := stack.completeQueuedRunControlIfStopHasNoPendingAgentsV0(ctx, command, candidate, state, run); err != nil {
+	completed, err := stack.completeQueuedRunControlIfStopHasNoPendingAgentsV0(ctx, command, candidate, state, run)
+	if err != nil || completed {
 		return err
 	}
 	return stack.recoverQueuedRunControlV0(ctx, command, candidate, state)
+}
+
+func codexStackQueuedRecoveryAdvisoryErrorV0(err error) bool {
+	var workflowErr orquestacoreworkflow.OrchestrationCommandErrorV0
+	if errors.As(err, &workflowErr) {
+		return workflowErr.Code == orquestacoreworkflow.ErrTransicionInvalidaV0 &&
+			strings.HasPrefix(strings.TrimSpace(workflowErr.Field), "payload")
+	}
+	var coreErr orquestacionnucleoapp.ErrorV0
+	if errors.As(err, &coreErr) {
+		return coreErr.Code == orquestacionnucleoapp.ErrNucleoOrquestacionInvalidoV0 &&
+			strings.HasPrefix(strings.TrimSpace(coreErr.Field), "payload")
+	}
+	return false
 }
 
 func (stack StackV0) completeQueuedRunControlIfStopHasNoPendingAgentsV0(
@@ -162,20 +180,20 @@ func (stack StackV0) completeQueuedRunControlIfStopHasNoPendingAgentsV0(
 	candidate orquestarunqueue.RunSchedulingCandidateV0,
 	state orquestaruncontrol.RunControlStateV0,
 	run orquestacoreworkflow.OrchestrationRunV0,
-) error {
-	if strings.TrimSpace(candidate.Status) != orquestarunqueue.RunStatusRunningV0 {
-		return nil
+) (bool, error) {
+	if !codexStackQueueStatusCanCompleteRunControlStopV0(candidate.Status, state.Status) {
+		return false, nil
 	}
 	evaluation := orquestaruncontrol.EvaluateRunControlV0(state)
 	if !evaluation.StopAgentsAllowed || len(stackDrainPendingStartedAgentRefsV0(run)) > 0 {
-		return nil
+		return false, nil
 	}
 	if pending, err := stack.domainWorkRunHasPendingSubmissionWithoutAcceptedReceiptV0(ctx, run); err != nil || pending {
-		return err
+		return false, err
 	}
 	target, ok := codexStackTerminalStatusForRunControlRequestV0(state.Status)
 	if !ok {
-		return nil
+		return false, nil
 	}
 	completed, err := stack.Stores.RunControl.CompleteRunControlV0(ctx, orquestaruncontrol.CompleteRunControlCommandV0{
 		RunRef:         candidate.RunRef,
@@ -189,9 +207,36 @@ func (stack StackV0) completeQueuedRunControlIfStopHasNoPendingAgentsV0(
 		),
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
-	return stack.syncQueuedRunControlBlockedCandidateV0(ctx, command, candidate, completed)
+	if err := stack.syncQueuedRunControlBlockedCandidateV0(ctx, command, candidate, completed); err != nil {
+		return true, err
+	}
+	return true, nil
+}
+
+func codexStackQueueStatusCanCompleteRunControlStopV0(
+	queueStatus string,
+	controlStatus orquestaruncontrol.RunControlStatusV0,
+) bool {
+	switch orquestaruncontrol.NormalizeRunControlStatusV0(controlStatus) {
+	case orquestaruncontrol.RunControlStatusStopRequestedV0:
+		switch strings.TrimSpace(queueStatus) {
+		case orquestarunqueue.RunStatusRunningV0, orquestarunqueue.RunStatusStoppedV0:
+			return true
+		default:
+			return false
+		}
+	case orquestaruncontrol.RunControlStatusCancelRequestedV0:
+		switch strings.TrimSpace(queueStatus) {
+		case orquestarunqueue.RunStatusRunningV0, orquestarunqueue.RunStatusCanceledV0:
+			return true
+		default:
+			return false
+		}
+	default:
+		return false
+	}
 }
 
 func (stack StackV0) completeQueuedRunControlWithoutActiveRunV0(

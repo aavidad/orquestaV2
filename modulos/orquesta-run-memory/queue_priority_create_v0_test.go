@@ -143,3 +143,43 @@ func TestRunMemoryStorePriorityWriterConservaWorksetClaimsV0(t *testing.T) {
 		t.Fatalf("listed=%+v", listed)
 	}
 }
+
+func TestRunMemoryStorePriorityWriterConservaMetadataDeRescateV0(t *testing.T) {
+	store := NewRunMemoryStoreV0()
+	ctx := context.Background()
+	now := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+
+	updated, err := store.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        "run-rescue",
+		QueueRef:      "global",
+		AppRef:        "app",
+		PriorityScore: 50,
+		UpdatedAt:     now,
+		AttemptGroup: orquestarunqueue.RunQueueAttemptGroupV0{
+			ConsumerRef:  "consumer",
+			ObjectiveRef: "objective",
+			WorkItemRef:  "topic-001",
+			WriteSetRefs: []string{"topic/001"},
+		},
+		ParentRunRef:     "run-original",
+		SupersedesRunRef: "run-original",
+		RescueReason:     "estado_incierto",
+	})
+	if err != nil {
+		t.Fatalf("SetRunPriorityV0: %v", err)
+	}
+	updated.AttemptGroup.WriteSetRefs[0] = "mutated"
+
+	listed, err := store.ListRunSchedulingCandidatesV0(ctx, orquestarunqueue.RunQueueReadRequestV0{QueueRef: "global"})
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	if len(listed) != 1 ||
+		listed[0].AttemptGroup.WorkItemRef != "topic-001" ||
+		listed[0].AttemptGroup.WriteSetRefs[0] != "topic/001" ||
+		listed[0].ParentRunRef != "run-original" ||
+		listed[0].SupersedesRunRef != "run-original" ||
+		listed[0].RescueReason != "estado_incierto" {
+		t.Fatalf("listed=%+v", listed)
+	}
+}

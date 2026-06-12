@@ -113,15 +113,19 @@ func waitOPESBridgeLoopDoneV0(
 }
 
 func opesBridgeHasSafeFilterV0(config opesDrainConfigV0) bool {
-	if strings.TrimSpace(os.Getenv(envOPESBridgeAllowUnfilteredV0)) == "1" {
+	if strings.TrimSpace(os.Getenv(envOPESBridgeAllowUnfilteredV0)) == "1" &&
+		compactEvidenceRefV0(os.Getenv(envOPESBridgeDestinationEvidenceV0)) {
 		return true
 	}
-	return strings.TrimSpace(config.JobType) != "" ||
-		strings.TrimSpace(config.JobRef) != "" ||
+	hasHardScope := strings.TrimSpace(config.JobRef) != "" ||
 		strings.TrimSpace(config.ProgramID) != "" ||
 		strings.TrimSpace(config.TopicID) != "" ||
-		strings.TrimSpace(config.CorrelationID) != "" ||
-		len(config.JobTypeSequence) > 0
+		strings.TrimSpace(config.CorrelationID) != ""
+	if len(config.JobTypeSequence) > 0 {
+		return hasHardScope
+	}
+	return strings.TrimSpace(config.JobType) != "" ||
+		hasHardScope
 }
 
 func opesBridgeFilterSummaryV0(config opesDrainConfigV0) []string {

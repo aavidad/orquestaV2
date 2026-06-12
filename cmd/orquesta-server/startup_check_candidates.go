@@ -65,6 +65,14 @@ func (check serverStartupCheckV0) startupCleanupCandidatesV0(
 			})
 			continue
 		}
+		reconciled, ok, err := check.startupPendingStopCandidateV0(ctx, candidate, state)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			cleanup = append(cleanup, reconciled)
+			continue
+		}
 		queueStatus, ok, err := check.startupQueueStatusFromRunStoreV0(ctx, candidate.RunRef)
 		if err != nil {
 			return nil, err
@@ -210,6 +218,11 @@ func (check serverStartupCheckV0) reconcileStartupQueueCandidatesV0(
 		if !entry.QueueDirty || entry.Active {
 			continue
 		}
+		if entry.CompleteControlPending {
+			if err := check.completeStartupRunControlV0(ctx, entry); err != nil {
+				return synced, err
+			}
+		}
 		if err := check.markStartupQueueCandidateTerminalV0(ctx, command, entry.Candidate, entry.QueueStatus); err != nil {
 			return synced, err
 		}
@@ -232,5 +245,44 @@ func startupQueueStatusFromControlV0(status orquestaruncontrol.RunControlStatusV
 		return orquestarunqueue.RunStatusStoppedV0
 	default:
 		return orquestarunqueue.RunStatusStoppedV0
+	}
+}
+
+func (check serverStartupCheckV0) startupPendingStopCandidateV0(
+	ctx context.Context,
+	candidate orquestarunqueue.RunSchedulingCandidateV0,
+	state orquestaruncontrol.RunControlStateV0,
+) (startupCandidateCleanupV0, bool, error) {
+	target, ok := startupCompleteStatusFromPendingControlV0(state.Status)
+	if !ok {
+		return startupCandidateCleanupV0{}, false, nil
+	}
+	ready, err := check.startupCandidateCanBeCompletedByStartupV0(ctx, candidate.RunRef)
+	if err != nil {
+		return startupCandidateCleanupV0{}, false, err
+	}
+	if !ready {
+		return startupCandidateCleanupV0{Candidate: candidate, Active: true}, true, nil
+	}
+	return startupCandidateCleanupV0{
+		Candidate:              candidate,
+		QueueDirty:             true,
+		QueueStatus:            startupQueueStatusFromControlV0(target),
+		CompleteControlStatus:  target,
+		CompleteControlReason:  "shutdown/reload: stop/cancel pendiente sin agentes en vuelo",
+		CompleteControlPending: true,
+	}, true, nil
+}
+
+func startupCompleteStatusFromPendingControlV0(
+	status orquestaruncontrol.RunControlStatusV0,
+) (orquestaruncontrol.RunControlStatusV0, bool) {
+	switch orquestaruncontrol.NormalizeRunControlStatusV0(status) {
+	case orquestaruncontrol.RunControlStatusStopRequestedV0:
+		return orquestaruncontrol.RunControlStatusStoppedV0, true
+	case orquestaruncontrol.RunControlStatusCancelRequestedV0:
+		return orquestaruncontrol.RunControlStatusCanceledV0, true
+	default:
+		return "", false
 	}
 }

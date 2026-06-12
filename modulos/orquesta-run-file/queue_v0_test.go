@@ -82,6 +82,47 @@ func TestRunFileStoreQueuePersistsAfterRecreateV0(t *testing.T) {
 	}
 }
 
+func TestRunFileStoreQueuePersisteMetadataDeRescateV0(t *testing.T) {
+	dir := t.TempDir()
+	store := mustNewRunFileStoreV0(t, dir)
+	ctx := context.Background()
+	now := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+
+	if _, err := store.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        "run-rescue",
+		QueueRef:      "global",
+		AppRef:        "app",
+		PriorityScore: 50,
+		UpdatedAt:     now,
+		AttemptGroup: orquestarunqueue.RunQueueAttemptGroupV0{
+			GroupRef:     "attempt-topic-001",
+			ConsumerRef:  "consumer",
+			ObjectiveRef: "objective",
+			WorkItemRef:  "topic-001",
+			WriteSetRefs: []string{"topic/001"},
+		},
+		ParentRunRef:     "run-original",
+		SupersedesRunRef: "run-original",
+		RescueReason:     "estado_incierto",
+	}); err != nil {
+		t.Fatalf("SetRunPriorityV0: %v", err)
+	}
+
+	reopened := mustNewRunFileStoreV0(t, dir)
+	listed, err := reopened.ListRunSchedulingCandidatesV0(ctx, orquestarunqueue.RunQueueReadRequestV0{QueueRef: "global"})
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	if len(listed) != 1 ||
+		listed[0].AttemptGroup.GroupRef != "attempt-topic-001" ||
+		listed[0].AttemptGroup.WorkItemRef != "topic-001" ||
+		listed[0].ParentRunRef != "run-original" ||
+		listed[0].SupersedesRunRef != "run-original" ||
+		listed[0].RescueReason != "estado_incierto" {
+		t.Fatalf("listed=%+v", listed)
+	}
+}
+
 func TestRunFileStoreQueueUpsertPersistsAfterRecreateV0(t *testing.T) {
 	dir := t.TempDir()
 	store := mustNewRunFileStoreV0(t, dir)

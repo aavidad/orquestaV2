@@ -153,6 +153,7 @@ func codexStackRunSupervisorSnapshotMCPV0(
 	return orquestamcp.MCPRunSupervisorSnapshotV0{
 		Status:       strings.TrimSpace(string(snapshot.Status)),
 		SessionRef:   strings.TrimSpace(snapshot.SessionRef),
+		AgentRef:     strings.TrimSpace(snapshot.AgentRef),
 		ProcessRef:   strings.TrimSpace(snapshot.ProcessRef),
 		EvidenceRefs: compactStringsV0(snapshot.EvidenceRefs),
 	}

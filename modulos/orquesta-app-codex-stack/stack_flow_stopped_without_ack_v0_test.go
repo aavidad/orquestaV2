@@ -2,15 +2,18 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
+	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 )
 
 func TestDrainRunV0ProcesoParadoSinACKNoQuedaEsperandoIndefinido(t *testing.T) {
@@ -55,6 +58,92 @@ func TestDrainRunV0ProcesoParadoSinACKNoQuedaEsperandoIndefinido(t *testing.T) {
 	}
 }
 
+func TestDrainRunV0ACKTardioTrasLostReconciliadoSeIngiereV0(t *testing.T) {
+	ctx := context.Background()
+	runtime := newStoppedPendingAckCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	director := postDirectorAPIV0(t, stack)
+	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	descriptors := codexStackDescriptorsForTestV0(t, stack)
+	var agentRef string
+	var descriptorFound bool
+	var observation orquestacionnucleoapp.AgentDeliveryObservationV0
+	directorAgentRef := strings.TrimSpace(director.DirectorTask.AgentRequestID)
+	for _, descriptor := range descriptors {
+		if strings.TrimSpace(descriptor.AgentRef) == directorAgentRef ||
+			!codexStackHasRefV0(run.LostAgents, descriptor.AgentRef) ||
+			len(compactStringsV0(descriptor.Spec.AgentPacket.Task.WriteSet)) == 0 {
+			continue
+		}
+		files, err := runtime.writeDeliveryFilesV0(
+			descriptor.ProjectWorkDir,
+			descriptor.Spec.AgentPacket.Task.WriteSet,
+		)
+		if err != nil {
+			t.Fatalf("write late delivery files: %v", err)
+		}
+		if len(files) == 0 {
+			continue
+		}
+		if err := writeCodexStackAckForDescriptorFilesV0(descriptor, files); err != nil {
+			t.Fatalf("write late ACK: %v", err)
+		}
+		agentRef = strings.TrimSpace(descriptor.AgentRef)
+		observation = drainObservationFromDescriptorForTestV0(descriptor)
+		descriptorFound = true
+		break
+	}
+	if !descriptorFound {
+		t.Fatalf("descriptor perdido con write_set no encontrado: lost=%v descriptors=%v", run.LostAgents, codexStackRealSmokeDescriptorAgentsV0(descriptors))
+	}
+
+	drain, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+		RunRef:               director.RunRef,
+		CorrelationID:        "corr-stack-late-ack-after-lost-001",
+		WaitAgentRefs:        []string{agentRef},
+		MaxBursts:            4,
+		MaxStepsPerBurst:     4,
+		MaxDispatchesPerWait: 4,
+		MaxCommands:          12,
+		MaxOutboxPerCycle:    4,
+		MaxExternalWaits:     1,
+	})
+	if err != nil {
+		t.Fatalf("DrainRunV0 late ACK: %v status=%s final=%+v", err, drain.Status, drain.Final)
+	}
+	run = mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	if !drainObservationAlreadyRegisteredV0(run, observation) {
+		t.Fatalf("ACK tardio tras lost no conservado: agents=%v started=%v lost=%v artifacts=%v deliveries=%v delivered_agents=%v delivered_tasks=%v tasks=%v observation=%+v", run.Agents, run.StartedAgents, run.LostAgents, run.PhaseArtifacts, run.Deliveries, run.DeliveredAgents, run.DeliveredTasks, run.Tasks, observation)
+	}
+	if codexStackHasRefV0(run.LostAgents, agentRef) {
+		t.Fatalf("ACK tardio valido debe reconciliar lost: delivered=%v lost=%v", run.DeliveredAgents, run.LostAgents)
+	}
+}
+
+func writeCodexStackAckForDescriptorFilesV0(
+	descriptor orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+	files []string,
+) error {
+	packet := descriptor.Spec.AgentPacket
+	data, err := json.Marshal(map[string]any{
+		"schema_version": "codex_agent_ack.v0",
+		"request_id":     packet.RequestID,
+		"correlation_id": packet.CorrelationID,
+		"ack_ref":        packet.DeliveryRefs.AckRef,
+		"target_module":  packet.TargetModule,
+		"task_ref":       packet.Task.TaskRef,
+		"status":         "completed",
+		"files":          files,
+		"tests":          packet.Task.RequiredTests,
+		"test_receipts":  codexStackRequiredTestReceiptsV0(packet.Task.RequiredTests),
+		"notes":          codexStackFakeAckNotesV0(packet, "ack tardio tras lost con artefactos reales"),
+	})
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(descriptor.AckPath, data, 0o600)
+}
+
 func TestDrainRunV0WaitAgentRefsProcesoParadoSinACKActivaSupervision(t *testing.T) {
 	ctx := context.Background()
 	runtime := newPendingAckCodexStackRuntimeV0()
@@ -95,6 +184,56 @@ func TestDrainRunV0WaitAgentRefsProcesoParadoSinACKActivaSupervision(t *testing.
 		codexStackHasRefV0(run.StoppedAgents, agentRef) ||
 		codexStackHasRefV0(run.ConfirmedStoppedAgents, agentRef) {
 		t.Fatalf("agente acotado no quedo reconciliado como lost: status=%s lost=%v stopped=%v confirmed=%v", drain.Status, run.LostAgents, run.StoppedAgents, run.ConfirmedStoppedAgents)
+	}
+}
+
+func TestDrainRunV0AgentePendienteSinRegistroProcesoSeReconciliaComoLostV0(t *testing.T) {
+	ctx := context.Background()
+	runtime := newPendingAckCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	director := postDirectorAPIV0(t, stack)
+	agentRef := strings.TrimSpace(director.DirectorTask.AgentRequestID)
+	if agentRef == "" {
+		t.Fatalf("director sin agente: %+v", director)
+	}
+	if _, err := stack.Stores.ProcessRegistry.ResolveAgentProcessV0(ctx, director.RunRef, agentRef); err != nil {
+		t.Fatalf("precondicion sin registro inicial: %v", err)
+	}
+	stack.Stores.ProcessRegistry = orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
+
+	drain, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+		RunRef:               director.RunRef,
+		CorrelationID:        "corr-stack-missing-process-registry-no-ack-001",
+		WaitAgentRefs:        []string{agentRef},
+		MaxBursts:            8,
+		MaxStepsPerBurst:     6,
+		MaxDispatchesPerWait: 8,
+		MaxCommands:          20,
+		MaxOutboxPerCycle:    8,
+		MaxExternalWaits:     1,
+	})
+	if err != nil {
+		t.Fatalf("DrainRunV0: %v status=%s final=%+v", err, drain.Status, drain.Final)
+	}
+	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	if drainRunHasPendingExternalAgentRefsV0(run, []string{agentRef}) {
+		t.Fatalf("agente sin ProcessRegistry sigue pendiente: status=%s started=%v lost=%v delivered=%v", drain.Status, run.StartedAgents, run.LostAgents, run.DeliveredAgents)
+	}
+	if !codexStackHasRefV0(run.LostAgents, agentRef) ||
+		codexStackHasRefV0(run.StoppedAgents, agentRef) ||
+		codexStackHasRefV0(run.ConfirmedStoppedAgents, agentRef) {
+		t.Fatalf("agente sin registro debe quedar lost sin parada runtime: lost=%v stopped=%v confirmed=%v", run.LostAgents, run.StoppedAgents, run.ConfirmedStoppedAgents)
+	}
+	if !codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0) ||
+		!codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionAskDirectorV0) {
+		t.Fatalf("faltan assessment/revision ask_director para registro ausente: %+v", run.AgentAssessments)
+	}
+	if codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictGarbageV0) ||
+		codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionStopAgentV0) {
+		t.Fatalf("registro ausente no debe marcar basura ni stop_agent: %+v", run.AgentAssessments)
+	}
+	if len(compactStringsV0(run.DirectorQuestions)) == 0 {
+		t.Fatalf("reconciliacion debe dejar pregunta no bloqueante para el Director: %+v", run)
 	}
 }
 

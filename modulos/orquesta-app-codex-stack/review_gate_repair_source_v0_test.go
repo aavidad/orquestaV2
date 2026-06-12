@@ -155,6 +155,61 @@ func TestCodexStackReviewGateReworkAcceptanceObservaPadreTrasFollowupCerradoV0(t
 	}
 }
 
+func TestCodexStackReviewGateReworkAcceptanceDerivaPadreDesdeReplanSinDescriptorV0(t *testing.T) {
+	const (
+		runRef           = "run-ref-stack-review-rework-acceptance-no-parent-descriptor"
+		parentTaskRef    = "task-ref-stack-review-parent-no-descriptor"
+		parentDelivery   = "ack-ref-stack-review-parent-no-descriptor"
+		followupTaskRef  = "task-ref-stack-review-followup-no-parent-descriptor"
+		followupDelivery = "ack-ref-stack-review-followup-no-parent-descriptor"
+	)
+	followupSpec := codexStackReviewGateSpecForTestV0(followupDelivery)
+	followupSpec.RequestID = "agent-ref-stack-review-followup-no-parent-descriptor"
+	followupSpec.AgentPacket.RequestID = followupSpec.RequestID
+	followupSpec.AgentPacket.Task.TaskRef = followupTaskRef
+	followupSpec.AgentPacket.DeliveryRefs.AckRef = followupDelivery
+	reviewRequestRef := "review-request-ref-" + parentDelivery
+	reviewResultRef := "review-result-ref-" + parentDelivery
+	reworkRequestRef := "rework-request-ref-" + reviewResultRef
+	request := orquestacionnucleoapp.ReviewGateObservationRequestV0{
+		Run: orquestacoreworkflow.OrchestrationRunV0{
+			RunID:           runRef,
+			CurrentPhase:    orquestacoreworkflow.OrchestrationPhaseRevisionV0,
+			Tasks:           []string{parentTaskRef, followupTaskRef},
+			Deliveries:      []string{parentDelivery, followupDelivery},
+			ReworkRequests:  []string{reworkRequestRef + "#review_result:" + reviewResultRef + "#review_request:" + reviewRequestRef + "#delivery:" + parentDelivery},
+			ReplanDecisions: []string{"replan-ref-stack-review-rework-no-parent-descriptor#source:" + reworkRequestRef + "#task:" + parentTaskRef + "#action:split_task#followups:" + followupTaskRef},
+			AcceptedReviews: []string{"accepted-review-ref-" + followupDelivery},
+			ClosedTasks:     []string{followupTaskRef},
+		},
+	}
+	observations := codexStackReviewGateReworkAcceptanceObservationsV0(
+		request,
+		[]orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{{
+			RunID:    runRef,
+			AgentRef: followupSpec.RequestID,
+			Spec:     followupSpec,
+		}},
+	)
+	if len(observations) != 1 ||
+		observations[0].DeliveryRef != parentDelivery ||
+		observations[0].Status != orquestacoreworkflow.ReviewResultStatusAcceptedV0 ||
+		!codexStackReviewGateHasEvidenceForTestV0(observations[0].EvidenceRefs, followupTaskRef) {
+		t.Fatalf("observations=%+v", observations)
+	}
+	request.Run.ReplanDecisions = nil
+	if got := codexStackReviewGateReworkAcceptanceObservationsV0(
+		request,
+		[]orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{{
+			RunID:    runRef,
+			AgentRef: followupSpec.RequestID,
+			Spec:     followupSpec,
+		}},
+	); len(got) != 0 {
+		t.Fatalf("sin replan causal no debe inferir padre: %+v", got)
+	}
+}
+
 func recordStackReviewDescriptorWithTestsForTestV0(
 	t *testing.T,
 	stack StackV0,

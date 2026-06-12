@@ -18,16 +18,17 @@ func externalBridgeRuntimeObserverV0(
 	}
 	return func(ctx context.Context, event externalBridgeLoopEventV0) {
 		runtime.MarkExternalBridgeLifecycleV0(ctx, orquestaserver.ExternalBridgeLifecycleUpdateV0{
-			Component:  event.Component,
-			Status:     event.Status,
-			TickNumber: event.TickNumber,
-			TickActive: event.TickActive,
-			Success:    event.Success,
-			ErrorCode:  event.ErrorCode,
-			StopReason: event.StopReason,
-			Filters:    event.FilterSummary,
-			Counters:   event.Counters,
-			OccurredAt: event.OccurredAt,
+			Component:    event.Component,
+			Status:       event.Status,
+			TickNumber:   event.TickNumber,
+			TickActive:   event.TickActive,
+			Success:      event.Success,
+			ErrorCode:    event.ErrorCode,
+			StopReason:   event.StopReason,
+			Filters:      event.FilterSummary,
+			Counters:     event.Counters,
+			EvidenceRefs: event.EvidenceRefs,
+			OccurredAt:   event.OccurredAt,
 		})
 	}
 }

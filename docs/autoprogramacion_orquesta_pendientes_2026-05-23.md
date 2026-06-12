@@ -132,6 +132,76 @@ en `127.0.0.1:8789` consumiendo alrededor del 80% de CPU durante mas de 20
 minutos sin uso activo; el total percibido rondaba el 150% por coexistencia con
 otras instancias antiguas.
 
+Revalidacion OrquestaV2 2026-06-11:
+`agent-ref-task-autoprogramming-7c02f2568e45-g01` verifica que el watchdog
+reside en la composicion del servidor, no en el core puro; `cmd/orquesta-server`
+cablea `SelfWatchdog` y publica en `effective_config`
+`ORQUESTA_SERVER_SELF_WATCHDOG_DISABLED`,
+`ORQUESTA_SERVER_SELF_WATCHDOG_CPU_HIGH_PERCENT`,
+`ORQUESTA_SERVER_SELF_WATCHDOG_SUSTAINED_SECONDS` y
+`ORQUESTA_SERVER_SELF_WATCHDOG_NO_PROGRESS_SECONDS`. El codigo central de
+politica/observacion vive en `modulos/orquesta-server`, fuera del write-set de
+esta revalidacion; no se reabre salvo regresion o tarea con ese owner. Esta
+tarea no drena OPES/TCAE ni modifica jobs de dominio.
+
+Rework de revision 2026-06-11:
+`agent-ref-task-ref-review-rework-task-autoprogramming-7c02f2568e45-g01-449fcc36b3c508d55429e771db52f5fb`
+cierra la correccion sin relanzar agente padre: conserva la entrega valida,
+resuelve el contexto obligatorio `ref_only` por lectura local/evidencia en ACK y
+reanuda la verificacion tras el checkpoint previo. Pasan `git diff --check`, la
+bateria amplia requerida y los focales `go test -count=1 ./cmd/orquesta-server`
+y `go test -count=1 ./modulos/orquesta-app-codex-stack`; no se toca OPES/TCAE ni
+se modifica codigo fuera del write-set.
+
+Ajuste focal 2026-06-11:
+se reabre solo la frontera `modulos/orquesta-server` para cubrir causas
+operativas vivas que la politica ya contemplaba pero el observador no
+transportaba de forma completa. `ExternalBridgeTickActive` pasa a ser causa
+explicita de CPU alta con trabajo causal, el observador publica evidencia para
+bridge externo activo y async work de apagado, y el tick de self-watchdog cruza
+el flag atomico `residentDirectorTickActive` antes de evaluar la parada. Pruebas
+focales: `go test -count=1 ./modulos/orquesta-server` y
+`go test -count=1 ./cmd/orquesta-server`.
+
+## P0-B shutdown/reload no bloqueante con cola stale
+
+Objetivo: si un shutdown/reload deja runs en `stop_requested` o
+`cancel_requested` sin agentes vivos, el arranque no debe remezclarlos como cola
+activa ni bloquear la app. Debe completar el control terminal, apartar el
+candidato de la cola ejecutable y conservar backup durable antes de compactar.
+
+Estado: cerrado localmente 2026-06-11 por
+`task-autoprogramming-ea0e7738ec68-g01`. El `startup` en modo diagnostico
+reconcilia `stop_requested -> stopped` y `cancel_requested -> canceled` solo
+cuando puede comprobar que no quedan agentes en vuelo; despues marca la cola
+como terminal y ejecuta la compaccion existente, que guarda revision durable con
+`queue_v0.before.json`, `control_v0.before.json`, `queue_removed.json`,
+`control_removed.json` y `manifest.json`. Los runs preparados normales siguen
+adoptables: no se purga una cola `ready` activa sin intencion de stop/cancel.
+
+Alcance:
+
+- `cmd/orquesta-server`
+- `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`
+
+Criterios cerrados:
+
+- Shutdown/reload puede quedar listo aunque haya runs pendientes antiguos con
+  stop/cancel ya solicitado y sin agentes vivos.
+- `RunControl` forced stop/cancel no deja esos runs como `agents_in_flight` ni
+  como candidatos ejecutables tras reinicio.
+- La cola global no mezcla esos runs historicos con trabajo OPES/TCAE o de
+  autoprogramacion nuevo.
+- El backup durable queda en la revision de startup antes de retirar registros
+  terminales de `run-state`.
+
+Validacion OrquestaV2 requerida 2026-06-11:
+
+- `git diff --check`
+- `go test -count=1 ./modulos/orquesta-server-shutdown ./modulos/orquesta-run-control ./modulos/orquesta-state-file ./cmd/orquesta-server`
+- `go test -count=1 ./modulos/orquesta-server-shutdown ./cmd/orquesta-server`
+- `go test -count=1 ./modulos/orquesta-run-control ./modulos/orquesta-state-file`
+
 Alcance:
 
 - `cmd/orquesta-server`
@@ -182,6 +252,13 @@ Validacion ejecutada:
 - `go test -count=1 ./modulos/orquesta-run-supervisor ./modulos/orquesta-runtime ./modulos/orquesta-agent-process-registry ./modulos/orquesta-observability`
 - `go test -count=1 ./...`
 - `git diff --check`
+
+Validacion OrquestaV2 requerida 2026-06-11:
+
+- `git diff --check`
+- `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-runtime-codex ./modulos/orquesta-app-codex-stack ./modulos/orquesta-director-operativo ./modulos/orquesta-rails ./modulos/orquesta-autoprogramming ./modulos/orquesta-mcp`
+- `go test -count=1 ./cmd/orquesta-server`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack`
 
 ## Revision subagentes 2026-06-08: pendientes antes del Director autonomo residente
 
@@ -9431,6 +9508,19 @@ Retry OrquestaV2 2026-05-26:
 `agent-ref-task-autoprogramming-761a129dc1b4-g01` revalida T158 sin relanzar
 smoke real ni abrir owner vecino; el contexto obligatorio `ref_only` queda
 resuelto por lectura local y evidencia explicita en ACK.
+Revalidacion OrquestaV2 2026-06-11:
+`agent-ref-task-autoprogramming-7c02f2568e45-g03` mantiene T158 cerrado para la
+tarea origen `task-ref-opes-guards-no-productivo-001`. Evidencia revisada:
+`cmd/orquesta-server/opes_bridge_destination_policy_v0.go` exige URL sin
+credenciales/query, clasifica loopback separado de temporal/productivo, requiere
+confirmacion real incluso en loopback no-dry-run y evidence ref compacta para
+productivo; `cmd/orquesta-server/opes_bridge_loop.go` exige filtro seguro y no
+acepta `ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE` sin scope duro por
+`program_id`, `topic_id`, `correlation_id` o equivalente. Este corte no edita
+`cmd/orquesta-server` por write-set cerrado; actualiza estado, matriz y runbook
+para que los smokes OPES no traten loopback/unspecified como temporal ni usen
+secuencia como permiso de efectos sobre jobs ajenos. Contexto obligatorio
+`ref_only` resuelto por lectura local y evidencia explicita en ACK.
 
 ## Escaneo backlog 2026-05-24 quincuagesima quinta pasada
 
@@ -15997,6 +16087,13 @@ Rework de evaluacion 2026-05-27:
 conserva la misma fusion con T256 canonico, no relanza agente padre ni abre
 otro owner para `before-growth`, y resuelve el contexto `ref_only` por lectura
 local y evidencia ACK.
+Revalidacion OrquestaV2 2026-06-11:
+`agent-ref-assessment-task-autoprogramming-fe9cf6f32e89-g01-d18f387e937eb820ba9d7cf0b788b9a3`
+mantiene esta variante absorbida por T256 canonico, conserva
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` como refs opacas
+y resuelve el contexto `ref_only` por lectura local del paquete y fuentes
+vigentes.
 Rework de evaluacion 2026-05-27:
 `agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-46d0d95f62343cc1e51b9ca398f83f84`
 mantiene la variante `before-growth` absorbida por T256 canonico, no reabre
@@ -16305,6 +16402,12 @@ de uso se reparte en `auth_v0.go`, `control_v0.go`, `queue_targets_v0.go`,
 `checkpoint_v0.go`, `supervision_v0.go` y `summary_v0.go`, conservando puertos,
 DTOs, reason/status y semantica de checkpoint no forzado. Todos los ficheros Go
 de `orquesta-server-shutdown` quedan por debajo de 300 lineas.
+
+Revalidacion 2026-06-11: el paquete OrquestaV2
+`agent-ref-assessment-task-autoprogramming-fe9cf6f32e89-g01-d18f387e937eb820ba9d7cf0b788b9a3`
+mantiene la API publica de `ShutdownServerV0` y separa la validacion de
+dependencias requeridas en `deps_v0.go`, sin introducir runtime, HTTP, MCP, DB
+ni control directo de procesos en `orquesta-server-shutdown`.
 
 Rework final 2026-05-27: la entrega
 `agent-ref-assessment-task-ref-review-rework-task-autoprogramming-68fe872ff80c-g01-864-247e6d495674dee5a1b996468956a6be`
@@ -17029,6 +17132,2469 @@ alcance de pruebas de scanners; T252/T254 gobiernan ids humanos, reserva,
 colisiones y aliases; T253/T255/T256/T257/T258 cubren splits concretos recientes.
 Esta pasada queda como evidencia de no-op cubierto y debe cerrarse mediante ACK
 con `contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Revalidacion T256 2026-06-11 burst 002
+
+Evidencia revisada: paquete OrquestaV2
+`agent-ref-task-autoprogramming-7a851a71f125-g01` del retry
+`request-ref-autoprogramming-backlog-t256-server-shutdown-usecase-file-split-before-growth-079d82a9`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-t256-server-shutdown-usecase-file-split-before-growth-079d82a9-retry-6f8fbdae94604c23dd44a651fef4fb49929cfdb7e3b36cd7d86c7d46f14249bb-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a `orquesta-server-shutdown`, `cmd/orquesta-server` y estos
+tres shards documentales. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas.
+
+Resultado: T256 sigue cerrado como owner canonico del split local de
+`orquesta-server-shutdown`; la variante
+`server-shutdown-usecase-file-split-before-growth` queda absorbida y no abre
+owner nuevo. La revalidacion anade una guarda focal de presupuesto en
+`modulos/orquesta-server-shutdown/architecture_v0_test.go` para que todo fichero
+Go del modulo permanezca por debajo de 300 lineas. `shutdown_v0.go` permanece
+como fachada publica pequena y el detalle sigue separado en autorizacion,
+control, checkpoint, targets, supervision y resumen, sin mover runtime, Codex,
+MCP, web, DB, filesystem ni `cmd` al modulo neutral.
+Revalidacion OrquestaV2 2026-06-11 retry b1c7:
+`agent-ref-task-autoprogramming-f02e03774215-g01` mantiene la misma absorcion
+del alias `server-shutdown-usecase-file-split-before-growth` por T256 y corrige
+la causa general observada en el planner: las lineas `Estado 2026-..:` y
+`Cierre local 2026-..:` ahora se leen como estado canonico fechado, no como
+texto narrativo pendiente que pueda relanzar un owner ya cerrado.
+Revalidacion OrquestaV2 2026-06-11 retry f39e:
+`agent-ref-task-autoprogramming-510467d5758e-g01` repite el mismo alias con
+contexto obligatorio `ref_only`, write-set cerrado y prueba focal obligatoria.
+T256 se mantiene como owner canonico, no se abre owner nuevo, `worktree_ref` y
+`branch_ref` siguen como refs opacas, y la evidencia queda en la guarda de
+presupuesto ya existente mas el ACK de prueba.
+
+## T260 - Corregir estados falsos `running` en agentes externos
+
+Origen: incidencia real detectada el 2026-06-11 durante OPES A1 informática
+con 72 padres de tema. Orquesta registró y supervisó múltiples runs como
+`running`, pero la verificación externa por proceso vivo mostró que muchos eran
+solo outbox pendiente, registros duplicados, rescates sin agente vivo o procesos
+ya caídos. El director OPES tuvo que comprobar por `ps` y lanzar fallback
+directo documentado, lo que no puede ser el flujo normal.
+
+Documento de incidencia:
+`docs/runbooks/incidencia_opes_a1_informatica_estados_falsos_orquesta_2026-06-11.md`.
+
+Tarea ejecutable:
+`.orquesta-runtime/opes-a1-informatica-orquesta-runtime-incidents-20260611/task_T260_fix_false_running_external_agents.json`.
+
+Frontera: no meter reglas editoriales OPES en Orquesta. OPES es solo consumidor
+y caso de reproducción. La corrección pertenece a runtime/proveedor,
+supervisión, cola, outbox y proyecciones públicas MCP/API.
+
+Estado: sincronizado/no-op documental para automejora tras el corte local y las
+revalidaciones del 2026-06-11. T260 no está `running`, no queda como
+implementación genérica abierta y no debe generar otro padre de código por el
+patrón "corregir running falso" salvo regresión demostrada. Las menciones
+históricas o narrativas a `running` dentro de esta sección son evidencia de la
+incidencia original, no estado vivo. La proyección falsa de estado vivo queda
+cerrada localmente con evidencia focal; el cierre productivo completo queda
+pendiente solo como validación opt-in concreta: smoke Codex real concurrente y
+regresión OPES temporal/fake-runtime de 72 temas. Las tareas nuevas deben
+apuntar a esas validaciones, a un fallo nuevo con evidencia causal o a T262 para
+deduplicación causal de rescates.
+
+Marcador canónico para scanners/automejora 2026-06-11:
+`estado_documental_t260=sincronizado`,
+`implementacion_false_running=cerrada_localmente`,
+`trabajo_vivo_t260=smoke_codex_real_concurrente_opt_in|regresion_opes_temporal_fake_runtime_72_temas_opt_in`,
+`owner_codigo=task-ref-self-improvement-c440df9070c6`,
+`no_reabrir_por_patron=corregir_estados_falsos_running_sin_regresion_causal`.
+Este marcador prevalece sobre revalidaciones narrativas, ACKs historicos,
+recibos de prueba, menciones de `status:"running"` de la incidencia original y
+objetivos de automejora que repitan el mismo patron sin evidencia causal nueva.
+Si el planner vuelve a observar T260 por texto coincidente, debe clasificarlo
+como sincronizado/no-op documental; si necesita trabajo real, debe abrir solo
+una validacion opt-in ya nombrada o un rework causal con nueva evidencia.
+
+Revalidacion de rework OrquestaV2 2026-06-11:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-6b1a4f3d41efd6d3fb97ea10c88422a1`
+conserva la entrega valida de T260 sin relanzar otro agente padre sobre la
+tarea original. El contexto obligatorio `ref_only` se resuelve por las refs del
+paquete, el runbook de incidencia y esta entrada canonica: no aporta material
+ejecutable nuevo, por lo que el resultado correcto sigue siendo no-op
+documental salvo regresion causal. Los pendientes vivos permanecen acotados a
+las dos validaciones opt-in ya nombradas, o a T262 si la evidencia nueva trata
+duplicacion causal de rescates.
+
+Alcance cubierto por T260:
+
+- separar estados públicos: `registered`, `queued`, `waiting_outbox`,
+  `launching`, `running_live`, `completed`, `failed`, `stalled` o equivalentes;
+- impedir que `wait_unhandled_outbox` sin worker vivo se proyecte como
+  `running`;
+- validar proceso vivo, heartbeat, ACK reciente o lease activo antes de exponer
+  `running`;
+- registrar `launch_failed`/`stalled` cuando el proveedor no arranca o cae antes
+  de entregar;
+
+Pendiente residual de T260:
+
+- persistir o exponer descriptor operativo suficiente del intento externo con
+  `process_ref`, inicio, workdir/logs referenciados y proveedor sin filtrar
+  detalles sensibles en core neutral;
+- proteger la instalación/refresh de skills de Codex frente a lanzamientos
+  concurrentes, porque se observó:
+  `failed to install system skills: io error while remove existing system skills dir: Permission denied (os error 13)`;
+  owner canónico: T261;
+- enlazar rescates de un mismo objetivo de forma causal para no crear registros
+  opacos duplicados; owner canónico: T262.
+
+Pruebas obligatorias:
+
+- unitario de proyección: `wait_unhandled_outbox` sin worker vivo no devuelve
+  `running`;
+- unitario de proyección: `process_ref` sin proceso verificable devuelve
+  `stalled` o `launch_failed`;
+- API/MCP friendly: conteos separados para registrados, outbox pendiente y
+  running vivo;
+- fake-runtime con 72 jobs externos y rescates;
+- smoke Codex real acotado con concurrencia y sin carrera de skills;
+- regresión OPES temporal que permita al director saber qué padres tienen
+  agente vivo sin usar `ps` manual.
+
+Corte local 2026-06-11: implementada la primera corrección de proyección en
+supervisor Codex/MCP/servidor. `wait_unhandled_outbox` se proyecta como
+`waiting_outbox`, `process_ref` sin proceso vivo verificable se proyecta como
+`stalled`, y `running_live` exige evidencia de proceso vivo del adaptador. La
+proyección friendly separa contadores `registered`, `waiting_outbox`,
+`running_live` y `stalled`. Evidencia local:
+`go test -count=1 ./modulos/orquesta-runtime-codex ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack`,
+`go test -count=1 ./modulos/orquesta-server` y
+`go test -count=1 ./cmd/orquesta-server`. Sigue pendiente el smoke Codex real
+concurrente y la regresión OPES temporal/fake-runtime de 72 temas antes de
+declarar cierre productivo completo.
+
+Registro consolidado de reworks T260 2026-06-11 retry 08e24/a5ac4d burst 002:
+Las entradas acumuladas de rework, assessment y sincronizacion documental sobre
+T260 quedan consolidadas aqui para evitar que el backlog se convierta en una
+fuente de relanzamientos por coincidencia textual. La entrega valida acumulada
+se conserva como evidencia de trazabilidad en los ACKs y paquetes de Orquesta,
+pero no se repite como nueva deuda ejecutable dentro de esta seccion. Reworks
+nuevos del mismo patron, incluida
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-42428889cd78dbe3987de1ef7de91c19`,
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-18d181a15d2ff584a2b27ff1b3185420`,
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-1bd87fe5ed99d09c0b3aa5de83e54156`,
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-64c08956344167d7804eb90470b2c7b4`,
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-b64-2c78646549fbe962bd19b69d605c8f1c`,
+quedan cubiertos por este registro consolidado: su evidencia `ref_only` y sus
+pruebas viven en el ACK de control, no en otro parrafo individual acumulativo.
+
+Estado canonico unico para planners/scanners: T260 esta
+`sincronizado/no-op documental` para el patron de estados falsos `running` si
+no existe regresion causal nueva. La proyeccion falsa de estado vivo ya queda
+cerrada localmente con evidencia focal: `waiting_outbox`, `stalled` y
+`running_live` estan separados, y `running_live` exige evidencia de proceso
+vivo del adaptador. La deuda viva de T260 queda limitada a validaciones opt-in
+ya nombradas: smoke Codex real concurrente y regresion OPES temporal o
+fake-runtime de 72 temas. T261 conserva el owner de la carrera de skills y T262
+el owner de deduplicacion causal de rescates.
+
+Regla de cierre de reworks: sin `run_ref`, `agent_ref`, log nuevo, entrega
+causal posterior al corte local o resultado nuevo de las validaciones opt-in,
+una observacion nueva sobre T260 debe cerrarse como sincronizada/no-op
+documental o pedir solo una de esas validaciones. No debe relanzar otro padre
+de codigo ni anadir otra nota acumulativa a este bloque para corregir
+`running` falso. El ACK de cada rework conserva la evidencia de contexto
+`ref_only`; este bloque solo registra el estado consolidado y la regla de
+deduplicacion documental.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 08e24 burst
+002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-454a0afb58d55a5e081a5120281516ec`
+completa esta correccion dentro del write-set documental permitido, sin
+relanzar otro agente padre sobre la tarea original ni abrir codigo. El contexto
+obligatorio `ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`AGENTS.md`, `README.md`, `docs/README.md`, foto vigente, guia del nucleo,
+principio del Director, runbook de incidencia T260 y bloque vigente
+T260/T261/T262.
+
+Rework de revision OrquestaV2 2026-06-11 retry a5ac4d burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-c65f24928c562ee28774043a0ff45188`
+queda integrado como correccion documental estricta sobre la entrega valida
+previa. No relanza agente padre, no abre codigo ni cambia la deuda viva:
+mantiene T260 como `sincronizado/no-op documental` salvo regresion causal o
+validacion opt-in ya nombrada. El contexto obligatorio `ref_only` queda
+resuelto por `agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`,
+foto vigente, guia del nucleo, principio del Director, runbook de incidencia y
+bloque T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 resident-director-8319
+burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-909b7b8c107f9423e121ac27a5dba294`
+conserva la entrega valida acumulada de T260 dentro del write-set documental,
+sin relanzar otro agente padre sobre la tarea original ni abrir codigo. El
+estado canonico no cambia: T260 sigue sincronizada/no-op documental para el
+patron de estados falsos `running` salvo regresion causal nueva; la deuda viva
+queda limitada al smoke Codex real concurrente y a la regresion OPES
+temporal/fake-runtime de 72 temas. El contexto obligatorio `ref_only` queda
+resuelto por lectura local de `agent_packet.json`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del Director,
+runbook de incidencia T260, runbook de bucle de rework y bloque vigente
+T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry c7f8e089
+resident-director-8284:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-f2fc81ce70bbd9cd0840f9e3b1d4d0ec`
+conserva la entrega valida acumulada de T260 y completa esta correccion dentro
+del write-set documental permitido, sin relanzar otro agente padre sobre la
+tarea original ni abrir codigo. El estado canonico no cambia: T260 sigue
+sincronizada/no-op documental para el patron de estados falsos `running` salvo
+regresion causal nueva; la evidencia local ya separa `waiting_outbox`,
+`stalled` y `running_live`, y la deuda viva continua limitada al smoke Codex
+real concurrente y a la regresion OPES temporal/fake-runtime de 72 temas. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, runbook de incidencia T260 y bloque
+vigente T260/T261/T262. Sin `run_ref`, `agent_ref`, log nuevo o entrega causal
+posterior al corte local, planners y scanners deben cerrar nuevas observaciones
+del mismo patron como sincronizadas/no-op documental o pedir solo una
+validacion opt-in ya nombrada, no otro arreglo generico de `running`.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 2503eef
+resident-director-8285:
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-666-e220754fd2166cbc1d3f0b2452d926e4`
+conserva la entrega valida acumulada de T260 y completa esta correccion dentro
+del write-set documental permitido, sin relanzar otro agente padre sobre la
+tarea original ni abrir codigo. El estado canonico no cambia: T260 sigue
+sincronizada/no-op documental para el patron de estados falsos `running` salvo
+regresion causal nueva; la evidencia local ya separa `waiting_outbox`,
+`stalled` y `running_live`, y la deuda viva continua limitada al smoke Codex
+real concurrente y a la regresion OPES temporal/fake-runtime de 72 temas. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, runbook de incidencia T260 y bloque
+vigente T260/T261/T262. Sin `run_ref`, `agent_ref`, log nuevo o entrega causal
+posterior al corte local, planners y scanners deben cerrar nuevas observaciones
+del mismo patron como sincronizadas/no-op documental o pedir solo una
+validacion opt-in ya nombrada, no otro arreglo generico de `running`.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry c7f8e089
+resident-director-8288:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-d740760178927d66d170996383290e2a`
+conserva la entrega valida acumulada de T260 y completa el rastro causal pedido
+por esta tarea nueva dentro del write-set documental permitido, sin relanzar
+otro agente padre sobre la tarea original ni abrir codigo. El estado canonico no
+cambia: T260 sigue sincronizada/no-op documental para el patron de estados
+falsos `running` salvo regresion causal nueva; la evidencia local ya separa
+`waiting_outbox`, `stalled` y `running_live`, y la deuda viva continua limitada
+al smoke Codex real concurrente y a la regresion OPES temporal/fake-runtime de
+72 temas. El contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, runbook de incidencia T260 y bloque
+vigente T260/T261/T262. Sin `run_ref`, `agent_ref`, log nuevo o entrega causal
+posterior al corte local, planners y scanners deben cerrar nuevas observaciones
+del mismo patron como sincronizadas/no-op documental o pedir solo una
+validacion opt-in ya nombrada, no otro arreglo generico de `running`.
+
+Assessment/rework de reemplazo OrquestaV2 2026-06-11 retry 08e24 burst 002:
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-454-9557052a27e2cc58b376828d1adbc572`
+cierra la correccion de entrega dentro del write-set documental permitido y
+conserva la entrega valida acumulada de T260. No relanza agente padre, no abre
+codigo ni cambia el estado canonico: T260 sigue
+`sincronizado/no-op documental` para el patron de estados falsos `running`
+salvo regresion causal nueva o validacion opt-in ya nombrada. El contexto
+obligatorio `ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`AGENTS.md`, `README.md`, `docs/README.md`, foto vigente, guia del nucleo,
+principio del Director, runbook de incidencia T260 y bloque vigente
+T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 08e24
+resident-director-8290:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-8e3bb53408fa514d000a7b39294e4409`
+conserva la entrega valida acumulada de T260 y completa esta microtarea nueva
+dentro del write-set documental permitido, sin relanzar otro agente padre sobre
+la tarea original ni abrir codigo. El estado canonico no cambia: T260 sigue
+`sincronizado/no-op documental` para el patron de estados falsos `running`
+salvo regresion causal nueva o validacion opt-in ya nombrada. El contexto
+obligatorio `ref_only` con `materialization_missing` queda resuelto por lectura
+local de `agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto
+vigente, guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia T260 y bloque vigente T260/T261/T262. Sin `run_ref`, `agent_ref`,
+log nuevo, entrega causal posterior al corte local o resultado de validacion
+opt-in, planners y scanners deben cerrar nuevas observaciones del mismo patron
+como sincronizadas/no-op documental o pedir solo la validacion opt-in ya
+nombrada, no otro arreglo generico de `running`.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry a5ac4d
+resident-director-8290 burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-8a8a2e402e0784d7ba20a70838fd422a`
+conserva la entrega valida acumulada de T260 y completa esta correccion dentro
+del write-set documental permitido, sin relanzar otro agente padre sobre la
+tarea original, sin abrir codigo y sin cambiar la deuda viva. El estado
+canonico no cambia: T260 sigue `sincronizado/no-op documental` para el patron
+de estados falsos `running` salvo regresion causal nueva o validacion opt-in ya
+nombrada. El contexto obligatorio `ref_only` con
+`required_ref_action=ack_evidence_required` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia T260 y bloque vigente T260/T261/T262. Sin `run_ref`, `agent_ref`,
+log nuevo, entrega causal posterior al corte local o resultado de validacion
+opt-in, planners y scanners deben cerrar nuevas observaciones del mismo patron
+como sincronizadas/no-op documental o pedir solo la validacion opt-in ya
+nombrada, no otro arreglo generico de `running`.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry c7f8e089
+resident-director-8292 burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-ccf22b7edfb4c771ee38f09ec904afec`
+conserva la entrega valida acumulada de T260 y completa esta microtarea dentro
+del write-set documental permitido, sin relanzar otro agente padre sobre la
+tarea original ni abrir codigo. El estado canonico no cambia: T260 sigue
+`sincronizado/no-op documental` para el patron de estados falsos `running`
+salvo regresion causal nueva o validacion opt-in ya nombrada. El
+`codex_stderr.log` del paquete actual registra de nuevo el fallo de instalacion
+de skills de Codex al arranque; esa senal se mantiene enlazada a T261 como
+regresion/verificacion posterior al corte local y no reabre T260. El contexto
+obligatorio `ref_only` con `required_ref_action=ack_evidence_required` queda
+resuelto por lectura local de `agent_packet.json`, `codex_stderr.log`,
+`AGENTS.md`, `README.md`, `docs/README.md`, foto vigente, guia del nucleo,
+principio del Director, matriz de smokes, runbook de incidencia T260 y bloque
+vigente T260/T261/T262. Sin `run_ref`, `agent_ref`, entrega causal posterior al
+corte local o resultado de validacion opt-in, planners y scanners deben cerrar
+nuevas observaciones del mismo patron como sincronizadas/no-op documental o
+pedir solo la validacion opt-in ya nombrada, no otro arreglo generico de
+`running`.
+
+Assessment de rework OrquestaV2 2026-06-11 retry 08e24
+resident-director-8294:
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-8e3-d8d09c8d561d29b3f18f3bb20fb2ad8a`
+conserva la entrega valida acumulada de T260 y cierra esta correccion dentro
+del write-set documental permitido, sin relanzar otro agente padre sobre la
+tarea original, sin abrir codigo y sin ampliar deuda. El estado canonico no
+cambia: T260 sigue `sincronizado/no-op documental` para el patron de estados
+falsos `running` salvo regresion causal nueva o validacion opt-in ya nombrada.
+El contexto obligatorio `ref_only` con
+`required_ref_action=ack_evidence_required` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia T260 y bloque vigente T260/T261/T262. Sin `run_ref`, `agent_ref`,
+log nuevo, entrega causal posterior al corte local o resultado de validacion
+opt-in, planners y scanners deben cerrar nuevas observaciones del mismo patron
+como sincronizadas/no-op documental o pedir solo la validacion opt-in ya
+nombrada, no otro arreglo generico de `running`.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry c7f8e089
+resident-director-8296 burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-c36da13a9d553dcd55510f2530d396c1`
+conserva la entrega valida acumulada de T260 y completa esta tarea nueva
+dentro del write-set documental permitido, sin relanzar otro agente padre sobre
+la tarea original, sin abrir codigo y sin cambiar deuda viva. El estado
+canonico no cambia: T260 sigue `sincronizado/no-op documental` para el patron
+de estados falsos `running` salvo regresion causal nueva o validacion opt-in ya
+nombrada. El contexto obligatorio `ref_only` con
+`required_ref_action=ack_evidence_required` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, runbook de incidencia T260 y bloque
+vigente T260/T261/T262. Sin `run_ref`, `agent_ref`, log nuevo, entrega causal
+posterior al corte local o resultado de validacion opt-in, planners y scanners
+deben cerrar nuevas observaciones del mismo patron como sincronizadas/no-op
+documental o pedir solo la validacion opt-in ya nombrada, no otro arreglo
+generico de `running`.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry a5ac4d
+resident-director-8297 burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-dd391da7640884e4f722257d8fd2c7b6`
+conserva la entrega valida acumulada de T260 y completa esta correccion dentro
+del write-set documental permitido, sin relanzar otro agente padre sobre la
+tarea original, sin abrir codigo y sin cambiar la deuda viva. El estado
+canonico no cambia: T260 sigue `sincronizado/no-op documental` para el patron
+de estados falsos `running` salvo regresion causal nueva o validacion opt-in ya
+nombrada. El contexto obligatorio `ref_only` con
+`required_ref_action=ack_evidence_required` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia T260 y bloque vigente T260/T261/T262. El `codex_stderr.log` del
+paquete actual vuelve a mostrar el fallo de instalacion de skills de Codex al
+arranque; esa senal queda enlazada a T261 como regresion/verificacion posterior
+al corte local y no reabre T260. Sin `run_ref`, `agent_ref`, log nuevo,
+entrega causal posterior al corte local o resultado de validacion opt-in,
+planners y scanners deben cerrar nuevas observaciones del mismo patron como
+sincronizadas/no-op documental o pedir solo la validacion opt-in ya nombrada,
+no otro arreglo generico de `running`.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry a5ac4d
+resident-director-8301 burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-2d1aec685d9493b714676321d040433b`
+conserva la entrega valida acumulada de T260 y completa esta correccion dentro
+del write-set documental permitido, sin relanzar otro agente padre sobre la
+tarea original, sin abrir codigo y sin cambiar la deuda viva. El estado
+canonico no cambia: T260 sigue `sincronizado/no-op documental` para el patron
+de estados falsos `running` salvo regresion causal nueva o validacion opt-in ya
+nombrada. El contexto obligatorio `ref_only` con
+`required_ref_action=ack_evidence_required` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia T260 y bloque vigente T260/T261/T262. Sin `run_ref`, `agent_ref`,
+log nuevo, entrega causal posterior al corte local o resultado de validacion
+opt-in, planners y scanners deben cerrar nuevas observaciones del mismo patron
+como sincronizadas/no-op documental o pedir solo la validacion opt-in ya
+nombrada, no otro arreglo generico de `running`.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry c7f8e089
+resident-director-8301 burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-2a931ad7b6dc61c0045a990837fdbf09`
+conserva la entrega valida acumulada de T260 y completa esta microtarea dentro
+del write-set documental permitido, sin relanzar otro agente padre sobre la
+tarea original, sin abrir codigo y sin cambiar la deuda viva. El estado
+canonico no cambia: T260 sigue `sincronizado/no-op documental` para el patron
+de estados falsos `running` salvo regresion causal nueva o validacion opt-in ya
+nombrada. El contexto obligatorio `ref_only` con
+`required_ref_action=ack_evidence_required` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, runbook de incidencia T260, tarea
+manual T260 y bloque vigente T260/T261/T262. Sin `run_ref`, `agent_ref`, log
+nuevo, entrega causal posterior al corte local o resultado de validacion
+opt-in, planners y scanners deben cerrar nuevas observaciones del mismo patron
+como sincronizadas/no-op documental o pedir solo la validacion opt-in ya
+nombrada, no otro arreglo generico de `running`.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry c7f8e089
+resident-director-8307 burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-ead2845a32c21e6747ecb97bb71008bc`
+conserva la entrega valida acumulada de T260 y completa esta correccion dentro
+del write-set documental permitido, sin relanzar otro agente padre sobre la
+tarea original, sin abrir codigo y sin cambiar la deuda viva. El estado
+canonico no cambia: T260 sigue `sincronizado/no-op documental` para el patron
+de estados falsos `running` salvo regresion causal nueva o validacion opt-in ya
+nombrada. El contexto obligatorio `ref_only` con
+`required_ref_action=ack_evidence_required` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, runbook de incidencia T260, tarea
+manual T260 y bloque vigente T260/T261/T262. El `codex_stderr.log` del paquete
+actual vuelve a mostrar el fallo de instalacion de skills de Codex al arranque;
+esa senal queda enlazada a T261 como regresion/verificacion posterior al corte
+local y no reabre T260. Sin `run_ref`, `agent_ref`, log nuevo, entrega causal
+posterior al corte local o resultado de validacion opt-in, planners y scanners
+deben cerrar nuevas observaciones del mismo patron como sincronizadas/no-op
+documental o pedir solo la validacion opt-in ya nombrada, no otro arreglo
+generico de `running`.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry c7f8e089
+resident-director-8323 burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-b64ccf77d350b52058c23922d49805e8`
+conserva la entrega valida acumulada de T260 y completa esta microtarea dentro
+del write-set documental permitido, sin relanzar otro agente padre sobre la
+tarea original, sin abrir codigo y sin cambiar la deuda viva. El estado
+canonico no cambia: T260 sigue `sincronizado/no-op documental` para el patron
+de estados falsos `running` salvo regresion causal nueva o validacion opt-in ya
+nombrada. El contexto obligatorio `ref_only` con
+`required_ref_action=ack_evidence_required` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, runbook de incidencia T260, runbook de
+bucle de rework y bloque vigente T260/T261/T262. Sin `run_ref`, `agent_ref`,
+log nuevo, entrega causal posterior al corte local o resultado de validacion
+opt-in, planners y scanners deben cerrar nuevas observaciones del mismo patron
+como sincronizadas/no-op documental o pedir solo la validacion opt-in ya
+nombrada, no otro arreglo generico de `running`.
+
+## T261 - Evitar carrera concurrente al instalar skills de Codex
+
+Resumen canonico de lectura para scanners/automejora:
+`estado_documental_t261=sincronizado`,
+`implementacion_lock_codex_skills=cerrada_localmente`,
+`trabajo_vivo_t261=smoke_codex_real_concurrente_opt_in`,
+`owner_codigo_t261=task-ref-self-improvement-93ae9eac132d` y
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending`.
+Este resumen prevalece sobre reworks, assessments y sincronizaciones
+acumulativas posteriores de este mismo bloque. Si una tarea nueva solo pide
+"sincronizar estado documental ambiguo de T261" o cita el error de instalacion
+de skills sin `run_ref`, `agent_ref`, log nuevo, entrega causal posterior al
+corte local o resultado del smoke externo, el cierre esperado es
+`sincronizado/no-op documental`: conservar refs opacas, enlazar este bloque y no
+anadir otra nota repetida ni abrir otro padre de implementacion. La unica accion
+programable sin regresion nueva sigue siendo el smoke Codex real concurrente
+opt-in con `CODEX_HOME` compartido.
+
+Registro consolidado de correcciones de revision T261: las microtareas nuevas
+de rework/revision con contexto obligatorio `ref_only` y
+`required_ref_action=ack_evidence_required` deben conservar su evidencia en el
+ACK de control y enlazar este resumen canonico, no ampliar el backlog con otro
+parrafo acumulativo equivalente. El mismo cierre por ACK aplica a assessments
+y reworks posteriores que solo traigan el mismo write-set documental y la misma
+senal de arranque de skills, incluido
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-126-03abf7d041ceb44f38d6a509cc76ee94`:
+si no hay write-set de codigo ni smoke externo ejecutado, la accion tecnica
+queda fuera de alcance y no se anade otro cierre narrativo al final del bloque.
+Esto cubre tambien
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-3d19c06e09cde10f476e67a03c5f9f7e`
+y
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-825e5ed4c6b90d3b3ee63f0a4ca98912`:
+la entrega valida acumulada se conserva, no se relanza otro agente padre sobre
+la implementacion original, no se abre codigo desde este write-set documental y
+la salida viva sigue limitada a smoke Codex real concurrente opt-in con
+`CODEX_HOME` compartido o rework causal con write-set de codigo si el Director
+aporta regresion verificable posterior al corte local.
+El mismo criterio cubre
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-d06bea9534c232aab67d2cdf73e41129`:
+su evidencia de contexto `ref_only` debe quedar en el ACK de control, sin
+anadir otra entrada acumulativa al final del bloque ni cambiar el estado
+canonico de T261.
+Tambien cubre
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-7df466823c9ebe12ff38fec631644024`:
+esta correccion conserva la entrega valida acumulada, no relanza otro agente
+padre sobre la implementacion original, no abre codigo desde este write-set
+documental y deja la evidencia `ref_only` en el ACK de control.
+Tambien cubre
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-e6f18550ff87d5d446dc91ebb139d5aa`:
+la correccion conserva la entrega valida acumulada, no relanza otro agente
+padre sobre la implementacion original y mantiene la evidencia `ref_only` en el
+ACK de control. El `codex_stderr.log` del paquete actual vuelve a registrar
+`failed to install system skills`, por lo que la senal queda enlazada a T261
+como regresion/verificacion posterior al corte local; la accion tecnica sigue
+fuera de este write-set documental hasta que el Director abra rework causal con
+write-set de codigo o ejecute el smoke Codex real concurrente opt-in con
+`CODEX_HOME` compartido.
+Tambien cubre
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-875a6010e43d467d07f2162e0c9f2b50`:
+esta correccion conserva la entrega valida acumulada de T261, resuelve la
+evidencia `ref_only` en el ACK de control y no cambia el estado canonico. El
+paquete actual vuelve a registrar `failed to install system skills` al
+arranque, por lo que la senal queda deduplicada bajo
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending`; sin
+smoke externo ni write-set de codigo, no se abre otra implementacion ni otro
+padre de rework.
+
+Origen: subfallo detectado en la misma incidencia OPES A1 informática del
+2026-06-11. Al lanzar muchos Codex casi simultáneos se observó en logs:
+`failed to install system skills: io error while remove existing system skills dir: Permission denied (os error 13)`.
+
+Tarea ejecutable:
+`.orquesta-runtime/opes-a1-informatica-orquesta-runtime-incidents-20260611/task_T261_codex_skills_concurrency_lock.json`.
+
+Estado canonico: implementacion local del lock completada el 2026-06-11;
+cierre productivo pendiente solo del smoke Codex real acotado con concurrencia
+contra proveedor real. No relanzar otra tarea de codigo para el lock desde
+scanners documentales salvo regresion demostrada; si el planner reobserva T261,
+debe proponer validacion/smoke o rework causal sobre fallo nuevo, no repetir la
+misma implementacion.
+
+Marcador canonico para scanners/automejora 2026-06-11:
+`estado_documental=sincronizado`,
+`implementacion_lock_codex_skills=cerrada_localmente`,
+`trabajo_vivo_t261=smoke_codex_real_concurrente_opt_in`,
+`owner_codigo=task-ref-self-improvement-93ae9eac132d`,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending`. Este
+marcador prevalece sobre coincidencias narrativas antiguas de "failed to
+install system skills" o "carrera concurrente al instalar skills de Codex". Si
+no hay evidencia nueva de regresion causal, esas coincidencias se tratan como
+no-op documental; si hace falta trabajo, debe ser solo el smoke externo
+pendiente o rework causal sobre un fallo nuevo. Las sincronizaciones
+documentales posteriores que repitan este mismo marcador son evidencia de
+revalidacion, no nuevo backlog ejecutable.
+
+Regla anti-reapertura para planners/scanners: una tarea futura que solo cite
+T261, el error de instalación de skills o la carrera concurrente de Codex sin
+aportar un `run_ref`, `agent_ref`, log nuevo o entrega causal posterior al corte
+del 2026-06-11 debe cerrarse como sincronizada/no-op documental. No debe crear
+otro padre de implementacion ni otra sincronizacion acumulativa del mismo
+marcador. Las unicas salidas vivas son: ejecutar el smoke Codex real concurrente
+opt-in ya nombrado, o abrir rework causal si aparece una regresion nueva con
+evidencia verificable.
+
+Regla de deduplicacion documental T261: los scanners de automejora deben usar
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` como
+clave canonica de estado. Si una observacion nueva no cambia esa clave ni aporta
+evidencia causal posterior al corte, el resultado esperado es marcar
+`sincronizado/no-op documental` y enlazar este bloque, no lanzar otra tarea
+padre para "sincronizar T261". La unica tarea programable sin regresion nueva es
+la validacion externa opt-in ya nombrada: smoke Codex real concurrente con
+`CODEX_HOME` compartido.
+
+Regla de cierre para automejora idle T261: si una tarea nueva nace solo de
+coincidencias documentales sobre "Evitar carrera concurrente al instalar skills
+de Codex", "failed to install system skills" o "sincronizar estado documental
+ambiguo de T261" y no trae `run_ref`, `agent_ref`, log nuevo, entrega causal o
+resultado del smoke externo posterior al corte del 2026-06-11, debe cerrarse
+como `sincronizado/no-op documental`. No debe anadir otra nota acumulativa al
+backlog, abrir codigo ni relanzar un padre de implementacion. En ese caso, el
+ACK debe enlazar esta clave canonica y conservar
+`task-ref-self-improvement-93ae9eac132d`,
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` como refs opacas.
+
+Trabajo requerido original ya cubierto localmente: añadir lock, preflight
+serializado o preparación única para la instalación/refresh de skills
+compartidas del proveedor Codex; registrar `launch_failed` si el proveedor falla
+antes de crear agente operativo; y garantizar que ese fallo no se proyecta como
+`running`.
+
+Pendiente vivo de T261: ejecutar validacion externa opt-in, acotada, con varios
+agentes Codex reales concurrentes y `CODEX_HOME` compartido. Esa validacion debe
+confirmar que no reaparece `Permission denied` durante instalación/refresh de
+skills y que un fallo temprano se registra como `launch_failed`/`stalled`, no
+como `running`.
+
+Pruebas de cierre original: unitario/adaptador de concurrencia, smoke Codex real
+acotado con varios agentes y regresión de estado `launch_failed` si falla
+skills. La prueba focal local del lock queda registrada en el corte local; la
+prueba que sigue viva es el smoke Codex real acotado.
+
+Corte local 2026-06-11: el wrapper Codex serializa el arranque contra un lock
+atómico bajo `CODEX_HOME` cuando el binario es `codex` real y el home es
+compartido. La ventana de lock es configurable con
+`ORQUESTA_CODEX_STARTUP_LOCK_SECONDS` y el timeout con
+`ORQUESTA_CODEX_STARTUP_LOCK_TIMEOUT_SECONDS`; runtimes fake y `CODEX_HOME`
+aislado bajo runtime de agente usan ventana cero para no bloquear pruebas ni
+olas aisladas. Evidencia local:
+`go test -count=1 ./modulos/orquesta-runtime-codex`. Pendiente: smoke Codex
+real acotado con varios agentes concurrentes para cerrar la incidencia de
+skills contra proveedor real.
+
+Sincronizacion documental 2026-06-11: T261 queda separado en dos estados para
+evitar ambiguedad de backlog. La causa general de codigo ya tiene corte local y
+evidencia focal; la deuda viva es validacion externa opt-in con proveedor real.
+
+Rework de revision 2026-06-11:
+`agent-ref-task-ref-review-rework-task-autoprogramming-93ae9eac132d-g01-f07bb9a5125f3f93df1aa87132add4cc`
+conserva la entrega documental valida de T261 y no relanza otro agente padre
+sobre la tarea original. La correccion mantiene el owner del lock como cerrado
+localmente, deja vivo solo el smoke Codex real acotado con proveedor compartido y
+resuelve el contexto obligatorio `ref_only` por lectura local de paquete,
+README/AGENTS, runbook de incidencia, tarea T261 y backlog T260/T261/T262. Si
+una revision futura observa de nuevo esta incidencia sin fallo nuevo, debe pedir
+validacion externa opt-in o rework causal sobre evidencia nueva, no repetir la
+misma implementacion documental ni el lock ya registrado.
+
+Segundo rework de revision 2026-06-11:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-fe740c3396e550769213ed39cd41df72`
+conserva la entrega valida acumulada de T261 y corrige la trazabilidad de
+revision sin ampliar write-set ni relanzar un agente padre sobre la tarea
+original. El contexto obligatorio `ref_only` queda resuelto con el paquete
+OrquestaV2 actual, README/AGENTS, `docs/README.md`, runbook de incidencia y el
+bloque vigente T260/T261/T262. El estado canonico no cambia: el lock de arranque
+Codex queda cerrado localmente con evidencia focal, y el unico pendiente vivo
+de T261 sigue siendo el smoke Codex real acotado con varios agentes concurrentes
+y `CODEX_HOME` compartido.
+
+Assessment documental 2026-06-11:
+`agent-ref-assessment-task-autoprogramming-8dba73408f53-g01-822068b0fb6fd0f5de82df038bf2628c`
+confirma la sincronizacion acumulada de T261 sin abrir codigo ni relanzar un
+owner solapado. La tarea origen
+`task-ref-self-improvement-93ae9eac132d` queda preservada como ref opaca junto
+con `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`,
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` y
+`backlog_scan_epoch:backlog-scan-epoch-01339b374db5`. Estado canonico: el lock
+de arranque Codex sigue cerrado localmente con evidencia focal; la unica deuda
+viva de T261 es validacion externa opt-in mediante smoke Codex real acotado con
+varios agentes concurrentes y `CODEX_HOME` compartido. Si el planner vuelve a
+observar la incidencia sin fallo nuevo, debe clasificarla como no-op documental
+o pedir solo esa validacion externa, no repetir implementacion ni crear otro
+padre de codigo.
+
+Sincronizacion documental de automejora 2026-06-11:
+`agent-ref-task-autoprogramming-dbce8996225c-g01` corrige el patron ambiguo que
+volvia a presentar T261 como trabajo de implementacion abierto. La lectura
+canonica queda: `task-ref-self-improvement-93ae9eac132d` y su evidencia local
+cierran el cambio de lock; `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`,
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` y
+`backlog_scan_epoch:backlog-scan-epoch-01339b374db5` se conservan solo como refs
+opacas de trazabilidad; la unica accion viva es el smoke Codex real acotado con
+varios agentes concurrentes y `CODEX_HOME` compartido, o rework causal si aparece
+un fallo nuevo. Los scanners de backlog y la automejora idle deben tratar nuevas
+coincidencias documentales de "carrera de skills" como sincronizadas/no-op cuando
+no aporten regresion verificable.
+
+Sincronizacion documental OrquestaV2 2026-06-11 burst 002:
+`agent-ref-task-autoprogramming-de66e2461b63-g01` resuelve la ambiguedad
+detectada por automejora sin ampliar write-set, sin abrir codigo y sin relanzar
+un agente padre sobre la implementacion ya registrada. Estado canonico para
+planners y scanners: T261 no esta pendiente de implementar; el lock de arranque
+Codex queda cerrado localmente por `task-ref-self-improvement-93ae9eac132d` y
+la deuda viva sigue siendo solo validacion externa opt-in mediante smoke Codex
+real acotado con varios agentes concurrentes y `CODEX_HOME` compartido, o rework
+causal si aparece una regresion nueva con evidencia. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`,
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` y
+`backlog_scan_epoch:backlog-scan-epoch-f6f711eeec44` se conservan solo como refs
+opacas; no son rutas ni nombres Git. Si una lectura documental vuelve a detectar
+"carrera concurrente al instalar skills de Codex" sin fallo nuevo, el resultado
+correcto es `no-op`/sincronizado o pedir el smoke externo pendiente, no crear
+otra tarea de implementacion del lock.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 burst 002 retry:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-b1418a4c275825515a599aac352c6cbe`
+conserva la entrega valida acumulada de T261 y completa la microtarea de
+revision dentro del write-set documental permitido. No relanza otro agente padre
+sobre la tarea original, no abre codigo y no cambia el estado canonico: el lock
+de arranque Codex sigue cerrado localmente por
+`task-ref-self-improvement-93ae9eac132d`; la unica deuda viva es el smoke Codex
+real concurrente opt-in con `CODEX_HOME` compartido o rework causal si aparece
+una regresion nueva con evidencia verificable. El contexto obligatorio
+`ref_only` con `required_ref_action=ack_evidence_required` queda resuelto por
+lectura local de `agent_packet.json`, `codex_stderr.log`, `AGENTS.md`,
+`README.md`, `docs/README.md`, la foto vigente, guia del nucleo, principio del
+Director, runbook de incidencia y bloque vigente T260/T261/T262. La senal de
+instalacion de skills observada al arranque de este paquete queda registrada
+como evidencia de trazabilidad enlazada a T261, no como permiso para duplicar
+la implementacion ni para abrir un nuevo padre sin `run_ref`, `agent_ref`, log
+causal nuevo o resultado del smoke externo posterior al corte local.
+
+Sincronizacion documental OrquestaV2 2026-06-11 retry 1c0f0ee:
+`agent-ref-assessment-task-autoprogramming-fb4ce32b6a76-g01-04e23c6b6af432fcc295474677004743`
+normaliza el estado documental de T261 para evitar que el backlog vuelva a
+presentar la carrera de skills como implementacion abierta. Estado de planner:
+`estado_documental=sincronizado`, `implementacion_lock=cerrada_localmente` y
+`trabajo_vivo=smoke_codex_real_concurrente_opt_in`. El scanner debe tratar
+coincidencias nuevas de `failed to install system skills` o "carrera concurrente
+al instalar skills de Codex" como no-op documental si no aportan regresion
+verificable, y solo debe abrir una tarea nueva para ejecutar el smoke externo
+pendiente o para rework causal sobre fallo nuevo. El contexto obligatorio
+`ref_only` queda resuelto con lectura local del paquete OrquestaV2, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+Director, runbook de incidencia y bloque T260/T261/T262.
+`task-ref-self-improvement-93ae9eac132d`,
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`,
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` y
+`backlog_scan_epoch:backlog-scan-epoch-72ccf7f44ac3` se conservan solo como refs
+opacas; no son rutas, nombres Git ni instrucciones de ejecucion.
+
+Assessment documental OrquestaV2 2026-06-11 retry fd94c312:
+`agent-ref-assessment-task-autoprogramming-52970cb5102c-g01-92587a4b32d988dde0b8ee96b063c781`
+confirma el mismo cierre documental acumulado de T261 sin programar codigo ni
+relanzar un owner padre para el lock. Lectura canonica para automejora y
+planners: T261 no esta pendiente de implementacion; el lock de arranque de
+skills de Codex queda cerrado localmente por
+`task-ref-self-improvement-93ae9eac132d`; la unica deuda viva sigue siendo el
+smoke Codex real concurrente opt-in con `CODEX_HOME` compartido, o rework causal
+si aparece una regresion nueva con `run_ref`, `agent_ref`, log nuevo o entrega
+causal posterior al corte del 2026-06-11. Coincidencias documentales nuevas de
+`failed to install system skills` o "carrera concurrente al instalar skills de
+Codex" sin evidencia nueva deben clasificarse como sincronizadas/no-op
+documental. El contexto obligatorio `ref_only` de este paquete queda resuelto
+por lectura local de `agent_packet.json`, `AGENTS.md`, `README.md`,
+`docs/README.md`, estado vigente, principio del Director, runbook de incidencia
+y bloque T260/T261/T262. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas; no son rutas, nombres Git ni instrucciones de ejecucion.
+
+Rework de revision OrquestaV2 2026-06-11 retry b26069e:
+`agent-ref-task-ref-review-rework-task-autoprogramming-2083d1dda084-g01-14a3615eb036b7b29d6b6a41d5a3b6f4`
+conserva la entrega valida acumulada de T261 y completa la correccion sin
+relanzar otro agente padre sobre la tarea original. El estado canonico no
+cambia: `task-ref-self-improvement-93ae9eac132d` sigue siendo el owner del
+lock de arranque Codex ya cerrado localmente con evidencia focal, y la unica
+accion viva continua siendo el smoke Codex real concurrente opt-in con
+`CODEX_HOME` compartido, o rework causal si aparece una regresion nueva
+verificable posterior al corte del 2026-06-11. El contexto obligatorio
+`ref_only` queda resuelto por lectura local del paquete OrquestaV2, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+Director, runbook de incidencia y bloque T260/T261/T262. Sin fallo nuevo,
+planners y scanners deben tratar coincidencias sobre la carrera de skills como
+sincronizadas/no-op documental o pedir solo el smoke externo pendiente, no abrir
+otra implementacion del lock.
+
+Rework de revision OrquestaV2 2026-06-11 retry fd94c312 burst 002:
+`agent-ref-task-ref-review-rework-task-autoprogramming-52970cb5102c-g01-ccc93be895a0c5078851c08ea31f38df`
+completa la correccion documental sobre la misma entrega valida sin relanzar
+otro agente padre ni abrir codigo fuera del write-set. El estado canonico se
+mantiene: `task-ref-self-improvement-93ae9eac132d` conserva el owner del lock
+Codex cerrado localmente con evidencia focal; T261 solo queda vivo para el
+smoke Codex real concurrente opt-in con `CODEX_HOME` compartido, o para rework
+causal si aparece una regresion nueva con `run_ref`, `agent_ref`, log nuevo o
+entrega posterior verificable. El contexto obligatorio `ref_only` queda
+resuelto por lectura local de `agent_packet.json`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del Director,
+runbook de incidencia y bloque vigente T260/T261/T262. Si una observacion futura
+solo repite `failed to install system skills` o la carrera concurrente de
+skills sin evidencia nueva, debe cerrarse como sincronizada/no-op documental o
+pedir solo la validacion externa pendiente.
+
+Sincronizacion documental OrquestaV2 2026-06-11 retry 1a6225:
+`agent-ref-task-autoprogramming-e60061e57fe0-g01` mantiene el mismo cierre
+canonico y corrige la ambiguedad acumulativa sin ampliar codigo ni write-set.
+La lectura vigente para T261 es unica: `task-ref-self-improvement-93ae9eac132d`
+continua como owner opaco del lock de arranque Codex cerrado localmente con
+evidencia focal; `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan
+solo como refs opacas; la unica deuda viva es el smoke Codex real concurrente
+opt-in con `CODEX_HOME` compartido, o rework causal si aparece una regresion
+nueva verificable posterior al corte del 2026-06-11. El contexto obligatorio
+`ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`AGENTS.md`, `README.md`, `docs/README.md`, foto vigente, guia del nucleo,
+principio del Director, runbook de incidencia y bloque T260/T261/T262. Sin
+`run_ref`, `agent_ref`, log nuevo o entrega causal posterior al corte, los
+planners/scanners deben clasificar nuevas coincidencias sobre la carrera de
+skills como `sincronizado/no-op documental` o pedir solo el smoke externo
+pendiente, no crear otro padre de implementacion ni otra sincronizacion
+acumulativa.
+
+Revalidacion documental OrquestaV2 2026-06-11 retry f7cd4fb7:
+`agent-ref-task-autoprogramming-f909729631f0-g01` no abre codigo ni amplia
+write-set; sincroniza el estado ambiguo de T261 reforzando la clave canonica
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending`. El
+owner opaco preservado sigue siendo `task-ref-self-improvement-93ae9eac132d`, y
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` junto con
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas, no rutas ni nombres Git. Estado vigente para planners:
+`implementacion_lock_codex_skills=cerrada_localmente` y
+`trabajo_vivo_t261=smoke_codex_real_concurrente_opt_in`; sin `run_ref`,
+`agent_ref`, log nuevo o entrega causal posterior al corte del 2026-06-11,
+nuevas coincidencias sobre la carrera de skills deben cerrarse como
+`sincronizado/no-op documental`, no generar otra sincronizacion acumulativa ni
+otra implementacion del lock. El contexto obligatorio `ref_only` queda resuelto
+por lectura local de `agent_packet.json`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del Director,
+runbook de incidencia y bloque T260/T261/T262.
+
+Rework de revision OrquestaV2 2026-06-11 retry eca41ea:
+`agent-ref-task-ref-review-rework-task-autoprogramming-bc5d58c523bb-g01-f98a77048b610006ca8597efaeabf84c`
+cierra la correccion de entrega conservando la evidencia valida acumulada de
+T261 y sin relanzar otro agente padre sobre la implementacion original. El
+estado canonico no cambia: `task-ref-self-improvement-93ae9eac132d` sigue como
+owner opaco del lock de arranque Codex cerrado localmente con evidencia focal,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la unica accion viva continua siendo el smoke
+Codex real concurrente opt-in con `CODEX_HOME` compartido o rework causal si
+aparece una regresion nueva verificable posterior al corte del 2026-06-11. El
+contexto obligatorio `ref_only` queda resuelto por lectura local del paquete
+OrquestaV2, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente, principio
+del Director, runbook de incidencia y bloque vigente T260/T261/T262. Sin
+`run_ref`, `agent_ref`, log nuevo o entrega causal posterior, planners y
+scanners deben cerrar nuevas coincidencias sobre la carrera de skills como
+`sincronizado/no-op documental` o pedir solo el smoke externo pendiente.
+
+Rework de revision OrquestaV2 2026-06-11 retry b26069e burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-24facf170a9ba7c630ebc0c2082e5273`
+completa la correccion de la entrega de revision conservando la evidencia
+valida acumulada de T261 y sin relanzar otro agente padre sobre la
+implementacion original. El estado canonico no cambia:
+`task-ref-self-improvement-93ae9eac132d` sigue como owner opaco del lock de
+arranque Codex cerrado localmente con evidencia focal,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la unica accion viva continua siendo el smoke
+Codex real concurrente opt-in con `CODEX_HOME` compartido o rework causal si
+aparece una regresion nueva verificable posterior al corte del 2026-06-11. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia y bloque vigente T260/T261/T262. Sin `run_ref`, `agent_ref`, log
+nuevo o entrega causal posterior, planners y scanners deben cerrar nuevas
+coincidencias sobre la carrera de skills como `sincronizado/no-op documental` o
+pedir solo la validacion externa pendiente.
+
+Rework de revision OrquestaV2 2026-06-11 retry f7cd4fb7 burst 002:
+`agent-ref-task-ref-review-rework-task-autoprogramming-f909729631f0-g01-d8703ecc836fa982572a8102a86a9852`
+conserva la entrega valida acumulada de T261, pero corrige la lectura de
+revision porque el arranque del paquete actual trae evidencia nueva en
+`codex_stderr.log`: `failed to install system skills: io error while remove existing system skills dir: Permission denied (os error 13)`.
+Esta observacion es posterior al corte local y no debe cerrarse como mera
+coincidencia documental. El write-set de este rework solo permite documentacion,
+por lo que no abre codigo ni relanza otro agente padre sobre la implementacion
+original; deja la accion tecnica como rework causal fuera de este alcance o
+validacion externa opt-in del arranque Codex real con `CODEX_HOME` compartido.
+El contexto obligatorio `ref_only` queda resuelto por lectura local del paquete
+OrquestaV2, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente, guia del
+nucleo, principio del Director, runbook de incidencia y bloque vigente
+T260/T261/T262. La deduplicacion canonica se conserva, pero esta evidencia nueva
+debe enlazarse a T261 como regresion verificable si el Director abre una tarea
+posterior con write-set de codigo.
+
+Rework de revision OrquestaV2 2026-06-11 retry fd94c312 revision f5380:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-f5380b4dff939786ce2dcd27ff25ffb8`
+completa la correccion de entrega conservando la evidencia valida previa y sin
+relanzar otro agente padre sobre la implementacion original. La lectura vigente
+queda separada en tres estados: el lock de arranque Codex sigue cerrado
+localmente por `task-ref-self-improvement-93ae9eac132d`; la evidencia posterior
+de `codex_stderr.log` citada por el rework anterior no se degrada a simple
+coincidencia documental; y la accion pendiente queda limitada a rework causal
+con write-set de codigo o smoke Codex real concurrente opt-in con `CODEX_HOME`
+compartido. Este paquete no trae contexto materializado adicional, por lo que el
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, runbook de incidencia y bloque vigente
+T260/T261/T262.
+
+Rework de revision OrquestaV2 2026-06-11 retry 33b689ac burst 002:
+`agent-ref-task-ref-review-rework-task-autoprogramming-dd493b8cc14c-g01-86099ebd297fc0a42b254587e4422cef`
+conserva la entrega valida acumulada de T261 y completa la correccion
+documental dentro del write-set permitido, sin relanzar otro agente padre ni
+abrir codigo. El arranque de este paquete vuelve a traer evidencia posterior en
+`codex_stderr.log` del fallo `failed to install system skills`, por lo que no se
+rebaja a coincidencia narrativa antigua; queda enlazado a T261 como evidencia
+de regresion/verificacion para una tarea causal futura con owner de codigo o
+para el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. La
+lectura canonica no cambia: el lock local sigue asociado a
+`task-ref-self-improvement-93ae9eac132d`, la deduplicacion documental conserva
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending`, y el
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, runbook de incidencia y bloque vigente
+T260/T261/T262.
+
+Rework de revision OrquestaV2 2026-06-11 retry 1a6225 burst 002:
+`agent-ref-task-ref-review-rework-task-autoprogramming-e60061e57fe0-g01-82ba5afab50b54f8fdeb5b1a9443044f`
+conserva la entrega valida acumulada de T261 y completa la correccion
+documental de este paquete dentro del write-set permitido, sin abrir codigo ni
+relanzar otro agente padre sobre la implementacion original. El paquete actual
+trae evidencia posterior en `codex_stderr.log` del fallo de instalacion de
+skills de Codex, por lo que esa senal no se clasifica como coincidencia
+documental antigua. La accion tecnica queda fuera de este write-set y debe
+abrirse solo como rework causal con alcance de codigo, o como smoke Codex real
+concurrente opt-in con `CODEX_HOME` compartido. La lectura canonica se mantiene:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental y el contexto obligatorio `ref_only` queda resuelto
+por lectura local de `agent_packet.json`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del Director, matriz
+de smokes, runbook de incidencia y bloque vigente T260/T261/T262.
+
+Rework de revision sobre rework OrquestaV2 2026-06-11 retry eca41ea burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-ca767c69d448fb7842599ec55fc2e4a5`
+conserva la entrega valida acumulada de T261 y completa la correccion
+documental dentro del write-set permitido, sin relanzar otro agente padre sobre
+la implementacion original ni abrir cambios de codigo. El paquete actual vuelve
+a traer evidencia posterior en `codex_stderr.log` del fallo de instalacion de
+skills de Codex, por lo que la senal sigue enlazada a T261 como regresion
+verificable y no como coincidencia documental antigua. La lectura canonica se
+mantiene: `task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del
+lock local, `dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending`
+conserva la deduplicacion documental, y la accion tecnica queda fuera de este
+alcance documental hasta que el Director abra rework causal con write-set de
+codigo o ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME`
+compartido. El contexto obligatorio `ref_only` queda resuelto por lectura local
+de `agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto
+vigente, guia del nucleo, principio del Director, runbook de incidencia y
+bloque vigente T260/T261/T262.
+
+Rework de revision sobre rework OrquestaV2 2026-06-11 retry 33b689ac burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-a551de1c354a6d70a2c1a231d74dc472`
+conserva la entrega valida acumulada de T261 y completa la correccion
+documental de esta tarea nueva dentro del write-set permitido, sin relanzar otro
+agente padre sobre la implementacion original ni abrir cambios de codigo. El
+paquete actual vuelve a traer evidencia posterior en `codex_stderr.log` del
+fallo `failed to install system skills`, por lo que la senal sigue enlazada a
+T261 como regresion/verificacion y no como coincidencia documental antigua. La
+lectura canonica se mantiene: `task-ref-self-improvement-93ae9eac132d` conserva
+el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, runbook de incidencia y bloque vigente
+T260/T261/T262.
+
+Rework de revision sobre rework OrquestaV2 2026-06-11 retry f7cd4fb7 burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-e71852fcb5acb2a41e5d69f428cb2e50`
+conserva la entrega valida acumulada de T261 y completa la correccion
+documental de esta tarea nueva dentro del write-set permitido, sin relanzar otro
+agente padre sobre la implementacion original ni abrir cambios de codigo. El
+paquete actual vuelve a traer evidencia posterior en `codex_stderr.log` del
+fallo de instalacion de skills de Codex, por lo que la senal sigue enlazada a
+T261 como regresion/verificacion y no como coincidencia documental antigua. La
+lectura canonica se mantiene: `task-ref-self-improvement-93ae9eac132d`
+conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia y bloque vigente T260/T261/T262.
+
+Rework de revision sobre rework OrquestaV2 2026-06-11 retry 33b689ac revision c1847:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-c1847d572c19349ed427cece1a540281`
+conserva la entrega valida acumulada de T261 dentro del write-set documental
+permitido y no relanza otro agente padre sobre la implementacion original. Esta
+tarea no aporta codigo ni ejecuta el smoke externo; por tanto mantiene como
+lectura canonica que `task-ref-self-improvement-93ae9eac132d` es el owner opaco
+del lock local, que
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental y que la accion tecnica viva queda limitada a rework
+causal con write-set de codigo si el Director materializa la regresion, o al
+smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. Las evidencias
+previas de `codex_stderr.log` no se degradan a coincidencia documental antigua,
+pero tampoco autorizan desde este paquete un cambio de codigo fuera de alcance.
+El contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia y bloque vigente T260/T261/T262.
+
+Rework de revision sobre rework OrquestaV2 2026-06-11 retry 1a6225 burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-45ef3fdfcba410ee4c537ebc5db802b7`
+conserva la entrega valida acumulada de T261 y completa la correccion
+documental de esta tarea nueva dentro del write-set permitido, sin relanzar
+otro agente padre sobre la implementacion original ni abrir cambios de codigo.
+El paquete actual vuelve a traer evidencia posterior en `codex_stderr.log` del
+fallo de instalacion de skills de Codex al arranque, por lo que la senal sigue
+enlazada a T261 como regresion/verificacion y no como coincidencia documental
+antigua. La lectura canonica se mantiene: `task-ref-self-improvement-93ae9eac132d`
+conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia y bloque vigente T260/T261/T262. La API local de Orquesta no se
+consulto como superficie de direccion porque el sandbox rechazo la conexion
+loopback; queda registrada como limitacion operativa de este agente externo, no
+como cambio de estado del backlog.
+
+Rework de revision sobre rework OrquestaV2 2026-06-11 retry fd94c312 burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-291e1b1566b4c5888552a09c893ed863`
+conserva la entrega valida acumulada de T261 y completa la correccion
+documental dentro del write-set permitido, sin abrir codigo ni relanzar otro
+agente padre sobre la implementacion original. El paquete actual mantiene
+evidencia posterior en `codex_stderr.log` del fallo de instalacion de skills de
+Codex al arranque, por lo que la senal sigue enlazada a T261 como
+regresion/verificacion y no como coincidencia documental antigua. La accion
+tecnica queda fuera de este alcance documental: debe abrirse solo como rework
+causal con write-set de codigo o como smoke Codex real concurrente opt-in con
+`CODEX_HOME` compartido. La lectura canonica se mantiene:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local
+y `dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending`
+conserva la deduplicacion documental. El contexto obligatorio `ref_only` queda
+resuelto por lectura local de `agent_packet.json`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del Director,
+runbook de incidencia y bloque vigente T260/T261/T262.
+
+Rework de revision sobre rework OrquestaV2 2026-06-11 retry b26069e revision 42eb:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-42eb2de52f760f281fd8a46bfa08fe3f`
+conserva la entrega valida acumulada de T261 y completa la correccion
+documental dentro del write-set permitido, sin abrir codigo ni relanzar otro
+agente padre sobre la implementacion original. El `codex_stderr.log` del paquete
+actual vuelve a registrar el fallo de instalacion de skills al arranque, por lo
+que la senal permanece enlazada a T261 como regresion/verificacion y no se
+rebaja a coincidencia documental antigua. La accion tecnica queda fuera de este
+alcance documental: solo procede si el Director abre rework causal con write-set
+de codigo o ejecuta el smoke Codex real concurrente opt-in con `CODEX_HOME`
+compartido. La lectura canonica se mantiene:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental y el contexto obligatorio `ref_only` queda resuelto
+por lectura local de `agent_packet.json`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del Director,
+runbook de incidencia y bloque vigente T260/T261/T262.
+
+Rework de revision sobre rework OrquestaV2 2026-06-11 retry eca41ea burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-fb639273744f7e086514b433ad1e7ac7`
+conserva la entrega valida acumulada de T261 y completa la correccion
+documental de esta tarea nueva dentro del write-set permitido, sin abrir codigo
+ni relanzar otro agente padre sobre la implementacion original. El arranque del
+paquete actual vuelve a registrar en `codex_stderr.log` el fallo de instalacion
+de skills de Codex, por lo que la senal sigue enlazada a T261 como
+regresion/verificacion posterior al corte local y no como coincidencia
+documental antigua. La lectura canonica se mantiene:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de incidencia
+y bloque vigente T260/T261/T262. La consulta de la API local de Orquesta quedo
+bloqueada por el sandbox de loopback de este agente externo; esta limitacion no
+cambia el estado canonico ni autoriza ampliar el write-set.
+
+Rework de revision sobre rework OrquestaV2 2026-06-11 retry f7cd4fb7 revision 146a:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-146aeaa711e1631ec8d9ca35149c539d`
+conserva la entrega valida acumulada de T261 y completa la correccion
+documental de esta tarea nueva dentro del write-set permitido, sin abrir codigo
+ni relanzar otro agente padre sobre la implementacion original. El arranque del
+paquete actual vuelve a registrar en `codex_stderr.log` el fallo de instalacion
+de skills de Codex, por lo que la senal sigue enlazada a T261 como
+regresion/verificacion posterior al corte local y no como coincidencia
+documental antigua. La lectura canonica se mantiene:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, runbook de incidencia y bloque vigente
+T260/T261/T262. La correccion previa que solo quedo `blocked` por validacion de
+entorno se conserva como evidencia recuperable; este rework registra el cierre
+documental esperado por el paquete actual.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 916770:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-61cdeb57cd507cd1404ba6fe435bef13`
+conserva la entrega valida acumulada de T261 y completa la correccion
+documental dentro del write-set permitido, sin abrir codigo ni relanzar otro
+agente padre sobre la implementacion original. El arranque de este paquete
+vuelve a registrar en `codex_stderr.log` el fallo de instalacion de skills de
+Codex, por lo que la senal sigue enlazada a T261 como
+regresion/verificacion posterior al corte local y no como coincidencia
+documental antigua. La lectura canonica se mantiene:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, runbook de incidencia y bloque vigente
+T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 1a6225 revision 7740:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-77404d40d57fedf4a7059e4fe436188a`
+conserva la entrega valida acumulada de T261 y completa la correccion
+documental de esta tarea nueva dentro del write-set permitido, sin relanzar
+otro agente padre sobre la implementacion original ni abrir cambios de codigo.
+El arranque del paquete actual vuelve a registrar en `codex_stderr.log` el fallo
+de instalacion de skills de Codex al arranque, por lo que la senal permanece
+enlazada a T261 como regresion/verificacion posterior al corte local y no como
+coincidencia documental antigua. La lectura canonica se mantiene:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, runbook de incidencia y bloque vigente
+T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry fd94c312 revision a2387:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-a2387aaccfa40e4f75771a12349bd8b6`
+conserva la entrega valida acumulada de T261 y completa la correccion
+documental de esta tarea nueva dentro del write-set permitido, sin relanzar
+otro agente padre sobre la implementacion original ni abrir cambios de codigo.
+El paquete actual mantiene en `codex_stderr.log` evidencia posterior del fallo
+de instalacion de skills de Codex al arranque, por lo que la senal sigue
+enlazada a T261 como regresion/verificacion posterior al corte local y no como
+coincidencia documental antigua. La lectura canonica no cambia:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, runbook de incidencia y bloque vigente
+T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry b26069e revision 70b139:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-70b139374ef0e535be592871166432e8`
+conserva la entrega valida acumulada de T261 y completa la correccion
+documental de esta tarea nueva dentro del write-set permitido, sin relanzar
+otro agente padre sobre la implementacion original ni abrir cambios de codigo.
+El arranque del paquete actual vuelve a registrar en `codex_stderr.log` el
+fallo de instalacion de skills de Codex, por lo que la senal sigue enlazada a
+T261 como regresion/verificacion posterior al corte local y no como coincidencia
+documental antigua. La lectura canonica se mantiene:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `codex_stderr.log`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del Director,
+runbook de incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry f7cd4fb7 burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-d741969634ab401a28b585fb853d6e16`
+conserva la entrega valida acumulada de T261 y completa esta correccion
+documental dentro del write-set permitido, sin relanzar otro agente padre sobre
+la implementacion original ni abrir cambios de codigo. El paquete actual vuelve
+a registrar en `codex_stderr.log` el fallo de instalacion de skills de Codex al
+arranque, por lo que la senal sigue enlazada a T261 como
+regresion/verificacion posterior al corte local y no como coincidencia
+documental antigua. La lectura canonica no cambia:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `codex_stderr.log`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del Director,
+runbook de incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry eca41ea revision de10eb:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-de10eb03d1ebb3b8438f623f98a766e1`
+conserva la entrega valida acumulada de T261 y cierra esta tarea documental
+dentro del write-set permitido, sin abrir codigo ni relanzar otro agente padre
+sobre la implementacion original. El contexto materializado del paquete llega
+solo como `ref_only` con `materialization_missing`, por lo que la correccion se
+apoya en refs locales y mantiene la lectura canonica vigente:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+hasta que el Director abra rework causal con write-set de codigo o ejecute el
+smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El contexto
+obligatorio `ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`AGENTS.md`, `README.md`, `docs/README.md`, runbook de incidencia y bloque
+vigente T260/T261/T262. La consulta a la API local de Orquesta quedo bloqueada
+por permisos de loopback del sandbox; no cambia el estado canonico ni autoriza
+ampliar el alcance.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 1a6225 revision 6d24:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-6d24d422d07c9fcb1e213d3ca879e399`
+conserva la entrega valida acumulada de T261 y completa la correccion
+documental de esta tarea nueva dentro del write-set permitido, sin abrir codigo
+ni relanzar otro agente padre sobre la implementacion original. El
+`codex_stderr.log` del paquete actual vuelve a registrar el fallo de
+instalacion de skills de Codex al arranque, por lo que la senal sigue enlazada
+a T261 como regresion/verificacion posterior al corte local y no se rebaja a
+coincidencia documental antigua. La lectura canonica se mantiene:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `codex_stderr.log`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del Director,
+matriz de smokes, runbook de incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry fd94c312 revision 398196:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-398196814367db2c3bd845a09b45738f`
+conserva la entrega valida acumulada de T261 y completa la correccion
+documental de esta tarea nueva dentro del write-set permitido, sin abrir codigo
+ni relanzar otro agente padre sobre la implementacion original. El contexto
+materializado llega como `ref_only` con `materialization_missing`, y el
+`codex_stderr.log` del paquete actual vuelve a registrar el fallo de
+instalacion de skills de Codex al arranque; por tanto, la senal sigue enlazada
+a T261 como regresion/verificacion posterior al corte local, no como
+coincidencia documental antigua. La lectura canonica se mantiene:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `codex_stderr.log`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del Director, matriz
+de smokes, runbook de incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 916770 revision 871271:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-87127151445af2a649e1c86120976576`
+conserva la entrega valida acumulada de T261 y completa esta correccion
+documental dentro del write-set permitido, sin relanzar otro agente padre sobre
+la implementacion original ni abrir cambios de codigo. El paquete actual
+mantiene en `codex_stderr.log` evidencia posterior del fallo de instalacion de
+skills de Codex al arranque, por lo que la senal sigue enlazada a T261 como
+regresion/verificacion posterior al corte local y no como coincidencia
+documental antigua. La lectura canonica no cambia:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `codex_stderr.log`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del Director, matriz
+de smokes, runbook de incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry eca41ea revision 505d:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-505d56661420022467743b57c27c7443`
+conserva la entrega valida acumulada de T261 y completa esta correccion
+documental dentro del write-set permitido, sin relanzar otro agente padre sobre
+la implementacion original ni abrir cambios de codigo. El contexto materializado
+del paquete llega como `ref_only` con `materialization_missing`, por lo que esta
+entrega no introduce evidencia causal nueva ni cambia el estado canonico:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica sigue limitada a rework causal
+con write-set de codigo si aparece regresion verificable o al smoke Codex real
+concurrente opt-in con `CODEX_HOME` compartido. El contexto obligatorio
+`ref_only` queda resuelto por lectura local de `agent_packet.json`, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+Director, matriz de smokes, runbook de incidencia y bloque vigente
+T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry b26069e revision 93bb:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-93bb1d69e2c12d0f8675b92edc07b3e7`
+conserva la entrega valida acumulada de T261 y completa esta correccion
+documental dentro del write-set permitido, sin abrir codigo ni relanzar otro
+agente padre sobre la implementacion original. El contexto materializado llega
+como `ref_only` con `materialization_missing`, y el `codex_stderr.log` del
+paquete actual registra de nuevo el fallo de instalacion de skills de Codex al
+arranque, por lo que la senal queda enlazada a T261 como
+regresion/verificacion posterior al corte local y no como coincidencia
+documental antigua. La lectura canonica se mantiene:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `codex_stderr.log`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del Director, matriz
+de smokes, runbook de incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 1a6225 burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-5cfbaf5d91d33e061be21ddeec4534f8`
+conserva la entrega valida acumulada de T261 y completa esta correccion
+documental dentro del write-set permitido, sin relanzar otro agente padre sobre
+la implementacion original ni abrir cambios de codigo. El contexto materializado
+llega como `ref_only` con `materialization_missing`, y el `codex_stderr.log` del
+paquete actual vuelve a registrar el fallo de instalacion de skills de Codex al
+arranque; por tanto, la senal sigue enlazada a T261 como
+regresion/verificacion posterior al corte local y no como coincidencia
+documental antigua. La lectura canonica se mantiene:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `codex_stderr.log`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del Director, matriz
+de smokes, runbook de incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry f7cd4fb7 revision bc23:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-bc23d199a50180e9c627fa48a35d8732`
+conserva la entrega valida acumulada de T261 y completa esta correccion
+documental dentro del write-set permitido, sin relanzar otro agente padre sobre
+la implementacion original ni abrir cambios de codigo. El contexto materializado
+llega como `ref_only` con `materialization_missing`, y el `codex_stderr.log` del
+paquete actual vuelve a registrar el fallo de instalacion de skills de Codex al
+arranque; por tanto, la senal sigue enlazada a T261 como
+regresion/verificacion posterior al corte local y no como coincidencia
+documental antigua. La lectura canonica se mantiene:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `codex_stderr.log`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del Director, matriz
+de smokes, runbook de incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry fd94c312 revision 1feec:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-1feec4046c06e1e0f2ab320b14206a84`
+conserva la entrega valida acumulada de T261 y completa esta correccion
+documental dentro del write-set permitido, sin relanzar otro agente padre sobre
+la implementacion original ni abrir cambios de codigo. El contexto materializado
+llega como `ref_only` con `materialization_missing`, y el `codex_stderr.log` del
+paquete actual vuelve a registrar el fallo de instalacion de skills de Codex al
+arranque; por tanto, la senal queda enlazada a T261 como
+regresion/verificacion posterior al corte local y no como coincidencia
+documental antigua. La lectura canonica se mantiene:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `codex_stderr.log`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del Director,
+runbook de incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 1a6225 revision d2ce:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-d2ceb0580483fc62f149804cc1dcc8db`
+conserva la entrega valida acumulada de T261 y completa esta correccion
+documental dentro del write-set permitido, sin relanzar otro agente padre sobre
+la implementacion original ni abrir cambios de codigo. El contexto materializado
+llega como `ref_only` con `materialization_missing`, y el `codex_stderr.log` del
+paquete actual vuelve a registrar el fallo de instalacion de skills de Codex al
+arranque; por tanto, la senal queda enlazada a T261 como
+regresion/verificacion posterior al corte local y no como coincidencia
+documental antigua. La lectura canonica se mantiene:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `codex_stderr.log`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del Director, matriz
+de smokes, runbook de incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 916770 burst
+002 revision c7d4:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-c7d4b93301f977897cc8a7b99bf3e7f7`
+conserva la entrega valida acumulada de T261 y completa esta correccion
+documental dentro del write-set permitido, sin relanzar otro agente padre sobre
+la implementacion original ni abrir cambios de codigo. El contexto materializado
+llega como `ref_only` con `materialization_missing`, y el `codex_stderr.log` del
+paquete actual registra de nuevo `failed to install system skills`; por tanto,
+la senal sigue enlazada a T261 como regresion/verificacion posterior al corte
+local y no como coincidencia documental antigua. La lectura canonica no cambia:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `codex_stderr.log`, `AGENTS.md`, `README.md`,
+`docs/README.md`, runbook de incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry b26069e revision 5a197:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-5a19718f31f440de997c7f4f2279333d`
+conserva la entrega valida acumulada de T261 y completa esta correccion
+documental dentro del write-set permitido, sin relanzar otro agente padre sobre
+la implementacion original ni abrir cambios de codigo. El contexto materializado
+del paquete llega como `ref_only` con `materialization_missing`, y el
+`codex_stderr.log` del paquete actual registra de nuevo el fallo de instalacion
+de skills de Codex al arranque; por tanto, la senal queda enlazada a T261 como
+regresion/verificacion posterior al corte local y no como coincidencia
+documental antigua. La lectura canonica se mantiene:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `codex_stderr.log`, `AGENTS.md`, `README.md`,
+`docs/README.md`, runbook de incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry eca41ea burst
+002 revision bd803:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-bd803897ddd501a543fcd449c3708c46`
+conserva la entrega valida acumulada de T261 y completa esta correccion
+documental dentro del write-set permitido, sin abrir cambios de codigo ni
+relanzar otro agente padre sobre la implementacion original. El contexto
+materializado llega como `ref_only` con `materialization_missing`, y el
+`codex_stderr.log` del paquete actual registra de nuevo el fallo de instalacion
+de skills de Codex al arranque; por tanto, la senal queda enlazada a T261 como
+regresion/verificacion posterior al corte local y no como coincidencia
+documental antigua. La lectura canonica se mantiene:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `codex_stderr.log`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del Director,
+runbook de incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry f7cd4fb7 burst
+002 revision 4a36:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-4a36ef655dc94166aabc034f1afdb260`
+conserva la entrega valida acumulada de T261 y completa esta correccion
+documental dentro del write-set permitido, sin relanzar otro agente padre sobre
+la implementacion original ni abrir cambios de codigo. El contexto materializado
+llega como `ref_only` con `materialization_missing`, y el `codex_stderr.log` del
+paquete actual registra `failed to install system skills`; por tanto, la senal
+sigue enlazada a T261 como regresion/verificacion posterior al corte local y no
+como coincidencia documental antigua. La lectura canonica se mantiene:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `codex_stderr.log`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del Director, matriz
+de smokes, runbook de incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry a5ac burst
+002, resident-director-8283:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-783eb4794a8d0d4255403c0713933320`
+conserva la entrega valida acumulada y cierra solo la correccion documental de
+esta tarea nueva dentro del write-set permitido, sin relanzar otro agente padre
+sobre la implementacion original ni abrir cambios de codigo. El paquete actual
+llega con contexto obligatorio `ref_only` y `materialization_missing`; la
+lectura local de `agent_packet.json` y `codex_stderr.log` vuelve a mostrar
+`failed to install system skills`, por lo que la senal queda enlazada a T261
+como regresion/verificacion posterior al corte local y no reabre T260 como
+arreglo generico de estados falsos `running`. La lectura canonica se mantiene:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+documental hasta que el Director abra rework causal con write-set de codigo o
+ejecute el smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El
+contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `codex_stderr.log`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del Director,
+runbook de incidencia y bloque vigente T260/T261/T262.
+
+Sincronizacion documental OrquestaV2 2026-06-11 retry 9449ae65 burst 002:
+`agent-ref-task-autoprogramming-343c2978bafe-g01` cierra esta observacion como
+sincronizacion documental acotada dentro del write-set permitido, sin abrir
+codigo ni relanzar otro agente padre sobre el lock original. El paquete actual
+trae contexto obligatorio `ref_only` con `materialization_missing` y no aporta
+`run_ref`, `agent_ref`, log nuevo ni entrega causal distinta a la incidencia ya
+enlazada; por contrato, prevalece el estado canonico vigente:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la unica accion viva sigue siendo el smoke Codex
+real concurrente opt-in con `CODEX_HOME` compartido o rework causal si aparece
+una regresion verificable posterior al corte local. `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` se preservan
+solo como refs opacas; no son rutas ni nombres Git. El contexto obligatorio
+`ref_only` queda resuelto por lectura local de `agent_packet.json`, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+Director, matriz de smokes, runbook de incidencia y bloque vigente
+T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry fd94c312 burst
+002, revision 4ba7:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-4ba7a053470106f5ae0735ab32de9ab9`
+conserva la entrega valida acumulada de T261 y completa esta correccion dentro
+del write-set documental permitido, sin abrir codigo ni relanzar otro agente
+padre sobre la implementacion original. El contexto materializado llega como
+`ref_only` con `materialization_missing`, y el `codex_stderr.log` del paquete
+actual registra de nuevo `failed to install system skills`; por tanto, la senal
+queda enlazada a T261 como regresion/verificacion posterior al corte local, no
+como tarea nueva de implementacion del lock. La lectura canonica no cambia:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+hasta que el Director abra rework causal con write-set de codigo o ejecute el
+smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El contexto
+obligatorio `ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`codex_stderr.log`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 1a6225 burst
+002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-4f214ef703294d5490b5cc5788f5fab5`
+conserva la entrega valida acumulada de T261 y completa esta correccion
+documental dentro del write-set permitido, sin abrir codigo ni relanzar otro
+agente padre sobre la implementacion original. El paquete actual llega con
+contexto obligatorio `ref_only` y `materialization_missing`; el
+`codex_stderr.log` de esta ejecucion registra de nuevo
+`failed to install system skills`, por lo que la senal queda enlazada a T261
+como regresion/verificacion posterior al corte local, no como implementacion
+nueva del lock. La lectura canonica no cambia:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la unica salida tecnica viva sigue siendo rework
+causal con write-set de codigo o smoke Codex real concurrente opt-in con
+`CODEX_HOME` compartido. El contexto obligatorio `ref_only` queda resuelto por
+lectura local de `agent_packet.json`, `codex_stderr.log`, `AGENTS.md`,
+`README.md`, `docs/README.md`, runbook de incidencia y bloque vigente
+T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 916770 burst
+002, resident-director-8285:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-b68d41ddda8f920a01ac2f520937b771`
+conserva la entrega valida acumulada de T261 y completa esta correccion
+documental dentro del write-set permitido, sin abrir codigo ni relanzar otro
+agente padre sobre la implementacion original. El paquete actual llega con
+contexto obligatorio `ref_only` y `materialization_missing`; la lectura local de
+`agent_packet.json` y `codex_stderr.log` registra de nuevo
+`failed to install system skills`, por lo que la senal queda enlazada a T261
+como regresion/verificacion posterior al corte local, no como implementacion
+nueva del lock. La lectura canonica no cambia:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la unica salida tecnica viva sigue siendo rework
+causal con write-set de codigo o smoke Codex real concurrente opt-in con
+`CODEX_HOME` compartido. El contexto obligatorio `ref_only` queda resuelto por
+lectura local de `agent_packet.json`, `codex_stderr.log`, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+Director, runbook de incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry eca41ea burst
+002, resident-director-8286:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-0f1ddbd98fc49c4925f4a7c559e9d402`
+conserva la entrega valida acumulada de T261 y completa esta correccion
+documental dentro del write-set permitido, sin abrir codigo ni relanzar otro
+agente padre sobre la implementacion original. El paquete actual llega con
+contexto obligatorio `ref_only` y `materialization_missing`; la lectura local de
+`agent_packet.json` y `codex_stderr.log` registra de nuevo
+`failed to install system skills`, por lo que la senal queda enlazada a T261
+como regresion/verificacion posterior al corte local, no como implementacion
+nueva del lock. La lectura canonica no cambia:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la unica salida tecnica viva sigue siendo rework
+causal con write-set de codigo o smoke Codex real concurrente opt-in con
+`CODEX_HOME` compartido. El contexto obligatorio `ref_only` queda resuelto por
+lectura local de `agent_packet.json`, `codex_stderr.log`, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+Director, runbook de incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry b26069e burst
+002, resident-director-8286:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-dadc7a2076281c2ed489bb5c01635a1e`
+conserva la entrega valida acumulada de T261 y completa esta correccion
+documental dentro del write-set permitido, sin abrir codigo ni relanzar otro
+agente padre sobre la implementacion original. El paquete actual llega con
+contexto obligatorio `ref_only` y `materialization_missing`; la lectura local de
+`agent_packet.json` y `codex_stderr.log` registra de nuevo
+`failed to install system skills`, por lo que la senal queda enlazada a T261
+como regresion/verificacion posterior al corte local, no como implementacion
+nueva del lock. La lectura canonica no cambia:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la unica salida tecnica viva sigue siendo rework
+causal con write-set de codigo o smoke Codex real concurrente opt-in con
+`CODEX_HOME` compartido. El contexto obligatorio `ref_only` queda resuelto por
+lectura local de `agent_packet.json`, `codex_stderr.log`, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+Director, matriz de smokes, runbook de incidencia y bloque vigente
+T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry f7cd4fb7 burst
+002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-4573d57c29d6d530e9629ce17ede37f1`
+conserva la entrega valida acumulada de T261 y completa esta correccion
+documental dentro del write-set permitido, sin abrir codigo ni relanzar otro
+agente padre sobre la implementacion original. El paquete actual llega con
+contexto obligatorio `ref_only` y `materialization_missing`; la lectura local de
+`codex_stderr.log` registra de nuevo `failed to install system skills`, por lo
+que la senal queda enlazada a T261 como regresion/verificacion posterior al
+corte local, no como implementacion nueva del lock. La lectura canonica no
+cambia: `task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del
+lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la unica salida tecnica viva sigue siendo rework
+causal con write-set de codigo o smoke Codex real concurrente opt-in con
+`CODEX_HOME` compartido. El contexto obligatorio `ref_only` queda resuelto por
+lectura local de `agent_packet.json`, `codex_stderr.log`, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+Director, matriz de smokes, runbook de incidencia y bloque vigente
+T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 9449 burst 002:
+`agent-ref-task-ref-review-rework-task-autoprogramming-343c2978bafe-g01-89bf3421a9755ccd0b58670679c2c956`
+conserva la entrega valida acumulada de T261 y completa esta microtarea nueva
+dentro del write-set documental permitido, sin abrir codigo ni relanzar otro
+agente padre sobre la implementacion original. El paquete actual llega con
+contexto obligatorio `ref_only` y `materialization_missing`; la lectura local
+de `agent_packet.json` y `codex_stderr.log` registra de nuevo
+`failed to install system skills`, por lo que la senal queda enlazada a T261
+como regresion/verificacion posterior al corte local, no como implementacion
+nueva del lock ni como coincidencia documental antigua. La lectura canonica se
+mantiene: `task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del
+lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la unica salida tecnica viva sigue siendo rework
+causal con write-set de codigo o smoke Codex real concurrente opt-in con
+`CODEX_HOME` compartido. El contexto obligatorio `ref_only` queda resuelto por
+lectura local de `agent_packet.json`, `codex_stderr.log`, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+Director, matriz de smokes, runbook de incidencia y bloque vigente
+T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 1a6225 burst
+002, resident-director-8287:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-d292f1c4bb9507dd871117c5af2f6a9d`
+conserva la entrega valida acumulada de T261 y completa esta correccion
+documental dentro del write-set permitido, sin abrir codigo ni relanzar otro
+agente padre sobre la implementacion original. El paquete actual llega con
+contexto obligatorio `ref_only` y `materialization_missing`; la lectura local
+de `agent_packet.json` y `codex_stderr.log` registra de nuevo
+`failed to install system skills`, por lo que la senal queda enlazada a T261
+como regresion/verificacion posterior al corte local, no como implementacion
+nueva del lock ni como coincidencia documental antigua. La lectura canonica no
+cambia: `task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del
+lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la unica salida tecnica viva sigue siendo rework
+causal con write-set de codigo o smoke Codex real concurrente opt-in con
+`CODEX_HOME` compartido. El contexto obligatorio `ref_only` queda resuelto por
+lectura local de `agent_packet.json`, `codex_stderr.log`, `AGENTS.md`,
+`README.md`, `docs/README.md`, foto vigente, guia del nucleo, principio del
+Director, matriz de smokes, runbook de incidencia y bloque vigente
+T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 916770 burst
+002, revision 84ea:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-84ea3b75613f0bdc38ea183845f199d5`
+conserva la entrega valida acumulada de T261 y cierra esta microtarea de
+rework dentro del write-set documental permitido, sin abrir codigo ni relanzar
+otro agente padre sobre la implementacion original. El paquete actual llega con
+contexto obligatorio `ref_only` y `materialization_missing`; la lectura local
+de `agent_packet.json` y `codex_stderr.log` registra de nuevo
+`failed to install system skills`, por lo que la senal queda enlazada a T261
+como regresion/verificacion posterior al corte local, no como implementacion
+nueva del lock ni como coincidencia documental antigua. La lectura canonica no
+cambia: `task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del
+lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la unica salida tecnica viva sigue siendo rework
+causal con write-set de codigo si aparece regresion verificable posterior al
+corte local o smoke Codex real concurrente opt-in con `CODEX_HOME` compartido.
+El contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `codex_stderr.log`, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del Director, matriz
+de smokes, runbook de incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 9449 burst
+002, resident-director-8290:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-bf0bf5f0fc21da0e45f099c4269b7639`
+conserva la entrega valida acumulada de T261 y completa esta correccion dentro
+del write-set documental permitido, sin abrir codigo ni relanzar otro agente
+padre sobre la implementacion original. El paquete actual llega con contexto
+obligatorio `ref_only` y `materialization_missing`; el `codex_stderr.log` de
+esta ejecucion registra de nuevo `failed to install system skills`, por lo que
+la senal queda enlazada a T261 como regresion/verificacion posterior al corte
+local, no como implementacion nueva del lock ni como coincidencia documental
+antigua. La lectura canonica no cambia:
+`task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la unica salida tecnica viva sigue siendo rework
+causal con write-set de codigo si el Director lo abre o smoke Codex real
+concurrente opt-in con `CODEX_HOME` compartido. El contexto obligatorio
+`ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`codex_stderr.log`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 1a6225 burst
+002, resident-director-8291:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-646d09bcd4b6f677330087e351bad757`
+conserva la entrega valida acumulada de T261 y completa esta microtarea nueva
+dentro del write-set documental permitido, sin abrir codigo ni relanzar otro
+agente padre sobre la implementacion original. El paquete actual llega con
+contexto obligatorio `ref_only` y `materialization_missing`; la lectura local de
+`agent_packet.json` y `codex_stderr.log` registra de nuevo
+`failed to install system skills`, por lo que la senal queda enlazada a T261
+como regresion/verificacion posterior al corte local, no como implementacion
+nueva del lock ni como coincidencia documental antigua. La lectura canonica no
+cambia: `task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del
+lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la unica salida tecnica viva sigue siendo rework
+causal con write-set de codigo si el Director lo abre o smoke Codex real
+concurrente opt-in con `CODEX_HOME` compartido. El contexto obligatorio
+`ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`codex_stderr.log`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 916770 burst
+002, resident-director-8291:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-c56694d788d9fe24fabeb10bcb83fe4b`
+conserva la entrega valida acumulada de T261 y completa esta correccion dentro
+del write-set documental permitido, sin abrir codigo ni relanzar otro agente
+padre sobre la implementacion original. El paquete actual llega con contexto
+obligatorio `ref_only` y `materialization_missing`; la lectura local de
+`agent_packet.json` y `codex_stderr.log` registra de nuevo
+`failed to install system skills`, por lo que la senal queda enlazada a T261
+como regresion/verificacion posterior al corte local, no como implementacion
+nueva del lock ni como coincidencia documental antigua. La lectura canonica no
+cambia: `task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del
+lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la unica salida tecnica viva sigue siendo rework
+causal con write-set de codigo si el Director lo abre o smoke Codex real
+concurrente opt-in con `CODEX_HOME` compartido. El contexto obligatorio
+`ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`codex_stderr.log`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry eca41ea burst
+002, resident-director-8291:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-784ca13d61c049c845bcadc96046659d`
+conserva la entrega valida acumulada de T261 y completa esta correccion dentro
+del write-set documental permitido, sin abrir codigo ni relanzar otro agente
+padre sobre la implementacion original. El paquete actual llega con contexto
+obligatorio `ref_only` y `materialization_missing`; la lectura local de
+`agent_packet.json` y `codex_stderr.log` registra de nuevo
+`failed to install system skills`, por lo que la senal queda enlazada a T261
+como regresion/verificacion posterior al corte local, no como implementacion
+nueva del lock ni como coincidencia documental antigua. La lectura canonica no
+cambia: `task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del
+lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la unica salida tecnica viva sigue siendo rework
+causal con write-set de codigo si el Director lo abre o smoke Codex real
+concurrente opt-in con `CODEX_HOME` compartido. El contexto obligatorio
+`ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`codex_stderr.log`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 33b689ac
+burst 002, resident-director-8292:
+`agent-ref-task-ref-review-rework-task-autoprogramming-9b0a91d897cd-g01-229fdf61a50b6bae9190c66cfa98293f`
+conserva la entrega valida acumulada de T261 y completa esta correccion dentro
+del write-set documental permitido, sin abrir codigo ni relanzar otro agente
+padre sobre la implementacion original. El paquete actual llega con contexto
+obligatorio `ref_only`, `materialization_missing` y
+`required_ref_action=ack_evidence_required`; la lectura local de
+`agent_packet.json` y `codex_stderr.log` registra de nuevo
+`failed to install system skills`, por lo que la senal queda enlazada a T261
+como regresion/verificacion posterior al corte local, no como implementacion
+nueva del lock ni como coincidencia documental antigua. La lectura canonica no
+cambia: `task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del
+lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la unica salida tecnica viva sigue siendo rework
+causal con write-set de codigo si el Director lo abre o smoke Codex real
+concurrente opt-in con `CODEX_HOME` compartido. El contexto obligatorio
+`ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`codex_stderr.log`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras evaluacion OrquestaV2 2026-06-11 retry f7cd4fb7
+burst 002, resident-director-8292:
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-457-d45fb98c99145307c53e6c55810287d8`
+conserva la entrega valida acumulada de T261 y cierra la correccion de
+reemplazo dentro del write-set documental permitido, sin abrir codigo ni
+relanzar otro agente padre sobre la implementacion original. El paquete actual
+mantiene contexto obligatorio `ref_only` con `materialization_missing` y
+`required_ref_action=ack_evidence_required`; la lectura local de
+`agent_packet.json` y `codex_stderr.log` vuelve a registrar
+`failed to install system skills`, por lo que la senal queda enlazada a T261
+como regresion/verificacion posterior al corte local, no como implementacion
+nueva del lock ni como coincidencia documental antigua. La lectura canonica no
+cambia: `task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del
+lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+hasta que el Director abra rework causal con write-set de codigo o ejecute el
+smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El contexto
+obligatorio `ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`codex_stderr.log`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 9449 burst
+002, resident-director-8293:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-fb0ac991e02d45d622653373ca417302`
+conserva la entrega valida acumulada de T261 y completa esta correccion dentro
+del write-set documental permitido, sin abrir codigo ni relanzar otro agente
+padre sobre la implementacion original. El paquete actual mantiene contexto
+obligatorio `ref_only`, `materialization_missing` y
+`required_ref_action=ack_evidence_required`; `codex_stderr.log` registra de
+nuevo `failed to install system skills`, por lo que la senal queda enlazada a
+T261 como regresion/verificacion posterior al corte local, no como
+implementacion nueva del lock ni como coincidencia documental antigua. La
+lectura canonica no cambia: `task-ref-self-improvement-93ae9eac132d` conserva
+el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+hasta que el Director abra rework causal con write-set de codigo o ejecute el
+smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El contexto
+obligatorio `ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`codex_stderr.log`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 1a6225 burst
+002, resident-director-8294:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-f5adbbb2e6a74c6cfa5510ef7a75bc75`
+conserva la entrega valida acumulada de T261 y completa esta correccion dentro
+del write-set documental permitido, sin abrir codigo ni relanzar otro agente
+padre sobre la implementacion original. El paquete actual mantiene contexto
+obligatorio `ref_only`, `materialization_missing` y
+`required_ref_action=ack_evidence_required`; `codex_stderr.log` registra de
+nuevo `failed to install system skills`, por lo que la senal queda enlazada a
+T261 como regresion/verificacion posterior al corte local, no como
+implementacion nueva del lock ni como coincidencia documental antigua. La
+lectura canonica no cambia: `task-ref-self-improvement-93ae9eac132d` conserva
+el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+hasta que el Director abra rework causal con write-set de codigo o ejecute el
+smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El contexto
+obligatorio `ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`codex_stderr.log`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 33b689ac
+burst 002, resident-director-8295:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-88426c6b0716ce282874e1d485e8b227`
+conserva la entrega valida acumulada de T261 y completa esta microtarea de
+rework dentro del write-set documental permitido, sin abrir codigo ni relanzar
+otro agente padre sobre la implementacion original. El paquete actual mantiene
+contexto obligatorio `ref_only`, `materialization_missing` y
+`required_ref_action=ack_evidence_required`; `codex_stderr.log` registra de
+nuevo `failed to install system skills`, por lo que la senal queda enlazada a
+T261 como regresion/verificacion posterior al corte local, no como
+implementacion nueva del lock ni como coincidencia documental antigua. La
+lectura canonica no cambia: `task-ref-self-improvement-93ae9eac132d` conserva
+el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+hasta que el Director abra rework causal con write-set de codigo o ejecute el
+smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El contexto
+obligatorio `ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`codex_stderr.log`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras evaluacion OrquestaV2 2026-06-11 retry 33b689ac,
+resident-director-8296:
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-c56-23d9c945c36aa21b0e4855070a504039`
+conserva la entrega valida acumulada de T261 y cierra esta correccion de
+reemplazo dentro del write-set documental permitido, sin abrir codigo ni
+relanzar otro agente padre sobre la implementacion original. El paquete actual
+mantiene contexto obligatorio `ref_only`, `materialization_missing` y
+`required_ref_action=ack_evidence_required`; `codex_stderr.log` registra
+`failed to install system skills`, por lo que la senal queda enlazada a T261
+como regresion/verificacion posterior al corte local, no como implementacion
+nueva del lock ni como coincidencia documental antigua. La lectura canonica no
+cambia: `task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del
+lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+hasta que el Director abra rework causal con write-set de codigo o ejecute el
+smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El contexto
+obligatorio `ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`codex_stderr.log`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 33b689ac
+burst 002, resident-director-8297:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-165f5e6a3136d0a8f21665186567acb9`
+conserva la entrega valida acumulada de T261 y completa esta microtarea nueva
+dentro del write-set documental permitido, sin abrir codigo ni relanzar otro
+agente padre sobre la implementacion original. El paquete actual mantiene
+contexto obligatorio `ref_only`, `materialization_missing` y
+`required_ref_action=ack_evidence_required`; la lectura local de
+`agent_packet.json` y `codex_stderr.log` vuelve a registrar
+`failed to install system skills`, por lo que la senal queda enlazada a T261
+como regresion/verificacion posterior al corte local, no como implementacion
+nueva del lock ni como coincidencia documental antigua. La lectura canonica no
+cambia: `task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del
+lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+hasta que el Director abra rework causal con write-set de codigo o ejecute el
+smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El contexto
+obligatorio `ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`codex_stderr.log`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry eca41ea
+burst 002, resident-director-8299:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-6533662edac99e5f478baefd738154f3`
+conserva la entrega valida acumulada de T261 y completa esta correccion dentro
+del write-set documental permitido, sin abrir codigo ni relanzar otro agente
+padre sobre la implementacion original. El paquete actual mantiene contexto
+obligatorio `ref_only`, `materialization_missing` y
+`required_ref_action=ack_evidence_required`; `codex_stderr.log` registra
+`failed to install system skills`, por lo que la senal queda enlazada a T261
+como regresion/verificacion posterior al corte local y no como implementacion
+nueva del lock ni como coincidencia documental antigua. La lectura canonica no
+cambia: `task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del
+lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+hasta que el Director abra rework causal con write-set de codigo o ejecute el
+smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El contexto
+obligatorio `ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`codex_stderr.log`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 1a6225 burst
+002, resident-director-8300:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-35a30aca06431e12769f0e28750062aa`
+conserva la entrega valida acumulada de T261 y completa esta microtarea de
+rework dentro del write-set documental permitido, sin abrir codigo ni relanzar
+otro agente padre sobre la implementacion original. El paquete actual mantiene
+contexto obligatorio `ref_only`, `materialization_missing` y
+`required_ref_action=ack_evidence_required`; la lectura local de
+`agent_packet.json` y `codex_stderr.log` registra de nuevo
+`failed to install system skills`, por lo que la senal queda enlazada a T261
+como regresion/verificacion posterior al corte local, no como implementacion
+nueva del lock ni como coincidencia documental antigua. La lectura canonica no
+cambia: `task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del
+lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+hasta que el Director abra rework causal con write-set de codigo o ejecute el
+smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El contexto
+obligatorio `ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`codex_stderr.log`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 33b689ac
+burst 002, resident-director-8300:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-e4501641d9707381276aed82628012a1`
+conserva la entrega valida acumulada de T261 y completa esta correccion dentro
+del write-set documental permitido, sin abrir codigo ni relanzar otro agente
+padre sobre la implementacion original. El paquete actual mantiene contexto
+obligatorio `ref_only`, `materialization_missing` y
+`required_ref_action=ack_evidence_required`; la lectura local de
+`agent_packet.json` y `codex_stderr.log` registra de nuevo
+`failed to install system skills`, por lo que la senal queda enlazada a T261
+como regresion/verificacion posterior al corte local, no como implementacion
+nueva del lock ni como coincidencia documental antigua. La lectura canonica no
+cambia: `task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del
+lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+hasta que el Director abra rework causal con write-set de codigo o ejecute el
+smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El contexto
+obligatorio `ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`codex_stderr.log`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 9449ae65 burst
+002, resident-director-8302:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-9e6c2a9eb4be05617368fa6c91dbdcfa`
+conserva la entrega valida acumulada de T261 y completa esta correccion
+documental dentro del write-set permitido, sin abrir codigo ni relanzar otro
+agente padre sobre la implementacion original. El paquete actual llega con
+contexto obligatorio `ref_only`, `materialization_missing` y
+`required_ref_action=ack_evidence_required`; la lectura local de
+`agent_packet.json` y `codex_stderr.log` registra de nuevo
+`failed to install system skills`, por lo que la senal queda enlazada a T261
+como regresion/verificacion posterior al corte local, no como implementacion
+nueva del lock ni como coincidencia documental antigua. La lectura canonica no
+cambia: `task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del
+lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+hasta que el Director abra rework causal con write-set de codigo o ejecute el
+smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El contexto
+obligatorio `ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`codex_stderr.log`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 17ac738a,
+resident-director-8305:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-ba3315027d0fd853604f43f0a8b6f2ad`
+conserva la entrega valida acumulada de T261 y completa esta correccion
+documental dentro del write-set permitido, sin abrir codigo ni relanzar otro
+agente padre sobre la implementacion original. El paquete actual llega con
+contexto obligatorio `ref_only`, `materialization_missing` y
+`required_ref_action=ack_evidence_required`; la lectura local de
+`agent_packet.json` y `codex_stderr.log` registra de nuevo
+`failed to install system skills`, por lo que la senal queda enlazada a T261
+como regresion/verificacion posterior al corte local, no como implementacion
+nueva del lock ni como coincidencia documental antigua. La lectura canonica no
+cambia: `task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del
+lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+hasta que el Director abra rework causal con write-set de codigo o ejecute el
+smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El contexto
+obligatorio `ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`codex_stderr.log`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, runbook de incidencia y bloque vigente
+T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 33b689ac,
+resident-director-8306 burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-6f66b834c2cc28d34848664b529454e6`
+conserva la entrega valida acumulada de T261 y completa esta microtarea nueva
+dentro del write-set documental permitido, sin abrir codigo ni relanzar otro
+agente padre sobre la implementacion original. El paquete actual llega con
+contexto obligatorio `ref_only`, `materialization_missing` y
+`required_ref_action=ack_evidence_required`; `codex_stderr.log` registra de
+nuevo `failed to install system skills`, por lo que la senal permanece enlazada
+a T261 como regresion/verificacion posterior al corte local, no como
+implementacion nueva del lock ni como coincidencia documental antigua. La
+lectura canonica se mantiene: `task-ref-self-improvement-93ae9eac132d` conserva
+el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+hasta que el Director abra rework causal con write-set de codigo o ejecute el
+smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El contexto
+obligatorio `ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`codex_stderr.log`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, runbook de incidencia y bloque vigente
+T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 33b689ac,
+resident-director-8307 burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-3d6fd48e30bca6d3b840bfda348f1cbc`
+conserva la entrega valida acumulada de T261 y completa esta correccion dentro
+del write-set documental permitido, sin abrir codigo ni relanzar otro agente
+padre sobre la implementacion original. El paquete actual mantiene contexto
+obligatorio `ref_only`, `materialization_missing` y
+`required_ref_action=ack_evidence_required`; `codex_stderr.log` registra de
+nuevo `failed to install system skills`, por lo que la senal queda enlazada a
+T261 como regresion/verificacion posterior al corte local, no como
+implementacion nueva del lock ni como coincidencia documental antigua. La
+lectura canonica se mantiene: `task-ref-self-improvement-93ae9eac132d`
+conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+hasta que el Director abra rework causal con write-set de codigo o ejecute el
+smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El contexto
+obligatorio `ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`codex_stderr.log`, `AGENTS.md`, `README.md`, `docs/README.md`, runbook de
+incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 9449ae65,
+resident-director-8308 burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-e5005947ca4268c8f2d2601a25ed377a`
+conserva la entrega valida acumulada de T261 y completa esta microtarea dentro
+del write-set documental permitido, sin abrir codigo ni relanzar otro agente
+padre sobre la implementacion original. El paquete actual mantiene contexto
+obligatorio `ref_only`, `materialization_missing` y
+`required_ref_action=ack_evidence_required`; `codex_stderr.log` registra
+`failed to install system skills`, por lo que la senal queda enlazada a T261
+como regresion/verificacion posterior al corte local, no como implementacion
+nueva del lock ni como coincidencia documental antigua. La lectura canonica no
+cambia: `task-ref-self-improvement-93ae9eac132d` conserva el owner opaco del
+lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+hasta que el Director abra rework causal con write-set de codigo o ejecute el
+smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El contexto
+obligatorio `ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`codex_stderr.log`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia y bloque vigente T260/T261/T262.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 9449ae65,
+resident-director-8313 burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-e202b45c0a058217deb2e63ecf699c3f`
+conserva la entrega valida acumulada de T261 y cierra esta correccion dentro
+del write-set documental permitido, sin abrir codigo ni relanzar otro agente
+padre sobre la implementacion original. El paquete actual mantiene contexto
+obligatorio `ref_only`, `materialization_missing` y
+`required_ref_action=ack_evidence_required`; `codex_stderr.log` registra de
+nuevo `failed to install system skills`, por lo que la senal queda enlazada a
+T261 como regresion/verificacion posterior al corte local, no como
+implementacion nueva del lock ni como coincidencia documental antigua. La
+lectura canonica sigue igual: `task-ref-self-improvement-93ae9eac132d`
+conserva el owner opaco del lock local,
+`dedupe_key_t261=codex_skills_startup_lock_closed_local_smoke_pending` conserva
+la deduplicacion documental, y la accion tecnica queda fuera de este alcance
+hasta que el Director abra rework causal con write-set de codigo o ejecute el
+smoke Codex real concurrente opt-in con `CODEX_HOME` compartido. El contexto
+obligatorio `ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`codex_stderr.log`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, matriz de smokes, runbook de
+incidencia y bloque vigente T260/T261/T262.
+
+Registro consolidado de rework T260/T261 2026-06-11 resident-director-8315/8318/8320/8321/8322/8325:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-3564e080ccd41d45c75d4a0a35bff9b4`
+y
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-7c6b74bcbe24b3b2c5283198c4feb576`
+e igualmente
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-1d10384ebc8ee926fb7ab3e0fa331936`
+e igualmente
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-dbeab94a3ab83d986069c58ed5179481`
+e igualmente
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-1e2c8449ba5e9e7cdca620646d365da4`
+e igualmente
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-4e7adad41740fec3d8542b34c95c83dc`
+e igualmente
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-1267c4c35252aa801614eb3d8beff54c`
+e igualmente
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-1b21b07c240dc77067c4d608774faae9`
+e igualmente
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-f98343f32a1c476782c00c3869b7c32e`
+no cambian el estado canonico ni abren codigo: T260 queda cerrado localmente
+para no proyectar `wait_unhandled_outbox` como agente vivo, T261 queda cerrado
+localmente para el lock de skills con deuda viva solo de smoke Codex real
+concurrente opt-in, y T262 mantiene su dedupe causal cerrado localmente con
+validacion OPES externa opcional. Estas correcciones solo conservan la entrega
+valida y completan el rastro causal pedido por reworks documentales dentro del
+write-set permitido. El contexto obligatorio `ref_only` queda resuelto por
+lectura local del paquete actual, ACKs previos, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del Director,
+runbook de incidencia, runbook de bucle de rework y bloque vigente
+T260/T261/T262. El paquete actual vuelve a registrar
+`failed to install system skills` al arranque, por lo que la senal queda
+enlazada a T261 como regresion/verificacion posterior al corte local y no
+reabre T260. Sin `run_ref`, `agent_ref`, resultado de smoke externo o rework
+causal con write-set de codigo, nuevas coincidencias equivalentes deben
+deduplicarse como `blocked_external_or_scope_change_required` o
+`sincronizado/no-op documental`, no generar otro parrafo acumulativo ni otro
+padre de rework documental.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 5d067045
+burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-2cf91c2b9e21fb86b4ee0003db19e493`
+conserva la entrega valida acumulada de T260/T261/T262 y cierra esta
+microtarea dentro del write-set documental permitido. No abre codigo, no
+relanza otro agente padre y no cambia el estado canonico: T260 sigue cerrado
+localmente para no proyectar `wait_unhandled_outbox` como agente vivo; T261
+mantiene pendiente solo el smoke Codex real concurrente opt-in con `CODEX_HOME`
+compartido; T262 sigue sincronizado/no-op documental con validacion externa
+OPES opcional. El contexto obligatorio `ref_only` queda resuelto por lectura
+local de `agent_packet.json`, `codex_stderr.log`, `AGENTS.md`, `README.md`,
+`docs/README.md`, runbook de incidencia, runbook de bucle de rework y bloque
+vigente T260/T261/T262. El error de skills observado en el arranque de este
+agente se enlaza a T261 como evidencia repetida ya deduplicada, no como causa
+para otra implementacion documental acumulativa. Sin evidencia causal nueva,
+nuevos paquetes equivalentes deben cerrarse como
+`blocked_external_or_scope_change_required` o `sincronizado/no-op documental`.
+
+## T262 - Deduplicar rescates y enlazarlos causalmente
+
+Origen: subfallo detectado en OPES A1 informática el 2026-06-11. Para 72 temas
+aparecieron 143 registros relacionados por originales, rescates y reintentos,
+lo que obligó a inferir manualmente qué tema tenía intento activo real.
+
+Tarea ejecutable de origen, ya cubierta localmente:
+`.orquesta-runtime/opes-a1-informatica-orquesta-runtime-incidents-20260611/task_T262_rescue_dedupe_and_causal_links.json`.
+
+Estado canonico 2026-06-11: implementacion local cerrada en capa neutral de
+cola/coordinador/persistencia/MCP con fake de 72 items y 143 registros; no queda
+abierto un cambio generico de codigo para "deduplicar rescates". La unica deuda
+viva es validacion externa opt-in contra OPES temporal o datos reales de la
+incidencia si el operador exige cierre productivo fuera del nucleo.
+
+Marcador canonico para scanners/automejora 2026-06-11:
+`estado_documental_t262=sincronizado`,
+`implementacion_rescue_dedupe=cerrada_localmente`,
+`trabajo_vivo_t262=validacion_opes_temporal_o_datos_reales_opt_in`,
+`owner_codigo=task-ref-self-improvement-ad59876540ec`,
+`dedupe_key_t262=rescue_dedupe_causal_closed_local_external_validation_pending`,
+`accion_scanner_t262_sin_evidencia=ack_noop_sin_editar_backlog`,
+`no_reabrir_t262_por_contexto_ref_only=true`,
+`paquete_ref_only_equivalente_t262=sincronizado_sin_nueva_entrada`,
+`backlog_scan_epoch_t262_absorbido=backlog-scan-epoch-ce278a4901ec`.
+Este marcador prevalece sobre revalidaciones narrativas, ACKs historicos,
+recibos de prueba, menciones a rescates duplicados de la incidencia original y
+objetivos de automejora que repitan el patron sin evidencia causal nueva.
+Sin `run_ref`, `agent_ref`, log nuevo o entrega causal posterior al corte local
+del 2026-06-11, los planners/scanners deben clasificar T262 como
+`sincronizado/no-op documental` o pedir solo la validacion externa opt-in, no
+crear otra implementacion generica ni otra sincronizacion acumulativa del mismo
+marcador.
+
+Regla anti-acumulacion T262 2026-06-12: si un paquete de
+automejora/assessment/rework con contexto `ref_only` solo repite el patron
+"deduplicar rescates y enlazarlos causalmente",
+`task-ref-self-improvement-ad59876540ec`, refs opacas de worktree/branch,
+`backlog_scan_epoch` incluido `backlog-scan-epoch-ce278a4901ec` o
+`backlog-scan-epoch-420e77fb6f4b`, o criterios ya cubiertos por este marcador,
+el agente debe cerrar por ACK con
+`contexto_ref_only_resuelto` y pruebas requeridas ejecutadas,
+sin anadir otra sincronizacion narrativa equivalente ni abrir codigo; el ACK del
+paquete, no otro parrafo historico, es la evidencia durable de esa observacion
+repetida. Si el contrato exige "cambio implementado" pero no aporta `run_ref`,
+`agent_ref`, log nuevo, entrega causal posterior al corte local ni orden
+explicita de validacion externa OPES temporal, la sincronizacion general se
+considera ya satisfecha por este marcador y el paquete debe cerrarse como
+`sincronizado/no-op documental`. El unico cambio documental permitido es
+corregir una contradiccion concreta, registrar una evidencia causal nueva
+verificable con `run_ref`/`agent_ref` o documentar una orden explicita de
+validacion externa OPES temporal fuera del nucleo.
+
+Trabajo requerido original, ya cubierto localmente salvo validacion externa
+opt-in: deduplicar por consumidor/objetivo/tema/write-set, enlazar rescates con
+`parent_run_ref`, `rescue_reason`, `supersedes_run_ref` y `active_attempt_ref`,
+y exponer una vista que separe completos, agente vivo, outbox pendiente,
+fallidos y sin intento activo.
+
+Pruebas obligatorias originales, cubiertas en el corte local: unitario de
+rescates enlazados, API/MCP friendly con `active_attempt_ref` y fake-runtime de
+72 temas con reintentos sin confundir registros con agentes vivos.
+
+Corte local 2026-06-11: implementada proyección causal neutral de intentos en
+`orquesta-run-queue` con `ProjectRunQueueAttemptsV0`; el coordinador propaga
+`attempt_group`, `active_attempt_ref`, `parent_run_ref`, `supersedes_run_ref` y
+`rescue_reason` en ranked/execution/skip/drain request; `orquesta-run-memory` y
+`orquesta-run-file` preservan la metadata desde `SetRunPriorityV0`; MCP
+`orquesta.run_queue.priority.v0` acepta y expone esos campos, por lo que
+`orquesta.status.v0`/`orquesta.tasks.list.v0` los reciben al reutilizar la vista
+compacta de cola. Evidencia local:
+`go test -count=1 ./modulos/orquesta-run-queue ./modulos/orquesta-run-coordinator ./modulos/orquesta-run-memory ./modulos/orquesta-run-file ./modulos/orquesta-mcp`
+y
+`go test -count=1 ./modulos/orquesta-run-supervisor ./modulos/orquesta-app-codex-stack ./modulos/orquesta-server ./cmd/orquesta-server`.
+El fake de 72 items/143 registros queda cubierto en
+`TestProjectRunQueueAttemptsV0FakeSetentaYDosItemsConRescatesV0`. Pendiente
+solo si se exige cierre productivo fuera del nucleo: pasada OPES temporal contra
+datos reales de la incidencia.
+
+Sincronizacion documental 2026-06-11: T262 queda separado en dos estados para
+evitar relanzamientos ambiguos. La causa general de codigo ya tiene corte local
+neutral con evidencia focal y fake de 72 items/143 registros; la deuda viva es
+solo validacion externa opt-in contra OPES temporal o datos reales de la
+incidencia, si el operador exige cierre productivo fuera del nucleo. Si un
+scanner vuelve a observar esta incidencia sin fallo nuevo, debe proponer esa
+validacion externa o un rework causal sobre evidencia nueva, no otro cambio
+generico de codigo ni otro rescate opaco.
+
+Rework de revision 2026-06-11:
+`agent-ref-assessment-task-autoprogramming-e1c00ad28643-g01-fc9a0023e85a6ec91e2df5aff5dd2182`
+conserva la entrega valida acumulada de T262 y sincroniza el estado documental
+sin ampliar write-set ni relanzar un agente padre sobre la tarea original
+`task-ref-self-improvement-ad59876540ec`. El contexto obligatorio `ref_only`
+queda resuelto con el paquete OrquestaV2 actual, README/AGENTS,
+`docs/README.md`, el runbook de incidencia y el bloque vigente T260/T261/T262.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan como
+refs opacas. El estado canonico no cambia: deduplicacion causal y
+`active_attempt_ref` quedan cerrados localmente; queda vivo solo el smoke OPES
+temporal/datos reales si se exige cierre productivo de la incidencia.
+
+Sincronizacion documental OrquestaV2 2026-06-11:
+`agent-ref-task-autoprogramming-b938f9503dae-g01` conserva la entrega valida
+acumulada de T262 y fija el estado documental para la automejora idle sin
+ampliar write-set ni abrir cambios de codigo. La tarea origen
+`task-ref-self-improvement-ad59876540ec` sigue como owner canonico del patron
+"deduplicar rescates y enlazarlos causalmente";
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`,
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` y
+`backlog_scan_epoch:backlog-scan-epoch-ec1eb8a3faf4` se conservan solo como refs
+opacas. El contexto obligatorio `ref_only` queda resuelto por lectura local del
+paquete OrquestaV2 actual, `AGENTS.md`, `README.md`, `docs/README.md`, la foto
+vigente, la guia del nucleo, el principio del Director, el runbook de incidencia
+y el bloque vigente T260/T261/T262. Estado canonico: la deduplicacion causal
+neutral, `active_attempt_ref` y el fake de 72 items/143 registros ya estan
+cerrados localmente; el unico pendiente vivo es validacion externa opt-in contra
+OPES temporal o datos reales de la incidencia si el operador exige cierre
+productivo. Sin regresion nueva, scanners y automejora deben clasificar T262
+como sincronizado/no-op documental o pedir solo esa validacion externa, no
+relanzar implementacion generica ni crear otro rescate opaco.
+
+Sincronizacion documental OrquestaV2 2026-06-11 burst 002:
+`agent-ref-task-autoprogramming-65aa6b76368e-g01` sincroniza el estado ambiguo
+detectado por automejora para T262 sin ampliar write-set ni abrir codigo. La
+tarea origen `task-ref-self-improvement-ad59876540ec` queda preservada como
+owner canonico del patron "deduplicar rescates y enlazarlos causalmente";
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`,
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` y
+`backlog_scan_epoch:backlog-scan-epoch-30bea1b98d87` se conservan solo como refs
+opacas. El contexto obligatorio `ref_only` queda resuelto por lectura local del
+paquete OrquestaV2 actual, `AGENTS.md`, `README.md`, `docs/README.md`, runbook
+de incidencia, runbook de sincronizacion de backlog y bloque vigente
+T260/T261/T262. Estado canonico: T262 esta sincronizado/no-op para automejora
+idle cuando no exista regresion nueva; la unica accion viva sigue siendo
+validacion externa opt-in contra OPES temporal o datos reales de la incidencia
+si se requiere cierre productivo fuera del nucleo.
+
+Sincronizacion documental OrquestaV2 2026-06-11 retry 4c9:
+`agent-ref-task-autoprogramming-f9a8ae48a57f-g01` conserva la entrega valida
+acumulada de T262 y cierra la ambiguedad documental observada por automejora
+sin ampliar write-set ni ejecutar cambios de codigo. La tarea origen
+`task-ref-self-improvement-ad59876540ec` sigue como owner canonico del patron
+"deduplicar rescates y enlazarlos causalmente";
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan como
+refs opacas, no como rutas ni nombres Git. El contexto obligatorio `ref_only`
+queda resuelto por lectura local del paquete OrquestaV2 actual, `AGENTS.md`,
+`README.md`, `docs/README.md`, el runbook de incidencia y el bloque vigente
+T260/T261/T262. Estado canonico: la deduplicacion causal neutral,
+`active_attempt_ref` y el fake de 72 items/143 registros ya estan cerrados
+localmente; el unico pendiente vivo es validacion externa opt-in contra OPES
+temporal o datos reales de la incidencia si el operador exige cierre productivo.
+Sin fallo nuevo, un scanner debe clasificar T262 como sincronizado/no-op o pedir
+solo esa validacion externa, no crear otro padre de codigo ni otro rescate
+opaco.
+
+Revalidacion documental OrquestaV2 2026-06-11 retry 284517:
+`agent-ref-task-autoprogramming-3e0dd004a448-g01` corrige el patron ambiguo
+detectado por automejora sin ampliar write-set ni abrir codigo. La lectura
+canonica queda sincronizada: `task-ref-self-improvement-ad59876540ec` conserva
+el owner de la deduplicacion causal de rescates; el cambio neutral y el fake de
+72 items/143 registros ya estan cerrados localmente; la unica accion viva es la
+validacion externa opt-in contra OPES temporal o datos reales de la incidencia
+si el operador exige cierre productivo fuera del nucleo. Las refs
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas. Sin regresion nueva, scanners y automejora idle deben tratar
+T262 como sincronizado/no-op documental o pedir solo esa validacion externa, no
+relanzar implementacion generica ni crear otro rescate opaco.
+
+Assessment documental OrquestaV2 2026-06-11 retry 284517 burst 002:
+`agent-ref-assessment-task-autoprogramming-3e0dd004a448-g01-e10d5897bac37788b310d8914d143b0d`
+mantiene la misma lectura canonica y corrige la ambiguedad restante observada
+por automejora sin ampliar write-set ni tocar codigo. El contexto obligatorio
+`ref_only` queda resuelto por lectura local de `agent_packet.json`,
+`AGENTS.md`, `README.md`, `docs/README.md`, foto vigente, guia del nucleo,
+principio del Director, runbook de incidencia, runbook de sincronizacion de
+backlog y bloque vigente T260/T261/T262. Estado para planners y scanners: T262
+esta sincronizado/no-op documental; `task-ref-self-improvement-ad59876540ec`
+sigue como owner opaco del patron "deduplicar rescates y enlazarlos
+causalmente"; `worktree_ref=worktree-ref-orquesta-server-idle-self-improvement`
+y `branch_ref=branch-ref-orquesta-server-idle-self-improvement` son solo refs
+opacas. Sin `run_ref`, `agent_ref`, log nuevo o entrega causal posterior al
+corte local, la unica accion viva es validacion externa opt-in contra OPES
+temporal o datos reales de la incidencia si el operador exige cierre productivo
+fuera del nucleo, no otra implementacion generica ni otro rescate opaco.
+
+Rework de revision OrquestaV2 2026-06-11 retry 07723c burst 002:
+`agent-ref-task-ref-review-rework-task-autoprogramming-3627e979f46c-g01-87ba15f0fb8768d280fda4f1cc98879d`
+conserva la entrega valida acumulada de T262 y corrige la evidencia de revision
+sin relanzar otro agente padre sobre la tarea original
+`task-ref-self-improvement-ad59876540ec`. El estado canonico no cambia:
+`dedupe_key_t262=rescue_dedupe_causal_closed_local_external_validation_pending`
+sigue separando la implementacion local cerrada de la unica deuda viva,
+validacion externa opt-in contra OPES temporal o datos reales de la incidencia
+si el operador exige cierre productivo fuera del nucleo. El contexto obligatorio
+`ref_only` queda resuelto por lectura local de `agent_packet.json`, ACK de la
+entrega previa, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente, guia
+del nucleo, principio del Director, runbook de incidencia y bloque vigente
+T260/T261/T262. Sin `run_ref`, `agent_ref`, log nuevo o entrega causal posterior
+al corte local de T262, planners y scanners deben cerrar nuevas coincidencias
+como `sincronizado/no-op documental` o pedir solo la validacion externa
+pendiente, no otra implementacion generica ni otra sincronizacion acumulativa.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 07723c burst
+002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-669ea4b8745f3a96ff5ac41fa1a7de4b`
+conserva la entrega valida anterior y completa la evidencia pedida por el
+rework sin relanzar un padre sobre la tarea original
+`task-ref-self-improvement-ad59876540ec`. Esta correccion no abre codigo ni
+cambia el estado canonico: T262 sigue `sincronizado/no-op documental`, con
+deduplicacion causal neutral cerrada localmente y solo validacion externa
+opt-in contra OPES temporal o datos reales si el operador exige cierre
+productivo fuera del nucleo. La entrada `ref_only` obligatoria queda resuelta
+por lectura local del paquete actual, ACKs previos de T262, AGENTS/README,
+docs de estado/guia/principio, runbook de incidencia y bloque vigente
+T260/T261/T262. Sin evidencia causal nueva, este parrafo es cierre de rework,
+no semilla para otra sincronizacion acumulativa ni otro rescate opaco.
+
+Correccion final de entrega tras revision OrquestaV2 2026-06-11 retry 07723c
+burst 002:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-0ef5e2875980de9e1ea488e647c88542`
+conserva la entrega valida acumulada de T262 y solo completa el rastro causal
+del rework actual dentro del write-set documental. No cambia el marcador
+canonico `dedupe_key_t262=rescue_dedupe_causal_closed_local_external_validation_pending`:
+la implementacion neutral y el fake de 72 items/143 registros siguen cerrados
+localmente, y la unica accion viva sigue siendo validacion externa opt-in contra
+OPES temporal o datos reales si el operador exige cierre productivo fuera del
+nucleo. El contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, runbook de incidencia y bloque vigente
+T260/T261/T262. Sin evidencia causal nueva posterior al corte local, este cierre
+no debe usarse como semilla para otra sincronizacion acumulativa, implementacion
+generica ni rescate opaco.
+
+Correccion de entrega tras revision OrquestaV2 2026-06-11 retry 07723c burst
+002, resident-director-8275:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-495f2aa02d7346429f8310a9b4dcb10a`
+conserva la entrega valida acumulada de T262 y cierra esta tarea de rework
+dentro del write-set documental, sin relanzar otro agente padre sobre
+`task-ref-self-improvement-ad59876540ec`. El estado canonico no cambia:
+`dedupe_key_t262=rescue_dedupe_causal_closed_local_external_validation_pending`
+mantiene separadas la implementacion neutral cerrada localmente y la unica deuda
+viva, validacion externa opt-in contra OPES temporal o datos reales de la
+incidencia si el operador exige cierre productivo fuera del nucleo. El contexto
+obligatorio `ref_only` queda resuelto por lectura local de `agent_packet.json`,
+ACKs previos de T262, `AGENTS.md`, `README.md`, `docs/README.md`, foto vigente,
+guia del nucleo, principio del Director, runbook de incidencia y bloque vigente
+T260/T261/T262. Sin `run_ref`, `agent_ref`, log nuevo o entrega causal posterior
+al corte local de T262, este cierre no debe crear otra sincronizacion
+acumulativa, implementacion generica ni rescate opaco.
+
+Registro consolidado de reworks T262 2026-06-11 retry 07723c burst 002:
+las correcciones documentales de
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-0ef5e2875980de9e1ea488e647c88542`,
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-495f2aa02d7346429f8310a9b4dcb10a`,
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-1aee01ba98513bc6eacaded30dcb7c12`
+y
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-c44041ee6be56228f727599757e5f6cc`
+quedan enlazadas a la misma lectura canonica sin crear otro padre sobre
+`task-ref-self-improvement-ad59876540ec`. Los parrafos historicos anteriores
+solo conservan trazabilidad; el marcador ejecutable sigue siendo
+`dedupe_key_t262=rescue_dedupe_causal_closed_local_external_validation_pending`.
+El estado no cambia: implementacion neutral y fake de 72 items/143 registros
+cerrados localmente; unica deuda viva, validacion externa opt-in contra OPES
+temporal o datos reales si el operador exige cierre productivo fuera del nucleo.
+El contexto obligatorio `ref_only` queda resuelto por lectura local de
+`agent_packet.json`, ACKs previos de T262, `AGENTS.md`, `README.md`,
+`docs/README.md`, foto vigente, guia del nucleo, principio del Director, runbook
+de incidencia y bloque vigente T260/T261/T262. Sin evidencia causal nueva
+posterior al corte local, nuevos reworks no deben anadir otra sincronizacion
+acumulativa, implementacion generica ni rescate opaco.
+
+Revalidacion consolidada T262 2026-06-12 retry 21eff7 burst 002:
+`agent-ref-task-autoprogramming-05c17b0620d9-g01` queda enlazado al mismo
+owner canonico `task-ref-self-improvement-ad59876540ec` y al mismo
+`dedupe_key_t262=rescue_dedupe_causal_closed_local_external_validation_pending`.
+La lectura por contexto `ref_only` no aporta `run_ref`, `agent_ref`, log,
+entrega causal ni validacion externa posteriores al corte local de T262; por
+tanto no abre codigo, no crea otro rescate y no anade deuda ejecutable nueva.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas. Estado para planners/scanners: T262 sigue
+`sincronizado/no-op documental`; la unica accion viva continua siendo
+validacion externa opt-in contra OPES temporal o datos reales de la incidencia
+si el operador exige cierre productivo fuera del nucleo.
 
 ## Rework T257 2026-05-27 reemplazo 5a8806
 

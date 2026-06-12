@@ -53,14 +53,15 @@ func autoprogrammingPrepareTaskWorktreeIsolationV0(
 		work.BranchRef,
 	)
 	return orquestaruntimeworktree.PrepareIsolatedWorktreeV0(ctx, orquestaruntimeworktree.WorktreeIsolationRequestV0{
-		IsolationRef:   "worktree-isolation-ref-" + strings.TrimSpace(task.TaskID),
-		ProjectRef:     strings.TrimSpace(work.ProjectRef),
-		WorktreeRef:    worktreeRef,
-		BranchRef:      branchRef,
-		ProjectWorkDir: projectWorkDir,
-		Isolated:       true,
-		BaselineRef:    "worktree-baseline-ref-" + strings.TrimSpace(task.TaskID),
-		IgnorePrefixes: codexStackWorktreeIgnorePrefixesV0(),
+		IsolationRef:         "worktree-isolation-ref-" + strings.TrimSpace(task.TaskID),
+		ProjectRef:           strings.TrimSpace(work.ProjectRef),
+		WorktreeRef:          worktreeRef,
+		BranchRef:            branchRef,
+		ProjectWorkDir:       projectWorkDir,
+		Isolated:             true,
+		BaselineRef:          "worktree-baseline-ref-" + strings.TrimSpace(task.TaskID),
+		IgnorePrefixes:       codexStackWorktreeIgnorePrefixesV0(),
+		AllowPartialSnapshot: true,
 	})
 }
 

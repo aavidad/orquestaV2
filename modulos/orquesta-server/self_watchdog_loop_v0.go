@@ -52,6 +52,7 @@ func (runtime *RuntimeV0) runSelfWatchdogTickV0(
 		return false
 	}
 	observation.SupervisorTickActive = observation.SupervisorTickActive || atomic.LoadInt32(&runtime.supervisorTickActive) == 1
+	observation.ResidentDirectorTickActive = observation.ResidentDirectorTickActive || atomic.LoadInt32(&runtime.residentDirectorTickActive) == 1
 	observation.ShutdownInProgress = observation.ShutdownInProgress || atomic.LoadInt32(&runtime.shutdownInProgress) == 1
 	decision := EvaluateSelfWatchdogV0(runtime.config.SelfWatchdog, observation)
 	runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkSelfWatchdogV0(decision, now), "self_watchdog")

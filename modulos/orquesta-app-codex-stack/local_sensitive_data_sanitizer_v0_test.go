@@ -193,6 +193,90 @@ func TestLocalSensitiveDataSanitizerV0NoFiltraRefsSensiblesEnEvidencia(t *testin
 	}
 }
 
+func TestLocalSensitiveDataSanitizerV0PreservaURLPublicaSinQueryNiCredenciales(t *testing.T) {
+	sanitizer := LocalSensitiveDataSanitizerV0{SanitizerRef: "sanitizer-ref-local-test"}
+	result := sanitizer.SanitizeContextEntryV0(orquestacontext.ContextSanitizationRequestV0{
+		BundleRef:    "bundle-ref-local-sanitizer-url-public-001",
+		WorkOrderRef: "task-ref-local-sanitizer-url-public-001",
+		TargetModule: "orquesta-app-codex-stack",
+		EntryRef:     "entry-ref-local-sanitizer-url-public-001",
+		SourceRef:    "source-ref-local-sanitizer-url-public-001",
+		Content:      "referencia publica https://docs.example.com/secret-management/users/guide",
+		Bytes:        80,
+	})
+
+	if result.Status != orquestacontext.ContextSanitizationStatusCleanV0 ||
+		result.Evidence.ReplacementCount != 0 ||
+		result.Evidence.ReviewRequired {
+		t.Fatalf("expected clean public URL, got %+v", result)
+	}
+	if !strings.Contains(result.Content, "https://docs.example.com/secret-management/users/guide") {
+		t.Fatalf("public URL was not preserved: %s", result.Content)
+	}
+}
+
+func TestLocalSensitiveDataSanitizerV0EliminaQueryYFragmentoDeURLPublica(t *testing.T) {
+	sanitizer := LocalSensitiveDataSanitizerV0{SanitizerRef: "sanitizer-ref-local-test"}
+	result := sanitizer.SanitizeContextEntryV0(orquestacontext.ContextSanitizationRequestV0{
+		BundleRef:    "bundle-ref-local-sanitizer-url-query-001",
+		WorkOrderRef: "task-ref-local-sanitizer-url-query-001",
+		TargetModule: "orquesta-app-codex-stack",
+		EntryRef:     "entry-ref-local-sanitizer-url-query-001",
+		SourceRef:    "source-ref-local-sanitizer-url-query-001",
+		Content:      "busqueda https://docs.example.com/search?q=orquesta&utm_source=test#section.",
+		Bytes:        78,
+	})
+
+	if result.Status != orquestacontext.ContextSanitizationStatusSanitizedV0 ||
+		result.Evidence.ReplacementCount != 1 ||
+		result.Evidence.ReviewRequired {
+		t.Fatalf("expected public URL query sanitization, got %+v", result)
+	}
+	if !strings.Contains(result.Content, "https://docs.example.com/search.") {
+		t.Fatalf("public URL path not preserved: %s", result.Content)
+	}
+	for _, forbidden := range []string{"q=orquesta", "utm_source", "#section"} {
+		if strings.Contains(result.Content, forbidden) {
+			t.Fatalf("URL query/fragment fragment %q leaked: %s", forbidden, result.Content)
+		}
+	}
+}
+
+func TestLocalSensitiveDataSanitizerV0RedactaURLPrivadaOTokenizada(t *testing.T) {
+	sanitizer := LocalSensitiveDataSanitizerV0{SanitizerRef: "sanitizer-ref-local-test"}
+	result := sanitizer.SanitizeContextEntryV0(orquestacontext.ContextSanitizationRequestV0{
+		BundleRef:    "bundle-ref-local-sanitizer-url-sensitive-001",
+		WorkOrderRef: "task-ref-local-sanitizer-url-sensitive-001",
+		TargetModule: "orquesta-app-codex-stack",
+		EntryRef:     "entry-ref-local-sanitizer-url-sensitive-001",
+		SourceRef:    "source-ref-local-sanitizer-url-sensitive-001",
+		Content: strings.Join([]string{
+			"https://user:pass@api.example.com/private",
+			"https://api.example.com/callback?access_token=sk-secret-local",
+			"http://localhost:8080/api",
+			"http://192.168.1.20/api",
+		}, " "),
+		Bytes: 180,
+	})
+
+	if result.Status != orquestacontext.ContextSanitizationStatusSanitizedV0 ||
+		result.Evidence.ReplacementCount != 4 ||
+		result.Evidence.ReviewRequired {
+		t.Fatalf("expected sensitive URL redaction, got %+v", result)
+	}
+	for _, forbidden := range []string{
+		"user:pass",
+		"access_token",
+		"sk-secret-local",
+		"localhost",
+		"192.168.1.20",
+	} {
+		if strings.Contains(strings.ToLower(result.Content), forbidden) {
+			t.Fatalf("sensitive URL fragment %q leaked: %s", forbidden, result.Content)
+		}
+	}
+}
+
 func codexLaunchSpecResolverForLocalSanitizerTestV0(
 	t *testing.T,
 	runRef string,

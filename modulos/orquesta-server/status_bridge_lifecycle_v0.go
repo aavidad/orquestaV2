@@ -72,6 +72,7 @@ func (tracker *StatusTrackerV0) MarkExternalBridgeLifecycleV0(
 		}
 		if update.Counters != nil {
 			state.ExternalBridgeCounters = copyServerIntMapV0(update.Counters)
+			state.ExternalBridgeEvidenceRefs = compactServerDiagnosticStringsV0(update.EvidenceRefs)
 		}
 		if update.Success {
 			state.ExternalBridgeLastSuccess = formatTimeV0(now)

@@ -16,5 +16,7 @@ Cobertura v0:
 - aging como desempate entre misma prioridad;
 - `updated_at` ascendente con estabilidad en empates exactos;
 - normalizacion de `RunQueuePriorityCommandV0.status`;
+- proyeccion causal de rescates con `active_attempt_ref`, `parent_run_ref`,
+  `supersedes_run_ref` y `rescue_reason`;
 - pureza basica: no mutar referencias de evidencia del input;
 - gate de arquitectura contra imports/terminos de adaptadores y persistencia.

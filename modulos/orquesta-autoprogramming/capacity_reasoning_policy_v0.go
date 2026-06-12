@@ -33,9 +33,13 @@ func DecideCapacityReasoningPolicyV0(
 ) CapacityReasoningPolicyDecisionV0 {
 	switch {
 	case capacityReasoningContainsAnyV0(input, []string{
-		"opes", "plan_temario", "plan_tema", "plan_documento", "document_plan",
+		"plan_temario", "plan_tema", "plan_documento", "document_plan",
 	}):
 		return capacityReasoningDecisionV0("xhigh", CapacityPolicyRefOPESDocumentV0)
+	case capacityReasoningContainsAnyV0(input, []string{
+		"opes",
+	}):
+		return capacityReasoningDecisionV0("high", CapacityPolicyRefHighRiskV0)
 	case capacityReasoningContainsAnyV0(input, []string{
 		"architecture_decision", "arquitectura amplia", "risk:high", "riesgo_alto",
 		"programacion", "programming", "crear_app_completa", "go.mod", "cmd/",

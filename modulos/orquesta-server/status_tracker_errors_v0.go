@@ -38,15 +38,75 @@ func (tracker *StatusTrackerV0) MarkIdleSelfImprovementErrorV0(message string, n
 	})
 }
 
+func (tracker *StatusTrackerV0) MarkIdleSelfImprovementPrepareFailedV0(
+	result IdleSelfImprovementResultV0,
+	now time.Time,
+) StateV0 {
+	result.Accepted = false
+	if strings.TrimSpace(result.Status) == "" {
+		result.Status = "error"
+	}
+	if strings.TrimSpace(result.Message) == "" {
+		result.Message = "prepare_failed"
+	}
+	return tracker.updateV0(func(state *StateV0) {
+		state.LastHeartbeatAt = formatTimeV0(now)
+		state.IdleSelfImprovementCheck = formatTimeV0(now)
+		state.IdleSelfImprovementReason = idleSelfImprovementPrepareFailedReasonV0(result)
+		state.IdleSelfImprovementOperationalMessage = projectServerOperationalMessageRecordV0(
+			serverOperationalMessageInputV0{
+				Scope:        "idle_self_improvement",
+				ReasonCode:   "prepare_failed",
+				Status:       result.Status,
+				Message:      result.Message,
+				RunRefs:      []string{result.RunRef},
+				RequestRefs:  []string{result.RequestRef},
+				EvidenceRefs: result.EvidenceRefs,
+				Counters: map[string]int{
+					"attempts": tracker.idleSelfImprovementAttempts + 1,
+					"accepted": tracker.idleSelfImprovementPrepared,
+					"next":     len(result.NextActions),
+				},
+			},
+		)
+		tracker.lastIdleSelfImprovementAt = now.UTC()
+		tracker.idleSelfImprovementInFlight = false
+		tracker.idleSelfImprovementAccepted = false
+		tracker.idleSelfImprovementAttempts++
+		state.IdleSelfImprovementFlight = false
+		state.IdleSelfImprovementRuns = tracker.idleSelfImprovementAttempts
+		state.IdleSelfImprovementOK = tracker.idleSelfImprovementPrepared
+		state.LastError = projectServerOperationalMessageV0("idle_self_improvement", result.Message)
+		state.LastErrorOperationalMessage = copyServerOperationalMessageV0(
+			state.IdleSelfImprovementOperationalMessage,
+		)
+		appendRecentServerErrorV0(
+			state,
+			now,
+			"idle_self_improvement_prepare_failed",
+			"idle_self_improvement",
+			result.Message,
+			result.EvidenceRefs,
+		)
+	})
+}
+
 func (tracker *StatusTrackerV0) MarkIdleSelfImprovementCheckedV0(reason string, now time.Time) StateV0 {
 	reason = projectServerOperationalMessageV0("idle_self_improvement", reason)
 	return tracker.updateV0(func(state *StateV0) {
-		if reason == "attempt_blocked" &&
-			tracker.idleSelfImprovementAccepted &&
-			strings.HasPrefix(state.IdleSelfImprovementReason, "prepared") {
-			reason = state.IdleSelfImprovementReason
-			if !strings.Contains(reason, "pending=accepted_attempt") {
-				reason += ";pending=accepted_attempt"
+		if reason == "attempt_blocked" {
+			if tracker.idleSelfImprovementAccepted &&
+				strings.HasPrefix(state.IdleSelfImprovementReason, "prepared") {
+				reason = state.IdleSelfImprovementReason
+				if !strings.Contains(reason, "pending=accepted_attempt") {
+					reason += ";pending=accepted_attempt"
+				}
+			}
+			if strings.HasPrefix(state.IdleSelfImprovementReason, "error:prepare_failed") {
+				reason = state.IdleSelfImprovementReason
+				if !strings.Contains(reason, "pending=failed_attempt") {
+					reason += ";pending=failed_attempt"
+				}
 			}
 		}
 		state.LastHeartbeatAt = formatTimeV0(now)
@@ -68,6 +128,29 @@ func (tracker *StatusTrackerV0) MarkIdleSelfImprovementCheckedV0(reason string, 
 		state.IdleSelfImprovementRuns = tracker.idleSelfImprovementAttempts
 		state.IdleSelfImprovementOK = tracker.idleSelfImprovementPrepared
 	})
+}
+
+func idleSelfImprovementPrepareFailedReasonV0(result IdleSelfImprovementResultV0) string {
+	reason := []string{"error:prepare_failed"}
+	if strings.TrimSpace(result.RunRef) != "" {
+		reason = append(reason, "run_ref="+strings.TrimSpace(result.RunRef))
+	}
+	if strings.TrimSpace(result.RequestRef) != "" {
+		reason = append(reason, "request_ref="+strings.TrimSpace(result.RequestRef))
+	}
+	if strings.TrimSpace(result.Status) != "" {
+		reason = append(reason, projectServerOperationalReasonFieldV0("status", result.Status))
+	}
+	if strings.TrimSpace(result.Message) != "" {
+		reason = append(reason, projectServerOperationalReasonFieldV0("message", result.Message))
+	}
+	if len(result.NextActions) > 0 {
+		reason = append(reason, projectServerOperationalReasonFieldV0("next", strings.Join(result.NextActions, ",")))
+	}
+	if len(result.EvidenceRefs) > 0 {
+		reason = append(reason, "evidence="+strings.Join(compactServerDiagnosticStringsV0(result.EvidenceRefs), ","))
+	}
+	return strings.Join(compactConfigStringsV0(reason), ";")
 }
 
 func (tracker *StatusTrackerV0) MarkErrorV0(message string, now time.Time) StateV0 {

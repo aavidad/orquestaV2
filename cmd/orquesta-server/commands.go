@@ -75,16 +75,29 @@ func runServerCommandV0(_ io.Writer, stderr io.Writer) int {
 	} else {
 		bridgeConfig.Loop.Observer = externalBridgeRuntimeObserverV0(runtime)
 	}
+	registryFinalPkgConfig, err := opesRegistryFinalPkgLoopConfigFromEnvV0(serverConfig, "http://"+serverConfig.Addr)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "orquesta-server opes-registry-finalpkg blocked: %v\n", err)
+		markExternalBridgeConfigBlockedV0(ctx, runtime, err)
+	} else {
+		registryFinalPkgConfig.Loop.Observer = externalBridgeRuntimeObserverV0(runtime)
+	}
 	bridgeDone := runOPESBridgeLoopAsyncV0(ctx, bridgeConfig, stderr, runOPESDrainOnceV0)
+	registryFinalPkgDone := runOPESRegistryFinalPkgLoopAsyncV0(ctx, registryFinalPkgConfig, stderr, runOPESRegistryFinalPkgOnceV0)
 	runErr := runtime.RunWithShutdownCauseV0(ctx, signalController.shutdownCauseV0)
 	signalController.stopNotificationsV0()
 	bridgeOK := waitOPESBridgeLoopDoneV0(context.Background(), bridgeConfig, bridgeDone)
+	registryFinalPkgOK := waitOPESRegistryFinalPkgLoopDoneV0(context.Background(), registryFinalPkgConfig, registryFinalPkgDone)
 	if runErr != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server: %v\n", runErr)
 		return 1
 	}
 	if !bridgeOK {
 		_, _ = fmt.Fprintln(stderr, "orquesta-server opes-bridge: shutdown_timeout")
+		return 1
+	}
+	if !registryFinalPkgOK {
+		_, _ = fmt.Fprintln(stderr, "orquesta-server opes-registry-finalpkg: shutdown_timeout")
 		return 1
 	}
 	return 0

@@ -26,11 +26,12 @@ func CaptureWorktreeSnapshotV0(
 		}
 	}
 	budget := worktreeSnapshotRequestBudgetV0(request)
-	files, receipts, issues := collectWorktreeFilesV0(
+	files, omittedPaths, receipts, issues := collectWorktreeFilesV0(
 		ctx,
 		request.ProjectWorkDir,
 		request.IgnorePrefixes,
 		budget,
+		request.AllowPartial,
 	)
 	if len(issues) > 0 {
 		return WorktreeSnapshotV0{}, issues
@@ -40,6 +41,7 @@ func CaptureWorktreeSnapshotV0(
 		SnapshotRef:       request.SnapshotRef,
 		ReadBudget:        budget,
 		Files:             files,
+		OmittedPaths:      omittedPaths,
 		ExclusionReceipts: receipts,
 	}, nil
 }
@@ -75,11 +77,15 @@ func collectWorktreeFilesV0(
 	root string,
 	ignorePrefixes []string,
 	budget WorktreeSnapshotReadBudgetV0,
-) ([]WorktreeSnapshotFileV0, []WorktreeLocalArtifactExclusionReceiptV0, []WorktreeIssueV0) {
+	allowPartial bool,
+) ([]WorktreeSnapshotFileV0, []string, []WorktreeLocalArtifactExclusionReceiptV0, []WorktreeIssueV0) {
 	files := make([]WorktreeSnapshotFileV0, 0)
 	var excluded []string
+	var omittedPaths []string
+	var budgetReceipts []WorktreeLocalArtifactExclusionReceiptV0
 	var issues []WorktreeIssueV0
 	var totalBytes int64
+	partialStopped := false
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			issues = append(issues, worktreeSnapshotUnreadableIssueV0(root, path))
@@ -123,31 +129,62 @@ func collectWorktreeFilesV0(
 			return errWorktreeSnapshotStoppedV0
 		}
 		if len(files) >= budget.MaxFiles {
-			issues = append(issues, worktreeIssueV0(
+			issue := worktreeIssueV0(
 				WorktreeIssueSnapshotTooManyFilesV0,
 				"max_files",
 				"worktree_snapshot_file_count_budget_exceeded",
-			))
+			)
+			if allowPartial {
+				if receipt, ok := worktreeSnapshotBudgetReceiptForIssueV0(issue); ok {
+					budgetReceipts = append(budgetReceipts, receipt)
+				}
+				partialStopped = true
+				return errWorktreeSnapshotStoppedV0
+			}
+			issues = append(issues, issue)
 			return errWorktreeSnapshotStoppedV0
 		}
 		if info.Size() > budget.MaxFileBytes {
-			issues = append(issues, worktreeIssueV0(
+			issue := worktreeIssueV0(
 				WorktreeIssueSnapshotFileTooLargeV0,
 				"file",
 				rel,
-			))
+			)
+			if allowPartial {
+				if receipt, ok := worktreeSnapshotBudgetReceiptForIssueV0(issue); ok {
+					budgetReceipts = append(budgetReceipts, receipt)
+				}
+				omittedPaths = append(omittedPaths, rel)
+				return nil
+			}
+			issues = append(issues, issue)
 			return errWorktreeSnapshotStoppedV0
 		}
 		if totalBytes+info.Size() > budget.MaxTotalBytes {
-			issues = append(issues, worktreeIssueV0(
+			issue := worktreeIssueV0(
 				WorktreeIssueSnapshotTooLargeV0,
 				"max_total_bytes",
 				"worktree_snapshot_total_budget_exceeded",
-			))
+			)
+			if allowPartial {
+				if receipt, ok := worktreeSnapshotBudgetReceiptForIssueV0(issue); ok {
+					budgetReceipts = append(budgetReceipts, receipt)
+				}
+				omittedPaths = append(omittedPaths, rel)
+				return nil
+			}
+			issues = append(issues, issue)
 			return errWorktreeSnapshotStoppedV0
 		}
 		file, readBytes, issue := hashWorktreeFileV0(path, rel, info.Size(), budget, totalBytes)
 		if issue != nil {
+			if allowPartial {
+				if receipt, ok := worktreeSnapshotBudgetReceiptForIssueV0(*issue); ok {
+					budgetReceipts = append(budgetReceipts, receipt)
+					omittedPaths = append(omittedPaths, rel)
+					return nil
+				}
+			}
 			issues = append(issues, *issue)
 			return errWorktreeSnapshotStoppedV0
 		}
@@ -156,13 +193,23 @@ func collectWorktreeFilesV0(
 		return nil
 	})
 	if errors.Is(err, errWorktreeSnapshotStoppedV0) {
-		return nil, nil, issues
+		if allowPartial && partialStopped && len(issues) == 0 {
+			sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+			return files, compactWorktreeStringsV0(omittedPaths), mergeWorktreeLocalArtifactReceiptsV0(
+				worktreeLocalArtifactReceiptsV0(excluded),
+				budgetReceipts,
+			), nil
+		}
+		return nil, nil, nil, issues
 	}
 	if err != nil {
-		return nil, nil, []WorktreeIssueV0{worktreeIssueV0(WorktreeIssueFilesystemV0, "project_work_dir")}
+		return nil, nil, nil, []WorktreeIssueV0{worktreeIssueV0(WorktreeIssueFilesystemV0, "project_work_dir")}
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
-	return files, worktreeLocalArtifactReceiptsV0(excluded), nil
+	return files, compactWorktreeStringsV0(omittedPaths), mergeWorktreeLocalArtifactReceiptsV0(
+		worktreeLocalArtifactReceiptsV0(excluded),
+		budgetReceipts,
+	), nil
 }
 
 func worktreeRelativePathV0(root string, path string) (string, bool) {

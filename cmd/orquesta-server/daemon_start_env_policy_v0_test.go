@@ -163,6 +163,33 @@ func TestServerDaemonStartEnvironmentV0NoFuerzaPurgasPorDefecto(t *testing.T) {
 	}
 }
 
+func TestServerDaemonStartEnvironmentV0ProyectaEgressSanitizerSinAbrirSecretosV0(t *testing.T) {
+	projectDir := t.TempDir()
+	config := orquestaserver.ConfigV0{
+		Addr:           "127.0.0.1:19097",
+		ProjectWorkDir: projectDir,
+		RuntimeWorkDir: filepath.Join(projectDir, "runtime"),
+		StateDir:       filepath.Join(projectDir, "state"),
+		AuditFile:      "audit.jsonl",
+	}
+
+	got := serverDaemonStartEnvironmentV0([]string{
+		envEgressSanitizerEnabledV0 + "=true",
+		envEgressSanitizerRefV0 + "=sanitizer-ref-test",
+		envEgressSanitizerSidecarLocalEndpointV0 + "=http://127.0.0.1:17777/filter",
+		"ORQUESTA_EGRESS_PRIVATE_API_KEY=blocked",
+	}, config)
+
+	if !daemonStartEnvHasPairForTestV0(got, envEgressSanitizerEnabledV0, "true") ||
+		!daemonStartEnvHasPairForTestV0(got, envEgressSanitizerRefV0, "sanitizer-ref-test") ||
+		!daemonStartEnvHasPairForTestV0(got, envEgressSanitizerSidecarLocalEndpointV0, "http://127.0.0.1:17777/filter") {
+		t.Fatalf("egress sanitizer no proyectado al daemon: %v", got)
+	}
+	if daemonStartEnvHasKeyForTestV0(got, "ORQUESTA_EGRESS_PRIVATE_API_KEY") {
+		t.Fatalf("daemon no debe proyectar api keys egress: %v", got)
+	}
+}
+
 func TestServerDaemonStartEnvironmentV0RespetaForcedStopExplicito(t *testing.T) {
 	projectDir := t.TempDir()
 	config := orquestaserver.ConfigV0{

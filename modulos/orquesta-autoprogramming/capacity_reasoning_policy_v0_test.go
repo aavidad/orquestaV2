@@ -30,6 +30,21 @@ func TestDecideCapacityReasoningPolicyV0OPESDocumentalOptInXHigh(t *testing.T) {
 	}
 }
 
+func TestDecideCapacityReasoningPolicyV0OPESGenericoUsaHighSinXHigh(t *testing.T) {
+	got := DecideCapacityReasoningPolicyV0(CapacityReasoningPolicyInputV0{
+		DomainRefs: []string{"domain-ref-opes"},
+		WriteSet: []string{
+			"opes-salidas/coordinacion_temarios/a1_maestros_todas_opes_2026-06-11/informatica_a1_72_padres/tema_063",
+		},
+	})
+
+	if got.CapacityLevel != "high" ||
+		got.ReasoningEffort != "high" ||
+		got.PolicyRef != CapacityPolicyRefHighRiskV0 {
+		t.Fatalf("policy=%+v", got)
+	}
+}
+
 func TestDecideCapacityReasoningPolicyV0NoEscalaOPESPorSubcadena(t *testing.T) {
 	got := DecideCapacityReasoningPolicyV0(CapacityReasoningPolicyInputV0{
 		WorkProfileKind: "implementation",

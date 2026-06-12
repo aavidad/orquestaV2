@@ -40,7 +40,7 @@ func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 	}
 	supervisor := serverStackSupervisorV0{
 		stack:          &stack,
-		projectWorkDir: serverConfig.ProjectWorkDir,
+		projectWorkDir: serverConfig.IdleSelfImprovementProjectWorkDir,
 		runtimeWorkDir: serverConfig.RuntimeWorkDir,
 		stateDir:       serverConfig.StateDir,
 	}
@@ -125,6 +125,10 @@ func buildStackFromEnvV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
+	egressSanitizer, err := egressSanitizerConfigWithSidecarPortFromEnvV0()
+	if err != nil {
+		return orquestaappcodexstack.StackV0{}, err
+	}
 	worktreeSnapshotStore := orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0()
 	stack, err := orquestaappcodexstack.BuildStackV0(orquestaappcodexstack.ConfigV0{
 		Enabled:        true,
@@ -163,10 +167,11 @@ func buildStackFromEnvV0(
 			processRuntime,
 			codexUsageMetricsFromEnvV0(receiptStore),
 		),
-		Gemini:        geminiRuntimeConfigV0(serverConfig),
-		Claude:        claudeRuntimeConfigV0(serverConfig),
-		Capacity:      codexStackCapacityConfigFromEnvV0(),
-		RuntimeModels: runtimeModelManagerFromEnvV0(),
+		Gemini:          geminiRuntimeConfigV0(serverConfig),
+		Claude:          claudeRuntimeConfigV0(serverConfig),
+		EgressSanitizer: egressSanitizer,
+		Capacity:        codexStackCapacityConfigFromEnvV0(),
+		RuntimeModels:   runtimeModelManagerFromEnvV0(),
 		ReviewGate: orquestaappcodexstack.ReviewGateConfigV0{
 			FileEvidence:            orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 			StrictGoLineBudget:      boolEnvOrDefaultV0(envReviewGateStrictGoLineBudgetV0, false),
@@ -177,6 +182,7 @@ func buildStackFromEnvV0(
 		DomainTests:              domainWorkRequiredTestConfigFromEnvV0(),
 		AutoprogrammingPromotion: autoprogrammingPromotionConfigFromEnvV0(serverConfig),
 		DomainWork:               domainWorkExecutor,
+		ExternalWorkRunGuard:     externalWorkRunProjectWorkDirGuardConfigFromEnvV0(serverConfig),
 		DomainDelivery: orquestaappcodexstack.DomainWorkDeliveryBridgeConfigV0{
 			Enabled: domainWorkDeliveryEnabledFromEnvV0(),
 			Ledger:  domainDeliveryLedgerFromEnvV0(serverConfig),

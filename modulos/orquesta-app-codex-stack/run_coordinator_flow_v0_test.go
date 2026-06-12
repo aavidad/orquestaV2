@@ -356,6 +356,52 @@ func TestCodexStackV0RecoverReanudaAppChangeAutoplanBloqueadoSinMicrotareaV0(t *
 	}
 }
 
+func TestCodexStackV0RecoverReanudaOpenPlanTardioConReviewAceptadaV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	director := postDirectorAPIV0(t, stack)
+	run, err := stack.Stores.RunStore.LoadRunV0(context.Background(), director.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	run = codexStackRunWithActivePhaseForTestV0(run, orquestacoreworkflow.OrchestrationPhaseRevisionV0)
+	run.Status = orquestacoreworkflow.OrchestrationRunStatusBlockedV0
+	run.PhaseArtifacts = nil
+	run.Tasks = []string{"task-ref-app-change-finalpkg-030"}
+	run.Agents = []string{"agent-ref-app-change-finalpkg-030"}
+	run.AgentPhaseRefs = []string{"agent-ref-app-change-finalpkg-030#phase:programacion"}
+	run.StartedAgents = []string{"agent-ref-app-change-finalpkg-030"}
+	run.Deliveries = []string{"delivery-ref-app-change-finalpkg-030"}
+	run.DeliveredAgents = []string{"agent-ref-app-change-finalpkg-030"}
+	run.DeliveredTasks = []string{"task-ref-app-change-finalpkg-030"}
+	run.AcceptedReviews = []string{"accepted-review-ref-app-change-finalpkg-030"}
+	run.Blockers = []string{
+		"app-director-decision-director-decision-apply-error-director-decision-app-change-open-plan-appchange-finalpkg-030",
+	}
+	if err := stack.Stores.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0 blocked: %v", err)
+	}
+
+	recovered, ok, err := stack.recoverBlockedAppChangeAutoPlanRunV0(
+		context.Background(),
+		globalTickCommandForTestV0(),
+		orquestaruncontrol.DefaultRunControlStateV0(director.RunRef),
+		run,
+	)
+	if err != nil {
+		t.Fatalf("recoverBlockedAppChangeAutoPlanRunV0: %v", err)
+	}
+	if !ok || recovered.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 || len(recovered.Blockers) != 0 {
+		t.Fatalf("run no recuperada: ok=%v status=%s blockers=%v", ok, recovered.Status, recovered.Blockers)
+	}
+	persisted, err := stack.Stores.RunStore.LoadRunV0(context.Background(), director.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 persisted: %v", err)
+	}
+	if persisted.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 || len(persisted.Blockers) != 0 {
+		t.Fatalf("run persistida no recuperada: status=%s blockers=%v", persisted.Status, persisted.Blockers)
+	}
+}
+
 func TestCodexStackV0RecoverNoReanudaAppChangeConBlockerAjenoV0(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	director := postDirectorAPIV0(t, stack)
@@ -622,6 +668,72 @@ func TestCodexStackV0RecoverTerminalizaRunRunningConStopCheckpointSinAgentesPend
 	}
 }
 
+func TestCodexStackV0RecoverTerminalizaRunStoppedConStopCheckpointSinAgentesPendientesV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	runRef := "request-ref-autoprogramming-stopped-stop-no-pending-001"
+	taskRef := "task-autoprogramming-stopped-stop-no-pending-001"
+	agentRef := "agent-ref-stopped-stop-no-pending-001"
+	run := codexStackAutoprogrammingRunForCoordinatorRepairTestV0(runRef, taskRef)
+	run.StartedAgents = []string{agentRef}
+	run.ConfirmedStoppedAgents = []string{agentRef}
+	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	if _, err := stack.Stores.RunQueue.SetRunPriorityV0(context.Background(), orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        runRef,
+		QueueRef:      DefaultRunQueueRefV0,
+		AppRef:        "project-ref-orquesta-server",
+		Status:        orquestarunqueue.RunStatusStoppedV0,
+		PriorityScore: 80,
+		UpdatedAt:     time.Date(2026, 5, 27, 14, 5, 0, 0, time.UTC),
+		EvidenceRefs:  []string{"evidence-ref-test-stopped-before-stop-sync"},
+	}); err != nil {
+		t.Fatalf("SetRunPriorityV0: %v", err)
+	}
+	if _, err := stack.Stores.RunControl.StopRunV0(context.Background(), orquestaruncontrol.StopRunCommandV0{
+		RunRef:       runRef,
+		RequestedBy:  "orquesta-director",
+		Reason:       "stop ya sincronizado en cola",
+		EvidenceRefs: []string{"evidence-ref-test-stopped-stop-requested"},
+	}); err != nil {
+		t.Fatalf("StopRunV0: %v", err)
+	}
+	if _, err := stack.Stores.RunControl.RecordRunCheckpointV0(context.Background(), orquestaruncontrol.RecordRunCheckpointCommandV0{
+		RunRef:       runRef,
+		RequestedBy:  "orquesta-mcp-run-control",
+		Reason:       "checkpoint de stop ya registrado",
+		EvidenceRefs: []string{"evidence-ref-test-stopped-stop-checkpoint"},
+	}); err != nil {
+		t.Fatalf("RecordRunCheckpointV0: %v", err)
+	}
+
+	if err := stack.recoverQueuedStoppedActiveRunsV0(context.Background(), globalTickCommandForTestV0()); err != nil {
+		t.Fatalf("recoverQueuedStoppedActiveRunsV0: %v", err)
+	}
+
+	state, err := stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: runRef},
+	)
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0: %v", err)
+	}
+	if state.Status != orquestaruncontrol.RunControlStatusStoppedV0 ||
+		!codexStackStringInSetV0(state.EvidenceRefs, "evidence-ref-run-control-complete-no-pending-agents") {
+		t.Fatalf("state=%+v", state)
+	}
+	visible, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		context.Background(),
+		orquestarunqueue.RunQueueReadRequestV0{QueueRef: DefaultRunQueueRefV0},
+	)
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	if len(visible) != 0 {
+		t.Fatalf("run parada no debe reencolarse como ejecutable: %+v", visible)
+	}
+}
+
 func TestCodexStackV0RecoverNoTerminalizaStopConDomainWorkPendienteV0(t *testing.T) {
 	ledger := NewInMemoryDomainWorkArtifactSubmissionLedgerV0()
 	stack := mustBuildCodexStackWithDomainWorkForTestV0(
@@ -654,7 +766,7 @@ func TestCodexStackV0RecoverNoTerminalizaStopConDomainWorkPendienteV0(t *testing
 		t.Fatalf("StopRunV0: %v", err)
 	}
 
-	if err := stack.completeQueuedRunControlIfStopHasNoPendingAgentsV0(
+	if completed, err := stack.completeQueuedRunControlIfStopHasNoPendingAgentsV0(
 		context.Background(),
 		globalTickCommandForTestV0(),
 		orquestarunqueue.RunSchedulingCandidateV0{
@@ -673,6 +785,8 @@ func TestCodexStackV0RecoverNoTerminalizaStopConDomainWorkPendienteV0(t *testing
 		},
 	); err != nil {
 		t.Fatalf("completeQueuedRunControlIfStopHasNoPendingAgentsV0: %v", err)
+	} else if completed {
+		t.Fatalf("completeQueuedRunControlIfStopHasNoPendingAgentsV0 completed con domain work pendiente")
 	}
 	state, err = stack.Stores.RunControl.ReadRunControlStateV0(
 		context.Background(),

@@ -127,8 +127,13 @@ func enforceDaemonLogRetentionV0(path string, policy orquestaserver.DaemonLogPol
 		return fmt.Errorf("daemon_log_retention_failed")
 	}
 	sort.Sort(sort.Reverse(sort.StringSlice(matches)))
+	cutoff := time.Now().AddDate(0, 0, -policy.RetentionDays)
 	for index, match := range matches {
-		if index < policy.MaxRotatedFiles {
+		expired, err := daemonRotatedLogExpiredV0(match, cutoff)
+		if err != nil {
+			return err
+		}
+		if index < policy.MaxRotatedFiles && !expired {
 			continue
 		}
 		if err := os.Remove(match); err != nil && !os.IsNotExist(err) {
@@ -136,6 +141,17 @@ func enforceDaemonLogRetentionV0(path string, policy orquestaserver.DaemonLogPol
 		}
 	}
 	return nil
+}
+
+func daemonRotatedLogExpiredV0(path string, cutoff time.Time) (bool, error) {
+	stat, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("daemon_log_retention_failed")
+	}
+	return stat.ModTime().Before(cutoff), nil
 }
 
 func openDaemonDiscardPairV0() (*os.File, *os.File, error) {

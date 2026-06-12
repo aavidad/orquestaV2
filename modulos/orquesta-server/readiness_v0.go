@@ -55,7 +55,7 @@ func NewServerReadinessV0(state StateV0) ServerReadinessV0 {
 		ExternalBridgeStatus:    strings.TrimSpace(state.ExternalBridgeStatus),
 		ExternalBridgeReady:     externalBridgeReadinessOKV0(state.ExternalBridgeStatus),
 		ExternalBridgeLastError: strings.TrimSpace(state.ExternalBridgeLastError),
-		EvidenceRefs:            compactServerStringsV0(state.StartupEvidenceRefs),
+		EvidenceRefs:            compactServerStringsV0(append(append([]string(nil), state.StartupEvidenceRefs...), state.ExternalBridgeEvidenceRefs...)),
 	}
 }
 

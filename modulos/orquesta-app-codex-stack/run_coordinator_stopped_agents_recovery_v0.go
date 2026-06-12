@@ -42,7 +42,7 @@ func (stack StackV0) recoverQueuedTerminalAgentAssessmentV0(
 	if stack.Ports.AssessmentReplanSource == nil || !stackRunHasRecoverableTerminalAssessmentV0(run) {
 		return nil
 	}
-	ports := stack.Ports
+	ports := stack.directorPortsWithClosureSourceV0(stack.Ports)
 	ports.DeliverySource = nil
 	ports.ProgressSource = nil
 	ports.LeaseSource = nil

@@ -34,6 +34,12 @@ Debe trabajar por puertos y refs opacas.
   acepta summaries como tests ejecutados.
 - Cada transicion debe tener causa: task, delivery, review, evidencia, replan,
   outbox o blocker.
+- `accepted_review_refs` pertenece como propietario a `review_deliveries`, pero
+  puede propagarse a `run_required_tests` y `replan_or_close` como ref causal.
+  Si una ref aceptada aparece en esos pasos sin estar ya en un
+  `review_deliveries` aceptado, el propio paso debe conservar tambien
+  `delivery_refs` y `review_result_refs`; refs sueltas sin cadena causal son
+  invalidas.
 - Las claves idempotentes deben ser estables por `run_ref`, `plan_ref`, step y
   refs causales, no por timestamps.
 - Reentrada y replay no pueden duplicar review, tests, rework, replan ni cierre.
@@ -77,11 +83,13 @@ apuntar a esas refs, no convertirse en un segundo log paralelo.
    cuando las entregas del scope activo tienen cadena causal
    `DeliveryRegistered -> ReviewRequested -> ReviewResultRecorded(accepted) ->
    ReviewAccepted`. El step de review guarda `delivery_refs`,
-   `review_result_refs` y `accepted_review_refs`.
+   `review_result_refs` y `accepted_review_refs`; los pasos posteriores
+   conservan esas `accepted_review_refs` para que tests y cierre mantengan la
+   cadena causal sin releer scope legacy.
 9. Consumo durable de `RequiredTestEvidenceV0` desde `run_required_tests` en
    `app-director-service`: evidencias `passed` causales activan
-   `replan_or_close`; evidencias `failed` bloquean con
-   `required-tests-failed`.
+   `replan_or_close` preservando review aceptada y evidencias; evidencias
+   `failed` bloquean con `required-tests-failed`.
 10. Observacion negativa de `review_deliveries` cuando el historial causal trae
     `ReworkRequested` y `ReplanDecisionRecorded`. El state guarda refs de
     rework/replan, marca el step como `changes_requested` e incrementa attempts.

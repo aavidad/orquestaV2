@@ -2,6 +2,7 @@ package orquestaserver
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
@@ -119,6 +120,10 @@ type IdleSelfImprovementRequestV0 struct {
 	ProjectRef         string
 	WorktreeRef        string
 	BranchRef          string
+	ParentRunRef       string
+	RescueReason       string
+	SupersedesRunRef   string
+	ActiveAttemptRef   string
 	RequestedBy        string
 	Source             string
 	FailureKind        string
@@ -198,6 +203,13 @@ type StartupCheckPortV0 interface {
 	PrepareStartupV0(context.Context, StartupCheckCommandV0) (StartupCheckResultV0, error)
 }
 
+type SupervisorPublicProjectionV0 struct {
+	Status       string
+	StopPublic   string
+	StopCategory string
+	EvidenceRefs []string
+}
+
 type SelfWatchdogObservationPortV0 interface {
 	ObserveSelfWatchdogV0(
 		context.Context,
@@ -219,4 +231,68 @@ type SystemClockV0 struct{}
 
 func (SystemClockV0) Now() time.Time {
 	return time.Now().UTC()
+}
+
+func (runtime *RuntimeV0) maybeScheduleIdleSelfImprovementCausalV0(
+	ctx context.Context,
+	result orquestarunsupervisor.RunSupervisorResultV0,
+	now time.Time,
+) {
+	if runtime.supervisorFrozenForShutdownV0() {
+		runtime.auditEventV0(ctx, "idle_self_improvement_check", "skipped", "", map[string]interface{}{"reason": "shutdown_in_progress"})
+		runtime.markIdleSelfImprovementCheckedV0(ctx, "shutdown_in_progress", now)
+		return
+	}
+	if runtime.config.IdleSelfImprovementAfter <= 0 {
+		runtime.auditEventV0(ctx, "idle_self_improvement_check", "skipped", "", map[string]interface{}{"reason": "disabled"})
+		runtime.markIdleSelfImprovementCheckedV0(ctx, "disabled", now)
+		return
+	}
+	port, ok := runtime.supervisor.(IdleSelfImprovementPortV0)
+	if !ok || port == nil {
+		runtime.auditEventV0(ctx, "idle_self_improvement_check", "skipped", "", map[string]interface{}{"reason": "port_unavailable"})
+		runtime.markIdleSelfImprovementCheckedV0(ctx, "port_unavailable", now)
+		return
+	}
+	decision := runtime.idleSelfImprovementScheduleDecisionV0(ctx, result, now)
+	if !decision.Schedule {
+		runtime.auditEventV0(ctx, "idle_self_improvement_check", decision.AuditStatus, "", decision.AuditPayload())
+		runtime.markIdleSelfImprovementDecisionCheckedV0(ctx, decision, now)
+		return
+	}
+	request := runtime.idleSelfImprovementRequestV0(decision, now)
+	requests := normalizeIdleSelfImprovementCausalRequestsV0(
+		runtime.idleSelfImprovementRequestsV0(ctx, request, decision),
+	)
+	if len(requests) == 0 {
+		runtime.auditEventV0(ctx, "idle_self_improvement_check", "skipped", "", map[string]interface{}{"reason": "planner_empty", "request": request})
+		runtime.markIdleSelfImprovementCheckedV0(ctx, "planner_empty", now)
+		return
+	}
+	runtime.auditEventV0(ctx, "idle_self_improvement_scheduled", "scheduled", "", map[string]interface{}{"requests": requests})
+	runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkIdleSelfImprovementScheduledV0(now), "idle_self_improvement_scheduled")
+	runtime.runAsyncWorkV0("idle_self_improvement_prepare", func() {
+		runtime.prepareIdleSelfImprovementBatchV0(ctx, port, requests)
+	})
+}
+
+func idleSelfImprovementDedupeTargetV0(request IdleSelfImprovementRequestV0) string {
+	baseRef := idleSelfImprovementCausalBaseRefV0(request.RequestRef)
+	area := strings.TrimSpace(request.SuggestedArea)
+	writeSet := strings.Join(compactConfigStringsV0(request.WriteSet), "|")
+	if area == "" || writeSet == "" {
+		return baseRef
+	}
+	parts := compactConfigStringsV0([]string{
+		request.ProjectRef,
+		request.WorktreeRef,
+		request.BranchRef,
+		request.Source,
+		request.RequestedBy,
+		area,
+		request.FailureKind,
+		request.FailureSummary,
+		writeSet,
+	})
+	return "intent:" + strings.Join(parts, "\x1f")
 }

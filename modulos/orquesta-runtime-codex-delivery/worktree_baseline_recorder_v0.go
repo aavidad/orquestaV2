@@ -49,6 +49,7 @@ func (recorder CodexReceiptWorktreeBaselineRecorderV0) CaptureCodexReceiptWorktr
 			MaxFiles:       recorder.SnapshotReadBudget.MaxFiles,
 			MaxFileBytes:   recorder.SnapshotReadBudget.MaxFileBytes,
 			MaxTotalBytes:  recorder.SnapshotReadBudget.MaxTotalBytes,
+			AllowPartial:   true,
 		},
 	)
 	if len(issues) > 0 {

@@ -142,7 +142,7 @@ func BuildCodexDeliveryObservationV0(
 	if issues := ValidateCodexAgentAckForSpecV0(ack, spec); len(issues) > 0 {
 		return CodexDeliveryObservationV0{}, issues
 	}
-	if strings.TrimSpace(ack.Status) != codexAgentAckStatusCompletedV0 {
+	if !codexAgentAckStatusCarriesReviewableWorkV0(ack.Status) {
 		return CodexDeliveryObservationV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{
 			codexIssueV0(CodexConnectorAckInvalidV0, "status", spec.CorrelationID, "status_not_completed"),
 		}
@@ -164,6 +164,9 @@ func codexDeliveryObservationFromAckV0(
 	evidenceRefs = append(evidenceRefs, CodexAgentAckPendingRailEvidenceRefsV0(ack)...)
 	if codexAckHasFailedTestEvidenceV0(ack) {
 		evidenceRefs = append(evidenceRefs, "gate-issue:failed_test_evidence")
+	}
+	if strings.TrimSpace(ack.Status) == codexAgentAckStatusBlockedV0 {
+		evidenceRefs = append(evidenceRefs, "gate-issue:agent_blocked")
 	}
 	return CodexDeliveryObservationV0{
 		DeliveryRef:  strings.TrimSpace(ack.AckRef),

@@ -2,6 +2,7 @@ package orquestadomainworkfile_test
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
@@ -36,6 +37,33 @@ func validDomainWorkFileJobRequestV0() orquestadomainwork.DomainWorkJobRequestV0
 		}},
 		EvidenceRefs: []string{"evidence-001"},
 	}
+}
+
+func validDomainWorkFileArtifactSubmissionV0() orquestadomainwork.DomainWorkArtifactSubmissionV0 {
+	return orquestadomainwork.NormalizeDomainWorkArtifactSubmissionV0(
+		orquestadomainwork.DomainWorkArtifactSubmissionV0{
+			RequestID:      "req-domain-work-file-artifact-001",
+			CorrelationID:  "corr-domain-work-file-001",
+			IdempotencyKey: "domain-work-file-artifact-idem-001",
+			RequestedBy:    "test",
+			DomainRef:      "dominio-demo",
+			JobRef:         "job-ref-domain-work-file-001",
+			ArtifactRef:    "artifact-ref-domain-work-file-001",
+			ArtifactType:   "content_package",
+			Summary:        "Artefacto local de prueba.",
+			PayloadFields: []orquestadomainwork.DomainWorkFieldV0{{
+				Name:  "body",
+				Value: "contenido",
+			}},
+			PayloadRefs: []string{"payload-ref-001"},
+			ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{{
+				Kind: "run_ref",
+				Ref:  "run-001",
+			}},
+			EvidenceRefs: []string{"evidence-artifact-001"},
+			CompleteJob:  true,
+		},
+	)
 }
 
 func mustNewFileDomainWorkJobCreatorV0(
@@ -89,4 +117,9 @@ func listDomainWorkFileRecordsForTestV0(
 		t.Fatalf("ListDomainWorkJobRecordsV0: %v", err)
 	}
 	return records
+}
+
+func pathExistsForDomainWorkFileTestV0(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

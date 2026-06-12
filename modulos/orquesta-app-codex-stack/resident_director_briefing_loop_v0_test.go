@@ -33,6 +33,18 @@ func TestCodexStackResidentDirectorV0IdleSinCandidatosV0(t *testing.T) {
 	}
 }
 
+func TestCodexStackDirectorPortsV0ReconstruyeClosureSourceSiFaltaEnPortsV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	ports := stack.Ports
+	ports.OperationalClosureSource = nil
+
+	recovered := stack.directorPortsWithClosureSourceV0(ports)
+
+	if recovered.OperationalClosureSource == nil {
+		t.Fatalf("resident director debe reconstruir OperationalClosureSource desde stores del stack")
+	}
+}
+
 func TestCodexStackResidentDirectorV0EjecutaRunEnColaConBriefingLoopV0(t *testing.T) {
 	ctx := context.Background()
 	runtime := newFakeCodexStackRuntimeV0()

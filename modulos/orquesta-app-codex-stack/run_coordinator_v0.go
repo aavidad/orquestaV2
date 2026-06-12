@@ -13,9 +13,21 @@ func (stack StackV0) RunGlobalTickV0(
 	ctx context.Context,
 	command orquestaruncoordinator.RunCoordinatorTickCommandV0,
 ) (orquestaruncoordinator.RunCoordinatorTickResultV0, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	command = stack.normalizeRunCoordinatorCommandV0(command)
+	if err := ctx.Err(); err != nil {
+		return orquestaruncoordinator.RunCoordinatorTickResultV0{}, err
+	}
+	if err := stack.reconcileQueuedOrphanExecutableRunsV0(ctx, command); err != nil {
+		return orquestaruncoordinator.RunCoordinatorTickResultV0{}, err
+	}
 	if err := stack.recoverQueuedStoppedActiveRunsV0(ctx, command); err != nil {
 		if codexStackProcessRuntimeMissingV0(err) {
+			if err := ctx.Err(); err != nil {
+				return orquestaruncoordinator.RunCoordinatorTickResultV0{}, err
+			}
 			return orquestaruncoordinator.CoordinateRunsTickV0(
 				ctx,
 				orquestaruncoordinator.RunCoordinatorDepsV0{
@@ -29,7 +41,13 @@ func (stack StackV0) RunGlobalTickV0(
 		}
 		return orquestaruncoordinator.RunCoordinatorTickResultV0{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return orquestaruncoordinator.RunCoordinatorTickResultV0{}, err
+	}
 	if err := stack.recoverQueuedControlledDomainWorkArtifactsV0(ctx, command); err != nil {
+		return orquestaruncoordinator.RunCoordinatorTickResultV0{}, err
+	}
+	if err := ctx.Err(); err != nil {
 		return orquestaruncoordinator.RunCoordinatorTickResultV0{}, err
 	}
 	return orquestaruncoordinator.CoordinateRunsTickV0(
@@ -142,6 +160,22 @@ func (stack StackV0) enrichQueuedOperationalDirectorDrainRequestV0(
 		return request, nil
 	}
 	if err := stack.repairQueuedAutoprogrammingWorkflowTasksV0(ctx, request.RunRef); err != nil {
+		return DrainRunRequestV0{}, err
+	}
+	if _, err := stack.recoverBlockedDomainWorkOpenReviewRunV0(
+		ctx,
+		request.RunRef,
+		request.CorrelationID,
+		request.OccurredAt,
+	); err != nil {
+		return DrainRunRequestV0{}, err
+	}
+	if _, err := stack.recoverPartialDomainWorkReviewPhaseV0(
+		ctx,
+		request.RunRef,
+		request.CorrelationID,
+		request.OccurredAt,
+	); err != nil {
 		return DrainRunRequestV0{}, err
 	}
 	if strings.TrimSpace(request.OperationalDirectorPlanRef) == "" {

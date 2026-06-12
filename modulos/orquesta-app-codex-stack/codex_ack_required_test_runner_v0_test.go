@@ -331,25 +331,28 @@ func TestCodexAckRequiredTestRunnerV0NoMaterializaACKLegacyComoEvidencia(t *test
 	}
 }
 
-func TestCodexAckRequiredTestRunnerV0DelegaSiACKDeclaraEvidenciaNoEjecutada(t *testing.T) {
+func TestCodexAckRequiredTestRunnerV0MaterializaReceiptsAunqueNotaDeclareDeudaFuturaOPES(t *testing.T) {
 	ctx := context.Background()
-	runRef := "run-ref-codex-ack-required-test-incomplete"
-	taskRef := "task-ref-codex-ack-required-test-incomplete"
-	agentRef := "agent-ref-codex-ack-required-test-incomplete"
-	deliveryRef := "ack-ref-codex-ack-required-test-incomplete"
-	requiredTests := []string{"smoke OPES real temporal"}
+	runRef := "run-ref-codex-ack-required-test-opes-future-debt"
+	taskRef := "task-ref-codex-ack-required-test-opes-future-debt"
+	agentRef := "agent-ref-codex-ack-required-test-opes-future-debt"
+	deliveryRef := "ack-ref-codex-ack-required-test-opes-future-debt"
+	requiredTests := []string{
+		"validar criterios de aceptacion del cambio",
+		"validar contrato externo de dominio",
+	}
 	ackPath := filepath.Join(t.TempDir(), orquestaruntimecodex.CodexAgentAckFileNameV0)
 	ack := orquestaruntimecodex.CodexAgentAckV0{
 		SchemaVersion: orquestaruntimecodex.CodexAgentAckSchemaVersionV0,
 		RequestID:     agentRef,
-		CorrelationID: "corr-codex-ack-required-test-incomplete",
+		CorrelationID: "corr-codex-ack-required-test-opes-future-debt",
 		AckRef:        deliveryRef,
 		TargetModule:  "orquesta-app-stack-programacion",
 		TaskRef:       taskRef,
 		Status:        "completed",
 		Tests:         orquestaruntimecodex.EvidenceListV0(requiredTests),
 		TestReceipts:  codexStackRequiredTestReceiptsV0(requiredTests),
-		Notes:         orquestaruntimecodex.EvidenceListV0{"smoke real no ejecutado por faltar entorno temporal"},
+		Notes:         orquestaruntimecodex.EvidenceListV0{"estado_no_publicable: faltan ampliacion A1, tests/tutor, HTML, RAG, audio y paquete"},
 	}
 	data, err := json.Marshal(ack)
 	if err != nil {
@@ -359,16 +362,16 @@ func TestCodexAckRequiredTestRunnerV0DelegaSiACKDeclaraEvidenciaNoEjecutada(t *t
 		t.Fatalf("Write ACK: %v", err)
 	}
 	descriptor := orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
-		DescriptorRef: "descriptor-ref-codex-ack-required-test-incomplete",
+		DescriptorRef: "descriptor-ref-codex-ack-required-test-opes-future-debt",
 		RunID:         runRef,
 		AgentRef:      agentRef,
 		AckPath:       ackPath,
 		Spec: orquestaruntime.ExternalAgentLaunchSpecV0{
 			RequestID:     agentRef,
-			CorrelationID: "corr-codex-ack-required-test-incomplete",
+			CorrelationID: "corr-codex-ack-required-test-opes-future-debt",
 			AgentPacket: orquestaruntime.AgentStartPacketV0{
 				RequestID:     agentRef,
-				CorrelationID: "corr-codex-ack-required-test-incomplete",
+				CorrelationID: "corr-codex-ack-required-test-opes-future-debt",
 				TargetModule:  "orquesta-app-stack-programacion",
 				Task: orquestaruntime.AgentStartTaskV0{
 					TaskRef:       taskRef,
@@ -380,11 +383,11 @@ func TestCodexAckRequiredTestRunnerV0DelegaSiACKDeclaraEvidenciaNoEjecutada(t *t
 			},
 		},
 	}
-	inner := &fakeCodexAckRequiredTestInnerRunnerV0{}
+	evidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
 	runner := codexAckRequiredTestRunnerV0{
-		Inner:          inner,
 		ReceiptStore:   orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(descriptor),
-		EvidenceWriter: orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0(),
+		EvidenceReader: evidenceStore,
+		EvidenceWriter: evidenceStore,
 	}
 
 	result, err := runner.RunRequiredTestsV0(ctx, orquestacionnucleoapp.RequiredTestExecutionRequestV0{
@@ -392,17 +395,19 @@ func TestCodexAckRequiredTestRunnerV0DelegaSiACKDeclaraEvidenciaNoEjecutada(t *t
 		TaskRef:           taskRef,
 		TestCommands:      requiredTests,
 		DeliveryRef:       deliveryRef,
-		ReviewRequestID:   "review-request-ref-codex-ack-required-test-incomplete",
-		ReviewResultRef:   "review-result-ref-codex-ack-required-test-incomplete",
-		AcceptedReviewRef: "accepted-review-ref-codex-ack-required-test-incomplete",
+		ReviewRequestID:   "review-request-ref-codex-ack-required-test-opes-future-debt",
+		ReviewResultRef:   "review-result-ref-codex-ack-required-test-opes-future-debt",
+		AcceptedReviewRef: "accepted-review-ref-codex-ack-required-test-opes-future-debt",
 		OccurredAt:        "2026-05-25T16:34:00Z",
-		CorrelationID:     "corr-codex-ack-required-test-incomplete",
+		CorrelationID:     "corr-codex-ack-required-test-opes-future-debt",
 	})
 	if err != nil {
 		t.Fatalf("RunRequiredTestsV0: %v", err)
 	}
-	if len(result.EvidenceRefs) != 0 || !inner.called {
-		t.Fatalf("debe delegar sin materializar evidencia: result=%+v inner=%v", result, inner.called)
+	if len(result.EvidenceRefs) != len(requiredTests) ||
+		len(result.PassedEvidenceRefs) != len(requiredTests) ||
+		len(result.FailedEvidenceRefs) != 0 {
+		t.Fatalf("debe materializar receipts causales pese a nota generica: %+v", result)
 	}
 }
 

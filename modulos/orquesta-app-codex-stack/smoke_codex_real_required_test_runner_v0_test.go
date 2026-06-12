@@ -427,6 +427,9 @@ func TestCodexStackRealRequiredTestRunnerEndToEndOptInV0(t *testing.T) {
 	if deliveryRef == "" {
 		t.Fatalf("delivery ref vacia en descriptor=%+v", delivered)
 	}
+	if err := stack.Stores.OperationalPlanStateWriter.SaveOperationalDirectorPlanStateV0(ctx, refs.planStateForDeliveryReviewV0(deliveryRef)); err != nil {
+		t.Fatalf("SaveOperationalDirectorPlanStateV0 review: %v", err)
+	}
 
 	openCodexStackPhaseForTestV0(
 		t,
@@ -435,10 +438,7 @@ func TestCodexStackRealRequiredTestRunnerEndToEndOptInV0(t *testing.T) {
 		orquestacoreworkflow.OrchestrationPhaseRevisionV0,
 		"Smoke real required tests: revisar entrega Codex.",
 	)
-	causal := codexStackRequiredTestDrainUntilAcceptedReviewV0(t, ctx, stack, refs.RunRef, deliveryRef, cfg.RuntimeWorkDir, cfg.Timeout)
-	if err := stack.Stores.OperationalPlanStateWriter.SaveOperationalDirectorPlanStateV0(ctx, refs.planStateForCausalReviewV0(causal)); err != nil {
-		t.Fatalf("SaveOperationalDirectorPlanStateV0: %v", err)
-	}
+	causal := codexStackRequiredTestDrainUntilAcceptedReviewV0(t, ctx, stack, refs.RunRef, refs.PlanRef, deliveryRef, cfg.RuntimeWorkDir, cfg.Timeout)
 
 	result, err := orquestaappdirectorservice.ContinueAppDirectorV0(ctx, orquestaappdirectorservice.ContinueAppDirectorRequestV0{
 		RunRef:                     refs.RunRef,
@@ -769,6 +769,37 @@ func (refs codexStackRequiredTestRefsV0) planStateForCausalReviewV0(
 	refs.ReviewResultRef = causal.ReviewResultRef
 	refs.AcceptedReviewRef = causal.AcceptedReviewRef
 	return refs.planStateV0()
+}
+
+func (refs codexStackRequiredTestRefsV0) planStateForDeliveryReviewV0(
+	deliveryRef string,
+) orquestacionnucleoapp.OperationalDirectorPlanStateV0 {
+	refs = refs.withDefaultsV0()
+	refs.DeliveryRef = strings.TrimSpace(deliveryRef)
+	state := refs.planStateV0()
+	state.ActiveStepID = "step-review-deliveries"
+	for index := range state.Steps {
+		switch state.Steps[index].StepID {
+		case "step-wait-subagents":
+			state.Steps[index].Status = orquestadirectoroperativo.OperationalDirectorStepAcceptedV0
+			state.Steps[index].PendingAgentRefs = nil
+			state.Steps[index].DeliveryRefs = []string{refs.DeliveryRef}
+		case "step-review-deliveries":
+			state.Steps[index].Status = orquestadirectoroperativo.OperationalDirectorStepRunningV0
+			state.Steps[index].DeliveryRefs = []string{refs.DeliveryRef}
+			state.Steps[index].ReviewResultRefs = nil
+			state.Steps[index].AcceptedReviewRefs = nil
+		case "step-run-required-tests":
+			state.Steps[index].Status = orquestadirectoroperativo.OperationalDirectorStepPendingV0
+			state.Steps[index].DeliveryRefs = nil
+			state.Steps[index].ReviewResultRefs = nil
+			state.Steps[index].AcceptedReviewRefs = nil
+			state.Steps[index].BlockerRefs = nil
+		case "step-replan-or-close":
+			state.Steps[index].Status = orquestadirectoroperativo.OperationalDirectorStepPendingV0
+		}
+	}
+	return state
 }
 
 func codexStackRealRequiredTestRunnerStackV0(
@@ -1184,6 +1215,7 @@ func codexStackRequiredTestDrainUntilAcceptedReviewV0(
 	ctx context.Context,
 	stack StackV0,
 	runRef string,
+	planRef string,
 	deliveryRef string,
 	runtimeWorkDir string,
 	timeout time.Duration,
@@ -1192,14 +1224,15 @@ func codexStackRequiredTestDrainUntilAcceptedReviewV0(
 	deadline := time.Now().Add(timeout)
 	for cycle := 1; cycle <= 12 && time.Now().Before(deadline); cycle++ {
 		if _, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
-			RunRef:               runRef,
-			CorrelationID:        "corr-rt-runner-e2e-review",
-			MaxBursts:            4,
-			MaxStepsPerBurst:     8,
-			MaxDispatchesPerWait: 4,
-			MaxCommands:          12,
-			MaxOutboxPerCycle:    6,
-			MaxExternalWaits:     1,
+			RunRef:                     runRef,
+			CorrelationID:              "corr-rt-runner-e2e-review",
+			MaxBursts:                  4,
+			MaxStepsPerBurst:           8,
+			MaxDispatchesPerWait:       4,
+			MaxCommands:                12,
+			MaxOutboxPerCycle:          6,
+			MaxExternalWaits:           1,
+			OperationalDirectorPlanRef: planRef,
 		}); err != nil {
 			t.Fatalf("DrainRunV0 review ciclo=%d: %v\n%s", cycle, err, codexStackRealSmokeDiagnosticsV0(runtimeWorkDir))
 		}

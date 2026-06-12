@@ -94,20 +94,78 @@ func TestMCPRunQueuePriorityExecutorV0ValidaActionYPuerto(t *testing.T) {
 	}
 }
 
+func TestMCPRunQueuePriorityExecutorV0RankExponeIntentoActivoV0(t *testing.T) {
+	now := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	group := orquestarunqueue.RunQueueAttemptGroupV0{
+		ConsumerRef:  "consumer",
+		ObjectiveRef: "objective",
+		WorkItemRef:  "topic-001",
+		WriteSetRefs: []string{"topic/001"},
+	}
+	reader := &fakeMCPRunQueueReaderV0{
+		candidates: []orquestarunqueue.RunSchedulingCandidateV0{
+			{
+				RunRef:        "run-original",
+				AppRef:        "app",
+				Status:        "ready",
+				PriorityScore: 1,
+				UpdatedAt:     now.Add(-20 * time.Minute),
+				AttemptGroup:  group,
+			},
+			{
+				RunRef:           "run-rescue",
+				AppRef:           "app",
+				Status:           "ready",
+				PriorityScore:    9,
+				UpdatedAt:        now,
+				AttemptGroup:     group,
+				ParentRunRef:     "run-original",
+				SupersedesRunRef: "run-original",
+				RescueReason:     "estado_incierto",
+			},
+		},
+	}
+
+	result, err := (MCPRunQueuePriorityToolExecutorV0{Reader: reader}).Execute(
+		context.Background(),
+		MCPRunQueuePriorityToolInputV0{Action: "rank", OccurredAt: now.Format(time.RFC3339)},
+	)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	if len(result.Ranked) != 2 ||
+		result.Ranked[0].RunRef != "run-rescue" ||
+		result.Ranked[0].ActiveAttemptRef != "run-rescue" ||
+		result.Ranked[0].ParentRunRef != "run-original" ||
+		result.Ranked[0].SupersedesRunRef != "run-original" ||
+		result.Ranked[0].RescueReason != "estado_incierto" ||
+		result.Ranked[0].WorkItemRef != "topic-001" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPRunQueuePriorityExecutorV0SetPriorityDelegaEnWriter(t *testing.T) {
 	writer := &fakeMCPRunQueueWriterV0{}
 	executor := MCPRunQueuePriorityToolExecutorV0{Writer: writer}
 
 	result, err := executor.Execute(context.Background(), MCPRunQueuePriorityToolInputV0{
-		RequestID:     "req-set-priority-001",
-		Action:        " set_priority ",
-		QueueRef:      "global",
-		RunRef:        " run-priority-001 ",
-		AppRef:        " app-priority-001 ",
-		Status:        " canceled ",
-		PriorityScore: 77,
-		RequestedBy:   " director ",
-		EvidenceRefs:  []string{" evidence-1 ", "evidence-1"},
+		RequestID:        "req-set-priority-001",
+		Action:           " set_priority ",
+		QueueRef:         "global",
+		RunRef:           " run-priority-001 ",
+		AppRef:           " app-priority-001 ",
+		Status:           " canceled ",
+		PriorityScore:    77,
+		ConsumerRef:      " consumer ",
+		ObjectiveRef:     " objective ",
+		WorkItemRef:      " topic-001 ",
+		WriteSetRefs:     []string{" topic/001 ", "topic/001"},
+		ParentRunRef:     " run-original ",
+		SupersedesRunRef: " run-original ",
+		RescueReason:     " estado_incierto ",
+		RequestedBy:      " director ",
+		EvidenceRefs:     []string{" evidence-1 ", "evidence-1"},
 	})
 	if err != nil {
 		t.Fatalf("execute: %v", err)
@@ -117,13 +175,19 @@ func TestMCPRunQueuePriorityExecutorV0SetPriorityDelegaEnWriter(t *testing.T) {
 		result.Updated == nil ||
 		result.Updated.RunRef != "run-priority-001" ||
 		result.Updated.Status != "canceled" ||
-		result.Updated.PriorityScore != 77 {
+		result.Updated.PriorityScore != 77 ||
+		result.Updated.ParentRunRef != "run-original" ||
+		result.Updated.ActiveAttemptRef != "run-priority-001" {
 		t.Fatalf("result=%+v", result)
 	}
 	if writer.command.RunRef != "run-priority-001" ||
 		writer.command.AppRef != "app-priority-001" ||
 		writer.command.Status != "canceled" ||
 		writer.command.PriorityScore != 77 ||
+		writer.command.AttemptGroup.WorkItemRef != "topic-001" ||
+		writer.command.ParentRunRef != "run-original" ||
+		writer.command.SupersedesRunRef != "run-original" ||
+		writer.command.RescueReason != "estado_incierto" ||
 		len(writer.command.EvidenceRefs) != 1 {
 		t.Fatalf("command=%+v", writer.command)
 	}
@@ -209,11 +273,15 @@ func (fake *fakeMCPRunQueueWriterV0) SetRunPriorityV0(
 		status = "ready"
 	}
 	return orquestarunqueue.RunSchedulingCandidateV0{
-		RunRef:        command.RunRef,
-		AppRef:        command.AppRef,
-		Status:        status,
-		PriorityScore: command.PriorityScore,
-		EvidenceRefs:  command.EvidenceRefs,
+		RunRef:           command.RunRef,
+		AppRef:           command.AppRef,
+		Status:           status,
+		PriorityScore:    command.PriorityScore,
+		AttemptGroup:     command.AttemptGroup,
+		ParentRunRef:     command.ParentRunRef,
+		SupersedesRunRef: command.SupersedesRunRef,
+		RescueReason:     command.RescueReason,
+		EvidenceRefs:     command.EvidenceRefs,
 	}, nil
 }
 

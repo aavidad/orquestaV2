@@ -107,14 +107,17 @@ func (runtime *RuntimeV0) prepareIdleSelfImprovementBatchV0(
 	requests []IdleSelfImprovementRequestV0,
 ) {
 	failed := false
+	failures := make([]IdleSelfImprovementResultV0, 0, len(requests))
 	for _, request := range requests {
 		result, err := port.PrepareIdleSelfImprovementV0(ctx, request)
 		if err != nil {
 			failed = true
+			failures = append(failures, idleSelfImprovementPrepareFailureFromErrorV0(request, err))
 			continue
 		}
 		if !result.Accepted {
 			failed = true
+			failures = append(failures, idleSelfImprovementPrepareFailureFromResultV0(request, result))
 			continue
 		}
 		if failed {
@@ -130,18 +133,76 @@ func (runtime *RuntimeV0) prepareIdleSelfImprovementBatchV0(
 		)
 	}
 	if failed {
-		runtime.markIdleSelfImprovementPrepareFailedV0(ctx)
+		runtime.markIdleSelfImprovementPrepareFailedV0(ctx, failures)
 	}
 }
 
-func (runtime *RuntimeV0) markIdleSelfImprovementPrepareFailedV0(ctx context.Context) {
+func idleSelfImprovementPrepareFailureFromErrorV0(
+	request IdleSelfImprovementRequestV0,
+	err error,
+) IdleSelfImprovementResultV0 {
+	message := "prepare_failed"
+	if err != nil {
+		message = err.Error()
+	}
+	return idleSelfImprovementPrepareFailureFromResultV0(request, IdleSelfImprovementResultV0{
+		Accepted: false,
+		Status:   "error",
+		Message:  message,
+	})
+}
+
+func idleSelfImprovementPrepareFailureFromResultV0(
+	request IdleSelfImprovementRequestV0,
+	result IdleSelfImprovementResultV0,
+) IdleSelfImprovementResultV0 {
+	result.Accepted = false
+	if strings.TrimSpace(result.RequestRef) == "" {
+		result.RequestRef = request.RequestRef
+	}
+	if strings.TrimSpace(result.Status) == "" {
+		result.Status = "error"
+	}
+	if strings.TrimSpace(result.Message) == "" {
+		result.Message = "prepare_failed"
+	}
+	if len(result.EvidenceRefs) == 0 {
+		result.EvidenceRefs = append([]string(nil), request.EvidenceRefs...)
+	}
+	return result
+}
+
+func (runtime *RuntimeV0) markIdleSelfImprovementPrepareFailedV0(
+	ctx context.Context,
+	failures []IdleSelfImprovementResultV0,
+) {
 	state := runtime.tracker.SnapshotV0()
 	if strings.HasPrefix(state.IdleSelfImprovementReason, "prepared") {
 		return
 	}
+	failure := firstIdleSelfImprovementPrepareFailureV0(failures)
 	runtime.persistStateTransitionV0(
 		ctx,
-		runtime.tracker.MarkIdleSelfImprovementErrorV0("prepare_failed", runtime.clock.Now()),
+		runtime.tracker.MarkIdleSelfImprovementPrepareFailedV0(failure, runtime.clock.Now()),
 		"idle_self_improvement_prepare_failed",
 	)
+}
+
+func firstIdleSelfImprovementPrepareFailureV0(
+	failures []IdleSelfImprovementResultV0,
+) IdleSelfImprovementResultV0 {
+	for _, failure := range failures {
+		if strings.TrimSpace(failure.Message) != "" ||
+			strings.TrimSpace(failure.RequestRef) != "" ||
+			strings.TrimSpace(failure.RunRef) != "" ||
+			len(failure.NextActions) > 0 ||
+			len(failure.EvidenceRefs) > 0 {
+			return failure
+		}
+	}
+	return IdleSelfImprovementResultV0{
+		Accepted: false,
+		Status:   "error",
+		Message:  "prepare_failed",
+	}
 }

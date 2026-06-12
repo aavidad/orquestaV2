@@ -82,6 +82,8 @@ func (observer *ProcessSelfWatchdogObserverV0) ObserveSelfWatchdogV0(
 		ActiveAgents:               nonNegativeServerIntV0(request.State.ShutdownAgentsInFlight),
 		SupervisorTickActive:       request.State.SupervisorTickActive,
 		ResidentDirectorTickActive: request.State.ResidentDirectorTickActive,
+		ExternalBridgeTickActive:   request.State.ExternalBridgeTickActive,
+		AsyncWorkActive:            nonNegativeServerIntV0(request.State.ShutdownAsyncWorkActive),
 		ShutdownInProgress:         request.State.ShutdownInProgress,
 		EvidenceRefs:               selfWatchdogObservationEvidenceRefsV0(request.State, cpuOK),
 	}
@@ -186,6 +188,12 @@ func selfWatchdogObservationEvidenceRefsV0(state StateV0, cpuOK bool) []string {
 	}
 	if state.ResidentDirectorTickActive {
 		refs = append(refs, "evidence-ref-self-watchdog-resident-director-active")
+	}
+	if state.ExternalBridgeTickActive {
+		refs = append(refs, "evidence-ref-self-watchdog-external-bridge-active")
+	}
+	if state.ShutdownAsyncWorkActive > 0 {
+		refs = append(refs, "evidence-ref-self-watchdog-async-work-active")
 	}
 	if state.ShutdownInProgress {
 		refs = append(refs, "evidence-ref-self-watchdog-shutdown-active")

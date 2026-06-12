@@ -7,6 +7,8 @@ Incluye:
 - contrato `RunQueueReaderPortV0` para leer candidatos desde una fuente externa;
 - DTO `RunSchedulingCandidateV0` con `app_ref`, `run_ref`, `status`, `priority_score` y `updated_at`;
 - funcion pura `RankRunCandidatesV0` con aging/fairness determinista;
+- funcion pura `ProjectRunQueueAttemptsV0` para proyectar intentos/rescates
+  enlazados por refs opacas y calcular `active_attempt_ref`;
 - pruebas locales del contrato de ordenacion y filtrado.
 
 Fuera de alcance:

@@ -64,6 +64,38 @@ func TestStartExternalWorkRunV0CreaRunOperativoYEncola(t *testing.T) {
 	}
 }
 
+func TestStartExternalWorkRunV0NormalizaQueueDefaultAColaCanonica(t *testing.T) {
+	queue := &fakeExternalWorkRunQueueV0{}
+	request := validExternalWorkRunRequestForTestV0()
+	request.QueueRef = " default "
+
+	result, err := StartExternalWorkRunV0(
+		context.Background(),
+		request,
+		StartExternalWorkRunPortsV0{
+			RunStore:  orquestacionnucleoapp.NewInMemoryRunStoreV0(),
+			EventSink: orquestacionnucleoapp.NewInMemoryEventSinkV0(),
+			RunQueue:  queue,
+			AppChange: orquestaappchange.AppChangePortsV0{
+				Store:            orquestaappchange.NewInMemoryAppChangeStoreV0(),
+				DirectorNotifier: fakeExternalWorkRunNotifierV0{},
+			},
+		},
+		StartExternalWorkRunConfigV0{
+			QueueRef:   "global",
+			OccurredAt: "2026-05-10T10:00:00Z",
+		},
+	)
+	if err != nil {
+		t.Fatalf("StartExternalWorkRunV0: %v", err)
+	}
+	if result.Status != ExternalWorkRunStatusAcceptedV0 ||
+		len(queue.commands) != 1 ||
+		queue.commands[0].QueueRef != "global" {
+		t.Fatalf("result=%+v queue=%+v", result, queue.commands)
+	}
+}
+
 func TestStartExternalWorkRunV0NoCreaRunSiFaltaExternalWork(t *testing.T) {
 	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
 	queue := &fakeExternalWorkRunQueueV0{}

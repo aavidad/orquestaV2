@@ -42,7 +42,10 @@ func TestCodexDeliveryObservationSourceV0ConservaSnapshotBudgetComoRailV0(t *tes
 		t.Fatalf("BuildAgentDeliveryObservationsV0: %v", err)
 	}
 	if len(observations) != 1 ||
-		!stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-issue:worktree_snapshot_file_too_large") {
+		!stringInCodexDeliverySetV0(
+			observations[0].EvidenceRefs,
+			"evidence-ref-worktree-snapshot-file-too-large-excluded-v0",
+		) {
 		t.Fatalf("observations=%+v", observations)
 	}
 }

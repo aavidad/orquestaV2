@@ -101,6 +101,10 @@ func updatedAtBeforeV0(left time.Time, right time.Time, missingLast bool) bool {
 }
 
 func cloneRunSchedulingCandidateV0(candidate RunSchedulingCandidateV0) RunSchedulingCandidateV0 {
+	candidate.AttemptGroup = NormalizeRunQueueAttemptGroupV0(candidate.AttemptGroup)
+	candidate.ParentRunRef = strings.TrimSpace(candidate.ParentRunRef)
+	candidate.SupersedesRunRef = strings.TrimSpace(candidate.SupersedesRunRef)
+	candidate.RescueReason = strings.TrimSpace(candidate.RescueReason)
 	if candidate.EvidenceRefs != nil {
 		candidate.EvidenceRefs = append([]string(nil), candidate.EvidenceRefs...)
 	}

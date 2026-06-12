@@ -25,6 +25,7 @@ func TestOPESBridgeLoopConfigUsesServerFallbackV0(t *testing.T) {
 	t.Setenv("ORQUESTA_BASE_URL", "")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_ENABLED", "1")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_CONFIRM", "1")
+	t.Setenv("ORQUESTA_OPES_TEMPORAL_CONFIRM", "1")
 	t.Setenv("ORQUESTA_OPES_BASE_URL", "http://127.0.0.1:18082")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_LIMIT", "7")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_JOB_TYPE", "plan_temario")
@@ -53,12 +54,14 @@ func TestOPESBridgeLoopConfigAceptaSecuenciaComoFiltroSeguroV0(t *testing.T) {
 	t.Setenv("ORQUESTA_BASE_URL", "")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_ENABLED", "1")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_CONFIRM", "1")
+	t.Setenv("ORQUESTA_OPES_TEMPORAL_CONFIRM", "1")
 	t.Setenv("ORQUESTA_OPES_BASE_URL", "http://127.0.0.1:18082")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_LIMIT", "1")
 	t.Setenv(
 		"ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE",
 		"draft_content_block, generate_visual_asset; review_quality",
 	)
+	t.Setenv("ORQUESTA_OPES_BRIDGE_PROGRAM_ID", "program-bridge-sequence-test")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_INTERVAL_SECONDS", "3")
 
 	config, err := opesBridgeLoopConfigFromEnvV0("http://127.0.0.1:18100")
@@ -71,6 +74,7 @@ func TestOPESBridgeLoopConfigAceptaSecuenciaComoFiltroSeguroV0(t *testing.T) {
 		config.Loop.Component != "opes_bridge_sequence_loop" ||
 		config.DrainConfig.OPESBaseURL != "http://127.0.0.1:18082" ||
 		config.DrainConfig.OrquestaBaseURL != "http://127.0.0.1:18100" ||
+		config.DrainConfig.ProgramID != "program-bridge-sequence-test" ||
 		config.DrainConfig.Limit != 1 ||
 		config.Loop.Interval != 3*time.Second ||
 		strings.Join(config.DrainConfig.JobTypeSequence, ",") != strings.Join(wantSequence, ",") {
@@ -82,6 +86,7 @@ func TestOPESBridgeLoopConfigAceptaProgramIDComoFiltroSeguroV0(t *testing.T) {
 	t.Setenv("ORQUESTA_BASE_URL", "")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_ENABLED", "1")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_CONFIRM", "1")
+	t.Setenv("ORQUESTA_OPES_TEMPORAL_CONFIRM", "1")
 	t.Setenv("ORQUESTA_OPES_BASE_URL", "http://127.0.0.1:18082")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_PROGRAM_ID", "program-conductores")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_CORRELATION_ID", "conductores-20260602")
@@ -105,6 +110,7 @@ func TestOPESBridgeLoopConfigAceptaProgramIDComoFiltroSeguroV0(t *testing.T) {
 func TestOPESBridgeLoopConfigRechazaSecuenciaAmbiguaConJobTypeV0(t *testing.T) {
 	t.Setenv("ORQUESTA_OPES_BRIDGE_ENABLED", "1")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_CONFIRM", "1")
+	t.Setenv("ORQUESTA_OPES_TEMPORAL_CONFIRM", "1")
 	t.Setenv("ORQUESTA_OPES_BASE_URL", "http://127.0.0.1:18082")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_JOB_TYPE", "plan_temario")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE", "draft_content_block,review_quality")
@@ -144,6 +150,7 @@ func TestOPESBridgeLoopConfigRequiereConfirmacionV0(t *testing.T) {
 func TestOPESBridgeLoopConfigRequiereFiltroSeguroV0(t *testing.T) {
 	t.Setenv("ORQUESTA_OPES_BRIDGE_ENABLED", "1")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_CONFIRM", "1")
+	t.Setenv("ORQUESTA_OPES_TEMPORAL_CONFIRM", "1")
 	t.Setenv("ORQUESTA_OPES_BASE_URL", "http://127.0.0.1:18082")
 
 	config, err := opesBridgeLoopConfigFromEnvV0("http://127.0.0.1:18100")

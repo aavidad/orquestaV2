@@ -40,7 +40,27 @@ Campos minimos:
 - `fairness_group_ref`: ref opcional de grupo de fairness. Si falta, el ranking
   deriva un grupo estable `app:<app_ref>` o `run:<run_ref>` y expone
   `fairness_group_missing`.
+- `attempt_group`: clave causal opaca opcional para agrupar intentos del mismo
+  consumidor/objetivo/item/write-set sin reglas de dominio.
+- `parent_run_ref`, `supersedes_run_ref`, `rescue_reason`: enlaces opcionales
+  para rescates/reintentos. Son refs/razones opacas; el modulo no interpreta
+  contenido OPES ni de ninguna app consumidora.
 - `evidence_refs`: refs opacas de evidencia.
+
+## ProjectRunQueueAttemptsV0
+
+Funcion pura:
+
+- recibe candidatos de cola y no consulta servicios externos;
+- agrupa por `attempt_group.group_ref` o por clave derivada de
+  `consumer_ref`, `objective_ref`, `work_item_ref` y `write_set_refs`;
+- si no hay metadata causal, cada run queda en su propio grupo `run:<run_ref>`;
+- expone `original_run_ref`, `rescue_run_refs`, `active_attempt_ref`,
+  `parent_run_ref`, `supersedes_run_ref`, `rescue_reason`, `status_counts` y
+  `evidence_refs`;
+- el intento activo se elige de forma determinista priorizando estado
+  ejecutable, `updated_at` mas reciente, mayor `priority_score` y desempate por
+  `run_ref`.
 
 ## RankRunCandidatesV0
 

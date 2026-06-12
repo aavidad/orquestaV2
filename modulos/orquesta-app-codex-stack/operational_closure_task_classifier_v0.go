@@ -80,8 +80,35 @@ func codexStackOperationalClosureOpenTaskRefsV0(
 func codexStackWorkflowTaskLooksOperationalDirectorV0(
 	task orquestacoreworkflow.WorkflowTaskV0,
 ) bool {
+	if orquestacoreworkflow.NormalizeWorkProfileKindV0(task.WorkProfileKind) == orquestacoreworkflow.WorkProfileDomainWorkV0 {
+		return codexStackWorkflowTaskHasOperationalDirectorFunctionContractV0(task) ||
+			codexStackWorkflowTaskHasOperationalDirectorContextRefV0(task)
+	}
 	for _, value := range codexStackWorkflowTaskOperationalSignalsV0(task) {
 		if codexStackOperationalDirectorSignalV0(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func codexStackWorkflowTaskHasOperationalDirectorFunctionContractV0(
+	task orquestacoreworkflow.WorkflowTaskV0,
+) bool {
+	for _, ref := range task.FunctionContractRefs {
+		if codexStackOperationalDirectorSignalV0(ref.ContractRef) ||
+			codexStackOperationalDirectorSignalV0(ref.FunctionName) {
+			return true
+		}
+	}
+	return false
+}
+
+func codexStackWorkflowTaskHasOperationalDirectorContextRefV0(
+	task orquestacoreworkflow.WorkflowTaskV0,
+) bool {
+	for _, ref := range task.ContextRefs {
+		if strings.TrimSpace(ref) == autoprogrammingBridgeOperationalTaskSourceRefV0 {
 			return true
 		}
 	}

@@ -21,14 +21,8 @@ func ShutdownServerV0(
 		))
 		return result, nil
 	}
-	if deps.QueueReader == nil {
-		return missingServerShutdownDepV0(ServerShutdownStatusNoQueueReaderV0), nil
-	}
-	if deps.RunControlReader == nil {
-		return missingServerShutdownDepV0(ServerShutdownStatusNoRunControlReaderV0), nil
-	}
-	if deps.RunControlWriter == nil {
-		return missingServerShutdownDepV0(ServerShutdownStatusNoRunControlWriterV0), nil
+	if result, ok := missingRequiredServerShutdownDepsV0(deps); ok {
+		return result, nil
 	}
 	candidates, err := deps.QueueReader.ListRunSchedulingCandidatesV0(
 		ctx,

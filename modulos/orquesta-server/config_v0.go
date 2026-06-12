@@ -30,42 +30,57 @@ const (
 	DefaultSelfWatchdogCPUHighPercentV0       = 75
 	DefaultSelfWatchdogSustainedForV0         = 2 * time.Minute
 	DefaultSelfWatchdogNoProgressForV0        = 1 * time.Minute
+	SupervisorPublicStatusOKV0                = "ok"
+	SupervisorPublicStatusWaitingOutboxV0     = "waiting_outbox"
+	SupervisorPublicStatusWaitingExternalV0   = "waiting_external"
+	SupervisorPublicStatusRunningLiveV0       = "running_live"
+	SupervisorPublicStatusStalledV0           = "stalled"
+	SupervisorPublicStatusLaunchFailedV0      = "launch_failed"
+	SupervisorPublicStopWaitingOutboxV0       = "waiting_outbox"
+	SupervisorPublicStopWaitingExternalV0     = "wait_external"
+	SupervisorPublicStopRunningLiveV0         = "running_live"
+	SupervisorPublicStopStalledV0             = "external_process_unverified"
+	SupervisorPublicStopLaunchFailedV0        = "launch_failed"
+	SupervisorPublicCategoryWaitOutboxV0      = "wait_outbox"
+	SupervisorPublicCategoryWaitExternalV0    = "wait_external"
+	SupervisorPublicCategoryExternalProcessV0 = "external_process"
 )
 
 type ConfigV0 struct {
-	Addr                             string
-	StateDir                         string
-	StateFile                        string
-	AuditFile                        string
-	AuditDisabled                    bool
-	DaemonLogPolicy                  DaemonLogPolicyV0
-	HTTPResourceLimits               HTTPResourceLimitsV0
-	ControlPlane                     ControlPlaneConfigV0
-	EffectiveConfig                  ServerEffectiveConfigV0
-	ProjectWorkDir                   string
-	RuntimeWorkDir                   string
-	ShutdownSignalPolicy             ShutdownSignalPolicyV0
-	TickInterval                     time.Duration
-	ShutdownGracePeriod              time.Duration
-	SupervisorCommand                orquestarunsupervisor.RunSupervisorCommandV0
-	IdleSelfImprovementDisabled      bool
-	IdleSelfImprovementAfter         time.Duration
-	IdleSelfImprovementProjectRef    string
-	IdleSelfImprovementWorktreeRef   string
-	IdleSelfImprovementBranchRef     string
-	IdleSelfImprovementSuggestedArea string
-	IdleSelfImprovementWriteSet      []string
-	IdleSelfImprovementRequiredTests []string
-	IdleSelfImprovementContextRefs   []string
-	IdleSelfImprovementEvidenceRefs  []string
-	IdleSelfImprovementAcceptance    []string
-	IdleSelfImprovementCompactRules  []string
-	IdleSelfImprovementPriorityScore int
-	IdleSelfImprovementMaxRequests   int
-	IdleSelfImprovementTargetQueue   int
-	ResidentDirectorEnabled          bool
-	ResidentDirectorMaxActions       int
-	SelfWatchdog                     SelfWatchdogConfigV0
+	Addr                              string
+	StateDir                          string
+	StateFile                         string
+	AuditFile                         string
+	AuditDisabled                     bool
+	DaemonLogPolicy                   DaemonLogPolicyV0
+	HTTPResourceLimits                HTTPResourceLimitsV0
+	ControlPlane                      ControlPlaneConfigV0
+	EffectiveConfig                   ServerEffectiveConfigV0
+	ProjectWorkDir                    string
+	RuntimeWorkDir                    string
+	IdleSelfImprovementProjectWorkDir string
+	ShutdownSignalPolicy              ShutdownSignalPolicyV0
+	TickInterval                      time.Duration
+	ShutdownGracePeriod               time.Duration
+	SupervisorCommand                 orquestarunsupervisor.RunSupervisorCommandV0
+	IdleSelfImprovementDisabled       bool
+	IdleSelfImprovementAfter          time.Duration
+	IdleSelfImprovementProjectRef     string
+	IdleSelfImprovementWorktreeRef    string
+	IdleSelfImprovementBranchRef      string
+	IdleSelfImprovementSuggestedArea  string
+	IdleSelfImprovementWriteSet       []string
+	IdleSelfImprovementRequiredTests  []string
+	IdleSelfImprovementContextRefs    []string
+	IdleSelfImprovementEvidenceRefs   []string
+	IdleSelfImprovementAcceptance     []string
+	IdleSelfImprovementCompactRules   []string
+	IdleSelfImprovementPriorityScore  int
+	IdleSelfImprovementMaxRequests    int
+	IdleSelfImprovementTargetQueue    int
+	ResidentDirectorEnabled           bool
+	ResidentDirectorMaxActions        int
+	SelfWatchdog                      SelfWatchdogConfigV0
 }
 
 type ControlPlaneConfigV0 struct {
@@ -108,6 +123,10 @@ func NormalizeConfigV0(config ConfigV0) ConfigV0 {
 	config.EffectiveConfig = NormalizeServerEffectiveConfigV0(config.EffectiveConfig)
 	config.ProjectWorkDir = strings.TrimSpace(config.ProjectWorkDir)
 	config.RuntimeWorkDir = strings.TrimSpace(config.RuntimeWorkDir)
+	config.IdleSelfImprovementProjectWorkDir = strings.TrimSpace(config.IdleSelfImprovementProjectWorkDir)
+	if config.IdleSelfImprovementProjectWorkDir == "" {
+		config.IdleSelfImprovementProjectWorkDir = config.ProjectWorkDir
+	}
 	config.ShutdownSignalPolicy = NormalizeShutdownSignalPolicyV0(config.ShutdownSignalPolicy)
 	if config.TickInterval <= 0 {
 		config.TickInterval = DefaultTickIntervalV0
@@ -193,6 +212,10 @@ func ValidateConfigV0(config ConfigV0) error {
 	if strings.TrimSpace(config.RuntimeWorkDir) != "" && !filepath.IsAbs(config.RuntimeWorkDir) {
 		return fmt.Errorf("orquesta_server: runtime_work_dir invalido")
 	}
+	if strings.TrimSpace(config.IdleSelfImprovementProjectWorkDir) != "" &&
+		!filepath.IsAbs(config.IdleSelfImprovementProjectWorkDir) {
+		return fmt.Errorf("orquesta_server: idle_self_improvement_project_work_dir invalido")
+	}
 	return nil
 }
 
@@ -237,4 +260,50 @@ func compactConfigStringsV0(values []string) []string {
 		return []string{}
 	}
 	return out
+}
+
+func normalizeIdleSelfImprovementCausalRequestsV0(requests []IdleSelfImprovementRequestV0) []IdleSelfImprovementRequestV0 {
+	out := make([]IdleSelfImprovementRequestV0, 0, len(requests))
+	byTarget := map[string]int{}
+	for _, request := range requests {
+		request.RequestRef = strings.TrimSpace(request.RequestRef)
+		if request.RequestRef == "" {
+			continue
+		}
+		baseRef := idleSelfImprovementCausalBaseRefV0(request.RequestRef)
+		target := idleSelfImprovementDedupeTargetV0(request)
+		request.ActiveAttemptRef = request.RequestRef
+		if baseRef != request.RequestRef {
+			request.ParentRunRef = firstNonEmptyIdleSelfImprovementV0(request.ParentRunRef, baseRef)
+			request.SupersedesRunRef = firstNonEmptyIdleSelfImprovementV0(request.SupersedesRunRef, baseRef)
+			request.RescueReason = firstNonEmptyIdleSelfImprovementV0(request.RescueReason, "retry")
+			request.ContextRefs = compactConfigStringsV0(append(request.ContextRefs,
+				"parent_run_ref:"+request.ParentRunRef,
+				"rescue_reason:"+request.RescueReason,
+				"supersedes_run_ref:"+request.SupersedesRunRef,
+				"active_attempt_ref:"+request.ActiveAttemptRef,
+			))
+			request.EvidenceRefs = compactConfigStringsV0(append(request.EvidenceRefs, "evidence-ref-idle-self-improvement-rescue-causal-link"))
+		}
+		if index, ok := byTarget[target]; ok {
+			out[index].ContextRefs = compactConfigStringsV0(append(out[index].ContextRefs,
+				"deduped_rescue_ref:"+request.RequestRef,
+			))
+			out[index].EvidenceRefs = compactConfigStringsV0(append(out[index].EvidenceRefs, "evidence-ref-idle-self-improvement-rescue-deduped"))
+			continue
+		}
+		byTarget[target] = len(out)
+		out = append(out, request)
+	}
+	return out
+}
+
+func idleSelfImprovementCausalBaseRefV0(value string) string {
+	value = strings.TrimSpace(value)
+	for _, marker := range []string{"-retry-", "-reconcile-"} {
+		if index := strings.Index(value, marker); index > 0 {
+			return value[:index]
+		}
+	}
+	return value
 }

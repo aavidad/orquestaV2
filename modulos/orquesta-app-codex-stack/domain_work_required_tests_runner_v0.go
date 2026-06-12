@@ -78,7 +78,7 @@ func (runner DomainWorkRequiredTestRunnerV0) runDomainWorkRequiredTestsV0(
 ) (orquestacionnucleoapp.RequiredTestExecutionResultV0, error) {
 	record, ok, err := runner.domainWorkSubmissionRecordV0(ctx, request)
 	if err != nil || !ok || runner.EvidenceWriter == nil {
-		return orquestacionnucleoapp.RequiredTestExecutionResultV0{}, err
+		return runner.runInnerRequiredTestsV0(ctx, request, err)
 	}
 	out := orquestacionnucleoapp.RequiredTestExecutionResultV0{}
 	allowed := domainWorkRequiredTestPlanRefSetV0(plan)

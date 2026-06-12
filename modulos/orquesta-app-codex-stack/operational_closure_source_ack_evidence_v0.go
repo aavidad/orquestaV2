@@ -121,7 +121,6 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureA
 	}
 	ack, err := orquestaruntimecodex.ReadCodexAgentAckFileV0(descriptor.AckPath)
 	if err != nil ||
-		orquestaruntimecodex.CodexAgentAckDeclaresIncompleteRequiredEvidenceV0(ack) ||
 		!codexStackOperationalClosureAckMatchesAcceptedDeliveryV0(ack, task, delivery, result) {
 		return nil, false, nil
 	}

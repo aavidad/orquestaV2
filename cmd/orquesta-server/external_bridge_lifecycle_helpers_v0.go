@@ -19,6 +19,29 @@ func externalBridgeResultCountersV0(result any) map[string]int {
 			"skipped":           value.Skipped,
 			"errors":            len(value.Errors),
 		}
+	case opesRegistryFinalPkgSummaryV0:
+		return map[string]int{
+			"seen":                  value.Seen,
+			"submitted":             value.Submitted,
+			"skipped":               value.Skipped,
+			"reconciled":            value.Reconciled,
+			"reconcile_skipped":     value.ReconcileSkipped,
+			"errors":                len(value.Errors),
+			"completed_nonterminal": value.CompletedNonTerminal,
+		}
+	default:
+		return nil
+	}
+}
+
+func externalBridgeResultEvidenceRefsV0(result any) []string {
+	switch value := result.(type) {
+	case opesRegistryFinalPkgSummaryV0:
+		refs := make([]string, 0, len(value.CompletedNonTerminalRefs))
+		for _, drift := range value.CompletedNonTerminalRefs {
+			refs = append(refs, drift.RunRef)
+		}
+		return compactExternalBridgeStringsV0(refs)
 	default:
 		return nil
 	}

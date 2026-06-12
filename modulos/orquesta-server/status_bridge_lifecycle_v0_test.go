@@ -15,21 +15,28 @@ func TestStatusTrackerExternalBridgeLifecycleV0(t *testing.T) {
 	now := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
 
 	state := tracker.MarkExternalBridgeLifecycleV0(ExternalBridgeLifecycleUpdateV0{
-		Component:  "opes_bridge_loop",
-		Status:     "degraded",
-		TickNumber: 3,
-		ErrorCode:  "http_503",
-		Filters:    []string{"job_type=plan_temario", "job_ref=configured"},
-		Counters:   map[string]int{"seen": 2, "submitted": 0, "errors": 1},
+		Component:    "opes_bridge_loop",
+		Status:       "degraded",
+		TickNumber:   3,
+		ErrorCode:    "http_503",
+		Filters:      []string{"job_type=plan_temario", "job_ref=configured"},
+		Counters:     map[string]int{"seen": 2, "submitted": 0, "errors": 1},
+		EvidenceRefs: []string{"run-ref-opes-a1-t002-finalpkg-20260612"},
 	}, now)
 
 	if state.ExternalBridgeStatus != "degraded" ||
 		state.ExternalBridgeLastTickRef != "opes_bridge_loop-tick-ref-3" ||
 		state.ExternalBridgeLastError != "http_503" ||
-		state.ExternalBridgeErrorTicks != 1 {
+		state.ExternalBridgeErrorTicks != 1 ||
+		len(state.ExternalBridgeEvidenceRefs) != 1 ||
+		state.ExternalBridgeEvidenceRefs[0] != "run-ref-opes-a1-t002-finalpkg-20260612" {
 		t.Fatalf("state=%+v", state)
 	}
 	public := NewServerPublicStatusV0(state)
+	if len(public.ExternalBridgeEvidenceRefs) != 1 ||
+		public.ExternalBridgeEvidenceRefs[0] != "run-ref-opes-a1-t002-finalpkg-20260612" {
+		t.Fatalf("public=%+v", public)
+	}
 	body, err := json.Marshal(public)
 	if err != nil {
 		t.Fatalf("json=%v", err)

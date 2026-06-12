@@ -20,6 +20,7 @@ func VerifyWorktreeWriteSetV0(
 		MaxFiles:       request.MaxSnapshotFiles,
 		MaxFileBytes:   request.MaxSnapshotFileBytes,
 		MaxTotalBytes:  request.MaxSnapshotTotalBytes,
+		AllowPartial:   request.AllowPartialSnapshot,
 	})
 	if len(captureIssues) > 0 {
 		return WorktreeVerifyResultV0{}, captureIssues
@@ -137,6 +138,7 @@ func diffWorktreeSnapshotsV0(
 ) WorktreeVerifyResultV0 {
 	base := worktreeSnapshotMapV0(baseline)
 	now := worktreeSnapshotMapV0(current)
+	currentOmitted := worktreeSnapshotOmittedPathSetV0(current)
 	result := WorktreeVerifyResultV0{}
 	for path, currentFile := range now {
 		baseFile, existed := base[path]
@@ -151,6 +153,9 @@ func diffWorktreeSnapshotsV0(
 	}
 	for path := range base {
 		if _, ok := now[path]; !ok {
+			if currentOmitted[path] {
+				continue
+			}
 			result.RemovedPaths = append(result.RemovedPaths, path)
 			result.ChangedPaths = append(result.ChangedPaths, path)
 		}
@@ -183,9 +188,27 @@ func diffWorktreeSnapshotsV0(
 			request.AcceptedPartitionFollowups,
 		)
 	}
-	result.EvidenceRefs = []string{"evidence-ref-worktree-write-set-verified-v0"}
-	result.ExclusionReceipts = current.ExclusionReceipts
+	result.ExclusionReceipts = mergeWorktreeLocalArtifactReceiptsV0(
+		baseline.ExclusionReceipts,
+		current.ExclusionReceipts,
+	)
+	result.EvidenceRefs = compactWorktreeStringsV0(append(
+		[]string{"evidence-ref-worktree-write-set-verified-v0"},
+		worktreeSnapshotBudgetEvidenceRefsV0(result.ExclusionReceipts)...,
+	))
 	return result
+}
+
+func worktreeSnapshotOmittedPathSetV0(
+	snapshot WorktreeSnapshotV0,
+) map[string]bool {
+	out := make(map[string]bool, len(snapshot.OmittedPaths))
+	for _, item := range snapshot.OmittedPaths {
+		if path, ok := normalizeWorktreeRelPathV0(item, false); ok {
+			out[path] = true
+		}
+	}
+	return out
 }
 
 func worktreeSnapshotMapV0(

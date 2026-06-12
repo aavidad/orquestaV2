@@ -118,6 +118,11 @@ cero y el historial de eventos trae la cadena causal del scope activo
 ReviewAccepted`, el state marca review como aceptada, guarda `delivery_refs`,
 `review_result_refs` y `accepted_review_refs`, y activa `run_required_tests` en
 modo `programming` con tests requeridos o `replan_or_close` en el resto.
+`run_required_tests` y `replan_or_close` conservan las mismas
+`accepted_review_refs` como causalidad de cierre. Si un followup/retry aporta
+una review aceptada nueva y el paso posterior es quien la porta, debe conservar
+tambien `delivery_refs` y `review_result_refs`; una accepted review suelta sin
+cadena causal no es valida.
 Cuando un `PlanState` activo entra o reentra en `review_deliveries` y el run
 todavia esta en `programacion`, el servicio abre `revision` mediante
 `OpenPhase` idempotente antes del review gate. Si el cambio de state acaba de

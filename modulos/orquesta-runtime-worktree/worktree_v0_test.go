@@ -199,6 +199,46 @@ func TestPrepareIsolatedWorktreeV0ConservaBranchRefOpaca(t *testing.T) {
 	}
 }
 
+func TestPrepareIsolatedWorktreeV0PermiteSnapshotParcialPorPresupuestoV0(t *testing.T) {
+	root := t.TempDir()
+	writeWorktreeFileForTestV0(t, root, "README.md", "base")
+	writeWorktreeFileForTestV0(
+		t,
+		root,
+		"binario-local",
+		strings.Repeat("x", int(WorktreeDefaultSnapshotMaxFileBytesV0+1)),
+	)
+
+	result, issues := PrepareIsolatedWorktreeV0(context.Background(), WorktreeIsolationRequestV0{
+		IsolationRef:         "worktree-isolation-ref-partial",
+		ProjectRef:           "project-ref-autoprogramming-partial",
+		WorktreeRef:          "worktree-ref-autoprogramming-partial",
+		BranchRef:            "branch-ref-autoprogramming-partial",
+		ProjectWorkDir:       root,
+		Isolated:             true,
+		BaselineRef:          "worktree-baseline-ref-partial",
+		AllowPartialSnapshot: true,
+	})
+	if len(issues) > 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if result.BaselineRef == "" || len(result.Snapshot.Files) != 1 ||
+		result.Snapshot.Files[0].Path != "README.md" {
+		t.Fatalf("result=%+v", result)
+	}
+	requireWorktreeReceiptReasonV0(
+		t,
+		result.Snapshot.ExclusionReceipts,
+		WorktreeIssueSnapshotFileTooLargeV0,
+	)
+	if !worktreeStringInSetV0(
+		result.EvidenceRefs,
+		"evidence-ref-worktree-snapshot-file-too-large-excluded-v0",
+	) {
+		t.Fatalf("evidence_refs=%v", result.EvidenceRefs)
+	}
+}
+
 func TestPrepareIsolatedWorktreeV0RechazaRamaNoOpacaONoAislada(t *testing.T) {
 	root := t.TempDir()
 	_, issues := PrepareIsolatedWorktreeV0(context.Background(), WorktreeIsolationRequestV0{

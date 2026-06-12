@@ -38,6 +38,7 @@ type externalBridgeLoopEventV0 struct {
 	StopReason    string
 	FilterSummary []string
 	Counters      map[string]int
+	EvidenceRefs  []string
 	OccurredAt    time.Time
 }
 
@@ -110,10 +111,11 @@ func runExternalBridgeLoopV0(
 
 func externalBridgeLoopResultEventV0(tickNumber int, result any, err error) externalBridgeLoopEventV0 {
 	event := externalBridgeLoopEventV0{
-		Status:     "running",
-		TickNumber: tickNumber,
-		Success:    err == nil,
-		Counters:   externalBridgeResultCountersV0(result),
+		Status:       "running",
+		TickNumber:   tickNumber,
+		Success:      err == nil,
+		Counters:     externalBridgeResultCountersV0(result),
+		EvidenceRefs: externalBridgeResultEvidenceRefsV0(result),
 	}
 	if err == nil && event.Counters != nil && event.Counters["submitted"] == 0 {
 		event.Status = "idle"
@@ -135,6 +137,7 @@ func notifyExternalBridgeLoopV0(ctx context.Context, config externalBridgeLoopCo
 	}
 	event.Component = firstExternalBridgeValueV0(event.Component, config.Component, "external_bridge_loop")
 	event.FilterSummary = compactExternalBridgeStringsV0(append(event.FilterSummary, config.FilterSummary...))
+	event.EvidenceRefs = compactExternalBridgeStringsV0(event.EvidenceRefs)
 	event.OccurredAt = time.Now().UTC()
 	config.Observer(ctx, event)
 }

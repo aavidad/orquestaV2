@@ -36,6 +36,7 @@ const (
 	envDetailProhibitedRailsV0                       = "ORQUESTA_DETAIL_PROHIBITED_RAILS"
 	envDetailProhibitedRailsScopeV0                  = "ORQUESTA_DETAIL_PROHIBITED_RAILS_SCOPE"
 	envServerIdleSelfImprovementAfterV0              = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS"
+	envServerIdleSelfImprovementProjectWorkDirV0     = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PROJECT_WORKDIR"
 	envServerIdleSelfImprovementProjectRefV0         = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PROJECT_REF"
 	envServerIdleSelfImprovementWorktreeRefV0        = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_WORKTREE_REF"
 	envServerIdleSelfImprovementBranchRefV0          = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_BRANCH_REF"
@@ -131,46 +132,61 @@ const (
 	envCapacityModelRefV0        = "ORQUESTA_CAPACITY_MODEL_REF"
 	envCapacityQuotaRefV0        = "ORQUESTA_CAPACITY_QUOTA_REF"
 
-	envOPESBaseURLV0                    = "ORQUESTA_OPES_BASE_URL"
-	envOPESBaseURLLegacyV0              = "OPES_BASE_URL"
-	envOPESTimeoutSecondsV0             = "ORQUESTA_OPES_TIMEOUT_SECONDS"
-	envOPESDefaultMaxAttemptsV0         = "ORQUESTA_OPES_DEFAULT_MAX_ATTEMPTS"
-	envOPESBridgeEnabledV0              = "ORQUESTA_OPES_BRIDGE_ENABLED"
-	envOPESBridgeConfirmV0              = "ORQUESTA_OPES_BRIDGE_CONFIRM"
-	envOPESBridgeDryRunV0               = "ORQUESTA_OPES_BRIDGE_DRY_RUN"
-	envOPESBridgeJobTypeV0              = "ORQUESTA_OPES_BRIDGE_JOB_TYPE"
-	envOPESBridgeJobRefV0               = "ORQUESTA_OPES_BRIDGE_JOB_REF"
-	envOPESBridgeProgramIDV0            = "ORQUESTA_OPES_BRIDGE_PROGRAM_ID"
-	envOPESBridgeTopicIDV0              = "ORQUESTA_OPES_BRIDGE_TOPIC_ID"
-	envOPESBridgeCorrelationIDV0        = "ORQUESTA_OPES_BRIDGE_CORRELATION_ID"
-	envOPESBridgeJobTypeSequenceV0      = "ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE"
-	envOPESBridgeLimitV0                = "ORQUESTA_OPES_BRIDGE_LIMIT"
-	envOPESBridgeTimeoutSecondsV0       = "ORQUESTA_OPES_BRIDGE_TIMEOUT_SECONDS"
-	envOPESBridgePriorityV0             = "ORQUESTA_OPES_BRIDGE_PRIORITY"
-	envOPESBridgeIntervalSecondsV0      = "ORQUESTA_OPES_BRIDGE_INTERVAL_SECONDS"
-	envOPESBridgeInitialDelaySecondsV0  = "ORQUESTA_OPES_BRIDGE_INITIAL_DELAY_SECONDS"
-	envOPESBridgeMaxTicksV0             = "ORQUESTA_OPES_BRIDGE_MAX_TICKS"
-	envOPESBridgeAllowUnfilteredV0      = "ORQUESTA_OPES_BRIDGE_ALLOW_UNFILTERED"
-	envOPESBridgeInputLedgerDisabledV0  = "ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_DISABLED"
-	envOPESBridgeInputLedgerPathV0      = "ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH"
-	envOPESTemporalConfirmV0            = "ORQUESTA_OPES_TEMPORAL_CONFIRM"
-	envOPESBridgeProductiveConfirmV0    = "ORQUESTA_OPES_BRIDGE_PRODUCTIVE_CONFIRM"
-	envOPESBridgeDestinationEvidenceV0  = "ORQUESTA_OPES_BRIDGE_DESTINATION_EVIDENCE_REF"
-	envDomainWorkHTTPBaseURLV0          = "ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL"
-	envDomainWorkFileDirV0              = "ORQUESTA_DOMAIN_WORK_FILE_DIR"
-	envDomainWorkFileEnabledV0          = "ORQUESTA_DOMAIN_WORK_FILE_ENABLED"
-	envDomainWorkHTTPCreatePathV0       = "ORQUESTA_DOMAIN_WORK_HTTP_CREATE_PATH"
-	envDomainWorkHTTPSubmitPathV0       = "ORQUESTA_DOMAIN_WORK_HTTP_SUBMIT_PATH"
-	envDomainWorkHTTPTimeoutSecondsV0   = "ORQUESTA_DOMAIN_WORK_HTTP_TIMEOUT_SECONDS"
-	envDomainWorkHTTPEgressModeV0       = "ORQUESTA_DOMAIN_WORK_HTTP_EGRESS_MODE"
-	envDomainWorkHTTPAllowedHostsV0     = "ORQUESTA_DOMAIN_WORK_HTTP_ALLOWED_HOSTS"
-	envRequiredTestRunnerEnabledV0      = "ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED"
-	envRequiredTestMaxOutputBytesV0     = "ORQUESTA_REQUIRED_TEST_MAX_OUTPUT_BYTES"
-	envRequiredTestOutputMaxArtifactsV0 = "ORQUESTA_REQUIRED_TEST_OUTPUT_MAX_ARTIFACTS"
-	envRequiredTestGoCommandV0          = "ORQUESTA_REQUIRED_TEST_GO_COMMAND"
-	envRequiredTestAllowedCommandsV0    = "ORQUESTA_REQUIRED_TEST_ALLOWED_COMMANDS"
-	envRequiredTestOutputDirV0          = "ORQUESTA_REQUIRED_TEST_OUTPUT_DIR"
-	envRequiredTestEnvV0                = "ORQUESTA_REQUIRED_TEST_ENV"
+	envOPESBaseURLV0                        = "ORQUESTA_OPES_BASE_URL"
+	envOPESBaseURLLegacyV0                  = "OPES_BASE_URL"
+	envOPESTimeoutSecondsV0                 = "ORQUESTA_OPES_TIMEOUT_SECONDS"
+	envOPESDefaultMaxAttemptsV0             = "ORQUESTA_OPES_DEFAULT_MAX_ATTEMPTS"
+	envOPESBridgeEnabledV0                  = "ORQUESTA_OPES_BRIDGE_ENABLED"
+	envOPESBridgeConfirmV0                  = "ORQUESTA_OPES_BRIDGE_CONFIRM"
+	envOPESBridgeDryRunV0                   = "ORQUESTA_OPES_BRIDGE_DRY_RUN"
+	envOPESBridgeJobTypeV0                  = "ORQUESTA_OPES_BRIDGE_JOB_TYPE"
+	envOPESBridgeJobRefV0                   = "ORQUESTA_OPES_BRIDGE_JOB_REF"
+	envOPESBridgeProgramIDV0                = "ORQUESTA_OPES_BRIDGE_PROGRAM_ID"
+	envOPESBridgeTopicIDV0                  = "ORQUESTA_OPES_BRIDGE_TOPIC_ID"
+	envOPESBridgeCorrelationIDV0            = "ORQUESTA_OPES_BRIDGE_CORRELATION_ID"
+	envOPESBridgeJobTypeSequenceV0          = "ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE"
+	envOPESBridgeLimitV0                    = "ORQUESTA_OPES_BRIDGE_LIMIT"
+	envOPESBridgeTimeoutSecondsV0           = "ORQUESTA_OPES_BRIDGE_TIMEOUT_SECONDS"
+	envOPESBridgePriorityV0                 = "ORQUESTA_OPES_BRIDGE_PRIORITY"
+	envOPESBridgeIntervalSecondsV0          = "ORQUESTA_OPES_BRIDGE_INTERVAL_SECONDS"
+	envOPESBridgeInitialDelaySecondsV0      = "ORQUESTA_OPES_BRIDGE_INITIAL_DELAY_SECONDS"
+	envOPESBridgeMaxTicksV0                 = "ORQUESTA_OPES_BRIDGE_MAX_TICKS"
+	envOPESBridgeAllowUnfilteredV0          = "ORQUESTA_OPES_BRIDGE_ALLOW_UNFILTERED"
+	envOPESBridgeInputLedgerDisabledV0      = "ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_DISABLED"
+	envOPESBridgeInputLedgerPathV0          = "ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH"
+	envOPESTemporalConfirmV0                = "ORQUESTA_OPES_TEMPORAL_CONFIRM"
+	envOPESBridgeProductiveConfirmV0        = "ORQUESTA_OPES_BRIDGE_PRODUCTIVE_CONFIRM"
+	envOPESBridgeDestinationEvidenceV0      = "ORQUESTA_OPES_BRIDGE_DESTINATION_EVIDENCE_REF"
+	envOPESRegistryFinalPkgEnabledV0        = "ORQUESTA_OPES_REGISTRY_FINALPKG_ENABLED"
+	envOPESRegistryFinalPkgConfirmV0        = "ORQUESTA_OPES_REGISTRY_FINALPKG_CONFIRM"
+	envOPESRegistryFinalPkgDryRunV0         = "ORQUESTA_OPES_REGISTRY_FINALPKG_DRY_RUN"
+	envOPESRegistryFinalPkgRegistryV0       = "ORQUESTA_OPES_REGISTRY_FINALPKG_REGISTRY_PATH"
+	envOPESRegistryFinalPkgCourseIDV0       = "ORQUESTA_OPES_REGISTRY_FINALPKG_COURSE_ID"
+	envOPESRegistryFinalPkgCourseRootV0     = "ORQUESTA_OPES_REGISTRY_FINALPKG_COURSE_ROOT"
+	envOPESRegistryFinalPkgTemplateRunV0    = "ORQUESTA_OPES_REGISTRY_FINALPKG_TEMPLATE_RUN_REF"
+	envOPESRegistryFinalPkgTemplateTopicV0  = "ORQUESTA_OPES_REGISTRY_FINALPKG_TEMPLATE_TOPIC_ID"
+	envOPESRegistryFinalPkgBatchSizeV0      = "ORQUESTA_OPES_REGISTRY_FINALPKG_BATCH_SIZE"
+	envOPESRegistryFinalPkgMaxInFlightV0    = "ORQUESTA_OPES_REGISTRY_FINALPKG_MAX_IN_FLIGHT"
+	envOPESRegistryFinalPkgIntervalV0       = "ORQUESTA_OPES_REGISTRY_FINALPKG_INTERVAL_SECONDS"
+	envOPESRegistryFinalPkgMaxTicksV0       = "ORQUESTA_OPES_REGISTRY_FINALPKG_MAX_TICKS"
+	envOPESRegistryFinalPkgQueueRefV0       = "ORQUESTA_OPES_REGISTRY_FINALPKG_QUEUE_REF"
+	envOPESRegistryFinalPkgReconcileV0      = "ORQUESTA_OPES_REGISTRY_FINALPKG_RECONCILE_ENABLED"
+	envOPESRegistryFinalPkgReconcileLimitV0 = "ORQUESTA_OPES_REGISTRY_FINALPKG_RECONCILE_LIMIT"
+	envDomainWorkHTTPBaseURLV0              = "ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL"
+	envDomainWorkFileDirV0                  = "ORQUESTA_DOMAIN_WORK_FILE_DIR"
+	envDomainWorkFileEnabledV0              = "ORQUESTA_DOMAIN_WORK_FILE_ENABLED"
+	envDomainWorkHTTPCreatePathV0           = "ORQUESTA_DOMAIN_WORK_HTTP_CREATE_PATH"
+	envDomainWorkHTTPSubmitPathV0           = "ORQUESTA_DOMAIN_WORK_HTTP_SUBMIT_PATH"
+	envDomainWorkHTTPTimeoutSecondsV0       = "ORQUESTA_DOMAIN_WORK_HTTP_TIMEOUT_SECONDS"
+	envDomainWorkHTTPEgressModeV0           = "ORQUESTA_DOMAIN_WORK_HTTP_EGRESS_MODE"
+	envDomainWorkHTTPAllowedHostsV0         = "ORQUESTA_DOMAIN_WORK_HTTP_ALLOWED_HOSTS"
+	envRequiredTestRunnerEnabledV0          = "ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED"
+	envRequiredTestMaxOutputBytesV0         = "ORQUESTA_REQUIRED_TEST_MAX_OUTPUT_BYTES"
+	envRequiredTestOutputMaxArtifactsV0     = "ORQUESTA_REQUIRED_TEST_OUTPUT_MAX_ARTIFACTS"
+	envRequiredTestGoCommandV0              = "ORQUESTA_REQUIRED_TEST_GO_COMMAND"
+	envRequiredTestAllowedCommandsV0        = "ORQUESTA_REQUIRED_TEST_ALLOWED_COMMANDS"
+	envRequiredTestOutputDirV0              = "ORQUESTA_REQUIRED_TEST_OUTPUT_DIR"
+	envRequiredTestEnvV0                    = "ORQUESTA_REQUIRED_TEST_ENV"
 
 	defaultCodexWaitIntervalMSV0               = 2000
 	defaultCodexStalledTicksV0                 = 300
@@ -196,6 +212,41 @@ type serverEnvSettingMetadataV0 struct {
 }
 
 var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
+	envServerAuditFileV0: {
+		Scope:       "audit",
+		Label:       "Archivo audit",
+		Description: "Archivo JSONL local donde el servidor registra eventos de auditoria.",
+	},
+	envServerAuditDisabledV0: {
+		Scope:       "audit",
+		Label:       "Audit desactivado",
+		Description: "Opt-out explicito de escritura de auditoria local.",
+	},
+	envServerRemoteControlPlaneConfirmV0: {
+		Scope:       "control_plane",
+		Label:       "Control remoto opt-in",
+		Description: "Confirmacion explicita requerida para exponer el control-plane fuera de loopback.",
+	},
+	envServerControlTokenV0: {
+		Scope:       "control_plane",
+		Label:       "Token control-plane",
+		Description: "Presencia del token de control-plane; el valor real nunca se publica.",
+	},
+	envServerControlPrincipalV0: {
+		Scope:       "control_plane",
+		Label:       "Principal control-plane",
+		Description: "Ref publica del principal autorizado para control-plane.",
+	},
+	envServerControlPermissionRefV0: {
+		Scope:       "control_plane",
+		Label:       "Permiso control-plane",
+		Description: "Ref publica de permiso asociada al acceso de control-plane.",
+	},
+	envServerControlPublicReasonV0: {
+		Scope:       "control_plane",
+		Label:       "Motivo control-plane",
+		Description: "Motivo publico registrado para el modo de acceso del control-plane.",
+	},
 	envServerMaxRunsPerTickV0: {
 		Scope:       "server_supervisor",
 		Label:       "Runs por tick",
@@ -235,6 +286,11 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "autoprogramming",
 		Label:       "Cola objetivo",
 		Description: "Tamano objetivo de cola de automejora.",
+	},
+	envServerIdleSelfImprovementProjectWorkDirV0: {
+		Scope:       "autoprogramming",
+		Label:       "Repo automejora",
+		Description: "Directorio de trabajo usado solo por automejora idle; separa el repo de Orquesta del proyecto externo.",
 	},
 	envServerIdleSelfImprovementMaxRequestsV0: {
 		Scope:       "autoprogramming",
@@ -313,9 +369,90 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Label:       "Presupuesto recursivo",
 		Description: "Presupuesto global de agentes en arbol recursivo.",
 	},
+	envOPESRegistryFinalPkgEnabledV0: {
+		Scope:       "opes_registry_finalpkg",
+		Label:       "Productor finalpkg",
+		Description: "Activa el productor residente opt-in de paquetes finales desde registro local OPES.",
+	},
+	envOPESRegistryFinalPkgConfirmV0: {
+		Scope:       "opes_registry_finalpkg",
+		Label:       "Confirmacion finalpkg",
+		Description: "Confirmacion explicita requerida para crear runs desde el registro local.",
+	},
+	envOPESRegistryFinalPkgDryRunV0: {
+		Scope:       "opes_registry_finalpkg",
+		Label:       "Dry-run finalpkg",
+		Description: "Mantiene el productor en modo simulacion; por defecto no crea runs.",
+	},
+	envOPESRegistryFinalPkgRegistryV0: {
+		Scope:       "opes_registry_finalpkg",
+		Label:       "Registro OPES",
+		Description: "Ruta local del registro compartido de temas OPES; se publica solo como presencia configurada.",
+	},
+	envOPESRegistryFinalPkgCourseIDV0: {
+		Scope:       "opes_registry_finalpkg",
+		Label:       "Curso OPES",
+		Description: "Identificador del curso dentro del registro local de temas.",
+	},
+	envOPESRegistryFinalPkgCourseRootV0: {
+		Scope:       "opes_registry_finalpkg",
+		Label:       "Raiz curso",
+		Description: "Raiz local del curso para detectar paquetes completos; se publica solo como presencia configurada.",
+	},
+	envOPESRegistryFinalPkgTemplateRunV0: {
+		Scope:       "opes_registry_finalpkg",
+		Label:       "Run plantilla",
+		Description: "Run existente usado como plantilla para construir nuevos paquetes finales.",
+	},
+	envOPESRegistryFinalPkgTemplateTopicV0: {
+		Scope:       "opes_registry_finalpkg",
+		Label:       "Tema plantilla",
+		Description: "Topic id que se sustituye al clonar la plantilla de paquete final.",
+	},
+	envOPESRegistryFinalPkgBatchSizeV0: {
+		Scope:       "opes_registry_finalpkg",
+		Label:       "Tanda finalpkg",
+		Description: "Maximo de temas nuevos que el productor intenta lanzar por tick.",
+	},
+	envOPESRegistryFinalPkgMaxInFlightV0: {
+		Scope:       "opes_registry_finalpkg",
+		Label:       "Finalpkg en vuelo",
+		Description: "Maximo de runs finalpkg no terminales antes de pausar nuevos lanzamientos.",
+	},
+	envOPESRegistryFinalPkgIntervalV0: {
+		Scope:       "opes_registry_finalpkg",
+		Label:       "Intervalo finalpkg",
+		Description: "Segundos entre ticks del productor residente de paquetes finales.",
+	},
+	envOPESRegistryFinalPkgMaxTicksV0: {
+		Scope:       "opes_registry_finalpkg",
+		Label:       "Ticks finalpkg",
+		Description: "Limite opcional de ticks del productor residente; cero significa continuo.",
+	},
+	envOPESRegistryFinalPkgQueueRefV0: {
+		Scope:       "opes_registry_finalpkg",
+		Label:       "Cola finalpkg",
+		Description: "Cola Orquesta donde se encolan los runs generados desde el registro.",
+	},
+	envOPESRegistryFinalPkgReconcileV0: {
+		Scope:       "opes_registry_finalpkg",
+		Label:       "Reconciliacion finalpkg",
+		Description: "Activa el cierre causal de runs finalpkg con paquete completo pero estado no terminal.",
+	},
+	envOPESRegistryFinalPkgReconcileLimitV0: {
+		Scope:       "opes_registry_finalpkg",
+		Label:       "Limite reconciliacion finalpkg",
+		Description: "Maximo de runs finalpkg completos que el reconciliador intenta cerrar por tick.",
+	},
 }
 
 func serverConfigSettingFromRegistryV0(key string, value string) orquestaserver.ServerConfigSettingV0 {
 	metadata := serverEffectiveEnvRegistryV0[key]
 	return serverConfigSettingV0(key, value, metadata.Scope, metadata.Label, metadata.Description)
+}
+
+func serverSensitiveConfigSettingFromRegistryV0(key string, value string) orquestaserver.ServerConfigSettingV0 {
+	setting := serverConfigSettingFromRegistryV0(key, value)
+	setting.Sensitive = true
+	return setting
 }

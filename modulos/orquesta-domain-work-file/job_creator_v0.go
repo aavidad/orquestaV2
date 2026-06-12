@@ -13,19 +13,25 @@ import (
 
 const (
 	DomainWorkFileJobCreatorSnapshotSchemaV0 = "domain_work_file_job_creator_snapshot.v0"
+	DomainWorkFileArtifactSnapshotSchemaV0   = "domain_work_file_artifact_snapshot.v0"
 
-	ErrDomainWorkFileIdempotencyConflictV0 = "domain_work_file_idempotency_conflict"
+	ErrDomainWorkFileIdempotencyConflictV0         = "domain_work_file_idempotency_conflict"
+	ErrDomainWorkFileArtifactIdempotencyConflictV0 = "domain_work_file_artifact_idempotency_conflict"
 
-	domainWorkFileJobsNameV0 = "domain_work_jobs_v0.json"
+	domainWorkFileJobsNameV0      = "domain_work_jobs_v0.json"
+	domainWorkFileArtifactsNameV0 = "domain_work_artifacts_v0.json"
 )
 
 var _ orquestadomainwork.DomainWorkJobRecordStorePortV0 = (*FileDomainWorkJobCreatorV0)(nil)
+var _ orquestadomainwork.DomainWorkArtifactSubmitterPortV0 = (*FileDomainWorkJobCreatorV0)(nil)
 
 type FileDomainWorkJobCreatorV0 struct {
-	mu        sync.Mutex
-	path      string
-	records   map[domainWorkFileJobKeyV0]domainWorkFileJobRecordV0
-	jobsByRef map[string]domainWorkFileJobKeyV0
+	mu              sync.Mutex
+	path            string
+	artifactPath    string
+	records         map[domainWorkFileJobKeyV0]domainWorkFileJobRecordV0
+	artifactRecords map[domainWorkFileArtifactKeyV0]domainWorkFileArtifactRecordV0
+	jobsByRef       map[string]domainWorkFileJobKeyV0
 }
 
 func NewFileDomainWorkJobCreatorV0(dir string) (*FileDomainWorkJobCreatorV0, error) {
@@ -37,7 +43,8 @@ func NewFileDomainWorkJobCreatorV0(dir string) (*FileDomainWorkJobCreatorV0, err
 		return nil, fmt.Errorf("orquesta_domain_work_file: dir_unavailable")
 	}
 	creator := &FileDomainWorkJobCreatorV0{
-		path: filepath.Join(dir, domainWorkFileJobsNameV0),
+		path:         filepath.Join(dir, domainWorkFileJobsNameV0),
+		artifactPath: filepath.Join(dir, domainWorkFileArtifactsNameV0),
 	}
 	if err := creator.loadV0(); err != nil {
 		return nil, err
@@ -164,6 +171,56 @@ func (creator *FileDomainWorkJobCreatorV0) ListDomainWorkJobRecordsV0(
 	return records, nil
 }
 
+func (creator *FileDomainWorkJobCreatorV0) SubmitDomainWorkArtifactV0(
+	ctx context.Context,
+	submission orquestadomainwork.DomainWorkArtifactSubmissionV0,
+) (orquestadomainwork.DomainWorkArtifactReceiptV0, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return orquestadomainwork.DomainWorkArtifactReceiptV0{}, err
+	}
+	submission = orquestadomainwork.NormalizeDomainWorkArtifactSubmissionV0(submission)
+	if issues := orquestadomainwork.ValidateDomainWorkArtifactSubmissionV0(submission); len(issues) > 0 {
+		return invalidDomainWorkFileArtifactReceiptV0(submission, issues), nil
+	}
+	fingerprint, err := domainWorkFileArtifactSubmissionFingerprintV0(submission)
+	if err != nil {
+		return orquestadomainwork.DomainWorkArtifactReceiptV0{}, err
+	}
+	key := domainWorkFileArtifactKeyFromSubmissionV0(submission)
+
+	creator.mu.Lock()
+	defer creator.mu.Unlock()
+	creator.ensureLockedV0()
+	if existing, ok := creator.artifactRecords[key]; ok {
+		if existing.Fingerprint == fingerprint {
+			return cloneDomainWorkFileArtifactReceiptV0(existing.Receipt), nil
+		}
+		return invalidDomainWorkFileArtifactReceiptV0(submission, []orquestadomainwork.DomainWorkIssueV0{{
+			Code:  ErrDomainWorkFileArtifactIdempotencyConflictV0,
+			Field: "idempotency_key",
+		}}), nil
+	}
+
+	receipt := acceptedDomainWorkFileArtifactReceiptV0(submission)
+	next := cloneDomainWorkFileArtifactRecordsMapV0(creator.artifactRecords)
+	next[key] = domainWorkFileArtifactRecordV0{
+		Submission:  cloneDomainWorkFileArtifactSubmissionV0(submission),
+		Receipt:     cloneDomainWorkFileArtifactReceiptV0(receipt),
+		Fingerprint: fingerprint,
+	}
+	if err := ctx.Err(); err != nil {
+		return orquestadomainwork.DomainWorkArtifactReceiptV0{}, err
+	}
+	if err := writeDomainWorkFileArtifactSnapshotV0(creator.artifactPath, next); err != nil {
+		return orquestadomainwork.DomainWorkArtifactReceiptV0{}, err
+	}
+	creator.artifactRecords = next
+	return cloneDomainWorkFileArtifactReceiptV0(receipt), nil
+}
+
 func (creator *FileDomainWorkJobCreatorV0) SnapshotPathV0() string {
 	if creator == nil {
 		return ""
@@ -176,7 +233,12 @@ func (creator *FileDomainWorkJobCreatorV0) loadV0() error {
 	if err != nil {
 		return err
 	}
+	artifactRecords, err := loadDomainWorkFileArtifactRecordsV0(creator.artifactPath)
+	if err != nil {
+		return err
+	}
 	creator.records = records
+	creator.artifactRecords = artifactRecords
 	creator.jobsByRef = domainWorkFileJobsByRefFromRecordsV0(records)
 	return nil
 }
@@ -187,5 +249,8 @@ func (creator *FileDomainWorkJobCreatorV0) ensureLockedV0() {
 	}
 	if creator.jobsByRef == nil {
 		creator.jobsByRef = domainWorkFileJobsByRefFromRecordsV0(creator.records)
+	}
+	if creator.artifactRecords == nil {
+		creator.artifactRecords = map[domainWorkFileArtifactKeyV0]domainWorkFileArtifactRecordV0{}
 	}
 }

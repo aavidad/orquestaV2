@@ -86,9 +86,15 @@ func (stack StackV0) DrainRunV0(
 	ctx context.Context,
 	request DrainRunRequestV0,
 ) (orquestacionnucleoapp.ManagedProgressiveLoopResultV0, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	request = normalizeDrainRunRequestV0(request)
 	result := orquestacionnucleoapp.ManagedProgressiveLoopResultV0{}
 	for attempt := 1; attempt <= request.MaxExternalWaits+1; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
 		control, err := stack.drainRunAttemptControlV0(ctx, request)
 		loop := control.Loop
 		result.Final = loop
@@ -100,11 +106,17 @@ func (stack StackV0) DrainRunV0(
 		if err != nil {
 			return result, err
 		}
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
 		if !drainRunHasPendingExternalAgentsV0(loop.Run, request.WaitAgentRefs) || attempt > request.MaxExternalWaits {
 			return result, nil
 		}
 		if stack.Ports.ExternalWaiter == nil {
 			return result, nil
+		}
+		if err := ctx.Err(); err != nil {
+			return result, err
 		}
 		wait, err := stack.Ports.ExternalWaiter.WaitExternalProgressV0(
 			ctx,
@@ -125,6 +137,9 @@ func (stack StackV0) DrainRunV0(
 			Continue:     wait.Continue,
 			EvidenceRefs: wait.EvidenceRefs,
 		})
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
 		if !wait.Continue {
 			return result, nil
 		}

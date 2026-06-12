@@ -16,6 +16,20 @@ func cloneDomainWorkFileRecordsMapV0(
 	return out
 }
 
+func cloneDomainWorkFileArtifactRecordsMapV0(
+	records map[domainWorkFileArtifactKeyV0]domainWorkFileArtifactRecordV0,
+) map[domainWorkFileArtifactKeyV0]domainWorkFileArtifactRecordV0 {
+	out := make(map[domainWorkFileArtifactKeyV0]domainWorkFileArtifactRecordV0, len(records))
+	for key, record := range records {
+		out[key] = domainWorkFileArtifactRecordV0{
+			Submission:  cloneDomainWorkFileArtifactSubmissionV0(record.Submission),
+			Receipt:     cloneDomainWorkFileArtifactReceiptV0(record.Receipt),
+			Fingerprint: record.Fingerprint,
+		}
+	}
+	return out
+}
+
 func cloneDomainWorkFileJobsByRefV0(
 	jobsByRef map[string]domainWorkFileJobKeyV0,
 ) map[string]domainWorkFileJobKeyV0 {
@@ -68,6 +82,25 @@ func cloneDomainWorkFileJobV0(
 	job.EvidenceRefs = append([]string(nil), job.EvidenceRefs...)
 	job.Issues = cloneDomainWorkFileIssuesV0(job.Issues)
 	return job
+}
+
+func cloneDomainWorkFileArtifactSubmissionV0(
+	submission orquestadomainwork.DomainWorkArtifactSubmissionV0,
+) orquestadomainwork.DomainWorkArtifactSubmissionV0 {
+	submission.PayloadFields = cloneDomainWorkFileFieldsV0(submission.PayloadFields)
+	submission.PayloadRefs = append([]string(nil), submission.PayloadRefs...)
+	submission.ExternalRefs = cloneDomainWorkFileExternalRefsV0(submission.ExternalRefs)
+	submission.EvidenceRefs = append([]string(nil), submission.EvidenceRefs...)
+	return submission
+}
+
+func cloneDomainWorkFileArtifactReceiptV0(
+	receipt orquestadomainwork.DomainWorkArtifactReceiptV0,
+) orquestadomainwork.DomainWorkArtifactReceiptV0 {
+	receipt.ExternalRefs = cloneDomainWorkFileExternalRefsV0(receipt.ExternalRefs)
+	receipt.EvidenceRefs = append([]string(nil), receipt.EvidenceRefs...)
+	receipt.Issues = cloneDomainWorkFileIssuesV0(receipt.Issues)
+	return receipt
 }
 
 func cloneDomainWorkFileFieldsV0(
