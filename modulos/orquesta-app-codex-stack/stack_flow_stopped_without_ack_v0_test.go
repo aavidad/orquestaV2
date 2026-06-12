@@ -237,6 +237,59 @@ func TestDrainRunV0AgentePendienteSinRegistroProcesoSeReconciliaComoLostV0(t *te
 	}
 }
 
+func TestDrainRunV0RegistroProcesoParadoSinDescriptorSeReconciliaComoLostV0(t *testing.T) {
+	ctx := context.Background()
+	runtime := newPendingAckCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	director := postDirectorAPIV0(t, stack)
+	agentRef := strings.TrimSpace(director.DirectorTask.AgentRequestID)
+	if agentRef == "" {
+		t.Fatalf("director sin agente: %+v", director)
+	}
+	record, err := stack.Stores.ProcessRegistry.ResolveAgentProcessV0(ctx, director.RunRef, agentRef)
+	if err != nil {
+		t.Fatalf("precondicion sin registro inicial: %v", err)
+	}
+	runtime.markStoppedForTestV0(record.ProcessRef)
+	stack.Stores.ReceiptStore = orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0()
+	stack.Ports.ProgressSource = noOpAgentProgressSourceForStoppedReconciliationTestV0{}
+
+	drain, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+		RunRef:               director.RunRef,
+		CorrelationID:        "corr-stack-stopped-process-registry-no-descriptor-001",
+		WaitAgentRefs:        []string{agentRef},
+		MaxBursts:            8,
+		MaxStepsPerBurst:     6,
+		MaxDispatchesPerWait: 8,
+		MaxCommands:          20,
+		MaxOutboxPerCycle:    8,
+		MaxExternalWaits:     1,
+	})
+	if err != nil {
+		t.Fatalf("DrainRunV0: %v status=%s final=%+v", err, drain.Status, drain.Final)
+	}
+	run := mustLoadCodexStackRunForTestV0(t, stack, director.RunRef)
+	if drainRunHasPendingExternalAgentRefsV0(run, []string{agentRef}) {
+		t.Fatalf("agente con ProcessRegistry parado sin descriptor sigue pendiente: status=%s started=%v lost=%v delivered=%v", drain.Status, run.StartedAgents, run.LostAgents, run.DeliveredAgents)
+	}
+	if !codexStackHasRefV0(run.LostAgents, agentRef) ||
+		codexStackHasRefV0(run.StoppedAgents, agentRef) ||
+		codexStackHasRefV0(run.ConfirmedStoppedAgents, agentRef) {
+		t.Fatalf("proceso registrado parado debe quedar lost sin parada runtime: lost=%v stopped=%v confirmed=%v", run.LostAgents, run.StoppedAgents, run.ConfirmedStoppedAgents)
+	}
+	if !codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0) ||
+		!codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionAskDirectorV0) {
+		t.Fatalf("faltan assessment/revision ask_director para proceso parado sin descriptor: %+v", run.AgentAssessments)
+	}
+	if codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictGarbageV0) ||
+		codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionStopAgentV0) {
+		t.Fatalf("proceso parado sin descriptor no debe marcar basura ni stop_agent: %+v", run.AgentAssessments)
+	}
+	if len(compactStringsV0(run.DirectorQuestions)) == 0 {
+		t.Fatalf("reconciliacion debe dejar pregunta no bloqueante para el Director: %+v", run)
+	}
+}
+
 func TestDrainRunV0ProcesoParadoConACKCompletoIngiereAntesDeLost(t *testing.T) {
 	ctx := context.Background()
 	runtime := newFakeCodexStackRuntimeV0()
@@ -483,6 +536,15 @@ func TestDrainRunHasPendingExternalAgentsV0FiltraCohorteObjetivo(t *testing.T) {
 	if !drainRunHasPendingExternalAgentsV0(run, nil) {
 		t.Fatalf("WaitAgentRefs vacio mantiene compatibilidad legacy y debe esperar agent-old: %+v", run)
 	}
+}
+
+type noOpAgentProgressSourceForStoppedReconciliationTestV0 struct{}
+
+func (noOpAgentProgressSourceForStoppedReconciliationTestV0) BuildAgentProgressObservationsV0(
+	context.Context,
+	orquestacionnucleoapp.AgentProgressObservationRequestV0,
+) ([]orquestacionnucleoapp.AgentProgressObservationV0, error) {
+	return nil, nil
 }
 
 type capacityLimitedPendingAckCodexStackRuntimeV0 struct {

@@ -28,6 +28,10 @@ func (stack StackV0) reconcileStoppedPendingAgentsV0(
 	if err != nil || applied {
 		return direct, applied, err
 	}
+	direct, applied, err = stack.reconcileStoppedProcessRegistrySnapshotsV0(ctx, request, run)
+	if err != nil || applied {
+		return direct, applied, err
+	}
 	direct, applied, err = stack.reconcileMissingProcessRegistryPendingAgentsV0(ctx, request, run)
 	if err != nil || applied {
 		return direct, applied, err
@@ -107,6 +111,156 @@ func (stack StackV0) reconcileMissingProcessRegistryPendingAgentsV0(
 	}
 	next, err := stack.Stores.RunStore.LoadRunV0(ctx, run.RunID)
 	return next, true, err
+}
+
+func (stack StackV0) reconcileStoppedProcessRegistrySnapshotsV0(
+	ctx context.Context,
+	request DrainRunRequestV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) (orquestacoreworkflow.OrchestrationRunV0, bool, error) {
+	if stack.Stores.ProcessRegistry == nil || stack.CodexSnapshotSource == nil {
+		return run, false, nil
+	}
+	pending := pendingAgentRefsForProcessRegistryReconciliationV0(run, request.WaitAgentRefs)
+	if len(pending) == 0 {
+		return run, false, nil
+	}
+	agentsWithDescriptor, err := stack.processRegistrySnapshotDescriptorAgentsV0(ctx, request, run)
+	if err != nil {
+		return run, false, err
+	}
+	applied := false
+	for _, agentRef := range pending {
+		if _, ok := agentsWithDescriptor[strings.TrimSpace(agentRef)]; ok {
+			continue
+		}
+		record, err := stack.Stores.ProcessRegistry.ResolveAgentProcessV0(
+			ctx,
+			strings.TrimSpace(run.RunID),
+			strings.TrimSpace(agentRef),
+		)
+		if err != nil {
+			continue
+		}
+		observation, ready, err := stack.stoppedProcessRegistrySnapshotObservationV0(run, record)
+		if err != nil {
+			return run, applied, err
+		}
+		if !ready {
+			continue
+		}
+		if err := stack.applyStoppedAgentReconciliationV0(ctx, request, run, observation); err != nil {
+			return run, applied, err
+		}
+		applied = true
+	}
+	if !applied {
+		return run, false, nil
+	}
+	next, err := stack.Stores.RunStore.LoadRunV0(ctx, run.RunID)
+	return next, true, err
+}
+
+func (stack StackV0) processRegistrySnapshotDescriptorAgentsV0(
+	ctx context.Context,
+	request DrainRunRequestV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) (map[string]struct{}, error) {
+	result := map[string]struct{}{}
+	if stack.Stores.ReceiptStore == nil {
+		return result, nil
+	}
+	descriptors, err := stack.Stores.ReceiptStore.ListCodexReceiptDescriptorsV0(
+		ctx,
+		orquestaruntimecodexdelivery.CodexReceiptDescriptorRequestV0{
+			RunID:         run.RunID,
+			StartedAgents: compactStringsV0(run.StartedAgents),
+			CorrelationID: strings.TrimSpace(request.CorrelationID),
+			EvidenceRefs:  []string{"evidence-ref-live-agent-reconciliation-direct"},
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	for _, descriptor := range descriptors {
+		agentRef := strings.TrimSpace(descriptor.AgentRef)
+		if agentRef == "" {
+			continue
+		}
+		result[agentRef] = struct{}{}
+	}
+	return result, nil
+}
+
+func (stack StackV0) stoppedProcessRegistrySnapshotObservationV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	record orquestacionnucleoapp.AgentProcessRegistryRecordV0,
+) (orquestacionnucleoapp.AgentProgressObservationV0, bool, error) {
+	snapshot, err := stack.CodexSnapshotSource.SnapshotV0(strings.TrimSpace(record.ProcessRef))
+	if err != nil {
+		if codexStackProcessRuntimeMissingV0(err) {
+			report := processRegistrySnapshotProgressReportV0(run, record, "missing")
+			return processRegistrySnapshotProgressObservationV0(run, report), true, nil
+		}
+		return orquestacionnucleoapp.AgentProgressObservationV0{}, false, err
+	}
+	if snapshot.Status != orquestaruntime.ProcessRuntimeStoppedV0 {
+		return orquestacionnucleoapp.AgentProgressObservationV0{}, false, nil
+	}
+	report := processRegistrySnapshotProgressReportV0(run, record, "stopped")
+	return processRegistrySnapshotProgressObservationV0(run, report), true, nil
+}
+
+func processRegistrySnapshotProgressObservationV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	report orquestaruntime.AgentProgressReportV0,
+) orquestacionnucleoapp.AgentProgressObservationV0 {
+	return orquestacionnucleoapp.AgentProgressObservationV0{
+		CandidateRef:     "progress-candidate-ref-" + report.ReportID,
+		Report:           report,
+		PhaseID:          firstNonEmptyQueuedSourceV0(strings.TrimSpace(string(run.CurrentPhase)), "phase-ref-live-agent-reconciliation"),
+		DecisionRequired: true,
+		EvidenceRefs:     append([]string(nil), report.EvidenceRefs...),
+	}
+}
+
+func processRegistrySnapshotProgressReportV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	record orquestacionnucleoapp.AgentProcessRegistryRecordV0,
+	runtimeState string,
+) orquestaruntime.AgentProgressReportV0 {
+	agentRef := strings.TrimSpace(record.AgentRequestID)
+	processRef := strings.TrimSpace(record.ProcessRef)
+	safe := codexStackOperationalClosureSafeRefV0(
+		strings.TrimSpace(run.RunID) + "-" + agentRef + "-" + processRef + "-" + strings.TrimSpace(runtimeState),
+	)
+	digest := codexStackDeterministicDigestV0(safe)
+	if len(digest) > 32 {
+		digest = digest[:32]
+	}
+	evidenceRefs := []string{
+		"evidence-ref-no-ack",
+		"evidence-ref-live-agent-reconciliation-direct",
+		"evidence-ref-agent-process-registry",
+	}
+	summary := "Proceso runtime registrado parado sin ACK durable; se reconcilia como agente perdido para no bloquear el supervisor."
+	reportPrefix := "agent-progress-report-ref-live-registry-stopped-"
+	if strings.TrimSpace(runtimeState) == "missing" {
+		evidenceRefs = append(evidenceRefs, "evidence-ref-process-runtime-missing")
+		summary = "Proceso runtime registrado sin snapshot verificable tras reinicio; se reconcilia como agente perdido para no bloquear el supervisor."
+		reportPrefix = "agent-progress-report-ref-live-registry-missing-"
+	} else {
+		evidenceRefs = append(evidenceRefs, "evidence-ref-process-runtime-stopped")
+	}
+	return orquestaruntime.AgentProgressReportV0{
+		ReportID:         reportPrefix + digest,
+		RunID:            strings.TrimSpace(run.RunID),
+		AgentRequestID:   agentRef,
+		Status:           orquestaruntime.AgentStoppedV0,
+		DecisionRequired: true,
+		Summary:          summary,
+		EvidenceRefs:     compactStringsV0(evidenceRefs),
+	}
 }
 
 func pendingAgentRefsForProcessRegistryReconciliationV0(
