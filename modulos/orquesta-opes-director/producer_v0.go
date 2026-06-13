@@ -74,12 +74,34 @@ func ProduceOPESCausalJobsV0(
 			}
 			result.CreatedJobs = append(result.CreatedJobs, job)
 			result.EvidenceRefs = compactStringsV0(append(result.EvidenceRefs, job.EvidenceRefs...))
+			result = applyTopicRegistryUpdateIfConfiguredV0(ctx, result, ports.TopicRegistryUpdater, jobRequest)
 			actions++
 		}
 	}
 	result.Status = OPESCausalProducerStatusCompletedV0
 	result.EvidenceRefs = compactStringsV0(append(result.EvidenceRefs, "evidence-ref-opes-causal-producer"))
 	return result, nil
+}
+
+func applyTopicRegistryUpdateIfConfiguredV0(
+	ctx context.Context,
+	result OPESCausalProducerResultV0,
+	updater OPESCausalTopicRegistryUpdaterPortV0,
+	request orquestadomainwork.DomainWorkJobRequestV0,
+) OPESCausalProducerResultV0 {
+	if updater == nil || request.WorkKind != opesTopicRegistryUpdateWorkKindV0 {
+		return result
+	}
+	update, err := updater.ApplyOPESCausalTopicRegistryUpdateV0(ctx, request)
+	result.TopicRegistryUpdates = append(result.TopicRegistryUpdates, update)
+	result.EvidenceRefs = compactStringsV0(append(result.EvidenceRefs, update.EvidenceRefs...))
+	for _, issue := range update.Issues {
+		result.Issues = append(result.Issues, issueV0(issue.Code, "topic_registry."+issue.Field))
+	}
+	if err != nil {
+		result.Issues = append(result.Issues, issueV0(ErrOPESCausalTopicRegistryFailedV0, "topic_registry.command"))
+	}
+	return result
 }
 
 func normalizeProducerRequestV0(request OPESCausalProducerRequestV0) OPESCausalProducerRequestV0 {

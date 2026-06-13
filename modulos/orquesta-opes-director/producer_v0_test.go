@@ -7,6 +7,7 @@ import (
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestadomainworkmemory "orquesta/modulos/orquesta-domain-work-memory"
+	orquestaopestopicregistry "orquesta/modulos/orquesta-opes-topic-registry"
 )
 
 func TestProduceOPESCausalJobsV0ExpandeDocumentPlanYEsIdempotente(t *testing.T) {
@@ -114,8 +115,14 @@ func TestProduceOPESCausalJobsV0CreaActualizacionRegistroPorTema(t *testing.T) {
 		},
 	}}}
 	creator := orquestadomainworkmemory.NewInMemoryDomainWorkJobCreatorV0()
+	updater := &fakeTopicRegistryUpdaterV0{}
 	result, err := ProduceOPESCausalJobsV0(context.Background(), OPESCausalProducerRequestV0{},
-		OPESCausalProducerPortsV0{ArtifactSource: source, JobCreator: creator, JobRecords: creator})
+		OPESCausalProducerPortsV0{
+			ArtifactSource:       source,
+			JobCreator:           creator,
+			JobRecords:           creator,
+			TopicRegistryUpdater: updater,
+		})
 	if err != nil {
 		t.Fatalf("ProduceOPESCausalJobsV0: %v", err)
 	}
@@ -130,6 +137,12 @@ func TestProduceOPESCausalJobsV0CreaActualizacionRegistroPorTema(t *testing.T) {
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "en_progreso_orquesta") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "expected_artifact_type", orquestadomainwork.DomainWorkArtifactTypeTopicRegistryUpdateV0) {
 		t.Fatalf("request=%+v ok=%v", request, ok)
+	}
+	if len(updater.requests) != 1 ||
+		updater.requests[0].WorkKind != opesTopicRegistryUpdateWorkKindV0 ||
+		len(result.TopicRegistryUpdates) != 1 ||
+		result.TopicRegistryUpdates[0].Status != orquestaopestopicregistry.TopicRegistryUpdateStatusAppliedV0 {
+		t.Fatalf("updater=%+v result=%+v", updater.requests, result.TopicRegistryUpdates)
 	}
 
 	second, err := ProduceOPESCausalJobsV0(context.Background(), OPESCausalProducerRequestV0{},
@@ -259,4 +272,20 @@ func domainWorkFieldValueForDirectorTestV0(
 		}
 	}
 	return false
+}
+
+type fakeTopicRegistryUpdaterV0 struct {
+	requests []orquestadomainwork.DomainWorkJobRequestV0
+}
+
+func (updater *fakeTopicRegistryUpdaterV0) ApplyOPESCausalTopicRegistryUpdateV0(
+	_ context.Context,
+	request orquestadomainwork.DomainWorkJobRequestV0,
+) (orquestaopestopicregistry.TopicRegistryUpdateResultV0, error) {
+	updater.requests = append(updater.requests, request)
+	return orquestaopestopicregistry.TopicRegistryUpdateResultV0{
+		SchemaVersion: orquestaopestopicregistry.TopicRegistryUpdateResultSchemaV0,
+		Status:        orquestaopestopicregistry.TopicRegistryUpdateStatusAppliedV0,
+		EvidenceRefs:  []string{"evidence-ref-topic-registry-applied"},
+	}, nil
 }

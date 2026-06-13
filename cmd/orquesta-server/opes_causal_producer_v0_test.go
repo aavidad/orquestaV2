@@ -9,6 +9,7 @@ import (
 	orquestadomainworkfile "orquesta/modulos/orquesta-domain-work-file"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaopesdirector "orquesta/modulos/orquesta-opes-director"
+	orquestaopestopicregistry "orquesta/modulos/orquesta-opes-topic-registry"
 )
 
 func TestServerOPESCausalProducerV0CreaFollowupDesdeLedgerYNoDuplica(t *testing.T) {
@@ -84,6 +85,62 @@ func serverOPESCausalProducerCreatedWorkKindForTestV0(
 ) bool {
 	for _, job := range jobs {
 		if job.WorkKind == workKind {
+			return true
+		}
+	}
+	return false
+}
+
+func TestServerOPESTopicRegistryUpdaterV0AplicaDesdeDomainWork(t *testing.T) {
+	runner := &fakeServerTopicRegistryRunnerV0{}
+	updater := serverOPESTopicRegistryUpdaterV0{
+		config: opesTopicRegistryConfigV0{
+			Enabled:  true,
+			ToolPath: "/tmp/registro_trabajo_temas.py",
+			AgentID:  "orquesta-registro",
+			Force:    true,
+		},
+		runner: runner,
+	}
+	result, err := updater.ApplyOPESCausalTopicRegistryUpdateV0(context.Background(),
+		orquestadomainwork.DomainWorkJobRequestV0{
+			WorkKind: "update_topic_registry",
+			InputFields: []orquestadomainwork.DomainWorkFieldV0{
+				{Name: "registry_action", Value: "release"},
+				{Name: "course_id", Value: "curso-a2"},
+				{Name: "topic_id", Value: "tema-001"},
+				{Name: "proposed_status", Value: "paquete_final_local_verificable"},
+				{Name: "done_refs", Values: []string{"artifact-001"}},
+			},
+			EvidenceRefs: []string{"evidence-job-001"},
+		})
+	if err != nil {
+		t.Fatalf("ApplyOPESCausalTopicRegistryUpdateV0: %v", err)
+	}
+	if result.Status != orquestaopestopicregistry.TopicRegistryUpdateStatusAppliedV0 ||
+		len(runner.invocations) != 1 ||
+		runner.invocations[0].ToolPath != "/tmp/registro_trabajo_temas.py" ||
+		runner.invocations[0].Args[0] != "release" ||
+		!serverTopicRegistryArgsContainForTestV0(runner.invocations[0].Args, "--force") {
+		t.Fatalf("result=%+v invocations=%+v", result, runner.invocations)
+	}
+}
+
+type fakeServerTopicRegistryRunnerV0 struct {
+	invocations []orquestaopestopicregistry.TopicRegistryCommandInvocationV0
+}
+
+func (runner *fakeServerTopicRegistryRunnerV0) RunTopicRegistryCommandV0(
+	_ context.Context,
+	invocation orquestaopestopicregistry.TopicRegistryCommandInvocationV0,
+) (orquestaopestopicregistry.TopicRegistryCommandResultV0, error) {
+	runner.invocations = append(runner.invocations, invocation)
+	return orquestaopestopicregistry.TopicRegistryCommandResultV0{}, nil
+}
+
+func serverTopicRegistryArgsContainForTestV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
 			return true
 		}
 	}

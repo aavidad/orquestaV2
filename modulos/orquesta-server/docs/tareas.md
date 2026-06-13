@@ -334,6 +334,14 @@ Implementado:
   aceptadas con `course_id` y `topic_id`;
 - el propio artefacto `topic_registry_update` no vuelve a disparar otro job de
   registro;
+- nuevo módulo `orquesta-opes-topic-registry` para construir y ejecutar
+  `update`/`release` contra la herramienta oficial `registro_trabajo_temas.py`
+  mediante runner inyectado;
+- `cmd/orquesta-server` cablea el conector con opt-in por
+  `ORQUESTA_OPES_TOPIC_REGISTRY_ENABLED` o
+  `ORQUESTA_OPES_TOPIC_REGISTRY_TOOL_PATH`;
+- `effective_config` publica presencia redactada del tool path y no filtra la
+  ruta local;
 - idempotencia por fuente, artefacto, receipt y scope del tema.
 
 Validación:
@@ -342,4 +350,9 @@ Validación:
 - `TestOPESFullTemarioJobTypeSequenceV0IncluyeCierreCompletoV0`;
 - `TestProduceOPESCausalJobsV0CreaActualizacionRegistroPorTema`;
 - `TestProduceOPESCausalJobsV0NoRepiteRegistroDesdeRegistro`;
+- `TestTopicRegistryCLIArgsV0UpdateConEvidencias`;
+- `TestApplyTopicRegistryUpdateV0EjecutaRunnerInyectado`;
+- `TestTopicRegistryUpdateRequestFromDomainWorkJobV0`;
+- `TestServerOPESTopicRegistryUpdaterV0AplicaDesdeDomainWork`;
+- `TestOPESTopicRegistryEffectiveConfigRedactaToolPathV0`;
 - `go test -count=1 ./modulos/orquesta-domain-work ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-director`.

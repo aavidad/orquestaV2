@@ -4,6 +4,7 @@ import (
 	"context"
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
+	orquestaopestopicregistry "orquesta/modulos/orquesta-opes-topic-registry"
 )
 
 const (
@@ -19,6 +20,7 @@ const (
 	ErrOPESCausalJobCreatorRequiredV0     = "opes_causal_job_creator_required"
 	ErrOPESCausalArtifactInvalidV0        = "opes_causal_artifact_invalid"
 	ErrOPESCausalJobRejectedV0            = "opes_causal_job_rejected"
+	ErrOPESCausalTopicRegistryFailedV0    = "opes_causal_topic_registry_failed"
 )
 
 type OPESCausalProducerRequestV0 struct {
@@ -29,9 +31,10 @@ type OPESCausalProducerRequestV0 struct {
 }
 
 type OPESCausalProducerPortsV0 struct {
-	ArtifactSource OPESCausalArtifactRecordSourcePortV0
-	JobCreator     orquestadomainwork.DomainWorkJobCreatorPortV0
-	JobRecords     orquestadomainwork.DomainWorkJobRecordSourcePortV0
+	ArtifactSource       OPESCausalArtifactRecordSourcePortV0
+	JobCreator           orquestadomainwork.DomainWorkJobCreatorPortV0
+	JobRecords           orquestadomainwork.DomainWorkJobRecordSourcePortV0
+	TopicRegistryUpdater OPESCausalTopicRegistryUpdaterPortV0
 }
 
 type OPESCausalArtifactRecordSourcePortV0 interface {
@@ -69,12 +72,20 @@ type OPESCausalArtifactRecordV0 struct {
 }
 
 type OPESCausalProducerResultV0 struct {
-	SchemaVersion string                                      `json:"schema_version"`
-	Status        string                                      `json:"status"`
-	ProcessedRefs []string                                    `json:"processed_refs,omitempty"`
-	SkippedRefs   []string                                    `json:"skipped_refs,omitempty"`
-	RequestedJobs []orquestadomainwork.DomainWorkJobRequestV0 `json:"requested_jobs,omitempty"`
-	CreatedJobs   []orquestadomainwork.DomainWorkJobV0        `json:"created_jobs,omitempty"`
-	EvidenceRefs  []string                                    `json:"evidence_refs,omitempty"`
-	Issues        []orquestadomainwork.DomainWorkIssueV0      `json:"issues,omitempty"`
+	SchemaVersion        string                                                  `json:"schema_version"`
+	Status               string                                                  `json:"status"`
+	ProcessedRefs        []string                                                `json:"processed_refs,omitempty"`
+	SkippedRefs          []string                                                `json:"skipped_refs,omitempty"`
+	RequestedJobs        []orquestadomainwork.DomainWorkJobRequestV0             `json:"requested_jobs,omitempty"`
+	CreatedJobs          []orquestadomainwork.DomainWorkJobV0                    `json:"created_jobs,omitempty"`
+	TopicRegistryUpdates []orquestaopestopicregistry.TopicRegistryUpdateResultV0 `json:"topic_registry_updates,omitempty"`
+	EvidenceRefs         []string                                                `json:"evidence_refs,omitempty"`
+	Issues               []orquestadomainwork.DomainWorkIssueV0                  `json:"issues,omitempty"`
+}
+
+type OPESCausalTopicRegistryUpdaterPortV0 interface {
+	ApplyOPESCausalTopicRegistryUpdateV0(
+		context.Context,
+		orquestadomainwork.DomainWorkJobRequestV0,
+	) (orquestaopestopicregistry.TopicRegistryUpdateResultV0, error)
 }

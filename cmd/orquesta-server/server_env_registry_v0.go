@@ -173,6 +173,10 @@ const (
 	envOPESRegistryFinalPkgQueueRefV0       = "ORQUESTA_OPES_REGISTRY_FINALPKG_QUEUE_REF"
 	envOPESRegistryFinalPkgReconcileV0      = "ORQUESTA_OPES_REGISTRY_FINALPKG_RECONCILE_ENABLED"
 	envOPESRegistryFinalPkgReconcileLimitV0 = "ORQUESTA_OPES_REGISTRY_FINALPKG_RECONCILE_LIMIT"
+	envOPESTopicRegistryEnabledV0           = "ORQUESTA_OPES_TOPIC_REGISTRY_ENABLED"
+	envOPESTopicRegistryToolPathV0          = "ORQUESTA_OPES_TOPIC_REGISTRY_TOOL_PATH"
+	envOPESTopicRegistryAgentIDV0           = "ORQUESTA_OPES_TOPIC_REGISTRY_AGENT_ID"
+	envOPESTopicRegistryForceV0             = "ORQUESTA_OPES_TOPIC_REGISTRY_FORCE"
 	envDomainWorkHTTPBaseURLV0              = "ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL"
 	envDomainWorkFileDirV0                  = "ORQUESTA_DOMAIN_WORK_FILE_DIR"
 	envDomainWorkFileEnabledV0              = "ORQUESTA_DOMAIN_WORK_FILE_ENABLED"
@@ -444,6 +448,26 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "opes_registry_finalpkg",
 		Label:       "Limite reconciliacion finalpkg",
 		Description: "Maximo de runs finalpkg completos que el reconciliador intenta cerrar por tick.",
+	},
+	envOPESTopicRegistryEnabledV0: {
+		Scope:       "opes_topic_registry",
+		Label:       "Registro por tema",
+		Description: "Activa el conector causal de registro OPES por course_id y topic_id.",
+	},
+	envOPESTopicRegistryToolPathV0: {
+		Scope:       "opes_topic_registry",
+		Label:       "Herramienta registro",
+		Description: "Ruta de la herramienta oficial registro_trabajo_temas.py; se publica solo como presencia configurada.",
+	},
+	envOPESTopicRegistryAgentIDV0: {
+		Scope:       "opes_topic_registry",
+		Label:       "Agente registro",
+		Description: "Identificador que usa Orquesta al ejecutar update/release del registro por tema.",
+	},
+	envOPESTopicRegistryForceV0: {
+		Scope:       "opes_topic_registry",
+		Label:       "Force registro",
+		Description: "Permite --force en la herramienta oficial tras configuracion explicita del operador.",
 	},
 }
 

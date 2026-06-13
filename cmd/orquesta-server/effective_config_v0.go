@@ -91,6 +91,7 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 	settings = append(settings, hermesOperatorEffectiveConfigSettingsV0()...)
 	settings = append(settings, ollamaModelManagerEffectiveConfigSettingsV0()...)
 	settings = append(settings, opesRegistryFinalPkgEffectiveConfigSettingsV0()...)
+	settings = append(settings, opesTopicRegistryEffectiveConfigSettingsV0()...)
 	settings = append(settings, daemonStartEnvSettingsV0(daemonEnvPolicy)...)
 	return orquestaserver.NormalizeServerEffectiveConfigV0(orquestaserver.ServerEffectiveConfigV0{
 		SchemaVersion: orquestaserver.ServerEffectiveConfigSchemaVersionV0,

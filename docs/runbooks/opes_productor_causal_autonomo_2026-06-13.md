@@ -62,6 +62,13 @@ comando exacto necesario, no cerrar el tema como listo.
 
 El propio artefacto `topic_registry_update` queda excluido para evitar bucles.
 
+El conector ejecutable vive en `modulos/orquesta-opes-topic-registry` y no edita
+JSON bruto: construye llamadas `update` o `release` contra la herramienta
+oficial `registro_trabajo_temas.py`. En servidor se activa solo con
+`ORQUESTA_OPES_TOPIC_REGISTRY_ENABLED=1` o configurando
+`ORQUESTA_OPES_TOPIC_REGISTRY_TOOL_PATH`; la ruta se redacta en
+`effective_config`.
+
 ## Pruebas
 
 Comandos usados en la implementación:

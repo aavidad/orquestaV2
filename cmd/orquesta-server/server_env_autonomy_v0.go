@@ -46,6 +46,8 @@ func serverOPESAutomationContextFromEnvV0() bool {
 		envOPESBridgeJobRefV0,
 		envOPESBridgeJobTypeSequenceV0,
 		envOPESRegistryFinalPkgEnabledV0,
+		envOPESTopicRegistryEnabledV0,
+		envOPESTopicRegistryToolPathV0,
 	} {
 		if strings.TrimSpace(os.Getenv(key)) != "" {
 			return true

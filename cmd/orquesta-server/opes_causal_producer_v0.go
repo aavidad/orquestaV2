@@ -8,12 +8,14 @@ import (
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaopesdirector "orquesta/modulos/orquesta-opes-director"
+	orquestaopestopicregistry "orquesta/modulos/orquesta-opes-topic-registry"
 )
 
 type serverOPESCausalProducerV0 struct {
-	artifacts  orquestaopesdirector.OPESCausalArtifactRecordSourcePortV0
-	jobCreator orquestadomainwork.DomainWorkJobCreatorPortV0
-	jobRecords orquestadomainwork.DomainWorkJobRecordSourcePortV0
+	artifacts            orquestaopesdirector.OPESCausalArtifactRecordSourcePortV0
+	jobCreator           orquestadomainwork.DomainWorkJobCreatorPortV0
+	jobRecords           orquestadomainwork.DomainWorkJobRecordSourcePortV0
+	topicRegistryUpdater orquestaopesdirector.OPESCausalTopicRegistryUpdaterPortV0
 }
 
 func newServerOPESCausalProducerV0(
@@ -27,9 +29,10 @@ func newServerOPESCausalProducerV0(
 		return nil
 	}
 	return &serverOPESCausalProducerV0{
-		artifacts:  serverOPESCausalArtifactSourceV0{reader: reader},
-		jobCreator: serverDomainWorkMCPJobCreatorV0{executor: stack.DomainWork},
-		jobRecords: serverDomainWorkJobRecordSourceV0(stack.DomainWork),
+		artifacts:            serverOPESCausalArtifactSourceV0{reader: reader},
+		jobCreator:           serverDomainWorkMCPJobCreatorV0{executor: stack.DomainWork},
+		jobRecords:           serverDomainWorkJobRecordSourceV0(stack.DomainWork),
+		topicRegistryUpdater: serverOPESTopicRegistryUpdaterFromEnvV0(),
 	}
 }
 
@@ -47,11 +50,41 @@ func (producer *serverOPESCausalProducerV0) ProduceV0(
 		ctx,
 		command,
 		orquestaopesdirector.OPESCausalProducerPortsV0{
-			ArtifactSource: producer.artifacts,
-			JobCreator:     producer.jobCreator,
-			JobRecords:     producer.jobRecords,
+			ArtifactSource:       producer.artifacts,
+			JobCreator:           producer.jobCreator,
+			JobRecords:           producer.jobRecords,
+			TopicRegistryUpdater: producer.topicRegistryUpdater,
 		},
 	)
+}
+
+type serverOPESTopicRegistryUpdaterV0 struct {
+	config opesTopicRegistryConfigV0
+	runner orquestaopestopicregistry.TopicRegistryCommandRunnerPortV0
+}
+
+func serverOPESTopicRegistryUpdaterFromEnvV0() orquestaopesdirector.OPESCausalTopicRegistryUpdaterPortV0 {
+	config := opesTopicRegistryConfigFromEnvV0()
+	if !config.Enabled {
+		return nil
+	}
+	return serverOPESTopicRegistryUpdaterV0{
+		config: config,
+		runner: orquestaopestopicregistry.ExecTopicRegistryCommandRunnerV0{},
+	}
+}
+
+func (updater serverOPESTopicRegistryUpdaterV0) ApplyOPESCausalTopicRegistryUpdateV0(
+	ctx context.Context,
+	request orquestadomainwork.DomainWorkJobRequestV0,
+) (orquestaopestopicregistry.TopicRegistryUpdateResultV0, error) {
+	topicRequest := orquestaopestopicregistry.TopicRegistryUpdateRequestFromDomainWorkJobV0(
+		request,
+		updater.config.ToolPath,
+		updater.config.AgentID,
+	)
+	topicRequest.Force = updater.config.Force
+	return orquestaopestopicregistry.ApplyTopicRegistryUpdateV0(ctx, topicRequest, updater.runner)
 }
 
 type serverOPESCausalArtifactSourceV0 struct {
