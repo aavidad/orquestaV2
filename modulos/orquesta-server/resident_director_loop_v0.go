@@ -18,6 +18,8 @@ func (runtime *RuntimeV0) runResidentDirectorLoopV0(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
+		case <-runtime.residentDirectorWakeups:
+			runtime.runResidentDirectorTickAsyncV0(ctx)
 		case <-ticker.C:
 			runtime.runResidentDirectorTickAsyncV0(ctx)
 		}

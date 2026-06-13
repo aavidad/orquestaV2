@@ -15,8 +15,9 @@ import (
 )
 
 type serverSupervisorWakeupRelayV0 struct {
-	mu      sync.RWMutex
-	request func(string) bool
+	mu                      sync.RWMutex
+	request                 func(string) bool
+	requestResidentDirector func(string) bool
 }
 
 func (relay *serverSupervisorWakeupRelayV0) bindRuntimeV0(runtime *orquestaserver.RuntimeV0) {
@@ -27,9 +28,11 @@ func (relay *serverSupervisorWakeupRelayV0) bindRuntimeV0(runtime *orquestaserve
 	defer relay.mu.Unlock()
 	if runtime == nil {
 		relay.request = nil
+		relay.requestResidentDirector = nil
 		return
 	}
 	relay.request = runtime.RequestSupervisorWakeupV0
+	relay.requestResidentDirector = runtime.RequestResidentDirectorWakeupV0
 }
 
 func (relay *serverSupervisorWakeupRelayV0) requestV0(cause string) bool {
@@ -38,6 +41,19 @@ func (relay *serverSupervisorWakeupRelayV0) requestV0(cause string) bool {
 	}
 	relay.mu.RLock()
 	request := relay.request
+	relay.mu.RUnlock()
+	if request == nil {
+		return false
+	}
+	return request(cause)
+}
+
+func (relay *serverSupervisorWakeupRelayV0) requestResidentDirectorV0(cause string) bool {
+	if relay == nil {
+		return false
+	}
+	relay.mu.RLock()
+	request := relay.requestResidentDirector
 	relay.mu.RUnlock()
 	if request == nil {
 		return false
@@ -65,6 +81,7 @@ func (store serverWakeupRunStoreV0) SaveRunV0(
 		return err
 	}
 	store.wakeup.requestV0("run_store_saved")
+	store.wakeup.requestResidentDirectorV0("run_store_saved")
 	return nil
 }
 

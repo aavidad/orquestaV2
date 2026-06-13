@@ -16,9 +16,14 @@ import (
 func TestServerSupervisorWakeupDecoratorsV0DisparanSoloTrasMutacionesEjecutables(t *testing.T) {
 	ctx := context.Background()
 	var causes []string
+	var residentCauses []string
 	relay := &serverSupervisorWakeupRelayV0{
 		request: func(cause string) bool {
 			causes = append(causes, cause)
+			return true
+		},
+		requestResidentDirector: func(cause string) bool {
+			residentCauses = append(residentCauses, cause)
 			return true
 		},
 	}
@@ -70,6 +75,9 @@ func TestServerSupervisorWakeupDecoratorsV0DisparanSoloTrasMutacionesEjecutables
 	want := []string{"run_store_saved", "run_queue_ready", "run_control_resume", "run_control_complete"}
 	if !stringSlicesEqualV0(causes, want) {
 		t.Fatalf("causes=%v want=%v", causes, want)
+	}
+	if !stringSlicesEqualV0(residentCauses, []string{"run_store_saved"}) {
+		t.Fatalf("residentCauses=%v", residentCauses)
 	}
 }
 

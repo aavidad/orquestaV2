@@ -30,6 +30,7 @@ type RuntimeV0 struct {
 	supervisorWakeups           chan SupervisorWakeupV0
 	residentDirectorTickActive  int32
 	residentDirectorTickPending int32
+	residentDirectorWakeups     chan ResidentDirectorWakeupV0
 	shutdownInProgress          int32
 	stateStore                  StateStorePortV0
 	auditSink                   AuditSinkPortV0
@@ -79,7 +80,11 @@ func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
 		clock:             deps.Clock,
 		tracker:           tracker,
 		supervisorWakeups: make(chan SupervisorWakeupV0, 1),
-		handoffRequested:  make(chan struct{}),
+		residentDirectorWakeups: make(
+			chan ResidentDirectorWakeupV0,
+			1,
+		),
+		handoffRequested: make(chan struct{}),
 	}, nil
 }
 
