@@ -27,9 +27,10 @@
   bloquear nuevos pulsos.
 - `modulos/orquesta-server` prueba que el Director residente opt-in ejecuta
   ticks asincronos por puerto, no arranca sin `ResidentDirectorEnabled`,
-  coalescea un tick pendiente, persiste OK/error, recupera panic como error
-  durable, aparece en status/operational status y cuenta como causa operativa
-  para el self-watchdog.
+  despierta por wakeup no bloqueante aunque el ticker este lejos, coalescea un
+  tick pendiente, persiste OK/error, recupera panic como error durable, aparece
+  en status/operational status y cuenta como causa operativa para el
+  self-watchdog.
 - `cmd/orquesta-server` prueba que `ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED`
   y `ORQUESTA_SERVER_RESIDENT_DIRECTOR_MAX_ACTIONS` se publican en
   `effective_config`, y que el adaptador del Director residente solo se inyecta

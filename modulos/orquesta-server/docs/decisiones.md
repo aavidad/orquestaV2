@@ -123,9 +123,10 @@ Por eso el contrato es `ResidentDirectorPortV0` y se activa solo con
 `ConfigV0.ResidentDirectorEnabled=true`.
 
 El pulso usa el mismo patron operativo que el supervisor: tick inicial, ticker,
-guarda atomica de anti-solape, coalescing de un pulso pendiente, panic convertido
-en error durable y estado publico `resident_director_*`. El self-watchdog trata
-actividad y progreso del Director residente como causa operativa observable.
+wakeup no bloqueante por progreso durable, guarda atomica de anti-solape,
+coalescing de un pulso pendiente, panic convertido en error durable y estado
+publico `resident_director_*`. El self-watchdog trata actividad y progreso del
+Director residente como causa operativa observable.
 
 Composicion cerrada: `cmd/orquesta-server` inyecta un adaptador real opt-in que
 usa `RunResidentDirectorBriefingLoopV0` con fuente de briefing reentrable desde

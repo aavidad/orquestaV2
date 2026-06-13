@@ -42,6 +42,11 @@ Configuracion externa relacionada:
   que el Director residente puede ejecutar por tick.
 - Estas dos variables son configuracion de arranque del servidor residente; un
   cambio en proceso vivo requiere reiniciar esa composicion.
+- `RequestResidentDirectorWakeupV0(cause)`: pulso no bloqueante para despertar
+  el Director residente opt-in antes del siguiente ticker cuando la composicion
+  ha persistido progreso durable relevante. Si el Director residente no esta
+  inyectado, no esta habilitado, el runtime esta congelado por shutdown o el
+  canal ya tiene un pulso pendiente, devuelve `false` sin bloquear.
 - `ORQUESTA_SERVER_SUPERVISOR_MAX_TICKS`: numero maximo de ticks internos por
   pulso del supervisor residente. Por defecto se conserva acotado a `1`.
 - `ORQUESTA_SERVER_ALLOW_REPEATED_RUNS=true`: permite que un mismo pulso del
@@ -127,8 +132,9 @@ Invariantes:
   preparacion de automejora corre fuera del tick principal y no debe retener el
   bucle global.
 - el Director residente ejecuta pulsos asincronos opt-in por
-  `ResidentDirectorPortV0`: no solapa ticks, coalescea un unico pulso pendiente,
-  recupera `panic` como error durable y publica progreso/errores en
+  `ResidentDirectorPortV0`: arranca por tick inicial, ticker o wakeup residente
+  no bloqueante, no solapa ticks, coalescea un unico pulso pendiente, recupera
+  `panic` como error durable y publica progreso/errores en
   `resident_director_*`. El self-watchdog debe tratar
   `resident_director_tick_active` y sus contadores como causa operativa, no como
   rail de contenido.
