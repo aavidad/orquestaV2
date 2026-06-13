@@ -83,6 +83,23 @@ func TestRunControlWebEndpointV0RechazaMetodoNoMutador(t *testing.T) {
 	}
 }
 
+func TestRunControlWebEndpointV0GETHTMLParaNavegador(t *testing.T) {
+	endpoint := NewRunControlWebEndpointV0(&recordingRunControlWebClientV0{})
+	req := httptest.NewRequest(http.MethodGet, WebRunControlPageEndpointV0, nil)
+	req.Header.Set("Accept", "text/html")
+	rec := httptest.NewRecorder()
+
+	endpoint.ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK ||
+		rec.Header().Get("Content-Type") != WebHTMLContentTypeHeaderV0 ||
+		!strings.Contains(body, "run-control-root") ||
+		!strings.Contains(body, "postJSON('/run-control'") {
+		t.Fatalf("html control invalido status=%d headers=%v body=%s", rec.Code, rec.Header(), body)
+	}
+}
+
 type recordingRunControlWebClientV0 struct {
 	Command WebRunControlCommandV0
 }

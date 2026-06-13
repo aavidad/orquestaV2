@@ -22,7 +22,9 @@ Contenedor de handlers `net/http` ya construidos por otro borde de composicion.
 
 Campos:
 
+- `Home`;
 - `NuevaApp`;
+- `AutoprogrammingPage`;
 - `AppChangePage`;
 - `DirectorStatsPage`;
 - `RunControlPage`;
@@ -47,7 +49,9 @@ Campos:
 
 ## Rutas estables
 
+- `RouteHomeV0`: `/`;
 - `RouteNuevaAppV0`: `/nueva-app`;
+- `RouteAutoprogrammingPageV0`: `/autoprogramming`;
 - `RouteAppChangePageV0`: `/app-change`;
 - `RouteDirectorStatsPageV0`: `/director-stats`;
 - `RouteRunControlPageV0`: `/run-control`;

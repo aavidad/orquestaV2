@@ -38,6 +38,10 @@ func (endpoint RunQueueWebEndpointV0) ServeHTTP(w http.ResponseWriter, r *http.R
 	}
 	switch r.Method {
 	case http.MethodGet:
+		if webRequestWantsHTMLV0(r) {
+			writeWebHTMLStringResponseV0(w, http.StatusOK, runQueueHTMLV0(), "es")
+			return
+		}
 		endpoint.handleRunQueueV0(w, r, runQueueQueryFromURLV0(r))
 	case http.MethodPost:
 		query, err := decodeRunQueueQueryV0(r)

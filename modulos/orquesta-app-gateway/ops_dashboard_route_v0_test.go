@@ -26,6 +26,54 @@ func TestAppGatewayOpsDashboardRouteV0(t *testing.T) {
 	}
 }
 
+func TestAppGatewayHomeRouteV0(t *testing.T) {
+	handler := NewHTTPHandlerV0(ConfigV0{Timeout: time.Second})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, required := range []string{
+		"Orquesta",
+		`href="/ops"`,
+		`href="/nueva-app"`,
+		`href="/autoprogramming"`,
+		`href="/app-change"`,
+		`href="/run-control"`,
+	} {
+		if !strings.Contains(body, required) {
+			t.Fatalf("home sin %q: %s", required, body)
+		}
+	}
+}
+
+func TestAppGatewayAutoprogrammingPageRouteV0(t *testing.T) {
+	handler := NewHTTPHandlerV0(ConfigV0{Timeout: time.Second})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/autoprogramming", nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, required := range []string{
+		"Autoprogramacion",
+		"/api/v0/autoprogramming/prepare-run",
+		"/api/v0/autoprogramming/status",
+		"/api/v0/runs/supervise",
+	} {
+		if !strings.Contains(body, required) {
+			t.Fatalf("autoprogramming sin %q: %s", required, body)
+		}
+	}
+}
+
 func TestAppGatewayOpsAgentRuntimeDetailRouteInyectadaV0(t *testing.T) {
 	handler := NewHTTPHandlerV0(ConfigV0{
 		OpsAgentRuntimeDetail: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -221,6 +221,56 @@ Estado: completada.
 ```
 
 ```text
+ID: WEB-034
+Objetivo: Convertir `/director-stats`, `/run-queue` y `/run-control` en rutas
+humanamente operables desde navegador sin romper su contrato JSON.
+Write-set: director_stats_endpoint_v0.go, run_queue_endpoint_v0.go,
+run_control_endpoint_v0.go, operator_pages_html_v0.go, web_accept_v0.go, tests
+y docs locales.
+Simbolo foco: webRequestWantsHTMLV0, operatorPageHTMLV0
+Contrato: Si `Accept` pide `text/html`, la ruta devuelve shell HTML; si el
+cliente no pide HTML o pide JSON, se conserva el JSON existente. La shell usa
+los mismos endpoints con `Accept: application/json`.
+Validacion: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway`.
+Bloqueos: Son shells operativas, no reemplazan `/ops` como cockpit principal ni
+crean contratos nuevos.
+Estado: completada.
+```
+
+```text
+ID: WEB-033
+Objetivo: Crear `/autoprogramming` como pantalla directa para preparar runs,
+consultar estado y pedir supervision acotada desde la web.
+Write-set: autoprogramming_endpoint_v0.go, autoprogramming_html_v0.go,
+autoprogramming_endpoint_v0_test.go, wiring gateway y docs locales.
+Simbolo foco: AutoprogrammingWebEndpointV0
+Contrato: Consume solo `/api/v0/autoprogramming/prepare-run`,
+`/api/v0/autoprogramming/status` y `/api/v0/runs/supervise` por navegador
+same-origin; conserva refs opacas y no lee stores/runtime/proveedor.
+Validacion: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway`.
+Bloqueos: La planificacion real sigue en la composicion/director; la pantalla
+solo construye payloads compactos y muestra respuestas publicas.
+Estado: completada.
+```
+
+```text
+ID: WEB-032
+Objetivo: Montar `/` como consola inicial de operador para que la web sea
+entrada unica a Orquesta sin conocer rutas API/CLI.
+Write-set: home_endpoint_v0.go, home_endpoint_v0_test.go,
+ops_dashboard_html_chunk_0_v0.go, README.md, docs locales y wiring gateway.
+Simbolo foco: HomeWebEndpointV0
+Contrato: La home solo enlaza capacidades web/API ya publicadas; no lee stores,
+runtime, proveedor, filesystem ni decide negocio. El handler devuelve home solo
+para path exacto `/`.
+Validacion: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway`.
+Bloqueos: No sustituye el futuro wizard conversacional ni vistas de dominio
+OPES; reduce friccion operativa y evita que el operador tenga que recordar
+rutas.
+Estado: completada.
+```
+
+```text
 ID: WEB-030
 Objetivo: Alinear `/ops` con la regla vigente de que `stalled`/ticks sin
 progreso son telemetria, no atencion dura ni motivo de replan automatico.

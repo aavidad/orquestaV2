@@ -34,8 +34,8 @@ const opsDashboardHTMLChunk0V0 = `<!doctype html>
     .dot.ok { background: var(--good); }
     .dot.warn { background: var(--warn); }
     .dot.bad { background: var(--bad); }
-    button { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
-    button:hover { border-color: var(--info); }
+    button, .navlink { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 6px; padding: 6px 10px; cursor: pointer; text-decoration: none; }
+    button:hover, .navlink:hover { border-color: var(--info); }
     button.small { min-width: 32px; min-height: 28px; padding: 4px 7px; }
     .grid { display: grid; gap: 12px; }
     .kpis { grid-template-columns: repeat(6, minmax(150px, 1fr)); margin-bottom: 12px; }
@@ -151,6 +151,10 @@ const opsDashboardHTMLChunk0V0 = `<!doctype html>
         <span class="pill"><span id="live-dot" class="dot warn"></span><span id="live-text">conectando</span></span>
         <span class="pill">refresco <strong id="refresh-ms">1000 ms</strong></span>
         <span class="pill">última lectura <strong id="last-refresh">-</strong></span>
+        <a class="navlink" href="/">Inicio</a>
+        <a class="navlink" href="/nueva-app">Nueva app</a>
+        <a class="navlink" href="/autoprogramming">Autoprogramar</a>
+        <a class="navlink" href="/app-change">Cambio</a>
         <button id="refresh-now" type="button">Actualizar</button>
       </div>
     </header>

@@ -4,6 +4,8 @@ Responsabilidad: interfaz primaria para pedir apps, revisar progreso y operar ac
 
 Incluye:
 
+- consola inicial `/`;
+- pantalla de autoprogramacion `/autoprogramming`;
 - nueva app;
 - panel de agentes;
 - panel de fases;
@@ -27,3 +29,17 @@ de cache/frescura de `/ops` pertenece a T211.
 El formulario `/app-change` puede enviar refs opacas de `external_work` para
 que Orquesta coordine trabajos de una app externa sin importar su nucleo ni
 acoplarse a sus bases de datos, runtime, proveedor o contratos internos.
+
+La consola inicial `/` es un indice operativo fino: no lee estado ni decide
+negocio; enlaza a `/ops`, `/nueva-app`, `/autoprogramming`, `/app-change`,
+`/director-stats`, `/run-queue` y `/run-control` para que el operador pueda
+usar Orquesta desde la web sin recordar rutas API.
+
+La pantalla `/autoprogramming` consume los endpoints publicos
+`/api/v0/autoprogramming/prepare-run`, `/api/v0/autoprogramming/status` y
+`/api/v0/runs/supervise` desde navegador same-origin. La web prepara payloads
+compactos con refs opacas y no interpreta worktrees, ramas, runtime ni stores.
+
+`/director-stats`, `/run-queue` y `/run-control` conservan respuesta JSON para
+clientes finos, pero cuando el navegador pide `text/html` devuelven una shell
+HTML operable que usa esos mismos contratos publicos por `fetch`.

@@ -42,6 +42,10 @@ func (endpoint DirectorStatsWebEndpointV0) ServeHTTP(w http.ResponseWriter, r *h
 	}
 	switch r.Method {
 	case http.MethodGet:
+		if webRequestWantsHTMLV0(r) {
+			writeWebHTMLStringResponseV0(w, http.StatusOK, directorStatsHTMLV0(), "es")
+			return
+		}
 		endpoint.handleDirectorStats(w, r, directorStatsQueryFromURLV0(r))
 	case http.MethodPost:
 		query, err := decodeDirectorStatsQueryV0(r)

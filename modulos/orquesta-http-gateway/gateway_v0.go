@@ -3,8 +3,10 @@ package orquestahttpgateway
 import "net/http"
 
 const (
+	RouteHomeV0                           = "/"
 	RouteNuevaAppV0                       = "/nueva-app"
 	RouteOpsDashboardV0                   = "/ops"
+	RouteAutoprogrammingPageV0            = "/autoprogramming"
 	RouteAppChangePageV0                  = "/app-change"
 	RouteDirectorStatsPageV0              = "/director-stats"
 	RouteRunControlPageV0                 = "/run-control"
@@ -34,8 +36,10 @@ const (
 )
 
 type RouteHandlersV0 struct {
+	Home                           http.Handler
 	NuevaApp                       http.Handler
 	OpsDashboard                   http.Handler
+	AutoprogrammingPage            http.Handler
 	AppChangePage                  http.Handler
 	DirectorStatsPage              http.Handler
 	RunControlPage                 http.Handler
@@ -96,8 +100,10 @@ type gatewayRouteRegistrationV0 struct {
 
 func gatewayRouteRegistrationsV0(handlers RouteHandlersV0) []gatewayRouteRegistrationV0 {
 	return []gatewayRouteRegistrationV0{
+		{ref: RouteRefHomeV0, route: RouteHomeV0, handler: handlers.Home},
 		{ref: RouteRefNuevaAppV0, route: RouteNuevaAppV0, handler: handlers.NuevaApp},
 		{ref: RouteRefOpsDashboardV0, route: RouteOpsDashboardV0, handler: handlers.OpsDashboard},
+		{ref: RouteRefAutoprogrammingPageV0, route: RouteAutoprogrammingPageV0, handler: handlers.AutoprogrammingPage},
 		{ref: RouteRefAppChangePageV0, route: RouteAppChangePageV0, handler: handlers.AppChangePage},
 		{ref: RouteRefDirectorStatsPageV0, route: RouteDirectorStatsPageV0, handler: handlers.DirectorStatsPage},
 		{ref: RouteRefRunControlPageV0, route: RouteRunControlPageV0, handler: handlers.RunControlPage},

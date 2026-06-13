@@ -14,8 +14,10 @@ const (
 	RouteSecurityControlPlaneMutationV0 = "control_plane_mutation"
 	RouteSecurityMCPJSONRPCV0           = "mcp_jsonrpc"
 
+	RouteRefHomeV0                           = "route-ref-home-v0"
 	RouteRefNuevaAppV0                       = "route-ref-nueva-app-v0"
 	RouteRefOpsDashboardV0                   = "route-ref-ops-dashboard-v0"
+	RouteRefAutoprogrammingPageV0            = "route-ref-autoprogramming-page-v0"
 	RouteRefAppChangePageV0                  = "route-ref-app-change-page-v0"
 	RouteRefDirectorStatsPageV0              = "route-ref-director-stats-page-v0"
 	RouteRefRunControlPageV0                 = "route-ref-run-control-page-v0"

@@ -54,6 +54,27 @@ func TestDirectorStatsWebEndpointV0GETConsultaCliente(t *testing.T) {
 	}
 }
 
+func TestDirectorStatsWebEndpointV0GETHTMLParaNavegador(t *testing.T) {
+	client := &fakeDirectorStatsClientV0{VM: NewWebDirectorStatsViewModelV0(webDirectorStatsFixtureV0())}
+	endpoint := NewDirectorStatsWebEndpointV0(client)
+	req := httptest.NewRequest(http.MethodGet, "/director-stats", nil)
+	req.Header.Set("Accept", "text/html")
+	rec := httptest.NewRecorder()
+
+	endpoint.ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK ||
+		rec.Header().Get("Content-Type") != WebHTMLContentTypeHeaderV0 ||
+		!strings.Contains(body, "director-stats-root") ||
+		!strings.Contains(body, "getJSON('/director-stats?include_agent_progress=true") {
+		t.Fatalf("html stats invalido status=%d headers=%v body=%s", rec.Code, rec.Header(), body)
+	}
+	if client.Query.RunRef != "" {
+		t.Fatalf("cliente no debe consultarse para shell HTML: %+v", client.Query)
+	}
+}
+
 func TestDirectorStatsWebEndpointV0GETPreparaRefreshSemitiempoReal(t *testing.T) {
 	client := &fakeDirectorStatsClientV0{VM: NewWebDirectorStatsViewModelV0(webDirectorStatsFixtureV0())}
 	endpoint := NewDirectorStatsWebEndpointV0(client)

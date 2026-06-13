@@ -50,6 +50,23 @@ func TestRunQueueWebEndpointV0GETConsultaRanking(t *testing.T) {
 	}
 }
 
+func TestRunQueueWebEndpointV0GETHTMLParaNavegador(t *testing.T) {
+	endpoint := NewRunQueueWebEndpointV0(&fakeRunQueueClientV0{})
+	req := httptest.NewRequest(http.MethodGet, "/run-queue", nil)
+	req.Header.Set("Accept", "text/html")
+	rec := httptest.NewRecorder()
+
+	endpoint.ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK ||
+		rec.Header().Get("Content-Type") != WebHTMLContentTypeHeaderV0 ||
+		!strings.Contains(body, "run-queue-root") ||
+		!strings.Contains(body, "getJSON('/run-queue?action=rank") {
+		t.Fatalf("html cola invalido status=%d headers=%v body=%s", rec.Code, rec.Header(), body)
+	}
+}
+
 func TestRunQueueWebEndpointV0POSTSetPriority(t *testing.T) {
 	client := &fakeRunQueueClientV0{
 		result: WebRunQueueViewModelV0{

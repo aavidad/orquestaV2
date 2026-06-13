@@ -24,6 +24,10 @@ func (endpoint RunControlWebEndpointV0) ServeHTTP(w http.ResponseWriter, r *http
 	if handleWebPublicHTTPOptionsV0(w, r, http.MethodPost) {
 		return
 	}
+	if r.Method == http.MethodGet && webRequestWantsHTMLV0(r) {
+		writeWebHTMLStringResponseV0(w, http.StatusOK, runControlHTMLV0(), "es")
+		return
+	}
 	if r.Method != http.MethodPost {
 		setWebPublicHTTPAllowV0(w, http.MethodPost)
 		writeRunControlPageV0(w, http.StatusMethodNotAllowed, endpoint.pageV0(WebRunControlCommandV0{},
