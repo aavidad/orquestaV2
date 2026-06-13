@@ -66,8 +66,9 @@ El conector ejecutable vive en `modulos/orquesta-opes-topic-registry` y no edita
 JSON bruto: construye llamadas `update` o `release` contra la herramienta
 oficial `registro_trabajo_temas.py`. En servidor se activa solo con
 `ORQUESTA_OPES_TOPIC_REGISTRY_ENABLED=1` o configurando
-`ORQUESTA_OPES_TOPIC_REGISTRY_TOOL_PATH`; la ruta se redacta en
-`effective_config`.
+`ORQUESTA_OPES_TOPIC_REGISTRY_TOOL_PATH`. Si `ORQUESTA_OPES_PROJECT_WORKDIR`
+apunta a OPES y contiene la herramienta oficial, el servidor descubre esa ruta
+sin otro env adicional. La ruta se redacta en `effective_config`.
 
 ## Pruebas
 

@@ -340,6 +340,8 @@ Implementado:
 - `cmd/orquesta-server` cablea el conector con opt-in por
   `ORQUESTA_OPES_TOPIC_REGISTRY_ENABLED` o
   `ORQUESTA_OPES_TOPIC_REGISTRY_TOOL_PATH`;
+- si `ORQUESTA_OPES_PROJECT_WORKDIR` apunta a OPES y contiene la herramienta
+  oficial, el servidor descubre el tool path sin otro env adicional;
 - `effective_config` publica presencia redactada del tool path y no filtra la
   ruta local;
 - idempotencia por fuente, artefacto, receipt y scope del tema.
@@ -355,4 +357,5 @@ Validación:
 - `TestTopicRegistryUpdateRequestFromDomainWorkJobV0`;
 - `TestServerOPESTopicRegistryUpdaterV0AplicaDesdeDomainWork`;
 - `TestOPESTopicRegistryEffectiveConfigRedactaToolPathV0`;
+- `TestOPESTopicRegistryConfigDescubreToolDesdeOPESProjectWorkDirV0`;
 - `go test -count=1 ./modulos/orquesta-domain-work ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-director`.
