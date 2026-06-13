@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 )
 
 func TestFileDomainWorkArtifactSubmissionLedgerV0PersisteYRecupera(t *testing.T) {
@@ -24,8 +26,23 @@ func TestFileDomainWorkArtifactSubmissionLedgerV0PersisteYRecupera(t *testing.T)
 			RunRef:         "run-ref-001",
 			TaskRef:        "task-ref-001",
 			DeliveryRef:    "delivery-ref-001",
-			ReceiptRef:     "receipt-ref-001",
-			EvidenceRefs:   []string{"evidence-ref-001"},
+			CorrelationID:  "corr-ref-001",
+			DomainRef:      "opes",
+			JobRef:         "job-ref-001",
+			ArtifactRef:    "artifact-ref-001",
+			ArtifactType:   orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0,
+			Summary:        "Paquete final pendiente de audio.",
+			PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+				{Name: "estado", Value: "pendiente_continuar"},
+				{Name: "followup_refs", Values: []string{"audio-tema-01"}},
+			},
+			PayloadRefs: []string{"payload-ref-001"},
+			ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{{
+				Kind: "source_job_ref",
+				Ref:  "job-ref-001",
+			}},
+			ReceiptRef:   "receipt-ref-001",
+			EvidenceRefs: []string{"evidence-ref-001"},
 		},
 	); err != nil {
 		t.Fatalf("record: %v", err)
@@ -46,6 +63,14 @@ func TestFileDomainWorkArtifactSubmissionLedgerV0PersisteYRecupera(t *testing.T)
 	)
 	if err != nil || len(records) != 1 || records[0].ReceiptRef != "receipt-ref-001" {
 		t.Fatalf("records=%+v err=%v", records, err)
+	}
+	if records[0].CorrelationID != "corr-ref-001" ||
+		records[0].Summary != "Paquete final pendiente de audio." ||
+		!domainWorkFieldValueForTestV0(records[0].PayloadFields, "estado", "pendiente_continuar") ||
+		!domainWorkFieldValuesForTestV0(records[0].PayloadFields, "followup_refs", []string{"audio-tema-01"}) ||
+		len(records[0].PayloadRefs) != 1 ||
+		len(records[0].ExternalRefs) != 1 {
+		t.Fatalf("record payload no persistido: %+v", records[0])
 	}
 	assertAppStackDurableFilePolicyV0(t, filepath.Dir(path), filepath.Base(path))
 }

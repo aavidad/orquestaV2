@@ -57,20 +57,25 @@ type DomainWorkArtifactSubmissionBuildInputV0 struct {
 }
 
 type DomainWorkArtifactSubmissionRecordV0 struct {
-	IdempotencyKey string   `json:"idempotency_key"`
-	Status         string   `json:"status,omitempty"`
-	RunRef         string   `json:"run_ref,omitempty"`
-	TaskRef        string   `json:"task_ref,omitempty"`
-	DeliveryRef    string   `json:"delivery_ref,omitempty"`
-	DomainRef      string   `json:"domain_ref,omitempty"`
-	JobRef         string   `json:"job_ref,omitempty"`
-	ArtifactRef    string   `json:"artifact_ref,omitempty"`
-	ArtifactType   string   `json:"artifact_type,omitempty"`
-	CompleteJob    bool     `json:"complete_job,omitempty"`
-	ReceiptRef     string   `json:"receipt_ref,omitempty"`
-	EvidenceRefs   []string `json:"evidence_refs,omitempty"`
-	IssueRefs      []string `json:"issue_refs,omitempty"`
-	RecordedAt     string   `json:"recorded_at,omitempty"`
+	IdempotencyKey string                                       `json:"idempotency_key"`
+	Status         string                                       `json:"status,omitempty"`
+	RunRef         string                                       `json:"run_ref,omitempty"`
+	TaskRef        string                                       `json:"task_ref,omitempty"`
+	DeliveryRef    string                                       `json:"delivery_ref,omitempty"`
+	CorrelationID  string                                       `json:"correlation_id,omitempty"`
+	DomainRef      string                                       `json:"domain_ref,omitempty"`
+	JobRef         string                                       `json:"job_ref,omitempty"`
+	ArtifactRef    string                                       `json:"artifact_ref,omitempty"`
+	ArtifactType   string                                       `json:"artifact_type,omitempty"`
+	Summary        string                                       `json:"summary,omitempty"`
+	PayloadFields  []orquestadomainwork.DomainWorkFieldV0       `json:"payload_fields,omitempty"`
+	PayloadRefs    []string                                     `json:"payload_refs,omitempty"`
+	ExternalRefs   []orquestadomainwork.DomainWorkExternalRefV0 `json:"external_refs,omitempty"`
+	CompleteJob    bool                                         `json:"complete_job,omitempty"`
+	ReceiptRef     string                                       `json:"receipt_ref,omitempty"`
+	EvidenceRefs   []string                                     `json:"evidence_refs,omitempty"`
+	IssueRefs      []string                                     `json:"issue_refs,omitempty"`
+	RecordedAt     string                                       `json:"recorded_at,omitempty"`
 }
 
 type DomainWorkArtifactSubmissionRecordFilterV0 struct {
@@ -172,15 +177,54 @@ func normalizeDomainWorkArtifactSubmissionRecordV0(
 	record.RunRef = strings.TrimSpace(record.RunRef)
 	record.TaskRef = strings.TrimSpace(record.TaskRef)
 	record.DeliveryRef = strings.TrimSpace(record.DeliveryRef)
+	record.CorrelationID = strings.TrimSpace(record.CorrelationID)
 	record.DomainRef = strings.TrimSpace(record.DomainRef)
 	record.JobRef = strings.TrimSpace(record.JobRef)
 	record.ArtifactRef = strings.TrimSpace(record.ArtifactRef)
 	record.ArtifactType = strings.TrimSpace(record.ArtifactType)
+	record.Summary = strings.TrimSpace(record.Summary)
+	record.PayloadFields = normalizeDomainWorkArtifactRecordFieldsV0(record.PayloadFields)
+	record.PayloadRefs = compactStringsV0(record.PayloadRefs)
+	record.ExternalRefs = normalizeDomainWorkArtifactRecordExternalRefsV0(record.ExternalRefs)
 	record.ReceiptRef = strings.TrimSpace(record.ReceiptRef)
 	record.EvidenceRefs = compactStringsV0(record.EvidenceRefs)
 	record.IssueRefs = compactStringsV0(record.IssueRefs)
 	record.RecordedAt = strings.TrimSpace(record.RecordedAt)
 	return record
+}
+
+func normalizeDomainWorkArtifactRecordFieldsV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	return orquestadomainwork.NormalizeDomainWorkArtifactSubmissionV0(
+		orquestadomainwork.DomainWorkArtifactSubmissionV0{
+			RequestID:      "record-normalization",
+			CorrelationID:  "record-normalization",
+			IdempotencyKey: "record-normalization",
+			DomainRef:      "record-normalization",
+			JobRef:         "record-normalization",
+			ArtifactRef:    "record-normalization",
+			ArtifactType:   "record-normalization",
+			PayloadFields:  fields,
+		},
+	).PayloadFields
+}
+
+func normalizeDomainWorkArtifactRecordExternalRefsV0(
+	refs []orquestadomainwork.DomainWorkExternalRefV0,
+) []orquestadomainwork.DomainWorkExternalRefV0 {
+	return orquestadomainwork.NormalizeDomainWorkArtifactSubmissionV0(
+		orquestadomainwork.DomainWorkArtifactSubmissionV0{
+			RequestID:      "record-normalization",
+			CorrelationID:  "record-normalization",
+			IdempotencyKey: "record-normalization",
+			DomainRef:      "record-normalization",
+			JobRef:         "record-normalization",
+			ArtifactRef:    "record-normalization",
+			ArtifactType:   "record-normalization",
+			ExternalRefs:   refs,
+		},
+	).ExternalRefs
 }
 
 func normalizeDomainWorkArtifactSubmissionRecordFilterV0(

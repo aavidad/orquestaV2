@@ -22,6 +22,7 @@ func (defaultDomainWorkArtifactSubmissionBuilderV0) BuildDomainWorkArtifactSubmi
 		return orquestadomainwork.DomainWorkArtifactSubmissionV0{}, false, nil
 	}
 	fields := copyDomainWorkFieldsForContextV0(work.InputFields)
+	fields = appendDomainWorkFieldIfMissingV0(fields, "source_work_kind", work.WorkKind)
 	artifactType := domainWorkExpectedArtifactTypeV0(fields, work.WorkKind)
 	intake, err := readDomainWorkDeliveryArtifactV0(input.Descriptor, input.Ack, artifactType)
 	if err != nil {

@@ -252,7 +252,7 @@ Validacion:
 
 ## SRV-TASK-015: productor causal OPES de rework y followups
 
-Estado: pendiente.
+Estado: hecho local 2026-06-13.
 
 Objetivo: crear un adaptador OPES opt-in que convierta artefactos y receipts ya
 aceptados o rechazados en nuevos `DomainWorkJobRequestV0` deduplicados. Debe
@@ -261,9 +261,32 @@ cubrir al menos `document_plan` aceptado, `director_review_matrix` con
 `followup_refs`, y receipts rechazados. No debe vivir en el nucleo puro: debe
 apoyarse en puertos `domain-work`, `orquesta-opes-bridge` y contratos OPES.
 
-Validacion prevista:
+Implementado:
 
-- prueba unitaria con fake `DomainWorkJobCreatorPortV0`;
-- prueba de idempotencia por `source_job + artifact_ref + followup_ref`;
-- prueba de no cierre falso cuando quedan followups;
-- smoke fake `plan_temario -> derivados -> package pendiente -> rework`.
+- `modulos/orquesta-opes-director` como adaptador causal OPES fuera del nucleo;
+- el ledger de entregas conserva `correlation_id`, `summary`, payload,
+  `payload_refs` y `external_refs` para poder reanudar desde artefactos
+  duraderos;
+- el Director residente ejecuta el productor causal OPES antes de su drenaje
+  normal;
+- el ledger de artefactos despierta supervisor y Director residente al guardar
+  una entrega;
+- `document_plan` aceptado expande trabajos derivados y pide rework si no cubre
+  la secuencia completa OPES;
+- paquetes finales con `pendiente_continuar`, `followup_refs`,
+  `pending_followup_refs`, `rework_refs` o `missing_required_refs` crean la
+  siguiente tarea causal;
+- receipts rechazados crean una correccion de la misma fase cuando existe
+  `source_work_kind`;
+- idempotencia por `idempotency_key` y, si el backend expone job records,
+  preconsulta para no relanzar el mismo trabajo.
+
+Validacion:
+
+- `TestProduceOPESCausalJobsV0ExpandeDocumentPlanYEsIdempotente`;
+- `TestProduceOPESCausalJobsV0PaquetePendienteCreaFollowupSinCerrar`;
+- `TestProduceOPESCausalJobsV0RejectedCreaCorreccionMismaFase`;
+- `TestServerOPESCausalProducerV0CreaFollowupDesdeLedgerYNoDuplica`;
+- `TestServerWakeupDomainWorkArtifactSubmissionLedgerV0DisparaAlRegistrar`;
+- `go test -count=1 ./modulos/orquesta-opes-director`;
+- `go test -count=1 ./cmd/orquesta-server -run 'OPESCausal|WakeupDomainWork|ResidentDirector'`.

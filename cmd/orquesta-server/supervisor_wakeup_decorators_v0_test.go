@@ -5,9 +5,11 @@ import (
 	"testing"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
+	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoragentfilesource "orquesta/modulos/orquesta-director-agent-file-source"
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
@@ -222,6 +224,57 @@ func TestServerWakeupCodexReceiptStoreV0DisparaAlRegistrarDescriptorYSidecar(t *
 	}
 	if len(inner.sidecars) != 1 {
 		t.Fatalf("sidecars=%+v", inner.sidecars)
+	}
+}
+
+func TestServerWakeupDomainWorkArtifactSubmissionLedgerV0DisparaAlRegistrar(t *testing.T) {
+	ctx := context.Background()
+	var causes []string
+	var residentCauses []string
+	relay := &serverSupervisorWakeupRelayV0{
+		request: func(cause string) bool {
+			causes = append(causes, cause)
+			return true
+		},
+		requestResidentDirector: func(cause string) bool {
+			residentCauses = append(residentCauses, cause)
+			return true
+		},
+	}
+	ledger := serverWakeupDomainWorkArtifactSubmissionLedgerV0{
+		inner:  orquestaappcodexstack.NewInMemoryDomainWorkArtifactSubmissionLedgerV0(),
+		wakeup: relay,
+	}
+	record := orquestaappcodexstack.DomainWorkArtifactSubmissionRecordV0{
+		IdempotencyKey: "domain-work-artifact-wakeup-001",
+		Status:         orquestaappcodexstack.DomainWorkArtifactSubmissionStatusAcceptedV0,
+		DomainRef:      "opes",
+		JobRef:         "job-ref-wakeup-domain-work-001",
+		ArtifactRef:    "artifact-ref-wakeup-domain-work-001",
+		ArtifactType:   orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0,
+	}
+
+	if err := ledger.RecordDomainWorkArtifactSubmissionV0(ctx, record); err != nil {
+		t.Fatalf("RecordDomainWorkArtifactSubmissionV0: %v", err)
+	}
+	exists, err := ledger.HasDomainWorkArtifactSubmissionV0(ctx, record.IdempotencyKey)
+	if err != nil || !exists {
+		t.Fatalf("HasDomainWorkArtifactSubmissionV0 exists=%v err=%v", exists, err)
+	}
+	records, err := ledger.ListDomainWorkArtifactSubmissionsV0(
+		ctx,
+		orquestaappcodexstack.DomainWorkArtifactSubmissionRecordFilterV0{Status: record.Status},
+	)
+	if err != nil || len(records) != 1 {
+		t.Fatalf("ListDomainWorkArtifactSubmissionsV0 records=%+v err=%v", records, err)
+	}
+
+	want := []string{"domain_work_artifact_recorded"}
+	if !stringSlicesEqualV0(causes, want) {
+		t.Fatalf("causes=%v want=%v", causes, want)
+	}
+	if !stringSlicesEqualV0(residentCauses, want) {
+		t.Fatalf("residentCauses=%v want=%v", residentCauses, want)
 	}
 }
 

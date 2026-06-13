@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
+	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoragentfilesource "orquesta/modulos/orquesta-director-agent-file-source"
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
@@ -309,4 +310,39 @@ func (store serverWakeupCodexReceiptStoreV0) RecordDirectorAgentDecisionFileCons
 	store.wakeup.requestV0("director_decision_sidecar_consumed")
 	store.wakeup.requestResidentDirectorV0("director_decision_sidecar_consumed")
 	return nil
+}
+
+type serverWakeupDomainWorkArtifactSubmissionLedgerV0 struct {
+	inner  orquestaappcodexstack.DomainWorkArtifactSubmissionLedgerPortV0
+	wakeup *serverSupervisorWakeupRelayV0
+}
+
+func (ledger serverWakeupDomainWorkArtifactSubmissionLedgerV0) HasDomainWorkArtifactSubmissionV0(
+	ctx context.Context,
+	idempotencyKey string,
+) (bool, error) {
+	return ledger.inner.HasDomainWorkArtifactSubmissionV0(ctx, idempotencyKey)
+}
+
+func (ledger serverWakeupDomainWorkArtifactSubmissionLedgerV0) RecordDomainWorkArtifactSubmissionV0(
+	ctx context.Context,
+	record orquestaappcodexstack.DomainWorkArtifactSubmissionRecordV0,
+) error {
+	if err := ledger.inner.RecordDomainWorkArtifactSubmissionV0(ctx, record); err != nil {
+		return err
+	}
+	ledger.wakeup.requestV0("domain_work_artifact_recorded")
+	ledger.wakeup.requestResidentDirectorV0("domain_work_artifact_recorded")
+	return nil
+}
+
+func (ledger serverWakeupDomainWorkArtifactSubmissionLedgerV0) ListDomainWorkArtifactSubmissionsV0(
+	ctx context.Context,
+	filter orquestaappcodexstack.DomainWorkArtifactSubmissionRecordFilterV0,
+) ([]orquestaappcodexstack.DomainWorkArtifactSubmissionRecordV0, error) {
+	reader, ok := ledger.inner.(orquestaappcodexstack.DomainWorkArtifactSubmissionRecordReaderPortV0)
+	if !ok || reader == nil {
+		return nil, nil
+	}
+	return reader.ListDomainWorkArtifactSubmissionsV0(ctx, filter)
 }

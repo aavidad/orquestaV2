@@ -150,6 +150,7 @@ func buildStackFromEnvV0(
 	runControl := orquestaruncontrol.RunControlPortV0(runFileStore)
 	receiptStorePort := orquestaappcodexstack.CodexReceiptStorePortV0(receiptStore)
 	appChangeStore := orquestaappchange.AppChangeRecordStorePortV0(runFileStore)
+	domainDeliveryLedger := domainDeliveryLedgerFromEnvV0(serverConfig)
 	if supervisorWakeup != nil {
 		runStore = serverWakeupRunStoreV0{inner: stateStore, wakeup: supervisorWakeup}
 		runQueue = serverWakeupRunQueueV0{inner: runFileStore, wakeup: supervisorWakeup}
@@ -164,6 +165,10 @@ func buildStackFromEnvV0(
 		}
 		outboxLedgerPort = serverWakeupDirectorCycleOutboxLedgerV0{
 			inner:  outboxLedgerPort,
+			wakeup: supervisorWakeup,
+		}
+		domainDeliveryLedger = serverWakeupDomainWorkArtifactSubmissionLedgerV0{
+			inner:  domainDeliveryLedger,
 			wakeup: supervisorWakeup,
 		}
 	}
@@ -222,7 +227,7 @@ func buildStackFromEnvV0(
 		ExternalWorkRunGuard:     externalWorkRunProjectWorkDirGuardConfigFromEnvV0(serverConfig),
 		DomainDelivery: orquestaappcodexstack.DomainWorkDeliveryBridgeConfigV0{
 			Enabled: domainWorkDeliveryEnabledFromEnvV0(),
-			Ledger:  domainDeliveryLedgerFromEnvV0(serverConfig),
+			Ledger:  domainDeliveryLedger,
 		},
 	})
 	if err != nil {
