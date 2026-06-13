@@ -64,6 +64,34 @@ func TestStackDrainQueueStatusMantieneAutoprogrammingActivoParaRevisionYCierreV0
 	}
 }
 
+func TestStackDrainQueueStatusMantieneProgramacionGenericaActivaParaCierreV0(t *testing.T) {
+	ctx := context.Background()
+	runRef := "run-stack-delivered-programming-001"
+	taskRef := "task-stack-delivered-programming-001"
+	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskRef)
+	task := stackDeliveredAutoprogrammingTaskForTestV0(runRef, taskRef)
+	task.TaskID = taskRef
+	task.Title = "Programacion generica entregada"
+	task.FunctionContractRefs = []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
+		FunctionName: "BuildCompleteAppBootstrapV0",
+	}}
+	stack := StackV0{Stores: StoresV0{
+		TaskStore: orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(task),
+	}}
+	result := orquestacionnucleoapp.ManagedProgressiveLoopResultV0{
+		Final: orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Run: stackDeliveredRunForQueueTestV0(runRef, taskRef, agentRef),
+		},
+	}
+	status, err := stack.stackDrainQueueStatusForCoordinatorV0(ctx, result)
+	if err != nil {
+		t.Fatalf("stackDrainQueueStatusForCoordinatorV0: %v", err)
+	}
+	if status != "" {
+		t.Fatalf("queue_status=%q, want activo para cierre de programacion generica", status)
+	}
+}
+
 func TestStackDrainQueueStatusNoRetieneDomainWorkPorTaskSourceDirectorV0(t *testing.T) {
 	ctx := context.Background()
 	runRef := "run-stack-delivered-domain-work-001"

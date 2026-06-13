@@ -61,6 +61,9 @@ func (source ProjectBacklogDirectorDecisionSourceV0) ListDirectorAgentDecisionsV
 func projectBacklogShouldEmitV0(
 	request orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0,
 ) bool {
+	if codexStackDecisionSourceRecoveryRequestedV0(request.RequestedBy) {
+		return false
+	}
 	run := request.Run
 	if run.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 ||
 		strings.TrimSpace(run.RunID) == "" ||

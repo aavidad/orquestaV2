@@ -38,6 +38,9 @@ func (source codexStackResidentBriefingSourceV0) shouldMaterializeDecisionCounci
 	if err != nil {
 		return false
 	}
+	if codexStackResidentCouncilProgrammingHoldV0(ctx, run, source.TaskStore) {
+		return false
+	}
 	return codexStackResidentCouncilReadyV0(ctx, run, source.TaskStore)
 }
 
@@ -55,6 +58,9 @@ func (source codexStackResidentBriefingSourceV0) shouldOpenDecisionCouncilBrains
 	if run.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 ||
 		run.CurrentPhase == orquestacoreworkflow.OrchestrationPhaseBrainstormingArquitecturaV0 ||
 		!codexStackResidentCouncilCanCreateMicrotasksV0(run.CurrentPhase) {
+		return false
+	}
+	if codexStackResidentCouncilProgrammingHoldV0(ctx, run, source.TaskStore) {
 		return false
 	}
 	tasks, ok := codexStackResidentCouncilTasksV0(ctx, run, source.TaskStore)
@@ -77,6 +83,9 @@ func (source codexStackResidentBriefingSourceV0) shouldOpenDecisionCouncilVotePh
 	}
 	if run.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 ||
 		run.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseBrainstormingArquitecturaV0 {
+		return false
+	}
+	if codexStackResidentCouncilProgrammingHoldV0(ctx, run, source.TaskStore) {
 		return false
 	}
 	tasks, ok := codexStackResidentCouncilTasksV0(ctx, run, source.TaskStore)
@@ -279,6 +288,11 @@ func (handler codexStackResidentExternalActionHandlerV0) materializeDecisionCoun
 	if err != nil {
 		return result, err
 	}
+	if codexStackResidentCouncilProgrammingHoldV0(ctx, run, handler.Ports.DirectorTaskStore) {
+		result.Status = orquestacionnucleoapp.DirectorBriefingExecutionStatusExternalPendingV0
+		result.EvidenceRefs = compactStringsV0(append(result.EvidenceRefs, "evidence-ref-codex-stack-resident-council-open-programming-hold"))
+		return result, nil
+	}
 	if codexStackResidentCouncilAlreadyMaterializedV0(ctx, run, handler.Ports.DirectorTaskStore) {
 		result.Status = orquestacionnucleoapp.DirectorBriefingExecutionStatusExternalAppliedV0
 		result.EvidenceRefs = compactStringsV0(append(result.EvidenceRefs, "evidence-ref-codex-stack-resident-council-already-materialized"))
@@ -368,6 +382,11 @@ func (handler codexStackResidentExternalActionHandlerV0) openDecisionCouncilPhas
 	if err != nil {
 		return result, err
 	}
+	if codexStackResidentCouncilProgrammingHoldV0(ctx, run, handler.Ports.DirectorTaskStore) {
+		result.Status = orquestacionnucleoapp.DirectorBriefingExecutionStatusExternalPendingV0
+		result.EvidenceRefs = compactStringsV0(append(result.EvidenceRefs, "evidence-ref-codex-stack-resident-council-open-programming-hold"))
+		return result, nil
+	}
 	tasks, ok := codexStackResidentCouncilTasksV0(ctx, run, handler.Ports.DirectorTaskStore)
 	if !ok {
 		result.Status = orquestacionnucleoapp.DirectorBriefingExecutionStatusExternalPendingV0
@@ -414,6 +433,15 @@ func (handler codexStackResidentExternalActionHandlerV0) openDecisionCouncilPhas
 	result.Status = orquestacionnucleoapp.DirectorBriefingExecutionStatusExternalAppliedV0
 	result.EvidenceRefs = compactStringsV0(append(result.EvidenceRefs, "evidence-ref-codex-stack-resident-council-phase-opened-"+string(phase)))
 	return result, nil
+}
+
+func codexStackResidentCouncilProgrammingHoldV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	taskStore orquestacionnucleoapp.WorkflowTaskStorePortV0,
+) bool {
+	hold, err := RunHasOpenProgrammingOrAutonomyTasksV0(ctx, taskStore, run)
+	return err == nil && hold
 }
 
 func codexStackResidentCouncilOpenPhaseCommandV0(

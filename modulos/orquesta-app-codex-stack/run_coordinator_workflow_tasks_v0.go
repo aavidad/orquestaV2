@@ -154,6 +154,7 @@ func stackDrainPendingStartedAgentRefsV0(
 		run.LostAgents,
 		run.StoppedAgents,
 		run.ConfirmedStoppedAgents,
+		stackDrainPhaseArtifactAgentRefsV0(run),
 	} {
 		for _, agentRef := range compactStringsV0(values) {
 			terminal[agentRef] = true
@@ -167,4 +168,21 @@ func stackDrainPendingStartedAgentRefsV0(
 		refs = append(refs, agentRef)
 	}
 	return refs
+}
+
+func stackDrainPhaseArtifactAgentRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) []string {
+	refs := make([]string, 0, len(run.PhaseArtifacts))
+	for _, artifactRef := range compactStringsV0(run.PhaseArtifacts) {
+		_, agentTail, ok := strings.Cut(artifactRef, "#agent:")
+		if !ok {
+			continue
+		}
+		agentRef := strings.TrimSpace(agentTail)
+		if agentRef != "" {
+			refs = append(refs, agentRef)
+		}
+	}
+	return compactStringsV0(refs)
 }

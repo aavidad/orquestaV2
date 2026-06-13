@@ -1,6 +1,14 @@
 # Decisiones locales
 
 ```text
+Fecha: 2026-06-13
+Decision: Las microtareas de `programacion` con `write_set` puramente documental pueden omitir `required_tests`.
+Motivo: un smoke real de app completa genero documentacion paralela valida en `docs/**` sin pruebas ejecutables. Bloquearla obligaba a inventar tests falsos o a parar el run por una forma recuperable.
+Impacto: las tareas que tocan codigo siguen exigiendo `required_tests`; las tareas documentales se validan como trabajo aprovechable y quedan sujetas a revision/cierre. La politica de app Go sigue exigiendo `go test ./...` para el bootstrap real.
+Estado: aceptada_local
+```
+
+```text
 Fecha: 2026-05-27
 Decision: T15 no se relanza desde `orquesta-director-agent`; el DTO consume la politica comun de rails por campo y conserva vocabulario operativo opaco.
 Motivo: desde 2026-06-02 los rails de detalle quedan offline por defecto. Reabrir desde el DTO duplicaria owner y volveria a bloquear decisiones validas por palabras como runtime, provider, model, db, sql o codex.

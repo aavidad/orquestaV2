@@ -1,6 +1,56 @@
 # Decisiones: orquesta-app-codex-stack
 
 ```text
+Fecha: 2026-06-13
+Decision: El residente no materializa `task-council-*` mientras haya una tarea
+de programacion/autonomia abierta.
+Motivo: en smoke real de app desde cero, tras abrir una tarea de bootstrap
+vertical el residente podia crear consejo paralelo antes de que la proyeccion
+del agente vivo estuviera visible. Eso contaminaba el run y desviaba la
+orquestacion.
+Impacto: el stack detecta tareas abiertas por metadata estructural
+(`WorkProfileImplementationV0`, fase `programacion` legacy y senales
+autoprogramming), no por palabras de logs. El briefing superior continua para
+lanzar/cerrar la tarea abierta, pero las acciones council quedan retenidas
+como `external_pending` si se ejecutan con estado obsoleto. La cola tambien
+retiene implementaciones entregadas hasta cierre formal; `domain_work` no queda
+retenido por esta regla.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-06-13
+Decision: El stack residente reconstruye `LaunchRuntimeAgent` si existe
+`AgentRequested` durable pero falta el outbox pendiente de arranque.
+Motivo: en un smoke de app desde cero se observo una inconsistencia de persist
+parcial: el run tenia el agente en `run.Agents`, sin `AgentStarted` ni terminal,
+y el ledger no tenia el mensaje `outbox-launchruntimeagent-*`. El director
+quedaba sin progreso observable aunque el core ya soporta reintentar
+`RequestAgent` para regenerar solo el outbox.
+Impacto: `DrainRunV0` detecta la inconsistencia por refs estructurales, lee el
+evento causal `AgentRequested`, reconstruye el comando original con su
+`command_id` e `idempotency_key`, registra de nuevo el outbox por el ledger y
+vuelve al loop normal de dispatch. No interpreta texto de agentes ni toca core.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-06-13
+Decision: El stack recupera runs bloqueados por proyecciones parciales y
+entregas terminales sin ACK antes de pedir intervencion manual.
+Motivo: despues de cortes o paradas cooperativas, el run podia quedar con
+`director_decision_source_error`, una fase abierta en eventos pero no en la
+proyeccion del `RunStore`, o un agente terminal confirmado sin delivery
+proyectada. La cola quedaba dormida aunque habia evidencia durable reparable.
+Impacto: `DrainRunV0` y el reconciliador de cola reintentan fuentes de decision
+consumidas solo en modo recovery, reconstruyen `OpenPhase` desde eventos
+durables cuando la causalidad cuadra y convierten agentes terminales con tarea
+abierta en replan/rework por los puertos existentes. No se reabre el core ni se
+descartan entregas por alias/formato recuperable.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-06-08
 Decision: Las tareas Codex del consejo residente tienen packet propio y no
 caen como director generico.
@@ -15,6 +65,21 @@ materializa objetivo y contexto `decision_council_context.v0` con refs
 estructuradas (`decision-council-role-p/c/v`, assignment, agente, familia,
 gate, deps, cohorte y ola). No cambia core, no mete proveedor/modelo y no
 parsea logs, summaries ni texto libre.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-06-13
+Decision: `crear_app_completa` tiene rescate de bootstrap si la planificacion
+inicial deja plan accionable pero no materializa microtareas.
+Motivo: en prueba real una app desde cero quedo con documentos de arquitectura
+y backlog, pero sin `director_decisions.json`/ACK final del director, por lo
+que Orquesta no pasaba a programacion aunque habia insumo recuperable.
+Impacto: el composite de decisiones conserva prioridad del archivo real del
+director y da margen a decisiones tardias. Solo si ninguna fuente previa crea
+microtareas y existe un plan accionable en docs, el stack publica una cadena
+causal minima: decision, contrato, bootstrap vertical Go, tests `go test ./...`
+y apertura de programacion. No toca core ni OPES.
 Estado: aceptada.
 ```
 

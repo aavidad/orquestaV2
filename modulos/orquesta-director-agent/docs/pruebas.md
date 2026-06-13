@@ -26,6 +26,8 @@ Cobertura local:
   relajar refs/evidencias compactas;
 - acepta `create_microtask` con linaje recursivo neutral y refs compactas;
 - acepta `create_microtask` con `context_refs` opacas compactas;
+- acepta microtareas documentales paralelas en `programacion` sin
+  `required_tests` cuando el `write_set` es puramente documental;
 - acepta `work_profile_kind` opcional en microtareas y unidades de equipo;
 - acepta `ask_director` y `ask_user` compactos;
 - acepta `request_capacity` y `request_agent` compactos;
@@ -36,7 +38,7 @@ Cobertura local:
 - acepta `DirectorAgentCompactStatsV0` con contadores y refs pendientes;
 - rechaza proveedor/modelo y payloads largos;
 - rechaza microtareas sin contrato funcional.
-- rechaza microtareas de programacion sin `required_tests`.
+- rechaza microtareas de programacion que tocan codigo sin `required_tests`.
 - rechaza linaje recursivo incoherente en microtareas.
 - rechaza `context_refs` no compactas o con detalles prohibidos.
 - rechaza plan/equipo con detalle operativo o asignaciones inexistentes.

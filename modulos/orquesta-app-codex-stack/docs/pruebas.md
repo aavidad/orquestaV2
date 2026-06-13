@@ -63,6 +63,12 @@ Cobertura Go actual:
   valida que el residente solo propone `materialize_decision_council` cuando el
   run tiene estado durable suficiente (`Brainstorms`, `Votes`) y contratos
   publicados.
+- `TestCodexStackResidentBriefingSourceV0EsperaAgentesExternosPendientesV0`
+  valida que el residente no emite acciones laterales mientras hay agentes
+  externos en vuelo.
+- `TestCodexStackResidentBriefingSourceV0NoEmiteConsejoConProgramacionAbiertaV0`
+  valida que una tarea generica de programacion abierta no dispara
+  `task-council-*`; el residente continua para lanzar/cerrar esa tarea.
 - `TestCodexStackResidentBriefingSourceV0NoEmiteConsejoFueraDeFaseDeCreacionV0`
   cubre que no se fuerza el consejo en fases donde `CreateMicrotask` no es
   causalmente aplicable.
@@ -70,6 +76,9 @@ Cobertura Go actual:
   valida la materializacion idempotente de tareas `task-council-*` por puertos
   del stack, abre `brainstorming_arquitectura` y deja candidatos de propuesta
   visibles para `WorkflowTaskCandidateProviderV0`.
+- `TestCodexStackResidentCouncilHandlerV0NoMaterializaConProgramacionAbiertaV0`
+  valida que una accion council obsoleta queda pendiente si entre el briefing y
+  la ejecucion se abrio una tarea de implementacion.
 - `TestCodexStackResidentCouncilV0AbreVotacionCuandoTerminaBrainstormV0`
   valida que, tras propuestas y criticas entregadas, la fuente residente emite
   `open_decision_council_vote_phase`, el handler abre `votacion_y_decision` y
@@ -120,6 +129,18 @@ Cobertura Go actual:
   flujo vertical completo: entrega registrada, revision con evidencia real,
   `changes_requested`, `RequestRework`, `retry_task`, decision de capacidad y
   arranque de un nuevo agente sin intervencion manual del test.
+- `TestDrainRunV0RecoverReingiereDirectorDecisionSourceBloqueadoV0` valida que
+  un run bloqueado por fuente de decisiones se recupera releyendo sidecars
+  consumidos solo bajo requested_by de recovery.
+- `TestDrainRunV0RecoverProyeccionParcialOpenPhaseProgramacionV0` valida la
+  reparacion de una fase `programacion` abierta en eventos durables pero ausente
+  en la proyeccion del run.
+- `TestDrainRunV0AgenteTerminalConTareaAbiertaReplanificaSinQuedarDormido`
+  valida que un agente terminal con tarea abierta genera replan/rework y no deja
+  la cola en espera indefinida.
+- `TestStackDrainQueueStatusMantieneProgramacionGenericaActivaParaCierreV0`
+  valida que implementaciones genericas entregadas no se marcan como `delivered`
+  final antes del cierre formal.
 - `TestReviewReworkReplanSourceV0MantieneEvidenciaOperativaOpaca` valida que
   refs operativas opacas como runtime/Codex se conservan como evidencia y solo
   se filtran valores sensibles efectivos.
@@ -1266,3 +1287,33 @@ Cobertura:
 - los rechazos por placeholder visible y `document_plan` incompleto exponen un
   `DomainWorkIssueV0` local sin cambiar el error publico compatible
   `domain_work_artifact_quality_gate_failed`.
+
+Validacion rescate de bootstrap para app completa:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestProjectPlanBootstrap|TestDrainRunV0RescataPlanInicialSinDirectorDecisionsYArrancaProgramacion|TestCodexStackRunSupervisorAPIV0ColaGlobalConsumeDecisionFileAparecidoTrasACK'
+go test -count=1 ./modulos/orquesta-app-codex-stack
+```
+
+Cobertura:
+
+- `TestProjectPlanBootstrapDirectorDecisionSourceV0EmiteBootstrapDesdePlanSinMicrotareas`
+  fija la cadena causal decision -> contrato -> bootstrap vertical -> programacion;
+- `TestDrainRunV0RescataPlanInicialSinDirectorDecisionsYArrancaProgramacion`
+  reproduce una app desde cero sin `director_decisions.json` y comprueba que
+  Orquesta crea tarea y agente de programacion;
+- `TestCodexStackRunSupervisorAPIV0ColaGlobalConsumeDecisionFileAparecidoTrasACK`
+  protege que el rescate no pise un archivo real de decisiones tardio.
+
+Validacion recuperacion de outbox de lanzamiento:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack -run TestRecoverMissingLaunchOutboxForRequestedAgentsV0ReconstruyeOutboxTrasPersistParcial
+go test -count=1 ./modulos/orquesta-app-codex-stack
+```
+
+Cobertura:
+
+- `TestRecoverMissingLaunchOutboxForRequestedAgentsV0ReconstruyeOutboxTrasPersistParcial`
+  reproduce un `AgentRequested` durable sin outbox `LaunchRuntimeAgent` y fija
+  que el stack reconstruye el mensaje pendiente desde el evento causal.

@@ -89,11 +89,13 @@ func directorDecisionDescriptorsFromReceiptsV0(
 		if !exists {
 			continue
 		}
-		if sidecar.Status == "consumed" {
+		if sidecar.Status == "consumed" && !directorDecisionConsumedSidecarRecoveryRequestedV0(request) {
 			continue
 		}
-		if err := recordDirectorDecisionSidecarPendingReceiptV0(ctx, store, sidecar); err != nil {
-			return nil, err
+		if sidecar.Status != "consumed" {
+			if err := recordDirectorDecisionSidecarPendingReceiptV0(ctx, store, sidecar); err != nil {
+				return nil, err
+			}
 		}
 		descriptors = append(descriptors, orquestadirectoragentfilesource.DirectorAgentDecisionFileDescriptorV0{
 			DescriptorRef:  directorDecisionDescriptorRefV0(receipt),
@@ -103,6 +105,12 @@ func directorDecisionDescriptorsFromReceiptsV0(
 		})
 	}
 	return descriptors, nil
+}
+
+func directorDecisionConsumedSidecarRecoveryRequestedV0(
+	request orquestadirectoragentfilesource.DirectorAgentDecisionFileListRequestV0,
+) bool {
+	return strings.TrimSpace(request.RequestedBy) == "orquesta-app-codex-stack-decision-source-recovery"
 }
 
 func recordDirectorDecisionSidecarPendingReceiptV0(

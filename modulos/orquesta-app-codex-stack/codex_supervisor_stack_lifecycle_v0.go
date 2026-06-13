@@ -200,7 +200,7 @@ func (lifecycle CodexSupervisorStackLifecycleV0) codexSupervisorSnapshotFromDrai
 	if codexSupervisorEvidenceRefsContainPartV0(evidenceRefs, "operational-director-plan-state:blocked") {
 		status = CodexSupervisorRuntimeStoppedV0
 	}
-	agentRef := codexSupervisorLastRefV0(result.Final.Run.StartedAgents)
+	agentRef := codexSupervisorLastRefV0(stackDrainPendingStartedAgentRefsV0(result.Final.Run))
 	processRef, processStatus, processEvidenceRefs := lifecycle.codexSupervisorLiveProcessProjectionV0(ctx, result.Final.Run, status, agentRef)
 	if processStatus != "" {
 		status = processStatus

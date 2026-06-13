@@ -28,8 +28,32 @@ func (stack StackV0) drainRunAttemptControlV0(
 	if err != nil {
 		return drainRunAttemptControlV0{}, err
 	}
+	if !stackRunIsActiveV0(run) {
+		recovered, ok, err := stack.recoverBlockedDirectorDecisionSourceRunForDrainV0(ctx, request, run)
+		if err != nil {
+			return drainRunAttemptControlV0{}, err
+		}
+		if ok {
+			run = recovered
+		}
+		if !stackRunIsActiveV0(run) {
+			recovered, ok, err = stack.recoverBlockedOpenPhaseProjectionRunForDrainV0(ctx, request, run)
+			if err != nil {
+				return drainRunAttemptControlV0{}, err
+			}
+			if ok {
+				run = recovered
+			}
+		}
+	}
 	if err := stack.submitPendingDomainWorkArtifactsV0(ctx, request, run); err != nil {
 		return drainRunAttemptControlV0{}, err
+	}
+	if recovered, err := stack.recoverMissingLaunchOutboxForRequestedAgentsV0(ctx, run); err != nil || recovered {
+		if err != nil {
+			return drainRunAttemptControlV0{}, err
+		}
+		return stack.continueDrainRunControlAfterExternalV0(ctx, request)
 	}
 	if err := stack.submitRecoverableDomainWorkArtifactsWithoutCoreDeliveryV0(ctx, request, run); err != nil {
 		return drainRunAttemptControlV0{}, err
@@ -108,6 +132,9 @@ func (stack StackV0) drainRunAttemptControlV0(
 			),
 		}, nil
 	}
+	if control, progressed, err := stack.continueTerminalExternalProgressV0(ctx, request, run); err != nil || progressed {
+		return control, err
+	}
 	return stack.continueDrainRunControlAfterExternalV0(ctx, request)
 }
 
@@ -173,6 +200,35 @@ func (stack StackV0) continuePendingExternalProgressV0(
 		return drainRunAttemptControlV0{}, false, nil
 	}
 	return control, true, nil
+}
+
+func (stack StackV0) continueTerminalExternalProgressV0(
+	ctx context.Context,
+	request DrainRunRequestV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) (drainRunAttemptControlV0, bool, error) {
+	if stack.Ports.AssessmentReplanSource == nil {
+		return drainRunAttemptControlV0{}, false, nil
+	}
+	ports := stack.directorPortsWithClosureSourceV0(stack.Ports)
+	ports.DirectorDecisionSource = nil
+	reconciled, applied, err := stack.reconcileTerminalOpenTaskAgentsV0(ctx, request, run)
+	if err != nil {
+		return drainRunAttemptControlV0{}, false, err
+	}
+	if applied {
+		run = reconciled
+		control, continueErr := stack.continueDrainRunControlAfterExternalWithPortsV0(ctx, request, ports)
+		return control, true, continueErr
+	}
+	if !stackRunHasRecoverableTerminalAssessmentV0(run) {
+		return drainRunAttemptControlV0{}, false, nil
+	}
+	control, err := stack.continueDrainRunControlAfterExternalWithPortsV0(ctx, request, ports)
+	if err != nil {
+		return drainRunAttemptControlV0{}, false, err
+	}
+	return control, drainRunProgressedV0(run, control.Loop.Run), nil
 }
 
 func drainRunProgressedV0(

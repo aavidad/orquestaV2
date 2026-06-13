@@ -430,6 +430,17 @@ func (source codexStackResidentBriefingSourceV0) BuildResidentDirectorBriefingV0
 			)
 		}
 	}
+	if source.hasPendingExternalAgentsV0(ctx, request) {
+		return source.waitingBriefingV0(request, "resident_director_external_agents_pending"), nil
+	}
+	if source.hasOpenProgrammingOrAutonomyTasksV0(ctx, request) {
+		return source.briefingFromDecisionV0(
+			request,
+			orquestadirectorsupervisor.DirectorSupervisorActionContinueV0,
+			true,
+			nil,
+		)
+	}
 	if source.shouldAcceptDecisionCouncilVotesV0(ctx, request) {
 		return source.decisionCouncilOpenPhaseBriefingV0(
 			request,
@@ -479,6 +490,21 @@ func (source codexStackResidentBriefingSourceV0) completedBriefingV0(
 	}
 }
 
+func (source codexStackResidentBriefingSourceV0) waitingBriefingV0(
+	request orquestacionnucleoapp.ResidentDirectorBriefingBuildRequestV0,
+	reasonCode string,
+) orquestadirectorsupervisor.DirectorSupervisorBriefingV0 {
+	return orquestadirectorsupervisor.DirectorSupervisorBriefingV0{
+		SchemaVersion:            orquestadirectorsupervisor.DirectorSupervisorBriefingSchemaV0,
+		RunRef:                   request.RunRef,
+		ObjectiveRef:             firstNonEmptyQueuedSourceV0(source.ObjectiveRef, request.ObjectiveRef),
+		AutonomousRecommendation: orquestadirectorsupervisor.DirectorSupervisorAutonomousWaitV0,
+		ReasonCode:               firstNonEmptyQueuedSourceV0(reasonCode, orquestadirectorsupervisor.DirectorSupervisorReasonExternalWaitV0),
+		ContextRefs:              compactStringsV0(append(source.ContextRefs, request.ContextRefs...)),
+		EvidenceRefs:             compactStringsV0(request.EvidenceRefs),
+	}
+}
+
 func residentDirectorReusableFinalBriefingV0(
 	briefing orquestadirectorsupervisor.DirectorSupervisorBriefingV0,
 ) bool {
@@ -522,6 +548,35 @@ func (source codexStackResidentBriefingSourceV0) briefingFromDecisionV0(
 	)
 }
 
+func (source codexStackResidentBriefingSourceV0) hasPendingExternalAgentsV0(
+	ctx context.Context,
+	request orquestacionnucleoapp.ResidentDirectorBriefingBuildRequestV0,
+) bool {
+	if source.RunStore == nil {
+		return false
+	}
+	run, err := source.RunStore.LoadRunV0(ctx, request.RunRef)
+	if err != nil {
+		return false
+	}
+	return drainRunHasPendingExternalAgentsV0(run, nil)
+}
+
+func (source codexStackResidentBriefingSourceV0) hasOpenProgrammingOrAutonomyTasksV0(
+	ctx context.Context,
+	request orquestacionnucleoapp.ResidentDirectorBriefingBuildRequestV0,
+) bool {
+	if source.RunStore == nil {
+		return false
+	}
+	run, err := source.RunStore.LoadRunV0(ctx, request.RunRef)
+	if err != nil {
+		return false
+	}
+	hold, err := RunHasOpenProgrammingOrAutonomyTasksV0(ctx, source.TaskStore, run)
+	return err == nil && hold
+}
+
 func residentDirectorSupervisorRecommendationV0(
 	action orquestadirectorsupervisor.DirectorSupervisorActionV0,
 ) orquestadirectorsupervisor.DirectorSupervisorAutonomousRecommendationV0 {
@@ -541,6 +596,8 @@ func residentDirectorSupervisorReasonV0(
 	switch action {
 	case orquestadirectorsupervisor.DirectorSupervisorActionWaitOutboxV0:
 		return orquestadirectorsupervisor.DirectorSupervisorReasonOutboxPendingV0
+	case orquestadirectorsupervisor.DirectorSupervisorActionWaitExternalV0:
+		return orquestadirectorsupervisor.DirectorSupervisorReasonExternalWaitV0
 	default:
 		return orquestadirectorsupervisor.DirectorSupervisorReasonContinueV0
 	}

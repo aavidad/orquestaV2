@@ -28,7 +28,7 @@ func (stack StackV0) stackDrainQueueStatusForCoordinatorV0(
 	if err != nil || hold {
 		return "", err
 	}
-	hold, err = RunHasOpenAutoprogrammingTasksV0(ctx, stack.Stores.TaskStore, run)
+	hold, err = RunHasOpenProgrammingOrAutonomyTasksV0(ctx, stack.Stores.TaskStore, run)
 	if err != nil || hold {
 		return "", err
 	}

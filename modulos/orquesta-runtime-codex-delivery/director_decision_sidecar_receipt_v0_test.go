@@ -61,6 +61,28 @@ func TestCodexReceiptDirectorDecisionFileDescriptorProviderV0OmiteSidecarConsumi
 	}
 }
 
+func TestCodexReceiptDirectorDecisionFileDescriptorProviderV0ReexponeSidecarConsumidoParaRecovery(t *testing.T) {
+	store, provider, request, _ := directorDecisionSidecarFixtureV0(t)
+	got, err := provider.ListDirectorAgentDecisionFilesV0(context.Background(), request)
+	if err != nil || len(got) != 1 || got[0].SidecarReceipt == nil {
+		t.Fatalf("primer list got=%+v err=%v", got, err)
+	}
+	consumed := *got[0].SidecarReceipt
+	consumed.Status = "consumed"
+	if err := store.RecordDirectorAgentDecisionFileConsumptionV0(context.Background(), consumed); err != nil {
+		t.Fatalf("RecordDirectorAgentDecisionFileConsumptionV0: %v", err)
+	}
+	request.RequestedBy = "orquesta-app-codex-stack-decision-source-recovery"
+
+	got, err = provider.ListDirectorAgentDecisionFilesV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("segundo list recovery: %v", err)
+	}
+	if len(got) != 1 || got[0].SidecarReceipt == nil || got[0].SidecarReceipt.Status != "consumed" {
+		t.Fatalf("descriptor recovery=%+v", got)
+	}
+}
+
 func TestCodexReceiptDirectorDecisionFileDescriptorProviderV0BloqueaSidecarConsumidoMutado(t *testing.T) {
 	store, provider, request, decisionPath := directorDecisionSidecarFixtureV0(t)
 	got, err := provider.ListDirectorAgentDecisionFilesV0(context.Background(), request)

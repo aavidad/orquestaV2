@@ -782,6 +782,64 @@ func TestCodexSupervisorRuntimeStateFromLoopV0MapeaEstadosDelNucleoV0(t *testing
 	}
 }
 
+func TestCodexSupervisorSnapshotFromDrainV0NoExigeProcesoVivoParaUltimoAgenteEntregadoV0(t *testing.T) {
+	ctx := context.Background()
+	runRef := "run-ref-supervisor-delivered-last-agent-001"
+	agentRef := "agent-ref-supervisor-delivered-last-agent-001"
+	taskRef := "task-ref-supervisor-delivered-last-agent-001"
+	lifecycle := CodexSupervisorStackLifecycleV0{}
+	snapshot := lifecycle.codexSupervisorSnapshotFromDrainV0(ctx, runRef, "", orquestacionnucleoapp.ManagedProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0,
+		Final: orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Status: orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0,
+			Run: orquestacoreworkflow.OrchestrationRunV0{
+				RunID:           runRef,
+				Status:          orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+				Tasks:           []string{taskRef},
+				Agents:          []string{agentRef},
+				StartedAgents:   []string{agentRef},
+				DeliveredAgents: []string{agentRef},
+				DeliveredTasks:  []string{taskRef},
+				Deliveries:      []string{"delivery-ref-supervisor-delivered-last-agent-001"},
+			},
+		},
+	})
+
+	if snapshot.Status != CodexSupervisorRuntimeRunningV0 ||
+		snapshot.AgentRef != "" ||
+		codexStackRefsContainPartV0(snapshot.EvidenceRefs, "process-snapshot-missing") {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+}
+
+func TestCodexSupervisorSnapshotFromDrainV0NoExigeProcesoVivoParaAgenteConPhaseArtifactV0(t *testing.T) {
+	ctx := context.Background()
+	runRef := "run-ref-supervisor-phase-artifact-agent-001"
+	agentRef := "agent-ref-supervisor-phase-artifact-agent-001"
+	lifecycle := CodexSupervisorStackLifecycleV0{}
+	snapshot := lifecycle.codexSupervisorSnapshotFromDrainV0(ctx, runRef, "", orquestacionnucleoapp.ManagedProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0,
+		Final: orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Status: orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0,
+			Run: orquestacoreworkflow.OrchestrationRunV0{
+				RunID:         runRef,
+				Status:        orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+				Agents:        []string{agentRef},
+				StartedAgents: []string{agentRef},
+				PhaseArtifacts: []string{
+					"artifact-ref-supervisor-phase-artifact-agent-001#phase:brainstorming_arquitectura#agent:" + agentRef,
+				},
+			},
+		},
+	})
+
+	if snapshot.Status != CodexSupervisorRuntimeRunningV0 ||
+		snapshot.AgentRef != "" ||
+		codexStackRefsContainPartV0(snapshot.EvidenceRefs, "process-snapshot-missing") {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+}
+
 func TestCodexSupervisorSnapshotFromDrainV0NoCierraAutomejoraActivaConEntregaAbiertaV0(t *testing.T) {
 	ctx := context.Background()
 	taskRef := "task-autoprogramming-open-delivered-001"

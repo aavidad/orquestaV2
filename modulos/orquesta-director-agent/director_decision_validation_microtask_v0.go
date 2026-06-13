@@ -1,5 +1,7 @@
 package orquestadirectoragent
 
+import "strings"
+
 func (v *directorAgentDecisionValidatorV0) validateCreateMicrotask(decision DirectorAgentDecisionV0) {
 	if decision.CreateMicrotask == nil {
 		v.add("director_agent_payload_requerido", "create_microtask")
@@ -15,7 +17,7 @@ func (v *directorAgentDecisionValidatorV0) validateCreateMicrotask(decision Dire
 	v.requireText("create_microtask.task.summary", task.Summary)
 	v.requireOperationalTextList("create_microtask.task.write_set", task.WriteSet)
 	v.requireTextList("create_microtask.task.acceptance_criteria", task.AcceptanceCriteria)
-	if task.PhaseID == "programacion" {
+	if directorAgentMicrotaskRequiresRequiredTestsV0(task) {
 		v.requireOperationalTextList("create_microtask.task.required_tests", task.RequiredTests)
 	} else {
 		v.requireOptionalOperationalTextList("create_microtask.task.required_tests", task.RequiredTests)
@@ -48,4 +50,35 @@ func (v *directorAgentDecisionValidatorV0) validateCreateMicrotask(decision Dire
 		decision.PhaseID != "programacion" {
 		v.add("director_agent_phase_mismatch", "phase_id")
 	}
+}
+
+func directorAgentMicrotaskRequiresRequiredTestsV0(task DirectorAgentMicrotaskV0) bool {
+	if strings.TrimSpace(task.PhaseID) != "programacion" {
+		return false
+	}
+	return !directorAgentMicrotaskLooksDocumentationOnlyV0(task)
+}
+
+func directorAgentMicrotaskLooksDocumentationOnlyV0(task DirectorAgentMicrotaskV0) bool {
+	writeSet := compactDirectorAgentStringsV0(task.WriteSet)
+	if len(writeSet) == 0 {
+		return false
+	}
+	for _, path := range writeSet {
+		if !directorAgentMicrotaskPathLooksDocumentationV0(path) {
+			return false
+		}
+	}
+	return true
+}
+
+func directorAgentMicrotaskPathLooksDocumentationV0(path string) bool {
+	path = strings.TrimSpace(strings.ToLower(path))
+	path = strings.TrimPrefix(path, "./")
+	path = strings.TrimSuffix(path, "/")
+	return path == "docs" ||
+		path == "docs/**" ||
+		strings.HasPrefix(path, "docs/") ||
+		path == "readme.md" ||
+		strings.HasSuffix(path, ".md")
 }

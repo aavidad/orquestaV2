@@ -203,12 +203,28 @@ func TestValidateDirectorAgentDecisionV0RechazaMicrotareaSinContrato(t *testing.
 
 func TestValidateDirectorAgentDecisionV0RechazaMicrotareaProgramacionSinRequiredTests(t *testing.T) {
 	decision := validDirectorAgentCreateMicrotaskDecisionV0()
+	decision.CreateMicrotask.Task.WriteSet = []string{"go.mod", "cmd/server/main.go", "internal/app"}
 	decision.CreateMicrotask.Task.RequiredTests = nil
 
 	requireDirectorAgentIssueV0(t,
 		ValidateDirectorAgentDecisionV0(decision),
 		"director_agent_lista_invalida",
 	)
+}
+
+func TestValidateDirectorAgentDecisionV0AceptaMicrotareaDocumentalProgramacionSinRequiredTests(t *testing.T) {
+	decision := validDirectorAgentCreateMicrotaskDecisionV0()
+	decision.CreateMicrotask.Task.Title = "Documentacion operativa paralela"
+	decision.CreateMicrotask.Task.Summary = "Preparar manuales y notas de revision sin tocar codigo."
+	decision.CreateMicrotask.Task.WriteSet = []string{
+		"docs/modules/manuales.md",
+		"docs/reviews/doc_review.md",
+	}
+	decision.CreateMicrotask.Task.RequiredTests = nil
+
+	if issues := ValidateDirectorAgentDecisionV0(decision); len(issues) != 0 {
+		t.Fatalf("issues inesperados: %+v", issues)
+	}
 }
 
 func TestValidateDirectorAgentDecisionV0RechazaDependenciaNoCompacta(t *testing.T) {

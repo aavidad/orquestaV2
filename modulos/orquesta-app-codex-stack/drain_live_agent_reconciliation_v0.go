@@ -69,6 +69,52 @@ func (stack StackV0) reconcileStoppedPendingAgentsV0(
 	return next, true, err
 }
 
+func (stack StackV0) reconcileTerminalOpenTaskAgentsV0(
+	ctx context.Context,
+	request DrainRunRequestV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) (orquestacoreworkflow.OrchestrationRunV0, bool, error) {
+	if stack.Stores.ReceiptStore == nil || len(stackDrainOpenTaskRefsV0(run)) == 0 {
+		return run, false, nil
+	}
+	descriptors, err := stack.Stores.ReceiptStore.ListCodexReceiptDescriptorsV0(
+		ctx,
+		orquestaruntimecodexdelivery.CodexReceiptDescriptorRequestV0{
+			RunID:         run.RunID,
+			StartedAgents: compactStringsV0(run.StartedAgents),
+			CorrelationID: strings.TrimSpace(request.CorrelationID),
+			EvidenceRefs:  []string{"evidence-ref-terminal-open-task-reconciliation"},
+		},
+	)
+	if err != nil {
+		return run, false, err
+	}
+	openTasks := terminalOpenTaskSetV0(run)
+	terminalAgents := stackTerminalAgentRefSetV0(run)
+	applied := false
+	for _, descriptor := range descriptors {
+		agentRef := strings.TrimSpace(descriptor.AgentRef)
+		taskRef := strings.TrimSpace(descriptor.Spec.AgentPacket.Task.TaskRef)
+		if agentRef == "" || taskRef == "" ||
+			!terminalAgents[agentRef] ||
+			!openTasks[taskRef] ||
+			codexStackStringInSetV0(run.DeliveredAgents, agentRef) ||
+			terminalOpenTaskHasRecoverableAssessmentV0(run, agentRef, taskRef) {
+			continue
+		}
+		observation := terminalOpenTaskProgressObservationV0(run, descriptor)
+		if err := stack.applyStoppedAgentReconciliationV0(ctx, request, run, observation); err != nil {
+			return run, applied, err
+		}
+		applied = true
+	}
+	if !applied {
+		return run, false, nil
+	}
+	next, err := stack.Stores.RunStore.LoadRunV0(ctx, run.RunID)
+	return next, true, err
+}
+
 func (stack StackV0) reconcileMissingProcessRegistryPendingAgentsV0(
 	ctx context.Context,
 	request DrainRunRequestV0,
@@ -283,6 +329,89 @@ func pendingAgentRefsForProcessRegistryReconciliationV0(
 		pending = append(pending, agentRef)
 	}
 	return compactStringsV0(pending)
+}
+
+func terminalOpenTaskSetV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) map[string]bool {
+	open := map[string]bool{}
+	for _, taskRef := range stackDrainOpenTaskRefsV0(run) {
+		open[strings.TrimSpace(taskRef)] = true
+	}
+	return open
+}
+
+func terminalOpenTaskHasRecoverableAssessmentV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	agentRef string,
+	taskRef string,
+) bool {
+	agentRef = strings.TrimSpace(agentRef)
+	taskRef = strings.TrimSpace(taskRef)
+	for _, raw := range compactStringsV0(run.AgentAssessments) {
+		projection, ok := orquestacoreworkflow.ParseAgentAssessmentProjectionV0(raw)
+		if !ok ||
+			strings.TrimSpace(projection.AgentRequestID) != agentRef ||
+			strings.TrimSpace(projection.TaskRef) != taskRef {
+			continue
+		}
+		switch strings.TrimSpace(projection.Action) {
+		case orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
+			orquestacoreworkflow.AgentAssessmentActionStopAgentV0:
+			return true
+		}
+	}
+	return false
+}
+
+func terminalOpenTaskProgressObservationV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	descriptor orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+) orquestacionnucleoapp.AgentProgressObservationV0 {
+	agentRef := strings.TrimSpace(descriptor.AgentRef)
+	if agentRef == "" {
+		agentRef = strings.TrimSpace(descriptor.Spec.RequestID)
+	}
+	taskRef := strings.TrimSpace(descriptor.Spec.AgentPacket.Task.TaskRef)
+	report := terminalOpenTaskProgressReportV0(run, agentRef, taskRef)
+	phaseID := strings.TrimSpace(descriptor.Spec.AgentPacket.Phase)
+	if phaseID == "" {
+		phaseID = strings.TrimSpace(string(run.CurrentPhase))
+	}
+	return orquestacionnucleoapp.AgentProgressObservationV0{
+		CandidateRef:     "progress-candidate-ref-" + report.ReportID,
+		Report:           report,
+		PhaseID:          phaseID,
+		TaskRef:          taskRef,
+		DecisionRequired: true,
+		EvidenceRefs:     append([]string(nil), report.EvidenceRefs...),
+	}
+}
+
+func terminalOpenTaskProgressReportV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	agentRef string,
+	taskRef string,
+) orquestaruntime.AgentProgressReportV0 {
+	safe := codexStackOperationalClosureSafeRefV0(
+		strings.TrimSpace(run.RunID) + "-" + strings.TrimSpace(agentRef) + "-" + strings.TrimSpace(taskRef),
+	)
+	digest := codexStackDeterministicDigestV0(safe)
+	if len(digest) > 32 {
+		digest = digest[:32]
+	}
+	return orquestaruntime.AgentProgressReportV0{
+		ReportID:         "agent-progress-report-ref-terminal-open-task-" + digest,
+		RunID:            strings.TrimSpace(run.RunID),
+		AgentRequestID:   strings.TrimSpace(agentRef),
+		Status:           orquestaruntime.AgentStoppedV0,
+		DecisionRequired: true,
+		Summary:          "Agente terminal sin ACK para una tarea abierta; se reconcilia como perdido recuperable.",
+		EvidenceRefs: compactStringsV0([]string{
+			"evidence-ref-no-ack",
+			"evidence-ref-terminal-open-task-reconciliation",
+		}),
+	}
 }
 
 func processRegistryAgentRefSetV0(
@@ -515,7 +644,8 @@ func (stack StackV0) applyStoppedAgentReconciliationV0(
 	if result.AskDirectorCommand != nil {
 		commands = append(commands, *result.AskDirectorCommand)
 	}
-	if result.RegisterLostCommand != nil {
+	if result.RegisterLostCommand != nil &&
+		!codexStackStringInSetV0(run.ConfirmedStoppedAgents, strings.TrimSpace(observation.Report.AgentRequestID)) {
 		commands = append(commands, *result.RegisterLostCommand)
 	}
 	for _, command := range commands {

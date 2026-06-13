@@ -159,6 +159,42 @@ func TestAssessmentReplanSourceV0ConvierteAskDirectorPerdidoEnReemplazoDelDirect
 	}
 }
 
+func TestAssessmentReplanSourceV0ConvierteAskDirectorConfirmadoParadoEnReemplazo(t *testing.T) {
+	runRef := "run-ref-assessment-replan-stack-confirmed-ask-director-001"
+	oldAgentRef := "agent-ref-assessment-confirmed-ask-director-001"
+	taskRef := "task-ref-assessment-stack-confirmed-ask-director-001"
+	source := AssessmentReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(
+			assessmentReplanDescriptorForTestV0(runRef, oldAgentRef, taskRef),
+		),
+	}
+	request := assessmentReplanRequestForTestV0(runRef, oldAgentRef, taskRef, false)
+	request.Run.LostAgents = nil
+	request.Run.StoppedAgents = []string{oldAgentRef}
+	request.Run.ConfirmedStoppedAgents = []string{oldAgentRef}
+	request.Run.AgentAssessments = []string{
+		orquestacoreworkflow.AgentAssessmentProjectionRefV0(orquestacoreworkflow.AgentWorkAssessedPayloadV0{
+			AssessmentRef:  "assessment-ref-" + oldAgentRef,
+			PhaseID:        string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			AgentRequestID: oldAgentRef,
+			TaskRef:        taskRef,
+			Verdict:        orquestacoreworkflow.AgentAssessmentVerdictNeedsRevisionV0,
+			Action:         orquestacoreworkflow.AgentAssessmentActionAskDirectorV0,
+			Severity:       orquestacoreworkflow.AgentAssessmentSeverityHighV0,
+		}),
+	}
+
+	plans, err := source.BuildAgentAssessmentReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildAgentAssessmentReplanPlansV0 confirmed ask director: %v", err)
+	}
+	if len(plans) != 1 ||
+		plans[0].Assessment.AgentRequestID != oldAgentRef ||
+		plans[0].RequestedAction != "replace_agent" {
+		t.Fatalf("ask_director confirmado parado debe generar replacement: %+v", plans)
+	}
+}
+
 func TestAssessmentReplanSourceV0NoDuplicaSiReplacementYaExiste(t *testing.T) {
 	runRef := "run-ref-assessment-replan-stack-002"
 	oldAgentRef := "agent-ref-assessment-old-002"

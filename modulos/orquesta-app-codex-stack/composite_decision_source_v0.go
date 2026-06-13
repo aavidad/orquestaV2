@@ -12,6 +12,7 @@ import (
 
 type compositeDirectorDecisionSourceV0 struct {
 	Sources              []orquestadirectoragentworkflow.DirectorAgentDecisionSourcePortV0
+	PlanBootstrapSource  orquestadirectoragentworkflow.DirectorAgentDecisionSourcePortV0
 	AppChangeStore       orquestaappchange.AppChangeRecordSourcePortV0
 	DomainRequiredPolicy orquestadomainwork.DomainWorkRequiredTestPolicyPortV0
 	Budget               orquestadirectoragentworkflow.DirectorAgentDecisionBatchBudgetV0
@@ -55,7 +56,45 @@ func (source compositeDirectorDecisionSourceV0) ListDirectorAgentDecisionsV0(
 		}
 		out = append(out, decisions...)
 	}
+	if source.PlanBootstrapSource != nil && !compositeDecisionBatchHasCreateMicrotaskV0(out) {
+		sourceCount++
+		if err := source.validateBudgetV0(request.Run, out, sourceCount, nil); err != nil {
+			return nil, err
+		}
+		decisions, err := source.PlanBootstrapSource.ListDirectorAgentDecisionsV0(ctx, request)
+		if err != nil {
+			return nil, err
+		}
+		decisions = normalizeCompositeDirectorDecisionBatchV0(request.Run, decisions)
+		decisions, err = source.normalizeDomainWorkRequiredTestsV0(ctx, request.Run, decisions)
+		if err != nil {
+			return nil, err
+		}
+		if err := validateCompositeDirectorDecisionBatchV0(
+			request.Run,
+			request.RequestKind,
+			request.ObjectiveHints,
+			decisions,
+		); err != nil {
+			return nil, err
+		}
+		if err := source.validateBudgetV0(request.Run, out, sourceCount, decisions); err != nil {
+			return nil, err
+		}
+		out = append(out, decisions...)
+	}
 	return out, nil
+}
+
+func compositeDecisionBatchHasCreateMicrotaskV0(
+	decisions []orquestadirectoragent.DirectorAgentDecisionV0,
+) bool {
+	for _, decision := range decisions {
+		if decision.CreateMicrotask != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func (source compositeDirectorDecisionSourceV0) validateBudgetV0(

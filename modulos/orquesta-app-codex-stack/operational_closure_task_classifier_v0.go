@@ -64,6 +64,33 @@ func RunHasOpenAutoprogrammingTasksV0(
 	return false, nil
 }
 
+func RunHasOpenProgrammingOrAutonomyTasksV0(
+	ctx context.Context,
+	taskStore orquestacionnucleoapp.WorkflowTaskStorePortV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) (bool, error) {
+	openRefs := codexStackOperationalClosureOpenTaskRefsV0(run)
+	if len(openRefs) == 0 {
+		return false, nil
+	}
+	if codexStackRunLooksAutoprogrammingV0(run, openRefs) {
+		return true, nil
+	}
+	if taskStore == nil {
+		return false, nil
+	}
+	tasks, err := taskStore.LoadWorkflowTasksV0(ctx, run.RunID, openRefs)
+	if err != nil {
+		return false, err
+	}
+	for _, task := range tasks {
+		if codexStackWorkflowTaskLooksProgrammingOrAutonomyV0(task) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func codexStackOperationalClosureOpenTaskRefsV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 ) []string {
@@ -146,6 +173,30 @@ func codexStackWorkflowTaskLooksAutoprogrammingV0(
 			codexStackAutoprogrammingSignalV0(ref.FunctionName) {
 			return true
 		}
+	}
+	return false
+}
+
+func codexStackWorkflowTaskLooksProgrammingOrAutonomyV0(
+	task orquestacoreworkflow.WorkflowTaskV0,
+) bool {
+	if codexStackWorkflowTaskLooksAutoprogrammingV0(task) {
+		return true
+	}
+	if orquestacoreworkflow.NormalizeWorkProfileKindV0(task.WorkProfileKind) ==
+		orquestacoreworkflow.WorkProfileImplementationV0 {
+		return true
+	}
+	if strings.TrimSpace(string(task.WorkProfileKind)) != "" {
+		if _, ok := orquestacoreworkflow.LookupWorkProfileDefinitionV0(task.WorkProfileKind); ok {
+			return false
+		}
+	}
+	if task.PhaseID == orquestacoreworkflow.OrchestrationPhaseProgramacionV0 &&
+		(len(compactStringsV0(task.WriteSet)) > 0 ||
+			len(compactStringsV0(task.RequiredTests)) > 0 ||
+			len(task.FunctionContractRefs) > 0) {
+		return true
 	}
 	return false
 }

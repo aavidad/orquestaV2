@@ -54,6 +54,9 @@ func (source codexStackResidentBriefingSourceV0) shouldAcceptDecisionCouncilVote
 		stringInSetV0(run.Decisions, codexStackResidentCouncilDecisionRefV0(run.RunID)) {
 		return false
 	}
+	if codexStackResidentCouncilProgrammingHoldV0(ctx, run, source.TaskStore) {
+		return false
+	}
 	tasks, ok := codexStackResidentCouncilTasksV0(ctx, run, source.TaskStore)
 	if !ok || !codexStackResidentCouncilReadyForVotePhaseV0(run, tasks) {
 		return false
@@ -84,6 +87,11 @@ func (handler codexStackResidentExternalActionHandlerV0) acceptDecisionCouncilRe
 	run, err := handler.Ports.RunStore.LoadRunV0(ctx, runRef)
 	if err != nil {
 		return result, err
+	}
+	if codexStackResidentCouncilProgrammingHoldV0(ctx, run, handler.Ports.DirectorTaskStore) {
+		result.Status = orquestacionnucleoapp.DirectorBriefingExecutionStatusExternalPendingV0
+		result.EvidenceRefs = compactStringsV0(append(result.EvidenceRefs, "evidence-ref-codex-stack-resident-council-open-programming-hold"))
+		return result, nil
 	}
 	decisionRef := codexStackResidentCouncilDecisionRefV0(run.RunID)
 	if stringInSetV0(run.Decisions, decisionRef) {

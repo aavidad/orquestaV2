@@ -197,6 +197,9 @@ func directorDecisionSourceV0(config ConfigV0) orquestadirectoragentworkflow.Dir
 		AppChangeStore:       config.Stores.AppChangeStore,
 		DomainRequiredPolicy: config.DomainTests.Policy,
 		Budget:               config.DirectorDecisionBudget,
+		PlanBootstrapSource: ProjectPlanBootstrapDirectorDecisionSourceV0{
+			ProjectWorkDir: config.Codex.ProjectWorkDir,
+		},
 		Sources: []orquestadirectoragentworkflow.DirectorAgentDecisionSourcePortV0{
 			directorDecisionFileSourceV0(config),
 			orquestaappchangedirectorsource.AppChangeDirectorDecisionSourceV0{

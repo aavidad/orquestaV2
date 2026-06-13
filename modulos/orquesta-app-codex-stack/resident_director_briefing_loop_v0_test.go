@@ -225,6 +225,98 @@ func TestCodexStackResidentBriefingSourceV0EmiteConsejoConEstadoEstructuralV0(t 
 	}
 }
 
+func TestCodexStackResidentBriefingSourceV0EsperaAgentesExternosPendientesV0(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	run := codexStackResidentCouncilRunForTestV0(
+		"run-resident-pending-agent-source-001",
+		orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		[]string{"contract:function:decision-council:v0"},
+	)
+	run.StartedAgents = []string{"agent-ref-resident-pending-001"}
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	source := codexStackResidentBriefingSourceV0{
+		RunStore:        stack.Ports.RunStore,
+		TaskStore:       stack.Ports.DirectorTaskStore,
+		DecisionCouncil: DecisionCouncilConfigV0{VoteSource: fakeDecisionCouncilVoteSourceForTestV0{}},
+		ObjectiveRef:    "resident-director:" + run.RunID,
+		ContextRefs:     []string{"context-ref-codex-stack-resident-director"},
+	}
+
+	briefing, err := source.BuildResidentDirectorBriefingV0(
+		ctx,
+		orquestacionnucleoapp.ResidentDirectorBriefingBuildRequestV0{
+			RunRef:       run.RunID,
+			StepNumber:   1,
+			EvidenceRefs: []string{"evidence-ref-resident-pending-agent-source"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("BuildResidentDirectorBriefingV0: %v", err)
+	}
+	if briefing.AutonomousRecommendation != orquestadirectorsupervisor.DirectorSupervisorAutonomousWaitV0 ||
+		briefing.ReasonCode != "resident_director_external_agents_pending" ||
+		briefing.NextAction != nil ||
+		briefing.DecisionAction != "" {
+		t.Fatalf("briefing=%+v", briefing)
+	}
+}
+
+func TestCodexStackResidentBriefingSourceV0NoEmiteConsejoConProgramacionAbiertaV0(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	run := codexStackResidentCouncilRunForTestV0(
+		"run-resident-open-programming-source-001",
+		orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0,
+		[]string{"contract:function:decision-council:v0"},
+	)
+	task := orquestacoreworkflow.WorkflowTaskV0{
+		SchemaVersion:      orquestacoreworkflow.WorkflowTaskSchemaVersionV0,
+		TaskID:             "task-open-programming-resident-001",
+		RunID:              run.RunID,
+		PhaseID:            orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		WorkProfileKind:    orquestacoreworkflow.WorkProfileImplementationV0,
+		Title:              "Programming open task",
+		Summary:            "Tarea abierta que debe impedir consejo paralelo.",
+		WriteSet:           []string{"internal/open/task.go"},
+		AcceptanceCriteria: []string{"no abrir consejo mientras siga abierta"},
+		RequiredTests:      []string{"go test ./..."},
+	}
+	run.Tasks = []string{task.TaskID}
+	if err := stack.Stores.TaskStore.SaveWorkflowTaskV0(ctx, task); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0: %v", err)
+	}
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	source := codexStackResidentBriefingSourceV0{
+		RunStore:        stack.Ports.RunStore,
+		TaskStore:       stack.Ports.DirectorTaskStore,
+		DecisionCouncil: DecisionCouncilConfigV0{VoteSource: fakeDecisionCouncilVoteSourceForTestV0{}},
+		ObjectiveRef:    "resident-director:" + run.RunID,
+		ContextRefs:     []string{"context-ref-codex-stack-resident-director"},
+	}
+
+	briefing, err := source.BuildResidentDirectorBriefingV0(
+		ctx,
+		orquestacionnucleoapp.ResidentDirectorBriefingBuildRequestV0{
+			RunRef:       run.RunID,
+			StepNumber:   1,
+			EvidenceRefs: []string{"evidence-ref-resident-open-autoprogramming-source"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("BuildResidentDirectorBriefingV0: %v", err)
+	}
+	if briefing.NextAction == nil ||
+		briefing.NextAction.Kind == codexStackResidentActionKindMaterializeDecisionCouncilV0 ||
+		briefing.NextAction.Kind != orquestadirectorsupervisor.DirectorSupervisorActionKindRunStepV0 {
+		t.Fatalf("briefing=%+v", briefing)
+	}
+}
+
 func TestCodexStackResidentBriefingSourceV0NoEmiteConsejoFueraDeFaseDeCreacionV0(t *testing.T) {
 	ctx := context.Background()
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
@@ -313,6 +405,51 @@ func TestCodexStackResidentCouncilHandlerV0MaterializaUnaVezConContratoPublicado
 	if second.Status != orquestacionnucleoapp.DirectorBriefingExecutionStatusExternalAppliedV0 ||
 		len(secondTaskRefs) != len(firstTaskRefs) {
 		t.Fatalf("second=%+v first_tasks=%v second_tasks=%v", second, firstTaskRefs, secondTaskRefs)
+	}
+}
+
+func TestCodexStackResidentCouncilHandlerV0NoMaterializaConProgramacionAbiertaV0(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	run := codexStackResidentCouncilRunForTestV0(
+		"run-resident-council-handler-open-programming-001",
+		orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0,
+		[]string{"contract:function:decision-council:v0"},
+	)
+	task := orquestacoreworkflow.WorkflowTaskV0{
+		SchemaVersion:      orquestacoreworkflow.WorkflowTaskSchemaVersionV0,
+		TaskID:             "task-open-programming-council-handler-001",
+		RunID:              run.RunID,
+		PhaseID:            orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		WorkProfileKind:    orquestacoreworkflow.WorkProfileImplementationV0,
+		Title:              "Programacion abierta",
+		Summary:            "Tarea de implementacion en curso.",
+		WriteSet:           []string{"internal/app"},
+		AcceptanceCriteria: []string{"entrega implementada"},
+		RequiredTests:      []string{"go test ./..."},
+	}
+	run.Tasks = []string{task.TaskID}
+	if err := stack.Stores.TaskStore.SaveWorkflowTaskV0(ctx, task); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0: %v", err)
+	}
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	handler := codexStackResidentExternalActionHandlerV0{Ports: stack.Ports}
+
+	result, err := handler.ExecuteDirectorBriefingExternalActionV0(
+		ctx,
+		codexStackResidentCouncilExternalActionRequestForTestV0(run.RunID),
+	)
+	if err != nil {
+		t.Fatalf("ExecuteDirectorBriefingExternalActionV0: %v", err)
+	}
+	after := codexStackResidentCouncilRunFromStoreForTestV0(t, ctx, stack, run.RunID)
+	if result.Status != orquestacionnucleoapp.DirectorBriefingExecutionStatusExternalPendingV0 ||
+		!codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-codex-stack-resident-council-open-programming-hold") ||
+		len(after.Tasks) != 1 ||
+		codexStackResidentCouncilHasTaskRefWithPrefixForTestV0(after.Tasks, codexStackResidentCouncilTaskPrefixV0) {
+		t.Fatalf("result=%+v after_tasks=%v", result, after.Tasks)
 	}
 }
 

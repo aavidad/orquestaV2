@@ -402,6 +402,210 @@ func TestCodexStackV0RecoverReanudaOpenPlanTardioConReviewAceptadaV0(t *testing.
 	}
 }
 
+func TestDrainRunV0RecoverReingiereDirectorDecisionSourceBloqueadoV0(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	director := postDirectorAPIV0(t, stack)
+	run, err := stack.Stores.RunStore.LoadRunV0(context.Background(), director.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	run.Status = orquestacoreworkflow.OrchestrationRunStatusBlockedV0
+	run.Blockers = []string{
+		"app-director-decision-director-decision-source-error-director-decision-source",
+	}
+	stack.Ports.DirectorDecisionSource = codexStackStaticDecisionSourceForTestV0{
+		Decisions: projectPlanBootstrapDecisionsV0(run, "recover-source"),
+	}
+	if err := stack.Stores.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0 blocked: %v", err)
+	}
+
+	if _, err := stack.DrainRunV0(context.Background(), DrainRunRequestV0{
+		RunRef:               director.RunRef,
+		CorrelationID:        "corr-recover-decision-source-direct-drain",
+		MaxBursts:            16,
+		MaxStepsPerBurst:     12,
+		MaxDispatchesPerWait: 8,
+		MaxCommands:          30,
+		MaxOutboxPerCycle:    8,
+		MaxDecisionCycles:    8,
+		MaxExternalWaits:     1,
+	}); err != nil {
+		t.Fatalf("DrainRunV0: %v", err)
+	}
+
+	drained, err := stack.Stores.RunStore.LoadRunV0(context.Background(), director.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 drained: %v", err)
+	}
+	taskRef := codexStackBootstrapTaskRefForRunV0(drained)
+	if drained.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 ||
+		len(drained.Blockers) != 0 ||
+		taskRef == "" ||
+		drained.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseProgramacionV0 ||
+		runtime.launchCountV0() < 5 {
+		t.Fatalf(
+			"decision source no recuperado: status=%s blockers=%v task=%s phase=%s launches=%d tasks=%v",
+			drained.Status,
+			drained.Blockers,
+			taskRef,
+			drained.CurrentPhase,
+			runtime.launchCountV0(),
+			drained.Tasks,
+		)
+	}
+}
+
+func TestDrainRunV0RecoverProyeccionParcialOpenPhaseProgramacionV0(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	director := postDirectorAPIV0(t, stack)
+	run, err := stack.Stores.RunStore.LoadRunV0(context.Background(), director.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	decisions := projectPlanBootstrapDecisionsV0(run, "recover-open-phase")
+	taskRef, openDecisionRef := saveBootstrapTaskAndOpenDecisionForProjectionRecoveryTestV0(t, stack, decisions)
+	run = codexStackRunWithActivePhaseForTestV0(run, orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0)
+	run.Status = orquestacoreworkflow.OrchestrationRunStatusBlockedV0
+	run.Tasks = []string{taskRef}
+	run.Blockers = []string{
+		"app-director-decision-director-decision-apply-error-director-decision-" + openDecisionRef,
+	}
+	openEvent, err := orquestacoreworkflow.NewPhaseOpenedEventV0(
+		orquestacoreworkflow.OrchestrationEventMetaV0{
+			EventID:        "evt-projection-recovery-open-programacion",
+			RunID:          run.RunID,
+			Sequence:       run.LastSequence,
+			IdempotencyKey: "idem-projection-recovery-open-programacion",
+			CorrelationID:  "corr-projection-recovery-open-programacion",
+			CausationID:    "cmd-projection-recovery-open-programacion",
+			OccurredAt:     "2026-06-13T12:00:00Z",
+		},
+		orquestacoreworkflow.PhaseOpenedPayloadV0{
+			PhaseID:  string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			OpenedBy: "orquesta-app-codex-stack-test",
+			Reason:   "fase durable pendiente de proyectar",
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewPhaseOpenedEventV0: %v", err)
+	}
+	if err := stack.Stores.EventSink.AppendRunEventsV0(context.Background(), run.RunID, []orquestacoreworkflow.OrchestrationEventV0{openEvent}); err != nil {
+		t.Fatalf("AppendRunEventsV0 open phase: %v", err)
+	}
+	if err := stack.Stores.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0 blocked: %v", err)
+	}
+
+	if _, err := stack.DrainRunV0(context.Background(), DrainRunRequestV0{
+		RunRef:               director.RunRef,
+		CorrelationID:        "corr-recover-open-phase-direct-drain",
+		MaxBursts:            12,
+		MaxStepsPerBurst:     10,
+		MaxDispatchesPerWait: 8,
+		MaxCommands:          24,
+		MaxOutboxPerCycle:    8,
+		MaxDecisionCycles:    4,
+		MaxExternalWaits:     1,
+	}); err != nil {
+		t.Fatalf("DrainRunV0: %v", err)
+	}
+
+	drained, err := stack.Stores.RunStore.LoadRunV0(context.Background(), director.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 drained: %v", err)
+	}
+	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskRef)
+	if drained.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 ||
+		len(drained.Blockers) != 0 ||
+		drained.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseProgramacionV0 ||
+		!codexStackStringInSetForTestV0(drained.StartedAgents, agentRef) ||
+		runtime.launchCountV0() < 5 {
+		t.Fatalf(
+			"proyeccion parcial no recuperada: status=%s blockers=%v phase=%s agent=%s started=%v launches=%d",
+			drained.Status,
+			drained.Blockers,
+			drained.CurrentPhase,
+			agentRef,
+			drained.StartedAgents,
+			runtime.launchCountV0(),
+		)
+	}
+}
+
+func saveBootstrapTaskAndOpenDecisionForProjectionRecoveryTestV0(
+	t *testing.T,
+	stack StackV0,
+	decisions []orquestadirectoragent.DirectorAgentDecisionV0,
+) (string, string) {
+	t.Helper()
+	taskRef := ""
+	openDecisionRef := ""
+	for _, decision := range decisions {
+		if decision.CommandType == orquestadirectoragent.DirectorAgentCommandCreateMicrotaskV0 &&
+			decision.CreateMicrotask != nil {
+			data, err := json.Marshal(decision.CreateMicrotask.Task)
+			if err != nil {
+				t.Fatalf("Marshal microtask: %v", err)
+			}
+			var workflowTask orquestacoreworkflow.WorkflowTaskV0
+			if err := json.Unmarshal(data, &workflowTask); err != nil {
+				t.Fatalf("Unmarshal WorkflowTaskV0: %v", err)
+			}
+			task, err := orquestacoreworkflow.NewWorkflowTaskV0(workflowTask)
+			if err != nil {
+				t.Fatalf("NewWorkflowTaskV0: %v", err)
+			}
+			if err := stack.Ports.DirectorTaskStore.SaveWorkflowTaskV0(context.Background(), task); err != nil {
+				t.Fatalf("SaveWorkflowTaskV0: %v", err)
+			}
+			taskRef = task.TaskID
+		}
+		if decision.CommandType == orquestadirectoragent.DirectorAgentCommandOpenPhaseV0 &&
+			decision.OpenPhase != nil &&
+			decision.OpenPhase.PhaseID == string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0) {
+			openDecisionRef = decision.DecisionRef
+		}
+	}
+	if taskRef == "" || openDecisionRef == "" {
+		t.Fatalf("bootstrap incompleto: task=%q open=%q decisions=%+v", taskRef, openDecisionRef, decisions)
+	}
+	return taskRef, openDecisionRef
+}
+
+func TestCodexStackV0RecoverNoReanudaDecisionSourceConBlockerAjenoV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	director := postDirectorAPIV0(t, stack)
+	run, err := stack.Stores.RunStore.LoadRunV0(context.Background(), director.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	run.Status = orquestacoreworkflow.OrchestrationRunStatusBlockedV0
+	run.Blockers = []string{
+		"app-director-decision-director-decision-source-error-director-decision-source",
+		"security-sensitive-payload-blocked",
+	}
+	stack.Ports.DirectorDecisionSource = codexStackStaticDecisionSourceForTestV0{
+		Decisions: projectPlanBootstrapDecisionsV0(run, "recover-source"),
+	}
+
+	recovered, ok, err := stack.recoverBlockedDirectorDecisionSourceRunV0(
+		context.Background(),
+		"corr-recover-decision-source-mixed",
+		"2026-06-13T12:00:00Z",
+		orquestaruncontrol.DefaultRunControlStateV0(director.RunRef),
+		run,
+	)
+	if err != nil {
+		t.Fatalf("recoverBlockedDirectorDecisionSourceRunV0: %v", err)
+	}
+	if ok || recovered.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 {
+		t.Fatalf("no debe recuperar blockers mixtos: ok=%v recovered=%+v", ok, recovered)
+	}
+}
+
 func TestCodexStackV0RecoverNoReanudaAppChangeConBlockerAjenoV0(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	director := postDirectorAPIV0(t, stack)

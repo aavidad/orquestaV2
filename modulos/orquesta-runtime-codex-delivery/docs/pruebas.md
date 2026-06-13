@@ -18,6 +18,8 @@ Cobertura:
 - propaga ACK invalido como error publico sin incluir la ruta local del ACK;
 - registra descriptors mediante `CodexReceiptRecordingSpecResolverV0`;
 - permite que el source lea posteriormente el descriptor registrado;
+- permite reexponer un sidecar de decisiones consumido solo para
+  `orquesta-app-codex-stack-decision-source-recovery`;
 - recupera descriptors con `FileCodexReceiptDescriptorStoreV0` tras recrear
   instancia;
 - reemplaza descriptors por `descriptor_ref` sin duplicar;

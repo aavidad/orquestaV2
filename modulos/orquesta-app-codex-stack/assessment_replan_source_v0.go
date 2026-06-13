@@ -106,7 +106,8 @@ func assessmentReplanProjectionReadyV0(
 		return false
 	}
 	if projection.Action == orquestacoreworkflow.AgentAssessmentActionAskDirectorV0 {
-		return stringInSetV0(run.LostAgents, agentRef)
+		return stringInSetV0(run.LostAgents, agentRef) ||
+			stringInSetV0(run.ConfirmedStoppedAgents, agentRef)
 	}
 	return stringInSetV0(run.StoppedAgents, agentRef) &&
 		(stringInSetV0(run.ConfirmedStoppedAgents, agentRef) ||

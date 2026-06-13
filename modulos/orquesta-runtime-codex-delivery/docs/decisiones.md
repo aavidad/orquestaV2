@@ -1,6 +1,20 @@
 # Decisiones: orquesta-runtime-codex-delivery
 
 ```text
+Fecha: 2026-06-13
+Decision: Un sidecar `director_decisions.json` consumido puede reexponerse solo
+para recovery explicito de decision-source.
+Motivo: si el stack queda bloqueado tras consumir un sidecar valido pero antes
+de proyectar sus decisiones, reintentar la fuente normal lo omite y el run queda
+atascado. Releerlo sin acotar tambien podria duplicar decisiones.
+Impacto: el provider mantiene la regla normal de no reemitir sidecars
+consumidos, salvo `RequestedBy=orquesta-app-codex-stack-decision-source-recovery`.
+La recuperacion queda gobernada por el stack y sigue validando refs/causalidad;
+no se exponen logs, prompts ni rutas locales al core.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-27
 Decision: `orquesta-runtime-codex-delivery` no infiere uso desde logs ni ACKs.
 Motivo: T209 cierra el reporte de uso en runtime/stack; duplicar parseo aqui

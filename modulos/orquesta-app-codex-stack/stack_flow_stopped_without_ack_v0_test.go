@@ -120,6 +120,120 @@ func TestDrainRunV0ACKTardioTrasLostReconciliadoSeIngiereV0(t *testing.T) {
 	}
 }
 
+func TestDrainRunV0AgenteTerminalConTareaAbiertaReplanificaSinQuedarDormido(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newPendingAckCodexStackRuntimeV0())
+	runRef := "run-ref-terminal-open-no-ack-001"
+	taskRef := "task-ref-terminal-open-no-ack-001"
+	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskRef)
+	seedTerminalOpenTaskNoACKRunForTestV0(t, ctx, stack, runRef, taskRef, agentRef)
+
+	drain, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+		RunRef:               runRef,
+		OccurredAt:           "2026-05-10T13:15:00Z",
+		CorrelationID:        "corr-stack-terminal-open-replan-001",
+		MaxBursts:            20,
+		MaxStepsPerBurst:     6,
+		MaxDispatchesPerWait: 8,
+		MaxCommands:          20,
+		MaxOutboxPerCycle:    8,
+		MaxExternalWaits:     2,
+	})
+	if err != nil {
+		t.Fatalf("DrainRunV0 terminal open: %v status=%s final=%+v", err, drain.Status, drain.Final)
+	}
+	run := mustLoadCodexStackRunForTestV0(t, stack, runRef)
+	if !codexStackHasRefV0(run.ConfirmedStoppedAgents, agentRef) ||
+		!codexStackRefsContainPartV0(run.AgentAssessments, "#action:"+orquestacoreworkflow.AgentAssessmentActionAskDirectorV0) ||
+		codexStackRefsContainPartV0(run.AgentAssessments, "#verdict:"+orquestacoreworkflow.AgentAssessmentVerdictGarbageV0) ||
+		len(compactStringsV0(run.ReplanDecisions)) == 0 ||
+		!codexStackRefsContainPartV0(run.StartedAgents, "agent-ref-assessment-") {
+		t.Fatalf("terminal sin ACK no recuperado como replan: agent=%s run=%+v", agentRef, run)
+	}
+}
+
+func seedTerminalOpenTaskNoACKRunForTestV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	runRef string,
+	taskRef string,
+	agentRef string,
+) {
+	t.Helper()
+	task := orquestacoreworkflow.WorkflowTaskV0{
+		SchemaVersion:      orquestacoreworkflow.WorkflowTaskSchemaVersionV0,
+		TaskID:             taskRef,
+		RunID:              runRef,
+		PhaseID:            orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		WorkProfileKind:    orquestacoreworkflow.WorkProfileImplementationV0,
+		Title:              "Terminal open task no ACK",
+		Summary:            "Fixture de tarea abierta cuyo agente termino sin ACK.",
+		WriteSet:           []string{"internal/terminal_open/fixture.go"},
+		AcceptanceCriteria: []string{"se replanifica si no hay ACK"},
+		RequiredTests:      []string{"go test ./..."},
+	}
+	if err := stack.Stores.TaskStore.SaveWorkflowTaskV0(ctx, task); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0: %v", err)
+	}
+	phases := orquestacoreworkflow.OrchestrationPhaseCatalogV0()
+	for index := range phases {
+		if phases[index].ID == orquestacoreworkflow.OrchestrationPhaseProgramacionV0 {
+			phases[index].Status = orquestacoreworkflow.OrchestrationPhaseStatusActiveV0
+		}
+	}
+	run := orquestacoreworkflow.OrchestrationRunV0{
+		SchemaVersion:          orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
+		RunID:                  runRef,
+		ProjectRef:             "project-ref-terminal-open-no-ack",
+		AppSpecRef:             "app-spec-ref-terminal-open-no-ack",
+		Status:                 orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+		CurrentPhase:           orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		Phases:                 phases,
+		Tasks:                  []string{taskRef},
+		Agents:                 []string{agentRef},
+		StartedAgents:          []string{agentRef},
+		StoppedAgents:          []string{agentRef},
+		ConfirmedStoppedAgents: []string{agentRef},
+	}
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	spec := orquestaruntime.ExternalAgentLaunchSpecV0{
+		RequestID:     agentRef,
+		CorrelationID: "corr-" + runRef,
+		AgentPacket: orquestaruntime.AgentStartPacketV0{
+			RequestID:     agentRef,
+			CorrelationID: "corr-" + runRef,
+			TargetModule:  "terminal-open-no-ack",
+			Phase:         string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			Task: orquestaruntime.AgentStartTaskV0{
+				TaskRef:       taskRef,
+				WriteSet:      append([]string(nil), task.WriteSet...),
+				RequiredTests: append([]string(nil), task.RequiredTests...),
+			},
+			DeliveryRefs: orquestaruntime.AgentStartDeliveryRefsV0{
+				AckRef:       "ack-ref-" + agentRef,
+				MailboxRef:   "mailbox-ref-" + agentRef,
+				ReadinessRef: "readiness-ref-" + agentRef,
+			},
+		},
+	}
+	if err := stack.Stores.ReceiptStore.RecordCodexReceiptDescriptorV0(
+		ctx,
+		orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+			DescriptorRef:  "receipt-ref-" + agentRef,
+			RunID:          runRef,
+			AgentRef:       agentRef,
+			Spec:           spec,
+			AckPath:        filepath.Join(t.TempDir(), orquestaruntimecodex.CodexAgentAckFileNameV0),
+			ProjectWorkDir: t.TempDir(),
+		},
+	); err != nil {
+		t.Fatalf("RecordCodexReceiptDescriptorV0: %v", err)
+	}
+}
+
 func writeCodexStackAckForDescriptorFilesV0(
 	descriptor orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
 	files []string,

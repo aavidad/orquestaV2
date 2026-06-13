@@ -158,6 +158,18 @@ func (stack StackV0) recoverQueuedStoppedCandidateV0(
 			return err
 		}
 		if !ok {
+			recovered, ok, err = stack.recoverBlockedDirectorDecisionSourceRunForQueueV0(ctx, command, state, run)
+			if err != nil {
+				return err
+			}
+		}
+		if !ok {
+			recovered, ok, err = stack.recoverBlockedOpenPhaseProjectionRunForQueueV0(ctx, command, state, run)
+			if err != nil {
+				return err
+			}
+		}
+		if !ok {
 			return stack.completeQueuedRunControlWithoutActiveRunV0(ctx, command, candidate, state)
 		}
 		run = recovered
