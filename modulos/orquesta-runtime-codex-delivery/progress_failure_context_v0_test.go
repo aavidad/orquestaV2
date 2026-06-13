@@ -42,6 +42,41 @@ func TestCodexProgressReportWithProcessFailureContextV0NoClasificaCapacidadPorTe
 	}
 }
 
+func TestCodexProgressReportWithProcessFailureContextV0ClasificaCuotaEstructurada(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(dir, orquestaruntimecodex.CodexUsageAccountingFileNameV0),
+		[]byte(`{"usage":{},"quota":{"status":"exhausted"}}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write usage accounting: %v", err)
+	}
+	report := validCodexProgressFailureReportForTestV0()
+	descriptor := CodexReceiptDescriptorV0{
+		AckPath: filepath.Join(dir, orquestaruntimecodex.CodexAgentAckFileNameV0),
+	}
+
+	got := codexProgressReportWithProcessFailureContextV0(descriptor, report)
+
+	if got.BudgetStatus != orquestaruntime.AgentProgressBudgetCapacityLimitedV0 ||
+		got.BudgetReason != "Cuota externa agotada antes de ACK." ||
+		!got.DecisionRequired ||
+		got.Summary != "Cuota externa agotada antes de ACK; cerrar agente y replanificar automaticamente cuando haya capacidad." ||
+		!stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-provider-quota-exhausted") ||
+		!stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-capacity-limited") {
+		t.Fatalf("report cuota estructurada inesperado=%+v", got)
+	}
+	if gotClass := codexProgressFailureClassFromDescriptorV0(descriptor); gotClass != codexProgressFailureProviderQuotaExhaustedV0 {
+		t.Fatalf("failure class=%s want=%s", gotClass, codexProgressFailureProviderQuotaExhaustedV0)
+	}
+	if strings.Contains(got.Summary, dir) || strings.Contains(got.BudgetReason, dir) {
+		t.Fatalf("report filtra ruta local: %+v", got)
+	}
+	if issues := orquestaruntime.ValidateAgentProgressReportV0(got); len(issues) > 0 {
+		t.Fatalf("progress report invalido: %+v", issues)
+	}
+}
+
 func TestCodexProgressReportWithProcessFailureContextV0NoClasificaAuthPorTextoLibre(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(

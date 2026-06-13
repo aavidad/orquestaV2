@@ -15,15 +15,17 @@ const maxCodexProgressFailureLogBytesV0 = 64 * 1024
 type codexProgressFailureClassV0 string
 
 const (
-	CodexProgressFailureNoACKV0           codexProgressFailureClassV0 = "no_ack"
-	CodexProgressFailureInterruptedV0     codexProgressFailureClassV0 = "interrupted"
-	CodexProgressFailureCapacityWarningV0 codexProgressFailureClassV0 = "capacity_warning"
-	CodexProgressFailureAuthInvalidV0     codexProgressFailureClassV0 = "auth_invalid"
+	CodexProgressFailureNoACKV0                  codexProgressFailureClassV0 = "no_ack"
+	CodexProgressFailureInterruptedV0            codexProgressFailureClassV0 = "interrupted"
+	CodexProgressFailureCapacityWarningV0        codexProgressFailureClassV0 = "capacity_warning"
+	CodexProgressFailureAuthInvalidV0            codexProgressFailureClassV0 = "auth_invalid"
+	CodexProgressFailureProviderQuotaExhaustedV0 codexProgressFailureClassV0 = "provider_quota_exhausted"
 
-	codexProgressFailureNoACKV0           = CodexProgressFailureNoACKV0
-	codexProgressFailureInterruptedV0     = CodexProgressFailureInterruptedV0
-	codexProgressFailureCapacityWarningV0 = CodexProgressFailureCapacityWarningV0
-	codexProgressFailureAuthInvalidV0     = CodexProgressFailureAuthInvalidV0
+	codexProgressFailureNoACKV0                  = CodexProgressFailureNoACKV0
+	codexProgressFailureInterruptedV0            = CodexProgressFailureInterruptedV0
+	codexProgressFailureCapacityWarningV0        = CodexProgressFailureCapacityWarningV0
+	codexProgressFailureAuthInvalidV0            = CodexProgressFailureAuthInvalidV0
+	codexProgressFailureProviderQuotaExhaustedV0 = CodexProgressFailureProviderQuotaExhaustedV0
 )
 
 func codexProgressReportWithProcessFailureContextV0(
@@ -67,6 +69,16 @@ func CodexProgressReportWithProcessFailureContextV0(
 		report.EvidenceRefs = compactCodexDeliveryRefsV0(append(
 			report.EvidenceRefs,
 			"evidence-ref-capacity-warning",
+			"evidence-ref-capacity-limited",
+		))
+	case CodexProgressFailureProviderQuotaExhaustedV0:
+		report.Summary = "Cuota externa agotada antes de ACK; cerrar agente y replanificar automaticamente cuando haya capacidad."
+		report.BudgetStatus = orquestaruntime.AgentProgressBudgetCapacityLimitedV0
+		report.BudgetReason = "Cuota externa agotada antes de ACK."
+		report.DecisionRequired = true
+		report.EvidenceRefs = compactCodexDeliveryRefsV0(append(
+			report.EvidenceRefs,
+			"evidence-ref-provider-quota-exhausted",
 			"evidence-ref-capacity-limited",
 		))
 	case CodexProgressFailureInterruptedV0:
@@ -118,6 +130,9 @@ func codexProgressFailureClassFromDescriptorV0(
 func CodexProgressFailureClassFromDescriptorV0(
 	descriptor CodexReceiptDescriptorV0,
 ) codexProgressFailureClassV0 {
+	if codexProgressDescriptorHasProviderQuotaExhaustedV0(descriptor) {
+		return CodexProgressFailureProviderQuotaExhaustedV0
+	}
 	logs := codexProgressFailureLogsFromDescriptorV0(descriptor)
 	for _, log := range logs {
 		if codexProgressTextHasInterruptedNoACKSignalV0(log) {
@@ -148,6 +163,26 @@ func codexProgressFailureLogsFromDescriptorV0(
 		}
 	}
 	return logs
+}
+
+func codexProgressDescriptorHasProviderQuotaExhaustedV0(
+	descriptor CodexReceiptDescriptorV0,
+) bool {
+	ackPath := strings.TrimSpace(descriptor.AckPath)
+	if ackPath == "" {
+		return false
+	}
+	path := filepath.Join(
+		filepath.Dir(ackPath),
+		orquestaruntimecodex.CodexUsageAccountingFileNameV0,
+	)
+	data, ok := codexProgressReadTailV0(path, maxCodexProgressFailureLogBytesV0)
+	if !ok {
+		return false
+	}
+	snapshot := orquestaruntimecodex.BuildCodexUsageAccountingSnapshotV0([]string{string(data)})
+	return snapshot.Observed &&
+		snapshot.QuotaStatus == orquestaruntimecodex.CodexUsageQuotaExhaustedV0
 }
 
 func codexProgressTextHasCapacitySignalV0(text string) bool {

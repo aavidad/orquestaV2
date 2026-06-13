@@ -153,6 +153,41 @@ func TestCodexProgressObservationSourceV0NoClasificaCapacidadPorTextoSinACK(t *t
 	}
 }
 
+func TestCodexProgressObservationSourceV0ClasificaCuotaEstructuradaSinACK(t *testing.T) {
+	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
+	source := codexProgressSourceForTestV0(t, spec, ackPath)
+	source.SnapshotSource = stoppedSnapshotSourceForProgressTestV0{}
+	if err := os.WriteFile(
+		filepath.Join(filepath.Dir(ackPath), orquestaruntimecodex.CodexUsageAccountingFileNameV0),
+		[]byte(`{"usage":{},"quota":{"status":"exhausted"}}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write usage accounting: %v", err)
+	}
+
+	got, err := source.BuildAgentProgressObservationsV0(
+		context.Background(),
+		codexProgressRequestForTestV0(spec),
+	)
+	if err != nil {
+		t.Fatalf("BuildAgentProgressObservationsV0: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("observations=%+v", got)
+	}
+	report := got[0].Report
+	if report.Status != orquestaruntime.AgentStoppedV0 ||
+		report.BudgetStatus != orquestaruntime.AgentProgressBudgetCapacityLimitedV0 ||
+		!report.DecisionRequired ||
+		!stringInCodexDeliverySetV0(report.EvidenceRefs, "evidence-ref-provider-quota-exhausted") ||
+		!stringInCodexDeliverySetV0(report.EvidenceRefs, "evidence-ref-capacity-limited") {
+		t.Fatalf("report cuota estructurada inesperado: %+v", report)
+	}
+	if codexProgressObservationLeaksPathV0(got[0], ackPath) {
+		t.Fatalf("observacion filtra path: %+v", got[0])
+	}
+}
+
 func TestCodexProgressObservationSourceV0NoClasificaAuthPorTextoLibreSinACK(t *testing.T) {
 	spec, ackPath := codexProgressSpecAndAckPathForTestV0(t)
 	source := codexProgressSourceForTestV0(t, spec, ackPath)
