@@ -123,6 +123,37 @@ func TestServerConfigFromEnvV0PerfilAutonomiaActivaDirectorResidenteV0(t *testin
 	}
 }
 
+func TestServerConfigFromEnvV0ContextoOPESActivaDirectorResidenteV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envOPESProjectWorkDirV0, "/tmp/opes-workspace")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if !config.ResidentDirectorEnabled {
+		t.Fatalf("contexto OPES no activo director residente: %+v", config)
+	}
+	if got := effectiveSettingValueForTestV0(config.EffectiveConfig.Settings, envServerAutonomyEnabledV0); got != "true" {
+		t.Fatalf("%s=%q want true", envServerAutonomyEnabledV0, got)
+	}
+	if got := effectiveSettingValueForTestV0(config.EffectiveConfig.Settings, envServerResidentDirectorEnabledV0); got != "true" {
+		t.Fatalf("%s=%q want true", envServerResidentDirectorEnabledV0, got)
+	}
+}
+
+func TestServerConfigFromEnvV0BloqueaOPESConDirectorResidenteApagadoV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envOPESProjectWorkDirV0, "/tmp/opes-workspace")
+	t.Setenv(envServerResidentDirectorEnabledV0, "false")
+
+	_, err := serverConfigFromEnvV0()
+	if err == nil ||
+		!strings.Contains(err.Error(), envServerResidentDirectorEnabledV0+"=false incompatible con contexto OPES") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 func TestServerConfigFromEnvV0DirectorResidenteExplicitoGanaAlPerfilAutonomiaV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envServerAutonomyEnabledV0, "true")

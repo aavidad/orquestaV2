@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 	orquestaappgateway "orquesta/modulos/orquesta-app-gateway"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -148,10 +149,15 @@ func buildStackFromEnvV0(
 	runQueue := orquestarunqueue.RunQueuePortV0(runFileStore)
 	runControl := orquestaruncontrol.RunControlPortV0(runFileStore)
 	receiptStorePort := orquestaappcodexstack.CodexReceiptStorePortV0(receiptStore)
+	appChangeStore := orquestaappchange.AppChangeRecordStorePortV0(runFileStore)
 	if supervisorWakeup != nil {
 		runStore = serverWakeupRunStoreV0{inner: stateStore, wakeup: supervisorWakeup}
 		runQueue = serverWakeupRunQueueV0{inner: runFileStore, wakeup: supervisorWakeup}
 		runControl = serverWakeupRunControlV0{inner: runFileStore, wakeup: supervisorWakeup}
+		appChangeStore = serverWakeupAppChangeStoreV0{
+			inner:  appChangeStore,
+			wakeup: supervisorWakeup,
+		}
 		receiptStorePort = serverWakeupCodexReceiptStoreV0{
 			inner:  receiptStorePort,
 			wakeup: supervisorWakeup,
@@ -174,7 +180,7 @@ func buildStackFromEnvV0(
 			OperationalPlanStateWriter: stateStore,
 			OperationalPlanStateStore:  stateStore,
 			RequiredTestEvidenceStore:  stateStore,
-			AppChangeStore:             runFileStore,
+			AppChangeStore:             appChangeStore,
 			ReceiptStore:               receiptStorePort,
 			ProgressState:              progressStore,
 			ProcessRegistry:            stateStore,

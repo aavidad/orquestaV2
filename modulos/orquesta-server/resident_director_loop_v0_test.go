@@ -215,6 +215,28 @@ func TestResidentDirectorV0VisibleEnStatusPublicoYOperacional(t *testing.T) {
 	}
 }
 
+func TestResidentDirectorV0StatusPublicoNoReusaOkHistoricoSiEstaDesactivado(t *testing.T) {
+	status := NewServerPublicStatusV0(StateV0{
+		SchemaVersion:                   StateSchemaVersionV0,
+		Status:                          "running",
+		ResidentDirectorStatus:          "ok",
+		ResidentDirectorTickActive:      true,
+		ResidentDirectorTicks:           3,
+		ResidentDirectorExecutedActions: 2,
+		EffectiveConfig: ServerEffectiveConfigV0{
+			Settings: []ServerConfigSettingV0{{
+				Key:   "ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED",
+				Value: "false",
+			}},
+		},
+	})
+
+	if status.ResidentDirectorStatus != "disabled" ||
+		status.ResidentDirectorTickActive {
+		t.Fatalf("status=%+v", status)
+	}
+}
+
 type residentDirectorFakeResultV0 struct {
 	result ResidentDirectorResultV0
 	err    error

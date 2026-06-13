@@ -8,6 +8,7 @@ import (
 const (
 	ServerStatusConfigVisibilityPublicRedactedV0 = "public_redacted"
 	ServerStatusConfigHiddenValueV0              = "redacted"
+	serverPublicResidentDirectorEnabledKeyV0     = "ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED"
 )
 
 type ServerPublicStatusV0 struct {
@@ -139,6 +140,12 @@ func NewServerPublicStatusV0(state StateV0) ServerPublicStatusV0 {
 	}
 	config, configHidden := PublicServerEffectiveConfigV0(state.EffectiveConfig)
 	hidden = append(hidden, configHidden...)
+	residentDirectorStatus := state.ResidentDirectorStatus
+	residentDirectorTickActive := state.ResidentDirectorTickActive
+	if !serverPublicResidentDirectorEnabledV0(config) {
+		residentDirectorStatus = "disabled"
+		residentDirectorTickActive = false
+	}
 	return ServerPublicStatusV0{
 		SchemaVersion:                         StateSchemaVersionV0,
 		Status:                                strings.TrimSpace(state.Status),
@@ -202,8 +209,8 @@ func NewServerPublicStatusV0(state StateV0) ServerPublicStatusV0 {
 		IdleSelfImprovementFlight:             state.IdleSelfImprovementFlight,
 		IdleSelfImprovementRuns:               state.IdleSelfImprovementRuns,
 		IdleSelfImprovementOK:                 state.IdleSelfImprovementOK,
-		ResidentDirectorStatus:                state.ResidentDirectorStatus,
-		ResidentDirectorTickActive:            state.ResidentDirectorTickActive,
+		ResidentDirectorStatus:                residentDirectorStatus,
+		ResidentDirectorTickActive:            residentDirectorTickActive,
 		ResidentDirectorLastTickAt:            state.ResidentDirectorLastTickAt,
 		ResidentDirectorLastSuccessAt:         state.ResidentDirectorLastSuccessAt,
 		ResidentDirectorLastErrorAt:           state.ResidentDirectorLastErrorAt,
@@ -257,6 +264,22 @@ func NewServerPublicStatusV0(state StateV0) ServerPublicStatusV0 {
 		ResponseWriteLastStage:                state.ResponseWriteLastStage,
 		RecentErrors:                          append([]ServerDiagnosticV0(nil), state.RecentErrors...),
 	}
+}
+
+func serverPublicResidentDirectorEnabledV0(config ServerEffectiveConfigV0) bool {
+	config = NormalizeServerEffectiveConfigV0(config)
+	for _, setting := range config.Settings {
+		if strings.TrimSpace(setting.Key) != serverPublicResidentDirectorEnabledKeyV0 {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(setting.Value)) {
+		case "0", "false", "no", "off":
+			return false
+		default:
+			return true
+		}
+	}
+	return true
 }
 
 func PublicServerEffectiveConfigV0(config ServerEffectiveConfigV0) (ServerEffectiveConfigV0, []string) {

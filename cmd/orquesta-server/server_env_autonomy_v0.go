@@ -19,9 +19,37 @@ func serverAutonomyEnabledFromEnvV0() bool {
 	return boolEnvOrDefaultV0(envServerAutonomyEnabledV0, false)
 }
 
+func serverAutonomyEffectiveEnabledFromEnvV0() bool {
+	return serverAutonomyEnabledFromEnvV0() || serverOPESAutomationContextFromEnvV0()
+}
+
 func serverResidentDirectorEnabledFromEnvV0() bool {
 	if strings.TrimSpace(os.Getenv(envServerResidentDirectorEnabledV0)) != "" {
 		return boolEnvOrDefaultV0(envServerResidentDirectorEnabledV0, false)
 	}
-	return serverAutonomyEnabledFromEnvV0()
+	return serverAutonomyEffectiveEnabledFromEnvV0()
+}
+
+func serverResidentDirectorDisabledExplicitlyFromEnvV0() bool {
+	return strings.TrimSpace(os.Getenv(envServerResidentDirectorEnabledV0)) != "" &&
+		!boolEnvOrDefaultV0(envServerResidentDirectorEnabledV0, false)
+}
+
+func serverOPESAutomationContextFromEnvV0() bool {
+	if firstNonEmptyEnvV0(envOPESBaseURLV0, envOPESBaseURLLegacyV0) != "" {
+		return true
+	}
+	for _, key := range []string{
+		envOPESProjectWorkDirV0,
+		envOPESBridgeEnabledV0,
+		envOPESBridgeJobTypeV0,
+		envOPESBridgeJobRefV0,
+		envOPESBridgeJobTypeSequenceV0,
+		envOPESRegistryFinalPkgEnabledV0,
+	} {
+		if strings.TrimSpace(os.Getenv(key)) != "" {
+			return true
+		}
+	}
+	return false
 }

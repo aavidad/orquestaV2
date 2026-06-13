@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoragentfilesource "orquesta/modulos/orquesta-director-agent-file-source"
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
@@ -240,6 +241,30 @@ func (ledger serverWakeupDirectorCycleOutboxLedgerV0) AckOutboxDispatchV0(
 	ack orquestaoutboxdispatch.OutboxDispatchAckV0,
 ) []orquestaoutboxdispatch.DispatchIssueV0 {
 	return ledger.inner.AckOutboxDispatchV0(ack)
+}
+
+type serverWakeupAppChangeStoreV0 struct {
+	inner  orquestaappchange.AppChangeRecordStorePortV0
+	wakeup *serverSupervisorWakeupRelayV0
+}
+
+func (store serverWakeupAppChangeStoreV0) SaveAppChangeRequestV0(
+	ctx context.Context,
+	record orquestaappchange.AppChangeRecordV0,
+) error {
+	if err := store.inner.SaveAppChangeRequestV0(ctx, record); err != nil {
+		return err
+	}
+	store.wakeup.requestV0("app_change_saved")
+	store.wakeup.requestResidentDirectorV0("app_change_saved")
+	return nil
+}
+
+func (store serverWakeupAppChangeStoreV0) ListAppChangeRecordsV0(
+	ctx context.Context,
+	filter orquestaappchange.AppChangeRecordFilterV0,
+) ([]orquestaappchange.AppChangeRecordV0, error) {
+	return store.inner.ListAppChangeRecordsV0(ctx, filter)
 }
 
 type serverWakeupCodexReceiptStoreV0 struct {

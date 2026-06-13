@@ -19,6 +19,13 @@ const (
 )
 
 func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
+	if serverOPESAutomationContextFromEnvV0() && serverResidentDirectorDisabledExplicitlyFromEnvV0() {
+		return orquestaserver.ConfigV0{}, fmt.Errorf("%s=false incompatible con contexto OPES: activar %s=true o %s=true",
+			envServerResidentDirectorEnabledV0,
+			envServerAutonomyEnabledV0,
+			envServerResidentDirectorEnabledV0,
+		)
+	}
 	projectDir, err := projectDirFromEnvV0()
 	if err != nil {
 		return orquestaserver.ConfigV0{}, err

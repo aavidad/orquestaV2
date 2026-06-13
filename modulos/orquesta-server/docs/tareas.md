@@ -211,3 +211,59 @@ Pendiente separado:
 - smoke largo real con servidor residente opt-in y cola amplia;
 - consejo/votacion y resolucion de `SkillRefs` por rol pertenecen al Director,
   no a `orquesta-server`.
+
+## SRV-TASK-013: OPES no puede arrancar sin Director residente
+
+Estado: hecho local 2026-06-13.
+
+Origen: incidencia OPES A2 Informatica con servidor `127.0.0.1:8792` arrancado
+con `ORQUESTA_OPES_PROJECT_WORKDIR` y
+`ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=false`.
+
+Objetivo: un servidor con contexto OPES no debe quedar en modo semiautomatico
+sin Director residente. Si OPES esta activo, la autonomia efectiva debe activar
+el Director residente por defecto; si alguien fuerza
+`ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=false`, el arranque debe fallar con
+error accionable. El daemon arrancado por `start` debe recibir explicitamente la
+configuracion efectiva de autonomia y el status publico no debe mostrar un `ok`
+historico como si el loop siguiera activo.
+
+Validacion:
+
+- `TestServerConfigFromEnvV0ContextoOPESActivaDirectorResidenteV0`;
+- `TestServerConfigFromEnvV0BloqueaOPESConDirectorResidenteApagadoV0`;
+- `TestServerDaemonStartEnvironmentV0ProyectaDirectorResidenteEfectivo`;
+- `TestResidentDirectorV0StatusPublicoNoReusaOkHistoricoSiEstaDesactivado`.
+
+## SRV-TASK-014: app-change despierta supervision residente
+
+Estado: hecho local 2026-06-13.
+
+Objetivo: persistir una `app-change` aceptada debe despertar al supervisor y al
+Director residente. La app-change aceptada no es materializacion: la
+materializacion ocurre cuando el supervisor/director vuelve a drenar decisiones.
+Por tanto el store durable debe emitir wakeup desde el composition root del
+servidor, sin acoplar handlers HTTP con `/api/v0/runs/supervise`.
+
+Validacion:
+
+- `TestServerWakeupAppChangeStoreV0DisparaAlGuardarSolicitud`;
+- `TestServerSupervisorWakeupDecoratorsV0DisparanSoloTrasMutacionesEjecutables`.
+
+## SRV-TASK-015: productor causal OPES de rework y followups
+
+Estado: pendiente.
+
+Objetivo: crear un adaptador OPES opt-in que convierta artefactos y receipts ya
+aceptados o rechazados en nuevos `DomainWorkJobRequestV0` deduplicados. Debe
+cubrir al menos `document_plan` aceptado, `director_review_matrix` con
+`needs_rework`, `completed_syllabus_package` con `pendiente_continuar` y
+`followup_refs`, y receipts rechazados. No debe vivir en el nucleo puro: debe
+apoyarse en puertos `domain-work`, `orquesta-opes-bridge` y contratos OPES.
+
+Validacion prevista:
+
+- prueba unitaria con fake `DomainWorkJobCreatorPortV0`;
+- prueba de idempotencia por `source_job + artifact_ref + followup_ref`;
+- prueba de no cierre falso cuando quedan followups;
+- smoke fake `plan_temario -> derivados -> package pendiente -> rework`.

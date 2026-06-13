@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoragentfilesource "orquesta/modulos/orquesta-director-agent-file-source"
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
@@ -79,6 +80,50 @@ func TestServerSupervisorWakeupDecoratorsV0DisparanSoloTrasMutacionesEjecutables
 		t.Fatalf("causes=%v want=%v", causes, want)
 	}
 	if !stringSlicesEqualV0(residentCauses, []string{"run_store_saved"}) {
+		t.Fatalf("residentCauses=%v", residentCauses)
+	}
+}
+
+func TestServerWakeupAppChangeStoreV0DisparaAlGuardarSolicitud(t *testing.T) {
+	ctx := context.Background()
+	var causes []string
+	var residentCauses []string
+	relay := &serverSupervisorWakeupRelayV0{
+		request: func(cause string) bool {
+			causes = append(causes, cause)
+			return true
+		},
+		requestResidentDirector: func(cause string) bool {
+			residentCauses = append(residentCauses, cause)
+			return true
+		},
+	}
+	store := serverWakeupAppChangeStoreV0{
+		inner:  orquestaappchange.NewInMemoryAppChangeStoreV0(),
+		wakeup: relay,
+	}
+
+	if err := store.SaveAppChangeRequestV0(ctx, orquestaappchange.AppChangeRecordV0{
+		Request: orquestaappchange.AppChangeRequestV0{
+			RequestID:     "request-ref-app-change-wakeup-001",
+			CorrelationID: "corr-app-change-wakeup-001",
+			RunRef:        "run-ref-app-change-wakeup-001",
+			AppRef:        "app-ref-app-change-wakeup-001",
+			ChangeRef:     "change-ref-app-change-wakeup-001",
+		},
+	}); err != nil {
+		t.Fatalf("SaveAppChangeRequestV0: %v", err)
+	}
+	records, err := store.ListAppChangeRecordsV0(ctx, orquestaappchange.AppChangeRecordFilterV0{
+		RunRef: "run-ref-app-change-wakeup-001",
+	})
+	if err != nil || len(records) != 1 {
+		t.Fatalf("ListAppChangeRecordsV0 records=%+v err=%v", records, err)
+	}
+	if !stringSlicesEqualV0(causes, []string{"app_change_saved"}) {
+		t.Fatalf("causes=%v", causes)
+	}
+	if !stringSlicesEqualV0(residentCauses, []string{"app_change_saved"}) {
 		t.Fatalf("residentCauses=%v", residentCauses)
 	}
 }

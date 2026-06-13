@@ -163,6 +163,27 @@ func TestServerDaemonStartEnvironmentV0NoFuerzaPurgasPorDefecto(t *testing.T) {
 	}
 }
 
+func TestServerDaemonStartEnvironmentV0ProyectaDirectorResidenteEfectivo(t *testing.T) {
+	projectDir := t.TempDir()
+	config := orquestaserver.ConfigV0{
+		Addr:                       "127.0.0.1:19098",
+		ProjectWorkDir:             projectDir,
+		RuntimeWorkDir:             filepath.Join(projectDir, "runtime"),
+		StateDir:                   filepath.Join(projectDir, "state"),
+		AuditFile:                  "audit.jsonl",
+		ResidentDirectorEnabled:    true,
+		ResidentDirectorMaxActions: 11,
+	}
+
+	got := serverDaemonStartEnvironmentV0(nil, config)
+
+	if !daemonStartEnvHasPairForTestV0(got, envServerAutonomyEnabledV0, "true") ||
+		!daemonStartEnvHasPairForTestV0(got, envServerResidentDirectorEnabledV0, "true") ||
+		!daemonStartEnvHasPairForTestV0(got, envServerResidentDirectorMaxActionsV0, "11") {
+		t.Fatalf("director residente efectivo no proyectado al daemon: %v", got)
+	}
+}
+
 func TestServerDaemonStartEnvironmentV0ProyectaEgressSanitizerSinAbrirSecretosV0(t *testing.T) {
 	projectDir := t.TempDir()
 	config := orquestaserver.ConfigV0{
