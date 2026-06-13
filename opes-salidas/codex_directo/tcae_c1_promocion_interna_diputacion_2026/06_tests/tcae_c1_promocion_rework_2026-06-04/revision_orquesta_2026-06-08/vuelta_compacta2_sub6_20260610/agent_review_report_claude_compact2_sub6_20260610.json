@@ -1,0 +1,72 @@
+{
+  "schema_version": "agent_review_report.v0",
+  "report_ref": "agent-review-report-claude-compact2-sub6-20260610",
+  "request_id": "agent-ref-task-ref-app-change-appchange-011ee60c79556f80b3c9cb3990f93da2",
+  "correlation_id": "corr-tcae-promocion-tests-compact2_sub6_20260610-20260608-burst-002",
+  "round": "compact2_sub6_20260610",
+  "course": "TCAE C1 promocion interna Diputacion 2026",
+  "reviewer_role": "revision editorial, ambiguedades, test y explicaciones",
+  "source_packet_ref": "compact2-review-packet-claude-sub6-20260610",
+  "source_packet_path": "opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04/revision_orquesta_2026-06-08/compact_review_packets2_20260610/claude_compact_review_packet_20260610.json",
+  "verdict": "accepted",
+  "scope_note": "Revision focal de 29 preguntas listadas en el paquete compacto; no declara cobertura total del banco de 1050 preguntas.",
+  "reviewed_count": 29,
+  "accepted_condition_checked": true,
+  "local_validator_summary": {
+    "command": "python3 revision_orquesta_2026-06-08/validate_tcae_promocion_tests.py",
+    "status": "passed",
+    "topic_files": 21,
+    "bank_questions": 1050,
+    "issue_count": 0,
+    "executed_by_codex_at": "2026-06-09T23:18:23Z"
+  },
+  "reviewed_id_suffixes": [
+    "t001-reuse-004",
+    "t001-reuse-021",
+    "t001-reuse-026",
+    "t002-reuse-006",
+    "t002-reuse-008",
+    "t002-reuse-011",
+    "t002-reuse-015",
+    "t002-reuse-025",
+    "t002-reuse-029",
+    "t003-reuse-008",
+    "t003-reuse-009",
+    "t003-reuse-015",
+    "t003-reuse-028",
+    "t004-reuse-013",
+    "t004-reuse-028",
+    "t005-reuse-001",
+    "t005-reuse-002",
+    "t005-reuse-021",
+    "t005-reuse-022",
+    "t005-reuse-029",
+    "t010-reuse-003",
+    "t010-reuse-008",
+    "t010-reuse-011",
+    "t010-reuse-016",
+    "t015-reuse-014",
+    "t015-reuse-029",
+    "t017-reuse-006",
+    "t017-reuse-014",
+    "t017-reuse-022"
+  ],
+  "findings": [],
+  "rework_required": [],
+  "risks": [
+    {
+      "id_suffix": "t004-reuse-013",
+      "severity": "low",
+      "note": "Un distractor menciona ponderacion y acceso parcial con disociacion; se conserva aceptado porque el enunciado pregunta por el deber directo cuando el limite afecta solo a parte de la informacion, y la opcion correcta es mas precisa."
+    }
+  ],
+  "contract_checks": [
+    "No se modificaron question_banks ni course_tests.",
+    "La entrega es un agent_review_report compacto en el write-set permitido.",
+    "El veredicto accepted no reclama cobertura total de 1050 preguntas."
+  ],
+  "context_notes": [
+    "contexto_ref_only_resuelto: el paquete de inicio exigia ack_evidence_required para una entrada ref_only; se deja evidencia en este informe y en el ACK, sin inventar contenido no materializado."
+  ],
+  "created_at": "2026-06-09T23:21:09Z"
+}

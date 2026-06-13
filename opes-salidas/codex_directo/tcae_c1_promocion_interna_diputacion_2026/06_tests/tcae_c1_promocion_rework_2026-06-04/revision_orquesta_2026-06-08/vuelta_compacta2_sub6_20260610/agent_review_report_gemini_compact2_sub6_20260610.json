@@ -1,0 +1,112 @@
+{
+  "schema_version": "agent_review_report.v0",
+  "report_ref": "agent-review-report-gemini-compact2-sub6-20260610",
+  "packet_ref": "compact2-review-packet-gemini-sub6-20260610",
+  "reviewer_role": "revision didactica y semantica exigente",
+  "round": "compact2_sub6_20260610",
+  "verdict": "rework_required",
+  "scope": {
+    "course": "TCAE C1 promocion interna Diputacion 2026",
+    "review_type": "revision focal posterior a correccion local y 6 subagentes",
+    "reviewed_focus_questions": 32,
+    "coverage_note": "Revision limitada a los IDs focales del paquete compacto; no declara cobertura total de 1050 preguntas."
+  },
+  "evidence": {
+    "compact_packet_path": "opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04/revision_orquesta_2026-06-08/compact_review_packets2_20260610/gemini_compact_review_packet_20260610.json",
+    "local_validation_summary": "validate_tcae_promocion_tests.py passed: 21 topic files, 1050 questions, issue_count 0",
+    "bank_read_policy": "No se ha leido el banco completo; revision realizada sobre paquete compacto y comprobacion semantica focal de los IDs listados."
+  },
+  "reviewed_ids": [
+    "t007-reuse-003",
+    "t007-reuse-008",
+    "t007-reuse-017",
+    "t007-reuse-018",
+    "t007-reuse-019",
+    "t007-reuse-023",
+    "t011-reuse-005",
+    "t011-reuse-007",
+    "t011-reuse-010",
+    "t011-reuse-016",
+    "t011-reuse-020",
+    "t011-reuse-026",
+    "t012-reuse-003",
+    "t012-reuse-005",
+    "t012-reuse-008",
+    "t012-reuse-016",
+    "t012-reuse-026",
+    "t012-reuse-027",
+    "t014-reuse-005",
+    "t014-reuse-013",
+    "t014-reuse-014",
+    "t014-reuse-015",
+    "t014-reuse-023",
+    "t014-reuse-025",
+    "t018-reuse-011",
+    "t018-reuse-024",
+    "t018-supp-001",
+    "t018-supp-010",
+    "t018-supp-020",
+    "t020-reuse-005",
+    "t020-reuse-027",
+    "t021-reuse-023"
+  ],
+  "findings": [
+    {
+      "id_suffix": "t014-reuse-025",
+      "severity": "blocking",
+      "problem": "Un distractor afirma que las UPP son prevenibles con cambios posturales cada 3 horas. La respuesta correcta usa cada 2-3 horas; por tanto, el distractor queda incluido en el rango aceptado y puede ser semantically equivalente para examen.",
+      "recommended_change": "Cambiar ese distractor por una frecuencia claramente incorrecta o por una medida que no prevenga UPP, por ejemplo 'solo con crema hidratante sin cambios posturales' o 'con cambios cada 6-8 horas'."
+    },
+    {
+      "id_suffix": "t011-reuse-010",
+      "severity": "major",
+      "problem": "La pregunta mezcla 'insulina abierta' y 'algunos colirios' y da como unica correcta conservar en nevera 2-8 C. Para insulina en uso, muchas pautas permiten o recomiendan conservacion a temperatura ambiente dentro del plazo indicado; tal como esta redactada, puede penalizar una pauta correcta dependiente de ficha tecnica.",
+      "recommended_change": "Reformular a 'insulina sin abrir y colirios que requieran frio' si se quiere 2-8 C, o separar insulina en uso de medicamentos que requieren nevera segun ficha tecnica."
+    },
+    {
+      "id_suffix": "t011-reuse-016",
+      "severity": "minor",
+      "problem": "Hay dos distractores equivalentes sobre via transdermica/parche. No cambia la respuesta correcta, pero reduce calidad psicometrica y variedad de distractores.",
+      "recommended_change": "Sustituir uno de los dos distractores transdermicos por otra via incorrecta no equivalente, por ejemplo rectal, inhalatoria u oral de liberacion prolongada, manteniendo que la sublingual es la correcta."
+    }
+  ],
+  "accepted_focus_ids_without_rework": [
+    "t007-reuse-003",
+    "t007-reuse-008",
+    "t007-reuse-017",
+    "t007-reuse-018",
+    "t007-reuse-019",
+    "t007-reuse-023",
+    "t011-reuse-005",
+    "t011-reuse-007",
+    "t011-reuse-020",
+    "t011-reuse-026",
+    "t012-reuse-003",
+    "t012-reuse-005",
+    "t012-reuse-008",
+    "t012-reuse-016",
+    "t012-reuse-026",
+    "t012-reuse-027",
+    "t014-reuse-005",
+    "t014-reuse-013",
+    "t014-reuse-014",
+    "t014-reuse-015",
+    "t014-reuse-023",
+    "t018-reuse-011",
+    "t018-reuse-024",
+    "t018-supp-001",
+    "t018-supp-010",
+    "t018-supp-020",
+    "t020-reuse-005",
+    "t020-reuse-027",
+    "t021-reuse-023"
+  ],
+  "risks": [
+    "El validador estructural puede estar verde aunque existan distractores equivalentes o formulaciones clinicas dependientes de ficha tecnica.",
+    "No reclamar cobertura total: el informe solo valida o reabre los IDs focales del paquete."
+  ],
+  "notes": [
+    "contexto_ref_only_resuelto: el paquete exigia evidencia en ACK para una entrada required=true mode=ref_only; se conserva la limitacion en el ACK sin inventar contenido ausente.",
+    "No se modificaron question_banks ni course_tests."
+  ]
+}

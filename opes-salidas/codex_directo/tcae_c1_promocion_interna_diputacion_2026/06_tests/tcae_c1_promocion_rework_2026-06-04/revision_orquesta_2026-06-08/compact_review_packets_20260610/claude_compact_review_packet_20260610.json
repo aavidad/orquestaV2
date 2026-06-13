@@ -1,0 +1,422 @@
+{
+  "schema_version": "opes.tcae.compact_review_packet.v1",
+  "packet_ref": "compact-review-packet-claude-sub6-20260610",
+  "provider_target": "claude",
+  "token_policy": {
+    "read_this_packet_only_first": true,
+    "do_not_read_full_bank_unless_a_listed_id_requires_targeted_check": true,
+    "max_focus_questions": 29,
+    "expected_final_report": "brief JSON only"
+  },
+  "scope": {
+    "course": "TCAE C1 promoción interna Diputación 2026",
+    "round": "compact_sub6_20260610",
+    "purpose": "Revisión focal posterior a corrección local y 6 subagentes; no sustituye revisión completa de 1050 preguntas.",
+    "bank_root_absolute_ref": "/home/alberto/Trabajo/OPES/opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04",
+    "bank_root_relative_ref": "opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04"
+  },
+  "local_validation": {
+    "command": "python3 revision_orquesta_2026-06-08/validate_tcae_promocion_tests.py",
+    "status": "passed",
+    "topic_files": 21,
+    "bank_questions": 1050,
+    "issue_count": 0,
+    "executed_by_codex_at": "2026-06-09T23:16:21Z"
+  },
+  "local_changes_summary": [
+    "Corregidas respuestas legales y administrativas de temas 1-5.",
+    "Corregido Tema 10: confidencialidad, indicios fundados de maltrato, justicia/equidad y grados de dependencia.",
+    "Corregidas opciones equivalentes, erratas y distractores no plausibles en temas sanitarios/asistenciales.",
+    "Regenerado bloque suplementario del tema 18 para que sea comunicación, no SAAD/residencias.",
+    "Reescritas explicaciones suplementarias para no depender de letras A-D tras barajado.",
+    "Sincronizados question_banks y course_tests; validador local en verde."
+  ],
+  "review_request": {
+    "verdict_values": [
+      "accepted",
+      "rework_required"
+    ],
+    "accepted_condition": "No encontrar errores reales en los IDs focales ni contradicción con el validador local.",
+    "rework_condition": "Listar id_suffix, problema, severidad y cambio recomendado. No reabrir por estilo menor si no afecta a respuesta, seguridad o aprendizaje.",
+    "do_not_modify_bank": true
+  },
+  "focus_questions": [
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t001-reuse-004",
+      "id_suffix": "t001-reuse-004",
+      "topic_file": "tema_001_organizacion-territorial-comunidades-autonomas-estatutos-y-competencias.questions.json",
+      "body": "El artículo 137 de la Constitución Española organiza el territorio del Estado en:",
+      "correct": "Municipios, provincias y Comunidades Autónomas",
+      "distractors": [
+        "Solo en municipios y Comunidades Autónomas",
+        "Comarcas, provincias, Comunidades Autónomas e islas",
+        "Municipios, comarcas y regiones"
+      ],
+      "explanation": "La respuesta correcta es: Municipios, provincias y Comunidades Autónomas. Foco de la pregunta: El artículo 137 de la Constitución Española organiza el territorio del Estado en:. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t001-reuse-021",
+      "id_suffix": "t001-reuse-021",
+      "topic_file": "tema_001_organizacion-territorial-comunidades-autonomas-estatutos-y-competencias.questions.json",
+      "body": "Qué materias figuran como competencias exclusivas del Estado (art. 149):",
+      "correct": "Defensa, Relaciones Exteriores, Hacienda General, Legislación penal e Inmigración",
+      "distractors": [
+        "Sanidad, educación y medio ambiente",
+        "Urbanismo, asistencia social y ordenación del territorio",
+        "Urbanismo, agricultura y servicios sociales"
+      ],
+      "explanation": "La respuesta correcta es: Defensa, Relaciones Exteriores, Hacienda General, Legislación penal e Inmigración. Foco de la pregunta: Qué materias figuran como competencias exclusivas del Estado (art. 149):. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t001-reuse-026",
+      "id_suffix": "t001-reuse-026",
+      "topic_file": "tema_001_organizacion-territorial-comunidades-autonomas-estatutos-y-competencias.questions.json",
+      "body": "Cuál de las siguientes materias puede ser asumida por las CCAA según el art. 148 CE:",
+      "correct": "Ordenación del territorio, urbanismo y vivienda",
+      "distractors": [
+        "Legislación penal y régimen penitenciario",
+        "Defensa, relaciones exteriores y legislación penal",
+        "Relaciones exteriores y tratados internacionales"
+      ],
+      "explanation": "La respuesta correcta es: Ordenación del territorio, urbanismo y vivienda. Foco de la pregunta: Cuál de las siguientes materias puede ser asumida por las CCAA según el art. 148 CE:. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t002-reuse-006",
+      "id_suffix": "t002-reuse-006",
+      "topic_file": "tema_002_legalidad-fuentes-acto-administrativo-y-procedimiento.questions.json",
+      "body": "¿Según el principio de legalidad, la Administración Pública?",
+      "correct": "Solo puede actuar cuando la ley le habilita expresamente para ello (vinculación positiva)",
+      "distractors": [
+        "Actúa con plena discrecionalidad salvo en materia de derechos fundamentales",
+        "Puede hacer todo lo que la ley no prohíbe expresamente",
+        "La Administración puede actuar por oportunidad aunque no exista habilitación legal expresa"
+      ],
+      "explanation": "La respuesta correcta es: Solo puede actuar cuando la ley le habilita expresamente para ello (vinculación positiva). Foco de la pregunta: Según el principio de legalidad, la Administración Pública. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t002-reuse-008",
+      "id_suffix": "t002-reuse-008",
+      "topic_file": "tema_002_legalidad-fuentes-acto-administrativo-y-procedimiento.questions.json",
+      "body": "¿Cuándo se produce la caducidad por paralización imputable al interesado en un procedimiento iniciado a solicitud?",
+      "correct": "El procedimiento se paraliza por causa imputable al interesado durante más de 3 meses",
+      "distractors": [
+        "El procedimiento se paraliza por causa imputable al interesado durante más de 4 meses",
+        "El interesado presenta su solicitud fuera del plazo de prescripción de la acción",
+        "La Administración no resuelve dentro del plazo máximo legalmente establecido"
+      ],
+      "explanation": "La respuesta correcta es: El procedimiento se paraliza por causa imputable al interesado durante más de 3 meses. Foco de la pregunta: Cuándo se produce la caducidad por paralización imputable al interesado en un procedimiento iniciado a solicitud. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t002-reuse-011",
+      "id_suffix": "t002-reuse-011",
+      "topic_file": "tema_002_legalidad-fuentes-acto-administrativo-y-procedimiento.questions.json",
+      "body": "¿En qué supuestos se aplica el silencio NEGATIVO según la Ley 39/2015?",
+      "correct": "En casos tasados: recursos administrativos, solicitudes sobre dominio público, actividades que puedan dañar el medio ambiente, entre otros",
+      "distractors": [
+        "En todos los procedimientos iniciados de oficio por la Administración",
+        "Siempre que el interesado no aporte la documentación requerida en el plazo señalado",
+        "Siempre que la Administración no resuelva dentro de plazo, sin excepciones"
+      ],
+      "explanation": "La respuesta correcta es: En casos tasados: recursos administrativos, solicitudes sobre dominio público, actividades que puedan dañar el medio ambiente, entre otros. Foco de la pregunta: En qué supuestos se aplica el silencio NEGATIVO según la Ley 39/2015. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t002-reuse-015",
+      "id_suffix": "t002-reuse-015",
+      "topic_file": "tema_002_legalidad-fuentes-acto-administrativo-y-procedimiento.questions.json",
+      "body": "¿El Recurso de ALZADA se interpone?",
+      "correct": "Ante el órgano que dictó el acto o ante el superior jerárquico competente para resolver, cuando el acto no agota la vía administrativa",
+      "distractors": [
+        "Directamente ante los Tribunales de Justicia, sin necesidad de agotar la vía administrativa",
+        "Ante el mismo órgano que dictó el acto, con carácter potestativo",
+        "Ante cualquier órgano administrativo, aunque no tenga competencia para resolver"
+      ],
+      "explanation": "La respuesta correcta es: Ante el órgano que dictó el acto o ante el superior jerárquico competente para resolver, cuando el acto no agota la vía administrativa. Foco de la pregunta: El Recurso de ALZADA se interpone. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t002-reuse-025",
+      "id_suffix": "t002-reuse-025",
+      "topic_file": "tema_002_legalidad-fuentes-acto-administrativo-y-procedimiento.questions.json",
+      "body": "¿Cuál es el plazo general para interponer recurso de alzada ante el órgano superior jerárquico?",
+      "correct": "1 mes desde la notificación del acto expreso; si el acto no es expreso, en cualquier momento desde el día siguiente al silencio administrativo",
+      "distractors": [
+        "2 mes desde la notificación del acto expreso, o 3 meses desde el silencio administrativo negativo",
+        "2 meses desde la notificación del acto expreso, o cualquier momento frente a la desestimación presunta",
+        "15 días hábiles en todo caso"
+      ],
+      "explanation": "La respuesta correcta es: 1 mes desde la notificación del acto expreso; si el acto no es expreso, en cualquier momento desde el día siguiente al silencio administrativo. Foco de la pregunta: Cuál es el plazo general para interponer recurso de alzada ante el órgano superior jerárquico. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t002-reuse-029",
+      "id_suffix": "t002-reuse-029",
+      "topic_file": "tema_002_legalidad-fuentes-acto-administrativo-y-procedimiento.questions.json",
+      "body": "¿Qué regula específicamente la Ley 39/2015, de 1 de octubre?",
+      "correct": "El régimen jurídico del sector público y la organización interna de las Administraciones",
+      "distractors": [
+        "La Ley de Bases del Régimen Local y la autonomía municipal",
+        "El régimen jurídico y la organización interna del sector público",
+        "El Procedimiento Administrativo Común de todas las Administraciones Públicas"
+      ],
+      "explanation": "La respuesta correcta es: El régimen jurídico del sector público y la organización interna de las Administraciones. Foco de la pregunta: Qué regula específicamente la Ley 39/2015, de 1 de octubre. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t003-reuse-008",
+      "id_suffix": "t003-reuse-008",
+      "topic_file": "tema_003_contratos-del-sector-publico.questions.json",
+      "body": "¿Cuándo puede modificarse un contrato del sector público sin nueva licitación por circunstancias imprevisibles (art. 205 LCSP)?",
+      "correct": "Cuando concurren circunstancias imprevisibles, no se altera la naturaleza global del contrato y la modificación no supera el 50% del precio inicial",
+      "distractors": [
+        "Cuando basta una razón genérica de interés público y la modificación no supera el 20%, aunque altere la naturaleza global del contrato",
+        "Siempre que el órgano de contratación lo justifique por razones de interés público, sin límite cuantitativo",
+        "Cuando concurren circunstancias imprevisibles y la modificación supera el 50% del precio inicial"
+      ],
+      "explanation": "La respuesta correcta es: Cuando concurren circunstancias imprevisibles, no se altera la naturaleza global del contrato y la modificación no supera el 50% del precio inicial. Foco de la pregunta: Cuándo puede modificarse un contrato del sector público sin nueva licitación por circunstancias imprevisibles (art. 205 LCSP). La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t003-reuse-009",
+      "id_suffix": "t003-reuse-009",
+      "topic_file": "tema_003_contratos-del-sector-publico.questions.json",
+      "body": "¿Cuál es la duración máxima de un contrato de servicios en la LCSP con carácter general?",
+      "correct": "Con carácter general, hasta 5 años incluyendo las posibles prórrogas",
+      "distractors": [
+        "2 años, prorrogables hasta 4 años incluyendo prórrogas",
+        "7 años incluyendo prórrogas",
+        "4 años, prorrogables hasta 5 años incluyendo prórrogas"
+      ],
+      "explanation": "La respuesta correcta es: Con carácter general, hasta 5 años incluyendo las posibles prórrogas. Foco de la pregunta: Cuál es la duración máxima de un contrato de servicios en la LCSP con carácter general. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t003-reuse-015",
+      "id_suffix": "t003-reuse-015",
+      "topic_file": "tema_003_contratos-del-sector-publico.questions.json",
+      "body": "¿Cuál es el umbral del contrato menor para OBRAS según el art. 118.2.a LCSP?",
+      "correct": "Inferior a 40.000 € (sin IVA)",
+      "distractors": [
+        "Inferior a 30.000 € (sin IVA)",
+        "Inferior a 15.000 € (sin IVA)",
+        "Inferior a 50.000 € (sin IVA)"
+      ],
+      "explanation": "La respuesta correcta es: Inferior a 40.000 € (sin IVA). Foco de la pregunta: Cuál es el umbral del contrato menor para OBRAS según el art. 118.2.a LCSP. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t003-reuse-028",
+      "id_suffix": "t003-reuse-028",
+      "topic_file": "tema_003_contratos-del-sector-publico.questions.json",
+      "body": "¿Qué documento acredita la aptitud para contratar de una empresa y reúne declaraciones sobre prohibiciones de contratar, solvencia y representación?",
+      "correct": "La Declaración Responsable (art. 141 LCSP), o el Documento Europeo Único de Contratación (DEUC)",
+      "distractors": [
+        "El Pliego de Prescripciones Técnicas (PPT)",
+        "Una declaración responsable genérica sin identificar prohibiciones de contratar ni solvencia",
+        "El informe jurídico previo del Secretario del órgano de contratación"
+      ],
+      "explanation": "La respuesta correcta es: La Declaración Responsable (art. 141 LCSP), o el Documento Europeo Único de Contratación (DEUC). Foco de la pregunta: Qué documento acredita la aptitud para contratar de una empresa y reúne declaraciones sobre prohibiciones de contratar, solvencia y representación. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t004-reuse-013",
+      "id_suffix": "t004-reuse-013",
+      "topic_file": "tema_004_transparencia-publicidad-activa-y-acceso-a-la-informacion.questions.json",
+      "body": "Cuando un límite al acceso afecta solo a parte de la información solicitada, la Administración debe:",
+      "correct": "Conceder acceso parcial previa disociación o anonimización de los datos protegidos",
+      "distractors": [
+        "Denegar siempre el acceso por existir un límite, aunque sea posible disociar la parte protegida",
+        "Se aplica la ponderación entre el derecho de acceso y la protección de datos, pudiendo concederse acceso parcial con disociación de datos",
+        "Solicitar autorización judicial antes de responder"
+      ],
+      "explanation": "La respuesta correcta es: Conceder acceso parcial previa disociación o anonimización de los datos protegidos. Foco de la pregunta: Cuando un límite al acceso afecta solo a parte de la información solicitada, la Administración debe:. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t004-reuse-028",
+      "id_suffix": "t004-reuse-028",
+      "topic_file": "tema_004_transparencia-publicidad-activa-y-acceso-a-la-informacion.questions.json",
+      "body": "Partidos políticos, sindicatos y organizaciones empresariales están sujetos a la Ley 19/2013 cuando:",
+      "correct": "En todo caso, como sujetos incluidos directamente en la Ley 19/2013",
+      "distractors": [
+        "Reciban más de 99.000 € de fondos públicos o más del 40% de sus ingresos anuales procedan de los mismos",
+        "Tengan más de 50 trabajadores o más de 5 millones de facturación",
+        "Solo cuando superan los umbrales económicos previstos para otras entidades privadas"
+      ],
+      "explanation": "La respuesta correcta es: En todo caso, como sujetos incluidos directamente en la Ley 19/2013. Foco de la pregunta: Partidos políticos, sindicatos y organizaciones empresariales están sujetos a la Ley 19/2013 cuando:. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t005-reuse-001",
+      "id_suffix": "t005-reuse-001",
+      "topic_file": "tema_005_presupuesto-local-creditos-ejecucion-y-liquidacion.questions.json",
+      "body": "Las generaciones de crédito las aprueba:",
+      "correct": "El Alcalde o Presidente de la Entidad Local",
+      "distractors": [
+        "La Intervención municipal",
+        "El Consejo de Estado",
+        "El Pleno"
+      ],
+      "explanation": "La respuesta correcta es: El Alcalde o Presidente de la Entidad Local. Foco de la pregunta: Las generaciones de crédito las aprueba:. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t005-reuse-002",
+      "id_suffix": "t005-reuse-002",
+      "topic_file": "tema_005_presupuesto-local-creditos-ejecucion-y-liquidacion.questions.json",
+      "body": "El principio presupuestario de UNIVERSALIDAD establece que:",
+      "correct": "Todos los derechos e ingresos y todas las obligaciones y gastos deben incluirse en el presupuesto, sin compensaciones entre ellos",
+      "distractors": [
+        "El presupuesto debe equilibrar ingresos y gastos sin déficit inicial",
+        "Los créditos son anuales y no se pueden aplicar a ejercicios distintos",
+        "Solo deben incluirse ingresos efectivamente cobrados y gastos ya pagados"
+      ],
+      "explanation": "La respuesta correcta es: Todos los derechos e ingresos y todas las obligaciones y gastos deben incluirse en el presupuesto, sin compensaciones entre ellos. Foco de la pregunta: El principio presupuestario de UNIVERSALIDAD establece que:. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t005-reuse-021",
+      "id_suffix": "t005-reuse-021",
+      "topic_file": "tema_005_presupuesto-local-creditos-ejecucion-y-liquidacion.questions.json",
+      "body": "¿Qué fase del ciclo del gasto corresponde al acto por el que el órgano competente acuerda la realización de un gasto por cuantía determinada (compromiso de gasto)?",
+      "correct": "Fase D (Disposición o compromiso)",
+      "distractors": [
+        "Fase O (Reconocimiento de la obligación)",
+        "Fase A (Autorización)",
+        "Ordenación del pago"
+      ],
+      "explanation": "La respuesta correcta es: Fase D (Disposición o compromiso). Foco de la pregunta: Qué fase del ciclo del gasto corresponde al acto por el que el órgano competente acuerda la realización de un gasto por cuantía determinada (compromiso de gasto). La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t005-reuse-022",
+      "id_suffix": "t005-reuse-022",
+      "topic_file": "tema_005_presupuesto-local-creditos-ejecucion-y-liquidacion.questions.json",
+      "body": "¿Cuál es la primera fase del ciclo de ejecución del gasto público?",
+      "correct": "Autorización (A)",
+      "distractors": [
+        "Reconocimiento de la obligación",
+        "Disposición o compromiso",
+        "Retención de crédito"
+      ],
+      "explanation": "La respuesta correcta es: Autorización (A). Foco de la pregunta: Cuál es la primera fase del ciclo de ejecución del gasto público. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t005-reuse-029",
+      "id_suffix": "t005-reuse-029",
+      "topic_file": "tema_005_presupuesto-local-creditos-ejecucion-y-liquidacion.questions.json",
+      "body": "¿En qué fase del gasto nace jurídicamente la obligación de pago?",
+      "correct": "En la fase de reconocimiento de la obligación (O)",
+      "distractors": [
+        "En la fase de autorización",
+        "En la fase de ordenación del pago (P)",
+        "En la fase de ordenación del pago"
+      ],
+      "explanation": "La respuesta correcta es: En la fase de reconocimiento de la obligación (O). Foco de la pregunta: En qué fase del gasto nace jurídicamente la obligación de pago. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t010-reuse-003",
+      "id_suffix": "t010-reuse-003",
+      "topic_file": "tema_010_bioetica-dilemas-eticos-normas-profesionales-y-secreto-profesional.questions.json",
+      "body": "¿Qué situaciones justifican la ruptura de la confidencialidad por parte del cuidador o del equipo?",
+      "correct": "Ante riesgo grave para la vida del residente o de terceros, indicios fundados de maltrato o requerimiento judicial",
+      "distractors": [
+        "Siempre que otro profesional del centro la pida, aunque no esté implicado en la atención ni autorizado",
+        "Cuando un periodista o medio de comunicación solicita información sobre el estado del residente",
+        "Cuando el familiar del residente presenta una queja formal ante la dirección del centro"
+      ],
+      "explanation": "La respuesta correcta es: Ante riesgo grave para la vida del residente o de terceros, indicios fundados de maltrato o requerimiento judicial. Foco de la pregunta: Qué situaciones justifican la ruptura de la confidencialidad por parte del cuidador o del equipo. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t010-reuse-008",
+      "id_suffix": "t010-reuse-008",
+      "topic_file": "tema_010_bioetica-dilemas-eticos-normas-profesionales-y-secreto-profesional.questions.json",
+      "body": "El principio de justicia en bioética obliga al cuidador a:",
+      "correct": "Tratar a todos los residentes con equidad, sin discriminación por edad, sexo, religión, etnia o condición social",
+      "distractors": [
+        "Dedicar más tiempo a los residentes con mayor deterioro cognitivo",
+        "Tratar a todas las personas exactamente igual, sin valorar necesidades ni apoyos individuales",
+        "Priorizar siempre los cuidados de los residentes que tienen familia"
+      ],
+      "explanation": "La respuesta correcta es: Tratar a todos los residentes con equidad, sin discriminación por edad, sexo, religión, etnia o condición social. Foco de la pregunta: El principio de justicia en bioética obliga al cuidador a:. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t010-reuse-011",
+      "id_suffix": "t010-reuse-011",
+      "topic_file": "tema_010_bioetica-dilemas-eticos-normas-profesionales-y-secreto-profesional.questions.json",
+      "body": "¿Cuándo DEBE el cuidador romper la confidencialidad aunque el residente no lo desee?",
+      "correct": "Ante riesgo grave para la vida del residente o de terceros, indicios fundados de maltrato o requerimiento judicial",
+      "distractors": [
+        "Cuando otro residente del centro siente curiosidad por su diagnóstico o tratamiento",
+        "Cuando un compañero sin autorización ni relación asistencial la solicita",
+        "Cuando la familia lo solicita por escrito"
+      ],
+      "explanation": "La respuesta correcta es: Ante riesgo grave para la vida del residente o de terceros, indicios fundados de maltrato o requerimiento judicial. Foco de la pregunta: Cuándo DEBE el cuidador romper la confidencialidad aunque el residente no lo desee. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t010-reuse-016",
+      "id_suffix": "t010-reuse-016",
+      "topic_file": "tema_010_bioetica-dilemas-eticos-normas-profesionales-y-secreto-profesional.questions.json",
+      "body": "¿Qué grado de dependencia corresponde a quien necesita ayuda varias veces al día, pero no apoyo indispensable y continuo?",
+      "correct": "Grado II: dependencia severa",
+      "distractors": [
+        "Grado III: gran dependencia",
+        "Ley 39/2006 de Dependencia",
+        "Grado I: dependencia moderada"
+      ],
+      "explanation": "La respuesta correcta es: Grado II: dependencia severa. Foco de la pregunta: Qué grado de dependencia corresponde a quien necesita ayuda varias veces al día, pero no apoyo indispensable y continuo. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t015-reuse-014",
+      "id_suffix": "t015-reuse-014",
+      "topic_file": "tema_015_centro-con-discapacidad-intelectual.questions.json",
+      "body": "¿Qué es la inclusión social frente a la integración?",
+      "correct": "La integración pide a la persona que se adapte al entorno; la inclusión pide que el entorno cambie para que todos participen por igual",
+      "distractors": [
+        "Son conceptos iguales que no han variado en las últimas décadas",
+        "La inclusión solo se aplica en el ámbito escolar y la integración en el laboral",
+        "La inclusión exige adaptar a la persona al recurso sin modificar el entorno"
+      ],
+      "explanation": "La respuesta correcta es: La integración pide a la persona que se adapte al entorno; la inclusión pide que el entorno cambie para que todos participen por igual. Foco de la pregunta: Qué es la inclusión social frente a la integración. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t015-reuse-029",
+      "id_suffix": "t015-reuse-029",
+      "topic_file": "tema_015_centro-con-discapacidad-intelectual.questions.json",
+      "body": "¿Qué es la autodeterminación y cómo puede fomentarla el cuidador?",
+      "correct": "Es la capacidad de la persona para ser el agente causal de su propia vida; el cuidador la fomenta dando opciones de elección reales en el día a día (ropa, ocio, comidas)",
+      "distractors": [
+        "Es el derecho legal a votar en las elecciones; el cuidador la fomenta llevando al residente al colegio electoral",
+        "Es la capacidad de vivir sin ningún tipo de apoyo externo; el cuidador la fomenta retirando toda la ayuda física",
+        "Fomentarla retirando apoyos para que decida sin ayuda"
+      ],
+      "explanation": "La respuesta correcta es: Es la capacidad de la persona para ser el agente causal de su propia vida; el cuidador la fomenta dando opciones de elección reales en el día a día (ropa, ocio, comidas). Foco de la pregunta: Qué es la autodeterminación y cómo puede fomentarla el cuidador. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t017-reuse-006",
+      "id_suffix": "t017-reuse-006",
+      "topic_file": "tema_017_actividades-basicas-de-la-vida-diaria-e-instrumentos-de-valoracion.questions.json",
+      "body": "¿Qué ítem del Índice de Barthel tiene mayor peso en la puntuación total y por qué?",
+      "correct": "Traslados sillón-cama, 15 puntos, por su complejidad funcional",
+      "distractors": [
+        "La alimentación (10 puntos), porque es la actividad más frecuente y determinante para la supervivencia",
+        "El control de heces y el control de orina, ambos con 10 puntos, como ítems siempre superiores al traslado",
+        "El baño (5 puntos), porque implica mayor riesgo de caída y lesión"
+      ],
+      "explanation": "La respuesta correcta es: Traslados sillón-cama, 15 puntos, por su complejidad funcional. Foco de la pregunta: Qué ítem del Índice de Barthel tiene mayor peso en la puntuación total y por qué. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t017-reuse-014",
+      "id_suffix": "t017-reuse-014",
+      "topic_file": "tema_017_actividades-basicas-de-la-vida-diaria-e-instrumentos-de-valoracion.questions.json",
+      "body": "¿Cómo debe actuar el cuidador si un residente con demencia se niega sistemáticamente al baño?",
+      "correct": "No forzar, intentar buscar el motivo, validar su emoción, buscar un momento más propicio, registrar la incidencia y comunicarla al equipo o a enfermería según protocolo",
+      "distractors": [
+        "Obligarle físicamente por motivos de higiene e imperativo legal",
+        "No forzar nunca, dejar el aseo indefinidamente sin registrar ni comunicar",
+        "Ignorar la situación y dejar al residente sin asear por tiempo indefinido"
+      ],
+      "explanation": "La respuesta correcta es: No forzar, intentar buscar el motivo, validar su emoción, buscar un momento más propicio, registrar la incidencia y comunicarla al equipo o a enfermería según protocolo. Foco de la pregunta: Cómo debe actuar el cuidador si un residente con demencia se niega sistemáticamente al baño. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t017-reuse-022",
+      "id_suffix": "t017-reuse-022",
+      "topic_file": "tema_017_actividades-basicas-de-la-vida-diaria-e-instrumentos-de-valoracion.questions.json",
+      "body": "¿Cuál es el objetivo del cuidado asistido frente al cuidado sustitutivo?",
+      "correct": "El cuidado asistido ayuda solo en lo que el residente no puede hacer, preservando autonomía residual; el sustitutivo cubre la actividad cuando no puede realizarla por limitación funcional, manteniendo dignidad y seguridad",
+      "distractors": [
+        "El cuidado asistido se aplica solo en el turno de noche y el sustitutivo solo en el de día, según el turno",
+        "El cuidado asistido lo realiza siempre enfermería; el sustitutivo, el cuidador",
+        "Son términos sinónimos que describen el mismo tipo de apoyo físico"
+      ],
+      "explanation": "La respuesta correcta es: El cuidado asistido ayuda solo en lo que el residente no puede hacer, preservando autonomía residual; el sustitutivo cubre la actividad cuando no puede realizarla por limitación funcional, manteniendo dignidad y seguridad. Foco de la pregunta: Cuál es el objetivo del cuidado asistido frente al cuidado sustitutivo. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    }
+  ]
+}

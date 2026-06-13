@@ -1,0 +1,59 @@
+{
+  "schema_version": "agent_review_report.v0",
+  "report_ref": "agent-review-report-gemini-recheck-compact2-20260610",
+  "packet_ref": "gemini-recheck-compact2-sub6-20260610",
+  "reviewer_role": "recheck didactico focal de 3 hallazgos",
+  "round": "gemini_recheck_compact2_20260610",
+  "verdict": "accepted",
+  "scope": {
+    "course": "TCAE C1 promocion interna Diputacion 2026",
+    "review_type": "recheck focal posterior a correccion local de hallazgos Gemini compact2",
+    "reviewed_focus_questions": 3,
+    "coverage_note": "Revision limitada a los 3 IDs focales del paquete compacto; no declara cobertura total de 1050 preguntas."
+  },
+  "evidence": {
+    "compact_packet_path": "opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04/revision_orquesta_2026-06-08/gemini_recheck_packets_20260610/gemini_recheck_packet_20260610.json",
+    "local_validation_summary": "validate_tcae_promocion_tests.py passed: 21 topic files, 1050 questions, issue_count 0",
+    "bank_read_policy": "No se ha leido el banco completo ni course_tests completo; revision realizada sobre paquete compacto y comprobacion semantica focal de los IDs listados."
+  },
+  "reviewed_ids": [
+    "t014-reuse-025",
+    "t011-reuse-010",
+    "t011-reuse-016"
+  ],
+  "previous_findings_recheck": [
+    {
+      "id_suffix": "t014-reuse-025",
+      "previous_problem": "Distractor sobre UPP equivalente al rango preventivo correcto.",
+      "current_assessment": "corregido",
+      "evidence": "La opcion correcta conserva cambios posturales cada 2-3 horas segun plan y riesgo; el distractor ahora afirma prevencion solo con crema hidratante, sin cambios posturales, y deja de ser equivalente."
+    },
+    {
+      "id_suffix": "t011-reuse-010",
+      "previous_problem": "Formulacion ambigua sobre insulina en uso frente a conservacion en frio.",
+      "current_assessment": "corregido",
+      "evidence": "El enunciado acota insulina sin abrir y colirios que requieren frio; la respuesta 2-8 C, nunca congelar, queda alineada con ese alcance."
+    },
+    {
+      "id_suffix": "t011-reuse-016",
+      "previous_problem": "Distractores repetidos/equivalentes sobre via transdermica.",
+      "current_assessment": "corregido",
+      "evidence": "Los distractores ahora son oral con recubrimiento enterico, transdermica mediante parche de larga duracion y rectal mediante supositorio; no duplican la misma via."
+    }
+  ],
+  "findings": [],
+  "accepted_focus_ids_without_rework": [
+    "t014-reuse-025",
+    "t011-reuse-010",
+    "t011-reuse-016"
+  ],
+  "risks": [
+    "El informe solo valida la correccion focal de los 3 hallazgos previos; otros problemas fuera del paquete compacto quedan fuera de alcance.",
+    "La validacion estructural verde no sustituye revision humana total del banco."
+  ],
+  "notes": [
+    "contexto_ref_only_resuelto: el paquete contiene una entrada required=true mode=ref_only sin contenido materializado; se uso la accion requerida ack_evidence_required y se deja evidencia en ACK.",
+    "No se modificaron question_banks ni course_tests.",
+    "Contrato externo mantenido por refs opacas y artefacto de revision dentro del write-set."
+  ]
+}

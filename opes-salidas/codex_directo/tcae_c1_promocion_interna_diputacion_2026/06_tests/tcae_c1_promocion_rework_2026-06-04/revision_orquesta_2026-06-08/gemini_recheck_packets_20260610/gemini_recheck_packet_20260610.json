@@ -1,0 +1,71 @@
+{
+  "schema_version": "opes.tcae.compact_review_packet.v1",
+  "packet_ref": "gemini-recheck-compact2-sub6-20260610",
+  "provider_target": "gemini",
+  "token_policy": {
+    "read_this_packet_only_first": true,
+    "do_not_read_full_bank": true,
+    "max_focus_questions": 3,
+    "expected_final_report": "brief JSON only"
+  },
+  "scope": {
+    "round": "gemini_recheck_compact2_20260610",
+    "purpose": "Recheck solo de los 3 hallazgos de Gemini compact2 tras corrección local."
+  },
+  "local_validation": {
+    "status": "passed",
+    "topic_files": 21,
+    "bank_questions": 1050,
+    "issue_count": 0,
+    "after_rework": "fix_gemini_compact2_rework_20260610.py"
+  },
+  "review_request": {
+    "verdict_values": [
+      "accepted",
+      "rework_required"
+    ],
+    "accepted_condition": "Los 3 hallazgos previos están corregidos sin crear nuevos problemas evidentes.",
+    "do_not_modify_bank": true
+  },
+  "focus_questions": [
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t014-reuse-025",
+      "id_suffix": "t014-reuse-025",
+      "topic_file": "tema_014_sindrome-de-inmovilidad-y-actividad-fisica.questions.json",
+      "body": "¿Cuál es la complicación cutánea más grave del síndrome de inmovilidad?",
+      "correct": "Úlceras por presión (UPP), prevenibles con cambios posturales cada 2-3 horas según plan y riesgo",
+      "distractors": [
+        "Dermatitis de contacto por uso de productos de higiene",
+        "Úlceras por presión (UPP), prevenibles solo con crema hidratante, sin cambios posturales",
+        "Edemas en extremidades inferiores por retención de líquidos"
+      ],
+      "explanation": "La respuesta correcta es: Úlceras por presión (UPP), prevenibles con cambios posturales cada 2-3 horas según plan y riesgo. Foco de la pregunta: Cuál es la complicación cutánea más grave del síndrome de inmovilidad. La opción correcta mantiene el criterio técnico del enunciado. Los distractores son incorrectos porque cambian la vía, la condición de conservación, la frecuencia preventiva o el tipo de complicación."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t011-reuse-010",
+      "id_suffix": "t011-reuse-010",
+      "topic_file": "tema_011_medicamentos-tipos-vias-precauciones-y-conservacion.questions.json",
+      "body": "¿A qué temperatura deben conservarse la insulina sin abrir y los colirios que requieren frío?",
+      "correct": "En nevera entre 2 y 8°C, nunca congelar",
+      "distractors": [
+        "A temperatura ambiente entre 15 y 25°C",
+        "8-15 °C en armario fresco",
+        "En congelador a -20°C para mantener su eficacia"
+      ],
+      "explanation": "La respuesta correcta es: En nevera entre 2 y 8°C, nunca congelar. Foco de la pregunta: A qué temperatura deben conservarse la insulina sin abrir y los colirios que requieren frío. La opción correcta mantiene el criterio técnico del enunciado. Los distractores son incorrectos porque cambian la vía, la condición de conservación, la frecuencia preventiva o el tipo de complicación."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t011-reuse-016",
+      "id_suffix": "t011-reuse-016",
+      "topic_file": "tema_011_medicamentos-tipos-vias-precauciones-y-conservacion.questions.json",
+      "body": "¿Qué vía de administración evita el primer paso hepático y produce absorción muy rápida, siendo de elección en la angina de pecho?",
+      "correct": "Vía sublingual (bajo la lengua), ejemplo: nitroglicerina",
+      "distractors": [
+        "Vía oral en comprimido con recubrimiento entérico",
+        "Vía transdérmica mediante parche de larga duración",
+        "Vía rectal mediante supositorio"
+      ],
+      "explanation": "La respuesta correcta es: Vía sublingual (bajo la lengua), ejemplo: nitroglicerina. Foco de la pregunta: Qué vía de administración evita el primer paso hepático y produce absorción muy rápida, siendo de elección en la angina de pecho. La opción correcta mantiene el criterio técnico del enunciado. Los distractores son incorrectos porque cambian la vía, la condición de conservación, la frecuencia preventiva o el tipo de complicación."
+    }
+  ]
+}

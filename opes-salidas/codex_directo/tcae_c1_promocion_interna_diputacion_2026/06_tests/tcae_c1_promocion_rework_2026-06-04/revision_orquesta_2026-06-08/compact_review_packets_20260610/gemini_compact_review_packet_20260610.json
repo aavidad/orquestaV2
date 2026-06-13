@@ -1,0 +1,461 @@
+{
+  "schema_version": "opes.tcae.compact_review_packet.v1",
+  "packet_ref": "compact-review-packet-gemini-sub6-20260610",
+  "provider_target": "gemini",
+  "token_policy": {
+    "read_this_packet_only_first": true,
+    "do_not_read_full_bank_unless_a_listed_id_requires_targeted_check": true,
+    "max_focus_questions": 32,
+    "expected_final_report": "brief JSON only"
+  },
+  "scope": {
+    "course": "TCAE C1 promoción interna Diputación 2026",
+    "round": "compact_sub6_20260610",
+    "purpose": "Revisión focal posterior a corrección local y 6 subagentes; no sustituye revisión completa de 1050 preguntas.",
+    "bank_root_absolute_ref": "/home/alberto/Trabajo/OPES/opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04",
+    "bank_root_relative_ref": "opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04"
+  },
+  "local_validation": {
+    "command": "python3 revision_orquesta_2026-06-08/validate_tcae_promocion_tests.py",
+    "status": "passed",
+    "topic_files": 21,
+    "bank_questions": 1050,
+    "issue_count": 0,
+    "executed_by_codex_at": "2026-06-09T23:16:21Z"
+  },
+  "local_changes_summary": [
+    "Corregidas respuestas legales y administrativas de temas 1-5.",
+    "Corregido Tema 10: confidencialidad, indicios fundados de maltrato, justicia/equidad y grados de dependencia.",
+    "Corregidas opciones equivalentes, erratas y distractores no plausibles en temas sanitarios/asistenciales.",
+    "Regenerado bloque suplementario del tema 18 para que sea comunicación, no SAAD/residencias.",
+    "Reescritas explicaciones suplementarias para no depender de letras A-D tras barajado.",
+    "Sincronizados question_banks y course_tests; validador local en verde."
+  ],
+  "review_request": {
+    "verdict_values": [
+      "accepted",
+      "rework_required"
+    ],
+    "accepted_condition": "No encontrar errores reales en los IDs focales ni contradicción con el validador local.",
+    "rework_condition": "Listar id_suffix, problema, severidad y cambio recomendado. No reabrir por estilo menor si no afecta a respuesta, seguridad o aprendizaje.",
+    "do_not_modify_bank": true
+  },
+  "focus_questions": [
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t007-reuse-003",
+      "id_suffix": "t007-reuse-003",
+      "topic_file": "tema_007_hidratacion-control-de-ingesta-signos-y-registros.questions.json",
+      "body": "¿Qué color de orina indica una hidratación correcta?",
+      "correct": "Amarillo pálido o transparente",
+      "distractors": [
+        "Rojo intenso persistente",
+        "Amarillo oscuro o ámbar",
+        "Marrón o muy oscuro"
+      ],
+      "explanation": "La respuesta correcta es: Amarillo pálido o transparente. Foco de la pregunta: Qué color de orina indica una hidratación correcta. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t007-reuse-008",
+      "id_suffix": "t007-reuse-008",
+      "topic_file": "tema_007_hidratacion-control-de-ingesta-signos-y-registros.questions.json",
+      "body": "¿Qué incluye la distribución correcta de la ingesta de líquidos a lo largo del día?",
+      "correct": "Repartirla entre mañana, media mañana, comida, merienda, cena y antes de dormir",
+      "distractors": [
+        "Concentrarla en el desayuno y la comida para asegurar el aporte",
+        "Solo al levantarse y antes de acostarse",
+        "Ofrecerla solo antes y después de las comidas principales"
+      ],
+      "explanation": "La respuesta correcta es: Repartirla entre mañana, media mañana, comida, merienda, cena y antes de dormir. Foco de la pregunta: Qué incluye la distribución correcta de la ingesta de líquidos a lo largo del día. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t007-reuse-017",
+      "id_suffix": "t007-reuse-017",
+      "topic_file": "tema_007_hidratacion-control-de-ingesta-signos-y-registros.questions.json",
+      "body": "La prevención de la deshidratación incluye:",
+      "correct": "Ofrecer líquidos proactivamente, variar los tipos y extremar la vigilancia en verano y con fiebre",
+      "distractors": [
+        "Esperar a que la persona pida agua espontáneamente, salvo fiebre",
+        "Esperar a que el residente pida agua para respetar su autonomía",
+        "Aumentar la dosis de espesante para que los líquidos sean más agradables"
+      ],
+      "explanation": "La respuesta correcta es: Ofrecer líquidos proactivamente, variar los tipos y extremar la vigilancia en verano y con fiebre. Foco de la pregunta: La prevención de la deshidratación incluye:. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t007-reuse-018",
+      "id_suffix": "t007-reuse-018",
+      "topic_file": "tema_007_hidratacion-control-de-ingesta-signos-y-registros.questions.json",
+      "body": "Durante una ola de calor estival, el cuidador debe:",
+      "correct": "Extremar la vigilancia e incrementar la oferta de líquidos adaptados",
+      "distractors": [
+        "Ofrecer solo agua durante las comidas",
+        "Restringir los líquidos para evitar incontinencia urinaria",
+        "Mantener la ingesta habitual sin modificarla"
+      ],
+      "explanation": "La respuesta correcta es: Extremar la vigilancia e incrementar la oferta de líquidos adaptados. Foco de la pregunta: Durante una ola de calor estival, el cuidador debe:. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t007-reuse-019",
+      "id_suffix": "t007-reuse-019",
+      "topic_file": "tema_007_hidratacion-control-de-ingesta-signos-y-registros.questions.json",
+      "body": "¿Con qué frecuencia debe ofrecerse líquidos proactivamente a los residentes según las buenas prácticas de hidratación?",
+      "correct": "De forma distribuida a lo largo del día: mañana, media mañana, comida, merienda, cena y antes de dormir",
+      "distractors": [
+        "Cada vez que el residente lo solicite espontáneamente",
+        "Solo en las comidas principales (desayuno, comida y cena)",
+        "Cada 6 horas únicamente"
+      ],
+      "explanation": "La respuesta correcta es: De forma distribuida a lo largo del día: mañana, media mañana, comida, merienda, cena y antes de dormir. Foco de la pregunta: Con qué frecuencia debe ofrecerse líquidos proactivamente a los residentes según las buenas prácticas de hidratación. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t007-reuse-023",
+      "id_suffix": "t007-reuse-023",
+      "topic_file": "tema_007_hidratacion-control-de-ingesta-signos-y-registros.questions.json",
+      "body": "¿Qué debe hacer el cuidador si un residente que padece insuficiencia cardíaca congestiva pide más agua de la pautada?",
+      "correct": "No modificar la pauta hídrica por su cuenta; consultar con enfermería antes de alterar la cantidad prescrita",
+      "distractors": [
+        "Darle el agua solicitada para respetar su autonomía, sin restricción",
+        "Darle la mitad de lo solicitado como término medio entre la pauta y el deseo del residente",
+        "Modificar él mismo la restricción hídrica si cree que bebe poco"
+      ],
+      "explanation": "La respuesta correcta es: No modificar la pauta hídrica por su cuenta; consultar con enfermería antes de alterar la cantidad prescrita. Foco de la pregunta: Qué debe hacer el cuidador si un residente que padece insuficiencia cardíaca congestiva pide más agua de la pautada. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t011-reuse-005",
+      "id_suffix": "t011-reuse-005",
+      "topic_file": "tema_011_medicamentos-tipos-vias-precauciones-y-conservacion.questions.json",
+      "body": "Si el residente vomita justo después de tomar la medicación, el cuidador debe:",
+      "correct": "No repetir la dosis por su cuenta y comunicarlo a enfermería",
+      "distractors": [
+        "Repetir la dosis para asegurarse de que el medicamento hace efecto",
+        "Repetir la dosis si vomita en los primeros minutos",
+        "Esperar 2 horas y entonces administrar media dosis"
+      ],
+      "explanation": "La respuesta correcta es: No repetir la dosis por su cuenta y comunicarlo a enfermería. Foco de la pregunta: Si el residente vomita justo después de tomar la medicación, el cuidador debe:. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t011-reuse-007",
+      "id_suffix": "t011-reuse-007",
+      "topic_file": "tema_011_medicamentos-tipos-vias-precauciones-y-conservacion.questions.json",
+      "body": "¿Puede el cuidador administrar inyecciones intramusculares o subcutáneas?",
+      "correct": "No; los inyectables solo los administra el personal sanitario (enfermería o médico)",
+      "distractors": [
+        "Sí, si ha recibido formación específica y lo autoriza el director del centro",
+        "Sí, siempre que la medicación esté ya pautada y preparada por enfermería",
+        "Sí, si la familia lo autoriza"
+      ],
+      "explanation": "La respuesta correcta es: No; los inyectables solo los administra el personal sanitario (enfermería o médico). Foco de la pregunta: Puede el cuidador administrar inyecciones intramusculares o subcutáneas. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t011-reuse-010",
+      "id_suffix": "t011-reuse-010",
+      "topic_file": "tema_011_medicamentos-tipos-vias-precauciones-y-conservacion.questions.json",
+      "body": "¿A qué temperatura deben conservarse la insulina abierta y algunos colirios?",
+      "correct": "En nevera entre 2 y 8°C, nunca congelar",
+      "distractors": [
+        "A temperatura ambiente entre 15 y 25°C",
+        "8-15 °C en armario fresco",
+        "En congelador a -20°C para mantener su eficacia"
+      ],
+      "explanation": "La respuesta correcta es: En nevera entre 2 y 8°C, nunca congelar. Foco de la pregunta: A qué temperatura deben conservarse la insulina abierta y algunos colirios. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t011-reuse-016",
+      "id_suffix": "t011-reuse-016",
+      "topic_file": "tema_011_medicamentos-tipos-vias-precauciones-y-conservacion.questions.json",
+      "body": "¿Qué vía de administración evita el primer paso hepático y produce absorción muy rápida, siendo de elección en la angina de pecho?",
+      "correct": "Vía sublingual (bajo la lengua), ejemplo: nitroglicerina",
+      "distractors": [
+        "Vía oral en comprimido con recubrimiento entérico",
+        "Vía transdérmica mediante parche de larga duración",
+        "Vía transdérmica en parche"
+      ],
+      "explanation": "La respuesta correcta es: Vía sublingual (bajo la lengua), ejemplo: nitroglicerina. Foco de la pregunta: Qué vía de administración evita el primer paso hepático y produce absorción muy rápida, siendo de elección en la angina de pecho. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t011-reuse-020",
+      "id_suffix": "t011-reuse-020",
+      "topic_file": "tema_011_medicamentos-tipos-vias-precauciones-y-conservacion.questions.json",
+      "body": "¿Qué debe hacer el cuidador si al entregar la medicación observa que el envase tiene la fecha de caducidad superada?",
+      "correct": "No administrarla, retirarla, comunicarlo a enfermería y registrar la incidencia",
+      "distractors": [
+        "Guardarla en nevera para ralentizar su degradación y usarla en la siguiente semana",
+        "Administrarla de todas formas si la caducidad es reciente (menos de 1 mes), ya que el fármaco sigue siendo eficaz",
+        "Administrarla si solo ha caducado recientemente"
+      ],
+      "explanation": "La respuesta correcta es: No administrarla, retirarla, comunicarlo a enfermería y registrar la incidencia. Foco de la pregunta: Qué debe hacer el cuidador si al entregar la medicación observa que el envase tiene la fecha de caducidad superada. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t011-reuse-026",
+      "id_suffix": "t011-reuse-026",
+      "topic_file": "tema_011_medicamentos-tipos-vias-precauciones-y-conservacion.questions.json",
+      "body": "¿Qué significa que un comprimido tiene la terminación '-retard' o 'SR'?",
+      "correct": "Que es de liberación retardada y NO debe triturarse bajo riesgo de sobredosis",
+      "distractors": [
+        "Que es efervescente y debe disolverse siempre",
+        "Que requiere conservación en nevera a 2-8°C",
+        "Que su principio activo es de origen sintético y puede triturarse"
+      ],
+      "explanation": "La respuesta correcta es: Que es de liberación retardada y NO debe triturarse bajo riesgo de sobredosis. Foco de la pregunta: Qué significa que un comprimido tiene la terminación '-retard' o 'SR'. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t012-reuse-003",
+      "id_suffix": "t012-reuse-003",
+      "topic_file": "tema_012_fisiologia-del-envejecimiento.questions.json",
+      "body": "¿Cuál es la enfermedad crónica más prevalente en personas mayores de 65 años en España?",
+      "correct": "Hipertensión arterial (HTA), que afecta aproximadamente al 60-70% de los mayores de 65 años",
+      "distractors": [
+        "Diabetes mellitus tipo 2, que afecta al 40% de los mayores",
+        "EPOC, por el tabaquismo histórico de la generación actual de mayores",
+        "HTA en menos del 10% de los residentes"
+      ],
+      "explanation": "La respuesta correcta es: Hipertensión arterial (HTA), que afecta aproximadamente al 60-70% de los mayores de 65 años. Foco de la pregunta: Cuál es la enfermedad crónica más prevalente en personas mayores de 65 años en España. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t012-reuse-005",
+      "id_suffix": "t012-reuse-005",
+      "topic_file": "tema_012_fisiologia-del-envejecimiento.questions.json",
+      "body": "¿Qué síntoma indica una descompensación urgente en un residente con insuficiencia cardíaca?",
+      "correct": "Aparición de edemas (hinchazón) en pies y tobillos, o dificultad para respirar al estar tumbado (ortopnea)",
+      "distractors": [
+        "Hambre excesiva por la mañana",
+        "Ligero aumento de la producción de orina durante el día",
+        "Dolor articular crónico sin disnea ni edema"
+      ],
+      "explanation": "La respuesta correcta es: Aparición de edemas (hinchazón) en pies y tobillos, o dificultad para respirar al estar tumbado (ortopnea). Foco de la pregunta: Qué síntoma indica una descompensación urgente en un residente con insuficiencia cardíaca. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t012-reuse-008",
+      "id_suffix": "t012-reuse-008",
+      "topic_file": "tema_012_fisiologia-del-envejecimiento.questions.json",
+      "body": "¿Cuál es el cuidado específico del cuidador ante un residente con EPOC que utiliza inhalador?",
+      "correct": "Supervisar la técnica inhaladora correcta (agitación, espiración previa, apnea de 10 segundos), registrar si la usa bien y comunicar dificultades al equipo sanitario",
+      "distractors": [
+        "Administrar el inhalador por su cuenta cuando el residente refiere falta de aire leve, sin consultar con enfermería",
+        "Inspirar antes de agitar el inhalador y no hacer apnea",
+        "Mezclar el contenido del inhalador con el vaso de agua del residente para facilitar la toma"
+      ],
+      "explanation": "La respuesta correcta es: Supervisar la técnica inhaladora correcta (agitación, espiración previa, apnea de 10 segundos), registrar si la usa bien y comunicar dificultades al equipo sanitario. Foco de la pregunta: Cuál es el cuidado específico del cuidador ante un residente con EPOC que utiliza inhalador. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t012-reuse-016",
+      "id_suffix": "t012-reuse-016",
+      "topic_file": "tema_012_fisiologia-del-envejecimiento.questions.json",
+      "body": "¿Qué complicación grave del pie diabético puede producirse si el cuidador no comunica a tiempo una pequeña herida o ampolla?",
+      "correct": "Infección con progresión rápida, gangrena y riesgo de amputación del pie o del miembro",
+      "distractors": [
+        "Molestia local leve sin riesgo sistémico",
+        "Retención hídrica y edema local leve de resolución espontánea en pocos días",
+        "Hipoglucemia reactiva por el estrés de la herida sobre el metabolismo glucídico"
+      ],
+      "explanation": "La respuesta correcta es: Infección con progresión rápida, gangrena y riesgo de amputación del pie o del miembro. Foco de la pregunta: Qué complicación grave del pie diabético puede producirse si el cuidador no comunica a tiempo una pequeña herida o ampolla. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t012-reuse-026",
+      "id_suffix": "t012-reuse-026",
+      "topic_file": "tema_012_fisiologia-del-envejecimiento.questions.json",
+      "body": "¿Qué signo alerta de una crisis respiratoria en un paciente con EPOC?",
+      "correct": "Cianosis (coloración azulada de labios y uñas) junto con aumento de disnea y cambio de esputo a amarillento/verdoso",
+      "distractors": [
+        "Palidez sin disnea ni cambio de esputo",
+        "Aumento de las ganas de comer",
+        "Sensación de cansancio al subir escaleras"
+      ],
+      "explanation": "La respuesta correcta es: Cianosis (coloración azulada de labios y uñas) junto con aumento de disnea y cambio de esputo a amarillento/verdoso. Foco de la pregunta: Qué signo alerta de una crisis respiratoria en un paciente con EPOC. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t012-reuse-027",
+      "id_suffix": "t012-reuse-027",
+      "topic_file": "tema_012_fisiologia-del-envejecimiento.questions.json",
+      "body": "¿Cuál es la tétrada clásica de la enfermedad de Parkinson?",
+      "correct": "Temblor en reposo, rigidez, bradicinesia e inestabilidad postural",
+      "distractors": [
+        "Alucinaciones, caídas, rigidez y afasia progresiva",
+        "Temblor de intención, hipotonía y afasia",
+        "Fiebre, rigidez, bradicinesia y temblor de acción"
+      ],
+      "explanation": "La respuesta correcta es: Temblor en reposo, rigidez, bradicinesia e inestabilidad postural. Foco de la pregunta: Cuál es la tétrada clásica de la enfermedad de Parkinson. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t014-reuse-005",
+      "id_suffix": "t014-reuse-005",
+      "topic_file": "tema_014_sindrome-de-inmovilidad-y-actividad-fisica.questions.json",
+      "body": "¿Qué debe hacer el cuidador si detecta un eritema (enrojecimiento) que no blanquea al presionar en el sacro de un residente?",
+      "correct": "Registrar inmediatamente la localización, tamaño aproximado, estadio y hora de detección, y comunicarlo al personal de enfermería para valoración y plan de cuidados",
+      "distractors": [
+        "Esperar 24 horas para ver si el enrojecimiento desaparece por sí solo con el próximo cambio postural",
+        "Masajear la zona y esperar al siguiente cambio postural",
+        "Dar un masaje enérgico sobre la zona roja para activar la circulación sanguínea"
+      ],
+      "explanation": "La respuesta correcta es: Registrar inmediatamente la localización, tamaño aproximado, estadio y hora de detección, y comunicarlo al personal de enfermería para valoración y plan de cuidados. Foco de la pregunta: Qué debe hacer el cuidador si detecta un eritema (enrojecimiento) que no blanquea al presionar en el sacro de un residente. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t014-reuse-013",
+      "id_suffix": "t014-reuse-013",
+      "topic_file": "tema_014_sindrome-de-inmovilidad-y-actividad-fisica.questions.json",
+      "body": "¿Cuáles son los principales grupos de complicaciones del síndrome de inmovilidad que el cuidador debe conocer?",
+      "correct": "Cutáneas (UPP), cardiovasculares (TVP/TEP), respiratorias (neumonía hipostática) y musculoesqueléticas (atrofia, contracturas), además de psicosociales",
+      "distractors": [
+        "Digestivas, urinarias, respiratorias y endocrinas",
+        "Solo cutáneas y musculoesqueléticas, ya que las demás son competencia exclusiva del personal sanitario",
+        "Cutáneas (UPP), digestivas (estreñimiento), respiratorias (neumonía hipostática) y musculoesqueléticas (atrofia, contracturas), además de psicosociales"
+      ],
+      "explanation": "La respuesta correcta es: Cutáneas (UPP), cardiovasculares (TVP/TEP), respiratorias (neumonía hipostática) y musculoesqueléticas (atrofia, contracturas), además de psicosociales. Foco de la pregunta: Cuáles son los principales grupos de complicaciones del síndrome de inmovilidad que el cuidador debe conocer. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t014-reuse-014",
+      "id_suffix": "t014-reuse-014",
+      "topic_file": "tema_014_sindrome-de-inmovilidad-y-actividad-fisica.questions.json",
+      "body": "¿Cuál es la frecuencia recomendada para realizar cambios posturales en un residente encamado?",
+      "correct": "Cada 2-3 horas, siguiendo un plan de rotación establecido",
+      "distractors": [
+        "Cada 6-8 horas",
+        "Una vez al día, coincidiendo con el aseo de la mañana",
+        "Cada 6 horas, para no interrumpir el descanso del residente"
+      ],
+      "explanation": "La respuesta correcta es: Cada 2-3 horas, siguiendo un plan de rotación establecido. Foco de la pregunta: Cuál es la frecuencia recomendada para realizar cambios posturales en un residente encamado. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t014-reuse-015",
+      "id_suffix": "t014-reuse-015",
+      "topic_file": "tema_014_sindrome-de-inmovilidad-y-actividad-fisica.questions.json",
+      "body": "¿Cuál es la zona de mayor riesgo de aparición de UPP en un residente que permanece mucho tiempo sentado en silla de ruedas?",
+      "correct": "Las tuberosidades isquiáticas (zona glútea inferior)",
+      "distractors": [
+        "Sacro y talones",
+        "Las rodillas y los codos",
+        "Los talones y el occipital"
+      ],
+      "explanation": "La respuesta correcta es: Las tuberosidades isquiáticas (zona glútea inferior). Foco de la pregunta: Cuál es la zona de mayor riesgo de aparición de UPP en un residente que permanece mucho tiempo sentado en silla de ruedas. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t014-reuse-023",
+      "id_suffix": "t014-reuse-023",
+      "topic_file": "tema_014_sindrome-de-inmovilidad-y-actividad-fisica.questions.json",
+      "body": "¿Qué se conoce como 'círculo vicioso de la inmovilidad'?",
+      "correct": "El miedo a caerse y la falta de movilización suficiente reducen el movimiento, aumentan la debilidad y elevan de nuevo el riesgo de caída",
+      "distractors": [
+        "La falta de movilización mejora la fuerza y reduce el miedo",
+        "La tendencia del personal a no movilizar a residentes por falta de tiempo, perpetuando el encamamiento",
+        "El miedo a caerse y la falta de movilización suficiente aumentan el movimiento, reducen la debilidad y disminuyen de nuevo el riesgo de caída"
+      ],
+      "explanation": "La respuesta correcta es: El miedo a caerse y la falta de movilización suficiente reducen el movimiento, aumentan la debilidad y elevan de nuevo el riesgo de caída. Foco de la pregunta: Qué se conoce como 'círculo vicioso de la inmovilidad'. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t014-reuse-025",
+      "id_suffix": "t014-reuse-025",
+      "topic_file": "tema_014_sindrome-de-inmovilidad-y-actividad-fisica.questions.json",
+      "body": "¿Cuál es la complicación cutánea más grave del síndrome de inmovilidad?",
+      "correct": "Úlceras por presión (UPP), prevenibles con cambios posturales cada 2-3 horas según plan y riesgo",
+      "distractors": [
+        "Dermatitis de contacto por uso de productos de higiene",
+        "Úlceras por presión (UPP), prevenibles con cambios posturales cada 3 horas",
+        "Edemas en extremidades inferiores por retención de líquidos"
+      ],
+      "explanation": "La respuesta correcta es: Úlceras por presión (UPP), prevenibles con cambios posturales cada 2-3 horas según plan y riesgo. Foco de la pregunta: Cuál es la complicación cutánea más grave del síndrome de inmovilidad. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t018-reuse-011",
+      "id_suffix": "t018-reuse-011",
+      "topic_file": "tema_018_comunicacion-en-personas-dependientes.questions.json",
+      "body": "¿Cuál es el peso predominante en el mensaje comunicativo según el tema?",
+      "correct": "La comunicación no verbal (gestos, mirada, postura, tacto, silencio)",
+      "distractors": [
+        "La entonación y el volumen de la voz",
+        "El contenido verbal literal de las palabras utilizadas",
+        "El contenido verbal (las palabras)"
+      ],
+      "explanation": "La respuesta correcta es: La comunicación no verbal (gestos, mirada, postura, tacto, silencio). Foco de la pregunta: Cuál es el peso predominante en el mensaje comunicativo según el tema. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t018-reuse-024",
+      "id_suffix": "t018-reuse-024",
+      "topic_file": "tema_018_comunicacion-en-personas-dependientes.questions.json",
+      "body": "¿Qué porcentaje aproximado del mensaje comunicativo corresponde a elementos no verbales según los estudios de comunicación humana?",
+      "correct": "Aproximadamente el 70-93%, incluyendo tono de voz, gestos, postura y expresión facial",
+      "distractors": [
+        "Aproximadamente el 40-50%",
+        "Aproximadamente el 20-30%, siendo las palabras el canal predominante",
+        "Exactamente el 50%, en equilibrio con el contenido verbal"
+      ],
+      "explanation": "La respuesta correcta es: Aproximadamente el 70-93%, incluyendo tono de voz, gestos, postura y expresión facial. Foco de la pregunta: Qué porcentaje aproximado del mensaje comunicativo corresponde a elementos no verbales según los estudios de comunicación humana. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t018-supp-001",
+      "id_suffix": "t018-supp-001",
+      "topic_file": "tema_018_comunicacion-en-personas-dependientes.questions.json",
+      "body": "¿Qué debe priorizar el TCAE al iniciar una comunicación con una persona dependiente?",
+      "correct": "Usar tono calmado, presentarse, comprobar comprensión y respetar el ritmo de la persona",
+      "distractors": [
+        "Hablar rápido para terminar antes la intervención",
+        "Preguntar solo a la familia aunque la persona pueda responder",
+        "Evitar explicar el cuidado para no generar ansiedad"
+      ],
+      "explanation": "La respuesta correcta es: Usar tono calmado, presentarse, comprobar comprensión y respetar el ritmo de la persona. Se ajusta al enunciado porque mantiene la actuación profesional dentro de seguridad, dignidad, autonomía, registro objetivo y comunicación por cauces adecuados cuando procede. Las demás opciones son incorrectas porque alteran el alcance, omiten garantías, invaden funciones de otros profesionales o proponen una conducta incompleta o insegura."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t018-supp-010",
+      "id_suffix": "t018-supp-010",
+      "topic_file": "tema_018_comunicacion-en-personas-dependientes.questions.json",
+      "body": "¿Cuándo son útiles las preguntas cerradas en la comunicación asistencial?",
+      "correct": "Para confirmar datos concretos cuando la persona tiene dificultad para expresarse",
+      "distractors": [
+        "Para explorar una biografía completa sin interrupciones",
+        "Para impedir que la persona explique lo que siente",
+        "Para sustituir siempre a la observación directa"
+      ],
+      "explanation": "La respuesta correcta es: Para confirmar datos concretos cuando la persona tiene dificultad para expresarse. Se ajusta al enunciado porque mantiene la actuación profesional dentro de seguridad, dignidad, autonomía, registro objetivo y comunicación por cauces adecuados cuando procede. Las demás opciones son incorrectas porque alteran el alcance, omiten garantías, invaden funciones de otros profesionales o proponen una conducta incompleta o insegura."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t018-supp-020",
+      "id_suffix": "t018-supp-020",
+      "topic_file": "tema_018_comunicacion-en-personas-dependientes.questions.json",
+      "body": "¿Cómo debe interpretarse el silencio de una persona dependiente?",
+      "correct": "Como una señal que debe contextualizarse: puede expresar miedo, dolor, cansancio o necesidad de tiempo",
+      "distractors": [
+        "Siempre como negativa definitiva a cualquier cuidado",
+        "Como falta de inteligencia o colaboración",
+        "Como autorización automática para actuar sin explicar"
+      ],
+      "explanation": "La respuesta correcta es: Como una señal que debe contextualizarse: puede expresar miedo, dolor, cansancio o necesidad de tiempo. Se ajusta al enunciado porque mantiene la actuación profesional dentro de seguridad, dignidad, autonomía, registro objetivo y comunicación por cauces adecuados cuando procede. Las demás opciones son incorrectas porque alteran el alcance, omiten garantías, invaden funciones de otros profesionales o proponen una conducta incompleta o insegura."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t020-reuse-005",
+      "id_suffix": "t020-reuse-005",
+      "topic_file": "tema_020_incapacitacion-internamiento-y-contenciones-fisicas.questions.json",
+      "body": "¿Cuál de los siguientes es un requisito legal indispensable para aplicar una contención física en un centro?",
+      "correct": "Prescripción médica por escrito y consentimiento informado del residente o su representante legal",
+      "distractors": [
+        "Autorización verbal del responsable de turno sin prescripción médica",
+        "Prescripción médica de forma verbal y consentimiento informado del residente o su representante legal",
+        "Petición expresa de los compañeros de habitación para evitar molestias"
+      ],
+      "explanation": "La respuesta correcta es: Prescripción médica por escrito y consentimiento informado del residente o su representante legal. Foco de la pregunta: Cuál de los siguientes es un requisito legal indispensable para aplicar una contención física en un centro. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t020-reuse-027",
+      "id_suffix": "t020-reuse-027",
+      "topic_file": "tema_020_incapacitacion-internamiento-y-contenciones-fisicas.questions.json",
+      "body": "¿Cuándo se permite una contención física por 'urgencia vital' sin prescripción previa?",
+      "correct": "Cuando existe riesgo inmediato para la vida del paciente o de terceros; debe comunicarlo al médico para que ratifique la medida",
+      "distractors": [
+        "Aplicar la contención por comodidad del servicio si hay agitación leve",
+        "Cuando el personal tiene mucha carga de trabajo y no puede atender al residente",
+        "Solo si el familiar de referencia lo autoriza por escrito"
+      ],
+      "explanation": "La respuesta correcta es: Cuando existe riesgo inmediato para la vida del paciente o de terceros; debe comunicarlo al médico para que ratifique la medida. Foco de la pregunta: Cuándo se permite una contención física por 'urgencia vital' sin prescripción previa. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    },
+    {
+      "id": "ope-tcae-c1-promocion-interna-diputacion-2026-t021-reuse-023",
+      "id_suffix": "t021-reuse-023",
+      "topic_file": "tema_021_normativa-andaluza-de-centros-residenciales.questions.json",
+      "body": "¿Cuál es la ratio de personal cuidador aproximada para el turno de día en las residencias andaluzas?",
+      "correct": "Aproximadamente 1 cuidador por cada 5-8 residentes",
+      "distractors": [
+        "1 cuidador por cada 15-20 residentes",
+        "Aproximadamente 2 cuidadores por cada 5-8 residentes",
+        "1 cuidador por cada 2-3 residentes"
+      ],
+      "explanation": "La respuesta correcta es: Aproximadamente 1 cuidador por cada 5-8 residentes. Foco de la pregunta: Cuál es la ratio de personal cuidador aproximada para el turno de día en las residencias andaluzas. La opción válida responde al enunciado sin cambiar el alcance técnico, jurídico o asistencial. Las demás opciones son incorrectas porque introducen un supuesto distinto, omiten una garantía, confunden competencias o formulan una actuación insegura o incompleta."
+    }
+  ]
+}

@@ -1,0 +1,108 @@
+{
+  "request_id": "req-tcae-promocion-tests-compact2_sub6_20260610-claude-20260608",
+  "correlation_id": "corr-tcae-promocion-tests-compact2_sub6_20260610-20260608",
+  "external_work_run_request": {
+    "schema_version": "external_work_run_request.v0",
+    "request_id": "req-tcae-promocion-tests-compact2_sub6_20260610-run-claude-20260608",
+    "correlation_id": "corr-tcae-promocion-tests-compact2_sub6_20260610-20260608",
+    "run_ref": "run-tcae-promocion-tests-compact2_sub6_20260610-claude-review-20260608",
+    "project_ref": "opes",
+    "app_spec_ref": "app-spec-opes-tcae-promocion-tests-three-reviewers",
+    "queue_ref": "opes-tests-compact2-sub6-20260610",
+    "priority_score": 100,
+    "occurred_at": "2026-06-09T23:18:23Z",
+    "requested_by": "director-codex-orquesta",
+    "app_change_request": {
+      "schema_version": "app_change_request.v0",
+      "request_id": "req-tcae-promocion-tests-compact2_sub6_20260610-change-claude-20260608",
+      "correlation_id": "corr-tcae-promocion-tests-compact2_sub6_20260610-20260608",
+      "run_ref": "run-tcae-promocion-tests-compact2_sub6_20260610-claude-review-20260608",
+      "app_ref": "opes",
+      "change_ref": "change-tcae-promocion-tests-compact2_sub6_20260610-claude-20260608",
+      "actor_ref": "director-codex-orquesta",
+      "locale": "es-ES",
+      "user_intent": "Revisar con claude el banco corregido de tests TCAE promocion interna. Esta es la candidata a vuelta limpia 1 de 3.",
+      "target_area": "domain_work",
+      "current_state_refs": [
+        "opes-tcae-promocion-tests-current-bank",
+        "job-tcae-promocion-tests-compact2_sub6_20260610-claude-review-20260608",
+        "vuelta-1-rework-applied",
+        "restore-question-bank-option-keys",
+        "clean1b-codex-rework-applied"
+      ],
+      "allowed_write_set": [
+        "opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04/revision_orquesta_2026-06-08/vuelta_compacta2_sub6_20260610"
+      ],
+      "acceptance_criteria": [
+        "leer primero y principalmente opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04/revision_orquesta_2026-06-08/compact_review_packets2_20260610/claude_compact_review_packet_20260610.json",
+        "no leer el banco completo ni course_tests completo salvo comprobación focal de un ID listado",
+        "crear opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04/revision_orquesta_2026-06-08/vuelta_compacta2_sub6_20260610/agent_review_report_claude_compact2_sub6_20260610.json",
+        "dar verdict accepted solo si los IDs focales revisados no tienen rework real pendiente",
+        "si rework_required, listar id_suffix, problema, severidad y cambio recomendado",
+        "no modificar question_banks ni course_tests; solo escribir informe compacto en el write-set"
+      ],
+      "constraints": [
+        "trabajar desde /home/alberto/Trabajo/OPES como workdir del proyecto",
+        "no llamar APIs remotas ni tocar produccion",
+        "no editar fuera del write-set de revision",
+        "comunicacion compacta; no pegar 1050 preguntas en el informe"
+      ],
+      "external_work": {
+        "project_ref": "opes",
+        "job_ref": "job-tcae-promocion-tests-compact2_sub6_20260610-claude-review-20260608",
+        "interface_refs": [
+          "orquesta.domain_work.v0",
+          "opes-tests-review-contract-v0"
+        ],
+        "work_kind": "review_claude",
+        "work_refs": [
+          "compact2-review-packet-claude-sub6-20260610",
+          "validator-passed-1050-questions-20260610",
+          "subagent6-local-review-fixes-20260610"
+        ],
+        "input_fields": [
+          {
+            "name": "expected_artifact_type",
+            "value": "agent_review_report"
+          },
+          {
+            "name": "round",
+            "value": "compact2_sub6_20260610"
+          },
+          {
+            "name": "clean_round_target",
+            "value": "revisión compacta post-subagentes 6"
+          },
+          {
+            "name": "reviewer_role",
+            "value": "revision editorial, ambiguedades, test y explicaciones"
+          },
+          {
+            "name": "output_dir",
+            "value": "opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04/revision_orquesta_2026-06-08/vuelta_compacta2_sub6_20260610"
+          },
+          {
+            "name": "output_file",
+            "value": "opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04/revision_orquesta_2026-06-08/vuelta_compacta2_sub6_20260610/agent_review_report_claude_compact2_sub6_20260610.json"
+          },
+          {
+            "name": "objective",
+            "value": "Emitir accepted/rework_required sobre el paquete compacto focal. No reclamar cobertura total de 1050 preguntas."
+          },
+          {
+            "name": "compact_packet_path",
+            "value": "opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04/revision_orquesta_2026-06-08/compact_review_packets2_20260610/claude_compact_review_packet_20260610.json"
+          },
+          {
+            "name": "validator_summary",
+            "value": "validate_tcae_promocion_tests.py passed: 21 topic files, 1050 questions, issue_count 0"
+          },
+          {
+            "name": "token_budget_policy",
+            "value": "No leer banco completo. Revisar solo el compact packet y, si hace falta, IDs focales concretos."
+          }
+        ]
+      }
+    }
+  }
+}

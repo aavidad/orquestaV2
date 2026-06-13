@@ -1,0 +1,134 @@
+{
+  "schema_version": "agent_review_report.v0",
+  "report_ref": "agent-review-report-gemini-clean-sub6-20260610",
+  "request_id": "agent-ref-task-ref-app-change-appchange-de5c126b567ec11b148d70ed57bc596f",
+  "correlation_id": "corr-tcae-promocion-tests-clean_sub6_20260610-20260608-burst-002",
+  "task_ref": "task-ref-app-change-appchange-de5c126b567ec11b148d70ed57bc596f",
+  "round": "clean_sub6_20260610",
+  "reviewer_role": "revision didactica y semantica exigente",
+  "artifact_type": "agent_review_report",
+  "review_scope": {
+    "expected_course_tests_path": "opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04/course_tests.json",
+    "expected_question_banks_path": "opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04/question_banks",
+    "expected_validation_script_path": "opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04/revision_orquesta_2026-06-08/validate_tcae_promocion_tests.py",
+    "expected_question_count": 1050,
+    "expected_topic_count": 21,
+    "write_set": [
+      "opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04/revision_orquesta_2026-06-08/vuelta_limpia_sub6_20260610"
+    ]
+  },
+  "verdict": "rework_required",
+  "summary": "No se puede aceptar el banco corregido en esta vuelta porque los artefactos vigentes referenciados por el paquete no estan materializados en el workdir del proyecto. Se conserva informe verificable en el write-set y se evita inventar cobertura sobre 21 temas, 1050 preguntas, claves A-D, sincronizacion course_tests/question_banks o limpieza semantica.",
+  "evidence": {
+    "context_ref_only": {
+      "status": "pending",
+      "note": "Existe una entrada required=true mode=ref_only con required_ref_action=ack_evidence_required, pero no aporta contenido verificable adicional en el paquete materializado."
+    },
+    "local_presence_checks": [
+      {
+        "path": "opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04/course_tests.json",
+        "status": "missing"
+      },
+      {
+        "path": "opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04/question_banks",
+        "status": "missing"
+      },
+      {
+        "path": "opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04/revision_orquesta_2026-06-08/validate_tcae_promocion_tests.py",
+        "status": "missing"
+      },
+      {
+        "path": "opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04/revision_orquesta_2026-06-08/clean1b_codex_rework_applied.json",
+        "status": "missing"
+      },
+      {
+        "path": "opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04/revision_orquesta_2026-06-08/restore_question_bank_option_keys.json",
+        "status": "missing"
+      }
+    ]
+  },
+  "acceptance_criteria_review": [
+    {
+      "criterion": "revisar banco vigente actual, no backups ni versiones anteriores",
+      "status": "blocked",
+      "finding": "El banco vigente actual no existe en la ruta referenciada dentro del workdir."
+    },
+    {
+      "criterion": "cubrir 21 temas y 1050 preguntas con revision programatica completa y muestreo/manual focal de contenido",
+      "status": "blocked",
+      "finding": "No hay JSON de curso ni question_banks para contar temas/preguntas o muestrear contenido."
+    },
+    {
+      "criterion": "ejecutar o tomar como evidencia validate_tcae_promocion_tests.py pasado",
+      "status": "blocked",
+      "finding": "El script de validacion referenciado no esta materializado."
+    },
+    {
+      "criterion": "verificar que question_banks conserva claves A-D alineadas con sort_order y que course_tests/question_banks siguen sincronizados",
+      "status": "blocked",
+      "finding": "No se puede comprobar sincronizacion ni claves por ausencia de ambos artefactos."
+    },
+    {
+      "criterion": "verificar limpieza de patrones semanticos prohibidos y explicaciones antiguas",
+      "status": "blocked",
+      "finding": "Sin contenido del banco no hay base para declarar ausencia de familia sanitario, delirium mal explicado, Comunidades Autonomas de animo, usuario del centro, distractores equivalentes residente/usuario o plantillas antiguas."
+    },
+    {
+      "criterion": "declarar verdict accepted solo si cero rework real pendiente",
+      "status": "passed",
+      "finding": "Se declara rework_required porque falta evidencia critica."
+    }
+  ],
+  "findings": [
+    {
+      "severity": "blocking",
+      "code": "missing-current-bank",
+      "description": "Faltan los artefactos vigentes exigidos para emitir aceptacion sobre el banco corregido.",
+      "causal_rework": "Materializar course_tests.json, question_banks, reportes de rework y script de validacion en las rutas referenciadas, o relanzar la revision con paquete que los incluya por contenido o refs resolubles."
+    },
+    {
+      "severity": "blocking",
+      "code": "validation-evidence-unavailable",
+      "description": "No hay evidencia local de validate_tcae_promocion_tests.py pasado.",
+      "causal_rework": "Ejecutar el validador sobre el banco vigente y adjuntar receipt de salida limpia antes de pedir veredicto accepted."
+    },
+    {
+      "severity": "major",
+      "code": "ref-only-context-unresolved",
+      "description": "Una entrada required=true mode=ref_only queda sin contenido verificable.",
+      "causal_rework": "Resolver source_ref requerido o aceptar explicitamente que el informe solo puede registrar la falta como contexto_ref_only_pendiente."
+    }
+  ],
+  "risks": [
+    "Aceptar sin banco materializado podria ocultar errores en respuestas correctas, distractores equivalentes o explicaciones antiguas.",
+    "Aceptar sin validador pasado romperia la trazabilidad minima para importacion o publicacion posterior."
+  ],
+  "domain_contract_review": {
+    "opaque_refs_preserved": true,
+    "external_effects_performed": false,
+    "product_files_touched": [
+      "opes-salidas/codex_directo/tcae_c1_promocion_interna_diputacion_2026/06_tests/tcae_c1_promocion_rework_2026-06-04/revision_orquesta_2026-06-08/vuelta_limpia_sub6_20260610/agent_review_report_gemini_clean_sub6_20260610.json"
+    ],
+    "notes": [
+      "No se han creado jobs OPES ni subido artefactos manualmente.",
+      "No se han editado rutas fuera del write-set.",
+      "No se han descartado artefactos recuperables; los artefactos necesarios no estaban disponibles en este workdir."
+    ]
+  },
+  "required_tests_review": [
+    {
+      "command": "validar criterios de aceptacion del cambio",
+      "status": "passed",
+      "evidence": "Criterios evaluados y veredicto conservador rework_required emitido por falta de evidencia critica."
+    },
+    {
+      "command": "validar contrato externo de dominio",
+      "status": "passed",
+      "evidence": "Salida creada como agent_review_report dentro del write-set, refs opacas preservadas y sin efectos externos."
+    }
+  ],
+  "next_actions": [
+    "Relanzar revision cuando Orquesta materialice el banco vigente y el script validate_tcae_promocion_tests.py.",
+    "Si los artefactos existen fuera del repo, aportarlos por conector OPES/Orquesta como refs resolubles o contenido compactado, no como acceso directo fuera del workdir."
+  ]
+}
