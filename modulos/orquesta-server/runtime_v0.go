@@ -27,6 +27,7 @@ type RuntimeV0 struct {
 	asyncWork                   runtimeAsyncWorkGroupV0
 	supervisorTickActive        int32
 	supervisorTickPending       int32
+	supervisorWakeups           chan SupervisorWakeupV0
 	residentDirectorTickActive  int32
 	residentDirectorTickPending int32
 	shutdownInProgress          int32
@@ -67,17 +68,18 @@ func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
 		tracker = restored
 	}
 	return &RuntimeV0{
-		config:           config,
-		appHandler:       deps.AppHandler,
-		supervisor:       deps.Supervisor,
-		residentDirector: deps.ResidentDirector,
-		stateStore:       deps.StateStore,
-		auditSink:        deps.AuditSink,
-		startupCheck:     deps.StartupCheck,
-		selfWatchdog:     deps.SelfWatchdog,
-		clock:            deps.Clock,
-		tracker:          tracker,
-		handoffRequested: make(chan struct{}),
+		config:            config,
+		appHandler:        deps.AppHandler,
+		supervisor:        deps.Supervisor,
+		residentDirector:  deps.ResidentDirector,
+		stateStore:        deps.StateStore,
+		auditSink:         deps.AuditSink,
+		startupCheck:      deps.StartupCheck,
+		selfWatchdog:      deps.SelfWatchdog,
+		clock:             deps.Clock,
+		tracker:           tracker,
+		supervisorWakeups: make(chan SupervisorWakeupV0, 1),
+		handoffRequested:  make(chan struct{}),
 	}, nil
 }
 

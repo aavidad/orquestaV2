@@ -21,6 +21,8 @@ func (runtime *RuntimeV0) runSupervisorLoopV0(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
+		case <-runtime.supervisorWakeups:
+			runtime.runSupervisorTickAsyncV0(ctx)
 		case <-ticker.C:
 			runtime.runSupervisorTickAsyncV0(ctx)
 		}

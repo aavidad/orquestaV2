@@ -16,7 +16,9 @@ import (
 	orquestaobservability "orquesta/modulos/orquesta-observability"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestapersistence "orquesta/modulos/orquesta-persistence"
+	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestarunfile "orquesta/modulos/orquesta-run-file"
+	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
@@ -30,7 +32,8 @@ func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 	if err != nil {
 		return nil, err
 	}
-	stack, err := buildStackFromEnvV0(serverConfig)
+	supervisorWakeup := &serverSupervisorWakeupRelayV0{}
+	stack, err := buildStackFromEnvV0(serverConfig, supervisorWakeup)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +48,7 @@ func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 		stateDir:       serverConfig.StateDir,
 	}
 	residentDirector := newServerResidentDirectorV0(&stack, serverConfig)
-	return orquestaserver.NewRuntimeV0(serverConfig, orquestaserver.RuntimeDepsV0{
+	runtime, err := orquestaserver.NewRuntimeV0(serverConfig, orquestaserver.RuntimeDepsV0{
 		AppHandler:       appHandler,
 		Supervisor:       supervisor,
 		ResidentDirector: residentDirector,
@@ -54,6 +57,11 @@ func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 			orquestaserver.NewProcSelfCPUSamplerV0(),
 		),
 	})
+	if err != nil {
+		return nil, err
+	}
+	supervisorWakeup.bindRuntimeV0(runtime)
+	return runtime, nil
 }
 
 func buildServerAppHandlerV0(stack orquestaappcodexstack.StackV0) (http.Handler, error) {
@@ -85,7 +93,12 @@ func serverWebHTMLRenderObserverV0() orquestaobservability.WebHTMLRenderObserver
 
 func buildStackFromEnvV0(
 	serverConfig orquestaserver.ConfigV0,
+	supervisorWakeups ...*serverSupervisorWakeupRelayV0,
 ) (orquestaappcodexstack.StackV0, error) {
+	var supervisorWakeup *serverSupervisorWakeupRelayV0
+	if len(supervisorWakeups) > 0 {
+		supervisorWakeup = supervisorWakeups[0]
+	}
 	processRuntime := orquestaruntime.NewProcessRuntimeConnectorV0()
 	receiptStore, err := orquestaruntimecodexdelivery.NewFileCodexReceiptDescriptorStoreV0(serverConfig.StateDir)
 	if err != nil {
@@ -130,12 +143,20 @@ func buildStackFromEnvV0(
 		return orquestaappcodexstack.StackV0{}, err
 	}
 	worktreeSnapshotStore := orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0()
+	runStore := orquestacionnucleoapp.RunStorePortV0(stateStore)
+	runQueue := orquestarunqueue.RunQueuePortV0(runFileStore)
+	runControl := orquestaruncontrol.RunControlPortV0(runFileStore)
+	if supervisorWakeup != nil {
+		runStore = serverWakeupRunStoreV0{inner: stateStore, wakeup: supervisorWakeup}
+		runQueue = serverWakeupRunQueueV0{inner: runFileStore, wakeup: supervisorWakeup}
+		runControl = serverWakeupRunControlV0{inner: runFileStore, wakeup: supervisorWakeup}
+	}
 	stack, err := orquestaappcodexstack.BuildStackV0(orquestaappcodexstack.ConfigV0{
 		Enabled:        true,
 		Timeout:        30 * time.Second,
 		DirectorLimits: directorLimitsV0(),
 		Stores: orquestaappcodexstack.StoresV0{
-			RunStore:                   stateStore,
+			RunStore:                   runStore,
 			EventSink:                  stateStore,
 			OutboxLedger:               outboxLedger,
 			TaskStore:                  stateStore,
@@ -147,8 +168,8 @@ func buildStackFromEnvV0(
 			ReceiptStore:               receiptStore,
 			ProgressState:              progressStore,
 			ProcessRegistry:            stateStore,
-			RunControl:                 runFileStore,
-			RunQueue:                   runFileStore,
+			RunControl:                 runControl,
+			RunQueue:                   runQueue,
 		},
 		RunQueue: orquestaappcodexstack.RunQueueConfigV0{
 			QueueRef:       "global",
