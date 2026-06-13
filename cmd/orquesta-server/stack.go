@@ -147,10 +147,15 @@ func buildStackFromEnvV0(
 	runStore := orquestacionnucleoapp.RunStorePortV0(stateStore)
 	runQueue := orquestarunqueue.RunQueuePortV0(runFileStore)
 	runControl := orquestaruncontrol.RunControlPortV0(runFileStore)
+	receiptStorePort := orquestaappcodexstack.CodexReceiptStorePortV0(receiptStore)
 	if supervisorWakeup != nil {
 		runStore = serverWakeupRunStoreV0{inner: stateStore, wakeup: supervisorWakeup}
 		runQueue = serverWakeupRunQueueV0{inner: runFileStore, wakeup: supervisorWakeup}
 		runControl = serverWakeupRunControlV0{inner: runFileStore, wakeup: supervisorWakeup}
+		receiptStorePort = serverWakeupCodexReceiptStoreV0{
+			inner:  receiptStorePort,
+			wakeup: supervisorWakeup,
+		}
 		outboxLedgerPort = serverWakeupDirectorCycleOutboxLedgerV0{
 			inner:  outboxLedgerPort,
 			wakeup: supervisorWakeup,
@@ -170,7 +175,7 @@ func buildStackFromEnvV0(
 			OperationalPlanStateStore:  stateStore,
 			RequiredTestEvidenceStore:  stateStore,
 			AppChangeStore:             runFileStore,
-			ReceiptStore:               receiptStore,
+			ReceiptStore:               receiptStorePort,
 			ProgressState:              progressStore,
 			ProcessRegistry:            stateStore,
 			RunControl:                 runControl,
@@ -191,7 +196,7 @@ func buildStackFromEnvV0(
 		Codex: codexRuntimeConfigV0(
 			serverConfig,
 			processRuntime,
-			codexUsageMetricsFromEnvV0(receiptStore),
+			codexUsageMetricsFromEnvV0(receiptStorePort),
 		),
 		Gemini:          geminiRuntimeConfigV0(serverConfig),
 		Claude:          claudeRuntimeConfigV0(serverConfig),

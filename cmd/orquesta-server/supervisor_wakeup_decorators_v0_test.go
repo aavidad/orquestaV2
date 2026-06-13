@@ -5,12 +5,14 @@ import (
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadirectoragentfilesource "orquesta/modulos/orquesta-director-agent-file-source"
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestarunfile "orquesta/modulos/orquesta-run-file"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
+	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 )
 
 func TestServerSupervisorWakeupDecoratorsV0DisparanSoloTrasMutacionesEjecutables(t *testing.T) {
@@ -121,6 +123,63 @@ func TestServerWakeupDirectorCycleOutboxLedgerV0DisparaAlGuardarPendientes(t *te
 	}
 }
 
+func TestServerWakeupCodexReceiptStoreV0DisparaAlRegistrarDescriptorYSidecar(t *testing.T) {
+	ctx := context.Background()
+	var causes []string
+	var residentCauses []string
+	relay := &serverSupervisorWakeupRelayV0{
+		request: func(cause string) bool {
+			causes = append(causes, cause)
+			return true
+		},
+		requestResidentDirector: func(cause string) bool {
+			residentCauses = append(residentCauses, cause)
+			return true
+		},
+	}
+	inner := &fakeServerCodexReceiptStoreV0{}
+	store := serverWakeupCodexReceiptStoreV0{
+		inner:  inner,
+		wakeup: relay,
+	}
+
+	descriptor := orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+		DescriptorRef: "codex-receipt-ref-wakeup-001",
+		RunID:         "run-ref-receipt-wakeup-001",
+		AgentRef:      "agent-ref-receipt-wakeup-001",
+	}
+	if err := store.RecordCodexReceiptDescriptorV0(ctx, descriptor); err != nil {
+		t.Fatalf("RecordCodexReceiptDescriptorV0: %v", err)
+	}
+	if got, err := store.ListCodexReceiptDescriptorsV0(ctx, orquestaruntimecodexdelivery.CodexReceiptDescriptorRequestV0{
+		RunID: "run-ref-receipt-wakeup-001",
+	}); err != nil || len(got) != 1 {
+		t.Fatalf("ListCodexReceiptDescriptorsV0 got=%+v err=%v", got, err)
+	}
+	if err := store.RecordDirectorAgentDecisionFileConsumptionV0(
+		ctx,
+		orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0{
+			ReceiptRef: "sidecar-receipt-ref-wakeup-001",
+			RunID:      "run-ref-receipt-wakeup-001",
+			AgentRef:   "agent-ref-receipt-wakeup-001",
+			Status:     "pending",
+		},
+	); err != nil {
+		t.Fatalf("RecordDirectorAgentDecisionFileConsumptionV0: %v", err)
+	}
+
+	want := []string{"codex_receipt_descriptor_recorded", "director_decision_sidecar_consumed"}
+	if !stringSlicesEqualV0(causes, want) {
+		t.Fatalf("causes=%v want=%v", causes, want)
+	}
+	if !stringSlicesEqualV0(residentCauses, want) {
+		t.Fatalf("residentCauses=%v want=%v", residentCauses, want)
+	}
+	if len(inner.sidecars) != 1 {
+		t.Fatalf("sidecars=%+v", inner.sidecars)
+	}
+}
+
 type fakeServerDirectorCycleOutboxLedgerV0 struct {
 	pending []orquestacoreworkflow.OutboxMessageV0
 }
@@ -157,6 +216,34 @@ func (ledger *fakeServerDirectorCycleOutboxLedgerV0) ClaimOutboxDispatchV0(
 func (ledger *fakeServerDirectorCycleOutboxLedgerV0) AckOutboxDispatchV0(
 	_ orquestaoutboxdispatch.OutboxDispatchAckV0,
 ) []orquestaoutboxdispatch.DispatchIssueV0 {
+	return nil
+}
+
+type fakeServerCodexReceiptStoreV0 struct {
+	descriptors []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0
+	sidecars    []orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0
+}
+
+func (store *fakeServerCodexReceiptStoreV0) RecordCodexReceiptDescriptorV0(
+	_ context.Context,
+	descriptor orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+) error {
+	store.descriptors = append(store.descriptors, descriptor)
+	return nil
+}
+
+func (store *fakeServerCodexReceiptStoreV0) ListCodexReceiptDescriptorsV0(
+	_ context.Context,
+	_ orquestaruntimecodexdelivery.CodexReceiptDescriptorRequestV0,
+) ([]orquestaruntimecodexdelivery.CodexReceiptDescriptorV0, error) {
+	return append([]orquestaruntimecodexdelivery.CodexReceiptDescriptorV0(nil), store.descriptors...), nil
+}
+
+func (store *fakeServerCodexReceiptStoreV0) RecordDirectorAgentDecisionFileConsumptionV0(
+	_ context.Context,
+	receipt orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0,
+) error {
+	store.sidecars = append(store.sidecars, receipt)
 	return nil
 }
 

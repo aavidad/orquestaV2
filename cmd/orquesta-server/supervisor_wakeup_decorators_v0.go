@@ -6,11 +6,13 @@ import (
 	"sync"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadirectoragentfilesource "orquesta/modulos/orquesta-director-agent-file-source"
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
+	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
@@ -238,4 +240,48 @@ func (ledger serverWakeupDirectorCycleOutboxLedgerV0) AckOutboxDispatchV0(
 	ack orquestaoutboxdispatch.OutboxDispatchAckV0,
 ) []orquestaoutboxdispatch.DispatchIssueV0 {
 	return ledger.inner.AckOutboxDispatchV0(ack)
+}
+
+type serverWakeupCodexReceiptStoreV0 struct {
+	inner  serverWakeupCodexReceiptStorePortV0
+	wakeup *serverSupervisorWakeupRelayV0
+}
+
+type serverWakeupCodexReceiptStorePortV0 interface {
+	orquestaruntimecodexdelivery.CodexReceiptDescriptorStorePortV0
+	orquestaruntimecodexdelivery.CodexReceiptDescriptorRecorderPortV0
+}
+
+func (store serverWakeupCodexReceiptStoreV0) RecordCodexReceiptDescriptorV0(
+	ctx context.Context,
+	descriptor orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+) error {
+	if err := store.inner.RecordCodexReceiptDescriptorV0(ctx, descriptor); err != nil {
+		return err
+	}
+	store.wakeup.requestV0("codex_receipt_descriptor_recorded")
+	store.wakeup.requestResidentDirectorV0("codex_receipt_descriptor_recorded")
+	return nil
+}
+
+func (store serverWakeupCodexReceiptStoreV0) ListCodexReceiptDescriptorsV0(
+	ctx context.Context,
+	request orquestaruntimecodexdelivery.CodexReceiptDescriptorRequestV0,
+) ([]orquestaruntimecodexdelivery.CodexReceiptDescriptorV0, error) {
+	return store.inner.ListCodexReceiptDescriptorsV0(ctx, request)
+}
+
+func (store serverWakeupCodexReceiptStoreV0) RecordDirectorAgentDecisionFileConsumptionV0(
+	ctx context.Context,
+	receipt orquestadirectoragentfilesource.DirectorAgentDecisionSidecarReceiptV0,
+) error {
+	recorder, ok := store.inner.(orquestadirectoragentfilesource.DirectorAgentDecisionFileConsumptionRecorderPortV0)
+	if ok && recorder != nil {
+		if err := recorder.RecordDirectorAgentDecisionFileConsumptionV0(ctx, receipt); err != nil {
+			return err
+		}
+	}
+	store.wakeup.requestV0("director_decision_sidecar_consumed")
+	store.wakeup.requestResidentDirectorV0("director_decision_sidecar_consumed")
+	return nil
 }
