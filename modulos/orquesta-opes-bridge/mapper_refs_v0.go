@@ -84,6 +84,8 @@ func expectedArtifactTypeV0(jobType string) string {
 		return opesArtifactTypeLearningGamesPackageV0
 	case "generate_help_manual_assets", "generate_help_manuals", "create_help_manuals":
 		return opesArtifactTypeHelpManualPackageV0
+	case "finalize_topic_package":
+		return orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0
 	case "finalize_temario_package", "close_temario_package":
 		return opesArtifactTypeCompletedSyllabusPackageV0
 	}
@@ -126,6 +128,7 @@ func contextProfileForJobTypeV0(jobType string) string {
 		"generate_tutor_assets",
 		"generate_learning_games",
 		"generate_help_manual_assets",
+		"finalize_topic_package",
 		"finalize_temario_package",
 		"configure_temario_bots":
 		return "large"
@@ -185,6 +188,8 @@ func acceptanceCriteriaForJobV0(jobType string) []string {
 		criteria = append(criteria, pairedAgentReviewAcceptanceCriteriaV0(jobType)...)
 	case "review_director_consolidation", "review_director_final":
 		criteria = append(criteria, directorConsolidationAcceptanceCriteriaV0()...)
+	case "finalize_topic_package":
+		criteria = append(criteria, finalizedTopicPackageAcceptanceCriteriaV0()...)
 	case "finalize_temario_package", "close_temario_package":
 		criteria = append(criteria, finalizedTemarioPackageAcceptanceCriteriaV0()...)
 	}
@@ -361,9 +366,23 @@ func finalizedTemarioPackageAcceptanceCriteriaV0() []string {
 		"entregar paquete de temario terminado al 100% para revision local del operador antes de produccion",
 		"incluir temario resumido y ampliado separados, fuentes, exam_research_report, visuales finales, question_bank, audios por apartado, tutor/bots, HTML local, manuales graficos y manifest de trazabilidad",
 		"incorporar solo artefactos aceptados por Director o marcados como recuperables en ubicacion interna; no mostrar trazabilidad tecnica al alumnado",
+		"comprobar fases completas por tema: inventario, fuentes, redaccion, expansion, revision, tests, visuales, HTML, RAG, audio, QA, paquete y matriz de rework",
+		"convertir pendientes causales del ACK o matriz de revision en estado pendiente_continuar con followup_refs; no cerrar ready si queda rework abierto",
 		"verificar HTML local, responsive, enlaces, assets comprimidos, audio/manifests, locales/i18n, watermark USO cuando proceda y ausencia de rutas internas",
+		"verificar RAG/corpus y tutor contra el temario final aprobado, con anclas citables por tema/apartado",
+		"verificar audio con manifest y QA/Whisper cuando el curso exija audios; si falta audio, estado pendiente_continuar",
 		"exigir triple visto bueno y revisiones por pares cerradas; si falta una revision obligatoria, estado pendiente_continuar, no ready",
 		"devolver completed_syllabus_package con package_ref, manifest_ref, checksum_refs, validation_report_ref, review_matrix_ref y estado listo_para_revision_operador",
+	}
+}
+
+func finalizedTopicPackageAcceptanceCriteriaV0() []string {
+	return []string{
+		"cerrar paquete local verificable de un tema y no declararlo temario completo ni listo para produccion",
+		"incluir texto final del tema, tests, visuales_plan, HTML local, RAG, audio o guion/manifest, tutor y qa_final cuando el curso los exija",
+		"si faltan piezas obligatorias, devolver final_domain_package con estado pendiente_continuar y followup_refs causales",
+		"no ocultar pendientes bajo ready, ready_candidate_html ni apto_para_subida_controlada",
+		"no subir a produccion; conservar paquete como evidencia local revisable",
 	}
 }
 

@@ -195,6 +195,70 @@ func TestAppChangeDirectorDecisionSourceV0ProyectaPlanDocumental(t *testing.T) {
 	}
 }
 
+func TestAppChangeDirectorDecisionSourceV0ProyectaCierreTemarioExterno(t *testing.T) {
+	record := appChangeRecordForSourceTestV0()
+	record.Request.AllowedWriteSet = nil
+	record.Request.ExternalWork = &orquestaappchange.AppChangeExternalWorkV0{
+		ProjectRef:    "opes",
+		InterfaceRefs: []string{"opes-rest-v0", "opes-mcp-v0"},
+		WorkKind:      "finalize_temario_package",
+		WorkRefs:      []string{"opes-job-finalize-001", "opes-course-a2-informatica"},
+	}
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	run := appChangeRunForSourceTestV0(record)
+
+	decisions, err := (AppChangeDirectorDecisionSourceV0{Store: store}).
+		ListDirectorAgentDecisionsV0(
+			context.Background(),
+			orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+		)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	task := microtaskDecisionForTestV0(t, decisions).CreateMicrotask.Task
+	if task.Title != "Cerrar paquete de temario externo" ||
+		task.Summary != "Cerrar paquete de dominio externo con matriz de evidencias, validaciones y bloqueos causales antes de cualquier publicacion." ||
+		!stringInSetV0(task.WriteSet, "external/opes/finalize_temario_package") ||
+		!stringInSetV0(task.AcceptanceCriteria, "Devolver artifact_type=final_domain_package con manifest, matriz de evidencias y estado de validacion.") ||
+		!stringInSetV0(task.AcceptanceCriteria, "No ejecutar subida a produccion desde esta tarea; dejarla como trabajo posterior con confirmacion explicita.") ||
+		!stringInSetV0(task.RequiredTests, "validar final_domain_package") ||
+		!stringInSetV0(task.RequiredTests, "validar matriz de evidencias de cierre") ||
+		!stringInSetV0(task.RequiredTests, "validar que no hay subida a produccion sin confirmacion") {
+		t.Fatalf("task=%+v", task)
+	}
+}
+
+func TestAppChangeDirectorDecisionSourceV0ProyectaCierreTemaExterno(t *testing.T) {
+	record := appChangeRecordForSourceTestV0()
+	record.Request.AllowedWriteSet = nil
+	record.Request.ExternalWork = &orquestaappchange.AppChangeExternalWorkV0{
+		ProjectRef:    "opes",
+		InterfaceRefs: []string{"opes-rest-v0", "opes-mcp-v0"},
+		WorkKind:      "finalize_topic_package",
+		WorkRefs:      []string{"opes-job-finalpkg-001", "opes-topic-001"},
+	}
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	run := appChangeRunForSourceTestV0(record)
+
+	decisions, err := (AppChangeDirectorDecisionSourceV0{Store: store}).
+		ListDirectorAgentDecisionsV0(
+			context.Background(),
+			orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+		)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	task := microtaskDecisionForTestV0(t, decisions).CreateMicrotask.Task
+	if task.Title != "Cerrar paquete de tema externo" ||
+		task.Summary != "Cerrar paquete de dominio externo con matriz de evidencias, validaciones y bloqueos causales antes de cualquier publicacion." ||
+		!stringInSetV0(task.WriteSet, "external/opes/finalize_topic_package") ||
+		!stringInSetV0(task.RequiredTests, "validar final_domain_package") {
+		t.Fatalf("task=%+v", task)
+	}
+}
+
 func TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExternoSinWriteSetLocal(t *testing.T) {
 	record := appChangeRecordForSourceTestV0()
 	record.Request.AllowedWriteSet = nil

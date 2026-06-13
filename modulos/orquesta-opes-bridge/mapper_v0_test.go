@@ -258,6 +258,7 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 		{workKind: "generate_learning_games", artifactType: "learning_games_package", context: "large"},
 		{workKind: "generate_html_site", artifactType: "local_html_site", context: "large"},
 		{workKind: "generate_help_manual_assets", artifactType: "help_manual_package", context: "large"},
+		{workKind: "finalize_topic_package", artifactType: "final_domain_package", context: "large"},
 		{workKind: "finalize_temario_package", artifactType: "completed_syllabus_package", context: "large"},
 	}
 	for _, tc := range cases {
@@ -357,8 +358,18 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 			if tc.artifactType == "completed_syllabus_package" {
 				criteriaText := strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n")
 				if !strings.Contains(criteriaText, "temario terminado al 100%") ||
+					!strings.Contains(criteriaText, "convertir pendientes causales") ||
+					!strings.Contains(criteriaText, "RAG/corpus") ||
 					!strings.Contains(criteriaText, "triple visto bueno") ||
 					!strings.Contains(criteriaText, "listo_para_revision_operador") {
+					t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
+				}
+			}
+			if tc.workKind == "finalize_topic_package" {
+				criteriaText := strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n")
+				if !strings.Contains(criteriaText, "paquete local verificable de un tema") ||
+					!strings.Contains(criteriaText, "followup_refs causales") ||
+					!strings.Contains(criteriaText, "no declararlo temario completo") {
 					t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
 				}
 			}

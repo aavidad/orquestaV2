@@ -17,6 +17,7 @@ const (
 	appChangeExternalWorkKindDocumentPlanV0      appChangeExternalWorkKindClassV0 = "document_plan"
 	appChangeExternalWorkKindVisualV0            appChangeExternalWorkKindClassV0 = "visual"
 	appChangeExternalWorkKindAudioV0             appChangeExternalWorkKindClassV0 = "audio"
+	appChangeExternalWorkKindFinalPackageV0      appChangeExternalWorkKindClassV0 = "final_package"
 )
 
 type appChangeExternalWorkKindRuleV0 struct {
@@ -45,8 +46,31 @@ var appChangeExternalWorkKindRulesV0 = map[string]appChangeExternalWorkKindRuleV
 	"review_legal":              {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Resolver revision legal externa"},
 	"review_pedagogical":        {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Resolver revision pedagogica externa"},
 	"review_quality":            {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Resolver revision de calidad externa"},
-	"validate_topic":            {Class: appChangeExternalWorkKindDocumentaryV0},
-	"assemble_topic":            {Class: appChangeExternalWorkKindDocumentaryV0},
+	"review_codex":              {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Resolver revision independiente externa"},
+	"review_gemini":             {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Resolver revision independiente externa"},
+	"review_claude":             {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Resolver revision independiente externa"},
+	"review_pair_codex_gemini":  {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Resolver revision cruzada externa"},
+	"review_pair_codex_claude":  {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Resolver revision cruzada externa"},
+	"review_pair_gemini_claude": {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Resolver revision cruzada externa"},
+	"review_director_consolidation": {
+		Class: appChangeExternalWorkKindDocumentaryV0,
+		Title: "Consolidar revision externa del director",
+	},
+	"validate_topic":          {Class: appChangeExternalWorkKindDocumentaryV0},
+	"assemble_topic":          {Class: appChangeExternalWorkKindDocumentaryV0},
+	"generate_question_bank":  {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Generar banco de preguntas externo"},
+	"generate_tutor_assets":   {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Generar tutor y RAG externos"},
+	"generate_rag_assets":     {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Generar tutor y RAG externos"},
+	"generate_learning_games": {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Generar juegos de aprendizaje externos"},
+	"generate_html_site":      {Class: appChangeExternalWorkKindDocumentaryV0, Title: "Generar sitio HTML externo"},
+	"generate_help_manual_assets": {
+		Class: appChangeExternalWorkKindDocumentaryV0,
+		Title: "Generar manuales de ayuda externos",
+	},
+	"finalize_topic_package":    {Class: appChangeExternalWorkKindFinalPackageV0, Title: "Cerrar paquete de tema externo"},
+	"finalize_temario_package":  {Class: appChangeExternalWorkKindFinalPackageV0, Title: "Cerrar paquete de temario externo"},
+	"finalize_syllabus_package": {Class: appChangeExternalWorkKindFinalPackageV0, Title: "Cerrar paquete de temario externo"},
+	"finalize_domain_package":   {Class: appChangeExternalWorkKindFinalPackageV0, Title: "Cerrar paquete de dominio externo"},
 	"generate_audio_asset":      {Class: appChangeExternalWorkKindAudioV0, Title: "Generar audio accesible externo"},
 	"generate_topic_audio":      {Class: appChangeExternalWorkKindAudioV0, Title: "Generar audio accesible externo"},
 	"tts_topic":                 {Class: appChangeExternalWorkKindAudioV0, Title: "Generar audio accesible externo"},
@@ -114,6 +138,9 @@ func appChangeTaskSummaryV0(request orquestaappchange.AppChangeRequestV0) string
 	if appChangeIsAudioExternalWorkV0(request) {
 		return appChangeAudioTaskSummaryV0()
 	}
+	if appChangeIsFinalPackageExternalWorkV0(request) {
+		return "Cerrar paquete de dominio externo con matriz de evidencias, validaciones y bloqueos causales antes de cualquier publicacion."
+	}
 	if appChangeIsSummaryExternalWorkV0(request) {
 		return "Crear resumen derivado compacto con trazabilidad a bloques, capitulos, tema y fuentes de origen."
 	}
@@ -145,6 +172,15 @@ func appChangeExternalWorkCriteriaV0(
 	if appChangeIsAudioExternalWorkV0(request) {
 		criteria = append(criteria, appChangeAudioWorkCriteriaV0(request)...)
 		return append(criteria,
+			"Si falta un campo de input_fields requerido por el job, conservar avance parcial y dejar nota de rework de dominio.",
+		)
+	}
+	if appChangeIsFinalPackageExternalWorkV0(request) {
+		return append(criteria,
+			"Devolver artifact_type=final_domain_package con manifest, matriz de evidencias y estado de validacion.",
+			"Comprobar que las fases previas requeridas estan aceptadas o declaradas como bloqueo causal.",
+			"No marcar el paquete como publicable si faltan revisiones, tests, visuales, HTML, RAG, audio o validacion final exigida por la app propietaria.",
+			"No ejecutar subida a produccion desde esta tarea; dejarla como trabajo posterior con confirmacion explicita.",
 			"Si falta un campo de input_fields requerido por el job, conservar avance parcial y dejar nota de rework de dominio.",
 		)
 	}
@@ -226,6 +262,15 @@ func appChangeIsSummaryExternalWorkV0(
 	)
 }
 
+func appChangeIsFinalPackageExternalWorkV0(
+	request orquestaappchange.AppChangeRequestV0,
+) bool {
+	return appChangeExternalWorkKindHasClassV0(
+		request,
+		appChangeExternalWorkKindFinalPackageV0,
+	)
+}
+
 func appChangeExternalWorkKindHasClassV0(
 	request orquestaappchange.AppChangeRequestV0,
 	class appChangeExternalWorkKindClassV0,
@@ -251,7 +296,8 @@ func (rule appChangeExternalWorkKindRuleV0) isDocumentaryV0() bool {
 		appChangeExternalWorkKindSummaryV0,
 		appChangeExternalWorkKindExpansionV0,
 		appChangeExternalWorkKindDocumentPlanV0,
-		appChangeExternalWorkKindAudioV0:
+		appChangeExternalWorkKindAudioV0,
+		appChangeExternalWorkKindFinalPackageV0:
 		return true
 	default:
 		return false

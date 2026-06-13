@@ -67,16 +67,22 @@ func ExpectedDomainWorkArtifactTypeForWorkKindV0(workKind string) string {
 		"narracion_tema", "sintesis_voz_tema", "topic_audio":
 		return DomainWorkArtifactTypeAudioAssetV0
 	case "generate_tutor_assets", "configure_temario_tutor", "configure_temario_bots",
-		"create_tutor_bot_package", "crear_tutor_temario", "bots_temario":
+		"create_tutor_bot_package", "crear_tutor_temario", "bots_temario",
+		"generate_rag_assets", "generate_rag_tutor_assets", "create_rag_corpus":
 		return DomainWorkArtifactTypeTutorBotPackageV0
 	case "generate_interactive_practice", "create_interactive_practice",
-		"generate_practice_package":
+		"generate_practice_package", "generate_learning_games", "create_learning_games",
+		"generate_learning_game_package":
 		return DomainWorkArtifactTypeInteractivePracticeV0
-	case "generate_help_package", "create_help_package", "help_package":
+	case "generate_help_package", "create_help_package", "help_package",
+		"generate_help_manual_assets", "generate_help_manuals":
 		return DomainWorkArtifactTypeHelpPackageV0
-	case "review_agent_independent", "review_independent_agent":
+	case "review_agent_independent", "review_independent_agent",
+		"review_codex", "review_gemini", "review_claude":
 		return DomainWorkArtifactTypeAgentReviewReportV0
-	case "review_agent_pair", "review_peer_pair", "review_pair":
+	case "review_agent_pair", "review_peer_pair", "review_pair",
+		"review_pair_codex_gemini", "review_pair_codex_claude",
+		"review_pair_gemini_claude":
 		return DomainWorkArtifactTypeAgentPairReviewReportV0
 	case "generate_agent_candidate":
 		return DomainWorkArtifactTypeAgentCandidateV0
@@ -86,7 +92,9 @@ func ExpectedDomainWorkArtifactTypeForWorkKindV0(workKind string) string {
 		return DomainWorkArtifactTypeAgentCandidateSelectV0
 	case "review_director_consolidation", "review_consensus_director":
 		return DomainWorkArtifactTypeDirectorReviewMatrixV0
-	case "finalize_domain_package", "close_domain_package":
+	case "finalize_domain_package", "close_domain_package",
+		"finalize_topic_package", "finalize_temario_package", "finalize_syllabus_package",
+		"completed_syllabus_package":
 		return DomainWorkArtifactTypeFinalDomainPackageV0
 	default:
 		return DomainWorkArtifactTypeGenericWorkDeliveryV0

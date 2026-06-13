@@ -23,6 +23,13 @@ func appChangeTaskRequiredTestsV0(
 			tests = append(tests, appChangeVisualRequiredTestsV0(request)...)
 		} else if appChangeIsAudioExternalWorkV0(request) {
 			tests = append(tests, appChangeAudioRequiredTestsV0(request)...)
+		} else if appChangeIsFinalPackageExternalWorkV0(request) {
+			tests = append(tests,
+				"validar final_domain_package",
+				"validar matriz de evidencias de cierre",
+				"validar bloqueos causales antes de publicar",
+				"validar que no hay subida a produccion sin confirmacion",
+			)
 		} else if appChangeIsSummaryExternalWorkV0(request) {
 			tests = append(tests,
 				"validar trazabilidad del resumen",
