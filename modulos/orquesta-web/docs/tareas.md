@@ -537,6 +537,24 @@ cohortes si no llegan por los contratos publicos existentes.
 Estado: completada localmente.
 ```
 
+```text
+ID: WEB-035
+Objetivo: Convertir `/nueva-app` en un wizard guiado sin romper el contrato
+POST existente.
+Write-set: nueva_app_html_render_v0.go, nueva_app_html_handler_v0_test.go,
+docs locales.
+Simbolo foco: nuevaAppHTMLTemplateV0 wizard
+Contrato: Mantiene los `name=` actuales para `WebNuevaAppFormV0`; JavaScript
+solo mejora navegacion, presets y resumen vivo; sin DB, runtime, stores,
+proveedores ni reglas de negocio en la web.
+Validacion: `go test -count=1 ./modulos/orquesta-web -run TestNuevaAppHTMLHandlerV0`;
+`go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway`;
+`git diff --check`.
+Bloqueos: Ninguno.
+Estado: completada localmente; el submit queda usable sin JavaScript y el
+wizard preserva preview de backlog y errores publicos.
+```
+
 ## CONSULTA AL DIRECTOR
 
 ```text

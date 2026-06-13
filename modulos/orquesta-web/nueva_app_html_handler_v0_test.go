@@ -31,6 +31,9 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 	}
 	for _, want := range []string{
 		`<form method="post" action="/nueva-app">`,
+		`id="nueva-app-wizard"`,
+		`data-goto-step="0"`,
+		`data-preset="webapp"`,
 		`name="request_id"`,
 		`name="request_kind"`,
 		`name="execution_mode"`,
@@ -52,6 +55,9 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		`name="calidad.pruebas"`,
 		`name="agentes.autonomia"`,
 		`name="integraciones.0.tipo"`,
+		`Resumen vivo`,
+		`id="wizard-final-summary"`,
+		`.wizard-ready .hidden-final`,
 		`Vista previa del backlog`,
 	} {
 		if !strings.Contains(body, want) {
