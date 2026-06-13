@@ -3,6 +3,7 @@ package orquestaopesbridge
 func OPESFullTemarioJobTypeSequenceV0() []string {
 	return []string{
 		"plan_temario",
+		"update_topic_registry",
 		"research_exam_precedents",
 		"draft_content_block",
 		"generate_visual_asset",

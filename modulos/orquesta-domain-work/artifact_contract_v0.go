@@ -25,6 +25,7 @@ const (
 	DomainWorkArtifactTypeAgentCandidateVoteV0    = "agent_candidate_vote_report"
 	DomainWorkArtifactTypeAgentCandidateSelectV0  = "agent_candidate_selection_matrix"
 	DomainWorkArtifactTypeDirectorReviewMatrixV0  = "director_review_matrix"
+	DomainWorkArtifactTypeTopicRegistryUpdateV0   = "topic_registry_update"
 	DomainWorkArtifactTypeFinalDomainPackageV0    = "final_domain_package"
 	DomainWorkArtifactTypeGenericWorkDeliveryV0   = "work_delivery"
 )
@@ -92,6 +93,8 @@ func ExpectedDomainWorkArtifactTypeForWorkKindV0(workKind string) string {
 		return DomainWorkArtifactTypeAgentCandidateSelectV0
 	case "review_director_consolidation", "review_consensus_director":
 		return DomainWorkArtifactTypeDirectorReviewMatrixV0
+	case "update_topic_registry", "claim_topic_registry", "release_topic_registry":
+		return DomainWorkArtifactTypeTopicRegistryUpdateV0
 	case "finalize_domain_package", "close_domain_package",
 		"finalize_topic_package", "finalize_temario_package", "finalize_syllabus_package",
 		"completed_syllabus_package":

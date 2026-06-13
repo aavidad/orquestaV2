@@ -97,6 +97,76 @@ func TestProduceOPESCausalJobsV0RejectedCreaCorreccionMismaFase(t *testing.T) {
 	}
 }
 
+func TestProduceOPESCausalJobsV0CreaActualizacionRegistroPorTema(t *testing.T) {
+	source := fakeArtifactSourceV0{records: []OPESCausalArtifactRecordV0{{
+		Status:        "accepted",
+		DomainRef:     "opes",
+		JobRef:        "job-topic-synthetic-001",
+		ArtifactRef:   "artifact-topic-synthetic-001",
+		ArtifactType:  orquestadomainwork.DomainWorkArtifactTypeContentBlockV0,
+		ReceiptRef:    "receipt-topic-synthetic-001",
+		CorrelationID: "corr-topic-synthetic-001",
+		Summary:       "Entrega sintética de tema para registrar avance.",
+		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+			{Name: "course_id", Value: "curso-sintetico-a1"},
+			{Name: "topic_id", Value: "tema-001"},
+			{Name: "source_work_kind", Value: "draft_content_block"},
+		},
+	}}}
+	creator := orquestadomainworkmemory.NewInMemoryDomainWorkJobCreatorV0()
+	result, err := ProduceOPESCausalJobsV0(context.Background(), OPESCausalProducerRequestV0{},
+		OPESCausalProducerPortsV0{ArtifactSource: source, JobCreator: creator, JobRecords: creator})
+	if err != nil {
+		t.Fatalf("ProduceOPESCausalJobsV0: %v", err)
+	}
+	if len(result.CreatedJobs) != 1 || result.CreatedJobs[0].WorkKind != opesTopicRegistryUpdateWorkKindV0 {
+		t.Fatalf("result=%+v", result)
+	}
+	request, ok := requestedWorkKindForTestV0(result.RequestedJobs, opesTopicRegistryUpdateWorkKindV0)
+	if !ok ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "course_id", "curso-sintetico-a1") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "topic_id", "tema-001") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "registry_action", "update") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "en_progreso_orquesta") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "expected_artifact_type", orquestadomainwork.DomainWorkArtifactTypeTopicRegistryUpdateV0) {
+		t.Fatalf("request=%+v ok=%v", request, ok)
+	}
+
+	second, err := ProduceOPESCausalJobsV0(context.Background(), OPESCausalProducerRequestV0{},
+		OPESCausalProducerPortsV0{ArtifactSource: source, JobCreator: creator, JobRecords: creator})
+	if err != nil {
+		t.Fatalf("second ProduceOPESCausalJobsV0: %v", err)
+	}
+	if len(second.CreatedJobs) != 0 || len(second.SkippedRefs) != 1 {
+		t.Fatalf("second=%+v", second)
+	}
+}
+
+func TestProduceOPESCausalJobsV0NoRepiteRegistroDesdeRegistro(t *testing.T) {
+	source := fakeArtifactSourceV0{records: []OPESCausalArtifactRecordV0{{
+		Status:       "accepted",
+		DomainRef:    "opes",
+		JobRef:       "job-registry-synthetic-001",
+		ArtifactRef:  "artifact-registry-synthetic-001",
+		ArtifactType: orquestadomainwork.DomainWorkArtifactTypeTopicRegistryUpdateV0,
+		ReceiptRef:   "receipt-registry-synthetic-001",
+		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+			{Name: "course_id", Value: "curso-sintetico-a1"},
+			{Name: "topic_id", Value: "tema-001"},
+			{Name: "source_work_kind", Value: opesTopicRegistryUpdateWorkKindV0},
+		},
+	}}}
+	creator := orquestadomainworkmemory.NewInMemoryDomainWorkJobCreatorV0()
+	result, err := ProduceOPESCausalJobsV0(context.Background(), OPESCausalProducerRequestV0{},
+		OPESCausalProducerPortsV0{ArtifactSource: source, JobCreator: creator, JobRecords: creator})
+	if err != nil {
+		t.Fatalf("ProduceOPESCausalJobsV0: %v", err)
+	}
+	if len(result.CreatedJobs) != 0 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 type fakeArtifactSourceV0 struct {
 	records []OPESCausalArtifactRecordV0
 }
@@ -156,6 +226,36 @@ func createdWorkKindForTestV0(jobs []orquestadomainwork.DomainWorkJobV0, workKin
 	for _, job := range jobs {
 		if job.WorkKind == workKind {
 			return true
+		}
+	}
+	return false
+}
+
+func requestedWorkKindForTestV0(
+	jobs []orquestadomainwork.DomainWorkJobRequestV0,
+	workKind string,
+) (orquestadomainwork.DomainWorkJobRequestV0, bool) {
+	for _, job := range jobs {
+		if job.WorkKind == workKind {
+			return job, true
+		}
+	}
+	return orquestadomainwork.DomainWorkJobRequestV0{}, false
+}
+
+func domainWorkFieldValueForDirectorTestV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	name string,
+	value string,
+) bool {
+	for _, field := range fields {
+		if field.Name == name && field.Value == value {
+			return true
+		}
+		for _, item := range field.Values {
+			if field.Name == name && item == value {
+				return true
+			}
 		}
 	}
 	return false

@@ -1,14 +1,14 @@
-# Productor Causal OPES Autonomo
+# Productor Causal OPES Autónomo
 
 Fecha: 2026-06-13.
 
 ## Problema
 
-OPES podia lanzar agentes y recibir artefactos, pero el cierre no era autonomo:
+OPES podía lanzar agentes y recibir artefactos, pero el cierre no era autónomo:
 un ACK con pendientes, rework o paquete incompleto quedaba registrado y un
-operador tenia que convertirlo manualmente en la siguiente ola de trabajo.
+operador tenía que convertirlo manualmente en la siguiente ola de trabajo.
 
-## Solucion
+## Solución
 
 El servidor residente ejecuta un productor causal OPES antes de drenar el
 Director residente normal. El productor lee el ledger durable de entregas
@@ -21,10 +21,13 @@ cuando encuentra:
 - paquete final con `pendiente_continuar`: abre followup causal;
 - `followup_refs`, `pending_followup_refs`, `rework_refs` o
   `missing_required_refs`: materializa la siguiente tarea;
+- entrega aceptada con `course_id` y `topic_id`: abre `update_topic_registry`
+  para que el conector oficial actualice el registro global de temas sin
+  ampliar el write-set del agente de contenido;
 - receipt rechazado: crea correccion conservando el trabajo recuperable.
 
-La logica vive en `modulos/orquesta-opes-director`. El servidor solo cablea
-puertos y wakeups. El nucleo no importa OPES.
+La lógica vive en `modulos/orquesta-opes-director`. El servidor solo cablea
+puertos y wakeups. El núcleo no importa OPES.
 
 ## Idempotencia
 
@@ -35,7 +38,7 @@ del backend remoto.
 
 ## Wakeup
 
-El ledger de artefactos del composition root esta decorado para despertar:
+El ledger de artefactos del composition root está decorado para despertar:
 
 - supervisor residente;
 - Director residente.
@@ -48,9 +51,20 @@ Un paquete final con estado `pendiente_continuar` no se interpreta como cierre.
 Si no declara refs concretas, el productor crea el followup
 `final-package-pendiente-continuar`.
 
+## Registro Por Tema
+
+El registro OPES se trata como trabajo causal propio. El productor crea
+`update_topic_registry` cuando una entrega aceptada trae `course_id` y
+`topic_id`; el job debe devolver `topic_registry_update` con `registry_action`,
+`proposed_status`, `done_refs`, `pending_refs` y evidencias. Si el conector o la
+herramienta oficial no está disponible, el job debe devolver bloqueo público y
+comando exacto necesario, no cerrar el tema como listo.
+
+El propio artefacto `topic_registry_update` queda excluido para evitar bucles.
+
 ## Pruebas
 
-Comandos usados en la implementacion:
+Comandos usados en la implementación:
 
 ```bash
 go test -count=1 ./modulos/orquesta-opes-director

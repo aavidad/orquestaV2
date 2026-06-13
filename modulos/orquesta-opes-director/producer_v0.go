@@ -139,6 +139,9 @@ func acceptedArtifactRequestsV0(
 			}
 		}
 	}
+	if shouldRequestTopicRegistryUpdateV0(record) {
+		requests = append(requests, topicRegistryUpdateRequestV0(record))
+	}
 	for _, followupRef := range followupRefsForRecordV0(record) {
 		requests = append(requests, followupRequestV0(record, followupRef))
 	}

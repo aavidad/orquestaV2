@@ -58,11 +58,12 @@ func TestServerOPESCausalProducerV0CreaFollowupDesdeLedgerYNoDuplica(t *testing.
 	if err != nil {
 		t.Fatalf("ProduceV0 first: %v", err)
 	}
-	if len(first.CreatedJobs) != 1 {
+	if len(first.CreatedJobs) != 2 {
 		t.Fatalf("CreatedJobs first=%+v issues=%+v", first.CreatedJobs, first.Issues)
 	}
-	if first.CreatedJobs[0].WorkKind != "generate_audio_asset" {
-		t.Fatalf("work_kind=%s", first.CreatedJobs[0].WorkKind)
+	if !serverOPESCausalProducerCreatedWorkKindForTestV0(first.CreatedJobs, "generate_audio_asset") ||
+		!serverOPESCausalProducerCreatedWorkKindForTestV0(first.CreatedJobs, "update_topic_registry") {
+		t.Fatalf("CreatedJobs first=%+v", first.CreatedJobs)
 	}
 
 	second, err := producer.ProduceV0(ctx, orquestaopesdirector.OPESCausalProducerRequestV0{
@@ -72,7 +73,19 @@ func TestServerOPESCausalProducerV0CreaFollowupDesdeLedgerYNoDuplica(t *testing.
 	if err != nil {
 		t.Fatalf("ProduceV0 second: %v", err)
 	}
-	if len(second.CreatedJobs) != 0 || len(second.SkippedRefs) != 1 {
+	if len(second.CreatedJobs) != 0 || len(second.SkippedRefs) != 2 {
 		t.Fatalf("second CreatedJobs=%+v SkippedRefs=%+v", second.CreatedJobs, second.SkippedRefs)
 	}
+}
+
+func serverOPESCausalProducerCreatedWorkKindForTestV0(
+	jobs []orquestadomainwork.DomainWorkJobV0,
+	workKind string,
+) bool {
+	for _, job := range jobs {
+		if job.WorkKind == workKind {
+			return true
+		}
+	}
+	return false
 }

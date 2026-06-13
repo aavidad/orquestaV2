@@ -313,3 +313,33 @@ Validacion:
 
 - `TestRunOPESDrainOnceV0NoSupervisaPorDefectoTrasEnviarV0`;
 - `go test -count=1 ./cmd/orquesta-server -run 'OPESDrain|ExternalBridgeInput|OPESBridge|OPESTemarioCycle'`.
+
+## SRV-TASK-017: registro OPES por tema como trabajo causal
+
+Estado: hecho local 2026-06-13.
+
+Objetivo: evitar que los padres OPES queden parados porque el registro global de
+temas está fuera de su write-set. Orquesta debe pedir una actualización causal
+del registro para `course_id + topic_id` cuando reciba una entrega aceptada de
+tema, sin reabrir el write-set del agente de contenido ni editar JSON bruto
+desde el nucleo.
+
+Implementado:
+
+- nuevo artefacto `topic_registry_update` en `domain-work`;
+- nuevo work kind OPES `update_topic_registry`;
+- `update_topic_registry` entra en la secuencia completa OPES justo después de
+  `plan_temario`;
+- el productor causal OPES crea jobs `update_topic_registry` desde entregas
+  aceptadas con `course_id` y `topic_id`;
+- el propio artefacto `topic_registry_update` no vuelve a disparar otro job de
+  registro;
+- idempotencia por fuente, artefacto, receipt y scope del tema.
+
+Validación:
+
+- `TestExpectedDomainWorkArtifactTypeForWorkKindV0`;
+- `TestOPESFullTemarioJobTypeSequenceV0IncluyeCierreCompletoV0`;
+- `TestProduceOPESCausalJobsV0CreaActualizacionRegistroPorTema`;
+- `TestProduceOPESCausalJobsV0NoRepiteRegistroDesdeRegistro`;
+- `go test -count=1 ./modulos/orquesta-domain-work ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-director`.

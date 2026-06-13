@@ -128,6 +128,7 @@ func contextProfileForJobTypeV0(jobType string) string {
 		"generate_tutor_assets",
 		"generate_learning_games",
 		"generate_help_manual_assets",
+		"update_topic_registry",
 		"finalize_topic_package",
 		"finalize_temario_package",
 		"configure_temario_bots":
@@ -188,12 +189,25 @@ func acceptanceCriteriaForJobV0(jobType string) []string {
 		criteria = append(criteria, pairedAgentReviewAcceptanceCriteriaV0(jobType)...)
 	case "review_director_consolidation", "review_director_final":
 		criteria = append(criteria, directorConsolidationAcceptanceCriteriaV0()...)
+	case "update_topic_registry", "claim_topic_registry", "release_topic_registry":
+		criteria = append(criteria, topicRegistryUpdateAcceptanceCriteriaV0()...)
 	case "finalize_topic_package":
 		criteria = append(criteria, finalizedTopicPackageAcceptanceCriteriaV0()...)
 	case "finalize_temario_package", "close_temario_package":
 		criteria = append(criteria, finalizedTemarioPackageAcceptanceCriteriaV0()...)
 	}
 	return criteria
+}
+
+func topicRegistryUpdateAcceptanceCriteriaV0() []string {
+	return []string{
+		"actualizar o preparar actualización causal del registro global de temas OPES para course_id y topic_id recibidos",
+		"usar exclusivamente el conector o herramienta oficial del registro; no editar JSON bruto a mano si existe herramienta",
+		"respetar lock por tema y no bloquear otros topic_id del mismo curso",
+		"registrar hecho, pendiente, resumen, evidencias y estado propuesto sin mezclar trazas internas en contenido del alumno",
+		"si el conector no está disponible, devolver topic_registry_update con bloqueo público, payload de intención y comando exacto necesario",
+		"no marcar ready ni cerrar el curso si la actualización del registro queda pendiente",
+	}
 }
 
 func examResearchAcceptanceCriteriaV0() []string {

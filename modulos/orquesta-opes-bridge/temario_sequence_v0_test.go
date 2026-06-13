@@ -11,6 +11,7 @@ func TestOPESFullTemarioJobTypeSequenceV0IncluyeCierreCompletoV0(t *testing.T) {
 	for _, want := range []string{
 		"research_exam_precedents",
 		"plan_temario",
+		"update_topic_registry",
 		"generate_question_bank",
 		"review_codex",
 		"review_gemini",
@@ -33,6 +34,8 @@ func TestOPESFullTemarioJobTypeSequenceV0IncluyeCierreCompletoV0(t *testing.T) {
 		t.Fatalf("final=%s", got)
 	}
 	if sequence[0] != "plan_temario" ||
+		indexOfOPESSequenceForTestV0(sequence, "update_topic_registry") <
+			indexOfOPESSequenceForTestV0(sequence, "plan_temario") ||
 		sequence[len(sequence)-1] != "finalize_temario_package" {
 		t.Fatalf("sequence=%v", sequence)
 	}
