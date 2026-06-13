@@ -104,6 +104,45 @@ func TestServerConfigFromEnvV0ExponeSupervisorDesatendidoV0(t *testing.T) {
 	}
 }
 
+func TestServerConfigFromEnvV0PerfilAutonomiaActivaDirectorResidenteV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envServerAutonomyEnabledV0, "true")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if !config.ResidentDirectorEnabled {
+		t.Fatalf("perfil autonomia no activo director residente: %+v", config)
+	}
+	if got := effectiveSettingValueForTestV0(config.EffectiveConfig.Settings, envServerAutonomyEnabledV0); got != "true" {
+		t.Fatalf("%s=%q want true", envServerAutonomyEnabledV0, got)
+	}
+	if got := effectiveSettingValueForTestV0(config.EffectiveConfig.Settings, envServerResidentDirectorEnabledV0); got != "true" {
+		t.Fatalf("%s=%q want true", envServerResidentDirectorEnabledV0, got)
+	}
+}
+
+func TestServerConfigFromEnvV0DirectorResidenteExplicitoGanaAlPerfilAutonomiaV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envServerAutonomyEnabledV0, "true")
+	t.Setenv(envServerResidentDirectorEnabledV0, "false")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if config.ResidentDirectorEnabled {
+		t.Fatalf("override explicito no desactivo director residente: %+v", config)
+	}
+	if got := effectiveSettingValueForTestV0(config.EffectiveConfig.Settings, envServerAutonomyEnabledV0); got != "true" {
+		t.Fatalf("%s=%q want true", envServerAutonomyEnabledV0, got)
+	}
+	if got := effectiveSettingValueForTestV0(config.EffectiveConfig.Settings, envServerResidentDirectorEnabledV0); got != "false" {
+		t.Fatalf("%s=%q want false", envServerResidentDirectorEnabledV0, got)
+	}
+}
+
 func TestServerConfigFromEnvV0PublicaConfiguracionEfectivaCanonica(t *testing.T) {
 	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", t.TempDir())
 	t.Setenv("ORQUESTA_SERVER_MAX_RUNS_PER_TICK", "10")
@@ -141,6 +180,7 @@ func TestServerConfigFromEnvV0PublicaConfiguracionEfectivaCanonica(t *testing.T)
 		"ORQUESTA_SERVER_DRAIN_MAX_OUTBOX":                   "10",
 		"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_TARGET_QUEUE": "25",
 		"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_MAX_REQUESTS": "10",
+		"ORQUESTA_SERVER_AUTONOMY_ENABLED":                   "false",
 		"ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED":          "true",
 		"ORQUESTA_SERVER_RESIDENT_DIRECTOR_MAX_ACTIONS":      "7",
 		"ORQUESTA_SERVER_SELF_WATCHDOG_DISABLED":             "false",

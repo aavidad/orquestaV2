@@ -36,6 +36,11 @@ Salida:
 - statefile JSON `orquesta_server_state.v0`
 
 Configuracion externa relacionada:
+- `ORQUESTA_SERVER_AUTONOMY_ENABLED=true`: perfil explicito para arrancar la
+  composicion residente con defaults autonomos seguros. Hoy activa el Director
+  residente si la composicion inyecta `ResidentDirectorPortV0`; no sustituye a
+  los controles finos y no pisa `ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED` si
+  este se declara explicitamente.
 - `ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=true`: activa el pulso residente
   del Director si la composicion ha inyectado `ResidentDirectorPortV0`.
 - `ORQUESTA_SERVER_RESIDENT_DIRECTOR_MAX_ACTIONS`: acciones maximas de briefing

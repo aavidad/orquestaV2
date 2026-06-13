@@ -35,6 +35,10 @@
   y `ORQUESTA_SERVER_RESIDENT_DIRECTOR_MAX_ACTIONS` se publican en
   `effective_config`, y que el adaptador del Director residente solo se inyecta
   con opt-in y stack disponible.
+- `cmd/orquesta-server` prueba que `ORQUESTA_SERVER_AUTONOMY_ENABLED=true`
+  activa el Director residente como default autonomo y que
+  `ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=false` lo desactiva si se declara
+  explicitamente.
 - `cmd/orquesta-server` prueba que el planner de automejora salta tareas ya
   visibles en cola y anade una tarea scanner cuando hay capacidad libre para
   descubrir nuevos huecos.
