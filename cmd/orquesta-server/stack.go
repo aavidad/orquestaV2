@@ -120,6 +120,7 @@ func buildStackFromEnvV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
+	var outboxLedgerPort orquestaappcodexstack.OutboxLedgerPortV0 = outboxLedger
 	runFileStore, err := orquestarunfile.NewRunFileStoreV0(
 		filepath.Join(serverConfig.StateDir, "run-state"),
 	)
@@ -150,6 +151,10 @@ func buildStackFromEnvV0(
 		runStore = serverWakeupRunStoreV0{inner: stateStore, wakeup: supervisorWakeup}
 		runQueue = serverWakeupRunQueueV0{inner: runFileStore, wakeup: supervisorWakeup}
 		runControl = serverWakeupRunControlV0{inner: runFileStore, wakeup: supervisorWakeup}
+		outboxLedgerPort = serverWakeupDirectorCycleOutboxLedgerV0{
+			inner:  outboxLedgerPort,
+			wakeup: supervisorWakeup,
+		}
 	}
 	stack, err := orquestaappcodexstack.BuildStackV0(orquestaappcodexstack.ConfigV0{
 		Enabled:        true,
@@ -158,7 +163,7 @@ func buildStackFromEnvV0(
 		Stores: orquestaappcodexstack.StoresV0{
 			RunStore:                   runStore,
 			EventSink:                  stateStore,
-			OutboxLedger:               outboxLedger,
+			OutboxLedger:               outboxLedgerPort,
 			TaskStore:                  stateStore,
 			WaitStateStore:             stateStore,
 			OperationalPlanStateWriter: stateStore,

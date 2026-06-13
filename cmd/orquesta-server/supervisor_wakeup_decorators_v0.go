@@ -6,7 +6,9 @@ import (
 	"sync"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 	orquestaserver "orquesta/modulos/orquesta-server"
@@ -166,5 +168,57 @@ func (control serverWakeupRunControlV0) CompleteRunControlV0(
 	ctx context.Context,
 	command orquestaruncontrol.CompleteRunControlCommandV0,
 ) (orquestaruncontrol.RunControlStateV0, error) {
-	return control.inner.CompleteRunControlV0(ctx, command)
+	state, err := control.inner.CompleteRunControlV0(ctx, command)
+	if err == nil {
+		control.wakeup.requestV0("run_control_complete")
+	}
+	return state, err
+}
+
+type serverWakeupDirectorCycleOutboxLedgerV0 struct {
+	inner  serverWakeupOutboxLedgerPortV0
+	wakeup *serverSupervisorWakeupRelayV0
+}
+
+type serverWakeupOutboxLedgerPortV0 interface {
+	orquestadirectorcycleoutbox.DirectorCycleOutboxLedgerPortV0
+	orquestaoutboxdispatch.PendingOutboxReaderPortV0
+	orquestaoutboxdispatch.OutboxDispatchClaimerPortV0
+	orquestaoutboxdispatch.OutboxDispatchAckPortV0
+}
+
+func (ledger serverWakeupDirectorCycleOutboxLedgerV0) SavePending(
+	ctx context.Context,
+	messages []orquestacoreworkflow.OutboxMessageV0,
+) ([]orquestacoreworkflow.OutboxMessageV0, []orquestadirectorcycleoutbox.DirectorCycleOutboxIssueV0) {
+	saved, issues := ledger.inner.SavePending(ctx, messages)
+	if len(saved) > 0 {
+		ledger.wakeup.requestV0("director_cycle_outbox_saved")
+	}
+	return saved, issues
+}
+
+func (ledger serverWakeupDirectorCycleOutboxLedgerV0) ListPending(
+	ctx context.Context,
+	filter orquestadirectorcycleoutbox.DirectorCycleOutboxPendingFilterV0,
+) ([]orquestacoreworkflow.OutboxMessageV0, []orquestadirectorcycleoutbox.DirectorCycleOutboxIssueV0) {
+	return ledger.inner.ListPending(ctx, filter)
+}
+
+func (ledger serverWakeupDirectorCycleOutboxLedgerV0) ListPendingOutboxV0(
+	filter orquestaoutboxdispatch.PendingOutboxFilterV0,
+) ([]orquestaoutboxdispatch.OutboxPendingEntryV0, []orquestaoutboxdispatch.DispatchIssueV0) {
+	return ledger.inner.ListPendingOutboxV0(filter)
+}
+
+func (ledger serverWakeupDirectorCycleOutboxLedgerV0) ClaimOutboxDispatchV0(
+	claim orquestaoutboxdispatch.OutboxDispatchClaimV0,
+) (orquestaoutboxdispatch.OutboxDispatchClaimResultV0, []orquestaoutboxdispatch.DispatchIssueV0) {
+	return ledger.inner.ClaimOutboxDispatchV0(claim)
+}
+
+func (ledger serverWakeupDirectorCycleOutboxLedgerV0) AckOutboxDispatchV0(
+	ack orquestaoutboxdispatch.OutboxDispatchAckV0,
+) []orquestaoutboxdispatch.DispatchIssueV0 {
+	return ledger.inner.AckOutboxDispatchV0(ack)
 }
