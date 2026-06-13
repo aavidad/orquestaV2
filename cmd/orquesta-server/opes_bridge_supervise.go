@@ -23,6 +23,10 @@ func opesBridgeSuperviseSubmittedRunV0(
 			strings.TrimSpace(result.Status) != "recovery_required") {
 		return
 	}
+	if !config.SuperviseSubmitted {
+		result.SupervisionStatus = "resident_director_pending"
+		return
+	}
 	supervision, err := superviseOPESExternalWorkRunV0(
 		ctx,
 		client,

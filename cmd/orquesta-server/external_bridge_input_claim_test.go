@@ -246,11 +246,12 @@ func opesClaimDrainConfigV0(
 	ledger externalBridgeInputLedgerV0,
 ) opesDrainConfigV0 {
 	return opesDrainConfigV0{
-		OPESBaseURL:     opesBaseURL,
-		OrquestaBaseURL: orquestaBaseURL,
-		Limit:           1,
-		JobType:         "draft_content_block",
-		HTTPTimeout:     time.Second,
+		OPESBaseURL:        opesBaseURL,
+		OrquestaBaseURL:    orquestaBaseURL,
+		Limit:              1,
+		JobType:            "draft_content_block",
+		HTTPTimeout:        time.Second,
+		SuperviseSubmitted: true,
 		RunConfig: orquestaopesbridge.JobRunConfigV0{
 			PriorityScore: 70,
 			RequestedBy:   "test",

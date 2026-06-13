@@ -89,6 +89,70 @@ func TestRunOPESDrainOnceV0LedgerEvitaReenviarJobPendienteV0(t *testing.T) {
 	}
 }
 
+func TestRunOPESDrainOnceV0NoSupervisaPorDefectoTrasEnviarV0(t *testing.T) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
+			"id":             "job-ref-autonomous-default-001",
+			"type":           "draft_content_block",
+			"status":         "pending",
+			"execution_mode": "external",
+			"payload_json":   `{"topic_id":"topic-ref-001","title":"Bloque autonomo"}`,
+			"requested_by":   "opes",
+		}})
+	}))
+	defer opesServer.Close()
+
+	submits := 0
+	supervisions := 0
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v0/runs/supervise" {
+			supervisions++
+			t.Fatalf("el bridge OPES no debe supervisar manualmente por defecto")
+		}
+		if r.URL.Path != "/api/v0/external-work/run" || r.Method != http.MethodPost {
+			t.Fatalf("orquesta request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		submits++
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"run_ref": "run-ref-autonomous-default-001",
+			"estado":  "accepted",
+		})
+	}))
+	defer orquestaServer.Close()
+
+	ledger, err := newFileExternalBridgeInputLedgerV0(
+		filepath.Join(t.TempDir(), "external-bridge-input-ledger.json"),
+	)
+	if err != nil {
+		t.Fatalf("ledger: %v", err)
+	}
+	summary, err := runOPESDrainOnceV0(context.Background(), opesDrainConfigV0{
+		OPESBaseURL:     opesServer.URL,
+		OrquestaBaseURL: orquestaServer.URL,
+		Limit:           1,
+		JobType:         "draft_content_block",
+		HTTPTimeout:     time.Second,
+		RunConfig: orquestaopesbridge.JobRunConfigV0{
+			PriorityScore: 70,
+			RequestedBy:   "test",
+		},
+		InputLedger: ledger,
+	})
+	if err != nil ||
+		submits != 1 ||
+		supervisions != 0 ||
+		summary.Submitted != 1 ||
+		summary.Results[0].Status != "submitted" ||
+		summary.Results[0].SupervisionStatus != "resident_director_pending" {
+		t.Fatalf("submits=%d supervisions=%d summary=%+v err=%v", submits, supervisions, summary, err)
+	}
+}
+
 func TestRunOPESDrainOnceV0PlanTemarioOperadoresEnviaExternalWorkDocumentPlanV0(t *testing.T) {
 	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs/job-ref-plan-operadores-001" || r.Method != http.MethodGet {
@@ -248,7 +312,8 @@ func TestRunOPESDrainOnceV0SecuenciaPasesSaltaTiposSinPendientesV0(t *testing.T)
 			"generate_visual_asset",
 			"review_quality",
 		},
-		HTTPTimeout: time.Second,
+		HTTPTimeout:        time.Second,
+		SuperviseSubmitted: true,
 		RunConfig: orquestaopesbridge.JobRunConfigV0{
 			PriorityScore: 70,
 			RequestedBy:   "test",
@@ -328,7 +393,8 @@ func TestRunOPESDrainOnceV0SecuenciaPasesNoAvanzaSiPrimerTipoYaEnviadoV0(t *test
 			"generate_visual_asset",
 			"review_quality",
 		},
-		HTTPTimeout: time.Second,
+		HTTPTimeout:        time.Second,
+		SuperviseSubmitted: true,
 		RunConfig: orquestaopesbridge.JobRunConfigV0{
 			PriorityScore: 70,
 			RequestedBy:   "test",
@@ -451,11 +517,12 @@ func TestRunOPESDrainOnceV0AlreadySubmittedStoppedReanudaYReencolaV0(t *testing.
 	}
 
 	summary, err := runOPESDrainOnceV0(context.Background(), opesDrainConfigV0{
-		OPESBaseURL:     opesServer.URL,
-		OrquestaBaseURL: orquestaServer.URL,
-		Limit:           1,
-		JobType:         "draft_content_block",
-		HTTPTimeout:     time.Second,
+		OPESBaseURL:        opesServer.URL,
+		OrquestaBaseURL:    orquestaServer.URL,
+		Limit:              1,
+		JobType:            "draft_content_block",
+		HTTPTimeout:        time.Second,
+		SuperviseSubmitted: true,
 		RunConfig: orquestaopesbridge.JobRunConfigV0{
 			PriorityScore: 70,
 			RequestedBy:   "test",
@@ -585,7 +652,8 @@ func TestRunOPESDrainOnceV0AlreadySubmittedDoneConOPESPendienteReanudaYReencolaV
 			"draft_content_block",
 			"generate_visual_asset",
 		},
-		HTTPTimeout: time.Second,
+		HTTPTimeout:        time.Second,
+		SuperviseSubmitted: true,
 		RunConfig: orquestaopesbridge.JobRunConfigV0{
 			PriorityScore: 70,
 			RequestedBy:   "test",
@@ -672,11 +740,12 @@ func TestRunOPESDrainOnceV0AlreadySubmittedDoneConOPESPendienteMarcaRetryPending
 	}
 
 	summary, err := runOPESDrainOnceV0(context.Background(), opesDrainConfigV0{
-		OPESBaseURL:     opesServer.URL,
-		OrquestaBaseURL: orquestaServer.URL,
-		Limit:           1,
-		JobType:         "draft_content_block",
-		HTTPTimeout:     time.Second,
+		OPESBaseURL:        opesServer.URL,
+		OrquestaBaseURL:    orquestaServer.URL,
+		Limit:              1,
+		JobType:            "draft_content_block",
+		HTTPTimeout:        time.Second,
+		SuperviseSubmitted: true,
 		RunConfig: orquestaopesbridge.JobRunConfigV0{
 			PriorityScore: 70,
 			RequestedBy:   "test",
@@ -742,11 +811,12 @@ func TestRunOPESDrainOnceV0SupervisionTemporalNoBloqueaBridgeV0(t *testing.T) {
 	}
 
 	summary, err := runOPESDrainOnceV0(context.Background(), opesDrainConfigV0{
-		OPESBaseURL:     opesServer.URL,
-		OrquestaBaseURL: orquestaServer.URL,
-		Limit:           1,
-		JobType:         "draft_content_block",
-		HTTPTimeout:     time.Second,
+		OPESBaseURL:        opesServer.URL,
+		OrquestaBaseURL:    orquestaServer.URL,
+		Limit:              1,
+		JobType:            "draft_content_block",
+		HTTPTimeout:        time.Second,
+		SuperviseSubmitted: true,
 		RunConfig: orquestaopesbridge.JobRunConfigV0{
 			PriorityScore: 70,
 			RequestedBy:   "test",

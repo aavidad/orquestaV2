@@ -10,20 +10,21 @@ import (
 )
 
 type opesDrainConfigV0 struct {
-	OPESBaseURL     string
-	OrquestaBaseURL string
-	Limit           int
-	JobType         string
-	JobTypeSequence []string
-	JobRef          string
-	ProgramID       string
-	TopicID         string
-	CorrelationID   string
-	DryRun          bool
-	HTTPTimeout     time.Duration
-	RunConfig       orquestaopesbridge.JobRunConfigV0
-	InputLedger     externalBridgeInputLedgerV0
-	Destination     opesDrainDestinationPolicyV0
+	OPESBaseURL        string
+	OrquestaBaseURL    string
+	Limit              int
+	JobType            string
+	JobTypeSequence    []string
+	JobRef             string
+	ProgramID          string
+	TopicID            string
+	CorrelationID      string
+	DryRun             bool
+	SuperviseSubmitted bool
+	HTTPTimeout        time.Duration
+	RunConfig          orquestaopesbridge.JobRunConfigV0
+	InputLedger        externalBridgeInputLedgerV0
+	Destination        opesDrainDestinationPolicyV0
 }
 
 func opesDrainConfigFromEnvV0() (opesDrainConfigV0, error) {
@@ -66,17 +67,18 @@ func opesDrainConfigFromEnvWithBaseURLV0(
 		return opesDrainConfigV0{}, fmt.Errorf("ORQUESTA_OPES_BRIDGE_JOB_REF incompatible con ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE")
 	}
 	return opesDrainConfigV0{
-		OPESBaseURL:     strings.TrimRight(opesBaseURL, "/"),
-		OrquestaBaseURL: strings.TrimRight(orquestaBaseURL, "/"),
-		Limit:           intEnvOrDefaultV0(envOPESBridgeLimitV0, 3),
-		JobType:         jobType,
-		JobTypeSequence: jobTypeSequence,
-		JobRef:          jobRef,
-		ProgramID:       programID,
-		TopicID:         topicID,
-		CorrelationID:   correlationID,
-		DryRun:          dryRun,
-		HTTPTimeout:     time.Duration(intEnvOrDefaultV0(envOPESBridgeTimeoutSecondsV0, 30)) * time.Second,
+		OPESBaseURL:        strings.TrimRight(opesBaseURL, "/"),
+		OrquestaBaseURL:    strings.TrimRight(orquestaBaseURL, "/"),
+		Limit:              intEnvOrDefaultV0(envOPESBridgeLimitV0, 3),
+		JobType:            jobType,
+		JobTypeSequence:    jobTypeSequence,
+		JobRef:             jobRef,
+		ProgramID:          programID,
+		TopicID:            topicID,
+		CorrelationID:      correlationID,
+		DryRun:             dryRun,
+		SuperviseSubmitted: strings.TrimSpace(os.Getenv(envOPESBridgeSuperviseSubmittedV0)) == "1",
+		HTTPTimeout:        time.Duration(intEnvOrDefaultV0(envOPESBridgeTimeoutSecondsV0, 30)) * time.Second,
 		RunConfig: orquestaopesbridge.JobRunConfigV0{
 			PriorityScore: intEnvOrDefaultV0(envOPESBridgePriorityV0, 70),
 			RequestedBy:   "orquesta-opes-bridge",

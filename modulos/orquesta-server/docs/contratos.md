@@ -112,6 +112,10 @@ Configuracion externa relacionada:
   loop consulta la secuencia en orden y drena solo el primer tipo con trabajos
   `pending`; el ledger evita relanzar inputs ya enviados y bloquea fases
   posteriores mientras OPES siga exponiendo pendientes de la fase actual.
+- `ORQUESTA_OPES_BRIDGE_SUPERVISE_SUBMITTED=1` activa el modo legacy en el que
+  el bridge llama a `/api/v0/runs/supervise` tras enviar o reencontrar un run.
+  Por defecto esta llamada queda desactivada: el bridge solo encola trabajo y el
+  Director residente lo materializa por wakeup/ticker.
 
 Invariantes:
 - no conoce Codex, DB, web, MCP ni modelos;

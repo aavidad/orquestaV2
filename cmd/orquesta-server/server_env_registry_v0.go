@@ -151,6 +151,7 @@ const (
 	envOPESBridgeIntervalSecondsV0          = "ORQUESTA_OPES_BRIDGE_INTERVAL_SECONDS"
 	envOPESBridgeInitialDelaySecondsV0      = "ORQUESTA_OPES_BRIDGE_INITIAL_DELAY_SECONDS"
 	envOPESBridgeMaxTicksV0                 = "ORQUESTA_OPES_BRIDGE_MAX_TICKS"
+	envOPESBridgeSuperviseSubmittedV0       = "ORQUESTA_OPES_BRIDGE_SUPERVISE_SUBMITTED"
 	envOPESBridgeAllowUnfilteredV0          = "ORQUESTA_OPES_BRIDGE_ALLOW_UNFILTERED"
 	envOPESBridgeInputLedgerDisabledV0      = "ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_DISABLED"
 	envOPESBridgeInputLedgerPathV0          = "ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH"

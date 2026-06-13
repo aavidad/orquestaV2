@@ -290,3 +290,26 @@ Validacion:
 - `TestServerWakeupDomainWorkArtifactSubmissionLedgerV0DisparaAlRegistrar`;
 - `go test -count=1 ./modulos/orquesta-opes-director`;
 - `go test -count=1 ./cmd/orquesta-server -run 'OPESCausal|WakeupDomainWork|ResidentDirector'`.
+
+## SRV-TASK-016: bridge OPES sin supervise manual por defecto
+
+Estado: hecho local 2026-06-13.
+
+Objetivo: el bridge OPES no debe depender de una llamada inmediata a
+`/api/v0/runs/supervise` para avanzar. En modo autonomo, crear o reencontrar un
+run debe bastar: el wakeup y el Director residente se encargan del drenaje. La
+supervision directa queda solo como compatibilidad legacy con opt-in explicito.
+
+Implementado:
+
+- `ORQUESTA_OPES_BRIDGE_SUPERVISE_SUBMITTED=1` conserva el comportamiento
+  anterior para smokes antiguos o diagnostico dirigido;
+- sin esa variable, el bridge registra `supervision_status=resident_director_pending`
+  y no llama a `/api/v0/runs/supervise`;
+- los smokes legacy que simulaban progreso OPES desde `/runs/supervise` activan
+  el opt-in de forma explicita.
+
+Validacion:
+
+- `TestRunOPESDrainOnceV0NoSupervisaPorDefectoTrasEnviarV0`;
+- `go test -count=1 ./cmd/orquesta-server -run 'OPESDrain|ExternalBridgeInput|OPESBridge|OPESTemarioCycle'`.

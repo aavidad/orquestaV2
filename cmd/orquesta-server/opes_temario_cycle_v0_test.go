@@ -209,13 +209,14 @@ func TestRunOPESTemarioCycleV0ConBridgeRealFakeHastaCierreV0(t *testing.T) {
 
 	summary := runOPESTemarioCycleV0(context.Background(), opesTemarioCycleConfigV0{
 		DrainConfig: opesDrainConfigV0{
-			OPESBaseURL:     opesServer.URL,
-			OrquestaBaseURL: orquestaServer.URL,
-			Limit:           1,
-			JobTypeSequence: sequence,
-			HTTPTimeout:     time.Second,
-			RunConfig:       orquestaopesbridge.JobRunConfigV0{PriorityScore: 70, RequestedBy: "test"},
-			InputLedger:     ledger,
+			OPESBaseURL:        opesServer.URL,
+			OrquestaBaseURL:    orquestaServer.URL,
+			Limit:              1,
+			JobTypeSequence:    sequence,
+			HTTPTimeout:        time.Second,
+			SuperviseSubmitted: true,
+			RunConfig:          orquestaopesbridge.JobRunConfigV0{PriorityScore: 70, RequestedBy: "test"},
+			InputLedger:        ledger,
 		},
 		MaxTicks:     5,
 		TickSleep:    0,
