@@ -215,6 +215,9 @@ func (stack StackV0) completeQueuedRunControlIfStopHasNoPendingAgentsV0(
 	if !evaluation.StopAgentsAllowed || len(stackDrainPendingStartedAgentRefsV0(run)) > 0 {
 		return false, nil
 	}
+	if len(stackDrainOpenTaskRefsV0(run)) > 0 {
+		return false, nil
+	}
 	if pending, err := stack.domainWorkRunHasPendingSubmissionWithoutAcceptedReceiptV0(ctx, run); err != nil || pending {
 		return false, err
 	}

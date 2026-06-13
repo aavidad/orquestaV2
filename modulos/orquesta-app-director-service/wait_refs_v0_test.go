@@ -102,6 +102,21 @@ func TestExistingDirectorLoopRequestV0DerivaWaitAgentRefsPorParentTask(t *testin
 	}
 }
 
+func TestAppDirectorRunHasPendingAgentRefsV0NoCuentaAgenteNoMaterializado(t *testing.T) {
+	runRef := "run-app-director-wait-unrequested-001"
+	deliveredTask := serviceWorkflowTaskForWaitRefsTestV0(runRef, "task-app-director-wait-delivered", "wave-01", "cohort-a")
+	unrequestedTask := serviceWorkflowTaskForWaitRefsTestV0(runRef, "task-app-director-wait-unrequested", "wave-01", "cohort-a")
+	deliveredAgentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(deliveredTask.TaskID)
+	unrequestedAgentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(unrequestedTask.TaskID)
+	run := serviceRunForWaitRefsTestV0(runRef, deliveredTask.TaskID, unrequestedTask.TaskID)
+	run.Agents = []string{deliveredAgentRef}
+	run.StartedAgents = []string{deliveredAgentRef}
+	run.DeliveredAgents = []string{deliveredAgentRef}
+	if appDirectorRunHasPendingAgentRefsV0(run, []string{deliveredAgentRef, unrequestedAgentRef}) {
+		t.Fatalf("unrequested no debe contar como externo pendiente: delivered=%s unrequested=%s", deliveredAgentRef, unrequestedAgentRef)
+	}
+}
+
 func TestExistingDirectorLoopRequestV0RequiereTaskStoreConFiltroWait(t *testing.T) {
 	runRef := "run-app-director-wait-store-missing-001"
 	run := serviceRunForWaitRefsTestV0(runRef)
@@ -155,6 +170,37 @@ func TestExistingDirectorLoopRequestV0RefsExplicitosNoRequierenFiltro(t *testing
 	}
 	if len(loop.WaitAgentRefs) != 1 || loop.WaitAgentRefs[0] != "agent-ref-explicit" {
 		t.Fatalf("wait_agent_refs=%v", loop.WaitAgentRefs)
+	}
+}
+
+func TestAppDirectorExplicitPendingAgentRefsV0NoEsperaAgenteNoMaterializado(t *testing.T) {
+	run := orquestacoreworkflow.OrchestrationRunV0{
+		Agents:        []string{"agent-ref-materializado"},
+		StartedAgents: []string{"agent-ref-arrancado"},
+		DeliveredAgents: []string{
+			"agent-ref-arrancado",
+		},
+	}
+
+	pending := appDirectorExplicitPendingAgentRefsV0(run, []string{
+		"agent-ref-materializado",
+		"agent-ref-arrancado",
+		"agent-ref-no-materializado",
+	})
+
+	if len(pending) != 1 || pending[0] != "agent-ref-materializado" {
+		t.Fatalf("pending=%v", pending)
+	}
+}
+
+func TestAppDirectorRunHasRequestedAgentRefsV0(t *testing.T) {
+	if appDirectorRunHasRequestedAgentRefsV0(orquestacoreworkflow.OrchestrationRunV0{}) {
+		t.Fatalf("run vacio no debe filtrar primer dispatch")
+	}
+	if !appDirectorRunHasRequestedAgentRefsV0(orquestacoreworkflow.OrchestrationRunV0{
+		StartedAgents: []string{"agent-ref-arrancado"},
+	}) {
+		t.Fatalf("run con agente arrancado debe filtrar reentrada")
 	}
 }
 

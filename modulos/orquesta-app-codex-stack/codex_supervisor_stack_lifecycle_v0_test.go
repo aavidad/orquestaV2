@@ -886,6 +886,88 @@ func TestCodexSupervisorSnapshotFromDrainV0NoCierraAutomejoraActivaConEntregaAbi
 	}
 }
 
+func TestCodexSupervisorSnapshotFromDrainV0NoCierraRunActivaConWorkflowTaskAbiertaV0(t *testing.T) {
+	ctx := context.Background()
+	runRef := "run-ref-supervisor-open-workflow-task-001"
+	openTaskRef := "workflow-task-supervisor-open-workflow-task-001"
+	deliveredTaskRef := "workflow-task-supervisor-delivered-workflow-task-001"
+	lifecycle := CodexSupervisorStackLifecycleV0{}
+	loop := orquestacionnucleoapp.ProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+		Run: orquestacoreworkflow.OrchestrationRunV0{
+			RunID:          runRef,
+			Status:         orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+			Tasks:          []string{deliveredTaskRef, openTaskRef},
+			DeliveredTasks: []string{deliveredTaskRef},
+		},
+	}
+
+	snapshot := lifecycle.codexSupervisorSnapshotFromDrainV0(ctx, runRef, "", orquestacionnucleoapp.ManagedProgressiveLoopResultV0{
+		Status: loop.Status,
+		Final:  loop,
+	})
+	if snapshot.Status != CodexSupervisorRuntimeRunningV0 ||
+		!codexStackRefsContainPartV0(snapshot.EvidenceRefs, "open-run-work") {
+		t.Fatalf("snapshot=%+v want running con workflow task abierta", snapshot)
+	}
+
+	loop.Run.DeliveredTasks = append(loop.Run.DeliveredTasks, openTaskRef)
+	loop.Run.ClosedTasks = append(loop.Run.ClosedTasks, deliveredTaskRef, openTaskRef)
+	snapshot = lifecycle.codexSupervisorSnapshotFromDrainV0(ctx, runRef, "", orquestacionnucleoapp.ManagedProgressiveLoopResultV0{
+		Status: loop.Status,
+		Final:  loop,
+	})
+	if snapshot.Status != CodexSupervisorRuntimeDoneV0 {
+		t.Fatalf("snapshot=%+v want done tras cerrar workflow tasks", snapshot)
+	}
+}
+
+func TestCodexSupervisorSnapshotFromDrainV0CargaRunStoreSiFinalNoTraeTareasV0(t *testing.T) {
+	ctx := context.Background()
+	runRef := "run-ref-supervisor-open-workflow-task-store-001"
+	openTaskRef := "workflow-task-supervisor-open-workflow-task-store-001"
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0(orquestacoreworkflow.OrchestrationRunV0{
+		RunID:  runRef,
+		Status: orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+		Tasks:  []string{openTaskRef},
+	})
+	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(orquestacoreworkflow.WorkflowTaskV0{
+		SchemaVersion: orquestacoreworkflow.WorkflowTaskSchemaVersionV0,
+		TaskID:        openTaskRef,
+		RunID:         runRef,
+		PhaseID:       orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		WriteSet:      []string{"internal/modules/open"},
+		FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
+			ContractRef:  "contract-ref-supervisor-open-work-v0",
+			FunctionName: "open_work",
+		}},
+	})
+	lifecycle := CodexSupervisorStackLifecycleV0{
+		Stack: StackV0{
+			Stores: StoresV0{
+				RunStore:  runStore,
+				TaskStore: taskStore,
+			},
+		},
+	}
+	loop := orquestacionnucleoapp.ProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+		Run: orquestacoreworkflow.OrchestrationRunV0{
+			RunID:  runRef,
+			Status: orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+		},
+	}
+
+	snapshot := lifecycle.codexSupervisorSnapshotFromDrainV0(ctx, runRef, "", orquestacionnucleoapp.ManagedProgressiveLoopResultV0{
+		Status: loop.Status,
+		Final:  loop,
+	})
+	if snapshot.Status != CodexSupervisorRuntimeRunningV0 ||
+		!codexStackRefsContainPartV0(snapshot.EvidenceRefs, "open-run-work") {
+		t.Fatalf("snapshot=%+v want running desde RunStore con workflow task abierta", snapshot)
+	}
+}
+
 func TestCodexSupervisorGlobalV0NoTrataDeliveredOpenComoIdleV0(t *testing.T) {
 	ctx := context.Background()
 	runRef := "run-ref-global-delivered-open-001"

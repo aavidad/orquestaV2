@@ -63,6 +63,53 @@ func TestOperationalDirectorPlanRequiredTestsSeAcotanPorWorkflowTaskV0(t *testin
 	}
 }
 
+func TestOperationalDirectorPlanRequiredTestsNoHeredaFallbackEnWorkflowTaskSinTestsV0(t *testing.T) {
+	runRef := "run-ref-required-tests-review-without-tests"
+	codeTask := serviceRequiredTestsScopeTaskForTestV0(t, runRef, "task-required-tests-code", []string{
+		"go test ./...",
+	})
+	reviewTask := serviceRequiredTestsScopeTaskForTestV0(t, runRef, "task-required-tests-review", nil)
+	store := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(codeTask, reviewTask)
+	requiredTests := []string{"go test ./..."}
+	activeStep := orquestacionnucleoapp.OperationalDirectorPlanStepStateV0{
+		TaskRefs: []string{codeTask.TaskID, reviewTask.TaskID},
+	}
+	matches := []operationalDirectorPlanAcceptedReviewMatchV0{
+		serviceRequiredTestsScopeMatchForTestV0(codeTask.TaskID),
+		serviceRequiredTestsScopeMatchForTestV0(reviewTask.TaskID),
+	}
+
+	requiredByTask, err := operationalDirectorPlanRequiredTestsByTaskV0(
+		context.Background(),
+		runRef,
+		store,
+		activeStep,
+		requiredTests,
+		matches,
+	)
+	if err != nil {
+		t.Fatalf("operationalDirectorPlanRequiredTestsByTaskV0: %v", err)
+	}
+	evidence := []orquestacionnucleoapp.RequiredTestEvidenceV0{
+		serviceRequiredTestsScopeEvidenceForTestV0(runRef, matches[0], "go test ./..."),
+	}
+
+	evaluation := operationalDirectorPlanEvaluateRequiredTestEvidenceV0(
+		runRef,
+		requiredTests,
+		matches,
+		evidence,
+		requiredByTask,
+	)
+
+	if !evaluation.Complete ||
+		len(evaluation.FailedRefs) != 0 ||
+		len(evaluation.PassedRefs) != 1 ||
+		len(requiredByTask[reviewTask.TaskID]) != 0 {
+		t.Fatalf("evaluation=%+v requiredByTask=%+v", evaluation, requiredByTask)
+	}
+}
+
 func TestOperationalDirectorPlanRequiredTestsAceptaEvidenciaRunScopedCondicionalV0(t *testing.T) {
 	runRef := "run-ref-required-tests-run-scoped"
 	requiredTests := []string{"smoke HTTP completo"}

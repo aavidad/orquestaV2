@@ -49,6 +49,12 @@ func (stack StackV0) drainRunAttemptControlV0(
 	if err := stack.submitPendingDomainWorkArtifactsV0(ctx, request, run); err != nil {
 		return drainRunAttemptControlV0{}, err
 	}
+	if recovered, err := stack.recoverMissingCapacityOutboxForPendingCapacityRequestsV0(ctx, run); err != nil || recovered {
+		if err != nil {
+			return drainRunAttemptControlV0{}, err
+		}
+		return stack.continueDrainRunControlAfterExternalV0(ctx, request)
+	}
 	if recovered, err := stack.recoverMissingLaunchOutboxForRequestedAgentsV0(ctx, run); err != nil || recovered {
 		if err != nil {
 			return drainRunAttemptControlV0{}, err

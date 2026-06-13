@@ -46,6 +46,42 @@ func TestRecoverMissingLaunchOutboxForRequestedAgentsV0ReconstruyeOutboxTrasPers
 	}
 }
 
+func TestRecoverMissingCapacityOutboxForPendingCapacityRequestsV0ReconstruyeOutboxTrasPersistParcial(t *testing.T) {
+	ctx := context.Background()
+	runRef := "run-ref-capacity-outbox-recovery-001"
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	eventSink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	run := codexStackCapacityOutboxRecoveryRunV0(t, ctx, runStore, eventSink, runRef)
+	stack := StackV0{
+		Stores: StoresV0{
+			RunStore:     runStore,
+			EventSink:    eventSink,
+			OutboxLedger: ledger,
+		},
+		Ports: stackLaunchOutboxRecoveryPortsV0(runStore, eventSink, ledger),
+	}
+
+	recovered, err := stack.recoverMissingCapacityOutboxForPendingCapacityRequestsV0(ctx, run)
+	if err != nil {
+		t.Fatalf("recoverMissingCapacityOutboxForPendingCapacityRequestsV0: %v", err)
+	}
+	if !recovered {
+		t.Fatalf("recovery no reconstruyo outbox")
+	}
+	pending, issues := ledger.ListPendingOutboxV0(orquestaoutboxdispatch.PendingOutboxFilterV0{
+		RunID:       runRef,
+		TargetPort:  orquestacoreworkflow.OutboxTargetCapacityV0,
+		MessageType: orquestacoreworkflow.OutboxMessageRequestCapacityDecisionV0,
+	})
+	if len(issues) > 0 || len(pending) != 1 {
+		t.Fatalf("pending=%+v issues=%+v", pending, issues)
+	}
+	if pending[0].MessageID != "outbox-requestcapacitydecision-idem-capacity-recovery-001" {
+		t.Fatalf("message_id=%s", pending[0].MessageID)
+	}
+}
+
 func codexStackLaunchOutboxRecoveryRunV0(
 	t *testing.T,
 	ctx context.Context,
@@ -56,6 +92,40 @@ func codexStackLaunchOutboxRecoveryRunV0(
 	t.Helper()
 	run := orquestacoreworkflow.OrchestrationRunV0{}
 	commands := codexStackLaunchOutboxRecoveryCommandsV0(t, runRef)
+	for _, command := range commands {
+		result, err := orquestacoreworkflow.HandleCommandV0(run, command)
+		if err != nil {
+			t.Fatalf("HandleCommandV0 %s: %v", command.CommandType, err)
+		}
+		for _, event := range result.Events {
+			var applyErr error
+			run, applyErr = orquestacoreworkflow.ApplyEventV0(run, event)
+			if applyErr != nil {
+				t.Fatalf("ApplyEventV0 %s: %v", event.EventType, applyErr)
+			}
+		}
+		if len(result.Events) > 0 {
+			if err := eventSink.AppendRunEventsV0(ctx, runRef, result.Events); err != nil {
+				t.Fatalf("AppendRunEventsV0: %v", err)
+			}
+		}
+	}
+	if err := runStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	return run
+}
+
+func codexStackCapacityOutboxRecoveryRunV0(
+	t *testing.T,
+	ctx context.Context,
+	runStore *orquestacionnucleoapp.InMemoryRunStoreV0,
+	eventSink *orquestacionnucleoapp.InMemoryEventSinkV0,
+	runRef string,
+) orquestacoreworkflow.OrchestrationRunV0 {
+	t.Helper()
+	run := orquestacoreworkflow.OrchestrationRunV0{}
+	commands := codexStackCapacityOutboxRecoveryCommandsV0(t, runRef)
 	for _, command := range commands {
 		result, err := orquestacoreworkflow.HandleCommandV0(run, command)
 		if err != nil {
@@ -133,6 +203,40 @@ func codexStackLaunchOutboxRecoveryCommandsV0(
 			Summary:            "Microtarea acotada lista.",
 			EvidenceRefs:       []string{"evidence-ref-agent-launch-outbox-recovery-001"},
 			SkillRefs:          []string{"skill-ref-orquesta-programacion-integracion-v0"},
+		},
+	)
+	commands = append(commands, mustLaunchOutboxRecoveryCommandV0(t, command, err))
+	return commands
+}
+
+func codexStackCapacityOutboxRecoveryCommandsV0(
+	t *testing.T,
+	runRef string,
+) []orquestacoreworkflow.OrchestrationCommandV0 {
+	t.Helper()
+	commands := make([]orquestacoreworkflow.OrchestrationCommandV0, 0, 3)
+	command, err := orquestacoreworkflow.NewStartRunCommandV0(
+		launchOutboxRecoveryCommandMetaV0(runRef, "cmd-start-capacity-recovery-001", "idem-start-capacity-recovery-001"),
+		orquestacoreworkflow.StartRunCommandPayloadV0{
+			ProjectRef: "project-ref-capacity-recovery-001",
+			AppSpecRef: "appspec-ref-capacity-recovery-001",
+		},
+	)
+	commands = append(commands, mustLaunchOutboxRecoveryCommandV0(t, command, err))
+	command, err = orquestacoreworkflow.NewOpenPhaseCommandV0(
+		launchOutboxRecoveryCommandMetaV0(runRef, "cmd-open-programacion-capacity-recovery-001", "idem-open-programacion-capacity-recovery-001"),
+		orquestacoreworkflow.OpenPhaseCommandPayloadV0{PhaseID: string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0)},
+	)
+	commands = append(commands, mustLaunchOutboxRecoveryCommandV0(t, command, err))
+	command, err = orquestacoreworkflow.NewRequestCapacityCommandV0(
+		launchOutboxRecoveryCommandMetaV0(runRef, "cmd-capacity-recovery-001", "idem-capacity-recovery-001"),
+		orquestacoreworkflow.RequestCapacityCommandPayloadV0{
+			CapacityRequestID:          "capacity-ref-capacity-recovery-001",
+			PhaseID:                    string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			TaskRef:                    "task-ref-capacity-recovery-001",
+			ReasonCode:                 "work_profile_implementation",
+			Summary:                    "Capacidad para implementar tarea acotada.",
+			MinimumRecommendedCapacity: orquestacoreworkflow.OrchestrationCapacityHighV0,
 		},
 	)
 	commands = append(commands, mustLaunchOutboxRecoveryCommandV0(t, command, err))

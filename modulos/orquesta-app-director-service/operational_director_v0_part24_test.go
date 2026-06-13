@@ -100,6 +100,75 @@ func TestContinueAppDirectorV0RecuperaWaitStatePersistidoSinAmpliarCohorte(t *te
 	}
 }
 
+func TestContinueOperationalDirectorPlanStateV0NoEsperaRefsNoMaterializadas(t *testing.T) {
+	runRef := "run-app-director-wait-unmaterialized-open"
+	planRef := "plan-ref-wait-unmaterialized-open"
+	taskA := serviceWorkflowTaskForWaitRefsTestV0(runRef, "task-wait-unmaterialized-a", "", "")
+	taskB := serviceWorkflowTaskForWaitRefsTestV0(runRef, "task-wait-unmaterialized-b", "", "")
+	agentA := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskA.TaskID)
+	agentB := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskB.TaskID)
+	state := orquestacionnucleoapp.OperationalDirectorPlanStateV0{
+		SchemaVersion: orquestacionnucleoapp.OperationalDirectorPlanStateSchemaVersionV0,
+		StateRef:      "state-ref-wait-unmaterialized-open",
+		PlanRef:       planRef,
+		RequestRef:    "request-ref-wait-unmaterialized-open",
+		RunRef:        runRef,
+		ProjectRef:    "orquesta",
+		Mode:          orquestadirectoroperativo.OperationalDirectorModeProgrammingV0,
+		Status:        orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0,
+		ActiveStepID:  "step-wait-subagents",
+		ObservedAt:    "2026-05-17T14:09:00Z",
+		PendingAgentRefs: []string{
+			agentA,
+			agentB,
+		},
+		Steps: []orquestacionnucleoapp.OperationalDirectorPlanStepStateV0{{
+			StepID:           "step-wait-subagents",
+			Kind:             orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0,
+			Status:           orquestadirectoroperativo.OperationalDirectorStepRunningV0,
+			TaskRefs:         []string{taskA.TaskID, taskB.TaskID},
+			WaitRefs:         []string{"wait-ref-wait-unmaterialized-open"},
+			AgentRefs:        []string{agentA, agentB},
+			PendingAgentRefs: []string{agentA, agentB},
+		}},
+	}
+	run := serviceRunForWaitRefsTestV0(runRef, taskA.TaskID, taskB.TaskID)
+	run.Agents = []string{agentA}
+	run.StartedAgents = []string{agentA}
+	run.DeliveredAgents = []string{agentA}
+	run.DeliveredTasks = []string{taskA.TaskID}
+	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0()
+	if err := planStateStore.SaveOperationalDirectorPlanStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveOperationalDirectorPlanStateV0: %v", err)
+	}
+	ports := StartAppDirectorPortsV0{
+		RunStore:                  orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+		DirectorTaskStore:         orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(taskA, taskB),
+		OperationalPlanStateStore: planStateStore,
+	}
+	request := ContinueAppDirectorRequestV0{
+		RunRef:                     runRef,
+		OperationalDirectorPlanRef: planRef,
+		OccurredAt:                 "2026-05-17T14:10:00Z",
+		CorrelationID:              "corr-wait-unmaterialized-open",
+	}
+
+	reentered, err := continueRequestWithOperationalDirectorPlanStateV0(context.Background(), request, ports)
+	if err != nil {
+		t.Fatalf("continueRequestWithOperationalDirectorPlanStateV0: %v", err)
+	}
+	if !serviceSameStringSetV0(reentered.WaitAgentRefs, []string{agentA, agentB}) {
+		t.Fatalf("debe conservar scope acotado aunque no haya pendiente externo: reentered=%+v agentA=%s agentB=%s", reentered, agentA, agentB)
+	}
+	refs, err := operationalDirectorPlanStateActiveWaitAgentRefsV0(context.Background(), request, ports)
+	if err != nil {
+		t.Fatalf("operationalDirectorPlanStateActiveWaitAgentRefsV0: %v", err)
+	}
+	if len(refs) != 0 {
+		t.Fatalf("active wait refs=%+v; want empty", refs)
+	}
+}
+
 func TestMaterializeContinueOperationalDirectorPlanV0UsaFaseActualSiNoSeIndica(t *testing.T) {
 	runRef := "run-app-director-operational-plan-phase-001"
 	contractRef := "contract:function:operational-director:v0"

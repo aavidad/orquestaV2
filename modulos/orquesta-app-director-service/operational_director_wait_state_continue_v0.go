@@ -27,12 +27,20 @@ func continueRequestWithLoadedOperationalDirectorPlanStateV0(
 			return recovered, ok, err
 		}
 		request = continueRequestWithOperationalDirectorPlanStepScopeV0(request, state, step)
-		request.WaitAgentRefs = compactServiceRefsV0(append(request.WaitAgentRefs, step.PendingAgentRefs...))
-		request.WaitAgentRefs = compactServiceRefsV0(append(request.WaitAgentRefs, state.PendingAgentRefs...))
-		if len(request.WaitAgentRefs) == 0 {
-			request.WaitAgentRefs = compactServiceRefsV0(append(request.WaitAgentRefs, step.AgentRefs...))
+		scopeAgentRefs := operationalDirectorPlanStateWaitStepScopeAgentRefsV0(state, step)
+		agentRefs := scopeAgentRefs
+		if ports.RunStore != nil {
+			run, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
+			if err != nil {
+				return request, false, err
+			}
+			agentRefs = appDirectorRequestedPendingAgentRefsV0(run, agentRefs)
 		}
-		return request, true, nil
+		if len(agentRefs) == 0 {
+			agentRefs = scopeAgentRefs
+		}
+		request.WaitAgentRefs = compactServiceRefsV0(append(request.WaitAgentRefs, agentRefs...))
+		return request, len(request.WaitAgentRefs) > 0, nil
 	case orquestadirectoroperativo.OperationalDirectorStepReviewDeliveriesV0:
 		if step.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 {
 			return request, false, nil
@@ -175,10 +183,22 @@ func continueRequestWithRecoveredWorkflowTaskWaitStateV0(
 	request.WaitWaveRef = ""
 	request.WaitCohortRef = ""
 	request.WaitParentTaskRef = ""
-	request.WaitAgentRefs = compactServiceRefsV0(append(request.WaitAgentRefs, waitState.PendingAgentRefs...))
-	if len(request.WaitAgentRefs) == 0 {
-		request.WaitAgentRefs = compactServiceRefsV0(append(request.WaitAgentRefs, waitState.AgentRefs...))
+	agentRefs := compactServiceRefsV0(waitState.PendingAgentRefs)
+	if len(agentRefs) == 0 {
+		agentRefs = compactServiceRefsV0(waitState.AgentRefs)
 	}
+	scopeAgentRefs := agentRefs
+	if ports.RunStore != nil {
+		run, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
+		if err != nil {
+			return request, false, err
+		}
+		agentRefs = appDirectorRequestedPendingAgentRefsV0(run, agentRefs)
+	}
+	if len(agentRefs) == 0 {
+		agentRefs = scopeAgentRefs
+	}
+	request.WaitAgentRefs = compactServiceRefsV0(append(request.WaitAgentRefs, agentRefs...))
 	return request, len(request.WaitAgentRefs) > 0, nil
 }
 

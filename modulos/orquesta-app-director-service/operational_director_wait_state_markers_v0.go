@@ -110,6 +110,7 @@ func operationalDirectorPlanStateAfterWaitTerminalWithoutDeliveryV0(
 	}
 	if len(agentRefs) == 0 ||
 		allServiceRefsInSetV0(agentRefs, run.DeliveredAgents) ||
+		appDirectorRunHasUnmaterializedAgentRefsV0(run, agentRefs) ||
 		appDirectorRunHasPendingAgentRefsV0(run, agentRefs) {
 		return state, false, nil
 	}

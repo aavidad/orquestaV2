@@ -132,8 +132,12 @@ func appDirectorExplicitPendingAgentRefsV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	agentRefs []string,
 ) []string {
+	requested := appDirectorRequestedAgentRefsV0(run)
 	pending := make([]string, 0, len(agentRefs))
 	for _, agentRef := range compactServiceRefsV0(agentRefs) {
+		if len(requested) > 0 && !requested[agentRef] {
+			continue
+		}
 		if startAppDirectorStringInSetV0(run.DeliveredAgents, agentRef) ||
 			startAppDirectorStringInSetV0(run.FailedAgents, agentRef) ||
 			startAppDirectorStringInSetV0(run.LostAgents, agentRef) ||
@@ -144,6 +148,70 @@ func appDirectorExplicitPendingAgentRefsV0(
 		pending = append(pending, agentRef)
 	}
 	return pending
+}
+
+func appDirectorRequestedPendingAgentRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	agentRefs []string,
+) []string {
+	requested := appDirectorRequestedAgentRefsV0(run)
+	pending := make([]string, 0, len(agentRefs))
+	for _, agentRef := range compactServiceRefsV0(agentRefs) {
+		if !requested[agentRef] {
+			continue
+		}
+		if appDirectorAgentTerminalInRunV0(run, agentRef) {
+			continue
+		}
+		pending = append(pending, agentRef)
+	}
+	return pending
+}
+
+func appDirectorAgentTerminalInRunV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	agentRef string,
+) bool {
+	return startAppDirectorStringInSetV0(run.DeliveredAgents, agentRef) ||
+		startAppDirectorStringInSetV0(run.FailedAgents, agentRef) ||
+		startAppDirectorStringInSetV0(run.LostAgents, agentRef) ||
+		startAppDirectorStringInSetV0(run.ConfirmedStoppedAgents, agentRef) ||
+		startAppDirectorStringInSetV0(run.StoppedAgents, agentRef)
+}
+
+func appDirectorRequestedAgentRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) map[string]bool {
+	requested := map[string]bool{}
+	for _, values := range [][]string{
+		run.Agents,
+		run.StartedAgents,
+	} {
+		for _, agentRef := range compactServiceRefsV0(values) {
+			requested[agentRef] = true
+		}
+	}
+	return requested
+}
+
+func appDirectorRunHasRequestedAgentRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) bool {
+	return len(compactServiceRefsV0(append(append([]string(nil), run.Agents...), run.StartedAgents...))) > 0
+}
+
+func appDirectorRunHasUnmaterializedAgentRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	agentRefs []string,
+) bool {
+	requested := appDirectorRequestedAgentRefsV0(run)
+	for _, agentRef := range compactServiceRefsV0(agentRefs) {
+		if requested[agentRef] || appDirectorAgentTerminalInRunV0(run, agentRef) {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func normalizeAppDirectorWaitFilterV0(filter appDirectorWaitFilterV0) appDirectorWaitFilterV0 {

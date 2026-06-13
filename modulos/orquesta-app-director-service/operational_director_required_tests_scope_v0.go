@@ -44,6 +44,7 @@ func operationalDirectorPlanRequiredTestsByTaskV0(
 		}
 		taskRequired := compactServiceRefsV0(task.RequiredTests)
 		if len(taskRequired) == 0 {
+			fallback[taskRef] = nil
 			continue
 		}
 		if len(requiredSet) > 0 {

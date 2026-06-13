@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
+	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
 )
 
@@ -31,6 +32,10 @@ func codexSupervisorRuntimeStateFromGlobalSupervisorV0(
 	seenWaitingOutbox := false
 	for _, tick := range result.Ticks {
 		for _, execution := range tick.Result.Executions {
+			if strings.TrimSpace(execution.QueueStatus) == orquestarunqueue.RunStatusRunningV0 {
+				seenRunning = true
+				continue
+			}
 			state := codexSupervisorRuntimeStateFromOutcomeV0(execution.Outcome)
 			switch state {
 			case CodexSupervisorRuntimeFailedV0:

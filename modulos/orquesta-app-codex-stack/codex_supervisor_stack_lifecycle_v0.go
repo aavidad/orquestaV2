@@ -2,6 +2,7 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -185,6 +186,7 @@ func (lifecycle CodexSupervisorStackLifecycleV0) codexSupervisorSnapshotFromDrai
 	planRef string,
 	result orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
 ) CodexSupervisorRuntimeSnapshotV0 {
+	run, projectionEvidenceRefs := lifecycle.codexSupervisorDrainRunForProjectionV0(ctx, runRef, result.Final.Run)
 	evidenceRefs := compactStringsV0(append(
 		[]string{"evidence-ref-codex-supervisor-stack-drain", string(result.Status)},
 		append(
@@ -192,16 +194,23 @@ func (lifecycle CodexSupervisorStackLifecycleV0) codexSupervisorSnapshotFromDrai
 			lifecycle.codexSupervisorOperationalBlockedEvidenceRefsV0(ctx, runRef, planRef, result)...,
 		)...,
 	))
+	evidenceRefs = compactStringsV0(append(evidenceRefs,
+		append(projectionEvidenceRefs, codexSupervisorDrainRunProjectionEvidenceRefsV0(run)...)...,
+	))
 	status := codexSupervisorRuntimeStateFromDrainLoopV0(result.Final)
 	if status == CodexSupervisorRuntimeDoneV0 &&
-		lifecycle.codexSupervisorDrainHasOpenAutoprogrammingWorkV0(ctx, result.Final.Run) {
+		lifecycle.codexSupervisorDrainHasOpenRunWorkV0(ctx, run) {
 		status = CodexSupervisorRuntimeRunningV0
+		evidenceRefs = compactStringsV0(append(
+			evidenceRefs,
+			"evidence-ref-codex-supervisor-stack-drain-open-run-work",
+		))
 	}
 	if codexSupervisorEvidenceRefsContainPartV0(evidenceRefs, "operational-director-plan-state:blocked") {
 		status = CodexSupervisorRuntimeStoppedV0
 	}
-	agentRef := codexSupervisorLastRefV0(stackDrainPendingStartedAgentRefsV0(result.Final.Run))
-	processRef, processStatus, processEvidenceRefs := lifecycle.codexSupervisorLiveProcessProjectionV0(ctx, result.Final.Run, status, agentRef)
+	agentRef := codexSupervisorLastRefV0(stackDrainPendingStartedAgentRefsV0(run))
+	processRef, processStatus, processEvidenceRefs := lifecycle.codexSupervisorLiveProcessProjectionV0(ctx, run, status, agentRef)
 	if processStatus != "" {
 		status = processStatus
 	}
@@ -213,6 +222,32 @@ func (lifecycle CodexSupervisorStackLifecycleV0) codexSupervisorSnapshotFromDrai
 		ProcessRef:   strings.TrimSpace(processRef),
 		EvidenceRefs: evidenceRefs,
 		Diagnostics:  append([]orquestaruncoordinator.RunDrainDiagnosticV0(nil), stackDrainDiagnosticsV0(result)...),
+	}
+}
+
+func (lifecycle CodexSupervisorStackLifecycleV0) codexSupervisorDrainRunForProjectionV0(
+	ctx context.Context,
+	runRef string,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) (orquestacoreworkflow.OrchestrationRunV0, []string) {
+	runRef = strings.TrimSpace(runRef)
+	if runRef == "" || lifecycle.Stack.Stores.RunStore == nil {
+		return run, nil
+	}
+	loaded, err := lifecycle.Stack.Stores.RunStore.LoadRunV0(ctx, runRef)
+	if err != nil {
+		return run, []string{"evidence-ref-codex-supervisor-drain-runstore-load-failed"}
+	}
+	return loaded, []string{"evidence-ref-codex-supervisor-drain-runstore-loaded"}
+}
+
+func codexSupervisorDrainRunProjectionEvidenceRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) []string {
+	return []string{
+		"evidence-ref-codex-supervisor-drain-projection-tasks-" + strconv.Itoa(len(compactStringsV0(run.Tasks))),
+		"evidence-ref-codex-supervisor-drain-projection-open-tasks-" + strconv.Itoa(len(stackDrainOpenTaskRefsV0(run))),
+		"evidence-ref-codex-supervisor-drain-projection-requested-agents-" + strconv.Itoa(len(stackDrainRequestedAgentRefsV0(run))),
 	}
 }
 
@@ -369,16 +404,41 @@ func codexSupervisorRuntimeStateFromDrainLoopV0(
 	return codexSupervisorRuntimeStateFromLoopV0(loop.Status, loop.Run.Status)
 }
 
-func (lifecycle CodexSupervisorStackLifecycleV0) codexSupervisorDrainHasOpenAutoprogrammingWorkV0(
+func (lifecycle CodexSupervisorStackLifecycleV0) codexSupervisorDrainHasOpenRunWorkV0(
 	ctx context.Context,
 	run orquestacoreworkflow.OrchestrationRunV0,
 ) bool {
-	if run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
-		!codexSupervisorRunHasOpenDeliveredTasksV0(run) {
+	if run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
 		return false
 	}
-	hold, err := RunHasOpenAutoprogrammingTasksV0(ctx, lifecycle.Stack.Stores.TaskStore, run)
-	return err == nil && hold
+	if codexSupervisorRunHasOpenNonOperationalDirectorTasksV0(ctx, lifecycle.Stack.Stores.TaskStore, run) {
+		return true
+	}
+	return codexSupervisorRunHasOpenDeliveredNonOperationalDirectorTasksV0(ctx, lifecycle.Stack.Stores.TaskStore, run)
+}
+
+func codexSupervisorRunHasOpenNonOperationalDirectorTasksV0(
+	ctx context.Context,
+	taskStore orquestacionnucleoapp.WorkflowTaskStorePortV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) bool {
+	openRefs := stackDrainOpenTaskRefsV0(run)
+	if len(openRefs) == 0 {
+		return false
+	}
+	if taskStore == nil {
+		return true
+	}
+	tasks, err := taskStore.LoadWorkflowTasksV0(ctx, run.RunID, openRefs)
+	if err != nil {
+		return true
+	}
+	for _, task := range tasks {
+		if !codexSupervisorWorkflowTaskIsInternalOperationalDirectorWorkV0(task) {
+			return true
+		}
+	}
+	return false
 }
 
 func codexSupervisorRunHasOpenDeliveredTasksV0(
@@ -390,6 +450,42 @@ func codexSupervisorRunHasOpenDeliveredTasksV0(
 		}
 	}
 	return false
+}
+
+func codexSupervisorRunHasOpenDeliveredNonOperationalDirectorTasksV0(
+	ctx context.Context,
+	taskStore orquestacionnucleoapp.WorkflowTaskStorePortV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) bool {
+	refs := []string{}
+	for _, taskRef := range compactStringsV0(run.DeliveredTasks) {
+		if !codexStackStringInSetV0(run.ClosedTasks, taskRef) {
+			refs = append(refs, taskRef)
+		}
+	}
+	if len(refs) == 0 {
+		return false
+	}
+	if taskStore == nil {
+		return true
+	}
+	tasks, err := taskStore.LoadWorkflowTasksV0(ctx, run.RunID, refs)
+	if err != nil {
+		return true
+	}
+	for _, task := range tasks {
+		if !codexSupervisorWorkflowTaskIsInternalOperationalDirectorWorkV0(task) {
+			return true
+		}
+	}
+	return false
+}
+
+func codexSupervisorWorkflowTaskIsInternalOperationalDirectorWorkV0(
+	task orquestacoreworkflow.WorkflowTaskV0,
+) bool {
+	return codexStackWorkflowTaskHasOperationalDirectorFunctionContractV0(task) ||
+		codexStackWorkflowTaskHasOperationalDirectorContextRefV0(task)
 }
 
 func codexSupervisorRuntimeStateFromLoopV0(

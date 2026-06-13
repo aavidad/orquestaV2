@@ -72,7 +72,7 @@ func operationalDirectorPlanStatePostLoopScopeV0(
 	}
 	waitAgentRefs := compactServiceRefsV0(loopRequest.WaitAgentRefs)
 	if len(waitAgentRefs) == 0 {
-		refs, err := operationalDirectorPlanStateActiveWaitAgentRefsV0(ctx, request, ports)
+		refs, err := operationalDirectorPlanStateActiveWaitScopeAgentRefsV0(ctx, request, ports)
 		if err != nil {
 			return loop, err
 		}

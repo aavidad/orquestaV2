@@ -6,6 +6,9 @@ import (
 	"testing"
 	"time"
 
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
+	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
 )
 
@@ -28,6 +31,26 @@ func TestCodexStackV0RunGlobalSupervisorAvanzaVariasAppsPorPrioridadV0(t *testin
 	}
 	if result.StopReason != orquestarunsupervisor.RunSupervisorStopMaxExecutionsV0 {
 		t.Fatalf("stop_reason=%q result=%+v", result.StopReason, result)
+	}
+}
+
+func TestCodexSupervisorRuntimeStateFromGlobalSupervisorV0RunningQueueNoEsDone(t *testing.T) {
+	state := codexSupervisorRuntimeStateFromGlobalSupervisorV0(orquestarunsupervisor.RunSupervisorResultV0{
+		StopReason: orquestarunsupervisor.RunSupervisorStopMaxTicksV0,
+		Ticks: []orquestarunsupervisor.RunSupervisorTickSummaryV0{{
+			TickNumber: 1,
+			Result: orquestaruncoordinator.RunCoordinatorTickResultV0{
+				Executions: []orquestaruncoordinator.RunExecutionSummaryV0{{
+					RunRef:      "run-ref-open-work",
+					Outcome:     string(orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0),
+					QueueStatus: orquestarunqueue.RunStatusRunningV0,
+				}},
+			},
+		}},
+	})
+
+	if state != CodexSupervisorRuntimeRunningV0 {
+		t.Fatalf("state=%s", state)
 	}
 }
 

@@ -101,6 +101,25 @@ func operationalDirectorPlanStateActiveWaitAgentRefsV0(
 	request ContinueAppDirectorRequestV0,
 	ports StartAppDirectorPortsV0,
 ) ([]string, error) {
+	refs, err := operationalDirectorPlanStateActiveWaitScopeAgentRefsV0(ctx, request, ports)
+	if err != nil {
+		return nil, err
+	}
+	if ports.RunStore != nil {
+		run, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
+		if err != nil {
+			return nil, err
+		}
+		refs = appDirectorRequestedPendingAgentRefsV0(run, refs)
+	}
+	return refs, nil
+}
+
+func operationalDirectorPlanStateActiveWaitScopeAgentRefsV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+) ([]string, error) {
 	planRef := continueOperationalDirectorPlanRefV0(request)
 	if planRef == "" || ports.OperationalPlanStateStore == nil {
 		return nil, nil
@@ -116,11 +135,18 @@ func operationalDirectorPlanStateActiveWaitAgentRefsV0(
 		activeStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 {
 		return nil, nil
 	}
-	refs := compactServiceRefsV0(append(activeStep.PendingAgentRefs, state.PendingAgentRefs...))
+	return operationalDirectorPlanStateWaitStepScopeAgentRefsV0(state, activeStep), nil
+}
+
+func operationalDirectorPlanStateWaitStepScopeAgentRefsV0(
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+	step orquestacionnucleoapp.OperationalDirectorPlanStepStateV0,
+) []string {
+	refs := compactServiceRefsV0(append(step.PendingAgentRefs, state.PendingAgentRefs...))
 	if len(refs) == 0 {
-		refs = compactServiceRefsV0(activeStep.AgentRefs)
+		refs = compactServiceRefsV0(step.AgentRefs)
 	}
-	return refs, nil
+	return refs
 }
 
 func operationalDirectorScopedQuiescentLoopV0(
@@ -143,7 +169,11 @@ func appDirectorRunHasPendingAgentRefsV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	agentRefs []string,
 ) bool {
+	requested := appDirectorRequestedAgentRefsV0(run)
 	for _, agentRef := range compactServiceRefsV0(agentRefs) {
+		if len(requested) > 0 && !requested[agentRef] && !appDirectorAgentTerminalInRunV0(run, agentRef) {
+			continue
+		}
 		if startAppDirectorStringInSetV0(run.DeliveredAgents, agentRef) ||
 			startAppDirectorStringInSetV0(run.FailedAgents, agentRef) ||
 			startAppDirectorStringInSetV0(run.LostAgents, agentRef) ||

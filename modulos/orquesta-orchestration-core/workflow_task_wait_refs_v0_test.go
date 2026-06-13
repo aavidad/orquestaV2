@@ -37,9 +37,10 @@ func TestBuildWorkflowTaskWaitSnapshotV0IncluyePendientesAcotados(t *testing.T) 
 	runRef := "run-workflow-task-wait-snapshot-001"
 	first := workflowTaskForWaitRefsTestV0(runRef, "task-wait-snapshot-a", "wave-01", "cohort-a")
 	second := workflowTaskForWaitRefsTestV0(runRef, "task-wait-snapshot-b", "wave-01", "cohort-a")
+	unrequested := workflowTaskForWaitRefsTestV0(runRef, "task-wait-snapshot-unrequested", "wave-01", "cohort-a")
 	other := workflowTaskForWaitRefsTestV0(runRef, "task-wait-snapshot-c", "wave-02", "cohort-b")
 	run := mustActiveProgrammingRunV0(t, runRef)
-	run.Tasks = []string{first.TaskID, second.TaskID, other.TaskID}
+	run.Tasks = []string{first.TaskID, second.TaskID, unrequested.TaskID, other.TaskID}
 	run.StartedAgents = []string{
 		WorkflowTaskAgentRequestRefV0(first.TaskID),
 		WorkflowTaskAgentRequestRefV0(second.TaskID),
@@ -50,23 +51,27 @@ func TestBuildWorkflowTaskWaitSnapshotV0IncluyePendientesAcotados(t *testing.T) 
 
 	snapshot, err := BuildWorkflowTaskWaitSnapshotV0(
 		context.Background(),
-		NewInMemoryWorkflowTaskStoreV0(first, second, other),
+		NewInMemoryWorkflowTaskStoreV0(first, second, unrequested, other),
 		run,
 		WorkflowTaskWaitFilterV0{WaveRef: "wave-01", CohortRef: "cohort-a"},
 	)
 	if err != nil {
 		t.Fatalf("BuildWorkflowTaskWaitSnapshotV0: %v", err)
 	}
-	if !sameStringsForTestV0(snapshot.TaskRefs, []string{first.TaskID, second.TaskID}) {
+	if !sameStringsForTestV0(snapshot.TaskRefs, []string{first.TaskID, second.TaskID, unrequested.TaskID}) {
 		t.Fatalf("task_refs=%v", snapshot.TaskRefs)
 	}
 	if !sameStringsForTestV0(snapshot.AgentRefs, []string{
 		WorkflowTaskAgentRequestRefV0(first.TaskID),
 		WorkflowTaskAgentRequestRefV0(second.TaskID),
+		WorkflowTaskAgentRequestRefV0(unrequested.TaskID),
 	}) {
 		t.Fatalf("agent_refs=%v", snapshot.AgentRefs)
 	}
-	if !sameStringsForTestV0(snapshot.PendingAgentRefs, []string{WorkflowTaskAgentRequestRefV0(first.TaskID)}) {
+	if !sameStringsForTestV0(snapshot.PendingAgentRefs, []string{
+		WorkflowTaskAgentRequestRefV0(first.TaskID),
+		WorkflowTaskAgentRequestRefV0(unrequested.TaskID),
+	}) {
 		t.Fatalf("pending_agent_refs=%v", snapshot.PendingAgentRefs)
 	}
 }

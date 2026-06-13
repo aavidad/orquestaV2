@@ -77,16 +77,19 @@ func (stack StackV0) queuedOperationalDirectorWaitAgentRefsV0(
 	if err != nil {
 		return nil, err
 	}
+	requestedAgents := stackDrainRequestedAgentRefsV0(run)
 	refs := make([]string, 0, len(tasks))
 	for _, task := range tasks {
 		if !codexStackWorkflowTaskLooksOperationalDirectorV0(task) {
 			continue
 		}
-		refs = append(refs, orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(task.TaskID))
+		agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(task.TaskID)
+		if !requestedAgents[agentRef] {
+			continue
+		}
+		refs = append(refs, agentRef)
 	}
-	if len(refs) > 0 {
-		refs = append(refs, stackDrainPendingStartedAgentRefsV0(run)...)
-	}
+	refs = append(refs, stackDrainPendingStartedAgentRefsV0(run)...)
 	return compactStringsV0(refs), nil
 }
 
@@ -166,6 +169,21 @@ func stackDrainPendingStartedAgentRefsV0(
 			continue
 		}
 		refs = append(refs, agentRef)
+	}
+	return refs
+}
+
+func stackDrainRequestedAgentRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) map[string]bool {
+	refs := map[string]bool{}
+	for _, values := range [][]string{
+		run.Agents,
+		run.StartedAgents,
+	} {
+		for _, agentRef := range compactStringsV0(values) {
+			refs[agentRef] = true
+		}
 	}
 	return refs
 }

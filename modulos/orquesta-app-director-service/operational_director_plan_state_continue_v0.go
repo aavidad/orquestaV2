@@ -121,7 +121,10 @@ func continueRequestWithOperationalDirectorPlanStateV0(
 	if !applied && hasWaitScope && explicitPlanRef == "" {
 		return request, nil
 	}
-	canContinueWithoutWaitScope := operationalDirectorPlanStateReplanOrCloseRunningV0(state)
+	canContinueWithoutWaitScope, err := operationalDirectorPlanStateCanContinueWithoutWaitScopeV0(ctx, request, ports, state)
+	if err != nil {
+		return ContinueAppDirectorRequestV0{}, err
+	}
 	if explicitPlanRef != "" &&
 		(!applied || (!continueRequestHasWaitScopeV0(next) && !canContinueWithoutWaitScope)) {
 		canProgress, err := continueOperationalDirectorPlanStateCanProgressBlockedRequiredTestsReplanV0(ctx, request, ports, state)
@@ -154,6 +157,36 @@ func operationalDirectorPlanStateReplanOrCloseRunningV0(
 		state.Status == orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0 &&
 		activeStep.Kind == orquestadirectoroperativo.OperationalDirectorStepReplanOrCloseV0 &&
 		activeStep.Status == orquestadirectoroperativo.OperationalDirectorStepRunningV0
+}
+
+func operationalDirectorPlanStateCanContinueWithoutWaitScopeV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+) (bool, error) {
+	if operationalDirectorPlanStateReplanOrCloseRunningV0(state) {
+		return true, nil
+	}
+	activeStep, ok := operationalDirectorPlanStateActiveStepV0(state)
+	if !ok ||
+		state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0 ||
+		activeStep.Kind != orquestadirectoroperativo.OperationalDirectorStepWaitSubagentsV0 ||
+		activeStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 {
+		return false, nil
+	}
+	agentRefs := compactServiceRefsV0(append(activeStep.PendingAgentRefs, state.PendingAgentRefs...))
+	if len(agentRefs) == 0 {
+		agentRefs = compactServiceRefsV0(activeStep.AgentRefs)
+	}
+	if len(agentRefs) == 0 || ports.RunStore == nil {
+		return false, nil
+	}
+	run, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
+	if err != nil {
+		return false, err
+	}
+	return len(appDirectorRequestedPendingAgentRefsV0(run, agentRefs)) == 0, nil
 }
 
 func operationalDirectorPlanStateBlockedRequiredTestsEvidenceMissingV0(

@@ -101,7 +101,7 @@ func TestCodexStackV0RunGlobalTickResidenteNoBloqueaEnExternalWaiterV0(t *testin
 	}
 	if len(result.Executions) != 1 ||
 		result.Executions[0].RunRef != runRef ||
-		result.Executions[0].Outcome != string(orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0) {
+		result.Executions[0].Outcome != string(orquestacionnucleoapp.ProgressiveLoopStatusMaxBurstsV0) {
 		t.Fatalf("result=%+v", result)
 	}
 }
@@ -798,6 +798,7 @@ func TestCodexStackV0RecoverTerminalizaRunRunningConStopCheckpointSinAgentesPend
 	run := codexStackAutoprogrammingRunForCoordinatorRepairTestV0(runRef, taskRef)
 	run.StartedAgents = []string{agentRef}
 	run.ConfirmedStoppedAgents = []string{agentRef}
+	run.DeliveredTasks = []string{taskRef}
 	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), run); err != nil {
 		t.Fatalf("SaveRunV0: %v", err)
 	}
@@ -880,6 +881,7 @@ func TestCodexStackV0RecoverTerminalizaRunStoppedConStopCheckpointSinAgentesPend
 	run := codexStackAutoprogrammingRunForCoordinatorRepairTestV0(runRef, taskRef)
 	run.StartedAgents = []string{agentRef}
 	run.ConfirmedStoppedAgents = []string{agentRef}
+	run.DeliveredTasks = []string{taskRef}
 	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), run); err != nil {
 		t.Fatalf("SaveRunV0: %v", err)
 	}
@@ -935,6 +937,54 @@ func TestCodexStackV0RecoverTerminalizaRunStoppedConStopCheckpointSinAgentesPend
 	}
 	if len(visible) != 0 {
 		t.Fatalf("run parada no debe reencolarse como ejecutable: %+v", visible)
+	}
+}
+
+func TestCodexStackV0RecoverNoTerminalizaStopConTareasAbiertasV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	runRef := "request-ref-autoprogramming-stop-open-tasks-001"
+	taskRef := "task-autoprogramming-stop-open-tasks-001"
+	agentRef := "agent-ref-stop-open-tasks-001"
+	state, err := stack.Stores.RunControl.StopRunV0(context.Background(), orquestaruncontrol.StopRunCommandV0{
+		RunRef:       runRef,
+		RequestedBy:  "orquesta-director",
+		Reason:       "stop solicitado con trabajo abierto",
+		EvidenceRefs: []string{"evidence-ref-test-stop-open-tasks"},
+	})
+	if err != nil {
+		t.Fatalf("StopRunV0: %v", err)
+	}
+	run := codexStackAutoprogrammingRunForCoordinatorRepairTestV0(runRef, taskRef)
+	run.StartedAgents = []string{agentRef}
+	run.ConfirmedStoppedAgents = []string{agentRef}
+
+	if completed, err := stack.completeQueuedRunControlIfStopHasNoPendingAgentsV0(
+		context.Background(),
+		globalTickCommandForTestV0(),
+		orquestarunqueue.RunSchedulingCandidateV0{
+			RunRef:        runRef,
+			AppRef:        "project-ref-orquesta-server",
+			Status:        orquestarunqueue.RunStatusRunningV0,
+			PriorityScore: 80,
+			UpdatedAt:     time.Date(2026, 5, 27, 14, 20, 0, 0, time.UTC),
+		},
+		state,
+		run,
+	); err != nil {
+		t.Fatalf("completeQueuedRunControlIfStopHasNoPendingAgentsV0: %v", err)
+	} else if completed {
+		t.Fatalf("completeQueuedRunControlIfStopHasNoPendingAgentsV0 completed con tareas abiertas")
+	}
+	state, err = stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: runRef},
+	)
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0: %v", err)
+	}
+	if state.Status == orquestaruncontrol.RunControlStatusStoppedV0 ||
+		codexStackStringInSetV0(state.EvidenceRefs, "evidence-ref-run-control-complete-no-pending-agents") {
+		t.Fatalf("run-control terminalizado con tareas abiertas: %+v", state)
 	}
 }
 
@@ -1204,11 +1254,13 @@ func TestCodexStackV0WaitRefsColaReparaTasksEntregadasYAgentesArrancadosPendient
 	deliveredTaskRef := "task-autoprogramming-wait-repair-001"
 	reworkTaskRef := "task-ref-review-rework-task-autoprogramming-wait-repair-001"
 	ghostTaskRef := "task-ref-review-rework-task-autoprogramming-wait-repair-ghost-001"
+	unrequestedTaskRef := "task-ref-review-rework-task-autoprogramming-wait-repair-unrequested-001"
 	deliveredAgentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(deliveredTaskRef)
 	reworkAgentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(reworkTaskRef)
+	unrequestedAgentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(unrequestedTaskRef)
 
 	run := codexStackAutoprogrammingRunForCoordinatorRepairTestV0(runRef, deliveredTaskRef)
-	run.Tasks = []string{deliveredTaskRef, reworkTaskRef, ghostTaskRef}
+	run.Tasks = []string{deliveredTaskRef, reworkTaskRef, ghostTaskRef, unrequestedTaskRef}
 	run.Agents = []string{deliveredAgentRef, reworkAgentRef}
 	run.StartedAgents = []string{deliveredAgentRef, reworkAgentRef}
 	run.DeliveredAgents = []string{deliveredAgentRef}
@@ -1222,6 +1274,12 @@ func TestCodexStackV0WaitRefsColaReparaTasksEntregadasYAgentesArrancadosPendient
 	); err != nil {
 		t.Fatalf("SaveWorkflowTaskV0 ghost: %v", err)
 	}
+	if err := stack.Ports.DirectorTaskStore.SaveWorkflowTaskV0(
+		context.Background(),
+		stackDeliveredOperationalTaskForTestV0(runRef, unrequestedTaskRef),
+	); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0 unrequested: %v", err)
+	}
 
 	refs, err := stack.queuedOperationalDirectorWaitAgentRefsV0(context.Background(), runRef)
 	if err != nil {
@@ -1232,6 +1290,9 @@ func TestCodexStackV0WaitRefsColaReparaTasksEntregadasYAgentesArrancadosPendient
 	}
 	if codexStackStringInSetV0(refs, deliveredAgentRef) {
 		t.Fatalf("wait refs no deben reabrir agente ya entregado: refs=%v delivered=%s", refs, deliveredAgentRef)
+	}
+	if codexStackStringInSetV0(refs, unrequestedAgentRef) {
+		t.Fatalf("wait refs no deben esperar agentes no materializados: refs=%v unrequested=%s", refs, unrequestedAgentRef)
 	}
 	if codexStackStringInSetV0(stackDrainOpenTaskRefsV0(run), deliveredTaskRef) {
 		t.Fatalf("open task refs no deben incluir tarea ya entregada: open=%v", stackDrainOpenTaskRefsV0(run))
