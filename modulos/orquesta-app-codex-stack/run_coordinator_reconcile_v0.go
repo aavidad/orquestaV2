@@ -24,6 +24,7 @@ func (stack StackV0) recoverQueuedStoppedActiveRunsV0(
 		orquestarunqueue.RunQueueReadRequestV0{
 			QueueRef:             strings.TrimSpace(command.QueueRef),
 			AppRefs:              append([]string(nil), command.AppRefs...),
+			Limit:                queuedStoppedRecoveryReadLimitV0(command),
 			IncludeNonExecutable: true,
 		},
 	)
@@ -32,6 +33,9 @@ func (stack StackV0) recoverQueuedStoppedActiveRunsV0(
 	}
 	policy := buildQueuedStoppedRecoveryPolicyV0(candidates)
 	for _, candidate := range candidates {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if !policy.shouldRecoverV0(candidate) {
 			continue
 		}
@@ -40,6 +44,17 @@ func (stack StackV0) recoverQueuedStoppedActiveRunsV0(
 		}
 	}
 	return nil
+}
+
+const defaultQueuedStoppedRecoveryReadLimitV0 = 70
+
+func queuedStoppedRecoveryReadLimitV0(
+	command orquestaruncoordinator.RunCoordinatorTickCommandV0,
+) int {
+	if command.QueueLimit > 0 {
+		return command.QueueLimit
+	}
+	return defaultQueuedStoppedRecoveryReadLimitV0
 }
 
 type queuedStoppedRecoveryPolicyV0 struct {
@@ -298,21 +313,18 @@ func (stack StackV0) recoverQueuedRunControlV0(
 	}
 	evaluation := orquestaruncontrol.EvaluateRunControlV0(state)
 	if evaluation.StopAgentsAllowed && !orquestarunqueue.IsExecutableRunStatusV0(candidate.Status) {
-		_, err := stack.Stores.RunQueue.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
-			RunRef:         candidate.RunRef,
-			QueueRef:       command.QueueRef,
-			AppRef:         candidate.AppRef,
-			Status:         orquestarunqueue.RunStatusReadyV0,
-			PriorityScore:  candidate.PriorityScore,
-			UpdatedAt:      command.OccurredAt,
-			RequestedBy:    "orquesta-app-codex-stack-run-control-reconciler",
-			Reason:         "queued_non_executable_stop_requested_reconciled",
-			IdempotencyKey: "idem-run-queue-reconcile-stop-ready-" + codexStackOperationalClosureSafeRefV0(candidate.RunRef),
-			EvidenceRefs: append(
+		_, err := stack.Stores.RunQueue.SetRunPriorityV0(ctx, stackRunQueueCommandFromCandidateV0(
+			command,
+			candidate,
+			orquestarunqueue.RunStatusReadyV0,
+			"orquesta-app-codex-stack-run-control-reconciler",
+			"queued_non_executable_stop_requested_reconciled",
+			"idem-run-queue-reconcile-stop-ready-"+codexStackOperationalClosureSafeRefV0(candidate.RunRef),
+			compactStringsV0(append(
 				append([]string(nil), candidate.EvidenceRefs...),
 				"evidence-ref-run-queue-stop-requested-ready-for-drain",
-			),
-		})
+			)),
+		))
 		return err
 	}
 	if !evaluation.DispatchAllowed {
@@ -321,21 +333,18 @@ func (stack StackV0) recoverQueuedRunControlV0(
 	if orquestarunqueue.IsExecutableRunStatusV0(candidate.Status) {
 		return nil
 	}
-	_, err := stack.Stores.RunQueue.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
-		RunRef:         candidate.RunRef,
-		QueueRef:       command.QueueRef,
-		AppRef:         candidate.AppRef,
-		Status:         orquestarunqueue.RunStatusReadyV0,
-		PriorityScore:  candidate.PriorityScore,
-		UpdatedAt:      command.OccurredAt,
-		RequestedBy:    "orquesta-app-codex-stack-run-control-reconciler",
-		Reason:         "queued_non_executable_active_run_reconciled",
-		IdempotencyKey: "idem-run-queue-reconcile-ready-" + codexStackOperationalClosureSafeRefV0(candidate.RunRef),
-		EvidenceRefs: []string{
+	_, err := stack.Stores.RunQueue.SetRunPriorityV0(ctx, stackRunQueueCommandFromCandidateV0(
+		command,
+		candidate,
+		orquestarunqueue.RunStatusReadyV0,
+		"orquesta-app-codex-stack-run-control-reconciler",
+		"queued_non_executable_active_run_reconciled",
+		"idem-run-queue-reconcile-ready-"+codexStackOperationalClosureSafeRefV0(candidate.RunRef),
+		compactStringsV0(append(append([]string(nil), candidate.EvidenceRefs...),
 			"evidence-ref-run-queue-non-executable-active-reconciled",
 			"evidence-ref-run-control-dispatch-allowed",
-		},
-	})
+		)),
+	))
 	return err
 }
 
@@ -351,19 +360,45 @@ func (stack StackV0) syncQueuedRunControlBlockedCandidateV0(
 	}
 	refs := append([]string(nil), candidate.EvidenceRefs...)
 	refs = append(refs, "evidence-ref-run-queue-run-control-blocked-reconciled")
-	_, err := stack.Stores.RunQueue.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
-		RunRef:         candidate.RunRef,
-		QueueRef:       command.QueueRef,
-		AppRef:         candidate.AppRef,
-		Status:         status,
-		PriorityScore:  candidate.PriorityScore,
-		UpdatedAt:      command.OccurredAt,
-		RequestedBy:    "orquesta-app-codex-stack-run-control-reconciler",
-		Reason:         "queued_run_control_blocked_reconciled",
-		IdempotencyKey: "idem-run-queue-reconcile-blocked-" + codexStackOperationalClosureSafeRefV0(candidate.RunRef),
-		EvidenceRefs:   refs,
-	})
+	_, err := stack.Stores.RunQueue.SetRunPriorityV0(ctx, stackRunQueueCommandFromCandidateV0(
+		command,
+		candidate,
+		status,
+		"orquesta-app-codex-stack-run-control-reconciler",
+		"queued_run_control_blocked_reconciled",
+		"idem-run-queue-reconcile-blocked-"+codexStackOperationalClosureSafeRefV0(candidate.RunRef),
+		refs,
+	))
 	return err
+}
+
+func stackRunQueueCommandFromCandidateV0(
+	command orquestaruncoordinator.RunCoordinatorTickCommandV0,
+	candidate orquestarunqueue.RunSchedulingCandidateV0,
+	status string,
+	requestedBy string,
+	reason string,
+	idempotencyKey string,
+	evidenceRefs []string,
+) orquestarunqueue.RunQueuePriorityCommandV0 {
+	return orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:           candidate.RunRef,
+		QueueRef:         command.QueueRef,
+		AppRef:           candidate.AppRef,
+		Status:           status,
+		PriorityScore:    candidate.PriorityScore,
+		UpdatedAt:        command.OccurredAt,
+		FairnessGroupRef: candidate.FairnessGroupRef,
+		AttemptGroup:     candidate.AttemptGroup,
+		ParentRunRef:     candidate.ParentRunRef,
+		SupersedesRunRef: candidate.SupersedesRunRef,
+		RescueReason:     candidate.RescueReason,
+		RequestedBy:      requestedBy,
+		Reason:           reason,
+		IdempotencyKey:   idempotencyKey,
+		EvidenceRefs:     evidenceRefs,
+		WorksetClaims:    candidate.WorksetClaims,
+	}
 }
 
 func codexStackTerminalStatusForRunControlRequestV0(

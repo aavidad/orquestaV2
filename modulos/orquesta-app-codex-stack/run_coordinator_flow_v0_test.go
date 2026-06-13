@@ -567,8 +567,8 @@ func TestCodexStackV0RecoverReencolaRunEntregadaConStopCheckpointParaDrenarV0(t 
 	if err := stack.recoverQueuedStoppedActiveRunsV0(context.Background(), command); err != nil {
 		t.Fatalf("recoverQueuedStoppedActiveRunsV0: %v", err)
 	}
-	if trackedQueue.lastRead.Limit != 0 || !trackedQueue.lastRead.IncludeNonExecutable {
-		t.Fatalf("reconciliacion debe revisar toda la cola no ejecutable: read=%+v", trackedQueue.lastRead)
+	if trackedQueue.lastRead.Limit != 1 || !trackedQueue.lastRead.IncludeNonExecutable {
+		t.Fatalf("reconciliacion debe respetar el lote acotado de cola: read=%+v", trackedQueue.lastRead)
 	}
 
 	visible, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
@@ -867,14 +867,36 @@ func TestCodexStackV0RecoverReencolaRunActivoNoEjecutableConTrabajoAbiertoV0(t *
 	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), run); err != nil {
 		t.Fatalf("SaveRunV0: %v", err)
 	}
-	if _, err := stack.Stores.RunQueue.SetRunPriorityV0(context.Background(), orquestarunqueue.RunQueuePriorityCommandV0{
+	claim := orquestarunqueue.WorksetClaimV0{
+		SchemaVersion: orquestarunqueue.WorksetClaimSchemaVersionV0,
+		ClaimRef:      "claim-ref-autoprogramming-requeue-active-001",
 		RunRef:        runRef,
-		QueueRef:      DefaultRunQueueRefV0,
-		AppRef:        "project-ref-orquesta-server",
-		Status:        orquestarunqueue.RunStatusCanceledV0,
-		PriorityScore: 70,
-		UpdatedAt:     time.Date(2026, 5, 25, 16, 0, 0, 0, time.UTC),
-		EvidenceRefs:  []string{"evidence-ref-test-stale-canceled-queue"},
+		TaskRef:       taskRef,
+		WriteSet: []orquestarunqueue.ScopeRefV0{{
+			Ref: "modulos/orquesta-app-codex-stack",
+		}},
+	}
+	attempt := orquestarunqueue.RunQueueAttemptGroupV0{
+		GroupRef:     "attempt-group-autoprogramming-requeue-active-001",
+		ConsumerRef:  "consumer-ref-orquesta-core",
+		ObjectiveRef: "objective-ref-autonomy",
+		WorkItemRef:  taskRef,
+		WriteSetRefs: []string{"modulos/orquesta-app-codex-stack"},
+	}
+	if _, err := stack.Stores.RunQueue.SetRunPriorityV0(context.Background(), orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:           runRef,
+		QueueRef:         DefaultRunQueueRefV0,
+		AppRef:           "project-ref-orquesta-server",
+		Status:           orquestarunqueue.RunStatusCanceledV0,
+		PriorityScore:    70,
+		UpdatedAt:        time.Date(2026, 5, 25, 16, 0, 0, 0, time.UTC),
+		FairnessGroupRef: "fairness-ref-autoprogramming",
+		AttemptGroup:     attempt,
+		ParentRunRef:     "parent-run-ref-autoprogramming-requeue-active",
+		SupersedesRunRef: "superseded-run-ref-autoprogramming-requeue-active",
+		RescueReason:     "stale_queue_state",
+		EvidenceRefs:     []string{"evidence-ref-test-stale-canceled-queue"},
+		WorksetClaims:    []orquestarunqueue.WorksetClaimV0{claim},
 	}); err != nil {
 		t.Fatalf("SetRunPriorityV0: %v", err)
 	}
@@ -904,6 +926,14 @@ func TestCodexStackV0RecoverReencolaRunActivoNoEjecutableConTrabajoAbiertoV0(t *
 	if len(visibleAfter) != 1 ||
 		visibleAfter[0].RunRef != runRef ||
 		visibleAfter[0].Status != orquestarunqueue.RunStatusReadyV0 ||
+		visibleAfter[0].FairnessGroupRef != "fairness-ref-autoprogramming" ||
+		visibleAfter[0].AttemptGroup.WorkItemRef != taskRef ||
+		visibleAfter[0].ParentRunRef != "parent-run-ref-autoprogramming-requeue-active" ||
+		visibleAfter[0].SupersedesRunRef != "superseded-run-ref-autoprogramming-requeue-active" ||
+		visibleAfter[0].RescueReason != "stale_queue_state" ||
+		len(visibleAfter[0].WorksetClaims) != 1 ||
+		visibleAfter[0].WorksetClaims[0].ClaimRef != claim.ClaimRef ||
+		!codexStackStringInSetV0(visibleAfter[0].EvidenceRefs, "evidence-ref-test-stale-canceled-queue") ||
 		!codexStackStringInSetV0(visibleAfter[0].EvidenceRefs, "evidence-ref-run-queue-non-executable-active-reconciled") {
 		t.Fatalf("visibleAfter=%+v", visibleAfter)
 	}

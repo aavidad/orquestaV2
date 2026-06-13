@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strconv"
 	"testing"
+	"time"
 
 	orquestacoreconcurrency "orquesta/modulos/orquesta-core-concurrency"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -16,6 +17,85 @@ import (
 	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
+
+func TestRuntimeResidentDirectorConduceDirectorCycleStepTrasRestartV0(t *testing.T) {
+	ctx := context.Background()
+	config := directorCycleResidentConfigV0(t)
+	config.Addr = "127.0.0.1:0"
+	config.ResidentDirectorEnabled = true
+	config.ResidentDirectorMaxActions = 3
+	config.TickInterval = time.Hour
+	config.AuditDisabled = true
+	config.IdleSelfImprovementDisabled = true
+	config.ShutdownGracePeriod = 500 * time.Millisecond
+	stack, err := buildStackFromEnvV0(config)
+	if err != nil {
+		t.Fatalf("buildStackFromEnvV0: %v", err)
+	}
+	workflow := newResidentCycleWorkflowV0(t)
+	firstDirector := &residentCycleRuntimeDirectorV0{
+		workflow: workflow,
+		ledger:   stack.Stores.OutboxLedger,
+	}
+	firstRuntime, err := orquestaserver.NewRuntimeV0(config, orquestaserver.RuntimeDepsV0{
+		ResidentDirector: firstDirector,
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0 first: %v", err)
+	}
+
+	firstCancelCtx, firstCancel := context.WithCancel(ctx)
+	firstDone := make(chan error, 1)
+	go func() { firstDone <- firstRuntime.RunV0(firstCancelCtx) }()
+	firstState := waitRuntimeResidentDirectorTicksForTestV0(t, firstRuntime, 1)
+	firstCancel()
+	if err := waitRuntimeDoneForCycleResidentTestV0(t, firstDone); err != nil {
+		t.Fatalf("first RunV0: %v", err)
+	}
+	if firstDirector.calls != 1 ||
+		len(firstDirector.results) != 1 ||
+		firstDirector.results[0].Status != orquestadirectorrunner.DirectorCycleStatusOutboxPendingV0 ||
+		firstState.ResidentDirectorLastResult != string(orquestadirectorrunner.DirectorCycleStatusOutboxPendingV0) ||
+		firstState.ResidentDirectorExecutedActions != 1 {
+		t.Fatalf("first state=%+v director=%+v", firstState, firstDirector)
+	}
+
+	restartedStack, err := buildStackFromEnvV0(config)
+	if err != nil {
+		t.Fatalf("restart buildStackFromEnvV0: %v", err)
+	}
+	secondDirector := &residentCycleRuntimeDirectorV0{
+		workflow: workflow,
+		ledger:   restartedStack.Stores.OutboxLedger,
+	}
+	secondRuntime, err := orquestaserver.NewRuntimeV0(config, orquestaserver.RuntimeDepsV0{
+		ResidentDirector: secondDirector,
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0 second: %v", err)
+	}
+	secondCancelCtx, secondCancel := context.WithCancel(ctx)
+	secondDone := make(chan error, 1)
+	go func() { secondDone <- secondRuntime.RunV0(secondCancelCtx) }()
+	secondState := waitRuntimeResidentDirectorTicksForTestV0(t, secondRuntime, 2)
+	secondCancel()
+	if err := waitRuntimeDoneForCycleResidentTestV0(t, secondDone); err != nil {
+		t.Fatalf("second RunV0: %v", err)
+	}
+	if secondDirector.calls != 1 ||
+		len(secondDirector.results) != 1 ||
+		secondDirector.results[0].Status != orquestadirectorrunner.DirectorCycleStatusWaitingV0 ||
+		!reflect.DeepEqual(secondDirector.results[0].PendingOutboxBeforeRefs, firstDirector.results[0].PendingOutboxAfterRefs) ||
+		secondState.ResidentDirectorLastResult != string(orquestadirectorrunner.DirectorCycleStatusWaitingV0) {
+		t.Fatalf("second state=%+v director=%+v first=%+v", secondState, secondDirector, firstDirector)
+	}
+	pending, issues := restartedStack.Stores.OutboxLedger.ListPending(ctx, orquestadirectorcycleoutbox.DirectorCycleOutboxPendingFilterV0{
+		RunRef: workflow.run.RunID,
+	})
+	if len(issues) != 0 || len(pending) != 1 {
+		t.Fatalf("pending=%+v issues=%+v", pending, issues)
+	}
+}
 
 func TestDirectorCycleResidentRestartSmokeV0(t *testing.T) {
 	ctx := context.Background()
@@ -293,4 +373,78 @@ func (executor *residentCycleDispatchExecutorV0) ExecuteOutboxDispatchV0(
 		DispatchRef:  "dispatch-ref-" + intent.MessageID,
 		EvidenceRefs: []string{"evidence-ref-resident-cycle-dispatch"},
 	}, nil
+}
+
+type residentCycleRuntimeDirectorV0 struct {
+	workflow *residentCycleWorkflowV0
+	ledger   orquestadirectorcycleoutbox.DirectorCycleOutboxLedgerPortV0
+	calls    int
+	results  []orquestadirectorcycle.DirectorCycleStepResultV0
+}
+
+func (director *residentCycleRuntimeDirectorV0) RunResidentDirectorV0(
+	ctx context.Context,
+	command orquestaserver.ResidentDirectorCommandV0,
+) (orquestaserver.ResidentDirectorResultV0, error) {
+	director.calls++
+	step, err := orquestadirectorcycle.ExecuteDirectorCycleStepV0(
+		ctx,
+		residentCycleInputV0(
+			director.workflow,
+			director.ledger,
+			"cycle-ref-runtime-resident-"+strconv.Itoa(director.calls),
+			"tick-ref-runtime-resident-"+strconv.Itoa(director.calls),
+		),
+	)
+	director.results = append(director.results, step)
+	return orquestaserver.ResidentDirectorResultV0{
+		Status:          string(step.Status),
+		RunRef:          step.RunRef,
+		ExecutedActions: residentCycleRuntimeExecutedActionsV0(step),
+		EvidenceRefs: []string{
+			"evidence-ref-runtime-resident-director-cycle",
+			command.CorrelationID,
+		},
+	}, err
+}
+
+func residentCycleRuntimeExecutedActionsV0(
+	step orquestadirectorcycle.DirectorCycleStepResultV0,
+) int {
+	if step.OutboxSavedCount > 0 {
+		return step.OutboxSavedCount
+	}
+	return len(step.AppliedCommands)
+}
+
+func waitRuntimeResidentDirectorTicksForTestV0(
+	t *testing.T,
+	runtime *orquestaserver.RuntimeV0,
+	minTicks int,
+) orquestaserver.StateV0 {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		state := runtime.StateV0()
+		if state.ResidentDirectorTicks >= minTicks && !state.ResidentDirectorTickActive {
+			return state
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("runtime sin ticks residentes suficientes: state=%+v want>=%d", runtime.StateV0(), minTicks)
+	return orquestaserver.StateV0{}
+}
+
+func waitRuntimeDoneForCycleResidentTestV0(
+	t *testing.T,
+	done <-chan error,
+) error {
+	t.Helper()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(2 * time.Second):
+		t.Fatalf("runtime no paro")
+		return nil
+	}
 }

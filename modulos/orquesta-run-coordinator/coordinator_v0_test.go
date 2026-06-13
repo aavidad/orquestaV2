@@ -77,6 +77,78 @@ func TestCoordinateRunsTickPropagaMetadataCausalDeRescateV0(t *testing.T) {
 	}
 }
 
+func TestCoordinateRunsTickPreservaMetadataCausalAlRotarColaV0(t *testing.T) {
+	now := time.Date(2026, 6, 13, 10, 0, 0, 0, time.UTC)
+	claim := orquestarunqueue.WorksetClaimV0{
+		SchemaVersion: orquestarunqueue.WorksetClaimSchemaVersionV0,
+		ClaimRef:      "claim-ref-run-preserve",
+		RunRef:        "run-preserve",
+		TaskRef:       "task-preserve",
+		WriteSet: []orquestarunqueue.ScopeRefV0{{
+			Ref: "modulos/orquesta-run-coordinator",
+		}},
+	}
+	candidate := candidateWithUpdatedAtV0("run-preserve", "app", 9, now.Add(-time.Minute))
+	candidate.FairnessGroupRef = "fairness-preserve"
+	candidate.AttemptGroup = orquestarunqueue.RunQueueAttemptGroupV0{
+		GroupRef:     "attempt-group-preserve",
+		ConsumerRef:  "consumer-preserve",
+		ObjectiveRef: "objective-preserve",
+		WorkItemRef:  "task-preserve",
+		WriteSetRefs: []string{"modulos/orquesta-run-coordinator"},
+	}
+	candidate.ParentRunRef = "run-parent"
+	candidate.SupersedesRunRef = "run-superseded"
+	candidate.RescueReason = "reconcile_stale_state"
+	candidate.WorksetClaims = []orquestarunqueue.WorksetClaimV0{claim}
+	queue := &fakeQueueStoreV0{candidates: []orquestarunqueue.RunSchedulingCandidateV0{candidate}}
+	drainer := &fakeDrainerV0{
+		results: map[string]RunDrainResultV0{
+			"run-preserve": {
+				RunRef:      "run-preserve",
+				AppRef:      "app",
+				Outcome:     "quiescent",
+				QueueStatus: orquestarunqueue.RunStatusDeliveredV0,
+			},
+		},
+	}
+	deps := RunCoordinatorDepsV0{
+		QueueReader:   queue,
+		QueueUpdater:  queue,
+		ControlReader: &fakeControlReaderV0{states: map[string]orquestaruncontrol.RunControlStateV0{}, missing: map[string]bool{}},
+		Drainer:       drainer,
+	}
+	command := tickCommandV0(1)
+	command.QueueRef = "queue-preserve"
+	command.OccurredAt = now
+	command.RankingPolicy = orquestarunqueue.DefaultRunQueueRankingPolicyV0(now)
+
+	result, err := CoordinateRunsTickV0(context.Background(), deps, command)
+	if err != nil {
+		t.Fatalf("coordinate tick: %v", err)
+	}
+
+	if len(result.Executions) != 1 || len(queue.commands) != 1 {
+		t.Fatalf("result=%+v commands=%+v", result, queue.commands)
+	}
+	written := queue.commands[0]
+	if written.Status != orquestarunqueue.RunStatusDeliveredV0 ||
+		written.FairnessGroupRef != candidate.FairnessGroupRef ||
+		written.AttemptGroup.WorkItemRef != candidate.AttemptGroup.WorkItemRef ||
+		written.ParentRunRef != candidate.ParentRunRef ||
+		written.SupersedesRunRef != candidate.SupersedesRunRef ||
+		written.RescueReason != candidate.RescueReason ||
+		len(written.WorksetClaims) != 1 ||
+		written.WorksetClaims[0].ClaimRef != claim.ClaimRef {
+		t.Fatalf("command no preserva metadata causal: %+v", written)
+	}
+	if queue.candidates[0].Status != orquestarunqueue.RunStatusDeliveredV0 ||
+		len(queue.candidates[0].WorksetClaims) != 1 ||
+		queue.candidates[0].WorksetClaims[0].ClaimRef != claim.ClaimRef {
+		t.Fatalf("candidate actualizado sin metadata: %+v", queue.candidates[0])
+	}
+}
+
 func TestCoordinateRunsTickSkipsPausedV0(t *testing.T) {
 	deps := coordinatorDepsV0([]orquestarunqueue.RunSchedulingCandidateV0{
 		candidateV0("run-paused", "app", 9),
@@ -616,6 +688,7 @@ func (fake *fakeQueueReaderV0) ListRunSchedulingCandidatesV0(
 
 type fakeQueueStoreV0 struct {
 	candidates []orquestarunqueue.RunSchedulingCandidateV0
+	commands   []orquestarunqueue.RunQueuePriorityCommandV0
 }
 
 func (fake *fakeQueueStoreV0) ListRunSchedulingCandidatesV0(
@@ -629,6 +702,7 @@ func (fake *fakeQueueStoreV0) SetRunPriorityV0(
 	_ context.Context,
 	command orquestarunqueue.RunQueuePriorityCommandV0,
 ) (orquestarunqueue.RunSchedulingCandidateV0, error) {
+	fake.commands = append(fake.commands, command)
 	for index := range fake.candidates {
 		if fake.candidates[index].RunRef != command.RunRef {
 			continue
@@ -638,7 +712,23 @@ func (fake *fakeQueueStoreV0) SetRunPriorityV0(
 		}
 		fake.candidates[index].UpdatedAt = command.UpdatedAt
 		fake.candidates[index].PriorityScore = command.PriorityScore
+		if command.FairnessGroupRef != "" {
+			fake.candidates[index].FairnessGroupRef = command.FairnessGroupRef
+		}
+		if !orquestarunqueue.RunQueueAttemptGroupEmptyV0(command.AttemptGroup) {
+			fake.candidates[index].AttemptGroup = command.AttemptGroup
+		}
+		if command.ParentRunRef != "" {
+			fake.candidates[index].ParentRunRef = command.ParentRunRef
+		}
+		if command.SupersedesRunRef != "" {
+			fake.candidates[index].SupersedesRunRef = command.SupersedesRunRef
+		}
+		if command.RescueReason != "" {
+			fake.candidates[index].RescueReason = command.RescueReason
+		}
 		fake.candidates[index].EvidenceRefs = append([]string(nil), command.EvidenceRefs...)
+		fake.candidates[index].WorksetClaims = append([]orquestarunqueue.WorksetClaimV0(nil), command.WorksetClaims...)
 		return fake.candidates[index], nil
 	}
 	return orquestarunqueue.RunSchedulingCandidateV0{}, errors.New("run not found")
@@ -742,6 +832,13 @@ func cloneCandidatesV0(
 	for index := range cloned {
 		cloned[index].AttemptGroup.WriteSetRefs = append([]string(nil), cloned[index].AttemptGroup.WriteSetRefs...)
 		cloned[index].EvidenceRefs = append([]string(nil), cloned[index].EvidenceRefs...)
+		cloned[index].WorksetClaims = append([]orquestarunqueue.WorksetClaimV0(nil), cloned[index].WorksetClaims...)
+		for claimIndex := range cloned[index].WorksetClaims {
+			cloned[index].WorksetClaims[claimIndex].ReadSet = append([]orquestarunqueue.ScopeRefV0(nil), cloned[index].WorksetClaims[claimIndex].ReadSet...)
+			cloned[index].WorksetClaims[claimIndex].WriteSet = append([]orquestarunqueue.ScopeRefV0(nil), cloned[index].WorksetClaims[claimIndex].WriteSet...)
+			cloned[index].WorksetClaims[claimIndex].DependsOn = append([]string(nil), cloned[index].WorksetClaims[claimIndex].DependsOn...)
+			cloned[index].WorksetClaims[claimIndex].EvidenceRefs = append([]string(nil), cloned[index].WorksetClaims[claimIndex].EvidenceRefs...)
+		}
 	}
 	return cloned
 }

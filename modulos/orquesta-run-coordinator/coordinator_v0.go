@@ -121,17 +121,14 @@ func syncControlBlockedQueueStatusV0(
 	}
 	refs := append([]string(nil), candidate.EvidenceRefs...)
 	refs = append(refs, "evidence-ref-run-coordinator-control-blocked-queue-sync")
-	_, err := updater.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
-		RunRef:        candidate.RunRef,
-		QueueRef:      command.QueueRef,
-		AppRef:        candidate.AppRef,
-		Status:        status,
-		PriorityScore: candidate.PriorityScore,
-		UpdatedAt:     command.OccurredAt,
-		RequestedBy:   "orquesta-run-coordinator",
-		Reason:        "run_control_blocked_queue_sync",
-		EvidenceRefs:  refs,
-	})
+	_, err := updater.SetRunPriorityV0(ctx, runQueuePriorityCommandFromRankedCandidateV0(
+		candidate,
+		command,
+		status,
+		"orquesta-run-coordinator",
+		"run_control_blocked_queue_sync",
+		refs,
+	))
 	return err
 }
 
@@ -202,18 +199,42 @@ func rotateExecutedRunV0(
 	refs := append([]string(nil), candidate.EvidenceRefs...)
 	refs = append(refs, "evidence-ref-run-coordinator-executed")
 	queueStatus := effectiveExecutedRunQueueStatusV0(candidate, result)
-	_, err := updater.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
-		RunRef:        candidate.RunRef,
-		QueueRef:      command.QueueRef,
-		AppRef:        candidate.AppRef,
-		Status:        queueStatus,
-		PriorityScore: candidate.PriorityScore,
-		UpdatedAt:     command.OccurredAt,
-		RequestedBy:   "orquesta-run-coordinator",
-		Reason:        "run_executed_rotation",
-		EvidenceRefs:  refs,
-	})
+	_, err := updater.SetRunPriorityV0(ctx, runQueuePriorityCommandFromRankedCandidateV0(
+		candidate,
+		command,
+		queueStatus,
+		"orquesta-run-coordinator",
+		"run_executed_rotation",
+		refs,
+	))
 	return err
+}
+
+func runQueuePriorityCommandFromRankedCandidateV0(
+	candidate orquestarunqueue.RankedRunCandidateV0,
+	command RunCoordinatorTickCommandV0,
+	status string,
+	requestedBy string,
+	reason string,
+	evidenceRefs []string,
+) orquestarunqueue.RunQueuePriorityCommandV0 {
+	return orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:           candidate.RunRef,
+		QueueRef:         command.QueueRef,
+		AppRef:           candidate.AppRef,
+		Status:           status,
+		PriorityScore:    candidate.PriorityScore,
+		UpdatedAt:        command.OccurredAt,
+		FairnessGroupRef: candidate.FairnessGroupRef,
+		AttemptGroup:     candidate.AttemptGroup,
+		ParentRunRef:     candidate.ParentRunRef,
+		SupersedesRunRef: candidate.SupersedesRunRef,
+		RescueReason:     candidate.RescueReason,
+		EvidenceRefs:     evidenceRefs,
+		WorksetClaims:    candidate.WorksetClaims,
+		RequestedBy:      requestedBy,
+		Reason:           reason,
+	}
 }
 
 func effectiveExecutedRunQueueStatusV0(
