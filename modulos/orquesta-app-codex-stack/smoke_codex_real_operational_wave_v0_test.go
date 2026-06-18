@@ -24,6 +24,9 @@ func TestCodexStackOperationalWaveFakeRuntimeV0(t *testing.T) {
 	cfg := codexStackRequiredTestLocalConfigV0(t)
 	cfg.MaxBatchReady = 3
 	cfg.MaxConcurrency = 3
+	// Recuperacion real (de nucleo): si un agente materializa su write-set pero no
+	// escribe ACK, la entrega se promueve igualmente con gate-issue de revision.
+	cfg.PromoteMaterializedArtifactWithoutAck = true
 	writeCodexStackRequiredTestTinyGoModuleV0(t, cfg.ProjectWorkDir)
 	goCommand := codexStackRequiredTestGoCommandV0(t)
 	outputDir := filepath.Join(t.TempDir(), "required-test-output")
@@ -417,6 +420,9 @@ func TestCodexStackRealOperationalWaveOptInV0(t *testing.T) {
 	}
 	cfg.MaxBatchReady = 3
 	cfg.MaxConcurrency = 3
+	// Recuperacion real (de nucleo): si un agente materializa su write-set pero no
+	// escribe ACK, la entrega se promueve igualmente con gate-issue de revision.
+	cfg.PromoteMaterializedArtifactWithoutAck = true
 	writeCodexStackRequiredTestTinyGoModuleV0(t, cfg.ProjectWorkDir)
 	codexStackRealSmokeWriteProjectContextV0(t, cfg.ProjectWorkDir)
 	goCommand := codexStackRequiredTestGoCommandV0(t)
@@ -494,17 +500,18 @@ func codexStackOperationalWaveRunToCloseV0(
 	codexStackOperationalWaveAssertCohortDerivesWaitRefsV0(t, ctx, stack, fixture, agentRefs)
 
 	started, err := orquestaappdirectorservice.ContinueAppDirectorV0(ctx, orquestaappdirectorservice.ContinueAppDirectorRequestV0{
-		RunRef:               fixture.RunRef,
-		OccurredAt:           "2026-05-22T19:00:00Z",
-		CorrelationID:        "corr-operational-wave-start",
-		WaitWaveRef:          fixture.WaveRef,
-		WaitCohortRef:        fixture.CohortRef,
-		MaxBursts:            6,
-		MaxStepsPerBurst:     8,
-		MaxDispatchesPerWait: 4,
-		MaxCommands:          16,
-		MaxOutboxPerCycle:    8,
-		MaxExternalWaits:     1,
+		RunRef:                  fixture.RunRef,
+		OccurredAt:              "2026-05-22T19:00:00Z",
+		CorrelationID:           "corr-operational-wave-start",
+		WaitWaveRef:             fixture.WaveRef,
+		WaitCohortRef:           fixture.CohortRef,
+		MaxBursts:               6,
+		MaxStepsPerBurst:        8,
+		MaxDispatchesPerWait:    4,
+		MaxCommands:             16,
+		MaxOutboxPerCycle:       8,
+		MaxExternalWaits:        1,
+		StreamingSubwaveEnabled: true,
 	}, stack.Ports)
 	if err != nil {
 		t.Fatalf("ContinueAppDirectorV0 start: %v %s\n%s", err, codexStackRequiredTestErrorDetailsV0(err), codexStackRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))
@@ -547,6 +554,7 @@ func codexStackOperationalWaveRunToCloseV0(
 			MaxCommands:                24,
 			MaxOutboxPerCycle:          12,
 			MaxExternalWaits:           1,
+			StreamingSubwaveEnabled:    true,
 		}, stack.Ports)
 		if err != nil {
 			currentRun := mustLoadCodexStackRunForTestV0(t, stack, fixture.RunRef)
@@ -677,6 +685,23 @@ func codexStackOperationalWavePendingRunV0(
 	return run
 }
 
+// codexStackOperationalWaveTaskSummaryBySizeV0 da a cada tarea de la ola un
+// tamano distinto (corta/media/larga) para que los agentes Codex tarden tiempos
+// diferentes en entregar y se observe el avance incremental por sub-ola.
+func codexStackOperationalWaveTaskSummaryBySizeV0(index int) string {
+	switch index {
+	case 1:
+		return "Tarea CORTA: escribe un docs/w1.md de 3-5 lineas con un titulo y una frase. " +
+			"Al terminar escribe agent_ack.json con status=completed y la prueba requerida ejecutada."
+	case 2:
+		return "Tarea MEDIA: escribe docs/w2.md con ~20 lineas (titulo, 3 secciones, una lista). " +
+			"Al terminar escribe agent_ack.json con status=completed y la prueba requerida ejecutada."
+	default:
+		return "Tarea LARGA: escribe docs/w3.md con ~60 lineas (titulo, 6 secciones detalladas, " +
+			"tabla y conclusiones). Al terminar escribe agent_ack.json con status=completed y la prueba requerida ejecutada."
+	}
+}
+
 func codexStackOperationalWaveTaskV0(
 	fixture codexStackOperationalWaveFixtureV0,
 	refs codexStackRequiredTestRefsV0,
@@ -685,7 +710,9 @@ func codexStackOperationalWaveTaskV0(
 	task := refs.workflowTaskV0()
 	task.WorkProfileKind = orquestacoreworkflow.WorkProfileDocumentationV0
 	task.Title = fmt.Sprintf("Documento operacional de cohorte %02d", index)
-	task.Summary = "Microtarea de ola amplia con cierre causal y tests requeridos."
+	// Tareas de distinto tamano para forzar tiempos de entrega distintos y
+	// ejercitar el streaming por sub-ola: la corta entrega antes que la larga.
+	task.Summary = codexStackOperationalWaveTaskSummaryBySizeV0(index)
 	task.WriteSet = []string{fmt.Sprintf("docs/w%d.md", index)}
 	task.AcceptanceCriteria = []string{
 		"ACK de agente registrado dentro de WaitAgentRefs",
@@ -742,9 +769,13 @@ func codexStackOperationalWaveDrainUntilDeliveriesV0(
 		}
 		run := mustLoadCodexStackRunForTestV0(t, stack, runRef)
 		for _, descriptor := range codexStackOperationalWaveDescriptorsForAgentsV0(t, stack, agentRefs) {
-			ack, ok := codexStackRealSmokeCompletedAckV0(descriptor)
-			if ok && codexStackRealSmokeContainsProjectionPartV0(run.Deliveries, ack.AckRef) {
-				deliveries[descriptor.AgentRef] = ack.AckRef
+			// La entrega puede venir de un ACK completo o, si el agente no escribio
+			// ACK pero materializo su write-set, de la promocion del nucleo
+			// (PromoteMaterializedArtifactWithoutAck): en ambos casos el ack_ref del
+			// packet acaba en run.Deliveries.
+			ackRef := strings.TrimSpace(descriptor.Spec.AgentPacket.DeliveryRefs.AckRef)
+			if ackRef != "" && codexStackRealSmokeContainsProjectionPartV0(run.Deliveries, ackRef) {
+				deliveries[descriptor.AgentRef] = ackRef
 			}
 		}
 		if len(deliveries) == len(agentRefs) {

@@ -9,6 +9,28 @@ const (
 	WorktreeDestructiveReplacedLargeDeltaV0 = "replaced_large_delta"
 )
 
+// Umbrales de clasificacion de cambios destructivos. Son ADVISORY: ya no
+// bloquean entregas, solo etiquetan el cambio como evidencia (`gate-issue:*`)
+// para review del Director. Se documentan aqui como punto unico para afinar
+// sensibilidad sin buscarlos por el codigo. Ver
+// docs/estado_actual_2026-05-17.md:39-64 (no cortar trabajo recuperable).
+const (
+	// Tamano/lineas minimos para considerar un fichero "sustancial".
+	worktreeTruncateMinBytesV0 int64 = 64
+	worktreeTruncateMinLinesV0       = 10
+	// Un fichero se marca truncado si su tamano/lineas cae a la mitad o menos
+	// (current*Factor <= base). Untyped para servir a Size (int64) y LineCount (int).
+	worktreeTruncateShrinkFactorV0 = 2
+	// Tamano minimo para evaluar delta grande (ruido por debajo no cuenta).
+	worktreeLargeDeltaMinBytesV0 int64 = 4096
+	// Delta grande si el menor es <= 60% del mayor (min*5 <= max*3).
+	worktreeLargeDeltaRatioNumV0 int64 = 3
+	worktreeLargeDeltaRatioDenV0 int64 = 5
+	// O si la diferencia de lineas supera este umbral en ficheros grandes.
+	worktreeLargeDeltaLineFloorV0 = 120
+	worktreeLargeDeltaLineDeltaV0 = 120
+)
+
 func classifyWorktreeDestructiveChangesV0(
 	base map[string]WorktreeSnapshotFileV0,
 	now map[string]WorktreeSnapshotFileV0,
@@ -87,29 +109,30 @@ func worktreeRenameCandidatesV0(
 }
 
 func worktreeStrongTruncateV0(baseFile, currentFile WorktreeSnapshotFileV0) bool {
-	if baseFile.Size >= 64 && currentFile.Size*2 <= baseFile.Size {
+	if baseFile.Size >= worktreeTruncateMinBytesV0 &&
+		currentFile.Size*worktreeTruncateShrinkFactorV0 <= baseFile.Size {
 		return true
 	}
-	return baseFile.LineCount >= 10 &&
+	return baseFile.LineCount >= worktreeTruncateMinLinesV0 &&
 		currentFile.LineCount > 0 &&
-		currentFile.LineCount*2 <= baseFile.LineCount
+		currentFile.LineCount*worktreeTruncateShrinkFactorV0 <= baseFile.LineCount
 }
 
 func worktreeLargeDeltaReplacementV0(baseFile, currentFile WorktreeSnapshotFileV0) bool {
-	if baseFile.Size < 4096 || currentFile.Size < 4096 {
+	if baseFile.Size < worktreeLargeDeltaMinBytesV0 || currentFile.Size < worktreeLargeDeltaMinBytesV0 {
 		return false
 	}
 	maxSize := maxWorktreeInt64V0(baseFile.Size, currentFile.Size)
 	minSize := minWorktreeInt64V0(baseFile.Size, currentFile.Size)
-	if minSize*5 <= maxSize*3 {
+	if minSize*worktreeLargeDeltaRatioDenV0 <= maxSize*worktreeLargeDeltaRatioNumV0 {
 		return true
 	}
-	if baseFile.LineCount >= 120 && currentFile.LineCount >= 120 {
+	if baseFile.LineCount >= worktreeLargeDeltaLineFloorV0 && currentFile.LineCount >= worktreeLargeDeltaLineFloorV0 {
 		delta := baseFile.LineCount - currentFile.LineCount
 		if delta < 0 {
 			delta = -delta
 		}
-		return delta >= 120
+		return delta >= worktreeLargeDeltaLineDeltaV0
 	}
 	return false
 }

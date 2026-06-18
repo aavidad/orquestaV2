@@ -15,8 +15,9 @@ import (
 
 func deliverySourceV0(config ConfigV0) orquestacionnucleoapp.AgentDeliveryObservationProviderPortV0 {
 	base := orquestaruntimecodexdelivery.CodexDeliveryObservationSourceV0{
-		Store:            config.Stores.ReceiptStore,
-		WorktreeVerifier: codexStackWorktreeVerifierV0(config),
+		Store:                                 config.Stores.ReceiptStore,
+		WorktreeVerifier:                      codexStackWorktreeVerifierV0(config),
+		PromoteMaterializedArtifactWithoutAck: config.PromoteMaterializedArtifactWithoutAck,
 	}
 	recovery := domainWorkRecoveryDeliverySourceV0{
 		Stores:         config.Stores,

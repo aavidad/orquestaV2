@@ -98,7 +98,37 @@ func autoprogrammingPartitionWriteSetByAreaV0(
 		}
 	}
 	plan = autoprogrammingApplySequencedPathDepsV0(request, plan, groups, sequenced)
+	plan = autoprogrammingApplyDeclaredTaskWriteSetAndDepsV0(plan, groups)
 	return autoprogrammingCompletePartitionPlanV0(request, plan, groups), nil
+}
+
+// autoprogrammingApplyDeclaredTaskWriteSetAndDepsV0 deja que las tareas declaren
+// explicitamente su write-set y sus dependencias (depends_on por task_ref). Si una
+// tarea del grupo trae WriteSet/DependsOn declarados, ganan sobre la inferencia
+// automatica por area. Es aditivo: tareas sin declaracion conservan lo inferido.
+func autoprogrammingApplyDeclaredTaskWriteSetAndDepsV0(
+	plan AutoprogrammingPartitionPlanV0,
+	groups []AutoprogrammingTaskGroupV0,
+) AutoprogrammingPartitionPlanV0 {
+	for _, group := range groups {
+		declaredWriteSet := make([]string, 0)
+		declaredDeps := make([]string, 0)
+		for _, task := range group.Tasks {
+			for _, path := range task.WriteSet {
+				declaredWriteSet = appendUniqueStringV0(declaredWriteSet, path)
+			}
+			for _, dep := range task.DependsOn {
+				declaredDeps = appendUniqueStringV0(declaredDeps, dep)
+			}
+		}
+		if len(declaredWriteSet) > 0 {
+			plan.WriteSetByArea[group.Area] = declaredWriteSet
+		}
+		if len(declaredDeps) > 0 {
+			plan.DependsOnByArea[group.Area] = declaredDeps
+		}
+	}
+	return plan
 }
 
 func autoprogrammingPartitionAreasV0(groups []AutoprogrammingTaskGroupV0) []string {

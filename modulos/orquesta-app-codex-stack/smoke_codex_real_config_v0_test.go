@@ -26,6 +26,8 @@ type codexStackRealSmokeConfigV0 struct {
 	MaxBatchReady   int
 	MaxConcurrency  int
 	Timeout         time.Duration
+
+	PromoteMaterializedArtifactWithoutAck bool
 }
 
 func codexStackRealSmokeConfigForTestV0(t *testing.T) codexStackRealSmokeConfigV0 {

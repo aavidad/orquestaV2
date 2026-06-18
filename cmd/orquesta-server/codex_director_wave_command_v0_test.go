@@ -485,8 +485,8 @@ func TestCodexLaunchDirectorWaveCommandV0RecursiveDryRunMaterializaNietosConLimi
 	}
 	grandchildWrapper := mustReadFileStringV0(t, grandchild.Launch.Agents[0].WrapperPath)
 	if strings.Contains(grandchildWrapper, `model_reasoning_effort="xhigh"`) ||
-		!strings.Contains(grandchildWrapper, `model_reasoning_effort="medium"`) {
-		t.Fatalf("wrapper nieto debe usar medium por defecto:\n%s", grandchildWrapper)
+		!strings.Contains(grandchildWrapper, `model_reasoning_effort="high"`) {
+		t.Fatalf("wrapper nieto debe usar high por defecto (subido para fiabilidad de ACK):\n%s", grandchildWrapper)
 	}
 
 	nodes := codexDirectorCollectAgentNodesForTestV0(summary)

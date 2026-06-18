@@ -35,6 +35,10 @@ type ContinueAppDirectorRequestV0 struct {
 	OperationalDirectorFunctionContractRefs []orquestacoreworkflow.WorkflowFunctionContractRefV0 `json:"operational_director_function_contract_refs,omitempty"`
 	OperationalDirectorTargetPhaseID        orquestacoreworkflow.OrchestrationPhaseIDV0          `json:"operational_director_target_phase_id,omitempty"`
 	OperationalDirectorMaxItems             int                                                  `json:"operational_director_max_items,omitempty"`
+	// StreamingSubwaveEnabled activa el avance incremental por sub-ola: en cuanto
+	// un subconjunto de agentes entrega, avanza a review sin esperar al resto de
+	// la ola. Opt-in: por defecto se mantiene la barrera de ola completa.
+	StreamingSubwaveEnabled bool `json:"streaming_subwave_enabled,omitempty"`
 }
 
 type ContinueAppDirectorResultV0 struct {

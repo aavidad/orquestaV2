@@ -46,6 +46,10 @@ type ConfigV0 struct {
 	DecisionCouncil          DecisionCouncilConfigV0
 	DomainDelivery           DomainWorkDeliveryBridgeConfigV0
 	ExternalWorkRunGuard     ExternalWorkRunProjectWorkDirGuardConfigV0
+	// PromoteMaterializedArtifactWithoutAck recupera entregas cuyo agente
+	// materializo el write-set pero no escribio ACK (con gate-issue de revision
+	// humana). Opt-in: por defecto OFF.
+	PromoteMaterializedArtifactWithoutAck bool
 }
 
 type DomainWorkRequiredTestConfigV0 struct {

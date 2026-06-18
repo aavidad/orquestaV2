@@ -53,7 +53,11 @@ func BuildCodexAgentPromptWithControlFilesV0(packet orquestaruntime.AgentStartPa
 		".\n",
 		"Mantén cada fichero Go por debajo de 300 lineas; divide responsabilidades si se acerca a ese limite.\n",
 		"Comunicacion compacta: activa $caveman full si existe; si no existe, usa compact equivalente.\n",
-		"Final visible recomendado: ACK ", packet.DeliveryRefs.AckRef, " <status>.\n",
+		"PASO FINAL OBLIGATORIO: antes de terminar el turno, escribe SIEMPRE el ACK de control ",
+		packet.DeliveryRefs.AckRef,
+		" con el status real (completed/blocked/failed), los ficheros del write-set tocados y la evidencia de pruebas. ",
+		"No omitas este paso ni lo dejes para luego: aunque el trabajo ya este en disco, sin ACK Orquesta no recibe el acuse causal. ",
+		"Escribe el ACK como ultima accion, no antes de terminar el trabajo.\n",
 		"Si falta contexto, no inventes: usa lo disponible, guarda el avance y deja la falta como nota de revision en el ACK.\n",
 	)
 	if codexPacketHasRequiredTruncatedContextV0(packet) {

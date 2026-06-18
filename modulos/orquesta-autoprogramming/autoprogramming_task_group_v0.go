@@ -15,6 +15,12 @@ type AutoprogrammingTaskGroupCandidateV0 struct {
 	AcceptanceCriteria []string `json:"acceptance_criteria,omitempty"`
 	RequiredTests      []string `json:"required_tests,omitempty"`
 	CompactRules       []string `json:"compact_rules,omitempty"`
+	// WriteSet y DependsOn permiten declarar por tarea el alcance de escritura y
+	// las dependencias explicitas (refs de otras task_ref). Si se declaran, ganan
+	// sobre la inferencia automatica por area/solapamiento. Vacios = comportamiento
+	// historico (inferencia por area). Aditivo y retrocompatible.
+	WriteSet  []string `json:"write_set,omitempty"`
+	DependsOn []string `json:"depends_on,omitempty"`
 }
 
 type AutoprogrammingTaskGroupV0 struct {
@@ -85,6 +91,8 @@ func normalizeAutoprogrammingTaskCandidateV0(
 		AcceptanceCriteria: compactStringsV0(task.AcceptanceCriteria),
 		RequiredTests:      compactStringsV0(task.RequiredTests),
 		CompactRules:       compactStringsV0(task.CompactRules),
+		WriteSet:           compactStringsV0(task.WriteSet),
+		DependsOn:          compactStringsV0(task.DependsOn),
 	}
 }
 

@@ -58,9 +58,11 @@ func BuildGeminiAgentPromptWithControlFilesV0(
 	b.WriteString(".\n")
 	b.WriteString("Manten cada fichero Go por debajo de 300 lineas; divide responsabilidades si se acerca a ese limite.\n")
 	b.WriteString("Comunicacion compacta: activa $caveman full si existe; si no existe, usa compact equivalente.\n")
-	b.WriteString("Final visible recomendado: ACK ")
+	b.WriteString("PASO FINAL OBLIGATORIO: antes de terminar el turno, escribe SIEMPRE el ACK de control ")
 	b.WriteString(packet.DeliveryRefs.AckRef)
-	b.WriteString(" <status>.\n")
+	b.WriteString(" con el status real (completed/blocked/failed), los ficheros del write-set tocados y la evidencia de pruebas. ")
+	b.WriteString("No omitas este paso ni lo dejes para luego: aunque el trabajo ya este en disco, sin ACK Orquesta no recibe el acuse causal. ")
+	b.WriteString("Escribe el ACK como ultima accion, no antes de terminar el trabajo.\n")
 	b.WriteString("Si falta contexto, no inventes: usa lo disponible, guarda el avance y deja la falta como nota de revision en el ACK.\n")
 	if geminiPacketHasRequiredTruncatedContextV0(packet) {
 		b.WriteString("CONTEXTO TRUNCADO: agent_packet.context contiene entradas required=true y truncated=true. Trabaja con refs/materializacion externa cuando este disponible; si no, guarda avance parcial y anota contexto_truncado_pendiente o contexto_truncado_resuelto en notes.\n")

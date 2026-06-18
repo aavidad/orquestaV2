@@ -154,6 +154,8 @@ func TestCodexExecResolverV0PromptUsaControlFilesDelRuntime(t *testing.T) {
 		"Es obligatorio solo si objetivo o criterios de cierre lo piden.",
 		"Comunicacion compacta",
 		"$caveman full",
+		"PASO FINAL OBLIGATORIO",
+		"escribe SIEMPRE el ACK de control",
 		"No uses git status como criterio obligatorio",
 		"ACK status completed aunque git no aplique",
 		"No imprimas diffs ni pegues artefactos completos",

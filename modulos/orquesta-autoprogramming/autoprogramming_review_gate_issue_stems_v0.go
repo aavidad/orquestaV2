@@ -107,6 +107,21 @@ func autoprogrammingReviewGateCanonicalStemV0(stem string) string {
 		"false_positive",
 		"falso_positivo":
 		return "ack_pending_rail"
+	case "ack_sensitive_detail_redacted",
+		"sensitive_detail_redacted",
+		"sensitive_detail",
+		"forbidden_sensitive_detail",
+		"detalle_sensible",
+		"detalle_sensible_redactado",
+		"ack_detalle_prohibido",
+		"sensitive_detail_requires_human_review":
+		return "sensitive_detail_requires_review"
+	case "artifact_without_ack_requires_human_review",
+		"artifact_without_ack_requires_review",
+		"artifact_without_ack",
+		"artifacto_sin_ack",
+		"artefacto_sin_ack":
+		return "artifact_without_ack_requires_review"
 	case "missing_required_test":
 		return "required_test_missing"
 	case "failed_required_test":

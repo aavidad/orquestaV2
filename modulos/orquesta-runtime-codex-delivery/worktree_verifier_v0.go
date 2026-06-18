@@ -61,8 +61,17 @@ func (source CodexDeliveryObservationSourceV0) verifyDescriptorWorktreeV0(
 		strings.TrimSpace(descriptor.AckPath),
 		descriptor.Spec,
 	)
-	if len(issues) > 0 && !codexReceiptAckIssuesOnlyReviewableFailedTestEvidenceV0(issues) {
-		return nil, fmt.Errorf("codex_worktree_verification: ack_invalid")
+	var ackGateRefs []string
+	if len(issues) > 0 {
+		// Solo cortamos en duro por issues no recuperables (forma rota,
+		// correlacion ajena, detalle sensible, artefacto de control/fuera de
+		// write-set). Las discrepancias recuperables de forma/ruta y la
+		// evidencia reviewable de tests se conservan como gate-issue y dejan
+		// continuar; ver docs/estado_actual_2026-05-17.md:39-64.
+		if !codexReceiptAckIssuesAllRecoverableV0(issues) {
+			return nil, fmt.Errorf("codex_worktree_verification: ack_invalid")
+		}
+		ackGateRefs = codexReceiptAckIssueGateRefsV0(issues)
 	}
 	request := CodexReceiptWorktreeVerificationRequestV0{
 		DescriptorRef:       descriptor.DescriptorRef,
@@ -74,9 +83,13 @@ func (source CodexDeliveryObservationSourceV0) verifyDescriptorWorktreeV0(
 		AckFiles:            append([]string(nil), ack.Files...),
 	}
 	if verifier, ok := source.WorktreeVerifier.(CodexReceiptWorktreeEvidenceVerifierPortV0); ok {
-		return verifier.VerifyCodexReceiptWorktreeEvidenceRefsV0(ctx, request)
+		refs, err := verifier.VerifyCodexReceiptWorktreeEvidenceRefsV0(ctx, request)
+		if err != nil {
+			return nil, err
+		}
+		return compactCodexDeliveryRefsV0(append(refs, ackGateRefs...)), nil
 	}
-	return nil, source.WorktreeVerifier.VerifyCodexReceiptWorktreeV0(ctx, request)
+	return ackGateRefs, source.WorktreeVerifier.VerifyCodexReceiptWorktreeV0(ctx, request)
 }
 
 func (verifier CodexReceiptWorktreeVerifierV0) VerifyCodexReceiptWorktreeV0(
@@ -92,7 +105,7 @@ func (verifier CodexReceiptWorktreeVerifierV0) VerifyCodexReceiptWorktreeEvidenc
 	request CodexReceiptWorktreeVerificationRequestV0,
 ) ([]string, error) {
 	if verifier.modeV0() == CodexReceiptWorktreeAckFilesV0 {
-		return nil, verifyCodexReceiptAckFilesV0(request)
+		return verifyCodexReceiptAckFilesEvidenceV0(request)
 	}
 	if verifier.SnapshotStore == nil {
 		return codexReceiptWorktreeFallbackAckFilesV0(request, "gate-issue:worktree_snapshot_store_missing")
@@ -132,10 +145,12 @@ func codexReceiptWorktreeFallbackAckFilesV0(
 	request CodexReceiptWorktreeVerificationRequestV0,
 	evidenceRef string,
 ) ([]string, error) {
-	if err := verifyCodexReceiptAckFilesV0(request); err != nil {
+	ackRefs, err := verifyCodexReceiptAckFilesEvidenceV0(request)
+	if err != nil {
 		return nil, err
 	}
-	return compactCodexDeliveryRefsV0([]string{evidenceRef, "gate-issue:strict_diff_unavailable"}), nil
+	refs := append([]string{evidenceRef, "gate-issue:strict_diff_unavailable"}, ackRefs...)
+	return compactCodexDeliveryRefsV0(refs), nil
 }
 
 func (verifier CodexReceiptWorktreeVerifierV0) modeV0() CodexReceiptWorktreeVerificationModeV0 {
@@ -145,25 +160,46 @@ func (verifier CodexReceiptWorktreeVerifierV0) modeV0() CodexReceiptWorktreeVeri
 	return verifier.Mode
 }
 
-func verifyCodexReceiptAckFilesV0(request CodexReceiptWorktreeVerificationRequestV0) error {
+// verifyCodexReceiptAckFilesEvidenceV0 comprueba que cada fichero declarado en
+// el ACK existe dentro del proyecto. Las discrepancias recuperables (fichero
+// declarado ausente cuando hay otros cambios reales) se conservan como
+// `gate-issue` en lugar de cortar. Solo corta en duro cuando no hay nada
+// recuperable: ruta fuera del proyecto (efecto/control), o ningun fichero
+// declarado existe (entrega vacia, nada que conservar).
+func verifyCodexReceiptAckFilesEvidenceV0(
+	request CodexReceiptWorktreeVerificationRequestV0,
+) ([]string, error) {
 	projectDir := strings.TrimSpace(request.ProjectWorkDir)
 	if projectDir == "" {
-		return fmt.Errorf("codex_worktree_verification: project_required")
+		return nil, fmt.Errorf("codex_worktree_verification: project_required")
 	}
+	var gateRefs []string
+	declared := 0
+	present := 0
 	for _, raw := range request.AckFiles {
-		rel, ok := cleanCodexReceiptAckFilePathV0(raw)
+		declared++
+		rel, ok := cleanCodexReceiptAckFilePathInProjectV0(raw, projectDir)
 		if !ok {
-			return fmt.Errorf("codex_worktree_verification: ack_file_invalid")
+			// Ruta fuera del proyecto: corte duro legitimo (efecto/control).
+			return nil, fmt.Errorf("codex_worktree_verification: ack_file_invalid")
 		}
 		info, err := os.Stat(filepath.Join(projectDir, filepath.FromSlash(rel)))
 		if err != nil {
-			return fmt.Errorf("codex_worktree_verification: ack_file_missing")
+			gateRefs = append(gateRefs, "gate-issue:ack_file_missing:"+rel)
+			continue
 		}
 		if info.IsDir() {
-			return fmt.Errorf("codex_worktree_verification: ack_file_invalid")
+			gateRefs = append(gateRefs, "gate-issue:ack_file_invalid:"+rel)
+			continue
 		}
+		present++
 	}
-	return nil
+	// Si no hay entrega real (nada existe en disco) y se declararon ficheros, no
+	// hay trabajo recuperable: corte duro.
+	if declared > 0 && present == 0 {
+		return nil, fmt.Errorf("codex_worktree_verification: ack_file_missing")
+	}
+	return compactCodexDeliveryRefsV0(gateRefs), nil
 }
 
 func cleanCodexReceiptAckFilePathV0(value string) (string, bool) {
@@ -178,6 +214,45 @@ func cleanCodexReceiptAckFilePathV0(value string) (string, bool) {
 		return "", false
 	}
 	return cleaned, true
+}
+
+// cleanCodexReceiptAckFilePathInProjectV0 normaliza rutas recuperables: una ruta
+// absoluta o con `~`/`$HOME` que cae dentro de `projectDir` se deriva a relativa
+// en lugar de rechazarse. Solo se rechaza si escapa del proyecto. Esto evita
+// colgar al agente por entregar una ruta absoluta correcta.
+func cleanCodexReceiptAckFilePathInProjectV0(value string, projectDir string) (string, bool) {
+	if rel, ok := cleanCodexReceiptAckFilePathV0(value); ok {
+		return rel, true
+	}
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" || strings.Contains(trimmed, "://") {
+		return "", false
+	}
+	if home := strings.TrimSpace(os.Getenv("HOME")); home != "" {
+		if strings.HasPrefix(trimmed, "~/") {
+			trimmed = filepath.Join(home, strings.TrimPrefix(trimmed, "~/"))
+		} else if trimmed == "~" {
+			trimmed = home
+		}
+		trimmed = strings.ReplaceAll(trimmed, "$HOME", home)
+	}
+	if !filepath.IsAbs(trimmed) {
+		return "", false
+	}
+	absProject, err := filepath.Abs(projectDir)
+	if err != nil {
+		return "", false
+	}
+	rel, err := filepath.Rel(absProject, filepath.Clean(trimmed))
+	if err != nil {
+		return "", false
+	}
+	rel = filepath.ToSlash(rel)
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, "../") {
+		// Escapa del proyecto: corte duro legitimo.
+		return "", false
+	}
+	return rel, true
 }
 
 func codexReceiptPathAllowedByWriteSetV0(path string, writeSet []string) bool {

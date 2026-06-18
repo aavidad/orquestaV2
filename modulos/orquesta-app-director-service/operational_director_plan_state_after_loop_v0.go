@@ -61,6 +61,19 @@ func applyOperationalDirectorPlanStateAfterLoopV0(
 		next = afterDeliveredTasks
 		changed = true
 	}
+	// Avance incremental por sub-ola (opt-in). Solo se ejecuta si las barreras de
+	// ola completa de arriba no avanzaron: actua sobre entregas parciales para que
+	// las tareas independientes fluyan a review sin esperar a las hermanas.
+	if request.StreamingSubwaveEnabled {
+		afterSubset, subsetChanged, err := operationalDirectorPlanStateAfterWaitDeliveredSubsetV0(request, next, loop.Run)
+		if err != nil {
+			return false, err
+		}
+		if subsetChanged {
+			next = afterSubset
+			changed = true
+		}
+	}
 	afterReview, reviewChanged, err := operationalDirectorPlanStateAfterReviewAcceptedV0(ctx, request, ports, next, loop)
 	if err != nil {
 		return false, err

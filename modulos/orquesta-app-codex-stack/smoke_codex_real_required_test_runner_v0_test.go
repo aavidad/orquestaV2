@@ -816,8 +816,9 @@ func codexStackRealRequiredTestRunnerStackV0(
 	planStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0()
 	runMemory := orquestarunmemory.NewRunMemoryStoreV0()
 	stack, err := BuildStackV0(ConfigV0{
-		Enabled: true,
-		Timeout: cfg.Timeout,
+		Enabled:                               true,
+		Timeout:                               cfg.Timeout,
+		PromoteMaterializedArtifactWithoutAck: cfg.PromoteMaterializedArtifactWithoutAck,
 		DirectorLimits: orquestaweb.WebArrancarDirectorAppLimitsV0{
 			MaxBursts:            4,
 			MaxStepsPerBurst:     4,
