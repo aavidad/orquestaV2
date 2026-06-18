@@ -10,8 +10,18 @@ func (collector *schedulerTickCollectorV0) collectReplanFollowupCandidateV0(
 ) error {
 	input := candidate.ReplanFollowupsInput
 	replanRecorded := collector.replanAlreadyRecordedV0(input.DecisionPayload.ReplanRef)
+	// Guard anti bucle infinito de replan: si la tarea ya supero el limite de
+	// replans previos, escalamos a decision (needsDirector) en vez de seguir
+	// reintentando/dividiendo. Se registra la decision causal (RecordReplanDecision)
+	// pero se SUPRIMEN los followups resolutivos. Ver auditoria del Director en
+	// docs/orquesta_director_y_entregas_2026-06-18.md.
+	retryLimitExceeded := schedulerReplanRetryLimitExceededV0(
+		collector.input.Snapshot,
+		input.DecisionPayload.TaskRef,
+		input.DecisionPayload.AcceptedAction,
+	)
 	prepared, state := collector.prepareReplanFollowupsInputV0(input, replanRecorded)
-	if state.waitingCapacity {
+	if state.waitingCapacity && !retryLimitExceeded {
 		collector.addWaitingV0(SchedulerWaitingCapacityPendingV0)
 		return nil
 	}
@@ -22,6 +32,14 @@ func (collector *schedulerTickCollectorV0) collectReplanFollowupCandidateV0(
 	result, err := orquestadirector.BuildReplanFollowupsV0(prepared)
 	if err != nil {
 		return schedulerTickWrappedExternalErrorV0("replan_followup_candidates", err)
+	}
+	if retryLimitExceeded {
+		if !replanRecorded {
+			collector.addCommandV0(result.RecordReplanDecisionCommand)
+			collector.plannedReplanRefs[state.replanRef] = true
+		}
+		collector.needsDirector = true
+		return nil
 	}
 	return collector.collectReplanFollowupsResultV0(result, replanRecorded, state)
 }
