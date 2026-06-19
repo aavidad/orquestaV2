@@ -63,7 +63,7 @@ func listCycleStepPendingOutboxV0(
 		CorrelationID: input.CorrelationID,
 	})
 	if err != nil {
-		return result, cycleStepErrorV0(input, ErrDirectorCycleStepOutboxV0, "outbox ledger fallo", "outbox_ledger", true, nil)
+		return result, cycleStepOutboxErrorV0(input, err)
 	}
 	return result, nil
 }
@@ -80,7 +80,7 @@ func recordCycleStepOutboxV0(
 		CorrelationID: input.CorrelationID,
 	})
 	if err != nil {
-		return result, cycleStepErrorV0(input, ErrDirectorCycleStepOutboxV0, "outbox ledger fallo", "outbox_ledger", true, nil)
+		return result, cycleStepOutboxErrorV0(input, err)
 	}
 	return result, nil
 }

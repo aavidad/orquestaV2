@@ -131,6 +131,65 @@ func TestFileOutboxLedgerV0ClaimFrescoNoDuplicaDespacho(t *testing.T) {
 	}
 }
 
+func TestFileOutboxLedgerV0IdempotenciaIgnoraCorrelationOperativa(t *testing.T) {
+	dir := t.TempDir()
+	ledger := newFileOutboxLedgerForTestV0(t, dir)
+	message := validLaunchOutboxLedgerMessageV0(t)
+	if _, issues := ledger.SavePending(context.Background(), []orquestacoreworkflow.OutboxMessageV0{message}); len(issues) != 0 {
+		t.Fatalf("save issues=%+v", issues)
+	}
+
+	retry := message
+	retry.CorrelationID = "corr-ack-retry-002"
+	accepted, issues := ledger.SavePending(context.Background(), []orquestacoreworkflow.OutboxMessageV0{retry})
+	if len(issues) != 0 {
+		t.Fatalf("retry con distinta correlacion no debe romper idempotencia: %+v", issues)
+	}
+	if len(accepted) != 1 || accepted[0].CorrelationID != message.CorrelationID {
+		t.Fatalf("accepted=%+v, want stored original correlation %q", accepted, message.CorrelationID)
+	}
+
+	reopened := newFileOutboxLedgerForTestV0(t, dir)
+	pending, issues := reopened.ListPending(context.Background(), orquestadirectorcycleoutbox.DirectorCycleOutboxPendingFilterV0{
+		RunRef: message.RunID,
+	})
+	if len(issues) != 0 || len(pending) != 1 {
+		t.Fatalf("pending=%+v issues=%+v", pending, issues)
+	}
+	if pending[0].CorrelationID != message.CorrelationID {
+		t.Fatalf("correlation almacenada=%q, want original %q", pending[0].CorrelationID, message.CorrelationID)
+	}
+}
+
+func TestFileOutboxLedgerV0MantieneConflictoSiCambiaCausation(t *testing.T) {
+	dir := t.TempDir()
+	ledger := newFileOutboxLedgerForTestV0(t, dir)
+	message := validLaunchOutboxLedgerMessageV0(t)
+	if _, issues := ledger.SavePending(context.Background(), []orquestacoreworkflow.OutboxMessageV0{message}); len(issues) != 0 {
+		t.Fatalf("save issues=%+v", issues)
+	}
+
+	retry := message
+	retry.CausationEventID = "event-agent-requested-retry-002"
+	_, issues := ledger.SavePending(context.Background(), []orquestacoreworkflow.OutboxMessageV0{retry})
+	if !hasFileOutboxLedgerIssueV0(issues, ErrConflictoIdempotenciaV0, "message_id") {
+		t.Fatalf("expected causation conflict, got %+v", issues)
+	}
+}
+
+func hasFileOutboxLedgerIssueV0(
+	issues []orquestadirectorcycleoutbox.DirectorCycleOutboxIssueV0,
+	code string,
+	field string,
+) bool {
+	for _, issue := range issues {
+		if issue.Code == code && (field == "" || issue.Field == field) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestFileOutboxLedgerV0RecuperaClaimExpiradoSinReinicio(t *testing.T) {
 	dir := t.TempDir()
 	ledger := newFileOutboxLedgerForTestV0(t, dir)

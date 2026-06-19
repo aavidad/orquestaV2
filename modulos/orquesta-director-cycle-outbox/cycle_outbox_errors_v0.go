@@ -49,3 +49,22 @@ func resultWithCycleOutboxIssueV0(
 	result.Issues = append(result.Issues, issue)
 	return result, cycleOutboxErrorV0(input, code, message, field, retryable, result.Issues)
 }
+
+func resultWithCycleOutboxLedgerIssuesV0(
+	result DirectorCycleOutboxRecordResultV0,
+	input DirectorCycleOutboxRecordInputV0,
+	field string,
+	issues []DirectorCycleOutboxIssueV0,
+) (DirectorCycleOutboxRecordResultV0, error) {
+	header := cycleOutboxIssueV0(ErrDirectorCycleOutboxLedgerV0, field, "ledger devolvio issues")
+	result.Issues = append(result.Issues, header)
+	result.Issues = append(result.Issues, issues...)
+	return result, cycleOutboxErrorV0(
+		input,
+		ErrDirectorCycleOutboxLedgerV0,
+		"ledger devolvio issues",
+		field,
+		true,
+		result.Issues,
+	)
+}

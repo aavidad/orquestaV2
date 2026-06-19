@@ -111,6 +111,24 @@ func TestInMemoryOutboxLedgerV0SaveYAckSonIdempotentes(t *testing.T) {
 	}
 }
 
+func TestInMemoryOutboxLedgerV0IdempotenciaIgnoraCorrelationOperativa(t *testing.T) {
+	ledger := NewInMemoryOutboxLedgerV0()
+	message := validLaunchOutboxLedgerMessageV0(t)
+	if _, issues := ledger.SavePending(context.Background(), []orquestacoreworkflow.OutboxMessageV0{message}); len(issues) != 0 {
+		t.Fatalf("save issues=%+v", issues)
+	}
+
+	retry := message
+	retry.CorrelationID = "corr-ack-retry-002"
+	accepted, issues := ledger.SavePending(context.Background(), []orquestacoreworkflow.OutboxMessageV0{retry})
+	if len(issues) != 0 {
+		t.Fatalf("retry con distinta correlacion no debe romper idempotencia: %+v", issues)
+	}
+	if len(accepted) != 1 || accepted[0].CorrelationID != message.CorrelationID {
+		t.Fatalf("accepted=%+v, want stored original correlation %q", accepted, message.CorrelationID)
+	}
+}
+
 func TestInMemoryOutboxLedgerV0RechazaPayloadYAckIncompatibles(t *testing.T) {
 	ledger := NewInMemoryOutboxLedgerV0()
 	message := validLaunchOutboxLedgerMessageV0(t)
@@ -141,6 +159,21 @@ func TestInMemoryOutboxLedgerV0RechazaPayloadYAckIncompatibles(t *testing.T) {
 	_, issues = ledger.RegistrarAck(context.Background(), ack)
 	if !HasOutboxLedgerIssueV0(issues, ErrConflictoIdempotenciaV0, "ack") {
 		t.Fatalf("expected ack conflict, got %+v", issues)
+	}
+}
+
+func TestInMemoryOutboxLedgerV0MantieneConflictoSiCambiaCausation(t *testing.T) {
+	ledger := NewInMemoryOutboxLedgerV0()
+	message := validLaunchOutboxLedgerMessageV0(t)
+	if _, issues := ledger.SavePending(context.Background(), []orquestacoreworkflow.OutboxMessageV0{message}); len(issues) != 0 {
+		t.Fatalf("save issues=%+v", issues)
+	}
+
+	retry := message
+	retry.CausationEventID = "event-agent-requested-retry-002"
+	_, issues := ledger.SavePending(context.Background(), []orquestacoreworkflow.OutboxMessageV0{retry})
+	if !HasOutboxLedgerIssueV0(issues, ErrConflictoIdempotenciaV0, "message_id") {
+		t.Fatalf("expected causation conflict, got %+v", issues)
 	}
 }
 

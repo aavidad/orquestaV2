@@ -19,7 +19,7 @@ func RecordDirectorCycleOutboxV0(
 		result.SavedCount = len(saved)
 		result.SavedOutboxRefs = cycleOutboxMessageRefsV0(saved)
 		if len(issues) > 0 {
-			return resultWithCycleOutboxIssueV0(result, input, ErrDirectorCycleOutboxLedgerV0, "save_pending", "ledger devolvio issues", true)
+			return resultWithCycleOutboxLedgerIssuesV0(result, input, "save_pending", issues)
 		}
 	}
 	pending, issues := input.Ledger.ListPending(ctx, DirectorCycleOutboxPendingFilterV0{
@@ -29,7 +29,7 @@ func RecordDirectorCycleOutboxV0(
 	result.PendingCount = len(pending)
 	result.PendingOutboxRefs = cycleOutboxMessageRefsV0(pending)
 	if len(issues) > 0 {
-		return resultWithCycleOutboxIssueV0(result, input, ErrDirectorCycleOutboxLedgerV0, "list_pending", "ledger devolvio issues", true)
+		return resultWithCycleOutboxLedgerIssuesV0(result, input, "list_pending", issues)
 	}
 	return result, nil
 }
