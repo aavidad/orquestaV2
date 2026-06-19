@@ -14,7 +14,7 @@
     "worktree_ref": "worktree-bolsa-100-productizable-local-20260619",
     "worktree_isolated": true,
     "branch_ref": "branch-bolsa-100-productizable-local-20260619",
-    "max_write_set_entries": 42,
+    "max_write_set_entries": 40,
     "write_set": [
       "README.md",
       "Dockerfile",
