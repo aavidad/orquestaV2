@@ -1,0 +1,141 @@
+{
+  "request_id": "req-bolsa-vec-notificaciones-auditoria-20260619",
+  "correlation_id": "corr-bolsa-vec-notificaciones-auditoria-20260619",
+  "requested_by": "operador-bolsa-diputacion",
+  "occurred_at": "2026-06-19T18:05:00Z",
+  "max_bursts": 10,
+  "max_steps_per_burst": 10,
+  "max_dispatches_per_wait": 6,
+  "max_commands": 48,
+  "max_outbox_per_cycle": 24,
+  "autoprogramming_request": {
+    "request_ref": "bolsa-vec-notificaciones-auditoria-20260619",
+    "project_ref": "bolsa-diputacion-granada",
+    "worktree_ref": "worktree-bolsa-vec-notificaciones-auditoria-20260619",
+    "worktree_isolated": true,
+    "branch_ref": "branch-bolsa-vec-notificaciones-auditoria-20260619",
+    "max_write_set_entries": 28,
+    "write_set": [
+      "README.md",
+      "docs/portal_vec/bolsa_flow_contract_2026-06-19.md",
+      "internal/candidate/adapters/handler/administrative_flow.go",
+      "internal/candidate/adapters/handler/administrative_flow_test.go",
+      "internal/candidate/adapters/handler/routes.go",
+      "internal/candidate/adapters/handler/professional_portal.go",
+      "internal/candidate/adapters/handler/professional_portal_test.go",
+      "internal/candidate/application/professional_portal.go",
+      "internal/candidate/application/professional_portal_test.go",
+      "internal/app/bootstrap/bootstrap_test.go",
+      "internal/app/server/server_flow_test.go",
+      "internal/vec/module.go",
+      "internal/vec/module_test.go",
+      "locales/es.json",
+      "web/static/app.js",
+      "web/static/index.html",
+      "web/static/styles.css"
+    ],
+    "required_tests": [
+      "go test ./..."
+    ],
+    "tasks": [
+      {
+        "task_ref": "bolsa-notif-contract",
+        "area": "contract",
+        "title": "Contrato de notificaciones y auditoria como endpoints VEC",
+        "objective": "Use skill admin-data-web. Actualiza README.md y docs/portal_vec/bolsa_flow_contract_2026-06-19.md para declarar endpoints reales de prototipo: POST/GET /api/notifications, POST /api/notifications/{id}/send, POST /api/notifications/{id}/read y GET /api/audit?candidate_id={id}. Mantener compatibilidad con rutas por candidato ya existentes. Etiquetar claramente que no es notificacion fehaciente productiva: son recibos y estados trazables en memoria.",
+        "write_set": [
+          "README.md",
+          "docs/portal_vec/bolsa_flow_contract_2026-06-19.md"
+        ],
+        "required_tests": [
+          "go test ./..."
+        ],
+        "acceptance_criteria": [
+          "El contrato lista endpoints globales y rutas por candidato sin duplicar login ni shell VEC.",
+          "Send/read de notificaciones quedan declarados como estado de prototipo con recibos trazables.",
+          "Audit global por candidate_id/scope queda declarado como consulta backend real de prototipo."
+        ]
+      },
+      {
+        "task_ref": "bolsa-notif-http",
+        "area": "http",
+        "title": "Endpoints globales de notificaciones, send/read y auditoria",
+        "objective": "Conecta usecases existentes SendNotification, MarkNotificationRead y ListAuditByScope al Handler HTTP. Implementa POST /api/notifications con candidate_id en JSON y GET /api/notifications?candidate_id={id}; POST /api/notifications/{id}/send staff-only; POST /api/notifications/{id}/read candidate-only; GET /api/audit?candidate_id={id} o scope=candidate:{id} staff-only. Mantener rutas por candidato ya existentes. No metas reglas de negocio en handler, no toques dominio si no hace falta, conserva i18n y envelopes JSON.",
+        "write_set": [
+          "internal/candidate/adapters/handler/administrative_flow.go",
+          "internal/candidate/adapters/handler/administrative_flow_test.go",
+          "internal/candidate/adapters/handler/routes.go",
+          "internal/candidate/adapters/handler/professional_portal.go",
+          "internal/candidate/adapters/handler/professional_portal_test.go",
+          "internal/candidate/application/professional_portal.go",
+          "internal/candidate/application/professional_portal_test.go",
+          "internal/app/bootstrap/bootstrap_test.go",
+          "internal/vec/module.go",
+          "internal/vec/module_test.go",
+          "locales/es.json"
+        ],
+        "required_tests": [
+          "go test ./internal/candidate/adapters/handler/...",
+          "go test ./internal/app/...",
+          "go test ./internal/vec/..."
+        ],
+        "depends_on": [
+          "bolsa-notif-contract"
+        ],
+        "acceptance_criteria": [
+          "Los cuatro endpoints globales responden con tests httptest positivos y negativos de auth.",
+          "Send cambia estado a Enviada y read cambia estado a Leida usando los usecases, no mutacion directa.",
+          "Portal y manifest VEC declaran estos endpoints como real.",
+          "/api devuelve las rutas globales ademas de las rutas por candidato."
+        ]
+      },
+      {
+        "task_ref": "bolsa-notif-ui",
+        "area": "ui",
+        "title": "UI con envio/lectura de notificaciones y auditoria global",
+        "objective": "Use skill admin-data-web. Actualiza UI para usar POST/GET /api/notifications cuando exista, permitir enviar y marcar leida una notificacion del prototipo, y consultar auditoria por /api/audit?candidate_id={id}. Las acciones deben mostrar recibos claros y estados backend. No simules send/read si el endpoint falla; muestra error. Mantener contador de avisos dinamico, i18n y botones sin promesas legales falsas.",
+        "write_set": [
+          "web/static/app.js",
+          "web/static/index.html",
+          "web/static/styles.css",
+          "locales/es.json"
+        ],
+        "required_tests": [
+          "go test ./..."
+        ],
+        "depends_on": [
+          "bolsa-notif-http"
+        ],
+        "acceptance_criteria": [
+          "La UI llama endpoints globales de notificaciones y auditoria.",
+          "Existen acciones visibles para enviar y marcar leida cuando hay notificacion seleccionada.",
+          "Los estados/recibos vienen del backend o se etiquetan como error; no hay mutacion local silenciosa.",
+          "El JS sigue sin calcular baremo ni permisos."
+        ]
+      },
+      {
+        "task_ref": "bolsa-notif-smoke",
+        "area": "smoke",
+        "title": "Smoke de cierre para send/read y auditoria",
+        "objective": "Amplia internal/app/server/server_flow_test.go para recorrer por HTTP: candidato -> documento -> claim -> notification create via /api/notifications -> send -> read -> list notifications -> audit via /api/audit. El test debe fallar si /api/notifications, /api/notifications/{id}/send, /api/notifications/{id}/read o /api/audit no existen. Mantener test de frontera hexagonal existente.",
+        "write_set": [
+          "internal/app/server/server_flow_test.go",
+          "internal/candidate/adapters/handler/administrative_flow_test.go",
+          "internal/vec/module_test.go"
+        ],
+        "required_tests": [
+          "go test ./..."
+        ],
+        "depends_on": [
+          "bolsa-notif-http",
+          "bolsa-notif-ui"
+        ],
+        "acceptance_criteria": [
+          "go test ./... prueba send/read/list/audit globales.",
+          "No quedan 404 en los endpoints globales de notificaciones/auditoria.",
+          "Manifest/portal reflejan rutas globales reales."
+        ]
+      }
+    ]
+  }
+}
