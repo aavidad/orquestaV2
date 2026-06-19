@@ -1,0 +1,98 @@
+{
+  "request_id": "req-bolsa-vec-audit-candidate-id-20260619",
+  "correlation_id": "corr-bolsa-vec-audit-candidate-id-20260619",
+  "requested_by": "operador-bolsa-diputacion",
+  "occurred_at": "2026-06-19T18:35:00Z",
+  "max_bursts": 8,
+  "max_steps_per_burst": 10,
+  "max_dispatches_per_wait": 6,
+  "max_commands": 32,
+  "max_outbox_per_cycle": 16,
+  "autoprogramming_request": {
+    "request_ref": "bolsa-vec-audit-candidate-id-20260619",
+    "project_ref": "bolsa-diputacion-granada",
+    "worktree_ref": "worktree-bolsa-vec-audit-candidate-id-20260619",
+    "worktree_isolated": true,
+    "branch_ref": "branch-bolsa-vec-audit-candidate-id-20260619",
+    "max_write_set_entries": 10,
+    "write_set": [
+      "docs/portal_vec/bolsa_flow_contract_2026-06-19.md",
+      "internal/candidate/adapters/handler/routes.go",
+      "internal/candidate/adapters/handler/administrative_flow_test.go",
+      "internal/app/server/server_flow_test.go",
+      "web/static/app.js",
+      "web/static/index.html",
+      "locales/es.json"
+    ],
+    "required_tests": [
+      "go test ./..."
+    ],
+    "tasks": [
+      {
+        "task_ref": "bolsa-audit-candidate-id-contract",
+        "area": "contract",
+        "title": "Contrato publico de auditoria por candidate_id",
+        "objective": "Actualiza el contrato/documentacion para que GET /api/audit?candidate_id={id} sea el contrato publico principal de auditoria global VEC. scope=candidate:{id} puede mantenerse solo como compatibilidad interna/backward compatible, pero no debe ser la forma usada por UI ni tests de flujo principal. No declares notificacion fehaciente productiva; mantener prototipo con recibos trazables en memoria.",
+        "write_set": [
+          "docs/portal_vec/bolsa_flow_contract_2026-06-19.md"
+        ],
+        "required_tests": [
+          "go test ./..."
+        ],
+        "acceptance_criteria": [
+          "El contrato menciona explicitamente GET /api/audit?candidate_id={id}.",
+          "scope queda etiquetado como compatibilidad, no como API principal.",
+          "No se cambia la frontera VEC modular ni se introduce login propio."
+        ]
+      },
+      {
+        "task_ref": "bolsa-audit-candidate-id-http",
+        "area": "http",
+        "title": "Handler global audit normaliza candidate_id a scope interno",
+        "objective": "Cambia el adaptador HTTP para que GET /api/audit?candidate_id={id} funcione y normalice internamente a scope candidate:{id} antes de llamar al caso de uso ListAuditByScope. Mantener soporte opcional de scope para compatibilidad. No metas reglas de negocio en el handler salvo normalizacion de entrada HTTP; dominio/usecases siguen igual. Anade tests httptest positivos y negativos para candidate_id.",
+        "write_set": [
+          "internal/candidate/adapters/handler/routes.go",
+          "internal/candidate/adapters/handler/administrative_flow_test.go"
+        ],
+        "required_tests": [
+          "go test ./internal/candidate/adapters/handler/..."
+        ],
+        "depends_on": [
+          "bolsa-audit-candidate-id-contract"
+        ],
+        "acceptance_criteria": [
+          "GET /api/audit?candidate_id=cand-1 responde 200 para staff y devuelve auditoria del candidato.",
+          "GET /api/audit?scope=candidate:cand-1 sigue funcionando como compatibilidad.",
+          "GET /api/audit sin candidate_id ni scope devuelve error controlado.",
+          "El handler no expone ni exige formato interno candidate:{id} como entrada principal."
+        ]
+      },
+      {
+        "task_ref": "bolsa-audit-candidate-id-ui-smoke",
+        "area": "ui-smoke",
+        "title": "UI y smoke usan candidate_id en auditoria global",
+        "objective": "Actualiza la UI y los tests de servidor para usar /api/audit?candidate_id={id}. El test internal/app/server/server_flow_test.go debe fallar si solo funciona scope y no candidate_id. Mantener i18n, botones funcionales y flujo administrativo denso ya existente.",
+        "write_set": [
+          "internal/app/server/server_flow_test.go",
+          "web/static/app.js",
+          "web/static/index.html",
+          "locales/es.json"
+        ],
+        "required_tests": [
+          "go test ./...",
+          "node --check web/static/app.js",
+          "python3 -m json.tool locales/es.json"
+        ],
+        "depends_on": [
+          "bolsa-audit-candidate-id-http"
+        ],
+        "acceptance_criteria": [
+          "server_flow_test.go llama /api/audit?candidate_id=cand-flow.",
+          "web/static/app.js llama /api/audit?candidate_id=... cuando el endpoint global existe.",
+          "La UI no pide al usuario escribir candidate:{id} para el flujo normal.",
+          "go test ./... pasa."
+        ]
+      }
+    ]
+  }
+}
