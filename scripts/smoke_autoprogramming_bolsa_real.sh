@@ -360,7 +360,7 @@ start_bolsa_app_if_present() {
     return 0
   fi
   local app_addr="${ORQUESTA_BOLSA_APP_ADDR:-127.0.0.1:0}"
-  BOLSA_HTTP_ADDR="$app_addr" go run -buildvcs=false ./cmd/bolsa-server \
+  (cd "$project_dir" && BOLSA_HTTP_ADDR="$app_addr" go run -buildvcs=false ./cmd/bolsa-server) \
     >"$app_stdout" 2>"$app_stderr" &
   app_pid="$!"
   for _ in $(seq 1 80); do
