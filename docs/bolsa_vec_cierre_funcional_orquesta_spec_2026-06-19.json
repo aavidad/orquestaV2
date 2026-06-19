@@ -1,0 +1,176 @@
+{
+  "request_id": "req-bolsa-vec-cierre-funcional-20260619",
+  "correlation_id": "corr-bolsa-vec-cierre-funcional-20260619",
+  "requested_by": "operador-bolsa-diputacion",
+  "occurred_at": "2026-06-19T17:40:00Z",
+  "max_bursts": 12,
+  "max_steps_per_burst": 10,
+  "max_dispatches_per_wait": 6,
+  "max_commands": 56,
+  "max_outbox_per_cycle": 24,
+  "autoprogramming_request": {
+    "request_ref": "bolsa-vec-cierre-funcional-20260619",
+    "project_ref": "bolsa-diputacion-granada",
+    "worktree_ref": "worktree-bolsa-vec-cierre-funcional-20260619",
+    "worktree_isolated": true,
+    "branch_ref": "branch-bolsa-vec-cierre-funcional-20260619",
+    "max_write_set_entries": 36,
+    "write_set": [
+      "README.md",
+      "docs/portal_vec/bolsa_flow_contract_2026-06-19.md",
+      "internal/candidate/ports/administrative_flow.go",
+      "internal/candidate/usecases/administrative_flow.go",
+      "internal/candidate/usecases/administrative_flow_test.go",
+      "internal/candidate/adapters/repository/administrative_flow_memory.go",
+      "internal/candidate/adapters/repository/administrative_flow_memory_test.go",
+      "internal/candidate/adapters/handler/administrative_flow.go",
+      "internal/candidate/adapters/handler/administrative_flow_test.go",
+      "internal/candidate/adapters/handler/routes.go",
+      "internal/candidate/adapters/handler/http.go",
+      "internal/candidate/adapters/handler/professional_portal.go",
+      "internal/candidate/adapters/handler/professional_portal_test.go",
+      "internal/candidate/application/professional_portal.go",
+      "internal/candidate/application/professional_portal_test.go",
+      "internal/app/bootstrap/bootstrap.go",
+      "internal/app/bootstrap/bootstrap_test.go",
+      "internal/app/server/server_flow_test.go",
+      "internal/vec/module.go",
+      "internal/vec/module_test.go",
+      "locales/es.json",
+      "web/static/app.js",
+      "web/static/index.html",
+      "web/static/styles.css"
+    ],
+    "required_tests": [
+      "go test ./..."
+    ],
+    "tasks": [
+      {
+        "task_ref": "bolsa-functional-contract",
+        "area": "contract",
+        "title": "Contrato cerrado para flujos reales de Bolsa dentro de VEC",
+        "objective": "Use skill admin-data-web. Actualiza docs/portal_vec/bolsa_flow_contract_2026-06-19.md y README.md para que el contrato de Bolsa declare una integracion VEC modular con SSO externo y sin login propio. La matriz debe separar API real, demo y local, y para esta ola debe exigir API real para alegaciones, notificaciones y auditoria: POST/GET /api/candidates/{id}/claims, POST/GET /api/notifications, POST /api/notifications/{id}/send, POST /api/notifications/{id}/read y GET /api/audit. No prometas registro/firma productivos: la persistencia sigue siendo memoria de prototipo y los recibos son trazables de prototipo.",
+        "write_set": [
+          "docs/portal_vec/bolsa_flow_contract_2026-06-19.md",
+          "README.md"
+        ],
+        "required_tests": [
+          "go test ./..."
+        ],
+        "acceptance_criteria": [
+          "La matriz UI -> endpoint -> usecase -> puerto -> modo no marca alegaciones, notificaciones ni auditoria como local.",
+          "El documento mantiene Bolsa como modulo enganchable a VEC, no como portal completo.",
+          "Las limitaciones de memoria, SSO simulado y ausencia de registro/firma externos quedan claras."
+        ]
+      },
+      {
+        "task_ref": "bolsa-functional-usecases",
+        "area": "usecases",
+        "title": "Consultas hexagonales para alegaciones, notificaciones y auditoria",
+        "objective": "Extiende puertos, repositorios de memoria y AdministrativeFlowUseCase para listar alegaciones por solicitud, listar notificaciones por candidato y consultar auditoria por scope/candidato. Reutiliza el dominio existente Claim, Notification y AuditEntry; no metas HTTP, JS, textos UI, Orquesta, filesystem ni DB en dominio/usecases. Mantener refs opacas, orden estable y errores por tipos existentes. Si necesitas helpers de vista, dejalos en handler, no en usecases.",
+        "write_set": [
+          "internal/candidate/ports/administrative_flow.go",
+          "internal/candidate/usecases/administrative_flow.go",
+          "internal/candidate/usecases/administrative_flow_test.go",
+          "internal/candidate/adapters/repository/administrative_flow_memory.go",
+          "internal/candidate/adapters/repository/administrative_flow_memory_test.go"
+        ],
+        "required_tests": [
+          "go test ./internal/candidate/usecases/...",
+          "go test ./internal/candidate/adapters/repository/..."
+        ],
+        "acceptance_criteria": [
+          "Los puertos siguen siendo interfaces de dominio/aplicacion sin dependencias de adaptadores.",
+          "La auditoria puede consultarse por scope sin exponer mapas mutables.",
+          "Listados de claims, notifications y audit son deterministas.",
+          "Los tests cubren happy path, not found o vacio, y mutacion defensiva."
+        ]
+      },
+      {
+        "task_ref": "bolsa-functional-http",
+        "area": "http",
+        "title": "Endpoints reales para alegaciones, notificaciones y auditoria",
+        "objective": "Conecta AdministrativeFlowUseCase al Handler HTTP. Implementa candidate-only POST/GET /api/candidates/{id}/claims; staff-only POST/GET /api/notifications; staff-only POST /api/notifications/{id}/send; candidate-only POST /api/notifications/{id}/read; staff-only GET /api/audit?candidate_id={id} o GET /api/audit?scope=candidate:{id}. Mantener envelopes JSON, auth por puerto, decode JSON estricto, errores i18n, timestamps saneados y sin reglas de negocio en handler. Actualiza /api, /api/portal y el manifest VEC para declarar todas las rutas reales.",
+        "write_set": [
+          "internal/candidate/adapters/handler/administrative_flow.go",
+          "internal/candidate/adapters/handler/administrative_flow_test.go",
+          "internal/candidate/adapters/handler/routes.go",
+          "internal/candidate/adapters/handler/http.go",
+          "internal/candidate/adapters/handler/professional_portal.go",
+          "internal/candidate/adapters/handler/professional_portal_test.go",
+          "internal/candidate/application/professional_portal.go",
+          "internal/candidate/application/professional_portal_test.go",
+          "internal/app/bootstrap/bootstrap.go",
+          "internal/app/bootstrap/bootstrap_test.go",
+          "internal/vec/module.go",
+          "internal/vec/module_test.go",
+          "locales/es.json"
+        ],
+        "required_tests": [
+          "go test ./internal/candidate/adapters/handler/...",
+          "go test ./internal/app/...",
+          "go test ./internal/vec/..."
+        ],
+        "depends_on": [
+          "bolsa-functional-usecases",
+          "bolsa-functional-contract"
+        ],
+        "acceptance_criteria": [
+          "Cada endpoint nuevo tiene test httptest de metodo, auth, happy path y error JSON.",
+          "El manifest VEC marca claims, notifications y audit como real y lista sus rutas HTTP.",
+          "/api devuelve catalogo completo de rutas relevantes de Bolsa.",
+          "Ciudadano no accede a endpoints staff y staff no ejecuta acciones propias de ciudadano."
+        ]
+      },
+      {
+        "task_ref": "bolsa-functional-ui",
+        "area": "ui",
+        "title": "UI administrativa con acciones reales o etiquetas honestas",
+        "objective": "Use skill admin-data-web. Actualiza web/static para que Alegaciones, Notificaciones y Auditoria usen los endpoints reales nuevos. Cambia acciones de fila ambiguas: si solo seleccionan fila deben decir Abrir detalle; si dicen Resolver, Validar, Revisar o Enviar deben ejecutar una accion real disponible o quedar etiquetadas como demo/local. El contador de avisos debe salir del estado/capabilities/notificaciones, no quedar fijo en HTML. No metas calculo de baremo ni autorizaciones en JS; el JS llama APIs, renderiza resultados y muestra recibos/i18n.",
+        "write_set": [
+          "web/static/app.js",
+          "web/static/index.html",
+          "web/static/styles.css",
+          "locales/es.json"
+        ],
+        "required_tests": [
+          "go test ./..."
+        ],
+        "depends_on": [
+          "bolsa-functional-http"
+        ],
+        "acceptance_criteria": [
+          "Los botones de Alegaciones, Notificaciones y Auditoria hacen fetch a endpoints reales.",
+          "No quedan botones principales que prometan resolver/validar/enviar sin endpoint real o etiqueta demo/local.",
+          "El contador de avisos es dinamico.",
+          "La pantalla sigue siendo densa y accesible, sin landing page ni textos fuera del catalogo."
+        ]
+      },
+      {
+        "task_ref": "bolsa-functional-smoke",
+        "area": "smoke",
+        "title": "Smoke integral y guardas de cierre funcional",
+        "objective": "Amplia internal/app/server/server_flow_test.go y tests focales para ejecutar el flujo completo por HTTP: candidate -> merits -> baremo -> expediente -> document -> claim -> notification create/send/read -> audit -> manifest. El test debe fallar si claims o notifications aparecen como local en manifest o portal. Incluye chequeo de frontera hexagonal basico: domain/usecases no importan adapters/handler/web/http. No uses servicios externos.",
+        "write_set": [
+          "internal/app/server/server_flow_test.go",
+          "internal/candidate/adapters/handler/administrative_flow_test.go",
+          "internal/candidate/usecases/administrative_flow_test.go",
+          "internal/vec/module_test.go"
+        ],
+        "required_tests": [
+          "go test ./..."
+        ],
+        "depends_on": [
+          "bolsa-functional-http",
+          "bolsa-functional-ui"
+        ],
+        "acceptance_criteria": [
+          "go test ./... recorre todos los endpoints nuevos y antiguos.",
+          "El test comprueba que manifest/portal declaran claims, notifications y audit como real.",
+          "La frontera hexagonal queda protegida por test automatizado.",
+          "No hay servicios externos ni dependencias de VEC shell completo."
+        ]
+      }
+    ]
+  }
+}
