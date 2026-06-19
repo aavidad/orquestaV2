@@ -156,6 +156,120 @@ Campos obligatorios:
 | `events_subscribed` | Eventos que escucha. |
 | `health_route` | Comprobacion de salud del modulo. |
 
+## Ampliaciones propuestas por revision
+
+Los revisores coinciden en que el manifiesto anterior es una base minima, pero
+debe crecer antes de programar una plataforma modular completa. Las ampliaciones
+propuestas son estas:
+
+- Separar `contract_version`, `module_version` y compatibilidad minima del
+  shell. `version` solo no basta para upgrades seguros.
+- Declarar `permissions_declared`, `permission_version`,
+  `permission_migrations` y `default_denied: true`. Los roles sirven para
+  visibilidad inicial; cada accion se autoriza en backend por permiso y regla de
+  negocio.
+- Declarar `security_profile`: clasificacion de datos, scopes API, acciones
+  privilegiadas, politica CSRF/CORS, exportaciones permitidas, firma requerida,
+  confirmaciones y retencion.
+- Declarar `data_classification`, `owner_ref`, `support_level`,
+  `lifecycle_state`, `dependencies`, `document_types`, `event_schemas` e
+  `i18n_catalog_ref`.
+- Ampliar `menu_entries` con `group_ref`, `order`, `icon_ref`, `badge_source`,
+  `default_route`, `breadcrumb_label`, `search_keywords` y `legal_scope`.
+- Normalizar `widgets` por tipos: `pending_actions`, `deadlines`, `drafts`,
+  `legal_notifications`, `recent_expedientes` y `validation_issues`.
+- Declarar `navigation`: breadcrumbs, recientes, favoritos, busqueda global
+  facetada, vuelta al expediente y enlaces cruzados por `expediente_ref`.
+- Declarar `legal_actions`: `submit`, `sign`, `register`, `withdraw`,
+  `allege`, `accept_notification`, `resolve` y `download_receipt`, con permiso,
+  estado origen/destino, confirmacion, recibo, evento y documento asociado.
+- Declarar `case_types`, `expediente_ref_strategy`, `required_evidence`,
+  `timeline_events` y `receipts` para que el expediente global pueda reconstruir
+  historia legal coherente.
+- Declarar `notification_semantics`: puesta a disposicion, comparecencia,
+  aceptacion, plazo, caducidad, canal, acuse, expediente y accion pendiente.
+- Declarar `semantic_color_tokens` y `status_taxonomy` comunes: identidad azul,
+  tramites indigo, meritos/baremo teal o violeta, documentos cian,
+  notificaciones ambar, plazos/riesgo naranja, valido verde, rechazo/error rojo
+  y auditoria gris. El color siempre va acompanado de texto o icono.
+
+Ejemplo de manifiesto extendido, aun pendiente de validar como JSON Schema:
+
+```json
+{
+  "contract_version": "vec.module.contract.v1",
+  "module_ref": "vec.module.bolsa",
+  "module_version": "0.1.0",
+  "min_shell_version": "0.1.0",
+  "lifecycle_state": "enabled",
+  "owner_ref": "rrhh.seleccion",
+  "support_level": "business_hours",
+  "data_classification": "administrative_sensitive",
+  "security_profile": {
+    "default_denied": true,
+    "csrf_required": true,
+    "export_allowed": true,
+    "privileged_actions": ["bolsa.listado.publish"]
+  },
+  "permissions_declared": [
+    "bolsa.dashboard.read",
+    "bolsa.solicitud.read",
+    "bolsa.solicitud.submit",
+    "bolsa.autobaremo.calculate",
+    "bolsa.alegacion.submit"
+  ],
+  "permission_version": "bolsa.permissions.v1",
+  "document_types": ["bolsa.solicitud", "bolsa.merito", "bolsa.recibo"],
+  "event_schemas": ["bolsa.events.v1"],
+  "i18n_catalog_ref": "i18n.bolsa.es.v1",
+  "navigation": {
+    "breadcrumb_root": "module.bolsa.title",
+    "supports_recent_items": true,
+    "global_search_facets": ["convocatoria", "expediente", "estado"]
+  },
+  "legal_actions": [
+    {
+      "action_ref": "bolsa.solicitud.submit",
+      "required_permissions": ["bolsa.solicitud.submit"],
+      "from_state": "draft",
+      "to_state": "submitted",
+      "confirmation_required": true,
+      "receipt_type": "bolsa.recibo.presentacion",
+      "event_type": "bolsa.solicitud_registrada"
+    }
+  ]
+}
+```
+
+## Registry y ciclo de vida
+
+El registro de modulos no debe limitarse a guardar manifiestos. Debe validar y
+exponer una vista filtrada por usuario.
+
+Estados propuestos:
+
+```text
+registered -> validated -> enabled -> degraded -> disabled -> retired
+```
+
+Validaciones del registry:
+
+- Colision de `module_ref`, `base_route`, `api_prefix`, permisos, widgets,
+  slots, eventos, tipos documentales y claves i18n.
+- Compatibilidad entre `contract_version`, `module_version` y version del shell.
+- Estado de salud del modulo y degradacion visible en tablero operativo.
+- Vista filtrada por `VECPrincipal`, sin entregar catalogo bruto sensible al
+  frontend.
+
+Ciclo de vida propuesto:
+
+```text
+Validate -> Install -> Enable -> Disable -> Upgrade -> Rollback -> HealthCheck -> Drain
+```
+
+Si un modulo se deshabilita, debe desaparecer del menu, rechazar rutas nuevas,
+cortar suscripciones vivas y conservar auditoria historica.
+
 ## Backend: interfaz comun
 
 El shell debe depender de una interfaz comun, no de paquetes concretos como
@@ -168,6 +282,22 @@ type VECModuleProvider interface {
     DashboardWidgets(ctx context.Context, principal VECPrincipal) ([]VECWidget, error)
     Routes() []VECHTTPRoute
     Health(ctx context.Context) VECModuleHealth
+}
+```
+
+Revision propuesta: separar descriptor puro y adaptadores de transporte para no
+meter HTTP dentro del contrato de dominio.
+
+```go
+type VECModuleDescriptor interface {
+    Manifest(ctx context.Context) (VECModuleManifest, error)
+    Menu(ctx context.Context, principal VECPrincipal) ([]VECMenuEntry, error)
+    DashboardWidgets(ctx context.Context, principal VECPrincipal) ([]VECWidget, error)
+    Health(ctx context.Context) VECModuleHealth
+}
+
+type VECModuleHTTPAdapter interface {
+    Routes() []VECHTTPRoute
 }
 ```
 
@@ -184,6 +314,12 @@ type VECPrincipal struct {
     AuthMethod     string // kerberos_ad
     SessionRef     string
     CorrelationRef string
+    IssuedAt       string
+    ExpiresAt      string
+    AuthStrength   string
+    ClaimsVersion  string
+    OrgScopes      []string
+    DelegationRef  string
 }
 ```
 
@@ -192,10 +328,27 @@ Reglas:
 - `VECPrincipal` llega ya autenticado al modulo.
 - El modulo puede autorizar por permisos, unidad, rol o regla de negocio, pero
   no puede pedir credenciales.
+- El frontend nunca aporta roles ni permisos como verdad. Todo claim operativo
+  se deriva en shell/backend desde Kerberos/AD y fuentes autorizadas.
+- El dominio del modulo no debe recibir el principal completo si no lo necesita;
+  debe bastar un `ActorContext` minimo o una decision de autorizacion emitida
+  por puerto.
 - Las reglas de dominio viven en casos de uso del modulo.
 - Los handlers HTTP del modulo solo adaptan transporte, DTOs e i18n.
 - Los permisos se expresan como claves: `bolsa.solicitud.read`,
   `nomina.recibo.download`, `permisos.solicitud.submit`, etc.
+
+Puertos transversales minimos:
+
+```text
+IdentityPort
+PermissionPort
+AuditPort
+DocumentPort
+NotificationPort
+RegistryPort
+SearchIndexPort
+```
 
 ## Frontend: interfaz comun
 
@@ -232,6 +385,18 @@ Reglas:
 - Todo texto visible usa i18n por claves. No hay literales de producto en
   componentes reutilizables.
 
+Componentes base que deben ser comunes:
+
+- Tabla densa con filtros, orden, acciones por fila, acciones masivas, estados
+  empty/loading/error/bloqueado y exportacion si el permiso lo permite.
+- Panel derecho de expediente con tabs `Resumen`, `Datos`, `Documentos`,
+  `Comunicaciones`, `Historial` y `Auditoria`.
+- Timeline con evento, fecha, actor, recibo/ref, estado resultante y enlace al
+  documento o tramite.
+- Confirmacion de acciones legales con expediente, estado origen/destino,
+  documentos afectados, recibo previsto y plazo.
+- Buzon de notificaciones con prioridad por plazo y efecto legal.
+
 ## Eventos estandar
 
 Todos los modulos publican eventos con envelope comun.
@@ -245,10 +410,25 @@ Todos los modulos publican eventos con envelope comun.
   "actor_ref": "employee-ref",
   "occurred_at": "2026-06-19T12:00:00Z",
   "correlation_ref": "corr-...",
+  "causation_ref": "evt-previo-o-accion",
+  "aggregate_ref": "expediente-ref",
+  "idempotency_key": "module-action-target-v1",
+  "payload_schema_ref": "bolsa.autobaremo_calculado.v1",
   "payload_ref": "opaque-payload-ref",
-  "audit_level": "administrative"
+  "audit_level": "administrative",
+  "result": "accepted",
+  "retention_class": "administrative_record"
 }
 ```
+
+Semantica de eventos:
+
+- Publicacion por outbox/inbox cuando haya persistencia.
+- Entrega tolerante a duplicados, eventos tardios y reintentos.
+- Orden garantizado como minimo por `aggregate_ref`.
+- Deduplicacion por `event_ref` e `idempotency_key`.
+- Versionado por `payload_schema_ref`.
+- Auditoria tambien para acciones fallidas relevantes, no solo exitos.
 
 Eventos transversales recomendados:
 
@@ -356,6 +536,22 @@ Un modulo VEC solo se acepta si cumple:
 - `gate-audit`: acciones administrativas emiten evento auditable.
 - `gate-health`: expone salud del modulo.
 - `gate-tests`: pruebas focales del modulo y prueba de integracion con shell.
+- `gate-security-profile`: clasificacion, retencion, exportacion, CSRF/CORS y
+  acciones privilegiadas declaradas.
+- `gate-auth-context`: contexto de identidad emitido por shell/backend, no por
+  frontend, con caducidad y version de claims.
+- `gate-permission-catalog`: permisos versionados, denegacion por defecto y
+  migraciones de permisos.
+- `gate-api-authz-per-action`: cada caso de uso autoriza en backend, no solo en
+  menu ni handler.
+- `gate-event-idempotency`: eventos con schema, causation, aggregate,
+  idempotency key y deduplicacion.
+- `gate-sensitive-data`: minimizacion, clasificacion y control de exportacion
+  para datos sensibles como nomina, IRPF, salud laboral o accion social.
+- `gate-i18n-catalog-complete`: catalogos por locale, fallback controlado,
+  pluralizacion/formato y prueba contra literales visibles.
+- `gate-no-domain-imports-from-shell`: dominio/casos de uso no importan shell,
+  HTTP, DB concreta, Orquesta ni modulos internos ajenos.
 
 ## Preguntas para discutir con otros agentes
 
@@ -373,6 +569,11 @@ Un modulo VEC solo se acepta si cumple:
    existentes?
 7. Que prueba minima debe demostrar que un modulo se puede instalar, ver en
    menu, ejecutar una accion, emitir evento y auditarse?
+8. El frontend de modulos debe entrar por imports locales, web components,
+   microfrontends remotos o bundles firmados por modulo?
+9. RUM/meritos debe nacer como `vec.module.rum`, como capability comun o como
+   parte inicial de Bolsa con plan de extraccion?
+10. Que nivel de auditoria probatoria exige cada familia de modulos?
 
 ## Propuesta de primera entrega
 
@@ -391,6 +592,12 @@ tests:
   - usuario Kerberos salta de Dashboard a Bolsa sin nuevo login
   - accion Bolsa emite evento auditable
   - modulo sin permiso no aparece
+  - manifest invalido falla por JSON Schema
+  - ruta/API/permiso/widget/evento/i18n duplicado falla
+  - accion duplicada por idempotency_key no duplica auditoria
+  - modulo disabled desaparece del menu y conserva historico
+  - dominio de Bolsa no importa shell, HTTP, DB concreta ni Orquesta
+  - segundo modulo stub se registra sin codigo especial
 ```
 
 Cuando esto este verde, cada opcion del menu real puede convertirse en modulo
