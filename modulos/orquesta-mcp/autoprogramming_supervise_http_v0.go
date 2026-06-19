@@ -51,7 +51,7 @@ func (handler mcpAutoprogrammingSuperviseHTTPHandlerV0) ServeHTTP(w http.Respons
 		writeMCPAutoprogrammingSuperviseHTTPResultV0(w, http.StatusServiceUnavailable, newMCPAutoprogrammingSuperviseHTTPErrorV0(r, input.MCPRunSupervisorToolInputV0, "executor", "autoprogramming_supervise_no_configurado"), input.OperatorAdvice)
 		return
 	}
-	result, err := handler.executor.Execute(r.Context(), input.MCPRunSupervisorToolInputV0)
+	result, err := handler.executor.Execute(runSupervisorExecutionContextV0(r), input.MCPRunSupervisorToolInputV0)
 	if err != nil {
 		if result.Estado == MCPRunSupervisorEstadoErrorV0 && len(result.Errores) > 0 {
 			writeMCPAutoprogrammingSuperviseHTTPResultV0(w, http.StatusInternalServerError, result, input.OperatorAdvice)

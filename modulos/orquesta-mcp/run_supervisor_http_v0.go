@@ -40,7 +40,7 @@ func (handler mcpRunSupervisorHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r 
 		writeMCPRunSupervisorHTTPV0(w, http.StatusBadRequest, newMCPRunSupervisorHTTPErrorV0(r, input, "body", code))
 		return
 	}
-	result, err := handler.executor.Execute(r.Context(), input)
+	result, err := handler.executor.Execute(runSupervisorExecutionContextV0(r), input)
 	if err != nil {
 		if result.Estado == MCPRunSupervisorEstadoErrorV0 && len(result.Errores) > 0 {
 			writeMCPRunSupervisorHTTPV0(w, http.StatusInternalServerError, result)

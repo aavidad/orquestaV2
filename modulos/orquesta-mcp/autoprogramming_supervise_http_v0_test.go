@@ -36,6 +36,30 @@ func TestMCPAutoprogrammingSuperviseHTTPHandlerV0DelegaEnExecutor(t *testing.T) 
 	}
 }
 
+func TestMCPAutoprogrammingSuperviseHTTPHandlerV0NoCancelaSupervisorPorCierreHTTP(t *testing.T) {
+	executor := &fakeMCPAutoprogrammingSuperviseHTTPExecutorV0{
+		result: MCPRunSupervisorToolResultV0{
+			Estado: MCPRunSupervisorEstadoOKV0,
+			RunRef: "run-ref-autop-supervise-http-cancel-001",
+		},
+	}
+	body := bytes.NewBufferString(`{"run_ref":"run-ref-autop-supervise-http-cancel-001","max_ticks":1}`)
+	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingSuperviseHTTPPathV0, body)
+	ctx, cancel := context.WithCancel(req.Context())
+	cancel()
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	NewMCPAutoprogrammingSuperviseHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if executor.ctxErr != nil {
+		t.Fatalf("executor recibio contexto cancelado: %v", executor.ctxErr)
+	}
+}
+
 func TestMCPAutoprogrammingSuperviseTransportV0QuedaOptInSinPuerto(t *testing.T) {
 	transport := newFakeMCPTransportV0()
 	if err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{}); err != nil {
@@ -299,15 +323,17 @@ func TestMCPAutoprogrammingSuperviseHTTPHandlerV0RechazaBodyConTrailingData(t *t
 
 type fakeMCPAutoprogrammingSuperviseHTTPExecutorV0 struct {
 	input  MCPRunSupervisorToolInputV0
+	ctxErr error
 	result MCPRunSupervisorToolResultV0
 	err    error
 }
 
 func (executor *fakeMCPAutoprogrammingSuperviseHTTPExecutorV0) Execute(
-	_ context.Context,
+	ctx context.Context,
 	input MCPRunSupervisorToolInputV0,
 ) (MCPRunSupervisorToolResultV0, error) {
 	executor.input = input
+	executor.ctxErr = ctx.Err()
 	if executor.err != nil {
 		return executor.result, executor.err
 	}

@@ -46,6 +46,30 @@ func TestMCPRunSupervisorHTTPHandlerV0DelegaEnExecutor(t *testing.T) {
 	}
 }
 
+func TestMCPRunSupervisorHTTPHandlerV0NoCancelaSupervisorPorCierreHTTP(t *testing.T) {
+	executor := &fakeMCPRunSupervisorHTTPExecutorV0{
+		result: MCPRunSupervisorToolResultV0{
+			Estado: MCPRunSupervisorEstadoOKV0,
+			RunRef: "run-ref-supervisor-http-cancel-001",
+		},
+	}
+	body := bytes.NewBufferString(`{"run_ref":"run-ref-supervisor-http-cancel-001","max_ticks":1}`)
+	req := httptest.NewRequest(http.MethodPost, MCPRunSupervisorHTTPPathV0, body)
+	ctx, cancel := context.WithCancel(req.Context())
+	cancel()
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	NewMCPRunSupervisorHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if executor.ctxErr != nil {
+		t.Fatalf("executor recibio contexto cancelado: %v", executor.ctxErr)
+	}
+}
+
 func TestMCPRunSupervisorHTTPHandlerV0PropagaErrorPublicoDelExecutor(t *testing.T) {
 	input := MCPRunSupervisorToolInputV0{
 		RequestID:     "request-ref-run-supervisor-http-error-001",
@@ -145,15 +169,17 @@ func TestMCPRunSupervisorHTTPHandlerV0SoloPOST(t *testing.T) {
 
 type fakeMCPRunSupervisorHTTPExecutorV0 struct {
 	input  MCPRunSupervisorToolInputV0
+	ctxErr error
 	result MCPRunSupervisorToolResultV0
 	err    error
 }
 
 func (executor *fakeMCPRunSupervisorHTTPExecutorV0) Execute(
-	_ context.Context,
+	ctx context.Context,
 	input MCPRunSupervisorToolInputV0,
 ) (MCPRunSupervisorToolResultV0, error) {
 	executor.input = input
+	executor.ctxErr = ctx.Err()
 	if executor.result.Estado == "" {
 		executor.result = MCPRunSupervisorToolResultV0{Estado: MCPRunSupervisorEstadoOKV0}
 	}
