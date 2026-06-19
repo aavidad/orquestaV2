@@ -14,6 +14,21 @@ ORQUESTA_BOLSA_APP_ADDR=127.0.0.1:18082 \
 scripts/smoke_autoprogramming_bolsa_real.sh
 ```
 
+## Reproducir el cierre 100 productizable
+
+```bash
+ORQUESTA_BOLSA_REAL_SMOKE_CONFIRM=1 \
+ORQUESTA_BOLSA_REAL_CODEX_EXECUTION_CONFIRMED=1 \
+ORQUESTA_KEEP_SMOKE_DIR=1 \
+ORQUESTA_SMOKE_ROOT=/tmp/orquesta-bolsa-100-productizable-repro \
+ORQUESTA_BOLSA_REAL_RUN_REF=bolsa-100-productizable-repro \
+ORQUESTA_BOLSA_SPEC_PATH=/home/alberto/Trabajo/orquesta/docs/bolsa_100_productizable_local_orquesta_spec_2026-06-19.json \
+ORQUESTA_BOLSA_APP_SOURCE_DIR=/home/alberto/Trabajo/Bolsa_Diputacion_app \
+ORQUESTA_BOLSA_APP_ADDR=127.0.0.1:18082 \
+ORQUESTA_BOLSA_REAL_SUPERVISE_TICKS=4 \
+scripts/smoke_autoprogramming_bolsa_real.sh
+```
+
 El script compila `cmd/orquesta-server`, arranca un servidor temporal, llama a
 `/api/v0/autoprogramming/prepare-run`, supervisa el `run_ref` devuelto con
 `/api/v0/runs/supervise`, espera cierre causal, ejecuta `go test -count=1 ./...`
