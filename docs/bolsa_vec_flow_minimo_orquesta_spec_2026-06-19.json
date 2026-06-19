@@ -1,0 +1,206 @@
+{
+  "request_id": "req-bolsa-vec-flow-minimo-20260619",
+  "correlation_id": "corr-bolsa-vec-flow-minimo-20260619",
+  "requested_by": "operador-bolsa-diputacion",
+  "occurred_at": "2026-06-19T16:40:00Z",
+  "max_bursts": 10,
+  "max_steps_per_burst": 10,
+  "max_dispatches_per_wait": 6,
+  "max_commands": 48,
+  "max_outbox_per_cycle": 24,
+  "autoprogramming_request": {
+    "request_ref": "bolsa-vec-flow-minimo-20260619",
+    "project_ref": "bolsa-diputacion-granada",
+    "worktree_ref": "worktree-bolsa-vec-flow-minimo-20260619",
+    "worktree_isolated": true,
+    "branch_ref": "branch-bolsa-vec-flow-minimo-20260619",
+    "max_write_set_entries": 90,
+    "write_set": [
+      "README.md",
+      "docs/portal_vec/bolsa_flow_contract_2026-06-19.md",
+      "internal/candidate/domain/document_flow.go",
+      "internal/candidate/domain/document_flow_test.go",
+      "internal/candidate/domain/claim.go",
+      "internal/candidate/domain/claim_test.go",
+      "internal/candidate/domain/notification.go",
+      "internal/candidate/domain/notification_test.go",
+      "internal/candidate/ports/administrative_flow.go",
+      "internal/candidate/usecases/administrative_flow.go",
+      "internal/candidate/usecases/administrative_flow_test.go",
+      "internal/candidate/adapters/repository/administrative_flow_memory.go",
+      "internal/candidate/adapters/repository/administrative_flow_memory_test.go",
+      "internal/candidate/adapters/handler/administrative_flow.go",
+      "internal/candidate/adapters/handler/administrative_flow_test.go",
+      "internal/candidate/adapters/handler/routes.go",
+      "internal/candidate/adapters/handler/http.go",
+      "internal/app/bootstrap/bootstrap.go",
+      "internal/app/bootstrap/bootstrap_test.go",
+      "internal/vec/module.go",
+      "internal/vec/module_test.go",
+      "internal/candidate/adapters/handler/vec_module.go",
+      "internal/candidate/adapters/handler/vec_module_test.go",
+      "internal/candidate/application/professional_portal.go",
+      "internal/candidate/application/professional_portal_test.go",
+      "web/static/app.js",
+      "web/static/styles.css",
+      "web/static/index.html",
+      "locales/es.json",
+      "internal/app/server/server_flow_test.go"
+    ],
+    "required_tests": [
+      "go test ./..."
+    ],
+    "tasks": [
+      {
+        "task_ref": "bolsa-flow-contract",
+        "area": "contract",
+        "title": "Contrato funcional de botones y flujos Bolsa/VEC",
+        "objective": "Use skill admin-data-web. Crea docs/portal_vec/bolsa_flow_contract_2026-06-19.md con una matriz accion UI -> endpoint/API -> caso de uso -> puerto -> estado real/demo/local -> clave i18n. Aplica docs/portal_vec/contrato_modulos_vec.md y docs/portal_vec/dominio_y_autobaremacion.md. La matriz debe declarar que Bolsa es vec.module.bolsa, sin login propio, con SSO/Kerberos recibido por el shell VEC, y debe distinguir que ahora implementamos un vertical minimo real de documentos, alegaciones, notificaciones, auditoria y manifiesto VEC. No inventes produccion juridica: si algo queda simulado, etiquetalo como simulado.",
+        "write_set": [
+          "docs/portal_vec/bolsa_flow_contract_2026-06-19.md",
+          "README.md"
+        ],
+        "required_tests": [
+          "go test ./..."
+        ],
+        "acceptance_criteria": [
+          "Existe una matriz accion UI -> endpoint -> usecase -> puerto -> i18n.",
+          "Los botones principales quedan clasificados como real, demo o local sin prometer validez juridica falsa.",
+          "El documento mantiene Bolsa como modulo VEC acoplable, no como shell VEC monolitico."
+        ]
+      },
+      {
+        "task_ref": "bolsa-flow-domain-usecases",
+        "area": "domain-usecases",
+        "title": "Dominio y casos de uso puros para documentos, alegaciones, notificaciones y auditoria",
+        "objective": "Implementa dominio, puertos y casos de uso hexagonales para registrar documentos ENI/CSV sobre candidato, presentar alegaciones, crear/listar notificaciones y registrar eventos auditables. Reutiliza domain/evidence.go y domain/audit.go; no metas HTTP, filesystem, DB, Orquesta ni textos UI en dominio/usecases. Los casos de uso deben devolver recibos trazables con refs opacas, estado y timestamps inyectables o deterministas en tests. Incluye tests unitarios de transiciones y errores. Mantener nombres y codigos de estado pensados para i18n.",
+        "write_set": [
+          "internal/candidate/domain/document_flow.go",
+          "internal/candidate/domain/document_flow_test.go",
+          "internal/candidate/domain/claim.go",
+          "internal/candidate/domain/claim_test.go",
+          "internal/candidate/domain/notification.go",
+          "internal/candidate/domain/notification_test.go",
+          "internal/candidate/ports/administrative_flow.go",
+          "internal/candidate/usecases/administrative_flow.go",
+          "internal/candidate/usecases/administrative_flow_test.go"
+        ],
+        "required_tests": [
+          "go test ./internal/candidate/domain/...",
+          "go test ./internal/candidate/usecases/..."
+        ],
+        "acceptance_criteria": [
+          "Dominio y usecases no importan adaptadores, HTTP, DB ni web.",
+          "Documentos usan CSV/ENI/AVStatus y no permiten exportar evidencias no limpias como si fueran definitivas.",
+          "Alegaciones y notificaciones tienen estados y recibos auditables.",
+          "Auditoria se registra por puerto y usa el modelo de hash/firma ya existente."
+        ]
+      },
+      {
+        "task_ref": "bolsa-flow-memory-adapters",
+        "area": "memory-adapters",
+        "title": "Adaptadores en memoria para el vertical administrativo",
+        "objective": "Implementa adaptadores de memoria thread-safe para los puertos creados en bolsa-flow-domain-usecases: documentos, alegaciones, notificaciones y auditoria. Deben ser solo adaptadores; no meter reglas de negocio aqui. Incluye tests de contrato/reinicio basico en memoria y orden estable de listados.",
+        "write_set": [
+          "internal/candidate/adapters/repository/administrative_flow_memory.go",
+          "internal/candidate/adapters/repository/administrative_flow_memory_test.go"
+        ],
+        "required_tests": [
+          "go test ./internal/candidate/adapters/repository/..."
+        ],
+        "depends_on": [
+          "bolsa-flow-domain-usecases"
+        ],
+        "acceptance_criteria": [
+          "Repositorios en memoria implementan los puertos sin filtrar mapas mutables.",
+          "Operaciones concurrentes basicas son seguras.",
+          "Listados devuelven orden determinista para UI y tests."
+        ]
+      },
+      {
+        "task_ref": "bolsa-flow-http-vec",
+        "area": "http-vec",
+        "title": "Endpoints REST y manifiesto VEC de Bolsa",
+        "objective": "Conecta los casos de uso administrativos al Handler HTTP con endpoints finos bajo /api. Implementa POST/GET /api/candidates/{id}/documents, POST/GET /api/candidates/{id}/claims, POST/GET /api/notifications, GET /api/audit y GET /api/modules/bolsa/manifest + /api/modules/bolsa/healthz. Respeta roles: candidate para sus documentos/alegaciones, staff para notificaciones/auditoria/portal. Usa envelopes JSON existentes, decode JSON estricto, errores por i18n y auth por puerto. Crea internal/vec/module.go como contrato minimo de manifiesto VEC reutilizable por futuros modulos, sin construir el shell VEC completo. Actualiza bootstrap para cablear memoria/usecases y /api/portal para declarar capabilities real/demo/local.",
+        "write_set": [
+          "internal/vec/module.go",
+          "internal/vec/module_test.go",
+          "internal/candidate/adapters/handler/administrative_flow.go",
+          "internal/candidate/adapters/handler/administrative_flow_test.go",
+          "internal/candidate/adapters/handler/vec_module.go",
+          "internal/candidate/adapters/handler/vec_module_test.go",
+          "internal/candidate/adapters/handler/routes.go",
+          "internal/candidate/adapters/handler/http.go",
+          "internal/app/bootstrap/bootstrap.go",
+          "internal/app/bootstrap/bootstrap_test.go",
+          "internal/candidate/application/professional_portal.go",
+          "internal/candidate/application/professional_portal_test.go",
+          "locales/es.json"
+        ],
+        "required_tests": [
+          "go test ./internal/vec/...",
+          "go test ./internal/candidate/adapters/handler/...",
+          "go test ./internal/app/..."
+        ],
+        "depends_on": [
+          "bolsa-flow-domain-usecases",
+          "bolsa-flow-memory-adapters",
+          "bolsa-flow-contract"
+        ],
+        "acceptance_criteria": [
+          "Cada endpoint tiene test httptest de metodo, auth, happy path y error JSON.",
+          "El manifiesto VEC usa module_ref vec.module.bolsa, base_route /bolsa y api_prefix /api/modules/bolsa.",
+          "El portal declara capabilities real/demo/local y no oculta rutas funcionales.",
+          "Los textos visibles nuevos salen de locales/es.json o claves i18n, no de dominio."
+        ]
+      },
+      {
+        "task_ref": "bolsa-flow-ui",
+        "area": "ui",
+        "title": "UI administrativa conectada a los endpoints reales",
+        "objective": "Use skill admin-data-web. Actualiza web/static para que los botones principales llamen endpoints reales cuando existan: registrar documento, registrar alegacion, crear/listar notificaciones, consultar auditoria, ver manifiesto VEC y refrescar portal/capabilities. Mantener layout denso, sin landing page, con colores semanticos y sin texto que prometa validez juridica donde el backend sea memoria/demo. No mover reglas de baremo, estados legales ni permisos al JS: el JS solo renderiza, filtra, llama APIs y muestra receipts. Cualquier accion que siga local/demo debe mostrar etiqueta demo/local usando i18n.",
+        "write_set": [
+          "web/static/app.js",
+          "web/static/styles.css",
+          "web/static/index.html",
+          "locales/es.json"
+        ],
+        "required_tests": [
+          "go test ./..."
+        ],
+        "depends_on": [
+          "bolsa-flow-http-vec"
+        ],
+        "acceptance_criteria": [
+          "Los botones Documentos, Alegaciones, Notificaciones, Auditoria y Manifiesto VEC hacen fetch a endpoints reales.",
+          "El JS no calcula baremo ni decide estados legales; renderiza datos del backend.",
+          "La UI mantiene informacion densa, estados claros, recibos y labels real/demo/local.",
+          "Textos nuevos usan i18n o catalogo compartido."
+        ]
+      },
+      {
+        "task_ref": "bolsa-flow-smoke",
+        "area": "smoke",
+        "title": "Smokes de todos los flujos principales",
+        "objective": "Anade pruebas de integracion Go que levanten el servidor/handler con memoria y recorran el flujo candidato -> merito -> baremo -> expediente -> documento -> alegacion -> notificacion -> auditoria -> manifiesto VEC. Verifica tambien negativos de auth: ciudadano no accede a endpoints staff y staff no sustituye acciones propias de candidato salvo endpoints administrativos. Incluye un test de frontera hexagonal basico para que domain/usecases no importen adapters/http/web. No uses servicios externos.",
+        "write_set": [
+          "internal/app/server/server_flow_test.go",
+          "internal/candidate/adapters/handler/administrative_flow_test.go",
+          "internal/candidate/usecases/administrative_flow_test.go"
+        ],
+        "required_tests": [
+          "go test ./..."
+        ],
+        "depends_on": [
+          "bolsa-flow-http-vec",
+          "bolsa-flow-ui"
+        ],
+        "acceptance_criteria": [
+          "go test ./... ejecuta un e2e local que toca todos los endpoints nuevos.",
+          "Hay cobertura negativa de auth candidate/staff.",
+          "Hay test de frontera hexagonal para dominio/usecases."
+        ]
+      }
+    ]
+  }
+}
