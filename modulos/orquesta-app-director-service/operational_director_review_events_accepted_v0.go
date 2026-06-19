@@ -59,11 +59,7 @@ func operationalDirectorPlanAcceptedReviewMatchForDeliveryV0(
 			!startAppDirectorStringInSetV0(run.Reviews, reviewRequest.ReviewRequestID) {
 			continue
 		}
-		reviewResult, ok := operationalDirectorPlanAcceptedReviewResultForRequestV0(run, trace, reviewRequest, deliveryRef)
-		if !ok {
-			continue
-		}
-		acceptedReview, ok := operationalDirectorPlanAcceptedReviewForRequestV0(run, trace, reviewRequest, deliveryRef)
+		reviewResult, acceptedReview, ok := operationalDirectorPlanAcceptedReviewPairForRequestV0(run, trace, reviewRequest, deliveryRef)
 		if !ok {
 			continue
 		}
@@ -82,39 +78,89 @@ func operationalDirectorPlanAcceptedReviewMatchForDeliveryV0(
 	return operationalDirectorPlanAcceptedReviewMatchV0{}, false
 }
 
-func operationalDirectorPlanAcceptedReviewResultForRequestV0(
+func operationalDirectorPlanAcceptedReviewPairForRequestV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	trace operationalDirectorPlanReviewTraceV0,
 	reviewRequest orquestacoreworkflow.ReviewRequestedPayloadV0,
 	deliveryRef string,
-) (orquestacoreworkflow.ReviewResultV0, bool) {
+) (orquestacoreworkflow.ReviewResultV0, orquestacoreworkflow.ReviewAcceptedPayloadV0, bool) {
 	reviewRequestID := strings.TrimSpace(reviewRequest.ReviewRequestID)
-	for _, reviewResultRef := range trace.ReviewResultRefs {
-		reviewResult := trace.ReviewResults[reviewResultRef]
-		if strings.TrimSpace(reviewResult.ReviewRequestID) == reviewRequestID &&
-			strings.TrimSpace(reviewResult.DeliveryRef) == deliveryRef &&
-			orquestacoreworkflow.ReviewResultStatusV0(strings.TrimSpace(string(reviewResult.Status))) == orquestacoreworkflow.ReviewResultStatusAcceptedV0 &&
-			operationalDirectorPlanProjectionReflectedV0(reviewResult.ReviewResultRef, run.ReviewResults) {
-			return reviewResult, true
-		}
-	}
-	return orquestacoreworkflow.ReviewResultV0{}, false
-}
-
-func operationalDirectorPlanAcceptedReviewForRequestV0(
-	run orquestacoreworkflow.OrchestrationRunV0,
-	trace operationalDirectorPlanReviewTraceV0,
-	reviewRequest orquestacoreworkflow.ReviewRequestedPayloadV0,
-	deliveryRef string,
-) (orquestacoreworkflow.ReviewAcceptedPayloadV0, bool) {
-	reviewRequestID := strings.TrimSpace(reviewRequest.ReviewRequestID)
+	var fallbackResult orquestacoreworkflow.ReviewResultV0
+	var fallbackAccepted orquestacoreworkflow.ReviewAcceptedPayloadV0
+	haveFallback := false
 	for _, acceptedReviewRef := range trace.AcceptedReviewRefs {
 		acceptedReview := trace.AcceptedReviews[acceptedReviewRef]
-		if strings.TrimSpace(acceptedReview.ReviewRequestID) == reviewRequestID &&
-			strings.TrimSpace(acceptedReview.DeliveryRef) == deliveryRef &&
-			startAppDirectorStringInSetV0(run.AcceptedReviews, acceptedReview.AcceptedReviewRef) {
-			return acceptedReview, true
+		if strings.TrimSpace(acceptedReview.ReviewRequestID) != reviewRequestID ||
+			strings.TrimSpace(acceptedReview.DeliveryRef) != deliveryRef ||
+			!startAppDirectorStringInSetV0(run.AcceptedReviews, acceptedReview.AcceptedReviewRef) {
+			continue
+		}
+		reviewResult, direct, ok := operationalDirectorPlanAcceptedReviewResultForAcceptedV0(run, trace, acceptedReview, deliveryRef)
+		if !ok {
+			continue
+		}
+		if direct {
+			return reviewResult, acceptedReview, true
+		}
+		if !haveFallback {
+			fallbackResult = reviewResult
+			fallbackAccepted = acceptedReview
+			haveFallback = true
 		}
 	}
-	return orquestacoreworkflow.ReviewAcceptedPayloadV0{}, false
+	return fallbackResult, fallbackAccepted, haveFallback
+}
+
+func operationalDirectorPlanAcceptedReviewResultForAcceptedV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	trace operationalDirectorPlanReviewTraceV0,
+	acceptedReview orquestacoreworkflow.ReviewAcceptedPayloadV0,
+	deliveryRef string,
+) (orquestacoreworkflow.ReviewResultV0, bool, bool) {
+	acceptedEvidence := operationalDirectorPlanReviewEvidenceSetV0(acceptedReview.EvidenceRefs)
+	var fallback orquestacoreworkflow.ReviewResultV0
+	haveFallback := false
+	for _, reviewResultRef := range trace.ReviewResultRefs {
+		reviewResult := trace.ReviewResults[reviewResultRef]
+		if strings.TrimSpace(reviewResult.ReviewRequestID) != strings.TrimSpace(acceptedReview.ReviewRequestID) ||
+			strings.TrimSpace(reviewResult.DeliveryRef) != deliveryRef ||
+			orquestacoreworkflow.ReviewResultStatusV0(strings.TrimSpace(string(reviewResult.Status))) != orquestacoreworkflow.ReviewResultStatusAcceptedV0 ||
+			!operationalDirectorPlanProjectionReflectedV0(reviewResult.ReviewResultRef, run.ReviewResults) {
+			continue
+		}
+		if operationalDirectorPlanReviewResultMatchesAcceptedV0(reviewResult, acceptedEvidence) {
+			return reviewResult, true, true
+		}
+		if !haveFallback {
+			fallback = reviewResult
+			haveFallback = true
+		}
+	}
+	return fallback, false, haveFallback
+}
+
+func operationalDirectorPlanReviewResultMatchesAcceptedV0(
+	reviewResult orquestacoreworkflow.ReviewResultV0,
+	acceptedEvidence map[string]bool,
+) bool {
+	if len(acceptedEvidence) == 0 {
+		return false
+	}
+	if acceptedEvidence[strings.TrimSpace(reviewResult.ReviewResultRef)] {
+		return true
+	}
+	for _, evidenceRef := range reviewResult.EvidenceRefs {
+		if acceptedEvidence[strings.TrimSpace(evidenceRef)] {
+			return true
+		}
+	}
+	return false
+}
+
+func operationalDirectorPlanReviewEvidenceSetV0(values []string) map[string]bool {
+	out := map[string]bool{}
+	for _, value := range compactServiceRefsV0(values) {
+		out[strings.TrimSpace(value)] = true
+	}
+	return out
 }

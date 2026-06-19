@@ -66,8 +66,16 @@ func (lifecycle CodexSupervisorStackLifecycleV0) drainRunV0(
 	}
 	snapshot := lifecycle.codexSupervisorSnapshotFromDrainV0(ctx, request.RunRef, request.OperationalDirectorPlanRef, result)
 	if err != nil {
-		if codexSupervisorDrainRecoverableBlockedV0(result) {
+		if codexSupervisorDrainRecoverableBlockedV0(result) ||
+			codexSupervisorSnapshotRecoverablePlanBlockedV0(snapshot) {
 			snapshot.Status = CodexSupervisorRuntimeStoppedV0
+			snapshot.EvidenceRefs = compactStringsV0(append(
+				snapshot.EvidenceRefs,
+				"evidence-ref-codex-supervisor-stack-drain-recoverable-blocked",
+			))
+			if syncErr := lifecycle.syncDirectDrainRecoverableBlockedQueueStatusV0(ctx, request.RunRef); syncErr != nil {
+				return snapshot, syncErr
+			}
 			return snapshot, nil
 		}
 		snapshot.Status = CodexSupervisorRuntimeFailedV0
@@ -120,6 +128,62 @@ func (lifecycle CodexSupervisorStackLifecycleV0) syncDirectDrainTerminalQueueSta
 			EvidenceRefs: compactStringsV0(append(
 				candidate.EvidenceRefs,
 				"evidence-ref-codex-supervisor-direct-drain-terminal-queue-sync",
+			)),
+			WorksetClaims: candidate.WorksetClaims,
+		})
+		return err
+	}
+	return nil
+}
+
+func (lifecycle CodexSupervisorStackLifecycleV0) syncDirectDrainRecoverableBlockedQueueStatusV0(
+	ctx context.Context,
+	runRef string,
+) error {
+	runRef = strings.TrimSpace(runRef)
+	if runRef == "" || lifecycle.Stack.Stores.RunQueue == nil {
+		return nil
+	}
+	queueConfig := normalizeRunQueueConfigV0(lifecycle.Stack.RunQueue)
+	candidates, err := lifecycle.Stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		ctx,
+		orquestarunqueue.RunQueueReadRequestV0{
+			QueueRef:             queueConfig.QueueRef,
+			IncludeNonExecutable: true,
+		},
+	)
+	if err != nil {
+		return err
+	}
+	queueStatus := orquestarunqueue.RunStatusStoppedV0
+	if lifecycle.Stack.Stores.RunStore != nil {
+		run, err := lifecycle.Stack.Stores.RunStore.LoadRunV0(ctx, runRef)
+		if err == nil && run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+			queueStatus = orquestarunqueue.RunStatusClosedV0
+		}
+	}
+	for _, candidate := range candidates {
+		if strings.TrimSpace(candidate.RunRef) != runRef {
+			continue
+		}
+		_, err = lifecycle.Stack.Stores.RunQueue.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+			RunRef:           candidate.RunRef,
+			QueueRef:         queueConfig.QueueRef,
+			AppRef:           candidate.AppRef,
+			Status:           queueStatus,
+			PriorityScore:    candidate.PriorityScore,
+			UpdatedAt:        stackNowV0(lifecycle.Stack.Clock),
+			FairnessGroupRef: candidate.FairnessGroupRef,
+			AttemptGroup:     candidate.AttemptGroup,
+			ParentRunRef:     candidate.ParentRunRef,
+			SupersedesRunRef: candidate.SupersedesRunRef,
+			RescueReason:     candidate.RescueReason,
+			RequestedBy:      "codex-supervisor-direct-drain",
+			Reason:           "supervise directo reconcilio bloqueo operativo recuperable",
+			IdempotencyKey:   "codex-supervisor-direct-drain-recoverable-blocked:" + runRef + ":" + queueStatus,
+			EvidenceRefs: compactStringsV0(append(
+				candidate.EvidenceRefs,
+				"evidence-ref-codex-supervisor-direct-drain-recoverable-blocked-queue-sync",
 			)),
 			WorksetClaims: candidate.WorksetClaims,
 		})
@@ -309,6 +373,13 @@ func codexSupervisorDrainRecoverableBlockedV0(
 		result.Final.Status == orquestacionnucleoapp.ProgressiveLoopStatusBlockedV0
 }
 
+func codexSupervisorSnapshotRecoverablePlanBlockedV0(
+	snapshot CodexSupervisorRuntimeSnapshotV0,
+) bool {
+	return codexSupervisorEvidenceRefsContainPartV0(snapshot.EvidenceRefs, "operational-director-plan-state:blocked") &&
+		codexSupervisorEvidenceRefsContainPartV0(snapshot.EvidenceRefs, "operational-closure-run-not-active")
+}
+
 func (lifecycle CodexSupervisorStackLifecycleV0) codexSupervisorOperationalBlockedEvidenceRefsV0(
 	ctx context.Context,
 	runRef string,
@@ -410,6 +481,11 @@ func (lifecycle CodexSupervisorStackLifecycleV0) codexSupervisorDrainHasOpenRunW
 ) bool {
 	if run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
 		return false
+	}
+	if len(stackDrainOpenTaskRefsV0(run)) > 0 {
+		if open, err := RunHasOpenProgrammingOrAutonomyTasksV0(ctx, lifecycle.Stack.Stores.TaskStore, run); err != nil || open {
+			return true
+		}
 	}
 	if codexSupervisorRunHasOpenNonOperationalDirectorTasksV0(ctx, lifecycle.Stack.Stores.TaskStore, run) {
 		return true

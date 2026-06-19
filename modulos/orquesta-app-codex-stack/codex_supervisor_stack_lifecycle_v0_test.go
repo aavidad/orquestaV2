@@ -434,6 +434,121 @@ func TestCodexStackRunSupervisorAPIV0BloqueoRequiredTestsEvidenceMissingDevuelve
 	}
 }
 
+func TestCodexStackRunSupervisorAPIV0PlanStateRunNotActiveDevuelveOKYDetieneColaV0(t *testing.T) {
+	ctx := context.Background()
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	planStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0()
+	evidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
+	stack.Stores.OperationalPlanStateWriter = planStore
+	stack.Stores.OperationalPlanStateStore = planStore
+	stack.Stores.RequiredTestEvidenceStore = evidenceStore
+	stack.Ports.OperationalPlanStateWriter = planStore
+	stack.Ports.OperationalPlanStateStore = planStore
+	stack.Ports.RequiredTestEvidenceStore = evidenceStore
+	stack.Ports.RequiredTestRunner = nil
+
+	refs := (codexStackRequiredTestRefsV0{
+		RunRef:  "run-ref-supervisor-plan-state-run-not-active-001",
+		PlanRef: "plan-ref-supervisor-plan-state-run-not-active-001",
+	}).withDefaultsV0()
+	run := refs.runV0()
+	run.Status = orquestacoreworkflow.OrchestrationRunStatusBlockedV0
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	taskWriter, ok := stack.Stores.TaskStore.(orquestacionnucleoapp.WorkflowTaskWriterPortV0)
+	if !ok {
+		t.Fatalf("TaskStore no escribe WorkflowTaskV0: %T", stack.Stores.TaskStore)
+	}
+	if err := taskWriter.SaveWorkflowTaskV0(ctx, refs.workflowTaskV0()); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0: %v", err)
+	}
+	state := refs.planStateV0()
+	state.Status = orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0
+	state.ActiveStepID = "step-replan-or-close"
+	state.ClosureReason = "operational-closure-run-not-active"
+	state.BlockerRefs = []string{"operational-closure-run-not-active"}
+	state.EvidenceRefs = []string{"evidence-ref-app-director-operational-plan-state-closure-blocked-v0"}
+	for index := range state.Steps {
+		if state.Steps[index].StepID != "step-replan-or-close" {
+			continue
+		}
+		state.Steps[index].Status = orquestadirectoroperativo.OperationalDirectorStepBlockedV0
+		state.Steps[index].Reason = "operational-closure-run-not-active"
+		state.Steps[index].BlockerRefs = []string{"operational-closure-run-not-active"}
+		state.Steps[index].EvidenceRefs = []string{"evidence-ref-app-director-operational-plan-state-closure-blocked-v0"}
+	}
+	if err := planStore.SaveOperationalDirectorPlanStateV0(ctx, state); err != nil {
+		t.Fatalf("SaveOperationalDirectorPlanStateV0: %v", err)
+	}
+	if err := stack.Stores.EventSink.AppendRunEventsV0(ctx, refs.RunRef, refs.eventsV0(t)); err != nil {
+		t.Fatalf("AppendRunEventsV0: %v", err)
+	}
+	if _, err := stack.Stores.RunQueue.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        refs.RunRef,
+		QueueRef:      DefaultRunQueueRefV0,
+		AppRef:        run.AppSpecRef,
+		Status:        orquestarunqueue.RunStatusRunningV0,
+		PriorityScore: 90,
+		EvidenceRefs:  []string{"evidence-ref-test-plan-state-run-not-active-running"},
+	}); err != nil {
+		t.Fatalf("SetRunPriorityV0 running: %v", err)
+	}
+
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:                  "request-ref-run-supervisor-plan-state-run-not-active-001",
+		CorrelationID:              "corr-run-supervisor-plan-state-run-not-active-001",
+		RunRef:                     refs.RunRef,
+		OperationalDirectorPlanRef: refs.PlanRef,
+		MaxTicks:                   1,
+		MaxBursts:                  2,
+		MaxStepsPerBurst:           4,
+		MaxDispatchesPerWait:       2,
+		MaxCommands:                8,
+		MaxOutboxPerCycle:          4,
+		MaxDecisionCycles:          1,
+		MaxExternalWaits:           1,
+	}); err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/runs/supervise", body)
+	req.Header.Set("Content-Type", "application/json")
+
+	orquestamcp.NewMCPRunSupervisorHTTPHandlerV0(NewCodexStackRunSupervisorExecutorV0(&stack)).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPRunSupervisorToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	candidates, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		ctx,
+		orquestarunqueue.RunQueueReadRequestV0{
+			QueueRef:             DefaultRunQueueRefV0,
+			IncludeNonExecutable: true,
+		},
+	)
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	if result.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
+		result.RunRef != refs.RunRef ||
+		result.Last.Status != string(CodexSupervisorRuntimeStoppedV0) ||
+		!codexStackRefsContainPartV0(result.Last.EvidenceRefs, "operational-director-plan-state:blocked") ||
+		!codexStackRefsContainPartV0(result.Last.EvidenceRefs, "operational-closure-run-not-active") ||
+		len(candidates) != 1 ||
+		candidates[0].Status != orquestarunqueue.RunStatusStoppedV0 ||
+		orquestarunqueue.IsExecutableRunStatusV0(candidates[0].Status) ||
+		!codexStackRefsContainPartV0(candidates[0].EvidenceRefs, "direct-drain-recoverable-blocked-queue-sync") {
+		t.Fatalf("result=%+v candidates=%+v", result, candidates)
+	}
+}
+
 func TestCodexStackRunSupervisorAPIV0RecuperaPlanRefYReintentaRequiredTestsBloqueadosV0(t *testing.T) {
 	ctx := context.Background()
 	runtime := newFakeCodexStackRuntimeV0()
@@ -808,6 +923,56 @@ func TestCodexSupervisorSnapshotFromDrainV0NoExigeProcesoVivoParaUltimoAgenteEnt
 	if snapshot.Status != CodexSupervisorRuntimeRunningV0 ||
 		snapshot.AgentRef != "" ||
 		codexStackRefsContainPartV0(snapshot.EvidenceRefs, "process-snapshot-missing") {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+}
+
+func TestCodexSupervisorSnapshotFromDrainV0QuiescentConAutoprogramacionAbiertaSigueRunningV0(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	runRef := "run-ref-supervisor-open-autoprogramming-001"
+	taskRef := "task-autoprogramming-open-supervisor-001"
+	taskWriter, ok := stack.Stores.TaskStore.(orquestacionnucleoapp.WorkflowTaskWriterPortV0)
+	if !ok {
+		t.Fatalf("TaskStore no escribe WorkflowTaskV0: %T", stack.Stores.TaskStore)
+	}
+	if err := taskWriter.SaveWorkflowTaskV0(ctx, orquestacoreworkflow.WorkflowTaskV0{
+		SchemaVersion:   orquestacoreworkflow.WorkflowTaskSchemaVersionV0,
+		TaskID:          taskRef,
+		RunID:           runRef,
+		PhaseID:         orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		WorkProfileKind: orquestacoreworkflow.WorkProfileImplementationV0,
+		Title:           "Implementar slice de autoprogramacion",
+		WriteSet:        []string{"internal/app"},
+		AcceptanceCriteria: []string{
+			"autoprogramacion abierta no debe proyectarse como done",
+		},
+		ContextRefs: []string{
+			"request_ref:run-ref-supervisor-open-autoprogramming-001",
+			"operational_director.task_source:autoprogramming",
+		},
+		FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
+			FunctionName: "BuildAutoprogrammingProgrammableWorkV0",
+		}},
+	}); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0: %v", err)
+	}
+	lifecycle := CodexSupervisorStackLifecycleV0{Stack: stack}
+	snapshot := lifecycle.codexSupervisorSnapshotFromDrainV0(ctx, runRef, "", orquestacionnucleoapp.ManagedProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+		Final: orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+			Run: orquestacoreworkflow.OrchestrationRunV0{
+				RunID:        runRef,
+				Status:       orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+				CurrentPhase: orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+				Tasks:        []string{taskRef},
+			},
+		},
+	})
+
+	if snapshot.Status != CodexSupervisorRuntimeRunningV0 ||
+		!codexStackRefsContainPartV0(snapshot.EvidenceRefs, "open-run-work") {
 		t.Fatalf("snapshot=%+v", snapshot)
 	}
 }
