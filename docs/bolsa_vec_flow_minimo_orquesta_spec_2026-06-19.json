@@ -14,7 +14,7 @@
     "worktree_ref": "worktree-bolsa-vec-flow-minimo-20260619",
     "worktree_isolated": true,
     "branch_ref": "branch-bolsa-vec-flow-minimo-20260619",
-    "max_write_set_entries": 90,
+    "max_write_set_entries": 40,
     "write_set": [
       "README.md",
       "docs/portal_vec/bolsa_flow_contract_2026-06-19.md",
