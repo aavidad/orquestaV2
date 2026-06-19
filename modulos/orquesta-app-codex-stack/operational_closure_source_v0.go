@@ -89,6 +89,7 @@ type codexStackOperationalClosureTraceV0 struct {
 	DeliveryRefs    []string
 	ReviewRequests  map[string]orquestacoreworkflow.ReviewRequestedPayloadV0
 	ReviewResults   map[string]orquestacoreworkflow.ReviewResultV0
+	ReviewResultRefs []string
 	AcceptedReviews map[string]orquestacoreworkflow.ReviewAcceptedPayloadV0
 }
 

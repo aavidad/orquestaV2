@@ -58,10 +58,37 @@ func continueOperationalDirectorPlanStateAfterBlockedClosurePrerequisiteV0(
 	case "operational-closure-outbox-pending":
 		// The next loop is the source of truth for pending outbox. Reopen once and
 		// let maybeCloseOperationalDirectorV0 block again if the outbox is still pending.
+	case "operational-closure-issues":
+		if ports.OperationalClosureSource == nil || ports.DirectorTaskStore == nil ||
+			!operationalDirectorBlockedClosureIssuesHaveRequiredTestEvidenceV0(state, activeStep) {
+			return state, false, nil
+		}
 	default:
 		return state, false, nil
 	}
 	return operationalDirectorPlanStateWithClosurePrerequisiteReadyV0(request, state, activeStep)
+}
+
+func operationalDirectorBlockedClosureIssuesHaveRequiredTestEvidenceV0(
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+	activeStep orquestacionnucleoapp.OperationalDirectorPlanStepStateV0,
+) bool {
+	if len(compactServiceRefsV0(activeStep.RequiredTestEvidenceRefs)) == 0 {
+		return false
+	}
+	blockers := compactServiceRefsV0(append(state.BlockerRefs, activeStep.BlockerRefs...))
+	if !startAppDirectorStringInSetV0(blockers, "required_test_evidence_refs") {
+		return false
+	}
+	for _, blocker := range blockers {
+		switch blocker {
+		case "operational-closure-issues", "required_test_evidence_refs", "nucleo_orquestacion_invalido":
+			continue
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func operationalDirectorPlanStateWithClosurePrerequisiteReadyV0(

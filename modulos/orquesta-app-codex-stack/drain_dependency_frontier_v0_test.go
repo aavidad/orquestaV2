@@ -2,12 +2,15 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
 	orquestadirectoragentfilesource "orquesta/modulos/orquesta-director-agent-file-source"
+	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
@@ -67,6 +70,86 @@ func TestDrainRunV0TrasEntregaBootstrapLanzaFronteraDependiente(t *testing.T) {
 		if !codexStackStringInSetForTestV0(run.StartedAgents, agentRef) {
 			t.Fatalf("started_agents=%v missing=%s delivered=%v", run.StartedAgents, agentRef, run.DeliveredTasks)
 		}
+	}
+}
+
+func TestCodexStackAutoprogrammingPrepareRunAPIV0TickGlobalTrasACKLanzaFronteraDependienteV0(t *testing.T) {
+	ctx := context.Background()
+	runtime := newPendingAckCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.RequestRef = "run-autoprogramming-dependency-frontier-001"
+	bootstrapTaskRef := codexStackAutoprogrammingTaskRefForTestV0(request.RequestRef, 0)
+	request.Tasks[0].TaskRef = "source-task-ref-autoprogramming-bootstrap"
+	request.Tasks[0].Area = "bootstrap"
+	request.Tasks[0].WriteSet = []string{"modulos/orquesta-app-codex-stack/bootstrap_frontier_test.go"}
+	request.Tasks = append(request.Tasks, request.Tasks[0])
+	request.Tasks[1].TaskRef = "source-task-ref-autoprogramming-dependent"
+	request.Tasks[1].Area = "dependent"
+	request.Tasks[1].WriteSet = []string{"modulos/orquesta-app-codex-stack/dependent_frontier_test.go"}
+	request.Tasks[1].DependsOn = []string{bootstrapTaskRef}
+	request.WriteSet = append(request.Tasks[0].WriteSet, request.Tasks[1].WriteSet...)
+
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-autoprogramming-dependency-frontier-001",
+		CorrelationID:          "corr-autoprogramming-dependency-frontier-001",
+		OccurredAt:             "2026-06-18T09:00:00Z",
+		RequestedBy:            "orquesta-stack-api-test",
+		AutoprogrammingRequest: request,
+		MaxBursts:              3,
+		MaxStepsPerBurst:       4,
+		MaxDispatchesPerWait:   3,
+		MaxCommands:            8,
+		MaxOutboxPerCycle:      5,
+	})
+	if !prepared.Accepted || prepared.RunRef == "" || len(prepared.WorkflowTaskRefs) != 2 {
+		t.Fatalf("prepared=%+v", prepared)
+	}
+	bootstrap := prepared.WorkflowTaskRefs[0]
+	dependent := prepared.WorkflowTaskRefs[1]
+	if bootstrap != bootstrapTaskRef {
+		t.Fatalf("bootstrap ref inesperada: got=%s want=%s prepared=%+v", bootstrap, bootstrapTaskRef, prepared)
+	}
+
+	first, err := stack.RunGlobalTickV0(ctx, globalTickCommandForTestV0())
+	if err != nil {
+		t.Fatalf("RunGlobalTickV0 first: %v", err)
+	}
+	run := mustLoadCodexStackRunForTestV0(t, stack, prepared.RunRef)
+	bootstrapAgent := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(bootstrap)
+	dependentAgent := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(dependent)
+	if runtime.launchCountV0() != 1 ||
+		!codexStackStringInSetForTestV0(run.StartedAgents, bootstrapAgent) ||
+		codexStackStringInSetForTestV0(run.StartedAgents, dependentAgent) {
+		t.Fatalf("first=%+v launches=%d started=%v bootstrap=%s dependent=%s",
+			first,
+			runtime.launchCountV0(),
+			run.StartedAgents,
+			bootstrapAgent,
+			dependentAgent,
+		)
+	}
+	descriptor := mustCodexStackDescriptorByTaskRefV0(t, stack, bootstrap)
+	if err := writeCodexStackAckForDescriptorV0(t, descriptor); err != nil {
+		t.Fatalf("write bootstrap ack: %v", err)
+	}
+
+	second, err := stack.RunGlobalTickV0(ctx, globalTickCommandForTestV0())
+	if err != nil {
+		t.Fatalf("RunGlobalTickV0 second: %v", err)
+	}
+	run = mustLoadCodexStackRunForTestV0(t, stack, prepared.RunRef)
+	if !codexStackStringInSetForTestV0(run.DeliveredTasks, bootstrap) ||
+		!codexStackStringInSetForTestV0(run.StartedAgents, dependentAgent) ||
+		runtime.launchCountV0() != 2 {
+		t.Fatalf("second=%+v launches=%d delivered=%v started=%v bootstrap=%s dependent=%s",
+			second,
+			runtime.launchCountV0(),
+			run.DeliveredTasks,
+			run.StartedAgents,
+			bootstrap,
+			dependentAgent,
+		)
 	}
 }
 
@@ -161,4 +244,9 @@ func writeCodexStackAckForDescriptorV0(
 		return err
 	}
 	return os.WriteFile(descriptor.AckPath, data, 0o600)
+}
+
+func codexStackAutoprogrammingTaskRefForTestV0(requestRef string, groupIndex int) string {
+	sum := sha256.Sum256([]byte(requestRef))
+	return fmt.Sprintf("task-autoprogramming-%x-g%02d", sum[:6], groupIndex+1)
 }

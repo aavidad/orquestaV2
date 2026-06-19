@@ -25,6 +25,7 @@ type AutoprogrammingWorkProfileV1 struct {
 	TaskRef              string                                               `json:"task_ref,omitempty"`
 	ProfileKind          orquestacoreworkflow.WorkProfileKindV0               `json:"profile_kind"`
 	FunctionContractRefs []orquestacoreworkflow.WorkflowFunctionContractRefV0 `json:"function_contract_refs,omitempty"`
+	SkillRefs            []string                                             `json:"skill_refs,omitempty"`
 }
 
 type AutoprogrammingResolvedWorkProfileV1 struct {

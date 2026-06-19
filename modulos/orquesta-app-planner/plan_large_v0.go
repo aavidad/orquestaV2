@@ -23,7 +23,11 @@ func appLargeArchitectureUnitV0(request AppPlanRequestV0) AppWorkUnitV0 {
 		"Disenar arquitectura de app grande",
 		"Documentar fronteras hexagonales, modulos, puertos y riesgos antes de programar.",
 		[]string{"docs/arquitectura.md", "docs/contratos.md", "docs/decisiones.md"},
-		[]string{"Fronteras y conectores definidos.", "No hay adaptador operacional concreto hardcodeado."},
+		[]string{
+			"Fronteras domain, application, ports, adapters y bootstrap definidas.",
+			"Handlers/adaptadores declarados como finos y sin composicion global.",
+			"No hay adaptador operacional concreto hardcodeado.",
+		},
 		[]string{deliveryRefV0(request, "bootstrap")},
 	)
 }
@@ -32,8 +36,12 @@ func appLargeDomainUnitV0(request AppPlanRequestV0) AppWorkUnitV0 {
 	return appUnitV0(request, "domain", "implementacion", orquestacoreworkflow.OrchestrationCapacityHighV0,
 		"Crear dominio hexagonal",
 		"Implementar entidades, servicios puros y puertos sin adaptadores concretos.",
-		[]string{"internal/domain", "internal/ports"},
-		[]string{"Dominio probado.", "Puertos definidos sin almacenamiento concreto."},
+		[]string{"internal/domain", "internal/application", "internal/ports"},
+		[]string{
+			"Dominio probado sin imports de adapters, HTTP, DB, filesystem, runtime ni UI.",
+			"Application/casos de uso dependen de puertos/interfaces, no de adaptadores concretos.",
+			"Puertos definidos sin almacenamiento concreto.",
+		},
 		[]string{deliveryRefV0(request, "architecture")},
 	)
 }
@@ -42,7 +50,7 @@ func appLargePersistenceUnitV0(request AppPlanRequestV0) AppWorkUnitV0 {
 	return appUnitV0(request, "persistence-port", "implementacion", orquestacoreworkflow.OrchestrationCapacityHighV0,
 		"Preparar contrato de persistencia",
 		"Crear puerto de persistencia y adaptador fake de test sin fijar tecnologia concreta.",
-		[]string{"internal/persistence", "internal/testadapters"},
+		[]string{"internal/adapters/persistence", "internal/testadapters"},
 		[]string{"Persistencia expresada por interfaz.", "No aparece tecnologia concreta hardcodeada."},
 		[]string{deliveryRefV0(request, "architecture")},
 	)
@@ -52,8 +60,14 @@ func appLargeAPIUnitV0(request AppPlanRequestV0) AppWorkUnitV0 {
 	return appUnitV0(request, "api", "implementacion", orquestacoreworkflow.OrchestrationCapacityHighV0,
 		"Crear API REST modular",
 		"Implementar handlers pequenos conectados a puertos de aplicacion y entrypoint Go idiomatico.",
-		[]string{"internal/api", "cmd/server"},
-		[]string{"API compilable.", "Entrypoint bajo cmd/server.", "Imports de modulo, sin imports relativos ../.", "Handlers pequenos y testeados."},
+		[]string{"internal/adapters/http", "internal/app/bootstrap", "cmd/server"},
+		[]string{
+			"API compilable.",
+			"Entrypoint bajo cmd/server y composicion bajo internal/app/bootstrap.",
+			"Handlers pequenos y testeados.",
+			"Handlers no construyen repositorios, autenticacion, fixtures ni reglas de negocio.",
+			"Imports de modulo, sin imports relativos ../.",
+		},
 		[]string{deliveryRefV0(request, "domain"), deliveryRefV0(request, "persistence-port")},
 	)
 }
@@ -95,7 +109,11 @@ func appLargeIntegrationUnitV0(request AppPlanRequestV0) AppWorkUnitV0 {
 		"Integrar modulos de app",
 		"Conectar dominio, puertos, API, web e i18n con tests de flujo.",
 		[]string{"internal/app", "internal/integration"},
-		[]string{"Flujo principal probado.", "`go test ./...` declarado en ACK."},
+		[]string{
+			"Flujo principal probado.",
+			"Composicion de repositorios, adaptadores, autenticacion y configuracion centralizada en bootstrap/cmd.",
+			"`go test ./...` declarado en ACK.",
+		},
 		[]string{
 			deliveryRefV0(request, "domain"),
 			deliveryRefV0(request, "persistence-port"),
@@ -121,7 +139,12 @@ func appLargeReviewUnitV0(request AppPlanRequestV0) AppWorkUnitV0 {
 		"Revisar app grande",
 		"Ejecutar revision final de arquitectura, seguridad, tests y tamano.",
 		[]string{"docs/revision.md"},
-		[]string{"Revision final aceptada.", "Riesgos y rework documentados."},
+		[]string{
+			"Revision final aceptada.",
+			"No se acepta si domain/application importan adapters, HTTP, DB, filesystem, runtime o UI.",
+			"No se acepta si handlers contienen composicion de repositorios, autenticacion, fixtures o reglas de negocio.",
+			"Riesgos y rework documentados.",
+		},
 		[]string{deliveryRefV0(request, "docs")},
 	)
 }

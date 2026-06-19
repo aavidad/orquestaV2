@@ -27,6 +27,7 @@ func mcpSharedContractSourcesV0() []mcpSharedContractSourceV0 {
 				"no_persiste",
 				"no_crea_tareas",
 				"no_arranca_runtime",
+				"arquitectura_hexagonal_estricta",
 				"validacion_delegada_en_factory",
 			},
 			ProgressKey:  "mcp.contracts.progress.descriptor_tool_puro_implementado.v0",

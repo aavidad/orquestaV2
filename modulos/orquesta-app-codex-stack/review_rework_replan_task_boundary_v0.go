@@ -93,9 +93,6 @@ func reviewReworkCorrectionTaskV0(
 		return orquestacoreworkflow.WorkflowTaskV0{}, false
 	}
 	functionContracts := reviewReworkFunctionContractRefsFromRunV0(request.Run)
-	if len(functionContracts) == 0 {
-		return orquestacoreworkflow.WorkflowTaskV0{}, false
-	}
 	taskID := reviewReworkCorrectionTaskIDV0(plan)
 	task, err := orquestacoreworkflow.NewWorkflowTaskV0(orquestacoreworkflow.WorkflowTaskV0{
 		SchemaVersion:        orquestacoreworkflow.WorkflowTaskSchemaVersionV0,

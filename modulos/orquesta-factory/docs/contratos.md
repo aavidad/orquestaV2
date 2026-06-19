@@ -136,7 +136,10 @@ Invariantes:
 - `locale` y `i18n.default_locale` usan BCP 47.
 - `i18n.enabled` es `true` por defecto; si es `false`, debe haber
   `i18n.justificacion`.
-- `preferencias_tecnicas.arquitectura` es `hexagonal` por defecto.
+- `preferencias_tecnicas.arquitectura` es `hexagonal` por defecto y cualquier
+  valor no hexagonal es incompatible.
+- La hexagonalidad no es advisory: una app generada debe separar domain,
+  application, ports, adapters y bootstrap/composicion.
 - `datos.db_required=true` obliga a declarar necesidad funcional, no proveedor.
 - Las integraciones se expresan como conectores, no como llamadas directas a DB,
   filesystem, runtime, LLM, cache, cola ni deploy.
@@ -187,11 +190,19 @@ Campos:
 Invariantes:
 
 - `schema_version` es inmutable dentro de la version `v0`.
-- Toda excepcion a hexagonal, i18n o documentacion por defecto debe estar en
+- No hay excepcion productiva a arquitectura hexagonal para apps programadas por
+  Orquesta en `AppSpecV0`: si se solicita otra arquitectura, la request se
+  rechaza como incompatible.
+- Toda excepcion a i18n o documentacion por defecto debe estar en
   `defaults_applied` o en `validation.warnings`.
 - `data` no contiene tablas, SQL, dialectos ni detalles de proveedor.
 - `connectors` no contiene imports internos ni structs privados de otro modulo.
 - `architecture.modulos_iniciales` solo propone fronteras; no genera codigo.
+- `architecture.modulos_iniciales` debe incluir domain, application, ports,
+  adapters y bootstrap.
+- `architecture.fronteras` debe declarar que domain/application no importan
+  adaptadores ni tecnologias externas, que los handlers son finos y que el
+  wiring vive en bootstrap/cmd.
 - Una spec con `validation.estado=valida` puede alimentar el backlog inicial.
 
 Errores:
@@ -205,7 +216,7 @@ Errores:
 Pruebas de contrato:
 
 - Serializacion estable de `AppSpecV0`.
-- Validacion de invariantes hexagonal/i18n/docs.
+- Validacion de invariantes hexagonales estrictas/i18n/docs.
 - Validacion de ausencia de DB directa y runtime.
 - Validacion de errores publicos estables.
 
@@ -232,6 +243,8 @@ Invariantes:
 
 - Toda microtarea tiene criterio de cierre verificable.
 - Toda microtarea tiene write-set previsto o declara bloqueo.
+- El backlog incluye `ArquitecturaHexagonalEstricta v0` como contrato requerido
+  y microtarea de frontera antes de implementar.
 - El backlog propuesto no arranca agentes ni asigna runtime.
 - El backlog propuesto no crea registros en DB.
 - Si una microtarea afecta otro modulo, debe quedar como bloqueo o consulta.

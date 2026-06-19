@@ -37,10 +37,11 @@ Motivo: una entrega con ACKs, docs y paquetes internos puede parecer progreso
 real aunque no sea ejecutable como aplicacion. El plan debe cerrar desde el
 principio los invariantes minimos de Go: modulo, entrypoint, imports de modulo
 y pruebas.
-Impacto: bootstrap exige `go.mod`; la unidad API escribe `cmd/server`; apps
-grandes usan `internal/api` + `cmd/server`; todas las unidades conservan
-`go test ./...` como required test por contrato runtime. Persistencia y deploy
-siguen siendo puertos/conectores, sin proveedor DB hardcodeado.
+Impacto: bootstrap exige `go.mod`; la unidad API escribe
+`internal/adapters/http`, `internal/app/bootstrap` y `cmd/server`; apps grandes
+usan el mismo corte de adaptador HTTP + composicion; todas las unidades
+conservan `go test ./...` como required test por contrato runtime. Persistencia
+y deploy siguen siendo puertos/conectores, sin proveedor DB hardcodeado.
 Estado: aceptada.
 ```
 

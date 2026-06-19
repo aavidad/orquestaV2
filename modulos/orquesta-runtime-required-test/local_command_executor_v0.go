@@ -71,6 +71,11 @@ func (executor LocalCommandExecutorV0) RunRequiredTestCommandV0(
 		}
 		status = orquestacionnucleoapp.RequiredTestEvidenceStatusFailedV0
 	}
+	if status == orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0 &&
+		localCommandGoTestWithoutExecutedTestsV0(tokens, output.String()) {
+		status = orquestacionnucleoapp.RequiredTestEvidenceStatusFailedV0
+		output = localCommandOutputWithDiagnosticV0(output, "required_test_go_no_tests_executed")
+	}
 	ref, status, err := writeOutputArtifactV0(normalized, request, status, output)
 	if err != nil {
 		return orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}, err
@@ -188,6 +193,42 @@ func runLocalCommandV0(
 	cmd.Stderr = output
 	err := cmd.Run()
 	return *output, err
+}
+
+func localCommandGoTestWithoutExecutedTestsV0(tokens []string, output string) bool {
+	if len(tokens) < 2 ||
+		filepath.Base(strings.TrimSpace(tokens[0])) != "go" ||
+		strings.TrimSpace(tokens[1]) != "test" {
+		return false
+	}
+	seenNoTests := false
+	seenExecutedTests := false
+	for _, line := range strings.Split(output, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if strings.Contains(trimmed, "[no test files]") ||
+			strings.Contains(trimmed, "[no tests to run]") {
+			seenNoTests = true
+			continue
+		}
+		if strings.HasPrefix(trimmed, "ok ") || strings.HasPrefix(trimmed, "ok\t") {
+			seenExecutedTests = true
+		}
+	}
+	return seenNoTests && !seenExecutedTests
+}
+
+func localCommandOutputWithDiagnosticV0(output outputBufferV0, message string) outputBufferV0 {
+	limit := output.limit
+	if limit <= 0 {
+		limit = 1024 * 1024
+	}
+	next := newOutputBufferV0(limit)
+	_, _ = next.Write([]byte(output.String()))
+	_, _ = next.Write([]byte("\n" + strings.TrimSpace(message) + "\n"))
+	return *next
 }
 
 func isolatedLocalCommandEnvV0(env []string) []string {

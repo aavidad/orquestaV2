@@ -81,6 +81,7 @@ const (
 	envCodexDirectorApprovalPolicyV0       = "ORQUESTA_CODEX_DIRECTOR_APPROVAL_POLICY"
 	envCodexAllowInteractiveApprovalV0     = "ORQUESTA_CODEX_ALLOW_INTERACTIVE_APPROVAL"
 	envCodexExtraArgsV0                    = "ORQUESTA_CODEX_EXTRA_ARGS"
+	envCodexSkillInstructionsJSONV0        = "ORQUESTA_CODEX_SKILL_INSTRUCTIONS_JSON"
 	envCodexWaitIntervalMSV0               = "ORQUESTA_CODEX_WAIT_INTERVAL_MS"
 	envCodexStalledTicksV0                 = "ORQUESTA_CODEX_STALLED_TICKS"
 	envCodexLoopTicksV0                    = "ORQUESTA_CODEX_LOOP_TICKS"

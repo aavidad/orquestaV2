@@ -27,11 +27,12 @@ func TestBuildGoAPIWebMicrotaskPlanV0ParaAppGrandeDividePorContratos(t *testing.
 		"docs/decisiones.md",
 	})
 	assertAppUnitForTestV0(t, plan, "persistence-port", orquestacoreworkflow.OrchestrationPhaseProgramacionV0, []string{"ack-erp-architecture"}, []string{
-		"internal/persistence",
+		"internal/adapters/persistence",
 		"internal/testadapters",
 	})
 	assertAppUnitForTestV0(t, plan, "api", orquestacoreworkflow.OrchestrationPhaseProgramacionV0, []string{"ack-erp-domain", "ack-erp-persistence-port"}, []string{
-		"internal/api",
+		"internal/adapters/http",
+		"internal/app/bootstrap",
 		"cmd/server",
 	})
 	assertAppUnitForTestV0(t, plan, "integration", orquestacoreworkflow.OrchestrationPhaseIntegracionV0, []string{
@@ -60,6 +61,40 @@ func TestBuildGoAPIWebMicrotaskPlanV0ParaAppGrandeDividePorContratos(t *testing.
 		t.Fatalf("review capacity=%s", review.Capacity)
 	}
 	assertLargePlanHasNoDBProviderWriteSetV0(t, plan)
+}
+
+func TestBuildGoAPIWebMicrotaskPlanV0ParaAppGrandeExigeHexagonalidadEstructural(t *testing.T) {
+	plan, err := BuildGoAPIWebMicrotaskPlanV0(AppPlanRequestV0{
+		RunRef:  "run-ref-large-hex-001",
+		AppRef:  "erp",
+		AppName: "ERP",
+		API:     true,
+		Web:     true,
+		Scale:   AppPlanScaleLargeV0,
+	})
+	if err != nil {
+		t.Fatalf("BuildGoAPIWebMicrotaskPlanV0 large: %v", err)
+	}
+
+	architecture := appUnitByKeyForTestV0(t, plan, "architecture")
+	assertAppUnitCriteriaContainsForTestV0(t, architecture, "Fronteras domain, application, ports, adapters y bootstrap definidas.")
+	assertAppUnitCriteriaContainsForTestV0(t, architecture, "Handlers/adaptadores declarados como finos y sin composicion global.")
+
+	domain := appUnitByKeyForTestV0(t, plan, "domain")
+	if !sameStringSetForTestV0(domain.WriteSet, []string{"internal/domain", "internal/application", "internal/ports"}) {
+		t.Fatalf("domain write_set=%v", domain.WriteSet)
+	}
+	assertAppUnitCriteriaContainsForTestV0(t, domain, "Application/casos de uso dependen de puertos/interfaces, no de adaptadores concretos.")
+
+	api := appUnitByKeyForTestV0(t, plan, "api")
+	assertAppUnitCriteriaContainsForTestV0(t, api, "Handlers no construyen repositorios, autenticacion, fixtures ni reglas de negocio.")
+
+	integration := appUnitByKeyForTestV0(t, plan, "integration")
+	assertAppUnitCriteriaContainsForTestV0(t, integration, "Composicion de repositorios, adaptadores, autenticacion y configuracion centralizada en bootstrap/cmd.")
+
+	review := appUnitByKeyForTestV0(t, plan, "review")
+	assertAppUnitCriteriaContainsForTestV0(t, review, "No se acepta si domain/application importan adapters, HTTP, DB, filesystem, runtime o UI.")
+	assertAppUnitCriteriaContainsForTestV0(t, review, "No se acepta si handlers contienen composicion de repositorios, autenticacion, fixtures o reglas de negocio.")
 }
 
 func TestAppPlanRequestFromAppSpecV0EscalaConPersistenciaOCalidadAlta(t *testing.T) {

@@ -23,6 +23,7 @@ type autoprogrammingSelectedWorkProfileV1 struct {
 	kind                 orquestacoreworkflow.WorkProfileKindV0
 	source               string
 	functionContractRefs []orquestacoreworkflow.WorkflowFunctionContractRefV0
+	skillRefs            []string
 }
 
 func BuildAutoprogrammingProgrammableWorkV1(
@@ -189,5 +190,6 @@ func autoprogrammingSelectedWorkProfileFromBindingV1(
 			[]orquestacoreworkflow.WorkflowFunctionContractRefV0(nil),
 			profile.FunctionContractRefs...,
 		),
+		skillRefs: compactStringsV0(profile.SkillRefs),
 	}
 }

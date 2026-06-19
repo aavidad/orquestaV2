@@ -33,6 +33,9 @@ func TestMCPNuevaAppDescriptorV0Compacto(t *testing.T) {
 		!strings.Contains(descriptor.Output, "compact") {
 		t.Fatalf("descriptor no referencia contrato compacto: %+v", descriptor)
 	}
+	if !mcpStringInSetForTestV0(descriptor.Invariantes, "apps generadas con arquitectura hexagonal estricta") {
+		t.Fatalf("descriptor no declara hexagonalidad estricta: %+v", descriptor.Invariantes)
+	}
 
 	payload, err := json.Marshal(descriptor)
 	if err != nil {
@@ -99,7 +102,8 @@ func TestNewMCPNuevaAppOKResultV0ContieneSpecYBacklogCompactos(t *testing.T) {
 		result.AppSpec.Slug != "agenda" ||
 		result.AppSpec.RequestKind != orquestafactory.RequestKindDocumentarAppV0 ||
 		result.AppSpec.ExecutionMode != orquestafactory.ExecutionModeDebugV0 ||
-		result.AppSpec.DeployTarget != "local" {
+		result.AppSpec.DeployTarget != "local" ||
+		result.AppSpec.ArchitecturePolicy != "hexagonal_estricta" {
 		t.Fatalf("app_spec compacto: %+v", result.AppSpec)
 	}
 	if result.Backlog.SchemaVersion != testBacklogInicialPropuestoV0 ||
@@ -209,9 +213,21 @@ func TestMCPNuevaAppToolExecutorV0ReturnsOKResultFromFactoryHTTPPort(t *testing.
 	if result.AppSpec.SchemaVersion != orquestafactory.AppSpecSchemaV0 || result.AppSpec.SpecID == "" {
 		t.Fatalf("app spec invalida: %+v", result.AppSpec)
 	}
+	if result.AppSpec.ArchitecturePolicy != "hexagonal_estricta" {
+		t.Fatalf("architecture policy=%q", result.AppSpec.ArchitecturePolicy)
+	}
 	if result.Backlog.SchemaVersion == "" || result.Backlog.Microtareas == 0 || result.Backlog.Fases == 0 {
 		t.Fatalf("backlog invalido: %+v", result.Backlog)
 	}
+}
+
+func mcpStringInSetForTestV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestMCPNuevaAppToolExecutorV0ReturnsPublicErrorResultFromFactoryHTTPPort(t *testing.T) {
@@ -301,8 +317,12 @@ func validMCPAppSpecV0() orquestafactory.AppSpecV0 {
 			TipoApp:  "web",
 		},
 		Scope: orquestafactory.ScopeV0{
-			Supuestos:         []string{"Arquitectura hexagonal por defecto"},
+			Supuestos:         []string{"Arquitectura hexagonal estricta"},
 			PreguntasAbiertas: []string{"Confirmar calendario inicial"},
+		},
+		Architecture: orquestafactory.ArchitectureV0{
+			Patron:             "hexagonal",
+			ContratosEsperados: []string{"ArquitecturaHexagonalEstricta v0"},
 		},
 		I18N: orquestafactory.I18NSpecV0{
 			Locales: []string{"es", "en", "es"},

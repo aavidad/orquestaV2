@@ -189,7 +189,7 @@ func validateEnumsV0(req AppSpecRequestV0) []ValidationIssue {
 		issues = append(issues, issue(ErrAppSpecInvalida, "agentes.autonomia", "autonomia no soportada"))
 	}
 	if arch := req.PreferenciasTecnicas.Arquitectura; arch != "" && arch != "hexagonal" {
-		issues = append(issues, issue(ErrOpcionIncompatible, "preferencias_tecnicas.arquitectura", "solo hexagonal esta permitido en v0"))
+		issues = append(issues, issue(ErrOpcionIncompatible, "preferencias_tecnicas.arquitectura", "solo hexagonal estricta esta permitido en v0"))
 	}
 	issues = append(issues, validateConnectorNamesV0(req)...)
 	return issues

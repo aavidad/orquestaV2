@@ -46,5 +46,6 @@ type AppWorkUnitV0 struct {
 	AcceptanceCriteria  []string                                                   `json:"acceptance_criteria"`
 	RequiredTests       []string                                                   `json:"required_tests,omitempty"`
 	DependsOnDeliveries []string                                                   `json:"depends_on_deliveries,omitempty"`
+	SkillRefs           []string                                                   `json:"skill_refs,omitempty"`
 	EvidenceRefs        []string                                                   `json:"evidence_refs,omitempty"`
 }

@@ -97,6 +97,19 @@ func maybeCloseOperationalDirectorV0(
 		},
 	)
 	if err != nil || !ok {
+		reopened, reopenErr := operationalDirectorPlanStateReopenReviewForClosureOpenTasksNoProgressV0(
+			ctx,
+			request,
+			ports,
+			loop.Run,
+		)
+		if reopenErr != nil {
+			return loop, nil, reopenErr
+		}
+		if reopened {
+			loop.Status = orquestacionnucleoapp.ProgressiveLoopStatusNeedsDirectorV0
+			return loop, nil, err
+		}
 		if blockErr := operationalDirectorPlanStateBlockedAfterClosureV0(
 			ctx,
 			request,

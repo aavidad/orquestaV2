@@ -50,23 +50,29 @@ const (
 )
 
 type CodexConnectorProfileV0 struct {
-	SchemaVersion            string   `json:"schema_version"`
-	OptIn                    bool     `json:"opt_in"`
-	CommandPath              string   `json:"command_path"`
-	ProjectWorkDir           string   `json:"project_work_dir"`
-	RuntimeWorkDir           string   `json:"runtime_work_dir"`
-	RuntimeWorkDirPlacement  string   `json:"runtime_work_dir_placement,omitempty"`
-	CodeHomeDir              string   `json:"code_home_dir,omitempty"`
-	HomeDir                  string   `json:"home_dir,omitempty"`
-	PathEnv                  string   `json:"path_env,omitempty"`
-	Model                    string   `json:"model,omitempty"`
-	ReasoningEffort          string   `json:"reasoning_effort,omitempty"`
-	Profile                  string   `json:"profile,omitempty"`
-	Sandbox                  string   `json:"sandbox,omitempty"`
-	ApprovalPolicy           string   `json:"approval_policy,omitempty"`
-	InteractiveApprovalOptIn bool     `json:"interactive_approval_opt_in,omitempty"`
-	ExtraArgs                []string `json:"extra_args,omitempty"`
-	PromptHints              []string `json:"prompt_hints,omitempty"`
+	SchemaVersion            string                    `json:"schema_version"`
+	OptIn                    bool                      `json:"opt_in"`
+	CommandPath              string                    `json:"command_path"`
+	ProjectWorkDir           string                    `json:"project_work_dir"`
+	RuntimeWorkDir           string                    `json:"runtime_work_dir"`
+	RuntimeWorkDirPlacement  string                    `json:"runtime_work_dir_placement,omitempty"`
+	CodeHomeDir              string                    `json:"code_home_dir,omitempty"`
+	HomeDir                  string                    `json:"home_dir,omitempty"`
+	PathEnv                  string                    `json:"path_env,omitempty"`
+	Model                    string                    `json:"model,omitempty"`
+	ReasoningEffort          string                    `json:"reasoning_effort,omitempty"`
+	Profile                  string                    `json:"profile,omitempty"`
+	Sandbox                  string                    `json:"sandbox,omitempty"`
+	ApprovalPolicy           string                    `json:"approval_policy,omitempty"`
+	InteractiveApprovalOptIn bool                      `json:"interactive_approval_opt_in,omitempty"`
+	ExtraArgs                []string                  `json:"extra_args,omitempty"`
+	PromptHints              []string                  `json:"prompt_hints,omitempty"`
+	SkillInstructions        []CodexSkillInstructionV0 `json:"skill_instructions,omitempty"`
+}
+
+type CodexSkillInstructionV0 struct {
+	SkillRef string `json:"skill_ref"`
+	Text     string `json:"text"`
 }
 
 func ValidateCodexConnectorProfileV0(
@@ -98,6 +104,9 @@ func ValidateCodexConnectorProfileV0(
 	}
 	for i, value := range profile.PromptHints {
 		v.optionalSafeValue(fmt.Sprintf("prompt_hints[%d]", i), value)
+	}
+	for i, instruction := range profile.SkillInstructions {
+		v.validateSkillInstructionV0(i, instruction)
 	}
 	return v.issues
 }
@@ -202,6 +211,21 @@ func (v *codexProfileValidatorV0) rejectWorkspaceEscapeExtraArgV0(field, value s
 		strings.HasPrefix(trimmed, "--sandbox="):
 		v.add(CodexConnectorValueInvalidV0, field)
 	}
+}
+
+func (v *codexProfileValidatorV0) validateSkillInstructionV0(index int, instruction CodexSkillInstructionV0) {
+	refField := fmt.Sprintf("skill_instructions[%d].skill_ref", index)
+	textField := fmt.Sprintf("skill_instructions[%d].text", index)
+	ref := strings.TrimSpace(instruction.SkillRef)
+	text := strings.TrimSpace(instruction.Text)
+	if ref == "" || strings.ContainsAny(ref, " /\\\t\r\n") || codexHasControlCharsV0(ref) {
+		v.add(CodexConnectorValueInvalidV0, refField)
+	}
+	if text == "" || len(text) > 2000 {
+		v.add(CodexConnectorValueInvalidV0, textField)
+		return
+	}
+	v.optionalSafeValue(textField, text)
 }
 
 func (v *codexProfileValidatorV0) validateWorkspaceWriteRuntimeIsolationV0(

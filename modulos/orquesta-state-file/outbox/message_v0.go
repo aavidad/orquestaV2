@@ -30,11 +30,18 @@ func normalizeOutboxMessageV0(
 	if err := orquestacoreworkflow.ValidateOutboxMessageV0(normalized); err != nil {
 		return orquestacoreworkflow.OutboxMessageV0{}, nil, err
 	}
-	fingerprint, err := json.Marshal(normalized)
+	fingerprint, err := json.Marshal(outboxMessageFingerprintV0(normalized))
 	if err != nil {
 		return orquestacoreworkflow.OutboxMessageV0{}, nil, err
 	}
 	return cloneOutboxMessageV0(normalized), fingerprint, nil
+}
+
+func outboxMessageFingerprintV0(
+	message orquestacoreworkflow.OutboxMessageV0,
+) orquestacoreworkflow.OutboxMessageV0 {
+	message.CorrelationID = ""
+	return message
 }
 
 func canonicalJSONV0(raw json.RawMessage) ([]byte, error) {

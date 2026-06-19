@@ -60,9 +60,55 @@ func autoprogrammingBridgeContinueRequestWithPlanStateV0(
 func autoprogrammingBridgeWaitAgentRefsV0(
 	tasks []orquestacoreworkflow.WorkflowTaskV0,
 ) []string {
+	return autoprogrammingBridgeWaitAgentRefsForRunV0(tasks, orquestacoreworkflow.OrchestrationRunV0{})
+}
+
+func autoprogrammingBridgeWaitAgentRefsForRunV0(
+	tasks []orquestacoreworkflow.WorkflowTaskV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) []string {
 	refs := make([]string, 0, len(tasks))
 	for _, task := range tasks {
+		if autoprogrammingBridgeTaskTerminalInRunV0(task, run) ||
+			!autoprogrammingBridgeTaskDependenciesSatisfiedV0(task, run) {
+			continue
+		}
 		refs = append(refs, orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(task.TaskID))
 	}
 	return compactStringsV0(refs)
+}
+
+func autoprogrammingBridgeTaskTerminalInRunV0(
+	task orquestacoreworkflow.WorkflowTaskV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) bool {
+	taskRef := strings.TrimSpace(task.TaskID)
+	return autoprogrammingBridgeStringInSetV0(run.DeliveredTasks, taskRef) ||
+		autoprogrammingBridgeStringInSetV0(run.ClosedTasks, taskRef)
+}
+
+func autoprogrammingBridgeTaskDependenciesSatisfiedV0(
+	task orquestacoreworkflow.WorkflowTaskV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) bool {
+	for _, dependency := range compactStringsV0(task.DependsOn) {
+		if !autoprogrammingBridgeStringInSetV0(run.DeliveredTasks, dependency) &&
+			!autoprogrammingBridgeStringInSetV0(run.ClosedTasks, dependency) {
+			return false
+		}
+	}
+	return true
+}
+
+func autoprogrammingBridgeStringInSetV0(values []string, want string) bool {
+	want = strings.TrimSpace(want)
+	if want == "" {
+		return false
+	}
+	for _, value := range compactStringsV0(values) {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

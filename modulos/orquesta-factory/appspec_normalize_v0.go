@@ -33,7 +33,7 @@ func (n appSpecNormalizerV0) scope() ScopeV0 {
 	return ScopeV0{
 		Objetivos:         []string{strings.TrimSpace(n.req.Objetivo)},
 		FueraDeAlcance:    []string{},
-		Supuestos:         []string{"Arquitectura hexagonal, i18n y documentacion se aplican por defecto salvo excepcion justificada."},
+		Supuestos:         []string{"Arquitectura hexagonal estricta, i18n y documentacion se aplican por defecto y son condiciones de aceptacion de la app generada."},
 		PreguntasAbiertas: []string{},
 	}
 }
@@ -42,15 +42,21 @@ func (n appSpecNormalizerV0) architecture() ArchitectureV0 {
 	return ArchitectureV0{
 		Patron: "hexagonal",
 		ModulosIniciales: []ModuleBoundaryV0{
-			{Nombre: "core", Responsabilidad: "Casos de uso, dominio y contratos de la aplicacion.", Puertos: []string{"puertos_entrada", "puertos_salida"}},
-			{Nombre: "adapters", Responsabilidad: "Conectores inbound y outbound sin reglas de negocio.", Puertos: []string{"http", "cli", "persistence"}},
+			{Nombre: "domain", Responsabilidad: "Entidades, value objects y reglas puras sin framework, IO ni adaptadores.", Puertos: []string{"domain_services"}},
+			{Nombre: "application", Responsabilidad: "Casos de uso, comandos, consultas y DTOs de aplicacion sobre puertos.", Puertos: []string{"input_ports", "output_ports"}},
+			{Nombre: "ports", Responsabilidad: "Interfaces de entrada y salida versionadas que conectan aplicacion con adaptadores.", Puertos: []string{"inbound", "outbound"}},
+			{Nombre: "adapters", Responsabilidad: "HTTP, CLI, persistencia, cache, colas o clientes externos sin reglas de negocio ni composicion global.", Puertos: []string{"http", "cli", "persistence"}},
+			{Nombre: "bootstrap", Responsabilidad: "Composicion de dependencias, configuracion canonica y wiring de adaptadores.", Puertos: []string{"composition_root"}},
 			{Nombre: "i18n-docs", Responsabilidad: "Catalogos i18n, loader y documentacion inicial localizada.", Puertos: []string{"i18n_bundle", "docs_bundle"}},
 		},
 		Fronteras: []string{
-			"El core no importa DB, runtime, filesystem, LLM ni framework UI.",
+			"El dominio no importa application, adapters, HTTP, DB, filesystem, runtime, LLM ni framework UI.",
+			"Los casos de uso dependen de puertos/interfaces, no de adaptadores concretos.",
+			"Los handlers y adaptadores son finos: traducen transporte, validan forma y llaman casos de uso.",
+			"La composicion de repositorios, autenticacion, reglas, fixtures y configuracion vive en bootstrap/cmd, no en handlers.",
 			"Cada dependencia externa entra como conector versionado.",
 		},
-		ContratosEsperados: []string{"SolicitarNuevaApp v0", "AppSpecV0"},
+		ContratosEsperados: []string{"SolicitarNuevaApp v0", "AppSpecV0", "ArquitecturaHexagonalEstricta v0"},
 	}
 }
 

@@ -25,8 +25,13 @@ Cobertura:
   paralela fuera de REST/MCP/web.
 - `AppSpecV0` con persistencia escala a `large` sin introducir proveedor DB
   concreto en el write-set.
-- la unidad API standard usa `cmd/server` como entrypoint Go.
-- la unidad API large usa `internal/api` + `cmd/server`.
+- la unidad API standard usa `internal/adapters/http`,
+  `internal/app/bootstrap` y `cmd/server`.
+- la unidad API large usa `internal/adapters/http`,
+  `internal/app/bootstrap` y `cmd/server`.
+- los planes standard y large conservan criterios de hexagonalidad estricta:
+  dominio/application sin adaptadores, handlers finos y composicion en
+  bootstrap/cmd.
 - `go test ./...` se conserva como test obligatorio de contrato runtime.
 - las unidades de docs, integracion y revision salen con su `phase_id`
   especifico, no como programacion.

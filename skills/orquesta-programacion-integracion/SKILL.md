@@ -15,6 +15,9 @@ externas.
 - Adaptador: tecnologia concreta opt-in.
 - Composicion: wiring, env/config, defaults y reinicio si aplica.
 - Tests: frontera, opt-in, error sin puerto y caso fake.
+- En apps generadas, toda integracion entra por puerto + adaptador. El adaptador
+  se registra solo desde bootstrap/cmd; el nucleo de aplicacion no importa SDKs,
+  DBs, HTTP clients concretos ni proveedores.
 
 ## Configuracion
 

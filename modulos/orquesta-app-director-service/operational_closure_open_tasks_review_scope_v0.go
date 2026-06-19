@@ -9,10 +9,11 @@ import (
 )
 
 type operationalDirectorPlanStateClosureScopeV0 struct {
-	TaskRefs         []string
-	AgentRefs        []string
-	DeliveryRefs     []string
-	ReviewResultRefs []string
+	TaskRefs           []string
+	AgentRefs          []string
+	DeliveryRefs       []string
+	ReviewResultRefs   []string
+	AcceptedReviewRefs []string
 }
 
 type operationalDirectorPlanStateClosureScopeFilterV0 struct {
@@ -90,11 +91,13 @@ func operationalDirectorPlanStateOpenAcceptedLeafTasksForClosureV0(
 		scope.AgentRefs = append(scope.AgentRefs, match.AgentRef)
 		scope.DeliveryRefs = append(scope.DeliveryRefs, match.DeliveryRef)
 		scope.ReviewResultRefs = append(scope.ReviewResultRefs, match.ReviewResultRef)
+		scope.AcceptedReviewRefs = append(scope.AcceptedReviewRefs, match.AcceptedReviewRef)
 	}
 	scope.TaskRefs = compactServiceRefsV0(scope.TaskRefs)
 	scope.AgentRefs = compactServiceRefsV0(scope.AgentRefs)
 	scope.DeliveryRefs = compactServiceRefsV0(scope.DeliveryRefs)
 	scope.ReviewResultRefs = compactServiceRefsV0(scope.ReviewResultRefs)
+	scope.AcceptedReviewRefs = compactServiceRefsV0(scope.AcceptedReviewRefs)
 	return scope, nil
 }
 

@@ -59,6 +59,28 @@ func tinyGoModuleForRequiredTestV0(t *testing.T) string {
 	return projectDir
 }
 
+func tinyGoModuleWithoutTestsForRequiredTestV0(t *testing.T) string {
+	t.Helper()
+	projectDir := t.TempDir()
+	files := map[string]string{
+		"go.mod": "module example.com/orquesta-required-test-no-tests\n\ngo 1.22\n",
+		"calc.go": strings.Join([]string{
+			"package calc",
+			"",
+			"func Add(a int, b int) int {",
+			"\treturn a + b",
+			"}",
+			"",
+		}, "\n"),
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(projectDir, name), []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	return projectDir
+}
+
 func requiredTestExecutionRequestForRuntimeTestV0() orquestacionnucleoapp.RequiredTestExecutionRequestV0 {
 	return orquestacionnucleoapp.RequiredTestExecutionRequestV0{
 		RunRef:            "run-runtime-required-test-real-001",

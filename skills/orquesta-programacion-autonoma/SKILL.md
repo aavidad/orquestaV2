@@ -33,7 +33,14 @@ codigo en cualquier repo consumidor de Orquesta.
 ## Programacion
 
 - Preferir patrones locales del repo.
-- Separar nucleo, puertos, adaptadores, runtime y UI.
+- Toda app generada o modificada por Orquesta debe ser hexagonal estricta:
+  separar domain, application/usecases, ports, adapters y bootstrap.
+- Domain/application no importan adapters, HTTP, DB, filesystem, runtime, LLM ni
+  UI; dependen de puertos/interfaces.
+- Handlers y adaptadores son finos: traducen transporte, validan forma y llaman
+  casos de uso; no construyen repositorios, autenticacion, fixtures, reglas de
+  negocio ni configuracion global.
+- El wiring vive en bootstrap/cmd o superficie de composicion canonica.
 - No hardcodear configuracion que deba cambiarse sin redeploy.
 - Mantener i18n para texto visible de UI.
 - Antes de produccion, probar en local o contra instancia temporal.

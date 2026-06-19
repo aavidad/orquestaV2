@@ -108,6 +108,7 @@ func (r CodexExecResolverV0) materializeFilesV0(
 			DecisionPath:        filepath.Join(r.profile.RuntimeWorkDir, CodexDirectorDecisionsFileNameV0),
 			ShutdownRequestPath: filepath.Join(r.profile.RuntimeWorkDir, CodexShutdownRequestFileNameV0),
 			ShutdownAckPath:     filepath.Join(r.profile.RuntimeWorkDir, CodexShutdownCheckpointAckFileNameV0),
+			SkillInstructions:   append([]CodexSkillInstructionV0(nil), r.profile.SkillInstructions...),
 		},
 	)
 	if err := writeControlFileV0(r.profile.RuntimeWorkDir, promptPath, CodexAgentPromptFileNameV0, "agent_prompt", []byte(prompt), 0o600); err != nil {

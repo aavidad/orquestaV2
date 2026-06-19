@@ -98,8 +98,11 @@ func TestCodexStackRunSupervisorErrorResultMCPV0ExponeDiagnosticoPublicoDelDrain
 		t.Fatalf("diagnostic code=%q", result.Diagnostics[0].Code)
 	}
 	if !strings.Contains(result.Diagnostics[0].Message, "LaunchRuntimeAgent") ||
-		!strings.Contains(result.Diagnostics[0].Message, "capacity-missing") {
+		!strings.Contains(result.Diagnostics[0].Message, "target=unknown") {
 		t.Fatalf("diagnostic message sin contexto publico: %q", result.Diagnostics[0].Message)
+	}
+	if strings.Contains(result.Diagnostics[0].Message, "capacity-missing") {
+		t.Fatalf("diagnostic inventa target de capacidad: %q", result.Diagnostics[0].Message)
 	}
 	if strings.Contains(result.Diagnostics[0].Message, "/home/alberto") ||
 		strings.Contains(result.Diagnostics[0].Message, "token.txt") {

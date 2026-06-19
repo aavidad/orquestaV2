@@ -39,19 +39,28 @@ func appPlanUnitsV0(request AppPlanRequestV0) []AppWorkUnitV0 {
 func appUnitBootstrapV0(request AppPlanRequestV0) AppWorkUnitV0 {
 	return appUnitV0(request, "bootstrap", "preparacion", orquestacoreworkflow.OrchestrationCapacityMediumV0,
 		"Preparar base Go minima",
-		"Crear modulo Go autonomo, contexto local y README inicial.",
+		"Crear modulo Go autonomo, contexto local y contrato hexagonal inicial.",
 		[]string{"go.mod", "AGENTS.md", "README.md", "docs/contratos.md", "docs/tareas.md", "docs/pruebas.md", "docs/decisiones.md"},
-		[]string{"go.mod creado con modulo canonico.", "Contexto local de agente presente.", "README inicial presente."},
+		[]string{
+			"go.mod creado con modulo canonico.",
+			"AGENTS.md y docs/contratos.md declaran arquitectura hexagonal estricta como condicion de aceptacion.",
+			"docs/contratos.md separa domain, application, ports, adapters y bootstrap.",
+			"README inicial presente.",
+		},
 		nil,
 	)
 }
 
 func appUnitDomainV0(request AppPlanRequestV0) AppWorkUnitV0 {
 	return appUnitV0(request, "agenda-core", "implementacion", orquestacoreworkflow.OrchestrationCapacityMediumV0,
-		"Crear nucleo de agenda",
-		"Implementar reglas de agenda en modulo interno pequeno.",
-		[]string{"internal/agenda"},
-		[]string{"Nucleo de agenda probado.", "Sin dependencias externas innecesarias."},
+		"Crear nucleo hexagonal de aplicacion",
+		"Implementar dominio, casos de uso y puertos en modulos internos pequenos.",
+		[]string{"internal/domain", "internal/application", "internal/ports"},
+		[]string{
+			"Dominio probado sin imports de adapters, HTTP, DB, filesystem, runtime ni UI.",
+			"Casos de uso dependen de puertos/interfaces, no de repositorios concretos.",
+			"Puertos de entrada/salida definidos con DTOs de aplicacion.",
+		},
 		[]string{deliveryRefV0(request, "bootstrap")},
 	)
 }
@@ -68,10 +77,16 @@ func appUnitWebV0(request AppPlanRequestV0) AppWorkUnitV0 {
 
 func appUnitAPIV0(request AppPlanRequestV0) AppWorkUnitV0 {
 	return appUnitV0(request, "api", "implementacion", orquestacoreworkflow.OrchestrationCapacityHighV0,
-		"Crear API REST de agenda",
-		"Implementar servidor HTTP pequeno conectado al nucleo de agenda con entrypoint Go idiomatico.",
-		[]string{"cmd/server"},
-		[]string{"API REST compilable.", "Entrypoint bajo cmd/server.", "Imports de modulo, sin imports relativos ../.", "`go test ./...` declarado en ACK."},
+		"Crear API REST hexagonal",
+		"Implementar handlers finos conectados a casos de uso y bootstrap de composicion.",
+		[]string{"internal/adapters/http", "internal/app/bootstrap", "cmd/server"},
+		[]string{
+			"API REST compilable.",
+			"Entrypoint bajo cmd/server y composicion bajo internal/app/bootstrap.",
+			"Handlers finos: no construyen repositorios, autenticacion, fixtures ni reglas de negocio.",
+			"Imports de modulo, sin imports relativos ../.",
+			"`go test ./...` declarado en ACK.",
+		},
 		[]string{deliveryRefV0(request, "agenda-core"), deliveryRefV0(request, "web")},
 	)
 }
@@ -89,9 +104,14 @@ func appUnitDocsV0(request AppPlanRequestV0) AppWorkUnitV0 {
 func appUnitReviewV0(request AppPlanRequestV0) AppWorkUnitV0 {
 	return appUnitV0(request, "review", "revision", orquestacoreworkflow.OrchestrationCapacityHighV0,
 		"Revisar mini app de agenda",
-		"Registrar revision final compacta con pruebas y riesgos.",
+		"Registrar revision final compacta de arquitectura, pruebas y riesgos.",
 		[]string{"docs/revision.md"},
-		[]string{"Revision final escrita.", "`go test ./...` declarado en ACK."},
+		[]string{
+			"Revision final escrita.",
+			"La revision no acepta la app si dominio/application importan adapters, HTTP, DB, filesystem, runtime o UI.",
+			"La revision no acepta handlers con composicion de repositorios, autenticacion, fixtures o reglas de negocio.",
+			"`go test ./...` declarado en ACK.",
+		},
 		[]string{deliveryRefV0(request, "docs")},
 	)
 }

@@ -49,10 +49,9 @@ func TestBuildAutoprogrammingProgrammableWorkV0HonraWriteSetYDependsOnPorTareaV0
 	if !stringSliceEqualForDeclaredTestV0(adaptador.WriteSet, []string{"internal/candidate/adapters/repository/memory.go"}) {
 		t.Fatalf("adaptador write_set=%v want solo memory.go", adaptador.WriteSet)
 	}
-	// La dependencia declarada (task-dominio) debe reflejarse en el DependsOn del
-	// adaptador, derivado a la ref de tarea programable del grupo dominio.
-	if len(adaptador.DependsOn) == 0 {
-		t.Fatalf("adaptador debe declarar dependencia del dominio, DependsOn vacio")
+	expectedDependency := autoprogrammingProgrammableTaskRefV0(request.RequestRef, byArea["dominio"])
+	if !stringSliceEqualForDeclaredTestV0(adaptador.DependsOn, []string{expectedDependency}) {
+		t.Fatalf("adaptador depends_on=%v want %s", adaptador.DependsOn, expectedDependency)
 	}
 }
 

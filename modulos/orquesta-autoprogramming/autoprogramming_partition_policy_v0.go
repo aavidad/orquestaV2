@@ -98,7 +98,7 @@ func autoprogrammingPartitionWriteSetByAreaV0(
 		}
 	}
 	plan = autoprogrammingApplySequencedPathDepsV0(request, plan, groups, sequenced)
-	plan = autoprogrammingApplyDeclaredTaskWriteSetAndDepsV0(plan, groups)
+	plan = autoprogrammingApplyDeclaredTaskWriteSetAndDepsV0(request, plan, groups)
 	return autoprogrammingCompletePartitionPlanV0(request, plan, groups), nil
 }
 
@@ -107,18 +107,25 @@ func autoprogrammingPartitionWriteSetByAreaV0(
 // tarea del grupo trae WriteSet/DependsOn declarados, ganan sobre la inferencia
 // automatica por area. Es aditivo: tareas sin declaracion conservan lo inferido.
 func autoprogrammingApplyDeclaredTaskWriteSetAndDepsV0(
+	request AutoprogrammingRequestV0,
 	plan AutoprogrammingPartitionPlanV0,
 	groups []AutoprogrammingTaskGroupV0,
 ) AutoprogrammingPartitionPlanV0 {
+	sourceToWorkflowTask := autoprogrammingSourceTaskRefMapV0(request, groups)
 	for _, group := range groups {
 		declaredWriteSet := make([]string, 0)
 		declaredDeps := make([]string, 0)
+		currentTaskRef := sourceToWorkflowTask["area:"+group.Area]
 		for _, task := range group.Tasks {
 			for _, path := range task.WriteSet {
 				declaredWriteSet = appendUniqueStringV0(declaredWriteSet, path)
 			}
 			for _, dep := range task.DependsOn {
-				declaredDeps = appendUniqueStringV0(declaredDeps, dep)
+				dependencyRef := autoprogrammingDeclaredDependencyRefV0(sourceToWorkflowTask, dep)
+				if dependencyRef == currentTaskRef {
+					continue
+				}
+				declaredDeps = appendUniqueStringV0(declaredDeps, dependencyRef)
 			}
 		}
 		if len(declaredWriteSet) > 0 {
@@ -129,6 +136,34 @@ func autoprogrammingApplyDeclaredTaskWriteSetAndDepsV0(
 		}
 	}
 	return plan
+}
+
+func autoprogrammingSourceTaskRefMapV0(
+	request AutoprogrammingRequestV0,
+	groups []AutoprogrammingTaskGroupV0,
+) map[string]string {
+	refs := map[string]string{}
+	for i, group := range groups {
+		taskRef := autoprogrammingProgrammableTaskRefV0(request.RequestRef, i)
+		refs["area:"+group.Area] = taskRef
+		for _, sourceRef := range group.TaskRefs {
+			refs[sourceRef] = taskRef
+		}
+		for _, task := range group.Tasks {
+			refs[task.TaskRef] = taskRef
+		}
+	}
+	return refs
+}
+
+func autoprogrammingDeclaredDependencyRefV0(
+	sourceToWorkflowTask map[string]string,
+	dependency string,
+) string {
+	if mapped := sourceToWorkflowTask[dependency]; mapped != "" {
+		return mapped
+	}
+	return dependency
 }
 
 func autoprogrammingPartitionAreasV0(groups []AutoprogrammingTaskGroupV0) []string {

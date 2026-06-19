@@ -38,6 +38,7 @@ func WorkProfileForUnitV0(plan AppMicrotaskPlanV0, unit AppWorkUnitV0) (orquesta
 		AcceptanceCriteria:   append([]string(nil), unit.AcceptanceCriteria...),
 		RequiredTests:        append([]string(nil), unit.RequiredTests...),
 		DependsOn:            dependsOn,
+		SkillRefs:            append([]string(nil), unit.SkillRefs...),
 		FunctionContractRefs: appPlanFunctionContractRefsForUnitV0(unit),
 	})
 	if err != nil {

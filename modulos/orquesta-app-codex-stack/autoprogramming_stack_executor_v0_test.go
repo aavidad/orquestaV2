@@ -144,7 +144,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0PreparaRunYSupervisorArranca(t 
 		t.Fatalf("LoadRunV0 repeated: %v", err)
 	}
 	if repeated.RunRef != prepared.RunRef ||
-		repeated.WaitAgentRefs[0] != prepared.WaitAgentRefs[0] ||
+		len(repeated.WaitAgentRefs) != 0 ||
 		runtime.launchCountV0() != 1 ||
 		!autoprogrammingBridgeStringInSetForTestV0(run.StartedAgents, prepared.WaitAgentRefs[0]) {
 		t.Fatalf("repeated=%+v run=%+v launches=%d", repeated, run, runtime.launchCountV0())

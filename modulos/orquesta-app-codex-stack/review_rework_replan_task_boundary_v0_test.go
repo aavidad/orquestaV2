@@ -49,3 +49,30 @@ func TestReviewReworkReplanSourceV0CreaTareaCorreccionSiYaHayPadreV0(t *testing.
 		t.Fatalf("refs/evidencia incompletas plan=%v task=%+v", plan.EvidenceRefs, task)
 	}
 }
+
+func TestReviewReworkReplanSourceV0CreaTareaCorreccionSinFunctionContractsV0(t *testing.T) {
+	descriptor := reviewReworkDescriptorForTestV0("delivery-ref-target", "task-ref-target")
+	descriptor.Spec.AgentPacket.Task.WriteSet = []string{"modulos/orquesta-app-codex-stack"}
+	descriptor.Spec.AgentPacket.Task.RequiredTests = []string{"go test -count=1 ./modulos/orquesta-app-codex-stack"}
+	source := ReviewReworkReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(descriptor),
+	}
+	request := reviewReworkPlanRequestForTestV0(false)
+	request.Run.FunctionContracts = nil
+	request.Run.Agents = []string{descriptor.AgentRef}
+	request.Run.StartedAgents = []string{descriptor.AgentRef}
+
+	plans, err := source.BuildReviewReworkReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildReviewReworkReplanPlansV0: %v", err)
+	}
+	if len(plans) != 1 {
+		t.Fatalf("plans=%+v", plans)
+	}
+	task := plans[0].SplitTasks[0]
+	if task.TaskID == "" ||
+		!reviewReworkPlanHasEvidenceForTestV0(task.DependsOn, "task-ref-target") ||
+		len(task.FunctionContractRefs) != 0 {
+		t.Fatalf("tarea de correccion sin contratos opcionales invalida: plan=%+v task=%+v", plans[0], task)
+	}
+}

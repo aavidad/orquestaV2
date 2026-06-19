@@ -102,6 +102,9 @@ func operationalDirectorReviewPhaseCommandSuffixV0(
 		activeStep.WaveRef,
 		activeStep.CohortRef,
 		activeStep.ParentTaskRef,
+		strings.Join(compactServiceRefsV0(activeStep.TaskRefs), "+"),
+		strings.Join(compactServiceRefsV0(activeStep.AgentRefs), "+"),
+		strings.Join(compactServiceRefsV0(activeStep.DeliveryRefs), "+"),
 		"replan-attempt-" + strconv.Itoa(state.ReplanAttempts),
 	}), "-"))
 }

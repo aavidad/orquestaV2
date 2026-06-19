@@ -10,6 +10,7 @@ import (
 
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestAutoprogrammingResidentModeV0NormalizaBacklogDurableV0(t *testing.T) {
@@ -52,6 +53,82 @@ func TestAutoprogrammingResidentModeV0TomaRunPreparadaDeColaV0(t *testing.T) {
 		runtime.launchCountV0() != 1 ||
 		!codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-autoprogramming-resident-backlog-queue") {
 		t.Fatalf("result=%+v prepared=%+v launches=%d", result, prepared, runtime.launchCountV0())
+	}
+}
+
+func TestAutoprogrammingResidentModeV0RelanzaFronteraDependienteTrasACKV0(t *testing.T) {
+	runtime := newPendingAckCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	request := autoprogrammingBridgeDependentRequestForTestV0()
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-autoprogramming-resident-dependent-001",
+		CorrelationID:          "corr-autoprogramming-resident-dependent-001",
+		AutoprogrammingRequest: request,
+		MaxBursts:              3,
+		MaxStepsPerBurst:       3,
+		MaxDispatchesPerWait:   3,
+		MaxCommands:            5,
+		MaxOutboxPerCycle:      5,
+	})
+	if !prepared.Accepted || prepared.RunRef == "" || len(prepared.WaitAgentRefs) != 1 || len(prepared.WorkflowTaskRefs) != 2 {
+		t.Fatalf("prepared=%+v", prepared)
+	}
+	tasks, err := stack.Ports.DirectorTaskStore.LoadWorkflowTasksV0(
+		context.Background(),
+		prepared.RunRef,
+		prepared.WorkflowTaskRefs,
+	)
+	if err != nil {
+		t.Fatalf("LoadWorkflowTasksV0: %v", err)
+	}
+	baseTaskRef := tasks[0].TaskID
+	dependentTaskRef := tasks[1].TaskID
+	dependentAgentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(dependentTaskRef)
+
+	first := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:         "request-autoprogramming-resident-dependent-supervise-001",
+		CorrelationID:     "corr-autoprogramming-resident-dependent-001",
+		ResidentMode:      true,
+		MaxTicks:          1,
+		MaxRunsPerTick:    1,
+		MaxExecutions:     1,
+		AllowRepeatedRuns: true,
+	})
+	if first.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
+		first.RunRef != prepared.RunRef ||
+		runtime.launchCountV0() != 1 {
+		t.Fatalf("first=%+v prepared=%+v launches=%d", first, prepared, runtime.launchCountV0())
+	}
+	baseDescriptor := mustCodexStackDescriptorByTaskRefV0(t, stack, baseTaskRef)
+	if err := writeCodexStackAckForDescriptorV0(t, baseDescriptor); err != nil {
+		t.Fatalf("write base ack: %v", err)
+	}
+
+	second := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:         "request-autoprogramming-resident-dependent-supervise-002",
+		CorrelationID:     "corr-autoprogramming-resident-dependent-001",
+		ResidentMode:      true,
+		MaxTicks:          1,
+		MaxRunsPerTick:    1,
+		MaxExecutions:     1,
+		AllowRepeatedRuns: true,
+	})
+	run, err := stack.Ports.RunStore.LoadRunV0(context.Background(), prepared.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if second.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
+		second.RunRef != prepared.RunRef ||
+		!autoprogrammingBridgeStringInSetForTestV0(run.DeliveredTasks, baseTaskRef) ||
+		!autoprogrammingBridgeStringInSetForTestV0(run.StartedAgents, dependentAgentRef) ||
+		runtime.launchCountV0() != 2 {
+		t.Fatalf("second=%+v delivered=%v started=%v launches=%d dep_agent=%s",
+			second,
+			run.DeliveredTasks,
+			run.StartedAgents,
+			runtime.launchCountV0(),
+			dependentAgentRef,
+		)
 	}
 }
 

@@ -144,6 +144,33 @@ func TestBuildCodexAgentPromptV0MaterializaSkillRefsRolesSeparadas(t *testing.T)
 	}
 }
 
+func TestBuildCodexAgentPromptV0MaterializaSkillRefsInyectadasPorComposicion(t *testing.T) {
+	packet := codexPacketForTestV0()
+	packet.Task.SkillRefs = []string{"skill-ref-catalogo-declarado-v0"}
+
+	prompt := BuildCodexAgentPromptWithControlFilesV0(packet, nil, CodexControlFilesV0{
+		PacketPath: CodexAgentPacketFileNameV0,
+		AckPath:    CodexAgentAckFileNameV0,
+		SkillInstructions: []CodexSkillInstructionV0{{
+			SkillRef: "skill-ref-catalogo-declarado-v0",
+			Text:     "Catalogo declarado: aplica workspace administrativo denso con filtros, tablas y estados semanticos.",
+		}},
+	})
+
+	for _, want := range []string{
+		"- skill-ref-catalogo-declarado-v0: Catalogo declarado",
+		"workspace administrativo denso",
+		"SkillRefs solicitadas:",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("prompt no materializa skill inyectada %q:\n%s", want, prompt)
+		}
+	}
+	if strings.Contains(prompt, "SKILL.md") || strings.Contains(prompt, "skills/") {
+		t.Fatalf("prompt no debe resolver skill_refs a rutas:\n%s", prompt)
+	}
+}
+
 func promptSectionForTestV0(prompt string, start string, end string) string {
 	_, after, ok := strings.Cut(prompt, start)
 	if !ok {

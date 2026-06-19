@@ -110,6 +110,7 @@ func codexProfileForAreaV0(
 		InteractiveApprovalOptIn: config.InteractiveApprovalOptIn,
 		ExtraArgs:                append([]string(nil), config.ExtraArgs...),
 		PromptHints:              codexPromptHintsV0(config.PromptHints),
+		SkillInstructions:        append([]orquestaruntimecodex.CodexSkillInstructionV0(nil), config.SkillInstructions...),
 	}
 }
 

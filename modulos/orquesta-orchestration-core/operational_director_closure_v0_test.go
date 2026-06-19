@@ -327,6 +327,86 @@ func TestOperationalDirectorClosureV0ExigeTodosLosTestsRequeridos(t *testing.T) 
 	}
 }
 
+func TestOperationalDirectorClosureV0EmparejaReviewAceptadaConResultadoPorEvidencia(t *testing.T) {
+	runRef := "run-operational-director-closure-accepted-result-pairing-001"
+	runStore, sink, run := mustOperationalDirectorClosureReadyStoreV0(t, runRef)
+	const (
+		taskRef             = "task-ref-nucleo-001"
+		testCommand         = "go test ./..."
+		reviewRequestID     = "review-request-ref-nucleo-review-001"
+		deliveryRef         = "delivery-ref-nucleo-review-001"
+		wrongReviewResult   = "review-result-ref-nucleo-review-wrong-accepted"
+		softReviewResult    = "review-result-ref-nucleo-review-soft-accepted"
+		softAcceptedReview  = "accepted-review-ref-nucleo-review-soft-accepted"
+		softEvidenceRef     = "evidence-ref-soft-accepted-pairing"
+		requiredEvidenceRef = "test-evidence-ref-soft-accepted-pairing"
+	)
+	run.ReviewResults = append(run.ReviewResults,
+		wrongReviewResult+"#review_result:accepted#review_request:"+reviewRequestID+"#delivery:"+deliveryRef,
+		softReviewResult+"#review_result:accepted#review_request:"+reviewRequestID+"#delivery:"+deliveryRef,
+	)
+	run.AcceptedReviews = append(run.AcceptedReviews, softAcceptedReview)
+	if err := runStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	events := []orquestacoreworkflow.OrchestrationEventV0{
+		operationalDirectorClosureEventForTestV0(t, runRef, run.LastSequence+1, orquestacoreworkflow.OrchestrationEventReviewResultRecordedV0, orquestacoreworkflow.ReviewResultV0{
+			ReviewResultRef: wrongReviewResult,
+			ReviewRequestID: reviewRequestID,
+			DeliveryRef:     deliveryRef,
+			Status:          orquestacoreworkflow.ReviewResultStatusAcceptedV0,
+			Summary:         "Resultado aceptado anterior del mismo delivery.",
+			EvidenceRefs:    []string{"evidence-ref-wrong-accepted-pairing"},
+		}),
+		operationalDirectorClosureEventForTestV0(t, runRef, run.LastSequence+2, orquestacoreworkflow.OrchestrationEventReviewResultRecordedV0, orquestacoreworkflow.ReviewResultV0{
+			ReviewResultRef: softReviewResult,
+			ReviewRequestID: reviewRequestID,
+			DeliveryRef:     deliveryRef,
+			Status:          orquestacoreworkflow.ReviewResultStatusAcceptedV0,
+			Summary:         "Resultado aceptado que corresponde a la review aceptada usada para cerrar.",
+			EvidenceRefs:    []string{softEvidenceRef},
+		}),
+		operationalDirectorClosureEventForTestV0(t, runRef, run.LastSequence+3, orquestacoreworkflow.OrchestrationEventReviewAcceptedV0, orquestacoreworkflow.ReviewAcceptedPayloadV0{
+			AcceptedReviewRef: softAcceptedReview,
+			PhaseID:           string(orquestacoreworkflow.OrchestrationPhaseRevisionV0),
+			ReviewRequestID:   reviewRequestID,
+			DeliveryRef:       deliveryRef,
+			Summary:           "Review aceptada con evidencias compartidas con su resultado.",
+			EvidenceRefs:      []string{softEvidenceRef},
+		}),
+	}
+	events[0].EventID = "evt-operational-director-closure-pairing-wrong-result"
+	events[1].EventID = "evt-operational-director-closure-pairing-soft-result"
+	events[2].EventID = "evt-operational-director-closure-pairing-soft-accepted"
+	if err := sink.AppendRunEventsV0(context.Background(), runRef, events); err != nil {
+		t.Fatalf("AppendRunEventsV0: %v", err)
+	}
+	evidence := requiredTestEvidenceForTestV0(runRef, taskRef, testCommand)
+	evidence.EvidenceRef = requiredEvidenceRef
+	evidence.ReviewResultRef = softReviewResult
+	evidence.AcceptedReviewRef = softAcceptedReview
+	evidence.EvidenceRefs = []string{"required-test-receipt-ref-soft-accepted-pairing"}
+	request := operationalDirectorClosureRequestForTestV0(runRef)
+	request.AcceptedReviewRef = softAcceptedReview
+	request.RequiredTestEvidenceRefs = []string{requiredEvidenceRef}
+
+	result, err := (OperationalDirectorClosureV0{
+		RunStore:                  runStore,
+		EventSink:                 sink,
+		TaskStore:                 NewInMemoryWorkflowTaskStoreV0(operationalDirectorClosureTaskForTestV0(runRef, taskRef, []string{testCommand})),
+		RequiredTestEvidenceStore: NewInMemoryRequiredTestEvidenceStoreV0(evidence),
+	}).CloseOperationalDirectorRunV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("CloseOperationalDirectorRunV0: %v", err)
+	}
+	if len(result.Issues) > 0 {
+		t.Fatalf("issues=%+v", result.Issues)
+	}
+	if !containsNucleoRefV0(result.Run.ClosedTasks, taskRef) {
+		t.Fatalf("task no cerrada con emparejamiento por evidencia: %+v", result.Run)
+	}
+}
+
 func TestOperationalDirectorClosureV0RechazaTestFailed(t *testing.T) {
 	runRef := "run-operational-director-closure-test-failed-001"
 	runStore, sink, _ := mustOperationalDirectorClosureReadyStoreV0(t, runRef)
@@ -468,6 +548,88 @@ func TestOperationalDirectorClosureV0CierraPadreConReviewAceptadaDeHijoRework(t 
 	}
 	if len(result.Issues) > 0 || !containsNucleoRefV0(result.Run.ClosedTasks, parentTaskRef) {
 		t.Fatalf("debe cerrar padre con entrega aceptada del hijo de rework: result=%+v", result)
+	}
+}
+
+func TestOperationalDirectorClosureV0CierraPadreConHijoDeSplitTaskSoloPorEventoReplan(t *testing.T) {
+	runRef := "run-operational-director-closure-replan-child-rework-001"
+	parentTaskRef := "task-ref-nucleo-parent-replan-001"
+	childTaskRef := "task-ref-nucleo-child-replan-001"
+	deliveryRef := "delivery-ref-nucleo-child-replan-001"
+	acceptedReviewRef := "accepted-review-ref-nucleo-child-replan-001"
+	sourceReviewResultRef := "review-result-ref-nucleo-parent-replan-001"
+	sourceReworkRef := "rework-request-ref-nucleo-parent-replan-001"
+	runStore, sink, run := mustOperationalDirectorClosureReadyStoreV0(t, runRef)
+	run.Tasks = []string{parentTaskRef, childTaskRef}
+	run.Deliveries = append(run.Deliveries, deliveryRef)
+	run.AcceptedReviews = append(run.AcceptedReviews, acceptedReviewRef)
+	run.ReviewResults = append(run.ReviewResults, sourceReviewResultRef+"#review_result:changes_requested#review_request:review-request-ref-nucleo-review-001#delivery:delivery-ref-nucleo-review-001")
+	run.ReworkRequests = append(run.ReworkRequests, sourceReworkRef+"#review_result:"+sourceReviewResultRef+"#review_request:review-request-ref-nucleo-review-001#delivery:delivery-ref-nucleo-review-001")
+	run.ReplanDecisions = append(run.ReplanDecisions, "replan-ref-nucleo-split-replan-001#source:"+sourceReworkRef+"#task:"+parentTaskRef+"#action:split_task#followups:"+childTaskRef)
+	run.ClosedTasks = []string{childTaskRef}
+	if err := runStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	parent := operationalDirectorClosureTaskForTestV0(runRef, parentTaskRef, nil)
+	child := operationalDirectorClosureTaskForTestV0(runRef, childTaskRef, nil)
+	events := []orquestacoreworkflow.OrchestrationEventV0{
+		operationalDirectorClosureEventForTestV0(t, runRef, 1, orquestacoreworkflow.OrchestrationEventReplanDecisionRecordedV0, orquestacoreworkflow.ReplanDecisionRecordedPayloadV0{
+			ReplanRef:      "replan-ref-nucleo-split-replan-001",
+			RunRef:         runRef,
+			TaskRef:        parentTaskRef,
+			SourceRef:      sourceReworkRef,
+			AcceptedAction: orquestacoreworkflow.ReplanDecisionActionSplitTaskV0,
+			FollowupRefs:   []string{childTaskRef},
+			Summary:        "Rework del padre dividido en hijo causal.",
+		}),
+		operationalDirectorClosureEventForTestV0(t, runRef, 2, orquestacoreworkflow.OrchestrationEventDeliveryRegisteredV0, orquestacoreworkflow.DeliveryRegisteredPayloadV0{
+			DeliveryRef:  deliveryRef,
+			PhaseID:      string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			TaskID:       childTaskRef,
+			AgentRef:     "agent-ref-nucleo-child-replan-001",
+			Summary:      "Entrega del hijo de rework aceptada.",
+			EvidenceRefs: []string{"evidence-ref-delivery-child-replan-001"},
+		}),
+		operationalDirectorClosureEventForTestV0(t, runRef, 3, orquestacoreworkflow.OrchestrationEventReviewRequestedV0, orquestacoreworkflow.ReviewRequestedPayloadV0{
+			ReviewRequestID: "review-request-ref-nucleo-child-replan-001",
+			PhaseID:         string(orquestacoreworkflow.OrchestrationPhaseRevisionV0),
+			DeliveryRef:     deliveryRef,
+			Summary:         "Review del hijo de rework.",
+		}),
+		operationalDirectorClosureEventForTestV0(t, runRef, 4, orquestacoreworkflow.OrchestrationEventReviewResultRecordedV0, orquestacoreworkflow.ReviewResultV0{
+			ReviewResultRef: "review-result-ref-nucleo-child-replan-001",
+			ReviewRequestID: "review-request-ref-nucleo-child-replan-001",
+			DeliveryRef:     deliveryRef,
+			Status:          orquestacoreworkflow.ReviewResultStatusAcceptedV0,
+			Summary:         "Review aceptada del hijo de rework.",
+		}),
+		operationalDirectorClosureEventForTestV0(t, runRef, 5, orquestacoreworkflow.OrchestrationEventReviewAcceptedV0, orquestacoreworkflow.ReviewAcceptedPayloadV0{
+			AcceptedReviewRef: acceptedReviewRef,
+			PhaseID:           string(orquestacoreworkflow.OrchestrationPhaseRevisionV0),
+			ReviewRequestID:   "review-request-ref-nucleo-child-replan-001",
+			DeliveryRef:       deliveryRef,
+			Summary:           "Aceptacion causal del hijo de rework.",
+		}),
+	}
+	if err := sink.AppendRunEventsV0(context.Background(), runRef, events); err != nil {
+		t.Fatalf("AppendRunEventsV0: %v", err)
+	}
+	request := operationalDirectorClosureRequestForTestV0(runRef)
+	request.TaskID = parentTaskRef
+	request.DeliveryRef = deliveryRef
+	request.AcceptedReviewRef = acceptedReviewRef
+	request.RequiredTestEvidenceRefs = nil
+
+	result, err := (OperationalDirectorClosureV0{
+		RunStore:  NewInMemoryRunStoreV0(run),
+		EventSink: sink,
+		TaskStore: NewInMemoryWorkflowTaskStoreV0(parent, child),
+	}).CloseOperationalDirectorRunV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("CloseOperationalDirectorRunV0: %v", err)
+	}
+	if len(result.Issues) > 0 || !containsNucleoRefV0(result.Run.ClosedTasks, parentTaskRef) {
+		t.Fatalf("debe cerrar padre con hijo causal de split_task sin metadata duplicada: result=%+v", result)
 	}
 }
 

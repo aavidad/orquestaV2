@@ -105,6 +105,103 @@ func TestContinueRequestWithOperationalDirectorPlanStateV0ReabreReviewDeFollowup
 	}
 }
 
+func TestContinueRequestWithOperationalDirectorPlanStateV0ReabreReviewDeFollowupEntregadoTrasClosureIssues(t *testing.T) {
+	runRef := "run-app-director-closure-issues-followup-review"
+	planRef := "plan-ref-closure-issues-followup-review"
+	parentTaskRef := "task-ref-closure-issues-parent"
+	followupTask := serviceOperationalClosureTaskRefsForTestV0{TaskRef: "task-ref-closure-issues-followup"}
+	followupAgentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(followupTask.TaskRef)
+	followupDeliveryRef := "delivery-ref-closure-issues-followup"
+	state := serviceOperationalDirectorWideWaveWaitStateForTestV0(
+		runRef,
+		planRef,
+		parentTaskRef,
+		"wave-closure-issues-followup",
+		"cohort-closure-issues-followup",
+		serviceOperationalClosureTaskRefsForTestV0{TaskRef: parentTaskRef},
+		followupTask,
+	)
+	state.Status = orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0
+	state.ActiveStepID = "step-replan-or-close"
+	state.PendingAgentRefs = nil
+	state.BlockerRefs = []string{"operational-closure-issues", "delivery_ref", "nucleo_orquestacion_invalido"}
+	state.ClosureReason = "operational-closure-issues"
+	for index := range state.Steps {
+		switch state.Steps[index].StepID {
+		case "step-wait-subagents":
+			state.Steps[index].Status = orquestadirectoroperativo.OperationalDirectorStepAcceptedV0
+			state.Steps[index].PendingAgentRefs = nil
+			state.Steps[index].BlockerRefs = nil
+			state.Steps[index].Reason = "wait-subagents-consumed"
+		case "step-review-deliveries":
+			state.Steps[index].Status = orquestadirectoroperativo.OperationalDirectorStepAcceptedV0
+			state.Steps[index].TaskRefs = []string{parentTaskRef}
+			state.Steps[index].DeliveryRefs = []string{"delivery-ref-closure-issues-parent"}
+			state.Steps[index].ReviewResultRefs = []string{"review-result-ref-closure-issues-parent"}
+			state.Steps[index].AcceptedReviewRefs = []string{"accepted-review-ref-closure-issues-parent"}
+			state.Steps[index].Reason = "review-deliveries-accepted"
+		case "step-run-required-tests":
+			state.Steps[index].Status = orquestadirectoroperativo.OperationalDirectorStepAcceptedV0
+			state.Steps[index].TaskRefs = []string{parentTaskRef}
+			state.Steps[index].Reason = "required-tests-passed"
+		case "step-replan-or-close":
+			state.Steps[index].Status = orquestadirectoroperativo.OperationalDirectorStepBlockedV0
+			state.Steps[index].TaskRefs = []string{parentTaskRef}
+			state.Steps[index].BlockerRefs = []string{"operational-closure-issues", "delivery_ref"}
+			state.Steps[index].Reason = "operational-closure-issues"
+		}
+	}
+	run := orquestacoreworkflow.OrchestrationRunV0{
+		SchemaVersion:   orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
+		RunID:           runRef,
+		ProjectRef:      "orquesta",
+		AppSpecRef:      "app-spec-closure-issues-followup-review",
+		Status:          orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+		CurrentPhase:    orquestacoreworkflow.OrchestrationPhaseRevisionV0,
+		Tasks:           []string{parentTaskRef, followupTask.TaskRef},
+		DeliveredAgents: []string{followupAgentRef},
+		DeliveredTasks:  []string{followupTask.TaskRef},
+		Deliveries:      []string{followupDeliveryRef},
+	}
+	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(state)
+	request := ContinueAppDirectorRequestV0{
+		RunRef:                     runRef,
+		OperationalDirectorPlanRef: planRef,
+		OccurredAt:                 "2026-05-27T22:45:00Z",
+		CorrelationID:              "corr-closure-issues-followup-review",
+	}
+
+	got, err := continueRequestWithOperationalDirectorPlanStateV0(context.Background(), request, StartAppDirectorPortsV0{
+		RunStore:                   orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+		EventReader:                serviceOperationalClosureEventReaderForTestV0{Events: []orquestacoreworkflow.OrchestrationEventV0{serviceOperationalDirectorPlanStateEventForTestV0(t, runRef, 1, orquestacoreworkflow.OrchestrationEventDeliveryRegisteredV0, orquestacoreworkflow.DeliveryRegisteredPayloadV0{DeliveryRef: followupDeliveryRef, PhaseID: string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0), TaskID: followupTask.TaskRef, AgentRef: followupAgentRef, Summary: "Entrega followup pendiente de review.", EvidenceRefs: []string{"evidence-ref-followup-delivered-closure-issues"}})}},
+		OperationalPlanStateStore:  planStateStore,
+		OperationalPlanStateWriter: planStateStore,
+	})
+	if err != nil {
+		t.Fatalf("continueRequestWithOperationalDirectorPlanStateV0: %v", err)
+	}
+	recovered, err := planStateStore.LoadOperationalDirectorPlanStateV0(context.Background(), runRef, planRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0: %v", err)
+	}
+	reviewStep := serviceOperationalDirectorPlanStateStepForTestV0(t, recovered, "step-review-deliveries")
+	replanStep := serviceOperationalDirectorPlanStateStepForTestV0(t, recovered, "step-replan-or-close")
+	if recovered.Status != orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0 ||
+		recovered.ActiveStepID != "step-review-deliveries" ||
+		recovered.ClosureReason != "" ||
+		len(recovered.BlockerRefs) != 0 ||
+		reviewStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
+		!serviceStringInSetV0(reviewStep.TaskRefs, followupTask.TaskRef) ||
+		serviceStringInSetV0(reviewStep.TaskRefs, parentTaskRef) ||
+		!serviceStringInSetV0(reviewStep.AgentRefs, followupAgentRef) ||
+		!serviceStringInSetV0(reviewStep.DeliveryRefs, followupDeliveryRef) ||
+		replanStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
+		len(replanStep.BlockerRefs) != 0 ||
+		!serviceStringInSetV0(got.WaitAgentRefs, followupAgentRef) {
+		t.Fatalf("got=%+v recovered=%+v review=%+v replan=%+v", got, recovered, reviewStep, replanStep)
+	}
+}
+
 func TestOperationalDirectorPlanStateRequiredTestsPassedRefrescaScopeDeCierreV0(t *testing.T) {
 	runRef := "run-app-director-required-tests-refresh-closure-scope"
 	planRef := "plan-ref-required-tests-refresh-closure-scope"
@@ -211,6 +308,9 @@ func TestContinueOperationalDirectorPlanStateRefreshStaleClosureScopeV0(t *testi
 		followupTask,
 	)
 	state.ActiveStepID = "step-replan-or-close"
+	state.Status = orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0
+	state.BlockerRefs = []string{"operational-closure-issues", "delivery_ref"}
+	state.ClosureReason = "operational-closure-issues"
 	state.PendingAgentRefs = nil
 	for index := range state.Steps {
 		switch state.Steps[index].StepID {
@@ -236,11 +336,13 @@ func TestContinueOperationalDirectorPlanStateRefreshStaleClosureScopeV0(t *testi
 			state.Steps[index].RequiredTestEvidenceRefs = []string{"evidence-ref-refresh-stale-closure-followup-test"}
 			state.Steps[index].Reason = "required-tests-passed"
 		case "step-replan-or-close":
-			state.Steps[index].Status = orquestadirectoroperativo.OperationalDirectorStepRunningV0
+			state.Steps[index].Status = orquestadirectoroperativo.OperationalDirectorStepBlockedV0
 			state.Steps[index].TaskRefs = []string{parentTaskRef}
 			state.Steps[index].AgentRefs = []string{orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(parentTaskRef)}
 			state.Steps[index].DeliveryRefs = []string{"delivery-ref-refresh-stale-closure-parent"}
 			state.Steps[index].ReviewResultRefs = []string{"review-result-ref-refresh-stale-closure-parent"}
+			state.Steps[index].AcceptedReviewRefs = []string{"accepted-review-ref-refresh-stale-closure-parent"}
+			state.Steps[index].BlockerRefs = []string{"operational-closure-issues", "delivery_ref"}
 			state.Steps[index].Reason = "stale-closure-scope"
 		}
 	}
@@ -302,11 +404,15 @@ func TestContinueOperationalDirectorPlanStateRefreshStaleClosureScopeV0(t *testi
 	}
 	replanStep := serviceOperationalDirectorPlanStateStepForTestV0(t, recovered, "step-replan-or-close")
 	if !changed ||
+		recovered.Status != orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0 ||
+		replanStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
 		!serviceStringInSetV0(replanStep.TaskRefs, followupTask.TaskRef) ||
 		serviceStringInSetV0(replanStep.TaskRefs, parentTaskRef) ||
 		!serviceStringInSetV0(replanStep.AgentRefs, followupAgentRef) ||
 		!serviceStringInSetV0(replanStep.DeliveryRefs, followupDeliveryRef) ||
 		!serviceStringInSetV0(replanStep.ReviewResultRefs, followupReviewResultRef) ||
+		!serviceStringInSetV0(replanStep.AcceptedReviewRefs, followupAcceptedReviewRef) ||
+		serviceStringInSetV0(replanStep.AcceptedReviewRefs, "accepted-review-ref-refresh-stale-closure-parent") ||
 		serviceStringInSetV0(replanStep.TaskRefs, otherTaskRef) ||
 		serviceStringInSetV0(replanStep.AgentRefs, otherAgentRef) ||
 		serviceStringInSetV0(replanStep.DeliveryRefs, otherDeliveryRef) ||

@@ -199,6 +199,31 @@ func TestFileOutboxLedgerV0MantieneIdempotenciaYJSONEstructurado(t *testing.T) {
 	}
 }
 
+func TestFileOutboxLedgerV0IdempotenciaIgnoraCorrelationOperativa(t *testing.T) {
+	dir := t.TempDir()
+	ledger := newFileOutboxLedgerForTestV0(t, dir)
+	message := validLaunchMessageV0(t)
+	if _, issues := ledger.SavePending(context.Background(), []orquestacoreworkflow.OutboxMessageV0{message}); len(issues) != 0 {
+		t.Fatalf("save issues=%+v", issues)
+	}
+
+	retry := message
+	retry.CorrelationID = "corr-outbox-file-retry-002"
+	if _, issues := ledger.SavePending(context.Background(), []orquestacoreworkflow.OutboxMessageV0{retry}); len(issues) != 0 {
+		t.Fatalf("retry con distinta correlacion no debe romper idempotencia: %+v", issues)
+	}
+
+	pending, issues := ledger.ListPending(context.Background(), orquestadirectorcycleoutbox.DirectorCycleOutboxPendingFilterV0{
+		RunRef: message.RunID,
+	})
+	if len(issues) != 0 || len(pending) != 1 {
+		t.Fatalf("pending=%+v issues=%+v", pending, issues)
+	}
+	if pending[0].CorrelationID != message.CorrelationID {
+		t.Fatalf("correlation almacenada=%q, want original %q", pending[0].CorrelationID, message.CorrelationID)
+	}
+}
+
 func TestFileOutboxLedgerV0LimitaLecturaSnapshot(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, fileOutboxLedgerNameV0)

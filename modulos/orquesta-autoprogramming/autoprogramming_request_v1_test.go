@@ -84,6 +84,29 @@ func TestBuildAutoprogrammingProgrammableWorkV1NormalizaAliasDeTipoApp(t *testin
 	}
 }
 
+func TestBuildAutoprogrammingProgrammableWorkV1PropagaSkillRefsDePerfil(t *testing.T) {
+	result := BuildAutoprogrammingProgrammableWorkV1(validAutoprogrammingRequestV1(func(request *AutoprogrammingRequestV1) {
+		request.WorkProfiles = []AutoprogrammingWorkProfileV1{
+			{
+				AppKind:     "web_application",
+				ProfileKind: orquestacoreworkflow.WorkProfileImplementationV0,
+				SkillRefs: []string{
+					"skill-ref-catalogo-declarado-v0",
+				},
+			},
+		}
+	}))
+	if !result.Accepted {
+		t.Fatalf("issues=%+v", result.Issues)
+	}
+	if !stringsSliceContainsForAutoprogrammingTestV0(
+		result.Work.Base.Tasks[0].SkillRefs,
+		"skill-ref-catalogo-declarado-v0",
+	) {
+		t.Fatalf("skill_refs=%v", result.Work.Base.Tasks[0].SkillRefs)
+	}
+}
+
 func TestValidateAutoprogrammingRequestV1RechazaPerfilSinAppKind(t *testing.T) {
 	result := ValidateAutoprogrammingRequestV1(validAutoprogrammingRequestV1(func(request *AutoprogrammingRequestV1) {
 		request.AppKind = ""

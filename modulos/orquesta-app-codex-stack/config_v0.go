@@ -17,6 +17,7 @@ import (
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
+	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
 	orquestaweb "orquesta/modulos/orquesta-web"
@@ -102,6 +103,7 @@ type CodexRuntimeConfigV0 struct {
 	InteractiveApprovalOptIn bool
 	ExtraArgs                []string
 	PromptHints              []string
+	SkillInstructions        []orquestaruntimecodex.CodexSkillInstructionV0
 
 	Runtime          orquestaruntime.ExternalAgentProcessRuntimePortV0
 	ProcessStopper   orquestacionnucleoapp.ProcessRuntimeStopPortV0

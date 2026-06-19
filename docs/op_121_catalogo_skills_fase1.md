@@ -191,6 +191,9 @@ Estas skills viven en este repo y valen para cualquier consumidor:
   Revision tecnica, arquitectura, producto/UI, tests y rework causal.
 - `skills/orquesta-programacion-web-local/SKILL.md`
   Validacion web local con i18n, responsive, capturas y assets.
+- `skills/orquesta-programacion-web-administrativa/SKILL.md`
+  Webs administrativas densas para portales de empleado, Bolsa/VEC, expedientes,
+  autobaremacion, listados, alegaciones, auditoria y muchos datos visibles.
 - `skills/orquesta-programacion-release/SKILL.md`
   Worktree limpio, archivado, commit, push y despliegue seguro.
 - `skills/orquesta-revision-consejo-votacion/SKILL.md`

@@ -5,6 +5,7 @@ import "strings"
 func (n appSpecNormalizerV0) defaultsApplied() []DefaultAppliedV0 {
 	defaults := []DefaultAppliedV0{
 		{Campo: "architecture.patron", Valor: "hexagonal", Motivo: "Default obligatorio de OrquestaV2."},
+		{Campo: "architecture.policy", Valor: "hexagonal_estricta", Motivo: "Las apps programadas por Orquesta deben separar domain, application, ports, adapters y bootstrap."},
 	}
 	if n.req.I18N.Enabled == nil {
 		defaults = append(defaults, DefaultAppliedV0{Campo: "i18n.enabled", Valor: true, Motivo: "i18n se activa por defecto."})

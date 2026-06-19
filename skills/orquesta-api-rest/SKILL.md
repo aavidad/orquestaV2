@@ -23,6 +23,9 @@ Cada endpoint debe declarar:
 
 ## Implementacion
 
+- En apps generadas, handlers HTTP son adaptadores inbound: validan/serializan y
+  llaman casos de uso. No contienen reglas de dominio, queries directas ni
+  wiring de dependencias.
 - Validar input antes de efectos externos.
 - Separar handler, caso de uso, puerto y adaptador.
 - No filtrar tokens, HOME, rutas privadas, query sensible ni cuerpos crudos en

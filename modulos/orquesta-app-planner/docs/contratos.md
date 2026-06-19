@@ -22,6 +22,13 @@ Invariantes:
 - cada unidad tiene write-set no vacio;
 - las dependencias se expresan contra delivery refs, no contra procesos;
 - una app completa se divide en cortes pequenos.
+- toda app programada por Orquesta conserva arquitectura hexagonal estricta:
+  `domain`, `application`, `ports`, `adapters` y `bootstrap` quedan separados
+  aunque el plan sea pequeno.
+- los handlers/adaptadores son finos y no construyen repositorios,
+  autenticacion, fixtures, reglas de dominio ni configuracion global.
+- la composicion de dependencias vive en `internal/app/bootstrap` o `cmd`, no en
+  handlers ni en dominio/application.
 - `scale=large` aumenta el numero de cortes: arquitectura, dominio,
   persistencia por puerto, API, web, i18n, deploy, integracion, docs y revision.
 - Persistencia y deploy se expresan como contratos/conectores; el plan no elige
@@ -39,6 +46,8 @@ Reglas:
 
 - no crean un perfil propio de programacion paralelo al nucleo;
 - conservan write-set, criterios, tests obligatorios y contrato de funcion;
+- conservan los criterios de arquitectura hexagonal estricta; un ACK que compile
+  pero mezcle dominio, adaptadores o composicion debe terminar en rework.
 - traducen dependencias internas desde `delivery_ref` del plan a `task_ref` para
   que `WorkflowTaskV0.depends_on` quede causal y reutilizable por el nucleo.
 - rechazan unidades ajenas al plan o dependencias que no puedan mapearse a una

@@ -3,6 +3,7 @@ package orquestaappdirectorservice
 import (
 	"context"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadirectoroperativo "orquesta/modulos/orquesta-director-operativo"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	"testing"
 )
@@ -35,6 +36,32 @@ func TestContinueRequestWithOperationalDirectorPlanStateV0ReintentaCierreTrasOut
 	if fixture.Source.Called {
 		t.Fatalf("closure source no debe invocarse con outbox pendiente")
 	}
+	serviceReopenAndCloseOperationalClosurePrerequisiteForTestV0(t, fixture)
+}
+
+func TestContinueRequestWithOperationalDirectorPlanStateV0ReintentaCierreTrasIssuesConTestsDurables(t *testing.T) {
+	fixture := newServiceOperationalClosurePrerequisiteRetryFixtureV0(t, "closure-issues-tests")
+	state := serviceOperationalClosurePlanStateReadyForCloseV0(fixture.RunRef, fixture.PlanRef)
+	blockers := []string{"operational-closure-issues", "required_test_evidence_refs", "nucleo_orquestacion_invalido"}
+	state.Status = orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0
+	state.ClosureReason = "operational-closure-issues"
+	state.BlockerRefs = blockers
+	for index := range state.Steps {
+		if state.Steps[index].StepID != "step-replan-or-close" {
+			continue
+		}
+		state.Steps[index].Status = orquestadirectoroperativo.OperationalDirectorStepBlockedV0
+		state.Steps[index].Reason = "operational-closure-issues"
+		state.Steps[index].BlockerRefs = blockers
+	}
+	normalized, err := orquestacionnucleoapp.NewOperationalDirectorPlanStateV0(state)
+	if err != nil {
+		t.Fatalf("NewOperationalDirectorPlanStateV0: %v", err)
+	}
+	if err := fixture.PlanStateStore.SaveOperationalDirectorPlanStateV0(context.Background(), normalized); err != nil {
+		t.Fatalf("SaveOperationalDirectorPlanStateV0: %v", err)
+	}
+
 	serviceReopenAndCloseOperationalClosurePrerequisiteForTestV0(t, fixture)
 }
 

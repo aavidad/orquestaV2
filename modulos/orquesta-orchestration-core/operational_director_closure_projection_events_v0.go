@@ -36,7 +36,7 @@ func operationalDirectorClosureProjectionEventsV0(
 			"evidence-ref-operational-closure-run-projection-delivery",
 		},
 	}
-	if !operationalDirectorClosureDeliveryMatchesTaskOrDescendantV0(delivery, tasks, request.TaskID) {
+	if !operationalDirectorClosureDeliveryMatchesTaskOrDescendantV0(delivery, tasks, operationalDirectorClosureTraceFromRunProjectionV0(run), request.TaskID) {
 		return nil, false
 	}
 	reviewRequest := orquestacoreworkflow.ReviewRequestedPayloadV0{

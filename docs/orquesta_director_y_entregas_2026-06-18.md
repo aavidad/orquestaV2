@@ -150,104 +150,90 @@ pruebas reales antes de refactors grandes.
   `ORQUESTA_CODEX_HOME=$HOME`, `ORQUESTA_CODEX_CODE_HOME=$HOME/.codex`. El
   smoke pasa aunque los 3 agentes no escriban ACK: la promoción recupera el trabajo.
 
-## BUG abierto: frontera de tareas no re-evaluada tras entrega (autoprogramming)
+## P1 cerrado real: frontera de tareas autoprogramming
 
 Descubierto en prueba real orquestando una app (Bolsa Diputación, 8 tareas hexagonales
 con `depends_on`) por `/api/v0/autoprogramming/prepare-run` + `/api/v0/runs/supervise`
-con Codex real (2026-06-18).
+con Codex real (2026-06-18). El síntoma era que la tarea base se entregaba, pero las
+dependientes no se relanzaban y el run quedaba `quiescent` con tareas abiertas.
 
-**Síntoma:** la tarea base (sin dependencias) se lanza, el agente Codex la programa y
-entrega (ACK `completed`, queda en `run.DeliveredTasks`). Pero el director se queda
-`quiescent` (`stop_reason=done`) **sin lanzar las tareas cuyas dependencias ya están
-satisfechas**. Run parado en `agents_requested=1, tasks_open=7` indefinidamente, pese a
-forzar supervise con más capacidad/bursts. Evidencia del drain:
-`projection-tasks-8`, `projection-open-tasks-7`, `projection-requested-agents-1`,
-`quiescent`.
+**Corrección 2026-06-19:** el fallo principal no era `WaitAgentRefs` ni el
+`WorkflowTaskCandidateProviderV0`; era la traducción de dependencias declaradas en el
+spec de autoprogramming. Specs reales como Bolsa declaran `depends_on` usando refs fuente
+(`bolsa-base`), mientras el scheduler satisface dependencias por `WorkflowTaskV0.TaskID`
+materializado (`task-autoprogramming-...`). Ahora `orquesta-autoprogramming` remapea
+esas refs fuente al `TaskID` generado, conserva refs opacas desconocidas y evita
+autodependencias tras agrupar tareas.
 
-**Causa raíz:** el flujo de autoprogramming/stack-Codex genera el trabajo por
-"decision sources" (`modulos/orquesta-app-codex-stack/project_backlog_decision_source_v0.go`,
-`dispatchers_v0.go`), NO por el `WorkflowTaskCandidateProviderV0`
-(`modulos/orquesta-orchestration-core/workflow_task_candidate_provider.go`) — que es
-justamente quien re-evalúa la frontera de tareas schedulables respetando `DependsOn`
-(`workflowTaskSchedulableV0`). Ese provider **no está cableado en el stack Codex**
-(cero referencias). Por eso la frontera no se recalcula tras una entrega: el scheduler
-(`scheduler_tick_v0.go:69-73`) declara quiescent cuando `WorkCandidates` llega vacío,
-y nadie regenera esos candidatos para las tareas recién desbloqueadas.
+El stack Codex también devuelve `WaitAgentRefs` como frontera viva del run: al preparar
+un run nuevo incluye solo tareas sin dependencias; al repetir `prepare-run` sobre un run
+existente omite tareas ya entregadas/cerradas e incluye las dependientes ya desbloqueadas
+por `DeliveredTasks`/`ClosedTasks`. Esto mantiene el invariante cerrado: `WaitAgentRefs`
+acota espera e ingesta; no se rellena con agentes futuros no materializados.
 
-**Importante (instrucción del operador 2026-06-18):** los bugs que destapa una app de
-prueba se arreglan en **Orquesta en general**, no parcheando para la app concreta.
+**Evidencia offline/focal:**
+- `TestBuildAutoprogrammingProgrammableWorkV0HonraWriteSetYDependsOnPorTareaV0`.
+- `TestCodexStackAutoprogrammingRunGlobalTickV0RelanzaFronteraDependienteTrasACKV0`.
+- `TestCodexStackAutoprogrammingPrepareRunAPIV0TickGlobalTrasACKLanzaFronteraDependienteV0`.
+- `TestAutoprogrammingResidentModeV0RelanzaFronteraDependienteTrasACKV0`.
+- Suite afectada: `go test -count=1 ./modulos/orquesta-autoprogramming
+  ./modulos/orquesta-app-codex-stack ./modulos/orquesta-app-director-service
+  ./modulos/orquesta-orchestration-core`.
 
-**Diagnóstico afinado (2026-06-18, sesión "arregla todo"):**
-- `ContinueAppDirectorV0` con run + `DirectorTaskStore` + dispatchers **SÍ relanza** la
-  frontera tras una entrega, incluso con `WaitAgentRefs` acotado. Probado por
-  `TestContinueAppDirectorV0RelanzaFronteraTrasEntregaV0` y
-  `...AunConWaitScopeAcotadoV0` en `orquesta-app-director-service`
-  (`frontier_redispatch_v0_test.go`). Es decir: **el director y el provider de frontera
-  funcionan**. El bug NO está ahí.
-- En el run real (autoprogramming + supervise), tras entregar la base **no se genera
-  ningún outbox nuevo** para las dependientes (verificado en el ledger: solo 4 mensajes,
-  los de la ola inicial). El director nunca emite `RequestCapacity`/`RequestAgent` para
-  la frontera desbloqueada.
-- Sospecha principal: el camino de `supervise` → coordinador → `drainRunAttemptControlV0`
-  → `continueDrainRunControlAfterExternalV0` no está llegando a ejecutar el ciclo del
-  director con el provider de frontera para este run, o lo ejecuta con un contexto que
-  no re-pide (posible interacción con `AutoprogrammingDirectorDecisionSourceV0`, que solo
-  abre review cuando TODAS entregaron y no emite lanzamientos; o con el managed loop /
-  `ExternalWaiter` que acota el burst al scope ya consumido).
-- **Descartado** (no era la causa): el wait-scope de
-  `queuedOperationalDirectorWaitAgentRefsV0` excluye agentes no pedidos a propósito
-  (invariante protegido por `TestCodexStackV0WaitRefsColaRepara...`); incluir ahí las
-  schedulables rompe ese invariante y NO arregla el relanzamiento.
+**Evidencia real 2026-06-19:**
+- `bolsa-nucleo-001` sobre
+  `~/Trabajo/Bolsa_Diputacion_app/orquesta_spec_nucleo.json` cerró las 8 tareas con
+  Codex real: `status=cerrada`, `phase=cierre`, 8/8 tareas entregadas/cerradas,
+  8 reviews aceptadas, 1 validación y 1 closure.
+- `bolsa-tests-001` cerró 4 tareas adicionales de tests por supervisor residente, sin
+  `runs/supervise` manual: `g01+g03` iniciales, `g02` tras ACK de `g01`, `g04` tras ACK
+  de `g02+g03`, 4 reviews aceptadas, validación final y closure.
+- Verificación externa de la app: `go test -count=1 ./...` en
+  `~/Trabajo/Bolsa_Diputacion_app` devuelve paquetes `ok` reales para dominio, auth,
+  i18n, repositorio, casos de uso y handler HTTP.
 
-**Cerco del bug (2026-06-19):** `frontier_redispatch_v0_test.go` prueba que
-`ContinueAppDirectorV0` relanza la frontera tras entrega en CUATRO configuraciones:
-(1) directo, (2) con `WaitAgentRefs` acotado, (3) con managed loop + `ExternalWaiter`,
-(4) con `DirectorDecisionSource` que no progresa. **Las cuatro pasan.** Por tanto el
-director y el provider de frontera (`WorkflowTaskCandidateProviderV0`, cableado en
-`provider_composition_v0.go` cuando hay `DirectorTaskStore`) están sanos. Los ports del
-drain del stack preservan `DirectorTaskStore` y dispatchers
-(`directorPortsWithClosureSourceV0`). El fallo, por descarte, está en el
-`RunCoordinator`/cola del stack ANTES de llegar a `ContinueAppDirectorV0`, en
-condiciones no reproducidas unitariamente. Pista de ejecución real: en la cola del run
-Bolsa coexistían DOS runs (`bolsa-nucleo-001` y un `request-ref-autoprogramming-backlog-scanner-*`),
-y el ledger solo tenía 4 mensajes (la ola inicial), sin outbox nuevo para las
-dependientes — el coordinador nunca volvió a pedirlas.
+Si falla un caso futuro, diagnosticar runtime/proveedor/coordinador con evidencia nueva,
+sin reabrir `queuedOperationalDirectorWaitAgentRefsV0` salvo regresión demostrada.
 
-**Pendiente:** depurar con trazas el `RunCoordinator`/drain en ejecución (no solo
-lectura) para ver por qué este run no vuelve a `ContinueAppDirectorV0` con la frontera.
-Reproducción end-to-end: spec `~/Trabajo/Bolsa_Diputacion_app/orquesta_spec_nucleo.json`
-por `/api/v0/autoprogramming/prepare-run` + `/api/v0/runs/supervise` con Codex real.
-NO arreglar tocando el wait-scope de `queuedOperationalDirectorWaitAgentRefsV0`: rompe el
-invariante "wait refs no esperan agentes no materializados"
-(`TestCodexStackV0WaitRefsColaRepara...`) y no resuelve el relanzamiento (ya probado).
+Riesgo lateral no cerrado en este P1: dependencias generadas por `live_works` usan refs
+opacas de trabajos externos y necesitan su propio caso de promoción/replay; no afecta al
+spec Bolsa actual.
 
 ## Hallazgos de la prueba real Bolsa (2026-06-18)
 
-Lo que la prueba demostró que **SÍ funciona** (Codex real, app de verdad):
+Lo que las pruebas demostraron que **SÍ funciona** (Codex real, app de verdad):
 - Orquesta acepta un spec de app genérico por JSON (`prepare-run`) con `depends_on` y
   `write_set` por tarea, sin código a medida.
 - El director **respeta las dependencias al lanzar**: con 8 tareas, lanzó solo la base
   (sin deps); las dependientes no se lanzaron antes de tiempo.
+- Tras corregir P1, el supervisor residente reevalúa la frontera tras cada entrega,
+  arranca solo dependientes desbloqueadas y cierra el run sin supervisión manual.
 - El agente Codex **programó código de buena calidad**: dominio hexagonal de Bolsa
   (entidad Merit con máquina de estados Borrador→Presentado→Validado/Rechazado/Subsanación,
   `CanTransition`/`Transition` con validación y errores tipados, tabla de transiciones).
   Compila (`go build ./...` ok).
 - Con `reasoning_effort=high`, el agente **escribió el ACK** (`completed`); con `medium`
   tendía a no escribirlo (la recuperación sin ACK sigue siendo la red de seguridad).
+- Un run posterior orquestado por Orquesta añadió tests reales para dominio, auth/i18n,
+  repositorio, usecase y HTTP handler; `go test -count=1 ./...` ya no es un pase vacío.
 
 Bugs/carencias que la prueba **destapó** (arreglar en Orquesta, no en la app):
 1. Frontera no re-evaluada tras entrega (ver sección BUG abajo) — el más grave y único
    bug de orquestación confirmado.
 
 **Corrección (2026-06-19):** una sospecha inicial de "review sello de goma" (el agente
-habría entregado sin tests) resultó **falsa** al revisar el ACK real: el agente base
-SÍ ejecutó los `RequiredTests` (`go test ./...` y `go test ./internal/candidate/domain/...`)
-y dejó `test_receipts` con `status=passed, exit_code=0`. El gate
+habría entregado sin tests) resultó **parcial** al revisar el ACK real: el agente base
+SÍ ejecutó los `RequiredTests` declarados y dejó `test_receipts` con `status=passed,
+exit_code=0`, pero el `go test` inicial no ejecutó pruebas porque aún no había ficheros
+`*_test.go`. El gate
 (`autoprogramming_review_gate_v0.go: autoprogrammingReviewGateRequiredTestIssuesV0`)
 exige que cada required test declarado esté ejecutado y pasado, y emite
-`required_test_missing`/`required_test_failed` (bloqueantes) si no. Funciona. Lo que el
-agente NO hizo fue escribir ficheros `*_test.go` propios del dominio — eso es calidad del
-trabajo (mejorable por prompt/review de otro agente), no un fallo del gate de Orquesta.
+`required_test_missing`/`required_test_failed` (bloqueantes) si no.
+
+Mitigación genérica añadida: `LocalCommandExecutorV0` marca `failed` cuando el comando es
+`go test` y toda la salida son paquetes sin tests (`[no test files]`/`[no tests to run]`),
+de modo que un required test vacío ya no puede cerrar una app Go. La carencia de
+acceptance criteria semánticos queda como mejora de calidad separada.
 
 ## Frentes abiertos para el siguiente agente
 
@@ -258,3 +244,6 @@ trabajo (mejorable por prompt/review de otro agente), no un fallo del gate de Or
   permanente. Pendiente; el arreglo correcto vive en la capa supervisor/composición,
   no en el contrato del plan-state.
 - Revisar la condición de yield de progreso a replan (auditoría).
+- Convertir la evidencia real Bolsa (`bolsa-nucleo-001` + `bolsa-tests-001`) en
+  script/runbook opt-in repetible, sin tocar Bolsa productiva ni depender de rutas
+  locales salvo por variables de entorno.

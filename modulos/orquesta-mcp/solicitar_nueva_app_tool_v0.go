@@ -47,18 +47,19 @@ type MCPNuevaAppToolResultV0 struct {
 }
 
 type MCPAppSpecCompactV0 struct {
-	SchemaVersion string   `json:"schema_version,omitempty"`
-	SpecID        string   `json:"spec_id,omitempty"`
-	RequestID     string   `json:"request_id,omitempty"`
-	Nombre        string   `json:"nombre,omitempty"`
-	Slug          string   `json:"slug,omitempty"`
-	Objetivo      string   `json:"objetivo,omitempty"`
-	TipoApp       string   `json:"tipo_app,omitempty"`
-	RequestKind   string   `json:"request_kind,omitempty"`
-	ExecutionMode string   `json:"execution_mode,omitempty"`
-	Locale        string   `json:"locale,omitempty"`
-	I18NLocales   []string `json:"i18n_locales,omitempty"`
-	DeployTarget  string   `json:"deploy_target,omitempty"`
+	SchemaVersion      string   `json:"schema_version,omitempty"`
+	SpecID             string   `json:"spec_id,omitempty"`
+	RequestID          string   `json:"request_id,omitempty"`
+	Nombre             string   `json:"nombre,omitempty"`
+	Slug               string   `json:"slug,omitempty"`
+	Objetivo           string   `json:"objetivo,omitempty"`
+	TipoApp            string   `json:"tipo_app,omitempty"`
+	RequestKind        string   `json:"request_kind,omitempty"`
+	ExecutionMode      string   `json:"execution_mode,omitempty"`
+	Locale             string   `json:"locale,omitempty"`
+	I18NLocales        []string `json:"i18n_locales,omitempty"`
+	DeployTarget       string   `json:"deploy_target,omitempty"`
+	ArchitecturePolicy string   `json:"architecture_policy,omitempty"`
 }
 
 type MCPBacklogCompactV0 struct {
@@ -90,6 +91,7 @@ func MCPNuevaAppDescriptorV0() MCPNuevaAppToolDescriptorV0 {
 		PromptName:  MCPNuevaAppPromptNameV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
+			"apps generadas con arquitectura hexagonal estricta",
 			"sin DB, CLI, runtime, filesystem ni servidor MCP real",
 			"validacion de negocio delegada en orquesta-factory",
 		},
@@ -128,19 +130,29 @@ func NewMCPNuevaAppErrorResultV0(requestID, correlationID string, issues []orque
 
 func compactAppSpecV0(spec orquestafactory.AppSpecV0) MCPAppSpecCompactV0 {
 	return MCPAppSpecCompactV0{
-		SchemaVersion: strings.TrimSpace(spec.SchemaVersion),
-		SpecID:        strings.TrimSpace(spec.SpecID),
-		RequestID:     strings.TrimSpace(spec.RequestID),
-		Nombre:        strings.TrimSpace(spec.App.Nombre),
-		Slug:          strings.TrimSpace(spec.App.Slug),
-		Objetivo:      strings.TrimSpace(spec.App.Objetivo),
-		TipoApp:       strings.TrimSpace(spec.App.TipoApp),
-		RequestKind:   strings.TrimSpace(spec.RequestKind),
-		ExecutionMode: strings.TrimSpace(spec.ExecutionMode),
-		Locale:        strings.TrimSpace(spec.Locale),
-		I18NLocales:   compactStringsMCPV0(spec.I18N.Locales),
-		DeployTarget:  strings.TrimSpace(spec.Deploy.Target),
+		SchemaVersion:      strings.TrimSpace(spec.SchemaVersion),
+		SpecID:             strings.TrimSpace(spec.SpecID),
+		RequestID:          strings.TrimSpace(spec.RequestID),
+		Nombre:             strings.TrimSpace(spec.App.Nombre),
+		Slug:               strings.TrimSpace(spec.App.Slug),
+		Objetivo:           strings.TrimSpace(spec.App.Objetivo),
+		TipoApp:            strings.TrimSpace(spec.App.TipoApp),
+		RequestKind:        strings.TrimSpace(spec.RequestKind),
+		ExecutionMode:      strings.TrimSpace(spec.ExecutionMode),
+		Locale:             strings.TrimSpace(spec.Locale),
+		I18NLocales:        compactStringsMCPV0(spec.I18N.Locales),
+		DeployTarget:       strings.TrimSpace(spec.Deploy.Target),
+		ArchitecturePolicy: compactArchitecturePolicyMCPV0(spec.Architecture),
 	}
+}
+
+func compactArchitecturePolicyMCPV0(architecture orquestafactory.ArchitectureV0) string {
+	for _, contract := range compactStringsMCPV0(architecture.ContratosEsperados) {
+		if contract == "ArquitecturaHexagonalEstricta v0" {
+			return "hexagonal_estricta"
+		}
+	}
+	return strings.TrimSpace(architecture.Patron)
 }
 
 func compactBacklogV0(backlog orquestafactory.BacklogInicialPropuestoV0) MCPBacklogCompactV0 {

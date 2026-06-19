@@ -8,16 +8,16 @@ import (
 const BacklogInicialPropuestoSchemaV0 = "backlog_inicial_propuesto.v0"
 
 type BacklogInicialPropuestoV0 struct {
-	SchemaVersion       string                  `json:"schema_version"`
-	SpecID              string                  `json:"spec_id"`
-	Estado              string                  `json:"estado"`
-	Freshness           BacklogFreshnessV0      `json:"freshness"`
+	SchemaVersion       string                   `json:"schema_version"`
+	SpecID              string                   `json:"spec_id"`
+	Estado              string                   `json:"estado"`
+	Freshness           BacklogFreshnessV0       `json:"freshness"`
 	DirectorHandoff     BacklogDirectorHandoffV0 `json:"director_handoff"`
-	Fases               []FaseInicialV0         `json:"fases"`
-	Microtareas         []MicrotareaPropuestaV0 `json:"microtareas"`
-	ContratosRequeridos []string                `json:"contratos_requeridos"`
-	Riesgos             []string                `json:"riesgos"`
-	PreguntasAbiertas   []string                `json:"preguntas_abiertas"`
+	Fases               []FaseInicialV0          `json:"fases"`
+	Microtareas         []MicrotareaPropuestaV0  `json:"microtareas"`
+	ContratosRequeridos []string                 `json:"contratos_requeridos"`
+	Riesgos             []string                 `json:"riesgos"`
+	PreguntasAbiertas   []string                 `json:"preguntas_abiertas"`
 }
 
 type FaseInicialV0 struct {
@@ -64,7 +64,7 @@ type backlogBuilderV0 struct {
 func (b backlogBuilderV0) fases() []FaseInicialV0 {
 	return []FaseInicialV0{
 		{ID: "discovery", Nombre: "Descubrimiento", Objetivo: "Cerrar alcance, supuestos y preguntas abiertas antes de programar.", Orden: 10},
-		{ID: "arquitectura", Nombre: "Arquitectura", Objetivo: "Definir puertos, contratos y fronteras hexagonales.", Orden: 20},
+		{ID: "arquitectura", Nombre: "Arquitectura", Objetivo: "Definir puertos, contratos y fronteras hexagonales estrictas.", Orden: 20},
 		{ID: "i18n_docs", Nombre: "I18n y documentacion", Objetivo: "Preparar catalogos i18n y documentacion inicial con idioma declarado.", Orden: 30},
 		{ID: "implementacion", Nombre: "Implementacion", Objetivo: "Construir slices verticales pequenos con FunctionContract.", Orden: 40},
 		{ID: "validacion", Nombre: "Validacion", Objetivo: "Cerrar pruebas, revision, seguridad y evidencias.", Orden: 50},
@@ -110,11 +110,11 @@ func (b backlogBuilderV0) architectureTask() MicrotareaPropuestaV0 {
 	return MicrotareaPropuestaV0{
 		ID:               "BLG-002",
 		Fase:             "arquitectura",
-		ModuloSugerido:   "core",
-		Objetivo:         "Definir puertos de entrada/salida, entidades y conectores iniciales con arquitectura hexagonal.",
+		ModuloSugerido:   "architecture",
+		Objetivo:         "Definir domain, application, ports, adapters y bootstrap con arquitectura hexagonal estricta.",
 		WriteSetPrevisto: []string{"docs/arquitectura.md", "docs/contratos.md"},
-		Contrato:         "FunctionContract v0",
-		Validacion:       "Contratos documentados sin DB, runtime, filesystem ni proveedor como dependencia del core.",
+		Contrato:         "ArquitecturaHexagonalEstricta v0",
+		Validacion:       "Contratos documentados con handlers finos, composicion solo en bootstrap/cmd y sin DB, runtime, filesystem ni proveedor como dependencia de domain/application.",
 		Bloqueos:         []string{"FunctionContract v0"},
 	}
 }
@@ -186,11 +186,11 @@ func (b backlogBuilderV0) firstSliceTask() MicrotareaPropuestaV0 {
 	}
 	return MicrotareaPropuestaV0{
 		Fase:             "implementacion",
-		ModuloSugerido:   "core",
+		ModuloSugerido:   "application",
 		Objetivo:         "Implementar el primer caso de uso vertical minimo de " + b.spec.App.Nombre + ".",
-		WriteSetPrevisto: []string{"core/", "adapters/inbound/", "tests/"},
+		WriteSetPrevisto: []string{"domain/", "application/", "ports/", "adapters/inbound/", "bootstrap/", "tests/"},
 		Contrato:         "FunctionContract v0",
-		Validacion:       "Tests del slice en verde, write-set respetado y entrega sin cambios fuera de contrato.",
+		Validacion:       "Tests del slice en verde, domain/application sin imports de adaptadores y wiring concentrado en bootstrap/cmd.",
 		Bloqueos:         blockers,
 	}
 }
@@ -202,7 +202,7 @@ func (b backlogBuilderV0) validationTask() MicrotareaPropuestaV0 {
 		Objetivo:         "Ejecutar revision final de pruebas, seguridad, i18n, documentacion y conectores.",
 		WriteSetPrevisto: []string{"docs/pruebas.md", "docs/revision_final.md"},
 		Contrato:         "FunctionContract v0",
-		Validacion:       "Evidencia de tests/revision registrada y riesgos abiertos explicitados.",
+		Validacion:       "Evidencia de tests/revision registrada, arquitectura hexagonal estricta aceptada y riesgos abiertos explicitados.",
 		Bloqueos:         []string{"Primer slice vertical minimo completado"},
 	}
 }

@@ -51,7 +51,11 @@ func codexStackOperationalClosureTraceFromEventsV0(
 		case orquestacoreworkflow.OrchestrationEventReviewResultRecordedV0:
 			var payload orquestacoreworkflow.ReviewResultV0
 			if codexStackOperationalClosureDecodeEventPayloadV0(event, &payload) {
-				trace.ReviewResults[strings.TrimSpace(payload.ReviewResultRef)] = payload
+				ref := strings.TrimSpace(payload.ReviewResultRef)
+				if ref != "" && trace.ReviewResults[ref].ReviewResultRef == "" {
+					trace.ReviewResultRefs = append(trace.ReviewResultRefs, ref)
+				}
+				trace.ReviewResults[ref] = payload
 			}
 		case orquestacoreworkflow.OrchestrationEventReviewAcceptedV0:
 			var payload orquestacoreworkflow.ReviewAcceptedPayloadV0
@@ -119,10 +123,12 @@ func codexStackOperationalClosureTraceWithRunProjectionsV0(
 		if !ok {
 			continue
 		}
-		if _, exists := trace.ReviewResults[strings.TrimSpace(result.ReviewResultRef)]; exists {
+		resultRef := strings.TrimSpace(result.ReviewResultRef)
+		if _, exists := trace.ReviewResults[resultRef]; exists {
 			continue
 		}
-		trace.ReviewResults[strings.TrimSpace(result.ReviewResultRef)] = result
+		trace.ReviewResults[resultRef] = result
+		trace.ReviewResultRefs = append(trace.ReviewResultRefs, resultRef)
 		if _, exists := trace.ReviewRequests[strings.TrimSpace(result.ReviewRequestID)]; !exists {
 			trace.ReviewRequests[strings.TrimSpace(result.ReviewRequestID)] = orquestacoreworkflow.ReviewRequestedPayloadV0{
 				ReviewRequestID: result.ReviewRequestID,
@@ -155,6 +161,7 @@ func codexStackOperationalClosureTraceWithRunProjectionsV0(
 		}
 	}
 	trace.DeliveryRefs = codexStackOperationalClosureCompactRefsV0(trace.DeliveryRefs)
+	trace.ReviewResultRefs = codexStackOperationalClosureCompactRefsV0(trace.ReviewResultRefs)
 	return trace
 }
 

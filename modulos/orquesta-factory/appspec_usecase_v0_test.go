@@ -50,6 +50,32 @@ func TestSolicitarNuevaAppV0AppliesDefaults(t *testing.T) {
 	}
 }
 
+func TestSolicitarNuevaAppV0DeclaraHexagonalidadEstricta(t *testing.T) {
+	spec, issues := SolicitarNuevaAppV0(validMinimalRequestV0(), time.Date(2026, 6, 19, 9, 0, 0, 0, time.UTC))
+	if len(issues) > 0 {
+		t.Fatalf("unexpected issues: %+v", issues)
+	}
+
+	for _, boundary := range []string{"domain", "application", "ports", "adapters", "bootstrap"} {
+		if !factoryModuleBoundaryNamedV0(spec.Architecture.ModulosIniciales, boundary) {
+			t.Fatalf("missing hexagonal boundary %q in %+v", boundary, spec.Architecture.ModulosIniciales)
+		}
+	}
+	for _, want := range []string{
+		"El dominio no importa application, adapters, HTTP, DB, filesystem, runtime, LLM ni framework UI.",
+		"Los casos de uso dependen de puertos/interfaces, no de adaptadores concretos.",
+		"Los handlers y adaptadores son finos: traducen transporte, validan forma y llaman casos de uso.",
+		"La composicion de repositorios, autenticacion, reglas, fixtures y configuracion vive en bootstrap/cmd, no en handlers.",
+	} {
+		if !factoryStringInSetV0(spec.Architecture.Fronteras, want) {
+			t.Fatalf("missing architecture frontier %q in %+v", want, spec.Architecture.Fronteras)
+		}
+	}
+	if !factoryStringInSetV0(spec.Architecture.ContratosEsperados, "ArquitecturaHexagonalEstricta v0") {
+		t.Fatalf("missing strict hexagonal contract: %+v", spec.Architecture.ContratosEsperados)
+	}
+}
+
 func TestSolicitarNuevaAppV0HonorsExplicitOptions(t *testing.T) {
 	no := false
 	req := validMinimalRequestV0()
@@ -263,4 +289,22 @@ func assertJSONArrayV0(t *testing.T, object map[string]any, key string) {
 	if _, ok := object[key].([]any); !ok {
 		t.Fatalf("%s should be JSON array, got %#v", key, object[key])
 	}
+}
+
+func factoryModuleBoundaryNamedV0(boundaries []ModuleBoundaryV0, name string) bool {
+	for _, boundary := range boundaries {
+		if boundary.Nombre == name {
+			return true
+		}
+	}
+	return false
+}
+
+func factoryStringInSetV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

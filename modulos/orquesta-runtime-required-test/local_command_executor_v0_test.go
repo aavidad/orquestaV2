@@ -214,6 +214,43 @@ func TestRequiredTestRunnerV0ConLocalCommandExecutorEjecutaGoTestReal(t *testing
 	}
 }
 
+func TestLocalCommandExecutorV0GoTestSinTestsEsFailed(t *testing.T) {
+	goPath, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatalf("go no encontrado: %v", err)
+	}
+	projectDir := tinyGoModuleWithoutTestsForRequiredTestV0(t)
+	outputDir := t.TempDir()
+	executor := LocalCommandExecutorV0{
+		ProjectWorkDir: projectDir,
+		OutputDir:      outputDir,
+		AllowedCommands: map[string]string{
+			"go": goPath,
+		},
+		Env: []string{
+			"CGO_ENABLED=0",
+			"GOCACHE=" + filepath.Join(t.TempDir(), "go-build-cache"),
+			"GOPATH=" + filepath.Join(t.TempDir(), "go-path"),
+			"GOMODCACHE=" + filepath.Join(t.TempDir(), "go-mod-cache"),
+		},
+		MaxOutputBytes: 64 * 1024,
+	}
+
+	result, err := executor.RunRequiredTestCommandV0(context.Background(), commandRequestForTestV0("go test ./..."))
+	if err != nil {
+		t.Fatalf("RunRequiredTestCommandV0: %v", err)
+	}
+	if result.Status != orquestacionnucleoapp.RequiredTestEvidenceStatusFailedV0 || len(result.EvidenceRefs) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	content := outputArtifactForTestV0(t, outputDir, result.EvidenceRefs[0])
+	if !strings.Contains(content, "[no test files]") ||
+		!strings.Contains(content, "required_test_go_no_tests_executed") ||
+		!strings.Contains(content, "status=failed") {
+		t.Fatalf("artifact content=%q", content)
+	}
+}
+
 func TestRequiredTestRunnerV0ConStoreReaderNoReejecutaExternoEnReplay(t *testing.T) {
 	outputDir := t.TempDir()
 	executor := localCommandExecutorForTestV0(t, outputDir, "pass")

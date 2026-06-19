@@ -136,6 +136,7 @@
           "maxLength": 120
         },
         "arquitectura": {
+          "description": "Arquitectura hexagonal estricta obligatoria para apps programadas por Orquesta.",
           "type": "string",
           "enum": [
             "hexagonal"

@@ -39,6 +39,28 @@ func TestAppPlanCandidateProviderV0EmiteSoloOlaLista(t *testing.T) {
 	}
 }
 
+func TestAppPlanCandidateProviderV0PropagaSkillRefsDeclaradas(t *testing.T) {
+	plan := mustAppPlanForTestV0(t)
+	for i := range plan.Units {
+		if plan.Units[i].TaskRef == "task-agenda-web" {
+			plan.Units[i].SkillRefs = []string{"skill-ref-catalogo-declarado-v0"}
+		}
+	}
+	provider := AppPlanCandidateProviderV0{Plan: plan}
+	candidates := mustBuildAppCandidatesForTestV0(t, provider, appRunForTestV0([]string{"ack-agenda-bootstrap"}, nil))
+
+	for _, candidate := range candidates.WorkCandidates {
+		if candidate.AgentCandidate.Payload.AgentRequestID != "agent-agenda-web" {
+			continue
+		}
+		if !appPlannerStringInSetV0(candidate.AgentCandidate.Payload.SkillRefs, "skill-ref-catalogo-declarado-v0") {
+			t.Fatalf("web skill_refs=%v", candidate.AgentCandidate.Payload.SkillRefs)
+		}
+		return
+	}
+	t.Fatalf("candidate web no encontrado: %+v", candidates.WorkCandidates)
+}
+
 func TestAppPlanCandidateProviderV0UsaPerfilNeutralParaDocs(t *testing.T) {
 	plan := mustAppPlanForTestV0(t)
 	provider := AppPlanCandidateProviderV0{Plan: plan}

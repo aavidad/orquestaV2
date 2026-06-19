@@ -30,32 +30,49 @@ func continueOperationalDirectorPlanStatePostLoopV0(
 		if err != nil || expired {
 			return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
 		}
+		if activeReviewResult, handled, err := continueOperationalDirectorPlanStatePostLoopActiveReviewV0(ctx, request, ports, loop, loopRequest, managedLoop); err != nil || handled {
+			return activeReviewResult, err
+		}
 		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
 	}
 	loop, err = operationalDirectorPlanStateActiveWaitLoopV0(ctx, request, ports, loop)
 	if err != nil {
 		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
 	}
+	if activeReviewResult, handled, err := continueOperationalDirectorPlanStatePostLoopActiveReviewV0(ctx, request, ports, loop, loopRequest, managedLoop); err != nil || handled {
+		return activeReviewResult, err
+	}
+	return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, nil
+}
+
+func continueOperationalDirectorPlanStatePostLoopActiveReviewV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	loop orquestacionnucleoapp.ProgressiveLoopResultV0,
+	loopRequest orquestacionnucleoapp.ProgressiveLoopRequestV0,
+	managedLoop orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
+) (existingDirectorAutonomyLoopResultV0, bool, error) {
 	_, _, activeReview, err := operationalDirectorActiveReviewDeliveriesStepV0(ctx, request, ports)
 	if err != nil || !activeReview {
-		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
+		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, false, err
 	}
 	nextRequest, err := continueRequestWithOperationalDirectorPlanStateV0(ctx, request, ports)
 	if err != nil {
-		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
+		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, true, err
 	}
 	if _, err := ensureOperationalDirectorReviewPhaseV0(ctx, nextRequest, ports); err != nil {
-		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, err
+		return existingDirectorAutonomyLoopResultV0{Request: request, Loop: loop, LoopRequest: loopRequest, ManagedLoop: managedLoop}, true, err
 	}
 	followup, err := runExistingDirectorAutonomyLoopV0(ctx, nextRequest, ports)
 	if err != nil {
-		return existingDirectorAutonomyLoopResultV0{Request: nextRequest, Loop: followup.Loop, LoopRequest: followup.LoopRequest}, err
+		return existingDirectorAutonomyLoopResultV0{Request: nextRequest, Loop: followup.Loop, LoopRequest: followup.LoopRequest}, true, err
 	}
 	followupLoop := operationalDirectorScopedQuiescentLoopV0(followup.Request, followup.Loop, followup.LoopRequest)
 	if _, err := applyOperationalDirectorPlanStateAfterLoopV0(ctx, followup.Request, ports, followupLoop); err != nil {
-		return existingDirectorAutonomyLoopResultV0{Request: followup.Request, Loop: followupLoop, LoopRequest: followup.LoopRequest}, err
+		return existingDirectorAutonomyLoopResultV0{Request: followup.Request, Loop: followupLoop, LoopRequest: followup.LoopRequest}, true, err
 	}
-	return existingDirectorAutonomyLoopResultV0{Request: followup.Request, Loop: followupLoop, LoopRequest: followup.LoopRequest}, nil
+	return existingDirectorAutonomyLoopResultV0{Request: followup.Request, Loop: followupLoop, LoopRequest: followup.LoopRequest}, true, nil
 }
 
 func operationalDirectorPlanStatePostLoopScopeV0(

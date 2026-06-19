@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"time"
@@ -8,6 +9,7 @@ import (
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
+	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
@@ -38,6 +40,7 @@ func codexRuntimeConfigV0(
 		DirectorApprovalPolicy:   envConfig.DirectorApprovalPolicy,
 		InteractiveApprovalOptIn: envConfig.InteractiveApprovalOptIn,
 		ExtraArgs:                envConfig.ExtraArgs,
+		SkillInstructions:        envConfig.SkillInstructions,
 		PromptHints:              codexServerPromptHintsV0(serverConfig),
 		Runtime:                  processRuntime,
 		ProcessStopper:           processRuntime,
@@ -65,6 +68,7 @@ type codexRuntimeEnvConfigV0 struct {
 	DirectorApprovalPolicy   string
 	InteractiveApprovalOptIn bool
 	ExtraArgs                []string
+	SkillInstructions        []orquestaruntimecodex.CodexSkillInstructionV0
 	Limits                   codexRuntimeLimitsV0
 	WaitInterval             time.Duration
 	ProgressPolicy           orquestaruntime.AgentProgressHeartbeatPolicyV0
@@ -93,6 +97,7 @@ func codexRuntimeEnvConfigFromEnvV0() codexRuntimeEnvConfigV0 {
 		DirectorApprovalPolicy:   strings.TrimSpace(os.Getenv(envCodexDirectorApprovalPolicyV0)),
 		InteractiveApprovalOptIn: boolEnvOrDefaultV0(envCodexAllowInteractiveApprovalV0, false),
 		ExtraArgs:                strings.Fields(os.Getenv(envCodexExtraArgsV0)),
+		SkillInstructions:        codexSkillInstructionsFromEnvV0(),
 		Limits:                   codexRuntimeLimitsFromEnvV0(),
 		WaitInterval:             time.Duration(intEnvOrDefaultV0(envCodexWaitIntervalMSV0, defaultCodexWaitIntervalMSV0)) * time.Millisecond,
 		ProgressPolicy: orquestaruntime.AgentProgressHeartbeatPolicyV0{
@@ -104,6 +109,39 @@ func codexRuntimeEnvConfigFromEnvV0() codexRuntimeEnvConfigV0 {
 			NoActivityLimit: time.Duration(intEnvOrDefaultV0(envCodexNoActivitySecondsV0, defaultCodexNoActivitySecondsV0)) * time.Second,
 		},
 	}
+}
+
+func codexSkillInstructionsFromEnvV0() []orquestaruntimecodex.CodexSkillInstructionV0 {
+	raw := strings.TrimSpace(os.Getenv(envCodexSkillInstructionsJSONV0))
+	if raw == "" {
+		return nil
+	}
+	var instructions []orquestaruntimecodex.CodexSkillInstructionV0
+	if err := json.Unmarshal([]byte(raw), &instructions); err != nil {
+		return nil
+	}
+	return compactCodexSkillInstructionsV0(instructions)
+}
+
+func compactCodexSkillInstructionsV0(
+	instructions []orquestaruntimecodex.CodexSkillInstructionV0,
+) []orquestaruntimecodex.CodexSkillInstructionV0 {
+	seen := map[string]bool{}
+	result := make([]orquestaruntimecodex.CodexSkillInstructionV0, 0, len(instructions))
+	for _, instruction := range instructions {
+		ref := strings.TrimSpace(instruction.SkillRef)
+		text := strings.TrimSpace(instruction.Text)
+		key := strings.ToLower(ref)
+		if ref == "" || text == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		result = append(result, orquestaruntimecodex.CodexSkillInstructionV0{
+			SkillRef: ref,
+			Text:     text,
+		})
+	}
+	return result
 }
 
 type codexRuntimeLimitsV0 struct {

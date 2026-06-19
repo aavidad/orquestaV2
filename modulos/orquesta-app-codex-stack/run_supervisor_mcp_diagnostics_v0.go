@@ -119,10 +119,20 @@ func codexStackRunSupervisorDiagnosticMessageMCPV0(
 	return strings.Join(compactStringsV0([]string{
 		"status=" + strings.TrimSpace(diagnostic.Status),
 		"message_type=" + strings.TrimSpace(diagnostic.MessageType),
-		"target=" + firstNonEmptyQueuedSourceV0(diagnostic.TargetPort, "capacity-missing"),
+		codexStackRunSupervisorDiagnosticTargetMCPV0(diagnostic),
 		"error=" + codexStackRunSupervisorPublicDiagnosticErrorV0(diagnostic.Error),
 		fmt.Sprintf("issues=%d", diagnostic.Issues),
 	}), " ")
+}
+
+func codexStackRunSupervisorDiagnosticTargetMCPV0(
+	diagnostic orquestaruncoordinator.RunDrainDiagnosticV0,
+) string {
+	targetPort := strings.TrimSpace(diagnostic.TargetPort)
+	if targetPort == "" {
+		return "target=unknown"
+	}
+	return "target=" + targetPort
 }
 
 func codexStackRunSupervisorPublicDiagnosticErrorV0(value string) string {

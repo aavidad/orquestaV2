@@ -24,6 +24,27 @@ func TestBuildAutoprogrammingProgrammableWorkV0NormalizesAreaAlias(t *testing.T)
 	assertStringsEqualV0(t, got, []string{"apps/admin/web_app/page.go"})
 }
 
+func TestBuildAutoprogrammingProgrammableWorkV0PropagaSkillRefsDeclaradas(t *testing.T) {
+	result := BuildAutoprogrammingProgrammableWorkV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{{
+			TaskRef:   "task-ref-web",
+			Area:      "Web Application",
+			SkillRefs: []string{"skill-ref-catalogo-declarado-v0"},
+		}}
+		request.WriteSet = []string{"apps/admin/web_app/page.go"}
+	}))
+
+	if !result.Accepted {
+		t.Fatalf("accepted=false issues=%+v", result.Issues)
+	}
+	if !stringsSliceContainsForAutoprogrammingTestV0(
+		result.Work.Groups[0].Task.SkillRefs,
+		"skill-ref-catalogo-declarado-v0",
+	) {
+		t.Fatalf("skill_refs=%v", result.Work.Groups[0].Task.SkillRefs)
+	}
+}
+
 func TestBuildAutoprogrammingProgrammableWorkV0PostponesLiveWorkOverlap(t *testing.T) {
 	result := BuildAutoprogrammingProgrammableWorkV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
 		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{

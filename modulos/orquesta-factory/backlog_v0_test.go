@@ -49,6 +49,10 @@ func TestGenerarBacklogInicialPropuestoV0DesdeSpecValida(t *testing.T) {
 	if !containsStringV0(backlog.ContratosRequeridos, "AppSpecV0") {
 		t.Fatalf("missing AppSpecV0 contract: %+v", backlog.ContratosRequeridos)
 	}
+	architectureTask := assertHasTaskContractV0(t, backlog.Microtareas, "ArquitecturaHexagonalEstricta v0")
+	if !strings.Contains(architectureTask.Validacion, "composicion solo en bootstrap/cmd") {
+		t.Fatalf("architecture task should enforce strict hexagonal validation: %+v", architectureTask)
+	}
 	if backlog.Riesgos == nil {
 		t.Fatalf("risks should be a JSON array")
 	}

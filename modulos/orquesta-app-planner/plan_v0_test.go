@@ -23,11 +23,31 @@ func TestBuildGoAPIWebMicrotaskPlanV0DivideAppEnCortesPequenos(t *testing.T) {
 		"docs/pruebas.md",
 		"docs/decisiones.md",
 	})
-	assertAppUnitForTestV0(t, plan, "agenda-core", orquestacoreworkflow.OrchestrationPhaseProgramacionV0, []string{"ack-agenda-bootstrap"}, []string{"internal/agenda"})
+	assertAppUnitForTestV0(t, plan, "agenda-core", orquestacoreworkflow.OrchestrationPhaseProgramacionV0, []string{"ack-agenda-bootstrap"}, []string{"internal/domain", "internal/application", "internal/ports"})
 	assertAppUnitForTestV0(t, plan, "web", orquestacoreworkflow.OrchestrationPhaseProgramacionV0, []string{"ack-agenda-bootstrap"}, []string{"web"})
-	assertAppUnitForTestV0(t, plan, "api", orquestacoreworkflow.OrchestrationPhaseProgramacionV0, []string{"ack-agenda-agenda-core", "ack-agenda-web"}, []string{"cmd/server"})
+	assertAppUnitForTestV0(t, plan, "api", orquestacoreworkflow.OrchestrationPhaseProgramacionV0, []string{"ack-agenda-agenda-core", "ack-agenda-web"}, []string{"internal/adapters/http", "internal/app/bootstrap", "cmd/server"})
 	assertAppUnitForTestV0(t, plan, "docs", orquestacoreworkflow.OrchestrationPhaseDocumentacionV0, []string{"ack-agenda-api"}, []string{"README.md"})
 	assertAppUnitForTestV0(t, plan, "review", orquestacoreworkflow.OrchestrationPhaseRevisionV0, []string{"ack-agenda-docs"}, []string{"docs/revision.md"})
+}
+
+func TestBuildGoAPIWebMicrotaskPlanV0ExigeHexagonalidadEstructural(t *testing.T) {
+	plan := mustAppPlanForTestV0(t)
+
+	bootstrap := appUnitByKeyForTestV0(t, plan, "bootstrap")
+	assertAppUnitCriteriaContainsForTestV0(t, bootstrap, "AGENTS.md y docs/contratos.md declaran arquitectura hexagonal estricta como condicion de aceptacion.")
+	assertAppUnitCriteriaContainsForTestV0(t, bootstrap, "docs/contratos.md separa domain, application, ports, adapters y bootstrap.")
+
+	domain := appUnitByKeyForTestV0(t, plan, "agenda-core")
+	assertAppUnitCriteriaContainsForTestV0(t, domain, "Dominio probado sin imports de adapters, HTTP, DB, filesystem, runtime ni UI.")
+	assertAppUnitCriteriaContainsForTestV0(t, domain, "Casos de uso dependen de puertos/interfaces, no de repositorios concretos.")
+
+	api := appUnitByKeyForTestV0(t, plan, "api")
+	assertAppUnitCriteriaContainsForTestV0(t, api, "Entrypoint bajo cmd/server y composicion bajo internal/app/bootstrap.")
+	assertAppUnitCriteriaContainsForTestV0(t, api, "Handlers finos: no construyen repositorios, autenticacion, fixtures ni reglas de negocio.")
+
+	review := appUnitByKeyForTestV0(t, plan, "review")
+	assertAppUnitCriteriaContainsForTestV0(t, review, "La revision no acepta la app si dominio/application importan adapters, HTTP, DB, filesystem, runtime o UI.")
+	assertAppUnitCriteriaContainsForTestV0(t, review, "La revision no acepta handlers con composicion de repositorios, autenticacion, fixtures o reglas de negocio.")
 }
 
 func TestRuntimeFunctionContractForUnitV0ConservaCorteVerificable(t *testing.T) {
@@ -40,11 +60,28 @@ func TestRuntimeFunctionContractForUnitV0ConservaCorteVerificable(t *testing.T) 
 		contract.Objetivo != unit.Summary {
 		t.Fatalf("contract=%+v unit=%+v", contract, unit)
 	}
-	if len(contract.WriteSet) != 1 || contract.WriteSet[0] != "cmd/server" {
+	if !sameStringSetForTestV0(contract.WriteSet, []string{"internal/adapters/http", "internal/app/bootstrap", "cmd/server"}) {
 		t.Fatalf("write_set=%v", contract.WriteSet)
 	}
 	if len(contract.TestsObligatorios) != 1 || contract.TestsObligatorios[0] != "go test ./..." {
 		t.Fatalf("tests=%v", contract.TestsObligatorios)
+	}
+	if !appPlannerStringInSetV0(contract.CriterioCierre, "Handlers finos: no construyen repositorios, autenticacion, fixtures ni reglas de negocio.") {
+		t.Fatalf("criterio_cierre=%v", contract.CriterioCierre)
+	}
+}
+
+func TestWorkProfileForUnitV0PropagaSkillRefsDeclaradas(t *testing.T) {
+	plan := mustAppPlanForTestV0(t)
+	unit := appUnitByKeyForTestV0(t, plan, "web")
+	unit.SkillRefs = []string{"skill-ref-catalogo-declarado-v0"}
+
+	profile, err := WorkProfileForUnitV0(plan, unit)
+	if err != nil {
+		t.Fatalf("WorkProfileForUnitV0: %v", err)
+	}
+	if !appPlannerStringInSetV0(profile.SkillRefs, "skill-ref-catalogo-declarado-v0") {
+		t.Fatalf("profile skill_refs=%v", profile.SkillRefs)
 	}
 }
 
@@ -116,4 +153,14 @@ func sameStringSetForTestV0(left []string, right []string) bool {
 		}
 	}
 	return true
+}
+
+func assertAppUnitCriteriaContainsForTestV0(t *testing.T, unit AppWorkUnitV0, want string) {
+	t.Helper()
+	for _, criterion := range unit.AcceptanceCriteria {
+		if criterion == want {
+			return
+		}
+	}
+	t.Fatalf("%s missing criterion %q in %+v", unit.TaskRef, want, unit.AcceptanceCriteria)
 }

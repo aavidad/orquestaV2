@@ -187,6 +187,10 @@ Documentos de entrada obligatorios para cambios transversales:
   DB real debe entrar por composicion opt-in con driver, schema y pruebas propias.
 - Toda app externa debe entrar por contratos y refs opacas. No compartir DB ni
   filesystem interno con Orquesta.
+- Toda app completa generada por Orquesta debe nacer hexagonal pura:
+  dominio/aplicacion, puertos y adaptadores separados; HTTP/UI/DB/runtime/
+  proveedores solo como adaptadores; composicion y wiring solo en bootstrap/cmd.
+  No mezclar handlers, persistencia, configuracion ni reglas de dominio.
 - El dominio externo aporta datos, reglas, validadores y ensamblado. Orquesta
   aporta juicio mediante director/agentes.
 - No conviertas validadores deterministicos en NLU pobre por strings exactos. Si

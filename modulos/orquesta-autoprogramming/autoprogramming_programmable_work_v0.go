@@ -147,6 +147,7 @@ func autoprogrammingWorkflowTaskForGroupV0(
 		ScopeRefs:            append([]string(nil), writeSet...),
 		RequiredTests:        autoprogrammingRequiredTestsForGroupV0(requiredTests, group),
 		AcceptanceCriteria:   autoprogrammingAcceptanceCriteriaForGroupV0(group),
+		SkillRefs:            autoprogrammingSkillRefsForGroupV0(group),
 		MaxDelegationDepth:   limits.maxDelegationDepth,
 		MaxChildAgents:       limits.maxSubagentsPerAgent,
 		MaxSubagentsPerAgent: limits.maxSubagentsPerAgent,

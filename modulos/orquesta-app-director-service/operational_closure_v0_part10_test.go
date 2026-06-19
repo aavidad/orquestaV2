@@ -146,6 +146,80 @@ func TestMaybeCloseOperationalDirectorV0BloqueaPlanStateSiSourceNoConstruyeReque
 	}
 }
 
+func TestMaybeCloseOperationalDirectorV0ReabreReviewSiSourceNoConstruyeRequestConEntregaSinReview(t *testing.T) {
+	runRef := "run-service-operational-closure-source-missing-open-review"
+	planRef := "plan-ref-service-operational-closure-source-missing-open-review"
+	taskRef := "task-ref-service-operational-closure-001"
+	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskRef)
+	deliveryRef := "delivery-ref-service-operational-closure-001"
+	run := serviceContinueClosureRunForTestV0(runRef, orquestacoreworkflow.OrchestrationPhaseRevisionV0)
+	run.Tasks = []string{taskRef}
+	run.DeliveredTasks = []string{taskRef}
+	run.DeliveredAgents = []string{agentRef}
+	run.Deliveries = []string{deliveryRef}
+	planStateStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0(
+		serviceOperationalClosurePlanStateReadyForCloseV0(runRef, planRef),
+	)
+	source := &serviceOperationalClosureSourceForTestV0{Reject: true}
+
+	loop, issues, err := maybeCloseOperationalDirectorV0(
+		context.Background(),
+		ContinueAppDirectorRequestV0{
+			RunRef:                     runRef,
+			OccurredAt:                 "2026-05-17T16:31:00Z",
+			OperationalDirectorPlanRef: planRef,
+		},
+		StartAppDirectorPortsV0{
+			RunStore:  orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+			EventSink: orquestacionnucleoapp.NewInMemoryEventSinkV0(),
+			EventReader: serviceOperationalClosureEventReaderForTestV0{Events: []orquestacoreworkflow.OrchestrationEventV0{
+				serviceOperationalDirectorPlanStateEventForTestV0(t, runRef, 1, orquestacoreworkflow.OrchestrationEventDeliveryRegisteredV0, orquestacoreworkflow.DeliveryRegisteredPayloadV0{
+					DeliveryRef:  deliveryRef,
+					PhaseID:      string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+					TaskID:       taskRef,
+					AgentRef:     agentRef,
+					Summary:      "Entrega pendiente de review.",
+					EvidenceRefs: []string{"evidence-ref-delivery-open-review"},
+				}),
+			}},
+			DirectorTaskStore:          orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(serviceOperationalClosureTaskForTestV0(runRef)),
+			OperationalClosureSource:   source,
+			OperationalPlanStateStore:  planStateStore,
+			OperationalPlanStateWriter: planStateStore,
+		},
+		orquestacionnucleoapp.ProgressiveLoopResultV0{
+			Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+			Run:    run,
+		},
+		orquestacionnucleoapp.ProgressiveLoopRequestV0{},
+	)
+	if err != nil || len(issues) != 0 {
+		t.Fatalf("maybeCloseOperationalDirectorV0 err=%v issues=%+v", err, issues)
+	}
+	if !source.Called {
+		t.Fatalf("closure source no invocado")
+	}
+	if loop.Status != orquestacionnucleoapp.ProgressiveLoopStatusNeedsDirectorV0 {
+		t.Fatalf("loop status=%s want needs_director", loop.Status)
+	}
+	state, err := planStateStore.LoadOperationalDirectorPlanStateV0(context.Background(), runRef, planRef)
+	if err != nil {
+		t.Fatalf("LoadOperationalDirectorPlanStateV0: %v", err)
+	}
+	reviewStep := serviceOperationalDirectorPlanStateStepForTestV0(t, state, "step-review-deliveries")
+	if state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0 ||
+		state.ActiveStepID != "step-review-deliveries" ||
+		state.ClosureReason != "" ||
+		serviceStringInSetV0(state.BlockerRefs, "operational-closure-source-unavailable") ||
+		reviewStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
+		!serviceStringInSetV0(reviewStep.TaskRefs, taskRef) ||
+		!serviceStringInSetV0(reviewStep.AgentRefs, agentRef) ||
+		!serviceStringInSetV0(reviewStep.DeliveryRefs, deliveryRef) ||
+		reviewStep.Reason != "closure-open-tasks-review-followups" {
+		t.Fatalf("state=%+v review=%+v", state, reviewStep)
+	}
+}
+
 func TestMaybeCloseOperationalDirectorV0BloqueaPlanStateSinClosureSourceEnReplanOrClose(t *testing.T) {
 	runRef := "run-service-operational-closure-plan-state-no-source"
 	planRef := "plan-ref-service-operational-closure-plan-state-no-source"

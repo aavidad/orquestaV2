@@ -15,6 +15,7 @@ type AutoprogrammingTaskGroupCandidateV0 struct {
 	AcceptanceCriteria []string `json:"acceptance_criteria,omitempty"`
 	RequiredTests      []string `json:"required_tests,omitempty"`
 	CompactRules       []string `json:"compact_rules,omitempty"`
+	SkillRefs          []string `json:"skill_refs,omitempty"`
 	// WriteSet y DependsOn permiten declarar por tarea el alcance de escritura y
 	// las dependencias explicitas (refs de otras task_ref). Si se declaran, ganan
 	// sobre la inferencia automatica por area/solapamiento. Vacios = comportamiento
@@ -91,6 +92,7 @@ func normalizeAutoprogrammingTaskCandidateV0(
 		AcceptanceCriteria: compactStringsV0(task.AcceptanceCriteria),
 		RequiredTests:      compactStringsV0(task.RequiredTests),
 		CompactRules:       compactStringsV0(task.CompactRules),
+		SkillRefs:          compactStringsV0(task.SkillRefs),
 		WriteSet:           compactStringsV0(task.WriteSet),
 		DependsOn:          compactStringsV0(task.DependsOn),
 	}
@@ -101,4 +103,12 @@ func normalizeAutoprogrammingTaskAreaV0(area string) string {
 		return unicode.IsSpace(r) || r == '_' || r == '-'
 	})
 	return strings.Join(parts, "-")
+}
+
+func autoprogrammingSkillRefsForGroupV0(group AutoprogrammingTaskGroupV0) []string {
+	var refs []string
+	for _, task := range group.Tasks {
+		refs = append(refs, task.SkillRefs...)
+	}
+	return compactStringsV0(refs)
 }

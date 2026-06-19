@@ -765,6 +765,26 @@ func TestCodexRuntimeConfigV0InyectaToolbeltOperativoDelServidor(t *testing.T) {
 	}
 }
 
+func TestCodexRuntimeConfigV0LeeSkillInstructionsDesdeComposicion(t *testing.T) {
+	t.Setenv(envCodexSkillInstructionsJSONV0, `[
+		{"skill_ref":" skill-ref-catalogo-declarado-v0 ","text":" Catalogo declarado: usa workspace administrativo denso. "},
+		{"skill_ref":"skill-ref-catalogo-declarado-v0","text":"duplicada"}
+	]`)
+
+	config := codexRuntimeConfigV0(orquestaserver.ConfigV0{
+		ProjectWorkDir: t.TempDir(),
+		RuntimeWorkDir: t.TempDir(),
+	}, nil)
+
+	if len(config.SkillInstructions) != 1 {
+		t.Fatalf("skill_instructions=%+v", config.SkillInstructions)
+	}
+	if got := config.SkillInstructions[0]; got.SkillRef != "skill-ref-catalogo-declarado-v0" ||
+		got.Text != "Catalogo declarado: usa workspace administrativo denso." {
+		t.Fatalf("skill_instruction=%+v", got)
+	}
+}
+
 func TestCodexStackCapacityConfigFromEnvV0ConservaReasoningCodexMedium(t *testing.T) {
 	t.Setenv("ORQUESTA_CAPACITY_REASONING_EFFORT", "")
 	t.Setenv("ORQUESTA_CODEX_REASONING_EFFORT", "medium")

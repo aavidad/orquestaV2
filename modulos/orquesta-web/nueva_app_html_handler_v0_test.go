@@ -49,6 +49,7 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		`name="project_source.project_ref"`,
 		`name="plataformas"`,
 		`name="preferencias_tecnicas.arquitectura"`,
+		`hexagonal estricta`,
 		`name="i18n.enabled"`,
 		`name="datos.db_required"`,
 		`name="deploy.target"`,
@@ -63,6 +64,9 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		if !strings.Contains(body, want) {
 			t.Fatalf("GET HTML no contiene %q\n%s", want, body)
 		}
+	}
+	if strings.Contains(body, `value="modular"`) || strings.Contains(body, `value="monolito_modular"`) {
+		t.Fatalf("GET HTML ofrece arquitecturas no soportadas\n%s", body)
 	}
 }
 

@@ -19,9 +19,8 @@ func continueOperationalDirectorPlanStateRefreshStaleClosureScopeV0(
 	}
 	activeStep, ok := operationalDirectorPlanStateActiveStepV0(state)
 	if !ok ||
-		state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0 ||
 		activeStep.Kind != orquestadirectoroperativo.OperationalDirectorStepReplanOrCloseV0 ||
-		activeStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 {
+		!operationalDirectorPlanStateCanRefreshClosureScopeV0(state, activeStep) {
 		return state, false, nil
 	}
 	run, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
@@ -30,6 +29,13 @@ func continueOperationalDirectorPlanStateRefreshStaleClosureScopeV0(
 	}
 	if run.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 {
 		return state, false, nil
+	}
+	if state.Status == orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0 &&
+		operationalDirectorPlanStateHasReasonOrBlockerV0(state, activeStep, "operational-closure-issues") {
+		canProgressClosureReplan, err := continueOperationalDirectorPlanStateCanProgressBlockedClosureIssuesReplanV0(ctx, request, ports, state)
+		if err != nil || canProgressClosureReplan {
+			return state, false, err
+		}
 	}
 	scope, err := operationalDirectorPlanStateOpenAcceptedLeafTasksForClosureV0(
 		ctx,
@@ -44,7 +50,8 @@ func continueOperationalDirectorPlanStateRefreshStaleClosureScopeV0(
 	if operationalDirectorPlanStateSameRefsV0(activeStep.TaskRefs, scope.TaskRefs) &&
 		operationalDirectorPlanStateSameRefsV0(activeStep.AgentRefs, scope.AgentRefs) &&
 		operationalDirectorPlanStateSameRefsV0(activeStep.DeliveryRefs, scope.DeliveryRefs) &&
-		operationalDirectorPlanStateSameRefsV0(activeStep.ReviewResultRefs, scope.ReviewResultRefs) {
+		operationalDirectorPlanStateSameRefsV0(activeStep.ReviewResultRefs, scope.ReviewResultRefs) &&
+		operationalDirectorPlanStateSameRefsV0(activeStep.AcceptedReviewRefs, scope.AcceptedReviewRefs) {
 		return state, false, nil
 	}
 	nextSteps := make([]orquestacionnucleoapp.OperationalDirectorPlanStepStateV0, 0, len(state.Steps))
@@ -55,6 +62,8 @@ func continueOperationalDirectorPlanStateRefreshStaleClosureScopeV0(
 			nextStep.AgentRefs = append([]string(nil), scope.AgentRefs...)
 			nextStep.DeliveryRefs = append([]string(nil), scope.DeliveryRefs...)
 			nextStep.ReviewResultRefs = append([]string(nil), scope.ReviewResultRefs...)
+			nextStep.AcceptedReviewRefs = append([]string(nil), scope.AcceptedReviewRefs...)
+			nextStep.Status = orquestadirectoroperativo.OperationalDirectorStepRunningV0
 			nextStep.BlockerRefs = nil
 			nextStep.Reason = "closure-scope-refreshed-from-open-reviewed-tasks"
 			nextStep.EvidenceRefs = compactServiceRefsV0(append(
@@ -64,6 +73,8 @@ func continueOperationalDirectorPlanStateRefreshStaleClosureScopeV0(
 		}
 		nextSteps = append(nextSteps, nextStep)
 	}
+	state.Status = orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0
+	state.ActiveStepID = activeStep.StepID
 	state.PendingAgentRefs = nil
 	state.BlockerRefs = nil
 	state.ClosureReason = ""
@@ -78,4 +89,23 @@ func continueOperationalDirectorPlanStateRefreshStaleClosureScopeV0(
 		return state, false, err
 	}
 	return next, true, nil
+}
+
+func operationalDirectorPlanStateCanRefreshClosureScopeV0(
+	state orquestacionnucleoapp.OperationalDirectorPlanStateV0,
+	activeStep orquestacionnucleoapp.OperationalDirectorPlanStepStateV0,
+) bool {
+	if state.Status == orquestacionnucleoapp.OperationalDirectorPlanStateActiveV0 &&
+		activeStep.Status == orquestadirectoroperativo.OperationalDirectorStepRunningV0 {
+		return true
+	}
+	if state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0 ||
+		activeStep.Status != orquestadirectoroperativo.OperationalDirectorStepBlockedV0 {
+		return false
+	}
+	if len(compactServiceRefsV0(activeStep.ReplanDecisionRefs)) > 0 {
+		return false
+	}
+	return operationalDirectorPlanStateHasReasonOrBlockerV0(state, activeStep, "operational-closure-issues") ||
+		operationalDirectorPlanStateHasReasonOrBlockerV0(state, activeStep, operationalClosureOpenTasksNoProgressReasonV0)
 }

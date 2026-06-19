@@ -54,9 +54,15 @@ func continueOperationalDirectorPlanStateAfterClosureOpenTasksNoProgressV0(
 	if !ok ||
 		state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateBlockedV0 ||
 		activeStep.Kind != orquestadirectoroperativo.OperationalDirectorStepReplanOrCloseV0 ||
-		activeStep.Status != orquestadirectoroperativo.OperationalDirectorStepBlockedV0 ||
-		!operationalDirectorPlanStateHasReasonOrBlockerV0(state, activeStep, operationalClosureOpenTasksNoProgressReasonV0) {
+		activeStep.Status != orquestadirectoroperativo.OperationalDirectorStepBlockedV0 {
 		return state, false, nil
+	}
+	reason := operationalClosureOpenTasksNoProgressReasonV0
+	if !operationalDirectorPlanStateHasReasonOrBlockerV0(state, activeStep, reason) {
+		reason = "operational-closure-issues"
+		if !operationalDirectorPlanStateHasReasonOrBlockerV0(state, activeStep, reason) {
+			return state, false, nil
+		}
 	}
 	run, err := ports.RunStore.LoadRunV0(ctx, request.RunRef)
 	if err != nil {
@@ -68,6 +74,6 @@ func continueOperationalDirectorPlanStateAfterClosureOpenTasksNoProgressV0(
 		ports,
 		state,
 		run,
-		operationalClosureOpenTasksNoProgressReasonV0,
+		reason,
 	)
 }

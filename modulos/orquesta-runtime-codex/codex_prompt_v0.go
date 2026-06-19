@@ -15,6 +15,7 @@ type CodexControlFilesV0 struct {
 	DecisionPath        string
 	ShutdownRequestPath string
 	ShutdownAckPath     string
+	SkillInstructions   []CodexSkillInstructionV0
 }
 
 func BuildCodexAgentPromptV0(packet orquestaruntime.AgentStartPacketV0, hints []string) string {
@@ -113,7 +114,7 @@ func BuildCodexAgentPromptWithControlFilesV0(packet orquestaruntime.AgentStartPa
 	writePromptListSectionV0(&b, "Write-set permitido:", packet.Task.WriteSet)
 	writePromptListSectionV0(&b, "Tests obligatorios:", packet.Task.RequiredTests)
 	writePromptListSectionV0(&b, "SkillRefs solicitadas:", packet.Task.SkillRefs)
-	writeCodexSkillRefsMaterializedV0(&b, packet.Task.SkillRefs)
+	writeCodexSkillRefsMaterializedV0(&b, packet.Task.SkillRefs, control.SkillInstructions)
 	if len(hints) > 0 {
 		b.WriteString("\nNotas operativas del conector:\n")
 		for _, hint := range hints {
@@ -235,8 +236,8 @@ func cleanControlPathV0(value string, fallback string) string {
 	return filepath.Clean(trimmed)
 }
 
-func writeCodexSkillRefsMaterializedV0(b *strings.Builder, refs []string) {
-	materialized := codexMaterializedSkillRefsV0(refs)
+func writeCodexSkillRefsMaterializedV0(b *strings.Builder, refs []string, instructions []CodexSkillInstructionV0) {
+	materialized := codexMaterializedSkillRefsV0(refs, instructions)
 	if len(materialized) == 0 {
 		return
 	}
@@ -248,17 +249,37 @@ func writeCodexSkillRefsMaterializedV0(b *strings.Builder, refs []string) {
 
 type codexMaterializedSkillV0 struct{ Ref, Text string }
 
-func codexMaterializedSkillRefsV0(refs []string) []codexMaterializedSkillV0 {
+func codexMaterializedSkillRefsV0(refs []string, instructions []CodexSkillInstructionV0) []codexMaterializedSkillV0 {
+	injected := codexSkillInstructionTextMapV0(instructions)
 	seen := map[string]bool{}
 	result := []codexMaterializedSkillV0{}
 	for _, ref := range compactPromptValuesV0(refs) {
 		key := strings.ToLower(strings.TrimSpace(ref))
-		text, ok := codexSkillRefTextV0(key)
+		text, ok := injected[key]
+		if !ok {
+			text, ok = codexSkillRefTextV0(key)
+		}
 		if !ok || seen[key] {
 			continue
 		}
 		seen[key] = true
 		result = append(result, codexMaterializedSkillV0{Ref: ref, Text: text})
+	}
+	return result
+}
+
+func codexSkillInstructionTextMapV0(instructions []CodexSkillInstructionV0) map[string]string {
+	result := map[string]string{}
+	for _, instruction := range instructions {
+		ref := strings.ToLower(strings.TrimSpace(instruction.SkillRef))
+		text := strings.TrimSpace(instruction.Text)
+		if ref == "" || text == "" || strings.ContainsAny(ref, " /\\\t\r\n") {
+			continue
+		}
+		if _, exists := result[ref]; exists {
+			continue
+		}
+		result[ref] = text
 	}
 	return result
 }

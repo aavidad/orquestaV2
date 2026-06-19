@@ -14,6 +14,9 @@ consumidora.
 - La web pertenece a la app consumidora, no al nucleo de Orquesta.
 - Orquesta aporta direccion, agentes, review, tests y cierre.
 - La app aporta branding, dominio, datos, permisos, persistencia y despliegue.
+- Si la web forma parte de una app generada por Orquesta, la arquitectura sigue
+  siendo hexagonal: UI/web llama API o puertos de aplicacion y no contiene
+  reglas de dominio, persistencia ni composicion global.
 
 ## Flujo
 

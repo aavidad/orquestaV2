@@ -151,7 +151,129 @@
         "contratos_esperados": {
           "$ref": "#/$defs/string_list"
         }
-      }
+      },
+      "allOf": [
+        {
+          "properties": {
+            "modulos_iniciales": {
+              "contains": {
+                "type": "object",
+                "required": [
+                  "nombre"
+                ],
+                "properties": {
+                  "nombre": {
+                    "const": "domain"
+                  }
+                }
+              },
+              "minContains": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "modulos_iniciales": {
+              "contains": {
+                "type": "object",
+                "required": [
+                  "nombre"
+                ],
+                "properties": {
+                  "nombre": {
+                    "const": "application"
+                  }
+                }
+              },
+              "minContains": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "modulos_iniciales": {
+              "contains": {
+                "type": "object",
+                "required": [
+                  "nombre"
+                ],
+                "properties": {
+                  "nombre": {
+                    "const": "ports"
+                  }
+                }
+              },
+              "minContains": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "modulos_iniciales": {
+              "contains": {
+                "type": "object",
+                "required": [
+                  "nombre"
+                ],
+                "properties": {
+                  "nombre": {
+                    "const": "adapters"
+                  }
+                }
+              },
+              "minContains": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "modulos_iniciales": {
+              "contains": {
+                "type": "object",
+                "required": [
+                  "nombre"
+                ],
+                "properties": {
+                  "nombre": {
+                    "const": "bootstrap"
+                  }
+                }
+              },
+              "minContains": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "fronteras": {
+              "contains": {
+                "const": "Los handlers y adaptadores son finos: traducen transporte, validan forma y llaman casos de uso."
+              },
+              "minContains": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "fronteras": {
+              "contains": {
+                "const": "La composicion de repositorios, autenticacion, reglas, fixtures y configuracion vive en bootstrap/cmd, no en handlers."
+              },
+              "minContains": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "contratos_esperados": {
+              "contains": {
+                "const": "ArquitecturaHexagonalEstricta v0"
+              },
+              "minContains": 1
+            }
+          }
+        }
+      ]
     },
     "i18n": {
       "type": "object",

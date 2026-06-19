@@ -163,7 +163,7 @@ func (provider AppPlanCandidateProviderV0) profileResolutionForUnitV0(
 	if err != nil {
 		return orquestacionnucleoapp.WorkflowTaskProfileResolutionV0{}, err
 	}
-	return orquestacionnucleoapp.DefaultWorkflowTaskProfileResolverV0{}.ResolveWorkflowTaskProfileV0(
+	resolution, err := orquestacionnucleoapp.DefaultWorkflowTaskProfileResolverV0{}.ResolveWorkflowTaskProfileV0(
 		ctx,
 		orquestacionnucleoapp.WorkflowTaskProfileRequestV0{
 			Run:             request.Run,
@@ -171,6 +171,11 @@ func (provider AppPlanCandidateProviderV0) profileResolutionForUnitV0(
 			DefaultCapacity: unit.Capacity,
 		},
 	)
+	if err != nil {
+		return orquestacionnucleoapp.WorkflowTaskProfileResolutionV0{}, err
+	}
+	resolution.SkillRefs = compactAppPlannerStringsV0(append(resolution.SkillRefs, task.SkillRefs...))
+	return resolution, nil
 }
 
 func capacityPayloadForUnitV0(
@@ -200,6 +205,7 @@ func agentPayloadForUnitV0(
 		Role:               profile.Role,
 		Summary:            profile.AgentSummary,
 		EvidenceRefs:       appPlannerProfileEvidenceRefsV0(unit, profile),
+		SkillRefs:          profile.SkillRefs,
 	}
 }
 

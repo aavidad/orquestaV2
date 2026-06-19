@@ -20,8 +20,11 @@ func TestWorkflowTaskForUnitV0ConvierteUnidadAPerfilNeutral(t *testing.T) {
 	if task.TaskID != unit.TaskRef || task.RunID != plan.RunRef || task.PhaseID != unit.PhaseID {
 		t.Fatalf("refs task=%+v unit=%+v", task, unit)
 	}
-	if !sameStringSetForTestV0(task.WriteSet, []string{"cmd/server"}) {
+	if !sameStringSetForTestV0(task.WriteSet, []string{"internal/adapters/http", "internal/app/bootstrap", "cmd/server"}) {
 		t.Fatalf("write_set=%v", task.WriteSet)
+	}
+	if !appPlannerStringInSetV0(task.AcceptanceCriteria, "Handlers finos: no construyen repositorios, autenticacion, fixtures ni reglas de negocio.") {
+		t.Fatalf("acceptance_criteria=%v", task.AcceptanceCriteria)
 	}
 	if !sameStringSetForTestV0(task.RequiredTests, []string{"go test ./..."}) {
 		t.Fatalf("required_tests=%v", task.RequiredTests)

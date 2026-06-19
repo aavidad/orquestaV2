@@ -30,7 +30,7 @@ func autoprogrammingBridgeExistingRunResultV0(
 	}
 	result.Run = existing
 	result.Tasks = append([]orquestacoreworkflow.WorkflowTaskV0(nil), storedTasks...)
-	result.WaitAgentRefs = autoprogrammingBridgeWaitAgentRefsV0(result.Work.Tasks)
+	result.WaitAgentRefs = autoprogrammingBridgeWaitAgentRefsForRunV0(storedTasks, existing)
 	continueRequest, err := autoprogrammingBridgeContinueRequestWithPlanStateV0(ctx, request, result, ports)
 	if err != nil {
 		return AutoprogrammingBridgeResultV0{}, err
