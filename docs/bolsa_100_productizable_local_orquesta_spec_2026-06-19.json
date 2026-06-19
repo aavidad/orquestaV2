@@ -1,0 +1,229 @@
+{
+  "request_id": "req-bolsa-100-productizable-local-20260619",
+  "correlation_id": "corr-bolsa-100-productizable-local-20260619",
+  "requested_by": "operador-bolsa-diputacion",
+  "occurred_at": "2026-06-19T19:05:00Z",
+  "max_bursts": 12,
+  "max_steps_per_burst": 12,
+  "max_dispatches_per_wait": 6,
+  "max_commands": 72,
+  "max_outbox_per_cycle": 32,
+  "autoprogramming_request": {
+    "request_ref": "bolsa-100-productizable-local-20260619",
+    "project_ref": "bolsa-diputacion-granada",
+    "worktree_ref": "worktree-bolsa-100-productizable-local-20260619",
+    "worktree_isolated": true,
+    "branch_ref": "branch-bolsa-100-productizable-local-20260619",
+    "max_write_set_entries": 42,
+    "write_set": [
+      "README.md",
+      "Dockerfile",
+      "docker-compose.yml",
+      "docs/portal_vec/bolsa_productizable_local_2026-06-19.md",
+      "docs/portal_vec/bolsa_flow_contract_2026-06-19.md",
+      "config/config.go",
+      "cmd/bolsa-server/main.go",
+      "internal/app/bootstrap/bootstrap.go",
+      "internal/app/bootstrap/bootstrap_test.go",
+      "internal/app/server/server.go",
+      "internal/app/server/server_test.go",
+      "internal/app/server/server_flow_test.go",
+      "internal/candidate/adapters/auth/fake.go",
+      "internal/candidate/adapters/auth/fake_test.go",
+      "internal/candidate/adapters/auth/trusted_headers.go",
+      "internal/candidate/adapters/auth/trusted_headers_test.go",
+      "internal/candidate/adapters/handler/auth.go",
+      "internal/candidate/adapters/handler/json.go",
+      "internal/candidate/adapters/handler/professional_portal.go",
+      "internal/candidate/adapters/handler/professional_portal_test.go",
+      "internal/candidate/adapters/handler/routes.go",
+      "internal/candidate/adapters/handler/vec_module.go",
+      "internal/candidate/adapters/handler/vec_module_test.go",
+      "internal/candidate/adapters/repository/durable_file.go",
+      "internal/candidate/adapters/repository/durable_file_test.go",
+      "internal/candidate/adapters/repository/memory.go",
+      "internal/candidate/adapters/repository/administrative_flow_memory.go",
+      "internal/candidate/adapters/repository/baremo_result_memory.go",
+      "internal/candidate/adapters/repository/procedure_memory.go",
+      "internal/candidate/application/professional_portal.go",
+      "internal/candidate/application/professional_portal_test.go",
+      "internal/vec/module.go",
+      "internal/vec/module_test.go",
+      "locales/es.json",
+      "web/static/app.js",
+      "web/static/index.html",
+      "web/static/styles.css"
+    ],
+    "required_tests": [
+      "go test ./...",
+      "node --check web/static/app.js",
+      "python3 -m json.tool locales/es.json"
+    ],
+    "tasks": [
+      {
+        "task_ref": "bolsa-100-contract",
+        "area": "contract",
+        "title": "Declaracion 100% local productizable y limites externos",
+        "objective": "Actualiza README.md y crea docs/portal_vec/bolsa_productizable_local_2026-06-19.md. Define el estado objetivo: Bolsa 100% operativa en local/productizable VEC, con persistencia duradera local, auth VEC por cabeceras confiadas, flujos HTTP completos, UI administrativa densa y smoke tras reinicio. No declares registro electronico, firma, notificacion fehaciente ni Kerberos corporativo real si no hay adaptador externo configurado; decláralos como puertos/frontera de despliegue. Mantener hexagonalidad pura e i18n.",
+        "write_set": [
+          "README.md",
+          "docs/portal_vec/bolsa_productizable_local_2026-06-19.md",
+          "docs/portal_vec/bolsa_flow_contract_2026-06-19.md"
+        ],
+        "required_tests": [
+          "go test ./..."
+        ],
+        "acceptance_criteria": [
+          "El documento distingue 100% local/productizable de produccion legal externa.",
+          "Lista variables canonicas nuevas y flujos cerrados.",
+          "Declara persistencia durable local y auth trusted headers como objetivo de esta ola.",
+          "No convierte Bolsa en shell VEC ni duplica login."
+        ]
+      },
+      {
+        "task_ref": "bolsa-100-config-auth",
+        "area": "config-auth",
+        "title": "Configuracion canonica y autenticacion VEC por cabeceras",
+        "objective": "Amplia config.Config con variables canonicas: BOLSA_STORAGE_MODE=memory|file, BOLSA_DATA_DIR, BOLSA_AUTH_MODE=fake|trusted_headers, BOLSA_TRUSTED_USER_HEADER, BOLSA_TRUSTED_ROLE_HEADER, BOLSA_TRUSTED_NAME_HEADER, BOLSA_TRUSTED_EMAIL_HEADER y BOLSA_DEMO_ENABLED. Implementa un autenticador trusted_headers que reciba principal desde reverse proxy/VEC/Kerberos ya autenticado. Mantener fake auth solo para desarrollo/tests. No leer HOME ni paths locales hardcodeados.",
+        "write_set": [
+          "config/config.go",
+          "internal/app/bootstrap/bootstrap.go",
+          "internal/app/bootstrap/bootstrap_test.go",
+          "internal/candidate/adapters/auth/fake.go",
+          "internal/candidate/adapters/auth/fake_test.go",
+          "internal/candidate/adapters/auth/trusted_headers.go",
+          "internal/candidate/adapters/auth/trusted_headers_test.go",
+          "internal/candidate/adapters/handler/auth.go"
+        ],
+        "required_tests": [
+          "go test ./config ./internal/app/bootstrap/... ./internal/candidate/adapters/auth/... ./internal/candidate/adapters/handler/..."
+        ],
+        "depends_on": [
+          "bolsa-100-contract"
+        ],
+        "acceptance_criteria": [
+          "Config centraliza defaults y normalizacion de modo storage/auth.",
+          "trusted_headers autentica roles candidate, validator_l1, validator_l2 y system_admin desde cabeceras configuradas.",
+          "fake auth sigue funcionando para tests y smoke local.",
+          "Handlers no conocen configuracion concreta ni HOME."
+        ]
+      },
+      {
+        "task_ref": "bolsa-100-durable-store",
+        "area": "persistence",
+        "title": "Persistencia duradera local por fichero atomico",
+        "objective": "Implementa un adaptador de persistencia local por fichero JSON atomico en internal/candidate/adapters/repository/durable_file.go. Debe cubrir CandidateRepository, MeritRepository, BaremoResultRepository, CandidateDocumentRepository, ClaimRepository, NotificationRepository y AdministrativeAuditTrail, conservando los puertos actuales. Bootstrap debe usarlo cuando BOLSA_STORAGE_MODE=file y BOLSA_DATA_DIR este configurado. Mantener memoria como default de tests. Tests deben probar reinicio: crear candidato/merito/baremo/documento/alegacion/notificacion/auditoria, reconstruir repos desde el mismo data dir y recuperar estado.",
+        "write_set": [
+          "config/config.go",
+          "internal/app/bootstrap/bootstrap.go",
+          "internal/app/bootstrap/bootstrap_test.go",
+          "internal/candidate/adapters/repository/durable_file.go",
+          "internal/candidate/adapters/repository/durable_file_test.go",
+          "internal/candidate/adapters/repository/memory.go",
+          "internal/candidate/adapters/repository/administrative_flow_memory.go",
+          "internal/candidate/adapters/repository/baremo_result_memory.go"
+        ],
+        "required_tests": [
+          "go test ./internal/candidate/adapters/repository/...",
+          "go test ./internal/app/bootstrap/..."
+        ],
+        "depends_on": [
+          "bolsa-100-config-auth"
+        ],
+        "acceptance_criteria": [
+          "El adaptador durable hace load al arrancar y write atomico por mutacion.",
+          "No comparte filesystem interno con Orquesta; solo usa BOLSA_DATA_DIR de la app.",
+          "No rompe repositorios en memoria.",
+          "La auditoria mantiene orden y firmas encadenadas tras reinicio."
+        ]
+      },
+      {
+        "task_ref": "bolsa-100-admin-status",
+        "area": "api-status",
+        "title": "Estado operativo, capacidades y cierre de rutas demo",
+        "objective": "Anade endpoints administrativos reales de estado productizable: GET /api/admin/status y GET /api/admin/capabilities. Deben exponer modo storage, modo auth, demo_enabled, adaptadores externos registry/signature/notification como not_configured si no existen, y rutas/capacidades VEC. Si BOLSA_DEMO_ENABLED=false, /api/demo debe devolver 404 o 403 controlado y la UI no debe depender de demo para funcionar. Manifest/portal deben declarar capacidades reales/durables y estado de externos.",
+        "write_set": [
+          "internal/candidate/adapters/handler/json.go",
+          "internal/candidate/adapters/handler/professional_portal.go",
+          "internal/candidate/adapters/handler/professional_portal_test.go",
+          "internal/candidate/adapters/handler/routes.go",
+          "internal/candidate/adapters/handler/vec_module.go",
+          "internal/candidate/adapters/handler/vec_module_test.go",
+          "internal/app/server/server_flow_test.go",
+          "internal/vec/module.go",
+          "internal/vec/module_test.go",
+          "locales/es.json"
+        ],
+        "required_tests": [
+          "go test ./internal/candidate/adapters/handler/...",
+          "go test ./internal/vec/...",
+          "go test ./internal/app/server/..."
+        ],
+        "depends_on": [
+          "bolsa-100-durable-store"
+        ],
+        "acceptance_criteria": [
+          "GET /api/admin/status funciona para staff y queda protegido.",
+          "El estado no afirma integraciones legales no configuradas.",
+          "Portal/manifest incluyen /api/admin/status y /api/admin/capabilities.",
+          "La app puede arrancar con demo deshabilitada sin romper dashboard."
+        ]
+      },
+      {
+        "task_ref": "bolsa-100-ui",
+        "area": "ui",
+        "title": "UI administrativa sin botones engañosos",
+        "objective": "Use skill admin-data-web. Actualiza web/static/app.js, index.html, styles.css y locales/es.json para modo 100% local productizable: cargar dashboard sin depender de /api/demo si esta deshabilitado, mostrar estado storage/auth/adaptadores desde /api/admin/status, rotular registry/signature/notification externa como pendiente configuracion, mantener botones funcionales. Donde haya export CSV local debe ser claramente export local de datos visibles, no publicacion legal. El modulo Listados debe seguir funcionando aunque no haya demo.",
+        "write_set": [
+          "web/static/app.js",
+          "web/static/index.html",
+          "web/static/styles.css",
+          "locales/es.json"
+        ],
+        "required_tests": [
+          "node --check web/static/app.js",
+          "python3 -m json.tool locales/es.json",
+          "go test ./..."
+        ],
+        "depends_on": [
+          "bolsa-100-admin-status"
+        ],
+        "acceptance_criteria": [
+          "No quedan botones que prometan publicacion, firma, registro o notificacion fehaciente real sin endpoint/configuracion.",
+          "El panel Administracion muestra storage/auth/external adapters desde API.",
+          "Listados/export siguen funcionando con datos visibles aunque demo este deshabilitado.",
+          "La UI mantiene densidad administrativa y no introduce landing page."
+        ]
+      },
+      {
+        "task_ref": "bolsa-100-e2e",
+        "area": "e2e",
+        "title": "Smoke E2E con reinicio, storage file y trusted headers",
+        "objective": "Amplia tests para cerrar la operatividad 100% local: server_flow_test.go o tests de bootstrap deben arrancar con BOLSA_STORAGE_MODE=file/BOLSA_DATA_DIR temporal y BOLSA_AUTH_MODE=trusted_headers, ejecutar candidato -> merito -> baremo -> documento -> alegacion -> notificacion create/send/read -> audit candidate_id -> admin/status, reconstruir servidor con el mismo data dir y comprobar que expediente, notificaciones y auditoria persisten. Mantener tests memory/fake existentes.",
+        "write_set": [
+          "internal/app/bootstrap/bootstrap_test.go",
+          "internal/app/server/server_flow_test.go",
+          "internal/candidate/adapters/handler/professional_portal_test.go",
+          "internal/candidate/adapters/repository/durable_file_test.go",
+          "README.md",
+          "Dockerfile",
+          "docker-compose.yml"
+        ],
+        "required_tests": [
+          "go test ./...",
+          "node --check web/static/app.js",
+          "python3 -m json.tool locales/es.json"
+        ],
+        "depends_on": [
+          "bolsa-100-ui"
+        ],
+        "acceptance_criteria": [
+          "go test ./... prueba persistencia real tras reinicio.",
+          "El smoke usa trusted_headers en al menos un flujo de staff y candidate.",
+          "Docker/compose documentan variables de storage/auth sin secretos.",
+          "README deja comando claro para modo productizable local."
+        ]
+      }
+    ]
+  }
+}
