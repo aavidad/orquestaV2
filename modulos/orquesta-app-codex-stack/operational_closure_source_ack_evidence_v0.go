@@ -132,7 +132,7 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureA
 			refs = append(refs, evidenceRef)
 			continue
 		}
-		evidenceRefs := codexStackOperationalClosureAckTestEvidenceRefsV0(ack, command)
+		evidenceRefs, occurredAt := codexStackOperationalClosureAckTestEvidenceRefsV0(ack, command)
 		if len(evidenceRefs) == 0 {
 			evidenceRefs = codexStackOperationalClosureAckContextualRefOnlyEvidenceRefsV0(
 				descriptor,
@@ -143,6 +143,7 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureA
 				accepted,
 				result,
 			)
+			occurredAt = request.OccurredAt
 		}
 		if len(evidenceRefs) == 0 {
 			return nil, false, nil
@@ -158,7 +159,7 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureA
 			ReviewRequestID:   reviewRequest.ReviewRequestID,
 			ReviewResultRef:   result.ReviewResultRef,
 			AcceptedReviewRef: accepted.AcceptedReviewRef,
-			OccurredAt:        request.OccurredAt,
+			OccurredAt:        firstNonEmptyQueuedSourceV0(occurredAt, request.OccurredAt),
 			EvidenceRefs:      evidenceRefs,
 		}
 		if err := source.RequiredTestEvidenceWriter.SaveRequiredTestEvidenceV0(ctx, evidence); err != nil {
@@ -232,7 +233,7 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureR
 func codexStackOperationalClosureAckTestEvidenceRefsV0(
 	ack orquestaruntimecodex.CodexAgentAckV0,
 	command string,
-) []string {
+) ([]string, string) {
 	for _, receipt := range ack.TestReceipts {
 		if strings.TrimSpace(receipt.Command) != strings.TrimSpace(command) ||
 			!strings.EqualFold(strings.TrimSpace(receipt.Status), "passed") ||
@@ -244,9 +245,9 @@ func codexStackOperationalClosureAckTestEvidenceRefsV0(
 			len(codexStackOperationalClosureCompactRefsV0(receipt.EvidenceRefs)) == 0 {
 			continue
 		}
-		return codexStackOperationalClosureCompactRefsV0(receipt.EvidenceRefs)
+		return codexStackOperationalClosureCompactRefsV0(receipt.EvidenceRefs), strings.TrimSpace(receipt.OccurredAt)
 	}
-	return nil
+	return nil, ""
 }
 
 func codexStackOperationalClosureAckContextualRefOnlyEvidenceRefsV0(

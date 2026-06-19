@@ -303,6 +303,27 @@ func TestOperationalClosureSourceV0CierraAutoprogrammingConAckTestReceipts(t *te
 	if !ok || got.TaskID != task.TaskID || len(got.RequiredTestEvidenceRefs) != 1 {
 		t.Fatalf("source no cerro autoprogramming legacy: ok=%v request=%+v", ok, got)
 	}
+	evidence, err := evidenceStore.LoadRequiredTestEvidenceV0(context.Background(), runRef, got.RequiredTestEvidenceRefs)
+	if err != nil {
+		t.Fatalf("LoadRequiredTestEvidenceV0: %v", err)
+	}
+	if len(evidence) != 1 || evidence[0].OccurredAt != "2026-05-24T18:20:00Z" {
+		t.Fatalf("evidencia debe conservar occurred_at del receipt: %+v", evidence)
+	}
+	replayed, ok, err := source.BuildOperationalDirectorClosureRequestV0(
+		context.Background(),
+		orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0{
+			Run:          run,
+			OccurredAt:   "2026-05-24T19:45:00Z",
+			EvidenceRefs: []string{"evidence-ref-stack-operational-closure-autoprogramming-legacy-replay"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("BuildOperationalDirectorClosureRequestV0 replay: %v", err)
+	}
+	if !ok || !reflect.DeepEqual(replayed.RequiredTestEvidenceRefs, got.RequiredTestEvidenceRefs) {
+		t.Fatalf("replay no idempotente: first=%+v replay=%+v ok=%v", got, replayed, ok)
+	}
 }
 
 func TestOperationalClosureSourceV0CierraConContextoRefOnlySinTestReceipt(t *testing.T) {

@@ -107,12 +107,15 @@ func TestCodexAckRequiredTestRunnerV0MaterializaReceiptsComoEvidenciaDurable(t *
 			item.TaskRef != taskRef ||
 			item.TestCommand != requiredTests[index] ||
 			item.DeliveryRef != deliveryRef ||
+			item.OccurredAt != "2026-05-24T10:00:00Z" ||
 			len(item.EvidenceRefs) != 1 {
 			t.Fatalf("evidencia invalida[%d]=%+v", index, item)
 		}
 	}
 
-	replayed, err := runner.RunRequiredTestsV0(ctx, request)
+	replayRequest := request
+	replayRequest.OccurredAt = "2026-05-25T17:45:00Z"
+	replayed, err := runner.RunRequiredTestsV0(ctx, replayRequest)
 	if err != nil {
 		t.Fatalf("RunRequiredTestsV0 replay: %v", err)
 	}

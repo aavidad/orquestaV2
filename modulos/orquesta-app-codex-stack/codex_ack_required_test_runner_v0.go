@@ -100,9 +100,10 @@ func (runner codexAckRequiredTestRunnerV0) resultFromCodexAckDescriptorV0(
 			)
 			continue
 		}
-		evidenceRefs, ok := codexAckRequiredTestReceiptEvidenceRefsV0(ack, command)
+		evidenceRefs, occurredAt, ok := codexAckRequiredTestReceiptEvidenceRefsV0(ack, command)
 		if !ok {
 			evidenceRefs, ok = codexAckRequiredTestContextualRefOnlyEvidenceRefsV0(descriptor, ack, request, command)
+			occurredAt = request.OccurredAt
 		}
 		if !ok {
 			continue
@@ -118,7 +119,7 @@ func (runner codexAckRequiredTestRunnerV0) resultFromCodexAckDescriptorV0(
 			ReviewRequestID:   request.ReviewRequestID,
 			ReviewResultRef:   request.ReviewResultRef,
 			AcceptedReviewRef: request.AcceptedReviewRef,
-			OccurredAt:        request.OccurredAt,
+			OccurredAt:        firstNonEmptyQueuedSourceV0(occurredAt, request.OccurredAt),
 			EvidenceRefs:      evidenceRefs,
 		}
 		if err := runner.EvidenceWriter.SaveRequiredTestEvidenceV0(ctx, evidence); err != nil {
@@ -186,15 +187,15 @@ func codexAckRequiredTestAckMatchesRequestV0(
 func codexAckRequiredTestReceiptEvidenceRefsV0(
 	ack orquestaruntimecodex.CodexAgentAckV0,
 	command string,
-) ([]string, bool) {
+) ([]string, string, bool) {
 	command = strings.TrimSpace(command)
 	for _, receipt := range ack.TestReceipts {
 		if !codexAckRequiredTestReceiptMatchesV0(receipt, command) {
 			continue
 		}
-		return compactStringsV0(receipt.EvidenceRefs), true
+		return compactStringsV0(receipt.EvidenceRefs), strings.TrimSpace(receipt.OccurredAt), true
 	}
-	return nil, false
+	return nil, "", false
 }
 
 func codexAckRequiredTestContextualRefOnlyEvidenceRefsV0(
