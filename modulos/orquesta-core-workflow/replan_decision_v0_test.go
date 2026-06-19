@@ -98,6 +98,29 @@ func TestRecordReplanDecisionCommandV0RepeatedDoesNotDuplicate(t *testing.T) {
 	assertIdempotentNoEventsV0(t, result, err)
 }
 
+func TestRecordReplanDecisionCommandV0AcceptsDurableReworkAfterPhaseAdvanced(t *testing.T) {
+	run := mustReplanDecisionReadyRunV0(t)
+	openProgramacion := mustOpenPhaseCommandV0(
+		t,
+		"cmd-open-programacion-after-rework",
+		"idem-open-programacion-after-rework",
+		OrchestrationPhaseProgramacionV0,
+	)
+	run = mustApplySingleCommandEventV0(t, run, openProgramacion)
+	command := mustRecordReplanDecisionCommandV0(
+		t,
+		"cmd-record-replan-after-programacion",
+		"idem-record-replan-after-programacion",
+		"replan-decision-after-programacion",
+	)
+
+	result, err := HandleCommandV0(run, command)
+	if err != nil {
+		t.Fatalf("handle RecordReplanDecision tras fase avanzada: %v", err)
+	}
+	assertSingleEventTypeV0(t, result, OrchestrationEventReplanDecisionRecordedV0)
+}
+
 func TestRecordReplanDecisionCommandV0RejectsReflectedPayloadConflict(t *testing.T) {
 	run := mustReplanDecisionReadyRunV0(t)
 	payload := validReplanDecisionPayloadV0("replan-decision-effect-conflict")

@@ -79,7 +79,8 @@ func replanDecisionSourceKindForRefV0(current OrchestrationRunV0, sourceRef stri
 func replanDecisionPhaseAllowedForSourceV0(current OrchestrationRunV0, sourceKind replanDecisionSourceKindV0) bool {
 	switch sourceKind {
 	case replanDecisionSourceReworkV0:
-		return reviewPhaseCurrentV0(current, string(OrchestrationPhaseRevisionV0))
+		return reviewPhaseCurrentV0(current, string(OrchestrationPhaseRevisionV0)) ||
+			phaseIsCurrentAndActiveV0(current, OrchestrationPhaseProgramacionV0)
 	case replanDecisionSourceAgentV0, replanDecisionSourceAgentLostV0,
 		replanDecisionSourceAssessmentV0,
 		replanDecisionSourceQualityGateV0:
