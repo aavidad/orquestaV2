@@ -359,3 +359,74 @@ Validación:
 - `TestOPESTopicRegistryEffectiveConfigRedactaToolPathV0`;
 - `TestOPESTopicRegistryConfigDescubreToolDesdeOPESProjectWorkDirV0`;
 - `go test -count=1 ./modulos/orquesta-domain-work ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-director`.
+
+## SRV-TASK-018: reconciliacion OPES tras timeout y ACK incompleto
+
+Estado: abierto 2026-06-20.
+
+Origen:
+`docs/incidencia_opes_servicios_multiples_supervision_ack_2026-06-20.md`.
+
+Objetivo: el bridge OPES y el Director residente deben reconciliar trabajos
+enviados aunque el comando de drenaje devuelva timeout o supervision no
+disponible, y deben convertir ACKs/artifacts incompletos en normalizacion o
+rework causal automatico sin intervencion manual.
+
+Alcance:
+
+- `opes-drain-once` no debe dejar un `retry_pending` indefinido cuando el run
+  ya fue creado;
+- los claims y ledgers deben detectar `submitted_after_timeout` y reconciliar
+  el run existente antes de relanzar;
+- el submit OPES debe validar o normalizar el contrato minimo de artefacto:
+  `artifact_type`, `complete_job`, `idempotency_key` y payload trazable;
+- si el contrato es recuperable pero no publicable, Orquesta debe crear el
+  rework causal y despertarlo automaticamente;
+- el status publico debe exponer contadores compactos de esos casos sin filtrar
+  rutas locales ni errores crudos.
+
+Criterio de cierre:
+
+- smoke real OPES temporal con 17 `draft_content_block`;
+- cero jobs atascados por `supervision_unavailable` sin siguiente accion
+  durable;
+- reworks causales para ACK incompleto se ejecutan sin llamada manual a
+  `/api/v0/runs/supervise`;
+- pruebas focales del bridge, servidor y productor causal OPES cubren timeout,
+  reencontro de run, ACK incompleto y rework automatico.
+
+## SRV-TASK-019: visuales OPES sin FK antes de tema canonico
+
+Estado: abierto 2026-06-20.
+
+Origen:
+`docs/incidencia_opes_servicios_multiples_supervision_ack_2026-06-20.md`.
+
+Objetivo: impedir que Orquesta/bridge marque como bloque visual final un
+`generate_visual_asset` que solo tiene refs de programa (`program_topic:*`,
+`placement_ref`) cuando OPES aun no tiene `canonical_topic_id` y `chapter_id`
+materializables. El resultado debe conservarse como artefacto/insumo trazable o
+reenviarse cuando existan refs vivas, sin rehacer el visual ni provocar
+`FOREIGN KEY constraint failed`.
+
+Alcance:
+
+- antes de llamar a `POST /api/jobs/{id}/artifacts` para tipos que materializan
+  bloques, comprobar si el job lleva `canonical_topic_id` y `chapter_id` vivos;
+- si solo hay refs de programa, entregar como evidencia no materializable o
+  crear una tarea causal de ensamblado/replay posterior;
+- reconciliar artefactos ya escritos en `external/opes/generate_visual_asset`
+  y jobs OPES `pending` sin relanzar agentes innecesariamente;
+- exponer contador compacto `materialization_refs_missing` y siguiente accion
+  durable en el status del bridge;
+- testear que un visual de programa no produce HTTP 500/FK y no queda
+  indefinidamente `pending` sin tarea causal.
+
+Criterio de cierre:
+
+- smoke OPES con curso basado en programa externo, sin `canonical_topics`
+  iniciales;
+- 17 visuales generados quedan en estado reconciliado: materializados si tienen
+  tema/capitulo vivo, o registrados como insumo trazable para ensamblado;
+- cero duplicados por reintento de visual ya entregado;
+- ninguna entrega valida se descarta por fallo de FK recuperable.
