@@ -69,6 +69,10 @@ func (err ErrorV0) Error() string {
 	return strings.TrimSpace(err.Code)
 }
 
+func (err ErrorV0) PublicCodeV0() string {
+	return strings.TrimSpace(err.Code)
+}
+
 func NewClientV0(config ConfigV0) (ClientV0, error) {
 	destination, err := NormalizeDestinationV0(config.BaseURL, effectiveEgressPolicyV0(config.EgressPolicy))
 	if err != nil {

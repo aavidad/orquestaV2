@@ -2,6 +2,7 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	orquestaappchangedirectorsource "orquesta/modulos/orquesta-app-change-director-source"
@@ -41,10 +42,22 @@ func (stack StackV0) recoverBlockedAppChangeAutoPlanRunV0(
 	if err != nil {
 		return run, false, err
 	}
-	if !staleOpenPlanAfterReview && !codexStackHasRecoverableAppChangeAutoPlanDecisionV0(run, decisions) {
+	missingTaskRefs := codexStackRecoverableAppChangeAutoPlanTaskRefsV0(run, decisions)
+	if !staleOpenPlanAfterReview && len(missingTaskRefs) == 0 {
 		return run, false, nil
 	}
 	recovered := run
+	if len(missingTaskRefs) > 0 {
+		next, _, err := stack.recoverDurableAppChangeAutoPlanMicrotaskProjectionV0(
+			ctx,
+			recovered,
+			missingTaskRefs,
+		)
+		if err != nil {
+			return run, false, err
+		}
+		recovered = next
+	}
 	for _, blocker := range recoverable {
 		next, err := stack.resolveRunBlockerForAppChangeAutoPlanRecoveryV0(
 			ctx,
@@ -58,6 +71,80 @@ func (stack StackV0) recoverBlockedAppChangeAutoPlanRunV0(
 		recovered = next
 	}
 	return recovered, true, nil
+}
+
+func (stack StackV0) recoverDurableAppChangeAutoPlanMicrotaskProjectionV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	taskRefs []string,
+) (orquestacoreworkflow.OrchestrationRunV0, bool, error) {
+	if stack.Ports.EventReader == nil || stack.Ports.RunStore == nil {
+		return run, false, nil
+	}
+	refs := map[string]bool{}
+	for _, taskRef := range compactStringsV0(taskRefs) {
+		if strings.HasPrefix(taskRef, "task-ref-app-change-") {
+			refs[taskRef] = true
+		}
+	}
+	if len(refs) == 0 {
+		return run, false, nil
+	}
+	events, err := stack.Ports.EventReader.LoadRunEventsV0(ctx, run.RunID)
+	if err != nil {
+		return run, false, err
+	}
+	recovered := run
+	changed := false
+	for _, event := range events {
+		if event.EventType != orquestacoreworkflow.OrchestrationEventMicrotaskCreatedV0 ||
+			strings.TrimSpace(event.RunID) != strings.TrimSpace(run.RunID) {
+			continue
+		}
+		taskRef, ok := codexStackMicrotaskCreatedEventTaskIDV0(event)
+		if !ok || !refs[taskRef] || codexStackStringInSetV0(recovered.Tasks, taskRef) {
+			continue
+		}
+		next, err := codexStackProjectDurableMicrotaskCreatedEventV0(recovered, event)
+		if err != nil {
+			return run, false, err
+		}
+		recovered = next
+		changed = true
+	}
+	if !changed {
+		return run, false, nil
+	}
+	if err := stack.Ports.RunStore.SaveRunV0(ctx, recovered); err != nil {
+		return run, false, err
+	}
+	return recovered, true, nil
+}
+
+func codexStackProjectDurableMicrotaskCreatedEventV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	event orquestacoreworkflow.OrchestrationEventV0,
+) (orquestacoreworkflow.OrchestrationRunV0, error) {
+	lastEventID := run.LastEventID
+	lastSequence := run.LastSequence
+	projected, err := orquestacoreworkflow.ApplyEventV0(run, event)
+	if err != nil {
+		return run, err
+	}
+	projected.LastEventID = lastEventID
+	projected.LastSequence = lastSequence
+	return projected, nil
+}
+
+func codexStackMicrotaskCreatedEventTaskIDV0(
+	event orquestacoreworkflow.OrchestrationEventV0,
+) (string, bool) {
+	var payload orquestacoreworkflow.MicrotaskCreatedPayloadV0
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return "", false
+	}
+	taskRef := strings.TrimSpace(payload.TaskID)
+	return taskRef, taskRef != ""
 }
 
 func codexStackRunControlAllowsAppChangeAutoPlanRecoveryV0(
@@ -429,6 +516,14 @@ func codexStackHasRecoverableAppChangeAutoPlanDecisionV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	decisions []orquestadirectoragent.DirectorAgentDecisionV0,
 ) bool {
+	return len(codexStackRecoverableAppChangeAutoPlanTaskRefsV0(run, decisions)) > 0
+}
+
+func codexStackRecoverableAppChangeAutoPlanTaskRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	decisions []orquestadirectoragent.DirectorAgentDecisionV0,
+) []string {
+	refs := make([]string, 0, len(decisions))
 	for _, decision := range decisions {
 		if decision.CommandType != orquestadirectoragent.DirectorAgentCommandCreateMicrotaskV0 ||
 			decision.CreateMicrotask == nil {
@@ -438,8 +533,8 @@ func codexStackHasRecoverableAppChangeAutoPlanDecisionV0(
 		if strings.TrimSpace(task.RunID) == strings.TrimSpace(run.RunID) &&
 			strings.HasPrefix(strings.TrimSpace(task.TaskID), "task-ref-app-change-") &&
 			!codexStackStringInSetV0(run.Tasks, task.TaskID) {
-			return true
+			refs = append(refs, task.TaskID)
 		}
 	}
-	return false
+	return compactStringsV0(refs)
 }

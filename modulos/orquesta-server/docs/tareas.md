@@ -291,6 +291,32 @@ Validacion:
 - `go test -count=1 ./modulos/orquesta-opes-director`;
 - `go test -count=1 ./cmd/orquesta-server -run 'OPESCausal|WakeupDomainWork|ResidentDirector'`.
 
+Reconciliacion backlog 2026-06-20:
+
+- `task-ref-self-improvement-874937b97f16` no abre nueva implementacion para
+  este frente: el intento padre previo quedo en checkpoint de apagado antes de
+  tocar archivos o ejecutar pruebas;
+- `scan-ref-backlog-c108d911342a` queda resuelto contra esta evidencia local,
+  el runbook `docs/runbooks/opes_productor_causal_autonomo_2026-06-13.md` y las
+  validaciones listadas arriba;
+- si el planner vuelve a detectar el patron `productor causal OPES` sin
+  regresion causal nueva, debe clasificarlo como `no-op documental` y no
+  relanzar otro padre de codigo para SRV-TASK-015.
+- el rework de revision
+  `agent-ref-task-ref-review-rework-task-autoprogramming-874937b97f16-g01-162db2d326380eeab85c029bbfcfe285`
+  solo confirma esta reconciliacion documental con contexto `ref_only` y prueba
+  focal del servidor; no cambia el owner de codigo ni abre nueva implementacion.
+- el rework de revision sobre rework
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-7b57471b0af67dc475be23b72a6c25c7`
+  conserva esa entrega valida, resuelve el contexto `ref_only` por evidencia
+  documental y mantiene SRV-TASK-015 cerrado salvo regresion causal nueva con
+  refs concretas de job, receipt o artifact.
+- el rework de revision materializado como
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-8f75b93913fef84c105ce29cf9734bca`
+  corrige solo el rastro causal de la entrega rechazada: conserva el cierre
+  documental, no relanza otro padre sobre la tarea original y no abre codigo
+  nuevo sin regresion causal concreta.
+
 ## SRV-TASK-016: bridge OPES sin supervise manual por defecto
 
 Estado: hecho local 2026-06-13.
@@ -430,3 +456,285 @@ Criterio de cierre:
   tema/capitulo vivo, o registrados como insumo trazable para ensamblado;
 - cero duplicados por reintento de visual ya entregado;
 - ninguna entrega valida se descarta por fallo de FK recuperable.
+
+## SRV-TASK-020: advance OPES no debe volver a initial_work cubierto
+
+Estado: abierto 2026-06-20.
+
+Origen:
+`docs/incidencia_opes_servicios_multiples_advance_duplica_inicial_2026-06-20.md`.
+
+Objetivo: el avance automático OPES debe reconocer artefactos aceptados por
+`correlation_id`, payload `program_id`, `document_plan`, `content_block` y
+`visual_asset`, aunque no estén materializados todavía como temas canónicos, y
+no debe recrear `research_sources`, `split_syllabus_topic` ni
+`draft_topic_outline` cuando esa fase ya está cubierta.
+
+Criterio de cierre:
+
+- smoke OPES con `document_plan`, 17 `content_block` y 17 `visual_asset`
+  aceptados;
+- llamada a `POST /api/programs/{id}/advance` crea solo fases siguientes reales
+  o devuelve `wait/nothing_to_advance`;
+- contador público `skipped_initial_work_already_covered`;
+- cero jobs iniciales duplicados para temas ya aceptados.
+
+## SRV-TASK-021: external-work convertible no puede cerrar run vacía
+
+Estado: abierto 2026-06-20.
+
+Origen:
+`docs/incidencia_opes_servicios_multiples_tutor_empty_run_2026-06-20.md`.
+
+Objetivo: cuando un `external_work` OPES convertible, como
+`generate_tutor_assets`, falla en submit o supervisión, Orquesta no debe marcar
+la run como `done` con cero tareas, cero agentes y sin artefacto. Debe quedar
+`failed_empty_run`, `retry_pending` o rework causal relanzable.
+
+Criterio de cierre:
+
+- smoke real acotado de `generate_tutor_assets`;
+- la supervisión nunca devuelve `done` con `tasks=0` para un trabajo
+  convertible;
+- `opes-drain-once` reconcilia `submit_failed + empty_run` sin crear
+  `existing_change_conflict`;
+- contador público `external_work_empty_run` y siguiente acción durable.
+
+## SRV-TASK-022: supervise no debe emitir error terminal con agente vivo y ACK tardío
+
+Estado: abierto 2026-06-20.
+
+Origen:
+`docs/incidencia_opes_servicios_multiples_supervision_ack_2026-06-20.md`.
+
+Objetivo: `POST /api/v0/runs/supervise` y el bridge OPES deben distinguir
+timeout de espera de fallo terminal. Si existe proceso vivo, ACK pendiente,
+artefacto local recuperable o submit tardío probable, la respuesta publica debe
+ser `wait/reconcile_pending` con siguiente accion durable, no
+`runtime_error/blocked`. Ademas, si una recuperacion manual o residente registra
+el artefacto antes de que llegue el ACK tardio, el ACK posterior debe
+deduplicarse por `run_ref + job_ref + artifact_type + payload/evidence_ref` o
+quedar marcado como replay reconciliado.
+
+Criterio de cierre:
+
+- smoke real OPES con un `generate_html_site` que tarde mas que la ventana de
+  supervision inicial;
+- la primera supervision devuelve estado no terminal y contador
+  `external_wait_live_process`;
+- el agente termina y el bridge registra un unico artefacto efectivo en OPES;
+- si se simula una recuperacion previa con otra idempotency key, el ACK tardio
+  no crea un segundo artefacto independiente;
+- `director/stats` muestra proceso vivo, ACK pendiente y siguiente accion sin
+  requerir inspeccion manual de `.orquesta-runtime`.
+
+## SRV-TASK-023: trabajos OPES de audio requieren red controlada y stop causal
+
+Estado: abierto 2026-06-20.
+
+Origen:
+`docs/incidencia_opes_servicios_multiples_supervision_ack_2026-06-20.md`.
+
+Objetivo: los trabajos OPES `generate_audio_asset` que ejecutan `edge-tts` no
+pueden lanzarse en una sandbox sin red y sin timeout por comando. Orquesta debe
+clasificar la dependencia externa controlada, usar un perfil opt-in que permita
+red solo para el runner autorizado o delegar a un runner de audio, y debe
+bloquear de forma accionable si falta la herramienta canonica.
+
+Alcance:
+
+- detectar en el contrato del job que `edge-tts` necesita red externa
+  controlada y no ejecutar el smoke dentro de `network: restricted`;
+- imponer timeout duro por comando TTS y registrar `audio_tts_timeout` sin
+  dejar el agente colgado;
+- validar tool path efectivo antes de lanzar el agente:
+  `scripts/opes_audio_app.py` canonico o wrapper compatible documentado;
+- si solo existe `scripts/tcae_audio_app.py`, marcar compatibilidad explicita o
+  crear rework causal de herramienta, no improvisar una ruta inexistente;
+- prohibir fallback silencioso a `espeak-ng` u otro motor no canonico para
+  audio publicable; esos resultados solo pueden ser diagnostico o insumo no
+  publicable;
+- `POST /api/v0/runs/control action=stop` debe materializar checkpoint en el
+  workdir del agente y terminar comandos hijo bloqueados; status debe distinguir
+  `stop_requested`, `stop_propagated` y `stop_confirmed`.
+
+Criterio de cierre:
+
+- smoke real OPES con `generate_audio_asset` y `edge-tts` genera un MP3 de
+  prueba desde Orquesta sin colgarse;
+- si se fuerza red restringida, Orquesta devuelve bloqueo accionable antes de
+  ejecutar `edge-tts`;
+- si se fuerza herramienta canonica ausente, crea rework causal y no lanza
+  agente inutil;
+- una run de audio bloqueada por TTS obedece `action=stop`, corta procesos hijo
+  y no escribe artefactos nuevos despues de la parada;
+- pruebas cubren clasificacion de dependencia externa, timeout de TTS, tool path
+  ausente y stop propagado a hijos.
+
+## SRV-TASK-024: run OPES aceptada no puede quedarse en resident_director_pending sin agente
+
+Estado: abierto 2026-06-20.
+
+Origen:
+`docs/incidencia_opes_servicios_multiples_supervision_ack_2026-06-20.md`.
+
+Objetivo: cuando `opes-drain-once` crea una run por `JOB_REF` exacto y devuelve
+`status=submitted` con `supervision_status=resident_director_pending`, el
+supervisor residente debe arrancar o reencontrar agente sin que el operador
+tenga que llamar manualmente a `/api/v0/runs/supervise`. Si por capacidad,
+lock, ledger o cola no puede hacerlo, debe publicar estado accionable y
+siguiente accion durable.
+
+Caso observado:
+
+- job OPES: `b305970086cb77343865513f32df7a66`;
+- tipo: `plan_temario`;
+- run: `run-external-work-opes-b305970086cb77343865513f32df7a66-opes-job-b305970086cb77343865513f32df7a66`;
+- `opes-drain-once` acepto la run en loopback con filtro por `JOB_REF`;
+- tras mas de 30 segundos, el job OPES siguio `pending`, no aparecio proceso
+  Codex nuevo y el servidor no expuso progreso residente visible.
+
+Alcance:
+
+- pulso residente debe barrer runs en `resident_director_pending` creadas por
+  bridge OPES y convertirlas en dispatch real o en bloqueo causal;
+- deduplicar por `run_ref + job_ref` y no crear runs repetidas;
+- exponer contador publico `resident_pending_without_dispatch` y ultima razon;
+- `opes-drain-once` debe poder devolver `supervision_status=started` si el
+  supervisor residente ya despacha dentro de la ventana configurada;
+- no depender de inspeccion manual de procesos para saber si la run avanza.
+
+Criterio de cierre:
+
+- smoke OPES acotado con `plan_temario` por `JOB_REF` exacto;
+- tras `opes-drain-once`, sin llamada manual a `/runs/supervise`, aparece agente
+  real o bloqueo causal publico antes de dos ticks residentes;
+- el job OPES termina o queda con error accionable sin que el operador tenga que
+  despertar el supervisor;
+- replay del mismo `JOB_REF` no duplica run ni agente.
+
+## SRV-TASK-025: reconciliacion de ACK OPES no debe terminar en domain_work_submit_conflict sin publicar artefacto
+
+Estado: abierto 2026-06-21.
+
+Origen:
+`docs/incidencia_opes_servicios_multiples_supervision_ack_2026-06-20.md`.
+
+Objetivo: si una run OPES ya tiene ACK completado, test requerido pasado y
+artefacto local valido, una llamada posterior a `POST /api/v0/runs/supervise`
+debe reconciliar esa entrega con OPES o devolver una accion durable concreta.
+No puede acabar en `runtime_error` con diagnostico `domain_work_submit_conflict`
+mientras el job OPES sigue `pending` y sin artefactos.
+
+Caso observado:
+
+- job OPES: `b305970086cb77343865513f32df7a66`;
+- tipo: `plan_temario`;
+- artefacto local:
+  `external/opes/plan_temario/b305970086cb77343865513f32df7a66/artifact_document_plan.json`;
+- ACK retry materializado con prueba
+  `opes-domain-test-plan_temario-b305970086cb77343865513f32df7a66` pasada;
+- `runs/supervise` posterior encontro `open_tasks=0` y
+  `requested_agents=2`, pero termino con
+  `run_supervisor_execute_error` y diagnostico
+  `domain_work_submit_conflict`;
+- OPES siguio mostrando el job como `pending` y
+  `/api/jobs/{id}/artifacts` siguio devolviendo `null`.
+
+Alcance:
+
+- deduplicar replays por `run_ref + job_ref + artifact_type +
+  artifact_path/idempotency_key`;
+- cuando haya ACK valido y artefacto local, intentar submit idempotente a OPES
+  o registrar `reconcile_manual_required` con ruta y causa exacta;
+- si existe conflicto, exponer que entidad conflictua y que accion debe tomar
+  el director residente;
+- no marcar la run como `failed` sin conservar estado de reconciliacion
+  pendiente recuperable;
+- añadir contador publico `domain_work_submit_conflict_recoverable`.
+
+Criterio de cierre:
+
+- smoke OPES con ACK tardio/retry y artefacto local ya escrito;
+- una segunda supervision registra exactamente un artefacto en OPES o deja
+  estado durable `reconcile_manual_required`;
+- el job OPES deja de quedar `pending` silenciosamente;
+- replay del mismo ACK no duplica artefactos ni lanza otro agente innecesario;
+- el diagnostico incluye ruta del artefacto, job_ref, tipo de artefacto e
+  idempotency efectiva.
+
+## SRV-TASK-026: supervisor OPES no puede cerrar quiescent sin tareas y dejar job pending
+
+Estado: abierto 2026-06-21.
+
+Origen:
+`docs/incidencia_opes_servicios_multiples_supervision_ack_2026-06-20.md`.
+
+Objetivo: una run OPES creada por `opes-drain-once` no puede quedar como
+aparentemente terminada con `status=done`, evidencias `quiescent`,
+`projection-tasks-0` y `projection-open-tasks-0` si el job OPES asociado sigue
+`pending` y sin artefacto. Ese estado es una falsa terminacion del supervisor y
+debe convertirse en despacho real, reconciliacion de entrega local o bloqueo
+causal publico.
+
+Caso observado:
+
+- job OPES: `b8702608bde2d7ebc6ca18f53d65495e`;
+- tipo: `validate_topic`;
+- run:
+  `run-external-work-opes-b8702608bde2d7ebc6ca18f53d65495e-opes-job-b8702608bde2d7ebc6ca18f53d65495e`;
+- `opes-drain-once` devolvio `submitted` y
+  `supervision_status=resident_director_pending`;
+- una llamada manual a `POST /api/v0/runs/supervise` devolvio `estado=ok`,
+  `stop_reason=done`, `ticks=1`, `quiescent`,
+  `projection-tasks-0`, `projection-open-tasks-0` y
+  `projection-requested-agents-0`;
+- despues de esa respuesta el job OPES seguia `pending`, `attempts=0`,
+  `last_error=""` y no existia artefacto de validacion.
+
+Segundo caso observado en el mismo flujo:
+
+- job OPES: `28c7d0694eeb31f8fb65e5b54cefa9fa`;
+- tipo: `generate_help_manual_assets`;
+- run:
+  `run-external-work-opes-28c7d0694eeb31f8fb65e5b54cefa9fa-opes-job-28c7d0694eeb31f8fb65e5b54cefa9fa`;
+- `opes-drain-once` devolvio `submitted` y
+  `supervision_status=resident_director_pending`;
+- `POST /api/v0/runs/supervise` devolvio de nuevo `estado=ok`,
+  `stop_reason=done`, `ticks=1`, `quiescent`,
+  `projection-tasks-0`, `projection-open-tasks-0` y
+  `projection-requested-agents-0`;
+- el job OPES continuo `pending`, `attempts=0`, `last_error=""` y sin
+  artefacto de manual.
+- despues de que el operador completase el job manualmente por API con un
+  `help_manual_package` validado, aparecio tarde un agente real de esa misma
+  run, empezo a escribir ficheros auxiliares y pudo duplicar o sobrescribir la
+  entrega; se solicito `runs/control action=stop` con idempotency key y el
+  proceso termino tras `stop_requested` con `checkpoint_recorded=true`.
+
+Alcance:
+
+- antes de devolver `done/quiescent`, comprobar el estado del job OPES asociado;
+- si el job externo sigue `pending`, no cerrar la run como terminada: crear
+  tarea de agente, reencontrar artefacto local o publicar bloqueo causal;
+- exponer diagnostico `quiescent_without_domain_progress` con `job_ref`,
+  `work_kind`, `run_ref` y accion siguiente;
+- proteger especialmente jobs de cierre (`validate_topic`, `assemble_topic`,
+  `finalize_temario_package`) porque no pueden desaparecer de la cola por falta
+  de tareas internas;
+- si aparece un agente tardio despues de que el job de dominio ya este
+  `completed`, debe entrar en modo reconciliacion/no-op y no escribir un segundo
+  artefacto ni sobrescribir la entrega aceptada;
+- cubrir el caso con prueba de bridge OPES donde `projection.tasks=0` pero el
+  job externo sigue pendiente.
+
+Criterio de cierre:
+
+- smoke OPES con `validate_topic` por `JOB_REF` exacto;
+- `opes-drain-once` seguido de supervision no devuelve `done/quiescent` si el
+  job OPES continua `pending`;
+- el resultado es agente lanzado, artefacto reconciliado o estado durable
+  `quiescent_without_domain_progress`;
+- replay del mismo job no duplica runs ni deja estados silenciosos;
+- el operador no necesita inspeccionar manualmente procesos ni el API OPES para
+  descubrir que el trabajo no avanzo.

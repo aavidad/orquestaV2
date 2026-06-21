@@ -144,6 +144,86 @@ func TestRunOPESDrainOnceV0ClaimPrevioBloqueaReenvioV0(t *testing.T) {
 	}
 }
 
+func TestRunOPESDrainOnceV0SubmitErrorGuardaFalloReintentableV0(t *testing.T) {
+	ledger, err := newFileExternalBridgeInputLedgerV0(
+		filepath.Join(t.TempDir(), "external-bridge-input-ledger.json"),
+	)
+	if err != nil {
+		t.Fatalf("ledger: %v", err)
+	}
+	job := opesClaimTestJobV0("job-ref-submit-error-retry-001")
+	opesServer := opesClaimTestOPESServerV0(t, job)
+	defer opesServer.Close()
+
+	posts := 0
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if writeOrquestaRunSuperviseOKForDrainTestV0(t, w, r) {
+			return
+		}
+		if r.URL.Path != "/api/v0/external-work/run" || r.Method != http.MethodPost {
+			t.Fatalf("orquesta request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		posts++
+		w.Header().Set("Content-Type", "application/json")
+		if posts == 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"estado": "error",
+				"errores_publicos": []map[string]string{{
+					"code":  "external_work_project_work_dir_mismatch",
+					"field": "project_work_dir:evidence-ref-opes-project-workdir-required",
+				}},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"run_ref": "run-ref-submit-error-retry-001",
+			"estado":  "accepted",
+		})
+	}))
+	defer orquestaServer.Close()
+
+	config := opesClaimDrainConfigV0(opesServer.URL, orquestaServer.URL, ledger)
+	first, err := runOPESDrainOnceV0(context.Background(), config)
+	if err != nil {
+		t.Fatalf("first drain: %v", err)
+	}
+	if posts != 1 ||
+		first.Submitted != 0 ||
+		first.Skipped != 1 ||
+		first.Results[0].Status != "submit_error" ||
+		first.Errors[0].Code != "request_http_400:external_work_project_work_dir_mismatch" {
+		t.Fatalf("posts=%d first=%+v", posts, first)
+	}
+	failed, ok, err := ledger.LookupExternalBridgeInputV0(
+		context.Background(), opesBridgeInputLedgerKeyV0(job.ID),
+	)
+	if err != nil || !ok ||
+		failed.Status != externalBridgeInputStatusSubmitFailedV0 ||
+		failed.LastError != "request_http_400:external_work_project_work_dir_mismatch" {
+		t.Fatalf("failed=%+v ok=%v err=%v", failed, ok, err)
+	}
+
+	second, err := runOPESDrainOnceV0(context.Background(), config)
+	if err != nil {
+		t.Fatalf("second drain: %v", err)
+	}
+	if posts != 2 ||
+		second.Submitted != 1 ||
+		second.Results[0].Status != "submitted" ||
+		second.Results[0].RunRef != "run-ref-submit-error-retry-001" {
+		t.Fatalf("posts=%d second=%+v", posts, second)
+	}
+	submitted, ok, err := ledger.LookupExternalBridgeInputV0(
+		context.Background(), opesBridgeInputLedgerKeyV0(job.ID),
+	)
+	if err != nil || !ok ||
+		submitted.Status != externalBridgeInputStatusSubmittedV0 ||
+		submitted.RunRef != "run-ref-submit-error-retry-001" {
+		t.Fatalf("submitted=%+v ok=%v err=%v", submitted, ok, err)
+	}
+}
+
 func TestRunOPESDrainOnceV0ClaimRaceSubmittedSupervisaSinReenviarV0(t *testing.T) {
 	job := opesClaimTestJobV0("job-ref-race-submitted-001")
 	ledger := &raceSubmittedExternalBridgeInputLedgerV0{

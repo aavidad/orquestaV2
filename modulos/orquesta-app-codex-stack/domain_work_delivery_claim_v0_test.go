@@ -104,20 +104,27 @@ func TestCodexStackV0DomainWorkSubmitAcceptedYRejectedFuncionalBloqueanReintento
 
 	ledger = NewInMemoryDomainWorkArtifactSubmissionLedgerV0()
 	rejectedTransient := domainWorkSubmissionRecordForRetryTestV0(DomainWorkArtifactSubmissionStatusRejectedV0)
-	rejectedTransient.IssueRefs = []string{"domain-work-submit-artifact-rejected", "domain-work-submit-execute-error"}
-	if err := ledger.RecordDomainWorkArtifactSubmissionV0(ctx, rejectedTransient); err != nil {
-		t.Fatalf("record rejected transient: %v", err)
-	}
-	stack = StackV0{DomainDelivery: DomainWorkDeliveryBridgeConfigV0{Ledger: ledger}}
-	submitted, err = stack.domainWorkSubmissionAlreadyRecordedV0(
-		ctx,
-		orquestacoreworkflow.OrchestrationRunV0{RunID: rejectedTransient.RunRef},
-		orquestacoreworkflow.WorkflowTaskV0{TaskID: rejectedTransient.TaskRef},
-		orquestacionnucleoapp.AgentDeliveryObservationV0{DeliveryRef: rejectedTransient.DeliveryRef},
-		domainWorkSubmissionForRetryTestV0(),
-	)
-	if err != nil || submitted {
-		t.Fatalf("rejected transitorio submitted=%v err=%v", submitted, err)
+	for _, transientIssue := range []string{
+		"domain-work-submit-execute-error",
+		"domain_work_port_no_disponible",
+		"opes_http_timeout",
+	} {
+		ledger = NewInMemoryDomainWorkArtifactSubmissionLedgerV0()
+		rejectedTransient.IssueRefs = []string{"domain-work-submit-artifact-rejected", transientIssue}
+		if err := ledger.RecordDomainWorkArtifactSubmissionV0(ctx, rejectedTransient); err != nil {
+			t.Fatalf("record rejected transient %s: %v", transientIssue, err)
+		}
+		stack = StackV0{DomainDelivery: DomainWorkDeliveryBridgeConfigV0{Ledger: ledger}}
+		submitted, err = stack.domainWorkSubmissionAlreadyRecordedV0(
+			ctx,
+			orquestacoreworkflow.OrchestrationRunV0{RunID: rejectedTransient.RunRef},
+			orquestacoreworkflow.WorkflowTaskV0{TaskID: rejectedTransient.TaskRef},
+			orquestacionnucleoapp.AgentDeliveryObservationV0{DeliveryRef: rejectedTransient.DeliveryRef},
+			domainWorkSubmissionForRetryTestV0(),
+		)
+		if err != nil || submitted {
+			t.Fatalf("rejected transitorio %s submitted=%v err=%v", transientIssue, submitted, err)
+		}
 	}
 
 	ledger = NewInMemoryDomainWorkArtifactSubmissionLedgerV0()

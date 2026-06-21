@@ -1,12 +1,14 @@
 package orquestaappcodexstack
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
 
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
+	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 )
 
 func TestCodexStackRunSupervisorDrainRequestV0AplicaPresupuestoConservadorPorDefecto(t *testing.T) {
@@ -107,5 +109,58 @@ func TestCodexStackRunSupervisorErrorResultMCPV0ExponeDiagnosticoPublicoDelDrain
 	if strings.Contains(result.Diagnostics[0].Message, "/home/alberto") ||
 		strings.Contains(result.Diagnostics[0].Message, "token.txt") {
 		t.Fatalf("diagnostic filtra path local sensible: %q", result.Diagnostics[0].Message)
+	}
+}
+
+func TestCodexStackRunSupervisorQueueDiagnosticsMCPV0ExponePresionWaitingOutbox(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	if _, err := stack.Stores.RunQueue.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        "run-ref-queue-pressure-ready-001",
+		QueueRef:      DefaultRunQueueRefV0,
+		AppRef:        "app-ref-queue-pressure",
+		Status:        orquestarunqueue.RunStatusReadyV0,
+		PriorityScore: 80,
+		RequestedBy:   "stack-test",
+	}); err != nil {
+		t.Fatalf("SetRunPriority ready: %v", err)
+	}
+	if _, err := stack.Stores.RunQueue.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        "run-ref-queue-pressure-running-001",
+		QueueRef:      DefaultRunQueueRefV0,
+		AppRef:        "app-ref-queue-pressure",
+		Status:        orquestarunqueue.RunStatusRunningV0,
+		PriorityScore: 70,
+		RequestedBy:   "stack-test",
+	}); err != nil {
+		t.Fatalf("SetRunPriority running: %v", err)
+	}
+	if _, err := stack.Stores.RunQueue.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        "run-ref-queue-pressure-stopped-001",
+		QueueRef:      DefaultRunQueueRefV0,
+		AppRef:        "app-ref-queue-pressure",
+		Status:        orquestarunqueue.RunStatusStoppedV0,
+		PriorityScore: 10,
+		RequestedBy:   "stack-test",
+	}); err != nil {
+		t.Fatalf("SetRunPriority stopped: %v", err)
+	}
+
+	diagnostics := stack.codexStackRunSupervisorQueueDiagnosticsMCPV0(
+		ctx,
+		orquestamcp.MCPRunSupervisorToolInputV0{QueueRef: DefaultRunQueueRefV0},
+		CodexSupervisorResultV0{
+			Last: CodexSupervisorRuntimeSnapshotV0{Status: CodexSupervisorRuntimeWaitingOutboxV0},
+		},
+	)
+
+	if len(diagnostics) != 1 ||
+		diagnostics[0].Code != "run_supervisor_queue_pressure" ||
+		!strings.Contains(diagnostics[0].Message, "total=3") ||
+		!strings.Contains(diagnostics[0].Message, "executable=2") ||
+		!strings.Contains(diagnostics[0].Message, "ready=1") ||
+		!strings.Contains(diagnostics[0].Message, "running=1") ||
+		!strings.Contains(diagnostics[0].Message, "stopped=1") {
+		t.Fatalf("diagnostics=%+v", diagnostics)
 	}
 }

@@ -85,3 +85,22 @@
   - `curl http://127.0.0.1:8787/api/v0/server/status`
   - `curl -i http://127.0.0.1:8787/api/status` solo para validar headers del
     alias legacy.
+- Reconciliacion SRV-TASK-015 2026-06-20 requiere conservar verde:
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`.
+  Esta prueba valida que la sincronizacion documental del backlog no rompe el
+  servidor residente ni su composition root; las pruebas historicas focales del
+  productor causal OPES siguen citadas en `docs/tareas.md` y en el runbook.
+  El rework
+  `agent-ref-task-ref-review-rework-task-autoprogramming-874937b97f16-g01-162db2d326380eeab85c029bbfcfe285`
+  usa ese mismo comando como prueba obligatoria y no declara pasadas las
+  pruebas historicas si no se reejecutan en esta tarea.
+- El rework de revision sobre rework
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-7b57471b0af67dc475be23b72a6c25c7`
+  debe registrar como pasada solo
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si el
+  comando obligatorio termina con exit code 0 en esta ejecucion.
+- La correccion de revision
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-8f75b93913fef84c105ce29cf9734bca`
+  usa el mismo criterio: solo puede declarar pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion.

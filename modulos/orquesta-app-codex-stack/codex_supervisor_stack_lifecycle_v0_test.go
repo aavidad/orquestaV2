@@ -48,12 +48,11 @@ func TestCodexSupervisorStackLifecycleV0SupervisaRunExistenteSinCanalParaleloV0(
 	if err != nil {
 		t.Fatalf("SuperviseCodexV0: %v result=%+v", err, result)
 	}
-	if result.StopReason != CodexSupervisorStopMaxTicksV0 || result.Ticks != 2 {
+	if result.StopReason != CodexSupervisorStopDispatchV0 || result.Ticks != 1 {
 		t.Fatalf("result=%+v", result)
 	}
-	if len(result.History) != 2 ||
-		result.History[0].Action != "launch" ||
-		result.History[1].Action != "continue" {
+	if len(result.History) != 1 ||
+		result.History[0].Action != "launch" {
 		t.Fatalf("history=%+v", result.History)
 	}
 	if result.Last.SessionRef != director.RunRef ||
@@ -94,6 +93,32 @@ func TestCodexSupervisorStackLifecycleV0UsaSupervisorGlobalExistenteV0(t *testin
 	}
 }
 
+func TestCodexSupervisorSnapshotNeedsOperationalReplanV0DetectaWaitSinAgentesV0(t *testing.T) {
+	snapshot := CodexSupervisorRuntimeSnapshotV0{
+		Status: CodexSupervisorRuntimeFailedV0,
+		EvidenceRefs: []string{
+			"operational-director-plan-state:blocked",
+			"external-wait-exhausted",
+			"evidence-ref-codex-supervisor-drain-projection-open-tasks-1",
+			"evidence-ref-codex-supervisor-drain-projection-requested-agents-0",
+		},
+	}
+
+	if !codexSupervisorSnapshotNeedsOperationalReplanV0(snapshot) {
+		t.Fatalf("snapshot no detectado como needs_replan: %+v", snapshot)
+	}
+
+	snapshot.EvidenceRefs = []string{
+		"operational-director-plan-state:blocked",
+		"external-wait-exhausted",
+		"evidence-ref-codex-supervisor-drain-projection-open-tasks-1",
+		"evidence-ref-codex-supervisor-drain-projection-requested-agents-1",
+	}
+	if codexSupervisorSnapshotNeedsOperationalReplanV0(snapshot) {
+		t.Fatalf("snapshot con agentes pedidos no debe ser needs_replan: %+v", snapshot)
+	}
+}
+
 func TestCodexStackRunSupervisorAPIV0EmpujaRunExistenteSinRelanzarAgentes(t *testing.T) {
 	runtime := newPendingAckCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)
@@ -123,11 +148,13 @@ func TestCodexStackRunSupervisorAPIV0EmpujaRunExistenteSinRelanzarAgentes(t *tes
 	}
 	if result.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
 		result.RunRef != director.RunRef ||
+		result.StopReason != string(CodexSupervisorStopDispatchV0) ||
 		result.Last.SessionRef != director.RunRef ||
 		result.Last.Status != string(CodexSupervisorRuntimeRunningLiveV0) ||
 		result.Last.AgentRef == "" ||
 		result.Last.ProcessRef == "" ||
-		!codexStackRefsContainPartV0(result.Last.EvidenceRefs, "evidence-ref-codex-supervisor-stack-drain") {
+		!codexStackRefsContainPartV0(result.Last.EvidenceRefs, "evidence-ref-codex-supervisor-stack-drain") ||
+		!codexStackRefsContainPartV0(result.NextActions, "dispatch_started_poll_run_ref_for_ack_or_completion") {
 		t.Fatalf("result=%+v director=%+v", result, director)
 	}
 	if runtime.launchCountV0() != len(director.StartedAgents) {

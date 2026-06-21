@@ -63,7 +63,7 @@ func (executor MCPDomainWorkToolExecutorV0) executeCreateJobV0(
 	if err != nil {
 		return newMCPDomainWorkErrorV0(
 			input,
-			MCPDomainWorkPortUnavailableV0,
+			publicMCPDomainWorkPortErrorCodeV0(err, MCPDomainWorkPortUnavailableV0),
 			"job_creator",
 			"domain work creator no disponible",
 		), nil
@@ -90,10 +90,26 @@ func (executor MCPDomainWorkToolExecutorV0) executeSubmitArtifactV0(
 	if err != nil {
 		return newMCPDomainWorkErrorV0(
 			input,
-			MCPDomainWorkPortUnavailableV0,
+			publicMCPDomainWorkPortErrorCodeV0(err, MCPDomainWorkPortUnavailableV0),
 			"artifact_submitter",
 			"domain work submitter no disponible",
 		), nil
 	}
 	return newMCPDomainWorkReceiptResultV0(input, receipt), nil
+}
+
+type mcpPublicCodeErrorV0 interface {
+	PublicCodeV0() string
+}
+
+func publicMCPDomainWorkPortErrorCodeV0(err error, fallback string) string {
+	if err == nil {
+		return fallback
+	}
+	if publicErr, ok := err.(mcpPublicCodeErrorV0); ok {
+		if code := strings.TrimSpace(publicErr.PublicCodeV0()); code != "" {
+			return code
+		}
+	}
+	return fallback
 }

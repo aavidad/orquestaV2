@@ -2,11 +2,13 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"time"
 
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
+	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
 )
 
@@ -66,6 +68,11 @@ func (executor CodexStackRunSupervisorExecutorV0) Execute(
 		result.Ticks,
 		codexStackRunSupervisorSnapshotMCPV0(result.Last),
 		codexStackRunSupervisorHistoryMCPV0(result.History),
+	)
+	output.NextActions = codexStackRunSupervisorNextActionsMCPV0(result)
+	output.Diagnostics = append(
+		output.Diagnostics,
+		executor.Stack.codexStackRunSupervisorQueueDiagnosticsMCPV0(ctx, input, result)...,
 	)
 	output = addAutoprogrammingResidentEvidenceV0(input, output)
 	output = maybePrepareAutoprogrammingResidentSelfRepairV0(ctx, input, *executor.Stack, result, output)
@@ -157,4 +164,85 @@ func codexStackRunSupervisorSnapshotMCPV0(
 		ProcessRef:   strings.TrimSpace(snapshot.ProcessRef),
 		EvidenceRefs: compactStringsV0(snapshot.EvidenceRefs),
 	}
+}
+
+func codexStackRunSupervisorNextActionsMCPV0(
+	result CodexSupervisorResultV0,
+) []string {
+	switch result.Last.Status {
+	case CodexSupervisorRuntimeRunningLiveV0:
+		return []string{
+			"dispatch_started_poll_run_ref_for_ack_or_completion",
+			"do_not_relaunch_same_run_ref_while_process_live",
+		}
+	case CodexSupervisorRuntimeWaitingOutboxV0:
+		return []string{
+			"waiting_outbox_supervise_again_or_wait_for_capacity",
+			"inspect_queue_pressure_if_repeated",
+		}
+	case CodexSupervisorRuntimeNeedsReplanV0:
+		return []string{
+			"replan_operational_director_active_step",
+			"do_not_mark_run_failed_without_replan",
+		}
+	}
+	if result.StopReason == CodexSupervisorStopDispatchV0 {
+		return []string{"dispatch_started_poll_run_ref_for_ack_or_completion"}
+	}
+	return nil
+}
+
+func (stack *StackV0) codexStackRunSupervisorQueueDiagnosticsMCPV0(
+	ctx context.Context,
+	input orquestamcp.MCPRunSupervisorToolInputV0,
+	result CodexSupervisorResultV0,
+) []orquestamcp.MCPAutoprogrammingDiagnosticV0 {
+	if stack == nil ||
+		stack.Stores.RunQueue == nil ||
+		result.Last.Status != CodexSupervisorRuntimeWaitingOutboxV0 {
+		return nil
+	}
+	queue := normalizeRunQueueConfigV0(stack.RunQueue)
+	queueRef := firstNonEmptyQueuedSourceV0(input.QueueRef, queue.QueueRef)
+	candidates, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		ctx,
+		orquestarunqueue.RunQueueReadRequestV0{
+			QueueRef:             queueRef,
+			IncludeNonExecutable: true,
+		},
+	)
+	if err != nil {
+		return []orquestamcp.MCPAutoprogrammingDiagnosticV0{{
+			Code:    "run_supervisor_queue_pressure_unavailable",
+			Scope:   "queue:" + strings.TrimSpace(queueRef),
+			Message: "queue_pressure_unavailable",
+		}}
+	}
+	counts := map[string]int{}
+	executable := 0
+	for _, candidate := range candidates {
+		status := strings.TrimSpace(candidate.Status)
+		if status == "" {
+			status = "unknown"
+		}
+		counts[status]++
+		if orquestarunqueue.IsExecutableRunStatusV0(status) {
+			executable++
+		}
+	}
+	message := strings.Join(compactStringsV0([]string{
+		"queue_ref=" + strings.TrimSpace(queueRef),
+		"total=" + strconv.Itoa(len(candidates)),
+		"executable=" + strconv.Itoa(executable),
+		"ready=" + strconv.Itoa(counts[orquestarunqueue.RunStatusReadyV0]),
+		"running=" + strconv.Itoa(counts[orquestarunqueue.RunStatusRunningV0]),
+		"delivered=" + strconv.Itoa(counts[orquestarunqueue.RunStatusDeliveredV0]),
+		"stopped=" + strconv.Itoa(counts[orquestarunqueue.RunStatusStoppedV0]),
+		"closed=" + strconv.Itoa(counts[orquestarunqueue.RunStatusClosedV0]),
+	}), " ")
+	return []orquestamcp.MCPAutoprogrammingDiagnosticV0{{
+		Code:    "run_supervisor_queue_pressure",
+		Scope:   "queue:" + strings.TrimSpace(queueRef),
+		Message: message,
+	}}
 }

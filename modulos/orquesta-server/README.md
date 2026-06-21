@@ -44,6 +44,25 @@ elevar `percent_complete`, pero `TasksClosed` permanece ligado a cierre/review
 aceptada. El servidor residente no debe rellenar 0% por defecto si la fuente
 trae una senal viva ni recalcular esa semantica desde runtime o filesystem.
 
+## Reconciliacion de backlog residente
+
+La automejora residente puede cerrar patrones ya resueltos mediante evidencia
+documental causal, sin relanzar otra implementacion. Para SRV-TASK-015, el
+productor causal OPES queda reconciliado por las docs locales y el runbook del
+2026-06-13: el servidor solo cablea puertos y wakeups; la logica OPES vive en
+adaptadores de dominio y el nucleo sigue neutral. Un nuevo intento solo procede
+si aporta regresion causal con refs de job, receipt o artifact.
+El rework de revision `874937b97f16-g01-162db2d326380eeab85c029bbfcfe285`
+mantiene esa frontera: contexto `ref_only` se resuelve por evidencia documental
+y no por otra implementacion residente.
+El rework sobre rework
+`7b57471b0af67dc475be23b72a6c25c7` conserva la misma frontera: no relanza padre
+de codigo, no amplia write-set y solo cierra con la prueba focal del servidor.
+El rework de revision materializado como
+`8f75b93913fef84c105ce29cf9734bca` conserva ese no-op documental: resuelve el
+contexto `ref_only` por evidencia local, no toca codigo y exige el mismo test
+focal antes del ACK.
+
 ## Bridge OPES residente
 
 `cmd/orquesta-server run` puede arrancar el bridge OPES por opt-in:

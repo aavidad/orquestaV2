@@ -19,6 +19,7 @@ const (
 	CodexSupervisorRuntimeWaitingOutboxV0 CodexSupervisorRuntimeStateV0 = "waiting_outbox"
 	CodexSupervisorRuntimeStalledV0       CodexSupervisorRuntimeStateV0 = "stalled"
 	CodexSupervisorRuntimeLaunchFailedV0  CodexSupervisorRuntimeStateV0 = "launch_failed"
+	CodexSupervisorRuntimeNeedsReplanV0   CodexSupervisorRuntimeStateV0 = "needs_replan"
 	CodexSupervisorRuntimeStoppedV0       CodexSupervisorRuntimeStateV0 = "stopped"
 	CodexSupervisorRuntimeDoneV0          CodexSupervisorRuntimeStateV0 = "done"
 	CodexSupervisorRuntimeFailedV0        CodexSupervisorRuntimeStateV0 = "failed"
@@ -30,6 +31,7 @@ const (
 	CodexSupervisorStopDoneV0         CodexSupervisorStopReasonV0 = "done"
 	CodexSupervisorStopFailedV0       CodexSupervisorStopReasonV0 = "failed"
 	CodexSupervisorStopStoppedV0      CodexSupervisorStopReasonV0 = "stopped"
+	CodexSupervisorStopDispatchV0     CodexSupervisorStopReasonV0 = "dispatch_started"
 	CodexSupervisorStopMaxTicksV0     CodexSupervisorStopReasonV0 = "max_ticks"
 	CodexSupervisorStopContextDoneV0  CodexSupervisorStopReasonV0 = "context_done"
 	CodexSupervisorStopRuntimeErrorV0 CodexSupervisorStopReasonV0 = "runtime_error"
@@ -122,6 +124,10 @@ func SuperviseCodexV0(
 			result.StopReason = CodexSupervisorStopStoppedV0
 			return result, nil
 		}
+		if codexSupervisorRuntimeDispatchStartedV0(snapshot.Status) {
+			result.StopReason = CodexSupervisorStopDispatchV0
+			return result, nil
+		}
 	}
 	result.StopReason = CodexSupervisorStopMaxTicksV0
 	return result, nil
@@ -188,7 +194,16 @@ func codexSupervisorRuntimeFailedV0(state CodexSupervisorRuntimeStateV0) bool {
 
 func codexSupervisorRuntimeStoppedV0(state CodexSupervisorRuntimeStateV0) bool {
 	switch strings.TrimSpace(string(state)) {
-	case string(CodexSupervisorRuntimeStoppedV0), "blocked", "paused", "stop_requested":
+	case string(CodexSupervisorRuntimeNeedsReplanV0), string(CodexSupervisorRuntimeStoppedV0), "blocked", "paused", "stop_requested":
+		return true
+	default:
+		return false
+	}
+}
+
+func codexSupervisorRuntimeDispatchStartedV0(state CodexSupervisorRuntimeStateV0) bool {
+	switch strings.TrimSpace(string(state)) {
+	case string(CodexSupervisorRuntimeRunningLiveV0):
 		return true
 	default:
 		return false

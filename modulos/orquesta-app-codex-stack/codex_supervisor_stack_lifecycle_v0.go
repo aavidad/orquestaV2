@@ -66,6 +66,17 @@ func (lifecycle CodexSupervisorStackLifecycleV0) drainRunV0(
 	}
 	snapshot := lifecycle.codexSupervisorSnapshotFromDrainV0(ctx, request.RunRef, request.OperationalDirectorPlanRef, result)
 	if err != nil {
+		if codexSupervisorSnapshotNeedsOperationalReplanV0(snapshot) {
+			snapshot.Status = CodexSupervisorRuntimeNeedsReplanV0
+			snapshot.EvidenceRefs = compactStringsV0(append(
+				snapshot.EvidenceRefs,
+				"evidence-ref-codex-supervisor-operational-plan-needs-replan",
+			))
+			if syncErr := lifecycle.syncDirectDrainRecoverableBlockedQueueStatusV0(ctx, request.RunRef); syncErr != nil {
+				return snapshot, syncErr
+			}
+			return snapshot, nil
+		}
 		if codexSupervisorDrainRecoverableBlockedV0(result) ||
 			codexSupervisorSnapshotRecoverablePlanBlockedV0(snapshot) {
 			snapshot.Status = CodexSupervisorRuntimeStoppedV0
@@ -378,6 +389,46 @@ func codexSupervisorSnapshotRecoverablePlanBlockedV0(
 ) bool {
 	return codexSupervisorEvidenceRefsContainPartV0(snapshot.EvidenceRefs, "operational-director-plan-state:blocked") &&
 		codexSupervisorEvidenceRefsContainPartV0(snapshot.EvidenceRefs, "operational-closure-run-not-active")
+}
+
+func codexSupervisorSnapshotNeedsOperationalReplanV0(
+	snapshot CodexSupervisorRuntimeSnapshotV0,
+) bool {
+	if !codexSupervisorEvidenceRefsContainPartV0(snapshot.EvidenceRefs, "operational-director-plan-state:blocked") ||
+		!codexSupervisorEvidenceRefsContainPartV0(snapshot.EvidenceRefs, "external-wait-exhausted") {
+		return false
+	}
+	openTasks, hasOpenTasks := codexSupervisorEvidenceCountByPrefixV0(
+		snapshot.EvidenceRefs,
+		"evidence-ref-codex-supervisor-drain-projection-open-tasks-",
+	)
+	requestedAgents, hasRequestedAgents := codexSupervisorEvidenceCountByPrefixV0(
+		snapshot.EvidenceRefs,
+		"evidence-ref-codex-supervisor-drain-projection-requested-agents-",
+	)
+	return hasOpenTasks && openTasks > 0 && hasRequestedAgents && requestedAgents == 0
+}
+
+func codexSupervisorEvidenceCountByPrefixV0(
+	values []string,
+	prefix string,
+) (int, bool) {
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return 0, false
+	}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if !strings.HasPrefix(value, prefix) {
+			continue
+		}
+		count, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(value, prefix)))
+		if err != nil {
+			return 0, false
+		}
+		return count, true
+	}
+	return 0, false
 }
 
 func (lifecycle CodexSupervisorStackLifecycleV0) codexSupervisorOperationalBlockedEvidenceRefsV0(

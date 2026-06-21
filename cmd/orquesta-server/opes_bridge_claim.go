@@ -36,6 +36,11 @@ func opesBridgeSkipRecordedInputV0(
 	if !ok {
 		return false
 	}
+	if entry.Status == externalBridgeInputStatusSubmitFailedV0 {
+		result.RunRef = entry.RunRef
+		result.ChangeRef = entry.ChangeRef
+		return false
+	}
 	return opesBridgeRecordHitV0(entry, summary, result)
 }
 
@@ -74,6 +79,30 @@ func opesBridgeClaimRunRequestV0(
 		return request, opesBridgeRecordHitV0(entry, summary, result)
 	}
 	return request, false
+}
+
+func opesBridgeRecordSubmitFailedV0(
+	ctx context.Context,
+	ledger externalBridgeInputLedgerV0,
+	job orquestaopesconnector.ExternalJobV0,
+	result opesDrainJobResultV0,
+	errorCode string,
+) error {
+	if ledger == nil {
+		return nil
+	}
+	return ledger.UpsertExternalBridgeInputV0(ctx, externalBridgeInputLedgerEntryV0{
+		Key:            opesBridgeInputLedgerKeyV0(job.ID),
+		ExternalSystem: opesBridgeExternalSystemV0,
+		ExternalJobRef: strings.TrimSpace(job.ID),
+		Status:         externalBridgeInputStatusSubmitFailedV0,
+		ClaimRef:       opesBridgeInputClaimRefV0(job.ID),
+		CorrelationID:  strings.TrimSpace(job.CorrelationID),
+		IdempotencyKey: strings.TrimSpace(result.ChangeRef),
+		RunRef:         strings.TrimSpace(result.RunRef),
+		ChangeRef:      strings.TrimSpace(result.ChangeRef),
+		LastError:      strings.TrimSpace(errorCode),
+	})
 }
 
 func opesBridgeRecordHitV0(

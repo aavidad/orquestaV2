@@ -35,10 +35,30 @@ func (stack StackV0) domainWorkSubmissionAlreadyRecordedV0(
 		return true, nil
 	}
 	if record.Status == DomainWorkArtifactSubmissionStatusRejectedV0 {
-		if codexStackStringInSetV0(record.IssueRefs, "domain-work-submit-execute-error") {
+		if domainWorkRejectedSubmissionRecoverableV0(record.IssueRefs) {
 			return false, nil
 		}
 		return true, nil
 	}
 	return false, nil
+}
+
+func domainWorkRejectedSubmissionRecoverableV0(issueRefs []string) bool {
+	for _, issue := range issueRefs {
+		switch issue {
+		case "domain-work-submit-execute-error",
+			"domain_work_port_no_disponible",
+			"opes_http_request_failed",
+			"opes_http_timeout",
+			"opes_http_cancelled",
+			"retry_budget_exhausted":
+			return true
+		case "opes_http_status_429",
+			"opes_http_status_502",
+			"opes_http_status_503",
+			"opes_http_status_504":
+			return true
+		}
+	}
+	return false
 }

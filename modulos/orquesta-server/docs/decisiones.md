@@ -132,3 +132,39 @@ Composicion cerrada: `cmd/orquesta-server` inyecta un adaptador real opt-in que
 usa `RunResidentDirectorBriefingLoopV0` con fuente de briefing reentrable desde
 stores vivos. El modulo `orquesta-server` sigue puro: no construye briefings ni
 conoce Codex, OPES, MCP, modelos, HOME ni persistencia concreta.
+
+## SRV-013: reconciliar backlog cerrado antes de reabrir implementacion
+
+Cuando automejora detecte un patron ya cerrado en docs locales, el servidor debe
+preferir reconciliacion documental con evidencia causal antes de lanzar otro
+padre de codigo. Para SRV-TASK-015, la evidencia vigente es:
+
+- `modulos/orquesta-server/docs/tareas.md` declara el productor causal OPES como
+  hecho local y lista pruebas focales;
+- `docs/runbooks/opes_productor_causal_autonomo_2026-06-13.md` fija frontera:
+  logica en `orquesta-opes-director`, servidor solo cablea puertos/wakeups y el
+  nucleo no importa OPES;
+- un intento posterior cerrado por apagado no toco archivos ni ejecuto pruebas,
+  por lo que no invalida el cierre local ni justifica relanzar implementacion.
+
+Si aparece una regresion causal, debe abrirse rework focal con refs concretas de
+job, receipt o artifact. Si solo reaparece texto historico del patron, se cierra
+como no-op documental y se deja ACK con `contexto_ref_only_resuelto`.
+
+El rework de revision
+`agent-ref-task-ref-review-rework-task-autoprogramming-874937b97f16-g01-162db2d326380eeab85c029bbfcfe285`
+aplica esta decision: conserva la entrega documental ya valida, resuelve el
+contexto obligatorio por refs y limita la validacion a
+`go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`.
+
+El rework de revision sobre rework
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-7b57471b0af67dc475be23b72a6c25c7`
+no cambia la decision ni reabre implementacion: solo completa el rastro causal
+de la correccion rechazada, conserva el no-op documental y exige el mismo test
+focal antes de ACK `completed`.
+
+La correccion posterior
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-8f75b93913fef84c105ce29cf9734bca`
+mantiene la misma decision. Su unico alcance es sincronizar la evidencia local
+de esta revision con el backlog y docs del servidor; cualquier cambio de codigo
+requiere regresion causal nueva con refs concretas de job, receipt o artifact.

@@ -356,6 +356,81 @@ func TestCodexStackV0RecoverReanudaAppChangeAutoplanBloqueadoSinMicrotareaV0(t *
 	}
 }
 
+func TestCodexStackV0RecoverAppChangeAutoplanProyectaMicrotareaDurableV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	director := postDirectorAPIV0(t, stack)
+	change := postOPESExternalWorkChangeV0(t, stack, opesExternalWorkChangeV0(director.RunRef))
+	run, err := stack.Stores.RunStore.LoadRunV0(context.Background(), director.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	refs := appChangeAutoPlanRefsForRecoveryTestV0(t, stack, run)
+	task := appChangeAutoPlanWorkflowTaskForRecoveryTestV0(t, stack, run, refs.TaskRef)
+	if err := stack.Ports.DirectorTaskStore.SaveWorkflowTaskV0(context.Background(), task); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0: %v", err)
+	}
+	event, err := orquestacoreworkflow.NewMicrotaskCreatedEventV0(
+		orquestacoreworkflow.OrchestrationEventMetaV0{
+			EventID:        "evt-recover-app-change-microtask-created",
+			RunID:          run.RunID,
+			Sequence:       run.LastSequence + 1,
+			IdempotencyKey: "idem-recover-app-change-microtask-created",
+			CorrelationID:  "corr-recover-app-change-microtask-created",
+			CausationID:    "command-ref-app-change-task-recover",
+			OccurredAt:     "2026-06-20T12:00:00Z",
+		},
+		orquestacoreworkflow.MicrotaskCreatedPayloadV0{
+			TaskID:               refs.TaskRef,
+			PhaseID:              string(task.PhaseID),
+			FunctionContractRefs: []string{refs.ContractRef},
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewMicrotaskCreatedEventV0: %v", err)
+	}
+	if err := stack.Ports.EventSink.AppendRunEventsV0(context.Background(), run.RunID, []orquestacoreworkflow.OrchestrationEventV0{event}); err != nil {
+		t.Fatalf("AppendRunEventsV0: %v", err)
+	}
+	run = codexStackRunWithActivePhaseForTestV0(run, orquestacoreworkflow.OrchestrationPhaseProgramacionV0)
+	run.Status = orquestacoreworkflow.OrchestrationRunStatusBlockedV0
+	run.DirectorAnsweredQuestions = []string{change.DirectorQuestionRef}
+	run.DirectorAnswers = nil
+	run.Decisions = []string{refs.DecisionRef}
+	run.FunctionContracts = []string{refs.ContractRef}
+	run.Tasks = nil
+	run.Blockers = []string{
+		"app-director-decision-director-decision-apply-error-director-decision-" + refs.TaskDecisionRef,
+	}
+	if err := stack.Stores.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0 blocked: %v", err)
+	}
+
+	recovered, ok, err := stack.recoverBlockedAppChangeAutoPlanRunV0(
+		context.Background(),
+		globalTickCommandForTestV0(),
+		orquestaruncontrol.DefaultRunControlStateV0(director.RunRef),
+		run,
+	)
+	if err != nil {
+		t.Fatalf("recoverBlockedAppChangeAutoPlanRunV0: %v", err)
+	}
+	if !ok ||
+		recovered.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 ||
+		len(recovered.Blockers) != 0 ||
+		!codexStackStringInSetForTestV0(recovered.Tasks, refs.TaskRef) {
+		t.Fatalf("run no recuperada con microtarea durable: ok=%v status=%s blockers=%v tasks=%v", ok, recovered.Status, recovered.Blockers, recovered.Tasks)
+	}
+	persisted, err := stack.Stores.RunStore.LoadRunV0(context.Background(), director.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 persisted: %v", err)
+	}
+	if persisted.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 ||
+		len(persisted.Blockers) != 0 ||
+		!codexStackStringInSetForTestV0(persisted.Tasks, refs.TaskRef) {
+		t.Fatalf("run persistida no recuperada: status=%s blockers=%v tasks=%v", persisted.Status, persisted.Blockers, persisted.Tasks)
+	}
+}
+
 func TestCodexStackV0RecoverReanudaOpenPlanTardioConReviewAceptadaV0(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	director := postDirectorAPIV0(t, stack)
@@ -1496,6 +1571,46 @@ func appChangeAutoPlanRefsForRecoveryTestV0(
 	return refs
 }
 
+func appChangeAutoPlanWorkflowTaskForRecoveryTestV0(
+	t *testing.T,
+	stack StackV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	taskRef string,
+) orquestacoreworkflow.WorkflowTaskV0 {
+	t.Helper()
+	decisions, err := (orquestaappchangedirectorsource.AppChangeDirectorDecisionSourceV0{
+		Store: stack.Stores.AppChangeStore,
+	}).ListDirectorAgentDecisionsV0(
+		context.Background(),
+		orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+	)
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	for _, decision := range decisions {
+		if decision.CommandType != orquestadirectoragent.DirectorAgentCommandCreateMicrotaskV0 ||
+			decision.CreateMicrotask == nil ||
+			decision.CreateMicrotask.Task.TaskID != taskRef {
+			continue
+		}
+		data, err := json.Marshal(decision.CreateMicrotask.Task)
+		if err != nil {
+			t.Fatalf("Marshal microtask: %v", err)
+		}
+		var workflowTask orquestacoreworkflow.WorkflowTaskV0
+		if err := json.Unmarshal(data, &workflowTask); err != nil {
+			t.Fatalf("Unmarshal WorkflowTaskV0: %v", err)
+		}
+		task, err := orquestacoreworkflow.NewWorkflowTaskV0(workflowTask)
+		if err != nil {
+			t.Fatalf("NewWorkflowTaskV0: %v", err)
+		}
+		return task
+	}
+	t.Fatalf("microtarea app-change no encontrada: task=%s decisions=%+v", taskRef, decisions)
+	return orquestacoreworkflow.WorkflowTaskV0{}
+}
+
 func codexStackRunWithActivePhaseForTestV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	phase orquestacoreworkflow.OrchestrationPhaseIDV0,
@@ -1517,18 +1632,38 @@ func codexStackRunWithActivePhaseForTestV0(
 		}
 	}
 	if !hasTarget {
-		run.Phases = append(run.Phases, orquestacoreworkflow.OrchestrationPhaseV0{
-			ID:     phase,
-			Status: orquestacoreworkflow.OrchestrationPhaseStatusActiveV0,
-		})
+		run.Phases = append(run.Phases, codexStackCatalogPhaseForTestV0(
+			phase,
+			orquestacoreworkflow.OrchestrationPhaseStatusActiveV0,
+		))
 	}
 	if !hasProgramming {
-		run.Phases = append(run.Phases, orquestacoreworkflow.OrchestrationPhaseV0{
-			ID:     orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
-			Status: orquestacoreworkflow.OrchestrationPhaseStatusPendingV0,
-		})
+		run.Phases = append(run.Phases, codexStackCatalogPhaseForTestV0(
+			orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+			orquestacoreworkflow.OrchestrationPhaseStatusPendingV0,
+		))
 	}
 	return run
+}
+
+func codexStackCatalogPhaseForTestV0(
+	phaseID orquestacoreworkflow.OrchestrationPhaseIDV0,
+	status orquestacoreworkflow.OrchestrationPhaseStatusV0,
+) orquestacoreworkflow.OrchestrationPhaseV0 {
+	for _, phase := range orquestacoreworkflow.OrchestrationPhaseCatalogV0() {
+		if phase.ID == phaseID {
+			phase.Status = status
+			return phase
+		}
+	}
+	return orquestacoreworkflow.OrchestrationPhaseV0{
+		ID:                  phaseID,
+		Status:              status,
+		EntryCriteria:       []string{"criterio de entrada de prueba"},
+		ExitCriteria:        []string{"criterio de salida de prueba"},
+		EvidenceRequired:    []string{"evidence-ref-test-phase"},
+		RecommendedCapacity: orquestacoreworkflow.OrchestrationCapacityMediumV0,
+	}
 }
 
 func setRunQueueCandidateForTestV0(

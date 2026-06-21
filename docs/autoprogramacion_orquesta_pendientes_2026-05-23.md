@@ -17167,6 +17167,81 @@ T256 se mantiene como owner canonico, no se abre owner nuevo, `worktree_ref` y
 `branch_ref` siguen como refs opacas, y la evidencia queda en la guarda de
 presupuesto ya existente mas el ACK de prueba.
 
+## Reconciliacion SRV-TASK-015 2026-06-20
+
+Evidencia revisada: paquete OrquestaV2
+`agent-ref-assessment-task-autoprogramming-874937b97f16-g01-b1cf6d563d6bf210ef988e6021bef03b`
+de la request
+`request-ref-autoprogramming-backlog-srv-task-015-13f54805-reconcile-fe5b3701`,
+con `correlation_id=resident-director-8329`, contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a este backlog,
+`docs/runbooks` y documentacion de `modulos/orquesta-server`.
+`worktree_ref=worktree-ref-orquesta-server-idle-self-improvement` y
+`branch_ref=branch-ref-orquesta-server-idle-self-improvement` se conservan solo
+como refs opacas.
+
+Resultado: no se abre otro padre de implementacion para SRV-TASK-015. El intento
+previo `agent-ref-task-autoprogramming-874937b97f16-g01` quedo en
+`checkpoint_ready` antes de editar o probar, con `files_touched=[]` y
+`tests_run=[]`; por tanto no aporta cierre nuevo ni trabajo parcial que
+rescatar. La evidencia de cierre real ya esta en la documentacion local del
+servidor: `modulos/orquesta-server/docs/tareas.md:253-292` declara
+`Estado: hecho local 2026-06-13`, lista el adaptador
+`modulos/orquesta-opes-director`, wakeups, idempotencia y validaciones; el
+runbook `docs/runbooks/opes_productor_causal_autonomo_2026-06-13.md:13-30`
+ubica la logica fuera del nucleo y `:73-83` conserva los comandos usados en la
+implementacion.
+
+Hashes leidos antes de esta reconciliacion:
+`backlog=ffd788bd357992ebef3918810868e17901bba5bc7a75328da1c1b6d6ab354fd8`,
+`server_tareas=9bf3a33e7166fbd8fe3ce98267609b67ed52f8c739de5204f5d9ab22dcc3d85b`,
+`server_readme=ec84aafed1c1288f71b6280b9bb28b7e62e51f0634551f52a9dd0b629b183ed5`.
+`backlog_scan_epoch=backlog-scan-epoch-ba0be0570440`,
+`backlog_scan_ref=scan-ref-backlog-c108d911342a` y
+`backlog_scan_reservation_ref=reservation-ref-backlog-srv-task-015-13f54805-reconcile-fe5b3701`
+quedan citados como causa de esta sincronizacion documental.
+
+Marcador canonico para scanners/automejora:
+`estado_documental_srv_task_015=reconciliado`,
+`implementacion_productor_causal_opes=cerrada_localmente_2026-06-13`,
+`owner_codigo=SRV-TASK-015`,
+`no_reabrir_por_patron=productor_causal_opes_rework_followups_sin_regresion_causal`.
+Si aparece evidencia nueva de fallo real, debe abrirse rework focal con refs de
+receipt/job/artifact concretas; si solo reaparece el patron textual, debe
+cerrarse como no-op documental con `contexto_ref_only_resuelto`.
+
+Rework de revision 2026-06-20:
+`agent-ref-task-ref-review-rework-task-autoprogramming-874937b97f16-g01-162db2d326380eeab85c029bbfcfe285`
+con `correlation_id=resident-director-8392` conserva la entrega valida anterior
+y completa la evidencia `ref_only` requerida por el paquete de correccion. No
+relanza otro padre sobre `task-ref-self-improvement-874937b97f16`, no amplia el
+write-set y mantiene como cierre canonico la reconciliacion documental anterior;
+la prueba obligatoria focal es
+`go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`. El ACK debe
+declarar `contexto_ref_only_resuelto` por lectura de paquete, AGENTS, docs
+vigentes, docs locales del servidor y evidencia SRV-TASK-015 citada arriba.
+
+Rework de revision sobre rework 2026-06-20:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-7b57471b0af67dc475be23b72a6c25c7`
+con `correlation_id=corr-request-ref-autoprogramming-backlog-srv-task-015-13f54805-reconcile-fe5b3701-burst-002`
+cierra la correccion documental sin relanzar otro padre sobre la tarea original.
+La entrada `ref_only` obligatoria se resuelve por paquete de control, AGENTS,
+foto vigente, docs locales del servidor, runbook causal OPES y evidencia
+SRV-TASK-015 ya citada. No hay cambio de codigo ni nueva implementacion: si
+aparece una regresion real, debe abrirse rework causal con refs de
+receipt/job/artifact concretas y write-set tecnico propio.
+
+Correccion de entrega tras revision 2026-06-20:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-8f75b93913fef84c105ce29cf9734bca`
+con `correlation_id=corr-request-ref-autoprogramming-backlog-srv-task-015-13f54805-reconcile-fe5b3701-burst-002`
+mantiene el cierre documental de SRV-TASK-015. El paquete conserva contexto
+obligatorio `ref_only` con `required_ref_action=ack_evidence_required`; queda
+resuelto por lectura del paquete, AGENTS, foto vigente, guia del nucleo,
+principio del director, AGENTS/README locales del servidor, runbook causal OPES
+y docs locales de tareas/decisiones/pruebas. No se relanza otro padre ni se
+programa codigo; la prueba obligatoria de esta correccion es
+`go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`.
+
 ## T260 - Corregir estados falsos `running` en agentes externos
 
 Origen: incidencia real detectada el 2026-06-11 durante OPES A1 informática

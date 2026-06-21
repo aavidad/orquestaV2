@@ -150,6 +150,35 @@ func TestMCPDomainWorkExecutorV0PropagaReceiptInvalidoSinPuertoCaido(t *testing.
 	}
 }
 
+func TestMCPDomainWorkExecutorV0PropagaCodigoPublicoDeSubmitter(t *testing.T) {
+	submitter := &fakeMCPDomainWorkSubmitterV0{
+		err: fakeMCPDomainWorkPublicCodeErrorV0{code: "opes_http_timeout"},
+	}
+	executor := MCPDomainWorkToolExecutorV0{ArtifactSubmitter: submitter}
+
+	result, err := executor.Execute(context.Background(), MCPDomainWorkToolInputV0{
+		RequestID: "req-domain-timeout-001",
+		Action:    MCPDomainWorkActionSubmitArtifactV0,
+		ArtifactSubmission: orquestadomainwork.DomainWorkArtifactSubmissionV0{
+			IdempotencyKey: "idem-domain-timeout-001",
+			RequestedBy:    "director",
+			DomainRef:      "domain-academic",
+			JobRef:         "job-domain-001",
+			ArtifactRef:    "artifact-domain-001",
+			ArtifactType:   "lesson_plan",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if result.Estado != MCPDomainWorkEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "opes_http_timeout" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPDomainWorkExecutorV0ValidaActionYPuertos(t *testing.T) {
 	result, err := MCPDomainWorkToolExecutorV0{}.Execute(
 		context.Background(),
@@ -192,6 +221,18 @@ type fakeMCPDomainWorkCreatorV0 struct {
 	job     orquestadomainwork.DomainWorkJobV0
 }
 
+type fakeMCPDomainWorkPublicCodeErrorV0 struct {
+	code string
+}
+
+func (err fakeMCPDomainWorkPublicCodeErrorV0) Error() string {
+	return err.code
+}
+
+func (err fakeMCPDomainWorkPublicCodeErrorV0) PublicCodeV0() string {
+	return err.code
+}
+
 func (fake *fakeMCPDomainWorkCreatorV0) CreateDomainWorkJobV0(
 	_ context.Context,
 	request orquestadomainwork.DomainWorkJobRequestV0,
@@ -205,6 +246,7 @@ type fakeMCPDomainWorkSubmitterV0 struct {
 	called     int
 	submission orquestadomainwork.DomainWorkArtifactSubmissionV0
 	receipt    orquestadomainwork.DomainWorkArtifactReceiptV0
+	err        error
 }
 
 func (fake *fakeMCPDomainWorkSubmitterV0) SubmitDomainWorkArtifactV0(
@@ -213,5 +255,8 @@ func (fake *fakeMCPDomainWorkSubmitterV0) SubmitDomainWorkArtifactV0(
 ) (orquestadomainwork.DomainWorkArtifactReceiptV0, error) {
 	fake.called++
 	fake.submission = submission
+	if fake.err != nil {
+		return orquestadomainwork.DomainWorkArtifactReceiptV0{}, fake.err
+	}
 	return fake.receipt, nil
 }

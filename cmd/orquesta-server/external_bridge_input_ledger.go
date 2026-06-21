@@ -47,8 +47,9 @@ type externalBridgeInputLedgerEntryV0 struct {
 }
 
 const (
-	externalBridgeInputStatusClaimedV0   = "claimed"
-	externalBridgeInputStatusSubmittedV0 = "submitted"
+	externalBridgeInputStatusClaimedV0      = "claimed"
+	externalBridgeInputStatusSubmitFailedV0 = "submit_failed"
+	externalBridgeInputStatusSubmittedV0    = "submitted"
 
 	externalBridgeInputLedgerMaxBytesV0   int64 = 8 * 1024 * 1024
 	externalBridgeInputLedgerMaxRecordsV0       = 10000

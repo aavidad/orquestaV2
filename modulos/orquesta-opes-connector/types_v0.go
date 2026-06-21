@@ -115,6 +115,10 @@ func (err connectorErrorV0) Error() string {
 	return err.code
 }
 
+func (err connectorErrorV0) PublicCodeV0() string {
+	return err.code
+}
+
 func connectorErrorCodeV0(err error) (string, bool) {
 	var publicErr connectorErrorV0
 	if !errors.As(err, &publicErr) {

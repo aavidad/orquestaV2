@@ -40,6 +40,18 @@ func (ledger *fileExternalBridgeInputLedgerV0) ClaimExternalBridgeInputV0(
 			previous.Status == externalBridgeInputStatusClaimedV0 {
 			return previous, false, nil
 		}
+		if previous.Status == externalBridgeInputStatusSubmitFailedV0 {
+			if !externalBridgeInputSameIntentV0(previous, entry) {
+				return previous, false, fmt.Errorf("external_bridge_claim_conflict")
+			}
+			entry.Attempts = previous.Attempts + 1
+			entry.UpdatedAt = time.Now().UTC()
+			entries[entry.Key] = entry
+			if err := ledger.saveV0(entries); err != nil {
+				return externalBridgeInputLedgerEntryV0{}, false, err
+			}
+			return entry, true, nil
+		}
 		return previous, false, fmt.Errorf("external_bridge_claim_conflict")
 	}
 	entry.Attempts = 1

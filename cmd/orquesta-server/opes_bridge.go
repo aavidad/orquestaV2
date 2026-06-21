@@ -226,10 +226,14 @@ func runOPESDrainSingleOnceV0(
 		}
 		runRef, err := submitOPESExternalWorkRunV0(ctx, &orquestaHTTPClient, config.OrquestaBaseURL, request)
 		if err != nil {
+			errorCode := err.Error()
+			if recordErr := opesBridgeRecordSubmitFailedV0(ctx, config.InputLedger, job, result, errorCode); recordErr != nil {
+				appendOPESDrainErrorV0(&summary, job.ID, externalBridgeClaimFailedCodeV0)
+			}
 			summary.Skipped++
 			result.Status = "submit_error"
 			summary.Results = append(summary.Results, result)
-			summary.Errors = append(summary.Errors, opesDrainPublicErrorV0{JobRef: job.ID, Code: err.Error()})
+			summary.Errors = append(summary.Errors, opesDrainPublicErrorV0{JobRef: job.ID, Code: errorCode})
 			continue
 		}
 		result.RunRef = runRef
