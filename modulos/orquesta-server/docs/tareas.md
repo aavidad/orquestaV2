@@ -738,3 +738,90 @@ Criterio de cierre:
 - replay del mismo job no duplica runs ni deja estados silenciosos;
 - el operador no necesita inspeccionar manualmente procesos ni el API OPES para
   descubrir que el trabajo no avanzo.
+
+## SRV-TASK-027: automejora idle no debe arrancar durante sesiones OPES sin opt-in
+
+Estado: abierto 2026-06-22.
+
+Origen:
+`docs/incidencia_opes_autonomia_tractorista_ack_idle_stop_2026-06-22.md`.
+
+Objetivo: el residente no debe lanzar automejoras de Orquesta por idle mientras
+una sesion OPES acotada esta activa o acaba de cerrar, salvo opt-in explicito
+del operador. Si el servidor esta usando `ORQUESTA_OPES_PROJECT_WORKDIR`,
+`ORQUESTA_CODEX_PROJECT_WORKDIR` apunta a salidas OPES o hay runs OPES recientes,
+la automejora idle debe quedar desactivada, en cola pausada o en estado
+`idle_self_improvement_suppressed_by_domain_session`.
+
+Caso observado:
+
+- tras cerrar la run OPES de `operario-tractorista-grupo-5`, el servidor lanzo
+  `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`;
+- la tarea tenia write-set en docs de Orquesta, no en el curso OPES;
+- habia otro agente humano trabajando en el nucleo, por lo que el arranque podia
+  pisar cambios ajenos.
+
+Alcance:
+
+- anadir guardia de dominio para idle self-improvement;
+- hacer opt-in explicito con env/config canonica para permitir automejora en una
+  sesion OPES;
+- publicar en status/diagnostico por que se suprimio la automejora;
+- no perder tareas de automejora: quedan aplazadas o visibles, no ejecutadas
+  silenciosamente sobre otro write-set;
+- cubrir que el cierre de una run OPES no rankea automaticamente automejora de
+  Orquesta en el mismo servidor.
+
+Criterio de cierre:
+
+- con `ORQUESTA_OPES_PROJECT_WORKDIR` configurado y sin opt-in, una sesion OPES
+  que queda idle no arranca agentes de automejora de Orquesta;
+- con opt-in explicito, la automejora arranca y aparece claramente en stats;
+- `director/stats` o `autoprogramming/status` muestra
+  `idle_self_improvement_suppressed_by_domain_session` sin rutas locales;
+- smoke OPES temporal demuestra cero procesos extra tras cierre de la run.
+
+## SRV-TASK-028: stop de run debe confirmar parada real de procesos Codex
+
+Estado: abierto 2026-06-22.
+
+Origen:
+`docs/incidencia_opes_autonomia_tractorista_ack_idle_stop_2026-06-22.md`.
+
+Objetivo: `POST /api/v0/runs/control action=stop forced=true` seguido de
+`POST /api/v0/runs/supervise` no puede devolver `stop_reason=stopped` si quedan
+procesos Codex reales vivos de esa run. Debe propagar parada al runtime,
+confirmar `stop_confirmed` por `process_ref + session_ref` o devolver
+`stop_pending` con siguiente accion durable.
+
+Caso observado:
+
+- run de automejora:
+  `request-ref-autoprogramming-backlog-scanner-7e8a6ae9`;
+- `runs/control` devolvio `stop_requested` y `checkpoint_recorded=true`;
+- `runs/supervise` devolvio `stop_reason=stopped`;
+- el proceso `codex --ask-for-approval never exec ... request-ref-autoprogramming-backlog-scanner-7e8a6ae9`
+  siguio vivo hasta cortar la sesion del servidor.
+
+Alcance:
+
+- el supervisor debe consultar el registry de procesos antes de declarar
+  terminalidad operativa;
+- si la run esta `stop_requested`, escribir `orquesta_shutdown_request.json`,
+  esperar `agent_shutdown_checkpoint_ack.json` cuando proceda y enviar señal al
+  proceso controlado;
+- confirmar que no quedan hijos del wrapper antes de reportar `stopped`;
+- si el proceso no muere, emitir `stop_pending` o `stop_escalation_required`,
+  no `stopped`;
+- no matar por busqueda global de nombre: usar `process_ref + session_ref`.
+
+Criterio de cierre:
+
+- test con runtime fake que ignora la primera parada: supervise devuelve
+  `stop_pending`;
+- test con runtime fake que confirma parada: supervise devuelve `stopped` y
+  `stop_confirmed=1`;
+- smoke Codex real opt-in: una run parada no deja procesos `codex exec` vivos
+  tras el cierre;
+- status publico distingue `stop_requested`, `stop_propagated`,
+  `stop_confirmed` y `stop_pending`.

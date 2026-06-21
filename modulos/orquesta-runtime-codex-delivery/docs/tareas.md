@@ -205,3 +205,51 @@ Criterios:
 - delivery no lee stdout, stderr ni last-message para calcular tokens o cuota;
 - cualquier uso visible debe venir de `codex_usage_accounting.json` redactado
   y del puerto de stats de la composicion.
+
+## RTDELIVERY-010 - ACK completed debe cerrar aunque el proceso siga vivo
+
+Estado: abierto 2026-06-22.
+
+Origen:
+`docs/incidencia_opes_autonomia_tractorista_ack_idle_stop_2026-06-22.md`.
+
+Objetivo: si un agente Codex escribe un `agent_ack.json` valido con
+`status=completed`, tests requeridos pasados y ficheros del write-set
+existentes, el residente/status debe priorizar la ingesta del ACK y registrar la
+entrega aunque el proceso CLI continue vivo unos segundos o quede colgado tras
+escribir el acuse. No debe requerir una llamada manual a
+`POST /api/v0/runs/supervise`.
+
+Caso observado:
+
+- run OPES:
+  `run-opes-autonomia-operario-tractorista-course-parent-20260622`;
+- ACK escrito en runtime con `status=completed` y dos tests requeridos
+  `passed`;
+- `autoprogramming/status` siguio devolviendo `tasks_open=1`,
+  `agents_in_flight=1` y `closure_status=blocked`;
+- `runs/supervise` manual consumio el ACK en un tick y cerro la tarea.
+
+Alcance:
+
+- el source de progreso debe comprobar primero si hay ACK listo antes de
+  reportar `running/progressing/no_signal`;
+- el drain residente debe ingerir ACKs disponibles sin depender de polling
+  manual del operador;
+- si el ACK es valido pero el proceso sigue vivo, marcar la entrega como
+  completada y solicitar parada causal del proceso asociado por
+  `process_ref + session_ref`;
+- no filtrar `ack_path`, rutas locales, HOME, proveedor, modelo ni logs al
+  nucleo;
+- exponer contador compacto `ack_ready_process_still_alive` y siguiente accion
+  durable.
+
+Criterio de cierre:
+
+- test focal con descriptor ACK ya escrito y proceso aun vivo: una pasada
+  residente deja `tasks_closed=1`, `agents_in_flight=0` y `deliveries=1` sin
+  llamada manual a `/runs/supervise`;
+- smoke real opt-in Codex donde el CLI tarda en salir despues del ACK: Orquesta
+  ingiere el ACK y termina/parquea el proceso sin quedar bloqueada;
+- `autoprogramming/status` no recomienda `supervise:queue` para una run cerrada
+  solo porque el ACK llego antes que la salida del proceso.

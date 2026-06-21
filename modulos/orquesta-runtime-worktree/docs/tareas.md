@@ -51,6 +51,50 @@ Bloqueos:
 
 Estado: cerrada localmente el 2026-05-23.
 
+## RTWT-006 - Snapshot OPES grande con error accionable
+
+Estado: abierto 2026-06-22.
+
+Origen:
+`docs/incidencia_opes_autonomia_tractorista_ack_idle_stop_2026-06-22.md`.
+
+Objetivo: cuando `prepare-run` no pueda capturar snapshot de un workdir grande,
+como la raiz de OPES, el error publico debe dar una causa accionable sin filtrar
+rutas privadas. El operador no debe tener que adivinar si el problema era un
+directorio enorme, symlink, fichero no legible, presupuesto excedido o falta de
+scope.
+
+Caso observado:
+
+- `project_workdir=/home/alberto/Trabajo/OPES`;
+- `prepare-run` devolvio
+  `worktree_isolation_invalid / worktree_snapshot_unreadable`;
+- el campo publico fue solo `field=file`;
+- la prueba pudo continuar al acotar manualmente `project_workdir` al padre del
+  curso, pero esa decision no fue sugerida por Orquesta.
+
+Alcance:
+
+- conservar refs opacas hacia el nucleo, pero anadir evidencia redactada en el
+  borde externo: tipo de fallo, prefijo relativo redactado o categoria
+  `budget_exceeded`, `permission_denied`, `symlink_unreadable`,
+  `ignored_prefix_missing`;
+- soportar politica de include/scope por write-set para snapshots de
+  autoprogramacion cuando sea seguro;
+- permitir perfil OPES que ignore caches, backups, runtime, codex homes,
+  paquetes generados y salidas historicas fuera del write-set;
+- documentar recomendacion publica: usar workdir acotado o configurar ignore
+  prefixes.
+
+Criterio de cierre:
+
+- test con arbol artificial que contiene ruta no legible: el error no filtra la
+  ruta absoluta y si expone categoria accionable;
+- test con arbol grande y write-set acotado: snapshot limitado al scope no falla
+  por directorios ajenos;
+- smoke OPES opt-in o fixture equivalente demuestra que la raiz OPES no rompe
+  `prepare-run`, o que el error propone scope/ignore concreto.
+
 ## RTWT-005 - Reconciliacion T208
 
 Objetivo: dejar claro que el guardian break-glass usa este modulo solo como
