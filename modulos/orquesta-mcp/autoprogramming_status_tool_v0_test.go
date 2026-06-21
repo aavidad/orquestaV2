@@ -3,6 +3,7 @@ package orquestamcp
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -13,7 +14,8 @@ func TestMCPAutoprogrammingStatusDescriptorV0EsAdaptadorFino(t *testing.T) {
 
 	if descriptor.Name != MCPAutoprogrammingStatusToolNameV0 ||
 		descriptor.ResourceURI != MCPAutoprogrammingStatusResourceURIV0 ||
-		len(descriptor.Invariantes) == 0 {
+		len(descriptor.Invariantes) == 0 ||
+		!strings.Contains(descriptor.Output, "efficiency_summary") {
 		t.Fatalf("descriptor incompleto: %+v", descriptor)
 	}
 }
@@ -73,6 +75,17 @@ func TestMCPAutoprogrammingStatusExecutorV0DelegaEnColaYRun(t *testing.T) {
 		!result.OpsSnapshot.Decision.Attention {
 		t.Fatalf("ops_snapshot=%+v", result.OpsSnapshot)
 	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.SchemaVersion != MCPAutoprogrammingEfficiencySummarySchemaVersionV0 ||
+		result.EfficiencySummary.State != "live" ||
+		result.EfficiencySummary.OperationalHealthPercentage != 100 ||
+		result.EfficiencySummary.AlivePercentage != 100 ||
+		result.EfficiencySummary.AliveStuckStatus != "observed" ||
+		result.EfficiencySummary.AliveStuckSampleSize != 1 ||
+		result.EfficiencySummary.QueueCandidates != 1 ||
+		result.EfficiencySummary.AgentsInFlight != 1 {
+		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
+	}
 	if queue.input.Action != MCPRunQueuePriorityActionRankV0 ||
 		queue.input.Limit != 3 ||
 		stats.input.RunRef != "run-ref-autop-status-001" {
@@ -125,6 +138,14 @@ func TestMCPAutoprogrammingStatusExecutorV0DeclaraSuperviseColaAunqueFaltenStats
 	if !hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "run_stats_required_for_safe_supervision") {
 		t.Fatalf("el aviso informativo debe conservarse: %+v", result.Diagnostics)
 	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.State != "queued" ||
+		result.EfficiencySummary.QueueCandidates != 1 ||
+		result.EfficiencySummary.OperationalHealthPercentage != 85 ||
+		result.EfficiencySummary.AliveStuckStatus != "no_data" ||
+		result.EfficiencySummary.Confidence != "partial" {
+		t.Fatalf("efficiency_summary cola=%+v", result.EfficiencySummary)
+	}
 	for _, item := range result.Operator.SupervisorErrors {
 		if item.Code == "run_stats_required_for_safe_supervision" {
 			t.Fatalf("el aviso informativo no debe bloquear como error de supervisor: %+v", result.Operator.SupervisorErrors)
@@ -151,6 +172,15 @@ func TestMCPAutoprogrammingStatusExecutorV0NoDeclaraSuperviseSeguroConColaVacia(
 	}
 	if !hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "queue_empty_or_not_visible") {
 		t.Fatalf("falta diagnostico de cola vacia/no visible: %+v", result.Diagnostics)
+	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.State != "idle" ||
+		result.EfficiencySummary.QueueCandidates != 0 ||
+		result.EfficiencySummary.QueueVisibilityPercentage != 100 ||
+		result.EfficiencySummary.OperationalHealthPercentage != 100 ||
+		result.EfficiencySummary.AliveStuckStatus != "no_data" ||
+		result.EfficiencySummary.Confidence != "medium" {
+		t.Fatalf("efficiency_summary cola vacia=%+v", result.EfficiencySummary)
 	}
 }
 
@@ -191,6 +221,58 @@ func TestMCPAutoprogrammingStatusExecutorV0NoRecomiendaSupervisarBucleDeReplan(t
 	}
 	if !hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "supervisor_replan_amplification_blocked") {
 		t.Fatalf("falta diagnostico de bucle: %+v", result.Diagnostics)
+	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.State != "hung" ||
+		result.EfficiencySummary.OperationalHealthPercentage != 30 ||
+		!hasStringMCPAutoprogrammingStatusTestV0(result.EfficiencySummary.Reasons, "supervisor_replan_amplification_blocked") {
+		t.Fatalf("efficiency_summary bucle=%+v", result.EfficiencySummary)
+	}
+}
+
+func TestMCPAutoprogrammingStatusExecutorV0EfficiencySummaryNoConfundeStalledConHung(t *testing.T) {
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{},
+		Stats: &fakeMCPAutoprogrammingRunStatusV0{
+			stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+				RunRef:       "run-ref-autop-status-stalled-001",
+				Status:       "activa",
+				CurrentPhase: "programacion",
+				Counts: orquestacionnucleoapp.DirectorRunStatsCountsV0{
+					TasksTotal:     1,
+					TasksOpen:      1,
+					AgentsStarted:  1,
+					AgentsInFlight: 1,
+				},
+				Progress: orquestacionnucleoapp.DirectorProgressStatsV0{
+					TasksTotal:        1,
+					StalledAgents:     1,
+					ProgressingAgents: 1,
+				},
+				Closure: orquestacionnucleoapp.DirectorClosureStatsV0{
+					Status:  orquestacionnucleoapp.DirectorClosureStatusBlockedV0,
+					Blocked: true,
+				},
+				Agents: []orquestacionnucleoapp.DirectorAgentStatsV0{{
+					AgentRequestID: "agent-ref-autop-status-stalled-001",
+					Status:         orquestacionnucleoapp.DirectorAgentStatusRunningV0,
+					InFlight:       true,
+				}},
+			},
+		},
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{
+		RunRef: "run-ref-autop-status-stalled-001",
+	})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.State != "live" ||
+		result.EfficiencySummary.AgentsStalled != 1 ||
+		result.EfficiencySummary.AgentsStuck != 0 ||
+		result.EfficiencySummary.StuckPercentage != 0 {
+		t.Fatalf("efficiency_summary stalled=%+v", result.EfficiencySummary)
 	}
 }
 
@@ -277,4 +359,13 @@ func TestMCPAutoprogrammingStatusTransportV0AceptaIncludesFlexibles(t *testing.T
 		!stats.input.IncludeAgentUsage {
 		t.Fatalf("stats input no normalizado: %+v", stats.input)
 	}
+}
+
+func hasStringMCPAutoprogrammingStatusTestV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

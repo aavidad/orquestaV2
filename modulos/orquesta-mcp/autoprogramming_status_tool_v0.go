@@ -40,20 +40,21 @@ type MCPAutoprogrammingStatusToolInputV0 struct {
 }
 
 type MCPAutoprogrammingStatusToolResultV0 struct {
-	Estado        string                                                 `json:"estado"`
-	RequestID     string                                                 `json:"request_id,omitempty"`
-	CorrelationID string                                                 `json:"correlation_id,omitempty"`
-	RunRef        string                                                 `json:"run_ref,omitempty"`
-	QueueRef      string                                                 `json:"queue_ref,omitempty"`
-	Queue         *MCPRunQueuePriorityToolResultV0                       `json:"queue,omitempty"`
-	Run           *MCPDirectorStatsToolResultV0                          `json:"run,omitempty"`
-	Projects      []MCPAutoprogrammingProjectV0                          `json:"projects,omitempty"`
-	Tasks         []MCPAutoprogrammingTaskV0                             `json:"tasks,omitempty"`
-	Agents        []MCPAutoprogrammingAgentV0                            `json:"agents,omitempty"`
-	Operator      *MCPAutoprogrammingOperatorV0                          `json:"operator,omitempty"`
-	OpsSnapshot   *orquestaobservability.DirectorAutonomousOpsSnapshotV0 `json:"ops_snapshot,omitempty"`
-	Diagnostics   []MCPAutoprogrammingDiagnosticV0                       `json:"diagnostics,omitempty"`
-	Errores       []MCPValidationIssueV0                                 `json:"errores_publicos,omitempty"`
+	Estado            string                                                 `json:"estado"`
+	RequestID         string                                                 `json:"request_id,omitempty"`
+	CorrelationID     string                                                 `json:"correlation_id,omitempty"`
+	RunRef            string                                                 `json:"run_ref,omitempty"`
+	QueueRef          string                                                 `json:"queue_ref,omitempty"`
+	Queue             *MCPRunQueuePriorityToolResultV0                       `json:"queue,omitempty"`
+	Run               *MCPDirectorStatsToolResultV0                          `json:"run,omitempty"`
+	Projects          []MCPAutoprogrammingProjectV0                          `json:"projects,omitempty"`
+	Tasks             []MCPAutoprogrammingTaskV0                             `json:"tasks,omitempty"`
+	Agents            []MCPAutoprogrammingAgentV0                            `json:"agents,omitempty"`
+	Operator          *MCPAutoprogrammingOperatorV0                          `json:"operator,omitempty"`
+	EfficiencySummary *MCPAutoprogrammingEfficiencySummaryV0                 `json:"efficiency_summary,omitempty"`
+	OpsSnapshot       *orquestaobservability.DirectorAutonomousOpsSnapshotV0 `json:"ops_snapshot,omitempty"`
+	Diagnostics       []MCPAutoprogrammingDiagnosticV0                       `json:"diagnostics,omitempty"`
+	Errores           []MCPValidationIssueV0                                 `json:"errores_publicos,omitempty"`
 }
 
 type MCPAutoprogrammingStatusToolExecutorV0 struct {
@@ -66,7 +67,7 @@ func MCPAutoprogrammingStatusDescriptorV0() MCPAutoprogrammingStatusToolDescript
 		Name:        MCPAutoprogrammingStatusToolNameV0,
 		Version:     MCPAutoprogrammingStatusToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,external_job_ref?,queue_ref?,app_refs?,queue_limit?,operator_advice?}",
-		Output:      "ok:{queue?,run?,projects?,tasks?,agents?,operator?,ops_snapshot?,diagnostics?,operator_advice?}|error:{errores_publicos,diagnostics?,operator_advice?}",
+		Output:      "ok:{queue?,run?,projects?,tasks?,agents?,operator?,efficiency_summary?,ops_snapshot?,diagnostics?}|error:{errores_publicos,diagnostics?,operator_advice?}",
 		ResourceURI: MCPAutoprogrammingStatusResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -149,6 +150,12 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	result.Tasks = buildMCPAutoprogrammingTasksV0(result.Run)
 	result.Agents = buildMCPAutoprogrammingAgentsV0(result.Run)
 	result.Operator = newMCPAutoprogrammingOperatorV0(result.Queue, result.Run, result.Diagnostics)
+	result.EfficiencySummary = buildMCPAutoprogrammingEfficiencySummaryV0(
+		result.Queue,
+		result.Run,
+		result.Operator,
+		result.Diagnostics,
+	)
 	result.OpsSnapshot = buildMCPAutoprogrammingOpsSnapshotV0(result.Queue, result.Run, input.OccurredAt)
 	return result, nil
 }

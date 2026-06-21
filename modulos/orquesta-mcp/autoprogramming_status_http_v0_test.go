@@ -142,6 +142,43 @@ func TestMCPAutoprogrammingStatusHTTPHandlerV0AceptaIncludesFlexibles(t *testing
 	}
 }
 
+func TestMCPAutoprogrammingStatusHTTPHandlerV0SerializaEfficiencySummary(t *testing.T) {
+	executor := &fakeMCPAutoprogrammingStatusHTTPExecutorV0{
+		result: MCPAutoprogrammingStatusToolResultV0{
+			Estado: MCPAutoprogrammingStatusEstadoOKV0,
+			RunRef: "run-ref-status-efficiency-http-001",
+			EfficiencySummary: &MCPAutoprogrammingEfficiencySummaryV0{
+				SchemaVersion:               MCPAutoprogrammingEfficiencySummarySchemaVersionV0,
+				State:                       "live",
+				OperationalHealthPercentage: 100,
+				CompletionPercentage:        40,
+				AlivePercentage:             100,
+				QueueCandidates:             2,
+				AgentsInFlight:              1,
+			},
+		},
+	}
+	body := bytes.NewBufferString(`{"run_ref":"run-ref-status-efficiency-http-001"}`)
+	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingStatusHTTPPathV0, body)
+	rec := httptest.NewRecorder()
+
+	NewMCPAutoprogrammingStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPAutoprogrammingStatusToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.State != "live" ||
+		result.EfficiencySummary.OperationalHealthPercentage != 100 ||
+		result.EfficiencySummary.QueueCandidates != 2 {
+		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
+	}
+}
+
 type fakeMCPAutoprogrammingStatusHTTPExecutorV0 struct {
 	input  MCPAutoprogrammingStatusToolInputV0
 	result MCPAutoprogrammingStatusToolResultV0
