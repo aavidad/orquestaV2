@@ -123,6 +123,10 @@ Parche local aplicado el 2026-06-22:
   `enrich` y para `DrainRunV0`.
 - Validacion ejecutada:
   `go test -count=1 ./modulos/orquesta-app-codex-stack`.
+- Smoke real ejecutado con el servidor actualizado sobre
+  `run-opes-tractorista-investigacion-bases-brief-20260622`:
+  `estado=ok`, `stop_reason=done`, run persistida `status=cerrada`,
+  `current_phase=cierre`, `closed_tasks=1`, `blockers=[]` y cola `closed`.
 
 Quedan abiertas `CTX-TASK-001` a `CTX-TASK-004`; `CTX-TASK-005` queda cubierta
-por este parche y pendiente de smoke OPES real con servidor actualizado.
+por este parche y verificada con smoke OPES real con servidor actualizado.
