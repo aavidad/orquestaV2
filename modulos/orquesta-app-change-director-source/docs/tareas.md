@@ -1,5 +1,39 @@
 # Tareas
 
+## ACDS-006
+
+Objetivo: evitar que un `external_work` aceptado quede bloqueado o invisible
+antes de crear microtarea por `required_tests` largos o por criterios
+estructurados fuera de `acceptance_criteria`.
+
+Estado: hecho.
+
+Incidencia: OPES lanzo trabajos de ampliacion de temas Tractorista AP con
+`external_work/run`; las runs quedaron en `programacion`, con
+`director_questions=1`, `tasks_total=0` y blocker
+`app-director-decision-source-error`. La causa fue transportar un comando
+Python largo como `required_tests` de la microtarea del director. Ademas, se
+detecto que un contrato externo accionable sin criterios explicitos podia
+quedar aceptado por transporte pero sin microtarea.
+
+Solucion:
+
+- compactar `required_tests` de microtarea al limite del DTO del director;
+- sustituir comandos inline largos por el marcador verificable
+  `validar required_tests externos declarados en paquete de dominio`;
+- permitir autoplanning de `external_work` accionable aunque no traiga
+  `acceptance_criteria`, usando criterios derivados del contrato externo;
+- conservar la regla de que cambios internos sin criterios explicitos no crean
+  microtarea.
+
+Validacion:
+
+- `TestAppChangeDirectorDecisionSourceV0ExpansionOPESConRequiredTestLargoNoBloquea`;
+- `TestAppChangeDirectorDecisionSourceV0ExternalWorkAccionableSinCriteriosCreaMicrotarea`;
+- `TestAppChangeDirectorDecisionSourceV0NoInventaMicrotareaSinCriterios`;
+- `go test -count=1 ./modulos/orquesta-app-change-director-source`;
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'ExternalWorkRun|AppChangeConProgramacionPendiente' -v`.
+
 ## ACDS-005
 
 Objetivo: proyectar `AppChangeRequestV0.metadata_refs` como `context_refs`

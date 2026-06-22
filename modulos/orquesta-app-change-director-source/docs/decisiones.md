@@ -234,3 +234,36 @@ Impacto: se mantiene la frontera hexagonal porque la microtarea no transporta
 proveedor, runtime ni secretos concretos. Tambien se evita el falso quiescent:
 un cambio con write-set y criterios verificables no queda parado solo por una
 palabra saneable.
+
+## Required tests externos compactos
+
+Decision: La fuente compacta `required_tests` antes de construir
+`create_microtask`. Si una prueba externa llega como comando inline demasiado
+largo, la microtarea conserva el requisito como marcador verificable:
+`validar required_tests externos declarados en paquete de dominio`.
+
+Motivo: el DTO del director exige textos operativos compactos. Un comando
+Python largo procedente de OPES puede ser valido como prueba de dominio, pero
+no como campo directo de una decision del director. Antes de esta decision, una
+run aceptada por `external-work/run` podia bloquearse en la fuente del director
+con `tasks_total=0`.
+
+Impacto: el trabajo no se pierde ni se lanza sin validacion. El agente recibe
+un requisito compacto y debe ejecutar o documentar las pruebas declaradas en el
+paquete de dominio externo. La app propietaria conserva el detalle completo en
+su contrato/payload.
+
+## External work accionable sin criterios explicitos
+
+Decision: un `external_work` con `user_intent` y `work_kind`, `job_ref` o
+`work_refs` puede generar microtarea aunque `acceptance_criteria` llegue vacio.
+Los criterios se derivan del contrato externo y de la clase de trabajo.
+
+Motivo: algunas apps envian el contrato estructurado en `external_work`,
+`input_fields`, `constraints` y `required_tests`. Aceptar el transporte pero
+exigir criterios libres para autoplanning dejaba runs vivas, sin tarea y sin
+agente.
+
+Impacto: se mantiene la seguridad para cambios internos: si solo hay
+`allowed_write_set` y faltan criterios explicitos, no se inventa microtarea.
+La excepcion es exclusiva de trabajo externo accionable.

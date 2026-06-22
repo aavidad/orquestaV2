@@ -6,6 +6,13 @@ import (
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 )
 
+const (
+	maxAppChangeTaskRequiredTestsV0        = 24
+	maxAppChangeTaskRequiredTestCharsV0    = 260
+	appChangeExternalRequiredTestMarkerV0  = "validar required_tests externos declarados en paquete de dominio"
+	appChangeCompactedRequiredTestSuffixV0 = " (detalle completo en paquete externo)"
+)
+
 func appChangeTaskRequiredTestsV0(
 	request orquestaappchange.AppChangeRequestV0,
 ) []string {
@@ -59,7 +66,7 @@ func appChangeTaskRequiredTestsV0(
 			tests = append([]string{"go test ./..."}, tests...)
 		}
 	}
-	return compactAppChangeDirectorStringsV0(tests)
+	return compactAppChangeTaskRequiredTestsV0(tests)
 }
 
 func appChangeRequiredTestsContainGoTestV0(tests []string) bool {
@@ -69,6 +76,69 @@ func appChangeRequiredTestsContainGoTestV0(tests []string) bool {
 		}
 	}
 	return false
+}
+
+func compactAppChangeTaskRequiredTestsV0(values []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
+		if trimmed == "" {
+			continue
+		}
+		trimmed = compactAppChangeTaskRequiredTestForDirectorV0(trimmed)
+		if trimmed == "" || seen[trimmed] {
+			continue
+		}
+		seen[trimmed] = true
+		out = append(out, trimmed)
+		if len(out) >= maxAppChangeTaskRequiredTestsV0 {
+			break
+		}
+	}
+	return out
+}
+
+func compactAppChangeTaskRequiredTestForDirectorV0(value string) string {
+	if len(value) <= maxAppChangeTaskRequiredTestCharsV0 {
+		return value
+	}
+	if appChangeRequiredTestLooksInlineCommandV0(value) {
+		return appChangeExternalRequiredTestMarkerV0
+	}
+	suffix := appChangeCompactedRequiredTestSuffixV0
+	limit := maxAppChangeTaskRequiredTestCharsV0 - len(suffix)
+	if limit < 1 {
+		return strings.TrimSpace(suffix)
+	}
+	prefix := strings.TrimSpace(value[:limit])
+	if cut := strings.LastIndex(prefix, " "); cut > 80 {
+		prefix = strings.TrimSpace(prefix[:cut])
+	}
+	return prefix + suffix
+}
+
+func appChangeRequiredTestLooksInlineCommandV0(value string) bool {
+	lower := strings.ToLower(strings.TrimSpace(value))
+	commandPrefixes := []string{
+		"python ",
+		"python3 ",
+		"go test ",
+		"npm ",
+		"pnpm ",
+		"yarn ",
+		"node ",
+		"bash ",
+		"sh ",
+	}
+	for _, prefix := range commandPrefixes {
+		if strings.HasPrefix(lower, prefix) {
+			return true
+		}
+	}
+	return strings.Contains(lower, " -c ") ||
+		strings.Contains(lower, " && ") ||
+		strings.Contains(lower, " | ")
 }
 
 func compactAppChangeDirectorStringsV0(values []string) []string {

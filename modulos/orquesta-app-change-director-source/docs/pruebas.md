@@ -41,6 +41,14 @@ Casos focales:
   reproduce reglas operativas de autoprogramacion con `token economy`, Codex,
   modelo y provider; la fuente conserva esos terminos como vocabulario opaco y
   crea microtarea en vez de dejar la pregunta pendiente.
+- `TestAppChangeDirectorDecisionSourceV0ExpansionOPESConRequiredTestLargoNoBloquea`:
+  reproduce el patron OPES Tractorista AP con un comando Python largo en
+  `required_tests`; la fuente lo compacta, emite `CreateMicrotask` valida y no
+  deja la run bloqueada antes de pedir agente.
+- `TestAppChangeDirectorDecisionSourceV0ExternalWorkAccionableSinCriteriosCreaMicrotarea`:
+  valida que un contrato externo con `user_intent` y `work_kind/job_ref` crea
+  microtarea aunque no traiga `acceptance_criteria`, usando criterios derivados
+  del trabajo externo.
 - `TestAppChangeDirectorDecisionSourceV0BloqueaDetalleSensibleEnAutoPlan`:
   reproduce un criterio con `api_key=` y valida que no se cree microtarea
   automatica; el vocabulario operativo sin valor efectivo sigue permitido por

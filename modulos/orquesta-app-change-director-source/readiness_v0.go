@@ -8,12 +8,30 @@ import (
 )
 
 func appChangeReadyForAutoPlanV0(request orquestaappchange.AppChangeRequestV0) bool {
-	criteria := sanitizeAppChangeTaskCriteriaV0(request.AcceptanceCriteria)
-	return appChangeHasRunnableScopeV0(request) && len(criteria) > 0
+	if !appChangeHasRunnableScopeV0(request) {
+		return false
+	}
+	if len(sanitizeAppChangeTaskCriteriaV0(request.AcceptanceCriteria)) > 0 {
+		return true
+	}
+	if !appChangeHasActionableExternalWorkV0(request) {
+		return false
+	}
+	return len(appChangeTaskCriteriaV0(request)) > 0
 }
 
 func appChangeHasRunnableScopeV0(request orquestaappchange.AppChangeRequestV0) bool {
 	return len(request.AllowedWriteSet) > 0 || appChangeHasExternalWorkV0(request)
+}
+
+func appChangeHasActionableExternalWorkV0(request orquestaappchange.AppChangeRequestV0) bool {
+	if !appChangeHasExternalWorkV0(request) || strings.TrimSpace(request.UserIntent) == "" {
+		return false
+	}
+	work := request.ExternalWork
+	return strings.TrimSpace(work.WorkKind) != "" ||
+		strings.TrimSpace(work.JobRef) != "" ||
+		len(work.WorkRefs) > 0
 }
 
 func appChangeQuestionReadyV0(

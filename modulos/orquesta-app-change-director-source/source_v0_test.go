@@ -368,6 +368,93 @@ func TestAppChangeDirectorDecisionSourceV0SaneaGuardasInternasEnExpansion(t *tes
 	}
 }
 
+func TestAppChangeDirectorDecisionSourceV0ExpansionOPESConRequiredTestLargoNoBloquea(t *testing.T) {
+	record := appChangeRecordForSourceTestV0()
+	record.Request.RunRef = "run-ref-opes-tractorista-t001-rework-extension-20260622"
+	record.Request.ChangeRef = "change-opes-tractorista-t001-extension-minimum-AP"
+	record.Request.UserIntent = "Ampliar tema OPES de Tractorista hasta minimo AP sin generar audios."
+	record.Request.AllowedWriteSet = []string{
+		"opes-salidas/diputacion_granada/cursos_opes_2026/administracion_especial/operario-tractorista-grupo-5/temas/tema_001",
+	}
+	record.Request.AcceptanceCriteria = []string{
+		"el ampliado del tema propio queda entre 3150 y 5400 palabras utiles, sin relleno ni repeticiones mecanicas",
+		"castellano correcto: tildes, ñ y signos ¿? ¡! completos",
+	}
+	record.Request.RequiredTests = []string{
+		"python3 -c \"import pathlib,re; p=pathlib.Path('opes-salidas/diputacion_granada/cursos_opes_2026/administracion_especial/operario-tractorista-grupo-5/temas/tema_001/02_markdown/tema_001_ampliado.md'); text=p.read_text(encoding='utf-8'); words=len(re.findall(r'\\\\b\\\\w+\\\\b',text)); print(words); assert words >= 3150\"",
+	}
+	record.Request.ExternalWork = &orquestaappchange.AppChangeExternalWorkV0{
+		ProjectRef:    "opes",
+		JobRef:        "job-opes-tractorista-t001-expand-minimum-AP-20260622",
+		InterfaceRefs: []string{"opes-local-files-v0", "orquesta-external-work-v0"},
+		WorkKind:      "expand_topic_from_summary",
+		WorkRefs:      []string{"tractorista-grupo-5", "topic-001", "minimum-extension-AP"},
+	}
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	run := appChangeRunForSourceTestV0(record)
+
+	decisions, err := (AppChangeDirectorDecisionSourceV0{Store: store}).
+		ListDirectorAgentDecisionsV0(
+			context.Background(),
+			orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+		)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	taskDecision := microtaskDecisionForTestV0(t, decisions)
+	task := taskDecision.CreateMicrotask.Task
+	if task.Title != "Ampliar tema documental externo" ||
+		!stringInSetV0(task.RequiredTests, appChangeExternalRequiredTestMarkerV0) ||
+		containsFragmentInSetForTestV0(task.RequiredTests, "pathlib.Path") {
+		t.Fatalf("task=%+v", task)
+	}
+	for _, requiredTest := range task.RequiredTests {
+		if len(requiredTest) > 300 {
+			t.Fatalf("required_test demasiado largo: %d %q", len(requiredTest), requiredTest)
+		}
+	}
+	if issues := orquestadirectoragent.ValidateDirectorAgentDecisionV0(taskDecision); len(issues) != 0 {
+		t.Fatalf("decision invalida: %+v", issues)
+	}
+	if _, err := orquestacoreworkflow.NewWorkflowTaskV0(workflowTaskFromDirectorTaskForTestV0(task)); err != nil {
+		t.Fatalf("workflow task invalida: %v task=%+v", err, task)
+	}
+}
+
+func TestAppChangeDirectorDecisionSourceV0ExternalWorkAccionableSinCriteriosCreaMicrotarea(t *testing.T) {
+	record := appChangeRecordForSourceTestV0()
+	record.Request.UserIntent = "Resolver contrato externo OPES y devolver artefacto verificable."
+	record.Request.AllowedWriteSet = nil
+	record.Request.AcceptanceCriteria = nil
+	record.Request.ExternalWork = &orquestaappchange.AppChangeExternalWorkV0{
+		ProjectRef:    "opes",
+		JobRef:        "job-opes-tractorista-t001-expand-minimum-AP-20260622",
+		InterfaceRefs: []string{"opes-local-files-v0", "orquesta-external-work-v0"},
+		WorkKind:      "expand_topic_from_summary",
+		WorkRefs:      []string{"tractorista-grupo-5", "topic-001", "minimum-extension-AP"},
+	}
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	run := appChangeRunForSourceTestV0(record)
+
+	decisions, err := (AppChangeDirectorDecisionSourceV0{Store: store}).
+		ListDirectorAgentDecisionsV0(
+			context.Background(),
+			orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+		)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	task := microtaskDecisionForTestV0(t, decisions).CreateMicrotask.Task
+	if task.Title != "Ampliar tema documental externo" ||
+		!stringInSetV0(task.AcceptanceCriteria, "Resolver solo el contrato externo de dominio con refs opacas.") ||
+		!stringInSetV0(task.AcceptanceCriteria, "Usar temario, esquema, objetivo, fuentes, criterios y longitud si llegan en input_fields.") ||
+		!stringInSetV0(task.RequiredTests, "validar topic_expansion_package") {
+		t.Fatalf("task=%+v", task)
+	}
+}
+
 func TestAppChangeDirectorDecisionSourceV0SaneaCriteriosOperativosSinBloquearAutoPlan(t *testing.T) {
 	record := appChangeRecordForSourceTestV0()
 	record.Request.AllowedWriteSet = []string{"modulos/orquesta-director-agent"}
