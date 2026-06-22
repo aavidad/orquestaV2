@@ -1,5 +1,33 @@
 # Tareas: orquesta-app-codex-stack
 
+## APP-CODEX-STACK-043
+
+Objetivo: recuperar decisiones de capacidad duraderas no proyectadas para que
+una run OPES no deje tareas sin agente.
+
+Estado: hecho.
+
+Write-set aplicado:
+
+- `DrainRunV0` ejecuta `reconcileDurableCapacityDecisionsForRunV0` antes de la
+  recuperacion de launches reclamados;
+- el reconciliador lee eventos duraderos del run y localiza
+  `CapacityDecided` por `capacity_ref`;
+- solo actua si la solicitud de capacidad sigue existiendo en la proyeccion
+  actual del run;
+- aplica el evento `CapacityDecided` sobre la proyeccion actual, conserva
+  `LastEventID`/`LastSequence` coherentes y guarda el run;
+- no interpreta texto OPES, logs ni summaries de agentes.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestReconcileDurableCapacityDecisionsForRunV0ProyectaDecisionPerdida|TestReconcile(OrphanCapacity|ClaimedLaunch)'`
+
+Pendiente siguiente:
+
+- revisar la eficiencia del supervisor cuando hay agentes vivos pero aun queda
+  concurrencia disponible para lanzar otras tareas.
+
 ## APP-CODEX-STACK-042
 
 Objetivo: especializar el paquete Codex de las tareas del consejo residente.

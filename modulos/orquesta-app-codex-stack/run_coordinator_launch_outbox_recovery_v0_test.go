@@ -373,6 +373,70 @@ func TestReconcileOrphanCapacityOutboxForRunV0AckSupersededDecisionPersistente(t
 	}
 }
 
+func TestReconcileDurableCapacityDecisionsForRunV0ProyectaDecisionPerdida(t *testing.T) {
+	ctx := context.Background()
+	runRef := "run-ref-capacity-decision-durable-missing-001"
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	eventSink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	run := codexStackCapacityOutboxRecoveryRunV0(t, ctx, runStore, eventSink, runRef)
+	decisionCommand, err := orquestacoreworkflow.NewRegisterCapacityDecisionCommandV0(
+		launchOutboxRecoveryCommandMetaV0(runRef, "cmd-capacity-decision-durable-missing-001", "idem-capacity-decision-durable-missing-001"),
+		orquestacoreworkflow.RegisterCapacityDecisionCommandPayloadV0{
+			CapacityRequestID: "capacity-ref-capacity-recovery-001",
+			DecisionRef:       "capacity-decision-ref-durable-missing-001",
+			Tier:              orquestacoreworkflow.OrchestrationCapacityMediumV0,
+			ReasoningEffort:   orquestacoreworkflow.OrchestrationCapacityHighV0,
+			Summary:           "Decision duradera no proyectada.",
+			EvidenceRefs:      []string{"evidence-ref-capacity-decision-durable-missing-001"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewRegisterCapacityDecisionCommandV0: %v", err)
+	}
+	result, err := orquestacoreworkflow.HandleCommandV0(run, decisionCommand)
+	if err != nil {
+		t.Fatalf("HandleCommandV0 decision duradera: %v", err)
+	}
+	if len(result.Events) != 1 {
+		t.Fatalf("events=%d", len(result.Events))
+	}
+	if err := eventSink.AppendRunEventsV0(ctx, runRef, result.Events); err != nil {
+		t.Fatalf("AppendRunEventsV0 decision duradera: %v", err)
+	}
+	stack := StackV0{
+		Stores: StoresV0{
+			RunStore:     runStore,
+			EventSink:    eventSink,
+			OutboxLedger: ledger,
+		},
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			RunStore:     runStore,
+			EventSink:    eventSink,
+			EventReader:  eventSink,
+			OutboxLedger: ledger,
+		},
+	}
+
+	reconciled, err := stack.reconcileDurableCapacityDecisionsForRunV0(ctx, run)
+	if err != nil {
+		t.Fatalf("reconcileDurableCapacityDecisionsForRunV0: %v", err)
+	}
+	if !reconciled {
+		t.Fatalf("decision duradera no reconciliada")
+	}
+	loaded, err := runStore.LoadRunV0(ctx, runRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if !codexStackStringInSetV0(loaded.CapacityDecisions, "capacity-ref-capacity-recovery-001#capacity_decision:capacity-decision-ref-durable-missing-001") {
+		t.Fatalf("capacity_decisions=%v", loaded.CapacityDecisions)
+	}
+	if loaded.LastSequence != result.Events[0].Sequence {
+		t.Fatalf("last_sequence=%d, want %d", loaded.LastSequence, result.Events[0].Sequence)
+	}
+}
+
 func TestReconcileClaimedLaunchOutboxForProcessRegistryV0RegistraStartedYAck(t *testing.T) {
 	ctx := context.Background()
 	runRef := "run-ref-launch-outbox-claimed-process-001"

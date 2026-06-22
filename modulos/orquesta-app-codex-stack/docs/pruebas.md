@@ -209,6 +209,10 @@ Cobertura Go actual:
   1->2->4 con runtime fake: waits por `parent_task_ref`/`wave_ref`, entregas,
   review causal aceptada, `RequiredTestRunner`, evidencias por task y cierre de
   las 7 tareas por `PlanState`.
+- `TestReconcileDurableCapacityDecisionsForRunV0ProyectaDecisionPerdida`
+  reproduce una decision `CapacityDecided` escrita en eventos duraderos pero no
+  proyectada en `RunStore`; el reconciliador reproyecta la decision para que el
+  siguiente ciclo pueda lanzar el agente pendiente.
 - `TestCodexStackGeneratedRecursiveTreeFakeRuntimeV0` valida la ruta offline en
   la que solo existe el padre inicial: una review `changes_requested` genera
   hijos por `split_task`, esos hijos generan nietos por la misma ruta real de

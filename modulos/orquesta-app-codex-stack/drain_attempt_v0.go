@@ -64,6 +64,12 @@ func (stack StackV0) drainRunAttemptControlV0(
 		}
 		return stack.continueDrainRunControlAfterExternalV0(ctx, request)
 	}
+	if reconciled, err := stack.reconcileDurableCapacityDecisionsForRunV0(ctx, run); err != nil || reconciled {
+		if err != nil {
+			return drainRunAttemptControlV0{}, err
+		}
+		return stack.continueDrainRunControlAfterExternalV0(ctx, request)
+	}
 	if reconciled, err := stack.reconcileClaimedLaunchOutboxForProcessRegistryV0(ctx, request, run); err != nil || reconciled {
 		if err != nil {
 			return drainRunAttemptControlV0{}, err

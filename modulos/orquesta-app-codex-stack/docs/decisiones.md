@@ -2,6 +2,21 @@
 
 ```text
 Fecha: 2026-06-22
+Decision: El stack reproyecta `CapacityDecided` duradero si el event store lo
+contiene pero el `RunStore` no lo refleja para una solicitud de capacidad viva.
+Motivo: en OPES tractorista una run tenia tres solicitudes de capacidad y el
+evento durable de decision para `g01`, pero la proyeccion solo contenia las
+decisiones de `g02` y `g03`. El outbox estaba ACKeado y no quedaba otro camino
+para materializar el launch del agente faltante.
+Impacto: `DrainRunV0` lee eventos estructurados, comprueba que
+`CapacityRequests` conserva la solicitud, aplica `CapacityDecided` sobre el run
+actual y devuelve el control al ciclo normal para lanzar el agente. No toca el
+core ni parsea contenido OPES, logs ni texto libre.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-06-22
 Decision: Un replacement de assessment terminal sin entrega no bloquea para
 siempre nuevos replacements de la misma tarea; se permite reintento acotado.
 Motivo: en OPES tractorista un replacement fallo por un lock local obsoleto ya

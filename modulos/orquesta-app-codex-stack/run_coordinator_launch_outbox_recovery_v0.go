@@ -128,6 +128,43 @@ func capacityOutboxDecisionSetV0(
 	return decided
 }
 
+func (stack StackV0) reconcileDurableCapacityDecisionsForRunV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) (bool, error) {
+	if stack.Stores.RunStore == nil || stack.Ports.EventSink == nil {
+		return false, nil
+	}
+	reader := stack.eventReaderForLaunchOutboxRecoveryV0()
+	if reader == nil {
+		return false, nil
+	}
+	events, err := reader.LoadRunEventsV0(ctx, run.RunID)
+	if err != nil {
+		return false, err
+	}
+	decidedEvents := capacityDecidedEventsByCapacityRefV0(run.RunID, events)
+	current := run
+	decided := capacityOutboxDecisionSetV0(current)
+	reconciled := false
+	for capacityRef, event := range decidedEvents {
+		if decided[capacityRef] {
+			continue
+		}
+		if !codexStackStringInSetV0(current.CapacityRequests, capacityRef) {
+			continue
+		}
+		var projectedDecision bool
+		current, projectedDecision, err = stack.projectDurableCapacityDecisionForRecoveryV0(ctx, current, event)
+		if err != nil {
+			return false, err
+		}
+		reconciled = reconciled || projectedDecision
+		decided = capacityOutboxDecisionSetV0(current)
+	}
+	return reconciled, nil
+}
+
 func (stack StackV0) reconcileClaimedLaunchOutboxForProcessRegistryV0(
 	ctx context.Context,
 	request DrainRunRequestV0,
@@ -218,6 +255,37 @@ func (stack StackV0) reconcileClaimedLaunchOutboxForProcessRegistryV0(
 		reconciled = true
 	}
 	return reconciled, nil
+}
+
+func (stack StackV0) projectDurableCapacityDecisionForRecoveryV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	event orquestacoreworkflow.OrchestrationEventV0,
+) (orquestacoreworkflow.OrchestrationRunV0, bool, error) {
+	var payload orquestacoreworkflow.CapacityDecidedPayloadV0
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return run, false, err
+	}
+	capacityRef := strings.TrimSpace(payload.CapacityRequestID)
+	if capacityRef == "" || capacityOutboxDecisionSetV0(run)[capacityRef] {
+		return run, false, nil
+	}
+	lastEventID := run.LastEventID
+	lastSequence := run.LastSequence
+	projected, err := orquestacoreworkflow.ApplyEventV0(run, event)
+	if err != nil {
+		return run, false, err
+	}
+	if event.Sequence > lastSequence {
+		lastEventID = strings.TrimSpace(event.EventID)
+		lastSequence = event.Sequence
+	}
+	projected.LastEventID = lastEventID
+	projected.LastSequence = lastSequence
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, projected); err != nil {
+		return run, false, err
+	}
+	return projected, true, nil
 }
 
 func (stack StackV0) projectDurableAgentRequestedForLaunchRecoveryV0(
@@ -731,6 +799,28 @@ func agentStartedEventsByAgentRefV0(
 		agentRef := strings.TrimSpace(payload.AgentRequestID)
 		if agentRef != "" {
 			out[agentRef] = event
+		}
+	}
+	return out
+}
+
+func capacityDecidedEventsByCapacityRefV0(
+	runRef string,
+	events []orquestacoreworkflow.OrchestrationEventV0,
+) map[string]orquestacoreworkflow.OrchestrationEventV0 {
+	out := map[string]orquestacoreworkflow.OrchestrationEventV0{}
+	for _, event := range events {
+		if strings.TrimSpace(event.RunID) != strings.TrimSpace(runRef) ||
+			event.EventType != orquestacoreworkflow.OrchestrationEventCapacityDecidedV0 {
+			continue
+		}
+		var payload orquestacoreworkflow.CapacityDecidedPayloadV0
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			continue
+		}
+		capacityRef := strings.TrimSpace(payload.CapacityRequestID)
+		if capacityRef != "" {
+			out[capacityRef] = event
 		}
 	}
 	return out
