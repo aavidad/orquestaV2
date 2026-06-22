@@ -66,6 +66,122 @@ func (stack StackV0) recoverMissingCapacityOutboxForPendingCapacityRequestsV0(
 	return recovered, nil
 }
 
+func (stack StackV0) reconcileOrphanCapacityOutboxForRunV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	occurredAt string,
+) (bool, error) {
+	if stack.Stores.RunStore == nil || stack.Stores.OutboxLedger == nil {
+		return false, nil
+	}
+	pending, err := stack.pendingCapacityOutboxEntriesForReconcileV0(ctx, run.RunID)
+	if err != nil {
+		return false, err
+	}
+	known := launchOutboxRecoveryStringSetV0(run.CapacityRequests)
+	decided := capacityOutboxDecisionSetV0(run)
+	reconciled := false
+	for _, entry := range pending {
+		var payload orquestacoreworkflow.CapacityDecisionRequestV0
+		if err := json.Unmarshal(entry.Payload, &payload); err != nil {
+			continue
+		}
+		capacityRef := strings.TrimSpace(payload.CapacityRequestID)
+		if capacityRef == "" {
+			continue
+		}
+		if known[capacityRef] && decided[capacityRef] {
+			if err := stack.ackSupersededCapacityOutboxEntryV0(entry, payload); err != nil {
+				return false, err
+			}
+			reconciled = true
+			continue
+		}
+		if known[capacityRef] {
+			continue
+		}
+		command, err := requestCapacityCommandFromOutboxEntryV0(entry, payload, occurredAt)
+		if err != nil {
+			return false, err
+		}
+		if _, err := orquestacionnucleoapp.HandleStoredWorkflowCommandV0(ctx, stack.Stores.RunStore, stack.Ports.EventSink, command); err != nil {
+			return false, err
+		}
+		stack.releaseOutboxDispatchClaimV0(entry)
+		known[capacityRef] = true
+		reconciled = true
+	}
+	return reconciled, nil
+}
+
+func capacityOutboxDecisionSetV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) map[string]bool {
+	decided := map[string]bool{}
+	for _, decisionRef := range compactStringsV0(run.CapacityDecisions) {
+		capacityRef, _, _ := strings.Cut(decisionRef, "#capacity_decision:")
+		capacityRef = strings.TrimSpace(capacityRef)
+		if capacityRef != "" {
+			decided[capacityRef] = true
+		}
+	}
+	return decided
+}
+
+func (stack StackV0) ackSupersededCapacityOutboxEntryV0(
+	entry orquestaoutboxdispatch.OutboxPendingEntryV0,
+	payload orquestacoreworkflow.CapacityDecisionRequestV0,
+) error {
+	if stack.Stores.OutboxLedger == nil {
+		return nil
+	}
+	issues := stack.Stores.OutboxLedger.AckOutboxDispatchV0(orquestaoutboxdispatch.OutboxDispatchAckV0{
+		MessageID:   strings.TrimSpace(entry.MessageID),
+		RunID:       strings.TrimSpace(entry.RunID),
+		TargetPort:  strings.TrimSpace(entry.TargetPort),
+		DispatchRef: "dispatch-ref-superseded-" + strings.TrimSpace(entry.MessageID),
+		EvidenceRefs: compactStringsV0(append(
+			payload.EvidenceRefs,
+			"evidence-ref-capacity-outbox-superseded-by-existing-decision",
+			"evidence-ref-capacity-request-"+strings.TrimSpace(payload.CapacityRequestID),
+		)),
+	})
+	if len(issues) > 0 {
+		return fmt.Errorf("capacity_outbox_reconcile: ack_superseded: %s", strings.TrimSpace(issues[0].Code))
+	}
+	return nil
+}
+
+func (stack StackV0) pendingCapacityOutboxEntriesForReconcileV0(
+	ctx context.Context,
+	runID string,
+) ([]orquestaoutboxdispatch.OutboxPendingEntryV0, error) {
+	pending, issues := stack.Stores.OutboxLedger.ListPending(ctx, orquestadirectorcycleoutbox.DirectorCycleOutboxPendingFilterV0{
+		RunRef:     strings.TrimSpace(runID),
+		TargetPort: orquestacoreworkflow.OutboxTargetCapacityV0,
+	})
+	if len(issues) > 0 {
+		return nil, fmt.Errorf("capacity_outbox_reconcile: list_pending: %s", strings.TrimSpace(issues[0].Code))
+	}
+	entries := make([]orquestaoutboxdispatch.OutboxPendingEntryV0, 0, len(pending))
+	for _, message := range pending {
+		if strings.TrimSpace(message.MessageType) != orquestacoreworkflow.OutboxMessageRequestCapacityDecisionV0 {
+			continue
+		}
+		entries = append(entries, orquestaoutboxdispatch.OutboxPendingEntryV0{
+			MessageID:      strings.TrimSpace(message.MessageID),
+			RunID:          strings.TrimSpace(message.RunID),
+			TargetPort:     strings.TrimSpace(message.TargetPort),
+			MessageType:    strings.TrimSpace(message.MessageType),
+			IdempotencyKey: strings.TrimSpace(message.IdempotencyKey),
+			CorrelationID:  strings.TrimSpace(message.CorrelationID),
+			PayloadVersion: strings.TrimSpace(message.PayloadVersion),
+			Payload:        append(message.Payload[:0:0], message.Payload...),
+		})
+	}
+	return entries, nil
+}
+
 func (stack StackV0) recoverMissingLaunchOutboxForRequestedAgentsV0(
 	ctx context.Context,
 	run orquestacoreworkflow.OrchestrationRunV0,
@@ -116,6 +232,53 @@ func (stack StackV0) recoverMissingLaunchOutboxForRequestedAgentsV0(
 		recovered = recovered || record.SavedCount > 0
 	}
 	return recovered, nil
+}
+
+func requestCapacityCommandFromOutboxEntryV0(
+	entry orquestaoutboxdispatch.OutboxPendingEntryV0,
+	payload orquestacoreworkflow.CapacityDecisionRequestV0,
+	occurredAt string,
+) (orquestacoreworkflow.OrchestrationCommandV0, error) {
+	originalIdempotencyKey := strings.TrimSpace(entry.IdempotencyKey)
+	idempotencyKey := "idem-reconcile-capacity-outbox-" + strings.TrimSpace(entry.MessageID)
+	commandID := "cmd-reconcile-capacity-outbox-" + strings.TrimSpace(entry.MessageID)
+	return orquestacoreworkflow.NewRequestCapacityCommandV0(orquestacoreworkflow.OrchestrationCommandMetaV0{
+		CommandID:      commandID,
+		RunID:          strings.TrimSpace(entry.RunID),
+		IdempotencyKey: idempotencyKey,
+		CorrelationID:  strings.TrimSpace(entry.CorrelationID),
+		RequestedBy:    codexStackLaunchOutboxRecoveryRequestedByV0,
+		OccurredAt:     strings.TrimSpace(occurredAt),
+	}, orquestacoreworkflow.RequestCapacityCommandPayloadV0{
+		CapacityRequestID:          strings.TrimSpace(payload.CapacityRequestID),
+		PhaseID:                    strings.TrimSpace(payload.PhaseID),
+		TaskRef:                    strings.TrimSpace(payload.TaskRef),
+		ReasonCode:                 strings.TrimSpace(payload.ReasonCode),
+		Summary:                    strings.TrimSpace(payload.Summary),
+		MinimumRecommendedCapacity: payload.MinimumRecommendedCapacity,
+		EvidenceRefs: compactStringsV0(append(
+			payload.EvidenceRefs,
+			"evidence-ref-capacity-outbox-orphan-reconciled",
+			"evidence-ref-original-idempotency-"+originalIdempotencyKey,
+		)),
+	})
+}
+
+func (stack StackV0) releaseOutboxDispatchClaimV0(
+	entry orquestaoutboxdispatch.OutboxPendingEntryV0,
+) []orquestaoutboxdispatch.DispatchIssueV0 {
+	releaser, ok := stack.Stores.OutboxLedger.(interface {
+		ReleaseOutboxDispatchClaimV0(orquestaoutboxdispatch.OutboxDispatchClaimV0) []orquestaoutboxdispatch.DispatchIssueV0
+	})
+	if !ok || releaser == nil {
+		return nil
+	}
+	return releaser.ReleaseOutboxDispatchClaimV0(orquestaoutboxdispatch.OutboxDispatchClaimV0{
+		MessageID:      strings.TrimSpace(entry.MessageID),
+		RunID:          strings.TrimSpace(entry.RunID),
+		TargetPort:     strings.TrimSpace(entry.TargetPort),
+		IdempotencyKey: strings.TrimSpace(entry.IdempotencyKey),
+	})
 }
 
 func (stack StackV0) eventReaderForLaunchOutboxRecoveryV0() orquestacionnucleoapp.RunEventReaderPortV0 {
