@@ -314,6 +314,95 @@ func TestEnrichQueuedOperationalDirectorDrainRequestV0RecuperaDomainWorkOpenRevi
 	}
 }
 
+func TestEnrichQueuedOperationalDirectorDrainRequestV0RecuperaAutoprogrammingOpenReviewBloqueadoConACKV0(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	runRef := "run-stack-autoprogramming-blocked-open-review-001"
+	taskRef := "task-autoprogramming-blocked-open-review-001"
+	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskRef)
+	task := stackDeliveredAutoprogrammingTaskForTestV0(runRef, taskRef)
+	run := stackDeliveredRunForQueueTestV0(runRef, taskRef, agentRef)
+	run.SchemaVersion = orquestacoreworkflow.OrchestrationRunSchemaVersionV0
+	run.ProjectRef = "project-autoprogramming-open-review-001"
+	run.AppSpecRef = "app-spec-ref-autoprogramming-blocked-open-review-001"
+	run.Status = orquestacoreworkflow.OrchestrationRunStatusBlockedV0
+	run.CurrentPhase = orquestacoreworkflow.OrchestrationPhaseProgramacionV0
+	run.Phases = stackDeliveredClosurePhaseCatalogForTestV0(orquestacoreworkflow.OrchestrationPhaseProgramacionV0)
+	run.Blockers = []string{
+		"app-director-decision-director-decision-apply-error-director-decision-director-decision-autoprogramming-open-review-" + taskRef,
+	}
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	if err := stack.Stores.TaskStore.SaveWorkflowTaskV0(ctx, task); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0: %v", err)
+	}
+
+	_, err := stack.enrichQueuedOperationalDirectorDrainRequestV0(ctx, DrainRunRequestV0{
+		RunRef:                     runRef,
+		OccurredAt:                 "2026-06-22T12:10:00Z",
+		CorrelationID:              "corr-autoprogramming-open-review",
+		WaitAgentRefs:              []string{agentRef},
+		OperationalDirectorPlanRef: "plan-ref-existing",
+	})
+	if err != nil {
+		t.Fatalf("enrichQueuedOperationalDirectorDrainRequestV0: %v", err)
+	}
+	recovered := mustLoadCodexStackRunForTestV0(t, stack, runRef)
+	if recovered.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 ||
+		len(recovered.Blockers) != 0 ||
+		recovered.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseRevisionV0 {
+		t.Fatalf("run no recuperado: status=%s current_phase=%s blockers=%v", recovered.Status, recovered.CurrentPhase, recovered.Blockers)
+	}
+}
+
+func TestDrainRunV0RecuperaAutoprogrammingOpenReviewBloqueadoConACKV0(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	runRef := "run-stack-autoprogramming-blocked-open-review-drain-001"
+	taskRef := "task-autoprogramming-blocked-open-review-drain-001"
+	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskRef)
+	task := stackDeliveredAutoprogrammingTaskForTestV0(runRef, taskRef)
+	run := stackDeliveredRunForQueueTestV0(runRef, taskRef, agentRef)
+	run.SchemaVersion = orquestacoreworkflow.OrchestrationRunSchemaVersionV0
+	run.ProjectRef = "project-autoprogramming-open-review-drain-001"
+	run.AppSpecRef = "app-spec-ref-autoprogramming-blocked-open-review-drain-001"
+	run.Status = orquestacoreworkflow.OrchestrationRunStatusBlockedV0
+	run.CurrentPhase = orquestacoreworkflow.OrchestrationPhaseProgramacionV0
+	run.Phases = stackDeliveredClosurePhaseCatalogForTestV0(orquestacoreworkflow.OrchestrationPhaseProgramacionV0)
+	run.Blockers = []string{
+		"app-director-decision-director-decision-apply-error-director-decision-director-decision-autoprogramming-open-review-" + taskRef,
+	}
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	if err := stack.Stores.TaskStore.SaveWorkflowTaskV0(ctx, task); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0: %v", err)
+	}
+
+	_, err := stack.DrainRunV0(ctx, DrainRunRequestV0{
+		RunRef:               runRef,
+		OccurredAt:           "2026-06-22T12:15:00Z",
+		CorrelationID:        "corr-autoprogramming-open-review-drain",
+		WaitAgentRefs:        []string{agentRef},
+		MaxExternalWaits:     0,
+		MaxBursts:            1,
+		MaxStepsPerBurst:     1,
+		MaxCommands:          2,
+		MaxDecisionCycles:    1,
+		MaxDispatchesPerWait: 1,
+		MaxOutboxPerCycle:    1,
+	})
+	if err != nil {
+		t.Fatalf("DrainRunV0: %v", err)
+	}
+	recovered := mustLoadCodexStackRunForTestV0(t, stack, runRef)
+	if recovered.Status == orquestacoreworkflow.OrchestrationRunStatusBlockedV0 ||
+		len(recovered.Blockers) != 0 {
+		t.Fatalf("run sigue bloqueado: status=%s current_phase=%s blockers=%v", recovered.Status, recovered.CurrentPhase, recovered.Blockers)
+	}
+}
+
 func TestEnrichQueuedOperationalDirectorDrainRequestV0ReparaRevisionParcialDomainWorkAceptadoV0(t *testing.T) {
 	ctx := context.Background()
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())

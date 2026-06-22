@@ -164,6 +164,12 @@ func (stack StackV0) recoverQueuedStoppedCandidateV0(
 			}
 		}
 		if !ok {
+			recovered, ok, err = stack.recoverBlockedAutoprogrammingOpenReviewRunForQueueV0(ctx, command, state, run)
+			if err != nil {
+				return err
+			}
+		}
+		if !ok {
 			recovered, ok, err = stack.recoverBlockedOpenPhaseProjectionRunForQueueV0(ctx, command, state, run)
 			if err != nil {
 				return err

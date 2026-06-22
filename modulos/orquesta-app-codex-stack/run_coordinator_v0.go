@@ -170,6 +170,14 @@ func (stack StackV0) enrichQueuedOperationalDirectorDrainRequestV0(
 	); err != nil {
 		return DrainRunRequestV0{}, err
 	}
+	if _, err := stack.recoverBlockedAutoprogrammingOpenReviewRunV0(
+		ctx,
+		request.RunRef,
+		request.CorrelationID,
+		request.OccurredAt,
+	); err != nil {
+		return DrainRunRequestV0{}, err
+	}
 	if _, err := stack.recoverPartialDomainWorkReviewPhaseV0(
 		ctx,
 		request.RunRef,

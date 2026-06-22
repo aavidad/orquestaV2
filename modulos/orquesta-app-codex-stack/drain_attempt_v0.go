@@ -37,6 +37,15 @@ func (stack StackV0) drainRunAttemptControlV0(
 			run = recovered
 		}
 		if !stackRunIsActiveV0(run) {
+			recovered, ok, err = stack.recoverBlockedAutoprogrammingOpenReviewRunForDrainV0(ctx, request, run)
+			if err != nil {
+				return drainRunAttemptControlV0{}, err
+			}
+			if ok {
+				run = recovered
+			}
+		}
+		if !stackRunIsActiveV0(run) {
 			recovered, ok, err = stack.recoverBlockedOpenPhaseProjectionRunForDrainV0(ctx, request, run)
 			if err != nil {
 				return drainRunAttemptControlV0{}, err
