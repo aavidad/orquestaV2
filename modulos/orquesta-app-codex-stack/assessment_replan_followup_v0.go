@@ -6,6 +6,8 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 )
 
+const assessmentReplanMaxTerminalFailedFollowupsV0 = 3
+
 func assessmentReplanFollowupAgentRefsV0(projection string) []string {
 	const marker = "#followups:"
 	index := strings.Index(projection, marker)
@@ -50,16 +52,17 @@ func assessmentReplanFollowupStillBlocksTaskV0(
 		stringInSetV0(run.StartedAgents, agentRef)
 }
 
-func assessmentReplanTaskHasTerminalFailedFollowupV0(
+func assessmentReplanTaskTerminalFailedFollowupCountV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	taskRef string,
-) bool {
+) int {
 	taskRef = strings.TrimSpace(taskRef)
 	if taskRef == "" {
-		return false
+		return 0
 	}
 	needle := "#task:" + taskRef + "#action:" +
 		string(orquestacoreworkflow.ReplanDecisionActionReplaceAgentV0)
+	count := 0
 	for _, projection := range run.ReplanDecisions {
 		projection = strings.TrimSpace(projection)
 		if !strings.Contains(projection, needle) {
@@ -67,11 +70,11 @@ func assessmentReplanTaskHasTerminalFailedFollowupV0(
 		}
 		for _, followupRef := range assessmentReplanFollowupAgentRefsV0(projection) {
 			if assessmentReplanFollowupTerminalFailedV0(run, followupRef) {
-				return true
+				count++
 			}
 		}
 	}
-	return false
+	return count
 }
 
 func assessmentReplanFollowupTerminalFailedV0(

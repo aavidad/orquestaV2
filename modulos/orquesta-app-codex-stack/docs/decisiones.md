@@ -1,6 +1,37 @@
 # Decisiones: orquesta-app-codex-stack
 
 ```text
+Fecha: 2026-06-22
+Decision: Un replacement de assessment terminal sin entrega no bloquea para
+siempre nuevos replacements de la misma tarea; se permite reintento acotado.
+Motivo: en OPES tractorista un replacement fallo por un lock local obsoleto ya
+corregido, pero `AssessmentReplanSourceV0` bloqueaba cualquier nuevo
+replacement por existir un followup terminal fallido. El plan quedaba en
+`wait-subagents-terminal-without-delivery` esperando una entrega imposible.
+Impacto: el stack no duplica agentes si el followup sigue vivo, pedido o
+iniciado; si ya esta perdido/parado/fallido sin entrega, genera otro
+replacement hasta un maximo de tres followups terminales por tarea. No cambia el
+core ni interpreta contenido OPES.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-06-22
+Decision: El stack reconcilia `LaunchRuntimeAgent` reclamado si existe registro
+en `ProcessRegistry` pero la proyeccion del run no refleja el agente iniciado.
+Motivo: en OPES tractorista se observo un corte parcial donde el outbox de
+launch quedo reclamado, `ProcessRegistry` tenia `process_ref`/`launch_ref` y el
+PID ya habia muerto, pero `run.Agents` y `run.StartedAgents` no incluian el
+agente. El supervisor no podia clasificarlo como vivo, perdido ni relanzable.
+Impacto: `DrainRunV0` lee eventos durables y `ProcessRegistry`: reproyecta
+`AgentRequested` si falta, reproyecta `AgentStarted` si ya existe evento, o
+registra `AgentStarted` desde el proceso registrado y ACKea el outbox
+supersedido. No toca el core ni interpreta texto de agente; deja que el ciclo
+normal posterior gestione ACK, perdida o replan.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-06-13
 Decision: El residente no materializa `task-council-*` mientras haya una tarea
 de programacion/autonomia abierta.

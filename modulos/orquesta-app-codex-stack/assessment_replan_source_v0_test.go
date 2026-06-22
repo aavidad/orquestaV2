@@ -252,7 +252,7 @@ func TestAssessmentReplanSourceV0NoEncadenaReemplazosParaMismaTarea(t *testing.T
 	}
 }
 
-func TestAssessmentReplanSourceV0NoReintentaEnBucleSiFollowupFallo(t *testing.T) {
+func TestAssessmentReplanSourceV0ReintentaSiFollowupFalloTerminal(t *testing.T) {
 	runRef := "run-ref-assessment-replan-stack-chain-failed-001"
 	oldAgentRef := "agent-ref-assessment-chain-failed-old-001"
 	replacementAgentRef := "agent-ref-assessment-chain-failed-replacement-001"
@@ -277,8 +277,48 @@ func TestAssessmentReplanSourceV0NoReintentaEnBucleSiFollowupFallo(t *testing.T)
 	if err != nil {
 		t.Fatalf("BuildAgentAssessmentReplanPlansV0 chain failed: %v", err)
 	}
+	if len(plans) != 1 ||
+		plans[0].TaskRef != taskRef ||
+		plans[0].AgentRequestID == replacementAgentRef {
+		t.Fatalf("debe reintentar followup terminal con nuevo replacement, plans=%+v", plans)
+	}
+}
+
+func TestAssessmentReplanSourceV0CortaBucleTrasTresFollowupsFallidos(t *testing.T) {
+	runRef := "run-ref-assessment-replan-stack-chain-failed-max-001"
+	taskRef := "task-ref-assessment-stack-chain-failed-max-001"
+	failedRefs := []string{
+		"agent-ref-assessment-chain-failed-max-replacement-001",
+		"agent-ref-assessment-chain-failed-max-replacement-002",
+		"agent-ref-assessment-chain-failed-max-replacement-003",
+	}
+	source := AssessmentReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(
+			assessmentReplanDescriptorForTestV0(runRef, failedRefs[2], taskRef),
+		),
+	}
+	request := assessmentReplanRequestForTestV0(runRef, failedRefs[2], taskRef, false)
+	request.Run.ReplanDecisions = []string{
+		"replan-ref-chain-failed-max-001#source:assessment-ref-chain-old#task:" + taskRef +
+			"#action:" + string(orquestacoreworkflow.ReplanDecisionActionReplaceAgentV0) +
+			"#followups:" + failedRefs[0],
+		"replan-ref-chain-failed-max-002#source:assessment-ref-chain-old#task:" + taskRef +
+			"#action:" + string(orquestacoreworkflow.ReplanDecisionActionReplaceAgentV0) +
+			"#followups:" + failedRefs[1],
+		"replan-ref-chain-failed-max-003#source:assessment-ref-chain-old#task:" + taskRef +
+			"#action:" + string(orquestacoreworkflow.ReplanDecisionActionReplaceAgentV0) +
+			"#followups:" + failedRefs[2],
+	}
+	request.Run.Agents = append([]string(nil), failedRefs...)
+	request.Run.StoppedAgents = append([]string(nil), failedRefs...)
+	request.Run.ConfirmedStoppedAgents = append([]string(nil), failedRefs...)
+
+	plans, err := source.BuildAgentAssessmentReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildAgentAssessmentReplanPlansV0 chain failed max: %v", err)
+	}
 	if len(plans) != 0 {
-		t.Fatalf("no debe reintentar indefinidamente si el followup fallo, plans=%+v", plans)
+		t.Fatalf("debe cortar bucle tras tres followups terminales, plans=%+v", plans)
 	}
 }
 

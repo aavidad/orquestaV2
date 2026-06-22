@@ -42,7 +42,7 @@ func (source AssessmentReplanSourceV0) BuildAgentAssessmentReplanPlansV0(
 		if taskRef == "" {
 			continue
 		}
-		if assessmentReplanTaskHasTerminalFailedFollowupV0(request.Run, taskRef) {
+		if assessmentReplanTaskTerminalFailedFollowupCountV0(request.Run, taskRef) >= assessmentReplanMaxTerminalFailedFollowupsV0 {
 			continue
 		}
 		if assessmentReplanTaskHasMaterializedFollowupV0(request.Run, taskRef) {

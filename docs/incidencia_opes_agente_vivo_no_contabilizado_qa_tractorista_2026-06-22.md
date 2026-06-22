@@ -45,3 +45,46 @@ Objetivo: QA textual y de tests del curso `operario-tractorista-grupo-5`.
 Un smoke equivalente debe lanzar una run con limite de concurrencia y verificar
 que cada directorio/proceso real aparece en `agents[]`, que su tarea no queda
 `pending`, y que `agents_in_flight` coincide con procesos vivos controlados.
+
+## Ampliacion 2026-06-22: Launch Reclamado Sin Proyeccion
+
+Run OPES:
+`run-opes-tractorista-rework-tests-004-006-008-20260622`.
+
+Sintoma adicional confirmado:
+
+1. `g01` y `g03` arrancaron y dejaron `agent_ack.json`.
+2. `g02` quedo con outbox `LaunchRuntimeAgent` en estado `no_ack` reclamado.
+3. `ProcessRegistry` tenia registro de `g02` con `process_ref`, `pid`,
+   `launch_ref`, `readiness_ref` y `ack-ref-*`.
+4. El PID ya no existia y el run no tenia `g02` en `agents[]` ni en
+   `started_agents[]`, aunque el evento durable `AgentRequested` si existia.
+
+Impacto: el supervisor no podia tratar `g02` como agente iniciado, perdido,
+terminal ni relanzable. La tarea quedaba aparentemente `pending` con un claim de
+outbox vivo, rompiendo la autonomia del cierre OPES.
+
+Arreglo aplicado:
+
+- `DrainRunV0` ejecuta una reconciliacion de `LaunchRuntimeAgent` reclamado
+  contra `ProcessRegistry` antes de recuperar outbox faltante.
+- Si existe `AgentRequested` durable pero no esta proyectado, lo reproyecta por
+  comando idempotente.
+- Si existe `AgentStarted` durable pero falta en la proyeccion, lo aplica sin
+  avanzar cursor historico.
+- Si no existe `AgentStarted` pero si hay registro de proceso, registra
+  `AgentStarted` desde `ProcessRegistry` y ACKea el outbox de lanzamiento
+  supersedido.
+- El ciclo normal posterior puede detectar el proceso muerto o sin ACK y
+  decidir rework/reintento por las reglas existentes.
+
+Validacion focal:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestReconcile(ClaimedLaunchOutbox|OrphanCapacity)'
+```
+
+Criterio de cierre especifico: una run con claim de lanzamiento, registro de
+proceso y proyeccion parcial debe dejar de tener outbox pendiente de launch, el
+agente debe aparecer en `agents[]` y `started_agents[]`, y la supervision debe
+continuar por el flujo normal de ACK, perdida o replan.

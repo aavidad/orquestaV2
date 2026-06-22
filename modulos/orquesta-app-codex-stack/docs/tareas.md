@@ -998,3 +998,61 @@ Reglas cerradas:
 - no mueve proveedor, modelo, HOME, transporte ni OpenAI al nucleo;
 - no convierte el sanitizer en rail de contenido o bloqueo por palabras;
 - no toca OPES productivo ni procesos externos.
+
+## APP-CODEX-STACK-030
+
+Objetivo: reconciliar lanzamientos Codex reclamados cuando `ProcessRegistry`
+existe pero la proyeccion del run no tiene el agente iniciado.
+
+Estado: hecho local.
+
+Trabajo aplicado:
+
+- `DrainRunV0` ejecuta `reconcileClaimedLaunchOutboxForProcessRegistryV0`
+  despues de reconciliar capacidad huerfana y antes de regenerar outbox de
+  lanzamiento faltante;
+- el reconciliador lista `LaunchRuntimeAgent` pendientes/reclamados del ledger;
+- reproyecta `AgentRequested` desde eventos durables si el run no lo refleja;
+- reproyecta `AgentStarted` si el evento ya existe y falta en la proyeccion;
+- si no hay `AgentStarted` pero si registro de proceso, registra
+  `AgentStarted` desde `ProcessRegistry` y ACKea el outbox supersedido;
+- conserva el cierre posterior en el flujo normal de ACK, perdida o replan.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestReconcile(ClaimedLaunchOutbox|OrphanCapacity)'`
+
+Reglas cerradas:
+
+- no toca `orquesta-core-workflow`;
+- no interpreta texto ni logs de agente;
+- no inventa entregas ni marca tareas como cerradas;
+- convierte la inconsistencia en estado causal recuperable para que la
+  supervision normal decida si el agente termino, se perdio o requiere rework.
+
+## APP-CODEX-STACK-031
+
+Objetivo: permitir replacements acotados cuando un followup de assessment ya
+termino sin entrega.
+
+Estado: hecho local.
+
+Trabajo aplicado:
+
+- `AssessmentReplanSourceV0` deja de bloquear una tarea por el primer followup
+  terminal fallido;
+- si el followup anterior sigue vivo, solicitado o iniciado, no duplica agente;
+- si el followup anterior ya esta perdido/parado/fallido sin delivery, permite
+  generar otro replacement;
+- corta el bucle tras `3` followups terminales fallidos por tarea.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestAssessmentReplanSourceV0(ReintentaSiFollowupFalloTerminal|CortaBucleTrasTresFollowupsFallidos|NoEncadenaReemplazosParaMismaTarea)'`
+
+Reglas cerradas:
+
+- no reabre reemplazos mientras exista un agente materializado que aun pueda
+  entregar;
+- no deja el plan bloqueado esperando una entrega imposible;
+- no mete reglas OPES en el core.

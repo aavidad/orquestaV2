@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -366,6 +367,152 @@ func TestReconcileOrphanCapacityOutboxForRunV0AckSupersededDecisionPersistente(t
 		RunID:       runRef,
 		TargetPort:  orquestacoreworkflow.OutboxTargetCapacityV0,
 		MessageType: orquestacoreworkflow.OutboxMessageRequestCapacityDecisionV0,
+	})
+	if len(issues) > 0 || len(pending) != 0 {
+		t.Fatalf("pending=%+v issues=%+v", pending, issues)
+	}
+}
+
+func TestReconcileClaimedLaunchOutboxForProcessRegistryV0RegistraStartedYAck(t *testing.T) {
+	ctx := context.Background()
+	runRef := "run-ref-launch-outbox-claimed-process-001"
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	eventSink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	ledger, err := orquestapersistence.NewFileOutboxLedgerV0(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewFileOutboxLedgerV0: %v", err)
+	}
+	processRegistry := orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
+	run := codexStackStartOpenRunForOutboxRecoveryV0(t, ctx, runStore, eventSink, runRef)
+	capacityRef := "capacity-ref-launch-outbox-claimed-process-001"
+	capacityCommand, err := orquestacoreworkflow.NewRequestCapacityCommandV0(
+		launchOutboxRecoveryCommandMetaV0(runRef, "cmd-launch-claimed-capacity-001", "idem-launch-claimed-capacity-001"),
+		orquestacoreworkflow.RequestCapacityCommandPayloadV0{
+			CapacityRequestID:          capacityRef,
+			PhaseID:                    string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			TaskRef:                    "task-ref-launch-outbox-claimed-process-001",
+			ReasonCode:                 "programacion_siguiente_paso",
+			Summary:                    "Capacidad para agente parcial.",
+			MinimumRecommendedCapacity: orquestacoreworkflow.OrchestrationCapacityMediumV0,
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewRequestCapacityCommandV0: %v", err)
+	}
+	if _, err := orquestacionnucleoapp.HandleStoredWorkflowCommandV0(ctx, runStore, eventSink, capacityCommand); err != nil {
+		t.Fatalf("HandleStoredWorkflowCommandV0 capacity: %v", err)
+	}
+	decisionCommand, err := orquestacoreworkflow.NewRegisterCapacityDecisionCommandV0(
+		launchOutboxRecoveryCommandMetaV0(runRef, "cmd-launch-claimed-capacity-decision-001", "idem-launch-claimed-capacity-decision-001"),
+		orquestacoreworkflow.RegisterCapacityDecisionCommandPayloadV0{
+			CapacityRequestID: capacityRef,
+			DecisionRef:       "capacity-decision-ref-launch-outbox-claimed-process-001",
+			Tier:              orquestacoreworkflow.OrchestrationCapacityMediumV0,
+			ReasoningEffort:   orquestacoreworkflow.OrchestrationCapacityMediumV0,
+			Summary:           "Decision para agente parcial.",
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewRegisterCapacityDecisionCommandV0: %v", err)
+	}
+	if _, err := orquestacionnucleoapp.HandleStoredWorkflowCommandV0(ctx, runStore, eventSink, decisionCommand); err != nil {
+		t.Fatalf("HandleStoredWorkflowCommandV0 decision: %v", err)
+	}
+	run, err = runStore.LoadRunV0(ctx, runRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	agentRef := "agent-ref-launch-outbox-claimed-process-001"
+	requestAgentCommand, err := orquestacoreworkflow.NewRequestAgentCommandV0(
+		launchOutboxRecoveryCommandMetaV0(runRef, "cmd-agent-launch-claimed-process-001", "idem-agent-launch-claimed-process-001"),
+		orquestacoreworkflow.RequestAgentCommandPayloadV0{
+			AgentRequestID:     agentRef,
+			PhaseID:            string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			TaskRef:            "task-ref-launch-outbox-claimed-process-001",
+			CapacityRequestRef: capacityRef,
+			Role:               "implementacion",
+			Summary:            "Agente parcial con proceso registrado.",
+			EvidenceRefs:       []string{"evidence-ref-agent-launch-claimed-process-001"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewRequestAgentCommandV0: %v", err)
+	}
+	result, err := orquestacoreworkflow.HandleCommandV0(run, requestAgentCommand)
+	if err != nil {
+		t.Fatalf("HandleCommandV0 request agent parcial: %v", err)
+	}
+	if len(result.Events) != 1 || len(result.Outbox) != 1 {
+		t.Fatalf("request agent parcial events=%d outbox=%d", len(result.Events), len(result.Outbox))
+	}
+	if err := eventSink.AppendRunEventsV0(ctx, runRef, result.Events); err != nil {
+		t.Fatalf("AppendRunEventsV0 request agent parcial: %v", err)
+	}
+	if _, issues := ledger.SavePending(ctx, result.Outbox); len(issues) > 0 {
+		t.Fatalf("SavePending launch parcial: %+v", issues)
+	}
+	message := result.Outbox[0]
+	claim := orquestaoutboxdispatch.OutboxDispatchClaimV0{
+		MessageID:      message.MessageID,
+		RunID:          message.RunID,
+		TargetPort:     message.TargetPort,
+		IdempotencyKey: message.IdempotencyKey,
+	}
+	if claimed, issues := ledger.ClaimOutboxDispatchV0(claim); len(issues) > 0 || !claimed.Claimed {
+		t.Fatalf("ClaimOutboxDispatchV0: claimed=%+v issues=%+v", claimed, issues)
+	}
+	if err := processRegistry.RecordAgentProcessV0(ctx, orquestacionnucleoapp.AgentProcessRegistryRecordV0{
+		RunID:          runRef,
+		AgentRequestID: agentRef,
+		ProcessRef:     "process-ref-launch-outbox-claimed-process-001",
+		SessionRef:     "session-ref-launch-outbox-claimed-process-001",
+		LaunchRef:      "launch-ref-launch-outbox-claimed-process-001",
+		ReadinessRef:   "readiness-ref-launch-outbox-claimed-process-001",
+		EvidenceRefs: []string{
+			"process-ref-launch-outbox-claimed-process-001",
+			"ack-ref-launch-outbox-claimed-process-001",
+			"readiness-ref-launch-outbox-claimed-process-001",
+		},
+	}); err != nil {
+		t.Fatalf("RecordAgentProcessV0: %v", err)
+	}
+	stack := StackV0{
+		Stores: StoresV0{
+			RunStore:        runStore,
+			EventSink:       eventSink,
+			OutboxLedger:    ledger,
+			ProcessRegistry: processRegistry,
+		},
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			RunStore:     runStore,
+			EventSink:    eventSink,
+			EventReader:  eventSink,
+			OutboxLedger: ledger,
+		},
+	}
+
+	reconciled, err := stack.reconcileClaimedLaunchOutboxForProcessRegistryV0(ctx, DrainRunRequestV0{
+		RunRef:        runRef,
+		CorrelationID: "corr-launch-outbox-claimed-process-001",
+		OccurredAt:    "2026-06-22T20:00:00Z",
+	}, run)
+	if err != nil {
+		t.Fatalf("reconcileClaimedLaunchOutboxForProcessRegistryV0: %v", err)
+	}
+	if !reconciled {
+		t.Fatalf("launch outbox reclamado no reconciliado")
+	}
+	loaded, err := runStore.LoadRunV0(ctx, runRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 final: %v", err)
+	}
+	if !codexStackStringInSetV0(loaded.Agents, agentRef) || !codexStackStringInSetV0(loaded.StartedAgents, agentRef) {
+		t.Fatalf("agents=%v started=%v", loaded.Agents, loaded.StartedAgents)
+	}
+	pending, issues := ledger.ListPendingOutboxV0(orquestaoutboxdispatch.PendingOutboxFilterV0{
+		RunID:       runRef,
+		TargetPort:  orquestacoreworkflow.OutboxTargetAgentLauncherV0,
+		MessageType: orquestacoreworkflow.OutboxMessageLaunchRuntimeAgentV0,
 	})
 	if len(issues) > 0 || len(pending) != 0 {
 		t.Fatalf("pending=%+v issues=%+v", pending, issues)

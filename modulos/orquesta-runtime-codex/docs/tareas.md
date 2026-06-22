@@ -147,3 +147,31 @@ Validacion:
 - bateria T208 cruzada del paquete OrquestaV2.
 
 Estado: documentado el 2026-05-27; nuevos huecos requieren owner focal.
+
+## RTCODEX-007 - Startup lock obsoleto no supera timeout
+
+Objetivo: evitar que un lock global de arranque Codex vacio y obsoleto bloquee
+agentes OPES hasta agotar timeout cuando Orquesta ya puede reaperlo.
+
+Estado: hecho local.
+
+Trabajo aplicado:
+
+- el wrapper calcula `ORQUESTA_CODEX_STARTUP_LOCK_STALE_SECONDS` por defecto a
+  partir de `ORQUESTA_CODEX_STARTUP_LOCK_TIMEOUT_SECONDS`;
+- si el stale configurado es mayor que el timeout efectivo, se acota al
+  timeout;
+- un lock vacio antiguo se reapea antes de emitir
+  `orquesta_codex_startup_lock_timeout`.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex -run 'TestCodexWrapperV0(RetiraStartupLockObsoletoVacio|StaleLockPorDefectoNoSuperaTimeout)'`
+
+Criterios cerrados:
+
+- no toca `orquesta-core-workflow`;
+- no interpreta salida de Codex;
+- no elimina locks recientes;
+- corrige autonomia de lanzamiento sin cambiar la politica de serializacion de
+  arranque compartido.

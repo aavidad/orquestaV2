@@ -1309,6 +1309,7 @@ Validacion recuperacion de outbox de lanzamiento:
 
 ```bash
 go test -count=1 ./modulos/orquesta-app-codex-stack -run TestRecoverMissingLaunchOutboxForRequestedAgentsV0ReconstruyeOutboxTrasPersistParcial
+go test -count=1 ./modulos/orquesta-app-codex-stack -run TestReconcileClaimedLaunchOutboxForProcessRegistryV0RegistraStartedYAck
 go test -count=1 ./modulos/orquesta-app-codex-stack
 ```
 
@@ -1317,3 +1318,8 @@ Cobertura:
 - `TestRecoverMissingLaunchOutboxForRequestedAgentsV0ReconstruyeOutboxTrasPersistParcial`
   reproduce un `AgentRequested` durable sin outbox `LaunchRuntimeAgent` y fija
   que el stack reconstruye el mensaje pendiente desde el evento causal.
+- `TestReconcileClaimedLaunchOutboxForProcessRegistryV0RegistraStartedYAck`
+  reproduce un outbox `LaunchRuntimeAgent` reclamado, `ProcessRegistry`
+  presente y proyeccion parcial sin `AgentRequested`/`AgentStarted`; fija que
+  el stack proyecta el agente, registra el inicio causal y ACKea el outbox
+  supersedido.

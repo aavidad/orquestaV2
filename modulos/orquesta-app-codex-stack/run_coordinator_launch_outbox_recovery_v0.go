@@ -128,6 +128,219 @@ func capacityOutboxDecisionSetV0(
 	return decided
 }
 
+func (stack StackV0) reconcileClaimedLaunchOutboxForProcessRegistryV0(
+	ctx context.Context,
+	request DrainRunRequestV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) (bool, error) {
+	if stack.Stores.RunStore == nil || stack.Stores.OutboxLedger == nil ||
+		stack.Stores.ProcessRegistry == nil || stack.Ports.EventSink == nil {
+		return false, nil
+	}
+	pending, err := stack.pendingLaunchOutboxEntriesForReconcileV0(ctx, run.RunID)
+	if err != nil {
+		return false, err
+	}
+	if len(pending) == 0 {
+		return false, nil
+	}
+	reader := stack.eventReaderForLaunchOutboxRecoveryV0()
+	if reader == nil {
+		return false, nil
+	}
+	events, err := reader.LoadRunEventsV0(ctx, run.RunID)
+	if err != nil {
+		return false, err
+	}
+	agentRequestedEvents := agentRequestedEventsByAgentRefV0(run.RunID, events)
+	agentStartedEvents := agentStartedEventsByAgentRefV0(run.RunID, events)
+	current := run
+	reconciled := false
+	for _, entry := range pending {
+		var payload orquestacoreworkflow.LaunchRuntimeAgentRequestV0
+		if err := json.Unmarshal(entry.Payload, &payload); err != nil {
+			continue
+		}
+		agentRef := strings.TrimSpace(payload.AgentRequestID)
+		if agentRef == "" {
+			continue
+		}
+		if codexStackStringInSetV0(current.StartedAgents, agentRef) {
+			if err := stack.ackSupersededLaunchOutboxEntryV0(entry, payload, nil); err != nil {
+				return false, err
+			}
+			reconciled = true
+			continue
+		}
+		var projected bool
+		var projectErr error
+		current, projected, projectErr = stack.projectDurableAgentRequestedForLaunchRecoveryV0(ctx, current, agentRef, agentRequestedEvents)
+		if projectErr != nil {
+			return false, projectErr
+		}
+		if projected {
+			reconciled = true
+		}
+		if !codexStackStringInSetV0(current.Agents, agentRef) {
+			continue
+		}
+		if event, ok := agentStartedEvents[agentRef]; ok {
+			next, applied, err := stack.projectDurableAgentStartedForLaunchRecoveryV0(ctx, current, event)
+			if err != nil {
+				return false, err
+			}
+			current = next
+			reconciled = reconciled || applied
+			if err := stack.ackSupersededLaunchOutboxEntryV0(entry, payload, nil); err != nil {
+				return false, err
+			}
+			reconciled = true
+			continue
+		}
+		record, err := stack.Stores.ProcessRegistry.ResolveAgentProcessV0(ctx, strings.TrimSpace(run.RunID), agentRef)
+		if err != nil {
+			continue
+		}
+		command, err := registerAgentStartedCommandFromProcessRecordV0(entry, payload, record, request)
+		if err != nil {
+			return false, err
+		}
+		if _, err := orquestacionnucleoapp.HandleStoredWorkflowCommandV0(ctx, stack.Stores.RunStore, stack.Ports.EventSink, command); err != nil {
+			return false, err
+		}
+		if err := stack.ackSupersededLaunchOutboxEntryV0(entry, payload, record.EvidenceRefs); err != nil {
+			return false, err
+		}
+		current, err = stack.Stores.RunStore.LoadRunV0(ctx, run.RunID)
+		if err != nil {
+			return false, err
+		}
+		reconciled = true
+	}
+	return reconciled, nil
+}
+
+func (stack StackV0) projectDurableAgentRequestedForLaunchRecoveryV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	agentRef string,
+	events map[string]orquestacoreworkflow.OrchestrationEventV0,
+) (orquestacoreworkflow.OrchestrationRunV0, bool, error) {
+	if codexStackStringInSetV0(run.Agents, agentRef) {
+		return run, false, nil
+	}
+	event, ok := events[strings.TrimSpace(agentRef)]
+	if !ok {
+		return run, false, nil
+	}
+	command, err := requestAgentCommandFromRequestedEventV0(event)
+	if err != nil {
+		return run, false, err
+	}
+	if _, err := orquestacionnucleoapp.HandleStoredWorkflowCommandV0(ctx, stack.Stores.RunStore, stack.Ports.EventSink, command); err != nil {
+		return run, false, err
+	}
+	next, err := stack.Stores.RunStore.LoadRunV0(ctx, run.RunID)
+	return next, true, err
+}
+
+func (stack StackV0) projectDurableAgentStartedForLaunchRecoveryV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	event orquestacoreworkflow.OrchestrationEventV0,
+) (orquestacoreworkflow.OrchestrationRunV0, bool, error) {
+	var payload orquestacoreworkflow.AgentStartedPayloadV0
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return run, false, err
+	}
+	agentRef := strings.TrimSpace(payload.AgentRequestID)
+	if agentRef == "" || codexStackStringInSetV0(run.StartedAgents, agentRef) {
+		return run, false, nil
+	}
+	lastEventID := run.LastEventID
+	lastSequence := run.LastSequence
+	projected, err := orquestacoreworkflow.ApplyEventV0(run, event)
+	if err != nil {
+		return run, false, err
+	}
+	projected.LastEventID = lastEventID
+	projected.LastSequence = lastSequence
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, projected); err != nil {
+		return run, false, err
+	}
+	return projected, true, nil
+}
+
+func registerAgentStartedCommandFromProcessRecordV0(
+	entry orquestaoutboxdispatch.OutboxPendingEntryV0,
+	payload orquestacoreworkflow.LaunchRuntimeAgentRequestV0,
+	record orquestacionnucleoapp.AgentProcessRegistryRecordV0,
+	request DrainRunRequestV0,
+) (orquestacoreworkflow.OrchestrationCommandV0, error) {
+	agentRef := firstNonEmptyQueuedSourceV0(
+		strings.TrimSpace(record.AgentRequestID),
+		strings.TrimSpace(payload.AgentRequestID),
+	)
+	return orquestacoreworkflow.NewRegisterAgentStartedCommandV0(
+		orquestacoreworkflow.OrchestrationCommandMetaV0{
+			CommandID:      "cmd-reconcile-agent-started-" + strings.TrimSpace(entry.MessageID),
+			RunID:          strings.TrimSpace(entry.RunID),
+			IdempotencyKey: "idem-reconcile-agent-started-" + strings.TrimSpace(entry.MessageID),
+			CorrelationID:  firstNonEmptyQueuedSourceV0(strings.TrimSpace(request.CorrelationID), strings.TrimSpace(entry.CorrelationID)),
+			RequestedBy:    codexStackLaunchOutboxRecoveryRequestedByV0,
+			OccurredAt:     firstNonEmptyQueuedSourceV0(strings.TrimSpace(request.OccurredAt), "2026-05-10T12:00:00Z"),
+		},
+		orquestacoreworkflow.RegisterAgentStartedCommandPayloadV0{
+			AgentRequestID: agentRef,
+			LaunchRef:      strings.TrimSpace(record.LaunchRef),
+			AckRef:         ackRefFromAgentProcessRecordV0(record),
+			ReadinessRef:   strings.TrimSpace(record.ReadinessRef),
+			EvidenceRefs: compactStringsV0(append(
+				record.EvidenceRefs,
+				payload.EvidenceRefs...,
+			)),
+		},
+	)
+}
+
+func ackRefFromAgentProcessRecordV0(
+	record orquestacionnucleoapp.AgentProcessRegistryRecordV0,
+) string {
+	for _, ref := range compactStringsV0(record.EvidenceRefs) {
+		if strings.HasPrefix(ref, "ack-ref-") {
+			return ref
+		}
+	}
+	return "ack-ref-" + strings.TrimSpace(record.AgentRequestID)
+}
+
+func (stack StackV0) ackSupersededLaunchOutboxEntryV0(
+	entry orquestaoutboxdispatch.OutboxPendingEntryV0,
+	payload orquestacoreworkflow.LaunchRuntimeAgentRequestV0,
+	evidenceRefs []string,
+) error {
+	if stack.Stores.OutboxLedger == nil {
+		return nil
+	}
+	issues := stack.Stores.OutboxLedger.AckOutboxDispatchV0(orquestaoutboxdispatch.OutboxDispatchAckV0{
+		MessageID:   strings.TrimSpace(entry.MessageID),
+		RunID:       strings.TrimSpace(entry.RunID),
+		TargetPort:  strings.TrimSpace(entry.TargetPort),
+		DispatchRef: "dispatch-ref-reconciled-" + strings.TrimSpace(entry.MessageID),
+		EvidenceRefs: compactStringsV0(append(append(
+			payload.EvidenceRefs,
+			evidenceRefs...,
+		),
+			"evidence-ref-launch-outbox-reconciled-from-process-registry",
+			"evidence-ref-agent-request-"+strings.TrimSpace(payload.AgentRequestID),
+		)),
+	})
+	if len(issues) > 0 {
+		return fmt.Errorf("launch_outbox_reconcile: ack_superseded: %s", strings.TrimSpace(issues[0].Code))
+	}
+	return nil
+}
+
 func (stack StackV0) ackSupersededCapacityOutboxEntryV0(
 	entry orquestaoutboxdispatch.OutboxPendingEntryV0,
 	payload orquestacoreworkflow.CapacityDecisionRequestV0,
@@ -150,6 +363,36 @@ func (stack StackV0) ackSupersededCapacityOutboxEntryV0(
 		return fmt.Errorf("capacity_outbox_reconcile: ack_superseded: %s", strings.TrimSpace(issues[0].Code))
 	}
 	return nil
+}
+
+func (stack StackV0) pendingLaunchOutboxEntriesForReconcileV0(
+	ctx context.Context,
+	runID string,
+) ([]orquestaoutboxdispatch.OutboxPendingEntryV0, error) {
+	pending, issues := stack.Stores.OutboxLedger.ListPending(ctx, orquestadirectorcycleoutbox.DirectorCycleOutboxPendingFilterV0{
+		RunRef:     strings.TrimSpace(runID),
+		TargetPort: orquestacoreworkflow.OutboxTargetAgentLauncherV0,
+	})
+	if len(issues) > 0 {
+		return nil, fmt.Errorf("launch_outbox_reconcile: list_pending: %s", strings.TrimSpace(issues[0].Code))
+	}
+	entries := make([]orquestaoutboxdispatch.OutboxPendingEntryV0, 0, len(pending))
+	for _, message := range pending {
+		if strings.TrimSpace(message.MessageType) != orquestacoreworkflow.OutboxMessageLaunchRuntimeAgentV0 {
+			continue
+		}
+		entries = append(entries, orquestaoutboxdispatch.OutboxPendingEntryV0{
+			MessageID:      strings.TrimSpace(message.MessageID),
+			RunID:          strings.TrimSpace(message.RunID),
+			TargetPort:     strings.TrimSpace(message.TargetPort),
+			MessageType:    strings.TrimSpace(message.MessageType),
+			IdempotencyKey: strings.TrimSpace(message.IdempotencyKey),
+			CorrelationID:  strings.TrimSpace(message.CorrelationID),
+			PayloadVersion: strings.TrimSpace(message.PayloadVersion),
+			Payload:        append(message.Payload[:0:0], message.Payload...),
+		})
+	}
+	return entries, nil
 }
 
 func (stack StackV0) pendingCapacityOutboxEntriesForReconcileV0(
@@ -460,6 +703,28 @@ func agentRequestedEventsByAgentRefV0(
 			continue
 		}
 		var payload orquestacoreworkflow.AgentRequestedPayloadV0
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			continue
+		}
+		agentRef := strings.TrimSpace(payload.AgentRequestID)
+		if agentRef != "" {
+			out[agentRef] = event
+		}
+	}
+	return out
+}
+
+func agentStartedEventsByAgentRefV0(
+	runRef string,
+	events []orquestacoreworkflow.OrchestrationEventV0,
+) map[string]orquestacoreworkflow.OrchestrationEventV0 {
+	out := map[string]orquestacoreworkflow.OrchestrationEventV0{}
+	for _, event := range events {
+		if strings.TrimSpace(event.RunID) != strings.TrimSpace(runRef) ||
+			event.EventType != orquestacoreworkflow.OrchestrationEventAgentStartedV0 {
+			continue
+		}
+		var payload orquestacoreworkflow.AgentStartedPayloadV0
 		if err := json.Unmarshal(event.Payload, &payload); err != nil {
 			continue
 		}
