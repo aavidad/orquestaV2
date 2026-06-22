@@ -128,5 +128,23 @@ Parche local aplicado el 2026-06-22:
   `estado=ok`, `stop_reason=done`, run persistida `status=cerrada`,
   `current_phase=cierre`, `closed_tasks=1`, `blockers=[]` y cola `closed`.
 
-Quedan abiertas `CTX-TASK-001` a `CTX-TASK-004`; `CTX-TASK-005` queda cubierta
-por este parche y verificada con smoke OPES real con servidor actualizado.
+## Correccion Parcial De Porcentaje
+
+Parche local aplicado el 2026-06-22:
+
+- `modulos/orquesta-mcp/autoprogramming_efficiency_summary_v0.go` deja
+  `operational_health_percentage` como salud operativa separada y calcula
+  `overall_percentage` como mezcla de avance real y salud cuando hay run con
+  tareas.
+- `overall_percentage` ya no puede devolver 100 en una run activa con
+  `completion_percentage=1`; tampoco llega a 100 si el cierre causal no esta
+  `closed`.
+- Prueba añadida:
+  `TestMCPAutoprogrammingStatusExecutorV0OverallNoOcultaProgresoBajo`.
+- Validacion ejecutada:
+  `go test -count=1 ./modulos/orquesta-mcp`.
+
+Quedan abiertas `CTX-TASK-001`, `CTX-TASK-002` y `CTX-TASK-004`; `CTX-TASK-003`
+queda cubierta por este parche a nivel de API de estado, pendiente de smoke con
+servidor reiniciado sobre una run OPES real. `CTX-TASK-005` queda cubierta por
+el parche anterior y verificada con smoke OPES real con servidor actualizado.

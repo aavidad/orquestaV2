@@ -80,8 +80,8 @@ func buildMCPAutoprogrammingEfficiencySummaryV0(
 		run != nil,
 		diagnostics,
 	)
-	summary.OverallPercentage = summary.OperationalHealthPercentage
 	summary.State = stateMCPAutoprogrammingEfficiencyV0(summary, queueVisible, runVisible, run)
+	summary.OverallPercentage = overallPercentageMCPAutoprogrammingEfficiencyV0(summary, runVisible)
 	summary.Confidence = confidenceMCPAutoprogrammingEfficiencyV0(queueVisible, runVisible, summary)
 	summary.Reasons = compactStringsMCPV0(summary.Reasons)
 	return summary
@@ -203,6 +203,23 @@ func operationalHealthMCPAutoprogrammingEfficiencyV0(
 		health = minIntMCPAutoprogrammingEfficiencyV0(health, 60)
 	}
 	return clampIntMCPAutoprogrammingEfficiencyV0(health, 0, 100)
+}
+
+func overallPercentageMCPAutoprogrammingEfficiencyV0(
+	summary *MCPAutoprogrammingEfficiencySummaryV0,
+	runVisible bool,
+) int {
+	if summary == nil {
+		return 0
+	}
+	if !runVisible || summary.TasksTotal <= 0 {
+		return summary.OperationalHealthPercentage
+	}
+	overall := ((summary.CompletionPercentage * 70) + (summary.OperationalHealthPercentage * 30) + 50) / 100
+	if !strings.EqualFold(summary.ClosureStatus, "closed") && overall >= 100 {
+		overall = 99
+	}
+	return clampIntMCPAutoprogrammingEfficiencyV0(overall, 0, 100)
 }
 
 func stateMCPAutoprogrammingEfficiencyV0(

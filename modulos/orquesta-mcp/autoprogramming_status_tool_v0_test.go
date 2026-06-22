@@ -93,6 +93,49 @@ func TestMCPAutoprogrammingStatusExecutorV0DelegaEnColaYRun(t *testing.T) {
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0OverallNoOcultaProgresoBajo(t *testing.T) {
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{},
+		Stats: &fakeMCPAutoprogrammingRunStatusV0{
+			stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+				RunRef:       "run-ref-autop-status-low-progress-001",
+				Status:       "activa",
+				CurrentPhase: "programacion",
+				Counts: orquestacionnucleoapp.DirectorRunStatsCountsV0{
+					TasksTotal:      10,
+					TasksOpen:       10,
+					AgentsRequested: 5,
+					AgentsStarted:   5,
+					AgentsInFlight:  5,
+				},
+				Progress: orquestacionnucleoapp.DirectorProgressStatsV0{
+					PercentComplete:   1,
+					TasksTotal:        10,
+					TasksClosed:       0,
+					ProgressingAgents: 5,
+				},
+				Closure: orquestacionnucleoapp.DirectorClosureStatsV0{
+					Status:  orquestacionnucleoapp.DirectorClosureStatusBlockedV0,
+					Blocked: true,
+				},
+			},
+		},
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{
+		RunRef: "run-ref-autop-status-low-progress-001",
+	})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.State != "live" ||
+		result.EfficiencySummary.CompletionPercentage != 1 ||
+		result.EfficiencySummary.OperationalHealthPercentage != 100 ||
+		result.EfficiencySummary.OverallPercentage != 31 {
+		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0DiagnosticaPuertosNoConfigurados(t *testing.T) {
 	result, err := (MCPAutoprogrammingStatusToolExecutorV0{}).Execute(
 		context.Background(),
