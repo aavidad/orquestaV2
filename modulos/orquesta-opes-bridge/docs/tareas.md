@@ -33,3 +33,25 @@ Bloqueo real:
 No relanzar otra implementacion padre para T12 sin esas precondiciones. La
 reapertura debe ejecutar el runbook con limite bajo, secuencia de derivados y
 sin `JOB_TYPE`/`JOB_REF` manual en la ruta de derivados.
+
+## T13 mínimos editoriales OPES como required tests
+
+Estado: hecho local.
+
+Contexto: OPES detectó un temario `operario-tractorista-grupo-5` demasiado
+pequeño tras pasar por Orquesta como entrega estructural aceptada.
+
+Trabajo aplicado:
+
+- `OPESRequiredTestPolicyV0` añade required tests específicos para paquetes
+  finales: `opes-extension-minima-nivel-*` y
+  `opes-derivacion-comunes-maestro-*`;
+- la política editorial inyectada al agente incluye mínimos por nivel:
+  A1 20.250, A2 14.400, B 10.800, C1 7.200, C2 4.500 y AP 3.150 palabras en
+  ampliado publicable;
+- el contrato de `finalize_temario_package` exige informe de extensión y matriz
+  de comunes o no aplicabilidad explícita.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-opes-bridge -run 'TestOPESRequiredTestPolicyV0FinalTemarioExigeMinimosYComunes'`.

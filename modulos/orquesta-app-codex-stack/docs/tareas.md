@@ -1084,3 +1084,32 @@ Reglas cerradas:
   entregar;
 - no deja el plan bloqueado esperando una entrega imposible;
 - no mete reglas OPES en el core.
+
+## APP-CODEX-STACK-032
+
+Objetivo: impedir que un receipt OPES aceptado cierre paquetes finales de temario
+sin evidencia editorial mínima.
+
+Estado: hecho local.
+
+Trabajo aplicado:
+
+- el cierre operativo de `domain_work` OPES bloquea `finalize_topic_package`,
+  `finalize_temario_package`, `close_temario_package` y equivalentes si el
+  receipt no trae evidencia de extensión mínima y comunes/no aplicabilidad;
+- la causalidad de artefactos usa `expected_artifact_type` cuando el bridge OPES
+  lo declara;
+- un paquete final necesita evidencia tipo `opes-extension-minima-passed` o
+  `informe_extension_temario`, y evidencia de `matriz_reutilizacion_comunes` o
+  `opes-common-master-not-applicable`.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestOperationalClosureSourceV0(NoCierraOPESFinalSinMinimosYComunes|CierraOPESFinalConMinimosYComunes)'`.
+
+Reglas cerradas:
+
+- no mete mínimos concretos en el núcleo genérico;
+- solo afecta a OPES y paquetes finales;
+- no bloquea borradores, fuentes, visuales, tests ni entregas parciales
+  recuperables.

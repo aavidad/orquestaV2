@@ -192,6 +192,59 @@ func TestOperationalClosureSourceV0NoCierraOPESSinReceiptAceptado(t *testing.T) 
 	}
 }
 
+func TestOperationalClosureSourceV0NoCierraOPESFinalSinMinimosYComunes(t *testing.T) {
+	ctx := context.Background()
+	fixture := newOPESDomainWorkClosureFixtureForTestV0(t, "final-sin-minimos")
+	record := opesDomainWorkAppChangeRecordForTestV0(fixture.Run.RunID, "opes-job-job-ref-closure-final-sin-minimos")
+	record.Request.ExternalWork.WorkKind = "finalize_temario_package"
+	fixture.Source.AppChangeStore = orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	submission := opesAcceptedSubmissionRecordForFixtureV0(fixture, "final-sin-minimos")
+	submission.ArtifactType = "final_domain_package"
+	if err := fixture.Ledger.RecordDomainWorkArtifactSubmissionV0(ctx, submission); err != nil {
+		t.Fatalf("record receipt: %v", err)
+	}
+
+	_, ok, err := fixture.Source.BuildOperationalDirectorClosureRequestV0(
+		ctx,
+		orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0{Run: fixture.Run},
+	)
+	if err != nil {
+		t.Fatalf("BuildOperationalDirectorClosureRequestV0: %v", err)
+	}
+	if ok {
+		t.Fatalf("no debe cerrar OPES final sin evidencias de extension y comunes")
+	}
+}
+
+func TestOperationalClosureSourceV0CierraOPESFinalConMinimosYComunes(t *testing.T) {
+	ctx := context.Background()
+	fixture := newOPESDomainWorkClosureFixtureForTestV0(t, "final-con-minimos")
+	record := opesDomainWorkAppChangeRecordForTestV0(fixture.Run.RunID, "opes-job-job-ref-closure-final-con-minimos")
+	record.Request.ExternalWork.WorkKind = "finalize_temario_package"
+	fixture.Source.AppChangeStore = orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	submission := opesAcceptedSubmissionRecordForFixtureV0(fixture, "final-con-minimos")
+	submission.ArtifactType = "final_domain_package"
+	submission.EvidenceRefs = append(submission.EvidenceRefs,
+		"opes-extension-minima-passed",
+		"opes-common-master-not-applicable",
+	)
+	if err := fixture.Ledger.RecordDomainWorkArtifactSubmissionV0(ctx, submission); err != nil {
+		t.Fatalf("record receipt: %v", err)
+	}
+
+	got, ok, err := fixture.Source.BuildOperationalDirectorClosureRequestV0(
+		ctx,
+		orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0{Run: fixture.Run},
+	)
+	if err != nil || !ok {
+		t.Fatalf("BuildOperationalDirectorClosureRequestV0 ok=%v err=%v request=%+v", ok, err, got)
+	}
+	if !codexStackOperationalClosureContainsV0(got.EvidenceRefs, "opes-extension-minima-passed") ||
+		!codexStackOperationalClosureContainsV0(got.EvidenceRefs, "opes-common-master-not-applicable") {
+		t.Fatalf("cierre final OPES sin evidencias propagadas: %+v", got)
+	}
+}
+
 func TestOperationalClosureSourceV0CierraAppChangeExternalWorkLegacyConTestsCausales(t *testing.T) {
 	ctx := context.Background()
 	runRef := "run-stack-opes-a1-legacy-app-change-closure"

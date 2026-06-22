@@ -379,6 +379,9 @@ func finalizedTemarioPackageAcceptanceCriteriaV0() []string {
 	return []string{
 		"entregar paquete de temario terminado al 100% para revision local del operador antes de produccion",
 		"incluir temario resumido y ampliado separados, fuentes, exam_research_report, visuales finales, question_bank, audios por apartado, tutor/bots, HTML local, manuales graficos y manifest de trazabilidad",
+		"incluir informe_extension_temario.json y .md con minimos por nivel: A1 20.250, A2 14.400, B 10.800, C1 7.200, C2 4.500 y AP 3.150 palabras en ampliado publicable",
+		"incluir evidencia opes-extension-minima-passed u opes-editorial-minimums-passed solo si todos los temas alcanzan el minimo de su nivel",
+		"incluir matriz_reutilizacion_comunes o evidencia opes-common-master-not-applicable; si hay comunes, deben derivar desde maestro comun A1/A1-A2 o superior validado",
 		"incorporar solo artefactos aceptados por Director o marcados como recuperables en ubicacion interna; no mostrar trazabilidad tecnica al alumnado",
 		"comprobar fases completas por tema: inventario, fuentes, redaccion, expansion, revision, tests, visuales, HTML, RAG, audio, QA, paquete y matriz de rework",
 		"convertir pendientes causales del ACK o matriz de revision en estado pendiente_continuar con followup_refs; no cerrar ready si queda rework abierto",
@@ -394,6 +397,8 @@ func finalizedTopicPackageAcceptanceCriteriaV0() []string {
 	return []string{
 		"cerrar paquete local verificable de un tema y no declararlo temario completo ni listo para produccion",
 		"incluir texto final del tema, tests, visuales_plan, HTML local, RAG, audio o guion/manifest, tutor y qa_final cuando el curso los exija",
+		"incluir informe de extension del tema o del curso; si el ampliado no alcanza el minimo del nivel, devolver pendiente_continuar",
+		"si el tema es comun, incluir matriz de derivacion desde maestro comun A1/A1-A2 o superior validado; si no aplica, declararlo como no aplicable",
 		"si faltan piezas obligatorias, devolver final_domain_package con estado pendiente_continuar y followup_refs causales",
 		"no ocultar pendientes bajo ready, ready_candidate_html ni apto_para_subida_controlada",
 		"no subir a produccion; conservar paquete como evidencia local revisable",

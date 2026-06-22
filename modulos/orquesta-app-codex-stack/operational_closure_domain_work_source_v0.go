@@ -53,6 +53,10 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureD
 	if !codexStackOperationalClosureDomainWorkSubmissionIsCausalV0(accepted, record, deliveryRef) {
 		return nil, true, false, nil
 	}
+	if codexStackOperationalClosureRecordIsOPESV0(record) &&
+		!codexStackOperationalClosureOPESFinalPackageReadyV0(record, accepted) {
+		return nil, true, false, nil
+	}
 	refs := append([]string(nil), accepted.EvidenceRefs...)
 	refs = append(refs, accepted.ReceiptRef, "evidence-ref-domain-work-accepted")
 	if codexStackOperationalClosureRecordIsOPESV0(record) {
@@ -86,8 +90,101 @@ func codexStackOperationalClosureRecordIsOPESV0(
 	if record.Request.ExternalWork == nil {
 		return false
 	}
-	return strings.TrimSpace(record.Request.ExternalWork.ProjectRef) == "opes" ||
-		strings.TrimSpace(record.Request.AppRef) == "opes"
+	return codexStackOperationalClosureRefIsOPESV0(record.Request.ExternalWork.ProjectRef) ||
+		codexStackOperationalClosureRefIsOPESV0(record.Request.AppRef)
+}
+
+func codexStackOperationalClosureRefIsOPESV0(ref string) bool {
+	ref = strings.TrimSpace(ref)
+	return ref == "opes" || strings.HasPrefix(ref, "opes-")
+}
+
+func codexStackOperationalClosureOPESFinalPackageReadyV0(
+	record orquestaappchange.AppChangeRecordV0,
+	submission DomainWorkArtifactSubmissionRecordV0,
+) bool {
+	if !codexStackOperationalClosureOPESFinalPackageV0(record, submission) {
+		return true
+	}
+	tokens := codexStackOperationalClosureDomainWorkEvidenceTokensV0(submission)
+	return codexStackOperationalClosureEvidenceContainsAnyV0(tokens,
+		"opes-editorial-minimums-passed",
+		"opes-extension-minima-passed",
+		"opes-extension-minima-nivel-passed",
+		"informe_extension_temario",
+		"extension_report_ref",
+		"minimum_extension_status-passed",
+		"minimos-extension-passed",
+	) && codexStackOperationalClosureEvidenceContainsAnyV0(tokens,
+		"opes-common-canonical-reuse-passed",
+		"opes-common-master-not-applicable",
+		"opes-derivacion-comunes-maestro-passed",
+		"matriz_reutilizacion_comunes",
+		"common_reuse_matrix_ref",
+		"master_derivation_matrix_ref",
+		"common_topics_not_applicable",
+	)
+}
+
+func codexStackOperationalClosureOPESFinalPackageV0(
+	record orquestaappchange.AppChangeRecordV0,
+	submission DomainWorkArtifactSubmissionRecordV0,
+) bool {
+	work := record.Request.ExternalWork
+	workKind := ""
+	if work != nil {
+		workKind = strings.TrimSpace(work.WorkKind)
+	}
+	switch workKind {
+	case "finalize_topic_package",
+		"finalize_temario_package",
+		"close_temario_package",
+		"finalize_syllabus_package",
+		"close_syllabus_package":
+		return true
+	}
+	switch strings.TrimSpace(submission.ArtifactType) {
+	case "completed_syllabus_package":
+		return true
+	default:
+		return false
+	}
+}
+
+func codexStackOperationalClosureDomainWorkEvidenceTokensV0(
+	submission DomainWorkArtifactSubmissionRecordV0,
+) []string {
+	tokens := append([]string(nil), submission.EvidenceRefs...)
+	tokens = append(tokens, submission.PayloadRefs...)
+	for _, field := range submission.PayloadFields {
+		tokens = append(tokens, field.Name, field.Value)
+		tokens = append(tokens, field.Values...)
+		if len(field.ValueJSON) > 0 {
+			tokens = append(tokens, string(field.ValueJSON))
+		}
+	}
+	for _, ref := range submission.ExternalRefs {
+		tokens = append(tokens, ref.Kind, ref.Ref)
+	}
+	return codexStackOperationalClosureCompactRefsV0(tokens)
+}
+
+func codexStackOperationalClosureEvidenceContainsAnyV0(
+	values []string,
+	needles ...string,
+) bool {
+	for _, value := range values {
+		value = strings.ToLower(strings.TrimSpace(value))
+		if value == "" {
+			continue
+		}
+		for _, needle := range needles {
+			if strings.Contains(value, strings.ToLower(strings.TrimSpace(needle))) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func codexStackOperationalClosureDomainWorkSubmissionIsCausalV0(
@@ -108,6 +205,7 @@ func codexStackOperationalClosureDomainWorkSubmissionIsCausalV0(
 		strings.TrimSpace(submission.ArtifactRef) != strings.TrimSpace(deliveryRef) {
 		return false
 	}
+	expectedArtifactType := domainWorkExpectedArtifactTypeV0(work.InputFields, work.WorkKind)
 	return strings.TrimSpace(submission.JobRef) == strings.TrimSpace(work.JobRef) &&
-		strings.TrimSpace(submission.ArtifactType) == domainWorkArtifactTypeForWorkKindV0(work.WorkKind)
+		strings.TrimSpace(submission.ArtifactType) == strings.TrimSpace(expectedArtifactType)
 }

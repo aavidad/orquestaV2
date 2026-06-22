@@ -41,7 +41,7 @@ func opesRequiredTestsForJobV0(
 	safeJob := compactOPESBridgeRefV0(jobRef)
 	workKind := compactOPESBridgeRefV0(jobType)
 	artifactType := compactOPESBridgeRefV0(expectedArtifactTypeV0(jobType))
-	return []orquestadomainwork.DomainWorkRequiredTestV0{{
+	tests := []orquestadomainwork.DomainWorkRequiredTestV0{{
 		TestRef: "opes-domain-test-" + workKind + "-" + safeJob,
 		AcceptanceCriteria: []string{
 			"OPES acepta el artefacto por contrato publico submit_artifact.",
@@ -59,6 +59,70 @@ func opesRequiredTestsForJobV0(
 			"opes-expected-artifact-" + artifactType,
 		},
 	}}
+	if opesFinalPackageWorkKindV0(jobType) {
+		tests = append(tests, opesFinalPackageRequiredTestsV0(safeJob, workRefs)...)
+	}
+	return tests
+}
+
+func opesFinalPackageRequiredTestsV0(
+	safeJob string,
+	workRefs []string,
+) []orquestadomainwork.DomainWorkRequiredTestV0 {
+	inputRefs := compactStringsV0(append([]string{"opes-job-" + safeJob}, workRefs...))
+	return []orquestadomainwork.DomainWorkRequiredTestV0{
+		{
+			TestRef: "opes-extension-minima-nivel-" + safeJob,
+			AcceptanceCriteria: []string{
+				"Existe informe_extension_temario.json y .md con conteo por tema.",
+				"Cada ampliado publicable alcanza el minimo de su nivel: A1 20.250, A2 14.400, B 10.800, C1 7.200, C2 4.500 o AP 3.150 palabras.",
+				"Si algun tema no llega, el estado es pendiente_continuar con needs_expansion_min_words_<nivel>.",
+			},
+			AcceptanceCriteriaRefs: []string{"opes-required-extension-minima-nivel"},
+			InputRefs:              inputRefs,
+			ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
+				{Kind: "domain_ref", Ref: "opes"},
+				{Kind: "job_ref", Ref: safeJob},
+				{Kind: "required_evidence", Ref: "informe_extension_temario"},
+			},
+			EvidenceRefs: []string{
+				"opes-rule-minimos-extension-temarios-2026-06-22",
+				"opes-expected-evidence-informe-extension-temario",
+			},
+		},
+		{
+			TestRef: "opes-derivacion-comunes-maestro-" + safeJob,
+			AcceptanceCriteria: []string{
+				"Cada tema comun declara matriz de derivacion desde maestro comun A1/A1-A2 o superior validado.",
+				"Si no hay temas comunes, existe evidencia explicita de no aplicabilidad.",
+				"No se acepta reutilizar un curso vecino como canon cuando exista maestro comun superior.",
+			},
+			AcceptanceCriteriaRefs: []string{"opes-required-derivacion-comunes-maestro"},
+			InputRefs:              inputRefs,
+			ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
+				{Kind: "domain_ref", Ref: "opes"},
+				{Kind: "job_ref", Ref: safeJob},
+				{Kind: "required_evidence", Ref: "matriz_reutilizacion_comunes"},
+			},
+			EvidenceRefs: []string{
+				"opes-rule-comunes-a1-genericos",
+				"opes-expected-evidence-matriz-reutilizacion-comunes",
+			},
+		},
+	}
+}
+
+func opesFinalPackageWorkKindV0(jobType string) bool {
+	switch strings.TrimSpace(jobType) {
+	case "finalize_topic_package",
+		"finalize_temario_package",
+		"close_temario_package",
+		"finalize_syllabus_package",
+		"close_syllabus_package":
+		return true
+	default:
+		return false
+	}
 }
 
 func opesRequiredTestJobRefV0(

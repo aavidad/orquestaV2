@@ -53,3 +53,50 @@ func TestOPESRequiredTestPolicyV0SintetizaSiFaltanDeclarados(t *testing.T) {
 		t.Fatalf("plan=%+v err=%v", plan, err)
 	}
 }
+
+func TestOPESRequiredTestPolicyV0FinalTemarioExigeMinimosYComunes(t *testing.T) {
+	plan, err := (OPESRequiredTestPolicyV0{}).BuildDomainWorkRequiredTestPlanV0(
+		context.Background(),
+		orquestadomainwork.DomainWorkJobRequestV0{
+			CorrelationID:  "corr-policy-opes-final",
+			IdempotencyKey: "idem-policy-opes-final",
+			RequestedBy:    "orquesta",
+			DomainRef:      "opes",
+			WorkKind:       "finalize_temario_package",
+			WorkRefs:       []string{"job-ref-policy-opes-final"},
+			Objective:      "cerrar temario OPES",
+		},
+	)
+	if err != nil {
+		t.Fatalf("BuildDomainWorkRequiredTestPlanV0: %v", err)
+	}
+	got := requiredTestRefsForTestV0(plan.RequiredTests)
+	for _, want := range []string{
+		"opes-domain-test-finalize_temario_package-job-ref-policy-opes-final",
+		"opes-extension-minima-nivel-job-ref-policy-opes-final",
+		"opes-derivacion-comunes-maestro-job-ref-policy-opes-final",
+	} {
+		if !stringInRequiredTestRefsForTestV0(got, want) {
+			t.Fatalf("required_tests=%v falta %s", got, want)
+		}
+	}
+}
+
+func requiredTestRefsForTestV0(
+	tests []orquestadomainwork.DomainWorkRequiredTestV0,
+) []string {
+	out := make([]string, 0, len(tests))
+	for _, test := range tests {
+		out = append(out, test.TestRef)
+	}
+	return out
+}
+
+func stringInRequiredTestRefsForTestV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
