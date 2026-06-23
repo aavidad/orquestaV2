@@ -156,6 +156,9 @@ Documentos de entrada obligatorios para cambios transversales:
 - `/home/alberto/Trabajo/OPES/opes-salidas/coordinacion_temarios/GUIA_AGENTES_CREACION_TESTS_TEMARIOS_TCAE_OPES_2026-06-02.md`
   si tocas bancos de preguntas, tests, `generate_question_bank` o importacion
   local de tests OPES/TCAE.
+- `/home/alberto/Trabajo/OPES/skills/opes-supuestos-practicos/SKILL.md` y
+  `skills/orquesta-supuestos-practicos-opes/SKILL.md` si tocas supuestos
+  prácticos OPES, casos clínicos, casos operativos o supuestos tipo test.
 - `docs/matriz_pruebas_reales_y_smoke_2026-05-17.md` si cambias smokes,
   runtime, OPES, shutdown o pruebas reales.
 

@@ -203,6 +203,9 @@ Estas skills viven en este repo y valen para cualquier consumidor:
   web, assets o paquetes.
 - `skills/orquesta-runtime-modelos/SKILL.md`
   Gestion de modelos locales/cloud por puerto runtime opt-in.
+- `skills/orquesta-supuestos-practicos-opes/SKILL.md`
+  Coordinación de agentes Orquesta para crear, reutilizar, revisar y cerrar
+  supuestos prácticos OPES sin meter canon editorial OPES en el núcleo.
 
 ### OPES como consumidor independiente
 
@@ -218,6 +221,7 @@ Familias vigentes:
 - redaccion de temarios;
 - corrector ortografico;
 - tests de 4 respuestas;
+- supuestos prácticos y supuestos tipo test;
 - infografias y revision visual;
 - audio edge-tts + Whisper;
 - RAG, tutor y bots;

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Orquesta Supuestos Prácticos OPES"
+  short_description: "Coordina agentes para crear y validar supuestos prácticos OPES."
+  default_prompt: "Coordina con Orquesta la creación de supuestos prácticos OPES, usando refs, agentes por tema y validación contra temario."
