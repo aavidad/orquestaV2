@@ -1,6 +1,8 @@
 package orquestaappchangedirectorsource
 
 import (
+	"strings"
+
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoragent "orquesta/modulos/orquesta-director-agent"
@@ -19,11 +21,12 @@ func buildAppChangeDecisionsV0(
 	}
 	if current == orquestacoreworkflow.OrchestrationPhaseProgramacionV0 {
 		decisionRef, _ := appChangeBasisDecisionRefV0(run, refs)
-		return []orquestadirectoragent.DirectorAgentDecisionV0{
+		decisions := []orquestadirectoragent.DirectorAgentDecisionV0{
 			appChangeAnswerDecisionV0(runRef, current, refs),
 			appChangeContractDecisionV0(runRef, current, decisionRef, request, refs),
-			appChangeMicrotaskDecisionV0(runRef, current, request, refs),
 		}
+		decisions = append(decisions, appChangeMicrotaskDecisionsV0(runRef, current, request, refs, run)...)
+		return decisions
 	}
 	if current == orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0 {
 		decisions := []orquestadirectoragent.DirectorAgentDecisionV0{
@@ -45,15 +48,17 @@ func buildAppChangeDecisionsV0(
 			))
 			contractReady = true
 		}
-		taskReady := stringInSetV0(run.Tasks, refs.TaskRef)
+		taskRefs := appChangeMicrotaskRefsV0(request, refs)
+		taskReady := appChangeAllTasksReadyV0(run, taskRefs)
 		if !taskReady && contractReady {
-			decisions = append(decisions, appChangeMicrotaskDecisionV0(
+			decisions = append(decisions, appChangeMicrotaskDecisionsV0(
 				runRef,
 				orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0,
 				request,
 				refs,
-			))
-			taskReady = true
+				run,
+			)...)
+			taskReady = appChangeAllTasksPlannedByDecisionsV0(run, taskRefs, decisions)
 		}
 		if taskReady {
 			decisions = append(decisions, appChangeOpenPhaseV0(
@@ -67,16 +72,25 @@ func buildAppChangeDecisionsV0(
 		return decisions
 	}
 
-	return []orquestadirectoragent.DirectorAgentDecisionV0{
+	decisions := []orquestadirectoragent.DirectorAgentDecisionV0{
 		appChangeAnswerDecisionV0(runRef, current, refs),
 		appChangeOpenPhaseV0(runRef, current, orquestacoreworkflow.OrchestrationPhaseVotacionYDecisionV0, "open-vote", refs),
 		appChangeVoteDecisionV0(runRef, refs),
 		appChangeAcceptDecisionV0(runRef, refs),
 		appChangeOpenPhaseV0(runRef, orquestacoreworkflow.OrchestrationPhaseVotacionYDecisionV0, orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0, "open-plan", refs),
 		appChangeContractDecisionV0(runRef, orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0, refs.DecisionRef, request, refs),
-		appChangeMicrotaskDecisionV0(runRef, orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0, request, refs),
-		appChangeOpenPhaseV0(runRef, orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0, orquestacoreworkflow.OrchestrationPhaseProgramacionV0, "open-program", refs),
 	}
+	decisions = append(decisions, appChangeMicrotaskDecisionsV0(
+		runRef,
+		orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0,
+		request,
+		refs,
+		run,
+	)...)
+	decisions = append(decisions,
+		appChangeOpenPhaseV0(runRef, orquestacoreworkflow.OrchestrationPhasePlanificacionMicrotareasV0, orquestacoreworkflow.OrchestrationPhaseProgramacionV0, "open-program", refs),
+	)
+	return decisions
 }
 
 func appChangeAnswerDecisionV0(
@@ -141,33 +155,172 @@ func appChangeContractDecisionV0(
 	return decision
 }
 
-func appChangeMicrotaskDecisionV0(
+func appChangeMicrotaskDecisionsV0(
 	runRef string,
 	phase orquestacoreworkflow.OrchestrationPhaseIDV0,
 	request orquestaappchange.AppChangeRequestV0,
 	refs appChangeRefSetV0,
-) orquestadirectoragent.DirectorAgentDecisionV0 {
-	decision := appChangeDecisionV0(runRef, phase, "task", orquestadirectoragent.DirectorAgentCommandCreateMicrotaskV0, refs)
-	decision.CreateMicrotask = &orquestadirectoragent.DirectorAgentCreateMicrotaskCommandV0{
-		Task: orquestadirectoragent.DirectorAgentMicrotaskV0{
-			SchemaVersion:      orquestadirectoragent.DirectorAgentMicrotaskSchemaVersionV0,
-			TaskID:             refs.TaskRef,
-			RunID:              runRef,
-			PhaseID:            string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
-			WorkProfileKind:    appChangeTaskWorkProfileKindV0(request),
-			Title:              appChangeTaskTitleV0(request),
-			Summary:            appChangeTaskSummaryV0(request),
-			WriteSet:           appChangeTaskWriteSetV0(request),
-			AcceptanceCriteria: appChangeTaskCriteriaV0(request),
-			RequiredTests:      appChangeTaskRequiredTestsV0(request),
-			ContextRefs:        appChangeTaskContextRefsV0(request),
-			FunctionContractRefs: []orquestadirectoragent.DirectorAgentFunctionContractRefV0{{
-				ContractRef:  refs.ContractRef,
-				FunctionName: appChangeFunctionNamesV0(request)[0],
-			}},
-		},
+	run orquestacoreworkflow.OrchestrationRunV0,
+) []orquestadirectoragent.DirectorAgentDecisionV0 {
+	tasks := appChangeMicrotasksV0(runRef, request, refs)
+	decisions := make([]orquestadirectoragent.DirectorAgentDecisionV0, 0, len(tasks))
+	for _, task := range tasks {
+		if stringInSetV0(run.Tasks, task.TaskID) {
+			continue
+		}
+		decision := appChangeDecisionV0(runRef, phase, appChangeMicrotaskDecisionActionV0(task.TaskID, refs), orquestadirectoragent.DirectorAgentCommandCreateMicrotaskV0, refs)
+		decision.CreateMicrotask = &orquestadirectoragent.DirectorAgentCreateMicrotaskCommandV0{
+			Task: task,
+		}
+		decisions = append(decisions, decision)
 	}
-	return decision
+	return decisions
+}
+
+func appChangeMicrotasksV0(
+	runRef string,
+	request orquestaappchange.AppChangeRequestV0,
+	refs appChangeRefSetV0,
+) []orquestadirectoragent.DirectorAgentMicrotaskV0 {
+	parent := appChangeParentMicrotaskV0(runRef, request, refs)
+	if !appChangeRequiresOPESParentSixSubrolesV0(request) {
+		return []orquestadirectoragent.DirectorAgentMicrotaskV0{parent}
+	}
+	subroles := appChangeOPESSubrolesV0()
+	childRefs := make([]string, 0, len(subroles))
+	for _, subrole := range subroles {
+		childRefs = append(childRefs, appChangeSubroleTaskRefV0(refs, subrole.Ref))
+	}
+	parent.ChildTaskRefs = childRefs
+	parent.MaxChildAgents = len(childRefs)
+	parent.ContextRefs = compactAppChangeSourceRefsV0(append(parent.ContextRefs,
+		"opes-padre-tema-6-subroles-v1",
+		"opes-parent-task",
+	))
+	parent.CohortRef = appChangeOPESCohortRefV0(refs)
+	parent.WaveRef = appChangeOPESWaveRefV0(refs)
+
+	tasks := []orquestadirectoragent.DirectorAgentMicrotaskV0{parent}
+	for _, subrole := range subroles {
+		tasks = append(tasks, appChangeOPESSubroleMicrotaskV0(parent, request, refs, subrole))
+	}
+	return tasks
+}
+
+func appChangeParentMicrotaskV0(
+	runRef string,
+	request orquestaappchange.AppChangeRequestV0,
+	refs appChangeRefSetV0,
+) orquestadirectoragent.DirectorAgentMicrotaskV0 {
+	return orquestadirectoragent.DirectorAgentMicrotaskV0{
+		SchemaVersion:      orquestadirectoragent.DirectorAgentMicrotaskSchemaVersionV0,
+		TaskID:             refs.TaskRef,
+		RunID:              runRef,
+		PhaseID:            string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+		WorkProfileKind:    appChangeTaskWorkProfileKindV0(request),
+		Title:              appChangeTaskTitleV0(request),
+		Summary:            appChangeTaskSummaryV0(request),
+		WriteSet:           appChangeTaskWriteSetV0(request),
+		AcceptanceCriteria: appChangeTaskCriteriaV0(request),
+		RequiredTests:      appChangeTaskRequiredTestsV0(request),
+		ContextRefs:        appChangeTaskContextRefsV0(request),
+		FunctionContractRefs: []orquestadirectoragent.DirectorAgentFunctionContractRefV0{{
+			ContractRef:  refs.ContractRef,
+			FunctionName: appChangeFunctionNamesV0(request)[0],
+		}},
+	}
+}
+
+func appChangeOPESSubroleMicrotaskV0(
+	parent orquestadirectoragent.DirectorAgentMicrotaskV0,
+	request orquestaappchange.AppChangeRequestV0,
+	refs appChangeRefSetV0,
+	subrole appChangeOPESSubroleV0,
+) orquestadirectoragent.DirectorAgentMicrotaskV0 {
+	child := parent
+	child.TaskID = appChangeSubroleTaskRefV0(refs, subrole.Ref)
+	child.Title = subrole.Title + ": " + appChangeTaskTitleV0(request)
+	child.Summary = subrole.Summary
+	child.WriteSet = appChangeSubroleWriteSetV0(parent.WriteSet, subrole.Ref)
+	child.AcceptanceCriteria = compactAppChangeTaskCriteriaV0(append(
+		[]string{subrole.Criteria},
+		appChangeExternalWorkCriteriaV0(request)...,
+	))
+	child.RequiredTests = compactAppChangeTaskRequiredTestsV0(append(
+		[]string{subrole.RequiredTest},
+		appChangeTaskRequiredTestsV0(request)...,
+	))
+	child.ContextRefs = compactAppChangeSourceRefsV0(append(
+		parent.ContextRefs,
+		"opes-subrole-"+subrole.Ref,
+		subrole.SkillRef,
+	))
+	child.ParentTaskRef = parent.TaskID
+	child.CohortRef = appChangeOPESCohortRefV0(refs)
+	child.WaveRef = appChangeOPESWaveRefV0(refs)
+	child.DelegationDepth = parent.DelegationDepth + 1
+	child.MaxChildAgents = 0
+	child.ChildTaskRefs = nil
+	return child
+}
+
+func appChangeMicrotaskRefsV0(
+	request orquestaappchange.AppChangeRequestV0,
+	refs appChangeRefSetV0,
+) []string {
+	if !appChangeRequiresOPESParentSixSubrolesV0(request) {
+		return []string{refs.TaskRef}
+	}
+	taskRefs := []string{refs.TaskRef}
+	for _, subrole := range appChangeOPESSubrolesV0() {
+		taskRefs = append(taskRefs, appChangeSubroleTaskRefV0(refs, subrole.Ref))
+	}
+	return taskRefs
+}
+
+func appChangeAllTasksReadyV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	taskRefs []string,
+) bool {
+	for _, taskRef := range taskRefs {
+		if !stringInSetV0(run.Tasks, taskRef) {
+			return false
+		}
+	}
+	return len(taskRefs) > 0
+}
+
+func appChangeAllTasksPlannedByDecisionsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	taskRefs []string,
+	decisions []orquestadirectoragent.DirectorAgentDecisionV0,
+) bool {
+	planned := map[string]bool{}
+	for _, taskRef := range run.Tasks {
+		planned[taskRef] = true
+	}
+	for _, decision := range decisions {
+		if decision.CreateMicrotask == nil {
+			continue
+		}
+		planned[decision.CreateMicrotask.Task.TaskID] = true
+	}
+	for _, taskRef := range taskRefs {
+		if !planned[taskRef] {
+			return false
+		}
+	}
+	return len(taskRefs) > 0
+}
+
+func appChangeMicrotaskDecisionActionV0(
+	taskRef string,
+	refs appChangeRefSetV0,
+) string {
+	if taskRef == refs.TaskRef {
+		return "task"
+	}
+	return "task-" + strings.TrimPrefix(taskRef, refs.TaskRef+"-")
 }
 
 func appChangeTaskContextRefsV0(

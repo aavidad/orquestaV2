@@ -19,13 +19,7 @@ const (
 )
 
 func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
-	if serverOPESAutomationContextFromEnvV0() && serverResidentDirectorDisabledExplicitlyFromEnvV0() {
-		return orquestaserver.ConfigV0{}, fmt.Errorf("%s=false incompatible con contexto OPES: activar %s=true o %s=true",
-			envServerResidentDirectorEnabledV0,
-			envServerAutonomyEnabledV0,
-			envServerResidentDirectorEnabledV0,
-		)
-	}
+	opesAutomationContext := serverOPESAutomationContextFromEnvV0()
 	projectDir, err := projectDirFromEnvV0()
 	if err != nil {
 		return orquestaserver.ConfigV0{}, err
@@ -34,6 +28,8 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 		envServerIdleSelfImprovementProjectWorkDirV0,
 		projectDir,
 	)
+	idleSelfImprovementDisabled := strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementAfterV0)) == "0" ||
+		serverIdleSelfImprovementDisabledForOPESContextV0(opesAutomationContext, projectDir, idleSelfImprovementProjectDir)
 	stateDir := absDirEnvOrDefaultV0(envServerStateDirV0,
 		filepath.Join(defaultControlDirV0(projectDir), "state"))
 	runtimeDir := absDirEnvOrDefaultV0(envCodexRuntimeWorkDirV0,
@@ -83,7 +79,7 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 			envServerIdleSelfImprovementAfterV0,
 			int(orquestaserver.DefaultIdleSelfImprovementAfterV0/time.Second),
 		)) * time.Second,
-		IdleSelfImprovementDisabled:      strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementAfterV0)) == "0",
+		IdleSelfImprovementDisabled:      idleSelfImprovementDisabled,
 		IdleSelfImprovementProjectRef:    envOrDefaultV0(envServerIdleSelfImprovementProjectRefV0, orquestaserver.DefaultIdleSelfImprovementProjectRefV0),
 		IdleSelfImprovementWorktreeRef:   envOrDefaultV0(envServerIdleSelfImprovementWorktreeRefV0, orquestaserver.DefaultIdleSelfImprovementWorktreeRefV0),
 		IdleSelfImprovementBranchRef:     envOrDefaultV0(envServerIdleSelfImprovementBranchRefV0, orquestaserver.DefaultIdleSelfImprovementBranchRefV0),
@@ -188,6 +184,36 @@ func projectDirFromEnvV0() (string, error) {
 		return "", fmt.Errorf("project_work_dir_unavailable")
 	}
 	return abs, nil
+}
+
+func serverIdleSelfImprovementDisabledForOPESContextV0(
+	opesAutomationContext bool,
+	projectDir string,
+	idleSelfImprovementProjectDir string,
+) bool {
+	if !opesAutomationContext {
+		return false
+	}
+	if strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementProjectWorkDirV0)) == "" {
+		return true
+	}
+	if sameAbsDirForConfigV0(idleSelfImprovementProjectDir, projectDir) {
+		return true
+	}
+	opesProjectDir := strings.TrimSpace(os.Getenv(envOPESProjectWorkDirV0))
+	return opesProjectDir != "" && sameAbsDirForConfigV0(idleSelfImprovementProjectDir, opesProjectDir)
+}
+
+func sameAbsDirForConfigV0(left string, right string) bool {
+	leftAbs, err := filepath.Abs(strings.TrimSpace(left))
+	if err != nil {
+		return false
+	}
+	rightAbs, err := filepath.Abs(strings.TrimSpace(right))
+	if err != nil {
+		return false
+	}
+	return filepath.Clean(leftAbs) == filepath.Clean(rightAbs)
 }
 
 func absDirEnvOrDefaultV0(key string, fallback string) string {

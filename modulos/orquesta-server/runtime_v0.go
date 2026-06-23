@@ -28,6 +28,7 @@ type RuntimeV0 struct {
 	supervisorTickActive        int32
 	supervisorTickPending       int32
 	supervisorWakeups           chan SupervisorWakeupV0
+	residentDirectorPaused      int32
 	residentDirectorTickActive  int32
 	residentDirectorTickPending int32
 	residentDirectorWakeups     chan ResidentDirectorWakeupV0

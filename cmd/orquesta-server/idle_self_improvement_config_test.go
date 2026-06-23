@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -29,5 +30,42 @@ func TestServerConfigFromEnvV0ConfiguraAutomejoraIdleV0(t *testing.T) {
 	}
 	if !config.IdleSelfImprovementDisabled || config.IdleSelfImprovementAfter != 0 {
 		t.Fatalf("idle disabled config=%+v", config)
+	}
+}
+
+func TestServerConfigFromEnvV0DesactivaAutomejoraIdleEnOPESSinWorkdirSeparadoV0(t *testing.T) {
+	root := t.TempDir()
+	opesDir := filepath.Join(root, "OPES")
+	t.Setenv(envCodexProjectWorkDirV0, opesDir)
+	t.Setenv(envOPESProjectWorkDirV0, opesDir)
+	t.Setenv(envServerIdleSelfImprovementAfterV0, "")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if !config.IdleSelfImprovementDisabled || config.IdleSelfImprovementAfter != 0 {
+		t.Fatalf("automejora idle debe quedar desactivada en OPES sin workdir separado: %+v", config)
+	}
+	if config.IdleSelfImprovementProjectWorkDir != opesDir {
+		t.Fatalf("idle_self_improvement_project_work_dir=%q want %q", config.IdleSelfImprovementProjectWorkDir, opesDir)
+	}
+}
+
+func TestServerConfigFromEnvV0DesactivaAutomejoraIdleSiWorkdirExplicitoEsOPESV0(t *testing.T) {
+	root := t.TempDir()
+	opesDir := filepath.Join(root, "OPES")
+	orquestaDir := filepath.Join(root, "orquesta")
+	t.Setenv(envCodexProjectWorkDirV0, orquestaDir)
+	t.Setenv(envOPESProjectWorkDirV0, opesDir)
+	t.Setenv(envServerIdleSelfImprovementProjectWorkDirV0, opesDir)
+	t.Setenv(envServerIdleSelfImprovementAfterV0, "")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if !config.IdleSelfImprovementDisabled || config.IdleSelfImprovementAfter != 0 {
+		t.Fatalf("automejora idle debe quedar desactivada si apunta al workdir OPES: %+v", config)
 	}
 }

@@ -64,6 +64,9 @@ func (source ReviewReworkReplanSourceV0) BuildReviewReworkReplanPlansV0(
 		if reviewReworkReplanSkipExternalRailDocsLoopV0(rework, descriptors) {
 			continue
 		}
+		if reviewReworkAlreadyResolvedByAcceptedFollowupV0(request.Run, rework, descriptors) {
+			continue
+		}
 		plan := source.planForReworkV0(request, rework, result, descriptors)
 		plan = reviewReworkPlanWithTaskBoundaryV0(request, plan, descriptors)
 		if strings.TrimSpace(plan.CandidateRef) == "" {
@@ -78,6 +81,84 @@ func (source ReviewReworkReplanSourceV0) BuildReviewReworkReplanPlansV0(
 		plans = append(plans, plan)
 	}
 	return plans, nil
+}
+
+func reviewReworkAlreadyResolvedByAcceptedFollowupV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	rework reviewReworkProjectionV0,
+	descriptors []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+) bool {
+	if codexStackReviewGateReworkAcceptanceAlreadyDoneV0(run, rework.DeliveryRef) {
+		return true
+	}
+	_, deliveryByTask := codexStackReviewGateDescriptorTaskMapsV0(descriptors)
+	for _, rawReplan := range run.ReplanDecisions {
+		replan, ok := codexStackReviewGateParseReplanProjectionV0(rawReplan)
+		if !ok || replan.SourceRef != rework.ReworkRequestRef {
+			continue
+		}
+		if replan.AcceptedAction == string(orquestacoreworkflow.ReplanDecisionActionSplitTaskV0) &&
+			codexStackReviewGateFollowupsAcceptedV0(run, deliveryByTask, replan.FollowupRefs) {
+			return true
+		}
+		if reviewReworkRetryOrReplaceFollowupAcceptedV0(run, replan, descriptors) {
+			return true
+		}
+	}
+	return false
+}
+
+func reviewReworkRetryOrReplaceFollowupAcceptedV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	replan codexStackReviewGateReplanProjectionV0,
+	descriptors []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+) bool {
+	if replan.AcceptedAction != string(orquestacoreworkflow.ReplanDecisionActionRetryTaskV0) &&
+		replan.AcceptedAction != string(orquestacoreworkflow.ReplanDecisionActionReplaceAgentV0) {
+		return false
+	}
+	for _, followupRef := range replan.FollowupRefs {
+		deliveryRef := reviewReworkDeliveryRefForFollowupV0(followupRef, descriptors)
+		if deliveryRef == "" {
+			continue
+		}
+		if reviewReworkDeliveryAcceptedV0(run, deliveryRef) {
+			return true
+		}
+	}
+	return false
+}
+
+func reviewReworkDeliveryRefForFollowupV0(
+	followupRef string,
+	descriptors []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
+) string {
+	followupRef = strings.TrimSpace(followupRef)
+	if followupRef == "" {
+		return ""
+	}
+	for _, descriptor := range descriptors {
+		for _, candidate := range reviewReworkDescriptorAgentRefsV0(descriptor) {
+			if strings.TrimSpace(candidate) == followupRef {
+				return strings.TrimSpace(descriptor.Spec.AgentPacket.DeliveryRefs.AckRef)
+			}
+		}
+		if strings.TrimSpace(descriptor.Spec.AgentPacket.Task.TaskRef) == followupRef {
+			return strings.TrimSpace(descriptor.Spec.AgentPacket.DeliveryRefs.AckRef)
+		}
+	}
+	return ""
+}
+
+func reviewReworkDeliveryAcceptedV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	deliveryRef string,
+) bool {
+	deliveryRef = strings.TrimSpace(deliveryRef)
+	if deliveryRef == "" || !reviewReworkReplanStringInSetV0(run.Deliveries, deliveryRef) {
+		return false
+	}
+	return reviewReworkReplanStringInSetV0(run.AcceptedReviews, "accepted-review-ref-"+deliveryRef)
 }
 
 func (source ReviewReworkReplanSourceV0) planForReworkV0(

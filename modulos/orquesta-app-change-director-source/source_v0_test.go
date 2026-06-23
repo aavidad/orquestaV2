@@ -164,6 +164,68 @@ func TestAppChangeDirectorDecisionSourceV0ProyectaTrabajoExterno(t *testing.T) {
 	}
 }
 
+func TestAppChangeDirectorDecisionSourceV0MaterializaSeisSubrolesOPES(t *testing.T) {
+	record := appChangeRecordForSourceTestV0()
+	record.Request.AllowedWriteSet = nil
+	record.Request.ExternalWork = &orquestaappchange.AppChangeExternalWorkV0{
+		ProjectRef:    "opes",
+		JobRef:        "opes-job-tema-001",
+		InterfaceRefs: []string{"opes-rest-v0", "opes.padre-tema-6-subroles.v1"},
+		WorkKind:      "draft_content_block",
+		WorkRefs:      []string{"curso-servicios-multiples", "tema-001"},
+	}
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	run := appChangeRunForSourceTestV0(record)
+
+	decisions, err := (AppChangeDirectorDecisionSourceV0{Store: store}).
+		ListDirectorAgentDecisionsV0(
+			context.Background(),
+			orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+		)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	microtasks := microtaskDecisionsForTestV0(decisions)
+	if len(microtasks) != 7 {
+		t.Fatalf("microtasks=%d decisions=%+v", len(microtasks), decisions)
+	}
+	parent := microtasks[0].CreateMicrotask.Task
+	if parent.TaskID != appChangeRefsV0(record.Request.ChangeRef).TaskRef ||
+		parent.MaxChildAgents != 6 ||
+		len(parent.ChildTaskRefs) != 6 ||
+		parent.CohortRef == "" ||
+		parent.WaveRef == "" ||
+		!stringInSetV0(parent.ContextRefs, "opes-padre-tema-6-subroles-v1") {
+		t.Fatalf("parent=%+v", parent)
+	}
+	for _, decision := range microtasks {
+		task := decision.CreateMicrotask.Task
+		if _, err := orquestacoreworkflow.NewWorkflowTaskV0(workflowTaskFromDirectorTaskForTestV0(task)); err != nil {
+			t.Fatalf("workflow task invalida %s: %v task=%+v", task.TaskID, err, task)
+		}
+	}
+	seenChildren := map[string]bool{}
+	for _, decision := range microtasks[1:] {
+		child := decision.CreateMicrotask.Task
+		seenChildren[child.TaskID] = true
+		if child.ParentTaskRef != parent.TaskID ||
+			child.DelegationDepth != 1 ||
+			child.CohortRef != parent.CohortRef ||
+			child.WaveRef != parent.WaveRef ||
+			len(child.ChildTaskRefs) != 0 ||
+			!containsFragmentInSetForTestV0(child.WriteSet, "/subroles/") ||
+			!containsFragmentInSetForTestV0(child.ContextRefs, "opes-subrole-") {
+			t.Fatalf("child=%+v parent=%+v", child, parent)
+		}
+	}
+	for _, childRef := range parent.ChildTaskRefs {
+		if !seenChildren[childRef] {
+			t.Fatalf("child_ref %s no materializado: seen=%v", childRef, seenChildren)
+		}
+	}
+}
+
 func TestAppChangeDirectorDecisionSourceV0ProyectaPlanDocumental(t *testing.T) {
 	record := appChangeRecordForSourceTestV0()
 	record.Request.ExternalWork = &orquestaappchange.AppChangeExternalWorkV0{
@@ -1040,8 +1102,26 @@ func workflowTaskFromDirectorTaskForTestV0(
 		RequiredTests:        task.RequiredTests,
 		DependsOn:            task.DependsOn,
 		ContextRefs:          task.ContextRefs,
+		ParentTaskRef:        task.ParentTaskRef,
+		CohortRef:            task.CohortRef,
+		WaveRef:              task.WaveRef,
+		DelegationDepth:      task.DelegationDepth,
+		MaxChildAgents:       task.MaxChildAgents,
+		ChildTaskRefs:        task.ChildTaskRefs,
 		FunctionContractRefs: refs,
 	}
+}
+
+func microtaskDecisionsForTestV0(
+	decisions []orquestadirectoragent.DirectorAgentDecisionV0,
+) []orquestadirectoragent.DirectorAgentDecisionV0 {
+	out := make([]orquestadirectoragent.DirectorAgentDecisionV0, 0, len(decisions))
+	for _, decision := range decisions {
+		if decision.CreateMicrotask != nil {
+			out = append(out, decision)
+		}
+	}
+	return out
 }
 
 type appChangeSourceNoopNotifierV0 struct{}

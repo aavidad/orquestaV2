@@ -2,7 +2,11 @@ package orquestaserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -158,6 +162,69 @@ func TestRuntimeV0ResidentDirectorOptInExplicitoV0(t *testing.T) {
 	}
 	if runtime.runResidentDirectorTickAsyncV0(context.Background()) || director.calls != 0 {
 		t.Fatalf("resident director started without opt-in")
+	}
+}
+
+func TestRuntimeV0ResidentDirectorControlPausaYResumeV0(t *testing.T) {
+	store := &memoryStateStoreV0{}
+	director := &fakeResidentDirectorV0{}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                t.TempDir(),
+		TickInterval:            time.Hour,
+		ResidentDirectorEnabled: true,
+		AuditDisabled:           true,
+	}, RuntimeDepsV0{
+		ResidentDirector: director,
+		StateStore:       store,
+		Clock:            fixedClockV0{now: time.Date(2026, 6, 8, 13, 18, 0, 0, time.UTC)},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	pause := httptest.NewRecorder()
+	runtime.HandlerV0().ServeHTTP(
+		pause,
+		httptest.NewRequest(http.MethodPost, serverResidentDirectorControlRoutePathV0, strings.NewReader(`{"action":"pause","reason":"sin_cuota"}`)),
+	)
+	if pause.Code != http.StatusOK {
+		t.Fatalf("pause status=%d body=%s", pause.Code, pause.Body.String())
+	}
+	var paused serverResidentDirectorControlProjectionV0
+	if err := json.Unmarshal(pause.Body.Bytes(), &paused); err != nil {
+		t.Fatalf("pause json: %v", err)
+	}
+	if !paused.Paused || paused.Status != "paused" ||
+		store.last.ResidentDirectorStatus != "paused" {
+		t.Fatalf("paused=%+v state=%+v", paused, store.last)
+	}
+	if runtime.RequestResidentDirectorWakeupV0("test_paused") {
+		t.Fatalf("wakeup aceptado con director residente pausado")
+	}
+	if runtime.runResidentDirectorTickAsyncV0(context.Background()) || director.calls != 0 {
+		t.Fatalf("tick ejecutado con director residente pausado calls=%d", director.calls)
+	}
+
+	resume := httptest.NewRecorder()
+	runtime.HandlerV0().ServeHTTP(
+		resume,
+		httptest.NewRequest(http.MethodPost, serverResidentDirectorControlRoutePathV0, strings.NewReader(`{"action":"resume","reason":"cuota_disponible"}`)),
+	)
+	if resume.Code != http.StatusOK {
+		t.Fatalf("resume status=%d body=%s", resume.Code, resume.Body.String())
+	}
+	var resumed serverResidentDirectorControlProjectionV0
+	if err := json.Unmarshal(resume.Body.Bytes(), &resumed); err != nil {
+		t.Fatalf("resume json: %v", err)
+	}
+	if resumed.Paused || resumed.Status != "resumed" ||
+		store.last.ResidentDirectorStatus != "resumed" {
+		t.Fatalf("resumed=%+v state=%+v", resumed, store.last)
+	}
+
+	runtime.runResidentDirectorTickV0(context.Background())
+	if director.calls != 1 || store.last.ResidentDirectorStatus != "ok" {
+		t.Fatalf("tick tras resume no ejecuto: calls=%d state=%+v", director.calls, store.last)
 	}
 }
 

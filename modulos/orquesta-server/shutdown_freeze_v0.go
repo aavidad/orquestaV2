@@ -39,7 +39,7 @@ func (runtime *RuntimeV0) shutdownFreezeHTTPHandlerV0(next http.Handler) http.Ha
 }
 
 func (runtime *RuntimeV0) serverLifecycleHTTPHandlerV0(next http.Handler) http.Handler {
-	return runtime.handoffHTTPHandlerV0(runtime.shutdownFreezeHTTPHandlerV0(next))
+	return runtime.handoffHTTPHandlerV0(runtime.residentDirectorControlHTTPHandlerV0(runtime.shutdownFreezeHTTPHandlerV0(next)))
 }
 
 func (runtime *RuntimeV0) freezeSupervisorForShutdownV0(ctx context.Context, reason string) {

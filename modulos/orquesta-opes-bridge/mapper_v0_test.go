@@ -110,6 +110,25 @@ func TestBuildExternalWorkRunRequestV0MapeaExpansionComoLarge(t *testing.T) {
 	}
 }
 
+func TestBuildExternalWorkRunRequestV0MarcaContratoSeisSubrolesOPES(t *testing.T) {
+	req, ok := BuildExternalWorkRunRequestV0(orquestaopesconnector.ExternalJobV0{
+		ID:          "job-tema-001",
+		Type:        "draft_content_block",
+		PayloadJSON: `{"topic_id":"tema-001","subroles_required":6}`,
+	}, JobRunConfigV0{})
+
+	if !ok {
+		t.Fatalf("BuildExternalWorkRunRequestV0 ok=false")
+	}
+	work := req.AppChangeRequest.ExternalWork
+	if work == nil ||
+		!containsStringForTestV0(work.InterfaceRefs, "opes-rest-v0") ||
+		!containsStringForTestV0(work.InterfaceRefs, "opes-mcp-v0") ||
+		!containsStringForTestV0(work.InterfaceRefs, "opes.padre-tema-6-subroles.v1") {
+		t.Fatalf("external_work=%+v", work)
+	}
+}
+
 func TestBuildExternalWorkRunRequestV0MapeaPlanTemaComoDocumentPlan(t *testing.T) {
 	req, ok := BuildExternalWorkRunRequestV0(orquestaopesconnector.ExternalJobV0{
 		ID:   "job-ref-plan-001",

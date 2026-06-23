@@ -142,15 +142,23 @@ func TestServerConfigFromEnvV0ContextoOPESActivaDirectorResidenteV0(t *testing.T
 	}
 }
 
-func TestServerConfigFromEnvV0BloqueaOPESConDirectorResidenteApagadoV0(t *testing.T) {
+func TestServerConfigFromEnvV0PermiteOPESConDirectorResidenteApagadoExplicitoV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envOPESProjectWorkDirV0, "/tmp/opes-workspace")
 	t.Setenv(envServerResidentDirectorEnabledV0, "false")
 
-	_, err := serverConfigFromEnvV0()
-	if err == nil ||
-		!strings.Contains(err.Error(), envServerResidentDirectorEnabledV0+"=false incompatible con contexto OPES") {
-		t.Fatalf("err=%v", err)
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if config.ResidentDirectorEnabled {
+		t.Fatalf("override explicito no desactivo director residente en OPES: %+v", config)
+	}
+	if got := effectiveSettingValueForTestV0(config.EffectiveConfig.Settings, envServerAutonomyEnabledV0); got != "true" {
+		t.Fatalf("%s=%q want true", envServerAutonomyEnabledV0, got)
+	}
+	if got := effectiveSettingValueForTestV0(config.EffectiveConfig.Settings, envServerResidentDirectorEnabledV0); got != "false" {
+		t.Fatalf("%s=%q want false", envServerResidentDirectorEnabledV0, got)
 	}
 }
 
@@ -246,6 +254,7 @@ func TestServerConfigFromEnvV0SeparaProyectoPrincipalDeAutomejoraIdleV0(t *testi
 	opesDir := filepath.Join(root, "OPES")
 	orquestaDir := filepath.Join(root, "orquesta")
 	t.Setenv(envCodexProjectWorkDirV0, opesDir)
+	t.Setenv(envOPESProjectWorkDirV0, opesDir)
 	t.Setenv(envServerIdleSelfImprovementProjectWorkDirV0, orquestaDir)
 
 	config, err := serverConfigFromEnvV0()
@@ -257,6 +266,9 @@ func TestServerConfigFromEnvV0SeparaProyectoPrincipalDeAutomejoraIdleV0(t *testi
 	}
 	if config.IdleSelfImprovementProjectWorkDir != orquestaDir {
 		t.Fatalf("idle_self_improvement_project_work_dir=%q want %q", config.IdleSelfImprovementProjectWorkDir, orquestaDir)
+	}
+	if config.IdleSelfImprovementDisabled {
+		t.Fatalf("automejora idle no debe desactivarse si tiene workdir separado: %+v", config)
 	}
 	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerIdleSelfImprovementProjectWorkDirV0)
 	if setting.Value != "idle-self-improvement-project-workdir-configured" || !setting.Sensitive {

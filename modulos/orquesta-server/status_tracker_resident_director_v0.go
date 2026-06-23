@@ -111,6 +111,46 @@ func (tracker *StatusTrackerV0) MarkResidentDirectorSkippedV0(
 	})
 }
 
+func (tracker *StatusTrackerV0) MarkResidentDirectorPausedV0(
+	reason string,
+	now time.Time,
+) StateV0 {
+	reason = firstNonEmptyServerDiagnosticV0(reason, "operator_pause")
+	return tracker.updateV0(func(state *StateV0) {
+		state.LastHeartbeatAt = formatTimeV0(now)
+		state.ResidentDirectorStatus = "paused"
+		state.ResidentDirectorTickActive = false
+		state.ResidentDirectorLastResult = reason
+		state.ResidentDirectorOperationalMessage = projectServerOperationalMessageRecordV0(
+			serverOperationalMessageInputV0{
+				Scope:      "resident_director",
+				ReasonCode: reason,
+				Status:     "paused",
+			},
+		)
+	})
+}
+
+func (tracker *StatusTrackerV0) MarkResidentDirectorResumedV0(
+	reason string,
+	now time.Time,
+) StateV0 {
+	reason = firstNonEmptyServerDiagnosticV0(reason, "operator_resume")
+	return tracker.updateV0(func(state *StateV0) {
+		state.LastHeartbeatAt = formatTimeV0(now)
+		state.ResidentDirectorStatus = "resumed"
+		state.ResidentDirectorTickActive = false
+		state.ResidentDirectorLastResult = reason
+		state.ResidentDirectorOperationalMessage = projectServerOperationalMessageRecordV0(
+			serverOperationalMessageInputV0{
+				Scope:      "resident_director",
+				ReasonCode: reason,
+				Status:     "resumed",
+			},
+		)
+	})
+}
+
 func normalizeResidentDirectorResultV0(result ResidentDirectorResultV0) ResidentDirectorResultV0 {
 	result.Status = strings.TrimSpace(result.Status)
 	result.RunRef = strings.TrimSpace(result.RunRef)

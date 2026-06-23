@@ -284,6 +284,53 @@ func TestReviewReworkReplanSourceV0ReplanificaAunqueLaEntregaOriginalTengaAckCom
 	}
 }
 
+func TestReviewReworkReplanSourceV0NoRelanzaSplitTaskAceptado(t *testing.T) {
+	original := reviewReworkDescriptorForTestV0("delivery-ref-target", "task-ref-target")
+	followup := reviewReworkDescriptorForTestV0("delivery-ref-followup", "task-ref-followup")
+	source := ReviewReworkReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(original, followup),
+	}
+	request := reviewReworkPlanRequestForTestV0(false)
+	request.Run.ReplanDecisions = []string{
+		"replan-ref-target-split#source:rework-request-ref-target#task:task-ref-target" +
+			"#action:split_task#followups:task-ref-followup",
+	}
+	request.Run.ClosedTasks = []string{"task-ref-followup"}
+	request.Run.Deliveries = []string{"delivery-ref-followup"}
+	request.Run.AcceptedReviews = []string{"accepted-review-ref-delivery-ref-followup"}
+
+	plans, err := source.BuildReviewReworkReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildReviewReworkReplanPlansV0: %v", err)
+	}
+	if len(plans) != 0 {
+		t.Fatalf("no debe relanzar rework split_task ya aceptado: %+v", plans)
+	}
+}
+
+func TestReviewReworkReplanSourceV0NoRelanzaRetryAceptado(t *testing.T) {
+	original := reviewReworkDescriptorForTestV0("delivery-ref-target", "task-ref-target")
+	followup := reviewReworkDescriptorForTestV0("delivery-ref-followup", "task-ref-followup")
+	source := ReviewReworkReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(original, followup),
+	}
+	request := reviewReworkPlanRequestForTestV0(false)
+	request.Run.ReplanDecisions = []string{
+		"replan-ref-target-retry#source:rework-request-ref-target#task:task-ref-target" +
+			"#action:retry_task#followups:capacity-ref-followup+" + followup.AgentRef,
+	}
+	request.Run.Deliveries = []string{"delivery-ref-followup"}
+	request.Run.AcceptedReviews = []string{"accepted-review-ref-delivery-ref-followup"}
+
+	plans, err := source.BuildReviewReworkReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildReviewReworkReplanPlansV0: %v", err)
+	}
+	if len(plans) != 0 {
+		t.Fatalf("no debe relanzar rework retry_task ya aceptado: %+v", plans)
+	}
+}
+
 func TestReviewReworkReplanSourceV0NoRelanzaBucleDocumentalPorGoTestGlobalNoEjecutable(t *testing.T) {
 	descriptor := reviewReworkDescriptorForTestV0("delivery-ref-target", "task-ref-target")
 	descriptor.Spec.AgentPacket.Task.WriteSet = []string{

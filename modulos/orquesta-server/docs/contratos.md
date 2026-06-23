@@ -30,6 +30,11 @@ Salida:
   en memoria de persistencia durable confirmada o degradada, sin detalles del
   filesystem ni errores crudos del store. Tambien expone
   `resident_director_*` cuando el Director residente ha ejecutado algun pulso.
+- `POST /api/v0/resident-director/control`: control runtime del Director
+  residente con `action=pause|resume|status`. Pausado no ejecuta ticks ni
+  acepta wakeups; `status` devuelve `paused`, `tick_active`, `tick_pending` y si
+  el residente esta habilitado. Es control mutable y queda bajo el guard de
+  control-plane en accesos no loopback.
 - `GET /api/status`: alias legacy compatible del estado publico. Debe devolver
   el mismo DTO redactado que la ruta versionada y publicar headers de
   deprecacion/canonical para que clientes nuevos no lo promuevan.
@@ -50,8 +55,9 @@ Configuracion externa relacionada:
 - `RequestResidentDirectorWakeupV0(cause)`: pulso no bloqueante para despertar
   el Director residente opt-in antes del siguiente ticker cuando la composicion
   ha persistido progreso durable relevante. Si el Director residente no esta
-  inyectado, no esta habilitado, el runtime esta congelado por shutdown o el
-  canal ya tiene un pulso pendiente, devuelve `false` sin bloquear.
+  inyectado, no esta habilitado, esta pausado, el runtime esta congelado por
+  shutdown o el canal ya tiene un pulso pendiente, devuelve `false` sin
+  bloquear.
 - `ORQUESTA_SERVER_SUPERVISOR_MAX_TICKS`: numero maximo de ticks internos por
   pulso del supervisor residente. Por defecto se conserva acotado a `1`.
 - `ORQUESTA_SERVER_ALLOW_REPEATED_RUNS=true`: permite que un mismo pulso del
@@ -62,6 +68,10 @@ Configuracion externa relacionada:
 - `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_MAX_REQUESTS`: maximo de tareas nuevas
   por tanda de automejora. El objetivo de cola nunca baja por debajo de este
   valor normalizado.
+- En contexto OPES, si `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PROJECT_WORKDIR`
+  no esta definido o apunta al mismo directorio que OPES, la automejora idle del
+  servidor se desactiva. Para mantenerla activa debe apuntar a un workdir
+  separado de Orquesta.
 - `ORQUESTA_SERVER_MAX_RUNS_PER_TICK`,
   `ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK`,
   `ORQUESTA_SERVER_DRAIN_MAX_EXTERNAL_WAITS`,

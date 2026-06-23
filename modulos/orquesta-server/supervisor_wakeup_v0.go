@@ -33,6 +33,7 @@ func (runtime *RuntimeV0) RequestResidentDirectorWakeupV0(cause string) bool {
 	if runtime == nil ||
 		runtime.residentDirector == nil ||
 		!runtime.config.ResidentDirectorEnabled ||
+		runtime.residentDirectorPausedV0() ||
 		runtime.residentDirectorWakeups == nil {
 		return false
 	}

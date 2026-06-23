@@ -30,6 +30,9 @@ func (runtime *RuntimeV0) runResidentDirectorTickAsyncV0(ctx context.Context) bo
 	if runtime.residentDirector == nil || !runtime.config.ResidentDirectorEnabled {
 		return false
 	}
+	if runtime.residentDirectorPausedV0() {
+		return false
+	}
 	if runtime.supervisorFrozenForShutdownV0() {
 		runtime.markResidentDirectorSkippedV0(ctx, "shutdown_in_progress")
 		return false
@@ -69,6 +72,9 @@ func (runtime *RuntimeV0) runResidentDirectorTickAsyncV0(ctx context.Context) bo
 func (runtime *RuntimeV0) runResidentDirectorTickV0(ctx context.Context) {
 	defer runtime.recoverResidentDirectorTickPanicV0(ctx)
 	if runtime.residentDirector == nil || !runtime.config.ResidentDirectorEnabled {
+		return
+	}
+	if runtime.residentDirectorPausedV0() {
 		return
 	}
 	if runtime.supervisorFrozenForShutdownV0() {

@@ -87,7 +87,7 @@ func BuildExternalWorkRunRequestWithContextV0(
 		ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
 			ProjectRef:    config.ProjectRef,
 			JobRef:        job.ID,
-			InterfaceRefs: []string{"opes-rest-v0", "opes-mcp-v0"},
+			InterfaceRefs: interfaceRefsForJobFieldsV0(fields),
 			WorkKind:      job.Type,
 			WorkRefs:      workRefs,
 			InputFields:   fields,
@@ -106,6 +106,38 @@ func BuildExternalWorkRunRequestWithContextV0(
 		RequestedBy:      config.RequestedBy,
 		AppChangeRequest: change,
 	}, true
+}
+
+func interfaceRefsForJobFieldsV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) []string {
+	refs := []string{"opes-rest-v0", "opes-mcp-v0"}
+	if fieldDeclaresSixSubrolesV0(fields) {
+		refs = append(refs, "opes.padre-tema-6-subroles.v1")
+	}
+	return compactStringsV0(refs)
+}
+
+func fieldDeclaresSixSubrolesV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) bool {
+	for _, field := range fields {
+		if strings.TrimSpace(field.Name) != "subroles_required" {
+			continue
+		}
+		if len(field.Values) >= 6 {
+			return true
+		}
+		if strings.TrimSpace(string(field.ValueJSON)) == "6" ||
+			strings.EqualFold(strings.TrimSpace(string(field.ValueJSON)), "true") {
+			return true
+		}
+		if strings.TrimSpace(field.Value) == "6" ||
+			strings.EqualFold(strings.TrimSpace(field.Value), "true") {
+			return true
+		}
+	}
+	return false
 }
 
 type topicBlockContextV0 struct {
