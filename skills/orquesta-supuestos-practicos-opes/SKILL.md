@@ -74,7 +74,9 @@ El trabajo debe producir o actualizar:
 - matriz de procedencia y reutilización;
 - supuestos en Markdown para revisión humana;
 - JSON/JSONL importable por la web o por el adaptador OPES;
-- HTML local de revisión si procede;
+- HTML local de revisión con la carcasa visual vigente del curso cuando el
+  consumidor la tenga definida;
+- banco de test separado e importable cuando haya supuestos `tipo_test`;
 - informe de alcance contra temario;
 - informe de validación estructural;
 - incidencias de rework por tema.
@@ -110,6 +112,12 @@ del consumidor. En particular:
 - en desarrollo, las preguntas abiertas usan `open_response`;
 - cada pregunta declara evidencia del temario propio.
 
+El cierre de supuestos no se considera completo si solo existen Markdown o
+JSONL. Debe existir HTML revisable y, para `case_type: tipo_test`, un banco de
+test derivado con una fila por pregunta, conservando `case_id`, escenario,
+opciones `A-D`, correcta, explicación, evidencia y origen
+`supuesto_tipo_test`.
+
 ## Validación
 
 Antes de aceptar una entrega, el Director debe comprobar:
@@ -136,6 +144,8 @@ Cerrar solo cuando existan:
 - conteo de supuestos por tema frente al mínimo pedido;
 - matriz de reutilización y fuentes;
 - banco importable;
+- HTML revisable;
+- banco de test importable si existen supuestos `tipo_test`;
 - revisión de alcance contra temario;
 - informe de rework cerrado o pendiente justificado;
 - decisión del Director: `apto_local`, `pendiente_rework` o `bloqueado_real`.
