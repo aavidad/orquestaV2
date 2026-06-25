@@ -44,7 +44,9 @@ Puertos opcionales:
 - `GoalLauncher`, opcional para modo goal-first. Si se inyecta, el servicio
   persiste el intake/run, compila un `GoalWorkSpecV0` neutral desde
   `AppSpecV0`, lanza el goal por el puerto y no entra en el loop legacy de
-  agentes;
+  agentes. Para `/nueva-app`, el spec incluye `required_tests` ligados al
+  write-set generado y `ClosurePolicy.RequireRequiredTests=true`; un goal
+  `complete` sin `required_test_results` pasados queda bloqueado y pide rework;
 - `max_decision_cycles`, limite acotado para consumir decisiones y volver a ejecutar el loop sin quedar en bucle.
 
 Salida: `StartAppDirectorResultV0`.

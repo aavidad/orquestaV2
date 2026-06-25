@@ -158,6 +158,10 @@ func (backend *goalFirstHTTPBackendForTestV0) ObserveCodexGoalV0(
 		ExternalGoalRef: request.ExternalGoalRef,
 		Summary:         "goal-first fake completo",
 		ArtifactRefs:    goalFirstHTTPRequiredArtifactRefsForTestV0(backend.packet),
+		RequiredTestResults: goalFirstHTTPRequiredTestResultsForTestV0(
+			backend.packet,
+			"evidence-ref-http-goal-first-required-test",
+		),
 		EvidenceRefs: append(
 			[]string{"evidence-ref-http-goal-first-observed"},
 			backend.packet.ClosurePolicy.RequiredEvidenceRefs...,
@@ -175,4 +179,19 @@ func goalFirstHTTPRequiredArtifactRefsForTestV0(
 		}
 	}
 	return refs
+}
+
+func goalFirstHTTPRequiredTestResultsForTestV0(
+	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
+	evidenceRefs ...string,
+) []orquestagoal.GoalRequiredTestResultV0 {
+	results := make([]orquestagoal.GoalRequiredTestResultV0, 0, len(packet.RequiredTests))
+	for _, test := range packet.RequiredTests {
+		results = append(results, orquestagoal.GoalRequiredTestResultV0{
+			TestRef:      test.TestRef,
+			Status:       "passed",
+			EvidenceRefs: append([]string(nil), evidenceRefs...),
+		})
+	}
+	return results
 }

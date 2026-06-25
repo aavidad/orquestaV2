@@ -58,7 +58,11 @@ func TestObserveAppDirectorGoalV0SincronizaColaClosedConCandidatoPrevio(t *testi
 		GoalRef:         spec.GoalRef,
 		ExternalGoalRef: started.ExternalGoalRef,
 		ArtifactRefs:    goalFirstQueueRequiredArtifactRefsV0(spec),
-		EvidenceRefs:    spec.ClosurePolicy.RequiredEvidenceRefs,
+		RequiredTestResults: goalFirstQueueRequiredTestResultsV0(
+			spec,
+			"evidence-ref-goal-first-queue-required-test",
+		),
+		EvidenceRefs: spec.ClosurePolicy.RequiredEvidenceRefs,
 	}
 
 	result, err := stack.ObserveAppDirectorGoalV0(
@@ -108,11 +112,15 @@ func TestCodexStackObserveAppDirectorGoalExecutorV0UsaWrapperYSincronizaCola(t *
 	runRef := started.Run.RunID
 	spec := launcher.specs[0]
 	observer.result = orquestagoal.GoalWorkResultV0{
-		SchemaVersion:     orquestagoal.GoalWorkResultSchemaV0,
-		Status:            orquestagoal.GoalStatusCompleteV0,
-		GoalRef:           spec.GoalRef,
-		ExternalGoalRef:   started.ExternalGoalRef,
-		ArtifactRefs:      goalFirstQueueRequiredArtifactRefsV0(spec),
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusCompleteV0,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: started.ExternalGoalRef,
+		ArtifactRefs:    goalFirstQueueRequiredArtifactRefsV0(spec),
+		RequiredTestResults: goalFirstQueueRequiredTestResultsV0(
+			spec,
+			"evidence-ref-goal-first-mcp-required-test",
+		),
 		EvidenceRefs:      spec.ClosurePolicy.RequiredEvidenceRefs,
 		DomainReceiptRefs: []string{"domain-receipt-ref-goal-first-mcp-001"},
 	}
@@ -271,6 +279,21 @@ func goalFirstQueueRequiredArtifactRefsV0(spec orquestagoal.GoalWorkSpecV0) []st
 		}
 	}
 	return refs
+}
+
+func goalFirstQueueRequiredTestResultsV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	evidenceRefs ...string,
+) []orquestagoal.GoalRequiredTestResultV0 {
+	results := make([]orquestagoal.GoalRequiredTestResultV0, 0, len(spec.RequiredTests))
+	for _, test := range spec.RequiredTests {
+		results = append(results, orquestagoal.GoalRequiredTestResultV0{
+			TestRef:      test.TestRef,
+			Status:       "passed",
+			EvidenceRefs: append([]string(nil), evidenceRefs...),
+		})
+	}
+	return results
 }
 
 func listGoalFirstQueueCandidatesForTestV0(

@@ -71,6 +71,9 @@ El ultimo `observe_response.json` debe tener:
 - `closure_status=accepted`;
 - `closure_accepted=true`;
 - al menos los artefactos requeridos por el `GoalWorkSpecV0`;
+- el cierre solo puede llegar a `accepted` si el marcador
+  `ORQUESTA_GOAL_RESULT_V0` aporto resultados `passed` para los tests
+  requeridos por el `GoalWorkSpecV0`;
 - `evidence-ref-app-director-goal-first-v0` entre las evidencias observadas o
   acumuladas.
 

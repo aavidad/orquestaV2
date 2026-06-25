@@ -482,6 +482,7 @@ func buildStartAppDirectorGoalWorkSpecV0(
 			Path:    writeSetPath,
 			Purpose: "Arbol fuente de la app generada desde el contrato AppSpecV0.",
 		}},
+		RequiredTests:      startAppDirectorGoalRequiredTestsV0(token, writeSetPath, spec),
 		AcceptanceCriteria: startAppDirectorGoalAcceptanceCriteriaV0(spec, writeSetPath),
 		ArtifactContracts: []orquestagoal.GoalArtifactContractV0{
 			{ArtifactRef: "artifact-ref-" + token + "-source", ArtifactType: "source_tree", Required: true},
@@ -491,9 +492,13 @@ func buildStartAppDirectorGoalWorkSpecV0(
 			[]string{evidenceRef},
 			prepared.EvidenceRefs...,
 		)),
-		Budget:        startAppDirectorGoalBudgetV0(spec),
-		ClosurePolicy: orquestagoal.GoalClosurePolicyV0{RequireArtifacts: true, RequiredEvidenceRefs: []string{evidenceRef}},
-		ReworkPolicy:  orquestagoal.GoalReworkPolicyV0{PreferNewGoal: true, MaxReworkGoals: 1, PreserveArtifacts: true},
+		Budget: startAppDirectorGoalBudgetV0(spec),
+		ClosurePolicy: orquestagoal.GoalClosurePolicyV0{
+			RequireRequiredTests: true,
+			RequireArtifacts:     true,
+			RequiredEvidenceRefs: []string{evidenceRef},
+		},
+		ReworkPolicy: orquestagoal.GoalReworkPolicyV0{PreferNewGoal: true, MaxReworkGoals: 1, PreserveArtifacts: true},
 	})
 }
 
@@ -547,6 +552,26 @@ func startAppDirectorGoalAcceptanceCriteriaV0(
 		"Project source: kind=" + spec.ProjectSource.Kind + "; project_ref=" + spec.ProjectSource.ProjectRef + "; branch=" + spec.ProjectSource.Branch + ". No publicar rutas locales ni credenciales.",
 		"Entregar resumen final con artefactos, pruebas ejecutadas o justificadas, decisiones pendientes y bloqueos si existen.",
 	})
+}
+
+func startAppDirectorGoalRequiredTestsV0(
+	token string,
+	writeSetPath string,
+	spec orquestafactory.AppSpecV0,
+) []orquestagoal.GoalRequiredTestV0 {
+	testRef := "test-ref-" + token + "-generated-app"
+	return []orquestagoal.GoalRequiredTestV0{{
+		TestRef:    testRef,
+		CommandRef: "command-ref-" + token + "-verify-generated-app",
+		Command: "verificar la app generada bajo " + writeSetPath +
+			" con las pruebas propias del stack elegido o una prueba local documentada",
+		AcceptanceCriteria: compactStartAppDirectorStringsV0([]string{
+			"El arbol fuente requerido existe bajo " + writeSetPath + ".",
+			"La app cumple el contrato funcional: " + strings.TrimSpace(spec.App.Objetivo),
+			"Las pruebas declaradas para calidad=" + strings.TrimSpace(spec.Quality.Tests) + " pasan o quedan justificadas como no aplicables con evidencia local.",
+		}),
+		EvidenceRefs: []string{"evidence-ref-app-director-goal-required-test-v0"},
+	}}
 }
 
 func startAppDirectorGoalBudgetV0(spec orquestafactory.AppSpecV0) orquestagoal.GoalBudgetV0 {
