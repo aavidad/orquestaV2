@@ -93,6 +93,53 @@ func TestMCPAutoprogrammingStatusExecutorV0DelegaEnColaYRun(t *testing.T) {
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0ExponeQueueHealthSeparada(t *testing.T) {
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			ranked: []MCPRunQueueRankedCandidateCompactV0{
+				{Rank: 1, RunRef: "run-ref-health-ready", AppRef: "app", Status: "ready"},
+				{Rank: 2, RunRef: "run-ref-health-live", AppRef: "app", Status: "running"},
+				{Rank: 3, RunRef: "run-ref-health-blocked", AppRef: "app", Status: "stopped"},
+				{Rank: 4, RunRef: "run-ref-health-completed", AppRef: "app", Status: "closed"},
+				{Rank: 5, RunRef: "run-ref-health-failed", AppRef: "app", Status: "canceled"},
+			},
+		},
+		Stats: &fakeMCPAutoprogrammingRunStatusV0{
+			stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+				RunRef: "run-ref-health-live",
+				Counts: orquestacionnucleoapp.DirectorRunStatsCountsV0{
+					AgentsInFlight: 1,
+				},
+				Progress: orquestacionnucleoapp.DirectorProgressStatsV0{
+					ProgressingAgents: 1,
+				},
+				Closure: orquestacionnucleoapp.DirectorClosureStatsV0{
+					Status: orquestacionnucleoapp.DirectorClosureStatusReadyV0,
+				},
+			},
+		},
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{
+		RunRef: "run-ref-health-live",
+	})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.QueueHealth == nil ||
+		result.QueueHealth.Queued != 1 ||
+		result.QueueHealth.RunningLive != 1 ||
+		result.QueueHealth.RunningStale != 0 ||
+		result.QueueHealth.Blocked != 1 ||
+		result.QueueHealth.Completed != 1 ||
+		result.QueueHealth.Failed != 1 ||
+		result.QueueHealth.Lost != 0 ||
+		result.QueueHealth.ObservedRuns != 5 ||
+		result.QueueHealth.QueueRuns != 5 ||
+		result.QueueHealth.StatsRuns != 1 {
+		t.Fatalf("queue_health=%+v", result.QueueHealth)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0OverallNoOcultaProgresoBajo(t *testing.T) {
 	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
 		Queue: &fakeMCPAutoprogrammingQueueStatusV0{},

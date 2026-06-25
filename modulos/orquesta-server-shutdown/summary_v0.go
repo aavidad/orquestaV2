@@ -24,10 +24,14 @@ func applyShutdownStatsV0(
 	stats RunShutdownStatsV0,
 ) ServerShutdownRunResultV0 {
 	run.AgentsInFlight = stats.AgentsInFlight
+	run.ProcessLivenessObserved = stats.ProcessLivenessObserved
+	run.AgentsRunningLive = stats.AgentsRunningLive
+	run.AgentsRunningStale = stats.AgentsRunningStale
+	run.AgentsLost = stats.AgentsLost
 	run.AgentsStopRequested = stats.AgentsStopRequested
 	run.AgentsStopConfirmed = stats.AgentsStopConfirmed
 	if !run.Ready && !run.CheckpointRequired {
-		run.Ready = stats.AgentsInFlight == 0
+		run.Ready = shutdownRunWaitingAgentsV0(run) == 0
 	}
 	return run
 }
@@ -39,6 +43,10 @@ func summarizeShutdownResultV0(
 	result.ShutdownReady = true
 	for _, run := range result.Runs {
 		result.AgentsInFlight += run.AgentsInFlight
+		result.ProcessLivenessObserved = result.ProcessLivenessObserved || run.ProcessLivenessObserved
+		result.AgentsRunningLive += run.AgentsRunningLive
+		result.AgentsRunningStale += run.AgentsRunningStale
+		result.AgentsLost += run.AgentsLost
 		result.CheckpointAgentsPending += len(compactServerShutdownStringsV0(run.PendingCheckpointAgentRefs))
 		if run.Ready {
 			result.RunsStopped++
@@ -59,4 +67,11 @@ func summarizeShutdownResultV0(
 		}
 	}
 	return result
+}
+
+func shutdownRunWaitingAgentsV0(run ServerShutdownRunResultV0) int {
+	if run.ProcessLivenessObserved {
+		return run.AgentsRunningLive
+	}
+	return run.AgentsInFlight
 }

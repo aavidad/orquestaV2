@@ -26,10 +26,25 @@ type WebAutoprogrammingStatusViewModelV0 struct {
 	RunLive         bool                                        `json:"run_live"`
 	QueueRef        string                                      `json:"queue_ref,omitempty"`
 	RunRef          string                                      `json:"run_ref,omitempty"`
+	QueueHealth     *WebAutoprogrammingQueueHealthV0            `json:"queue_health,omitempty"`
 	Runs            []WebAutoprogrammingRunProgressV0           `json:"runs,omitempty"`
 	Agents          []WebAutoprogrammingAgentProgressV0         `json:"agents,omitempty"`
 	Diagnostics     []WebAutoprogrammingDiagnosticV0            `json:"diagnostics,omitempty"`
 	ErroresPublicos []WebAutoprogrammingPrepareRunPublicIssueV0 `json:"errores_publicos,omitempty"`
+}
+
+type WebAutoprogrammingQueueHealthV0 struct {
+	Queued       int `json:"queued,omitempty"`
+	RunningLive  int `json:"running_live,omitempty"`
+	RunningStale int `json:"running_stale,omitempty"`
+	Blocked      int `json:"blocked,omitempty"`
+	Lost         int `json:"lost,omitempty"`
+	Completed    int `json:"completed,omitempty"`
+	Failed       int `json:"failed,omitempty"`
+	Unclassified int `json:"unclassified,omitempty"`
+	ObservedRuns int `json:"observed_runs,omitempty"`
+	QueueRuns    int `json:"queue_runs,omitempty"`
+	StatsRuns    int `json:"stats_runs,omitempty"`
 }
 
 type WebAutoprogrammingRunProgressV0 struct {
@@ -88,12 +103,34 @@ func NewWebAutoprogrammingStatusViewModelV0(locale string, result orquestamcp.MC
 		vm.QueueLive = result.Queue.Estado == WebAutoprogrammingPrepareRunEstadoOKV0
 		vm.Runs = append(vm.Runs, webAutoprogrammingQueueRunsV0(result.Queue.Ranked)...)
 	}
+	vm.QueueHealth = webAutoprogrammingQueueHealthV0(result.QueueHealth)
 	if result.Run != nil && result.Run.Stats != nil {
 		vm.RunLive = result.Run.Estado == WebAutoprogrammingPrepareRunEstadoOKV0
 		vm.Runs = append(vm.Runs, webAutoprogrammingRunProgressV0(result.Run))
 		vm.Agents = webAutoprogrammingAgentProgressV0(result.Run)
 	}
 	return vm
+}
+
+func webAutoprogrammingQueueHealthV0(
+	value *orquestamcp.MCPAutoprogrammingQueueHealthV0,
+) *WebAutoprogrammingQueueHealthV0 {
+	if value == nil {
+		return nil
+	}
+	return &WebAutoprogrammingQueueHealthV0{
+		Queued:       value.Queued,
+		RunningLive:  value.RunningLive,
+		RunningStale: value.RunningStale,
+		Blocked:      value.Blocked,
+		Lost:         value.Lost,
+		Completed:    value.Completed,
+		Failed:       value.Failed,
+		Unclassified: value.Unclassified,
+		ObservedRuns: value.ObservedRuns,
+		QueueRuns:    value.QueueRuns,
+		StatsRuns:    value.StatsRuns,
+	}
 }
 
 func webAutoprogrammingQueueRunsV0(values []orquestamcp.MCPRunQueueRankedCandidateCompactV0) []WebAutoprogrammingRunProgressV0 {

@@ -11,6 +11,20 @@ type MCPAutoprogrammingProjectV0 struct {
 	Blocked        bool     `json:"blocked,omitempty"`
 }
 
+type MCPAutoprogrammingQueueHealthV0 struct {
+	Queued       int `json:"queued,omitempty"`
+	RunningLive  int `json:"running_live,omitempty"`
+	RunningStale int `json:"running_stale,omitempty"`
+	Blocked      int `json:"blocked,omitempty"`
+	Lost         int `json:"lost,omitempty"`
+	Completed    int `json:"completed,omitempty"`
+	Failed       int `json:"failed,omitempty"`
+	Unclassified int `json:"unclassified,omitempty"`
+	ObservedRuns int `json:"observed_runs,omitempty"`
+	QueueRuns    int `json:"queue_runs,omitempty"`
+	StatsRuns    int `json:"stats_runs,omitempty"`
+}
+
 type MCPAutoprogrammingTaskV0 struct {
 	RunRef              string   `json:"run_ref,omitempty"`
 	TaskRef             string   `json:"task_ref"`

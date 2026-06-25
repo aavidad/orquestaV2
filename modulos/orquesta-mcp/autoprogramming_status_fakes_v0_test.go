@@ -16,8 +16,9 @@ func hasMCPAutoprogrammingDiagnosticCodeV0(diagnostics []MCPAutoprogrammingDiagn
 }
 
 type fakeMCPAutoprogrammingQueueStatusV0 struct {
-	input MCPRunQueuePriorityToolInputV0
-	empty bool
+	input  MCPRunQueuePriorityToolInputV0
+	empty  bool
+	ranked []MCPRunQueueRankedCandidateCompactV0
 }
 
 func (fake *fakeMCPAutoprogrammingQueueStatusV0) Execute(
@@ -34,6 +35,11 @@ func (fake *fakeMCPAutoprogrammingQueueStatusV0) Execute(
 		Errores:       []MCPValidationIssueV0{},
 	}
 	if fake.empty {
+		return result, nil
+	}
+	if fake.ranked != nil {
+		result.Count = len(fake.ranked)
+		result.Ranked = append([]MCPRunQueueRankedCandidateCompactV0(nil), fake.ranked...)
 		return result, nil
 	}
 	result.Count = 1

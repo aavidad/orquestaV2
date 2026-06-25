@@ -63,11 +63,18 @@ func (reader stackShutdownStatsReaderV0) ReadRunShutdownStatsV0(
 			EvidenceRefs:  request.EvidenceRefs,
 		},
 	)
+	liveness := buildStackShutdownAgentLivenessV0(ctx, reader.Config, stats)
 	return orquestaservershutdown.RunShutdownStatsV0{
-		RunRef:              stats.RunRef,
-		AgentsInFlight:      stats.Counts.AgentsInFlight,
-		AgentsStopRequested: stats.Counts.AgentsStopRequested,
-		AgentsStopConfirmed: stats.Counts.AgentsStopConfirmed,
-		EvidenceRefs:        compactStringsV0(request.EvidenceRefs),
+		RunRef:                  stats.RunRef,
+		AgentsInFlight:          stats.Counts.AgentsInFlight,
+		ProcessLivenessObserved: liveness.Observed,
+		AgentsRunningLive:       len(liveness.LiveRefs),
+		AgentsRunningStale:      len(liveness.StaleRefs),
+		AgentsLost:              len(liveness.LostRefs),
+		AgentsStopRequested:     stats.Counts.AgentsStopRequested,
+		AgentsStopConfirmed:     stats.Counts.AgentsStopConfirmed,
+		EvidenceRefs: compactStringsV0(
+			append(request.EvidenceRefs, liveness.EvidenceRefs...),
+		),
 	}, nil
 }

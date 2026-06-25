@@ -27,9 +27,11 @@ func (preparer stackShutdownCheckpointPreparerV0) PrepareAgentShutdownV0(
 	if err != nil {
 		return orquestaservershutdown.PrepareAgentShutdownResultV0{}, err
 	}
-	inFlight := stackShutdownInFlightAgentRefsV0(stats)
+	liveness := buildStackShutdownAgentLivenessV0(ctx, preparer.Config, stats)
+	inFlight := stackShutdownCheckpointAgentRefsV0(stats, liveness)
+	evidence := compactStringsV0(append(command.EvidenceRefs, liveness.EvidenceRefs...))
 	if len(inFlight) == 0 {
-		return stackShutdownRecordedCheckpointResultV0(command), nil
+		return stackShutdownRecordedCheckpointResultV0(command, evidence), nil
 	}
 	descriptors, err := preparer.Config.Stores.ReceiptStore.ListCodexReceiptDescriptorsV0(
 		ctx,
@@ -43,6 +45,7 @@ func (preparer stackShutdownCheckpointPreparerV0) PrepareAgentShutdownV0(
 	if err != nil {
 		return orquestaservershutdown.PrepareAgentShutdownResultV0{}, err
 	}
+	command.EvidenceRefs = evidence
 	return preparer.prepareInFlightAgentCheckpointsV0(ctx, command, inFlight, descriptors), nil
 }
 
@@ -160,6 +163,16 @@ func stackShutdownInFlightAgentRefsV0(
 	return compactStringsV0(refs)
 }
 
+func stackShutdownCheckpointAgentRefsV0(
+	stats orquestacionnucleoapp.DirectorRunStatsV0,
+	liveness stackShutdownAgentLivenessV0,
+) []string {
+	if liveness.Observed {
+		return compactStringsV0(liveness.LiveRefs)
+	}
+	return stackShutdownInFlightAgentRefsV0(stats)
+}
+
 func stackShutdownDescriptorsByAgentV0(
 	descriptors []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
 ) map[string]orquestaruntimecodexdelivery.CodexReceiptDescriptorV0 {
@@ -186,9 +199,10 @@ func stackShutdownRuntimeDirV0(
 
 func stackShutdownRecordedCheckpointResultV0(
 	command orquestaservershutdown.PrepareAgentShutdownCommandV0,
+	evidence []string,
 ) orquestaservershutdown.PrepareAgentShutdownResultV0 {
 	checkpointRef := "checkpoint-ref-shutdown-" + safeStackShutdownRefPartV0(command.RunRef)
-	refs := append([]string(nil), command.EvidenceRefs...)
+	refs := append([]string(nil), evidence...)
 	refs = append(refs, checkpointRef)
 	return orquestaservershutdown.PrepareAgentShutdownResultV0{
 		RunRef:             strings.TrimSpace(command.RunRef),

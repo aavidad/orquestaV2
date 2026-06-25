@@ -69,6 +69,74 @@ func TestStackShutdownCheckpointV0NoConsumeAckDeIntentoAnterior(t *testing.T) {
 	}
 }
 
+func TestStackShutdownCheckpointV0RegistraSiAgenteEnVueloNoTieneProcesoVivo(t *testing.T) {
+	fixture := newStackShutdownCheckpointFixtureV0(t)
+	fixture.preparer.Config.Codex.SnapshotSource = stackShutdownSnapshotSourceForTestV0{}
+
+	result, err := fixture.preparer.PrepareAgentShutdownV0(context.Background(), fixture.command)
+	if err != nil {
+		t.Fatalf("PrepareAgentShutdownV0: %v", err)
+	}
+	if !result.CheckpointRecorded || len(result.PendingAgentRefs) != 0 {
+		t.Fatalf("result=%+v", result)
+	}
+	if _, err := os.Stat(filepath.Join(fixture.runtimeDir, orquestaruntimecodex.CodexShutdownRequestFileNameV0)); !os.IsNotExist(err) {
+		t.Fatalf("shutdown request no debe escribirse para agente stale: %v", err)
+	}
+	if !hasStackShutdownEvidenceForTestV0(result.EvidenceRefs, "shutdown-agent-stale-no-process") {
+		t.Fatalf("evidence sin stale no-process: %+v", result.EvidenceRefs)
+	}
+}
+
+func TestStackShutdownCheckpointV0MantieneEsperaSiProcesoSigueVivo(t *testing.T) {
+	fixture := newStackShutdownCheckpointFixtureV0(t)
+	processRef := "process-ref-shutdown-stack-001"
+	sessionRef := "session-ref-shutdown-stack-001"
+	launchRef := "launch-ref-shutdown-stack-001"
+	recordStackShutdownProcessForTestV0(t, fixture, processRef, sessionRef, launchRef)
+	fixture.preparer.Config.Codex.SnapshotSource = stackShutdownSnapshotSourceForTestV0{
+		snapshots: map[string]orquestaruntime.ProcessRuntimeSnapshotV0{
+			processRef: {
+				SchemaVersion: orquestaruntime.ProcessRuntimeConnectorVersionV0,
+				ProcessRef:    processRef,
+				SessionRef:    sessionRef,
+				LaunchRef:     launchRef,
+				Status:        orquestaruntime.ProcessRuntimeRunningV0,
+			},
+		},
+	}
+
+	result, err := fixture.preparer.PrepareAgentShutdownV0(context.Background(), fixture.command)
+	if err != nil {
+		t.Fatalf("PrepareAgentShutdownV0: %v", err)
+	}
+	if result.CheckpointRecorded || len(result.PendingAgentRefs) != 1 ||
+		result.PendingAgentRefs[0] != fixture.agentRef {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestStackShutdownStatsV0ExponeLivenessDeAgentesObsoletos(t *testing.T) {
+	fixture := newStackShutdownCheckpointFixtureV0(t)
+	fixture.preparer.Config.Codex.SnapshotSource = stackShutdownSnapshotSourceForTestV0{}
+
+	stats, err := stackShutdownStatsReaderV0{
+		Config: fixture.preparer.Config,
+	}.ReadRunShutdownStatsV0(context.Background(), orquestaservershutdown.RunShutdownStatsRequestV0{
+		RunRef: fixture.runRef,
+	})
+	if err != nil {
+		t.Fatalf("ReadRunShutdownStatsV0: %v", err)
+	}
+	if !stats.ProcessLivenessObserved ||
+		stats.AgentsInFlight != 1 ||
+		stats.AgentsRunningLive != 0 ||
+		stats.AgentsRunningStale != 1 ||
+		stats.AgentsLost != 0 {
+		t.Fatalf("stats=%+v", stats)
+	}
+}
+
 type stackShutdownCheckpointFixtureDataV0 struct {
 	runRef     string
 	agentRef   string
@@ -142,6 +210,44 @@ func stackShutdownRunForTestV0(
 		Tasks:         []string{"task-ref-shutdown-stack-001"},
 		Agents:        []string{agentRef},
 		StartedAgents: []string{agentRef},
+	}
+}
+
+func recordStackShutdownProcessForTestV0(
+	t *testing.T,
+	fixture stackShutdownCheckpointFixtureDataV0,
+	processRef string,
+	sessionRef string,
+	launchRef string,
+) {
+	t.Helper()
+	if err := fixture.preparer.Config.Stores.ProcessRegistry.RecordAgentProcessV0(context.Background(), orquestacionnucleoapp.AgentProcessRecordV0{
+		RunID:          fixture.runRef,
+		AgentRequestID: fixture.agentRef,
+		ProcessRef:     processRef,
+		SessionRef:     sessionRef,
+		LaunchRef:      launchRef,
+		ReadinessRef:   "readiness-ref-shutdown-stack-001",
+		EvidenceRefs:   []string{"evidence-ref-shutdown-process-record"},
+	}); err != nil {
+		t.Fatalf("RecordAgentProcessV0: %v", err)
+	}
+}
+
+type stackShutdownSnapshotSourceForTestV0 struct {
+	snapshots map[string]orquestaruntime.ProcessRuntimeSnapshotV0
+}
+
+func (source stackShutdownSnapshotSourceForTestV0) SnapshotV0(
+	processRef string,
+) (orquestaruntime.ProcessRuntimeSnapshotV0, error) {
+	if snapshot, ok := source.snapshots[processRef]; ok {
+		return snapshot, nil
+	}
+	return orquestaruntime.ProcessRuntimeSnapshotV0{}, orquestaruntime.ProcessRuntimeErrorV0{
+		Code:       orquestaruntime.ProcessRuntimeNoEncontradoV0,
+		MessageKey: "orquesta.runtime.process.process_runtime_no_encontrado",
+		Field:      "process_ref",
 	}
 }
 

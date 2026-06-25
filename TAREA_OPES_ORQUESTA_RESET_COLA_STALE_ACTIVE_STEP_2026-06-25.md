@@ -78,8 +78,31 @@ go test -count=1 ./modulos/orquesta-app-codex-stack
 go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-run-supervisor ./modulos/orquesta-run-coordinator
 ```
 
-Pendiente de esta tarea: taxonomía completa de estado vivo/stale/lost por PID y
-apagado cooperativo cuando solo queden registros obsoletos sin proceso vivo.
+Avance adicional 2026-06-25:
+
+- `/api/v0/server/shutdown` expone ahora `process_liveness_observed`,
+  `agents_running_live`, `agents_running_stale` y `agents_lost`.
+- El caso de uso neutral mantiene `agents_in_flight` como contador lógico
+  legacy, pero cuando hay liveness observada decide `ready/waiting` solo con
+  `agents_running_live`.
+- El preparador Codex de shutdown solo pide checkpoint/ACK a agentes con
+  proceso runtime `running` o `stopping`; los agentes en vuelo sin registro de
+  proceso, con snapshot `stopped` o con snapshot inexistente quedan como
+  `stale/lost` con evidencia compacta.
+- `/api/v0/autoprogramming/status` devuelve `queue_health` con conteos
+  `queued`, `running_live`, `running_stale`, `blocked`, `lost`, `completed` y
+  `failed`; la web conserva el mismo bloque en su view-model.
+
+Evidencia local adicional:
+
+```bash
+go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-web ./modulos/orquesta-server-shutdown ./modulos/orquesta-app-codex-stack
+```
+
+Pendiente de esta tarea: que el director residente OPES convierta
+automaticamente runs `stale/lost` en tareas de replanificacion sin intervencion
+manual. La deteccion y exposicion publica ya existen; la politica de
+replanificacion OPES debe quedar en la composicion/adaptador, no en core puro.
 
 ## Criterio de aceptación
 

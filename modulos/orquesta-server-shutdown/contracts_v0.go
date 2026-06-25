@@ -96,11 +96,15 @@ type RunShutdownStatsRequestV0 struct {
 }
 
 type RunShutdownStatsV0 struct {
-	RunRef              string   `json:"run_ref"`
-	AgentsInFlight      int      `json:"agents_in_flight"`
-	AgentsStopRequested int      `json:"agents_stop_requested"`
-	AgentsStopConfirmed int      `json:"agents_stop_confirmed"`
-	EvidenceRefs        []string `json:"evidence_refs,omitempty"`
+	RunRef                  string   `json:"run_ref"`
+	AgentsInFlight          int      `json:"agents_in_flight"`
+	ProcessLivenessObserved bool     `json:"process_liveness_observed,omitempty"`
+	AgentsRunningLive       int      `json:"agents_running_live,omitempty"`
+	AgentsRunningStale      int      `json:"agents_running_stale,omitempty"`
+	AgentsLost              int      `json:"agents_lost,omitempty"`
+	AgentsStopRequested     int      `json:"agents_stop_requested"`
+	AgentsStopConfirmed     int      `json:"agents_stop_confirmed"`
+	EvidenceRefs            []string `json:"evidence_refs,omitempty"`
 }
 
 type ServerShutdownResultV0 struct {
@@ -110,6 +114,10 @@ type ServerShutdownResultV0 struct {
 	RunsRequested              int                                          `json:"runs_requested"`
 	RunsStopped                int                                          `json:"runs_stopped"`
 	AgentsInFlight             int                                          `json:"agents_in_flight"`
+	ProcessLivenessObserved    bool                                         `json:"process_liveness_observed,omitempty"`
+	AgentsRunningLive          int                                          `json:"agents_running_live,omitempty"`
+	AgentsRunningStale         int                                          `json:"agents_running_stale,omitempty"`
+	AgentsLost                 int                                          `json:"agents_lost,omitempty"`
 	CheckpointsPending         int                                          `json:"checkpoints_pending"`
 	CheckpointAgentsPending    int                                          `json:"checkpoint_agents_pending,omitempty"`
 	CheckpointDeadlinesExpired int                                          `json:"checkpoint_deadlines_expired,omitempty"`
@@ -131,6 +139,10 @@ type ServerShutdownRunResultV0 struct {
 	Terminal                      bool     `json:"terminal,omitempty"`
 	StopRequested                 bool     `json:"stop_requested,omitempty"`
 	AgentsInFlight                int      `json:"agents_in_flight"`
+	ProcessLivenessObserved       bool     `json:"process_liveness_observed,omitempty"`
+	AgentsRunningLive             int      `json:"agents_running_live,omitempty"`
+	AgentsRunningStale            int      `json:"agents_running_stale,omitempty"`
+	AgentsLost                    int      `json:"agents_lost,omitempty"`
 	AgentsStopRequested           int      `json:"agents_stop_requested"`
 	AgentsStopConfirmed           int      `json:"agents_stop_confirmed"`
 	Ready                         bool     `json:"ready"`

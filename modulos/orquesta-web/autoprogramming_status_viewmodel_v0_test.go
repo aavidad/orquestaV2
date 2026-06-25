@@ -27,6 +27,18 @@ func TestWebAutoprogrammingStatusViewModelV0AgregaColaYRunVivos(t *testing.T) {
 				PriorityScore: 95,
 			}},
 		},
+		QueueHealth: &orquestamcp.MCPAutoprogrammingQueueHealthV0{
+			Queued:       1,
+			RunningLive:  1,
+			RunningStale: 2,
+			Blocked:      3,
+			Lost:         4,
+			Completed:    5,
+			Failed:       6,
+			ObservedRuns: 7,
+			QueueRuns:    8,
+			StatsRuns:    1,
+		},
 		Run: &orquestamcp.MCPDirectorStatsToolResultV0{
 			Estado: orquestamcp.MCPDirectorStatsEstadoOKV0,
 			RunRef: "run-ref-autop-status-web-001",
@@ -83,6 +95,19 @@ func TestWebAutoprogrammingStatusViewModelV0AgregaColaYRunVivos(t *testing.T) {
 		vm.QueueRef != "queue-ref-autop-status-web-001" ||
 		vm.RunRef != "run-ref-autop-status-web-001" {
 		t.Fatalf("vm=%+v", vm)
+	}
+	if vm.QueueHealth == nil ||
+		vm.QueueHealth.Queued != 1 ||
+		vm.QueueHealth.RunningLive != 1 ||
+		vm.QueueHealth.RunningStale != 2 ||
+		vm.QueueHealth.Blocked != 3 ||
+		vm.QueueHealth.Lost != 4 ||
+		vm.QueueHealth.Completed != 5 ||
+		vm.QueueHealth.Failed != 6 ||
+		vm.QueueHealth.ObservedRuns != 7 ||
+		vm.QueueHealth.QueueRuns != 8 ||
+		vm.QueueHealth.StatsRuns != 1 {
+		t.Fatalf("queue_health=%+v", vm.QueueHealth)
 	}
 	if len(vm.Runs) != 2 ||
 		vm.Runs[0].RunRef != "run-ref-autop-status-web-queued" ||

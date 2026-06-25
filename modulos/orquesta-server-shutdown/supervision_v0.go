@@ -14,7 +14,7 @@ func shouldRunShutdownSupervisorV0(
 		if run.CheckpointRequired || run.Terminal {
 			continue
 		}
-		if !statsAvailable || run.AgentsInFlight > 0 {
+		if !statsAvailable || shutdownRunWaitingAgentsV0(run) > 0 {
 			return true
 		}
 	}
