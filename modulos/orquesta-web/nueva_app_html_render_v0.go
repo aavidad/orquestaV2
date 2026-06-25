@@ -55,6 +55,7 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.html.backlog_vacio",
 		"nueva_app.goal.titulo",
 		"nueva_app.goal.run_ref",
+		"nueva_app.goal.director_execution_mode",
 		"nueva_app.goal.goal_ref",
 		"nueva_app.goal.external_goal_ref",
 		"nueva_app.goal.goal_status",
@@ -502,17 +503,18 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
     <aside class="side">
       <section class="panel"><h2>{{index .HTML "nueva_app.wizard.resumen_vivo"}}</h2><div id="wizard-summary" class="summary-list"></div></section>
       <section class="panel status"><h2>{{index .HTML "nueva_app.html.resultado"}}</h2><p>{{.Page.Textos.Estado}}</p>{{if .Page.ViewModel.RequestID}}<p><code>{{.Page.ViewModel.RequestID}}</code></p>{{end}}</section>
-      {{with .Page.ViewModel.Director}}<section class="panel goal-panel" data-goal-panel data-goal-auto-poll="true" data-goal-poll-interval-ms="5000" data-goal-max-polls="60" data-run-ref="{{.RunRef}}" data-goal-ref="{{.GoalRef}}" data-goal-updating="{{index $.HTML "nueva_app.goal.updating"}}" data-goal-updated="{{index $.HTML "nueva_app.goal.updated"}}" data-goal-error="{{index $.HTML "nueva_app.goal.error"}}">
+      {{with .Page.ViewModel.Director}}<section class="panel goal-panel" data-goal-panel data-goal-auto-poll="{{if .GoalRef}}true{{else}}false{{end}}" data-goal-poll-interval-ms="5000" data-goal-max-polls="60" data-run-ref="{{.RunRef}}" data-goal-ref="{{.GoalRef}}" data-goal-updating="{{index $.HTML "nueva_app.goal.updating"}}" data-goal-updated="{{index $.HTML "nueva_app.goal.updated"}}" data-goal-error="{{index $.HTML "nueva_app.goal.error"}}">
         <h2>{{index $.HTML "nueva_app.goal.titulo"}}</h2>
         <div class="goal-grid">
           {{if .RunRef}}<div><strong>{{index $.HTML "nueva_app.goal.run_ref"}}:</strong> <code data-goal-run-ref>{{.RunRef}}</code></div>{{end}}
+          {{if .DirectorExecutionMode}}<div><strong>{{index $.HTML "nueva_app.goal.director_execution_mode"}}:</strong> <code>{{.DirectorExecutionMode}}</code></div>{{end}}
           {{if .GoalRef}}<div><strong>{{index $.HTML "nueva_app.goal.goal_ref"}}:</strong> <code data-goal-goal-ref>{{.GoalRef}}</code></div>{{end}}
           {{if .ExternalGoalRef}}<div><strong>{{index $.HTML "nueva_app.goal.external_goal_ref"}}:</strong> <code data-goal-external-ref>{{.ExternalGoalRef}}</code></div>{{end}}
           {{if .GoalStatus}}<div><strong>{{index $.HTML "nueva_app.goal.goal_status"}}:</strong> <code data-goal-status>{{.GoalStatus}}</code></div>{{end}}
           <div data-goal-run-status-row hidden><strong>{{index $.HTML "nueva_app.goal.run_status"}}:</strong> <code data-goal-run-status></code></div>
           <div data-goal-closure-status-row hidden><strong>{{index $.HTML "nueva_app.goal.closure_status"}}:</strong> <code data-goal-closure-status></code></div>
         </div>
-        {{if .RunRef}}<div class="goal-actions"><button class="secondary" type="button" data-goal-observe>{{index $.HTML "nueva_app.goal.update"}}</button><span class="goal-feedback" data-goal-feedback aria-live="polite"></span></div>{{end}}
+        {{if .GoalRef}}<div class="goal-actions"><button class="secondary" type="button" data-goal-observe>{{index $.HTML "nueva_app.goal.update"}}</button><span class="goal-feedback" data-goal-feedback aria-live="polite"></span></div>{{end}}
       </section>{{end}}
       {{if .Page.ViewModel.ErroresPublicos}}<section class="panel issue"><h2>{{index .HTML "nueva_app.html.errores_publicos"}}</h2><ul>{{range .Page.ViewModel.ErroresPublicos}}<li><code>{{.Code}}</code> {{index $.Page.Textos.ErroresPublicos .Code}}</li>{{end}}</ul></section>{{end}}
       {{if .Page.ViewModel.ResumenApp.Nombre}}<section class="panel"><h2>{{index .HTML "nueva_app.html.resumen"}}</h2><p>{{.Page.ViewModel.ResumenApp.Nombre}} · {{.Page.ViewModel.ResumenApp.TipoApp}}</p><p>{{.Page.ViewModel.ResumenApp.Objetivo}}</p></section>{{end}}

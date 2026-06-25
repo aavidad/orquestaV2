@@ -169,6 +169,7 @@ Campos:
     app_spec: resumen compacto
     run_ref: ref interna neutra cuando se usa loop legacy
     phase_id: fase inicial
+    director_execution_mode: `legacy_director_loop` o `goal_first`
     director_task: task_ref, brainstorm_ref, agent_request_id y capacidad
     director_tasks: lista compacta de tareas/directores arrancables cuando
       la solicitud requiere equipo director
@@ -1445,9 +1446,10 @@ Campos:
     request_id?, correlation_id?, run_ref, occurred_at?, requested_by?
   output_ok:
     estado: ok
-    run_ref, run_status?, goal_ref, external_goal_ref?, goal_status,
-    closure_status?, closure_accepted?, closure_needs_rework?,
-    artifact_refs?, domain_receipt_refs?, evidence_refs?
+    run_ref, run_status?, director_execution_mode?, goal_ref,
+    external_goal_ref?, goal_status, closure_status?, closure_accepted?,
+    closure_needs_rework?, artifact_refs?, domain_receipt_refs?,
+    evidence_refs?
   output_error:
     estado: error
     errores_publicos

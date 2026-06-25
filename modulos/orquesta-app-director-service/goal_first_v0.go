@@ -111,15 +111,16 @@ func ObserveAppDirectorGoalV0(
 		return ObserveAppDirectorGoalResultV0{}, err
 	}
 	return ObserveAppDirectorGoalResultV0{
-		SchemaVersion:   ObserveAppDirectorGoalResultSchemaV0,
-		Status:          state.Status,
-		RunRef:          state.RunRef,
-		GoalRef:         state.GoalRef,
-		ExternalGoalRef: state.ExternalGoalRef,
-		Run:             run,
-		GoalResult:      result,
-		Closure:         closure,
-		EvidenceRefs:    append([]string(nil), state.EvidenceRefs...),
+		SchemaVersion:         ObserveAppDirectorGoalResultSchemaV0,
+		Status:                state.Status,
+		DirectorExecutionMode: AppDirectorExecutionModeGoalFirstV0,
+		RunRef:                state.RunRef,
+		GoalRef:               state.GoalRef,
+		ExternalGoalRef:       state.ExternalGoalRef,
+		Run:                   run,
+		GoalResult:            result,
+		Closure:               closure,
+		EvidenceRefs:          append([]string(nil), state.EvidenceRefs...),
 	}, nil
 }
 
@@ -508,15 +509,16 @@ func startAppDirectorGoalFirstResultV0(
 		status = StartAppDirectorStatusStartedV0
 	}
 	return StartAppDirectorResultV0{
-		SchemaVersion:     StartAppDirectorResultSchemaVersionV0,
-		Status:            status,
-		CorrelationID:     request.CorrelationID,
-		AppSpec:           spec,
-		Run:               prepared.Run,
-		GoalRef:           strings.TrimSpace(receipt.GoalRef),
-		ExternalGoalRef:   strings.TrimSpace(receipt.ExternalGoalRef),
-		GoalStatus:        strings.TrimSpace(receipt.Status),
-		GoalLaunchReceipt: &receipt,
+		SchemaVersion:         StartAppDirectorResultSchemaVersionV0,
+		Status:                status,
+		DirectorExecutionMode: AppDirectorExecutionModeGoalFirstV0,
+		CorrelationID:         request.CorrelationID,
+		AppSpec:               spec,
+		Run:                   prepared.Run,
+		GoalRef:               strings.TrimSpace(receipt.GoalRef),
+		ExternalGoalRef:       strings.TrimSpace(receipt.ExternalGoalRef),
+		GoalStatus:            strings.TrimSpace(receipt.Status),
+		GoalLaunchReceipt:     &receipt,
 		EvidenceRefs: compactStartAppDirectorStringsV0(append(
 			append([]string{"evidence-ref-app-director-goal-first-launched-v0"}, prepared.EvidenceRefs...),
 			receipt.EvidenceRefs...,

@@ -8,21 +8,22 @@ import (
 )
 
 type WebArrancarDirectorAppResultV0 struct {
-	Estado            string                            `json:"estado"`
-	RequestID         string                            `json:"request_id,omitempty"`
-	CorrelationID     string                            `json:"correlation_id,omitempty"`
-	RunRef            string                            `json:"run_ref,omitempty"`
-	PhaseID           string                            `json:"phase_id,omitempty"`
-	DirectorTask      WebNuevaAppDirectorTaskV0         `json:"director_task,omitempty"`
-	DirectorTasks     []WebNuevaAppDirectorTaskV0       `json:"director_tasks,omitempty"`
-	LoopStatus        string                            `json:"loop_status,omitempty"`
-	StartedAgents     []string                          `json:"started_agents,omitempty"`
-	GoalRef           string                            `json:"goal_ref,omitempty"`
-	ExternalGoalRef   string                            `json:"external_goal_ref,omitempty"`
-	GoalStatus        string                            `json:"goal_status,omitempty"`
-	GoalLaunchReceipt *orquestagoal.GoalLaunchReceiptV0 `json:"goal_launch_receipt,omitempty"`
-	Errores           []WebNuevaAppIssueV0              `json:"errores_publicos,omitempty"`
-	EvidenceRefs      []string                          `json:"evidence_refs,omitempty"`
+	Estado                string                            `json:"estado"`
+	RequestID             string                            `json:"request_id,omitempty"`
+	CorrelationID         string                            `json:"correlation_id,omitempty"`
+	RunRef                string                            `json:"run_ref,omitempty"`
+	PhaseID               string                            `json:"phase_id,omitempty"`
+	DirectorExecutionMode string                            `json:"director_execution_mode,omitempty"`
+	DirectorTask          WebNuevaAppDirectorTaskV0         `json:"director_task,omitempty"`
+	DirectorTasks         []WebNuevaAppDirectorTaskV0       `json:"director_tasks,omitempty"`
+	LoopStatus            string                            `json:"loop_status,omitempty"`
+	StartedAgents         []string                          `json:"started_agents,omitempty"`
+	GoalRef               string                            `json:"goal_ref,omitempty"`
+	ExternalGoalRef       string                            `json:"external_goal_ref,omitempty"`
+	GoalStatus            string                            `json:"goal_status,omitempty"`
+	GoalLaunchReceipt     *orquestagoal.GoalLaunchReceiptV0 `json:"goal_launch_receipt,omitempty"`
+	Errores               []WebNuevaAppIssueV0              `json:"errores_publicos,omitempty"`
+	EvidenceRefs          []string                          `json:"evidence_refs,omitempty"`
 }
 
 func NewWebNuevaAppDirectorViewModelV0(
@@ -41,16 +42,17 @@ func NewWebNuevaAppDirectorViewModelV0(
 		Fases:             []WebNuevaAppFaseV0{},
 		Microtareas:       []WebNuevaAppMicrotareaV0{},
 		Director: &WebNuevaAppDirectorV0{
-			RunRef:            trimV0(result.RunRef),
-			PhaseID:           trimV0(result.PhaseID),
-			LoopStatus:        trimV0(result.LoopStatus),
-			DirectorTasks:     tasks,
-			StartedAgents:     compactStringsV0(result.StartedAgents),
-			GoalRef:           trimV0(result.GoalRef),
-			ExternalGoalRef:   trimV0(result.ExternalGoalRef),
-			GoalStatus:        trimV0(result.GoalStatus),
-			GoalLaunchReceipt: result.GoalLaunchReceipt,
-			EvidenceRefs:      compactStringsV0(result.EvidenceRefs),
+			RunRef:                trimV0(result.RunRef),
+			PhaseID:               trimV0(result.PhaseID),
+			DirectorExecutionMode: trimV0(result.DirectorExecutionMode),
+			LoopStatus:            trimV0(result.LoopStatus),
+			DirectorTasks:         tasks,
+			StartedAgents:         compactStringsV0(result.StartedAgents),
+			GoalRef:               trimV0(result.GoalRef),
+			ExternalGoalRef:       trimV0(result.ExternalGoalRef),
+			GoalStatus:            trimV0(result.GoalStatus),
+			GoalLaunchReceipt:     result.GoalLaunchReceipt,
+			EvidenceRefs:          compactStringsV0(result.EvidenceRefs),
 		},
 	}
 }

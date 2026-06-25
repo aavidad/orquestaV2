@@ -94,6 +94,7 @@ func nuevaAppI18nSpanishV0() map[string]string {
 		"nueva_app.html.backlog_vacio":                         "No hay backlog propuesto para mostrar.",
 		"nueva_app.goal.titulo":                                "Director y goal",
 		"nueva_app.goal.run_ref":                               "Run",
+		"nueva_app.goal.director_execution_mode":               "Modo director",
 		"nueva_app.goal.goal_ref":                              "Goal",
 		"nueva_app.goal.external_goal_ref":                     "Goal externo",
 		"nueva_app.goal.goal_status":                           "Estado goal",

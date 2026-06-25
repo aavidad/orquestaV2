@@ -53,6 +53,9 @@ Salida: `StartAppDirectorResultV0`.
 - `run`;
 - `director_task`;
 - `director_tasks`;
+- `director_execution_mode`: `goal_first` cuando el arranque usa
+  `GoalWorkSpecV0` por puerto inyectado, o `legacy_director_loop` cuando usa el
+  loop historico de Director/agentes;
 - `loop_status`;
 - `started_agents`;
 - `goal_ref`, `external_goal_ref`, `goal_status` y `goal_launch_receipt` cuando

@@ -40,23 +40,24 @@ type MCPArrancarDirectorAppToolInputV0 struct {
 }
 
 type MCPArrancarDirectorAppToolResultV0 struct {
-	Estado            string                            `json:"estado"`
-	RequestID         string                            `json:"request_id,omitempty"`
-	CorrelationID     string                            `json:"correlation_id,omitempty"`
-	RoutePolicy       MCPAppSpecRoutePolicyV0           `json:"route_policy"`
-	AppSpec           MCPAppSpecCompactV0               `json:"app_spec,omitempty"`
-	RunRef            string                            `json:"run_ref,omitempty"`
-	PhaseID           string                            `json:"phase_id,omitempty"`
-	DirectorTask      MCPDirectorTaskCompactV0          `json:"director_task,omitempty"`
-	DirectorTasks     []MCPDirectorTaskCompactV0        `json:"director_tasks,omitempty"`
-	LoopStatus        string                            `json:"loop_status,omitempty"`
-	StartedAgents     []string                          `json:"started_agents,omitempty"`
-	GoalRef           string                            `json:"goal_ref,omitempty"`
-	ExternalGoalRef   string                            `json:"external_goal_ref,omitempty"`
-	GoalStatus        string                            `json:"goal_status,omitempty"`
-	GoalLaunchReceipt *orquestagoal.GoalLaunchReceiptV0 `json:"goal_launch_receipt,omitempty"`
-	Errores           []MCPValidationIssueV0            `json:"errores_publicos,omitempty"`
-	EvidenceRefs      []string                          `json:"evidence_refs,omitempty"`
+	Estado                string                            `json:"estado"`
+	RequestID             string                            `json:"request_id,omitempty"`
+	CorrelationID         string                            `json:"correlation_id,omitempty"`
+	RoutePolicy           MCPAppSpecRoutePolicyV0           `json:"route_policy"`
+	AppSpec               MCPAppSpecCompactV0               `json:"app_spec,omitempty"`
+	RunRef                string                            `json:"run_ref,omitempty"`
+	PhaseID               string                            `json:"phase_id,omitempty"`
+	DirectorExecutionMode string                            `json:"director_execution_mode,omitempty"`
+	DirectorTask          MCPDirectorTaskCompactV0          `json:"director_task,omitempty"`
+	DirectorTasks         []MCPDirectorTaskCompactV0        `json:"director_tasks,omitempty"`
+	LoopStatus            string                            `json:"loop_status,omitempty"`
+	StartedAgents         []string                          `json:"started_agents,omitempty"`
+	GoalRef               string                            `json:"goal_ref,omitempty"`
+	ExternalGoalRef       string                            `json:"external_goal_ref,omitempty"`
+	GoalStatus            string                            `json:"goal_status,omitempty"`
+	GoalLaunchReceipt     *orquestagoal.GoalLaunchReceiptV0 `json:"goal_launch_receipt,omitempty"`
+	Errores               []MCPValidationIssueV0            `json:"errores_publicos,omitempty"`
+	EvidenceRefs          []string                          `json:"evidence_refs,omitempty"`
 }
 
 type MCPDirectorTaskCompactV0 struct {
@@ -71,7 +72,7 @@ func MCPArrancarDirectorAppDescriptorV0() MCPArrancarDirectorAppToolDescriptorV0
 		Name:        MCPArrancarDirectorAppToolNameV0,
 		Version:     MCPArrancarDirectorAppToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,respuesta?,app_spec_request:AppSpecRequestV0(request_kind?,execution_mode?),max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,max_external_waits?}",
-		Output:      "ok:{route_policy,app_spec,run_ref?,goal_ref?,goal_status?,phase_id?,loop_status?}|error:{route_policy,errores_publicos}",
+		Output:      "ok:{route_policy,app_spec,run_ref?,director_execution_mode?,goal_ref?,goal_status?,phase_id?,loop_status?}|error:{route_policy,errores_publicos}",
 		ResourceURI: MCPArrancarDirectorAppResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -116,13 +117,14 @@ func NewMCPArrancarDirectorAppResultV0(
 		}
 	}
 	return MCPArrancarDirectorAppToolResultV0{
-		Estado:        MCPArrancarDirectorAppEstadoOKV0,
-		RequestID:     strings.TrimSpace(result.AppSpec.RequestID),
-		CorrelationID: strings.TrimSpace(result.CorrelationID),
-		RoutePolicy:   mcpPreferredDirectorRoutePolicyV0(),
-		AppSpec:       compactAppSpecV0(result.AppSpec),
-		RunRef:        strings.TrimSpace(result.Run.RunID),
-		PhaseID:       strings.TrimSpace(string(result.Run.CurrentPhase)),
+		Estado:                MCPArrancarDirectorAppEstadoOKV0,
+		RequestID:             strings.TrimSpace(result.AppSpec.RequestID),
+		CorrelationID:         strings.TrimSpace(result.CorrelationID),
+		RoutePolicy:           mcpPreferredDirectorRoutePolicyV0(),
+		AppSpec:               compactAppSpecV0(result.AppSpec),
+		RunRef:                strings.TrimSpace(result.Run.RunID),
+		PhaseID:               strings.TrimSpace(string(result.Run.CurrentPhase)),
+		DirectorExecutionMode: strings.TrimSpace(result.DirectorExecutionMode),
 		DirectorTask: MCPDirectorTaskCompactV0{
 			TaskRef:        strings.TrimSpace(result.DirectorTask.TaskRef),
 			BrainstormRef:  strings.TrimSpace(result.DirectorTask.BrainstormRef),

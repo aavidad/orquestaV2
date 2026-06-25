@@ -107,8 +107,10 @@ El 2026-06-25 `/api/v0/apps/director` queda conectado de forma opt-in a
 goal-first: `StartAppDirectorV0` persiste el intake/run, compila un
 `GoalWorkSpecV0` desde `AppSpecV0` y, si la composicion inyecta
 `GoalLauncher`, lanza el goal y devuelve `goal_ref`, `external_goal_ref`,
-`goal_status` y `goal_launch_receipt`. En ese camino no ejecuta el loop legacy
-ni encola el run para el supervisor historico.
+`goal_status`, `goal_launch_receipt` y
+`director_execution_mode=goal_first`. En ese camino no ejecuta el loop legacy ni
+encola el run para el supervisor historico. Si la composicion no inyecta goal,
+el resultado declara `director_execution_mode=legacy_director_loop`.
 
 La web `/nueva-app` acepta esa respuesta, muestra las refs dentro del bloque
 `director` y observa por `POST /api/v0/apps/director/goal/observe` con polling
@@ -163,6 +165,10 @@ del goal. Orquesta solo prepara y valida el contrato.
 5. Ejecutar smoke OPES temporal acotado de un derivado.
 6. Marcar rutas antiguas como legacy cuando tengan equivalencia goal-first
    probada.
+   Estado 2026-06-25: `StartAppDirectorV0`, MCP/REST y `/nueva-app` ya exponen
+   `director_execution_mode` para distinguir `goal_first` de
+   `legacy_director_loop`; falta cerrar la matriz completa y smokes reales
+   equivalentes antes de retirar rutas historicas.
 7. Conectar el contrato de `/nueva-app` a `GoalWorkSpecV0` y launcher
    goal-first.
    Estado 2026-06-25: hecho de forma opt-in para lanzamiento, refs publicas,

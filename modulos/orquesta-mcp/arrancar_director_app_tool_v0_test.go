@@ -44,6 +44,7 @@ func TestMCPArrancarDirectorAppToolExecutorV0UsaServicioCanonico(t *testing.T) {
 		t.Fatalf("Execute: %T %v result=%+v", err, err, result)
 	}
 	if result.Estado != MCPArrancarDirectorAppEstadoOKV0 ||
+		result.DirectorExecutionMode != orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0 ||
 		result.PhaseID != string(orquestacoreworkflow.OrchestrationPhaseBrainstormingArquitecturaV0) ||
 		result.DirectorTask.AgentRequestID == "" ||
 		len(result.DirectorTasks) != 1 ||
@@ -83,6 +84,7 @@ func TestMCPArrancarDirectorAppToolExecutorV0ExponeGoalFirst(t *testing.T) {
 		t.Fatalf("Execute: %v result=%+v", err, result)
 	}
 	if result.Estado != MCPArrancarDirectorAppEstadoOKV0 ||
+		result.DirectorExecutionMode != orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0 ||
 		result.GoalRef == "" ||
 		result.ExternalGoalRef != "thread-ref-mcp-goal-001" ||
 		result.GoalStatus != orquestagoal.GoalStatusRunningV0 ||

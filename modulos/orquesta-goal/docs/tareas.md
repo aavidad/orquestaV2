@@ -25,7 +25,16 @@ terminal, closure aceptada/bloqueada y cola sincronizada.
 
 ## GOAL-003 migracion del loop historico
 
-Estado: pendiente.
+Estado: avance local 2026-06-25.
 
 Marcar que casos siguen usando `app-director-service` y cuales ya usan goal,
 sin borrar el flujo historico hasta tener smokes equivalentes.
+
+Avance: `StartAppDirectorResultV0`, el tool/bridge
+`orquesta.apps.arrancar_director.v0` y la web `/nueva-app` exponen
+`director_execution_mode`. El valor `goal_first` identifica el camino
+`GoalWorkSpecV0` sin loop legacy; `legacy_director_loop` identifica la ruta
+historica de Director/agentes. `ObserveAppDirectorGoalV0` y
+`orquesta.apps.observe_director_goal.v0` exponen tambien `goal_first` para la
+observacion/cierre. Queda pendiente la matriz completa de migracion y los
+smokes reales equivalentes antes de declarar legacy las rutas historicas.

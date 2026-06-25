@@ -15,12 +15,13 @@ import (
 func TestMCPObserveAppDirectorGoalHTTPHandlerV0DelegaEnExecutor(t *testing.T) {
 	executor := &fakeMCPObserveAppDirectorGoalHTTPExecutorV0{
 		result: MCPObserveAppDirectorGoalToolResultV0{
-			Estado:       MCPObserveAppDirectorGoalEstadoOKV0,
-			RunRef:       "run-ref-goal-http-001",
-			RunStatus:    "closed",
-			GoalRef:      "goal-ref-http-001",
-			GoalStatus:   "complete",
-			EvidenceRefs: []string{"evidence-ref-goal-http-001"},
+			Estado:                MCPObserveAppDirectorGoalEstadoOKV0,
+			RunRef:                "run-ref-goal-http-001",
+			RunStatus:             "closed",
+			DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0,
+			GoalRef:               "goal-ref-http-001",
+			GoalStatus:            "complete",
+			EvidenceRefs:          []string{"evidence-ref-goal-http-001"},
 		},
 	}
 	body := &bytes.Buffer{}
@@ -49,7 +50,9 @@ func TestMCPObserveAppDirectorGoalHTTPHandlerV0DelegaEnExecutor(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode result: %v", err)
 	}
-	if result.GoalRef != "goal-ref-http-001" || result.RunStatus != "closed" {
+	if result.GoalRef != "goal-ref-http-001" ||
+		result.RunStatus != "closed" ||
+		result.DirectorExecutionMode != orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0 {
 		t.Fatalf("result=%+v", result)
 	}
 }

@@ -30,15 +30,16 @@ func startAppDirectorResultV0(
 		status = StartAppDirectorStatusStartedV0
 	}
 	return StartAppDirectorResultV0{
-		SchemaVersion: StartAppDirectorResultSchemaVersionV0,
-		Status:        status,
-		CorrelationID: request.CorrelationID,
-		AppSpec:       spec,
-		Run:           loop.Run,
-		DirectorTask:  prepared.DirectorTask,
-		DirectorTasks: append([]orquestaappdirectorintake.AppDirectorTaskV0(nil), prepared.DirectorTasks...),
-		LoopStatus:    loop.Status,
-		StartedAgents: append([]string(nil), loop.Run.StartedAgents...),
+		SchemaVersion:         StartAppDirectorResultSchemaVersionV0,
+		Status:                status,
+		DirectorExecutionMode: AppDirectorExecutionModeLegacyDirectorLoopV0,
+		CorrelationID:         request.CorrelationID,
+		AppSpec:               spec,
+		Run:                   loop.Run,
+		DirectorTask:          prepared.DirectorTask,
+		DirectorTasks:         append([]orquestaappdirectorintake.AppDirectorTaskV0(nil), prepared.DirectorTasks...),
+		LoopStatus:            loop.Status,
+		StartedAgents:         append([]string(nil), loop.Run.StartedAgents...),
 		EvidenceRefs: compactStartAppDirectorStringsV0(append(
 			[]string{"evidence-ref-app-director-service-v0"},
 			prepared.EvidenceRefs...,

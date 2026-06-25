@@ -33,23 +33,24 @@ type MCPObserveAppDirectorGoalToolInputV0 struct {
 }
 
 type MCPObserveAppDirectorGoalToolResultV0 struct {
-	Estado             string                 `json:"estado"`
-	RequestID          string                 `json:"request_id,omitempty"`
-	CorrelationID      string                 `json:"correlation_id,omitempty"`
-	RunRef             string                 `json:"run_ref,omitempty"`
-	RunStatus          string                 `json:"run_status,omitempty"`
-	GoalRef            string                 `json:"goal_ref,omitempty"`
-	ExternalGoalRef    string                 `json:"external_goal_ref,omitempty"`
-	GoalStatus         string                 `json:"goal_status,omitempty"`
-	ClosureStatus      string                 `json:"closure_status,omitempty"`
-	ClosureAccepted    bool                   `json:"closure_accepted,omitempty"`
-	ClosureNeedsRework bool                   `json:"closure_needs_rework,omitempty"`
-	Summary            string                 `json:"summary,omitempty"`
-	ArtifactRefs       []string               `json:"artifact_refs,omitempty"`
-	DomainReceiptRefs  []string               `json:"domain_receipt_refs,omitempty"`
-	EvidenceRefs       []string               `json:"evidence_refs,omitempty"`
-	ClosureIssues      []MCPValidationIssueV0 `json:"closure_issues,omitempty"`
-	Errores            []MCPValidationIssueV0 `json:"errores_publicos,omitempty"`
+	Estado                string                 `json:"estado"`
+	RequestID             string                 `json:"request_id,omitempty"`
+	CorrelationID         string                 `json:"correlation_id,omitempty"`
+	RunRef                string                 `json:"run_ref,omitempty"`
+	RunStatus             string                 `json:"run_status,omitempty"`
+	DirectorExecutionMode string                 `json:"director_execution_mode,omitempty"`
+	GoalRef               string                 `json:"goal_ref,omitempty"`
+	ExternalGoalRef       string                 `json:"external_goal_ref,omitempty"`
+	GoalStatus            string                 `json:"goal_status,omitempty"`
+	ClosureStatus         string                 `json:"closure_status,omitempty"`
+	ClosureAccepted       bool                   `json:"closure_accepted,omitempty"`
+	ClosureNeedsRework    bool                   `json:"closure_needs_rework,omitempty"`
+	Summary               string                 `json:"summary,omitempty"`
+	ArtifactRefs          []string               `json:"artifact_refs,omitempty"`
+	DomainReceiptRefs     []string               `json:"domain_receipt_refs,omitempty"`
+	EvidenceRefs          []string               `json:"evidence_refs,omitempty"`
+	ClosureIssues         []MCPValidationIssueV0 `json:"closure_issues,omitempty"`
+	Errores               []MCPValidationIssueV0 `json:"errores_publicos,omitempty"`
 }
 
 func MCPObserveAppDirectorGoalDescriptorV0() MCPObserveAppDirectorGoalToolDescriptorV0 {
@@ -57,7 +58,7 @@ func MCPObserveAppDirectorGoalDescriptorV0() MCPObserveAppDirectorGoalToolDescri
 		Name:        MCPObserveAppDirectorGoalToolNameV0,
 		Version:     MCPObserveAppDirectorGoalToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,run_ref,occurred_at?,requested_by?}",
-		Output:      "ok:{run_ref,run_status?,goal_ref,goal_status,closure_status?,closure_accepted?,artifact_refs?,evidence_refs?}|error:{errores_publicos}",
+		Output:      "ok:{run_ref,run_status?,director_execution_mode?,goal_ref,goal_status,closure_status?,closure_accepted?,artifact_refs?,evidence_refs?}|error:{errores_publicos}",
 		ResourceURI: MCPObserveAppDirectorGoalResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -85,23 +86,24 @@ func NewMCPObserveAppDirectorGoalResultV0(
 ) MCPObserveAppDirectorGoalToolResultV0 {
 	goalResult := result.GoalResult
 	return MCPObserveAppDirectorGoalToolResultV0{
-		Estado:             MCPObserveAppDirectorGoalEstadoOKV0,
-		RequestID:          strings.TrimSpace(input.RequestID),
-		CorrelationID:      firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
-		RunRef:             firstNonEmptyMCPV0(result.RunRef, input.RunRef),
-		RunStatus:          strings.TrimSpace(string(result.Run.Status)),
-		GoalRef:            strings.TrimSpace(result.GoalRef),
-		ExternalGoalRef:    strings.TrimSpace(result.ExternalGoalRef),
-		GoalStatus:         strings.TrimSpace(result.Status),
-		ClosureStatus:      strings.TrimSpace(result.Closure.Status),
-		ClosureAccepted:    result.Closure.Accepted,
-		ClosureNeedsRework: result.Closure.NeedsRework,
-		Summary:            strings.TrimSpace(goalResult.Summary),
-		ArtifactRefs:       compactStringsMCPV0(goalResult.ArtifactRefs),
-		DomainReceiptRefs:  compactStringsMCPV0(goalResult.DomainReceiptRefs),
-		EvidenceRefs:       compactStringsMCPV0(result.EvidenceRefs),
-		ClosureIssues:      goalWorkIssuesMCPV0(result.Closure.Issues),
-		Errores:            []MCPValidationIssueV0{},
+		Estado:                MCPObserveAppDirectorGoalEstadoOKV0,
+		RequestID:             strings.TrimSpace(input.RequestID),
+		CorrelationID:         firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
+		RunRef:                firstNonEmptyMCPV0(result.RunRef, input.RunRef),
+		RunStatus:             strings.TrimSpace(string(result.Run.Status)),
+		DirectorExecutionMode: strings.TrimSpace(result.DirectorExecutionMode),
+		GoalRef:               strings.TrimSpace(result.GoalRef),
+		ExternalGoalRef:       strings.TrimSpace(result.ExternalGoalRef),
+		GoalStatus:            strings.TrimSpace(result.Status),
+		ClosureStatus:         strings.TrimSpace(result.Closure.Status),
+		ClosureAccepted:       result.Closure.Accepted,
+		ClosureNeedsRework:    result.Closure.NeedsRework,
+		Summary:               strings.TrimSpace(goalResult.Summary),
+		ArtifactRefs:          compactStringsMCPV0(goalResult.ArtifactRefs),
+		DomainReceiptRefs:     compactStringsMCPV0(goalResult.DomainReceiptRefs),
+		EvidenceRefs:          compactStringsMCPV0(result.EvidenceRefs),
+		ClosureIssues:         goalWorkIssuesMCPV0(result.Closure.Issues),
+		Errores:               []MCPValidationIssueV0{},
 	}
 }
 

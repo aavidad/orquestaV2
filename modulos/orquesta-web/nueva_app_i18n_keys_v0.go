@@ -93,6 +93,7 @@ var nuevaAppI18nRequiredKeysV0 = []string{
 	"nueva_app.html.backlog_vacio",
 	"nueva_app.goal.titulo",
 	"nueva_app.goal.run_ref",
+	"nueva_app.goal.director_execution_mode",
 	"nueva_app.goal.goal_ref",
 	"nueva_app.goal.external_goal_ref",
 	"nueva_app.goal.goal_status",

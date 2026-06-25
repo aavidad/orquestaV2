@@ -114,10 +114,11 @@ func TestNuevaAppHTMLV0RenderizaPanelGoalFirstConActualizacion(t *testing.T) {
 	vm := NewWebNuevaAppViewModelV0(validSpecForViewModelV0(), backlogForViewModelV0())
 	vm.Estado = WebNuevaAppEstadoDirector
 	vm.Director = &WebNuevaAppDirectorV0{
-		RunRef:          "run-ref-web-goal-001",
-		GoalRef:         "goal-ref-web-goal-001",
-		ExternalGoalRef: "thread-ref-web-goal-001",
-		GoalStatus:      "running",
+		RunRef:                "run-ref-web-goal-001",
+		DirectorExecutionMode: "goal_first",
+		GoalRef:               "goal-ref-web-goal-001",
+		ExternalGoalRef:       "thread-ref-web-goal-001",
+		GoalStatus:            "running",
 	}
 	page := endpoint.page("es", vm)
 	rec := httptest.NewRecorder()
@@ -133,6 +134,8 @@ func TestNuevaAppHTMLV0RenderizaPanelGoalFirstConActualizacion(t *testing.T) {
 		`data-goal-poll-interval-ms="5000"`,
 		`data-goal-max-polls="60"`,
 		`Director y goal`,
+		`Modo director`,
+		`goal_first`,
 		`thread-ref-web-goal-001`,
 		`data-goal-observe`,
 		`Actualizar goal`,
@@ -144,6 +147,37 @@ func TestNuevaAppHTMLV0RenderizaPanelGoalFirstConActualizacion(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("HTML goal-first no contiene %q\n%s", want, body)
 		}
+	}
+}
+
+func TestNuevaAppHTMLV0RenderizaDirectorLegacySinPollingGoal(t *testing.T) {
+	endpoint := NewNuevaAppWebEndpointV0(&fakeNuevaAppClientV0{})
+	vm := NewWebNuevaAppViewModelV0(validSpecForViewModelV0(), backlogForViewModelV0())
+	vm.Estado = WebNuevaAppEstadoDirector
+	vm.Director = &WebNuevaAppDirectorV0{
+		RunRef:                "run-ref-web-legacy-001",
+		DirectorExecutionMode: "legacy_director_loop",
+		LoopStatus:            "wait_external",
+	}
+	page := endpoint.page("es", vm)
+	rec := httptest.NewRecorder()
+
+	writeNuevaAppHTMLPageV0(rec, http.StatusOK, page)
+
+	body := rec.Body.String()
+	for _, want := range []string{
+		`data-goal-panel`,
+		`data-goal-auto-poll="false"`,
+		`run-ref-web-legacy-001`,
+		`legacy_director_loop`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("HTML legacy no contiene %q\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, `<div class="goal-actions"><button`) ||
+		strings.Contains(body, `data-goal-panel data-goal-auto-poll="true"`) {
+		t.Fatalf("HTML legacy no debe activar polling/boton de goal\n%s", body)
 	}
 }
 

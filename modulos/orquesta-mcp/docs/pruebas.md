@@ -533,5 +533,6 @@ Evidencia esperada: `orquesta.apps.observe_director_goal.v0` queda registrado
 como tool opt-in, `POST /api/v0/apps/director/goal/observe` acepta solo POST,
 exige `run_ref`, propaga `X-Correlation-ID`, delega en el executor inyectado y
 devuelve salida compacta con `run_ref`, `goal_ref`, `goal_status`,
-`run_status`, `closure_status`, refs de artefactos/evidencias y errores
-publicos. Sin executor devuelve `mcp_transport_tool_unbound` por transporte.
+`run_status`, `director_execution_mode`, `closure_status`, refs de
+artefactos/evidencias y errores publicos. Sin executor devuelve
+`mcp_transport_tool_unbound` por transporte.

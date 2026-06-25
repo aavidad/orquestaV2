@@ -619,10 +619,12 @@ Campos visibles:
 - goal_ref
 - external_goal_ref
 - goal_status
+- director_execution_mode
 - run_status y closure_status tras refresco
 Invariantes:
 - Se renderiza solo si `WebNuevaAppViewModelV0.Director` esta presente.
-- El boton `Actualizar goal` aparece solo si hay `run_ref`.
+- El boton `Actualizar goal` y el polling automatico aparecen solo si hay
+  `goal_ref`; un resultado legacy con `run_ref` no intenta observar goal.
 - El refresco llama por `fetch` a `POST /api/v0/apps/director/goal/observe`.
 - Si hay `run_ref`, el panel observa automaticamente de forma acotada:
   `data-goal-poll-interval-ms=5000` y `data-goal-max-polls=60`.

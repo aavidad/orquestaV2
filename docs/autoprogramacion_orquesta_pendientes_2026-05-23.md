@@ -205,6 +205,10 @@ como `codex_app_server_control_socket_missing` o
 `codex_app_server_standalone_missing`; no cae al loop legacy cuando el operador
 ha configurado goal-first. `ORQUESTA_CODEX_GOAL_PREFLIGHT_TIMEOUT_MS` queda
 publicado en effective config.
+Avance local adicional 2026-06-25: `StartAppDirectorV0`, MCP/REST y
+`/nueva-app` exponen `director_execution_mode` para distinguir
+`goal_first` de `legacy_director_loop`. La web ya no intenta observar un goal
+cuando el resultado viene por loop historico sin `goal_ref`.
 
 Pendiente verificable:
 

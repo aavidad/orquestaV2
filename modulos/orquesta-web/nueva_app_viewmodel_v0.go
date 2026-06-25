@@ -84,16 +84,17 @@ type WebNuevaAppMicrotareaV0 struct {
 }
 
 type WebNuevaAppDirectorV0 struct {
-	RunRef            string                            `json:"run_ref"`
-	PhaseID           string                            `json:"phase_id,omitempty"`
-	LoopStatus        string                            `json:"loop_status,omitempty"`
-	DirectorTasks     []WebNuevaAppDirectorTaskV0       `json:"director_tasks,omitempty"`
-	StartedAgents     []string                          `json:"started_agents,omitempty"`
-	GoalRef           string                            `json:"goal_ref,omitempty"`
-	ExternalGoalRef   string                            `json:"external_goal_ref,omitempty"`
-	GoalStatus        string                            `json:"goal_status,omitempty"`
-	GoalLaunchReceipt *orquestagoal.GoalLaunchReceiptV0 `json:"goal_launch_receipt,omitempty"`
-	EvidenceRefs      []string                          `json:"evidence_refs,omitempty"`
+	RunRef                string                            `json:"run_ref"`
+	PhaseID               string                            `json:"phase_id,omitempty"`
+	DirectorExecutionMode string                            `json:"director_execution_mode,omitempty"`
+	LoopStatus            string                            `json:"loop_status,omitempty"`
+	DirectorTasks         []WebNuevaAppDirectorTaskV0       `json:"director_tasks,omitempty"`
+	StartedAgents         []string                          `json:"started_agents,omitempty"`
+	GoalRef               string                            `json:"goal_ref,omitempty"`
+	ExternalGoalRef       string                            `json:"external_goal_ref,omitempty"`
+	GoalStatus            string                            `json:"goal_status,omitempty"`
+	GoalLaunchReceipt     *orquestagoal.GoalLaunchReceiptV0 `json:"goal_launch_receipt,omitempty"`
+	EvidenceRefs          []string                          `json:"evidence_refs,omitempty"`
 }
 
 type WebNuevaAppDirectorTaskV0 struct {

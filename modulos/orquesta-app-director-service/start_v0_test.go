@@ -33,6 +33,7 @@ func TestStartAppDirectorV0StartsDirectorThroughInjectedPorts(t *testing.T) {
 		t.Fatalf("StartAppDirectorV0: %v", err)
 	}
 	if result.Status != StartAppDirectorStatusStartedV0 ||
+		result.DirectorExecutionMode != AppDirectorExecutionModeLegacyDirectorLoopV0 ||
 		result.LoopStatus != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 {
 		t.Fatalf("result=%+v", result)
 	}
@@ -134,6 +135,7 @@ func TestStartAppDirectorV0GoalFirstLanzaGoalYNoEjecutaLoopLegacy(t *testing.T) 
 		t.Fatalf("StartAppDirectorV0: %v", err)
 	}
 	if result.Status != StartAppDirectorStatusStartedV0 ||
+		result.DirectorExecutionMode != AppDirectorExecutionModeGoalFirstV0 ||
 		result.GoalRef == "" ||
 		result.ExternalGoalRef != "thread-ref-service-goal-001" ||
 		result.GoalStatus != orquestagoal.GoalStatusRunningV0 {
@@ -196,6 +198,7 @@ func TestObserveAppDirectorGoalV0PersisteResultadoCompletoYClosure(t *testing.T)
 		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
 	}
 	if result.Status != orquestagoal.GoalStatusCompleteV0 ||
+		result.DirectorExecutionMode != AppDirectorExecutionModeGoalFirstV0 ||
 		!result.Closure.Accepted ||
 		result.Closure.Status != orquestagoal.GoalStatusAcceptedV0 ||
 		result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
@@ -247,6 +250,7 @@ func TestObserveAppDirectorGoalV0BloqueaRunSiClosureNoAcepta(t *testing.T) {
 		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
 	}
 	if result.Closure.Accepted ||
+		result.DirectorExecutionMode != AppDirectorExecutionModeGoalFirstV0 ||
 		!result.Closure.NeedsRework ||
 		result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 {
 		t.Fatalf("result=%+v", result)
