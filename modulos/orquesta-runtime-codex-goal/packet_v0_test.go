@@ -81,6 +81,22 @@ func TestCodexGoalLauncherV0LlamaStarterInyectado(t *testing.T) {
 	}
 }
 
+func TestCodexGoalLauncherV0PreservaIssueCodeDeBackendV0(t *testing.T) {
+	starter := &recordingCodexGoalStarterV0{
+		receipt: CodexGoalStartReceiptV0{IssueCode: "codex_app_server_control_socket_missing"},
+		err:     errors.New("backend unavailable"),
+	}
+	launcher := CodexGoalLauncherV0{Starter: starter}
+
+	receipt, err := launcher.LaunchGoalWorkV0(context.Background(), validCodexGoalSpecV0())
+
+	if err == nil ||
+		receipt.Status != orquestagoal.GoalStatusInvalidV0 ||
+		!hasGoalIssueCodeForTestV0(receipt.Issues, "codex_app_server_control_socket_missing") {
+		t.Fatalf("receipt=%+v err=%v", receipt, err)
+	}
+}
+
 func TestBuildCodexGoalObservationRequestV0ValidaRefs(t *testing.T) {
 	packet, issues := BuildCodexGoalObservationRequestV0(orquestagoal.GoalObservationRequestV0{
 		GoalRef:         "goal-ref-001",
@@ -210,11 +226,19 @@ func (fakeCodexGoalStarterV0) StartCodexGoalV0(context.Context, CodexGoalStartPa
 }
 
 type recordingCodexGoalStarterV0 struct {
-	called bool
+	called  bool
+	receipt CodexGoalStartReceiptV0
+	err     error
 }
 
 func (starter *recordingCodexGoalStarterV0) StartCodexGoalV0(context.Context, CodexGoalStartPacketV0) (CodexGoalStartReceiptV0, error) {
 	starter.called = true
+	if starter.err != nil {
+		return starter.receipt, starter.err
+	}
+	if starter.receipt.Status != "" || starter.receipt.IssueCode != "" {
+		return starter.receipt, nil
+	}
 	return CodexGoalStartReceiptV0{
 		Status:          orquestagoal.GoalStatusAcceptedV0,
 		ExternalGoalRef: "external-goal-ref-001",
@@ -236,7 +260,7 @@ func (observer *recordingCodexGoalObserverV0) ObserveCodexGoalV0(
 	observer.called = true
 	observer.lastRequest = request
 	if observer.err != nil {
-		return CodexGoalObservationReceiptV0{}, observer.err
+		return observer.receipt, observer.err
 	}
 	return observer.receipt, nil
 }
@@ -250,6 +274,28 @@ func TestCodexGoalObserverV0PropagaErrorBackend(t *testing.T) {
 
 	if err == nil || result.Status != orquestagoal.GoalStatusInvalidV0 ||
 		!hasGoalIssueCodeForTestV0(result.Issues, ErrCodexGoalObservationRejectedV0) {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+}
+
+func TestCodexGoalObserverV0PreservaIssueCodeDeBackendV0(t *testing.T) {
+	observer := CodexGoalObserverV0{Observer: &recordingCodexGoalObserverV0{
+		err: errors.New("backend unavailable"),
+		receipt: CodexGoalObservationReceiptV0{
+			IssueCode:       "codex_app_server_control_socket_missing",
+			ExternalGoalRef: "external-goal-ref-001",
+		},
+	}}
+
+	result, err := observer.ObserveGoalWorkV0(context.Background(), orquestagoal.GoalObservationRequestV0{
+		GoalRef:         "goal-ref-001",
+		ExternalGoalRef: "external-goal-ref-001",
+	})
+
+	if err == nil ||
+		result.Status != orquestagoal.GoalStatusInvalidV0 ||
+		result.ExternalGoalRef != "external-goal-ref-001" ||
+		!hasGoalIssueCodeForTestV0(result.Issues, "codex_app_server_control_socket_missing") {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
 }

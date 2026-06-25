@@ -122,6 +122,14 @@ func serverCodexGoalBackendFromEnvV0(
 		PathEnv:     runtimeConfig.PathEnv,
 		Timeout:     time.Duration(codexGoalTimeoutMSFromEnvV0()) * time.Millisecond,
 	}
+	preflightProtocol := protocol
+	preflightProtocol.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond
+	if err := preflightProtocol.ProbeV0(context.Background()); err != nil {
+		degraded := serverCodexUnavailableGoalBackendV0{
+			IssueCode: codexAppServerIssueCodeForErrorV0(err, "codex_app_server_unavailable"),
+		}
+		return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded}, nil
+	}
 	client := serverCodexAppServerGoalBackendV0{
 		Protocol:        protocol,
 		CWD:             firstNonEmptyServerStackV0(config.IdleSelfImprovementProjectWorkDir, config.ProjectWorkDir),
@@ -139,6 +147,36 @@ func codexGoalBackendFromEnvV0() string {
 
 func codexGoalTimeoutMSFromEnvV0() int {
 	return intEnvOrDefaultV0(envCodexGoalTimeoutMSV0, defaultCodexGoalTimeoutMSV0)
+}
+
+func codexGoalPreflightTimeoutMSFromEnvV0() int {
+	return intEnvOrDefaultV0(envCodexGoalPreflightTimeoutMSV0, defaultCodexGoalPreflightTimeoutMSV0)
+}
+
+type serverCodexUnavailableGoalBackendV0 struct {
+	IssueCode string
+}
+
+func (backend serverCodexUnavailableGoalBackendV0) StartCodexGoalV0(
+	_ context.Context,
+	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
+) (orquestaruntimecodexgoal.CodexGoalStartReceiptV0, error) {
+	code := strings.TrimSpace(backend.IssueCode)
+	if code == "" {
+		code = "codex_app_server_unavailable"
+	}
+	return codexAppServerStartReceiptV0(packet, "", code), errors.New(code)
+}
+
+func (backend serverCodexUnavailableGoalBackendV0) ObserveCodexGoalV0(
+	_ context.Context,
+	request orquestaruntimecodexgoal.CodexGoalObservationRequestV0,
+) (orquestaruntimecodexgoal.CodexGoalObservationReceiptV0, error) {
+	code := strings.TrimSpace(backend.IssueCode)
+	if code == "" {
+		code = "codex_app_server_unavailable"
+	}
+	return codexAppServerObservationReceiptV0(request, orquestagoal.GoalStatusInvalidV0, code), errors.New(code)
 }
 
 type serverCodexAppServerGoalBackendV0 struct {
@@ -168,7 +206,8 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 	}
 	thread, err := backend.Protocol.StartThreadV0(ctx, backend.threadStartParamsV0())
 	if err != nil {
-		return codexAppServerStartReceiptV0(packet, "", "codex_app_server_thread_start_failed"), err
+		code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_thread_start_failed")
+		return codexAppServerStartReceiptV0(packet, "", code), err
 	}
 	threadID := strings.TrimSpace(thread.ID)
 	if threadID == "" {
@@ -184,10 +223,12 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 		Status:      "active",
 		TokenBudget: tokenBudget,
 	}); err != nil {
-		return codexAppServerStartReceiptV0(packet, threadID, "codex_app_server_goal_set_failed"), err
+		code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_goal_set_failed")
+		return codexAppServerStartReceiptV0(packet, threadID, code), err
 	}
 	if _, err := backend.Protocol.StartTurnV0(ctx, backend.turnStartParamsV0(threadID, packet)); err != nil {
-		return codexAppServerStartReceiptV0(packet, threadID, "codex_app_server_turn_start_failed"), err
+		code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_turn_start_failed")
+		return codexAppServerStartReceiptV0(packet, threadID, code), err
 	}
 	return orquestaruntimecodexgoal.CodexGoalStartReceiptV0{
 		Status:          orquestagoal.GoalStatusRunningV0,
@@ -214,7 +255,8 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 	}
 	goal, err := backend.Protocol.GetGoalV0(ctx, threadID)
 	if err != nil {
-		return codexAppServerObservationReceiptV0(request, orquestagoal.GoalStatusInvalidV0, "codex_app_server_goal_get_failed"), err
+		code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_goal_get_failed")
+		return codexAppServerObservationReceiptV0(request, orquestagoal.GoalStatusInvalidV0, code), err
 	}
 	if goal == nil {
 		return codexAppServerObservationReceiptV0(request, orquestagoal.GoalStatusInvalidV0, "codex_app_server_goal_missing"), errors.New("codex_app_server_goal_missing")
@@ -450,6 +492,11 @@ type serverCodexAppServerCommandProtocolV0 struct {
 	Timeout     time.Duration
 }
 
+func (protocol serverCodexAppServerCommandProtocolV0) ProbeV0(ctx context.Context) error {
+	var response serverCodexAppServerThreadLoadedListResponseV0
+	return protocol.callV0(ctx, "thread/loaded/list", map[string]interface{}{}, &response)
+}
+
 func (protocol serverCodexAppServerCommandProtocolV0) StartThreadV0(
 	ctx context.Context,
 	params serverCodexAppServerThreadStartParamsV0,
@@ -528,17 +575,90 @@ func (protocol serverCodexAppServerCommandProtocolV0) callV0(
 	}
 	cmd := exec.CommandContext(callCtx, commandPath, args...)
 	cmd.Stdin = strings.NewReader(payload)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	if strings.TrimSpace(protocol.PathEnv) != "" {
 		cmd.Env = append(os.Environ(), "PATH="+protocol.PathEnv)
 	}
 	stdout, err := cmd.Output()
 	if callCtx.Err() != nil {
-		return fmt.Errorf("codex_app_server_timeout:%w", callCtx.Err())
+		return codexAppServerCallErrorV0{Code: "codex_app_server_timeout", Err: callCtx.Err()}
 	}
 	if err != nil {
-		return fmt.Errorf("codex_app_server_call_failed:%w", err)
+		return codexAppServerCallErrorV0{
+			Code: codexAppServerIssueCodeFromCommandFailureV0(stderr.String(), err),
+			Err:  err,
+		}
 	}
 	return decodeCodexAppServerRPCResponseV0(stdout, 2, out)
+}
+
+type codexAppServerCallErrorV0 struct {
+	Code string
+	Err  error
+}
+
+func (err codexAppServerCallErrorV0) Error() string {
+	code := strings.TrimSpace(err.Code)
+	if code == "" {
+		code = "codex_app_server_call_failed"
+	}
+	return code
+}
+
+func (err codexAppServerCallErrorV0) Unwrap() error {
+	return err.Err
+}
+
+func codexAppServerIssueCodeForErrorV0(err error, fallback string) string {
+	if err == nil {
+		return strings.TrimSpace(fallback)
+	}
+	var callErr codexAppServerCallErrorV0
+	if errors.As(err, &callErr) && strings.TrimSpace(callErr.Code) != "" {
+		return strings.TrimSpace(callErr.Code)
+	}
+	message := err.Error()
+	return codexAppServerIssueCodeFromStderrV0(message, fallback)
+}
+
+func codexAppServerIssueCodeFromCommandFailureV0(stderr string, err error) string {
+	if code := codexAppServerIssueCodeFromMessageV0(stderr); code != "" {
+		return code
+	}
+	if err != nil {
+		if code := codexAppServerIssueCodeFromMessageV0(err.Error()); code != "" {
+			return code
+		}
+	}
+	return "codex_app_server_call_failed"
+}
+
+func codexAppServerIssueCodeFromStderrV0(message string, fallback string) string {
+	if code := codexAppServerIssueCodeFromMessageV0(message); code != "" {
+		return code
+	}
+	fallback = strings.TrimSpace(fallback)
+	if fallback == "" {
+		return "codex_app_server_call_failed"
+	}
+	return fallback
+}
+
+func codexAppServerIssueCodeFromMessageV0(message string) string {
+	normalized := strings.ToLower(strings.TrimSpace(message))
+	switch {
+	case strings.Contains(normalized, "managed standalone codex install not found"):
+		return "codex_app_server_standalone_missing"
+	case strings.Contains(normalized, "failed to connect to socket") ||
+		strings.Contains(normalized, "app-server-control.sock"):
+		return "codex_app_server_control_socket_missing"
+	case strings.Contains(normalized, "executable file not found"):
+		return "codex_app_server_command_missing"
+	case strings.Contains(normalized, "permission denied"):
+		return "codex_app_server_permission_denied"
+	}
+	return ""
 }
 
 func codexAppServerRPCPayloadV0(method string, params interface{}) (string, error) {
@@ -704,6 +824,11 @@ type serverCodexAppServerThreadGoalSetResponseV0 struct {
 
 type serverCodexAppServerThreadGoalGetResponseV0 struct {
 	Goal *serverCodexAppServerThreadGoalV0 `json:"goal"`
+}
+
+type serverCodexAppServerThreadLoadedListResponseV0 struct {
+	Data       []string `json:"data,omitempty"`
+	NextCursor *string  `json:"nextCursor,omitempty"`
 }
 
 type serverCodexAppServerThreadGoalV0 struct {

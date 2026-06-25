@@ -67,6 +67,7 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 		serverConfigSettingFromRegistryV0(envCodexReasoningEffortV0, codexRuntime.ReasoningEffort),
 		serverConfigSettingFromRegistryV0(envCodexGoalBackendV0, codexGoalBackendFromEnvV0()),
 		serverConfigSettingFromRegistryV0(envCodexGoalTimeoutMSV0, strconv.Itoa(codexGoalTimeoutMSFromEnvV0())),
+		serverConfigSettingFromRegistryV0(envCodexGoalPreflightTimeoutMSV0, strconv.Itoa(codexGoalPreflightTimeoutMSFromEnvV0())),
 		serverConfigSettingFromRegistryV0(envCapacityReasoningEffortV0, string(stackCapacity.ReasoningEffort)),
 		serverConfigSettingFromRegistryV0(envCapacityPolicyRefV0, stackCapacity.PolicyRef),
 		serverConfigSettingFromRegistryV0(envCapacityPoolRefV0, stackCapacity.PoolRef),

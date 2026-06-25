@@ -28,6 +28,8 @@ Variables utiles:
 - `ORQUESTA_CODEX_MODEL`: por defecto `gpt-5.5`.
 - `ORQUESTA_CODEX_REASONING_EFFORT`: por defecto `medium`.
 - `ORQUESTA_CODEX_GOAL_TIMEOUT_MS`: por defecto `90000`.
+- `ORQUESTA_CODEX_GOAL_PREFLIGHT_TIMEOUT_MS`: preflight rapido del backend; por
+  defecto `3000`.
 - `ORQUESTA_KEEP_SMOKE_DIR=1`: conserva el temporal para revisar salida.
 - `ORQUESTA_GOAL_FIRST_SMOKE_POLLS` y
   `ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS`: ventana de observacion.
@@ -39,6 +41,13 @@ Variables utiles:
 - Usa `ORQUESTA_CODEX_PROJECT_WORKDIR` temporal con contexto minimo.
 - No detiene el daemon Codex local al terminar; puede estar compartido por el
   operador.
+- Si falta el socket app-server o la instalacion standalone de Codex, Orquesta
+  no cae al loop legacy: devuelve reason codes como
+  `codex_app_server_control_socket_missing` o
+  `codex_app_server_standalone_missing`.
+- El preflight se evalua al construir la composicion. Si el daemon o socket se
+  levanta despues de arrancar Orquesta, reinicia el servidor para reconstruir el
+  backend goal real.
 
 ## Exito
 

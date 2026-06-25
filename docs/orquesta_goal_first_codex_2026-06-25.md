@@ -94,6 +94,13 @@ actividad y bloqueo semantico si el goal queda `invalid` o `blocked`. El
 statefile local puede contener spec/receipt/result/closure completos para
 restauracion, pero no es API publica.
 
+La composicion hace un preflight rapido del backend app-server al arrancar el
+stack. Si falta el socket local o la instalacion standalone requerida por
+`codex app-server daemon`, se inyecta un backend goal degradado con reason code
+compacto (`codex_app_server_control_socket_missing`,
+`codex_app_server_standalone_missing`, etc.). Esto evita volver al loop legacy
+cuando el operador habia pedido goal-first y deja la accion pendiente clara.
+
 ## `/nueva-app` goal-first
 
 El 2026-06-25 `/api/v0/apps/director` queda conectado de forma opt-in a
@@ -148,9 +155,10 @@ del goal. Orquesta solo prepara y valida el contrato.
 3. Cablear un launcher real de Codex Goal en `cmd/orquesta-server` solo cuando
    exista puerto seguro para crear/observar goals.
    Estado 2026-06-25: `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` inyecta
-   starter/observer por `codex app-server proxy`, observa `thread/read` y
-   traduce `ORQUESTA_GOAL_RESULT_V0` a refs de cierre; falta ejecutar smoke real
-   con daemon en ventana operativa.
+   starter/observer por `codex app-server proxy`, hace preflight de
+   `thread/loaded/list`, observa `thread/read` y traduce
+   `ORQUESTA_GOAL_RESULT_V0` a refs de cierre; falta ejecutar smoke real con
+   daemon en ventana operativa.
 4. Ejecutar smoke no-OPES temporal con repo de prueba.
 5. Ejecutar smoke OPES temporal acotado de un derivado.
 6. Marcar rutas antiguas como legacy cuando tengan equivalencia goal-first

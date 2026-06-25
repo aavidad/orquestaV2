@@ -94,6 +94,9 @@
   `thread/start`, `thread/goal/set`, `turn/start`, `thread/goal/get` y
   `thread/read` sin usar `codex exec`; al observar un goal terminal extrae
   `ORQUESTA_GOAL_RESULT_V0` para artefactos/evidencias de cierre.
+- `cmd/orquesta-server` prueba que el preflight app-server usa
+  `thread/loaded/list`, conserva puertos goal-first degradados si el socket o
+  standalone de Codex faltan, y publica issue codes compactos sin stderr crudo.
 - `modulos/orquesta-server` prueba que los contadores historicos
   `supervisor_error_ticks` y `resident_director_error_ticks` siguen visibles
   como telemetria, pero no degradan estado ni crean blockers si el supervisor y

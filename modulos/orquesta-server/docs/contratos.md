@@ -122,10 +122,17 @@ Configuracion externa relacionada:
   no arranca backend si no esta configurado y no mete Codex en el modulo
   servidor. En observaciones terminales lee `thread/read` y fusiona el marcador
   `ORQUESTA_GOAL_RESULT_V0` como refs opacas de artefactos, tests, receipts y
-  evidencias; el cierre aceptado sigue dependiendo del validador neutral.
+  evidencias; el cierre aceptado sigue dependiendo del validador neutral. Al
+  montar la composicion ejecuta un preflight rapido; si falla, conserva puertos
+  goal-first degradados y devuelve reason codes compactos como
+  `codex_app_server_control_socket_missing` o
+  `codex_app_server_standalone_missing`, sin caer al loop legacy.
 - `ORQUESTA_CODEX_GOAL_TIMEOUT_MS`: timeout por llamada al backend Codex Goal
   de composicion. Es configuracion del transporte app-server, no politica del
   nucleo.
+- `ORQUESTA_CODEX_GOAL_PREFLIGHT_TIMEOUT_MS`: timeout del preflight rapido del
+  backend app-server al construir la composicion. Por defecto es 3000 ms y solo
+  afecta al diagnostico de disponibilidad del transporte.
 - En contexto OPES, si `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PROJECT_WORKDIR`
   no esta definido o apunta al mismo directorio que OPES, la automejora idle del
   servidor se desactiva. Para mantenerla activa debe apuntar a un workdir

@@ -14,6 +14,8 @@ Cobertura actual:
   `GoalWorkResultV0`;
 - el observer rechaza backend ausente, errores del backend, refs invalidas y
   `goal_ref` cruzado;
+- el launcher y observer preservan `IssueCode` de backend cuando el transporte
+  real falla, para no degradar diagnosticos como socket o standalone ausente;
 - el prompt separa direccion interna de Codex Goal y gobierno externo de
   Orquesta.
 - `cmd/orquesta-server` prueba el wiring de composicion opt-in

@@ -32,7 +32,9 @@ directas a herramientas internas; solo define la frontera.
 La composicion `cmd/orquesta-server` aporta una implementacion opt-in con
 `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`: usa `codex app-server proxy`
 contra un daemon local ya disponible, no `codex exec`, y mantiene el transporte
-fuera de este modulo.
+fuera de este modulo. Si el transporte no esta disponible, la composicion puede
+devolver `IssueCode` compacto; el launcher neutral lo conserva en el
+`GoalLaunchReceiptV0` invalidado para que el operador vea la causa real.
 
 ## CodexGoalObservationRequestV0
 
@@ -59,6 +61,8 @@ ORQUESTA_GOAL_RESULT_V0 {"summary":"...","artifact_refs":[],"required_test_resul
 Solo esas refs estructuradas se fusionan como artefactos/evidencias de cierre.
 Si faltan, Orquesta conserva el estado observado pero no inventa refs para
 aceptar cierre.
+Si el backend falla al observar y devuelve `IssueCode`, el observer neutral lo
+conserva en el `GoalWorkResultV0` invalidado.
 
 ## CodexGoalLauncherV0
 

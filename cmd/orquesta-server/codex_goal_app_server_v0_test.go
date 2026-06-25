@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -195,6 +198,122 @@ func TestCodexAppServerGoalResultMarkerV0AceptaFallbackSinPhaseV0(t *testing.T) 
 	}
 }
 
+func TestCodexAppServerIssueCodeForErrorV0ClasificaDiagnosticosV0(t *testing.T) {
+	cases := []struct {
+		name    string
+		message string
+		want    string
+	}{
+		{
+			name:    "standalone missing",
+			message: "Error: managed standalone Codex install not found at /home/user/.codex/packages/standalone/current/codex",
+			want:    "codex_app_server_standalone_missing",
+		},
+		{
+			name:    "socket missing",
+			message: "Error: failed to connect to socket at /home/user/.codex/app-server-control/app-server-control.sock",
+			want:    "codex_app_server_control_socket_missing",
+		},
+		{
+			name:    "permission denied",
+			message: "Permission denied (os error 13)",
+			want:    "codex_app_server_permission_denied",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := codexAppServerIssueCodeForErrorV0(errors.New(tc.message), "fallback"); got != tc.want {
+				t.Fatalf("code=%q want=%q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCodexAppServerIssueCodeFromCommandFailureV0UsaErrorSinStderrV0(t *testing.T) {
+	code := codexAppServerIssueCodeFromCommandFailureV0(
+		"",
+		errors.New(`exec: "codex-missing": executable file not found in $PATH`),
+	)
+
+	if code != "codex_app_server_command_missing" {
+		t.Fatalf("code=%q", code)
+	}
+}
+
+func TestServerCodexAppServerUnavailableBackendV0BloqueaConIssueCodeV0(t *testing.T) {
+	backend := serverCodexUnavailableGoalBackendV0{IssueCode: "codex_app_server_control_socket_missing"}
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef: "goal-ref-unavailable-001",
+	})
+
+	if err == nil ||
+		receipt.Status != orquestagoal.GoalStatusInvalidV0 ||
+		receipt.IssueCode != "codex_app_server_control_socket_missing" ||
+		receipt.GoalRef != "goal-ref-unavailable-001" {
+		t.Fatalf("receipt=%+v err=%v", receipt, err)
+	}
+}
+
+func TestServerCodexGoalBackendFromEnvV0PreflightDegradadoV0(t *testing.T) {
+	script := filepath.Join(t.TempDir(), "codex-fake")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\necho 'Error: failed to connect to socket at /tmp/app-server-control.sock' >&2\nexit 1\n"), 0o700); err != nil {
+		t.Fatalf("write fake codex: %v", err)
+	}
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envCodexCommandV0, script)
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+	t.Setenv(envCodexGoalPreflightTimeoutMSV0, "1000")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	backend, err := serverCodexGoalBackendFromEnvV0(config)
+	if err != nil {
+		t.Fatalf("serverCodexGoalBackendFromEnvV0: %v", err)
+	}
+	if backend.Starter == nil || backend.Observer == nil {
+		t.Fatalf("backend degradado debe conservar puertos: %+v", backend)
+	}
+	receipt, err := backend.Starter.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef: "goal-ref-preflight-001",
+	})
+	if err == nil ||
+		receipt.IssueCode != "codex_app_server_control_socket_missing" {
+		t.Fatalf("receipt=%+v err=%v", receipt, err)
+	}
+}
+
+func TestServerCodexGoalBackendFromEnvV0PreflightOKConservaBackendRealV0(t *testing.T) {
+	script := filepath.Join(t.TempDir(), "codex-fake-ok")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf '{\"id\":2,\"result\":{\"data\":[]}}\\n'\n"), 0o700); err != nil {
+		t.Fatalf("write fake codex: %v", err)
+	}
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envCodexCommandV0, script)
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+	t.Setenv(envCodexGoalPreflightTimeoutMSV0, "1000")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	backend, err := serverCodexGoalBackendFromEnvV0(config)
+	if err != nil {
+		t.Fatalf("serverCodexGoalBackendFromEnvV0: %v", err)
+	}
+	if _, degraded := backend.Starter.(serverCodexUnavailableGoalBackendV0); degraded {
+		t.Fatalf("backend no debe quedar degradado tras preflight OK: %+v", backend)
+	}
+	if _, real := backend.Starter.(serverCodexAppServerGoalBackendV0); !real {
+		t.Fatalf("starter real=%T", backend.Starter)
+	}
+	if _, real := backend.Observer.(serverCodexAppServerGoalBackendV0); !real {
+		t.Fatalf("observer real=%T", backend.Observer)
+	}
+}
+
 func TestCodexAppServerRPCPayloadYDecodeV0(t *testing.T) {
 	payload, err := codexAppServerRPCPayloadV0("thread/goal/get", map[string]interface{}{"threadId": "thread-ref-003"})
 	if err != nil {
@@ -256,6 +375,9 @@ func TestServerEffectiveConfigV0ExponeGoalFirstYBackendV0(t *testing.T) {
 	}
 	if got := effectiveSettingValueForTestV0(settings, envCodexGoalTimeoutMSV0); got != "12000" {
 		t.Fatalf("goal timeout=%q", got)
+	}
+	if got := effectiveSettingValueForTestV0(settings, envCodexGoalPreflightTimeoutMSV0); got != "3000" {
+		t.Fatalf("goal preflight timeout=%q", got)
 	}
 }
 

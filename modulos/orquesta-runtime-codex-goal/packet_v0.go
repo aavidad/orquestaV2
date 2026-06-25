@@ -263,7 +263,14 @@ func (launcher CodexGoalLauncherV0) LaunchGoalWorkV0(ctx context.Context, spec o
 	}
 	receipt, err := launcher.Starter.StartCodexGoalV0(ctx, packet)
 	if err != nil {
-		return codexGoalLaunchInvalidReceiptV0(packet.GoalRef, ErrCodexGoalStartRejectedV0), err
+		result := codexGoalLaunchInvalidReceiptV0(packet.GoalRef, ErrCodexGoalStartRejectedV0)
+		if strings.TrimSpace(receipt.IssueCode) != "" {
+			result.Issues = []orquestagoal.GoalWorkIssueV0{{Code: strings.TrimSpace(receipt.IssueCode)}}
+		}
+		if strings.TrimSpace(receipt.ExternalGoalRef) != "" {
+			result.ExternalGoalRef = strings.TrimSpace(receipt.ExternalGoalRef)
+		}
+		return result, err
 	}
 	status := receipt.Status
 	if status == "" {
@@ -301,7 +308,14 @@ func (observer CodexGoalObserverV0) ObserveGoalWorkV0(
 	}
 	receipt, err := observer.Observer.ObserveCodexGoalV0(ctx, packet)
 	if err != nil {
-		return codexGoalObservationInvalidResultV0(request, ErrCodexGoalObservationRejectedV0), err
+		result := codexGoalObservationInvalidResultV0(request, ErrCodexGoalObservationRejectedV0)
+		if strings.TrimSpace(receipt.IssueCode) != "" {
+			result.Issues = []orquestagoal.GoalWorkIssueV0{{Code: strings.TrimSpace(receipt.IssueCode)}}
+		}
+		if strings.TrimSpace(receipt.ExternalGoalRef) != "" {
+			result.ExternalGoalRef = strings.TrimSpace(receipt.ExternalGoalRef)
+		}
+		return result, err
 	}
 	result := goalWorkResultFromCodexObservationV0(packet, receipt)
 	if result.GoalRef != packet.GoalRef {

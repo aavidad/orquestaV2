@@ -198,15 +198,22 @@ Avance local adicional 2026-06-25: el backend real
 inventa evidencias y el cierre queda bloqueado por el validador. Se anade smoke
 real opt-in `scripts/smoke_goal_first_app_server_real.sh` con runbook
 `docs/runbooks/smoke_goal_first_app_server_real_2026-06-25.md`.
+Avance local adicional 2026-06-25: `cmd/orquesta-server` hace preflight rapido
+del backend app-server con `thread/loaded/list`. Si falta socket o standalone de
+Codex, conserva puertos goal-first degradados y devuelve reason codes compactos
+como `codex_app_server_control_socket_missing` o
+`codex_app_server_standalone_missing`; no cae al loop legacy cuando el operador
+ha configurado goal-first. `ORQUESTA_CODEX_GOAL_PREFLIGHT_TIMEOUT_MS` queda
+publicado en effective config.
 
 Pendiente verificable:
 
 - `cmd/orquesta-server` ya cablea starter/observer opt-in con
   `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`, usando `codex app-server
-  proxy` contra un daemon local de Codex ya disponible, y ya transforma el
-  resultado final estructurado en refs de cierre. Queda pendiente ejecutar el
-  smoke real con daemon y proyecto temporal antes de apagar el loop residente
-  historico en esa ruta.
+  proxy` contra un daemon local de Codex ya disponible, hace preflight
+  diagnosticable y ya transforma el resultado final estructurado en refs de
+  cierre. Queda pendiente ejecutar el smoke real con daemon y proyecto temporal
+  antes de apagar el loop residente historico en esa ruta.
 - `/nueva-app` ya queda conectada localmente a `GoalWorkSpecV0` y al launcher
   goal-first por `orquesta.apps.arrancar_director.v0` cuando la composicion
   inyecta `AppGoalLauncher`/`AppGoalStateStore`; el panel web observa por

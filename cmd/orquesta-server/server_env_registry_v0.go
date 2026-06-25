@@ -99,6 +99,7 @@ const (
 	envCodexDirectorDomainContextFilesV0   = "ORQUESTA_CODEX_DIRECTOR_DOMAIN_CONTEXT_FILES"
 	envCodexGoalBackendV0                  = "ORQUESTA_CODEX_GOAL_BACKEND"
 	envCodexGoalTimeoutMSV0                = "ORQUESTA_CODEX_GOAL_TIMEOUT_MS"
+	envCodexGoalPreflightTimeoutMSV0       = "ORQUESTA_CODEX_GOAL_PREFLIGHT_TIMEOUT_MS"
 
 	envCodexWaveAgentsV0                     = "ORQUESTA_CODEX_WAVE_AGENTS"
 	envCodexWaveRefV0                        = "ORQUESTA_CODEX_WAVE_REF"
@@ -206,6 +207,7 @@ const (
 	defaultCodexMaxBatchReadyV0                = 70
 	defaultCodexMaxConcurrencyV0               = 70
 	defaultCodexGoalTimeoutMSV0                = 30000
+	defaultCodexGoalPreflightTimeoutMSV0       = 3000
 	defaultCodexServerMaxRunsPerTickV0         = 70
 	defaultCodexServerQueueLimitV0             = 70
 	defaultCodexServerDefaultPriorityV0        = 50
@@ -353,6 +355,11 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "codex_goal",
 		Label:       "Timeout Codex Goal",
 		Description: "Timeout por llamada al backend Codex Goal app-server.",
+	},
+	envCodexGoalPreflightTimeoutMSV0: {
+		Scope:       "codex_goal",
+		Label:       "Preflight Codex Goal",
+		Description: "Timeout de comprobacion rapida del backend Codex Goal app-server al montar la composicion.",
 	},
 	envCapacityReasoningEffortV0: {
 		Scope:       "capacity",

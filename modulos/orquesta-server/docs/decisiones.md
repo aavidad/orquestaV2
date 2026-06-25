@@ -228,6 +228,11 @@ para extraer `ORQUESTA_GOAL_RESULT_V0`. El modulo servidor y el nucleo neutral
 siguen viendo solo puertos y refs opacas; un `complete` de Codex no cierra nada
 sin `GoalWorkClosureValidatorV0`.
 
+Si el transporte app-server no esta disponible, la composicion no debe volver al
+loop legacy como si nada. El preflight crea un backend goal degradado que falla
+con reason codes compactos y accionables, manteniendo la frontera opt-in:
+goal-first configurado significa goal-first o bloqueo explicito.
+
 La correccion
 `agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-dc31be1188c5569b01263b5f388f0788`
 aplica esta decision: corrige la asociacion causal de las refs previas a
