@@ -225,6 +225,12 @@ Pendiente verificable:
   marcador estructurado. Sigue pendiente ejecutar el smoke real con daemon Codex
   y proyecto temporal hasta observacion terminal, cierre durable y cola
   terminal.
+- Intento de smoke real 2026-06-25: `scripts/smoke_goal_first_app_server_real.sh`
+  queda bloqueado antes de arrancar Orquesta porque
+  `codex app-server daemon start` requiere la instalacion standalone en
+  `/home/alberto/.codex/packages/standalone/current/codex` y no existe. Accion
+  externa: instalar Codex standalone con el instalador oficial indicado por la
+  CLI y repetir el smoke opt-in.
 - Revalidar OPES temporal con derivados/cierre cuando exista la ruta goal-first
   real; no tocar OPES productivo ni drenar colas amplias.
 

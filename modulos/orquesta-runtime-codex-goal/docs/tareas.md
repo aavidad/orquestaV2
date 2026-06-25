@@ -31,3 +31,13 @@ Estado: pendiente.
 
 Ejecutar un goal temporal sobre repo de prueba y validar que Orquesta recibe
 `complete`/`blocked` con evidencias.
+
+Intento 2026-06-25: ejecutado
+`ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1
+ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1
+ORQUESTA_KEEP_SMOKE_DIR=1 ./scripts/smoke_goal_first_app_server_real.sh`.
+El smoke no arranco Orquesta: fallo antes en `codex app-server daemon start`
+porque falta la instalacion standalone esperada por Codex en
+`/home/alberto/.codex/packages/standalone/current/codex`. Accion externa:
+instalar Codex standalone con el instalador oficial indicado por la CLI y
+repetir el smoke.

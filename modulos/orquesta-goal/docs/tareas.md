@@ -23,6 +23,12 @@ lanza `GoalWorkSpecV0` desde `/nueva-app`/`arrancar_director` cuando existe
 Pendiente real: smoke opt-in con daemon Codex y repo temporal hasta observacion
 terminal, closure aceptada/bloqueada y cola sincronizada.
 
+Intento 2026-06-25: bloqueado antes de arrancar Orquesta porque
+`codex app-server daemon start` no encuentra la instalacion standalone en
+`/home/alberto/.codex/packages/standalone/current/codex`. No hay evidencia de
+fallo del contrato `orquesta-goal`; falta resolver esa precondicion externa y
+repetir `scripts/smoke_goal_first_app_server_real.sh`.
+
 ## GOAL-003 migracion del loop historico
 
 Estado: avance local 2026-06-25.
