@@ -41,6 +41,12 @@ func (stack StackV0) recoverQueuedStoppedActiveRunsV0(
 			continue
 		}
 		if err := stack.recoverQueuedStoppedCandidateV0(ctx, command, candidate); err != nil {
+			if codexSupervisorRecoverableOperationalPlanStateErrorV0(err) {
+				if markErr := stack.markQueuedCandidateOperationalPlanStateNeedsReplanV0(ctx, command, candidate); markErr != nil {
+					return markErr
+				}
+				continue
+			}
 			return err
 		}
 	}

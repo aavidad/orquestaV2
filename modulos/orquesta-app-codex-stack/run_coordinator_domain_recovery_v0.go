@@ -32,6 +32,12 @@ func (stack StackV0) recoverQueuedControlledDomainWorkArtifactsV0(
 	for _, candidate := range candidates {
 		ok, err := stack.queuedCandidateAllowsDomainWorkRecoveryV0(ctx, candidate.RunRef)
 		if err != nil {
+			if codexSupervisorRecoverableOperationalPlanStateErrorV0(err) {
+				if markErr := stack.markQueuedCandidateOperationalPlanStateNeedsReplanV0(ctx, command, candidate); markErr != nil {
+					return markErr
+				}
+				continue
+			}
 			return err
 		}
 		if !ok {
@@ -50,6 +56,12 @@ func (stack StackV0) recoverQueuedControlledDomainWorkArtifactsV0(
 			},
 			run,
 		); err != nil {
+			if codexSupervisorRecoverableOperationalPlanStateErrorV0(err) {
+				if markErr := stack.markQueuedCandidateOperationalPlanStateNeedsReplanV0(ctx, command, candidate); markErr != nil {
+					return markErr
+				}
+				continue
+			}
 			return err
 		}
 	}

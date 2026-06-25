@@ -12,6 +12,7 @@ import (
 	orquestadirectoroperativo "orquesta/modulos/orquesta-director-operativo"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 	orquestarunmemory "orquesta/modulos/orquesta-run-memory"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
@@ -574,6 +575,244 @@ func TestCodexStackRunSupervisorAPIV0PlanStateRunNotActiveDevuelveOKYDetieneCola
 		!codexStackRefsContainPartV0(candidates[0].EvidenceRefs, "direct-drain-recoverable-blocked-queue-sync") {
 		t.Fatalf("result=%+v candidates=%+v", result, candidates)
 	}
+}
+
+func TestCodexStackRunSupervisorAPIV0ActiveStepNoReentrableDevuelveNeedsReplanV0(t *testing.T) {
+	ctx := context.Background()
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	planStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0()
+	evidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
+	stack.Stores.OperationalPlanStateWriter = planStore
+	stack.Stores.OperationalPlanStateStore = planStore
+	stack.Stores.RequiredTestEvidenceStore = evidenceStore
+	stack.Ports.OperationalPlanStateWriter = planStore
+	stack.Ports.OperationalPlanStateStore = planStore
+	stack.Ports.RequiredTestEvidenceStore = evidenceStore
+
+	refs := (codexStackRequiredTestRefsV0{
+		RunRef:  "run-ref-supervisor-active-step-needs-replan-001",
+		PlanRef: "plan-ref-supervisor-active-step-needs-replan-001",
+	}).withDefaultsV0()
+	run := refs.runV0()
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	taskWriter, ok := stack.Stores.TaskStore.(orquestacionnucleoapp.WorkflowTaskWriterPortV0)
+	if !ok {
+		t.Fatalf("TaskStore no escribe WorkflowTaskV0: %T", stack.Stores.TaskStore)
+	}
+	if err := taskWriter.SaveWorkflowTaskV0(ctx, refs.workflowTaskV0()); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0: %v", err)
+	}
+	state := codexStackUnsupportedActiveStepPlanStateForTestV0(refs)
+	if err := planStore.SaveOperationalDirectorPlanStateV0(ctx, state); err != nil {
+		t.Fatalf("SaveOperationalDirectorPlanStateV0: %v", err)
+	}
+	if err := stack.Stores.EventSink.AppendRunEventsV0(ctx, refs.RunRef, refs.eventsV0(t)); err != nil {
+		t.Fatalf("AppendRunEventsV0: %v", err)
+	}
+	if _, err := stack.Stores.RunQueue.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        refs.RunRef,
+		QueueRef:      DefaultRunQueueRefV0,
+		AppRef:        run.AppSpecRef,
+		Status:        orquestarunqueue.RunStatusRunningV0,
+		PriorityScore: 90,
+		EvidenceRefs:  []string{"evidence-ref-test-active-step-needs-replan-running"},
+	}); err != nil {
+		t.Fatalf("SetRunPriorityV0 running: %v", err)
+	}
+
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:                  "request-ref-run-supervisor-active-step-needs-replan-001",
+		CorrelationID:              "corr-run-supervisor-active-step-needs-replan-001",
+		RunRef:                     refs.RunRef,
+		OperationalDirectorPlanRef: refs.PlanRef,
+		MaxTicks:                   1,
+		MaxBursts:                  1,
+		MaxStepsPerBurst:           1,
+		MaxDispatchesPerWait:       1,
+		MaxCommands:                1,
+		MaxOutboxPerCycle:          1,
+		MaxDecisionCycles:          1,
+		MaxExternalWaits:           1,
+	}); err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/runs/supervise", body)
+	req.Header.Set("Content-Type", "application/json")
+
+	orquestamcp.NewMCPRunSupervisorHTTPHandlerV0(NewCodexStackRunSupervisorExecutorV0(&stack)).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPRunSupervisorToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	candidates, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		ctx,
+		orquestarunqueue.RunQueueReadRequestV0{
+			QueueRef:             DefaultRunQueueRefV0,
+			IncludeNonExecutable: true,
+		},
+	)
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	if result.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
+		result.RunRef != refs.RunRef ||
+		result.Last.Status != string(CodexSupervisorRuntimeNeedsReplanV0) ||
+		!codexStackRefsContainPartV0(result.NextActions, "replan_operational_director_active_step") ||
+		!codexStackDiagnosticsContainCodeForTestV0(result.Diagnostics, "operational_plan_state_active_step_needs_replan") ||
+		len(candidates) != 1 ||
+		candidates[0].Status != orquestarunqueue.RunStatusStoppedV0 ||
+		orquestarunqueue.IsExecutableRunStatusV0(candidates[0].Status) ||
+		!codexStackRefsContainPartV0(candidates[0].EvidenceRefs, "direct-drain-needs-replan-queue-sync") {
+		t.Fatalf("result=%+v candidates=%+v", result, candidates)
+	}
+}
+
+func TestCodexStackRunSupervisorGlobalV0ActiveStepNoReentrableNoRompeTickV0(t *testing.T) {
+	ctx := context.Background()
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	planStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0()
+	evidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
+	stack.Stores.OperationalPlanStateWriter = planStore
+	stack.Stores.OperationalPlanStateStore = planStore
+	stack.Stores.RequiredTestEvidenceStore = evidenceStore
+	stack.Ports.OperationalPlanStateWriter = planStore
+	stack.Ports.OperationalPlanStateStore = planStore
+	stack.Ports.RequiredTestEvidenceStore = evidenceStore
+
+	refs := (codexStackRequiredTestRefsV0{
+		RunRef:  "run-ref-supervisor-global-active-step-needs-replan-001",
+		PlanRef: "operational-director-plan-director-decisions-run-ref-supervisor-global-active-step-needs-replan-001",
+	}).withDefaultsV0()
+	run := refs.runV0()
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	taskWriter, ok := stack.Stores.TaskStore.(orquestacionnucleoapp.WorkflowTaskWriterPortV0)
+	if !ok {
+		t.Fatalf("TaskStore no escribe WorkflowTaskV0: %T", stack.Stores.TaskStore)
+	}
+	if err := taskWriter.SaveWorkflowTaskV0(ctx, refs.workflowTaskV0()); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0: %v", err)
+	}
+	if err := planStore.SaveOperationalDirectorPlanStateV0(ctx, codexStackUnsupportedActiveStepPlanStateForTestV0(refs)); err != nil {
+		t.Fatalf("SaveOperationalDirectorPlanStateV0: %v", err)
+	}
+	if err := stack.Stores.EventSink.AppendRunEventsV0(ctx, refs.RunRef, refs.eventsV0(t)); err != nil {
+		t.Fatalf("AppendRunEventsV0: %v", err)
+	}
+	if _, err := stack.Stores.RunQueue.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        refs.RunRef,
+		QueueRef:      DefaultRunQueueRefV0,
+		AppRef:        run.AppSpecRef,
+		Status:        orquestarunqueue.RunStatusReadyV0,
+		PriorityScore: 90,
+		EvidenceRefs:  []string{"evidence-ref-test-global-active-step-ready"},
+	}); err != nil {
+		t.Fatalf("SetRunPriorityV0 ready: %v", err)
+	}
+
+	supervised, err := stack.RunGlobalSupervisorV0(ctx, orquestarunsupervisor.RunSupervisorCommandV0{
+		QueueRef:          DefaultRunQueueRefV0,
+		MaxTicks:          1,
+		MaxRunsPerTick:    1,
+		MaxExecutions:     1,
+		StopOnNoExecution: true,
+		OccurredAt:        codexStackRunSupervisorTimeV0("2026-06-25T12:00:00Z"),
+		DrainLimits: orquestaruncoordinator.RunDrainLimitsV0{
+			MaxBursts:            1,
+			MaxStepsPerBurst:     1,
+			MaxDispatchesPerWait: 1,
+			MaxCommands:          1,
+			MaxOutboxPerCycle:    1,
+			MaxDecisionCycles:    1,
+			MaxExternalWaits:     1,
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunGlobalSupervisorV0: %v supervised=%+v", err, supervised)
+	}
+	if supervised.TotalExecutions != 1 ||
+		len(supervised.Ticks) != 1 ||
+		len(supervised.Ticks[0].Result.Executions) != 1 {
+		t.Fatalf("supervised=%+v", supervised)
+	}
+	execution := supervised.Ticks[0].Result.Executions[0]
+	candidates, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		ctx,
+		orquestarunqueue.RunQueueReadRequestV0{
+			QueueRef:             DefaultRunQueueRefV0,
+			IncludeNonExecutable: true,
+		},
+	)
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	if execution.Outcome != codexSupervisorOperationalPlanStateNeedsReplanOutcomeV0 ||
+		execution.QueueStatus != orquestarunqueue.RunStatusStoppedV0 ||
+		!codexStackDiagnosticsContainDrainCodeForTestV0(execution.Diagnostics, "operational_plan_state_active_step_needs_replan") ||
+		len(candidates) != 1 ||
+		candidates[0].Status != orquestarunqueue.RunStatusStoppedV0 {
+		t.Fatalf("execution=%+v candidates=%+v supervised=%+v", execution, candidates, supervised)
+	}
+}
+
+func codexStackUnsupportedActiveStepPlanStateForTestV0(
+	refs codexStackRequiredTestRefsV0,
+) orquestacionnucleoapp.OperationalDirectorPlanStateV0 {
+	refs = refs.withDefaultsV0()
+	state := refs.planStateV0()
+	state.ActiveStepID = "step-gather-context"
+	state.Steps = append(
+		[]orquestacionnucleoapp.OperationalDirectorPlanStepStateV0{{
+			StepID:    "step-gather-context",
+			Kind:      orquestadirectoroperativo.OperationalDirectorStepGatherContextV0,
+			Status:    orquestadirectoroperativo.OperationalDirectorStepRunningV0,
+			WaveRef:   state.ActiveWaveRef,
+			CohortRef: state.ActiveCohortRef,
+		}},
+		state.Steps...,
+	)
+	for index := range state.Steps {
+		if state.Steps[index].StepID != "step-run-required-tests" {
+			continue
+		}
+		state.Steps[index].Status = orquestadirectoroperativo.OperationalDirectorStepPendingV0
+	}
+	return state
+}
+
+func codexStackDiagnosticsContainCodeForTestV0(
+	diagnostics []orquestamcp.MCPAutoprogrammingDiagnosticV0,
+	code string,
+) bool {
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+func codexStackDiagnosticsContainDrainCodeForTestV0(
+	diagnostics []orquestaruncoordinator.RunDrainDiagnosticV0,
+	code string,
+) bool {
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Kind == code {
+			return true
+		}
+	}
+	return false
 }
 
 func TestCodexStackRunSupervisorAPIV0RecuperaPlanRefYReintentaRequiredTestsBloqueadosV0(t *testing.T) {

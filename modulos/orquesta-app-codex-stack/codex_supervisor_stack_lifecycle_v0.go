@@ -55,6 +55,13 @@ func (lifecycle CodexSupervisorStackLifecycleV0) drainRunV0(
 	}
 	enriched, err := lifecycle.Stack.enrichQueuedOperationalDirectorDrainRequestV0(ctx, request)
 	if err != nil {
+		if codexSupervisorRecoverableOperationalPlanStateErrorV0(err) {
+			snapshot := codexSupervisorOperationalPlanStateNeedsReplanSnapshotV0(request.RunRef, err)
+			if syncErr := lifecycle.syncDirectDrainNeedsReplanQueueStatusV0(ctx, request.RunRef); syncErr != nil {
+				return snapshot, syncErr
+			}
+			return snapshot, nil
+		}
 		return CodexSupervisorRuntimeSnapshotV0{
 			Status:     CodexSupervisorRuntimeFailedV0,
 			SessionRef: strings.TrimSpace(request.RunRef),
@@ -94,6 +101,13 @@ func (lifecycle CodexSupervisorStackLifecycleV0) drainRunV0(
 				"evidence-ref-codex-supervisor-stack-drain-recoverable-blocked",
 			))
 			if syncErr := lifecycle.syncDirectDrainRecoverableBlockedQueueStatusV0(ctx, request.RunRef); syncErr != nil {
+				return snapshot, syncErr
+			}
+			return snapshot, nil
+		}
+		if codexSupervisorRecoverableOperationalPlanStateErrorV0(err) {
+			snapshot = codexSupervisorOperationalPlanStateNeedsReplanSnapshotV0(request.RunRef, err)
+			if syncErr := lifecycle.syncDirectDrainNeedsReplanQueueStatusV0(ctx, request.RunRef); syncErr != nil {
 				return snapshot, syncErr
 			}
 			return snapshot, nil
@@ -204,6 +218,62 @@ func (lifecycle CodexSupervisorStackLifecycleV0) syncDirectDrainRecoverableBlock
 			EvidenceRefs: compactStringsV0(append(
 				candidate.EvidenceRefs,
 				"evidence-ref-codex-supervisor-direct-drain-recoverable-blocked-queue-sync",
+			)),
+			WorksetClaims: candidate.WorksetClaims,
+		})
+		return err
+	}
+	return nil
+}
+
+func (lifecycle CodexSupervisorStackLifecycleV0) syncDirectDrainNeedsReplanQueueStatusV0(
+	ctx context.Context,
+	runRef string,
+) error {
+	runRef = strings.TrimSpace(runRef)
+	if runRef == "" || lifecycle.Stack.Stores.RunQueue == nil {
+		return nil
+	}
+	queueConfig := normalizeRunQueueConfigV0(lifecycle.Stack.RunQueue)
+	candidates, err := lifecycle.Stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		ctx,
+		orquestarunqueue.RunQueueReadRequestV0{
+			QueueRef:             queueConfig.QueueRef,
+			IncludeNonExecutable: true,
+		},
+	)
+	if err != nil {
+		return err
+	}
+	queueStatus := orquestarunqueue.RunStatusStoppedV0
+	if lifecycle.Stack.Stores.RunStore != nil {
+		run, err := lifecycle.Stack.Stores.RunStore.LoadRunV0(ctx, runRef)
+		if err == nil && run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+			queueStatus = orquestarunqueue.RunStatusClosedV0
+		}
+	}
+	for _, candidate := range candidates {
+		if strings.TrimSpace(candidate.RunRef) != runRef {
+			continue
+		}
+		_, err = lifecycle.Stack.Stores.RunQueue.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+			RunRef:           candidate.RunRef,
+			QueueRef:         queueConfig.QueueRef,
+			AppRef:           candidate.AppRef,
+			Status:           queueStatus,
+			PriorityScore:    candidate.PriorityScore,
+			UpdatedAt:        stackNowV0(lifecycle.Stack.Clock),
+			FairnessGroupRef: candidate.FairnessGroupRef,
+			AttemptGroup:     candidate.AttemptGroup,
+			ParentRunRef:     candidate.ParentRunRef,
+			SupersedesRunRef: candidate.SupersedesRunRef,
+			RescueReason:     candidate.RescueReason,
+			RequestedBy:      "codex-supervisor-direct-drain",
+			Reason:           "supervise directo marco plan operativo para replan",
+			IdempotencyKey:   "codex-supervisor-direct-drain-needs-replan:" + runRef + ":" + queueStatus,
+			EvidenceRefs: compactStringsV0(append(
+				candidate.EvidenceRefs,
+				"evidence-ref-codex-supervisor-direct-drain-needs-replan-queue-sync",
 			)),
 			WorksetClaims: candidate.WorksetClaims,
 		})
@@ -433,6 +503,22 @@ func codexSupervisorSnapshotNeedsOperationalReplanV0(
 	return hasOpenTasks && openTasks > 0 && hasRequestedAgents && requestedAgents == 0
 }
 
+func codexSupervisorOperationalPlanStateNeedsReplanSnapshotV0(
+	runRef string,
+	err error,
+) CodexSupervisorRuntimeSnapshotV0 {
+	diagnostic := codexSupervisorOperationalPlanStateNeedsReplanDiagnosticV0(runRef, err)
+	return CodexSupervisorRuntimeSnapshotV0{
+		Status:     CodexSupervisorRuntimeNeedsReplanV0,
+		SessionRef: strings.TrimSpace(runRef),
+		EvidenceRefs: []string{
+			"evidence-ref-codex-supervisor-operational-plan-state-active-step-needs-replan",
+			"evidence-ref-codex-supervisor-operational-plan-needs-replan",
+		},
+		Diagnostics: []orquestaruncoordinator.RunDrainDiagnosticV0{diagnostic},
+	}
+}
+
 func codexSupervisorEvidenceCountByPrefixV0(
 	values []string,
 	prefix string,
@@ -538,6 +624,9 @@ func (lifecycle CodexSupervisorStackLifecycleV0) codexSupervisorPlanStateEvidenc
 func codexSupervisorRuntimeStateFromOutcomeV0(
 	outcome string,
 ) CodexSupervisorRuntimeStateV0 {
+	if strings.TrimSpace(outcome) == codexSupervisorOperationalPlanStateNeedsReplanOutcomeV0 {
+		return CodexSupervisorRuntimeNeedsReplanV0
+	}
 	return codexSupervisorRuntimeStateFromLoopV0(
 		orquestacionnucleoapp.ProgressiveLoopStatusV0(strings.TrimSpace(outcome)),
 		"",

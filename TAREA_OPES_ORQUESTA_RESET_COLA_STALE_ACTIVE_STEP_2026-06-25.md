@@ -53,6 +53,34 @@ Requisitos propuestos:
 4. El estado público debe exponer conteos separados: `queued`, `running_live`, `running_stale`, `blocked`, `lost`, `completed` y `failed`.
 5. El director residente OPES debe poder convertir runs `stale/lost` en tareas de replanificación sin intervención manual.
 
+## Avance 2026-06-25
+
+Cerrado en el stack Codex/Orquesta el aislamiento del fallo
+`operational_director_plan_state.active_step`:
+
+- el core y el store siguen validando estricto;
+- `orquesta-app-codex-stack` clasifica ese fallo interno como recuperable;
+- `/api/v0/runs/supervise` con `run_ref` devuelve `ok` con
+  `last.status=needs_replan`, diagnóstico público
+  `operational_plan_state_active_step_needs_replan` y acción
+  `replan_operational_director_active_step`;
+- la run afectada se sincroniza a cola no ejecutable `stopped` con evidencia,
+  en vez de quedar `running` o tumbar el endpoint;
+- la supervisión global convierte el mismo caso en resultado de drain
+  `needs_replan`, rota la run a `stopped` y no propaga error fatal al tick;
+- las recuperaciones previas al coordinador también apartan esa run concreta
+  cuando reciben el mismo fallo, sin abortar toda la cola.
+
+Evidencia local:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack
+go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-run-supervisor ./modulos/orquesta-run-coordinator
+```
+
+Pendiente de esta tarea: taxonomía completa de estado vivo/stale/lost por PID y
+apagado cooperativo cuando solo queden registros obsoletos sin proceso vivo.
+
 ## Criterio de aceptación
 
 - Una cola con runs antiguas sin procesos vivos no impide `supervise`.

@@ -41,6 +41,8 @@ func codexSupervisorRuntimeStateFromGlobalSupervisorV0(
 			switch state {
 			case CodexSupervisorRuntimeFailedV0:
 				return state
+			case CodexSupervisorRuntimeNeedsReplanV0:
+				return state
 			case CodexSupervisorRuntimeWaitingOutboxV0:
 				seenWaitingOutbox = true
 			case CodexSupervisorRuntimeRunningV0:

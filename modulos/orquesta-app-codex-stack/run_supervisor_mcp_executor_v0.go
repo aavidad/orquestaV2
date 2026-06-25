@@ -72,6 +72,10 @@ func (executor CodexStackRunSupervisorExecutorV0) Execute(
 	output.NextActions = codexStackRunSupervisorNextActionsMCPV0(result)
 	output.Diagnostics = append(
 		output.Diagnostics,
+		codexStackRunSupervisorDiagnosticsMCPV0(result.Last.Diagnostics)...,
+	)
+	output.Diagnostics = append(
+		output.Diagnostics,
 		executor.Stack.codexStackRunSupervisorQueueDiagnosticsMCPV0(ctx, input, result)...,
 	)
 	output = addAutoprogrammingResidentEvidenceV0(input, output)
