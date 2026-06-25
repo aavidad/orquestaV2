@@ -117,6 +117,7 @@ func (queuedGoalFirstInnerForTestV0) Execute(
 ) (orquestamcp.MCPArrancarDirectorAppToolResultV0, error) {
 	return orquestamcp.MCPArrancarDirectorAppToolResultV0{
 		Estado:  orquestamcp.MCPArrancarDirectorAppEstadoOKV0,
+		RunRef:  "run-ref-queued-goal-first-001",
 		GoalRef: "goal-ref-queued-goal-first-001",
 	}, nil
 }

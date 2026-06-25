@@ -72,7 +72,7 @@ func MCPArrancarDirectorAppDescriptorV0() MCPArrancarDirectorAppToolDescriptorV0
 		Name:        MCPArrancarDirectorAppToolNameV0,
 		Version:     MCPArrancarDirectorAppToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,respuesta?,app_spec_request:AppSpecRequestV0(request_kind?,execution_mode?),max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,max_external_waits?}",
-		Output:      "ok:{route_policy,app_spec,run_ref?,director_execution_mode?,goal_ref?,goal_status?,phase_id?,loop_status?}|error:{route_policy,errores_publicos}",
+		Output:      "ok:{route_policy,app_spec,run_ref,director_execution_mode?,goal_ref?,goal_status?,phase_id?,loop_status?}|error:{route_policy,errores_publicos}",
 		ResourceURI: MCPArrancarDirectorAppResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -80,6 +80,27 @@ func MCPArrancarDirectorAppDescriptorV0() MCPArrancarDirectorAppToolDescriptorV0
 			"no elige proveedor modelo credenciales home runtime ni DB",
 			"delegacion en orquesta-app-director-service",
 		},
+	}
+}
+
+func NormalizeMCPArrancarDirectorAppResultV0(
+	result MCPArrancarDirectorAppToolResultV0,
+	correlationID string,
+) MCPArrancarDirectorAppToolResultV0 {
+	if strings.TrimSpace(result.Estado) != MCPArrancarDirectorAppEstadoOKV0 ||
+		strings.TrimSpace(result.RunRef) != "" {
+		return result
+	}
+	return MCPArrancarDirectorAppToolResultV0{
+		Estado:        MCPArrancarDirectorAppEstadoErrorV0,
+		CorrelationID: strings.TrimSpace(firstNonEmptyMCPV0(result.CorrelationID, correlationID)),
+		RoutePolicy:   mcpPreferredDirectorRoutePolicyV0(),
+		Errores: []MCPValidationIssueV0{{
+			Code:    "run_ref_requerido",
+			Field:   "run_ref",
+			Message: "run_ref requerido para observar director y goal",
+		}},
+		EvidenceRefs: compactStringsMCPV0(result.EvidenceRefs),
 	}
 }
 

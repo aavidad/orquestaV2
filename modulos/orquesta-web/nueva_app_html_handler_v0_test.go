@@ -150,6 +150,40 @@ func TestNuevaAppHTMLV0RenderizaPanelGoalFirstConActualizacion(t *testing.T) {
 	}
 }
 
+func TestNuevaAppHTMLV0DefensivoGoalFirstSinRunNoObserva(t *testing.T) {
+	endpoint := NewNuevaAppWebEndpointV0(&fakeNuevaAppClientV0{})
+	vm := NewWebNuevaAppViewModelV0(validSpecForViewModelV0(), backlogForViewModelV0())
+	vm.Estado = WebNuevaAppEstadoDirector
+	vm.Director = &WebNuevaAppDirectorV0{
+		DirectorExecutionMode: "goal_first",
+		GoalRef:               "goal-ref-web-goal-sin-run-001",
+		ExternalGoalRef:       "thread-ref-web-goal-sin-run-001",
+		GoalStatus:            "running",
+	}
+	page := endpoint.page("es", vm)
+	rec := httptest.NewRecorder()
+
+	writeNuevaAppHTMLPageV0(rec, http.StatusOK, page)
+
+	body := rec.Body.String()
+	for _, want := range []string{
+		`data-goal-panel`,
+		`data-goal-auto-poll="false"`,
+		`data-run-ref=""`,
+		`goal-ref-web-goal-sin-run-001`,
+		`thread-ref-web-goal-sin-run-001`,
+		`goal_first`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("HTML goal-first sin run no contiene %q\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, `<div class="goal-actions"><button`) ||
+		strings.Contains(body, `data-goal-panel data-goal-auto-poll="true"`) {
+		t.Fatalf("HTML goal-first sin run no debe activar polling/boton de goal\n%s", body)
+	}
+}
+
 func TestNuevaAppHTMLV0RenderizaDirectorLegacySinPollingGoal(t *testing.T) {
 	endpoint := NewNuevaAppWebEndpointV0(&fakeNuevaAppClientV0{})
 	vm := NewWebNuevaAppViewModelV0(validSpecForViewModelV0(), backlogForViewModelV0())

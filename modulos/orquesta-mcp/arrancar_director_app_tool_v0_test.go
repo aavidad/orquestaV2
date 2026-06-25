@@ -85,6 +85,7 @@ func TestMCPArrancarDirectorAppToolExecutorV0ExponeGoalFirst(t *testing.T) {
 	}
 	if result.Estado != MCPArrancarDirectorAppEstadoOKV0 ||
 		result.DirectorExecutionMode != orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0 ||
+		result.RunRef == "" ||
 		result.GoalRef == "" ||
 		result.ExternalGoalRef != "thread-ref-mcp-goal-001" ||
 		result.GoalStatus != orquestagoal.GoalStatusRunningV0 ||
@@ -206,6 +207,71 @@ func TestMCPArrancarDirectorAppHTTPHandlerV0SirveBridgeREST(t *testing.T) {
 	if result.Estado != MCPArrancarDirectorAppEstadoOKV0 ||
 		result.RunRef == "" ||
 		len(result.StartedAgents) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestMCPArrancarDirectorAppHTTPHandlerV0RechazaOKSinRunRef(t *testing.T) {
+	executor := &fakeMCPArrancarDirectorAppHTTPExecutorV0{
+		result: MCPArrancarDirectorAppToolResultV0{
+			Estado:                MCPArrancarDirectorAppEstadoOKV0,
+			CorrelationID:         "corr-http-director-sin-run-001",
+			DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0,
+			GoalRef:               "goal-ref-http-director-sin-run-001",
+			GoalStatus:            orquestagoal.GoalStatusRunningV0,
+		},
+	}
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(validMCPDirectorAppInputForTestV0()); err != nil {
+		t.Fatalf("encode input: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, MCPArrancarDirectorAppHTTPPathV0, body)
+	req.Header.Set("X-Correlation-ID", "corr-http-director-sin-run-001")
+
+	NewMCPArrancarDirectorAppHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPArrancarDirectorAppToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if result.Estado != MCPArrancarDirectorAppEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "run_ref_requerido" ||
+		result.Errores[0].Field != "run_ref" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestMCPArrancarDirectorAppTransportV0NormalizaOKSinRunRef(t *testing.T) {
+	executor := &fakeMCPArrancarDirectorAppHTTPExecutorV0{
+		result: MCPArrancarDirectorAppToolResultV0{
+			Estado:                MCPArrancarDirectorAppEstadoOKV0,
+			DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0,
+			GoalRef:               "goal-ref-transport-director-sin-run-001",
+			GoalStatus:            orquestagoal.GoalStatusRunningV0,
+		},
+	}
+	input := validMCPDirectorAppInputForTestV0()
+	raw, err := json.Marshal(input)
+	if err != nil {
+		t.Fatalf("marshal input: %v", err)
+	}
+	payload, err := mcpArrancarDirectorAppTransportHandlerV0(executor)(context.Background(), raw)
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	var result MCPArrancarDirectorAppToolResultV0
+	if err := json.Unmarshal(payload, &result); err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+	if result.Estado != MCPArrancarDirectorAppEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "run_ref_requerido" ||
+		result.Errores[0].Field != "run_ref" {
 		t.Fatalf("result=%+v", result)
 	}
 }

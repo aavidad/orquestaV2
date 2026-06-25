@@ -245,6 +245,12 @@ func nuevaAppI18nSpanishV0() map[string]string {
 		"nueva_app.error.error_transporte":                     "No se pudo completar la comunicacion.",
 		"nueva_app.error.respuesta_invalida":                   "La respuesta recibida no cumple el contrato.",
 		"nueva_app.error.transporte_no_configurado":            "El conector de solicitud no esta configurado.",
+		nuevaAppErrKeyRunRefRequiredV0:                         "El Director respondio sin run_ref; el Goal no se puede observar. No se ha reactivado el loop legacy.",
+		nuevaAppErrKeyCodexAppServerUnavailableV0:              "Codex Goal no arranco. El backend app-server esta degradado. Revisa el daemon de Codex y reinicia orquesta-server.",
+		nuevaAppErrKeyCodexAppServerSocketV0:                   "Codex Goal no arranco. No se pudo conectar al socket local de Codex app-server. Arranca o reinicia codex app-server daemon y reinicia orquesta-server.",
+		nuevaAppErrKeyCodexAppServerStandaloneV0:               "Codex Goal no arranco. Falta la instalacion standalone requerida por Codex app-server. Instalala y reinicia orquesta-server.",
+		nuevaAppErrKeyCodexAppServerCommandV0:                  "Codex Goal no arranco. No se encontro el comando de Codex app-server configurado. Corrige la configuracion y reinicia orquesta-server.",
+		nuevaAppErrKeyCodexAppServerPermissionV0:               "Codex Goal no arranco. El backend app-server rechazo el acceso. Revisa permisos del socket o daemon y reinicia orquesta-server.",
 		"nueva_app.error.clave_no_encontrada":                  "Texto no disponible.",
 	}
 }

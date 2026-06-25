@@ -64,6 +64,9 @@ artifact_refs=<n>
 evidence_refs=<n>
 ```
 
+El `start_response.json` debe incluir `run_ref`, `goal_ref`,
+`external_goal_ref`, `goal_status` y `director_execution_mode=goal_first`.
+
 El ultimo `observe_response.json` debe tener:
 
 - `goal_status=complete`;

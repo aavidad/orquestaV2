@@ -208,7 +208,9 @@ publicado en effective config.
 Avance local adicional 2026-06-25: `StartAppDirectorV0`, MCP/REST y
 `/nueva-app` exponen `director_execution_mode` para distinguir
 `goal_first` de `legacy_director_loop`. La web ya no intenta observar un goal
-cuando el resultado viene por loop historico sin `goal_ref`.
+cuando el resultado viene por loop historico sin `goal_ref`; un `ok`
+goal-first sin `run_ref` debe rechazarse como `run_ref_requerido` porque no hay
+clave observable para cierre, evidencias ni tests.
 
 Pendiente verificable:
 

@@ -25,8 +25,9 @@ estado terminal sin exigir que el operador pulse repetidamente `Actualizar
 goal`, pero sin convertir la UI en scheduler ni runtime.
 Alternativas: solo boton manual; polling infinito; mover observacion al core.
 Impacto: `NuevaAppGoalFirstPanelV0` declara intervalo y maximo de polls por
-atributos `data-*`, llama al bridge REST existente y se detiene ante run
-`cerrada`/`bloqueada` o goal `complete`/`blocked`/`invalid`.
+atributos `data-*`, llama al bridge REST existente solo cuando tiene `run_ref`,
+y se detiene ante run `cerrada`/`bloqueada` o goal
+`complete`/`blocked`/`invalid`.
 Contratos afectados: `NuevaAppGoalFirstPanelV0`,
 `orquesta.apps.observe_director_goal.v0`.
 Estado: aceptada localmente.

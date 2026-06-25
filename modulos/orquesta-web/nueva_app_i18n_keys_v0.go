@@ -181,5 +181,11 @@ var nuevaAppI18nRequiredKeysV0 = []string{
 	"nueva_app.error.error_transporte",
 	"nueva_app.error.respuesta_invalida",
 	"nueva_app.error.transporte_no_configurado",
+	nuevaAppErrKeyRunRefRequiredV0,
+	nuevaAppErrKeyCodexAppServerUnavailableV0,
+	nuevaAppErrKeyCodexAppServerSocketV0,
+	nuevaAppErrKeyCodexAppServerStandaloneV0,
+	nuevaAppErrKeyCodexAppServerCommandV0,
+	nuevaAppErrKeyCodexAppServerPermissionV0,
 	"nueva_app.error.clave_no_encontrada",
 }

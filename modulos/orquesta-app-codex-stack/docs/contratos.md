@@ -173,8 +173,8 @@ persiste ese estado mediante su puerto y deja de rankear esa run en ticks
 posteriores.
 
 Para goal-first, `QueuedArrancarDirectorExecutorV0` no encola la run al
-arrancar si el resultado trae `goal_ref`: Codex Goal ocupa el loop automatico.
-La sincronizacion de cola sucede al observar el goal por
+arrancar si el resultado `ok` trae `run_ref` y `goal_ref`: Codex Goal ocupa el
+loop automatico. La sincronizacion de cola sucede al observar el goal por
 `StackV0.ObserveAppDirectorGoalV0`: primero delega en
 `orquesta-app-director-service.ObserveAppDirectorGoalV0` y, si el run queda
 terminal, actualiza `RunQueue` como `closed` para `cerrada` o `stopped` para

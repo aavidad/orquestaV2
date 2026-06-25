@@ -73,6 +73,10 @@ func (handler mcpArrancarDirectorAppHTTPHandlerV0) ServeHTTP(w http.ResponseWrit
 		)
 		return
 	}
+	result = NormalizeMCPArrancarDirectorAppResultV0(
+		result,
+		correlationFromArrancarDirectorHTTPV0(r, input),
+	)
 	status := http.StatusOK
 	if result.Estado == MCPArrancarDirectorAppEstadoErrorV0 {
 		status = http.StatusBadRequest

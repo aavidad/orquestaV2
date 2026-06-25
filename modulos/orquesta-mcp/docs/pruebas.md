@@ -412,7 +412,7 @@ Riesgos: No cubre Codex real ni servidor MCP real; el smoke real vive en `orques
 Caso: MCP-CT-023A bridge REST arrancar director
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-web
-Evidencia esperada: `NewMCPArrancarDirectorAppHTTPHandlerV0` acepta `POST /api/v0/apps/director`, invoca el executor inyectado, propaga correlation id y devuelve el resultado compacto consumido por `RESTArrancarDirectorAppClientV0`.
+Evidencia esperada: `NewMCPArrancarDirectorAppHTTPHandlerV0` acepta `POST /api/v0/apps/director`, invoca el executor inyectado, propaga correlation id y devuelve el resultado compacto consumido por `RESTArrancarDirectorAppClientV0`; un resultado `ok` sin `run_ref` se convierte en error publico `run_ref_requerido`.
 Ultima ejecucion: 2026-05-10; pasa.
 Riesgos: No abre servidor real ni configura puertos productivos; solo fija el bridge HTTP.
 ```

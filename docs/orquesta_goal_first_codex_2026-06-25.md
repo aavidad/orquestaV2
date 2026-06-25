@@ -106,8 +106,8 @@ cuando el operador habia pedido goal-first y deja la accion pendiente clara.
 El 2026-06-25 `/api/v0/apps/director` queda conectado de forma opt-in a
 goal-first: `StartAppDirectorV0` persiste el intake/run, compila un
 `GoalWorkSpecV0` desde `AppSpecV0` y, si la composicion inyecta
-`GoalLauncher`, lanza el goal y devuelve `goal_ref`, `external_goal_ref`,
-`goal_status`, `goal_launch_receipt` y
+`GoalLauncher`, lanza el goal y devuelve `run_ref`, `goal_ref`,
+`external_goal_ref`, `goal_status`, `goal_launch_receipt` y
 `director_execution_mode=goal_first`. En ese camino no ejecuta el loop legacy ni
 encola el run para el supervisor historico. Si la composicion no inyecta goal,
 el resultado declara `director_execution_mode=legacy_director_loop`.

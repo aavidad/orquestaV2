@@ -1595,6 +1595,12 @@ Como corregir:
 - `error_transporte`: fallo de cliente o endpoint externo.
 - `respuesta_invalida`: respuesta no cumple contrato publico.
 - `transporte_no_configurado`: no hay conector inyectado.
+- `run_ref_requerido`: el arranque Goal-first no devolvio `run_ref`; no hay
+  clave observable para cierre, evidencias ni tests y no se reactiva el loop
+  legacy.
+- `codex_app_server_*`: Codex Goal esta configurado pero el backend app-server
+  esta degradado. Revisa socket, comando, permisos o instalacion standalone,
+  reinicia `codex app-server daemon` y despues `orquesta-server`.
 
 ## Recetas De Uso
 

@@ -175,7 +175,8 @@ Campos:
     estado: ok
     route_policy: entrada operativa preferente por Director V2
     app_spec: resumen compacto
-    run_ref: ref interna neutra cuando se usa loop legacy
+    run_ref: ref interna neutra obligatoria para observar director, goal,
+      evidencias y cierre
     phase_id: fase inicial
     director_execution_mode: `legacy_director_loop` o `goal_first`
     director_task: task_ref, brainstorm_ref, agent_request_id y capacidad
@@ -197,7 +198,8 @@ Invariantes:
   - Permite que el formulario web invoque Orquesta sin conocer factory, workflow ni launcher.
 	Pruebas de contrato:
 	  - Ejecucion con puertos fake arranca director y devuelve `started_agents`.
-	  - Ejecucion con `GoalLauncher` devuelve `goal_ref` sin arrancar agentes legacy.
+	  - Ejecucion con `GoalLauncher` devuelve `run_ref` y `goal_ref` sin
+	    arrancar agentes legacy.
 	  - Autonomia alta devuelve `director_tasks` y arranca equipo por batch.
 	  - Request/correlation externos con `mcp` se traducen a refs internas neutras.
 	  - Request invalida devuelve errores publicos sin crear run.
@@ -216,9 +218,11 @@ Campos:
 Invariantes:
   - Bridge REST fino; no abre servidor por si mismo ni crea puertos productivos.
   - Usa executor inyectado de `orquesta.apps.arrancar_director.v0`.
+  - Convierte `ok` sin `run_ref` en error publico `run_ref_requerido`.
   - No conoce DB, runtime, proveedor, HOME, OAuth ni modelos.
 Pruebas de contrato:
   - Handler HTTP invoca executor y conserva correlation id.
+  - Handler HTTP rechaza `ok` sin `run_ref`.
   - Web puede usarlo con `RESTArrancarDirectorAppClientV0`.
 ```
 

@@ -51,7 +51,13 @@ Implementacion actual:
 - La respuesta 2xx canonica es `app_spec` + `backlog`, segun `../../CONTRATOS.md`, y devuelve `WebNuevaAppViewModelV0` compacto.
 - Los alias `spec` y `backlog_inicial_propuesto` solo son compatibilidad transitoria durante el arranque; no son contrato canonico.
 - La respuesta 400 canonica usa `errores` con issues publicos de factory y devuelve `WebNuevaAppViewModelV0` en estado `invalida`.
-- Status no 2xx distinto de 400 y errores de transporte devuelven `WebNuevaAppClientErrorV0` con codigo publico estable `error_transporte`, sin stack ni cuerpo privado.
+- Status no 2xx sin cuerpo publico estructurado y errores de transporte
+  devuelven `WebNuevaAppClientErrorV0` con codigo publico estable
+  `error_transporte`, sin stack ni cuerpo privado.
+- Status no 2xx con `estado=error` y `errores_publicos` se proyecta como error
+  publico del Director. Esto permite mostrar `codex_app_server_*` y
+  `run_ref_requerido` sin reactivar el loop legacy cuando Goal-first esta
+  configurado pero degradado.
 
 ## Contrato de salida: `ArrancarDirectorAppClient`
 
@@ -615,7 +621,8 @@ Version: v0
 Propietario: orquesta-web
 Consumidores: operadores en `/nueva-app`
 Campos visibles:
-- run_ref si existe
+- run_ref obligatorio en respuestas `ok` del arranque; el panel lo muestra si
+  esta presente
 - goal_ref
 - external_goal_ref
 - goal_status
@@ -624,17 +631,20 @@ Campos visibles:
 Invariantes:
 - Se renderiza solo si `WebNuevaAppViewModelV0.Director` esta presente.
 - El boton `Actualizar goal` y el polling automatico aparecen solo si hay
-  `goal_ref`; un resultado legacy con `run_ref` no intenta observar goal.
+  `run_ref` y `goal_ref`; un resultado legacy con `run_ref` no intenta observar
+  goal.
 - El refresco llama por `fetch` a `POST /api/v0/apps/director/goal/observe`.
 - Si hay `run_ref`, el panel observa automaticamente de forma acotada:
   `data-goal-poll-interval-ms=5000` y `data-goal-max-polls=60`.
 - La observacion automatica se detiene al ver run `cerrada`/`bloqueada` o goal
   `complete`/`blocked`/`invalid`; el boton manual sigue disponible.
 - No valida cierre, no toca cola, no arranca runtime ni crea stores.
-- Si el arranque goal-first no trae `run_ref`, muestra refs de goal pero no
-  fuerza una observacion imposible.
+- Si un viewmodel defensivo llega sin `run_ref`, muestra refs de goal pero no
+  fuerza una observacion imposible; la frontera REST/MCP ya debe rechazar ese
+  `ok` como `run_ref_requerido`.
 Pruebas de contrato:
 - `TestNuevaAppHTMLV0RenderizaPanelGoalFirstConActualizacion`.
+- `TestNuevaAppHTMLV0DefensivoGoalFirstSinRunNoObserva`.
 ```
 
 ```text

@@ -127,7 +127,7 @@ Riesgos: No cubre UI real ni handler de submit; eso queda para WEB-006.
 Caso: WEB-CT-014 cliente REST ArrancarDirectorApp v0
 Tipo: contract
 Comando: `go test -count=1 ./modulos/orquesta-web`
-Evidencia esperada: `RESTArrancarDirectorAppClientV0` envia `POST /api/v0/apps/director` con `app_spec_request`, correlation header y limites opcionales; respuesta `ok` se proyecta a `WebNuevaAppViewModelV0` estado `director_arrancado`, y respuesta `error` se mantiene como error publico renderizable.
+Evidencia esperada: `RESTArrancarDirectorAppClientV0` envia `POST /api/v0/apps/director` con `app_spec_request`, correlation header y limites opcionales; respuesta `ok` con `run_ref` se proyecta a `WebNuevaAppViewModelV0` estado `director_arrancado`, y respuesta `error` se mantiene como error publico renderizable incluso si llega con status 5xx estructurado por backend Goal degradado.
 Ultima ejecucion: 2026-05-10; pasa.
 Riesgos: El bridge REST productivo debe inyectarse fuera de web; web no construye puertos internos.
 ```
@@ -499,11 +499,15 @@ cuando el viewmodel trae `Director`, muestra `run_ref`, `goal_ref`,
 `external_goal_ref`, `goal_status`, `director_execution_mode` y boton
 `Actualizar goal`; el JS llama a
 `POST /api/v0/apps/director/goal/observe`, actualiza `run_status` y
-`closure_status`, y arranca polling acotado con parada terminal sin introducir
-cliente Go, store, runtime ni proveedor.
+`closure_status`, y arranca polling acotado con parada terminal si tambien hay
+`run_ref`, sin introducir cliente Go, store, runtime ni proveedor.
 Un resultado legacy con `director_execution_mode=legacy_director_loop` y sin
 `goal_ref` renderiza el modo, pero deja `data-goal-auto-poll=false` y no muestra
 boton de observacion de goal.
+Un viewmodel defensivo goal-first con `goal_ref` pero sin `run_ref` muestra refs
+de goal, pero deja `data-goal-auto-poll=false` y no muestra boton porque no
+existe clave observable para `POST /api/v0/apps/director/goal/observe`; la
+frontera REST/MCP debe rechazar esa respuesta como `run_ref_requerido`.
 Ultima ejecucion: 2026-06-25; pasa con el comando indicado tras anadir polling
 automatico goal-first.
 Riesgos: El test cubre contrato HTML/JS server-rendered; la respuesta real del

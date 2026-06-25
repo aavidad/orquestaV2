@@ -108,12 +108,11 @@ func decodeArrancarDirectorAppResponseV0(
 	resp *http.Response,
 	form WebNuevaAppFormV0,
 ) (WebNuevaAppViewModelV0, error) {
-	if (resp.StatusCode < 200 || resp.StatusCode > 299) && resp.StatusCode != http.StatusBadRequest {
-		discardWebHTTPResponseBodyV0(resp)
-		return WebNuevaAppViewModelV0{}, webNuevaAppClientErrorV0(WebNuevaAppErrTransporteV0, resp.StatusCode)
-	}
 	var result WebArrancarDirectorAppResultV0
 	if !decodeWebHTTPJSONResponseV0(resp, &result) {
+		if resp.StatusCode < 200 || resp.StatusCode > 299 {
+			return WebNuevaAppViewModelV0{}, webNuevaAppClientErrorV0(WebNuevaAppErrTransporteV0, resp.StatusCode)
+		}
 		return WebNuevaAppViewModelV0{}, webNuevaAppClientErrorV0(WebNuevaAppErrRespuestaInvalidaV0, resp.StatusCode)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
@@ -124,7 +123,7 @@ func decodeArrancarDirectorAppResponseV0(
 	}
 	switch strings.TrimSpace(result.Estado) {
 	case ArrancarDirectorAppEstadoOKV0:
-		if strings.TrimSpace(result.RunRef) == "" && strings.TrimSpace(result.GoalRef) == "" {
+		if strings.TrimSpace(result.RunRef) == "" {
 			return WebNuevaAppViewModelV0{}, webNuevaAppClientErrorV0(WebNuevaAppErrRespuestaInvalidaV0, resp.StatusCode)
 		}
 		return NewWebNuevaAppDirectorViewModelV0(form, result), nil

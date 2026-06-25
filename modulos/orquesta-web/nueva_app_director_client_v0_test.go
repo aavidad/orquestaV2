@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"testing"
 	"time"
-
-	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
 func TestRESTArrancarDirectorAppClientV0EnviaPOSTJSONYProyectaDirector(t *testing.T) {
@@ -103,7 +101,7 @@ func TestRESTArrancarDirectorAppClientV0ErroresPublicosNoSonTransporte(t *testin
 	}
 }
 
-func TestRESTArrancarDirectorAppClientV0AceptaGoalFirstSinRunLegacy(t *testing.T) {
+func TestRESTArrancarDirectorAppClientV0RechazaOKSinRunRef(t *testing.T) {
 	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(WebArrancarDirectorAppResultV0{
@@ -112,13 +110,7 @@ func TestRESTArrancarDirectorAppClientV0AceptaGoalFirstSinRunLegacy(t *testing.T
 			DirectorExecutionMode: "goal_first",
 			GoalRef:               "goal-ref-web-director-001",
 			ExternalGoalRef:       "thread-ref-web-director-001",
-			GoalStatus:            orquestagoal.GoalStatusRunningV0,
-			GoalLaunchReceipt: &orquestagoal.GoalLaunchReceiptV0{
-				SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
-				Status:          orquestagoal.GoalStatusRunningV0,
-				GoalRef:         "goal-ref-web-director-001",
-				ExternalGoalRef: "thread-ref-web-director-001",
-			},
+			GoalStatus:            "running",
 		}); err != nil {
 			t.Fatalf("encode success: %v", err)
 		}
@@ -126,18 +118,12 @@ func TestRESTArrancarDirectorAppClientV0AceptaGoalFirstSinRunLegacy(t *testing.T
 	defer server.Close()
 
 	client := NewRESTArrancarDirectorAppClientV0(server.URL, time.Second)
-	vm, err := client.ArrancarDirectorApp(context.Background(), minimalFormForClientV0("req-director-goal-001"))
-	if err != nil {
-		t.Fatalf("ArrancarDirectorApp: %v", err)
-	}
-	if vm.Estado != WebNuevaAppEstadoDirector ||
-		vm.Director == nil ||
-		vm.Director.RunRef != "" ||
-		vm.Director.DirectorExecutionMode != "goal_first" ||
-		vm.Director.GoalRef != "goal-ref-web-director-001" ||
-		vm.Director.ExternalGoalRef != "thread-ref-web-director-001" ||
-		vm.Director.GoalStatus != orquestagoal.GoalStatusRunningV0 {
-		t.Fatalf("vm=%+v", vm)
+	_, err := client.ArrancarDirectorApp(context.Background(), minimalFormForClientV0("req-director-goal-001"))
+	var clientErr WebNuevaAppClientErrorV0
+	if !errors.As(err, &clientErr) ||
+		clientErr.Code != WebNuevaAppErrRespuestaInvalidaV0 ||
+		clientErr.StatusCode != http.StatusOK {
+		t.Fatalf("error inesperado: %#v", err)
 	}
 }
 
@@ -173,6 +159,37 @@ func TestRESTArrancarDirectorAppClientV0Status500DevuelveErrorPublico(t *testing
 		clientErr.Code != WebNuevaAppErrTransporteV0 ||
 		clientErr.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("error inesperado: %#v", err)
+	}
+}
+
+func TestRESTArrancarDirectorAppClientV0Status500JSONConservaErrorPublicoGoal(t *testing.T) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(WebArrancarDirectorAppResultV0{
+			Estado:    ArrancarDirectorAppEstadoErrorV0,
+			RequestID: "req-director-goal-degraded",
+			Errores: []WebNuevaAppIssueV0{{
+				Code:    "codex_app_server_control_socket_missing",
+				Field:   "goal_backend",
+				Message: "codex_app_server_control_socket_missing",
+			}},
+		})
+	}))
+	defer server.Close()
+
+	client := NewRESTArrancarDirectorAppClientV0(server.URL, time.Second)
+	vm, err := client.ArrancarDirectorApp(
+		context.Background(),
+		minimalFormForClientV0("req-director-goal-degraded"),
+	)
+	if err != nil {
+		t.Fatalf("error publico goal degradado no debe ser transporte: %v", err)
+	}
+	if vm.Estado != WebNuevaAppEstadoInvalida ||
+		len(vm.ErroresPublicos) != 1 ||
+		vm.ErroresPublicos[0].Code != "codex_app_server_control_socket_missing" {
+		t.Fatalf("vm=%+v", vm)
 	}
 }
 

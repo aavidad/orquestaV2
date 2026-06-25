@@ -180,6 +180,10 @@ func mcpArrancarDirectorAppTransportHandlerV0(
 		if err != nil {
 			return nil, err
 		}
+		result = NormalizeMCPArrancarDirectorAppResultV0(
+			result,
+			firstNonEmptyMCPV0(input.CorrelationID, input.RequestID, input.AppSpecRequest.RequestID),
+		)
 		return json.Marshal(result)
 	}
 }

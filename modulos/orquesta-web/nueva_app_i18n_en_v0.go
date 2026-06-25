@@ -245,6 +245,12 @@ func nuevaAppI18nEnglishV0() map[string]string {
 		"nueva_app.error.error_transporte":                     "The communication could not be completed.",
 		"nueva_app.error.respuesta_invalida":                   "The received response does not match the contract.",
 		"nueva_app.error.transporte_no_configurado":            "The request connector is not configured.",
+		nuevaAppErrKeyRunRefRequiredV0:                         "The Director responded without run_ref, so the Goal cannot be observed. The legacy loop was not reactivated.",
+		nuevaAppErrKeyCodexAppServerUnavailableV0:              "Codex Goal did not start. The app-server backend is degraded. Check the Codex daemon and restart orquesta-server.",
+		nuevaAppErrKeyCodexAppServerSocketV0:                   "Codex Goal did not start. The local Codex app-server socket could not be reached. Start or restart codex app-server daemon and restart orquesta-server.",
+		nuevaAppErrKeyCodexAppServerStandaloneV0:               "Codex Goal did not start. The standalone installation required by Codex app-server is missing. Install it and restart orquesta-server.",
+		nuevaAppErrKeyCodexAppServerCommandV0:                  "Codex Goal did not start. The configured Codex app-server command was not found. Fix the configuration and restart orquesta-server.",
+		nuevaAppErrKeyCodexAppServerPermissionV0:               "Codex Goal did not start. The app-server backend denied access. Check socket or daemon permissions and restart orquesta-server.",
 		"nueva_app.error.clave_no_encontrada":                  "Text unavailable.",
 	}
 }
