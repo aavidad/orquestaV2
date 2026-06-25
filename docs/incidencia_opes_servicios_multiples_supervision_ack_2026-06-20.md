@@ -56,11 +56,12 @@ en `/home/alberto/Trabajo/OPES`, con OPES API local y Orquesta residente.
   de la run con `SIGTERM` para evitar que un audio no canonico entrara en el
   paquete OPES. El stop debe llegar al agente y a sus procesos hijo, y el
   supervisor debe confirmar la parada sin inspeccion manual.
-- La documentacion OPES vigente apunta a `scripts/opes_audio_app.py`, pero en
-  el arbol local solo existe `scripts/tcae_audio_app.py` como wrapper
-  historico. Orquesta no debe depender de una ruta inexistente: debe validar el
-  tool path efectivo antes de crear trabajos de audio y exponer un bloqueo
-  accionable si la herramienta canonica no esta instalada.
+- La documentacion OPES vigente apunta a `scripts/opes_audio_app.py`. El
+  2026-06-24 se corrigio la instalacion local: el script canonico existe y
+  `scripts/tcae_audio_app.py` queda como wrapper historico. Orquesta no debe
+  depender de una ruta supuesta: debe validar el tool path efectivo antes de
+  crear trabajos de audio y exponer un bloqueo accionable si la herramienta
+  canonica no esta instalada.
 
 ## Evidencia local
 
