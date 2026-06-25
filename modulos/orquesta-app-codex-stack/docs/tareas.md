@@ -1,5 +1,39 @@
 # Tareas: orquesta-app-codex-stack
 
+## APP-CODEX-STACK-045
+
+Objetivo: no declarar una run parada mientras queden procesos Codex sin
+confirmacion real de parada.
+
+Estado: hecho local.
+
+Write-set aplicado:
+
+- `SuperviseCodexV0` y el lifecycle del stack distinguen `stop_pending` de
+  `stopped`;
+- `run_stop_requested`, `stop_requested` y `stop_pending` ya salen como
+  `stop_pending`, no como parada terminal;
+- si `ProcessAgentStopperV0` no recibe snapshot `stopped`, `/runs/supervise`
+  devuelve `stop_pending` y conserva la parada como pendiente;
+- la reconciliacion queued de run-control ya no considera `StoppedAgents` como
+  confirmacion suficiente;
+- antes de completar `RunControl` como `stopped`, el stack verifica
+  `ProcessRegistry + SnapshotV0` y bloquea si un proceso registrado sigue
+  `running`/`stopping` o no cuadra su identidad;
+- el resultado MCP publica siguientes acciones para volver a supervisar y no
+  marcar parado sin confirmacion.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack`.
+
+Pendiente:
+
+- smoke Codex real opt-in que demuestre cero procesos `codex exec` vivos tras
+  stop forzado;
+- superficie publica de status con distincion completa `stop_requested`,
+  `stop_propagated`, `stop_confirmed` y `stop_pending`.
+
 ## APP-CODEX-STACK-044
 
 Objetivo: reconciliar `RunQueue` al observar un goal-first terminal sin

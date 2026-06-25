@@ -2,6 +2,7 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -66,6 +67,14 @@ func (lifecycle CodexSupervisorStackLifecycleV0) drainRunV0(
 	}
 	snapshot := lifecycle.codexSupervisorSnapshotFromDrainV0(ctx, request.RunRef, request.OperationalDirectorPlanRef, result)
 	if err != nil {
+		if codexSupervisorDrainStopPendingErrorV0(err, result) {
+			snapshot.Status = CodexSupervisorRuntimeStopPendingV0
+			snapshot.EvidenceRefs = compactStringsV0(append(
+				snapshot.EvidenceRefs,
+				"evidence-ref-codex-supervisor-stop-pending-runtime-not-confirmed",
+			))
+			return snapshot, nil
+		}
 		if codexSupervisorSnapshotNeedsOperationalReplanV0(snapshot) {
 			snapshot.Status = CodexSupervisorRuntimeNeedsReplanV0
 			snapshot.EvidenceRefs = compactStringsV0(append(
@@ -384,6 +393,21 @@ func codexSupervisorDrainRecoverableBlockedV0(
 		result.Final.Status == orquestacionnucleoapp.ProgressiveLoopStatusBlockedV0
 }
 
+func codexSupervisorDrainStopPendingErrorV0(
+	err error,
+	result orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
+) bool {
+	if err == nil {
+		return false
+	}
+	var coreErr orquestacionnucleoapp.ErrorV0
+	if !errors.As(err, &coreErr) {
+		return false
+	}
+	return coreErr.Code == orquestacionnucleoapp.ErrNucleoOrquestacionInvalidoV0 &&
+		strings.TrimSpace(coreErr.Field) == "process_runtime.status"
+}
+
 func codexSupervisorSnapshotRecoverablePlanBlockedV0(
 	snapshot CodexSupervisorRuntimeSnapshotV0,
 ) bool {
@@ -635,9 +659,10 @@ func codexSupervisorRuntimeStateFromLoopV0(
 	case orquestacionnucleoapp.ProgressiveLoopStatusNeedsDirectorV0:
 		return CodexSupervisorRuntimeRunningV0
 	case orquestacionnucleoapp.ProgressiveLoopStatusBlockedV0,
-		orquestacionnucleoapp.ProgressiveLoopStatusRunPausedV0,
-		orquestacionnucleoapp.ProgressiveLoopStatusRunStopRequestedV0:
+		orquestacionnucleoapp.ProgressiveLoopStatusRunPausedV0:
 		return CodexSupervisorRuntimeStoppedV0
+	case orquestacionnucleoapp.ProgressiveLoopStatusRunStopRequestedV0:
+		return CodexSupervisorRuntimeStopPendingV0
 	default:
 		return CodexSupervisorRuntimeRunningV0
 	}

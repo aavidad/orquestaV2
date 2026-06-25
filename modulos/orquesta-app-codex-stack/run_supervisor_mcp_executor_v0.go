@@ -185,6 +185,11 @@ func codexStackRunSupervisorNextActionsMCPV0(
 			"replan_operational_director_active_step",
 			"do_not_mark_run_failed_without_replan",
 		}
+	case CodexSupervisorRuntimeStopPendingV0:
+		return []string{
+			"stop_pending_supervise_again_until_runtime_stopped",
+			"do_not_mark_run_stopped_without_stop_confirmation",
+		}
 	}
 	if result.StopReason == CodexSupervisorStopDispatchV0 {
 		return []string{"dispatch_started_poll_run_ref_for_ack_or_completion"}

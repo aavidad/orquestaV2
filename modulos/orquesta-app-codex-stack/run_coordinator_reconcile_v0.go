@@ -10,6 +10,7 @@ import (
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func (stack StackV0) recoverQueuedStoppedActiveRunsV0(
@@ -218,13 +219,16 @@ func (stack StackV0) completeQueuedRunControlIfStopHasNoPendingAgentsV0(
 		return false, nil
 	}
 	evaluation := orquestaruncontrol.EvaluateRunControlV0(state)
-	if !evaluation.StopAgentsAllowed || len(stackDrainPendingStartedAgentRefsV0(run)) > 0 {
+	if !evaluation.StopAgentsAllowed || len(stackRunControlUnconfirmedStopAgentRefsV0(run)) > 0 {
 		return false, nil
 	}
 	if len(stackDrainOpenTaskRefsV0(run)) > 0 {
 		return false, nil
 	}
 	if pending, err := stack.domainWorkRunHasPendingSubmissionWithoutAcceptedReceiptV0(ctx, run); err != nil || pending {
+		return false, err
+	}
+	if live, err := stack.runControlHasLiveRegisteredProcessesV0(ctx, run.RunID); err != nil || live {
 		return false, err
 	}
 	target, ok := codexStackTerminalStatusForRunControlRequestV0(state.Status)
@@ -249,6 +253,87 @@ func (stack StackV0) completeQueuedRunControlIfStopHasNoPendingAgentsV0(
 		return true, err
 	}
 	return true, nil
+}
+
+func stackRunControlUnconfirmedStopAgentRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) []string {
+	confirmed := map[string]bool{}
+	for _, values := range [][]string{
+		run.DeliveredAgents,
+		run.FailedAgents,
+		run.LostAgents,
+		run.ConfirmedStoppedAgents,
+		stackDrainPhaseArtifactAgentRefsV0(run),
+	} {
+		for _, agentRef := range compactStringsV0(values) {
+			confirmed[agentRef] = true
+		}
+	}
+	refs := make([]string, 0, len(run.StartedAgents))
+	for _, agentRef := range compactStringsV0(run.StartedAgents) {
+		if confirmed[agentRef] {
+			continue
+		}
+		refs = append(refs, agentRef)
+	}
+	return refs
+}
+
+func (stack StackV0) runControlHasLiveRegisteredProcessesV0(
+	ctx context.Context,
+	runRef string,
+) (bool, error) {
+	runRef = strings.TrimSpace(runRef)
+	if runRef == "" || stack.Stores.ProcessRegistry == nil || stack.CodexSnapshotSource == nil {
+		return false, nil
+	}
+	lister, ok := stack.Stores.ProcessRegistry.(orquestacionnucleoapp.AgentProcessRegistryListPortV0)
+	if !ok {
+		return false, nil
+	}
+	records, err := lister.ListAgentProcessesV0(
+		ctx,
+		orquestacionnucleoapp.AgentProcessRegistryListFilterV0{RunID: runRef},
+	)
+	if err != nil {
+		return false, err
+	}
+	for _, record := range records {
+		snapshot, err := stack.CodexSnapshotSource.SnapshotV0(strings.TrimSpace(record.ProcessRef))
+		if err != nil {
+			if codexStackProcessRuntimeMissingV0(err) {
+				continue
+			}
+			return false, err
+		}
+		if !runControlRegisteredProcessMatchesSnapshotV0(record, snapshot) ||
+			snapshot.Status == orquestaruntime.ProcessRuntimeRunningV0 ||
+			snapshot.Status == orquestaruntime.ProcessRuntimeStoppingV0 {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func runControlRegisteredProcessMatchesSnapshotV0(
+	record orquestacionnucleoapp.AgentProcessRegistryRecordV0,
+	snapshot orquestaruntime.ProcessRuntimeSnapshotV0,
+) bool {
+	if strings.TrimSpace(record.ProcessRef) == "" ||
+		strings.TrimSpace(record.ProcessRef) != strings.TrimSpace(snapshot.ProcessRef) {
+		return false
+	}
+	if strings.TrimSpace(record.SessionRef) != "" &&
+		strings.TrimSpace(record.SessionRef) != strings.TrimSpace(snapshot.SessionRef) {
+		return false
+	}
+	if strings.TrimSpace(record.LaunchRef) != "" &&
+		strings.TrimSpace(snapshot.LaunchRef) != "" &&
+		strings.TrimSpace(record.LaunchRef) != strings.TrimSpace(snapshot.LaunchRef) {
+		return false
+	}
+	return true
 }
 
 func codexStackQueueStatusCanCompleteRunControlStopV0(

@@ -28,6 +28,7 @@ func codexSupervisorRuntimeStateFromGlobalSupervisorV0(
 		return CodexSupervisorRuntimeFailedV0
 	}
 	seenStopped := false
+	seenStopPending := false
 	seenRunning := false
 	seenWaitingOutbox := false
 	for _, tick := range result.Ticks {
@@ -44,6 +45,8 @@ func codexSupervisorRuntimeStateFromGlobalSupervisorV0(
 				seenWaitingOutbox = true
 			case CodexSupervisorRuntimeRunningV0:
 				seenRunning = true
+			case CodexSupervisorRuntimeStopPendingV0:
+				seenStopPending = true
 			case CodexSupervisorRuntimeStoppedV0:
 				seenStopped = true
 			}
@@ -54,6 +57,9 @@ func codexSupervisorRuntimeStateFromGlobalSupervisorV0(
 	}
 	if seenWaitingOutbox {
 		return CodexSupervisorRuntimeWaitingOutboxV0
+	}
+	if seenStopPending {
+		return CodexSupervisorRuntimeStopPendingV0
 	}
 	if seenStopped {
 		return CodexSupervisorRuntimeStoppedV0

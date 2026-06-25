@@ -12,6 +12,7 @@ import (
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func TestCodexStackV0StopForzadoPorAPIDrenaAgentesYActualizaStats(t *testing.T) {
@@ -67,6 +68,67 @@ func TestCodexStackV0StopForzadoPorAPIDrenaAgentesYActualizaStats(t *testing.T) 
 	}
 }
 
+func TestCodexStackV0RunSupervisorStopForzadoQuedaPendingSiRuntimeNoConfirmaV0(t *testing.T) {
+	runtime := newFirstStopPendingCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	director := postDirectorAPIV0(t, stack)
+
+	control := postRunControlStackV0(t, stack, orquestamcp.MCPRunControlToolInputV0{
+		Action:      "stop",
+		RunRef:      director.RunRef,
+		RequestedBy: "director",
+		Reason:      "parada pendiente de confirmacion runtime",
+		Forced:      true,
+	})
+	if control.Status != string(orquestaruncontrol.RunControlStatusStopRequestedV0) {
+		t.Fatalf("control=%+v", control)
+	}
+
+	supervisor := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:            "request-ref-stop-pending-runtime-001",
+		CorrelationID:        "corr-stop-pending-runtime-001",
+		RunRef:               director.RunRef,
+		MaxTicks:             2,
+		MaxBursts:            2,
+		MaxStepsPerBurst:     4,
+		MaxDispatchesPerWait: 8,
+		MaxCommands:          16,
+		MaxOutboxPerCycle:    8,
+		MaxDecisionCycles:    1,
+		MaxExternalWaits:     1,
+	})
+	if supervisor.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
+		supervisor.StopReason != string(CodexSupervisorStopPendingV0) ||
+		supervisor.Last.Status != string(CodexSupervisorRuntimeStopPendingV0) ||
+		!codexStackRefsContainPartV0(supervisor.Last.EvidenceRefs, "evidence-ref-codex-supervisor-stop-pending-runtime-not-confirmed") {
+		t.Fatalf("supervisor=%+v", supervisor)
+	}
+	if runtime.stopCountV0() == 0 || runtime.ignoredProcessRefV0() == "" {
+		t.Fatalf("runtime no recibio stop pendiente: stops=%d ignored=%q", runtime.stopCountV0(), runtime.ignoredProcessRefV0())
+	}
+	snapshot := runtime.ignoredSnapshotV0()
+	if snapshot.Status != orquestaruntime.ProcessRuntimeRunningV0 {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+	state, err := stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: director.RunRef},
+	)
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0: %v", err)
+	}
+	if state.Status != orquestaruncontrol.RunControlStatusStopRequestedV0 {
+		t.Fatalf("state=%+v", state)
+	}
+	run, err := stack.Stores.RunStore.LoadRunV0(context.Background(), director.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if len(run.ConfirmedStoppedAgents) >= len(run.StartedAgents) {
+		t.Fatalf("run no debe estar confirmado parado: %+v", run)
+	}
+}
+
 func stopStatsDrainLimitsV0() orquestaruncoordinator.RunDrainLimitsV0 {
 	return orquestaruncoordinator.RunDrainLimitsV0{
 		MaxBursts:            4,
@@ -107,4 +169,50 @@ func postDirectorStatsStackV0(
 		t.Fatalf("decode stats: %v", err)
 	}
 	return result
+}
+
+type firstStopPendingCodexStackRuntimeV0 struct {
+	*pendingAckCodexStackRuntimeV0
+
+	ignored bool
+	ref     string
+}
+
+func newFirstStopPendingCodexStackRuntimeV0() *firstStopPendingCodexStackRuntimeV0 {
+	return &firstStopPendingCodexStackRuntimeV0{
+		pendingAckCodexStackRuntimeV0: newPendingAckCodexStackRuntimeV0(),
+	}
+}
+
+func (runtime *firstStopPendingCodexStackRuntimeV0) StopV0(
+	_ context.Context,
+	processRef string,
+) (orquestaruntime.ProcessRuntimeSnapshotV0, error) {
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	snapshot := runtime.snapshots[processRef]
+	runtime.stops = append(runtime.stops, processRef)
+	if !runtime.ignored {
+		runtime.ignored = true
+		runtime.ref = processRef
+		snapshot.Status = orquestaruntime.ProcessRuntimeRunningV0
+		runtime.snapshots[processRef] = snapshot
+		return snapshot, nil
+	}
+	snapshot.Status = orquestaruntime.ProcessRuntimeStoppedV0
+	snapshot.StopRef = "stop-ref-" + processRef
+	runtime.snapshots[processRef] = snapshot
+	return snapshot, nil
+}
+
+func (runtime *firstStopPendingCodexStackRuntimeV0) ignoredProcessRefV0() string {
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	return runtime.ref
+}
+
+func (runtime *firstStopPendingCodexStackRuntimeV0) ignoredSnapshotV0() orquestaruntime.ProcessRuntimeSnapshotV0 {
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	return runtime.snapshots[runtime.ref]
 }

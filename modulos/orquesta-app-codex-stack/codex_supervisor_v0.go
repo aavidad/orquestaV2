@@ -20,6 +20,7 @@ const (
 	CodexSupervisorRuntimeStalledV0       CodexSupervisorRuntimeStateV0 = "stalled"
 	CodexSupervisorRuntimeLaunchFailedV0  CodexSupervisorRuntimeStateV0 = "launch_failed"
 	CodexSupervisorRuntimeNeedsReplanV0   CodexSupervisorRuntimeStateV0 = "needs_replan"
+	CodexSupervisorRuntimeStopPendingV0   CodexSupervisorRuntimeStateV0 = "stop_pending"
 	CodexSupervisorRuntimeStoppedV0       CodexSupervisorRuntimeStateV0 = "stopped"
 	CodexSupervisorRuntimeDoneV0          CodexSupervisorRuntimeStateV0 = "done"
 	CodexSupervisorRuntimeFailedV0        CodexSupervisorRuntimeStateV0 = "failed"
@@ -30,6 +31,7 @@ type CodexSupervisorStopReasonV0 string
 const (
 	CodexSupervisorStopDoneV0         CodexSupervisorStopReasonV0 = "done"
 	CodexSupervisorStopFailedV0       CodexSupervisorStopReasonV0 = "failed"
+	CodexSupervisorStopPendingV0      CodexSupervisorStopReasonV0 = "stop_pending"
 	CodexSupervisorStopStoppedV0      CodexSupervisorStopReasonV0 = "stopped"
 	CodexSupervisorStopDispatchV0     CodexSupervisorStopReasonV0 = "dispatch_started"
 	CodexSupervisorStopMaxTicksV0     CodexSupervisorStopReasonV0 = "max_ticks"
@@ -120,6 +122,10 @@ func SuperviseCodexV0(
 			result.StopReason = CodexSupervisorStopFailedV0
 			return result, nil
 		}
+		if codexSupervisorRuntimeStopPendingV0(snapshot.Status) {
+			result.StopReason = CodexSupervisorStopPendingV0
+			return result, nil
+		}
 		if codexSupervisorRuntimeStoppedV0(snapshot.Status) {
 			result.StopReason = CodexSupervisorStopStoppedV0
 			return result, nil
@@ -194,7 +200,16 @@ func codexSupervisorRuntimeFailedV0(state CodexSupervisorRuntimeStateV0) bool {
 
 func codexSupervisorRuntimeStoppedV0(state CodexSupervisorRuntimeStateV0) bool {
 	switch strings.TrimSpace(string(state)) {
-	case string(CodexSupervisorRuntimeNeedsReplanV0), string(CodexSupervisorRuntimeStoppedV0), "blocked", "paused", "stop_requested":
+	case string(CodexSupervisorRuntimeNeedsReplanV0), string(CodexSupervisorRuntimeStoppedV0), "blocked", "paused":
+		return true
+	default:
+		return false
+	}
+}
+
+func codexSupervisorRuntimeStopPendingV0(state CodexSupervisorRuntimeStateV0) bool {
+	switch strings.TrimSpace(string(state)) {
+	case string(CodexSupervisorRuntimeStopPendingV0), "stop_requested", "run_stop_requested":
 		return true
 	default:
 		return false

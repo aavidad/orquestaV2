@@ -70,7 +70,7 @@ Orquesta:
 SuperviseCodexV0
   tick 1 -> AgentLifecycle.LaunchV0(ctx)
   tick 2..N -> AgentLifecycle.ContinueV0(ctx, "sigue")
-  stop -> done | failed | max_ticks | context_done | runtime_error
+  stop -> done | failed | stop_pending | stopped | max_ticks | context_done | runtime_error
 ```
 
 Invariantes:
@@ -80,8 +80,14 @@ Invariantes:
   `sigue`;
 - `done`, `completed` y `complete` cierran como `done`;
 - `failed`, `error` y `errored` cierran como `failed`;
-- `pending`, `running` y `stopped` no son terminales para esta pieza: se siguen
-  empujando hasta `done`, error, cancelacion de contexto o `max_ticks`;
+- `stop_pending`, `stop_requested` y `run_stop_requested` cierran el supervisor
+  como `stop_pending`: el run ya tiene parada solicitada, pero todavia no se
+  declara parado;
+- `stopped`, `blocked`, `paused` y `needs_replan` cierran como `stopped` para
+  compatibilidad del contrato de ciclo de vida;
+- `pending` y `running` no son terminales para esta pieza: se siguen empujando
+  hasta `done`, error, stop pendiente, stop confirmado, cancelacion de contexto
+  o `max_ticks`;
 - el resultado conserva historial compacto de tick, accion y snapshot;
 - el contrato es un puerto del borde Codex, no del core;
 - `CodexSupervisorRuntimePortV0` queda como alias compatible, pero el concepto
@@ -118,6 +124,14 @@ Manejo real de agentes en Orquesta:
   `director_agent_decisions_file.v0`, se ignoran y no bloquean el run completo;
 - `DrainRunV0` aplica ACKs, reentra `ContinueAppDirectorV0` y despacha nuevas
   decisiones;
+- una parada solicitada no puede cerrar `RunControl` como `stopped` solo porque
+  el run tenga `StoppedAgents`: el stack exige `ConfirmedStoppedAgents` o
+  terminalidad equivalente y, si hay registro de procesos, verifica que ningun
+  `process_ref + session_ref` siga `running` o `stopping`;
+- si `ProcessAgentStopperV0` devuelve `process_runtime.status` no confirmado
+  como `stopped`, `/api/v0/runs/supervise` proyecta `stop_pending` y deja el
+  control como `stop_requested`, con siguiente accion de volver a supervisar
+  hasta confirmacion real;
 - progreso parado/lento entra por `ProgressSupervisionCandidateProviderV0` y el
   replan por `AssessmentReplanSourceV0`, que puede pedir `replace_agent`.
 

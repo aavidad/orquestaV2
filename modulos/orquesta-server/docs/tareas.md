@@ -968,7 +968,8 @@ Criterio de cierre:
 
 ## SRV-TASK-028: stop de run debe confirmar parada real de procesos Codex
 
-Estado: abierto 2026-06-22; avance local 2026-06-25 en `orquesta-server`.
+Estado: abierto 2026-06-22; avance local 2026-06-25 en `orquesta-server` y
+`orquesta-app-codex-stack`.
 
 Origen:
 `docs/incidencia_opes_autonomia_tractorista_ack_idle_stop_2026-06-22.md`.
@@ -1007,10 +1008,21 @@ Criterio de cierre:
   la respuesta conserva agentes en vuelo, checkpoints pendientes o runs pedidos
   sin confirmar; publica `shutdown_status=stop_pending` y mantiene congelado el
   supervisor hasta confirmacion real;
-- test con runtime fake que ignora la primera parada: supervise devuelve
-  `stop_pending`;
-- test con runtime fake que confirma parada: supervise devuelve `stopped` y
-  `stop_confirmed=1`;
+- avance 2026-06-25: `/api/v0/runs/supervise` ya proyecta
+  `run_stop_requested`/`stop_requested` como `stop_pending`, no como `stopped`;
+- avance 2026-06-25: la reconciliacion queued de run-control ya no trata
+  `StoppedAgents` como confirmacion; exige `ConfirmedStoppedAgents` o
+  terminalidad equivalente;
+- avance 2026-06-25: antes de `CompleteRunControlV0(stopped)`, el stack
+  consulta `ProcessRegistry + SnapshotV0` y bloquea el cierre si algun proceso
+  registrado sigue `running`/`stopping` o no cuadra su identidad;
+- cerrado local 2026-06-25: test con runtime fake que ignora la primera parada:
+  `/runs/supervise` devuelve `stop_pending`, conserva `RunControl` en
+  `stop_requested` y no confirma todos los agentes;
+- cerrado local 2026-06-25: test con runtime fake que confirma parada:
+  reconcile completa `RunControl` como `stopped`;
+- cerrado local 2026-06-25: test con proceso registrado vivo impide
+  terminalizar `RunControl` como `stopped`;
 - smoke Codex real opt-in: una run parada no deja procesos `codex exec` vivos
   tras el cierre;
 - status publico distingue `stop_requested`, `stop_propagated`,

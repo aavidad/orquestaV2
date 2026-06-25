@@ -114,6 +114,31 @@ func TestCodexSupervisorV0NoContinuaCuandoRuntimeQuedaStoppedV0(t *testing.T) {
 	}
 }
 
+func TestCodexSupervisorV0StopRequestedEsStopPendingV0(t *testing.T) {
+	runtime := newFakeCodexSupervisorRuntimeV0("pending", "stop_requested", "stopped")
+
+	result, err := SuperviseCodexV0(
+		context.Background(),
+		CodexSupervisorDepsV0{Runtime: runtime},
+		CodexSupervisorCommandV0{
+			MaxTicks:        5,
+			ContinueMessage: "sigue",
+		},
+	)
+	if err != nil {
+		t.Fatalf("SuperviseCodexV0: %v", err)
+	}
+
+	wantCalls := []string{"launch", "continue:sigue"}
+	if !reflect.DeepEqual(runtime.calls, wantCalls) {
+		t.Fatalf("calls got %#v want %#v", runtime.calls, wantCalls)
+	}
+	if result.StopReason != CodexSupervisorStopPendingV0 ||
+		result.Last.Status != "stop_requested" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestCodexSupervisorV0UsaSiguePorDefectoV0(t *testing.T) {
 	runtime := newFakeCodexSupervisorRuntimeV0("pending", "done")
 

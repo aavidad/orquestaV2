@@ -19,6 +19,7 @@ import (
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func TestCodexStackV0ArrancarDirectorRegistraRunEnColaGlobalV0(t *testing.T) {
@@ -1012,6 +1013,256 @@ func TestCodexStackV0RecoverTerminalizaRunStoppedConStopCheckpointSinAgentesPend
 	}
 	if len(visible) != 0 {
 		t.Fatalf("run parada no debe reencolarse como ejecutable: %+v", visible)
+	}
+}
+
+func TestCodexStackV0RecoverNoTerminalizaStopSoloConStopSolicitadoV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	runRef := "request-ref-autoprogramming-stop-request-only-001"
+	taskRef := "task-autoprogramming-stop-request-only-001"
+	agentRef := "agent-ref-stop-request-only-001"
+	run := codexStackAutoprogrammingRunForCoordinatorRepairTestV0(runRef, taskRef)
+	run.StartedAgents = []string{agentRef}
+	run.StoppedAgents = []string{agentRef}
+	run.DeliveredTasks = []string{taskRef}
+	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	state, err := stack.Stores.RunControl.StopRunV0(context.Background(), orquestaruncontrol.StopRunCommandV0{
+		RunRef:       runRef,
+		RequestedBy:  "orquesta-director",
+		Reason:       "stop solicitado pero no confirmado por runtime",
+		EvidenceRefs: []string{"evidence-ref-test-stop-request-only"},
+	})
+	if err != nil {
+		t.Fatalf("StopRunV0: %v", err)
+	}
+	if _, err := stack.Stores.RunControl.RecordRunCheckpointV0(context.Background(), orquestaruncontrol.RecordRunCheckpointCommandV0{
+		RunRef:       runRef,
+		RequestedBy:  "orquesta-mcp-run-control",
+		Reason:       "checkpoint de stop solicitado",
+		EvidenceRefs: []string{"evidence-ref-test-stop-request-only-checkpoint"},
+	}); err != nil {
+		t.Fatalf("RecordRunCheckpointV0: %v", err)
+	}
+	state, err = stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: runRef},
+	)
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0 checkpoint: %v", err)
+	}
+
+	completed, err := stack.completeQueuedRunControlIfStopHasNoPendingAgentsV0(
+		context.Background(),
+		globalTickCommandForTestV0(),
+		orquestarunqueue.RunSchedulingCandidateV0{
+			RunRef:        runRef,
+			AppRef:        "project-ref-orquesta-server",
+			Status:        orquestarunqueue.RunStatusStoppedV0,
+			PriorityScore: 80,
+			UpdatedAt:     time.Date(2026, 6, 25, 11, 0, 0, 0, time.UTC),
+		},
+		state,
+		run,
+	)
+	if err != nil {
+		t.Fatalf("completeQueuedRunControlIfStopHasNoPendingAgentsV0: %v", err)
+	}
+	if completed {
+		t.Fatalf("stop solicitado sin ConfirmedStoppedAgents no debe terminalizar run-control")
+	}
+	state, err = stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: runRef},
+	)
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0: %v", err)
+	}
+	if state.Status != orquestaruncontrol.RunControlStatusStopRequestedV0 {
+		t.Fatalf("state=%+v", state)
+	}
+}
+
+func TestCodexStackV0RecoverNoTerminalizaStopConProcesoRegistradoVivoV0(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	runRef := "request-ref-autoprogramming-stop-live-process-001"
+	taskRef := "task-autoprogramming-stop-live-process-001"
+	agentRef := "agent-ref-stop-live-process-001"
+	processRef := "process-ref-stop-live-process-001"
+	sessionRef := "session-ref-stop-live-process-001"
+	launchRef := "launch-ref-stop-live-process-001"
+	runtime.snapshots[processRef] = orquestaruntime.ProcessRuntimeSnapshotV0{
+		SchemaVersion: orquestaruntime.ProcessRuntimeConnectorVersionV0,
+		ProcessRef:    processRef,
+		SessionRef:    sessionRef,
+		LaunchRef:     launchRef,
+		Status:        orquestaruntime.ProcessRuntimeRunningV0,
+	}
+	if err := stack.Stores.ProcessRegistry.RecordAgentProcessV0(context.Background(), orquestacionnucleoapp.AgentProcessRecordV0{
+		RunID:          runRef,
+		AgentRequestID: agentRef,
+		ProcessRef:     processRef,
+		SessionRef:     sessionRef,
+		LaunchRef:      launchRef,
+		ReadinessRef:   "readiness-ref-stop-live-process-001",
+		EvidenceRefs:   []string{"evidence-ref-test-live-process-record"},
+	}); err != nil {
+		t.Fatalf("RecordAgentProcessV0: %v", err)
+	}
+	run := codexStackAutoprogrammingRunForCoordinatorRepairTestV0(runRef, taskRef)
+	run.StartedAgents = []string{agentRef}
+	run.ConfirmedStoppedAgents = []string{agentRef}
+	run.DeliveredTasks = []string{taskRef}
+	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	state, err := stack.Stores.RunControl.StopRunV0(context.Background(), orquestaruncontrol.StopRunCommandV0{
+		RunRef:       runRef,
+		RequestedBy:  "orquesta-director",
+		Reason:       "stop con proceso registrado vivo",
+		EvidenceRefs: []string{"evidence-ref-test-live-process-stop"},
+	})
+	if err != nil {
+		t.Fatalf("StopRunV0: %v", err)
+	}
+	if _, err := stack.Stores.RunControl.RecordRunCheckpointV0(context.Background(), orquestaruncontrol.RecordRunCheckpointCommandV0{
+		RunRef:       runRef,
+		RequestedBy:  "orquesta-mcp-run-control",
+		Reason:       "checkpoint de stop con proceso vivo",
+		EvidenceRefs: []string{"evidence-ref-test-live-process-stop-checkpoint"},
+	}); err != nil {
+		t.Fatalf("RecordRunCheckpointV0: %v", err)
+	}
+	state, err = stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: runRef},
+	)
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0 checkpoint: %v", err)
+	}
+
+	completed, err := stack.completeQueuedRunControlIfStopHasNoPendingAgentsV0(
+		context.Background(),
+		globalTickCommandForTestV0(),
+		orquestarunqueue.RunSchedulingCandidateV0{
+			RunRef:        runRef,
+			AppRef:        "project-ref-orquesta-server",
+			Status:        orquestarunqueue.RunStatusStoppedV0,
+			PriorityScore: 80,
+			UpdatedAt:     time.Date(2026, 6, 25, 11, 10, 0, 0, time.UTC),
+		},
+		state,
+		run,
+	)
+	if err != nil {
+		t.Fatalf("completeQueuedRunControlIfStopHasNoPendingAgentsV0: %v", err)
+	}
+	if completed {
+		t.Fatalf("proceso registrado vivo no debe permitir status stopped")
+	}
+	state, err = stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: runRef},
+	)
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0: %v", err)
+	}
+	if state.Status != orquestaruncontrol.RunControlStatusStopRequestedV0 {
+		t.Fatalf("state=%+v", state)
+	}
+}
+
+func TestCodexStackV0RecoverTerminalizaStopConProcesoRegistradoStoppedV0(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	runRef := "request-ref-autoprogramming-stop-confirmed-process-001"
+	taskRef := "task-autoprogramming-stop-confirmed-process-001"
+	agentRef := "agent-ref-stop-confirmed-process-001"
+	processRef := "process-ref-stop-confirmed-process-001"
+	sessionRef := "session-ref-stop-confirmed-process-001"
+	launchRef := "launch-ref-stop-confirmed-process-001"
+	runtime.snapshots[processRef] = orquestaruntime.ProcessRuntimeSnapshotV0{
+		SchemaVersion: orquestaruntime.ProcessRuntimeConnectorVersionV0,
+		ProcessRef:    processRef,
+		SessionRef:    sessionRef,
+		LaunchRef:     launchRef,
+		StopRef:       "stop-ref-stop-confirmed-process-001",
+		Status:        orquestaruntime.ProcessRuntimeStoppedV0,
+	}
+	if err := stack.Stores.ProcessRegistry.RecordAgentProcessV0(context.Background(), orquestacionnucleoapp.AgentProcessRecordV0{
+		RunID:          runRef,
+		AgentRequestID: agentRef,
+		ProcessRef:     processRef,
+		SessionRef:     sessionRef,
+		LaunchRef:      launchRef,
+		ReadinessRef:   "readiness-ref-stop-confirmed-process-001",
+		EvidenceRefs:   []string{"evidence-ref-test-confirmed-process-record"},
+	}); err != nil {
+		t.Fatalf("RecordAgentProcessV0: %v", err)
+	}
+	run := codexStackAutoprogrammingRunForCoordinatorRepairTestV0(runRef, taskRef)
+	run.StartedAgents = []string{agentRef}
+	run.ConfirmedStoppedAgents = []string{agentRef}
+	run.DeliveredTasks = []string{taskRef}
+	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	state, err := stack.Stores.RunControl.StopRunV0(context.Background(), orquestaruncontrol.StopRunCommandV0{
+		RunRef:       runRef,
+		RequestedBy:  "orquesta-director",
+		Reason:       "stop confirmado por process registry",
+		EvidenceRefs: []string{"evidence-ref-test-confirmed-process-stop"},
+	})
+	if err != nil {
+		t.Fatalf("StopRunV0: %v", err)
+	}
+	if _, err := stack.Stores.RunControl.RecordRunCheckpointV0(context.Background(), orquestaruncontrol.RecordRunCheckpointCommandV0{
+		RunRef:       runRef,
+		RequestedBy:  "orquesta-mcp-run-control",
+		Reason:       "checkpoint de stop confirmado",
+		EvidenceRefs: []string{"evidence-ref-test-confirmed-process-stop-checkpoint"},
+	}); err != nil {
+		t.Fatalf("RecordRunCheckpointV0: %v", err)
+	}
+	state, err = stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: runRef},
+	)
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0 checkpoint: %v", err)
+	}
+
+	completed, err := stack.completeQueuedRunControlIfStopHasNoPendingAgentsV0(
+		context.Background(),
+		globalTickCommandForTestV0(),
+		orquestarunqueue.RunSchedulingCandidateV0{
+			RunRef:        runRef,
+			AppRef:        "project-ref-orquesta-server",
+			Status:        orquestarunqueue.RunStatusStoppedV0,
+			PriorityScore: 80,
+			UpdatedAt:     time.Date(2026, 6, 25, 11, 20, 0, 0, time.UTC),
+		},
+		state,
+		run,
+	)
+	if err != nil {
+		t.Fatalf("completeQueuedRunControlIfStopHasNoPendingAgentsV0: %v", err)
+	}
+	if !completed {
+		t.Fatalf("proceso registrado stopped y ConfirmedStoppedAgents debe permitir terminalizar")
+	}
+	state, err = stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: runRef},
+	)
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0: %v", err)
+	}
+	if state.Status != orquestaruncontrol.RunControlStatusStoppedV0 ||
+		!codexStackStringInSetV0(state.EvidenceRefs, "evidence-ref-run-control-complete-no-pending-agents") {
+		t.Fatalf("state=%+v", state)
 	}
 }
 
