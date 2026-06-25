@@ -46,6 +46,7 @@ const (
 	envServerIdleSelfImprovementContextRefsV0        = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_CONTEXT_REFS"
 	envServerIdleSelfImprovementEvidenceRefsV0       = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_EVIDENCE_REFS"
 	envServerIdleSelfImprovementAcceptanceV0         = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_ACCEPTANCE"
+	envServerIdleSelfImprovementGoalFirstV0          = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_GOAL_FIRST_ENABLED"
 	envServerIdleSelfImprovementCompactRulesV0       = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_COMPACT_RULES"
 	envServerIdleSelfImprovementPriorityScoreV0      = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PRIORITY_SCORE"
 	envServerIdleSelfImprovementMaxRequestsV0        = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_MAX_REQUESTS"
@@ -96,6 +97,8 @@ const (
 	envCodexDirectorProjectRefV0           = "ORQUESTA_CODEX_DIRECTOR_PROJECT_REF"
 	envCodexDirectorDomainRefsV0           = "ORQUESTA_CODEX_DIRECTOR_DOMAIN_REFS"
 	envCodexDirectorDomainContextFilesV0   = "ORQUESTA_CODEX_DIRECTOR_DOMAIN_CONTEXT_FILES"
+	envCodexGoalBackendV0                  = "ORQUESTA_CODEX_GOAL_BACKEND"
+	envCodexGoalTimeoutMSV0                = "ORQUESTA_CODEX_GOAL_TIMEOUT_MS"
 
 	envCodexWaveAgentsV0                     = "ORQUESTA_CODEX_WAVE_AGENTS"
 	envCodexWaveRefV0                        = "ORQUESTA_CODEX_WAVE_REF"
@@ -202,6 +205,7 @@ const (
 	defaultCodexExecutionModeV0                = "parallel"
 	defaultCodexMaxBatchReadyV0                = 70
 	defaultCodexMaxConcurrencyV0               = 70
+	defaultCodexGoalTimeoutMSV0                = 30000
 	defaultCodexServerMaxRunsPerTickV0         = 70
 	defaultCodexServerQueueLimitV0             = 70
 	defaultCodexServerDefaultPriorityV0        = 50
@@ -303,6 +307,11 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Label:       "Nuevas tareas por tanda",
 		Description: "Maximo de tareas nuevas por tanda de automejora.",
 	},
+	envServerIdleSelfImprovementGoalFirstV0: {
+		Scope:       "autoprogramming",
+		Label:       "Goal-first automejora",
+		Description: "Activa modo goal-first estricto para automejora residente; requiere backend goal configurado.",
+	},
 	envSecurityModeV0: {Scope: "rails", Label: "Modo seguridad", Description: "Modo historico de seguridad; no reactiva rails offline hasta nueva orden."},
 	envRailsModeV0:    {Scope: "rails", Label: "Modo rails", Description: "offline fijo hasta nueva orden; no reactiva politicas de bloqueo."},
 	envDetailProhibitedRailsV0: {
@@ -334,6 +343,16 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "codex_runtime",
 		Label:       "Reasoning Codex",
 		Description: "Esfuerzo de razonamiento para agentes Codex.",
+	},
+	envCodexGoalBackendV0: {
+		Scope:       "codex_goal",
+		Label:       "Backend Codex Goal",
+		Description: "Backend opt-in para lanzar y observar Codex Goal desde la composicion.",
+	},
+	envCodexGoalTimeoutMSV0: {
+		Scope:       "codex_goal",
+		Label:       "Timeout Codex Goal",
+		Description: "Timeout por llamada al backend Codex Goal app-server.",
 	},
 	envCapacityReasoningEffortV0: {
 		Scope:       "capacity",

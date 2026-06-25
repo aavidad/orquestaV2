@@ -190,7 +190,8 @@ Campos:
   branch_ref, tasks, write_set, required_tests, priority_score y limites de
   continuacion.
 - view_model: estado, accepted, run_ref, project_ref, worktree_ref,
-  branch_ref, phase_id, workflow_task_refs, wait_agent_refs, continue y
+  branch_ref, phase_id, workflow_task_refs, wait_agent_refs, goal_specs
+  opcional cuando el prepare-run ya trae contratos Goal, continue y
   errores_publicos.
 Invariantes:
 - La web llama al bridge REST `/api/v0/autoprogramming/prepare-run`; no lee
@@ -200,6 +201,8 @@ Invariantes:
   interpretan como rutas, nombres Git ni comandos.
 - La preparacion solo deja una run continuable; la supervision posterior usa
   `run_ref` y `wait_agent_refs` devueltos.
+- Si el contrato externo devuelve `goal_specs[]`, la web los proyecta sin
+  interpretarlos ni lanzar Goal; son handoff para composiciones goal-first.
 - `priority_score` se transporta al contrato prepare-run para que la cola
   mantenga el trabajo secundario acotado sin bloquear trabajo primario.
 Errores:
@@ -310,6 +313,68 @@ Pruebas de contrato:
 ```
 
 ```text
+Nombre: WebNuevaAppIntakeGuidedTurnV0
+Tipo: dto
+Version: v0
+Propietario: orquesta-web
+Consumidores: vistas/handlers de nueva app, futuro API/MCP de intake
+Campos:
+- schema_version: `web_nueva_app_intake_guided_turn.v0`
+- need: necesidad libre del operador.
+- decisions: decisiones sugeridas como `WebNuevaAppIntakeDecisionV0`.
+- followups: acciones guiadas disponibles, con `id`, `label_key` y decisiones
+  asociadas.
+- messages: claves i18n de mensajes de estado para la UI.
+Invariantes:
+- No sustituye `WebNuevaAppIntakeSessionV0`; solo propone decisiones aplicables
+  a una sesion.
+- No valida reglas de negocio ni proveedores; el cierre sigue en factory o
+  Director.
+- Las acciones de mapas, datos, arquitectura y accesibilidad se expresan como
+  capacidades, preferencias y restricciones publicas, no como tokens, DSN,
+  backend ni runtime.
+- El caso de alquileres cercanos produce datos/storage/integraciones editables
+  y compatibles con `AppSpecRequestV0`.
+Pruebas de contrato:
+- Necesidad libre de app movil de alquileres cercanos genera nombre, objetivo,
+  `tipo_app=mobile`, plataforma mobile, datos detallados, storage e integracion
+  de mapas validable por factory.
+- Acciones de seguimiento actualizan arquitectura, calidad, accesibilidad y
+  datos externos sin cambiar el contrato final.
+```
+
+```text
+Nombre: NuevaAppIntakeGuidedHTTPHandlerV0
+Tipo: puerto_entrada
+Version: v0
+Propietario: orquesta-web
+Ruta prevista por gateway: POST /api/v0/apps/intake/guided-turn
+Request:
+- schema_version: `web_nueva_app_intake_guided_request.v0` opcional.
+- session_id, locale, nombre, idea: contexto inicial opcional.
+- need: necesidad libre del operador.
+- action_id/action_ids: acciones guiadas a aplicar.
+- session: `WebNuevaAppIntakeSessionV0` opcional para continuar una sesion.
+Response:
+- schema_version: `web_nueva_app_intake_guided_response.v0`.
+- turn: `WebNuevaAppIntakeGuidedTurnV0`.
+- session: `WebNuevaAppIntakeSessionV0` resultante.
+Invariantes:
+- Es calculo puro de intake; no persiste sesion, no arranca Director, no llama
+  LLM/MCP, no abre filesystem y no toca runtime.
+- El handler acepta solo JSON y mantiene limites de body/control plane comunes.
+- Las respuestas devuelven formulario parcial editable; factory y Director
+  siguen cerrando validacion/ejecucion.
+- Las acciones guiadas no imponen proveedor de mapas, DB, cloud ni arquitectura
+  obligatoria; `hexagonal` sigue siendo fallback, no imposicion.
+Pruebas de contrato:
+- POST JSON con necesidad de app movil de alquileres cercanos devuelve sesion
+  con datos, storage e integracion de mapas.
+- POST JSON con accion aplica la decision sobre una sesion existente.
+- Metodo no soportado y content-type no JSON producen errores HTTP publicos.
+```
+
+```text
 Nombre: NuevaAppI18nCatalogV0
 Tipo: dto
 Version: v0
@@ -388,10 +453,24 @@ Pruebas de contrato:
 Implementacion actual:
 - `nueva_app_form_v0.go` define el DTO local y `ToAppSpecRequestV0`.
 - El mapper importa factory como `orquestafactory "orquesta/modulos/orquesta-factory"`.
-- Defaults locales: `schema_version=app_spec_request.v0`, `source=orquesta-web`, `request_kind=crear_app_completa`, `execution_mode=normal`, `i18n.default_locale=locale` si falta y `preferencias_tecnicas.arquitectura=hexagonal` si falta.
+- Defaults locales: `schema_version=app_spec_request.v0`, `source=orquesta-web`, `request_kind=crear_app_completa`, `execution_mode=normal`, `i18n.default_locale=locale` si falta y `preferencias_tecnicas.arquitectura=hexagonal` como fallback si falta.
 - No valida reglas de negocio; esa validacion queda en `orquesta-factory`.
 - `project_source.kind` usa el mismo contrato que factory: `new`, `github` o
   `local_path`.
+- `preferencias_tecnicas.arquitectura` es una preferencia/contrato de patron,
+  no proveedor. Las opciones soportadas incluyen `hexagonal`,
+  `clean_architecture`, `onion`, `modular_monolith`, `layered`,
+  `event_driven`, `microservices`, `serverless`, `plugin_based` y
+  `data_pipeline`; todas deben conservar fronteras limpias entre dominio,
+  aplicacion, puertos, adaptadores y bootstrap. `hexagonal` queda como fallback
+  si el operador no elige patron, pero no es obligatorio.
+- Las opciones expertas de datos, almacenamiento e integraciones deben entrar
+  como necesidades, tipos, sensibilidad, retencion, integraciones y
+  restricciones publicas; no como tablas, SQL, DSN, proveedor ni runtime.
+- `calidad.accesibilidad` transporta el nivel de accesibilidad elegido por el
+  operador. El HTML expone `basica`, `normal`, `wcag_aa` y `no_aplica`;
+  `calidad.accesibilidad_opciones` permite declarar niveles aceptados por
+  runtime/adaptador, por ejemplo `normal,wcag_aa`, sin imponer proveedor.
 ```
 
 ```text
@@ -505,7 +584,13 @@ Campos:
 Invariantes:
 - Es adaptador HTML fino sobre `NuevaAppWebEndpointV0`/`NuevaAppWebPageV0`.
 - Reutiliza `SolicitarNuevaAppClientV0`; no accede a DB, runtime, provider/model, HOME, OAuth ni endpoints heredados.
-- El formulario expone request_id, locale, nombre, objetivo, descripcion, tipo_app, plataformas, arquitectura, i18n, datos, deploy, calidad, agentes e integracion basica sin decidir negocio.
+- El formulario expone asistente guiado, request_id, locale, nombre, objetivo,
+  descripcion, tipo_app, plataformas, arquitectura, i18n, datos, almacenamiento,
+  deploy, calidad, agentes e integraciones multiples sin decidir negocio.
+- La guia documental de opciones del wizard vive en
+  `docs/guia_nueva_app_opciones_2026-06-25.md` y distingue asistente guiado,
+  modo basico y modo experto opcional para datos, almacenamiento, accesibilidad
+  e integraciones multiples.
 - Renderiza estado, resumen, backlog preview y errores publicos sin materializar backlog.
 Errores:
 - metodo_no_soportado

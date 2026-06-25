@@ -129,6 +129,76 @@ func TestSolicitarNuevaAppV0HonorsExplicitOptions(t *testing.T) {
 	}
 }
 
+func TestSolicitarNuevaAppV0PreservaDatosExpertosArquitecturaYAccesibilidadV0(t *testing.T) {
+	req := validMinimalRequestV0()
+	req.PreferenciasTecnicas.Arquitectura = "event_driven"
+	req.Datos = DatosRequestV0{
+		DBRequired: true,
+		TiposDetallados: []DataTypeRequestV0{
+			{
+				Nombre:        "Pisos",
+				Proposito:     "Mostrar pisos cercanos en alquiler",
+				Sensibilidad:  "publica",
+				Retencion:     "mientras el anuncio este activo",
+				Volumen:       "alto",
+				Restricciones: []string{"geolocalizacion aproximada"},
+			},
+			{
+				Nombre:       "Usuarios",
+				Proposito:    "Guardar favoritos y alertas",
+				Sensibilidad: "personal",
+			},
+		},
+		Storage: []DataStorageRequestV0{
+			{
+				Tipo:      "relacional",
+				Proposito: "Consultas transaccionales de anuncios",
+				Requerido: true,
+			},
+			{
+				Tipo:      "vectorial",
+				Proposito: "Busqueda semantica de preferencias",
+				Requerido: false,
+			},
+		},
+	}
+	req.Calidad.Accesibilidad = "normal"
+	req.Calidad.AccesibilidadOpciones = []string{"normal", "wcag_aa"}
+
+	spec, issues := SolicitarNuevaAppV0(req, time.Date(2026, 6, 25, 11, 0, 0, 0, time.UTC))
+	if len(issues) > 0 {
+		t.Fatalf("unexpected issues: %+v", issues)
+	}
+	if spec.Architecture.Patron != "event_driven" ||
+		!factoryModuleBoundaryNamedV0(spec.Architecture.ModulosIniciales, "events") ||
+		!factoryStringInSetV0(spec.Architecture.ContratosEsperados, "ArquitecturaLimpiaSegunPatron v0") ||
+		factoryStringInSetV0(spec.Architecture.ContratosEsperados, "ArquitecturaHexagonalEstricta v0") {
+		t.Fatalf("architecture=%+v", spec.Architecture)
+	}
+	if len(spec.Data.Types) != 2 ||
+		spec.Data.Types[0].Nombre != "Pisos" ||
+		spec.Data.Types[1].Sensibilidad != "personal" ||
+		len(spec.Data.Storage) != 2 ||
+		spec.Data.Storage[0].Tipo != "relacional" ||
+		!spec.Data.Storage[0].Requerido {
+		t.Fatalf("data experto no normalizado: %+v", spec.Data)
+	}
+	if !factoryStringInSetV0(spec.Data.Needs, "Mostrar pisos cercanos en alquiler") ||
+		!factoryStringInSetV0(spec.Data.Needs, "Busqueda semantica de preferencias") ||
+		spec.Data.Sensitivity != "publica, personal" {
+		t.Fatalf("data needs/sensitivity=%+v", spec.Data)
+	}
+	if spec.Quality.Accessibility != "normal" ||
+		len(spec.Quality.AccessibilityOptions) != 2 ||
+		spec.Quality.AccessibilityOptions[1] != "wcag_aa" {
+		t.Fatalf("quality=%+v", spec.Quality)
+	}
+	if !factoryConnectorNamedV0(spec.Connectors.Required, "storage-relacional") ||
+		!factoryConnectorNamedV0(spec.Connectors.Optional, "storage-vectorial") {
+		t.Fatalf("connectors=%+v", spec.Connectors)
+	}
+}
+
 func TestSolicitarNuevaAppV0DocumentationTypeUsesDocumentationPlatform(t *testing.T) {
 	req := validMinimalRequestV0()
 	req.TipoApp = "documentacion"
@@ -303,6 +373,15 @@ func factoryModuleBoundaryNamedV0(boundaries []ModuleBoundaryV0, name string) bo
 func factoryStringInSetV0(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func factoryConnectorNamedV0(values []ConnectorSpecV0, name string) bool {
+	for _, value := range values {
+		if value.Nombre == name {
 			return true
 		}
 	}

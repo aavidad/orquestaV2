@@ -25,6 +25,10 @@
   asincronos sin solaparse, coalescea un unico tick pendiente si otro pulso llega
   durante la supervision activa y puede preparar automejora en segundo plano sin
   bloquear nuevos pulsos.
+- `modulos/orquesta-server` prueba que `/api/v0/server/shutdown` congela el
+  supervisor residente mientras no haya confirmacion completa y normaliza a
+  `stop_pending` si la respuesta upstream conserva agentes vivos, checkpoints
+  pendientes o runs pedidos sin todos los stops confirmados.
 - `modulos/orquesta-server` prueba que el Director residente opt-in ejecuta
   ticks asincronos por puerto, no arranca sin `ResidentDirectorEnabled`,
   despierta por wakeup no bloqueante aunque el ticker este lejos, coalescea un
@@ -53,6 +57,47 @@
   capacidad libre con cola visible, incluso con skips no terminales si queda
   hueco bajo el objetivo, y que no se prepara si la cola ya alcanzo el objetivo
   configurado.
+- `modulos/orquesta-server` prueba que la automejora goal-first genera
+  `GoalWorkSpecV0` cuando hay launcher inyectado, y que con el flag activo pero
+  sin launcher publica `goal_launcher_unavailable` sin preparar trabajo legacy.
+  El reason publicado y el mensaje operativo estructurado conservan `goal_ref`
+  para observar/cerrar el goal sin depender de semantica legacy de `run_ref`.
+- `modulos/orquesta-server` prueba que, si hay `goal_refs` pendientes, el tick
+  goal-first observa el goal por puerto antes de planificar otra tanda, y que
+  `complete` queda como `goal_complete_pending_closure_validation` sin cierre
+  automatico.
+- `modulos/orquesta-server` prueba que la automejora goal-first persiste
+  `GoalWorkSpecV0`, `GoalLaunchReceiptV0`, `GoalWorkResultV0` y
+  `GoalClosureValidationV0`: un `complete` sin spec sigue pendiente y un
+  `complete` con evidencia requerida por el spec pasa a
+  `goal_closure_accepted`.
+- `modulos/orquesta-server` prueba que `GET /api/v0/server/status` proyecta
+  automejora goal-first como resumen publico compacto con spec/receipt/result/
+  closure y sin filtrar objetivo, paths, comandos ni payloads completos.
+- `modulos/orquesta-server` prueba que `/api/v0/operational-status/query`
+  proyecta automejora goal-first como diagnostico compacto: conserva contadores
+  residentes existentes, anade contadores `goal_*`, refs opacas, salud,
+  actividad, bloqueo semantico para `invalid`/`blocked` y no filtra objetivo,
+  paths, summaries completos ni payloads completos.
+- `modulos/orquesta-server` prueba que `/api/v0/server/readiness` expone campos
+  informativos de goal-first sin cambiar `ready` por un goal en curso y sin
+  filtrar objetivo ni paths.
+- `modulos/orquesta-server` prueba que `goal_launcher_unavailable` sin
+  `goal_ref` ni spec/receipt/result/closure no se publica como goal activo en
+  status ni readiness.
+- `modulos/orquesta-server` prueba que `/api/v0/operational-status/query`
+  marca `goal_launcher_unavailable` como salud/bloqueo de capacidad degradada,
+  sin publicar refs ni contadores de goal activo.
+- `cmd/orquesta-server` prueba que el wrapper de composicion solo expone
+  `IdleSelfImprovementGoalLauncherPortV0`/`ObserverPortV0` cuando hay backend
+  goal real configurado, y que el backend `app_server_proxy` mapea
+  `thread/start`, `thread/goal/set`, `turn/start` y `thread/goal/get` sin usar
+  `codex exec`.
+- `modulos/orquesta-server` prueba que los contadores historicos
+  `supervisor_error_ticks` y `resident_director_error_ticks` siguen visibles
+  como telemetria, pero no degradan estado ni crean blockers si el supervisor y
+  el Director residente ya publican estado actual recuperado; un error vigente
+  sigue degradando aunque el contador historico este a cero.
 - `modulos/orquesta-server` prueba que refs de request retryables descuentan
   presion de cola igual que refs de run y llegan al planner con evidencia
   compacta del guardian/promocion.
@@ -69,9 +114,15 @@
 - `modulos/orquesta-server` prueba que `/healthz` es liveness y
   `/api/v0/server/readiness` es readiness, responde 503 si startup no esta
   listo y no filtra paths ni runtime dirs.
+- `modulos/orquesta-server` prueba que el guard remoto permite sin token la
+  excepcion exacta de lectura `/api/v0/apps/intake/guided-turn`, y conserva el
+  prefijo dinamico `/api/v0/apps/{app_ref}/changes` como mutacion protegida.
 - `modulos/orquesta-server` prueba que los fallos no fatales de persistencia de
   estado quedan visibles como `state_persist_failed`, sin filtrar paths del
   store, y que una escritura posterior confirmada devuelve la proyeccion a `ok`.
+- `modulos/orquesta-server` prueba que un `response_write_failed` queda visible
+  con contador y ultima fecha, y que una respuesta posterior correcta limpia el
+  blocker vigente sin borrar el contador historico.
 - `cmd/orquesta-server` prueba que el daemon espera readiness y no acepta
   `/healthz` como senal suficiente.
 - T210 requiere que el transporte de stats no degrade progreso vivo:
@@ -104,3 +155,184 @@
   usa el mismo criterio: solo puede declarar pasada
   `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
   comando exacto termina con exit code 0 en esta ejecucion.
+- El agente de reemplazo
+  `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-0b2-f385b5e4533d62b5c7d2a64b70950490`
+  usa el mismo criterio estricto: en su ACK solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 durante esta ejecucion.
+- La revalidacion OrquestaV2
+  `agent-ref-assessment-task-autoprogramming-30d589fce14c-g01-3dff4105035295423d6bf932af420185`
+  conserva SRV-TASK-015 como no-op documental salvo regresion causal nueva y
+  solo declara pasada la prueba obligatoria si el comando exacto
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` termina
+  con exit code 0 en esta ejecucion.
+- El agente externo
+  `agent-ref-task-ref-review-rework-task-autoprogramming-30d589fce14c-g01-8bb7a3491960a73cba493ed199be20e1`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion.
+- La correccion
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-dacb62e5ec1ae158a640baa674e72940`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion.
+- La correccion externa
+  `agent-ref-task-ref-review-rework-task-autoprogramming-abea33163b68-g01-04bebd80bd7c5afa1ff0cde8543ec8ec`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion.
+- La correccion externa
+  `agent-ref-task-ref-review-rework-task-autoprogramming-99f93b5dadeb-g01-46ac951607ee8f489f914ee25e92cb88`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion.
+- El assessment externo
+  `agent-ref-assessment-task-ref-review-rework-task-autoprogramming-99f93b5dadeb-g01-46a-de83dfc8cce6e142d5f9b4a9f2a47b24`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion.
+- La correccion de rastro SRV-TASK-024
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-dc31be1188c5569b01263b5f388f0788`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion. Las ejecuciones
+  previas de la misma request que fallaron por entorno no se reclasifican como
+  pasadas.
+- El assessment externo de la correccion SRV-TASK-024
+  `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-autoprogr-dc3-0ff5f84c9556672a698237df3988111c`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion y mantiene
+  SRV-TASK-024 abierto salvo codigo y smoke causal.
+- El assessment externo de reemplazo
+  `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-autoprogr-dc3-36f24a2209e93ca38f4443ce22f527cf`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- La correccion de entrega
+  `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-autoprogr-dc3-a5a32e27fa8bf23a4b29ee07490e9a10`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- La correccion de entrega tras revision
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-72998ee36295059452b54a9eb4e875ee`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- El assessment externo de esa correccion
+  `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-autoprogr-729-9fc3f13d44dbaff94cfe5adff747a3e9`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- La correccion externa de entrega tras revision
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-cfd9c13a92a5cd21fd6c622e6f405e46`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- El assessment externo de la correccion posterior
+  `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-cfd-c006963b24043636d557f12d4659b4a3`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- El assessment externo de reemplazo
+  `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-cfd-791ce4584f28597b364194874b2875a4`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- La correccion externa de entrega tras revision
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-99773dd28e4df93406b2912127997d04`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- La correccion externa de entrega tras revision
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-30ffd078ad6ee9febe4c50ac0bd29891`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- El assessment externo de esa correccion
+  `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-30f-c4501a4d6b170b706b55f9a3dd4a44a6`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- La correccion externa de entrega tras revision
+  `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-30f-aad45cf56f890e04e96c6b86b7c9bc7b`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- El assessment externo de esta correccion
+  `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-30f-6842075f2c746477bb06b52d2c34e0c5`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- La correccion externa de entrega tras revision
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-9ba51f68ffa908088c91ca219cb73b84`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- La correccion externa de entrega tras revision
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-5f1990c9bda61f11e4c4572d7d8ec5f9`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- La correccion externa de entrega tras revision
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-2f664d21881795ee2d8392327887480f`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- El assessment externo de la correccion tras revision
+  `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-2f6-4a88d678723f47ef86524e438127a1e1`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- La correccion externa de esa evaluacion
+  `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-2f6-d07cfaec65f49155f8328d0512377fd7`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- El assessment externo de reemplazo
+  `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-2f6-20f9ab529a94f082f863a30e7a9275dd`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- La correccion externa de entrega tras revision
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-d20f765b96bef254281f4683e6ab3480`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- La correccion externa de entrega tras revision
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-9e9d33b777c6565a38a9b5a6eb7529a2`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- La correccion externa de entrega tras revision
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-2b5521cd1c1dbd4767cebb3d9c1684d7`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- La correccion externa de entrega tras revision
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-15e93ad10820843acec443a42cbac3c7`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.

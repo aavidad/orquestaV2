@@ -70,6 +70,8 @@ Caso: DTOs y validacion pura Go de `OperationalStatusQueryV0` y `DiagnosticoComp
 Tipo: unit
 Comando: go test -count=1 .
 Evidencia esperada: query valida aceptada; JSON con campos de recuperacion activa rechazado; consumidores, scopes, secciones, limites, referencias opacas, `privacy` false y contenido prohibido se validan sin DB, sink, runtime, filesystem ni servidor.
+Los contadores compactos aceptan hasta 24 claves para conservar metricas base y
+senales goal-first sin borrar contadores existentes.
 Ultima ejecucion: 2026-05-04, correcta.
 Riesgos: no prueba adaptadores reales ni disponibilidad de proyecciones; schema JSON y fixtures quedan para microtarea posterior si un consumidor los necesita.
 ```

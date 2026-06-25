@@ -65,6 +65,29 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.wizard.step.calidad",
 		"nueva_app.wizard.step.revisar",
 		"nueva_app.wizard.idea_objetivo",
+		"nueva_app.wizard.guided_title",
+		"nueva_app.wizard.guided_need",
+		"nueva_app.wizard.guided_analyze",
+		"nueva_app.wizard.guided_followups",
+		"nueva_app.wizard.guided_mobile_both",
+		"nueva_app.wizard.guided_mobile_ios",
+		"nueva_app.wizard.guided_mobile_android",
+		"nueva_app.wizard.guided_data_external",
+		"nueva_app.wizard.guided_data_management",
+		"nueva_app.wizard.guided_maps_generic",
+		"nueva_app.wizard.guided_maps_osm",
+		"nueva_app.wizard.guided_architecture_default",
+		"nueva_app.wizard.guided_architecture_event",
+		"nueva_app.wizard.guided_architecture_modular",
+		"nueva_app.wizard.guided_quality_public",
+		"nueva_app.wizard.guided_review",
+		"nueva_app.wizard.guided_msg_analyzed",
+		"nueva_app.wizard.guided_msg_mobile",
+		"nueva_app.wizard.guided_msg_data",
+		"nueva_app.wizard.guided_msg_maps",
+		"nueva_app.wizard.guided_msg_architecture",
+		"nueva_app.wizard.guided_msg_quality",
+		"nueva_app.wizard.guided_msg_review",
 		"nueva_app.wizard.presets",
 		"nueva_app.wizard.preset.webapp",
 		"nueva_app.wizard.preset.api",
@@ -90,6 +113,9 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.wizard.summary.pending",
 		"nueva_app.wizard.summary.db_required",
 		"nueva_app.wizard.summary.no_db_required",
+		"nueva_app.validation.summary_title",
+		"nueva_app.validation.summary_intro",
+		"nueva_app.validation.required",
 	}
 	out := map[string]string{}
 	for _, key := range keys {
@@ -99,10 +125,87 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 }
 
 func nuevaAppHTMLHelpV0(locale string, catalog NuevaAppI18nCatalogV0) map[string]string {
-	return map[string]string{
-		"request_kind":   nuevaAppWebLookupV0(catalog, locale, "nueva_app.ayuda.request_kind"),
-		"execution_mode": nuevaAppWebLookupV0(catalog, locale, "nueva_app.ayuda.execution_mode"),
+	out := map[string]string{}
+	for _, key := range nuevaAppHTMLHelpKeysV0 {
+		out[key] = nuevaAppWebLookupV0(catalog, locale, "nueva_app.ayuda."+key)
 	}
+	return out
+}
+
+func nuevaAppHTMLHelpI18nKeysV0() []string {
+	keys := make([]string, 0, len(nuevaAppHTMLHelpKeysV0))
+	for _, key := range nuevaAppHTMLHelpKeysV0 {
+		keys = append(keys, "nueva_app.ayuda."+key)
+	}
+	return keys
+}
+
+var nuevaAppHTMLHelpKeysV0 = []string{
+	"step.idea",
+	"step.tipo",
+	"step.tecnologia",
+	"step.datos",
+	"step.calidad",
+	"step.revisar",
+	"preset.webapp",
+	"preset.api",
+	"preset.ops",
+	"nombre",
+	"tipo_app",
+	"objetivo",
+	"descripcion",
+	"request_id",
+	"locale",
+	"request_kind",
+	"execution_mode",
+	"plataformas.web",
+	"plataformas.mobile",
+	"plataformas.desktop",
+	"plataformas.api",
+	"project_source.kind",
+	"project_source.git_url",
+	"project_source.branch",
+	"project_source.project_ref",
+	"project_source.local_path",
+	"preferencias_tecnicas.arquitectura",
+	"preferencias_tecnicas.lenguaje",
+	"preferencias_tecnicas.framework",
+	"preferencias_tecnicas.preferencias",
+	"i18n.enabled",
+	"i18n.default_locale",
+	"i18n.locales",
+	"i18n.justificacion",
+	"datos.db_required",
+	"datos.necesidad_funcional",
+	"datos.tipos_datos",
+	"datos.tipos_detallados.nombre",
+	"datos.tipos_detallados.proposito",
+	"datos.tipos_detallados.sensibilidad",
+	"datos.tipos_detallados.retencion",
+	"datos.tipos_detallados.volumen",
+	"datos.tipos_detallados.restricciones",
+	"datos.storage.tipo",
+	"datos.storage.proposito",
+	"datos.storage.requerido",
+	"datos.storage.restricciones",
+	"datos.sensibilidad",
+	"datos.retencion",
+	"integraciones.0.tipo",
+	"integraciones.0.nombre",
+	"integraciones.0.proposito",
+	"integraciones.0.requerido",
+	"integraciones.0.restricciones",
+	"calidad.pruebas",
+	"calidad.accesibilidad",
+	"calidad.accesibilidad_opciones",
+	"calidad.observabilidad",
+	"calidad.compliance",
+	"deploy.target",
+	"deploy.restricciones",
+	"agentes.revision_humana",
+	"agentes.autonomia",
+	"agentes.preferencias",
+	"restricciones",
 }
 
 var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Parse(`<!doctype html>
@@ -117,12 +220,12 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
     body{font-family:"Trebuchet MS","Gill Sans",Verdana,sans-serif;margin:0;background:radial-gradient(circle at 10% 0,rgba(199,240,75,.35),transparent 28rem),linear-gradient(160deg,#f8faf4,#edf3ee);color:var(--ink)}
     main{max-width:1260px;margin:0 auto;padding:24px}
     header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
-    h1{font-family:Georgia,"Times New Roman",serif;font-size:clamp(30px,4vw,56px);line-height:.95;letter-spacing:-.05em;margin:0}
+    h1{font-family:Georgia,"Times New Roman",serif;font-size:clamp(30px,4vw,56px);line-height:.95;letter-spacing:0;margin:0}
     .topnav{display:flex;gap:8px;flex-wrap:wrap}
     .topnav a,.ghost{border:1px solid var(--line);background:rgba(255,255,255,.72);color:var(--ink);border-radius:999px;padding:8px 11px;text-decoration:none}
     .lead{color:var(--muted);max-width:760px;margin:10px 0 0;font-size:17px}
     form{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
-    .wizard{border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.88);box-shadow:0 24px 70px rgba(30,50,35,.12);overflow:hidden}
+    .wizard{border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.88);box-shadow:0 24px 70px rgba(30,50,35,.12);overflow:visible}
     .steps{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:1px;background:var(--line)}
     .step-tab{border:0;border-radius:0;background:#f8fbf5;color:var(--muted);padding:12px 8px;font-weight:800;cursor:pointer}
     .step-tab.active{background:var(--brand);color:#fff}
@@ -136,11 +239,26 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
     .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
     .checks{display:flex;flex-wrap:wrap;gap:10px}
     .checks label{display:flex;align-items:center;gap:6px;margin:0;border:1px solid var(--line);border-radius:999px;padding:7px 10px;background:#f8fbf5}
+    [data-help]{position:relative;cursor:help}
+    [data-help]::after{content:attr(data-help);position:absolute;left:0;bottom:calc(100% + 8px);z-index:50;width:300px;max-width:calc(100vw - 32px);padding:9px 10px;border-radius:8px;background:#102017;color:#f7fff2;box-shadow:0 12px 28px rgba(15,30,20,.24);font-size:.82rem;line-height:1.35;font-weight:600;white-space:normal;overflow-wrap:anywhere;opacity:0;visibility:hidden;pointer-events:none;transform:translateY(4px);transition:opacity .16s ease,transform .16s ease,visibility .16s ease}
+    [data-help]::before{content:"";position:absolute;left:12px;bottom:calc(100% + 2px);z-index:51;border:6px solid transparent;border-top-color:#102017;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .16s ease,visibility .16s ease}
+    [data-help]:hover::after,[data-help]:focus::after,[data-help]:focus-within::after{opacity:1;visibility:visible;transform:translateY(0)}
+    [data-help]:hover::before,[data-help]:focus::before,[data-help]:focus-within::before{opacity:1;visibility:visible}
     button{width:max-content;padding:10px 14px;border:0;border-radius:9px;background:var(--brand);color:#fff;font-weight:850;cursor:pointer}
     button.secondary{background:#e8efe8;color:var(--ink);border:1px solid var(--line)}
     .wizard-actions{display:flex;justify-content:space-between;gap:10px;padding:14px 18px;border-top:1px solid var(--line);background:#f8fbf5}
     .presets{display:flex;gap:8px;flex-wrap:wrap}
     .presets button{background:#102017;color:#dcffd6}
+    .guided-assistant{display:grid;gap:12px;border-color:#a7c8b2;background:#f7fcf5}
+    .guided-assistant textarea{min-height:110px}
+    .guided-thread{display:grid;gap:8px;min-height:38px}
+    .guided-message{border-left:4px solid var(--brand);background:#fff;padding:9px 10px;border-radius:8px;color:#334137}
+    .guided-actions{display:flex;gap:8px;flex-wrap:wrap}
+    .guided-actions button{background:#e8efe8;color:var(--ink);border:1px solid var(--line)}
+    .guided-actions button.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
+    .expert-block{display:grid;gap:12px;margin-top:10px}
+    .expert-row{border:1px solid var(--line);border-radius:10px;padding:10px;background:#fff}
+    .expert-row-title{font-weight:850;margin:0 0 8px;color:var(--brand)}
     details{border:1px dashed #bfd0c3;border-radius:12px;padding:10px;background:#fbfdf9}
     summary{cursor:pointer;font-weight:800;color:var(--brand)}
     .side{position:sticky;top:18px;display:grid;gap:12px}
@@ -148,6 +266,13 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
     .summary-list strong{color:var(--ink)}
     .status{border-left:4px solid var(--brand)}
     .issue{border-left:4px solid var(--bad)}
+    .form-error-summary{margin:14px 18px 0;border:1px solid #f0b4ae;border-left:4px solid var(--bad);border-radius:10px;background:#fff7f5;padding:12px;color:#621b16}
+    .form-error-summary strong{display:block;margin-bottom:4px}
+    .form-error-summary p{margin:0 0 8px;color:#7c2d24}
+    .form-error-summary ul{margin:0;padding-left:20px}
+    .form-error-summary button{width:auto;padding:0;border:0;border-radius:0;background:transparent;color:#8a1f15;text-align:left;text-decoration:underline;font-weight:800}
+    .field-error{margin-top:-4px;margin-bottom:10px;color:#9f241a;font-size:.86rem;font-weight:800}
+    [aria-invalid="true"]{border-color:#b42318;box-shadow:0 0 0 3px rgba(180,35,24,.12)}
     code{background:#eef5ed;padding:2px 4px;border-radius:4px}
     .wizard-ready .hidden-final{display:none}
     .wizard-ready .wizard-step-final .hidden-final{display:inline-flex}
@@ -163,7 +288,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
     </div>
     <nav class="topnav"><a href="/">{{index .HTML "nueva_app.wizard.nav.home"}}</a><a href="/ops">{{index .HTML "nueva_app.wizard.nav.ops"}}</a><a href="/autoprogramming">{{index .HTML "nueva_app.wizard.nav.autoprogramming"}}</a></nav>
   </header>
-  <form method="post" action="/nueva-app">
+  <form method="post" action="/nueva-app" novalidate>
     <section class="wizard" id="nueva-app-wizard"
       data-summary-name="{{index .HTML "nueva_app.wizard.summary.name"}}"
       data-summary-type="{{index .HTML "nueva_app.wizard.summary.type"}}"
@@ -176,98 +301,182 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
       data-summary-no-name="{{index .HTML "nueva_app.wizard.summary.no_name"}}"
       data-summary-pending="{{index .HTML "nueva_app.wizard.summary.pending"}}"
       data-summary-db-required="{{index .HTML "nueva_app.wizard.summary.db_required"}}"
-      data-summary-no-db-required="{{index .HTML "nueva_app.wizard.summary.no_db_required"}}">
+      data-summary-no-db-required="{{index .HTML "nueva_app.wizard.summary.no_db_required"}}"
+      data-validation-summary-title="{{index .HTML "nueva_app.validation.summary_title"}}"
+      data-validation-summary-intro="{{index .HTML "nueva_app.validation.summary_intro"}}"
+      data-validation-required="{{index .HTML "nueva_app.validation.required"}}"
+      data-guided-msg-analyzed="{{index .HTML "nueva_app.wizard.guided_msg_analyzed"}}"
+      data-guided-msg-mobile="{{index .HTML "nueva_app.wizard.guided_msg_mobile"}}"
+      data-guided-msg-data="{{index .HTML "nueva_app.wizard.guided_msg_data"}}"
+      data-guided-msg-maps="{{index .HTML "nueva_app.wizard.guided_msg_maps"}}"
+      data-guided-msg-architecture="{{index .HTML "nueva_app.wizard.guided_msg_architecture"}}"
+      data-guided-msg-quality="{{index .HTML "nueva_app.wizard.guided_msg_quality"}}"
+      data-guided-msg-review="{{index .HTML "nueva_app.wizard.guided_msg_review"}}">
       <div class="steps" aria-label="{{index .HTML "nueva_app.wizard.steps_label"}}">
-        <button class="step-tab active" type="button" data-goto-step="0">{{index .HTML "nueva_app.wizard.step.idea"}}</button>
-        <button class="step-tab" type="button" data-goto-step="1">{{index .HTML "nueva_app.wizard.step.tipo"}}</button>
-        <button class="step-tab" type="button" data-goto-step="2">{{index .HTML "nueva_app.wizard.step.tecnologia"}}</button>
-        <button class="step-tab" type="button" data-goto-step="3">{{index .HTML "nueva_app.wizard.step.datos"}}</button>
-        <button class="step-tab" type="button" data-goto-step="4">{{index .HTML "nueva_app.wizard.step.calidad"}}</button>
-        <button class="step-tab" type="button" data-goto-step="5">{{index .HTML "nueva_app.wizard.step.revisar"}}</button>
+        <button class="step-tab active" type="button" data-goto-step="0" data-help="{{index .Help "step.idea"}}">{{index .HTML "nueva_app.wizard.step.idea"}}</button>
+        <button class="step-tab" type="button" data-goto-step="1" data-help="{{index .Help "step.tipo"}}">{{index .HTML "nueva_app.wizard.step.tipo"}}</button>
+        <button class="step-tab" type="button" data-goto-step="2" data-help="{{index .Help "step.tecnologia"}}">{{index .HTML "nueva_app.wizard.step.tecnologia"}}</button>
+        <button class="step-tab" type="button" data-goto-step="3" data-help="{{index .Help "step.datos"}}">{{index .HTML "nueva_app.wizard.step.datos"}}</button>
+        <button class="step-tab" type="button" data-goto-step="4" data-help="{{index .Help "step.calidad"}}">{{index .HTML "nueva_app.wizard.step.calidad"}}</button>
+        <button class="step-tab" type="button" data-goto-step="5" data-help="{{index .Help "step.revisar"}}">{{index .HTML "nueva_app.wizard.step.revisar"}}</button>
       </div>
       <div class="step" data-step="0">
         <fieldset>
           <legend>{{index .HTML "nueva_app.wizard.idea_objetivo"}}</legend>
+          <div class="guided-assistant" id="guided-assistant">
+            <p class="expert-row-title">{{index .HTML "nueva_app.wizard.guided_title"}}</p>
+            <label data-help="{{index .Help "objetivo"}}">{{index .HTML "nueva_app.wizard.guided_need"}}<textarea id="guided-need" placeholder="{{index .HTML "nueva_app.wizard.placeholder.objetivo"}}"></textarea></label>
+            <div class="guided-actions"><button class="primary" type="button" data-guided-action="analyze">{{index .HTML "nueva_app.wizard.guided_analyze"}}</button><button type="button" data-guided-action="review">{{index .HTML "nueva_app.wizard.guided_review"}}</button></div>
+            <div class="guided-thread" id="guided-thread" aria-live="polite"></div>
+            <div id="guided-followups" hidden>
+              <p class="expert-row-title">{{index .HTML "nueva_app.wizard.guided_followups"}}</p>
+              <div class="guided-actions">
+                <button type="button" data-guided-action="mobile_both">{{index .HTML "nueva_app.wizard.guided_mobile_both"}}</button>
+                <button type="button" data-guided-action="mobile_ios">{{index .HTML "nueva_app.wizard.guided_mobile_ios"}}</button>
+                <button type="button" data-guided-action="mobile_android">{{index .HTML "nueva_app.wizard.guided_mobile_android"}}</button>
+                <button type="button" data-guided-action="data_external">{{index .HTML "nueva_app.wizard.guided_data_external"}}</button>
+                <button type="button" data-guided-action="data_management">{{index .HTML "nueva_app.wizard.guided_data_management"}}</button>
+                <button type="button" data-guided-action="maps_generic">{{index .HTML "nueva_app.wizard.guided_maps_generic"}}</button>
+                <button type="button" data-guided-action="maps_osm">{{index .HTML "nueva_app.wizard.guided_maps_osm"}}</button>
+                <button type="button" data-guided-action="architecture_default">{{index .HTML "nueva_app.wizard.guided_architecture_default"}}</button>
+                <button type="button" data-guided-action="architecture_event">{{index .HTML "nueva_app.wizard.guided_architecture_event"}}</button>
+                <button type="button" data-guided-action="architecture_modular">{{index .HTML "nueva_app.wizard.guided_architecture_modular"}}</button>
+                <button type="button" data-guided-action="quality_public">{{index .HTML "nueva_app.wizard.guided_quality_public"}}</button>
+              </div>
+            </div>
+          </div>
           <div class="presets" aria-label="{{index .HTML "nueva_app.wizard.presets"}}">
-            <button type="button" data-preset="webapp">{{index .HTML "nueva_app.wizard.preset.webapp"}}</button>
-            <button type="button" data-preset="api">{{index .HTML "nueva_app.wizard.preset.api"}}</button>
-            <button type="button" data-preset="ops">{{index .HTML "nueva_app.wizard.preset.ops"}}</button>
+            <button type="button" data-preset="webapp" data-help="{{index .Help "preset.webapp"}}">{{index .HTML "nueva_app.wizard.preset.webapp"}}</button>
+            <button type="button" data-preset="api" data-help="{{index .Help "preset.api"}}">{{index .HTML "nueva_app.wizard.preset.api"}}</button>
+            <button type="button" data-preset="ops" data-help="{{index .Help "preset.ops"}}">{{index .HTML "nueva_app.wizard.preset.ops"}}</button>
           </div>
           <div class="grid">
-            <label>{{index .Labels "nombre"}}<input name="nombre" required autocomplete="off"></label>
-            <label>{{index .Labels "tipo_app"}}<select name="tipo_app" required><option value="web">web</option><option value="api">api</option><option value="cli">cli</option><option value="desktop">desktop</option><option value="mobile">mobile</option><option value="automation">automation</option><option value="data">data</option><option value="plugin">plugin</option><option value="mixed">mixed</option></select></label>
+            <label data-help="{{index .Help "nombre"}}">{{index .Labels "nombre"}}<input name="nombre" data-required="true" aria-required="true" data-label="{{index .Labels "nombre"}}" autocomplete="off"></label>
+            <label data-help="{{index .Help "tipo_app"}}">{{index .Labels "tipo_app"}}<select name="tipo_app" data-required="true" aria-required="true" data-label="{{index .Labels "tipo_app"}}"><option value="web">web</option><option value="api">api</option><option value="cli">cli</option><option value="desktop">desktop</option><option value="mobile">mobile</option><option value="automation">automation</option><option value="data">data</option><option value="plugin">plugin</option><option value="mixed">mixed</option></select></label>
           </div>
-          <label>{{index .Labels "objetivo"}}<textarea name="objetivo" required placeholder="{{index .HTML "nueva_app.wizard.placeholder.objetivo"}}"></textarea></label>
-          <label>{{index .Labels "descripcion"}}<textarea name="descripcion" placeholder="{{index .HTML "nueva_app.wizard.placeholder.descripcion"}}"></textarea></label>
+          <label data-help="{{index .Help "objetivo"}}">{{index .Labels "objetivo"}}<textarea name="objetivo" data-required="true" aria-required="true" data-label="{{index .Labels "objetivo"}}" placeholder="{{index .HTML "nueva_app.wizard.placeholder.objetivo"}}"></textarea></label>
+          <label data-help="{{index .Help "descripcion"}}">{{index .Labels "descripcion"}}<textarea name="descripcion" placeholder="{{index .HTML "nueva_app.wizard.placeholder.descripcion"}}"></textarea></label>
           <details><summary>{{index .HTML "nueva_app.wizard.identidad_avanzada"}}</summary><div class="grid">
-            <label>{{index .Labels "request_id"}}<input name="request_id" autocomplete="off"></label>
-            <label>{{index .Labels "locale"}}<select name="locale">{{range .Page.Opciones.Locales}}<option value="{{.Valor}}">{{.Label}}</option>{{end}}</select></label>
-            <label title="{{index .Help "request_kind"}}">{{index .Labels "request_kind"}}<select name="request_kind"><option value="crear_app_completa">crear_app_completa</option><option value="documentar_app">documentar_app</option><option value="analizar_app">analizar_app</option><option value="brainstorming_arquitectura">brainstorming_arquitectura</option><option value="planificar_app">planificar_app</option><option value="programar_modulo">programar_modulo</option><option value="modificar_app_existente">modificar_app_existente</option><option value="revisar_codigo">revisar_codigo</option><option value="pruebas_y_validacion">pruebas_y_validacion</option><option value="seguridad">seguridad</option><option value="deploy">deploy</option><option value="operacion_soporte">operacion_soporte</option><option value="integracion_externa">integracion_externa</option><option value="i18n_l10n">i18n_l10n</option><option value="migracion_refactor">migracion_refactor</option><option value="investigacion_tecnica">investigacion_tecnica</option></select></label>
-            <label title="{{index .Help "execution_mode"}}">{{index .Labels "execution_mode"}}<select name="execution_mode"><option value="normal">normal</option><option value="debug">debug</option></select></label>
+            <label data-help="{{index .Help "request_id"}}">{{index .Labels "request_id"}}<input name="request_id" autocomplete="off"></label>
+            <label data-help="{{index .Help "locale"}}">{{index .Labels "locale"}}<select name="locale">{{range .Page.Opciones.Locales}}<option value="{{.Valor}}">{{.Label}}</option>{{end}}</select></label>
+            <label data-help="{{index .Help "request_kind"}}">{{index .Labels "request_kind"}}<select name="request_kind"><option value="crear_app_completa">crear_app_completa</option><option value="documentar_app">documentar_app</option><option value="analizar_app">analizar_app</option><option value="brainstorming_arquitectura">brainstorming_arquitectura</option><option value="planificar_app">planificar_app</option><option value="programar_modulo">programar_modulo</option><option value="modificar_app_existente">modificar_app_existente</option><option value="revisar_codigo">revisar_codigo</option><option value="pruebas_y_validacion">pruebas_y_validacion</option><option value="seguridad">seguridad</option><option value="deploy">deploy</option><option value="operacion_soporte">operacion_soporte</option><option value="integracion_externa">integracion_externa</option><option value="i18n_l10n">i18n_l10n</option><option value="migracion_refactor">migracion_refactor</option><option value="investigacion_tecnica">investigacion_tecnica</option></select></label>
+            <label data-help="{{index .Help "execution_mode"}}">{{index .Labels "execution_mode"}}<select name="execution_mode"><option value="normal">normal</option><option value="debug">debug</option></select></label>
           </div></details>
         </fieldset>
       </div>
       <div class="step" data-step="1">
         <fieldset><legend>{{index .HTML "nueva_app.wizard.plataformas_origen"}}</legend>
-          <div class="checks"><label><input type="checkbox" name="plataformas" value="web">web</label><label><input type="checkbox" name="plataformas" value="mobile">mobile</label><label><input type="checkbox" name="plataformas" value="desktop">desktop</label><label><input type="checkbox" name="plataformas" value="api">api</label></div>
+          <div class="checks"><label data-help="{{index .Help "plataformas.web"}}"><input type="checkbox" name="plataformas" value="web">web</label><label data-help="{{index .Help "plataformas.mobile"}}"><input type="checkbox" name="plataformas" value="mobile">mobile</label><label data-help="{{index .Help "plataformas.desktop"}}"><input type="checkbox" name="plataformas" value="desktop">desktop</label><label data-help="{{index .Help "plataformas.api"}}"><input type="checkbox" name="plataformas" value="api">api</label></div>
           <details open><summary>{{index .HTML "nueva_app.wizard.origen_proyecto"}}</summary><div class="grid">
-            <label>{{index .Labels "project_source.kind"}}<select name="project_source.kind"><option value=""></option><option value="new">new</option><option value="github">github</option><option value="local_path">local_path</option></select></label>
-            <label>{{index .Labels "project_source.git_url"}}<input name="project_source.git_url"></label>
-            <label>{{index .Labels "project_source.branch"}}<input name="project_source.branch"></label>
-            <label>{{index .Labels "project_source.project_ref"}}<input name="project_source.project_ref"></label>
-            <label>{{index .Labels "project_source.local_path"}}<input name="project_source.local_path"></label>
+            <label data-help="{{index .Help "project_source.kind"}}">{{index .Labels "project_source.kind"}}<select name="project_source.kind"><option value=""></option><option value="new">new</option><option value="github">github</option><option value="local_path">local_path</option></select></label>
+            <label data-help="{{index .Help "project_source.git_url"}}">{{index .Labels "project_source.git_url"}}<input name="project_source.git_url"></label>
+            <label data-help="{{index .Help "project_source.branch"}}">{{index .Labels "project_source.branch"}}<input name="project_source.branch"></label>
+            <label data-help="{{index .Help "project_source.project_ref"}}">{{index .Labels "project_source.project_ref"}}<input name="project_source.project_ref"></label>
+            <label data-help="{{index .Help "project_source.local_path"}}">{{index .Labels "project_source.local_path"}}<input name="project_source.local_path"></label>
           </div></details>
         </fieldset>
       </div>
       <div class="step" data-step="2">
         <fieldset><legend>{{index .Labels "preferencias_tecnicas"}}</legend><div class="grid">
-          <label>{{index .Labels "preferencias_tecnicas.arquitectura"}}<select name="preferencias_tecnicas.arquitectura"><option value="hexagonal">hexagonal estricta</option></select></label>
-          <label>{{index .Labels "preferencias_tecnicas.lenguaje"}}<input name="preferencias_tecnicas.lenguaje" placeholder="go, typescript..."></label>
-          <label>{{index .Labels "preferencias_tecnicas.framework"}}<input name="preferencias_tecnicas.framework"></label>
-          <label>{{index .Labels "preferencias_tecnicas.preferencias"}}<input name="preferencias_tecnicas.preferencias"></label>
+          <label data-help="{{index .Help "preferencias_tecnicas.arquitectura"}}">{{index .Labels "preferencias_tecnicas.arquitectura"}}<select name="preferencias_tecnicas.arquitectura"><option value="hexagonal">hexagonal</option><option value="clean_architecture">clean_architecture</option><option value="onion">onion</option><option value="modular_monolith">modular_monolith</option><option value="layered">layered</option><option value="event_driven">event_driven</option><option value="microservices">microservices</option><option value="serverless">serverless</option><option value="plugin_based">plugin_based</option><option value="data_pipeline">data_pipeline</option></select></label>
+          <label data-help="{{index .Help "preferencias_tecnicas.lenguaje"}}">{{index .Labels "preferencias_tecnicas.lenguaje"}}<input name="preferencias_tecnicas.lenguaje" placeholder="go, typescript..."></label>
+          <label data-help="{{index .Help "preferencias_tecnicas.framework"}}">{{index .Labels "preferencias_tecnicas.framework"}}<input name="preferencias_tecnicas.framework"></label>
+          <label data-help="{{index .Help "preferencias_tecnicas.preferencias"}}">{{index .Labels "preferencias_tecnicas.preferencias"}}<input name="preferencias_tecnicas.preferencias"></label>
         </div></fieldset>
         <fieldset><legend>{{index .Labels "i18n"}}</legend><div class="grid">
-          <label><span>{{index .Labels "i18n.enabled"}}</span><select name="i18n.enabled"><option value="true">true</option><option value="false">false</option></select></label>
-          <label>{{index .Labels "i18n.default_locale"}}<input name="i18n.default_locale" value="{{.Page.Locale}}"></label>
-          <label>{{index .Labels "i18n.locales"}}<input name="i18n.locales" placeholder="es-ES,en-US"></label>
-          <label>{{index .Labels "i18n.justificacion"}}<input name="i18n.justificacion"></label>
+          <label data-help="{{index .Help "i18n.enabled"}}"><span>{{index .Labels "i18n.enabled"}}</span><select name="i18n.enabled"><option value="true">true</option><option value="false">false</option></select></label>
+          <label data-help="{{index .Help "i18n.default_locale"}}">{{index .Labels "i18n.default_locale"}}<input name="i18n.default_locale" value="{{.Page.Locale}}"></label>
+          <label data-help="{{index .Help "i18n.locales"}}">{{index .Labels "i18n.locales"}}<input name="i18n.locales" placeholder="es-ES,en-US"></label>
+          <label data-help="{{index .Help "i18n.justificacion"}}">{{index .Labels "i18n.justificacion"}}<input name="i18n.justificacion"></label>
         </div></fieldset>
       </div>
       <div class="step" data-step="3">
         <fieldset><legend>{{index .Labels "datos"}}</legend><div class="grid">
-          <label><span>{{index .Labels "datos.db_required"}}</span><select name="datos.db_required"><option value="false">false</option><option value="true">true</option></select></label>
-          <label>{{index .Labels "datos.necesidad_funcional"}}<input name="datos.necesidad_funcional"></label>
-          <label>{{index .Labels "datos.tipos_datos"}}<input name="datos.tipos_datos" placeholder="usuarios,eventos"></label>
-          <label>{{index .Labels "datos.sensibilidad"}}<input name="datos.sensibilidad"></label>
-        </div></fieldset>
-        <fieldset><legend>{{index .Labels "integraciones"}}</legend><div class="grid">
-          <label>{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.0.tipo"><option value=""></option><option value="api">api</option><option value="webhook">webhook</option><option value="email">email</option><option value="calendar">calendar</option></select></label>
-          <label>{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.0.nombre"></label>
-          <label>{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.0.proposito"></label>
-          <label><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.0.requerido"><option value="false">false</option><option value="true">true</option></select></label>
+          <label data-help="{{index .Help "datos.db_required"}}"><span>{{index .Labels "datos.db_required"}}</span><select name="datos.db_required"><option value="false">false</option><option value="true">true</option></select></label>
+          <label data-help="{{index .Help "datos.necesidad_funcional"}}">{{index .Labels "datos.necesidad_funcional"}}<input name="datos.necesidad_funcional"></label>
+          <label data-help="{{index .Help "datos.tipos_datos"}}">{{index .Labels "datos.tipos_datos"}}<input name="datos.tipos_datos" placeholder="usuarios,eventos"></label>
+          <label data-help="{{index .Help "datos.sensibilidad"}}">{{index .Labels "datos.sensibilidad"}}<input name="datos.sensibilidad"></label>
+          <label data-help="{{index .Help "datos.retencion"}}">{{index .Labels "datos.retencion"}}<input name="datos.retencion"></label>
+        </div>
+        <details><summary>Modo experto de datos</summary><div class="expert-block">
+          <div class="expert-row"><p class="expert-row-title">Dato 1</p><div class="grid">
+            <label data-help="{{index .Help "datos.tipos_detallados.nombre"}}">{{index .Labels "datos.tipos_detallados.0.nombre"}}<input name="datos.tipos_detallados.0.nombre"></label>
+            <label data-help="{{index .Help "datos.tipos_detallados.proposito"}}">{{index .Labels "datos.tipos_detallados.0.proposito"}}<input name="datos.tipos_detallados.0.proposito"></label>
+            <label data-help="{{index .Help "datos.tipos_detallados.sensibilidad"}}">{{index .Labels "datos.tipos_detallados.0.sensibilidad"}}<input name="datos.tipos_detallados.0.sensibilidad"></label>
+            <label data-help="{{index .Help "datos.tipos_detallados.retencion"}}">{{index .Labels "datos.tipos_detallados.0.retencion"}}<input name="datos.tipos_detallados.0.retencion"></label>
+            <label data-help="{{index .Help "datos.tipos_detallados.volumen"}}">{{index .Labels "datos.tipos_detallados.0.volumen"}}<input name="datos.tipos_detallados.0.volumen"></label>
+            <label data-help="{{index .Help "datos.tipos_detallados.restricciones"}}">{{index .Labels "datos.tipos_detallados.0.restricciones"}}<input name="datos.tipos_detallados.0.restricciones"></label>
+          </div></div>
+          <div class="expert-row"><p class="expert-row-title">Dato 2</p><div class="grid">
+            <label data-help="{{index .Help "datos.tipos_detallados.nombre"}}">{{index .Labels "datos.tipos_detallados.0.nombre"}}<input name="datos.tipos_detallados.1.nombre"></label>
+            <label data-help="{{index .Help "datos.tipos_detallados.proposito"}}">{{index .Labels "datos.tipos_detallados.0.proposito"}}<input name="datos.tipos_detallados.1.proposito"></label>
+            <label data-help="{{index .Help "datos.tipos_detallados.sensibilidad"}}">{{index .Labels "datos.tipos_detallados.0.sensibilidad"}}<input name="datos.tipos_detallados.1.sensibilidad"></label>
+            <label data-help="{{index .Help "datos.tipos_detallados.retencion"}}">{{index .Labels "datos.tipos_detallados.0.retencion"}}<input name="datos.tipos_detallados.1.retencion"></label>
+            <label data-help="{{index .Help "datos.tipos_detallados.volumen"}}">{{index .Labels "datos.tipos_detallados.0.volumen"}}<input name="datos.tipos_detallados.1.volumen"></label>
+            <label data-help="{{index .Help "datos.tipos_detallados.restricciones"}}">{{index .Labels "datos.tipos_detallados.0.restricciones"}}<input name="datos.tipos_detallados.1.restricciones"></label>
+          </div></div>
+          <div class="expert-row"><p class="expert-row-title">Almacenamiento 1</p><div class="grid">
+            <label data-help="{{index .Help "datos.storage.tipo"}}">{{index .Labels "datos.storage.0.tipo"}}<select name="datos.storage.0.tipo"><option value=""></option><option value="relacional">relacional</option><option value="documental">documental</option><option value="vectorial">vectorial</option><option value="objetos">objetos</option><option value="clave_valor">clave_valor</option><option value="series_temporales">series_temporales</option><option value="grafo">grafo</option><option value="cache">cache</option><option value="busqueda">busqueda</option></select></label>
+            <label data-help="{{index .Help "datos.storage.proposito"}}">{{index .Labels "datos.storage.0.proposito"}}<input name="datos.storage.0.proposito"></label>
+            <label data-help="{{index .Help "datos.storage.requerido"}}"><span>{{index .Labels "datos.storage.0.requerido"}}</span><select name="datos.storage.0.requerido"><option value="false">false</option><option value="true">true</option></select></label>
+            <label data-help="{{index .Help "datos.storage.restricciones"}}">{{index .Labels "datos.storage.0.restricciones"}}<input name="datos.storage.0.restricciones"></label>
+          </div></div>
+          <div class="expert-row"><p class="expert-row-title">Almacenamiento 2</p><div class="grid">
+            <label data-help="{{index .Help "datos.storage.tipo"}}">{{index .Labels "datos.storage.0.tipo"}}<select name="datos.storage.1.tipo"><option value=""></option><option value="relacional">relacional</option><option value="documental">documental</option><option value="vectorial">vectorial</option><option value="objetos">objetos</option><option value="clave_valor">clave_valor</option><option value="series_temporales">series_temporales</option><option value="grafo">grafo</option><option value="cache">cache</option><option value="busqueda">busqueda</option></select></label>
+            <label data-help="{{index .Help "datos.storage.proposito"}}">{{index .Labels "datos.storage.0.proposito"}}<input name="datos.storage.1.proposito"></label>
+            <label data-help="{{index .Help "datos.storage.requerido"}}"><span>{{index .Labels "datos.storage.0.requerido"}}</span><select name="datos.storage.1.requerido"><option value="false">false</option><option value="true">true</option></select></label>
+            <label data-help="{{index .Help "datos.storage.restricciones"}}">{{index .Labels "datos.storage.0.restricciones"}}<input name="datos.storage.1.restricciones"></label>
+          </div></div>
+        </div></details></fieldset>
+        <fieldset><legend>{{index .Labels "integraciones"}}</legend><div class="expert-block">
+          <div class="expert-row"><p class="expert-row-title">Integracion 1</p><div class="grid">
+            <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.0.tipo"><option value=""></option><option value="api">api</option><option value="webhook">webhook</option><option value="email">email</option><option value="calendar">calendar</option><option value="maps">maps</option><option value="file_import">file_import</option><option value="payments">payments</option><option value="auth">auth</option><option value="analytics">analytics</option><option value="search">search</option><option value="notifications">notifications</option></select></label>
+            <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.0.nombre"></label>
+            <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.0.proposito"></label>
+            <label data-help="{{index .Help "integraciones.0.requerido"}}"><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.0.requerido"><option value="false">false</option><option value="true">true</option></select></label>
+            <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.0.restricciones"></label>
+          </div></div>
+          <details><summary>Integraciones adicionales</summary><div class="expert-block">
+            <div class="expert-row"><p class="expert-row-title">Integracion 2</p><div class="grid">
+              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.1.tipo"><option value=""></option><option value="api">api</option><option value="webhook">webhook</option><option value="email">email</option><option value="calendar">calendar</option><option value="maps">maps</option><option value="file_import">file_import</option><option value="payments">payments</option><option value="auth">auth</option><option value="analytics">analytics</option><option value="search">search</option><option value="notifications">notifications</option></select></label>
+              <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.1.nombre"></label>
+              <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.1.proposito"></label>
+              <label data-help="{{index .Help "integraciones.0.requerido"}}"><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.1.requerido"><option value="false">false</option><option value="true">true</option></select></label>
+              <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.1.restricciones"></label>
+            </div></div>
+            <div class="expert-row"><p class="expert-row-title">Integracion 3</p><div class="grid">
+              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.2.tipo"><option value=""></option><option value="api">api</option><option value="webhook">webhook</option><option value="email">email</option><option value="calendar">calendar</option><option value="maps">maps</option><option value="file_import">file_import</option><option value="payments">payments</option><option value="auth">auth</option><option value="analytics">analytics</option><option value="search">search</option><option value="notifications">notifications</option></select></label>
+              <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.2.nombre"></label>
+              <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.2.proposito"></label>
+              <label data-help="{{index .Help "integraciones.0.requerido"}}"><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.2.requerido"><option value="false">false</option><option value="true">true</option></select></label>
+              <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.2.restricciones"></label>
+            </div></div>
+          </div></details>
         </div></fieldset>
       </div>
       <div class="step" data-step="4">
         <fieldset><legend>{{index .Labels "calidad"}}</legend><div class="grid">
-          <label>{{index .Labels "calidad.pruebas"}}<select name="calidad.pruebas"><option value="basica">basica</option><option value="media">media</option><option value="alta">alta</option></select></label>
-          <label>{{index .Labels "calidad.accesibilidad"}}<select name="calidad.accesibilidad"><option value="basica">basica</option><option value="wcag_aa">wcag_aa</option></select></label>
-          <label><span>{{index .Labels "calidad.observabilidad"}}</span><select name="calidad.observabilidad"><option value="true">true</option><option value="false">false</option></select></label>
-          <label>{{index .Labels "calidad.compliance"}}<input name="calidad.compliance"></label>
+          <label data-help="{{index .Help "calidad.pruebas"}}">{{index .Labels "calidad.pruebas"}}<select name="calidad.pruebas"><option value="basica">basica</option><option value="media">media</option><option value="alta">alta</option></select></label>
+          <label data-help="{{index .Help "calidad.accesibilidad"}}">{{index .Labels "calidad.accesibilidad"}}<select name="calidad.accesibilidad"><option value="basica">basica</option><option value="normal">normal</option><option value="wcag_aa">wcag_aa</option><option value="no_aplica">no_aplica</option></select></label>
+          <label data-help="{{index .Help "calidad.accesibilidad_opciones"}}">{{index .Labels "calidad.accesibilidad_opciones"}}<input name="calidad.accesibilidad_opciones" placeholder="normal,wcag_aa"></label>
+          <label data-help="{{index .Help "calidad.observabilidad"}}"><span>{{index .Labels "calidad.observabilidad"}}</span><select name="calidad.observabilidad"><option value="true">true</option><option value="false">false</option></select></label>
+          <label data-help="{{index .Help "calidad.compliance"}}">{{index .Labels "calidad.compliance"}}<input name="calidad.compliance"></label>
         </div></fieldset>
         <fieldset><legend>{{index .Labels "deploy"}}</legend><div class="grid">
-          <label>{{index .Labels "deploy.target"}}<select name="deploy.target"><option value="sin_preferencia">sin_preferencia</option><option value="local">local</option><option value="contenedor">contenedor</option><option value="paas">paas</option><option value="serverless">serverless</option><option value="kubernetes">kubernetes</option><option value="desktop">desktop</option><option value="mobile_store">mobile_store</option></select></label>
-          <label>{{index .Labels "deploy.restricciones"}}<input name="deploy.restricciones"></label>
+          <label data-help="{{index .Help "deploy.target"}}">{{index .Labels "deploy.target"}}<select name="deploy.target"><option value="sin_preferencia">sin_preferencia</option><option value="local">local</option><option value="contenedor">contenedor</option><option value="paas">paas</option><option value="serverless">serverless</option><option value="kubernetes">kubernetes</option><option value="desktop">desktop</option><option value="mobile_store">mobile_store</option></select></label>
+          <label data-help="{{index .Help "deploy.restricciones"}}">{{index .Labels "deploy.restricciones"}}<input name="deploy.restricciones"></label>
         </div></fieldset>
       </div>
       <div class="step" data-step="5">
         <fieldset><legend>{{index .Labels "agentes"}}</legend><div class="grid">
-          <label><span>{{index .Labels "agentes.revision_humana"}}</span><select name="agentes.revision_humana"><option value="true">true</option><option value="false">false</option></select></label>
-          <label>{{index .Labels "agentes.autonomia"}}<select name="agentes.autonomia"><option value="media">media</option><option value="baja">baja</option><option value="alta">alta</option></select></label>
-          <label>{{index .Labels "agentes.preferencias"}}<input name="agentes.preferencias"></label>
-          <label>{{index .Labels "restricciones"}}<input name="restricciones"></label>
+          <label data-help="{{index .Help "agentes.revision_humana"}}"><span>{{index .Labels "agentes.revision_humana"}}</span><select name="agentes.revision_humana"><option value="true">true</option><option value="false">false</option></select></label>
+          <label data-help="{{index .Help "agentes.autonomia"}}">{{index .Labels "agentes.autonomia"}}<select name="agentes.autonomia"><option value="media">media</option><option value="baja">baja</option><option value="alta">alta</option></select></label>
+          <label data-help="{{index .Help "agentes.preferencias"}}">{{index .Labels "agentes.preferencias"}}<input name="agentes.preferencias"></label>
+          <label data-help="{{index .Help "restricciones"}}">{{index .Labels "restricciones"}}<input name="restricciones"></label>
         </div></fieldset>
         <fieldset><legend>{{index .HTML "nueva_app.wizard.revision_final"}}</legend><div id="wizard-final-summary" class="summary-list"></div><button class="hidden-final" type="submit">{{.Page.Formulario.Acciones.Submit}}</button></fieldset>
       </div>
+      <div id="wizard-errors" class="form-error-summary" role="alert" aria-live="polite" hidden></div>
       <div class="wizard-actions">
         <button class="secondary" type="button" data-prev-step>{{index .HTML "nueva_app.wizard.back"}}</button>
         <button type="button" data-next-step>{{index .HTML "nueva_app.wizard.next"}}</button>
@@ -293,6 +502,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
     const tabs=[...wizard.querySelectorAll('[data-goto-step]')];
     const prev=wizard.querySelector('[data-prev-step]');
     const next=wizard.querySelector('[data-next-step]');
+    const errors=document.getElementById('wizard-errors');
     function field(name){return form.elements[name];}
     function val(name){const el=field(name);return el?String(el.value||'').trim():'';}
     function checked(name){return [...form.querySelectorAll('input[name="'+name+'"]:checked')].map(el=>el.value).join(', ');}
@@ -322,8 +532,213 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
       wizard.classList.toggle('wizard-step-final',step===steps.length-1);
       renderSummary();
     }
-    function setValue(name,value){const el=field(name);if(el)el.value=value;}
-    function setChecked(value,on){form.querySelectorAll('input[name="plataformas"][value="'+value+'"]').forEach(el=>{el.checked=on;});}
+    function errorID(el){return 'field-error-'+String(el.name||'field').replace(/[^a-zA-Z0-9_-]/g,'-');}
+    function requiredFields(){return [...form.querySelectorAll('[data-required="true"]')];}
+    function fieldLabel(el){return el.dataset.label||el.name||'';}
+    function clearFieldError(el){
+      if(!el)return;
+      const id=errorID(el);
+      const current=document.getElementById(id);
+      if(current)current.remove();
+      el.removeAttribute('aria-invalid');
+      const described=(el.getAttribute('aria-describedby')||'').split(/\s+/).filter(v=>v&&v!==id);
+      if(described.length){el.setAttribute('aria-describedby',described.join(' '));}else{el.removeAttribute('aria-describedby');}
+    }
+    function setFieldError(el,message){
+      clearFieldError(el);
+      const id=errorID(el);
+      el.setAttribute('aria-invalid','true');
+      const described=(el.getAttribute('aria-describedby')||'').split(/\s+/).filter(Boolean);
+      if(!described.includes(id)){described.push(id);}
+      el.setAttribute('aria-describedby',described.join(' '));
+      const node=document.createElement('div');
+      node.className='field-error';
+      node.id=id;
+      node.textContent=message;
+      const label=el.closest('label');
+      if(label){label.insertAdjacentElement('afterend',node);}else{el.insertAdjacentElement('afterend',node);}
+    }
+    function focusField(el){
+      const parentStep=el.closest('[data-step]');
+      if(parentStep){show(Number(parentStep.dataset.step||0));}
+      setTimeout(()=>{el.focus({preventScroll:true});el.scrollIntoView({block:'center',behavior:'smooth'});},0);
+    }
+    function renderErrors(invalid){
+      if(!errors)return;
+      if(!invalid.length){errors.hidden=true;errors.innerHTML='';return;}
+      const copy=wizard.dataset;
+      errors.hidden=false;
+      errors.innerHTML='<strong>'+escapeHTML(copy.validationSummaryTitle||'')+'</strong><p>'+escapeHTML(copy.validationSummaryIntro||'')+'</p><ul>'+invalid.map(item=>'<li><button type="button" data-error-target="'+escapeHTML(item.name)+'">'+escapeHTML(item.label)+': '+escapeHTML(item.message)+'</button></li>').join('')+'</ul>';
+    }
+    function validateForm(){
+      const invalid=[];
+      requiredFields().forEach(el=>{
+        clearFieldError(el);
+        if(String(el.value||'').trim()===''){
+          const item={name:el.name,label:fieldLabel(el),message:wizard.dataset.validationRequired||'Completa este campo.'};
+          invalid.push(item);
+          setFieldError(el,item.message);
+        }
+      });
+      renderErrors(invalid);
+      if(invalid.length){const first=field(invalid[0].name);if(first)focusField(first);return false;}
+      return true;
+    }
+    function dispatchField(el){if(!el)return;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));}
+    function setValue(name,value){const el=field(name);if(el){el.value=value;clearFieldError(el);dispatchField(el);}}
+    function addCSV(name,values){
+      const current=val(name).split(',').map(v=>v.trim()).filter(Boolean);
+      values.forEach(value=>{if(value&&!current.includes(value)){current.push(value);}});
+      setValue(name,current.join(', '));
+    }
+    function setChecked(value,on){form.querySelectorAll('input[name="plataformas"][value="'+value+'"]').forEach(el=>{el.checked=on;dispatchField(el);});}
+    function guidedLog(message){
+      const thread=document.getElementById('guided-thread');
+      if(!thread||!message)return;
+      const node=document.createElement('div');
+      node.className='guided-message';
+      node.textContent=message;
+      thread.appendChild(node);
+    }
+    function hasOwn(obj,key){return Object.prototype.hasOwnProperty.call(obj||{},key);}
+    function setMaybe(name,value){
+      if(value===undefined||value===null)return;
+      if(typeof value==='string'&&value.trim()==='')return;
+      setValue(name,Array.isArray(value)?value.join(', '):String(value));
+    }
+    function setCSV(name,values){if(Array.isArray(values)&&values.length){setValue(name,values.join(', '));}}
+    function setPlatforms(values){
+      if(!Array.isArray(values)||!values.length)return;
+      form.querySelectorAll('input[name="plataformas"]').forEach(el=>{el.checked=values.includes(el.value);dispatchField(el);});
+    }
+    function applyIndexed(prefix,rows,fields){
+      if(!Array.isArray(rows))return;
+      rows.forEach((row,index)=>{
+        if(!row||index>3)return;
+        fields.forEach(name=>{
+          if(hasOwn(row,name)){setMaybe(prefix+'.'+index+'.'+name,row[name]);}
+        });
+      });
+    }
+    function applyGuidedForm(guidedForm){
+      if(!guidedForm)return;
+      setMaybe('nombre',guidedForm.nombre);
+      setMaybe('objetivo',guidedForm.objetivo);
+      setMaybe('descripcion',guidedForm.descripcion);
+      setMaybe('tipo_app',guidedForm.tipo_app);
+      setPlatforms(guidedForm.plataformas);
+      setCSV('usuarios_objetivo',guidedForm.usuarios_objetivo);
+      setCSV('restricciones',guidedForm.restricciones);
+      const pref=guidedForm.preferencias_tecnicas||{};
+      setMaybe('preferencias_tecnicas.lenguaje',pref.lenguaje);
+      setMaybe('preferencias_tecnicas.framework',pref.framework);
+      setMaybe('preferencias_tecnicas.arquitectura',pref.arquitectura);
+      setCSV('preferencias_tecnicas.restricciones',pref.restricciones);
+      setCSV('preferencias_tecnicas.preferencias',pref.preferencias);
+      const datos=guidedForm.datos||{};
+      if(hasOwn(datos,'db_required'))setMaybe('datos.db_required',datos.db_required);
+      setMaybe('datos.necesidad_funcional',datos.necesidad_funcional);
+      setCSV('datos.tipos_datos',datos.tipos_datos);
+      setMaybe('datos.sensibilidad',datos.sensibilidad);
+      setMaybe('datos.retencion',datos.retencion);
+      applyIndexed('datos.tipos_detallados',datos.tipos_detallados,['nombre','proposito','sensibilidad','retencion','volumen','restricciones']);
+      applyIndexed('datos.storage',datos.storage,['tipo','proposito','requerido','restricciones']);
+      applyIndexed('integraciones',guidedForm.integraciones,['tipo','nombre','proposito','requerido','restricciones']);
+      const calidad=guidedForm.calidad||{};
+      setMaybe('calidad.pruebas',calidad.pruebas);
+      setMaybe('calidad.accesibilidad',calidad.accesibilidad);
+      setCSV('calidad.accesibilidad_opciones',calidad.accesibilidad_opciones);
+      setCSV('calidad.compliance',calidad.compliance);
+      if(hasOwn(calidad,'observabilidad'))setMaybe('calidad.observabilidad',calidad.observabilidad);
+    }
+    async function requestGuided(payload){
+      try{
+        const response=await fetch('/api/v0/apps/intake/guided-turn',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload||{})});
+        if(!response.ok)return null;
+        return await response.json();
+      }catch(_){return null;}
+    }
+    async function applyServerGuided(payload,message){
+      const out=await requestGuided(Object.assign({locale:val('locale')||'es'},payload||{}));
+      if(!out||!out.session||!out.session.form)return false;
+      applyGuidedForm(out.session.form);
+      document.getElementById('guided-followups').hidden=false;
+      guidedLog(message);
+      renderSummary();
+      return true;
+    }
+    function titleFromNeed(text){
+      const lower=text.toLowerCase();
+      if(/piso|alquiler|vivienda|rent/.test(lower)){return 'Alquileres cercanos';}
+      const words=text.replace(/[^\p{L}\p{N}\s]/gu,' ').split(/\s+/).filter(Boolean).slice(0,5).join(' ');
+      return words||'Nueva app';
+    }
+    function configureRentalData(){
+      setValue('datos.db_required','true');
+      setValue('datos.necesidad_funcional','Gestionar y consultar pisos en alquiler, ubicaciones, favoritos y alertas.');
+      setValue('datos.tipos_datos','pisos, alquileres, ubicaciones, favoritos, alertas');
+      setValue('datos.tipos_detallados.0.nombre','Pisos en alquiler');
+      setValue('datos.tipos_detallados.0.proposito','Mostrar pisos cercanos y sus datos principales.');
+      setValue('datos.tipos_detallados.0.sensibilidad','publica');
+      setValue('datos.tipos_detallados.0.retencion','mientras el anuncio este activo');
+      setValue('datos.tipos_detallados.0.volumen','alto');
+      setValue('datos.tipos_detallados.1.nombre','Usuarios y favoritos');
+      setValue('datos.tipos_detallados.1.proposito','Guardar favoritos, busquedas y alertas.');
+      setValue('datos.tipos_detallados.1.sensibilidad','personal');
+      setValue('datos.storage.0.tipo','relacional');
+      setValue('datos.storage.0.proposito','Consultas consistentes de anuncios, usuarios y favoritos.');
+      setValue('datos.storage.0.requerido','true');
+      setValue('datos.storage.1.tipo','busqueda');
+      setValue('datos.storage.1.proposito','Filtrado por ubicacion, precio y preferencias.');
+      guidedLog(wizard.dataset.guidedMsgData);
+    }
+    function configureMaps(preferOSM){
+      setValue('integraciones.0.tipo','maps');
+      setValue('integraciones.0.nombre','capacidad de mapas');
+      setValue('integraciones.0.proposito','Mostrar ubicacion, cercania y rutas aproximadas sin acoplar el dominio a un proveedor.');
+      setValue('integraciones.0.requerido','true');
+      if(preferOSM){
+        addCSV('integraciones.0.restricciones',['preferir OpenStreetMap si el adaptador autorizado lo soporta']);
+        addCSV('preferencias_tecnicas.preferencias',['mapas: OpenStreetMap preferido por adaptador']);
+      }
+      guidedLog(wizard.dataset.guidedMsgMaps);
+    }
+    async function applyGuidedNeed(){
+      const input=document.getElementById('guided-need');
+      const text=input?String(input.value||'').trim():'';
+      if(!text)return;
+      if(await applyServerGuided({need:text},wizard.dataset.guidedMsgAnalyzed)){return;}
+      if(!val('objetivo'))setValue('objetivo',text);
+      if(!val('descripcion'))setValue('descripcion',text);
+      if(!val('nombre'))setValue('nombre',titleFromNeed(text));
+      const lower=text.toLowerCase();
+      if(/m[oó]vil|mobile|android|ios|iphone|apple/.test(lower)){setValue('tipo_app','mobile');setChecked('mobile',true);}
+      if(/api|backend|servicio/.test(lower)){setChecked('api',true);}
+      if(/web|panel|gestion|gesti[oó]n/.test(lower)){setChecked('web',true);}
+      if(/piso|pisos|alquiler|vivienda|rent/.test(lower)){configureRentalData();}
+      if(/map|mapa|cerca|cercan|ubicaci[oó]n|geo|openstreet/.test(lower)){configureMaps(/openstreet/.test(lower));}
+      document.getElementById('guided-followups').hidden=false;
+      guidedLog(wizard.dataset.guidedMsgAnalyzed);
+      renderSummary();
+    }
+    async function guidedAction(action){
+      if(action==='analyze'){applyGuidedNeed();return;}
+      if(action==='review'){guidedLog(wizard.dataset.guidedMsgReview);show(5);return;}
+      const actionMessages={mobile_both:wizard.dataset.guidedMsgMobile,mobile_ios:wizard.dataset.guidedMsgMobile,mobile_android:wizard.dataset.guidedMsgMobile,data_external:wizard.dataset.guidedMsgData,data_management:wizard.dataset.guidedMsgData,maps_generic:wizard.dataset.guidedMsgMaps,maps_osm:wizard.dataset.guidedMsgMaps,architecture_default:wizard.dataset.guidedMsgArchitecture,architecture_event:wizard.dataset.guidedMsgArchitecture,architecture_modular:wizard.dataset.guidedMsgArchitecture,quality_public:wizard.dataset.guidedMsgQuality};
+      if(await applyServerGuided({action_id:action},actionMessages[action])){return;}
+      if(action==='mobile_both'){setValue('tipo_app','mobile');setChecked('mobile',true);addCSV('preferencias_tecnicas.preferencias',['plataformas moviles: iOS y Android']);guidedLog(wizard.dataset.guidedMsgMobile);}
+      if(action==='mobile_ios'){setValue('tipo_app','mobile');setChecked('mobile',true);addCSV('preferencias_tecnicas.preferencias',['plataforma movil: iOS']);guidedLog(wizard.dataset.guidedMsgMobile);}
+      if(action==='mobile_android'){setValue('tipo_app','mobile');setChecked('mobile',true);addCSV('preferencias_tecnicas.preferencias',['plataforma movil: Android']);guidedLog(wizard.dataset.guidedMsgMobile);}
+      if(action==='data_external'){setValue('datos.db_required','false');setValue('integraciones.1.tipo','api');setValue('integraciones.1.nombre','datos externos de alquileres');setValue('integraciones.1.proposito','Consultar o importar datos existentes de pisos en alquiler.');guidedLog(wizard.dataset.guidedMsgData);}
+      if(action==='data_management'){configureRentalData();setChecked('api',true);setChecked('web',true);}
+      if(action==='maps_generic'){configureMaps(false);}
+      if(action==='maps_osm'){configureMaps(true);}
+      if(action==='architecture_default'){setValue('preferencias_tecnicas.arquitectura','hexagonal');guidedLog(wizard.dataset.guidedMsgArchitecture);}
+      if(action==='architecture_event'){setValue('preferencias_tecnicas.arquitectura','event_driven');guidedLog(wizard.dataset.guidedMsgArchitecture);}
+      if(action==='architecture_modular'){setValue('preferencias_tecnicas.arquitectura','modular_monolith');guidedLog(wizard.dataset.guidedMsgArchitecture);}
+      if(action==='quality_public'){setValue('calidad.pruebas','alta');setValue('calidad.accesibilidad','wcag_aa');setValue('calidad.accesibilidad_opciones','normal,wcag_aa');guidedLog(wizard.dataset.guidedMsgQuality);}
+      renderSummary();
+    }
     function preset(kind){
       if(kind==='webapp'){setValue('tipo_app','web');setChecked('web',true);setChecked('api',true);setValue('preferencias_tecnicas.lenguaje','go');setValue('deploy.target','contenedor');}
       if(kind==='api'){setValue('tipo_app','api');setChecked('api',true);setValue('preferencias_tecnicas.lenguaje','go');setValue('calidad.pruebas','alta');}
@@ -334,7 +749,12 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
     prev.addEventListener('click',()=>show(step-1));
     next.addEventListener('click',()=>show(step+1));
     form.addEventListener('input',renderSummary);
-    form.addEventListener('change',renderSummary);
+    form.addEventListener('input',event=>{if(event.target&&event.target.matches('[data-required="true"]')){clearFieldError(event.target);renderErrors(requiredFields().filter(el=>el.getAttribute('aria-invalid')==='true').map(el=>({name:el.name,label:fieldLabel(el),message:wizard.dataset.validationRequired||''})));}});
+    form.addEventListener('change',event=>{renderSummary();if(event.target&&event.target.matches('[data-required="true"]')){clearFieldError(event.target);}});
+    form.addEventListener('submit',event=>{if(!validateForm()){event.preventDefault();}});
+    if(errors){errors.addEventListener('click',event=>{const target=event.target.closest('[data-error-target]');if(!target)return;const el=field(target.dataset.errorTarget);if(el)focusField(el);});}
+    const guided=document.getElementById('guided-assistant');
+    if(guided){guided.addEventListener('click',event=>{const target=event.target.closest('[data-guided-action]');if(target)guidedAction(target.dataset.guidedAction);});}
     wizard.querySelectorAll('[data-preset]').forEach(node=>node.addEventListener('click',()=>preset(node.dataset.preset)));
     show(0);
   }());

@@ -188,8 +188,8 @@ Evidencia esperada: `RESTAutoprogrammingPrepareRunClientV0` envia
 `POST /api/v0/autoprogramming/prepare-run`, correlation header,
 `worktree_isolated=true`, `worktree_ref`, `branch_ref`, write-set y tests
 obligatorios; `priority_score` cruza como dato de cola opcional; la respuesta
-proyecta run, workflow tasks, agentes de espera, continue y errores publicos
-sin leer runtime/stores.
+proyecta run, workflow tasks, agentes de espera, `goal_specs` opcional,
+continue y errores publicos sin leer runtime/stores.
 Ultima ejecucion: 2026-05-23; pasa.
 Riesgos: El executor real de prepare-run se inyecta fuera de web; este corte
 solo cubre cliente, DTO y viewmodel.
@@ -241,6 +241,20 @@ Riesgos: UI v0 server-rendered y deliberadamente basica; no preserva todos los v
 ```
 
 ```text
+Caso: WEB-DOC-003 guia de opciones `/nueva-app`
+Tipo: docs
+Comando: `rg -n "Modo Experto|clean_architecture|modular_monolith|data_pipeline|calidad.accesibilidad|Preferencia De Persistencia|Varias Integraciones|Tooltips" modulos/orquesta-web/docs/guia_nueva_app_opciones_2026-06-25.md`
+Evidencia esperada: la guia documenta modo basico, asistente guiado y modo
+experto, catalogo ampliado de arquitectura con fallback `hexagonal`, datos
+multiples, sensibilidad por tipo, almacenamiento por capacidad, varias
+integraciones, niveles de accesibilidad elegibles por runtime/adaptador y
+relacion con tooltips, sin fijar proveedor concreto.
+Ultima ejecucion: 2026-06-25; documental y cubierta por tests web/factory.
+Riesgos: las composiciones externas deben seguir tratando arquitectura, storage,
+mapas y accesibilidad como contratos/capacidades, no como proveedor impuesto.
+```
+
+```text
 Caso: WEB-UT-012 bootstrap director para web
 Tipo: unit
 Comando: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-director`
@@ -252,7 +266,7 @@ Riesgos: El transporte inbound real del director aun no existe; si se define RES
 ```text
 Caso: WEB-UT-013 sesion conversacional nueva app
 Tipo: unit
-Comando: `GOCACHE=/tmp/orquesta-go-cache go test -count=1 ./modulos/orquesta-web -run 'TestWebNuevaAppIntakeSessionV0|TestApplyWebNuevaAppIntake'`
+Comando: `GOCACHE=/tmp/orquesta-go-cache go test -count=1 ./modulos/orquesta-web -run 'TestWebNuevaAppIntakeSessionV0|TestApplyWebNuevaAppIntake|TestWebNuevaAppIntakeGuided|TestNuevaAppIntakeGuided'`
 Evidencia esperada: `TestWebNuevaAppIntakeSessionV0CreaSesionDesdeIdeaYPideCamposCriticos`,
 `TestApplyWebNuevaAppIntakeAnswerV0RegistraDecisionYDejaDraftListo`,
 `TestApplyWebNuevaAppIntakeAnswerV0NoValidaEnumsDeFactory` y
@@ -260,12 +274,16 @@ Evidencia esperada: `TestWebNuevaAppIntakeSessionV0CreaSesionDesdeIdeaYPideCampo
 desde idea/nombre, pregunta pendiente, indice de campos, decision capturada,
 claves i18n de pregunta, `AppSpecRequestV0` parcial listo para validar, handoff
 compacto con refs opacas hacia Director/fallback, snapshot compacto y ausencia
-de validacion de enums de factory, sin DB, runtime, filesystem productivo, LLM
-real ni MCP directo.
-Ultima ejecucion: 2026-05-26; pasa con `GOCACHE=/tmp/orquesta-go-cache`.
-Riesgos: No arranca agente de intake real ni renderiza la vista HTML completa;
-ese tramo debe entrar por API/MCP/handler posterior. El handoff solo declara
-contrato compacto; la disponibilidad del puerto depende de la composicion.
+de validacion de enums de factory. `TestWebNuevaAppIntakeGuided*` valida que
+una necesidad libre de app movil para alquileres cercanos produce decisiones de
+plataforma, datos, storage, mapas, arquitectura y accesibilidad compatibles con
+factory. `TestNuevaAppIntakeGuidedHTTPHandler*` valida el endpoint JSON
+`POST /api/v0/apps/intake/guided-turn`, acciones de seguimiento y errores HTTP,
+sin DB, runtime, filesystem productivo, LLM real ni MCP directo.
+Ultima ejecucion: 2026-06-25; pasa con `GOCACHE=/tmp/orquesta-go-cache`.
+Riesgos: No arranca agente de intake real; el endpoint es calculo puro de
+wizard y el handoff solo declara contrato compacto. La disponibilidad de la
+ruta depende de la composicion/gateway.
 ```
 
 ## Validaciones realizadas en este arranque

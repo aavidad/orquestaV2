@@ -6,6 +6,7 @@ import (
 	orquestaappdirectorintake "orquesta/modulos/orquesta-app-director-intake"
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestafactory "orquesta/modulos/orquesta-factory"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
 const (
@@ -39,19 +40,23 @@ type MCPArrancarDirectorAppToolInputV0 struct {
 }
 
 type MCPArrancarDirectorAppToolResultV0 struct {
-	Estado        string                     `json:"estado"`
-	RequestID     string                     `json:"request_id,omitempty"`
-	CorrelationID string                     `json:"correlation_id,omitempty"`
-	RoutePolicy   MCPAppSpecRoutePolicyV0    `json:"route_policy"`
-	AppSpec       MCPAppSpecCompactV0        `json:"app_spec,omitempty"`
-	RunRef        string                     `json:"run_ref,omitempty"`
-	PhaseID       string                     `json:"phase_id,omitempty"`
-	DirectorTask  MCPDirectorTaskCompactV0   `json:"director_task,omitempty"`
-	DirectorTasks []MCPDirectorTaskCompactV0 `json:"director_tasks,omitempty"`
-	LoopStatus    string                     `json:"loop_status,omitempty"`
-	StartedAgents []string                   `json:"started_agents,omitempty"`
-	Errores       []MCPValidationIssueV0     `json:"errores_publicos,omitempty"`
-	EvidenceRefs  []string                   `json:"evidence_refs,omitempty"`
+	Estado            string                            `json:"estado"`
+	RequestID         string                            `json:"request_id,omitempty"`
+	CorrelationID     string                            `json:"correlation_id,omitempty"`
+	RoutePolicy       MCPAppSpecRoutePolicyV0           `json:"route_policy"`
+	AppSpec           MCPAppSpecCompactV0               `json:"app_spec,omitempty"`
+	RunRef            string                            `json:"run_ref,omitempty"`
+	PhaseID           string                            `json:"phase_id,omitempty"`
+	DirectorTask      MCPDirectorTaskCompactV0          `json:"director_task,omitempty"`
+	DirectorTasks     []MCPDirectorTaskCompactV0        `json:"director_tasks,omitempty"`
+	LoopStatus        string                            `json:"loop_status,omitempty"`
+	StartedAgents     []string                          `json:"started_agents,omitempty"`
+	GoalRef           string                            `json:"goal_ref,omitempty"`
+	ExternalGoalRef   string                            `json:"external_goal_ref,omitempty"`
+	GoalStatus        string                            `json:"goal_status,omitempty"`
+	GoalLaunchReceipt *orquestagoal.GoalLaunchReceiptV0 `json:"goal_launch_receipt,omitempty"`
+	Errores           []MCPValidationIssueV0            `json:"errores_publicos,omitempty"`
+	EvidenceRefs      []string                          `json:"evidence_refs,omitempty"`
 }
 
 type MCPDirectorTaskCompactV0 struct {
@@ -66,7 +71,7 @@ func MCPArrancarDirectorAppDescriptorV0() MCPArrancarDirectorAppToolDescriptorV0
 		Name:        MCPArrancarDirectorAppToolNameV0,
 		Version:     MCPArrancarDirectorAppToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,respuesta?,app_spec_request:AppSpecRequestV0(request_kind?,execution_mode?),max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,max_external_waits?}",
-		Output:      "ok:{route_policy,app_spec,run_ref,phase_id,director_task,director_tasks,loop_status}|error:{route_policy,errores_publicos}",
+		Output:      "ok:{route_policy,app_spec,run_ref?,goal_ref?,goal_status?,phase_id?,loop_status?}|error:{route_policy,errores_publicos}",
 		ResourceURI: MCPArrancarDirectorAppResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -124,10 +129,14 @@ func NewMCPArrancarDirectorAppResultV0(
 			AgentRequestID: strings.TrimSpace(result.DirectorTask.AgentRequestID),
 			Capacity:       strings.TrimSpace(string(result.DirectorTask.Capacity)),
 		},
-		DirectorTasks: compactDirectorTasksMCPV0(result.DirectorTasks),
-		LoopStatus:    strings.TrimSpace(string(result.LoopStatus)),
-		StartedAgents: compactStringsMCPV0(result.StartedAgents),
-		EvidenceRefs:  compactStringsMCPV0(result.EvidenceRefs),
+		DirectorTasks:     compactDirectorTasksMCPV0(result.DirectorTasks),
+		LoopStatus:        strings.TrimSpace(string(result.LoopStatus)),
+		StartedAgents:     compactStringsMCPV0(result.StartedAgents),
+		GoalRef:           strings.TrimSpace(result.GoalRef),
+		ExternalGoalRef:   strings.TrimSpace(result.ExternalGoalRef),
+		GoalStatus:        strings.TrimSpace(result.GoalStatus),
+		GoalLaunchReceipt: result.GoalLaunchReceipt,
+		EvidenceRefs:      compactStringsMCPV0(result.EvidenceRefs),
 	}
 }
 

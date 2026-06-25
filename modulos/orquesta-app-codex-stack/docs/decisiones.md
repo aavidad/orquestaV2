@@ -16,6 +16,21 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-06-25
+Decision: El stack Codex cablea `ConfigV0.AppGoalLauncher` hacia
+`StartAppDirectorPortsV0.GoalLauncher` para `/nueva-app` goal-first.
+Motivo: Cuando el backend de Codex Goal esta configurado, pedir una app desde
+la web debe poder arrancar un Goal que haga de loop automatico sin reactivar el
+loop legacy de agentes.
+Impacto: `buildDirectorPortsV0` inyecta el launcher neutral; `QueuedArrancarDirectorExecutorV0`
+no encola el run legacy si el resultado MCP trae `goal_ref`. Sin launcher, el
+comportamiento anterior se conserva.
+Contratos afectados: `ConfigV0`, `StartAppDirectorPortsV0`,
+`orquesta.apps.arrancar_director.v0`, `RunQueue`.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-06-22
 Decision: Un replacement de assessment terminal sin entrega no bloquea para
 siempre nuevos replacements de la misma tarea; se permite reintento acotado.

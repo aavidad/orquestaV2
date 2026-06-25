@@ -17,6 +17,7 @@ import (
 const (
 	DomainWorkArtifactSubmissionStatusClaimedV0    = "claimed"
 	DomainWorkArtifactSubmissionStatusSubmittingV0 = "submitting"
+	DomainWorkArtifactSubmissionStatusSubmittedV0  = "submitted"
 	DomainWorkArtifactSubmissionStatusAcceptedV0   = "accepted"
 	DomainWorkArtifactSubmissionStatusRejectedV0   = "rejected"
 )

@@ -64,7 +64,7 @@ type backlogBuilderV0 struct {
 func (b backlogBuilderV0) fases() []FaseInicialV0 {
 	return []FaseInicialV0{
 		{ID: "discovery", Nombre: "Descubrimiento", Objetivo: "Cerrar alcance, supuestos y preguntas abiertas antes de programar.", Orden: 10},
-		{ID: "arquitectura", Nombre: "Arquitectura", Objetivo: "Definir puertos, contratos y fronteras hexagonales estrictas.", Orden: 20},
+		{ID: "arquitectura", Nombre: "Arquitectura", Objetivo: "Definir patron, puertos, contratos y fronteras limpias.", Orden: 20},
 		{ID: "i18n_docs", Nombre: "I18n y documentacion", Objetivo: "Preparar catalogos i18n y documentacion inicial con idioma declarado.", Orden: 30},
 		{ID: "implementacion", Nombre: "Implementacion", Objetivo: "Construir slices verticales pequenos con FunctionContract.", Orden: 40},
 		{ID: "validacion", Nombre: "Validacion", Objetivo: "Cerrar pruebas, revision, seguridad y evidencias.", Orden: 50},
@@ -107,13 +107,14 @@ func (b backlogBuilderV0) discoveryTask() MicrotareaPropuestaV0 {
 }
 
 func (b backlogBuilderV0) architectureTask() MicrotareaPropuestaV0 {
+	pattern := firstNonEmptyV0(b.spec.Architecture.Patron, DefaultArchitecturePatternV0)
 	return MicrotareaPropuestaV0{
 		ID:               "BLG-002",
 		Fase:             "arquitectura",
 		ModuloSugerido:   "architecture",
-		Objetivo:         "Definir domain, application, ports, adapters y bootstrap con arquitectura hexagonal estricta.",
+		Objetivo:         "Definir modulos, puertos, adaptadores y bootstrap para arquitectura " + pattern + " con fronteras limpias.",
 		WriteSetPrevisto: []string{"docs/arquitectura.md", "docs/contratos.md"},
-		Contrato:         "ArquitecturaHexagonalEstricta v0",
+		Contrato:         architectureBacklogContractV0(pattern),
 		Validacion:       "Contratos documentados con handlers finos, composicion solo en bootstrap/cmd y sin DB, runtime, filesystem ni proveedor como dependencia de domain/application.",
 		Bloqueos:         []string{"FunctionContract v0"},
 	}
@@ -202,9 +203,16 @@ func (b backlogBuilderV0) validationTask() MicrotareaPropuestaV0 {
 		Objetivo:         "Ejecutar revision final de pruebas, seguridad, i18n, documentacion y conectores.",
 		WriteSetPrevisto: []string{"docs/pruebas.md", "docs/revision_final.md"},
 		Contrato:         "FunctionContract v0",
-		Validacion:       "Evidencia de tests/revision registrada, arquitectura hexagonal estricta aceptada y riesgos abiertos explicitados.",
+		Validacion:       "Evidencia de tests/revision registrada, arquitectura elegida aceptada con fronteras limpias y riesgos abiertos explicitados.",
 		Bloqueos:         []string{"Primer slice vertical minimo completado"},
 	}
+}
+
+func architectureBacklogContractV0(pattern string) string {
+	if strings.TrimSpace(pattern) == "hexagonal" {
+		return "ArquitecturaHexagonalEstricta v0"
+	}
+	return "ArquitecturaLimpiaSegunPatron v0"
 }
 
 func (b backlogBuilderV0) contratosRequeridos() []string {

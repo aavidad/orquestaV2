@@ -21,6 +21,8 @@ git diff --check -- modulos/orquesta-http-gateway
   `/api/v0/runs/control`.
 - Cobertura de ruta web `/run-queue` separada de API
   `/api/v0/runs/queue/priority`.
+- Cobertura de ruta exacta `/api/v0/apps/intake/guided-turn` separada y con
+  precedencia frente al prefijo `/api/v0/apps/`.
 - La auditoria de stats se limita al routing: el contenido de
   `DirectorRunStatsV0` pertenece al handler inyectado, no al gateway HTTP fino.
 - `PublicRouteMutabilityV0` clasifica las rutas de supervision

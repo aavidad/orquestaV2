@@ -6,6 +6,7 @@ import (
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestafactory "orquesta/modulos/orquesta-factory"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
 )
@@ -107,6 +108,135 @@ func TestStartAppDirectorV0AutonomiaAltaStartsDirectorTeamThroughBatch(t *testin
 	}
 }
 
+func TestStartAppDirectorV0GoalFirstLanzaGoalYNoEjecutaLoopLegacy(t *testing.T) {
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	launcher := &serviceGoalLauncherForTestV0{}
+	goalStates := newServiceGoalStateStoreForTestV0()
+
+	result, err := StartAppDirectorV0(
+		context.Background(),
+		validStartAppDirectorRequestForTestV0(),
+		StartAppDirectorPortsV0{
+			RunStore:       store,
+			EventSink:      sink,
+			OutboxLedger:   ledger,
+			GoalLauncher:   launcher,
+			GoalStateStore: goalStates,
+			Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
+				serviceCapacityDispatcherForTestV0(store, sink, ledger),
+				serviceAgentLauncherDispatcherForTestV0(store, sink, ledger),
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("StartAppDirectorV0: %v", err)
+	}
+	if result.Status != StartAppDirectorStatusStartedV0 ||
+		result.GoalRef == "" ||
+		result.ExternalGoalRef != "thread-ref-service-goal-001" ||
+		result.GoalStatus != orquestagoal.GoalStatusRunningV0 {
+		t.Fatalf("result=%+v", result)
+	}
+	if len(result.StartedAgents) != 0 || result.LoopStatus != "" {
+		t.Fatalf("goal-first no debe arrancar agentes legacy: started=%v loop=%q", result.StartedAgents, result.LoopStatus)
+	}
+	if launcher.calls != 1 || len(launcher.specs) != 1 {
+		t.Fatalf("launcher calls=%d specs=%d", launcher.calls, len(launcher.specs))
+	}
+	spec := launcher.specs[0]
+	if issues := orquestagoal.ValidateGoalWorkSpecV0(spec); len(issues) > 0 {
+		t.Fatalf("goal spec invalido: %+v spec=%+v", issues, spec)
+	}
+	if spec.DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 ||
+		spec.RunRef != result.Run.RunID ||
+		len(spec.WriteSet) != 1 ||
+		spec.WriteSet[0].Path != "generated-apps/agenda" {
+		t.Fatalf("goal spec inesperado: %+v", spec)
+	}
+	if _, err := store.LoadRunV0(context.Background(), result.Run.RunID); err != nil {
+		t.Fatalf("run no persistida: %v", err)
+	}
+	state, err := goalStates.LoadGoalWorkStateV0(context.Background(), result.Run.RunID)
+	if err != nil {
+		t.Fatalf("goal state no persistido: %v", err)
+	}
+	if state.GoalRef != result.GoalRef ||
+		state.ExternalGoalRef != result.ExternalGoalRef ||
+		state.Spec.RunRef != result.Run.RunID {
+		t.Fatalf("goal state=%+v result=%+v", state, result)
+	}
+}
+
+func TestObserveAppDirectorGoalV0PersisteResultadoCompletoYClosure(t *testing.T) {
+	goalStates := newServiceGoalStateStoreForTestV0()
+	spec := orquestagoal.NormalizeGoalWorkSpecV0(orquestagoal.GoalWorkSpecV0{
+		GoalRef:      "goal-ref-service-observe-001",
+		RunRef:       "run-ref-service-observe-001",
+		Objective:    "Construir app de prueba",
+		DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+		WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "generated-apps/observe"}},
+		ArtifactContracts: []orquestagoal.GoalArtifactContractV0{
+			{ArtifactRef: "artifact-ref-service-observe-source", ArtifactType: "source_tree", Required: true},
+		},
+		ClosurePolicy: orquestagoal.GoalClosurePolicyV0{
+			RequireArtifacts:     true,
+			RequiredEvidenceRefs: []string{"evidence-ref-service-observe-required"},
+		},
+	})
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), AppDirectorGoalStateV0{
+		SchemaVersion:   AppDirectorGoalStateSchemaVersionV0,
+		RunRef:          spec.RunRef,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: "thread-ref-service-observe-001",
+		Status:          orquestagoal.GoalStatusRunningV0,
+		Spec:            spec,
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         spec.GoalRef,
+			ExternalGoalRef: "thread-ref-service-observe-001",
+		},
+		EvidenceRefs: []string{"evidence-ref-service-observe-launch"},
+	}); err != nil {
+		t.Fatalf("SaveAppDirectorGoalStateV0: %v", err)
+	}
+	observer := serviceGoalObserverForTestV0{result: orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusCompleteV0,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: "thread-ref-service-observe-001",
+		ArtifactRefs:    []string{"artifact-ref-service-observe-source"},
+		EvidenceRefs:    []string{"evidence-ref-service-observe-required"},
+	}}
+
+	result, err := ObserveAppDirectorGoalV0(
+		context.Background(),
+		ObserveAppDirectorGoalRequestV0{RunRef: spec.RunRef},
+		StartAppDirectorPortsV0{
+			GoalStateStore:       goalStates,
+			GoalObserver:         observer,
+			GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Status != orquestagoal.GoalStatusCompleteV0 ||
+		!result.Closure.Accepted ||
+		result.Closure.Status != orquestagoal.GoalStatusAcceptedV0 {
+		t.Fatalf("result=%+v", result)
+	}
+	state, err := goalStates.LoadGoalWorkStateV0(context.Background(), spec.RunRef)
+	if err != nil {
+		t.Fatalf("LoadAppDirectorGoalStateV0: %v", err)
+	}
+	if state.LastResult == nil || state.LastClosure == nil || !state.LastClosure.Accepted {
+		t.Fatalf("state=%+v", state)
+	}
+}
+
 func TestStartAppDirectorV0ReturnsFactoryValidationIssues(t *testing.T) {
 	request := validStartAppDirectorRequestForTestV0()
 	request.AppSpecRequest.Locale = "locale invalido"
@@ -142,6 +272,68 @@ func TestStartAppDirectorV0RequiresInjectedPorts(t *testing.T) {
 	if err == nil {
 		t.Fatalf("esperaba error por puertos ausentes")
 	}
+}
+
+type serviceGoalLauncherForTestV0 struct {
+	calls int
+	specs []orquestagoal.GoalWorkSpecV0
+}
+
+func (launcher *serviceGoalLauncherForTestV0) LaunchGoalWorkV0(
+	_ context.Context,
+	spec orquestagoal.GoalWorkSpecV0,
+) (orquestagoal.GoalLaunchReceiptV0, error) {
+	launcher.calls++
+	launcher.specs = append(launcher.specs, spec)
+	return orquestagoal.GoalLaunchReceiptV0{
+		SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+		Status:          orquestagoal.GoalStatusRunningV0,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: "thread-ref-service-goal-001",
+		EvidenceRefs:    []string{"evidence-ref-service-goal-launched-001"},
+	}, nil
+}
+
+type serviceGoalObserverForTestV0 struct {
+	result orquestagoal.GoalWorkResultV0
+}
+
+func (observer serviceGoalObserverForTestV0) ObserveGoalWorkV0(
+	_ context.Context,
+	_ orquestagoal.GoalObservationRequestV0,
+) (orquestagoal.GoalWorkResultV0, error) {
+	return observer.result, nil
+}
+
+type serviceGoalStateStoreForTestV0 struct {
+	states map[string]AppDirectorGoalStateV0
+}
+
+func newServiceGoalStateStoreForTestV0() *serviceGoalStateStoreForTestV0 {
+	return &serviceGoalStateStoreForTestV0{states: map[string]AppDirectorGoalStateV0{}}
+}
+
+func (store *serviceGoalStateStoreForTestV0) SaveGoalWorkStateV0(
+	_ context.Context,
+	state AppDirectorGoalStateV0,
+) error {
+	normalized, err := NewAppDirectorGoalStateV0(state)
+	if err != nil {
+		return err
+	}
+	store.states[normalized.RunRef] = normalized
+	return nil
+}
+
+func (store *serviceGoalStateStoreForTestV0) LoadGoalWorkStateV0(
+	_ context.Context,
+	runRef string,
+) (AppDirectorGoalStateV0, error) {
+	state, ok := store.states[runRef]
+	if !ok {
+		return AppDirectorGoalStateV0{}, AppDirectorServiceIssueV0{Field: "goal_state"}
+	}
+	return state, nil
 }
 
 func validStartAppDirectorRequestForTestV0() StartAppDirectorRequestV0 {

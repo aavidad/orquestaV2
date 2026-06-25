@@ -57,6 +57,44 @@ func TestControlPlaneGuardV0BloqueaMutacionRemotaSinTokenV0(t *testing.T) {
 	}
 }
 
+func TestControlPlaneGuardV0PermiteIntakeGuiadoRemotoSinTokenV0(t *testing.T) {
+	runtime := newControlPlaneRuntimeForTestV0(t, ConfigV0{
+		Addr:     "0.0.0.0:8787",
+		StateDir: t.TempDir(),
+		ControlPlane: ControlPlaneConfigV0{
+			RemoteAccessOptIn: true,
+			Token:             "secret-control-plane-token",
+		},
+	})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, controlPlaneReadOnlyAppIntakeGuidedTurnPathV0, nil)
+	runtime.HandlerV0().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestControlPlaneGuardV0MantieneAppsChangeRemotoComoMutacionV0(t *testing.T) {
+	runtime := newControlPlaneRuntimeForTestV0(t, ConfigV0{
+		Addr:     "0.0.0.0:8787",
+		StateDir: t.TempDir(),
+		ControlPlane: ControlPlaneConfigV0{
+			RemoteAccessOptIn: true,
+			Token:             "secret-control-plane-token",
+		},
+	})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/apps/app-ref-001/changes", nil)
+	runtime.HandlerV0().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestControlPlaneGuardV0PermiteMutacionRemotaConTokenYPrincipalV0(t *testing.T) {
 	runtime := newControlPlaneRuntimeForTestV0(t, ConfigV0{
 		Addr:     "0.0.0.0:8787",

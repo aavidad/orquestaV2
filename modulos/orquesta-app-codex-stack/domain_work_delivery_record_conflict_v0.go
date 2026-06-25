@@ -25,6 +25,11 @@ func mergeDomainWorkArtifactSubmissionRecordV0(
 		}
 		return DomainWorkArtifactSubmissionRecordV0{}, fmt.Errorf("domain_work_submit_conflict")
 	}
+	if existing.Status == DomainWorkArtifactSubmissionStatusSubmittedV0 &&
+		existing.ReceiptRef != "" && incoming.ReceiptRef != "" &&
+		existing.ReceiptRef != incoming.ReceiptRef {
+		return DomainWorkArtifactSubmissionRecordV0{}, fmt.Errorf("domain_work_submit_conflict")
+	}
 	if !domainWorkSubmissionStatusTransitionAllowedV0(existing.Status, incoming.Status) {
 		return DomainWorkArtifactSubmissionRecordV0{}, fmt.Errorf("domain_work_submit_conflict")
 	}
@@ -72,17 +77,24 @@ func domainWorkSubmissionStatusTransitionAllowedV0(existing string, incoming str
 	if existing == "" || existing == DomainWorkArtifactSubmissionStatusClaimedV0 {
 		return incoming == DomainWorkArtifactSubmissionStatusClaimedV0 ||
 			incoming == DomainWorkArtifactSubmissionStatusSubmittingV0 ||
+			incoming == DomainWorkArtifactSubmissionStatusSubmittedV0 ||
 			domainWorkSubmissionTerminalStatusV0(incoming)
 	}
 	if existing == DomainWorkArtifactSubmissionStatusSubmittingV0 {
-		return incoming == DomainWorkArtifactSubmissionStatusClaimedV0 ||
-			incoming == DomainWorkArtifactSubmissionStatusSubmittingV0 ||
+		return incoming == DomainWorkArtifactSubmissionStatusSubmittingV0 ||
+			incoming == DomainWorkArtifactSubmissionStatusSubmittedV0 ||
+			incoming == DomainWorkArtifactSubmissionStatusRejectedV0 ||
+			domainWorkSubmissionTerminalStatusV0(incoming)
+	}
+	if existing == DomainWorkArtifactSubmissionStatusSubmittedV0 {
+		return incoming == DomainWorkArtifactSubmissionStatusSubmittedV0 ||
 			incoming == DomainWorkArtifactSubmissionStatusRejectedV0 ||
 			domainWorkSubmissionTerminalStatusV0(incoming)
 	}
 	if existing == DomainWorkArtifactSubmissionStatusRejectedV0 {
 		return incoming == DomainWorkArtifactSubmissionStatusClaimedV0 ||
 			incoming == DomainWorkArtifactSubmissionStatusSubmittingV0 ||
+			incoming == DomainWorkArtifactSubmissionStatusSubmittedV0 ||
 			incoming == DomainWorkArtifactSubmissionStatusRejectedV0 ||
 			domainWorkSubmissionTerminalStatusV0(incoming)
 	}

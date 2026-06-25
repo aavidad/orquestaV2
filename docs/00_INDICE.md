@@ -28,6 +28,7 @@ por el orden de autoridad documental indicado abajo.
 | Loop de aplicacion | `modulos/orquesta-orchestration-core` | [director operativo](director_operativo_v1_2026-05-17.md), [cierre generico](corte_cierre_generico_director_operativo_2026-05-17.md) |
 | Director Operativo | `modulos/orquesta-director-operativo`, `modulos/orquesta-app-director-service` | [director operativo](director_operativo_v1_2026-05-17.md), [corte director tarde](corte_director_funcionando_tarde_2026-05-17.md) |
 | Ciclo neutral V2 | `modulos/orquesta-director-cycle`, `modulos/orquesta-director-runner`, `modulos/orquesta-director-scheduler`, `modulos/orquesta-director-cycle-outbox` | [guia nucleo](guia_nucleo_orquestacion_2026-05-17.md), [matriz](matriz_pruebas_reales_y_smoke_2026-05-17.md) |
+| Goal-first | `modulos/orquesta-goal`, `modulos/orquesta-runtime-codex-goal` | [goal-first Codex](orquesta_goal_first_codex_2026-06-25.md) |
 | Trabajo externo neutral | `modulos/orquesta-domain-work`, `modulos/orquesta-app-change`, `modulos/orquesta-external-work-run` | [principio director](principio_orquesta_piensa_director.md), [guia nucleo](guia_nucleo_orquestacion_2026-05-17.md) |
 | Runtime y composicion | `modulos/orquesta-runtime*`, `modulos/orquesta-app-codex-stack`, `cmd/orquesta-server`, `modulos/orquesta-server` | [matriz](matriz_pruebas_reales_y_smoke_2026-05-17.md), runbooks en `docs/runbooks/` |
 | Web/MCP/API | `modulos/orquesta-web`, `modulos/orquesta-mcp`, `cmd/orquesta-server` | [backlog autoprogramacion](autoprogramacion_orquesta_pendientes_2026-05-23.md), runbooks de API/web/MCP |
@@ -69,6 +70,7 @@ por el orden de autoridad documental indicado abajo.
 - [corte_replan_negativo_followups_split_2026-05-21.md](corte_replan_negativo_followups_split_2026-05-21.md)
 - [corte_plan_state_director_decisions_2026-05-21.md](corte_plan_state_director_decisions_2026-05-21.md)
 - [informe_operativo_cierre_autoprogramacion_2026-05-25.md](informe_operativo_cierre_autoprogramacion_2026-05-25.md)
+- [orquesta_goal_first_codex_2026-06-25.md](orquesta_goal_first_codex_2026-06-25.md)
 
 ## Politicas y disenos reutilizables
 

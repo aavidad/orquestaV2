@@ -116,8 +116,17 @@ func (runtime *RuntimeV0) prepareIdleSelfImprovementBatchV0(
 			continue
 		}
 		if !result.Accepted {
+			failure := idleSelfImprovementPrepareFailureFromResultV0(request, result)
+			if idleSelfImprovementPreparePendingV0(failure) {
+				runtime.persistStateTransitionV0(
+					ctx,
+					runtime.tracker.MarkIdleSelfImprovementPreparePendingV0(failure, runtime.clock.Now()),
+					"idle_self_improvement_prepare_pending",
+				)
+				continue
+			}
 			failed = true
-			failures = append(failures, idleSelfImprovementPrepareFailureFromResultV0(request, result))
+			failures = append(failures, failure)
 			continue
 		}
 		if failed {

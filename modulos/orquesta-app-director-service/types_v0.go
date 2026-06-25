@@ -9,6 +9,7 @@ import (
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
 	orquestadirectoroperativo "orquesta/modulos/orquesta-director-operativo"
 	orquestafactory "orquesta/modulos/orquesta-factory"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 )
@@ -18,6 +19,8 @@ const (
 	StartAppDirectorStatusStartedV0       = "started"
 	StartAppDirectorStatusPendingV0       = "pending"
 	StartAppDirectorStatusInvalidV0       = "invalid"
+	AppDirectorGoalStateSchemaVersionV0   = orquestagoal.GoalWorkStateSchemaV0
+	ObserveAppDirectorGoalResultSchemaV0  = "observe_app_director_goal_result.v0"
 )
 
 type StartAppDirectorRequestV0 struct {
@@ -70,6 +73,10 @@ type StartAppDirectorPortsV0 struct {
 	OperationalPlanStateStore   orquestacionnucleoapp.OperationalDirectorPlanStateStorePortV0
 	RequiredTestEvidenceStore   orquestacionnucleoapp.RequiredTestEvidenceReaderPortV0
 	RequiredTestRunner          orquestacionnucleoapp.RequiredTestRunnerPortV0
+	GoalLauncher                orquestagoal.GoalWorkLauncherPortV0
+	GoalObserver                orquestagoal.GoalWorkObservationPortV0
+	GoalClosureValidator        orquestagoal.GoalWorkClosureValidatorPortV0
+	GoalStateStore              orquestagoal.GoalWorkStateStorePortV0
 	ExternalWaiter              orquestacionnucleoapp.ExternalProgressWaiterPortV0
 	OperationalClosureSource    AppDirectorOperationalClosureSourcePortV0
 }
@@ -102,18 +109,42 @@ type AppDirectorOperationalClosureRequestV0 struct {
 	EvidenceRefs             []string
 }
 
+type AppDirectorGoalStateV0 = orquestagoal.GoalWorkStateV0
+
+type ObserveAppDirectorGoalRequestV0 struct {
+	RunRef        string `json:"run_ref"`
+	OccurredAt    string `json:"occurred_at,omitempty"`
+	CorrelationID string `json:"correlation_id,omitempty"`
+	RequestedBy   string `json:"requested_by,omitempty"`
+}
+
+type ObserveAppDirectorGoalResultV0 struct {
+	SchemaVersion   string                               `json:"schema_version"`
+	Status          string                               `json:"status"`
+	RunRef          string                               `json:"run_ref"`
+	GoalRef         string                               `json:"goal_ref"`
+	ExternalGoalRef string                               `json:"external_goal_ref,omitempty"`
+	GoalResult      orquestagoal.GoalWorkResultV0        `json:"goal_result,omitempty"`
+	Closure         orquestagoal.GoalClosureValidationV0 `json:"closure,omitempty"`
+	EvidenceRefs    []string                             `json:"evidence_refs,omitempty"`
+}
+
 type StartAppDirectorResultV0 struct {
-	SchemaVersion    string                                        `json:"schema_version"`
-	Status           string                                        `json:"status"`
-	CorrelationID    string                                        `json:"correlation_id,omitempty"`
-	AppSpec          orquestafactory.AppSpecV0                     `json:"app_spec,omitempty"`
-	Run              orquestacoreworkflow.OrchestrationRunV0       `json:"run,omitempty"`
-	DirectorTask     orquestaappdirectorintake.AppDirectorTaskV0   `json:"director_task,omitempty"`
-	DirectorTasks    []orquestaappdirectorintake.AppDirectorTaskV0 `json:"director_tasks,omitempty"`
-	LoopStatus       orquestacionnucleoapp.ProgressiveLoopStatusV0 `json:"loop_status,omitempty"`
-	StartedAgents    []string                                      `json:"started_agents,omitempty"`
-	ValidationIssues []orquestafactory.ValidationIssue             `json:"validation_issues,omitempty"`
-	EvidenceRefs     []string                                      `json:"evidence_refs,omitempty"`
+	SchemaVersion     string                                        `json:"schema_version"`
+	Status            string                                        `json:"status"`
+	CorrelationID     string                                        `json:"correlation_id,omitempty"`
+	AppSpec           orquestafactory.AppSpecV0                     `json:"app_spec,omitempty"`
+	Run               orquestacoreworkflow.OrchestrationRunV0       `json:"run,omitempty"`
+	DirectorTask      orquestaappdirectorintake.AppDirectorTaskV0   `json:"director_task,omitempty"`
+	DirectorTasks     []orquestaappdirectorintake.AppDirectorTaskV0 `json:"director_tasks,omitempty"`
+	LoopStatus        orquestacionnucleoapp.ProgressiveLoopStatusV0 `json:"loop_status,omitempty"`
+	StartedAgents     []string                                      `json:"started_agents,omitempty"`
+	GoalRef           string                                        `json:"goal_ref,omitempty"`
+	ExternalGoalRef   string                                        `json:"external_goal_ref,omitempty"`
+	GoalStatus        string                                        `json:"goal_status,omitempty"`
+	GoalLaunchReceipt *orquestagoal.GoalLaunchReceiptV0             `json:"goal_launch_receipt,omitempty"`
+	ValidationIssues  []orquestafactory.ValidationIssue             `json:"validation_issues,omitempty"`
+	EvidenceRefs      []string                                      `json:"evidence_refs,omitempty"`
 }
 
 type AppDirectorServiceIssueV0 struct {

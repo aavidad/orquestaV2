@@ -79,7 +79,12 @@ func (tracker *StatusTrackerV0) restoreIdleSelfImprovementWindowV0(state StateV0
 	tracker.idleSelfImprovementAttempts = nonNegativeServerIntV0(state.IdleSelfImprovementRuns)
 	tracker.idleSelfImprovementPrepared = nonNegativeServerIntV0(state.IdleSelfImprovementOK)
 	tracker.idleSelfImprovementInFlight = false
-	tracker.idleSelfImprovementAccepted = strings.HasPrefix(state.IdleSelfImprovementReason, "prepared")
+	reasonCode := ""
+	if state.IdleSelfImprovementOperationalMessage != nil {
+		reasonCode = state.IdleSelfImprovementOperationalMessage.ReasonCode
+	}
+	tracker.idleSelfImprovementAccepted = strings.HasPrefix(state.IdleSelfImprovementReason, "prepared") ||
+		idleSelfImprovementGoalObservationReasonV0(state.IdleSelfImprovementReason, reasonCode)
 	if parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(state.IdleSelfImprovementCheck)); err == nil {
 		tracker.lastIdleSelfImprovementAt = parsed.UTC()
 	}

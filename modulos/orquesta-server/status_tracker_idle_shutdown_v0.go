@@ -61,6 +61,19 @@ func (tracker *StatusTrackerV0) MarkIdleSelfImprovementPreparedV0(
 		state.LastHeartbeatAt = formatTimeV0(now)
 		state.IdleSelfImprovementCheck = formatTimeV0(now)
 		state.IdleSelfImprovementReason = idleSelfImprovementPreparedReasonV0(result)
+		state.IdleSelfImprovementGoalSpec = nil
+		if strings.TrimSpace(result.GoalSpec.GoalRef) != "" {
+			goalSpec := copyGoalWorkSpecForServerStateV0(result.GoalSpec)
+			state.IdleSelfImprovementGoalSpec = &goalSpec
+		}
+		state.IdleSelfImprovementGoalReceipt = nil
+		if strings.TrimSpace(result.GoalReceipt.GoalRef) != "" ||
+			strings.TrimSpace(result.GoalReceipt.ExternalGoalRef) != "" {
+			goalReceipt := copyGoalLaunchReceiptForServerStateV0(result.GoalReceipt)
+			state.IdleSelfImprovementGoalReceipt = &goalReceipt
+		}
+		state.IdleSelfImprovementGoalResult = nil
+		state.IdleSelfImprovementGoalClosure = nil
 		state.IdleSelfImprovementOperationalMessage = projectServerOperationalMessageRecordV0(
 			serverOperationalMessageInputV0{
 				Scope:        "idle_self_improvement",
@@ -68,6 +81,7 @@ func (tracker *StatusTrackerV0) MarkIdleSelfImprovementPreparedV0(
 				Status:       result.Status,
 				Message:      result.Message,
 				RunRefs:      []string{result.RunRef},
+				GoalRefs:     []string{result.GoalRef, result.ExternalGoalRef},
 				RequestRefs:  []string{result.RequestRef},
 				EvidenceRefs: result.EvidenceRefs,
 				Counters: map[string]int{
@@ -121,6 +135,12 @@ func idleSelfImprovementPreparedReasonV0(result IdleSelfImprovementResultV0) str
 	reason := []string{"prepared"}
 	if strings.TrimSpace(result.RunRef) != "" {
 		reason = append(reason, "run_ref="+strings.TrimSpace(result.RunRef))
+	}
+	if strings.TrimSpace(result.GoalRef) != "" {
+		reason = append(reason, "goal_ref="+strings.TrimSpace(result.GoalRef))
+	}
+	if strings.TrimSpace(result.ExternalGoalRef) != "" {
+		reason = append(reason, "external_goal_ref="+strings.TrimSpace(result.ExternalGoalRef))
 	}
 	if strings.TrimSpace(result.RequestRef) != "" {
 		reason = append(reason, "request_ref="+strings.TrimSpace(result.RequestRef))

@@ -59,6 +59,26 @@ func TestNeutralOrchestrationPackagesDoNotImportProductAdapters(t *testing.T) {
 			},
 		},
 		{
+			pkg: "orquesta/modulos/orquesta-goal",
+			forbidden: []string{
+				"database/sql",
+				"orquesta/cmd",
+				"orquesta/db",
+				"orquesta/modulos/orquesta-app-codex-stack",
+				"orquesta/modulos/orquesta-domain-work-file",
+				"orquesta/modulos/orquesta-domain-work-sql",
+				"orquesta/modulos/orquesta-mcp",
+				"orquesta/modulos/orquesta-opes-",
+				"orquesta/modulos/orquesta-run-file",
+				"orquesta/modulos/orquesta-runtime",
+				"orquesta/modulos/orquesta-state-file",
+				"orquesta/modulos/orquesta-web",
+				"net/http",
+				"os",
+				"os/exec",
+			},
+		},
+		{
 			pkg: "orquesta/modulos/orquesta-orchestration-core",
 			forbidden: []string{
 				"orquesta/cmd",
@@ -200,6 +220,7 @@ func TestNeutralOrchestrationPackagesDoNotDependOnProductAdapters(t *testing.T) 
 		"orquesta/modulos/orquesta-core",
 		"orquesta/modulos/orquesta-core-workflow",
 		"orquesta/modulos/orquesta-domain-work",
+		"orquesta/modulos/orquesta-goal",
 		"orquesta/modulos/orquesta-orchestration-core",
 	} {
 		deps := packageDepsForBoundaryTest(t, pkg)
@@ -212,6 +233,46 @@ func TestNeutralOrchestrationPackagesDoNotDependOnProductAdapters(t *testing.T) 
 				if strings.Contains(dep, forbidden) {
 					t.Fatalf("%s depends on forbidden product adapter %s", pkg, dep)
 				}
+			}
+		}
+	}
+}
+
+func TestCodexGoalAdapterDoesNotImportServerStorageOrShell(t *testing.T) {
+	imports := packageImportsForBoundaryTest(t, "orquesta/modulos/orquesta-runtime-codex-goal")
+	for _, forbidden := range []string{
+		"net/http",
+		"os",
+		"os/exec",
+	} {
+		for _, imported := range imports {
+			if imported == forbidden {
+				t.Fatalf("orquesta-runtime-codex-goal imports forbidden dependency %s", imported)
+			}
+		}
+	}
+	deps := packageDepsForBoundaryTest(t, "orquesta/modulos/orquesta-runtime-codex-goal")
+	for _, forbidden := range []string{
+		"database/sql",
+		"github.com/go-sql-driver/mysql",
+		"github.com/jackc/pgx",
+		"github.com/lib/pq",
+		"github.com/mattn/go-sqlite3",
+		"modernc.org/sqlite",
+		"orquesta/cmd",
+		"orquesta/db",
+		"orquesta/modulos/orquesta-app-codex-stack",
+		"orquesta/modulos/orquesta-domain-work-file",
+		"orquesta/modulos/orquesta-domain-work-sql",
+		"orquesta/modulos/orquesta-mcp",
+		"orquesta/modulos/orquesta-opes-",
+		"orquesta/modulos/orquesta-run-file",
+		"orquesta/modulos/orquesta-state-file",
+		"orquesta/modulos/orquesta-web",
+	} {
+		for _, dep := range deps {
+			if strings.Contains(dep, forbidden) {
+				t.Fatalf("orquesta-runtime-codex-goal depends on forbidden adapter dependency %s", dep)
 			}
 		}
 	}
@@ -267,6 +328,7 @@ func TestNeutralOrchestrationPackagesDoNotDependOnFactoryOrHTTP(t *testing.T) {
 		"orquesta/modulos/orquesta-domain-work",
 		"orquesta/modulos/orquesta-domain-work-memory",
 		"orquesta/modulos/orquesta-external-work-run",
+		"orquesta/modulos/orquesta-goal",
 		"orquesta/modulos/orquesta-orchestration-core",
 		"orquesta/modulos/orquesta-run-control",
 		"orquesta/modulos/orquesta-run-queue",
@@ -331,6 +393,7 @@ func TestNeutralOrchestrationProductionCodeDoesNotHardcodeLocalPaths(t *testing.
 	for _, dir := range []string{
 		"modulos/orquesta-core-workflow",
 		"modulos/orquesta-domain-work",
+		"modulos/orquesta-goal",
 		"modulos/orquesta-orchestration-core",
 	} {
 		err := filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {

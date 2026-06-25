@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
 func TestMCPAutoprogrammingPrepareRunHTTPHandlerV0DelegaEnExecutor(t *testing.T) {
@@ -18,6 +20,16 @@ func TestMCPAutoprogrammingPrepareRunHTTPHandlerV0DelegaEnExecutor(t *testing.T)
 			Accepted:      true,
 			RunRef:        "run-autoprogramming-001",
 			WaitAgentRefs: []string{"agent-request-001"},
+			GoalSpecs: []orquestagoal.GoalWorkSpecV0{{
+				SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+				GoalRef:       "goal-ref-autoprogramming-001",
+				RequestRef:    "request-autoprogramming-001",
+				RunRef:        "run-autoprogramming-001",
+				WorkKind:      "autoprogramming",
+				Objective:     "Preparar goal desde prepare-run.",
+				DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+				WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "modulos/orquesta-mcp"}},
+			}},
 		},
 	}
 	body := bytes.NewBuffer(nil)
@@ -41,7 +53,10 @@ func TestMCPAutoprogrammingPrepareRunHTTPHandlerV0DelegaEnExecutor(t *testing.T)
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if result.RunRef != "run-autoprogramming-001" || len(result.WaitAgentRefs) != 1 {
+	if result.RunRef != "run-autoprogramming-001" ||
+		len(result.WaitAgentRefs) != 1 ||
+		len(result.GoalSpecs) != 1 ||
+		result.GoalSpecs[0].RunRef != "run-autoprogramming-001" {
 		t.Fatalf("result=%+v", result)
 	}
 }

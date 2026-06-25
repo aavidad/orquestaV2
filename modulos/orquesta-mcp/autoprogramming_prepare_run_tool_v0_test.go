@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
 func TestMCPAutoprogrammingPrepareRunDescriptorV0EsAdaptadorOptIn(t *testing.T) {
@@ -21,6 +23,9 @@ func TestMCPAutoprogrammingPrepareRunDescriptorV0EsAdaptadorOptIn(t *testing.T) 
 	}
 	if !strings.Contains(descriptor.InputSchema, "autoprogramming_request:AutoprogrammingRequestV0") {
 		t.Fatalf("descriptor debe publicar autoprogramming_request como objeto tipado, no string generico: %q", descriptor.InputSchema)
+	}
+	if !strings.Contains(descriptor.Output, "goal_specs?") {
+		t.Fatalf("descriptor debe publicar goal_specs opcional en prepare-run: %q", descriptor.Output)
 	}
 }
 
@@ -56,6 +61,14 @@ func TestMCPAutoprogrammingPrepareRunTransportV0BoundInvocaExecutor(t *testing.T
 			RunRef:           "run-ref-prepare-run-bound-001",
 			WorkflowTaskRefs: []string{"workflow-task-ref-001"},
 			WaitAgentRefs:    []string{"agent-request-ref-001"},
+			GoalSpecs: []orquestagoal.GoalWorkSpecV0{{
+				SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+				GoalRef:       "goal-ref-prepare-run-bound-001",
+				RunRef:        "run-ref-prepare-run-bound-001",
+				Objective:     "validar transporte MCP de goal_specs",
+				DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+				WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "modulos/orquesta-mcp"}},
+			}},
 		},
 	}
 	transport := newFakeMCPTransportV0()
@@ -101,7 +114,10 @@ func TestMCPAutoprogrammingPrepareRunTransportV0BoundInvocaExecutor(t *testing.T
 	if result.Estado != MCPAutoprogrammingPrepareRunEstadoOKV0 ||
 		!result.Accepted ||
 		result.RunRef != "run-ref-prepare-run-bound-001" ||
-		len(result.WaitAgentRefs) != 1 {
+		len(result.WaitAgentRefs) != 1 ||
+		len(result.GoalSpecs) != 1 ||
+		result.GoalSpecs[0].RunRef != "run-ref-prepare-run-bound-001" ||
+		result.GoalSpecs[0].DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 {
 		t.Fatalf("result=%+v", result)
 	}
 	assertTransportPayloadSaneadoMCPTestV0(t, output, 1400)

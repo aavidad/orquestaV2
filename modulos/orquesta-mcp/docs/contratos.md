@@ -167,13 +167,17 @@ Campos:
     estado: ok
     route_policy: entrada operativa preferente por Director V2
     app_spec: resumen compacto
-    run_ref: ref interna neutra
-	    phase_id: fase inicial
-	    director_task: task_ref, brainstorm_ref, agent_request_id y capacidad
-	    director_tasks: lista compacta de tareas/directores arrancables cuando
-	      la solicitud requiere equipo director
-	    loop_status: estado compacto del loop
-	    started_agents: agentes arrancados por Orquesta
+    run_ref: ref interna neutra cuando se usa loop legacy
+    phase_id: fase inicial
+    director_task: task_ref, brainstorm_ref, agent_request_id y capacidad
+    director_tasks: lista compacta de tareas/directores arrancables cuando
+      la solicitud requiere equipo director
+    loop_status: estado compacto del loop
+    started_agents: agentes arrancados por Orquesta
+    goal_ref, external_goal_ref, goal_status: refs compactas cuando la
+      composicion usa goal-first
+    goal_launch_receipt: receipt neutral de `orquesta-goal`, sin prompt ni
+      payload interno
   output_error:
     estado: error
     errores_publicos: issues de factory o servicio de aplicacion
@@ -184,6 +188,7 @@ Invariantes:
   - Permite que el formulario web invoque Orquesta sin conocer factory, workflow ni launcher.
 	Pruebas de contrato:
 	  - Ejecucion con puertos fake arranca director y devuelve `started_agents`.
+	  - Ejecucion con `GoalLauncher` devuelve `goal_ref` sin arrancar agentes legacy.
 	  - Autonomia alta devuelve `director_tasks` y arranca equipo por batch.
 	  - Request/correlation externos con `mcp` se traducen a refs internas neutras.
 	  - Request invalida devuelve errores publicos sin crear run.
@@ -1288,6 +1293,9 @@ Campos:
     accepted: true
     run_ref, project_ref, worktree_ref, branch_ref, phase_id
     workflow_task_refs, wait_agent_refs
+    goal_specs: contratos `GoalWorkSpecV0` opcionales cuando la composicion
+      clasifica el trabajo como `goal_ready`; preparan el handoff a Goal pero
+      no implican lanzamiento de runtime
     continue: request compacta para supervision posterior con `run_ref`
       explicito
   output_error:
@@ -1305,6 +1313,7 @@ Pruebas de contrato:
   - Descriptor compacto y saneado.
   - Registro MCP publica el tool.
   - Transporte bound invoca executor fake y devuelve resultado `ok`.
+  - Descriptor y transporte publican `goal_specs` como salida opcional.
   - Transporte sin executor devuelve `mcp_transport_tool_unbound`.
   - HTTP `POST /api/v0/autoprogramming/prepare-run` delega en executor fake.
 ```

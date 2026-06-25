@@ -18,11 +18,12 @@ const (
 	workflowWaitsDirV0             = "workflow_waits"
 	requiredTestEvidenceDirV0      = "required_test_evidence"
 	operationalPlanStatesDirV0     = "operational_director_plan_states"
+	appDirectorGoalStatesDirV0     = "app_director_goal_states"
 	agentProcessesDirV0            = "agent_processes"
 )
 
 func ensureStoreDirsV0(rootDir string) error {
-	for _, dir := range []string{runsDirV0, eventsDirV0, eventIndexesDirV0, eventRecordsDirV0, workflowTasksDirV0, workflowTaskParentIndexesDirV0, workflowWaitsDirV0, requiredTestEvidenceDirV0, operationalPlanStatesDirV0, agentProcessesDirV0} {
+	for _, dir := range []string{runsDirV0, eventsDirV0, eventIndexesDirV0, eventRecordsDirV0, workflowTasksDirV0, workflowTaskParentIndexesDirV0, workflowWaitsDirV0, requiredTestEvidenceDirV0, operationalPlanStatesDirV0, appDirectorGoalStatesDirV0, agentProcessesDirV0} {
 		if err := os.MkdirAll(filepath.Join(rootDir, dir), 0o700); err != nil {
 			return err
 		}
@@ -64,6 +65,10 @@ func (store *StoreV0) requiredTestEvidencePathV0(runRef string, evidenceRef stri
 
 func (store *StoreV0) operationalDirectorPlanStatePathV0(runRef string, planRef string) string {
 	return filepath.Join(store.rootDir, operationalPlanStatesDirV0, hashRefsV0(runRef), hashRefsV0(planRef)+".json")
+}
+
+func (store *StoreV0) appDirectorGoalStatePathV0(runRef string) string {
+	return filepath.Join(store.rootDir, appDirectorGoalStatesDirV0, hashRefsV0(runRef)+".json")
 }
 
 func (store *StoreV0) agentProcessPathV0(runRef string, agentRequestRef string) string {

@@ -41,6 +41,10 @@ Puertos opcionales:
   cuando `ContinueAppDirectorV0` reentra por `operational_director_plan_ref`;
 - `EventReader`, opcional pero necesario para que el plan state pueda avanzar
   `review_deliveries` desde el historial durable de eventos;
+- `GoalLauncher`, opcional para modo goal-first. Si se inyecta, el servicio
+  persiste el intake/run, compila un `GoalWorkSpecV0` neutral desde
+  `AppSpecV0`, lanza el goal por el puerto y no entra en el loop legacy de
+  agentes;
 - `max_decision_cycles`, limite acotado para consumir decisiones y volver a ejecutar el loop sin quedar en bucle.
 
 Salida: `StartAppDirectorResultV0`.
@@ -51,6 +55,8 @@ Salida: `StartAppDirectorResultV0`.
 - `director_tasks`;
 - `loop_status`;
 - `started_agents`;
+- `goal_ref`, `external_goal_ref`, `goal_status` y `goal_launch_receipt` cuando
+  el arranque se hizo por goal-first;
 - `evidence_refs`.
 
 Invariantes:
@@ -76,6 +82,9 @@ Invariantes:
   pending agent refs y `wait_ref` cuando ese tramo viene de
   `ContinueAppDirectorV0`, de `StartAppDirectorV0` con plan directo o de
   decisiones ya materializadas del director.
+- si hay `GoalLauncher`, Orquesta conserva la frontera neutral: el servicio no
+  conoce Codex, proveedor, shell ni daemon; solo usa `orquesta-goal` y el puerto
+  inyectado por la composicion.
 
 ## `ContinueAppDirectorV0`
 

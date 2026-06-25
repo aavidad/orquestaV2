@@ -480,10 +480,11 @@ go test -count=1 ./modulos/orquesta-mcp \
 ```
 
 Evidencia esperada: el registro MCP publica
-`orquesta.autoprogramming.prepare_run.v0` como tool opt-in; sin executor
-devuelve `mcp_transport_tool_unbound`, con executor inyectado invoca el puerto
-fake, y el bridge HTTP `POST /api/v0/autoprogramming/prepare-run` delega sin
-conocer Codex, OPES, runtime, DB ni filesystem productivo.
+`orquesta.autoprogramming.prepare_run.v0` como tool opt-in y salida opcional
+`goal_specs`; sin executor devuelve `mcp_transport_tool_unbound`, con executor
+inyectado invoca el puerto fake, y el bridge HTTP
+`POST /api/v0/autoprogramming/prepare-run` delega sin conocer Codex, OPES,
+runtime, DB ni filesystem productivo.
 
 ## Prueba automejora con consejo de operador 2026-05-23
 

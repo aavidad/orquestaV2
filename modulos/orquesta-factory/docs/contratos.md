@@ -136,11 +136,15 @@ Invariantes:
 - `locale` y `i18n.default_locale` usan BCP 47.
 - `i18n.enabled` es `true` por defecto; si es `false`, debe haber
   `i18n.justificacion`.
-- `preferencias_tecnicas.arquitectura` es `hexagonal` por defecto y cualquier
-  valor no hexagonal es incompatible.
-- La hexagonalidad no es advisory: una app generada debe separar domain,
-  application, ports, adapters y bootstrap/composicion.
-- `datos.db_required=true` obliga a declarar necesidad funcional, no proveedor.
+- `preferencias_tecnicas.arquitectura` es `hexagonal` por defecto cuando el
+  operador no elige patron, pero no es obligatorio. Se soportan `hexagonal`,
+  `clean_architecture`, `onion`, `modular_monolith`, `layered`,
+  `event_driven`, `microservices`, `serverless`, `plugin_based` y
+  `data_pipeline`.
+- La arquitectura elegida no es advisory: una app generada debe separar dominio
+  y aplicacion de adaptadores, IO, runtime, proveedores y bootstrap/composicion.
+- `datos.db_required=true` obliga a declarar necesidad funcional o datos/storage
+  detallados, no proveedor.
 - Las integraciones se expresan como conectores, no como llamadas directas a DB,
   filesystem, runtime, LLM, cache, cola ni deploy.
 
@@ -153,7 +157,7 @@ Errores:
 Pruebas de contrato:
 
 - Validar campos obligatorios.
-- Validar defaults de arquitectura hexagonal, i18n y documentacion.
+- Validar fallback `hexagonal`, patrones soportados, i18n y documentacion.
 - Rechazar proveedor DB directo como requisito de dominio.
 - Rechazar integracion runtime como parte de la peticion.
 
@@ -190,9 +194,9 @@ Campos:
 Invariantes:
 
 - `schema_version` es inmutable dentro de la version `v0`.
-- No hay excepcion productiva a arquitectura hexagonal para apps programadas por
-  Orquesta en `AppSpecV0`: si se solicita otra arquitectura, la request se
-  rechaza como incompatible.
+- `architecture.patron` debe ser uno de los patrones soportados. `hexagonal` es
+  el fallback conservador si no se declara patron, pero una request puede elegir
+  otro patron soportado.
 - Toda excepcion a i18n o documentacion por defecto debe estar en
   `defaults_applied` o en `validation.warnings`.
 - `data` no contiene tablas, SQL, dialectos ni detalles de proveedor.
@@ -216,7 +220,7 @@ Errores:
 Pruebas de contrato:
 
 - Serializacion estable de `AppSpecV0`.
-- Validacion de invariantes hexagonales estrictas/i18n/docs.
+- Validacion de fronteras limpias por patron, i18n y docs.
 - Validacion de ausencia de DB directa y runtime.
 - Validacion de errores publicos estables.
 
@@ -243,8 +247,8 @@ Invariantes:
 
 - Toda microtarea tiene criterio de cierre verificable.
 - Toda microtarea tiene write-set previsto o declara bloqueo.
-- El backlog incluye `ArquitecturaHexagonalEstricta v0` como contrato requerido
-  y microtarea de frontera antes de implementar.
+- El backlog incluye `ArquitecturaLimpiaSegunPatron v0` como contrato requerido;
+  si el patron es `hexagonal`, anade `ArquitecturaHexagonalEstricta v0`.
 - El backlog propuesto no arranca agentes ni asigna runtime.
 - El backlog propuesto no crea registros en DB.
 - Si una microtarea afecta otro modulo, debe quedar como bloqueo o consulta.

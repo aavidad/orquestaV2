@@ -45,7 +45,9 @@ func NuevaAppI18nTextV0(locale, key string) (string, error) {
 }
 
 func NuevaAppI18nRequiredKeysV0() []string {
-	return append([]string{}, nuevaAppI18nRequiredKeysV0...)
+	keys := append([]string{}, nuevaAppI18nRequiredKeysV0...)
+	keys = append(keys, nuevaAppHTMLHelpI18nKeysV0()...)
+	return keys
 }
 
 func (catalog NuevaAppI18nCatalogV0) Lookup(locale, key string) (string, error) {
@@ -64,7 +66,7 @@ func (catalog NuevaAppI18nCatalogV0) Lookup(locale, key string) (string, error) 
 
 func (catalog NuevaAppI18nCatalogV0) ValidateRequired() error {
 	for _, locale := range catalog.SupportedLocales() {
-		for _, key := range nuevaAppI18nRequiredKeysV0 {
+		for _, key := range NuevaAppI18nRequiredKeysV0() {
 			if catalog.lookupExact(locale, key) == "" {
 				return NuevaAppI18nErrorV0{
 					Code:   NuevaAppI18nErrCatalogoIncompletoV0,

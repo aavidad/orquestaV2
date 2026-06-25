@@ -316,6 +316,39 @@ Reconciliacion backlog 2026-06-20:
   corrige solo el rastro causal de la entrega rechazada: conserva el cierre
   documental, no relanza otro padre sobre la tarea original y no abre codigo
   nuevo sin regresion causal concreta.
+- el agente externo de reemplazo
+  `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-0b2-f385b5e4533d62b5c7d2a64b70950490`
+  aplica el mismo contrato de correccion: sincroniza evidencia local, conserva
+  la entrega valida anterior y limita el cierre al ACK causal y a la prueba
+  focal obligatoria.
+- la revalidacion OrquestaV2 del 2026-06-25
+  `task-ref-self-improvement-30d589fce14c` mantiene la misma decision: el
+  paquete trae contexto obligatorio `ref_only`, write-set cerrado a
+  `modulos/orquesta-server`, `backlog_scan_epoch:backlog-scan-epoch-ba0be0570440`
+  y `backlog_scan_ref:scan-ref-backlog-7c5facaa6c9e`; esos refs se resuelven
+  contra esta evidencia local y no reabren codigo sin regresion causal nueva
+  con refs concretas de job, receipt o artifact.
+- el agente externo de correccion
+  `agent-ref-task-ref-review-rework-task-autoprogramming-30d589fce14c-g01-8bb7a3491960a73cba493ed199be20e1`
+  conserva esa decision: completa solo el rastro causal de la revision, resuelve
+  `ref_only` por las docs locales de SRV-TASK-015 y cierra con la prueba focal
+  obligatoria si termina verde.
+- la correccion de entrega tras revision
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-dacb62e5ec1ae158a640baa674e72940`
+  mantiene el mismo no-op documental: resuelve `ref_only` por evidencia local,
+  conserva la entrega valida y no abre codigo salvo regresion causal nueva con
+  refs concretas de job, receipt o artifact.
+- la correccion externa de entrega tras revision
+  `agent-ref-task-ref-review-rework-task-autoprogramming-abea33163b68-g01-04bebd80bd7c5afa1ff0cde8543ec8ec`
+  conserva esa entrega valida: completa el rastro causal dentro del write-set
+  del servidor, resuelve el contexto obligatorio `ref_only` mediante evidencia
+  local y cierra solo con la prueba focal obligatoria verde.
+- correccion de rastro 2026-06-25: las refs
+  `agent-ref-task-ref-review-rework-task-autoprogramming-99f93b5dadeb-g01-46ac951607ee8f489f914ee25e92cb88`
+  y
+  `agent-ref-assessment-task-ref-review-rework-task-autoprogramming-99f93b5dadeb-g01-46a-de83dfc8cce6e142d5f9b4a9f2a47b24`
+  pertenecen a la request de SRV-TASK-024, no a SRV-TASK-015; no se usan como
+  evidencia nueva de este cierre documental.
 
 ## SRV-TASK-016: bridge OPES sin supervise manual por defecto
 
@@ -613,6 +646,146 @@ Criterio de cierre:
   despertar el supervisor;
 - replay del mismo `JOB_REF` no duplica run ni agente.
 
+Reconciliacion documental 2026-06-25:
+
+- `agent-ref-task-autoprogramming-99f93b5dadeb-g01` quedo bloqueado por
+  shutdown antes de editar o probar; no cierra este owner.
+- `agent-ref-task-ref-review-rework-task-autoprogramming-99f93b5dadeb-g01-46ac951607ee8f489f914ee25e92cb88`
+  y
+  `agent-ref-assessment-task-ref-review-rework-task-autoprogramming-99f93b5dadeb-g01-46a-de83dfc8cce6e142d5f9b4a9f2a47b24`
+  solo aportaron rastro documental y no declararon la prueba obligatoria como
+  pasada.
+- `agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-dc31be1188c5569b01263b5f388f0788`
+  corrige la asociacion causal de esas refs a SRV-TASK-024. El estado tecnico
+  sigue abierto: el cierre real requiere codigo que convierta
+  `resident_director_pending` en dispatch o bloqueo causal publico y smoke OPES
+  acotado; esta correccion no relanza padre ni amplia write-set.
+- `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-autoprogr-dc3-0ff5f84c9556672a698237df3988111c`
+  conserva esa correccion tras nueva evaluacion externa: contexto obligatorio
+  `ref_only` resuelto por paquete y docs locales, sin relanzar padre ni cerrar
+  SRV-TASK-024 por rastro documental.
+- `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-autoprogr-dc3-36f24a2209e93ca38f4443ce22f527cf`
+  reemplaza la evaluacion rechazada sin cambiar el owner tecnico: conserva la
+  entrega documental valida, resuelve `ref_only` por el paquete de control y
+  las docs locales, y mantiene SRV-TASK-024 abierto hasta que exista dispatch
+  real o bloqueo causal publico con smoke OPES acotado.
+- `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-autoprogr-dc3-a5a32e27fa8bf23a4b29ee07490e9a10`
+  corrige la entrega rechazada dentro del mismo alcance documental: conserva lo
+  valido, resuelve `ref_only` por paquete y fuentes locales, no relanza otro
+  padre y mantiene SRV-TASK-024 abierto hasta evidencia tecnica causal.
+- `agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-72998ee36295059452b54a9eb4e875ee`
+  completa el rework documental de burst 003: conserva la entrega valida ya
+  acumulada, resuelve `ref_only` por paquete y docs locales, no relanza padre
+  ni abre codigo dentro de este write-set, y mantiene SRV-TASK-024 abierto hasta
+  dispatch real o bloqueo causal publico con smoke OPES acotado.
+- `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-autoprogr-729-9fc3f13d44dbaff94cfe5adff747a3e9`
+  valida la correccion anterior como agente externo gobernado por OrquestaV2:
+  conserva la entrega documental util, resuelve `ref_only` por paquete de
+  control y fuentes locales, no relanza padre ni abre implementacion, y mantiene
+  SRV-TASK-024 abierto hasta dispatch real o bloqueo causal publico con smoke
+  OPES acotado.
+- `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-cfd9c13a92a5cd21fd6c622e6f405e46`
+  corrige esta entrega rechazada sin ampliar alcance: conserva la evidencia
+  documental util, resuelve `ref_only` por paquete de control y docs locales, no
+  relanza otro padre ni toca codigo, y mantiene SRV-TASK-024 abierto hasta
+  dispatch real o bloqueo causal publico con smoke OPES acotado.
+- `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-cfd-c006963b24043636d557f12d4659b4a3`
+  corrige la entrega externa asociada al mismo tramo de revision: conserva el
+  rastro documental valido, resuelve `ref_only` por paquete de control y docs
+  locales, no relanza padre ni abre codigo dentro del write-set documental, y
+  mantiene SRV-TASK-024 abierto hasta dispatch real o bloqueo causal publico
+  probado por smoke OPES acotado.
+- `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-cfd-791ce4584f28597b364194874b2875a4`
+  reemplaza el assessment rechazado sin ampliar alcance: conserva el rastro
+  documental valido, resuelve `ref_only` por paquete de control y fuentes
+  locales, no relanza padre ni abre codigo dentro del write-set documental, y
+  mantiene SRV-TASK-024 abierto hasta dispatch real o bloqueo causal publico
+  probado por smoke OPES acotado.
+- `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-99773dd28e4df93406b2912127997d04`
+  corrige la entrega rechazada de esta cadena sin ampliar alcance: conserva la
+  evidencia documental util, resuelve `ref_only` por paquete de control,
+  AGENTS raiz, README/AGENTS locales del servidor y docs locales, no relanza
+  padre ni toca codigo, y mantiene SRV-TASK-024 abierto hasta dispatch real o
+  bloqueo causal publico probado por smoke OPES acotado.
+- `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-30ffd078ad6ee9febe4c50ac0bd29891`
+  completa la correccion de entrega nueva sin ampliar alcance: conserva el
+  rastro documental valido, resuelve `ref_only` por paquete de control, AGENTS
+  raiz, README/AGENTS locales del servidor y docs locales, no relanza padre ni
+  toca codigo, y mantiene SRV-TASK-024 abierto hasta dispatch real o bloqueo
+  causal publico probado por smoke OPES acotado.
+- `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-30f-c4501a4d6b170b706b55f9a3dd4a44a6`
+  completa el assessment de esa correccion sin ampliar alcance: conserva el
+  rastro documental valido, resuelve `ref_only` por paquete de control, AGENTS
+  raiz, README/AGENTS locales del servidor y docs locales, no relanza padre ni
+  toca codigo, y mantiene SRV-TASK-024 abierto hasta dispatch real o bloqueo
+  causal publico probado por smoke OPES acotado.
+- `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-30f-aad45cf56f890e04e96c6b86b7c9bc7b`
+  corrige la entrega de replan por evaluacion sin ampliar alcance: conserva el
+  rastro documental valido, resuelve `ref_only` por paquete de control, AGENTS
+  raiz, README/AGENTS locales del servidor y docs locales, no relanza padre ni
+  toca codigo, y mantiene SRV-TASK-024 abierto hasta dispatch real o bloqueo
+  causal publico probado por smoke OPES acotado.
+- `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-30f-6842075f2c746477bb06b52d2c34e0c5`
+  completa la correccion de entrega tras revision sin ampliar alcance:
+  conserva el rastro documental valido, resuelve `ref_only` por paquete de
+  control, AGENTS raiz, README/AGENTS locales del servidor y docs locales, no
+  relanza padre ni toca codigo, y mantiene SRV-TASK-024 abierto hasta dispatch
+  real o bloqueo causal publico probado por smoke OPES acotado.
+- `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-9ba51f68ffa908088c91ca219cb73b84`
+  completa la correccion de entrega tras revision sin ampliar alcance: conserva
+  el rastro documental valido, resuelve `ref_only` por paquete de control,
+  AGENTS raiz, README/AGENTS locales del servidor y docs locales, no relanza
+  padre ni toca codigo, y mantiene SRV-TASK-024 abierto hasta dispatch real o
+  bloqueo causal publico probado por smoke OPES acotado.
+- `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-5f1990c9bda61f11e4c4572d7d8ec5f9`
+  completa esta correccion de entrega tras revision sin ampliar alcance:
+  conserva el rastro documental valido, resuelve `ref_only` por paquete de
+  control, AGENTS raiz, README/AGENTS locales del servidor y docs locales, no
+  relanza padre ni toca codigo, y mantiene SRV-TASK-024 abierto hasta dispatch
+  real o bloqueo causal publico probado por smoke OPES acotado.
+- `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-2f664d21881795ee2d8392327887480f`
+  completa esta correccion de entrega tras revision sin ampliar alcance:
+  conserva el rastro documental valido, resuelve `ref_only` por paquete de
+  control, AGENTS raiz, README/AGENTS locales del servidor y docs locales, no
+  relanza padre ni toca codigo, y mantiene SRV-TASK-024 abierto hasta dispatch
+  real o bloqueo causal publico probado por smoke OPES acotado.
+- `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-2f6-4a88d678723f47ef86524e438127a1e1`
+  completa esta evaluacion de correccion tras revision sin ampliar alcance:
+  conserva el rastro documental valido, resuelve `ref_only` por paquete de
+  control, AGENTS raiz, README/AGENTS locales del servidor y docs locales, no
+  relanza padre ni toca codigo, y mantiene SRV-TASK-024 abierto hasta dispatch
+  real o bloqueo causal publico probado por smoke OPES acotado.
+- `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-2f6-d07cfaec65f49155f8328d0512377fd7`
+  corrige la entrega rechazada de esa evaluacion sin ampliar alcance: conserva
+  el rastro documental valido, resuelve `ref_only` por paquete de control,
+  AGENTS raiz, README/AGENTS locales del servidor y docs locales, no relanza
+  padre ni toca codigo, y mantiene SRV-TASK-024 abierto hasta dispatch real o
+  bloqueo causal publico probado por smoke OPES acotado.
+- `agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-2f6-20f9ab529a94f082f863a30e7a9275dd`
+  corrige la evaluacion anterior sin ACK y no amplia alcance: conserva el
+  rastro documental valido, resuelve `ref_only` por paquete de control, AGENTS
+  raiz, README/AGENTS locales del servidor y docs locales, no relanza padre ni
+  toca codigo, y mantiene SRV-TASK-024 abierto hasta dispatch real o bloqueo
+  causal publico probado por smoke OPES acotado.
+- `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-d20f765b96bef254281f4683e6ab3480`
+  completa esta correccion de entrega tras revision sin ampliar alcance:
+  conserva el rastro documental valido, resuelve `ref_only` por paquete de
+  control, AGENTS raiz, README/AGENTS locales del servidor, foto vigente y docs
+  locales, no relanza padre ni toca codigo, y mantiene SRV-TASK-024 abierto
+  hasta dispatch real o bloqueo causal publico probado por smoke OPES acotado.
+- `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-9e9d33b777c6565a38a9b5a6eb7529a2`
+  completa esta correccion de entrega tras revision sin ampliar alcance:
+  conserva el rastro documental valido, resuelve `ref_only` por paquete de
+  control, AGENTS raiz, README/AGENTS locales del servidor, foto vigente y docs
+  locales, no relanza padre ni toca codigo, y mantiene SRV-TASK-024 abierto
+  hasta dispatch real o bloqueo causal publico probado por smoke OPES acotado.
+- `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-2b5521cd1c1dbd4767cebb3d9c1684d7`
+  completa esta correccion de entrega tras revision sin ampliar alcance:
+  conserva el rastro documental valido, resuelve `ref_only` por paquete de
+  control, AGENTS raiz, README/AGENTS locales del servidor, foto vigente y docs
+  locales, no relanza padre ni toca codigo, y mantiene SRV-TASK-024 abierto
+  hasta dispatch real o bloqueo causal publico probado por smoke OPES acotado.
+
 ## SRV-TASK-025: reconciliacion de ACK OPES no debe terminar en domain_work_submit_conflict sin publicar artefacto
 
 Estado: abierto 2026-06-21.
@@ -783,7 +956,7 @@ Criterio de cierre:
 
 ## SRV-TASK-028: stop de run debe confirmar parada real de procesos Codex
 
-Estado: abierto 2026-06-22.
+Estado: abierto 2026-06-22; avance local 2026-06-25 en `orquesta-server`.
 
 Origen:
 `docs/incidencia_opes_autonomia_tractorista_ack_idle_stop_2026-06-22.md`.
@@ -817,6 +990,11 @@ Alcance:
 
 Criterio de cierre:
 
+- avance 2026-06-25: la envoltura residente de
+  `/api/v0/server/shutdown` ya no acepta un `shutdown_ready=true` upstream si
+  la respuesta conserva agentes en vuelo, checkpoints pendientes o runs pedidos
+  sin confirmar; publica `shutdown_status=stop_pending` y mantiene congelado el
+  supervisor hasta confirmacion real;
 - test con runtime fake que ignora la primera parada: supervise devuelve
   `stop_pending`;
 - test con runtime fake que confirma parada: supervise devuelve `stopped` y
@@ -825,3 +1003,21 @@ Criterio de cierre:
   tras el cierre;
 - status publico distingue `stop_requested`, `stop_propagated`,
   `stop_confirmed` y `stop_pending`.
+
+## Rework documental SRV-TASK-024 2026-06-25
+
+Origen:
+`request-ref-autoprogramming-backlog-srv-task-024-90719eb4-reconcile-c83a27e7`,
+agente
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-15e93ad10820843acec443a42cbac3c7`.
+
+Resultado: entrega acotada a documentacion. El paquete trae contexto obligatorio
+`ref_only`, write-set cerrado a docs del servidor/backlog y prueba focal
+obligatoria. No se relanza otro padre ni se abre codigo porque no hay regresion
+causal nueva con refs de job, receipt, artifact o smoke OPES acotado. La
+evidencia local resuelve `required_ref_action=ack_evidence_required` mediante
+ACK con `contexto_ref_only_resuelto`.
+
+Criterio: SRV-TASK-024 sigue abierto hasta dispatch real o bloqueo causal
+publico probado; esta correccion solo cierra su propia entrega tras
+`go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`.

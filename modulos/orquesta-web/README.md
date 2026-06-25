@@ -35,10 +35,19 @@ negocio; enlaza a `/ops`, `/nueva-app`, `/autoprogramming`, `/app-change`,
 `/director-stats`, `/run-queue` y `/run-control` para que el operador pueda
 usar Orquesta desde la web sin recordar rutas API.
 
+La guia de opciones de `/nueva-app` esta en
+`docs/guia_nueva_app_opciones_2026-06-25.md`. Documenta el asistente guiado, el
+modo basico y el modo experto opcional para arquitectura, datos,
+almacenamiento, integraciones multiples, accesibilidad, autonomia, calidad y
+tooltips; es contrato documental de opciones y no introduce proveedor, DB ni
+runtime en la web.
+
 La pantalla `/autoprogramming` consume los endpoints publicos
 `/api/v0/autoprogramming/prepare-run`, `/api/v0/autoprogramming/status` y
 `/api/v0/runs/supervise` desde navegador same-origin. La web prepara payloads
 compactos con refs opacas y no interpreta worktrees, ramas, runtime ni stores.
+Si `prepare-run` devuelve `goal_specs[]`, la web los conserva como contrato de
+handoff goal-first, sin lanzar Goal ni asumir proveedor.
 
 `/director-stats`, `/run-queue` y `/run-control` conservan respuesta JSON para
 clientes finos, pero cuando el navegador pide `text/html` devuelven una shell

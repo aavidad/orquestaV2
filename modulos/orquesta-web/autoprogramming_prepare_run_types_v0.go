@@ -2,6 +2,7 @@ package orquestaweb
 
 import (
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 )
 
@@ -54,6 +55,7 @@ type WebAutoprogrammingPrepareRunViewModelV0 struct {
 	PhaseID          string                                      `json:"phase_id,omitempty"`
 	WorkflowTaskRefs []string                                    `json:"workflow_task_refs,omitempty"`
 	WaitAgentRefs    []string                                    `json:"wait_agent_refs,omitempty"`
+	GoalSpecs        []orquestagoal.GoalWorkSpecV0               `json:"goal_specs,omitempty"`
 	Continue         *WebAutoprogrammingContinueRequestV0        `json:"continue,omitempty"`
 	ErroresPublicos  []WebAutoprogrammingPrepareRunPublicIssueV0 `json:"errores_publicos,omitempty"`
 }
@@ -89,6 +91,7 @@ func NewWebAutoprogrammingPrepareRunViewModelV0(locale string, result orquestamc
 		PhaseID:          trimV0(result.PhaseID),
 		WorkflowTaskRefs: compactStringsV0(result.WorkflowTaskRefs),
 		WaitAgentRefs:    compactStringsV0(result.WaitAgentRefs),
+		GoalSpecs:        append([]orquestagoal.GoalWorkSpecV0(nil), result.GoalSpecs...),
 		ErroresPublicos:  webAutoprogrammingPrepareRunIssuesV0(result.Errores),
 	}
 	if result.Continue != nil {

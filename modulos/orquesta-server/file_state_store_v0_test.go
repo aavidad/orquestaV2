@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
 func TestFileStateStoreV0RecuperaStateV0(t *testing.T) {
@@ -30,6 +32,32 @@ func TestFileStateStoreV0RecuperaStateV0(t *testing.T) {
 				Canonical: true,
 			}},
 		},
+		IdleSelfImprovementGoalSpec: &orquestagoal.GoalWorkSpecV0{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			GoalRef:       "goal-ref-state-001",
+			Objective:     "Validar round-trip durable del goal",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "modulos/orquesta-server"}},
+			ClosurePolicy: orquestagoal.GoalClosurePolicyV0{RequiredEvidenceRefs: []string{"evidence-ref-state-001"}},
+		},
+		IdleSelfImprovementGoalReceipt: &orquestagoal.GoalLaunchReceiptV0{
+			SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+			Status:          orquestagoal.GoalStatusAcceptedV0,
+			GoalRef:         "goal-ref-state-001",
+			ExternalGoalRef: "external-goal-ref-state-001",
+			EvidenceRefs:    []string{"evidence-ref-state-receipt-001"},
+		},
+		IdleSelfImprovementGoalResult: &orquestagoal.GoalWorkResultV0{
+			SchemaVersion: orquestagoal.GoalWorkResultSchemaV0,
+			Status:        orquestagoal.GoalStatusCompleteV0,
+			GoalRef:       "goal-ref-state-001",
+			EvidenceRefs:  []string{"evidence-ref-state-001"},
+		},
+		IdleSelfImprovementGoalClosure: &orquestagoal.GoalClosureValidationV0{
+			Status:       orquestagoal.GoalStatusAcceptedV0,
+			Accepted:     true,
+			EvidenceRefs: []string{"evidence-ref-state-001"},
+		},
 	}
 	if err := store.SaveServerStateV0(context.Background(), want); err != nil {
 		t.Fatalf("SaveServerStateV0: %v", err)
@@ -43,7 +71,15 @@ func TestFileStateStoreV0RecuperaStateV0(t *testing.T) {
 		got.PID != want.PID ||
 		got.Addr != want.Addr ||
 		len(got.EffectiveConfig.Settings) != 1 ||
-		got.EffectiveConfig.Settings[0].Key != "ORQUESTA_SERVER_MAX_RUNS_PER_TICK" {
+		got.EffectiveConfig.Settings[0].Key != "ORQUESTA_SERVER_MAX_RUNS_PER_TICK" ||
+		got.IdleSelfImprovementGoalSpec == nil ||
+		got.IdleSelfImprovementGoalSpec.GoalRef != "goal-ref-state-001" ||
+		got.IdleSelfImprovementGoalReceipt == nil ||
+		got.IdleSelfImprovementGoalReceipt.ExternalGoalRef != "external-goal-ref-state-001" ||
+		got.IdleSelfImprovementGoalResult == nil ||
+		got.IdleSelfImprovementGoalResult.Status != orquestagoal.GoalStatusCompleteV0 ||
+		got.IdleSelfImprovementGoalClosure == nil ||
+		!got.IdleSelfImprovementGoalClosure.Accepted {
 		t.Fatalf("state=%+v want=%+v", got, want)
 	}
 	assertServerDurableFilePolicyV0(t, filepath.Dir(path), filepath.Base(path))

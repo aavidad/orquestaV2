@@ -34,7 +34,11 @@ func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 		return nil, err
 	}
 	supervisorWakeup := &serverSupervisorWakeupRelayV0{}
-	stack, err := buildStackFromEnvV0(serverConfig, supervisorWakeup)
+	goalBackend, err := serverCodexGoalBackendFromEnvV0(serverConfig)
+	if err != nil {
+		return nil, err
+	}
+	stack, err := buildStackFromEnvWithGoalBackendV0(serverConfig, goalBackend, supervisorWakeup)
 	if err != nil {
 		return nil, err
 	}
@@ -42,12 +46,13 @@ func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 	if err != nil {
 		return nil, err
 	}
-	supervisor := serverStackSupervisorV0{
+	baseSupervisor := serverStackSupervisorV0{
 		stack:          &stack,
 		projectWorkDir: serverConfig.IdleSelfImprovementProjectWorkDir,
 		runtimeWorkDir: serverConfig.RuntimeWorkDir,
 		stateDir:       serverConfig.StateDir,
 	}
+	supervisor := serverSupervisorWithCodexGoalBackendV0(baseSupervisor, goalBackend)
 	residentDirector := newServerResidentDirectorV0(&stack, serverConfig)
 	runtime, err := orquestaserver.NewRuntimeV0(serverConfig, orquestaserver.RuntimeDepsV0{
 		AppHandler:       appHandler,
@@ -94,6 +99,14 @@ func serverWebHTMLRenderObserverV0() orquestaobservability.WebHTMLRenderObserver
 
 func buildStackFromEnvV0(
 	serverConfig orquestaserver.ConfigV0,
+	supervisorWakeups ...*serverSupervisorWakeupRelayV0,
+) (orquestaappcodexstack.StackV0, error) {
+	return buildStackFromEnvWithGoalBackendV0(serverConfig, serverCodexGoalBackendV0{}, supervisorWakeups...)
+}
+
+func buildStackFromEnvWithGoalBackendV0(
+	serverConfig orquestaserver.ConfigV0,
+	goalBackend serverCodexGoalBackendV0,
 	supervisorWakeups ...*serverSupervisorWakeupRelayV0,
 ) (orquestaappcodexstack.StackV0, error) {
 	var supervisorWakeup *serverSupervisorWakeupRelayV0
@@ -191,6 +204,7 @@ func buildStackFromEnvV0(
 			ProcessRegistry:            stateStore,
 			RunControl:                 runControl,
 			RunQueue:                   runQueue,
+			AppGoalStateStore:          stateStore,
 		},
 		RunQueue: orquestaappcodexstack.RunQueueConfigV0{
 			QueueRef:       "global",
@@ -213,6 +227,8 @@ func buildStackFromEnvV0(
 		Claude:          claudeRuntimeConfigV0(serverConfig),
 		EgressSanitizer: egressSanitizer,
 		Capacity:        codexStackCapacityConfigFromEnvV0(),
+		AppGoalLauncher: serverGoalWorkLauncherFromBackendV0(goalBackend),
+		AppGoalObserver: serverGoalWorkObserverFromBackendV0(goalBackend),
 		RuntimeModels:   runtimeModelManagerFromEnvV0(),
 		ReviewGate: orquestaappcodexstack.ReviewGateConfigV0{
 			FileEvidence:            orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},

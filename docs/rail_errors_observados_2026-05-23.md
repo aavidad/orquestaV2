@@ -4557,6 +4557,15 @@ Decision aplicada: claim durable `claimed/submitting` antes de
 publico si una key terminal intenta cambiar receipt/payload o refs causales. No
 usar URL, DB, ruta local o nombre de conector como evidencia de tests de
 dominio.
+Rework OrquestaV2 2026-06-25: esta entrada queda acotada al ledger de salida
+`domain_work`. Cualquier referencia a `codexStackReviewGatePolicyV0`, snapshot o
+presupuesto de review pertenece a T117 y no debe usarse como cierre ni evidencia
+de T101.
+Assessment/rework OrquestaV2 2026-06-25: el cierre causal valido de T101 incluye
+estado `submitted` con `receipt_ref` antes de `accepted` para recovery de fallo
+post-efecto. Una claim `claimed/submitting/submitted` sin reconciliacion no debe
+reenviar `submit_artifact`; el Director conserva el trabajo y exige recovery
+compacto, no review gate ni snapshot de T117.
 Test:
 `go test -count=1 ./modulos/orquesta-app-codex-stack ./modulos/orquesta-domain-work ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector ./cmd/orquesta-server`.
 Backlog: `T101 domain-work-artifact-submission-ledger-recovery`.

@@ -84,6 +84,8 @@ func nuevaAppFormFromValuesV0(values map[string][]string) WebNuevaAppFormV0 {
 			DBRequired:         formBoolValueV0(values, "datos.db_required"),
 			NecesidadFuncional: formValueV0(values, "datos.necesidad_funcional"),
 			TiposDatos:         formValuesV0(values, "datos.tipos_datos"),
+			TiposDetallados:    formDataTypesV0(values, 4),
+			Storage:            formDataStorageV0(values, 4),
 			Sensibilidad:       formValueV0(values, "datos.sensibilidad"),
 			Retencion:          formValueV0(values, "datos.retencion"),
 		},
@@ -92,10 +94,11 @@ func nuevaAppFormFromValuesV0(values map[string][]string) WebNuevaAppFormV0 {
 			Restricciones: formValuesV0(values, "deploy.restricciones"),
 		},
 		Calidad: WebNuevaAppCalidadFormV0{
-			Pruebas:        formValueV0(values, "calidad.pruebas"),
-			Accesibilidad:  formValueV0(values, "calidad.accesibilidad"),
-			Compliance:     formValuesV0(values, "calidad.compliance"),
-			Observabilidad: formOptionalBoolValueV0(values, "calidad.observabilidad"),
+			Pruebas:               formValueV0(values, "calidad.pruebas"),
+			Accesibilidad:         formValueV0(values, "calidad.accesibilidad"),
+			AccesibilidadOpciones: formValuesV0(values, "calidad.accesibilidad_opciones"),
+			Compliance:            formValuesV0(values, "calidad.compliance"),
+			Observabilidad:        formOptionalBoolValueV0(values, "calidad.observabilidad"),
 		},
 		Documentacion: WebNuevaAppDocumentacionFormV0{
 			Usuario:    formOptionalBoolValueV0(values, "documentacion.usuario"),
@@ -116,17 +119,71 @@ func nuevaAppFormFromValuesV0(values map[string][]string) WebNuevaAppFormV0 {
 		},
 		Restricciones: formValuesV0(values, "restricciones"),
 	}
-	connector := WebNuevaAppConnectorFormV0{
-		Tipo:          formValueV0(values, "integraciones.0.tipo"),
-		Nombre:        formValueV0(values, "integraciones.0.nombre"),
-		Proposito:     formValueV0(values, "integraciones.0.proposito"),
-		Requerido:     formBoolValueV0(values, "integraciones.0.requerido"),
-		Restricciones: formValuesV0(values, "integraciones.0.restricciones"),
-	}
-	if connector.Tipo != "" || connector.Nombre != "" || connector.Proposito != "" || len(connector.Restricciones) > 0 || connector.Requerido {
-		form.Integraciones = []WebNuevaAppConnectorFormV0{connector}
-	}
+	form.Integraciones = formConnectorsV0(values, 4)
 	return form
+}
+
+func formDataTypesV0(values map[string][]string, maxRows int) []WebNuevaAppDataTypeFormV0 {
+	out := make([]WebNuevaAppDataTypeFormV0, 0, maxRows)
+	for index := 0; index < maxRows; index++ {
+		prefix := "datos.tipos_detallados." + strconv.Itoa(index) + "."
+		row := WebNuevaAppDataTypeFormV0{
+			Nombre:        formValueV0(values, prefix+"nombre"),
+			Proposito:     formValueV0(values, prefix+"proposito"),
+			Sensibilidad:  formValueV0(values, prefix+"sensibilidad"),
+			Retencion:     formValueV0(values, prefix+"retencion"),
+			Volumen:       formValueV0(values, prefix+"volumen"),
+			Restricciones: formValuesV0(values, prefix+"restricciones"),
+		}
+		if row.Nombre != "" || row.Proposito != "" || row.Sensibilidad != "" || row.Retencion != "" || row.Volumen != "" || len(row.Restricciones) > 0 {
+			out = append(out, row)
+		}
+	}
+	if out == nil {
+		return []WebNuevaAppDataTypeFormV0{}
+	}
+	return out
+}
+
+func formDataStorageV0(values map[string][]string, maxRows int) []WebNuevaAppDataStorageFormV0 {
+	out := make([]WebNuevaAppDataStorageFormV0, 0, maxRows)
+	for index := 0; index < maxRows; index++ {
+		prefix := "datos.storage." + strconv.Itoa(index) + "."
+		row := WebNuevaAppDataStorageFormV0{
+			Tipo:          formValueV0(values, prefix+"tipo"),
+			Proposito:     formValueV0(values, prefix+"proposito"),
+			Requerido:     formBoolValueV0(values, prefix+"requerido"),
+			Restricciones: formValuesV0(values, prefix+"restricciones"),
+		}
+		if row.Tipo != "" || row.Proposito != "" || len(row.Restricciones) > 0 || row.Requerido {
+			out = append(out, row)
+		}
+	}
+	if out == nil {
+		return []WebNuevaAppDataStorageFormV0{}
+	}
+	return out
+}
+
+func formConnectorsV0(values map[string][]string, maxRows int) []WebNuevaAppConnectorFormV0 {
+	out := make([]WebNuevaAppConnectorFormV0, 0, maxRows)
+	for index := 0; index < maxRows; index++ {
+		prefix := "integraciones." + strconv.Itoa(index) + "."
+		row := WebNuevaAppConnectorFormV0{
+			Tipo:          formValueV0(values, prefix+"tipo"),
+			Nombre:        formValueV0(values, prefix+"nombre"),
+			Proposito:     formValueV0(values, prefix+"proposito"),
+			Requerido:     formBoolValueV0(values, prefix+"requerido"),
+			Restricciones: formValuesV0(values, prefix+"restricciones"),
+		}
+		if row.Tipo != "" || row.Nombre != "" || row.Proposito != "" || len(row.Restricciones) > 0 || row.Requerido {
+			out = append(out, row)
+		}
+	}
+	if out == nil {
+		return []WebNuevaAppConnectorFormV0{}
+	}
+	return out
 }
 
 func formValueV0(values map[string][]string, key string) string {

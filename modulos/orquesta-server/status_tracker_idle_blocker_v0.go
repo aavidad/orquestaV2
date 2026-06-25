@@ -60,11 +60,12 @@ func (tracker *StatusTrackerV0) MarkIdleSelfImprovementBlockedV0(
 				RunRefs:      blocker.RunRefs,
 				EvidenceRefs: blocker.EvidenceRefs,
 				Counters: map[string]int{
-					"attempts":      tracker.idleSelfImprovementAttempts,
-					"accepted":      tracker.idleSelfImprovementPrepared,
-					"run_refs":      len(compactConfigStringsV0(blocker.RunRefs)),
-					"evidence_refs": len(compactConfigStringsV0(blocker.EvidenceRefs)),
-					"next_actions":  len(compactConfigStringsV0(blocker.NextActions)),
+					"attempts":                          tracker.idleSelfImprovementAttempts,
+					"accepted":                          tracker.idleSelfImprovementPrepared,
+					"run_refs":                          len(compactConfigStringsV0(blocker.RunRefs)),
+					"evidence_refs":                     len(compactConfigStringsV0(blocker.EvidenceRefs)),
+					"next_actions":                      len(compactConfigStringsV0(blocker.NextActions)),
+					"resident_pending_without_dispatch": residentPendingBlockerCountV0(blocker),
 				},
 			},
 		)
@@ -72,6 +73,17 @@ func (tracker *StatusTrackerV0) MarkIdleSelfImprovementBlockedV0(
 		state.IdleSelfImprovementRuns = tracker.idleSelfImprovementAttempts
 		state.IdleSelfImprovementOK = tracker.idleSelfImprovementPrepared
 	})
+}
+
+func residentPendingBlockerCountV0(blocker IdleSelfImprovementBlockerResultV0) int {
+	if !residentPendingValueV0(blocker.Reason) {
+		return 0
+	}
+	count := len(compactConfigStringsV0(blocker.RunRefs))
+	if count > 0 {
+		return count
+	}
+	return 1
 }
 
 func idleSelfImprovementBlockerReasonV0(blocker IdleSelfImprovementBlockerResultV0) string {

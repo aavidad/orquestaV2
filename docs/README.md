@@ -26,6 +26,9 @@ adaptadores, no la definicion del nucleo.
   clientes finos y cuarentena de rutas legacy.
 - [matriz_pruebas_reales_y_smoke_2026-05-17.md](matriz_pruebas_reales_y_smoke_2026-05-17.md):
   evidencias, smokes offline/opt-in y pendientes verificables.
+- [orquesta_goal_first_codex_2026-06-25.md](orquesta_goal_first_codex_2026-06-25.md):
+  corte goal-first: Codex Goal como Director operativo interno y Orquesta como
+  plano de gobierno, contexto, contratos y cierre.
 
 ## Handoffs vigentes
 
@@ -40,6 +43,8 @@ adaptadores, no la definicion del nucleo.
   agentes padre y 6 subagentes por padre.
 - [corte_opes_como_consumidor_orquesta_2026-05-18.md](corte_opes_como_consumidor_orquesta_2026-05-18.md):
   OPES como consumidor por conectores.
+- [orquesta_goal_first_codex_2026-06-25.md](orquesta_goal_first_codex_2026-06-25.md):
+  adelgazamiento del loop residente cuando el runtime soporte goals persistentes.
 - [runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md](runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md):
   smoke acotado de `plan_temario` contra OPES temporal.
 

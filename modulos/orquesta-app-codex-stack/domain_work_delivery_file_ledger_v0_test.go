@@ -155,11 +155,13 @@ func TestInMemoryDomainWorkArtifactSubmissionLedgerV0ClaimYConflicto(t *testing.
 	for _, status := range []string{
 		DomainWorkArtifactSubmissionStatusClaimedV0,
 		DomainWorkArtifactSubmissionStatusSubmittingV0,
+		DomainWorkArtifactSubmissionStatusSubmittedV0,
 		DomainWorkArtifactSubmissionStatusAcceptedV0,
 	} {
 		record := base
 		record.Status = status
-		if status == DomainWorkArtifactSubmissionStatusAcceptedV0 {
+		if status == DomainWorkArtifactSubmissionStatusSubmittedV0 ||
+			status == DomainWorkArtifactSubmissionStatusAcceptedV0 {
 			record.ReceiptRef = "receipt-ref-claim-001"
 		}
 		if err := ledger.RecordDomainWorkArtifactSubmissionV0(ctx, record); err != nil {

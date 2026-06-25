@@ -49,6 +49,7 @@ func NewRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 {
 		RunQueuePage:                   orquestaweb.NewRunQueueWebEndpointV0(newRunQueueClientV0(config, client)),
 		AppSpec:                        apiHandlers.AppSpec,
 		AppDirector:                    apiHandlers.AppDirector,
+		AppIntakeGuidedTurn:            apiHandlers.AppIntakeGuidedTurn,
 		AppChange:                      apiHandlers.AppChange,
 		DirectorStats:                  apiHandlers.DirectorStats,
 		RunControl:                     apiHandlers.RunControl,
@@ -80,6 +81,7 @@ func NewAPIRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 
 	return orquestahttpgateway.RouteHandlersV0{
 		AppSpec:                        orquestafactoryhttp.NewAppSpecHTTPHandlerV0(config.Clock),
 		AppDirector:                    orquestamcp.NewMCPArrancarDirectorAppHTTPHandlerV0(config.ArrancarDirector),
+		AppIntakeGuidedTurn:            orquestaweb.NewNuevaAppIntakeGuidedHTTPHandlerV0(),
 		AppChange:                      orquestamcp.NewMCPRequestAppChangeHTTPHandlerV0(config.RequestAppChange),
 		DirectorStats:                  orquestamcp.NewMCPDirectorStatsHTTPHandlerV0(config.DirectorStats),
 		RunControl:                     orquestamcp.NewMCPRunControlHTTPHandlerV0(config.RunControl),

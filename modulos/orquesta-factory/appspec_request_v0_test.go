@@ -36,9 +36,20 @@ func TestValidateAppSpecRequestV0Fixtures(t *testing.T) {
 	}
 }
 
-func TestValidateAppSpecRequestV0RejectsNonHexagonal(t *testing.T) {
+func TestValidateAppSpecRequestV0AcceptsSupportedArchitecturePatterns(t *testing.T) {
 	req := validMinimalRequestV0()
 	req.PreferenciasTecnicas.Arquitectura = "capas"
+
+	issues := ValidateAppSpecRequestV0(req)
+
+	if len(issues) != 0 {
+		t.Fatalf("expected supported architecture, got %+v", issues)
+	}
+}
+
+func TestValidateAppSpecRequestV0RejectsUnsupportedArchitecturePattern(t *testing.T) {
+	req := validMinimalRequestV0()
+	req.PreferenciasTecnicas.Arquitectura = "big_ball_of_mud"
 	issues := ValidateAppSpecRequestV0(req)
 	if !hasIssueCodeV0(issues, ErrOpcionIncompatible) {
 		t.Fatalf("expected %s, got %+v", ErrOpcionIncompatible, issues)
@@ -51,6 +62,38 @@ func TestValidateAppSpecRequestV0RejectsInvalidLocale(t *testing.T) {
 	issues := ValidateAppSpecRequestV0(req)
 	if !hasIssueCodeV0(issues, ErrIdiomaInvalido) {
 		t.Fatalf("expected %s, got %+v", ErrIdiomaInvalido, issues)
+	}
+}
+
+func TestValidateAppSpecRequestV0AcceptsDetailedDataWithoutFunctionalNeed(t *testing.T) {
+	req := validMinimalRequestV0()
+	req.Datos = DatosRequestV0{
+		DBRequired: true,
+		TiposDetallados: []DataTypeRequestV0{{
+			Nombre:       "Expedientes",
+			Proposito:    "Gestionar solicitudes y estados",
+			Sensibilidad: "personal",
+		}},
+		Storage: []DataStorageRequestV0{{
+			Tipo:      "relacional",
+			Proposito: "Consultas transaccionales",
+			Requerido: true,
+		}},
+	}
+
+	if issues := ValidateAppSpecRequestV0(req); len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+}
+
+func TestValidateAppSpecRequestV0RejectsUnsupportedStorageType(t *testing.T) {
+	req := validMinimalRequestV0()
+	req.Datos.Storage = []DataStorageRequestV0{{Tipo: "postgres"}}
+
+	issues := ValidateAppSpecRequestV0(req)
+
+	if !hasIssueFieldV0(issues, "datos.storage.0.tipo") {
+		t.Fatalf("expected storage type issue, got %+v", issues)
 	}
 }
 

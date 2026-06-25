@@ -15,6 +15,12 @@
   subagentes por padre en el trabajo programable; limites menores pueden
   declararse explicitamente por request cuando una composicion quiera acotar la
   ola.
+- `BuildAutoprogrammingProgrammableWorkV0` emite `goal_migration` para separar
+  tareas que siguen en loop legacy de tareas candidatas/cubiertas por Goal,
+  usando solo refs opacas en `context_refs`.
+- Si `goal_migration=goal_ready`, el trabajo programable incluye
+  `goal_specs[]` (`GoalWorkSpecV0`) por grupo, sin lanzar runtime ni depender de
+  Codex real.
 
 ## Cerrado
 
@@ -33,3 +39,9 @@
   queda tratado como umbrella historico ya cubierto por owners especificos
   T212-T237; este modulo no absorbe runtime, VCS, Codex, servidor ni guardian.
   Si aparece regresion, abrir tarea focal con write-set propio.
+- APG-005: clasificacion y specs goal-first, 2026-06-25. El modulo distingue
+  `legacy_loop_compatible`, `goal_ready`, `blocked_by_goal_capability`,
+  `covered_by_goal_first` y `legacy_loop_required`; cuando hay `goal_ready`,
+  compila `GoalWorkSpecV0` neutral con write-set/pruebas/criterios por grupo,
+  sin lanzar Codex ni tocar servidor. La composicion sigue siendo responsable de
+  crear/observar goals y validar smokes reales.

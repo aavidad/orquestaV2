@@ -29,6 +29,13 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 			},
 		},
 		{
+			name:  "app intake guided turn",
+			route: RouteAppIntakeGuidedTurnV0,
+			handlers: RouteHandlersV0{
+				AppIntakeGuidedTurn: markerHandler("app-intake-guided-turn"),
+			},
+		},
+		{
 			name:  "app change",
 			route: "/api/v0/apps/app-ref-001/changes",
 			handlers: RouteHandlersV0{
@@ -175,9 +182,10 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 
 func TestNewAppGatewayMuxV0PrefiereRutasExactasAntesDeCambioDinamico(t *testing.T) {
 	mux := NewAppGatewayMuxV0(RouteHandlersV0{
-		AppSpec:     markerHandler("app-spec"),
-		AppDirector: markerHandler("app-director"),
-		AppChange:   markerHandler("app-change"),
+		AppSpec:             markerHandler("app-spec"),
+		AppDirector:         markerHandler("app-director"),
+		AppIntakeGuidedTurn: markerHandler("app-intake-guided-turn"),
+		AppChange:           markerHandler("app-change"),
 	})
 
 	for _, tc := range []struct {
@@ -186,6 +194,7 @@ func TestNewAppGatewayMuxV0PrefiereRutasExactasAntesDeCambioDinamico(t *testing.
 	}{
 		{RouteAppSpecV0, "app-spec"},
 		{RouteAppDirectorV0, "app-director"},
+		{RouteAppIntakeGuidedTurnV0, "app-intake-guided-turn"},
 		{"/api/v0/apps/app-ref-001/changes", "app-change"},
 	} {
 		response := httptest.NewRecorder()

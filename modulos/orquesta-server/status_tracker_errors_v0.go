@@ -60,6 +60,7 @@ func (tracker *StatusTrackerV0) MarkIdleSelfImprovementPrepareFailedV0(
 				Status:       result.Status,
 				Message:      result.Message,
 				RunRefs:      []string{result.RunRef},
+				GoalRefs:     []string{result.GoalRef, result.ExternalGoalRef},
 				RequestRefs:  []string{result.RequestRef},
 				EvidenceRefs: result.EvidenceRefs,
 				Counters: map[string]int{

@@ -3,9 +3,13 @@ package orquestafactory
 import "strings"
 
 func (n appSpecNormalizerV0) defaultsApplied() []DefaultAppliedV0 {
+	pattern := architecturePatternOrDefaultV0(n.req.PreferenciasTecnicas.Arquitectura)
 	defaults := []DefaultAppliedV0{
-		{Campo: "architecture.patron", Valor: "hexagonal", Motivo: "Default obligatorio de OrquestaV2."},
-		{Campo: "architecture.policy", Valor: "hexagonal_estricta", Motivo: "Las apps programadas por Orquesta deben separar domain, application, ports, adapters y bootstrap."},
+		{Campo: "architecture.patron", Valor: pattern, Motivo: "Patron de arquitectura usado para proponer modulos y fronteras."},
+		{Campo: "architecture.policy", Valor: "fronteras_limpias", Motivo: "Las apps programadas por Orquesta deben separar dominio/aplicacion de adaptadores, runtime, IO y proveedores."},
+	}
+	if strings.TrimSpace(n.req.PreferenciasTecnicas.Arquitectura) == "" {
+		defaults = append(defaults, DefaultAppliedV0{Campo: "preferencias_tecnicas.arquitectura", Valor: pattern, Motivo: "Se usa hexagonal como default cuando el operador no elige patron."})
 	}
 	if n.req.I18N.Enabled == nil {
 		defaults = append(defaults, DefaultAppliedV0{Campo: "i18n.enabled", Valor: true, Motivo: "i18n se activa por defecto."})

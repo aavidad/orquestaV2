@@ -61,11 +61,29 @@ type I18NSpecV0 struct {
 }
 
 type DataSpecV0 struct {
-	PersistenceRequired bool     `json:"persistence_required"`
-	Needs               []string `json:"needs"`
-	Sensitivity         string   `json:"sensitivity,omitempty"`
-	Connector           string   `json:"connector,omitempty"`
-	Retention           string   `json:"retention,omitempty"`
+	PersistenceRequired bool                `json:"persistence_required"`
+	Needs               []string            `json:"needs"`
+	Types               []DataTypeSpecV0    `json:"types,omitempty"`
+	Storage             []DataStorageSpecV0 `json:"storage,omitempty"`
+	Sensitivity         string              `json:"sensitivity,omitempty"`
+	Connector           string              `json:"connector,omitempty"`
+	Retention           string              `json:"retention,omitempty"`
+}
+
+type DataTypeSpecV0 struct {
+	Nombre        string   `json:"nombre"`
+	Proposito     string   `json:"proposito,omitempty"`
+	Sensibilidad  string   `json:"sensibilidad,omitempty"`
+	Retencion     string   `json:"retencion,omitempty"`
+	Volumen       string   `json:"volumen,omitempty"`
+	Restricciones []string `json:"restricciones,omitempty"`
+}
+
+type DataStorageSpecV0 struct {
+	Tipo          string   `json:"tipo"`
+	Proposito     string   `json:"proposito,omitempty"`
+	Requerido     bool     `json:"requerido,omitempty"`
+	Restricciones []string `json:"restricciones,omitempty"`
 }
 
 type ConnectorsSpecV0 struct {
@@ -85,11 +103,12 @@ type DeploySpecV0 struct {
 }
 
 type QualitySpecV0 struct {
-	Tests         string   `json:"tests"`
-	Accessibility string   `json:"accessibility"`
-	Security      []string `json:"security"`
-	Compliance    []string `json:"compliance"`
-	Observability bool     `json:"observability"`
+	Tests                string   `json:"tests"`
+	Accessibility        string   `json:"accessibility"`
+	AccessibilityOptions []string `json:"accessibility_options,omitempty"`
+	Security             []string `json:"security"`
+	Compliance           []string `json:"compliance"`
+	Observability        bool     `json:"observability"`
 }
 
 type DocsSpecV0 struct {

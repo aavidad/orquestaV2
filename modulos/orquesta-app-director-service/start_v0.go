@@ -43,6 +43,13 @@ func StartAppDirectorV0(
 	if err := persistPreparedDirectorIntakeV0(ctx, ports, prepared); err != nil {
 		return StartAppDirectorResultV0{}, err
 	}
+	goalResult, launchedGoal, err := startAppDirectorGoalFirstV0(ctx, request, spec, prepared, ports)
+	if err != nil {
+		return StartAppDirectorResultV0{}, err
+	}
+	if launchedGoal {
+		return goalResult, nil
+	}
 	request, err = startAppDirectorWithOperationalDirectorPlanV0(ctx, request, ports, prepared)
 	if err != nil {
 		return StartAppDirectorResultV0{}, err

@@ -28,6 +28,12 @@ Cobertura actual:
   payload durable por debajo del limite del core;
 - transforma solicitudes validas en `WorkProfileV0`/`WorkflowTaskV0` con refs
   opacas y pruebas requeridas preservadas;
+- clasifica tareas de autoprogramacion goal-first sin runtime: legacy
+  compatible, bloqueada por capacidades Goal, lista para Goal, cubierta por
+  Goal y legacy requerido;
+- genera `GoalWorkSpecV0` valido cuando la clasificacion queda `goal_ready`,
+  conserva `write_set`, pruebas requeridas, criterios y refs opacas, y no genera
+  specs si faltan capacidades Goal;
 - `v1` materializa perfiles de trabajo por tipo de app/area/tarea, prioriza
   `task_ref` sobre area y conserva fallback `v0`;
 - particiona `write_set` por area, normaliza aliases y rechaza rutas no

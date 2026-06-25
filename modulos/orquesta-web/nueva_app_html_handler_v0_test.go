@@ -30,14 +30,28 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		t.Fatalf("GET no debe delegar: calls=%d", client.calls)
 	}
 	for _, want := range []string{
-		`<form method="post" action="/nueva-app">`,
+		`<form method="post" action="/nueva-app" novalidate>`,
 		`id="nueva-app-wizard"`,
+		`id="guided-assistant"`,
+		`data-guided-action="analyze"`,
+		`data-guided-action="mobile_both"`,
+		`data-guided-action="data_management"`,
+		`/api/v0/apps/intake/guided-turn`,
 		`data-goto-step="0"`,
 		`data-preset="webapp"`,
+		`[data-help]::after`,
+		`[data-help]:hover::after`,
+		`data-help="Opciones: web, api, cli`,
+		`data-help="Opciones: crear app completa`,
+		`data-help="Interfaz web para navegador."`,
+		`data-help="Opciones: sin_preferencia`,
+		`data-validation-required="Completa este campo."`,
+		`id="wizard-errors"`,
+		`role="alert"`,
+		`data-required="true" aria-required="true" data-label="Nombre"`,
 		`name="request_id"`,
 		`name="request_kind"`,
 		`name="execution_mode"`,
-		`title="Define si Orquesta debe crear una app completa`,
 		`name="locale"`,
 		`name="nombre"`,
 		`name="objetivo"`,
@@ -49,13 +63,22 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		`name="project_source.project_ref"`,
 		`name="plataformas"`,
 		`name="preferencias_tecnicas.arquitectura"`,
-		`hexagonal estricta`,
+		`value="clean_architecture"`,
+		`value="modular_monolith"`,
+		`value="event_driven"`,
 		`name="i18n.enabled"`,
 		`name="datos.db_required"`,
+		`name="datos.tipos_detallados.0.nombre"`,
+		`name="datos.storage.0.tipo"`,
+		`value="vectorial"`,
 		`name="deploy.target"`,
 		`name="calidad.pruebas"`,
+		`name="calidad.accesibilidad_opciones"`,
+		`value="normal"`,
 		`name="agentes.autonomia"`,
 		`name="integraciones.0.tipo"`,
+		`name="integraciones.1.tipo"`,
+		`value="maps"`,
 		`Resumen vivo`,
 		`id="wizard-final-summary"`,
 		`.wizard-ready .hidden-final`,
@@ -65,8 +88,41 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 			t.Fatalf("GET HTML no contiene %q\n%s", want, body)
 		}
 	}
-	if strings.Contains(body, `value="modular"`) || strings.Contains(body, `value="monolito_modular"`) {
-		t.Fatalf("GET HTML ofrece arquitecturas no soportadas\n%s", body)
+	for _, forbidden := range []string{
+		`<input name="nombre" required`,
+		`<select name="tipo_app" required`,
+		`<textarea name="objetivo" required`,
+		`Please fill out this field`,
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("GET HTML conserva validacion nativa del navegador %q\n%s", forbidden, body)
+		}
+	}
+	if !strings.Contains(body, `form.addEventListener('submit'`) ||
+		!strings.Contains(body, `event.preventDefault()`) ||
+		!strings.Contains(body, `focusField(first)`) ||
+		!strings.Contains(body, `applyGuidedNeed`) ||
+		!strings.Contains(body, `applyServerGuided`) ||
+		!strings.Contains(body, `function configureRentalData()`) {
+		t.Fatalf("GET HTML conserva validacion nativa del navegador\n%s", body)
+	}
+}
+
+func TestNuevaAppHTMLHandlerV0GETLocalizaValidacionEnInglesV0(t *testing.T) {
+	client := &fakeNuevaAppClientV0{}
+	handler := NewNuevaAppHTMLHandlerV0(client)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/nueva-app?locale=en", nil)
+
+	handler.ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, body)
+	}
+	if !strings.Contains(body, `data-validation-required="Complete this field."`) ||
+		!strings.Contains(body, `data-validation-summary-title="Required fields missing"`) {
+		t.Fatalf("validacion inglesa no localizada\n%s", body)
 	}
 }
 
@@ -94,12 +150,18 @@ func TestNuevaAppHTMLHandlerV0POSTValidoDelegaYRenderizaResultado(t *testing.T) 
 		client.received.ExecutionMode != "normal" ||
 		client.received.ProjectSource.Kind != "github" ||
 		client.received.ProjectSource.GitURL != "https://example.test/agenda.git" ||
-		client.received.PreferenciasTecnicas.Arquitectura != "hexagonal" ||
+		client.received.PreferenciasTecnicas.Arquitectura != "event_driven" ||
 		!client.received.Datos.DBRequired ||
+		len(client.received.Datos.TiposDetallados) != 1 ||
+		client.received.Datos.TiposDetallados[0].Nombre != "Pisos" ||
+		len(client.received.Datos.Storage) != 1 ||
+		client.received.Datos.Storage[0].Tipo != "relacional" ||
 		client.received.Deploy.Target != "contenedor" ||
+		len(client.received.Calidad.AccesibilidadOpciones) != 2 ||
 		client.received.Agentes.Autonomia != "media" ||
-		len(client.received.Integraciones) != 1 ||
-		client.received.Integraciones[0].Tipo != "api" {
+		len(client.received.Integraciones) != 2 ||
+		client.received.Integraciones[0].Tipo != "api" ||
+		client.received.Integraciones[1].Tipo != "maps" {
 		t.Fatalf("form delegado inesperado: %+v", client.received)
 	}
 	for _, want := range []string{"Lista para revisar", "Agenda", "BLG-001", "producto / AppSpecV0"} {
@@ -175,17 +237,29 @@ func nuevaAppHTMLValidFormValuesV0() url.Values {
 	values.Set("project_source.project_ref", "project-ref-agenda")
 	values.Add("plataformas", "web")
 	values.Set("preferencias_tecnicas.arquitectura", "hexagonal")
+	values.Set("preferencias_tecnicas.arquitectura", "event_driven")
 	values.Set("i18n.enabled", "true")
 	values.Set("i18n.default_locale", "es")
 	values.Set("datos.db_required", "true")
 	values.Set("datos.necesidad_funcional", "guardar disponibilidad")
+	values.Set("datos.tipos_detallados.0.nombre", "Pisos")
+	values.Set("datos.tipos_detallados.0.proposito", "Mostrar alquileres cercanos")
+	values.Set("datos.tipos_detallados.0.sensibilidad", "publica")
+	values.Set("datos.storage.0.tipo", "relacional")
+	values.Set("datos.storage.0.proposito", "consultas transaccionales")
+	values.Set("datos.storage.0.requerido", "true")
 	values.Set("deploy.target", "contenedor")
 	values.Set("calidad.pruebas", "alta")
+	values.Set("calidad.accesibilidad", "normal")
+	values.Set("calidad.accesibilidad_opciones", "normal,wcag_aa")
 	values.Set("calidad.observabilidad", "true")
 	values.Set("agentes.revision_humana", "true")
 	values.Set("agentes.autonomia", "media")
 	values.Set("integraciones.0.tipo", "api")
 	values.Set("integraciones.0.nombre", "crm")
 	values.Set("integraciones.0.proposito", "sincronizar ensayos")
+	values.Set("integraciones.1.tipo", "maps")
+	values.Set("integraciones.1.nombre", "capacidad de mapas")
+	values.Set("integraciones.1.proposito", "mostrar ubicaciones")
 	return values
 }

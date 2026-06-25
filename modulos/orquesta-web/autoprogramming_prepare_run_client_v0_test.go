@@ -8,6 +8,7 @@ import (
 	"time"
 
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 )
 
@@ -33,6 +34,17 @@ func TestRESTAutoprogrammingPrepareRunClientV0PreservaWorktreeAisladaYRamaOpaca(
 			PhaseID:          "programacion",
 			WorkflowTaskRefs: []string{"workflow-task-ref-001"},
 			WaitAgentRefs:    []string{"agent-ref-001"},
+			GoalSpecs: []orquestagoal.GoalWorkSpecV0{{
+				SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+				GoalRef:       "goal-ref-web-autoprog-001",
+				RequestRef:    "source-task-ref-001",
+				RunRef:        "run-autoprog-web-001",
+				ProjectRef:    "project-ref-orquesta",
+				WorkKind:      "autoprogramming",
+				Objective:     "Preservar contrato Goal desde web.",
+				DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+				WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "modulos/orquesta-web"}},
+			}},
 			Continue: &orquestamcp.MCPAutoprogrammingContinueRequestV0{
 				RunRef:                     "run-autoprog-web-001",
 				OperationalDirectorPlanRef: "operational-director-plan-web-001",
@@ -78,6 +90,9 @@ func TestRESTAutoprogrammingPrepareRunClientV0PreservaWorktreeAisladaYRamaOpaca(
 		!vm.Accepted ||
 		vm.WorktreeRef != "worktree-ref-opaque-001" ||
 		vm.BranchRef != "branch-ref-opaque-001" ||
+		len(vm.GoalSpecs) != 1 ||
+		vm.GoalSpecs[0].RunRef != "run-autoprog-web-001" ||
+		vm.GoalSpecs[0].DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 ||
 		vm.Continue == nil ||
 		vm.Continue.OperationalDirectorPlanRef != "operational-director-plan-web-001" ||
 		len(vm.Continue.WaitAgentRefs) != 1 {

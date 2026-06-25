@@ -11,6 +11,7 @@ import (
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
@@ -39,6 +40,9 @@ type ConfigV0 struct {
 	Capacity                 CapacityConfigV0
 	ReviewGate               ReviewGateConfigV0
 	RequiredTests            orquestacionnucleoapp.RequiredTestRunnerPortV0
+	AppGoalLauncher          orquestagoal.GoalWorkLauncherPortV0
+	AppGoalObserver          orquestagoal.GoalWorkObservationPortV0
+	AppGoalClosureValidator  orquestagoal.GoalWorkClosureValidatorPortV0
 	DomainTests              DomainWorkRequiredTestConfigV0
 	AppChange                orquestaappchange.AppChangePortsV0
 	AutoprogrammingPromotion AutoprogrammingPromotionConfigV0
@@ -72,6 +76,7 @@ type StoresV0 struct {
 	ProcessRegistry            orquestacionnucleoapp.AgentProcessRegistryPortV0
 	RunControl                 orquestaruncontrol.RunControlPortV0
 	RunQueue                   orquestarunqueue.RunQueuePortV0
+	AppGoalStateStore          orquestagoal.GoalWorkStateStorePortV0
 }
 
 type OutboxLedgerPortV0 interface {

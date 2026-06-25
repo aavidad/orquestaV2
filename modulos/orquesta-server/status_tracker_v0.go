@@ -162,6 +162,12 @@ func supervisorPublicProjectionV0(result orquestarunsupervisor.RunSupervisorResu
 		StopPublic:   strings.TrimSpace(metrics.PublicStop),
 		StopCategory: strings.TrimSpace(metrics.StopCategory),
 	}
+	if supervisorResultHasExternalEmptyRunV0(result) {
+		projection.Status = SupervisorPublicStatusExternalEmptyRunV0
+		projection.StopPublic = SupervisorPublicStopExternalEmptyRunV0
+		projection.StopCategory = SupervisorPublicCategoryExternalProcessV0
+		return projection
+	}
 	if supervisorResultHasLaunchFailedV0(result) {
 		projection.Status = SupervisorPublicStatusLaunchFailedV0
 		projection.StopPublic = SupervisorPublicStopLaunchFailedV0

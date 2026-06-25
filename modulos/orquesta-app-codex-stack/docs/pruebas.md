@@ -176,6 +176,11 @@ Cobertura Go actual:
 - `TestCodexSupervisorV0CortaPorMaxTicksSinDoneV0` fija que `pending`/`stopped`
   no cierran la sesion y que el supervisor corta por `max_ticks` si no llega
   `done`.
+- `TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveGoalSpecsCuandoGoalReady`
+  valida que `POST /api/v0/autoprogramming/prepare-run` expone
+  `goal_specs[]` validos y con `run_ref` cuando la request declara
+  `goal_migration:goal-first` y capacidades de Goal completas; el endpoint
+  sigue sin lanzar runtime ni Goal por si mismo.
 - `TestCodexSupervisorStackLifecycleV0SupervisaRunExistenteSinCanalParaleloV0`
   prueba el adaptador real de stack sobre una run ya creada: `SuperviseCodexV0`
   hace `launch` y luego `continue`, ambos por `DrainRunV0`, sin relanzar agentes.

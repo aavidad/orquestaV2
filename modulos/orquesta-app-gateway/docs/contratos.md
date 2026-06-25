@@ -14,6 +14,9 @@ Rutas montadas:
 - `/run-queue`: handler web JSON para cola multiapp y cambio de prioridad.
 - `/api/v0/apps/spec`: REST de factory.
 - `/api/v0/apps/director`: bridge REST de MCP para arrancar director.
+- `/api/v0/apps/intake/guided-turn`: endpoint JSON puro de intake guiado de
+  nueva app; calcula decisiones/followups de wizard y sesion parcial sin
+  persistir estado ni arrancar trabajo.
 - `/api/v0/apps/vcs`: overlay REST de MCP para AppVCS; se monta como ruta
   exacta antes del fallback `/api/v0/apps/{app_ref}/changes`.
 - `/api/v0/apps/{app_ref}/changes`: bridge REST de MCP para cambios de app.
@@ -90,10 +93,14 @@ Entrada de composicion:
   el gateway no interpreta estados, checkpoint, parada fisica ni runtime.
 - `/api/v0/apps/vcs` debe preceder al prefijo `/api/v0/apps/` y no llegar al
   handler catch-all de app-change.
+- `/api/v0/apps/intake/guided-turn` debe preceder al prefijo `/api/v0/apps/`,
+  no llegar al handler catch-all de app-change y no conocer Director, runtime,
+  DB, proveedores ni LLM real.
 - `/api/v0/runs/supervise` delega en `orquesta-mcp`; este modulo no sabe si el
   executor usa Codex, trabajo de dominio u otra composicion.
 - `/api/v0/autoprogramming/prepare-run` delega en `orquesta-mcp`; este modulo no
-  conoce `PrepareAutoprogrammingRunV0`, stores, runtime ni Codex.
+  conoce `PrepareAutoprogrammingRunV0`, stores, runtime ni Codex, y conserva
+  `goal_specs?` si el executor lo devuelve.
 - `/api/v0/autoprogramming/self-improvement` delega en `orquesta-mcp`; este
   modulo no decide prioridad, cola, runtime ni preparacion salvo puerto
   inyectado.

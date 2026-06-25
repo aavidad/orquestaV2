@@ -17,7 +17,8 @@ func startupEstadoV0(state StateV0) string {
 }
 
 func supervisorEstadoV0(state StateV0) string {
-	if strings.TrimSpace(state.LastSupervisorStatus) == "error" || state.SupervisorErrorTicks > 0 {
+	if strings.TrimSpace(state.LastSupervisorStatus) == "error" ||
+		strings.TrimSpace(state.LastSupervisorError) != "" {
 		return orquestaobservability.DiagnosticoEstadoDegradedV0
 	}
 	if strings.TrimSpace(state.LastSupervisorAt) == "" {
@@ -34,7 +35,8 @@ func startupSeverityV0(state StateV0) string {
 }
 
 func supervisorSeverityV0(state StateV0) string {
-	if strings.TrimSpace(state.LastSupervisorStatus) == "error" || state.SupervisorErrorTicks > 0 {
+	if strings.TrimSpace(state.LastSupervisorStatus) == "error" ||
+		strings.TrimSpace(state.LastSupervisorError) != "" {
 		return "warning"
 	}
 	return "info"

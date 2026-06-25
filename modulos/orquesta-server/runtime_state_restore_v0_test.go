@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
 func TestRuntimeV0RestauraEstadoDurableAlRecrearInstanciaV0(t *testing.T) {
@@ -130,5 +132,86 @@ func TestRuntimeV0RestauraEstadoDurableAlRecrearInstanciaV0(t *testing.T) {
 		state.IdleSelfImprovementOK != 2 ||
 		state.IdleSelfImprovementReason != "attempt_blocked" {
 		t.Fatalf("contadores idle restaurados=%+v", state)
+	}
+}
+
+func TestRuntimeV0RestauraGoalAutomejoraPendienteV0(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewFileStateStoreV0(filepath.Join(dir, DefaultStateFileV0))
+	if err != nil {
+		t.Fatalf("NewFileStateStoreV0: %v", err)
+	}
+	previous := StateV0{
+		SchemaVersion:             StateSchemaVersionV0,
+		Status:                    "running",
+		Addr:                      "127.0.0.1:1",
+		StartedAt:                 "2026-06-25T10:00:00Z",
+		LastHeartbeatAt:           "2026-06-25T10:05:00Z",
+		IdleSelfImprovementCheck:  "2026-06-25T10:04:00Z",
+		IdleSelfImprovementReason: "prepared;goal_ref=goal-ref-restore-001",
+		IdleSelfImprovementRuns:   1,
+		IdleSelfImprovementOK:     1,
+		IdleSelfImprovementFlight: true,
+		IdleSelfImprovementGoalSpec: &orquestagoal.GoalWorkSpecV0{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			GoalRef:       "goal-ref-restore-001",
+			Objective:     "Restaurar goal pendiente",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "modulos/orquesta-server"}},
+			ClosurePolicy: orquestagoal.GoalClosurePolicyV0{RequiredEvidenceRefs: []string{"evidence-ref-restore-001"}},
+		},
+		IdleSelfImprovementGoalReceipt: &orquestagoal.GoalLaunchReceiptV0{
+			SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+			Status:          orquestagoal.GoalStatusAcceptedV0,
+			GoalRef:         "goal-ref-restore-001",
+			ExternalGoalRef: "external-goal-ref-restore-001",
+			EvidenceRefs:    []string{"evidence-ref-restore-receipt-001"},
+		},
+		IdleSelfImprovementGoalResult: &orquestagoal.GoalWorkResultV0{
+			SchemaVersion: orquestagoal.GoalWorkResultSchemaV0,
+			Status:        orquestagoal.GoalStatusRunningV0,
+			GoalRef:       "goal-ref-restore-001",
+		},
+		IdleSelfImprovementGoalClosure: &orquestagoal.GoalClosureValidationV0{
+			Status:      orquestagoal.GoalStatusBlockedV0,
+			NeedsRework: true,
+			Issues:      []orquestagoal.GoalWorkIssueV0{{Code: orquestagoal.ErrGoalClosureInvalidV0, Field: "evidence_refs"}},
+		},
+		IdleSelfImprovementOperationalMessage: &ServerOperationalMessageV0{
+			Scope:      "idle_self_improvement",
+			ReasonCode: "prepared",
+			Status:     orquestagoal.GoalStatusAcceptedV0,
+			GoalRefs:   []string{"goal-ref-restore-001"},
+		},
+	}
+	if err := store.SaveServerStateV0(context.Background(), previous); err != nil {
+		t.Fatalf("SaveServerStateV0: %v", err)
+	}
+
+	now := time.Date(2026, 6, 25, 11, 0, 0, 0, time.UTC)
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:      dir,
+		Addr:          "127.0.0.1:8789",
+		AuditDisabled: true,
+	}, RuntimeDepsV0{Clock: fixedClockV0{now: now}})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	got := runtime.StateV0()
+	if got.IdleSelfImprovementGoalSpec == nil ||
+		got.IdleSelfImprovementGoalSpec.GoalRef != "goal-ref-restore-001" ||
+		got.IdleSelfImprovementGoalReceipt == nil ||
+		got.IdleSelfImprovementGoalReceipt.ExternalGoalRef != "external-goal-ref-restore-001" ||
+		got.IdleSelfImprovementGoalResult == nil ||
+		got.IdleSelfImprovementGoalResult.Status != orquestagoal.GoalStatusRunningV0 ||
+		got.IdleSelfImprovementGoalClosure == nil ||
+		!got.IdleSelfImprovementGoalClosure.NeedsRework ||
+		got.IdleSelfImprovementOperationalMessage == nil ||
+		got.IdleSelfImprovementOperationalMessage.ReasonCode != "prepared" {
+		t.Fatalf("goal durable no restaurado: %+v", got)
+	}
+	if _, _, inFlight, accepted := runtime.tracker.IdleSelfImprovementWindowV0(); inFlight || !accepted {
+		t.Fatalf("ventana goal restaurada in_flight=%v accepted=%v", inFlight, accepted)
 	}
 }

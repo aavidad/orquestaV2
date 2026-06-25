@@ -142,6 +142,64 @@ programable compatible con el nucleo:
 - corta refs vivos imposibles y rutas inseguras en `live_works.write_set`.
 - si el core rechaza un `WorkProfileV0`/`WorkflowTaskV0`, conserva el subcampo
   causal en el issue publico para que el director pueda reparar la forma.
+- devuelve `goal_migration` como evidencia pura de migracion goal-first:
+  `legacy_loop_compatible`, `goal_ready`,
+  `blocked_by_goal_capability`, `covered_by_goal_first` o
+  `legacy_loop_required`.
+- si `goal_migration.status=goal_ready`, devuelve `goal_specs[]` como
+  `GoalWorkSpecV0` neutral, uno por grupo programable, con `director_kind`
+  `codex_goal`, `write_set`, pruebas requeridas, criterios, refs de contexto y
+  politica de cierre por tests. No lanza ni observa ningun goal.
+
+### Clasificacion goal-first
+
+La clasificacion no lanza goals, no observa runtime y no importa Codex ni
+servidor. Solo lee `tasks.context_refs` para que el planner residente o un
+adaptador externo decidan si una tarea de autoprogramacion debe seguir por el
+loop historico o esperar/correr por Goal.
+
+Refs reconocidas:
+
+- `goal_migration:goal-first`: la tarea es candidata a ruta Goal.
+- `goal_migration:covered`: el trabajo ya esta cubierto por una ruta goal-first
+  y no debe reprogramarse en el loop legacy.
+- `goal_migration:legacy-required`: el caso necesita el loop historico por
+  compatibilidad, smoke existente o ausencia de runtime Goal.
+- `goal_capability:starter`: existe capacidad de arrancar goals por puerto.
+- `goal_capability:observer`: existe capacidad de observar `running`,
+  `complete` o `blocked`.
+- `goal_capability:closure-validator`: existe validacion de cierre por
+  evidencias, tests y artefactos.
+
+Reglas:
+
+- sin marcadores, la tarea conserva `legacy_loop_compatible`;
+- `legacy-required` gana sobre `goal-first`;
+- `covered` gana sobre `goal-first` y devuelve
+  `do_not_schedule_legacy_loop`, porque ya hay una ruta goal-first cubriendo el
+  trabajo y no debe duplicarse;
+- `goal-first` sin las tres capacidades queda
+  `blocked_by_goal_capability`;
+- `goal-first` con las tres capacidades queda `goal_ready`, pero el lanzamiento
+  real sigue perteneciendo a composicion/adaptador.
+
+### Goal specs
+
+`BuildAutoprogrammingGoalWorkSpecsV0` compila `GoalWorkSpecV0` solo desde un
+`AutoprogrammingProgrammableWorkV0` ya aceptado y clasificado como `goal_ready`.
+Para cualquier otro estado devuelve lista vacia. Si el spec resultante no pasa
+`ValidateGoalWorkSpecV0`, devuelve issue publico `goal_work_spec_invalid` con el
+subcampo causal.
+
+Invariantes:
+
+- no importa runtime, Codex, MCP, servidor, HTTP, DB, VCS ni filesystem;
+- conserva paths relativos del `write_set`, pruebas requeridas y criterios del
+  `WorkflowTaskV0`;
+- usa refs opacas de request/proyecto/worktree/branch y contexto compacto de la
+  tarea;
+- `complete` de un goal no se considera cierre por este modulo; la validacion
+  de cierre queda en `orquesta-goal` y en la composicion.
 
 ## AutoprogrammingRequestV1
 

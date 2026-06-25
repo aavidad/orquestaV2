@@ -144,7 +144,13 @@ func (handler handlerV0) writeOperationalStatusValidationV0(
 }
 
 func (handler handlerV0) observeResponseWriteV0(observation serverHTTPResponseObservationV0) {
-	if observation.OK || handler.config.Tracker == nil {
+	if handler.config.Tracker == nil {
+		return
+	}
+	if observation.OK {
+		if handler.config.Tracker.ResponseWriteRecoveryPendingV0() {
+			handler.config.Tracker.MarkResponseWriteSucceededV0(time.Now().UTC())
+		}
 		return
 	}
 	switch observation.Code {

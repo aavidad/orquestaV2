@@ -69,11 +69,29 @@ type PreferenciasTecnicasV0 struct {
 }
 
 type DatosRequestV0 struct {
-	DBRequired         bool     `json:"db_required,omitempty"`
-	NecesidadFuncional string   `json:"necesidad_funcional,omitempty"`
-	TiposDatos         []string `json:"tipos_datos,omitempty"`
-	Sensibilidad       string   `json:"sensibilidad,omitempty"`
-	Retencion          string   `json:"retencion,omitempty"`
+	DBRequired         bool                   `json:"db_required,omitempty"`
+	NecesidadFuncional string                 `json:"necesidad_funcional,omitempty"`
+	TiposDatos         []string               `json:"tipos_datos,omitempty"`
+	TiposDetallados    []DataTypeRequestV0    `json:"tipos_detallados,omitempty"`
+	Storage            []DataStorageRequestV0 `json:"storage,omitempty"`
+	Sensibilidad       string                 `json:"sensibilidad,omitempty"`
+	Retencion          string                 `json:"retencion,omitempty"`
+}
+
+type DataTypeRequestV0 struct {
+	Nombre        string   `json:"nombre,omitempty"`
+	Proposito     string   `json:"proposito,omitempty"`
+	Sensibilidad  string   `json:"sensibilidad,omitempty"`
+	Retencion     string   `json:"retencion,omitempty"`
+	Volumen       string   `json:"volumen,omitempty"`
+	Restricciones []string `json:"restricciones,omitempty"`
+}
+
+type DataStorageRequestV0 struct {
+	Tipo          string   `json:"tipo,omitempty"`
+	Proposito     string   `json:"proposito,omitempty"`
+	Requerido     bool     `json:"requerido,omitempty"`
+	Restricciones []string `json:"restricciones,omitempty"`
 }
 
 type DeployRequestV0 struct {
@@ -82,10 +100,11 @@ type DeployRequestV0 struct {
 }
 
 type CalidadRequestV0 struct {
-	Pruebas        string   `json:"pruebas,omitempty"`
-	Accesibilidad  string   `json:"accesibilidad,omitempty"`
-	Compliance     []string `json:"compliance,omitempty"`
-	Observabilidad *bool    `json:"observabilidad,omitempty"`
+	Pruebas               string   `json:"pruebas,omitempty"`
+	Accesibilidad         string   `json:"accesibilidad,omitempty"`
+	AccesibilidadOpciones []string `json:"accesibilidad_opciones,omitempty"`
+	Compliance            []string `json:"compliance,omitempty"`
+	Observabilidad        *bool    `json:"observabilidad,omitempty"`
 }
 
 type DocumentacionV0 struct {
@@ -182,14 +201,19 @@ func validateEnumsV0(req AppSpecRequestV0) []ValidationIssue {
 	if pruebas := req.Calidad.Pruebas; pruebas != "" && !containsV0(pruebas, "basica", "media", "alta") {
 		issues = append(issues, issue(ErrAppSpecInvalida, "calidad.pruebas", "nivel de pruebas no soportado"))
 	}
-	if accesibilidad := req.Calidad.Accesibilidad; accesibilidad != "" && !containsV0(accesibilidad, "no_aplica", "basica", "wcag_aa") {
+	if accesibilidad := req.Calidad.Accesibilidad; accesibilidad != "" && !AccessibilityLevelSupportedV0(accesibilidad) {
 		issues = append(issues, issue(ErrAppSpecInvalida, "calidad.accesibilidad", "nivel de accesibilidad no soportado"))
+	}
+	for index, accesibilidad := range req.Calidad.AccesibilidadOpciones {
+		if strings.TrimSpace(accesibilidad) != "" && !AccessibilityLevelSupportedV0(accesibilidad) {
+			issues = append(issues, issue(ErrAppSpecInvalida, fmt.Sprintf("calidad.accesibilidad_opciones.%d", index), "nivel de accesibilidad no soportado"))
+		}
 	}
 	if autonomia := req.Agentes.Autonomia; autonomia != "" && !containsV0(autonomia, "baja", "media", "alta") {
 		issues = append(issues, issue(ErrAppSpecInvalida, "agentes.autonomia", "autonomia no soportada"))
 	}
-	if arch := req.PreferenciasTecnicas.Arquitectura; arch != "" && arch != "hexagonal" {
-		issues = append(issues, issue(ErrOpcionIncompatible, "preferencias_tecnicas.arquitectura", "solo hexagonal estricta esta permitido en v0"))
+	if arch := req.PreferenciasTecnicas.Arquitectura; strings.TrimSpace(arch) != "" && !ArchitecturePatternSupportedV0(arch) {
+		issues = append(issues, issue(ErrOpcionIncompatible, "preferencias_tecnicas.arquitectura", "arquitectura no soportada"))
 	}
 	issues = append(issues, validateConnectorNamesV0(req)...)
 	return issues
@@ -219,13 +243,34 @@ func validateI18NV0(req AppSpecRequestV0) []ValidationIssue {
 }
 
 func validateDatosV0(req AppSpecRequestV0) []ValidationIssue {
+	var issues []ValidationIssue
+	for index, storage := range req.Datos.Storage {
+		tipo := strings.TrimSpace(storage.Tipo)
+		if tipo != "" && !containsV0(tipo, "relacional", "documental", "vectorial", "objetos", "clave_valor", "series_temporales", "grafo", "cache", "busqueda") {
+			issues = append(issues, issue(ErrAppSpecInvalida, fmt.Sprintf("datos.storage.%d.tipo", index), "tipo de almacenamiento no soportado"))
+		}
+	}
 	if !req.Datos.DBRequired {
-		return nil
+		return issues
 	}
-	if strings.TrimSpace(req.Datos.NecesidadFuncional) == "" {
-		return []ValidationIssue{issue(ErrAppSpecInvalida, "datos.necesidad_funcional", "db_required requiere necesidad funcional")}
+	if strings.TrimSpace(req.Datos.NecesidadFuncional) == "" && !hasDetailedDataNeedV0(req.Datos) {
+		issues = append(issues, issue(ErrAppSpecInvalida, "datos.necesidad_funcional", "db_required requiere necesidad funcional"))
 	}
-	return nil
+	return issues
+}
+
+func hasDetailedDataNeedV0(datos DatosRequestV0) bool {
+	for _, tipo := range datos.TiposDetallados {
+		if strings.TrimSpace(tipo.Nombre) != "" || strings.TrimSpace(tipo.Proposito) != "" {
+			return true
+		}
+	}
+	for _, storage := range datos.Storage {
+		if strings.TrimSpace(storage.Tipo) != "" || strings.TrimSpace(storage.Proposito) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func issue(code, field, message string) ValidationIssue {

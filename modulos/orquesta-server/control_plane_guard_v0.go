@@ -8,6 +8,8 @@ import (
 
 const controlPlaneDeniedCodeV0 = "control_plane_authorization_required"
 
+const controlPlaneReadOnlyAppIntakeGuidedTurnPathV0 = "/api/v0/apps/intake/guided-turn"
+
 type controlPlaneDecisionV0 struct {
 	Mutable       bool
 	Allowed       bool
@@ -67,6 +69,9 @@ func isMutableControlPlaneRequestV0(r *http.Request) bool {
 	}
 	path := r.URL.Path
 	if path == "/healthz" || path == ServerStatusLegacyEndpointV0 || path == ServerStatusEndpointV0 {
+		return false
+	}
+	if path == controlPlaneReadOnlyAppIntakeGuidedTurnPathV0 {
 		return false
 	}
 	if path == "/mcp" || strings.HasPrefix(path, "/api/v0/") {

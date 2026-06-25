@@ -22,6 +22,7 @@ type ServerOperationalMessageV0 struct {
 	Status        string         `json:"status,omitempty"`
 	Message       string         `json:"message,omitempty"`
 	RunRefs       []string       `json:"run_refs,omitempty"`
+	GoalRefs      []string       `json:"goal_refs,omitempty"`
 	RequestRefs   []string       `json:"request_refs,omitempty"`
 	EvidenceRefs  []string       `json:"evidence_refs,omitempty"`
 	Counters      map[string]int `json:"counters,omitempty"`
@@ -33,6 +34,7 @@ type serverOperationalMessageInputV0 struct {
 	Status       string
 	Message      string
 	RunRefs      []string
+	GoalRefs     []string
 	RequestRefs  []string
 	EvidenceRefs []string
 	Counters     map[string]int
@@ -70,6 +72,7 @@ func projectServerOperationalMessageRecordV0(
 		Status:        compactServerOperationalTokenV0(input.Status),
 		Message:       message,
 		RunRefs:       compactServerOperationalRefsV0(input.RunRefs),
+		GoalRefs:      compactServerOperationalRefsV0(input.GoalRefs),
 		RequestRefs:   compactServerOperationalRefsV0(input.RequestRefs),
 		EvidenceRefs:  compactServerOperationalRefsV0(input.EvidenceRefs),
 		Counters:      compactServerOperationalCountersV0(input.Counters),
@@ -79,6 +82,7 @@ func projectServerOperationalMessageRecordV0(
 		record.Status == "" &&
 		record.Message == "" &&
 		len(record.RunRefs) == 0 &&
+		len(record.GoalRefs) == 0 &&
 		len(record.RequestRefs) == 0 &&
 		len(record.EvidenceRefs) == 0 &&
 		len(record.Counters) == 0 {
@@ -95,6 +99,7 @@ func copyServerOperationalMessageV0(
 	}
 	out := *message
 	out.RunRefs = append([]string(nil), message.RunRefs...)
+	out.GoalRefs = append([]string(nil), message.GoalRefs...)
 	out.RequestRefs = append([]string(nil), message.RequestRefs...)
 	out.EvidenceRefs = append([]string(nil), message.EvidenceRefs...)
 	out.Counters = compactServerOperationalCountersV0(message.Counters)

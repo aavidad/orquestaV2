@@ -13,6 +13,12 @@ estado y ultima supervision. Al reconectar, el operador consulta ese fichero y
 despues valida `/api/v0/server/readiness` o `/api/v0/server/status`; `/api/status`
 queda solo como alias legacy.
 
+Con automejora goal-first, el statefile puede guardar spec, receipt, resultado
+y validacion de cierre completos para restaurar el proceso residente sin perder
+causalidad. Esa informacion es estado local de reenganche, no superficie
+publica: readiness, status y operational-status publican solo refs, estados y
+contadores compactos.
+
 ## SRV-003: supervisor por puerto
 
 El daemon no contiene logica del nucleo de orquestacion. Solo llama a un puerto
@@ -168,3 +174,230 @@ La correccion posterior
 mantiene la misma decision. Su unico alcance es sincronizar la evidencia local
 de esta revision con el backlog y docs del servidor; cualquier cambio de codigo
 requiere regresion causal nueva con refs concretas de job, receipt o artifact.
+
+El agente de reemplazo
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-0b2-f385b5e4533d62b5c7d2a64b70950490`
+no cambia la decision: conserva la entrega documental valida, resuelve el
+`ref_only` por evidencia local disponible y no relanza padre de codigo sobre la
+tarea original.
+
+El agente externo
+`agent-ref-task-ref-review-rework-task-autoprogramming-30d589fce14c-g01-8bb7a3491960a73cba493ed199be20e1`
+mantiene la misma decision: el paquete solo reobserva SRV-TASK-015 con contexto
+obligatorio `ref_only` y write-set cerrado al servidor, por lo que se cierra
+como no-op documental salvo regresion causal nueva con refs concretas.
+
+La correccion
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-dacb62e5ec1ae158a640baa674e72940`
+mantiene esa decision: evidencia `ref_only` local suficiente, sin relanzar otro
+padre ni programar codigo, y cierre condicionado al test focal obligatorio.
+
+La correccion externa
+`agent-ref-task-ref-review-rework-task-autoprogramming-abea33163b68-g01-04bebd80bd7c5afa1ff0cde8543ec8ec`
+mantiene esa decision: el contrato solo exige corregir la entrega rechazada,
+conservar lo valido y resolver `ref_only` por evidencia local; no reabre
+implementacion ni relanza otro padre sin regresion causal nueva con refs
+concretas.
+
+La correccion externa
+`agent-ref-task-ref-review-rework-task-autoprogramming-99f93b5dadeb-g01-46ac951607ee8f489f914ee25e92cb88`
+queda corregida como ref de SRV-TASK-024. No modifica la decision de SRV-TASK-015
+ni se usa como evidencia de cierre de ese owner.
+
+El assessment externo
+`agent-ref-assessment-task-ref-review-rework-task-autoprogramming-99f93b5dadeb-g01-46a-de83dfc8cce6e142d5f9b4a9f2a47b24`
+queda corregido como assessment de SRV-TASK-024. No cambia la frontera
+documental de SRV-TASK-015.
+
+## SRV-014: SRV-TASK-024 no se cierra por rastro documental
+
+La request
+`request-ref-autoprogramming-backlog-srv-task-024-90719eb4-reconcile-c83a27e7`
+reconcilia un backlog real sobre runs OPES en `resident_director_pending` sin
+agente visible. Las entregas documentales pueden conservar evidencia y
+normalizar refs, pero no sustituyen el cierre tecnico: debe existir codigo en
+composicion/servidor que despache o publique bloqueo causal y un smoke OPES
+acotado que lo demuestre.
+
+La correccion
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-dc31be1188c5569b01263b5f388f0788`
+aplica esta decision: corrige la asociacion causal de las refs previas a
+SRV-TASK-024, resuelve `ref_only` por evidencia local y no relanza otro padre ni
+abre implementacion fuera del write-set documental.
+
+El assessment externo
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-autoprogr-dc3-0ff5f84c9556672a698237df3988111c`
+no cambia la decision: conserva la evidencia valida, resuelve el nuevo
+`ref_only` por paquete y docs locales y deja el cierre tecnico en SRV-TASK-024.
+
+El assessment externo de reemplazo
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-autoprogr-dc3-36f24a2209e93ca38f4443ce22f527cf`
+aplica la misma decision: no relanza otro padre, no abre implementacion dentro
+de un write-set documental y solo puede cerrar su entrega si la prueba focal
+obligatoria pasa; SRV-TASK-024 sigue abierto hasta evidencia tecnica causal.
+
+La correccion de entrega
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-autoprogr-dc3-a5a32e27fa8bf23a4b29ee07490e9a10`
+mantiene esa decision. El `ref_only` se resuelve por paquete y docs locales; no
+hay regresion causal nueva ni permiso de codigo en el write-set, por lo que el
+cierre tecnico de SRV-TASK-024 sigue dependiendo de dispatch real o bloqueo
+causal publico con smoke OPES acotado.
+
+La correccion de burst 003
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-72998ee36295059452b54a9eb4e875ee`
+mantiene la misma decision: conserva la evidencia documental valida, resuelve
+`ref_only` por paquete y docs locales, no reabre implementacion ni relanza
+padre; SRV-TASK-024 sigue abierto hasta dispatch real o bloqueo causal publico
+probado por smoke OPES acotado.
+
+El assessment externo
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-autoprogr-729-9fc3f13d44dbaff94cfe5adff747a3e9`
+mantiene esa decision: la correccion revisada se conserva como evidencia
+documental valida, el `ref_only` se resuelve por paquete y fuentes locales, y
+no se relanza padre ni se abre codigo dentro del write-set. El cierre tecnico
+de SRV-TASK-024 sigue dependiendo de dispatch real o bloqueo causal publico
+probado por smoke OPES acotado.
+
+La correccion externa
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-cfd9c13a92a5cd21fd6c622e6f405e46`
+aplica la misma decision: completa solo el rastro documental de la entrega
+rechazada, conserva lo valido, resuelve `ref_only` por paquete y docs locales,
+no relanza padre ni abre codigo, y no cierra SRV-TASK-024 sin dispatch real o
+bloqueo causal publico probado por smoke OPES acotado.
+
+El assessment externo
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-cfd-c006963b24043636d557f12d4659b4a3`
+mantiene la misma decision: corrige solo la entrega documental de su evaluacion,
+resuelve `ref_only` por paquete y docs locales, no relanza padre ni abre codigo
+dentro del write-set. El cierre tecnico de SRV-TASK-024 sigue dependiendo de
+dispatch real o bloqueo causal publico probado por smoke OPES acotado.
+
+El assessment externo de reemplazo
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-cfd-791ce4584f28597b364194874b2875a4`
+mantiene esa decision: conserva la entrega documental valida, resuelve
+`ref_only` por paquete de control y fuentes locales, no relanza padre ni abre
+codigo dentro del write-set documental. El cierre tecnico de SRV-TASK-024 sigue
+dependiendo de dispatch real o bloqueo causal publico probado por smoke OPES
+acotado.
+
+La correccion externa
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-99773dd28e4df93406b2912127997d04`
+mantiene la misma decision: completa solo el rastro documental de la entrega
+rechazada, resuelve `ref_only` por paquete de control y docs locales, no
+relanza padre ni abre codigo dentro del write-set documental. El cierre tecnico
+de SRV-TASK-024 sigue dependiendo de dispatch real o bloqueo causal publico
+probado por smoke OPES acotado.
+
+La correccion externa
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-30ffd078ad6ee9febe4c50ac0bd29891`
+mantiene esa decision: completa solo el rastro documental de la entrega nueva,
+resuelve `ref_only` por paquete de control, AGENTS raiz, README/AGENTS locales
+del servidor y docs locales, no relanza padre ni abre codigo dentro del
+write-set documental. El cierre tecnico de SRV-TASK-024 sigue dependiendo de
+dispatch real o bloqueo causal publico probado por smoke OPES acotado.
+
+El assessment externo
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-30f-c4501a4d6b170b706b55f9a3dd4a44a6`
+mantiene esa decision: corrige solo el rastro documental de la evaluacion
+nueva, resuelve `ref_only` por paquete de control, AGENTS raiz, README/AGENTS
+locales del servidor y docs locales, no relanza padre ni abre codigo dentro del
+write-set documental. El cierre tecnico de SRV-TASK-024 sigue dependiendo de
+dispatch real o bloqueo causal publico probado por smoke OPES acotado.
+
+La correccion externa
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-30f-aad45cf56f890e04e96c6b86b7c9bc7b`
+mantiene esa decision: corrige solo el rastro documental del replan por
+evaluacion, resuelve `ref_only` por paquete de control, AGENTS raiz,
+README/AGENTS locales del servidor y docs locales, no relanza padre ni abre
+codigo dentro del write-set documental. El cierre tecnico de SRV-TASK-024 sigue
+dependiendo de dispatch real o bloqueo causal publico probado por smoke OPES
+acotado.
+
+El assessment externo
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-30f-6842075f2c746477bb06b52d2c34e0c5`
+mantiene la misma decision: completa solo el rastro documental de esta
+correccion tras revision, resuelve `ref_only` por paquete de control, AGENTS
+raiz, README/AGENTS locales del servidor y docs locales, no relanza padre ni
+abre codigo dentro del write-set documental. El cierre tecnico de SRV-TASK-024
+sigue dependiendo de dispatch real o bloqueo causal publico probado por smoke
+OPES acotado.
+
+La correccion externa
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-9ba51f68ffa908088c91ca219cb73b84`
+mantiene la misma decision: completa solo el rastro documental de esta entrega,
+resuelve `ref_only` por paquete de control, AGENTS raiz, README/AGENTS locales
+del servidor y docs locales, no relanza padre ni abre codigo dentro del
+write-set documental. El cierre tecnico de SRV-TASK-024 sigue dependiendo de
+dispatch real o bloqueo causal publico probado por smoke OPES acotado.
+
+La correccion externa
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-5f1990c9bda61f11e4c4572d7d8ec5f9`
+mantiene la misma decision: completa solo el rastro documental de esta entrega
+nueva, resuelve `ref_only` por paquete de control, AGENTS raiz, README/AGENTS
+locales del servidor y docs locales, no relanza padre ni abre codigo dentro del
+write-set documental. El cierre tecnico de SRV-TASK-024 sigue dependiendo de
+dispatch real o bloqueo causal publico probado por smoke OPES acotado.
+
+La correccion externa
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-2f664d21881795ee2d8392327887480f`
+mantiene la misma decision: completa solo el rastro documental de esta entrega
+nueva, resuelve `ref_only` por paquete de control, AGENTS raiz, README/AGENTS
+locales del servidor y docs locales, no relanza padre ni abre codigo dentro del
+write-set documental. El cierre tecnico de SRV-TASK-024 sigue dependiendo de
+dispatch real o bloqueo causal publico probado por smoke OPES acotado.
+
+El assessment externo
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-2f6-4a88d678723f47ef86524e438127a1e1`
+mantiene la misma decision: completa solo el rastro documental de la evaluacion
+nueva, resuelve `ref_only` por paquete de control, AGENTS raiz, README/AGENTS
+locales del servidor y docs locales, no relanza padre ni abre codigo dentro del
+write-set documental. El cierre tecnico de SRV-TASK-024 sigue dependiendo de
+dispatch real o bloqueo causal publico probado por smoke OPES acotado.
+
+La correccion externa
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-2f6-d07cfaec65f49155f8328d0512377fd7`
+mantiene esa decision: corrige solo la entrega rechazada de la evaluacion,
+resuelve `ref_only` por paquete de control, AGENTS raiz, README/AGENTS locales
+del servidor y docs locales, no relanza padre ni abre codigo dentro del
+write-set documental. El cierre tecnico de SRV-TASK-024 sigue dependiendo de
+dispatch real o bloqueo causal publico probado por smoke OPES acotado.
+
+El assessment externo de reemplazo
+`agent-ref-assessment-task-ref-review-rework-task-ref-review-rework-task-ref-revie-2f6-20f9ab529a94f082f863a30e7a9275dd`
+mantiene esa decision: corrige solo la evaluacion previa sin ACK, resuelve
+`ref_only` por paquete de control, AGENTS raiz, README/AGENTS locales del
+servidor y docs locales, no relanza padre ni abre codigo dentro del write-set
+documental. El cierre tecnico de SRV-TASK-024 sigue dependiendo de dispatch
+real o bloqueo causal publico probado por smoke OPES acotado.
+
+La correccion externa
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-d20f765b96bef254281f4683e6ab3480`
+mantiene esa decision: completa solo el rastro documental de la entrega nueva,
+resuelve `ref_only` por paquete de control, AGENTS raiz, README/AGENTS locales,
+foto vigente y docs locales, no relanza padre ni abre codigo dentro del
+write-set documental. El cierre tecnico de SRV-TASK-024 sigue dependiendo de
+dispatch real o bloqueo causal publico probado por smoke OPES acotado.
+
+La correccion externa
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-9e9d33b777c6565a38a9b5a6eb7529a2`
+mantiene esa decision: completa solo el rastro documental de esta entrega nueva,
+resuelve `ref_only` por paquete de control, AGENTS raiz, README/AGENTS locales,
+foto vigente y docs locales, no relanza padre ni abre codigo dentro del
+write-set documental. El cierre tecnico de SRV-TASK-024 sigue dependiendo de
+dispatch real o bloqueo causal publico probado por smoke OPES acotado.
+
+La correccion externa
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-2b5521cd1c1dbd4767cebb3d9c1684d7`
+mantiene esa decision: completa solo el rastro documental de esta entrega nueva,
+resuelve `ref_only` por paquete de control, AGENTS raiz, README/AGENTS locales,
+foto vigente y docs locales, no relanza padre ni abre codigo dentro del
+write-set documental. El cierre tecnico de SRV-TASK-024 sigue dependiendo de
+dispatch real o bloqueo causal publico probado por smoke OPES acotado.
+
+La correccion externa
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-15e93ad10820843acec443a42cbac3c7`
+mantiene esa decision: completa solo el rastro documental de esta entrega nueva,
+resuelve `ref_only` por paquete de control, AGENTS raiz, README/AGENTS locales,
+foto vigente y docs locales, no relanza padre ni abre codigo dentro del
+write-set documental. El cierre tecnico de SRV-TASK-024 sigue dependiendo de
+dispatch real o bloqueo causal publico probado por smoke OPES acotado.

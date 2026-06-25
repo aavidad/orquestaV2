@@ -227,13 +227,7 @@ func (stack StackV0) submitDomainWorkArtifactForObservationV0(
 		}
 		return nil
 	}
-	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
-		ctx,
-		domainWorkAcceptedSubmissionRecordV0(run, task, observation, submission, result, request.OccurredAt),
-	); err != nil {
-		return fmt.Errorf("domain_work_submit_recovery_required")
-	}
-	return nil
+	return stack.recordDomainWorkSuccessfulSubmissionV0(ctx, run, task, observation, submission, result, request.OccurredAt)
 }
 
 func domainWorkSubmitIssueRefsV0(

@@ -64,7 +64,7 @@ const (
 	maxOperationalWarningItemsV0        = 12
 	maxOperationalReferenceItemsV0      = 20
 	maxOperationalEvidenceRefsV0        = 8
-	maxOperationalCountersV0            = 16
+	maxOperationalCountersV0            = 24
 	maxOperationalFreshnessAgeSecondsV0 = 86400
 )
 

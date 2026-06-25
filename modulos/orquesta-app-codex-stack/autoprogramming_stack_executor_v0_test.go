@@ -10,6 +10,7 @@ import (
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
@@ -148,6 +149,51 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0PreparaRunYSupervisorArranca(t 
 		runtime.launchCountV0() != 1 ||
 		!autoprogrammingBridgeStringInSetForTestV0(run.StartedAgents, prepared.WaitAgentRefs[0]) {
 		t.Fatalf("repeated=%+v run=%+v launches=%d", repeated, run, runtime.launchCountV0())
+	}
+}
+
+func TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveGoalSpecsCuandoGoalReady(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.RequestRef = "run-autoprogramming-goal-ready-001"
+	request.Tasks[0].TaskRef = "source-task-ref-autoprogramming-goal-ready-001"
+	request.Tasks[0].ContextRefs = []string{
+		"goal_migration:goal-first",
+		"goal_capability:starter",
+		"goal_capability:observer",
+		"goal_capability:closure-validator",
+	}
+
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-autoprogramming-goal-ready-api-001",
+		CorrelationID:          "corr-autoprogramming-goal-ready-api-001",
+		OccurredAt:             "2026-06-25T12:00:00Z",
+		RequestedBy:            "orquesta-stack-api-test",
+		AutoprogrammingRequest: request,
+		MaxBursts:              3,
+		MaxStepsPerBurst:       3,
+		MaxDispatchesPerWait:   3,
+		MaxCommands:            5,
+		MaxOutboxPerCycle:      5,
+	})
+
+	if !prepared.Accepted || prepared.RunRef == "" || len(prepared.WorkflowTaskRefs) != 1 ||
+		len(prepared.GoalSpecs) != 1 {
+		t.Fatalf("prepared=%+v", prepared)
+	}
+	spec := prepared.GoalSpecs[0]
+	if issues := orquestagoal.ValidateGoalWorkSpecV0(spec); len(issues) > 0 {
+		t.Fatalf("goal spec invalido: %+v spec=%+v", issues, spec)
+	}
+	if spec.RunRef != prepared.RunRef ||
+		spec.RequestRef != request.RequestRef ||
+		spec.ProjectRef != request.ProjectRef ||
+		spec.DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 ||
+		spec.WorkKind != "autoprogramming" ||
+		len(spec.RequiredTests) != 1 ||
+		len(spec.WriteSet) != 1 ||
+		spec.WriteSet[0].Path != request.WriteSet[0] {
+		t.Fatalf("goal spec inesperado=%+v request=%+v", spec, request)
 	}
 }
 

@@ -213,17 +213,20 @@ func supervisorResultHasRunningLiveV0(result orquestarunsupervisor.RunSupervisor
 
 func supervisorPublicCountersV0(result orquestarunsupervisor.RunSupervisorResultV0) map[string]int {
 	counters := map[string]int{
-		"registered":       0,
-		"waiting_outbox":   0,
-		"waiting_external": 0,
-		"running_live":     0,
-		"stalled":          0,
-		"launch_failed":    0,
+		"registered":              0,
+		"waiting_outbox":          0,
+		"waiting_external":        0,
+		"running_live":            0,
+		"stalled":                 0,
+		"launch_failed":           0,
+		"external_work_empty_run": 0,
 	}
 	for _, tick := range result.Ticks {
 		counters["registered"] += len(tick.Result.Ranked)
 		for _, execution := range tick.Result.Executions {
 			switch supervisorExecutionPublicStatusV0(execution.Outcome, execution.QueueStatus, execution.EvidenceRefs, execution.Diagnostics) {
+			case SupervisorPublicStatusExternalEmptyRunV0:
+				counters["external_work_empty_run"]++
 			case SupervisorPublicStatusLaunchFailedV0:
 				counters["launch_failed"]++
 			case SupervisorPublicStatusRunningLiveV0:
@@ -249,6 +252,9 @@ func supervisorPublicCountersV0(result orquestarunsupervisor.RunSupervisorResult
 			}
 		}
 	}
+	if counters["external_work_empty_run"] == 0 && supervisorResultHasExternalEmptyRunV0(result) {
+		counters["external_work_empty_run"] = 1
+	}
 	return counters
 }
 
@@ -258,6 +264,9 @@ func supervisorExecutionPublicStatusV0(
 	evidenceRefs []string,
 	diagnostics []orquestaruncoordinator.RunDrainDiagnosticV0,
 ) string {
+	if supervisorTerminalEmptyRunEvidenceV0(outcome, queueStatus, "", evidenceRefs, diagnostics) {
+		return SupervisorPublicStatusExternalEmptyRunV0
+	}
 	if supervisorLaunchFailedValueV0(outcome, queueStatus) || supervisorDiagnosticsHaveLaunchFailedV0(diagnostics) {
 		return SupervisorPublicStatusLaunchFailedV0
 	}

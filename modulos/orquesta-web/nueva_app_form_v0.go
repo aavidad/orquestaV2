@@ -59,11 +59,29 @@ type WebNuevaAppPreferenciasFormV0 struct {
 }
 
 type WebNuevaAppDatosFormV0 struct {
-	DBRequired         bool     `json:"db_required,omitempty"`
-	NecesidadFuncional string   `json:"necesidad_funcional,omitempty"`
-	TiposDatos         []string `json:"tipos_datos,omitempty"`
-	Sensibilidad       string   `json:"sensibilidad,omitempty"`
-	Retencion          string   `json:"retencion,omitempty"`
+	DBRequired         bool                           `json:"db_required,omitempty"`
+	NecesidadFuncional string                         `json:"necesidad_funcional,omitempty"`
+	TiposDatos         []string                       `json:"tipos_datos,omitempty"`
+	TiposDetallados    []WebNuevaAppDataTypeFormV0    `json:"tipos_detallados,omitempty"`
+	Storage            []WebNuevaAppDataStorageFormV0 `json:"storage,omitempty"`
+	Sensibilidad       string                         `json:"sensibilidad,omitempty"`
+	Retencion          string                         `json:"retencion,omitempty"`
+}
+
+type WebNuevaAppDataTypeFormV0 struct {
+	Nombre        string   `json:"nombre,omitempty"`
+	Proposito     string   `json:"proposito,omitempty"`
+	Sensibilidad  string   `json:"sensibilidad,omitempty"`
+	Retencion     string   `json:"retencion,omitempty"`
+	Volumen       string   `json:"volumen,omitempty"`
+	Restricciones []string `json:"restricciones,omitempty"`
+}
+
+type WebNuevaAppDataStorageFormV0 struct {
+	Tipo          string   `json:"tipo,omitempty"`
+	Proposito     string   `json:"proposito,omitempty"`
+	Requerido     bool     `json:"requerido,omitempty"`
+	Restricciones []string `json:"restricciones,omitempty"`
 }
 
 type WebNuevaAppDeployFormV0 struct {
@@ -72,10 +90,11 @@ type WebNuevaAppDeployFormV0 struct {
 }
 
 type WebNuevaAppCalidadFormV0 struct {
-	Pruebas        string   `json:"pruebas,omitempty"`
-	Accesibilidad  string   `json:"accesibilidad,omitempty"`
-	Compliance     []string `json:"compliance,omitempty"`
-	Observabilidad *bool    `json:"observabilidad,omitempty"`
+	Pruebas               string   `json:"pruebas,omitempty"`
+	Accesibilidad         string   `json:"accesibilidad,omitempty"`
+	AccesibilidadOpciones []string `json:"accesibilidad_opciones,omitempty"`
+	Compliance            []string `json:"compliance,omitempty"`
+	Observabilidad        *bool    `json:"observabilidad,omitempty"`
 }
 
 type WebNuevaAppDocumentacionFormV0 struct {
@@ -161,9 +180,45 @@ func mapDatosFormV0(value WebNuevaAppDatosFormV0) orquestafactory.DatosRequestV0
 		DBRequired:         value.DBRequired,
 		NecesidadFuncional: trimV0(value.NecesidadFuncional),
 		TiposDatos:         compactStringsV0(value.TiposDatos),
+		TiposDetallados:    mapDataTypeFormsV0(value.TiposDetallados),
+		Storage:            mapDataStorageFormsV0(value.Storage),
 		Sensibilidad:       trimV0(value.Sensibilidad),
 		Retencion:          trimV0(value.Retencion),
 	}
+}
+
+func mapDataTypeFormsV0(values []WebNuevaAppDataTypeFormV0) []orquestafactory.DataTypeRequestV0 {
+	out := make([]orquestafactory.DataTypeRequestV0, 0, len(values))
+	for _, value := range values {
+		out = append(out, orquestafactory.DataTypeRequestV0{
+			Nombre:        trimV0(value.Nombre),
+			Proposito:     trimV0(value.Proposito),
+			Sensibilidad:  trimV0(value.Sensibilidad),
+			Retencion:     trimV0(value.Retencion),
+			Volumen:       trimV0(value.Volumen),
+			Restricciones: compactStringsV0(value.Restricciones),
+		})
+	}
+	if out == nil {
+		return []orquestafactory.DataTypeRequestV0{}
+	}
+	return out
+}
+
+func mapDataStorageFormsV0(values []WebNuevaAppDataStorageFormV0) []orquestafactory.DataStorageRequestV0 {
+	out := make([]orquestafactory.DataStorageRequestV0, 0, len(values))
+	for _, value := range values {
+		out = append(out, orquestafactory.DataStorageRequestV0{
+			Tipo:          trimV0(value.Tipo),
+			Proposito:     trimV0(value.Proposito),
+			Requerido:     value.Requerido,
+			Restricciones: compactStringsV0(value.Restricciones),
+		})
+	}
+	if out == nil {
+		return []orquestafactory.DataStorageRequestV0{}
+	}
+	return out
 }
 
 func mapDeployFormV0(value WebNuevaAppDeployFormV0) orquestafactory.DeployRequestV0 {
@@ -175,10 +230,11 @@ func mapDeployFormV0(value WebNuevaAppDeployFormV0) orquestafactory.DeployReques
 
 func mapCalidadFormV0(value WebNuevaAppCalidadFormV0) orquestafactory.CalidadRequestV0 {
 	return orquestafactory.CalidadRequestV0{
-		Pruebas:        trimV0(value.Pruebas),
-		Accesibilidad:  trimV0(value.Accesibilidad),
-		Compliance:     compactStringsV0(value.Compliance),
-		Observabilidad: value.Observabilidad,
+		Pruebas:               trimV0(value.Pruebas),
+		Accesibilidad:         trimV0(value.Accesibilidad),
+		AccesibilidadOpciones: compactStringsV0(value.AccesibilidadOpciones),
+		Compliance:            compactStringsV0(value.Compliance),
+		Observabilidad:        value.Observabilidad,
 	}
 }
 

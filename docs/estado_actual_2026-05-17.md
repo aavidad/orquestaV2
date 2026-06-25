@@ -114,6 +114,14 @@ Esto implica:
   registra nueva outbox. No es el loop progresivo historico de
   `app-director-service`, no es daemon y no demuestra por si sola composicion
   residente, smoke real, proveedor real ni OPES temporal.
+- desde el corte 2026-06-25 se abre el camino goal-first para adelgazar el loop
+  residente cuando el runtime ya aporta `goal` persistente. En ese modo, Codex
+  Goal actua como Director operativo interno; Orquesta compila
+  `GoalWorkSpecV0`, lanza/observa por adaptador opt-in, conserva receipt y
+  valida cierre por evidencias. El status publico solo expone resumen compacto
+  de spec/receipt/result/closure. El loop historico
+  `app-director-service`/`PlanState` no se reabre para nuevas rutas goal-first
+  salvo compatibilidad o regresion.
 - para `AppSpecV0`, la ruta publica operativa preferente es
   `orquesta.apps.arrancar_director.v0`, que delega en
   `orquesta-app-director-service`. `orquesta.apps.preparar_orquestacion.v0` y
@@ -392,6 +400,8 @@ Lo pendiente no debe confundirse con lo hecho:
   `xhigh`, `document_plan` entregado y derivados creados.
 - `corte_supervisor_codex_director_2026-05-18.md`: corte vigente de la pieza
   `launch -> sigue -> done` para sesiones Codex supervisadas por Orquesta.
+- `orquesta_goal_first_codex_2026-06-25.md`: corte vigente para Codex Goal como
+  Director operativo interno y Orquesta como plano de gobierno externo.
 - `arquitectura_plataforma_agentes_2026-05-13.md`: decision de evolucion hacia
   plataforma/nucleo de agentes con dominios consumidores.
 - `resultado_prueba_opes_orquesta_plan_limpia_2026-05-15.md`: evidencia viva de

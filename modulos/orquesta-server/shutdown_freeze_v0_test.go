@@ -152,6 +152,92 @@ func TestRuntimeV0ServerShutdownReadyDescongelaSupervisorV0(t *testing.T) {
 	}
 }
 
+func TestRuntimeV0ServerShutdownReadyConAgenteVivoQuedaStopPendingV0(t *testing.T) {
+	store := &memoryStateStoreV0{}
+	supervisor := &countingShutdownFreezeSupervisorV0{}
+	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"estado":              "ok",
+			"status":              "stopped",
+			"shutdown_ready":      true,
+			"runs_requested":      1,
+			"runs_stopped":        1,
+			"agents_in_flight":    1,
+			"checkpoints_pending": 0,
+		})
+	})
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:     t.TempDir(),
+		TickInterval: time.Hour,
+		SupervisorCommand: orquestarunsupervisor.RunSupervisorCommandV0{
+			QueueRef:      "global",
+			MaxExecutions: 10,
+		},
+	}, RuntimeDepsV0{
+		AppHandler: app,
+		Supervisor: supervisor,
+		StateStore: store,
+		Clock:      fixedClockV0{now: time.Date(2026, 6, 25, 10, 0, 0, 0, time.UTC)},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, serverShutdownRoutePathV0, nil)
+	runtime.HandlerV0().ServeHTTP(httptest.NewRecorder(), req)
+	state := runtime.StateV0()
+	if !state.SupervisorFrozen ||
+		!state.ShutdownInProgress ||
+		state.ShutdownReady ||
+		state.ShutdownStatus != "stop_pending" ||
+		state.ShutdownAgentsInFlight != 1 {
+		t.Fatalf("shutdown stop pendiente no reflejado: %+v", state)
+	}
+}
+
+func TestShutdownProjectionFromHTTPV0ReadySinConfirmacionesQuedaStopPendingV0(t *testing.T) {
+	cases := []struct {
+		name string
+		body map[string]any
+	}{{
+		name: "runs_sin_confirmar",
+		body: map[string]any{
+			"estado":         "ok",
+			"status":         "ready",
+			"shutdown_ready": true,
+			"runs_requested": 2,
+			"runs_stopped":   1,
+		},
+	}, {
+		name: "checkpoint_pendiente",
+		body: map[string]any{
+			"estado":              "ok",
+			"status":              "ready",
+			"shutdown_ready":      true,
+			"runs_requested":      1,
+			"runs_stopped":        1,
+			"checkpoints_pending": 1,
+		},
+	}}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body, err := json.Marshal(tc.body)
+			if err != nil {
+				t.Fatalf("json.Marshal: %v", err)
+			}
+
+			projection, keepFrozen := shutdownProjectionFromHTTPV0(http.StatusOK, body)
+
+			if !keepFrozen ||
+				projection.Ready ||
+				projection.Status != "stop_pending" {
+				t.Fatalf("projection=%+v keep_frozen=%v", projection, keepFrozen)
+			}
+		})
+	}
+}
+
 type countingShutdownFreezeSupervisorV0 struct {
 	calls int
 }

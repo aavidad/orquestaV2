@@ -137,7 +137,19 @@
       ],
       "properties": {
         "patron": {
-          "const": "hexagonal"
+          "type": "string",
+          "enum": [
+            "hexagonal",
+            "clean_architecture",
+            "onion",
+            "modular_monolith",
+            "layered",
+            "event_driven",
+            "microservices",
+            "serverless",
+            "plugin_based",
+            "data_pipeline"
+          ]
         },
         "modulos_iniciales": {
           "type": "array",
@@ -267,7 +279,7 @@
           "properties": {
             "contratos_esperados": {
               "contains": {
-                "const": "ArquitecturaHexagonalEstricta v0"
+                "const": "ArquitecturaLimpiaSegunPatron v0"
               },
               "minContains": 1
             }
@@ -337,15 +349,22 @@
         "needs": {
           "$ref": "#/$defs/string_list"
         },
+        "types": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/data_type_spec"
+          }
+        },
+        "storage": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/data_storage_spec"
+          }
+        },
         "sensitivity": {
           "type": "string",
-          "enum": [
-            "publica",
-            "interna",
-            "personal",
-            "sensible",
-            "secreta"
-          ]
+          "minLength": 1,
+          "maxLength": 500
         },
         "connector": {
           "type": "string",
@@ -469,8 +488,22 @@
           "enum": [
             "no_aplica",
             "basica",
+            "normal",
             "wcag_aa"
           ]
+        },
+        "accessibility_options": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "no_aplica",
+              "basica",
+              "normal",
+              "wcag_aa"
+            ]
+          },
+          "uniqueItems": true
         },
         "security": {
           "$ref": "#/$defs/string_list"
@@ -692,6 +725,77 @@
           "maxLength": 500
         },
         "puertos": {
+          "$ref": "#/$defs/string_list"
+        }
+      }
+    },
+    "data_type_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nombre"
+      ],
+      "properties": {
+        "nombre": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "proposito": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "sensibilidad": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "retencion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "volumen": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "restricciones": {
+          "$ref": "#/$defs/string_list"
+        }
+      }
+    },
+    "data_storage_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tipo"
+      ],
+      "properties": {
+        "tipo": {
+          "type": "string",
+          "enum": [
+            "relacional",
+            "documental",
+            "vectorial",
+            "objetos",
+            "clave_valor",
+            "series_temporales",
+            "grafo",
+            "cache",
+            "busqueda"
+          ]
+        },
+        "proposito": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "requerido": {
+          "type": "boolean"
+        },
+        "restricciones": {
           "$ref": "#/$defs/string_list"
         }
       }

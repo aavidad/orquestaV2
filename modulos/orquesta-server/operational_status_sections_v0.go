@@ -37,12 +37,20 @@ func residentOperationalHealthV0(state StateV0) []orquestaobservability.Diagnost
 	if check := selfWatchdogHealthCheckV0(state); check.I18nKey != "" {
 		health = append(health, check)
 	}
+	if check := residentOperationalGoalHealthCheckV0(state); check.I18nKey != "" {
+		health = append(health, check)
+	}
+	if check := residentOperationalGoalFirstCapabilityHealthCheckV0(state); check.I18nKey != "" {
+		health = append(health, check)
+	}
 	return health
 }
 
 func residentOperationalBlockersV0(state StateV0) []orquestaobservability.DiagnosticoBloqueoV0 {
 	var blockers []orquestaobservability.DiagnosticoBloqueoV0
-	if strings.TrimSpace(state.LastError) != "" || state.SupervisorErrorTicks > 0 {
+	if strings.TrimSpace(state.LastError) != "" ||
+		strings.TrimSpace(state.LastSupervisorStatus) == "error" ||
+		strings.TrimSpace(state.LastSupervisorError) != "" {
 		blockers = append(blockers, orquestaobservability.DiagnosticoBloqueoV0{
 			BlockerRef:   "blocker-ref-server-operational-status",
 			Severity:     "warning",
@@ -51,7 +59,8 @@ func residentOperationalBlockersV0(state StateV0) []orquestaobservability.Diagno
 			EvidenceRefs: sanitizeServerEvidenceRefsV0(state.StartupEvidenceRefs),
 		})
 	}
-	if strings.TrimSpace(state.ResidentDirectorLastError) != "" || state.ResidentDirectorErrorTicks > 0 {
+	if strings.TrimSpace(state.ResidentDirectorLastError) != "" ||
+		strings.TrimSpace(state.ResidentDirectorStatus) == "error" {
 		blockers = append(blockers, orquestaobservability.DiagnosticoBloqueoV0{
 			BlockerRef: "blocker-ref-server-resident-director",
 			Severity:   "warning",
@@ -83,6 +92,12 @@ func residentOperationalBlockersV0(state StateV0) []orquestaobservability.Diagno
 			Summary:    "entrega HTTP degradada",
 		})
 	}
+	if blocker := residentOperationalGoalBlockerV0(state); blocker.BlockerRef != "" {
+		blockers = append(blockers, blocker)
+	}
+	if blocker := residentOperationalGoalFirstCapabilityBlockerV0(state); blocker.BlockerRef != "" {
+		blockers = append(blockers, blocker)
+	}
 	return blockers
 }
 
@@ -106,6 +121,9 @@ func residentOperationalActivityV0(state StateV0) []orquestaobservability.Diagno
 	appendActivity("activity-ref-server-state-persist-failed", state.StatePersistLastFailedAt, "system", "fallo de persistencia de estado observado")
 	appendActivity("activity-ref-server-audit-write-failed", state.AuditLastFailedAt, "system", "fallo de escritura de auditoria observado")
 	appendActivity("activity-ref-server-response-write-failed", state.ResponseWriteLastFailedAt, "system", "fallo de entrega HTTP observado")
+	if activity := residentOperationalGoalActivityV0(state); activity.ActivityRef != "" {
+		out = append(out, activity)
+	}
 	return out
 }
 
@@ -127,6 +145,7 @@ func residentOperationalReferencesV0(
 			Rel: "related", TargetType: "system", TargetRef: strings.TrimSpace(state.LastSupervisorQueueRef),
 		})
 	}
+	refs = append(refs, residentOperationalGoalReferencesV0(state)...)
 	return refs
 }
 

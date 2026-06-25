@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
 )
 
@@ -41,6 +42,14 @@ type IdleSelfImprovementPortV0 interface {
 		context.Context,
 		IdleSelfImprovementRequestV0,
 	) (IdleSelfImprovementResultV0, error)
+}
+
+type IdleSelfImprovementGoalLauncherPortV0 interface {
+	LaunchGoalWorkV0(context.Context, orquestagoal.GoalWorkSpecV0) (orquestagoal.GoalLaunchReceiptV0, error)
+}
+
+type IdleSelfImprovementGoalObserverPortV0 interface {
+	ObserveGoalWorkV0(context.Context, orquestagoal.GoalObservationRequestV0) (orquestagoal.GoalWorkResultV0, error)
 }
 
 type IdleSelfImprovementPlannerPortV0 interface {
@@ -133,6 +142,7 @@ type IdleSelfImprovementRequestV0 struct {
 	RequiredTests      []string
 	AcceptanceCriteria []string
 	CompactRules       []string
+	SkillRefs          []string
 	ContextRefs        []string
 	EvidenceRefs       []string
 	BacklogScanRef     string
@@ -181,13 +191,17 @@ type BacklogScanCollisionV0 struct {
 }
 
 type IdleSelfImprovementResultV0 struct {
-	Accepted     bool
-	RunRef       string
-	RequestRef   string
-	Status       string
-	Message      string
-	NextActions  []string
-	EvidenceRefs []string
+	Accepted        bool
+	RunRef          string
+	RequestRef      string
+	Status          string
+	Message         string
+	NextActions     []string
+	EvidenceRefs    []string
+	GoalRef         string
+	ExternalGoalRef string
+	GoalSpec        orquestagoal.GoalWorkSpecV0
+	GoalReceipt     orquestagoal.GoalLaunchReceiptV0
 }
 
 type StateStorePortV0 interface {
@@ -231,49 +245,6 @@ type SystemClockV0 struct{}
 
 func (SystemClockV0) Now() time.Time {
 	return time.Now().UTC()
-}
-
-func (runtime *RuntimeV0) maybeScheduleIdleSelfImprovementCausalV0(
-	ctx context.Context,
-	result orquestarunsupervisor.RunSupervisorResultV0,
-	now time.Time,
-) {
-	if runtime.supervisorFrozenForShutdownV0() {
-		runtime.auditEventV0(ctx, "idle_self_improvement_check", "skipped", "", map[string]interface{}{"reason": "shutdown_in_progress"})
-		runtime.markIdleSelfImprovementCheckedV0(ctx, "shutdown_in_progress", now)
-		return
-	}
-	if runtime.config.IdleSelfImprovementAfter <= 0 {
-		runtime.auditEventV0(ctx, "idle_self_improvement_check", "skipped", "", map[string]interface{}{"reason": "disabled"})
-		runtime.markIdleSelfImprovementCheckedV0(ctx, "disabled", now)
-		return
-	}
-	port, ok := runtime.supervisor.(IdleSelfImprovementPortV0)
-	if !ok || port == nil {
-		runtime.auditEventV0(ctx, "idle_self_improvement_check", "skipped", "", map[string]interface{}{"reason": "port_unavailable"})
-		runtime.markIdleSelfImprovementCheckedV0(ctx, "port_unavailable", now)
-		return
-	}
-	decision := runtime.idleSelfImprovementScheduleDecisionV0(ctx, result, now)
-	if !decision.Schedule {
-		runtime.auditEventV0(ctx, "idle_self_improvement_check", decision.AuditStatus, "", decision.AuditPayload())
-		runtime.markIdleSelfImprovementDecisionCheckedV0(ctx, decision, now)
-		return
-	}
-	request := runtime.idleSelfImprovementRequestV0(decision, now)
-	requests := normalizeIdleSelfImprovementCausalRequestsV0(
-		runtime.idleSelfImprovementRequestsV0(ctx, request, decision),
-	)
-	if len(requests) == 0 {
-		runtime.auditEventV0(ctx, "idle_self_improvement_check", "skipped", "", map[string]interface{}{"reason": "planner_empty", "request": request})
-		runtime.markIdleSelfImprovementCheckedV0(ctx, "planner_empty", now)
-		return
-	}
-	runtime.auditEventV0(ctx, "idle_self_improvement_scheduled", "scheduled", "", map[string]interface{}{"requests": requests})
-	runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkIdleSelfImprovementScheduledV0(now), "idle_self_improvement_scheduled")
-	runtime.runAsyncWorkV0("idle_self_improvement_prepare", func() {
-		runtime.prepareIdleSelfImprovementBatchV0(ctx, port, requests)
-	})
 }
 
 func idleSelfImprovementDedupeTargetV0(request IdleSelfImprovementRequestV0) string {

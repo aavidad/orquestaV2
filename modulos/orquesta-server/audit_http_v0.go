@@ -75,6 +75,12 @@ func (runtime *RuntimeV0) auditHTTPHandlerV0(next http.Handler) http.Handler {
 					"response_write_failed",
 				)
 			}
+		} else if recorder.observation.Code == "" && runtime.tracker != nil && runtime.tracker.ResponseWriteRecoveryPendingV0() {
+			runtime.persistStateTransitionV0(
+				context.Background(),
+				runtime.tracker.MarkResponseWriteSucceededV0(runtime.clock.Now()),
+				"response_write_recovered",
+			)
 		}
 		runtime.auditEventV0(r.Context(), "http_request", auditStatus, "", map[string]interface{}{
 			"method":          r.Method,

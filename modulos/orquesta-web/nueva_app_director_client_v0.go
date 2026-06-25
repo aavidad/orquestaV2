@@ -124,7 +124,7 @@ func decodeArrancarDirectorAppResponseV0(
 	}
 	switch strings.TrimSpace(result.Estado) {
 	case ArrancarDirectorAppEstadoOKV0:
-		if strings.TrimSpace(result.RunRef) == "" {
+		if strings.TrimSpace(result.RunRef) == "" && strings.TrimSpace(result.GoalRef) == "" {
 			return WebNuevaAppViewModelV0{}, webNuevaAppClientErrorV0(WebNuevaAppErrRespuestaInvalidaV0, resp.StatusCode)
 		}
 		return NewWebNuevaAppDirectorViewModelV0(form, result), nil

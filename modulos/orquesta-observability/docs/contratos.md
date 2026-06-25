@@ -310,6 +310,9 @@ Invariantes:
 - El DTO resume progreso y diagnostico; no prescribe acciones, no asigna responsables operativos nuevos y no cambia decisiones de core/capacity/runtime/review.
 - `bloqueos`, `salud` y `actividad_reciente` contienen resumen y referencias, no contenido fuente completo.
 - `contadores` contiene agregados compactos; no incluye samples crudos, transcript, comandos completos, diffs completos ni payloads de eventos completos.
+- `contadores` queda acotado a 24 claves por diagnostico para permitir
+  proyecciones residentes con metricas base y senales goal-first sin borrar
+  contadores historicos.
 - Si una seccion no puede calcularse sin cruzar internals, se omite con warning publico o se marca `unknown`.
 - Si una seccion futura usa evidencia historica V1, debe respetar `SafeHistoricalSignalExtractionPolicyV0` y seguir siendo compacta, saneada y opaca.
 - Cualquier campo nuevo que exponga consumidores globales, operaciones de recuperacion o fuentes reales requiere version nueva o `CONSULTA AL DIRECTOR`.

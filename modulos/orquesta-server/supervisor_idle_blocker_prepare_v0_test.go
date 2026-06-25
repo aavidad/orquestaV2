@@ -64,6 +64,97 @@ func TestRuntimeV0SupervisorNoPreparaAutomejoraConProveedorAuthBloqueadoV0(t *te
 	}
 }
 
+func TestRuntimeV0SuprimeAutomejoraIdleEnSesionDominioSinOptInV0(t *testing.T) {
+	now := time.Date(2026, 6, 25, 10, 0, 0, 0, time.UTC)
+	store := &memoryStateStoreV0{}
+	supervisor := &fakeSupervisorV0{
+		results: []fakeSupervisorResultV0{{result: orquestarunsupervisor.RunSupervisorResultV0{
+			StopReason: orquestarunsupervisor.RunSupervisorStopNoExecutionV0,
+		}}},
+		planRequests: []IdleSelfImprovementRequestV0{{RequestRef: "request-ref-no-debe-arrancar"}},
+	}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                          t.TempDir(),
+		ProjectWorkDir:                    "/tmp/proyecto-dominio",
+		IdleSelfImprovementProjectWorkDir: "/tmp/proyecto-dominio",
+		IdleSelfImprovementAfter:          time.Minute,
+		IdleSelfImprovementMaxRequests:    3,
+		IdleSelfImprovementTargetQueue:    4,
+		AuditDisabled:                     true,
+		EffectiveConfig: ServerEffectiveConfigV0{Settings: []ServerConfigSettingV0{{
+			Key:       "ORQUESTA_OPES_PROJECT_WORKDIR",
+			Value:     "opes-project-workdir-configured",
+			Scope:     "domain_work",
+			Sensitive: true,
+		}}},
+	}, RuntimeDepsV0{
+		Supervisor: supervisor,
+		StateStore: store,
+		Clock:      fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	markNoExecutionSinceForTestV0(runtime, now)
+
+	runtime.runSupervisorTickV0(context.Background())
+
+	if supervisor.planCalls != 0 || supervisor.selfCalls != 0 {
+		t.Fatalf("sesion dominio no debe planificar: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
+	}
+	if store.last.IdleSelfImprovementOperationalMessage == nil ||
+		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementDomainSessionSuppressedReasonV0 ||
+		!strings.Contains(store.last.IdleSelfImprovementReason, idleSelfImprovementDomainSessionSuppressedReasonV0) ||
+		strings.Contains(store.last.IdleSelfImprovementReason, "/tmp/proyecto-dominio") {
+		t.Fatalf("idle suppression state=%+v", store.last)
+	}
+}
+
+func TestRuntimeV0AutomejoraIdleArrancaConWorkdirSeparadoEnSesionDominioV0(t *testing.T) {
+	now := time.Date(2026, 6, 25, 10, 5, 0, 0, time.UTC)
+	supervisor := &fakeSupervisorV0{
+		results: []fakeSupervisorResultV0{{result: orquestarunsupervisor.RunSupervisorResultV0{
+			StopReason: orquestarunsupervisor.RunSupervisorStopNoExecutionV0,
+		}}},
+		planRequests: []IdleSelfImprovementRequestV0{{RequestRef: "request-ref-automejora-opt-in"}},
+		selfStarted:  make(chan struct{}, 1),
+	}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                          t.TempDir(),
+		ProjectWorkDir:                    "/tmp/proyecto-dominio",
+		IdleSelfImprovementProjectWorkDir: "/tmp/proyecto-orquesta",
+		IdleSelfImprovementAfter:          time.Minute,
+		IdleSelfImprovementMaxRequests:    3,
+		IdleSelfImprovementTargetQueue:    4,
+		AuditDisabled:                     true,
+		EffectiveConfig: ServerEffectiveConfigV0{Settings: []ServerConfigSettingV0{{
+			Key:       "ORQUESTA_OPES_PROJECT_WORKDIR",
+			Value:     "opes-project-workdir-configured",
+			Scope:     "domain_work",
+			Sensitive: true,
+		}}},
+	}, RuntimeDepsV0{
+		Supervisor: supervisor,
+		StateStore: &memoryStateStoreV0{},
+		Clock:      fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	markNoExecutionSinceForTestV0(runtime, now)
+
+	runtime.runSupervisorTickV0(context.Background())
+
+	select {
+	case <-supervisor.selfStarted:
+	case <-time.After(time.Second):
+		t.Fatalf("automejora con workdir separado no arranco")
+	}
+	if supervisor.planCalls != 1 || supervisor.selfCalls != 1 {
+		t.Fatalf("opt-in separado debe planificar: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
+	}
+}
+
 func TestIdleSelfImprovementAuditPayloadRedactaMensajeDeBlockerV0(t *testing.T) {
 	payload := idleSelfImprovementScheduleDecisionV0{
 		Reason:          "provider_auth_blocked",

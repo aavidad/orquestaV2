@@ -132,7 +132,8 @@ Superficie publica de app:
 ```text
 POST /api/v0/autoprogramming/prepare-run
   input: autoprogramming_request, occurred_at?, requested_by?, limites?
-  output: estado, accepted, run_ref, workflow_task_refs, wait_agent_refs, continue
+  output: estado, accepted, run_ref, workflow_task_refs, wait_agent_refs,
+          goal_specs?, continue
 
 POST /api/v0/runs/supervise
   input: run_ref?, queue_ref?, max_ticks?, continue_message?, limites?
@@ -142,7 +143,10 @@ POST /api/v0/runs/supervise
 `prepare-run` es una entrada opt-in de esta composicion: adapta el contrato MCP
 `orquesta.autoprogramming.prepare_run.v0` a `PrepareAutoprogrammingRunV0`, guarda
 `WorkflowTaskV0`/run por los stores del stack y devuelve un `continue` acotado.
-No arranca agentes por si misma. Las tareas explicitas preservan objetivo,
+Cuando `orquesta-autoprogramming` clasifica la request como `goal_ready`, el
+resultado incluye `goal_specs[]` normalizados y con `run_ref` para que una
+composicion Goal pueda lanzar/observar despues sin reconstruir el contrato. No
+arranca agentes ni goals por si misma. Las tareas explicitas preservan objetivo,
 contexto, criterios, tests y reglas compactas hasta el paquete del agente sin
 convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git. La ruta de
 supervision es neutral de runs. El gateway y `orquesta-mcp` no conocen Codex; este stack inyecta

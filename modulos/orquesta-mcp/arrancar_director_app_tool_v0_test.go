@@ -14,6 +14,7 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectorsupervisedburst "orquesta/modulos/orquesta-director-supervised-burst"
 	orquestafactory "orquesta/modulos/orquesta-factory"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
 )
@@ -53,6 +54,45 @@ func TestMCPArrancarDirectorAppToolExecutorV0UsaServicioCanonico(t *testing.T) {
 		strings.Contains(result.CorrelationID, "mcp") ||
 		strings.Contains(result.RunRef, "mcp") {
 		t.Fatalf("refs internas no deben filtrar adaptador MCP: %+v", result)
+	}
+}
+
+func TestMCPArrancarDirectorAppToolExecutorV0ExponeGoalFirst(t *testing.T) {
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	launcher := &mcpGoalLauncherForTestV0{}
+	executor := NewMCPArrancarDirectorAppToolExecutorV0(
+		orquestaappdirectorservice.StartAppDirectorPortsV0{
+			RunStore:     store,
+			EventSink:    sink,
+			OutboxLedger: ledger,
+			GoalLauncher: launcher,
+			GoalStateStore: &mcpGoalStateStoreForTestV0{
+				states: map[string]orquestagoal.GoalWorkStateV0{},
+			},
+			Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
+				mcpDirectorCapacityDispatcherForTestV0(store, sink, ledger),
+				mcpDirectorAgentLauncherDispatcherForTestV0(store, sink, ledger),
+			},
+		},
+	)
+
+	result, err := executor.Execute(context.Background(), validMCPDirectorAppInputForTestV0())
+	if err != nil {
+		t.Fatalf("Execute: %v result=%+v", err, result)
+	}
+	if result.Estado != MCPArrancarDirectorAppEstadoOKV0 ||
+		result.GoalRef == "" ||
+		result.ExternalGoalRef != "thread-ref-mcp-goal-001" ||
+		result.GoalStatus != orquestagoal.GoalStatusRunningV0 ||
+		len(result.StartedAgents) != 0 {
+		t.Fatalf("result=%+v", result)
+	}
+	if result.GoalLaunchReceipt == nil ||
+		result.GoalLaunchReceipt.GoalRef != result.GoalRef ||
+		launcher.calls != 1 {
+		t.Fatalf("receipt=%+v calls=%d", result.GoalLaunchReceipt, launcher.calls)
 	}
 }
 
@@ -197,6 +237,47 @@ func TestMCPArrancarDirectorAppHTTPHandlerV0ExecutorErrorExponeCampoPublico(t *t
 		!strings.Contains(issue.Message, "ports.run_store") {
 		t.Fatalf("issue=%+v", issue)
 	}
+}
+
+type mcpGoalLauncherForTestV0 struct {
+	calls int
+}
+
+func (launcher *mcpGoalLauncherForTestV0) LaunchGoalWorkV0(
+	_ context.Context,
+	spec orquestagoal.GoalWorkSpecV0,
+) (orquestagoal.GoalLaunchReceiptV0, error) {
+	launcher.calls++
+	return orquestagoal.GoalLaunchReceiptV0{
+		SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+		Status:          orquestagoal.GoalStatusRunningV0,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: "thread-ref-mcp-goal-001",
+		EvidenceRefs:    []string{"evidence-ref-mcp-goal-launched-001"},
+	}, nil
+}
+
+type mcpGoalStateStoreForTestV0 struct {
+	states map[string]orquestagoal.GoalWorkStateV0
+}
+
+func (store *mcpGoalStateStoreForTestV0) SaveGoalWorkStateV0(
+	_ context.Context,
+	state orquestagoal.GoalWorkStateV0,
+) error {
+	normalized, err := orquestagoal.NewGoalWorkStateV0(state)
+	if err != nil {
+		return err
+	}
+	store.states[normalized.RunRef] = normalized
+	return nil
+}
+
+func (store *mcpGoalStateStoreForTestV0) LoadGoalWorkStateV0(
+	_ context.Context,
+	runRef string,
+) (orquestagoal.GoalWorkStateV0, error) {
+	return store.states[runRef], nil
 }
 
 func validMCPDirectorAppInputForTestV0() MCPArrancarDirectorAppToolInputV0 {

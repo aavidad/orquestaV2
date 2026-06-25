@@ -42,5 +42,8 @@ func validateStartAppDirectorPortsV0(
 	if len(ports.Dispatchers) == 0 && len(ports.BatchDispatchers) == 0 {
 		return AppDirectorServiceIssueV0{Field: "ports.dispatchers"}
 	}
+	if ports.GoalLauncher != nil && ports.GoalStateStore == nil {
+		return AppDirectorServiceIssueV0{Field: "ports.goal_state_store"}
+	}
 	return nil
 }

@@ -16,7 +16,9 @@ Estado vigente:
 
 - `orquesta.autoprogramming.prepare_run.v0` prepara un run continuable desde
   una request de autoprogramacion por executor inyectado. No arranca agentes por
-  si mismo; la composicion debe supervisar despues con `run_ref` explicito.
+  si mismo; cuando la composicion lo aporta puede devolver `goal_specs[]` como
+  handoff goal-first, y la composicion debe supervisar despues con `run_ref`
+  explicito.
 - `orquesta.autoprogramming.self_improvement.propose.v0` convierte fallos
   observados en requests de automejora de segundo plano con prioridad baja.
 - `orquesta.director.human_work.review_plan.v0` convierte ordenes humanas

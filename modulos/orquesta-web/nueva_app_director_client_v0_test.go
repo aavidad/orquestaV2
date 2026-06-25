@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
 func TestRESTArrancarDirectorAppClientV0EnviaPOSTJSONYProyectaDirector(t *testing.T) {
@@ -97,6 +99,42 @@ func TestRESTArrancarDirectorAppClientV0ErroresPublicosNoSonTransporte(t *testin
 	if vm.Estado != WebNuevaAppEstadoInvalida ||
 		len(vm.ErroresPublicos) != 1 ||
 		vm.ErroresPublicos[0].Code != "app_spec_invalida" {
+		t.Fatalf("vm=%+v", vm)
+	}
+}
+
+func TestRESTArrancarDirectorAppClientV0AceptaGoalFirstSinRunLegacy(t *testing.T) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(WebArrancarDirectorAppResultV0{
+			Estado:          ArrancarDirectorAppEstadoOKV0,
+			RequestID:       "req-director-goal-001",
+			GoalRef:         "goal-ref-web-director-001",
+			ExternalGoalRef: "thread-ref-web-director-001",
+			GoalStatus:      orquestagoal.GoalStatusRunningV0,
+			GoalLaunchReceipt: &orquestagoal.GoalLaunchReceiptV0{
+				SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+				Status:          orquestagoal.GoalStatusRunningV0,
+				GoalRef:         "goal-ref-web-director-001",
+				ExternalGoalRef: "thread-ref-web-director-001",
+			},
+		}); err != nil {
+			t.Fatalf("encode success: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	client := NewRESTArrancarDirectorAppClientV0(server.URL, time.Second)
+	vm, err := client.ArrancarDirectorApp(context.Background(), minimalFormForClientV0("req-director-goal-001"))
+	if err != nil {
+		t.Fatalf("ArrancarDirectorApp: %v", err)
+	}
+	if vm.Estado != WebNuevaAppEstadoDirector ||
+		vm.Director == nil ||
+		vm.Director.RunRef != "" ||
+		vm.Director.GoalRef != "goal-ref-web-director-001" ||
+		vm.Director.ExternalGoalRef != "thread-ref-web-director-001" ||
+		vm.Director.GoalStatus != orquestagoal.GoalStatusRunningV0 {
 		t.Fatalf("vm=%+v", vm)
 	}
 }

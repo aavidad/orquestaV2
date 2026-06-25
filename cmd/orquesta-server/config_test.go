@@ -104,6 +104,19 @@ func TestServerConfigFromEnvV0ExponeSupervisorDesatendidoV0(t *testing.T) {
 	}
 }
 
+func TestServerConfigFromEnvV0ExponeAutomejoraGoalFirstOptInV0(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", t.TempDir())
+	t.Setenv(envServerIdleSelfImprovementGoalFirstV0, "true")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if !config.IdleSelfImprovementGoalFirst {
+		t.Fatalf("goal-first idle no activo: %+v", config)
+	}
+}
+
 func TestServerConfigFromEnvV0PerfilAutonomiaActivaDirectorResidenteV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envServerAutonomyEnabledV0, "true")

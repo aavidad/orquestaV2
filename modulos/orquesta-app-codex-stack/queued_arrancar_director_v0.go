@@ -41,6 +41,9 @@ func (executor QueuedArrancarDirectorExecutorV0) Execute(
 	if err != nil || result.Estado != orquestamcp.MCPArrancarDirectorAppEstadoOKV0 {
 		return result, err
 	}
+	if strings.TrimSpace(result.GoalRef) != "" {
+		return result, nil
+	}
 	if executor.config.Writer == nil {
 		return result, fmt.Errorf("run_queue.writer requerido")
 	}

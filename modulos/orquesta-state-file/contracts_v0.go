@@ -2,9 +2,11 @@ package orquestastatefile
 
 import (
 	orquestacore "orquesta/modulos/orquesta-core"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
+var _ orquestagoal.GoalWorkStateStorePortV0 = (*StoreV0)(nil)
 var _ orquestacionnucleoapp.RunStorePortV0 = (*StoreV0)(nil)
 var _ orquestacionnucleoapp.EventSinkPortV0 = (*StoreV0)(nil)
 var _ orquestacionnucleoapp.RunEventReaderPortV0 = (*StoreV0)(nil)

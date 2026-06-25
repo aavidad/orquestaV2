@@ -75,18 +75,31 @@ func TestWebNuevaAppFormV0ToAppSpecRequestV0PreservaCamposRicos(t *testing.T) {
 			DBRequired:         true,
 			NecesidadFuncional: "guardar borradores",
 			TiposDatos:         []string{"contenido", "usuarios"},
-			Sensibilidad:       "media",
-			Retencion:          "12 meses",
+			TiposDetallados: []WebNuevaAppDataTypeFormV0{{
+				Nombre:       "contenidos",
+				Proposito:    "publicar borradores",
+				Sensibilidad: "interna",
+				Retencion:    "12 meses",
+				Volumen:      "medio",
+			}},
+			Storage: []WebNuevaAppDataStorageFormV0{{
+				Tipo:      "relacional",
+				Proposito: "consultas transaccionales",
+				Requerido: true,
+			}},
+			Sensibilidad: "media",
+			Retencion:    "12 meses",
 		},
 		Deploy: WebNuevaAppDeployFormV0{
 			Target:        "contenedor",
 			Restricciones: []string{"sin cloud propietaria"},
 		},
 		Calidad: WebNuevaAppCalidadFormV0{
-			Pruebas:        "alta",
-			Accesibilidad:  "wcag_aa",
-			Compliance:     []string{"gdpr"},
-			Observabilidad: &no,
+			Pruebas:               "alta",
+			Accesibilidad:         "wcag_aa",
+			AccesibilidadOpciones: []string{"normal", "wcag_aa"},
+			Compliance:            []string{"gdpr"},
+			Observabilidad:        &no,
 		},
 		Documentacion: WebNuevaAppDocumentacionFormV0{
 			Usuario:    &yes,
@@ -115,8 +128,18 @@ func TestWebNuevaAppFormV0ToAppSpecRequestV0PreservaCamposRicos(t *testing.T) {
 	if !req.Datos.DBRequired || req.Datos.NecesidadFuncional != "guardar borradores" || req.Datos.TiposDatos[1] != "usuarios" {
 		t.Fatalf("datos no preservados: %+v", req.Datos)
 	}
+	if len(req.Datos.TiposDetallados) != 1 ||
+		req.Datos.TiposDetallados[0].Nombre != "contenidos" ||
+		len(req.Datos.Storage) != 1 ||
+		req.Datos.Storage[0].Tipo != "relacional" ||
+		!req.Datos.Storage[0].Requerido {
+		t.Fatalf("datos expertos no preservados: %+v", req.Datos)
+	}
 	if req.Deploy.Target != "contenedor" || req.Calidad.Observabilidad == nil || *req.Calidad.Observabilidad {
 		t.Fatalf("deploy/calidad no preservados: deploy=%+v calidad=%+v", req.Deploy, req.Calidad)
+	}
+	if len(req.Calidad.AccesibilidadOpciones) != 2 || req.Calidad.AccesibilidadOpciones[0] != "normal" {
+		t.Fatalf("opciones de accesibilidad no preservadas: %+v", req.Calidad)
 	}
 	if req.Documentacion.Sistemas == nil || *req.Documentacion.Sistemas {
 		t.Fatalf("documentacion no preservada: %+v", req.Documentacion)

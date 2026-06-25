@@ -1470,6 +1470,16 @@ salida `domain_work`. El stack registra `claimed/submitting` antes del efecto
 externo, bloquea claims no terminales con recovery compacto y conserva
 accepted/rejected terminales sin sobrescritura conflictiva.
 
+Rework OrquestaV2 2026-06-25: se separa explicitamente T101 de T117. T101 no
+duplica ni sustituye la politica de review gate `codexStackReviewGatePolicyV0`;
+solo protege el efecto externo `submit_artifact` mediante ledger causal de
+salida, idempotencia y recovery publico compacto.
+
+Assessment/rework OrquestaV2 2026-06-25: se conserva esa separacion y se deja
+explicito el estado intermedio `submitted` con `receipt_ref`: sirve para
+recuperar fallos despues del efecto externo sin repetir `submit_artifact`, y no
+abre ningun rail nuevo de contenido, snapshot o presupuesto de review.
+
 ## Priorizacion scanner 2026-05-24 trigesimocuarta pasada
 
 Backlog asociado: `T102 legacy-http-json-boundary-policy`,

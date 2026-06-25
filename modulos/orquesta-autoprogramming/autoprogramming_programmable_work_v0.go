@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
 type AutoprogrammingProgrammableWorkResultV0 struct {
@@ -17,14 +18,16 @@ type AutoprogrammingProgrammableWorkResultV0 struct {
 }
 
 type AutoprogrammingProgrammableWorkV0 struct {
-	RequestRef  string                                `json:"request_ref"`
-	ProjectRef  string                                `json:"project_ref"`
-	WorktreeRef string                                `json:"worktree_ref"`
-	BranchRef   string                                `json:"branch_ref"`
-	Partition   AutoprogrammingPartitionPlanV0        `json:"partition,omitempty"`
-	Groups      []AutoprogrammingProgrammableGroupV0  `json:"groups"`
-	Profiles    []orquestacoreworkflow.WorkProfileV0  `json:"profiles"`
-	Tasks       []orquestacoreworkflow.WorkflowTaskV0 `json:"tasks"`
+	RequestRef    string                                       `json:"request_ref"`
+	ProjectRef    string                                       `json:"project_ref"`
+	WorktreeRef   string                                       `json:"worktree_ref"`
+	BranchRef     string                                       `json:"branch_ref"`
+	GoalMigration AutoprogrammingGoalMigrationClassificationV0 `json:"goal_migration"`
+	Partition     AutoprogrammingPartitionPlanV0               `json:"partition,omitempty"`
+	Groups        []AutoprogrammingProgrammableGroupV0         `json:"groups"`
+	GoalSpecs     []orquestagoal.GoalWorkSpecV0                `json:"goal_specs,omitempty"`
+	Profiles      []orquestacoreworkflow.WorkProfileV0         `json:"profiles"`
+	Tasks         []orquestacoreworkflow.WorkflowTaskV0        `json:"tasks"`
 }
 
 type AutoprogrammingProgrammableGroupV0 struct {
@@ -107,6 +110,15 @@ func BuildAutoprogrammingProgrammableWorkV0(
 		work.Profiles = append(work.Profiles, profile)
 		work.Tasks = append(work.Tasks, task)
 	}
+	goalSpecs, goalIssues := BuildAutoprogrammingGoalWorkSpecsV0(work)
+	if len(goalIssues) > 0 {
+		return AutoprogrammingProgrammableWorkResultV0{
+			Accepted: false,
+			Work:     work,
+			Issues:   goalIssues,
+		}
+	}
+	work.GoalSpecs = goalSpecs
 
 	return AutoprogrammingProgrammableWorkResultV0{
 		Accepted: true,
@@ -118,10 +130,11 @@ func autoprogrammingProgrammableWorkSkeletonV0(
 	request AutoprogrammingRequestV0,
 ) AutoprogrammingProgrammableWorkV0 {
 	return AutoprogrammingProgrammableWorkV0{
-		RequestRef:  strings.TrimSpace(request.RequestRef),
-		ProjectRef:  strings.TrimSpace(request.ProjectRef),
-		WorktreeRef: strings.TrimSpace(request.WorktreeRef),
-		BranchRef:   strings.TrimSpace(request.BranchRef),
+		RequestRef:    strings.TrimSpace(request.RequestRef),
+		ProjectRef:    strings.TrimSpace(request.ProjectRef),
+		WorktreeRef:   strings.TrimSpace(request.WorktreeRef),
+		BranchRef:     strings.TrimSpace(request.BranchRef),
+		GoalMigration: ClassifyAutoprogrammingGoalMigrationV0(request),
 	}
 }
 

@@ -27,3 +27,9 @@ func TestPublicRouteMutabilityV0LecturaPorDefecto(t *testing.T) {
 		t.Fatalf("mutability=%s", got)
 	}
 }
+
+func TestPublicRouteMutabilityV0IntakeGuiadoEsLecturaAunqueEsteBajoAppsV0(t *testing.T) {
+	if got := PublicRouteMutabilityV0(RouteAppIntakeGuidedTurnV0); got != PublicRouteReadV0 {
+		t.Fatalf("mutability=%s", got)
+	}
+}

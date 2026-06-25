@@ -49,6 +49,8 @@ autoridad vigente.
 | `modulos/orquesta-director-scheduler` | Decide comandos publicos desde snapshot/candidates compactos. | Alineada como planificador puro. No aplica comandos, no persiste y no elige proveedor. |
 | `modulos/orquesta-director-tick-input` | Construye input compacto del scheduler desde run durable, candidates explicitos y refs de outbox pendiente. | Alineada. No lista outbox ni calcula candidates. |
 | `modulos/orquesta-director-cycle-outbox` | Registra outbox generada por el ciclo y lista refs pendientes por ledger inyectado. | Alineada. No despacha, no ACK y no elige storage. |
+| `modulos/orquesta-goal` | Contrato neutral `GoalWorkSpecV0`/`GoalLaunchReceiptV0`/`GoalWorkResultV0` para delegar el loop interno a un runtime con goal persistente. | Alineada. Orquesta gobierna contexto/cierre; el runtime dirige dentro del goal. |
+| `modulos/orquesta-runtime-codex-goal` | Adaptador opt-in para preparar un `CodexGoalStartPacketV0` desde `GoalWorkSpecV0` y llamar a un puerto real de Codex Goal. | Adaptador concreto. No entra al core ni lanza procesos por defecto. |
 | `modulos/orquesta-director-operativo` | Contrato puro de Director Operativo V1: plan vivo, subagentes, espera, review, replan y delegacion recursiva gobernada. | Alineada como DTO/validacion previa a integracion. No ejecuta runtime ni duplica scheduler/replanner. |
 | `modulos/orquesta-domain-work` | Contratos genericos de jobs, records filtrables y artefactos externos. | Alineada. Debe seguir sin OPES, programacion, REST, MCP, runtime ni modelo. |
 | `modulos/orquesta-document-plan-expander` | Expande `DomainDocumentPlanV0` a `DomainWorkJobRequestV0[]` por puerto. | Alineada. No ejecuta jobs ni importa adaptadores. |
@@ -156,6 +158,15 @@ progresivo de `app-director-service` ni usarse para declarar cerrada la
 composicion residente. Sus pendientes se nombran por tipo: codigo offline,
 composicion residente/restart, smoke real neutral, proveedor real u OPES
 temporal.
+
+El camino goal-first anadido el 2026-06-25 no sustituye esa espina ni el loop
+historico: los adelgaza cuando el runtime ya aporta continuidad por goal. En
+ese modo, Orquesta entrega `GoalWorkSpecV0`; Codex Goal u otro runtime actua
+como Director operativo interno; Orquesta observa y valida cierre con tests,
+artefactos y receipts. El servidor puede publicar un resumen compacto de
+spec/receipt/result/closure para operacion, pero no payloads completos,
+objetivos, paths ni comandos. No se debe recrear `wait/review/replan` dentro
+del servidor si el goal ya lo mantiene.
 
 Estado real del primer corte:
 

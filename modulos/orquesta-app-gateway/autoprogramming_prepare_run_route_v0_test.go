@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 )
 
@@ -40,7 +41,10 @@ func TestAutoprogrammingPrepareRunAPIRouteV0(t *testing.T) {
 	}
 	if result.Estado != orquestamcp.MCPAutoprogrammingPrepareRunEstadoOKV0 ||
 		!result.Accepted ||
-		result.RunRef != "run-prepare-route-001" {
+		result.RunRef != "run-prepare-route-001" ||
+		len(result.GoalSpecs) != 1 ||
+		result.GoalSpecs[0].RunRef != "run-prepare-route-001" ||
+		result.GoalSpecs[0].DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 {
 		t.Fatalf("result=%+v", result)
 	}
 }
@@ -59,5 +63,13 @@ func (executor *recordingAutoprogrammingPrepareRunExecutorV0) Execute(
 		Estado:   orquestamcp.MCPAutoprogrammingPrepareRunEstadoOKV0,
 		Accepted: true,
 		RunRef:   "run-prepare-route-001",
+		GoalSpecs: []orquestagoal.GoalWorkSpecV0{{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			GoalRef:       "goal-ref-prepare-route-001",
+			RunRef:        "run-prepare-route-001",
+			Objective:     "validar passthrough app gateway de goal_specs",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "modulos/orquesta-app-gateway"}},
+		}},
 	}, nil
 }

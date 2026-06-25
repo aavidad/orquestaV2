@@ -17,6 +17,8 @@ con Codex y OPES son composiciones consumidoras, no la definicion del nucleo.
   cuarentena de aliases legacy.
 - `docs/matriz_pruebas_reales_y_smoke_2026-05-17.md`: matriz de pruebas reales,
   opt-in y offline.
+- `docs/orquesta_goal_first_codex_2026-06-25.md`: corte para usar Codex Goal
+  como Director operativo interno y adelgazar el loop residente.
 
 ## Autoridad documental
 
@@ -58,6 +60,12 @@ prepara input compacto, planifica comandos publicos, aplica workflow por puerto
 y deja outbox pendiente para un supervisor externo. No es daemon ni composicion
 residente; esos cierres viven en el servidor/adaptadores y requieren evidencia
 propia.
+
+El camino nuevo para runtimes con `goal` persistente es goal-first: Orquesta
+compila `GoalWorkSpecV0` con reglas, contexto, write-set, tests y artefactos;
+Codex Goal actua como Director operativo dentro del trabajo; Orquesta observa y
+valida el cierre. El loop historico `app-director-service`/`PlanState` queda
+como compatibilidad hasta que cada ruta tenga smoke equivalente.
 
 `modulos/orquesta-domain-work-sql` es solo un adaptador SQL externo de referencia
 para jobs de dominio. No es persistencia global de Orquesta, no abre conexiones,

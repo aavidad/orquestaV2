@@ -9,6 +9,9 @@ const (
 
 func PublicRouteMutabilityV0(route string) string {
 	route = strings.TrimSpace(route)
+	if route == RouteAppIntakeGuidedTurnV0 {
+		return PublicRouteReadV0
+	}
 	if strings.HasPrefix(route, RouteAppChangeV0) {
 		return PublicRouteMutationV0
 	}

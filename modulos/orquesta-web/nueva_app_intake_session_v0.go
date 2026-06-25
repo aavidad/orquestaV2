@@ -207,11 +207,18 @@ func webNuevaAppIntakeFieldCapturedV0(form WebNuevaAppFormV0, field string) bool
 	case "integraciones":
 		return len(form.Integraciones) > 0
 	case "datos":
-		return form.Datos.DBRequired || trimV0(form.Datos.NecesidadFuncional) != "" || len(compactStringsV0(form.Datos.TiposDatos)) > 0
+		return form.Datos.DBRequired ||
+			trimV0(form.Datos.NecesidadFuncional) != "" ||
+			len(compactStringsV0(form.Datos.TiposDatos)) > 0 ||
+			len(form.Datos.TiposDetallados) > 0 ||
+			len(form.Datos.Storage) > 0
 	case "deploy":
 		return trimV0(form.Deploy.Target) != "" || len(compactStringsV0(form.Deploy.Restricciones)) > 0
 	case "calidad":
-		return trimV0(form.Calidad.Pruebas) != "" || trimV0(form.Calidad.Accesibilidad) != "" || len(compactStringsV0(form.Calidad.Compliance)) > 0
+		return trimV0(form.Calidad.Pruebas) != "" ||
+			trimV0(form.Calidad.Accesibilidad) != "" ||
+			len(compactStringsV0(form.Calidad.AccesibilidadOpciones)) > 0 ||
+			len(compactStringsV0(form.Calidad.Compliance)) > 0
 	case "documentacion":
 		return form.Documentacion.Usuario != nil || form.Documentacion.Desarrollo != nil || form.Documentacion.Sistemas != nil || len(compactStringsV0(form.Documentacion.Locales)) > 0
 	case "i18n":
@@ -219,7 +226,11 @@ func webNuevaAppIntakeFieldCapturedV0(form WebNuevaAppFormV0, field string) bool
 	case "agentes":
 		return form.Agentes.RevisionHumana != nil || trimV0(form.Agentes.Autonomia) != "" || len(compactStringsV0(form.Agentes.Preferencias)) > 0
 	case "project_source":
-		return trimV0(form.ProjectSource.Kind) != "" || trimV0(form.ProjectSource.ProjectRef) != ""
+		return trimV0(form.ProjectSource.Kind) != "" ||
+			trimV0(form.ProjectSource.ProjectRef) != "" ||
+			trimV0(form.ProjectSource.GitURL) != "" ||
+			trimV0(form.ProjectSource.Branch) != "" ||
+			trimV0(form.ProjectSource.LocalPath) != ""
 	default:
 		return false
 	}

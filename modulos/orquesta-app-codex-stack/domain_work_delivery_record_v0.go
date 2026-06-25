@@ -71,6 +71,26 @@ func domainWorkSubmittingSubmissionRecordV0(
 	return record
 }
 
+func domainWorkSubmittedSubmissionRecordV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	task orquestacoreworkflow.WorkflowTaskV0,
+	observation orquestacionnucleoapp.AgentDeliveryObservationV0,
+	submission orquestadomainwork.DomainWorkArtifactSubmissionV0,
+	result orquestamcp.MCPDomainWorkToolResultV0,
+	occurredAt string,
+) DomainWorkArtifactSubmissionRecordV0 {
+	record := domainWorkSubmissionRecordFromSubmissionV0(run, task, observation, submission, occurredAt)
+	record.Status = DomainWorkArtifactSubmissionStatusSubmittedV0
+	if result.Receipt != nil {
+		record.ReceiptRef = result.Receipt.ReceiptRef
+		record.EvidenceRefs = compactStringsV0(append(
+			append([]string{"domain-work-submit-receipt-recorded"}, submission.EvidenceRefs...),
+			result.Receipt.EvidenceRefs...,
+		))
+	}
+	return record
+}
+
 func domainWorkAcceptedSubmissionRecordV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	task orquestacoreworkflow.WorkflowTaskV0,

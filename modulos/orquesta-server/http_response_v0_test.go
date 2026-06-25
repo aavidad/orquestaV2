@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	orquestaobservability "orquesta/modulos/orquesta-observability"
 )
 
 func TestWriteServerJSONResponseV0EncodeFailAntesDeHeaderSeguroV0(t *testing.T) {
@@ -58,6 +60,54 @@ func TestAuditHTTPHandlerV0RegistraWriteFailAfterHeaderV0(t *testing.T) {
 	runtime.HandlerV0().ServeHTTP(newFailingResponseWriterV0(), httptest.NewRequest(http.MethodGet, "/delegated", nil))
 
 	assertResponseWriteFailureObservedV0(t, runtime.StateV0(), sink, "body_after_header")
+}
+
+func TestHandlerV0ResponseWriteOKLimpiaFalloVigenteV0(t *testing.T) {
+	tracker := NewStatusTrackerV0(ConfigV0{}, time.Date(2026, 5, 26, 10, 0, 0, 0, time.UTC))
+	handler := handlerV0{config: HandlerConfigV0{Tracker: tracker}}
+	tracker.MarkResponseWriteFailedV0("body_after_header", time.Date(2026, 5, 26, 10, 1, 0, 0, time.UTC))
+
+	handler.writeJSONV0(httptest.NewRecorder(), http.StatusOK, map[string]string{"status": "ok"})
+
+	state := tracker.SnapshotV0()
+	if state.ResponseWriteFailures != 1 ||
+		state.ResponseWriteLastFailedAt == "" ||
+		state.ResponseWriteLastCode != "" ||
+		state.ResponseWriteLastStage != "" {
+		t.Fatalf("state=%+v", state)
+	}
+	if blockers := residentOperationalBlockersV0(state); diagnosticoContainsBlockerForResponseWriteTestV0(blockers) {
+		t.Fatalf("response_write blocker no recuperado: %+v", blockers)
+	}
+}
+
+func TestAuditHTTPHandlerV0ResponseWriteOKPersisteRecuperacionV0(t *testing.T) {
+	sink := &memoryAuditSinkV0{}
+	store := &memoryStateStoreV0{}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir: t.TempDir(),
+	}, RuntimeDepsV0{
+		AppHandler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("domain-ok"))
+		}),
+		StateStore: store,
+		AuditSink:  sink,
+		Clock:      fixedClockV0{now: time.Date(2026, 5, 26, 10, 0, 0, 0, time.UTC)},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	runtime.tracker.MarkResponseWriteFailedV0("body_after_header", time.Date(2026, 5, 26, 10, 1, 0, 0, time.UTC))
+
+	runtime.HandlerV0().ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/delegated", nil))
+
+	state := runtime.StateV0()
+	if state.ResponseWriteFailures != 1 ||
+		state.ResponseWriteLastCode != "" ||
+		state.ResponseWriteLastStage != "" ||
+		store.last.ResponseWriteLastCode != "" {
+		t.Fatalf("state=%+v stored=%+v", state, store.last)
+	}
 }
 
 func newRuntimeForResponseWriteTestV0(t *testing.T, sink *memoryAuditSinkV0, app http.Handler) *RuntimeV0 {
@@ -122,4 +172,13 @@ func (writer *failingResponseWriterV0) WriteHeader(statusCode int) {}
 
 func (writer *failingResponseWriterV0) Write(_ []byte) (int, error) {
 	return 0, errors.New("write failed")
+}
+
+func diagnosticoContainsBlockerForResponseWriteTestV0(blockers []orquestaobservability.DiagnosticoBloqueoV0) bool {
+	for _, blocker := range blockers {
+		if blocker.BlockerRef == "blocker-ref-server-response-write" {
+			return true
+		}
+	}
+	return false
 }

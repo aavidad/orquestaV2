@@ -7,6 +7,7 @@ import (
 
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
@@ -217,6 +218,7 @@ func codexStackAutoprogrammingPrepareRunResultMCPV0(
 		PhaseID:          string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
 		WorkflowTaskRefs: codexStackAutoprogrammingWorkflowTaskRefsMCPV0(result.Tasks),
 		WaitAgentRefs:    compactStringsV0(result.WaitAgentRefs),
+		GoalSpecs:        codexStackAutoprogrammingGoalSpecsMCPV0(result.Work.GoalSpecs, result.Run.RunID),
 		Errores:          []orquestamcp.MCPValidationIssueV0{},
 	}
 	out.Continue = &orquestamcp.MCPAutoprogrammingContinueRequestV0{
@@ -243,6 +245,25 @@ func codexStackAutoprogrammingWorkflowTaskRefsMCPV0(
 		refs = append(refs, task.TaskID)
 	}
 	return compactStringsV0(refs)
+}
+
+func codexStackAutoprogrammingGoalSpecsMCPV0(
+	specs []orquestagoal.GoalWorkSpecV0,
+	runRef string,
+) []orquestagoal.GoalWorkSpecV0 {
+	out := make([]orquestagoal.GoalWorkSpecV0, 0, len(specs))
+	runRef = strings.TrimSpace(runRef)
+	for _, spec := range specs {
+		spec = orquestagoal.NormalizeGoalWorkSpecV0(spec)
+		if strings.TrimSpace(spec.RunRef) == "" {
+			spec.RunRef = runRef
+		}
+		out = append(out, spec)
+	}
+	if out == nil {
+		return []orquestagoal.GoalWorkSpecV0{}
+	}
+	return out
 }
 
 func codexStackAutoprogrammingIssuesMCPV0(

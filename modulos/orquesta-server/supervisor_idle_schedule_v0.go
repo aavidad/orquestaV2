@@ -19,6 +19,9 @@ func (runtime *RuntimeV0) maybeScheduleIdleSelfImprovementV0(
 		return
 	}
 	if runtime.config.IdleSelfImprovementAfter <= 0 {
+		if runtime.blockIdleSelfImprovementDomainSessionV0(ctx, now) {
+			return
+		}
 		runtime.auditEventV0(ctx, "idle_self_improvement_check", "skipped", "", map[string]interface{}{"reason": "disabled"})
 		runtime.markIdleSelfImprovementCheckedV0(ctx, "disabled", now)
 		return
@@ -27,6 +30,9 @@ func (runtime *RuntimeV0) maybeScheduleIdleSelfImprovementV0(
 	if !ok || port == nil {
 		runtime.auditEventV0(ctx, "idle_self_improvement_check", "skipped", "", map[string]interface{}{"reason": "port_unavailable"})
 		runtime.markIdleSelfImprovementCheckedV0(ctx, "port_unavailable", now)
+		return
+	}
+	if runtime.blockIdleSelfImprovementDomainSessionV0(ctx, now) {
 		return
 	}
 	decision := runtime.idleSelfImprovementScheduleDecisionV0(ctx, result, now)
@@ -127,6 +133,24 @@ func (runtime *RuntimeV0) idleSelfImprovementScheduleDecisionV0(
 		decision.BlockerRecoveryAction = strings.TrimSpace(blocked.RecoveryAction)
 		decision.BlockerNextActions = compactConfigStringsV0(blocked.NextActions)
 		return decision
+	}
+	if residentPending := detectResidentPendingWithoutDispatchV0(result); residentPending.Blocked {
+		activePendingRefs := idleSelfImprovementWithoutRetryableRefsV0(
+			residentPending.RunRefs,
+			freshness.RetryableRunRefs,
+			freshness.RetryableRequestRefs,
+		)
+		if len(activePendingRefs) > 0 {
+			decision.Schedule = false
+			decision.AuditStatus = "blocked"
+			decision.Reason = idleSelfImprovementResidentPendingBlockedReasonV0
+			decision.BlockerRunRefs = activePendingRefs
+			decision.BlockerEvidence = compactConfigStringsV0(residentPending.EvidenceRefs)
+			decision.BlockerMessage = idleSelfImprovementResidentPendingBlockedReasonV0
+			decision.BlockerRecoveryAction = "resident_director_dispatch_or_causal_blocker_required"
+			decision.BlockerNextActions = []string{"wake_resident_director_or_reconcile_run"}
+			return decision
+		}
 	}
 	if externalWait := detectIdleSelfImprovementExternalWaitBlockV0(result); externalWait.Blocked {
 		activeWaitRefs := idleSelfImprovementWithoutRetryableRefsV0(

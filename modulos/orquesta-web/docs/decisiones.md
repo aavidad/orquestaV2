@@ -283,7 +283,7 @@ Fecha: 2026-05-10
 Decision: WEB-014 hace opt-in del arranque de director desde el POST de nueva app mediante `ArrancarDirectorAppClientV0`.
 Motivo: El flujo real pedido por el usuario no debe quedarse en validar una spec; la web debe poder pedir una app y dejar que Orquesta arranque el director sin conocer core, scheduler, runtime ni agentes.
 Alternativas: Sustituir `SolicitarNuevaAppClientV0` directamente; importar MCP en codigo productivo web; construir puertos de director desde web; seguir solo con preview de backlog.
-Impacto: `NuevaAppWebEndpointV0` usa `DirectorClient` si esta configurado y conserva `SolicitarNuevaAppClientV0` como fallback. El resultado expone `director.run_ref`, `director_tasks` y `started_agents` compactos.
+Impacto: `NuevaAppWebEndpointV0` usa `DirectorClient` si esta configurado y conserva `SolicitarNuevaAppClientV0` como fallback. El resultado expone `director.run_ref`, `director_tasks` y `started_agents` compactos en modo legacy, y tambien acepta `goal_ref`, `external_goal_ref`, `goal_status` y `goal_launch_receipt` cuando `/api/v0/apps/director` arranca en modo goal-first.
 Contratos afectados: `ArrancarDirectorAppClientV0`, `WebNuevaAppDirectorV0`, `orquesta.apps.arrancar_director.v0`, bridge REST `/api/v0/apps/director`.
 Estado: aceptada localmente.
 ```

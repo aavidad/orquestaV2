@@ -14,6 +14,14 @@ Entrada:
 - `IdleSelfImprovementBlockerPortV0` opcional, implementado por la composicion
   que tambien actua como `SupervisorPortV0`, para veto preventivo de
   automejora residente cuando hay blockers externos conocidos.
+- `IdleSelfImprovementGoalLauncherPortV0` opcional para composiciones que
+  quieran lanzar automejora residente como goal persistente externo. El runtime
+  solo consume el puerto; no conoce Codex, shell, API concreta ni proveedor.
+- `IdleSelfImprovementGoalObserverPortV0` opcional para composiciones que
+  quieran observar goals de automejora ya lanzados. El servidor solo pide
+  `GoalObservationRequestV0`, persiste `GoalWorkResultV0` observado y acepta
+  cierre solo si el `GoalWorkSpecV0` persistido valida por el contrato neutral
+  de `orquesta-goal`.
 - Configuracion explicita de direccion, statefile y ritmo de supervision.
 - Configuracion explicita del Director residente: `ResidentDirectorEnabled` y
   `ResidentDirectorMaxActions`. El servidor no construye briefings ni conoce
@@ -24,21 +32,55 @@ Salida:
   automejora.
 - `GET /api/v0/server/readiness`: readiness operativa. Devuelve 200 solo con
   `ready=true`; si el startup cleanup/reconciliacion esta bloqueado devuelve
-  503 con estado compacto y evidence refs.
+  503 con estado compacto y evidence refs. Si existe un goal de automejora
+  lanzado o estado durable de goal, anade solo campos informativos no
+  bloqueantes (`idle_self_improvement_goal_*`) con ref, estado, reason code y
+  cierre aceptado; un goal en curso no cambia `ready` por si solo. Una
+  capacidad faltante como `goal_launcher_unavailable` sin `goal_ref` no se
+  publica como goal activo.
 - `GET /api/v0/server/status`: estado/diagnostico publico canonico.
   Incluye la proyeccion compacta `state_persist_*` para distinguir estado vivo
   en memoria de persistencia durable confirmada o degradada, sin detalles del
   filesystem ni errores crudos del store. Tambien expone
   `resident_director_*` cuando el Director residente ha ejecutado algun pulso.
+  Cuando existe automejora goal-first, expone
+  `idle_self_improvement_goal` como resumen publico redactado: refs, presencia
+  de spec/receipt/result/closure, estados y contadores. No publica objetivo,
+  paths, comandos, payloads completos ni errores crudos del runtime.
+  Los mensajes operativos pueden transportar `run_refs`, `goal_refs`,
+  `request_refs` y `evidence_refs` estructurados; clientes nuevos no deben
+  parsear esos refs desde strings de razon cuando exista el campo dedicado.
 - `POST /api/v0/resident-director/control`: control runtime del Director
   residente con `action=pause|resume|status`. Pausado no ejecuta ticks ni
   acepta wakeups; `status` devuelve `paused`, `tick_active`, `tick_pending` y si
   el residente esta habilitado. Es control mutable y queda bajo el guard de
   control-plane en accesos no loopback.
+- `POST /api/v0/apps/intake/guided-turn`: excepcion exacta de lectura en el
+  guard de control-plane aunque use POST y este bajo `/api/v0/`. El handler de
+  aplicacion calcula decisiones editables del wizard sin persistir, arrancar
+  runs, tocar runtime ni producir efectos externos. El resto de `/api/v0/*`
+  sigue tratado como mutable salvo metodos de lectura.
 - `GET /api/status`: alias legacy compatible del estado publico. Debe devolver
   el mismo DTO redactado que la ruta versionada y publicar headers de
   deprecacion/canonical para que clientes nuevos no lo promuevan.
+- `POST /api/v0/operational-status/query`: diagnostico compacto residente.
+  Cuando existe automejora goal-first, conserva los contadores residentes ya
+  existentes y anade contadores `goal_*`, refs opacas, salud, actividad y
+  bloqueos semanticos del goal (`running`, `blocked`, `invalid`, pendiente de
+  cierre o cierre aceptado). No publica objetivo, paths, comandos, summaries
+  completos ni payloads completos del goal. Si goal-first esta configurado pero
+  falta `IdleSelfImprovementGoalLauncherPortV0`, publica salud/bloqueo de
+  capacidad `goal_launcher_unavailable` sin crear refs, contadores ni estado de
+  goal activo. Los contadores historicos de fallos del supervisor y del
+  Director residente se conservan como telemetria, pero no degradan ni crean
+  blockers por si solos cuando `LastSupervisorStatus`/`LastSupervisorError`,
+  `ResidentDirectorStatus`/`ResidentDirectorLastError` y `LastError` ya estan
+  recuperados.
 - statefile JSON `orquesta_server_state.v0`
+  El statefile local puede contener `GoalWorkSpecV0`, `GoalLaunchReceiptV0`,
+  `GoalWorkResultV0` y `GoalClosureValidationV0` completos para reenganche y
+  restauracion del proceso residente. No es API publica: clientes externos
+  deben leer readiness/status/operational-status, no parsear el statefile.
 
 Configuracion externa relacionada:
 - `ORQUESTA_SERVER_AUTONOMY_ENABLED=true`: perfil explicito para arrancar la
@@ -68,6 +110,20 @@ Configuracion externa relacionada:
 - `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_MAX_REQUESTS`: maximo de tareas nuevas
   por tanda de automejora. El objetivo de cola nunca baja por debajo de este
   valor normalizado.
+- `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_GOAL_FIRST_ENABLED=true`: cambia la
+  preparacion de automejora a `GoalWorkSpecV0` si la composicion inyecta
+  `IdleSelfImprovementGoalLauncherPortV0`. Es opt-in estricto: si el flag esta
+  activo y falta el launcher, el runtime publica
+  `goal_launcher_unavailable` y no cae silenciosamente al loop legacy de
+  `PrepareIdleSelfImprovementV0`.
+- `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`: solo en `cmd/orquesta-server`,
+  inyecta launcher/observer Codex Goal usando `codex app-server proxy` contra
+  un daemon local de Codex ya disponible. No usa `codex exec` como sustituto,
+  no arranca backend si no esta configurado y no mete Codex en el modulo
+  servidor.
+- `ORQUESTA_CODEX_GOAL_TIMEOUT_MS`: timeout por llamada al backend Codex Goal
+  de composicion. Es configuracion del transporte app-server, no politica del
+  nucleo.
 - En contexto OPES, si `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PROJECT_WORKDIR`
   no esta definido o apunta al mismo directorio que OPES, la automejora idle del
   servidor se desactiva. Para mantenerla activa debe apuntar a un workdir
@@ -132,6 +188,9 @@ Invariantes:
 - no arranca agentes directamente;
 - no guarda secretos ni rutas de credenciales en errores;
 - cada pulso del supervisor es acotado por configuracion explicita.
+- el guard de control-plane solo permite excepciones exactas de lectura cuando
+  el contrato del handler no tiene efectos externos. Las rutas catch-all bajo
+  `/api/v0/apps/` siguen protegidas como mutacion remota.
 - el runtime residente respeta el `MaxTicks` configurado; no lo pisa
   silenciosamente salvo que llegue vacio o invalido.
 - `cmd/orquesta-server` debe leer cada variable operativa por una ruta canonica
@@ -142,6 +201,17 @@ Invariantes:
   configurado; los skips no terminales cuentan como presion de cola, pero no
   bloquean por si solos si sigue quedando capacidad. No crea una tarea generica
   a ciegas.
+- con `IdleSelfImprovementGoalFirst` activo, la automejora residente exige
+  `IdleSelfImprovementGoalLauncherPortV0`; ausencia de launcher es una
+  capacidad faltante observable, no autorizacion para usar el ciclo legacy.
+- si ya hay `goal_refs` de automejora en estado y existe observer inyectado, el
+  tick residente observa ese goal antes de planificar otra tanda. Un `complete`
+  observado queda como `goal_complete_pending_closure_validation` si falta spec
+  o evidencia requerida; solo pasa a `goal_closure_accepted` cuando
+  `ValidateGoalWorkClosureV0` acepta refs, evidencias, tests, artefactos y
+  recibos exigidos por el spec persistido. El receipt de lanzamiento queda
+  persistido como `GoalLaunchReceiptV0` para trazabilidad durable y se publica
+  solo como resumen compacto.
 - los refs retryables devueltos por la composicion se descuentan de la presion
   de cola y se transportan al planner como refs de run, refs de request y
   evidencias compactas; un retryable por request ref no debe volver invisible la
@@ -174,11 +244,19 @@ Invariantes:
   publica `startup_status`, `startup_ready`, mensaje y evidencias; la purga real
   de estado transitorio pertenece a la composicion inyectada.
 - la respuesta de readiness no expone paths, runtime dirs, prompts,
-  transcripts, payloads de startup ni secretos; solo estado compacto y
-  evidence refs.
+  transcripts, payloads de startup, payloads de goal ni secretos; solo estado
+  compacto, refs y evidence refs.
 - un fallo no fatal de `StateStorePortV0` despues del arranque queda visible
   como `state_persist_failed` en memoria/status y en `recent_errors`; no se
   intenta reparar escribiendo esa proyeccion en el mismo store fallido.
+- un fallo de escritura HTTP queda visible como `response_write_failed` y
+  conserva contador/ultima fecha de fallo, pero una respuesta posterior escrita
+  correctamente limpia `response_write_last_code`/`stage` y retira el blocker
+  vigente. El contador historico no se borra.
+- los contadores historicos `supervisor_error_ticks` y
+  `resident_director_error_ticks` no son estado vigente: permanecen visibles
+  para auditoria, pero el diagnostico compacto solo degrada por error actual,
+  estado actual `error` o ultimo error actual no vacio.
 - la auditoria JSONL del startup check tampoco persiste `StartupCheckCommandV0`
   ni `StartupCheckResultV0` completos: registra `command_summary` y
   `result_summary` con correlacion, presencia booleana de dirs, estado, mensaje

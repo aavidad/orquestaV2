@@ -13,6 +13,7 @@ const (
 	RouteRunQueuePageV0                   = "/run-queue"
 	RouteAppSpecV0                        = "/api/v0/apps/spec"
 	RouteAppDirectorV0                    = "/api/v0/apps/director"
+	RouteAppIntakeGuidedTurnV0            = "/api/v0/apps/intake/guided-turn"
 	RouteAppChangeV0                      = "/api/v0/apps/"
 	RouteDirectorStatsV0                  = "/api/v0/director/stats"
 	RouteRunControlV0                     = "/api/v0/runs/control"
@@ -46,6 +47,7 @@ type RouteHandlersV0 struct {
 	RunQueuePage                   http.Handler
 	AppSpec                        http.Handler
 	AppDirector                    http.Handler
+	AppIntakeGuidedTurn            http.Handler
 	AppChange                      http.Handler
 	DirectorStats                  http.Handler
 	RunControl                     http.Handler
@@ -110,6 +112,7 @@ func gatewayRouteRegistrationsV0(handlers RouteHandlersV0) []gatewayRouteRegistr
 		{ref: RouteRefRunQueuePageV0, route: RouteRunQueuePageV0, handler: handlers.RunQueuePage},
 		{ref: RouteRefAppSpecV0, route: RouteAppSpecV0, handler: handlers.AppSpec},
 		{ref: RouteRefAppDirectorV0, route: RouteAppDirectorV0, handler: handlers.AppDirector},
+		{ref: RouteRefAppIntakeGuidedTurnV0, route: RouteAppIntakeGuidedTurnV0, handler: handlers.AppIntakeGuidedTurn},
 		{ref: RouteRefAppChangeV0, route: RouteAppChangeV0, handler: handlers.AppChange},
 		{ref: RouteRefDirectorStatsV0, route: RouteDirectorStatsV0, handler: handlers.DirectorStats},
 		{ref: RouteRefRunControlV0, route: RouteRunControlV0, handler: handlers.RunControl},

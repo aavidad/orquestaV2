@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
 const (
@@ -64,6 +65,7 @@ type MCPAutoprogrammingPrepareRunToolResultV0 struct {
 	PhaseID          string                               `json:"phase_id,omitempty"`
 	WorkflowTaskRefs []string                             `json:"workflow_task_refs,omitempty"`
 	WaitAgentRefs    []string                             `json:"wait_agent_refs,omitempty"`
+	GoalSpecs        []orquestagoal.GoalWorkSpecV0        `json:"goal_specs,omitempty"`
 	Continue         *MCPAutoprogrammingContinueRequestV0 `json:"continue,omitempty"`
 	Errores          []MCPValidationIssueV0               `json:"errores_publicos,omitempty"`
 }
@@ -73,7 +75,7 @@ func MCPAutoprogrammingPrepareRunDescriptorV0() MCPAutoprogrammingPrepareRunTool
 		Name:        MCPAutoprogrammingPrepareRunToolNameV0,
 		Version:     MCPAutoprogrammingPrepareRunToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,idempotency_key?,occurred_at?,requested_by?,autoprogramming_request:AutoprogrammingRequestV0,max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,priority_score?}",
-		Output:      "ok:{run_ref,workflow_task_refs,wait_agent_refs,continue{operational_director_plan_ref?}}|error:{errores_publicos}",
+		Output:      "ok:{run_ref,workflow_task_refs,wait_agent_refs,goal_specs?,continue{operational_director_plan_ref?}}|error:{errores_publicos}",
 		ResourceURI: MCPAutoprogrammingPrepareRunResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",

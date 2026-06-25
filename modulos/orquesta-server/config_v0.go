@@ -23,6 +23,8 @@ const (
 	DefaultIdleSelfImprovementBranchRefV0     = "branch-ref-orquesta-server-idle-self-improvement"
 	DefaultIdleSelfImprovementRequiredTestV0  = "go test -count=1 ./..."
 	DefaultIdleSelfImprovementSuggestedAreaV0 = "automejora"
+	DefaultIdleSelfImprovementSkillRefAutoV0  = "skill-ref-orquesta-programacion-autonoma-v0"
+	DefaultIdleSelfImprovementSkillRefIntV0   = "skill-ref-orquesta-programacion-integracion-v0"
 	DefaultIdleSelfImprovementPriorityScoreV0 = 10
 	DefaultIdleSelfImprovementMaxRequestsV0   = 10
 	DefaultIdleSelfImprovementTargetQueueV0   = 10
@@ -36,11 +38,13 @@ const (
 	SupervisorPublicStatusRunningLiveV0       = "running_live"
 	SupervisorPublicStatusStalledV0           = "stalled"
 	SupervisorPublicStatusLaunchFailedV0      = "launch_failed"
+	SupervisorPublicStatusExternalEmptyRunV0  = "external_work_empty_run"
 	SupervisorPublicStopWaitingOutboxV0       = "waiting_outbox"
 	SupervisorPublicStopWaitingExternalV0     = "wait_external"
 	SupervisorPublicStopRunningLiveV0         = "running_live"
 	SupervisorPublicStopStalledV0             = "external_process_unverified"
 	SupervisorPublicStopLaunchFailedV0        = "launch_failed"
+	SupervisorPublicStopExternalEmptyRunV0    = "failed_empty_run"
 	SupervisorPublicCategoryWaitOutboxV0      = "wait_outbox"
 	SupervisorPublicCategoryWaitExternalV0    = "wait_external"
 	SupervisorPublicCategoryExternalProcessV0 = "external_process"
@@ -75,6 +79,8 @@ type ConfigV0 struct {
 	IdleSelfImprovementEvidenceRefs   []string
 	IdleSelfImprovementAcceptance     []string
 	IdleSelfImprovementCompactRules   []string
+	IdleSelfImprovementSkillRefs      []string
+	IdleSelfImprovementGoalFirst      bool
 	IdleSelfImprovementPriorityScore  int
 	IdleSelfImprovementMaxRequests    int
 	IdleSelfImprovementTargetQueue    int
@@ -168,6 +174,13 @@ func NormalizeConfigV0(config ConfigV0) ConfigV0 {
 	config.IdleSelfImprovementEvidenceRefs = compactConfigStringsV0(config.IdleSelfImprovementEvidenceRefs)
 	config.IdleSelfImprovementAcceptance = compactConfigStringsV0(config.IdleSelfImprovementAcceptance)
 	config.IdleSelfImprovementCompactRules = compactConfigStringsV0(config.IdleSelfImprovementCompactRules)
+	config.IdleSelfImprovementSkillRefs = compactConfigStringsV0(config.IdleSelfImprovementSkillRefs)
+	if len(config.IdleSelfImprovementSkillRefs) == 0 {
+		config.IdleSelfImprovementSkillRefs = []string{
+			DefaultIdleSelfImprovementSkillRefAutoV0,
+			DefaultIdleSelfImprovementSkillRefIntV0,
+		}
+	}
 	if config.IdleSelfImprovementPriorityScore <= 0 {
 		config.IdleSelfImprovementPriorityScore = DefaultIdleSelfImprovementPriorityScoreV0
 	}

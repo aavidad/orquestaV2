@@ -115,6 +115,14 @@ Tras los cortes del 2026-05-17, el estado real es:
   scheduler/workflow/outbox, sin daemon, runtime real ni composicion residente.
   Lo pendiente en esa linea debe clasificarse como codigo offline, composicion
   residente, smoke real, proveedor real u OPES temporal.
+- Corte 2026-06-25: cuando una composicion tenga Codex Goal o un runtime con
+  `goal` persistente, el goal actua como Director operativo interno del trabajo.
+  Orquesta debe adelgazar su loop: compila `GoalWorkSpecV0` con objetivo,
+  reglas, contexto, write-set, tests y artefactos, lanza/observa por adaptador
+  opt-in y valida cierre por evidencias. El loop historico
+  `app-director-service`/`OperationalDirectorPlanStateV0` queda como
+  compatibilidad para rutas no migradas y smokes existentes; no se borra sin
+  evidencia equivalente.
 
 Orden de autoridad documental:
 
@@ -166,6 +174,8 @@ Documentos de entrada obligatorios para cambios transversales:
 
 - Core puro: `modulos/orquesta-core-workflow`.
 - Loop de aplicacion del nucleo: `modulos/orquesta-orchestration-core`.
+- Trabajo goal-first neutral: `modulos/orquesta-goal`.
+- Adaptador Codex Goal opt-in: `modulos/orquesta-runtime-codex-goal`.
 - Plan operativo del director: `modulos/orquesta-director-operativo`.
 - Trabajo externo neutral: `modulos/orquesta-domain-work`,
   `modulos/orquesta-app-change`, `modulos/orquesta-external-work-run`.

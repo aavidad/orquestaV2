@@ -7,6 +7,7 @@ import (
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestaappgateway "orquesta/modulos/orquesta-app-gateway"
 	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
@@ -188,6 +189,10 @@ func buildDirectorPortsV0(
 		OperationalPlanStateStore:   operationalPlanStateStoreV0(config),
 		RequiredTestEvidenceStore:   requiredTestEvidenceStoreV0(config),
 		RequiredTestRunner:          requiredTestRunnerV0(config),
+		GoalLauncher:                config.AppGoalLauncher,
+		GoalObserver:                config.AppGoalObserver,
+		GoalClosureValidator:        appGoalClosureValidatorV0(config),
+		GoalStateStore:              config.Stores.AppGoalStateStore,
 		ExternalWaiter:              ackWaiterV0(config),
 		OperationalClosureSource:    operationalClosureSourceV0(config),
 		Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
@@ -199,6 +204,15 @@ func buildDirectorPortsV0(
 			agentBatchDispatcherV0(config),
 		},
 	}
+}
+
+func appGoalClosureValidatorV0(
+	config ConfigV0,
+) orquestagoal.GoalWorkClosureValidatorPortV0 {
+	if config.AppGoalClosureValidator != nil {
+		return config.AppGoalClosureValidator
+	}
+	return orquestagoal.DefaultGoalWorkClosureValidatorV0{}
 }
 
 func requiredTestEvidenceStoreV0(

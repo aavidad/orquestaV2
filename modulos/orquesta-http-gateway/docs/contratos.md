@@ -31,6 +31,7 @@ Campos:
 - `RunQueuePage`;
 - `AppSpec`;
 - `AppDirector`;
+- `AppIntakeGuidedTurn`;
 - `AppChange`;
 - `DirectorStats`;
 - `RunControl`;
@@ -58,6 +59,7 @@ Campos:
 - `RouteRunQueuePageV0`: `/run-queue`;
 - `RouteAppSpecV0`: `/api/v0/apps/spec`;
 - `RouteAppDirectorV0`: `/api/v0/apps/director`;
+- `RouteAppIntakeGuidedTurnV0`: `/api/v0/apps/intake/guided-turn`;
 - `RouteAppChangeV0`: `/api/v0/apps/`;
 - `RouteDirectorStatsV0`: `/api/v0/director/stats`.
 - `RouteRunControlV0`: `/api/v0/runs/control`;
@@ -79,9 +81,9 @@ Campos:
 
 `PublicRouteManifestV0` publica el inventario canonico de rutas exactas,
 prefijos y overlays externos con `ref`, `owner`, metodo esperado y perfil de
-seguridad. Las rutas exactas bajo un prefijo, como `/api/v0/apps/director` o el
-overlay AppVCS `/api/v0/apps/vcs`, deben declarar explicitamente que preceden al
-prefijo `/api/v0/apps/`.
+seguridad. Las rutas exactas bajo un prefijo, como `/api/v0/apps/director`,
+`/api/v0/apps/intake/guided-turn` o el overlay AppVCS `/api/v0/apps/vcs`, deben
+declarar explicitamente que preceden al prefijo `/api/v0/apps/`.
 
 `ValidateRouteManifestV0` detecta duplicados exactos, prefijos duplicados y
 shadows no declarados. El builder del mux valida que las rutas que registra
@@ -95,6 +97,11 @@ tareas, agentes, rework, replan, progreso, cierre ni `decision_context`.
 `RouteRunQueuePageV0` y `RouteRunQueuePriorityV0` son rutas separadas: la
 primera apunta al panel web inyectado y la segunda al contrato REST/MCP de
 cola. El gateway no conoce ranking, prioridad, aging, fairness ni stores.
+
+`RouteAppIntakeGuidedTurnV0` apunta al endpoint JSON de intake guiado de nueva
+app. Es ruta exacta bajo `/api/v0/apps/`, precede al catch-all de app-change y
+se clasifica como lectura de control plane porque no persiste estado ni dispara
+trabajo externo.
 
 `RouteRunControlPageV0` y `RouteRunControlV0` son rutas separadas: la primera
 apunta al panel web inyectado y la segunda al contrato REST/MCP de control. El
@@ -111,7 +118,8 @@ dominio.
 
 `RouteAutoprogrammingPrepareRunV0` apunta al contrato REST/MCP que prepara una
 run de autoprogramacion continuable por executor inyectado. El gateway no crea
-runs ni arranca agentes; solo monta el handler.
+runs ni arranca agentes; solo monta el handler y no recorta `goal_specs?` cuando
+el handler inyectado los publica.
 
 `RouteAutoprogrammingStatusV0` y `RouteAutoprogrammingSuperviseV0` apuntan a
 contratos REST/MCP finos para estado/diagnostico y supervision puntual de

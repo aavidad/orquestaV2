@@ -3,7 +3,6 @@ package orquestaappcodexstack
 import (
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -11,7 +10,7 @@ import (
 
 func TestPrivacyFilterSidecarHTTPPortV0PostsSimpleLocalContract(t *testing.T) {
 	observed := PrivacyFilterSidecarHTTPRequestV0{}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/filter" {
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
