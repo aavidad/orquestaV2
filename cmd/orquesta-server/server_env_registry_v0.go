@@ -36,6 +36,7 @@ const (
 	envDetailProhibitedRailsV0                       = "ORQUESTA_DETAIL_PROHIBITED_RAILS"
 	envDetailProhibitedRailsScopeV0                  = "ORQUESTA_DETAIL_PROHIBITED_RAILS_SCOPE"
 	envServerIdleSelfImprovementAfterV0              = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS"
+	envServerIdleSelfImprovementAfterLegacyV0        = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER"
 	envServerIdleSelfImprovementProjectWorkDirV0     = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PROJECT_WORKDIR"
 	envServerIdleSelfImprovementProjectRefV0         = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PROJECT_REF"
 	envServerIdleSelfImprovementWorktreeRefV0        = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_WORKTREE_REF"
@@ -293,6 +294,11 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "server_supervisor",
 		Label:       "Intervalo tick ms",
 		Description: "Intervalo entre pulsos automaticos del servidor.",
+	},
+	envServerIdleSelfImprovementAfterV0: {
+		Scope:       "autoprogramming",
+		Label:       "Espera idle segundos",
+		Description: "Segundos sin ejecuciones antes de proponer automejora idle; 0 desactiva el disparador.",
 	},
 	envServerIdleSelfImprovementTargetQueueV0: {
 		Scope:       "autoprogramming",

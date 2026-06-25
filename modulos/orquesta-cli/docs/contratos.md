@@ -353,6 +353,7 @@ Campos:
   - ORQUESTA_SERVER_DRAIN_MAX_EXTERNAL_WAITS: esperas externas maximas por drain; default `1`, configurable hasta `70`.
   - ORQUESTA_SERVER_TICK_INTERVAL_MS: intervalo entre pulsos automaticos del servidor residente; default operativo `5000`.
   - ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS: segundos sin ejecuciones antes de proponer automejora idle; default operativo `60`; valor `0` desactiva este disparador.
+  - ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER: alias historico no canonico; solo se aplica si `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS` no esta definida y debe migrarse. El servidor publica diagnostico `legacy_env_alias` o `legacy_env_ignored` en `effective_config.diagnostics`.
   - ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PROJECT_REF: proyecto opaco de la automejora idle; default `project-ref-orquesta-server`.
   - ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_WORKTREE_REF: worktree opaca de la automejora idle; default `worktree-ref-orquesta-server-idle-self-improvement`.
   - ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_BRANCH_REF: rama opaca de la automejora idle; default `branch-ref-orquesta-server-idle-self-improvement`.

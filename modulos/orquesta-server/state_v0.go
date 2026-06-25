@@ -133,6 +133,7 @@ type ServerEffectiveConfigV0 struct {
 	SchemaVersion string                  `json:"schema_version,omitempty"`
 	RestartNote   string                  `json:"restart_note,omitempty"`
 	Settings      []ServerConfigSettingV0 `json:"settings,omitempty"`
+	Diagnostics   []ServerDiagnosticV0    `json:"diagnostics,omitempty"`
 }
 
 type ServerConfigSettingV0 struct {

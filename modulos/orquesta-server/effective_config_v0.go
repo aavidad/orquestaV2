@@ -21,6 +21,7 @@ func NormalizeServerEffectiveConfigV0(config ServerEffectiveConfigV0) ServerEffe
 		settings = append(settings, setting)
 	}
 	config.Settings = settings
+	config.Diagnostics = normalizeServerEffectiveConfigDiagnosticsV0(config.Diagnostics)
 	if config.RestartNote == "" && len(config.Settings) > 0 {
 		config.RestartNote = "Los cambios de variables de entorno no se aplican al proceso actual; quedan pendientes hasta reinicio."
 	}
@@ -42,4 +43,25 @@ func NormalizeServerConfigSettingV0(setting ServerConfigSettingV0) ServerConfigS
 		setting.Canonical = true
 	}
 	return setting
+}
+
+func normalizeServerEffectiveConfigDiagnosticsV0(diagnostics []ServerDiagnosticV0) []ServerDiagnosticV0 {
+	out := make([]ServerDiagnosticV0, 0, len(diagnostics))
+	seen := map[string]bool{}
+	for _, diagnostic := range diagnostics {
+		diagnostic.Code = strings.TrimSpace(diagnostic.Code)
+		diagnostic.Scope = strings.TrimSpace(diagnostic.Scope)
+		diagnostic.Message = strings.TrimSpace(diagnostic.Message)
+		diagnostic.EvidenceRefs = compactConfigStringsV0(diagnostic.EvidenceRefs)
+		if diagnostic.Code == "" && diagnostic.Message == "" {
+			continue
+		}
+		key := diagnostic.Code + "|" + diagnostic.Scope + "|" + diagnostic.Message
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, diagnostic)
+	}
+	return out
 }

@@ -447,3 +447,12 @@ nueva, resuelve `ref_only` por paquete de control, AGENTS raiz, README/AGENTS
 locales, foto vigente y docs locales, no relanza padre ni abre codigo dentro
 del write-set documental. El cierre tecnico de SRV-TASK-024 sigue dependiendo
 de dispatch real o bloqueo causal publico probado por smoke OPES acotado.
+
+## SRV-016: configuracion efectiva de automejora idle
+
+`ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS` es la variable canonica
+para el disparador idle. El alias historico
+`ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER` se acepta solo por compatibilidad
+cuando la canonica no existe; el estado efectivo publica un diagnostico de
+migracion. Si ambas existen, gana la canonica y el alias queda ignorado con
+diagnostico publico.

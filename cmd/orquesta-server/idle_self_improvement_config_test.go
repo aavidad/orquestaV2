@@ -2,8 +2,11 @@ package main
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
 func TestServerConfigFromEnvV0ConfiguraAutomejoraIdleV0(t *testing.T) {
@@ -30,6 +33,48 @@ func TestServerConfigFromEnvV0ConfiguraAutomejoraIdleV0(t *testing.T) {
 	}
 	if !config.IdleSelfImprovementDisabled || config.IdleSelfImprovementAfter != 0 {
 		t.Fatalf("idle disabled config=%+v", config)
+	}
+}
+
+func TestServerConfigFromEnvV0AceptaAliasLegacyDeAutomejoraIdleConDiagnosticoV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envServerIdleSelfImprovementAfterV0, "")
+	t.Setenv(envServerIdleSelfImprovementAfterLegacyV0, "0")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if !config.IdleSelfImprovementDisabled || config.IdleSelfImprovementAfter != 0 {
+		t.Fatalf("alias legacy no desactiva automejora idle: %+v", config)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerIdleSelfImprovementAfterV0)
+	if setting.Value != "0" || setting.Source != "legacy_alias" || !setting.Canonical {
+		t.Fatalf("setting after=%+v", setting)
+	}
+	if !effectiveConfigHasDiagnosticForTestV0(config.EffectiveConfig, "legacy_env_alias", envServerIdleSelfImprovementAfterLegacyV0, envServerIdleSelfImprovementAfterV0) {
+		t.Fatalf("diagnostico legacy ausente: %+v", config.EffectiveConfig.Diagnostics)
+	}
+}
+
+func TestServerConfigFromEnvV0CanonicaGanaAAliasLegacyDeAutomejoraIdleV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envServerIdleSelfImprovementAfterV0, "30")
+	t.Setenv(envServerIdleSelfImprovementAfterLegacyV0, "0")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if config.IdleSelfImprovementDisabled || config.IdleSelfImprovementAfter != 30*time.Second {
+		t.Fatalf("la canonica debe ganar al alias legacy: %+v", config)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerIdleSelfImprovementAfterV0)
+	if setting.Value != "30" || setting.Source != "explicit" {
+		t.Fatalf("setting after=%+v", setting)
+	}
+	if !effectiveConfigHasDiagnosticForTestV0(config.EffectiveConfig, "legacy_env_ignored", envServerIdleSelfImprovementAfterLegacyV0, envServerIdleSelfImprovementAfterV0) {
+		t.Fatalf("diagnostico legacy ignored ausente: %+v", config.EffectiveConfig.Diagnostics)
 	}
 }
 
@@ -68,4 +113,24 @@ func TestServerConfigFromEnvV0DesactivaAutomejoraIdleSiWorkdirExplicitoEsOPESV0(
 	if !config.IdleSelfImprovementDisabled || config.IdleSelfImprovementAfter != 0 {
 		t.Fatalf("automejora idle debe quedar desactivada si apunta al workdir OPES: %+v", config)
 	}
+}
+
+func effectiveConfigHasDiagnosticForTestV0(config orquestaserver.ServerEffectiveConfigV0, code string, parts ...string) bool {
+	for _, diagnostic := range config.Diagnostics {
+		if diagnostic.Code != code {
+			continue
+		}
+		message := diagnostic.Message
+		ok := true
+		for _, part := range parts {
+			if !strings.Contains(message, part) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return true
+		}
+	}
+	return false
 }

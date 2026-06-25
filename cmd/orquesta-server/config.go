@@ -28,7 +28,8 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 		envServerIdleSelfImprovementProjectWorkDirV0,
 		projectDir,
 	)
-	idleSelfImprovementDisabled := strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementAfterV0)) == "0" ||
+	idleSelfImprovementAfterSeconds := idleSelfImprovementAfterSecondsFromEnvV0()
+	idleSelfImprovementDisabled := idleSelfImprovementAfterSeconds == 0 ||
 		serverIdleSelfImprovementDisabledForOPESContextV0(opesAutomationContext, projectDir, idleSelfImprovementProjectDir)
 	stateDir := absDirEnvOrDefaultV0(envServerStateDirV0,
 		filepath.Join(defaultControlDirV0(projectDir), "state"))
@@ -75,10 +76,7 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 			envServerShutdownGraceMSV0,
 			int(orquestaserver.DefaultShutdownGracePeriodV0/time.Millisecond),
 		)) * time.Millisecond,
-		IdleSelfImprovementAfter: time.Duration(intEnvOrDefaultAllowZeroV0(
-			envServerIdleSelfImprovementAfterV0,
-			int(orquestaserver.DefaultIdleSelfImprovementAfterV0/time.Second),
-		)) * time.Second,
+		IdleSelfImprovementAfter:         time.Duration(idleSelfImprovementAfterSeconds) * time.Second,
 		IdleSelfImprovementDisabled:      idleSelfImprovementDisabled,
 		IdleSelfImprovementProjectRef:    envOrDefaultV0(envServerIdleSelfImprovementProjectRefV0, orquestaserver.DefaultIdleSelfImprovementProjectRefV0),
 		IdleSelfImprovementWorktreeRef:   envOrDefaultV0(envServerIdleSelfImprovementWorktreeRefV0, orquestaserver.DefaultIdleSelfImprovementWorktreeRefV0),
@@ -260,6 +258,29 @@ func intEnvOrDefaultAllowZeroV0(key string, fallback int) int {
 		return fallback
 	}
 	return parsed
+}
+
+func idleSelfImprovementAfterSecondsFromEnvV0() int {
+	return intEnvOrDefaultAllowZeroFromKeysV0(
+		int(orquestaserver.DefaultIdleSelfImprovementAfterV0/time.Second),
+		envServerIdleSelfImprovementAfterV0,
+		envServerIdleSelfImprovementAfterLegacyV0,
+	)
+}
+
+func intEnvOrDefaultAllowZeroFromKeysV0(fallback int, keys ...string) int {
+	for _, key := range keys {
+		value := strings.TrimSpace(os.Getenv(key))
+		if value == "" {
+			continue
+		}
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 0 {
+			return fallback
+		}
+		return parsed
+	}
+	return fallback
 }
 
 func csvEnvOrDefaultV0(key string, fallback []string) []string {

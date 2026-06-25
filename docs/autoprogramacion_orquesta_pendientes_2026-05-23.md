@@ -679,6 +679,12 @@ Seguimiento: `docs/duplicaciones_railes_pendientes_2026-05-24.md`.
   Pruebas:
   `TestRuntimeV0SupervisorPreparaAutomejoraTrasIdleV0` y
   `TestServerConfigFromEnvV0ConfiguraAutomejoraIdleV0`.
+- Compatibilidad 2026-06-25: la variable historica
+  `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER` se acepta solo como alias si
+  `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS` no esta definida; la
+  configuracion efectiva publica `legacy_env_alias`. Si ambas existen, gana la
+  canonica y se publica `legacy_env_ignored`. La opcion canonica sigue siendo
+  `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS`.
 - Rework `task-ref-self-improvement-1089cc70db2b`: una run de
   autoprogramacion con agente externo pendiente no se relanza en ticks globales
   posteriores. Si quedan tareas autoprogramming abiertas y agentes externos

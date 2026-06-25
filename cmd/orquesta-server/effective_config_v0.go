@@ -46,6 +46,7 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 		serverConfigSettingFromRegistryV0(envServerSelfWatchdogCPUHighPercentV0, strconv.Itoa(config.SelfWatchdog.CPUHighPercent)),
 		serverConfigSettingFromRegistryV0(envServerSelfWatchdogSustainedSecondsV0, strconv.Itoa(int(config.SelfWatchdog.SustainedFor/time.Second))),
 		serverConfigSettingFromRegistryV0(envServerSelfWatchdogNoProgressSecondsV0, strconv.Itoa(int(config.SelfWatchdog.NoProgressFor/time.Second))),
+		serverIdleSelfImprovementAfterSettingV0(config),
 		serverConfigSettingFromRegistryV0(envServerIdleSelfImprovementTargetQueueV0, strconv.Itoa(config.IdleSelfImprovementTargetQueue)),
 		serverConfigSettingFromRegistryV0(envServerIdleSelfImprovementGoalFirstV0, strconv.FormatBool(config.IdleSelfImprovementGoalFirst)),
 		serverSensitiveConfigSettingFromRegistryV0(
@@ -100,7 +101,45 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 	return orquestaserver.NormalizeServerEffectiveConfigV0(orquestaserver.ServerEffectiveConfigV0{
 		SchemaVersion: orquestaserver.ServerEffectiveConfigSchemaVersionV0,
 		Settings:      settings,
+		Diagnostics:   serverEffectiveConfigDiagnosticsFromEnvV0(),
 	})
+}
+
+func serverIdleSelfImprovementAfterSettingV0(config orquestaserver.ConfigV0) orquestaserver.ServerConfigSettingV0 {
+	setting := serverConfigSettingFromRegistryV0(
+		envServerIdleSelfImprovementAfterV0,
+		strconv.Itoa(int(config.IdleSelfImprovementAfter/time.Second)),
+	)
+	if serverIdleSelfImprovementAfterLegacyActiveV0() {
+		setting.Source = "legacy_alias"
+	}
+	return setting
+}
+
+func serverEffectiveConfigDiagnosticsFromEnvV0() []orquestaserver.ServerDiagnosticV0 {
+	legacy := strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementAfterLegacyV0))
+	if legacy == "" {
+		return nil
+	}
+	if strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementAfterV0)) != "" {
+		return []orquestaserver.ServerDiagnosticV0{{
+			Code:         "legacy_env_ignored",
+			Scope:        "autoprogramming",
+			Message:      envServerIdleSelfImprovementAfterLegacyV0 + " ignorada porque " + envServerIdleSelfImprovementAfterV0 + " esta definida",
+			EvidenceRefs: []string{"evidence-ref-server-idle-self-improvement-env-legacy-ignored"},
+		}}
+	}
+	return []orquestaserver.ServerDiagnosticV0{{
+		Code:         "legacy_env_alias",
+		Scope:        "autoprogramming",
+		Message:      envServerIdleSelfImprovementAfterLegacyV0 + " es legacy; usar " + envServerIdleSelfImprovementAfterV0,
+		EvidenceRefs: []string{"evidence-ref-server-idle-self-improvement-env-legacy-alias"},
+	}}
+}
+
+func serverIdleSelfImprovementAfterLegacyActiveV0() bool {
+	return strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementAfterV0)) == "" &&
+		strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementAfterLegacyV0)) != ""
 }
 
 func detailRailsEffectiveValueV0() string {
