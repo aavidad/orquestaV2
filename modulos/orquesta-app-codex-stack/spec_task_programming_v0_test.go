@@ -80,6 +80,10 @@ func TestProgrammingTaskV0PropagaRequiredTestsYContratoGoCompleto(t *testing.T) 
 		"sin imports relativos ../",
 		"limite 6 subagentes",
 		"conservando refs/parentesco",
+		"Orquesta ya declaro 1 child_task_refs",
+		"no lo trates como opcional",
+		"No cierres el ACK del padre sin ACK",
+		"task-ref-child-002",
 	} {
 		if !strings.Contains(got.Objective, want) && !codexStackDoneCriteriaContainsForTestV0(got.DoneCriteria, want) {
 			t.Fatalf("contrato Go completo no contiene %q: objective=%s criteria=%v", want, got.Objective, got.DoneCriteria)

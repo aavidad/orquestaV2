@@ -111,7 +111,7 @@ func programmingObjectiveV0(
 		strings.TrimSpace(task.Summary),
 		programmingProfileObjectiveLineV0(task, unit),
 		strictWriteSetObjectiveLineV0(),
-		agentDelegationObjectiveLineV0(task.MaxChildAgents, task.MaxSubagentsPerAgent),
+		agentDelegationObjectiveLineV0(task),
 		"Ejecuta pruebas focales razonables y registra el resultado en el ACK.",
 	}
 	if programmingTaskRequiresCompleteGoAppV0(task) {
@@ -128,8 +128,17 @@ func programmingObjectiveV0(
 	return strings.Join(lines, "\n")
 }
 
-func agentDelegationObjectiveLineV0(maxChildAgents int, maxSubagentsPerAgent int) string {
-	limit := agentDelegationLimitV0(maxChildAgents, maxSubagentsPerAgent)
+func agentDelegationObjectiveLineV0(task orquestacoreworkflow.WorkflowTaskV0) string {
+	limit := agentDelegationLimitV0(task.MaxChildAgents, task.MaxSubagentsPerAgent)
+	childTaskRefs := compactStringsV0(task.ChildTaskRefs)
+	if len(childTaskRefs) > 0 {
+		return fmt.Sprintf(
+			"Delegacion operativa: Orquesta ya declaro %d child_task_refs para este padre; no lo trates como opcional ni lo sustituyas por una tabla de roles. Coordina esas tareas hijas, limite %d subagentes, conservando refs/parentesco, write-set, presupuesto y evidencia. No cierres el ACK del padre sin ACK, entrega, bloqueo o rework pendiente documentado para cada child_task_ref: %s.",
+			len(childTaskRefs),
+			limit,
+			strings.Join(childTaskRefs, ", "),
+		)
+	}
 	return fmt.Sprintf(
 		"Delegacion operativa: si necesitas ayuda y el runtime lo permite, activa subagentes para paralelizar analisis, implementacion, pruebas o revision; limite %d subagentes, conservando refs/parentesco, write-set, presupuesto y evidencia en el ACK.",
 		limit,

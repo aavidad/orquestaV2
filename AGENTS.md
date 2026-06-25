@@ -276,6 +276,12 @@ Documentos de entrada obligatorios para cambios transversales:
   nucleo. La composicion Codex debe arrancar con 70 padres/ejecuciones por tick
   como default operativo amplio, no con 10 como cuello de botella silencioso.
   Conserva refs/parentesco, write-set, presupuesto y evidencia en el ACK.
+- Cuando una tarea ya trae `child_task_refs`, esos hijos no son una sugerencia
+  de ayuda: son contrato causal del plan. El padre no debe cerrar como completo
+  sin ACK, entrega, bloqueo o rework documentado por cada hijo. En OPES, si el
+  contrato declara `subroles_required=6` o `opes.padre-tema-6-subroles.v1`,
+  Orquesta debe materializar seis subagentes/subroles reales o dejar bloqueo
+  operativo explícito; no basta con una tabla de roles escrita por el padre.
 - Economia de tokens: al lanzar agentes o subagentes, pide comunicacion compacta
   y tecnicas de ahorro como `caveman` si estan disponibles. Para exploracion y
   pruebas usa razonamiento `medium` por defecto; no uses `xhigh` salvo orden
