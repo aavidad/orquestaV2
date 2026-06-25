@@ -14,6 +14,7 @@ smoke_temp_root_prepare "$smoke_root" "$smoke_root_source"
 
 state_dir="$smoke_root/state"
 project_dir="$smoke_root/project"
+idle_project_dir="$smoke_root/orquesta-idle"
 runtime_dir="$smoke_root/runtime"
 bin_dir="$smoke_root/bin"
 payload_file="$smoke_root/start_request.json"
@@ -118,7 +119,7 @@ if [[ ! -x "$codex_command" ]]; then
   exit 2
 fi
 
-mkdir -p "$state_dir" "$project_dir" "$runtime_dir" "$bin_dir" \
+mkdir -p "$state_dir" "$project_dir" "$idle_project_dir" "$runtime_dir" "$bin_dir" \
   "$project_dir/docs" \
   "$project_dir/modulos/orquesta-factory/docs" \
   "$project_dir/modulos/orquesta-web/docs"
@@ -209,6 +210,7 @@ JSON
 export ORQUESTA_SERVER_ADDR="127.0.0.1:0"
 export ORQUESTA_SERVER_STATE_DIR="$state_dir"
 export ORQUESTA_CODEX_PROJECT_WORKDIR="$project_dir"
+export ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PROJECT_WORKDIR="$idle_project_dir"
 export ORQUESTA_CODEX_RUNTIME_WORKDIR="$runtime_dir"
 export ORQUESTA_CODEX_COMMAND="$codex_command"
 export ORQUESTA_CODEX_PATH="${ORQUESTA_CODEX_PATH:-$PATH}"

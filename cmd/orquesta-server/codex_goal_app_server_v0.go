@@ -105,46 +105,6 @@ func (supervisor serverGoalSupervisorV0) ObserveGoalWorkV0(
 	return supervisor.observer.ObserveGoalWorkV0(ctx, request)
 }
 
-func serverCodexGoalBackendFromEnvV0(
-	config orquestaserver.ConfigV0,
-) (serverCodexGoalBackendV0, error) {
-	backend := codexGoalBackendFromEnvV0()
-	if backend == "" {
-		return serverCodexGoalBackendV0{}, nil
-	}
-	if backend != codexGoalBackendAppServerProxyV0 {
-		return serverCodexGoalBackendV0{}, fmt.Errorf("codex_goal_backend_no_soportado:%s", backend)
-	}
-	runtimeConfig := codexRuntimeEnvConfigFromEnvV0()
-	protocol := serverCodexAppServerCommandProtocolV0{
-		CommandPath: runtimeConfig.CommandPath,
-		Args:        []string{"app-server", "proxy"},
-		PathEnv:     runtimeConfig.PathEnv,
-		Timeout:     time.Duration(codexGoalTimeoutMSFromEnvV0()) * time.Millisecond,
-	}
-	preflightProtocol := protocol
-	preflightProtocol.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond
-	if err := preflightProtocol.ProbeV0(context.Background()); err != nil {
-		degraded := serverCodexUnavailableGoalBackendV0{
-			IssueCode: codexAppServerIssueCodeForErrorV0(err, "codex_app_server_unavailable"),
-		}
-		return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded}, nil
-	}
-	client := serverCodexAppServerGoalBackendV0{
-		Protocol:        protocol,
-		CWD:             firstNonEmptyServerStackV0(config.IdleSelfImprovementProjectWorkDir, config.ProjectWorkDir),
-		Model:           runtimeConfig.Model,
-		ReasoningEffort: runtimeConfig.ReasoningEffort,
-		Sandbox:         runtimeConfig.Sandbox,
-		ApprovalPolicy:  runtimeConfig.ApprovalPolicy,
-	}
-	return serverCodexGoalBackendV0{Starter: client, Observer: client}, nil
-}
-
-func codexGoalBackendFromEnvV0() string {
-	return strings.TrimSpace(os.Getenv(envCodexGoalBackendV0))
-}
-
 func codexGoalTimeoutMSFromEnvV0() int {
 	return intEnvOrDefaultV0(envCodexGoalTimeoutMSV0, defaultCodexGoalTimeoutMSV0)
 }

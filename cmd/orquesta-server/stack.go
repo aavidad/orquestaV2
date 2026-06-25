@@ -34,11 +34,11 @@ func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 		return nil, err
 	}
 	supervisorWakeup := &serverSupervisorWakeupRelayV0{}
-	goalBackend, err := serverCodexGoalBackendFromEnvV0(serverConfig)
+	goalBackends, err := serverCodexGoalBackendsFromEnvV0(serverConfig)
 	if err != nil {
 		return nil, err
 	}
-	stack, err := buildStackFromEnvWithGoalBackendV0(serverConfig, goalBackend, supervisorWakeup)
+	stack, err := buildStackFromEnvWithGoalBackendV0(serverConfig, goalBackends.AppGoal, supervisorWakeup)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 		runtimeWorkDir: serverConfig.RuntimeWorkDir,
 		stateDir:       serverConfig.StateDir,
 	}
-	supervisor := serverSupervisorWithCodexGoalBackendV0(baseSupervisor, goalBackend)
+	supervisor := serverSupervisorWithCodexGoalBackendV0(baseSupervisor, goalBackends.IdleGoal)
 	residentDirector := newServerResidentDirectorV0(&stack, serverConfig)
 	runtime, err := orquestaserver.NewRuntimeV0(serverConfig, orquestaserver.RuntimeDepsV0{
 		AppHandler:       appHandler,

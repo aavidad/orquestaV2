@@ -31,6 +31,9 @@ Variables utiles:
 - `ORQUESTA_CODEX_GOAL_PREFLIGHT_TIMEOUT_MS`: preflight rapido del backend; por
   defecto `3000`.
 - `ORQUESTA_KEEP_SMOKE_DIR=1`: conserva el temporal para revisar salida.
+- `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PROJECT_WORKDIR`: el script la fija a
+  un directorio temporal separado para demostrar que `/nueva-app` usa
+  `ORQUESTA_CODEX_PROJECT_WORKDIR` y no el workdir de automejora.
 - `ORQUESTA_GOAL_FIRST_SMOKE_POLLS` y
   `ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS`: ventana de observacion.
 
@@ -39,6 +42,8 @@ Variables utiles:
 - Requiere doble confirmacion porque ejecuta Codex real y puede consumir cuota.
 - Falla si `ORQUESTA_OPES_BASE_URL` u `OPES_BASE_URL` estan configuradas.
 - Usa `ORQUESTA_CODEX_PROJECT_WORKDIR` temporal con contexto minimo.
+- Usa un workdir temporal distinto para automejora idle; si una app aparece en
+  ese directorio, la separacion de consumidores Goal ha regresado.
 - No detiene el daemon Codex local al terminar; puede estar compartido por el
   operador.
 - Si falta el socket app-server o la instalacion standalone de Codex, Orquesta

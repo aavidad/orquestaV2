@@ -314,6 +314,44 @@ func TestServerCodexGoalBackendFromEnvV0PreflightOKConservaBackendRealV0(t *test
 	}
 }
 
+func TestServerCodexGoalBackendsFromEnvV0SeparaWorkdirAppEIdleV0(t *testing.T) {
+	script := filepath.Join(t.TempDir(), "codex-fake-ok")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf '{\"id\":2,\"result\":{\"data\":[]}}\\n'\n"), 0o700); err != nil {
+		t.Fatalf("write fake codex: %v", err)
+	}
+	root := t.TempDir()
+	appDir := filepath.Join(root, "app-workdir")
+	idleDir := filepath.Join(root, "orquesta-idle-workdir")
+	t.Setenv(envCodexProjectWorkDirV0, appDir)
+	t.Setenv(envServerIdleSelfImprovementProjectWorkDirV0, idleDir)
+	t.Setenv(envCodexCommandV0, script)
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+	t.Setenv(envCodexGoalPreflightTimeoutMSV0, "1000")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	backends, err := serverCodexGoalBackendsFromEnvV0(config)
+	if err != nil {
+		t.Fatalf("serverCodexGoalBackendsFromEnvV0: %v", err)
+	}
+	appStarter, ok := backends.AppGoal.Starter.(serverCodexAppServerGoalBackendV0)
+	if !ok {
+		t.Fatalf("app starter=%T", backends.AppGoal.Starter)
+	}
+	idleStarter, ok := backends.IdleGoal.Starter.(serverCodexAppServerGoalBackendV0)
+	if !ok {
+		t.Fatalf("idle starter=%T", backends.IdleGoal.Starter)
+	}
+	if appStarter.CWD != filepath.Clean(appDir) {
+		t.Fatalf("app CWD=%q want %q", appStarter.CWD, filepath.Clean(appDir))
+	}
+	if idleStarter.CWD != filepath.Clean(idleDir) {
+		t.Fatalf("idle CWD=%q want %q", idleStarter.CWD, filepath.Clean(idleDir))
+	}
+}
+
 func TestCodexAppServerRPCPayloadYDecodeV0(t *testing.T) {
 	payload, err := codexAppServerRPCPayloadV0("thread/goal/get", map[string]interface{}{"threadId": "thread-ref-003"})
 	if err != nil {
