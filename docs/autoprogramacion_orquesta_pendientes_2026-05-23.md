@@ -183,6 +183,12 @@ semantico del goal. Si falta launcher, operational-status publica
 refs ni contadores de goal activo. El statefile puede contener
 spec/receipt/result/closure completos para reenganche local, pero no es API
 publica.
+Avance local adicional 2026-06-25: `/nueva-app` observa automaticamente el
+goal-first con polling acotado, sin convertir la web en runtime. El servidor
+tiene prueba HTTP integrada con backend goal fake que monta el handler real,
+lanza por `/api/v0/apps/director`, observa por
+`/api/v0/apps/director/goal/observe` y verifica cierre aceptado con run
+`cerrada`.
 
 Pendiente verificable:
 
@@ -191,9 +197,12 @@ Pendiente verificable:
   proxy` contra un daemon local de Codex ya disponible. Queda pendiente smoke
   real con daemon y repo temporal antes de apagar el loop residente historico en
   esa ruta.
-- Conectar el contrato generado por `/nueva-app` a `GoalWorkSpecV0` y al
-  launcher goal-first. Hoy `nueva-app` orienta y produce contrato/intake; no
-  garantiza por si sola un agente Codex Goal hasta fin de app.
+- `/nueva-app` ya queda conectada localmente a `GoalWorkSpecV0` y al launcher
+  goal-first por `orquesta.apps.arrancar_director.v0` cuando la composicion
+  inyecta `AppGoalLauncher`/`AppGoalStateStore`; el panel web observa por
+  `POST /api/v0/apps/director/goal/observe` con polling acotado. Sigue
+  pendiente el smoke real con daemon Codex y repo temporal hasta observacion
+  terminal, cierre durable y cola terminal.
 - Revalidar OPES temporal con derivados/cierre cuando exista la ruta goal-first
   real; no tocar OPES productivo ni drenar colas amplias.
 

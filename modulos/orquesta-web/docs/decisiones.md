@@ -17,6 +17,22 @@ Estado:
 ## Decisiones iniciales
 
 ```text
+Fecha: 2026-06-25
+Decision: El panel goal-first de `/nueva-app` observa automaticamente el goal
+con polling acotado, manteniendo el refresco manual.
+Motivo: si Codex Goal asume el loop interno, la web debe mostrar avance hasta
+estado terminal sin exigir que el operador pulse repetidamente `Actualizar
+goal`, pero sin convertir la UI en scheduler ni runtime.
+Alternativas: solo boton manual; polling infinito; mover observacion al core.
+Impacto: `NuevaAppGoalFirstPanelV0` declara intervalo y maximo de polls por
+atributos `data-*`, llama al bridge REST existente y se detiene ante run
+`cerrada`/`bloqueada` o goal `complete`/`blocked`/`invalid`.
+Contratos afectados: `NuevaAppGoalFirstPanelV0`,
+`orquesta.apps.observe_director_goal.v0`.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-05-15
 Decision: `stalled` informativo no cambia el panel a `attention`.
 Motivo: un agente premium puede estar pensando varios ticks sin escribir artefactos. La web debe mostrar esa telemetria, pero solo pedir atencion si core marca `needs_attention`, hay `loop_detected`, proceso `stopped` o checkpoint pendiente.

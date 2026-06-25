@@ -624,6 +624,10 @@ Invariantes:
 - Se renderiza solo si `WebNuevaAppViewModelV0.Director` esta presente.
 - El boton `Actualizar goal` aparece solo si hay `run_ref`.
 - El refresco llama por `fetch` a `POST /api/v0/apps/director/goal/observe`.
+- Si hay `run_ref`, el panel observa automaticamente de forma acotada:
+  `data-goal-poll-interval-ms=5000` y `data-goal-max-polls=60`.
+- La observacion automatica se detiene al ver run `cerrada`/`bloqueada` o goal
+  `complete`/`blocked`/`invalid`; el boton manual sigue disponible.
 - No valida cierre, no toca cola, no arranca runtime ni crea stores.
 - Si el arranque goal-first no trae `run_ref`, muestra refs de goal pero no
   fuerza una observacion imposible.

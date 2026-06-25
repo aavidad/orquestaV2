@@ -129,10 +129,17 @@ func TestNuevaAppHTMLV0RenderizaPanelGoalFirstConActualizacion(t *testing.T) {
 		`data-goal-panel`,
 		`data-run-ref="run-ref-web-goal-001"`,
 		`data-goal-ref="goal-ref-web-goal-001"`,
+		`data-goal-auto-poll="true"`,
+		`data-goal-poll-interval-ms="5000"`,
+		`data-goal-max-polls="60"`,
 		`Director y goal`,
 		`thread-ref-web-goal-001`,
 		`data-goal-observe`,
 		`Actualizar goal`,
+		`function startGoalAutoPoll()`,
+		`orquesta-web-nueva-app-auto`,
+		`runStatus==='cerrada'||runStatus==='bloqueada'`,
+		`window.setTimeout(tick,interval)`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("HTML goal-first no contiene %q\n%s", want, body)

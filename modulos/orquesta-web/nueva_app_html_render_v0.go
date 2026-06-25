@@ -502,7 +502,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
     <aside class="side">
       <section class="panel"><h2>{{index .HTML "nueva_app.wizard.resumen_vivo"}}</h2><div id="wizard-summary" class="summary-list"></div></section>
       <section class="panel status"><h2>{{index .HTML "nueva_app.html.resultado"}}</h2><p>{{.Page.Textos.Estado}}</p>{{if .Page.ViewModel.RequestID}}<p><code>{{.Page.ViewModel.RequestID}}</code></p>{{end}}</section>
-      {{with .Page.ViewModel.Director}}<section class="panel goal-panel" data-goal-panel data-run-ref="{{.RunRef}}" data-goal-ref="{{.GoalRef}}" data-goal-updating="{{index $.HTML "nueva_app.goal.updating"}}" data-goal-updated="{{index $.HTML "nueva_app.goal.updated"}}" data-goal-error="{{index $.HTML "nueva_app.goal.error"}}">
+      {{with .Page.ViewModel.Director}}<section class="panel goal-panel" data-goal-panel data-goal-auto-poll="true" data-goal-poll-interval-ms="5000" data-goal-max-polls="60" data-run-ref="{{.RunRef}}" data-goal-ref="{{.GoalRef}}" data-goal-updating="{{index $.HTML "nueva_app.goal.updating"}}" data-goal-updated="{{index $.HTML "nueva_app.goal.updated"}}" data-goal-error="{{index $.HTML "nueva_app.goal.error"}}">
         <h2>{{index $.HTML "nueva_app.goal.titulo"}}</h2>
         <div class="goal-grid">
           {{if .RunRef}}<div><strong>{{index $.HTML "nueva_app.goal.run_ref"}}:</strong> <code data-goal-run-ref>{{.RunRef}}</code></div>{{end}}
@@ -552,17 +552,19 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
       document.getElementById('wizard-final-summary').innerHTML=html;
     }
     function escapeHTML(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-    async function observeGoal(button){
-      const panel=button.closest('[data-goal-panel]');
+    async function observeGoal(panelOrButton,options){
+      options=options||{};
+      const panel=panelOrButton&&panelOrButton.closest?panelOrButton.closest('[data-goal-panel]'):panelOrButton;
       if(!panel||!panel.dataset.runRef)return;
+      const button=panel.querySelector('[data-goal-observe]');
       const feedback=panel.querySelector('[data-goal-feedback]');
       if(feedback)feedback.textContent=panel.dataset.goalUpdating||'';
-      button.disabled=true;
+      if(button&&!options.auto)button.disabled=true;
       try{
         const response=await fetch('/api/v0/apps/director/goal/observe',{
           method:'POST',
           headers:{'Content-Type':'application/json','Accept':'application/json','X-Correlation-ID':panel.dataset.runRef},
-          body:JSON.stringify({run_ref:panel.dataset.runRef,requested_by:'orquesta-web-nueva-app'})
+          body:JSON.stringify({run_ref:panel.dataset.runRef,requested_by:options.auto?'orquesta-web-nueva-app-auto':'orquesta-web-nueva-app'})
         });
         const result=await response.json();
         if(!response.ok||result.estado==='error'){
@@ -575,11 +577,16 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
         setGoalText(panel,'[data-goal-status]',result.goal_status);
         setGoalRow(panel,'[data-goal-run-status-row]','[data-goal-run-status]',result.run_status);
         setGoalRow(panel,'[data-goal-closure-status-row]','[data-goal-closure-status]',result.closure_status);
+        panel.dataset.goalLastStatus=result.goal_status||'';
+        panel.dataset.runLastStatus=result.run_status||'';
+        panel.dataset.closureAccepted=result.closure_accepted?'true':'false';
         if(feedback)feedback.textContent=panel.dataset.goalUpdated||'';
+        return result;
       }catch(err){
         if(feedback)feedback.textContent=(panel.dataset.goalError||'')+(err&&err.message?': '+err.message:'');
+        return null;
       }finally{
-        button.disabled=false;
+        if(button&&!options.auto)button.disabled=false;
       }
     }
     function setGoalText(panel,selector,value){
@@ -592,6 +599,28 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
       if(!row||!node||!value)return;
       node.textContent=value;
       row.hidden=false;
+    }
+    function goalObservationTerminal(panel,result){
+      const runStatus=String((result&&result.run_status)||panel.dataset.runLastStatus||'').trim();
+      const goalStatus=String((result&&result.goal_status)||panel.dataset.goalLastStatus||'').trim();
+      if(runStatus==='cerrada'||runStatus==='bloqueada'||runStatus==='closed'||runStatus==='blocked')return true;
+      return goalStatus==='complete'||goalStatus==='blocked'||goalStatus==='invalid'||panel.dataset.closureAccepted==='true';
+    }
+    function startGoalAutoPoll(){
+      const panel=document.querySelector('[data-goal-panel][data-goal-auto-poll="true"]');
+      if(!panel||!panel.dataset.runRef||panel.dataset.goalPollingStarted==='true')return;
+      panel.dataset.goalPollingStarted='true';
+      const interval=Math.max(1000,Number(panel.dataset.goalPollIntervalMs||5000));
+      const maxPolls=Math.max(1,Number(panel.dataset.goalMaxPolls||60));
+      let polls=0;
+      async function tick(){
+        if(polls>=maxPolls||goalObservationTerminal(panel,null))return;
+        polls+=1;
+        const result=await observeGoal(panel,{auto:true});
+        if(goalObservationTerminal(panel,result))return;
+        window.setTimeout(tick,interval);
+      }
+      window.setTimeout(tick,800);
     }
     function show(index){
       step=Math.max(0,Math.min(steps.length-1,index));
@@ -828,6 +857,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
     wizard.querySelectorAll('[data-preset]').forEach(node=>node.addEventListener('click',()=>preset(node.dataset.preset)));
     const goalButton=document.querySelector('[data-goal-observe]');
     if(goalButton)goalButton.addEventListener('click',()=>observeGoal(goalButton));
+    startGoalAutoPoll();
     show(0);
   }());
 </script>

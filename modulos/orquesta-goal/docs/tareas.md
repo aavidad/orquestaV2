@@ -12,10 +12,16 @@ Criterio:
 
 ## GOAL-002 composicion residente
 
-Estado: pendiente.
+Estado: cerrado localmente para wiring opt-in; smoke real pendiente.
 
-Cablear una ruta publica opt-in para lanzar goals desde Orquesta usando un
-adaptador concreto. El primer adaptador previsto es Codex Goal.
+`cmd/orquesta-server` puede inyectar launcher/observer con
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`; `orquesta-app-director-service`
+lanza `GoalWorkSpecV0` desde `/nueva-app`/`arrancar_director` cuando existe
+`AppGoalLauncher`, persiste estado y expone observacion por
+`/api/v0/apps/director/goal/observe`.
+
+Pendiente real: smoke opt-in con daemon Codex y repo temporal hasta observacion
+terminal, closure aceptada/bloqueada y cola sincronizada.
 
 ## GOAL-003 migracion del loop historico
 
