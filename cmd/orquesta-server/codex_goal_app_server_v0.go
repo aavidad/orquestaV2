@@ -156,6 +156,7 @@ type serverCodexAppServerProtocolPortV0 interface {
 	SetGoalV0(context.Context, serverCodexAppServerThreadGoalSetParamsV0) (serverCodexAppServerThreadGoalV0, error)
 	StartTurnV0(context.Context, serverCodexAppServerTurnStartParamsV0) (serverCodexAppServerTurnV0, error)
 	GetGoalV0(context.Context, string) (*serverCodexAppServerThreadGoalV0, error)
+	ReadThreadV0(context.Context, string, bool) (serverCodexAppServerThreadReadV0, error)
 }
 
 func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
@@ -222,6 +223,21 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 	receipt := codexAppServerObservationReceiptV0(request, status, "codex_app_server_goal_status_"+strings.TrimSpace(goal.Status))
 	if strings.TrimSpace(goal.ThreadID) != "" {
 		receipt.ExternalGoalRef = strings.TrimSpace(goal.ThreadID)
+	}
+	if codexGoalWorkStatusIsTerminalV0(status) {
+		thread, err := backend.Protocol.ReadThreadV0(ctx, receipt.ExternalGoalRef, true)
+		if err != nil {
+			receipt.IssueCode = "codex_app_server_thread_read_failed"
+			return receipt, nil
+		}
+		marked, found, err := codexAppServerGoalResultFromThreadV0(thread)
+		if err != nil {
+			receipt.IssueCode = "codex_app_server_goal_result_marker_invalid"
+			return receipt, nil
+		}
+		if found {
+			mergeCodexAppServerGoalResultV0(&receipt, marked)
+		}
 	}
 	return receipt, nil
 }
@@ -293,6 +309,140 @@ func codexAppServerGoalStatusToGoalWorkStatusV0(status string) string {
 	}
 }
 
+func codexGoalWorkStatusIsTerminalV0(status string) bool {
+	switch strings.TrimSpace(status) {
+	case orquestagoal.GoalStatusCompleteV0, orquestagoal.GoalStatusBlockedV0:
+		return true
+	default:
+		return false
+	}
+}
+
+type codexAppServerGoalResultMarkerV0 struct {
+	Summary             string                                  `json:"summary,omitempty"`
+	ArtifactRefs        []string                                `json:"artifact_refs,omitempty"`
+	RequiredTestResults []orquestagoal.GoalRequiredTestResultV0 `json:"required_test_results,omitempty"`
+	DomainReceiptRefs   []string                                `json:"domain_receipt_refs,omitempty"`
+	EvidenceRefs        []string                                `json:"evidence_refs,omitempty"`
+}
+
+func codexAppServerGoalResultFromThreadV0(
+	thread serverCodexAppServerThreadReadV0,
+) (codexAppServerGoalResultMarkerV0, bool, error) {
+	if text := codexAppServerFinalMarkerTextV0(thread, true); text != "" {
+		return parseCodexAppServerGoalResultMarkerV0(text)
+	}
+	if text := codexAppServerFinalMarkerTextV0(thread, false); text != "" {
+		return parseCodexAppServerGoalResultMarkerV0(text)
+	}
+	return codexAppServerGoalResultMarkerV0{}, false, nil
+}
+
+func codexAppServerFinalMarkerTextV0(thread serverCodexAppServerThreadReadV0, finalOnly bool) string {
+	for turnIndex := len(thread.Turns) - 1; turnIndex >= 0; turnIndex-- {
+		items := thread.Turns[turnIndex].Items
+		for itemIndex := len(items) - 1; itemIndex >= 0; itemIndex-- {
+			item := items[itemIndex]
+			if strings.TrimSpace(item.Type) != "agentMessage" {
+				continue
+			}
+			if finalOnly && strings.TrimSpace(item.Phase) != "final_answer" {
+				continue
+			}
+			text := strings.TrimSpace(item.Text)
+			if strings.Contains(text, orquestaruntimecodexgoal.CodexGoalResultMarkerV0) {
+				return text
+			}
+		}
+	}
+	return ""
+}
+
+func parseCodexAppServerGoalResultMarkerV0(text string) (codexAppServerGoalResultMarkerV0, bool, error) {
+	if !strings.Contains(text, orquestaruntimecodexgoal.CodexGoalResultMarkerV0) {
+		return codexAppServerGoalResultMarkerV0{}, false, nil
+	}
+	payload, ok := codexAppServerGoalResultMarkerJSONV0(text)
+	if !ok {
+		return codexAppServerGoalResultMarkerV0{}, true, errors.New("codex_app_server_goal_result_marker_json_missing")
+	}
+	var marked codexAppServerGoalResultMarkerV0
+	if err := json.Unmarshal([]byte(payload), &marked); err != nil {
+		return codexAppServerGoalResultMarkerV0{}, true, err
+	}
+	marked.Summary = strings.TrimSpace(marked.Summary)
+	marked.ArtifactRefs = compactServerStackStringsV0(marked.ArtifactRefs)
+	marked.DomainReceiptRefs = compactServerStackStringsV0(marked.DomainReceiptRefs)
+	marked.EvidenceRefs = compactServerStackStringsV0(marked.EvidenceRefs)
+	for index := range marked.RequiredTestResults {
+		marked.RequiredTestResults[index].TestRef = strings.TrimSpace(marked.RequiredTestResults[index].TestRef)
+		marked.RequiredTestResults[index].Status = strings.TrimSpace(marked.RequiredTestResults[index].Status)
+		marked.RequiredTestResults[index].EvidenceRefs = compactServerStackStringsV0(
+			marked.RequiredTestResults[index].EvidenceRefs,
+		)
+	}
+	return marked, true, nil
+}
+
+func codexAppServerGoalResultMarkerJSONV0(text string) (string, bool) {
+	markerIndex := strings.LastIndex(text, orquestaruntimecodexgoal.CodexGoalResultMarkerV0)
+	if markerIndex < 0 {
+		return "", false
+	}
+	afterMarker := text[markerIndex+len(orquestaruntimecodexgoal.CodexGoalResultMarkerV0):]
+	start := strings.Index(afterMarker, "{")
+	if start < 0 {
+		return "", false
+	}
+	depth := 0
+	inString := false
+	escaped := false
+	for index := start; index < len(afterMarker); index++ {
+		ch := afterMarker[index]
+		if inString {
+			if escaped {
+				escaped = false
+				continue
+			}
+			switch ch {
+			case '\\':
+				escaped = true
+			case '"':
+				inString = false
+			}
+			continue
+		}
+		switch ch {
+		case '"':
+			inString = true
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return afterMarker[start : index+1], true
+			}
+		}
+	}
+	return "", false
+}
+
+func mergeCodexAppServerGoalResultV0(
+	receipt *orquestaruntimecodexgoal.CodexGoalObservationReceiptV0,
+	marked codexAppServerGoalResultMarkerV0,
+) {
+	if strings.TrimSpace(marked.Summary) != "" {
+		receipt.Summary = strings.TrimSpace(marked.Summary)
+	}
+	receipt.ArtifactRefs = compactServerStackStringsV0(append(receipt.ArtifactRefs, marked.ArtifactRefs...))
+	receipt.RequiredTestResults = append(receipt.RequiredTestResults, marked.RequiredTestResults...)
+	receipt.DomainReceiptRefs = compactServerStackStringsV0(append(receipt.DomainReceiptRefs, marked.DomainReceiptRefs...))
+	receipt.EvidenceRefs = compactServerStackStringsV0(append(
+		append(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-result-marker"),
+		marked.EvidenceRefs...,
+	))
+}
+
 type serverCodexAppServerCommandProtocolV0 struct {
 	CommandPath string
 	Args        []string
@@ -337,6 +487,19 @@ func (protocol serverCodexAppServerCommandProtocolV0) GetGoalV0(
 		return nil, err
 	}
 	return response.Goal, nil
+}
+
+func (protocol serverCodexAppServerCommandProtocolV0) ReadThreadV0(
+	ctx context.Context,
+	threadID string,
+	includeTurns bool,
+) (serverCodexAppServerThreadReadV0, error) {
+	var response serverCodexAppServerThreadReadResponseV0
+	err := protocol.callV0(ctx, "thread/read", map[string]interface{}{
+		"threadId":     strings.TrimSpace(threadID),
+		"includeTurns": includeTurns,
+	}, &response)
+	return response.Thread, err
 }
 
 func (protocol serverCodexAppServerCommandProtocolV0) callV0(
@@ -550,6 +713,30 @@ type serverCodexAppServerThreadGoalV0 struct {
 	TokenBudget     *int   `json:"tokenBudget,omitempty"`
 	TokensUsed      int    `json:"tokensUsed,omitempty"`
 	TimeUsedSeconds int    `json:"timeUsedSeconds,omitempty"`
+}
+
+type serverCodexAppServerThreadReadResponseV0 struct {
+	Thread serverCodexAppServerThreadReadV0 `json:"thread"`
+}
+
+type serverCodexAppServerThreadReadV0 struct {
+	ID     string                           `json:"id"`
+	Status string                           `json:"status,omitempty"`
+	Turns  []serverCodexAppServerReadTurnV0 `json:"turns,omitempty"`
+}
+
+type serverCodexAppServerReadTurnV0 struct {
+	ID        string                           `json:"id"`
+	Status    string                           `json:"status,omitempty"`
+	ItemsView string                           `json:"itemsView,omitempty"`
+	Items     []serverCodexAppServerReadItemV0 `json:"items,omitempty"`
+}
+
+type serverCodexAppServerReadItemV0 struct {
+	ID    string `json:"id"`
+	Type  string `json:"type"`
+	Phase string `json:"phase,omitempty"`
+	Text  string `json:"text,omitempty"`
 }
 
 type serverCodexAppServerTurnStartResponseV0 struct {

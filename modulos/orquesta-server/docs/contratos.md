@@ -120,7 +120,9 @@ Configuracion externa relacionada:
   inyecta launcher/observer Codex Goal usando `codex app-server proxy` contra
   un daemon local de Codex ya disponible. No usa `codex exec` como sustituto,
   no arranca backend si no esta configurado y no mete Codex en el modulo
-  servidor.
+  servidor. En observaciones terminales lee `thread/read` y fusiona el marcador
+  `ORQUESTA_GOAL_RESULT_V0` como refs opacas de artefactos, tests, receipts y
+  evidencias; el cierre aceptado sigue dependiendo del validador neutral.
 - `ORQUESTA_CODEX_GOAL_TIMEOUT_MS`: timeout por llamada al backend Codex Goal
   de composicion. Es configuracion del transporte app-server, no politica del
   nucleo.

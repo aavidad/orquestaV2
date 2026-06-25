@@ -25,3 +25,11 @@ Goal.
 La observacion de Codex Goal tambien entra por puerto inyectado. El adaptador
 solo normaliza y valida refs/status antes de devolver `GoalWorkResultV0`; no
 acepta cierre ni consulta herramientas concretas.
+
+## D-005 resultado terminal estructurado
+
+El prompt exige que la respuesta final termine con
+`ORQUESTA_GOAL_RESULT_V0 { ... }`. La composicion `cmd/orquesta-server` puede
+leer ese marcador desde `thread/read` y convertirlo en refs opacas de
+artefactos, tests, receipts y evidencias. Un `complete` sin marcador o sin refs
+requeridas queda como resultado observable, no como cierre aceptado.

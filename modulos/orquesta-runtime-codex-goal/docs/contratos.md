@@ -48,7 +48,17 @@ artefactos, tests, receipts y evidencias. El adaptador convierte esa respuesta a
 no coincida con el pedido.
 
 En el backend `app_server_proxy`, la observacion usa la `external_goal_ref`
-persistida como `threadId` y consulta `thread/goal/get`.
+persistida como `threadId`, consulta `thread/goal/get` y, si el goal queda
+terminal, consulta `thread/read` con `includeTurns=true`. La respuesta final del
+agente debe incluir el marcador:
+
+```text
+ORQUESTA_GOAL_RESULT_V0 {"summary":"...","artifact_refs":[],"required_test_results":[],"domain_receipt_refs":[],"evidence_refs":[]}
+```
+
+Solo esas refs estructuradas se fusionan como artefactos/evidencias de cierre.
+Si faltan, Orquesta conserva el estado observado pero no inventa refs para
+aceptar cierre.
 
 ## CodexGoalLauncherV0
 

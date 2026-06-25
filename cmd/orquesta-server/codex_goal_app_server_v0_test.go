@@ -96,6 +96,10 @@ func TestServerCodexAppServerGoalBackendV0ObservaGoalPorThreadIDV0(t *testing.T)
 			ThreadID: "thread-ref-goal-002",
 			Status:   "complete",
 		},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID:     "thread-ref-goal-002",
+			Status: "closed",
+		},
 	}
 	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol}
 
@@ -114,11 +118,80 @@ func TestServerCodexAppServerGoalBackendV0ObservaGoalPorThreadIDV0(t *testing.T)
 		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-observed") {
 		t.Fatalf("receipt=%+v", receipt)
 	}
-	if !reflect.DeepEqual(protocol.calls, []string{"thread/goal/get"}) {
+	if !reflect.DeepEqual(protocol.calls, []string{"thread/goal/get", "thread/read"}) {
 		t.Fatalf("calls=%v", protocol.calls)
 	}
 	if protocol.getThreadID != "thread-ref-goal-002" {
 		t.Fatalf("get thread id=%q", protocol.getThreadID)
+	}
+	if protocol.readThreadID != "thread-ref-goal-002" || !protocol.readIncludeTurns {
+		t.Fatalf("read thread id=%q include=%v", protocol.readThreadID, protocol.readIncludeTurns)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0ObservaResultadoMarcadoV0(t *testing.T) {
+	marked := `ORQUESTA_GOAL_RESULT_V0 {"summary":"cierre con {llaves}","artifact_refs":["artifact-ref-goal-summary"],"required_test_results":[{"test_ref":"test-ref-goal","status":"passed","evidence_refs":["evidence-ref-test-pass"]}],"domain_receipt_refs":["domain-receipt-ref-001"],"evidence_refs":["evidence-ref-required"]}`
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID: "thread-ref-goal-003",
+			Status:   "complete",
+		},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID: "thread-ref-goal-003",
+			Turns: []serverCodexAppServerReadTurnV0{{
+				ID:        "turn-ref-goal-003",
+				Status:    "completed",
+				ItemsView: "full",
+				Items: []serverCodexAppServerReadItemV0{{
+					ID:    "item-ref-goal-003",
+					Type:  "agentMessage",
+					Phase: "final_answer",
+					Text:  "Hecho.\n" + marked,
+				}},
+			}},
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		SchemaVersion:   orquestaruntimecodexgoal.CodexGoalObservationRequestSchemaV0,
+		GoalRef:         "goal-ref-codex-app-server-003",
+		ExternalGoalRef: "thread-ref-goal-003",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if receipt.Summary != "cierre con {llaves}" ||
+		!containsStringForTestV0(receipt.ArtifactRefs, "artifact-ref-goal-summary") ||
+		!containsStringForTestV0(receipt.DomainReceiptRefs, "domain-receipt-ref-001") ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-required") ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-result-marker") ||
+		len(receipt.RequiredTestResults) != 1 ||
+		receipt.RequiredTestResults[0].TestRef != "test-ref-goal" ||
+		receipt.RequiredTestResults[0].Status != "passed" {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+}
+
+func TestCodexAppServerGoalResultMarkerV0AceptaFallbackSinPhaseV0(t *testing.T) {
+	thread := serverCodexAppServerThreadReadV0{
+		ID: "thread-ref-goal-004",
+		Turns: []serverCodexAppServerReadTurnV0{{
+			ID: "turn-ref-goal-004",
+			Items: []serverCodexAppServerReadItemV0{{
+				ID:   "item-ref-goal-004",
+				Type: "agentMessage",
+				Text: `texto ` + orquestaruntimecodexgoal.CodexGoalResultMarkerV0 + ` {"summary":"ok","evidence_refs":["evidence-ref-ok"]}`,
+			}},
+		}},
+	}
+
+	marked, found, err := codexAppServerGoalResultFromThreadV0(thread)
+
+	if err != nil || !found || marked.Summary != "ok" ||
+		!containsStringForTestV0(marked.EvidenceRefs, "evidence-ref-ok") {
+		t.Fatalf("marked=%+v found=%v err=%v", marked, found, err)
 	}
 }
 
@@ -149,6 +222,18 @@ func TestCodexAppServerRPCPayloadYDecodeV0(t *testing.T) {
 		response.Goal.ThreadID != "thread-ref-003" ||
 		response.Goal.Status != "active" {
 		t.Fatalf("response=%+v", response)
+	}
+
+	stdout = []byte(`{"id":2,"result":{"thread":{"id":"thread-ref-003","status":"closed","turns":[{"id":"turn-ref-003","status":"completed","itemsView":"full","items":[{"id":"item-ref-003","type":"agentMessage","phase":"final_answer","text":"` + orquestaruntimecodexgoal.CodexGoalResultMarkerV0 + ` {\"summary\":\"ok\"}"}]}]}}}` + "\n")
+	var threadResponse serverCodexAppServerThreadReadResponseV0
+	if err := decodeCodexAppServerRPCResponseV0(stdout, 2, &threadResponse); err != nil {
+		t.Fatalf("decode thread/read: %v", err)
+	}
+	if threadResponse.Thread.ID != "thread-ref-003" ||
+		len(threadResponse.Thread.Turns) != 1 ||
+		len(threadResponse.Thread.Turns[0].Items) != 1 ||
+		threadResponse.Thread.Turns[0].Items[0].Phase != "final_answer" {
+		t.Fatalf("thread response=%+v", threadResponse)
 	}
 }
 
@@ -181,10 +266,13 @@ type fakeCodexAppServerProtocolV0 struct {
 	turnParams  serverCodexAppServerTurnStartParamsV0
 	getThreadID string
 
-	thread       serverCodexAppServerThreadV0
-	goal         serverCodexAppServerThreadGoalV0
-	turn         serverCodexAppServerTurnV0
-	observedGoal *serverCodexAppServerThreadGoalV0
+	thread           serverCodexAppServerThreadV0
+	goal             serverCodexAppServerThreadGoalV0
+	turn             serverCodexAppServerTurnV0
+	observedGoal     *serverCodexAppServerThreadGoalV0
+	readThread       serverCodexAppServerThreadReadV0
+	readThreadID     string
+	readIncludeTurns bool
 }
 
 func (fake *fakeCodexAppServerProtocolV0) StartThreadV0(
@@ -221,4 +309,15 @@ func (fake *fakeCodexAppServerProtocolV0) GetGoalV0(
 	fake.calls = append(fake.calls, "thread/goal/get")
 	fake.getThreadID = threadID
 	return fake.observedGoal, nil
+}
+
+func (fake *fakeCodexAppServerProtocolV0) ReadThreadV0(
+	_ context.Context,
+	threadID string,
+	includeTurns bool,
+) (serverCodexAppServerThreadReadV0, error) {
+	fake.calls = append(fake.calls, "thread/read")
+	fake.readThreadID = threadID
+	fake.readIncludeTurns = includeTurns
+	return fake.readThread, nil
 }

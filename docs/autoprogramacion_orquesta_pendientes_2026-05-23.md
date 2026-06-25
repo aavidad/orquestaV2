@@ -189,20 +189,31 @@ tiene prueba HTTP integrada con backend goal fake que monta el handler real,
 lanza por `/api/v0/apps/director`, observa por
 `/api/v0/apps/director/goal/observe` y verifica cierre aceptado con run
 `cerrada`.
+Avance local adicional 2026-06-25: el backend real
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` ya observa goals terminales con
+`thread/read includeTurns=true`, extrae el marcador
+`ORQUESTA_GOAL_RESULT_V0` de la respuesta final y fusiona `artifact_refs`,
+`required_test_results`, `domain_receipt_refs` y `evidence_refs` en
+`GoalWorkResultV0`. Si el marcador falta o no trae refs requeridas, Orquesta no
+inventa evidencias y el cierre queda bloqueado por el validador. Se anade smoke
+real opt-in `scripts/smoke_goal_first_app_server_real.sh` con runbook
+`docs/runbooks/smoke_goal_first_app_server_real_2026-06-25.md`.
 
 Pendiente verificable:
 
 - `cmd/orquesta-server` ya cablea starter/observer opt-in con
   `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`, usando `codex app-server
-  proxy` contra un daemon local de Codex ya disponible. Queda pendiente smoke
-  real con daemon y repo temporal antes de apagar el loop residente historico en
-  esa ruta.
+  proxy` contra un daemon local de Codex ya disponible, y ya transforma el
+  resultado final estructurado en refs de cierre. Queda pendiente ejecutar el
+  smoke real con daemon y proyecto temporal antes de apagar el loop residente
+  historico en esa ruta.
 - `/nueva-app` ya queda conectada localmente a `GoalWorkSpecV0` y al launcher
   goal-first por `orquesta.apps.arrancar_director.v0` cuando la composicion
   inyecta `AppGoalLauncher`/`AppGoalStateStore`; el panel web observa por
-  `POST /api/v0/apps/director/goal/observe` con polling acotado. Sigue
-  pendiente el smoke real con daemon Codex y repo temporal hasta observacion
-  terminal, cierre durable y cola terminal.
+  `POST /api/v0/apps/director/goal/observe` con polling acotado y cierre por
+  marcador estructurado. Sigue pendiente ejecutar el smoke real con daemon Codex
+  y proyecto temporal hasta observacion terminal, cierre durable y cola
+  terminal.
 - Revalidar OPES temporal con derivados/cierre cuando exista la ruta goal-first
   real; no tocar OPES productivo ni drenar colas amplias.
 

@@ -103,13 +103,23 @@ goal-first: `StartAppDirectorV0` persiste el intake/run, compila un
 `goal_status` y `goal_launch_receipt`. En ese camino no ejecuta el loop legacy
 ni encola el run para el supervisor historico.
 
-La web `/nueva-app` acepta esa respuesta y muestra las refs dentro del bloque
-`director`. Sin `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`, el puerto no se
+La web `/nueva-app` acepta esa respuesta, muestra las refs dentro del bloque
+`director` y observa por `POST /api/v0/apps/director/goal/observe` con polling
+acotado. Sin `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`, el puerto no se
 inyecta y se conserva el flujo legacy de Director/agentes.
 
-Pendiente verificable: observacion/cierre completo del goal de app nueva hasta
-evidencias durables de artefactos y pruebas. Este corte solo garantiza
-lanzamiento opt-in y propagacion publica de refs/receipt.
+El backend `app_server_proxy` observa `thread/goal/get`; cuando el goal queda
+terminal lee `thread/read` con `includeTurns=true` y extrae de la respuesta final
+un marcador estructurado:
+
+```text
+ORQUESTA_GOAL_RESULT_V0 {"summary":"...","artifact_refs":[],"required_test_results":[],"domain_receipt_refs":[],"evidence_refs":[]}
+```
+
+Las refs del marcador se convierten a `GoalWorkResultV0` y pasan por el
+validador de cierre de Orquesta. Si el marcador falta o no contiene las
+evidencias/artefactos exigidos por el spec, Orquesta no inventa refs: el goal
+puede estar `complete`, pero el run queda bloqueado por cierre no aceptado.
 
 ## Relacion con el Director actual
 
@@ -138,15 +148,18 @@ del goal. Orquesta solo prepara y valida el contrato.
 3. Cablear un launcher real de Codex Goal en `cmd/orquesta-server` solo cuando
    exista puerto seguro para crear/observar goals.
    Estado 2026-06-25: `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` inyecta
-   starter/observer por `codex app-server proxy`; falta smoke real con daemon.
+   starter/observer por `codex app-server proxy`, observa `thread/read` y
+   traduce `ORQUESTA_GOAL_RESULT_V0` a refs de cierre; falta ejecutar smoke real
+   con daemon en ventana operativa.
 4. Ejecutar smoke no-OPES temporal con repo de prueba.
 5. Ejecutar smoke OPES temporal acotado de un derivado.
 6. Marcar rutas antiguas como legacy cuando tengan equivalencia goal-first
    probada.
 7. Conectar el contrato de `/nueva-app` a `GoalWorkSpecV0` y launcher
    goal-first.
-   Estado 2026-06-25: hecho de forma opt-in para lanzamiento y refs publicas;
-   queda pendiente observacion/cierre completo del goal de app nueva.
+   Estado 2026-06-25: hecho de forma opt-in para lanzamiento, refs publicas,
+   observacion y cierre validado por Orquesta cuando el goal devuelve marcador
+   estructurado.
 
 ## No hacer
 

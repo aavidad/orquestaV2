@@ -1,0 +1,346 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/smoke_common.sh
+source "$repo_root/scripts/lib/smoke_common.sh"
+
+smoke_root_source="generated"
+if [[ -n "${ORQUESTA_SMOKE_ROOT:-}" ]]; then
+  smoke_root_source="env:ORQUESTA_SMOKE_ROOT"
+fi
+smoke_root="${ORQUESTA_SMOKE_ROOT:-$(mktemp -d "${TMPDIR:-/tmp}/orquesta-goal-first-app-server.XXXXXX")}"
+smoke_temp_root_prepare "$smoke_root" "$smoke_root_source"
+
+state_dir="$smoke_root/state"
+project_dir="$smoke_root/project"
+runtime_dir="$smoke_root/runtime"
+bin_dir="$smoke_root/bin"
+payload_file="$smoke_root/start_request.json"
+start_response="$smoke_root/start_response.json"
+observe_payload="$smoke_root/observe_request.json"
+observe_response="$smoke_root/observe_response.json"
+server_stdout="$smoke_root/server.stdout.log"
+server_stderr="$smoke_root/server.stderr.log"
+daemon_stdout="$smoke_root/codex-daemon.stdout.log"
+daemon_stderr="$smoke_root/codex-daemon.stderr.log"
+server_pid=""
+
+keep_dir="${ORQUESTA_KEEP_SMOKE_DIR:-0}"
+request_timeout="${ORQUESTA_GOAL_FIRST_SMOKE_REQUEST_TIMEOUT_SECONDS:-90}"
+polls="${ORQUESTA_GOAL_FIRST_SMOKE_POLLS:-120}"
+sleep_seconds="${ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS:-5}"
+
+cleanup() {
+  if [[ -n "$server_pid" ]] && kill -0 "$server_pid" >/dev/null 2>&1; then
+    kill -INT "$server_pid" >/dev/null 2>&1 || true
+    for _ in $(seq 1 25); do
+      if ! kill -0 "$server_pid" >/dev/null 2>&1; then
+        break
+      fi
+      sleep 0.2
+    done
+    if kill -0 "$server_pid" >/dev/null 2>&1; then
+      kill -TERM "$server_pid" >/dev/null 2>&1 || true
+    fi
+    wait "$server_pid" >/dev/null 2>&1 || true
+  fi
+  smoke_temp_root_cleanup "$smoke_root" "$keep_dir"
+}
+
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+
+need_cmd() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "falta comando requerido: $1" >&2
+    exit 127
+  fi
+}
+
+resolve_command() {
+  local raw="$1"
+  if [[ -z "$raw" ]]; then
+    return 1
+  fi
+  if [[ "$raw" == /* ]]; then
+    printf '%s' "$raw"
+    return 0
+  fi
+  command -v "$raw"
+}
+
+json_get() {
+  local file="$1"
+  local expr="$2"
+  python3 - "$file" "$expr" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as fh:
+    data = json.load(fh)
+value = data
+for part in sys.argv[2].split("."):
+    if not part:
+        continue
+    if isinstance(value, dict):
+        value = value.get(part, "")
+    else:
+        value = ""
+if isinstance(value, bool):
+    print("true" if value else "false")
+elif value is None:
+    print("")
+else:
+    print(value)
+PY
+}
+
+if [[ "${ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM:-0}" != "1" ||
+  "${ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED:-0}" != "1" ]]; then
+  echo "confirmacion doble requerida: exporta ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1 y ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1" >&2
+  exit 2
+fi
+
+if [[ -n "${ORQUESTA_OPES_BASE_URL:-}" || -n "${OPES_BASE_URL:-}" ]]; then
+  echo "OPES debe estar desactivado para este smoke" >&2
+  exit 2
+fi
+
+need_cmd go
+need_cmd curl
+need_cmd python3
+
+codex_command="$(resolve_command "${ORQUESTA_CODEX_COMMAND:-codex}")" || {
+  echo "no se pudo resolver ORQUESTA_CODEX_COMMAND/codex" >&2
+  exit 2
+}
+if [[ ! -x "$codex_command" ]]; then
+  echo "ORQUESTA_CODEX_COMMAND no es ejecutable: $codex_command" >&2
+  exit 2
+fi
+
+mkdir -p "$state_dir" "$project_dir" "$runtime_dir" "$bin_dir" \
+  "$project_dir/docs" \
+  "$project_dir/modulos/orquesta-factory/docs" \
+  "$project_dir/modulos/orquesta-web/docs"
+
+cat >"$project_dir/AGENTS.md" <<'EOF'
+# Smoke temporal goal-first
+
+Trabaja solo dentro de este proyecto temporal. Crea una app pequena, hexagonal y
+verificable bajo `generated-apps/`. No publiques HOME, tokens ni rutas privadas.
+EOF
+
+cat >"$project_dir/docs/orquesta_goal_first_codex_2026-06-25.md" <<'EOF'
+# Goal-first smoke
+
+Codex Goal actua como director operativo interno. Orquesta valida el cierre
+externamente. Al terminar, devuelve `ORQUESTA_GOAL_RESULT_V0` con refs opacas de
+artefactos y evidencias producidas.
+EOF
+
+cat >"$project_dir/modulos/orquesta-factory/docs/contratos.md" <<'EOF'
+# Contrato factory minimo
+
+La app generada debe separar dominio/aplicacion, puertos y adaptadores. Para el
+smoke basta una app local pequena con pruebas o verificacion documentada.
+EOF
+
+cat >"$project_dir/modulos/orquesta-web/docs/guia_nueva_app_opciones_2026-06-25.md" <<'EOF'
+# Opciones nueva app
+
+Arquitectura hexagonal por defecto si no rompe el contrato. Accesibilidad basica
+aceptable para smoke. Persistencia puede ser en memoria si la solicitud no exige
+base de datos.
+EOF
+
+echo "arrancando daemon Codex app-server si hace falta..."
+"$codex_command" app-server daemon start >"$daemon_stdout" 2>"$daemon_stderr" || {
+  echo "no se pudo arrancar codex app-server daemon; stderr:" >&2
+  tail -n 80 "$daemon_stderr" >&2 || true
+  exit 2
+}
+
+echo "compilando servidor temporal..."
+go build -o "$bin_dir/orquesta-server" ./cmd/orquesta-server
+
+request_id="request-ref-goal-first-real-$(date -u +%Y%m%dT%H%M%SZ)"
+cat >"$payload_file" <<JSON
+{
+  "request_id": "$request_id",
+  "correlation_id": "$request_id",
+  "app_spec_request": {
+    "schema_version": "app_spec_request.v0",
+    "request_id": "$request_id",
+    "source": "orquesta-smoke",
+    "locale": "es",
+    "request_kind": "crear_app_completa",
+    "execution_mode": "normal",
+    "nombre": "Smoke Goal First",
+    "objetivo": "Crear una app local minima para gestionar notas con API HTTP y una pantalla HTML sencilla.",
+    "descripcion": "Smoke acotado de goal-first real: generar una app pequena bajo generated-apps, separando dominio/aplicacion, puertos y adaptadores, con una verificacion local documentada.",
+    "tipo_app": "mixed",
+    "usuarios_objetivo": ["operador de smoke"],
+    "plataformas": ["web", "api"],
+    "preferencias_tecnicas": {
+      "lenguaje": "go",
+      "framework": "net/http",
+      "arquitectura": "hexagonal",
+      "restricciones": ["app pequena", "sin dependencias externas obligatorias", "sin tocar rutas fuera de generated-apps"]
+    },
+    "calidad": {
+      "pruebas": "basica",
+      "accesibilidad": "basica",
+      "observabilidad": false
+    },
+    "i18n": {
+      "enabled": true,
+      "default_locale": "es",
+      "locales": ["es"]
+    },
+    "restricciones": [
+      "hexagonal puro",
+      "entrega pequena y verificable",
+      "resultado final con marcador ORQUESTA_GOAL_RESULT_V0"
+    ]
+  }
+}
+JSON
+
+export ORQUESTA_SERVER_ADDR="127.0.0.1:0"
+export ORQUESTA_SERVER_STATE_DIR="$state_dir"
+export ORQUESTA_CODEX_PROJECT_WORKDIR="$project_dir"
+export ORQUESTA_CODEX_RUNTIME_WORKDIR="$runtime_dir"
+export ORQUESTA_CODEX_COMMAND="$codex_command"
+export ORQUESTA_CODEX_PATH="${ORQUESTA_CODEX_PATH:-$PATH}"
+export ORQUESTA_CODEX_GOAL_BACKEND="app_server_proxy"
+export ORQUESTA_CODEX_GOAL_TIMEOUT_MS="${ORQUESTA_CODEX_GOAL_TIMEOUT_MS:-90000}"
+export ORQUESTA_CODEX_APPROVAL_POLICY="${ORQUESTA_CODEX_APPROVAL_POLICY:-never}"
+export ORQUESTA_CODEX_SANDBOX="${ORQUESTA_CODEX_SANDBOX:-workspace-write}"
+export ORQUESTA_CODEX_MODEL="${ORQUESTA_CODEX_MODEL:-gpt-5.5}"
+export ORQUESTA_CODEX_REASONING_EFFORT="${ORQUESTA_CODEX_REASONING_EFFORT:-medium}"
+export ORQUESTA_OPES_BASE_URL=""
+export OPES_BASE_URL=""
+
+echo "arrancando orquesta-server..."
+"$bin_dir/orquesta-server" run >"$server_stdout" 2>"$server_stderr" &
+server_pid="$!"
+
+state_file="$state_dir/orquesta_server_state_v0.json"
+server_addr=""
+server_ready="0"
+for _ in $(seq 1 80); do
+  if [[ -s "$state_file" ]]; then
+    server_addr="$(python3 - "$state_file" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as fh:
+    print(json.load(fh).get("addr", ""))
+PY
+)"
+    if [[ -n "$server_addr" ]] && curl -fsS -m 2 "http://$server_addr/api/v0/server/readiness" >/dev/null; then
+      server_ready="1"
+      break
+    fi
+  fi
+  sleep 0.5
+done
+
+if [[ "$server_ready" != "1" ]]; then
+  echo "el servidor no llego a readiness; addr=$server_addr; stderr:" >&2
+  tail -n 80 "$server_stderr" >&2 || true
+  exit 1
+fi
+
+base_url="http://$server_addr"
+echo "servidor listo: $base_url"
+
+start_status="$(
+  curl -sS -m "$request_timeout" -o "$start_response" -w "%{http_code}" \
+    -X POST "$base_url/api/v0/apps/director" \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json" \
+    -H "X-Correlation-ID: $request_id" \
+    --data-binary "@$payload_file"
+)"
+
+echo "POST /api/v0/apps/director -> HTTP $start_status"
+if [[ "$start_status" -lt 200 || "$start_status" -gt 299 ]]; then
+  smoke_print_file_excerpt "$start_response"
+  exit 1
+fi
+
+run_ref="$(json_get "$start_response" "run_ref")"
+goal_ref="$(json_get "$start_response" "goal_ref")"
+external_goal_ref="$(json_get "$start_response" "external_goal_ref")"
+if [[ -z "$run_ref" || -z "$goal_ref" || -z "$external_goal_ref" ]]; then
+  echo "respuesta inicial sin refs goal-first:" >&2
+  smoke_print_file_excerpt "$start_response"
+  exit 1
+fi
+
+echo "run_ref=$run_ref"
+echo "goal_ref=$goal_ref"
+echo "external_goal_ref=$external_goal_ref"
+
+terminal="0"
+for i in $(seq 1 "$polls"); do
+  cat >"$observe_payload" <<JSON
+{
+  "request_id": "$request_id-observe-$i",
+  "correlation_id": "$request_id-observe-$i",
+  "run_ref": "$run_ref",
+  "requested_by": "smoke-goal-first-app-server-real"
+}
+JSON
+  observe_status="$(
+    curl -sS -m "$request_timeout" -o "$observe_response" -w "%{http_code}" \
+      -X POST "$base_url/api/v0/apps/director/goal/observe" \
+      -H "Content-Type: application/json" \
+      -H "Accept: application/json" \
+      -H "X-Correlation-ID: $request_id-observe-$i" \
+      --data-binary "@$observe_payload"
+  )"
+  if [[ "$observe_status" -lt 200 || "$observe_status" -gt 299 ]]; then
+    echo "observe HTTP $observe_status" >&2
+    smoke_print_file_excerpt "$observe_response"
+    exit 1
+  fi
+  goal_status="$(json_get "$observe_response" "goal_status")"
+  run_status="$(json_get "$observe_response" "run_status")"
+  closure_status="$(json_get "$observe_response" "closure_status")"
+  closure_accepted="$(json_get "$observe_response" "closure_accepted")"
+  echo "poll=$i goal_status=$goal_status run_status=$run_status closure_status=$closure_status closure_accepted=$closure_accepted"
+  if [[ "$closure_accepted" == "true" && "$run_status" == "cerrada" ]]; then
+    terminal="1"
+    break
+  fi
+  if [[ "$goal_status" == "blocked" || "$run_status" == "bloqueada" || "$closure_status" == "blocked" ]]; then
+    echo "goal-first termino bloqueado; respuesta final:" >&2
+    smoke_print_file_excerpt "$observe_response"
+    exit 1
+  fi
+  sleep "$sleep_seconds"
+done
+
+if [[ "$terminal" != "1" ]]; then
+  echo "timeout esperando cierre aceptado goal-first; ultimo observe:" >&2
+  smoke_print_file_excerpt "$observe_response"
+  exit 1
+fi
+
+artifact_count="$(python3 - "$observe_response" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as fh:
+    print(len(json.load(fh).get("artifact_refs", [])))
+PY
+)"
+evidence_count="$(python3 - "$observe_response" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as fh:
+    print(len(json.load(fh).get("evidence_refs", [])))
+PY
+)"
+
+echo "smoke_goal_first_app_server_real=ok"
+echo "artifact_refs=$artifact_count"
+echo "evidence_refs=$evidence_count"
+echo "smoke_root=$smoke_root"

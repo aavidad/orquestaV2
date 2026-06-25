@@ -25,6 +25,8 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		"criterio-ref-goal-first",
 		"artifact-ref-goal-summary",
 		"Evidencia requerida: evidence-ref-required",
+		CodexGoalResultMarkerV0,
+		"Resultado estructurado obligatorio",
 	} {
 		if !strings.Contains(packet.Prompt, expected) {
 			t.Fatalf("prompt no contiene %q:\n%s", expected, packet.Prompt)

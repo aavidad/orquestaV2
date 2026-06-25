@@ -219,6 +219,15 @@ normalizar refs, pero no sustituyen el cierre tecnico: debe existir codigo en
 composicion/servidor que despache o publique bloqueo causal y un smoke OPES
 acotado que lo demuestre.
 
+## SRV-015: app-server goal-first es composicion
+
+`cmd/orquesta-server` puede usar `codex app-server proxy` como backend
+goal-first opt-in. Ese codigo queda en composition root: arranca threads,
+configura goals, inicia turns, observa `thread/goal/get` y lee `thread/read`
+para extraer `ORQUESTA_GOAL_RESULT_V0`. El modulo servidor y el nucleo neutral
+siguen viendo solo puertos y refs opacas; un `complete` de Codex no cierra nada
+sin `GoalWorkClosureValidatorV0`.
+
 La correccion
 `agent-ref-task-ref-review-rework-task-ref-review-rework-task-autoprogr-dc31be1188c5569b01263b5f388f0788`
 aplica esta decision: corrige la asociacion causal de las refs previas a

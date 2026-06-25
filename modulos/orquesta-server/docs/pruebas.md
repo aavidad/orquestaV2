@@ -91,8 +91,9 @@
 - `cmd/orquesta-server` prueba que el wrapper de composicion solo expone
   `IdleSelfImprovementGoalLauncherPortV0`/`ObserverPortV0` cuando hay backend
   goal real configurado, y que el backend `app_server_proxy` mapea
-  `thread/start`, `thread/goal/set`, `turn/start` y `thread/goal/get` sin usar
-  `codex exec`.
+  `thread/start`, `thread/goal/set`, `turn/start`, `thread/goal/get` y
+  `thread/read` sin usar `codex exec`; al observar un goal terminal extrae
+  `ORQUESTA_GOAL_RESULT_V0` para artefactos/evidencias de cierre.
 - `modulos/orquesta-server` prueba que los contadores historicos
   `supervisor_error_ticks` y `resident_director_error_ticks` siguen visibles
   como telemetria, pero no degradan estado ni crean blockers si el supervisor y

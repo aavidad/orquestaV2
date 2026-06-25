@@ -11,6 +11,7 @@ import (
 const (
 	CodexGoalStartPacketSchemaV0        = "codex_goal_start_packet.v0"
 	CodexGoalObservationRequestSchemaV0 = "codex_goal_observation_request.v0"
+	CodexGoalResultMarkerV0             = "ORQUESTA_GOAL_RESULT_V0"
 
 	ErrCodexGoalStarterMissingV0      = "codex_goal_starter_missing"
 	ErrCodexGoalObserverMissingV0     = "codex_goal_observer_missing"
@@ -237,6 +238,13 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 	}
 	b.WriteString("- Devuelve blocked si falta input externo, permiso, proveedor o cambio de estado externo.\n")
 	b.WriteString("- Conserva refs opacas y no publiques HOME, tokens, OAuth, comandos internos ni transcripts completos.\n")
+	b.WriteString("\nResultado estructurado obligatorio:\n")
+	b.WriteString("- Termina la respuesta final con una sola linea que empiece por ")
+	b.WriteString(CodexGoalResultMarkerV0)
+	b.WriteString(" seguida de JSON compacto.\n")
+	b.WriteString("- El JSON debe usar esta forma: {\"summary\":\"...\",\"artifact_refs\":[],\"required_test_results\":[{\"test_ref\":\"...\",\"status\":\"passed\",\"evidence_refs\":[]}],\"domain_receipt_refs\":[],\"evidence_refs\":[]}.\n")
+	b.WriteString("- Incluye en evidence_refs las evidencias requeridas solo si han sido verificadas; no inventes refs para forzar el cierre.\n")
+	b.WriteString("- Incluye en artifact_refs solo artefactos producidos o verificados que cumplan el contrato.\n")
 	return b.String()
 }
 
