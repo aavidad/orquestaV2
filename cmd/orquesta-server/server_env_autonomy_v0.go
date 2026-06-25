@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -39,6 +40,9 @@ func serverOPESAutomationContextFromEnvV0() bool {
 	if firstNonEmptyEnvV0(envOPESBaseURLV0, envOPESBaseURLLegacyV0) != "" {
 		return true
 	}
+	if serverProjectWorkDirLooksLikeOPESV0(os.Getenv(envCodexProjectWorkDirV0)) {
+		return true
+	}
 	for _, key := range []string{
 		envOPESProjectWorkDirV0,
 		envOPESBridgeEnabledV0,
@@ -54,4 +58,17 @@ func serverOPESAutomationContextFromEnvV0() bool {
 		}
 	}
 	return false
+}
+
+func serverProjectWorkDirLooksLikeOPESV0(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	clean := strings.ToLower(filepath.ToSlash(filepath.Clean(value)))
+	return clean == "opes" ||
+		strings.HasSuffix(clean, "/opes") ||
+		strings.HasSuffix(clean, "/opes-salidas") ||
+		strings.Contains(clean, "/opes/") ||
+		strings.Contains(clean, "/opes-salidas/")
 }

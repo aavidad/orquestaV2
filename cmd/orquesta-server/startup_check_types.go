@@ -57,13 +57,14 @@ type startupControlRecordV0 struct {
 }
 
 type startupCandidateCleanupV0 struct {
-	Candidate              orquestarunqueue.RunSchedulingCandidateV0
-	Active                 bool
-	QueueDirty             bool
-	QueueStatus            string
-	CompleteControlStatus  orquestaruncontrol.RunControlStatusV0
-	CompleteControlReason  string
-	CompleteControlPending bool
+	Candidate               orquestarunqueue.RunSchedulingCandidateV0
+	Active                  bool
+	QueueDirty              bool
+	QueueStatus             string
+	DomainSessionSuppressed bool
+	CompleteControlStatus   orquestaruncontrol.RunControlStatusV0
+	CompleteControlReason   string
+	CompleteControlPending  bool
 }
 
 func countStartupCleanupCandidatesV0(

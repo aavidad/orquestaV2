@@ -97,6 +97,21 @@ func TestServerConfigFromEnvV0DesactivaAutomejoraIdleEnOPESSinWorkdirSeparadoV0(
 	}
 }
 
+func TestServerConfigFromEnvV0DetectaOPESPorProjectWorkdirCodexV0(t *testing.T) {
+	root := t.TempDir()
+	opesOutputDir := filepath.Join(root, "OPES", "opes-salidas", "curso-demo")
+	t.Setenv(envCodexProjectWorkDirV0, opesOutputDir)
+	t.Setenv(envServerIdleSelfImprovementAfterV0, "")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if !config.IdleSelfImprovementDisabled || config.IdleSelfImprovementAfter != 0 {
+		t.Fatalf("automejora idle debe quedar desactivada si CODEX_PROJECT_WORKDIR apunta a salida OPES: %+v", config)
+	}
+}
+
 func TestServerConfigFromEnvV0DesactivaAutomejoraIdleSiWorkdirExplicitoEsOPESV0(t *testing.T) {
 	root := t.TempDir()
 	opesDir := filepath.Join(root, "OPES")

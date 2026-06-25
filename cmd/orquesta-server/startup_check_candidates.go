@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
@@ -83,6 +84,10 @@ func (check serverStartupCheckV0) startupCleanupCandidatesV0(
 				QueueDirty:  true,
 				QueueStatus: queueStatus,
 			})
+			continue
+		}
+		if suppressed, ok := check.suppressStartupAutoprogrammingForDomainSessionV0(candidate); ok {
+			cleanup = append(cleanup, suppressed)
 			continue
 		}
 		cleanup = append(cleanup, startupCandidateCleanupV0{
@@ -235,6 +240,62 @@ func startupQueueCandidateTerminalV0(
 	candidate orquestarunqueue.RunSchedulingCandidateV0,
 ) bool {
 	return !orquestarunqueue.IsExecutableRunStatusV0(candidate.Status)
+}
+
+const (
+	startupIdleSelfImprovementDomainSessionSuppressedReasonV0 = "idle_self_improvement_suppressed_by_domain_session"
+	startupIdleSelfImprovementDomainSessionEvidenceV0         = "evidence-ref-idle-self-improvement-domain-session"
+)
+
+func (check serverStartupCheckV0) suppressStartupAutoprogrammingForDomainSessionV0(
+	candidate orquestarunqueue.RunSchedulingCandidateV0,
+) (startupCandidateCleanupV0, bool) {
+	if !check.startupDomainSessionSuppressesIdleSelfImprovementV0() ||
+		!startupAutoprogrammingRunRefV0(candidate.RunRef) {
+		return startupCandidateCleanupV0{}, false
+	}
+	candidate.RescueReason = startupIdleSelfImprovementDomainSessionSuppressedReasonV0
+	candidate.EvidenceRefs = appendStartupEvidenceRefV0(
+		candidate.EvidenceRefs,
+		startupIdleSelfImprovementDomainSessionEvidenceV0,
+	)
+	return startupCandidateCleanupV0{
+		Candidate:               candidate,
+		QueueDirty:              true,
+		QueueStatus:             orquestarunqueue.RunStatusStoppedV0,
+		DomainSessionSuppressed: true,
+	}, true
+}
+
+func (check serverStartupCheckV0) startupDomainSessionSuppressesIdleSelfImprovementV0() bool {
+	if !check.ServerConfig.IdleSelfImprovementDisabled {
+		return false
+	}
+	if serverProjectWorkDirLooksLikeOPESV0(check.ServerConfig.ProjectWorkDir) ||
+		serverProjectWorkDirLooksLikeOPESV0(os.Getenv(envCodexProjectWorkDirV0)) ||
+		strings.TrimSpace(os.Getenv(envOPESProjectWorkDirV0)) != "" {
+		return true
+	}
+	for _, setting := range check.ServerConfig.EffectiveConfig.Settings {
+		key := strings.ToUpper(strings.TrimSpace(setting.Key))
+		scope := strings.ToLower(strings.TrimSpace(setting.Scope))
+		value := strings.ToLower(strings.TrimSpace(setting.Value))
+		source := strings.ToLower(strings.TrimSpace(setting.Source))
+		if value == "" || value == "false" || value == "0" || value == "absent" || source == "defaulted" {
+			continue
+		}
+		if strings.HasPrefix(key, "ORQUESTA_OPES_") ||
+			strings.Contains(scope, "domain_work") ||
+			strings.Contains(scope, "external_bridge") ||
+			strings.Contains(scope, "opes") {
+			return true
+		}
+	}
+	return false
+}
+
+func startupAutoprogrammingRunRefV0(runRef string) bool {
+	return strings.HasPrefix(strings.TrimSpace(runRef), "request-ref-autoprogramming-")
 }
 
 func startupQueueStatusFromControlV0(status orquestaruncontrol.RunControlStatusV0) string {

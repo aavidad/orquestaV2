@@ -46,6 +46,21 @@ Además, si el operador usa una variable antigua o incompleta, el servidor no pu
 - Resultado esperado: cola OPES visible limpia, cero procesos Codex de autoprogramación y diagnóstico público de supresión.
 - Con opt-in explícito de automejora, el scanner puede arrancar, pero debe aparecer separado de la cola OPES del curso.
 
+## Avance 2026-06-25
+
+- `cmd/orquesta-server` detecta sesión OPES también cuando `ORQUESTA_CODEX_PROJECT_WORKDIR` apunta a `OPES` o a `opes-salidas`.
+- En arranque `diagnose`, si `idle_self_improvement` está desactivado y la sesión es OPES/dominio, las runs `request-ref-autoprogramming-*` ejecutables no se adoptan como activas: se marcan `stopped` con `rescue_reason=idle_self_improvement_suppressed_by_domain_session` y evidencia `evidence-ref-idle-self-improvement-domain-session`.
+- `server/status` publica la razón en `startup_message` y `startup_evidence_refs`.
+- `/api/v0/autoprogramming/status` pide también terminales de cola y publica diagnóstico `idle_self_improvement_suppressed_by_domain_session` cuando encuentra la run suprimida.
+- La variable legacy `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER` ya queda diagnosticada como alias/ignorada frente a `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS`.
+
+Evidencia local:
+
+```bash
+go test -count=1 ./modulos/orquesta-mcp ./cmd/orquesta-server ./modulos/orquesta-web ./modulos/orquesta-server
+git diff --check
+```
+
 ## Relacionado
 
 - `modulos/orquesta-server/docs/tareas.md`, `SRV-TASK-027`.

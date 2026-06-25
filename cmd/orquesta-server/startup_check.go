@@ -83,6 +83,7 @@ func (check serverStartupCheckV0) diagnoseStartupV0(
 			EvidenceRefs: startupAdoptionEvidenceRefsV0([]string{"evidence-ref-orquesta-startup-diagnose-ready"}, adoption),
 		}, nil
 	}
+	domainSessionSuppressed := startupCleanupHasDomainSessionSuppressionV0(cleanup)
 	synced, err := check.reconcileStartupQueueCandidatesV0(ctx, command, cleanup)
 	if err != nil {
 		return orquestaserver.StartupCheckResultV0{}, err
@@ -97,17 +98,23 @@ func (check serverStartupCheckV0) diagnoseStartupV0(
 			if err != nil {
 				return orquestaserver.StartupCheckResultV0{}, err
 			}
+			message := fmt.Sprintf("director: orquesta preparada; cola terminal reconciliada=%d", synced)
+			evidenceRefs := []string{
+				"evidence-ref-orquesta-startup-diagnose-ready",
+				"evidence-ref-orquesta-startup-queue-reconciled",
+			}
+			if domainSessionSuppressed {
+				message += "; " + startupIdleSelfImprovementDomainSessionSuppressedReasonV0
+				evidenceRefs = append(evidenceRefs, startupIdleSelfImprovementDomainSessionEvidenceV0)
+			}
 			return orquestaserver.StartupCheckResultV0{
 				Status: orquestaserver.StartupCheckStatusReadyV0,
 				Ready:  true,
 				Message: startupReadyMessageV0(startupAdoptionMessageV0(
-					fmt.Sprintf("director: orquesta preparada; cola terminal reconciliada=%d", synced),
+					message,
 					adoption,
 				), compaction),
-				EvidenceRefs: startupReadyEvidenceRefsV0(startupAdoptionEvidenceRefsV0([]string{
-					"evidence-ref-orquesta-startup-diagnose-ready",
-					"evidence-ref-orquesta-startup-queue-reconciled",
-				}, adoption), compaction),
+				EvidenceRefs:    startupReadyEvidenceRefsV0(startupAdoptionEvidenceRefsV0(evidenceRefs, adoption), compaction),
 				StartupRevision: startupRevisionSummaryFromCompactionV0(compaction),
 			}, nil
 		}
@@ -133,6 +140,15 @@ func (check serverStartupCheckV0) diagnoseStartupV0(
 		Message:      fmt.Sprintf("runs transitorios activos=%d cola_desincronizada=%d; usar %s=forced_stop para purga logica", active, queueDirty, envStartupCleanupModeV0),
 		EvidenceRefs: []string{"evidence-ref-orquesta-startup-dirty-runs"},
 	}, nil
+}
+
+func startupCleanupHasDomainSessionSuppressionV0(candidates []startupCandidateCleanupV0) bool {
+	for _, candidate := range candidates {
+		if candidate.DomainSessionSuppressed {
+			return true
+		}
+	}
+	return false
 }
 
 func (check serverStartupCheckV0) forceStopStartupStateV0(

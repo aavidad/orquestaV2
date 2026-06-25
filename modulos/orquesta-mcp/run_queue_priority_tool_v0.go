@@ -28,29 +28,30 @@ type MCPRunQueuePriorityToolDescriptorV0 struct {
 }
 
 type MCPRunQueuePriorityToolInputV0 struct {
-	RequestID        string   `json:"request_id,omitempty"`
-	CorrelationID    string   `json:"correlation_id,omitempty"`
-	Action           string   `json:"action"`
-	QueueRef         string   `json:"queue_ref,omitempty"`
-	AppRefs          []string `json:"app_refs,omitempty"`
-	RunRef           string   `json:"run_ref,omitempty"`
-	AppRef           string   `json:"app_ref,omitempty"`
-	Status           string   `json:"status,omitempty"`
-	PriorityScore    int      `json:"priority_score,omitempty"`
-	ConsumerRef      string   `json:"consumer_ref,omitempty"`
-	ObjectiveRef     string   `json:"objective_ref,omitempty"`
-	WorkItemRef      string   `json:"work_item_ref,omitempty"`
-	WriteSetRefs     []string `json:"write_set_refs,omitempty"`
-	AttemptGroupRef  string   `json:"attempt_group_ref,omitempty"`
-	ParentRunRef     string   `json:"parent_run_ref,omitempty"`
-	SupersedesRunRef string   `json:"supersedes_run_ref,omitempty"`
-	RescueReason     string   `json:"rescue_reason,omitempty"`
-	RequestedBy      string   `json:"requested_by,omitempty"`
-	Reason           string   `json:"reason,omitempty"`
-	IdempotencyKey   string   `json:"idempotency_key,omitempty"`
-	EvidenceRefs     []string `json:"evidence_refs,omitempty"`
-	Limit            int      `json:"limit,omitempty"`
-	OccurredAt       string   `json:"occurred_at,omitempty"`
+	RequestID            string   `json:"request_id,omitempty"`
+	CorrelationID        string   `json:"correlation_id,omitempty"`
+	Action               string   `json:"action"`
+	QueueRef             string   `json:"queue_ref,omitempty"`
+	AppRefs              []string `json:"app_refs,omitempty"`
+	RunRef               string   `json:"run_ref,omitempty"`
+	AppRef               string   `json:"app_ref,omitempty"`
+	Status               string   `json:"status,omitempty"`
+	PriorityScore        int      `json:"priority_score,omitempty"`
+	ConsumerRef          string   `json:"consumer_ref,omitempty"`
+	ObjectiveRef         string   `json:"objective_ref,omitempty"`
+	WorkItemRef          string   `json:"work_item_ref,omitempty"`
+	WriteSetRefs         []string `json:"write_set_refs,omitempty"`
+	AttemptGroupRef      string   `json:"attempt_group_ref,omitempty"`
+	ParentRunRef         string   `json:"parent_run_ref,omitempty"`
+	SupersedesRunRef     string   `json:"supersedes_run_ref,omitempty"`
+	RescueReason         string   `json:"rescue_reason,omitempty"`
+	RequestedBy          string   `json:"requested_by,omitempty"`
+	Reason               string   `json:"reason,omitempty"`
+	IdempotencyKey       string   `json:"idempotency_key,omitempty"`
+	EvidenceRefs         []string `json:"evidence_refs,omitempty"`
+	Limit                int      `json:"limit,omitempty"`
+	IncludeNonExecutable bool     `json:"include_non_executable,omitempty"`
+	OccurredAt           string   `json:"occurred_at,omitempty"`
 }
 
 type MCPRunQueuePriorityToolResultV0 struct {
@@ -61,6 +62,7 @@ type MCPRunQueuePriorityToolResultV0 struct {
 	QueueRef      string                                `json:"queue_ref,omitempty"`
 	Count         int                                   `json:"count"`
 	Ranked        []MCPRunQueueRankedCandidateCompactV0 `json:"ranked,omitempty"`
+	Terminal      []MCPRunQueueRankedCandidateCompactV0 `json:"terminal,omitempty"`
 	Updated       *MCPRunQueueRankedCandidateCompactV0  `json:"updated,omitempty"`
 	Errores       []MCPValidationIssueV0                `json:"errores_publicos,omitempty"`
 }
@@ -95,8 +97,8 @@ func MCPRunQueuePriorityDescriptorV0() MCPRunQueuePriorityToolDescriptorV0 {
 	return MCPRunQueuePriorityToolDescriptorV0{
 		Name:        MCPRunQueuePriorityToolNameV0,
 		Version:     MCPRunQueuePriorityToolVersionV0,
-		InputSchema: "envelope:{action,queue_ref?,run_ref?,app_ref?,status?,priority_score?,attempt_group_ref?,parent_run_ref?,supersedes_run_ref?,rescue_reason?,limit?,occurred_at?}",
-		Output:      "ok:{action,queue_ref,count,ranked?,updated?}|error:{errores_publicos}",
+		InputSchema: "envelope:{action,queue_ref?,run_ref?,app_ref?,status?,priority_score?,attempt_group_ref?,parent_run_ref?,supersedes_run_ref?,rescue_reason?,limit?,include_non_executable?,occurred_at?}",
+		Output:      "ok:{action,queue_ref,count,ranked?,terminal?,updated?}|error:{errores_publicos}",
 		ResourceURI: MCPRunQueuePriorityResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -162,9 +164,10 @@ func (executor MCPRunQueuePriorityToolExecutorV0) executeRankV0(
 		return newMCPRunQueuePriorityErrorV0(input, "run_queue_reader_no_disponible", "reader", "reader requerido"), nil
 	}
 	request := orquestarunqueue.RunQueueReadRequestV0{
-		QueueRef: strings.TrimSpace(input.QueueRef),
-		AppRefs:  compactStringsMCPV0(input.AppRefs),
-		Limit:    input.Limit,
+		QueueRef:             strings.TrimSpace(input.QueueRef),
+		AppRefs:              compactStringsMCPV0(input.AppRefs),
+		Limit:                input.Limit,
+		IncludeNonExecutable: input.IncludeNonExecutable,
 	}
 	candidates, err := executor.Reader.ListRunSchedulingCandidatesV0(ctx, request)
 	if err != nil {
@@ -174,6 +177,7 @@ func (executor MCPRunQueuePriorityToolExecutorV0) executeRankV0(
 	attempts := activeAttemptsMCPByRunRefV0(candidates)
 	ranked := orquestarunqueue.RankRunCandidatesV0(candidates, policy)
 	ranked = limitMCPRunQueueRankedV0(ranked, input.Limit)
+	terminal := compactRunQueueTerminalCandidatesMCPV0(candidates, attempts)
 	return MCPRunQueuePriorityToolResultV0{
 		Estado:        MCPRunQueuePriorityEstadoOKV0,
 		RequestID:     strings.TrimSpace(input.RequestID),
@@ -182,6 +186,7 @@ func (executor MCPRunQueuePriorityToolExecutorV0) executeRankV0(
 		QueueRef:      request.QueueRef,
 		Count:         len(ranked),
 		Ranked:        compactRunQueueRankedCandidatesMCPV0(ranked, attempts),
+		Terminal:      terminal,
 		Errores:       []MCPValidationIssueV0{},
 	}, nil
 }
@@ -284,6 +289,29 @@ func compactRunQueueRankedCandidatesMCPV0(
 			ActiveAttemptRef: strings.TrimSpace(attempt.ActiveAttemptRef),
 			EvidenceRefs:     compactStringsMCPV0(value.EvidenceRefs),
 		})
+	}
+	if out == nil {
+		return []MCPRunQueueRankedCandidateCompactV0{}
+	}
+	return out
+}
+
+func compactRunQueueTerminalCandidatesMCPV0(
+	values []orquestarunqueue.RunSchedulingCandidateV0,
+	attempts map[string]orquestarunqueue.RunQueueAttemptProjectionV0,
+) []MCPRunQueueRankedCandidateCompactV0 {
+	out := make([]MCPRunQueueRankedCandidateCompactV0, 0)
+	for _, value := range values {
+		if orquestarunqueue.IsExecutableRunStatusV0(value.Status) {
+			continue
+		}
+		compact := compactRunQueueRankedCandidatesMCPV0([]orquestarunqueue.RankedRunCandidateV0{{
+			RunSchedulingCandidateV0: value,
+		}}, attempts)
+		if len(compact) == 0 {
+			continue
+		}
+		out = append(out, compact[0])
 	}
 	if out == nil {
 		return []MCPRunQueueRankedCandidateCompactV0{}

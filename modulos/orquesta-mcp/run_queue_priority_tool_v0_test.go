@@ -145,6 +145,43 @@ func TestMCPRunQueuePriorityExecutorV0RankExponeIntentoActivoV0(t *testing.T) {
 	}
 }
 
+func TestMCPRunQueuePriorityExecutorV0RankExponeTerminalesSoloSiSePidenV0(t *testing.T) {
+	now := time.Date(2026, 6, 25, 12, 0, 0, 0, time.UTC)
+	reader := &fakeMCPRunQueueReaderV0{
+		candidates: []orquestarunqueue.RunSchedulingCandidateV0{
+			runQueueCandidateMCPTestV0("run-ready", "app", "ready", 10, now),
+			{
+				RunRef:        "request-ref-autoprogramming-backlog-scanner-15eeecb9",
+				AppRef:        "app-ref-autoprogramming",
+				Status:        "stopped",
+				PriorityScore: 99,
+				RescueReason:  "idle_self_improvement_suppressed_by_domain_session",
+				EvidenceRefs:  []string{"evidence-ref-idle-self-improvement-domain-session"},
+			},
+		},
+	}
+
+	result, err := (MCPRunQueuePriorityToolExecutorV0{Reader: reader}).Execute(
+		context.Background(),
+		MCPRunQueuePriorityToolInputV0{
+			Action:               "rank",
+			IncludeNonExecutable: true,
+			OccurredAt:           now.Format(time.RFC3339),
+		},
+	)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !reader.request.IncludeNonExecutable ||
+		result.Count != 1 ||
+		len(result.Ranked) != 1 ||
+		result.Ranked[0].RunRef != "run-ready" ||
+		len(result.Terminal) != 1 ||
+		result.Terminal[0].RescueReason != "idle_self_improvement_suppressed_by_domain_session" {
+		t.Fatalf("result=%+v request=%+v", result, reader.request)
+	}
+}
+
 func TestMCPRunQueuePriorityExecutorV0SetPriorityDelegaEnWriter(t *testing.T) {
 	writer := &fakeMCPRunQueueWriterV0{}
 	executor := MCPRunQueuePriorityToolExecutorV0{Writer: writer}

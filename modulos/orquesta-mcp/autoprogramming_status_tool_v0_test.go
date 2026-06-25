@@ -140,6 +140,36 @@ func TestMCPAutoprogrammingStatusExecutorV0ExponeQueueHealthSeparada(t *testing.
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0DiagnosticaAutoprogrammingSuprimidaPorSesionDominio(t *testing.T) {
+	queue := &fakeMCPAutoprogrammingQueueStatusV0{
+		empty: true,
+		terminal: []MCPRunQueueRankedCandidateCompactV0{{
+			RunRef:       "request-ref-autoprogramming-backlog-scanner-15eeecb9",
+			AppRef:       "app-ref-autoprogramming",
+			Status:       "stopped",
+			RescueReason: mcpAutoprogrammingDomainSessionSuppressedReasonV0,
+			EvidenceRefs: []string{mcpAutoprogrammingDomainSessionSuppressedEvidenceV0},
+		}},
+	}
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: queue,
+		Stats: &fakeMCPAutoprogrammingRunStatusV0{},
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !queue.input.IncludeNonExecutable {
+		t.Fatalf("autoprogramming status debe pedir terminales para diagnostico")
+	}
+	if result.Queue == nil ||
+		len(result.Queue.Ranked) != 0 ||
+		len(result.Queue.Terminal) != 1 ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, mcpAutoprogrammingDomainSessionSuppressedReasonV0) {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0OverallNoOcultaProgresoBajo(t *testing.T) {
 	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
 		Queue: &fakeMCPAutoprogrammingQueueStatusV0{},

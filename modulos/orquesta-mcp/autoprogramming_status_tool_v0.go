@@ -13,6 +13,9 @@ const (
 	MCPAutoprogrammingStatusResourceURIV0 = "orquesta://contracts/autoprogramming-status/v0"
 	MCPAutoprogrammingStatusEstadoOKV0    = "ok"
 	MCPAutoprogrammingStatusEstadoErrorV0 = "error"
+
+	mcpAutoprogrammingDomainSessionSuppressedReasonV0   = "idle_self_improvement_suppressed_by_domain_session"
+	mcpAutoprogrammingDomainSessionSuppressedEvidenceV0 = "evidence-ref-idle-self-improvement-domain-session"
 )
 
 type MCPAutoprogrammingStatusToolDescriptorV0 struct {
@@ -103,6 +106,7 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 				okCount++
 			}
 			result.Diagnostics = append(result.Diagnostics, diagnosticsFromIssuesMCPAutoprogrammingV0("queue", queue.Errores)...)
+			result.Diagnostics = append(result.Diagnostics, diagnosticsFromSuppressedQueueMCPAutoprogrammingV0(&queue)...)
 		}
 	} else {
 		result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingDiagnosticV0("queue_unbound", "queue", "run_queue no configurado"))
@@ -200,13 +204,14 @@ func mcpAutoprogrammingQueueInputV0(
 	input MCPAutoprogrammingStatusToolInputV0,
 ) MCPRunQueuePriorityToolInputV0 {
 	return MCPRunQueuePriorityToolInputV0{
-		RequestID:     input.RequestID,
-		CorrelationID: input.CorrelationID,
-		Action:        MCPRunQueuePriorityActionRankV0,
-		QueueRef:      input.QueueRef,
-		AppRefs:       input.AppRefs,
-		Limit:         input.QueueLimit,
-		OccurredAt:    input.OccurredAt,
+		RequestID:            input.RequestID,
+		CorrelationID:        input.CorrelationID,
+		Action:               MCPRunQueuePriorityActionRankV0,
+		QueueRef:             input.QueueRef,
+		AppRefs:              input.AppRefs,
+		Limit:                input.QueueLimit,
+		IncludeNonExecutable: true,
+		OccurredAt:           input.OccurredAt,
 	}
 }
 
@@ -251,4 +256,39 @@ func mcpAutoprogrammingDiagnosticV0(
 		Scope:   strings.TrimSpace(scope),
 		Message: strings.TrimSpace(message),
 	}
+}
+
+func diagnosticsFromSuppressedQueueMCPAutoprogrammingV0(
+	queue *MCPRunQueuePriorityToolResultV0,
+) []MCPAutoprogrammingDiagnosticV0 {
+	if queue == nil {
+		return nil
+	}
+	out := []MCPAutoprogrammingDiagnosticV0{}
+	for _, candidate := range queue.Terminal {
+		if !suppressedDomainSessionQueueCandidateMCPAutoprogrammingV0(candidate) {
+			continue
+		}
+		out = append(out, MCPAutoprogrammingDiagnosticV0{
+			Code:         mcpAutoprogrammingDomainSessionSuppressedReasonV0,
+			Scope:        "queue",
+			Message:      "autoprogramacion stale suprimida por sesion de dominio",
+			EvidenceRefs: compactStringsMCPV0(append([]string{mcpAutoprogrammingDomainSessionSuppressedEvidenceV0}, candidate.EvidenceRefs...)),
+		})
+	}
+	return out
+}
+
+func suppressedDomainSessionQueueCandidateMCPAutoprogrammingV0(
+	candidate MCPRunQueueRankedCandidateCompactV0,
+) bool {
+	if strings.TrimSpace(candidate.RescueReason) == mcpAutoprogrammingDomainSessionSuppressedReasonV0 {
+		return true
+	}
+	for _, ref := range candidate.EvidenceRefs {
+		if strings.TrimSpace(ref) == mcpAutoprogrammingDomainSessionSuppressedEvidenceV0 {
+			return true
+		}
+	}
+	return false
 }

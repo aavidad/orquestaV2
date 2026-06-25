@@ -93,6 +93,74 @@ func TestStartupDiagnoseV0AsumeRunsReadyActivosSinPurgaV0(t *testing.T) {
 	}
 }
 
+func TestStartupDiagnoseV0SuprimeAutoprogrammingStaleEnSesionOPESV0(t *testing.T) {
+	ctx := context.Background()
+	store := orquestarunmemory.NewRunMemoryStoreV0()
+	runRef := "request-ref-autoprogramming-backlog-scanner-15eeecb9"
+	if _, err := store.UpsertRunSchedulingCandidateV0(ctx, "queue-main", orquestarunqueue.RunSchedulingCandidateV0{
+		RunRef:       runRef,
+		AppRef:       "app-ref-autoprogramming",
+		Status:       orquestarunqueue.RunStatusReadyV0,
+		EvidenceRefs: []string{"evidence-prev"},
+	}); err != nil {
+		t.Fatalf("UpsertRunSchedulingCandidateV0: %v", err)
+	}
+	opesDir := filepath.Join(t.TempDir(), "OPES", "opes-salidas", "curso-demo")
+	check := serverStartupCheckV0{
+		Stack: orquestaappcodexstack.StackV0{
+			Stores: orquestaappcodexstack.StoresV0{
+				RunQueue:   store,
+				RunControl: store,
+			},
+			RunQueue: orquestaappcodexstack.RunQueueConfigV0{QueueRef: "queue-main"},
+		},
+		ServerConfig: orquestaserver.ConfigV0{
+			ProjectWorkDir:              opesDir,
+			IdleSelfImprovementDisabled: true,
+			EffectiveConfig: orquestaserver.ServerEffectiveConfigV0{Settings: []orquestaserver.ServerConfigSettingV0{{
+				Key:    envOPESProjectWorkDirV0,
+				Value:  "opes-project-workdir-configured",
+				Source: "explicit",
+				Scope:  "domain_work",
+			}}},
+		},
+		Mode: startupCleanupModeDiagnoseV0,
+	}
+
+	result, err := check.PrepareStartupV0(ctx, orquestaserver.StartupCheckCommandV0{
+		OccurredAt: time.Date(2026, 6, 25, 11, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("PrepareStartupV0: %v", err)
+	}
+	if !result.Ready ||
+		!strings.Contains(result.Message, startupIdleSelfImprovementDomainSessionSuppressedReasonV0) ||
+		!containsStringForTestV0(result.EvidenceRefs, startupIdleSelfImprovementDomainSessionEvidenceV0) {
+		t.Fatalf("result=%+v", result)
+	}
+	visible, err := store.ListRunSchedulingCandidatesV0(ctx, orquestarunqueue.RunQueueReadRequestV0{QueueRef: "queue-main"})
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0 visible: %v", err)
+	}
+	if len(visible) != 0 {
+		t.Fatalf("cola ejecutable debe quedar limpia: %+v", visible)
+	}
+	all, err := store.ListRunSchedulingCandidatesV0(ctx, orquestarunqueue.RunQueueReadRequestV0{
+		QueueRef:             "queue-main",
+		IncludeNonExecutable: true,
+	})
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0 all: %v", err)
+	}
+	if len(all) != 1 ||
+		all[0].Status != orquestarunqueue.RunStatusStoppedV0 ||
+		all[0].RescueReason != startupIdleSelfImprovementDomainSessionSuppressedReasonV0 ||
+		!containsStringForTestV0(all[0].EvidenceRefs, startupIdleSelfImprovementDomainSessionEvidenceV0) ||
+		!containsStringForTestV0(all[0].EvidenceRefs, "evidence-ref-orquesta-startup-queue-stopped") {
+		t.Fatalf("terminal candidate=%+v", all)
+	}
+}
+
 func TestStartupDiagnoseV0AdoptaProcesosVivosRegistradosV0(t *testing.T) {
 	ctx := context.Background()
 	queueControl := orquestarunmemory.NewRunMemoryStoreV0()
