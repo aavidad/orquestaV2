@@ -220,6 +220,30 @@ mantiene la misma frontera: corrige solo el rastro documental de esta entrega
 nueva, resuelve `ref_only` por paquete, AGENTS raiz, README/AGENTS locales, foto
 vigente y docs locales, no toca codigo ni relanza padre, y conserva
 SRV-TASK-024 abierto hasta dispatch real o bloqueo causal publico probado.
+La correccion externa
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-0f0bdd6085651f057155f6a385ccea82`
+mantiene la misma frontera: completa solo el rastro documental de esta entrega
+nueva, resuelve `ref_only` por paquete, AGENTS raiz, README/AGENTS locales,
+foto vigente y docs locales, no toca codigo ni relanza padre, y conserva
+SRV-TASK-024 abierto hasta dispatch real o bloqueo causal publico probado.
+La correccion externa
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-d4aec6d93452fd3b4f10a49c0bca437c`
+mantiene esa frontera: corrige solo esta entrega documental, resuelve
+`ref_only` por paquete, AGENTS raiz, README/AGENTS locales, foto vigente y docs
+locales, no toca codigo ni relanza padre, y conserva SRV-TASK-024 abierto hasta
+dispatch real o bloqueo causal publico probado.
+La correccion externa
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-403a707ea7e18c0c29793d3df9266ede`
+mantiene esa frontera: completa solo el rastro documental de esta entrega,
+resuelve `ref_only` por paquete, AGENTS raiz, README/AGENTS locales, foto
+vigente y docs locales, no toca codigo ni relanza padre, y conserva
+SRV-TASK-024 abierto hasta dispatch real o bloqueo causal publico probado.
+La correccion externa
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-026aefcaa6977288909f6693516c13c1`
+mantiene la misma frontera: completa solo el rastro documental de esta entrega
+nueva, resuelve `ref_only` por paquete, AGENTS raiz, README/AGENTS locales,
+foto vigente y docs locales, no toca codigo ni relanza padre, y conserva
+SRV-TASK-024 abierto hasta dispatch real o bloqueo causal publico probado.
 
 ## Bridge OPES residente
 

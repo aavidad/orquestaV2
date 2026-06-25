@@ -336,3 +336,27 @@
   `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
   comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
   previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- La correccion externa de entrega tras revision
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-0f0bdd6085651f057155f6a385ccea82`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- La correccion externa de entrega tras revision
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-d4aec6d93452fd3b4f10a49c0bca437c`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- La correccion externa de entrega tras revision
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-403a707ea7e18c0c29793d3df9266ede`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+- La correccion externa de entrega tras revision
+  `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-026aefcaa6977288909f6693516c13c1`
+  aplica el mismo criterio estricto: solo declara pasada
+  `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
+  comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
+  previas ni cierra SRV-TASK-024 sin codigo y smoke causal.

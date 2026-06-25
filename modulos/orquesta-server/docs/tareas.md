@@ -785,6 +785,18 @@ Reconciliacion documental 2026-06-25:
   control, AGENTS raiz, README/AGENTS locales del servidor, foto vigente y docs
   locales, no relanza padre ni toca codigo, y mantiene SRV-TASK-024 abierto
   hasta dispatch real o bloqueo causal publico probado por smoke OPES acotado.
+- `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-403a707ea7e18c0c29793d3df9266ede`
+  completa esta correccion de entrega tras revision sin ampliar alcance:
+  conserva el rastro documental valido, resuelve `ref_only` por paquete de
+  control, AGENTS raiz, README/AGENTS locales del servidor, foto vigente y docs
+  locales, no relanza padre ni toca codigo, y mantiene SRV-TASK-024 abierto
+  hasta dispatch real o bloqueo causal publico probado por smoke OPES acotado.
+- `agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-026aefcaa6977288909f6693516c13c1`
+  completa esta correccion de entrega tras revision sin ampliar alcance:
+  conserva el rastro documental valido, resuelve `ref_only` por paquete de
+  control, AGENTS raiz, README/AGENTS locales del servidor, foto vigente y docs
+  locales, no relanza padre ni toca codigo, y mantiene SRV-TASK-024 abierto
+  hasta dispatch real o bloqueo causal publico probado por smoke OPES acotado.
 
 ## SRV-TASK-025: reconciliacion de ACK OPES no debe terminar en domain_work_submit_conflict sin publicar artefacto
 
@@ -1017,6 +1029,63 @@ obligatoria. No se relanza otro padre ni se abre codigo porque no hay regresion
 causal nueva con refs de job, receipt, artifact o smoke OPES acotado. La
 evidencia local resuelve `required_ref_action=ack_evidence_required` mediante
 ACK con `contexto_ref_only_resuelto`.
+
+Criterio: SRV-TASK-024 sigue abierto hasta dispatch real o bloqueo causal
+publico probado; esta correccion solo cierra su propia entrega tras
+`go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`.
+
+## Rework documental SRV-TASK-024 2026-06-25 0f0bdd
+
+Origen:
+`request-ref-autoprogramming-backlog-srv-task-024-90719eb4-reconcile-c83a27e7`,
+agente
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-0f0bdd6085651f057155f6a385ccea82`.
+
+Resultado: correccion acotada a documentacion. El paquete trae contexto
+obligatorio `ref_only`, `required_ref_action=ack_evidence_required`, write-set
+cerrado a backlog y docs del servidor, y prueba focal obligatoria. No se
+relanza otro padre ni se abre codigo porque no hay regresion causal nueva con
+refs de job, receipt, artifact o smoke OPES acotado. La evidencia local
+resuelve el contexto por paquete, AGENTS raiz, README/AGENTS locales, foto
+vigente y docs locales.
+
+Criterio: SRV-TASK-024 sigue abierto hasta dispatch real o bloqueo causal
+publico probado; esta correccion solo cierra su propia entrega tras
+`go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`.
+
+## Rework documental SRV-TASK-024 2026-06-25 d4aec
+
+Origen:
+`request-ref-autoprogramming-backlog-srv-task-024-90719eb4-reconcile-c83a27e7`,
+agente
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-d4aec6d93452fd3b4f10a49c0bca437c`.
+
+Resultado: correccion acotada a documentacion. El paquete trae contexto
+obligatorio `ref_only`, `required_ref_action=ack_evidence_required`, write-set
+cerrado a backlog y docs del servidor, y prueba focal obligatoria. No se
+relanza otro padre ni se abre codigo porque no hay regresion causal nueva con
+refs de job, receipt, artifact o smoke OPES acotado. La evidencia local
+resuelve el contexto por paquete, AGENTS raiz, README/AGENTS locales, foto
+vigente y docs locales.
+
+Criterio: SRV-TASK-024 sigue abierto hasta dispatch real o bloqueo causal
+publico probado; esta correccion solo cierra su propia entrega tras
+`go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`.
+
+## Rework documental SRV-TASK-024 2026-06-25 403a707
+
+Origen:
+`request-ref-autoprogramming-backlog-srv-task-024-90719eb4-reconcile-c83a27e7`,
+agente
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-403a707ea7e18c0c29793d3df9266ede`.
+
+Resultado: correccion acotada a documentacion. El paquete trae contexto
+obligatorio `ref_only`, `required_ref_action=ack_evidence_required`, write-set
+cerrado a backlog y docs del servidor, y prueba focal obligatoria. No se
+relanza otro padre ni se abre codigo porque no hay regresion causal nueva con
+refs de job, receipt, artifact o smoke OPES acotado. La evidencia local
+resuelve el contexto por paquete, AGENTS raiz, README/AGENTS locales, foto
+vigente y docs locales.
 
 Criterio: SRV-TASK-024 sigue abierto hasta dispatch real o bloqueo causal
 publico probado; esta correccion solo cierra su propia entrega tras

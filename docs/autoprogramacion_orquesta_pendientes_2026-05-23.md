@@ -17685,6 +17685,20 @@ pasada la prueba obligatoria si el comando exacto
 `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` termina con
 exit code 0 en esta ejecucion.
 
+Correccion externa de entrega tras revision 2026-06-25:
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-403a707ea7e18c0c29793d3df9266ede`
+con `correlation_id=corr-request-ref-autoprogramming-backlog-srv-task-024-90719eb4-reconcile-c83a27e7-burst-002`
+completa solo el rastro documental de esta entrega nueva y conserva lo valido
+de la cadena previa. El contexto obligatorio `ref_only` queda resuelto por
+lectura local del paquete de control, AGENTS raiz, README/AGENTS locales del
+servidor, foto vigente y docs locales de tareas/decisiones/pruebas. No relanza
+otro padre, no abre codigo dentro del write-set documental y no cambia el
+estado canonico: SRV-TASK-024 sigue abierto hasta dispatch real o bloqueo
+causal publico probado por smoke OPES acotado. Su ACK solo puede declarar
+pasada la prueba obligatoria si el comando exacto
+`go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` termina con
+exit code 0 en esta ejecucion.
+
 ## Historico T260 - Corregir estados falsos `running` en agentes externos
 
 Origen: incidencia real detectada el 2026-06-11 durante OPES A1 informática
@@ -21106,6 +21120,85 @@ contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
 write-set cerrado a backlog y docs de `orquesta-server`, skill refs de
 programacion autonoma/integracion, y prueba obligatoria
 `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`.
+
+Resultado: no se abre codigo ni se relanza otro padre. La entrega conserva el
+rastro documental valido de SRV-TASK-024 y corrige solo esta revision: el
+contexto `ref_only` queda resuelto por paquete, AGENTS raiz, README/AGENTS
+locales del servidor, foto vigente y docs locales. SRV-TASK-024 sigue abierto
+hasta dispatch real o bloqueo causal publico probado por smoke OPES acotado.
+Esta pasada debe cerrarse con ACK `contexto_ref_only_resuelto` y solo declarar
+pasada la prueba focal si el comando exacto termina con exit code 0.
+
+## Rework documental SRV-TASK-024 2026-06-25 0f0bdd
+
+Evidencia revisada: paquete OrquestaV2
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-0f0bdd6085651f057155f6a385ccea82`
+de
+`request-ref-autoprogramming-backlog-srv-task-024-90719eb4-reconcile-c83a27e7`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-srv-task-024-90719eb4-reconcile-c83a27e7-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog y docs de `orquesta-server`, skill refs de
+programacion autonoma/integracion, y prueba obligatoria
+`go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`.
+
+Resultado: no se abre codigo ni se relanza otro padre. La entrega conserva el
+rastro documental valido de SRV-TASK-024 y corrige solo esta revision: el
+contexto `ref_only` queda resuelto por paquete, AGENTS raiz, README/AGENTS
+locales del servidor, foto vigente y docs locales. SRV-TASK-024 sigue abierto
+hasta dispatch real o bloqueo causal publico probado por smoke OPES acotado.
+Esta pasada debe cerrarse con ACK `contexto_ref_only_resuelto` y solo declarar
+pasada la prueba focal si el comando exacto termina con exit code 0.
+
+## Rework documental SRV-TASK-024 2026-06-25 d4aec
+
+Evidencia revisada: paquete OrquestaV2
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-d4aec6d93452fd3b4f10a49c0bca437c`
+de
+`request-ref-autoprogramming-backlog-srv-task-024-90719eb4-reconcile-c83a27e7`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-srv-task-024-90719eb4-reconcile-c83a27e7-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog y docs de `orquesta-server`, skill refs de
+programacion autonoma/integracion, y prueba obligatoria
+`go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`.
+
+Resultado: no se abre codigo ni se relanza otro padre. La entrega conserva el
+rastro documental valido de SRV-TASK-024 y corrige solo esta revision: el
+contexto `ref_only` queda resuelto por paquete, AGENTS raiz, README/AGENTS
+locales del servidor, foto vigente y docs locales. SRV-TASK-024 sigue abierto
+hasta dispatch real o bloqueo causal publico probado por smoke OPES acotado.
+Esta pasada debe cerrarse con ACK `contexto_ref_only_resuelto` y solo declarar
+pasada la prueba focal si el comando exacto termina con exit code 0.
+
+## Rework documental SRV-TASK-024 2026-06-25 403a707
+
+Evidencia revisada: paquete OrquestaV2
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-403a707ea7e18c0c29793d3df9266ede`
+de
+`request-ref-autoprogramming-backlog-srv-task-024-90719eb4-reconcile-c83a27e7`,
+con `correlation_id=corr-request-ref-autoprogramming-backlog-srv-task-024-90719eb4-reconcile-c83a27e7-burst-002`,
+contexto obligatorio `ref_only`, `required_ref_action=ack_evidence_required`,
+write-set cerrado a backlog y docs de `orquesta-server`, skill refs de
+programacion autonoma/integracion, y prueba obligatoria
+`go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`.
+
+Resultado: no se abre codigo ni se relanza otro padre. La entrega conserva el
+rastro documental valido de SRV-TASK-024 y corrige solo esta revision: el
+contexto `ref_only` queda resuelto por paquete, AGENTS raiz, README/AGENTS
+locales del servidor, foto vigente y docs locales. SRV-TASK-024 sigue abierto
+hasta dispatch real o bloqueo causal publico probado por smoke OPES acotado.
+Esta pasada debe cerrarse con ACK `contexto_ref_only_resuelto` y solo declarar
+pasada la prueba focal si el comando exacto termina con exit code 0.
+
+## Rework documental SRV-TASK-024 2026-06-25 026aef
+
+Evidencia revisada: paquete OrquestaV2
+`agent-ref-task-ref-review-rework-task-ref-review-rework-task-ref-revie-026aefcaa6977288909f6693516c13c1`
+de
+`request-ref-autoprogramming-backlog-srv-task-024-90719eb4-reconcile-c83a27e7`,
+con `correlation_id=resident-director-9747`, contexto obligatorio `ref_only`,
+`required_ref_action=ack_evidence_required`, write-set cerrado a backlog y docs
+de `orquesta-server`, skill refs de programacion autonoma/integracion, y prueba
+obligatoria `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`.
 
 Resultado: no se abre codigo ni se relanza otro padre. La entrega conserva el
 rastro documental valido de SRV-TASK-024 y corrige solo esta revision: el
