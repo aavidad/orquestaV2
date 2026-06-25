@@ -24,6 +24,26 @@ func TestHandleRegisterFinalValidationCommandV0ReturnsEventAndNoOutbox(t *testin
 	}
 }
 
+func TestHandleRegisterFinalValidationCommandV0AceptaRunSinMicrotareas(t *testing.T) {
+	run := mustHandlerStartedRunV0(t)
+	open := mustOpenPhaseCommandV0(t, "cmd-open-final-validation-run-level", "idem-open-final-validation-run-level", OrchestrationPhaseValidacionFinalV0)
+	run = mustApplySingleCommandEventV0(t, run, open)
+	payload := validRegisterFinalValidationPayloadV0("validation-run-level")
+	payload.ClosedTaskRef = ""
+	payload.Summary = "Registrar validacion final compacta de una run goal-first."
+	command := mustRegisterFinalValidationCommandWithPayloadV0(t, "cmd-final-validation-run-level", "idem-final-validation-run-level", payload)
+
+	result, err := HandleCommandV0(run, command)
+	if err != nil {
+		t.Fatalf("handle run-level RegisterFinalValidation: %v", err)
+	}
+	assertSingleEventTypeV0(t, result, OrchestrationEventFinalValidationRegisteredV0)
+	next := mustApplySingleCommandEventV0(t, run, command)
+	if !finalValidationAlreadyReflectedV0(next, "validation-run-level") {
+		t.Fatalf("validacion run-level no proyectada: %+v", next.Validations)
+	}
+}
+
 func TestApplyFinalValidationRegisteredV0ProjectsRefOnce(t *testing.T) {
 	run := mustFinalValidationReadyRunV0(t)
 	event := mustFinalValidationRegisteredEventV0(t, "evt-final-validation-reducer-001", run.LastSequence+1, "validation-001")

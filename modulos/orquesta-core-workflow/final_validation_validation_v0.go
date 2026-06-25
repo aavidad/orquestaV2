@@ -23,10 +23,9 @@ func validateRegisterFinalValidationCommandPayloadDataV0(payload RegisterFinalVa
 
 func validateFinalValidationRegisteredPayloadDataV0(payload FinalValidationRegisteredPayloadV0) error {
 	if err := requirePayloadFieldsV0(map[string]string{
-		"validation_ref":  payload.ValidationRef,
-		"phase_id":        payload.PhaseID,
-		"closed_task_ref": payload.ClosedTaskRef,
-		"summary":         payload.Summary,
+		"validation_ref": payload.ValidationRef,
+		"phase_id":       payload.PhaseID,
+		"summary":        payload.Summary,
 	}); err != nil {
 		return err
 	}
@@ -47,10 +46,9 @@ func validateFinalValidationRegisteredPayloadDataV0(payload FinalValidationRegis
 
 func validateRegisterFinalValidationRequiredV0(payload RegisterFinalValidationCommandPayloadV0) error {
 	if err := requireCommandPayloadFieldsV0(map[string]string{
-		"validation_ref":  payload.ValidationRef,
-		"phase_id":        payload.PhaseID,
-		"closed_task_ref": payload.ClosedTaskRef,
-		"summary":         payload.Summary,
+		"validation_ref": payload.ValidationRef,
+		"phase_id":       payload.PhaseID,
+		"summary":        payload.Summary,
 	}); err != nil {
 		return err
 	}

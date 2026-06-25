@@ -119,14 +119,15 @@ type ObserveAppDirectorGoalRequestV0 struct {
 }
 
 type ObserveAppDirectorGoalResultV0 struct {
-	SchemaVersion   string                               `json:"schema_version"`
-	Status          string                               `json:"status"`
-	RunRef          string                               `json:"run_ref"`
-	GoalRef         string                               `json:"goal_ref"`
-	ExternalGoalRef string                               `json:"external_goal_ref,omitempty"`
-	GoalResult      orquestagoal.GoalWorkResultV0        `json:"goal_result,omitempty"`
-	Closure         orquestagoal.GoalClosureValidationV0 `json:"closure,omitempty"`
-	EvidenceRefs    []string                             `json:"evidence_refs,omitempty"`
+	SchemaVersion   string                                  `json:"schema_version"`
+	Status          string                                  `json:"status"`
+	RunRef          string                                  `json:"run_ref"`
+	GoalRef         string                                  `json:"goal_ref"`
+	ExternalGoalRef string                                  `json:"external_goal_ref,omitempty"`
+	Run             orquestacoreworkflow.OrchestrationRunV0 `json:"run,omitempty"`
+	GoalResult      orquestagoal.GoalWorkResultV0           `json:"goal_result,omitempty"`
+	Closure         orquestagoal.GoalClosureValidationV0    `json:"closure,omitempty"`
+	EvidenceRefs    []string                                `json:"evidence_refs,omitempty"`
 }
 
 type StartAppDirectorResultV0 struct {

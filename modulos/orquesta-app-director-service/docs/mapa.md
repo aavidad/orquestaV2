@@ -8,6 +8,9 @@ No decide runtime, proveedor, HOME, DB, REST, MCP, web, Codex ni OPES.
 
 - `StartAppDirectorV0`: valida `AppSpecRequestV0`, prepara intake, persiste el
   run inicial y ejecuta el loop con los puertos aportados por la composicion.
+- `ObserveAppDirectorGoalV0`: observa el goal externo de un arranque
+  `goal-first`, persiste resultado/closure y refleja la salida terminal en la
+  run del core como cierre aceptado o bloqueo causal por puertos inyectados.
 - `ContinueAppDirectorV0`: reentra sobre un run existente, materializa un plan
   operativo si llega, recupera `OperationalDirectorPlanStateV0`, resuelve waits
   acotados y avanza review/tests/replan/cierre cuando hay causalidad suficiente.

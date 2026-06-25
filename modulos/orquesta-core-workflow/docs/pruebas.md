@@ -901,3 +901,12 @@ Ultima ejecucion: 2026-06-01, ok, go test -count=1 ./modulos/orquesta-core-workf
 Riesgos: Los alias son cerrados y no sustituyen validacion causal ni autorizacion
 de efectos externos.
 ```
+
+```text
+Caso: ncw_078_validacion_final_run_level_sin_microtareas
+Tipo: contrato
+Comando: go test -count=1 ./modulos/orquesta-core-workflow -run 'TestHandleRegisterFinalValidationCommandV0AceptaRunSinMicrotareas|TestRegisterFinalValidationCommandV0RejectsMissingClosedTask|TestFinalValidationRegisteredEventV0RejectsMissingClosedTask|TestCloseRun'
+Evidencia esperada: `RegisterFinalValidation` acepta `closed_task_ref` vacio solo para runs sin tareas, conserva rechazo cuando hay microtareas sin cierre causal y `CloseRun` sigue exigiendo `validation_ref` proyectada.
+Ultima ejecucion: 2026-06-25, ok, comando focal anterior.
+Riesgos: Este modo esta pensado para composiciones goal-first donde el trabajo no se materializa como `WorkflowTaskV0`; no debe usarse para saltarse cierre causal de microtareas.
+```

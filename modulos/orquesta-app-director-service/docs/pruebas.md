@@ -133,9 +133,21 @@ Evidencia 2026-05-09:
 - `TestStartAppDirectorV0ConsumesDirectorDeliverySource`;
 - `TestComposeStartAppDirectorProviderV0IncludesReviewGateSource`;
 - `TestContinueAppDirectorV0ProcessesReviewGateSource`;
+- `TestStartAppDirectorV0GoalFirstLanzaGoalYNoEjecutaLoopLegacy`;
+- `TestObserveAppDirectorGoalV0PersisteResultadoCompletoYClosure`;
+- `TestObserveAppDirectorGoalV0BloqueaRunSiClosureNoAcepta`;
 - `TestStartAppDirectorV0ReturnsFactoryValidationIssues`;
 - `TestStartAppDirectorV0RequiresInjectedPorts`;
 - `TestAppDirectorServiceArchitectureV0NoImportaLegacyNiDBHardcodeada`.
+
+Evidencia 2026-06-25:
+
+- `go test -count=1 ./modulos/orquesta-app-director-service -run 'TestObserveAppDirectorGoal|TestStartAppDirectorV0GoalFirst'`;
+- `go test -count=1 ./modulos/orquesta-core-workflow ./modulos/orquesta-app-director-service ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
+
+Cobertura esperada: `goal-first` no arranca loop legacy en el arranque, pero al
+observar un goal terminal cierra la run si la closure es aceptada y la bloquea
+si faltan artefactos/evidencias del contrato.
 
 Evidencia real 2026-05-09:
 

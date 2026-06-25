@@ -9,6 +9,12 @@ func ensureRegisterFinalValidationCommandAllowedV0(current OrchestrationRunV0, c
 	if err := ensureRegisterFinalValidationCommandPhaseCurrentV0(current, payload.PhaseID); err != nil {
 		return err
 	}
+	if strings.TrimSpace(payload.ClosedTaskRef) == "" {
+		if len(current.Tasks) != 0 || len(current.ClosedTasks) != 0 {
+			return commandErrorV0(ErrTransicionInvalidaV0, "payload.closed_task_ref")
+		}
+		return nil
+	}
 	if !taskClosedAlreadyReflectedV0(current, payload.ClosedTaskRef) {
 		return commandErrorV0(ErrTransicionInvalidaV0, "payload.closed_task_ref")
 	}
@@ -21,6 +27,12 @@ func ensureFinalValidationRegisteredEventAllowedV0(current OrchestrationRunV0, e
 	}
 	if err := ensureFinalValidationRegisteredEventPhaseCurrentV0(current, payload.PhaseID); err != nil {
 		return err
+	}
+	if strings.TrimSpace(payload.ClosedTaskRef) == "" {
+		if len(current.Tasks) != 0 || len(current.ClosedTasks) != 0 {
+			return eventErrorV0(ErrSecuenciaInvalidaV0, "payload.closed_task_ref")
+		}
+		return nil
 	}
 	if !taskClosedAlreadyReflectedV0(current, payload.ClosedTaskRef) {
 		return eventErrorV0(ErrSecuenciaInvalidaV0, "payload.closed_task_ref")

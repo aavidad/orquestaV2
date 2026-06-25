@@ -870,3 +870,13 @@ Validacion: 2026-05-21, ok, go test -count=1 ./modulos/orquesta-core-workflow -r
 Bloqueos: No guarda contenido de ACK ni conoce runtime; la observacion y validacion de archivos sigue en adaptadores externos.
 Estado: completada local
 ```
+
+```text
+ID: NCW-078
+Objetivo: Permitir validacion final run-level para runs goal-first sin microtareas.
+Write-set: final_validation_flow_v0.go, final_validation_validation_v0.go, final_validation_v0_test.go, docs locales.
+Contrato: RegisterFinalValidation, FinalValidationRegistered, OrchestrationRunV0.Validations.
+Validacion: 2026-06-25, ok, go test -count=1 ./modulos/orquesta-core-workflow -run 'TestHandleRegisterFinalValidationCommandV0AceptaRunSinMicrotareas|TestRegisterFinalValidationCommandV0RejectsMissingClosedTask|TestFinalValidationRegisteredEventV0RejectsMissingClosedTask|TestCloseRun'.
+Bloqueos: Solo aplica si la run no tiene tareas ni tareas cerradas; los cierres con microtareas siguen requiriendo `closed_task_ref` causal.
+Estado: completada local
+```

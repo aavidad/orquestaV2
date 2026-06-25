@@ -3,10 +3,18 @@ package orquestaappdirectorservice
 import (
 	"context"
 	"strings"
+	"time"
 
 	orquestaappdirectorintake "orquesta/modulos/orquesta-app-director-intake"
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestafactory "orquesta/modulos/orquesta-factory"
 	orquestagoal "orquesta/modulos/orquesta-goal"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+)
+
+const (
+	appDirectorGoalClosureReasonAcceptedV0 = "goal_first_accepted"
+	appDirectorGoalClosureReasonBlockedV0  = "goal_first_closure_blocked"
 )
 
 func startAppDirectorGoalFirstV0(
@@ -79,6 +87,7 @@ func ObserveAppDirectorGoalV0(
 	state.Status = result.Status
 	state.EvidenceRefs = compactStartAppDirectorStringsV0(append(state.EvidenceRefs, result.EvidenceRefs...))
 	closure := orquestagoal.GoalClosureValidationV0{}
+	run := orquestacoreworkflow.OrchestrationRunV0{}
 	if startAppDirectorGoalResultTerminalV0(result.Status) {
 		if ports.GoalClosureValidator == nil {
 			return ObserveAppDirectorGoalResultV0{}, AppDirectorServiceIssueV0{Field: "ports.goal_closure_validator"}
@@ -89,6 +98,10 @@ func ObserveAppDirectorGoalV0(
 		}
 		state.LastClosure = &closure
 		state.EvidenceRefs = compactStartAppDirectorStringsV0(append(state.EvidenceRefs, closure.EvidenceRefs...))
+		run, err = reflectAppDirectorGoalClosureInRunV0(ctx, request, state, result, closure, ports)
+		if err != nil {
+			return ObserveAppDirectorGoalResultV0{}, err
+		}
 	}
 	state, err = NewAppDirectorGoalStateV0(state)
 	if err != nil {
@@ -103,10 +116,295 @@ func ObserveAppDirectorGoalV0(
 		RunRef:          state.RunRef,
 		GoalRef:         state.GoalRef,
 		ExternalGoalRef: state.ExternalGoalRef,
+		Run:             run,
 		GoalResult:      result,
 		Closure:         closure,
 		EvidenceRefs:    append([]string(nil), state.EvidenceRefs...),
 	}, nil
+}
+
+func reflectAppDirectorGoalClosureInRunV0(
+	ctx context.Context,
+	request ObserveAppDirectorGoalRequestV0,
+	state AppDirectorGoalStateV0,
+	result orquestagoal.GoalWorkResultV0,
+	closure orquestagoal.GoalClosureValidationV0,
+	ports StartAppDirectorPortsV0,
+) (orquestacoreworkflow.OrchestrationRunV0, error) {
+	if ports.RunStore == nil {
+		return orquestacoreworkflow.OrchestrationRunV0{}, AppDirectorServiceIssueV0{Field: "ports.run_store"}
+	}
+	if ports.EventSink == nil {
+		return orquestacoreworkflow.OrchestrationRunV0{}, AppDirectorServiceIssueV0{Field: "ports.event_sink"}
+	}
+	run, err := ports.RunStore.LoadRunV0(ctx, state.RunRef)
+	if err != nil {
+		return orquestacoreworkflow.OrchestrationRunV0{}, err
+	}
+	if run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+		return run, nil
+	}
+	if !closure.Accepted {
+		return blockAppDirectorGoalRunV0(ctx, request, state, result, closure, ports)
+	}
+	return closeAppDirectorGoalRunV0(ctx, request, run, state, result, closure, ports)
+}
+
+func blockAppDirectorGoalRunV0(
+	ctx context.Context,
+	request ObserveAppDirectorGoalRequestV0,
+	state AppDirectorGoalStateV0,
+	result orquestagoal.GoalWorkResultV0,
+	closure orquestagoal.GoalClosureValidationV0,
+	ports StartAppDirectorPortsV0,
+) (orquestacoreworkflow.OrchestrationRunV0, error) {
+	blockerRef := appDirectorGoalBlockerRefV0(state)
+	command, err := orquestacoreworkflow.NewBlockRunCommandV0(
+		appDirectorGoalCommandMetaV0(request, state.RunRef, "block-goal", blockerRef),
+		orquestacoreworkflow.BlockRunCommandPayloadV0{
+			BlockerID:    blockerRef,
+			ReasonCode:   appDirectorGoalClosureReasonBlockedV0,
+			Summary:      "Goal-first bloqueado por cierre no aceptado.",
+			SourceGroup:  "app-director-goal-first",
+			EvidenceRefs: appDirectorGoalCommandEvidenceRefsV0(state, result, closure),
+		},
+	)
+	if err != nil {
+		return orquestacoreworkflow.OrchestrationRunV0{}, err
+	}
+	if _, err := orquestacionnucleoapp.HandleStoredWorkflowCommandV0(ctx, ports.RunStore, ports.EventSink, command); err != nil {
+		return orquestacoreworkflow.OrchestrationRunV0{}, err
+	}
+	return ports.RunStore.LoadRunV0(ctx, state.RunRef)
+}
+
+func closeAppDirectorGoalRunV0(
+	ctx context.Context,
+	request ObserveAppDirectorGoalRequestV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	state AppDirectorGoalStateV0,
+	result orquestagoal.GoalWorkResultV0,
+	closure orquestagoal.GoalClosureValidationV0,
+	ports StartAppDirectorPortsV0,
+) (orquestacoreworkflow.OrchestrationRunV0, error) {
+	run, err := resolveAppDirectorGoalBlockerIfPresentV0(ctx, request, run, state, result, closure, ports)
+	if err != nil {
+		return run, err
+	}
+	if run.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 {
+		return run, nil
+	}
+	validationRef := appDirectorGoalValidationRefV0(state)
+	closureRef := appDirectorGoalClosureRefV0(state)
+	if run, err = openAppDirectorGoalFinalValidationIfNeededV0(ctx, request, run, state, validationRef, ports); err != nil {
+		return run, err
+	}
+	if run, err = registerAppDirectorGoalFinalValidationIfNeededV0(ctx, request, run, state, result, closure, validationRef, ports); err != nil {
+		return run, err
+	}
+	if run, err = openAppDirectorGoalClosureIfNeededV0(ctx, request, run, state, closureRef, ports); err != nil {
+		return run, err
+	}
+	return closeAppDirectorGoalRunIfNeededV0(ctx, request, run, state, result, closure, validationRef, closureRef, ports)
+}
+
+func resolveAppDirectorGoalBlockerIfPresentV0(
+	ctx context.Context,
+	request ObserveAppDirectorGoalRequestV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	state AppDirectorGoalStateV0,
+	result orquestagoal.GoalWorkResultV0,
+	closure orquestagoal.GoalClosureValidationV0,
+	ports StartAppDirectorPortsV0,
+) (orquestacoreworkflow.OrchestrationRunV0, error) {
+	blockerRef := appDirectorGoalBlockerRefV0(state)
+	if !appDirectorGoalRunHasBlockerV0(run, blockerRef) {
+		return run, nil
+	}
+	return applyAppDirectorGoalWorkflowCommandV0(ctx, request, state.RunRef, "resolve-goal-blocker", blockerRef, ports, func(meta orquestacoreworkflow.OrchestrationCommandMetaV0) (orquestacoreworkflow.OrchestrationCommandV0, error) {
+		return orquestacoreworkflow.NewResolveRunBlockerCommandV0(meta, orquestacoreworkflow.ResolveRunBlockerCommandPayloadV0{
+			BlockerID:    blockerRef,
+			ReasonCode:   appDirectorGoalClosureReasonAcceptedV0,
+			Summary:      "Goal-first aceptado tras observacion de cierre.",
+			EvidenceRefs: appDirectorGoalCommandEvidenceRefsV0(state, result, closure),
+		})
+	})
+}
+
+func openAppDirectorGoalFinalValidationIfNeededV0(
+	ctx context.Context,
+	request ObserveAppDirectorGoalRequestV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	state AppDirectorGoalStateV0,
+	validationRef string,
+	ports StartAppDirectorPortsV0,
+) (orquestacoreworkflow.OrchestrationRunV0, error) {
+	if run.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseValidacionFinalV0 &&
+		run.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseCierreV0 {
+		return applyAppDirectorGoalWorkflowCommandV0(ctx, request, state.RunRef, "open-final-validation", validationRef, ports, func(meta orquestacoreworkflow.OrchestrationCommandMetaV0) (orquestacoreworkflow.OrchestrationCommandV0, error) {
+			return orquestacoreworkflow.NewOpenPhaseCommandV0(meta, orquestacoreworkflow.OpenPhaseCommandPayloadV0{
+				PhaseID: string(orquestacoreworkflow.OrchestrationPhaseValidacionFinalV0),
+				Reason:  "Validacion final run-level de goal-first aceptado.",
+			})
+		})
+	}
+	return run, nil
+}
+
+func registerAppDirectorGoalFinalValidationIfNeededV0(
+	ctx context.Context,
+	request ObserveAppDirectorGoalRequestV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	state AppDirectorGoalStateV0,
+	result orquestagoal.GoalWorkResultV0,
+	closure orquestagoal.GoalClosureValidationV0,
+	validationRef string,
+	ports StartAppDirectorPortsV0,
+) (orquestacoreworkflow.OrchestrationRunV0, error) {
+	if !appDirectorGoalStringInSetV0(run.Validations, validationRef) {
+		return applyAppDirectorGoalWorkflowCommandV0(ctx, request, state.RunRef, "register-final-validation", validationRef, ports, func(meta orquestacoreworkflow.OrchestrationCommandMetaV0) (orquestacoreworkflow.OrchestrationCommandV0, error) {
+			return orquestacoreworkflow.NewRegisterFinalValidationCommandV0(meta, orquestacoreworkflow.RegisterFinalValidationCommandPayloadV0{
+				ValidationRef: validationRef,
+				PhaseID:       string(orquestacoreworkflow.OrchestrationPhaseValidacionFinalV0),
+				Summary:       "Validacion final run-level de goal-first aceptado.",
+				EvidenceRefs:  appDirectorGoalCommandEvidenceRefsV0(state, result, closure),
+			})
+		})
+	}
+	return run, nil
+}
+
+func openAppDirectorGoalClosureIfNeededV0(
+	ctx context.Context,
+	request ObserveAppDirectorGoalRequestV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	state AppDirectorGoalStateV0,
+	closureRef string,
+	ports StartAppDirectorPortsV0,
+) (orquestacoreworkflow.OrchestrationRunV0, error) {
+	if run.CurrentPhase != orquestacoreworkflow.OrchestrationPhaseCierreV0 {
+		return applyAppDirectorGoalWorkflowCommandV0(ctx, request, state.RunRef, "open-closure", closureRef, ports, func(meta orquestacoreworkflow.OrchestrationCommandMetaV0) (orquestacoreworkflow.OrchestrationCommandV0, error) {
+			return orquestacoreworkflow.NewOpenPhaseCommandV0(meta, orquestacoreworkflow.OpenPhaseCommandPayloadV0{
+				PhaseID: string(orquestacoreworkflow.OrchestrationPhaseCierreV0),
+				Reason:  "Cierre de run goal-first aceptada.",
+			})
+		})
+	}
+	return run, nil
+}
+
+func closeAppDirectorGoalRunIfNeededV0(
+	ctx context.Context,
+	request ObserveAppDirectorGoalRequestV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	state AppDirectorGoalStateV0,
+	result orquestagoal.GoalWorkResultV0,
+	closure orquestagoal.GoalClosureValidationV0,
+	validationRef string,
+	closureRef string,
+	ports StartAppDirectorPortsV0,
+) (orquestacoreworkflow.OrchestrationRunV0, error) {
+	if !appDirectorGoalStringInSetV0(run.Closures, closureRef) {
+		return applyAppDirectorGoalWorkflowCommandV0(ctx, request, state.RunRef, "close-run", closureRef, ports, func(meta orquestacoreworkflow.OrchestrationCommandMetaV0) (orquestacoreworkflow.OrchestrationCommandV0, error) {
+			return orquestacoreworkflow.NewCloseRunCommandV0(meta, orquestacoreworkflow.CloseRunCommandPayloadV0{
+				ClosureRef:    closureRef,
+				PhaseID:       string(orquestacoreworkflow.OrchestrationPhaseCierreV0),
+				ValidationRef: validationRef,
+				Summary:       "Run goal-first cerrada con closure aceptada.",
+				EvidenceRefs:  appDirectorGoalCommandEvidenceRefsV0(state, result, closure),
+			})
+		})
+	}
+	return run, nil
+}
+
+type appDirectorGoalWorkflowCommandBuilderV0 func(orquestacoreworkflow.OrchestrationCommandMetaV0) (orquestacoreworkflow.OrchestrationCommandV0, error)
+
+func applyAppDirectorGoalWorkflowCommandV0(
+	ctx context.Context,
+	request ObserveAppDirectorGoalRequestV0,
+	runRef string,
+	action string,
+	ref string,
+	ports StartAppDirectorPortsV0,
+	build appDirectorGoalWorkflowCommandBuilderV0,
+) (orquestacoreworkflow.OrchestrationRunV0, error) {
+	command, err := build(appDirectorGoalCommandMetaV0(request, runRef, action, ref))
+	if err != nil {
+		return orquestacoreworkflow.OrchestrationRunV0{}, err
+	}
+	if _, err := orquestacionnucleoapp.HandleStoredWorkflowCommandV0(ctx, ports.RunStore, ports.EventSink, command); err != nil {
+		return orquestacoreworkflow.OrchestrationRunV0{}, err
+	}
+	return ports.RunStore.LoadRunV0(ctx, runRef)
+}
+
+func appDirectorGoalCommandMetaV0(
+	request ObserveAppDirectorGoalRequestV0,
+	runRef string,
+	action string,
+	ref string,
+) orquestacoreworkflow.OrchestrationCommandMetaV0 {
+	token := appDirectorGoalSafeTokenV0(runRef, ref, action)
+	return orquestacoreworkflow.OrchestrationCommandMetaV0{
+		CommandID:      "cmd-app-director-goal-" + strings.TrimSpace(action) + "-" + token,
+		RunID:          strings.TrimSpace(runRef),
+		IdempotencyKey: "idem-app-director-goal-" + strings.TrimSpace(action) + "-" + token,
+		CorrelationID:  strings.TrimSpace(request.CorrelationID),
+		RequestedBy:    firstStartAppDirectorGoalValueV0(request.RequestedBy, "orquesta-app-director-service"),
+		OccurredAt:     appDirectorGoalOccurredAtV0(request.OccurredAt),
+	}
+}
+
+func appDirectorGoalOccurredAtV0(value string) string {
+	if trimmed := strings.TrimSpace(value); trimmed != "" {
+		return trimmed
+	}
+	return time.Now().UTC().Format(time.RFC3339)
+}
+
+func appDirectorGoalBlockerRefV0(state AppDirectorGoalStateV0) string {
+	return "blocker-ref-app-director-goal-" + appDirectorGoalSafeTokenV0(state.RunRef, state.GoalRef)
+}
+
+func appDirectorGoalValidationRefV0(state AppDirectorGoalStateV0) string {
+	return "validation-ref-app-director-goal-" + appDirectorGoalSafeTokenV0(state.RunRef, state.GoalRef)
+}
+
+func appDirectorGoalClosureRefV0(state AppDirectorGoalStateV0) string {
+	return "closure-ref-app-director-goal-" + appDirectorGoalSafeTokenV0(state.RunRef, state.GoalRef)
+}
+
+func appDirectorGoalCommandEvidenceRefsV0(
+	state AppDirectorGoalStateV0,
+	result orquestagoal.GoalWorkResultV0,
+	closure orquestagoal.GoalClosureValidationV0,
+) []string {
+	refs := compactStartAppDirectorStringsV0(append(append(append(
+		[]string{"evidence-ref-app-director-goal-observed-v0"},
+		state.EvidenceRefs...,
+	), result.EvidenceRefs...), closure.EvidenceRefs...))
+	if len(refs) > 20 {
+		return append([]string(nil), refs[:20]...)
+	}
+	return refs
+}
+
+func appDirectorGoalRunHasBlockerV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	blockerRef string,
+) bool {
+	return appDirectorGoalStringInSetV0(run.Blockers, blockerRef)
+}
+
+func appDirectorGoalStringInSetV0(values []string, want string) bool {
+	want = strings.TrimSpace(want)
+	for _, value := range values {
+		if strings.TrimSpace(value) == want {
+			return true
+		}
+	}
+	return false
 }
 
 func newStartAppDirectorGoalStateV0(

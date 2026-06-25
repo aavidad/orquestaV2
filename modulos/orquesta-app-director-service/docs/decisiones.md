@@ -278,3 +278,12 @@ inyecta, el provider del nucleo convierte planes compactos en
 `ReplanFollowupCandidates`. Si no se inyecta, el comportamiento no cambia.
 Estado: aceptada.
 ```
+
+```text
+Fecha: 2026-06-25
+Decision: Reflejar la salida terminal de `goal-first` como cierre o bloqueo del run del core.
+Motivo: con Codex Goal el ciclo de trabajo puede vivir fuera del loop legacy de microtareas, pero la API de Orquesta necesita que la run durable deje de quedar activa indefinidamente.
+Alternativas: dejar la run solo con estado de goal persistido; fabricar microtareas sinteticas; mover cierre al adaptador web/CLI.
+Impacto: `ObserveAppDirectorGoalV0` usa `GoalClosureValidator`, `RunStore` y `EventSink`. Closure aceptada emite fases, `FinalValidationRegistered` run-level y `RunClosed`; closure no aceptada emite `RunBlocked` con blocker estable. La composicion sigue aportando puertos y el servicio no conoce runtime, proveedor, DB ni filesystem.
+Estado: aceptada.
+```

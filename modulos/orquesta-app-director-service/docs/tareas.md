@@ -251,3 +251,23 @@ Notas de test:
 - si aparece un blocker nuevo, anadir una prueba focal con la cadena causal que
   lo hace reparable o explicitar que queda bloqueado; no ampliar validaciones por
   texto libre ni mover pendientes reales cerrados de la matriz.
+
+## APP-DIR-SVC-016
+
+Objetivo: reflejar el resultado terminal de `goal-first` en la run durable del
+core.
+
+Estado: hecho.
+
+Cambio: `ObserveAppDirectorGoalV0` exige `RunStore` y `EventSink` cuando el
+goal llega a estado terminal. Si la closure es aceptada, abre
+`validacion_final`, registra validacion run-level sin microtareas, abre
+`cierre` y emite `CloseRun`. Si la closure no es aceptada, emite `BlockRun` con
+blocker estable de goal-first. El servicio sigue sin conocer runtime, proveedor
+ni DB; todo cruza por puertos.
+
+Validacion:
+
+```sh
+go test -count=1 ./modulos/orquesta-app-director-service -run 'TestObserveAppDirectorGoal|TestStartAppDirectorV0GoalFirst'
+```

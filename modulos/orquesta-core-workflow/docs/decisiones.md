@@ -893,3 +893,13 @@ Contratos afectados: WorkflowTaskV0, WorkProfileV0, ReviewResultV0,
 AssessAgentWork, AgentWorkAssessed, RecordReplanDecision.
 Estado: aceptada local en NCW-077
 ```
+
+```text
+Fecha: 2026-06-25
+Decision: Permitir `RegisterFinalValidation` run-level sin `closed_task_ref` solo para runs sin microtareas.
+Motivo: las composiciones goal-first delegan el ciclo de trabajo en un goal externo y pueden cerrar una run del core sin haber materializado `WorkflowTaskV0`; exigir una tarea cerrada obligaria a fabricar microtareas falsas.
+Alternativas: mantener el requisito estricto y dejar la run activa; crear una microtarea sintetica de goal; cerrar la run desde el adaptador sin pasar por `FinalValidationRegistered`.
+Impacto: `closed_task_ref` deja de ser obligatorio en payload, pero el handler/reducer solo aceptan valor vacio si `OrchestrationRunV0.Tasks` y `ClosedTasks` estan vacios. Runs con microtareas conservan la causalidad anterior.
+Contratos afectados: RegisterFinalValidation, FinalValidationRegistered, CloseRun, OrchestrationRunV0.Validations.
+Estado: aceptada local en NCW-078
+```

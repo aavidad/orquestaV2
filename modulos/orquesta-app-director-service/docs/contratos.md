@@ -166,6 +166,14 @@ run no activo, el servicio no llama a la fuente de cierre ni intenta
 `closure_reason=operational-closure-run-not-active` para que el adaptador
 resuelva el bloqueo causal antes de cerrar.
 
+Regla goal-first: si `ObserveAppDirectorGoalV0` observa un goal terminal, debe
+validar la closure con el puerto inyectado. Closure aceptada refleja el cierre
+del run mediante comandos del core (`OpenPhase(validacion_final)`,
+`RegisterFinalValidation` run-level, `OpenPhase(cierre)`, `CloseRun`). Closure
+no aceptada refleja `BlockRun` con blocker estable. Si faltan `RunStore` o
+`EventSink`, el servicio devuelve error publico de puerto ausente; no inventa
+persistencia, runtime ni proveedor.
+
 Regla del primer corte operativo: si `ContinueAppDirectorV0` recibe un plan
 `ready`, usa `OperationalDirectorPlanMaterializerV0`, guarda las
 `WorkflowTaskV0`, emite `CreateMicrotask`, deriva la primera ola/cohorte como
