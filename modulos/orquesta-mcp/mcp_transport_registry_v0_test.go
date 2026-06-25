@@ -32,6 +32,7 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 	for _, name := range []string{
 		MCPNuevaAppToolNameV0,
 		MCPArrancarDirectorAppToolNameV0,
+		MCPObserveAppDirectorGoalToolNameV0,
 		MCPDirectorAgentDecisionToolNameV0,
 		MCPDirectorSupervisorBriefingToolNameV0,
 		MCPDirectorStatsToolNameV0,
@@ -69,7 +70,7 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 		}
 	}
 	assertTransportPayloadSaneadoMCPTestV0(t, transport.resources, 9000)
-	assertTransportPayloadSaneadoMCPTestV0(t, transport.tools, 25000)
+	assertTransportPayloadSaneadoMCPTestV0(t, transport.tools, 26000)
 }
 
 func TestMCPTransportV0SirveResourceYToolConFakeEnMemoria(t *testing.T) {
@@ -181,6 +182,27 @@ func TestMCPTransportV0ArrancarDirectorQuedaOptInSinPuerto(t *testing.T) {
 	}
 	if result.ErrorCode != MCPTransportToolUnboundV0 {
 		t.Fatalf("arrancar director debe ser opt-in: %+v", result)
+	}
+	assertTransportPayloadSaneadoMCPTestV0(t, json.RawMessage(output), 300)
+}
+
+func TestMCPTransportV0ObserveAppDirectorGoalQuedaOptInSinPuerto(t *testing.T) {
+	transport := newFakeMCPTransportV0()
+	if err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{}); err != nil {
+		t.Fatalf("register transport: %v", err)
+	}
+	output, err := transport.CallToolV0(context.Background(), MCPObserveAppDirectorGoalToolNameV0, MCPObserveAppDirectorGoalToolInputV0{
+		RunRef: "run-ref-goal-unbound-001",
+	})
+	if err != nil {
+		t.Fatalf("call observe goal unbound: %v", err)
+	}
+	var result MCPTransportToolErrorV0
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("decode unbound: %v", err)
+	}
+	if result.Tool != MCPObserveAppDirectorGoalToolNameV0 || result.ErrorCode != MCPTransportToolUnboundV0 {
+		t.Fatalf("observe director goal debe ser opt-in: %+v", result)
 	}
 	assertTransportPayloadSaneadoMCPTestV0(t, json.RawMessage(output), 300)
 }

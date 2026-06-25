@@ -19,6 +19,7 @@ Rutas v0:
 - `/run-queue`
 - `/api/v0/apps/spec`
 - `/api/v0/apps/director`
+- `/api/v0/apps/director/goal/observe`
 - `/api/v0/apps/{app_ref}/changes`
 - `/api/v0/director/stats`
 - `/api/v0/autoprogramming/validate-request`

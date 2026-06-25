@@ -53,6 +53,17 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.html.defaults",
 		"nueva_app.html.sin_resultado",
 		"nueva_app.html.backlog_vacio",
+		"nueva_app.goal.titulo",
+		"nueva_app.goal.run_ref",
+		"nueva_app.goal.goal_ref",
+		"nueva_app.goal.external_goal_ref",
+		"nueva_app.goal.goal_status",
+		"nueva_app.goal.run_status",
+		"nueva_app.goal.closure_status",
+		"nueva_app.goal.update",
+		"nueva_app.goal.updating",
+		"nueva_app.goal.updated",
+		"nueva_app.goal.error",
 		"nueva_app.wizard.nav.home",
 		"nueva_app.wizard.nav.ops",
 		"nueva_app.wizard.nav.autoprogramming",
@@ -265,6 +276,12 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
     .summary-list{display:grid;gap:8px;color:var(--muted)}
     .summary-list strong{color:var(--ink)}
     .status{border-left:4px solid var(--brand)}
+    .goal-panel{border-left:4px solid #2563eb}
+    .goal-grid{display:grid;gap:7px;color:var(--muted)}
+    .goal-grid div{overflow-wrap:anywhere}
+    .goal-grid strong{color:var(--ink)}
+    .goal-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}
+    .goal-feedback{color:var(--muted);font-size:.9rem}
     .issue{border-left:4px solid var(--bad)}
     .form-error-summary{margin:14px 18px 0;border:1px solid #f0b4ae;border-left:4px solid var(--bad);border-radius:10px;background:#fff7f5;padding:12px;color:#621b16}
     .form-error-summary strong{display:block;margin-bottom:4px}
@@ -485,6 +502,18 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
     <aside class="side">
       <section class="panel"><h2>{{index .HTML "nueva_app.wizard.resumen_vivo"}}</h2><div id="wizard-summary" class="summary-list"></div></section>
       <section class="panel status"><h2>{{index .HTML "nueva_app.html.resultado"}}</h2><p>{{.Page.Textos.Estado}}</p>{{if .Page.ViewModel.RequestID}}<p><code>{{.Page.ViewModel.RequestID}}</code></p>{{end}}</section>
+      {{with .Page.ViewModel.Director}}<section class="panel goal-panel" data-goal-panel data-run-ref="{{.RunRef}}" data-goal-ref="{{.GoalRef}}" data-goal-updating="{{index $.HTML "nueva_app.goal.updating"}}" data-goal-updated="{{index $.HTML "nueva_app.goal.updated"}}" data-goal-error="{{index $.HTML "nueva_app.goal.error"}}">
+        <h2>{{index $.HTML "nueva_app.goal.titulo"}}</h2>
+        <div class="goal-grid">
+          {{if .RunRef}}<div><strong>{{index $.HTML "nueva_app.goal.run_ref"}}:</strong> <code data-goal-run-ref>{{.RunRef}}</code></div>{{end}}
+          {{if .GoalRef}}<div><strong>{{index $.HTML "nueva_app.goal.goal_ref"}}:</strong> <code data-goal-goal-ref>{{.GoalRef}}</code></div>{{end}}
+          {{if .ExternalGoalRef}}<div><strong>{{index $.HTML "nueva_app.goal.external_goal_ref"}}:</strong> <code data-goal-external-ref>{{.ExternalGoalRef}}</code></div>{{end}}
+          {{if .GoalStatus}}<div><strong>{{index $.HTML "nueva_app.goal.goal_status"}}:</strong> <code data-goal-status>{{.GoalStatus}}</code></div>{{end}}
+          <div data-goal-run-status-row hidden><strong>{{index $.HTML "nueva_app.goal.run_status"}}:</strong> <code data-goal-run-status></code></div>
+          <div data-goal-closure-status-row hidden><strong>{{index $.HTML "nueva_app.goal.closure_status"}}:</strong> <code data-goal-closure-status></code></div>
+        </div>
+        {{if .RunRef}}<div class="goal-actions"><button class="secondary" type="button" data-goal-observe>{{index $.HTML "nueva_app.goal.update"}}</button><span class="goal-feedback" data-goal-feedback aria-live="polite"></span></div>{{end}}
+      </section>{{end}}
       {{if .Page.ViewModel.ErroresPublicos}}<section class="panel issue"><h2>{{index .HTML "nueva_app.html.errores_publicos"}}</h2><ul>{{range .Page.ViewModel.ErroresPublicos}}<li><code>{{.Code}}</code> {{index $.Page.Textos.ErroresPublicos .Code}}</li>{{end}}</ul></section>{{end}}
       {{if .Page.ViewModel.ResumenApp.Nombre}}<section class="panel"><h2>{{index .HTML "nueva_app.html.resumen"}}</h2><p>{{.Page.ViewModel.ResumenApp.Nombre}} · {{.Page.ViewModel.ResumenApp.TipoApp}}</p><p>{{.Page.ViewModel.ResumenApp.Objetivo}}</p></section>{{end}}
       <section class="panel"><h2>{{.Page.Textos.BacklogPreview.Titulo}}</h2>{{if .Page.ViewModel.BacklogPreview.TotalMicrotareas}}<ol>{{range .Page.ViewModel.BacklogPreview.Microtareas}}<li><strong>{{.Key}}</strong> {{.Titulo}} <code>{{.ModuloFrontera}}</code></li>{{end}}</ol>{{else}}<p>{{index .HTML "nueva_app.html.backlog_vacio"}}</p>{{end}}</section>
@@ -523,6 +552,47 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
       document.getElementById('wizard-final-summary').innerHTML=html;
     }
     function escapeHTML(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+    async function observeGoal(button){
+      const panel=button.closest('[data-goal-panel]');
+      if(!panel||!panel.dataset.runRef)return;
+      const feedback=panel.querySelector('[data-goal-feedback]');
+      if(feedback)feedback.textContent=panel.dataset.goalUpdating||'';
+      button.disabled=true;
+      try{
+        const response=await fetch('/api/v0/apps/director/goal/observe',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','Accept':'application/json','X-Correlation-ID':panel.dataset.runRef},
+          body:JSON.stringify({run_ref:panel.dataset.runRef,requested_by:'orquesta-web-nueva-app'})
+        });
+        const result=await response.json();
+        if(!response.ok||result.estado==='error'){
+          const issue=result.errores_publicos&&result.errores_publicos[0];
+          throw new Error((issue&&(issue.message||issue.code))||panel.dataset.goalError||'error');
+        }
+        setGoalText(panel,'[data-goal-run-ref]',result.run_ref);
+        setGoalText(panel,'[data-goal-goal-ref]',result.goal_ref);
+        setGoalText(panel,'[data-goal-external-ref]',result.external_goal_ref);
+        setGoalText(panel,'[data-goal-status]',result.goal_status);
+        setGoalRow(panel,'[data-goal-run-status-row]','[data-goal-run-status]',result.run_status);
+        setGoalRow(panel,'[data-goal-closure-status-row]','[data-goal-closure-status]',result.closure_status);
+        if(feedback)feedback.textContent=panel.dataset.goalUpdated||'';
+      }catch(err){
+        if(feedback)feedback.textContent=(panel.dataset.goalError||'')+(err&&err.message?': '+err.message:'');
+      }finally{
+        button.disabled=false;
+      }
+    }
+    function setGoalText(panel,selector,value){
+      const node=panel.querySelector(selector);
+      if(node&&value)node.textContent=value;
+    }
+    function setGoalRow(panel,rowSelector,valueSelector,value){
+      const row=panel.querySelector(rowSelector);
+      const node=panel.querySelector(valueSelector);
+      if(!row||!node||!value)return;
+      node.textContent=value;
+      row.hidden=false;
+    }
     function show(index){
       step=Math.max(0,Math.min(steps.length-1,index));
       steps.forEach((node,i)=>{node.hidden=i!==step;});
@@ -756,6 +826,8 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
     const guided=document.getElementById('guided-assistant');
     if(guided){guided.addEventListener('click',event=>{const target=event.target.closest('[data-guided-action]');if(target)guidedAction(target.dataset.guidedAction);});}
     wizard.querySelectorAll('[data-preset]').forEach(node=>node.addEventListener('click',()=>preset(node.dataset.preset)));
+    const goalButton=document.querySelector('[data-goal-observe]');
+    if(goalButton)goalButton.addEventListener('click',()=>observeGoal(goalButton));
     show(0);
   }());
 </script>

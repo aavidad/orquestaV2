@@ -24,6 +24,7 @@ const (
 	RouteRefRunQueuePageV0                   = "route-ref-run-queue-page-v0"
 	RouteRefAppSpecV0                        = "route-ref-app-spec-v0"
 	RouteRefAppDirectorV0                    = "route-ref-app-director-v0"
+	RouteRefAppDirectorGoalObserveV0         = "route-ref-app-director-goal-observe-v0"
 	RouteRefAppIntakeGuidedTurnV0            = "route-ref-app-intake-guided-turn-v0"
 	RouteRefAppChangeV0                      = "route-ref-app-change-prefix-v0"
 	RouteRefAppVCSV0                         = "route-ref-app-vcs-v0"

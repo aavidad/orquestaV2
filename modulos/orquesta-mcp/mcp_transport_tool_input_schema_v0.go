@@ -35,6 +35,8 @@ func mcpTransportToolInputDTOByNameV0(name string) (any, bool) {
 		return MCPNuevaAppToolInputV0{}, true
 	case MCPArrancarDirectorAppToolNameV0:
 		return MCPArrancarDirectorAppToolInputV0{}, true
+	case MCPObserveAppDirectorGoalToolNameV0:
+		return MCPObserveAppDirectorGoalToolInputV0{}, true
 	case MCPRequestAppChangeToolNameV0:
 		return MCPRequestAppChangeToolInputV0{}, true
 	case MCPDirectorAgentDecisionToolNameV0:
@@ -148,6 +150,8 @@ func mcpTransportJSONTypeForFieldV0(typ reflect.Type) string {
 
 func mcpTransportToolRequiredFieldsV0(name string) map[string]bool {
 	switch strings.TrimSpace(name) {
+	case MCPObserveAppDirectorGoalToolNameV0:
+		return map[string]bool{"run_ref": true}
 	case MCPAppVCSToolNameV0:
 		return map[string]bool{"action": true, "app_ref": true, "repo_ref": true}
 	case MCPDirectorSupervisorBriefingToolNameV0:

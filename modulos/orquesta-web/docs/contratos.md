@@ -609,6 +609,29 @@ Implementacion actual:
 ```
 
 ```text
+Nombre: NuevaAppGoalFirstPanelV0
+Tipo: ui/html
+Version: v0
+Propietario: orquesta-web
+Consumidores: operadores en `/nueva-app`
+Campos visibles:
+- run_ref si existe
+- goal_ref
+- external_goal_ref
+- goal_status
+- run_status y closure_status tras refresco
+Invariantes:
+- Se renderiza solo si `WebNuevaAppViewModelV0.Director` esta presente.
+- El boton `Actualizar goal` aparece solo si hay `run_ref`.
+- El refresco llama por `fetch` a `POST /api/v0/apps/director/goal/observe`.
+- No valida cierre, no toca cola, no arranca runtime ni crea stores.
+- Si el arranque goal-first no trae `run_ref`, muestra refs de goal pero no
+  fuerza una observacion imposible.
+Pruebas de contrato:
+- `TestNuevaAppHTMLV0RenderizaPanelGoalFirstConActualizacion`.
+```
+
+```text
 Nombre: WebAutoprogrammingStatusV0
 Tipo: cliente_salida/dto
 Version: v0

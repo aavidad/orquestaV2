@@ -11,6 +11,7 @@ import (
 type MCPTransportBindingsV0 struct {
 	NuevaApp                   MCPTransportNuevaAppExecutorV0
 	ArrancarDirector           MCPTransportArrancarDirectorAppExecutorV0
+	ObserveDirectorGoal        MCPTransportObserveAppDirectorGoalExecutorV0
 	RequestAppChange           MCPTransportRequestAppChangeExecutorV0
 	EjecutarOrquestacion       MCPTransportEjecutarOrquestacionAppExecutorV0
 	DirectorDecision           MCPTransportDirectorAgentDecisionExecutorV0
@@ -39,6 +40,10 @@ type MCPTransportNuevaAppExecutorV0 interface {
 
 type MCPTransportArrancarDirectorAppExecutorV0 interface {
 	Execute(context.Context, MCPArrancarDirectorAppToolInputV0) (MCPArrancarDirectorAppToolResultV0, error)
+}
+
+type MCPTransportObserveAppDirectorGoalExecutorV0 interface {
+	Execute(context.Context, MCPObserveAppDirectorGoalToolInputV0) (MCPObserveAppDirectorGoalToolResultV0, error)
 }
 
 type MCPTransportRequestAppChangeExecutorV0 interface {

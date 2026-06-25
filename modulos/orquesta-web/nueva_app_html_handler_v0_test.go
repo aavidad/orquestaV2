@@ -37,6 +37,7 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		`data-guided-action="mobile_both"`,
 		`data-guided-action="data_management"`,
 		`/api/v0/apps/intake/guided-turn`,
+		`/api/v0/apps/director/goal/observe`,
 		`data-goto-step="0"`,
 		`data-preset="webapp"`,
 		`[data-help]::after`,
@@ -105,6 +106,37 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		!strings.Contains(body, `applyServerGuided`) ||
 		!strings.Contains(body, `function configureRentalData()`) {
 		t.Fatalf("GET HTML conserva validacion nativa del navegador\n%s", body)
+	}
+}
+
+func TestNuevaAppHTMLV0RenderizaPanelGoalFirstConActualizacion(t *testing.T) {
+	endpoint := NewNuevaAppWebEndpointV0(&fakeNuevaAppClientV0{})
+	vm := NewWebNuevaAppViewModelV0(validSpecForViewModelV0(), backlogForViewModelV0())
+	vm.Estado = WebNuevaAppEstadoDirector
+	vm.Director = &WebNuevaAppDirectorV0{
+		RunRef:          "run-ref-web-goal-001",
+		GoalRef:         "goal-ref-web-goal-001",
+		ExternalGoalRef: "thread-ref-web-goal-001",
+		GoalStatus:      "running",
+	}
+	page := endpoint.page("es", vm)
+	rec := httptest.NewRecorder()
+
+	writeNuevaAppHTMLPageV0(rec, http.StatusOK, page)
+
+	body := rec.Body.String()
+	for _, want := range []string{
+		`data-goal-panel`,
+		`data-run-ref="run-ref-web-goal-001"`,
+		`data-goal-ref="goal-ref-web-goal-001"`,
+		`Director y goal`,
+		`thread-ref-web-goal-001`,
+		`data-goal-observe`,
+		`Actualizar goal`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("HTML goal-first no contiene %q\n%s", want, body)
+		}
 	}
 }
 

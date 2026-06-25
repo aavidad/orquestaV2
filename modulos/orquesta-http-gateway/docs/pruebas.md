@@ -23,8 +23,11 @@ git diff --check -- modulos/orquesta-http-gateway
   `/api/v0/runs/queue/priority`.
 - Cobertura de ruta exacta `/api/v0/apps/intake/guided-turn` separada y con
   precedencia frente al prefijo `/api/v0/apps/`.
+- Cobertura de ruta exacta `/api/v0/apps/director/goal/observe` separada y con
+  precedencia frente al prefijo `/api/v0/apps/`.
 - La auditoria de stats se limita al routing: el contenido de
   `DirectorRunStatsV0` pertenece al handler inyectado, no al gateway HTTP fino.
 - `PublicRouteMutabilityV0` clasifica las rutas de supervision
-  `/api/v0/runs/supervise` y `/api/v0/autoprogramming/supervise` como
-  mutaciones, y el guard browser bloquea origen cruzado antes de delegar.
+  `/api/v0/runs/supervise`, `/api/v0/autoprogramming/supervise` y observacion
+  goal-first como mutaciones, y el guard browser bloquea origen cruzado antes
+  de delegar.

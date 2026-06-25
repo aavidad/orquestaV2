@@ -11,6 +11,7 @@ Este modulo ensambla handlers ya existentes:
 - web `/run-queue`;
 - REST `/api/v0/apps/spec`;
 - REST `/api/v0/apps/director`;
+- REST `/api/v0/apps/director/goal/observe`;
 - REST `/api/v0/apps/{app_ref}/changes`;
 - REST `/api/v0/director/stats`;
 - REST `/api/v0/runs/control`;

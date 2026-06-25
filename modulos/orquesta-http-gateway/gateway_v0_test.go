@@ -29,6 +29,13 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 			},
 		},
 		{
+			name:  "app director goal observe",
+			route: RouteAppDirectorGoalObserveV0,
+			handlers: RouteHandlersV0{
+				AppDirectorGoalObserve: markerHandler("app-director-goal-observe"),
+			},
+		},
+		{
 			name:  "app intake guided turn",
 			route: RouteAppIntakeGuidedTurnV0,
 			handlers: RouteHandlersV0{
@@ -182,10 +189,11 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 
 func TestNewAppGatewayMuxV0PrefiereRutasExactasAntesDeCambioDinamico(t *testing.T) {
 	mux := NewAppGatewayMuxV0(RouteHandlersV0{
-		AppSpec:             markerHandler("app-spec"),
-		AppDirector:         markerHandler("app-director"),
-		AppIntakeGuidedTurn: markerHandler("app-intake-guided-turn"),
-		AppChange:           markerHandler("app-change"),
+		AppSpec:                markerHandler("app-spec"),
+		AppDirector:            markerHandler("app-director"),
+		AppDirectorGoalObserve: markerHandler("app-director-goal-observe"),
+		AppIntakeGuidedTurn:    markerHandler("app-intake-guided-turn"),
+		AppChange:              markerHandler("app-change"),
 	})
 
 	for _, tc := range []struct {
@@ -194,6 +202,7 @@ func TestNewAppGatewayMuxV0PrefiereRutasExactasAntesDeCambioDinamico(t *testing.
 	}{
 		{RouteAppSpecV0, "app-spec"},
 		{RouteAppDirectorV0, "app-director"},
+		{RouteAppDirectorGoalObserveV0, "app-director-goal-observe"},
 		{RouteAppIntakeGuidedTurnV0, "app-intake-guided-turn"},
 		{"/api/v0/apps/app-ref-001/changes", "app-change"},
 	} {
@@ -256,6 +265,7 @@ func TestNewAppGatewayMuxV0Returns404ForUnconfiguredRoutes(t *testing.T) {
 	for _, route := range []string{
 		RouteAppSpecV0,
 		RouteAppDirectorV0,
+		RouteAppDirectorGoalObserveV0,
 		RouteOpsDashboardV0,
 		RouteDirectorStatsPageV0,
 		RouteDirectorStatsV0,

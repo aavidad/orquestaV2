@@ -289,6 +289,21 @@ Estado: aceptada localmente.
 ```
 
 ```text
+Fecha: 2026-06-25
+Decision: `/nueva-app` muestra un panel goal-first y permite refrescarlo con
+`POST /api/v0/apps/director/goal/observe`.
+Motivo: al migrar a runtimes con goal, el trabajo puede avanzar fuera del loop
+legacy; el operador necesita ver y refrescar `run_ref`, `goal_ref` y estado de
+cierre desde la misma pantalla donde lanzo la app.
+Impacto: la UI usa `fetch` directo al bridge publico y actualiza solo campos
+compactos. Web no valida cierre, no toca cola, no crea cliente Go nuevo y no
+conoce runtime, Codex, DB, filesystem ni proveedor.
+Contratos afectados: `WebNuevaAppDirectorV0`, `NuevaAppHTMLHandlerV0`,
+`/api/v0/apps/director/goal/observe`.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-05-10
 Decision: WEB-015 acepta HTTP 400 como respuesta publica valida solo para `estado:error` de director stats.
 Motivo: El bridge REST de `/api/v0/director/stats` debe distinguir validacion de usuario/run no disponible de fallo tecnico. La web debe renderizar esos errores para operador/director, no ocultarlos como transporte.

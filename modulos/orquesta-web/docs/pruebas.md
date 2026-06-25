@@ -480,6 +480,20 @@ temporal debe validar que el executor real/fake responde.
 ```
 
 ```text
+Caso: WEB-UT-032 nueva-app muestra panel goal-first
+Tipo: unit/html contract
+Comando: `go test -count=1 ./modulos/orquesta-web -run 'NuevaAppHTML|NuevaAppI18n|ArrancarDirector'`
+Evidencia esperada: el HTML de `/nueva-app` contiene el panel `Director y goal`
+cuando el viewmodel trae `Director`, muestra `run_ref`, `goal_ref`,
+`external_goal_ref`, `goal_status` y boton `Actualizar goal`; el JS llama a
+`POST /api/v0/apps/director/goal/observe` y actualiza `run_status` y
+`closure_status` sin introducir cliente Go, store, runtime ni proveedor.
+Ultima ejecucion: 2026-06-25; pasa con el comando indicado.
+Riesgos: El test cubre contrato HTML/JS server-rendered; la respuesta real del
+endpoint queda cubierta en `orquesta-mcp`, `orquesta-app-gateway` y stack Codex.
+```
+
+```text
 Caso: WEB-UT-027 tablas responsivas de panel ops
 Tipo: unit/html contract
 Comando: `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto`

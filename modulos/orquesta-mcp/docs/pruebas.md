@@ -519,3 +519,19 @@ Evidencia esperada: `orquesta.director.stats.v0` devuelve
 agrega `queue` y `run` en el mismo snapshot. La decision contiene solo
 `action`, `scope`, `reason_code` y refs opacas para UI/cockpit, sin arrancar
 runtime, filtrar entregas ni leer Codex, OPES, DB, HOME o proveedor.
+
+## Prueba observacion goal-first de nueva app 2026-06-25
+
+Comando:
+
+```bash
+go test -count=1 ./modulos/orquesta-mcp \
+  -run 'ObserveAppDirectorGoal|MCPTransportToolInputSchema|RegisterMCPTransport'
+```
+
+Evidencia esperada: `orquesta.apps.observe_director_goal.v0` queda registrado
+como tool opt-in, `POST /api/v0/apps/director/goal/observe` acepta solo POST,
+exige `run_ref`, propaga `X-Correlation-ID`, delega en el executor inyectado y
+devuelve salida compacta con `run_ref`, `goal_ref`, `goal_status`,
+`run_status`, `closure_status`, refs de artefactos/evidencias y errores
+publicos. Sin executor devuelve `mcp_transport_tool_unbound` por transporte.

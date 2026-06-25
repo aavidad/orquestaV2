@@ -84,6 +84,9 @@ func buildStackMCPTransportBindingsV0(
 	})
 	return orquestamcp.MCPTransportBindingsV0{
 		ArrancarDirector: arrancar,
+		ObserveDirectorGoal: NewCodexStackObserveAppDirectorGoalExecutorV0(
+			stack,
+		),
 		RequestAppChange: orquestamcp.NewMCPRequestAppChangeToolExecutorV0(appChangePortsV0(config)),
 		DirectorStats: orquestamcp.MCPDirectorStatsToolExecutorV0{
 			RunStore:          config.Stores.RunStore,
@@ -142,6 +145,7 @@ func buildStackHTTPHandlerV0(
 	handler := orquestaappgateway.NewHTTPHandlerV0(orquestaappgateway.ConfigV0{
 		Clock:                     config.Clock,
 		ArrancarDirector:          bindings.ArrancarDirector,
+		ObserveDirectorGoal:       bindings.ObserveDirectorGoal,
 		RequestAppChange:          bindings.RequestAppChange,
 		DirectorStats:             bindings.DirectorStats,
 		RunControl:                bindings.RunControl,

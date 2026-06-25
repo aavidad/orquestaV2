@@ -63,6 +63,39 @@ func TestNuevaAppPOSTDelegaEnAppDirectorRESTSinCmdDBRuntimeV0(t *testing.T) {
 	}
 }
 
+func TestAppDirectorGoalObserveAPIDelegaEnExecutorRESTV0(t *testing.T) {
+	executor := &recordingObserveDirectorGoalExecutorV0{}
+	handler := NewHTTPHandlerV0(ConfigV0{
+		ObserveDirectorGoal: executor,
+		Timeout:             time.Second,
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		orquestamcp.MCPObserveAppDirectorGoalHTTPPathV0,
+		strings.NewReader(`{"request_id":"req-goal-observe-app-gateway-001","run_ref":"run-ref-goal-observe-app-gateway-001"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if executor.Input.RunRef != "run-ref-goal-observe-app-gateway-001" {
+		t.Fatalf("input=%+v", executor.Input)
+	}
+	var result orquestamcp.MCPObserveAppDirectorGoalToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != orquestamcp.MCPObserveAppDirectorGoalEstadoOKV0 ||
+		result.GoalRef != "goal-ref-app-gateway-observed-001" ||
+		result.RunStatus != "closed" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestDirectorStatsPageDelegaEnDirectorStatsRESTSinCmdDBRuntimeV0(t *testing.T) {
 	run := orquestacoreworkflow.OrchestrationRunV0{
 		RunID:         "run-app-gateway-stats-001",
@@ -278,6 +311,26 @@ func (executor *recordingArrancarDirectorExecutorV0) Execute(
 			Capacity:       "high",
 		}},
 		StartedAgents: []string{"agent-app-gateway-director-001"},
+	}, nil
+}
+
+type recordingObserveDirectorGoalExecutorV0 struct {
+	Input orquestamcp.MCPObserveAppDirectorGoalToolInputV0
+}
+
+func (executor *recordingObserveDirectorGoalExecutorV0) Execute(
+	_ context.Context,
+	input orquestamcp.MCPObserveAppDirectorGoalToolInputV0,
+) (orquestamcp.MCPObserveAppDirectorGoalToolResultV0, error) {
+	executor.Input = input
+	return orquestamcp.MCPObserveAppDirectorGoalToolResultV0{
+		Estado:       orquestamcp.MCPObserveAppDirectorGoalEstadoOKV0,
+		RequestID:    input.RequestID,
+		RunRef:       input.RunRef,
+		RunStatus:    "closed",
+		GoalRef:      "goal-ref-app-gateway-observed-001",
+		GoalStatus:   "complete",
+		EvidenceRefs: []string{"evidence-ref-app-gateway-goal-observed-001"},
 	}, nil
 }
 

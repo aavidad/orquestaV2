@@ -59,6 +59,7 @@ Campos:
 - `RouteRunQueuePageV0`: `/run-queue`;
 - `RouteAppSpecV0`: `/api/v0/apps/spec`;
 - `RouteAppDirectorV0`: `/api/v0/apps/director`;
+- `RouteAppDirectorGoalObserveV0`: `/api/v0/apps/director/goal/observe`;
 - `RouteAppIntakeGuidedTurnV0`: `/api/v0/apps/intake/guided-turn`;
 - `RouteAppChangeV0`: `/api/v0/apps/`;
 - `RouteDirectorStatsV0`: `/api/v0/director/stats`.
@@ -97,6 +98,11 @@ tareas, agentes, rework, replan, progreso, cierre ni `decision_context`.
 `RouteRunQueuePageV0` y `RouteRunQueuePriorityV0` son rutas separadas: la
 primera apunta al panel web inyectado y la segunda al contrato REST/MCP de
 cola. El gateway no conoce ranking, prioridad, aging, fairness ni stores.
+
+`RouteAppDirectorGoalObserveV0` apunta al bridge REST/MCP que observa un goal
+ya lanzado por el Director de nueva app. Es ruta exacta bajo `/api/v0/apps/`,
+precede al catch-all de app-change y se clasifica como mutacion de control
+plane porque puede persistir resultado observado, cerrar o bloquear la run.
 
 `RouteAppIntakeGuidedTurnV0` apunta al endpoint JSON de intake guiado de nueva
 app. Es ruta exacta bajo `/api/v0/apps/`, precede al catch-all de app-change y

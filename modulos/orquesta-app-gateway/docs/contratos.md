@@ -14,6 +14,8 @@ Rutas montadas:
 - `/run-queue`: handler web JSON para cola multiapp y cambio de prioridad.
 - `/api/v0/apps/spec`: REST de factory.
 - `/api/v0/apps/director`: bridge REST de MCP para arrancar director.
+- `/api/v0/apps/director/goal/observe`: bridge REST de MCP para observar un
+  goal-first ya lanzado por `run_ref`.
 - `/api/v0/apps/intake/guided-turn`: endpoint JSON puro de intake guiado de
   nueva app; calcula decisiones/followups de wizard y sesion parcial sin
   persistir estado ni arrancar trabajo.
@@ -58,6 +60,8 @@ Entrada de composicion:
 
 - `Clock`: reloj opcional para factory.
 - `ArrancarDirector`: executor MCP inyectado.
+- `ObserveDirectorGoal`: executor MCP inyectado para observar goal-first de
+  nueva app.
 - `RequestAppChange`: executor MCP inyectado para cambios de app.
 - `AppVCS`: executor MCP inyectado para preparar, revisar, commitear o publicar
   repos por refs opacas; nil deja el overlay sin montar.
@@ -96,6 +100,10 @@ Entrada de composicion:
 - `/api/v0/apps/intake/guided-turn` debe preceder al prefijo `/api/v0/apps/`,
   no llegar al handler catch-all de app-change y no conocer Director, runtime,
   DB, proveedores ni LLM real.
+- `/api/v0/apps/director/goal/observe` debe preceder al prefijo
+  `/api/v0/apps/` y delega en `orquesta-mcp`; este modulo no interpreta
+  `GoalWorkResultV0`, no valida cierre, no toca cola y no conoce runtime goal,
+  Codex, DB, filesystem ni proveedor.
 - `/api/v0/runs/supervise` delega en `orquesta-mcp`; este modulo no sabe si el
   executor usa Codex, trabajo de dominio u otra composicion.
 - `/api/v0/autoprogramming/prepare-run` delega en `orquesta-mcp`; este modulo no

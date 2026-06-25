@@ -19,15 +19,18 @@ Write-set aplicado:
   candidato;
 - si goal-first no se habia encolado al arrancar, se crea solo una traza
   terminal no ejecutable al observar el cierre/bloqueo.
+- `CodexStackObserveAppDirectorGoalExecutorV0` expone esa observacion por el
+  binding MCP/REST del stack y llama al wrapper anterior, no al servicio directo.
 
 Validacion:
 
-- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestObserveAppDirectorGoalV0SincronizaCola|TestQueuedArrancarDirectorExecutorV0NoEncolaGoalFirst|TestBuildDirectorPortsV0CableaAppGoalLauncher'`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'CodexStackObserveAppDirectorGoalExecutor|TestObserveAppDirectorGoalV0SincronizaCola|TestQueuedArrancarDirectorExecutorV0NoEncolaGoalFirst|TestBuildDirectorPortsV0CableaAppGoalLauncher'`
 
 Pendiente siguiente:
 
-- exponer una ruta/accion publica de observacion de goal-first si la web debe
-  refrescar el cierre sin pasar por un supervisor externo.
+- ampliar UI/operacion para refresco periodico si el operador necesita polling
+  automatico; la accion publica manual ya existe por
+  `/api/v0/apps/director/goal/observe`.
 
 ## APP-CODEX-STACK-043
 

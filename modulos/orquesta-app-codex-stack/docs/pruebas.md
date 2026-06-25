@@ -188,6 +188,9 @@ Cobertura Go actual:
 - `TestObserveAppDirectorGoalV0SincronizaColaStoppedSinCandidatoPrevio` valida
   que un cierre goal-first no aceptado bloquea el run y crea una traza de cola
   `stopped` no ejecutable aunque no hubiera encolado inicial.
+- `TestCodexStackObserveAppDirectorGoalExecutorV0UsaWrapperYSincronizaCola`
+  valida que el executor MCP/REST del stack observa por
+  `StackV0.ObserveAppDirectorGoalV0` y deja la cola terminal al cerrar el goal.
 - `TestCodexSupervisorStackLifecycleV0SupervisaRunExistenteSinCanalParaleloV0`
   prueba el adaptador real de stack sobre una run ya creada: `SuperviseCodexV0`
   hace `launch` y luego `continue`, ambos por `DrainRunV0`, sin relanzar agentes.

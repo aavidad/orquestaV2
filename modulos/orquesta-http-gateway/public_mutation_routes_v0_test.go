@@ -14,6 +14,7 @@ func TestPublicRouteMutabilityV0ClasificaMutacionesPublicas(t *testing.T) {
 		RouteAppChangePageV0,
 		RouteRunControlPageV0,
 		RouteRunQueuePageV0,
+		RouteAppDirectorGoalObserveV0,
 		RouteAppChangeV0 + "agenda/changes",
 	} {
 		if got := PublicRouteMutabilityV0(route); got != PublicRouteMutationV0 {

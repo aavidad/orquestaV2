@@ -168,7 +168,9 @@ terminal, actualiza `RunQueue` como `closed` para `cerrada` o `stopped` para
 terminal no ejecutable usado por la composicion. Si habia candidato previo, se
 conservan prioridad, app, fairness, grupo de intento, parent/supersedes,
 rescue reason, claims y evidencias; si no lo habia, se crea solo una traza
-terminal no ejecutable.
+terminal no ejecutable. El binding MCP/REST del stack usa
+`CodexStackObserveAppDirectorGoalExecutorV0`, que llama a
+`StackV0.ObserveAppDirectorGoalV0` para no saltarse esa reconciliacion.
 
 ## Bridge de entregas a dominio externo
 

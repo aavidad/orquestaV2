@@ -1426,3 +1426,38 @@ Invariantes:
 Pruebas de contrato:
   - go test -count=1 ./modulos/orquesta-mcp
 ```
+
+```text
+Nombre: mcp.tool.orquesta.apps.observe_director_goal.v0
+Tipo: puerto_entrada
+Version: v0
+Propietario: orquesta-mcp
+Consumidores: cliente IA MCP, bridge HTTP local, web nueva-app y composiciones
+opt-in con runtime goal.
+Campos:
+  descriptor:
+    name: orquesta.apps.observe_director_goal.v0
+    resource_uri: orquesta://contracts/observe-app-director-goal/v0
+  rest:
+    method: POST
+    path: /api/v0/apps/director/goal/observe
+  input:
+    request_id?, correlation_id?, run_ref, occurred_at?, requested_by?
+  output_ok:
+    estado: ok
+    run_ref, run_status?, goal_ref, external_goal_ref?, goal_status,
+    closure_status?, closure_accepted?, closure_needs_rework?,
+    artifact_refs?, domain_receipt_refs?, evidence_refs?
+  output_error:
+    estado: error
+    errores_publicos
+Invariantes:
+  - Adaptador inbound fino para observar un goal ya lanzado.
+  - No ejecuta loop legacy, no arranca proveedor y no decide cierre.
+  - Delega observacion y validacion causal en `orquesta-app-director-service`.
+  - `run_ref` es obligatorio porque acota el estado goal-first persistido.
+  - La composicion puede envolver el executor para efectos propios, como
+    sincronizar cola en `orquesta-app-codex-stack`.
+Pruebas de contrato:
+  - go test -count=1 ./modulos/orquesta-mcp -run 'ObserveAppDirectorGoal|MCPTransportToolInputSchema|RegisterMCPTransport'
+```

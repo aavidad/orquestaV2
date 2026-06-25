@@ -17,6 +17,8 @@ git diff --check -- modulos/orquesta-app-gateway
   multiapp; el gateway solo compone cliente in-process.
 - `/api/v0/apps/director` con executor real in-memory comparte RunStore con
   `/director-stats`.
+- `/api/v0/apps/director/goal/observe` delega en
+  `ObserveDirectorGoal` inyectado y conserva `run_ref` sin interpretar cierre.
 - `/api/v0/apps/intake/guided-turn` devuelve una sesion guiada de nueva app con
   datos/mapas desde una necesidad libre, sin stores ni runtime.
 - `/api/v0/apps/vcs` precede al prefijo `/api/v0/apps/` y delega en AppVCS, no

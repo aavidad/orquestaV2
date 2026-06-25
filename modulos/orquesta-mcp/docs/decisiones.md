@@ -434,6 +434,22 @@ Estado: aceptada localmente.
 ```
 
 ```text
+Fecha: 2026-06-25
+Decision: La observacion de goal-first de nueva app se expone como tool MCP y
+bridge REST propio: `orquesta.apps.observe_director_goal.v0` y
+`POST /api/v0/apps/director/goal/observe`.
+Motivo: con runtimes que soportan goal, el loop automatico vive en el goal; la
+superficie publica de Orquesta debe poder refrescar estado, validar cierre y
+persistir la consecuencia causal sin relanzar el director legacy.
+Impacto: MCP solo traduce DTOs y errores publicos. La validacion de cierre
+sigue en `orquesta-app-director-service`; efectos de composicion como sincronizar
+cola pertenecen al executor inyectado por el stack.
+Contratos afectados: mcp.tool.orquesta.apps.observe_director_goal.v0;
+rest.bridge.orquesta.apps.observe_director_goal.v0.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-06-08
 Decision: `director.stats` y `autoprogramming.status` publican
 `ops_snapshot` read-only para el cockpit del Director.

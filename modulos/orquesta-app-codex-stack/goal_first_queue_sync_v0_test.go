@@ -10,6 +10,7 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestafactory "orquesta/modulos/orquesta-factory"
 	orquestagoal "orquesta/modulos/orquesta-goal"
+	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestarunmemory "orquesta/modulos/orquesta-run-memory"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
@@ -98,6 +99,41 @@ func TestObserveAppDirectorGoalV0SincronizaColaClosedConCandidatoPrevio(t *testi
 		!codexStackStringInSetV0(candidate.EvidenceRefs, "evidence-ref-previa-goal-first") ||
 		!codexStackStringInSetV0(candidate.EvidenceRefs, "evidence-ref-goal-first-queue-terminal-sync") {
 		t.Fatalf("candidate=%+v", candidate)
+	}
+}
+
+func TestCodexStackObserveAppDirectorGoalExecutorV0UsaWrapperYSincronizaCola(t *testing.T) {
+	ctx := context.Background()
+	stack, observer, launcher, started := startGoalFirstQueueSyncStackForTestV0(t)
+	runRef := started.Run.RunID
+	spec := launcher.specs[0]
+	observer.result = orquestagoal.GoalWorkResultV0{
+		SchemaVersion:     orquestagoal.GoalWorkResultSchemaV0,
+		Status:            orquestagoal.GoalStatusCompleteV0,
+		GoalRef:           spec.GoalRef,
+		ExternalGoalRef:   started.ExternalGoalRef,
+		ArtifactRefs:      goalFirstQueueRequiredArtifactRefsV0(spec),
+		EvidenceRefs:      spec.ClosurePolicy.RequiredEvidenceRefs,
+		DomainReceiptRefs: []string{"domain-receipt-ref-goal-first-mcp-001"},
+	}
+	executor := NewCodexStackObserveAppDirectorGoalExecutorV0(&stack)
+
+	result, err := executor.Execute(ctx, orquestamcp.MCPObserveAppDirectorGoalToolInputV0{
+		RequestID: "req-goal-first-mcp-observe-001",
+		RunRef:    runRef,
+	})
+
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != orquestamcp.MCPObserveAppDirectorGoalEstadoOKV0 ||
+		result.GoalRef != spec.GoalRef ||
+		result.RunStatus != string(orquestacoreworkflow.OrchestrationRunStatusClosedV0) {
+		t.Fatalf("result=%+v", result)
+	}
+	all := listGoalFirstQueueCandidatesForTestV0(t, stack)
+	if len(all) != 1 || all[0].RunRef != runRef || all[0].Status != orquestarunqueue.RunStatusClosedV0 {
+		t.Fatalf("queue no sincronizada por executor: %+v", all)
 	}
 }
 

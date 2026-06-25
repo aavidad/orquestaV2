@@ -29,6 +29,7 @@ func PublicRouteMutabilityV0(route string) string {
 		RouteRunQueuePageV0,
 		RouteAppSpecV0,
 		RouteAppDirectorV0,
+		RouteAppDirectorGoalObserveV0,
 		RouteAppChangeV0,
 		RouteExternalWorkRunV0,
 		RouteDomainWorkV0:
