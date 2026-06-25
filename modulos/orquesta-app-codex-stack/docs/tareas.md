@@ -1,5 +1,34 @@
 # Tareas: orquesta-app-codex-stack
 
+## APP-CODEX-STACK-044
+
+Objetivo: reconciliar `RunQueue` al observar un goal-first terminal sin
+reintroducir el loop legacy.
+
+Estado: hecho.
+
+Write-set aplicado:
+
+- `StackV0.ObserveAppDirectorGoalV0` envuelve
+  `orquesta-app-director-service.ObserveAppDirectorGoalV0`;
+- si el servicio deja el run `cerrada`, la cola queda `closed`;
+- si el servicio deja el run `bloqueada`, la cola queda `stopped` porque
+  `RunQueue` no tiene estado `blocked`;
+- la sincronizacion conserva prioridad, app, fairness, grupos de intento,
+  parent/supersedes, rescue reason, workset claims y evidencias cuando ya habia
+  candidato;
+- si goal-first no se habia encolado al arrancar, se crea solo una traza
+  terminal no ejecutable al observar el cierre/bloqueo.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestObserveAppDirectorGoalV0SincronizaCola|TestQueuedArrancarDirectorExecutorV0NoEncolaGoalFirst|TestBuildDirectorPortsV0CableaAppGoalLauncher'`
+
+Pendiente siguiente:
+
+- exponer una ruta/accion publica de observacion de goal-first si la web debe
+  refrescar el cierre sin pasar por un supervisor externo.
+
 ## APP-CODEX-STACK-043
 
 Objetivo: recuperar decisiones de capacidad duraderas no proyectadas para que

@@ -158,6 +158,18 @@ cerrada, el stack informa `queue_status=closed` al coordinador. La cola global
 persiste ese estado mediante su puerto y deja de rankear esa run en ticks
 posteriores.
 
+Para goal-first, `QueuedArrancarDirectorExecutorV0` no encola la run al
+arrancar si el resultado trae `goal_ref`: Codex Goal ocupa el loop automatico.
+La sincronizacion de cola sucede al observar el goal por
+`StackV0.ObserveAppDirectorGoalV0`: primero delega en
+`orquesta-app-director-service.ObserveAppDirectorGoalV0` y, si el run queda
+terminal, actualiza `RunQueue` como `closed` para `cerrada` o `stopped` para
+`bloqueada`. Como la cola no tiene estado `blocked`, `stopped` es el estado
+terminal no ejecutable usado por la composicion. Si habia candidato previo, se
+conservan prioridad, app, fairness, grupo de intento, parent/supersedes,
+rescue reason, claims y evidencias; si no lo habia, se crea solo una traza
+terminal no ejecutable.
+
 ## Bridge de entregas a dominio externo
 
 Contrato opt-in:

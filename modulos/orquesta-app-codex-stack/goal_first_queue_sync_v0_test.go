@@ -1,0 +1,319 @@
+package orquestaappcodexstack
+
+import (
+	"context"
+	"fmt"
+	"testing"
+	"time"
+
+	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestafactory "orquesta/modulos/orquesta-factory"
+	orquestagoal "orquesta/modulos/orquesta-goal"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestarunmemory "orquesta/modulos/orquesta-run-memory"
+	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
+)
+
+func TestObserveAppDirectorGoalV0SincronizaColaClosedConCandidatoPrevio(t *testing.T) {
+	ctx := context.Background()
+	stack, observer, launcher, started := startGoalFirstQueueSyncStackForTestV0(t)
+	runRef := started.Run.RunID
+	spec := launcher.specs[0]
+	claim := orquestarunqueue.WorksetClaimV0{
+		SchemaVersion: orquestarunqueue.WorksetClaimSchemaVersionV0,
+		ClaimRef:      "claim-ref-goal-first-queue-001",
+		RunRef:        runRef,
+		TaskRef:       "task-ref-goal-first-queue-001",
+		WriteSet:      []orquestarunqueue.ScopeRefV0{{Ref: "generated-apps/agenda"}},
+		EvidenceRefs:  []string{"evidence-ref-workset-goal-first-001"},
+	}
+	if _, err := stack.Stores.RunQueue.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:           runRef,
+		QueueRef:         "goal-first-test",
+		AppRef:           "app-ref-previo-goal-first",
+		Status:           orquestarunqueue.RunStatusRunningV0,
+		PriorityScore:    91,
+		UpdatedAt:        time.Date(2026, 6, 25, 10, 0, 0, 0, time.UTC),
+		FairnessGroupRef: "fairness-goal-first",
+		AttemptGroup: orquestarunqueue.RunQueueAttemptGroupV0{
+			GroupRef:     "attempt-group-goal-first",
+			ConsumerRef:  "consumer-goal-first",
+			ObjectiveRef: "objective-goal-first",
+			WorkItemRef:  "workitem-goal-first",
+			WriteSetRefs: []string{"generated-apps/agenda"},
+		},
+		ParentRunRef:     "parent-run-goal-first",
+		SupersedesRunRef: "superseded-run-goal-first",
+		RescueReason:     "goal-first-test-preserve",
+		EvidenceRefs:     []string{"evidence-ref-previa-goal-first"},
+		WorksetClaims:    []orquestarunqueue.WorksetClaimV0{claim},
+	}); err != nil {
+		t.Fatalf("SetRunPriorityV0: %v", err)
+	}
+	observer.result = orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusCompleteV0,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: started.ExternalGoalRef,
+		ArtifactRefs:    goalFirstQueueRequiredArtifactRefsV0(spec),
+		EvidenceRefs:    spec.ClosurePolicy.RequiredEvidenceRefs,
+	}
+
+	result, err := stack.ObserveAppDirectorGoalV0(
+		ctx,
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{RunRef: runRef},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+		t.Fatalf("run status=%q", result.Run.Status)
+	}
+	visible, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		ctx,
+		orquestarunqueue.RunQueueReadRequestV0{QueueRef: "goal-first-test"},
+	)
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0 visible: %v", err)
+	}
+	if len(visible) != 0 {
+		t.Fatalf("ranking visible=%+v", visible)
+	}
+	all := listGoalFirstQueueCandidatesForTestV0(t, stack)
+	if len(all) != 1 {
+		t.Fatalf("all=%+v", all)
+	}
+	candidate := all[0]
+	if candidate.Status != orquestarunqueue.RunStatusClosedV0 ||
+		candidate.AppRef != "app-ref-previo-goal-first" ||
+		candidate.PriorityScore != 91 ||
+		candidate.FairnessGroupRef != "fairness-goal-first" ||
+		candidate.AttemptGroup.GroupRef != "attempt-group-goal-first" ||
+		candidate.ParentRunRef != "parent-run-goal-first" ||
+		candidate.SupersedesRunRef != "superseded-run-goal-first" ||
+		candidate.RescueReason != "goal-first-test-preserve" ||
+		len(candidate.WorksetClaims) != 1 ||
+		candidate.WorksetClaims[0].ClaimRef != claim.ClaimRef ||
+		!codexStackStringInSetV0(candidate.EvidenceRefs, "evidence-ref-previa-goal-first") ||
+		!codexStackStringInSetV0(candidate.EvidenceRefs, "evidence-ref-goal-first-queue-terminal-sync") {
+		t.Fatalf("candidate=%+v", candidate)
+	}
+}
+
+func TestObserveAppDirectorGoalV0SincronizaColaStoppedSinCandidatoPrevio(t *testing.T) {
+	ctx := context.Background()
+	stack, observer, launcher, started := startGoalFirstQueueSyncStackForTestV0(t)
+	runRef := started.Run.RunID
+	spec := launcher.specs[0]
+	observer.result = orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusCompleteV0,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: started.ExternalGoalRef,
+		EvidenceRefs:    spec.ClosurePolicy.RequiredEvidenceRefs,
+	}
+
+	result, err := stack.ObserveAppDirectorGoalV0(
+		ctx,
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{RunRef: runRef},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 ||
+		result.Closure.Accepted ||
+		!result.Closure.NeedsRework {
+		t.Fatalf("result=%+v", result)
+	}
+	all := listGoalFirstQueueCandidatesForTestV0(t, stack)
+	if len(all) != 1 {
+		t.Fatalf("all=%+v", all)
+	}
+	candidate := all[0]
+	if candidate.Status != orquestarunqueue.RunStatusStoppedV0 ||
+		candidate.PriorityScore != 77 ||
+		candidate.AppRef == "" ||
+		!codexStackStringInSetV0(candidate.EvidenceRefs, "evidence-ref-goal-first-queue-terminal-sync") {
+		t.Fatalf("candidate=%+v", candidate)
+	}
+	visible, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		ctx,
+		orquestarunqueue.RunQueueReadRequestV0{QueueRef: "goal-first-test"},
+	)
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0 visible: %v", err)
+	}
+	if len(visible) != 0 {
+		t.Fatalf("ranking visible=%+v", visible)
+	}
+}
+
+func startGoalFirstQueueSyncStackForTestV0(
+	t *testing.T,
+) (StackV0, *goalFirstQueueObserverForTestV0, *goalFirstQueueLauncherForTestV0, orquestaappdirectorservice.StartAppDirectorResultV0) {
+	t.Helper()
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	eventSink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	queue := orquestarunmemory.NewRunMemoryStoreV0()
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	launcher := &goalFirstQueueLauncherForTestV0{}
+	observer := &goalFirstQueueObserverForTestV0{}
+	ports := orquestaappdirectorservice.StartAppDirectorPortsV0{
+		RunStore:             runStore,
+		EventSink:            eventSink,
+		OutboxLedger:         ledger,
+		GoalLauncher:         launcher,
+		GoalObserver:         observer,
+		GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		GoalStateStore:       goalStates,
+		Dispatchers:          []orquestacionnucleoapp.OutboxDispatcherBindingV0{{}},
+	}
+	stack := StackV0{
+		Ports: ports,
+		Stores: StoresV0{
+			RunStore:          runStore,
+			EventSink:         eventSink,
+			OutboxLedger:      ledger,
+			RunQueue:          queue,
+			AppGoalStateStore: goalStates,
+		},
+		RunQueue: RunQueueConfigV0{QueueRef: "goal-first-test", DefaultPriorityScore: 77},
+		Clock: func() time.Time {
+			return time.Date(2026, 6, 25, 12, 0, 0, 0, time.UTC)
+		},
+	}
+	started, err := orquestaappdirectorservice.StartAppDirectorV0(
+		context.Background(),
+		goalFirstQueueStartRequestForTestV0(),
+		stack.Ports,
+	)
+	if err != nil {
+		t.Fatalf("StartAppDirectorV0: %v", err)
+	}
+	if started.GoalRef == "" || len(launcher.specs) != 1 {
+		t.Fatalf("started=%+v specs=%d", started, len(launcher.specs))
+	}
+	return stack, observer, launcher, started
+}
+
+func goalFirstQueueStartRequestForTestV0() orquestaappdirectorservice.StartAppDirectorRequestV0 {
+	observability := true
+	return orquestaappdirectorservice.StartAppDirectorRequestV0{
+		RunRef:        "run-goal-first-queue-sync-001",
+		ProjectRef:    "project-goal-first-queue-sync-001",
+		OccurredAt:    "2026-06-25T11:00:00Z",
+		CorrelationID: "corr-goal-first-queue-sync-001",
+		RequestedBy:   "orquesta-app-codex-stack-goal-first-test",
+		AppSpecRequest: orquestafactory.AppSpecRequestV0{
+			SchemaVersion: orquestafactory.AppSpecRequestSchemaV0,
+			RequestID:     "request-ref-goal-first-queue-sync-001",
+			Source:        "orquesta-web",
+			Locale:        "es-ES",
+			Nombre:        "Agenda",
+			Objetivo:      "Gestionar contactos y citas desde una API y una web.",
+			TipoApp:       "mixed",
+			PreferenciasTecnicas: orquestafactory.PreferenciasTecnicasV0{
+				Lenguaje:     "go",
+				Arquitectura: "hexagonal",
+			},
+			Calidad: orquestafactory.CalidadRequestV0{
+				Pruebas:        "media",
+				Accesibilidad:  "basica",
+				Observabilidad: &observability,
+			},
+		},
+	}
+}
+
+func goalFirstQueueRequiredArtifactRefsV0(spec orquestagoal.GoalWorkSpecV0) []string {
+	refs := make([]string, 0, len(spec.ArtifactContracts))
+	for _, contract := range spec.ArtifactContracts {
+		if contract.Required {
+			refs = append(refs, contract.ArtifactRef)
+		}
+	}
+	return refs
+}
+
+func listGoalFirstQueueCandidatesForTestV0(
+	t *testing.T,
+	stack StackV0,
+) []orquestarunqueue.RunSchedulingCandidateV0 {
+	t.Helper()
+	candidates, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		context.Background(),
+		orquestarunqueue.RunQueueReadRequestV0{
+			QueueRef:             "goal-first-test",
+			IncludeNonExecutable: true,
+		},
+	)
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0 all: %v", err)
+	}
+	return candidates
+}
+
+type goalFirstQueueLauncherForTestV0 struct {
+	specs []orquestagoal.GoalWorkSpecV0
+}
+
+func (launcher *goalFirstQueueLauncherForTestV0) LaunchGoalWorkV0(
+	_ context.Context,
+	spec orquestagoal.GoalWorkSpecV0,
+) (orquestagoal.GoalLaunchReceiptV0, error) {
+	launcher.specs = append(launcher.specs, spec)
+	return orquestagoal.GoalLaunchReceiptV0{
+		SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+		Status:          orquestagoal.GoalStatusRunningV0,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: "thread-ref-goal-first-queue-sync-001",
+		EvidenceRefs:    []string{"evidence-ref-goal-first-queue-launch"},
+	}, nil
+}
+
+type goalFirstQueueObserverForTestV0 struct {
+	result orquestagoal.GoalWorkResultV0
+}
+
+func (observer *goalFirstQueueObserverForTestV0) ObserveGoalWorkV0(
+	_ context.Context,
+	request orquestagoal.GoalObservationRequestV0,
+) (orquestagoal.GoalWorkResultV0, error) {
+	if observer.result.GoalRef == "" {
+		return orquestagoal.GoalWorkResultV0{}, fmt.Errorf("goal result no configurado: %s", request.GoalRef)
+	}
+	return observer.result, nil
+}
+
+type goalFirstQueueStateStoreForTestV0 struct {
+	states map[string]orquestagoal.GoalWorkStateV0
+}
+
+func newGoalFirstQueueStateStoreForTestV0() *goalFirstQueueStateStoreForTestV0 {
+	return &goalFirstQueueStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+}
+
+func (store *goalFirstQueueStateStoreForTestV0) SaveGoalWorkStateV0(
+	_ context.Context,
+	state orquestagoal.GoalWorkStateV0,
+) error {
+	normalized, err := orquestagoal.NewGoalWorkStateV0(state)
+	if err != nil {
+		return err
+	}
+	store.states[normalized.RunRef] = normalized
+	return nil
+}
+
+func (store *goalFirstQueueStateStoreForTestV0) LoadGoalWorkStateV0(
+	_ context.Context,
+	runRef string,
+) (orquestagoal.GoalWorkStateV0, error) {
+	state, ok := store.states[runRef]
+	if !ok {
+		return orquestagoal.GoalWorkStateV0{}, fmt.Errorf("goal state no encontrado: %s", runRef)
+	}
+	return state, nil
+}

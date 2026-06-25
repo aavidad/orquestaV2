@@ -1,6 +1,22 @@
 # Decisiones: orquesta-app-codex-stack
 
 ```text
+Fecha: 2026-06-25
+Decision: El stack Codex sincroniza la cola al observar un goal-first terminal.
+Motivo: el arranque goal-first no debe entrar en el loop/cola legacy, pero al
+terminar el goal la superficie operativa necesita una traza terminal coherente
+para que ranking y paneles no muestren un estado vivo obsoleto.
+Impacto: `StackV0.ObserveAppDirectorGoalV0` envuelve al servicio neutral de
+observacion de goal y, solo en la composicion, proyecta `cerrada -> closed` y
+`bloqueada -> stopped` en `RunQueue`. `stopped` se usa porque la cola no tiene
+estado `blocked`; ambos estados son no ejecutables. Si existe candidato previo,
+se conservan sus metadatos operativos.
+Contratos afectados: `StackV0`, `RunQueue`, goal-first de
+`orquesta-app-director-service`.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-06-22
 Decision: El stack reproyecta `CapacityDecided` duradero si el event store lo
 contiene pero el `RunStore` no lo refleja para una solicitud de capacidad viva.

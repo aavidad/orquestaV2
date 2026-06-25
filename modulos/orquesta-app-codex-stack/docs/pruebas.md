@@ -181,6 +181,13 @@ Cobertura Go actual:
   `goal_specs[]` validos y con `run_ref` cuando la request declara
   `goal_migration:goal-first` y capacidades de Goal completas; el endpoint
   sigue sin lanzar runtime ni Goal por si mismo.
+- `TestObserveAppDirectorGoalV0SincronizaColaClosedConCandidatoPrevio` valida
+  que la composicion observa un goal-first completo, cierra el run por el
+  servicio neutral, proyecta la cola como `closed`, conserva metadatos del
+  candidato previo y deja el ranking ejecutable vacio.
+- `TestObserveAppDirectorGoalV0SincronizaColaStoppedSinCandidatoPrevio` valida
+  que un cierre goal-first no aceptado bloquea el run y crea una traza de cola
+  `stopped` no ejecutable aunque no hubiera encolado inicial.
 - `TestCodexSupervisorStackLifecycleV0SupervisaRunExistenteSinCanalParaleloV0`
   prueba el adaptador real de stack sobre una run ya creada: `SuperviseCodexV0`
   hace `launch` y luego `continue`, ambos por `DrainRunV0`, sin relanzar agentes.
