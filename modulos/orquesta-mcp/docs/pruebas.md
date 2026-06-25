@@ -520,6 +520,20 @@ agrega `queue` y `run` en el mismo snapshot. La decision contiene solo
 `action`, `scope`, `reason_code` y refs opacas para UI/cockpit, sin arrancar
 runtime, filtrar entregas ni leer Codex, OPES, DB, HOME o proveedor.
 
+## Prueba stop_control publico en stats 2026-06-25
+
+Comando:
+
+```bash
+go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-mcp ./modulos/orquesta-web
+```
+
+Evidencia esperada: `DirectorRunStatsV0.stop_control` distingue
+`stop_requested`, `stop_propagated`, `stop_pending` y `stop_confirmed`.
+`orquesta.director.stats.v0` enriquece esa proyeccion con `RunControl` si esta
+inyectado, sin leer runtime ni procesos por su cuenta, y la web la proyecta
+como estado de atencion cuando queda parada pendiente.
+
 ## Prueba observacion goal-first de nueva app 2026-06-25
 
 Comando:

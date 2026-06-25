@@ -114,6 +114,11 @@ Campos:
     include_process_refs, include_agent_progress, include_agent_usage
   output_ok:
     stats: DirectorRunStatsV0 completo
+      incluye `stop_control` con status `none`, `stop_requested`,
+      `stop_propagated`, `stop_pending` o `stop_confirmed`, refs opacas de
+      agentes pendientes/solicitados/confirmados y, si existe puerto
+      `RunControl`, `run_control_status`, checkpoint, forced y evidencias
+      compactas
     external_job: proyeccion compacta opcional con job_ref, work_kind,
       change_ref, run_ref, task_ref, agent_ref, status y delivery_refs
     decision_context
@@ -123,8 +128,11 @@ Invariantes:
   - Si falta `run_ref`, el puerto puede resolverlo desde el job externo.
   - La salida conserva `DirectorRunStatsV0`; `external_job` es una proyeccion
     aditiva para que OPES no tenga que interpretar toda la run.
+  - Si se inyecta `RunControlReaderPortV0`, el tool puede distinguir parada de
+    run solicitada antes de que haya `StoppedAgents` propagados.
 Pruebas de contrato:
   - Executor resuelve `run_ref` por job externo mediante puerto fake.
+  - Executor proyecta `stop_control` desde `RunControl` sin exponer runtime.
   - HTTP bridge conserva el mismo envelope REST.
 ```
 

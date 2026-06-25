@@ -132,6 +132,45 @@ func TestWebDirectorStatsPanelV0ProyectaCheckpointPendienteSiLlegaPorContrato(t 
 	}
 }
 
+func TestWebDirectorStatsPanelV0ProyectaStopControlPendiente(t *testing.T) {
+	result := directorStatsResultForWebTestV0()
+	result.Stats.StopControl = WebDirectorStopControlContractV0{
+		Status:                 " stop_pending ",
+		Requested:              true,
+		Propagated:             true,
+		Pending:                true,
+		RunControlStatus:       " stop_requested ",
+		CheckpointRecorded:     true,
+		Forced:                 true,
+		StartedAgents:          2,
+		StopRequestedAgents:    2,
+		StopConfirmedAgents:    1,
+		StopPendingAgents:      1,
+		PendingAgentRefs:       []string{" agent-ref-stop-pending-001 ", "agent-ref-stop-pending-001"},
+		StopRequestedAgentRefs: []string{"agent-ref-stop-pending-001"},
+		StopConfirmedAgentRefs: []string{"agent-ref-stop-confirmed-001"},
+		EvidenceRefs:           []string{"evidence-ref-stop-control-001", "evidence-ref-stop-control-001"},
+	}
+
+	panel := NewWebDirectorStatsPanelV0("es", result)
+
+	if panel.Estado != WebDirectorStatsEstadoAtencionV0 ||
+		panel.StopControl.Status != "stop_pending" ||
+		panel.StopControl.RunControlStatus != "stop_requested" ||
+		!panel.StopControl.Requested ||
+		!panel.StopControl.Propagated ||
+		!panel.StopControl.Pending ||
+		panel.StopControl.Confirmed ||
+		!panel.StopControl.CheckpointRecorded ||
+		!panel.StopControl.Forced ||
+		panel.StopControl.StopPendingAgents != 1 ||
+		len(panel.StopControl.PendingAgentRefs) != 1 ||
+		panel.StopControl.PendingAgentRefs[0] != "agent-ref-stop-pending-001" ||
+		len(panel.StopControl.EvidenceRefs) != 1 {
+		t.Fatalf("stop_control=%+v panel=%+v", panel.StopControl, panel)
+	}
+}
+
 func TestWebDirectorStatsPanelV0ProyectaCierreBloqueadoYAccionesSeguras(t *testing.T) {
 	result := directorStatsResultForWebTestV0()
 	result.Stats.Closure = WebDirectorClosureStatsContractV0{

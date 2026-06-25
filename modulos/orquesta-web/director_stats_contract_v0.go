@@ -49,6 +49,7 @@ type WebDirectorRunStatsContractV0 struct {
 	Counts                     map[string]int                     `json:"counts"`
 	Progress                   WebDirectorProgressStatsContractV0 `json:"progress"`
 	Closure                    WebDirectorClosureStatsContractV0  `json:"closure"`
+	StopControl                WebDirectorStopControlContractV0   `json:"stop_control"`
 	UsageSummary               *WebDirectorRunUsageSummaryV0      `json:"usage_summary,omitempty"`
 	Agents                     []WebDirectorAgentStatsContractV0  `json:"agents,omitempty"`
 	CheckpointAgentsPending    int                                `json:"checkpoint_agents_pending,omitempty"`
@@ -63,6 +64,25 @@ type WebDirectorClosureStatsContractV0 struct {
 	Closed      bool     `json:"closed"`
 	BlockedBy   []string `json:"blocked_by,omitempty"`
 	BlockerRefs []string `json:"blocker_refs,omitempty"`
+}
+
+type WebDirectorStopControlContractV0 struct {
+	Status                 string   `json:"status"`
+	Requested              bool     `json:"requested"`
+	Propagated             bool     `json:"propagated"`
+	Pending                bool     `json:"pending"`
+	Confirmed              bool     `json:"confirmed"`
+	RunControlStatus       string   `json:"run_control_status,omitempty"`
+	CheckpointRecorded     bool     `json:"checkpoint_recorded,omitempty"`
+	Forced                 bool     `json:"forced,omitempty"`
+	StartedAgents          int      `json:"started_agents"`
+	StopRequestedAgents    int      `json:"stop_requested_agents"`
+	StopConfirmedAgents    int      `json:"stop_confirmed_agents"`
+	StopPendingAgents      int      `json:"stop_pending_agents"`
+	PendingAgentRefs       []string `json:"pending_agent_refs,omitempty"`
+	StopRequestedAgentRefs []string `json:"stop_requested_agent_refs,omitempty"`
+	StopConfirmedAgentRefs []string `json:"stop_confirmed_agent_refs,omitempty"`
+	EvidenceRefs           []string `json:"evidence_refs,omitempty"`
 }
 
 type WebDirectorProgressStatsContractV0 struct {

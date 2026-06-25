@@ -42,6 +42,65 @@ func TestBuildDirectorRunStatsV0ResumeRunYAgentes(t *testing.T) {
 	}
 }
 
+func TestBuildDirectorRunStatsV0ExponeStopControlPendienteYConfirmado(t *testing.T) {
+	run := mustActiveProgrammingRunV0(t, "run-nucleo-director-stop-control-001")
+	run.Agents = []string{"agent-ref-stop-001", "agent-ref-stop-002"}
+	run.StartedAgents = []string{"agent-ref-stop-001", "agent-ref-stop-002"}
+	run.StoppedAgents = []string{"agent-ref-stop-001", "agent-ref-stop-002"}
+	run.ConfirmedStoppedAgents = []string{"agent-ref-stop-001"}
+
+	stats := BuildDirectorRunStatsV0(run)
+	if stats.StopControl.Status != DirectorRunStopStatusPendingV0 ||
+		!stats.StopControl.Requested ||
+		!stats.StopControl.Propagated ||
+		!stats.StopControl.Pending ||
+		stats.StopControl.Confirmed ||
+		stats.StopControl.StopRequestedAgents != 2 ||
+		stats.StopControl.StopConfirmedAgents != 1 ||
+		stats.StopControl.StopPendingAgents != 1 ||
+		!containsNucleoRefV0(stats.StopControl.PendingAgentRefs, "agent-ref-stop-002") {
+		t.Fatalf("stop_control pendiente=%+v", stats.StopControl)
+	}
+
+	run.ConfirmedStoppedAgents = []string{"agent-ref-stop-001", "agent-ref-stop-002"}
+	confirmed := BuildDirectorRunStatsV0(run)
+	if confirmed.StopControl.Status != DirectorRunStopStatusConfirmedV0 ||
+		!confirmed.StopControl.Confirmed ||
+		confirmed.StopControl.Pending ||
+		confirmed.StopControl.StopPendingAgents != 0 ||
+		len(confirmed.StopControl.PendingAgentRefs) != 0 {
+		t.Fatalf("stop_control confirmado=%+v", confirmed.StopControl)
+	}
+}
+
+func TestApplyDirectorRunControlStateV0ExponeStopRequestedSinPropagar(t *testing.T) {
+	run := mustActiveProgrammingRunV0(t, "run-nucleo-director-stop-control-runcontrol-001")
+	run.Agents = []string{"agent-ref-stop-runcontrol-001"}
+	run.StartedAgents = []string{"agent-ref-stop-runcontrol-001"}
+	stats := BuildDirectorRunStatsV0(run)
+
+	ApplyDirectorRunControlStateV0(
+		&stats,
+		"stop_requested",
+		true,
+		true,
+		[]string{"evidence-ref-stop-control-runcontrol-001"},
+	)
+
+	if stats.StopControl.Status != DirectorRunStopStatusRequestedV0 ||
+		!stats.StopControl.Requested ||
+		stats.StopControl.Propagated ||
+		!stats.StopControl.Pending ||
+		stats.StopControl.RunControlStatus != "stop_requested" ||
+		!stats.StopControl.CheckpointRecorded ||
+		!stats.StopControl.Forced ||
+		stats.StopControl.StopPendingAgents != 1 ||
+		!containsNucleoRefV0(stats.StopControl.PendingAgentRefs, "agent-ref-stop-runcontrol-001") ||
+		!containsNucleoRefV0(stats.StopControl.EvidenceRefs, "evidence-ref-stop-control-runcontrol-001") {
+		t.Fatalf("stop_control runcontrol=%+v", stats.StopControl)
+	}
+}
+
 func TestBuildDirectorRunStatsV0ExponeCierreBloqueadoPorHitosGenericos(t *testing.T) {
 	run := mustActiveProgrammingRunV0(t, "run-nucleo-director-closure-blocked-001")
 	run.Tasks = []string{"task-ref-closure-001"}

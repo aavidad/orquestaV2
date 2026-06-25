@@ -14,6 +14,7 @@ type WebDirectorStatsViewModelV0 struct {
 	Progress        WebDirectorStatsProgressV0      `json:"progress"`
 	Resumen         WebDirectorStatsSummaryV0       `json:"resumen"`
 	Closure         WebDirectorStatsClosureV0       `json:"closure"`
+	StopControl     WebDirectorStatsStopControlV0   `json:"stop_control"`
 	Checkpoint      WebDirectorStatsCheckpointV0    `json:"checkpoint"`
 	SafeActions     []WebDirectorStatsSafeActionV0  `json:"safe_actions,omitempty"`
 	Agents          []WebDirectorStatsAgentV0       `json:"agents,omitempty"`
@@ -80,6 +81,25 @@ type WebDirectorStatsSummaryV0 struct {
 	NoSignalAgentRefs  []string `json:"no_signal_agent_refs"`
 }
 
+type WebDirectorStatsStopControlV0 struct {
+	Status                 string   `json:"status"`
+	Requested              bool     `json:"requested"`
+	Propagated             bool     `json:"propagated"`
+	Pending                bool     `json:"pending"`
+	Confirmed              bool     `json:"confirmed"`
+	RunControlStatus       string   `json:"run_control_status,omitempty"`
+	CheckpointRecorded     bool     `json:"checkpoint_recorded,omitempty"`
+	Forced                 bool     `json:"forced,omitempty"`
+	StartedAgents          int      `json:"started_agents"`
+	StopRequestedAgents    int      `json:"stop_requested_agents"`
+	StopConfirmedAgents    int      `json:"stop_confirmed_agents"`
+	StopPendingAgents      int      `json:"stop_pending_agents"`
+	PendingAgentRefs       []string `json:"pending_agent_refs,omitempty"`
+	StopRequestedAgentRefs []string `json:"stop_requested_agent_refs,omitempty"`
+	StopConfirmedAgentRefs []string `json:"stop_confirmed_agent_refs,omitempty"`
+	EvidenceRefs           []string `json:"evidence_refs,omitempty"`
+}
+
 type WebDirectorStatsCheckpointV0 struct {
 	CheckpointAgentsPending    int      `json:"checkpoint_agents_pending"`
 	PendingCheckpointAgentRefs []string `json:"pending_checkpoint_agent_refs"`
@@ -143,6 +163,7 @@ func NewWebDirectorStatsPanelV0(
 	vm.Resumen = directorStatsSummaryV0(stats.Progress, stats.UsageSummary)
 	applyDirectorStatsLiveCountsPercentV0(&vm)
 	vm.Closure = directorStatsClosureV0(stats.Closure)
+	vm.StopControl = directorStatsStopControlV0(stats.StopControl)
 	vm.Checkpoint = directorStatsCheckpointV0(*stats)
 	vm.Agents = directorStatsAgentsV0(stats.Agents)
 	vm.Agentes = vm.Agents
@@ -237,10 +258,34 @@ func directorStatsSummaryV0(
 	return summary
 }
 
+func directorStatsStopControlV0(
+	stop WebDirectorStopControlContractV0,
+) WebDirectorStatsStopControlV0 {
+	return WebDirectorStatsStopControlV0{
+		Status:                 firstDirectorStatsNonEmptyV0(trimDirectorStatsV0(stop.Status), "none"),
+		Requested:              stop.Requested,
+		Propagated:             stop.Propagated,
+		Pending:                stop.Pending,
+		Confirmed:              stop.Confirmed,
+		RunControlStatus:       trimDirectorStatsV0(stop.RunControlStatus),
+		CheckpointRecorded:     stop.CheckpointRecorded,
+		Forced:                 stop.Forced,
+		StartedAgents:          stop.StartedAgents,
+		StopRequestedAgents:    stop.StopRequestedAgents,
+		StopConfirmedAgents:    stop.StopConfirmedAgents,
+		StopPendingAgents:      stop.StopPendingAgents,
+		PendingAgentRefs:       compactOperationalStringsV0(stop.PendingAgentRefs),
+		StopRequestedAgentRefs: compactOperationalStringsV0(stop.StopRequestedAgentRefs),
+		StopConfirmedAgentRefs: compactOperationalStringsV0(stop.StopConfirmedAgentRefs),
+		EvidenceRefs:           compactOperationalStringsV0(stop.EvidenceRefs),
+	}
+}
+
 func directorStatsAttentionStateV0(vm WebDirectorStatsViewModelV0) string {
 	if vm.Progress.LoopDetectedAgents > 0 ||
 		vm.Progress.StoppedAgents > 0 ||
 		vm.Counts.AgentsNeedAttention > 0 ||
+		vm.StopControl.Pending ||
 		vm.Checkpoint.RequiresAttention {
 		return WebDirectorStatsEstadoAtencionV0
 	}

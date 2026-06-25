@@ -8,6 +8,8 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
+	orquestarunmemory "orquesta/modulos/orquesta-run-memory"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
@@ -136,6 +138,47 @@ func TestMCPDirectorStatsToolExecutorV0CalculaControlSinExponerProcessRefs(t *te
 	}
 	if result.OpsSnapshot == nil || len(result.OpsSnapshot.Agents) == 0 {
 		t.Fatalf("ops_snapshot ausente: %+v", result)
+	}
+}
+
+func TestMCPDirectorStatsToolExecutorV0IncluyeRunControlStopRequested(t *testing.T) {
+	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-stop-control-001")
+	run.StoppedAgents = nil
+	run.AgentStopRequests = nil
+	run.ConfirmedStoppedAgents = nil
+	control := orquestarunmemory.NewRunMemoryStoreV0()
+	if _, err := control.StopRunV0(context.Background(), orquestaruncontrol.StopRunCommandV0{
+		RunRef:         run.RunID,
+		RequestedBy:    "operator",
+		Reason:         "parada de prueba",
+		Forced:         true,
+		IdempotencyKey: "idem-mcp-director-stats-stop-control-001",
+		EvidenceRefs:   []string{"evidence-ref-mcp-director-stats-stop-control-001"},
+	}); err != nil {
+		t.Fatalf("StopRunV0: %v", err)
+	}
+
+	result, err := (MCPDirectorStatsToolExecutorV0{
+		RunStore:   orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+		RunControl: control,
+	}).Execute(context.Background(), MCPDirectorStatsToolInputV0{
+		RequestID:     "request-ref-mcp-director-stats-stop-control-001",
+		CorrelationID: "corr-mcp-director-stats-stop-control-001",
+		RunRef:        run.RunID,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPDirectorStatsEstadoOKV0 ||
+		result.Stats == nil ||
+		result.Stats.StopControl.Status != orquestacionnucleoapp.DirectorRunStopStatusRequestedV0 ||
+		result.Stats.StopControl.RunControlStatus != string(orquestaruncontrol.RunControlStatusStopRequestedV0) ||
+		!result.Stats.StopControl.Requested ||
+		result.Stats.StopControl.Propagated ||
+		!result.Stats.StopControl.Pending ||
+		!result.Stats.StopControl.Forced ||
+		!containsStringMCPTestV0(result.Stats.StopControl.EvidenceRefs, "evidence-ref-mcp-director-stats-stop-control-001") {
+		t.Fatalf("result=%+v", result)
 	}
 }
 

@@ -90,6 +90,7 @@ func buildStackMCPTransportBindingsV0(
 		RequestAppChange: orquestamcp.NewMCPRequestAppChangeToolExecutorV0(appChangePortsV0(config)),
 		DirectorStats: orquestamcp.MCPDirectorStatsToolExecutorV0{
 			RunStore:          config.Stores.RunStore,
+			RunControl:        config.Stores.RunControl,
 			ProcessRegistry:   config.Stores.ProcessRegistry,
 			ProgressSource:    statsProgressSourceV0(config),
 			AgentUsageSource:  agentUsageSourceV0(config),

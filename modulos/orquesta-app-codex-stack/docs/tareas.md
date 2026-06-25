@@ -21,18 +21,19 @@ Write-set aplicado:
   `ProcessRegistry + SnapshotV0` y bloquea si un proceso registrado sigue
   `running`/`stopping` o no cuadra su identidad;
 - el resultado MCP publica siguientes acciones para volver a supervisar y no
-  marcar parado sin confirmacion.
+  marcar parado sin confirmacion;
+- `orquesta.director.stats.v0` recibe `RunControl` desde el stack y publica
+  `stop_control` con `stop_requested`, `stop_propagated`, `stop_pending` o
+  `stop_confirmed`, mas checkpoint/forced/evidencias compactas.
 
 Validacion:
 
-- `go test -count=1 ./modulos/orquesta-app-codex-stack`.
+- `go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-mcp ./modulos/orquesta-web ./modulos/orquesta-app-codex-stack`.
 
 Pendiente:
 
 - smoke Codex real opt-in que demuestre cero procesos `codex exec` vivos tras
-  stop forzado;
-- superficie publica de status con distincion completa `stop_requested`,
-  `stop_propagated`, `stop_confirmed` y `stop_pending`.
+  stop forzado.
 
 ## APP-CODEX-STACK-044
 

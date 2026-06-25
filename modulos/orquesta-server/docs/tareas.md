@@ -1023,10 +1023,13 @@ Criterio de cierre:
   reconcile completa `RunControl` como `stopped`;
 - cerrado local 2026-06-25: test con proceso registrado vivo impide
   terminalizar `RunControl` como `stopped`;
+- cerrado local 2026-06-25: `DirectorRunStatsV0.stop_control` y
+  `/api/v0/director/stats` distinguen `stop_requested`,
+  `stop_propagated`, `stop_pending` y `stop_confirmed`; el stack inyecta
+  `RunControl` para publicar `run_control_status`, checkpoint, forced y
+  evidencias compactas;
 - smoke Codex real opt-in: una run parada no deja procesos `codex exec` vivos
-  tras el cierre;
-- status publico distingue `stop_requested`, `stop_propagated`,
-  `stop_confirmed` y `stop_pending`.
+  tras el cierre.
 
 ## Rework documental SRV-TASK-024 2026-06-25
 

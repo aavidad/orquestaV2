@@ -372,6 +372,17 @@ proyeccion queda preparada sin construir un adaptador a shutdown desde web.
 ```
 
 ```text
+Caso: WEB-UT-019B director stats proyecta stop_control pendiente
+Tipo: unit
+Comando: `go test -count=1 ./modulos/orquesta-web -run 'TestWebDirectorStatsPanelV0ProyectaStopControlPendiente'`
+Evidencia esperada: si el contrato consumido entrega `stop_control` con
+`stop_pending`, el panel web marca atencion, conserva `run_control_status`,
+checkpoint y forced, y deduplica refs opacas sin leer runtime ni shutdown.
+Ultima ejecucion: 2026-06-25; pasa con `go test -count=1 ./modulos/orquesta-web`.
+Riesgos: la precision depende de `director.stats`; la web solo proyecta.
+```
+
+```text
 Caso: WEB-INT-020 panel de cola multiapp
 Tipo: integration/contract
 Comando: `go test -count=1 ./modulos/orquesta-web`

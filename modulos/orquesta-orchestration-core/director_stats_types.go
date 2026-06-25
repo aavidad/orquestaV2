@@ -45,6 +45,14 @@ const (
 	DirectorClosureBlockedByRunBlockersV0          = "run_blockers"
 )
 
+const (
+	DirectorRunStopStatusNoneV0       = "none"
+	DirectorRunStopStatusRequestedV0  = "stop_requested"
+	DirectorRunStopStatusPropagatedV0 = "stop_propagated"
+	DirectorRunStopStatusPendingV0    = "stop_pending"
+	DirectorRunStopStatusConfirmedV0  = "stop_confirmed"
+)
+
 type DirectorRunStatsV0 struct {
 	SchemaVersion string                   `json:"schema_version"`
 	RunRef        string                   `json:"run_ref"`
@@ -56,6 +64,7 @@ type DirectorRunStatsV0 struct {
 	Refs          DirectorRunStatsRefsV0   `json:"refs,omitempty"`
 	Progress      DirectorProgressStatsV0  `json:"progress"`
 	Closure       DirectorClosureStatsV0   `json:"closure"`
+	StopControl   DirectorRunStopControlV0 `json:"stop_control"`
 	UsageSummary  *DirectorRunUsageStatsV0 `json:"usage_summary,omitempty"`
 	Phases        []DirectorPhaseStatsV0   `json:"phases,omitempty"`
 	Agents        []DirectorAgentStatsV0   `json:"agents,omitempty"`
@@ -154,6 +163,25 @@ type DirectorClosureStatsV0 struct {
 	Closed      bool     `json:"closed"`
 	BlockedBy   []string `json:"blocked_by,omitempty"`
 	BlockerRefs []string `json:"blocker_refs,omitempty"`
+}
+
+type DirectorRunStopControlV0 struct {
+	Status                 string   `json:"status"`
+	Requested              bool     `json:"requested"`
+	Propagated             bool     `json:"propagated"`
+	Pending                bool     `json:"pending"`
+	Confirmed              bool     `json:"confirmed"`
+	RunControlStatus       string   `json:"run_control_status,omitempty"`
+	CheckpointRecorded     bool     `json:"checkpoint_recorded,omitempty"`
+	Forced                 bool     `json:"forced,omitempty"`
+	StartedAgents          int      `json:"started_agents"`
+	StopRequestedAgents    int      `json:"stop_requested_agents"`
+	StopConfirmedAgents    int      `json:"stop_confirmed_agents"`
+	StopPendingAgents      int      `json:"stop_pending_agents"`
+	PendingAgentRefs       []string `json:"pending_agent_refs,omitempty"`
+	StopRequestedAgentRefs []string `json:"stop_requested_agent_refs,omitempty"`
+	StopConfirmedAgentRefs []string `json:"stop_confirmed_agent_refs,omitempty"`
+	EvidenceRefs           []string `json:"evidence_refs,omitempty"`
 }
 
 type DirectorAgentStatsV0 struct {

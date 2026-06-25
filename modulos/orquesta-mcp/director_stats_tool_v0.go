@@ -6,6 +6,7 @@ import (
 
 	orquestaobservability "orquesta/modulos/orquesta-observability"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 )
 
 const (
@@ -79,6 +80,7 @@ type MCPDirectorExternalJobStatsSourcePortV0 interface {
 
 type MCPDirectorStatsToolExecutorV0 struct {
 	RunStore          orquestacionnucleoapp.RunStorePortV0
+	RunControl        orquestaruncontrol.RunControlReaderPortV0
 	ProcessRegistry   orquestacionnucleoapp.AgentProcessRegistryPortV0
 	ProgressSource    orquestacionnucleoapp.AgentProgressObservationProviderPortV0
 	AgentUsageSource  orquestacionnucleoapp.AgentUsageStatsProviderPortV0
@@ -182,6 +184,7 @@ func (executor MCPDirectorStatsToolExecutorV0) Execute(
 	if !input.IncludeProcessRefs {
 		clearMCPDirectorStatsProcessRefsV0(&stats)
 	}
+	executor.applyRunControlProjectionV0(ctx, runRef, &stats)
 	decisionContext := buildMCPDirectorDecisionContextV0(run, stats, input.OccurredAt)
 	return MCPDirectorStatsToolResultV0{
 		Estado:          MCPDirectorStatsEstadoOKV0,
@@ -194,6 +197,29 @@ func (executor MCPDirectorStatsToolExecutorV0) Execute(
 		OpsSnapshot:     buildMCPDirectorStatsOpsSnapshotV0(stats, decisionContext, input.OccurredAt),
 		Errores:         []MCPValidationIssueV0{},
 	}, nil
+}
+
+func (executor MCPDirectorStatsToolExecutorV0) applyRunControlProjectionV0(
+	ctx context.Context,
+	runRef string,
+	stats *orquestacionnucleoapp.DirectorRunStatsV0,
+) {
+	if executor.RunControl == nil || stats == nil {
+		return
+	}
+	state, err := executor.RunControl.ReadRunControlStateV0(ctx, orquestaruncontrol.RunControlReadRequestV0{
+		RunRef: strings.TrimSpace(runRef),
+	})
+	if err != nil {
+		return
+	}
+	orquestacionnucleoapp.ApplyDirectorRunControlStateV0(
+		stats,
+		string(state.Status),
+		state.CheckpointRecorded,
+		state.Forced,
+		state.EvidenceRefs,
+	)
 }
 
 func clearMCPDirectorStatsProcessRefsV0(stats *orquestacionnucleoapp.DirectorRunStatsV0) {

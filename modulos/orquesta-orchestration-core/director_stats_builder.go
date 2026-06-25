@@ -21,6 +21,7 @@ func BuildDirectorRunStatsV0(
 		Refs:          buildDirectorRunRefsV0(run),
 		Progress:      BuildDirectorProgressStatsV0(run, nil, nil),
 		Closure:       buildDirectorClosureStatsV0(run),
+		StopControl:   buildDirectorRunStopControlV0(run),
 		Phases:        buildDirectorPhaseStatsV0(run.Phases),
 		Agents:        buildDirectorAgentStatsV0(run),
 	}
@@ -232,4 +233,72 @@ func buildDirectorRunRefsV0(
 		DirectorAnswered:      compactStringsV0(run.DirectorAnsweredQuestions),
 		Blockers:              compactStringsV0(run.Blockers),
 	}
+}
+
+func buildDirectorRunStopControlV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) DirectorRunStopControlV0 {
+	started := compactStringsV0(run.StartedAgents)
+	stopRequested := compactStringsV0(run.StoppedAgents)
+	stopConfirmed := compactStringsV0(run.ConfirmedStoppedAgents)
+	pending := pendingDirectorRunStopAgentRefsV0(run)
+	allRequestedConfirmed := directorStopRequestedAllConfirmedV0(stopRequested, stopConfirmed)
+	stats := DirectorRunStopControlV0{
+		Status:                 DirectorRunStopStatusNoneV0,
+		Propagated:             len(stopRequested) > 0,
+		Pending:                len(pending) > 0,
+		Confirmed:              allRequestedConfirmed,
+		StartedAgents:          len(started),
+		StopRequestedAgents:    len(stopRequested),
+		StopConfirmedAgents:    len(stopConfirmed),
+		StopPendingAgents:      len(pending),
+		PendingAgentRefs:       pending,
+		StopRequestedAgentRefs: stopRequested,
+		StopConfirmedAgentRefs: stopConfirmed,
+	}
+	stats.Requested = stats.Propagated || stats.Confirmed
+	switch {
+	case stats.Pending:
+		stats.Status = DirectorRunStopStatusPendingV0
+	case stats.Confirmed:
+		stats.Status = DirectorRunStopStatusConfirmedV0
+	case stats.Propagated:
+		stats.Status = DirectorRunStopStatusPropagatedV0
+	}
+	return stats
+}
+
+func pendingDirectorRunStopAgentRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) []string {
+	stopRequested := autonomousStringSetV0(run.StoppedAgents)
+	terminal := autonomousStringSetV0(compactStringsV0(append(
+		append(append([]string{}, run.ConfirmedStoppedAgents...), run.DeliveredAgents...),
+		append(run.FailedAgents, run.LostAgents...)...,
+	)))
+	pending := make([]string, 0, len(run.StartedAgents))
+	for _, agentRef := range compactStringsV0(run.StartedAgents) {
+		if !stopRequested[agentRef] || terminal[agentRef] {
+			continue
+		}
+		pending = append(pending, agentRef)
+	}
+	return pending
+}
+
+func directorStopRequestedAllConfirmedV0(
+	stopRequested []string,
+	stopConfirmed []string,
+) bool {
+	stopRequested = compactStringsV0(stopRequested)
+	if len(stopRequested) == 0 {
+		return false
+	}
+	confirmed := autonomousStringSetV0(stopConfirmed)
+	for _, agentRef := range stopRequested {
+		if !confirmed[strings.TrimSpace(agentRef)] {
+			return false
+		}
+	}
+	return true
 }

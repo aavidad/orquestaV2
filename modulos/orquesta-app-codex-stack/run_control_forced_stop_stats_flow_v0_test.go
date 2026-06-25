@@ -10,6 +10,7 @@ import (
 	"time"
 
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
@@ -65,6 +66,12 @@ func TestCodexStackV0StopForzadoPorAPIDrenaAgentesYActualizaStats(t *testing.T) 
 	}
 	if state.Status != orquestaruncontrol.RunControlStatusStoppedV0 {
 		t.Fatalf("state=%+v", state)
+	}
+	if stats.Stats.StopControl.Status != orquestacionnucleoapp.DirectorRunStopStatusConfirmedV0 ||
+		stats.Stats.StopControl.RunControlStatus != string(orquestaruncontrol.RunControlStatusStoppedV0) ||
+		!stats.Stats.StopControl.Confirmed ||
+		stats.Stats.StopControl.Pending {
+		t.Fatalf("stop_control=%+v", stats.Stats.StopControl)
 	}
 }
 
@@ -126,6 +133,18 @@ func TestCodexStackV0RunSupervisorStopForzadoQuedaPendingSiRuntimeNoConfirmaV0(t
 	}
 	if len(run.ConfirmedStoppedAgents) >= len(run.StartedAgents) {
 		t.Fatalf("run no debe estar confirmado parado: %+v", run)
+	}
+	stats := postDirectorStatsStackV0(t, stack, director.RunRef)
+	if stats.Stats == nil ||
+		stats.Stats.StopControl.Status != orquestacionnucleoapp.DirectorRunStopStatusPendingV0 ||
+		stats.Stats.StopControl.RunControlStatus != string(orquestaruncontrol.RunControlStatusStopRequestedV0) ||
+		!stats.Stats.StopControl.Requested ||
+		!stats.Stats.StopControl.Propagated ||
+		!stats.Stats.StopControl.Pending ||
+		stats.Stats.StopControl.Confirmed ||
+		stats.Stats.StopControl.StopPendingAgents == 0 ||
+		len(stats.Stats.StopControl.PendingAgentRefs) == 0 {
+		t.Fatalf("stats stop_control=%+v stats=%+v", stats.Stats.StopControl, stats.Stats)
 	}
 }
 

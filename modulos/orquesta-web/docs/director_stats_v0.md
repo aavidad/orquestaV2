@@ -41,3 +41,6 @@ Pruebas:
 - `director_stats_viewmodel_v0_test.go` valida que un checkpoint pendiente
   recibido por contrato se muestra como atencion, con refs deduplicadas y sin
   acoplar la web a runtime/shutdown.
+- `director_stats_viewmodel_v0_test.go` valida que `stop_control` recibido por
+  contrato se proyecta con refs opacas deduplicadas y marca atencion cuando
+  queda `stop_pending`.
