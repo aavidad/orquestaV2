@@ -1188,7 +1188,7 @@ func TestSmokeOPESDerivativesRESTWrapperFakeServerV0(t *testing.T) {
 	}
 }
 
-func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilAssembleV0(t *testing.T) {
+func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilFinalizeV0(t *testing.T) {
 	requireLocalTCPForTestV0(t)
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 no disponible")
@@ -1202,7 +1202,7 @@ func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilAssembleV0(t *testing.
 	cmd.Env = cleanOPESSmokeEnvForDrainTestV0(os.Environ())
 	cmd.Env = append(cmd.Env,
 		"ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER=1",
-		"ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-assemble",
+		"ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-finalize",
 		"ORQUESTA_OPES_DERIVATIVES_EXECUTE=1",
 		"ORQUESTA_OPES_TEMPORAL_CONFIRM=1",
 		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-fake-operario-001",
@@ -1252,6 +1252,7 @@ func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilAssembleV0(t *testing.
 		!strings.Contains(output, `"artifact_type": "help_manual_package"`) ||
 		!strings.Contains(output, `"artifact_type": "completed_syllabus_package"`) ||
 		!strings.Contains(output, `run_until_status=completed`) ||
+		!strings.Contains(output, `run_until_mode=run-until-finalize`) ||
 		!strings.Contains(output, `final_job_type=finalize_temario_package`) {
 		t.Fatalf("stdout=%s stderr=%s", output, stderr.String())
 	}

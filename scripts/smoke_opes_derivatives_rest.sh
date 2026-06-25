@@ -21,6 +21,17 @@ FAKE_PENDING_TYPE="${ORQUESTA_OPES_DERIVATIVES_FAKE_PENDING_TYPE:-assemble_topic
 FAKE_DIR=""
 FAKE_PID=""
 
+is_run_until_mode() {
+  case "$1" in
+    run-until-assemble | run-until-finalize | run-until-final)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 cleanup() {
   if [[ -n "$FAKE_PID" ]]; then
     kill "$FAKE_PID" >/dev/null 2>&1 || true
@@ -34,8 +45,8 @@ trap cleanup EXIT
 
 start_fake_opes() {
   smoke_require_tool python3
-  if [[ "$MODE" != "dry-run-once" && "$MODE" != "run-until-assemble" ]]; then
-    echo "fake OPES solo soporta dry-run-once o run-until-assemble" >&2
+  if [[ "$MODE" != "dry-run-once" ]] && ! is_run_until_mode "$MODE"; then
+    echo "fake OPES solo soporta dry-run-once, run-until-finalize o run-until-assemble" >&2
     exit 2
   fi
   if [[ -z "$FAKE_PENDING_TYPE" ]]; then
@@ -289,7 +300,7 @@ PY
   for _ in $(seq 1 50); do
     if [[ -s "$url_file" ]]; then
       OPES_BASE_URL_EFFECTIVE="$(cat "$url_file")"
-      if [[ "$MODE" == "run-until-assemble" ]]; then
+      if is_run_until_mode "$MODE"; then
         ORQUESTA_BASE_URL_EFFECTIVE="$OPES_BASE_URL_EFFECTIVE"
       fi
       return
@@ -481,7 +492,7 @@ post_supervise_run() {
   cat "$response_file"
 }
 
-run_until_assemble() {
+run_until_final_type() {
   smoke_require_tools python3 curl
   local final_type
   final_type="${SEQUENCE##*,}"
@@ -496,6 +507,7 @@ run_until_assemble() {
       if [[ "$final_seen" == "1" ]]; then
         final_summary="$summary_file"
         echo "run_until_status=completed"
+        echo "run_until_mode=$MODE"
         echo "final_job_type=$final_type"
         echo "final_summary=$final_summary"
         return
@@ -523,6 +535,7 @@ run_until_assemble() {
     if [[ "$selected" == "$final_type" ]]; then
       final_summary="$summary_file"
       echo "run_until_status=completed"
+      echo "run_until_mode=$MODE"
       echo "final_job_type=$final_type"
       echo "final_summary=$final_summary"
       return
@@ -549,11 +562,11 @@ main() {
     drain-once)
       run_execute_drain_once
       ;;
-    run-until-assemble)
-      run_until_assemble
+    run-until-assemble | run-until-finalize | run-until-final)
+      run_until_final_type
       ;;
     *)
-      echo "modo no soportado: $MODE (usa dry-run-once, drain-once o run-until-assemble)" >&2
+      echo "modo no soportado: $MODE (usa dry-run-once, drain-once, run-until-finalize o run-until-assemble)" >&2
       exit 2
       ;;
   esac

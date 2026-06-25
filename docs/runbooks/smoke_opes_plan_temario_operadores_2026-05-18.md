@@ -434,7 +434,7 @@ operadores y la matriz: acepta la guarda historica
 `ORQUESTA_OPES_DERIVATIVES_SMOKE_CONFIRM=1`, la traduce a
 `ORQUESTA_OPES_DERIVATIVES_REST_CONFIRM=1` y delega en
 `scripts/smoke_opes_derivatives_rest.sh`. La ruta canonica es el script REST,
-porque contiene tambien el modo fake aislado y el loop `run-until-assemble`.
+porque contiene tambien el modo fake aislado y el loop `run-until-finalize`.
 
 Ese modo es `dry-run-once`: consulta OPES temporal y muestra la primera fase
 pendiente de la secuencia sin crear runs en Orquesta. Si el OPES temporal no es
@@ -457,7 +457,8 @@ scripts/smoke_opes_derivatives_rest.sh
 
 Para dejar avanzar la secuencia completa hasta que OPES deje de exponer el
 ultimo tipo configurado pendiente despues de supervisar su run, usar el modo
-`run-until-assemble`. El nombre del modo queda por compatibilidad historica.
+`run-until-finalize`. El alias historico `run-until-assemble` sigue aceptado
+por compatibilidad.
 Sigue siendo opt-in y temporal: crea runs fase a fase, supervisa cada `run_ref`
 devuelto por Orquesta y repite la secuencia hasta observar que
 `generate_html_site` y `generate_help_manual_assets` ya no quedan pendientes en
@@ -469,7 +470,7 @@ ORQUESTA_BASE_URL=http://127.0.0.1:<puerto-orquesta> \
 ORQUESTA_OPES_DERIVATIVES_REST_CONFIRM=1 \
 ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
-ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-assemble \
+ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-finalize \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 ORQUESTA_OPES_BRIDGE_MAX_TICKS=20 \
@@ -484,7 +485,7 @@ ORQUESTA_BASE_URL=http://127.0.0.1:<puerto-orquesta> \
 ORQUESTA_OPES_DERIVATIVES_SMOKE_CONFIRM=1 \
 ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
-ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-assemble \
+ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-finalize \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 ORQUESTA_OPES_BRIDGE_MAX_TICKS=20 \
@@ -495,7 +496,7 @@ El wrapper rechaza `ORQUESTA_OPES_BRIDGE_JOB_TYPE` y
 `ORQUESTA_OPES_BRIDGE_JOB_REF` para derivados porque la ruta segura aqui es la
 secuencia completa por fases. Cada ejecucion real debe revisar el JSON de salida
 en `/tmp/opes-salidas/derivatives-rest-<smoke_id>/` antes de repetir o subir el
-limite. El fake offline cubre tambien `run-until-assemble` y comprueba que
+limite. El fake offline cubre tambien `run-until-finalize` y comprueba que
 `research_exam_precedents`, `assemble_topic`, `generate_question_bank`,
 `generate_audio_asset`, `generate_tutor_assets`, `generate_html_site` y
 `generate_help_manual_assets` se
@@ -519,7 +520,7 @@ cuota/modelo confirmados y evidencia de que cada derivado fue aceptado por OPES
 con refs causales suficientes; no se declara cerrado desde dry-run.
 
 Bloqueo verificable T12 si no hay entorno temporal: ejecutar primero el smoke
-fake aislado y despues repetir el comando `run-until-assemble` anterior cuando
+fake aislado y despues repetir el comando `run-until-finalize` anterior cuando
 existan OPES temporal, servidor Orquesta temporal y cuota/modelo confirmados.
 La ausencia de `ORQUESTA_OPES_BASE_URL`, `ORQUESTA_BASE_URL`,
 `ORQUESTA_OPES_TEMPORAL_CONFIRM=1` u `ORQUESTA_OPES_DERIVATIVES_EXECUTE=1`
