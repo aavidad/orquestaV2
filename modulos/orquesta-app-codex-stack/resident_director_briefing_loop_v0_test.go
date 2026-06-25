@@ -148,6 +148,99 @@ func TestCodexStackResidentDirectorV0ProcesaLoteSegunMaxRunsPerTickV0(t *testing
 	}
 }
 
+func TestCodexStackResidentDirectorV0RecuperaRunNoEjecutableAntesDeCoordinarV0(t *testing.T) {
+	ctx := context.Background()
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	now := time.Date(2026, 6, 25, 12, 0, 0, 0, time.UTC)
+	runRef := "run-resident-codex-stack-recover-001"
+	taskRef := "task-resident-codex-stack-recover-001"
+	queueRef := normalizeRunQueueConfigV0(stack.RunQueue).QueueRef
+	seedCodexStackResidentDirectorRunV0(t, ctx, stack, runRef, taskRef)
+	claim := orquestarunqueue.WorksetClaimV0{
+		SchemaVersion: orquestarunqueue.WorksetClaimSchemaVersionV0,
+		ClaimRef:      "claim-ref-resident-codex-stack-recover-001",
+		RunRef:        runRef,
+		TaskRef:       taskRef,
+		WriteSet: []orquestarunqueue.ScopeRefV0{{
+			Ref: "external/opes/job-demo",
+		}},
+	}
+	if _, err := stack.Stores.RunQueue.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        runRef,
+		QueueRef:      queueRef,
+		AppRef:        "opes",
+		Status:        orquestarunqueue.RunStatusCanceledV0,
+		PriorityScore: 80,
+		UpdatedAt:     now,
+		AttemptGroup: orquestarunqueue.RunQueueAttemptGroupV0{
+			GroupRef:     "attempt-group-resident-codex-stack-recover-001",
+			ConsumerRef:  "opes",
+			ObjectiveRef: "objective-ref-opes-job-demo",
+			WorkItemRef:  taskRef,
+			WriteSetRefs: []string{"external/opes/job-demo"},
+		},
+		ParentRunRef:  "parent-run-ref-resident-codex-stack-recover",
+		RescueReason:  "resident_director_pending_recovery",
+		RequestedBy:   "resident-director-test",
+		Reason:        "fixture no ejecutable previo al residente",
+		EvidenceRefs:  []string{"evidence-ref-resident-recover-candidate"},
+		WorksetClaims: []orquestarunqueue.WorksetClaimV0{claim},
+	}); err != nil {
+		t.Fatalf("SetRunPriorityV0: %v", err)
+	}
+	visibleBefore, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		ctx,
+		orquestarunqueue.RunQueueReadRequestV0{QueueRef: queueRef},
+	)
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0 before: %v", err)
+	}
+	if len(visibleBefore) != 0 {
+		t.Fatalf("visibleBefore=%+v", visibleBefore)
+	}
+
+	result, err := stack.RunCodexStackResidentDirectorV0(ctx, CodexStackResidentDirectorCommandV0{
+		OccurredAt:            now.Format(time.RFC3339),
+		CorrelationID:         "corr-resident-codex-stack-recover",
+		MaxRunsPerTick:        1,
+		MaxExecutions:         1,
+		RunQueueReadLimit:     1,
+		MaxActions:            8,
+		MaxDispatchesPerWait:  4,
+		MaxCommands:           6,
+		MaxOutboxPerCycle:     6,
+		QueueRankingPolicyNow: now,
+		EvidenceRefs:          []string{"evidence-ref-resident-recover-command"},
+	})
+	if err != nil {
+		t.Fatalf("RunCodexStackResidentDirectorV0: %v result=%+v", err, result)
+	}
+	if result.RunRef != runRef ||
+		result.Status == CodexStackResidentDirectorStatusIdleV0 ||
+		runtime.launchCountV0() != 1 {
+		t.Fatalf("result=%+v launches=%d", result, runtime.launchCountV0())
+	}
+	all, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		ctx,
+		orquestarunqueue.RunQueueReadRequestV0{QueueRef: queueRef, IncludeNonExecutable: true},
+	)
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0 after: %v", err)
+	}
+	if len(all) != 1 ||
+		all[0].RunRef != runRef ||
+		all[0].AppRef != "opes" ||
+		all[0].AttemptGroup.WorkItemRef != taskRef ||
+		all[0].ParentRunRef != "parent-run-ref-resident-codex-stack-recover" ||
+		all[0].RescueReason != "resident_director_pending_recovery" ||
+		len(all[0].WorksetClaims) != 1 ||
+		all[0].WorksetClaims[0].ClaimRef != claim.ClaimRef ||
+		!codexStackStringInSetForTestV0(all[0].EvidenceRefs, "evidence-ref-run-queue-non-executable-active-reconciled") {
+		t.Fatalf("all=%+v", all)
+	}
+}
+
 func TestCodexStackResidentBriefingSourceV0NoReutilizaStopMaxStepsInternoV0(t *testing.T) {
 	runRef := "run-ref-resident-stop-max-001"
 	stopBudget := mustCodexStackResidentBriefingForTestV0(

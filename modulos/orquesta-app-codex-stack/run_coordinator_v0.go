@@ -21,43 +21,63 @@ func (stack StackV0) RunGlobalTickV0(
 	if err := ctx.Err(); err != nil {
 		return orquestaruncoordinator.RunCoordinatorTickResultV0{}, err
 	}
-	if err := stack.reconcileQueuedOrphanExecutableRunsV0(ctx, command); err != nil {
+	if _, err := stack.prepareRunCoordinatorTickV0(ctx, command); err != nil {
 		return orquestaruncoordinator.RunCoordinatorTickResultV0{}, err
+	}
+	return stack.coordinateRunsTickV0(
+		ctx,
+		command,
+		stackRunDrainerV0{stack: stack},
+	)
+}
+
+type runCoordinatorPreparationResultV0 struct {
+	ProcessRuntimeMissing bool
+}
+
+func (stack StackV0) prepareRunCoordinatorTickV0(
+	ctx context.Context,
+	command orquestaruncoordinator.RunCoordinatorTickCommandV0,
+) (runCoordinatorPreparationResultV0, error) {
+	if err := ctx.Err(); err != nil {
+		return runCoordinatorPreparationResultV0{}, err
+	}
+	if err := stack.reconcileQueuedOrphanExecutableRunsV0(ctx, command); err != nil {
+		return runCoordinatorPreparationResultV0{}, err
 	}
 	if err := stack.recoverQueuedStoppedActiveRunsV0(ctx, command); err != nil {
 		if codexStackProcessRuntimeMissingV0(err) {
 			if err := ctx.Err(); err != nil {
-				return orquestaruncoordinator.RunCoordinatorTickResultV0{}, err
+				return runCoordinatorPreparationResultV0{}, err
 			}
-			return orquestaruncoordinator.CoordinateRunsTickV0(
-				ctx,
-				orquestaruncoordinator.RunCoordinatorDepsV0{
-					QueueReader:   stack.Stores.RunQueue,
-					QueueUpdater:  stack.Stores.RunQueue,
-					ControlReader: stack.Stores.RunControl,
-					Drainer:       stackRunDrainerV0{stack: stack},
-				},
-				command,
-			)
+			return runCoordinatorPreparationResultV0{ProcessRuntimeMissing: true}, nil
 		}
-		return orquestaruncoordinator.RunCoordinatorTickResultV0{}, err
+		return runCoordinatorPreparationResultV0{}, err
 	}
 	if err := ctx.Err(); err != nil {
-		return orquestaruncoordinator.RunCoordinatorTickResultV0{}, err
+		return runCoordinatorPreparationResultV0{}, err
 	}
 	if err := stack.recoverQueuedControlledDomainWorkArtifactsV0(ctx, command); err != nil {
-		return orquestaruncoordinator.RunCoordinatorTickResultV0{}, err
+		return runCoordinatorPreparationResultV0{}, err
 	}
 	if err := ctx.Err(); err != nil {
-		return orquestaruncoordinator.RunCoordinatorTickResultV0{}, err
+		return runCoordinatorPreparationResultV0{}, err
 	}
+	return runCoordinatorPreparationResultV0{}, nil
+}
+
+func (stack StackV0) coordinateRunsTickV0(
+	ctx context.Context,
+	command orquestaruncoordinator.RunCoordinatorTickCommandV0,
+	drainer orquestaruncoordinator.RunDrainerPortV0,
+) (orquestaruncoordinator.RunCoordinatorTickResultV0, error) {
 	return orquestaruncoordinator.CoordinateRunsTickV0(
 		ctx,
 		orquestaruncoordinator.RunCoordinatorDepsV0{
 			QueueReader:   stack.Stores.RunQueue,
 			QueueUpdater:  stack.Stores.RunQueue,
 			ControlReader: stack.Stores.RunControl,
-			Drainer:       stackRunDrainerV0{stack: stack},
+			Drainer:       drainer,
 		},
 		command,
 	)

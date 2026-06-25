@@ -76,27 +76,20 @@ func (stack StackV0) RunCodexStackResidentDirectorV0(
 		}, nil
 	}
 	accumulator := &codexStackResidentDirectorAccumulatorV0{}
-	tick, err := orquestaruncoordinator.CoordinateRunsTickV0(
+	tickCommand := codexStackResidentCoordinatorCommandV0(command)
+	if _, err := stack.prepareRunCoordinatorTickV0(ctx, tickCommand); err != nil {
+		return CodexStackResidentDirectorResultV0{
+			Status:       "error",
+			EvidenceRefs: compactStringsV0(command.EvidenceRefs),
+		}, err
+	}
+	tick, err := stack.coordinateRunsTickV0(
 		ctx,
-		orquestaruncoordinator.RunCoordinatorDepsV0{
-			QueueReader:   stack.Stores.RunQueue,
-			QueueUpdater:  stack.Stores.RunQueue,
-			ControlReader: stack.Stores.RunControl,
-			Drainer: codexStackResidentRunDrainerV0{
-				stack:       stack,
-				command:     command,
-				accumulator: accumulator,
-			},
-		},
-		orquestaruncoordinator.RunCoordinatorTickCommandV0{
-			QueueRef:             command.QueueRef,
-			QueueLimit:           command.RunQueueReadLimit,
-			MaxRuns:              command.MaxRunsPerTick,
-			OccurredAt:           command.QueueRankingPolicyNow,
-			CorrelationID:        command.CorrelationID,
-			DrainLimits:          codexStackResidentDrainLimitsV0(command),
-			RankingPolicy:        orquestarunqueue.DefaultRunQueueRankingPolicyV0(command.QueueRankingPolicyNow),
-			ContinueOnDrainError: true,
+		tickCommand,
+		codexStackResidentRunDrainerV0{
+			stack:       stack,
+			command:     command,
+			accumulator: accumulator,
 		},
 	)
 	result := codexStackResidentResultFromCoordinatorV0(command, tick, accumulator)
@@ -104,6 +97,21 @@ func (stack StackV0) RunCodexStackResidentDirectorV0(
 		return result, err
 	}
 	return result, nil
+}
+
+func codexStackResidentCoordinatorCommandV0(
+	command CodexStackResidentDirectorCommandV0,
+) orquestaruncoordinator.RunCoordinatorTickCommandV0 {
+	return orquestaruncoordinator.RunCoordinatorTickCommandV0{
+		QueueRef:             command.QueueRef,
+		QueueLimit:           command.RunQueueReadLimit,
+		MaxRuns:              command.MaxRunsPerTick,
+		OccurredAt:           command.QueueRankingPolicyNow,
+		CorrelationID:        command.CorrelationID,
+		DrainLimits:          codexStackResidentDrainLimitsV0(command),
+		RankingPolicy:        orquestarunqueue.DefaultRunQueueRankingPolicyV0(command.QueueRankingPolicyNow),
+		ContinueOnDrainError: true,
+	}
 }
 
 func normalizeCodexStackResidentDirectorCommandV0(

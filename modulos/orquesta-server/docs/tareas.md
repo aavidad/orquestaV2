@@ -798,6 +798,23 @@ Reconciliacion documental 2026-06-25:
   locales, no relanza padre ni toca codigo, y mantiene SRV-TASK-024 abierto
   hasta dispatch real o bloqueo causal publico probado por smoke OPES acotado.
 
+Avance local 2026-06-25:
+
+- `orquesta-app-codex-stack` extrae `prepareRunCoordinatorTickV0` desde el tick
+  global y lo reutiliza en `RunCodexStackResidentDirectorV0`.
+- El residente ejecuta `reconcileQueuedOrphanExecutableRunsV0`,
+  `recoverQueuedStoppedActiveRunsV0` y
+  `recoverQueuedControlledDomainWorkArtifactsV0` antes del coordinator,
+  conservando la degradacion por `codexStackProcessRuntimeMissingV0`.
+- `TestCodexStackResidentDirectorV0RecuperaRunNoEjecutableAntesDeCoordinarV0`
+  cubre una run `AppRef=opes` no ejecutable con `AttemptGroup`,
+  `WorksetClaims`, parent ref y evidencia que queda reencolada y despachada por
+  el residente.
+- Evidencia local: `go test -count=1 ./modulos/orquesta-app-codex-stack` y
+  `git diff --check -- modulos/orquesta-app-codex-stack`.
+- SRV-TASK-024 sigue abierto hasta smoke OPES acotado por `JOB_REF` exacto que
+  demuestre dispatch real o bloqueo causal publico sin `/runs/supervise`.
+
 ## SRV-TASK-025: reconciliacion de ACK OPES no debe terminar en domain_work_submit_conflict sin publicar artefacto
 
 Estado: abierto 2026-06-21.
