@@ -235,8 +235,17 @@ ORQUESTA_OPES_BRIDGE_CONFIRM=1 \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 ORQUESTA_OPES_BRIDGE_JOB_TYPE=plan_temario \
 ORQUESTA_OPES_BRIDGE_JOB_REF=job-ref-plan-temario-operario-001 \
+ORQUESTA_OPES_BRIDGE_WAIT_RESIDENT_SECONDS=15 \
+ORQUESTA_OPES_BRIDGE_WAIT_RESIDENT_INTERVAL_MS=500 \
 go run ./cmd/orquesta-server opes-drain-once
 ```
+
+`ORQUESTA_OPES_BRIDGE_WAIT_RESIDENT_SECONDS` no llama a
+`/api/v0/runs/supervise`: solo observa `/api/v0/director/stats` durante una
+ventana corta para que `opes-drain-once` pueda devolver
+`supervision_status=started` si el pulso residente ya despacho la run, o
+`resident_director_pending` con `supervision_stop_reason=resident_dispatch_wait_timeout`
+si no hay dispatch visible.
 
 Empuje acotado opcional si se quiere acelerar una run concreta sin esperar al
 siguiente tick del servidor:

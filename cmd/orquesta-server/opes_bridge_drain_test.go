@@ -153,6 +153,191 @@ func TestRunOPESDrainOnceV0NoSupervisaPorDefectoTrasEnviarV0(t *testing.T) {
 	}
 }
 
+func TestRunOPESDrainOnceV0EsperaDespachoResidenteSinSupervisarV0(t *testing.T) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
+			"id":             "job-ref-resident-dispatch-001",
+			"type":           "plan_temario",
+			"status":         "pending",
+			"execution_mode": "external",
+			"payload_json":   `{"program_id":"program-ref-resident-001","title":"Temario residente"}`,
+			"requested_by":   "opes",
+		}})
+	}))
+	defer opesServer.Close()
+
+	statsCalls := 0
+	supervisions := 0
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v0/external-work/run":
+			if r.Method != http.MethodPost {
+				t.Fatalf("external-work method=%s", r.Method)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"run_ref": "run-ref-resident-dispatch-001",
+				"estado":  "accepted",
+			})
+		case "/api/v0/director/stats":
+			if r.Method != http.MethodPost {
+				t.Fatalf("director stats method=%s", r.Method)
+			}
+			statsCalls++
+			if statsCalls == 1 {
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"estado":  "ok",
+					"run_ref": "run-ref-resident-dispatch-001",
+					"stats": map[string]any{
+						"run_ref": "run-ref-resident-dispatch-001",
+						"status":  "running",
+						"counts":  map[string]any{},
+					},
+				})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"estado":  "ok",
+				"run_ref": "run-ref-resident-dispatch-001",
+				"stats": map[string]any{
+					"run_ref": "run-ref-resident-dispatch-001",
+					"status":  "running",
+					"counts": map[string]any{
+						"agents_started":   1,
+						"agents_in_flight": 1,
+					},
+					"refs": map[string]any{
+						"agents_started": []string{"agent-ref-resident-dispatch-001"},
+					},
+					"agents": []map[string]any{{
+						"agent_request_id": "agent-ref-resident-dispatch-001",
+						"started":          true,
+						"in_flight":        true,
+						"process": map[string]any{
+							"process_ref":   "process-ref-resident-dispatch-001",
+							"evidence_refs": []string{"evidence-ref-resident-dispatch-001"},
+						},
+					}},
+				},
+			})
+		case "/api/v0/runs/supervise":
+			supervisions++
+			t.Fatalf("no debe llamar /runs/supervise en espera residente pasiva")
+		default:
+			t.Fatalf("orquesta request inesperada %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer orquestaServer.Close()
+
+	ledger, err := newFileExternalBridgeInputLedgerV0(
+		filepath.Join(t.TempDir(), "external-bridge-input-ledger.json"),
+	)
+	if err != nil {
+		t.Fatalf("ledger: %v", err)
+	}
+	summary, err := runOPESDrainOnceV0(context.Background(), opesDrainConfigV0{
+		OPESBaseURL:                  opesServer.URL,
+		OrquestaBaseURL:              orquestaServer.URL,
+		Limit:                        1,
+		JobType:                      "plan_temario",
+		HTTPTimeout:                  time.Second,
+		ResidentDispatchWait:         time.Second,
+		ResidentDispatchPollInterval: time.Millisecond,
+		RunConfig: orquestaopesbridge.JobRunConfigV0{
+			PriorityScore: 70,
+			RequestedBy:   "test",
+		},
+		InputLedger: ledger,
+	})
+	if err != nil ||
+		statsCalls < 2 ||
+		supervisions != 0 ||
+		summary.Submitted != 1 ||
+		summary.Results[0].SupervisionStatus != "started" ||
+		summary.Results[0].SupervisionProcessRef != "process-ref-resident-dispatch-001" ||
+		summary.Results[0].SupervisionEvidenceRef != "evidence-ref-resident-dispatch-001" {
+		t.Fatalf("stats=%d supervisions=%d summary=%+v err=%v", statsCalls, supervisions, summary, err)
+	}
+}
+
+func TestRunOPESDrainOnceV0EsperaDespachoResidenteTimeoutSinSupervisarV0(t *testing.T) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
+			"id":             "job-ref-resident-timeout-001",
+			"type":           "plan_temario",
+			"status":         "pending",
+			"execution_mode": "external",
+			"payload_json":   `{"program_id":"program-ref-resident-timeout-001","title":"Temario timeout"}`,
+			"requested_by":   "opes",
+		}})
+	}))
+	defer opesServer.Close()
+
+	supervisions := 0
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v0/external-work/run":
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"run_ref": "run-ref-resident-timeout-001",
+				"estado":  "accepted",
+			})
+		case "/api/v0/director/stats":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"estado":  "ok",
+				"run_ref": "run-ref-resident-timeout-001",
+				"stats": map[string]any{
+					"run_ref": "run-ref-resident-timeout-001",
+					"status":  "queued",
+					"counts":  map[string]any{},
+				},
+			})
+		case "/api/v0/runs/supervise":
+			supervisions++
+			t.Fatalf("no debe llamar /runs/supervise en espera residente pasiva")
+		default:
+			t.Fatalf("orquesta request inesperada %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer orquestaServer.Close()
+
+	ledger, err := newFileExternalBridgeInputLedgerV0(
+		filepath.Join(t.TempDir(), "external-bridge-input-ledger.json"),
+	)
+	if err != nil {
+		t.Fatalf("ledger: %v", err)
+	}
+	summary, err := runOPESDrainOnceV0(context.Background(), opesDrainConfigV0{
+		OPESBaseURL:                  opesServer.URL,
+		OrquestaBaseURL:              orquestaServer.URL,
+		Limit:                        1,
+		JobType:                      "plan_temario",
+		HTTPTimeout:                  time.Second,
+		ResidentDispatchWait:         5 * time.Millisecond,
+		ResidentDispatchPollInterval: time.Millisecond,
+		RunConfig: orquestaopesbridge.JobRunConfigV0{
+			PriorityScore: 70,
+			RequestedBy:   "test",
+		},
+		InputLedger: ledger,
+	})
+	if err != nil ||
+		supervisions != 0 ||
+		summary.Submitted != 1 ||
+		summary.Results[0].SupervisionStatus != "resident_director_pending" ||
+		summary.Results[0].SupervisionStopReason != "resident_dispatch_wait_timeout" {
+		t.Fatalf("supervisions=%d summary=%+v err=%v", supervisions, summary, err)
+	}
+}
+
 func TestRunOPESDrainOnceV0PlanTemarioOperadoresEnviaExternalWorkDocumentPlanV0(t *testing.T) {
 	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs/job-ref-plan-operadores-001" || r.Method != http.MethodGet {

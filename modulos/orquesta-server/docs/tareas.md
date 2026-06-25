@@ -815,6 +815,24 @@ Avance local 2026-06-25:
 - SRV-TASK-024 sigue abierto hasta smoke OPES acotado por `JOB_REF` exacto que
   demuestre dispatch real o bloqueo causal publico sin `/runs/supervise`.
 
+Avance local 2026-06-25 tarde:
+
+- `opes-drain-once` acepta
+  `ORQUESTA_OPES_BRIDGE_WAIT_RESIDENT_SECONDS` y
+  `ORQUESTA_OPES_BRIDGE_WAIT_RESIDENT_INTERVAL_MS` para observar
+  `/api/v0/director/stats` tras crear o reencontrar una run, sin llamar a
+  `/api/v0/runs/supervise`.
+- Si el residente ya despacho la run, la salida puede devolver
+  `supervision_status=started`, `supervision_process_ref` y evidencia compacta.
+  Si no hay dispatch visible durante la ventana, conserva
+  `resident_director_pending` con
+  `supervision_stop_reason=resident_dispatch_wait_timeout`.
+- Evidencia local:
+  `go test -count=1 ./cmd/orquesta-server -run 'TestRunOPESDrainOnceV0(NoSupervisaPorDefectoTrasEnviar|EsperaDespachoResidenteSinSupervisar|EsperaDespachoResidenteTimeoutSinSupervisar)|TestServerEnvRegistryV0'`.
+- SRV-TASK-024 sigue abierto hasta el smoke OPES temporal/acotado por `JOB_REF`
+  exacto que pruebe dispatch real o bloqueo causal publico contra una instancia
+  OPES aislada.
+
 ## SRV-TASK-025: reconciliacion de ACK OPES no debe terminar en domain_work_submit_conflict sin publicar artefacto
 
 Estado: abierto 2026-06-21.

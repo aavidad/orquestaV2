@@ -9,22 +9,26 @@ import (
 	orquestaopesbridge "orquesta/modulos/orquesta-opes-bridge"
 )
 
+const defaultOPESBridgeResidentDispatchIntervalV0 = 500 * time.Millisecond
+
 type opesDrainConfigV0 struct {
-	OPESBaseURL        string
-	OrquestaBaseURL    string
-	Limit              int
-	JobType            string
-	JobTypeSequence    []string
-	JobRef             string
-	ProgramID          string
-	TopicID            string
-	CorrelationID      string
-	DryRun             bool
-	SuperviseSubmitted bool
-	HTTPTimeout        time.Duration
-	RunConfig          orquestaopesbridge.JobRunConfigV0
-	InputLedger        externalBridgeInputLedgerV0
-	Destination        opesDrainDestinationPolicyV0
+	OPESBaseURL                  string
+	OrquestaBaseURL              string
+	Limit                        int
+	JobType                      string
+	JobTypeSequence              []string
+	JobRef                       string
+	ProgramID                    string
+	TopicID                      string
+	CorrelationID                string
+	DryRun                       bool
+	SuperviseSubmitted           bool
+	ResidentDispatchWait         time.Duration
+	ResidentDispatchPollInterval time.Duration
+	HTTPTimeout                  time.Duration
+	RunConfig                    orquestaopesbridge.JobRunConfigV0
+	InputLedger                  externalBridgeInputLedgerV0
+	Destination                  opesDrainDestinationPolicyV0
 }
 
 func opesDrainConfigFromEnvV0() (opesDrainConfigV0, error) {
@@ -78,7 +82,13 @@ func opesDrainConfigFromEnvWithBaseURLV0(
 		CorrelationID:      correlationID,
 		DryRun:             dryRun,
 		SuperviseSubmitted: strings.TrimSpace(os.Getenv(envOPESBridgeSuperviseSubmittedV0)) == "1",
-		HTTPTimeout:        time.Duration(intEnvOrDefaultV0(envOPESBridgeTimeoutSecondsV0, 30)) * time.Second,
+		ResidentDispatchWait: time.Duration(
+			intEnvOrDefaultV0(envOPESBridgeWaitResidentSecondsV0, 0),
+		) * time.Second,
+		ResidentDispatchPollInterval: time.Duration(
+			intEnvOrDefaultV0(envOPESBridgeWaitResidentIntervalMSV0, int(defaultOPESBridgeResidentDispatchIntervalV0/time.Millisecond)),
+		) * time.Millisecond,
+		HTTPTimeout: time.Duration(intEnvOrDefaultV0(envOPESBridgeTimeoutSecondsV0, 30)) * time.Second,
 		RunConfig: orquestaopesbridge.JobRunConfigV0{
 			PriorityScore: intEnvOrDefaultV0(envOPESBridgePriorityV0, 70),
 			RequestedBy:   "orquesta-opes-bridge",

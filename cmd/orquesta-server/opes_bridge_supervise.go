@@ -24,6 +24,24 @@ func opesBridgeSuperviseSubmittedRunV0(
 		return
 	}
 	if !config.SuperviseSubmitted {
+		if config.ResidentDispatchWait > 0 {
+			supervision, err := observeOPESBridgeResidentDispatchUntilV0(
+				ctx,
+				client,
+				config,
+				result.RunRef,
+			)
+			if err != nil {
+				result.SupervisionStatus = "retry_pending"
+				result.SupervisionStopReason = "resident_dispatch_observation_unavailable"
+				return
+			}
+			result.SupervisionStatus = supervision.Status
+			result.SupervisionStopReason = supervision.StopReason
+			result.SupervisionProcessRef = supervision.ProcessRef
+			result.SupervisionEvidenceRef = supervision.EvidenceRef
+			return
+		}
 		result.SupervisionStatus = "resident_director_pending"
 		return
 	}
