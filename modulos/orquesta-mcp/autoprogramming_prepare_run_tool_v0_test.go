@@ -27,6 +27,9 @@ func TestMCPAutoprogrammingPrepareRunDescriptorV0EsAdaptadorOptIn(t *testing.T) 
 	if !strings.Contains(descriptor.Output, "goal_specs?") {
 		t.Fatalf("descriptor debe publicar goal_specs opcional en prepare-run: %q", descriptor.Output)
 	}
+	if !strings.Contains(descriptor.Output, "run_ref?") || !strings.Contains(descriptor.Output, "continue?") {
+		t.Fatalf("descriptor debe publicar run_ref y continue como opcionales en goal-first: %q", descriptor.Output)
+	}
 }
 
 func TestNewMCPAutoprogrammingPrepareRunErrorResultV0NormalizaErrorPublico(t *testing.T) {

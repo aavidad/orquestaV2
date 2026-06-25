@@ -1304,20 +1304,21 @@ Campos:
   output_ok:
     estado: ok
     accepted: true
-    run_ref, project_ref, worktree_ref, branch_ref, phase_id
-    workflow_task_refs, wait_agent_refs
+    run_ref?, project_ref, worktree_ref, branch_ref, phase_id?
+    workflow_task_refs?, wait_agent_refs?
     goal_specs: contratos `GoalWorkSpecV0` opcionales cuando la composicion
-      clasifica el trabajo como `goal_ready`; preparan el handoff a Goal pero
-      no implican lanzamiento de runtime
-    continue: request compacta para supervision posterior con `run_ref`
-      explicito
+      clasifica el trabajo como `goal_ready`; en esa rama preparan el handoff a
+      Goal sin materializar ni encolar un run legacy
+    continue: request compacta opcional para supervision legacy posterior con
+      `run_ref` explicito
   output_error:
     estado: error
     accepted: false
     errores_publicos: issues compactos
 Invariantes:
   - Adaptador inbound fino.
-  - Prepara un run continuable por executor inyectado.
+  - Prepara un run legacy continuable o un handoff Goal-first por executor
+    inyectado.
   - No arranca agentes por si mismo ni supervisa despues del prepare.
   - No conoce Codex, OPES, DB, filesystem, runtime productivo ni proveedor.
   - El registro MCP es opt-in: sin executor devuelve

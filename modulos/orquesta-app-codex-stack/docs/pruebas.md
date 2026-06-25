@@ -178,9 +178,9 @@ Cobertura Go actual:
   `done`.
 - `TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveGoalSpecsCuandoGoalReady`
   valida que `POST /api/v0/autoprogramming/prepare-run` expone
-  `goal_specs[]` validos y con `run_ref` cuando la request declara
+  `goal_specs[]` validos y sin `run_ref` legacy cuando la request declara
   `goal_migration:goal-first` y capacidades de Goal completas; el endpoint
-  sigue sin lanzar runtime ni Goal por si mismo.
+  sigue sin lanzar runtime, Goal ni supervisor legacy por si mismo.
 - `TestObserveAppDirectorGoalV0SincronizaColaClosedConCandidatoPrevio` valida
   que la composicion observa un goal-first completo, cierra el run por el
   servicio neutral, proyecta la cola como `closed`, conserva metadatos del

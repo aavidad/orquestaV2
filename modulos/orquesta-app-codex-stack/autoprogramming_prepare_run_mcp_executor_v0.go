@@ -68,7 +68,7 @@ func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) Execute(
 			err.Error(),
 		), nil
 	}
-	if result.Accepted {
+	if result.Accepted && autoprogrammingBridgeHasPreparedLegacyRunV0(result) {
 		if err := executor.enqueuePreparedRunV0(ctx, input, result); err != nil {
 			return orquestamcp.NewMCPAutoprogrammingPrepareRunErrorResultV0(
 				input,

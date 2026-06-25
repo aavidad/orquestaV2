@@ -151,9 +151,9 @@ del goal. Orquesta solo prepara y valida el contrato.
 2. Usar `GoalWorkSpecV0` para nuevas tareas de autoprogramacion acotadas.
    Estado 2026-06-25: `orquesta-autoprogramming` ya compila `goal_specs[]`
    cuando `goal_migration=goal_ready`, y `POST
-   /api/v0/autoprogramming/prepare-run` los expone con `run_ref` desde la
-   composicion Codex stack; los gateways los conservan como passthrough y no
-   lanzan runtime.
+   /api/v0/autoprogramming/prepare-run` los expone sin `run_ref` legacy desde
+   la composicion Codex stack; los gateways los conservan como passthrough y no
+   lanzan runtime ni encolan `runs/supervise`.
 3. Cablear un launcher real de Codex Goal en `cmd/orquesta-server` solo cuando
    exista puerto seguro para crear/observar goals.
    Estado 2026-06-25: `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` inyecta

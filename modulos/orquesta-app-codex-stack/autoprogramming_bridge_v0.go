@@ -3,6 +3,7 @@ package orquestaappcodexstack
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
@@ -74,6 +75,9 @@ func prepareAutoprogrammingRunWithWorkV0(
 	if !work.Accepted {
 		return result, nil
 	}
+	if !autoprogrammingBridgeShouldMaterializeLegacyLoopV0(work.Work) {
+		return result, nil
+	}
 	run := autoprogrammingBridgeRunV0(request, work.Work)
 	if issues := orquestacoreworkflow.ValidateOrchestrationRunV0(run); len(issues) > 0 {
 		return AutoprogrammingBridgeResultV0{}, fmt.Errorf("autoprogramming run invalido: %s", issues[0].Error())
@@ -102,4 +106,22 @@ func prepareAutoprogrammingRunWithWorkV0(
 	}
 	result.Continue = continueRequest
 	return result, nil
+}
+
+func autoprogrammingBridgeShouldMaterializeLegacyLoopV0(
+	work orquestaautoprogramming.AutoprogrammingProgrammableWorkV0,
+) bool {
+	status := strings.TrimSpace(work.GoalMigration.Status)
+	action := strings.TrimSpace(work.GoalMigration.RecommendedAction)
+	switch status {
+	case orquestaautoprogramming.AutoprogrammingGoalMigrationGoalReadyV0,
+		orquestaautoprogramming.AutoprogrammingGoalMigrationCoveredByGoalFirstV0,
+		orquestaautoprogramming.AutoprogrammingGoalMigrationBlockedByGoalCapabilityV0:
+		return false
+	case orquestaautoprogramming.AutoprogrammingGoalMigrationLegacyCompatibleV0,
+		orquestaautoprogramming.AutoprogrammingGoalMigrationLegacyLoopRequiredV0:
+		return true
+	default:
+		return action == "" || action == orquestaautoprogramming.AutoprogrammingGoalMigrationActionKeepLegacyLoopV0
+	}
 }

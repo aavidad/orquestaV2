@@ -47,17 +47,19 @@ SMOKE_ID=manual-001
   verificando que produce grupos, perfiles y `WorkflowTaskV0`.
 - Si los tests existen, ejecuta la entrada real no-HTTP del stack:
   `PrepareAutoprogrammingRunV0` y `CodexStackAutoprogrammingExecutorV0`. Esa
-  cobertura valida que la request se transforma en run continuable,
+  cobertura valida, para una request legacy, que se transforma en run continuable,
   `WorkflowTaskV0` persistidas, `WaitAgentRefs` y `ContinueAppDirectorRequestV0`
   usando runtime fake.
 - Compila y arranca `cmd/orquesta-server` con `state_dir`, `runtime_dir`,
   `project_dir`, `CODEX_HOME` y comando Codex fake temporales.
 - Llama a `POST /api/v0/autoprogramming/validate-request` si la ruta esta
   expuesta y exige `accepted=true`.
-- Llama a `POST /api/v0/autoprogramming/prepare-run`, exige `run_ref`,
-  `wait_agent_refs` y `continue`, y despues espera a que el supervisor
-  residente del servidor tome la cola global y arranque al menos un agente
-  Codex fake para ese `run_ref`.
+- Llama a `POST /api/v0/autoprogramming/prepare-run` en modo legacy explicito,
+  exige `run_ref`, `wait_agent_refs` y `continue`, y despues espera a que el
+  supervisor residente del servidor tome la cola global y arranque al menos un
+  agente Codex fake para ese `run_ref`. Si la request se marca `goal_ready`, el
+  smoke debe esperar `goal_specs[]` sin `run_ref` y no invocar supervisor
+  legacy.
 - Vuelve a llamar a `POST /api/v0/autoprogramming/prepare-run` con el mismo
   payload despues del arranque residente; exige respuesta aceptada,
   `run_ref` estable, `wait_agent_refs` no vacio y `continue`, para cubrir
@@ -100,11 +102,12 @@ stack Codex:
   `orquesta-app-codex-stack`.
 
 El smoke la cubre con tests focales y por servidor temporal. La supervision
-posterior valida el camino desatendido: `prepare-run` encola el run en la cola
-global del stack Codex y el supervisor residente del servidor avanza esa cola
-sin recibir `run_ref` explicito por API. Tras observar agentes arrancados por
-stats, repite `prepare-run` con el mismo payload y exige que el replay
-idempotente conserve el `run_ref` y siga devolviendo refs causales.
+posterior valida el camino desatendido legacy: `prepare-run` encola el run en la
+cola global del stack Codex y el supervisor residente del servidor avanza esa
+cola sin recibir `run_ref` explicito por API. Tras observar agentes arrancados
+por stats, repite `prepare-run` con el mismo payload y exige que el replay
+idempotente conserve el `run_ref` y siga devolviendo refs causales. El camino
+Goal-first queda fuera de este smoke legacy y no debe encolar run.
 `/api/v0/external-work/run` queda como fallback opcional de compatibilidad para
 otros trabajos externos; no es el launcher de autoprogramacion.
 

@@ -14,11 +14,10 @@ MCP es adaptador inbound. No es el cerebro del sistema.
 
 Estado vigente:
 
-- `orquesta.autoprogramming.prepare_run.v0` prepara un run continuable desde
-  una request de autoprogramacion por executor inyectado. No arranca agentes por
-  si mismo; cuando la composicion lo aporta puede devolver `goal_specs[]` como
-  handoff goal-first, y la composicion debe supervisar despues con `run_ref`
-  explicito.
+- `orquesta.autoprogramming.prepare_run.v0` prepara, por executor inyectado, una
+  salida legacy con `run_ref` continuable o un handoff goal-first con
+  `goal_specs[]` sin run legacy. No arranca agentes por si mismo; la supervision
+  con `run_ref` aplica solo a la rama legacy.
 - `orquesta.autoprogramming.self_improvement.propose.v0` convierte fallos
   observados en requests de automejora de segundo plano con prioridad baja.
 - `orquesta.director.human_work.review_plan.v0` convierte ordenes humanas

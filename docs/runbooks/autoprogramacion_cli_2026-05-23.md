@@ -43,8 +43,10 @@ nucleo ni en runtime local:
 3. `autoprogramacion estado ver` muestra cola, run seleccionado, agentes,
    progreso compacto, diagnosticos y acciones seguras desde
    `orquesta.autoprogramming.status.v0`.
-4. `autoprogramacion preparar` crea una run continuable con worktree aislada,
-   `worktree_ref` y `branch_ref` opacas, write-set y tests requeridos.
+4. `autoprogramacion preparar` crea una run continuable solo en la rama legacy;
+   para trabajo `goal_ready` debe mostrar `goal_specs[]` sin `run_ref` legacy.
+   En ambos casos conserva `worktree_ref` y `branch_ref` opacas, write-set y
+   tests requeridos.
 5. `autoprogramacion supervisar` ejecuta un pulso acotado del supervisor por
    API; `--max-ticks 1` es el valor seguro para operacion manual.
 6. `autoprogramacion run ver` consulta detalle de una run por

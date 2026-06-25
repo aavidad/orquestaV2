@@ -146,8 +146,8 @@ Superficie publica de app:
 ```text
 POST /api/v0/autoprogramming/prepare-run
   input: autoprogramming_request, occurred_at?, requested_by?, limites?
-  output: estado, accepted, run_ref, workflow_task_refs, wait_agent_refs,
-          goal_specs?, continue
+  output: estado, accepted, run_ref?, workflow_task_refs?, wait_agent_refs?,
+          goal_specs?, continue?
 
 POST /api/v0/runs/supervise
   input: run_ref?, queue_ref?, max_ticks?, continue_message?, limites?
@@ -155,12 +155,17 @@ POST /api/v0/runs/supervise
 ```
 
 `prepare-run` es una entrada opt-in de esta composicion: adapta el contrato MCP
-`orquesta.autoprogramming.prepare_run.v0` a `PrepareAutoprogrammingRunV0`, guarda
-`WorkflowTaskV0`/run por los stores del stack y devuelve un `continue` acotado.
+`orquesta.autoprogramming.prepare_run.v0` a `PrepareAutoprogrammingRunV0`.
+En modo legacy guarda `WorkflowTaskV0`/run por los stores del stack y devuelve
+un `continue` acotado.
 Cuando `orquesta-autoprogramming` clasifica la request como `goal_ready`, el
-resultado incluye `goal_specs[]` normalizados y con `run_ref` para que una
-composicion Goal pueda lanzar/observar despues sin reconstruir el contrato. No
-arranca agentes ni goals por si misma. Las tareas explicitas preservan objetivo,
+resultado incluye `goal_specs[]` normalizados sin materializar ni encolar un
+run legacy; `run_ref`, `workflow_task_refs`, `wait_agent_refs` y `continue`
+quedan vacios para que una composicion Goal lance/observe sin doble loop.
+Cuando la clasificacion queda `covered_by_goal_first` o
+`blocked_by_goal_capability`, tampoco se programa loop legacy salvo que el
+contrato marque explicitamente `legacy_loop_required`. No arranca agentes ni
+goals por si misma. Las tareas explicitas preservan objetivo,
 contexto, criterios, tests y reglas compactas hasta el paquete del agente sin
 convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git. La ruta de
 supervision es neutral de runs. El gateway y `orquesta-mcp` no conocen Codex; este stack inyecta

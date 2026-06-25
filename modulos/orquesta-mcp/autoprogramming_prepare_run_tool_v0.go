@@ -75,14 +75,14 @@ func MCPAutoprogrammingPrepareRunDescriptorV0() MCPAutoprogrammingPrepareRunTool
 		Name:        MCPAutoprogrammingPrepareRunToolNameV0,
 		Version:     MCPAutoprogrammingPrepareRunToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,idempotency_key?,occurred_at?,requested_by?,autoprogramming_request:AutoprogrammingRequestV0,max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,priority_score?}",
-		Output:      "ok:{run_ref,workflow_task_refs,wait_agent_refs,goal_specs?,continue{operational_director_plan_ref?}}|error:{errores_publicos}",
+		Output:      "ok:{run_ref?,workflow_task_refs?,wait_agent_refs?,goal_specs?,continue?{run_ref,operational_director_plan_ref?}}|error:{errores_publicos}",
 		ResourceURI: MCPAutoprogrammingPrepareRunResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
-			"prepara run continuable por executor inyectado",
+			"prepara run legacy continuable o handoff goal-first por executor inyectado",
 			"no arranca agentes por si mismo",
 			"no conoce Codex OPES DB filesystem ni proveedor concreto",
-			"la supervision posterior debe usar run_ref explicito",
+			"la supervision legacy posterior debe usar run_ref explicito; goal-first debe lanzar u observar goal_specs",
 		},
 	}
 }

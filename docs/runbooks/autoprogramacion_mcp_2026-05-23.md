@@ -20,9 +20,10 @@ Write-set del corte:
 
 Tools MCP relevantes ya publicados por `RegisterMCPTransportV0`:
 
-- `orquesta.autoprogramming.prepare_run.v0`: prepara un run continuable por
-  executor inyectado y devuelve `run_ref`, `workflow_task_refs`,
-  `wait_agent_refs` y request `continue`.
+- `orquesta.autoprogramming.prepare_run.v0`: por executor inyectado prepara una
+  run continuable legacy con `run_ref`, `workflow_task_refs`, `wait_agent_refs`
+  y request `continue`, o un handoff Goal-first con `goal_specs[]` sin
+  `run_ref` legacy.
 - `orquesta.autoprogramming.self_improvement.propose.v0`: transforma un fallo
   observado por director/agente en `AutoprogrammingRequestV0` de segundo plano,
   con `priority_score` bajo y `prepare_run` listo para el paso siguiente. Si

@@ -30,9 +30,11 @@ scripts/smoke_autoprogramming_bolsa_real.sh
 ```
 
 El script compila `cmd/orquesta-server`, arranca un servidor temporal, llama a
-`/api/v0/autoprogramming/prepare-run`, supervisa el `run_ref` devuelto con
-`/api/v0/runs/supervise`, espera cierre causal, ejecuta `go test -count=1 ./...`
-en la app resultante y arranca Bolsa para validar `/healthz` y `/api/portal`.
+`/api/v0/autoprogramming/prepare-run` en modo legacy, supervisa el `run_ref`
+devuelto con `/api/v0/runs/supervise`, espera cierre causal, ejecuta
+`go test -count=1 ./...` en la app resultante y arranca Bolsa para validar
+`/healthz` y `/api/portal`. No cubre la rama `goal_ready`, donde `prepare-run`
+debe devolver `goal_specs[]` sin `run_ref` legacy.
 
 ## Variables utiles
 

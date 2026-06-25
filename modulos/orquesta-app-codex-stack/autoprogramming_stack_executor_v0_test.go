@@ -177,7 +177,10 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveGoalSpecsCuandoGoalRead
 		MaxOutboxPerCycle:      5,
 	})
 
-	if !prepared.Accepted || prepared.RunRef == "" || len(prepared.WorkflowTaskRefs) != 1 ||
+	if !prepared.Accepted || prepared.RunRef != "" || len(prepared.WorkflowTaskRefs) != 0 ||
+		len(prepared.WaitAgentRefs) != 0 ||
+		prepared.Continue != nil ||
+		prepared.PhaseID != "" ||
 		len(prepared.GoalSpecs) != 1 {
 		t.Fatalf("prepared=%+v", prepared)
 	}
@@ -185,7 +188,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveGoalSpecsCuandoGoalRead
 	if issues := orquestagoal.ValidateGoalWorkSpecV0(spec); len(issues) > 0 {
 		t.Fatalf("goal spec invalido: %+v spec=%+v", issues, spec)
 	}
-	if spec.RunRef != prepared.RunRef ||
+	if spec.RunRef != "" ||
 		spec.RequestRef != request.RequestRef ||
 		spec.ProjectRef != request.ProjectRef ||
 		spec.DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 ||
@@ -194,6 +197,19 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveGoalSpecsCuandoGoalRead
 		len(spec.WriteSet) != 1 ||
 		spec.WriteSet[0].Path != request.WriteSet[0] {
 		t.Fatalf("goal spec inesperado=%+v request=%+v", spec, request)
+	}
+	if run, err := stack.Ports.RunStore.LoadRunV0(context.Background(), request.RequestRef); err == nil {
+		t.Fatalf("run legacy materializada en goal_ready: %+v", run)
+	} else if !orquestacionnucleoapp.IsRunNotFoundErrorV0(err) {
+		t.Fatalf("LoadRunV0 goal_ready: %v", err)
+	}
+	ranking := postRunQueuePriorityStackV0(t, stack, orquestamcp.MCPRunQueuePriorityToolInputV0{
+		Action:   orquestamcp.MCPRunQueuePriorityActionRankV0,
+		QueueRef: DefaultRunQueueRefV0,
+		Limit:    1,
+	})
+	if len(ranking.Ranked) != 0 {
+		t.Fatalf("goal_ready no debe encolar loop legacy: %+v", ranking)
 	}
 }
 

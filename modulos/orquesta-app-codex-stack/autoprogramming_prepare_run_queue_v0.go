@@ -206,35 +206,44 @@ func codexStackAutoprogrammingPrepareRunResultMCPV0(
 			codexStackAutoprogrammingIssuesMCPV0(result.Issues),
 		)
 	}
+	runRef := strings.TrimSpace(result.Run.RunID)
 	out := orquestamcp.MCPAutoprogrammingPrepareRunToolResultV0{
 		Estado:           orquestamcp.MCPAutoprogrammingPrepareRunEstadoOKV0,
 		RequestID:        firstNonEmptyAutoprogrammingStackV0(input.RequestID, result.Work.RequestRef),
 		CorrelationID:    firstNonEmptyAutoprogrammingStackV0(input.CorrelationID, input.RequestID, result.Work.RequestRef),
 		Accepted:         true,
-		RunRef:           strings.TrimSpace(result.Run.RunID),
+		RunRef:           runRef,
 		ProjectRef:       strings.TrimSpace(result.Work.ProjectRef),
 		WorktreeRef:      strings.TrimSpace(result.Work.WorktreeRef),
 		BranchRef:        strings.TrimSpace(result.Work.BranchRef),
-		PhaseID:          string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
 		WorkflowTaskRefs: codexStackAutoprogrammingWorkflowTaskRefsMCPV0(result.Tasks),
 		WaitAgentRefs:    compactStringsV0(result.WaitAgentRefs),
-		GoalSpecs:        codexStackAutoprogrammingGoalSpecsMCPV0(result.Work.GoalSpecs, result.Run.RunID),
+		GoalSpecs:        codexStackAutoprogrammingGoalSpecsMCPV0(result.Work.GoalSpecs, runRef),
 		Errores:          []orquestamcp.MCPValidationIssueV0{},
 	}
-	out.Continue = &orquestamcp.MCPAutoprogrammingContinueRequestV0{
-		RunRef:                     strings.TrimSpace(result.Continue.RunRef),
-		OperationalDirectorPlanRef: strings.TrimSpace(result.Continue.OperationalDirectorPlanRef),
-		OccurredAt:                 strings.TrimSpace(result.Continue.OccurredAt),
-		CorrelationID:              strings.TrimSpace(result.Continue.CorrelationID),
-		RequestedBy:                strings.TrimSpace(result.Continue.RequestedBy),
-		MaxBursts:                  result.Continue.MaxBursts,
-		MaxStepsPerBurst:           result.Continue.MaxStepsPerBurst,
-		MaxDispatchesPerWait:       result.Continue.MaxDispatchesPerWait,
-		WaitAgentRefs:              compactStringsV0(result.Continue.WaitAgentRefs),
-		MaxCommands:                result.Continue.MaxCommands,
-		MaxOutboxPerCycle:          result.Continue.MaxOutboxPerCycle,
+	if runRef != "" {
+		out.PhaseID = string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0)
+	}
+	if strings.TrimSpace(result.Continue.RunRef) != "" {
+		out.Continue = &orquestamcp.MCPAutoprogrammingContinueRequestV0{
+			RunRef:                     strings.TrimSpace(result.Continue.RunRef),
+			OperationalDirectorPlanRef: strings.TrimSpace(result.Continue.OperationalDirectorPlanRef),
+			OccurredAt:                 strings.TrimSpace(result.Continue.OccurredAt),
+			CorrelationID:              strings.TrimSpace(result.Continue.CorrelationID),
+			RequestedBy:                strings.TrimSpace(result.Continue.RequestedBy),
+			MaxBursts:                  result.Continue.MaxBursts,
+			MaxStepsPerBurst:           result.Continue.MaxStepsPerBurst,
+			MaxDispatchesPerWait:       result.Continue.MaxDispatchesPerWait,
+			WaitAgentRefs:              compactStringsV0(result.Continue.WaitAgentRefs),
+			MaxCommands:                result.Continue.MaxCommands,
+			MaxOutboxPerCycle:          result.Continue.MaxOutboxPerCycle,
+		}
 	}
 	return out
+}
+
+func autoprogrammingBridgeHasPreparedLegacyRunV0(result AutoprogrammingBridgeResultV0) bool {
+	return strings.TrimSpace(result.Run.RunID) != ""
 }
 
 func codexStackAutoprogrammingWorkflowTaskRefsMCPV0(

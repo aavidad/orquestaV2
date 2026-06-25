@@ -512,7 +512,24 @@ causales antes de supervisar; mezclarlo con trabajos externos neutrales
 acoplaria el contrato generico a una composicion concreta.
 Impacto: MCP solo define DTO, descriptor, HTTP handler y puerto inyectado. La
 composicion Codex implementa el executor real y la supervision posterior debe
-usar `run_ref` explicito.
+usar `run_ref` explicito en la rama legacy. Actualizacion 2026-06-25: la rama
+Goal-first puede devolver `goal_specs[]` sin `run_ref` legacy ni `continue`.
+Contratos afectados: mcp.tool.orquesta.autoprogramming.prepare_run.v0;
+rest.bridge.orquesta.autoprogramming.prepare_run.v0.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-06-25
+Decision: `orquesta.autoprogramming.prepare_run.v0` acepta salida Goal-first sin
+`run_ref` legacy.
+Motivo: cuando la composicion clasifica el trabajo como `goal_ready`,
+materializar una `run` y encolarla duplica el loop que ya debe llevar Codex
+Goal. `prepare-run` debe entregar `goal_specs[]` y dejar que la composicion Goal
+lance/observe, sin activar `runs/supervise`.
+Impacto: `run_ref`, `workflow_task_refs`, `wait_agent_refs`, `phase_id` y
+`continue` son campos de la rama legacy. La rama Goal-first devuelve
+`goal_specs[]` validos y no arranca runtime por si misma.
 Contratos afectados: mcp.tool.orquesta.autoprogramming.prepare_run.v0;
 rest.bridge.orquesta.autoprogramming.prepare_run.v0.
 Estado: aceptada localmente.
