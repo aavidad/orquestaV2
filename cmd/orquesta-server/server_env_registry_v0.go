@@ -369,6 +369,16 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Label:       "Preflight Codex Goal",
 		Description: "Timeout de comprobacion rapida del backend Codex Goal app-server al montar la composicion.",
 	},
+	envOPESBridgeWaitResidentSecondsV0: {
+		Scope:       "opes_bridge",
+		Label:       "Espera residente OPES",
+		Description: "Segundos que opes-drain-once observa director/stats para ver dispatch residente sin supervisar manualmente.",
+	},
+	envOPESBridgeWaitResidentIntervalMSV0: {
+		Scope:       "opes_bridge",
+		Label:       "Intervalo espera OPES",
+		Description: "Intervalo en milisegundos entre lecturas pasivas de director/stats durante la espera residente OPES.",
+	},
 	envCapacityReasoningEffortV0: {
 		Scope:       "capacity",
 		Label:       "Reasoning capacidad",

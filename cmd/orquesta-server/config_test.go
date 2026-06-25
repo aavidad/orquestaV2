@@ -213,6 +213,8 @@ func TestServerConfigFromEnvV0PublicaConfiguracionEfectivaCanonica(t *testing.T)
 	t.Setenv("ORQUESTA_CODEX_MAX_CONCURRENCY", "10")
 	t.Setenv("ORQUESTA_CODEX_REASONING_EFFORT", "high")
 	t.Setenv("ORQUESTA_CODEX_DIRECTOR_MAX_SUBAGENTS_PER_AGENT", "6")
+	t.Setenv(envOPESBridgeWaitResidentSecondsV0, "15")
+	t.Setenv(envOPESBridgeWaitResidentIntervalMSV0, "250")
 	t.Setenv("ORQUESTA_HERMES_ENABLED", "1")
 	t.Setenv("ORQUESTA_HERMES_BASE_URL", "https://hermes.local/mcp")
 	t.Setenv("ORQUESTA_HERMES_API_KEY", "secret-hermes-test")
@@ -243,6 +245,8 @@ func TestServerConfigFromEnvV0PublicaConfiguracionEfectivaCanonica(t *testing.T)
 		"ORQUESTA_CODEX_MAX_CONCURRENCY":                     "10",
 		"ORQUESTA_CODEX_REASONING_EFFORT":                    "high",
 		"ORQUESTA_CODEX_DIRECTOR_MAX_SUBAGENTS_PER_AGENT":    "6",
+		envOPESBridgeWaitResidentSecondsV0:                   "15",
+		envOPESBridgeWaitResidentIntervalMSV0:                "250",
 		"ORQUESTA_HERMES_ENABLED":                            "true",
 		"ORQUESTA_HERMES_BASE_URL":                           "hermes-base-url-configured",
 		"ORQUESTA_HERMES_API_KEY":                            "hermes-api-key-configured",
