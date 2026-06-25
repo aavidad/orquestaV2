@@ -410,6 +410,11 @@ ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER=1 \
 scripts/smoke_opes_consumer_isolated.sh
 ORQUESTA_OPES_PLAN_TEMARIO_FAKE_SERVER=1 \
   scripts/smoke_opes_plan_temario_operadores.sh
+ORQUESTA_OPES_PLAN_TEMARIO_FAKE_SERVER=1 \
+ORQUESTA_OPES_PLAN_TEMARIO_SMOKE_MODE=drain-once \
+ORQUESTA_OPES_PLAN_TEMARIO_EXECUTE=1 \
+ORQUESTA_OPES_BRIDGE_WAIT_RESIDENT_SECONDS=1 \
+  scripts/smoke_opes_plan_temario_operadores.sh
 ```
 
 Estas pruebas no ejecutan Codex ni llaman a OPES real. El fake REST de
@@ -419,6 +424,10 @@ tipo configurado, hoy `generate_help_manual_assets`, contra un fake HTTP local,
 supervisando cada `run_ref` sin Codex ni OPES real. El fake rechaza consultas
 sin `job_type`, `status=pending`,
 `execution_mode=external` y `limit` esperado.
+El fake de `plan_temario` cubre tambien `drain-once`: simula OPES y Orquesta
+locales, aisla el ledger en `SMOKE_OUT_DIR` y permite comprobar
+`supervision_status=started` por observacion pasiva de `/api/v0/director/stats`
+sin llamar a `/api/v0/runs/supervise`.
 El smoke real de derivados sigue siendo opt-in, contra instancia temporal, y
 debe comprobar que OPES recibe artefactos validos y deduplica reintentos; en
 particular, `assemble_topic` debe entregar `artifact_type=assembled_topic` y

@@ -1474,6 +1474,44 @@ func TestSmokeOPESPlanTemarioWrapperFakeServerV0(t *testing.T) {
 	}
 }
 
+func TestSmokeOPESPlanTemarioWrapperFakeServerDrainOnceV0(t *testing.T) {
+	requireLocalTCPForTestV0(t)
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 no disponible")
+	}
+	repoRoot := filepath.Clean("../..")
+	cmd := exec.Command("bash", "scripts/smoke_opes_plan_temario_operadores.sh")
+	cmd.Dir = repoRoot
+	cmd.Env = cleanOPESSmokeEnvForDrainTestV0(os.Environ())
+	cmd.Env = append(cmd.Env,
+		"ORQUESTA_OPES_PLAN_TEMARIO_FAKE_SERVER=1",
+		"ORQUESTA_OPES_PLAN_TEMARIO_SMOKE_MODE=drain-once",
+		"ORQUESTA_OPES_PLAN_TEMARIO_EXECUTE=1",
+		"ORQUESTA_OPES_BRIDGE_WAIT_RESIDENT_SECONDS=1",
+		"ORQUESTA_OPES_BRIDGE_WAIT_RESIDENT_INTERVAL_MS=50",
+		"SMOKE_ID=test-plan-temario-fake-drain",
+		"SMOKE_OUT_DIR="+filepath.Join(t.TempDir(), "out"),
+	)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("script err=%v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	output := stdout.String()
+	if strings.Contains(output, `"dry_run":true`) ||
+		!strings.Contains(output, `"job_type":"plan_temario"`) ||
+		!strings.Contains(output, `"job_ref":"job-ref-fake-plan-temario-operadores-001"`) ||
+		!strings.Contains(output, `"status":"submitted"`) ||
+		!strings.Contains(output, `"supervision_status":"started"`) ||
+		!strings.Contains(output, `"supervision_process_ref":"process-ref-fake-plan-temario-001"`) ||
+		!strings.Contains(output, `"supervision_evidence_ref":"evidence-ref-fake-plan-temario-dispatch"`) {
+		t.Fatalf("stdout=%s stderr=%s", output, stderr.String())
+	}
+}
+
 func cleanOPESSmokeEnvForDrainTestV0(env []string) []string {
 	out := make([]string, 0, len(env))
 	for _, item := range env {

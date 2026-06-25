@@ -12,6 +12,7 @@ OPES_BASE_URL_EFFECTIVE="${ORQUESTA_OPES_BASE_URL:-${OPES_BASE_URL:-}}"
 ORQUESTA_BASE_URL_EFFECTIVE="${ORQUESTA_BASE_URL:-}"
 JOB_REF="${ORQUESTA_OPES_BRIDGE_JOB_REF:-}"
 LIMIT="${ORQUESTA_OPES_BRIDGE_LIMIT:-1}"
+INPUT_LEDGER_PATH="${ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH:-$SMOKE_OUT_DIR/external-bridge-input-ledger.json}"
 FAKE_SERVER="${ORQUESTA_OPES_PLAN_TEMARIO_FAKE_SERVER:-0}"
 FAKE_DIR=""
 FAKE_PID=""
@@ -29,8 +30,8 @@ trap cleanup EXIT
 
 start_fake_opes() {
   smoke_require_tool python3
-  if [[ "$MODE" != "dry-run-once" ]]; then
-    echo "fake OPES solo soporta dry-run-once" >&2
+  if [[ "$MODE" != "dry-run-once" && "$MODE" != "drain-once" ]]; then
+    echo "fake OPES solo soporta dry-run-once o drain-once" >&2
     exit 2
   fi
   JOB_REF="${JOB_REF:-job-ref-fake-plan-temario-operadores-001}"
@@ -46,6 +47,7 @@ from urllib.parse import urlparse
 
 url_file = sys.argv[1]
 job_ref = sys.argv[2]
+runs = {}
 
 def job():
     return {
@@ -87,6 +89,75 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        raw = self.rfile.read(length)
+        try:
+            payload = json.loads(raw.decode("utf-8") or "{}")
+        except Exception as exc:
+            self.send_response(400)
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "invalid_json", "detail": str(exc)}).encode("utf-8"))
+            return
+        if parsed.path == "/api/v0/external-work/run":
+            request = payload.get("external_work_run_request") or {}
+            app_change = request.get("app_change_request") or {}
+            external_work = app_change.get("external_work") or {}
+            got_job_ref = external_work.get("job_ref") or ""
+            work_kind = external_work.get("work_kind") or ""
+            if got_job_ref != job_ref or work_kind != "plan_temario":
+                body = json.dumps({
+                    "error": "unexpected_external_work",
+                    "job_ref": got_job_ref,
+                    "work_kind": work_kind,
+                }).encode("utf-8")
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            run_ref = "run-ref-fake-" + job_ref
+            runs[run_ref] = {"job_ref": job_ref, "work_kind": work_kind}
+            body = json.dumps({"run_ref": run_ref, "estado": "accepted"}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if parsed.path == "/api/v0/director/stats":
+            run_ref = payload.get("run_ref") or ""
+            if run_ref not in runs:
+                body = json.dumps({"estado": "ok", "stats": {"status": "resident_director_pending"}}).encode("utf-8")
+            else:
+                body = json.dumps({
+                    "estado": "ok",
+                    "stats": {
+                        "status": "running",
+                        "counts": {"agents_started": 1, "agents_in_flight": 1},
+                        "refs": {"agents_started": ["agent-ref-fake-plan-temario-001"]},
+                        "agents": [{
+                            "agent_request_id": "agent-ref-fake-plan-temario-001",
+                            "started": True,
+                            "in_flight": True,
+                            "process": {
+                                "process_ref": "process-ref-fake-plan-temario-001",
+                                "evidence_refs": ["evidence-ref-fake-plan-temario-dispatch"]
+                            }
+                        }]
+                    }
+                }).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        self.send_response(404)
+        self.end_headers()
+
 server = HTTPServer(("127.0.0.1", 0), Handler)
 with open(url_file, "w", encoding="utf-8") as fh:
     fh.write(f"http://127.0.0.1:{server.server_port}\n")
@@ -97,6 +168,10 @@ PY
   for _ in $(seq 1 50); do
     if [[ -s "$url_file" ]]; then
       OPES_BASE_URL_EFFECTIVE="$(cat "$url_file")"
+      if [[ "$MODE" == "drain-once" ]]; then
+        ORQUESTA_BASE_URL_EFFECTIVE="$OPES_BASE_URL_EFFECTIVE"
+        export ORQUESTA_OPES_TEMPORAL_CONFIRM=1
+      fi
       return
     fi
     sleep 0.1
@@ -153,6 +228,7 @@ write_metadata() {
     echo "job_type=plan_temario"
     echo "job_ref=$JOB_REF"
     echo "limit=$LIMIT"
+    echo "input_ledger_path=$INPUT_LEDGER_PATH"
     echo "output_dir=$SMOKE_OUT_DIR"
   } >"$SMOKE_OUT_DIR/metadata.txt"
 }
@@ -183,6 +259,7 @@ run_execute_drain_once() {
   export ORQUESTA_OPES_BRIDGE_LIMIT="$LIMIT"
   export ORQUESTA_OPES_BRIDGE_JOB_TYPE=plan_temario
   export ORQUESTA_OPES_BRIDGE_JOB_REF="$JOB_REF"
+  export ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH="$INPUT_LEDGER_PATH"
   go run ./cmd/orquesta-server opes-drain-once |
     tee "$SMOKE_OUT_DIR/opes_plan_temario_drain_summary.json"
 }

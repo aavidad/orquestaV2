@@ -829,6 +829,14 @@ Avance local 2026-06-25 tarde:
   `supervision_stop_reason=resident_dispatch_wait_timeout`.
 - Evidencia local:
   `go test -count=1 ./cmd/orquesta-server -run 'TestRunOPESDrainOnceV0(NoSupervisaPorDefectoTrasEnviar|EsperaDespachoResidenteSinSupervisar|EsperaDespachoResidenteTimeoutSinSupervisar)|TestServerEnvRegistryV0'`.
+- Avance local 2026-06-25 noche: el wrapper
+  `scripts/smoke_opes_plan_temario_operadores.sh` soporta fake
+  `drain-once` por `JOB_REF` exacto; simula OPES y Orquesta locales, aisla
+  `ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH` en `SMOKE_OUT_DIR` y prueba
+  `supervision_status=started` por observacion pasiva de
+  `/api/v0/director/stats` sin `/api/v0/runs/supervise`.
+- Evidencia local:
+  `go test -count=1 ./cmd/orquesta-server -run 'TestSmokeOPESPlanTemarioWrapperFakeServer(DrainOnce)?V0'`.
 - SRV-TASK-024 sigue abierto hasta el smoke OPES temporal/acotado por `JOB_REF`
   exacto que pruebe dispatch real o bloqueo causal publico contra una instancia
   OPES aislada.
