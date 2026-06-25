@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoroperativo "orquesta/modulos/orquesta-director-operativo"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
@@ -238,6 +239,97 @@ func TestCodexStackV0ExternalWorkRunSelfProgrammingSupervisaSinBloqueoGoBootstra
 	}
 }
 
+func TestCodexStackV0ExternalWorkRunOPESSubrolesMaterializaPadreYSeisHijosV0(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	result := postExternalWorkRunStackWithChangeV0(t, stack, orquestaappchange.AppChangeRequestV0{
+		ChangeRef:  "opes-job-tema-subroles-001",
+		AppRef:     "opes",
+		UserIntent: "Resolver tema OPES con padre y seis subroles reales.",
+		AcceptanceCriteria: []string{
+			"materializar padre y seis subagentes OPES",
+			"conservar ACK causal por subrol",
+		},
+		ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+			ProjectRef:    "opes",
+			JobRef:        "job-ref-opes-subroles-001",
+			InterfaceRefs: []string{"opes-rest-v0", "opes.padre-tema-6-subroles.v1"},
+			WorkKind:      "draft_content_block",
+			WorkRefs:      []string{"curso-integrador-social-b", "tema-015"},
+			InputFields: []orquestadomainwork.DomainWorkFieldV0{
+				{Name: "topic_id", Value: "tema-015"},
+				{Name: "subroles_required", Value: "6"},
+			},
+		},
+	})
+
+	drain, err := stack.DrainRunV0(context.Background(), DrainRunRequestV0{
+		RunRef:               result.RunRef,
+		CorrelationID:        "corr-opes-subroles-drain-001",
+		OccurredAt:           "2026-06-26T00:10:00Z",
+		MaxBursts:            32,
+		MaxStepsPerBurst:     12,
+		MaxDispatchesPerWait: 16,
+		MaxCommands:          64,
+		MaxOutboxPerCycle:    16,
+		MaxDecisionCycles:    6,
+		MaxExternalWaits:     0,
+	})
+	if err != nil {
+		t.Fatalf("DrainRunV0: %v drain=%+v", err, drain)
+	}
+	run, err := stack.Stores.RunStore.LoadRunV0(context.Background(), result.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	tasks, err := stack.Stores.TaskStore.LoadWorkflowTasksV0(context.Background(), result.RunRef, run.Tasks)
+	if err != nil {
+		t.Fatalf("LoadWorkflowTasksV0: %v", err)
+	}
+	if len(run.Tasks) != 7 || len(tasks) != 7 {
+		t.Fatalf("tasks run=%v loaded=%+v", run.Tasks, tasks)
+	}
+	parent, children := codexStackOPESSubroleTasksForTestV0(tasks)
+	if parent.TaskID == "" ||
+		parent.MaxChildAgents != 6 ||
+		len(parent.ChildTaskRefs) != 6 ||
+		parent.CohortRef == "" ||
+		parent.WaveRef == "" ||
+		!codexStackStringInSetForTestV0(parent.WriteSet, "external/opes/draft_content_block/coordinacion") ||
+		!codexStackStringInSetForTestV0(parent.WriteSet, "external/opes/job-ref-opes-subroles-001/coordinacion") ||
+		containsOPESSubroleWriteSetForTestV0(parent.WriteSet) {
+		t.Fatalf("parent=%+v", parent)
+	}
+	if len(children) != 6 {
+		t.Fatalf("children=%+v parent=%+v", children, parent)
+	}
+	seenChildren := map[string]bool{}
+	for _, child := range children {
+		seenChildren[child.TaskID] = true
+		if child.ParentTaskRef != parent.TaskID ||
+			child.DelegationDepth != 1 ||
+			child.CohortRef != parent.CohortRef ||
+			child.WaveRef != parent.WaveRef ||
+			len(child.ChildTaskRefs) != 0 ||
+			!containsOPESSubroleWriteSetForTestV0(child.WriteSet) {
+			t.Fatalf("child=%+v parent=%+v", child, parent)
+		}
+	}
+	for _, childRef := range parent.ChildTaskRefs {
+		if !seenChildren[childRef] {
+			t.Fatalf("child_ref %s no cargado: seen=%v", childRef, seenChildren)
+		}
+	}
+	if len(run.StartedAgents) != 7 || runtime.launchCountV0() != 7 {
+		t.Fatalf("subagentes no lanzados: started=%v launches=%d tasks=%v blockers=%v",
+			run.StartedAgents,
+			runtime.launchCountV0(),
+			run.Tasks,
+			run.Blockers,
+		)
+	}
+}
+
 func TestCodexStackV0ExternalWorkRunSupervisorConsumeDeliverySinExpirarWaitV0(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	planStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0()
@@ -294,27 +386,36 @@ func postExternalWorkRunStackV0(
 	stack StackV0,
 ) orquestamcp.MCPExternalWorkRunToolResultV0 {
 	t.Helper()
+	return postExternalWorkRunStackWithChangeV0(t, stack, orquestaappchange.AppChangeRequestV0{
+		ChangeRef:  "opes-job-job-ref-001",
+		AppRef:     "opes",
+		UserIntent: "Resolver trabajo externo de OPES.",
+		AcceptanceCriteria: []string{
+			"markdown valido",
+		},
+		ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+			ProjectRef: "opes",
+			JobRef:     "job-ref-001",
+			WorkKind:   "draft_content_block",
+			InputFields: []orquestadomainwork.DomainWorkFieldV0{{
+				Name:  "topic_id",
+				Value: "topic-ref-001",
+			}},
+		},
+	})
+}
+
+func postExternalWorkRunStackWithChangeV0(
+	t *testing.T,
+	stack StackV0,
+	change orquestaappchange.AppChangeRequestV0,
+) orquestamcp.MCPExternalWorkRunToolResultV0 {
+	t.Helper()
 	body := bytes.NewBuffer(nil)
 	err := json.NewEncoder(body).Encode(orquestamcp.MCPExternalWorkRunToolInputV0{
-		RequestID:     "req-external-work-stack-001",
-		CorrelationID: "corr-external-work-stack-001",
-		AppChangeRequest: orquestaappchange.AppChangeRequestV0{
-			ChangeRef:  "opes-job-job-ref-001",
-			AppRef:     "opes",
-			UserIntent: "Resolver trabajo externo de OPES.",
-			AcceptanceCriteria: []string{
-				"markdown valido",
-			},
-			ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
-				ProjectRef: "opes",
-				JobRef:     "job-ref-001",
-				WorkKind:   "draft_content_block",
-				InputFields: []orquestadomainwork.DomainWorkFieldV0{{
-					Name:  "topic_id",
-					Value: "topic-ref-001",
-				}},
-			},
-		},
+		RequestID:        "req-external-work-stack-001",
+		CorrelationID:    "corr-external-work-stack-001",
+		AppChangeRequest: change,
 	})
 	if err != nil {
 		t.Fatalf("encode: %v", err)
@@ -335,6 +436,32 @@ func postExternalWorkRunStackV0(
 		t.Fatalf("result=%+v", result)
 	}
 	return result
+}
+
+func codexStackOPESSubroleTasksForTestV0(
+	tasks []orquestacoreworkflow.WorkflowTaskV0,
+) (orquestacoreworkflow.WorkflowTaskV0, []orquestacoreworkflow.WorkflowTaskV0) {
+	children := make([]orquestacoreworkflow.WorkflowTaskV0, 0, 6)
+	var parent orquestacoreworkflow.WorkflowTaskV0
+	for _, task := range tasks {
+		if strings.TrimSpace(task.ParentTaskRef) != "" {
+			children = append(children, task)
+			continue
+		}
+		if len(task.ChildTaskRefs) > 0 {
+			parent = task
+		}
+	}
+	return parent, children
+}
+
+func containsOPESSubroleWriteSetForTestV0(writeSet []string) bool {
+	for _, entry := range writeSet {
+		if strings.Contains(entry, "/subroles/") {
+			return true
+		}
+	}
+	return false
 }
 
 func codexStackExternalWorkPlanStepForTestV0(

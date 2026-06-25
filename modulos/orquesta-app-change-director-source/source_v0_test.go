@@ -9,6 +9,7 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoragent "orquesta/modulos/orquesta-director-agent"
 	orquestadirectoragentworkflow "orquesta/modulos/orquesta-director-agent-workflow"
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 )
 
 func TestAppChangeDirectorDecisionSourceV0GeneraCadenaCompleta(t *testing.T) {
@@ -196,9 +197,16 @@ func TestAppChangeDirectorDecisionSourceV0MaterializaSeisSubrolesOPES(t *testing
 		len(parent.ChildTaskRefs) != 6 ||
 		parent.CohortRef == "" ||
 		parent.WaveRef == "" ||
+		containsFragmentInSetForTestV0(parent.WriteSet, "/subroles/") ||
 		!stringInSetV0(parent.ContextRefs, "opes-padre-tema-6-subroles-v1") {
 		t.Fatalf("parent=%+v", parent)
 	}
+	requireStringSetForTestV0(t, parent.WriteSet, []string{
+		"external/opes/draft_content_block/coordinacion",
+		"external/opes/opes-job-tema-001/coordinacion",
+		"external/opes/curso-servicios-multiples/coordinacion",
+		"external/opes/tema-001/coordinacion",
+	})
 	for _, decision := range microtasks {
 		task := decision.CreateMicrotask.Task
 		if _, err := orquestacoreworkflow.NewWorkflowTaskV0(workflowTaskFromDirectorTaskForTestV0(task)); err != nil {
@@ -209,20 +217,71 @@ func TestAppChangeDirectorDecisionSourceV0MaterializaSeisSubrolesOPES(t *testing
 	for _, decision := range microtasks[1:] {
 		child := decision.CreateMicrotask.Task
 		seenChildren[child.TaskID] = true
+		subroleRef := strings.TrimPrefix(child.TaskID, parent.TaskID+"-subrole-")
 		if child.ParentTaskRef != parent.TaskID ||
+			subroleRef == child.TaskID ||
+			subroleRef == "" ||
 			child.DelegationDepth != 1 ||
 			child.CohortRef != parent.CohortRef ||
 			child.WaveRef != parent.WaveRef ||
 			len(child.ChildTaskRefs) != 0 ||
-			!containsFragmentInSetForTestV0(child.WriteSet, "/subroles/") ||
+			containsFragmentInSetForTestV0(child.WriteSet, "/coordinacion") ||
+			containsFragmentInSetForTestV0(child.WriteSet, "/coordinacion/subroles/") ||
 			!containsFragmentInSetForTestV0(child.ContextRefs, "opes-subrole-") {
 			t.Fatalf("child=%+v parent=%+v", child, parent)
 		}
+		requireStringSetForTestV0(t, child.WriteSet, []string{
+			"external/opes/draft_content_block/subroles/" + subroleRef,
+			"external/opes/opes-job-tema-001/subroles/" + subroleRef,
+			"external/opes/curso-servicios-multiples/subroles/" + subroleRef,
+			"external/opes/tema-001/subroles/" + subroleRef,
+		})
 	}
 	for _, childRef := range parent.ChildTaskRefs {
 		if !seenChildren[childRef] {
 			t.Fatalf("child_ref %s no materializado: seen=%v", childRef, seenChildren)
 		}
+	}
+}
+
+func TestAppChangeDirectorDecisionSourceV0NoExpandeSubrolesFueraDeOPES(t *testing.T) {
+	record := appChangeRecordForSourceTestV0()
+	record.Request.AllowedWriteSet = nil
+	record.Request.ExternalWork = &orquestaappchange.AppChangeExternalWorkV0{
+		ProjectRef:    "external-editorial",
+		InterfaceRefs: []string{"domain-contract-v0"},
+		WorkKind:      "validate_topic",
+		WorkRefs:      []string{"topic-001"},
+		InputFields: []orquestadomainwork.DomainWorkFieldV0{{
+			Name:  "subroles_required",
+			Value: "6",
+		}},
+	}
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	run := appChangeRunForSourceTestV0(record)
+
+	decisions, err := (AppChangeDirectorDecisionSourceV0{Store: store}).
+		ListDirectorAgentDecisionsV0(
+			context.Background(),
+			orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+		)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	microtasks := microtaskDecisionsForTestV0(decisions)
+	if len(microtasks) != 1 {
+		t.Fatalf("microtasks=%d decisions=%+v", len(microtasks), decisions)
+	}
+	task := microtasks[0].CreateMicrotask.Task
+	if task.MaxChildAgents != 0 ||
+		len(task.ChildTaskRefs) != 0 ||
+		task.CohortRef != "" ||
+		task.WaveRef != "" ||
+		!stringInSetV0(task.WriteSet, "external/external-editorial/validate_topic") ||
+		containsFragmentInSetForTestV0(task.WriteSet, "/subroles/") ||
+		containsFragmentInSetForTestV0(task.WriteSet, "/coordinacion") {
+		t.Fatalf("task=%+v", task)
 	}
 }
 
@@ -1077,6 +1136,18 @@ func containsFragmentInSetForTestV0(values []string, fragment string) bool {
 		}
 	}
 	return false
+}
+
+func requireStringSetForTestV0(t *testing.T, got []string, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("set len got=%d want=%d got=%v want=%v", len(got), len(want), got, want)
+	}
+	for _, value := range want {
+		if !stringInSetV0(got, value) {
+			t.Fatalf("set missing %q got=%v want=%v", value, got, want)
+		}
+	}
 }
 
 func workflowTaskFromDirectorTaskForTestV0(

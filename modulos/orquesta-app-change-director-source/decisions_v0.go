@@ -186,11 +186,13 @@ func appChangeMicrotasksV0(
 	if !appChangeRequiresOPESParentSixSubrolesV0(request) {
 		return []orquestadirectoragent.DirectorAgentMicrotaskV0{parent}
 	}
+	baseWriteSet := append([]string(nil), parent.WriteSet...)
 	subroles := appChangeOPESSubrolesV0()
 	childRefs := make([]string, 0, len(subroles))
 	for _, subrole := range subroles {
 		childRefs = append(childRefs, appChangeSubroleTaskRefV0(refs, subrole.Ref))
 	}
+	parent.WriteSet = appChangeOPESParentCoordinationWriteSetV0(baseWriteSet)
 	parent.ChildTaskRefs = childRefs
 	parent.MaxChildAgents = len(childRefs)
 	parent.ContextRefs = compactAppChangeSourceRefsV0(append(parent.ContextRefs,
@@ -202,7 +204,7 @@ func appChangeMicrotasksV0(
 
 	tasks := []orquestadirectoragent.DirectorAgentMicrotaskV0{parent}
 	for _, subrole := range subroles {
-		tasks = append(tasks, appChangeOPESSubroleMicrotaskV0(parent, request, refs, subrole))
+		tasks = append(tasks, appChangeOPESSubroleMicrotaskV0(parent, request, refs, subrole, baseWriteSet))
 	}
 	return tasks
 }
@@ -236,12 +238,13 @@ func appChangeOPESSubroleMicrotaskV0(
 	request orquestaappchange.AppChangeRequestV0,
 	refs appChangeRefSetV0,
 	subrole appChangeOPESSubroleV0,
+	baseWriteSet []string,
 ) orquestadirectoragent.DirectorAgentMicrotaskV0 {
 	child := parent
 	child.TaskID = appChangeSubroleTaskRefV0(refs, subrole.Ref)
 	child.Title = subrole.Title + ": " + appChangeTaskTitleV0(request)
 	child.Summary = subrole.Summary
-	child.WriteSet = appChangeSubroleWriteSetV0(parent.WriteSet, subrole.Ref)
+	child.WriteSet = appChangeSubroleWriteSetV0(baseWriteSet, subrole.Ref)
 	child.AcceptanceCriteria = compactAppChangeTaskCriteriaV0(append(
 		[]string{subrole.Criteria},
 		appChangeExternalWorkCriteriaV0(request)...,

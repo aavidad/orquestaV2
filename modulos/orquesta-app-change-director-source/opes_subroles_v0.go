@@ -150,14 +150,23 @@ func appChangeOPESWaveRefV0(refs appChangeRefSetV0) string {
 }
 
 func appChangeSubroleWriteSetV0(
-	parent []string,
+	base []string,
 	subroleRef string,
 ) []string {
 	suffix := "subroles/" + strings.TrimSpace(subroleRef)
-	out := make([]string, 0, len(parent))
-	for _, entry := range parent {
+	return appChangeOPESWriteSetWithSuffixV0(base, suffix)
+}
+
+func appChangeOPESParentCoordinationWriteSetV0(base []string) []string {
+	return appChangeOPESWriteSetWithSuffixV0(base, "coordinacion")
+}
+
+func appChangeOPESWriteSetWithSuffixV0(base []string, suffix string) []string {
+	suffix = strings.Trim(strings.TrimSpace(suffix), "/")
+	out := make([]string, 0, len(base))
+	for _, entry := range base {
 		entry = strings.Trim(strings.TrimSpace(entry), "/")
-		if entry == "" {
+		if entry == "" || suffix == "" {
 			continue
 		}
 		out = append(out, entry+"/"+suffix)
