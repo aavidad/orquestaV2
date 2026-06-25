@@ -18,6 +18,23 @@ type CodexStackRunSupervisorExecutorV0 struct {
 
 var _ orquestamcp.MCPTransportRunSupervisorExecutorV0 = CodexStackRunSupervisorExecutorV0{}
 
+const (
+	defaultCodexStackRunSupervisorMaxBurstsV0            = 1
+	defaultCodexStackRunSupervisorMaxStepsPerBurstV0     = 1
+	defaultCodexStackRunSupervisorMaxDispatchesPerWaitV0 = 1
+	defaultCodexStackRunSupervisorMaxCommandsV0          = 1
+	defaultCodexStackRunSupervisorMaxOutboxPerCycleV0    = 1
+	defaultCodexStackRunSupervisorMaxDecisionCyclesV0    = 1
+	defaultCodexStackRunSupervisorMaxExternalWaitsV0     = 1
+
+	defaultCodexStackDirectOPESMaxBurstsV0            = 16
+	defaultCodexStackDirectOPESMaxStepsPerBurstV0     = 12
+	defaultCodexStackDirectOPESMaxDispatchesPerWaitV0 = 8
+	defaultCodexStackDirectOPESMaxCommandsV0          = 20
+	defaultCodexStackDirectOPESMaxOutboxPerCycleV0    = 8
+	defaultCodexStackDirectOPESMaxDecisionCyclesV0    = 4
+)
+
 func NewCodexStackRunSupervisorExecutorV0(
 	stack *StackV0,
 ) CodexStackRunSupervisorExecutorV0 {
@@ -40,6 +57,7 @@ func (executor CodexStackRunSupervisorExecutorV0) Execute(
 		return result, nil
 	}
 	input = normalizeAutoprogrammingResidentInputV0(input, *executor.Stack)
+	input = executor.Stack.normalizeDirectOPESRunSupervisorInputV0(ctx, input)
 	lifecycle := CodexSupervisorStackLifecycleV0{
 		Stack:             *executor.Stack,
 		RunRef:            strings.TrimSpace(input.RunRef),
@@ -90,15 +108,55 @@ func codexStackRunSupervisorDrainRequestV0(
 		RunRef:                     strings.TrimSpace(input.RunRef),
 		OccurredAt:                 strings.TrimSpace(input.OccurredAt),
 		CorrelationID:              firstNonEmptyQueuedSourceV0(input.CorrelationID, input.RequestID),
-		MaxBursts:                  codexStackPositiveOrDefaultV0(input.MaxBursts, 1),
-		MaxStepsPerBurst:           codexStackPositiveOrDefaultV0(input.MaxStepsPerBurst, 1),
-		MaxDispatchesPerWait:       codexStackPositiveOrDefaultV0(input.MaxDispatchesPerWait, 1),
-		MaxCommands:                codexStackPositiveOrDefaultV0(input.MaxCommands, 1),
-		MaxOutboxPerCycle:          codexStackPositiveOrDefaultV0(input.MaxOutboxPerCycle, 1),
-		MaxDecisionCycles:          codexStackPositiveOrDefaultV0(input.MaxDecisionCycles, 1),
-		MaxExternalWaits:           input.MaxExternalWaits,
+		MaxBursts:                  codexStackPositiveOrDefaultV0(input.MaxBursts, defaultCodexStackRunSupervisorMaxBurstsV0),
+		MaxStepsPerBurst:           codexStackPositiveOrDefaultV0(input.MaxStepsPerBurst, defaultCodexStackRunSupervisorMaxStepsPerBurstV0),
+		MaxDispatchesPerWait:       codexStackPositiveOrDefaultV0(input.MaxDispatchesPerWait, defaultCodexStackRunSupervisorMaxDispatchesPerWaitV0),
+		MaxCommands:                codexStackPositiveOrDefaultV0(input.MaxCommands, defaultCodexStackRunSupervisorMaxCommandsV0),
+		MaxOutboxPerCycle:          codexStackPositiveOrDefaultV0(input.MaxOutboxPerCycle, defaultCodexStackRunSupervisorMaxOutboxPerCycleV0),
+		MaxDecisionCycles:          codexStackPositiveOrDefaultV0(input.MaxDecisionCycles, defaultCodexStackRunSupervisorMaxDecisionCyclesV0),
+		MaxExternalWaits:           codexStackPositiveOrDefaultV0(input.MaxExternalWaits, defaultCodexStackRunSupervisorMaxExternalWaitsV0),
 		OperationalDirectorPlanRef: strings.TrimSpace(input.OperationalDirectorPlanRef),
 	}
+}
+
+func (stack StackV0) normalizeDirectOPESRunSupervisorInputV0(
+	ctx context.Context,
+	input orquestamcp.MCPRunSupervisorToolInputV0,
+) orquestamcp.MCPRunSupervisorToolInputV0 {
+	if input.ResidentMode || strings.TrimSpace(input.RunRef) == "" || stack.Stores.RunStore == nil {
+		return input
+	}
+	run, err := stack.Stores.RunStore.LoadRunV0(ctx, strings.TrimSpace(input.RunRef))
+	if err != nil || !codexStackRunLooksOPESDirectWorkV0(run.ProjectRef, run.AppSpecRef) {
+		return input
+	}
+	if input.MaxBursts <= 0 {
+		input.MaxBursts = defaultCodexStackDirectOPESMaxBurstsV0
+	}
+	if input.MaxStepsPerBurst <= 0 {
+		input.MaxStepsPerBurst = defaultCodexStackDirectOPESMaxStepsPerBurstV0
+	}
+	if input.MaxDispatchesPerWait <= 0 {
+		input.MaxDispatchesPerWait = defaultCodexStackDirectOPESMaxDispatchesPerWaitV0
+	}
+	if input.MaxCommands <= 0 {
+		input.MaxCommands = defaultCodexStackDirectOPESMaxCommandsV0
+	}
+	if input.MaxOutboxPerCycle <= 0 {
+		input.MaxOutboxPerCycle = defaultCodexStackDirectOPESMaxOutboxPerCycleV0
+	}
+	if input.MaxDecisionCycles <= 0 {
+		input.MaxDecisionCycles = defaultCodexStackDirectOPESMaxDecisionCyclesV0
+	}
+	return input
+}
+
+func codexStackRunLooksOPESDirectWorkV0(projectRef string, appSpecRef string) bool {
+	projectRef = strings.ToLower(strings.TrimSpace(projectRef))
+	appSpecRef = strings.ToLower(strings.TrimSpace(appSpecRef))
+	return projectRef == "opes" ||
+		strings.HasPrefix(projectRef, "opes-") ||
+		strings.HasPrefix(appSpecRef, "app-spec-external-work-opes")
 }
 
 func codexStackPositiveOrDefaultV0(value int, fallback int) int {
@@ -121,13 +179,13 @@ func codexStackRunSupervisorCommandV0(
 		OccurredAt:        codexStackRunSupervisorTimeV0(input.OccurredAt),
 		CorrelationID:     firstNonEmptyQueuedSourceV0(input.CorrelationID, input.RequestID),
 		DrainLimits: orquestaruncoordinator.RunDrainLimitsV0{
-			MaxBursts:            codexStackPositiveOrDefaultV0(input.MaxBursts, 1),
-			MaxStepsPerBurst:     codexStackPositiveOrDefaultV0(input.MaxStepsPerBurst, 1),
-			MaxDispatchesPerWait: codexStackPositiveOrDefaultV0(input.MaxDispatchesPerWait, 1),
-			MaxCommands:          codexStackPositiveOrDefaultV0(input.MaxCommands, 1),
-			MaxOutboxPerCycle:    codexStackPositiveOrDefaultV0(input.MaxOutboxPerCycle, 1),
-			MaxDecisionCycles:    codexStackPositiveOrDefaultV0(input.MaxDecisionCycles, 1),
-			MaxExternalWaits:     input.MaxExternalWaits,
+			MaxBursts:            codexStackPositiveOrDefaultV0(input.MaxBursts, defaultCodexStackRunSupervisorMaxBurstsV0),
+			MaxStepsPerBurst:     codexStackPositiveOrDefaultV0(input.MaxStepsPerBurst, defaultCodexStackRunSupervisorMaxStepsPerBurstV0),
+			MaxDispatchesPerWait: codexStackPositiveOrDefaultV0(input.MaxDispatchesPerWait, defaultCodexStackRunSupervisorMaxDispatchesPerWaitV0),
+			MaxCommands:          codexStackPositiveOrDefaultV0(input.MaxCommands, defaultCodexStackRunSupervisorMaxCommandsV0),
+			MaxOutboxPerCycle:    codexStackPositiveOrDefaultV0(input.MaxOutboxPerCycle, defaultCodexStackRunSupervisorMaxOutboxPerCycleV0),
+			MaxDecisionCycles:    codexStackPositiveOrDefaultV0(input.MaxDecisionCycles, defaultCodexStackRunSupervisorMaxDecisionCyclesV0),
+			MaxExternalWaits:     codexStackPositiveOrDefaultV0(input.MaxExternalWaits, defaultCodexStackRunSupervisorMaxExternalWaitsV0),
 		},
 	}
 }

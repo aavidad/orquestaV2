@@ -45,6 +45,9 @@ func (stack StackV0) prepareRunCoordinatorTickV0(
 	if err := stack.reconcileQueuedOrphanExecutableRunsV0(ctx, command); err != nil {
 		return runCoordinatorPreparationResultV0{}, err
 	}
+	if err := stack.reconcileQueuedRunningStaleRunsV0(ctx, command); err != nil {
+		return runCoordinatorPreparationResultV0{}, err
+	}
 	if err := stack.recoverQueuedStoppedActiveRunsV0(ctx, command); err != nil {
 		if codexStackProcessRuntimeMissingV0(err) {
 			if err := ctx.Err(); err != nil {

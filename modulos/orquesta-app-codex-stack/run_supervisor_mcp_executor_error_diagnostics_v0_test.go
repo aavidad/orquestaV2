@@ -23,7 +23,7 @@ func TestCodexStackRunSupervisorDrainRequestV0AplicaPresupuestoConservadorPorDef
 		request.MaxCommands != 1 ||
 		request.MaxOutboxPerCycle != 1 ||
 		request.MaxDecisionCycles != 1 ||
-		request.MaxExternalWaits != 0 {
+		request.MaxExternalWaits != 1 {
 		t.Fatalf("presupuesto por defecto no acotado: %+v", request)
 	}
 }
@@ -62,8 +62,19 @@ func TestCodexStackRunSupervisorCommandV0AplicaPresupuestoConservadorPorDefecto(
 		command.DrainLimits.MaxCommands != 1 ||
 		command.DrainLimits.MaxOutboxPerCycle != 1 ||
 		command.DrainLimits.MaxDecisionCycles != 1 ||
-		command.DrainLimits.MaxExternalWaits != 0 {
+		command.DrainLimits.MaxExternalWaits != 1 {
 		t.Fatalf("presupuesto por defecto del coordinador no acotado: %+v", command.DrainLimits)
+	}
+}
+
+func TestCodexStackRunSupervisorCommandV0ConservaMaxExternalWaitsExplicito(t *testing.T) {
+	command := codexStackRunSupervisorCommandV0(orquestamcp.MCPRunSupervisorToolInputV0{
+		QueueRef:         "queue-ref-budget-explicit-waits-001",
+		MaxExternalWaits: 9,
+	})
+
+	if command.DrainLimits.MaxExternalWaits != 9 {
+		t.Fatalf("max_external_waits explicito no conservado: %+v", command.DrainLimits)
 	}
 }
 

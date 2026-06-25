@@ -368,3 +368,48 @@ Tarea para agente de Orquesta:
 - La supervisión dirigida de un run `ready` debería indicar explícitamente:
   `blocked_by_higher_priority_stale_runs` con refs, o activar reconciliación
   segura.
+
+## Actualización 2026-06-26 00:36 - T021 arranca solo padre y no subroles
+
+Contexto: OPES lanzó `run-opes-integracion-social-b-t021-padre-20260626-ola1`
+para el tema 021, con contrato de padre más seis subroles por skill.
+
+Evidencia:
+
+- `/api/v0/director/stats` muestra `tasks_total=7`, `tasks_open=7`,
+  `agents_requested=1`, `agents_started=1`, `agents_in_flight=1` y un único
+  agente registrado.
+- No existen `agent_ack.json` de subroles ni del padre en el runtime de T021
+  en el momento de la comprobación.
+- El log del padre indica literalmente el patrón operativo: primero esperó
+  workers; después registró que no terminó ningún worker en 60 s y decidió
+  continuar con entrega padre para no bloquear el trabajo.
+- Una llamada dirigida a `/api/v0/runs/supervise` contra T021 quedó sin
+  respuesta durante más de dos minutos y se tuvo que cortar el cliente `curl`;
+  después, `director/stats` siguió devolviendo un único agente en vuelo.
+
+Impacto:
+
+- El contrato OPES de un padre con seis subroles no se materializa siempre en
+  agentes reales.
+- El padre puede producir material útil, pero Orquesta no garantiza el reparto
+  paralelo esperado ni da un estado claro de por qué los subroles no arrancan.
+- La supervisión dirigida puede quedar bloqueada sin devolver diagnóstico.
+
+Tarea para agente de Orquesta:
+
+- Asegurar que, cuando una run declara siete tareas OPES, Orquesta materializa
+  los seis subroles o registra un bloqueo explícito por capacidad, cuota,
+  permisos, cola o contrato inválido.
+- Evitar que `/api/v0/runs/supervise` quede colgado sin salida diagnóstica.
+- Exponer en `director/stats` un campo de espera útil: `waiting_for_subagents`,
+  `subagents_not_materialized_reason` o equivalente.
+
+### Evidencia posterior al ACK
+
+Tras cerrar el padre de T021, `agent_ack.json` existe y el proceso terminó. En
+ese momento `/api/v0/director/stats` pasó a `agents_requested=7`, pero solo
+`agents_started=1`, `agents_delivered=1`, `agents_in_flight=0` y los seis
+subroles quedaron en estado `requested` con `started=false`. El padre generó
+ficheros `subrole_*.md` como coordinación interna, pero Orquesta no materializó
+seis agentes reales.

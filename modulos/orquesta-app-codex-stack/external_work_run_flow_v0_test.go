@@ -330,6 +330,52 @@ func TestCodexStackV0ExternalWorkRunOPESSubrolesMaterializaPadreYSeisHijosV0(t *
 	}
 }
 
+func TestCodexStackV0ExternalWorkRunOPESSubrolesSupervisorDirectoSinLimitesLanzaSieteV0(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	result := postExternalWorkRunStackWithChangeV0(t, stack, orquestaappchange.AppChangeRequestV0{
+		ChangeRef:  "opes-job-tema-subroles-supervisor-001",
+		AppRef:     "opes",
+		UserIntent: "Resolver tema OPES con padre y seis subroles desde supervisor directo.",
+		AcceptanceCriteria: []string{
+			"materializar padre y seis subagentes OPES",
+			"arrancar todos los subroles sin limites expertos obligatorios",
+		},
+		ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+			ProjectRef:    "opes",
+			JobRef:        "job-ref-opes-subroles-supervisor-001",
+			InterfaceRefs: []string{"opes-rest-v0", "opes.padre-tema-6-subroles.v1"},
+			WorkKind:      "draft_content_block",
+			WorkRefs:      []string{"curso-integrador-social-b", "tema-021"},
+			InputFields: []orquestadomainwork.DomainWorkFieldV0{
+				{Name: "topic_id", Value: "tema-021"},
+				{Name: "subroles_required", Value: "6"},
+			},
+		},
+	})
+
+	supervisor := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:     "req-opes-subroles-supervisor-defaults-001",
+		CorrelationID: "corr-opes-subroles-supervisor-defaults-001",
+		RunRef:        result.RunRef,
+	})
+	if supervisor.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 {
+		t.Fatalf("supervisor=%+v", supervisor)
+	}
+	run, err := stack.Stores.RunStore.LoadRunV0(context.Background(), result.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if len(run.Tasks) != 7 || len(run.StartedAgents) != 7 || runtime.launchCountV0() != 7 {
+		t.Fatalf("supervisor directo no lanzo siete agentes OPES: tasks=%v started=%v launches=%d supervisor=%+v",
+			run.Tasks,
+			run.StartedAgents,
+			runtime.launchCountV0(),
+			supervisor,
+		)
+	}
+}
+
 func TestCodexStackV0ExternalWorkRunSupervisorConsumeDeliverySinExpirarWaitV0(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	planStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0()
