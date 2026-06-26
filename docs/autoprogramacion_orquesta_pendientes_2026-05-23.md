@@ -228,11 +228,18 @@ Pendiente verificable:
   y proyecto temporal hasta observacion terminal, cierre durable y cola
   terminal.
 - Intento de smoke real 2026-06-25: `scripts/smoke_goal_first_app_server_real.sh`
-  queda bloqueado antes de arrancar Orquesta porque
-  `codex app-server daemon start` requiere la instalacion standalone en
-  `/home/alberto/.codex/packages/standalone/current/codex` y no existe. Accion
-  externa: instalar Codex standalone con el instalador oficial indicado por la
-  CLI y repetir el smoke opt-in.
+  quedo bloqueado antes de arrancar Orquesta porque el CLI informo falta de
+  instalacion standalone en
+  `/home/alberto/.codex/packages/standalone/current/codex`. Relectura local
+  2026-06-26: `command -v codex` resuelve
+  `/home/alberto/.nvm/versions/node/v20.19.2/bin/codex` y ese CLI ya expone
+  `codex app-server`; `codex app-server daemon version` falla por socket
+  ausente en `/home/alberto/.codex/app-server-control/app-server-control.sock`.
+  El smoke ahora tiene preflight no-costoso
+  `ORQUESTA_GOAL_FIRST_SMOKE_PREFLIGHT_ONLY=1` para distinguir CLI, daemon,
+  socket y standalone antes de ejecutar una generacion real. Accion externa
+  pendiente: arrancar/validar daemon app-server con doble confirmacion y repetir
+  el smoke opt-in, sin caer al loop legacy.
 - Revalidar OPES temporal con derivados/cierre cuando exista la ruta goal-first
   real; no tocar OPES productivo ni drenar colas amplias.
 

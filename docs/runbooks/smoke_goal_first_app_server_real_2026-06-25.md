@@ -16,6 +16,21 @@ Validar la ruta real no-OPES de `/nueva-app` con Codex Goal persistente:
 
 ## Comando
 
+Preflight sin ejecutar Codex ni crear app:
+
+```bash
+ORQUESTA_GOAL_FIRST_SMOKE_PREFLIGHT_ONLY=1 \
+ORQUESTA_CODEX_COMMAND="$(command -v codex)" \
+./scripts/smoke_goal_first_app_server_real.sh
+```
+
+Debe devolver `smoke_goal_first_app_server_preflight=ok` si el daemon
+app-server ya esta accesible. Si el CLI existe pero no hay daemon/socket,
+devuelve `smoke_goal_first_app_server_preflight=blocked` con reason code
+diagnostico, por ejemplo `codex_app_server_control_socket_missing`.
+
+Smoke real, con ejecucion de Codex:
+
 ```bash
 ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1 \
 ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1 \
@@ -25,6 +40,8 @@ ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1 \
 Variables utiles:
 
 - `ORQUESTA_CODEX_COMMAND`: ruta de `codex`; por defecto resuelve `codex`.
+- `ORQUESTA_GOAL_FIRST_SMOKE_PREFLIGHT_ONLY=1`: comprueba CLI/daemon app-server
+  sin arrancar Orquesta ni ejecutar una generacion.
 - `ORQUESTA_CODEX_MODEL`: por defecto `gpt-5.5`.
 - `ORQUESTA_CODEX_REASONING_EFFORT`: por defecto `medium`.
 - `ORQUESTA_CODEX_GOAL_TIMEOUT_MS`: por defecto `90000`.
@@ -46,13 +63,23 @@ Variables utiles:
   ese directorio, la separacion de consumidores Goal ha regresado.
 - No detiene el daemon Codex local al terminar; puede estar compartido por el
   operador.
-- Si falta el socket app-server o la instalacion standalone de Codex, Orquesta
-  no cae al loop legacy: devuelve reason codes como
-  `codex_app_server_control_socket_missing` o
+- Si falta el socket app-server, el daemon o la instalacion esperada por el CLI
+  de Codex, Orquesta no cae al loop legacy: devuelve reason codes como
+  `codex_app_server_control_socket_missing`,
+  `codex_app_server_daemon_cli_missing` o
   `codex_app_server_standalone_missing`.
 - El preflight se evalua al construir la composicion. Si el daemon o socket se
   levanta despues de arrancar Orquesta, reinicia el servidor para reconstruir el
   backend goal real.
+
+## Estado local 2026-06-26
+
+En esta maquina `command -v codex` resuelve
+`/home/alberto/.nvm/versions/node/v20.19.2/bin/codex` y el CLI expone
+`codex app-server`. El preflight no-costoso detecta que aun no hay socket de
+daemon en `/home/alberto/.codex/app-server-control/app-server-control.sock`;
+por tanto el siguiente paso para evidencia real es arrancar el daemon con la
+doble confirmacion del smoke, no relanzar el loop legacy.
 
 ## Exito
 

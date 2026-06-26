@@ -25,6 +25,8 @@ server_stdout="$smoke_root/server.stdout.log"
 server_stderr="$smoke_root/server.stderr.log"
 daemon_stdout="$smoke_root/codex-daemon.stdout.log"
 daemon_stderr="$smoke_root/codex-daemon.stderr.log"
+preflight_stdout="$smoke_root/codex-preflight.stdout.log"
+preflight_stderr="$smoke_root/codex-preflight.stderr.log"
 server_pid=""
 
 keep_dir="${ORQUESTA_KEEP_SMOKE_DIR:-0}"
@@ -71,6 +73,50 @@ resolve_command() {
   command -v "$raw"
 }
 
+codex_app_server_error_reason() {
+  local file="$1"
+  if grep -qi "managed standalone codex install not found" "$file" 2>/dev/null; then
+    printf '%s' "codex_app_server_standalone_missing"
+    return 0
+  fi
+  if grep -Eqi "app-server-control|control socket|failed to connect" "$file" 2>/dev/null; then
+    printf '%s' "codex_app_server_control_socket_missing"
+    return 0
+  fi
+  printf '%s' "codex_app_server_unavailable"
+}
+
+codex_app_server_preflight() {
+  local command_path="$1"
+  : >"$preflight_stdout"
+  : >"$preflight_stderr"
+  if ! "$command_path" app-server --help >>"$preflight_stdout" 2>>"$preflight_stderr"; then
+    echo "smoke_goal_first_app_server_preflight=blocked"
+    echo "reason=codex_app_server_cli_missing"
+    echo "codex_command=$command_path"
+    tail -n 40 "$preflight_stderr" >&2 || true
+    return 2
+  fi
+  if ! "$command_path" app-server daemon --help >>"$preflight_stdout" 2>>"$preflight_stderr"; then
+    echo "smoke_goal_first_app_server_preflight=blocked"
+    echo "reason=codex_app_server_daemon_cli_missing"
+    echo "codex_command=$command_path"
+    tail -n 40 "$preflight_stderr" >&2 || true
+    return 2
+  fi
+  if "$command_path" app-server daemon version >>"$preflight_stdout" 2>>"$preflight_stderr"; then
+    echo "smoke_goal_first_app_server_preflight=ok"
+    echo "codex_command=$command_path"
+    tail -n 1 "$preflight_stdout" || true
+    return 0
+  fi
+  echo "smoke_goal_first_app_server_preflight=blocked"
+  echo "reason=$(codex_app_server_error_reason "$preflight_stderr")"
+  echo "codex_command=$command_path"
+  tail -n 40 "$preflight_stderr" >&2 || true
+  return 2
+}
+
 json_get() {
   local file="$1"
   local expr="$2"
@@ -95,6 +141,22 @@ else:
 PY
 }
 
+need_cmd python3
+
+codex_command="$(resolve_command "${ORQUESTA_CODEX_COMMAND:-codex}")" || {
+  echo "no se pudo resolver ORQUESTA_CODEX_COMMAND/codex" >&2
+  exit 2
+}
+if [[ ! -x "$codex_command" ]]; then
+  echo "ORQUESTA_CODEX_COMMAND no es ejecutable: $codex_command" >&2
+  exit 2
+fi
+
+if [[ "${ORQUESTA_GOAL_FIRST_SMOKE_PREFLIGHT_ONLY:-0}" == "1" ]]; then
+  codex_app_server_preflight "$codex_command"
+  exit $?
+fi
+
 if [[ "${ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM:-0}" != "1" ||
   "${ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED:-0}" != "1" ]]; then
   echo "confirmacion doble requerida: exporta ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1 y ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1" >&2
@@ -108,16 +170,6 @@ fi
 
 need_cmd go
 need_cmd curl
-need_cmd python3
-
-codex_command="$(resolve_command "${ORQUESTA_CODEX_COMMAND:-codex}")" || {
-  echo "no se pudo resolver ORQUESTA_CODEX_COMMAND/codex" >&2
-  exit 2
-}
-if [[ ! -x "$codex_command" ]]; then
-  echo "ORQUESTA_CODEX_COMMAND no es ejecutable: $codex_command" >&2
-  exit 2
-fi
 
 mkdir -p "$state_dir" "$project_dir" "$idle_project_dir" "$runtime_dir" "$bin_dir" \
   "$project_dir/docs" \
@@ -156,7 +208,7 @@ EOF
 
 echo "arrancando daemon Codex app-server si hace falta..."
 "$codex_command" app-server daemon start >"$daemon_stdout" 2>"$daemon_stderr" || {
-  echo "no se pudo arrancar codex app-server daemon; stderr:" >&2
+  echo "no se pudo arrancar codex app-server daemon; reason=$(codex_app_server_error_reason "$daemon_stderr"); stderr:" >&2
   tail -n 80 "$daemon_stderr" >&2 || true
   exit 2
 }
