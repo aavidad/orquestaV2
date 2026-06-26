@@ -46,6 +46,23 @@ func TestReadCommandHTTPResponseBodyV0NoPropagaBodyNo2xx(t *testing.T) {
 	}
 }
 
+func TestReadCommandHTTPResponseBodyV0PropagaCodigosPublicosJSONNo2xx(t *testing.T) {
+	response := commandHTTPResponseForTestV0(
+		http.StatusInternalServerError,
+		"application/json; charset=utf-8",
+		`{"estado":"error","errores_publicos":[{"code":"run_supervisor_execute_error"}],"diagnostics":[{"code":"supervisor_transition_error_but_agents_live"}]}`,
+	)
+
+	_, err := readCommandHTTPResponseBodyV0(response, "request")
+
+	if err == nil {
+		t.Fatalf("error esperado")
+	}
+	if got := err.Error(); got != "request_http_500:run_supervisor_execute_error,supervisor_transition_error_but_agents_live" {
+		t.Fatalf("error=%q", got)
+	}
+}
+
 func TestReadCommandHTTPResponseBodyV0RechazaJSONConTrailingData(t *testing.T) {
 	response := commandHTTPResponseForTestV0(http.StatusOK, "application/json", `{"estado":"ok"} {"extra":true}`)
 

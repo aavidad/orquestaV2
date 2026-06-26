@@ -1421,7 +1421,9 @@ Campos:
     diagnostics?: diagnostico publico de puertos/errores y consejo no bloqueante
       y issues de progreso del run, incluido
       `external_work_agent_requested_not_started` cuando hay agentes pedidos,
-      ninguno arrancado y ninguna senal viva
+      ninguno arrancado y ninguna senal viva; para compatibilidad con
+      consumidores existentes, las refs `opes...`/`app-spec-opes...` se tratan
+      como trabajo externo aunque no incluyan literalmente `external-work`
   output_error:
     estado: error
     errores_publicos reparables

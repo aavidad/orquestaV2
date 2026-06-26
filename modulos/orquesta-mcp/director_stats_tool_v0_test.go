@@ -249,6 +249,38 @@ func TestMCPDirectorStatsToolExecutorV0DiagnosticaExternalWorkAgenteSolicitadoNo
 	}
 }
 
+func TestMCPDirectorStatsToolExecutorV0DiagnosticaOPESDirectoAgenteSolicitadoNoArrancado(t *testing.T) {
+	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-opes-direct-agent-not-started-001")
+	run.ProjectRef = "opes-revision-tcae"
+	run.AppSpecRef = "app-spec-opes-qa-visual"
+	run.Agents = []string{"agent-ref-qa-visual-direct-001"}
+	run.StartedAgents = nil
+	run.FailedAgents = nil
+	run.LostAgents = nil
+	run.StoppedAgents = nil
+	run.ConfirmedStoppedAgents = nil
+	run.Deliveries = nil
+
+	result, err := (MCPDirectorStatsToolExecutorV0{
+		RunStore: orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+	}).Execute(context.Background(), MCPDirectorStatsToolInputV0{
+		RequestID:     "request-ref-mcp-director-stats-opes-direct-agent-not-started-001",
+		CorrelationID: "corr-mcp-director-stats-opes-direct-agent-not-started-001",
+		RunRef:        run.RunID,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPDirectorStatsEstadoOKV0 ||
+		result.Stats == nil ||
+		!mcpDirectorStatsProgressIssueExistsV0(
+			result.Stats.Progress.Issues,
+			mcpDirectorStatsExternalWorkAgentRequestedNotStartedV0,
+		) {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPDirectorStatsToolExecutorV0DevuelveIssuesPublicos(t *testing.T) {
 	result, err := (MCPDirectorStatsToolExecutorV0{}).Execute(
 		context.Background(),

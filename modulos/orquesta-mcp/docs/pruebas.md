@@ -524,6 +524,10 @@ Evidencia adicional: `director.stats` publica
 external-work tiene agentes pedidos, ninguno arrancado y nada en vuelo;
 `autoprogramming/status` propaga ese issue como `diagnostics[]` para que la UI y
 el operador no lo vean como `wait-subagents-terminal-without-delivery` generico.
+Evidencia adicional 2026-06-26: el mismo diagnostico cubre tambien runs OPES
+directas que llegan con refs `opes...`/`app-spec-opes...` aunque el nombre del
+spec no incluya `external-work`; asi `director.stats` no cae al codigo generico
+`agent_requested_not_started` para QA visual external-work lanzada desde OPES.
 
 Evidencia adicional 2026-06-26: el bridge HTTP legacy `/api/v0/runs/supervise`
 tambien devuelve `202 accepted_background` con `operation_ref`, diagnostico y

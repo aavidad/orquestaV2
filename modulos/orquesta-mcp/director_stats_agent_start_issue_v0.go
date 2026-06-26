@@ -43,7 +43,10 @@ func mcpDirectorStatsLooksExternalWorkV0(
 	return strings.Contains(projectRef, "external-work") ||
 		strings.Contains(projectRef, "external_work") ||
 		strings.Contains(appSpecRef, "external-work") ||
-		strings.Contains(appSpecRef, "external_work")
+		strings.Contains(appSpecRef, "external_work") ||
+		projectRef == "opes" ||
+		strings.HasPrefix(projectRef, "opes-") ||
+		strings.HasPrefix(appSpecRef, "app-spec-opes")
 }
 
 func mcpDirectorStatsHasProcessRefV0(

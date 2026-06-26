@@ -110,6 +110,12 @@ bateria focal + `go test -count=1 -p=1 ./...` pasaron.
   `runs/supervise` en external-work/OPES con agente pedido pero no arrancado:
   `external_work_agent_requested_not_started`, causa publica y acciones de
   reintento/revision de capacidad, auth, runtime, cola, outbox o politica.
+- 2026-06-26: `orquesta-mcp` clasifica tambien refs OPES directas
+  (`opes...`/`app-spec-opes...`) como trabajo externo para ese diagnostico, y
+  `cmd/orquesta-server` conserva codigos publicos JSON de respuestas HTTP
+  no-2xx (`errores_publicos`, `issues`, `diagnostics`, `code`) para que OPES no
+  pierda senales como `supervisor_transition_error_but_agents_live` detras de
+  `request_http_500` generico.
 
 ## No reabrir salvo regresion
 

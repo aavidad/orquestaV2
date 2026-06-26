@@ -86,66 +86,7 @@ func readOPESExternalWorkRunSubmitResponseBodyV0(response *http.Response) ([]byt
 }
 
 func opesExternalWorkRunSubmitHTTPErrorV0(status int, body []byte) error {
-	code := fmt.Sprintf("request_http_%d", status)
-	if detail := opesExternalWorkRunSubmitPublicErrorDetailV0(body); detail != "" {
-		return fmt.Errorf("%s:%s", code, detail)
-	}
-	return fmt.Errorf("%s", code)
-}
-
-func opesExternalWorkRunSubmitPublicErrorDetailV0(body []byte) string {
-	if len(body) == 0 || !json.Valid(body) {
-		return ""
-	}
-	var decoded struct {
-		ErroresPublicos []struct {
-			Code string `json:"code"`
-		} `json:"errores_publicos"`
-		Issues []struct {
-			Code string `json:"code"`
-		} `json:"issues"`
-		Code string `json:"code"`
-	}
-	if err := json.Unmarshal(body, &decoded); err != nil {
-		return ""
-	}
-	codes := make([]string, 0, len(decoded.ErroresPublicos)+len(decoded.Issues)+1)
-	for _, issue := range decoded.ErroresPublicos {
-		codes = append(codes, compactOPESBridgeErrorCodeV0(issue.Code))
-	}
-	for _, issue := range decoded.Issues {
-		codes = append(codes, compactOPESBridgeErrorCodeV0(issue.Code))
-	}
-	codes = append(codes, compactOPESBridgeErrorCodeV0(decoded.Code))
-	return strings.Join(compactOPESBridgeRunPartsV0(codes), ",")
-}
-
-func compactOPESBridgeErrorCodeV0(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return ""
-	}
-	var b strings.Builder
-	lastSep := false
-	for _, r := range value {
-		switch {
-		case r >= 'a' && r <= 'z',
-			r >= 'A' && r <= 'Z',
-			r >= '0' && r <= '9',
-			r == '_',
-			r == '-',
-			r == '.',
-			r == ':':
-			b.WriteRune(r)
-			lastSep = false
-		default:
-			if !lastSep {
-				b.WriteByte('-')
-				lastSep = true
-			}
-		}
-	}
-	return strings.Trim(b.String(), "-")
+	return commandHTTPStatusErrorV0("request", status, "application/json", body)
 }
 
 type opesExternalWorkRunSupervisionV0 struct {
