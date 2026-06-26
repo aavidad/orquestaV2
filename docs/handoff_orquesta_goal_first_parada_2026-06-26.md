@@ -69,13 +69,18 @@ bateria focal + `go test -count=1 -p=1 ./...` pasaron.
    goal-first/estado, sin borrar handlers ni smokes historicos.
 4. Anadir contrato/test para backend Goal configurado pero degradado: no debe
    caer silenciosamente a `legacy_director_loop` si el operador pidio goal.
-5. Anadir test de frontera para `/api/v0/autoprogramming/status` con cola
-   `running`, process refs vivos y salida `running_live=1`, `agents_live>0`,
-   `stale_running=[]`.
-6. OPES sigue en otra sesion: no pisar procesos ni documentos que escriba ese
+5. OPES sigue en otra sesion: no pisar procesos ni documentos que escriba ese
    agente. El fichero
    `TAREA_OPES_ORQUESTA_EXTERNAL_WORK_VALIDACION_Y_STREAM_2026-06-26.md` estaba
    modificado por OPES y debe quedar fuera del commit salvo orden expresa.
+
+## Cierre local posterior
+
+- 2026-06-26: anadido test HTTP de frontera para
+  `/api/v0/autoprogramming/status` con cola `running`, process refs vivos y
+  salida `queue_health.running_live=1`, `queue_health.agents_live=1`,
+  `stale_running=[]`. Esto cubre el hueco gateway/adapter sin tocar OPES ni
+  arrancar servidores.
 
 ## No reabrir salvo regresion
 

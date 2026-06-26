@@ -179,6 +179,46 @@ func TestMCPAutoprogrammingStatusHTTPHandlerV0SerializaEfficiencySummary(t *test
 	}
 }
 
+func TestMCPAutoprogrammingStatusHTTPHandlerV0NoMarcaRunningStaleSiHayAgentesVivos(t *testing.T) {
+	queue := &fakeMCPAutoprogrammingQueueStatusV0{}
+	stats := &fakeMCPAutoprogrammingRunStatusV0{}
+	executor := MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: queue,
+		Stats: stats,
+	}
+	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingStatusHTTPPathV0, bytes.NewBufferString(`{}`))
+	rec := httptest.NewRecorder()
+
+	NewMCPAutoprogrammingStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPAutoprogrammingStatusToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(stats.inputs) != 1 ||
+		stats.inputs[0].RunRef != "run-ref-autop-status-001" ||
+		!stats.inputs[0].IncludeProcessRefs ||
+		!stats.inputs[0].IncludeAgentProgress {
+		t.Fatalf("stats inputs=%+v", stats.inputs)
+	}
+	if result.QueueHealth == nil ||
+		result.QueueHealth.RunningLive != 1 ||
+		result.QueueHealth.AgentsLive != 1 ||
+		result.QueueHealth.RunningStale != 0 ||
+		result.QueueHealth.RunningStaleNoProcess != 0 ||
+		result.QueueHealth.RunningWithoutRecentStats != 0 ||
+		len(result.StaleRunning) != 0 {
+		t.Fatalf("queue_health=%+v stale_running=%+v body=%s", result.QueueHealth, result.StaleRunning, rec.Body.String())
+	}
+	if queue.input.Action != MCPRunQueuePriorityActionRankV0 ||
+		!queue.input.IncludeNonExecutable {
+		t.Fatalf("queue input=%+v", queue.input)
+	}
+}
+
 type fakeMCPAutoprogrammingStatusHTTPExecutorV0 struct {
 	input  MCPAutoprogrammingStatusToolInputV0
 	result MCPAutoprogrammingStatusToolResultV0
