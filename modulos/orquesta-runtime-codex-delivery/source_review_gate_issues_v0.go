@@ -12,11 +12,21 @@ func codexReviewGateIssuesEvaluableV0(
 	issues []orquestaruntime.ExternalAgentConnectorErrorV0,
 ) bool {
 	for _, issue := range issues {
-		if string(issue.Code) != string(orquestaruntimecodex.CodexConnectorAckArtifactV0) {
+		if !codexReviewGateIssueEvaluableV0(issue) {
 			return false
 		}
 	}
 	return true
+}
+
+func codexReviewGateIssueEvaluableV0(
+	issue orquestaruntime.ExternalAgentConnectorErrorV0,
+) bool {
+	if string(issue.Code) == string(orquestaruntimecodex.CodexConnectorAckArtifactV0) {
+		return true
+	}
+	return string(issue.Code) == string(orquestaruntimecodex.CodexConnectorAckCorrelationV0) &&
+		stringInCodexDeliverySetV0(issue.Evidence, orquestaruntimecodex.CodexAgentAckInvalidParentSubroleCollisionEvidenceV0)
 }
 
 func codexReviewGateMergeConnectorIssuesV0(

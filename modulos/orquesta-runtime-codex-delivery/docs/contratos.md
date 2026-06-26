@@ -189,6 +189,9 @@ Invariantes:
   validar ACK completado, tests requeridos, write-set y limite de lineas;
 - proyecta `ack-pending-rail:*` del ACK como issues advisory del gate, para que
   queden como follow-up no bloqueante y no como razon de relanzar otro agente;
+- proyecta `invalid_parent_ack_subrole_collision` como issue observable de
+  review/rework cuando el ACK del padre contiene un `task_ref` de subrol; la
+  correlacion generica no identificada sigue siendo causalidad rota dura;
 - una entrega valida produce `accepted` y `accepted_review_ref`;
 - una entrega invalida produce `changes_requested` por defecto y evidencia de
   incidencias compactas;
