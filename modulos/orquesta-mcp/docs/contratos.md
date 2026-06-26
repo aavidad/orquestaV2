@@ -38,7 +38,10 @@ Campos:
   output_ok:
     estado: ok
     run_ref, stop_reason, ticks, last, history?, evidence_refs?,
-    operator_advice?, diagnostics?
+    operator_advice?, diagnostics?; por HTTP, si el executor sigue vivo mas
+    alla de la ventana de respuesta, devuelve `202 accepted` con
+    `stop_reason=accepted_background`, `operation_ref`, diagnostico y acciones
+    de consulta
   output_error:
     estado: error
     errores_publicos: issues compactos
@@ -48,9 +51,13 @@ Invariantes:
   - No conoce Codex, OPES, DB ni runtime concreto.
   - La composicion decide si el executor reentra por drain, cola global o
     supervisor residente.
+  - El HTTP no mantiene al cliente bloqueado indefinidamente tras delegar en el
+    executor; deja `operation_ref` y obliga a observar por stats/cola.
   - `operator_advice` se conserva como observacion; no decide runtime ni cierre.
 Pruebas de contrato:
   - HTTP delega en executor fake y preserva correlation id.
+  - HTTP devuelve `202 accepted_background` si el executor no responde dentro de
+    la ventana acotada.
   - Transporte MCP queda opt-in y devuelve unbound si falta puerto.
   - Payload compacto sin secretos ni detalles internos.
 ```

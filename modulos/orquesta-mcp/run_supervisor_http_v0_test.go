@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestMCPRunSupervisorHTTPHandlerV0DelegaEnExecutor(t *testing.T) {
@@ -67,6 +68,44 @@ func TestMCPRunSupervisorHTTPHandlerV0NoCancelaSupervisorPorCierreHTTP(t *testin
 	}
 	if executor.ctxErr != nil {
 		t.Fatalf("executor recibio contexto cancelado: %v", executor.ctxErr)
+	}
+}
+
+func TestMCPRunSupervisorHTTPHandlerV0DevuelveAcceptedSiExecutorSigueVivo(t *testing.T) {
+	executor := &fakeMCPRunSupervisorHTTPExecutorV0{
+		delay: 25 * time.Millisecond,
+		result: MCPRunSupervisorToolResultV0{
+			Estado: MCPRunSupervisorEstadoOKV0,
+			RunRef: "run-ref-supervisor-http-background-001",
+		},
+	}
+	body := bytes.NewBufferString(`{
+		"request_id":"request-ref-supervisor-http-background-001",
+		"correlation_id":"corr-supervisor-http-background-001",
+		"idempotency_key":"idem-supervisor-http-background-001",
+		"run_ref":"run-ref-supervisor-http-background-001",
+		"max_ticks":20
+	}`)
+	req := httptest.NewRequest(http.MethodPost, MCPRunSupervisorHTTPPathV0, body)
+	rec := httptest.NewRecorder()
+
+	newMCPRunSupervisorHTTPHandlerWithTimeoutV0(executor, time.Millisecond).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPRunSupervisorToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != MCPRunSupervisorEstadoOKV0 ||
+		result.StopReason != "accepted_background" ||
+		result.OperationRef == "" ||
+		!strings.Contains(result.OperationRef, "idem-supervisor-http-background-001") ||
+		len(result.Diagnostics) != 1 ||
+		result.Diagnostics[0].Code != "run_supervisor_background_accepted" ||
+		len(result.NextActions) < 2 {
+		t.Fatalf("result=%+v", result)
 	}
 }
 
@@ -172,6 +211,7 @@ type fakeMCPRunSupervisorHTTPExecutorV0 struct {
 	ctxErr error
 	result MCPRunSupervisorToolResultV0
 	err    error
+	delay  time.Duration
 }
 
 func (executor *fakeMCPRunSupervisorHTTPExecutorV0) Execute(
@@ -180,6 +220,9 @@ func (executor *fakeMCPRunSupervisorHTTPExecutorV0) Execute(
 ) (MCPRunSupervisorToolResultV0, error) {
 	executor.input = input
 	executor.ctxErr = ctx.Err()
+	if executor.delay > 0 {
+		time.Sleep(executor.delay)
+	}
 	if executor.result.Estado == "" {
 		executor.result = MCPRunSupervisorToolResultV0{Estado: MCPRunSupervisorEstadoOKV0}
 	}

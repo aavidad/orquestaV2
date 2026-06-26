@@ -518,6 +518,13 @@ publicar `running_stale`. `autoprogramming/supervise` devuelve `202 accepted`
 con `operation_ref` y diagnostico si el executor sigue vivo mas alla de la
 ventana HTTP, en vez de dejar al cliente colgado.
 
+Evidencia adicional 2026-06-26: el bridge HTTP legacy `/api/v0/runs/supervise`
+tambien devuelve `202 accepted_background` con `operation_ref`, diagnostico y
+siguientes acciones si el executor ya fue delegado pero sigue vivo mas alla de
+la ventana de respuesta. Es compatibilidad acotada para composiciones aun no
+migradas a Goal/autoprogramming supervise; no anade logica al core ni relanza
+trabajo por si mismo.
+
 ## Prueba snapshot operativo del Director 2026-06-08
 
 Comando:
