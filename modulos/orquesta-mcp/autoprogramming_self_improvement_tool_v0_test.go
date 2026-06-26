@@ -20,6 +20,9 @@ func TestMCPAutoprogrammingSelfImprovementDescriptorV0EsAdaptadorFino(t *testing
 		len(descriptor.Invariantes) == 0 {
 		t.Fatalf("descriptor=%+v", descriptor)
 	}
+	if !containsMCPStringPartForTestV0(descriptor.Invariantes, "no sustituye la ruta goal-first") {
+		t.Fatalf("descriptor debe marcar automejora como secundaria: %+v", descriptor.Invariantes)
+	}
 	assertTransportPayloadSaneadoMCPTestV0(t, descriptor, 1200)
 }
 

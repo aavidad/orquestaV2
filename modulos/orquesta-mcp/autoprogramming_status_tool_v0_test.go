@@ -383,6 +383,50 @@ func TestMCPAutoprogrammingStatusExecutorV0ExponeUsageLimitReconciliadoV0(t *tes
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0PropagaDiagnosticoAgenteSolicitadoNoArrancadoV0(t *testing.T) {
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{empty: true},
+		Stats: &fakeMCPAutoprogrammingRunStatusV0{
+			stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+				RunRef:     "run-ref-autop-agent-not-started-001",
+				ProjectRef: "opes",
+				AppSpecRef: "app-spec-external-work-opes-qa-visual",
+				Counts: orquestacionnucleoapp.DirectorRunStatsCountsV0{
+					TasksTotal:      1,
+					TasksOpen:       1,
+					AgentsRequested: 1,
+					AgentsStarted:   0,
+					AgentsInFlight:  0,
+				},
+				Progress: orquestacionnucleoapp.DirectorProgressStatsV0{
+					Issues: []orquestacionnucleoapp.DirectorProgressIssueV0{{
+						Code:    mcpDirectorStatsExternalWorkAgentRequestedNotStartedV0,
+						Field:   "agents",
+						Message: "cause=unknown action=retry_materialization_or_check_capacity_auth_runtime_queue_outbox_policy",
+					}},
+				},
+			},
+		},
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{
+		RunRef: "run-ref-autop-agent-not-started-001",
+	})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !hasMCPAutoprogrammingDiagnosticCodeV0(
+		result.Diagnostics,
+		mcpDirectorStatsExternalWorkAgentRequestedNotStartedV0,
+	) {
+		t.Fatalf("diagnostics=%+v", result.Diagnostics)
+	}
+	if result.Operator == nil ||
+		len(result.Operator.SafeActions) == 0 ||
+		result.Operator.SafeActions[0].Action != "supervise" {
+		t.Fatalf("operator=%+v", result.Operator)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0DiagnosticaAutoprogrammingSuprimidaPorSesionDominio(t *testing.T) {
 	queue := &fakeMCPAutoprogrammingQueueStatusV0{
 		empty: true,

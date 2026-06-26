@@ -24,9 +24,11 @@ func MCPAutoprogrammingSuperviseDescriptorV0() MCPAutoprogrammingSuperviseToolDe
 		ResourceURI: MCPAutoprogrammingSuperviseResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
+			"compatibilidad legacy/resident para runs del loop historico",
 			"supervision puntual via runs.supervisor inyectado",
 			"run_ref acota una run de autoprogramacion si se proporciona",
 			"sin run_ref delega la decision de cola al executor inyectado",
+			"no supervisa runs goal-first; usar orquesta.autoprogramming.observe_goal.v0 para observar goals",
 			"resident_mode permite al executor seguir backlog durable hasta cierre o bloqueo",
 			"operator_advice se conserva como observacion no bloqueante",
 			"no conoce Codex runtime DB filesystem ni proveedor concreto",

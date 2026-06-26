@@ -143,6 +143,12 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	}
 	observedRuns, observedDiagnostics := executor.executeQueueRunningStatsV0(ctx, input, result.Queue, result.Run)
 	result.Diagnostics = append(result.Diagnostics, observedDiagnostics...)
+	for _, observed := range observedRuns {
+		if observed == nil {
+			continue
+		}
+		result.Diagnostics = append(result.Diagnostics, diagnosticsFromRunProgressIssuesMCPAutoprogrammingV0(observed.Stats)...)
+	}
 	if mcpAutoprogrammingNeedsRunStatsForSafeSupervisionV0(result.Queue, result.Run) &&
 		!mcpAutoprogrammingQueueRunningStatsObservedV0(result.Queue, result.Run, observedRuns...) {
 		result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingDiagnosticV0(
@@ -258,6 +264,7 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) executeRunStatusV0(
 		}, nil
 	}
 	diagnostics := diagnosticsFromIssuesMCPAutoprogrammingV0("run", run.Errores)
+	diagnostics = append(diagnostics, diagnosticsFromRunProgressIssuesMCPAutoprogrammingV0(run.Stats)...)
 	return run.Estado == MCPDirectorStatsEstadoOKV0, &run, diagnostics, nil
 }
 

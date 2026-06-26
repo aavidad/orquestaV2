@@ -66,6 +66,7 @@ func MCPAutoprogrammingSelfImprovementDescriptorV0() MCPAutoprogrammingSelfImpro
 		ResourceURI: MCPAutoprogrammingSelfImprovementResourceURIV0,
 		Invariantes: []string{
 			"convierte fallos observados en automejora secundaria",
+			"no sustituye la ruta goal-first ni supervision de estado",
 			"solo prepara run si auto_prepare_run y executor inyectado existen",
 			"prioridad baja por defecto para no bloquear trabajo principal",
 			"operator_advice es observacion no bloqueante y no decide runtime",

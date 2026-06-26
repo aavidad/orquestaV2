@@ -214,6 +214,7 @@ func (executor MCPDirectorStatsToolExecutorV0) Execute(
 		clearMCPDirectorStatsProcessRefsV0(&stats)
 	}
 	executor.applyRunControlProjectionV0(ctx, runRef, &stats)
+	enrichMCPDirectorStatsRequestedAgentNotStartedV0(&stats)
 	decisionContext := buildMCPDirectorDecisionContextV0(run, stats, input.OccurredAt)
 	return MCPDirectorStatsToolResultV0{
 		Estado:          MCPDirectorStatsEstadoOKV0,

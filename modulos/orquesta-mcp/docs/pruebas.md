@@ -519,6 +519,11 @@ agentes vivos se han observado por progreso o refs de proceso.
 `autoprogramming/supervise` devuelve `202 accepted` con `operation_ref` y
 diagnostico si el executor sigue vivo mas alla de la ventana HTTP, en vez de
 dejar al cliente colgado.
+Evidencia adicional: `director.stats` publica
+`external_work_agent_requested_not_started` en `progress.issues` cuando una run
+external-work tiene agentes pedidos, ninguno arrancado y nada en vuelo;
+`autoprogramming/status` propaga ese issue como `diagnostics[]` para que la UI y
+el operador no lo vean como `wait-subagents-terminal-without-delivery` generico.
 
 Evidencia adicional 2026-06-26: el bridge HTTP legacy `/api/v0/runs/supervise`
 tambien devuelve `202 accepted_background` con `operation_ref`, diagnostico y

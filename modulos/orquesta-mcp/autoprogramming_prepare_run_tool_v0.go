@@ -90,6 +90,7 @@ func MCPAutoprogrammingPrepareRunDescriptorV0() MCPAutoprogrammingPrepareRunTool
 		Invariantes: []string{
 			"adaptador inbound fino",
 			"prepara run legacy continuable o lanza/hace handoff goal-first por executor inyectado",
+			"goal-first es la ruta preferente cuando devuelve goal o goal_specs; continue queda como compatibilidad legacy",
 			"no arranca agentes por si mismo",
 			"no conoce Codex OPES DB filesystem ni proveedor concreto",
 			"la supervision legacy posterior debe usar run_ref explicito; goal-first se observa por run_ref del goal",

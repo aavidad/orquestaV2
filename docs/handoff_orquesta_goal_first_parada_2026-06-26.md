@@ -45,10 +45,12 @@ bateria focal + `go test -count=1 -p=1 ./...` pasaron.
   visible, ayuda accesible por `aria-describedby`, pestanas ARIA, i18n de
   textos expertos y guia actualizada. Queda QA manual en navegador, capturas
   responsive y completar seniales humanas si aparecen mas opciones ambiguas.
-- `autoprogramming/status` y `supervise`: alrededor de 75-80%. HTTP colgado
+- `autoprogramming/status` y `supervise`: alrededor de 80-85%. HTTP colgado
   esta mitigado con `202 accepted_background`; `running_stale` con procesos
-  vivos ya consulta stats/procesos y expone `agents_live`. Falta test de
-  frontera gateway/stack completo y mas seniales humanas para casos OPES finos.
+  vivos ya consulta stats/procesos y expone `agents_live`; los runs
+  external-work con agentes pedidos pero no arrancados publican
+  `external_work_agent_requested_not_started`. Falta test de frontera
+  gateway/stack completo y mas seniales humanas para casos OPES finos.
 - Orquesta nucleo goal-first: alrededor de 82-85%.
 - Orquesta incluyendo OPES temporal completo hasta derivados/HTML: alrededor de
   70-75%.
@@ -65,9 +67,7 @@ bateria focal + `go test -count=1 -p=1 ./...` pasaron.
    - completar documentacion larga si se anaden nuevas opciones;
    - mantener cualquier opcion de proveedor/DB como adaptador opt-in, no como
      decision de la web.
-3. Demotar visiblemente herramientas MCP legacy de programacion frente a rutas
-   goal-first/estado, sin borrar handlers ni smokes historicos.
-4. OPES sigue en otra sesion: no pisar procesos ni documentos que escriba ese
+3. OPES sigue en otra sesion: no pisar procesos ni documentos que escriba ese
    agente. El fichero
    `TAREA_OPES_ORQUESTA_EXTERNAL_WORK_VALIDACION_Y_STREAM_2026-06-26.md` estaba
    modificado por OPES y debe quedar fuera del commit salvo orden expresa.
@@ -82,6 +82,14 @@ bateria focal + `go test -count=1 -p=1 ./...` pasaron.
 - 2026-06-26: anadido contrato de servicio para backend Goal configurado pero
   degradado: si `GoalLauncher` falla, `StartAppDirectorV0` propaga el error y
   no ejecuta el loop legacy ni genera eventos `AgentRequested`/`AgentStarted`.
+- 2026-06-26: `orquesta-mcp` demota explicitamente la supervision legacy frente
+  a goal-first en descriptores/README: `prepare_run` prefiere `goal`/`goal_specs`,
+  `supervise` queda como compatibilidad legacy/resident y las runs goal-first se
+  observan por `orquesta.autoprogramming.observe_goal.v0`.
+- 2026-06-26: `director.stats` diagnostica
+  `external_work_agent_requested_not_started` si hay agentes solicitados,
+  ninguno arrancado y nada en vuelo; `autoprogramming/status` propaga ese issue
+  como diagnostico publico accionable.
 
 ## No reabrir salvo regresion
 

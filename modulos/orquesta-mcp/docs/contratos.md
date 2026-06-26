@@ -1419,6 +1419,9 @@ Campos:
     ops_snapshot?: DirectorAutonomousOpsSnapshotV0 agregado de cola/run para
       `/ops` y cockpit operativo
     diagnostics?: diagnostico publico de puertos/errores y consejo no bloqueante
+      y issues de progreso del run, incluido
+      `external_work_agent_requested_not_started` cuando hay agentes pedidos,
+      ninguno arrancado y ninguna senal viva
   output_error:
     estado: error
     errores_publicos reparables
@@ -1430,6 +1433,8 @@ Invariantes:
   - Para runs `running` visibles en cola puede consultar `director.stats` de
     forma acotada y con `include_process_refs`; si no hay liveness verificable,
     no inventa `running_stale_no_process`.
+  - Si `director.stats` informa issues de progreso, los conserva como
+    diagnosticos publicos accionables en vez de convertirlos en fallo terminal.
   - El bridge HTTP puede transportar consejo del operador como observacion no
     bloqueante sin tocar el caso de uso.
   - `ops_snapshot` es read-only, no decide runtime ni corta entregas; deriva de
