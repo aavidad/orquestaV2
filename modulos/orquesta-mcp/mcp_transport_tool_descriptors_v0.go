@@ -14,6 +14,7 @@ type mcpTransportToolDescriptorsV0 struct {
 	humanDirectorWork        MCPHumanDirectorWorkReviewPlanToolDescriptorV0
 	selfImprovement          MCPAutoprogrammingSelfImprovementToolDescriptorV0
 	autoprogrammingPrepare   MCPAutoprogrammingPrepareRunToolDescriptorV0
+	autoprogrammingGoal      MCPAutoprogrammingObserveGoalToolDescriptorV0
 	autoprogrammingStatus    MCPAutoprogrammingStatusToolDescriptorV0
 	autoprogrammingSupervise MCPAutoprogrammingSuperviseToolDescriptorV0
 	bootstrap                MCPBootstrapToolDescriptorV0
@@ -44,6 +45,7 @@ func newMCPTransportToolDescriptorsV0() mcpTransportToolDescriptorsV0 {
 		humanDirectorWork:        MCPHumanDirectorWorkReviewPlanDescriptorV0(),
 		selfImprovement:          MCPAutoprogrammingSelfImprovementDescriptorV0(),
 		autoprogrammingPrepare:   MCPAutoprogrammingPrepareRunDescriptorV0(),
+		autoprogrammingGoal:      MCPAutoprogrammingObserveGoalDescriptorV0(),
 		autoprogrammingStatus:    MCPAutoprogrammingStatusDescriptorV0(),
 		autoprogrammingSupervise: MCPAutoprogrammingSuperviseDescriptorV0(),
 		bootstrap:                MCPBootstrapToolDescriptorV0Value(),

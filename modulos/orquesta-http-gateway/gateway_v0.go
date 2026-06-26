@@ -30,6 +30,7 @@ const (
 	RouteAutoprogrammingValidateRequestV0 = "/api/v0/autoprogramming/validate-request"
 	RouteAutoprogrammingSelfImprovementV0 = "/api/v0/autoprogramming/self-improvement"
 	RouteAutoprogrammingPrepareRunV0      = "/api/v0/autoprogramming/prepare-run"
+	RouteAutoprogrammingObserveGoalV0     = "/api/v0/autoprogramming/goal/observe"
 	RouteAutoprogrammingStatusV0          = "/api/v0/autoprogramming/status"
 	RouteAutoprogrammingSuperviseV0       = "/api/v0/autoprogramming/supervise"
 	RouteGovernanceCatalogQueryV0         = "/api/v0/governance/catalog/query"
@@ -65,6 +66,7 @@ type RouteHandlersV0 struct {
 	AutoprogrammingValidateRequest http.Handler
 	AutoprogrammingSelfImprovement http.Handler
 	AutoprogrammingPrepareRun      http.Handler
+	AutoprogrammingObserveGoal     http.Handler
 	AutoprogrammingStatus          http.Handler
 	AutoprogrammingSupervise       http.Handler
 	GovernanceCatalogQuery         http.Handler
@@ -131,6 +133,7 @@ func gatewayRouteRegistrationsV0(handlers RouteHandlersV0) []gatewayRouteRegistr
 		{ref: RouteRefAutoprogrammingValidateRequestV0, route: RouteAutoprogrammingValidateRequestV0, handler: handlers.AutoprogrammingValidateRequest},
 		{ref: RouteRefAutoprogrammingSelfImprovementV0, route: RouteAutoprogrammingSelfImprovementV0, handler: handlers.AutoprogrammingSelfImprovement},
 		{ref: RouteRefAutoprogrammingPrepareRunV0, route: RouteAutoprogrammingPrepareRunV0, handler: handlers.AutoprogrammingPrepareRun},
+		{ref: RouteRefAutoprogrammingObserveGoalV0, route: RouteAutoprogrammingObserveGoalV0, handler: handlers.AutoprogrammingObserveGoal},
 		{ref: RouteRefAutoprogrammingStatusV0, route: RouteAutoprogrammingStatusV0, handler: handlers.AutoprogrammingStatus},
 		{ref: RouteRefAutoprogrammingSuperviseV0, route: RouteAutoprogrammingSuperviseV0, handler: handlers.AutoprogrammingSupervise},
 		{ref: RouteRefGovernanceCatalogQueryV0, route: RouteGovernanceCatalogQueryV0, handler: handlers.GovernanceCatalogQuery},

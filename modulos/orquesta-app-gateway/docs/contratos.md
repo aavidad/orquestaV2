@@ -108,7 +108,10 @@ Entrada de composicion:
   executor usa Codex, trabajo de dominio u otra composicion.
 - `/api/v0/autoprogramming/prepare-run` delega en `orquesta-mcp`; este modulo no
   conoce `PrepareAutoprogrammingRunV0`, stores, runtime ni Codex, y conserva
-  `goal_specs?` si el executor lo devuelve.
+  `goal?` y `goal_specs?` si el executor los devuelve.
+- `/api/v0/autoprogramming/goal/observe` delega en `orquesta-mcp`; este modulo
+  no observa goals, no valida cierre, no toca cola y no conoce runtime goal,
+  Codex, DB, filesystem ni proveedor.
 - `/api/v0/autoprogramming/self-improvement` delega en `orquesta-mcp`; este
   modulo no decide prioridad, cola, runtime ni preparacion salvo puerto
   inyectado.

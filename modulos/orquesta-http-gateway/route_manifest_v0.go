@@ -42,6 +42,7 @@ const (
 	RouteRefAutoprogrammingValidateRequestV0 = "route-ref-autoprogramming-validate-request-v0"
 	RouteRefAutoprogrammingSelfImprovementV0 = "route-ref-autoprogramming-self-improvement-v0"
 	RouteRefAutoprogrammingPrepareRunV0      = "route-ref-autoprogramming-prepare-run-v0"
+	RouteRefAutoprogrammingObserveGoalV0     = "route-ref-autoprogramming-observe-goal-v0"
 	RouteRefAutoprogrammingStatusV0          = "route-ref-autoprogramming-status-v0"
 	RouteRefAutoprogrammingSuperviseV0       = "route-ref-autoprogramming-supervise-v0"
 	RouteRefGovernanceCatalogQueryV0         = "route-ref-governance-catalog-query-v0"

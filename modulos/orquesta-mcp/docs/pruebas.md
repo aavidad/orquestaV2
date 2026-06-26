@@ -563,3 +563,18 @@ devuelve salida compacta con `run_ref`, `goal_ref`, `goal_status`,
 `run_status`, `director_execution_mode`, `closure_status`, refs de
 artefactos/evidencias y errores publicos. Sin executor devuelve
 `mcp_transport_tool_unbound` por transporte.
+
+## Prueba observacion goal-first de autoprogramacion 2026-06-26
+
+Comando:
+
+```bash
+go test -count=1 ./modulos/orquesta-mcp \
+  -run 'AutoprogrammingObserveGoal|MCPTransportToolInputSchema|RegisterMCPTransport'
+```
+
+Evidencia esperada: `orquesta.autoprogramming.observe_goal.v0` queda registrado
+como tool opt-in, `POST /api/v0/autoprogramming/goal/observe` acepta solo POST,
+exige `run_ref`, delega en executor inyectado y devuelve la misma proyeccion
+compacta de goal/cierre que la ruta de app-director. Sin executor devuelve
+`mcp_transport_tool_unbound` por transporte.

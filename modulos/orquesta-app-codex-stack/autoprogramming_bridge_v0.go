@@ -8,6 +8,7 @@ import (
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
@@ -33,6 +34,8 @@ type AutoprogrammingBridgeResultV0 struct {
 	Tasks         []orquestacoreworkflow.WorkflowTaskV0                     `json:"tasks,omitempty"`
 	WaitAgentRefs []string                                                  `json:"wait_agent_refs,omitempty"`
 	Continue      orquestaappdirectorservice.ContinueAppDirectorRequestV0   `json:"continue,omitempty"`
+	GoalState     orquestagoal.GoalWorkStateV0                              `json:"goal_state,omitempty"`
+	GoalReceipt   *orquestagoal.GoalLaunchReceiptV0                         `json:"goal_receipt,omitempty"`
 	Issues        []orquestaautoprogramming.AutoprogrammingRequestIssueV0   `json:"issues,omitempty"`
 }
 
@@ -75,6 +78,14 @@ func prepareAutoprogrammingRunWithWorkV0(
 	if !work.Accepted {
 		return result, nil
 	}
+	if issue := autoprogrammingBridgeGoalFirstLaunchIssueV0(work.Work, ports); issue.Code != "" {
+		result.Accepted = false
+		result.Issues = append(result.Issues, issue)
+		return result, nil
+	}
+	if autoprogrammingBridgeShouldStartGoalFirstV0(work.Work, ports) {
+		return autoprogrammingBridgeStartGoalFirstV0(ctx, request, result, ports)
+	}
 	if !autoprogrammingBridgeShouldMaterializeLegacyLoopV0(work.Work) {
 		return result, nil
 	}
@@ -106,6 +117,47 @@ func prepareAutoprogrammingRunWithWorkV0(
 	}
 	result.Continue = continueRequest
 	return result, nil
+}
+
+func autoprogrammingBridgeShouldStartGoalFirstV0(
+	work orquestaautoprogramming.AutoprogrammingProgrammableWorkV0,
+	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
+) bool {
+	return autoprogrammingBridgeGoalFirstBackendAvailableV0(ports) &&
+		strings.TrimSpace(work.GoalMigration.Status) == orquestaautoprogramming.AutoprogrammingGoalMigrationGoalReadyV0 &&
+		len(work.GoalSpecs) == 1
+}
+
+func autoprogrammingBridgeGoalFirstBackendAvailableV0(
+	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
+) bool {
+	return ports.GoalLauncher != nil && ports.GoalStateStore != nil
+}
+
+func autoprogrammingBridgeGoalFirstLaunchIssueV0(
+	work orquestaautoprogramming.AutoprogrammingProgrammableWorkV0,
+	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
+) orquestaautoprogramming.AutoprogrammingRequestIssueV0 {
+	if !autoprogrammingBridgeGoalFirstBackendAvailableV0(ports) ||
+		strings.TrimSpace(work.GoalMigration.Status) != orquestaautoprogramming.AutoprogrammingGoalMigrationGoalReadyV0 {
+		return orquestaautoprogramming.AutoprogrammingRequestIssueV0{}
+	}
+	switch len(work.GoalSpecs) {
+	case 0:
+		return orquestaautoprogramming.AutoprogrammingRequestIssueV0{
+			Code:    "autoprogramming_goal_specs_missing",
+			Field:   "goal_specs",
+			Message: "goal_specs requerido para lanzamiento goal-first",
+		}
+	case 1:
+		return orquestaautoprogramming.AutoprogrammingRequestIssueV0{}
+	default:
+		return orquestaautoprogramming.AutoprogrammingRequestIssueV0{
+			Code:    "autoprogramming_multi_goal_launch_unsupported",
+			Field:   "goal_specs",
+			Message: "lanzamiento goal-first soporta un goal por request; divide el trabajo antes de lanzar",
+		}
+	}
 }
 
 func autoprogrammingBridgeShouldMaterializeLegacyLoopV0(

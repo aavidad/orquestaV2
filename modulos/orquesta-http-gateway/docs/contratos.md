@@ -124,8 +124,13 @@ dominio.
 
 `RouteAutoprogrammingPrepareRunV0` apunta al contrato REST/MCP que prepara una
 run de autoprogramacion continuable por executor inyectado. El gateway no crea
-runs ni arranca agentes; solo monta el handler y no recorta `goal_specs?` cuando
-el handler inyectado los publica.
+runs ni arranca agentes; solo monta el handler y no recorta `goal?` ni
+`goal_specs?` cuando el handler inyectado los publica.
+
+`RouteAutoprogrammingObserveGoalV0` apunta al contrato REST/MCP que observa un
+goal de autoprogramacion por `run_ref`. El gateway no observa goals, no valida
+cierre, no sincroniza cola y no conoce Codex, OPES, scheduler, runtime, DB ni
+reglas de dominio.
 
 `RouteAutoprogrammingStatusV0` y `RouteAutoprogrammingSuperviseV0` apuntan a
 contratos REST/MCP finos para estado/diagnostico y supervision puntual de

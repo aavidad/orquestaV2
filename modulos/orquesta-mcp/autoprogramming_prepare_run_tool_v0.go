@@ -66,8 +66,18 @@ type MCPAutoprogrammingPrepareRunToolResultV0 struct {
 	WorkflowTaskRefs []string                             `json:"workflow_task_refs,omitempty"`
 	WaitAgentRefs    []string                             `json:"wait_agent_refs,omitempty"`
 	GoalSpecs        []orquestagoal.GoalWorkSpecV0        `json:"goal_specs,omitempty"`
+	Goal             *MCPAutoprogrammingGoalRunV0         `json:"goal,omitempty"`
 	Continue         *MCPAutoprogrammingContinueRequestV0 `json:"continue,omitempty"`
 	Errores          []MCPValidationIssueV0               `json:"errores_publicos,omitempty"`
+}
+
+type MCPAutoprogrammingGoalRunV0 struct {
+	DirectorExecutionMode string   `json:"director_execution_mode,omitempty"`
+	RunRef                string   `json:"run_ref,omitempty"`
+	GoalRef               string   `json:"goal_ref"`
+	ExternalGoalRef       string   `json:"external_goal_ref,omitempty"`
+	GoalStatus            string   `json:"goal_status,omitempty"`
+	EvidenceRefs          []string `json:"evidence_refs,omitempty"`
 }
 
 func MCPAutoprogrammingPrepareRunDescriptorV0() MCPAutoprogrammingPrepareRunToolDescriptorV0 {
@@ -75,14 +85,14 @@ func MCPAutoprogrammingPrepareRunDescriptorV0() MCPAutoprogrammingPrepareRunTool
 		Name:        MCPAutoprogrammingPrepareRunToolNameV0,
 		Version:     MCPAutoprogrammingPrepareRunToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,idempotency_key?,occurred_at?,requested_by?,autoprogramming_request:AutoprogrammingRequestV0,max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,priority_score?}",
-		Output:      "ok:{run_ref?,workflow_task_refs?,wait_agent_refs?,goal_specs?,continue?{run_ref,operational_director_plan_ref?}}|error:{errores_publicos}",
+		Output:      "ok:{run_ref?,workflow_task_refs?,wait_agent_refs?,goal_specs?,goal?{run_ref,goal_ref,goal_status},continue?{run_ref,operational_director_plan_ref?}}|error:{errores_publicos}",
 		ResourceURI: MCPAutoprogrammingPrepareRunResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
-			"prepara run legacy continuable o handoff goal-first por executor inyectado",
+			"prepara run legacy continuable o lanza/hace handoff goal-first por executor inyectado",
 			"no arranca agentes por si mismo",
 			"no conoce Codex OPES DB filesystem ni proveedor concreto",
-			"la supervision legacy posterior debe usar run_ref explicito; goal-first debe lanzar u observar goal_specs",
+			"la supervision legacy posterior debe usar run_ref explicito; goal-first se observa por run_ref del goal",
 		},
 	}
 }

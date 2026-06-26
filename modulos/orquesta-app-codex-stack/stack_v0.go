@@ -117,6 +117,9 @@ func buildStackMCPTransportBindingsV0(
 			config.Clock,
 			config.Codex.RuntimeWorkDir,
 		),
+		AutoprogrammingObserveGoal: NewCodexStackAutoprogrammingObserveGoalExecutorV0(
+			stack,
+		),
 		ServerShutdown:  serverShutdownExecutorV0(config, stack),
 		DomainWork:      config.DomainWork,
 		ExternalWorkRun: externalWorkRunGuardedExecutorV0(config, queueConfig),
@@ -156,6 +159,7 @@ func buildStackHTTPHandlerV0(
 		RunSupervisor:             bindings.RunSupervisor,
 		AppVCS:                    bindings.AppVCS,
 		AutoprogrammingPrepareRun: bindings.AutoprogrammingPrepareRun,
+		AutoprogrammingObserveGoal: bindings.AutoprogrammingObserveGoal,
 		ServerShutdown:            bindings.ServerShutdown,
 		DomainWork:                bindings.DomainWork,
 		ExternalWorkRun:           bindings.ExternalWorkRun,

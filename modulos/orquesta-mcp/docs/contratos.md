@@ -1315,9 +1315,13 @@ Campos:
     accepted: true
     run_ref?, project_ref, worktree_ref, branch_ref, phase_id?
     workflow_task_refs?, wait_agent_refs?
+    goal?: estado durable de lanzamiento Goal-first cuando la composicion tiene
+      backend inyectado: director_execution_mode, run_ref, goal_ref,
+      external_goal_ref?, goal_status?, evidence_refs?
     goal_specs: contratos `GoalWorkSpecV0` opcionales cuando la composicion
-      clasifica el trabajo como `goal_ready`; en esa rama preparan el handoff a
-      Goal sin materializar ni encolar un run legacy
+      clasifica el trabajo como `goal_ready`; sin backend preparan el handoff a
+      Goal sin materializar ni encolar un run legacy, y con backend quedan
+      devueltos con `run_ref` del run contenedor
     continue: request compacta opcional para supervision legacy posterior con
       `run_ref` explicito
   output_error:
@@ -1326,8 +1330,8 @@ Campos:
     errores_publicos: issues compactos
 Invariantes:
   - Adaptador inbound fino.
-  - Prepara un run legacy continuable o un handoff Goal-first por executor
-    inyectado.
+  - Prepara un run legacy continuable, un handoff Goal-first o un lanzamiento
+    Goal-first persistido por executor inyectado.
   - No arranca agentes por si mismo ni supervisa despues del prepare.
   - No conoce Codex, OPES, DB, filesystem, runtime productivo ni proveedor.
   - El registro MCP es opt-in: sin executor devuelve
@@ -1339,6 +1343,38 @@ Pruebas de contrato:
   - Descriptor y transporte publican `goal_specs` como salida opcional.
   - Transporte sin executor devuelve `mcp_transport_tool_unbound`.
   - HTTP `POST /api/v0/autoprogramming/prepare-run` delega en executor fake.
+```
+
+```text
+Nombre: mcp.tool.orquesta.autoprogramming.observe_goal.v0
+Campos:
+  descriptor:
+    name: orquesta.autoprogramming.observe_goal.v0
+    resource_uri: orquesta://contracts/autoprogramming-observe-goal/v0
+  rest:
+    method: POST
+    path: /api/v0/autoprogramming/goal/observe
+  input:
+    request_id, correlation_id: refs externas opcionales
+    run_ref: ref durable del run contenedor Goal-first
+    occurred_at, requested_by: metadata opcional
+  output_ok:
+    estado: ok
+    run_ref, run_status?, director_execution_mode?
+    goal_ref, external_goal_ref?, goal_status?
+    closure_status?, closure_accepted?, closure_needs_rework?
+    summary?, artifact_refs?, domain_receipt_refs?, evidence_refs?,
+    closure_issues?
+  output_error:
+    estado: error
+    errores_publicos
+Invariantes:
+  - Adaptador inbound fino.
+  - Observa un `GoalWorkStateV0` ya persistido por `run_ref`.
+  - No ejecuta loop legacy ni arranca proveedor.
+  - La validacion de cierre queda en el servicio neutral de Goal.
+  - El registro MCP es opt-in: sin executor devuelve
+    `mcp_transport_tool_unbound`.
 ```
 
 ```text

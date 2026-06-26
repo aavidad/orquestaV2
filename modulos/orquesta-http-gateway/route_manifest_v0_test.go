@@ -17,6 +17,7 @@ func TestPublicRouteManifestV0DeclaraInventarioYPrecedenciaV0(t *testing.T) {
 		RouteRefAppDirectorV0,
 		RouteRefAppDirectorGoalObserveV0,
 		RouteRefAppIntakeGuidedTurnV0,
+		RouteRefAutoprogrammingObserveGoalV0,
 		RouteRefAppVCSV0,
 		RouteRefMCPJSONRPCV0,
 		RouteRefWorkspaceTimelineV0,

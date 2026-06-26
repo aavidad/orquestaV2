@@ -57,6 +57,8 @@ func mcpTransportToolInputDTOByNameV0(name string) (any, bool) {
 		return MCPAutoprogrammingSelfImprovementToolInputV0{}, true
 	case MCPAutoprogrammingPrepareRunToolNameV0:
 		return MCPAutoprogrammingPrepareRunToolInputV0{}, true
+	case MCPAutoprogrammingObserveGoalToolNameV0:
+		return MCPAutoprogrammingObserveGoalToolInputV0{}, true
 	case MCPAutoprogrammingStatusToolNameV0:
 		return mcpAutoprogrammingStatusTransportInputV0{}, true
 	case MCPAutoprogrammingSuperviseToolNameV0:
@@ -151,6 +153,8 @@ func mcpTransportJSONTypeForFieldV0(typ reflect.Type) string {
 func mcpTransportToolRequiredFieldsV0(name string) map[string]bool {
 	switch strings.TrimSpace(name) {
 	case MCPObserveAppDirectorGoalToolNameV0:
+		return map[string]bool{"run_ref": true}
+	case MCPAutoprogrammingObserveGoalToolNameV0:
 		return map[string]bool{"run_ref": true}
 	case MCPAppVCSToolNameV0:
 		return map[string]bool{"action": true, "app_ref": true, "repo_ref": true}

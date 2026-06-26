@@ -149,11 +149,14 @@ del goal. Orquesta solo prepara y valida el contrato.
 
 1. Mantener el loop historico intacto.
 2. Usar `GoalWorkSpecV0` para nuevas tareas de autoprogramacion acotadas.
-   Estado 2026-06-25: `orquesta-autoprogramming` ya compila `goal_specs[]`
-   cuando `goal_migration=goal_ready`, y `POST
-   /api/v0/autoprogramming/prepare-run` los expone sin `run_ref` legacy desde
-   la composicion Codex stack; los gateways los conservan como passthrough y no
-   lanzan runtime ni encolan `runs/supervise`.
+   Estado 2026-06-26: `orquesta-autoprogramming` sigue siendo puro y compila
+   `goal_specs[]` cuando `goal_migration=goal_ready`. En la composicion Codex
+   stack, `POST /api/v0/autoprogramming/prepare-run` conserva dos rutas: si no
+   hay backend `GoalLauncher` + `GoalStateStore`, devuelve `goal_specs[]` sin
+   `run_ref` como handoff; si el backend esta inyectado, crea un run contenedor
+   sin `WorkflowTaskV0` legacy, lanza el goal, persiste `GoalWorkStateV0`,
+   devuelve `goal{run_ref,goal_ref,external_goal_ref,goal_status}` y no encola
+   `runs/supervise`.
 3. Cablear un launcher real de Codex Goal en `cmd/orquesta-server` solo cuando
    exista puerto seguro para crear/observar goals.
    Estado 2026-06-25: `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` inyecta
@@ -174,6 +177,12 @@ del goal. Orquesta solo prepara y valida el contrato.
    Estado 2026-06-25: hecho de forma opt-in para lanzamiento, refs publicas,
    observacion y cierre validado por Orquesta cuando el goal devuelve marcador
    estructurado.
+8. Conectar autoprogramacion a observacion goal-first.
+   Estado 2026-06-26: `orquesta.autoprogramming.observe_goal.v0` y `POST
+   /api/v0/autoprogramming/goal/observe` observan el `GoalWorkStateV0` por
+   `run_ref`, reutilizan el cierre neutral de `orquesta-app-director-service` y
+   solo sincronizan cola como terminal no ejecutable si el goal cierra o bloquea
+   el run.
 
 ## No hacer
 

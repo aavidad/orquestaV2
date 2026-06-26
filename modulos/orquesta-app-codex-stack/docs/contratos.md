@@ -147,7 +147,12 @@ Superficie publica de app:
 POST /api/v0/autoprogramming/prepare-run
   input: autoprogramming_request, occurred_at?, requested_by?, limites?
   output: estado, accepted, run_ref?, workflow_task_refs?, wait_agent_refs?,
-          goal_specs?, continue?
+          goal_specs?, goal?, continue?
+
+POST /api/v0/autoprogramming/goal/observe
+  input: run_ref, occurred_at?, requested_by?
+  output: estado, run_ref, run_status?, goal_ref, goal_status,
+          closure_status?, closure_accepted?, evidence_refs?
 
 POST /api/v0/runs/supervise
   input: run_ref?, queue_ref?, max_ticks?, continue_message?, limites?
@@ -159,17 +164,25 @@ POST /api/v0/runs/supervise
 En modo legacy guarda `WorkflowTaskV0`/run por los stores del stack y devuelve
 un `continue` acotado.
 Cuando `orquesta-autoprogramming` clasifica la request como `goal_ready`, el
-resultado incluye `goal_specs[]` normalizados sin materializar ni encolar un
-run legacy; `run_ref`, `workflow_task_refs`, `wait_agent_refs` y `continue`
-quedan vacios para que una composicion Goal lance/observe sin doble loop.
+resultado depende de los puertos inyectados. Si no hay backend Goal disponible,
+incluye `goal_specs[]` normalizados sin materializar ni encolar un run legacy;
+`run_ref`, `workflow_task_refs`, `wait_agent_refs` y `continue` quedan vacios
+para que otra composicion haga handoff. Si existen `GoalLauncher` y
+`GoalStateStore`, el stack crea un run contenedor sin `WorkflowTaskV0` ni
+contratos legacy, completa `GoalWorkSpecV0.RunRef`, lanza el goal, persiste
+`GoalWorkStateV0` y devuelve `goal{run_ref,goal_ref,external_goal_ref,
+goal_status,evidence_refs}`. Ese run contenedor no se marca `ready` en
+RunQueue, por lo que no entra en `runs/supervise` ni en el drain legacy.
 Cuando la clasificacion queda `covered_by_goal_first` o
 `blocked_by_goal_capability`, tampoco se programa loop legacy salvo que el
 contrato marque explicitamente `legacy_loop_required`. No arranca agentes ni
-goals por si misma. Las tareas explicitas preservan objetivo,
-contexto, criterios, tests y reglas compactas hasta el paquete del agente sin
-convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git. La ruta de
-supervision es neutral de runs. El gateway y `orquesta-mcp` no conocen Codex; este stack inyecta
+goals por si misma fuera de esos puertos opt-in. Las tareas explicitas preservan
+objetivo, contexto, criterios, tests y reglas compactas hasta el paquete del
+agente sin convertir `worktree_ref` ni `branch_ref` en rutas o nombres Git. La
+ruta de supervision es neutral de runs. El gateway y `orquesta-mcp` no conocen
+Codex; este stack inyecta
 `CodexStackAutoprogrammingPrepareRunExecutorV0` y
+`CodexStackAutoprogrammingObserveGoalExecutorV0` junto a
 `CodexStackRunSupervisorExecutorV0`.
 
 Cuando `RunGlobalTickV0` drena una run y el loop del nucleo devuelve la run
@@ -190,6 +203,9 @@ rescue reason, claims y evidencias; si no lo habia, se crea solo una traza
 terminal no ejecutable. El binding MCP/REST del stack usa
 `CodexStackObserveAppDirectorGoalExecutorV0`, que llama a
 `StackV0.ObserveAppDirectorGoalV0` para no saltarse esa reconciliacion.
+Autoprogramacion expone la misma observacion con tool/ruta propios:
+`orquesta.autoprogramming.observe_goal.v0` y
+`/api/v0/autoprogramming/goal/observe`.
 
 ## Bridge de entregas a dominio externo
 

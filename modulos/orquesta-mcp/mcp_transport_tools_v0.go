@@ -18,6 +18,7 @@ func MCPTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnve
 		mcpTransportToolEnvelopeV0(descriptors.humanDirectorWork.Name, descriptors.humanDirectorWork.Version, descriptors.humanDirectorWork.ResourceURI, descriptors.humanDirectorWork.InputSchema, descriptors.humanDirectorWork.Output, mcpHumanDirectorWorkReviewPlanTransportHandlerV0(MCPHumanDirectorWorkReviewPlanToolExecutorV0{OperatorQuery: mcpOperatorQueryBindingV0(bindings)})),
 		mcpTransportToolEnvelopeV0(descriptors.selfImprovement.Name, descriptors.selfImprovement.Version, descriptors.selfImprovement.ResourceURI, descriptors.selfImprovement.InputSchema, descriptors.selfImprovement.Output, mcpAutoprogrammingSelfImprovementTransportHandlerV0(NewMCPAutoprogrammingSelfImprovementToolExecutorV0(bindings.AutoprogrammingPrepareRun))),
 		mcpTransportToolEnvelopeV0(descriptors.autoprogrammingPrepare.Name, descriptors.autoprogrammingPrepare.Version, descriptors.autoprogrammingPrepare.ResourceURI, descriptors.autoprogrammingPrepare.InputSchema, descriptors.autoprogrammingPrepare.Output, mcpAutoprogrammingPrepareRunTransportHandlerV0(bindings.AutoprogrammingPrepareRun)),
+		mcpTransportToolEnvelopeV0(descriptors.autoprogrammingGoal.Name, descriptors.autoprogrammingGoal.Version, descriptors.autoprogrammingGoal.ResourceURI, descriptors.autoprogrammingGoal.InputSchema, descriptors.autoprogrammingGoal.Output, mcpAutoprogrammingObserveGoalTransportHandlerV0(bindings.AutoprogrammingObserveGoal)),
 		mcpTransportToolEnvelopeV0(descriptors.autoprogrammingStatus.Name, descriptors.autoprogrammingStatus.Version, descriptors.autoprogrammingStatus.ResourceURI, descriptors.autoprogrammingStatus.InputSchema, descriptors.autoprogrammingStatus.Output, mcpAutoprogrammingStatusTransportHandlerV0(autoprogrammingStatusExecutorFromBindingsV0(bindings))),
 		mcpTransportToolEnvelopeV0(descriptors.autoprogrammingSupervise.Name, descriptors.autoprogrammingSupervise.Version, descriptors.autoprogrammingSupervise.ResourceURI, descriptors.autoprogrammingSupervise.InputSchema, descriptors.autoprogrammingSupervise.Output, mcpAutoprogrammingSuperviseTransportHandlerV0(bindings.RunSupervisor)),
 		mcpTransportToolEnvelopeV0(descriptors.bootstrap.Name, descriptors.bootstrap.Version, descriptors.bootstrap.ResourceURI, descriptors.bootstrap.InputSchema, descriptors.bootstrap.Output, mcpBootstrapTransportHandlerV0),
@@ -47,6 +48,7 @@ func applyMCPTransportExecutionProfilesV0(
 		profile := MCPTransportExecutionProfileControlPlaneMutationV0
 		switch tools[idx].Name {
 		case MCPAutoprogrammingPrepareRunToolNameV0,
+			MCPAutoprogrammingObserveGoalToolNameV0,
 			MCPAutoprogrammingSelfImprovementToolNameV0,
 			MCPAutoprogrammingSuperviseToolNameV0,
 			MCPRuntimeModelsToolNameV0,

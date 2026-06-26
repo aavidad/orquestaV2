@@ -1352,3 +1352,21 @@ Cobertura:
   presente y proyeccion parcial sin `AgentRequested`/`AgentStarted`; fija que
   el stack proyecta el agente, registra el inicio causal y ACKea el outbox
   supersedido.
+
+Validacion autoprogramacion goal-first 2026-06-26:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack -run 'Autoprogramming.*Goal|AutoprogrammingPrepareRunAPIV0GoalReady'
+go test -count=1 ./modulos/orquesta-app-codex-stack
+```
+
+Cobertura:
+
+- `TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveGoalSpecsCuandoGoalReady`
+  conserva el fallback sin backend Goal: `goal_ready` devuelve `goal_specs[]`
+  sin `run_ref`, sin tareas, sin wait y sin cola legacy.
+- `TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaGoalFirstSinColaLegacy`
+  fija la ruta con backend `GoalLauncher` + `GoalStateStore`: crea run
+  contenedor sin `WorkflowTaskV0`, persiste `GoalWorkStateV0`, devuelve bloque
+  `goal`, no encola `ready`, observa el goal por `run_ref`, valida cierre con
+  tests requeridos y sincroniza la cola solo como terminal `closed`.

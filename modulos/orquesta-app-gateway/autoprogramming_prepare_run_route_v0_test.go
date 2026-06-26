@@ -49,6 +49,39 @@ func TestAutoprogrammingPrepareRunAPIRouteV0(t *testing.T) {
 	}
 }
 
+func TestAutoprogrammingObserveGoalAPIRouteV0(t *testing.T) {
+	executor := &recordingAutoprogrammingObserveGoalExecutorV0{}
+	handler := NewHTTPHandlerV0(ConfigV0{
+		Timeout:                    time.Second,
+		AutoprogrammingObserveGoal: executor,
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/autoprogramming/goal/observe",
+		strings.NewReader(`{"request_id":"request-observe-goal-route-001","run_ref":"run-observe-goal-route-001"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if executor.Input.RunRef != "run-observe-goal-route-001" {
+		t.Fatalf("input=%+v", executor.Input)
+	}
+	var result orquestamcp.MCPAutoprogrammingObserveGoalToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != orquestamcp.MCPAutoprogrammingObserveGoalEstadoOKV0 ||
+		result.RunRef != "run-observe-goal-route-001" ||
+		result.GoalRef != "goal-ref-observe-goal-route-001" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 type recordingAutoprogrammingPrepareRunExecutorV0 struct {
 	Input orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0
 }
@@ -71,5 +104,23 @@ func (executor *recordingAutoprogrammingPrepareRunExecutorV0) Execute(
 			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
 			WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "modulos/orquesta-app-gateway"}},
 		}},
+	}, nil
+}
+
+type recordingAutoprogrammingObserveGoalExecutorV0 struct {
+	Input orquestamcp.MCPAutoprogrammingObserveGoalToolInputV0
+}
+
+func (executor *recordingAutoprogrammingObserveGoalExecutorV0) Execute(
+	ctx context.Context,
+	input orquestamcp.MCPAutoprogrammingObserveGoalToolInputV0,
+) (orquestamcp.MCPAutoprogrammingObserveGoalToolResultV0, error) {
+	_ = ctx
+	executor.Input = input
+	return orquestamcp.MCPAutoprogrammingObserveGoalToolResultV0{
+		Estado:     orquestamcp.MCPAutoprogrammingObserveGoalEstadoOKV0,
+		RunRef:     input.RunRef,
+		GoalRef:    "goal-ref-observe-goal-route-001",
+		GoalStatus: orquestagoal.GoalStatusRunningV0,
 	}, nil
 }

@@ -294,9 +294,14 @@ El primer corte ya no esta solo en documentos:
 - Desde el corte posterior del 2026-05-22, la entrada
   `POST /api/v0/autoprogramming/prepare-run` en `orquesta-app-codex-stack`
   persiste la run/tareas y tambien la deja como candidato de la cola global del
-  stack Codex. El supervisor residente del servidor o
-  `POST /api/v0/runs/supervise` pueden arrancarla sin `run_ref`; esto sigue
-  siendo politica de composicion Codex, no contrato del nucleo ni de MCP/gateway.
+  stack Codex cuando la clasificacion requiere loop legacy. Desde el 2026-06-26,
+  si `goal_migration.status=goal_ready` y la composicion tiene
+  `GoalLauncher` + `GoalStateStore`, crea un run contenedor sin tareas legacy,
+  lanza/persiste `GoalWorkStateV0`, publica `goal{...}` y no encola `ready`;
+  sin backend conserva el handoff `goal_specs[]` sin `run_ref`. El supervisor
+  residente del servidor o `POST /api/v0/runs/supervise` solo deben arrancar la
+  rama legacy; esto sigue siendo politica de composicion Codex, no contrato del
+  nucleo ni de MCP/gateway.
 - Desde el 2026-06-08, `cmd/orquesta-server` puede inyectar por opt-in un
   Director residente real sobre el stack Codex mediante `ResidentDirectorPortV0`
   (`8944ca9f`, afinado en `f619e899`): ranking/cola neutral,

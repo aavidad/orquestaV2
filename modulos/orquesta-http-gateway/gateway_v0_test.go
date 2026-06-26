@@ -134,6 +134,13 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 			},
 		},
 		{
+			name:  "autoprogramming observe goal",
+			route: RouteAutoprogrammingObserveGoalV0,
+			handlers: RouteHandlersV0{
+				AutoprogrammingObserveGoal: markerHandler("autoprogramming-observe-goal"),
+			},
+		},
+		{
 			name:  "autoprogramming status",
 			route: RouteAutoprogrammingStatusV0,
 			handlers: RouteHandlersV0{
@@ -270,6 +277,7 @@ func TestNewAppGatewayMuxV0Returns404ForUnconfiguredRoutes(t *testing.T) {
 		RouteDirectorStatsPageV0,
 		RouteDirectorStatsV0,
 		RouteOpsAgentRuntimeDetailV0,
+		RouteAutoprogrammingObserveGoalV0,
 		RouteDomainWorkV0,
 		"/no-existe",
 	} {

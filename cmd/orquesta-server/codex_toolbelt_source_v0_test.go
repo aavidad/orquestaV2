@@ -14,6 +14,7 @@ func TestCodexToolbeltSourceV0DerivaHTTPDeContratosMCPGateway(t *testing.T) {
 		orquestamcp.MCPAutoprogrammingStatusHTTPPathV0,
 		orquestamcp.MCPAutoprogrammingSuperviseHTTPPathV0,
 		orquestamcp.MCPAutoprogrammingPrepareRunHTTPPathV0,
+		orquestamcp.MCPAutoprogrammingObserveGoalHTTPPathV0,
 		orquestamcp.MCPAutoprogrammingSelfImprovementHTTPPathV0,
 		orquestamcp.MCPHumanDirectorWorkReviewPlanHTTPPathV0,
 		orquestamcp.MCPRunSupervisorHTTPPathV0,

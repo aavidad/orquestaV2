@@ -213,6 +213,135 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveGoalSpecsCuandoGoalRead
 	}
 }
 
+func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaGoalFirstSinColaLegacy(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	launcher := &goalFirstQueueLauncherForTestV0{}
+	observer := &goalFirstQueueObserverForTestV0{}
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	stack.Ports.GoalLauncher = launcher
+	stack.Ports.GoalObserver = observer
+	stack.Ports.GoalClosureValidator = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
+	stack.Ports.GoalStateStore = goalStates
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.RequestRef = "run-autoprogramming-goal-first-launch-001"
+	request.Tasks[0].TaskRef = "source-task-ref-autoprogramming-goal-first-launch-001"
+	request.Tasks[0].ContextRefs = []string{
+		"goal_migration:goal-first",
+		"goal_capability:starter",
+		"goal_capability:observer",
+		"goal_capability:closure-validator",
+	}
+
+	prepareExecutor := NewCodexStackAutoprogrammingPrepareRunExecutorV0(
+		&stack,
+		"2026-06-25T12:30:00Z",
+		"orquesta-stack-api-test",
+		stack.Stores.RunQueue,
+		stack.RunQueue,
+		stack.Clock,
+		stack.Codex.RuntimeWorkDir,
+	)
+	prepared, err := prepareExecutor.Execute(context.Background(), orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-autoprogramming-goal-first-launch-api-001",
+		CorrelationID:          "corr-autoprogramming-goal-first-launch-api-001",
+		OccurredAt:             "2026-06-25T12:30:00Z",
+		RequestedBy:            "orquesta-stack-api-test",
+		AutoprogrammingRequest: request,
+		MaxBursts:              3,
+		MaxStepsPerBurst:       3,
+		MaxDispatchesPerWait:   3,
+		MaxCommands:            5,
+		MaxOutboxPerCycle:      5,
+	})
+	if err != nil {
+		t.Fatalf("prepare.Execute: %v", err)
+	}
+
+	if !prepared.Accepted ||
+		prepared.RunRef != request.RequestRef ||
+		prepared.PhaseID != string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0) ||
+		prepared.Goal == nil ||
+		prepared.Goal.RunRef != prepared.RunRef ||
+		prepared.Goal.GoalStatus != orquestagoal.GoalStatusRunningV0 ||
+		len(prepared.GoalSpecs) != 1 ||
+		prepared.GoalSpecs[0].RunRef != prepared.RunRef ||
+		len(prepared.WorkflowTaskRefs) != 0 ||
+		len(prepared.WaitAgentRefs) != 0 ||
+		prepared.Continue != nil {
+		t.Fatalf("prepared=%+v", prepared)
+	}
+	if len(launcher.specs) != 1 || launcher.specs[0].RunRef != prepared.RunRef {
+		t.Fatalf("launcher specs=%+v prepared=%+v", launcher.specs, prepared)
+	}
+	run, err := stack.Ports.RunStore.LoadRunV0(context.Background(), prepared.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if len(run.Tasks) != 0 || len(run.FunctionContracts) != 0 {
+		t.Fatalf("run goal-first materializo loop legacy: %+v", run)
+	}
+	state, err := goalStates.LoadGoalWorkStateV0(context.Background(), prepared.RunRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if state.GoalRef != prepared.Goal.GoalRef ||
+		state.Spec.RunRef != prepared.RunRef {
+		t.Fatalf("state=%+v prepared=%+v", state, prepared)
+	}
+	ranking := postRunQueuePriorityStackV0(t, stack, orquestamcp.MCPRunQueuePriorityToolInputV0{
+		Action:   orquestamcp.MCPRunQueuePriorityActionRankV0,
+		QueueRef: DefaultRunQueueRefV0,
+		Limit:    1,
+	})
+	if len(ranking.Ranked) != 0 {
+		t.Fatalf("goal-first no debe encolar legacy: %+v", ranking)
+	}
+
+	observer.result = orquestagoal.GoalWorkResultV0{
+		SchemaVersion:       orquestagoal.GoalWorkResultSchemaV0,
+		Status:              orquestagoal.GoalStatusCompleteV0,
+		GoalRef:             state.GoalRef,
+		ExternalGoalRef:     state.ExternalGoalRef,
+		Summary:             "autoprogramming goal-first completado",
+		RequiredTestResults: autoprogrammingGoalRequiredTestResultsForTestV0(state.Spec, "evidence-ref-autoprogramming-goal-first-test-passed"),
+		EvidenceRefs:        state.Spec.ClosurePolicy.RequiredEvidenceRefs,
+	}
+	observeExecutor := NewCodexStackAutoprogrammingObserveGoalExecutorV0(&stack)
+	observed, err := observeExecutor.Execute(context.Background(), orquestamcp.MCPAutoprogrammingObserveGoalToolInputV0{
+		RequestID:     "request-autoprogramming-goal-first-observe-api-001",
+		CorrelationID: "corr-autoprogramming-goal-first-launch-api-001",
+		RunRef:        prepared.RunRef,
+	})
+	if err != nil {
+		t.Fatalf("observe.Execute: %v", err)
+	}
+	if observed.Estado != orquestamcp.MCPAutoprogrammingObserveGoalEstadoOKV0 ||
+		observed.RunRef != prepared.RunRef ||
+		observed.GoalStatus != orquestagoal.GoalStatusCompleteV0 ||
+		!observed.ClosureAccepted ||
+		observed.RunStatus != string(orquestacoreworkflow.OrchestrationRunStatusClosedV0) {
+		t.Fatalf("observed=%+v", observed)
+	}
+	closed, err := stack.Ports.RunStore.LoadRunV0(context.Background(), prepared.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 closed: %v", err)
+	}
+	if closed.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+		t.Fatalf("closed run=%+v", closed)
+	}
+	terminalQueue := postRunQueuePriorityStackV0(t, stack, orquestamcp.MCPRunQueuePriorityToolInputV0{
+		Action:               orquestamcp.MCPRunQueuePriorityActionRankV0,
+		QueueRef:             DefaultRunQueueRefV0,
+		IncludeNonExecutable: true,
+		Limit:                1,
+	})
+	if len(terminalQueue.Terminal) != 1 ||
+		terminalQueue.Terminal[0].RunRef != prepared.RunRef ||
+		terminalQueue.Terminal[0].Status != "closed" {
+		t.Fatalf("terminalQueue=%+v", terminalQueue)
+	}
+}
+
 func TestCodexStackAutoprogrammingPrepareRunAPIV0EncolaYSupervisorGlobalArranca(t *testing.T) {
 	runtime := newFakeCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)
@@ -679,6 +808,21 @@ func postAutoprogrammingPrepareRunStackV0(
 		t.Fatalf("decode prepare run: %v", err)
 	}
 	return result
+}
+
+func autoprogrammingGoalRequiredTestResultsForTestV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	evidenceRef string,
+) []orquestagoal.GoalRequiredTestResultV0 {
+	results := make([]orquestagoal.GoalRequiredTestResultV0, 0, len(spec.RequiredTests))
+	for _, test := range spec.RequiredTests {
+		results = append(results, orquestagoal.GoalRequiredTestResultV0{
+			TestRef:      test.TestRef,
+			Status:       "passed",
+			EvidenceRefs: []string{evidenceRef},
+		})
+	}
+	return results
 }
 
 func postServerShutdownStackV0(

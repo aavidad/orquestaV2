@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestagoal "orquesta/modulos/orquesta-goal"
@@ -219,6 +220,7 @@ func codexStackAutoprogrammingPrepareRunResultMCPV0(
 		WorkflowTaskRefs: codexStackAutoprogrammingWorkflowTaskRefsMCPV0(result.Tasks),
 		WaitAgentRefs:    compactStringsV0(result.WaitAgentRefs),
 		GoalSpecs:        codexStackAutoprogrammingGoalSpecsMCPV0(result.Work.GoalSpecs, runRef),
+		Goal:             codexStackAutoprogrammingGoalRunMCPV0(result),
 		Errores:          []orquestamcp.MCPValidationIssueV0{},
 	}
 	if runRef != "" {
@@ -243,7 +245,35 @@ func codexStackAutoprogrammingPrepareRunResultMCPV0(
 }
 
 func autoprogrammingBridgeHasPreparedLegacyRunV0(result AutoprogrammingBridgeResultV0) bool {
-	return strings.TrimSpace(result.Run.RunID) != ""
+	return strings.TrimSpace(result.Run.RunID) != "" && !autoprogrammingBridgeResultIsGoalFirstV0(result)
+}
+
+func codexStackAutoprogrammingGoalRunMCPV0(
+	result AutoprogrammingBridgeResultV0,
+) *orquestamcp.MCPAutoprogrammingGoalRunV0 {
+	if !autoprogrammingBridgeResultIsGoalFirstV0(result) {
+		return nil
+	}
+	state := result.GoalState
+	receipt := result.GoalReceipt
+	goalRef := strings.TrimSpace(state.GoalRef)
+	externalGoalRef := strings.TrimSpace(state.ExternalGoalRef)
+	goalStatus := strings.TrimSpace(state.Status)
+	evidenceRefs := compactStringsV0(state.EvidenceRefs)
+	if receipt != nil {
+		goalRef = firstNonEmptyAutoprogrammingStackV0(goalRef, receipt.GoalRef)
+		externalGoalRef = firstNonEmptyAutoprogrammingStackV0(externalGoalRef, receipt.ExternalGoalRef)
+		goalStatus = firstNonEmptyAutoprogrammingStackV0(goalStatus, receipt.Status)
+		evidenceRefs = compactStringsV0(append(evidenceRefs, receipt.EvidenceRefs...))
+	}
+	return &orquestamcp.MCPAutoprogrammingGoalRunV0{
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0,
+		RunRef:                strings.TrimSpace(result.Run.RunID),
+		GoalRef:               goalRef,
+		ExternalGoalRef:       externalGoalRef,
+		GoalStatus:            goalStatus,
+		EvidenceRefs:          evidenceRefs,
+	}
 }
 
 func codexStackAutoprogrammingWorkflowTaskRefsMCPV0(

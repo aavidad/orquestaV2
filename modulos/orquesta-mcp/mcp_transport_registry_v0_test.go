@@ -42,6 +42,7 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 		MCPHumanDirectorWorkReviewPlanToolNameV0,
 		MCPAutoprogrammingSelfImprovementToolNameV0,
 		MCPAutoprogrammingPrepareRunToolNameV0,
+		MCPAutoprogrammingObserveGoalToolNameV0,
 		MCPAutoprogrammingStatusToolNameV0,
 		MCPAutoprogrammingSuperviseToolNameV0,
 		MCPBootstrapToolNameV0,
@@ -70,7 +71,7 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 		}
 	}
 	assertTransportPayloadSaneadoMCPTestV0(t, transport.resources, 9000)
-	assertTransportPayloadSaneadoMCPTestV0(t, transport.tools, 26000)
+	assertTransportPayloadSaneadoMCPTestV0(t, transport.tools, 27000)
 }
 
 func TestMCPTransportV0SirveResourceYToolConFakeEnMemoria(t *testing.T) {
@@ -203,6 +204,27 @@ func TestMCPTransportV0ObserveAppDirectorGoalQuedaOptInSinPuerto(t *testing.T) {
 	}
 	if result.Tool != MCPObserveAppDirectorGoalToolNameV0 || result.ErrorCode != MCPTransportToolUnboundV0 {
 		t.Fatalf("observe director goal debe ser opt-in: %+v", result)
+	}
+	assertTransportPayloadSaneadoMCPTestV0(t, json.RawMessage(output), 300)
+}
+
+func TestMCPTransportV0AutoprogrammingObserveGoalQuedaOptInSinPuerto(t *testing.T) {
+	transport := newFakeMCPTransportV0()
+	if err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{}); err != nil {
+		t.Fatalf("register transport: %v", err)
+	}
+	output, err := transport.CallToolV0(context.Background(), MCPAutoprogrammingObserveGoalToolNameV0, MCPAutoprogrammingObserveGoalToolInputV0{
+		RunRef: "run-ref-autoprogramming-goal-unbound-001",
+	})
+	if err != nil {
+		t.Fatalf("call autoprogramming observe goal unbound: %v", err)
+	}
+	var result MCPTransportToolErrorV0
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("decode unbound: %v", err)
+	}
+	if result.Tool != MCPAutoprogrammingObserveGoalToolNameV0 || result.ErrorCode != MCPTransportToolUnboundV0 {
+		t.Fatalf("autoprogramming observe goal debe ser opt-in: %+v", result)
 	}
 	assertTransportPayloadSaneadoMCPTestV0(t, json.RawMessage(output), 300)
 }

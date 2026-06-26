@@ -150,6 +150,9 @@ programable compatible con el nucleo:
   `GoalWorkSpecV0` neutral, uno por grupo programable, con `director_kind`
   `codex_goal`, `write_set`, pruebas requeridas, criterios, refs de contexto y
   politica de cierre por tests. No lanza ni observa ningun goal.
+- una composicion externa puede consumir esos `goal_specs[]` para lanzar y
+  persistir `GoalWorkStateV0` si tiene backend Goal opt-in; esa decision no
+  vive en este modulo puro.
 
 ### Clasificacion goal-first
 

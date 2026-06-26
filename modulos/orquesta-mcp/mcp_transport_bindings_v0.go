@@ -23,6 +23,7 @@ type MCPTransportBindingsV0 struct {
 	RunSupervisor              MCPTransportRunSupervisorExecutorV0
 	WorkspaceTimeline          orquestaobservability.WorkspaceTimelineSourcePortV0
 	AutoprogrammingPrepareRun  MCPTransportAutoprogrammingPrepareRunExecutorV0
+	AutoprogrammingObserveGoal MCPTransportAutoprogrammingObserveGoalExecutorV0
 	ServerShutdown             MCPTransportServerShutdownExecutorV0
 	DomainWork                 MCPDomainWorkExecutorPortV0
 	ExternalWorkRun            MCPTransportExternalWorkRunExecutorV0
@@ -72,6 +73,10 @@ type MCPTransportRunSupervisorExecutorV0 interface {
 
 type MCPTransportAutoprogrammingPrepareRunExecutorV0 interface {
 	Execute(context.Context, MCPAutoprogrammingPrepareRunToolInputV0) (MCPAutoprogrammingPrepareRunToolResultV0, error)
+}
+
+type MCPTransportAutoprogrammingObserveGoalExecutorV0 interface {
+	Execute(context.Context, MCPAutoprogrammingObserveGoalToolInputV0) (MCPAutoprogrammingObserveGoalToolResultV0, error)
 }
 
 type MCPTransportAutoprogrammingStatusExecutorV0 interface {

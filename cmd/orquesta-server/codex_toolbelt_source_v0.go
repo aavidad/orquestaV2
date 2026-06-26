@@ -40,6 +40,7 @@ func codexToolbeltHTTPEntriesV0() []codexToolbeltHTTPEntryV0 {
 		{Method: "POST", Path: orquestamcp.MCPAutoprogrammingStatusHTTPPathV0, Status: codexToolbeltStatusServerLiveV0},
 		{Method: "POST", Path: orquestamcp.MCPAutoprogrammingSuperviseHTTPPathV0, Status: codexToolbeltStatusServerLiveV0},
 		{Method: "POST", Path: orquestamcp.MCPAutoprogrammingPrepareRunHTTPPathV0, Status: codexToolbeltStatusServerLiveV0},
+		{Method: "POST", Path: orquestamcp.MCPAutoprogrammingObserveGoalHTTPPathV0, Status: codexToolbeltStatusServerLiveV0},
 		{Method: "POST", Path: orquestamcp.MCPAutoprogrammingSelfImprovementHTTPPathV0, Status: codexToolbeltStatusServerLiveV0},
 		{Method: "POST", Path: orquestamcp.MCPHumanDirectorWorkReviewPlanHTTPPathV0, Status: codexToolbeltStatusServerLiveV0},
 		{Method: "POST", Path: orquestamcp.MCPRunSupervisorHTTPPathV0, Status: codexToolbeltStatusServerLiveV0},
@@ -57,6 +58,7 @@ func codexToolbeltMCPEntriesV0() []codexToolbeltMCPEntryV0 {
 		orquestamcp.MCPAutoprogrammingStatusToolNameV0,
 		orquestamcp.MCPAutoprogrammingSuperviseToolNameV0,
 		orquestamcp.MCPAutoprogrammingPrepareRunToolNameV0,
+		orquestamcp.MCPAutoprogrammingObserveGoalToolNameV0,
 		orquestamcp.MCPAutoprogrammingSelfImprovementToolNameV0,
 		orquestamcp.MCPHumanDirectorWorkReviewPlanToolNameV0,
 		orquestamcp.MCPRunSupervisorToolNameV0,
@@ -93,6 +95,7 @@ func codexToolbeltStatusForMCPToolV0(name string, registered map[string]struct{}
 	}
 	if strings.HasPrefix(name, "orquesta.operator.") ||
 		name == orquestamcp.MCPAutoprogrammingPrepareRunToolNameV0 ||
+		name == orquestamcp.MCPAutoprogrammingObserveGoalToolNameV0 ||
 		name == orquestamcp.MCPAutoprogrammingStatusToolNameV0 ||
 		name == orquestamcp.MCPAutoprogrammingSuperviseToolNameV0 ||
 		name == orquestamcp.MCPDomainWorkToolNameV0 ||
