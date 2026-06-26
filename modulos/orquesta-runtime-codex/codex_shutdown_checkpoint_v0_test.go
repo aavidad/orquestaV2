@@ -41,6 +41,30 @@ func TestCodexShutdownCheckpointV0EscribeRequestYValidaAck(t *testing.T) {
 	}
 }
 
+func TestCodexShutdownCheckpointV0AceptaAckMinimoHidratadoDesdeRequest(t *testing.T) {
+	dir := t.TempDir()
+	request := codexShutdownRequestForTestV0()
+	ackPath := filepath.Join(dir, CodexShutdownCheckpointAckFileNameV0)
+	if err := os.WriteFile(
+		ackPath,
+		[]byte(`{"schema_version":"codex_shutdown_checkpoint_ack.v0","status":"checkpoint_ready"}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write ack: %v", err)
+	}
+
+	ack, issues := ReadCodexShutdownCheckpointAckFileV0(ackPath, request)
+	if len(issues) != 0 {
+		t.Fatalf("ReadCodexShutdownCheckpointAckFileV0 issues=%+v", issues)
+	}
+	if ack.RunRef != request.RunRef ||
+		ack.AgentRef != request.AgentRef ||
+		ack.ShutdownAttemptRef != request.ShutdownAttemptRef ||
+		ack.CheckpointRef != request.CheckpointRef {
+		t.Fatalf("ack no hidratado desde request: ack=%+v request=%+v", ack, request)
+	}
+}
+
 func TestCodexShutdownCheckpointV0AckPendienteEsRetryable(t *testing.T) {
 	_, issues := ReadCodexShutdownCheckpointAckFileV0(
 		filepath.Join(t.TempDir(), CodexShutdownCheckpointAckFileNameV0),

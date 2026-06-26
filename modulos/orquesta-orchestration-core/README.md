@@ -126,14 +126,17 @@ El contrato operativo de review gate es:
 1. un adaptador externo evalua una entrega ya registrada y devuelve una
    `ReviewGateObservationV0` compacta;
 2. `ReviewGateCandidateProviderV0` solo actua en fase `revision`;
-3. el provider genera un `SchedulableReviewGateCandidateV0` con
+3. el provider normaliza la observacion y compacta resumen/evidencias si una
+   fuente externa entrega un payload demasiado verboso, conservando refs
+   causales y una evidencia de compactacion;
+4. el provider genera un `SchedulableReviewGateCandidateV0` con
    `RequestReview` y `RecordReviewResult`;
-4. si el status es `accepted`, anade `AcceptReview`;
-5. si el status es `changes_requested` o `rejected`, anade `RequestRework`;
-6. el provider emite como maximo un candidato por tick para que una revision
+5. si el status es `accepted`, anade `AcceptReview`;
+6. si el status es `changes_requested` o `rejected`, anade `RequestRework`;
+7. el provider emite como maximo un candidato por tick para que una revision
    con muchas entregas no infle el input del scheduler;
-7. el scheduler materializa un comando por tick segun estado durable observado;
-8. el workflow deduplica con `Reviews`, `ReviewResults`, `AcceptedReviews` y
+8. el scheduler materializa un comando por tick segun estado durable observado;
+9. el workflow deduplica con `Reviews`, `ReviewResults`, `AcceptedReviews` y
    `ReworkRequests`.
 
 El nucleo no lee tests, ficheros, ACKs, transcripts, runtime ni proveedor para

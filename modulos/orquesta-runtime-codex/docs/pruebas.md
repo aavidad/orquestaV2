@@ -33,8 +33,9 @@ Cobertura:
 - el prompt materializa `orquesta_shutdown_request.json` y
   `agent_shutdown_checkpoint_ack.json` como ficheros de control de cierre
   cooperativo;
-- escribe request de shutdown, valida ACK `checkpoint_ready` y trata el ACK
-  ausente como pendiente retryable;
+- escribe request de shutdown, valida ACK `checkpoint_ready`, acepta ACK minimo
+  hidratado desde la request correlada y trata el ACK ausente como pendiente
+  retryable;
 - rechaza ACK de checkpoint de otro agente/run/checkpoint;
 - con sandbox `workspace-write`, acepta `runtime_work_dir` externo al proyecto
   cuando el wrapper lo autoriza con `--add-dir`;

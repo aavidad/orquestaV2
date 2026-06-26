@@ -70,6 +70,7 @@ ACK esperado del agente:
 - `schema_version`: `codex_shutdown_checkpoint_ack.v0`
 - `run_ref`
 - `agent_ref`
+- `shutdown_attempt_ref`
 - `checkpoint_ref`
 - `status`: `checkpoint_ready`
 - `summary`
@@ -81,6 +82,9 @@ Invariantes:
   app generada.
 - El ACK debe correlacionar `run_ref`, `agent_ref` y `checkpoint_ref` con la
   request.
+- Si el agente escribe un ACK minimo con `schema_version` y
+  `status=checkpoint_ready`, el conector hidrata refs ausentes desde la request
+  correlada. Refs explicitas pero incorrectas siguen bloqueando por causalidad.
 - Si no existe ACK, el conector devuelve error retryable
   `checkpoint_ack_not_ready`; Orquesta no registra checkpoint.
 - Un ACK corrupto, de otro agente o con detalles prohibidos no se acepta como

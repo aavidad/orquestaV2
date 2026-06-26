@@ -67,6 +67,24 @@ Riesgos:
 - la fuente real de votos `architecture_vote.v0` vive en la composicion/adaptador
   y no queda probada por este paquete.
 
+## ORCH-CORE-REVIEW-002
+
+Comando:
+
+```bash
+go test -count=1 ./modulos/orquesta-orchestration-core -run 'TestReviewGateCandidateProviderV0(CompactaObservacionVerbosaAntesDeValidar|EmiteSoloResultadoTrasReview|ProgressiveLoopAcceptsReviewSinReplan)'
+```
+
+Cobertura:
+
+- una `ReviewGateObservationV0` con summary/evidencias demasiado grandes se
+  compacta antes de crear `RecordReviewResult`;
+- el provider conserva refs causales y anade
+  `evidence-ref-review-gate-payload-compacted`;
+- un ACK/receipt valido no queda bloqueado por `payload_invalido` de review
+  cuando la fuente externa trae detalle excesivo;
+- el workflow puro conserva sus limites de payload.
+
 ## T207 Rotacion De Sesiones
 
 ```text

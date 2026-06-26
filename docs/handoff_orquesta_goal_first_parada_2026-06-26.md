@@ -93,6 +93,14 @@ bateria focal + `go test -count=1 -p=1 ./...` pasaron.
 - 2026-06-26: `orquesta-runtime-codex-delivery` clasifica
   `Failed to create stream fd` como `evidence-ref-warning-stream-fd` advisory:
   no lo convierte en capacidad/autenticacion ni tapa `no_ack` cuando falta ACK.
+- 2026-06-26: `orquesta-runtime-codex` acepta
+  `agent_shutdown_checkpoint_ack.json` minimo con `schema_version` y
+  `status=checkpoint_ready`, hidratando refs ausentes desde la request
+  correlada; refs explicitas incorrectas siguen bloqueando por causalidad.
+- 2026-06-26: `orquesta-orchestration-core` compacta observaciones de review
+  demasiado verbosas antes de construir `RecordReviewResult`, conservando refs
+  causales y `evidence-ref-review-gate-payload-compacted` para evitar
+  `payload_invalido` tras ACK valido.
 
 ## No reabrir salvo regresion
 

@@ -2,6 +2,7 @@ package orquestacionnucleoapp
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -227,6 +228,48 @@ func TestReviewGateCandidateProviderV0EmiteSoloResultadoTrasReview(t *testing.T)
 		candidate.RequestRework != nil ||
 		candidate.AcceptReview != nil {
 		t.Fatalf("candidate debe contener solo record_review_result: %+v", candidate)
+	}
+}
+
+func TestReviewGateCandidateProviderV0CompactaObservacionVerbosaAntesDeValidar(t *testing.T) {
+	run := mustReviewGateReadyRunV0(t, "run-nucleo-review-gate-compacted-001")
+	run = mustApplyCommandV0(t, run, mustReviewReworkRequestReviewCommandV0(t, run.RunID))
+	observation := reviewGateObservationForTestV0(orquestacoreworkflow.ReviewResultStatusChangesRequestedV0)
+	observation.Summary = strings.Repeat("revision extensa ", 80)
+	observation.EvidenceRefs = []string{
+		"evidence-ref-review-gate-compact-001",
+		strings.Repeat("evidence-ref-demasiado-larga-", 20),
+	}
+	for index := 0; index < 30; index++ {
+		observation.EvidenceRefs = append(observation.EvidenceRefs, "evidence-ref-extra-"+string(rune('a'+index)))
+	}
+	provider := ReviewGateCandidateProviderV0{
+		GateSource: staticReviewGateObservationSourceV0{Observations: []ReviewGateObservationV0{observation}},
+	}
+
+	candidates, err := provider.BuildSchedulerCandidatesV0(context.Background(), SchedulerCandidateRequestV0{
+		Run:        run,
+		OccurredAt: "2026-06-26T16:20:00Z",
+	})
+	if err != nil {
+		t.Fatalf("BuildSchedulerCandidatesV0: %v", err)
+	}
+	if len(candidates.ReviewGateCandidates) != 1 {
+		t.Fatalf("review_gate_candidates=%d", len(candidates.ReviewGateCandidates))
+	}
+	candidate := candidates.ReviewGateCandidates[0]
+	if candidate.RecordReviewResult == nil {
+		t.Fatalf("record_review_result requerido: %+v", candidate)
+	}
+	payload := candidate.RecordReviewResult.Payload
+	if len([]rune(payload.Summary)) > reviewGateObservationSummaryMaxRunesV0 {
+		t.Fatalf("summary no compactado: len=%d", len([]rune(payload.Summary)))
+	}
+	if len(payload.EvidenceRefs) > reviewGateObservationEvidenceRefsMaxV0+1 {
+		t.Fatalf("evidence_refs no compactas: %v", payload.EvidenceRefs)
+	}
+	if !stringInSetV0(reviewGateObservationCompactedEvidenceRefV0, payload.EvidenceRefs) {
+		t.Fatalf("falta evidencia de compactacion: %v", payload.EvidenceRefs)
 	}
 }
 

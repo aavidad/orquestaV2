@@ -163,7 +163,7 @@ func normalizeReviewGateObservationV0(
 	if observation.PhaseID == "" {
 		observation.PhaseID = string(request.Run.CurrentPhase)
 	}
-	return observation
+	return compactReviewGateObservationPayloadV0(observation)
 }
 
 func validateReviewGateObservationV0(

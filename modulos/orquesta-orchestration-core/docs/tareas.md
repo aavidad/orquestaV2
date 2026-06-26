@@ -85,6 +85,9 @@ Implementado:
 - `ReviewGateCandidateProviderV0` materializa `RecordReviewResult`,
   `AcceptReview` para review aceptada y `RequestRework` para
   `changes_requested`/`rejected`;
+- `ReviewGateCandidateProviderV0` compacta observaciones demasiado verbosas
+  antes de validarlas contra el workflow, conservando refs causales y una
+  evidencia de compactacion para evitar `payload_invalido` por detalle externo;
 - `ReviewReworkReplanCandidateProviderV0` materializa
   `RecordReplanDecision`, reabre `programacion` y lanza followups;
 - `split_task` crea `WorkflowTaskV0` durables por `WorkflowTaskWriterPortV0`,

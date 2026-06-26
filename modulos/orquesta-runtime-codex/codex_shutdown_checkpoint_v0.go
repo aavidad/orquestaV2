@@ -92,6 +92,10 @@ func ReadCodexShutdownCheckpointAckFileV0(
 			codexIssueV0(CodexConnectorAckInvalidV0, CodexShutdownCheckpointAckFileNameV0, request.CorrelationID, "json_invalid"),
 		}
 	}
+	ack = codexShutdownCheckpointAckWithRequestDefaultsV0(
+		normalizeCodexShutdownCheckpointAckV0(ack),
+		normalizeCodexShutdownRequestV0(request),
+	)
 	return ack, ValidateCodexShutdownCheckpointAckV0(ack, request)
 }
 
@@ -119,6 +123,7 @@ func ValidateCodexShutdownCheckpointAckV0(
 ) []orquestaruntime.ExternalAgentConnectorErrorV0 {
 	ack = normalizeCodexShutdownCheckpointAckV0(ack)
 	request = normalizeCodexShutdownRequestV0(request)
+	ack = codexShutdownCheckpointAckWithRequestDefaultsV0(ack, request)
 	v := codexShutdownValidatorV0{correlationID: request.CorrelationID}
 	if ack.SchemaVersion != CodexShutdownCheckpointAckSchemaVersionV0 {
 		v.add(CodexConnectorAckInvalidV0, "schema_version", "schema_version_invalid")
@@ -141,6 +146,25 @@ func ValidateCodexShutdownCheckpointAckV0(
 	v.noForbidden("summary", ack.Summary)
 	v.noForbiddenList("evidence_refs", ack.EvidenceRefs)
 	return v.issues
+}
+
+func codexShutdownCheckpointAckWithRequestDefaultsV0(
+	ack CodexShutdownCheckpointAckV0,
+	request CodexShutdownRequestV0,
+) CodexShutdownCheckpointAckV0 {
+	if strings.TrimSpace(ack.RunRef) == "" {
+		ack.RunRef = request.RunRef
+	}
+	if strings.TrimSpace(ack.AgentRef) == "" {
+		ack.AgentRef = request.AgentRef
+	}
+	if strings.TrimSpace(ack.ShutdownAttemptRef) == "" {
+		ack.ShutdownAttemptRef = request.ShutdownAttemptRef
+	}
+	if strings.TrimSpace(ack.CheckpointRef) == "" {
+		ack.CheckpointRef = request.CheckpointRef
+	}
+	return ack
 }
 
 func normalizeCodexShutdownRequestV0(request CodexShutdownRequestV0) CodexShutdownRequestV0 {
