@@ -53,6 +53,11 @@ Cobertura Go actual:
   padre y seis hijos, lanza los seis subroles reales y deja la cola `running`
   en vez de `ready`, `delivered` o `stopped` mientras no existan entregas
   durables.
+- `TestCodexStackRunSupervisorQueueDiagnosticsMCPV0ExponeNoExecutionConReady`
+  valida que una supervision global que termina con evidencia `no_execution`
+  pero mantiene candidatos ejecutables en cola expone el diagnostico
+  `run_supervisor_queue_no_execution_with_ready_candidates` y la accion
+  operativa `supervise_with_resident_mode_or_run_ref`.
 - `DrainRunV0` ejecuta `submitPendingDomainWorkArtifactsV0` tambien despues de
   `ContinueAppDirectorV0`; asi una entrega registrada dentro del mismo ciclo no
   queda como run `quiescent` antes de enviar el artefacto al conector de dominio.

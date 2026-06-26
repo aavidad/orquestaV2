@@ -2,6 +2,23 @@
 
 ```text
 Fecha: 2026-06-26
+Decision: El supervisor global diagnostica `no_execution` con candidatos
+ejecutables en cola.
+Motivo: OPES documento supervisiones que terminaban sin ejecucion aunque habia
+runs listos. La proyeccion del supervisor puede quedar `done` con evidencia
+`no_execution`, y el diagnostico anterior solo aparecia si el ultimo snapshot
+era `waiting_outbox`.
+Impacto: la salida MCP/HTTP conserva el resultado del supervisor pero anade el
+diagnostico `run_supervisor_queue_no_execution_with_ready_candidates` cuando el
+scope es cola global, existe evidencia `no_execution` y hay candidatos
+ejecutables. No bloquea ni descarta trabajo; orienta a relanzar en modo
+residente o por `run_ref`.
+Contratos afectados: `CodexStackRunSupervisorExecutorV0`, `RunQueue`.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-06-26
 Decision: La supervision directa sincroniza la cola como `running` cuando el
 run tiene agentes arrancados sin entrega durable.
 Motivo: OPES documento runs que aparecian `ready`/terminales aunque ya habia

@@ -351,9 +351,10 @@ func (stack *StackV0) codexStackRunSupervisorQueueDiagnosticsMCPV0(
 	input orquestamcp.MCPRunSupervisorToolInputV0,
 	result CodexSupervisorResultV0,
 ) []orquestamcp.MCPAutoprogrammingDiagnosticV0 {
+	noExecutionWithQueue := codexStackRunSupervisorNoExecutionWithQueueV0(input, result)
 	if stack == nil ||
 		stack.Stores.RunQueue == nil ||
-		result.Last.Status != CodexSupervisorRuntimeWaitingOutboxV0 {
+		(result.Last.Status != CodexSupervisorRuntimeWaitingOutboxV0 && !noExecutionWithQueue) {
 		return nil
 	}
 	queue := normalizeRunQueueConfigV0(stack.RunQueue)
@@ -384,7 +385,10 @@ func (stack *StackV0) codexStackRunSupervisorQueueDiagnosticsMCPV0(
 			executable++
 		}
 	}
-	message := strings.Join(compactStringsV0([]string{
+	if noExecutionWithQueue && executable == 0 {
+		return nil
+	}
+	messageParts := []string{
 		"queue_ref=" + strings.TrimSpace(queueRef),
 		"total=" + strconv.Itoa(len(candidates)),
 		"executable=" + strconv.Itoa(executable),
@@ -393,10 +397,28 @@ func (stack *StackV0) codexStackRunSupervisorQueueDiagnosticsMCPV0(
 		"delivered=" + strconv.Itoa(counts[orquestarunqueue.RunStatusDeliveredV0]),
 		"stopped=" + strconv.Itoa(counts[orquestarunqueue.RunStatusStoppedV0]),
 		"closed=" + strconv.Itoa(counts[orquestarunqueue.RunStatusClosedV0]),
-	}), " ")
+	}
+	code := "run_supervisor_queue_pressure"
+	if noExecutionWithQueue {
+		code = "run_supervisor_queue_no_execution_with_ready_candidates"
+		messageParts = append(messageParts, "action=supervise_with_resident_mode_or_run_ref")
+	}
+	message := strings.Join(compactStringsV0(messageParts), " ")
 	return []orquestamcp.MCPAutoprogrammingDiagnosticV0{{
-		Code:    "run_supervisor_queue_pressure",
+		Code:    code,
 		Scope:   "queue:" + strings.TrimSpace(queueRef),
 		Message: message,
 	}}
+}
+
+func codexStackRunSupervisorNoExecutionWithQueueV0(
+	input orquestamcp.MCPRunSupervisorToolInputV0,
+	result CodexSupervisorResultV0,
+) bool {
+	return strings.TrimSpace(input.RunRef) == "" &&
+		result.Last.Status == CodexSupervisorRuntimeDoneV0 &&
+		codexSupervisorEvidenceRefsContainPartV0(
+			result.Last.EvidenceRefs,
+			orquestarunsupervisor.RunSupervisorStopNoExecutionV0,
+		)
 }

@@ -10,6 +10,7 @@ import (
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
+	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
 )
 
 func TestCodexStackRunSupervisorDrainRequestV0AplicaPresupuestoConservadorPorDefecto(t *testing.T) {
@@ -345,6 +346,45 @@ func TestCodexStackRunSupervisorQueueDiagnosticsMCPV0ExponePresionWaitingOutbox(
 		!strings.Contains(diagnostics[0].Message, "ready=1") ||
 		!strings.Contains(diagnostics[0].Message, "running=1") ||
 		!strings.Contains(diagnostics[0].Message, "stopped=1") {
+		t.Fatalf("diagnostics=%+v", diagnostics)
+	}
+}
+
+func TestCodexStackRunSupervisorQueueDiagnosticsMCPV0ExponeNoExecutionConReady(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	if _, err := stack.Stores.RunQueue.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        "run-ref-queue-no-execution-ready-001",
+		QueueRef:      DefaultRunQueueRefV0,
+		AppRef:        "app-ref-queue-no-execution",
+		Status:        orquestarunqueue.RunStatusReadyV0,
+		PriorityScore: 90,
+		RequestedBy:   "stack-test",
+	}); err != nil {
+		t.Fatalf("SetRunPriority ready: %v", err)
+	}
+
+	diagnostics := stack.codexStackRunSupervisorQueueDiagnosticsMCPV0(
+		ctx,
+		orquestamcp.MCPRunSupervisorToolInputV0{QueueRef: DefaultRunQueueRefV0},
+		CodexSupervisorResultV0{
+			StopReason: CodexSupervisorStopDoneV0,
+			Last: CodexSupervisorRuntimeSnapshotV0{
+				Status: CodexSupervisorRuntimeDoneV0,
+				EvidenceRefs: []string{
+					"evidence-ref-codex-supervisor-stack-global",
+					orquestarunsupervisor.RunSupervisorStopNoExecutionV0,
+				},
+			},
+		},
+	)
+
+	if len(diagnostics) != 1 ||
+		diagnostics[0].Code != "run_supervisor_queue_no_execution_with_ready_candidates" ||
+		!strings.Contains(diagnostics[0].Message, "total=1") ||
+		!strings.Contains(diagnostics[0].Message, "executable=1") ||
+		!strings.Contains(diagnostics[0].Message, "ready=1") ||
+		!strings.Contains(diagnostics[0].Message, "action=supervise_with_resident_mode_or_run_ref") {
 		t.Fatalf("diagnostics=%+v", diagnostics)
 	}
 }
