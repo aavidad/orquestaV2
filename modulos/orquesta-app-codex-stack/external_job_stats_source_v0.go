@@ -15,8 +15,10 @@ import (
 
 const (
 	codexStackExternalJobStatusIntegrationRequiredV0 = "integration_required"
+	codexStackExternalJobStatusParentAckReceivedV0   = "parent_ack_received"
 
 	codexStackExternalJobStatusReasonParentIntegrationPendingV0                   = "parent_integration_pending"
+	codexStackExternalJobStatusReasonCohortOpenV0                                 = "cohort_open"
 	codexStackExternalJobStatusReasonProductNotConsolidatedDueWriteSetNarrowingV0 = "product_not_consolidated_due_write_set_narrowing"
 )
 
@@ -126,9 +128,16 @@ func (source CodexStackExternalJobStatsSourceV0) enrichExternalJobTaskDiagnostic
 	}
 	parent := tasks[0]
 	childRefs := compactCodexStackStringsV0(parent.ChildTaskRefs)
-	if len(childRefs) == 0 ||
-		externalJobTaskResolvedV0(run, parent.TaskID) ||
-		!externalJobAllTasksResolvedV0(run, childRefs) {
+	if len(childRefs) == 0 {
+		return
+	}
+	parentResolved := externalJobTaskResolvedV0(run, parent.TaskID)
+	childrenResolved := externalJobAllTasksResolvedV0(run, childRefs)
+	if parentResolved && !childrenResolved {
+		source.markExternalJobParentAckWithOpenCohortV0(run, stats, parent, childRefs)
+		return
+	}
+	if parentResolved || !childrenResolved {
 		return
 	}
 	reason := codexStackExternalJobStatusReasonParentIntegrationPendingV0
@@ -153,6 +162,31 @@ func (source CodexStackExternalJobStatsSourceV0) enrichExternalJobTaskDiagnostic
 		Scope:        strings.TrimSpace(stats.JobRef),
 		Message:      "integracion del padre pendiente tras resolver las tareas hijas",
 		EvidenceRefs: compactCodexStackStringsV0(append([]string{parent.TaskID}, childRefs...)),
+	})
+}
+
+func (source CodexStackExternalJobStatsSourceV0) markExternalJobParentAckWithOpenCohortV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	stats *orquestamcp.MCPDirectorExternalJobStatsV0,
+	parent orquestacoreworkflow.WorkflowTaskV0,
+	childRefs []string,
+) {
+	stats.Status = codexStackExternalJobStatusParentAckReceivedV0
+	stats.StatusReason = codexStackExternalJobStatusReasonCohortOpenV0
+	stats.IssueRefs = compactCodexStackStringsV0(append(
+		stats.IssueRefs,
+		"issue-ref-external-job-parent-ack-received-cohort-open-"+codexStackOperationalClosureSafeRefV0(parent.TaskID),
+		parent.TaskID,
+	))
+	stats.EvidenceRefs = compactCodexStackStringsV0(append(
+		stats.EvidenceRefs,
+		parent.TaskID,
+	))
+	stats.Diagnostics = append(stats.Diagnostics, orquestamcp.MCPDirectorExternalJobDiagnosticV0{
+		Code:         "external_job_parent_ack_received_cohort_open",
+		Scope:        strings.TrimSpace(stats.JobRef),
+		Message:      "ack del padre recibido con cohorte de tareas hijas aun abierta",
+		EvidenceRefs: compactCodexStackStringsV0(append([]string{run.RunID, parent.TaskID}, childRefs...)),
 	})
 }
 

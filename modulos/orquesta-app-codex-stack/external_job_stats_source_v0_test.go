@@ -51,10 +51,33 @@ func TestCodexStackExternalJobStatsSourceV0ExponeNarrowingLegacyComoRazon(t *tes
 	}
 }
 
+func TestCodexStackExternalJobStatsSourceV0DistingueParentAckConCohorteAbierta(t *testing.T) {
+	fixture := newCodexStackExternalJobSubrolesStatsFixtureV0(false)
+	fixture.run.DeliveredTasks = []string{fixture.parent.TaskID}
+	fixture.run.ClosedTasks = []string{fixture.parent.ChildTaskRefs[0]}
+	fixture.source.RunStore = orquestacionnucleoapp.NewInMemoryRunStoreV0(fixture.run)
+
+	stats, ok, err := fixture.source.ResolveDirectorExternalJobStatsV0(
+		context.Background(),
+		fixture.request,
+	)
+
+	if err != nil {
+		t.Fatalf("ResolveDirectorExternalJobStatsV0: %v", err)
+	}
+	if !ok ||
+		stats.Status != codexStackExternalJobStatusParentAckReceivedV0 ||
+		stats.StatusReason != codexStackExternalJobStatusReasonCohortOpenV0 ||
+		!codexStackExternalJobDiagnosticForTestV0(stats.Diagnostics, "external_job_parent_ack_received_cohort_open") {
+		t.Fatalf("stats=%+v", stats)
+	}
+}
+
 type codexStackExternalJobSubrolesStatsFixtureV0 struct {
 	source  CodexStackExternalJobStatsSourceV0
 	request orquestamcp.MCPDirectorExternalJobStatsRequestV0
 	parent  orquestacoreworkflow.WorkflowTaskV0
+	run     orquestacoreworkflow.OrchestrationRunV0
 }
 
 func newCodexStackExternalJobSubrolesStatsFixtureV0(
@@ -130,6 +153,7 @@ func newCodexStackExternalJobSubrolesStatsFixtureV0(
 			ExternalJobRef: jobRef,
 		},
 		parent: parent,
+		run:    run,
 	}
 }
 

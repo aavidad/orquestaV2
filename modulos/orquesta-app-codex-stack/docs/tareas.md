@@ -805,6 +805,9 @@ Trabajo aplicado:
 
 - `CodexStackExternalJobStatsSourceV0` resuelve `external_job_ref` desde
   `AppChangeStore`, deriva `task_ref/agent_ref` y proyecta status compacto;
+- si el padre ya entrego ACK pero los hijos causales siguen abiertos, el job
+  externo se expone como `parent_ack_received` con
+  `status_reason=cohort_open`;
 - cuando `WorkflowTaskStore` muestra que los subroles hijos ya estan resueltos
   pero el padre sigue sin entrega/cierre, el job externo se expone como
   `integration_required` con `status_reason`, `issue_refs` y `diagnostics`;

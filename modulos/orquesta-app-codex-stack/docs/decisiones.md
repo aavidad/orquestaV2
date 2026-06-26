@@ -420,7 +420,9 @@ Impacto: el stack inyecta `CodexStackExternalJobStatsSourceV0` en
 `orquesta.director.stats.v0`. La fuente resuelve `job_ref -> run_ref/task_ref`
 desde `AppChangeStore`, deriva `agent_ref`, consulta deliveries por
 `ReceiptStore`, consulta `WorkflowTaskStore` para parentesco padre/subroles y
-proyecta `status` compacto. Si los seis subroles de OPES estan resueltos pero
+proyecta `status` compacto. Si el padre ya entrego ACK pero la cohorte de hijos
+sigue abierta, el job queda como `parent_ack_received` con
+`status_reason=cohort_open`. Si los seis subroles de OPES estan resueltos pero
 el padre sigue sin entrega/cierre, el job queda como `integration_required` con
 `status_reason=parent_integration_pending`; si el padre solo podia escribir en
 `/coordinacion`, el motivo publico es

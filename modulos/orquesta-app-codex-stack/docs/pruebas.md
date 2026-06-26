@@ -1077,6 +1077,10 @@ Evidencia:
   run asociada a `external_job_ref`;
 - la respuesta incluye `external_job` con `job_ref`, `run_ref`, `task_ref`,
   `agent_ref`, `status` y `delivery_refs` cuando existan;
+- si el padre OPES ya entrego ACK pero la cohorte de subroles sigue abierta,
+  `external_job.status=parent_ack_received` conserva
+  `status_reason=cohort_open` y diagnostico
+  `external_job_parent_ack_received_cohort_open`;
 - si los subroles OPES estan entregados/cerrados y el padre no ha integrado,
   `external_job.status=integration_required` conserva `status_reason`,
   `issue_refs` y `diagnostics` para que el consumidor vea el siguiente paso
