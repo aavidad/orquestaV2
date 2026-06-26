@@ -330,6 +330,11 @@ Evidencia anadida:
 - `TestCodexProgressObservationSourceV0ClasificaCapacidadLimitadaSinACK`
   valida que un proceso detenido sin ACK no queda pendiente, no filtra paths ni
   stderr, y pide decision de relevo mediante reporte compacto.
+- `TestCodexProgressReportWithProcessFailureContextV0ClasificaStreamFDComoWarning`
+  y `TestCodexProgressReportWithProcessFailureContextV0StreamFDNoBloqueaProgreso`
+  fijan que `Failed to create stream fd` solo anade evidencia advisory
+  `evidence-ref-warning-stream-fd`: si falta ACK sigue siendo `no_ack`, y si hay
+  progreso no se bloquea ni se marca capacidad/autenticacion.
 
 Revalidacion 2026-05-12 de interrupcion Codex sin ACK:
 

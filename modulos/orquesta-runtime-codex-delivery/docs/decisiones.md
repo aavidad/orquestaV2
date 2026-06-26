@@ -637,6 +637,20 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-06-26
+Decision: Clasificar `Failed to create stream fd` como warning operativo, no
+como fallo fuerte.
+Motivo: el runtime puede escribir ese mensaje aunque el agente siga trabajando
+o llegue a producir ACK/evidencia; convertirlo en capacidad, autenticacion o
+fallo de producto reintroduce rails por texto libre.
+Impacto: `CodexProgressObservationSourceV0` anade
+`evidence-ref-warning-stream-fd` cuando aparece en logs acotados. Si ademas no
+hay ACK y el proceso esta parado, el reporte conserva `no_ack` y decision
+requerida; si hay progreso, no bloquea.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-14
 Decision: La clasificacion delivery vs artefacto no depende solo de la fase.
 Motivo: Orquesta ya puede tener microtareas durables en documentacion,

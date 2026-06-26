@@ -90,6 +90,9 @@ bateria focal + `go test -count=1 -p=1 ./...` pasaron.
   `external_work_agent_requested_not_started` si hay agentes solicitados,
   ninguno arrancado y nada en vuelo; `autoprogramming/status` propaga ese issue
   como diagnostico publico accionable.
+- 2026-06-26: `orquesta-runtime-codex-delivery` clasifica
+  `Failed to create stream fd` como `evidence-ref-warning-stream-fd` advisory:
+  no lo convierte en capacidad/autenticacion ni tapa `no_ack` cuando falta ACK.
 
 ## No reabrir salvo regresion
 

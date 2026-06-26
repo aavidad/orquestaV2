@@ -110,6 +110,72 @@ func TestCodexProgressReportWithProcessFailureContextV0NoClasificaAuthPorTextoLi
 	}
 }
 
+func TestCodexProgressReportWithProcessFailureContextV0ClasificaStreamFDComoWarning(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(dir, orquestaruntimecodex.CodexStderrFileNameV0),
+		[]byte("Failed to create stream fd: Operation not permitted"),
+		0o600,
+	); err != nil {
+		t.Fatalf("write stderr: %v", err)
+	}
+	report := validCodexProgressFailureReportForTestV0()
+
+	got := codexProgressReportWithProcessFailureContextV0(
+		CodexReceiptDescriptorV0{
+			AckPath: filepath.Join(dir, orquestaruntimecodex.CodexAgentAckFileNameV0),
+		},
+		report,
+	)
+
+	if !got.DecisionRequired ||
+		got.Summary != "Proceso detenido sin ACK." ||
+		!stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-no-ack") ||
+		!stringInCodexDeliverySetV0(got.EvidenceRefs, codexProgressWarningStreamFDEvidenceRefV0) {
+		t.Fatalf("report warning_stream_fd inesperado=%+v", got)
+	}
+	if got.BudgetStatus != "" || got.BudgetReason != "" ||
+		stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-capacity-warning") ||
+		stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-auth-config-blocker") {
+		t.Fatalf("warning_stream_fd no debe clasificar auth/capacity: %+v", got)
+	}
+	if issues := orquestaruntime.ValidateAgentProgressReportV0(got); len(issues) > 0 {
+		t.Fatalf("progress report invalido: %+v", issues)
+	}
+}
+
+func TestCodexProgressReportWithProcessFailureContextV0StreamFDNoBloqueaProgreso(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(dir, orquestaruntimecodex.CodexStderrFileNameV0),
+		[]byte("Failed to create stream fd: Operation not permitted"),
+		0o600,
+	); err != nil {
+		t.Fatalf("write stderr: %v", err)
+	}
+	report := validCodexProgressFailureReportForTestV0()
+	report.Status = orquestaruntime.AgentProgressingV0
+	report.DecisionRequired = false
+	report.Summary = "Proceso con progreso observable."
+
+	got := codexProgressReportWithProcessFailureContextV0(
+		CodexReceiptDescriptorV0{
+			AckPath: filepath.Join(dir, orquestaruntimecodex.CodexAgentAckFileNameV0),
+		},
+		report,
+	)
+
+	if got.DecisionRequired ||
+		got.Summary != "Proceso con progreso observable." ||
+		!stringInCodexDeliverySetV0(got.EvidenceRefs, codexProgressWarningStreamFDEvidenceRefV0) ||
+		stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-no-ack") {
+		t.Fatalf("warning_stream_fd no debe bloquear progreso: %+v", got)
+	}
+	if issues := orquestaruntime.ValidateAgentProgressReportV0(got); len(issues) > 0 {
+		t.Fatalf("progress report invalido: %+v", issues)
+	}
+}
+
 func TestCodexProgressReportWithProcessFailureContextV0ClasificaNoACKSinLogs(t *testing.T) {
 	report := validCodexProgressFailureReportForTestV0()
 

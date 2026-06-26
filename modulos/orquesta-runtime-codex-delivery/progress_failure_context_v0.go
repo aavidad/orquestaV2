@@ -12,6 +12,8 @@ import (
 
 const maxCodexProgressFailureLogBytesV0 = 64 * 1024
 
+const codexProgressWarningStreamFDEvidenceRefV0 = "evidence-ref-warning-stream-fd"
+
 type codexProgressFailureClassV0 string
 
 const (
@@ -40,7 +42,11 @@ func CodexProgressReportWithProcessFailureContextV0(
 	report orquestaruntime.AgentProgressReportV0,
 ) orquestaruntime.AgentProgressReportV0 {
 	materialized := codexProgressWriteSetMaterializedV0(descriptor)
+	streamFDWarning := codexProgressDescriptorHasStreamFDWarningV0(descriptor)
 	if report.Status != orquestaruntime.AgentStoppedV0 {
+		if streamFDWarning {
+			report = codexProgressReportWithStreamFDWarningV0(report)
+		}
 		if materialized && codexProgressStatusNeedsMaterializedArtifactReviewV0(report.Status) {
 			report.DecisionRequired = true
 			report.Summary = "Proceso sin ACK pero con artefacto en write-set; requiere validacion antes de replanificar."
@@ -110,6 +116,9 @@ func CodexProgressReportWithProcessFailureContextV0(
 			report.EvidenceRefs,
 			"evidence-ref-artifact-without-ack",
 		))
+	}
+	if streamFDWarning {
+		report = codexProgressReportWithStreamFDWarningV0(report)
 	}
 	return report
 }
@@ -183,6 +192,32 @@ func codexProgressDescriptorHasProviderQuotaExhaustedV0(
 	snapshot := orquestaruntimecodex.BuildCodexUsageAccountingSnapshotV0([]string{string(data)})
 	return snapshot.Observed &&
 		snapshot.QuotaStatus == orquestaruntimecodex.CodexUsageQuotaExhaustedV0
+}
+
+func codexProgressDescriptorHasStreamFDWarningV0(
+	descriptor CodexReceiptDescriptorV0,
+) bool {
+	for _, log := range codexProgressFailureLogsFromDescriptorV0(descriptor) {
+		if codexProgressTextHasStreamFDWarningSignalV0(log) {
+			return true
+		}
+	}
+	return false
+}
+
+func codexProgressTextHasStreamFDWarningSignalV0(text string) bool {
+	normalized := strings.ToLower(text)
+	return strings.Contains(normalized, "failed to create stream fd")
+}
+
+func codexProgressReportWithStreamFDWarningV0(
+	report orquestaruntime.AgentProgressReportV0,
+) orquestaruntime.AgentProgressReportV0 {
+	report.EvidenceRefs = compactCodexDeliveryRefsV0(append(
+		report.EvidenceRefs,
+		codexProgressWarningStreamFDEvidenceRefV0,
+	))
+	return report
 }
 
 func codexProgressTextHasCapacitySignalV0(text string) bool {

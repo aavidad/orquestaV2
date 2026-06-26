@@ -156,6 +156,9 @@ Invariantes:
 - Las senales locales de progreso se reducen a firma compacta interna. El
   nucleo solo recibe refs opacas y el estado `stalled`, `loop_detected` o
   `stopped`.
+- El ruido conocido `Failed to create stream fd` se conserva como evidencia
+  advisory `evidence-ref-warning-stream-fd`; no convierte por si solo el agente
+  en capacidad, autenticacion ni fallo de producto.
 - Una misma firma puede emitir primero `stalled` y despues `loop_detected` si
   sigue repitiendose; no repite indefinidamente el mismo aviso.
 - No escanea procesos por nombre y no usa PID, HOME, OAuth, modelo, provider ni
