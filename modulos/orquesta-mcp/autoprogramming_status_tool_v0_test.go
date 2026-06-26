@@ -128,6 +128,7 @@ func TestMCPAutoprogrammingStatusExecutorV0ExponeQueueHealthSeparada(t *testing.
 	if result.QueueHealth == nil ||
 		result.QueueHealth.Queued != 1 ||
 		result.QueueHealth.RunningLive != 1 ||
+		result.QueueHealth.AgentsLive != 1 ||
 		result.QueueHealth.RunningStale != 0 ||
 		result.QueueHealth.Blocked != 1 ||
 		result.QueueHealth.Completed != 1 ||
@@ -219,6 +220,7 @@ func TestMCPAutoprogrammingStatusExecutorV0ObservaRunningConProcesoVivoV0(t *tes
 	}
 	if result.QueueHealth == nil ||
 		result.QueueHealth.RunningLive != 1 ||
+		result.QueueHealth.AgentsLive != 1 ||
 		result.QueueHealth.RunningStale != 0 ||
 		result.QueueHealth.RunningStaleNoProcess != 0 ||
 		result.QueueHealth.RunningWithoutRecentStats != 0 ||
@@ -274,6 +276,73 @@ func TestMCPAutoprogrammingStatusExecutorV0NoMarcaStaleConProcesoVivoAunqueFalte
 	}
 	if result.QueueHealth == nil ||
 		result.QueueHealth.RunningLive != 1 ||
+		result.QueueHealth.AgentsLive != 1 ||
+		result.QueueHealth.RunningStale != 0 ||
+		result.QueueHealth.RunningStaleNoProcess != 0 ||
+		result.QueueHealth.RunningWithoutRecentStats != 0 ||
+		len(result.StaleRunning) != 0 {
+		t.Fatalf("queue_health=%+v stale_running=%+v", result.QueueHealth, result.StaleRunning)
+	}
+}
+
+func TestMCPAutoprogrammingStatusExecutorV0CuentaAgentesVivosPorProcesoAunqueNoProgresenV0(t *testing.T) {
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		statsByRun: map[string]*orquestacionnucleoapp.DirectorRunStatsV0{
+			"run-ref-running-live-process-count-001": {
+				RunRef: "run-ref-running-live-process-count-001",
+				Counts: orquestacionnucleoapp.DirectorRunStatsCountsV0{
+					AgentsInFlight: 2,
+				},
+				Progress: orquestacionnucleoapp.DirectorProgressStatsV0{
+					StalledAgents: 2,
+				},
+				Agents: []orquestacionnucleoapp.DirectorAgentStatsV0{
+					{
+						AgentRequestID: "agent-ref-running-live-process-count-001",
+						Status:         orquestacionnucleoapp.DirectorAgentStatusRunningV0,
+						InFlight:       true,
+						Process: &orquestacionnucleoapp.DirectorAgentProcessStatsV0{
+							ProcessRef: "process-ref-running-live-process-count-001",
+						},
+					},
+					{
+						AgentRequestID: "agent-ref-running-live-process-count-002",
+						Status:         orquestacionnucleoapp.DirectorAgentStatusRequestedV0,
+						Process: &orquestacionnucleoapp.DirectorAgentProcessStatsV0{
+							SessionRef: "session-ref-running-live-process-count-002",
+						},
+					},
+					{
+						AgentRequestID: "agent-ref-running-live-process-count-003",
+						Status:         orquestacionnucleoapp.DirectorAgentStatusFailedV0,
+						Failed:         true,
+						Process: &orquestacionnucleoapp.DirectorAgentProcessStatsV0{
+							ProcessRef: "process-ref-running-live-process-count-003",
+						},
+					},
+				},
+			},
+		},
+	}
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			ranked: []MCPRunQueueRankedCandidateCompactV0{{
+				Rank:          1,
+				RunRef:        "run-ref-running-live-process-count-001",
+				AppRef:        "opes",
+				Status:        "running",
+				PriorityScore: 90,
+			}},
+		},
+		Stats: stats,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.QueueHealth == nil ||
+		result.QueueHealth.RunningLive != 1 ||
+		result.QueueHealth.AgentsLive != 2 ||
 		result.QueueHealth.RunningStale != 0 ||
 		result.QueueHealth.RunningStaleNoProcess != 0 ||
 		result.QueueHealth.RunningWithoutRecentStats != 0 ||

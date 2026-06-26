@@ -14,6 +14,7 @@ type MCPAutoprogrammingProjectV0 struct {
 type MCPAutoprogrammingQueueHealthV0 struct {
 	Queued                    int `json:"queued,omitempty"`
 	RunningLive               int `json:"running_live,omitempty"`
+	AgentsLive                int `json:"agents_live,omitempty"`
 	RunningStale              int `json:"running_stale,omitempty"`
 	RunningStaleNoProcess     int `json:"running_stale_no_process,omitempty"`
 	RunningWithoutRecentStats int `json:"running_without_recent_stats,omitempty"`

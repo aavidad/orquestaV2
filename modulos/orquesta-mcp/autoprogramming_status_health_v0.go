@@ -54,6 +54,7 @@ func buildMCPAutoprogrammingQueueHealthV0(
 				-1,
 			)
 		}
+		health.AgentsLive += liveAgentsMCPAutoprogrammingRunStatsV0(*run.Stats)
 		applyMCPAutoprogrammingRunHealthV0(&health, *run.Stats)
 	}
 	for _, observed := range observedRuns {
@@ -73,6 +74,7 @@ func buildMCPAutoprogrammingQueueHealthV0(
 				-1,
 			)
 		}
+		health.AgentsLive += liveAgentsMCPAutoprogrammingRunStatsV0(*observed.Stats)
 		applyMCPAutoprogrammingRunHealthV0(&health, *observed.Stats)
 	}
 	health.StatsRuns = countMCPAutoprogrammingSeenRunsV0(statsSeen)
@@ -135,23 +137,30 @@ func applyMCPAutoprogrammingRunHealthV0(
 func mcpAutoprogrammingRunStatsHasLiveSignalV0(
 	stats orquestacionnucleoapp.DirectorRunStatsV0,
 ) bool {
-	return stats.Progress.ProgressingAgents > 0 ||
-		hasMCPAutoprogrammingLiveAgentSignalV0(stats.Agents) ||
-		hasMCPAutoprogrammingLiveProcessSignalV0(stats.Agents)
+	return liveAgentsMCPAutoprogrammingRunStatsV0(stats) > 0
+}
+
+func liveAgentsMCPAutoprogrammingRunStatsV0(
+	stats orquestacionnucleoapp.DirectorRunStatsV0,
+) int {
+	liveAgents := 0
+	for _, agent := range stats.Agents {
+		if hasMCPAutoprogrammingLiveAgentStatsSignalV0(agent) ||
+			hasMCPAutoprogrammingLiveProcessStatsSignalV0(agent) {
+			liveAgents++
+		}
+	}
+	if stats.Progress.ProgressingAgents > liveAgents {
+		liveAgents = stats.Progress.ProgressingAgents
+	}
+	return liveAgents
 }
 
 func hasMCPAutoprogrammingLiveProcessSignalV0(
 	agents []orquestacionnucleoapp.DirectorAgentStatsV0,
 ) bool {
 	for _, agent := range agents {
-		if agent.NeedsAttention || agent.Process == nil ||
-			mcpAutoprogrammingAgentStatsTerminalV0(agent) {
-			continue
-		}
-		if strings.TrimSpace(agent.Process.ProcessRef) != "" ||
-			strings.TrimSpace(agent.Process.SessionRef) != "" ||
-			strings.TrimSpace(agent.Process.LaunchRef) != "" ||
-			strings.TrimSpace(agent.Process.ReadinessRef) != "" {
+		if hasMCPAutoprogrammingLiveProcessStatsSignalV0(agent) {
 			return true
 		}
 	}
@@ -179,18 +188,39 @@ func hasMCPAutoprogrammingLiveAgentSignalV0(
 	agents []orquestacionnucleoapp.DirectorAgentStatsV0,
 ) bool {
 	for _, agent := range agents {
-		if !agent.InFlight || agent.NeedsAttention {
-			continue
-		}
-		if agent.LastProgress == nil {
-			continue
-		}
-		switch strings.ToLower(strings.TrimSpace(agent.LastProgress.Status)) {
-		case "progressing", "working", "running":
+		if hasMCPAutoprogrammingLiveAgentStatsSignalV0(agent) {
 			return true
 		}
 	}
 	return false
+}
+
+func hasMCPAutoprogrammingLiveAgentStatsSignalV0(
+	agent orquestacionnucleoapp.DirectorAgentStatsV0,
+) bool {
+	if !agent.InFlight || agent.NeedsAttention || agent.LastProgress == nil ||
+		mcpAutoprogrammingAgentStatsTerminalV0(agent) {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(agent.LastProgress.Status)) {
+	case "progressing", "working", "running":
+		return true
+	default:
+		return false
+	}
+}
+
+func hasMCPAutoprogrammingLiveProcessStatsSignalV0(
+	agent orquestacionnucleoapp.DirectorAgentStatsV0,
+) bool {
+	if agent.NeedsAttention || agent.Process == nil ||
+		mcpAutoprogrammingAgentStatsTerminalV0(agent) {
+		return false
+	}
+	return strings.TrimSpace(agent.Process.ProcessRef) != "" ||
+		strings.TrimSpace(agent.Process.SessionRef) != "" ||
+		strings.TrimSpace(agent.Process.LaunchRef) != "" ||
+		strings.TrimSpace(agent.Process.ReadinessRef) != ""
 }
 
 func mcpAutoprogrammingRunStatusCompletedV0(status string) bool {

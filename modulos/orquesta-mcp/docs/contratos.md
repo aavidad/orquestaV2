@@ -1409,9 +1409,11 @@ Campos:
     estado: ok
     queue?: resultado compacto de orquesta.run_queue.priority.v0
     run?: resultado compacto de orquesta.director.stats.v0
-    queue_health?: separa `running_live`, `running_without_recent_stats` y
-      `running_stale_no_process`; `running_stale` agregado solo cuenta stale
-      verificable sin proceso vivo
+    queue_health?: separa `running_live`, `agents_live`,
+      `running_without_recent_stats` y `running_stale_no_process`;
+      `running_live` cuenta runs con liveness probado, `agents_live` cuenta
+      agentes vivos observados por progreso o refs de proceso, y
+      `running_stale` agregado solo cuenta stale verificable sin proceso vivo
     stale_running?: acciones publicas; una run `running` sin liveness probado se
       expone como `running_without_recent_stats`, no como stale terminal
     ops_snapshot?: DirectorAutonomousOpsSnapshotV0 agregado de cola/run para
