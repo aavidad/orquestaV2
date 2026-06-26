@@ -75,12 +75,14 @@ El adaptador no conoce HOME, modelo, proveedor, OAuth, token, command path ni
 filesystem productivo. El arranque real queda en composicion opt-in.
 
 El 2026-06-25 se cablea en `cmd/orquesta-server` un transporte real opt-in con
-`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`. La CLI local de Codex no expone
-un subcomando estable `goal`, y usar `codex exec` no equivaldria al loop
-persistente de Codex Goal; por eso el wiring usa `codex app-server proxy`
-contra un daemon local de Codex ya disponible. Sin esa variable, la composicion
-no expone launcher/observer y Orquesta publica capacidad goal faltante cuando
-`IdleSelfImprovementGoalFirst` esta activo.
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`. El 2026-06-26 se anade
+`app_server_stdio` para instalaciones donde `codex app-server --stdio` responde
+pero `codex app-server proxy` no obtiene respuesta del socket manual. La CLI
+local de Codex no expone un subcomando estable `goal`, y usar `codex exec` no
+equivaldria al loop persistente de Codex Goal; por eso el wiring usa
+`codex app-server` como frontera de composicion. Sin esa variable, la
+composicion no expone launcher/observer y Orquesta publica capacidad goal
+faltante cuando `IdleSelfImprovementGoalFirst` esta activo.
 
 `orquesta-server` ya conserva para automejora goal-first el spec emitido, el
 receipt de lanzamiento, el resultado observado y la validacion de cierre. En
@@ -95,9 +97,12 @@ statefile local puede contener spec/receipt/result/closure completos para
 restauracion, pero no es API publica.
 
 La composicion hace un preflight rapido del backend app-server al arrancar el
-stack. Si falta el socket local o la instalacion standalone requerida por
-`codex app-server daemon`, se inyecta un backend goal degradado con reason code
-compacto (`codex_app_server_control_socket_missing`,
+stack. El cliente manda `initialize`, `initialized` y la llamada real
+`thread/loaded/list`, manteniendo stdin abierto hasta recibir `id=2`; esto es
+necesario para `app_server_stdio` y compatible con `app_server_proxy`. Si falta
+el socket local, la instalacion standalone requerida por `codex app-server
+daemon` o el backend no responde, se inyecta un backend goal degradado con
+reason code compacto (`codex_app_server_control_socket_missing`,
 `codex_app_server_standalone_missing`, etc.). Esto evita volver al loop legacy
 cuando el operador habia pedido goal-first y deja la accion pendiente clara.
 
@@ -114,21 +119,25 @@ el resultado declara `director_execution_mode=legacy_director_loop`.
 
 La web `/nueva-app` acepta esa respuesta, muestra las refs dentro del bloque
 `director` y observa por `POST /api/v0/apps/director/goal/observe` con polling
-acotado. Sin `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`, el puerto no se
-inyecta y se conserva el flujo legacy de Director/agentes.
+acotado. Sin `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o
+`app_server_stdio`, el puerto no se inyecta y se conserva el flujo legacy de
+Director/agentes.
 
-El backend `app_server_proxy` observa `thread/goal/get`; cuando el goal queda
-terminal lee `thread/read` con `includeTurns=true` y extrae de la respuesta final
-un marcador estructurado:
+Los backends `app_server_proxy` y `app_server_stdio` observan
+`thread/goal/get`; cuando el goal queda terminal leen `thread/read` con
+`includeTurns=true` y extraen de la respuesta final un marcador estructurado o,
+si el hilo no aporta marcador legible, el archivo durable
+`orquesta_goal_result_v0.json` escrito bajo el write-set:
 
 ```text
-ORQUESTA_GOAL_RESULT_V0 {"summary":"...","artifact_refs":[],"required_test_results":[],"domain_receipt_refs":[],"evidence_refs":[]}
+ORQUESTA_GOAL_RESULT_V0 {"goal_ref":"...","summary":"...","artifact_refs":[],"required_test_results":[],"domain_receipt_refs":[],"evidence_refs":[]}
 ```
 
-Las refs del marcador se convierten a `GoalWorkResultV0` y pasan por el
-validador de cierre de Orquesta. Si el marcador falta o no contiene las
+Las refs del marcador o del archivo durable se convierten a `GoalWorkResultV0`
+y pasan por el validador de cierre de Orquesta. Si faltan las
 evidencias/artefactos exigidos por el spec, Orquesta no inventa refs: el goal
-puede estar `complete`, pero el run queda bloqueado por cierre no aceptado.
+puede estar `complete`, pero el run queda bloqueado por cierre no aceptado. El
+archivo durable debe incluir `goal_ref` coincidente.
 
 ## Relacion con el Director actual
 
@@ -159,11 +168,11 @@ del goal. Orquesta solo prepara y valida el contrato.
    `runs/supervise`.
 3. Cablear un launcher real de Codex Goal en `cmd/orquesta-server` solo cuando
    exista puerto seguro para crear/observar goals.
-   Estado 2026-06-25: `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` inyecta
-   starter/observer por `codex app-server proxy`, hace preflight de
-   `thread/loaded/list`, observa `thread/read` y traduce
-   `ORQUESTA_GOAL_RESULT_V0` a refs de cierre; falta ejecutar smoke real con
-   daemon en ventana operativa.
+   Estado 2026-06-26: `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o
+   `app_server_stdio` inyecta starter/observer por `codex app-server`, hace
+   preflight de `thread/loaded/list`, observa `thread/read` y traduce
+   `ORQUESTA_GOAL_RESULT_V0` o `orquesta_goal_result_v0.json` a refs de cierre;
+   smoke real local cerrado el 2026-06-26 con `app_server_stdio`.
 4. Ejecutar smoke no-OPES temporal con repo de prueba.
 5. Ejecutar smoke OPES temporal acotado de un derivado.
 6. Marcar rutas antiguas como legacy cuando tengan equivalencia goal-first
@@ -176,7 +185,7 @@ del goal. Orquesta solo prepara y valida el contrato.
    goal-first.
    Estado 2026-06-25: hecho de forma opt-in para lanzamiento, refs publicas,
    observacion y cierre validado por Orquesta cuando el goal devuelve marcador
-   estructurado.
+   estructurado o archivo durable.
 8. Conectar autoprogramacion a observacion goal-first.
    Estado 2026-06-26: `orquesta.autoprogramming.observe_goal.v0` y `POST
    /api/v0/autoprogramming/goal/observe` observan el `GoalWorkStateV0` por

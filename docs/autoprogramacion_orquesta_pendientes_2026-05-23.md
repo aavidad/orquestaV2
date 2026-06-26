@@ -198,6 +198,17 @@ Avance local adicional 2026-06-25: el backend real
 inventa evidencias y el cierre queda bloqueado por el validador. Se anade smoke
 real opt-in `scripts/smoke_goal_first_app_server_real.sh` con runbook
 `docs/runbooks/smoke_goal_first_app_server_real_2026-06-25.md`.
+Avance local adicional 2026-06-26: se anade backend opt-in
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio` para usar
+`codex app-server --stdio` cuando `app_server_proxy` no responde al socket
+local. El cliente RPC manda `initialize`, `initialized` y la llamada objetivo,
+manteniendo stdin abierto hasta recibir la respuesta `id=2`; esto corrige el
+preflight y evita falsos `codex_app_server_unavailable` antes de crear el goal.
+Avance local adicional 2026-06-26: el backend app-server tambien acepta el
+archivo durable `orquesta_goal_result_v0.json` bajo el write-set como fallback
+de cierre cuando el goal terminal no deja marcador textual legible en
+`thread/read`. El archivo debe incluir `goal_ref` coincidente; Orquesta no
+relaja `required_tests`, `artifact_refs` ni `evidence_refs`.
 Avance local adicional 2026-06-25: `cmd/orquesta-server` hace preflight rapido
 del backend app-server con `thread/loaded/list`. Si falta socket o standalone de
 Codex, conserva puertos goal-first degradados y devuelve reason codes compactos
@@ -215,18 +226,18 @@ clave observable para cierre, evidencias ni tests.
 Pendiente verificable:
 
 - `cmd/orquesta-server` ya cablea starter/observer opt-in con
-  `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`, usando `codex app-server
-  proxy` contra un daemon local de Codex ya disponible, hace preflight
-  diagnosticable y ya transforma el resultado final estructurado en refs de
-  cierre. Queda pendiente ejecutar el smoke real con daemon y proyecto temporal
-  antes de apagar el loop residente historico en esa ruta.
+  `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o `app_server_stdio`, usando
+  `codex app-server` como frontera real, hace preflight diagnosticable y ya
+  transforma el resultado final estructurado en refs de cierre. Smoke real
+  cerrado el 2026-06-26 con `app_server_stdio`: `goal_status=complete`,
+  `run_status=cerrada`, `closure_status=accepted`, `closure_accepted=true`,
+  `artifact_refs=2`, `evidence_refs=9`.
 - `/nueva-app` ya queda conectada localmente a `GoalWorkSpecV0` y al launcher
   goal-first por `orquesta.apps.arrancar_director.v0` cuando la composicion
   inyecta `AppGoalLauncher`/`AppGoalStateStore`; el panel web observa por
   `POST /api/v0/apps/director/goal/observe` con polling acotado y cierre por
-  marcador estructurado. Sigue pendiente ejecutar el smoke real con daemon Codex
-  y proyecto temporal hasta observacion terminal, cierre durable y cola
-  terminal.
+  marcador estructurado o resultado durable. El smoke real de proyecto temporal
+  cerro el 2026-06-26 sin caer al loop legacy.
 - Intento de smoke real 2026-06-25: `scripts/smoke_goal_first_app_server_real.sh`
   quedo bloqueado antes de arrancar Orquesta porque el CLI informo falta de
   instalacion standalone en
@@ -236,13 +247,15 @@ Pendiente verificable:
   `codex app-server`; `codex app-server daemon version` falla por socket
   ausente en `/home/alberto/.codex/app-server-control/app-server-control.sock`.
   El smoke ahora tiene preflight no-costoso
-  `ORQUESTA_GOAL_FIRST_SMOKE_PREFLIGHT_ONLY=1` para distinguir CLI, daemon,
-  socket y standalone antes de ejecutar una generacion real. Accion externa
-  pendiente actualizada: con app-server directo escuchando en
-  `$HOME/.codex/app-server-control/app-server-control.sock`, el preflight queda
-  `ok` sin instalar standalone; falta repetir el smoke real opt-in con doble
-  confirmacion para validar generacion, marcador `ORQUESTA_GOAL_RESULT_V0` y
-  cierre aceptado, sin caer al loop legacy.
+  `ORQUESTA_GOAL_FIRST_SMOKE_PREFLIGHT_ONLY=1` para distinguir CLI, backend,
+  socket y standalone antes de ejecutar una generacion real. Intento adicional
+  2026-06-26: el socket manual aparecia como `running` para
+  `daemon version`, pero `codex app-server proxy` no devolvia respuesta RPC y
+  `/api/v0/apps/director` fallaba como `codex_app_server_unavailable`. La ruta
+  local viable es `app_server_stdio`. Repeticion real 2026-06-26: el goal
+  genero la app temporal, corrigio tests tras `listen EPERM`, paso
+  `npm run verify`, escribio `orquesta_goal_result_v0.json` con el `test_ref`
+  literal y Orquesta acepto el cierre sin caer al loop legacy.
 - Revalidar OPES temporal con derivados/cierre cuando exista la ruta goal-first
   real; no tocar OPES productivo ni drenar colas amplias.
 

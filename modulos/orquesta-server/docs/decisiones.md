@@ -221,12 +221,14 @@ acotado que lo demuestre.
 
 ## SRV-015: app-server goal-first es composicion
 
-`cmd/orquesta-server` puede usar `codex app-server proxy` como backend
-goal-first opt-in. Ese codigo queda en composition root: arranca threads,
-configura goals, inicia turns, observa `thread/goal/get` y lee `thread/read`
-para extraer `ORQUESTA_GOAL_RESULT_V0`. El modulo servidor y el nucleo neutral
-siguen viendo solo puertos y refs opacas; un `complete` de Codex no cierra nada
-sin `GoalWorkClosureValidatorV0`.
+`cmd/orquesta-server` puede usar `codex app-server proxy` o
+`codex app-server --stdio` como backend goal-first opt-in. Ese codigo queda en
+composition root: arranca threads, configura goals, inicia turns, observa
+`thread/goal/get` y lee `thread/read` para extraer
+`ORQUESTA_GOAL_RESULT_V0` o usa el archivo durable
+`orquesta_goal_result_v0.json` con `goal_ref` coincidente. El modulo servidor y
+el nucleo neutral siguen viendo solo puertos y refs opacas; un `complete` de
+Codex no cierra nada sin `GoalWorkClosureValidatorV0`.
 
 Si el transporte app-server no esta disponible, la composicion no debe volver al
 loop legacy como si nada. El preflight crea un backend goal degradado que falla

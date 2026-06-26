@@ -33,6 +33,7 @@ keep_dir="${ORQUESTA_KEEP_SMOKE_DIR:-0}"
 request_timeout="${ORQUESTA_GOAL_FIRST_SMOKE_REQUEST_TIMEOUT_SECONDS:-90}"
 polls="${ORQUESTA_GOAL_FIRST_SMOKE_POLLS:-120}"
 sleep_seconds="${ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS:-5}"
+goal_backend="${ORQUESTA_CODEX_GOAL_BACKEND:-app_server_stdio}"
 
 cleanup() {
   if [[ -n "$server_pid" ]] && kill -0 "$server_pid" >/dev/null 2>&1; then
@@ -122,6 +123,65 @@ codex_app_server_ready() {
   "$command_path" app-server daemon version >"$daemon_stdout" 2>"$daemon_stderr"
 }
 
+codex_app_server_stdio_ready() {
+  local command_path="$1"
+  python3 - "$command_path" >"$daemon_stdout" 2>"$daemon_stderr" <<'PY'
+import json
+import select
+import subprocess
+import sys
+import time
+
+command = sys.argv[1]
+process = subprocess.Popen(
+    [command, "app-server", "--stdio"],
+    stdin=subprocess.PIPE,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    text=True,
+    bufsize=1,
+)
+def send(message):
+    process.stdin.write(json.dumps(message, separators=(",", ":")) + "\n")
+    process.stdin.flush()
+
+def wait_for_response(response_id, timeout=8):
+    deadline = time.time() + timeout
+    needle = f'"id":{response_id}'
+    while time.time() < deadline:
+        readable, _, _ = select.select([process.stdout, process.stderr], [], [], 0.25)
+        for stream in readable:
+            line = stream.readline()
+            if not line:
+                continue
+            if stream is process.stdout:
+                print(line, end="")
+                if needle in line:
+                    return True
+            else:
+                print(line, end="", file=sys.stderr)
+    return False
+
+send({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"clientInfo": {"name": "orquesta-smoke-preflight", "version": "0"}, "capabilities": {"experimentalApi": True}}})
+initialized = wait_for_response(1)
+if initialized:
+    send({"jsonrpc": "2.0", "method": "initialized", "params": {}})
+    send({"jsonrpc": "2.0", "id": 2, "method": "thread/loaded/list", "params": {}})
+found = initialized and wait_for_response(2)
+
+process.stdin.close()
+process.terminate()
+try:
+    process.wait(timeout=3)
+except subprocess.TimeoutExpired:
+    process.kill()
+
+if not found:
+    print("codex app-server stdio no devolvio thread/loaded/list", file=sys.stderr)
+    sys.exit(1)
+PY
+}
+
 json_get() {
   local file="$1"
   local expr="$2"
@@ -157,7 +217,30 @@ if [[ ! -x "$codex_command" ]]; then
   exit 2
 fi
 
+case "$goal_backend" in
+  app_server_proxy|app_server_stdio) ;;
+  *)
+    echo "ORQUESTA_CODEX_GOAL_BACKEND no soportado para este smoke: $goal_backend" >&2
+    exit 2
+    ;;
+esac
+
 if [[ "${ORQUESTA_GOAL_FIRST_SMOKE_PREFLIGHT_ONLY:-0}" == "1" ]]; then
+  if [[ "$goal_backend" == "app_server_stdio" ]]; then
+    if codex_app_server_stdio_ready "$codex_command"; then
+      echo "smoke_goal_first_app_server_preflight=ok"
+      echo "codex_command=$codex_command"
+      echo "goal_backend=$goal_backend"
+      tail -n 1 "$daemon_stdout" || true
+      exit 0
+    fi
+    echo "smoke_goal_first_app_server_preflight=blocked"
+    echo "reason=$(codex_app_server_error_reason "$daemon_stderr")"
+    echo "codex_command=$codex_command"
+    echo "goal_backend=$goal_backend"
+    tail -n 40 "$daemon_stderr" >&2 || true
+    exit 2
+  fi
   codex_app_server_preflight "$codex_command"
   exit $?
 fi
@@ -211,16 +294,26 @@ aceptable para smoke. Persistencia puede ser en memoria si la solicitud no exige
 base de datos.
 EOF
 
-echo "comprobando daemon Codex app-server..."
-if codex_app_server_ready "$codex_command"; then
-  echo "daemon Codex app-server accesible"
-else
-  echo "arrancando daemon Codex app-server si hace falta..."
-  "$codex_command" app-server daemon start >"$daemon_stdout" 2>"$daemon_stderr" || {
-    echo "no se pudo arrancar codex app-server daemon; reason=$(codex_app_server_error_reason "$daemon_stderr"); stderr:" >&2
+if [[ "$goal_backend" == "app_server_stdio" ]]; then
+  echo "comprobando Codex app-server stdio..."
+  codex_app_server_stdio_ready "$codex_command" || {
+    echo "codex app-server stdio no esta disponible; reason=$(codex_app_server_error_reason "$daemon_stderr"); stderr:" >&2
     tail -n 80 "$daemon_stderr" >&2 || true
     exit 2
   }
+  echo "Codex app-server stdio accesible"
+else
+  echo "comprobando daemon Codex app-server..."
+  if codex_app_server_ready "$codex_command"; then
+    echo "daemon Codex app-server accesible"
+  else
+    echo "arrancando daemon Codex app-server si hace falta..."
+    "$codex_command" app-server daemon start >"$daemon_stdout" 2>"$daemon_stderr" || {
+      echo "no se pudo arrancar codex app-server daemon; reason=$(codex_app_server_error_reason "$daemon_stderr"); stderr:" >&2
+      tail -n 80 "$daemon_stderr" >&2 || true
+      exit 2
+    }
+  fi
 fi
 
 echo "compilando servidor temporal..."
@@ -273,10 +366,13 @@ export ORQUESTA_SERVER_ADDR="127.0.0.1:0"
 export ORQUESTA_SERVER_STATE_DIR="$state_dir"
 export ORQUESTA_CODEX_PROJECT_WORKDIR="$project_dir"
 export ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PROJECT_WORKDIR="$idle_project_dir"
+export ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS=0
+export ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER=0
+export ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=false
 export ORQUESTA_CODEX_RUNTIME_WORKDIR="$runtime_dir"
 export ORQUESTA_CODEX_COMMAND="$codex_command"
 export ORQUESTA_CODEX_PATH="${ORQUESTA_CODEX_PATH:-$PATH}"
-export ORQUESTA_CODEX_GOAL_BACKEND="app_server_proxy"
+export ORQUESTA_CODEX_GOAL_BACKEND="$goal_backend"
 export ORQUESTA_CODEX_GOAL_TIMEOUT_MS="${ORQUESTA_CODEX_GOAL_TIMEOUT_MS:-90000}"
 export ORQUESTA_CODEX_APPROVAL_POLICY="${ORQUESTA_CODEX_APPROVAL_POLICY:-never}"
 export ORQUESTA_CODEX_SANDBOX="${ORQUESTA_CODEX_SANDBOX:-workspace-write}"
@@ -370,14 +466,15 @@ JSON
   fi
   goal_status="$(json_get "$observe_response" "goal_status")"
   run_status="$(json_get "$observe_response" "run_status")"
+  director_execution_mode="$(json_get "$observe_response" "director_execution_mode")"
   closure_status="$(json_get "$observe_response" "closure_status")"
   closure_accepted="$(json_get "$observe_response" "closure_accepted")"
-  echo "poll=$i goal_status=$goal_status run_status=$run_status closure_status=$closure_status closure_accepted=$closure_accepted"
-  if [[ "$closure_accepted" == "true" && "$run_status" == "cerrada" ]]; then
+  echo "poll=$i mode=$director_execution_mode goal_status=$goal_status run_status=$run_status closure_status=$closure_status closure_accepted=$closure_accepted"
+  if [[ "$director_execution_mode" == "goal_first" && "$goal_status" == "complete" && "$run_status" == "cerrada" && "$closure_status" == "accepted" && "$closure_accepted" == "true" ]]; then
     terminal="1"
     break
   fi
-  if [[ "$goal_status" == "blocked" || "$run_status" == "bloqueada" || "$closure_status" == "blocked" ]]; then
+  if [[ "$goal_status" == "blocked" || "$goal_status" == "invalid" || "$run_status" == "bloqueada" || "$closure_status" == "blocked" ]]; then
     echo "goal-first termino bloqueado; respuesta final:" >&2
     smoke_print_file_excerpt "$observe_response"
     exit 1
@@ -403,6 +500,17 @@ with open(sys.argv[1], encoding="utf-8") as fh:
     print(len(json.load(fh).get("evidence_refs", [])))
 PY
 )"
+
+if [[ "$artifact_count" -lt 1 ]]; then
+  echo "cierre aceptado sin artifact_refs" >&2
+  smoke_print_file_excerpt "$observe_response"
+  exit 1
+fi
+if [[ "$evidence_count" -lt 1 ]]; then
+  echo "cierre aceptado sin evidence_refs" >&2
+  smoke_print_file_excerpt "$observe_response"
+  exit 1
+fi
 
 echo "smoke_goal_first_app_server_real=ok"
 echo "artifact_refs=$artifact_count"

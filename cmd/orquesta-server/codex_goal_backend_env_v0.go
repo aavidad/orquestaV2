@@ -52,13 +52,13 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 	if backend == "" {
 		return serverCodexGoalBackendV0{}, nil
 	}
-	if backend != codexGoalBackendAppServerProxyV0 {
+	if backend != codexGoalBackendAppServerProxyV0 && backend != codexGoalBackendAppServerStdioV0 {
 		return serverCodexGoalBackendV0{}, fmt.Errorf("codex_goal_backend_no_soportado:%s", backend)
 	}
 	runtimeConfig := codexRuntimeEnvConfigFromEnvV0()
 	protocol := serverCodexAppServerCommandProtocolV0{
 		CommandPath: runtimeConfig.CommandPath,
-		Args:        []string{"app-server", "proxy"},
+		Args:        codexGoalBackendArgsV0(backend),
 		PathEnv:     runtimeConfig.PathEnv,
 		Timeout:     time.Duration(codexGoalTimeoutMSFromEnvV0()) * time.Millisecond,
 	}
@@ -70,8 +70,17 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 		}
 		return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded}, nil
 	}
+	var runtimeProtocol serverCodexAppServerProtocolPortV0 = protocol
+	if backend == codexGoalBackendAppServerStdioV0 {
+		runtimeProtocol = &serverCodexAppServerPersistentCommandProtocolV0{
+			CommandPath: runtimeConfig.CommandPath,
+			Args:        codexGoalBackendArgsV0(backend),
+			PathEnv:     runtimeConfig.PathEnv,
+			Timeout:     time.Duration(codexGoalTimeoutMSFromEnvV0()) * time.Millisecond,
+		}
+	}
 	client := serverCodexAppServerGoalBackendV0{
-		Protocol:        protocol,
+		Protocol:        runtimeProtocol,
 		CWD:             firstNonEmptyServerStackV0(workDir, config.ProjectWorkDir),
 		Model:           runtimeConfig.Model,
 		ReasoningEffort: runtimeConfig.ReasoningEffort,
@@ -83,4 +92,13 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 
 func codexGoalBackendFromEnvV0() string {
 	return strings.TrimSpace(os.Getenv(envCodexGoalBackendV0))
+}
+
+func codexGoalBackendArgsV0(backend string) []string {
+	switch strings.TrimSpace(backend) {
+	case codexGoalBackendAppServerStdioV0:
+		return []string{"app-server", "--stdio"}
+	default:
+		return []string{"app-server", "proxy"}
+	}
 }

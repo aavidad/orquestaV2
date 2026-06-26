@@ -8,10 +8,12 @@ Validar la ruta real no-OPES de `/nueva-app` con Codex Goal persistente:
 
 1. Orquesta levanta un servidor temporal.
 2. `/api/v0/apps/director` compila `GoalWorkSpecV0` y lanza Codex por
-   `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`.
+   `ORQUESTA_CODEX_GOAL_BACKEND` (`app_server_stdio` por defecto en este
+   smoke; `app_server_proxy` si se quiere validar daemon/socket).
 3. Codex trabaja en un proyecto temporal, no en el repo Orquesta.
 4. `/api/v0/apps/director/goal/observe` lee `thread/goal/get` y `thread/read`.
-5. El marcador `ORQUESTA_GOAL_RESULT_V0` aporta artefactos/evidencias.
+5. El marcador `ORQUESTA_GOAL_RESULT_V0` o el archivo durable
+   `orquesta_goal_result_v0.json` aporta artefactos/evidencias.
 6. Orquesta valida cierre y deja el run `cerrada`.
 
 ## Comando
@@ -24,10 +26,13 @@ ORQUESTA_CODEX_COMMAND="$(command -v codex)" \
 ./scripts/smoke_goal_first_app_server_real.sh
 ```
 
-Debe devolver `smoke_goal_first_app_server_preflight=ok` si el daemon
-app-server ya esta accesible. Si el CLI existe pero no hay daemon/socket,
-devuelve `smoke_goal_first_app_server_preflight=blocked` con reason code
-diagnostico, por ejemplo `codex_app_server_control_socket_missing`.
+Debe devolver `smoke_goal_first_app_server_preflight=ok` si el backend
+seleccionado responde a `thread/loaded/list`. Por defecto usa
+`app_server_stdio` y no necesita daemon. Para validar el socket persistente,
+exporta `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`; si el CLI existe pero
+no hay daemon/socket, devuelve `smoke_goal_first_app_server_preflight=blocked`
+con reason code diagnostico, por ejemplo
+`codex_app_server_control_socket_missing`.
 
 Si `codex app-server daemon start` falla por standalone gestionado ausente,
 pero el CLI instalado por Node incluye app-server, se puede levantar app-server
@@ -38,9 +43,10 @@ mkdir -p "$HOME/.codex/app-server-control"
 codex app-server --listen "unix://$HOME/.codex/app-server-control/app-server-control.sock"
 ```
 
-En otra terminal, repite el preflight. El smoke real reutiliza un app-server ya
-accesible y solo intenta `daemon start` si `codex app-server daemon version` no
-puede conectar.
+En otra terminal, repite el preflight con
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`. El smoke real por proxy reutiliza
+un app-server ya accesible y solo intenta `daemon start` si
+`codex app-server daemon version` no puede conectar.
 
 Smoke real, con ejecucion de Codex:
 
@@ -53,7 +59,9 @@ ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1 \
 Variables utiles:
 
 - `ORQUESTA_CODEX_COMMAND`: ruta de `codex`; por defecto resuelve `codex`.
-- `ORQUESTA_GOAL_FIRST_SMOKE_PREFLIGHT_ONLY=1`: comprueba CLI/daemon app-server
+- `ORQUESTA_CODEX_GOAL_BACKEND`: `app_server_stdio` por defecto; tambien admite
+  `app_server_proxy` para daemon/socket.
+- `ORQUESTA_GOAL_FIRST_SMOKE_PREFLIGHT_ONLY=1`: comprueba el backend app-server
   sin arrancar Orquesta ni ejecutar una generacion.
 - `ORQUESTA_CODEX_MODEL`: por defecto `gpt-5.5`.
 - `ORQUESTA_CODEX_REASONING_EFFORT`: por defecto `medium`.
@@ -64,6 +72,9 @@ Variables utiles:
 - `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PROJECT_WORKDIR`: el script la fija a
   un directorio temporal separado para demostrar que `/nueva-app` usa
   `ORQUESTA_CODEX_PROJECT_WORKDIR` y no el workdir de automejora.
+- `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS=0` y
+  `ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=false`: el script los fija para no
+  lanzar automejora/residente durante este smoke de `/nueva-app`.
 - `ORQUESTA_GOAL_FIRST_SMOKE_POLLS` y
   `ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS`: ventana de observacion.
 
@@ -74,6 +85,8 @@ Variables utiles:
 - Usa `ORQUESTA_CODEX_PROJECT_WORKDIR` temporal con contexto minimo.
 - Usa un workdir temporal distinto para automejora idle; si una app aparece en
   ese directorio, la separacion de consumidores Goal ha regresado.
+- No debe arrancar `request-ref-autoprogramming-*` ni agentes de automejora
+  idle. Si aparecen, el smoke esta contaminado y debe cortarse.
 - No detiene el daemon Codex local al terminar; puede estar compartido por el
   operador.
 - Si falta el socket app-server, el daemon o la instalacion esperada por el CLI
@@ -89,15 +102,24 @@ Variables utiles:
 
 En esta maquina `command -v codex` resuelve
 `/home/alberto/.nvm/versions/node/v20.19.2/bin/codex` y el CLI expone
-`codex app-server`. El preflight no-costoso detecta que aun no hay socket de
-daemon en `/home/alberto/.codex/app-server-control/app-server-control.sock`;
-por tanto el siguiente paso para evidencia real es arrancar el daemon con la
-doble confirmacion del smoke, no relanzar el loop legacy.
-Comprobacion adicional del 2026-06-26: app-server directo con
+`codex app-server`. Comprobacion 2026-06-26: `codex app-server --stdio`
+responde a `initialize` y `thread/loaded/list`; Orquesta debe mandar tambien la
+notificacion `initialized` y mantener stdin abierto hasta recibir la respuesta
+RPC. El socket manual creado con
 `codex app-server --listen unix://$HOME/.codex/app-server-control/app-server-control.sock`
-deja el preflight en `smoke_goal_first_app_server_preflight=ok` sin instalar
-standalone; queda pendiente ejecutar el smoke real con doble confirmacion porque
-esa parte si genera trabajo Codex.
+no respondio a `codex app-server proxy` en esta instalacion, aunque
+`daemon version` lo liste como `running`; por eso el smoke real local usa
+`app_server_stdio` mientras el backend proxy queda como ruta opt-in a validar
+cuando exista un daemon/socket gestionado compatible.
+
+Ejecucion real 2026-06-26 con `app_server_stdio`:
+`smoke_goal_first_app_server_real=ok`, `goal_status=complete`,
+`run_status=cerrada`, `closure_status=accepted`, `closure_accepted=true`,
+`artifact_refs=2`, `evidence_refs=9`, `smoke_root=/tmp/orquesta-goal-first-app-server.2dZTDh`.
+El goal genero una app temporal, corrigio una prueba HTTP que no podia abrir
+socket local por `listen EPERM`, ejecuto `npm run verify` con resultado passed
+y escribio `docs/orquesta_goal_result_v0.json` con el `test_ref` literal del
+`GoalWorkSpecV0`.
 
 ## Exito
 
@@ -120,7 +142,8 @@ El ultimo `observe_response.json` debe tener:
 - `closure_accepted=true`;
 - al menos los artefactos requeridos por el `GoalWorkSpecV0`;
 - el cierre solo puede llegar a `accepted` si el marcador
-  `ORQUESTA_GOAL_RESULT_V0` aporto resultados `passed` para los tests
+  `ORQUESTA_GOAL_RESULT_V0` o el archivo durable
+  `orquesta_goal_result_v0.json` aporto resultados `passed` para los tests
   requeridos por el `GoalWorkSpecV0`;
 - `evidence-ref-app-director-goal-first-v0` entre las evidencias observadas o
   acumuladas.

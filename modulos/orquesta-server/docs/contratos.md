@@ -116,13 +116,18 @@ Configuracion externa relacionada:
   activo y falta el launcher, el runtime publica
   `goal_launcher_unavailable` y no cae silenciosamente al loop legacy de
   `PrepareIdleSelfImprovementV0`.
-- `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`: solo en `cmd/orquesta-server`,
-  inyecta launcher/observer Codex Goal usando `codex app-server proxy` contra
-  un daemon local de Codex ya disponible. No usa `codex exec` como sustituto,
-  no arranca backend si no esta configurado y no mete Codex en el modulo
-  servidor. En observaciones terminales lee `thread/read` y fusiona el marcador
-  `ORQUESTA_GOAL_RESULT_V0` como refs opacas de artefactos, tests, receipts y
-  evidencias; el cierre aceptado sigue dependiendo del validador neutral. Al
+- `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy|app_server_stdio`: solo en
+  `cmd/orquesta-server`, inyecta launcher/observer Codex Goal usando
+  `codex app-server`. `app_server_proxy` usa un daemon/socket compatible ya
+  disponible; `app_server_stdio` usa `codex app-server --stdio` y mantiene stdin
+  abierto hasta recibir la respuesta RPC. No usa `codex exec` como sustituto, no
+  arranca backend si no esta configurado y no mete Codex en el modulo servidor.
+  En observaciones terminales lee `thread/read` y fusiona el marcador
+  `ORQUESTA_GOAL_RESULT_V0` o el archivo durable
+  `orquesta_goal_result_v0.json` como refs opacas de artefactos, tests,
+  receipts y evidencias; el cierre aceptado sigue dependiendo del validador
+  neutral. El archivo durable debe tener `goal_ref` coincidente y tiene
+  prioridad sobre un marcador textual incompleto. Al
   montar la composicion ejecuta un preflight rapido; si falla, conserva puertos
   goal-first degradados y devuelve reason codes compactos como
   `codex_app_server_control_socket_missing` o

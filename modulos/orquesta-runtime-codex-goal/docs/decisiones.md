@@ -16,9 +16,9 @@ El paquete no arranca Codex por si mismo. La composicion debe inyectar un puerto
 real cuando el entorno soporte Codex Goal.
 
 El wiring local disponible vive en `cmd/orquesta-server` y solo se activa con
-`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`. Usa `codex app-server proxy`
-contra daemon local ya disponible; no convierte `codex exec` en sustituto de
-Goal.
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o `app_server_stdio`. Usa
+`codex app-server` como frontera de composicion; no convierte `codex exec` en
+sustituto de Goal.
 
 ## D-004 observacion por puerto
 
@@ -30,6 +30,8 @@ acepta cierre ni consulta herramientas concretas.
 
 El prompt exige que la respuesta final termine con
 `ORQUESTA_GOAL_RESULT_V0 { ... }`. La composicion `cmd/orquesta-server` puede
-leer ese marcador desde `thread/read` y convertirlo en refs opacas de
-artefactos, tests, receipts y evidencias. Un `complete` sin marcador o sin refs
-requeridas queda como resultado observable, no como cierre aceptado.
+leer ese marcador desde `thread/read` o el archivo durable
+`orquesta_goal_result_v0.json` bajo el write-set y convertirlo en refs opacas de
+artefactos, tests, receipts y evidencias. Un `complete` sin resultado
+estructurado o sin refs requeridas queda como resultado observable, no como
+cierre aceptado.

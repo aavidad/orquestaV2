@@ -15,19 +15,21 @@ Criterio:
 Estado: cerrado localmente para wiring opt-in; smoke real pendiente.
 
 `cmd/orquesta-server` puede inyectar launcher/observer con
-`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`; `orquesta-app-director-service`
-lanza `GoalWorkSpecV0` desde `/nueva-app`/`arrancar_director` cuando existe
-`AppGoalLauncher`, persiste estado y expone observacion por
-`/api/v0/apps/director/goal/observe`.
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o `app_server_stdio`;
+`orquesta-app-director-service` lanza `GoalWorkSpecV0` desde
+`/nueva-app`/`arrancar_director` cuando existe `AppGoalLauncher`, persiste
+estado y expone observacion por `/api/v0/apps/director/goal/observe`.
 
-Pendiente real: smoke opt-in con daemon Codex y repo temporal hasta observacion
-terminal, closure aceptada/bloqueada y cola sincronizada.
+Pendiente real: smoke opt-in con backend Codex app-server y repo temporal hasta
+observacion terminal, closure aceptada/bloqueada y cola sincronizada.
 
 Intento 2026-06-25: bloqueado antes de arrancar Orquesta porque
 `codex app-server daemon start` no encuentra la instalacion standalone en
 `/home/alberto/.codex/packages/standalone/current/codex`. No hay evidencia de
 fallo del contrato `orquesta-goal`; falta resolver esa precondicion externa y
 repetir `scripts/smoke_goal_first_app_server_real.sh`.
+Actualizacion 2026-06-26: el backend `app_server_stdio` permite usar
+`codex app-server --stdio` sin daemon/socket cuando el proxy no responde.
 
 ## GOAL-003 migracion del loop historico
 

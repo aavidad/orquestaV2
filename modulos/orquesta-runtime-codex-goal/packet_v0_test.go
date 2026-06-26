@@ -21,11 +21,16 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		"implementation",
 		"docs/estado_actual_2026-05-17.md",
 		"modulos/orquesta-goal",
+		"test_ref=test-ref-goal",
 		"go test -count=1 ./modulos/orquesta-goal",
 		"criterio-ref-goal-first",
 		"artifact-ref-goal-summary",
 		"Evidencia requerida: evidence-ref-required",
 		CodexGoalResultMarkerV0,
+		CodexGoalResultFileNameV0,
+		"goal_ref",
+		"usa literalmente los test_ref",
+		"usa literalmente los artifact_ref",
 		"Resultado estructurado obligatorio",
 	} {
 		if !strings.Contains(packet.Prompt, expected) {

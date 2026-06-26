@@ -12,6 +12,7 @@ const (
 	CodexGoalStartPacketSchemaV0        = "codex_goal_start_packet.v0"
 	CodexGoalObservationRequestSchemaV0 = "codex_goal_observation_request.v0"
 	CodexGoalResultMarkerV0             = "ORQUESTA_GOAL_RESULT_V0"
+	CodexGoalResultFileNameV0           = "orquesta_goal_result_v0.json"
 
 	ErrCodexGoalStarterMissingV0      = "codex_goal_starter_missing"
 	ErrCodexGoalObserverMissingV0     = "codex_goal_observer_missing"
@@ -185,9 +186,24 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 	b.WriteString("\nTests requeridos:\n")
 	for _, test := range spec.RequiredTests {
 		b.WriteString("- ")
+		if test.TestRef != "" {
+			b.WriteString("test_ref=")
+			b.WriteString(test.TestRef)
+			if test.CommandRef != "" || test.Command != "" {
+				b.WriteString(" ")
+			}
+		}
+		if test.CommandRef != "" {
+			b.WriteString("command_ref=")
+			b.WriteString(test.CommandRef)
+			if test.Command != "" {
+				b.WriteString(" ")
+			}
+		}
 		if test.Command != "" {
+			b.WriteString("command=")
 			b.WriteString(test.Command)
-		} else {
+		} else if test.TestRef == "" {
 			b.WriteString(test.TestRef)
 		}
 		b.WriteString("\n")
@@ -242,10 +258,36 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 	b.WriteString("- Termina la respuesta final con una sola linea que empiece por ")
 	b.WriteString(CodexGoalResultMarkerV0)
 	b.WriteString(" seguida de JSON compacto.\n")
-	b.WriteString("- El JSON debe usar esta forma: {\"summary\":\"...\",\"artifact_refs\":[],\"required_test_results\":[{\"test_ref\":\"...\",\"status\":\"passed\",\"evidence_refs\":[]}],\"domain_receipt_refs\":[],\"evidence_refs\":[]}.\n")
+	b.WriteString("- El JSON debe usar esta forma: {\"goal_ref\":\"")
+	b.WriteString(spec.GoalRef)
+	b.WriteString("\",\"summary\":\"...\",\"artifact_refs\":[],\"required_test_results\":[{\"test_ref\":\"...\",\"status\":\"passed\",\"evidence_refs\":[]}],\"domain_receipt_refs\":[],\"evidence_refs\":[]}.\n")
+	if len(spec.RequiredTests) > 0 {
+		b.WriteString("- En required_test_results usa literalmente los test_ref declarados arriba; no los resumas ni inventes aliases.\n")
+	}
+	if len(spec.ArtifactContracts) > 0 {
+		b.WriteString("- En artifact_refs usa literalmente los artifact_ref declarados arriba para los artefactos producidos; no uses rutas de fichero como refs.\n")
+	}
+	if resultFilePath := codexGoalResultFilePathV0(spec); resultFilePath != "" {
+		b.WriteString("- Antes de marcar el goal como complete, escribe el mismo JSON en ")
+		b.WriteString(resultFilePath)
+		b.WriteString(" incluyendo \"goal_ref\":\"")
+		b.WriteString(spec.GoalRef)
+		b.WriteString("\" para que Orquesta pueda cerrar aunque no haya respuesta final textual.\n")
+	}
 	b.WriteString("- Incluye en evidence_refs las evidencias requeridas solo si han sido verificadas; no inventes refs para forzar el cierre.\n")
 	b.WriteString("- Incluye en artifact_refs solo artefactos producidos o verificados que cumplan el contrato.\n")
 	return b.String()
+}
+
+func codexGoalResultFilePathV0(spec orquestagoal.GoalWorkSpecV0) string {
+	for _, scope := range spec.WriteSet {
+		path := strings.Trim(strings.TrimSpace(scope.Path), "/")
+		if path == "" {
+			continue
+		}
+		return path + "/docs/" + CodexGoalResultFileNameV0
+	}
+	return ""
 }
 
 func (launcher CodexGoalLauncherV0) LaunchGoalWorkV0(ctx context.Context, spec orquestagoal.GoalWorkSpecV0) (orquestagoal.GoalLaunchReceiptV0, error) {

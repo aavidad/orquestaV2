@@ -29,12 +29,14 @@ transcript.
 Puerto de composicion que crea el goal real. El adaptador no implementa llamadas
 directas a herramientas internas; solo define la frontera.
 
-La composicion `cmd/orquesta-server` aporta una implementacion opt-in con
-`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`: usa `codex app-server proxy`
-contra un daemon local ya disponible, no `codex exec`, y mantiene el transporte
-fuera de este modulo. Si el transporte no esta disponible, la composicion puede
-devolver `IssueCode` compacto; el launcher neutral lo conserva en el
-`GoalLaunchReceiptV0` invalidado para que el operador vea la causa real.
+La composicion `cmd/orquesta-server` aporta implementaciones opt-in con
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o `app_server_stdio`: usan
+`codex app-server`, no `codex exec`, y mantienen el transporte fuera de este
+modulo. `app_server_proxy` habla con un daemon/socket local ya disponible;
+`app_server_stdio` lanza `codex app-server --stdio` y mantiene stdin abierto
+hasta recibir la respuesta RPC. Si el transporte no esta disponible, la
+composicion puede devolver `IssueCode` compacto; el launcher neutral lo conserva
+en el `GoalLaunchReceiptV0` invalidado para que el operador vea la causa real.
 
 ## CodexGoalObservationRequestV0
 
@@ -49,18 +51,20 @@ artefactos, tests, receipts y evidencias. El adaptador convierte esa respuesta a
 `GoalWorkResultV0`, valida refs/status y rechaza observaciones cuyo `goal_ref`
 no coincida con el pedido.
 
-En el backend `app_server_proxy`, la observacion usa la `external_goal_ref`
-persistida como `threadId`, consulta `thread/goal/get` y, si el goal queda
-terminal, consulta `thread/read` con `includeTurns=true`. La respuesta final del
-agente debe incluir el marcador:
+En los backends app-server, la observacion usa la `external_goal_ref` persistida
+como `threadId`, consulta `thread/goal/get` y, si el goal queda terminal,
+consulta `thread/read` con `includeTurns=true`. La respuesta final del agente
+debe incluir el marcador o, como fallback durable bajo el write-set,
+`docs/orquesta_goal_result_v0.json` con `goal_ref` coincidente:
 
 ```text
-ORQUESTA_GOAL_RESULT_V0 {"summary":"...","artifact_refs":[],"required_test_results":[],"domain_receipt_refs":[],"evidence_refs":[]}
+ORQUESTA_GOAL_RESULT_V0 {"goal_ref":"...","summary":"...","artifact_refs":[],"required_test_results":[],"domain_receipt_refs":[],"evidence_refs":[]}
 ```
 
 Solo esas refs estructuradas se fusionan como artefactos/evidencias de cierre.
 Si faltan, Orquesta conserva el estado observado pero no inventa refs para
-aceptar cierre.
+aceptar cierre. El archivo durable tiene prioridad sobre un marcador textual
+incompleto o invalido.
 Si el backend falla al observar y devuelve `IssueCode`, el observer neutral lo
 conserva en el `GoalWorkResultV0` invalidado.
 

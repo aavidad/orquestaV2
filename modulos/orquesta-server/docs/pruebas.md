@@ -90,10 +90,11 @@
   sin publicar refs ni contadores de goal activo.
 - `cmd/orquesta-server` prueba que el wrapper de composicion solo expone
   `IdleSelfImprovementGoalLauncherPortV0`/`ObserverPortV0` cuando hay backend
-  goal real configurado, y que el backend `app_server_proxy` mapea
+  goal real configurado, y que los backends app-server mapean
   `thread/start`, `thread/goal/set`, `turn/start`, `thread/goal/get` y
   `thread/read` sin usar `codex exec`; al observar un goal terminal extrae
-  `ORQUESTA_GOAL_RESULT_V0` para artefactos/evidencias de cierre.
+  `ORQUESTA_GOAL_RESULT_V0` o `orquesta_goal_result_v0.json` para
+  artefactos/evidencias de cierre.
 - `cmd/orquesta-server` prueba que el preflight app-server usa
   `thread/loaded/list`, conserva puertos goal-first degradados si el socket o
   standalone de Codex faltan, y publica issue codes compactos sin stderr crudo.

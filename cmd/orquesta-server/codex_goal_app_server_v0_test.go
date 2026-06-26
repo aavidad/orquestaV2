@@ -177,6 +177,246 @@ func TestServerCodexAppServerGoalBackendV0ObservaResultadoMarcadoV0(t *testing.T
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0ObservaResultadoDurableSinMarcadorV0(t *testing.T) {
+	projectDir := t.TempDir()
+	resultDir := filepath.Join(projectDir, "generated-apps", "agenda", "docs")
+	if err := os.MkdirAll(resultDir, 0o755); err != nil {
+		t.Fatalf("mkdir result dir: %v", err)
+	}
+	resultPath := filepath.Join(resultDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0)
+	payload := `{
+		"goal_ref":"goal-ref-codex-app-server-file-001",
+		"summary":"resultado durable",
+		"artifact_refs":["artifact-ref-goal-source","artifact-ref-goal-handoff"],
+		"required_test_results":[{"test_ref":"test-ref-goal","status":"passed","evidence_refs":["evidence-ref-test-pass"]}],
+		"evidence_refs":["evidence-ref-required"]
+	}`
+	if err := os.WriteFile(resultPath, []byte(payload), 0o644); err != nil {
+		t.Fatalf("write result file: %v", err)
+	}
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID: "thread-ref-goal-file-001",
+			Status:   "complete",
+		},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID:     "thread-ref-goal-file-001",
+			Status: "closed",
+			Turns: []serverCodexAppServerReadTurnV0{{
+				ID: "turn-ref-goal-file-001",
+				Items: []serverCodexAppServerReadItemV0{{
+					ID:    "item-ref-goal-file-001",
+					Type:  "agentMessage",
+					Phase: "commentary",
+					Text:  "marcado completo por update_goal",
+				}},
+			}},
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol, CWD: projectDir}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		SchemaVersion:   orquestaruntimecodexgoal.CodexGoalObservationRequestSchemaV0,
+		GoalRef:         "goal-ref-codex-app-server-file-001",
+		ExternalGoalRef: "thread-ref-goal-file-001",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if receipt.Summary != "resultado durable" ||
+		!containsStringForTestV0(receipt.ArtifactRefs, "artifact-ref-goal-source") ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-required") ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-result-file") ||
+		len(receipt.RequiredTestResults) != 1 ||
+		receipt.RequiredTestResults[0].TestRef != "test-ref-goal" ||
+		receipt.RequiredTestResults[0].Status != "passed" {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0ObservaResultadoDurableSiThreadReadFallaV0(t *testing.T) {
+	projectDir := t.TempDir()
+	resultDir := filepath.Join(projectDir, "generated-apps", "agenda", "docs")
+	if err := os.MkdirAll(resultDir, 0o755); err != nil {
+		t.Fatalf("mkdir result dir: %v", err)
+	}
+	resultPath := filepath.Join(resultDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0)
+	payload := `{
+		"goal_ref":"goal-ref-codex-app-server-file-002",
+		"summary":"resultado durable tras fallo de thread/read",
+		"artifact_refs":["artifact-ref-goal-source"],
+		"required_test_results":[{"test_ref":"test-ref-goal","status":"passed","evidence_refs":["evidence-ref-test-pass"]}],
+		"evidence_refs":["evidence-ref-required"]
+	}`
+	if err := os.WriteFile(resultPath, []byte(payload), 0o644); err != nil {
+		t.Fatalf("write result file: %v", err)
+	}
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID: "thread-ref-goal-file-002",
+			Status:   "complete",
+		},
+		readThreadErr: errors.New("thread read unavailable"),
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol, CWD: projectDir}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		SchemaVersion:   orquestaruntimecodexgoal.CodexGoalObservationRequestSchemaV0,
+		GoalRef:         "goal-ref-codex-app-server-file-002",
+		ExternalGoalRef: "thread-ref-goal-file-002",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if receipt.IssueCode != "" ||
+		receipt.Summary != "resultado durable tras fallo de thread/read" ||
+		!containsStringForTestV0(receipt.ArtifactRefs, "artifact-ref-goal-source") ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-required") ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-result-file") ||
+		len(receipt.RequiredTestResults) != 1 ||
+		receipt.RequiredTestResults[0].TestRef != "test-ref-goal" {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+	if !reflect.DeepEqual(protocol.calls, []string{"thread/goal/get", "thread/read"}) {
+		t.Fatalf("calls=%v", protocol.calls)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0PrefiereResultadoDurableSobreMarcadorV0(t *testing.T) {
+	projectDir := t.TempDir()
+	resultDir := filepath.Join(projectDir, "generated-apps", "agenda", "docs")
+	if err := os.MkdirAll(resultDir, 0o755); err != nil {
+		t.Fatalf("mkdir result dir: %v", err)
+	}
+	resultPath := filepath.Join(resultDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0)
+	payload := `{
+		"goal_ref":"goal-ref-codex-app-server-file-003",
+		"summary":"resultado durable preferente",
+		"artifact_refs":["artifact-ref-goal-source"],
+		"required_test_results":[{"test_ref":"test-ref-goal","status":"passed","evidence_refs":["evidence-ref-test-pass"]}],
+		"evidence_refs":["evidence-ref-required"]
+	}`
+	if err := os.WriteFile(resultPath, []byte(payload), 0o644); err != nil {
+		t.Fatalf("write result file: %v", err)
+	}
+	marker := orquestaruntimecodexgoal.CodexGoalResultMarkerV0 + ` {"goal_ref":"goal-ref-codex-app-server-file-003","summary":"marcador incompleto","evidence_refs":["evidence-ref-marker"]}`
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID: "thread-ref-goal-file-003",
+			Status:   "complete",
+		},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID: "thread-ref-goal-file-003",
+			Turns: []serverCodexAppServerReadTurnV0{{
+				ID: "turn-ref-goal-file-003",
+				Items: []serverCodexAppServerReadItemV0{{
+					ID:    "item-ref-goal-file-003",
+					Type:  "agentMessage",
+					Phase: "final_answer",
+					Text:  marker,
+				}},
+			}},
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol, CWD: projectDir}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		SchemaVersion:   orquestaruntimecodexgoal.CodexGoalObservationRequestSchemaV0,
+		GoalRef:         "goal-ref-codex-app-server-file-003",
+		ExternalGoalRef: "thread-ref-goal-file-003",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if receipt.IssueCode != "" ||
+		receipt.Summary != "resultado durable preferente" ||
+		!containsStringForTestV0(receipt.ArtifactRefs, "artifact-ref-goal-source") ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-result-file") ||
+		containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-result-marker") {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0UsaDurableSiMarcadorEsInvalidoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	resultDir := filepath.Join(projectDir, "generated-apps", "agenda", "docs")
+	if err := os.MkdirAll(resultDir, 0o755); err != nil {
+		t.Fatalf("mkdir result dir: %v", err)
+	}
+	resultPath := filepath.Join(resultDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0)
+	payload := `{
+		"goal_ref":"goal-ref-codex-app-server-file-004",
+		"summary":"resultado durable con marcador invalido",
+		"artifact_refs":["artifact-ref-goal-source"],
+		"required_test_results":[{"test_ref":"test-ref-goal","status":"passed","evidence_refs":["evidence-ref-test-pass"]}],
+		"evidence_refs":["evidence-ref-required"]
+	}`
+	if err := os.WriteFile(resultPath, []byte(payload), 0o644); err != nil {
+		t.Fatalf("write result file: %v", err)
+	}
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID: "thread-ref-goal-file-004",
+			Status:   "complete",
+		},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID: "thread-ref-goal-file-004",
+			Turns: []serverCodexAppServerReadTurnV0{{
+				ID: "turn-ref-goal-file-004",
+				Items: []serverCodexAppServerReadItemV0{{
+					ID:    "item-ref-goal-file-004",
+					Type:  "agentMessage",
+					Phase: "final_answer",
+					Text:  orquestaruntimecodexgoal.CodexGoalResultMarkerV0 + ` sin-json`,
+				}},
+			}},
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol, CWD: projectDir}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		SchemaVersion:   orquestaruntimecodexgoal.CodexGoalObservationRequestSchemaV0,
+		GoalRef:         "goal-ref-codex-app-server-file-004",
+		ExternalGoalRef: "thread-ref-goal-file-004",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if receipt.IssueCode != "" ||
+		receipt.Summary != "resultado durable con marcador invalido" ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-result-file") {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0DiagnosticaThreadReadSinResultadoDurableV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID: "thread-ref-goal-file-005",
+			Status:   "complete",
+		},
+		readThreadErr: errors.New("thread read unavailable"),
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol, CWD: t.TempDir()}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		SchemaVersion:   orquestaruntimecodexgoal.CodexGoalObservationRequestSchemaV0,
+		GoalRef:         "goal-ref-codex-app-server-file-005",
+		ExternalGoalRef: "thread-ref-goal-file-005",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if receipt.IssueCode != "codex_app_server_thread_read_failed" {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+}
+
 func TestCodexAppServerGoalResultMarkerV0AceptaFallbackSinPhaseV0(t *testing.T) {
 	thread := serverCodexAppServerThreadReadV0{
 		ID: "thread-ref-goal-004",
@@ -194,6 +434,39 @@ func TestCodexAppServerGoalResultMarkerV0AceptaFallbackSinPhaseV0(t *testing.T) 
 
 	if err != nil || !found || marked.Summary != "ok" ||
 		!containsStringForTestV0(marked.EvidenceRefs, "evidence-ref-ok") {
+		t.Fatalf("marked=%+v found=%v err=%v", marked, found, err)
+	}
+}
+
+func TestCodexAppServerGoalResultFromWorkspaceV0IgnoraArchivoInvalidoAntesDelValidoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	invalidDir := filepath.Join(projectDir, "generated-apps", "a-stale", "docs")
+	validDir := filepath.Join(projectDir, "generated-apps", "z-valid", "docs")
+	if err := os.MkdirAll(invalidDir, 0o755); err != nil {
+		t.Fatalf("mkdir invalid dir: %v", err)
+	}
+	if err := os.MkdirAll(validDir, 0o755); err != nil {
+		t.Fatalf("mkdir valid dir: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(invalidDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0),
+		[]byte(`{invalid-json`),
+		0o644,
+	); err != nil {
+		t.Fatalf("write invalid result: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(validDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0),
+		[]byte(`{"goal_ref":"goal-ref-codex-app-server-file-006","summary":"resultado valido","evidence_refs":["evidence-ref-required"]}`),
+		0o644,
+	); err != nil {
+		t.Fatalf("write valid result: %v", err)
+	}
+
+	marked, found, err := codexAppServerGoalResultFromWorkspaceV0(projectDir, "goal-ref-codex-app-server-file-006")
+
+	if err != nil || !found || marked.Summary != "resultado valido" ||
+		!containsStringForTestV0(marked.EvidenceRefs, "evidence-ref-required") {
 		t.Fatalf("marked=%+v found=%v err=%v", marked, found, err)
 	}
 }
@@ -287,7 +560,7 @@ func TestServerCodexGoalBackendFromEnvV0PreflightDegradadoV0(t *testing.T) {
 
 func TestServerCodexGoalBackendFromEnvV0PreflightOKConservaBackendRealV0(t *testing.T) {
 	script := filepath.Join(t.TempDir(), "codex-fake-ok")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf '{\"id\":2,\"result\":{\"data\":[]}}\\n'\n"), 0o700); err != nil {
+	if err := os.WriteFile(script, []byte(fakeCodexAppServerPreflightScriptV0("")), 0o700); err != nil {
 		t.Fatalf("write fake codex: %v", err)
 	}
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
@@ -314,9 +587,40 @@ func TestServerCodexGoalBackendFromEnvV0PreflightOKConservaBackendRealV0(t *test
 	}
 }
 
+func TestServerCodexGoalBackendFromEnvV0StdioPreflightOKV0(t *testing.T) {
+	script := filepath.Join(t.TempDir(), "codex-fake-stdio-ok")
+	if err := os.WriteFile(script, []byte(fakeCodexAppServerPreflightScriptV0("stdio")), 0o700); err != nil {
+		t.Fatalf("write fake codex: %v", err)
+	}
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envCodexCommandV0, script)
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerStdioV0)
+	t.Setenv(envCodexGoalPreflightTimeoutMSV0, "1000")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	backend, err := serverCodexGoalBackendFromEnvV0(config)
+	if err != nil {
+		t.Fatalf("serverCodexGoalBackendFromEnvV0: %v", err)
+	}
+	starter, ok := backend.Starter.(serverCodexAppServerGoalBackendV0)
+	if !ok {
+		t.Fatalf("starter real=%T", backend.Starter)
+	}
+	protocol, ok := starter.Protocol.(*serverCodexAppServerPersistentCommandProtocolV0)
+	if !ok {
+		t.Fatalf("protocol=%T", starter.Protocol)
+	}
+	if !reflect.DeepEqual(protocol.Args, []string{"app-server", "--stdio"}) {
+		t.Fatalf("args=%v", protocol.Args)
+	}
+}
+
 func TestServerCodexGoalBackendsFromEnvV0SeparaWorkdirAppEIdleV0(t *testing.T) {
 	script := filepath.Join(t.TempDir(), "codex-fake-ok")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf '{\"id\":2,\"result\":{\"data\":[]}}\\n'\n"), 0o700); err != nil {
+	if err := os.WriteFile(script, []byte(fakeCodexAppServerPreflightScriptV0("")), 0o700); err != nil {
 		t.Fatalf("write fake codex: %v", err)
 	}
 	root := t.TempDir()
@@ -358,11 +662,18 @@ func TestCodexAppServerRPCPayloadYDecodeV0(t *testing.T) {
 		t.Fatalf("payload: %v", err)
 	}
 	lines := strings.Split(strings.TrimSpace(payload), "\n")
-	if len(lines) != 2 {
+	if len(lines) != 3 {
 		t.Fatalf("payload lines=%q", payload)
 	}
+	var initialized map[string]interface{}
+	if err := json.Unmarshal([]byte(lines[1]), &initialized); err != nil {
+		t.Fatalf("json initialized: %v", err)
+	}
+	if initialized["method"] != "initialized" {
+		t.Fatalf("initialized=%+v", initialized)
+	}
 	var request map[string]interface{}
-	if err := json.Unmarshal([]byte(lines[1]), &request); err != nil {
+	if err := json.Unmarshal([]byte(lines[2]), &request); err != nil {
 		t.Fatalf("json request: %v", err)
 	}
 	if request["method"] != "thread/goal/get" || int(request["id"].(float64)) != 2 {
@@ -419,6 +730,14 @@ func TestServerEffectiveConfigV0ExponeGoalFirstYBackendV0(t *testing.T) {
 	}
 }
 
+func fakeCodexAppServerPreflightScriptV0(mode string) string {
+	argsCheck := ""
+	if mode == "stdio" {
+		argsCheck = "if [ \"$1\" != \"app-server\" ] || [ \"$2\" != \"--stdio\" ]; then\n  echo \"args inesperados: $*\" >&2\n  exit 1\nfi\n"
+	}
+	return "#!/bin/sh\n" + argsCheck + "while IFS= read -r line; do\n  case \"$line\" in\n    *'\"id\":1'*) printf '{\"id\":1,\"result\":{}}\\n' ;;\n    *'\"id\":2'*) printf '{\"id\":2,\"result\":{\"data\":[]}}\\n'; exit 0 ;;\n  esac\ndone\nexit 1\n"
+}
+
 type fakeCodexAppServerProtocolV0 struct {
 	calls       []string
 	startParams serverCodexAppServerThreadStartParamsV0
@@ -431,6 +750,7 @@ type fakeCodexAppServerProtocolV0 struct {
 	turn             serverCodexAppServerTurnV0
 	observedGoal     *serverCodexAppServerThreadGoalV0
 	readThread       serverCodexAppServerThreadReadV0
+	readThreadErr    error
 	readThreadID     string
 	readIncludeTurns bool
 }
@@ -479,5 +799,8 @@ func (fake *fakeCodexAppServerProtocolV0) ReadThreadV0(
 	fake.calls = append(fake.calls, "thread/read")
 	fake.readThreadID = threadID
 	fake.readIncludeTurns = includeTurns
+	if fake.readThreadErr != nil {
+		return serverCodexAppServerThreadReadV0{}, fake.readThreadErr
+	}
 	return fake.readThread, nil
 }

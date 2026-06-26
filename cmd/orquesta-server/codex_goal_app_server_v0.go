@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -17,7 +18,10 @@ import (
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
-const codexGoalBackendAppServerProxyV0 = "app_server_proxy"
+const (
+	codexGoalBackendAppServerProxyV0 = "app_server_proxy"
+	codexGoalBackendAppServerStdioV0 = "app_server_stdio"
+)
 
 type serverCodexGoalBackendV0 struct {
 	Starter  orquestaruntimecodexgoal.CodexGoalStarterPortV0
@@ -227,18 +231,51 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 		receipt.ExternalGoalRef = strings.TrimSpace(goal.ThreadID)
 	}
 	if codexGoalWorkStatusIsTerminalV0(status) {
-		thread, err := backend.Protocol.ReadThreadV0(ctx, receipt.ExternalGoalRef, true)
-		if err != nil {
+		var marker codexAppServerGoalResultMarkerV0
+		markerFound := false
+		markerIssue := ""
+		thread, readErr := backend.Protocol.ReadThreadV0(ctx, receipt.ExternalGoalRef, true)
+		if readErr == nil {
+			marked, found, err := codexAppServerGoalResultFromThreadV0(thread)
+			if err != nil {
+				markerIssue = "codex_app_server_goal_result_marker_invalid"
+			} else if found {
+				if codexAppServerGoalResultMarkerGoalRefMismatchV0(marked, request.GoalRef) {
+					markerIssue = "codex_app_server_goal_result_marker_goal_ref_mismatch"
+				} else {
+					marker = marked
+					markerFound = true
+				}
+			}
+		}
+		fileMarked, fileFound, err := codexAppServerGoalResultFromWorkspaceV0(backend.CWD, request.GoalRef)
+		if err != nil && !markerFound {
+			receipt.IssueCode = "codex_app_server_goal_result_file_invalid"
+			return receipt, nil
+		}
+		resultFound := false
+		if fileFound {
+			mergeCodexAppServerGoalResultV0(
+				&receipt,
+				fileMarked,
+				"evidence-ref-codex-app-server-goal-result-file",
+			)
+			resultFound = true
+		} else if markerFound {
+			mergeCodexAppServerGoalResultV0(
+				&receipt,
+				marker,
+				"evidence-ref-codex-app-server-goal-result-marker",
+			)
+			resultFound = true
+		}
+		if markerIssue != "" && !resultFound {
+			receipt.IssueCode = markerIssue
+			return receipt, nil
+		}
+		if readErr != nil && !resultFound {
 			receipt.IssueCode = "codex_app_server_thread_read_failed"
 			return receipt, nil
-		}
-		marked, found, err := codexAppServerGoalResultFromThreadV0(thread)
-		if err != nil {
-			receipt.IssueCode = "codex_app_server_goal_result_marker_invalid"
-			return receipt, nil
-		}
-		if found {
-			mergeCodexAppServerGoalResultV0(&receipt, marked)
 		}
 	}
 	return receipt, nil
@@ -321,6 +358,7 @@ func codexGoalWorkStatusIsTerminalV0(status string) bool {
 }
 
 type codexAppServerGoalResultMarkerV0 struct {
+	GoalRef             string                                  `json:"goal_ref,omitempty"`
 	Summary             string                                  `json:"summary,omitempty"`
 	ArtifactRefs        []string                                `json:"artifact_refs,omitempty"`
 	RequiredTestResults []orquestagoal.GoalRequiredTestResultV0 `json:"required_test_results,omitempty"`
@@ -372,18 +410,7 @@ func parseCodexAppServerGoalResultMarkerV0(text string) (codexAppServerGoalResul
 	if err := json.Unmarshal([]byte(payload), &marked); err != nil {
 		return codexAppServerGoalResultMarkerV0{}, true, err
 	}
-	marked.Summary = strings.TrimSpace(marked.Summary)
-	marked.ArtifactRefs = compactServerStackStringsV0(marked.ArtifactRefs)
-	marked.DomainReceiptRefs = compactServerStackStringsV0(marked.DomainReceiptRefs)
-	marked.EvidenceRefs = compactServerStackStringsV0(marked.EvidenceRefs)
-	for index := range marked.RequiredTestResults {
-		marked.RequiredTestResults[index].TestRef = strings.TrimSpace(marked.RequiredTestResults[index].TestRef)
-		marked.RequiredTestResults[index].Status = strings.TrimSpace(marked.RequiredTestResults[index].Status)
-		marked.RequiredTestResults[index].EvidenceRefs = compactServerStackStringsV0(
-			marked.RequiredTestResults[index].EvidenceRefs,
-		)
-	}
-	return marked, true, nil
+	return normalizeCodexAppServerGoalResultMarkerV0(marked), true, nil
 }
 
 func codexAppServerGoalResultMarkerJSONV0(text string) (string, bool) {
@@ -429,9 +456,18 @@ func codexAppServerGoalResultMarkerJSONV0(text string) (string, bool) {
 	return "", false
 }
 
+func codexAppServerGoalResultMarkerGoalRefMismatchV0(
+	marked codexAppServerGoalResultMarkerV0,
+	goalRef string,
+) bool {
+	markedGoalRef := strings.TrimSpace(marked.GoalRef)
+	return markedGoalRef != "" && markedGoalRef != strings.TrimSpace(goalRef)
+}
+
 func mergeCodexAppServerGoalResultV0(
 	receipt *orquestaruntimecodexgoal.CodexGoalObservationReceiptV0,
 	marked codexAppServerGoalResultMarkerV0,
+	sourceEvidenceRef string,
 ) {
 	if strings.TrimSpace(marked.Summary) != "" {
 		receipt.Summary = strings.TrimSpace(marked.Summary)
@@ -440,7 +476,7 @@ func mergeCodexAppServerGoalResultV0(
 	receipt.RequiredTestResults = append(receipt.RequiredTestResults, marked.RequiredTestResults...)
 	receipt.DomainReceiptRefs = compactServerStackStringsV0(append(receipt.DomainReceiptRefs, marked.DomainReceiptRefs...))
 	receipt.EvidenceRefs = compactServerStackStringsV0(append(
-		append(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-result-marker"),
+		append(receipt.EvidenceRefs, sourceEvidenceRef),
 		marked.EvidenceRefs...,
 	))
 }
@@ -525,22 +561,90 @@ func (protocol serverCodexAppServerCommandProtocolV0) callV0(
 	}
 	callCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	payload, err := codexAppServerRPCPayloadV0(method, params)
-	if err != nil {
-		return err
-	}
 	args := append([]string(nil), protocol.Args...)
 	if len(args) == 0 {
 		args = []string{"app-server", "proxy"}
 	}
 	cmd := exec.CommandContext(callCtx, commandPath, args...)
-	cmd.Stdin = strings.NewReader(payload)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if strings.TrimSpace(protocol.PathEnv) != "" {
 		cmd.Env = append(os.Environ(), "PATH="+protocol.PathEnv)
 	}
-	stdout, err := cmd.Output()
+	if err := cmd.Start(); err != nil {
+		return codexAppServerCallErrorV0{
+			Code: codexAppServerIssueCodeFromCommandFailureV0(stderr.String(), err),
+			Err:  err,
+		}
+	}
+	writeLine := func(line string) error {
+		if _, err := io.WriteString(stdin, line); err != nil {
+			_ = stdin.Close()
+			waitErr := cmd.Wait()
+			if waitErr != nil {
+				return codexAppServerCallErrorV0{
+					Code: codexAppServerIssueCodeFromCommandFailureV0(stderr.String(), waitErr),
+					Err:  waitErr,
+				}
+			}
+			return err
+		}
+		return nil
+	}
+	initLine, err := codexAppServerRPCMessageLineV0(codexAppServerInitializeRequestV0())
+	if err != nil {
+		return err
+	}
+	if err := writeLine(initLine); err != nil {
+		return err
+	}
+	scanner := bufio.NewScanner(stdout)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	var initResponse map[string]interface{}
+	if decodeErr := decodeCodexAppServerRPCResponseScannerV0(scanner, 1, &initResponse); decodeErr != nil {
+		_ = stdin.Close()
+		err = cmd.Wait()
+		if callCtx.Err() != nil {
+			return codexAppServerCallErrorV0{Code: "codex_app_server_timeout", Err: callCtx.Err()}
+		}
+		if err != nil {
+			return codexAppServerCallErrorV0{
+				Code: codexAppServerIssueCodeFromCommandFailureV0(stderr.String(), err),
+				Err:  err,
+			}
+		}
+		return decodeErr
+	}
+	initializedLine, err := codexAppServerRPCMessageLineV0(codexAppServerInitializedNotificationV0())
+	if err != nil {
+		return err
+	}
+	if err := writeLine(initializedLine); err != nil {
+		return err
+	}
+	callLine, err := codexAppServerRPCMessageLineV0(map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  method,
+		"params":  params,
+	})
+	if err != nil {
+		return err
+	}
+	if err := writeLine(callLine); err != nil {
+		return err
+	}
+	decodeErr := decodeCodexAppServerRPCResponseScannerV0(scanner, 2, out)
+	_ = stdin.Close()
+	err = cmd.Wait()
 	if callCtx.Err() != nil {
 		return codexAppServerCallErrorV0{Code: "codex_app_server_timeout", Err: callCtx.Err()}
 	}
@@ -550,7 +654,7 @@ func (protocol serverCodexAppServerCommandProtocolV0) callV0(
 			Err:  err,
 		}
 	}
-	return decodeCodexAppServerRPCResponseV0(stdout, 2, out)
+	return decodeErr
 }
 
 type codexAppServerCallErrorV0 struct {
@@ -623,7 +727,27 @@ func codexAppServerIssueCodeFromMessageV0(message string) string {
 
 func codexAppServerRPCPayloadV0(method string, params interface{}) (string, error) {
 	var b strings.Builder
-	initReq := map[string]interface{}{
+	for _, request := range []map[string]interface{}{
+		codexAppServerInitializeRequestV0(),
+		codexAppServerInitializedNotificationV0(),
+		{
+			"jsonrpc": "2.0",
+			"id":      2,
+			"method":  method,
+			"params":  params,
+		},
+	} {
+		line, err := codexAppServerRPCMessageLineV0(request)
+		if err != nil {
+			return "", err
+		}
+		b.WriteString(line)
+	}
+	return b.String(), nil
+}
+
+func codexAppServerInitializeRequestV0() map[string]interface{} {
+	return map[string]interface{}{
 		"jsonrpc": "2.0",
 		"id":      1,
 		"method":  "initialize",
@@ -637,26 +761,35 @@ func codexAppServerRPCPayloadV0(method string, params interface{}) (string, erro
 			},
 		},
 	}
-	callReq := map[string]interface{}{
+}
+
+func codexAppServerInitializedNotificationV0() map[string]interface{} {
+	return map[string]interface{}{
 		"jsonrpc": "2.0",
-		"id":      2,
-		"method":  method,
-		"params":  params,
+		"method":  "initialized",
+		"params":  map[string]interface{}{},
 	}
-	for _, request := range []map[string]interface{}{initReq, callReq} {
-		data, err := json.Marshal(request)
-		if err != nil {
-			return "", err
-		}
-		b.Write(data)
-		b.WriteByte('\n')
+}
+
+func codexAppServerRPCMessageLineV0(request map[string]interface{}) (string, error) {
+	data, err := json.Marshal(request)
+	if err != nil {
+		return "", err
 	}
-	return b.String(), nil
+	return string(data) + "\n", nil
 }
 
 func decodeCodexAppServerRPCResponseV0(stdout []byte, responseID int, out interface{}) error {
-	scanner := bufio.NewScanner(bytes.NewReader(stdout))
+	return decodeCodexAppServerRPCResponseReaderV0(bytes.NewReader(stdout), responseID, out)
+}
+
+func decodeCodexAppServerRPCResponseReaderV0(stdout io.Reader, responseID int, out interface{}) error {
+	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	return decodeCodexAppServerRPCResponseScannerV0(scanner, responseID, out)
+}
+
+func decodeCodexAppServerRPCResponseScannerV0(scanner *bufio.Scanner, responseID int, out interface{}) error {
 	var lastErr error
 	for scanner.Scan() {
 		line := bytes.TrimSpace(scanner.Bytes())
@@ -697,138 +830,4 @@ type serverCodexAppServerRPCResponseV0 struct {
 	Error  *struct {
 		Message string `json:"message"`
 	} `json:"error,omitempty"`
-}
-
-type serverCodexAppServerThreadStartParamsV0 struct {
-	CWD            string
-	Ephemeral      bool
-	Model          string
-	Sandbox        string
-	ApprovalPolicy string
-	ServiceTier    string
-}
-
-func (params serverCodexAppServerThreadStartParamsV0) toJSONV0() map[string]interface{} {
-	out := map[string]interface{}{"ephemeral": params.Ephemeral}
-	setNonEmptyJSONFieldV0(out, "cwd", params.CWD)
-	setNonEmptyJSONFieldV0(out, "model", params.Model)
-	setNonEmptyJSONFieldV0(out, "sandbox", params.Sandbox)
-	setNonEmptyJSONFieldV0(out, "approvalPolicy", params.ApprovalPolicy)
-	setNonEmptyJSONFieldV0(out, "serviceTier", params.ServiceTier)
-	return out
-}
-
-type serverCodexAppServerThreadGoalSetParamsV0 struct {
-	ThreadID    string
-	Objective   string
-	Status      string
-	TokenBudget int
-}
-
-func (params serverCodexAppServerThreadGoalSetParamsV0) toJSONV0() map[string]interface{} {
-	out := map[string]interface{}{"threadId": strings.TrimSpace(params.ThreadID)}
-	setNonEmptyJSONFieldV0(out, "objective", params.Objective)
-	setNonEmptyJSONFieldV0(out, "status", params.Status)
-	if params.TokenBudget > 0 {
-		out["tokenBudget"] = params.TokenBudget
-	}
-	return out
-}
-
-type serverCodexAppServerTurnStartParamsV0 struct {
-	ThreadID        string
-	CWD             string
-	InputText       string
-	ClientMessageID string
-	Model           string
-	Effort          string
-	ApprovalPolicy  string
-	ServiceTier     string
-}
-
-func (params serverCodexAppServerTurnStartParamsV0) toJSONV0() map[string]interface{} {
-	out := map[string]interface{}{
-		"threadId": strings.TrimSpace(params.ThreadID),
-		"input": []map[string]interface{}{{
-			"type": "text",
-			"text": strings.TrimSpace(params.InputText),
-		}},
-	}
-	setNonEmptyJSONFieldV0(out, "cwd", params.CWD)
-	setNonEmptyJSONFieldV0(out, "clientUserMessageId", params.ClientMessageID)
-	setNonEmptyJSONFieldV0(out, "model", params.Model)
-	setNonEmptyJSONFieldV0(out, "effort", params.Effort)
-	setNonEmptyJSONFieldV0(out, "approvalPolicy", params.ApprovalPolicy)
-	setNonEmptyJSONFieldV0(out, "serviceTier", params.ServiceTier)
-	return out
-}
-
-func setNonEmptyJSONFieldV0(out map[string]interface{}, key string, value string) {
-	if trimmed := strings.TrimSpace(value); trimmed != "" {
-		out[key] = trimmed
-	}
-}
-
-type serverCodexAppServerThreadStartResponseV0 struct {
-	Thread serverCodexAppServerThreadV0 `json:"thread"`
-}
-
-type serverCodexAppServerThreadV0 struct {
-	ID        string `json:"id"`
-	SessionID string `json:"sessionId,omitempty"`
-}
-
-type serverCodexAppServerThreadGoalSetResponseV0 struct {
-	Goal serverCodexAppServerThreadGoalV0 `json:"goal"`
-}
-
-type serverCodexAppServerThreadGoalGetResponseV0 struct {
-	Goal *serverCodexAppServerThreadGoalV0 `json:"goal"`
-}
-
-type serverCodexAppServerThreadLoadedListResponseV0 struct {
-	Data       []string `json:"data,omitempty"`
-	NextCursor *string  `json:"nextCursor,omitempty"`
-}
-
-type serverCodexAppServerThreadGoalV0 struct {
-	ThreadID        string `json:"threadId"`
-	Objective       string `json:"objective"`
-	Status          string `json:"status"`
-	TokenBudget     *int   `json:"tokenBudget,omitempty"`
-	TokensUsed      int    `json:"tokensUsed,omitempty"`
-	TimeUsedSeconds int    `json:"timeUsedSeconds,omitempty"`
-}
-
-type serverCodexAppServerThreadReadResponseV0 struct {
-	Thread serverCodexAppServerThreadReadV0 `json:"thread"`
-}
-
-type serverCodexAppServerThreadReadV0 struct {
-	ID     string                           `json:"id"`
-	Status string                           `json:"status,omitempty"`
-	Turns  []serverCodexAppServerReadTurnV0 `json:"turns,omitempty"`
-}
-
-type serverCodexAppServerReadTurnV0 struct {
-	ID        string                           `json:"id"`
-	Status    string                           `json:"status,omitempty"`
-	ItemsView string                           `json:"itemsView,omitempty"`
-	Items     []serverCodexAppServerReadItemV0 `json:"items,omitempty"`
-}
-
-type serverCodexAppServerReadItemV0 struct {
-	ID    string `json:"id"`
-	Type  string `json:"type"`
-	Phase string `json:"phase,omitempty"`
-	Text  string `json:"text,omitempty"`
-}
-
-type serverCodexAppServerTurnStartResponseV0 struct {
-	Turn serverCodexAppServerTurnV0 `json:"turn"`
-}
-
-type serverCodexAppServerTurnV0 struct {
-	ID     string `json:"id"`
-	Status string `json:"status,omitempty"`
 }

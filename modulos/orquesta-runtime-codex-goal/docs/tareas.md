@@ -17,10 +17,9 @@ El modulo convierte `GoalObservationRequestV0` en
 Estado: cerrado localmente para wiring opt-in; smoke real pendiente.
 
 `cmd/orquesta-server` puede inyectar starter y observer reales con
-`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`. Ese backend habla con
-`codex app-server proxy` contra un daemon local de Codex ya disponible, crea
-thread persistente, fija `thread/goal/set`, arranca `turn/start` y observa con
-`thread/goal/get`.
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o `app_server_stdio`. Esos
+backends hablan con `codex app-server`, crean thread persistente, fijan
+`thread/goal/set`, arrancan `turn/start` y observan con `thread/goal/get`.
 
 Sigue siendo opt-in de composicion: el modulo no conoce comando, shell, daemon,
 modelo ni rutas. Sin la variable de backend no se expone launcher/observer.
@@ -41,3 +40,5 @@ porque falta la instalacion standalone esperada por Codex en
 `/home/alberto/.codex/packages/standalone/current/codex`. Accion externa:
 instalar Codex standalone con el instalador oficial indicado por la CLI y
 repetir el smoke.
+Actualizacion 2026-06-26: el socket manual listado como `running` no respondio
+por `codex app-server proxy`; el backend local viable es `app_server_stdio`.
