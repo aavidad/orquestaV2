@@ -43,11 +43,14 @@ tooltips; es contrato documental de opciones y no introduce proveedor, DB ni
 runtime en la web.
 
 La pantalla `/autoprogramming` consume los endpoints publicos
-`/api/v0/autoprogramming/prepare-run`, `/api/v0/autoprogramming/status` y
-`/api/v0/runs/supervise` desde navegador same-origin. La web prepara payloads
-compactos con refs opacas y no interpreta worktrees, ramas, runtime ni stores.
-Si `prepare-run` devuelve `goal_specs[]`, la web los conserva como contrato de
-handoff goal-first, sin lanzar Goal ni asumir proveedor.
+`/api/v0/autoprogramming/prepare-run`, `/api/v0/autoprogramming/status`,
+`/api/v0/autoprogramming/goal/observe` y
+`/api/v0/autoprogramming/supervise` desde navegador same-origin. La web prepara
+payloads compactos con refs opacas y no interpreta worktrees, ramas, runtime ni
+stores. Por defecto anade los marcadores de migracion Goal a la tarea; si
+`prepare-run` devuelve un `goal` lanzado, lo observa por run_ref con polling
+acotado. Si solo devuelve `goal_specs[]`, lo muestra como handoff goal-first
+preparado sin empujar al operador al supervisor legacy.
 
 `/director-stats`, `/run-queue` y `/run-control` conservan respuesta JSON para
 clientes finos, pero cuando el navegador pide `text/html` devuelven una shell

@@ -66,7 +66,8 @@ func TestAppGatewayAutoprogrammingPageRouteV0(t *testing.T) {
 		"Autoprogramacion",
 		"/api/v0/autoprogramming/prepare-run",
 		"/api/v0/autoprogramming/status",
-		"/api/v0/runs/supervise",
+		"/api/v0/autoprogramming/goal/observe",
+		"/api/v0/autoprogramming/supervise",
 	} {
 		if !strings.Contains(body, required) {
 			t.Fatalf("autoprogramming sin %q: %s", required, body)

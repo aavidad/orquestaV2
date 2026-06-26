@@ -197,18 +197,22 @@ Campos:
   continuacion.
 - view_model: estado, accepted, run_ref, project_ref, worktree_ref,
   branch_ref, phase_id, workflow_task_refs, wait_agent_refs, goal_specs
-  opcional cuando el prepare-run ya trae contratos Goal, continue y
-  errores_publicos.
+  opcional cuando el prepare-run ya trae contratos Goal, goal opcional cuando
+  la composicion lo lanza, continue y errores_publicos.
 Invariantes:
 - La web llama al bridge REST `/api/v0/autoprogramming/prepare-run`; no lee
   stores, runtime, procesos, Git, DB ni filesystem.
 - `worktree_isolated=true` se fija en el envelope enviado al contrato externo;
   `worktree_ref` y `branch_ref` se transportan como refs opacas y no se
   interpretan como rutas, nombres Git ni comandos.
-- La preparacion solo deja una run continuable; la supervision posterior usa
-  `run_ref` y `wait_agent_refs` devueltos.
-- Si el contrato externo devuelve `goal_specs[]`, la web los proyecta sin
-  interpretarlos ni lanzar Goal; son handoff para composiciones goal-first.
+- Por defecto la pantalla marca la tarea con `goal_migration:goal-first` y las
+  capacidades `goal_capability:*`; si el operador desactiva Goal, conserva la
+  ruta legacy acotada.
+- La preparacion legacy deja una run continuable; la supervision posterior usa
+  `run_ref` y el endpoint acotado `/api/v0/autoprogramming/supervise`.
+- Si el contrato externo devuelve `goal`, la web observa cierre por
+  `/api/v0/autoprogramming/goal/observe` con polling acotado. Si solo devuelve
+  `goal_specs[]`, lo proyecta como handoff sin empujar a supervisor legacy.
 - `priority_score` se transporta al contrato prepare-run para que la cola
   mantenga el trabajo secundario acotado sin bloquear trabajo primario.
 Errores:

@@ -413,6 +413,19 @@ Riesgos: El estado real depende de que el bridge MCP tenga inyectados
 ```
 
 ```text
+Caso: WEB-CT-025 pantalla autoprogramming goal-first
+Tipo: contract/ui
+Comando: `go test -count=1 ./modulos/orquesta-web -run TestAutoprogrammingWebEndpointV0`
+Evidencia esperada: `/autoprogramming` renderiza los marcadores
+`goal_migration:goal-first` y `goal_capability:*` en el payload JS, consume
+`/api/v0/autoprogramming/goal/observe` para seguimiento Goal, y usa
+`/api/v0/autoprogramming/supervise` solo como accion legacy acotada.
+Ultima ejecucion: 2026-06-26; pasa.
+Riesgos: El lanzamiento real depende de backend Goal opt-in; la web no arranca
+proveedor ni sustituye la validacion de cierre del servicio.
+```
+
+```text
 Caso: WEB-INT-021 panel de control de runs
 Tipo: integration/contract
 Comando: `go test -count=1 ./modulos/orquesta-web`
