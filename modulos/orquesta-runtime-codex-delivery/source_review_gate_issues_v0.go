@@ -26,7 +26,8 @@ func codexReviewGateIssueEvaluableV0(
 		return true
 	}
 	return string(issue.Code) == string(orquestaruntimecodex.CodexConnectorAckCorrelationV0) &&
-		stringInCodexDeliverySetV0(issue.Evidence, orquestaruntimecodex.CodexAgentAckInvalidParentSubroleCollisionEvidenceV0)
+		(stringInCodexDeliverySetV0(issue.Evidence, orquestaruntimecodex.CodexAgentAckInvalidParentSubroleCollisionEvidenceV0) ||
+			stringInCodexDeliverySetV0(issue.Evidence, orquestaruntimecodex.CodexAgentAckInvalidParentChildTaskCollisionEvidenceV0))
 }
 
 func codexReviewGateMergeConnectorIssuesV0(

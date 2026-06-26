@@ -12,7 +12,8 @@ const (
 	codexAgentAckStatusCompletedV0 = "completed"
 	codexAgentAckStatusBlockedV0   = "blocked"
 
-	CodexAgentAckInvalidParentSubroleCollisionEvidenceV0 = "invalid_parent_ack_subrole_collision"
+	CodexAgentAckInvalidParentSubroleCollisionEvidenceV0   = "invalid_parent_ack_subrole_collision"
+	CodexAgentAckInvalidParentChildTaskCollisionEvidenceV0 = "invalid_parent_ack_child_task_collision"
 )
 
 func ReadAndValidateCodexAgentAckFileV0(
@@ -87,7 +88,7 @@ func codexAgentAckWithSpecDefaultsV0(
 		if strings.TrimSpace(ack.CorrelationID) != strings.TrimSpace(packet.CorrelationID) {
 			ack.CorrelationID = packet.CorrelationID
 		}
-		if !codexAgentAckParentSubroleCollisionV0(ack, spec) {
+		if !codexAgentAckParentTaskCollisionV0(ack, spec) {
 			ack.TaskRef = packet.Task.TaskRef
 		}
 	}
@@ -164,14 +165,49 @@ func (v *codexAckValidatorV0) validateCorrelation(
 		ack.TaskRef != packet.Task.TaskRef ||
 		ack.AckRef != packet.DeliveryRefs.AckRef {
 		evidence := "correlation_mismatch"
-		if codexAgentAckParentSubroleCollisionV0(ack, spec) {
+		if codexAgentAckParentChildTaskCollisionV0(ack, spec) {
+			evidence = CodexAgentAckInvalidParentChildTaskCollisionEvidenceV0
+		} else if codexAgentAckParentSubroleCollisionV0(ack, spec) {
 			evidence = CodexAgentAckInvalidParentSubroleCollisionEvidenceV0
 		}
 		v.add(CodexConnectorAckCorrelationV0, "agent_ack", evidence)
 	}
 }
 
+func codexAgentAckParentTaskCollisionV0(
+	ack CodexAgentAckV0,
+	spec orquestaruntime.ExternalAgentLaunchSpecV0,
+) bool {
+	return codexAgentAckParentChildTaskCollisionV0(ack, spec) ||
+		codexAgentAckParentSubroleCollisionV0(ack, spec)
+}
+
 func codexAgentAckParentSubroleCollisionV0(
+	ack CodexAgentAckV0,
+	spec orquestaruntime.ExternalAgentLaunchSpecV0,
+) bool {
+	taskRef := strings.TrimSpace(ack.TaskRef)
+	return codexAgentAckParentTaskRefMismatchWithMatchingIdentityV0(ack, spec) &&
+		codexAgentAckTaskRefLooksSubroleV0(taskRef)
+}
+
+func codexAgentAckParentChildTaskCollisionV0(
+	ack CodexAgentAckV0,
+	spec orquestaruntime.ExternalAgentLaunchSpecV0,
+) bool {
+	if !codexAgentAckParentTaskRefMismatchWithMatchingIdentityV0(ack, spec) {
+		return false
+	}
+	taskRef := strings.TrimSpace(ack.TaskRef)
+	for _, childTaskRef := range spec.AgentPacket.Task.ChildTaskRefs {
+		if taskRef == strings.TrimSpace(childTaskRef) {
+			return true
+		}
+	}
+	return false
+}
+
+func codexAgentAckParentTaskRefMismatchWithMatchingIdentityV0(
 	ack CodexAgentAckV0,
 	spec orquestaruntime.ExternalAgentLaunchSpecV0,
 ) bool {
@@ -184,8 +220,7 @@ func codexAgentAckParentSubroleCollisionV0(
 		strings.TrimSpace(ack.TargetModule) == strings.TrimSpace(packet.TargetModule) &&
 		taskRef != "" &&
 		parentTaskRef != "" &&
-		taskRef != parentTaskRef &&
-		codexAgentAckTaskRefLooksSubroleV0(taskRef)
+		taskRef != parentTaskRef
 }
 
 func codexAgentAckTaskRefLooksSubroleV0(taskRef string) bool {

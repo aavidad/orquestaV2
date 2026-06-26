@@ -20,9 +20,52 @@ func TestCodexReviewGateIssuesEvaluableV0ParentSubroleCollisionEsObservable(t *t
 	if codexReviewGateIssuesEvaluableV0([]orquestaruntime.ExternalAgentConnectorErrorV0{{
 		Code:     orquestaruntime.ExternalAgentConnectorErrorCodeV0(orquestaruntimecodex.CodexConnectorAckCorrelationV0),
 		Field:    "agent_ack",
+		Evidence: []string{orquestaruntimecodex.CodexAgentAckInvalidParentChildTaskCollisionEvidenceV0},
+	}}) != true {
+		t.Fatalf("parent/child_task_ref collision debe llegar al review gate como issue observable")
+	}
+	if codexReviewGateIssuesEvaluableV0([]orquestaruntime.ExternalAgentConnectorErrorV0{{
+		Code:     orquestaruntime.ExternalAgentConnectorErrorCodeV0(orquestaruntimecodex.CodexConnectorAckCorrelationV0),
+		Field:    "agent_ack",
 		Evidence: []string{"correlation_mismatch"},
 	}}) {
 		t.Fatalf("correlacion generica sigue siendo causalidad rota dura")
+	}
+}
+
+func TestCodexReviewGateObservationSourceV0ParentAckConChildTaskRefNoCierra(t *testing.T) {
+	spec := codexDeliverySpecWithRefsForTestV0(
+		"agent-ref-opes-parent-child-001",
+		"task-ref-opes-parent-child-001",
+		"ack-ref-opes-parent-child-001",
+	)
+	spec.AgentPacket.Task.ChildTaskRefs = []string{"task-ref-opes-child-redaccion-001"}
+	ack := codexDeliveryAckForTestV0(spec)
+	ack.TaskRef = "task-ref-opes-child-redaccion-001"
+	path := writeCodexDeliveryAckForTestV0(t, spec, ack)
+	store := NewInMemoryCodexReceiptDescriptorStoreV0(CodexReceiptDescriptorV0{
+		DescriptorRef: "receipt-ref-parent-child-collision-001",
+		RunID:         "run-ref-001",
+		AgentRef:      spec.RequestID,
+		Spec:          spec,
+		AckPath:       path,
+	})
+
+	observations, err := (CodexReviewGateObservationSourceV0{Store: store}).
+		BuildReviewGateObservationsV0(context.Background(), codexReviewGateRequestForTestV0(spec, nil))
+	if err != nil {
+		t.Fatalf("BuildReviewGateObservationsV0: %v", err)
+	}
+	if len(observations) != 1 {
+		t.Fatalf("observations=%+v", observations)
+	}
+	got := observations[0]
+	if got.Status == orquestacoreworkflow.ReviewResultStatusAcceptedV0 ||
+		got.AcceptedReviewRef != "" {
+		t.Fatalf("parent/child collision no debe cerrar como aceptada: %+v", got)
+	}
+	if !stringInCodexDeliverySetV0(got.EvidenceRefs, "gate-issue:"+orquestaruntimecodex.CodexAgentAckInvalidParentChildTaskCollisionEvidenceV0) {
+		t.Fatalf("evidence_refs=%v", got.EvidenceRefs)
 	}
 }
 

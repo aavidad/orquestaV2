@@ -199,6 +199,20 @@ func TestCodexAgentAckReceiptV0DetectaColisionACKPadreConTaskRefSubrolV0(t *test
 	}
 }
 
+func TestCodexAgentAckReceiptV0DetectaColisionACKPadreConChildTaskRefV0(t *testing.T) {
+	spec := codexSpecForTestV0()
+	spec.AgentPacket.Task.ChildTaskRefs = []string{"task-ref-child-redaccion-001"}
+	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-child-redaccion-001","status":"completed","files":["README.md"],"tests":["go test ./..."]}`
+
+	got, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	requireCodexIssueV0(t, issues, CodexConnectorAckCorrelationV0)
+	requireCodexIssueEvidenceV0(t, issues, CodexAgentAckInvalidParentChildTaskCollisionEvidenceV0)
+	if got.TaskRef != "task-ref-child-redaccion-001" {
+		t.Fatalf("child task_ref no debe normalizarse como typo recuperable: %+v", got)
+	}
+}
+
 func TestCodexAgentAckReceiptV0AceptaACKMinimoHidratableConRequiredTests(t *testing.T) {
 	spec := codexSpecForTestV0()
 	ack := `{"schema_version":"codex_agent_ack.v0","status":"completed"}`

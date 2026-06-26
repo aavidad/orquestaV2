@@ -2,6 +2,21 @@
 
 ```text
 Fecha: 2026-06-26
+Decision: La colision de ACK del padre contra un hijo se detecta por
+`child_task_refs` cuando el packet los declara.
+Motivo: OPES reporto ACKs de padres/subroles donde el nombre del hijo no siempre
+contiene `subrol`. La frontera causal ya existe en `AgentStartTaskV0`, por lo
+que el review gate debe conservar esa evidencia sin depender de strings.
+Impacto: `orquesta-runtime-codex` emite
+`invalid_parent_ack_child_task_collision`; `orquesta-runtime-codex-delivery` lo
+trata como issue observable de review/rework, igual que el alias legacy
+`invalid_parent_ack_subrole_collision`. La correlacion generica sigue siendo
+error duro.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-06-26
 Decision: Los cambios reales fuera del write-set exponen tambien
 `gate-issue:write_set_escape_detected`.
 Motivo: OPES reporto duplicados fuera del write-set del curso y necesita una
