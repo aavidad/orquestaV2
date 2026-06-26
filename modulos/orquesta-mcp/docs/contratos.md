@@ -1416,6 +1416,8 @@ Campos:
       `running_stale` agregado solo cuenta stale verificable sin proceso vivo
     stale_running?: acciones publicas; una run `running` sin liveness probado se
       expone como `running_without_recent_stats`, no como stale terminal
+      tambien incluye external-work terminal `stopped` sin agentes ni entregas
+      como `external_work_accepted_stopped_without_delivery`
     ops_snapshot?: DirectorAutonomousOpsSnapshotV0 agregado de cola/run para
       `/ops` y cockpit operativo
     diagnostics?: diagnostico publico de puertos/errores y consejo no bloqueante

@@ -120,6 +120,10 @@ bateria focal + `go test -count=1 -p=1 ./...` pasaron.
   inyecta `GoalWorkStateStore`: para una run goal-first publica
   `autoprogramming_goal_first_observe_required`, recomienda `observe_goal` y
   elimina acciones legacy de supervision/retry/review para esa run.
+- 2026-06-26: `autoprogramming/status` publica
+  `external_work_accepted_stopped_without_delivery` para external-work aceptado
+  que queda `stopped` con evidencias de arranque/cola/coordinador pero sin
+  agentes, vuelos ni entregas en `director.stats`.
 
 ## No reabrir salvo regresion
 

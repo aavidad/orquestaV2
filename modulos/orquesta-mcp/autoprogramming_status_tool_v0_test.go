@@ -494,6 +494,54 @@ func TestMCPAutoprogrammingStatusExecutorV0PropagaDiagnosticoAgenteSolicitadoNoA
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0DiagnosticaExternalWorkStoppedSinEntregaV0(t *testing.T) {
+	runRef := "run-opes-psicologo-rework-visual-019-030-20260626"
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			empty: true,
+			terminal: []MCPRunQueueRankedCandidateCompactV0{{
+				RunRef:        runRef,
+				AppRef:        "opes",
+				Status:        "stopped",
+				PriorityScore: 1,
+				EvidenceRefs: []string{
+					mcpAutoprogrammingEvidenceExternalWorkRunStartedV0,
+					mcpAutoprogrammingEvidenceExternalWorkRunQueuedV0,
+					mcpAutoprogrammingEvidenceRunCoordinatorExecutedV0,
+				},
+			}},
+		},
+		Stats: &fakeMCPAutoprogrammingRunStatusV0{
+			stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+				RunRef:     runRef,
+				ProjectRef: "opes",
+				AppSpecRef: "app-spec-opes-rework-visual",
+				Counts: orquestacionnucleoapp.DirectorRunStatsCountsV0{
+					TasksTotal:      1,
+					TasksOpen:       1,
+					AgentsRequested: 0,
+					AgentsStarted:   0,
+					AgentsInFlight:  0,
+					Deliveries:      0,
+				},
+			},
+		},
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{
+		RunRef: runRef,
+	})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 ||
+		result.StaleRunning[0].Code != mcpAutoprogrammingActionExternalWorkStoppedNoDeliveryV0 ||
+		result.StaleRunning[0].Severity != "blocked" ||
+		result.StaleRunning[0].RecommendedAction != "relaunch_or_replan_external_work_with_causal_error" ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, mcpAutoprogrammingActionExternalWorkStoppedNoDeliveryV0) {
+		t.Fatalf("stale_running=%+v diagnostics=%+v", result.StaleRunning, result.Diagnostics)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0DiagnosticaAutoprogrammingSuprimidaPorSesionDominio(t *testing.T) {
 	queue := &fakeMCPAutoprogrammingQueueStatusV0{
 		empty: true,

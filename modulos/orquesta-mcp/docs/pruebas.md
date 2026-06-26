@@ -542,6 +542,12 @@ Evidencia adicional 2026-06-26: `autoprogramming/status` puede recibir un
 supervision/retry/review de esa run por `observe_goal` contra
 `/api/v0/autoprogramming/goal/observe`.
 
+Evidencia adicional 2026-06-26: `autoprogramming/status` diagnostica
+`external_work_accepted_stopped_without_delivery` cuando una run external-work
+queda terminal `stopped` con evidencias de arranque/cola/coordinador, pero los
+stats de la run muestran cero agentes arrancados, cero agentes en vuelo y cero
+entregas.
+
 ## Prueba snapshot operativo del Director 2026-06-08
 
 Comando:

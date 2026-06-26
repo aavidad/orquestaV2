@@ -3,13 +3,17 @@ package orquestamcp
 import "strings"
 
 const (
-	mcpAutoprogrammingActionStaleRunningV0              = "stale_running"
-	mcpAutoprogrammingActionRunningStaleNoProcessV0     = "running_stale_no_process"
-	mcpAutoprogrammingActionRunningWithoutRecentStatsV0 = "running_without_recent_stats"
-	mcpAutoprogrammingActionStaleRunningReconciledV0    = "stale_running_reconciled"
-	mcpAutoprogrammingActionProviderUsageLimitRetryV0   = "provider_usage_limit_retry_after"
-	mcpAutoprogrammingEvidenceRunningStaleReconciledV0  = "evidence-ref-run-queue-running-stale-no-live-process-reconciled"
-	mcpAutoprogrammingEvidenceProviderUsageLimitRetryV0 = "evidence-ref-provider-usage-limit-retry-after"
+	mcpAutoprogrammingActionStaleRunningV0                  = "stale_running"
+	mcpAutoprogrammingActionRunningStaleNoProcessV0         = "running_stale_no_process"
+	mcpAutoprogrammingActionRunningWithoutRecentStatsV0     = "running_without_recent_stats"
+	mcpAutoprogrammingActionStaleRunningReconciledV0        = "stale_running_reconciled"
+	mcpAutoprogrammingActionProviderUsageLimitRetryV0       = "provider_usage_limit_retry_after"
+	mcpAutoprogrammingActionExternalWorkStoppedNoDeliveryV0 = "external_work_accepted_stopped_without_delivery"
+	mcpAutoprogrammingEvidenceRunningStaleReconciledV0      = "evidence-ref-run-queue-running-stale-no-live-process-reconciled"
+	mcpAutoprogrammingEvidenceProviderUsageLimitRetryV0     = "evidence-ref-provider-usage-limit-retry-after"
+	mcpAutoprogrammingEvidenceExternalWorkRunStartedV0      = "evidence-ref-external-work-run-started"
+	mcpAutoprogrammingEvidenceExternalWorkRunQueuedV0       = "evidence-ref-external-work-run-queued"
+	mcpAutoprogrammingEvidenceRunCoordinatorExecutedV0      = "evidence-ref-run-coordinator-executed"
 )
 
 func buildMCPAutoprogrammingStaleRunningV0(
@@ -61,6 +65,16 @@ func mcpAutoprogrammingStaleRunningActionForCandidateV0(
 			"inspect_run_ref_before_relaunch",
 		), true
 	}
+	if status == "stopped" &&
+		mcpAutoprogrammingStoppedExternalWorkAcceptedWithoutDeliveryV0(candidate, observedByRunRef[runRef]) {
+		return mcpAutoprogrammingActionableRunFromCandidateV0(
+			candidate,
+			mcpAutoprogrammingActionExternalWorkStoppedNoDeliveryV0,
+			"blocked",
+			"external_work accepted and stopped without agents or delivery",
+			"relaunch_or_replan_external_work_with_causal_error",
+		), true
+	}
 	if status == "running" {
 		observed := observedByRunRef[runRef]
 		if mcpAutoprogrammingRunStatsLiveV0(observed) {
@@ -84,6 +98,28 @@ func mcpAutoprogrammingStaleRunningActionForCandidateV0(
 		), true
 	}
 	return MCPAutoprogrammingActionableRunV0{}, false
+}
+
+func mcpAutoprogrammingStoppedExternalWorkAcceptedWithoutDeliveryV0(
+	candidate MCPRunQueueRankedCandidateCompactV0,
+	observed *MCPDirectorStatsToolResultV0,
+) bool {
+	if observed == nil || observed.Stats == nil {
+		return false
+	}
+	if !mcpAutoprogrammingCandidateHasEvidenceV0(candidate, mcpAutoprogrammingEvidenceRunCoordinatorExecutedV0) {
+		return false
+	}
+	if !mcpAutoprogrammingCandidateHasEvidenceV0(candidate, mcpAutoprogrammingEvidenceExternalWorkRunStartedV0) &&
+		!mcpAutoprogrammingCandidateHasEvidenceV0(candidate, mcpAutoprogrammingEvidenceExternalWorkRunQueuedV0) {
+		return false
+	}
+	counts := observed.Stats.Counts
+	return counts.AgentsRequested == 0 &&
+		counts.AgentsStarted == 0 &&
+		counts.AgentsInFlight == 0 &&
+		counts.Deliveries == 0 &&
+		counts.AgentsDelivered == 0
 }
 
 func mcpAutoprogrammingObservedRunsByRefV0(
