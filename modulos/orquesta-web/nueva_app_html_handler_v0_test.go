@@ -39,7 +39,15 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		`/api/v0/apps/intake/guided-turn`,
 		`/api/v0/apps/director/goal/observe`,
 		`data-goto-step="0"`,
+		`role="tablist"`,
+		`role="tab" id="nueva-app-step-tab-0"`,
+		`role="tabpanel" id="nueva-app-step-panel-0"`,
+		`aria-selected="true"`,
 		`data-preset="webapp"`,
+		`.help-text`,
+		`function initAccessibleHelp()`,
+		`aria-describedby`,
+		`matchMedia('(prefers-reduced-motion: reduce)')`,
 		`[data-help]::after`,
 		`[data-help]:hover::after`,
 		`data-help="Opciones: web, api, cli`,
@@ -230,6 +238,25 @@ func TestNuevaAppHTMLHandlerV0GETLocalizaValidacionEnInglesV0(t *testing.T) {
 	if !strings.Contains(body, `data-validation-required="Complete this field."`) ||
 		!strings.Contains(body, `data-validation-summary-title="Required fields missing"`) {
 		t.Fatalf("validacion inglesa no localizada\n%s", body)
+	}
+	for _, want := range []string{
+		`Expert data mode`,
+		`Data set 1`,
+		`Additional integrations`,
+		`Options: api, webhook, email, calendar, maps, file_import, payments, auth, analytics, search, or notifications.`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("GET ingles no contiene %q\n%s", want, body)
+		}
+	}
+	for _, forbidden := range []string{
+		`Modo experto de datos`,
+		`Integraciones adicionales`,
+		`Dato 1`,
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("GET ingles conserva texto espanol %q\n%s", forbidden, body)
+		}
 	}
 }
 

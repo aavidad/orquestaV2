@@ -6,16 +6,17 @@ trabaja en otra sesion.
 ## Estado del ultimo tramo
 
 - Rama: `trabajo/plataforma-agentes`.
-- Ultimo commit ya publicado antes de este handoff: `623ef40c Expone agentes vivos en autoprogramacion`.
+- Ultimo commit ya publicado antes de este handoff: `213eba6d Documenta parada y salud web goal-first`.
 - Cambio preparado para el siguiente commit:
-  - Web `/autoprogramming` transporta y muestra `queue_health.agents_live`.
-  - `modulos/orquesta-goal/docs/tareas.md` y
-    `modulos/orquesta-runtime-codex-goal/docs/tareas.md` dejan de decir que el
-    smoke real goal-first esta pendiente; el cierre local con
-    `app_server_stdio` queda documentado como cerrado el 2026-06-26.
-  - `cmd/orquesta-server/director_cycle_resident_restart_smoke_v0_test.go`
-    estabiliza el intervalo del test residente para evitar ticks extra antes
-    de cancelar.
+  - `/nueva-app` mantiene los tooltips visuales y anade ayuda accesible por
+    `aria-describedby` para cada nodo con `data-help`.
+  - Las pestanas del wizard exponen `tablist`/`tab`/`tabpanel`,
+    `aria-selected` vivo y navegacion con respeto a `prefers-reduced-motion`.
+  - Los textos expertos de datos, almacenamiento e integraciones pasan a i18n
+    ES/EN; la ayuda de tipo de integracion ya enumera todas las opciones
+    visibles.
+  - `modulos/orquesta-web/docs/guia_nueva_app_opciones_2026-06-25.md` queda
+    alineada con el bloque experto ya visible en HTML.
 
 ## Verificacion ejecutada
 
@@ -24,6 +25,8 @@ trabaja en otra sesion.
 - `go test -count=1 ./cmd/orquesta-server -run TestRuntimeResidentDirectorConduceDirectorCycleStepTrasRestartV0 -v`
 - `git diff --check`
 - `go test -count=1 -p=1 ./...`
+- `go test -count=1 ./modulos/orquesta-web`
+- `git diff --check`
 
 La primera ejecucion amplia fallo en
 `TestRuntimeResidentDirectorConduceDirectorCycleStepTrasRestartV0` por carrera
@@ -38,9 +41,10 @@ bateria focal + `go test -count=1 -p=1 ./...` pasaron.
   `run_status=cerrada`, `closure_status=accepted`, artefactos y evidencias.
   Falta restart/resume de goal en vuelo, negativos completos y rework automatico
   cuando el cierre no es aceptado.
-- Web/operador: alrededor de 80%. El wizard de `/nueva-app` existe, con ayuda y
-  opciones expertas parciales. Queda mejorar accesibilidad real de tooltips,
-  i18n de textos expertos hardcodeados y alinear guia/opciones exactas.
+- Web/operador: alrededor de 85%. El wizard de `/nueva-app` existe, con ayuda
+  visible, ayuda accesible por `aria-describedby`, pestanas ARIA, i18n de
+  textos expertos y guia actualizada. Queda QA manual en navegador, capturas
+  responsive y completar seniales humanas si aparecen mas opciones ambiguas.
 - `autoprogramming/status` y `supervise`: alrededor de 75-80%. HTTP colgado
   esta mitigado con `202 accepted_background`; `running_stale` con procesos
   vivos ya consulta stats/procesos y expone `agents_live`. Falta test de
@@ -54,11 +58,14 @@ bateria focal + `go test -count=1 -p=1 ./...` pasaron.
 1. Commit/push de este lote si aun no esta publicado.
 2. Reiniciar solo el servidor web local `127.0.0.1:8787` con el binario nuevo
    cuando se retome; no tocar servidores OPES.
-3. Mejorar `/nueva-app`:
-   - sustituir tooltips CSS por ayuda accesible con `aria-describedby`;
-   - mover textos expertos hardcodeados a i18n;
-   - completar campos expertos de datos/storage/integraciones;
-   - actualizar `guia_nueva_app_opciones_2026-06-25.md`.
+3. Mejorar `/nueva-app` en el siguiente corte:
+   - validar en navegador real que tooltips, foco, tabs y scroll funcionan bien
+     en desktop/movil;
+   - revisar si hacen falta mas filas o campos expertos antes de congelar el
+     contrato UI;
+   - completar documentacion larga si se anaden nuevas opciones;
+   - mantener cualquier opcion de proveedor/DB como adaptador opt-in, no como
+     decision de la web.
 4. Demotar visiblemente herramientas MCP legacy de programacion frente a rutas
    goal-first/estado, sin borrar handlers ni smokes historicos.
 5. Anadir contrato/test para backend Goal configurado pero degradado: no debe
@@ -78,4 +85,3 @@ bateria focal + `go test -count=1 -p=1 ./...` pasaron.
 - `CODEX-RECURSION-REAL`.
 - `CODEX-GOAL-FIRST-APP-SERVER-REAL` con `app_server_stdio`.
 - Cierre causal offline ya cubierto en matriz vigente.
-

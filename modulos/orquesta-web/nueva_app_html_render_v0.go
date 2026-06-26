@@ -107,6 +107,15 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.wizard.identidad_avanzada",
 		"nueva_app.wizard.plataformas_origen",
 		"nueva_app.wizard.origen_proyecto",
+		"nueva_app.wizard.datos_experto",
+		"nueva_app.wizard.dato_1",
+		"nueva_app.wizard.dato_2",
+		"nueva_app.wizard.almacenamiento_1",
+		"nueva_app.wizard.almacenamiento_2",
+		"nueva_app.wizard.integracion_1",
+		"nueva_app.wizard.integracion_2",
+		"nueva_app.wizard.integracion_3",
+		"nueva_app.wizard.integraciones_adicionales",
 		"nueva_app.wizard.revision_final",
 		"nueva_app.wizard.resumen_vivo",
 		"nueva_app.wizard.back",
@@ -256,6 +265,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
     [data-help]::before{content:"";position:absolute;left:12px;bottom:calc(100% + 2px);z-index:51;border:6px solid transparent;border-top-color:#102017;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .16s ease,visibility .16s ease}
     [data-help]:hover::after,[data-help]:focus::after,[data-help]:focus-within::after{opacity:1;visibility:visible;transform:translateY(0)}
     [data-help]:hover::before,[data-help]:focus::before,[data-help]:focus-within::before{opacity:1;visibility:visible}
+    .help-text{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);border:0;white-space:nowrap}
     button{width:max-content;padding:10px 14px;border:0;border-radius:9px;background:var(--brand);color:#fff;font-weight:850;cursor:pointer}
     button.secondary{background:#e8efe8;color:var(--ink);border:1px solid var(--line)}
     .wizard-actions{display:flex;justify-content:space-between;gap:10px;padding:14px 18px;border-top:1px solid var(--line);background:#f8fbf5}
@@ -330,15 +340,15 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
       data-guided-msg-architecture="{{index .HTML "nueva_app.wizard.guided_msg_architecture"}}"
       data-guided-msg-quality="{{index .HTML "nueva_app.wizard.guided_msg_quality"}}"
       data-guided-msg-review="{{index .HTML "nueva_app.wizard.guided_msg_review"}}">
-      <div class="steps" aria-label="{{index .HTML "nueva_app.wizard.steps_label"}}">
-        <button class="step-tab active" type="button" data-goto-step="0" data-help="{{index .Help "step.idea"}}">{{index .HTML "nueva_app.wizard.step.idea"}}</button>
-        <button class="step-tab" type="button" data-goto-step="1" data-help="{{index .Help "step.tipo"}}">{{index .HTML "nueva_app.wizard.step.tipo"}}</button>
-        <button class="step-tab" type="button" data-goto-step="2" data-help="{{index .Help "step.tecnologia"}}">{{index .HTML "nueva_app.wizard.step.tecnologia"}}</button>
-        <button class="step-tab" type="button" data-goto-step="3" data-help="{{index .Help "step.datos"}}">{{index .HTML "nueva_app.wizard.step.datos"}}</button>
-        <button class="step-tab" type="button" data-goto-step="4" data-help="{{index .Help "step.calidad"}}">{{index .HTML "nueva_app.wizard.step.calidad"}}</button>
-        <button class="step-tab" type="button" data-goto-step="5" data-help="{{index .Help "step.revisar"}}">{{index .HTML "nueva_app.wizard.step.revisar"}}</button>
+      <div class="steps" role="tablist" aria-label="{{index .HTML "nueva_app.wizard.steps_label"}}">
+        <button class="step-tab active" type="button" role="tab" id="nueva-app-step-tab-0" aria-controls="nueva-app-step-panel-0" aria-selected="true" data-goto-step="0" data-help="{{index .Help "step.idea"}}">{{index .HTML "nueva_app.wizard.step.idea"}}</button>
+        <button class="step-tab" type="button" role="tab" id="nueva-app-step-tab-1" aria-controls="nueva-app-step-panel-1" aria-selected="false" data-goto-step="1" data-help="{{index .Help "step.tipo"}}">{{index .HTML "nueva_app.wizard.step.tipo"}}</button>
+        <button class="step-tab" type="button" role="tab" id="nueva-app-step-tab-2" aria-controls="nueva-app-step-panel-2" aria-selected="false" data-goto-step="2" data-help="{{index .Help "step.tecnologia"}}">{{index .HTML "nueva_app.wizard.step.tecnologia"}}</button>
+        <button class="step-tab" type="button" role="tab" id="nueva-app-step-tab-3" aria-controls="nueva-app-step-panel-3" aria-selected="false" data-goto-step="3" data-help="{{index .Help "step.datos"}}">{{index .HTML "nueva_app.wizard.step.datos"}}</button>
+        <button class="step-tab" type="button" role="tab" id="nueva-app-step-tab-4" aria-controls="nueva-app-step-panel-4" aria-selected="false" data-goto-step="4" data-help="{{index .Help "step.calidad"}}">{{index .HTML "nueva_app.wizard.step.calidad"}}</button>
+        <button class="step-tab" type="button" role="tab" id="nueva-app-step-tab-5" aria-controls="nueva-app-step-panel-5" aria-selected="false" data-goto-step="5" data-help="{{index .Help "step.revisar"}}">{{index .HTML "nueva_app.wizard.step.revisar"}}</button>
       </div>
-      <div class="step" data-step="0">
+      <div class="step" data-step="0" role="tabpanel" id="nueva-app-step-panel-0" aria-labelledby="nueva-app-step-tab-0" tabindex="-1">
         <fieldset>
           <legend>{{index .HTML "nueva_app.wizard.idea_objetivo"}}</legend>
           <div class="guided-assistant" id="guided-assistant">
@@ -382,7 +392,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
           </div></details>
         </fieldset>
       </div>
-      <div class="step" data-step="1">
+      <div class="step" data-step="1" role="tabpanel" id="nueva-app-step-panel-1" aria-labelledby="nueva-app-step-tab-1" tabindex="-1">
         <fieldset><legend>{{index .HTML "nueva_app.wizard.plataformas_origen"}}</legend>
           <div class="checks"><label data-help="{{index .Help "plataformas.web"}}"><input type="checkbox" name="plataformas" value="web">web</label><label data-help="{{index .Help "plataformas.mobile"}}"><input type="checkbox" name="plataformas" value="mobile">mobile</label><label data-help="{{index .Help "plataformas.desktop"}}"><input type="checkbox" name="plataformas" value="desktop">desktop</label><label data-help="{{index .Help "plataformas.api"}}"><input type="checkbox" name="plataformas" value="api">api</label></div>
           <details open><summary>{{index .HTML "nueva_app.wizard.origen_proyecto"}}</summary><div class="grid">
@@ -394,7 +404,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
           </div></details>
         </fieldset>
       </div>
-      <div class="step" data-step="2">
+      <div class="step" data-step="2" role="tabpanel" id="nueva-app-step-panel-2" aria-labelledby="nueva-app-step-tab-2" tabindex="-1">
         <fieldset><legend>{{index .Labels "preferencias_tecnicas"}}</legend><div class="grid">
           <label data-help="{{index .Help "preferencias_tecnicas.arquitectura"}}">{{index .Labels "preferencias_tecnicas.arquitectura"}}<select name="preferencias_tecnicas.arquitectura"><option value="hexagonal">hexagonal</option><option value="clean_architecture">clean_architecture</option><option value="onion">onion</option><option value="modular_monolith">modular_monolith</option><option value="layered">layered</option><option value="event_driven">event_driven</option><option value="microservices">microservices</option><option value="serverless">serverless</option><option value="plugin_based">plugin_based</option><option value="data_pipeline">data_pipeline</option></select></label>
           <label data-help="{{index .Help "preferencias_tecnicas.lenguaje"}}">{{index .Labels "preferencias_tecnicas.lenguaje"}}<input name="preferencias_tecnicas.lenguaje" placeholder="go, typescript..."></label>
@@ -408,7 +418,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
           <label data-help="{{index .Help "i18n.justificacion"}}">{{index .Labels "i18n.justificacion"}}<input name="i18n.justificacion"></label>
         </div></fieldset>
       </div>
-      <div class="step" data-step="3">
+      <div class="step" data-step="3" role="tabpanel" id="nueva-app-step-panel-3" aria-labelledby="nueva-app-step-tab-3" tabindex="-1">
         <fieldset><legend>{{index .Labels "datos"}}</legend><div class="grid">
           <label data-help="{{index .Help "datos.db_required"}}"><span>{{index .Labels "datos.db_required"}}</span><select name="datos.db_required"><option value="false">false</option><option value="true">true</option></select></label>
           <label data-help="{{index .Help "datos.necesidad_funcional"}}">{{index .Labels "datos.necesidad_funcional"}}<input name="datos.necesidad_funcional"></label>
@@ -416,8 +426,8 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
           <label data-help="{{index .Help "datos.sensibilidad"}}">{{index .Labels "datos.sensibilidad"}}<input name="datos.sensibilidad"></label>
           <label data-help="{{index .Help "datos.retencion"}}">{{index .Labels "datos.retencion"}}<input name="datos.retencion"></label>
         </div>
-        <details><summary>Modo experto de datos</summary><div class="expert-block">
-          <div class="expert-row"><p class="expert-row-title">Dato 1</p><div class="grid">
+        <details><summary>{{index .HTML "nueva_app.wizard.datos_experto"}}</summary><div class="expert-block">
+          <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.dato_1"}}</p><div class="grid">
             <label data-help="{{index .Help "datos.tipos_detallados.nombre"}}">{{index .Labels "datos.tipos_detallados.0.nombre"}}<input name="datos.tipos_detallados.0.nombre"></label>
             <label data-help="{{index .Help "datos.tipos_detallados.proposito"}}">{{index .Labels "datos.tipos_detallados.0.proposito"}}<input name="datos.tipos_detallados.0.proposito"></label>
             <label data-help="{{index .Help "datos.tipos_detallados.sensibilidad"}}">{{index .Labels "datos.tipos_detallados.0.sensibilidad"}}<input name="datos.tipos_detallados.0.sensibilidad"></label>
@@ -425,7 +435,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
             <label data-help="{{index .Help "datos.tipos_detallados.volumen"}}">{{index .Labels "datos.tipos_detallados.0.volumen"}}<input name="datos.tipos_detallados.0.volumen"></label>
             <label data-help="{{index .Help "datos.tipos_detallados.restricciones"}}">{{index .Labels "datos.tipos_detallados.0.restricciones"}}<input name="datos.tipos_detallados.0.restricciones"></label>
           </div></div>
-          <div class="expert-row"><p class="expert-row-title">Dato 2</p><div class="grid">
+          <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.dato_2"}}</p><div class="grid">
             <label data-help="{{index .Help "datos.tipos_detallados.nombre"}}">{{index .Labels "datos.tipos_detallados.0.nombre"}}<input name="datos.tipos_detallados.1.nombre"></label>
             <label data-help="{{index .Help "datos.tipos_detallados.proposito"}}">{{index .Labels "datos.tipos_detallados.0.proposito"}}<input name="datos.tipos_detallados.1.proposito"></label>
             <label data-help="{{index .Help "datos.tipos_detallados.sensibilidad"}}">{{index .Labels "datos.tipos_detallados.0.sensibilidad"}}<input name="datos.tipos_detallados.1.sensibilidad"></label>
@@ -433,13 +443,13 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
             <label data-help="{{index .Help "datos.tipos_detallados.volumen"}}">{{index .Labels "datos.tipos_detallados.0.volumen"}}<input name="datos.tipos_detallados.1.volumen"></label>
             <label data-help="{{index .Help "datos.tipos_detallados.restricciones"}}">{{index .Labels "datos.tipos_detallados.0.restricciones"}}<input name="datos.tipos_detallados.1.restricciones"></label>
           </div></div>
-          <div class="expert-row"><p class="expert-row-title">Almacenamiento 1</p><div class="grid">
+          <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.almacenamiento_1"}}</p><div class="grid">
             <label data-help="{{index .Help "datos.storage.tipo"}}">{{index .Labels "datos.storage.0.tipo"}}<select name="datos.storage.0.tipo"><option value=""></option><option value="relacional">relacional</option><option value="documental">documental</option><option value="vectorial">vectorial</option><option value="objetos">objetos</option><option value="clave_valor">clave_valor</option><option value="series_temporales">series_temporales</option><option value="grafo">grafo</option><option value="cache">cache</option><option value="busqueda">busqueda</option></select></label>
             <label data-help="{{index .Help "datos.storage.proposito"}}">{{index .Labels "datos.storage.0.proposito"}}<input name="datos.storage.0.proposito"></label>
             <label data-help="{{index .Help "datos.storage.requerido"}}"><span>{{index .Labels "datos.storage.0.requerido"}}</span><select name="datos.storage.0.requerido"><option value="false">false</option><option value="true">true</option></select></label>
             <label data-help="{{index .Help "datos.storage.restricciones"}}">{{index .Labels "datos.storage.0.restricciones"}}<input name="datos.storage.0.restricciones"></label>
           </div></div>
-          <div class="expert-row"><p class="expert-row-title">Almacenamiento 2</p><div class="grid">
+          <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.almacenamiento_2"}}</p><div class="grid">
             <label data-help="{{index .Help "datos.storage.tipo"}}">{{index .Labels "datos.storage.0.tipo"}}<select name="datos.storage.1.tipo"><option value=""></option><option value="relacional">relacional</option><option value="documental">documental</option><option value="vectorial">vectorial</option><option value="objetos">objetos</option><option value="clave_valor">clave_valor</option><option value="series_temporales">series_temporales</option><option value="grafo">grafo</option><option value="cache">cache</option><option value="busqueda">busqueda</option></select></label>
             <label data-help="{{index .Help "datos.storage.proposito"}}">{{index .Labels "datos.storage.0.proposito"}}<input name="datos.storage.1.proposito"></label>
             <label data-help="{{index .Help "datos.storage.requerido"}}"><span>{{index .Labels "datos.storage.0.requerido"}}</span><select name="datos.storage.1.requerido"><option value="false">false</option><option value="true">true</option></select></label>
@@ -447,22 +457,22 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
           </div></div>
         </div></details></fieldset>
         <fieldset><legend>{{index .Labels "integraciones"}}</legend><div class="expert-block">
-          <div class="expert-row"><p class="expert-row-title">Integracion 1</p><div class="grid">
+          <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.integracion_1"}}</p><div class="grid">
             <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.0.tipo"><option value=""></option><option value="api">api</option><option value="webhook">webhook</option><option value="email">email</option><option value="calendar">calendar</option><option value="maps">maps</option><option value="file_import">file_import</option><option value="payments">payments</option><option value="auth">auth</option><option value="analytics">analytics</option><option value="search">search</option><option value="notifications">notifications</option></select></label>
             <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.0.nombre"></label>
             <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.0.proposito"></label>
             <label data-help="{{index .Help "integraciones.0.requerido"}}"><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.0.requerido"><option value="false">false</option><option value="true">true</option></select></label>
             <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.0.restricciones"></label>
           </div></div>
-          <details><summary>Integraciones adicionales</summary><div class="expert-block">
-            <div class="expert-row"><p class="expert-row-title">Integracion 2</p><div class="grid">
+          <details><summary>{{index .HTML "nueva_app.wizard.integraciones_adicionales"}}</summary><div class="expert-block">
+            <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.integracion_2"}}</p><div class="grid">
               <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.1.tipo"><option value=""></option><option value="api">api</option><option value="webhook">webhook</option><option value="email">email</option><option value="calendar">calendar</option><option value="maps">maps</option><option value="file_import">file_import</option><option value="payments">payments</option><option value="auth">auth</option><option value="analytics">analytics</option><option value="search">search</option><option value="notifications">notifications</option></select></label>
               <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.1.nombre"></label>
               <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.1.proposito"></label>
               <label data-help="{{index .Help "integraciones.0.requerido"}}"><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.1.requerido"><option value="false">false</option><option value="true">true</option></select></label>
               <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.1.restricciones"></label>
             </div></div>
-            <div class="expert-row"><p class="expert-row-title">Integracion 3</p><div class="grid">
+            <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.integracion_3"}}</p><div class="grid">
               <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.2.tipo"><option value=""></option><option value="api">api</option><option value="webhook">webhook</option><option value="email">email</option><option value="calendar">calendar</option><option value="maps">maps</option><option value="file_import">file_import</option><option value="payments">payments</option><option value="auth">auth</option><option value="analytics">analytics</option><option value="search">search</option><option value="notifications">notifications</option></select></label>
               <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.2.nombre"></label>
               <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.2.proposito"></label>
@@ -472,7 +482,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
           </div></details>
         </div></fieldset>
       </div>
-      <div class="step" data-step="4">
+      <div class="step" data-step="4" role="tabpanel" id="nueva-app-step-panel-4" aria-labelledby="nueva-app-step-tab-4" tabindex="-1">
         <fieldset><legend>{{index .Labels "calidad"}}</legend><div class="grid">
           <label data-help="{{index .Help "calidad.pruebas"}}">{{index .Labels "calidad.pruebas"}}<select name="calidad.pruebas"><option value="basica">basica</option><option value="media">media</option><option value="alta">alta</option></select></label>
           <label data-help="{{index .Help "calidad.accesibilidad"}}">{{index .Labels "calidad.accesibilidad"}}<select name="calidad.accesibilidad"><option value="basica">basica</option><option value="normal">normal</option><option value="wcag_aa">wcag_aa</option><option value="no_aplica">no_aplica</option></select></label>
@@ -485,7 +495,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
           <label data-help="{{index .Help "deploy.restricciones"}}">{{index .Labels "deploy.restricciones"}}<input name="deploy.restricciones"></label>
         </div></fieldset>
       </div>
-      <div class="step" data-step="5">
+      <div class="step" data-step="5" role="tabpanel" id="nueva-app-step-panel-5" aria-labelledby="nueva-app-step-tab-5" tabindex="-1">
         <fieldset><legend>{{index .Labels "agentes"}}</legend><div class="grid">
           <label data-help="{{index .Help "agentes.revision_humana"}}"><span>{{index .Labels "agentes.revision_humana"}}</span><select name="agentes.revision_humana"><option value="true">true</option><option value="false">false</option></select></label>
           <label data-help="{{index .Help "agentes.autonomia"}}">{{index .Labels "agentes.autonomia"}}<select name="agentes.autonomia"><option value="media">media</option><option value="baja">baja</option><option value="alta">alta</option></select></label>
@@ -554,6 +564,33 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
       document.getElementById('wizard-final-summary').innerHTML=html;
     }
     function escapeHTML(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+    function motionBehavior(){
+      return window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth';
+    }
+    function addDescribedBy(node,id){
+      if(!node||!id)return;
+      const described=(node.getAttribute('aria-describedby')||'').split(/\s+/).filter(Boolean);
+      if(!described.includes(id)){described.push(id);}
+      node.setAttribute('aria-describedby',described.join(' '));
+    }
+    function initAccessibleHelp(){
+      wizard.querySelectorAll('[data-help]').forEach((node,index)=>{
+        const help=String(node.dataset.help||'').trim();
+        if(!help)return;
+        const id=node.id?node.id+'-help':'nueva-app-help-'+index;
+        let helper=document.getElementById(id);
+        if(!helper){
+          helper=document.createElement('span');
+          helper.id=id;
+          helper.className='help-text';
+          helper.textContent=help;
+          node.appendChild(helper);
+        }
+        addDescribedBy(node,id);
+        const target=node.matches('button,a,input,select,textarea')?node:node.querySelector('input,select,textarea,button,a');
+        addDescribedBy(target,id);
+      });
+    }
     async function observeGoal(panelOrButton,options){
       options=options||{};
       const panel=panelOrButton&&panelOrButton.closest?panelOrButton.closest('[data-goal-panel]'):panelOrButton;
@@ -624,14 +661,21 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
       }
       window.setTimeout(tick,800);
     }
-    function show(index){
+    function show(index,moveFocus){
       step=Math.max(0,Math.min(steps.length-1,index));
       steps.forEach((node,i)=>{node.hidden=i!==step;});
-      tabs.forEach((node,i)=>node.classList.toggle('active',i===step));
+      tabs.forEach((node,i)=>{
+        const active=i===step;
+        node.classList.toggle('active',active);
+        node.setAttribute('aria-selected',active?'true':'false');
+      });
       prev.disabled=step===0;
       next.hidden=step===steps.length-1;
       wizard.classList.toggle('wizard-step-final',step===steps.length-1);
       renderSummary();
+      if(moveFocus&&steps[step]){
+        setTimeout(()=>{steps[step].focus({preventScroll:true});steps[step].scrollIntoView({block:'start',behavior:motionBehavior()});},0);
+      }
     }
     function errorID(el){return 'field-error-'+String(el.name||'field').replace(/[^a-zA-Z0-9_-]/g,'-');}
     function requiredFields(){return [...form.querySelectorAll('[data-required="true"]')];}
@@ -661,8 +705,8 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
     }
     function focusField(el){
       const parentStep=el.closest('[data-step]');
-      if(parentStep){show(Number(parentStep.dataset.step||0));}
-      setTimeout(()=>{el.focus({preventScroll:true});el.scrollIntoView({block:'center',behavior:'smooth'});},0);
+      if(parentStep){show(Number(parentStep.dataset.step||0),false);}
+      setTimeout(()=>{el.focus({preventScroll:true});el.scrollIntoView({block:'center',behavior:motionBehavior()});},0);
     }
     function renderErrors(invalid){
       if(!errors)return;
@@ -824,7 +868,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
     }
     async function guidedAction(action){
       if(action==='analyze'){applyGuidedNeed();return;}
-      if(action==='review'){guidedLog(wizard.dataset.guidedMsgReview);show(5);return;}
+      if(action==='review'){guidedLog(wizard.dataset.guidedMsgReview);show(5,true);return;}
       const actionMessages={mobile_both:wizard.dataset.guidedMsgMobile,mobile_ios:wizard.dataset.guidedMsgMobile,mobile_android:wizard.dataset.guidedMsgMobile,data_external:wizard.dataset.guidedMsgData,data_management:wizard.dataset.guidedMsgData,maps_generic:wizard.dataset.guidedMsgMaps,maps_osm:wizard.dataset.guidedMsgMaps,architecture_default:wizard.dataset.guidedMsgArchitecture,architecture_event:wizard.dataset.guidedMsgArchitecture,architecture_modular:wizard.dataset.guidedMsgArchitecture,quality_public:wizard.dataset.guidedMsgQuality};
       if(await applyServerGuided({action_id:action},actionMessages[action])){return;}
       if(action==='mobile_both'){setValue('tipo_app','mobile');setChecked('mobile',true);addCSV('preferencias_tecnicas.preferencias',['plataformas moviles: iOS y Android']);guidedLog(wizard.dataset.guidedMsgMobile);}
@@ -846,9 +890,9 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
       if(kind==='ops'){setValue('tipo_app','web');setChecked('web',true);setValue('preferencias_tecnicas.framework','html/js + api');setValue('calidad.observabilidad','true');}
       renderSummary();
     }
-    tabs.forEach(node=>node.addEventListener('click',()=>show(Number(node.dataset.gotoStep||0))));
-    prev.addEventListener('click',()=>show(step-1));
-    next.addEventListener('click',()=>show(step+1));
+    tabs.forEach(node=>node.addEventListener('click',()=>show(Number(node.dataset.gotoStep||0),true)));
+    prev.addEventListener('click',()=>show(step-1,true));
+    next.addEventListener('click',()=>show(step+1,true));
     form.addEventListener('input',renderSummary);
     form.addEventListener('input',event=>{if(event.target&&event.target.matches('[data-required="true"]')){clearFieldError(event.target);renderErrors(requiredFields().filter(el=>el.getAttribute('aria-invalid')==='true').map(el=>({name:el.name,label:fieldLabel(el),message:wizard.dataset.validationRequired||''})));}});
     form.addEventListener('change',event=>{renderSummary();if(event.target&&event.target.matches('[data-required="true"]')){clearFieldError(event.target);}});
@@ -859,8 +903,9 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
     wizard.querySelectorAll('[data-preset]').forEach(node=>node.addEventListener('click',()=>preset(node.dataset.preset)));
     const goalButton=document.querySelector('[data-goal-observe]');
     if(goalButton)goalButton.addEventListener('click',()=>observeGoal(goalButton));
+    initAccessibleHelp();
+    show(0,false);
     startGoalAutoPoll();
-    show(0);
   }());
 </script>
 </body>

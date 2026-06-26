@@ -12,11 +12,11 @@ wizard `/nueva-app`. Es documentacion de uso y contrato de UI; no cambia codigo.
   `SolicitarNuevaApp v0` por el transporte configurado.
 - El contrato de captura local es `WebNuevaAppFormV0`; el contrato de dominio
   consumido es `AppSpecRequestV0`.
-- El HTML actual implementa un modo basico guiado. El DTO y el POST JSON
-  soportan mas campos que los visibles en HTML.
-- El bloque experto de datos e integraciones descrito aqui es una ampliacion
-  documental solicitada para el siguiente corte de UI. Debe mantenerse opcional
-  y plegarse sobre contratos publicos, sin meter DB concreta ni proveedor en web.
+- El HTML actual implementa un modo basico guiado y un bloque experto opcional
+  para detallar datos, almacenamiento e integraciones. El DTO y el POST JSON
+  siguen soportando mas campos que los visibles en HTML.
+- El bloque experto de datos e integraciones debe mantenerse opcional y plegarse
+  sobre contratos publicos, sin meter DB concreta ni proveedor en web.
 
 ## Principios
 
@@ -1097,9 +1097,9 @@ No usar para:
 
 ### Modo Experto: Varias Integraciones
 
-El DTO `WebNuevaAppFormV0` ya modela `integraciones[]`; el HTML basico actual
-solo muestra una fila. El bloque experto debe permitir varias filas sin crear
-dependencias directas.
+El DTO `WebNuevaAppFormV0` ya modela `integraciones[]`; el HTML muestra una
+integracion principal y filas expertas adicionales sin crear dependencias
+directas.
 
 Campos recomendados por integracion:
 
