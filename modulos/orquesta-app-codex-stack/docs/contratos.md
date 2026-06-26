@@ -206,6 +206,11 @@ terminal no ejecutable. El binding MCP/REST del stack usa
 Autoprogramacion expone la misma observacion con tool/ruta propios:
 `orquesta.autoprogramming.observe_goal.v0` y
 `/api/v0/autoprogramming/goal/observe`.
+Si un operador llama `runs.supervisor` con un `run_ref` que ya tiene
+`GoalWorkStateV0`, el executor no drena el loop legacy: devuelve
+`stop_reason=goal_first_observe_required`, diagnostico
+`run_supervisor_goal_first_not_legacy` y `next_actions` que apuntan a observar
+el goal por la ruta/tool goal-first.
 
 ## Bridge de entregas a dominio externo
 

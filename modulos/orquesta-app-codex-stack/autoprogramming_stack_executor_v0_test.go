@@ -214,7 +214,8 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveGoalSpecsCuandoGoalRead
 }
 
 func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaGoalFirstSinColaLegacy(t *testing.T) {
-	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
 	launcher := &goalFirstQueueLauncherForTestV0{}
 	observer := &goalFirstQueueObserverForTestV0{}
 	goalStates := newGoalFirstQueueStateStoreForTestV0()
@@ -295,6 +296,31 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaGoalFirstSinColaL
 	})
 	if len(ranking.Ranked) != 0 {
 		t.Fatalf("goal-first no debe encolar legacy: %+v", ranking)
+	}
+	supervisor, err := NewCodexStackRunSupervisorExecutorV0(&stack).Execute(context.Background(), orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:     "request-autoprogramming-goal-first-legacy-supervisor-001",
+		CorrelationID: "corr-autoprogramming-goal-first-launch-api-001",
+		RunRef:        prepared.RunRef,
+		MaxTicks:      1,
+	})
+	if err != nil {
+		t.Fatalf("supervisor goal-first: %v", err)
+	}
+	if supervisor.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
+		supervisor.RunRef != prepared.RunRef ||
+		supervisor.StopReason != "goal_first_observe_required" ||
+		supervisor.Last.Status != string(CodexSupervisorRuntimeRunningLiveV0) ||
+		!codexStackStringInSetForTestV0(supervisor.NextActions, "observe_autoprogramming_goal") ||
+		!codexStackDiagnosticsContainCodeForTestV0(supervisor.Diagnostics, "run_supervisor_goal_first_not_legacy") ||
+		runtime.launchCountV0() != 0 {
+		t.Fatalf("supervisor=%+v launches=%d", supervisor, runtime.launchCountV0())
+	}
+	run, err = stack.Ports.RunStore.LoadRunV0(context.Background(), prepared.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 tras supervisor legacy: %v", err)
+	}
+	if len(run.StartedAgents) != 0 {
+		t.Fatalf("supervisor legacy arranco agentes en goal-first: %+v", run.StartedAgents)
 	}
 
 	observer.result = orquestagoal.GoalWorkResultV0{

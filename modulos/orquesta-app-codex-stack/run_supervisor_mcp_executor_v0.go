@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
@@ -58,6 +59,9 @@ func (executor CodexStackRunSupervisorExecutorV0) Execute(
 	}
 	input = normalizeAutoprogrammingResidentInputV0(input, *executor.Stack)
 	input = executor.Stack.normalizeDirectOPESRunSupervisorInputV0(ctx, input)
+	if result, redirected := executor.goalFirstRunSupervisorResultV0(ctx, input); redirected {
+		return result, nil
+	}
 	lifecycle := CodexSupervisorStackLifecycleV0{
 		Stack:             *executor.Stack,
 		RunRef:            strings.TrimSpace(input.RunRef),
@@ -99,6 +103,67 @@ func (executor CodexStackRunSupervisorExecutorV0) Execute(
 	output = addAutoprogrammingResidentEvidenceV0(input, output)
 	output = maybePrepareAutoprogrammingResidentSelfRepairV0(ctx, input, *executor.Stack, result, output)
 	return output, nil
+}
+
+func (executor CodexStackRunSupervisorExecutorV0) goalFirstRunSupervisorResultV0(
+	ctx context.Context,
+	input orquestamcp.MCPRunSupervisorToolInputV0,
+) (orquestamcp.MCPRunSupervisorToolResultV0, bool) {
+	runRef := strings.TrimSpace(input.RunRef)
+	if runRef == "" ||
+		executor.Stack == nil ||
+		executor.Stack.Ports.GoalStateStore == nil {
+		return orquestamcp.MCPRunSupervisorToolResultV0{}, false
+	}
+	state, err := executor.Stack.Ports.GoalStateStore.LoadGoalWorkStateV0(ctx, runRef)
+	if err != nil ||
+		strings.TrimSpace(state.RunRef) == "" ||
+		strings.TrimSpace(state.GoalRef) == "" {
+		return orquestamcp.MCPRunSupervisorToolResultV0{}, false
+	}
+	evidenceRefs := compactStringsV0(append(
+		append([]string{}, state.EvidenceRefs...),
+		"evidence-ref-run-supervisor-goal-first-redirect",
+	))
+	result := orquestamcp.NewMCPRunSupervisorOKResultV0(
+		input,
+		runRef,
+		"goal_first_observe_required",
+		0,
+		orquestamcp.MCPRunSupervisorSnapshotV0{
+			Status:       string(codexStackGoalFirstSupervisorStatusV0(state.Status)),
+			SessionRef:   runRef,
+			EvidenceRefs: evidenceRefs,
+		},
+		nil,
+	)
+	result.EvidenceRefs = evidenceRefs
+	result.NextActions = []string{
+		"observe_autoprogramming_goal",
+		"do_not_supervise_goal_first_with_legacy_loop",
+	}
+	result.Diagnostics = []orquestamcp.MCPAutoprogrammingDiagnosticV0{{
+		Code:         "run_supervisor_goal_first_not_legacy",
+		Scope:        "run:" + runRef,
+		Message:      "run_ref pertenece a goal-first; usar orquesta.autoprogramming.observe_goal.v0 o /api/v0/autoprogramming/goal/observe",
+		EvidenceRefs: evidenceRefs,
+	}}
+	return result, true
+}
+
+func codexStackGoalFirstSupervisorStatusV0(
+	status string,
+) CodexSupervisorRuntimeStateV0 {
+	switch strings.TrimSpace(status) {
+	case orquestagoal.GoalStatusCompleteV0:
+		return CodexSupervisorRuntimeDoneV0
+	case orquestagoal.GoalStatusBlockedV0, orquestagoal.GoalStatusInvalidV0:
+		return CodexSupervisorRuntimeStoppedV0
+	case orquestagoal.GoalStatusAcceptedV0, orquestagoal.GoalStatusRunningV0:
+		return CodexSupervisorRuntimeRunningLiveV0
+	default:
+		return CodexSupervisorRuntimePendingV0
+	}
 }
 
 func codexStackRunSupervisorDrainRequestV0(
