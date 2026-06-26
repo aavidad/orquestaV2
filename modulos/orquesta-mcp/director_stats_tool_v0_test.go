@@ -281,6 +281,43 @@ func TestMCPDirectorStatsToolExecutorV0DiagnosticaOPESDirectoAgenteSolicitadoNoA
 	}
 }
 
+func TestMCPDirectorStatsToolExecutorV0DiagnosticaExternalWorkStoppedSinEntrega(t *testing.T) {
+	run := mcpDirectorStatsRunForTestV0(t, "run-opes-psicologo-rework-visual-019-030-20260626")
+	run.ProjectRef = "opes"
+	run.AppSpecRef = "app-spec-external-work-opes-rework-visual"
+	run.Status = "stopped"
+	run.Agents = nil
+	run.StartedAgents = nil
+	run.FailedAgents = nil
+	run.LostAgents = nil
+	run.StoppedAgents = nil
+	run.ConfirmedStoppedAgents = nil
+	run.Deliveries = nil
+	run.DeliveredAgents = nil
+
+	result, err := (MCPDirectorStatsToolExecutorV0{
+		RunStore: orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+	}).Execute(context.Background(), MCPDirectorStatsToolInputV0{
+		RequestID:     "request-ref-mcp-director-stats-stopped-no-delivery-001",
+		CorrelationID: "corr-mcp-director-stats-stopped-no-delivery-001",
+		RunRef:        run.RunID,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPDirectorStatsEstadoOKV0 ||
+		result.Stats == nil ||
+		!mcpDirectorStatsProgressIssueExistsV0(
+			result.Stats.Progress.Issues,
+			mcpDirectorStatsExternalWorkStoppedNoDeliveryV0,
+		) {
+		t.Fatalf("result=%+v", result)
+	}
+	if !strings.Contains(result.Stats.Progress.Issues[0].Message, "relaunch_or_replan_external_work_with_causal_error") {
+		t.Fatalf("issues=%+v", result.Stats.Progress.Issues)
+	}
+}
+
 func TestMCPDirectorStatsToolExecutorV0DevuelveIssuesPublicos(t *testing.T) {
 	result, err := (MCPDirectorStatsToolExecutorV0{}).Execute(
 		context.Background(),

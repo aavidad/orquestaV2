@@ -9,6 +9,7 @@ import (
 const (
 	mcpDirectorStatsAgentRequestedNotStartedV0             = "agent_requested_not_started"
 	mcpDirectorStatsExternalWorkAgentRequestedNotStartedV0 = "external_work_agent_requested_not_started"
+	mcpDirectorStatsExternalWorkStoppedNoDeliveryV0        = "external_work_accepted_stopped_without_delivery"
 )
 
 func enrichMCPDirectorStatsRequestedAgentNotStartedV0(
@@ -32,6 +33,29 @@ func enrichMCPDirectorStatsRequestedAgentNotStartedV0(
 		Code:    code,
 		Field:   "agents",
 		Message: "cause=unknown action=retry_materialization_or_check_capacity_auth_runtime_queue_outbox_policy",
+	})
+}
+
+func enrichMCPDirectorStatsExternalWorkStoppedNoDeliveryV0(
+	stats *orquestacionnucleoapp.DirectorRunStatsV0,
+) {
+	if stats == nil ||
+		!mcpDirectorStatsLooksExternalWorkV0(*stats) ||
+		strings.TrimSpace(stats.Status) != "stopped" ||
+		stats.Counts.AgentsRequested > 0 ||
+		stats.Counts.AgentsStarted > 0 ||
+		stats.Counts.AgentsInFlight > 0 ||
+		stats.Counts.Deliveries > 0 ||
+		stats.Counts.AgentsDelivered > 0 {
+		return
+	}
+	if mcpDirectorStatsProgressIssueExistsV0(stats.Progress.Issues, mcpDirectorStatsExternalWorkStoppedNoDeliveryV0) {
+		return
+	}
+	stats.Progress.Issues = append(stats.Progress.Issues, orquestacionnucleoapp.DirectorProgressIssueV0{
+		Code:    mcpDirectorStatsExternalWorkStoppedNoDeliveryV0,
+		Field:   "run",
+		Message: "external_work accepted and stopped without agents or delivery action=relaunch_or_replan_external_work_with_causal_error",
 	})
 }
 

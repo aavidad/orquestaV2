@@ -12,7 +12,10 @@ import (
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 )
 
-const codexStackExternalWorkAgentRequestedNotStartedDiagnosticV0 = "external_work_agent_requested_not_started"
+const (
+	codexStackExternalWorkAgentRequestedNotStartedDiagnosticV0 = "external_work_agent_requested_not_started"
+	codexStackExternalWorkStoppedNoDeliveryDiagnosticV0        = "external_work_accepted_stopped_without_delivery"
+)
 
 func codexStackRunSupervisorErrorResultMCPV0(
 	input orquestamcp.MCPRunSupervisorToolInputV0,
@@ -179,6 +182,51 @@ func (stack *StackV0) codexStackRunSupervisorRequestedNotStartedDiagnosticsMCPV0
 	}}
 }
 
+func (stack *StackV0) codexStackRunSupervisorStoppedNoDeliveryDiagnosticsMCPV0(
+	ctx context.Context,
+	input orquestamcp.MCPRunSupervisorToolInputV0,
+	result CodexSupervisorResultV0,
+) []orquestamcp.MCPAutoprogrammingDiagnosticV0 {
+	if stack == nil || stack.Stores.RunStore == nil {
+		return nil
+	}
+	if result.StopReason != CodexSupervisorStopStoppedV0 &&
+		result.Last.Status != CodexSupervisorRuntimeStoppedV0 {
+		return nil
+	}
+	runRef := strings.TrimSpace(firstNonEmptyQueuedSourceV0(input.RunRef, result.Last.SessionRef))
+	if runRef == "" {
+		return nil
+	}
+	run, err := stack.Stores.RunStore.LoadRunV0(ctx, runRef)
+	if err != nil || !codexStackRunLooksExternalWorkV0(run.ProjectRef, run.AppSpecRef) {
+		return nil
+	}
+	if len(compactStringsV0(run.Agents)) > 0 ||
+		len(compactStringsV0(run.StartedAgents)) > 0 ||
+		len(stackDrainPendingStartedAgentRefsV0(run)) > 0 ||
+		len(compactStringsV0(run.Deliveries)) > 0 ||
+		len(compactStringsV0(run.DeliveredAgents)) > 0 {
+		return nil
+	}
+	message := strings.Join(compactStringsV0([]string{
+		"agents_requested=0",
+		"started_agents=0",
+		"in_flight=0",
+		"deliveries=0",
+		"action=relaunch_or_replan_external_work_with_causal_error",
+	}), " ")
+	return []orquestamcp.MCPAutoprogrammingDiagnosticV0{{
+		Code:    codexStackExternalWorkStoppedNoDeliveryDiagnosticV0,
+		Scope:   "run:" + runRef,
+		Message: message,
+		EvidenceRefs: compactStringsV0(append(
+			result.Last.EvidenceRefs,
+			"evidence-ref-external-work-accepted-stopped-without-delivery",
+		)),
+	}}
+}
+
 func codexStackRunSupervisorWithRequestedNotStartedActionsMCPV0(
 	output orquestamcp.MCPRunSupervisorToolResultV0,
 	diagnostics []orquestamcp.MCPAutoprogrammingDiagnosticV0,
@@ -196,6 +244,28 @@ func codexStackRunSupervisorWithRequestedNotStartedActionsMCPV0(
 	output.NextActions = compactStringsV0(append(output.NextActions,
 		"retry_materialization",
 		"check_capacity_auth_runtime_queue_outbox_policy",
+		"do_not_mark_completed_without_agent_start_or_delivery",
+	))
+	return output
+}
+
+func codexStackRunSupervisorWithStoppedNoDeliveryActionsMCPV0(
+	output orquestamcp.MCPRunSupervisorToolResultV0,
+	diagnostics []orquestamcp.MCPAutoprogrammingDiagnosticV0,
+) orquestamcp.MCPRunSupervisorToolResultV0 {
+	hasStoppedNoDelivery := false
+	for _, diagnostic := range diagnostics {
+		if strings.TrimSpace(diagnostic.Code) == codexStackExternalWorkStoppedNoDeliveryDiagnosticV0 {
+			hasStoppedNoDelivery = true
+			break
+		}
+	}
+	if !hasStoppedNoDelivery {
+		return output
+	}
+	output.NextActions = compactStringsV0(append(output.NextActions,
+		"relaunch_or_replan_external_work_with_causal_error",
+		"inspect_external_work_payload_and_runtime_binding",
 		"do_not_mark_completed_without_agent_start_or_delivery",
 	))
 	return output
