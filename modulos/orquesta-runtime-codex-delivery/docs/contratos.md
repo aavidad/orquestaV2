@@ -118,8 +118,9 @@ Invariantes:
 - Los prefijos de control, por ejemplo runtime aislado dentro del proyecto, se
   inyectan como `ignore_prefixes`.
 - Si hay cambios fuera de write-set o borrados, devuelve evidencia compacta
-  `gate-issue:file_outside_write_set` o `gate-issue:removed_path` sin filtrar
-  `project_work_dir`, `ack_path` ni rutas absolutas al nucleo. Requests
+  `gate-issue:file_outside_write_set`,
+  `gate-issue:write_set_escape_detected` o `gate-issue:removed_path` sin
+  filtrar `project_work_dir`, `ack_path` ni rutas absolutas al nucleo. Requests
   invalidas siguen devolviendo error compacto.
 - Los limites de presupuesto de snapshot son observabilidad: si el snapshot
   verificable es parcial, se devuelven refs de evidencia compactas y no se

@@ -284,6 +284,7 @@ func codexReceiptWorktreeSoftIssueRefsV0(
 			refs = append(refs, codexReceiptWorktreeIssueEvidenceRefsV0("removed_path", issue)...)
 		case orquestaruntimeworktree.WorktreeIssueOutsideWriteSetV0:
 			refs = append(refs, codexReceiptWorktreeIssueEvidenceRefsV0("file_outside_write_set", issue)...)
+			refs = append(refs, codexReceiptWorktreeIssueEvidenceRefsV0("write_set_escape_detected", issue)...)
 		case orquestaruntimeworktree.WorktreeIssueTruncatedPathV0:
 			refs = append(refs, codexReceiptWorktreeIssueEvidenceRefsV0("truncated_path", issue)...)
 		case orquestaruntimeworktree.WorktreeIssueRenamedOrMovedV0:

@@ -171,6 +171,10 @@ func TestCodexDeliveryObservationSourceV0ConservaCambioRealFueraDeWriteSetComoRa
 	if !stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-issue:file_outside_write_set") {
 		t.Fatalf("rail blando fuera de write-set no conservado: %+v", observations[0].EvidenceRefs)
 	}
+	if !stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-issue:write_set_escape_detected") ||
+		!stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-issue:write_set_escape_detected:changed_file_outside_write_set") {
+		t.Fatalf("escape fuera de write-set no expuesto: %+v", observations[0].EvidenceRefs)
+	}
 }
 
 func TestCodexDeliveryObservationSourceV0ConservaAckFilesMismatchComoRailBlando(t *testing.T) {

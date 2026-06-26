@@ -78,6 +78,7 @@ func TestCodexReviewGateObservationSourceV0NoCortaPorRailsGenericosEnCamposACK(t
 			orquestaruntimecodex.CodexAgentAckPendingRailEvidenceRefV0,
 		) ||
 		!stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-issue:file_outside_write_set") ||
+		!stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-issue:write_set_escape_detected") ||
 		!stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-followup-required") {
 		t.Fatalf("observations=%+v", observations)
 	}

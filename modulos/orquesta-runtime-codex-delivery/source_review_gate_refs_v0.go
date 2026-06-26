@@ -52,6 +52,7 @@ func codexReviewGateEvidenceRefsV0(
 			values = append(values, ref)
 		}
 	}
+	values = codexDeliveryWithWriteSetEscapeAliasV0(values)
 	return compactCodexDeliveryRefsV0(values)
 }
 

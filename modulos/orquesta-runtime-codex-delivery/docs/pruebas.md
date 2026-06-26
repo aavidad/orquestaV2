@@ -54,7 +54,8 @@ Cobertura:
   ACK simulado, observacion de entrega y `DeliveryRegistered`;
 - captura baseline de worktree antes del launch si se inyecta recorder;
 - conserva un ACK valido si el diff real solo contiene cambios fuera del
-  write-set, marcandolo como `gate-issue:file_outside_write_set`;
+  write-set, marcandolo como `gate-issue:file_outside_write_set` y
+  `gate-issue:write_set_escape_detected`;
 - conserva un ACK valido si el diff real contiene borrados, marcandolo como
   `gate-issue:removed_path` para revision/rework sin filtrar rutas locales;
 - convierte una entrega registrada en observacion de revision;

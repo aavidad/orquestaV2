@@ -1,6 +1,21 @@
 # Decisiones: orquesta-runtime-codex-delivery
 
 ```text
+Fecha: 2026-06-26
+Decision: Los cambios reales fuera del write-set exponen tambien
+`gate-issue:write_set_escape_detected`.
+Motivo: OPES reporto duplicados fuera del write-set del curso y necesita una
+senal publica estable para la vista/API. Ya existia `file_outside_write_set`,
+pero el nombre no coincidia con la incidencia operativa documentada.
+Impacto: `CodexReceiptWorktreeVerifierV0` conserva
+`gate-issue:file_outside_write_set` y anade el alias
+`gate-issue:write_set_escape_detected` con paths seguros cuando existen. No
+endurece el rail blando ni cambia core; solo mejora observabilidad de una
+frontera fuerte de efectos.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-06-13
 Decision: Un sidecar `director_decisions.json` consumido puede reexponerse solo
 para recovery explicito de decision-source.

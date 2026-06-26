@@ -5,6 +5,7 @@ import "strings"
 func codexDeliveryObservationCoreEvidenceRefsV0(values []string) []string {
 	const maxCoreEvidenceRefs = 18
 	const maxCoreEvidenceRefLen = 240
+	values = codexDeliveryWithWriteSetEscapeAliasV0(values)
 	seen := map[string]bool{}
 	result := make([]string, 0, maxCoreEvidenceRefs+1)
 	truncated := false
@@ -31,6 +32,21 @@ func codexDeliveryObservationCoreEvidenceRefsV0(values []string) []string {
 		result = append(result, "evidence-ref-codex-delivery-evidence-truncated")
 	}
 	return result
+}
+
+func codexDeliveryWithWriteSetEscapeAliasV0(values []string) []string {
+	out := make([]string, 0, len(values)+1)
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		out = append(out, value)
+		if strings.HasPrefix(value, "gate-issue:file_outside_write_set") {
+			out = append(out, strings.Replace(value, "gate-issue:file_outside_write_set", "gate-issue:write_set_escape_detected", 1))
+		}
+	}
+	return out
 }
 
 func compactCodexDeliveryRefsV0(values []string) []string {
