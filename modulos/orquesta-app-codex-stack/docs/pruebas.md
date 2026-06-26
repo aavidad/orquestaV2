@@ -141,6 +141,13 @@ Cobertura Go actual:
 - `TestDrainRunV0AgenteTerminalConTareaAbiertaReplanificaSinQuedarDormido`
   valida que un agente terminal con tarea abierta genera replan/rework y no deja
   la cola en espera indefinida.
+- `TestAssessmentReplanSourceV0NoReplanificaAssessmentDeTareaCerrada`,
+  `TestAssessmentReplanSourceV0NoReplanificaAssessmentConReviewAceptada`,
+  `TestStackRunHasRecoverableTerminalAssessmentV0IgnoraAssessmentCubiertoPorReviewAceptada`
+  y `TestStackRunHasRecoverableTerminalAssessmentV0IgnoraAssessmentDeTareaCerrada`
+  validan que un assessment terminal antiguo no abre replacements si la task ya
+  esta cerrada o si hay entrega registrada con review aceptada; sin esa review,
+  el recovery sigue siendo elegible.
 - `TestStackDrainQueueStatusMantieneProgramacionGenericaActivaParaCierreV0`
   valida que implementaciones genericas entregadas no se marcan como `delivered`
   final antes del cierre formal.

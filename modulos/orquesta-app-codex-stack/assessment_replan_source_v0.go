@@ -42,6 +42,9 @@ func (source AssessmentReplanSourceV0) BuildAgentAssessmentReplanPlansV0(
 		if taskRef == "" {
 			continue
 		}
+		if assessmentReplanProjectionAlreadyCoveredV0(request.Run, projection, taskRef, descriptors) {
+			continue
+		}
 		if assessmentReplanTaskTerminalFailedFollowupCountV0(request.Run, taskRef) >= assessmentReplanMaxTerminalFailedFollowupsV0 {
 			continue
 		}

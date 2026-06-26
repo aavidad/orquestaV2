@@ -43,6 +43,50 @@ func TestAssessmentReplanSourceV0PlanificaReemplazoTrasStopConfirmado(t *testing
 	}
 }
 
+func TestAssessmentReplanSourceV0NoReplanificaAssessmentDeTareaCerrada(t *testing.T) {
+	runRef := "run-ref-assessment-replan-stack-covered-closed-001"
+	oldAgentRef := "agent-ref-assessment-covered-closed-001"
+	taskRef := "task-ref-assessment-covered-closed-001"
+	source := AssessmentReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(
+			assessmentReplanDescriptorForTestV0(runRef, oldAgentRef, taskRef),
+		),
+	}
+	request := assessmentReplanRequestForTestV0(runRef, oldAgentRef, taskRef, false)
+	request.Run.ClosedTasks = []string{taskRef}
+
+	plans, err := source.BuildAgentAssessmentReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildAgentAssessmentReplanPlansV0 covered closed: %v", err)
+	}
+	if len(plans) != 0 {
+		t.Fatalf("assessment de tarea cerrada no debe abrir replan: %+v", plans)
+	}
+}
+
+func TestAssessmentReplanSourceV0NoReplanificaAssessmentConReviewAceptada(t *testing.T) {
+	runRef := "run-ref-assessment-replan-stack-covered-review-001"
+	oldAgentRef := "agent-ref-assessment-covered-review-001"
+	taskRef := "task-ref-assessment-covered-review-001"
+	deliveryRef := "delivery-ref-assessment-covered-review-001"
+	descriptor := assessmentReplanDescriptorForTestV0(runRef, oldAgentRef, taskRef)
+	descriptor.Spec.AgentPacket.DeliveryRefs.AckRef = deliveryRef
+	source := AssessmentReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(descriptor),
+	}
+	request := assessmentReplanRequestForTestV0(runRef, oldAgentRef, taskRef, false)
+	request.Run.Deliveries = []string{deliveryRef}
+	request.Run.AcceptedReviews = []string{"accepted-review-ref-" + deliveryRef}
+
+	plans, err := source.BuildAgentAssessmentReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildAgentAssessmentReplanPlansV0 covered review: %v", err)
+	}
+	if len(plans) != 0 {
+		t.Fatalf("assessment con review aceptada no debe abrir replan: %+v", plans)
+	}
+}
+
 func TestAssessmentReplanSourceV0PlanificaReemplazoTrasAgentePerdido(t *testing.T) {
 	runRef := "run-ref-assessment-replan-stack-lost-001"
 	oldAgentRef := "agent-ref-assessment-lost-001"
@@ -62,6 +106,67 @@ func TestAssessmentReplanSourceV0PlanificaReemplazoTrasAgentePerdido(t *testing.
 	}
 	if len(plans) != 1 || plans[0].Assessment.AgentRequestID != oldAgentRef {
 		t.Fatalf("plans lost=%+v", plans)
+	}
+}
+
+func TestStackRunHasRecoverableTerminalAssessmentV0IgnoraAssessmentCubiertoPorReviewAceptada(t *testing.T) {
+	agentRef := "agent-ref-stack-assessment-covered-review-001"
+	taskRef := "task-ref-stack-assessment-covered-review-001"
+	deliveryRef := "delivery-ref-stack-assessment-covered-review-001"
+	run := orquestacoreworkflow.OrchestrationRunV0{
+		RunID:        "run-ref-stack-assessment-covered-review-001",
+		CurrentPhase: orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		Tasks:        []string{taskRef},
+		AgentAssessments: []string{
+			orquestacoreworkflow.AgentAssessmentProjectionRefV0(orquestacoreworkflow.AgentWorkAssessedPayloadV0{
+				AssessmentRef:  "assessment-ref-" + agentRef,
+				PhaseID:        string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+				AgentRequestID: agentRef,
+				TaskRef:        taskRef,
+				DeliveryRef:    deliveryRef,
+				Verdict:        orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0,
+				Action:         orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
+				Severity:       orquestacoreworkflow.AgentAssessmentSeverityCriticalV0,
+			}),
+		},
+		DeliveredAgents: []string{agentRef},
+		Deliveries:      []string{deliveryRef},
+		AcceptedReviews: []string{"accepted-review-ref-" + deliveryRef},
+	}
+	if stackRunHasRecoverableTerminalAssessmentV0(run) {
+		t.Fatalf("assessment cubierto por review aceptada no debe disparar recovery")
+	}
+	run.AcceptedReviews = nil
+	if !stackRunHasRecoverableTerminalAssessmentV0(run) {
+		t.Fatalf("assessment terminal sin review aceptada debe seguir disparando recovery")
+	}
+}
+
+func TestStackRunHasRecoverableTerminalAssessmentV0IgnoraAssessmentDeTareaCerrada(t *testing.T) {
+	agentRef := "agent-ref-stack-assessment-covered-task-001"
+	closedTaskRef := "task-ref-stack-assessment-covered-task-001"
+	openTaskRef := "task-ref-stack-assessment-open-task-001"
+	run := orquestacoreworkflow.OrchestrationRunV0{
+		RunID:        "run-ref-stack-assessment-covered-task-001",
+		CurrentPhase: orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		Tasks:        []string{closedTaskRef, openTaskRef},
+		ClosedTasks:  []string{closedTaskRef},
+		AgentAssessments: []string{
+			orquestacoreworkflow.AgentAssessmentProjectionRefV0(orquestacoreworkflow.AgentWorkAssessedPayloadV0{
+				AssessmentRef:  "assessment-ref-" + agentRef,
+				PhaseID:        string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+				AgentRequestID: agentRef,
+				TaskRef:        closedTaskRef,
+				Verdict:        orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0,
+				Action:         orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
+				Severity:       orquestacoreworkflow.AgentAssessmentSeverityCriticalV0,
+			}),
+		},
+		StoppedAgents:          []string{agentRef},
+		ConfirmedStoppedAgents: []string{agentRef},
+	}
+	if stackRunHasRecoverableTerminalAssessmentV0(run) {
+		t.Fatalf("assessment de tarea cerrada no debe disparar recovery aunque haya otras tareas abiertas")
 	}
 }
 
@@ -437,6 +542,7 @@ func assessmentReplanDescriptorForTestV0(
 		DescriptorRef: "receipt-ref-" + agentRef,
 		RunID:         runRef,
 		AgentRef:      agentRef,
+		AckPath:       "ack-path-" + agentRef,
 		Spec: orquestaruntime.ExternalAgentLaunchSpecV0{
 			RequestID: agentRef,
 			AgentPacket: orquestaruntime.AgentStartPacketV0{

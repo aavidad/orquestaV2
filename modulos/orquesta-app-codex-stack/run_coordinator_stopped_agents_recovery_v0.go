@@ -80,6 +80,9 @@ func stackRunHasRecoverableTerminalAssessmentV0(
 		if !ok || !stackAssessmentActionCanTriggerRecoveryV0(projection.Action) {
 			continue
 		}
+		if assessmentReplanProjectionAlreadyCoveredV0(run, projection, projection.TaskRef, nil) {
+			continue
+		}
 		if terminal[strings.TrimSpace(projection.AgentRequestID)] {
 			return true
 		}
