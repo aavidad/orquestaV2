@@ -106,7 +106,7 @@ func externalWorkContextEntriesV0(
 	taskRef string,
 	work *orquestaappchange.AppChangeExternalWorkV0,
 ) []orquestacontext.ContextMaterializedEntryV0 {
-	if work == nil || len(work.InputFields) == 0 {
+	if work == nil {
 		return nil
 	}
 	policy := externalWorkContextPolicyForWorkV0(work)
@@ -117,6 +117,14 @@ func externalWorkContextEntriesV0(
 	}
 	entries := make([]orquestacontext.ContextMaterializedEntryV0, 0, limit+1)
 	remaining := policy.TotalMaxBytes
+	if externalWorkContextIsOPESV0(work) {
+		entry := externalWorkOPESSearchScopeEntryV0(area, taskRef)
+		entries = append(entries, entry)
+		remaining -= entry.Bytes
+	}
+	if len(fields) == 0 {
+		return entries
+	}
 	omitted := len(fields) - limit
 	for index, field := range fields[:limit] {
 		if remaining <= 0 {
@@ -147,6 +155,46 @@ func externalWorkContextEntriesV0(
 		entries = append(entries, externalWorkContextBudgetEntryV0(area, taskRef, omitted))
 	}
 	return entries
+}
+
+func externalWorkContextIsOPESV0(
+	work *orquestaappchange.AppChangeExternalWorkV0,
+) bool {
+	if work == nil {
+		return false
+	}
+	projectRef := strings.ToLower(strings.TrimSpace(work.ProjectRef))
+	if projectRef == "opes" || strings.HasPrefix(projectRef, "opes-") {
+		return true
+	}
+	for _, ref := range append(append([]string{}, work.InterfaceRefs...), work.WorkRefs...) {
+		ref = strings.ToLower(strings.TrimSpace(ref))
+		if ref == "opes" ||
+			strings.HasPrefix(ref, "opes-") ||
+			strings.Contains(ref, "opes-rest") ||
+			strings.Contains(ref, "opes-mcp") {
+			return true
+		}
+	}
+	return false
+}
+
+func externalWorkOPESSearchScopeEntryV0(
+	area string,
+	taskRef string,
+) orquestacontext.ContextMaterializedEntryV0 {
+	const content = "OPES external-work search scope: start inventory and searches from the course, topic, official program, canon and reusable material refs in this packet. Exclude opes-salidas/backups/**, historical packages and runtime/control dirs from normal searches unless the task explicitly asks for a global audit."
+	refSuffix := packetRefSuffixV0(taskRef, area, "opes-search-scope", "00")
+	return orquestacontext.ContextMaterializedEntryV0{
+		EntryRef:  "entry-ref-app-stack-external-" + refSuffix,
+		Layer:     orquestacontext.ContextLayerTaskContextV0,
+		Kind:      orquestacontext.ContextEntryDocRefV0,
+		SourceRef: "source-ref-app-stack-external-" + refSuffix,
+		Mode:      orquestacontext.ContextMaterializationModeContentV0,
+		Content:   content,
+		Bytes:     len(content),
+		Required:  false,
+	}
 }
 
 func externalWorkPrioritizedContextFieldsV0(

@@ -2,6 +2,20 @@
 
 ```text
 Fecha: 2026-06-26
+Decision: El paquete OPES external-work incluye pauta de busqueda acotada.
+Motivo: OPES documento agentes que empezaban con busquedas demasiado amplias y
+alcanzaban backups, paquetes historicos o runtime antes de enfocar curso/tema.
+Impacto: `CodexLaunchSpecResolverV0` anade una entrada de contexto advisory
+para trabajos OPES: empezar por curso, tema, programa oficial, canon y refs
+del paquete, y excluir backups, historicos y runtime/control salvo auditoria
+global explicita. No es un rail duro ni descarta entregas; solo orienta el
+trabajo y reduce ruido/coste.
+Contratos afectados: `AgentStartPacketV0`, contexto external-work OPES.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-06-26
 Decision: El supervisor global diagnostica `no_execution` con candidatos
 ejecutables en cola.
 Motivo: OPES documento supervisiones que terminaban sin ejecucion aunque habia

@@ -48,6 +48,10 @@ Cobertura Go actual:
   tambien comprueba que el contexto del agente contiene la regla OPES de
   derivacion descendente A1/A2 o A1 -> B/C1 -> C2/AP y el metodo de
   asimilacion.
+- `TestCodexLaunchSpecResolverV0MaterializaContextoDominioExterno` valida que
+  el contexto external-work OPES incluye la pauta de busqueda acotada para
+  empezar por curso/tema/canon y excluir backups, historicos y runtime salvo
+  auditoria global explicita.
 - `TestCodexStackV0ExternalWorkRunOPESSubrolesSupervisorDirectoSinLimitesLanzaSeisYDejaColaRunningV0`
   valida que el supervisor directo de un OPES 1+6 con ACK pendiente materializa
   padre y seis hijos, lanza los seis subroles reales y deja la cola `running`

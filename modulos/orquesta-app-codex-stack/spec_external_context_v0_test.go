@@ -82,7 +82,7 @@ func TestCodexLaunchSpecResolverV0MaterializaContextoDominioExterno(t *testing.T
 	if len(context.Entries) < 4 {
 		t.Fatalf("context entries=%+v", context.Entries)
 	}
-	for _, want := range []string{"topic_id", "topic-ref-real-001", "syllabus_full", "block_position", "chapter_order", "source_refs", "BOE-A-001"} {
+	for _, want := range []string{"topic_id", "topic-ref-real-001", "syllabus_full", "block_position", "chapter_order", "source_refs", "BOE-A-001", "opes-salidas/backups", "global audit"} {
 		if !codexStackContextContainsForTestV0(context.Entries, want) {
 			t.Fatalf("context no contiene %q: %+v", want, context.Entries)
 		}
