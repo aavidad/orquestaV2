@@ -15,6 +15,7 @@ import (
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 )
 
 func TestCodexStackV0ExternalWorkRunCreaRunSinDirectorInicial(t *testing.T) {
@@ -410,8 +411,8 @@ func TestCodexStackV0ExternalWorkRunOPESSubrolesPadreConservaWriteSetProductoAut
 	}
 }
 
-func TestCodexStackV0ExternalWorkRunOPESSubrolesSupervisorDirectoSinLimitesLanzaSieteV0(t *testing.T) {
-	runtime := newFakeCodexStackRuntimeV0()
+func TestCodexStackV0ExternalWorkRunOPESSubrolesSupervisorDirectoSinLimitesLanzaSeisYDejaColaRunningV0(t *testing.T) {
+	runtime := newPendingAckCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)
 	result := postExternalWorkRunStackWithChangeV0(t, stack, orquestaappchange.AppChangeRequestV0{
 		ChangeRef:  "opes-job-tema-subroles-supervisor-001",
@@ -419,7 +420,7 @@ func TestCodexStackV0ExternalWorkRunOPESSubrolesSupervisorDirectoSinLimitesLanza
 		UserIntent: "Resolver tema OPES con padre y seis subroles desde supervisor directo.",
 		AcceptanceCriteria: []string{
 			"materializar padre y seis subagentes OPES",
-			"arrancar todos los subroles sin limites expertos obligatorios",
+			"arrancar seis subroles sin limites expertos obligatorios",
 		},
 		ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
 			ProjectRef:    "opes",
@@ -446,13 +447,44 @@ func TestCodexStackV0ExternalWorkRunOPESSubrolesSupervisorDirectoSinLimitesLanza
 	if err != nil {
 		t.Fatalf("LoadRunV0: %v", err)
 	}
-	if len(run.Tasks) != 7 || len(run.StartedAgents) != 7 || runtime.launchCountV0() != 7 {
-		t.Fatalf("supervisor directo no lanzo siete agentes OPES: tasks=%v started=%v launches=%d supervisor=%+v",
+	if len(run.Tasks) != 7 || len(run.StartedAgents) != 6 || runtime.launchCountV0() != 6 {
+		t.Fatalf("supervisor directo no lanzo seis subroles OPES: tasks=%v started=%v launches=%d supervisor=%+v",
 			run.Tasks,
 			run.StartedAgents,
 			runtime.launchCountV0(),
 			supervisor,
 		)
+	}
+	candidates, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		context.Background(),
+		orquestarunqueue.RunQueueReadRequestV0{
+			QueueRef:             DefaultRunQueueRefV0,
+			IncludeNonExecutable: true,
+		},
+	)
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	found := false
+	for _, candidate := range candidates {
+		if candidate.RunRef != result.RunRef {
+			continue
+		}
+		found = true
+		if candidate.Status != orquestarunqueue.RunStatusRunningV0 {
+			t.Fatalf("supervisor directo dejo cola sin running: candidate=%+v started=%v delivered_agents=%v deliveries=%v delivered_tasks=%v closed_tasks=%v phase_artifacts=%v",
+				candidate,
+				run.StartedAgents,
+				run.DeliveredAgents,
+				run.Deliveries,
+				run.DeliveredTasks,
+				run.ClosedTasks,
+				run.PhaseArtifacts,
+			)
+		}
+	}
+	if !found {
+		t.Fatalf("supervisor directo no encontro candidato en cola: candidates=%+v", candidates)
 	}
 }
 

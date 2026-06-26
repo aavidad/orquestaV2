@@ -48,6 +48,11 @@ Cobertura Go actual:
   tambien comprueba que el contexto del agente contiene la regla OPES de
   derivacion descendente A1/A2 o A1 -> B/C1 -> C2/AP y el metodo de
   asimilacion.
+- `TestCodexStackV0ExternalWorkRunOPESSubrolesSupervisorDirectoSinLimitesLanzaSeisYDejaColaRunningV0`
+  valida que el supervisor directo de un OPES 1+6 con ACK pendiente materializa
+  padre y seis hijos, lanza los seis subroles reales y deja la cola `running`
+  en vez de `ready`, `delivered` o `stopped` mientras no existan entregas
+  durables.
 - `DrainRunV0` ejecuta `submitPendingDomainWorkArtifactsV0` tambien despues de
   `ContinueAppDirectorV0`; asi una entrega registrada dentro del mismo ciclo no
   queda como run `quiescent` antes de enviar el artefacto al conector de dominio.

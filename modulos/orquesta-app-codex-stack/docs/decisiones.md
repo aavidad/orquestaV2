@@ -2,6 +2,24 @@
 
 ```text
 Fecha: 2026-06-26
+Decision: La supervision directa sincroniza la cola como `running` cuando el
+run tiene agentes arrancados sin entrega durable.
+Motivo: OPES documento runs que aparecian `ready`/terminales aunque ya habia
+procesos vivos o subroles en vuelo. El loop directo por `run_ref` no pasa por la
+rotacion de estado del coordinador global y ademas puede calcular cola con una
+proyeccion de loop menos completa que el `RunStore` persistido.
+Impacto: `CodexSupervisorStackLifecycleV0` deja de sincronizar solo estados
+terminales, lee la foto persistida del run antes de decidir y marca `running`
+si hay tareas abiertas, agentes arrancados sin ACK/delivery, outbox o pendientes.
+El estado `delivered`/`stopped` no se proyecta mientras existan agentes iniciados
+sin entrega, fallo, lost o stop confirmado.
+Contratos afectados: `RunQueue`, `DrainRunV0`,
+`CodexSupervisorStackLifecycleV0`.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-06-26
 Decision: Una validacion `domain_work` estructurada con `files_scanned=0` no
 puede completar el job como si fuera un pass.
 Motivo: OPES documento validadores que devolvian `pass` aunque no habian

@@ -12,6 +12,7 @@ func (stack StackV0) stackDrainQueueStatusForCoordinatorV0(
 	ctx context.Context,
 	result orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
 ) (string, error) {
+	result = stack.stackDrainQueueStatusResultWithLatestRunV0(ctx, result)
 	status := stackDrainQueueStatusV0(result)
 	if status == orquestarunqueue.RunStatusClosedV0 {
 		complete, _, err := stack.maybePromoteClosedAutoprogrammingRunV0(ctx, result.Final.Run)
@@ -35,6 +36,22 @@ func (stack StackV0) stackDrainQueueStatusForCoordinatorV0(
 	return status, nil
 }
 
+func (stack StackV0) stackDrainQueueStatusResultWithLatestRunV0(
+	ctx context.Context,
+	result orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
+) orquestacionnucleoapp.ManagedProgressiveLoopResultV0 {
+	runRef := result.Final.Run.RunID
+	if runRef == "" || stack.Stores.RunStore == nil {
+		return result
+	}
+	latest, err := stack.Stores.RunStore.LoadRunV0(ctx, runRef)
+	if err != nil || latest.RunID == "" {
+		return result
+	}
+	result.Final.Run = latest
+	return result
+}
+
 func stackDrainQueueStatusV0(
 	result orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
 ) string {
@@ -46,6 +63,7 @@ func stackDrainQueueStatusV0(
 		return ""
 	}
 	if stackDrainRunHasAllTasksDeliveredOrClosedV0(run) &&
+		!stackDrainRunHasUndeliveredStartedAgentsV0(run) &&
 		!drainRunHasPendingExternalAgentsV0(run, nil) {
 		return orquestarunqueue.RunStatusDeliveredV0
 	}
@@ -56,6 +74,7 @@ func stackDrainQueueStatusV0(
 	if result.Status == orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0 &&
 		result.Final.PendingOutboxCount == 0 &&
 		result.Final.FirstPendingCount == 0 &&
+		!stackDrainRunHasUndeliveredStartedAgentsV0(run) &&
 		!drainRunHasPendingExternalAgentsV0(run, nil) {
 		return orquestarunqueue.RunStatusStoppedV0
 	}
@@ -72,4 +91,27 @@ func stackDrainRunAwaitsLateDirectorDecisionsV0(
 		(len(compactCodexStackStringsV0(run.PhaseArtifacts)) > 0 ||
 			len(compactCodexStackStringsV0(run.DeliveredAgents)) > 0 ||
 			len(compactCodexStackStringsV0(run.Deliveries)) > 0)
+}
+
+func stackDrainRunHasUndeliveredStartedAgentsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) bool {
+	started := compactCodexStackStringsV0(run.StartedAgents)
+	if len(started) == 0 {
+		return false
+	}
+	terminalRefs := append([]string{}, run.DeliveredAgents...)
+	terminalRefs = append(terminalRefs, run.FailedAgents...)
+	terminalRefs = append(terminalRefs, run.LostAgents...)
+	terminalRefs = append(terminalRefs, run.ConfirmedStoppedAgents...)
+	terminalRefs = compactCodexStackStringsV0(terminalRefs)
+	if len(terminalRefs) == 0 {
+		return len(compactCodexStackStringsV0(run.Deliveries)) < len(started)
+	}
+	for _, agentRef := range started {
+		if !codexStackStringInSetV0(terminalRefs, agentRef) {
+			return true
+		}
+	}
+	return false
 }

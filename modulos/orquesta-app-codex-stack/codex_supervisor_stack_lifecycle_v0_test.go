@@ -276,7 +276,7 @@ func TestCodexSupervisorStackLifecycleV0SincronizaColaTerminalEnDrainDirectoV0(t
 		len(candidates) != 1 ||
 		candidates[0].Status != orquestarunqueue.RunStatusDeliveredV0 ||
 		orquestarunqueue.IsExecutableRunStatusV0(candidates[0].Status) ||
-		!codexStackRefsContainPartV0(candidates[0].EvidenceRefs, "direct-drain-terminal-queue-sync") {
+		!codexStackRefsContainPartV0(candidates[0].EvidenceRefs, "direct-drain-queue-sync") {
 		t.Fatalf("snapshot=%+v candidates=%+v", snapshot, candidates)
 	}
 }

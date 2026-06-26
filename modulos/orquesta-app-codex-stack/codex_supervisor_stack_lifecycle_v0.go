@@ -70,7 +70,7 @@ func (lifecycle CodexSupervisorStackLifecycleV0) drainRunV0(
 	request = enriched
 	result, err := lifecycle.Stack.DrainRunV0(ctx, request)
 	if err == nil {
-		err = lifecycle.syncDirectDrainTerminalQueueStatusV0(ctx, result)
+		err = lifecycle.syncDirectDrainQueueStatusV0(ctx, result)
 	}
 	snapshot := lifecycle.codexSupervisorSnapshotFromDrainV0(ctx, request.RunRef, request.OperationalDirectorPlanRef, result)
 	if err != nil {
@@ -117,15 +117,22 @@ func (lifecycle CodexSupervisorStackLifecycleV0) drainRunV0(
 	return snapshot, err
 }
 
-func (lifecycle CodexSupervisorStackLifecycleV0) syncDirectDrainTerminalQueueStatusV0(
+func (lifecycle CodexSupervisorStackLifecycleV0) syncDirectDrainQueueStatusV0(
 	ctx context.Context,
 	result orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
 ) error {
 	if lifecycle.Stack.Stores.RunQueue == nil {
 		return nil
 	}
+	result = lifecycle.Stack.stackDrainQueueStatusResultWithLatestRunV0(ctx, result)
 	queueStatus, err := lifecycle.Stack.stackDrainQueueStatusForCoordinatorV0(ctx, result)
-	if err != nil || strings.TrimSpace(queueStatus) == "" || orquestarunqueue.IsExecutableRunStatusV0(queueStatus) {
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(queueStatus) == "" && codexSupervisorDirectDrainShouldMarkRunningV0(result) {
+		queueStatus = orquestarunqueue.RunStatusRunningV0
+	}
+	if strings.TrimSpace(queueStatus) == "" {
 		return nil
 	}
 	queueConfig := normalizeRunQueueConfigV0(lifecycle.Stack.RunQueue)
@@ -144,6 +151,9 @@ func (lifecycle CodexSupervisorStackLifecycleV0) syncDirectDrainTerminalQueueSta
 		if strings.TrimSpace(candidate.RunRef) != runRef {
 			continue
 		}
+		if strings.TrimSpace(candidate.Status) == queueStatus {
+			return nil
+		}
 		_, err = lifecycle.Stack.Stores.RunQueue.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
 			RunRef:           candidate.RunRef,
 			QueueRef:         queueConfig.QueueRef,
@@ -157,17 +167,31 @@ func (lifecycle CodexSupervisorStackLifecycleV0) syncDirectDrainTerminalQueueSta
 			SupersedesRunRef: candidate.SupersedesRunRef,
 			RescueReason:     candidate.RescueReason,
 			RequestedBy:      "codex-supervisor-direct-drain",
-			Reason:           "supervise directo sincronizo estado terminal de cola",
-			IdempotencyKey:   "codex-supervisor-direct-drain-terminal:" + runRef + ":" + queueStatus,
+			Reason:           "supervise directo sincronizo estado de cola",
+			IdempotencyKey:   "codex-supervisor-direct-drain-queue:" + runRef + ":" + queueStatus,
 			EvidenceRefs: compactStringsV0(append(
 				candidate.EvidenceRefs,
-				"evidence-ref-codex-supervisor-direct-drain-terminal-queue-sync",
+				"evidence-ref-codex-supervisor-direct-drain-queue-sync",
 			)),
 			WorksetClaims: candidate.WorksetClaims,
 		})
 		return err
 	}
 	return nil
+}
+
+func codexSupervisorDirectDrainShouldMarkRunningV0(
+	result orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
+) bool {
+	run := result.Final.Run
+	if run.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 {
+		return false
+	}
+	return len(stackDrainOpenTaskRefsV0(run)) > 0 ||
+		stackDrainRunHasUndeliveredStartedAgentsV0(run) ||
+		drainRunHasPendingExternalAgentsV0(run, nil) ||
+		result.Final.PendingOutboxCount > 0 ||
+		result.Final.FirstPendingCount > 0
 }
 
 func (lifecycle CodexSupervisorStackLifecycleV0) syncDirectDrainRecoverableBlockedQueueStatusV0(
