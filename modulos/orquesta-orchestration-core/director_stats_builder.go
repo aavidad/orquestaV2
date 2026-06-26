@@ -60,9 +60,56 @@ func BuildDirectorRunStatsWithProcessRegistryV0(
 		stats.Agents[index].Process = &process
 		stats.Agents[index].ControlRegistered = true
 	}
+	appendDirectorUnreflectedProcessAgentsV0(ctx, &stats, registry)
 	refreshDirectorControlCountsV0(&stats, true)
 	applyDirectorRegisteredProcessProgressV0(&stats)
 	return stats
+}
+
+func appendDirectorUnreflectedProcessAgentsV0(
+	ctx context.Context,
+	stats *DirectorRunStatsV0,
+	registry AgentProcessRegistryPortV0,
+) {
+	if stats == nil || registry == nil {
+		return
+	}
+	lister, ok := registry.(AgentProcessRegistryListPortV0)
+	if !ok {
+		return
+	}
+	records, err := lister.ListAgentProcessesV0(ctx, AgentProcessRegistryListFilterV0{
+		RunID: stats.RunRef,
+	})
+	if err != nil {
+		return
+	}
+	known := map[string]bool{}
+	for _, agent := range stats.Agents {
+		agentRef := strings.TrimSpace(agent.AgentRequestID)
+		if agentRef != "" {
+			known[agentRef] = true
+		}
+	}
+	for _, record := range records {
+		agentRef := strings.TrimSpace(record.AgentRequestID)
+		if agentRef == "" || known[agentRef] {
+			continue
+		}
+		process := directorProcessStatsFromRecordV0(record)
+		stats.Agents = append(stats.Agents, DirectorAgentStatsV0{
+			AgentRequestID:    agentRef,
+			Status:            DirectorAgentStatusRunningV0,
+			Requested:         true,
+			Started:           true,
+			InFlight:          true,
+			ControlRegistered: true,
+			ControlState:      DirectorAgentControlStateRegisteredV0,
+			CanStop:           true,
+			Process:           &process,
+		})
+		known[agentRef] = true
+	}
 }
 
 func BuildDirectorRunStatsWithObservationsV0(

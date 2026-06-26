@@ -81,6 +81,51 @@ func TestBuildDirectorRunStatsWithProcessRegistryV0UsaProcesoComoSenalParcial(t 
 	}
 }
 
+func TestBuildDirectorRunStatsWithProcessRegistryV0ProyectaProcesoNoReflejadoEnRun(t *testing.T) {
+	taskRef := "task-ref-live-process-unreflected-001"
+	agentRef := "agent-ref-live-process-unreflected-subrole-001"
+	run := mustActiveProgrammingRunV0(t, "run-nucleo-director-live-process-unreflected-001")
+	run.Tasks = []string{taskRef}
+	run.Agents = nil
+	run.StartedAgents = nil
+	registry := NewInMemoryAgentProcessRegistryV0()
+	if err := registry.RecordAgentProcessV0(context.Background(), AgentProcessRecordV0{
+		RunID:          run.RunID,
+		AgentRequestID: agentRef,
+		ProcessRef:     "process-ref-live-process-unreflected-001",
+		SessionRef:     "session-ref-live-process-unreflected-001",
+		LaunchRef:      "launch-ref-live-process-unreflected-001",
+		ReadinessRef:   "readiness-ref-live-process-unreflected-001",
+		EvidenceRefs:   []string{"evidence-ref-live-process-unreflected-001"},
+	}); err != nil {
+		t.Fatalf("record process: %v", err)
+	}
+
+	stats := BuildDirectorRunStatsWithProcessRegistryV0(context.Background(), run, registry)
+
+	if stats.Counts.AgentsInFlight != 1 ||
+		stats.Counts.AgentsControlRegistered != 1 ||
+		stats.Progress.PercentComplete != 1 ||
+		stats.Progress.TasksObserved != 1 {
+		t.Fatalf("stats=%+v", stats)
+	}
+	agent := findDirectorAgentStatsForTestV0(t, stats, agentRef)
+	if agent.Status != DirectorAgentStatusRunningV0 ||
+		!agent.Started ||
+		!agent.InFlight ||
+		!agent.ControlRegistered ||
+		agent.Process == nil ||
+		agent.Process.ProcessRef != "process-ref-live-process-unreflected-001" {
+		t.Fatalf("agent=%+v", agent)
+	}
+	task := findDirectorTaskProgressForTestV0(t, stats.Progress, taskRef)
+	if task.Status != DirectorTaskProgressInProgressV0 ||
+		task.ProgressStatus != DirectorTaskProgressProcessRegisteredV0 ||
+		task.AgentRequestID != agentRef {
+		t.Fatalf("task=%+v", task)
+	}
+}
+
 func TestBuildDirectorRunStatsWithProcessRegistryV0AsociaProcesoOpacoATareaUnica(t *testing.T) {
 	taskRef := "task-ref-live-process-opaque-001"
 	agentRef := "agent-ref-live-process-opaque-001"
