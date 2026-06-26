@@ -117,6 +117,11 @@ codex_app_server_preflight() {
   return 2
 }
 
+codex_app_server_ready() {
+  local command_path="$1"
+  "$command_path" app-server daemon version >"$daemon_stdout" 2>"$daemon_stderr"
+}
+
 json_get() {
   local file="$1"
   local expr="$2"
@@ -206,12 +211,17 @@ aceptable para smoke. Persistencia puede ser en memoria si la solicitud no exige
 base de datos.
 EOF
 
-echo "arrancando daemon Codex app-server si hace falta..."
-"$codex_command" app-server daemon start >"$daemon_stdout" 2>"$daemon_stderr" || {
-  echo "no se pudo arrancar codex app-server daemon; reason=$(codex_app_server_error_reason "$daemon_stderr"); stderr:" >&2
-  tail -n 80 "$daemon_stderr" >&2 || true
-  exit 2
-}
+echo "comprobando daemon Codex app-server..."
+if codex_app_server_ready "$codex_command"; then
+  echo "daemon Codex app-server accesible"
+else
+  echo "arrancando daemon Codex app-server si hace falta..."
+  "$codex_command" app-server daemon start >"$daemon_stdout" 2>"$daemon_stderr" || {
+    echo "no se pudo arrancar codex app-server daemon; reason=$(codex_app_server_error_reason "$daemon_stderr"); stderr:" >&2
+    tail -n 80 "$daemon_stderr" >&2 || true
+    exit 2
+  }
+fi
 
 echo "compilando servidor temporal..."
 go build -o "$bin_dir/orquesta-server" ./cmd/orquesta-server

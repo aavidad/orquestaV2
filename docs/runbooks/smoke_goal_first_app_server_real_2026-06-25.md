@@ -29,6 +29,19 @@ app-server ya esta accesible. Si el CLI existe pero no hay daemon/socket,
 devuelve `smoke_goal_first_app_server_preflight=blocked` con reason code
 diagnostico, por ejemplo `codex_app_server_control_socket_missing`.
 
+Si `codex app-server daemon start` falla por standalone gestionado ausente,
+pero el CLI instalado por Node incluye app-server, se puede levantar app-server
+directo contra el socket estandar que usa `codex app-server proxy`:
+
+```bash
+mkdir -p "$HOME/.codex/app-server-control"
+codex app-server --listen "unix://$HOME/.codex/app-server-control/app-server-control.sock"
+```
+
+En otra terminal, repite el preflight. El smoke real reutiliza un app-server ya
+accesible y solo intenta `daemon start` si `codex app-server daemon version` no
+puede conectar.
+
 Smoke real, con ejecucion de Codex:
 
 ```bash
@@ -80,6 +93,11 @@ En esta maquina `command -v codex` resuelve
 daemon en `/home/alberto/.codex/app-server-control/app-server-control.sock`;
 por tanto el siguiente paso para evidencia real es arrancar el daemon con la
 doble confirmacion del smoke, no relanzar el loop legacy.
+Comprobacion adicional del 2026-06-26: app-server directo con
+`codex app-server --listen unix://$HOME/.codex/app-server-control/app-server-control.sock`
+deja el preflight en `smoke_goal_first_app_server_preflight=ok` sin instalar
+standalone; queda pendiente ejecutar el smoke real con doble confirmacion porque
+esa parte si genera trabajo Codex.
 
 ## Exito
 

@@ -238,8 +238,11 @@ Pendiente verificable:
   El smoke ahora tiene preflight no-costoso
   `ORQUESTA_GOAL_FIRST_SMOKE_PREFLIGHT_ONLY=1` para distinguir CLI, daemon,
   socket y standalone antes de ejecutar una generacion real. Accion externa
-  pendiente: arrancar/validar daemon app-server con doble confirmacion y repetir
-  el smoke opt-in, sin caer al loop legacy.
+  pendiente actualizada: con app-server directo escuchando en
+  `$HOME/.codex/app-server-control/app-server-control.sock`, el preflight queda
+  `ok` sin instalar standalone; falta repetir el smoke real opt-in con doble
+  confirmacion para validar generacion, marcador `ORQUESTA_GOAL_RESULT_V0` y
+  cierre aceptado, sin caer al loop legacy.
 - Revalidar OPES temporal con derivados/cierre cuando exista la ruta goal-first
   real; no tocar OPES productivo ni drenar colas amplias.
 
