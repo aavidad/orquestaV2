@@ -51,6 +51,28 @@ func TestCodexStackExternalJobStatsSourceV0ExponeNarrowingLegacyComoRazon(t *tes
 	}
 }
 
+func TestCodexStackExternalJobStatsSourceV0NoCompletaPadreEntregadoConWriteSetEstrecho(t *testing.T) {
+	fixture := newCodexStackExternalJobSubrolesStatsFixtureV0(true)
+	fixture.run.DeliveredTasks = append(fixture.run.DeliveredTasks, fixture.parent.TaskID)
+	fixture.run.ClosedTasks = append(fixture.run.ClosedTasks, fixture.parent.TaskID)
+	fixture.source.RunStore = orquestacionnucleoapp.NewInMemoryRunStoreV0(fixture.run)
+
+	stats, ok, err := fixture.source.ResolveDirectorExternalJobStatsV0(
+		context.Background(),
+		fixture.request,
+	)
+
+	if err != nil {
+		t.Fatalf("ResolveDirectorExternalJobStatsV0: %v", err)
+	}
+	if !ok ||
+		stats.Status != codexStackExternalJobStatusIntegrationRequiredV0 ||
+		stats.StatusReason != codexStackExternalJobStatusReasonProductNotConsolidatedDueWriteSetNarrowingV0 ||
+		!codexStackExternalJobDiagnosticForTestV0(stats.Diagnostics, codexStackExternalJobStatusReasonProductNotConsolidatedDueWriteSetNarrowingV0) {
+		t.Fatalf("stats=%+v", stats)
+	}
+}
+
 func TestCodexStackExternalJobStatsSourceV0DistingueParentAckConCohorteAbierta(t *testing.T) {
 	fixture := newCodexStackExternalJobSubrolesStatsFixtureV0(false)
 	fixture.run.DeliveredTasks = []string{fixture.parent.TaskID}

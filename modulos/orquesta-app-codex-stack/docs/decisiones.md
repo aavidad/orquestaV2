@@ -1577,6 +1577,26 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-06-26
+Decision: Un padre OPES entregado con write-set solo de coordinacion no completa
+el job externo.
+Motivo: en OPES 1+6 los subroles pueden producir artefactos utiles bajo
+`subroles/<rol>`, pero el producto canonico del tema debe consolidarse por el
+padre en el write-set de producto autorizado. Si el `agent_packet` legacy del
+padre solo permitia `*/coordinacion`, un ACK del padre no demuestra
+consolidacion de Markdown canonico.
+Impacto: `CodexStackExternalJobStatsSourceV0` fuerza
+`external_job.status=integration_required` y
+`status_reason=product_not_consolidated_due_write_set_narrowing` incluso si el
+padre aparece en `DeliveredTasks` o `ClosedTasks`, siempre que la cohorte de
+subroles este resuelta y el write-set del padre sea solo coordinacion. Las
+nuevas olas conservan el write-set de producto en el `WorkflowTaskV0` y en el
+`agent_packet` del padre; las runs legacy estrechas quedan visibles como
+pendientes de integracion canonica.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-21
 Decision: El director puede avanzar con ACKs parciales y recoger ACKs tardios
 de la ola anterior.

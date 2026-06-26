@@ -1397,3 +1397,21 @@ Cobertura:
   encola `ready`, impide que `runs.supervisor` drene ese contenedor como loop
   legacy, observa el goal por `run_ref`, valida cierre con tests requeridos y
   sincroniza la cola solo como terminal `closed`.
+
+Validacion OPES 1+6 e integracion canonica 2026-06-26:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackExternalJobStatsSourceV0|TestCodexStackV0ExternalWorkRunOPESSubrolesPadreConservaWriteSetProductoAutorizadoV0'
+```
+
+Cobertura:
+
+- `TestCodexStackV0ExternalWorkRunOPESSubrolesPadreConservaWriteSetProductoAutorizadoV0`
+  fija que el `WorkflowTaskV0` y el `agent_packet` del padre OPES conservan el
+  write-set de producto autorizado (`temas/tema_032`) mas coordinación, mientras
+  los subroles quedan acotados a `subroles/<rol>`.
+- `TestCodexStackExternalJobStatsSourceV0NoCompletaPadreEntregadoConWriteSetEstrecho`
+  reproduce una run legacy donde los hijos y el padre ya entregaron, pero el
+  padre solo tenia write-set de coordinacion; el job queda como
+  `integration_required` con razon
+  `product_not_consolidated_due_write_set_narrowing`, no como completado.

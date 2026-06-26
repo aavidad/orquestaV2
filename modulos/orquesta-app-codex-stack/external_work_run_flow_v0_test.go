@@ -392,6 +392,12 @@ func TestCodexStackV0ExternalWorkRunOPESSubrolesPadreConservaWriteSetProductoAut
 		containsOPESSubroleWriteSetForTestV0(parent.WriteSet) {
 		t.Fatalf("parent=%+v", parent)
 	}
+	parentDescriptor := mustCodexStackDescriptorByTaskRefV0(t, stack, parent.TaskID)
+	if !codexStackStringInSetForTestV0(parentDescriptor.Spec.AgentPacket.Task.WriteSet, "temas/tema_032") ||
+		!codexStackStringInSetForTestV0(parentDescriptor.Spec.AgentPacket.Task.WriteSet, "temas/tema_032/coordinacion") ||
+		containsOPESSubroleWriteSetForTestV0(parentDescriptor.Spec.AgentPacket.Task.WriteSet) {
+		t.Fatalf("parent packet write_set=%+v parent=%+v", parentDescriptor.Spec.AgentPacket.Task.WriteSet, parent)
+	}
 	for _, child := range children {
 		if child.ParentTaskRef != parent.TaskID ||
 			codexStackStringInSetForTestV0(child.WriteSet, "temas/tema_032") ||

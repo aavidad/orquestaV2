@@ -137,14 +137,40 @@ func (source CodexStackExternalJobStatsSourceV0) enrichExternalJobTaskDiagnostic
 		source.markExternalJobParentAckWithOpenCohortV0(run, stats, parent, childRefs)
 		return
 	}
+	if childrenResolved && externalJobParentWriteSetOnlyCoordinationV0(parent.WriteSet) {
+		source.markExternalJobIntegrationRequiredV0(
+			stats,
+			parent,
+			childRefs,
+			codexStackExternalJobStatusReasonProductNotConsolidatedDueWriteSetNarrowingV0,
+			codexStackExternalJobStatusReasonProductNotConsolidatedDueWriteSetNarrowingV0,
+			"producto canonico pendiente: el padre solo tenia write-set de coordinacion",
+		)
+		return
+	}
 	if parentResolved || !childrenResolved {
 		return
 	}
-	reason := codexStackExternalJobStatusReasonParentIntegrationPendingV0
-	code := "external_job_parent_integration_pending"
-	if externalJobParentWriteSetOnlyCoordinationV0(parent.WriteSet) {
-		reason = codexStackExternalJobStatusReasonProductNotConsolidatedDueWriteSetNarrowingV0
-		code = reason
+	source.markExternalJobIntegrationRequiredV0(
+		stats,
+		parent,
+		childRefs,
+		codexStackExternalJobStatusReasonParentIntegrationPendingV0,
+		"external_job_parent_integration_pending",
+		"integracion del padre pendiente tras resolver las tareas hijas",
+	)
+}
+
+func (source CodexStackExternalJobStatsSourceV0) markExternalJobIntegrationRequiredV0(
+	stats *orquestamcp.MCPDirectorExternalJobStatsV0,
+	parent orquestacoreworkflow.WorkflowTaskV0,
+	childRefs []string,
+	reason string,
+	code string,
+	message string,
+) {
+	if stats == nil {
+		return
 	}
 	stats.Status = codexStackExternalJobStatusIntegrationRequiredV0
 	stats.StatusReason = reason
@@ -160,7 +186,7 @@ func (source CodexStackExternalJobStatsSourceV0) enrichExternalJobTaskDiagnostic
 	stats.Diagnostics = append(stats.Diagnostics, orquestamcp.MCPDirectorExternalJobDiagnosticV0{
 		Code:         code,
 		Scope:        strings.TrimSpace(stats.JobRef),
-		Message:      "integracion del padre pendiente tras resolver las tareas hijas",
+		Message:      message,
 		EvidenceRefs: compactCodexStackStringsV0(append([]string{parent.TaskID}, childRefs...)),
 	})
 }
