@@ -10,6 +10,9 @@ Responsabilidad:
 - convertir `followup_refs`, `rework_refs`, faltas obligatorias y rechazos en
   nuevos `DomainWorkJobRequestV0`;
 - evitar cierres falsos de paquetes OPES con `pendiente_continuar`;
+- preservar estados estructurados de avance parcial del registro OPES, por
+  ejemplo `texto_minimo_B_ok_pendiente_assets_html_tests_rag_audio_qa`, cuando
+  vienen en el artefacto causal;
 - mantener idempotencia estable sin tocar core ni internals de OPES.
 
 Fuera de alcance:

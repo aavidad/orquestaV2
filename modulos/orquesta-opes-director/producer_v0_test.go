@@ -155,6 +155,35 @@ func TestProduceOPESCausalJobsV0CreaActualizacionRegistroPorTema(t *testing.T) {
 	}
 }
 
+func TestProduceOPESCausalJobsV0PreservaEstadoTextoMinimoPendiente(t *testing.T) {
+	const partialStatus = "texto_minimo_B_ok_pendiente_assets_html_tests_rag_audio_qa"
+	source := fakeArtifactSourceV0{records: []OPESCausalArtifactRecordV0{{
+		Status:       "accepted",
+		DomainRef:    "opes",
+		JobRef:       "job-topic-partial-001",
+		ArtifactRef:  "artifact-topic-partial-001",
+		ArtifactType: orquestadomainwork.DomainWorkArtifactTypeContentBlockV0,
+		ReceiptRef:   "receipt-topic-partial-001",
+		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+			{Name: "course_id", Value: "curso-integracion-social-b"},
+			{Name: "topic_id", Value: "tema-023"},
+			{Name: "source_work_kind", Value: "draft_content_block"},
+			{Name: "status", Value: partialStatus},
+		},
+	}}}
+	creator := orquestadomainworkmemory.NewInMemoryDomainWorkJobCreatorV0()
+	result, err := ProduceOPESCausalJobsV0(context.Background(), OPESCausalProducerRequestV0{},
+		OPESCausalProducerPortsV0{ArtifactSource: source, JobCreator: creator, JobRecords: creator})
+	if err != nil {
+		t.Fatalf("ProduceOPESCausalJobsV0: %v", err)
+	}
+	request, ok := requestedWorkKindForTestV0(result.RequestedJobs, opesTopicRegistryUpdateWorkKindV0)
+	if !ok ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", partialStatus) {
+		t.Fatalf("request=%+v ok=%v result=%+v", request, ok, result)
+	}
+}
+
 func TestProduceOPESCausalJobsV0NoRepiteRegistroDesdeRegistro(t *testing.T) {
 	source := fakeArtifactSourceV0{records: []OPESCausalArtifactRecordV0{{
 		Status:       "accepted",

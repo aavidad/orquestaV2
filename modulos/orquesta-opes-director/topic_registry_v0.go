@@ -82,16 +82,40 @@ func topicRegistryActionForRecordV0(record OPESCausalArtifactRecordV0) string {
 }
 
 func topicRegistryStatusForRecordV0(record OPESCausalArtifactRecordV0) string {
-	status := strings.ToLower(firstNonEmptyV0(
+	status := firstNonEmptyV0(
 		fieldStringV0(record.PayloadFields, "status"),
 		fieldStringV0(record.PayloadFields, "estado"),
 		fieldStringV0(record.PayloadFields, "decision"),
-	))
-	if len(followupRefsForRecordV0(record)) > 0 || strings.Contains(status, "pendiente") {
+	)
+	if topicRegistryExplicitPartialStatusV0(status) {
+		return strings.TrimSpace(status)
+	}
+	normalized := strings.ToLower(strings.TrimSpace(status))
+	if len(followupRefsForRecordV0(record)) > 0 || strings.Contains(normalized, "pendiente") {
 		return "pendiente_continuar"
 	}
 	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 {
 		return "paquete_final_local_verificable"
 	}
 	return "en_progreso_orquesta"
+}
+
+func topicRegistryExplicitPartialStatusV0(status string) bool {
+	status = strings.ToLower(strings.TrimSpace(status))
+	if status == "" {
+		return false
+	}
+	if strings.HasPrefix(status, "texto_minimo_") && strings.Contains(status, "_pendiente_") {
+		return true
+	}
+	switch {
+	case strings.HasPrefix(status, "pendiente_reintento_orquesta"):
+		return true
+	case strings.HasPrefix(status, "stale_lock_no_process"):
+		return true
+	case strings.HasPrefix(status, "needs_reconcile"):
+		return true
+	default:
+		return false
+	}
 }
