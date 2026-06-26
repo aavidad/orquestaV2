@@ -14,6 +14,7 @@ type WebDirectorStatsViewModelV0 struct {
 	Progress        WebDirectorStatsProgressV0      `json:"progress"`
 	Resumen         WebDirectorStatsSummaryV0       `json:"resumen"`
 	Closure         WebDirectorStatsClosureV0       `json:"closure"`
+	Goal            WebDirectorStatsGoalV0          `json:"goal"`
 	StopControl     WebDirectorStatsStopControlV0   `json:"stop_control"`
 	Checkpoint      WebDirectorStatsCheckpointV0    `json:"checkpoint"`
 	SafeActions     []WebDirectorStatsSafeActionV0  `json:"safe_actions,omitempty"`
@@ -79,6 +80,20 @@ type WebDirectorStatsSummaryV0 struct {
 	UsageQuotaStatus   string   `json:"usage_quota_status,omitempty"`
 	UsageTotalTokens   int64    `json:"usage_total_tokens,omitempty"`
 	NoSignalAgentRefs  []string `json:"no_signal_agent_refs"`
+}
+
+type WebDirectorStatsGoalV0 struct {
+	Available             bool     `json:"available"`
+	CanObserve            bool     `json:"can_observe"`
+	DirectorExecutionMode string   `json:"director_execution_mode,omitempty"`
+	RunRef                string   `json:"run_ref,omitempty"`
+	GoalRef               string   `json:"goal_ref,omitempty"`
+	ExternalGoalRef       string   `json:"external_goal_ref,omitempty"`
+	Status                string   `json:"status,omitempty"`
+	ClosureStatus         string   `json:"closure_status,omitempty"`
+	ClosureAccepted       bool     `json:"closure_accepted,omitempty"`
+	ClosureNeedsRework    bool     `json:"closure_needs_rework,omitempty"`
+	EvidenceRefs          []string `json:"evidence_refs,omitempty"`
 }
 
 type WebDirectorStatsStopControlV0 struct {
@@ -163,6 +178,7 @@ func NewWebDirectorStatsPanelV0(
 	vm.Resumen = directorStatsSummaryV0(stats.Progress, stats.UsageSummary)
 	applyDirectorStatsLiveCountsPercentV0(&vm)
 	vm.Closure = directorStatsClosureV0(stats.Closure)
+	vm.Goal = directorStatsGoalV0(result.Goal, vm.RunRef)
 	vm.StopControl = directorStatsStopControlV0(stats.StopControl)
 	vm.Checkpoint = directorStatsCheckpointV0(*stats)
 	vm.Agents = directorStatsAgentsV0(stats.Agents)
@@ -285,11 +301,46 @@ func directorStatsAttentionStateV0(vm WebDirectorStatsViewModelV0) string {
 	if vm.Progress.LoopDetectedAgents > 0 ||
 		vm.Progress.StoppedAgents > 0 ||
 		vm.Counts.AgentsNeedAttention > 0 ||
+		directorStatsGoalNeedsAttentionV0(vm.Goal) ||
 		vm.StopControl.Pending ||
 		vm.Checkpoint.RequiresAttention {
 		return WebDirectorStatsEstadoAtencionV0
 	}
 	return WebDirectorStatsEstadoOKV0
+}
+
+func directorStatsGoalV0(
+	goal *WebDirectorGoalStatsContractV0,
+	runRef string,
+) WebDirectorStatsGoalV0 {
+	if goal == nil || trimDirectorStatsV0(goal.GoalRef) == "" {
+		return WebDirectorStatsGoalV0{}
+	}
+	return WebDirectorStatsGoalV0{
+		Available:             true,
+		CanObserve:            trimDirectorStatsV0(runRef) != "",
+		DirectorExecutionMode: firstDirectorStatsNonEmptyV0(goal.DirectorExecutionMode, "goal_first"),
+		RunRef:                firstDirectorStatsNonEmptyV0(goal.RunRef, runRef),
+		GoalRef:               trimDirectorStatsV0(goal.GoalRef),
+		ExternalGoalRef:       trimDirectorStatsV0(goal.ExternalGoalRef),
+		Status:                trimDirectorStatsV0(goal.Status),
+		ClosureStatus:         trimDirectorStatsV0(goal.ClosureStatus),
+		ClosureAccepted:       goal.ClosureAccepted,
+		ClosureNeedsRework:    goal.ClosureNeedsRework,
+		EvidenceRefs:          compactOperationalStringsV0(goal.EvidenceRefs),
+	}
+}
+
+func directorStatsGoalNeedsAttentionV0(goal WebDirectorStatsGoalV0) bool {
+	if !goal.Available {
+		return false
+	}
+	switch trimDirectorStatsV0(goal.Status) {
+	case "blocked", "invalid":
+		return true
+	default:
+		return goal.ClosureNeedsRework
+	}
 }
 
 func directorStatsEstadoV0(estado string, stats *WebDirectorRunStatsContractV0) string {

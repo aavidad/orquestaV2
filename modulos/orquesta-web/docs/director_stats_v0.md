@@ -7,6 +7,9 @@ Responsabilidad:
 - Enviar `run_ref`, correlacion, locale y flags de inclusion al inbound de stats.
 - Recibir un envelope publico `ok|error` con `stats` o `errores_publicos`.
 - Proyectar un panel web compacto con `run_ref`, contadores, progreso por tareas, progreso por agentes y errores publicos.
+- Proyectar, si el inbound lo entrega, el bloque `goal` goal-first asociado a
+  la run y ofrecer una accion segura `observe_goal` contra
+  `/api/v0/apps/director/goal/observe`.
 - Preparar refresco semitiempo-real desde `/director-stats` con `include_process_refs=true`, `include_agent_progress=true` e `include_agent_usage=true`, reutilizando el mismo cliente/endpoint y sin crear backend paralelo.
 - Preparar la proyeccion web para estado de checkpoint si el API/handler entrega
   `checkpoint_agents_pending`, `pending_checkpoint_agent_refs` y
@@ -22,6 +25,8 @@ Invariantes:
   ficheros de ACK ni evidencia.
 - Todo texto visible del panel sale de i18n local `es-ES|en-US`.
 - La pagina web puede publicar metadatos de refresco (`href`, metodo e intervalo) solo si hay `run_ref`; no abre conexiones push ni conoce stores/runtime.
+- La pagina web no observa Goals por si sola: solo expone una accion explicita
+  para que el operador invoque el endpoint publico existente por `run_ref`.
 - Corte actual: `/director-stats` no invoca `orquesta.server.shutdown.v0` ni
   `server-shutdown`; solo proyecta esos campos si llegan ya saneados por el
   contrato consumido.
@@ -44,3 +49,7 @@ Pruebas:
 - `director_stats_viewmodel_v0_test.go` valida que `stop_control` recibido por
   contrato se proyecta con refs opacas deduplicadas y marca atencion cuando
   queda `stop_pending`.
+- `director_stats_viewmodel_v0_test.go` valida que `goal` goal-first se
+  proyecta como bloque compacto y genera accion `observe_goal`.
+- `director_stats_web_v0_test.go` valida que la shell HTML expone la accion de
+  observacion de Goal sin acoplarse a runtime.

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
@@ -107,6 +108,55 @@ func (source mcpDirectorExternalJobStatsSourceForTestV0) ResolveDirectorExternal
 		return MCPDirectorExternalJobStatsV0{}, false, nil
 	}
 	return source.Stats, true, nil
+}
+
+type mcpDirectorGoalStateSourceForTestV0 struct {
+	State orquestagoal.GoalWorkStateV0
+}
+
+func (source mcpDirectorGoalStateSourceForTestV0) LoadGoalWorkStateV0(
+	_ context.Context,
+	runRef string,
+) (orquestagoal.GoalWorkStateV0, error) {
+	if source.State.RunRef != runRef {
+		return orquestagoal.GoalWorkStateV0{}, errMCPDirectorGoalStateMissingForTestV0{}
+	}
+	return source.State, nil
+}
+
+type errMCPDirectorGoalStateMissingForTestV0 struct{}
+
+func (errMCPDirectorGoalStateMissingForTestV0) Error() string {
+	return "goal_state_missing"
+}
+
+func mcpDirectorGoalStateForTestV0(runRef string) orquestagoal.GoalWorkStateV0 {
+	goalRef := "goal-ref-mcp-director-stats-001"
+	return orquestagoal.GoalWorkStateV0{
+		SchemaVersion:   orquestagoal.GoalWorkStateSchemaV0,
+		RunRef:          runRef,
+		GoalRef:         goalRef,
+		ExternalGoalRef: "thread-ref-mcp-director-stats-001",
+		Status:          orquestagoal.GoalStatusRunningV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			GoalRef:       goalRef,
+			RunRef:        runRef,
+			Objective:     "Construir app de prueba por goal-first.",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet: []orquestagoal.GoalWriteScopeV0{{
+				Path: "generated-apps/mcp-director-stats",
+			}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         goalRef,
+			ExternalGoalRef: "thread-ref-mcp-director-stats-001",
+			EvidenceRefs:    []string{"evidence-ref-mcp-director-stats-goal-launch"},
+		},
+		EvidenceRefs: []string{"evidence-ref-mcp-director-stats-goal-state"},
+	}
 }
 
 func mcpDirectorStatsProgressObservationForTestV0(

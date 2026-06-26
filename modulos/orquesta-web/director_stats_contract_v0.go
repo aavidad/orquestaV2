@@ -3,6 +3,7 @@ package orquestaweb
 const (
 	WebDirectorStatsInboundEndpointV0      = "/api/v0/director/stats"
 	WebDirectorStatsPageEndpointV0         = "/director-stats"
+	WebDirectorStatsGoalObserveEndpointV0  = "/api/v0/apps/director/goal/observe"
 	WebDirectorStatsCorrelationHeaderV0    = "X-Correlation-ID"
 	WebDirectorStatsPageSchemaV0           = "web_director_stats_page.v0"
 	WebDirectorStatsPanelSchemaV0          = "web_director_stats_panel.v0"
@@ -35,8 +36,21 @@ type WebDirectorStatsInboundResultV0 struct {
 	RequestID     string                          `json:"request_id,omitempty"`
 	CorrelationID string                          `json:"correlation_id,omitempty"`
 	RunRef        string                          `json:"run_ref,omitempty"`
+	Goal          *WebDirectorGoalStatsContractV0 `json:"goal,omitempty"`
 	Stats         *WebDirectorRunStatsContractV0  `json:"stats,omitempty"`
 	Errores       []WebDirectorStatsPublicIssueV0 `json:"errores_publicos,omitempty"`
+}
+
+type WebDirectorGoalStatsContractV0 struct {
+	DirectorExecutionMode string   `json:"director_execution_mode,omitempty"`
+	RunRef                string   `json:"run_ref,omitempty"`
+	GoalRef               string   `json:"goal_ref"`
+	ExternalGoalRef       string   `json:"external_goal_ref,omitempty"`
+	Status                string   `json:"status,omitempty"`
+	ClosureStatus         string   `json:"closure_status,omitempty"`
+	ClosureAccepted       bool     `json:"closure_accepted,omitempty"`
+	ClosureNeedsRework    bool     `json:"closure_needs_rework,omitempty"`
+	EvidenceRefs          []string `json:"evidence_refs,omitempty"`
 }
 
 type WebDirectorRunStatsContractV0 struct {

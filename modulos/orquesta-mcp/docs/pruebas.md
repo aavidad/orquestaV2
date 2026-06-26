@@ -72,8 +72,9 @@ completo en `stats` con tareas, agentes, rework, replan, `stats.progress` y
 `stats.closure` compactos; ademas devuelve `decision_context`
 `DirectorDecisionContextV0` con progreso por fase/tarea/agente, procesos
 opacos, actividad reciente, bloqueos, cierre, rework/replan, duraciones y
-quietud. `/api/v0/director/stats` mantiene el mismo envelope para web/API/MCP
-sin conocer internos.
+quietud. Si se inyecta `GoalStateStore`, publica `goal` como proyeccion de
+estado goal-first persistido sin observar ni cerrar el goal. `/api/v0/director/stats`
+mantiene el mismo envelope para web/API/MCP sin conocer internos.
 Ultima ejecucion: 2026-05-10; pasa con `go test -count=1 ./modulos/orquesta-mcp`.
 Riesgos: la politica exacta de cierre por `request_kind` vive en
 `orquesta-app-director-service`; este tool expone estado observable del run.

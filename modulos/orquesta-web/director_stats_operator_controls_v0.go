@@ -41,6 +41,13 @@ func directorStatsSafeActionsV0(
 	if runRef == "" {
 		return out
 	}
+	if vm.Goal.Available {
+		if vm.Goal.CanObserve {
+			out = append(out, directorStatsGoalObserveActionV0(runRef, vm.Goal.Status))
+		}
+		out = append(out, directorStatsRunControlActionsV0(vm, runRef)...)
+		return out
+	}
 	if vm.Counts.AgentsInFlight > 0 || len(vm.Agents) > 0 {
 		out = append(out, directorStatsSafeActionV0("supervise", runRef, "agents_in_flight"))
 	}
@@ -53,6 +60,21 @@ func directorStatsSafeActionsV0(
 		out = append(out, directorStatsSafeActionV0("retry", runRef, "agent_attention"))
 	}
 	return out
+}
+
+func directorStatsGoalObserveActionV0(runRef string, status string) WebDirectorStatsSafeActionV0 {
+	reason := "goal_first"
+	if status = trimDirectorStatsV0(status); status != "" {
+		reason += ":" + status
+	}
+	return WebDirectorStatsSafeActionV0{
+		Action:       "observe_goal",
+		RunRef:       trimDirectorStatsV0(runRef),
+		Method:       "POST",
+		Endpoint:     WebDirectorStatsGoalObserveEndpointV0,
+		Reason:       reason,
+		RequiresPost: true,
+	}
 }
 
 func directorStatsRunControlActionsV0(

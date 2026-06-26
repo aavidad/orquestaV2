@@ -67,7 +67,9 @@ func TestDirectorStatsWebEndpointV0GETHTMLParaNavegador(t *testing.T) {
 	if rec.Code != http.StatusOK ||
 		rec.Header().Get("Content-Type") != WebHTMLContentTypeHeaderV0 ||
 		!strings.Contains(body, "director-stats-root") ||
-		!strings.Contains(body, "getJSON('/director-stats?include_agent_progress=true") {
+		!strings.Contains(body, "getJSON('/director-stats?include_agent_progress=true") ||
+		!strings.Contains(body, WebDirectorStatsGoalObserveEndpointV0) ||
+		!strings.Contains(body, "Observar goal") {
 		t.Fatalf("html stats invalido status=%d headers=%v body=%s", rec.Code, rec.Header(), body)
 	}
 	if client.Query.RunRef != "" {
@@ -143,7 +145,16 @@ func TestRESTDirectorStatsClientV0DecodificaStats(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("method=%s", r.Method)
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"stats": stats})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"stats": stats,
+			"goal": WebDirectorGoalStatsContractV0{
+				DirectorExecutionMode: "goal_first",
+				RunRef:                stats.RunRef,
+				GoalRef:               "goal-ref-rest-web-stats-001",
+				ExternalGoalRef:       "thread-ref-rest-web-stats-001",
+				Status:                "running",
+			},
+		})
 	}))
 	defer server.Close()
 	client := NewRESTDirectorStatsClientV0(server.URL, 0)
@@ -157,6 +168,11 @@ func TestRESTDirectorStatsClientV0DecodificaStats(t *testing.T) {
 	}
 	if vm.RunRef != stats.RunRef || vm.Progress.StalledAgents != 1 {
 		t.Fatalf("vm=%+v", vm)
+	}
+	if !vm.Goal.Available ||
+		vm.Goal.GoalRef != "goal-ref-rest-web-stats-001" ||
+		!directorStatsHasSafeActionV0(vm.SafeActions, "observe_goal") {
+		t.Fatalf("goal no conservado por REST: %+v actions=%+v", vm.Goal, vm.SafeActions)
 	}
 }
 

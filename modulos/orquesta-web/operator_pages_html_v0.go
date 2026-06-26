@@ -46,11 +46,24 @@ func runControlHTMLV0() string {
 func directorStatsHTMLV0() string {
 	return operatorPageHTMLV0("Stats de Director", "Consulta progreso, agentes, cierre y evidencias publicas de una run.", "director-stats-root", `
       <label>Run ref <input id="run-ref" placeholder="run-ref..."></label>
-      <button onclick="loadStats()">Consultar stats</button>
+      <div class="row">
+        <button onclick="loadStats()">Consultar stats</button>
+        <button onclick="observeGoal()">Observar goal</button>
+      </div>
       <script>
         async function loadStats() {
           const run = encodeURIComponent(document.getElementById('run-ref').value.trim());
           show(await getJSON('/director-stats?include_agent_progress=true&include_agent_usage=true&run_ref=' + run));
+        }
+        async function observeGoal() {
+          const id = 'web-director-stats-goal-observe-' + Date.now().toString(36);
+          const run = document.getElementById('run-ref').value.trim();
+          show(await postJSON('`+WebDirectorStatsGoalObserveEndpointV0+`', {
+            request_id: id,
+            correlation_id: id,
+            run_ref: run,
+            requested_by: 'orquesta-web-director-stats'
+          }));
         }
       </script>`)
 }

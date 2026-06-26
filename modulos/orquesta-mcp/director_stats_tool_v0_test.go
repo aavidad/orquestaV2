@@ -99,6 +99,33 @@ func TestMCPDirectorStatsToolExecutorV0DevuelveStatsDeRunStore(t *testing.T) {
 	assertTransportPayloadSaneadoMCPTestV0(t, result, 13000)
 }
 
+func TestMCPDirectorStatsToolExecutorV0ExponeGoalFirstSiExisteEstado(t *testing.T) {
+	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-goal-001")
+
+	result, err := (MCPDirectorStatsToolExecutorV0{
+		RunStore:        orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+		GoalStateSource: mcpDirectorGoalStateSourceForTestV0{State: mcpDirectorGoalStateForTestV0(run.RunID)},
+	}).Execute(context.Background(), MCPDirectorStatsToolInputV0{
+		RequestID:     "request-ref-mcp-director-stats-goal-001",
+		CorrelationID: "corr-mcp-director-stats-goal-001",
+		RunRef:        run.RunID,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPDirectorStatsEstadoOKV0 ||
+		result.Goal == nil ||
+		result.Goal.DirectorExecutionMode != "goal_first" ||
+		result.Goal.RunRef != run.RunID ||
+		result.Goal.GoalRef != "goal-ref-mcp-director-stats-001" ||
+		result.Goal.ExternalGoalRef != "thread-ref-mcp-director-stats-001" ||
+		result.Goal.Status != "running" ||
+		len(result.Goal.EvidenceRefs) != 1 {
+		t.Fatalf("goal=%+v result=%+v", result.Goal, result)
+	}
+	assertTransportPayloadSaneadoMCPTestV0(t, result, 13000)
+}
+
 func TestMCPDirectorStatsToolExecutorV0CalculaControlSinExponerProcessRefs(t *testing.T) {
 	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-control-redacted-001")
 	registry := orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()

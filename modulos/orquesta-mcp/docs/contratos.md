@@ -122,6 +122,8 @@ Campos:
     external_job: proyeccion compacta opcional con job_ref, work_kind,
       change_ref, run_ref, task_ref, agent_ref, status, status_reason,
       delivery_refs, issue_refs, evidence_refs y diagnostics publicos
+    goal: proyeccion compacta opcional con `goal_ref`, `external_goal_ref`,
+      status, cierre y evidencias si la composicion inyecta un `GoalStateStore`
     decision_context
 Invariantes:
   - Si llega `external_job_ref`, MCP delega la resolucion en un puerto
@@ -131,6 +133,8 @@ Invariantes:
     aditiva para que OPES no tenga que interpretar toda la run.
   - `external_job.status_reason`, `issue_refs` y `diagnostics` son senales
     operativas advisory del puerto inyectado; no son rails duros del core.
+  - `goal` solo lee estado goal-first persistido por `run_ref`; no observa,
+    lanza, cierra ni reintenta Goals desde stats.
   - Si se inyecta `RunControlReaderPortV0`, el tool puede distinguir parada de
     run solicitada antes de que haya `StoppedAgents` propagados.
 Pruebas de contrato:
@@ -249,6 +253,7 @@ Campos:
   output_ok:
     estado: ok
     run_ref
+    goal: bloque opcional goal-first con refs y estado persistido
     stats: DirectorRunStatsV0 completo serializado como contrato publico
     decision_context: DirectorDecisionContextV0 compacto para decision del
       director/API/MCP/web
@@ -263,7 +268,8 @@ Cobertura de stats publicas:
   - rework: counts.rework_requests y refs.rework_requests;
   - replan: counts.replan_decisions y refs.replan_decisions;
   - cierre: closure.status, blocked, ready, closed, blocked_by y blocker_refs;
-  - progreso: progress.percent_complete, tasks, agents observados y issues.
+  - progreso: progress.percent_complete, tasks, agents observados y issues;
+  - goal-first: bloque `goal` opcional solo si existe estado persistido.
 Cobertura de decision_context:
   - progreso por fase/tarea/agente;
   - sesiones/procesos por refs opacas cuando `include_process_refs=true`;

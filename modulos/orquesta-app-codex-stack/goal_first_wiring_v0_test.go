@@ -42,6 +42,16 @@ func TestBuildDirectorPortsV0CableaAppGoalLauncher(t *testing.T) {
 	if err != nil || result.GoalRef != "goal-ref-stack-wiring-001" || observer.calls != 1 {
 		t.Fatalf("result=%+v err=%v calls=%d", result, err, observer.calls)
 	}
+	bindings := buildStackMCPTransportBindingsV0(
+		ConfigV0{Stores: StoresV0{AppGoalStateStore: stateStore}},
+		ports,
+		RunQueueConfigV0{},
+		&StackV0{},
+	)
+	stats, ok := bindings.DirectorStats.(orquestamcp.MCPDirectorStatsToolExecutorV0)
+	if !ok || stats.GoalStateSource == nil {
+		t.Fatalf("director stats sin goal state source: ok=%v stats=%+v", ok, stats)
+	}
 }
 
 func TestQueuedArrancarDirectorExecutorV0NoEncolaGoalFirst(t *testing.T) {

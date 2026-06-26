@@ -196,6 +196,49 @@ func TestWebDirectorStatsPanelV0ProyectaCierreBloqueadoYAccionesSeguras(t *testi
 	}
 }
 
+func TestWebDirectorStatsPanelV0ProyectaGoalFirstYAccionObservar(t *testing.T) {
+	result := directorStatsResultForWebTestV0()
+	result.Goal = &WebDirectorGoalStatsContractV0{
+		DirectorExecutionMode: "goal_first",
+		RunRef:                "run-ref-web-stats-001",
+		GoalRef:               "goal-ref-web-stats-001",
+		ExternalGoalRef:       "thread-ref-web-stats-001",
+		Status:                "running",
+		EvidenceRefs:          []string{" evidence-ref-web-stats-goal-001 ", "evidence-ref-web-stats-goal-001"},
+	}
+
+	panel := NewWebDirectorStatsPanelV0("es", result)
+
+	if !panel.Goal.Available ||
+		!panel.Goal.CanObserve ||
+		panel.Goal.DirectorExecutionMode != "goal_first" ||
+		panel.Goal.RunRef != "run-ref-web-stats-001" ||
+		panel.Goal.GoalRef != "goal-ref-web-stats-001" ||
+		panel.Goal.ExternalGoalRef != "thread-ref-web-stats-001" ||
+		panel.Goal.Status != "running" ||
+		len(panel.Goal.EvidenceRefs) != 1 {
+		t.Fatalf("goal=%+v panel=%+v", panel.Goal, panel)
+	}
+	if !directorStatsHasSafeActionV0(panel.SafeActions, "observe_goal") {
+		t.Fatalf("actions=%+v", panel.SafeActions)
+	}
+	for _, legacy := range []string{"supervise", "retry", "review"} {
+		if directorStatsHasSafeActionV0(panel.SafeActions, legacy) {
+			t.Fatalf("goal-first no debe proponer accion legacy %s: %+v", legacy, panel.SafeActions)
+		}
+	}
+	if !directorStatsHasSafeActionV0(panel.SafeActions, "pause") ||
+		!directorStatsHasSafeActionV0(panel.SafeActions, "stop") {
+		t.Fatalf("goal-first debe conservar control de run: %+v", panel.SafeActions)
+	}
+	action := directorStatsSafeActionForTestV0(t, panel.SafeActions, "observe_goal")
+	if action.Endpoint != WebDirectorStatsGoalObserveEndpointV0 ||
+		action.RunRef != "run-ref-web-stats-001" ||
+		action.Reason != "goal_first:running" {
+		t.Fatalf("observe action=%+v", action)
+	}
+}
+
 func directorStatsHasSafeActionV0(actions []WebDirectorStatsSafeActionV0, want string) bool {
 	for _, action := range actions {
 		if action.Action == want && action.Method == "POST" && action.RequiresPost {
@@ -203,6 +246,21 @@ func directorStatsHasSafeActionV0(actions []WebDirectorStatsSafeActionV0, want s
 		}
 	}
 	return false
+}
+
+func directorStatsSafeActionForTestV0(
+	t *testing.T,
+	actions []WebDirectorStatsSafeActionV0,
+	want string,
+) WebDirectorStatsSafeActionV0 {
+	t.Helper()
+	for _, action := range actions {
+		if action.Action == want {
+			return action
+		}
+	}
+	t.Fatalf("action %s no encontrada en %+v", want, actions)
+	return WebDirectorStatsSafeActionV0{}
 }
 
 func directorStatsResultForWebTestV0() WebDirectorStatsInboundResultV0 {

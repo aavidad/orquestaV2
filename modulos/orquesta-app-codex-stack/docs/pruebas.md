@@ -120,6 +120,9 @@ Cobertura Go actual:
   `/director-stats` usa los puertos inyectados del stack para exponer control
   de parada y progreso de agentes sin ACK; solo el director inicial puede
   aparecer protegido, no los directores especializados.
+- `orquesta.director.stats.v0` recibe tambien `AppGoalStateStore` desde la
+  composicion para publicar el bloque `goal` goal-first asociado a `run_ref`
+  sin observar ni cerrar el goal desde stats.
 - `TestCodexStackV0ReviewGateAceptaEntregaConEvidenciaReal` valida que el
   stack conecta review gate y acepta una entrega con fichero real manejable.
 - `TestCodexStackV0ReviewGateAceptaFicheroGrandeComoAviso` valida que una

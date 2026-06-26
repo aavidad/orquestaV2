@@ -29,6 +29,9 @@ Estado vigente:
 - `/api/v0/autoprogramming/status` y `/api/v0/autoprogramming/supervise`
   exponen gestion fina de autoprogramacion sobre puertos inyectados de cola,
   stats y supervisor. No ejecutan runtime ni leen estado concreto por si mismos.
+- `orquesta.director.stats.v0` puede publicar un bloque `goal` goal-first si la
+  composicion inyecta un `GoalStateStore`; ese bloque solo proyecta estado ya
+  persistido por `run_ref`, no observa ni cierra el Goal.
 - `/api/v0/domain-work` es el bridge HTTP local del mismo executor.
 - `orquesta.apps.arrancar_director.v0` es la entrada operativa preferente para
   apps nuevas desde `AppSpecV0`; `orquesta.apps.preparar_orquestacion.v0` y

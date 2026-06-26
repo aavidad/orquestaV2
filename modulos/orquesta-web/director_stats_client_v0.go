@@ -153,6 +153,7 @@ type directorStatsEnvelopeV0 struct {
 	RequestID     string                          `json:"request_id,omitempty"`
 	CorrelationID string                          `json:"correlation_id,omitempty"`
 	RunRef        string                          `json:"run_ref,omitempty"`
+	Goal          *WebDirectorGoalStatsContractV0 `json:"goal,omitempty"`
 	Stats         *WebDirectorRunStatsContractV0  `json:"stats,omitempty"`
 	DirectorStats *WebDirectorRunStatsContractV0  `json:"director_stats,omitempty"`
 	Errores       []WebDirectorStatsPublicIssueV0 `json:"errores_publicos,omitempty"`
@@ -168,6 +169,7 @@ func (envelope directorStatsEnvelopeV0) ResultV0() WebDirectorStatsInboundResult
 		RequestID:     envelope.RequestID,
 		CorrelationID: envelope.CorrelationID,
 		RunRef:        envelope.RunRef,
+		Goal:          envelope.Goal,
 		Stats:         stats,
 		Errores:       envelope.Errores,
 	}

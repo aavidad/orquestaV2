@@ -95,6 +95,7 @@ func buildStackMCPTransportBindingsV0(
 			ProgressSource:    statsProgressSourceV0(config),
 			AgentUsageSource:  agentUsageSourceV0(config),
 			ExternalJobSource: externalJobStatsSourceV0(config),
+			GoalStateSource:   config.Stores.AppGoalStateStore,
 		},
 		RunControl: orquestamcp.MCPRunControlToolExecutorV0{
 			Port:              config.Stores.RunControl,
