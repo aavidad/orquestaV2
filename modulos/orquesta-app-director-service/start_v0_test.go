@@ -2,6 +2,7 @@ package orquestaappdirectorservice
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -170,6 +171,44 @@ func TestStartAppDirectorV0GoalFirstLanzaGoalYNoEjecutaLoopLegacy(t *testing.T) 
 		state.ExternalGoalRef != result.ExternalGoalRef ||
 		state.Spec.RunRef != result.Run.RunID {
 		t.Fatalf("goal state=%+v result=%+v", state, result)
+	}
+}
+
+func TestStartAppDirectorV0GoalFirstLauncherDegradadoNoCaeALoopLegacy(t *testing.T) {
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	launcher := &serviceGoalLauncherForTestV0{err: errors.New("goal_launcher_unavailable")}
+	goalStates := newServiceGoalStateStoreForTestV0()
+
+	result, err := StartAppDirectorV0(
+		context.Background(),
+		validStartAppDirectorRequestForTestV0(),
+		StartAppDirectorPortsV0{
+			RunStore:       store,
+			EventSink:      sink,
+			OutboxLedger:   ledger,
+			GoalLauncher:   launcher,
+			GoalStateStore: goalStates,
+			Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
+				serviceCapacityDispatcherForTestV0(store, sink, ledger),
+				serviceAgentLauncherDispatcherForTestV0(store, sink, ledger),
+			},
+		},
+	)
+
+	if err == nil || err.Error() != "goal_launcher_unavailable" {
+		t.Fatalf("err=%v result=%+v", err, result)
+	}
+	if launcher.calls != 1 || len(launcher.specs) != 1 {
+		t.Fatalf("launcher calls=%d specs=%d", launcher.calls, len(launcher.specs))
+	}
+	if len(goalStates.states) != 0 {
+		t.Fatalf("goal state no debe persistirse si el launcher falla: %+v", goalStates.states)
+	}
+	if serviceHasEventTypeV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventAgentRequestedV0) ||
+		serviceHasEventTypeV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventAgentStartedV0) {
+		t.Fatalf("goal-first degradado no debe caer al loop legacy: %+v", sink.EventsV0())
 	}
 }
 
@@ -427,6 +466,7 @@ func TestStartAppDirectorV0RequiresInjectedPorts(t *testing.T) {
 type serviceGoalLauncherForTestV0 struct {
 	calls int
 	specs []orquestagoal.GoalWorkSpecV0
+	err   error
 }
 
 func (launcher *serviceGoalLauncherForTestV0) LaunchGoalWorkV0(
@@ -435,6 +475,9 @@ func (launcher *serviceGoalLauncherForTestV0) LaunchGoalWorkV0(
 ) (orquestagoal.GoalLaunchReceiptV0, error) {
 	launcher.calls++
 	launcher.specs = append(launcher.specs, spec)
+	if launcher.err != nil {
+		return orquestagoal.GoalLaunchReceiptV0{}, launcher.err
+	}
 	return orquestagoal.GoalLaunchReceiptV0{
 		SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
 		Status:          orquestagoal.GoalStatusRunningV0,

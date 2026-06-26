@@ -67,9 +67,7 @@ bateria focal + `go test -count=1 -p=1 ./...` pasaron.
      decision de la web.
 3. Demotar visiblemente herramientas MCP legacy de programacion frente a rutas
    goal-first/estado, sin borrar handlers ni smokes historicos.
-4. Anadir contrato/test para backend Goal configurado pero degradado: no debe
-   caer silenciosamente a `legacy_director_loop` si el operador pidio goal.
-5. OPES sigue en otra sesion: no pisar procesos ni documentos que escriba ese
+4. OPES sigue en otra sesion: no pisar procesos ni documentos que escriba ese
    agente. El fichero
    `TAREA_OPES_ORQUESTA_EXTERNAL_WORK_VALIDACION_Y_STREAM_2026-06-26.md` estaba
    modificado por OPES y debe quedar fuera del commit salvo orden expresa.
@@ -81,6 +79,9 @@ bateria focal + `go test -count=1 -p=1 ./...` pasaron.
   salida `queue_health.running_live=1`, `queue_health.agents_live=1`,
   `stale_running=[]`. Esto cubre el hueco gateway/adapter sin tocar OPES ni
   arrancar servidores.
+- 2026-06-26: anadido contrato de servicio para backend Goal configurado pero
+  degradado: si `GoalLauncher` falla, `StartAppDirectorV0` propaga el error y
+  no ejecuta el loop legacy ni genera eventos `AgentRequested`/`AgentStarted`.
 
 ## No reabrir salvo regresion
 
