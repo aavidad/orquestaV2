@@ -112,16 +112,13 @@ func applyMCPAutoprogrammingRunHealthV0(
 	if stats.Closure.Blocked {
 		applyMCPAutoprogrammingHealthClassV0(health, mcpAutoprogrammingHealthBlockedV0, 1)
 	}
+	if mcpAutoprogrammingRunStatsHasLiveSignalV0(stats) {
+		applyMCPAutoprogrammingHealthClassV0(health, mcpAutoprogrammingHealthRunningLiveV0, 1)
+		return
+	}
 	if stats.Counts.AgentsInFlight > 0 {
-		live := stats.Progress.ProgressingAgents
 		stale := stats.Progress.StalledAgents
-		liveSignal := live > 0 ||
-			hasMCPAutoprogrammingLiveAgentSignalV0(stats.Agents) ||
-			hasMCPAutoprogrammingLiveProcessSignalV0(stats.Agents)
-		if liveSignal {
-			applyMCPAutoprogrammingHealthClassV0(health, mcpAutoprogrammingHealthRunningLiveV0, 1)
-		}
-		if !liveSignal && (stale > 0 || live == 0) {
+		if stale > 0 || stats.Progress.ProgressingAgents == 0 {
 			applyMCPAutoprogrammingHealthClassV0(health, mcpAutoprogrammingHealthRunningStaleNoProcessV0, 1)
 		}
 		return
@@ -135,11 +132,20 @@ func applyMCPAutoprogrammingRunHealthV0(
 	}
 }
 
+func mcpAutoprogrammingRunStatsHasLiveSignalV0(
+	stats orquestacionnucleoapp.DirectorRunStatsV0,
+) bool {
+	return stats.Progress.ProgressingAgents > 0 ||
+		hasMCPAutoprogrammingLiveAgentSignalV0(stats.Agents) ||
+		hasMCPAutoprogrammingLiveProcessSignalV0(stats.Agents)
+}
+
 func hasMCPAutoprogrammingLiveProcessSignalV0(
 	agents []orquestacionnucleoapp.DirectorAgentStatsV0,
 ) bool {
 	for _, agent := range agents {
-		if !agent.InFlight || agent.NeedsAttention || agent.Process == nil {
+		if agent.NeedsAttention || agent.Process == nil ||
+			mcpAutoprogrammingAgentStatsTerminalV0(agent) {
 			continue
 		}
 		if strings.TrimSpace(agent.Process.ProcessRef) != "" ||
@@ -150,6 +156,23 @@ func hasMCPAutoprogrammingLiveProcessSignalV0(
 		}
 	}
 	return false
+}
+
+func mcpAutoprogrammingAgentStatsTerminalV0(
+	agent orquestacionnucleoapp.DirectorAgentStatsV0,
+) bool {
+	if agent.Failed || agent.Lost || agent.Completed || agent.StopConfirmed {
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(agent.Status)) {
+	case orquestacionnucleoapp.DirectorAgentStatusCompletedV0,
+		orquestacionnucleoapp.DirectorAgentStatusFailedV0,
+		orquestacionnucleoapp.DirectorAgentStatusLostV0,
+		orquestacionnucleoapp.DirectorAgentStatusStoppedV0:
+		return true
+	default:
+		return false
+	}
 }
 
 func hasMCPAutoprogrammingLiveAgentSignalV0(

@@ -227,6 +227,61 @@ func TestMCPAutoprogrammingStatusExecutorV0ObservaRunningConProcesoVivoV0(t *tes
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0NoMarcaStaleConProcesoVivoAunqueFalteContadorV0(t *testing.T) {
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		statsByRun: map[string]*orquestacionnucleoapp.DirectorRunStatsV0{
+			"run-ref-running-live-process-no-count-001": {
+				RunRef: "run-ref-running-live-process-no-count-001",
+				Counts: orquestacionnucleoapp.DirectorRunStatsCountsV0{
+					AgentsInFlight: 0,
+				},
+				Progress: orquestacionnucleoapp.DirectorProgressStatsV0{
+					StalledAgents: 1,
+				},
+				Agents: []orquestacionnucleoapp.DirectorAgentStatsV0{{
+					AgentRequestID:    "agent-ref-running-live-process-no-count-001",
+					Status:            orquestacionnucleoapp.DirectorAgentStatusRequestedV0,
+					ControlRegistered: true,
+					Process: &orquestacionnucleoapp.DirectorAgentProcessStatsV0{
+						ProcessRef: "process-ref-running-live-process-no-count-001",
+						SessionRef: "session-ref-running-live-process-no-count-001",
+					},
+				}},
+			},
+		},
+	}
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			ranked: []MCPRunQueueRankedCandidateCompactV0{{
+				Rank:          1,
+				RunRef:        "run-ref-running-live-process-no-count-001",
+				AppRef:        "opes",
+				Status:        "running",
+				PriorityScore: 90,
+			}},
+		},
+		Stats: stats,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(stats.inputs) != 1 ||
+		stats.inputs[0].RunRef != "run-ref-running-live-process-no-count-001" ||
+		!stats.inputs[0].IncludeProcessRefs ||
+		!stats.inputs[0].IncludeAgentProgress {
+		t.Fatalf("stats inputs=%+v", stats.inputs)
+	}
+	if result.QueueHealth == nil ||
+		result.QueueHealth.RunningLive != 1 ||
+		result.QueueHealth.RunningStale != 0 ||
+		result.QueueHealth.RunningStaleNoProcess != 0 ||
+		result.QueueHealth.RunningWithoutRecentStats != 0 ||
+		len(result.StaleRunning) != 0 {
+		t.Fatalf("queue_health=%+v stale_running=%+v", result.QueueHealth, result.StaleRunning)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0ExponeUsageLimitReconciliadoV0(t *testing.T) {
 	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
 		Queue: &fakeMCPAutoprogrammingQueueStatusV0{

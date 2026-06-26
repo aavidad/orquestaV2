@@ -140,12 +140,10 @@ func mcpAutoprogrammingCandidateHasEvidenceV0(
 }
 
 func mcpAutoprogrammingRunStatsLiveV0(run *MCPDirectorStatsToolResultV0) bool {
-	if run == nil || run.Stats == nil || run.Stats.Counts.AgentsInFlight <= 0 {
+	if run == nil || run.Stats == nil {
 		return false
 	}
-	return run.Stats.Progress.ProgressingAgents > 0 ||
-		hasMCPAutoprogrammingLiveAgentSignalV0(run.Stats.Agents) ||
-		hasMCPAutoprogrammingLiveProcessSignalV0(run.Stats.Agents)
+	return mcpAutoprogrammingRunStatsHasLiveSignalV0(*run.Stats)
 }
 
 func diagnosticsFromStaleRunningMCPAutoprogrammingV0(
