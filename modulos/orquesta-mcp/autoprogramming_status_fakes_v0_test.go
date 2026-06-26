@@ -56,10 +56,11 @@ func (fake *fakeMCPAutoprogrammingQueueStatusV0) Execute(
 }
 
 type fakeMCPAutoprogrammingRunStatusV0 struct {
-	input      MCPDirectorStatsToolInputV0
-	inputs     []MCPDirectorStatsToolInputV0
-	stats      *orquestacionnucleoapp.DirectorRunStatsV0
-	statsByRun map[string]*orquestacionnucleoapp.DirectorRunStatsV0
+	input         MCPDirectorStatsToolInputV0
+	inputs        []MCPDirectorStatsToolInputV0
+	stats         *orquestacionnucleoapp.DirectorRunStatsV0
+	statsByRun    map[string]*orquestacionnucleoapp.DirectorRunStatsV0
+	statsForInput func(MCPDirectorStatsToolInputV0) *orquestacionnucleoapp.DirectorRunStatsV0
 }
 
 func (fake *fakeMCPAutoprogrammingRunStatusV0) Execute(
@@ -69,6 +70,9 @@ func (fake *fakeMCPAutoprogrammingRunStatusV0) Execute(
 	fake.input = input
 	fake.inputs = append(fake.inputs, input)
 	stats := fake.stats
+	if fake.statsForInput != nil {
+		stats = fake.statsForInput(input)
+	}
 	if fake.statsByRun != nil && fake.statsByRun[input.RunRef] != nil {
 		stats = fake.statsByRun[input.RunRef]
 	}
