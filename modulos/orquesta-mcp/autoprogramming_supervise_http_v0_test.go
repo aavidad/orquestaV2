@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -96,6 +97,53 @@ func TestMCPAutoprogrammingSuperviseHTTPHandlerV0DevuelveAcceptedSiExecutorSigue
 		len(result.NextActions) == 0 ||
 		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_supervise_background_accepted") {
 		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestMCPAutoprogrammingSuperviseHTTPHandlerV0NoDuplicaOperacionActiva(t *testing.T) {
+	executor := &blockingMCPAutoprogrammingSuperviseHTTPExecutorV0{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	handler := newMCPAutoprogrammingSuperviseHTTPHandlerWithTimeoutV0(executor, time.Millisecond)
+	body := `{
+		"request_id":"request-ref-autop-supervise-http-dedupe-001",
+		"run_ref":"run-ref-autop-supervise-http-dedupe-001",
+		"idempotency_key":"idem-autop-supervise-http-dedupe-001"
+	}`
+	first := httptest.NewRecorder()
+	handler.ServeHTTP(first, httptest.NewRequest(
+		http.MethodPost,
+		MCPAutoprogrammingSuperviseHTTPPathV0,
+		bytes.NewBufferString(body),
+	))
+	if first.Code != http.StatusAccepted {
+		t.Fatalf("first status=%d body=%s", first.Code, first.Body.String())
+	}
+	select {
+	case <-executor.started:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatalf("executor no arranco")
+	}
+
+	second := httptest.NewRecorder()
+	handler.ServeHTTP(second, httptest.NewRequest(
+		http.MethodPost,
+		MCPAutoprogrammingSuperviseHTTPPathV0,
+		bytes.NewBufferString(body),
+	))
+	close(executor.release)
+
+	if second.Code != http.StatusAccepted {
+		t.Fatalf("second status=%d body=%s", second.Code, second.Body.String())
+	}
+	var result MCPRunSupervisorToolResultV0
+	if err := json.NewDecoder(second.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if executor.callsV0() != 1 ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_supervise_operation_already_running") {
+		t.Fatalf("calls=%d result=%+v", executor.callsV0(), result)
 	}
 }
 
@@ -358,6 +406,35 @@ func TestMCPAutoprogrammingSuperviseHTTPHandlerV0RechazaBodyConTrailingData(t *t
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "request_body_trailing_data") {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
+}
+
+type blockingMCPAutoprogrammingSuperviseHTTPExecutorV0 struct {
+	mu      sync.Mutex
+	once    sync.Once
+	calls   int
+	started chan struct{}
+	release chan struct{}
+}
+
+func (executor *blockingMCPAutoprogrammingSuperviseHTTPExecutorV0) Execute(
+	_ context.Context,
+	input MCPRunSupervisorToolInputV0,
+) (MCPRunSupervisorToolResultV0, error) {
+	executor.mu.Lock()
+	executor.calls++
+	executor.once.Do(func() { close(executor.started) })
+	executor.mu.Unlock()
+	<-executor.release
+	return MCPRunSupervisorToolResultV0{
+		Estado: MCPRunSupervisorEstadoOKV0,
+		RunRef: input.RunRef,
+	}, nil
+}
+
+func (executor *blockingMCPAutoprogrammingSuperviseHTTPExecutorV0) callsV0() int {
+	executor.mu.Lock()
+	defer executor.mu.Unlock()
+	return executor.calls
 }
 
 type fakeMCPAutoprogrammingSuperviseHTTPExecutorV0 struct {

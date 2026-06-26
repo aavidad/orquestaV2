@@ -65,10 +65,12 @@ func TestMCPArrancarDirectorAppToolExecutorV0ExponeGoalFirst(t *testing.T) {
 	launcher := &mcpGoalLauncherForTestV0{}
 	executor := NewMCPArrancarDirectorAppToolExecutorV0(
 		orquestaappdirectorservice.StartAppDirectorPortsV0{
-			RunStore:     store,
-			EventSink:    sink,
-			OutboxLedger: ledger,
-			GoalLauncher: launcher,
+			RunStore:             store,
+			EventSink:            sink,
+			OutboxLedger:         ledger,
+			GoalLauncher:         launcher,
+			GoalObserver:         mcpGoalObserverForTestV0{},
+			GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
 			GoalStateStore: &mcpGoalStateStoreForTestV0{
 				states: map[string]orquestagoal.GoalWorkStateV0{},
 			},
@@ -323,6 +325,15 @@ func (launcher *mcpGoalLauncherForTestV0) LaunchGoalWorkV0(
 		ExternalGoalRef: "thread-ref-mcp-goal-001",
 		EvidenceRefs:    []string{"evidence-ref-mcp-goal-launched-001"},
 	}, nil
+}
+
+type mcpGoalObserverForTestV0 struct{}
+
+func (mcpGoalObserverForTestV0) ObserveGoalWorkV0(
+	_ context.Context,
+	_ orquestagoal.GoalObservationRequestV0,
+) (orquestagoal.GoalWorkResultV0, error) {
+	return orquestagoal.GoalWorkResultV0{}, nil
 }
 
 type mcpGoalStateStoreForTestV0 struct {

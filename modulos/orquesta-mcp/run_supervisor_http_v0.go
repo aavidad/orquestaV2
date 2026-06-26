@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
 const MCPRunSupervisorHTTPPathV0 = "/api/v0/runs/supervise"
 
-const defaultMCPRunSupervisorHTTPResponseTimeoutV0 = 15 * time.Second
+const defaultMCPRunSupervisorHTTPResponseTimeoutV0 = 2 * time.Second
 
 func NewMCPRunSupervisorHTTPHandlerV0(
 	executor MCPTransportRunSupervisorExecutorV0,
@@ -27,12 +28,14 @@ func newMCPRunSupervisorHTTPHandlerWithTimeoutV0(
 	return mcpRunSupervisorHTTPHandlerV0{
 		executor:        executor,
 		responseTimeout: responseTimeout,
+		operations:      newMCPRunSupervisorOperationStoreV0(),
 	}
 }
 
 type mcpRunSupervisorHTTPHandlerV0 struct {
 	executor        MCPTransportRunSupervisorExecutorV0
 	responseTimeout time.Duration
+	operations      *mcpRunSupervisorOperationStoreV0
 }
 
 func (handler mcpRunSupervisorHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -87,6 +90,45 @@ type mcpRunSupervisorHTTPExecutionV0 struct {
 	err    error
 }
 
+type mcpRunSupervisorOperationStoreV0 struct {
+	mu     sync.Mutex
+	active map[string]bool
+}
+
+func newMCPRunSupervisorOperationStoreV0() *mcpRunSupervisorOperationStoreV0 {
+	return &mcpRunSupervisorOperationStoreV0{active: map[string]bool{}}
+}
+
+func (store *mcpRunSupervisorOperationStoreV0) beginV0(operationRef string) bool {
+	if store == nil {
+		return true
+	}
+	operationRef = strings.TrimSpace(operationRef)
+	if operationRef == "" {
+		return true
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.active[operationRef] {
+		return false
+	}
+	store.active[operationRef] = true
+	return true
+}
+
+func (store *mcpRunSupervisorOperationStoreV0) finishV0(operationRef string) {
+	if store == nil {
+		return
+	}
+	operationRef = strings.TrimSpace(operationRef)
+	if operationRef == "" {
+		return
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	delete(store.active, operationRef)
+}
+
 func (handler mcpRunSupervisorHTTPHandlerV0) executeSupervisorWithResponseTimeoutV0(
 	r *http.Request,
 	input MCPRunSupervisorToolInputV0,
@@ -96,8 +138,13 @@ func (handler mcpRunSupervisorHTTPHandlerV0) executeSupervisorWithResponseTimeou
 		result, err := handler.executor.Execute(runSupervisorExecutionContextV0(r), input)
 		return result, err, false
 	}
+	operationRef := mcpRunSupervisorOperationRefV0(input)
+	if !handler.operations.beginV0(operationRef) {
+		return newMCPRunSupervisorAlreadyRunningV0(r, input), nil, true
+	}
 	done := make(chan mcpRunSupervisorHTTPExecutionV0, 1)
 	go func() {
+		defer handler.operations.finishV0(operationRef)
 		result, err := handler.executor.Execute(runSupervisorExecutionContextV0(r), input)
 		done <- mcpRunSupervisorHTTPExecutionV0{result: result, err: err}
 	}()
@@ -109,6 +156,20 @@ func (handler mcpRunSupervisorHTTPHandlerV0) executeSupervisorWithResponseTimeou
 	case <-timer.C:
 		return newMCPRunSupervisorAcceptedBackgroundV0(r, input), nil, true
 	}
+}
+
+func newMCPRunSupervisorAlreadyRunningV0(
+	r *http.Request,
+	input MCPRunSupervisorToolInputV0,
+) MCPRunSupervisorToolResultV0 {
+	result := newMCPRunSupervisorAcceptedBackgroundV0(r, input)
+	result.Diagnostics = append(result.Diagnostics, MCPAutoprogrammingDiagnosticV0{
+		Code:         "run_supervisor_operation_already_running",
+		Scope:        mcpRunSupervisorOperationScopeV0(input),
+		Message:      "operation_ref ya tiene una supervision activa; no se duplica el despacho",
+		EvidenceRefs: result.EvidenceRefs,
+	})
+	return result
 }
 
 func newMCPRunSupervisorAcceptedBackgroundV0(

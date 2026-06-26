@@ -46,6 +46,19 @@ tool no debe importar conectores reales ni crear stores.
 ## Pruebas previstas
 
 ```text
+Caso: MCP-CT-038 supervise HTTP background deduplicado
+Tipo: contract
+Comando: go test -count=1 ./modulos/orquesta-mcp -run 'TestMCP.*SupervisorHTTPHandlerV0NoDuplicaOperacionActiva|TestMCP.*SupervisorHTTPHandlerV0DevuelveAcceptedSiExecutorSigueVivo'
+Evidencia esperada: `/api/v0/runs/supervise` y
+`/api/v0/autoprogramming/supervise` devuelven `202 accepted_background` si el
+executor sigue vivo; una segunda llamada con el mismo `operation_ref` no vuelve
+a invocar el executor y devuelve diagnostico `*_operation_already_running`.
+Ultima ejecucion: 2026-06-26; pasa con `go test -count=1 ./modulos/orquesta-mcp`.
+Riesgos: el ledger es memoria del handler HTTP; tras restart la fuente de verdad
+para progreso sigue siendo `director.stats`, `autoprogramming.status` y cola.
+```
+
+```text
 Caso: MCP-CT-030 apagado controlado de servidor por MCP/REST
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway

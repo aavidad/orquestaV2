@@ -33,7 +33,11 @@ Estado vigente:
   exponen gestion fina de autoprogramacion sobre puertos inyectados de cola,
   stats y supervisor. `status` es la observacion preferente; `supervise` queda
   como compatibilidad legacy/resident y no debe usarse para runs goal-first. No
-  ejecutan runtime ni leen estado concreto por si mismos.
+  ejecutan runtime ni leen estado concreto por si mismos. El bridge HTTP de
+  `supervise`, igual que `/api/v0/runs/supervise`, devuelve
+  `accepted_background` si el executor sigue vivo y deduplica una operacion
+  activa por `operation_ref`; el progreso se consulta por status/stats, no
+  relanzando la misma supervision.
 - `orquesta.director.stats.v0` puede publicar un bloque `goal` goal-first si la
   composicion inyecta un `GoalStateStore`; ese bloque solo proyecta estado ya
   persistido por `run_ref`, no observa ni cierra el Goal.

@@ -17,6 +17,27 @@ Estado:
 ## Decisiones tomadas
 
 ```text
+Fecha: 2026-06-26
+Decision: Los bridges HTTP de `runs/supervise` y `autoprogramming/supervise`
+responden rapido y deduplican operaciones activas por `operation_ref`.
+Motivo: En olas OPES se observaron llamadas HTTP que despachaban agentes pero
+dejaban al cliente sin respuesta, y reintentos que podian abrir dudas sobre si
+se duplicaria el despacho.
+Alternativas: Aumentar timeouts; mover supervision al core; crear un endpoint
+OPES especifico. Se descartan porque el fallo esta en el adaptador HTTP y el
+contrato debe seguir generico.
+Impacto: ambos handlers pasan a `accepted_background` tras un timeout corto,
+mantienen una tabla activa en memoria por `operation_ref` y, si llega la misma
+operacion mientras sigue viva, devuelven `202` con diagnostico
+`*_operation_already_running` sin invocar de nuevo el executor. La consulta de
+progreso sigue siendo por stats/status de run/cola; no se mete runtime ni OPES
+en MCP.
+Contratos afectados: rest.bridge.orquesta.runs.supervise.v0;
+rest.bridge.orquesta.autoprogramming.supervise.v0.
+Estado: aceptada localmente
+```
+
+```text
 Fecha: 2026-05-27
 Decision: Tratar T198 como owner documental vigente de `descriptor_source` para resources MCP.
 Motivo: Los intentos cerrados dejaron implementacion y pruebas focales, pero el

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -109,6 +110,53 @@ func TestMCPRunSupervisorHTTPHandlerV0DevuelveAcceptedSiExecutorSigueVivo(t *tes
 	}
 }
 
+func TestMCPRunSupervisorHTTPHandlerV0NoDuplicaOperacionActiva(t *testing.T) {
+	executor := &blockingMCPRunSupervisorHTTPExecutorV0{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	handler := newMCPRunSupervisorHTTPHandlerWithTimeoutV0(executor, time.Millisecond)
+	body := `{
+		"request_id":"request-ref-supervisor-http-dedupe-001",
+		"run_ref":"run-ref-supervisor-http-dedupe-001",
+		"idempotency_key":"idem-supervisor-http-dedupe-001"
+	}`
+	first := httptest.NewRecorder()
+	handler.ServeHTTP(first, httptest.NewRequest(
+		http.MethodPost,
+		MCPRunSupervisorHTTPPathV0,
+		bytes.NewBufferString(body),
+	))
+	if first.Code != http.StatusAccepted {
+		t.Fatalf("first status=%d body=%s", first.Code, first.Body.String())
+	}
+	select {
+	case <-executor.started:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatalf("executor no arranco")
+	}
+
+	second := httptest.NewRecorder()
+	handler.ServeHTTP(second, httptest.NewRequest(
+		http.MethodPost,
+		MCPRunSupervisorHTTPPathV0,
+		bytes.NewBufferString(body),
+	))
+	close(executor.release)
+
+	if second.Code != http.StatusAccepted {
+		t.Fatalf("second status=%d body=%s", second.Code, second.Body.String())
+	}
+	var result MCPRunSupervisorToolResultV0
+	if err := json.NewDecoder(second.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if executor.callsV0() != 1 ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "run_supervisor_operation_already_running") {
+		t.Fatalf("calls=%d result=%+v", executor.callsV0(), result)
+	}
+}
+
 func TestMCPRunSupervisorHTTPHandlerV0PropagaErrorPublicoDelExecutor(t *testing.T) {
 	input := MCPRunSupervisorToolInputV0{
 		RequestID:     "request-ref-run-supervisor-http-error-001",
@@ -204,6 +252,35 @@ func TestMCPRunSupervisorHTTPHandlerV0SoloPOST(t *testing.T) {
 	if rec.Code != http.StatusMethodNotAllowed || rec.Header().Get("Allow") != mcpPublicHTTPAllowHeaderV0(http.MethodPost) {
 		t.Fatalf("status=%d allow=%s", rec.Code, rec.Header().Get("Allow"))
 	}
+}
+
+type blockingMCPRunSupervisorHTTPExecutorV0 struct {
+	mu      sync.Mutex
+	once    sync.Once
+	calls   int
+	started chan struct{}
+	release chan struct{}
+}
+
+func (executor *blockingMCPRunSupervisorHTTPExecutorV0) Execute(
+	_ context.Context,
+	input MCPRunSupervisorToolInputV0,
+) (MCPRunSupervisorToolResultV0, error) {
+	executor.mu.Lock()
+	executor.calls++
+	executor.once.Do(func() { close(executor.started) })
+	executor.mu.Unlock()
+	<-executor.release
+	return MCPRunSupervisorToolResultV0{
+		Estado: MCPRunSupervisorEstadoOKV0,
+		RunRef: input.RunRef,
+	}, nil
+}
+
+func (executor *blockingMCPRunSupervisorHTTPExecutorV0) callsV0() int {
+	executor.mu.Lock()
+	defer executor.mu.Unlock()
+	return executor.calls
 }
 
 type fakeMCPRunSupervisorHTTPExecutorV0 struct {
