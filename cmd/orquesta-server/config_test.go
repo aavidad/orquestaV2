@@ -117,6 +117,45 @@ func TestServerConfigFromEnvV0ExponeAutomejoraGoalFirstOptInV0(t *testing.T) {
 	}
 }
 
+func TestServerConfigFromEnvV0DerivaAutomejoraGoalFirstDeBackendCodexGoalV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envServerIdleSelfImprovementGoalFirstV0, "")
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if !config.IdleSelfImprovementGoalFirst {
+		t.Fatalf("goal-first idle debe derivarse del backend goal: %+v", config)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerIdleSelfImprovementGoalFirstV0)
+	if setting.Value != "true" || setting.Source != "derived_from_codex_goal_backend" {
+		t.Fatalf("setting goal-first=%+v", setting)
+	}
+	if !effectiveConfigHasDiagnosticForTestV0(config.EffectiveConfig, "idle_self_improvement_goal_first_derived", envCodexGoalBackendV0) {
+		t.Fatalf("diagnostico de derivacion ausente: %+v", config.EffectiveConfig.Diagnostics)
+	}
+}
+
+func TestServerConfigFromEnvV0GoalFirstExplicitoFalseGanaABackendCodexGoalV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envServerIdleSelfImprovementGoalFirstV0, "false")
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if config.IdleSelfImprovementGoalFirst {
+		t.Fatalf("goal-first explicito false debe conservar compatibilidad legacy: %+v", config)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerIdleSelfImprovementGoalFirstV0)
+	if setting.Value != "false" || setting.Source != "explicit" {
+		t.Fatalf("setting goal-first=%+v", setting)
+	}
+}
+
 func TestServerConfigFromEnvV0PerfilAutonomiaActivaDirectorResidenteV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envServerAutonomyEnabledV0, "true")

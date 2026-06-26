@@ -146,9 +146,13 @@ duplicaria la ambiguedad que este corte elimina.
 Avance local adicional 2026-06-25: `orquesta-server` puede convertir una tanda
 acotada de automejora residente en `GoalWorkSpecV0` por
 `IdleSelfImprovementGoalLauncherPortV0` cuando
-`ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_GOAL_FIRST_ENABLED=true`. El opt-in es
-estricto: si falta el launcher, el runtime publica
-`goal_launcher_unavailable` y no cae al loop legacy.
+`ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_GOAL_FIRST_ENABLED=true`. Desde el
+2026-06-26, si esa bandera no esta definida y existe
+`ORQUESTA_CODEX_GOAL_BACKEND`, el servidor deriva goal-first para automejora
+residente y lo publica como `derived_from_codex_goal_backend`; `false`
+explicito conserva compatibilidad legacy. El opt-in/derivado es estricto: si
+falta el launcher, el runtime publica `goal_launcher_unavailable` y no cae al
+loop legacy.
 El contrato neutral valida ahora observaciones/resultados con refs opacas y no
 acepta `complete` sin `goal_ref` causal igual al spec. El paquete
 `CodexGoalStartPacketV0` conserva el gobierno externo completo del spec:

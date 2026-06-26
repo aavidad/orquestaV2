@@ -48,7 +48,7 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 		serverConfigSettingFromRegistryV0(envServerSelfWatchdogNoProgressSecondsV0, strconv.Itoa(int(config.SelfWatchdog.NoProgressFor/time.Second))),
 		serverIdleSelfImprovementAfterSettingV0(config),
 		serverConfigSettingFromRegistryV0(envServerIdleSelfImprovementTargetQueueV0, strconv.Itoa(config.IdleSelfImprovementTargetQueue)),
-		serverConfigSettingFromRegistryV0(envServerIdleSelfImprovementGoalFirstV0, strconv.FormatBool(config.IdleSelfImprovementGoalFirst)),
+		serverIdleSelfImprovementGoalFirstSettingV0(config),
 		serverSensitiveConfigSettingFromRegistryV0(
 			envServerIdleSelfImprovementProjectWorkDirV0,
 			configuredRefValueV0(config.IdleSelfImprovementProjectWorkDir, "idle-self-improvement-project-workdir-configured"),
@@ -121,25 +121,47 @@ func serverIdleSelfImprovementAfterSettingV0(config orquestaserver.ConfigV0) orq
 	return setting
 }
 
+func serverIdleSelfImprovementGoalFirstSettingV0(config orquestaserver.ConfigV0) orquestaserver.ServerConfigSettingV0 {
+	setting := serverConfigSettingFromRegistryV0(
+		envServerIdleSelfImprovementGoalFirstV0,
+		strconv.FormatBool(config.IdleSelfImprovementGoalFirst),
+	)
+	if strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementGoalFirstV0)) == "" &&
+		strings.TrimSpace(codexGoalBackendFromEnvV0()) != "" {
+		setting.Source = "derived_from_codex_goal_backend"
+	}
+	return setting
+}
+
 func serverEffectiveConfigDiagnosticsFromEnvV0() []orquestaserver.ServerDiagnosticV0 {
+	diagnostics := []orquestaserver.ServerDiagnosticV0{}
+	if strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementGoalFirstV0)) == "" &&
+		strings.TrimSpace(codexGoalBackendFromEnvV0()) != "" {
+		diagnostics = append(diagnostics, orquestaserver.ServerDiagnosticV0{
+			Code:         "idle_self_improvement_goal_first_derived",
+			Scope:        "autoprogramming",
+			Message:      envServerIdleSelfImprovementGoalFirstV0 + " derivada de " + envCodexGoalBackendV0,
+			EvidenceRefs: []string{"evidence-ref-server-idle-self-improvement-goal-first-derived"},
+		})
+	}
 	legacy := strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementAfterLegacyV0))
 	if legacy == "" {
-		return nil
+		return diagnostics
 	}
 	if strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementAfterV0)) != "" {
-		return []orquestaserver.ServerDiagnosticV0{{
+		return append(diagnostics, orquestaserver.ServerDiagnosticV0{
 			Code:         "legacy_env_ignored",
 			Scope:        "autoprogramming",
 			Message:      envServerIdleSelfImprovementAfterLegacyV0 + " ignorada porque " + envServerIdleSelfImprovementAfterV0 + " esta definida",
 			EvidenceRefs: []string{"evidence-ref-server-idle-self-improvement-env-legacy-ignored"},
-		}}
+		})
 	}
-	return []orquestaserver.ServerDiagnosticV0{{
+	return append(diagnostics, orquestaserver.ServerDiagnosticV0{
 		Code:         "legacy_env_alias",
 		Scope:        "autoprogramming",
 		Message:      envServerIdleSelfImprovementAfterLegacyV0 + " es legacy; usar " + envServerIdleSelfImprovementAfterV0,
 		EvidenceRefs: []string{"evidence-ref-server-idle-self-improvement-env-legacy-alias"},
-	}}
+	})
 }
 
 func serverIdleSelfImprovementAfterLegacyActiveV0() bool {

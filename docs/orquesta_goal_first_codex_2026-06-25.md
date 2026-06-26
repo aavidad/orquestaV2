@@ -83,6 +83,14 @@ equivaldria al loop persistente de Codex Goal; por eso el wiring usa
 `codex app-server` como frontera de composicion. Sin esa variable, la
 composicion no expone launcher/observer y Orquesta publica capacidad goal
 faltante cuando `IdleSelfImprovementGoalFirst` esta activo.
+Desde el 2026-06-26, si `ORQUESTA_CODEX_GOAL_BACKEND` esta configurada y
+`ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_GOAL_FIRST_ENABLED` no esta definida,
+la automejora residente deriva automaticamente goal-first. El operador puede
+forzar compatibilidad legacy con
+`ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_GOAL_FIRST_ENABLED=false`; la
+configuracion efectiva publica la fuente
+`derived_from_codex_goal_backend` y el diagnostico
+`idle_self_improvement_goal_first_derived`.
 
 `orquesta-server` ya conserva para automejora goal-first el spec emitido, el
 receipt de lanzamiento, el resultado observado y la validacion de cierre. En

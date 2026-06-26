@@ -320,7 +320,7 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 	envServerIdleSelfImprovementGoalFirstV0: {
 		Scope:       "autoprogramming",
 		Label:       "Goal-first automejora",
-		Description: "Activa modo goal-first estricto para automejora residente; requiere backend goal configurado.",
+		Description: "Activa modo goal-first estricto para automejora residente; si no se define y hay backend Codex Goal, se deriva automaticamente.",
 	},
 	envSecurityModeV0: {Scope: "rails", Label: "Modo seguridad", Description: "Modo historico de seguridad; no reactiva rails offline hasta nueva orden."},
 	envRailsModeV0:    {Scope: "rails", Label: "Modo rails", Description: "offline fijo hasta nueva orden; no reactiva politicas de bloqueo."},
