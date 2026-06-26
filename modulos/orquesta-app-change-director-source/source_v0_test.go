@@ -241,6 +241,11 @@ func TestAppChangeDirectorDecisionSourceV0MaterializaSeisSubrolesOPES(t *testing
 			"external/opes/curso-servicios-multiples/subroles/" + subroleRef,
 			"external/opes/tema-001/subroles/" + subroleRef,
 		})
+		if (subroleRef == "fuentes" || subroleRef == "reutilizacion") &&
+			(!strings.Contains(child.AcceptanceCriteria[0], "excluir backups") ||
+				!strings.Contains(child.AcceptanceCriteria[0], "runtime")) {
+			t.Fatalf("subrole %s sin acotacion de busqueda: criteria=%+v", subroleRef, child.AcceptanceCriteria)
+		}
 	}
 	for _, childRef := range parent.ChildTaskRefs {
 		if !seenChildren[childRef] {

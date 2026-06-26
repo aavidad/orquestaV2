@@ -32,7 +32,9 @@ Casos focales:
   largos.
 - `TestAppChangeDirectorDecisionSourceV0MaterializaSeisSubrolesOPES`: OPES
   1+6 materializa seis tareas hijas y un padre integrador causal; las hijas
-  escriben solo bajo `subroles/<rol>` y el padre depende de todas ellas.
+  escriben solo bajo `subroles/<rol>`, el padre depende de todas ellas y
+  fuentes/reutilizacion acotan la busqueda fuera de backups/runtime salvo
+  auditoria global.
 - `TestAppChangeDirectorDecisionSourceV0OPESSubrolesPadreConservaWriteSetProductoAutorizado`:
   reproduce `allowed_write_set=["temas/tema_032"]` y valida que el padre
   conserva `temas/tema_032` mas `temas/tema_032/coordinacion`, mientras

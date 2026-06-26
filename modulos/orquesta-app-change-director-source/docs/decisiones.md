@@ -128,6 +128,9 @@ ACK, entrega, bloqueo o rework de los hijos.
 Impacto: el scheduler puede lanzar los seis subroles en paralelo sin colision.
 Cuando sus dependencias quedan satisfechas, el padre recibe el write-set de
 producto y puede consolidar artefactos utiles en la ruta canonica autorizada.
+Los subroles de fuentes y reutilizacion declaran como criterio advisory que la
+busqueda empiece por curso/tema/programa/canon y excluya backups, paquetes
+historicos y runtime salvo auditoria global explicita.
 
 ## Planificacion documental como contrato propio
 
