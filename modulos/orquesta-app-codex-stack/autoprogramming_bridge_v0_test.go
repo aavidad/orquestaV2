@@ -12,6 +12,7 @@ import (
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoroperativo "orquesta/modulos/orquesta-director-operativo"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
@@ -217,6 +218,65 @@ func TestPrepareAutoprogrammingRunV0GoalReadyConBackendParcialNoLanzaNiCaeALegac
 	}
 	if _, err := runStore.LoadRunV0(context.Background(), request.RequestRef); !orquestacionnucleoapp.IsRunNotFoundErrorV0(err) {
 		t.Fatalf("run no debe persistirse, err=%v", err)
+	}
+}
+
+func TestPrepareAutoprogrammingRunV0GoalReadyRunExistenteSinGoalStateNoRelanzaGoal(t *testing.T) {
+	ctx := context.Background()
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0()
+	launcher := &goalFirstQueueLauncherForTestV0{}
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.RequestRef = "run-autoprogramming-goal-existing-missing-state-001"
+	request.Tasks[0].TaskRef = "source-task-ref-autoprogramming-goal-existing-missing-state-001"
+	request.Tasks[0].ContextRefs = []string{
+		"goal_migration:goal-first",
+		"goal_capability:starter",
+		"goal_capability:observer",
+		"goal_capability:closure-validator",
+	}
+	work := orquestaautoprogramming.BuildAutoprogrammingProgrammableWorkV0(request)
+	if !work.Accepted || len(work.Work.GoalSpecs) != 1 {
+		t.Fatalf("work=%+v", work)
+	}
+	existing := autoprogrammingBridgeGoalRunV0(
+		AutoprogrammingBridgeRequestV0{Request: request},
+		work.Work,
+	)
+	if err := runStore.SaveRunV0(ctx, existing); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+
+	bridged, err := PrepareAutoprogrammingRunV0(ctx, AutoprogrammingBridgeRequestV0{
+		Request: request,
+	}, orquestaappdirectorservice.StartAppDirectorPortsV0{
+		RunStore:             runStore,
+		DirectorTaskStore:    taskStore,
+		GoalLauncher:         launcher,
+		GoalObserver:         &goalFirstQueueObserverForTestV0{},
+		GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		GoalStateStore:       goalStates,
+	})
+	if err != nil {
+		t.Fatalf("PrepareAutoprogrammingRunV0: %v", err)
+	}
+	if bridged.Accepted ||
+		bridged.Run.RunID != existing.RunID ||
+		len(bridged.Issues) != 1 ||
+		bridged.Issues[0].Code != "autoprogramming_goal_state_unavailable_for_existing_run" ||
+		bridged.Issues[0].Field != "goal_state" {
+		t.Fatalf("bridged=%+v", bridged)
+	}
+	if len(launcher.specs) != 0 || len(goalStates.states) != 0 {
+		t.Fatalf("run existente sin goal_state no debe relanzar: specs=%+v states=%+v", launcher.specs, goalStates.states)
+	}
+	stored, err := runStore.LoadRunV0(ctx, existing.RunID)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if len(stored.Tasks) != 0 || len(stored.FunctionContracts) != 0 {
+		t.Fatalf("no debe materializar loop legacy: %+v", stored)
 	}
 }
 

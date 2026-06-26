@@ -37,7 +37,10 @@ func autoprogrammingBridgeStartGoalFirstV0(
 			return AutoprogrammingBridgeResultV0{}, err
 		}
 		if state, loaded, err := autoprogrammingBridgeLoadExistingGoalStateV0(ctx, ports, run.RunID); err != nil {
-			return AutoprogrammingBridgeResultV0{}, err
+			result.Run = existing
+			result.Accepted = false
+			result.Issues = append(result.Issues, autoprogrammingBridgeExistingGoalStateIssueV0(run.RunID))
+			return result, nil
 		} else if loaded {
 			result.Run = existing
 			result.GoalState = state
@@ -117,13 +120,23 @@ func autoprogrammingBridgeLoadExistingGoalStateV0(
 ) (orquestagoal.GoalWorkStateV0, bool, error) {
 	state, err := ports.GoalStateStore.LoadGoalWorkStateV0(ctx, runRef)
 	if err != nil {
-		return orquestagoal.GoalWorkStateV0{}, false, nil
+		return orquestagoal.GoalWorkStateV0{}, false, err
 	}
 	state, err = orquestagoal.NewGoalWorkStateV0(state)
 	if err != nil {
 		return orquestagoal.GoalWorkStateV0{}, false, err
 	}
 	return state, true, nil
+}
+
+func autoprogrammingBridgeExistingGoalStateIssueV0(
+	runRef string,
+) orquestaautoprogramming.AutoprogrammingRequestIssueV0 {
+	return orquestaautoprogramming.AutoprogrammingRequestIssueV0{
+		Code:    "autoprogramming_goal_state_unavailable_for_existing_run",
+		Field:   "goal_state",
+		Message: "run goal-first existente sin estado goal cargable; no se relanza ni se cae al loop legacy: " + strings.TrimSpace(runRef),
+	}
 }
 
 func autoprogrammingBridgeNewGoalStateV0(

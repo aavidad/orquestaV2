@@ -1405,6 +1405,11 @@ Cobertura:
   fija que un backend goal-first parcial publica
   `autoprogramming_goal_backend_incomplete`, no lanza Goal, no persiste run y
   no cae al loop legacy.
+- `TestPrepareAutoprogrammingRunV0GoalReadyRunExistenteSinGoalStateNoRelanzaGoal`
+  reproduce una run contenedora goal-first ya persistida sin `GoalWorkStateV0`
+  cargable; `prepare-run` devuelve
+  `autoprogramming_goal_state_unavailable_for_existing_run`, no llama al
+  launcher y no materializa tareas legacy.
 - `TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaGoalFirstSinColaLegacy`
   fija la ruta con backend completo `GoalLauncher` + `GoalObserver` +
   `GoalClosureValidator` + `GoalStateStore`: crea run contenedor sin

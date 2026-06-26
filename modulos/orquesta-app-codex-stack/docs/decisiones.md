@@ -86,6 +86,22 @@ Estado: aceptada.
 
 ```text
 Fecha: 2026-06-26
+Decision: `prepare-run` no relanza un Goal si la run goal-first ya existe pero
+el `GoalWorkStateV0` no se puede cargar.
+Motivo: tras restart o recuperacion parcial puede quedar persistida la run
+contenedora goal-first sin estado de goal legible. Relanzar con el mismo
+`run_ref` duplicaria trabajo en Codex Goal y reintroduciria una forma de loop
+paralelo. Caer al loop legacy tambien contradice el modelo goal-first.
+Impacto: la ruta de autoprogramacion devuelve issue publico
+`autoprogramming_goal_state_unavailable_for_existing_run`, conserva la run
+existente, no llama a `GoalLauncher`, no crea `WorkflowTaskV0` y no encola loop
+legacy. El operador debe recuperar/observar el estado de goal existente o
+resolver la persistencia.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-06-26
 Decision: Un padre OPES 1+6 no puede cerrar si el contrato de seis subroles no
 esta materializado en `WorkflowTaskV0`.
 Motivo: en recuperaciones legacy puede existir un padre `domain_work` con
