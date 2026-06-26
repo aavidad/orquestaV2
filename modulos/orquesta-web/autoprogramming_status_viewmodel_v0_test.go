@@ -39,6 +39,16 @@ func TestWebAutoprogrammingStatusViewModelV0AgregaColaYRunVivos(t *testing.T) {
 			QueueRuns:    8,
 			StatsRuns:    1,
 		},
+		StaleRunning: []orquestamcp.MCPAutoprogrammingActionableRunV0{{
+			Code:              "provider_usage_limit_retry_after",
+			Severity:          "blocked",
+			RunRef:            " run-ref-autop-status-web-stale ",
+			AppRef:            " opes ",
+			Status:            " stopped ",
+			Reason:            " provider_usage_limit_retry_after ",
+			RecommendedAction: " wait_for_quota_and_relaunch_idempotently ",
+			EvidenceRefs:      []string{" evidence-ref-provider-usage-limit-retry-after ", "evidence-ref-provider-usage-limit-retry-after"},
+		}},
 		Run: &orquestamcp.MCPDirectorStatsToolResultV0{
 			Estado: orquestamcp.MCPDirectorStatsEstadoOKV0,
 			RunRef: "run-ref-autop-status-web-001",
@@ -108,6 +118,15 @@ func TestWebAutoprogrammingStatusViewModelV0AgregaColaYRunVivos(t *testing.T) {
 		vm.QueueHealth.QueueRuns != 8 ||
 		vm.QueueHealth.StatsRuns != 1 {
 		t.Fatalf("queue_health=%+v", vm.QueueHealth)
+	}
+	if len(vm.StaleRunning) != 1 ||
+		vm.StaleRunning[0].Code != "usage_limit_retry_after" ||
+		vm.StaleRunning[0].Severity != "blocked" ||
+		vm.StaleRunning[0].RunRef != "run-ref-autop-status-web-stale" ||
+		vm.StaleRunning[0].RecommendedAction != "wait_for_quota_and_relaunch_idempotently" ||
+		len(vm.StaleRunning[0].EvidenceRefs) != 1 ||
+		vm.StaleRunning[0].EvidenceRefs[0] != "evidence-ref-usage-limit-retry-after" {
+		t.Fatalf("stale_running=%+v", vm.StaleRunning)
 	}
 	if len(vm.Runs) != 2 ||
 		vm.Runs[0].RunRef != "run-ref-autop-status-web-queued" ||

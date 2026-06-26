@@ -32,6 +32,12 @@ func autoprogrammingHTMLV0() string {
     .pill.ok { background:rgba(50,213,131,.14); color:var(--good); }
     .pill.warn { background:rgba(253,176,34,.14); color:var(--warn); }
     .pill.bad { background:rgba(249,112,102,.14); color:var(--bad); }
+    .action-list { display:grid; gap:8px; }
+    .action-item { display:grid; gap:4px; padding:9px; border:1px solid #3d4b56; border-left:4px solid var(--warn); border-radius:8px; background:#111820; }
+    .action-item.blocked { border-left-color:var(--bad); }
+    .action-item.info { border-left-color:var(--accent); }
+    .action-head { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+    .action-meta { display:flex; gap:6px; flex-wrap:wrap; color:var(--muted); font-size:12px; }
     pre { margin:0; max-height:420px; overflow:auto; padding:12px; border-radius:10px; background:#090d11; border:1px solid #24303a; white-space:pre-wrap; word-break:break-word; }
     .actions { display:flex; gap:8px; flex-wrap:wrap; }
     @media (max-width: 860px) { body{padding:14px} header,.grid,.row{grid-template-columns:1fr; display:grid} .nav{justify-content:flex-start} }
@@ -86,6 +92,10 @@ El cambio queda cubierto por tests</textarea></label>
           <a id="stats-link" href="/director-stats">Abrir stats</a>
           <a href="/ops">Ver en cockpit</a>
         </div>
+        <section id="stale-running-panel" class="action-list" hidden>
+          <h2>Acciones requeridas</h2>
+          <div id="stale-running-list" class="action-list"></div>
+        </section>
         <pre id="output">{}</pre>
       </aside>
     </section>
@@ -95,6 +105,8 @@ El cambio queda cubierto por tests</textarea></label>
     const runRefNode = document.getElementById('run-ref');
     const pill = document.getElementById('state-pill');
     const statsLink = document.getElementById('stats-link');
+    const stalePanel = document.getElementById('stale-running-panel');
+    const staleList = document.getElementById('stale-running-list');
     let currentRunRef = '';
 
     function lines(value) {
@@ -113,6 +125,36 @@ El cambio queda cubierto por tests</textarea></label>
         runRefNode.textContent = currentRunRef;
         statsLink.href = '/director-stats?include_agent_progress=true&run_ref=' + encodeURIComponent(currentRunRef);
       }
+      renderStaleRunning((value || {}).stale_running || []);
+    }
+    function renderStaleRunning(items) {
+      staleList.textContent = '';
+      stalePanel.hidden = !items || !items.length;
+      (items || []).slice(0, 8).forEach(item => {
+        const row = document.createElement('article');
+        const severity = String(item.severity || 'warning');
+        row.className = 'action-item ' + severity;
+        const head = document.createElement('div');
+        head.className = 'action-head';
+        const code = document.createElement('strong');
+        code.textContent = item.code || 'estado_accionable';
+        const status = document.createElement('span');
+        status.className = 'pill ' + (severity === 'blocked' ? 'bad' : (severity === 'info' ? 'ok' : 'warn'));
+        status.textContent = item.status || severity;
+        head.append(code, status);
+        const meta = document.createElement('div');
+        meta.className = 'action-meta';
+        [item.run_ref, item.app_ref, item.reason].filter(Boolean).forEach(value => {
+          const span = document.createElement('span');
+          span.textContent = value;
+          meta.appendChild(span);
+        });
+        const action = document.createElement('div');
+        action.className = 'hint';
+        action.textContent = item.recommended_action || 'inspect_run_ref';
+        row.append(head, meta, action);
+        staleList.appendChild(row);
+      });
     }
     async function postJSON(url, payload) {
       const response = await fetch(url, {

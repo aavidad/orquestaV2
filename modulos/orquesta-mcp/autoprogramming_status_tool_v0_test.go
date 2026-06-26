@@ -138,6 +138,68 @@ func TestMCPAutoprogrammingStatusExecutorV0ExponeQueueHealthSeparada(t *testing.
 		result.QueueHealth.StatsRuns != 1 {
 		t.Fatalf("queue_health=%+v", result.QueueHealth)
 	}
+	if len(result.StaleRunning) != 0 {
+		t.Fatalf("run con stats live no debe aparecer como stale_running: %+v", result.StaleRunning)
+	}
+}
+
+func TestMCPAutoprogrammingStatusExecutorV0ExponeStaleRunningAccionableV0(t *testing.T) {
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			ranked: []MCPRunQueueRankedCandidateCompactV0{{
+				Rank:          1,
+				RunRef:        "run-ref-stale-running-001",
+				AppRef:        "opes",
+				Status:        "running",
+				PriorityScore: 90,
+				EvidenceRefs:  []string{"evidence-ref-test-stale-running"},
+			}},
+		},
+		Stats: &fakeMCPAutoprogrammingRunStatusV0{},
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 ||
+		result.StaleRunning[0].Code != "stale_running" ||
+		result.StaleRunning[0].Severity != "warning" ||
+		result.StaleRunning[0].RecommendedAction != "supervise_run_ref_or_reconcile_if_no_live_process" ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "stale_running") {
+		t.Fatalf("stale_running=%+v diagnostics=%+v", result.StaleRunning, result.Diagnostics)
+	}
+}
+
+func TestMCPAutoprogrammingStatusExecutorV0ExponeUsageLimitReconciliadoV0(t *testing.T) {
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			empty: true,
+			terminal: []MCPRunQueueRankedCandidateCompactV0{{
+				RunRef:       "run-ref-usage-limit-001",
+				AppRef:       "opes",
+				Status:       "stopped",
+				RescueReason: "provider_usage_limit_retry_after",
+				EvidenceRefs: []string{
+					"evidence-ref-run-queue-running-stale-no-live-process-reconciled",
+					"evidence-ref-provider-usage-limit-retry-after",
+					"evidence-ref-codex-usage-quota-exhausted",
+				},
+			}},
+		},
+		Stats: &fakeMCPAutoprogrammingRunStatusV0{},
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 ||
+		result.StaleRunning[0].Code != "provider_usage_limit_retry_after" ||
+		result.StaleRunning[0].Severity != "blocked" ||
+		result.StaleRunning[0].Status != "stopped" ||
+		result.StaleRunning[0].RecommendedAction != "wait_for_quota_and_relaunch_idempotently" ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "provider_usage_limit_retry_after") {
+		t.Fatalf("stale_running=%+v diagnostics=%+v", result.StaleRunning, result.Diagnostics)
+	}
 }
 
 func TestMCPAutoprogrammingStatusExecutorV0DiagnosticaAutoprogrammingSuprimidaPorSesionDominio(t *testing.T) {

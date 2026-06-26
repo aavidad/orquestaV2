@@ -51,6 +51,7 @@ type MCPAutoprogrammingStatusToolResultV0 struct {
 	Queue             *MCPRunQueuePriorityToolResultV0                       `json:"queue,omitempty"`
 	Run               *MCPDirectorStatsToolResultV0                          `json:"run,omitempty"`
 	QueueHealth       *MCPAutoprogrammingQueueHealthV0                       `json:"queue_health,omitempty"`
+	StaleRunning      []MCPAutoprogrammingActionableRunV0                    `json:"stale_running,omitempty"`
 	Projects          []MCPAutoprogrammingProjectV0                          `json:"projects,omitempty"`
 	Tasks             []MCPAutoprogrammingTaskV0                             `json:"tasks,omitempty"`
 	Agents            []MCPAutoprogrammingAgentV0                            `json:"agents,omitempty"`
@@ -71,13 +72,14 @@ func MCPAutoprogrammingStatusDescriptorV0() MCPAutoprogrammingStatusToolDescript
 		Name:        MCPAutoprogrammingStatusToolNameV0,
 		Version:     MCPAutoprogrammingStatusToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,external_job_ref?,queue_ref?,app_refs?,queue_limit?,operator_advice?}",
-		Output:      "ok:{queue?,run?,queue_health?,projects?,tasks?,agents?,operator?,efficiency_summary?,ops_snapshot?,diagnostics?}|error:{errores_publicos,diagnostics?,operator_advice?}",
+		Output:      "ok:{queue?,run?,queue_health?,stale_running?,projects?,tasks?,agents?,operator?,efficiency_summary?,ops_snapshot?,diagnostics?}|error:{errores_publicos,diagnostics?,operator_advice?}",
 		ResourceURI: MCPAutoprogrammingStatusResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
 			"estado de cola via run_queue.priority inyectado",
 			"estado de run via director.stats inyectado",
 			"queue_health separa queued/running_live/running_stale/blocked/lost/completed/failed sin mutar cola",
+			"stale_running lista runs accionables que no deben competir silenciosamente con olas nuevas",
 			"proyecta proyectos tareas y agentes compactos para filtros externos",
 			"diagnostico solo resume puertos y errores publicos",
 			"operator_advice se conserva como observacion no bloqueante",
@@ -156,6 +158,8 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	result.Tasks = buildMCPAutoprogrammingTasksV0(result.Run)
 	result.Agents = buildMCPAutoprogrammingAgentsV0(result.Run)
 	result.QueueHealth = buildMCPAutoprogrammingQueueHealthV0(result.Queue, result.Run)
+	result.StaleRunning = buildMCPAutoprogrammingStaleRunningV0(result.Queue, result.Run)
+	result.Diagnostics = append(result.Diagnostics, diagnosticsFromStaleRunningMCPAutoprogrammingV0(result.StaleRunning)...)
 	result.Operator = newMCPAutoprogrammingOperatorV0(result.Queue, result.Run, result.Diagnostics)
 	result.EfficiencySummary = buildMCPAutoprogrammingEfficiencySummaryV0(
 		result.Queue,

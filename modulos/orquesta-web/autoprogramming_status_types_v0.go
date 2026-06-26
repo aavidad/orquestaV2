@@ -1,6 +1,10 @@
 package orquestaweb
 
-import orquestamcp "orquesta/modulos/orquesta-mcp"
+import (
+	"strings"
+
+	orquestamcp "orquesta/modulos/orquesta-mcp"
+)
 
 type WebAutoprogrammingStatusQueryV0 struct {
 	RequestID            string   `json:"request_id,omitempty"`
@@ -27,6 +31,7 @@ type WebAutoprogrammingStatusViewModelV0 struct {
 	QueueRef        string                                      `json:"queue_ref,omitempty"`
 	RunRef          string                                      `json:"run_ref,omitempty"`
 	QueueHealth     *WebAutoprogrammingQueueHealthV0            `json:"queue_health,omitempty"`
+	StaleRunning    []WebAutoprogrammingActionableRunV0         `json:"stale_running,omitempty"`
 	Runs            []WebAutoprogrammingRunProgressV0           `json:"runs,omitempty"`
 	Agents          []WebAutoprogrammingAgentProgressV0         `json:"agents,omitempty"`
 	Diagnostics     []WebAutoprogrammingDiagnosticV0            `json:"diagnostics,omitempty"`
@@ -45,6 +50,17 @@ type WebAutoprogrammingQueueHealthV0 struct {
 	ObservedRuns int `json:"observed_runs,omitempty"`
 	QueueRuns    int `json:"queue_runs,omitempty"`
 	StatsRuns    int `json:"stats_runs,omitempty"`
+}
+
+type WebAutoprogrammingActionableRunV0 struct {
+	Code              string   `json:"code"`
+	Severity          string   `json:"severity,omitempty"`
+	RunRef            string   `json:"run_ref,omitempty"`
+	AppRef            string   `json:"app_ref,omitempty"`
+	Status            string   `json:"status,omitempty"`
+	Reason            string   `json:"reason,omitempty"`
+	RecommendedAction string   `json:"recommended_action,omitempty"`
+	EvidenceRefs      []string `json:"evidence_refs,omitempty"`
 }
 
 type WebAutoprogrammingRunProgressV0 struct {
@@ -96,6 +112,7 @@ func NewWebAutoprogrammingStatusViewModelV0(locale string, result orquestamcp.MC
 		Estado:          webAutoprogrammingPrepareRunEstadoV0(result.Estado),
 		QueueRef:        trimV0(result.QueueRef),
 		RunRef:          trimV0(result.RunRef),
+		StaleRunning:    webAutoprogrammingActionableRunsV0(result.StaleRunning),
 		Diagnostics:     webAutoprogrammingDiagnosticsV0(result.Diagnostics),
 		ErroresPublicos: webAutoprogrammingPrepareRunIssuesV0(result.Errores),
 	}
@@ -131,6 +148,40 @@ func webAutoprogrammingQueueHealthV0(
 		QueueRuns:    value.QueueRuns,
 		StatsRuns:    value.StatsRuns,
 	}
+}
+
+func webAutoprogrammingActionableRunsV0(
+	values []orquestamcp.MCPAutoprogrammingActionableRunV0,
+) []WebAutoprogrammingActionableRunV0 {
+	out := make([]WebAutoprogrammingActionableRunV0, 0, len(values))
+	for _, value := range values {
+		out = append(out, WebAutoprogrammingActionableRunV0{
+			Code:              webAutoprogrammingPublicActionTextV0(value.Code),
+			Severity:          webAutoprogrammingPublicActionTextV0(value.Severity),
+			RunRef:            trimV0(value.RunRef),
+			AppRef:            trimV0(value.AppRef),
+			Status:            webAutoprogrammingPublicActionTextV0(value.Status),
+			Reason:            webAutoprogrammingPublicActionTextV0(value.Reason),
+			RecommendedAction: webAutoprogrammingPublicActionTextV0(value.RecommendedAction),
+			EvidenceRefs:      webAutoprogrammingPublicEvidenceRefsV0(value.EvidenceRefs),
+		})
+	}
+	return out
+}
+
+func webAutoprogrammingPublicActionTextV0(value string) string {
+	value = trimV0(value)
+	value = strings.ReplaceAll(value, "provider_usage", "usage")
+	value = strings.ReplaceAll(value, "provider-", "")
+	return value
+}
+
+func webAutoprogrammingPublicEvidenceRefsV0(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		out = append(out, webAutoprogrammingPublicActionTextV0(value))
+	}
+	return compactStringsV0(out)
 }
 
 func webAutoprogrammingQueueRunsV0(values []orquestamcp.MCPRunQueueRankedCandidateCompactV0) []WebAutoprogrammingRunProgressV0 {

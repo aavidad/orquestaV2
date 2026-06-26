@@ -20,6 +20,8 @@ func TestAutoprogrammingWebEndpointV0RenderizaPantallaOperativa(t *testing.T) {
 		"/api/v0/autoprogramming/status",
 		"/api/v0/runs/supervise",
 		`href="/ops"`,
+		"Acciones requeridas",
+		"stale_running",
 		`name="project_ref"`,
 		`name="required_tests"`,
 	} {

@@ -25,6 +25,17 @@ type MCPAutoprogrammingQueueHealthV0 struct {
 	StatsRuns    int `json:"stats_runs,omitempty"`
 }
 
+type MCPAutoprogrammingActionableRunV0 struct {
+	Code              string   `json:"code"`
+	Severity          string   `json:"severity,omitempty"`
+	RunRef            string   `json:"run_ref,omitempty"`
+	AppRef            string   `json:"app_ref,omitempty"`
+	Status            string   `json:"status,omitempty"`
+	Reason            string   `json:"reason,omitempty"`
+	RecommendedAction string   `json:"recommended_action,omitempty"`
+	EvidenceRefs      []string `json:"evidence_refs,omitempty"`
+}
+
 type MCPAutoprogrammingTaskV0 struct {
 	RunRef              string   `json:"run_ref,omitempty"`
 	TaskRef             string   `json:"task_ref"`
