@@ -101,6 +101,11 @@ bateria focal + `go test -count=1 -p=1 ./...` pasaron.
   demasiado verbosas antes de construir `RecordReviewResult`, conservando refs
   causales y `evidence-ref-review-gate-payload-compacted` para evitar
   `payload_invalido` tras ACK valido.
+- 2026-06-26: `orquesta-app-codex-stack` distingue un `runtime_error` de
+  supervisor cuando el ultimo snapshot conserva agente/proceso vivo: publica
+  `supervisor_transition_error_but_agents_live` y `next_actions` de
+  esperar/reintentar, sin relanzar la misma `run_ref` mientras el proceso siga
+  vivo.
 
 ## No reabrir salvo regresion
 

@@ -44,9 +44,15 @@ func codexStackRunSupervisorErrorResultMCPV0(
 	result.Last = codexStackRunSupervisorSnapshotMCPV0(partial.Last)
 	result.History = codexStackRunSupervisorHistoryMCPV0(partial.History)
 	result.EvidenceRefs = compactStringsV0(partial.Last.EvidenceRefs)
+	liveDiagnostics := codexStackRunSupervisorLiveErrorDiagnosticsMCPV0(result.RunRef, partial, err)
+	result.NextActions = codexStackRunSupervisorLiveErrorNextActionsMCPV0(partial)
 	if diagnostics := codexStackRunSupervisorDiagnosticsMCPV0(partial.Last.Diagnostics); len(diagnostics) > 0 {
 		diagnostics = codexStackRunSupervisorDiagnosticsWithFallbackErrorV0(diagnostics, err)
-		result.Diagnostics = diagnostics
+		result.Diagnostics = append(liveDiagnostics, diagnostics...)
+		return result
+	}
+	if len(liveDiagnostics) > 0 {
+		result.Diagnostics = liveDiagnostics
 		return result
 	}
 	if len(result.EvidenceRefs) > 0 {
@@ -58,6 +64,73 @@ func codexStackRunSupervisorErrorResultMCPV0(
 		}}
 	}
 	return result
+}
+
+func codexStackRunSupervisorLiveErrorDiagnosticsMCPV0(
+	runRef string,
+	partial CodexSupervisorResultV0,
+	err error,
+) []orquestamcp.MCPAutoprogrammingDiagnosticV0 {
+	if !codexStackRunSupervisorErrorHasLiveAgentV0(partial.Last) {
+		return nil
+	}
+	message := strings.Join(compactStringsV0([]string{
+		"last_status=" + strings.TrimSpace(string(partial.Last.Status)),
+		"stop_reason=" + strings.TrimSpace(string(partial.StopReason)),
+		"action=wait_agents_or_retry_supervise",
+		"error=" + codexStackRunSupervisorPublicDiagnosticErrorV0(codexStackRunSupervisorErrorStringV0(err)),
+	}), " ")
+	return []orquestamcp.MCPAutoprogrammingDiagnosticV0{{
+		Code:         "supervisor_transition_error_but_agents_live",
+		Scope:        codexStackRunSupervisorLiveErrorScopeMCPV0(runRef, partial.Last),
+		Message:      message,
+		EvidenceRefs: compactStringsV0(append(partial.Last.EvidenceRefs, "evidence-ref-supervisor-transition-error-agents-live")),
+	}}
+}
+
+func codexStackRunSupervisorErrorHasLiveAgentV0(
+	snapshot CodexSupervisorRuntimeSnapshotV0,
+) bool {
+	if snapshot.Status == CodexSupervisorRuntimeRunningLiveV0 {
+		return true
+	}
+	for _, ref := range snapshot.EvidenceRefs {
+		if strings.TrimSpace(ref) == "evidence-ref-codex-supervisor-process-live" {
+			return true
+		}
+	}
+	return false
+}
+
+func codexStackRunSupervisorLiveErrorScopeMCPV0(
+	runRef string,
+	snapshot CodexSupervisorRuntimeSnapshotV0,
+) string {
+	return strings.Join(compactStringsV0([]string{
+		"run:" + firstNonEmptyQueuedSourceV0(runRef, snapshot.SessionRef),
+		"agent:" + strings.TrimSpace(snapshot.AgentRef),
+		"process:" + strings.TrimSpace(snapshot.ProcessRef),
+	}), " ")
+}
+
+func codexStackRunSupervisorLiveErrorNextActionsMCPV0(
+	partial CodexSupervisorResultV0,
+) []string {
+	if !codexStackRunSupervisorErrorHasLiveAgentV0(partial.Last) {
+		return nil
+	}
+	return []string{
+		"wait_agents",
+		"retry_supervise",
+		"do_not_relaunch_same_run_ref_while_process_live",
+	}
+}
+
+func codexStackRunSupervisorErrorStringV0(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 func codexStackRunSupervisorDiagnosticsWithFallbackErrorV0(

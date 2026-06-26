@@ -123,6 +123,44 @@ func TestCodexStackRunSupervisorErrorResultMCPV0ExponeDiagnosticoPublicoDelDrain
 	}
 }
 
+func TestCodexStackRunSupervisorErrorResultMCPV0DistingueErrorConAgenteVivo(t *testing.T) {
+	partial := CodexSupervisorResultV0{
+		StopReason: CodexSupervisorStopRuntimeErrorV0,
+		Ticks:      1,
+		Last: CodexSupervisorRuntimeSnapshotV0{
+			Status:     CodexSupervisorRuntimeRunningLiveV0,
+			SessionRef: "run-ref-live-error-001",
+			AgentRef:   "agent-ref-live-error-001",
+			ProcessRef: "process-ref-live-error-001",
+			EvidenceRefs: []string{
+				"evidence-ref-codex-supervisor-process-live",
+			},
+		},
+	}
+
+	result := codexStackRunSupervisorErrorResultMCPV0(
+		orquestamcp.MCPRunSupervisorToolInputV0{RunRef: "run-ref-live-error-001"},
+		partial,
+		errors.New("transicion_invalida: idempotency_key"),
+	)
+
+	if result.Estado != orquestamcp.MCPRunSupervisorEstadoErrorV0 ||
+		result.Last.Status != string(CodexSupervisorRuntimeRunningLiveV0) ||
+		result.StopReason != string(CodexSupervisorStopRuntimeErrorV0) {
+		t.Fatalf("result=%+v", result)
+	}
+	if len(result.Diagnostics) != 1 ||
+		result.Diagnostics[0].Code != "supervisor_transition_error_but_agents_live" ||
+		!strings.Contains(result.Diagnostics[0].Message, "action=wait_agents_or_retry_supervise") {
+		t.Fatalf("diagnostics=%+v", result.Diagnostics)
+	}
+	if !codexStackStringInSetForTestV0(result.NextActions, "wait_agents") ||
+		!codexStackStringInSetForTestV0(result.NextActions, "retry_supervise") ||
+		!codexStackStringInSetForTestV0(result.NextActions, "do_not_relaunch_same_run_ref_while_process_live") {
+		t.Fatalf("next_actions=%+v", result.NextActions)
+	}
+}
+
 func TestCodexStackRunSupervisorQueueDiagnosticsMCPV0ExponePresionWaitingOutbox(t *testing.T) {
 	ctx := context.Background()
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())

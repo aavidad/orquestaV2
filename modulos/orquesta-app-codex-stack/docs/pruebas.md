@@ -208,6 +208,11 @@ Cobertura Go actual:
 - `TestCodexStackRunSupervisorAPIV0EmpujaRunExistenteSinRelanzarAgentes` prueba
   `POST /api/v0/runs/supervise` sobre `stack.Handler`: reentra por el adaptador
   real, conserva `run_ref`, expone evidencia y no relanza agentes ya vivos.
+- `TestCodexStackRunSupervisorErrorResultMCPV0DistingueErrorConAgenteVivo`
+  valida que un `runtime_error` del supervisor no oculta que el ultimo snapshot
+  sigue `running_live`: expone el diagnostico publico
+  `supervisor_transition_error_but_agents_live` y recomienda esperar/reintentar
+  en vez de relanzar la misma run mientras el proceso siga vivo.
 - `TestCodexStackRealRequiredTestRunnerEndToEndOptInV0` queda desactivado por
   defecto y valida con un agente Codex real acotado el ciclo del Director
   Operativo: task con `RequiredTests`, `WaitAgentRefs`, ACK/entrega, review
