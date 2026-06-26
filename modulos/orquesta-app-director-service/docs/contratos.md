@@ -49,7 +49,10 @@ Puertos opcionales:
   goal por el puerto y no entra en el loop legacy de agentes. Para
   `/nueva-app`, el spec incluye `required_tests` ligados al write-set generado
   y `ClosurePolicy.RequireRequiredTests=true`; un goal `complete` sin
-  `required_test_results` pasados queda bloqueado y pide rework;
+  `required_test_results` pasados queda bloqueado y pide rework. Un goal
+  observado como `blocked` o `invalid` tambien es terminal para Orquesta: se
+  valida como cierre no aceptado, bloquea la run durable y no reabre el loop
+  legacy;
 - `max_decision_cycles`, limite acotado para consumir decisiones y volver a ejecutar el loop sin quedar en bucle.
 
 Salida: `StartAppDirectorResultV0`.
@@ -174,13 +177,13 @@ run no activo, el servicio no llama a la fuente de cierre ni intenta
 `closure_reason=operational-closure-run-not-active` para que el adaptador
 resuelva el bloqueo causal antes de cerrar.
 
-Regla goal-first: si `ObserveAppDirectorGoalV0` observa un goal terminal, debe
-validar la closure con el puerto inyectado. Closure aceptada refleja el cierre
-del run mediante comandos del core (`OpenPhase(validacion_final)`,
-`RegisterFinalValidation` run-level, `OpenPhase(cierre)`, `CloseRun`). Closure
-no aceptada refleja `BlockRun` con blocker estable. Si faltan `RunStore` o
-`EventSink`, el servicio devuelve error publico de puerto ausente; no inventa
-persistencia, runtime ni proveedor.
+Regla goal-first: si `ObserveAppDirectorGoalV0` observa un goal terminal
+(`complete`, `blocked` o `invalid`), debe validar la closure con el puerto
+inyectado. Closure aceptada refleja el cierre del run mediante comandos del
+core (`OpenPhase(validacion_final)`, `RegisterFinalValidation` run-level,
+`OpenPhase(cierre)`, `CloseRun`). Closure no aceptada refleja `BlockRun` con
+blocker estable. Si faltan `RunStore` o `EventSink`, el servicio devuelve error
+publico de puerto ausente; no inventa persistencia, runtime ni proveedor.
 
 Regla del primer corte operativo: si `ContinueAppDirectorV0` recibe un plan
 `ready`, usa `OperationalDirectorPlanMaterializerV0`, guarda las

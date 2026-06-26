@@ -151,6 +151,25 @@ func TestValidateGoalWorkClosureV0RechazaGoalRefVacio(t *testing.T) {
 	}
 }
 
+func TestValidateGoalWorkClosureV0BloqueaInvalidConRework(t *testing.T) {
+	spec := GoalWorkSpecV0{
+		GoalRef:   "goal-ref-001",
+		Objective: "Objetivo",
+		WriteSet:  []GoalWriteScopeV0{{Path: "docs"}},
+	}
+	validation := ValidateGoalWorkClosureV0(spec, GoalWorkResultV0{
+		Status:  GoalStatusInvalidV0,
+		GoalRef: "goal-ref-001",
+	})
+
+	if validation.Accepted ||
+		validation.Status != GoalStatusBlockedV0 ||
+		!validation.NeedsRework ||
+		!hasGoalIssueFieldV0(validation.Issues, "status") {
+		t.Fatalf("validation=%+v", validation)
+	}
+}
+
 func TestDefaultGoalWorkClosureValidatorV0ImplementaPuerto(t *testing.T) {
 	spec := GoalWorkSpecV0{
 		GoalRef:   "goal-ref-001",

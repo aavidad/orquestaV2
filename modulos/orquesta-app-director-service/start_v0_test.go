@@ -390,6 +390,54 @@ func TestObserveAppDirectorGoalV0BloqueaRunSiClosureNoAcepta(t *testing.T) {
 	}
 }
 
+func TestObserveAppDirectorGoalV0BloqueaRunSiGoalTerminaInvalid(t *testing.T) {
+	store, sink, goalStates, launcher, started := serviceStartGoalFirstForObserveTestV0(t)
+	spec := launcher.specs[0]
+	observer := serviceGoalObserverForTestV0{result: orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusInvalidV0,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: started.ExternalGoalRef,
+		EvidenceRefs:    []string{"evidence-ref-service-goal-invalid-terminal"},
+	}}
+
+	result, err := ObserveAppDirectorGoalV0(
+		context.Background(),
+		ObserveAppDirectorGoalRequestV0{RunRef: spec.RunRef},
+		StartAppDirectorPortsV0{
+			RunStore:             store,
+			EventSink:            sink,
+			GoalStateStore:       goalStates,
+			GoalObserver:         observer,
+			GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Status != orquestagoal.GoalStatusInvalidV0 ||
+		result.Closure.Accepted ||
+		!result.Closure.NeedsRework ||
+		result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 ||
+		len(result.Closure.Issues) == 0 ||
+		result.Closure.Issues[0].Field != "status" {
+		t.Fatalf("result=%+v", result)
+	}
+	if !serviceHasEventTypeV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventRunBlockedV0) {
+		t.Fatalf("eventos sin RunBlocked: %+v", sink.EventsV0())
+	}
+	state, err := goalStates.LoadGoalWorkStateV0(context.Background(), spec.RunRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if state.Status != orquestagoal.GoalStatusInvalidV0 ||
+		state.LastResult == nil ||
+		state.LastClosure == nil ||
+		!state.LastClosure.NeedsRework {
+		t.Fatalf("state=%+v", state)
+	}
+}
+
 func serviceStartGoalFirstForObserveTestV0(t *testing.T) (
 	*orquestacionnucleoapp.InMemoryRunStoreV0,
 	*orquestacionnucleoapp.InMemoryEventSinkV0,

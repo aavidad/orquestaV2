@@ -14,6 +14,7 @@ import (
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestarunmemory "orquesta/modulos/orquesta-run-memory"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
+	orquestastatefile "orquesta/modulos/orquesta-state-file"
 )
 
 func TestObserveAppDirectorGoalV0SincronizaColaClosedConCandidatoPrevio(t *testing.T) {
@@ -193,6 +194,129 @@ func TestObserveAppDirectorGoalV0SincronizaColaStoppedSinCandidatoPrevio(t *test
 	}
 }
 
+func TestObserveAppDirectorGoalV0SincronizaColaStoppedSiGoalInvalid(t *testing.T) {
+	ctx := context.Background()
+	stack, observer, launcher, started := startGoalFirstQueueSyncStackForTestV0(t)
+	runRef := started.Run.RunID
+	spec := launcher.specs[0]
+	observer.result = orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusInvalidV0,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: started.ExternalGoalRef,
+		EvidenceRefs:    []string{"evidence-ref-goal-first-invalid-terminal"},
+	}
+
+	result, err := stack.ObserveAppDirectorGoalV0(
+		ctx,
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{RunRef: runRef},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Status != orquestagoal.GoalStatusInvalidV0 ||
+		result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 ||
+		result.Closure.Accepted ||
+		!result.Closure.NeedsRework {
+		t.Fatalf("result=%+v", result)
+	}
+	all := listGoalFirstQueueCandidatesForTestV0(t, stack)
+	if len(all) != 1 ||
+		all[0].RunRef != runRef ||
+		all[0].Status != orquestarunqueue.RunStatusStoppedV0 {
+		t.Fatalf("queue terminal invalid=%+v", all)
+	}
+}
+
+func TestObserveAppDirectorGoalV0ReanudaTrasRestartDesdeStateFile(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	launcher := &goalFirstQueueLauncherForTestV0{}
+	startStore := goalFirstQueueStateFileStoreForTestV0(t, root)
+	startStack := goalFirstQueueStateFileStackForTestV0(
+		startStore,
+		launcher,
+		&goalFirstQueueObserverForTestV0{},
+		orquestarunmemory.NewRunMemoryStoreV0(),
+	)
+
+	started, err := orquestaappdirectorservice.StartAppDirectorV0(
+		ctx,
+		goalFirstQueueStartRequestForTestV0(),
+		startStack.Ports,
+	)
+	if err != nil {
+		t.Fatalf("StartAppDirectorV0: %v", err)
+	}
+	if started.GoalRef == "" || len(launcher.specs) != 1 {
+		t.Fatalf("started=%+v specs=%d", started, len(launcher.specs))
+	}
+
+	reopenedStore := goalFirstQueueStateFileStoreForTestV0(t, root)
+	spec := launcher.specs[0]
+	observer := &goalFirstQueueObserverForTestV0{result: orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusCompleteV0,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: started.ExternalGoalRef,
+		ArtifactRefs:    goalFirstQueueRequiredArtifactRefsV0(spec),
+		RequiredTestResults: goalFirstQueueRequiredTestResultsV0(
+			spec,
+			"evidence-ref-goal-first-restart-required-test",
+		),
+		EvidenceRefs:      spec.ClosurePolicy.RequiredEvidenceRefs,
+		DomainReceiptRefs: []string{"domain-receipt-ref-goal-first-restart-001"},
+	}}
+	restartedStack := goalFirstQueueStateFileStackForTestV0(
+		reopenedStore,
+		&goalFirstQueueLauncherForTestV0{},
+		observer,
+		orquestarunmemory.NewRunMemoryStoreV0(),
+	)
+
+	result, err := restartedStack.ObserveAppDirectorGoalV0(
+		ctx,
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
+			RunRef:        started.Run.RunID,
+			CorrelationID: "corr-goal-first-restart-observe-001",
+			RequestedBy:   "orquesta-app-codex-stack-goal-first-restart-test",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0 tras restart: %v", err)
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		!result.Closure.Accepted ||
+		result.GoalRef != started.GoalRef {
+		t.Fatalf("result=%+v", result)
+	}
+	persistedRun, err := reopenedStore.LoadRunV0(ctx, started.Run.RunID)
+	if err != nil {
+		t.Fatalf("LoadRunV0 reopened: %v", err)
+	}
+	if persistedRun.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		len(persistedRun.Closures) != 1 ||
+		len(persistedRun.Validations) != 1 {
+		t.Fatalf("persistedRun=%+v", persistedRun)
+	}
+	persistedState, err := reopenedStore.LoadGoalWorkStateV0(ctx, started.Run.RunID)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0 reopened: %v", err)
+	}
+	if persistedState.Status != orquestagoal.GoalStatusCompleteV0 ||
+		persistedState.LastResult == nil ||
+		persistedState.LastClosure == nil ||
+		!persistedState.LastClosure.Accepted {
+		t.Fatalf("persistedState=%+v", persistedState)
+	}
+	all := listGoalFirstQueueCandidatesForTestV0(t, restartedStack)
+	if len(all) != 1 ||
+		all[0].RunRef != started.Run.RunID ||
+		all[0].Status != orquestarunqueue.RunStatusClosedV0 {
+		t.Fatalf("queue terminal tras restart=%+v", all)
+	}
+}
+
 func startGoalFirstQueueSyncStackForTestV0(
 	t *testing.T,
 ) (StackV0, *goalFirstQueueObserverForTestV0, *goalFirstQueueLauncherForTestV0, orquestaappdirectorservice.StartAppDirectorResultV0) {
@@ -240,6 +364,51 @@ func startGoalFirstQueueSyncStackForTestV0(
 		t.Fatalf("started=%+v specs=%d", started, len(launcher.specs))
 	}
 	return stack, observer, launcher, started
+}
+
+func goalFirstQueueStateFileStoreForTestV0(
+	t *testing.T,
+	root string,
+) *orquestastatefile.StoreV0 {
+	t.Helper()
+	store, err := orquestastatefile.NewStoreV0(orquestastatefile.ConfigV0{RootDir: root})
+	if err != nil {
+		t.Fatalf("NewStoreV0: %v", err)
+	}
+	return store
+}
+
+func goalFirstQueueStateFileStackForTestV0(
+	store *orquestastatefile.StoreV0,
+	launcher *goalFirstQueueLauncherForTestV0,
+	observer *goalFirstQueueObserverForTestV0,
+	queue orquestarunqueue.RunQueuePortV0,
+) StackV0 {
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	ports := orquestaappdirectorservice.StartAppDirectorPortsV0{
+		RunStore:             store,
+		EventSink:            store,
+		OutboxLedger:         ledger,
+		GoalLauncher:         launcher,
+		GoalObserver:         observer,
+		GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		GoalStateStore:       store,
+		Dispatchers:          []orquestacionnucleoapp.OutboxDispatcherBindingV0{{}},
+	}
+	return StackV0{
+		Ports: ports,
+		Stores: StoresV0{
+			RunStore:          store,
+			EventSink:         store,
+			OutboxLedger:      ledger,
+			RunQueue:          queue,
+			AppGoalStateStore: store,
+		},
+		RunQueue: RunQueueConfigV0{QueueRef: "goal-first-test", DefaultPriorityScore: 77},
+		Clock: func() time.Time {
+			return time.Date(2026, 6, 25, 13, 0, 0, 0, time.UTC)
+		},
+	}
 }
 
 func goalFirstQueueStartRequestForTestV0() orquestaappdirectorservice.StartAppDirectorRequestV0 {

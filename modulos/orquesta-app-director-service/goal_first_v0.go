@@ -443,7 +443,7 @@ func NewAppDirectorGoalStateV0(state AppDirectorGoalStateV0) (AppDirectorGoalSta
 
 func startAppDirectorGoalResultTerminalV0(status string) bool {
 	switch strings.TrimSpace(status) {
-	case orquestagoal.GoalStatusCompleteV0, orquestagoal.GoalStatusBlockedV0:
+	case orquestagoal.GoalStatusCompleteV0, orquestagoal.GoalStatusBlockedV0, orquestagoal.GoalStatusInvalidV0:
 		return true
 	default:
 		return false

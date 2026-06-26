@@ -1417,6 +1417,14 @@ Cobertura:
   encola `ready`, impide que `runs.supervisor` drene ese contenedor como loop
   legacy, observa el goal por `run_ref`, valida cierre con tests requeridos y
   sincroniza la cola solo como terminal `closed`.
+- `TestObserveAppDirectorGoalV0ReanudaTrasRestartDesdeStateFile` prueba el
+  replay integrado: arranca goal-first sobre `orquesta-state-file`, recrea el
+  store como tras reinicio, observa el goal con un stack nuevo, cierra la run
+  persistida y guarda `LastResult`/`LastClosure` en `GoalWorkStateV0` sin
+  relanzar ni supervisar loop legacy.
+- `TestObserveAppDirectorGoalV0SincronizaColaStoppedSiGoalInvalid` fija que un
+  goal observado como `invalid` bloquea la run y sincroniza la cola como
+  `stopped`, no como candidata viva para supervision legacy.
 
 Validacion OPES 1+6 e integracion canonica 2026-06-26:
 

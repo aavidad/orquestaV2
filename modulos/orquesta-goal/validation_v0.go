@@ -145,7 +145,7 @@ func ValidateGoalWorkClosureV0(spec GoalWorkSpecV0, result GoalWorkResultV0) Goa
 	if result.Status != GoalStatusCompleteV0 {
 		return GoalClosureValidationV0{
 			Status:      GoalStatusBlockedV0,
-			NeedsRework: result.Status == GoalStatusBlockedV0,
+			NeedsRework: result.Status == GoalStatusBlockedV0 || result.Status == GoalStatusInvalidV0,
 			Issues:      []GoalWorkIssueV0{{Code: ErrGoalClosureInvalidV0, Field: "status"}},
 		}
 	}

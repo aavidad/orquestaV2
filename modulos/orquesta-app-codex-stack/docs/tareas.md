@@ -56,10 +56,15 @@ Write-set aplicado:
   terminal no ejecutable al observar el cierre/bloqueo.
 - `CodexStackObserveAppDirectorGoalExecutorV0` expone esa observacion por el
   binding MCP/REST del stack y llama al wrapper anterior, no al servicio directo.
+- `TestObserveAppDirectorGoalV0ReanudaTrasRestartDesdeStateFile` fija que un
+  stack reconstruido con `orquesta-state-file` puede cargar `GoalWorkStateV0`,
+  observar el goal terminal, cerrar la run persistida y crear traza terminal de
+  cola sin reentrar al loop legacy.
 
 Validacion:
 
 - `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'CodexStackObserveAppDirectorGoalExecutor|TestObserveAppDirectorGoalV0SincronizaCola|TestQueuedArrancarDirectorExecutorV0NoEncolaGoalFirst|TestBuildDirectorPortsV0CableaAppGoalLauncher'`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run TestObserveAppDirectorGoalV0ReanudaTrasRestartDesdeStateFile`
 
 Pendiente siguiente:
 

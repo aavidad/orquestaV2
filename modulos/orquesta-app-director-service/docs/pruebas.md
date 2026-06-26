@@ -137,6 +137,7 @@ Evidencia 2026-05-09:
 - `TestStartAppDirectorV0GoalFirstBundleIncompletoNoCaeALoopLegacy`;
 - `TestObserveAppDirectorGoalV0PersisteResultadoCompletoYClosure`;
 - `TestObserveAppDirectorGoalV0BloqueaRunSiClosureNoAcepta`;
+- `TestObserveAppDirectorGoalV0BloqueaRunSiGoalTerminaInvalid`;
 - `TestStartAppDirectorV0ReturnsFactoryValidationIssues`;
 - `TestStartAppDirectorV0RequiresInjectedPorts`;
 - `TestAppDirectorServiceArchitectureV0NoImportaLegacyNiDBHardcodeada`.
@@ -148,7 +149,8 @@ Evidencia 2026-06-25:
 
 Cobertura esperada: `goal-first` no arranca loop legacy en el arranque, pero al
 observar un goal terminal cierra la run si la closure es aceptada y la bloquea
-si faltan artefactos/evidencias del contrato.
+si faltan artefactos/evidencias del contrato o si el runtime devuelve estado
+terminal `invalid`.
 
 Evidencia real 2026-05-09:
 
