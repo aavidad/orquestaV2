@@ -413,3 +413,125 @@ ese momento `/api/v0/director/stats` pasó a `agents_requested=7`, pero solo
 subroles quedaron en estado `requested` con `started=false`. El padre generó
 ficheros `subrole_*.md` como coordinación interna, pero Orquesta no materializó
 seis agentes reales.
+
+## Actualización 2026-06-26 01:04 - Bucle de reconciliación tras ACKs de T021 ola2
+
+Contexto: OPES lanzó `run-opes-integracion-social-b-t021-expansion-20260626-ola2`
+para ampliar el tema 021 desde 6.542 palabras hasta el mínimo B.
+
+Evidencia material útil:
+
+- `temas/tema_021/borrador_ampliado.md` quedó en 10.824 palabras, por encima
+  del mínimo B de 10.800.
+- Existen ACKs para padre y seis subroles en el runtime de ola2:
+  padre, fuentes, reutilización, redacción, visuales, tests/tutor y
+  html-rag-audio-qa.
+- Los subroles dejaron artefactos en
+  `00_control/orquesta_runs/run-integracion-social-b-t021-expansion-20260626-ola2/`.
+
+Fallo observado:
+
+- Después de existir ACKs, `/api/v0/director/stats` seguía con
+  `status=activa`, `tasks_open=7` y `tasks_closed=0`.
+- Varios subroles aparecían simultáneamente como `lost` y con `agent_ack.json`
+  existente.
+- Orquesta lanzó agentes de evaluación/replan para subroles ya entregados.
+  Cuando esos evaluadores generaban ACK, algunos quedaban también como `lost`
+  y Orquesta lanzaba nuevos evaluadores. Se observó crecimiento de
+  `agents_requested` de 7 a 15, `agent_assessments` de 0 a 8 y nuevos procesos
+  de evaluación en vuelo, sin necesidad editorial porque el texto ya cumplía
+  extensión.
+
+Impacto:
+
+- La run puede entrar en bucle de reconciliación aunque el producto OPES sea
+  aprovechable y todos los subroles hayan entregado ACK.
+- El estado `lost` no distingue entre "sin ACK real" y "ACK existe pero no se
+  ha reconciliado".
+- OPES no puede esperar indefinidamente a que la run cierre si el sistema
+  genera reemplazos/evaluadores sobre entregas ya válidas.
+
+Tarea para agente de Orquesta:
+
+- Antes de marcar `lost` o lanzar `replace_agent`, comprobar si existe
+  `agent_ack.json` válido y si el proceso terminó normalmente.
+- Si existe ACK y artefacto requerido, reconciliar como `delivered` o
+  `delivered_pending_review`, no crear evaluador de reemplazo.
+- Limitar el número de replan/evaluadores por `task_ref` y cortar con estado
+  explícito `reconciliation_loop_detected` cuando el mismo task tenga ACK y
+  varios reemplazos.
+- Exponer una acción/API segura para que OPES pueda cerrar una run materialmente
+  entregada como `accepted_with_orquesta_reconciliation_issue` sin matar trabajo
+  útil ni tocar el núcleo.
+
+## Actualización 2026-06-26 01:12 - Stop público aceptado, pero stats queda sin cuerpo
+
+Restricción de coordinación: hay otro agente trabajando en el núcleo de
+Orquesta. Desde OPES no se ha tocado código ni ramas de Orquesta; solo se han
+usado contratos públicos y ficheros runtime de parada cooperativa para no pisar
+ese trabajo.
+
+Acciones de control realizadas:
+
+- Se escribieron `orquesta_shutdown_request.json` en los dos evaluadores de
+  T021 ola2 que seguían en vuelo tras la entrega válida.
+- Después se llamó a `POST /api/v0/runs/control` con:
+  `action=stop`, `forced=true`,
+  `run_ref=run-opes-integracion-social-b-t021-expansion-20260626-ola2`.
+- La API respondió `estado=ok`, `status=stop_requested`,
+  `checkpoint_recorded=true`, `forced=true` y evidencia
+  `evidence-ref-mcp-run-control-checkpoint-recorded`.
+- Los dos evaluadores vivos generaron finalmente
+  `agent_shutdown_checkpoint_ack.json`; en `ps` ya no quedaron procesos Codex
+  de esa run.
+
+Fallo restante observado:
+
+- Tras el stop, varias llamadas a `/api/v0/runs/supervise` y
+  `/api/v0/director/stats` no devolvieron JSON útil antes del timeout del
+  cliente.
+- La parada material de procesos sí ocurrió, pero el plano de control no dio
+  una respuesta final clara tipo `stop_confirmed`, `stopped` o
+  `stop_pending_with_no_live_processes`.
+
+Tarea adicional para agente de Orquesta:
+
+- Garantizar que `runs/control action=stop forced=true` seguido de
+  `runs/supervise` o `director/stats` nunca deja al cliente sin cuerpo JSON.
+- Si no puede cerrar como `stopped`, devolver estado explícito y accionable:
+  `stop_pending`, `stats_unavailable_after_stop` o
+  `reconciliation_required_after_stop`.
+- Confirmar cierre cruzando `agent_shutdown_checkpoint_ack.json`, ausencia de
+  procesos hijos y `agent_ack.json`, y publicar `stop_confirmed` cuando cuadre.
+
+## Actualización 2026-06-26 01:27 - Instancia OPES 18793 no responde a HTTP
+
+Contexto: después del stop anterior, no quedan procesos Codex de la run T021
+ola2 ni de Integración Social. La instancia usada por OPES sigue viva como
+proceso `orquesta-server` con estado en:
+
+`/home/alberto/Trabajo/OPES/opes-salidas/diputacion_granada/cursos_opes_2026/administracion_especial/auxiliar-tecnico-superior-de-integracion-social/00_control/director_20260625/orquesta_server/18793_state`
+
+Evidencia:
+
+- `ss -ltnp` muestra `127.0.0.1:18793` escuchando en `orquesta-server`.
+- `GET /` contra `http://127.0.0.1:18793/` no devuelve cuerpo antes de un
+  timeout de 8 segundos.
+- `POST /api/v0/director/stats` tampoco devuelve cuerpo antes de timeout.
+- La instancia `8787` responde, pero no se usa para OPES porque puede
+  pertenecer al agente que está programando el núcleo de Orquesta.
+- No se ha tocado código ni ramas de Orquesta desde OPES.
+
+Impacto:
+
+- OPES no puede lanzar con seguridad nuevos temas sobre `18793`.
+- Si se usa otra instancia, debe ser una instancia OPES aislada con runtime y
+  state propios, no el servidor de otro agente.
+
+Tarea adicional para agente de Orquesta:
+
+- Evitar que una instancia quede escuchando pero sin responder a rutas básicas
+  tras `runs/control stop`.
+- Añadir health/readiness con diagnóstico: `http_server_accepting_but_handlers_blocked`,
+  `state_store_blocked`, `supervisor_lock_blocked` o equivalente.
+- Proveer un cierre seguro por API que no deje el proceso HTTP bloqueado.

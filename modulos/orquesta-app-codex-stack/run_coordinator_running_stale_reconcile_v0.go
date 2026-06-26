@@ -3,6 +3,7 @@ package orquestaappcodexstack
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -11,6 +12,8 @@ import (
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
+	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
+	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 )
 
 func (stack StackV0) reconcileQueuedRunningStaleRunsV0(
@@ -72,8 +75,19 @@ func (stack StackV0) reconcileQueuedRunningStaleCandidateV0(
 		return nil
 	}
 	liveness, err := stack.queuedRunningStaleProcessLivenessV0(ctx, run.RunID)
-	if err != nil || !liveness.Verifiable || liveness.Live || liveness.RecordCount == 0 {
+	if err != nil || !liveness.Verifiable || liveness.Live {
 		return err
+	}
+	cause, err := stack.queuedRunningStaleCauseV0(ctx, run)
+	if err != nil {
+		return err
+	}
+	if liveness.RecordCount == 0 && !cause.RuntimeEvidenceObserved {
+		cause.Reason = "running_stale_sin_registro_proceso_verificable"
+		cause.EvidenceRefs = compactStringsV0(append(
+			cause.EvidenceRefs,
+			"evidence-ref-agent-process-registry-empty",
+		))
 	}
 	if _, _, err := stack.reconcileStoppedPendingAgentsV0(
 		ctx,
@@ -102,25 +116,35 @@ func (stack StackV0) reconcileQueuedRunningStaleCandidateV0(
 	if stack.runningStaleCandidateStillHasLiveProcessV0(ctx, latest) {
 		return nil
 	}
+	reason := firstNonEmptyQueuedSourceV0(
+		cause.Reason,
+		"running_stale_sin_proceso_vivo_verificable",
+	)
+	evidenceRefs := compactStringsV0(append(
+		[]string{
+			"evidence-ref-run-control-running-stale-no-live-process",
+			"evidence-ref-live-agent-reconciliation-direct",
+		},
+		cause.EvidenceRefs...,
+	))
 	completed, err := stack.Stores.RunControl.CompleteRunControlV0(
 		ctx,
 		orquestaruncontrol.CompleteRunControlCommandV0{
 			RunRef:         strings.TrimSpace(candidate.RunRef),
 			TargetStatus:   orquestaruncontrol.RunControlStatusStoppedV0,
 			RequestedBy:    "orquesta-app-codex-stack-run-control-reconciler",
-			Reason:         "running_stale_sin_proceso_vivo_verificable",
-			IdempotencyKey: "idem-run-control-running-stale-no-live-" + codexStackOperationalClosureSafeRefV0(candidate.RunRef),
+			Reason:         reason,
+			IdempotencyKey: "idem-run-control-running-stale-" + codexStackOperationalClosureSafeRefV0(reason) + "-" + codexStackOperationalClosureSafeRefV0(candidate.RunRef),
 			EvidenceRefs: compactStringsV0(append(
 				append([]string(nil), state.EvidenceRefs...),
-				"evidence-ref-run-control-running-stale-no-live-process",
-				"evidence-ref-live-agent-reconciliation-direct",
+				evidenceRefs...,
 			)),
 		},
 	)
 	if err != nil {
 		return err
 	}
-	return stack.syncQueuedRunningStaleCandidateStoppedV0(ctx, command, candidate, completed)
+	return stack.syncQueuedRunningStaleCandidateStoppedV0(ctx, command, candidate, completed, reason, evidenceRefs)
 }
 
 func (stack StackV0) readQueuedRunControlStateOrDefaultV0(
@@ -145,6 +169,64 @@ type queuedRunningStaleProcessLivenessV0 struct {
 	Verifiable  bool
 	RecordCount int
 	Live        bool
+}
+
+type queuedRunningStaleCauseV0 struct {
+	Reason                  string
+	RuntimeEvidenceObserved bool
+	EvidenceRefs            []string
+}
+
+func (stack StackV0) queuedRunningStaleCauseV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) (queuedRunningStaleCauseV0, error) {
+	result := queuedRunningStaleCauseV0{}
+	if stack.Stores.ReceiptStore == nil {
+		return result, nil
+	}
+	descriptors, err := stack.Stores.ReceiptStore.ListCodexReceiptDescriptorsV0(
+		ctx,
+		orquestaruntimecodexdelivery.CodexReceiptDescriptorRequestV0{
+			RunID:         strings.TrimSpace(run.RunID),
+			StartedAgents: compactStringsV0(run.StartedAgents),
+			EvidenceRefs:  []string{"evidence-ref-run-queue-running-stale-cause"},
+		},
+	)
+	if err != nil {
+		return queuedRunningStaleCauseV0{}, err
+	}
+	samples := make([]string, 0, len(descriptors)*4)
+	for _, descriptor := range descriptors {
+		dir := strings.TrimSpace(filepath.Dir(strings.TrimSpace(descriptor.AckPath)))
+		if dir == "" || dir == "." {
+			continue
+		}
+		for _, name := range []string{
+			orquestaruntimecodex.CodexUsageAccountingFileNameV0,
+			orquestaruntimecodex.CodexStderrFileNameV0,
+			orquestaruntimecodex.CodexStdoutFileNameV0,
+			orquestaruntimecodex.CodexLastMessageFileNameV0,
+		} {
+			data, ok := codexStackReadTailFileV0(filepath.Join(dir, name), codexStackRuntimeLogTailMaxBytesV0)
+			if !ok {
+				continue
+			}
+			result.RuntimeEvidenceObserved = true
+			samples = append(samples, string(data))
+		}
+	}
+	usage := orquestaruntimecodex.BuildCodexUsageAccountingSnapshotV0(samples)
+	if usage.Observed && (usage.QuotaStatus == orquestaruntimecodex.CodexUsageQuotaExhaustedV0 ||
+		usage.QuotaStatus == orquestaruntimecodex.CodexUsageQuotaLimitedV0) {
+		result.Reason = "provider_usage_limit_retry_after"
+		result.EvidenceRefs = append(
+			result.EvidenceRefs,
+			"evidence-ref-provider-usage-limit-retry-after",
+			"evidence-ref-codex-usage-quota-"+usage.QuotaStatus,
+		)
+	}
+	return result, nil
 }
 
 func (stack StackV0) queuedRunningStaleProcessLivenessV0(
@@ -201,19 +283,20 @@ func (stack StackV0) syncQueuedRunningStaleCandidateStoppedV0(
 	command orquestaruncoordinator.RunCoordinatorTickCommandV0,
 	candidate orquestarunqueue.RunSchedulingCandidateV0,
 	state orquestaruncontrol.RunControlStateV0,
+	reason string,
+	evidenceRefs []string,
 ) error {
 	refs := compactStringsV0(append(
-		append([]string(nil), candidate.EvidenceRefs...),
+		append(append([]string(nil), candidate.EvidenceRefs...), evidenceRefs...),
 		"evidence-ref-run-queue-running-stale-no-live-process-reconciled",
-		"evidence-ref-run-control-running-stale-no-live-process",
 	))
 	_, err := stack.Stores.RunQueue.SetRunPriorityV0(ctx, stackRunQueueCommandFromCandidateV0(
 		command,
 		candidate,
 		orquestarunqueue.RunStatusStoppedV0,
 		"orquesta-app-codex-stack-run-control-reconciler",
-		"queued_running_stale_no_live_process_reconciled",
-		"idem-run-queue-running-stale-no-live-"+codexStackOperationalClosureSafeRefV0(candidate.RunRef),
+		firstNonEmptyQueuedSourceV0(reason, "queued_running_stale_no_live_process_reconciled"),
+		"idem-run-queue-running-stale-"+codexStackOperationalClosureSafeRefV0(firstNonEmptyQueuedSourceV0(reason, "no-live"))+"-"+codexStackOperationalClosureSafeRefV0(candidate.RunRef),
 		compactStringsV0(append(refs, state.EvidenceRefs...)),
 	))
 	return err
