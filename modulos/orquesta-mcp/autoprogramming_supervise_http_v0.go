@@ -101,6 +101,14 @@ func normalizeMCPAutoprogrammingSuperviseHTTPInputAliasesV0(
 	if out.MaxDispatchesPerWait <= 0 && input.MaxDispatches > 0 {
 		out.MaxDispatchesPerWait = input.MaxDispatches
 	}
+	if strings.TrimSpace(out.RunRef) == "" && input.MaxDispatches > 0 {
+		if out.MaxRunsPerTick <= 0 {
+			out.MaxRunsPerTick = input.MaxDispatches
+		}
+		if out.MaxExecutions <= 0 {
+			out.MaxExecutions = input.MaxDispatches
+		}
+	}
 	if out.MaxOutboxPerCycle <= 0 && input.MaxOutbox > 0 {
 		out.MaxOutboxPerCycle = input.MaxOutbox
 	}

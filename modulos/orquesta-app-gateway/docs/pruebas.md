@@ -27,6 +27,9 @@ git diff --check -- modulos/orquesta-app-gateway
   MCP inyectados.
 - `/api/v0/runs/supervise` delega en executor MCP inyectado y queda protegido
   por el guard browser de mutaciones para origen cruzado.
+- `/api/v0/autoprogramming/supervise` responde `202 accepted_background` si el
+  supervisor sigue vivo tras el timeout publico y no duplica una operacion
+  activa con el mismo `idempotency_key`.
 - `/api/v0/director/stats` mantiene el contrato MCP/API completo de
   `DirectorRunStatsV0` y `DirectorDecisionContextV0`; el gateway solo compone
   rutas y transporte in-process.

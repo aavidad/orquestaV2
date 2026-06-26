@@ -59,6 +59,20 @@ para progreso sigue siendo `director.stats`, `autoprogramming.status` y cola.
 ```
 
 ```text
+Caso: MCP-CT-039 alias operativo de cola para autoprogramming supervise
+Tipo: contract
+Comando: go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPAutoprogrammingStatusExecutorV0DeclaraSuperviseColaAunqueFaltenStatsDeRunV0|TestMCPAutoprogrammingSuperviseHTTPHandlerV0AceptaAliasesOperativos|TestMCPAutoprogrammingSuperviseHTTPHandlerV0AliasDispatchesAmpliaColaV0'
+Evidencia esperada: en scope `run_ref`, `max_dispatches` conserva la semantica
+de `max_dispatches_per_wait`; en scope de cola, el mismo alias rellena
+`max_runs_per_tick` y `max_executions` cuando no vienen explicitados. El
+`safe_action` de cola expone payload con `resident_mode=true` y presupuesto 70
+para evitar una supervision global demasiado estrecha.
+Ultima ejecucion: 2026-06-26; pasa con bateria focal.
+Riesgos: el alias no cambia la capacidad real del runtime ni limites de
+proveedor; solo evita que la ruta HTTP reduzca la ola por defaults de entrada.
+```
+
+```text
 Caso: MCP-CT-030 apagado controlado de servidor por MCP/REST
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway

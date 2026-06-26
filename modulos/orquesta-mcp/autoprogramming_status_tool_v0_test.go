@@ -723,6 +723,12 @@ func TestMCPAutoprogrammingStatusExecutorV0DeclaraSuperviseColaAunqueFaltenStats
 	for _, action := range result.Operator.SafeActions {
 		if action.Action == "supervise" && action.Scope == "queue" {
 			foundSuperviseQueue = true
+			if action.Payload["resident_mode"] != true ||
+				action.Payload["max_runs_per_tick"] != 70 ||
+				action.Payload["max_executions"] != 70 ||
+				action.Payload["max_dispatches_per_wait"] != 70 {
+				t.Fatalf("payload de supervision de cola insuficiente: %+v", action)
+			}
 		}
 	}
 	if !foundSuperviseQueue {

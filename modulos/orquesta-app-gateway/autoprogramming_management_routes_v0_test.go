@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -70,6 +71,62 @@ func TestAutoprogrammingSuperviseAPIRouteV0(t *testing.T) {
 	}
 }
 
+func TestAutoprogrammingSuperviseAPIRouteV0DevuelveAcceptedBackgroundSinColgar(t *testing.T) {
+	supervisor := newBlockingAutoprogrammingSuperviseExecutorV0()
+	handler := NewHTTPHandlerV0(ConfigV0{
+		Timeout:       time.Second,
+		RunSupervisor: supervisor,
+	})
+	body := `{
+		"request_id":"request-ref-app-gateway-autop-supervise-background-001",
+		"run_ref":"run-ref-app-gateway-autop-supervise-background-001",
+		"idempotency_key":"idem-app-gateway-autop-supervise-background-001"
+	}`
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/autoprogramming/supervise",
+		strings.NewReader(body),
+	)
+
+	started := time.Now()
+	handler.ServeHTTP(rec, req)
+	elapsed := time.Since(started)
+
+	if rec.Code != http.StatusAccepted || elapsed > 3*time.Second {
+		t.Fatalf("status=%d elapsed=%s body=%s", rec.Code, elapsed, rec.Body.String())
+	}
+	if supervisor.callsV0() != 1 {
+		t.Fatalf("calls=%d", supervisor.callsV0())
+	}
+	var result orquestamcp.MCPRunSupervisorToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Last.Status != "accepted_background" ||
+		result.OperationRef == "" {
+		t.Fatalf("result=%+v", result)
+	}
+
+	rec2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/autoprogramming/supervise",
+		strings.NewReader(body),
+	)
+	handler.ServeHTTP(rec2, req2)
+
+	if rec2.Code != http.StatusAccepted || supervisor.callsV0() != 1 {
+		t.Fatalf("segunda llamada status=%d calls=%d body=%s", rec2.Code, supervisor.callsV0(), rec2.Body.String())
+	}
+	supervisor.releaseV0()
+	select {
+	case <-supervisor.done:
+	case <-time.After(time.Second):
+		t.Fatalf("executor bloqueante no finalizo tras release")
+	}
+}
+
 type recordingAutoprogrammingStatusQueueExecutorV0 struct {
 	Input orquestamcp.MCPRunQueuePriorityToolInputV0
 }
@@ -115,4 +172,44 @@ func (executor *recordingAutoprogrammingSuperviseExecutorV0) Execute(
 		RunRef: input.RunRef,
 		Ticks:  input.MaxTicks,
 	}, nil
+}
+
+type blockingAutoprogrammingSuperviseExecutorV0 struct {
+	mu      sync.Mutex
+	calls   int
+	release chan struct{}
+	done    chan struct{}
+}
+
+func newBlockingAutoprogrammingSuperviseExecutorV0() *blockingAutoprogrammingSuperviseExecutorV0 {
+	return &blockingAutoprogrammingSuperviseExecutorV0{
+		release: make(chan struct{}),
+		done:    make(chan struct{}),
+	}
+}
+
+func (executor *blockingAutoprogrammingSuperviseExecutorV0) Execute(
+	_ context.Context,
+	input orquestamcp.MCPRunSupervisorToolInputV0,
+) (orquestamcp.MCPRunSupervisorToolResultV0, error) {
+	executor.mu.Lock()
+	executor.calls++
+	executor.mu.Unlock()
+	defer close(executor.done)
+	<-executor.release
+	return orquestamcp.MCPRunSupervisorToolResultV0{
+		Estado: orquestamcp.MCPRunSupervisorEstadoOKV0,
+		RunRef: input.RunRef,
+		Ticks:  1,
+	}, nil
+}
+
+func (executor *blockingAutoprogrammingSuperviseExecutorV0) callsV0() int {
+	executor.mu.Lock()
+	defer executor.mu.Unlock()
+	return executor.calls
+}
+
+func (executor *blockingAutoprogrammingSuperviseExecutorV0) releaseV0() {
+	close(executor.release)
 }

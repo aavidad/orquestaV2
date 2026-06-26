@@ -40,13 +40,14 @@ type MCPAutoprogrammingSupervisorErrorV0 struct {
 }
 
 type MCPAutoprogrammingSafeActionV0 struct {
-	Action       string `json:"action"`
-	Scope        string `json:"scope,omitempty"`
-	RunRef       string `json:"run_ref,omitempty"`
-	Method       string `json:"method"`
-	Endpoint     string `json:"endpoint"`
-	Reason       string `json:"reason,omitempty"`
-	RequiresPost bool   `json:"requires_post"`
+	Action       string         `json:"action"`
+	Scope        string         `json:"scope,omitempty"`
+	RunRef       string         `json:"run_ref,omitempty"`
+	Method       string         `json:"method"`
+	Endpoint     string         `json:"endpoint"`
+	Reason       string         `json:"reason,omitempty"`
+	RequiresPost bool           `json:"requires_post"`
+	Payload      map[string]any `json:"payload,omitempty"`
 }
 
 func newMCPAutoprogrammingOperatorV0(
@@ -227,14 +228,51 @@ func mcpAutoprogrammingNeedsRunStatsForSafeSupervisionV0(
 }
 
 func mcpAutoprogrammingSafeActionV0(action string, scope string, runRef string) MCPAutoprogrammingSafeActionV0 {
+	action = strings.TrimSpace(action)
+	scope = strings.TrimSpace(scope)
+	runRef = strings.TrimSpace(runRef)
 	return MCPAutoprogrammingSafeActionV0{
-		Action:       strings.TrimSpace(action),
-		Scope:        strings.TrimSpace(scope),
-		RunRef:       strings.TrimSpace(runRef),
+		Action:       action,
+		Scope:        scope,
+		RunRef:       runRef,
 		Method:       "POST",
 		Endpoint:     MCPAutoprogrammingSuperviseHTTPPathV0,
-		Reason:       strings.TrimSpace(scope),
+		Reason:       scope,
 		RequiresPost: true,
+		Payload:      mcpAutoprogrammingSafeActionPayloadV0(action, scope, runRef),
+	}
+}
+
+func mcpAutoprogrammingSafeActionPayloadV0(
+	action string,
+	scope string,
+	runRef string,
+) map[string]any {
+	if action != "supervise" {
+		return nil
+	}
+	switch scope {
+	case "queue":
+		return map[string]any{
+			"resident_mode":           true,
+			"max_ticks":               24,
+			"max_runs_per_tick":       70,
+			"max_executions":          70,
+			"max_dispatches_per_wait": 70,
+			"max_outbox_per_cycle":    70,
+		}
+	case "run":
+		if runRef == "" {
+			return nil
+		}
+		return map[string]any{
+			"run_ref":                 runRef,
+			"max_ticks":               4,
+			"max_dispatches_per_wait": 16,
+			"max_outbox_per_cycle":    16,
+		}
+	default:
+		return nil
 	}
 }
 

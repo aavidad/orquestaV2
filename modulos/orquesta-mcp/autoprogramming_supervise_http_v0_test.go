@@ -65,6 +65,36 @@ func TestMCPAutoprogrammingSuperviseHTTPHandlerV0AceptaAliasesOperativos(t *test
 		executor.input.QueueRef != "global" ||
 		executor.input.MaxTicks != 3 ||
 		executor.input.MaxDispatchesPerWait != 6 ||
+		executor.input.MaxRunsPerTick != 0 ||
+		executor.input.MaxExecutions != 0 ||
+		executor.input.MaxOutboxPerCycle != 12 {
+		t.Fatalf("input=%+v", executor.input)
+	}
+}
+
+func TestMCPAutoprogrammingSuperviseHTTPHandlerV0AliasDispatchesAmpliaColaV0(t *testing.T) {
+	executor := &fakeMCPAutoprogrammingSuperviseHTTPExecutorV0{
+		result: MCPRunSupervisorToolResultV0{
+			Estado: MCPRunSupervisorEstadoOKV0,
+		},
+	}
+	body := bytes.NewBufferString(`{
+		"queue_ref":"global",
+		"max_dispatches":6,
+		"max_outbox":12
+	}`)
+	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingSuperviseHTTPPathV0, body)
+	rec := httptest.NewRecorder()
+
+	NewMCPAutoprogrammingSuperviseHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if executor.input.QueueRef != "global" ||
+		executor.input.MaxDispatchesPerWait != 6 ||
+		executor.input.MaxRunsPerTick != 6 ||
+		executor.input.MaxExecutions != 6 ||
 		executor.input.MaxOutboxPerCycle != 12 {
 		t.Fatalf("input=%+v", executor.input)
 	}

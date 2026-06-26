@@ -18,6 +18,26 @@ Estado:
 
 ```text
 Fecha: 2026-06-26
+Decision: El alias HTTP `max_dispatches` y el `safe_action` de
+`autoprogramming/supervise` publican presupuesto real de cola.
+Motivo: El operador podia pedir mas despachos por la ruta web, pero en scope de
+cola ese alias solo subia el outbox por wait; el supervisor global seguia con
+defaults conservadores y podia ejecutar un solo run aunque la UI sugiriera una
+ola mayor.
+Alternativas: exigir siempre los campos expertos completos; cambiar defaults
+globales de MCP; crear un endpoint nuevo. Se evita porque el alias ya existe
+como superficie operativa y debe mapearse a los limites que el operador espera.
+Impacto: sin `run_ref`, `max_dispatches` rellena `MaxDispatchesPerWait`,
+`MaxRunsPerTick` y `MaxExecutions` si no venian explicitados. El `safe_action`
+de cola incluye payload recomendado con `resident_mode=true` y limites 70 para
+ticks/ejecuciones/despachos/outbox. Con `run_ref` se mantiene el comportamiento
+anterior y solo afecta a despachos del drain directo.
+Contratos afectados: rest.bridge.orquesta.autoprogramming.supervise.v0.
+Estado: aceptada localmente
+```
+
+```text
+Fecha: 2026-06-26
 Decision: Los bridges HTTP de `runs/supervise` y `autoprogramming/supervise`
 responden rapido y deduplican operaciones activas por `operation_ref`.
 Motivo: En olas OPES se observaron llamadas HTTP que despachaban agentes pero
