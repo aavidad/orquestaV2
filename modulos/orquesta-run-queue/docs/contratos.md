@@ -73,7 +73,8 @@ Funcion pura:
 
 Reglas:
 
-1. filtra `paused`, `delivered`, `canceled`, `stopped` y `closed`;
+1. filtra `paused`, `delivered`, `canceled`, `stopped`, `closed` y aliases
+   legacy terminales `completed`, `complete` y `done`;
 2. ordena por `priority_score` descendente;
 3. dentro de la misma prioridad aplica `fairness_group_paused` y
    `fairness_group_boosted` segun ventana, limite y reloj inyectado;

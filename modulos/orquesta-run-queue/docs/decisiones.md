@@ -27,3 +27,10 @@ No se implementan DB, HTTP ni MCP. Tampoco se toca workflow core ni scheduler in
 ## `updated_at` estable
 
 Cuando prioridad y aging empatan, gana el `updated_at` mas antiguo. Si tambien empata, se conserva el orden de entrada mediante ordenacion estable.
+
+## Alias terminales legacy
+
+La cola trata `completed`, `complete` y `done` como estados no ejecutables. No
+son nuevos estados canonicos del contrato, sino compatibilidad defensiva para
+runs historicas o adaptadores externos que escribieron esos nombres antes de
+normalizar a `closed`, `delivered`, `stopped` o `canceled`.

@@ -8,7 +8,8 @@ go test -count=1 ./modulos/orquesta-run-queue
 
 Cobertura v0:
 
-- filtrado de `paused`, `delivered`, `canceled`, `stopped` y `closed`;
+- filtrado de `paused`, `delivered`, `canceled`, `stopped`, `closed` y aliases
+  legacy terminales `completed`, `complete` y `done`;
 - prioridad antes de aging;
 - prioridad antes de fairness entre grupos;
 - reason codes `fairness_group_paused`, `fairness_group_boosted` y

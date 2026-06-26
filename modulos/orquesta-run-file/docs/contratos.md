@@ -25,8 +25,9 @@ Si el comando trae `status` o `fairness_group_ref`, los persiste; esto permite
 que una composicion marque una run cerrada en el core como terminal tambien en
 la cola durable y conserve el grupo usado por la politica de fairness.
 `ListRunSchedulingCandidatesV0` devuelve solo candidatos ejecutables de
-scheduling; filtra estados terminales/no ejecutables antes de aplicar `limit`
-para que la cola historica no bloquee trabajo nuevo.
+scheduling; filtra estados terminales/no ejecutables, incluidos aliases legacy
+como `completed`, antes de aplicar `limit` para que la cola historica no bloquee
+trabajo nuevo.
 
 Las solicitudes de cambio se guardan por clave `(run_ref, change_ref)`,
 reemplazando una solicitud previa y preservando el orden de insercion.

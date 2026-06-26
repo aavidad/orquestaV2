@@ -15,6 +15,7 @@ Cobertura v0:
   terminales.
 - `SetRunPriorityV0` actualiza candidatos en memoria y puede marcar un
   candidato como terminal para que no reaparezca en scheduling.
-- `ListRunSchedulingCandidatesV0` devuelve snapshots filtrables.
+- `ListRunSchedulingCandidatesV0` devuelve snapshots filtrables y excluye
+  aliases terminales legacy como `completed` antes de aplicar `limit`.
 - Ranking delegado a `orquesta-run-queue` conserva prioridad antes de aging.
 - La arquitectura de produccion no usa E/S, red, procesos ni persistencia.

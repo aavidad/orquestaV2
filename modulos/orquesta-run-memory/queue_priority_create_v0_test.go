@@ -51,7 +51,7 @@ func TestRunMemoryStoreListSchedulingCandidatesFiltraTerminalesAntesDeLimitV0(t 
 
 	seeds := []orquestarunqueue.RunSchedulingCandidateV0{
 		{RunRef: "run-a-stopped", AppRef: "app", Status: "stopped", PriorityScore: 70, UpdatedAt: now},
-		{RunRef: "run-b-stopped", AppRef: "app", Status: "stopped", PriorityScore: 70, UpdatedAt: now},
+		{RunRef: "run-b-completed", AppRef: "app", Status: " completed ", PriorityScore: 70, UpdatedAt: now},
 		{RunRef: "run-c-ready", AppRef: "app", Status: "ready", PriorityScore: 50, UpdatedAt: now},
 	}
 	for _, seed := range seeds {

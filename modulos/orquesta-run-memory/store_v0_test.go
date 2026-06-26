@@ -220,9 +220,9 @@ func TestRunMemoryStoreListSchedulingCandidatesIncluyeNoEjecutablesOptInV0(t *te
 	ctx := context.Background()
 	now := time.Date(2026, 5, 25, 16, 0, 0, 0, time.UTC)
 	if _, err := store.UpsertRunSchedulingCandidateV0(ctx, "main", candidateForTestV0(
-		"run-canceled", "app-1", orquestarunqueue.RunStatusCanceledV0, 9, now,
+		"run-completed", "app-1", "completed", 9, now,
 	)); err != nil {
-		t.Fatalf("seed canceled: %v", err)
+		t.Fatalf("seed completed: %v", err)
 	}
 
 	visible, err := store.ListRunSchedulingCandidatesV0(ctx, orquestarunqueue.RunQueueReadRequestV0{QueueRef: "main"})
@@ -239,7 +239,7 @@ func TestRunMemoryStoreListSchedulingCandidatesIncluyeNoEjecutablesOptInV0(t *te
 	if err != nil {
 		t.Fatalf("list all: %v", err)
 	}
-	if len(all) != 1 || all[0].RunRef != "run-canceled" {
+	if len(all) != 1 || all[0].RunRef != "run-completed" {
 		t.Fatalf("all=%+v", all)
 	}
 }

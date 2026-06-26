@@ -14,6 +14,9 @@ func TestRankRunCandidatesFiltersNonExecutableStatusesV0(t *testing.T) {
 		candidateV0("canceled-run", "app-1", "CANCELED", 50, now),
 		candidateV0("stopped-run", "app-1", RunStatusStoppedV0, 50, now),
 		candidateV0("closed-run", "app-1", RunStatusClosedV0, 50, now),
+		candidateV0("completed-run", "app-1", " completed ", 50, now),
+		candidateV0("complete-run", "app-1", "COMPLETE", 50, now),
+		candidateV0("done-run", "app-1", "done", 50, now),
 		candidateV0("ready-run", "app-2", RunStatusReadyV0, 10, now),
 		candidateV0("running-run", "app-2", RunStatusRunningV0, 9, now),
 	}

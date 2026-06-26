@@ -19,8 +19,8 @@ Fuera de alcance:
 
 Orden de ranking v0:
 
-1. filtra runs con `status` `paused`, `delivered`, `canceled`, `stopped` o
-   `closed`;
+1. filtra runs con `status` `paused`, `delivered`, `canceled`, `stopped`,
+   `closed` o aliases legacy terminales `completed`, `complete` y `done`;
 2. ordena por `priority_score` descendente;
 3. dentro de la misma prioridad aplica pausa/boost de `fairness_group_ref`;
 4. desempata por `aging_boost` descendente si aplica;
