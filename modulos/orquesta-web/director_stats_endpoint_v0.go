@@ -72,7 +72,7 @@ func (endpoint DirectorStatsWebEndpointV0) handleDirectorStats(
 	query WebDirectorStatsQueryV0,
 ) {
 	locale := localeFromNuevaAppRequestV0(r, endpoint.catalog())
-	if trimV0(query.RunRef) == "" {
+	if trimV0(query.RunRef) == "" && trimV0(query.ExternalJobRef) == "" {
 		vm := NewWebDirectorStatsErrorViewModelV0(query.RunRef, WebDirectorStatsErrRunRefRequeridoV0)
 		writeDirectorStatsPageV0(w, http.StatusBadRequest, endpoint.page(locale, query, vm))
 		return
@@ -108,7 +108,9 @@ func (endpoint DirectorStatsWebEndpointV0) page(
 
 func directorStatsQueryWithAgentProgressV0(query WebDirectorStatsQueryV0) WebDirectorStatsQueryV0 {
 	query.RunRef = trimDirectorStatsV0(query.RunRef)
-	if query.RunRef != "" {
+	query.AppRef = trimDirectorStatsV0(query.AppRef)
+	query.ExternalJobRef = trimDirectorStatsV0(query.ExternalJobRef)
+	if query.RunRef != "" || query.ExternalJobRef != "" {
 		query.IncludeProcessRefs = true
 		query.IncludeAgentProgress = true
 	}
@@ -120,14 +122,23 @@ func directorStatsRefreshV0(
 	query WebDirectorStatsQueryV0,
 ) WebDirectorStatsRefreshV0 {
 	runRef := trimDirectorStatsV0(query.RunRef)
-	if runRef == "" {
+	externalJobRef := trimDirectorStatsV0(query.ExternalJobRef)
+	if runRef == "" && externalJobRef == "" {
 		return WebDirectorStatsRefreshV0{}
 	}
 	values := url.Values{}
-	values.Set("run_ref", runRef)
+	if runRef != "" {
+		values.Set("run_ref", runRef)
+	}
 	values.Set("locale", normalizeDirectorStatsLocaleV0(firstDirectorStatsNonEmptyV0(query.Locale, locale)))
 	values.Set("include_process_refs", "true")
 	values.Set("include_agent_progress", "true")
+	if query.AppRef != "" {
+		values.Set("app_ref", trimDirectorStatsV0(query.AppRef))
+	}
+	if externalJobRef != "" {
+		values.Set("external_job_ref", externalJobRef)
+	}
 	if query.IncludeAgentUsage {
 		values.Set("include_agent_usage", "true")
 	}

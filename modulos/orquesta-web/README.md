@@ -55,3 +55,7 @@ preparado sin empujar al operador al supervisor legacy.
 `/director-stats`, `/run-queue` y `/run-control` conservan respuesta JSON para
 clientes finos, pero cuando el navegador pide `text/html` devuelven una shell
 HTML operable que usa esos mismos contratos publicos por `fetch`.
+`/director-stats` acepta tambien `app_ref` y `external_job_ref` para resolver y
+proyectar trabajos externos por refs opacas. La web solo muestra el bloque
+`external_job` que llega del contrato publico: estado, razon, issues,
+evidencias y diagnosticos; no lee OPES, runtime, logs ni filesystem.

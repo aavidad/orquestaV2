@@ -531,6 +531,20 @@ endpoint queda cubierta en `orquesta-mcp`, `orquesta-app-gateway` y stack Codex.
 ```
 
 ```text
+Caso: WEB-UT-033 director-stats proyecta trabajo externo
+Tipo: unit/web contract
+Comando: `go test -count=1 ./modulos/orquesta-web -run 'DirectorStats.*TrabajoExterno|RESTDirectorStatsClient|DirectorStatsWebEndpoint'`
+Evidencia esperada: `/director-stats` acepta `external_job_ref` sin `run_ref`,
+preserva `app_ref`/`external_job_ref` en refresh, el cliente REST conserva el
+bloque `external_job` y el viewmodel marca atencion cuando el trabajo externo
+llega como `parent_ack_received/cohort_open` o `integration_required`, sin leer
+OPES ni runtime.
+Ultima ejecucion: 2026-06-26; pasa dentro de `go test -count=1 ./modulos/orquesta-web`.
+Riesgos: El bloque depende de que MCP/stack inyecten `ExternalJobSource`; la
+web no inventa diagnosticos si el contrato no los trae.
+```
+
+```text
 Caso: WEB-UT-027 tablas responsivas de panel ops
 Tipo: unit/html contract
 Comando: `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto`

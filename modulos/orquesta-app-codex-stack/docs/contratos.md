@@ -168,11 +168,14 @@ resultado depende de los puertos inyectados. Si no hay backend Goal disponible,
 incluye `goal_specs[]` normalizados sin materializar ni encolar un run legacy;
 `run_ref`, `workflow_task_refs`, `wait_agent_refs` y `continue` quedan vacios
 para que otra composicion haga handoff. Si existen `GoalLauncher` y
-`GoalStateStore`, el stack crea un run contenedor sin `WorkflowTaskV0` ni
-contratos legacy, completa `GoalWorkSpecV0.RunRef`, lanza el goal, persiste
-`GoalWorkStateV0` y devuelve `goal{run_ref,goal_ref,external_goal_ref,
-goal_status,evidence_refs}`. Ese run contenedor no se marca `ready` en
-RunQueue, por lo que no entra en `runs/supervise` ni en el drain legacy.
+`GoalObserver`, `GoalClosureValidator` y `GoalStateStore`, el stack crea un run
+contenedor sin `WorkflowTaskV0` ni contratos legacy, completa
+`GoalWorkSpecV0.RunRef`, lanza el goal, persiste `GoalWorkStateV0` y devuelve
+`goal{run_ref,goal_ref,external_goal_ref,goal_status,evidence_refs}`. Si hay
+launcher u observer pero falta alguna pieza del bundle, devuelve issue publico
+`autoprogramming_goal_backend_incomplete` y no materializa run ni loop legacy.
+Ese run contenedor no se marca `ready` en RunQueue, por lo que no entra en
+`runs/supervise` ni en el drain legacy.
 Cuando la clasificacion queda `covered_by_goal_first` o
 `blocked_by_goal_capability`, tampoco se programa loop legacy salvo que el
 contrato marque explicitamente `legacy_loop_required`. No arranca agentes ni

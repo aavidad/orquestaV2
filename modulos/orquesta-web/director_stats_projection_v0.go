@@ -68,6 +68,68 @@ func directorStatsTasksV0(
 	return out
 }
 
+func directorStatsExternalJobV0(
+	externalJob *WebDirectorExternalJobV0,
+) WebDirectorExternalJobV0 {
+	if externalJob == nil || trimDirectorStatsV0(externalJob.JobRef) == "" {
+		return WebDirectorExternalJobV0{}
+	}
+	out := WebDirectorExternalJobV0{
+		Available:    true,
+		AppRef:       trimDirectorStatsV0(externalJob.AppRef),
+		JobRef:       trimDirectorStatsV0(externalJob.JobRef),
+		WorkKind:     trimDirectorStatsV0(externalJob.WorkKind),
+		ChangeRef:    trimDirectorStatsV0(externalJob.ChangeRef),
+		RunRef:       trimDirectorStatsV0(externalJob.RunRef),
+		TaskRef:      trimDirectorStatsV0(externalJob.TaskRef),
+		AgentRef:     trimDirectorStatsV0(externalJob.AgentRef),
+		Status:       trimDirectorStatsV0(externalJob.Status),
+		StatusReason: trimDirectorStatsV0(externalJob.StatusReason),
+		DeliveryRefs: compactOperationalStringsV0(externalJob.DeliveryRefs),
+		IssueRefs:    compactOperationalStringsV0(externalJob.IssueRefs),
+		EvidenceRefs: compactOperationalStringsV0(externalJob.EvidenceRefs),
+		Diagnostics:  directorStatsExternalJobDiagnosticsV0(externalJob.Diagnostics),
+	}
+	return out
+}
+
+func directorStatsExternalJobDiagnosticsV0(
+	diagnostics []WebDirectorExternalJobDiagnosticV0,
+) []WebDirectorExternalJobDiagnosticV0 {
+	out := make([]WebDirectorExternalJobDiagnosticV0, 0, len(diagnostics))
+	for _, item := range diagnostics {
+		code := trimDirectorStatsV0(item.Code)
+		if code == "" {
+			continue
+		}
+		out = append(out, WebDirectorExternalJobDiagnosticV0{
+			Code:         code,
+			Scope:        trimDirectorStatsV0(item.Scope),
+			Message:      trimDirectorStatsV0(item.Message),
+			EvidenceRefs: compactOperationalStringsV0(item.EvidenceRefs),
+		})
+	}
+	if out == nil {
+		return []WebDirectorExternalJobDiagnosticV0{}
+	}
+	return out
+}
+
+func directorStatsExternalJobNeedsAttentionV0(externalJob WebDirectorExternalJobV0) bool {
+	if !externalJob.Available {
+		return false
+	}
+	if len(externalJob.IssueRefs) > 0 || len(externalJob.Diagnostics) > 0 {
+		return true
+	}
+	switch trimDirectorStatsV0(externalJob.Status) {
+	case "integration_required", "parent_ack_received", "blocked", "failed":
+		return true
+	default:
+		return false
+	}
+}
+
 func directorStatsCheckpointV0(
 	stats WebDirectorRunStatsContractV0,
 ) WebDirectorStatsCheckpointV0 {

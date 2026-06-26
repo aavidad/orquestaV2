@@ -24,7 +24,7 @@ func startAppDirectorGoalFirstV0(
 	prepared orquestaappdirectorintake.AppDirectorIntakePreparedV0,
 	ports StartAppDirectorPortsV0,
 ) (StartAppDirectorResultV0, bool, error) {
-	if ports.GoalLauncher == nil {
+	if !appDirectorGoalPortsReadyV0(ports) {
 		return StartAppDirectorResultV0{}, false, nil
 	}
 	goalSpec := buildStartAppDirectorGoalWorkSpecV0(request, spec, prepared)

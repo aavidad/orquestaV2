@@ -45,7 +45,11 @@ func runControlHTMLV0() string {
 
 func directorStatsHTMLV0() string {
 	return operatorPageHTMLV0("Stats de Director", "Consulta progreso, agentes, cierre y evidencias publicas de una run.", "director-stats-root", `
-      <label>Run ref <input id="run-ref" placeholder="run-ref..."></label>
+      <div class="row">
+        <label>Run ref <input id="run-ref" placeholder="run-ref..."></label>
+        <label>App ref <input id="app-ref" placeholder="opes"></label>
+      </div>
+      <label>Trabajo externo <input id="external-job-ref" placeholder="job-ref..."></label>
       <div class="row">
         <button onclick="loadStats()">Consultar stats</button>
         <button onclick="observeGoal()">Observar goal</button>
@@ -53,7 +57,13 @@ func directorStatsHTMLV0() string {
       <script>
         async function loadStats() {
           const run = encodeURIComponent(document.getElementById('run-ref').value.trim());
-          show(await getJSON('/director-stats?include_agent_progress=true&include_agent_usage=true&run_ref=' + run));
+          const app = encodeURIComponent(document.getElementById('app-ref').value.trim());
+          const job = encodeURIComponent(document.getElementById('external-job-ref').value.trim());
+          let url = '/director-stats?include_agent_progress=true&include_agent_usage=true';
+          if (run) url += '&run_ref=' + run;
+          if (app) url += '&app_ref=' + app;
+          if (job) url += '&external_job_ref=' + job;
+          show(await getJSON(url));
         }
         async function observeGoal() {
           const id = 'web-director-stats-goal-observe-' + Date.now().toString(36);

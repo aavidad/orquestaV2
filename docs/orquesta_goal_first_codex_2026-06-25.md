@@ -169,11 +169,14 @@ del goal. Orquesta solo prepara y valida el contrato.
    Estado 2026-06-26: `orquesta-autoprogramming` sigue siendo puro y compila
    `goal_specs[]` cuando `goal_migration=goal_ready`. En la composicion Codex
    stack, `POST /api/v0/autoprogramming/prepare-run` conserva dos rutas: si no
-   hay backend `GoalLauncher` + `GoalStateStore`, devuelve `goal_specs[]` sin
-   `run_ref` como handoff; si el backend esta inyectado, crea un run contenedor
-   sin `WorkflowTaskV0` legacy, lanza el goal, persiste `GoalWorkStateV0`,
-   devuelve `goal{run_ref,goal_ref,external_goal_ref,goal_status}` y no encola
-   `runs/supervise`.
+   hay backend goal-first completo, devuelve `goal_specs[]` sin `run_ref` como
+   handoff; si estan inyectados `GoalLauncher`, `GoalObserver`,
+   `GoalClosureValidator` y `GoalStateStore`, crea un run contenedor sin
+   `WorkflowTaskV0` legacy, lanza el goal, persiste `GoalWorkStateV0`, devuelve
+   `goal{run_ref,goal_ref,external_goal_ref,goal_status}` y no encola
+   `runs/supervise`. Si una composicion configura launcher u observer pero deja
+   el bundle incompleto, la ruta falla de forma explicita y no cae al loop
+   legacy.
 3. Cablear un launcher real de Codex Goal en `cmd/orquesta-server` solo cuando
    exista puerto seguro para crear/observar goals.
    Estado 2026-06-26: `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o

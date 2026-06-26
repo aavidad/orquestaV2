@@ -1379,9 +1379,14 @@ Cobertura:
 - `TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveGoalSpecsCuandoGoalReady`
   conserva el fallback sin backend Goal: `goal_ready` devuelve `goal_specs[]`
   sin `run_ref`, sin tareas, sin wait y sin cola legacy.
+- `TestPrepareAutoprogrammingRunV0GoalReadyConBackendParcialNoLanzaNiCaeALegacy`
+  fija que un backend goal-first parcial publica
+  `autoprogramming_goal_backend_incomplete`, no lanza Goal, no persiste run y
+  no cae al loop legacy.
 - `TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaGoalFirstSinColaLegacy`
-  fija la ruta con backend `GoalLauncher` + `GoalStateStore`: crea run
-  contenedor sin `WorkflowTaskV0`, persiste `GoalWorkStateV0`, devuelve bloque
-  `goal`, no encola `ready`, impide que `runs.supervisor` drene ese contenedor
-  como loop legacy, observa el goal por `run_ref`, valida cierre con tests
-  requeridos y sincroniza la cola solo como terminal `closed`.
+  fija la ruta con backend completo `GoalLauncher` + `GoalObserver` +
+  `GoalClosureValidator` + `GoalStateStore`: crea run contenedor sin
+  `WorkflowTaskV0`, persiste `GoalWorkStateV0`, devuelve bloque `goal`, no
+  encola `ready`, impide que `runs.supervisor` drene ese contenedor como loop
+  legacy, observa el goal por `run_ref`, valida cierre con tests requeridos y
+  sincroniza la cola solo como terminal `closed`.

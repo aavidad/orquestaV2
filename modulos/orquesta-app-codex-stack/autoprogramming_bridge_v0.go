@@ -131,15 +131,28 @@ func autoprogrammingBridgeShouldStartGoalFirstV0(
 func autoprogrammingBridgeGoalFirstBackendAvailableV0(
 	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
 ) bool {
-	return ports.GoalLauncher != nil && ports.GoalStateStore != nil
+	return ports.GoalLauncher != nil &&
+		ports.GoalObserver != nil &&
+		ports.GoalClosureValidator != nil &&
+		ports.GoalStateStore != nil
 }
 
 func autoprogrammingBridgeGoalFirstLaunchIssueV0(
 	work orquestaautoprogramming.AutoprogrammingProgrammableWorkV0,
 	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
 ) orquestaautoprogramming.AutoprogrammingRequestIssueV0 {
-	if !autoprogrammingBridgeGoalFirstBackendAvailableV0(ports) ||
-		strings.TrimSpace(work.GoalMigration.Status) != orquestaautoprogramming.AutoprogrammingGoalMigrationGoalReadyV0 {
+	if strings.TrimSpace(work.GoalMigration.Status) != orquestaautoprogramming.AutoprogrammingGoalMigrationGoalReadyV0 {
+		return orquestaautoprogramming.AutoprogrammingRequestIssueV0{}
+	}
+	if autoprogrammingBridgeGoalFirstBackendConfiguredV0(ports) &&
+		!autoprogrammingBridgeGoalFirstBackendAvailableV0(ports) {
+		return orquestaautoprogramming.AutoprogrammingRequestIssueV0{
+			Code:    "autoprogramming_goal_backend_incomplete",
+			Field:   autoprogrammingBridgeMissingGoalPortFieldV0(ports),
+			Message: "backend goal-first incompleto; requiere launcher, observer, closure validator y state store",
+		}
+	}
+	if !autoprogrammingBridgeGoalFirstBackendAvailableV0(ports) {
 		return orquestaautoprogramming.AutoprogrammingRequestIssueV0{}
 	}
 	switch len(work.GoalSpecs) {
@@ -157,6 +170,29 @@ func autoprogrammingBridgeGoalFirstLaunchIssueV0(
 			Field:   "goal_specs",
 			Message: "lanzamiento goal-first soporta un goal por request; divide el trabajo antes de lanzar",
 		}
+	}
+}
+
+func autoprogrammingBridgeGoalFirstBackendConfiguredV0(
+	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
+) bool {
+	return ports.GoalLauncher != nil || ports.GoalObserver != nil
+}
+
+func autoprogrammingBridgeMissingGoalPortFieldV0(
+	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
+) string {
+	switch {
+	case ports.GoalLauncher == nil:
+		return "ports.goal_launcher"
+	case ports.GoalObserver == nil:
+		return "ports.goal_observer"
+	case ports.GoalClosureValidator == nil:
+		return "ports.goal_closure_validator"
+	case ports.GoalStateStore == nil:
+		return "ports.goal_state_store"
+	default:
+		return "ports.goal_bundle"
 	}
 }
 

@@ -239,6 +239,43 @@ func TestWebDirectorStatsPanelV0ProyectaGoalFirstYAccionObservar(t *testing.T) {
 	}
 }
 
+func TestWebDirectorStatsPanelV0ProyectaTrabajoExternoConDiagnostico(t *testing.T) {
+	result := directorStatsResultForWebTestV0()
+	result.ExternalJob = &WebDirectorExternalJobV0{
+		AppRef:       " opes ",
+		JobRef:       " job-ref-web-stats-external-001 ",
+		WorkKind:     " draft_content_block ",
+		RunRef:       " run-ref-web-stats-001 ",
+		TaskRef:      " task-ref-web-stats-external-001 ",
+		AgentRef:     " agent-ref-web-stats-external-001 ",
+		Status:       " parent_ack_received ",
+		StatusReason: " cohort_open ",
+		DeliveryRefs: []string{" ack-ref-web-stats-external-001 ", "ack-ref-web-stats-external-001"},
+		IssueRefs:    []string{" issue-ref-web-stats-external-001 "},
+		EvidenceRefs: []string{" evidence-ref-web-stats-external-001 "},
+		Diagnostics: []WebDirectorExternalJobDiagnosticV0{{
+			Code:         " external_job_parent_ack_received_cohort_open ",
+			Scope:        " job-ref-web-stats-external-001 ",
+			Message:      " ack del padre recibido con cohorte abierta ",
+			EvidenceRefs: []string{" task-ref-web-stats-external-001 ", "task-ref-web-stats-external-001"},
+		}},
+	}
+
+	panel := NewWebDirectorStatsPanelV0("es", result)
+
+	if panel.Estado != WebDirectorStatsEstadoAtencionV0 ||
+		!panel.ExternalJob.Available ||
+		panel.ExternalJob.AppRef != "opes" ||
+		panel.ExternalJob.JobRef != "job-ref-web-stats-external-001" ||
+		panel.ExternalJob.Status != "parent_ack_received" ||
+		panel.ExternalJob.StatusReason != "cohort_open" ||
+		len(panel.ExternalJob.DeliveryRefs) != 1 ||
+		len(panel.ExternalJob.Diagnostics) != 1 ||
+		panel.ExternalJob.Diagnostics[0].Code != "external_job_parent_ack_received_cohort_open" {
+		t.Fatalf("external_job=%+v panel=%+v", panel.ExternalJob, panel)
+	}
+}
+
 func directorStatsHasSafeActionV0(actions []WebDirectorStatsSafeActionV0, want string) bool {
 	for _, action := range actions {
 		if action.Action == want && action.Method == "POST" && action.RequiresPost {

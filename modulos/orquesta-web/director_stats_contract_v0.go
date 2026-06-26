@@ -25,6 +25,8 @@ type WebDirectorStatsQueryV0 struct {
 	CorrelationID        string `json:"correlation_id,omitempty"`
 	Locale               string `json:"locale,omitempty"`
 	RunRef               string `json:"run_ref"`
+	AppRef               string `json:"app_ref,omitempty"`
+	ExternalJobRef       string `json:"external_job_ref,omitempty"`
 	OccurredAt           string `json:"occurred_at,omitempty"`
 	IncludeProcessRefs   bool   `json:"include_process_refs,omitempty"`
 	IncludeAgentProgress bool   `json:"include_agent_progress,omitempty"`
@@ -36,9 +38,34 @@ type WebDirectorStatsInboundResultV0 struct {
 	RequestID     string                          `json:"request_id,omitempty"`
 	CorrelationID string                          `json:"correlation_id,omitempty"`
 	RunRef        string                          `json:"run_ref,omitempty"`
+	ExternalJob   *WebDirectorExternalJobV0       `json:"external_job,omitempty"`
 	Goal          *WebDirectorGoalStatsContractV0 `json:"goal,omitempty"`
 	Stats         *WebDirectorRunStatsContractV0  `json:"stats,omitempty"`
 	Errores       []WebDirectorStatsPublicIssueV0 `json:"errores_publicos,omitempty"`
+}
+
+type WebDirectorExternalJobV0 struct {
+	Available    bool                                 `json:"available,omitempty"`
+	AppRef       string                               `json:"app_ref,omitempty"`
+	JobRef       string                               `json:"job_ref,omitempty"`
+	WorkKind     string                               `json:"work_kind,omitempty"`
+	ChangeRef    string                               `json:"change_ref,omitempty"`
+	RunRef       string                               `json:"run_ref,omitempty"`
+	TaskRef      string                               `json:"task_ref,omitempty"`
+	AgentRef     string                               `json:"agent_ref,omitempty"`
+	Status       string                               `json:"status,omitempty"`
+	StatusReason string                               `json:"status_reason,omitempty"`
+	DeliveryRefs []string                             `json:"delivery_refs,omitempty"`
+	IssueRefs    []string                             `json:"issue_refs,omitempty"`
+	EvidenceRefs []string                             `json:"evidence_refs,omitempty"`
+	Diagnostics  []WebDirectorExternalJobDiagnosticV0 `json:"diagnostics,omitempty"`
+}
+
+type WebDirectorExternalJobDiagnosticV0 struct {
+	Code         string   `json:"code"`
+	Scope        string   `json:"scope,omitempty"`
+	Message      string   `json:"message,omitempty"`
+	EvidenceRefs []string `json:"evidence_refs,omitempty"`
 }
 
 type WebDirectorGoalStatsContractV0 struct {

@@ -1544,6 +1544,22 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-06-26
+Decision: Autoprogramacion solo lanza goal-first con backend Goal completo.
+Motivo: un backend parcial con launcher sin observer, cierre o state store crea
+runs contenedoras imposibles de observar/cerrar y obliga a reabrir supervision
+legacy. El modelo vigente es que Codex Goal hace el loop y Orquesta compila,
+observa y valida por evidencias.
+Impacto: `PrepareAutoprogrammingRunV0` conserva el handoff `goal_specs[]` si no
+hay backend Goal. Si detecta backend parcial (`GoalLauncher` u `GoalObserver`
+presente sin bundle completo), devuelve issue
+`autoprogramming_goal_backend_incomplete` y no persiste run, no lanza goal y no
+materializa loop legacy. El lanzamiento real requiere `GoalLauncher`,
+`GoalObserver`, `GoalClosureValidator` y `GoalStateStore`.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-21
 Decision: El director puede avanzar con ACKs parciales y recoger ACKs tardios
 de la ola anterior.

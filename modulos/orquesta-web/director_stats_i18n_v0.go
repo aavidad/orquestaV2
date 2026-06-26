@@ -6,6 +6,7 @@ func directorStatsTextsV0(locale string) WebDirectorStatsTextsV0 {
 		return WebDirectorStatsTextsV0{
 			Title:              "Director statistics",
 			Counts:             "Counts",
+			ExternalJob:        "External job",
 			TaskProgress:       "Task progress",
 			AgentProgress:      "Agent progress",
 			CheckpointProgress: "Checkpoint progress",
@@ -16,6 +17,7 @@ func directorStatsTextsV0(locale string) WebDirectorStatsTextsV0 {
 		return WebDirectorStatsTextsV0{
 			Title:              "Estadisticas del director",
 			Counts:             "Contadores",
+			ExternalJob:        "Trabajo externo",
 			TaskProgress:       "Progreso de tareas",
 			AgentProgress:      "Progreso de agentes",
 			CheckpointProgress: "Progreso de checkpoint",

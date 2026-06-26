@@ -180,6 +180,46 @@ func TestPrepareAutoprogrammingRunV0NoPersisteRequestInvalida(t *testing.T) {
 	}
 }
 
+func TestPrepareAutoprogrammingRunV0GoalReadyConBackendParcialNoLanzaNiCaeALegacy(t *testing.T) {
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0()
+	launcher := &goalFirstQueueLauncherForTestV0{}
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.RequestRef = "run-autoprogramming-goal-backend-parcial-001"
+	request.Tasks[0].TaskRef = "source-task-ref-autoprogramming-goal-backend-parcial-001"
+	request.Tasks[0].ContextRefs = []string{
+		"goal_migration:goal-first",
+		"goal_capability:starter",
+		"goal_capability:observer",
+		"goal_capability:closure-validator",
+	}
+
+	bridged, err := PrepareAutoprogrammingRunV0(context.Background(), AutoprogrammingBridgeRequestV0{
+		Request: request,
+	}, orquestaappdirectorservice.StartAppDirectorPortsV0{
+		RunStore:          runStore,
+		DirectorTaskStore: taskStore,
+		GoalLauncher:      launcher,
+		GoalStateStore:    goalStates,
+	})
+	if err != nil {
+		t.Fatalf("PrepareAutoprogrammingRunV0: %v", err)
+	}
+	if bridged.Accepted ||
+		len(bridged.Issues) != 1 ||
+		bridged.Issues[0].Code != "autoprogramming_goal_backend_incomplete" ||
+		bridged.Issues[0].Field != "ports.goal_observer" {
+		t.Fatalf("bridged=%+v", bridged)
+	}
+	if len(launcher.specs) != 0 || len(goalStates.states) != 0 {
+		t.Fatalf("backend parcial no debe lanzar goal: specs=%+v states=%+v", launcher.specs, goalStates.states)
+	}
+	if _, err := runStore.LoadRunV0(context.Background(), request.RequestRef); !orquestacionnucleoapp.IsRunNotFoundErrorV0(err) {
+		t.Fatalf("run no debe persistirse, err=%v", err)
+	}
+}
+
 func TestPrepareAutoprogrammingRunV0EsIdempotenteYNoSobrescribeRunViva(t *testing.T) {
 	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0()
 	eventSink := orquestacionnucleoapp.NewInMemoryEventSinkV0()

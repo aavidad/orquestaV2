@@ -42,8 +42,40 @@ func validateStartAppDirectorPortsV0(
 	if len(ports.Dispatchers) == 0 && len(ports.BatchDispatchers) == 0 {
 		return AppDirectorServiceIssueV0{Field: "ports.dispatchers"}
 	}
-	if ports.GoalLauncher != nil && ports.GoalStateStore == nil {
-		return AppDirectorServiceIssueV0{Field: "ports.goal_state_store"}
+	if appDirectorGoalPortsConfiguredForLaunchV0(ports) && !appDirectorGoalPortsReadyV0(ports) {
+		return AppDirectorServiceIssueV0{Field: appDirectorMissingGoalPortFieldV0(ports)}
 	}
 	return nil
+}
+
+func appDirectorGoalPortsConfiguredForLaunchV0(
+	ports StartAppDirectorPortsV0,
+) bool {
+	return ports.GoalLauncher != nil || ports.GoalObserver != nil
+}
+
+func appDirectorGoalPortsReadyV0(
+	ports StartAppDirectorPortsV0,
+) bool {
+	return ports.GoalLauncher != nil &&
+		ports.GoalObserver != nil &&
+		ports.GoalClosureValidator != nil &&
+		ports.GoalStateStore != nil
+}
+
+func appDirectorMissingGoalPortFieldV0(
+	ports StartAppDirectorPortsV0,
+) string {
+	switch {
+	case ports.GoalLauncher == nil:
+		return "ports.goal_launcher"
+	case ports.GoalObserver == nil:
+		return "ports.goal_observer"
+	case ports.GoalClosureValidator == nil:
+		return "ports.goal_closure_validator"
+	case ports.GoalStateStore == nil:
+		return "ports.goal_state_store"
+	default:
+		return "ports.goal_bundle"
+	}
 }

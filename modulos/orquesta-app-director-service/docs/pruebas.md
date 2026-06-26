@@ -134,6 +134,7 @@ Evidencia 2026-05-09:
 - `TestComposeStartAppDirectorProviderV0IncludesReviewGateSource`;
 - `TestContinueAppDirectorV0ProcessesReviewGateSource`;
 - `TestStartAppDirectorV0GoalFirstLanzaGoalYNoEjecutaLoopLegacy`;
+- `TestStartAppDirectorV0GoalFirstBundleIncompletoNoCaeALoopLegacy`;
 - `TestObserveAppDirectorGoalV0PersisteResultadoCompletoYClosure`;
 - `TestObserveAppDirectorGoalV0BloqueaRunSiClosureNoAcepta`;
 - `TestStartAppDirectorV0ReturnsFactoryValidationIssues`;

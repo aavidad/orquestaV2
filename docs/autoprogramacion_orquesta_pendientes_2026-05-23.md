@@ -236,12 +236,12 @@ Pendiente verificable:
   cerrado el 2026-06-26 con `app_server_stdio`: `goal_status=complete`,
   `run_status=cerrada`, `closure_status=accepted`, `closure_accepted=true`,
   `artifact_refs=2`, `evidence_refs=9`.
-- `/nueva-app` ya queda conectada localmente a `GoalWorkSpecV0` y al launcher
+- `/nueva-app` ya queda conectada localmente a `GoalWorkSpecV0` y al backend
   goal-first por `orquesta.apps.arrancar_director.v0` cuando la composicion
-  inyecta `AppGoalLauncher`/`AppGoalStateStore`; el panel web observa por
-  `POST /api/v0/apps/director/goal/observe` con polling acotado y cierre por
-  marcador estructurado o resultado durable. El smoke real de proyecto temporal
-  cerro el 2026-06-26 sin caer al loop legacy.
+  inyecta launcher, observer, closure validator y state store; el panel web
+  observa por `POST /api/v0/apps/director/goal/observe` con polling acotado y
+  cierre por marcador estructurado o resultado durable. El smoke real de
+  proyecto temporal cerro el 2026-06-26 sin caer al loop legacy.
 - Intento de smoke real 2026-06-25: `scripts/smoke_goal_first_app_server_real.sh`
   quedo bloqueado antes de arrancar Orquesta porque el CLI informo falta de
   instalacion standalone en

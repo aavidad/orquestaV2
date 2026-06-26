@@ -67,7 +67,8 @@ func TestDirectorStatsWebEndpointV0GETHTMLParaNavegador(t *testing.T) {
 	if rec.Code != http.StatusOK ||
 		rec.Header().Get("Content-Type") != WebHTMLContentTypeHeaderV0 ||
 		!strings.Contains(body, "director-stats-root") ||
-		!strings.Contains(body, "getJSON('/director-stats?include_agent_progress=true") ||
+		!strings.Contains(body, "external-job-ref") ||
+		!strings.Contains(body, "external_job_ref") ||
 		!strings.Contains(body, WebDirectorStatsGoalObserveEndpointV0) ||
 		!strings.Contains(body, "Observar goal") {
 		t.Fatalf("html stats invalido status=%d headers=%v body=%s", rec.Code, rec.Header(), body)
@@ -115,6 +116,48 @@ func TestDirectorStatsWebEndpointV0GETPreparaRefreshSemitiempoReal(t *testing.T)
 	}
 }
 
+func TestDirectorStatsWebEndpointV0GETAceptaTrabajoExternoSinRunRef(t *testing.T) {
+	stats := webDirectorStatsFixtureV0()
+	vm := NewWebDirectorStatsPanelV0("es", WebDirectorStatsInboundResultV0{
+		Estado: WebDirectorStatsInboundEstadoOKV0,
+		ExternalJob: &WebDirectorExternalJobV0{
+			AppRef:       "opes",
+			JobRef:       "job-ref-web-stats-external-001",
+			RunRef:       stats.RunRef,
+			Status:       "parent_ack_received",
+			StatusReason: "cohort_open",
+		},
+		Stats: &stats,
+	})
+	client := &fakeDirectorStatsClientV0{VM: vm}
+	endpoint := NewDirectorStatsWebEndpointV0(client)
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/director-stats?app_ref=opes&external_job_ref=job-ref-web-stats-external-001",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+
+	endpoint.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK ||
+		client.Query.RunRef != "" ||
+		client.Query.AppRef != "opes" ||
+		client.Query.ExternalJobRef != "job-ref-web-stats-external-001" ||
+		!client.Query.IncludeAgentProgress {
+		t.Fatalf("code=%d query=%+v body=%s", rec.Code, client.Query, rec.Body.String())
+	}
+	var page WebDirectorStatsPageV0
+	if err := json.NewDecoder(rec.Body).Decode(&page); err != nil {
+		t.Fatalf("decode page: %v", err)
+	}
+	if page.ViewModel.ExternalJob.JobRef != "job-ref-web-stats-external-001" ||
+		!strings.Contains(page.Refresh.Href, "external_job_ref=job-ref-web-stats-external-001") ||
+		!strings.Contains(page.Refresh.Href, "app_ref=opes") {
+		t.Fatalf("page=%+v", page)
+	}
+}
+
 func TestDirectorStatsWebEndpointV0GETRespetaUsoOptIn(t *testing.T) {
 	client := &fakeDirectorStatsClientV0{VM: NewWebDirectorStatsViewModelV0(webDirectorStatsFixtureV0())}
 	endpoint := NewDirectorStatsWebEndpointV0(client)
@@ -145,8 +188,22 @@ func TestRESTDirectorStatsClientV0DecodificaStats(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("method=%s", r.Method)
 		}
+		var query WebDirectorStatsQueryV0
+		if err := json.NewDecoder(r.Body).Decode(&query); err != nil {
+			t.Fatalf("decode query: %v", err)
+		}
+		if query.AppRef != "opes" || query.ExternalJobRef != "job-ref-rest-web-stats-001" {
+			t.Fatalf("query=%+v", query)
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"stats": stats,
+			"external_job": WebDirectorExternalJobV0{
+				AppRef:       "opes",
+				JobRef:       "job-ref-rest-web-stats-001",
+				RunRef:       stats.RunRef,
+				Status:       "integration_required",
+				StatusReason: "parent_integration_pending",
+			},
 			"goal": WebDirectorGoalStatsContractV0{
 				DirectorExecutionMode: "goal_first",
 				RunRef:                stats.RunRef,
@@ -161,6 +218,8 @@ func TestRESTDirectorStatsClientV0DecodificaStats(t *testing.T) {
 
 	vm, err := client.ConsultarDirectorStats(context.Background(), WebDirectorStatsQueryV0{
 		RunRef:               stats.RunRef,
+		AppRef:               "opes",
+		ExternalJobRef:       "job-ref-rest-web-stats-001",
 		IncludeAgentProgress: true,
 	})
 	if err != nil {
@@ -173,6 +232,11 @@ func TestRESTDirectorStatsClientV0DecodificaStats(t *testing.T) {
 		vm.Goal.GoalRef != "goal-ref-rest-web-stats-001" ||
 		!directorStatsHasSafeActionV0(vm.SafeActions, "observe_goal") {
 		t.Fatalf("goal no conservado por REST: %+v actions=%+v", vm.Goal, vm.SafeActions)
+	}
+	if !vm.ExternalJob.Available ||
+		vm.ExternalJob.Status != "integration_required" ||
+		vm.ExternalJob.StatusReason != "parent_integration_pending" {
+		t.Fatalf("external_job no conservado por REST: %+v", vm.ExternalJob)
 	}
 }
 

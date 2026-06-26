@@ -14,6 +14,7 @@ type WebDirectorStatsViewModelV0 struct {
 	Progress        WebDirectorStatsProgressV0      `json:"progress"`
 	Resumen         WebDirectorStatsSummaryV0       `json:"resumen"`
 	Closure         WebDirectorStatsClosureV0       `json:"closure"`
+	ExternalJob     WebDirectorExternalJobV0        `json:"external_job,omitempty"`
 	Goal            WebDirectorStatsGoalV0          `json:"goal"`
 	StopControl     WebDirectorStatsStopControlV0   `json:"stop_control"`
 	Checkpoint      WebDirectorStatsCheckpointV0    `json:"checkpoint"`
@@ -30,6 +31,7 @@ type WebDirectorStatsPanelV0 = WebDirectorStatsViewModelV0
 type WebDirectorStatsTextsV0 struct {
 	Title              string `json:"title"`
 	Counts             string `json:"counts"`
+	ExternalJob        string `json:"external_job"`
 	TaskProgress       string `json:"task_progress"`
 	AgentProgress      string `json:"agent_progress"`
 	CheckpointProgress string `json:"checkpoint_progress"`
@@ -158,7 +160,7 @@ func NewWebDirectorStatsPanelV0(
 	vm := WebDirectorStatsViewModelV0{
 		SchemaVersion:   WebDirectorStatsPanelSchemaV0,
 		Locale:          normalizeDirectorStatsLocaleV0(locale),
-		RunRef:          firstDirectorStatsNonEmptyV0(result.RunRef, runRefFromStatsV0(stats)),
+		RunRef:          firstDirectorStatsNonEmptyV0(result.RunRef, runRefFromStatsV0(stats), runRefFromExternalJobV0(result.ExternalJob)),
 		Estado:          directorStatsEstadoV0(result.Estado, stats),
 		Textos:          directorStatsTextsV0(locale),
 		Agents:          []WebDirectorStatsAgentV0{},
@@ -166,6 +168,7 @@ func NewWebDirectorStatsPanelV0(
 		Tasks:           []WebDirectorStatsTaskV0{},
 		Tareas:          []WebDirectorStatsTaskV0{},
 		ErroresPublicos: directorStatsIssuesV0(result.Errores, nil),
+		ExternalJob:     directorStatsExternalJobV0(result.ExternalJob),
 	}
 	if stats == nil {
 		return vm
@@ -301,6 +304,7 @@ func directorStatsAttentionStateV0(vm WebDirectorStatsViewModelV0) string {
 	if vm.Progress.LoopDetectedAgents > 0 ||
 		vm.Progress.StoppedAgents > 0 ||
 		vm.Counts.AgentsNeedAttention > 0 ||
+		directorStatsExternalJobNeedsAttentionV0(vm.ExternalJob) ||
 		directorStatsGoalNeedsAttentionV0(vm.Goal) ||
 		vm.StopControl.Pending ||
 		vm.Checkpoint.RequiresAttention {
@@ -362,6 +366,13 @@ func runRefFromStatsV0(stats *WebDirectorRunStatsContractV0) string {
 		return ""
 	}
 	return stats.RunRef
+}
+
+func runRefFromExternalJobV0(externalJob *WebDirectorExternalJobV0) string {
+	if externalJob == nil {
+		return ""
+	}
+	return externalJob.RunRef
 }
 
 func trimDirectorStatsV0(value string) string {

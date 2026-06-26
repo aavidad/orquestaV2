@@ -58,7 +58,7 @@ func (client *RESTDirectorStatsClientV0) ConsultarDirectorStats(
 ) (WebDirectorStatsViewModelV0, error) {
 	ctx = webContextOrBackgroundV0(ctx)
 	query = normalizeDirectorStatsQueryV0(query)
-	if query.RunRef == "" {
+	if query.RunRef == "" && query.ExternalJobRef == "" {
 		return WebDirectorStatsViewModelV0{}, directorStatsClientErrorV0(WebDirectorStatsErrRunRefRequeridoV0, 0)
 	}
 	if client.Timeout > 0 {
@@ -102,7 +102,7 @@ func decodeDirectorStatsResponseV0(
 	if resp.StatusCode == http.StatusBadRequest && result.Estado != WebDirectorStatsInboundEstadoErrorV0 {
 		return WebDirectorStatsViewModelV0{}, directorStatsClientErrorV0(WebDirectorStatsErrTransporteV0, resp.StatusCode)
 	}
-	if result.Estado == "" && result.Stats == nil && len(result.Errores) == 0 {
+	if result.Estado == "" && result.Stats == nil && result.ExternalJob == nil && len(result.Errores) == 0 {
 		return WebDirectorStatsViewModelV0{}, directorStatsClientErrorV0(WebDirectorStatsErrRespuestaInvalidaV0, resp.StatusCode)
 	}
 	return NewWebDirectorStatsPanelV0(query.Locale, result), nil
@@ -128,8 +128,10 @@ func normalizeDirectorStatsQueryV0(query WebDirectorStatsQueryV0) WebDirectorSta
 	query.CorrelationID = firstDirectorStatsNonEmptyV0(query.CorrelationID, query.RequestID)
 	query.Locale = normalizeDirectorStatsLocaleV0(query.Locale)
 	query.RunRef = trimDirectorStatsV0(query.RunRef)
+	query.AppRef = trimDirectorStatsV0(query.AppRef)
+	query.ExternalJobRef = trimDirectorStatsV0(query.ExternalJobRef)
 	query.OccurredAt = trimDirectorStatsV0(query.OccurredAt)
-	if query.RunRef != "" {
+	if query.RunRef != "" || query.ExternalJobRef != "" {
 		query.IncludeProcessRefs = true
 		query.IncludeAgentProgress = true
 	}
@@ -153,6 +155,7 @@ type directorStatsEnvelopeV0 struct {
 	RequestID     string                          `json:"request_id,omitempty"`
 	CorrelationID string                          `json:"correlation_id,omitempty"`
 	RunRef        string                          `json:"run_ref,omitempty"`
+	ExternalJob   *WebDirectorExternalJobV0       `json:"external_job,omitempty"`
 	Goal          *WebDirectorGoalStatsContractV0 `json:"goal,omitempty"`
 	Stats         *WebDirectorRunStatsContractV0  `json:"stats,omitempty"`
 	DirectorStats *WebDirectorRunStatsContractV0  `json:"director_stats,omitempty"`
@@ -169,6 +172,7 @@ func (envelope directorStatsEnvelopeV0) ResultV0() WebDirectorStatsInboundResult
 		RequestID:     envelope.RequestID,
 		CorrelationID: envelope.CorrelationID,
 		RunRef:        envelope.RunRef,
+		ExternalJob:   envelope.ExternalJob,
 		Goal:          envelope.Goal,
 		Stats:         stats,
 		Errores:       envelope.Errores,

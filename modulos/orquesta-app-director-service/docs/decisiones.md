@@ -287,3 +287,17 @@ Alternativas: dejar la run solo con estado de goal persistido; fabricar microtar
 Impacto: `ObserveAppDirectorGoalV0` usa `GoalClosureValidator`, `RunStore` y `EventSink`. Closure aceptada emite fases, `FinalValidationRegistered` run-level y `RunClosed`; closure no aceptada emite `RunBlocked` con blocker estable. La composicion sigue aportando puertos y el servicio no conoce runtime, proveedor, DB ni filesystem.
 Estado: aceptada.
 ```
+
+```text
+Fecha: 2026-06-26
+Decision: Tratar goal-first como bundle atomico en el servicio.
+Motivo: lanzar un Goal con solo `GoalLauncher` puede dejar trabajo vivo sin
+observacion, cierre ni persistencia suficientes; eso recrea el loop colgado que
+Codex Goal debe sustituir.
+Impacto: si una composicion configura `GoalLauncher` u `GoalObserver`, debe
+inyectar tambien `GoalClosureValidator` y `GoalStateStore`. Un bundle parcial
+falla con campo publico `ports.goal_*` y no cae al loop legacy. Un
+`GoalStateStore` aislado sigue permitido para proyectar stats/observacion de
+estado existente sin forzar arranque goal-first.
+Estado: aceptada.
+```

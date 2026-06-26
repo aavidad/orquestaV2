@@ -121,11 +121,13 @@ func TestStartAppDirectorV0GoalFirstLanzaGoalYNoEjecutaLoopLegacy(t *testing.T) 
 		context.Background(),
 		validStartAppDirectorRequestForTestV0(),
 		StartAppDirectorPortsV0{
-			RunStore:       store,
-			EventSink:      sink,
-			OutboxLedger:   ledger,
-			GoalLauncher:   launcher,
-			GoalStateStore: goalStates,
+			RunStore:             store,
+			EventSink:            sink,
+			OutboxLedger:         ledger,
+			GoalLauncher:         launcher,
+			GoalObserver:         serviceGoalObserverForTestV0{},
+			GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+			GoalStateStore:       goalStates,
 			Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
 				serviceCapacityDispatcherForTestV0(store, sink, ledger),
 				serviceAgentLauncherDispatcherForTestV0(store, sink, ledger),
@@ -185,11 +187,13 @@ func TestStartAppDirectorV0GoalFirstLauncherDegradadoNoCaeALoopLegacy(t *testing
 		context.Background(),
 		validStartAppDirectorRequestForTestV0(),
 		StartAppDirectorPortsV0{
-			RunStore:       store,
-			EventSink:      sink,
-			OutboxLedger:   ledger,
-			GoalLauncher:   launcher,
-			GoalStateStore: goalStates,
+			RunStore:             store,
+			EventSink:            sink,
+			OutboxLedger:         ledger,
+			GoalLauncher:         launcher,
+			GoalObserver:         serviceGoalObserverForTestV0{},
+			GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+			GoalStateStore:       goalStates,
 			Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
 				serviceCapacityDispatcherForTestV0(store, sink, ledger),
 				serviceAgentLauncherDispatcherForTestV0(store, sink, ledger),
@@ -209,6 +213,41 @@ func TestStartAppDirectorV0GoalFirstLauncherDegradadoNoCaeALoopLegacy(t *testing
 	if serviceHasEventTypeV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventAgentRequestedV0) ||
 		serviceHasEventTypeV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventAgentStartedV0) {
 		t.Fatalf("goal-first degradado no debe caer al loop legacy: %+v", sink.EventsV0())
+	}
+}
+
+func TestStartAppDirectorV0GoalFirstBundleIncompletoNoCaeALoopLegacy(t *testing.T) {
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	launcher := &serviceGoalLauncherForTestV0{}
+	goalStates := newServiceGoalStateStoreForTestV0()
+
+	result, err := StartAppDirectorV0(
+		context.Background(),
+		validStartAppDirectorRequestForTestV0(),
+		StartAppDirectorPortsV0{
+			RunStore:       store,
+			EventSink:      sink,
+			OutboxLedger:   ledger,
+			GoalLauncher:   launcher,
+			GoalStateStore: goalStates,
+			Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
+				serviceCapacityDispatcherForTestV0(store, sink, ledger),
+				serviceAgentLauncherDispatcherForTestV0(store, sink, ledger),
+			},
+		},
+	)
+
+	if err == nil || err.Error() != "app_director_service_invalido: ports.goal_observer" {
+		t.Fatalf("err=%v result=%+v", err, result)
+	}
+	if launcher.calls != 0 || len(goalStates.states) != 0 {
+		t.Fatalf("goal incompleto no debe lanzarse: calls=%d states=%+v", launcher.calls, goalStates.states)
+	}
+	if serviceHasEventTypeV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventAgentRequestedV0) ||
+		serviceHasEventTypeV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventAgentStartedV0) {
+		t.Fatalf("goal incompleto no debe caer al loop legacy: %+v", sink.EventsV0())
 	}
 }
 
@@ -368,11 +407,13 @@ func serviceStartGoalFirstForObserveTestV0(t *testing.T) (
 		context.Background(),
 		validStartAppDirectorRequestForTestV0(),
 		StartAppDirectorPortsV0{
-			RunStore:       store,
-			EventSink:      sink,
-			OutboxLedger:   ledger,
-			GoalLauncher:   launcher,
-			GoalStateStore: goalStates,
+			RunStore:             store,
+			EventSink:            sink,
+			OutboxLedger:         ledger,
+			GoalLauncher:         launcher,
+			GoalObserver:         serviceGoalObserverForTestV0{},
+			GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+			GoalStateStore:       goalStates,
 			Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
 				serviceCapacityDispatcherForTestV0(store, sink, ledger),
 				serviceAgentLauncherDispatcherForTestV0(store, sink, ledger),
