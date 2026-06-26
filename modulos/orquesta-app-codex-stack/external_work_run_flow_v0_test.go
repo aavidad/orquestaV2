@@ -293,8 +293,11 @@ func TestCodexStackV0ExternalWorkRunOPESSubrolesMaterializaPadreYSeisHijosV0(t *
 	if parent.TaskID == "" ||
 		parent.MaxChildAgents != 6 ||
 		len(parent.ChildTaskRefs) != 6 ||
+		len(parent.DependsOn) != 6 ||
 		parent.CohortRef == "" ||
 		parent.WaveRef == "" ||
+		!codexStackStringInSetForTestV0(parent.WriteSet, "external/opes/draft_content_block") ||
+		!codexStackStringInSetForTestV0(parent.WriteSet, "external/opes/job-ref-opes-subroles-001") ||
 		!codexStackStringInSetForTestV0(parent.WriteSet, "external/opes/draft_content_block/coordinacion") ||
 		!codexStackStringInSetForTestV0(parent.WriteSet, "external/opes/job-ref-opes-subroles-001/coordinacion") ||
 		containsOPESSubroleWriteSetForTestV0(parent.WriteSet) {
@@ -310,6 +313,7 @@ func TestCodexStackV0ExternalWorkRunOPESSubrolesMaterializaPadreYSeisHijosV0(t *
 			child.DelegationDepth != 1 ||
 			child.CohortRef != parent.CohortRef ||
 			child.WaveRef != parent.WaveRef ||
+			len(child.DependsOn) != 0 ||
 			len(child.ChildTaskRefs) != 0 ||
 			!containsOPESSubroleWriteSetForTestV0(child.WriteSet) {
 			t.Fatalf("child=%+v parent=%+v", child, parent)
@@ -318,6 +322,9 @@ func TestCodexStackV0ExternalWorkRunOPESSubrolesMaterializaPadreYSeisHijosV0(t *
 	for _, childRef := range parent.ChildTaskRefs {
 		if !seenChildren[childRef] {
 			t.Fatalf("child_ref %s no cargado: seen=%v", childRef, seenChildren)
+		}
+		if !codexStackStringInSetForTestV0(parent.DependsOn, childRef) {
+			t.Fatalf("parent.depends_on no contiene child_ref %s: parent=%+v", childRef, parent)
 		}
 	}
 	if len(run.StartedAgents) != 7 || runtime.launchCountV0() != 7 {

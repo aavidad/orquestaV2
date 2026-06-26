@@ -110,6 +110,25 @@ Impacto: la fuente anade criterios y pruebas para validar granularidad
 editorial coherente. Orquesta solo debe pedir division adicional a OPES si el
 job excede contexto, trazabilidad o capacidad de revision.
 
+## Subroles OPES e integracion causal
+
+Decision: Si OPES declara `opes.padre-tema-6-subroles.v1` o
+`subroles_required=6`, la fuente materializa seis tareas hijas con write-set
+acotado a `base/subroles/<rol>` y una tarea padre posterior. El padre conserva
+el write-set de producto autorizado por `allowed_write_set` o por los scopes
+externos derivados, anade `base/coordinacion` y depende de las seis tareas
+hijas.
+
+Motivo: los subroles deben existir como agentes reales, pero el producto
+canonico del tema no puede quedar bloqueado por un `agent_packet` reducido a
+coordinacion. A la vez, dar al padre el arbol completo mientras los hijos estan
+vivos solaparia write-sets; por eso el padre actua como integrador causal tras
+ACK, entrega, bloqueo o rework de los hijos.
+
+Impacto: el scheduler puede lanzar los seis subroles en paralelo sin colision.
+Cuando sus dependencias quedan satisfechas, el padre recibe el write-set de
+producto y puede consolidar artefactos utiles en la ruta canonica autorizada.
+
 ## Planificacion documental como contrato propio
 
 Decision: `plan_tema`, `plan_temario` y `plan_documento` no se tratan como

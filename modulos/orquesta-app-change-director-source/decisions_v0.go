@@ -192,7 +192,7 @@ func appChangeMicrotasksV0(
 	for _, subrole := range subroles {
 		childRefs = append(childRefs, appChangeSubroleTaskRefV0(refs, subrole.Ref))
 	}
-	parent.WriteSet = appChangeOPESParentCoordinationWriteSetV0(baseWriteSet)
+	parent.WriteSet = appChangeOPESParentProductWriteSetV0(baseWriteSet)
 	parent.ChildTaskRefs = childRefs
 	parent.MaxChildAgents = len(childRefs)
 	parent.ContextRefs = compactAppChangeSourceRefsV0(append(parent.ContextRefs,
@@ -202,10 +202,12 @@ func appChangeMicrotasksV0(
 	parent.CohortRef = appChangeOPESCohortRefV0(refs)
 	parent.WaveRef = appChangeOPESWaveRefV0(refs)
 
-	tasks := []orquestadirectoragent.DirectorAgentMicrotaskV0{parent}
+	tasks := make([]orquestadirectoragent.DirectorAgentMicrotaskV0, 0, len(subroles)+1)
 	for _, subrole := range subroles {
 		tasks = append(tasks, appChangeOPESSubroleMicrotaskV0(parent, request, refs, subrole, baseWriteSet))
 	}
+	parent.DependsOn = append([]string(nil), childRefs...)
+	tasks = append(tasks, parent)
 	return tasks
 }
 
@@ -259,6 +261,7 @@ func appChangeOPESSubroleMicrotaskV0(
 		subrole.SkillRef,
 	))
 	child.ParentTaskRef = parent.TaskID
+	child.DependsOn = nil
 	child.CohortRef = appChangeOPESCohortRefV0(refs)
 	child.WaveRef = appChangeOPESWaveRefV0(refs)
 	child.DelegationDepth = parent.DelegationDepth + 1

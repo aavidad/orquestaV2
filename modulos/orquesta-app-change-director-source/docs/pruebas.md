@@ -30,6 +30,13 @@ Casos focales:
   declara temario, esquema, objetivo, posicion, vecinos, fuentes, criterios y
   longitud si llegan por `input_fields`, ademas de no sobreatomizar temarios
   largos.
+- `TestAppChangeDirectorDecisionSourceV0MaterializaSeisSubrolesOPES`: OPES
+  1+6 materializa seis tareas hijas y un padre integrador causal; las hijas
+  escriben solo bajo `subroles/<rol>` y el padre depende de todas ellas.
+- `TestAppChangeDirectorDecisionSourceV0OPESSubrolesPadreConservaWriteSetProductoAutorizado`:
+  reproduce `allowed_write_set=["temas/tema_032"]` y valida que el padre
+  conserva `temas/tema_032` mas `temas/tema_032/coordinacion`, mientras
+  redaccion queda acotada a `temas/tema_032/subroles/redaccion`.
 - `TestAppChangeDirectorDecisionSourceV0ResumenPermiteGranularidadPequena`:
   `summarize_chapter` admite tarea pequena porque es artefacto derivado y exige
   trazabilidad y conservacion de matices criticos.

@@ -191,10 +191,11 @@ func TestAppChangeDirectorDecisionSourceV0MaterializaSeisSubrolesOPES(t *testing
 	if len(microtasks) != 7 {
 		t.Fatalf("microtasks=%d decisions=%+v", len(microtasks), decisions)
 	}
-	parent := microtasks[0].CreateMicrotask.Task
+	parent, children := appChangeOPESSubroleMicrotasksForTestV0(microtasks)
 	if parent.TaskID != appChangeRefsV0(record.Request.ChangeRef).TaskRef ||
 		parent.MaxChildAgents != 6 ||
 		len(parent.ChildTaskRefs) != 6 ||
+		len(parent.DependsOn) != 6 ||
 		parent.CohortRef == "" ||
 		parent.WaveRef == "" ||
 		containsFragmentInSetForTestV0(parent.WriteSet, "/subroles/") ||
@@ -202,6 +203,10 @@ func TestAppChangeDirectorDecisionSourceV0MaterializaSeisSubrolesOPES(t *testing
 		t.Fatalf("parent=%+v", parent)
 	}
 	requireStringSetForTestV0(t, parent.WriteSet, []string{
+		"external/opes/draft_content_block",
+		"external/opes/opes-job-tema-001",
+		"external/opes/curso-servicios-multiples",
+		"external/opes/tema-001",
 		"external/opes/draft_content_block/coordinacion",
 		"external/opes/opes-job-tema-001/coordinacion",
 		"external/opes/curso-servicios-multiples/coordinacion",
@@ -214,8 +219,7 @@ func TestAppChangeDirectorDecisionSourceV0MaterializaSeisSubrolesOPES(t *testing
 		}
 	}
 	seenChildren := map[string]bool{}
-	for _, decision := range microtasks[1:] {
-		child := decision.CreateMicrotask.Task
+	for _, child := range children {
 		seenChildren[child.TaskID] = true
 		subroleRef := strings.TrimPrefix(child.TaskID, parent.TaskID+"-subrole-")
 		if child.ParentTaskRef != parent.TaskID ||
@@ -224,6 +228,7 @@ func TestAppChangeDirectorDecisionSourceV0MaterializaSeisSubrolesOPES(t *testing
 			child.DelegationDepth != 1 ||
 			child.CohortRef != parent.CohortRef ||
 			child.WaveRef != parent.WaveRef ||
+			len(child.DependsOn) != 0 ||
 			len(child.ChildTaskRefs) != 0 ||
 			containsFragmentInSetForTestV0(child.WriteSet, "/coordinacion") ||
 			containsFragmentInSetForTestV0(child.WriteSet, "/coordinacion/subroles/") ||
@@ -241,6 +246,66 @@ func TestAppChangeDirectorDecisionSourceV0MaterializaSeisSubrolesOPES(t *testing
 		if !seenChildren[childRef] {
 			t.Fatalf("child_ref %s no materializado: seen=%v", childRef, seenChildren)
 		}
+		if !stringInSetV0(parent.DependsOn, childRef) {
+			t.Fatalf("parent.depends_on no contiene child_ref %s: parent=%+v", childRef, parent)
+		}
+	}
+}
+
+func TestAppChangeDirectorDecisionSourceV0OPESSubrolesPadreConservaWriteSetProductoAutorizado(t *testing.T) {
+	record := appChangeRecordForSourceTestV0()
+	record.Request.AllowedWriteSet = []string{"temas/tema_032"}
+	record.Request.ExternalWork = &orquestaappchange.AppChangeExternalWorkV0{
+		ProjectRef:    "opes",
+		JobRef:        "opes-job-tema-032",
+		InterfaceRefs: []string{"opes-rest-v0", "opes.padre-tema-6-subroles.v1"},
+		WorkKind:      "draft_content_block",
+		WorkRefs:      []string{"curso-servicios-multiples", "tema-032"},
+	}
+	store := orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	run := appChangeRunForSourceTestV0(record)
+
+	decisions, err := (AppChangeDirectorDecisionSourceV0{Store: store}).
+		ListDirectorAgentDecisionsV0(
+			context.Background(),
+			orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: run},
+		)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	microtasks := microtaskDecisionsForTestV0(decisions)
+	if len(microtasks) != 7 {
+		t.Fatalf("microtasks=%d decisions=%+v", len(microtasks), decisions)
+	}
+	parent, children := appChangeOPESSubroleMicrotasksForTestV0(microtasks)
+	if parent.TaskID == "" ||
+		len(parent.ChildTaskRefs) != 6 ||
+		len(parent.DependsOn) != 6 ||
+		containsFragmentInSetForTestV0(parent.WriteSet, "/subroles/") {
+		t.Fatalf("parent=%+v", parent)
+	}
+	requireStringSetForTestV0(t, parent.WriteSet, []string{
+		"temas/tema_032",
+		"temas/tema_032/coordinacion",
+	})
+	redaccionRef := parent.TaskID + "-subrole-redaccion"
+	for _, childRef := range parent.ChildTaskRefs {
+		if !stringInSetV0(parent.DependsOn, childRef) {
+			t.Fatalf("parent.depends_on no contiene %s: parent=%+v", childRef, parent)
+		}
+	}
+	var redaccion orquestadirectoragent.DirectorAgentMicrotaskV0
+	for _, child := range children {
+		if child.TaskID == redaccionRef {
+			redaccion = child
+			break
+		}
+	}
+	if redaccion.TaskID == "" ||
+		!stringInSetV0(redaccion.WriteSet, "temas/tema_032/subroles/redaccion") ||
+		stringInSetV0(redaccion.WriteSet, "temas/tema_032") {
+		t.Fatalf("redaccion=%+v children=%+v", redaccion, children)
 	}
 }
 
@@ -1127,6 +1192,27 @@ func containsOpenPhaseForTestV0(
 		}
 	}
 	return false
+}
+
+func appChangeOPESSubroleMicrotasksForTestV0(
+	decisions []orquestadirectoragent.DirectorAgentDecisionV0,
+) (orquestadirectoragent.DirectorAgentMicrotaskV0, []orquestadirectoragent.DirectorAgentMicrotaskV0) {
+	children := make([]orquestadirectoragent.DirectorAgentMicrotaskV0, 0, 6)
+	var parent orquestadirectoragent.DirectorAgentMicrotaskV0
+	for _, decision := range decisions {
+		if decision.CreateMicrotask == nil {
+			continue
+		}
+		task := decision.CreateMicrotask.Task
+		if strings.TrimSpace(task.ParentTaskRef) != "" {
+			children = append(children, task)
+			continue
+		}
+		if len(task.ChildTaskRefs) > 0 {
+			parent = task
+		}
+	}
+	return parent, children
 }
 
 func containsFragmentInSetForTestV0(values []string, fragment string) bool {

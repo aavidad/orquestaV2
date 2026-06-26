@@ -1,5 +1,32 @@
 # Tareas
 
+## ACDS-007
+
+Objetivo: evitar que OPES 1+6 complete subroles utiles sin padre capaz de
+consolidar el producto canonico por estrechamiento de write-set.
+
+Estado: hecho.
+
+Incidencia: un padre OPES con seis subroles recibia solo `base/coordinacion`.
+Cuando los subroles generaban material valido bajo `base/subroles/<rol>`, el
+padre no podia escribir el producto canonico bajo `base` aunque OPES hubiese
+autorizado ese `allowed_write_set`.
+
+Solucion:
+
+- conservar el write-set de producto en el padre integrador;
+- mantener los hijos acotados a `base/subroles/<rol>`;
+- ordenar la materializacion como seis hijos y padre posterior;
+- declarar `depends_on` del padre hacia los seis hijos para evitar solape vivo
+  de write-sets.
+
+Validacion:
+
+- `TestAppChangeDirectorDecisionSourceV0MaterializaSeisSubrolesOPES`;
+- `TestAppChangeDirectorDecisionSourceV0OPESSubrolesPadreConservaWriteSetProductoAutorizado`;
+- `go test -count=1 ./modulos/orquesta-app-change-director-source`;
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'ExternalWorkRunOPESSubroles'`.
+
 ## ACDS-006
 
 Objetivo: evitar que un `external_work` aceptado quede bloqueado o invisible

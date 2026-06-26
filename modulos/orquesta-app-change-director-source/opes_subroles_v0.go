@@ -161,6 +161,13 @@ func appChangeOPESParentCoordinationWriteSetV0(base []string) []string {
 	return appChangeOPESWriteSetWithSuffixV0(base, "coordinacion")
 }
 
+func appChangeOPESParentProductWriteSetV0(base []string) []string {
+	out := make([]string, 0, len(base)*2)
+	out = append(out, base...)
+	out = append(out, appChangeOPESParentCoordinationWriteSetV0(base)...)
+	return compactAppChangeSourceRefsV0(out)
+}
+
 func appChangeOPESWriteSetWithSuffixV0(base []string, suffix string) []string {
 	suffix = strings.Trim(strings.TrimSpace(suffix), "/")
 	out := make([]string, 0, len(base))
