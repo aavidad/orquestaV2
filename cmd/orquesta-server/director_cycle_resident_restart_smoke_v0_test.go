@@ -21,7 +21,7 @@ func TestRuntimeResidentDirectorConduceDirectorCycleStepTrasRestartV0(t *testing
 	config.Addr = "127.0.0.1:0"
 	config.ResidentDirectorEnabled = true
 	config.ResidentDirectorMaxActions = 3
-	config.TickInterval = 10 * time.Millisecond
+	config.TickInterval = 100 * time.Millisecond
 	config.AuditDisabled = true
 	config.IdleSelfImprovementDisabled = true
 	config.ShutdownGracePeriod = 500 * time.Millisecond

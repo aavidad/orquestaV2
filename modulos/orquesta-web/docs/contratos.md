@@ -661,7 +661,7 @@ Campos:
 - query: request_id, correlation_id, locale, run_ref?, app_ref?,
   external_job_ref?, queue_ref?, app_refs?, queue_limit? y flags de telemetria.
 - viewmodel: queue_live, run_live, queue_ref, run_ref, runs, agents,
-  ops_snapshot, diagnostics y errores_publicos.
+  queue_health con `agents_live`, ops_snapshot, diagnostics y errores_publicos.
 Invariantes:
 - Consume `POST /api/v0/autoprogramming/status`.
 - Delega estado de cola/run en `orquesta.autoprogramming.status.v0`.

@@ -41,6 +41,7 @@ type WebAutoprogrammingStatusViewModelV0 struct {
 type WebAutoprogrammingQueueHealthV0 struct {
 	Queued                    int `json:"queued,omitempty"`
 	RunningLive               int `json:"running_live,omitempty"`
+	AgentsLive                int `json:"agents_live,omitempty"`
 	RunningStale              int `json:"running_stale,omitempty"`
 	RunningStaleNoProcess     int `json:"running_stale_no_process,omitempty"`
 	RunningWithoutRecentStats int `json:"running_without_recent_stats,omitempty"`
@@ -140,6 +141,7 @@ func webAutoprogrammingQueueHealthV0(
 	return &WebAutoprogrammingQueueHealthV0{
 		Queued:                    value.Queued,
 		RunningLive:               value.RunningLive,
+		AgentsLive:                value.AgentsLive,
 		RunningStale:              value.RunningStale,
 		RunningStaleNoProcess:     value.RunningStaleNoProcess,
 		RunningWithoutRecentStats: value.RunningWithoutRecentStats,

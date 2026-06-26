@@ -30,6 +30,7 @@ func TestWebAutoprogrammingStatusViewModelV0AgregaColaYRunVivos(t *testing.T) {
 		QueueHealth: &orquestamcp.MCPAutoprogrammingQueueHealthV0{
 			Queued:                    1,
 			RunningLive:               1,
+			AgentsLive:                2,
 			RunningStale:              2,
 			RunningStaleNoProcess:     2,
 			RunningWithoutRecentStats: 9,
@@ -111,6 +112,7 @@ func TestWebAutoprogrammingStatusViewModelV0AgregaColaYRunVivos(t *testing.T) {
 	if vm.QueueHealth == nil ||
 		vm.QueueHealth.Queued != 1 ||
 		vm.QueueHealth.RunningLive != 1 ||
+		vm.QueueHealth.AgentsLive != 2 ||
 		vm.QueueHealth.RunningStale != 2 ||
 		vm.QueueHealth.RunningStaleNoProcess != 2 ||
 		vm.QueueHealth.RunningWithoutRecentStats != 9 ||

@@ -14,7 +14,8 @@ El modulo convierte `GoalObservationRequestV0` en
 
 ## CODEX-GOAL-002 composition root
 
-Estado: cerrado localmente para wiring opt-in; smoke real pendiente.
+Estado: cerrado localmente para wiring opt-in; smoke real app-server stdio
+cerrado el 2026-06-26.
 
 `cmd/orquesta-server` puede inyectar starter y observer reales con
 `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o `app_server_stdio`. Esos
@@ -26,7 +27,8 @@ modelo ni rutas. Sin la variable de backend no se expone launcher/observer.
 
 ## CODEX-GOAL-003 smoke opt-in
 
-Estado: pendiente.
+Estado: cerrado localmente con `app_server_stdio`; `app_server_proxy` sigue
+opt-in pendiente de daemon/socket compatible.
 
 Ejecutar un goal temporal sobre repo de prueba y validar que Orquesta recibe
 `complete`/`blocked` con evidencias.
@@ -42,3 +44,8 @@ instalar Codex standalone con el instalador oficial indicado por la CLI y
 repetir el smoke.
 Actualizacion 2026-06-26: el socket manual listado como `running` no respondio
 por `codex app-server proxy`; el backend local viable es `app_server_stdio`.
+Ejecucion real 2026-06-26: `scripts/smoke_goal_first_app_server_real.sh` paso
+con `ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio`: Codex ejecuto el goal,
+escribio resultado durable, Orquesta observo `goal_status=complete` y cerro la
+run como `cerrada` con `closure_status=accepted`, `closure_accepted=true`,
+`artifact_refs=2` y `evidence_refs=9`.

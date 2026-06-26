@@ -37,6 +37,10 @@ func autoprogrammingHTMLV0() string {
     .status-grid { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:6px 10px; margin:0; }
     .status-grid dt { color:var(--muted); }
     .status-grid dd { margin:0; min-width:0; word-break:break-word; }
+    .health-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
+    .health-item { border:1px solid #3d4b56; border-radius:8px; padding:8px; background:#111820; min-width:0; }
+    .health-item strong { display:block; font-size:18px; }
+    .health-item span { display:block; color:var(--muted); font-size:12px; }
     .action-list { display:grid; gap:8px; }
     .action-item { display:grid; gap:4px; padding:9px; border:1px solid #3d4b56; border-left:4px solid var(--warn); border-radius:8px; background:#111820; }
     .action-item.blocked { border-left-color:var(--bad); }
@@ -46,7 +50,7 @@ func autoprogrammingHTMLV0() string {
     pre { margin:0; max-height:420px; overflow:auto; padding:12px; border-radius:10px; background:#090d11; border:1px solid #24303a; white-space:pre-wrap; word-break:break-word; }
     .actions { display:flex; gap:8px; flex-wrap:wrap; }
     button:disabled { opacity:.55; cursor:not-allowed; }
-    @media (max-width: 860px) { body{padding:14px} header,.grid,.row{grid-template-columns:1fr; display:grid} .nav{justify-content:flex-start} }
+    @media (max-width: 860px) { body{padding:14px} header,.grid,.row,.health-grid{grid-template-columns:1fr; display:grid} .nav{justify-content:flex-start} }
   </style>
 </head>
 <body>
@@ -116,6 +120,10 @@ El cambio queda cubierto por tests</textarea></label>
           </div>
           <div id="goal-note" class="hint">Sin goal lanzado.</div>
         </section>
+        <section id="queue-health-panel" class="action-list" hidden>
+          <h2>Salud de cola</h2>
+          <div id="queue-health-grid" class="health-grid"></div>
+        </section>
         <section id="stale-running-panel" class="action-list" hidden>
           <h2>Acciones requeridas</h2>
           <div id="stale-running-list" class="action-list"></div>
@@ -131,6 +139,8 @@ El cambio queda cubierto por tests</textarea></label>
     const statsLink = document.getElementById('stats-link');
     const stalePanel = document.getElementById('stale-running-panel');
     const staleList = document.getElementById('stale-running-list');
+    const queueHealthPanel = document.getElementById('queue-health-panel');
+    const queueHealthGrid = document.getElementById('queue-health-grid');
     const superviseRunButton = document.getElementById('supervise-run');
     const goalPanel = document.getElementById('goal-panel');
     const goalRefNode = document.getElementById('goal-ref');
@@ -162,6 +172,7 @@ El cambio queda cubierto por tests</textarea></label>
         statsLink.href = '/director-stats?include_agent_progress=true&run_ref=' + encodeURIComponent(currentRunRef);
       }
       renderGoal(value || {});
+      renderQueueHealth((value || {}).queue_health || null);
       renderStaleRunning((value || {}).stale_running || []);
       updateSuperviseState();
     }
@@ -248,6 +259,30 @@ El cambio queda cubierto por tests</textarea></label>
         action.textContent = item.recommended_action || 'inspect_run_ref';
         row.append(head, meta, action);
         staleList.appendChild(row);
+      });
+    }
+    function renderQueueHealth(health) {
+      queueHealthGrid.textContent = '';
+      queueHealthPanel.hidden = !health;
+      if (!health) return;
+      [
+        ['Agentes vivos', health.agents_live || 0],
+        ['Runs vivas', health.running_live || 0],
+        ['Sin stats recientes', health.running_without_recent_stats || 0],
+        ['Stale sin proceso', health.running_stale_no_process || health.running_stale || 0],
+        ['En cola', health.queued || 0],
+        ['Bloqueadas', health.blocked || 0],
+        ['Completadas', health.completed || 0],
+        ['Fallidas', health.failed || 0]
+      ].forEach(([label, value]) => {
+        const item = document.createElement('div');
+        item.className = 'health-item';
+        const number = document.createElement('strong');
+        number.textContent = String(value);
+        const text = document.createElement('span');
+        text.textContent = label;
+        item.append(number, text);
+        queueHealthGrid.appendChild(item);
       });
     }
     async function postJSON(url, payload) {

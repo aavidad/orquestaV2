@@ -20,6 +20,8 @@ func TestAutoprogrammingWebEndpointV0RenderizaPantallaOperativa(t *testing.T) {
 		"/api/v0/autoprogramming/status",
 		"/api/v0/autoprogramming/goal/observe",
 		"/api/v0/autoprogramming/supervise",
+		"queue-health-panel",
+		"agents_live",
 		`href="/ops"`,
 		"Codex Goal automatico",
 		"goal_migration:goal-first",
