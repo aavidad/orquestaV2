@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
@@ -158,6 +159,63 @@ func TestCodexStackRunSupervisorErrorResultMCPV0DistingueErrorConAgenteVivo(t *t
 		!codexStackStringInSetForTestV0(result.NextActions, "retry_supervise") ||
 		!codexStackStringInSetForTestV0(result.NextActions, "do_not_relaunch_same_run_ref_while_process_live") {
 		t.Fatalf("next_actions=%+v", result.NextActions)
+	}
+}
+
+func TestCodexStackRunSupervisorRequestedNotStartedDiagnosticsMCPV0ExponeExternalWorkQAVisual(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	runRef := "run-opes-qa-visual-remota-tcae-psicologo-asg-operario-20260626"
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, orquestacoreworkflow.OrchestrationRunV0{
+		RunID:      runRef,
+		ProjectRef: "opes",
+		AppSpecRef: "app-spec-external-work-opes-qa-visual",
+		Status:     orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+		Tasks:      []string{"task-ref-qa-visual-remota-tcae-001"},
+		Agents:     []string{"agent-ref-qa-visual-remota-tcae-001"},
+	}); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	result := CodexSupervisorResultV0{
+		StopReason: CodexSupervisorStopStoppedV0,
+		Last: CodexSupervisorRuntimeSnapshotV0{
+			Status:     CodexSupervisorRuntimeStoppedV0,
+			SessionRef: runRef,
+			EvidenceRefs: []string{
+				"operational-director-plan-state:blocked",
+				"wait-subagents-terminal-without-delivery",
+			},
+		},
+	}
+
+	diagnostics := stack.codexStackRunSupervisorRequestedNotStartedDiagnosticsMCPV0(
+		ctx,
+		orquestamcp.MCPRunSupervisorToolInputV0{RunRef: runRef},
+		result,
+	)
+	output := codexStackRunSupervisorWithRequestedNotStartedActionsMCPV0(
+		orquestamcp.NewMCPRunSupervisorOKResultV0(
+			orquestamcp.MCPRunSupervisorToolInputV0{RunRef: runRef},
+			runRef,
+			string(CodexSupervisorStopStoppedV0),
+			1,
+			codexStackRunSupervisorSnapshotMCPV0(result.Last),
+			nil,
+		),
+		diagnostics,
+	)
+
+	if len(diagnostics) != 1 ||
+		diagnostics[0].Code != codexStackExternalWorkAgentRequestedNotStartedDiagnosticV0 ||
+		!strings.Contains(diagnostics[0].Message, "requested_agents=1") ||
+		!strings.Contains(diagnostics[0].Message, "started_agents=0") ||
+		!strings.Contains(diagnostics[0].Message, "retry_materialization_or_check_capacity_auth_runtime_queue_outbox_policy") {
+		t.Fatalf("diagnostics=%+v", diagnostics)
+	}
+	if !codexStackStringInSetForTestV0(output.NextActions, "retry_materialization") ||
+		!codexStackStringInSetForTestV0(output.NextActions, "check_capacity_auth_runtime_queue_outbox_policy") ||
+		!codexStackStringInSetForTestV0(output.NextActions, "do_not_mark_completed_without_agent_start_or_delivery") {
+		t.Fatalf("next_actions=%+v", output.NextActions)
 	}
 }
 

@@ -213,6 +213,11 @@ Cobertura Go actual:
   sigue `running_live`: expone el diagnostico publico
   `supervisor_transition_error_but_agents_live` y recomienda esperar/reintentar
   en vez de relanzar la misma run mientras el proceso siga vivo.
+- `TestCodexStackRunSupervisorRequestedNotStartedDiagnosticsMCPV0ExponeExternalWorkQAVisual`
+  valida que `runs/supervise` expone
+  `external_work_agent_requested_not_started` para una QA visual OPES aceptada
+  con `agents_requested>0`, `agents_started=0`, `agents_in_flight=0` y trabajo
+  abierto, en vez de dejar solo `wait-subagents-terminal-without-delivery`.
 - `TestCodexStackRealRequiredTestRunnerEndToEndOptInV0` queda desactivado por
   defecto y valida con un agente Codex real acotado el ciclo del Director
   Operativo: task con `RequiredTests`, `WaitAgentRefs`, ACK/entrega, review

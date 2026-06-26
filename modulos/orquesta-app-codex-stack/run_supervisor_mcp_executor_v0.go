@@ -100,6 +100,9 @@ func (executor CodexStackRunSupervisorExecutorV0) Execute(
 		output.Diagnostics,
 		executor.Stack.codexStackRunSupervisorQueueDiagnosticsMCPV0(ctx, input, result)...,
 	)
+	requestedNotStartedDiagnostics := executor.Stack.codexStackRunSupervisorRequestedNotStartedDiagnosticsMCPV0(ctx, input, result)
+	output.Diagnostics = append(output.Diagnostics, requestedNotStartedDiagnostics...)
+	output = codexStackRunSupervisorWithRequestedNotStartedActionsMCPV0(output, requestedNotStartedDiagnostics)
 	output = addAutoprogrammingResidentEvidenceV0(input, output)
 	output = maybePrepareAutoprogrammingResidentSelfRepairV0(ctx, input, *executor.Stack, result, output)
 	return output, nil
@@ -217,6 +220,22 @@ func (stack StackV0) normalizeDirectOPESRunSupervisorInputV0(
 }
 
 func codexStackRunLooksOPESDirectWorkV0(projectRef string, appSpecRef string) bool {
+	return codexStackRunLooksOPESDirectWorkStrictV0(projectRef, appSpecRef)
+}
+
+func codexStackRunLooksExternalWorkV0(projectRef string, appSpecRef string) bool {
+	if codexStackRunLooksOPESDirectWorkStrictV0(projectRef, appSpecRef) {
+		return true
+	}
+	projectRef = strings.ToLower(strings.TrimSpace(projectRef))
+	appSpecRef = strings.ToLower(strings.TrimSpace(appSpecRef))
+	return strings.Contains(projectRef, "external-work") ||
+		strings.Contains(projectRef, "external_work") ||
+		strings.Contains(appSpecRef, "external-work") ||
+		strings.Contains(appSpecRef, "external_work")
+}
+
+func codexStackRunLooksOPESDirectWorkStrictV0(projectRef string, appSpecRef string) bool {
 	projectRef = strings.ToLower(strings.TrimSpace(projectRef))
 	appSpecRef = strings.ToLower(strings.TrimSpace(appSpecRef))
 	return projectRef == "opes" ||

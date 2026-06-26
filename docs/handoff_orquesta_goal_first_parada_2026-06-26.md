@@ -106,6 +106,10 @@ bateria focal + `go test -count=1 -p=1 ./...` pasaron.
   `supervisor_transition_error_but_agents_live` y `next_actions` de
   esperar/reintentar, sin relanzar la misma `run_ref` mientras el proceso siga
   vivo.
+- 2026-06-26: `orquesta-app-codex-stack` anade diagnostico de frontera para
+  `runs/supervise` en external-work/OPES con agente pedido pero no arrancado:
+  `external_work_agent_requested_not_started`, causa publica y acciones de
+  reintento/revision de capacidad, auth, runtime, cola, outbox o politica.
 
 ## No reabrir salvo regresion
 

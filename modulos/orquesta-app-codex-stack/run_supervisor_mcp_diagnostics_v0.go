@@ -1,14 +1,18 @@
 package orquestaappcodexstack
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestarails "orquesta/modulos/orquesta-rails"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 )
+
+const codexStackExternalWorkAgentRequestedNotStartedDiagnosticV0 = "external_work_agent_requested_not_started"
 
 func codexStackRunSupervisorErrorResultMCPV0(
 	input orquestamcp.MCPRunSupervisorToolInputV0,
@@ -131,6 +135,70 @@ func codexStackRunSupervisorErrorStringV0(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+func (stack *StackV0) codexStackRunSupervisorRequestedNotStartedDiagnosticsMCPV0(
+	ctx context.Context,
+	input orquestamcp.MCPRunSupervisorToolInputV0,
+	result CodexSupervisorResultV0,
+) []orquestamcp.MCPAutoprogrammingDiagnosticV0 {
+	if stack == nil || stack.Stores.RunStore == nil {
+		return nil
+	}
+	runRef := strings.TrimSpace(firstNonEmptyQueuedSourceV0(input.RunRef, result.Last.SessionRef))
+	if runRef == "" {
+		return nil
+	}
+	run, err := stack.Stores.RunStore.LoadRunV0(ctx, runRef)
+	if err != nil ||
+		!codexStackRunLooksExternalWorkV0(run.ProjectRef, run.AppSpecRef) ||
+		len(stackDrainOpenTaskRefsV0(run)) == 0 {
+		return nil
+	}
+	requested := compactStringsV0(run.Agents)
+	started := compactStringsV0(run.StartedAgents)
+	inFlight := stackDrainPendingStartedAgentRefsV0(run)
+	if len(requested) == 0 || len(started) > 0 || len(inFlight) > 0 {
+		return nil
+	}
+	message := strings.Join(compactStringsV0([]string{
+		"requested_agents=" + strconv.Itoa(len(requested)),
+		"started_agents=0",
+		"in_flight=0",
+		"cause=unknown",
+		"action=retry_materialization_or_check_capacity_auth_runtime_queue_outbox_policy",
+	}), " ")
+	return []orquestamcp.MCPAutoprogrammingDiagnosticV0{{
+		Code:    codexStackExternalWorkAgentRequestedNotStartedDiagnosticV0,
+		Scope:   "run:" + runRef,
+		Message: message,
+		EvidenceRefs: compactStringsV0(append(
+			result.Last.EvidenceRefs,
+			"evidence-ref-external-work-agent-requested-not-started",
+		)),
+	}}
+}
+
+func codexStackRunSupervisorWithRequestedNotStartedActionsMCPV0(
+	output orquestamcp.MCPRunSupervisorToolResultV0,
+	diagnostics []orquestamcp.MCPAutoprogrammingDiagnosticV0,
+) orquestamcp.MCPRunSupervisorToolResultV0 {
+	hasRequestedNotStarted := false
+	for _, diagnostic := range diagnostics {
+		if strings.TrimSpace(diagnostic.Code) == codexStackExternalWorkAgentRequestedNotStartedDiagnosticV0 {
+			hasRequestedNotStarted = true
+			break
+		}
+	}
+	if !hasRequestedNotStarted {
+		return output
+	}
+	output.NextActions = compactStringsV0(append(output.NextActions,
+		"retry_materialization",
+		"check_capacity_auth_runtime_queue_outbox_policy",
+		"do_not_mark_completed_without_agent_start_or_delivery",
+	))
+	return output
 }
 
 func codexStackRunSupervisorDiagnosticsWithFallbackErrorV0(
