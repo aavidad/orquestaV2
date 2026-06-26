@@ -470,6 +470,10 @@ Evidencia esperada: si `run_ref` no carga pero `external_job_ref` es valido,
 `orquesta.director.stats.v0` resuelve la run canonica por puerto externo y
 devuelve `estado=ok`, `run_ref` canonico y `external_job`.
 
+Evidencia adicional: la proyeccion `external_job` conserva `status_reason`,
+`issue_refs` y `diagnostics` emitidos por el puerto externo, manteniendolos como
+diagnostico publico y no como logica de negocio MCP.
+
 ## Prueba prepare-run autoprogramming 2026-05-22
 
 Comando:

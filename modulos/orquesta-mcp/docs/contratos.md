@@ -120,7 +120,8 @@ Campos:
       `RunControl`, `run_control_status`, checkpoint, forced y evidencias
       compactas
     external_job: proyeccion compacta opcional con job_ref, work_kind,
-      change_ref, run_ref, task_ref, agent_ref, status y delivery_refs
+      change_ref, run_ref, task_ref, agent_ref, status, status_reason,
+      delivery_refs, issue_refs, evidence_refs y diagnostics publicos
     decision_context
 Invariantes:
   - Si llega `external_job_ref`, MCP delega la resolucion en un puerto
@@ -128,6 +129,8 @@ Invariantes:
   - Si falta `run_ref`, el puerto puede resolverlo desde el job externo.
   - La salida conserva `DirectorRunStatsV0`; `external_job` es una proyeccion
     aditiva para que OPES no tenga que interpretar toda la run.
+  - `external_job.status_reason`, `issue_refs` y `diagnostics` son senales
+    operativas advisory del puerto inyectado; no son rails duros del core.
   - Si se inyecta `RunControlReaderPortV0`, el tool puede distinguir parada de
     run solicitada antes de que haya `StoppedAgents` propagados.
 Pruebas de contrato:

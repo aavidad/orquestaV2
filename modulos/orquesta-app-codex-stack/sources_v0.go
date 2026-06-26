@@ -175,6 +175,7 @@ func externalJobStatsSourceV0(config ConfigV0) CodexStackExternalJobStatsSourceV
 		RunStore:       config.Stores.RunStore,
 		AppChangeStore: config.Stores.AppChangeStore,
 		ReceiptStore:   config.Stores.ReceiptStore,
+		TaskStore:      config.Stores.TaskStore,
 	}
 }
 

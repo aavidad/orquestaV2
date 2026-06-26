@@ -209,7 +209,14 @@ func TestMCPDirectorStatsToolExecutorV0ResuelveRunPorJobExterno(t *testing.T) {
 			TaskRef:      "task-ref-opes-001",
 			AgentRef:     "agent-ref-opes-001",
 			Status:       "running",
+			StatusReason: "parent_integration_pending",
 			DeliveryRefs: []string{"delivery-ref-opes-001"},
+			IssueRefs:    []string{"issue-ref-parent-integration-pending"},
+			Diagnostics: []MCPDirectorExternalJobDiagnosticV0{{
+				Code:         "external_job_parent_integration_pending",
+				Scope:        "job-ref-opes-001",
+				EvidenceRefs: []string{"task-ref-opes-001"},
+			}},
 		},
 	}
 
@@ -230,6 +237,9 @@ func TestMCPDirectorStatsToolExecutorV0ResuelveRunPorJobExterno(t *testing.T) {
 		result.ExternalJob == nil ||
 		result.ExternalJob.JobRef != "job-ref-opes-001" ||
 		result.ExternalJob.TaskRef != "task-ref-opes-001" ||
+		result.ExternalJob.StatusReason != "parent_integration_pending" ||
+		len(result.ExternalJob.IssueRefs) != 1 ||
+		len(result.ExternalJob.Diagnostics) != 1 ||
 		result.Stats == nil {
 		t.Fatalf("result=%+v", result)
 	}

@@ -59,15 +59,25 @@ type MCPDirectorExternalJobStatsRequestV0 struct {
 }
 
 type MCPDirectorExternalJobStatsV0 struct {
-	AppRef       string   `json:"app_ref,omitempty"`
-	JobRef       string   `json:"job_ref"`
-	WorkKind     string   `json:"work_kind,omitempty"`
-	ChangeRef    string   `json:"change_ref,omitempty"`
-	RunRef       string   `json:"run_ref,omitempty"`
-	TaskRef      string   `json:"task_ref,omitempty"`
-	AgentRef     string   `json:"agent_ref,omitempty"`
-	Status       string   `json:"status,omitempty"`
-	DeliveryRefs []string `json:"delivery_refs,omitempty"`
+	AppRef       string                               `json:"app_ref,omitempty"`
+	JobRef       string                               `json:"job_ref"`
+	WorkKind     string                               `json:"work_kind,omitempty"`
+	ChangeRef    string                               `json:"change_ref,omitempty"`
+	RunRef       string                               `json:"run_ref,omitempty"`
+	TaskRef      string                               `json:"task_ref,omitempty"`
+	AgentRef     string                               `json:"agent_ref,omitempty"`
+	Status       string                               `json:"status,omitempty"`
+	StatusReason string                               `json:"status_reason,omitempty"`
+	DeliveryRefs []string                             `json:"delivery_refs,omitempty"`
+	IssueRefs    []string                             `json:"issue_refs,omitempty"`
+	EvidenceRefs []string                             `json:"evidence_refs,omitempty"`
+	Diagnostics  []MCPDirectorExternalJobDiagnosticV0 `json:"diagnostics,omitempty"`
+}
+
+type MCPDirectorExternalJobDiagnosticV0 struct {
+	Code         string   `json:"code"`
+	Scope        string   `json:"scope,omitempty"`
+	Message      string   `json:"message,omitempty"`
 	EvidenceRefs []string `json:"evidence_refs,omitempty"`
 }
 
@@ -92,7 +102,7 @@ func MCPDirectorStatsDescriptorV0() MCPDirectorStatsToolDescriptorV0 {
 		Name:        MCPDirectorStatsToolNameV0,
 		Version:     MCPDirectorStatsToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,app_ref?,external_job_ref?,occurred_at?,include_process_refs?,include_agent_progress?,include_agent_usage?}",
-		Output:      "ok:{run_ref,external_job?,stats{progress,closure},decision_context,ops_snapshot}|error:{errores_publicos}",
+		Output:      "ok:{run_ref,external_job?{status,status_reason?,issue_refs?,diagnostics?},stats{progress,closure},decision_context,ops_snapshot}|error:{errores_publicos}",
 		ResourceURI: MCPDirectorStatsResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",

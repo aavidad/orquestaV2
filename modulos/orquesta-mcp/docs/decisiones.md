@@ -77,7 +77,9 @@ MCP.
 Impacto: el input acepta `app_ref` y `external_job_ref`; el resultado puede
 incluir `external_job` con refs compactas de job, task, agente, estado y
 deliveries. MCP sigue siendo hexagonal porque la resolucion se delega en
-`MCPDirectorExternalJobStatsSourcePortV0`.
+`MCPDirectorExternalJobStatsSourcePortV0`. Si el puerto detecta una condicion
+operativa de dominio, puede anadir `status_reason`, `issue_refs` y
+`diagnostics` compactos sin convertirlos en rails duros ni meter OPES en MCP.
 Contratos afectados: mcp.tool.orquesta.director.stats.v0;
 rest.bridge.orquesta.director.stats.v0.
 Estado: aceptada localmente

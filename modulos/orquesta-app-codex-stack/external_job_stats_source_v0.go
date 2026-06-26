@@ -13,10 +13,18 @@ import (
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 )
 
+const (
+	codexStackExternalJobStatusIntegrationRequiredV0 = "integration_required"
+
+	codexStackExternalJobStatusReasonParentIntegrationPendingV0                   = "parent_integration_pending"
+	codexStackExternalJobStatusReasonProductNotConsolidatedDueWriteSetNarrowingV0 = "product_not_consolidated_due_write_set_narrowing"
+)
+
 type CodexStackExternalJobStatsSourceV0 struct {
 	RunStore       orquestacionnucleoapp.RunStorePortV0
 	AppChangeStore orquestaappchange.AppChangeRecordSourcePortV0
 	ReceiptStore   CodexReceiptStorePortV0
+	TaskStore      orquestacionnucleoapp.WorkflowTaskStorePortV0
 }
 
 func (source CodexStackExternalJobStatsSourceV0) ResolveDirectorExternalJobStatsV0(
@@ -99,8 +107,89 @@ func (source CodexStackExternalJobStatsSourceV0) externalJobStatsForRecordV0(
 	if stats.Status != "completed" && len(stats.DeliveryRefs) > 0 {
 		stats.Status = "delivered"
 	}
+	source.enrichExternalJobTaskDiagnosticsV0(ctx, run, &stats)
 	stats.EvidenceRefs = compactCodexStackStringsV0(append(stats.EvidenceRefs, stats.DeliveryRefs...))
 	return stats, true, nil
+}
+
+func (source CodexStackExternalJobStatsSourceV0) enrichExternalJobTaskDiagnosticsV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	stats *orquestamcp.MCPDirectorExternalJobStatsV0,
+) {
+	if stats == nil || source.TaskStore == nil || strings.TrimSpace(stats.TaskRef) == "" {
+		return
+	}
+	tasks, err := source.TaskStore.LoadWorkflowTasksV0(ctx, run.RunID, []string{stats.TaskRef})
+	if err != nil || len(tasks) == 0 {
+		return
+	}
+	parent := tasks[0]
+	childRefs := compactCodexStackStringsV0(parent.ChildTaskRefs)
+	if len(childRefs) == 0 ||
+		externalJobTaskResolvedV0(run, parent.TaskID) ||
+		!externalJobAllTasksResolvedV0(run, childRefs) {
+		return
+	}
+	reason := codexStackExternalJobStatusReasonParentIntegrationPendingV0
+	code := "external_job_parent_integration_pending"
+	if externalJobParentWriteSetOnlyCoordinationV0(parent.WriteSet) {
+		reason = codexStackExternalJobStatusReasonProductNotConsolidatedDueWriteSetNarrowingV0
+		code = reason
+	}
+	stats.Status = codexStackExternalJobStatusIntegrationRequiredV0
+	stats.StatusReason = reason
+	stats.IssueRefs = compactCodexStackStringsV0(append(
+		stats.IssueRefs,
+		"issue-ref-"+code+"-"+codexStackOperationalClosureSafeRefV0(parent.TaskID),
+		parent.TaskID,
+	))
+	stats.EvidenceRefs = compactCodexStackStringsV0(append(
+		stats.EvidenceRefs,
+		parent.TaskID,
+	))
+	stats.Diagnostics = append(stats.Diagnostics, orquestamcp.MCPDirectorExternalJobDiagnosticV0{
+		Code:         code,
+		Scope:        strings.TrimSpace(stats.JobRef),
+		Message:      "integracion del padre pendiente tras resolver las tareas hijas",
+		EvidenceRefs: compactCodexStackStringsV0(append([]string{parent.TaskID}, childRefs...)),
+	})
+}
+
+func externalJobAllTasksResolvedV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	taskRefs []string,
+) bool {
+	if len(taskRefs) == 0 {
+		return false
+	}
+	for _, taskRef := range taskRefs {
+		if !externalJobTaskResolvedV0(run, taskRef) {
+			return false
+		}
+	}
+	return true
+}
+
+func externalJobTaskResolvedV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	taskRef string,
+) bool {
+	return codexStackStringInSetV0(run.DeliveredTasks, taskRef) ||
+		codexStackStringInSetV0(run.ClosedTasks, taskRef)
+}
+
+func externalJobParentWriteSetOnlyCoordinationV0(writeSet []string) bool {
+	entries := compactCodexStackStringsV0(writeSet)
+	if len(entries) == 0 {
+		return false
+	}
+	for _, entry := range entries {
+		if !strings.HasSuffix(strings.Trim(strings.TrimSpace(entry), "/"), "/coordinacion") {
+			return false
+		}
+	}
+	return true
 }
 
 func (source CodexStackExternalJobStatsSourceV0) externalJobDeliveryRefsV0(

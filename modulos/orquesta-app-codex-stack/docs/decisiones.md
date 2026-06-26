@@ -419,8 +419,15 @@ tareas, agentes y deliveries internas de Orquesta.
 Impacto: el stack inyecta `CodexStackExternalJobStatsSourceV0` en
 `orquesta.director.stats.v0`. La fuente resuelve `job_ref -> run_ref/task_ref`
 desde `AppChangeStore`, deriva `agent_ref`, consulta deliveries por
-`ReceiptStore` y proyecta `status` compacto. El `RunFileStoreV0` conserva
-`external_work` persistido para que esa resolucion sobreviva a reinicios.
+`ReceiptStore`, consulta `WorkflowTaskStore` para parentesco padre/subroles y
+proyecta `status` compacto. Si los seis subroles de OPES estan resueltos pero
+el padre sigue sin entrega/cierre, el job queda como `integration_required` con
+`status_reason=parent_integration_pending`; si el padre solo podia escribir en
+`/coordinacion`, el motivo publico es
+`product_not_consolidated_due_write_set_narrowing`. Es diagnostico operativo
+advisory, no rail de contenido ni regla OPES dentro del nucleo. El
+`RunFileStoreV0` conserva `external_work` persistido para que esa resolucion
+sobreviva a reinicios.
 Estado: aceptada.
 ```
 

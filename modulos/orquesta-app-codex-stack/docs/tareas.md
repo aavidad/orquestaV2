@@ -805,6 +805,9 @@ Trabajo aplicado:
 
 - `CodexStackExternalJobStatsSourceV0` resuelve `external_job_ref` desde
   `AppChangeStore`, deriva `task_ref/agent_ref` y proyecta status compacto;
+- cuando `WorkflowTaskStore` muestra que los subroles hijos ya estan resueltos
+  pero el padre sigue sin entrega/cierre, el job externo se expone como
+  `integration_required` con `status_reason`, `issue_refs` y `diagnostics`;
 - `/api/v0/director/stats` acepta `external_job_ref` y puede resolver `run_ref`
   mediante puerto MCP;
 - `RunFileStoreV0` conserva `external_work.job_ref` e `input_fields` al
@@ -817,6 +820,8 @@ Trabajo aplicado:
 Validacion:
 
 - `TestMCPDirectorStatsToolExecutorV0ResuelveRunPorJobExterno`;
+- `TestCodexStackExternalJobStatsSourceV0MarcaIntegracionPendienteTrasSubroles`;
+- `TestCodexStackExternalJobStatsSourceV0ExponeNarrowingLegacyComoRazon`;
 - `TestCodexStackV0OPESExternalWorkRESTCreaMicrotareaSinWriteSetLocal`;
 - `TestMCPRunControlExecutorV0ResuelveRunPorJobExterno`;
 - `TestRunFileStoreAppChangePersistsAfterRecreateAndReplacesV0`;

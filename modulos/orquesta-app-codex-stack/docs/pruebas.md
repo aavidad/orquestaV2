@@ -1051,7 +1051,7 @@ Validacion de stats OPES/job externo 2026-05-13:
 
 ```bash
 go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack ./modulos/orquesta-run-file \
-  -run 'TestMCPDirectorStatsToolExecutorV0ResuelveRunPorJobExterno|TestMCPRunControlExecutorV0ResuelveRunPorJobExterno|TestCodexStackV0OPESExternalWorkRESTCreaMicrotareaSinWriteSetLocal|TestRunFileStoreAppChangePersistsAfterRecreateAndReplacesV0|TestFileDomainWorkArtifactSubmissionLedgerV0PersisteYRecupera'
+  -run 'TestMCPDirectorStatsToolExecutorV0ResuelveRunPorJobExterno|TestMCPRunControlExecutorV0ResuelveRunPorJobExterno|TestCodexStackV0OPESExternalWorkRESTCreaMicrotareaSinWriteSetLocal|TestRunFileStoreAppChangePersistsAfterRecreateAndReplacesV0|TestFileDomainWorkArtifactSubmissionLedgerV0PersisteYRecupera|TestCodexStackExternalJobStatsSourceV0MarcaIntegracionPendienteTrasSubroles|TestCodexStackExternalJobStatsSourceV0ExponeNarrowingLegacyComoRazon'
 ```
 
 Resultado: `ok`.
@@ -1064,6 +1064,10 @@ Evidencia:
   run asociada a `external_job_ref`;
 - la respuesta incluye `external_job` con `job_ref`, `run_ref`, `task_ref`,
   `agent_ref`, `status` y `delivery_refs` cuando existan;
+- si los subroles OPES estan entregados/cerrados y el padre no ha integrado,
+  `external_job.status=integration_required` conserva `status_reason`,
+  `issue_refs` y `diagnostics` para que el consumidor vea el siguiente paso
+  accionable sin interpretar la run completa;
 - `RunFileStoreV0` no pierde `external_work` tras reinicio;
 - el ledger de entregas de dominio puede persistir y deduplicar
   `idempotency_key` despues de recrear el conector.
