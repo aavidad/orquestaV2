@@ -1360,6 +1360,11 @@ Campos:
     estado: ok
     queue?: resultado compacto de orquesta.run_queue.priority.v0
     run?: resultado compacto de orquesta.director.stats.v0
+    queue_health?: separa `running_live`, `running_without_recent_stats` y
+      `running_stale_no_process`; `running_stale` agregado solo cuenta stale
+      verificable sin proceso vivo
+    stale_running?: acciones publicas; una run `running` sin liveness probado se
+      expone como `running_without_recent_stats`, no como stale terminal
     ops_snapshot?: DirectorAutonomousOpsSnapshotV0 agregado de cola/run para
       `/ops` y cockpit operativo
     diagnostics?: diagnostico publico de puertos/errores y consejo no bloqueante
@@ -1371,6 +1376,9 @@ Campos:
 Invariantes:
   - Adaptador inbound fino.
   - Delega cola en `run_queue.priority` y run en `director.stats`.
+  - Para runs `running` visibles en cola puede consultar `director.stats` de
+    forma acotada y con `include_process_refs`; si no hay liveness verificable,
+    no inventa `running_stale_no_process`.
   - El bridge HTTP puede transportar consejo del operador como observacion no
     bloqueante sin tocar el caso de uso.
   - `ops_snapshot` es read-only, no decide runtime ni corta entregas; deriva de
@@ -1397,13 +1405,17 @@ Campos:
     mensaje humano
   output_ok:
     mismo resultado compacto de `orquesta.runs.supervisor.v0` y, por HTTP,
-    eco opcional de operator_advice no bloqueante
+    eco opcional de operator_advice no bloqueante; si la ejecucion sigue viva
+    mas alla de la ventana de respuesta HTTP, devuelve `202 accepted` con
+    `operation_ref`, diagnostico y siguientes acciones de consulta
   output_error:
     mismo error publico reparable de `orquesta.runs.supervisor.v0` y, por HTTP,
     eco opcional de operator_advice no bloqueante si el puerto falta o falla
 Invariantes:
   - Adaptador inbound fino.
   - Delega la supervision puntual en `runs.supervisor` inyectado.
+  - El HTTP no mantiene al cliente bloqueado indefinidamente si ya delego el
+    trabajo; responde parcial y deja evidencia consultable por estado de run/cola.
   - El consejo del operador no detiene ni reemplaza la decision del supervisor.
   - No conoce scheduler, runtime, Codex, DB, filesystem ni proveedor.
 ```

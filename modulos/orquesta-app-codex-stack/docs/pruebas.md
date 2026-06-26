@@ -1051,7 +1051,7 @@ Validacion de stats OPES/job externo 2026-05-13:
 
 ```bash
 go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack ./modulos/orquesta-run-file \
-  -run 'TestMCPDirectorStatsToolExecutorV0ResuelveRunPorJobExterno|TestMCPRunControlExecutorV0ResuelveRunPorJobExterno|TestCodexStackV0OPESExternalWorkRESTCreaMicrotareaSinWriteSetLocal|TestRunFileStoreAppChangePersistsAfterRecreateAndReplacesV0|TestFileDomainWorkArtifactSubmissionLedgerV0PersisteYRecupera|TestCodexStackExternalJobStatsSourceV0MarcaIntegracionPendienteTrasSubroles|TestCodexStackExternalJobStatsSourceV0ExponeNarrowingLegacyComoRazon'
+  -run 'TestMCPDirectorStatsToolExecutorV0ResuelveRunPorJobExterno|TestMCPRunControlExecutorV0ResuelveRunPorJobExterno|TestCodexStackV0OPESExternalWorkRESTCreaMicrotareaSinWriteSetLocal|TestRunFileStoreAppChangePersistsAfterRecreateAndReplacesV0|TestFileDomainWorkArtifactSubmissionLedgerV0PersisteYRecupera|TestCodexStackExternalJobStatsSourceV0MarcaIntegracionPendienteTrasSubroles|TestCodexStackExternalJobStatsSourceV0ExponeNarrowingLegacyComoRazon|TestCodexStackV0ExternalWorkRunOPESSubrolesPadreConservaWriteSetProductoAutorizadoV0'
 ```
 
 Resultado: `ok`.
@@ -1068,6 +1068,9 @@ Evidencia:
   `external_job.status=integration_required` conserva `status_reason`,
   `issue_refs` y `diagnostics` para que el consumidor vea el siguiente paso
   accionable sin interpretar la run completa;
+- el flujo integrado `external-work/run` conserva en el padre OPES el
+  `allowed_write_set` de producto autorizado (`temas/tema_NNN`) y limita los
+  hijos a `subroles/<rol>`, evitando que el padre quede solo en `/coordinacion`;
 - `RunFileStoreV0` no pierde `external_work` tras reinicio;
 - el ledger de entregas de dominio puede persistir y deduplicar
   `idempotency_key` despues de recrear el conector.

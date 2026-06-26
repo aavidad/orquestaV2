@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestMCPAutoprogrammingSuperviseHTTPHandlerV0DelegaEnExecutor(t *testing.T) {
@@ -57,6 +58,44 @@ func TestMCPAutoprogrammingSuperviseHTTPHandlerV0NoCancelaSupervisorPorCierreHTT
 	}
 	if executor.ctxErr != nil {
 		t.Fatalf("executor recibio contexto cancelado: %v", executor.ctxErr)
+	}
+}
+
+func TestMCPAutoprogrammingSuperviseHTTPHandlerV0DevuelveAcceptedSiExecutorSigueVivo(t *testing.T) {
+	executor := &fakeMCPAutoprogrammingSuperviseHTTPExecutorV0{
+		delay: 25 * time.Millisecond,
+		result: MCPRunSupervisorToolResultV0{
+			Estado: MCPRunSupervisorEstadoOKV0,
+			RunRef: "run-ref-autop-supervise-http-background-001",
+		},
+	}
+	body := bytes.NewBufferString(`{
+		"request_id":"request-ref-autop-supervise-http-background-001",
+		"run_ref":"run-ref-autop-supervise-http-background-001",
+		"idempotency_key":"idem-autop-supervise-http-background-001"
+	}`)
+	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingSuperviseHTTPPathV0, body)
+	rec := httptest.NewRecorder()
+
+	newMCPAutoprogrammingSuperviseHTTPHandlerWithTimeoutV0(
+		executor,
+		time.Millisecond,
+	).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPRunSupervisorToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != MCPRunSupervisorEstadoOKV0 ||
+		result.StopReason != "accepted_background" ||
+		result.OperationRef == "" ||
+		!strings.Contains(result.OperationRef, "idem-autop-supervise-http-background-001") ||
+		len(result.NextActions) == 0 ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_supervise_background_accepted") {
+		t.Fatalf("result=%+v", result)
 	}
 }
 
@@ -326,6 +365,7 @@ type fakeMCPAutoprogrammingSuperviseHTTPExecutorV0 struct {
 	ctxErr error
 	result MCPRunSupervisorToolResultV0
 	err    error
+	delay  time.Duration
 }
 
 func (executor *fakeMCPAutoprogrammingSuperviseHTTPExecutorV0) Execute(
@@ -334,6 +374,9 @@ func (executor *fakeMCPAutoprogrammingSuperviseHTTPExecutorV0) Execute(
 ) (MCPRunSupervisorToolResultV0, error) {
 	executor.input = input
 	executor.ctxErr = ctx.Err()
+	if executor.delay > 0 {
+		time.Sleep(executor.delay)
+	}
 	if executor.err != nil {
 		return executor.result, executor.err
 	}

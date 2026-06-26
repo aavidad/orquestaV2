@@ -4,6 +4,8 @@ import "strings"
 
 const (
 	mcpAutoprogrammingActionStaleRunningV0              = "stale_running"
+	mcpAutoprogrammingActionRunningStaleNoProcessV0     = "running_stale_no_process"
+	mcpAutoprogrammingActionRunningWithoutRecentStatsV0 = "running_without_recent_stats"
 	mcpAutoprogrammingActionStaleRunningReconciledV0    = "stale_running_reconciled"
 	mcpAutoprogrammingActionProviderUsageLimitRetryV0   = "provider_usage_limit_retry_after"
 	mcpAutoprogrammingEvidenceRunningStaleReconciledV0  = "evidence-ref-run-queue-running-stale-no-live-process-reconciled"
@@ -13,20 +15,18 @@ const (
 func buildMCPAutoprogrammingStaleRunningV0(
 	queue *MCPRunQueuePriorityToolResultV0,
 	run *MCPDirectorStatsToolResultV0,
+	observedRuns ...*MCPDirectorStatsToolResultV0,
 ) []MCPAutoprogrammingActionableRunV0 {
 	if queue == nil {
 		return nil
 	}
 	out := make([]MCPAutoprogrammingActionableRunV0, 0)
-	liveRunRef := ""
-	if mcpAutoprogrammingRunStatsLiveV0(run) {
-		liveRunRef = strings.TrimSpace(run.Stats.RunRef)
-	}
+	observedByRunRef := mcpAutoprogrammingObservedRunsByRefV0(run, observedRuns...)
 	for _, candidate := range append(
 		append([]MCPRunQueueRankedCandidateCompactV0{}, queue.Ranked...),
 		queue.Terminal...,
 	) {
-		action, ok := mcpAutoprogrammingStaleRunningActionForCandidateV0(candidate, liveRunRef)
+		action, ok := mcpAutoprogrammingStaleRunningActionForCandidateV0(candidate, observedByRunRef)
 		if ok {
 			out = append(out, action)
 		}
@@ -36,7 +36,7 @@ func buildMCPAutoprogrammingStaleRunningV0(
 
 func mcpAutoprogrammingStaleRunningActionForCandidateV0(
 	candidate MCPRunQueueRankedCandidateCompactV0,
-	liveRunRef string,
+	observedByRunRef map[string]*MCPDirectorStatsToolResultV0,
 ) (MCPAutoprogrammingActionableRunV0, bool) {
 	status := strings.ToLower(strings.TrimSpace(candidate.Status))
 	runRef := strings.TrimSpace(candidate.RunRef)
@@ -61,16 +61,50 @@ func mcpAutoprogrammingStaleRunningActionForCandidateV0(
 			"inspect_run_ref_before_relaunch",
 		), true
 	}
-	if status == "running" && runRef != strings.TrimSpace(liveRunRef) {
+	if status == "running" {
+		observed := observedByRunRef[runRef]
+		if mcpAutoprogrammingRunStatsLiveV0(observed) {
+			return MCPAutoprogrammingActionableRunV0{}, false
+		}
+		if observed != nil && observed.Stats != nil {
+			return mcpAutoprogrammingActionableRunFromCandidateV0(
+				candidate,
+				mcpAutoprogrammingActionRunningStaleNoProcessV0,
+				"warning",
+				"running_stale_no_live_process_detected",
+				"reconcile_if_no_live_process_or_wait_for_late_ack",
+			), true
+		}
 		return mcpAutoprogrammingActionableRunFromCandidateV0(
 			candidate,
-			mcpAutoprogrammingActionStaleRunningV0,
-			"warning",
+			mcpAutoprogrammingActionRunningWithoutRecentStatsV0,
+			"info",
 			"queue_candidate_running_requires_liveness_confirmation",
-			"supervise_run_ref_or_reconcile_if_no_live_process",
+			"observe_run_ref_with_process_refs_before_reconcile",
 		), true
 	}
 	return MCPAutoprogrammingActionableRunV0{}, false
+}
+
+func mcpAutoprogrammingObservedRunsByRefV0(
+	run *MCPDirectorStatsToolResultV0,
+	observedRuns ...*MCPDirectorStatsToolResultV0,
+) map[string]*MCPDirectorStatsToolResultV0 {
+	out := map[string]*MCPDirectorStatsToolResultV0{}
+	if run != nil && run.Stats != nil {
+		if runRef := strings.TrimSpace(run.Stats.RunRef); runRef != "" {
+			out[runRef] = run
+		}
+	}
+	for _, observed := range observedRuns {
+		if observed == nil || observed.Stats == nil {
+			continue
+		}
+		if runRef := strings.TrimSpace(observed.Stats.RunRef); runRef != "" {
+			out[runRef] = observed
+		}
+	}
+	return out
 }
 
 func mcpAutoprogrammingActionableRunFromCandidateV0(
@@ -110,7 +144,8 @@ func mcpAutoprogrammingRunStatsLiveV0(run *MCPDirectorStatsToolResultV0) bool {
 		return false
 	}
 	return run.Stats.Progress.ProgressingAgents > 0 ||
-		hasMCPAutoprogrammingLiveAgentSignalV0(run.Stats.Agents)
+		hasMCPAutoprogrammingLiveAgentSignalV0(run.Stats.Agents) ||
+		hasMCPAutoprogrammingLiveProcessSignalV0(run.Stats.Agents)
 }
 
 func diagnosticsFromStaleRunningMCPAutoprogrammingV0(

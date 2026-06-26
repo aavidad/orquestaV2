@@ -7,25 +7,29 @@ import (
 )
 
 const (
-	mcpAutoprogrammingHealthQueuedV0       = "queued"
-	mcpAutoprogrammingHealthRunningLiveV0  = "running_live"
-	mcpAutoprogrammingHealthRunningStaleV0 = "running_stale"
-	mcpAutoprogrammingHealthBlockedV0      = "blocked"
-	mcpAutoprogrammingHealthLostV0         = "lost"
-	mcpAutoprogrammingHealthCompletedV0    = "completed"
-	mcpAutoprogrammingHealthFailedV0       = "failed"
-	mcpAutoprogrammingHealthUnclassifiedV0 = "unclassified"
+	mcpAutoprogrammingHealthQueuedV0                    = "queued"
+	mcpAutoprogrammingHealthRunningLiveV0               = "running_live"
+	mcpAutoprogrammingHealthRunningStaleV0              = "running_stale"
+	mcpAutoprogrammingHealthRunningStaleNoProcessV0     = "running_stale_no_process"
+	mcpAutoprogrammingHealthRunningWithoutRecentStatsV0 = "running_without_recent_stats"
+	mcpAutoprogrammingHealthBlockedV0                   = "blocked"
+	mcpAutoprogrammingHealthLostV0                      = "lost"
+	mcpAutoprogrammingHealthCompletedV0                 = "completed"
+	mcpAutoprogrammingHealthFailedV0                    = "failed"
+	mcpAutoprogrammingHealthUnclassifiedV0              = "unclassified"
 )
 
 func buildMCPAutoprogrammingQueueHealthV0(
 	queue *MCPRunQueuePriorityToolResultV0,
 	run *MCPDirectorStatsToolResultV0,
+	observedRuns ...*MCPDirectorStatsToolResultV0,
 ) *MCPAutoprogrammingQueueHealthV0 {
 	if queue == nil && (run == nil || run.Stats == nil) {
 		return nil
 	}
 	health := MCPAutoprogrammingQueueHealthV0{}
 	seen := map[string]bool{}
+	statsSeen := map[string]bool{}
 	if queue != nil {
 		health.QueueRuns = len(queue.Ranked)
 		for _, item := range queue.Ranked {
@@ -38,10 +42,10 @@ func buildMCPAutoprogrammingQueueHealthV0(
 		}
 	}
 	if run != nil && run.Stats != nil {
-		health.StatsRuns = 1
 		runRef := strings.TrimSpace(run.Stats.RunRef)
 		if runRef != "" {
 			seen[runRef] = true
+			statsSeen[runRef] = true
 		}
 		if item, ok := queueCandidateForRunMCPAutoprogrammingHealthV0(queue, runRef); ok {
 			applyMCPAutoprogrammingHealthClassV0(
@@ -52,6 +56,26 @@ func buildMCPAutoprogrammingQueueHealthV0(
 		}
 		applyMCPAutoprogrammingRunHealthV0(&health, *run.Stats)
 	}
+	for _, observed := range observedRuns {
+		if observed == nil || observed.Stats == nil {
+			continue
+		}
+		runRef := strings.TrimSpace(observed.Stats.RunRef)
+		if runRef == "" || statsSeen[runRef] {
+			continue
+		}
+		statsSeen[runRef] = true
+		seen[runRef] = true
+		if item, ok := queueCandidateForRunMCPAutoprogrammingHealthV0(queue, runRef); ok {
+			applyMCPAutoprogrammingHealthClassV0(
+				&health,
+				classifyMCPAutoprogrammingQueueStatusV0(item.Status),
+				-1,
+			)
+		}
+		applyMCPAutoprogrammingRunHealthV0(&health, *observed.Stats)
+	}
+	health.StatsRuns = countMCPAutoprogrammingSeenRunsV0(statsSeen)
 	health.ObservedRuns = countMCPAutoprogrammingSeenRunsV0(seen)
 	return &health
 }
@@ -61,7 +85,7 @@ func classifyMCPAutoprogrammingQueueStatusV0(status string) string {
 	case "", "ready", "queued", "pending":
 		return mcpAutoprogrammingHealthQueuedV0
 	case "running":
-		return mcpAutoprogrammingHealthRunningStaleV0
+		return mcpAutoprogrammingHealthRunningWithoutRecentStatsV0
 	case "paused", "stopped", "stop_requested", "cancel_requested", "blocked", "needs_replan":
 		return mcpAutoprogrammingHealthBlockedV0
 	case "delivered", "closed", "completed":
@@ -91,11 +115,14 @@ func applyMCPAutoprogrammingRunHealthV0(
 	if stats.Counts.AgentsInFlight > 0 {
 		live := stats.Progress.ProgressingAgents
 		stale := stats.Progress.StalledAgents
-		if live > 0 || hasMCPAutoprogrammingLiveAgentSignalV0(stats.Agents) {
+		liveSignal := live > 0 ||
+			hasMCPAutoprogrammingLiveAgentSignalV0(stats.Agents) ||
+			hasMCPAutoprogrammingLiveProcessSignalV0(stats.Agents)
+		if liveSignal {
 			applyMCPAutoprogrammingHealthClassV0(health, mcpAutoprogrammingHealthRunningLiveV0, 1)
 		}
-		if stale > 0 || live == 0 {
-			applyMCPAutoprogrammingHealthClassV0(health, mcpAutoprogrammingHealthRunningStaleV0, 1)
+		if !liveSignal && (stale > 0 || live == 0) {
+			applyMCPAutoprogrammingHealthClassV0(health, mcpAutoprogrammingHealthRunningStaleNoProcessV0, 1)
 		}
 		return
 	}
@@ -106,6 +133,23 @@ func applyMCPAutoprogrammingRunHealthV0(
 	if stats.Counts.AgentsFailed == 0 && stats.Counts.AgentsLost == 0 && !stats.Closure.Blocked {
 		applyMCPAutoprogrammingHealthClassV0(health, mcpAutoprogrammingHealthUnclassifiedV0, 1)
 	}
+}
+
+func hasMCPAutoprogrammingLiveProcessSignalV0(
+	agents []orquestacionnucleoapp.DirectorAgentStatsV0,
+) bool {
+	for _, agent := range agents {
+		if !agent.InFlight || agent.NeedsAttention || agent.Process == nil {
+			continue
+		}
+		if strings.TrimSpace(agent.Process.ProcessRef) != "" ||
+			strings.TrimSpace(agent.Process.SessionRef) != "" ||
+			strings.TrimSpace(agent.Process.LaunchRef) != "" ||
+			strings.TrimSpace(agent.Process.ReadinessRef) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func hasMCPAutoprogrammingLiveAgentSignalV0(
@@ -166,6 +210,11 @@ func applyMCPAutoprogrammingHealthClassV0(
 		health.RunningLive = nonNegativeMCPAutoprogrammingHealthV0(health.RunningLive + delta)
 	case mcpAutoprogrammingHealthRunningStaleV0:
 		health.RunningStale = nonNegativeMCPAutoprogrammingHealthV0(health.RunningStale + delta)
+	case mcpAutoprogrammingHealthRunningStaleNoProcessV0:
+		health.RunningStale = nonNegativeMCPAutoprogrammingHealthV0(health.RunningStale + delta)
+		health.RunningStaleNoProcess = nonNegativeMCPAutoprogrammingHealthV0(health.RunningStaleNoProcess + delta)
+	case mcpAutoprogrammingHealthRunningWithoutRecentStatsV0:
+		health.RunningWithoutRecentStats = nonNegativeMCPAutoprogrammingHealthV0(health.RunningWithoutRecentStats + delta)
 	case mcpAutoprogrammingHealthBlockedV0:
 		health.Blocked = nonNegativeMCPAutoprogrammingHealthV0(health.Blocked + delta)
 	case mcpAutoprogrammingHealthLostV0:

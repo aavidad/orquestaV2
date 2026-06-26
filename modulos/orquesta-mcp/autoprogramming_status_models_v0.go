@@ -12,17 +12,19 @@ type MCPAutoprogrammingProjectV0 struct {
 }
 
 type MCPAutoprogrammingQueueHealthV0 struct {
-	Queued       int `json:"queued,omitempty"`
-	RunningLive  int `json:"running_live,omitempty"`
-	RunningStale int `json:"running_stale,omitempty"`
-	Blocked      int `json:"blocked,omitempty"`
-	Lost         int `json:"lost,omitempty"`
-	Completed    int `json:"completed,omitempty"`
-	Failed       int `json:"failed,omitempty"`
-	Unclassified int `json:"unclassified,omitempty"`
-	ObservedRuns int `json:"observed_runs,omitempty"`
-	QueueRuns    int `json:"queue_runs,omitempty"`
-	StatsRuns    int `json:"stats_runs,omitempty"`
+	Queued                    int `json:"queued,omitempty"`
+	RunningLive               int `json:"running_live,omitempty"`
+	RunningStale              int `json:"running_stale,omitempty"`
+	RunningStaleNoProcess     int `json:"running_stale_no_process,omitempty"`
+	RunningWithoutRecentStats int `json:"running_without_recent_stats,omitempty"`
+	Blocked                   int `json:"blocked,omitempty"`
+	Lost                      int `json:"lost,omitempty"`
+	Completed                 int `json:"completed,omitempty"`
+	Failed                    int `json:"failed,omitempty"`
+	Unclassified              int `json:"unclassified,omitempty"`
+	ObservedRuns              int `json:"observed_runs,omitempty"`
+	QueueRuns                 int `json:"queue_runs,omitempty"`
+	StatsRuns                 int `json:"stats_runs,omitempty"`
 }
 
 type MCPAutoprogrammingActionableRunV0 struct {

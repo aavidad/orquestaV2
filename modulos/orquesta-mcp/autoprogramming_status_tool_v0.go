@@ -16,6 +16,7 @@ const (
 
 	mcpAutoprogrammingDomainSessionSuppressedReasonV0   = "idle_self_improvement_suppressed_by_domain_session"
 	mcpAutoprogrammingDomainSessionSuppressedEvidenceV0 = "evidence-ref-idle-self-improvement-domain-session"
+	mcpAutoprogrammingRunningStatsMaxV0                 = 8
 )
 
 type MCPAutoprogrammingStatusToolDescriptorV0 struct {
@@ -140,7 +141,10 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 			"supervision no recomendada: replan/stop repetidos sin entregas, reviews ni cierres",
 		))
 	}
-	if mcpAutoprogrammingNeedsRunStatsForSafeSupervisionV0(result.Queue, result.Run) {
+	observedRuns, observedDiagnostics := executor.executeQueueRunningStatsV0(ctx, input, result.Queue, result.Run)
+	result.Diagnostics = append(result.Diagnostics, observedDiagnostics...)
+	if mcpAutoprogrammingNeedsRunStatsForSafeSupervisionV0(result.Queue, result.Run) &&
+		!mcpAutoprogrammingQueueRunningStatsObservedV0(result.Queue, result.Run, observedRuns...) {
 		result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingDiagnosticV0(
 			"run_stats_required_for_safe_supervision",
 			"queue",
@@ -157,8 +161,8 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	result.Projects = buildMCPAutoprogrammingProjectsV0(result.Queue, result.Run)
 	result.Tasks = buildMCPAutoprogrammingTasksV0(result.Run)
 	result.Agents = buildMCPAutoprogrammingAgentsV0(result.Run)
-	result.QueueHealth = buildMCPAutoprogrammingQueueHealthV0(result.Queue, result.Run)
-	result.StaleRunning = buildMCPAutoprogrammingStaleRunningV0(result.Queue, result.Run)
+	result.QueueHealth = buildMCPAutoprogrammingQueueHealthV0(result.Queue, result.Run, observedRuns...)
+	result.StaleRunning = buildMCPAutoprogrammingStaleRunningV0(result.Queue, result.Run, observedRuns...)
 	result.Diagnostics = append(result.Diagnostics, diagnosticsFromStaleRunningMCPAutoprogrammingV0(result.StaleRunning)...)
 	result.Operator = newMCPAutoprogrammingOperatorV0(result.Queue, result.Run, result.Diagnostics)
 	result.EfficiencySummary = buildMCPAutoprogrammingEfficiencySummaryV0(
@@ -169,6 +173,73 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	)
 	result.OpsSnapshot = buildMCPAutoprogrammingOpsSnapshotV0(result.Queue, result.Run, input.OccurredAt)
 	return result, nil
+}
+
+func mcpAutoprogrammingQueueRunningStatsObservedV0(
+	queue *MCPRunQueuePriorityToolResultV0,
+	run *MCPDirectorStatsToolResultV0,
+	observedRuns ...*MCPDirectorStatsToolResultV0,
+) bool {
+	if queue == nil || queue.Estado != MCPRunQueuePriorityEstadoOKV0 || len(queue.Ranked) == 0 {
+		return false
+	}
+	observed := mcpAutoprogrammingObservedRunsByRefV0(run, observedRuns...)
+	for _, candidate := range queue.Ranked {
+		if strings.ToLower(strings.TrimSpace(candidate.Status)) != "running" {
+			continue
+		}
+		if _, ok := observed[strings.TrimSpace(candidate.RunRef)]; !ok {
+			return false
+		}
+	}
+	return len(observed) > 0
+}
+
+func (executor MCPAutoprogrammingStatusToolExecutorV0) executeQueueRunningStatsV0(
+	ctx context.Context,
+	input MCPAutoprogrammingStatusToolInputV0,
+	queue *MCPRunQueuePriorityToolResultV0,
+	explicitRun *MCPDirectorStatsToolResultV0,
+) ([]*MCPDirectorStatsToolResultV0, []MCPAutoprogrammingDiagnosticV0) {
+	if executor.Stats == nil || queue == nil || queue.Estado != MCPRunQueuePriorityEstadoOKV0 {
+		return nil, nil
+	}
+	explicitRunRef := ""
+	if explicitRun != nil && explicitRun.Stats != nil {
+		explicitRunRef = strings.TrimSpace(explicitRun.Stats.RunRef)
+	}
+	seen := map[string]bool{}
+	out := make([]*MCPDirectorStatsToolResultV0, 0)
+	diagnostics := []MCPAutoprogrammingDiagnosticV0{}
+	for _, candidate := range queue.Ranked {
+		if len(out) >= mcpAutoprogrammingRunningStatsMaxV0 {
+			break
+		}
+		runRef := strings.TrimSpace(candidate.RunRef)
+		if runRef == "" ||
+			runRef == explicitRunRef ||
+			seen[runRef] ||
+			strings.ToLower(strings.TrimSpace(candidate.Status)) != "running" {
+			continue
+		}
+		seen[runRef] = true
+		statsInput := mcpAutoprogrammingStatsInputV0(input)
+		statsInput.RunRef = runRef
+		statsInput.ExternalJobRef = ""
+		statsInput.IncludeProcessRefs = true
+		statsInput.IncludeAgentProgress = true
+		stats, err := executor.Stats.Execute(ctx, statsInput)
+		if err != nil || stats.Estado != MCPDirectorStatsEstadoOKV0 || stats.Stats == nil {
+			diagnostics = append(diagnostics, mcpAutoprogrammingDiagnosticV0(
+				mcpAutoprogrammingActionRunningWithoutRecentStatsV0,
+				"run:"+runRef,
+				"run en cola como running sin stats/liveness verificables",
+			))
+			continue
+		}
+		out = append(out, &stats)
+	}
+	return out, diagnostics
 }
 
 func (executor MCPAutoprogrammingStatusToolExecutorV0) executeRunStatusV0(

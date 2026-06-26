@@ -403,7 +403,10 @@ Comando: `go test -count=1 ./modulos/orquesta-web`
 Evidencia esperada: `RESTAutoprogrammingPrepareRunClientV0` tambien implementa
 `AutoprogrammingStatusClientV0`, envia `POST /api/v0/autoprogramming/status`
 con correlation header, pide progreso de agentes por defecto y proyecta cola,
-runs, agentes, diagnosticos y errores publicos sin leer runtime/stores.
+runs, agentes, diagnosticos y errores publicos sin leer runtime/stores. El
+viewmodel conserva la separacion publica entre `running_without_recent_stats`,
+`running_live` y `running_stale_no_process` para que la UI no trate una run viva
+sin stats recientes como stale reconciliable.
 Ultima ejecucion: 2026-05-23; pasa.
 Riesgos: El estado real depende de que el bridge MCP tenga inyectados
 `run_queue.priority` y `director.stats`; la web solo consume el contrato.

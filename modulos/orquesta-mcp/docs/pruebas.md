@@ -509,6 +509,14 @@ executor, el error publico sigue siendo reparable y el bridge HTTP devuelve el
 consejo normalizado como observacion no bloqueante sin descartar evidencia de
 automejora.
 
+Evidencia adicional 2026-06-26: `autoprogramming/status` separa una run
+`running` sin stats recientes (`running_without_recent_stats`) de una run
+stale sin proceso vivo (`running_stale_no_process`) y consulta
+`director.stats` de forma acotada para detectar procesos vivos antes de
+publicar `running_stale`. `autoprogramming/supervise` devuelve `202 accepted`
+con `operation_ref` y diagnostico si el executor sigue vivo mas alla de la
+ventana HTTP, en vez de dejar al cliente colgado.
+
 ## Prueba snapshot operativo del Director 2026-06-08
 
 Comando:

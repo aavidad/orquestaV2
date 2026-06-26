@@ -28,16 +28,18 @@ func TestWebAutoprogrammingStatusViewModelV0AgregaColaYRunVivos(t *testing.T) {
 			}},
 		},
 		QueueHealth: &orquestamcp.MCPAutoprogrammingQueueHealthV0{
-			Queued:       1,
-			RunningLive:  1,
-			RunningStale: 2,
-			Blocked:      3,
-			Lost:         4,
-			Completed:    5,
-			Failed:       6,
-			ObservedRuns: 7,
-			QueueRuns:    8,
-			StatsRuns:    1,
+			Queued:                    1,
+			RunningLive:               1,
+			RunningStale:              2,
+			RunningStaleNoProcess:     2,
+			RunningWithoutRecentStats: 9,
+			Blocked:                   3,
+			Lost:                      4,
+			Completed:                 5,
+			Failed:                    6,
+			ObservedRuns:              7,
+			QueueRuns:                 8,
+			StatsRuns:                 1,
 		},
 		StaleRunning: []orquestamcp.MCPAutoprogrammingActionableRunV0{{
 			Code:              "provider_usage_limit_retry_after",
@@ -110,6 +112,8 @@ func TestWebAutoprogrammingStatusViewModelV0AgregaColaYRunVivos(t *testing.T) {
 		vm.QueueHealth.Queued != 1 ||
 		vm.QueueHealth.RunningLive != 1 ||
 		vm.QueueHealth.RunningStale != 2 ||
+		vm.QueueHealth.RunningStaleNoProcess != 2 ||
+		vm.QueueHealth.RunningWithoutRecentStats != 9 ||
 		vm.QueueHealth.Blocked != 3 ||
 		vm.QueueHealth.Lost != 4 ||
 		vm.QueueHealth.Completed != 5 ||

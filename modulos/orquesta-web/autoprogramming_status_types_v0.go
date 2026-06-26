@@ -39,17 +39,19 @@ type WebAutoprogrammingStatusViewModelV0 struct {
 }
 
 type WebAutoprogrammingQueueHealthV0 struct {
-	Queued       int `json:"queued,omitempty"`
-	RunningLive  int `json:"running_live,omitempty"`
-	RunningStale int `json:"running_stale,omitempty"`
-	Blocked      int `json:"blocked,omitempty"`
-	Lost         int `json:"lost,omitempty"`
-	Completed    int `json:"completed,omitempty"`
-	Failed       int `json:"failed,omitempty"`
-	Unclassified int `json:"unclassified,omitempty"`
-	ObservedRuns int `json:"observed_runs,omitempty"`
-	QueueRuns    int `json:"queue_runs,omitempty"`
-	StatsRuns    int `json:"stats_runs,omitempty"`
+	Queued                    int `json:"queued,omitempty"`
+	RunningLive               int `json:"running_live,omitempty"`
+	RunningStale              int `json:"running_stale,omitempty"`
+	RunningStaleNoProcess     int `json:"running_stale_no_process,omitempty"`
+	RunningWithoutRecentStats int `json:"running_without_recent_stats,omitempty"`
+	Blocked                   int `json:"blocked,omitempty"`
+	Lost                      int `json:"lost,omitempty"`
+	Completed                 int `json:"completed,omitempty"`
+	Failed                    int `json:"failed,omitempty"`
+	Unclassified              int `json:"unclassified,omitempty"`
+	ObservedRuns              int `json:"observed_runs,omitempty"`
+	QueueRuns                 int `json:"queue_runs,omitempty"`
+	StatsRuns                 int `json:"stats_runs,omitempty"`
 }
 
 type WebAutoprogrammingActionableRunV0 struct {
@@ -136,17 +138,19 @@ func webAutoprogrammingQueueHealthV0(
 		return nil
 	}
 	return &WebAutoprogrammingQueueHealthV0{
-		Queued:       value.Queued,
-		RunningLive:  value.RunningLive,
-		RunningStale: value.RunningStale,
-		Blocked:      value.Blocked,
-		Lost:         value.Lost,
-		Completed:    value.Completed,
-		Failed:       value.Failed,
-		Unclassified: value.Unclassified,
-		ObservedRuns: value.ObservedRuns,
-		QueueRuns:    value.QueueRuns,
-		StatsRuns:    value.StatsRuns,
+		Queued:                    value.Queued,
+		RunningLive:               value.RunningLive,
+		RunningStale:              value.RunningStale,
+		RunningStaleNoProcess:     value.RunningStaleNoProcess,
+		RunningWithoutRecentStats: value.RunningWithoutRecentStats,
+		Blocked:                   value.Blocked,
+		Lost:                      value.Lost,
+		Completed:                 value.Completed,
+		Failed:                    value.Failed,
+		Unclassified:              value.Unclassified,
+		ObservedRuns:              value.ObservedRuns,
+		QueueRuns:                 value.QueueRuns,
+		StatsRuns:                 value.StatsRuns,
 	}
 }
 

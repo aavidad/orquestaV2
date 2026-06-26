@@ -337,6 +337,73 @@ func TestCodexStackV0ExternalWorkRunOPESSubrolesMaterializaPadreYSeisHijosV0(t *
 	}
 }
 
+func TestCodexStackV0ExternalWorkRunOPESSubrolesPadreConservaWriteSetProductoAutorizadoV0(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	result := postExternalWorkRunStackWithChangeV0(t, stack, orquestaappchange.AppChangeRequestV0{
+		ChangeRef:       "opes-job-tema-subroles-producto-032",
+		AppRef:          "opes",
+		UserIntent:      "Resolver tema OPES con padre integrador y seis subroles reales.",
+		AllowedWriteSet: []string{"temas/tema_032"},
+		AcceptanceCriteria: []string{
+			"materializar padre y seis subagentes OPES",
+			"el padre conserva write-set de producto autorizado",
+		},
+		ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+			ProjectRef:    "opes",
+			JobRef:        "job-ref-opes-subroles-producto-032",
+			InterfaceRefs: []string{"opes-rest-v0", "opes.padre-tema-6-subroles.v1"},
+			WorkKind:      "draft_content_block",
+			WorkRefs:      []string{"curso-integrador-social-b", "tema-032"},
+			InputFields: []orquestadomainwork.DomainWorkFieldV0{
+				{Name: "topic_id", Value: "tema-032"},
+				{Name: "subroles_required", Value: "6"},
+			},
+		},
+	})
+
+	drain, err := stack.DrainRunV0(context.Background(), DrainRunRequestV0{
+		RunRef:               result.RunRef,
+		CorrelationID:        "corr-opes-subroles-producto-drain-032",
+		OccurredAt:           "2026-06-26T00:15:00Z",
+		MaxBursts:            32,
+		MaxStepsPerBurst:     12,
+		MaxDispatchesPerWait: 16,
+		MaxCommands:          64,
+		MaxOutboxPerCycle:    16,
+		MaxDecisionCycles:    6,
+		MaxExternalWaits:     0,
+	})
+	if err != nil {
+		t.Fatalf("DrainRunV0: %v drain=%+v", err, drain)
+	}
+	run, err := stack.Stores.RunStore.LoadRunV0(context.Background(), result.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	tasks, err := stack.Stores.TaskStore.LoadWorkflowTasksV0(context.Background(), result.RunRef, run.Tasks)
+	if err != nil {
+		t.Fatalf("LoadWorkflowTasksV0: %v", err)
+	}
+	parent, children := codexStackOPESSubroleTasksForTestV0(tasks)
+	if parent.TaskID == "" ||
+		!codexStackStringInSetForTestV0(parent.WriteSet, "temas/tema_032") ||
+		!codexStackStringInSetForTestV0(parent.WriteSet, "temas/tema_032/coordinacion") ||
+		containsOPESSubroleWriteSetForTestV0(parent.WriteSet) {
+		t.Fatalf("parent=%+v", parent)
+	}
+	for _, child := range children {
+		if child.ParentTaskRef != parent.TaskID ||
+			codexStackStringInSetForTestV0(child.WriteSet, "temas/tema_032") ||
+			!containsOPESSubroleWriteSetForTestV0(child.WriteSet) {
+			t.Fatalf("child=%+v parent=%+v", child, parent)
+		}
+	}
+	if len(children) != 6 || len(run.StartedAgents) != 7 || runtime.launchCountV0() != 7 {
+		t.Fatalf("children=%d started=%v launches=%d", len(children), run.StartedAgents, runtime.launchCountV0())
+	}
+}
+
 func TestCodexStackV0ExternalWorkRunOPESSubrolesSupervisorDirectoSinLimitesLanzaSieteV0(t *testing.T) {
 	runtime := newFakeCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)

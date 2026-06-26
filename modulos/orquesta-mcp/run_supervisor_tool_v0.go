@@ -70,6 +70,7 @@ type MCPRunSupervisorToolResultV0 struct {
 	IdempotencyKey string                           `json:"idempotency_key,omitempty"`
 	RepairRunRefs  []string                         `json:"repair_run_refs,omitempty"`
 	NextActions    []string                         `json:"next_actions,omitempty"`
+	OperationRef   string                           `json:"operation_ref,omitempty"`
 	Diagnostics    []MCPAutoprogrammingDiagnosticV0 `json:"diagnostics,omitempty"`
 	Errores        []MCPValidationIssueV0           `json:"errores_publicos,omitempty"`
 }

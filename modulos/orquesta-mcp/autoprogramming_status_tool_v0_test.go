@@ -143,7 +143,7 @@ func TestMCPAutoprogrammingStatusExecutorV0ExponeQueueHealthSeparada(t *testing.
 	}
 }
 
-func TestMCPAutoprogrammingStatusExecutorV0ExponeStaleRunningAccionableV0(t *testing.T) {
+func TestMCPAutoprogrammingStatusExecutorV0NoMarcaStaleSinStatsV0(t *testing.T) {
 	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
 		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
 			ranked: []MCPRunQueueRankedCandidateCompactV0{{
@@ -155,18 +155,75 @@ func TestMCPAutoprogrammingStatusExecutorV0ExponeStaleRunningAccionableV0(t *tes
 				EvidenceRefs:  []string{"evidence-ref-test-stale-running"},
 			}},
 		},
-		Stats: &fakeMCPAutoprogrammingRunStatusV0{},
 	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
 
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
 	if len(result.StaleRunning) != 1 ||
-		result.StaleRunning[0].Code != "stale_running" ||
-		result.StaleRunning[0].Severity != "warning" ||
-		result.StaleRunning[0].RecommendedAction != "supervise_run_ref_or_reconcile_if_no_live_process" ||
-		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "stale_running") {
-		t.Fatalf("stale_running=%+v diagnostics=%+v", result.StaleRunning, result.Diagnostics)
+		result.StaleRunning[0].Code != "running_without_recent_stats" ||
+		result.StaleRunning[0].Severity != "info" ||
+		result.StaleRunning[0].RecommendedAction != "observe_run_ref_with_process_refs_before_reconcile" ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "running_without_recent_stats") ||
+		result.QueueHealth == nil ||
+		result.QueueHealth.RunningStale != 0 ||
+		result.QueueHealth.RunningWithoutRecentStats != 1 {
+		t.Fatalf("stale_running=%+v diagnostics=%+v queue_health=%+v", result.StaleRunning, result.Diagnostics, result.QueueHealth)
+	}
+}
+
+func TestMCPAutoprogrammingStatusExecutorV0ObservaRunningConProcesoVivoV0(t *testing.T) {
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		statsByRun: map[string]*orquestacionnucleoapp.DirectorRunStatsV0{
+			"run-ref-running-live-process-001": {
+				RunRef: "run-ref-running-live-process-001",
+				Counts: orquestacionnucleoapp.DirectorRunStatsCountsV0{
+					AgentsInFlight: 1,
+				},
+				Progress: orquestacionnucleoapp.DirectorProgressStatsV0{
+					StalledAgents: 1,
+				},
+				Agents: []orquestacionnucleoapp.DirectorAgentStatsV0{{
+					AgentRequestID: "agent-ref-running-live-process-001",
+					Status:         orquestacionnucleoapp.DirectorAgentStatusRunningV0,
+					InFlight:       true,
+					Process: &orquestacionnucleoapp.DirectorAgentProcessStatsV0{
+						ProcessRef: "process-ref-running-live-process-001",
+						SessionRef: "session-ref-running-live-process-001",
+					},
+				}},
+			},
+		},
+	}
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			ranked: []MCPRunQueueRankedCandidateCompactV0{{
+				Rank:          1,
+				RunRef:        "run-ref-running-live-process-001",
+				AppRef:        "opes",
+				Status:        "running",
+				PriorityScore: 90,
+			}},
+		},
+		Stats: stats,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(stats.inputs) != 1 ||
+		stats.inputs[0].RunRef != "run-ref-running-live-process-001" ||
+		!stats.inputs[0].IncludeProcessRefs ||
+		!stats.inputs[0].IncludeAgentProgress {
+		t.Fatalf("stats inputs=%+v", stats.inputs)
+	}
+	if result.QueueHealth == nil ||
+		result.QueueHealth.RunningLive != 1 ||
+		result.QueueHealth.RunningStale != 0 ||
+		result.QueueHealth.RunningStaleNoProcess != 0 ||
+		result.QueueHealth.RunningWithoutRecentStats != 0 ||
+		len(result.StaleRunning) != 0 {
+		t.Fatalf("queue_health=%+v stale_running=%+v", result.QueueHealth, result.StaleRunning)
 	}
 }
 
@@ -294,7 +351,6 @@ func TestMCPAutoprogrammingStatusExecutorV0DiagnosticaPuertosNoConfigurados(t *t
 func TestMCPAutoprogrammingStatusExecutorV0DeclaraSuperviseColaAunqueFaltenStatsDeRunV0(t *testing.T) {
 	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
 		Queue: &fakeMCPAutoprogrammingQueueStatusV0{},
-		Stats: &fakeMCPAutoprogrammingRunStatusV0{},
 	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
 
 	if err != nil {
