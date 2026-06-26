@@ -258,7 +258,7 @@ func codexStackRunSupervisorCommandV0(
 ) orquestarunsupervisor.RunSupervisorCommandV0 {
 	return orquestarunsupervisor.RunSupervisorCommandV0{
 		QueueRef:          strings.TrimSpace(input.QueueRef),
-		MaxTicks:          1,
+		MaxTicks:          input.MaxTicks,
 		MaxRunsPerTick:    input.MaxRunsPerTick,
 		MaxExecutions:     input.MaxExecutions,
 		StopOnNoExecution: true,

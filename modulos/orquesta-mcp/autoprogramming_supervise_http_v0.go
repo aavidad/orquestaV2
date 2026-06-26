@@ -41,6 +41,8 @@ type mcpAutoprogrammingSuperviseHTTPHandlerV0 struct {
 type mcpAutoprogrammingSuperviseHTTPInputV0 struct {
 	MCPRunSupervisorToolInputV0
 	OperatorAdvice mcpAutoprogrammingOperatorAdviceListV0 `json:"operator_advice,omitempty"`
+	MaxDispatches  int                                    `json:"max_dispatches,omitempty"`
+	MaxOutbox      int                                    `json:"max_outbox,omitempty"`
 }
 
 type mcpAutoprogrammingSuperviseHTTPResultV0 struct {
@@ -71,7 +73,8 @@ func (handler mcpAutoprogrammingSuperviseHTTPHandlerV0) ServeHTTP(w http.Respons
 		writeMCPAutoprogrammingSuperviseHTTPResultV0(w, http.StatusServiceUnavailable, newMCPAutoprogrammingSuperviseHTTPErrorV0(r, input.MCPRunSupervisorToolInputV0, "executor", "autoprogramming_supervise_no_configurado"), input.OperatorAdvice)
 		return
 	}
-	result, err, acceptedBackground := handler.executeSupervisorWithResponseTimeoutV0(r, input.MCPRunSupervisorToolInputV0)
+	toolInput := normalizeMCPAutoprogrammingSuperviseHTTPInputAliasesV0(input)
+	result, err, acceptedBackground := handler.executeSupervisorWithResponseTimeoutV0(r, toolInput)
 	if acceptedBackground {
 		writeMCPAutoprogrammingSuperviseHTTPResultV0(w, http.StatusAccepted, result, input.OperatorAdvice)
 		return
@@ -89,6 +92,19 @@ func (handler mcpAutoprogrammingSuperviseHTTPHandlerV0) ServeHTTP(w http.Respons
 		status = http.StatusBadRequest
 	}
 	writeMCPAutoprogrammingSuperviseHTTPResultV0(w, status, result, input.OperatorAdvice)
+}
+
+func normalizeMCPAutoprogrammingSuperviseHTTPInputAliasesV0(
+	input mcpAutoprogrammingSuperviseHTTPInputV0,
+) MCPRunSupervisorToolInputV0 {
+	out := input.MCPRunSupervisorToolInputV0
+	if out.MaxDispatchesPerWait <= 0 && input.MaxDispatches > 0 {
+		out.MaxDispatchesPerWait = input.MaxDispatches
+	}
+	if out.MaxOutboxPerCycle <= 0 && input.MaxOutbox > 0 {
+		out.MaxOutboxPerCycle = input.MaxOutbox
+	}
+	return out
 }
 
 type mcpAutoprogrammingSuperviseExecutionV0 struct {

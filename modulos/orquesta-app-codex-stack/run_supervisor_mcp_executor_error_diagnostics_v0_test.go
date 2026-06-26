@@ -68,6 +68,26 @@ func TestCodexStackRunSupervisorCommandV0AplicaPresupuestoConservadorPorDefecto(
 	}
 }
 
+func TestCodexStackRunSupervisorCommandV0RespetaMaxTicksDeEntrada(t *testing.T) {
+	command := codexStackRunSupervisorCommandV0(orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:            "request-ref-run-supervisor-max-ticks-001",
+		QueueRef:             DefaultRunQueueRefV0,
+		MaxTicks:             3,
+		MaxRunsPerTick:       2,
+		MaxExecutions:        2,
+		MaxDispatchesPerWait: 6,
+		MaxOutboxPerCycle:    12,
+	})
+
+	if command.MaxTicks != 3 ||
+		command.MaxRunsPerTick != 2 ||
+		command.MaxExecutions != 2 ||
+		command.DrainLimits.MaxDispatchesPerWait != 6 ||
+		command.DrainLimits.MaxOutboxPerCycle != 12 {
+		t.Fatalf("command=%+v", command)
+	}
+}
+
 func TestCodexStackRunSupervisorCommandV0ConservaMaxExternalWaitsExplicito(t *testing.T) {
 	command := codexStackRunSupervisorCommandV0(orquestamcp.MCPRunSupervisorToolInputV0{
 		QueueRef:         "queue-ref-budget-explicit-waits-001",

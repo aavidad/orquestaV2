@@ -38,6 +38,38 @@ func TestMCPAutoprogrammingSuperviseHTTPHandlerV0DelegaEnExecutor(t *testing.T) 
 	}
 }
 
+func TestMCPAutoprogrammingSuperviseHTTPHandlerV0AceptaAliasesOperativos(t *testing.T) {
+	executor := &fakeMCPAutoprogrammingSuperviseHTTPExecutorV0{
+		result: MCPRunSupervisorToolResultV0{
+			Estado: MCPRunSupervisorEstadoOKV0,
+			RunRef: "run-ref-autop-supervise-http-aliases-001",
+		},
+	}
+	body := bytes.NewBufferString(`{
+		"run_ref":"run-ref-autop-supervise-http-aliases-001",
+		"queue_ref":"global",
+		"max_ticks":3,
+		"max_dispatches":6,
+		"max_outbox":12,
+		"include_process_refs":true
+	}`)
+	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingSuperviseHTTPPathV0, body)
+	rec := httptest.NewRecorder()
+
+	NewMCPAutoprogrammingSuperviseHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if executor.input.RunRef != "run-ref-autop-supervise-http-aliases-001" ||
+		executor.input.QueueRef != "global" ||
+		executor.input.MaxTicks != 3 ||
+		executor.input.MaxDispatchesPerWait != 6 ||
+		executor.input.MaxOutboxPerCycle != 12 {
+		t.Fatalf("input=%+v", executor.input)
+	}
+}
+
 func TestMCPAutoprogrammingSuperviseHTTPHandlerV0NoCancelaSupervisorPorCierreHTTP(t *testing.T) {
 	executor := &fakeMCPAutoprogrammingSuperviseHTTPExecutorV0{
 		result: MCPRunSupervisorToolResultV0{
