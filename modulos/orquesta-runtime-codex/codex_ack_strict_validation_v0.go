@@ -86,7 +86,11 @@ func codexStrictCompletedAckIssuesV0(
 		strings.TrimSpace(ack.TargetModule) != strings.TrimSpace(packet.TargetModule) ||
 		strings.TrimSpace(ack.TaskRef) != strings.TrimSpace(packet.Task.TaskRef) ||
 		strings.TrimSpace(ack.AckRef) != strings.TrimSpace(packet.DeliveryRefs.AckRef) {
-		v.add(CodexConnectorAckCorrelationV0, "agent_ack", "correlation_mismatch")
+		evidence := "correlation_mismatch"
+		if codexAgentAckParentSubroleCollisionV0(ack, spec) {
+			evidence = CodexAgentAckInvalidParentSubroleCollisionEvidenceV0
+		}
+		v.add(CodexConnectorAckCorrelationV0, "agent_ack", evidence)
 	}
 	return v.issues
 }

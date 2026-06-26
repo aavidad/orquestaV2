@@ -11,6 +11,8 @@ import (
 const (
 	codexAgentAckStatusCompletedV0 = "completed"
 	codexAgentAckStatusBlockedV0   = "blocked"
+
+	CodexAgentAckInvalidParentSubroleCollisionEvidenceV0 = "invalid_parent_ack_subrole_collision"
 )
 
 func ReadAndValidateCodexAgentAckFileV0(
@@ -85,7 +87,9 @@ func codexAgentAckWithSpecDefaultsV0(
 		if strings.TrimSpace(ack.CorrelationID) != strings.TrimSpace(packet.CorrelationID) {
 			ack.CorrelationID = packet.CorrelationID
 		}
-		ack.TaskRef = packet.Task.TaskRef
+		if !codexAgentAckParentSubroleCollisionV0(ack, spec) {
+			ack.TaskRef = packet.Task.TaskRef
+		}
 	}
 	return ack
 }
@@ -159,8 +163,35 @@ func (v *codexAckValidatorV0) validateCorrelation(
 		ack.TargetModule != packet.TargetModule ||
 		ack.TaskRef != packet.Task.TaskRef ||
 		ack.AckRef != packet.DeliveryRefs.AckRef {
-		v.add(CodexConnectorAckCorrelationV0, "agent_ack", "correlation_mismatch")
+		evidence := "correlation_mismatch"
+		if codexAgentAckParentSubroleCollisionV0(ack, spec) {
+			evidence = CodexAgentAckInvalidParentSubroleCollisionEvidenceV0
+		}
+		v.add(CodexConnectorAckCorrelationV0, "agent_ack", evidence)
 	}
+}
+
+func codexAgentAckParentSubroleCollisionV0(
+	ack CodexAgentAckV0,
+	spec orquestaruntime.ExternalAgentLaunchSpecV0,
+) bool {
+	packet := spec.AgentPacket
+	taskRef := strings.TrimSpace(ack.TaskRef)
+	parentTaskRef := strings.TrimSpace(packet.Task.TaskRef)
+	return strings.TrimSpace(ack.RequestID) == strings.TrimSpace(spec.RequestID) &&
+		strings.TrimSpace(ack.RequestID) == strings.TrimSpace(packet.RequestID) &&
+		strings.TrimSpace(ack.AckRef) == strings.TrimSpace(packet.DeliveryRefs.AckRef) &&
+		strings.TrimSpace(ack.TargetModule) == strings.TrimSpace(packet.TargetModule) &&
+		taskRef != "" &&
+		parentTaskRef != "" &&
+		taskRef != parentTaskRef &&
+		codexAgentAckTaskRefLooksSubroleV0(taskRef)
+}
+
+func codexAgentAckTaskRefLooksSubroleV0(taskRef string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(taskRef))
+	return strings.Contains(normalized, "subrole") ||
+		strings.Contains(normalized, "subrol")
 }
 
 func (v *codexAckValidatorV0) validateSensitiveDetails(ack CodexAgentAckV0) {

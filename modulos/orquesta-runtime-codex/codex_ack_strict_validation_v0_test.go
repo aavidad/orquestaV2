@@ -26,6 +26,16 @@ func TestStrictCompletedCodexAgentAckV0RechazaCorrelacionNormalizableV0(t *testi
 	requireCodexIssueV0(t, issues, CodexConnectorAckCorrelationV0)
 }
 
+func TestStrictCompletedCodexAgentAckV0ClasificaColisionPadreSubrolV0(t *testing.T) {
+	spec := codexSpecForTestV0()
+	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001-subrol-redaccion","status":"completed","files":["README.md"],"tests":["go test ./..."]}`
+
+	_, issues := ValidateStrictCompletedCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	requireCodexIssueV0(t, issues, CodexConnectorAckCorrelationV0)
+	requireCodexIssueEvidenceV0(t, issues, CodexAgentAckInvalidParentSubroleCollisionEvidenceV0)
+}
+
 func TestStrictCompletedCodexAgentAckV0RechazaEvidenciaAusenteV0(t *testing.T) {
 	spec := codexSpecForTestV0()
 	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed"}`
