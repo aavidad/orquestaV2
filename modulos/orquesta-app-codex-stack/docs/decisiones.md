@@ -2,6 +2,24 @@
 
 ```text
 Fecha: 2026-06-26
+Decision: El stack Codex materializa un integrador de producto para jobs OPES
+1+6 legacy cuyo padre quedo con write-set solo de coordinacion.
+Motivo: OPES documento casos donde los seis subroles reales producen borradores
+utiles, pero el padre legacy no puede consolidar Markdown canonico porque su
+write-set no incluye el producto. Un diagnostico `integration_required` no basta
+si Orquesta debe llevar el trabajo a cierre causal.
+Impacto: `ExternalJobIntegrationDecisionSourceV0` vive en la composicion Codex,
+lee `AppChangeStore` y `WorkflowTaskStore`, exige padre e hijos causales y crea
+una microtarea dependiente de todos ellos con el `AllowedWriteSet` de producto
+mas `/coordinacion`. No cambia core, no toca OPES productivo y no interpreta
+texto libre: decide por contrato externo, refs de tarea y metadata durable.
+Contratos afectados: `AppChangeExternalWorkV0`, `WorkflowTaskV0`,
+`DirectorAgentDecisionSourcePortV0`, `DrainRunV0`.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-06-26
 Decision: El replan por assessment terminal ignora assessments ya cubiertos por
 cierre causal.
 Motivo: OPES reporto casos donde assessments antiguos seguian disparando

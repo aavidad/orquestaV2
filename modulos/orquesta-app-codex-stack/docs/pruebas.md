@@ -148,6 +148,17 @@ Cobertura Go actual:
   validan que un assessment terminal antiguo no abre replacements si la task ya
   esta cerrada o si hay entrega registrada con review aceptada; sin esa review,
   el recovery sigue siendo elegible.
+- `TestExternalJobIntegrationDecisionSourceV0CreaIntegradorParaPadreLegacyEstrecho`
+  valida que un job OPES 1+6 legacy con padre limitado a `/coordinacion` crea
+  una microtarea integradora dependiente del padre y de los seis subroles, con
+  write-set de producto autorizado y contrato `ApplyExternalDomainWorkV0`.
+- `TestDrainRunV0CreaYLanzaIntegradorProductoParaPadreLegacyEstrecho` valida el
+  flujo vertical: `DrainRunV0` materializa el integrador desde metadata durable,
+  lo agenda, lo lanza con runtime fake y el paquete de agente conserva el
+  write-set de producto mas `/coordinacion`.
+- `TestExternalJobIntegrationDecisionSourceV0NoDuplicaPadreConProducto` cubre
+  que no se crea integrador adicional cuando el padre ya tenia write-set de
+  producto.
 - `TestStackDrainQueueStatusMantieneProgramacionGenericaActivaParaCierreV0`
   valida que implementaciones genericas entregadas no se marcan como `delivered`
   final antes del cierre formal.

@@ -207,6 +207,10 @@ func directorDecisionSourceV0(config ConfigV0) orquestadirectoragentworkflow.Dir
 			orquestaappchangedirectorsource.AppChangeDirectorDecisionSourceV0{
 				Store: config.Stores.AppChangeStore,
 			},
+			ExternalJobIntegrationDecisionSourceV0{
+				AppChangeStore: config.Stores.AppChangeStore,
+				TaskStore:      config.Stores.TaskStore,
+			},
 			ProjectBacklogDirectorDecisionSourceV0{
 				ProjectWorkDir: config.Codex.ProjectWorkDir,
 			},
