@@ -298,6 +298,8 @@ func externalJobStatusFromRunV0(
 		return "delivered"
 	case codexStackStringInSetV0(run.FailedAgents, agentRef):
 		return "failed"
+	case codexStackStringInSetV0(run.LostAgents, agentRef):
+		return "lost"
 	case codexStackStringInSetV0(run.ConfirmedStoppedAgents, agentRef):
 		return "stopped"
 	case codexStackStringInSetV0(run.StoppedAgents, agentRef):

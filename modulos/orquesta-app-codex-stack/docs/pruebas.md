@@ -1440,3 +1440,22 @@ Cobertura:
   pero sin `child_task_refs` reales pese a declarar `subroles_required=6`; la
   fuente de cierre no emite closure hasta que el contrato 1+6 este
   materializado causalmente.
+
+Validacion stats OPES/residente 2026-06-26:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack -run TestCodexStackExternalJobStatsSourceV0PriorizaLostSobreStarted
+go test -count=1 ./cmd/orquesta-server -run 'TestOPESBridgeSupervisionFromDirectorStatsV0'
+```
+
+Cobertura:
+
+- `TestCodexStackExternalJobStatsSourceV0PriorizaLostSobreStarted` fija que un
+  `external_job` no queda como `running` cuando la misma ref esta en
+  `LostAgents`;
+- `TestOPESBridgeSupervisionFromDirectorStatsV0PriorizaLostSobreStarted` fija
+  que el bridge residente devuelve `blocked/agent_failed_or_lost` aunque haya
+  contadores y refs de `started`;
+- `TestOPESBridgeSupervisionFromDirectorStatsV0DetectaLostEnAgenteSinContador`
+  cubre el caso de diagnostico donde el detalle del agente trae `lost=true`
+  aunque los contadores agregados aun no lo reflejen.

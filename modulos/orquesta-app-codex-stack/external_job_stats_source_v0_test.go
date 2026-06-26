@@ -95,6 +95,28 @@ func TestCodexStackExternalJobStatsSourceV0DistingueParentAckConCohorteAbierta(t
 	}
 }
 
+func TestCodexStackExternalJobStatsSourceV0PriorizaLostSobreStarted(t *testing.T) {
+	fixture := newCodexStackExternalJobSubrolesStatsFixtureV0(false)
+	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(fixture.parent.TaskID)
+	fixture.run.StartedAgents = []string{agentRef}
+	fixture.run.LostAgents = []string{agentRef}
+	fixture.run.DeliveredTasks = nil
+	fixture.run.ClosedTasks = nil
+	fixture.source.RunStore = orquestacionnucleoapp.NewInMemoryRunStoreV0(fixture.run)
+
+	stats, ok, err := fixture.source.ResolveDirectorExternalJobStatsV0(
+		context.Background(),
+		fixture.request,
+	)
+
+	if err != nil {
+		t.Fatalf("ResolveDirectorExternalJobStatsV0: %v", err)
+	}
+	if !ok || stats.Status != "lost" {
+		t.Fatalf("stats=%+v", stats)
+	}
+}
+
 type codexStackExternalJobSubrolesStatsFixtureV0 struct {
 	source  CodexStackExternalJobStatsSourceV0
 	request orquestamcp.MCPDirectorExternalJobStatsRequestV0

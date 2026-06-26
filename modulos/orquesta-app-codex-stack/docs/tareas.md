@@ -805,6 +805,8 @@ Trabajo aplicado:
 
 - `CodexStackExternalJobStatsSourceV0` resuelve `external_job_ref` desde
   `AppChangeStore`, deriva `task_ref/agent_ref` y proyecta status compacto;
+- en la proyeccion de status, `failed`/`lost` prevalecen sobre restos en
+  `started` para no exponer como vivo un agente ya reconciliado como perdido;
 - si el padre ya entrego ACK pero los hijos causales siguen abiertos, el job
   externo se expone como `parent_ack_received` con
   `status_reason=cohort_open`;
@@ -825,6 +827,7 @@ Validacion:
 - `TestMCPDirectorStatsToolExecutorV0ResuelveRunPorJobExterno`;
 - `TestCodexStackExternalJobStatsSourceV0MarcaIntegracionPendienteTrasSubroles`;
 - `TestCodexStackExternalJobStatsSourceV0ExponeNarrowingLegacyComoRazon`;
+- `TestCodexStackExternalJobStatsSourceV0PriorizaLostSobreStarted`;
 - `TestCodexStackV0OPESExternalWorkRESTCreaMicrotareaSinWriteSetLocal`;
 - `TestMCPRunControlExecutorV0ResuelveRunPorJobExterno`;
 - `TestRunFileStoreAppChangePersistsAfterRecreateAndReplacesV0`;

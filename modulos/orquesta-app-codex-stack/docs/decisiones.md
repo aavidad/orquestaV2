@@ -1665,6 +1665,21 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-06-26
+Decision: En stats de external_work, un agente perdido o fallido prevalece
+sobre started/in_flight.
+Motivo: una run puede conservar refs de arranque mientras el supervisor ya ha
+reconciliado el proceso como `lost`. Si la proyeccion consulta primero
+`StartedAgents`, OPES y otros consumidores ven `running` aunque ya haya bloqueo
+operativo real.
+Impacto: `CodexStackExternalJobStatsSourceV0` devuelve `lost` antes que
+`running` y el bridge residente OPES proyecta `blocked/agent_failed_or_lost`
+antes que `started`, incluyendo el caso en que la marca `lost` venga solo en el
+detalle del agente.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-21
 Decision: El director puede avanzar con ACKs parciales y recoger ACKs tardios
 de la ola anterior.

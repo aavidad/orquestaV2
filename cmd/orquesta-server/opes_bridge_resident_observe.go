@@ -187,15 +187,9 @@ func opesBridgeSupervisionFromDirectorStatsV0(
 			ProcessRef:  processRef,
 			EvidenceRef: firstNonEmptyEnvlessV0(opesBridgePrependStringV0(processEvidence, stats.Closure.BlockerRefs)...),
 		}
-	case stats.Counts.AgentsStarted > 0 || stats.Counts.AgentsInFlight > 0 ||
-		len(stats.Refs.AgentsStarted) > 0 || opesBridgeDirectorStatsHasStartedAgentV0(decoded):
-		return opesExternalWorkRunSupervisionV0{
-			Status:      "started",
-			ProcessRef:  processRef,
-			EvidenceRef: firstNonEmptyEnvlessV0(opesBridgePrependStringV0(processEvidence, stats.Refs.AgentsStarted)...),
-		}
 	case stats.Counts.AgentsFailed > 0 || stats.Counts.AgentsLost > 0 ||
-		len(stats.Refs.AgentsFailed) > 0 || len(stats.Refs.AgentsLost) > 0:
+		len(stats.Refs.AgentsFailed) > 0 || len(stats.Refs.AgentsLost) > 0 ||
+		opesBridgeDirectorStatsHasFailedOrLostAgentV0(decoded):
 		failedRefs := append([]string{}, stats.Refs.AgentsFailed...)
 		failedRefs = append(failedRefs, stats.Refs.AgentsLost...)
 		return opesExternalWorkRunSupervisionV0{
@@ -203,6 +197,13 @@ func opesBridgeSupervisionFromDirectorStatsV0(
 			StopReason:  "agent_failed_or_lost",
 			ProcessRef:  processRef,
 			EvidenceRef: firstNonEmptyEnvlessV0(opesBridgePrependStringV0(processEvidence, failedRefs)...),
+		}
+	case stats.Counts.AgentsStarted > 0 || stats.Counts.AgentsInFlight > 0 ||
+		len(stats.Refs.AgentsStarted) > 0 || opesBridgeDirectorStatsHasStartedAgentV0(decoded):
+		return opesExternalWorkRunSupervisionV0{
+			Status:      "started",
+			ProcessRef:  processRef,
+			EvidenceRef: firstNonEmptyEnvlessV0(opesBridgePrependStringV0(processEvidence, stats.Refs.AgentsStarted)...),
 		}
 	default:
 		return opesExternalWorkRunSupervisionV0{
@@ -217,6 +218,17 @@ func opesBridgePrependStringV0(value string, values []string) []string {
 	out = append(out, value)
 	out = append(out, values...)
 	return out
+}
+
+func opesBridgeDirectorStatsHasFailedOrLostAgentV0(
+	decoded opesBridgeDirectorStatsResponseV0,
+) bool {
+	for _, agent := range decoded.Stats.Agents {
+		if agent.Failed || agent.Lost {
+			return true
+		}
+	}
+	return false
 }
 
 func opesBridgeDirectorStatsHasStartedAgentV0(

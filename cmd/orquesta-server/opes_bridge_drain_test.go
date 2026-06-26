@@ -264,6 +264,78 @@ func TestRunOPESDrainOnceV0EsperaDespachoResidenteSinSupervisarV0(t *testing.T) 
 	}
 }
 
+func TestOPESBridgeSupervisionFromDirectorStatsV0PriorizaLostSobreStarted(t *testing.T) {
+	decoded := decodeOPESBridgeDirectorStatsForTestV0(t, `{
+		"estado": "ok",
+		"stats": {
+			"status": "running",
+			"counts": {
+				"agents_started": 1,
+				"agents_in_flight": 1,
+				"agents_lost": 1
+			},
+			"refs": {
+				"agents_started": ["agent-ref-resident-lost-001"],
+				"agents_lost": ["agent-ref-resident-lost-001"]
+			},
+			"agents": [{
+				"agent_request_id": "agent-ref-resident-lost-001",
+				"started": true,
+				"in_flight": true,
+				"lost": true,
+				"process": {
+					"process_ref": "process-ref-resident-lost-001",
+					"evidence_refs": ["evidence-ref-resident-lost-001"]
+				}
+			}]
+		}
+	}`)
+
+	supervision := opesBridgeSupervisionFromDirectorStatsV0(decoded)
+
+	if supervision.Status != "blocked" ||
+		supervision.StopReason != "agent_failed_or_lost" ||
+		supervision.ProcessRef != "process-ref-resident-lost-001" ||
+		supervision.EvidenceRef != "evidence-ref-resident-lost-001" {
+		t.Fatalf("supervision=%+v", supervision)
+	}
+}
+
+func TestOPESBridgeSupervisionFromDirectorStatsV0DetectaLostEnAgenteSinContador(t *testing.T) {
+	decoded := decodeOPESBridgeDirectorStatsForTestV0(t, `{
+		"estado": "ok",
+		"stats": {
+			"status": "running",
+			"counts": {
+				"agents_started": 1
+			},
+			"agents": [{
+				"agent_request_id": "agent-ref-resident-agent-lost-001",
+				"started": true,
+				"lost": true
+			}]
+		}
+	}`)
+
+	supervision := opesBridgeSupervisionFromDirectorStatsV0(decoded)
+
+	if supervision.Status != "blocked" || supervision.StopReason != "agent_failed_or_lost" {
+		t.Fatalf("supervision=%+v", supervision)
+	}
+}
+
+func decodeOPESBridgeDirectorStatsForTestV0(
+	t *testing.T,
+	raw string,
+) opesBridgeDirectorStatsResponseV0 {
+	t.Helper()
+	var decoded opesBridgeDirectorStatsResponseV0
+	if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
+		t.Fatalf("decode director stats: %v", err)
+	}
+	return decoded
+}
+
 func TestRunOPESDrainOnceV0EsperaDespachoResidenteTimeoutSinSupervisarV0(t *testing.T) {
 	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
