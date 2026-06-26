@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
 )
 
@@ -64,8 +65,9 @@ type MCPAutoprogrammingStatusToolResultV0 struct {
 }
 
 type MCPAutoprogrammingStatusToolExecutorV0 struct {
-	Queue MCPTransportRunQueuePriorityExecutorV0
-	Stats MCPTransportDirectorStatsExecutorV0
+	Queue          MCPTransportRunQueuePriorityExecutorV0
+	Stats          MCPTransportDirectorStatsExecutorV0
+	GoalStateStore orquestagoal.GoalWorkStateStorePortV0
 }
 
 func MCPAutoprogrammingStatusDescriptorV0() MCPAutoprogrammingStatusToolDescriptorV0 {
@@ -171,6 +173,10 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	result.StaleRunning = buildMCPAutoprogrammingStaleRunningV0(result.Queue, result.Run, observedRuns...)
 	result.Diagnostics = append(result.Diagnostics, diagnosticsFromStaleRunningMCPAutoprogrammingV0(result.StaleRunning)...)
 	result.Operator = newMCPAutoprogrammingOperatorV0(result.Queue, result.Run, result.Diagnostics)
+	if goalState, ok := executor.goalStateForAutoprogrammingStatusV0(ctx, result, input); ok {
+		result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingGoalFirstDiagnosticsV0(goalState)...)
+		result.Operator = mcpAutoprogrammingOperatorWithGoalFirstActionsV0(result.Operator, goalState.RunRef)
+	}
 	result.EfficiencySummary = buildMCPAutoprogrammingEfficiencySummaryV0(
 		result.Queue,
 		result.Run,
@@ -179,6 +185,45 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	)
 	result.OpsSnapshot = buildMCPAutoprogrammingOpsSnapshotV0(result.Queue, result.Run, input.OccurredAt)
 	return result, nil
+}
+
+func (executor MCPAutoprogrammingStatusToolExecutorV0) goalStateForAutoprogrammingStatusV0(
+	ctx context.Context,
+	result MCPAutoprogrammingStatusToolResultV0,
+	input MCPAutoprogrammingStatusToolInputV0,
+) (orquestagoal.GoalWorkStateV0, bool) {
+	if executor.GoalStateStore == nil {
+		return orquestagoal.GoalWorkStateV0{}, false
+	}
+	runRef := strings.TrimSpace(firstNonEmptyMCPV0(result.RunRef, input.RunRef))
+	if runRef == "" {
+		return orquestagoal.GoalWorkStateV0{}, false
+	}
+	state, err := executor.GoalStateStore.LoadGoalWorkStateV0(ctx, runRef)
+	if err != nil ||
+		strings.TrimSpace(state.RunRef) == "" ||
+		strings.TrimSpace(state.GoalRef) == "" {
+		return orquestagoal.GoalWorkStateV0{}, false
+	}
+	return state, true
+}
+
+func mcpAutoprogrammingGoalFirstDiagnosticsV0(
+	state orquestagoal.GoalWorkStateV0,
+) []MCPAutoprogrammingDiagnosticV0 {
+	return []MCPAutoprogrammingDiagnosticV0{{
+		Code:  "autoprogramming_goal_first_observe_required",
+		Scope: "run:" + strings.TrimSpace(state.RunRef),
+		Message: strings.Join(compactStringsMCPV0([]string{
+			"goal_ref=" + strings.TrimSpace(state.GoalRef),
+			"goal_status=" + strings.TrimSpace(state.Status),
+			"action=observe_goal",
+		}), " "),
+		EvidenceRefs: compactStringsMCPV0(append(
+			[]string{"evidence-ref-autoprogramming-status-goal-first-observe-required"},
+			state.EvidenceRefs...,
+		)),
+	}}
 }
 
 func mcpAutoprogrammingQueueRunningStatsObservedV0(

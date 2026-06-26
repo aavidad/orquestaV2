@@ -536,6 +536,12 @@ la ventana de respuesta. Es compatibilidad acotada para composiciones aun no
 migradas a Goal/autoprogramming supervise; no anade logica al core ni relanza
 trabajo por si mismo.
 
+Evidencia adicional 2026-06-26: `autoprogramming/status` puede recibir un
+`GoalWorkStateStore` opt-in. Si el `run_ref` pertenece a goal-first, publica
+`autoprogramming_goal_first_observe_required` y sustituye acciones legacy de
+supervision/retry/review de esa run por `observe_goal` contra
+`/api/v0/autoprogramming/goal/observe`.
+
 ## Prueba snapshot operativo del Director 2026-06-08
 
 Comando:

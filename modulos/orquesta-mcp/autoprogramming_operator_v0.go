@@ -238,6 +238,94 @@ func mcpAutoprogrammingSafeActionV0(action string, scope string, runRef string) 
 	}
 }
 
+func mcpAutoprogrammingObserveGoalSafeActionV0(runRef string) MCPAutoprogrammingSafeActionV0 {
+	return MCPAutoprogrammingSafeActionV0{
+		Action:       "observe_goal",
+		Scope:        "run",
+		RunRef:       strings.TrimSpace(runRef),
+		Method:       "POST",
+		Endpoint:     MCPAutoprogrammingObserveGoalHTTPPathV0,
+		Reason:       "goal_first",
+		RequiresPost: true,
+	}
+}
+
+func mcpAutoprogrammingOperatorWithGoalFirstActionsV0(
+	operator *MCPAutoprogrammingOperatorV0,
+	runRef string,
+) *MCPAutoprogrammingOperatorV0 {
+	if operator == nil {
+		return operator
+	}
+	runRef = strings.TrimSpace(runRef)
+	if runRef == "" {
+		return operator
+	}
+	next := []MCPAutoprogrammingSafeActionV0{mcpAutoprogrammingObserveGoalSafeActionV0(runRef)}
+	for _, action := range operator.SafeActions {
+		if mcpAutoprogrammingGoalFirstSuppressesLegacyActionV0(operator, action, runRef) {
+			continue
+		}
+		next = append(next, action)
+	}
+	operator.SafeActions = mcpAutoprogrammingDeduplicateSafeActionsV0(next)
+	return operator
+}
+
+func mcpAutoprogrammingGoalFirstSuppressesLegacyActionV0(
+	operator *MCPAutoprogrammingOperatorV0,
+	action MCPAutoprogrammingSafeActionV0,
+	runRef string,
+) bool {
+	switch strings.TrimSpace(action.Action) {
+	case "supervise", "retry", "review":
+	default:
+		return false
+	}
+	if strings.TrimSpace(action.RunRef) == runRef {
+		return true
+	}
+	return strings.TrimSpace(action.Action) == "supervise" &&
+		strings.TrimSpace(action.Scope) == "queue" &&
+		mcpAutoprogrammingQueueOnlyActiveRunV0(operator, runRef)
+}
+
+func mcpAutoprogrammingQueueOnlyActiveRunV0(
+	operator *MCPAutoprogrammingOperatorV0,
+	runRef string,
+) bool {
+	if operator == nil || len(operator.ActiveRuns) == 0 {
+		return false
+	}
+	for _, active := range operator.ActiveRuns {
+		if strings.TrimSpace(active.RunRef) != runRef {
+			return false
+		}
+	}
+	return true
+}
+
+func mcpAutoprogrammingDeduplicateSafeActionsV0(
+	actions []MCPAutoprogrammingSafeActionV0,
+) []MCPAutoprogrammingSafeActionV0 {
+	seen := map[string]bool{}
+	out := make([]MCPAutoprogrammingSafeActionV0, 0, len(actions))
+	for _, action := range actions {
+		key := strings.Join([]string{
+			strings.TrimSpace(action.Action),
+			strings.TrimSpace(action.Scope),
+			strings.TrimSpace(action.RunRef),
+			strings.TrimSpace(action.Endpoint),
+		}, "|")
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, action)
+	}
+	return out
+}
+
 func mcpAutoprogrammingTerminalRunV0(status string) bool {
 	switch strings.ToLower(strings.TrimSpace(status)) {
 	case "completed", "closed", "cancelled", "canceled", "failed", "stopped":

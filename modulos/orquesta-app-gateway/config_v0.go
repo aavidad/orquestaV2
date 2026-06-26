@@ -6,6 +6,7 @@ import (
 
 	orquestacore "orquesta/modulos/orquesta-core"
 	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestagovernance "orquesta/modulos/orquesta-governance"
 	orquestahttpgateway "orquesta/modulos/orquesta-http-gateway"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
@@ -33,6 +34,7 @@ type ConfigV0 struct {
 	FunctionContracts          orquestacore.FunctionContractReadIndexPortV0
 	AutoprogrammingPrepareRun  orquestamcp.MCPTransportAutoprogrammingPrepareRunExecutorV0
 	AutoprogrammingObserveGoal orquestamcp.MCPTransportAutoprogrammingObserveGoalExecutorV0
+	AutoprogrammingGoalStates  orquestagoal.GoalWorkStateStorePortV0
 	GovernanceCatalog          orquestagovernance.GovernanceCatalogProviderV0
 	OperatorQuery              operator.OperatorMCPDirectedQueryPortV0
 	ServerShutdown             orquestamcp.MCPTransportServerShutdownExecutorV0

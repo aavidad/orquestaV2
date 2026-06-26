@@ -101,7 +101,8 @@ func autoprogrammingStatusExecutorFromBindingsV0(
 		return nil
 	}
 	return MCPAutoprogrammingStatusToolExecutorV0{
-		Queue: bindings.RunQueuePriority,
-		Stats: bindings.DirectorStats,
+		Queue:          bindings.RunQueuePriority,
+		Stats:          bindings.DirectorStats,
+		GoalStateStore: bindings.AutoprogrammingGoalStates,
 	}
 }

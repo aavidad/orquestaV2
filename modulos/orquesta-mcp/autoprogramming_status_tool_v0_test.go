@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
@@ -90,6 +91,72 @@ func TestMCPAutoprogrammingStatusExecutorV0DelegaEnColaYRun(t *testing.T) {
 		queue.input.Limit != 3 ||
 		stats.input.RunRef != "run-ref-autop-status-001" {
 		t.Fatalf("queue=%+v stats=%+v", queue.input, stats.input)
+	}
+}
+
+func TestMCPAutoprogrammingStatusExecutorV0RecomiendaObserveGoalParaRunGoalFirst(t *testing.T) {
+	runRef := "run-ref-autop-status-goal-first-001"
+	goalRef := "goal-ref-autop-status-goal-first-001"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:  runRef,
+		GoalRef: goalRef,
+		Status:  orquestagoal.GoalStatusRunningV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "Terminar app goal-first sin loop legacy.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:      goalRef,
+			Status:       orquestagoal.GoalStatusRunningV0,
+			EvidenceRefs: []string{"evidence-ref-goal-first-status-test"},
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-first-status-test"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			ranked: []MCPRunQueueRankedCandidateCompactV0{{
+				Rank:          1,
+				RunRef:        runRef,
+				AppRef:        "app-ref-goal-first",
+				Status:        "running",
+				PriorityScore: 90,
+			}},
+		},
+		Stats: &fakeMCPAutoprogrammingRunStatusV0{
+			stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+				RunRef:     runRef,
+				ProjectRef: "app-ref-goal-first",
+				Counts: orquestacionnucleoapp.DirectorRunStatsCountsV0{
+					TasksTotal:     1,
+					AgentsInFlight: 1,
+				},
+				Closure: orquestacionnucleoapp.DirectorClosureStatsV0{
+					Status: orquestacionnucleoapp.DirectorClosureStatusReadyV0,
+				},
+			},
+		},
+		GoalStateStore: goalStates,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{
+		RunRef: runRef,
+	})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_goal_first_observe_required") {
+		t.Fatalf("diagnostics=%+v", result.Diagnostics)
+	}
+	if result.Operator == nil ||
+		!hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "observe_goal", "run", runRef) ||
+		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "supervise", "run", runRef) ||
+		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "supervise", "queue", "") {
+		t.Fatalf("operator=%+v", result.Operator)
 	}
 }
 
@@ -770,6 +837,22 @@ func TestMCPAutoprogrammingStatusTransportV0AceptaIncludesFlexibles(t *testing.T
 func hasStringMCPAutoprogrammingStatusTestV0(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func hasMCPAutoprogrammingSafeActionForTestV0(
+	actions []MCPAutoprogrammingSafeActionV0,
+	action string,
+	scope string,
+	runRef string,
+) bool {
+	for _, value := range actions {
+		if value.Action == action &&
+			value.Scope == scope &&
+			value.RunRef == runRef {
 			return true
 		}
 	}

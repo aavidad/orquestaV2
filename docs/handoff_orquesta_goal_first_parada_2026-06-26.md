@@ -116,6 +116,10 @@ bateria focal + `go test -count=1 -p=1 ./...` pasaron.
   no-2xx (`errores_publicos`, `issues`, `diagnostics`, `code`) para que OPES no
   pierda senales como `supervisor_transition_error_but_agents_live` detras de
   `request_http_500` generico.
+- 2026-06-26: `autoprogramming/status` ya es goal-aware cuando la composicion
+  inyecta `GoalWorkStateStore`: para una run goal-first publica
+  `autoprogramming_goal_first_observe_required`, recomienda `observe_goal` y
+  elimina acciones legacy de supervision/retry/review para esa run.
 
 ## No reabrir salvo regresion
 

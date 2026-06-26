@@ -1432,6 +1432,10 @@ Campos:
 Invariantes:
   - Adaptador inbound fino.
   - Delega cola en `run_queue.priority` y run en `director.stats`.
+  - Si la composicion inyecta `GoalWorkStateStore` y la run pertenece a
+    goal-first, recomienda observar el goal por
+    `/api/v0/autoprogramming/goal/observe` en vez de empujar supervision legacy
+    de esa run.
   - Para runs `running` visibles en cola puede consultar `director.stats` de
     forma acotada y con `include_process_refs`; si no hay liveness verificable,
     no inventa `running_stale_no_process`.
