@@ -41,13 +41,14 @@ Fecha: 2026-06-26
 Decision: El replan por assessment terminal ignora assessments ya cubiertos por
 cierre causal.
 Motivo: OPES reporto casos donde assessments antiguos seguian disparando
-recovery/replan aunque el agente o la tarea ya tenian entrega aceptada o task
-cerrada. Eso reabria trabajo valido y podia crear bucles de rework.
+recovery/replan aunque el agente o la tarea ya tenian ACK/delivery registrada o
+task cerrada. Eso reabria trabajo que ya habia pasado a review y podia crear
+bucles de rework.
 Impacto: `AssessmentReplanSourceV0` y el recovery de cola del stack consultan
 `ClosedTasks`, `Deliveries` y `AcceptedReviews` antes de generar replacements.
-No se acepta ACK suelto como cierre; hace falta entrega registrada con review
-aceptada, aceptacion causal de rework o task cerrada. El cambio vive en la
-composicion Codex y no cambia core ni interpreta texto libre.
+No se acepta ACK suelto como cierre; cuando existe `DeliveryRegistered`, el
+review gate gobierna aceptacion o rework. El change vive en la composicion Codex
+y no cambia core ni interpreta texto libre.
 Contratos afectados: `AssessmentReplanSourceV0`,
 `stackRunHasRecoverableTerminalAssessmentV0`, `OrchestrationRunV0`.
 Estado: aceptada localmente.

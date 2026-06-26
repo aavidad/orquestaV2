@@ -147,11 +147,12 @@ Cobertura Go actual:
   la cola en espera indefinida.
 - `TestAssessmentReplanSourceV0NoReplanificaAssessmentDeTareaCerrada`,
   `TestAssessmentReplanSourceV0NoReplanificaAssessmentConReviewAceptada`,
+  `TestAssessmentReplanSourceV0NoReplanificaAssessmentConDeliveryRegistrada`,
   `TestStackRunHasRecoverableTerminalAssessmentV0IgnoraAssessmentCubiertoPorReviewAceptada`
   y `TestStackRunHasRecoverableTerminalAssessmentV0IgnoraAssessmentDeTareaCerrada`
   validan que un assessment terminal antiguo no abre replacements si la task ya
-  esta cerrada o si hay entrega registrada con review aceptada; sin esa review,
-  el recovery sigue siendo elegible.
+  esta cerrada o si hay entrega registrada; sin delivery, el recovery sigue
+  siendo elegible, y con delivery la ruta correcta pasa por review/rework.
 - `TestExternalJobIntegrationDecisionSourceV0CreaIntegradorParaPadreLegacyEstrecho`
   valida que un job OPES 1+6 legacy con padre limitado a `/coordinacion` crea
   una microtarea integradora dependiente del padre y de los seis subroles, con

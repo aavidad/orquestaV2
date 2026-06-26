@@ -21,8 +21,7 @@ func assessmentReplanProjectionAlreadyCoveredV0(
 	if deliveryRef == "" || !stringInSetV0(run.Deliveries, deliveryRef) {
 		return false
 	}
-	return stringInSetV0(run.AcceptedReviews, "accepted-review-ref-"+deliveryRef) ||
-		codexStackReviewGateReworkAcceptanceAlreadyDoneV0(run, deliveryRef)
+	return true
 }
 
 func assessmentReplanDeliveryRefV0(

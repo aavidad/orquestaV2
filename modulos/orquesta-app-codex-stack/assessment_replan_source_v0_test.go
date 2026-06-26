@@ -87,6 +87,29 @@ func TestAssessmentReplanSourceV0NoReplanificaAssessmentConReviewAceptada(t *tes
 	}
 }
 
+func TestAssessmentReplanSourceV0NoReplanificaAssessmentConDeliveryRegistrada(t *testing.T) {
+	runRef := "run-ref-assessment-replan-stack-covered-delivery-001"
+	oldAgentRef := "agent-ref-assessment-covered-delivery-001"
+	taskRef := "task-ref-assessment-covered-delivery-001"
+	deliveryRef := "delivery-ref-assessment-covered-delivery-001"
+	descriptor := assessmentReplanDescriptorForTestV0(runRef, oldAgentRef, taskRef)
+	descriptor.Spec.AgentPacket.DeliveryRefs.AckRef = deliveryRef
+	source := AssessmentReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(descriptor),
+	}
+	request := assessmentReplanRequestForTestV0(runRef, oldAgentRef, taskRef, false)
+	request.Run.Deliveries = []string{deliveryRef}
+	request.Run.DeliveredAgents = []string{oldAgentRef}
+
+	plans, err := source.BuildAgentAssessmentReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildAgentAssessmentReplanPlansV0 covered delivery: %v", err)
+	}
+	if len(plans) != 0 {
+		t.Fatalf("assessment con delivery registrada debe esperar review/rework, no replacement: %+v", plans)
+	}
+}
+
 func TestAssessmentReplanSourceV0PlanificaReemplazoTrasAgentePerdido(t *testing.T) {
 	runRef := "run-ref-assessment-replan-stack-lost-001"
 	oldAgentRef := "agent-ref-assessment-lost-001"
@@ -137,8 +160,8 @@ func TestStackRunHasRecoverableTerminalAssessmentV0IgnoraAssessmentCubiertoPorRe
 		t.Fatalf("assessment cubierto por review aceptada no debe disparar recovery")
 	}
 	run.AcceptedReviews = nil
-	if !stackRunHasRecoverableTerminalAssessmentV0(run) {
-		t.Fatalf("assessment terminal sin review aceptada debe seguir disparando recovery")
+	if stackRunHasRecoverableTerminalAssessmentV0(run) {
+		t.Fatalf("assessment con delivery registrada debe esperar review/rework aunque falte review aceptada")
 	}
 }
 
