@@ -85,6 +85,22 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-06-26
+Decision: Un padre OPES 1+6 no puede cerrar si el contrato de seis subroles no
+esta materializado en `WorkflowTaskV0`.
+Motivo: en recuperaciones legacy puede existir un padre `domain_work` con
+`opes.padre-tema-6-subroles.v1` o `subroles_required=6`, entrega aceptada y
+receipt de dominio, pero sin `child_task_refs` persistidos. Cerrar ese padre
+convertiria una tabla de roles o un ACK temprano en sustituto de seis
+subagentes reales, rompiendo el contrato causal OPES.
+Impacto: la fuente de cierre del stack consulta el `AppChangeStore` para el
+record externo OPES y exige que los `child_task_refs` requeridos existan tanto
+en `WorkflowTaskStore` como en `run.Tasks` antes de considerar cerrable el
+padre. No afecta trabajos no-OPES ni app-change sin contrato 1+6.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-06-25
 Decision: El stack Codex cablea `ConfigV0.AppGoalLauncher` hacia
 `StartAppDirectorPortsV0.GoalLauncher` para `/nueva-app` goal-first.

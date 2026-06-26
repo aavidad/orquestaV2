@@ -21,6 +21,55 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureT
 	return ok, err
 }
 
+func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureOPESSubrolesMaterializedV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	task orquestacoreworkflow.WorkflowTaskV0,
+	tasks []orquestacoreworkflow.WorkflowTaskV0,
+) (bool, error) {
+	record, ok, err := source.codexStackOperationalClosureAppChangeRecordForTaskV0(ctx, run.RunID, task.TaskID)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return true, nil
+	}
+	required := codexStackOperationalClosureRequiredOPESSubrolesV0(record)
+	if required <= 0 {
+		return true, nil
+	}
+	childRefs := codexStackOperationalClosureChildTaskRefsV0(run, task)
+	if len(childRefs) < required {
+		return false, nil
+	}
+	knownTasks := map[string]bool{}
+	for _, item := range tasks {
+		knownTasks[strings.TrimSpace(item.TaskID)] = true
+	}
+	for _, childRef := range childRefs {
+		if !knownTasks[childRef] || !codexStackOperationalClosureContainsV0(run.Tasks, childRef) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func codexStackOperationalClosureRequiredOPESSubrolesV0(
+	record orquestaappchange.AppChangeRecordV0,
+) int {
+	work := record.Request.ExternalWork
+	if work == nil || !externalJobIntegrationExternalWorkLooksOPESV0(record.Request.AppRef, work) {
+		return 0
+	}
+	required := externalJobIntegrationSubrolesRequiredCountV0(work.InputFields)
+	for _, ref := range work.InterfaceRefs {
+		if strings.TrimSpace(ref) == "opes.padre-tema-6-subroles.v1" && required < 6 {
+			required = 6
+		}
+	}
+	return required
+}
+
 func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureDomainWorkEvidenceRefsForDeliveryV0(
 	ctx context.Context,
 	request orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0,

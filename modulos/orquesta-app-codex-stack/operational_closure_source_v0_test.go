@@ -9,9 +9,12 @@ import (
 	"reflect"
 	"testing"
 
+	orquestaappchange "orquesta/modulos/orquesta-app-change"
+	orquestaappchangedirectorsource "orquesta/modulos/orquesta-app-change-director-source"
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacontext "orquesta/modulos/orquesta-context"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
@@ -661,6 +664,85 @@ func TestOperationalClosureSourceV0NoCierraPadreConHijosAbiertos(t *testing.T) {
 	}
 	if ok {
 		t.Fatalf("no debe cerrar padre con child_task_refs abiertos")
+	}
+}
+
+func TestOperationalClosureSourceV0NoCierraPadreOPESSubrolesSinHijosMaterializados(t *testing.T) {
+	runRef := "run-stack-operational-closure-source-opes-subroles-missing-children"
+	changeRef := "opes-job-tema-subroles-missing-children"
+	taskRef := orquestaappchangedirectorsource.AppChangeTaskRefV0(changeRef)
+	deliveryRef := "delivery-ref-stack-operational-closure-opes-subroles-missing-children"
+	task := stackOperationalClosureTaskForTestV0(runRef, taskRef, nil)
+	task.WorkProfileKind = orquestacoreworkflow.WorkProfileDomainWorkV0
+	task.FunctionContractRefs = []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
+		ContractRef:  "contract:function:app-change:opes-subroles-missing-children:v0",
+		FunctionName: "ApplyExternalDomainWorkV0",
+	}}
+	run := stackOperationalClosureRunForTestV0(runRef, task.TaskID)
+	run.ProjectRef = "opes"
+	run.AppSpecRef = "app-spec-external-work-opes"
+	run.Deliveries = []string{deliveryRef}
+	run.AcceptedReviews = []string{"accepted-review-ref-" + deliveryRef}
+	record := orquestaappchange.AppChangeRecordV0{
+		Request: orquestaappchange.AppChangeRequestV0{
+			RunRef:          runRef,
+			AppRef:          "opes",
+			ChangeRef:       changeRef,
+			AllowedWriteSet: []string{"temas/tema_032"},
+			ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+				ProjectRef:    "opes",
+				JobRef:        "job-ref-opes-subroles-missing-children",
+				InterfaceRefs: []string{"opes-rest-v0", "opes.padre-tema-6-subroles.v1"},
+				WorkKind:      "draft_content_block",
+				InputFields: []orquestadomainwork.DomainWorkFieldV0{{
+					Name:  "subroles_required",
+					Value: "6",
+				}},
+			},
+		},
+	}
+	ledger := NewInMemoryDomainWorkArtifactSubmissionLedgerV0()
+	if err := ledger.RecordDomainWorkArtifactSubmissionV0(context.Background(), DomainWorkArtifactSubmissionRecordV0{
+		IdempotencyKey: "idem-opes-subroles-missing-children",
+		Status:         DomainWorkArtifactSubmissionStatusAcceptedV0,
+		RunRef:         runRef,
+		TaskRef:        task.TaskID,
+		DeliveryRef:    deliveryRef,
+		DomainRef:      "opes",
+		JobRef:         "job-ref-opes-subroles-missing-children",
+		ArtifactRef:    deliveryRef,
+		ArtifactType:   "content_block",
+		CompleteJob:    true,
+		ReceiptRef:     "receipt-ref-opes-subroles-missing-children",
+		EvidenceRefs:   []string{"evidence-ref-opes-subroles-missing-children"},
+	}); err != nil {
+		t.Fatalf("RecordDomainWorkArtifactSubmissionV0: %v", err)
+	}
+	reader := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	if err := reader.AppendRunEventsV0(context.Background(), runRef, []orquestacoreworkflow.OrchestrationEventV0{
+		stackOperationalClosureDeliveryEventForTestV0(t, runRef, 1, task.TaskID, deliveryRef),
+		stackOperationalClosureReviewRequestedEventForTestV0(t, runRef, 2, deliveryRef),
+		stackOperationalClosureReviewResultEventForTestV0(t, runRef, 3, deliveryRef, orquestacoreworkflow.ReviewResultStatusAcceptedV0),
+		stackOperationalClosureAcceptedReviewEventForTestV0(t, runRef, 4, deliveryRef),
+	}); err != nil {
+		t.Fatalf("AppendRunEventsV0: %v", err)
+	}
+	source := codexStackOperationalClosureSourceV0{
+		TaskStore:              orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(task),
+		EventReader:            reader,
+		AppChangeStore:         orquestaappchange.NewInMemoryAppChangeStoreV0(record),
+		DomainSubmissionLedger: ledger,
+	}
+
+	_, ok, err := source.BuildOperationalDirectorClosureRequestV0(
+		context.Background(),
+		orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0{Run: run, OccurredAt: "2026-06-26T18:10:00Z"},
+	)
+	if err != nil {
+		t.Fatalf("BuildOperationalDirectorClosureRequestV0: %v", err)
+	}
+	if ok {
+		t.Fatalf("no debe cerrar padre OPES subroles_required=6 sin child_task_refs materializados")
 	}
 }
 

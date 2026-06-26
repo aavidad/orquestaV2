@@ -1430,3 +1430,8 @@ Cobertura:
   padre solo tenia write-set de coordinacion; el job queda como
   `integration_required` con razon
   `product_not_consolidated_due_write_set_narrowing`, no como completado.
+- `TestOperationalClosureSourceV0NoCierraPadreOPESSubrolesSinHijosMaterializados`
+  reproduce un padre OPES `domain_work` con entrega, review y receipt aceptados,
+  pero sin `child_task_refs` reales pese a declarar `subroles_required=6`; la
+  fuente de cierre no emite closure hasta que el contrato 1+6 este
+  materializado causalmente.

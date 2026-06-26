@@ -85,12 +85,12 @@ func (source codexStackOperationalClosureSourceV0) BuildOperationalDirectorClosu
 }
 
 type codexStackOperationalClosureTraceV0 struct {
-	Deliveries      map[string]orquestacoreworkflow.DeliveryRegisteredPayloadV0
-	DeliveryRefs    []string
-	ReviewRequests  map[string]orquestacoreworkflow.ReviewRequestedPayloadV0
-	ReviewResults   map[string]orquestacoreworkflow.ReviewResultV0
+	Deliveries       map[string]orquestacoreworkflow.DeliveryRegisteredPayloadV0
+	DeliveryRefs     []string
+	ReviewRequests   map[string]orquestacoreworkflow.ReviewRequestedPayloadV0
+	ReviewResults    map[string]orquestacoreworkflow.ReviewResultV0
 	ReviewResultRefs []string
-	AcceptedReviews map[string]orquestacoreworkflow.ReviewAcceptedPayloadV0
+	AcceptedReviews  map[string]orquestacoreworkflow.ReviewAcceptedPayloadV0
 }
 
 func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureCandidateTasksV0(
@@ -282,7 +282,14 @@ func (source codexStackOperationalClosureSourceV0) codexStackOperationalClosureT
 		return true, nil
 	}
 	if appChangeExternal, err := source.codexStackOperationalClosureTaskIsAppChangeExternalWorkV0(ctx, request.Run.RunID, task); err != nil || appChangeExternal {
-		return appChangeExternal, err
+		if err != nil {
+			return false, err
+		}
+		materialized, err := source.codexStackOperationalClosureOPESSubrolesMaterializedV0(ctx, request.Run, task, tasks)
+		if err != nil {
+			return false, err
+		}
+		return materialized, nil
 	}
 	return false, nil
 }
