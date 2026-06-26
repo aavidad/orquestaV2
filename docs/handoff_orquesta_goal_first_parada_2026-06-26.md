@@ -6,8 +6,8 @@ trabaja en otra sesion.
 ## Estado del ultimo tramo
 
 - Rama: `trabajo/plataforma-agentes`.
-- Ultimo commit ya publicado antes de este handoff: `213eba6d Documenta parada y salud web goal-first`.
-- Cambio preparado para el siguiente commit:
+- Ultimo commit ya publicado antes del corte final de parada: `213eba6d Documenta parada y salud web goal-first`.
+- Cambio publicado en el corte final de `/nueva-app`:
   - `/nueva-app` mantiene los tooltips visuales y anade ayuda accesible por
     `aria-describedby` para cada nodo con `data-help`.
   - Las pestanas del wizard exponen `tablist`/`tab`/`tabpanel`,
@@ -55,10 +55,9 @@ bateria focal + `go test -count=1 -p=1 ./...` pasaron.
 
 ## Pendientes concretos siguientes
 
-1. Commit/push de este lote si aun no esta publicado.
-2. Reiniciar solo el servidor web local `127.0.0.1:8787` con el binario nuevo
+1. Reiniciar solo el servidor web local `127.0.0.1:8787` con el binario nuevo
    cuando se retome; no tocar servidores OPES.
-3. Mejorar `/nueva-app` en el siguiente corte:
+2. Mejorar `/nueva-app` en el siguiente corte:
    - validar en navegador real que tooltips, foco, tabs y scroll funcionan bien
      en desktop/movil;
    - revisar si hacen falta mas filas o campos expertos antes de congelar el
@@ -66,14 +65,14 @@ bateria focal + `go test -count=1 -p=1 ./...` pasaron.
    - completar documentacion larga si se anaden nuevas opciones;
    - mantener cualquier opcion de proveedor/DB como adaptador opt-in, no como
      decision de la web.
-4. Demotar visiblemente herramientas MCP legacy de programacion frente a rutas
+3. Demotar visiblemente herramientas MCP legacy de programacion frente a rutas
    goal-first/estado, sin borrar handlers ni smokes historicos.
-5. Anadir contrato/test para backend Goal configurado pero degradado: no debe
+4. Anadir contrato/test para backend Goal configurado pero degradado: no debe
    caer silenciosamente a `legacy_director_loop` si el operador pidio goal.
-6. Anadir test de frontera para `/api/v0/autoprogramming/status` con cola
+5. Anadir test de frontera para `/api/v0/autoprogramming/status` con cola
    `running`, process refs vivos y salida `running_live=1`, `agents_live>0`,
    `stale_running=[]`.
-7. OPES sigue en otra sesion: no pisar procesos ni documentos que escriba ese
+6. OPES sigue en otra sesion: no pisar procesos ni documentos que escriba ese
    agente. El fichero
    `TAREA_OPES_ORQUESTA_EXTERNAL_WORK_VALIDACION_Y_STREAM_2026-06-26.md` estaba
    modificado por OPES y debe quedar fuera del commit salvo orden expresa.
