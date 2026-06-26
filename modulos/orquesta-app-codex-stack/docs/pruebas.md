@@ -29,6 +29,10 @@ Cobertura Go actual:
   valida que `plan_tema` se entrega como `document_plan`, usa
   `content_type=application/json` y conserva `sections`/`deliverables` como
   JSON validable;
+- `TestDefaultDomainWorkArtifactSubmissionBuilderV0MarcaValidacionVaciaComoInvalida`
+  valida que un `block_revision` estructurado con `files_scanned=0` no completa
+  el job, normaliza `status=pass` a `invalid` y conserva
+  `invalid_validation_empty_scan` como issue de validacion;
 - `TestValidateDomainWorkDeliveryQualityV0AceptaDocumentPlanValido` y
   `TestValidateDomainWorkDeliveryQualityV0RechazaDocumentPlanIncompleto`
   validan que el stack no acepta planes documentales incompletos;

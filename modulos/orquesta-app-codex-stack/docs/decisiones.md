@@ -2,6 +2,24 @@
 
 ```text
 Fecha: 2026-06-26
+Decision: Una validacion `domain_work` estructurada con `files_scanned=0` no
+puede completar el job como si fuera un pass.
+Motivo: OPES documento validadores que devolvian `pass` aunque no habian
+escaneado ningun fichero publicable. Orquesta no debe leer texto libre ni
+parchear scripts OPES desde el nucleo, pero si el artefacto trae campos
+estructurados puede preservar la evidencia como validacion invalida.
+Impacto: la builder del stack Codex para artefactos `block_revision` detecta
+`files_scanned=0`, normaliza estados de pass a `invalid`, anade
+`validation_issue_refs=invalid_validation_empty_scan` y marca `complete_job=false`.
+El artefacto sigue siendo evidencia recuperable; no se convierte en rail por
+palabras ni en regla del core.
+Contratos afectados: `DomainWorkArtifactSubmissionV0`,
+`defaultDomainWorkArtifactSubmissionBuilderV0`.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-06-26
 Decision: El stack Codex materializa un integrador de producto para jobs OPES
 1+6 legacy cuyo padre quedo con write-set solo de coordinacion.
 Motivo: OPES documento casos donde los seis subroles reales producen borradores

@@ -72,6 +72,73 @@ func TestDefaultDomainWorkArtifactSubmissionBuilderV0EntregaDocumentPlanOPES(t *
 	}
 }
 
+func TestDefaultDomainWorkArtifactSubmissionBuilderV0MarcaValidacionVaciaComoInvalida(t *testing.T) {
+	projectDir := t.TempDir()
+	bodyPath := filepath.Join(projectDir, "external", "opes", "validacion_tema")
+	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	body := `{
+		"artifact_type":"block_revision",
+		"payload_json":{
+			"status":"pass",
+			"files_scanned":0,
+			"finding_count":0,
+			"summary":"Validador sin notas de autor."
+		}
+	}`
+	if err := os.WriteFile(bodyPath, []byte(body), 0o600); err != nil {
+		t.Fatalf("write body: %v", err)
+	}
+
+	submission, ok, err := (defaultDomainWorkArtifactSubmissionBuilderV0{}).
+		BuildDomainWorkArtifactSubmissionV0(
+			context.Background(),
+			DomainWorkArtifactSubmissionBuildInputV0{
+				Run:  orquestacoreworkflow.OrchestrationRunV0{RunID: "run-ref-validation-empty-scan-001"},
+				Task: orquestacoreworkflow.WorkflowTaskV0{TaskID: "task-ref-validation-empty-scan-001", Title: "Validar texto publico"},
+				Record: orquestaappchange.AppChangeRecordV0{
+					Request: orquestaappchange.AppChangeRequestV0{
+						CorrelationID: "corr-ref-validation-empty-scan-001",
+						ChangeRef:     "change-ref-validation-empty-scan-001",
+						ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+							ProjectRef: "opes",
+							JobRef:     "job-ref-validation-empty-scan-001",
+							WorkKind:   "validate_topic",
+						},
+					},
+				},
+				Descriptor: orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+					DescriptorRef:  "descriptor-ref-validation-empty-scan-001",
+					ProjectWorkDir: projectDir,
+				},
+				Ack: orquestaruntimecodex.CodexAgentAckV0{
+					Files: []string{"external/opes/validacion_tema"},
+				},
+				Observation: orquestacionnucleoapp.AgentDeliveryObservationV0{
+					DeliveryRef:  "ack-ref-validation-empty-scan-001",
+					AgentRef:     "agent-ref-validation-empty-scan-001",
+					Summary:      "Validador estructurado.",
+					EvidenceRefs: []string{"ack-ref-validation-empty-scan-001"},
+				},
+			},
+		)
+
+	if err != nil || !ok {
+		t.Fatalf("BuildDomainWorkArtifactSubmissionV0 ok=%v err=%v", ok, err)
+	}
+	if submission.ArtifactType != orquestadomainwork.DomainWorkArtifactTypeBlockRevisionV0 ||
+		submission.CompleteJob ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "status", "invalid") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "validation_status", "invalid") ||
+		!domainWorkFieldValuesForTestV0(submission.PayloadFields, "validation_issue_refs", []string{"invalid_validation_empty_scan"}) {
+		t.Fatalf("submission=%+v", submission)
+	}
+	if issues := orquestadomainwork.ValidateDomainWorkArtifactSubmissionV0(submission); len(issues) != 0 {
+		t.Fatalf("submission invalida: %+v", issues)
+	}
+}
+
 func validDocumentPlanPayloadForTestV0() string {
 	return `{
 		"schema_version":"domain_document_plan.v0",

@@ -33,6 +33,11 @@ func (defaultDomainWorkArtifactSubmissionBuilderV0) BuildDomainWorkArtifactSubmi
 	payloadBody = canonicalDomainWorkDeliveryPayloadBodyV0(artifactType, payloadBody, input)
 	fields = domainWorkDeliveryPayloadFieldsV0(fields, artifactType, input.Task.Title, payloadBody)
 	fields = appendDomainWorkFieldIfMissingV0(fields, "file_ref", intake.FileRef)
+	completeJob := true
+	if domainWorkDeliveryHasEmptyValidationScanV0(artifactType, fields) {
+		fields = domainWorkDeliveryMarkEmptyValidationScanInvalidV0(fields)
+		completeJob = false
+	}
 	fields = redactDomainWorkDeliveryPayloadFieldsV0(fields)
 	return orquestadomainwork.NormalizeDomainWorkArtifactSubmissionV0(
 		orquestadomainwork.DomainWorkArtifactSubmissionV0{
@@ -48,7 +53,7 @@ func (defaultDomainWorkArtifactSubmissionBuilderV0) BuildDomainWorkArtifactSubmi
 			PayloadFields:  fields,
 			ExternalRefs:   domainWorkArtifactExternalRefsV0(input),
 			EvidenceRefs:   append([]string{input.Descriptor.DescriptorRef}, input.Observation.EvidenceRefs...),
-			CompleteJob:    true,
+			CompleteJob:    completeJob,
 		},
 	), true, nil
 }
@@ -205,6 +210,56 @@ func domainWorkDeliveryJSONFieldV0(
 	return orquestadomainwork.DomainWorkFieldV0{Name: name, ValueJSON: append([]byte(nil), raw...)}, true
 }
 
+func domainWorkDeliveryHasEmptyValidationScanV0(
+	artifactType string,
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) bool {
+	if strings.TrimSpace(artifactType) != orquestadomainwork.DomainWorkArtifactTypeBlockRevisionV0 {
+		return false
+	}
+	filesScanned, ok := domainWorkFieldIntValueV0(fields, "files_scanned")
+	return ok && filesScanned == 0
+}
+
+func domainWorkDeliveryMarkEmptyValidationScanInvalidV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	out := make([]orquestadomainwork.DomainWorkFieldV0, 0, len(fields)+2)
+	for _, field := range fields {
+		if domainWorkValidationStatusFieldV0(field.Name) &&
+			domainWorkValidationStatusLooksPassV0(field.Value) {
+			field.Value = "invalid"
+		}
+		out = append(out, field)
+	}
+	out = appendDomainWorkFieldIfMissingV0(out, "validation_status", "invalid")
+	if !domainWorkFieldHasNameV0(out, "validation_issue_refs") {
+		out = append(out, orquestadomainwork.DomainWorkFieldV0{
+			Name:   "validation_issue_refs",
+			Values: []string{"invalid_validation_empty_scan"},
+		})
+	}
+	return out
+}
+
+func domainWorkValidationStatusFieldV0(name string) bool {
+	switch normalizeDomainWorkDeliveryAliasV0(name) {
+	case "status", "validation_status", "result", "resultado":
+		return true
+	default:
+		return false
+	}
+}
+
+func domainWorkValidationStatusLooksPassV0(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "pass", "passed", "ok", "success", "passed_with_warnings", "aprobado":
+		return true
+	default:
+		return false
+	}
+}
+
 func appendDomainWorkFieldIfMissingV0(
 	fields []orquestadomainwork.DomainWorkFieldV0,
 	name string,
@@ -333,19 +388,27 @@ func domainWorkFieldStringValueV0(
 }
 
 func domainWorkFieldIntV0(fields []orquestadomainwork.DomainWorkFieldV0, name string) int {
+	value, ok := domainWorkFieldIntValueV0(fields, name)
+	if !ok || value <= 0 {
+		return 0
+	}
+	return value
+}
+
+func domainWorkFieldIntValueV0(fields []orquestadomainwork.DomainWorkFieldV0, name string) (int, bool) {
 	for _, field := range fields {
 		if strings.TrimSpace(field.Name) != name {
 			continue
 		}
-		if value, err := strconv.Atoi(strings.TrimSpace(field.Value)); err == nil && value > 0 {
-			return value
+		if value, err := strconv.Atoi(strings.TrimSpace(field.Value)); err == nil {
+			return value, true
 		}
 		var decoded int
-		if len(field.ValueJSON) > 0 && json.Unmarshal(field.ValueJSON, &decoded) == nil && decoded > 0 {
-			return decoded
+		if len(field.ValueJSON) > 0 && json.Unmarshal(field.ValueJSON, &decoded) == nil {
+			return decoded, true
 		}
 	}
-	return 0
+	return 0, false
 }
 
 func domainWorkArtifactExternalRefsV0(
