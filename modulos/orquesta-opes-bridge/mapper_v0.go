@@ -83,7 +83,7 @@ func BuildExternalWorkRunRequestWithContextV0(
 		CurrentStateRefs:   currentStateRefsForJobV0(safeJob, workRefs),
 		AcceptanceCriteria: acceptanceCriteriaForJobV0(job.Type),
 		Constraints:        constraintsForJobV0(),
-		AllowedWriteSet:    []string{opesJobWriteSetV0(workKind, safeJob)},
+		AllowedWriteSet:    allowedWriteSetForJobV0(fields, workKind, safeJob),
 		ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
 			ProjectRef:    config.ProjectRef,
 			JobRef:        job.ID,
@@ -262,6 +262,89 @@ func fieldValueV0(fields []orquestadomainwork.DomainWorkFieldV0, name string) st
 		}
 	}
 	return ""
+}
+
+func allowedWriteSetForJobV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	workKind string,
+	safeJob string,
+) []string {
+	writeSet := productWriteSetFromPayloadFieldsV0(fields)
+	if len(writeSet) > 0 {
+		return writeSet
+	}
+	return []string{opesJobWriteSetV0(workKind, safeJob)}
+}
+
+func productWriteSetFromPayloadFieldsV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) []string {
+	out := []string{}
+	for _, field := range fields {
+		switch strings.TrimSpace(field.Name) {
+		case "allowed_write_set", "product_write_set", "topic_dir":
+		default:
+			continue
+		}
+		for _, value := range fieldStringValuesV0(field) {
+			if safe, ok := safeProductWriteSetRefV0(value); ok {
+				out = append(out, safe)
+			}
+		}
+	}
+	return compactStringsV0(out)
+}
+
+func fieldStringValuesV0(field orquestadomainwork.DomainWorkFieldV0) []string {
+	values := append([]string{field.Value}, field.Values...)
+	if len(field.ValueJSON) == 0 {
+		return compactStringsV0(values)
+	}
+	var decoded string
+	if json.Unmarshal(field.ValueJSON, &decoded) == nil {
+		return compactStringsV0(append(values, decoded))
+	}
+	var decodedValues []string
+	if json.Unmarshal(field.ValueJSON, &decodedValues) == nil {
+		return compactStringsV0(append(values, decodedValues...))
+	}
+	return compactStringsV0(values)
+}
+
+func safeProductWriteSetRefV0(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" ||
+		strings.HasPrefix(value, "/") ||
+		strings.HasPrefix(value, "~") ||
+		strings.Contains(value, "\\") ||
+		strings.Contains(value, ":") {
+		return "", false
+	}
+	parts := strings.Split(value, "/")
+	for _, part := range parts {
+		if !safeProductWriteSetSegmentV0(part) {
+			return "", false
+		}
+	}
+	return strings.Join(parts, "/"), true
+}
+
+func safeProductWriteSetSegmentV0(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "." || value == ".." {
+		return false
+	}
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '_', r == '-', r == '.':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func workRefsForPayloadV0(

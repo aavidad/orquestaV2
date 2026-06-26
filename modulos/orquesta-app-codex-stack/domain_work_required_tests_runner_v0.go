@@ -2,6 +2,8 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestaappchangedirectorsource "orquesta/modulos/orquesta-app-change-director-source"
@@ -126,7 +128,7 @@ func (runner DomainWorkRequiredTestRunnerV0) domainWorkRequiredTestEvidenceV0(
 ) (orquestacionnucleoapp.RequiredTestEvidenceV0, error) {
 	ref := domainWorkRequiredTestEvidenceRefV0(request, command)
 	status := orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0
-	if record.Status == DomainWorkArtifactSubmissionStatusRejectedV0 {
+	if domainWorkSubmissionRecordFailsRequiredTestsV0(record) {
 		status = orquestacionnucleoapp.RequiredTestEvidenceStatusFailedV0
 	}
 	evidenceRefs := domainWorkRequiredTestEvidenceRefsV0(request, record, status)
@@ -146,6 +148,62 @@ func (runner DomainWorkRequiredTestRunnerV0) domainWorkRequiredTestEvidenceV0(
 	})
 }
 
+func domainWorkSubmissionRecordFailsRequiredTestsV0(
+	record DomainWorkArtifactSubmissionRecordV0,
+) bool {
+	if record.Status == DomainWorkArtifactSubmissionStatusRejectedV0 {
+		return true
+	}
+	if record.CompleteJob {
+		return false
+	}
+	if codexStackStringInSetV0(
+		domainWorkSubmissionValidationIssueRefsV0(record.PayloadFields),
+		domainWorkInvalidValidationEmptyScanIssueRefV0,
+	) {
+		return true
+	}
+	return domainWorkSubmissionHasInvalidValidationStatusV0(record.PayloadFields)
+}
+
+func domainWorkSubmissionHasInvalidValidationStatusV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) bool {
+	for _, field := range fields {
+		if !domainWorkValidationStatusFieldV0(field.Name) {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(field.Value)) {
+		case "invalid", "failed", "fail", "error", "rejected":
+			return true
+		}
+	}
+	return false
+}
+
+func domainWorkSubmissionValidationIssueRefsV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) []string {
+	out := []string{}
+	for _, field := range fields {
+		if normalizeDomainWorkDeliveryAliasV0(field.Name) != "validation_issue_refs" {
+			continue
+		}
+		out = compactCodexStackStringsV0(append(out, field.Value))
+		out = compactCodexStackStringsV0(append(out, field.Values...))
+		var decodedString string
+		if len(field.ValueJSON) > 0 && json.Unmarshal(field.ValueJSON, &decodedString) == nil {
+			out = compactCodexStackStringsV0(append(out, decodedString))
+			continue
+		}
+		var decodedStrings []string
+		if len(field.ValueJSON) > 0 && json.Unmarshal(field.ValueJSON, &decodedStrings) == nil {
+			out = compactCodexStackStringsV0(append(out, decodedStrings...))
+		}
+	}
+	return out
+}
+
 func domainWorkRequiredTestEvidenceRefsV0(
 	request orquestacionnucleoapp.RequiredTestExecutionRequestV0,
 	record DomainWorkArtifactSubmissionRecordV0,
@@ -157,6 +215,10 @@ func domainWorkRequiredTestEvidenceRefsV0(
 	))
 	if status == orquestacionnucleoapp.RequiredTestEvidenceStatusFailedV0 {
 		evidenceRefs = compactCodexStackStringsV0(append(evidenceRefs, record.IssueRefs...))
+		evidenceRefs = compactCodexStackStringsV0(append(
+			evidenceRefs,
+			domainWorkSubmissionValidationIssueRefsV0(record.PayloadFields)...,
+		))
 	}
 	return evidenceRefs
 }

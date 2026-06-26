@@ -129,6 +129,46 @@ func TestBuildExternalWorkRunRequestV0MarcaContratoSeisSubrolesOPES(t *testing.T
 	}
 }
 
+func TestBuildExternalWorkRunRequestV0UsaTopicDirSeguroComoWriteSetProducto(t *testing.T) {
+	req, ok := BuildExternalWorkRunRequestV0(orquestaopesconnector.ExternalJobV0{
+		ID:   "job-tema-producto-032",
+		Type: "draft_content_block",
+		PayloadJSON: `{
+			"topic_id":"tema-032",
+			"topic_dir":"temas/tema_032"
+		}`,
+	}, JobRunConfigV0{})
+
+	if !ok {
+		t.Fatalf("request no construida")
+	}
+	if len(req.AppChangeRequest.AllowedWriteSet) != 1 ||
+		req.AppChangeRequest.AllowedWriteSet[0] != "temas/tema_032" {
+		t.Fatalf("allowed_write_set=%+v", req.AppChangeRequest.AllowedWriteSet)
+	}
+}
+
+func TestBuildExternalWorkRunRequestV0IgnoraWriteSetProductoInseguro(t *testing.T) {
+	req, ok := BuildExternalWorkRunRequestV0(orquestaopesconnector.ExternalJobV0{
+		ID:   "job-tema-producto-inseguro-032",
+		Type: "draft_content_block",
+		PayloadJSON: `{
+			"topic_id":"tema-032",
+			"topic_dir":"../tema_032",
+			"product_write_set":"/tmp/tema_032",
+			"allowed_write_set":"C:\\tmp\\tema_032"
+		}`,
+	}, JobRunConfigV0{})
+
+	if !ok {
+		t.Fatalf("request no construida")
+	}
+	if len(req.AppChangeRequest.AllowedWriteSet) != 1 ||
+		req.AppChangeRequest.AllowedWriteSet[0] != "external/opes/draft_content_block/job-tema-producto-inseguro-032" {
+		t.Fatalf("allowed_write_set=%+v", req.AppChangeRequest.AllowedWriteSet)
+	}
+}
+
 func TestBuildExternalWorkRunRequestV0MapeaPlanTemaComoDocumentPlan(t *testing.T) {
 	req, ok := BuildExternalWorkRunRequestV0(orquestaopesconnector.ExternalJobV0{
 		ID:   "job-ref-plan-001",

@@ -154,8 +154,12 @@ Reglas:
   invidentes o cualquier alumno puedan escuchar el contenido del tema y de sus
   apartados. Tambien debe incluir investigacion externa, banco de tests,
   tutor/bots, HTML local y manuales graficos de ayuda antes de produccion;
-- `allowed_write_set` se limita a `external/opes/<work_kind>/<job_id>` para que
-  cada job tenga una entrega unica y varios agentes del mismo tipo no se pisen;
+- `allowed_write_set` usa por defecto `external/opes/<work_kind>/<job_id>` para
+  que cada job tenga una entrega unica y varios agentes del mismo tipo no se
+  pisen; si OPES declara explicitamente `allowed_write_set`,
+  `product_write_set` o `topic_dir` como ruta relativa segura, el bridge
+  preserva ese write-set de producto para que el agente pueda consolidar el
+  artefacto canonico;
 - si OPES aporta `worktree_ref` o `branch_ref` en `external_refs`, el bridge los
   conserva como refs opacas en `input_fields`/`work_refs` y rechaza valores con
   forma de ruta; no los interpreta como paths, nombres Git ni write-set;

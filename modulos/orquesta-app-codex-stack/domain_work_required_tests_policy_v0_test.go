@@ -134,6 +134,33 @@ func TestDomainWorkRequiredTestRunnerV0DistingueLatenciaRechazoYAceptacion(t *te
 		t.Fatalf("rechazo debe generar failed evidence: result=%+v err=%v", result, err)
 	}
 
+	emptyScan := codexStackDomainWorkRequiredTestRequestForTestV0(record, "empty-scan")
+	if err := ledger.RecordDomainWorkArtifactSubmissionV0(ctx, DomainWorkArtifactSubmissionRecordV0{
+		IdempotencyKey: "idem-empty-scan",
+		Status:         DomainWorkArtifactSubmissionStatusAcceptedV0,
+		RunRef:         emptyScan.RunRef,
+		TaskRef:        emptyScan.TaskRef,
+		DeliveryRef:    emptyScan.DeliveryRef,
+		ReceiptRef:     "receipt-ref-empty-scan",
+		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+			{Name: "validation_status", Value: "invalid"},
+			{Name: "validation_issue_refs", Values: []string{domainWorkInvalidValidationEmptyScanIssueRefV0}},
+		},
+		EvidenceRefs: []string{"artifact-ref-empty-scan"},
+	}); err != nil {
+		t.Fatalf("record empty scan: %v", err)
+	}
+	result, err = runner.RunRequiredTestsV0(ctx, emptyScan)
+	if err != nil || len(result.FailedEvidenceRefs) != 1 || len(result.PassedEvidenceRefs) != 0 {
+		t.Fatalf("validacion vacia debe generar failed evidence: result=%+v err=%v", result, err)
+	}
+	items, err := evidence.LoadRequiredTestEvidenceV0(ctx, emptyScan.RunRef, result.FailedEvidenceRefs)
+	if err != nil || len(items) != 1 ||
+		items[0].Status != orquestacionnucleoapp.RequiredTestEvidenceStatusFailedV0 ||
+		!codexStackStringInSetForTestV0(items[0].EvidenceRefs, domainWorkInvalidValidationEmptyScanIssueRefV0) {
+		t.Fatalf("evidencia invalid_validation_empty_scan no registrada: items=%+v err=%v", items, err)
+	}
+
 	accepted := codexStackDomainWorkRequiredTestRequestForTestV0(record, "accepted")
 	if err := ledger.RecordDomainWorkArtifactSubmissionV0(ctx, DomainWorkArtifactSubmissionRecordV0{
 		IdempotencyKey: "idem-accepted",

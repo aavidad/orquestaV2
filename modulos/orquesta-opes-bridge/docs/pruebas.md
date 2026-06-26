@@ -45,7 +45,11 @@
   opacas, sin usarlas como ruta, rama Git ni componente del write-set.
 - Preservacion de payload JSON como `input_fields`.
 - Hidratacion de `topic_blocks` para `summarize_topic`.
-- Write-set unico para evitar entregas multiples innecesarias.
+- Write-set unico por defecto para evitar entregas multiples innecesarias y
+  preservacion del write-set de producto cuando el payload declara
+  `allowed_write_set`, `product_write_set` o `topic_dir` con ruta relativa
+  segura; rutas absolutas, con `..`, drive o separadores inseguros caen al
+  fallback `external/opes/<work_kind>/<job_id>`.
 
 Comando:
 

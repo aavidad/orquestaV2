@@ -11,6 +11,8 @@ import (
 	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
+const domainWorkInvalidValidationEmptyScanIssueRefV0 = "invalid_validation_empty_scan"
+
 type defaultDomainWorkArtifactSubmissionBuilderV0 struct{}
 
 func (defaultDomainWorkArtifactSubmissionBuilderV0) BuildDomainWorkArtifactSubmissionV0(
@@ -236,7 +238,7 @@ func domainWorkDeliveryMarkEmptyValidationScanInvalidV0(
 	if !domainWorkFieldHasNameV0(out, "validation_issue_refs") {
 		out = append(out, orquestadomainwork.DomainWorkFieldV0{
 			Name:   "validation_issue_refs",
-			Values: []string{"invalid_validation_empty_scan"},
+			Values: []string{domainWorkInvalidValidationEmptyScanIssueRefV0},
 		})
 	}
 	return out
