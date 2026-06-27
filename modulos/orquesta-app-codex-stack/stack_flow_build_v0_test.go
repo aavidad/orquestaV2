@@ -9,6 +9,7 @@ import (
 	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestarunmemory "orquesta/modulos/orquesta-run-memory"
@@ -48,10 +49,45 @@ func mustBuildCodexStackWithDomainWorkAndRequiredTestsForTestV0(
 	requiredTests orquestacionnucleoapp.RequiredTestRunnerPortV0,
 ) StackV0 {
 	t.Helper()
+	config := codexStackBaseConfigForTestV0(t, runtime, domainWork, requiredTests)
+	stack, err := BuildStackV0(config)
+	if err != nil {
+		t.Fatalf("BuildStackV0: %v", err)
+	}
+	return stack
+}
+
+func mustBuildCodexStackWithGoalBackendForTestV0(
+	t *testing.T,
+	runtime codexStackRuntimeForTestV0,
+	launcher orquestagoal.GoalWorkLauncherPortV0,
+	observer orquestagoal.GoalWorkObservationPortV0,
+	goalStates orquestagoal.GoalWorkStateStorePortV0,
+) StackV0 {
+	t.Helper()
+	config := codexStackBaseConfigForTestV0(t, runtime, nil, nil)
+	config.AppGoalLauncher = launcher
+	config.AppGoalObserver = observer
+	config.AppGoalClosureValidator = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
+	config.Stores.AppGoalStateStore = goalStates
+	stack, err := BuildStackV0(config)
+	if err != nil {
+		t.Fatalf("BuildStackV0: %v", err)
+	}
+	return stack
+}
+
+func codexStackBaseConfigForTestV0(
+	t *testing.T,
+	runtime codexStackRuntimeForTestV0,
+	domainWork orquestamcp.MCPDomainWorkExecutorPortV0,
+	requiredTests orquestacionnucleoapp.RequiredTestRunnerPortV0,
+) ConfigV0 {
+	t.Helper()
 	projectDir := t.TempDir()
 	runtimeDir := filepath.Join(t.TempDir(), "runtime")
 	runMemory := orquestarunmemory.NewRunMemoryStoreV0()
-	stack, err := BuildStackV0(ConfigV0{
+	return ConfigV0{
 		Enabled: true,
 		Timeout: time.Second,
 		DirectorLimits: orquestaweb.WebArrancarDirectorAppLimitsV0{
@@ -108,11 +144,7 @@ func mustBuildCodexStackWithDomainWorkAndRequiredTestsForTestV0(
 		DomainDelivery: DomainWorkDeliveryBridgeConfigV0{
 			Enabled: domainWork != nil,
 		},
-	})
-	if err != nil {
-		t.Fatalf("BuildStackV0: %v", err)
 	}
-	return stack
 }
 
 func codexStackProgressPolicyForTestV0() orquestaruntime.AgentProgressHeartbeatPolicyV0 {

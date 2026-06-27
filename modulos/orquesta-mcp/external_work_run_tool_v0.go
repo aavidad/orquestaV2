@@ -16,9 +16,12 @@ const (
 	MCPExternalWorkRunInputAmbiguousV0 = "external_work_run_input_ambiguous"
 
 	MCPExternalWorkRunRoutePolicyLegacyDirectorLoopV0   = "legacy_director_loop"
+	MCPExternalWorkRunRoutePolicyGoalFirstV0            = "goal_first"
 	MCPExternalWorkRunNextActionSuperviseLegacyRunV0    = "supervise_legacy_run_or_wait_resident"
 	MCPExternalWorkRunNextActionMigrateGoalFirstV0      = "migrate_external_work_to_goal_first"
+	MCPExternalWorkRunNextActionObserveGoalV0           = "observe_goal"
 	MCPExternalWorkRunDirectorExecutionModeLegacyLoopV0 = "legacy_director_loop"
+	MCPExternalWorkRunDirectorExecutionModeGoalFirstV0  = "goal_first"
 )
 
 type MCPExternalWorkRunToolDescriptorV0 struct {
@@ -47,6 +50,8 @@ type MCPExternalWorkRunToolResultV0 struct {
 	ProjectRef            string                      `json:"project_ref,omitempty"`
 	AppRef                string                      `json:"app_ref,omitempty"`
 	ChangeRef             string                      `json:"change_ref,omitempty"`
+	GoalRef               string                      `json:"goal_ref,omitempty"`
+	ExternalGoalRef       string                      `json:"external_goal_ref,omitempty"`
 	DirectorQuestionRef   string                      `json:"director_question_ref,omitempty"`
 	EvidenceRefs          []string                    `json:"evidence_refs,omitempty"`
 	NextActions           []string                    `json:"next_actions,omitempty"`
@@ -63,13 +68,13 @@ func MCPExternalWorkRunDescriptorV0() MCPExternalWorkRunToolDescriptorV0 {
 		Name:        MCPExternalWorkRunToolNameV0,
 		Version:     MCPExternalWorkRunToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,external_work_run_request?:StartExternalWorkRunRequestV0,app_change_request?:AppChangeRequestV0}",
-		Output:      "ok:{route_policy,director_execution_mode,run_ref,change_ref,director_question_ref,next_actions?}|error:{errores_publicos}",
+		Output:      "ok:{route_policy,director_execution_mode,run_ref,change_ref,goal_ref?,next_actions?}|error:{errores_publicos}",
 		ResourceURI: MCPExternalWorkRunResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
-			"compatibilidad legacy explicita hasta migrar external-work a GoalWorkSpecV0",
-			"no crea GoalWorkStateV0 ni arranca Codex Goal",
-			"crea run operativo y encola para loop historico por puertos inyectados",
+			"legacy explicito cuando no hay backend Goal completo",
+			"con backend Goal completo la composicion puede devolver route_policy=goal_first y goal_ref",
+			"la ruta legacy crea run operativo y encola para loop historico por puertos inyectados",
 			"sin OPES, DB, runtime, filesystem ni proveedor hardcodeado",
 		},
 	}

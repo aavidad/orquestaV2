@@ -7,6 +7,13 @@ import (
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 )
 
+func PrepareStartExternalWorkRunRequestV0(
+	request StartExternalWorkRunRequestV0,
+	config StartExternalWorkRunConfigV0,
+) StartExternalWorkRunRequestV0 {
+	return normalizeStartExternalWorkRunRequestV0(request, config)
+}
+
 func normalizeStartExternalWorkRunRequestV0(
 	request StartExternalWorkRunRequestV0,
 	config StartExternalWorkRunConfigV0,

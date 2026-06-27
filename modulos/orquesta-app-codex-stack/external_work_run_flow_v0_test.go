@@ -13,6 +13,7 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoroperativo "orquesta/modulos/orquesta-director-operativo"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
@@ -44,6 +45,59 @@ func TestCodexStackV0ExternalWorkRunCreaRunSinDirectorInicial(t *testing.T) {
 		ranking.Ranked[0].RunRef != result.RunRef ||
 		ranking.Ranked[0].AppRef != "opes" {
 		t.Fatalf("ranking=%+v result=%+v", ranking, result)
+	}
+}
+
+func TestCodexStackV0ExternalWorkRunConBackendGoalArrancaGoalFirstSinColaLegacy(t *testing.T) {
+	launcher := &goalFirstQueueLauncherForTestV0{}
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	stack := mustBuildCodexStackWithGoalBackendForTestV0(
+		t,
+		newFakeCodexStackRuntimeV0(),
+		launcher,
+		&goalFirstQueueObserverForTestV0{},
+		goalStates,
+	)
+
+	result := postExternalWorkRunStackV0(t, stack)
+	if result.RoutePolicy != orquestamcp.MCPExternalWorkRunRoutePolicyGoalFirstV0 ||
+		result.DirectorExecutionMode != orquestamcp.MCPExternalWorkRunDirectorExecutionModeGoalFirstV0 ||
+		result.GoalRef == "" ||
+		result.DirectorQuestionRef != "" ||
+		!codexStackStringInSetForTestV0(result.NextActions, orquestamcp.MCPExternalWorkRunNextActionObserveGoalV0) {
+		t.Fatalf("result goal-first inesperado=%+v", result)
+	}
+	if len(launcher.specs) != 1 ||
+		launcher.specs[0].DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 ||
+		!launcher.specs[0].ClosurePolicy.RequireDomainReceipt {
+		t.Fatalf("specs=%+v", launcher.specs)
+	}
+	run, err := stack.Stores.RunStore.LoadRunV0(context.Background(), result.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if string(run.CurrentPhase) != "programacion" ||
+		len(run.Tasks) != 0 ||
+		len(run.FunctionContracts) != 0 ||
+		len(run.DirectorQuestions) != 0 ||
+		len(run.StartedAgents) != 0 {
+		t.Fatalf("run goal-first contiene loop legacy: %+v", run)
+	}
+	state, err := goalStates.LoadGoalWorkStateV0(context.Background(), result.RunRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if state.GoalRef != result.GoalRef ||
+		state.Spec.RunRef != result.RunRef ||
+		state.Spec.DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 {
+		t.Fatalf("state=%+v result=%+v", state, result)
+	}
+	ranking := postRunQueuePriorityStackV0(t, stack, orquestamcp.MCPRunQueuePriorityToolInputV0{
+		Action:   "rank",
+		QueueRef: DefaultRunQueueRefV0,
+	})
+	if len(ranking.Ranked) != 0 {
+		t.Fatalf("goal-first no debe encolar loop legacy: ranking=%+v", ranking)
 	}
 }
 

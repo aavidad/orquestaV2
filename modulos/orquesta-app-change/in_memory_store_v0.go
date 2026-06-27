@@ -96,6 +96,7 @@ func copyAppChangeExternalWorkV0(
 	out.InterfaceRefs = append([]string(nil), work.InterfaceRefs...)
 	out.WorkRefs = append([]string(nil), work.WorkRefs...)
 	out.InputFields = copyDomainWorkFieldsFromAppChangeV0(work.InputFields)
+	out.RequiredTests = copyDomainWorkRequiredTestsFromAppChangeV0(work.RequiredTests)
 	return &out
 }
 

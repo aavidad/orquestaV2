@@ -240,6 +240,25 @@ Estado: aceptada.
 
 ```text
 Fecha: 2026-06-27
+Decision: `/external-work/run` usa Goal-first en el stack Codex cuando el
+backend Goal esta completo.
+Motivo: con Codex Goal, Orquesta no debe convertir un trabajo externo ya
+definido en una pregunta de Director y una entrada de cola legacy si puede
+compilar un `GoalWorkSpecV0`, lanzar el Goal y observar/cerrar por evidencias.
+La compatibilidad legacy sigue necesaria cuando la composicion no inyecta
+`GoalLauncher`, `GoalObserver`, `GoalClosureValidator` y `GoalStateStore`.
+Impacto: el executor del stack envuelve la ruta legacy. Si hay backend completo,
+normaliza `StartExternalWorkRunRequestV0`, compila el contrato neutral de
+`orquesta-external-work-run`, especializa `director_kind=codex_goal`, crea una
+run contenedora sin `WorkflowTaskV0` ni `DirectorQuestions`, persiste
+`GoalWorkStateV0` y devuelve `route_policy=goal_first` con
+`next_actions=[observe_goal]`. Si no hay backend completo, conserva
+`route_policy=legacy_director_loop`.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-06-27
 Decision: El supervisor legacy bloquea contenedores goal-first sin
 `GoalWorkStateV0` cargable.
 Motivo: si una run goal-first se persiste pero falla el state store, no debe

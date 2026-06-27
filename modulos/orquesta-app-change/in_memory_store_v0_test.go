@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 )
 
 func TestInMemoryAppChangeStoreV0GuardaYListaPorRunRef(t *testing.T) {
@@ -81,10 +83,14 @@ func TestInMemoryAppChangeStoreV0UsaCopiasDefensivas(t *testing.T) {
 	record := appChangeRecordForStoreTestV0("run-a", "change-1")
 	record.Request.AcceptanceCriteria = []string{"criterio-original"}
 	record.Request.RequiredTests = []string{"test-original"}
+	record.Request.ExternalWork.RequiredTests = []orquestadomainwork.DomainWorkRequiredTestV0{{
+		TestRef: "domain-test-original",
+	}}
 
 	mustSaveAppChangeRecordV0(t, store, record)
 	record.Request.AcceptanceCriteria[0] = "criterio-mutado"
 	record.Request.RequiredTests[0] = "test-mutado"
+	record.Request.ExternalWork.RequiredTests[0].TestRef = "domain-test-mutado"
 
 	records, err := store.ListAppChangeRecordsV0(
 		context.Background(),
@@ -95,6 +101,7 @@ func TestInMemoryAppChangeStoreV0UsaCopiasDefensivas(t *testing.T) {
 	}
 	records[0].Request.AcceptanceCriteria[0] = "criterio-mutado-desde-listado"
 	records[0].Request.RequiredTests[0] = "test-mutado-desde-listado"
+	records[0].Request.ExternalWork.RequiredTests[0].TestRef = "domain-test-mutado-desde-listado"
 
 	records, err = store.ListAppChangeRecordsV0(
 		context.Background(),
@@ -104,7 +111,8 @@ func TestInMemoryAppChangeStoreV0UsaCopiasDefensivas(t *testing.T) {
 		t.Fatalf("ListAppChangeRecordsV0: %v", err)
 	}
 	if records[0].Request.AcceptanceCriteria[0] != "criterio-original" ||
-		records[0].Request.RequiredTests[0] != "test-original" {
+		records[0].Request.RequiredTests[0] != "test-original" ||
+		records[0].Request.ExternalWork.RequiredTests[0].TestRef != "domain-test-original" {
 		t.Fatalf("record mutado: %+v", records[0])
 	}
 }
