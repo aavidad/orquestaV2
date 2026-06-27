@@ -249,6 +249,10 @@ respuesta es bloqueo/estado faltante y no loop historico. En `goal_ready`,
 `BuildAutoprogrammingProgrammableWorkV0` conserva `GoalWorkSpecV0` y grupos
 neutrales pero deja vacia la superficie publica `WorkflowTaskV0`/profiles
 legacy, evitando preparacion de worktrees y refs `workflow_task_refs` en MCP.
+Revalidacion adicional 2026-06-27: `/autoprogramming` desactiva `Supervisar`
+cuando `safe_actions` trae `observe_goal`, aunque aun no haya `currentGoalRef`;
+y la guarda de state faltante queda cubierta para `DrainRunV0` directo y
+Director residente, marcando la cola `stopped` sin lanzar agentes legacy.
 
 Pendiente verificable:
 

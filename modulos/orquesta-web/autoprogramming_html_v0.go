@@ -165,6 +165,7 @@ El cambio queda cubierto por tests</textarea></label>
     let currentGoalRef = '';
     let currentExternalGoalRef = '';
     let currentGoals = [];
+    let currentSafeActions = [];
     let currentGoalIndex = 0;
     let goalPollTimer = 0;
     let goalPollCount = 0;
@@ -299,11 +300,24 @@ El cambio queda cubierto por tests</textarea></label>
       );
     }
     function updateSuperviseState() {
-      const goalActive = Boolean(currentGoalRef);
+      const goalActive = Boolean(currentGoalRef) || hasGoalFirstSafeActionForCurrentRun();
       superviseRunButton.disabled = goalActive;
       superviseRunButton.title = goalActive
         ? 'Esta run usa Goal; usa Observar goal.'
         : 'Solo para runs legacy de autoprogramacion.';
+    }
+    function hasGoalFirstSafeActionForCurrentRun() {
+      return goalFirstSafeActions().some(item => {
+        const runRef = String(item.run_ref || '').trim();
+        return !currentRunRef || !runRef || runRef === currentRunRef;
+      });
+    }
+    function goalFirstSafeActions() {
+      return (currentSafeActions || []).filter(item =>
+        item &&
+        item.action === 'observe_goal' &&
+        item.endpoint === '/api/v0/autoprogramming/goal/observe'
+      );
     }
     function renderStaleRunning(items) {
       staleList.textContent = '';
@@ -335,6 +349,7 @@ El cambio queda cubierto por tests</textarea></label>
       });
     }
     function renderSafeActions(items) {
+      currentSafeActions = Array.isArray(items) ? items : [];
       safeActionsList.textContent = '';
       safeActionsPanel.hidden = !items || !items.length;
       (items || []).slice(0, 8).forEach(item => {
@@ -547,7 +562,12 @@ El cambio queda cubierto por tests</textarea></label>
     });
     document.getElementById('stop-goal-poll').addEventListener('click', stopGoalPolling);
     document.getElementById('supervise-run').addEventListener('click', async function() {
-      if (currentGoalRef) return;
+      if (currentGoalRef || hasGoalFirstSafeActionForCurrentRun()) {
+        goalPanel.hidden = false;
+        goalNote.textContent = 'Esta run publica observe_goal; no se usa supervision legacy.';
+        updateSuperviseState();
+        return;
+      }
       const id = requestId('web-supervise');
       const data = await postJSON('/api/v0/autoprogramming/supervise', {
         request_id: id,

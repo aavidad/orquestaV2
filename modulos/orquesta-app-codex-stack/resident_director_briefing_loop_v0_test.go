@@ -223,6 +223,79 @@ func TestCodexStackResidentDirectorV0NoDrenaLegacySiGoalFirstEnCola(t *testing.T
 	}
 }
 
+func TestCodexStackResidentDirectorV0NoDrenaLegacySiGoalFirstNoTieneState(t *testing.T) {
+	ctx := context.Background()
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	stack.Ports.GoalStateStore = newGoalFirstQueueStateStoreForTestV0()
+	now := time.Date(2026, 6, 27, 12, 15, 0, 0, time.UTC)
+	runRef := "run-resident-goal-first-missing-state-001"
+	if err := stack.Ports.RunStore.SaveRunV0(ctx, orquestacoreworkflow.OrchestrationRunV0{
+		SchemaVersion: orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
+		RunID:         runRef,
+		ProjectRef:    "app-resident-goal-first-missing-state",
+		AppSpecRef:    "app-spec-ref-autoprogramming-missing-state",
+		Status:        orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+		CurrentPhase:  orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+	}); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	if _, err := stack.Stores.RunQueue.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        runRef,
+		QueueRef:      normalizeRunQueueConfigV0(stack.RunQueue).QueueRef,
+		AppRef:        "app-resident-goal-first-missing-state",
+		Status:        orquestarunqueue.RunStatusReadyV0,
+		PriorityScore: 80,
+		UpdatedAt:     now,
+		RequestedBy:   "resident-director-goal-first-missing-state-test",
+		Reason:        "candidato goal-first sin state no debe caer a legacy",
+		EvidenceRefs:  []string{"evidence-ref-resident-goal-first-missing-state-candidate"},
+	}); err != nil {
+		t.Fatalf("SetRunPriorityV0: %v", err)
+	}
+
+	result, err := stack.RunCodexStackResidentDirectorV0(ctx, CodexStackResidentDirectorCommandV0{
+		OccurredAt:            now.Format(time.RFC3339),
+		CorrelationID:         "corr-resident-goal-first-missing-state-001",
+		MaxRunsPerTick:        1,
+		MaxExecutions:         1,
+		MaxActions:            8,
+		MaxDispatchesPerWait:  4,
+		MaxCommands:           6,
+		MaxOutboxPerCycle:     6,
+		QueueRankingPolicyNow: now,
+		EvidenceRefs:          []string{"evidence-ref-resident-goal-first-missing-state-command"},
+	})
+	if err != nil {
+		t.Fatalf("RunCodexStackResidentDirectorV0: %v result=%+v", err, result)
+	}
+	if result.RunRef != runRef ||
+		result.Status != codexStackGoalFirstStateMissingOutcomeV0 ||
+		result.ExecutedActions != 0 ||
+		runtime.launchCountV0() != 0 {
+		t.Fatalf("result=%+v launches=%d", result, runtime.launchCountV0())
+	}
+	candidates, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(ctx, orquestarunqueue.RunQueueReadRequestV0{
+		QueueRef:             normalizeRunQueueConfigV0(stack.RunQueue).QueueRef,
+		IncludeNonExecutable: true,
+	})
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	if len(candidates) != 1 ||
+		candidates[0].RunRef != runRef ||
+		candidates[0].Status != orquestarunqueue.RunStatusStoppedV0 {
+		t.Fatalf("candidates=%+v", candidates)
+	}
+	run, err := stack.Ports.RunStore.LoadRunV0(ctx, runRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if len(run.Tasks) != 0 || len(run.StartedAgents) != 0 {
+		t.Fatalf("resident missing-state guard materializo legacy: %+v", run)
+	}
+}
+
 func saveCodexStackGoalFirstStateForTestV0(
 	t *testing.T,
 	ctx context.Context,

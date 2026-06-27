@@ -481,6 +481,20 @@ func TestCodexStackRunSupervisorV0NoDrenaLegacySiGoalFirstNoTieneState(t *testin
 		runtime.launchCountV0() != 0 {
 		t.Fatalf("supervisor=%+v launches=%d", supervisor, runtime.launchCountV0())
 	}
+	directDrain, err := stack.DrainRunV0(context.Background(), DrainRunRequestV0{
+		RunRef:     run.RunID,
+		OccurredAt: "2026-06-27T12:45:00Z",
+		MaxBursts:  1,
+	})
+	if err != nil {
+		t.Fatalf("DrainRunV0 directo goal-first sin state: %v", err)
+	}
+	if directDrain.Status != orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0 ||
+		directDrain.Final.Run.RunID != run.RunID ||
+		len(directDrain.Attempts) != 1 ||
+		runtime.launchCountV0() != 0 {
+		t.Fatalf("directDrain=%+v launches=%d", directDrain, runtime.launchCountV0())
+	}
 }
 
 func TestCodexStackSupervisorGlobalNoDrenaLegacySiGoalFirstEnCola(t *testing.T) {
