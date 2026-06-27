@@ -13,6 +13,11 @@ const (
 	MCPAutoprogrammingPrepareRunResourceURIV0 = "orquesta://contracts/autoprogramming-prepare-run/v0"
 	MCPAutoprogrammingPrepareRunEstadoOKV0    = "ok"
 	MCPAutoprogrammingPrepareRunEstadoErrorV0 = "error"
+
+	MCPAutoprogrammingPrepareRunLegacyDirectorModeRequiredV0      = "autoprogramming_legacy_director_mode_required"
+	MCPAutoprogrammingPrepareRunLegacyDirectorLoopOptInRequiredV0 = "autoprogramming_legacy_director_loop_opt_in_required"
+	MCPAutoprogrammingPrepareRunDirectorExecutionModeLegacyLoopV0 = "legacy_director_loop"
+	MCPAutoprogrammingPrepareRunDirectorExecutionModeGoalFirstV0  = "goal_first"
 )
 
 type MCPAutoprogrammingPrepareRunToolDescriptorV0 struct {
@@ -30,6 +35,7 @@ type MCPAutoprogrammingPrepareRunToolInputV0 struct {
 	IdempotencyKey         string                                           `json:"idempotency_key,omitempty"`
 	OccurredAt             string                                           `json:"occurred_at,omitempty"`
 	RequestedBy            string                                           `json:"requested_by,omitempty"`
+	DirectorExecutionMode  string                                           `json:"director_execution_mode,omitempty"`
 	AutoprogrammingRequest orquestaautoprogramming.AutoprogrammingRequestV0 `json:"autoprogramming_request"`
 	MaxBursts              int                                              `json:"max_bursts,omitempty"`
 	MaxStepsPerBurst       int                                              `json:"max_steps_per_burst,omitempty"`
@@ -85,14 +91,14 @@ func MCPAutoprogrammingPrepareRunDescriptorV0() MCPAutoprogrammingPrepareRunTool
 	return MCPAutoprogrammingPrepareRunToolDescriptorV0{
 		Name:        MCPAutoprogrammingPrepareRunToolNameV0,
 		Version:     MCPAutoprogrammingPrepareRunToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,idempotency_key?,occurred_at?,requested_by?,autoprogramming_request:AutoprogrammingRequestV0,max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,priority_score?}",
+		InputSchema: "envelope:{request_id?,correlation_id?,idempotency_key?,occurred_at?,requested_by?,director_execution_mode?:goal_first|legacy_director_loop,autoprogramming_request:AutoprogrammingRequestV0,max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,priority_score?}",
 		Output:      "ok:{run_ref?,workflow_task_refs?,wait_agent_refs?,goal_specs?,goal?{run_ref,goal_ref,external_goal_ref?,goal_status,evidence_refs?},goals?[]{run_ref,goal_ref,external_goal_ref?,goal_status,evidence_refs?},continue?{run_ref,operational_director_plan_ref?}}|error:{errores_publicos}",
 		ResourceURI: MCPAutoprogrammingPrepareRunResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
 			"prepara run legacy continuable o lanza/hace handoff goal-first por executor inyectado",
 			"goal-first es la ruta preferente cuando devuelve goal o goal_specs; continue queda como compatibilidad legacy",
-			"la composicion puede exigir opt-in explicito para materializar continue/run legacy",
+			"legacy solo materializa continue/run con opt-in de composicion y director_execution_mode=legacy_director_loop",
 			"en batch goal-first goals[] es canonico; goal se omite y run_ref superior identifica el primer goal, no un run agregado",
 			"no arranca agentes por si mismo",
 			"no conoce Codex OPES DB filesystem ni proveedor concreto",

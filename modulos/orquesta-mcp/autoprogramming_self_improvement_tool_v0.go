@@ -25,11 +25,12 @@ type MCPAutoprogrammingSelfImprovementToolDescriptorV0 struct {
 }
 
 type MCPAutoprogrammingSelfImprovementToolInputV0 struct {
-	RequestID      string                                                           `json:"request_id,omitempty"`
-	CorrelationID  string                                                           `json:"correlation_id,omitempty"`
-	AutoPrepareRun bool                                                             `json:"auto_prepare_run,omitempty"`
-	OperatorAdvice []MCPAutoprogrammingOperatorAdviceV0                             `json:"operator_advice,omitempty"`
-	Proposal       orquestaautoprogramming.AutoprogrammingSelfImprovementProposalV0 `json:"proposal"`
+	RequestID             string                                                           `json:"request_id,omitempty"`
+	CorrelationID         string                                                           `json:"correlation_id,omitempty"`
+	DirectorExecutionMode string                                                           `json:"director_execution_mode,omitempty"`
+	AutoPrepareRun        bool                                                             `json:"auto_prepare_run,omitempty"`
+	OperatorAdvice        []MCPAutoprogrammingOperatorAdviceV0                             `json:"operator_advice,omitempty"`
+	Proposal              orquestaautoprogramming.AutoprogrammingSelfImprovementProposalV0 `json:"proposal"`
 }
 
 type MCPAutoprogrammingSelfImprovementToolResultV0 struct {
@@ -61,7 +62,7 @@ func MCPAutoprogrammingSelfImprovementDescriptorV0() MCPAutoprogrammingSelfImpro
 	return MCPAutoprogrammingSelfImprovementToolDescriptorV0{
 		Name:        MCPAutoprogrammingSelfImprovementToolNameV0,
 		Version:     MCPAutoprogrammingSelfImprovementToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,auto_prepare_run?,operator_advice?,proposal:AutoprogrammingSelfImprovementProposalV0}",
+		InputSchema: "envelope:{request_id?,correlation_id?,director_execution_mode?:goal_first|legacy_director_loop,auto_prepare_run?,operator_advice?,proposal:AutoprogrammingSelfImprovementProposalV0}",
 		Output:      "ok:{autoprogramming_request,priority_score,prepare_run,prepared_run?,operator_advice?,next_actions}|error:{errores_publicos,operator_advice?,next_actions}",
 		ResourceURI: MCPAutoprogrammingSelfImprovementResourceURIV0,
 		Invariantes: []string{
@@ -114,6 +115,7 @@ func (executor MCPAutoprogrammingSelfImprovementToolExecutorV0) Execute(
 		RequestID:              strings.TrimSpace(result.Request.RequestRef),
 		CorrelationID:          out.CorrelationID,
 		RequestedBy:            firstNonEmptyMCPV0(proposal.ObservedBy, "orquesta-autoprogramming-self-improvement"),
+		DirectorExecutionMode:  strings.TrimSpace(input.DirectorExecutionMode),
 		AutoprogrammingRequest: result.Request,
 		PriorityScore:          result.PriorityScore,
 	}

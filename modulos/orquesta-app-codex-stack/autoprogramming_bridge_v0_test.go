@@ -24,8 +24,9 @@ func TestCodexStackSelfImprovementAPIV0AutoPrepareRunEncola(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	body := bytes.NewBuffer(nil)
 	err := json.NewEncoder(body).Encode(orquestamcp.MCPAutoprogrammingSelfImprovementToolInputV0{
-		RequestID:      "request-ref-self-improvement-stack-001",
-		AutoPrepareRun: true,
+		RequestID:             "request-ref-self-improvement-stack-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		AutoPrepareRun:        true,
 		Proposal: orquestaautoprogramming.AutoprogrammingSelfImprovementProposalV0{
 			ProjectRef:        "project-ref-autoprogramming-bridge-001",
 			WorktreeRef:       "worktree-ref-autoprogramming-bridge-001",

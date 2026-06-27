@@ -22,8 +22,9 @@ Tools MCP relevantes ya publicados por `RegisterMCPTransportV0`:
 
 - `orquesta.autoprogramming.prepare_run.v0`: por executor inyectado prepara una
   run continuable legacy con `run_ref`, `workflow_task_refs`, `wait_agent_refs`
-  y request `continue`, o un handoff Goal-first con `goal_specs[]` sin
-  `run_ref` legacy.
+  y request `continue` solo con opt-in de composicion y
+  `director_execution_mode=legacy_director_loop`, o un handoff Goal-first con
+  `goal_specs[]` sin `run_ref` legacy.
 - `orquesta.autoprogramming.observe_goal.v0`: observa un `GoalWorkStateV0` por
   `run_ref`, valida cierre por puerto y sincroniza cola terminal. Para `run_ref`
   goal-first, `orquesta.runs.supervisor.v0` no drena legacy y debe recomendar

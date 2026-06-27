@@ -367,6 +367,7 @@ with open(source_payload, encoding="utf-8") as fh:
     payload = json.load(fh)
 payload["occurred_at"] = "2026-05-22T12:00:00Z"
 payload["requested_by"] = "orquesta-autoprogramming-supervised-smoke"
+payload["director_execution_mode"] = "legacy_director_loop"
 payload["max_bursts"] = 2
 payload["max_steps_per_burst"] = 2
 payload["max_dispatches_per_wait"] = 2

@@ -36,8 +36,9 @@ scripts/smoke_autoprogramming_bolsa_real.sh
 
 El script compila `cmd/orquesta-server`, arranca un servidor temporal, llama a
 `/api/v0/autoprogramming/prepare-run` en modo legacy con
-`ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=1`, supervisa el `run_ref`
-devuelto con `/api/v0/runs/supervise` por compatibilidad legacy tras
+`ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=1` y
+`director_execution_mode=legacy_director_loop` en el payload, supervisa el
+`run_ref` devuelto con `/api/v0/runs/supervise` por compatibilidad legacy tras
 `ORQUESTA_LEGACY_DIRECTOR_LOOP_SMOKE_CONFIRM=1`, espera cierre causal, ejecuta
 `go test -count=1 ./...` en la app resultante y arranca Bolsa para validar
 `/healthz` y `/api/portal`. No cubre la rama `goal_ready`, donde `prepare-run`

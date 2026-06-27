@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
@@ -16,10 +17,11 @@ func TestCodexStackAutoprogrammingExecutorV0MaterializaWorktreePorTask(t *testin
 	executor := NewCodexStackAutoprogrammingExecutorV0(&stack)
 
 	result, err := executor.Execute(context.Background(), AutoprogrammingBridgeRequestV0{
-		Request:       autoprogrammingBridgeRequestForTestV0(),
-		OccurredAt:    "2026-05-22T11:00:00Z",
-		CorrelationID: "corr-autoprogramming-worktree-isolation-001",
-		RequestedBy:   "orquesta-stack-executor-test",
+		Request:               autoprogrammingBridgeRequestForTestV0(),
+		OccurredAt:            "2026-05-22T11:00:00Z",
+		CorrelationID:         "corr-autoprogramming-worktree-isolation-001",
+		RequestedBy:           "orquesta-stack-executor-test",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
 	})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -50,10 +52,11 @@ func TestCodexStackAutoprogrammingExecutorV0BloqueaBranchRefNoOpacaAntesDeEncola
 	request.BranchRef = "trabajo/plataforma-agentes"
 
 	result, err := executor.Execute(context.Background(), AutoprogrammingBridgeRequestV0{
-		Request:       request,
-		OccurredAt:    "2026-05-22T11:05:00Z",
-		CorrelationID: "corr-autoprogramming-stack-executor-branch-001",
-		RequestedBy:   "orquesta-stack-executor-test",
+		Request:               request,
+		OccurredAt:            "2026-05-22T11:05:00Z",
+		CorrelationID:         "corr-autoprogramming-stack-executor-branch-001",
+		RequestedBy:           "orquesta-stack-executor-test",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
 	})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)

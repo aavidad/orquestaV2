@@ -185,15 +185,16 @@ func codexStackAutoprogrammingBridgeRequestFromMCPV0(
 		request.RequestRef = firstNonEmptyAutoprogrammingStackV0(input.RequestID, input.CorrelationID)
 	}
 	return AutoprogrammingBridgeRequestV0{
-		Request:              request,
-		OccurredAt:           firstNonEmptyAutoprogrammingStackV0(input.OccurredAt, defaultOccurredAt),
-		CorrelationID:        firstNonEmptyAutoprogrammingStackV0(input.CorrelationID, input.RequestID, request.RequestRef),
-		RequestedBy:          firstNonEmptyAutoprogrammingStackV0(input.RequestedBy, defaultRequestedBy),
-		MaxBursts:            input.MaxBursts,
-		MaxStepsPerBurst:     input.MaxStepsPerBurst,
-		MaxDispatchesPerWait: input.MaxDispatchesPerWait,
-		MaxCommands:          input.MaxCommands,
-		MaxOutboxPerCycle:    input.MaxOutboxPerCycle,
+		Request:               request,
+		OccurredAt:            firstNonEmptyAutoprogrammingStackV0(input.OccurredAt, defaultOccurredAt),
+		CorrelationID:         firstNonEmptyAutoprogrammingStackV0(input.CorrelationID, input.RequestID, request.RequestRef),
+		RequestedBy:           firstNonEmptyAutoprogrammingStackV0(input.RequestedBy, defaultRequestedBy),
+		DirectorExecutionMode: strings.TrimSpace(input.DirectorExecutionMode),
+		MaxBursts:             input.MaxBursts,
+		MaxStepsPerBurst:      input.MaxStepsPerBurst,
+		MaxDispatchesPerWait:  input.MaxDispatchesPerWait,
+		MaxCommands:           input.MaxCommands,
+		MaxOutboxPerCycle:     input.MaxOutboxPerCycle,
 	}
 }
 

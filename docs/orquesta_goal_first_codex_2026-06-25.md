@@ -184,6 +184,15 @@ degrada a `StartExternalWorkRunV0` legacy solo porque la composicion tenga
 tambien `director_execution_mode=legacy_director_loop`; sin backend Goal y sin
 esa marca devuelve `external_work_legacy_director_mode_required`, y con marca
 pero sin opt-in devuelve `external_work_legacy_director_loop_opt_in_required`.
+Actualizacion adicional 2026-06-27 noche 2: `autoprogramming.prepare_run`
+aplica la misma regla. `AllowLegacyAutoprogrammingRun` /
+`ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=1` solo habilita compatibilidad;
+no crea runs legacy si el payload no declara
+`director_execution_mode=legacy_director_loop`. Sin esa marca devuelve
+`autoprogramming_legacy_director_mode_required`; con marca pero sin opt-in
+devuelve `autoprogramming_legacy_director_loop_opt_in_required`. Si hay backend
+Goal completo y no se pide legacy, la ruta normal sigue lanzando/observando
+Goal.
 
 ## Migracion propuesta
 

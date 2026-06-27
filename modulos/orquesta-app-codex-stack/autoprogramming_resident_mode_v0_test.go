@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -137,9 +138,10 @@ func TestAutoprogrammingResidentModeV0TomaAutomejoraAutoPreparadaCuandoEstaParad
 	stack := mustBuildCodexStackForTestV0(t, runtime)
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(orquestamcp.MCPAutoprogrammingSelfImprovementToolInputV0{
-		RequestID:      "request-autoprogramming-resident-self-improvement-queue-001",
-		CorrelationID:  "corr-autoprogramming-resident-self-improvement-queue-001",
-		AutoPrepareRun: true,
+		RequestID:             "request-autoprogramming-resident-self-improvement-queue-001",
+		CorrelationID:         "corr-autoprogramming-resident-self-improvement-queue-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		AutoPrepareRun:        true,
 		Proposal: orquestaautoprogramming.AutoprogrammingSelfImprovementProposalV0{
 			ProjectRef:        "project-ref-autoprogramming-resident-self-improvement",
 			WorktreeRef:       "worktree-ref-autoprogramming-resident-self-improvement",
@@ -230,9 +232,10 @@ func TestAutoprogrammingResidentModeV0BloqueoCreaReparacionDurableV0(t *testing.
 	result = maybePrepareAutoprogrammingResidentSelfRepairV0(
 		context.Background(),
 		orquestamcp.MCPRunSupervisorToolInputV0{
-			RequestID:     "request-autoprogramming-resident-selfrepair-001",
-			CorrelationID: "corr-autoprogramming-resident-selfrepair-001",
-			ResidentMode:  true,
+			RequestID:             "request-autoprogramming-resident-selfrepair-001",
+			CorrelationID:         "corr-autoprogramming-resident-selfrepair-001",
+			DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+			ResidentMode:          true,
 		},
 		stack,
 		CodexSupervisorResultV0{Last: CodexSupervisorRuntimeSnapshotV0{Status: CodexSupervisorRuntimeStoppedV0}},
@@ -275,9 +278,10 @@ func TestAutoprogrammingResidentModeV0BloqueoDeReparacionNoCreaSegundaReparacion
 	primaryResult = maybePrepareAutoprogrammingResidentSelfRepairV0(
 		context.Background(),
 		orquestamcp.MCPRunSupervisorToolInputV0{
-			RequestID:     "request-autoprogramming-resident-primary-repair-001",
-			CorrelationID: "corr-autoprogramming-resident-loopguard-001",
-			ResidentMode:  true,
+			RequestID:             "request-autoprogramming-resident-primary-repair-001",
+			CorrelationID:         "corr-autoprogramming-resident-loopguard-001",
+			DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+			ResidentMode:          true,
 		},
 		stack,
 		CodexSupervisorResultV0{Last: CodexSupervisorRuntimeSnapshotV0{Status: CodexSupervisorRuntimeStoppedV0}},

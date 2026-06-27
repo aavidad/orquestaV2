@@ -284,6 +284,14 @@ en la composicion y `director_execution_mode=legacy_director_loop` en el
 payload. Sin backend Goal y sin esa marca devuelve
 `external_work_legacy_director_mode_required`; con marca pero sin opt-in devuelve
 `external_work_legacy_director_loop_opt_in_required`.
+Avance local adicional 2026-06-27 noche 3: `autoprogramming.prepare_run`
+queda alineado con esa frontera. El opt-in
+`ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=1` ya no basta para preparar una
+run del loop historico: el payload debe incluir
+`director_execution_mode=legacy_director_loop`. Sin esa marca devuelve
+`autoprogramming_legacy_director_mode_required`; con marca pero sin opt-in
+devuelve `autoprogramming_legacy_director_loop_opt_in_required`. Los smokes
+legacy de autoprogramacion transportan ya la marca explicita.
 
 Pendiente verificable:
 

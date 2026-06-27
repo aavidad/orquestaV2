@@ -17,6 +17,7 @@ func normalizeAutoprogrammingBridgeRequestV0(
 	request.OccurredAt = strings.TrimSpace(request.OccurredAt)
 	request.CorrelationID = strings.TrimSpace(request.CorrelationID)
 	request.RequestedBy = strings.TrimSpace(request.RequestedBy)
+	request.DirectorExecutionMode = strings.TrimSpace(request.DirectorExecutionMode)
 	if request.CorrelationID == "" {
 		request.CorrelationID = "corr-" + strings.TrimSpace(request.Request.RequestRef)
 	}
@@ -30,7 +31,8 @@ func autoprogrammingBridgeRequestWithGoalFirstBackendMarkersV0(
 	request AutoprogrammingBridgeRequestV0,
 	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
 ) AutoprogrammingBridgeRequestV0 {
-	if !autoprogrammingBridgeGoalFirstBackendAvailableV0(ports) ||
+	if autoprogrammingBridgeLegacyDirectorLoopRequestedV0(request) ||
+		!autoprogrammingBridgeGoalFirstBackendAvailableV0(ports) ||
 		autoprogrammingBridgeRequestHasGoalMigrationMarkerV0(
 			request.Request,
 			"goal_migration:legacy-required",

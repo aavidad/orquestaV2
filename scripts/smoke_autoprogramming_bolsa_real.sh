@@ -160,6 +160,7 @@ payload["request_id"] = f"req-{run_ref}"
 payload["correlation_id"] = f"corr-{run_ref}"
 payload["requested_by"] = "orquesta-bolsa-real-smoke"
 payload["occurred_at"] = "2026-06-19T12:00:00Z"
+payload["director_execution_mode"] = "legacy_director_loop"
 payload["max_bursts"] = int(payload.get("max_bursts") or 8)
 payload["max_steps_per_burst"] = int(payload.get("max_steps_per_burst") or 8)
 payload["max_dispatches_per_wait"] = int(payload.get("max_dispatches_per_wait") or 6)

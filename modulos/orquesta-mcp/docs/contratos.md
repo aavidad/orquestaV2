@@ -1376,6 +1376,9 @@ Campos:
     path: /api/v0/autoprogramming/prepare-run
   input:
     request_id, correlation_id: refs externas opcionales
+    director_execution_mode?: `goal_first|legacy_director_loop`; vacio conserva
+      ruta Goal-first por defecto; `legacy_director_loop` solo es valido si la
+      composicion habilita compatibilidad legacy
     autoprogramming_request: AutoprogrammingRequestV0 validado por el executor
       inyectado
     max_bursts, max_steps_per_burst, max_dispatches_per_wait, max_commands,

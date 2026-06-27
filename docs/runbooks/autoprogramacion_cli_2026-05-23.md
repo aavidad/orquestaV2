@@ -71,7 +71,8 @@ La CLI consume solo rutas publicas versionadas:
 - `POST /api/v0/apps/spec`
 - `POST /api/v0/director/bootstrap/appspec`
 - `GET /api/v0/server/status`
-- `POST /api/v0/autoprogramming/prepare-run`
+- `POST /api/v0/autoprogramming/prepare-run` (Goal-first por defecto; legacy
+  solo con opt-in de composicion y `director_execution_mode=legacy_director_loop`)
 - `POST /api/v0/autoprogramming/status`
 - `POST /api/v0/autoprogramming/goal/observe`
 - `POST /api/v0/autoprogramming/supervise` (compatibilidad legacy/diagnostico;

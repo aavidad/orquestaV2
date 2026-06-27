@@ -77,7 +77,9 @@ API HTTP versionada:
 - `POST /api/v0/runs/queue/priority`
 - `POST /api/v0/autoprogramming/validate-request`
 - `POST /api/v0/autoprogramming/self-improvement`
-- `POST /api/v0/autoprogramming/prepare-run`
+- `POST /api/v0/autoprogramming/prepare-run` (Goal-first por defecto; la
+  preparacion de run legacy requiere opt-in de composicion y
+  `director_execution_mode=legacy_director_loop`)
 - `POST /api/v0/apps/director/goal/observe`
 - `POST /api/v0/autoprogramming/goal/observe`
 - `POST /api/v0/autoprogramming/status`
@@ -108,10 +110,12 @@ CLI vigente:
   `/api/v0/core/function-contracts/list|view`.
 - `gobernanza catalogo listar|ver`: `POST /api/v0/governance/catalog/query`.
 - Autoprogramacion: `prepare-run` y `status`; si la respuesta trae
-  `goal_ref`/`run_ref` goal-first, continuar por `goal/observe`. `supervise`
-  queda para runs legacy/resident sin `GoalWorkStateV0` o para diagnostico
-  controlado y requiere `director_execution_mode=legacy_director_loop` cuando se
-  empuja un `run_ref` legacy. En `/ops` y MCP, las acciones seguras publicadas por
+  `goal_ref`/`run_ref` goal-first, continuar por `goal/observe`. Crear un run
+  legacy desde `prepare-run` es compatibilidad historica: requiere opt-in de
+  composicion y `director_execution_mode=legacy_director_loop` en el payload.
+  `supervise` queda para runs legacy/resident sin `GoalWorkStateV0` o para
+  diagnostico controlado y requiere la misma marca cuando se empuja un
+  `run_ref` legacy. En `/ops` y MCP, las acciones seguras publicadas por
   `autoprogramming/status` son la fuente de verdad: `observe_goal` gana a
   `supervise` cuando un run tiene estado Goal.
 

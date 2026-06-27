@@ -27,12 +27,13 @@ func TestCodexStackAutoprogrammingExecutorV0UsaPuertosDelStackYDevuelveContinue(
 	executor := NewCodexStackAutoprogrammingExecutorV0(&stack)
 
 	result, err := executor.Execute(context.Background(), AutoprogrammingBridgeRequestV0{
-		Request:       autoprogrammingBridgeRequestForTestV0(),
-		OccurredAt:    "2026-05-22T11:00:00Z",
-		CorrelationID: "corr-autoprogramming-stack-executor-001",
-		RequestedBy:   "orquesta-stack-executor-test",
-		MaxBursts:     3,
-		MaxCommands:   5,
+		Request:               autoprogrammingBridgeRequestForTestV0(),
+		OccurredAt:            "2026-05-22T11:00:00Z",
+		CorrelationID:         "corr-autoprogramming-stack-executor-001",
+		RequestedBy:           "orquesta-stack-executor-test",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		MaxBursts:             3,
+		MaxCommands:           5,
 	})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -179,6 +180,41 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0BloqueaLegacySinOptInV0(t *test
 	}
 	if _, err := stack.Ports.RunStore.LoadRunV0(context.Background(), request.RequestRef); !orquestacionnucleoapp.IsRunNotFoundErrorV0(err) {
 		t.Fatalf("run legacy no debe persistirse sin opt-in, err=%v", err)
+	}
+}
+
+func TestCodexStackAutoprogrammingPrepareRunAPIV0BloqueaLegacySinModoExplicitoV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	request := autoprogrammingBridgeRequestForTestV0()
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-autoprogramming-api-legacy-mode-required-001",
+		CorrelationID:          "corr-autoprogramming-api-legacy-mode-required-001",
+		AutoprogrammingRequest: request,
+	}); err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/autoprogramming/prepare-run", body)
+	req.Header.Set("Content-Type", "application/json")
+	stack.Handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK && rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPAutoprogrammingPrepareRunToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != orquestamcp.MCPAutoprogrammingPrepareRunEstadoErrorV0 ||
+		result.Accepted ||
+		result.RunRef != "" ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != orquestamcp.MCPAutoprogrammingPrepareRunLegacyDirectorModeRequiredV0 ||
+		result.Errores[0].Field != "director_execution_mode" {
+		t.Fatalf("result=%+v", result)
+	}
+	if _, err := stack.Ports.RunStore.LoadRunV0(context.Background(), request.RequestRef); !orquestacionnucleoapp.IsRunNotFoundErrorV0(err) {
+		t.Fatalf("run legacy no debe persistirse sin modo explicito, err=%v", err)
 	}
 }
 
@@ -1306,6 +1342,11 @@ func postAutoprogrammingPrepareRunStackV0(
 	input orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0,
 ) orquestamcp.MCPAutoprogrammingPrepareRunToolResultV0 {
 	t.Helper()
+	if strings.TrimSpace(input.DirectorExecutionMode) == "" &&
+		stack.AllowLegacyAutoprogrammingRun &&
+		!autoprogrammingBridgeGoalFirstBackendAvailableV0(stack.Ports) {
+		input.DirectorExecutionMode = orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0
+	}
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(input); err != nil {
 		t.Fatalf("encode prepare run: %v", err)

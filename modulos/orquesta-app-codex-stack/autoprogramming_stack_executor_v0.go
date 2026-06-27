@@ -36,7 +36,11 @@ func PrepareAutoprogrammingRunFromStackV0(
 		ctx = context.Background()
 	}
 	request = normalizeAutoprogrammingBridgeRequestV0(request)
-	if stack.AllowLegacyAutoprogrammingRun {
+	request.LegacyDirectorLoopOptInAvailable = request.LegacyDirectorLoopOptInAvailable ||
+		stack.AllowLegacyAutoprogrammingRun ||
+		request.AllowLegacyDirectorLoop
+	if stack.AllowLegacyAutoprogrammingRun &&
+		autoprogrammingBridgeLegacyDirectorLoopRequestedV0(request) {
 		request.AllowLegacyDirectorLoop = true
 	}
 	if err := validateAutoprogrammingBridgePortsV0(stack.Ports); err != nil {

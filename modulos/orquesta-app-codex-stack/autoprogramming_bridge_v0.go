@@ -15,16 +15,18 @@ import (
 const AutoprogrammingBridgeResultSchemaVersionV0 = "autoprogramming_bridge_result.v0"
 
 type AutoprogrammingBridgeRequestV0 struct {
-	Request                 orquestaautoprogramming.AutoprogrammingRequestV0 `json:"request"`
-	OccurredAt              string                                           `json:"occurred_at,omitempty"`
-	CorrelationID           string                                           `json:"correlation_id,omitempty"`
-	RequestedBy             string                                           `json:"requested_by,omitempty"`
-	AllowLegacyDirectorLoop bool                                             `json:"allow_legacy_director_loop,omitempty"`
-	MaxBursts               int                                              `json:"max_bursts,omitempty"`
-	MaxStepsPerBurst        int                                              `json:"max_steps_per_burst,omitempty"`
-	MaxDispatchesPerWait    int                                              `json:"max_dispatches_per_wait,omitempty"`
-	MaxCommands             int                                              `json:"max_commands,omitempty"`
-	MaxOutboxPerCycle       int                                              `json:"max_outbox_per_cycle,omitempty"`
+	Request                          orquestaautoprogramming.AutoprogrammingRequestV0 `json:"request"`
+	OccurredAt                       string                                           `json:"occurred_at,omitempty"`
+	CorrelationID                    string                                           `json:"correlation_id,omitempty"`
+	RequestedBy                      string                                           `json:"requested_by,omitempty"`
+	DirectorExecutionMode            string                                           `json:"director_execution_mode,omitempty"`
+	AllowLegacyDirectorLoop          bool                                             `json:"allow_legacy_director_loop,omitempty"`
+	LegacyDirectorLoopOptInAvailable bool                                             `json:"legacy_director_loop_opt_in_available,omitempty"`
+	MaxBursts                        int                                              `json:"max_bursts,omitempty"`
+	MaxStepsPerBurst                 int                                              `json:"max_steps_per_burst,omitempty"`
+	MaxDispatchesPerWait             int                                              `json:"max_dispatches_per_wait,omitempty"`
+	MaxCommands                      int                                              `json:"max_commands,omitempty"`
+	MaxOutboxPerCycle                int                                              `json:"max_outbox_per_cycle,omitempty"`
 }
 
 type AutoprogrammingBridgeResultV0 struct {
@@ -82,20 +84,27 @@ func prepareAutoprogrammingRunWithWorkV0(
 	if !work.Accepted {
 		return result, nil
 	}
-	if issue := autoprogrammingBridgeGoalFirstLaunchIssueV0(work.Work, ports); issue.Code != "" {
-		result.Accepted = false
-		result.Issues = append(result.Issues, issue)
-		return result, nil
-	}
-	if autoprogrammingBridgeShouldStartGoalFirstV0(work.Work, ports) {
-		return autoprogrammingBridgeStartGoalFirstV0(ctx, request, result, ports)
+	if !autoprogrammingBridgeLegacyDirectorLoopRequestedV0(request) {
+		if issue := autoprogrammingBridgeGoalFirstLaunchIssueV0(work.Work, ports); issue.Code != "" {
+			result.Accepted = false
+			result.Issues = append(result.Issues, issue)
+			return result, nil
+		}
+		if autoprogrammingBridgeShouldStartGoalFirstV0(work.Work, ports) {
+			return autoprogrammingBridgeStartGoalFirstV0(ctx, request, result, ports)
+		}
 	}
 	if !autoprogrammingBridgeShouldMaterializeLegacyLoopV0(work.Work) {
 		return result, nil
 	}
 	if !request.AllowLegacyDirectorLoop {
 		result.Accepted = false
-		result.Issues = append(result.Issues, autoprogrammingBridgeLegacyLoopOptInIssueV0())
+		if request.LegacyDirectorLoopOptInAvailable &&
+			!autoprogrammingBridgeLegacyDirectorLoopRequestedV0(request) {
+			result.Issues = append(result.Issues, autoprogrammingBridgeLegacyDirectorModeRequiredIssueV0())
+		} else {
+			result.Issues = append(result.Issues, autoprogrammingBridgeLegacyLoopOptInIssueV0())
+		}
 		return result, nil
 	}
 	run := autoprogrammingBridgeRunV0(request, work.Work)
@@ -134,6 +143,20 @@ func autoprogrammingBridgeLegacyLoopOptInIssueV0() orquestaautoprogramming.Autop
 		Field:   "goal_migration",
 		Message: "autoprogramacion legacy requiere opt-in explicito; usa goal-first o ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=1",
 	}
+}
+
+func autoprogrammingBridgeLegacyDirectorModeRequiredIssueV0() orquestaautoprogramming.AutoprogrammingRequestIssueV0 {
+	return orquestaautoprogramming.AutoprogrammingRequestIssueV0{
+		Code:    "autoprogramming_legacy_director_mode_required",
+		Field:   "director_execution_mode",
+		Message: "autoprogramacion legacy requiere director_execution_mode=legacy_director_loop; usa goal-first o declara legacy explicito",
+	}
+}
+
+func autoprogrammingBridgeLegacyDirectorLoopRequestedV0(
+	request AutoprogrammingBridgeRequestV0,
+) bool {
+	return strings.TrimSpace(request.DirectorExecutionMode) == orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0
 }
 
 func autoprogrammingBridgeShouldStartGoalFirstV0(

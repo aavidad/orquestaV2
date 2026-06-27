@@ -44,10 +44,12 @@ SMOKE_ID=manual-001
 ```
 
 `ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=1` es obligatorio para este
-smoke porque prueba deliberadamente `prepare-run` legacy. Sin ese opt-in,
+smoke porque prueba deliberadamente `prepare-run` legacy. El payload del smoke
+incluye `director_execution_mode=legacy_director_loop`. Sin ese opt-in,
 `prepare-run` debe responder con
 `autoprogramming_legacy_director_loop_opt_in_required` y no crear `run_ref`,
-`WorkflowTaskV0` ni cola legacy.
+`WorkflowTaskV0` ni cola legacy; con opt-in pero sin esa marca debe responder
+`autoprogramming_legacy_director_mode_required`.
 
 `ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK=1` es compatibilidad
 historica y, desde el corte goal-first, exige tambien

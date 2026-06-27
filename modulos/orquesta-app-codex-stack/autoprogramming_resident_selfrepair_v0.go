@@ -196,10 +196,11 @@ func autoprogrammingResidentPrepareSelfRepairV0(
 	)
 	self := orquestamcp.NewMCPAutoprogrammingSelfImprovementToolExecutorV0(prepare)
 	out, err := self.Execute(ctx, orquestamcp.MCPAutoprogrammingSelfImprovementToolInputV0{
-		RequestID:      proposal.RequestRef,
-		CorrelationID:  firstNonEmptyQueuedSourceV0(input.CorrelationID, input.RequestID, proposal.RequestRef),
-		AutoPrepareRun: true,
-		Proposal:       proposal,
+		RequestID:             proposal.RequestRef,
+		CorrelationID:         firstNonEmptyQueuedSourceV0(input.CorrelationID, input.RequestID, proposal.RequestRef),
+		DirectorExecutionMode: input.DirectorExecutionMode,
+		AutoPrepareRun:        true,
+		Proposal:              proposal,
 	})
 	if err != nil || out.PreparedRun == nil {
 		return orquestamcp.NewMCPAutoprogrammingPrepareRunErrorResultV0(
