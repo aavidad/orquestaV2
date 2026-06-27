@@ -29,6 +29,9 @@ func (executor CodexStackObserveAppDirectorGoalExecutorV0) Execute(
 		orquestamcp.ToObserveAppDirectorGoalRequestV0(input),
 	)
 	if err != nil {
+		if publicResult, ok := orquestamcp.NewMCPObserveAppDirectorGoalErrorResultFromErrorV0(input, err); ok {
+			return publicResult, nil
+		}
 		return orquestamcp.MCPObserveAppDirectorGoalToolResultV0{}, err
 	}
 	return orquestamcp.NewMCPObserveAppDirectorGoalResultV0(input, result), nil

@@ -29,6 +29,9 @@ func (executor CodexStackAutoprogrammingObserveGoalExecutorV0) Execute(
 		orquestamcp.ToAutoprogrammingObserveGoalRequestV0(input),
 	)
 	if err != nil {
+		if publicResult, ok := orquestamcp.NewMCPAutoprogrammingObserveGoalErrorResultFromErrorV0(input, err); ok {
+			return publicResult, nil
+		}
 		return orquestamcp.MCPAutoprogrammingObserveGoalToolResultV0{}, err
 	}
 	return orquestamcp.NewMCPAutoprogrammingObserveGoalResultV0(input, result), nil

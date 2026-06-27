@@ -82,6 +82,36 @@ func TestMCPObserveAppDirectorGoalHTTPHandlerV0RunRefRequerido(t *testing.T) {
 	}
 }
 
+func TestMCPObserveAppDirectorGoalHTTPHandlerV0ErrorOperativoNoDevuelve500(t *testing.T) {
+	executor := NewMCPObserveAppDirectorGoalToolExecutorV0(orquestaappdirectorservice.StartAppDirectorPortsV0{})
+	body := &bytes.Buffer{}
+	if err := json.NewEncoder(body).Encode(MCPObserveAppDirectorGoalToolInputV0{
+		RequestID: "req-goal-http-operational-error-001",
+		RunRef:    "run-ref-goal-http-operational-error-001",
+	}); err != nil {
+		t.Fatalf("encode input: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, MCPObserveAppDirectorGoalHTTPPathV0, body)
+	rec := httptest.NewRecorder()
+
+	NewMCPObserveAppDirectorGoalHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPObserveAppDirectorGoalToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != MCPObserveAppDirectorGoalEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "observe_app_director_goal_state_store_unbound" ||
+		result.Errores[0].Field != "goal_state_store" ||
+		result.Errores[0].Message != "goal_state_store_not_configured" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPObserveAppDirectorGoalToolExecutorV0RunRefRequerido(t *testing.T) {
 	result, err := NewMCPObserveAppDirectorGoalToolExecutorV0(orquestaappdirectorservice.StartAppDirectorPortsV0{}).Execute(
 		context.Background(),

@@ -21,6 +21,9 @@ func mcpObserveAppDirectorGoalTransportHandlerV0(
 			if result.Estado == MCPObserveAppDirectorGoalEstadoErrorV0 && len(result.Errores) > 0 {
 				return json.Marshal(result)
 			}
+			if publicResult, ok := NewMCPObserveAppDirectorGoalErrorResultFromErrorV0(input, err); ok {
+				return json.Marshal(publicResult)
+			}
 			payload := NewMCPObserveAppDirectorGoalErrorResultV0(
 				input,
 				"observe_app_director_goal_execute_error",

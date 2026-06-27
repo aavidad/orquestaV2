@@ -63,7 +63,12 @@ func (handler mcpAutoprogrammingObserveGoalHTTPHandlerV0) ServeHTTP(w http.Respo
 	if err != nil {
 		if result.Estado == MCPAutoprogrammingObserveGoalEstadoErrorV0 && len(result.Errores) > 0 {
 			result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), result.CorrelationID, input.CorrelationID, input.RequestID)
-			writeMCPAutoprogrammingObserveGoalHTTPV0(w, http.StatusInternalServerError, result)
+			writeMCPAutoprogrammingObserveGoalHTTPV0(w, http.StatusBadRequest, result)
+			return
+		}
+		if publicResult, ok := NewMCPAutoprogrammingObserveGoalErrorResultFromErrorV0(input, err); ok {
+			publicResult.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), publicResult.CorrelationID, input.CorrelationID, input.RequestID)
+			writeMCPAutoprogrammingObserveGoalHTTPV0(w, http.StatusBadRequest, publicResult)
 			return
 		}
 		writeMCPAutoprogrammingObserveGoalHTTPV0(w, http.StatusInternalServerError, newMCPAutoprogrammingObserveGoalHTTPErrorV0(

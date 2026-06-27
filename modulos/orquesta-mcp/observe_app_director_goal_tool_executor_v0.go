@@ -35,6 +35,9 @@ func (executor MCPObserveAppDirectorGoalToolExecutorV0) Execute(
 		executor.Ports,
 	)
 	if err != nil {
+		if publicResult, ok := NewMCPObserveAppDirectorGoalErrorResultFromErrorV0(input, err); ok {
+			return publicResult, nil
+		}
 		return MCPObserveAppDirectorGoalToolResultV0{}, err
 	}
 	return NewMCPObserveAppDirectorGoalResultV0(input, result), nil

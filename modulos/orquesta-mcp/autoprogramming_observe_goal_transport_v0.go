@@ -21,6 +21,9 @@ func mcpAutoprogrammingObserveGoalTransportHandlerV0(
 			if result.Estado == MCPAutoprogrammingObserveGoalEstadoErrorV0 && len(result.Errores) > 0 {
 				return json.Marshal(result)
 			}
+			if publicResult, ok := NewMCPAutoprogrammingObserveGoalErrorResultFromErrorV0(input, err); ok {
+				return json.Marshal(publicResult)
+			}
 			payload := NewMCPAutoprogrammingObserveGoalErrorResultV0(
 				input,
 				"autoprogramming_observe_goal_execute_error",
