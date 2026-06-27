@@ -149,10 +149,13 @@ Cobertura Go actual:
 - dos solicitudes con el mismo nombre visible no colisionan porque el intake
   usa identidad de spec, no solo slug.
 - `TestNuevaAppWebCodexStackRealOptInV0` queda desactivado por defecto y valida
-  `/nueva-app` con agente real cuando `ORQUESTA_CODEX_STACK_SMOKE=1`.
+  la ruta legacy de `/nueva-app` con agente real cuando
+  `ORQUESTA_CODEX_STACK_SMOKE=1`. Es evidencia historica/compatibilidad, no el
+  camino normal goal-first.
 - `TestNuevaAppWebCodexStackRealMultiagentOptInV0` queda desactivado por
-  defecto y valida `/nueva-app` con 4 Codex reales en paralelo cuando
-  `ORQUESTA_CODEX_STACK_MULTIAGENT_SMOKE=1`.
+  defecto y valida la ruta legacy de `/nueva-app` con 4 Codex reales en paralelo
+  cuando `ORQUESTA_CODEX_STACK_MULTIAGENT_SMOKE=1`. Es evidencia
+  historica/compatibilidad, no el camino normal goal-first.
 - `TestCodexStackV0DirectorStatsIncluyeProcesoYProgresoPorPuertos` valida que
   `/director-stats` usa los puertos inyectados del stack para exponer control
   de parada y progreso de agentes sin ACK; solo el director inicial puede
@@ -499,7 +502,7 @@ Repeticion final tras corregir drenaje de ACK tardio:
   Orquesta;
 - no quedaron procesos Codex/go test vivos tras finalizar.
 
-Smoke manual de referencia:
+Smoke manual de referencia legacy:
 
 ```bash
 ORQUESTA_CODEX_STACK_OPT_IN=1 \
@@ -519,7 +522,9 @@ ORQUESTA_CODEX_RUNTIME_WORKDIR=/tmp/orquesta-smokes/app-codex-stack-real/project
 
 Este comando es una referencia operativa, no un default del modulo. El operador
 debe anadir modelo, stores, DSN o workdirs solo cuando el smoke concreto los
-requiera.
+requiera. Para el flujo vigente goal-first, la prueba equivalente debe arrancar
+con backend Goal y observar/cerrar por `GoalWorkStateV0`, no por este smoke
+legacy.
 
 Evidencia 2026-05-10:
 
@@ -532,7 +537,7 @@ Evidencia 2026-05-10:
 - workdir de repeticion:
   `/tmp/orquesta-smokes/app-codex-stack-real-3/project`.
 
-Smoke multiagente real ejecutado el 2026-05-10:
+Smoke multiagente real legacy ejecutado el 2026-05-10:
 
 ```bash
 ORQUESTA_CODEX_STACK_OPT_IN=1 \

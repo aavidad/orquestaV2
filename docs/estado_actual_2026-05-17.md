@@ -227,8 +227,11 @@ El primer corte ya no esta solo en documentos:
   inicial listo, siempre que la composicion aporte contratos funcionales
   explicitos. En ese modo publica causalmente voto, decision, fase y contratos
   antes de materializar `launch_subagents`, deriva wait de ola/cohorte y
-  persiste `PlanState`/wait state por puertos. El bootstrap normal sin plan
-  directo sigue vigente; esto no mete runtime, Codex ni producto en el servicio.
+  persiste `PlanState`/wait state por puertos. Desde el corte Goal, el modo
+  vacio normaliza a `goal_first`: si falta backend Goal, la composicion debe
+  devolver `goal_backend_unavailable`. El bootstrap historico sin plan directo
+  sigue vigente solo para `legacy_director_loop` explicito o composiciones no
+  migradas a Goal; esto no mete runtime, Codex ni producto en el servicio.
 - P1 WaitAgentRefs queda cerrado para el stack Codex: el mismo scope limita
   pending, wait e ingesta de ACK/deliveries. `DrainRunRequestV0.WaitAgentRefs`
   llega al request de observaciones, el `DeliverySource` queda envuelto/filtrado

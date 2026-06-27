@@ -1083,6 +1083,10 @@ Estado: aceptada.
 Fecha: 2026-05-11
 Decision: Al arrancar un director de app, el stack encola automaticamente la
 run en la cola global.
+Estado 2026-06-27: supersedida para `goal_first`. Con Goal, el arranque no se
+encola como run legacy lista para `DrainRunV0`; compila/lanza `GoalWorkSpecV0`,
+persiste `GoalWorkStateV0` y se observa por `observe_goal`. La decision sigue
+vigente solo para `legacy_director_loop` explicito o composiciones no migradas.
 Motivo: si la cola solo se alimenta con `set_priority` manual, Orquesta no puede
 autogobernar varias apps a la vez. El alta en cola pertenece a composition
 porque conecta el resultado publico del arranque con el puerto global de

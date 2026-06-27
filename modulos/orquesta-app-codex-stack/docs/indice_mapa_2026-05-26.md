@@ -14,10 +14,23 @@ runtime Codex, stores concretos, ficheros de ACK, bridge de entregas y rutas
 HTTP/MCP del servidor porque vive fuera del core. No define el nucleo y no debe
 meter proveedor, modelo, HOME, DB, OPES ni paths locales en paquetes neutrales.
 
-El flujo operativo local se lee asi:
+El flujo operativo local por defecto se lee asi:
 
 ```text
 web/API/MCP/servidor opt-in
+  -> StackV0 / ejecutores MCP del stack
+  -> StartAppDirectorV0 con modo vacio normalizado a goal_first
+  -> GoalWorkSpecV0 con objetivo, reglas, contexto, write-set y tests
+  -> GoalLauncher / GoalObserver opt-in
+  -> GoalWorkStateV0 durable
+  -> observe_goal, validacion final y cierre por evidencias
+  -> bridge domain_work solo si esta inyectado
+```
+
+El loop historico queda como ruta de compatibilidad explicita:
+
+```text
+web/API/MCP/servidor opt-in con director_execution_mode=legacy_director_loop
   -> StackV0 / ejecutores MCP del stack
   -> app-director-service por puertos inyectados
   -> workflow/outbox neutral
@@ -33,9 +46,9 @@ web/API/MCP/servidor opt-in
 | --- | --- | --- |
 | Composicion y config | `config_v0.go`, `stack_v0.go`, `sources_v0.go`, `dispatchers_v0.go` | Construir puertos reales/fakes, handlers y dispatchers sin defaults ocultos. |
 | Paquete de agente | `spec_packet_v0.go`, `spec_task_v0.go`, `spec_task_council_v0.go`, `spec_resolver_v0.go`, `director_decision_contract_v0.go` | Convertir tareas Orquesta en contexto Codex compacto con linaje, write-set, criterios y refs; `CODEX-COUNCIL-PACKET-V0` deja propuesta/critica/voto como `decision_council`, no como director generico. |
-| Wait/drain/observacion | `waiter_v0.go`, `drain_v0.go`, `drain_wait_scope_v0.go`, `drain_observations_v0.go` | Esperar solo `WaitAgentRefs` cuando existan, ingerir ACK/deliveries y reentrar al director. |
-| Supervision residente | `run_supervisor_v0.go`, `run_coordinator_v0.go`, `codex_supervisor_stack_lifecycle_v0.go` | Avanzar runs por ticks acotados, cola global y ciclo normal de drain/outbox. |
-| Autoprogramacion | `autoprogramming_bridge_v0.go`, `autoprogramming_prepare_run_mcp_executor_v0.go`, `autoprogramming_resident_*` | Preparar runs desde backlog, conservar plan-state y crear self-repair solo ante bloqueo real. |
+| Wait/drain/observacion | `waiter_v0.go`, `drain_v0.go`, `drain_wait_scope_v0.go`, `drain_observations_v0.go` | Ruta legacy/no-Goal: esperar solo `WaitAgentRefs` cuando existan, ingerir ACK/deliveries y reentrar al director. Las runs goal-first deben observarse por estado Goal y no entrar en `DrainRunV0`. |
+| Supervision residente | `run_supervisor_v0.go`, `run_coordinator_v0.go`, `codex_supervisor_stack_lifecycle_v0.go` | Ruta legacy/no-Goal: avanzar runs por ticks acotados, cola global y ciclo de drain/outbox. En goal-first, la supervision debe redirigir a `observe_goal` o bloquear con estado reparable si falta `GoalWorkStateV0`. |
+| Autoprogramacion | `autoprogramming_bridge_v0.go`, `autoprogramming_prepare_run_mcp_executor_v0.go`, `autoprogramming_resident_*` | Con backend Goal compila/lanza `GoalWorkSpecV0` y guarda `GoalWorkStateV0`; solo conserva plan-state legacy y self-repair del loop historico cuando no hay Goal o se fuerza compatibilidad. |
 | Review/rework/replan | `review_rework_replan_source_v0.go`, `review_gate_*`, `assessment_replan_source_v0.go` | Traducir review negativa, falta de progreso o rework en followups causales. |
 | Tests requeridos | `codex_ack_required_test_runner_v0.go`, `domain_work_required_tests_*` | Generar/recoger `RequiredTestEvidenceV0` por puerto y no cerrar con summaries textuales. |
 | Cierre operativo | `operational_closure_source_*.go`, `operational_closure_domain_work_source_v0.go` | Construir requests de cierre desde task store, eventos, reviews, tests y receipts de dominio. |

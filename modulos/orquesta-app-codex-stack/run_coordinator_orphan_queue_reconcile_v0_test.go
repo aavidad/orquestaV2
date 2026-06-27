@@ -165,6 +165,51 @@ func TestCodexStackV0RunGlobalTickReconciliaRunningStaleAntesDeReadyV0(t *testin
 	}
 }
 
+func TestCodexStackV0NoParaOPESRunningSinRegistroProcesoNiEvidenciaTerminalV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	staleRunRef := "run-opes-running-no-process-no-terminal-001"
+	staleTaskRef := "task-opes-running-no-process-no-terminal-001"
+	staleAgentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(staleTaskRef)
+	staleRun := codexStackAutoprogrammingRunForCoordinatorRepairTestV0(staleRunRef, staleTaskRef)
+	staleRun.ProjectRef = "opes"
+	staleRun.AppSpecRef = "app-spec-external-work-opes"
+	staleRun.Agents = []string{staleAgentRef}
+	staleRun.StartedAgents = []string{staleAgentRef}
+	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), staleRun); err != nil {
+		t.Fatalf("SaveRunV0 stale: %v", err)
+	}
+	if err := stack.Ports.DirectorTaskStore.SaveWorkflowTaskV0(
+		context.Background(),
+		stackDeliveredAutoprogrammingTaskForTestV0(staleRunRef, staleTaskRef),
+	); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0 stale: %v", err)
+	}
+	setRunQueueCandidateForTestV0(
+		t,
+		stack,
+		staleRunRef,
+		orquestarunqueue.RunStatusRunningV0,
+		100,
+		time.Date(2026, 6, 26, 2, 40, 0, 0, time.UTC),
+	)
+
+	if err := stack.reconcileQueuedRunningStaleRunsV0(context.Background(), globalTickCommandForTestV0()); err != nil {
+		t.Fatalf("reconcileQueuedRunningStaleRunsV0: %v", err)
+	}
+	candidate := mustQueueCandidateForTestV0(t, stack, staleRunRef)
+	if candidate.Status != orquestarunqueue.RunStatusRunningV0 ||
+		codexStackStringInSetV0(candidate.EvidenceRefs, "evidence-ref-run-queue-running-stale-no-live-process-reconciled") {
+		t.Fatalf("candidate=%+v", candidate)
+	}
+	state, err := stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: staleRunRef},
+	)
+	if err == nil && state.Status == orquestaruncontrol.RunControlStatusStoppedV0 {
+		t.Fatalf("state stopped sin evidencia terminal: %+v", state)
+	}
+}
+
 func TestCodexStackV0RunGlobalTickReconciliaOPESUsageLimitSinProcesoRegistradoV0(t *testing.T) {
 	runtime := newFakeCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)

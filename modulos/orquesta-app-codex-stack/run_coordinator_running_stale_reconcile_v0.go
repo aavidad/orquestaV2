@@ -82,8 +82,10 @@ func (stack StackV0) reconcileQueuedRunningStaleCandidateV0(
 	if err != nil {
 		return err
 	}
-	if liveness.RecordCount == 0 && !cause.RuntimeEvidenceObserved {
-		cause.Reason = "running_stale_sin_registro_proceso_verificable"
+	if liveness.RecordCount == 0 && !queuedRunningStaleCauseAllowsNoProcessReconcileV0(cause) {
+		return nil
+	}
+	if liveness.RecordCount == 0 {
 		cause.EvidenceRefs = compactStringsV0(append(
 			cause.EvidenceRefs,
 			"evidence-ref-agent-process-registry-empty",
@@ -227,6 +229,10 @@ func (stack StackV0) queuedRunningStaleCauseV0(
 		)
 	}
 	return result, nil
+}
+
+func queuedRunningStaleCauseAllowsNoProcessReconcileV0(cause queuedRunningStaleCauseV0) bool {
+	return strings.TrimSpace(cause.Reason) == "provider_usage_limit_retry_after"
 }
 
 func (stack StackV0) queuedRunningStaleProcessLivenessV0(

@@ -965,9 +965,12 @@ Objetivo: introducir la pieza minima para que Orquesta pueda supervisar una
 sesion Codex y empujarla con `sigue` sin intervencion manual.
 
 Estado: hecho como contrato unitario, adaptador de stack, API HTTP generica
-`POST /api/v0/runs/supervise` sobre el ciclo normal de agentes Orquesta, prueba
+`POST /api/v0/runs/supervise` sobre el ciclo legacy de agentes Orquesta, prueba
 fake recursiva 1->2->4 sin llamadas manuales por nivel y prueba offline donde
 el arbol se genera por `review -> split_task -> WorkflowTaskStore -> launch`.
+Desde el corte Goal, esta tarea queda como historica/compatibilidad: una run
+`goal_first` no debe pasar por este loop, sino por observacion de
+`GoalWorkStateV0`.
 Pendiente smoke real recursivo padre/hijo/nieto con proveedor y, si se quiere,
 cliente CLI fino contra esa API.
 
@@ -984,10 +987,13 @@ Trabajo aplicado:
   empujo la sesion;
 - `CodexSupervisorStackLifecycleV0`, que implementa
   `CodexSupervisorAgentLifecyclePortV0` sin stdin ni canal paralelo:
-  - con `RunRef` usa `DrainRunV0` para avanzar una run existente;
-  - sin `RunRef` usa `RunGlobalSupervisorV0` para avanzar la cola global;
-  - ambos caminos reutilizan `DrainRunV0` / `ContinueAppDirectorV0` / replan /
+  - con `RunRef` legacy usa `DrainRunV0` para avanzar una run existente;
+  - sin `RunRef` legacy usa `RunGlobalSupervisorV0` para avanzar la cola global;
+  - ambos caminos legacy reutilizan `DrainRunV0` / `ContinueAppDirectorV0` / replan /
     outbox `LaunchRuntimeAgent` / dispatcher existente;
+  - con contenedor `goal_first`, el supervisor no entra al drain: si existe
+    `GoalWorkStateV0` devuelve `goal_first_observe_required`; si falta, devuelve
+    `goal_first_state_missing` para reparacion explicita;
   - el snapshot traduce estados del loop del nucleo a
     `pending|running|stopped|done|failed` para que `SuperviseCodexV0` pueda
     seguir empujando hasta terminal o `max_ticks`;
@@ -1011,9 +1017,11 @@ Reglas cerradas:
 
 - no tocar el core para esta pieza;
 - `ContinueV0("sigue")` no es stdin ni runtime interactivo;
-- el adaptador de stack avanza el flujo normal: `RunGlobalSupervisorV0` /
+- el adaptador de stack avanza el flujo legacy: `RunGlobalSupervisorV0` /
   `DrainRunV0` / `ContinueAppDirectorV0`, observaciones ACK/progreso, replan y
   outbox `LaunchRuntimeAgent`;
+- el flujo normal goal-first se conserva fuera del drain legacy y exige
+  observacion/cierre por estado Goal;
 - la API publica es de runs (`/api/v0/runs/supervise`), no de Codex; Codex vive
   solo en el executor de este stack;
 - si hace falta arrancar otro Codex, se hace por `ExternalProcessAgentBatchExecutorV0`
