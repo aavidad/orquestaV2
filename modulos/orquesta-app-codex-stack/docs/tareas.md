@@ -1,5 +1,27 @@
 # Tareas: orquesta-app-codex-stack
 
+## APP-CODEX-STACK-047
+
+Objetivo: que una supervision global `no_execution` con runs `ready` no quede
+muda para el operador.
+
+Estado: hecho local.
+
+Write-set aplicado:
+
+- el diagnostico `run_supervisor_queue_no_execution_with_ready_candidates`
+  incluye `executions=0`;
+- publica limites efectivos de supervision: `max_ticks`, `max_runs_per_tick`,
+  `max_executions`, `max_dispatches_per_wait` y `max_outbox_per_cycle`;
+- publica `top_candidates` con run ref, status y prioridad de los primeros
+  candidatos visibles;
+- mantiene la accion `supervise_with_resident_mode_or_run_ref` sin relanzar ni
+  mutar la cola desde el diagnostico.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackRunSupervisorQueueDiagnosticsMCPV0ExponeNoExecutionConReady|TestCodexStackRunSupervisorQueueDiagnosticsMCPV0ExponePresionWaitingOutbox'`
+
 ## APP-CODEX-STACK-046
 
 Objetivo: que `autoprogramming/status` no marque `running_stale` cuando hay

@@ -59,8 +59,10 @@ era `waiting_outbox`.
 Impacto: la salida MCP/HTTP conserva el resultado del supervisor pero anade el
 diagnostico `run_supervisor_queue_no_execution_with_ready_candidates` cuando el
 scope es cola global, existe evidencia `no_execution` y hay candidatos
-ejecutables. No bloquea ni descarta trabajo; orienta a relanzar en modo
-residente o por `run_ref`.
+ejecutables. Desde 2026-06-27 el diagnostico incluye `executions=0`, limites
+efectivos y `top_candidates` para diferenciar falta de dispatch, limites
+demasiado estrechos y candidatos visibles. No bloquea ni descarta trabajo;
+orienta a relanzar en modo residente o por `run_ref`.
 Contratos afectados: `CodexStackRunSupervisorExecutorV0`, `RunQueue`.
 Estado: aceptada localmente.
 ```

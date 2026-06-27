@@ -61,7 +61,9 @@ Cobertura Go actual:
   valida que una supervision global que termina con evidencia `no_execution`
   pero mantiene candidatos ejecutables en cola expone el diagnostico
   `run_supervisor_queue_no_execution_with_ready_candidates` y la accion
-  operativa `supervise_with_resident_mode_or_run_ref`.
+  operativa `supervise_with_resident_mode_or_run_ref`; desde 2026-06-27 tambien
+  fija `executions=0`, limites efectivos y `top_candidates` para diagnosticar
+  runs `ready` sin dispatch real.
 - `TestNormalizeAutoprogrammingResidentInputV0DespachaLoteAmplioSinEsperarAgentesLargos`
   valida que `resident_mode` normaliza a capacidad operativa 70 para
   `MaxRunsPerTick`, `MaxExecutions`, `MaxDispatchesPerWait` y

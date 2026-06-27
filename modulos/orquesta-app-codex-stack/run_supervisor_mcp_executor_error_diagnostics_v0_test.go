@@ -366,7 +366,14 @@ func TestCodexStackRunSupervisorQueueDiagnosticsMCPV0ExponeNoExecutionConReady(t
 
 	diagnostics := stack.codexStackRunSupervisorQueueDiagnosticsMCPV0(
 		ctx,
-		orquestamcp.MCPRunSupervisorToolInputV0{QueueRef: DefaultRunQueueRefV0},
+		orquestamcp.MCPRunSupervisorToolInputV0{
+			QueueRef:             DefaultRunQueueRefV0,
+			MaxTicks:             1,
+			MaxRunsPerTick:       6,
+			MaxExecutions:        6,
+			MaxDispatchesPerWait: 6,
+			MaxOutboxPerCycle:    12,
+		},
 		CodexSupervisorResultV0{
 			StopReason: CodexSupervisorStopDoneV0,
 			Last: CodexSupervisorRuntimeSnapshotV0{
@@ -384,6 +391,12 @@ func TestCodexStackRunSupervisorQueueDiagnosticsMCPV0ExponeNoExecutionConReady(t
 		!strings.Contains(diagnostics[0].Message, "total=1") ||
 		!strings.Contains(diagnostics[0].Message, "executable=1") ||
 		!strings.Contains(diagnostics[0].Message, "ready=1") ||
+		!strings.Contains(diagnostics[0].Message, "max_runs_per_tick=6") ||
+		!strings.Contains(diagnostics[0].Message, "max_executions=6") ||
+		!strings.Contains(diagnostics[0].Message, "max_dispatches_per_wait=6") ||
+		!strings.Contains(diagnostics[0].Message, "max_outbox_per_cycle=12") ||
+		!strings.Contains(diagnostics[0].Message, "executions=0") ||
+		!strings.Contains(diagnostics[0].Message, "top_candidates=run-ref-queue-no-execution-ready-001:ready:90") ||
 		!strings.Contains(diagnostics[0].Message, "action=supervise_with_resident_mode_or_run_ref") {
 		t.Fatalf("diagnostics=%+v", diagnostics)
 	}

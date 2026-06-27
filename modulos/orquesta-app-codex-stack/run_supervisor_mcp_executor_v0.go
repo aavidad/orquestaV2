@@ -398,10 +398,15 @@ func (stack *StackV0) codexStackRunSupervisorQueueDiagnosticsMCPV0(
 		"stopped=" + strconv.Itoa(counts[orquestarunqueue.RunStatusStoppedV0]),
 		"closed=" + strconv.Itoa(counts[orquestarunqueue.RunStatusClosedV0]),
 	}
+	messageParts = append(messageParts, codexStackRunSupervisorQueueDiagnosticLimitPartsV0(input)...)
 	code := "run_supervisor_queue_pressure"
 	if noExecutionWithQueue {
 		code = "run_supervisor_queue_no_execution_with_ready_candidates"
-		messageParts = append(messageParts, "action=supervise_with_resident_mode_or_run_ref")
+		messageParts = append(messageParts,
+			"executions=0",
+			"top_candidates="+codexStackRunSupervisorQueueDiagnosticTopCandidatesV0(candidates, 3),
+			"action=supervise_with_resident_mode_or_run_ref",
+		)
 	}
 	message := strings.Join(compactStringsV0(messageParts), " ")
 	return []orquestamcp.MCPAutoprogrammingDiagnosticV0{{
@@ -409,6 +414,46 @@ func (stack *StackV0) codexStackRunSupervisorQueueDiagnosticsMCPV0(
 		Scope:   "queue:" + strings.TrimSpace(queueRef),
 		Message: message,
 	}}
+}
+
+func codexStackRunSupervisorQueueDiagnosticLimitPartsV0(
+	input orquestamcp.MCPRunSupervisorToolInputV0,
+) []string {
+	return []string{
+		"max_ticks=" + strconv.Itoa(codexStackPositiveOrDefaultV0(input.MaxTicks, 1)),
+		"max_runs_per_tick=" + strconv.Itoa(codexStackPositiveOrDefaultV0(input.MaxRunsPerTick, 1)),
+		"max_executions=" + strconv.Itoa(codexStackPositiveOrDefaultV0(input.MaxExecutions, 1)),
+		"max_dispatches_per_wait=" + strconv.Itoa(codexStackPositiveOrDefaultV0(input.MaxDispatchesPerWait, defaultCodexStackRunSupervisorMaxDispatchesPerWaitV0)),
+		"max_outbox_per_cycle=" + strconv.Itoa(codexStackPositiveOrDefaultV0(input.MaxOutboxPerCycle, defaultCodexStackRunSupervisorMaxOutboxPerCycleV0)),
+	}
+}
+
+func codexStackRunSupervisorQueueDiagnosticTopCandidatesV0(
+	candidates []orquestarunqueue.RunSchedulingCandidateV0,
+	limit int,
+) string {
+	if limit <= 0 || len(candidates) == 0 {
+		return "none"
+	}
+	out := make([]string, 0, limit)
+	for _, candidate := range candidates {
+		runRef := strings.TrimSpace(candidate.RunRef)
+		if runRef == "" {
+			continue
+		}
+		status := strings.TrimSpace(candidate.Status)
+		if status == "" {
+			status = "unknown"
+		}
+		out = append(out, runRef+":"+status+":"+strconv.Itoa(candidate.PriorityScore))
+		if len(out) >= limit {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return "none"
+	}
+	return strings.Join(out, ",")
 }
 
 func codexStackRunSupervisorNoExecutionWithQueueV0(
