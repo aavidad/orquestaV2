@@ -68,6 +68,11 @@ Orquesta decide si el resultado cierra:
 - `GoalWorkStateListPortV0`: puerto opcional para listar estados goal activos o
   filtrados por refs/estado; permite a status/residentes recomendar
   `observe_goal` sin volver al supervisor legacy.
+- `GoalWorkRunMarkerV0` y `GoalWorkRunMarkerStorePortV0`: marcador minimo por
+  `run_ref` que conserva que un contenedor pertenece a goal-first. No reemplaza
+  a `GoalWorkStateV0` para observar ni cerrar, pero permite bloquear como state
+  faltante en vez de ejecutar el loop historico si el estado completo no esta
+  disponible.
 - `ObserveActiveGoalWorksV0`: pasada residente neutral sobre estados goal
   activos; lista por puerto, observa cada `run_ref` con el lifecycle existente y
   conserva incidencias por goal sin reconstruir el loop director historico.
@@ -131,10 +136,13 @@ El 2026-06-27 `/api/v0/apps/director` queda goal-first estricto por defecto:
 `goal_first`. Si la composicion inyecta `GoalLauncher`, `GoalObserver`,
 `GoalClosureValidator` y `GoalStateStore`, lanza el goal y devuelve `run_ref`,
 `goal_ref`, `external_goal_ref`, `goal_status`, `goal_launch_receipt` y
-`director_execution_mode=goal_first`. En ese camino no ejecuta el loop legacy ni
-encola el run para el supervisor historico. Si no hay backend Goal configurado,
-la llamada falla como `goal_backend_unavailable` y conserva la evidencia publica
-del error; no cae al loop historico.
+`director_execution_mode=goal_first`. Si la composicion inyecta ademas
+`GoalWorkRunMarkerStorePortV0`, guarda un marcador durable del run para que
+`ContinueAppDirectorV0` no vuelva al loop legacy aunque `GoalWorkStateV0` falte
+en una reentrada. En ese camino no ejecuta el loop legacy ni encola el run para
+el supervisor historico. Si no hay backend Goal configurado, la llamada falla
+como `goal_backend_unavailable` y conserva la evidencia publica del error; no
+cae al loop historico.
 
 La web `/nueva-app` acepta esa respuesta, muestra las refs dentro del bloque
 `director` y observa por `POST /api/v0/apps/director/goal/observe` con polling

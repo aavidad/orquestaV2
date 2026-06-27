@@ -60,6 +60,10 @@ Puertos opcionales:
   observado como `blocked` o `invalid` tambien es terminal para Orquesta: se
   valida como cierre no aceptado, bloquea la run durable y no reabre el loop
   legacy;
+- `GoalFirstRunMarkerStore`, opcional pero recomendado en composiciones
+  goal-first. Persiste un `GoalWorkRunMarkerV0` minimo por `run_ref` para
+  recordar que el contenedor pertenece a un goal aunque `GoalWorkStateV0` no se
+  pueda cargar en una reentrada posterior;
 - `max_decision_cycles`, limite acotado para consumir decisiones y volver a ejecutar el loop sin quedar en bucle.
 
 Salida: `StartAppDirectorResultV0`.
@@ -129,9 +133,13 @@ Regla goal-first: si existe `GoalWorkStateV0` cargable para `run_ref`,
 loop legacy. Devuelven `wait_external`, evidencia
 `evidence-ref-app-director-goal-observe-required-v0` y el codigo
 `app_director_goal_first_observe_required` para que la composicion avance por
-`ObserveAppDirectorGoalV0`. Si el estado goal-first no existe, se conserva la
-compatibilidad legacy; si existe pero es invalido o no puede cargarse, se
-devuelve error y no se drena el director antiguo sobre ese contenedor.
+`ObserveAppDirectorGoalV0`. Si el estado goal-first no existe pero existe
+`GoalWorkRunMarkerV0`, devuelven `wait_external` con
+`app_director_goal_first_state_missing` y evidencia
+`evidence-ref-app-director-goal-state-missing-v0`; no drenan el director antiguo
+sobre ese contenedor. Solo si no hay estado ni marcador se conserva la
+compatibilidad legacy. Si el estado existe pero es invalido o no puede
+cargarse, se devuelve error y tampoco se cae al loop historico.
 
 Regla de reentrada por plan state: si no hay wait explicito y llega
 `operational_director_plan_ref`, el servicio exige `OperationalPlanStateStore`,

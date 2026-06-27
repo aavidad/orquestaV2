@@ -83,6 +83,7 @@ type StartAppDirectorPortsV0 struct {
 	GoalObserver                orquestagoal.GoalWorkObservationPortV0
 	GoalClosureValidator        orquestagoal.GoalWorkClosureValidatorPortV0
 	GoalStateStore              orquestagoal.GoalWorkStateStorePortV0
+	GoalFirstRunMarkerStore     AppDirectorGoalFirstRunMarkerStorePortV0
 	ExternalWaiter              orquestacionnucleoapp.ExternalProgressWaiterPortV0
 	OperationalClosureSource    AppDirectorOperationalClosureSourcePortV0
 }
@@ -116,6 +117,12 @@ type AppDirectorOperationalClosureRequestV0 struct {
 }
 
 type AppDirectorGoalStateV0 = orquestagoal.GoalWorkStateV0
+
+const AppDirectorGoalFirstRunMarkerSchemaV0 = orquestagoal.GoalWorkRunMarkerSchemaV0
+
+type AppDirectorGoalFirstRunMarkerV0 = orquestagoal.GoalWorkRunMarkerV0
+
+type AppDirectorGoalFirstRunMarkerStorePortV0 = orquestagoal.GoalWorkRunMarkerStorePortV0
 
 type ObserveAppDirectorGoalRequestV0 struct {
 	RunRef        string `json:"run_ref"`

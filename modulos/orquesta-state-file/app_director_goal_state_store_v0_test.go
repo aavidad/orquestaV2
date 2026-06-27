@@ -46,6 +46,41 @@ func TestStoreV0AppDirectorGoalStateRechazaRunRefInconsistente(t *testing.T) {
 	}
 }
 
+func TestStoreV0AppDirectorGoalFirstRunMarkerSobreviveRecreate(t *testing.T) {
+	root := t.TempDir()
+	store, err := NewStoreV0(ConfigV0{RootDir: root})
+	if err != nil {
+		t.Fatalf("NewStoreV0: %v", err)
+	}
+	marker := orquestagoal.GoalWorkRunMarkerV0{
+		RunRef:          "run-ref-state-file-goal-marker-001",
+		GoalRef:         "goal-ref-state-file-goal-marker-001",
+		ExternalGoalRef: "thread-ref-state-file-goal-marker-001",
+		DirectorKind:    orquestagoal.GoalDirectorKindCodexGoalV0,
+		Status:          orquestagoal.GoalStatusRunningV0,
+		EvidenceRefs:    []string{"evidence-ref-state-file-goal-marker-001"},
+	}
+	if err := store.SaveGoalWorkRunMarkerV0(context.Background(), marker); err != nil {
+		t.Fatalf("SaveGoalWorkRunMarkerV0: %v", err)
+	}
+	recovered, err := NewStoreV0(ConfigV0{RootDir: root})
+	if err != nil {
+		t.Fatalf("NewStoreV0 recovered: %v", err)
+	}
+	got, err := recovered.LoadGoalWorkRunMarkerV0(context.Background(), marker.RunRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkRunMarkerV0: %v", err)
+	}
+	if got.SchemaVersion != orquestagoal.GoalWorkRunMarkerSchemaV0 ||
+		got.RunRef != marker.RunRef ||
+		got.GoalRef != marker.GoalRef ||
+		got.DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 ||
+		len(got.EvidenceRefs) != 1 ||
+		got.EvidenceRefs[0] != "evidence-ref-state-file-goal-marker-001" {
+		t.Fatalf("got=%+v", got)
+	}
+}
+
 func TestStoreV0AppDirectorGoalStateListaActivosTrasRecreate(t *testing.T) {
 	root := t.TempDir()
 	store, err := NewStoreV0(ConfigV0{RootDir: root})

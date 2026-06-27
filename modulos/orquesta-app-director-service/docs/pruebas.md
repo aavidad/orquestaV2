@@ -164,7 +164,10 @@ si faltan artefactos/evidencias del contrato o si el runtime devuelve estado
 terminal `invalid`.
 Tambien cubre que `continue` y el builder del runtime no reentran en el loop
 legacy cuando hay `GoalWorkStateV0` persistido; devuelven la senal de
-observacion requerida sin exigir `OutboxLedger` ni dispatchers legacy.
+observacion requerida sin exigir `OutboxLedger` ni dispatchers legacy. Cuando
+el estado completo falta pero existe `GoalWorkRunMarkerV0`, devuelven estado
+pendiente con `app_director_goal_first_state_missing` en vez de ejecutar el
+director historico.
 
 Evidencia real 2026-05-09:
 

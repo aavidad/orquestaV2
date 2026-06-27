@@ -21,7 +21,8 @@ func TestBuildDirectorPortsV0CableaAppGoalLauncher(t *testing.T) {
 	if ports.GoalLauncher == nil ||
 		ports.GoalObserver == nil ||
 		ports.GoalClosureValidator == nil ||
-		ports.GoalStateStore == nil {
+		ports.GoalStateStore == nil ||
+		ports.GoalFirstRunMarkerStore == nil {
 		t.Fatalf("puertos goal-first incompletos: %+v", ports)
 	}
 	receipt, err := ports.GoalLauncher.LaunchGoalWorkV0(context.Background(), orquestagoal.GoalWorkSpecV0{
@@ -117,6 +118,20 @@ func (codexStackGoalStateStoreForTestV0) LoadGoalWorkStateV0(
 	string,
 ) (orquestagoal.GoalWorkStateV0, error) {
 	return orquestagoal.GoalWorkStateV0{}, nil
+}
+
+func (codexStackGoalStateStoreForTestV0) SaveGoalWorkRunMarkerV0(
+	context.Context,
+	orquestagoal.GoalWorkRunMarkerV0,
+) error {
+	return nil
+}
+
+func (codexStackGoalStateStoreForTestV0) LoadGoalWorkRunMarkerV0(
+	context.Context,
+	string,
+) (orquestagoal.GoalWorkRunMarkerV0, error) {
+	return orquestagoal.GoalWorkRunMarkerV0{}, nil
 }
 
 type queuedGoalFirstInnerForTestV0 struct{}

@@ -16,6 +16,7 @@
 - `OperationalDirectorPlanStateWriterPortV0`
 - `GoalWorkStateStorePortV0`
 - `GoalWorkStateListPortV0`
+- `GoalWorkRunMarkerStorePortV0`
 - `AgentProcessRegistryPortV0`
 
 ## STF-002: FileOutboxLedgerV0
@@ -43,6 +44,9 @@ store de runs/tareas para evitar mezclar responsabilidades.
 - `app_director_goal_states/`: un documento por `run_ref`; conserva
   `GoalWorkStateV0` para rutas goal-first y permite listar estados activos sin
   depender de la cola legacy.
+- `app_director_goal_markers/`: un documento minimo por `run_ref`; conserva
+  `GoalWorkRunMarkerV0` para que `ContinueAppDirectorV0` reconozca un
+  contenedor goal-first aunque el estado completo no este disponible.
 - `agent_processes/`: un documento por `run_id + agent_request_id`.
 - `outbox_ledger_v0.json`: ledger durable del subpaquete `outbox`.
 

@@ -8,6 +8,7 @@ import (
 
 var _ orquestagoal.GoalWorkStateStorePortV0 = (*StoreV0)(nil)
 var _ orquestagoal.GoalWorkStateListPortV0 = (*StoreV0)(nil)
+var _ orquestagoal.GoalWorkRunMarkerStorePortV0 = (*StoreV0)(nil)
 var _ orquestacionnucleoapp.RunStorePortV0 = (*StoreV0)(nil)
 var _ orquestacionnucleoapp.EventSinkPortV0 = (*StoreV0)(nil)
 var _ orquestacionnucleoapp.RunEventReaderPortV0 = (*StoreV0)(nil)

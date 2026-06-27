@@ -15,7 +15,8 @@ No decide runtime, proveedor, HOME, DB, REST, MCP, web, Codex ni OPES.
   operativo si llega, recupera `OperationalDirectorPlanStateV0`, resuelve waits
   acotados y avanza review/tests/replan/cierre cuando hay causalidad suficiente.
   Si el run tiene `GoalWorkStateV0` persistido, no entra al loop legacy y
-  redirige a observacion goal-first.
+  redirige a observacion goal-first. Si solo queda `GoalWorkRunMarkerV0`,
+  bloquea como state faltante y tampoco reactiva el director historico.
 
 ## Ciclo Conceptual
 

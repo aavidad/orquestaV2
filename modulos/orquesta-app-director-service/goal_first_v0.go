@@ -46,6 +46,18 @@ func startAppDirectorGoalFirstV0(
 	if err != nil {
 		return StartAppDirectorResultV0{}, false, err
 	}
+	if ports.GoalFirstRunMarkerStore != nil {
+		if err := ports.GoalFirstRunMarkerStore.SaveGoalWorkRunMarkerV0(
+			ctx,
+			appDirectorGoalFirstRunMarkerFromLaunchV0(
+				prepared.Run.RunID,
+				goalStarted.Receipt,
+				prepared.EvidenceRefs,
+			),
+		); err != nil {
+			return StartAppDirectorResultV0{}, false, err
+		}
+	}
 	return startAppDirectorGoalFirstResultV0(request, spec, prepared, goalStarted.Receipt), true, nil
 }
 

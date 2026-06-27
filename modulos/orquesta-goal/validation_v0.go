@@ -369,6 +369,43 @@ func NewGoalWorkStateV0(state GoalWorkStateV0) (GoalWorkStateV0, error) {
 	return state, nil
 }
 
+func NormalizeGoalWorkRunMarkerV0(marker GoalWorkRunMarkerV0) GoalWorkRunMarkerV0 {
+	marker.SchemaVersion = GoalWorkRunMarkerSchemaV0
+	marker.RunRef = strings.TrimSpace(marker.RunRef)
+	marker.GoalRef = strings.TrimSpace(marker.GoalRef)
+	marker.ExternalGoalRef = strings.TrimSpace(marker.ExternalGoalRef)
+	marker.DirectorKind = strings.TrimSpace(marker.DirectorKind)
+	if marker.DirectorKind == "" {
+		marker.DirectorKind = GoalDirectorKindRuntimeGoalV0
+	}
+	marker.Status = strings.TrimSpace(marker.Status)
+	for i := range marker.EvidenceRefs {
+		marker.EvidenceRefs[i] = strings.TrimSpace(marker.EvidenceRefs[i])
+	}
+	return marker
+}
+
+func NewGoalWorkRunMarkerV0(marker GoalWorkRunMarkerV0) (GoalWorkRunMarkerV0, error) {
+	marker = NormalizeGoalWorkRunMarkerV0(marker)
+	var issues []GoalWorkIssueV0
+	validateRequiredGoalRefV0(&issues, "run_ref", marker.RunRef)
+	validateGoalRefsV0(&issues, "goal_ref", marker.GoalRef)
+	validateGoalRefsV0(&issues, "external_goal_ref", marker.ExternalGoalRef)
+	if marker.DirectorKind != GoalDirectorKindRuntimeGoalV0 && marker.DirectorKind != GoalDirectorKindCodexGoalV0 {
+		issues = append(issues, GoalWorkIssueV0{Code: ErrGoalDirectorInvalidV0, Field: "director_kind"})
+	}
+	if marker.Status != "" && !validGoalWorkResultStatusV0(marker.Status) {
+		issues = append(issues, GoalWorkIssueV0{Code: ErrGoalStatusInvalidV0, Field: "status"})
+	}
+	for _, evidenceRef := range marker.EvidenceRefs {
+		validateRequiredGoalRefV0(&issues, "evidence_refs", evidenceRef)
+	}
+	if len(issues) > 0 {
+		return GoalWorkRunMarkerV0{}, GoalWorkStateInvalidErrorV0{Issues: issues}
+	}
+	return marker, nil
+}
+
 type GoalWorkStateInvalidErrorV0 struct {
 	Issues []GoalWorkIssueV0
 }

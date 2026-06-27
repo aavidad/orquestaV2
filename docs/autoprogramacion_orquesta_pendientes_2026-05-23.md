@@ -16,6 +16,8 @@ mismo formato `## Txx`, conservando fichero, linea y hash por seccion.
 - Shard matriz de duplicaciones/rails pendientes: `docs/duplicaciones_railes_pendientes_2026-05-24.md`.
 - Mapa operativo no programable para ola complementaria 10x6:
   `docs/autoprogramacion_ola_complementaria_10x6_2026-05-25.md`.
+- Backlog canonico compacto de incidencias OPES/Orquesta:
+  `docs/incidencias/opes_orquesta_backlog_operativo_2026-06-28.md`.
 
 ## Indice federado de backlog local
 
@@ -44,6 +46,10 @@ legacy.
   source_kind: module_tasks; owner: `modulos/orquesta-runtime-codex-goal`;
   estado: vigente; aliases: CODEX-GOAL-*; tests:
   `go test -count=1 ./modulos/orquesta-runtime-codex-goal`.
+- source_path: `docs/incidencias/opes_orquesta_backlog_operativo_2026-06-28.md`;
+  source_kind: incident_backlog; owner: `docs/incidencias`; estado: vigente;
+  aliases: ORQ-OPES-*; tests:
+  `go test -count=1 ./modulos/orquesta-app-codex-stack ./modulos/orquesta-app-director-service`.
 - source_path: `docs/BIBLIA_APP_ORQUESTA.md`; source_kind:
   legacy_external_orchestrator_doc; owner: `docs`; estado: quarantine;
   related_txx: T124; aliases: LEGACY-EXT-ORCH-*.
@@ -244,7 +250,7 @@ el boton global observa el goal cuando procede, las filas goal-first avanzan por
 `StackV0.DrainRunV0` y el Director residente consultan tambien la guarda
 goal-first antes de reentrar en `ContinueAppDirectorV0`, por lo que una llamada
 directa o residente no debe lanzar agentes legacy sobre un run con
-`GoalWorkStateV0`; si falta el state pero el run es contenedor goal-first, la
+`GoalWorkStateV0`; si falta el state pero existe `GoalWorkRunMarkerV0`, la
 respuesta es bloqueo/estado faltante y no loop historico. En `goal_ready`,
 `BuildAutoprogrammingProgrammableWorkV0` conserva `GoalWorkSpecV0` y grupos
 neutrales pero deja vacia la superficie publica `WorkflowTaskV0`/profiles
@@ -348,11 +354,13 @@ Pendiente verificable:
   `goal_backend_unavailable` y no cae al loop historico; `legacy_director_loop`
   queda como opt-in explicito. Evidencia focal:
   `go test -count=1 ./modulos/orquesta-app-director-service ./modulos/orquesta-mcp ./modulos/orquesta-web ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack`.
-- Pendiente de status: si falta `GoalWorkStateV0`, `autoprogramming/status`
-  aun depende de la visibilidad del state store para publicar `observe_goal`.
-  Para diagnostico perfecto debe recibir una fuente de run/forma goal-first o
-  consumir la disposicion de la composicion, y publicar reparacion de state en
-  vez de acciones genericas.
+- Revalidacion adicional 2026-06-28: `StartAppDirectorV0` puede persistir
+  `GoalWorkRunMarkerV0` por `GoalWorkRunMarkerStorePortV0` y el stack Codex lo
+  cablea desde el mismo state-file. Si falta `GoalWorkStateV0`, `Continue` ya
+  reconoce el marcador y devuelve `app_director_goal_first_state_missing` sin
+  lanzar loop legacy. Queda como mejora de diagnostico que
+  `autoprogramming/status` publique reparacion/observacion mas rica usando ese
+  marcador cuando no haya state completo.
 
 Validacion focal:
 

@@ -577,6 +577,103 @@ func TestContinueAppDirectorV0GoalFirstContainerNoEjecutaLoopLegacySinPuertosLeg
 	}
 }
 
+func TestStartAppDirectorV0GoalFirstPersisteRunMarkerV0(t *testing.T) {
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	launcher := &serviceGoalLauncherForTestV0{}
+	goalStates := newServiceGoalStateStoreForTestV0()
+	markers := newServiceGoalFirstRunMarkerStoreForTestV0()
+	request := validStartAppDirectorRequestForTestV0()
+	request.DirectorExecutionMode = AppDirectorExecutionModeGoalFirstV0
+
+	result, err := StartAppDirectorV0(
+		context.Background(),
+		request,
+		StartAppDirectorPortsV0{
+			RunStore:                store,
+			EventSink:               sink,
+			OutboxLedger:            ledger,
+			GoalLauncher:            launcher,
+			GoalObserver:            serviceGoalObserverForTestV0{},
+			GoalClosureValidator:    orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+			GoalStateStore:          goalStates,
+			GoalFirstRunMarkerStore: markers,
+		},
+	)
+	if err != nil {
+		t.Fatalf("StartAppDirectorV0: %v", err)
+	}
+	marker, err := markers.LoadGoalWorkRunMarkerV0(context.Background(), result.Run.RunID)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkRunMarkerV0: %v", err)
+	}
+	if marker.RunRef != result.Run.RunID ||
+		marker.GoalRef != result.GoalRef ||
+		marker.DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 ||
+		!serviceStringInSetV0(marker.EvidenceRefs, "evidence-ref-app-director-goal-first-run-marker-v0") {
+		t.Fatalf("marker=%+v result=%+v", marker, result)
+	}
+}
+
+func TestContinueAppDirectorV0GoalFirstMarkerSinStateNoEjecutaLoopLegacyV0(t *testing.T) {
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	launcher := &serviceGoalLauncherForTestV0{}
+	goalStates := newServiceGoalStateStoreForTestV0()
+	markers := newServiceGoalFirstRunMarkerStoreForTestV0()
+	request := validStartAppDirectorRequestForTestV0()
+	request.DirectorExecutionMode = AppDirectorExecutionModeGoalFirstV0
+
+	started, err := StartAppDirectorV0(
+		context.Background(),
+		request,
+		StartAppDirectorPortsV0{
+			RunStore:                store,
+			EventSink:               sink,
+			OutboxLedger:            ledger,
+			GoalLauncher:            launcher,
+			GoalObserver:            serviceGoalObserverForTestV0{},
+			GoalClosureValidator:    orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+			GoalStateStore:          goalStates,
+			GoalFirstRunMarkerStore: markers,
+		},
+	)
+	if err != nil {
+		t.Fatalf("StartAppDirectorV0: %v", err)
+	}
+	missingGoalStateStore := newServiceGoalStateStoreForTestV0()
+
+	result, err := ContinueAppDirectorV0(
+		context.Background(),
+		ContinueAppDirectorRequestV0{
+			RunRef:        started.Run.RunID,
+			OccurredAt:    "2026-05-09T22:33:00Z",
+			CorrelationID: "corr-service-goal-first-marker-missing-state",
+		},
+		StartAppDirectorPortsV0{
+			RunStore:                store,
+			GoalStateStore:          missingGoalStateStore,
+			GoalFirstRunMarkerStore: markers,
+		},
+	)
+	if err != nil {
+		t.Fatalf("ContinueAppDirectorV0: %v", err)
+	}
+	if result.Status != ContinueAppDirectorStatusPendingV0 ||
+		result.LoopStatus != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 ||
+		result.Run.RunID != started.Run.RunID ||
+		len(result.StartedAgents) != 0 ||
+		!serviceStringInSetV0(result.EvidenceRefs, continueAppDirectorGoalFirstStateMissingEvidenceV0) {
+		t.Fatalf("result=%+v", result)
+	}
+	if len(result.OperationalClosureIssues) != 1 ||
+		result.OperationalClosureIssues[0].Code != continueAppDirectorGoalFirstStateMissingCodeV0 {
+		t.Fatalf("operational_closure_issues=%+v", result.OperationalClosureIssues)
+	}
+}
+
 func TestBuildContinueAppDirectorLoopRuntimeV0GoalFirstContainerCierraSinLoopLegacy(t *testing.T) {
 	store, _, goalStates, _, started := serviceStartGoalFirstForObserveTestV0(t)
 
@@ -795,6 +892,37 @@ func (store *serviceGoalStateStoreForTestV0) LoadGoalWorkStateV0(
 		return AppDirectorGoalStateV0{}, AppDirectorServiceIssueV0{Field: "goal_state"}
 	}
 	return state, nil
+}
+
+type serviceGoalFirstRunMarkerStoreForTestV0 struct {
+	markers map[string]AppDirectorGoalFirstRunMarkerV0
+}
+
+func newServiceGoalFirstRunMarkerStoreForTestV0() *serviceGoalFirstRunMarkerStoreForTestV0 {
+	return &serviceGoalFirstRunMarkerStoreForTestV0{markers: map[string]AppDirectorGoalFirstRunMarkerV0{}}
+}
+
+func (store *serviceGoalFirstRunMarkerStoreForTestV0) SaveGoalWorkRunMarkerV0(
+	_ context.Context,
+	marker AppDirectorGoalFirstRunMarkerV0,
+) error {
+	normalized, err := NewAppDirectorGoalFirstRunMarkerV0(marker)
+	if err != nil {
+		return err
+	}
+	store.markers[normalized.RunRef] = normalized
+	return nil
+}
+
+func (store *serviceGoalFirstRunMarkerStoreForTestV0) LoadGoalWorkRunMarkerV0(
+	_ context.Context,
+	runRef string,
+) (AppDirectorGoalFirstRunMarkerV0, error) {
+	marker, ok := store.markers[runRef]
+	if !ok {
+		return AppDirectorGoalFirstRunMarkerV0{}, AppDirectorServiceIssueV0{Field: "goal_first_run_marker"}
+	}
+	return marker, nil
 }
 
 func validStartAppDirectorRequestForTestV0() StartAppDirectorRequestV0 {

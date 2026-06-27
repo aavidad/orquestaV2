@@ -7,6 +7,7 @@ const (
 	GoalWorkLaunchReceiptSchemaV0 = "orquesta_goal_launch_receipt.v0"
 	GoalWorkResultSchemaV0        = "orquesta_goal_work_result.v0"
 	GoalWorkStateSchemaV0         = "orquesta_goal_work_state.v0"
+	GoalWorkRunMarkerSchemaV0     = "orquesta_goal_work_run_marker.v0"
 
 	GoalDirectorKindRuntimeGoalV0 = "runtime_goal"
 	GoalDirectorKindCodexGoalV0   = "codex_goal"
@@ -161,6 +162,16 @@ type GoalWorkStateV0 struct {
 	EvidenceRefs    []string                 `json:"evidence_refs,omitempty"`
 }
 
+type GoalWorkRunMarkerV0 struct {
+	SchemaVersion   string   `json:"schema_version"`
+	RunRef          string   `json:"run_ref"`
+	GoalRef         string   `json:"goal_ref,omitempty"`
+	ExternalGoalRef string   `json:"external_goal_ref,omitempty"`
+	DirectorKind    string   `json:"director_kind,omitempty"`
+	Status          string   `json:"status,omitempty"`
+	EvidenceRefs    []string `json:"evidence_refs,omitempty"`
+}
+
 type GoalWorkStateListRequestV0 struct {
 	RunRefs    []string `json:"run_refs,omitempty"`
 	Statuses   []string `json:"statuses,omitempty"`
@@ -202,6 +213,11 @@ type GoalWorkClosureValidatorPortV0 interface {
 type GoalWorkStateStorePortV0 interface {
 	SaveGoalWorkStateV0(context.Context, GoalWorkStateV0) error
 	LoadGoalWorkStateV0(context.Context, string) (GoalWorkStateV0, error)
+}
+
+type GoalWorkRunMarkerStorePortV0 interface {
+	SaveGoalWorkRunMarkerV0(context.Context, GoalWorkRunMarkerV0) error
+	LoadGoalWorkRunMarkerV0(context.Context, string) (GoalWorkRunMarkerV0, error)
 }
 
 type GoalWorkStateListPortV0 interface {

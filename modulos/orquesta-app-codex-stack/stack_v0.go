@@ -222,6 +222,7 @@ func buildDirectorPortsV0(
 		GoalObserver:                config.AppGoalObserver,
 		GoalClosureValidator:        appGoalClosureValidatorV0(config),
 		GoalStateStore:              config.Stores.AppGoalStateStore,
+		GoalFirstRunMarkerStore:     appGoalFirstRunMarkerStoreV0(config),
 		ExternalWaiter:              ackWaiterV0(config),
 		OperationalClosureSource:    operationalClosureSourceV0(config),
 		Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
@@ -233,6 +234,16 @@ func buildDirectorPortsV0(
 			agentBatchDispatcherV0(config),
 		},
 	}
+}
+
+func appGoalFirstRunMarkerStoreV0(
+	config ConfigV0,
+) orquestaappdirectorservice.AppDirectorGoalFirstRunMarkerStorePortV0 {
+	store, ok := config.Stores.AppGoalStateStore.(orquestaappdirectorservice.AppDirectorGoalFirstRunMarkerStorePortV0)
+	if !ok {
+		return nil
+	}
+	return store
 }
 
 func appGoalClosureValidatorV0(
