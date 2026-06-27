@@ -123,10 +123,11 @@ func applyMCPAutoprogrammingRunHealthV0(
 			applyMCPAutoprogrammingHealthClassV0(health, mcpAutoprogrammingHealthRunningWithoutRecentStatsV0, 1)
 			return
 		}
-		stale := stats.Progress.StalledAgents
-		if stale > 0 || stats.Progress.ProgressingAgents == 0 {
+		if mcpAutoprogrammingRunStatsHasConfirmedNoLiveProcessV0(stats) {
 			applyMCPAutoprogrammingHealthClassV0(health, mcpAutoprogrammingHealthRunningStaleNoProcessV0, 1)
+			return
 		}
+		applyMCPAutoprogrammingHealthClassV0(health, mcpAutoprogrammingHealthRunningWithoutRecentStatsV0, 1)
 		return
 	}
 	if stats.Closure.Closed || mcpAutoprogrammingRunStatusCompletedV0(stats.Status) {
@@ -250,6 +251,35 @@ func mcpAutoprogrammingRunStatsHasUnknownProcessSignalV0(
 		}
 	}
 	return false
+}
+
+func mcpAutoprogrammingRunStatsHasConfirmedNoLiveProcessV0(
+	stats orquestacionnucleoapp.DirectorRunStatsV0,
+) bool {
+	confirmedStopped := false
+	for _, agent := range stats.Agents {
+		if !agent.InFlight || agent.Process == nil || mcpAutoprogrammingAgentStatsTerminalV0(agent) {
+			continue
+		}
+		if strings.TrimSpace(agent.Process.ProcessRef) == "" &&
+			strings.TrimSpace(agent.Process.SessionRef) == "" &&
+			strings.TrimSpace(agent.Process.LaunchRef) == "" &&
+			strings.TrimSpace(agent.Process.ReadinessRef) == "" {
+			return false
+		}
+		switch strings.ToLower(strings.TrimSpace(agent.Process.Status)) {
+		case orquestacionnucleoapp.DirectorAgentProcessStatusStoppedV0:
+			confirmedStopped = true
+		case orquestacionnucleoapp.DirectorAgentProcessStatusRunningV0,
+			orquestacionnucleoapp.DirectorAgentProcessStatusStoppingV0,
+			orquestacionnucleoapp.DirectorAgentProcessStatusUnknownV0,
+			"":
+			return false
+		default:
+			return false
+		}
+	}
+	return confirmedStopped
 }
 
 func mcpAutoprogrammingRunStatusCompletedV0(status string) bool {

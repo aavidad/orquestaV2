@@ -166,6 +166,42 @@ func TestMCPAutoprogrammingValidateRequestExecutorV0DevuelveTrabajoProgramablePa
 	})
 }
 
+func TestMCPAutoprogrammingValidateRequestExecutorV0GoalFirstNoExponeWorkflowTaskRefsLegacy(t *testing.T) {
+	request := validMCPAutoprogrammingRequestV0()
+	request.Tasks = []orquestaautoprogramming.AutoprogrammingTaskGroupCandidateV0{{
+		TaskRef:     "task-ref-mcp-goal-first-001",
+		Area:        "MCP",
+		ContextRefs: []string{"goal_migration:goal-first", "goal_capability:starter", "goal_capability:observer", "goal_capability:closure-validator"},
+	}}
+	request.WriteSet = []string{"modulos/orquesta-mcp/autoprogramming_validate_request_tool_v0.go"}
+
+	result, err := MCPAutoprogrammingValidateRequestToolExecutorV0{}.Execute(
+		context.Background(),
+		MCPAutoprogrammingValidateRequestToolInputV0{
+			RequestID:              "request-ref-mcp-autoprogramming-goal-first-001",
+			AutoprogrammingRequest: request,
+		},
+	)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !result.Accepted ||
+		result.ProgrammableWork == nil ||
+		len(result.ProgrammableWork.WorkProfileRefs) != 0 ||
+		len(result.ProgrammableWork.WorkflowTaskRefs) != 0 ||
+		len(result.ProgrammableWork.Groups) != 1 {
+		t.Fatalf("programmable_work=%+v", result.ProgrammableWork)
+	}
+	group := result.ProgrammableWork.Groups[0]
+	if group.WorkflowTaskRef != "" ||
+		group.WorkProfileRef != "" ||
+		group.WorkKind != "goal_work_spec" ||
+		group.PhaseID != "goal_first" ||
+		len(group.WriteSet) != 1 {
+		t.Fatalf("group=%+v", group)
+	}
+}
+
 func TestMCPAutoprogrammingValidateRequestTransportV0RegistradoEInvocable(t *testing.T) {
 	transport := newFakeMCPTransportV0()
 	if err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{}); err != nil {

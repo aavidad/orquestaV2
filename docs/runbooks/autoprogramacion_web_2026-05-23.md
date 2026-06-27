@@ -72,8 +72,10 @@ Criterios de aceptacion manual:
 - `run-control` y `run-queue` delegan mutaciones al contrato REST/MCP y no leen
   estado interno desde web.
 - `/director-stats` expone acciones seguras de operador con POST explicito:
-  supervision por `/api/v0/autoprogramming/supervise` y pausa/reanudacion/parada
-  por `/run-control`.
+  para runs goal-first observa por `/api/v0/autoprogramming/goal/observe` o
+  `/api/v0/apps/director/goal/observe`; `/api/v0/autoprogramming/supervise` se
+  muestra solo como accion legacy cuando no hay `GoalWorkStateV0`. Pausa,
+  reanudacion y parada siguen por `/run-control`.
 - El contrato externo de dominio queda en adaptadores/composicion; la app
   propietaria conserva datos, reglas, validadores y ensamblado.
 

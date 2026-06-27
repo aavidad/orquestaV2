@@ -10,6 +10,7 @@ import (
 	orquestadecisioncouncil "orquesta/modulos/orquesta-decision-council"
 	orquestadirectorsupervisedburst "orquesta/modulos/orquesta-director-supervised-burst"
 	orquestadirectorsupervisor "orquesta/modulos/orquesta-director-supervisor"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 )
@@ -145,6 +146,116 @@ func TestCodexStackResidentDirectorV0ProcesaLoteSegunMaxRunsPerTickV0(t *testing
 		!codexStackStringInSetForTestV0(result.RunRefs, secondRunRef) ||
 		result.ExecutedActions != 2 {
 		t.Fatalf("result=%+v launches=%d", result, runtime.launchCountV0())
+	}
+}
+
+func TestCodexStackResidentDirectorV0NoDrenaLegacySiGoalFirstEnCola(t *testing.T) {
+	ctx := context.Background()
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	stack.Ports.GoalStateStore = goalStates
+	now := time.Date(2026, 6, 27, 12, 0, 0, 0, time.UTC)
+	runRef := "run-resident-goal-first-guard-001"
+	saveCodexStackGoalFirstStateForTestV0(t, ctx, goalStates, runRef)
+	if err := stack.Ports.RunStore.SaveRunV0(ctx, orquestacoreworkflow.OrchestrationRunV0{
+		SchemaVersion: orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
+		RunID:         runRef,
+		ProjectRef:    "app-resident-goal-first",
+		Status:        orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+		CurrentPhase:  orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+	}); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	if _, err := stack.Stores.RunQueue.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        runRef,
+		QueueRef:      normalizeRunQueueConfigV0(stack.RunQueue).QueueRef,
+		AppRef:        "app-resident-goal-first",
+		Status:        orquestarunqueue.RunStatusReadyV0,
+		PriorityScore: 80,
+		UpdatedAt:     now,
+		RequestedBy:   "resident-director-goal-first-test",
+		Reason:        "candidato goal-first accidental para guard residente",
+		EvidenceRefs:  []string{"evidence-ref-resident-goal-first-candidate"},
+	}); err != nil {
+		t.Fatalf("SetRunPriorityV0: %v", err)
+	}
+
+	result, err := stack.RunCodexStackResidentDirectorV0(ctx, CodexStackResidentDirectorCommandV0{
+		OccurredAt:            now.Format(time.RFC3339),
+		CorrelationID:         "corr-resident-goal-first-guard-001",
+		MaxRunsPerTick:        1,
+		MaxExecutions:         1,
+		MaxActions:            8,
+		MaxDispatchesPerWait:  4,
+		MaxCommands:           6,
+		MaxOutboxPerCycle:     6,
+		QueueRankingPolicyNow: now,
+		EvidenceRefs:          []string{"evidence-ref-resident-goal-first-command"},
+	})
+	if err != nil {
+		t.Fatalf("RunCodexStackResidentDirectorV0: %v result=%+v", err, result)
+	}
+	if result.RunRef != runRef ||
+		result.Status != codexStackGoalFirstObserveRequiredOutcomeV0 ||
+		result.ExecutedActions != 0 ||
+		runtime.launchCountV0() != 0 {
+		t.Fatalf("result=%+v launches=%d", result, runtime.launchCountV0())
+	}
+	candidates, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(ctx, orquestarunqueue.RunQueueReadRequestV0{
+		QueueRef:             normalizeRunQueueConfigV0(stack.RunQueue).QueueRef,
+		IncludeNonExecutable: true,
+	})
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	if len(candidates) != 1 ||
+		candidates[0].RunRef != runRef ||
+		candidates[0].Status != orquestarunqueue.RunStatusDeliveredV0 {
+		t.Fatalf("candidates=%+v", candidates)
+	}
+	run, err := stack.Ports.RunStore.LoadRunV0(ctx, runRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if len(run.Tasks) != 0 || len(run.StartedAgents) != 0 {
+		t.Fatalf("resident guard materializo legacy: %+v", run)
+	}
+}
+
+func saveCodexStackGoalFirstStateForTestV0(
+	t *testing.T,
+	ctx context.Context,
+	store *goalFirstQueueStateStoreForTestV0,
+	runRef string,
+) {
+	t.Helper()
+	goalRef := "goal-ref-" + runRef
+	if err := store.SaveGoalWorkStateV0(ctx, orquestagoal.GoalWorkStateV0{
+		RunRef:          runRef,
+		GoalRef:         goalRef,
+		ExternalGoalRef: "external-" + goalRef,
+		Status:          orquestagoal.GoalStatusRunningV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			GoalRef:      goalRef,
+			RunRef:       runRef,
+			ProjectRef:   "app-resident-goal-first",
+			Objective:    "Probar que el residente no drena un goal-first con loop legacy.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet: []orquestagoal.GoalWriteScopeV0{{
+				Path: "modulos/orquesta-app-codex-stack/goal-first-resident.md",
+			}},
+			EvidenceRefs: []string{"evidence-ref-resident-goal-first-state"},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         goalRef,
+			ExternalGoalRef: "external-" + goalRef,
+			EvidenceRefs:    []string{"evidence-ref-resident-goal-first-launch"},
+		},
+		EvidenceRefs: []string{"evidence-ref-resident-goal-first-state"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
 	}
 }
 

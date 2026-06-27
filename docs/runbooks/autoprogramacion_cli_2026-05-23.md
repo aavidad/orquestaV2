@@ -47,11 +47,16 @@ nucleo ni en runtime local:
    para trabajo `goal_ready` debe mostrar `goal_specs[]` sin `run_ref` legacy.
    En ambos casos conserva `worktree_ref` y `branch_ref` opacas, write-set y
    tests requeridos.
-5. `autoprogramacion supervisar` ejecuta un pulso acotado del supervisor por
-   API; `--max-ticks 1` es el valor seguro para operacion manual.
-6. `autoprogramacion run ver` consulta detalle de una run por
+5. Si preparar devuelve goal/run_ref goal-first, el siguiente paso no es
+   supervisar: es observar goal por `POST /api/v0/autoprogramming/goal/observe`.
+   Si la CLI aun no tiene comando dedicado, documentarlo como hueco de cliente y
+   no recomendar `supervise` para esos runs.
+6. `autoprogramacion supervisar` ejecuta un pulso acotado del supervisor por
+   API solo para runs legacy/resident; `--max-ticks 1` es el valor seguro para
+   operacion manual.
+7. `autoprogramacion run ver` consulta detalle de una run por
    `orquesta.director.stats.v0`.
-7. `autoprogramacion run controlar` delega `pause|resume|stop|cancel` en
+8. `autoprogramacion run controlar` delega `pause|resume|stop|cancel` en
    `orquesta.runs.control.v0`.
 
 El detalle de apps/runs se obtiene por refs opacas (`run_ref`, `app_ref`,
@@ -67,6 +72,7 @@ La CLI consume solo rutas publicas versionadas:
 - `GET /api/v0/server/status`
 - `POST /api/v0/autoprogramming/prepare-run`
 - `POST /api/v0/autoprogramming/status`
+- `POST /api/v0/autoprogramming/goal/observe`
 - `POST /api/v0/autoprogramming/supervise`
 - `POST /api/v0/runs/queue/priority`
 - `POST /api/v0/director/stats`

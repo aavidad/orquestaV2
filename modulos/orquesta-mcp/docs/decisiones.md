@@ -17,6 +17,28 @@ Estado:
 ## Decisiones tomadas
 
 ```text
+Fecha: 2026-06-27
+Decision: `autoprogramming/status` publica `observe_goal` como unica accion
+normal para runs goal-first y no recomienda `supervise queue` si la cola activa
+contiene GoalWorkStateV0.
+Motivo: Con Codex Goal, el goal persistente es el Director interno del trabajo.
+El supervisor legacy solo debe seguir para runs sin estado Goal; mezclar una
+cola global con goal-first podia reentrar en `ContinueAppDirectorV0` y lanzar
+trabajo antiguo.
+Alternativas: borrar `/runs/supervise`; bloquear cualquier cola mixta; exigir
+que la web detecte goal-first sin contrato de operador. Se descartan porque
+rompen compatibilidad legacy o reparten politica en clientes.
+Impacto: el operador recibe `observe_goal` por run goal-first,
+`supervise run` solo para runs legacy visibles, y ninguna accion global de cola
+si hay goal-first activo. `/ops` debe ejecutar esas `safe_actions` antes de usar
+fallbacks legacy.
+Contratos afectados: mcp.tool.orquesta.autoprogramming.status.v0;
+rest.bridge.orquesta.autoprogramming.goal.observe.v0;
+rest.bridge.orquesta.autoprogramming.supervise.v0.
+Estado: aceptada localmente
+```
+
+```text
 Fecha: 2026-06-26
 Decision: El alias HTTP `max_dispatches` y el `safe_action` de
 `autoprogramming/supervise` publican presupuesto real de cola.
@@ -591,5 +613,21 @@ Impacto: `run_ref`, `workflow_task_refs`, `wait_agent_refs`, `phase_id` y
 `goal_specs[]` validos y no arranca runtime por si misma.
 Contratos afectados: mcp.tool.orquesta.autoprogramming.prepare_run.v0;
 rest.bridge.orquesta.autoprogramming.prepare_run.v0.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-06-27
+Decision: `autoprogramming/status` detecta goal-first tambien desde la cola.
+Motivo: un operador puede consultar estado sin `run_ref` y recibir una cola
+mixta. Si algun candidato pertenece a goal-first, recomendar `supervise queue`
+es ambiguo: puede seleccionar el goal y despertar compatibilidad legacy o
+devolver solo redireccion, en vez de orientar al observador de Goal.
+Impacto: cuando existe `GoalWorkStateStore`, el status prueba los candidatos
+activos de cola por `run_ref`, publica `autoprogramming_goal_first_observe_required`,
+anade `observe_goal` por cada goal-first y suprime `supervise queue` si la cola
+contiene algun goal-first. Para candidatos legacy de la misma cola conserva
+acciones acotadas `supervise run` por `run_ref`.
+Contratos afectados: mcp.tool.orquesta.autoprogramming.status.v0.
 Estado: aceptada localmente.
 ```

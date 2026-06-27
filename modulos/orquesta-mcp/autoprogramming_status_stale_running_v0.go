@@ -90,6 +90,15 @@ func mcpAutoprogrammingStaleRunningActionForCandidateV0(
 					"observe_run_ref_with_process_refs_before_reconcile",
 				), true
 			}
+			if !mcpAutoprogrammingRunStatsHasConfirmedNoLiveProcessV0(*observed.Stats) {
+				return mcpAutoprogrammingActionableRunFromCandidateV0(
+					candidate,
+					mcpAutoprogrammingActionRunningWithoutRecentStatsV0,
+					"info",
+					"queue_candidate_running_requires_liveness_confirmation",
+					"observe_run_ref_with_process_refs_before_reconcile",
+				), true
+			}
 			return mcpAutoprogrammingActionableRunFromCandidateV0(
 				candidate,
 				mcpAutoprogrammingActionRunningStaleNoProcessV0,

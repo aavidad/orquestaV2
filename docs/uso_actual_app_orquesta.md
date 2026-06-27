@@ -73,6 +73,8 @@ API HTTP versionada:
 - `POST /api/v0/autoprogramming/validate-request`
 - `POST /api/v0/autoprogramming/self-improvement`
 - `POST /api/v0/autoprogramming/prepare-run`
+- `POST /api/v0/apps/director/goal/observe`
+- `POST /api/v0/autoprogramming/goal/observe`
 - `POST /api/v0/autoprogramming/status`
 - `POST /api/v0/autoprogramming/supervise`
 - `POST /api/v0/governance/catalog/query`
@@ -95,14 +97,19 @@ CLI vigente:
 - `contratos funcion listar|ver`: rutas read-only
   `/api/v0/core/function-contracts/list|view`.
 - `gobernanza catalogo listar|ver`: `POST /api/v0/governance/catalog/query`.
-- Autoprogramacion: `prepare-run`, `status`, `supervise`, cola, stats y control
-  por las rutas `/api/v0/*` correspondientes.
+- Autoprogramacion: `prepare-run` y `status`; si la respuesta trae
+  `goal_ref`/`run_ref` goal-first, continuar por `goal/observe`. `supervise`
+  queda para runs legacy/resident sin `GoalWorkStateV0` o para diagnostico
+  controlado. En `/ops` y MCP, las acciones seguras publicadas por
+  `autoprogramming/status` son la fuente de verdad: `observe_goal` gana a
+  `supervise` cuando un run tiene estado Goal.
 
 MCP/toolbelt vigente para IA cuando el transporte esta disponible:
 
 - `orquesta.apps.arrancar_director.v0`
 - `orquesta.autoprogramming.prepare_run.v0`
 - `orquesta.autoprogramming.status.v0`
+- `orquesta.autoprogramming.observe_goal.v0`
 - `orquesta.autoprogramming.supervise.v0`
 - `orquesta.autoprogramming.self_improvement.propose.v0`
 - `orquesta.director.stats.v0`

@@ -174,9 +174,15 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	result.StaleRunning = buildMCPAutoprogrammingStaleRunningV0(result.Queue, healthRun, healthObservedRuns...)
 	result.Diagnostics = append(result.Diagnostics, diagnosticsFromStaleRunningMCPAutoprogrammingV0(result.StaleRunning)...)
 	result.Operator = newMCPAutoprogrammingOperatorV0(result.Queue, result.Run, result.Diagnostics)
-	if goalState, ok := executor.goalStateForAutoprogrammingStatusV0(ctx, result, input); ok {
+	goalStates := executor.goalStatesForAutoprogrammingStatusV0(ctx, result, input)
+	for _, goalState := range goalStates {
 		result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingGoalFirstDiagnosticsV0(goalState)...)
-		result.Operator = mcpAutoprogrammingOperatorWithGoalFirstActionsV0(result.Operator, goalState.RunRef)
+	}
+	if len(goalStates) > 0 {
+		result.Operator = mcpAutoprogrammingOperatorWithGoalFirstActionsV0(
+			result.Operator,
+			mcpAutoprogrammingGoalStateRunRefsV0(goalStates)...,
+		)
 	}
 	result.EfficiencySummary = buildMCPAutoprogrammingEfficiencySummaryV0(
 		result.Queue,
@@ -188,25 +194,49 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	return result, nil
 }
 
-func (executor MCPAutoprogrammingStatusToolExecutorV0) goalStateForAutoprogrammingStatusV0(
+func (executor MCPAutoprogrammingStatusToolExecutorV0) goalStatesForAutoprogrammingStatusV0(
 	ctx context.Context,
 	result MCPAutoprogrammingStatusToolResultV0,
 	input MCPAutoprogrammingStatusToolInputV0,
-) (orquestagoal.GoalWorkStateV0, bool) {
+) []orquestagoal.GoalWorkStateV0 {
 	if executor.GoalStateStore == nil {
-		return orquestagoal.GoalWorkStateV0{}, false
+		return nil
 	}
-	runRef := strings.TrimSpace(firstNonEmptyMCPV0(result.RunRef, input.RunRef))
-	if runRef == "" {
-		return orquestagoal.GoalWorkStateV0{}, false
+	runRefs := compactStringsMCPV0([]string{result.RunRef, input.RunRef})
+	if result.Queue != nil {
+		for _, candidate := range result.Queue.Ranked {
+			if mcpAutoprogrammingTerminalRunV0(candidate.Status) {
+				continue
+			}
+			runRefs = append(runRefs, strings.TrimSpace(candidate.RunRef))
+		}
 	}
-	state, err := executor.GoalStateStore.LoadGoalWorkStateV0(ctx, runRef)
-	if err != nil ||
-		strings.TrimSpace(state.RunRef) == "" ||
-		strings.TrimSpace(state.GoalRef) == "" {
-		return orquestagoal.GoalWorkStateV0{}, false
+	seen := map[string]bool{}
+	out := make([]orquestagoal.GoalWorkStateV0, 0, len(runRefs))
+	for _, runRef := range compactStringsMCPV0(runRefs) {
+		if seen[runRef] {
+			continue
+		}
+		seen[runRef] = true
+		state, err := executor.GoalStateStore.LoadGoalWorkStateV0(ctx, runRef)
+		if err != nil ||
+			strings.TrimSpace(state.RunRef) == "" ||
+			strings.TrimSpace(state.GoalRef) == "" {
+			continue
+		}
+		out = append(out, state)
 	}
-	return state, true
+	return out
+}
+
+func mcpAutoprogrammingGoalStateRunRefsV0(
+	states []orquestagoal.GoalWorkStateV0,
+) []string {
+	out := make([]string, 0, len(states))
+	for _, state := range states {
+		out = append(out, strings.TrimSpace(state.RunRef))
+	}
+	return compactStringsMCPV0(out)
 }
 
 func mcpAutoprogrammingGoalFirstDiagnosticsV0(

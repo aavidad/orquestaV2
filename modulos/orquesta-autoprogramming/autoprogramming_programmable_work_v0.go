@@ -119,11 +119,27 @@ func BuildAutoprogrammingProgrammableWorkV0(
 		}
 	}
 	work.GoalSpecs = goalSpecs
+	work = autoprogrammingGoalReadyWithoutLegacyWorkflowSurfaceV0(work)
 
 	return AutoprogrammingProgrammableWorkResultV0{
 		Accepted: true,
 		Work:     work,
 	}
+}
+
+func autoprogrammingGoalReadyWithoutLegacyWorkflowSurfaceV0(
+	work AutoprogrammingProgrammableWorkV0,
+) AutoprogrammingProgrammableWorkV0 {
+	if strings.TrimSpace(work.GoalMigration.Status) != AutoprogrammingGoalMigrationGoalReadyV0 {
+		return work
+	}
+	work.Profiles = nil
+	work.Tasks = nil
+	for index := range work.Groups {
+		work.Groups[index].Profile = orquestacoreworkflow.WorkProfileV0{}
+		work.Groups[index].Task = orquestacoreworkflow.WorkflowTaskV0{}
+	}
+	return work
 }
 
 func autoprogrammingProgrammableWorkSkeletonV0(

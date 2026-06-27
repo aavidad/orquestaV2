@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
@@ -90,6 +91,15 @@ func (stack StackV0) DrainRunV0(
 		ctx = context.Background()
 	}
 	request = normalizeDrainRunRequestV0(request)
+	if disposition, ok := stack.goalFirstSupervisorDispositionV0(ctx, request.RunRef); ok {
+		run := orquestacoreworkflow.OrchestrationRunV0{RunID: strings.TrimSpace(request.RunRef)}
+		if stack.Ports.RunStore != nil {
+			if loaded, err := stack.Ports.RunStore.LoadRunV0(ctx, request.RunRef); err == nil {
+				run = loaded
+			}
+		}
+		return disposition.managedLoopResultV0(run), nil
+	}
 	result := orquestacionnucleoapp.ManagedProgressiveLoopResultV0{}
 	for attempt := 1; attempt <= request.MaxExternalWaits+1; attempt++ {
 		if err := ctx.Err(); err != nil {

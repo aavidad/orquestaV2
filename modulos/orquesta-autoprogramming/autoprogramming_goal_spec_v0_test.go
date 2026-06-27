@@ -34,6 +34,9 @@ func TestBuildAutoprogrammingProgrammableWorkV0GeneraGoalSpecsCuandoGoalListo(t 
 		len(result.Work.GoalSpecs) != 1 {
 		t.Fatalf("goal_migration/specs inesperados: %+v specs=%d", result.Work.GoalMigration, len(result.Work.GoalSpecs))
 	}
+	if len(result.Work.Tasks) != 0 || len(result.Work.Profiles) != 0 {
+		t.Fatalf("goal-ready no debe publicar superficie WorkflowTask legacy: tasks=%d profiles=%d", len(result.Work.Tasks), len(result.Work.Profiles))
+	}
 	spec := result.Work.GoalSpecs[0]
 	if issues := orquestagoal.ValidateGoalWorkSpecV0(spec); len(issues) > 0 {
 		t.Fatalf("goal spec invalido: %+v spec=%+v", issues, spec)

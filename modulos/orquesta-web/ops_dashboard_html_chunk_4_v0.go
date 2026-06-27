@@ -101,9 +101,39 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
 	      }
 	      await refreshAll();
 	    }
+	    function allAutoprogrammingSafeActions() {
+	      return Array.isArray(lastSnapshot.safeActions) ? lastSnapshot.safeActions : [];
+	    }
+	    function autoprogrammingSafeActionsForRun(runRef) {
+	      const ref = String(runRef || '');
+	      if (!ref) return [];
+	      return allAutoprogrammingSafeActions().filter(function(action) {
+	        return String((action || {}).run_ref || '') === ref;
+	      });
+	    }
+	    function autoprogrammingObserveGoalSafeAction(runRef) {
+	      return autoprogrammingSafeActionsForRun(runRef).find(function(action) {
+	        return String((action || {}).action || '') === 'observe_goal' &&
+	          String((action || {}).endpoint || '') === '/api/v0/autoprogramming/goal/observe';
+	      });
+	    }
+	    function firstAutoprogrammingSafeAction(actionName, scope) {
+	      return allAutoprogrammingSafeActions().find(function(action) {
+	        return String((action || {}).action || '') === actionName &&
+	          (!scope || String((action || {}).scope || '') === scope);
+	      });
+	    }
+	    function safeActionPayload(action, fallbackRunRef) {
+	      const payload = Object.assign({}, (action || {}).payload || {});
+	      if (!payload.run_ref && ((action || {}).run_ref || fallbackRunRef)) {
+	        payload.run_ref = (action || {}).run_ref || fallbackRunRef;
+	      }
+	      return payload;
+	    }
 	    function runIsGoalFirst(run) {
 	      const goal = (run || {}).goal || {};
-	      return String((run || {}).director_execution_mode || goal.director_execution_mode || '').toLowerCase() === 'goal_first' ||
+	      return Boolean(autoprogrammingObserveGoalSafeAction((run || {}).run_ref)) ||
+	        String((run || {}).director_execution_mode || goal.director_execution_mode || '').toLowerCase() === 'goal_first' ||
 	        Boolean(goal.available || goal.goal_ref || goal.can_observe);
 	    }
 	    function selectedRunAdvanceActionLabel(run) {
@@ -228,11 +258,35 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
       await refreshAll();
     }
     async function superviseGlobalWave() {
+      const observeAction = firstAutoprogrammingSafeAction('observe_goal', 'run');
+      if (observeAction) {
+        supervisorMessage = 'Observando goal...';
+        text('director-supervisor-message', supervisorMessage);
+        try {
+          supervisorMessage = await executeAutoprogrammingSafeActionOps(observeAction, 'goal desde cola');
+        } catch (err) {
+          supervisorMessage = err.message || String(err);
+        }
+        text('director-supervisor-message', supervisorMessage);
+        await refreshAll();
+        return;
+      }
+      const superviseAction = firstAutoprogrammingSafeAction('supervise', 'queue');
+      if (allAutoprogrammingSafeActions().length && !superviseAction) {
+        supervisorMessage = 'Sin accion segura de cola; revisa la accion por run publicada.';
+        text('director-supervisor-message', supervisorMessage);
+        await refreshAll();
+        return;
+      }
       supervisorMessage = 'Lanzando ola...';
       text('director-supervisor-message', supervisorMessage);
       try {
-        const result = await superviseOps({queue_ref: 'global'}, 'ola global');
-        supervisorMessage = supervisorResultText(result);
+        if (superviseAction) {
+          supervisorMessage = await executeAutoprogrammingSafeActionOps(superviseAction, 'ola global');
+        } else {
+          const result = await superviseOps({queue_ref: 'global'}, 'ola global');
+          supervisorMessage = supervisorResultText(result);
+        }
       } catch (err) {
         supervisorMessage = err.message || String(err);
       }
@@ -266,16 +320,18 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
       renderSelectedDetail();
       const now = Date.now();
       try {
-        const result = await fetchJSON('/api/v0/apps/director/goal/observe', {
+        const safeAction = autoprogrammingObserveGoalSafeAction(run.run_ref);
+        const endpoint = safeAction ? safeAction.endpoint : '/api/v0/apps/director/goal/observe';
+        const payload = safeActionPayload(safeAction, run.run_ref);
+        payload.request_id = payload.request_id || 'ops-observe-goal-' + now;
+        payload.correlation_id = payload.correlation_id || 'corr-ops-observe-goal-' + now;
+        payload.run_ref = payload.run_ref || run.run_ref;
+        payload.requested_by = payload.requested_by || 'orquesta-ops-panel';
+        payload.idempotency_key = payload.idempotency_key || 'ops-observe-goal-' + run.run_ref + '-' + now;
+        const result = await fetchJSON(endpoint, {
           method: 'POST',
           headers: {'content-type': 'application/json'},
-          body: JSON.stringify({
-            request_id: 'ops-observe-goal-' + now,
-            correlation_id: 'corr-ops-observe-goal-' + now,
-            run_ref: run.run_ref,
-            requested_by: 'orquesta-ops-panel',
-            idempotency_key: 'ops-observe-goal-' + run.run_ref + '-' + now
-          })
+          body: JSON.stringify(payload)
         });
         controlMessage = goalOpsResultText(result, label);
       } catch (err) {
@@ -309,6 +365,24 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
         headers: {'content-type': 'application/json'},
         body: JSON.stringify(payload)
       });
+    }
+    async function executeAutoprogrammingSafeActionOps(action, label) {
+      if (!action || !action.endpoint) throw new Error('Accion segura sin endpoint.');
+      const now = Date.now();
+      const payload = safeActionPayload(action, '');
+      payload.request_id = payload.request_id || 'ops-safe-action-' + now;
+      payload.correlation_id = payload.correlation_id || 'corr-ops-safe-action-' + now;
+      payload.requested_by = payload.requested_by || 'orquesta-ops-panel';
+      payload.idempotency_key = payload.idempotency_key || 'ops-safe-action-' + (action.run_ref || action.scope || action.action || 'global') + '-' + now;
+      const result = await fetchJSON(action.endpoint, {
+        method: action.method || 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      if (String(action.action || '') === 'observe_goal') {
+        return goalOpsResultText(result, label);
+      }
+      return supervisorResultText(result);
     }
     function goalOpsResultText(result, label) {
       result = result || {};

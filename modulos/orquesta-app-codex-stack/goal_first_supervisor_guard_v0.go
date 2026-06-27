@@ -4,7 +4,9 @@ import (
 	"context"
 	"strings"
 
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestagoal "orquesta/modulos/orquesta-goal"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 )
@@ -110,5 +112,25 @@ func (disposition codexStackGoalFirstSupervisorDispositionV0) snapshotV0() Codex
 		SessionRef:   strings.TrimSpace(disposition.RunRef),
 		EvidenceRefs: compactStringsV0(disposition.EvidenceRefs),
 		Diagnostics:  disposition.Diagnostics,
+	}
+}
+
+func (disposition codexStackGoalFirstSupervisorDispositionV0) managedLoopResultV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) orquestacionnucleoapp.ManagedProgressiveLoopResultV0 {
+	if strings.TrimSpace(run.RunID) == "" {
+		run.RunID = strings.TrimSpace(disposition.RunRef)
+	}
+	loop := orquestacionnucleoapp.ProgressiveLoopResultV0{
+		Status: orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0,
+		Run:    run,
+	}
+	return orquestacionnucleoapp.ManagedProgressiveLoopResultV0{
+		Status: loop.Status,
+		Final:  loop,
+		Attempts: []orquestacionnucleoapp.ManagedProgressiveLoopAttemptV0{{
+			AttemptNumber: 1,
+			Result:        loop,
+		}},
 	}
 }

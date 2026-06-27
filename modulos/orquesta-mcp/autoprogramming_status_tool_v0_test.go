@@ -160,6 +160,69 @@ func TestMCPAutoprogrammingStatusExecutorV0RecomiendaObserveGoalParaRunGoalFirst
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0ColaMixtaGoalFirstNoSupervisaColaGlobal(t *testing.T) {
+	goalRunRef := "run-ref-autop-status-goal-first-queue-001"
+	legacyRunRef := "run-ref-autop-status-legacy-queue-001"
+	goalRef := "goal-ref-autop-status-goal-first-queue-001"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:  goalRunRef,
+		GoalRef: goalRef,
+		Status:  orquestagoal.GoalStatusRunningV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       goalRunRef,
+			GoalRef:      goalRef,
+			Objective:    "Observar goal sin supervisor legacy de cola.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "generated-apps/goal"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:      goalRef,
+			Status:       orquestagoal.GoalStatusRunningV0,
+			EvidenceRefs: []string{"evidence-ref-goal-first-queue-status-test"},
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-first-queue-status-test"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			ranked: []MCPRunQueueRankedCandidateCompactV0{
+				{
+					Rank:          1,
+					RunRef:        goalRunRef,
+					AppRef:        "app-ref-goal-first",
+					Status:        "running",
+					PriorityScore: 90,
+				},
+				{
+					Rank:          2,
+					RunRef:        legacyRunRef,
+					AppRef:        "app-ref-legacy",
+					Status:        "ready",
+					PriorityScore: 80,
+				},
+			},
+		},
+		Stats:          &fakeMCPAutoprogrammingRunStatusV0{},
+		GoalStateStore: goalStates,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_goal_first_observe_required") {
+		t.Fatalf("diagnostics=%+v", result.Diagnostics)
+	}
+	if result.Operator == nil ||
+		!hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "observe_goal", "run", goalRunRef) ||
+		!hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "supervise", "run", legacyRunRef) ||
+		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "supervise", "run", goalRunRef) ||
+		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "supervise", "queue", "") {
+		t.Fatalf("operator=%+v", result.Operator)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0ExponeQueueHealthSeparada(t *testing.T) {
 	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
 		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
@@ -338,6 +401,53 @@ func TestMCPAutoprogrammingStatusExecutorV0ProcesoSinStatusQuedaSinStatsReciente
 	if result.QueueHealth == nil ||
 		result.QueueHealth.RunningLive != 0 ||
 		result.QueueHealth.AgentsLive != 0 ||
+		result.QueueHealth.RunningStale != 0 ||
+		result.QueueHealth.RunningStaleNoProcess != 0 ||
+		result.QueueHealth.RunningWithoutRecentStats != 1 ||
+		len(result.StaleRunning) != 1 ||
+		result.StaleRunning[0].Code != "running_without_recent_stats" {
+		t.Fatalf("queue_health=%+v stale_running=%+v", result.QueueHealth, result.StaleRunning)
+	}
+}
+
+func TestMCPAutoprogrammingStatusExecutorV0AgenteSinProcesoNoDeclaraNoProcessV0(t *testing.T) {
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		statsByRun: map[string]*orquestacionnucleoapp.DirectorRunStatsV0{
+			"run-ref-running-agent-without-process-001": {
+				RunRef: "run-ref-running-agent-without-process-001",
+				Counts: orquestacionnucleoapp.DirectorRunStatsCountsV0{
+					AgentsInFlight: 1,
+				},
+				Progress: orquestacionnucleoapp.DirectorProgressStatsV0{
+					StalledAgents:     1,
+					ProgressingAgents: 0,
+				},
+				Agents: []orquestacionnucleoapp.DirectorAgentStatsV0{{
+					AgentRequestID: "agent-ref-running-agent-without-process-001",
+					Status:         orquestacionnucleoapp.DirectorAgentStatusRunningV0,
+					InFlight:       true,
+				}},
+			},
+		},
+	}
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			ranked: []MCPRunQueueRankedCandidateCompactV0{{
+				Rank:          1,
+				RunRef:        "run-ref-running-agent-without-process-001",
+				AppRef:        "opes",
+				Status:        "running",
+				PriorityScore: 90,
+			}},
+		},
+		Stats: stats,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.QueueHealth == nil ||
+		result.QueueHealth.RunningLive != 0 ||
 		result.QueueHealth.RunningStale != 0 ||
 		result.QueueHealth.RunningStaleNoProcess != 0 ||
 		result.QueueHealth.RunningWithoutRecentStats != 1 ||

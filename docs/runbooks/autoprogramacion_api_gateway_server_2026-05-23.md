@@ -20,6 +20,7 @@ Rutas REST estables expuestas por el gateway:
 - `POST /api/v0/autoprogramming/validate-request`
 - `POST /api/v0/autoprogramming/self-improvement`
 - `POST /api/v0/autoprogramming/prepare-run`
+- `POST /api/v0/autoprogramming/goal/observe`
 - `POST /api/v0/autoprogramming/status`
 - `POST /api/v0/autoprogramming/supervise`
 - `POST /api/v0/director/human-work/review-plan`
@@ -43,10 +44,11 @@ Rutas web compatibles:
 Rutas consumidas por web/CLI para autoprogramacion:
 
 - preparar run: `POST /api/v0/autoprogramming/prepare-run`;
+- observar goal-first: `POST /api/v0/autoprogramming/goal/observe`;
 - listar cola/runs: `POST /api/v0/runs/queue/priority`;
 - estado operativo compacto: `POST /api/v0/autoprogramming/status`;
 - detalle de run: `POST /api/v0/director/stats`;
-- pulso supervisado: `POST /api/v0/autoprogramming/supervise`;
+- pulso supervisado legacy/resident: `POST /api/v0/autoprogramming/supervise`;
 - control seguro: `POST /api/v0/runs/control`.
 
 Todas transportan refs opacas. `worktree_ref` y `branch_ref` son identificadores
@@ -66,6 +68,12 @@ El servidor puede preparar automejoras de baja prioridad cuando el supervisor
 global queda sin ejecuciones durante una ventana configurable. La logica vive
 tras un puerto del servidor y el stack Codex la traduce a
 `/api/v0/autoprogramming/self-improvement` con `auto_prepare_run=true`.
+
+Desde 2026-06-26, con `ORQUESTA_CODEX_GOAL_BACKEND` configurado, la automejora
+residente deriva goal-first por defecto salvo false explicito. `prepare-run`
+puede devolver goal/run_ref lanzado; la continuacion publica es
+`POST /api/v0/autoprogramming/goal/observe`. `supervise` es compatibilidad
+legacy/resident y debe devolver `observe_required` para runs goal-first.
 
 Configuracion:
 

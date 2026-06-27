@@ -196,6 +196,17 @@ func (drainer codexStackResidentRunDrainerV0) DrainRunV0(
 	ctx context.Context,
 	request orquestaruncoordinator.RunDrainRequestV0,
 ) (orquestaruncoordinator.RunDrainResultV0, error) {
+	if disposition, ok := drainer.stack.goalFirstSupervisorDispositionV0(ctx, request.RunRef); ok {
+		result := CodexStackResidentDirectorRunResultV0{
+			Status:       disposition.Outcome,
+			RunRef:       strings.TrimSpace(request.RunRef),
+			EvidenceRefs: compactStringsV0(disposition.EvidenceRefs),
+		}
+		if drainer.accumulator != nil {
+			drainer.accumulator.Runs = append(drainer.accumulator.Runs, result)
+		}
+		return disposition.drainResultV0(request), nil
+	}
 	result, err := drainer.stack.runCodexStackResidentDirectorRunV0(ctx, drainer.command, request)
 	if drainer.accumulator != nil {
 		drainer.accumulator.Runs = append(drainer.accumulator.Runs, result)

@@ -148,29 +148,58 @@ func newMCPAutoprogrammingProgrammableWorkV0(
 		WorktreeRef: strings.TrimSpace(work.WorktreeRef),
 		BranchRef:   strings.TrimSpace(work.BranchRef),
 	}
+	goalReady := strings.TrimSpace(work.GoalMigration.Status) == orquestaautoprogramming.AutoprogrammingGoalMigrationGoalReadyV0
 	for _, profile := range work.Profiles {
+		if goalReady {
+			break
+		}
 		out.WorkProfileRefs = append(out.WorkProfileRefs, strings.TrimSpace(profile.ProfileRef))
 	}
 	for _, task := range work.Tasks {
+		if goalReady {
+			break
+		}
 		out.WorkflowTaskRefs = append(out.WorkflowTaskRefs, strings.TrimSpace(task.TaskID))
 	}
 	out.WorkProfileRefs = compactStringsMCPV0(out.WorkProfileRefs)
 	out.WorkflowTaskRefs = compactStringsMCPV0(out.WorkflowTaskRefs)
 	out.Groups = make([]MCPAutoprogrammingProgrammableWorkGroupV0, 0, len(work.Groups))
 	for _, group := range work.Groups {
+		task := group.Task
+		profile := group.Profile
+		workflowTaskRef := strings.TrimSpace(task.TaskID)
+		workProfileRef := strings.TrimSpace(profile.ProfileRef)
+		workKind := strings.TrimSpace(string(task.WorkProfileKind))
+		phaseID := strings.TrimSpace(string(task.PhaseID))
+		title := strings.TrimSpace(task.Title)
+		summary := strings.TrimSpace(task.Summary)
+		writeSet := compactStringsMCPV0(task.WriteSet)
+		requiredTests := compactStringsMCPV0(task.RequiredTests)
+		criteria := compactStringsMCPV0(task.AcceptanceCriteria)
+		contextRefs := compactStringsMCPV0(task.ContextRefs)
+		if goalReady {
+			workflowTaskRef = ""
+			workProfileRef = ""
+			workKind = "goal_work_spec"
+			phaseID = "goal_first"
+			writeSet = compactStringsMCPV0(group.WriteSet)
+			requiredTests = compactStringsMCPV0(group.RequiredTests)
+			criteria = nil
+			contextRefs = nil
+		}
 		out.Groups = append(out.Groups, MCPAutoprogrammingProgrammableWorkGroupV0{
 			Area:            strings.TrimSpace(group.Area),
 			SourceTaskRefs:  compactStringsMCPV0(group.TaskRefs),
-			WorkProfileRef:  strings.TrimSpace(group.Profile.ProfileRef),
-			WorkflowTaskRef: strings.TrimSpace(group.Task.TaskID),
-			WorkKind:        strings.TrimSpace(string(group.Task.WorkProfileKind)),
-			PhaseID:         strings.TrimSpace(string(group.Task.PhaseID)),
-			Title:           strings.TrimSpace(group.Task.Title),
-			Summary:         strings.TrimSpace(group.Task.Summary),
-			WriteSet:        compactStringsMCPV0(group.Task.WriteSet),
-			RequiredTests:   compactStringsMCPV0(group.Task.RequiredTests),
-			Criteria:        compactStringsMCPV0(group.Task.AcceptanceCriteria),
-			ContextRefs:     compactStringsMCPV0(group.Task.ContextRefs),
+			WorkProfileRef:  workProfileRef,
+			WorkflowTaskRef: workflowTaskRef,
+			WorkKind:        workKind,
+			PhaseID:         phaseID,
+			Title:           title,
+			Summary:         summary,
+			WriteSet:        writeSet,
+			RequiredTests:   requiredTests,
+			Criteria:        criteria,
+			ContextRefs:     contextRefs,
 		})
 	}
 	return &out

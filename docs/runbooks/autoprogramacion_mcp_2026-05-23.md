@@ -24,6 +24,10 @@ Tools MCP relevantes ya publicados por `RegisterMCPTransportV0`:
   run continuable legacy con `run_ref`, `workflow_task_refs`, `wait_agent_refs`
   y request `continue`, o un handoff Goal-first con `goal_specs[]` sin
   `run_ref` legacy.
+- `orquesta.autoprogramming.observe_goal.v0`: observa un `GoalWorkStateV0` por
+  `run_ref`, valida cierre por puerto y sincroniza cola terminal. Para `run_ref`
+  goal-first, `orquesta.runs.supervisor.v0` no drena legacy y debe recomendar
+  `observe_goal`.
 - `orquesta.autoprogramming.self_improvement.propose.v0`: transforma un fallo
   observado por director/agente en `AutoprogrammingRequestV0` de segundo plano,
   con `priority_score` bajo y `prepare_run` listo para el paso siguiente. Si
@@ -36,7 +40,8 @@ Tools MCP relevantes ya publicados por `RegisterMCPTransportV0`:
   puerto MCP de operador; Hermes/OpenClaw entran solo como conectores MCP
   externos, no como coupling de core.
 - `orquesta.runs.supervisor.v0`: supervisa una run concreta o una cola
-  inyectada con limites acotados.
+  inyectada con limites acotados; en goal-first actua como compatibilidad y
+  redirige a `observe_goal`.
 - `orquesta.director.stats.v0`: consulta stats compactas y contexto de decision
   por refs opacas.
 - `orquesta.observability.workspace_timeline.query.v0`: consulta timeline de

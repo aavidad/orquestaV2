@@ -572,6 +572,12 @@ Evidencia adicional 2026-06-26: `autoprogramming/status` puede recibir un
 supervision/retry/review de esa run por `observe_goal` contra
 `/api/v0/autoprogramming/goal/observe`.
 
+Evidencia adicional 2026-06-27:
+`TestMCPAutoprogrammingStatusExecutorV0ColaMixtaGoalFirstNoSupervisaColaGlobal`
+valida que, sin `run_ref` explicito, una cola mixta con candidato goal-first y
+legacy no recomienda `supervise queue`; recomienda `observe_goal` para el
+goal-first y `supervise run` para el candidato legacy concreto.
+
 Evidencia adicional 2026-06-26: `autoprogramming/status` diagnostica
 `external_work_accepted_stopped_without_delivery` cuando una run external-work
 queda terminal `stopped` con evidencias de arranque/cola/coordinador, pero los

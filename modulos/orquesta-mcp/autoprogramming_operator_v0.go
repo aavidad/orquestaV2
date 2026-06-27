@@ -290,18 +290,26 @@ func mcpAutoprogrammingObserveGoalSafeActionV0(runRef string) MCPAutoprogramming
 
 func mcpAutoprogrammingOperatorWithGoalFirstActionsV0(
 	operator *MCPAutoprogrammingOperatorV0,
-	runRef string,
+	runRefs ...string,
 ) *MCPAutoprogrammingOperatorV0 {
 	if operator == nil {
 		return operator
 	}
-	runRef = strings.TrimSpace(runRef)
-	if runRef == "" {
+	goalFirst := mcpAutoprogrammingGoalFirstRunRefSetV0(runRefs)
+	if len(goalFirst) == 0 {
 		return operator
 	}
-	next := []MCPAutoprogrammingSafeActionV0{mcpAutoprogrammingObserveGoalSafeActionV0(runRef)}
+	next := make([]MCPAutoprogrammingSafeActionV0, 0, len(operator.SafeActions)+len(goalFirst))
+	for _, runRef := range runRefs {
+		runRef = strings.TrimSpace(runRef)
+		if runRef == "" || !goalFirst[runRef] {
+			continue
+		}
+		next = append(next, mcpAutoprogrammingObserveGoalSafeActionV0(runRef))
+	}
+	next = append(next, mcpAutoprogrammingLegacyRunActionsForActiveRunsV0(operator, goalFirst)...)
 	for _, action := range operator.SafeActions {
-		if mcpAutoprogrammingGoalFirstSuppressesLegacyActionV0(operator, action, runRef) {
+		if mcpAutoprogrammingGoalFirstSuppressesLegacyActionV0(operator, action, goalFirst) {
 			continue
 		}
 		next = append(next, action)
@@ -313,34 +321,68 @@ func mcpAutoprogrammingOperatorWithGoalFirstActionsV0(
 func mcpAutoprogrammingGoalFirstSuppressesLegacyActionV0(
 	operator *MCPAutoprogrammingOperatorV0,
 	action MCPAutoprogrammingSafeActionV0,
-	runRef string,
+	goalFirst map[string]bool,
 ) bool {
 	switch strings.TrimSpace(action.Action) {
 	case "supervise", "retry", "review":
 	default:
 		return false
 	}
-	if strings.TrimSpace(action.RunRef) == runRef {
+	if goalFirst[strings.TrimSpace(action.RunRef)] {
 		return true
 	}
 	return strings.TrimSpace(action.Action) == "supervise" &&
 		strings.TrimSpace(action.Scope) == "queue" &&
-		mcpAutoprogrammingQueueOnlyActiveRunV0(operator, runRef)
+		mcpAutoprogrammingQueueHasGoalFirstRunV0(operator, goalFirst)
 }
 
-func mcpAutoprogrammingQueueOnlyActiveRunV0(
+func mcpAutoprogrammingGoalFirstRunRefSetV0(
+	runRefs []string,
+) map[string]bool {
+	out := map[string]bool{}
+	for _, runRef := range runRefs {
+		runRef = strings.TrimSpace(runRef)
+		if runRef != "" {
+			out[runRef] = true
+		}
+	}
+	return out
+}
+
+func mcpAutoprogrammingQueueHasGoalFirstRunV0(
 	operator *MCPAutoprogrammingOperatorV0,
-	runRef string,
+	goalFirst map[string]bool,
 ) bool {
 	if operator == nil || len(operator.ActiveRuns) == 0 {
 		return false
 	}
 	for _, active := range operator.ActiveRuns {
-		if strings.TrimSpace(active.RunRef) != runRef {
-			return false
+		if goalFirst[strings.TrimSpace(active.RunRef)] {
+			return true
 		}
 	}
-	return true
+	return false
+}
+
+func mcpAutoprogrammingLegacyRunActionsForActiveRunsV0(
+	operator *MCPAutoprogrammingOperatorV0,
+	goalFirst map[string]bool,
+) []MCPAutoprogrammingSafeActionV0 {
+	if operator == nil {
+		return nil
+	}
+	out := []MCPAutoprogrammingSafeActionV0{}
+	for _, active := range operator.ActiveRuns {
+		runRef := strings.TrimSpace(active.RunRef)
+		if runRef == "" || goalFirst[runRef] {
+			continue
+		}
+		out = append(out, mcpAutoprogrammingSafeActionV0("supervise", "run", runRef))
+		if len(out) >= 8 {
+			break
+		}
+	}
+	return out
 }
 
 func mcpAutoprogrammingDeduplicateSafeActionsV0(

@@ -65,6 +65,12 @@ legacy.
 - Orquesta nucleo no importa CLI, web, MCP, Codex, OPES, DB concreta, HOME,
   tokens, OAuth ni paths locales.
 - CLI, web, API, MCP, Codex y OPES son adaptadores/composiciones.
+- Regla goal-first para backlog: cualquier Txx anterior a T260 que describa
+  autoprogramacion como run legacy, cola ready, supervisor, PlanState o Director
+  Operativo debe leerse como compatibilidad legacy salvo que declare
+  explicitamente goal-first. Para trabajo nuevo con backend Goal completo,
+  `prepare-run` lanza o devuelve `GoalWorkSpecV0` y la continuacion es
+  `observe_goal`, no `runs/supervise`.
 - Mantener hexagonal puro: contratos, puertos y refs opacas en nucleo.
 - No borrar codigo, docs ni tests sin revisar referencias y dejar evidencia.
 - Cambios pequenos, con test focal antes de ampliar.
@@ -226,6 +232,23 @@ Avance local adicional 2026-06-25: `StartAppDirectorV0`, MCP/REST y
 cuando el resultado viene por loop historico sin `goal_ref`; un `ok`
 goal-first sin `run_ref` debe rechazarse como `run_ref_requerido` porque no hay
 clave observable para cierre, evidencias ni tests.
+Avance local adicional 2026-06-27: el camino normal de autoprogramacion
+goal-first queda mas delgado. `autoprogramming/status` detecta runs
+goal-first desde `GoalWorkStateStore`, publica `safe_actions` `observe_goal` y
+suprime `supervise`/`retry`/`review` legacy para esas refs; en colas mixtas
+conserva acciones `supervise` solo por run legacy y no recomienda supervision
+global de cola si hay goal-first activo. `/ops` consume esas `safe_actions`:
+el boton global observa el goal cuando procede, las filas goal-first avanzan por
+`POST /api/v0/autoprogramming/goal/observe` y el fallback
+`/api/v0/runs/supervise` queda para legacy sin accion segura publicada.
+`StackV0.DrainRunV0` y el Director residente consultan tambien la guarda
+goal-first antes de reentrar en `ContinueAppDirectorV0`, por lo que una llamada
+directa o residente no debe lanzar agentes legacy sobre un run con
+`GoalWorkStateV0`; si falta el state pero el run es contenedor goal-first, la
+respuesta es bloqueo/estado faltante y no loop historico. En `goal_ready`,
+`BuildAutoprogrammingProgrammableWorkV0` conserva `GoalWorkSpecV0` y grupos
+neutrales pero deja vacia la superficie publica `WorkflowTaskV0`/profiles
+legacy, evitando preparacion de worktrees y refs `workflow_task_refs` en MCP.
 
 Pendiente verificable:
 
@@ -262,6 +285,10 @@ Pendiente verificable:
   literal y Orquesta acepto el cierre sin caer al loop legacy.
 - Revalidar OPES temporal con derivados/cierre cuando exista la ruta goal-first
   real; no tocar OPES productivo ni drenar colas amplias.
+- Mantener el loop `app-director-service`/`PlanState` solo como compatibilidad
+  legacy hasta cerrar smokes equivalentes de OPES temporal, external-work,
+  app-change y rutas residentes. No borrar codigo historico sin evidencia
+  equivalente y commit especifico de retirada.
 
 Validacion focal:
 

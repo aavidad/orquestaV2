@@ -8,6 +8,12 @@ Orquesta es el plano de juicio del sistema. Cualquier app externa o modulo de
 dominio puede pedir trabajo, aportar reglas y validar resultados, pero no debe
 asumir capacidad de juicio si no esta usando un agente director de Orquesta.
 
+Actualizacion 2026-06-25: si la composicion dispone de Codex Goal o runtime con
+goal persistente, el Director operativo interno vive dentro del goal. Orquesta
+conserva juicio exterior: compila `GoalWorkSpecV0`, lanza/observa por adaptador
+y acepta o bloquea el cierre por evidencias. El loop Director/agentes queda como
+compatibilidad para rutas sin goal persistente.
+
 Esto aplica igual a:
 
 - crear documentacion o temarios;
@@ -23,6 +29,8 @@ Orquesta conserva:
 
 - arrancar director y agentes;
 - decidir plan, fases, granularidad y paralelismo mediante director;
+- compilar, lanzar, observar y validar `GoalWorkSpecV0` cuando la composicion
+  goal-first aporta un director operativo persistente propio;
 - interpretar intencion razonable de agentes y adaptar nombres, alias o formas
   equivalentes cuando no haya riesgo causal ni de seguridad;
 - elegir perfil neutral de trabajo, capacidad, razonamiento, modelo, proveedor y

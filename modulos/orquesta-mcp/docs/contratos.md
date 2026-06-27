@@ -1443,7 +1443,9 @@ Invariantes:
   - Si la composicion inyecta `GoalWorkStateStore` y la run pertenece a
     goal-first, recomienda observar el goal por
     `/api/v0/autoprogramming/goal/observe` en vez de empujar supervision legacy
-    de esa run.
+    de esa run. Cuando la consulta es de cola y hay candidatos goal-first, no
+    recomienda `supervise queue`; emite `observe_goal` por run goal-first y
+    `supervise run` acotado para candidatos legacy visibles.
   - Para runs `running` visibles en cola puede consultar `director.stats` de
     forma acotada y con `include_process_refs`; si solo hay refs de proceso sin
     `process.status` verificado, publica `running_without_recent_stats`; solo
