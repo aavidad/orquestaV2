@@ -154,6 +154,33 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0PreparaRunYSupervisorArranca(t 
 	}
 }
 
+func TestCodexStackAutoprogrammingPrepareRunAPIV0BloqueaLegacySinOptInV0(t *testing.T) {
+	config := codexStackBaseConfigForTestV0(t, newFakeCodexStackRuntimeV0(), nil, nil)
+	config.AllowLegacyAutoprogrammingRun = false
+	stack, err := BuildStackV0(config)
+	if err != nil {
+		t.Fatalf("BuildStackV0: %v", err)
+	}
+	request := autoprogrammingBridgeRequestForTestV0()
+	result := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-autoprogramming-api-legacy-optin-required-001",
+		CorrelationID:          "corr-autoprogramming-api-legacy-optin-required-001",
+		AutoprogrammingRequest: request,
+	})
+	if result.Estado != orquestamcp.MCPAutoprogrammingPrepareRunEstadoErrorV0 ||
+		result.Accepted ||
+		result.RunRef != "" ||
+		len(result.WorkflowTaskRefs) != 0 ||
+		len(result.WaitAgentRefs) != 0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "autoprogramming_legacy_director_loop_opt_in_required" {
+		t.Fatalf("result=%+v", result)
+	}
+	if _, err := stack.Ports.RunStore.LoadRunV0(context.Background(), request.RequestRef); !orquestacionnucleoapp.IsRunNotFoundErrorV0(err) {
+		t.Fatalf("run legacy no debe persistirse sin opt-in, err=%v", err)
+	}
+}
+
 func TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveGoalSpecsCuandoGoalReady(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	request := autoprogrammingBridgeRequestForTestV0()

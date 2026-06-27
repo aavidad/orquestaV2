@@ -819,6 +819,7 @@ func codexStackRealRequiredTestRunnerStackV0(
 		Enabled:                               true,
 		Timeout:                               cfg.Timeout,
 		PromoteMaterializedArtifactWithoutAck: cfg.PromoteMaterializedArtifactWithoutAck,
+		AllowLegacyAutoprogrammingRun:         true,
 		DirectorLimits: orquestaweb.WebArrancarDirectorAppLimitsV0{
 			MaxBursts:            4,
 			MaxStepsPerBurst:     4,

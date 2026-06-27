@@ -241,6 +241,10 @@ func buildStackFromEnvWithGoalBackendV0(
 		AutoprogrammingPromotion: autoprogrammingPromotionConfigFromEnvV0(serverConfig),
 		DomainWork:               domainWorkExecutor,
 		ExternalWorkRunGuard:     externalWorkRunProjectWorkDirGuardConfigFromEnvV0(serverConfig),
+		AllowLegacyAutoprogrammingRun: boolEnvOrDefaultV0(
+			envAutoprogrammingLegacyDirectorLoopV0,
+			false,
+		),
 		AllowLegacyExternalWorkRun: boolEnvOrDefaultV0(
 			envExternalWorkLegacyDirectorLoopV0,
 			false,

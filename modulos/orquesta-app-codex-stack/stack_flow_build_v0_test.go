@@ -142,6 +142,7 @@ func codexStackBaseConfigForTestV0(
 		RequiredTests:              requiredTests,
 		DomainWork:                 domainWork,
 		AllowLegacyExternalWorkRun: true,
+		AllowLegacyAutoprogrammingRun: true,
 		DomainDelivery: DomainWorkDeliveryBridgeConfigV0{
 			Enabled: domainWork != nil,
 		},

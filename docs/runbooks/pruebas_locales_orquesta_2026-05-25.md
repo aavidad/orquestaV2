@@ -61,6 +61,10 @@ curl -sS -X POST http://127.0.0.1:8787/api/v0/autoprogramming/status \
 Para runs legacy no migrados puede usarse `autoprogramming/supervise` como
 diagnostico/compatibilidad, pero no como avance normal cuando `prepare-run`
 devuelve `director_execution_mode=goal_first` o `goal_ref`.
+La creacion de nuevos runs legacy desde `prepare-run` requiere
+`ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=1`; sin ese opt-in debe devolver
+`autoprogramming_legacy_director_loop_opt_in_required` y no persistir cola
+legacy.
 
 El payload `prepare-local-auth-probe.json` debe declarar:
 

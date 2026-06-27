@@ -169,6 +169,33 @@ func TestServerConfigFromEnvV0ExternalWorkLegacyDirectorLoopPorDefectoFalseV0(t 
 	}
 }
 
+func TestServerConfigFromEnvV0AutoprogrammingLegacyDirectorLoopPorDefectoFalseV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envAutoprogrammingLegacyDirectorLoopV0)
+	if setting.Value != "false" || setting.Source != "defaulted" {
+		t.Fatalf("setting autoprogramming legacy=%+v", setting)
+	}
+}
+
+func TestServerConfigFromEnvV0AutoprogrammingLegacyDirectorLoopOptInVisibleV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envAutoprogrammingLegacyDirectorLoopV0, "true")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envAutoprogrammingLegacyDirectorLoopV0)
+	if setting.Value != "true" || setting.Source != "explicit" {
+		t.Fatalf("setting autoprogramming legacy=%+v", setting)
+	}
+}
+
 func TestServerConfigFromEnvV0ExternalWorkLegacyDirectorLoopOptInVisibleV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envExternalWorkLegacyDirectorLoopV0, "true")

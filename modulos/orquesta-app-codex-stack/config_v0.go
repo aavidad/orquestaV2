@@ -25,33 +25,34 @@ import (
 )
 
 type ConfigV0 struct {
-	Enabled                    bool
-	Clock                      orquestafactoryhttp.AppSpecHTTPClockV0
-	Timeout                    time.Duration
-	DirectorLimits             orquestaweb.WebArrancarDirectorAppLimitsV0
-	DirectorDecisionBudget     orquestadirectoragentworkflow.DirectorAgentDecisionBatchBudgetV0
-	Stores                     StoresV0
-	RunQueue                   RunQueueConfigV0
-	RunSupervisor              RunSupervisorConfigV0
-	Codex                      CodexRuntimeConfigV0
-	Gemini                     GeminiRuntimeConfigV0
-	Claude                     ClaudeRuntimeConfigV0
-	EgressSanitizer            EgressSanitizerConfigV0
-	Capacity                   CapacityConfigV0
-	ReviewGate                 ReviewGateConfigV0
-	RequiredTests              orquestacionnucleoapp.RequiredTestRunnerPortV0
-	AppGoalLauncher            orquestagoal.GoalWorkLauncherPortV0
-	AppGoalObserver            orquestagoal.GoalWorkObservationPortV0
-	AppGoalClosureValidator    orquestagoal.GoalWorkClosureValidatorPortV0
-	DomainTests                DomainWorkRequiredTestConfigV0
-	AppChange                  orquestaappchange.AppChangePortsV0
-	AutoprogrammingPromotion   AutoprogrammingPromotionConfigV0
-	DomainWork                 orquestamcp.MCPDomainWorkExecutorPortV0
-	RuntimeModels              orquestaruntime.RuntimeModelManagerPortV0
-	DecisionCouncil            DecisionCouncilConfigV0
-	DomainDelivery             DomainWorkDeliveryBridgeConfigV0
-	ExternalWorkRunGuard       ExternalWorkRunProjectWorkDirGuardConfigV0
-	AllowLegacyExternalWorkRun bool
+	Enabled                       bool
+	Clock                         orquestafactoryhttp.AppSpecHTTPClockV0
+	Timeout                       time.Duration
+	DirectorLimits                orquestaweb.WebArrancarDirectorAppLimitsV0
+	DirectorDecisionBudget        orquestadirectoragentworkflow.DirectorAgentDecisionBatchBudgetV0
+	Stores                        StoresV0
+	RunQueue                      RunQueueConfigV0
+	RunSupervisor                 RunSupervisorConfigV0
+	Codex                         CodexRuntimeConfigV0
+	Gemini                        GeminiRuntimeConfigV0
+	Claude                        ClaudeRuntimeConfigV0
+	EgressSanitizer               EgressSanitizerConfigV0
+	Capacity                      CapacityConfigV0
+	ReviewGate                    ReviewGateConfigV0
+	RequiredTests                 orquestacionnucleoapp.RequiredTestRunnerPortV0
+	AppGoalLauncher               orquestagoal.GoalWorkLauncherPortV0
+	AppGoalObserver               orquestagoal.GoalWorkObservationPortV0
+	AppGoalClosureValidator       orquestagoal.GoalWorkClosureValidatorPortV0
+	DomainTests                   DomainWorkRequiredTestConfigV0
+	AppChange                     orquestaappchange.AppChangePortsV0
+	AutoprogrammingPromotion      AutoprogrammingPromotionConfigV0
+	DomainWork                    orquestamcp.MCPDomainWorkExecutorPortV0
+	RuntimeModels                 orquestaruntime.RuntimeModelManagerPortV0
+	DecisionCouncil               DecisionCouncilConfigV0
+	DomainDelivery                DomainWorkDeliveryBridgeConfigV0
+	ExternalWorkRunGuard          ExternalWorkRunProjectWorkDirGuardConfigV0
+	AllowLegacyExternalWorkRun    bool
+	AllowLegacyAutoprogrammingRun bool
 	// PromoteMaterializedArtifactWithoutAck recupera entregas cuyo agente
 	// materializo el write-set pero no escribio ACK (con gate-issue de revision
 	// humana). Opt-in: por defecto OFF.

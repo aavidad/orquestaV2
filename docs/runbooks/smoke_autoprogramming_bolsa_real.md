@@ -11,6 +11,7 @@ cierre. No es la ruta normal goal-first.
 ORQUESTA_BOLSA_REAL_SMOKE_CONFIRM=1 \
 ORQUESTA_BOLSA_REAL_CODEX_EXECUTION_CONFIRMED=1 \
 ORQUESTA_LEGACY_DIRECTOR_LOOP_SMOKE_CONFIRM=1 \
+ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=1 \
 ORQUESTA_BOLSA_APP_SOURCE_DIR=/home/alberto/Trabajo/Bolsa_Diputacion_app \
 ORQUESTA_BOLSA_APP_ADDR=127.0.0.1:18082 \
 scripts/smoke_autoprogramming_bolsa_real.sh
@@ -22,6 +23,7 @@ scripts/smoke_autoprogramming_bolsa_real.sh
 ORQUESTA_BOLSA_REAL_SMOKE_CONFIRM=1 \
 ORQUESTA_BOLSA_REAL_CODEX_EXECUTION_CONFIRMED=1 \
 ORQUESTA_LEGACY_DIRECTOR_LOOP_SMOKE_CONFIRM=1 \
+ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=1 \
 ORQUESTA_KEEP_SMOKE_DIR=1 \
 ORQUESTA_SMOKE_ROOT=/tmp/orquesta-bolsa-100-productizable-repro \
 ORQUESTA_BOLSA_REAL_RUN_REF=bolsa-100-productizable-repro \
@@ -33,9 +35,10 @@ scripts/smoke_autoprogramming_bolsa_real.sh
 ```
 
 El script compila `cmd/orquesta-server`, arranca un servidor temporal, llama a
-`/api/v0/autoprogramming/prepare-run` en modo legacy, supervisa el `run_ref`
-devuelto con `/api/v0/runs/supervise` por compatibilidad legacy, espera cierre
-causal, ejecuta
+`/api/v0/autoprogramming/prepare-run` en modo legacy con
+`ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=1`, supervisa el `run_ref`
+devuelto con `/api/v0/runs/supervise` por compatibilidad legacy tras
+`ORQUESTA_LEGACY_DIRECTOR_LOOP_SMOKE_CONFIRM=1`, espera cierre causal, ejecuta
 `go test -count=1 ./...` en la app resultante y arranca Bolsa para validar
 `/healthz` y `/api/portal`. No cubre la rama `goal_ready`, donde `prepare-run`
 debe devolver `goal_specs[]` sin `run_ref` legacy.

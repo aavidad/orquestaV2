@@ -25,6 +25,7 @@ Desde la raiz del repo:
 
 ```bash
 ORQUESTA_AUTOPROGRAMMING_SUPERVISED_SMOKE_CONFIRM=1 \
+ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=1 \
   ./scripts/smoke_autoprogramming_supervised.sh
 ```
 
@@ -36,10 +37,17 @@ ORQUESTA_SMOKE_ROOT=/tmp/orquesta-autoprogramming-supervised
 ORQUESTA_SMOKE_REQUEST_TIMEOUT_SECONDS=15
 ORQUESTA_SERVER_TICK_INTERVAL_MS=250
 ORQUESTA_SMOKE_RESIDENT_POLLS=40
+ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=1
 ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK=1
 ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1
 SMOKE_ID=manual-001
 ```
+
+`ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=1` es obligatorio para este
+smoke porque prueba deliberadamente `prepare-run` legacy. Sin ese opt-in,
+`prepare-run` debe responder con
+`autoprogramming_legacy_director_loop_opt_in_required` y no crear `run_ref`,
+`WorkflowTaskV0` ni cola legacy.
 
 `ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK=1` es compatibilidad
 historica y, desde el corte goal-first, exige tambien
@@ -63,7 +71,8 @@ focal legacy asociado.
   `project_dir`, `CODEX_HOME` y comando Codex fake temporales.
 - Llama a `POST /api/v0/autoprogramming/validate-request` si la ruta esta
   expuesta y exige `accepted=true`.
-- Llama a `POST /api/v0/autoprogramming/prepare-run` en modo legacy explicito,
+- Llama a `POST /api/v0/autoprogramming/prepare-run` en modo legacy explicito
+  con `ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=1`,
   exige `run_ref`, `wait_agent_refs` y `continue`, y despues espera a que el
   supervisor residente del servidor tome la cola global y arranque al menos un
   agente Codex fake para ese `run_ref`. Si la request se marca `goal_ready`, el

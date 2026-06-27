@@ -59,6 +59,7 @@ const (
 	envServerAutoprogrammingPromotionCommitMessageV0 = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_COMMIT_MESSAGE"
 	envStartupCleanupModeV0                          = "ORQUESTA_STARTUP_CLEANUP_MODE"
 	envStartupQueueLimitV0                           = "ORQUESTA_STARTUP_QUEUE_LIMIT"
+	envAutoprogrammingLegacyDirectorLoopV0           = "ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP"
 	envExternalWorkLegacyDirectorLoopV0              = "ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP"
 	envReviewGateStrictGoLineBudgetV0                = "ORQUESTA_REVIEW_GATE_STRICT_GO_LINE_BUDGET"
 	envDomainDeliveryLedgerPathV0                    = "ORQUESTA_DOMAIN_DELIVERY_LEDGER_PATH"
@@ -322,6 +323,11 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "autoprogramming",
 		Label:       "Goal-first automejora",
 		Description: "Activa modo goal-first estricto para automejora residente; si no se define y hay backend Codex Goal, se deriva automaticamente.",
+	},
+	envAutoprogrammingLegacyDirectorLoopV0: {
+		Scope:       "autoprogramming",
+		Label:       "Autoprogramming legacy",
+		Description: "Breakglass opt-in para permitir que autoprogramming prepare runs del Director historico; por defecto false.",
 	},
 	envExternalWorkLegacyDirectorLoopV0: {
 		Scope:       "external_work",

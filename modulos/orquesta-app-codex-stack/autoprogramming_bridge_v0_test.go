@@ -77,12 +77,13 @@ func TestPrepareAutoprogrammingRunV0PersisteWorkflowTasksYRunContinuable(t *test
 	}
 
 	bridged, err := PrepareAutoprogrammingRunV0(context.Background(), AutoprogrammingBridgeRequestV0{
-		Request:       autoprogrammingBridgeRequestForTestV0(),
-		OccurredAt:    "2026-05-22T10:00:00Z",
-		CorrelationID: "corr-autoprogramming-bridge-001",
-		RequestedBy:   "orquesta-test",
-		MaxBursts:     4,
-		MaxCommands:   8,
+		Request:                 autoprogrammingBridgeRequestForTestV0(),
+		OccurredAt:              "2026-05-22T10:00:00Z",
+		CorrelationID:           "corr-autoprogramming-bridge-001",
+		RequestedBy:             "orquesta-test",
+		AllowLegacyDirectorLoop: true,
+		MaxBursts:               4,
+		MaxCommands:             8,
 	}, ports)
 	if err != nil {
 		t.Fatalf("PrepareAutoprogrammingRunV0: %v", err)
@@ -157,6 +158,38 @@ func TestPrepareAutoprogrammingRunV0PersisteWorkflowTasksYRunContinuable(t *test
 		waitStep.Status != orquestadirectoroperativo.OperationalDirectorStepRunningV0 ||
 		!autoprogrammingBridgeStringInSetForTestV0(planState.RequiredTestRefs, storedTasks[0].RequiredTests[0]) {
 		t.Fatalf("plan_state=%+v wait_step=%+v", planState, waitStep)
+	}
+}
+
+func TestPrepareAutoprogrammingRunV0BloqueaLegacySinOptInV0(t *testing.T) {
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0()
+	request := autoprogrammingBridgeRequestForTestV0()
+
+	bridged, err := PrepareAutoprogrammingRunV0(context.Background(), AutoprogrammingBridgeRequestV0{
+		Request:       request,
+		OccurredAt:    "2026-06-27T10:00:00Z",
+		CorrelationID: "corr-autoprogramming-legacy-optin-required-001",
+		RequestedBy:   "orquesta-test",
+	}, orquestaappdirectorservice.StartAppDirectorPortsV0{
+		RunStore:          runStore,
+		DirectorTaskStore: taskStore,
+	})
+	if err != nil {
+		t.Fatalf("PrepareAutoprogrammingRunV0: %v", err)
+	}
+	if bridged.Accepted ||
+		len(bridged.Issues) != 1 ||
+		bridged.Issues[0].Code != "autoprogramming_legacy_director_loop_opt_in_required" ||
+		bridged.Issues[0].Field != "goal_migration" ||
+		len(bridged.Tasks) != 0 ||
+		len(bridged.WaitAgentRefs) != 0 ||
+		bridged.Run.RunID != "" ||
+		bridged.Continue.RunRef != "" {
+		t.Fatalf("bridged=%+v", bridged)
+	}
+	if _, err := runStore.LoadRunV0(context.Background(), request.RequestRef); !orquestacionnucleoapp.IsRunNotFoundErrorV0(err) {
+		t.Fatalf("run legacy no debe persistirse sin opt-in, err=%v", err)
 	}
 }
 
@@ -619,12 +652,13 @@ func TestPrepareAutoprogrammingRunV0EsIdempotenteYNoSobrescribeRunViva(t *testin
 		},
 	}
 	request := AutoprogrammingBridgeRequestV0{
-		Request:       autoprogrammingBridgeRequestForTestV0(),
-		OccurredAt:    "2026-05-22T10:10:00Z",
-		CorrelationID: "corr-autoprogramming-idempotent-001",
-		RequestedBy:   "orquesta-test",
-		MaxBursts:     4,
-		MaxCommands:   8,
+		Request:                 autoprogrammingBridgeRequestForTestV0(),
+		OccurredAt:              "2026-05-22T10:10:00Z",
+		CorrelationID:           "corr-autoprogramming-idempotent-001",
+		RequestedBy:             "orquesta-test",
+		AllowLegacyDirectorLoop: true,
+		MaxBursts:               4,
+		MaxCommands:             8,
 	}
 
 	first, err := PrepareAutoprogrammingRunV0(context.Background(), request, ports)

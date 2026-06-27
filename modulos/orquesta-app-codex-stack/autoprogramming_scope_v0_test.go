@@ -135,9 +135,10 @@ func TestPrepareAutoprogrammingRunV0PreservaRefsOpacasDelPaquete(t *testing.T) {
 				"go test -count=1 ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server ./modulos/orquesta-run-file ./modulos/orquesta-state-file",
 			},
 		},
-		OccurredAt:    "2026-05-23T00:00:00Z",
-		CorrelationID: "corr-run-autoprog2-t07-smoke-desatendido-real-burst-002",
-		RequestedBy:   "orquesta-v2",
+		OccurredAt:              "2026-05-23T00:00:00Z",
+		CorrelationID:           "corr-run-autoprog2-t07-smoke-desatendido-real-burst-002",
+		RequestedBy:             "orquesta-v2",
+		AllowLegacyDirectorLoop: true,
 	}
 	result, err := PrepareAutoprogrammingRunV0(context.Background(), request, orquestaappdirectorservice.StartAppDirectorPortsV0{
 		RunStore:          runStore,
