@@ -405,6 +405,7 @@ func finalizedTopicPackageAcceptanceCriteriaV0() []string {
 	return []string{
 		"cerrar paquete local verificable de un tema y no declararlo temario completo ni listo para produccion",
 		"incluir texto final del tema, tests, visuales_plan, HTML local, RAG, audio o guion/manifest, tutor y qa_final cuando el curso los exija",
+		"incluir banco de preguntas publicable no vacio; un tests.json parseable pero sin preguntas deja el paquete en pendiente_continuar",
 		"incluir informe de extension del tema o del curso; si el ampliado no alcanza el minimo del nivel, devolver pendiente_continuar",
 		"si el tema es comun, incluir matriz de derivacion desde maestro comun A1/A1-A2 o superior validado; si no aplica, declararlo como no aplicable",
 		"si faltan piezas obligatorias, devolver final_domain_package con estado pendiente_continuar y followup_refs causales",

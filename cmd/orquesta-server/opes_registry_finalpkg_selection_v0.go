@@ -91,18 +91,70 @@ func opesRegistryFinalPkgTopicHasActiveLockV0(topic opesRegistryFinalPkgTopicV0)
 }
 
 func opesRegistryFinalPkgPackageCompleteV0(packageDir string) bool {
+	return validateOPESRegistryFinalPkgPackageV0(packageDir).Complete
+}
+
+type opesRegistryFinalPkgPackageValidationV0 struct {
+	Complete bool
+	Issues   []string
+}
+
+func validateOPESRegistryFinalPkgPackageV0(packageDir string) opesRegistryFinalPkgPackageValidationV0 {
+	var issues []string
 	for _, relative := range requiredOPESRegistryFinalPkgFilesV0 {
 		info, err := os.Stat(filepath.Join(packageDir, relative))
 		if err != nil || info.IsDir() || info.Size() <= 0 {
-			return false
+			issues = append(issues, "missing_or_empty:"+relative)
 		}
 	}
 	data, err := os.ReadFile(filepath.Join(packageDir, "tests.json"))
 	if err != nil {
+		issues = append(issues, "tests_json_missing")
+	} else if !opesRegistryFinalPkgTestsJSONHasPublishableQuestionsV0(data) {
+		issues = append(issues, "tests_json_without_questions")
+	}
+	return opesRegistryFinalPkgPackageValidationV0{
+		Complete: len(issues) == 0,
+		Issues:   compactOPESRegistryFinalPkgStringsV0(issues),
+	}
+}
+
+func opesRegistryFinalPkgTestsJSONHasPublishableQuestionsV0(data []byte) bool {
+	var decoded any
+	if err := json.Unmarshal(data, &decoded); err != nil {
 		return false
 	}
-	var decoded any
-	return json.Unmarshal(data, &decoded) == nil
+	return opesRegistryFinalPkgJSONHasQuestionsV0(decoded)
+}
+
+func opesRegistryFinalPkgJSONHasQuestionsV0(value any) bool {
+	switch typed := value.(type) {
+	case []any:
+		return len(typed) > 0
+	case map[string]any:
+		for _, key := range []string{"questions", "preguntas", "items", "tests", "question_bank"} {
+			if opesRegistryFinalPkgJSONHasQuestionsV0(typed[key]) {
+				return true
+			}
+		}
+		for _, key := range []string{"total_questions", "question_count", "questions_count", "total"} {
+			if opesRegistryFinalPkgPositiveJSONNumberV0(typed[key]) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func opesRegistryFinalPkgPositiveJSONNumberV0(value any) bool {
+	switch typed := value.(type) {
+	case float64:
+		return typed > 0
+	case int:
+		return typed > 0
+	default:
+		return false
+	}
 }
 
 func opesRegistryFinalPkgRunRefV0(config opesRegistryFinalPkgConfigV0, topicID string) string {

@@ -112,11 +112,19 @@ func (fixture opesRegistryFinalPkgFixtureV0) writeCompletePackage(topicID string
 		}
 		content := []byte("ok")
 		if relative == "tests.json" {
-			content = []byte(`{"questions":[]}`)
+			content = []byte(`{"questions":[{"id":"q1","prompt":"pregunta verificable","options":["a","b"],"answer":"a"}]}`)
 		}
 		if err := os.WriteFile(path, content, 0o644); err != nil {
 			fixture.t.Fatalf("write package: %v", err)
 		}
+	}
+}
+
+func (fixture opesRegistryFinalPkgFixtureV0) writePackageWithEmptyQuestionBank(topicID string) {
+	fixture.writeCompletePackage(topicID)
+	path := filepath.Join(fixture.courseRoot, "tema_"+topicID, "paquete_final", "tests.json")
+	if err := os.WriteFile(path, []byte(`{"questions":[]}`), 0o644); err != nil {
+		fixture.t.Fatalf("write empty tests: %v", err)
 	}
 }
 

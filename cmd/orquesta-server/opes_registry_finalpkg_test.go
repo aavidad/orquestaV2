@@ -220,6 +220,57 @@ func TestOPESRegistryFinalPkgNoCuentaRunNoTerminalConPaqueteCompletoV0(t *testin
 	}
 }
 
+func TestOPESRegistryFinalPkgPackageCompleteRequiresDeterministicQuestionBankV0(t *testing.T) {
+	fixture := newOPESRegistryFinalPkgFixtureV0(t)
+	fixture.writePackageWithEmptyQuestionBank("002")
+
+	validation := validateOPESRegistryFinalPkgPackageV0(
+		filepath.Join(fixture.courseRoot, "tema_002", "paquete_final"),
+	)
+
+	if validation.Complete ||
+		!containsStringForTestV0(validation.Issues, "tests_json_without_questions") {
+		t.Fatalf("validation=%+v", validation)
+	}
+}
+
+func TestOPESRegistryFinalPkgReviewAcceptedDoesNotCompleteEmptyQuestionBankV0(t *testing.T) {
+	fixture := newOPESRegistryFinalPkgFixtureV0(t)
+	fixture.writeRegistry(map[string]any{
+		"001": map[string]any{},
+		"002": map[string]any{},
+		"003": map[string]any{},
+	})
+	fixture.writeTemplateState()
+	fixture.writePackageWithEmptyQuestionBank("002")
+	fixture.writeActiveDeliveredRun("run-ref-opes-a1-t002-finalpkg-20260612", "bloqueada")
+	config := fixture.config(false)
+	config.MaxInFlight = 1
+	submitted := []string{}
+
+	summary, err := runOPESRegistryFinalPkgOnceV0(
+		context.Background(),
+		config,
+		func(_ context.Context, _ *http.Client, _ string, request orquestaexternalworkrun.StartExternalWorkRunRequestV0) (string, error) {
+			submitted = append(submitted, request.RunRef)
+			return request.RunRef, nil
+		},
+	)
+
+	if err != nil {
+		t.Fatalf("run once: %v", err)
+	}
+	if len(submitted) != 0 ||
+		summary.CompletedNonTerminal != 0 ||
+		len(summary.CompletedNonTerminalRefs) != 0 ||
+		len(summary.Active) != 1 ||
+		summary.Active[0] != "run-ref-opes-a1-t002-finalpkg-20260612" ||
+		len(summary.Results) != 1 ||
+		summary.Results[0].Status != "max_in_flight" {
+		t.Fatalf("submitted=%v summary=%+v", submitted, summary)
+	}
+}
+
 func TestOPESRegistryFinalPkgReconcilesCompletedRunV0(t *testing.T) {
 	fixture := newOPESRegistryFinalPkgFixtureV0(t)
 	runRef := "run-ref-opes-a1-t002-finalpkg-20260612"

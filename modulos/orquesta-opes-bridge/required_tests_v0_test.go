@@ -75,6 +75,7 @@ func TestOPESRequiredTestPolicyV0FinalTemarioExigeMinimosYComunes(t *testing.T) 
 		"opes-domain-test-finalize_temario_package-job-ref-policy-opes-final",
 		"opes-extension-minima-nivel-job-ref-policy-opes-final",
 		"opes-derivacion-comunes-maestro-job-ref-policy-opes-final",
+		"opes-question-bank-publicable-job-ref-policy-opes-final",
 	} {
 		if !stringInRequiredTestRefsForTestV0(got, want) {
 			t.Fatalf("required_tests=%v falta %s", got, want)

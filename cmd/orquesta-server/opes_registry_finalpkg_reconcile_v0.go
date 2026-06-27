@@ -261,7 +261,7 @@ func opesRegistryFinalPkgRegisterValidationCommandV0(
 			ValidationRef: validationRef,
 			PhaseID:       string(orquestacoreworkflow.OrchestrationPhaseValidacionFinalV0),
 			ClosedTaskRef: closedTaskRef,
-			Summary:       "Validacion final OPES finalpkg basada en paquete completo y review aceptada.",
+			Summary:       "Validacion final OPES finalpkg basada en contrato determinista de paquete, tests y review aceptada.",
 			EvidenceRefs:  evidenceRefs,
 		},
 	)
@@ -318,6 +318,8 @@ func opesRegistryFinalPkgReconcileEvidenceRefsV0(
 ) []string {
 	return compactExternalBridgeStringsV0([]string{
 		"evidence-ref-opes-finalpkg-package-complete",
+		"evidence-ref-opes-finalpkg-deterministic-package-contract",
+		"evidence-ref-opes-finalpkg-question-bank-present",
 		"evidence-ref-opes-finalpkg-reconcile",
 		strings.TrimSpace(run.RunID),
 		"topic-ref-opes-finalpkg-" + opesRegistryFinalPkgSafeRefTokenV0(topicID),

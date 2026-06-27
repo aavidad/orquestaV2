@@ -109,6 +109,25 @@ func opesFinalPackageRequiredTestsV0(
 				"opes-expected-evidence-matriz-reutilizacion-comunes",
 			},
 		},
+		{
+			TestRef: "opes-question-bank-publicable-" + safeJob,
+			AcceptanceCriteria: []string{
+				"Existe tests.json o question_bank equivalente con preguntas publicables.",
+				"El banco de preguntas no esta vacio y contiene al menos una pregunta revisable.",
+				"Un paquete con tests.json parseable pero sin preguntas queda pendiente_continuar, aunque tenga revision de agente aceptada.",
+			},
+			AcceptanceCriteriaRefs: []string{"opes-required-question-bank-publicable"},
+			InputRefs:              inputRefs,
+			ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
+				{Kind: "domain_ref", Ref: "opes"},
+				{Kind: "job_ref", Ref: safeJob},
+				{Kind: "required_evidence", Ref: "question_bank"},
+			},
+			EvidenceRefs: []string{
+				"opes-rule-question-bank-publicable",
+				"opes-expected-evidence-question-bank",
+			},
+		},
 	}
 }
 
