@@ -137,7 +137,7 @@ func TestRuntimeV0ResidentDirectorAsyncCoalesceaUnTickPendienteV0(t *testing.T) 
 	}
 	director.release()
 	director.waitDone(t)
-	time.Sleep(10 * time.Millisecond)
+	waitRuntimeAsyncWorkForTestV0(t, runtime)
 	if store.last.ResidentDirectorTickActive {
 		t.Fatalf("resident director tick stayed active: %+v", store.last)
 	}

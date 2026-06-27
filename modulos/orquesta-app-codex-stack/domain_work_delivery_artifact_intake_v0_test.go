@@ -129,6 +129,44 @@ func TestDomainWorkDeliveryArtifactIntakeV0AceptaJSONEstructuradoSeguro(t *testi
 	}
 }
 
+func TestDomainWorkDeliveryArtifactIntakeV0SeleccionaFicheroPorTipoArtefacto(t *testing.T) {
+	projectDir := t.TempDir()
+	writeDomainWorkArtifactIntakeTestFileV0(
+		t,
+		projectDir,
+		"external/opes/notas_auxiliares.md",
+		[]byte("Contenido auxiliar que no debe ser el artefacto principal."),
+	)
+	writeDomainWorkArtifactIntakeTestFileV0(
+		t,
+		projectDir,
+		"external/opes/draft_content_block",
+		[]byte(`{"title":"Bloque elegido","body":"Contenido elegido."}`),
+	)
+
+	intake, err := readDomainWorkDeliveryArtifactV0(
+		orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+			DescriptorRef:  "descriptor-ref-intake-multiple-001",
+			ProjectWorkDir: projectDir,
+		},
+		orquestaruntimecodex.CodexAgentAckV0{
+			Files: []string{
+				"external/opes/notas_auxiliares.md",
+				"external/opes/draft_content_block",
+			},
+		},
+		orquestadomainwork.DomainWorkArtifactTypeContentBlockV0,
+	)
+
+	if err != nil {
+		t.Fatalf("readDomainWorkDeliveryArtifactV0: %v", err)
+	}
+	if intake.FileRef != "external/opes/draft_content_block" ||
+		!strings.Contains(intake.Body, "Contenido elegido.") {
+		t.Fatalf("intake=%+v", intake)
+	}
+}
+
 func writeDomainWorkArtifactIntakeTestFileV0(
 	t *testing.T,
 	projectDir string,

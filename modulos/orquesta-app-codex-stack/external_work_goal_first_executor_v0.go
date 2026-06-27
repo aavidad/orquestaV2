@@ -380,8 +380,15 @@ func externalWorkGoalFirstResultV0(
 		ChangeRef:             strings.TrimSpace(request.AppChangeRequest.ChangeRef),
 		GoalRef:               strings.TrimSpace(state.GoalRef),
 		ExternalGoalRef:       strings.TrimSpace(state.ExternalGoalRef),
-		EvidenceRefs:          compactStringsV0(state.EvidenceRefs),
-		NextActions:           []string{orquestamcp.MCPExternalWorkRunNextActionObserveGoalV0},
+		EvidenceRefs: compactStringsV0(append(
+			[]string{"evidence-ref-external-work-goal-first-observer-required"},
+			state.EvidenceRefs...,
+		)),
+		NextActions: []string{
+			orquestamcp.MCPExternalWorkRunNextActionObserverRequiredV0,
+			orquestamcp.MCPExternalWorkRunNextActionObserveGoalV0,
+			orquestamcp.MCPExternalWorkRunNextActionObserveActiveGoalsV0,
+		},
 	}
 }
 

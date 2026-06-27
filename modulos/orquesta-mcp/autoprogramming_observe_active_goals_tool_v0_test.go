@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
 )
@@ -167,6 +169,39 @@ func TestMCPAutoprogrammingObserveActiveGoalsHTTPHandlerV0DelegaEnExecutor(t *te
 	}
 }
 
+func TestMCPAutoprogrammingObserveActiveGoalsHTTPHandlerV0AceptaBackgroundSiTarda(t *testing.T) {
+	executor := &fakeMCPAutoprogrammingObserveActiveGoalsHTTPExecutorForTestV0{
+		delay: 25 * time.Millisecond,
+		result: MCPAutoprogrammingObserveActiveGoalsToolResultV0{
+			Estado: MCPAutoprogrammingObserveActiveGoalsEstadoOKV0,
+		},
+	}
+	body := bytes.NewBufferString(`{
+		"request_id":"request-ref-observe-active-goals-background-001",
+		"correlation_id":"corr-observe-active-goals-background-001",
+		"run_refs":["run-ref-observe-active-goals-background-001"]
+	}`)
+	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingObserveActiveGoalsHTTPPathV0, body)
+	rec := httptest.NewRecorder()
+
+	newMCPAutoprogrammingObserveActiveGoalsHTTPHandlerWithTimeoutV0(executor, time.Millisecond).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPAutoprogrammingObserveActiveGoalsToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != MCPAutoprogrammingObserveActiveGoalsEstadoOKV0 ||
+		result.OperationRef == "" ||
+		!strings.Contains(result.OperationRef, "request-ref-observe-active-goals-background-001") ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_observe_active_goals_background_accepted") ||
+		len(result.NextActions) == 0 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 type errMCPAutoprogrammingObserveActiveGoalsForTestV0 string
 
 func (err errMCPAutoprogrammingObserveActiveGoalsForTestV0) Error() string {
@@ -199,6 +234,7 @@ func (executor *fakeMCPAutoprogrammingObserveActiveGoalsExecutorForTestV0) Execu
 type fakeMCPAutoprogrammingObserveActiveGoalsHTTPExecutorForTestV0 struct {
 	input  MCPAutoprogrammingObserveActiveGoalsToolInputV0
 	result MCPAutoprogrammingObserveActiveGoalsToolResultV0
+	delay  time.Duration
 }
 
 func (executor *fakeMCPAutoprogrammingObserveActiveGoalsHTTPExecutorForTestV0) Execute(
@@ -206,6 +242,9 @@ func (executor *fakeMCPAutoprogrammingObserveActiveGoalsHTTPExecutorForTestV0) E
 	input MCPAutoprogrammingObserveActiveGoalsToolInputV0,
 ) (MCPAutoprogrammingObserveActiveGoalsToolResultV0, error) {
 	executor.input = input
+	if executor.delay > 0 {
+		time.Sleep(executor.delay)
+	}
 	return executor.result, nil
 }
 

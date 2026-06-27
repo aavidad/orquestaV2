@@ -288,6 +288,7 @@ func TestRuntimeV0IdleSelfImprovementGoalFirstLanzaGoalSpecV0(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatalf("goal-first no lanzado")
 	}
+	waitRuntimeAsyncWorkForTestV0(t, runtime)
 	spec := supervisor.lastSpec
 	if supervisor.launchCalls != 1 ||
 		spec.DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 ||
@@ -308,12 +309,6 @@ func TestRuntimeV0IdleSelfImprovementGoalFirstLanzaGoalSpecV0(t *testing.T) {
 		!containsStringForTestV0(spec.SkillRefs, DefaultIdleSelfImprovementSkillRefAutoV0) ||
 		!containsStringForTestV0(spec.SkillRefs, DefaultIdleSelfImprovementSkillRefIntV0) {
 		t.Fatalf("spec=%+v calls=%d", spec, supervisor.launchCalls)
-	}
-	deadline := time.Now().Add(time.Second)
-	for time.Now().Before(deadline) &&
-		(store.last.IdleSelfImprovementOperationalMessage == nil ||
-			!containsStringForTestV0(store.last.IdleSelfImprovementOperationalMessage.EvidenceRefs, "evidence-ref-idle-self-improvement-goal-first-launched")) {
-		time.Sleep(10 * time.Millisecond)
 	}
 	if store.last.IdleSelfImprovementReason == "" ||
 		!strings.Contains(store.last.IdleSelfImprovementReason, "goal_ref="+spec.GoalRef) ||
@@ -562,7 +557,7 @@ func (fake *goalFirstSupervisorForTestV0) LaunchGoalWorkV0(
 	spec orquestagoal.GoalWorkSpecV0,
 ) (orquestagoal.GoalLaunchReceiptV0, error) {
 	fake.launchCalls++
-	fake.lastSpec = spec
+	fake.lastSpec = copyGoalWorkSpecForServerStateV0(spec)
 	if fake.started != nil {
 		fake.started <- struct{}{}
 	}

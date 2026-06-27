@@ -2,6 +2,7 @@ package orquestaserver
 
 import (
 	"context"
+	"testing"
 	"time"
 
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
@@ -134,6 +135,15 @@ func markNoExecutionSinceForTestV0(runtime *RuntimeV0, now time.Time) {
 	runtime.tracker.MarkSupervisorV0(runtime.config.SupervisorCommand, orquestarunsupervisor.RunSupervisorResultV0{
 		StopReason: orquestarunsupervisor.RunSupervisorStopNoExecutionV0,
 	}, now.Add(-61*time.Second))
+}
+
+func waitRuntimeAsyncWorkForTestV0(t *testing.T, runtime *RuntimeV0) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if !runtime.waitAsyncWorkV0(ctx) {
+		t.Fatalf("runtime async work sigue en vuelo")
+	}
 }
 
 func containsStringForTestV0(values []string, target string) bool {

@@ -25,18 +25,70 @@ func readDomainWorkDeliveryArtifactV0(
 	ack orquestaruntimecodex.CodexAgentAckV0,
 	artifactType string,
 ) (domainWorkDeliveryArtifactIntakeV0, error) {
-	for _, file := range ack.Files {
-		path, ok := safeDomainWorkDeliveryFilePathV0(descriptor.ProjectWorkDir, string(file))
+	path, fileRef, ok, err := selectDomainWorkDeliveryArtifactFileV0(
+		descriptor.ProjectWorkDir,
+		ack.Files,
+		artifactType,
+	)
+	if err != nil || !ok {
+		return domainWorkDeliveryArtifactIntakeV0{}, err
+	}
+	return readDomainWorkDeliveryArtifactFileV0(path, fileRef, artifactType)
+}
+
+func selectDomainWorkDeliveryArtifactFileV0(
+	projectWorkDir string,
+	files orquestaruntimecodex.EvidenceListV0,
+	artifactType string,
+) (string, string, bool, error) {
+	fallbackPath := ""
+	fallbackRef := ""
+	for _, file := range files {
+		fileRef := strings.TrimSpace(string(file))
+		path, ok := safeDomainWorkDeliveryFilePathV0(projectWorkDir, fileRef)
 		if !ok {
-			return domainWorkDeliveryArtifactIntakeV0{}, domainWorkArtifactIntakeErrorV0(
+			return "", "", false, domainWorkArtifactIntakeErrorV0(
 				"domain_work_artifact_unreadable",
 				"files.path",
 				"invalid_declared_path",
 			)
 		}
-		return readDomainWorkDeliveryArtifactFileV0(path, string(file), artifactType)
+		if fallbackPath == "" {
+			fallbackPath = path
+			fallbackRef = fileRef
+		}
+		if domainWorkDeliveryArtifactFileRefMatchesV0(fileRef, artifactType) {
+			return path, fileRef, true, nil
+		}
 	}
-	return domainWorkDeliveryArtifactIntakeV0{}, nil
+	if fallbackPath == "" {
+		return "", "", false, nil
+	}
+	return fallbackPath, fallbackRef, true, nil
+}
+
+func domainWorkDeliveryArtifactFileRefMatchesV0(fileRef string, artifactType string) bool {
+	artifactType = strings.TrimSpace(artifactType)
+	if artifactType == "" {
+		return false
+	}
+	candidates := []string{fileRef}
+	for _, segment := range strings.Split(filepath.ToSlash(fileRef), "/") {
+		segment = strings.TrimSpace(segment)
+		if segment == "" {
+			continue
+		}
+		candidates = append(candidates, segment)
+		if ext := filepath.Ext(segment); ext != "" {
+			candidates = append(candidates, strings.TrimSuffix(segment, ext))
+		}
+	}
+	for _, candidate := range candidates {
+		if domainWorkDeliveryArtifactTypeMatchesV0(candidate, artifactType) {
+			return true
+		}
+	}
+	return false
 }
 
 func readDomainWorkDeliveryArtifactFileV0(

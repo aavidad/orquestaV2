@@ -39,8 +39,11 @@ type MCPAutoprogrammingObserveActiveGoalsToolResultV0 struct {
 	Estado        string                                      `json:"estado"`
 	RequestID     string                                      `json:"request_id,omitempty"`
 	CorrelationID string                                      `json:"correlation_id,omitempty"`
+	OperationRef  string                                      `json:"operation_ref,omitempty"`
 	Observations  []MCPAutoprogrammingObserveGoalToolResultV0 `json:"observations,omitempty"`
 	Issues        []MCPValidationIssueV0                      `json:"issues,omitempty"`
+	NextActions   []string                                    `json:"next_actions,omitempty"`
+	Diagnostics   []MCPAutoprogrammingDiagnosticV0            `json:"diagnostics,omitempty"`
 	EvidenceRefs  []string                                    `json:"evidence_refs,omitempty"`
 	Errores       []MCPValidationIssueV0                      `json:"errores_publicos,omitempty"`
 }

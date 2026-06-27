@@ -43,7 +43,7 @@ func TestRuntimeV0SupervisorAsyncCoalesceaUnTickPendienteV0(t *testing.T) {
 	}
 	supervisor.release()
 	supervisor.waitDone(t)
-	time.Sleep(10 * time.Millisecond)
+	waitRuntimeAsyncWorkForTestV0(t, runtime)
 	if store.last.SupervisorTickActive {
 		t.Fatalf("supervisor tick stayed active after coalesced pulse: %+v", store.last)
 	}

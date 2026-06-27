@@ -24,6 +24,8 @@ const (
 	MCPExternalWorkRunNextActionSuperviseLegacyRunV0    = "supervise_legacy_run_or_wait_resident"
 	MCPExternalWorkRunNextActionMigrateGoalFirstV0      = "migrate_external_work_to_goal_first"
 	MCPExternalWorkRunNextActionObserveGoalV0           = "observe_goal"
+	MCPExternalWorkRunNextActionObserveActiveGoalsV0    = "observe_active_goals"
+	MCPExternalWorkRunNextActionObserverRequiredV0      = "observer_required"
 	MCPExternalWorkRunNextActionConfigureGoalBackendV0  = "configure_codex_goal_backend"
 	MCPExternalWorkRunNextActionEnableLegacyOptInV0     = "enable_legacy_director_loop_opt_in"
 	MCPExternalWorkRunNextActionDoNotFallbackLegacyV0   = "do_not_fallback_to_legacy_director_loop"

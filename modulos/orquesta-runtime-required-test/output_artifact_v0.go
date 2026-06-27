@@ -18,7 +18,7 @@ func writeOutputArtifactV0(
 	executor LocalCommandExecutorV0,
 	request orquestacionnucleoapp.RequiredTestCommandExecutionRequestV0,
 	status orquestacionnucleoapp.RequiredTestEvidenceStatusV0,
-	output outputBufferV0,
+	output *outputBufferV0,
 ) (string, orquestacionnucleoapp.RequiredTestEvidenceStatusV0, error) {
 	ref := outputArtifactRefV0(request)
 	path := filepath.Join(executor.OutputDir, strings.TrimPrefix(ref, "required-test-output-v0/"))

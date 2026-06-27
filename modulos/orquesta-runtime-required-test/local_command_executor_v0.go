@@ -106,7 +106,7 @@ func failedLocalCommandValidationResultV0(
 		executor,
 		request,
 		orquestacionnucleoapp.RequiredTestEvidenceStatusFailedV0,
-		*output,
+		output,
 	)
 	if err != nil {
 		return orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}, err
@@ -185,7 +185,7 @@ func runLocalCommandV0(
 	executor LocalCommandExecutorV0,
 	commandPath string,
 	args []string,
-) (outputBufferV0, error) {
+) (*outputBufferV0, error) {
 	limit := executor.MaxOutputBytes
 	if limit <= 0 {
 		limit = 1024 * 1024
@@ -197,7 +197,7 @@ func runLocalCommandV0(
 	cmd.Stdout = output
 	cmd.Stderr = output
 	err := cmd.Run()
-	return *output, err
+	return output, err
 }
 
 func localCommandGoTestWithoutExecutedTestsV0(tokens []string, output string) bool {
@@ -242,7 +242,7 @@ func localCommandValidationPassedWithoutScannedFilesV0(output string) bool {
 	return hasPassingValidation && hasEmptyScan
 }
 
-func localCommandOutputWithDiagnosticV0(output outputBufferV0, message string) outputBufferV0 {
+func localCommandOutputWithDiagnosticV0(output *outputBufferV0, message string) *outputBufferV0 {
 	limit := output.limit
 	if limit <= 0 {
 		limit = 1024 * 1024
@@ -250,7 +250,7 @@ func localCommandOutputWithDiagnosticV0(output outputBufferV0, message string) o
 	next := newOutputBufferV0(limit)
 	_, _ = next.Write([]byte(output.String()))
 	_, _ = next.Write([]byte("\n" + strings.TrimSpace(message) + "\n"))
-	return *next
+	return next
 }
 
 func isolatedLocalCommandEnvV0(env []string) []string {
