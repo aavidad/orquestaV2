@@ -167,14 +167,16 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 		))
 	}
 	healthRun, healthObservedRuns := mcpAutoprogrammingPreferredRunStatsForQueueHealthV0(result.Run, observedRuns...)
+	goalStates := executor.goalStatesForAutoprogrammingStatusV0(ctx, result, input)
+	goalStatesByRunRef := mcpAutoprogrammingGoalStatesByRunRefV0(goalStates)
+	goalFirstRunRefs := mcpAutoprogrammingGoalFirstRunRefSetFromStatesV0(goalStates)
 	result.Projects = buildMCPAutoprogrammingProjectsV0(result.Queue, result.Run)
-	result.Tasks = buildMCPAutoprogrammingTasksV0(result.Run)
-	result.Agents = buildMCPAutoprogrammingAgentsV0(result.Run)
-	result.QueueHealth = buildMCPAutoprogrammingQueueHealthV0(result.Queue, healthRun, healthObservedRuns...)
-	result.StaleRunning = buildMCPAutoprogrammingStaleRunningV0(result.Queue, healthRun, healthObservedRuns...)
+	result.Tasks = buildMCPAutoprogrammingTasksV0(result.Run, goalFirstRunRefs)
+	result.Agents = buildMCPAutoprogrammingAgentsV0(result.Run, goalFirstRunRefs)
+	result.QueueHealth = buildMCPAutoprogrammingQueueHealthV0(result.Queue, goalStatesByRunRef, healthRun, healthObservedRuns...)
+	result.StaleRunning = buildMCPAutoprogrammingStaleRunningV0(result.Queue, goalStatesByRunRef, healthRun, healthObservedRuns...)
 	result.Diagnostics = append(result.Diagnostics, diagnosticsFromStaleRunningMCPAutoprogrammingV0(result.StaleRunning)...)
 	result.Operator = newMCPAutoprogrammingOperatorV0(result.Queue, result.Run, result.Diagnostics)
-	goalStates := executor.goalStatesForAutoprogrammingStatusV0(ctx, result, input)
 	for _, goalState := range goalStates {
 		result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingGoalFirstDiagnosticsV0(goalState)...)
 	}
@@ -237,6 +239,34 @@ func mcpAutoprogrammingGoalStateRunRefsV0(
 		out = append(out, strings.TrimSpace(state.RunRef))
 	}
 	return compactStringsMCPV0(out)
+}
+
+func mcpAutoprogrammingGoalStatesByRunRefV0(
+	states []orquestagoal.GoalWorkStateV0,
+) map[string]orquestagoal.GoalWorkStateV0 {
+	out := map[string]orquestagoal.GoalWorkStateV0{}
+	for _, state := range states {
+		runRef := strings.TrimSpace(state.RunRef)
+		if runRef == "" || strings.TrimSpace(state.GoalRef) == "" {
+			continue
+		}
+		out[runRef] = state
+	}
+	return out
+}
+
+func mcpAutoprogrammingGoalFirstRunRefSetFromStatesV0(
+	states []orquestagoal.GoalWorkStateV0,
+) map[string]bool {
+	out := map[string]bool{}
+	for _, state := range states {
+		runRef := strings.TrimSpace(state.RunRef)
+		if runRef == "" || strings.TrimSpace(state.GoalRef) == "" {
+			continue
+		}
+		out[runRef] = true
+	}
+	return out
 }
 
 func mcpAutoprogrammingGoalFirstDiagnosticsV0(

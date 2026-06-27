@@ -1,6 +1,10 @@
 package orquestamcp
 
-import "strings"
+import (
+	"strings"
+
+	orquestagoal "orquesta/modulos/orquesta-goal"
+)
 
 const (
 	mcpAutoprogrammingActionStaleRunningV0                  = "stale_running"
@@ -18,6 +22,7 @@ const (
 
 func buildMCPAutoprogrammingStaleRunningV0(
 	queue *MCPRunQueuePriorityToolResultV0,
+	goalStatesByRunRef map[string]orquestagoal.GoalWorkStateV0,
 	run *MCPDirectorStatsToolResultV0,
 	observedRuns ...*MCPDirectorStatsToolResultV0,
 ) []MCPAutoprogrammingActionableRunV0 {
@@ -30,7 +35,7 @@ func buildMCPAutoprogrammingStaleRunningV0(
 		append([]MCPRunQueueRankedCandidateCompactV0{}, queue.Ranked...),
 		queue.Terminal...,
 	) {
-		action, ok := mcpAutoprogrammingStaleRunningActionForCandidateV0(candidate, observedByRunRef)
+		action, ok := mcpAutoprogrammingStaleRunningActionForCandidateV0(candidate, goalStatesByRunRef, observedByRunRef)
 		if ok {
 			out = append(out, action)
 		}
@@ -40,11 +45,15 @@ func buildMCPAutoprogrammingStaleRunningV0(
 
 func mcpAutoprogrammingStaleRunningActionForCandidateV0(
 	candidate MCPRunQueueRankedCandidateCompactV0,
+	goalStatesByRunRef map[string]orquestagoal.GoalWorkStateV0,
 	observedByRunRef map[string]*MCPDirectorStatsToolResultV0,
 ) (MCPAutoprogrammingActionableRunV0, bool) {
 	status := strings.ToLower(strings.TrimSpace(candidate.Status))
 	runRef := strings.TrimSpace(candidate.RunRef)
 	if runRef == "" {
+		return MCPAutoprogrammingActionableRunV0{}, false
+	}
+	if _, ok := goalStatesByRunRef[runRef]; ok {
 		return MCPAutoprogrammingActionableRunV0{}, false
 	}
 	if mcpAutoprogrammingCandidateHasEvidenceV0(candidate, mcpAutoprogrammingEvidenceProviderUsageLimitRetryV0) {
@@ -77,6 +86,9 @@ func mcpAutoprogrammingStaleRunningActionForCandidateV0(
 	}
 	if status == "running" {
 		observed := observedByRunRef[runRef]
+		if mcpAutoprogrammingGoalStatsSuppressesStaleRunningV0(observed) {
+			return MCPAutoprogrammingActionableRunV0{}, false
+		}
 		if mcpAutoprogrammingRunStatsLiveV0(observed) {
 			return MCPAutoprogrammingActionableRunV0{}, false
 		}
@@ -194,10 +206,22 @@ func mcpAutoprogrammingCandidateHasEvidenceV0(
 }
 
 func mcpAutoprogrammingRunStatsLiveV0(run *MCPDirectorStatsToolResultV0) bool {
-	if run == nil || run.Stats == nil {
+	if run == nil {
+		return false
+	}
+	if mcpAutoprogrammingGoalStatsSuppressesStaleRunningV0(run) {
+		return true
+	}
+	if run.Stats == nil {
 		return false
 	}
 	return mcpAutoprogrammingRunStatsHasLiveSignalV0(*run.Stats)
+}
+
+func mcpAutoprogrammingGoalStatsSuppressesStaleRunningV0(
+	run *MCPDirectorStatsToolResultV0,
+) bool {
+	return run != nil && run.Goal != nil && strings.TrimSpace(run.Goal.GoalRef) != ""
 }
 
 func diagnosticsFromStaleRunningMCPAutoprogrammingV0(

@@ -1923,6 +1923,23 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-06-27
+Decision: `external_job` goal-first se proyecta desde `GoalWorkStateV0`.
+Motivo: una run contenedora goal-first no tiene `WorkflowTaskV0`, `agent_ref`
+ni entregas legacy. Si `CodexStackExternalJobStatsSourceV0` mira solo
+`Tasks/Agents`, OPES y otros consumidores ven `registered` aunque el trabajo ya
+este corriendo dentro de Codex Goal. Eso vuelve a empujar operadores hacia
+`/runs/supervise`, que ya no es el loop correcto para estos runs.
+Impacto: la fuente de stats recibe `AppGoalStateStore`; cuando encuentra
+`GoalWorkStateV0`, publica `director_execution_mode=goal_first`, refs de goal,
+estado de goal/cierre y status de external job derivado del state. Para
+contenedores goal-first sin state devuelve `goal_state_missing` y diagnostico
+de reparacion, no una tarea legacy registrada. Las runs sin state goal-first ni
+metadata siguen usando la proyeccion legacy por tareas/agentes.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-21
 Decision: El director puede avanzar con ACKs parciales y recoger ACKs tardios
 de la ola anterior.

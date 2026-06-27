@@ -7,6 +7,7 @@ import (
 
 	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
@@ -162,10 +163,53 @@ func TestMCPDirectorStatsToolExecutorV0ExponeGoalFirstSiExisteEstado(t *testing.
 		result.Goal.GoalRef != "goal-ref-mcp-director-stats-001" ||
 		result.Goal.ExternalGoalRef != "thread-ref-mcp-director-stats-001" ||
 		result.Goal.Status != "running" ||
-		len(result.Goal.EvidenceRefs) != 1 {
+		len(result.Goal.EvidenceRefs) != 1 ||
+		result.Stats == nil ||
+		result.Stats.Status != orquestagoal.GoalStatusRunningV0 ||
+		result.Stats.Closure.Status != orquestacionnucleoapp.DirectorClosureStatusReadyV0 ||
+		!result.Stats.Closure.Ready ||
+		result.Stats.Closure.Blocked ||
+		result.Stats.Closure.Closed {
 		t.Fatalf("goal=%+v result=%+v", result.Goal, result)
 	}
 	assertTransportPayloadSaneadoMCPTestV0(t, result, 13000)
+}
+
+func TestMCPDirectorStatsToolExecutorV0GoalFirstAceptadoCierraStats(t *testing.T) {
+	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-goal-accepted-001")
+	state := mcpDirectorGoalStateForTestV0(run.RunID)
+	state.Status = orquestagoal.GoalStatusCompleteV0
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		SchemaVersion: orquestagoal.GoalWorkResultSchemaV0,
+		Status:        orquestagoal.GoalStatusCompleteV0,
+		GoalRef:       state.GoalRef,
+		EvidenceRefs:  []string{"evidence-ref-mcp-director-stats-goal-result"},
+	}
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status:       orquestagoal.GoalStatusAcceptedV0,
+		Accepted:     true,
+		EvidenceRefs: []string{"evidence-ref-mcp-director-stats-goal-closure"},
+	}
+
+	result, err := (MCPDirectorStatsToolExecutorV0{
+		RunStore:        orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+		GoalStateSource: mcpDirectorGoalStateSourceForTestV0{State: state},
+	}).Execute(context.Background(), MCPDirectorStatsToolInputV0{RunRef: run.RunID})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPDirectorStatsEstadoOKV0 ||
+		result.Goal == nil ||
+		!result.Goal.ClosureAccepted ||
+		result.Goal.ClosureStatus != orquestagoal.GoalStatusAcceptedV0 ||
+		result.Stats == nil ||
+		result.Stats.Status != "closed" ||
+		result.Stats.Closure.Status != orquestacionnucleoapp.DirectorClosureStatusClosedV0 ||
+		!result.Stats.Closure.Closed ||
+		result.Stats.Closure.Ready ||
+		result.Stats.Closure.Blocked {
+		t.Fatalf("goal=%+v stats=%+v", result.Goal, result.Stats)
+	}
 }
 
 func TestMCPDirectorStatsToolExecutorV0CalculaControlSinExponerProcessRefs(t *testing.T) {

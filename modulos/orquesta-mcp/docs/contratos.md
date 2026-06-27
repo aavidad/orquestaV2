@@ -1499,6 +1499,11 @@ Invariantes:
     de esa run. Cuando la consulta es de cola y hay candidatos goal-first, no
     recomienda `supervise queue`; emite `observe_goal` por run goal-first y
     `supervise run` acotado para candidatos legacy visibles.
+  - Las clases `running_without_recent_stats`, `running_stale*` y las
+    proyecciones legacy de tareas/agentes (`registered`, `process_ref`,
+    `task_ref`) aplican solo a runs sin `GoalWorkStateV0`. En goal-first el
+    estado operativo se expresa por `goal_status`, `closure_status`,
+    `observe_goal` y evidencias de cierre del goal.
   - Para runs `running` visibles en cola puede consultar `director.stats` de
     forma acotada y con `include_process_refs`; si solo hay refs de proceso sin
     `process.status` verificado, publica `running_without_recent_stats`; solo

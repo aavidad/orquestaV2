@@ -73,19 +73,26 @@ type MCPDirectorGoalStatsV0 struct {
 }
 
 type MCPDirectorExternalJobStatsV0 struct {
-	AppRef       string                               `json:"app_ref,omitempty"`
-	JobRef       string                               `json:"job_ref"`
-	WorkKind     string                               `json:"work_kind,omitempty"`
-	ChangeRef    string                               `json:"change_ref,omitempty"`
-	RunRef       string                               `json:"run_ref,omitempty"`
-	TaskRef      string                               `json:"task_ref,omitempty"`
-	AgentRef     string                               `json:"agent_ref,omitempty"`
-	Status       string                               `json:"status,omitempty"`
-	StatusReason string                               `json:"status_reason,omitempty"`
-	DeliveryRefs []string                             `json:"delivery_refs,omitempty"`
-	IssueRefs    []string                             `json:"issue_refs,omitempty"`
-	EvidenceRefs []string                             `json:"evidence_refs,omitempty"`
-	Diagnostics  []MCPDirectorExternalJobDiagnosticV0 `json:"diagnostics,omitempty"`
+	AppRef                string                               `json:"app_ref,omitempty"`
+	JobRef                string                               `json:"job_ref"`
+	WorkKind              string                               `json:"work_kind,omitempty"`
+	ChangeRef             string                               `json:"change_ref,omitempty"`
+	RunRef                string                               `json:"run_ref,omitempty"`
+	TaskRef               string                               `json:"task_ref,omitempty"`
+	AgentRef              string                               `json:"agent_ref,omitempty"`
+	DirectorExecutionMode string                               `json:"director_execution_mode,omitempty"`
+	GoalRef               string                               `json:"goal_ref,omitempty"`
+	ExternalGoalRef       string                               `json:"external_goal_ref,omitempty"`
+	GoalStatus            string                               `json:"goal_status,omitempty"`
+	ClosureStatus         string                               `json:"closure_status,omitempty"`
+	ClosureAccepted       bool                                 `json:"closure_accepted,omitempty"`
+	ClosureNeedsRework    bool                                 `json:"closure_needs_rework,omitempty"`
+	Status                string                               `json:"status,omitempty"`
+	StatusReason          string                               `json:"status_reason,omitempty"`
+	DeliveryRefs          []string                             `json:"delivery_refs,omitempty"`
+	IssueRefs             []string                             `json:"issue_refs,omitempty"`
+	EvidenceRefs          []string                             `json:"evidence_refs,omitempty"`
+	Diagnostics           []MCPDirectorExternalJobDiagnosticV0 `json:"diagnostics,omitempty"`
 }
 
 type MCPDirectorExternalJobDiagnosticV0 struct {
@@ -218,6 +225,8 @@ func (executor MCPDirectorStatsToolExecutorV0) Execute(
 	executor.applyRunControlProjectionV0(ctx, runRef, &stats)
 	enrichMCPDirectorStatsRequestedAgentNotStartedV0(&stats)
 	enrichMCPDirectorStatsExternalWorkStoppedNoDeliveryV0(&stats)
+	goal := executor.resolveGoalStatsV0(ctx, stats.RunRef)
+	applyMCPDirectorGoalRunProjectionV0(goal, &stats)
 	decisionContext := buildMCPDirectorDecisionContextV0(run, stats, input.OccurredAt)
 	return MCPDirectorStatsToolResultV0{
 		Estado:          MCPDirectorStatsEstadoOKV0,
@@ -225,7 +234,7 @@ func (executor MCPDirectorStatsToolExecutorV0) Execute(
 		CorrelationID:   firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
 		RunRef:          stats.RunRef,
 		ExternalJob:     externalJob,
-		Goal:            executor.resolveGoalStatsV0(ctx, stats.RunRef),
+		Goal:            goal,
 		Stats:           &stats,
 		DecisionContext: decisionContext,
 		OpsSnapshot:     buildMCPDirectorStatsOpsSnapshotV0(stats, decisionContext, input.OccurredAt),
@@ -262,6 +271,48 @@ func (executor MCPDirectorStatsToolExecutorV0) resolveGoalStatsV0(
 		goal.ClosureNeedsRework = state.LastClosure.NeedsRework
 	}
 	return &goal
+}
+
+func applyMCPDirectorGoalRunProjectionV0(
+	goal *MCPDirectorGoalStatsV0,
+	stats *orquestacionnucleoapp.DirectorRunStatsV0,
+) {
+	if goal == nil || stats == nil || strings.TrimSpace(goal.GoalRef) == "" {
+		return
+	}
+	status := strings.ToLower(strings.TrimSpace(goal.Status))
+	closureStatus := strings.ToLower(strings.TrimSpace(goal.ClosureStatus))
+	switch {
+	case goal.ClosureAccepted || closureStatus == orquestagoal.GoalStatusAcceptedV0:
+		stats.Status = "closed"
+		stats.Closure = orquestacionnucleoapp.DirectorClosureStatsV0{
+			Status: orquestacionnucleoapp.DirectorClosureStatusClosedV0,
+			Closed: true,
+		}
+	case goal.ClosureNeedsRework ||
+		closureStatus == orquestagoal.GoalStatusBlockedV0 ||
+		status == orquestagoal.GoalStatusBlockedV0 ||
+		status == orquestagoal.GoalStatusInvalidV0:
+		stats.Status = orquestagoal.GoalStatusBlockedV0
+		stats.Closure = orquestacionnucleoapp.DirectorClosureStatsV0{
+			Status:      orquestacionnucleoapp.DirectorClosureStatusBlockedV0,
+			Blocked:     true,
+			BlockedBy:   []string{"goal_first"},
+			BlockerRefs: compactStringsMCPV0(goal.EvidenceRefs),
+		}
+	case status == orquestagoal.GoalStatusCompleteV0:
+		stats.Status = "goal_complete_pending_closure"
+		stats.Closure = orquestacionnucleoapp.DirectorClosureStatsV0{
+			Status: orquestacionnucleoapp.DirectorClosureStatusReadyV0,
+			Ready:  true,
+		}
+	default:
+		stats.Status = orquestagoal.GoalStatusRunningV0
+		stats.Closure = orquestacionnucleoapp.DirectorClosureStatsV0{
+			Status: orquestacionnucleoapp.DirectorClosureStatusReadyV0,
+			Ready:  true,
+		}
+	}
 }
 
 func (executor MCPDirectorStatsToolExecutorV0) applyRunControlProjectionV0(

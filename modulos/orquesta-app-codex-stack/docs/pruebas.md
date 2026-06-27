@@ -163,6 +163,10 @@ Cobertura Go actual:
 - `orquesta.director.stats.v0` recibe tambien `AppGoalStateStore` desde la
   composicion para publicar el bloque `goal` goal-first asociado a `run_ref`
   sin observar ni cerrar el goal desde stats.
+- `CodexStackExternalJobStatsSourceV0` usa tambien `GoalWorkStateV0` para
+  proyectar `external_job` goal-first: no publica `task_ref`/`agent_ref`
+  sinteticos ni deja el job como `registered` cuando el trabajo ya vive en
+  Codex Goal.
 - `TestCodexStackV0ReviewGateAceptaEntregaConEvidenciaReal` valida que el
   stack conecta review gate y acepta una entrega con fichero real manejable.
 - `TestCodexStackV0ReviewGateAceptaFicheroGrandeComoAviso` valida que una
@@ -1571,8 +1575,16 @@ Cobertura:
   fija que `/api/v0/external-work/run`, con backend Goal completo, devuelve
   `route_policy=goal_first`, persiste `GoalWorkStateV0`, crea run contenedora
   sin tareas/preguntas legacy, no encola el loop historico y redirige
-  `/runs/supervise` a `observe_goal`.
+  `/runs/supervise` a `observe_goal`. La consulta posterior a
+  `orquesta.director.stats.v0` por `external_job_ref` devuelve
+  `external_job.director_execution_mode=goal_first` y estado derivado de
+  `GoalWorkStateV0`.
 - `TestCodexStackV0ExternalWorkGoalFirstSinStateNoDrenaLegacy` fija que una run
   external-work contenedora sin `GoalWorkStateV0` devuelve
   `goal_first_state_missing`, no drena el loop legacy y deja accion de reparar
   el state.
+- `TestCodexStackExternalJobStatsSourceV0GoalFirstRunningNoQuedaRegistered`,
+  `TestCodexStackExternalJobStatsSourceV0GoalFirstAceptadoCompletaJob` y
+  `TestCodexStackExternalJobStatsSourceV0GoalFirstSinStateNoPareceLegacyRegistrado`
+  cubren la proyeccion focal de `external_job` desde Goal: running, cierre
+  aceptado y contenedor goal-first sin state.

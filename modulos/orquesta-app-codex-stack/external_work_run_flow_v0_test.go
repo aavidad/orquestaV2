@@ -109,6 +109,19 @@ func TestCodexStackV0ExternalWorkRunConBackendGoalArrancaGoalFirstSinColaLegacy(
 		!codexStackStringInSetForTestV0(supervisor.NextActions, "do_not_supervise_goal_first_with_legacy_loop") {
 		t.Fatalf("supervisor goal-first inesperado=%+v", supervisor)
 	}
+	jobStats := postOPESDirectorJobStatsV0(t, stack, "job-ref-001")
+	if jobStats.Estado != orquestamcp.MCPDirectorStatsEstadoOKV0 ||
+		jobStats.ExternalJob == nil ||
+		jobStats.ExternalJob.Status != "running" ||
+		jobStats.ExternalJob.StatusReason != codexStackExternalJobStatusReasonGoalFirstRunningV0 ||
+		jobStats.ExternalJob.DirectorExecutionMode != orquestamcp.MCPExternalWorkRunDirectorExecutionModeGoalFirstV0 ||
+		jobStats.ExternalJob.GoalRef != result.GoalRef ||
+		jobStats.ExternalJob.TaskRef != "" ||
+		jobStats.ExternalJob.AgentRef != "" ||
+		jobStats.Goal == nil ||
+		jobStats.Goal.GoalRef != result.GoalRef {
+		t.Fatalf("jobStats goal-first inesperado=%+v result=%+v", jobStats, result)
+	}
 }
 
 func TestCodexStackV0ExternalWorkGoalFirstSinStateNoDrenaLegacy(t *testing.T) {

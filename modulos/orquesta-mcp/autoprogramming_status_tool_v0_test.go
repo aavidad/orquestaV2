@@ -136,9 +136,23 @@ func TestMCPAutoprogrammingStatusExecutorV0RecomiendaObserveGoalParaRunGoalFirst
 					TasksTotal:     1,
 					AgentsInFlight: 1,
 				},
+				Progress: orquestacionnucleoapp.DirectorProgressStatsV0{
+					Tasks: []orquestacionnucleoapp.DirectorTaskProgressV0{{
+						TaskRef:        "task-ref-goal-first-legacy-residual-001",
+						Status:         "in_progress",
+						AgentRequestID: "agent-ref-goal-first-legacy-residual-001",
+					}},
+				},
 				Closure: orquestacionnucleoapp.DirectorClosureStatsV0{
 					Status: orquestacionnucleoapp.DirectorClosureStatusReadyV0,
 				},
+				Agents: []orquestacionnucleoapp.DirectorAgentStatsV0{{
+					AgentRequestID:    "agent-ref-goal-first-legacy-residual-001",
+					Status:            orquestacionnucleoapp.DirectorAgentStatusRunningV0,
+					InFlight:          true,
+					ControlRegistered: true,
+					ControlState:      orquestacionnucleoapp.DirectorAgentControlStateRegisteredV0,
+				}},
 			},
 		},
 		GoalStateStore: goalStates,
@@ -151,6 +165,17 @@ func TestMCPAutoprogrammingStatusExecutorV0RecomiendaObserveGoalParaRunGoalFirst
 	}
 	if !hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_goal_first_observe_required") {
 		t.Fatalf("diagnostics=%+v", result.Diagnostics)
+	}
+	if result.QueueHealth == nil ||
+		result.QueueHealth.RunningLive != 1 ||
+		result.QueueHealth.RunningWithoutRecentStats != 0 ||
+		result.QueueHealth.RunningStale != 0 ||
+		result.QueueHealth.RunningStaleNoProcess != 0 ||
+		len(result.StaleRunning) != 0 {
+		t.Fatalf("queue_health=%+v stale_running=%+v", result.QueueHealth, result.StaleRunning)
+	}
+	if len(result.Tasks) != 0 || len(result.Agents) != 0 {
+		t.Fatalf("goal-first no debe exponer proyecciones legacy: tasks=%+v agents=%+v", result.Tasks, result.Agents)
 	}
 	if result.Operator == nil ||
 		!hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "observe_goal", "run", runRef) ||
@@ -219,6 +244,14 @@ func TestMCPAutoprogrammingStatusExecutorV0ColaMixtaGoalFirstNoSupervisaColaGlob
 	}
 	if !hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_goal_first_observe_required") {
 		t.Fatalf("diagnostics=%+v", result.Diagnostics)
+	}
+	if result.QueueHealth == nil ||
+		result.QueueHealth.Queued != 1 ||
+		result.QueueHealth.RunningLive != 1 ||
+		result.QueueHealth.RunningWithoutRecentStats != 0 ||
+		result.QueueHealth.RunningStale != 0 ||
+		len(result.StaleRunning) != 0 {
+		t.Fatalf("queue_health=%+v stale_running=%+v", result.QueueHealth, result.StaleRunning)
 	}
 	if result.Operator == nil ||
 		!hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "observe_goal", "run", goalRunRef) ||

@@ -8,6 +8,7 @@ import (
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestaappchangedirectorsource "orquesta/modulos/orquesta-app-change-director-source"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
@@ -16,9 +17,18 @@ import (
 
 const (
 	codexStackExternalJobStatusIntegrationRequiredV0                = "integration_required"
+	codexStackExternalJobStatusGoalCompletePendingClosureV0         = "goal_complete_pending_closure"
+	codexStackExternalJobStatusGoalStateMissingV0                   = "goal_state_missing"
 	codexStackExternalJobStatusParentAckReceivedV0                  = "parent_ack_received"
 	codexStackExternalJobStatusParentRunningWithChildAckCollisionV0 = "parent_running_with_child_ack_collision"
 
+	codexStackExternalJobStatusReasonGoalFirstRunningV0                           = "goal_first_running"
+	codexStackExternalJobStatusReasonGoalFirstCompletePendingClosureV0            = "goal_first_complete_pending_closure"
+	codexStackExternalJobStatusReasonGoalFirstClosureAcceptedV0                   = "goal_first_closure_accepted"
+	codexStackExternalJobStatusReasonGoalFirstClosureBlockedV0                    = "goal_first_closure_blocked"
+	codexStackExternalJobStatusReasonGoalFirstBlockedV0                           = "goal_first_blocked"
+	codexStackExternalJobStatusReasonGoalFirstInvalidV0                           = "goal_first_invalid"
+	codexStackExternalJobStatusReasonGoalFirstStateMissingV0                      = "goal_first_state_missing"
 	codexStackExternalJobStatusReasonParentIntegrationPendingV0                   = "parent_integration_pending"
 	codexStackExternalJobStatusReasonCohortOpenV0                                 = "cohort_open"
 	codexStackExternalJobStatusReasonChildAckCollisionV0                          = "child_ack_collision"
@@ -30,6 +40,7 @@ type CodexStackExternalJobStatsSourceV0 struct {
 	AppChangeStore orquestaappchange.AppChangeRecordSourcePortV0
 	ReceiptStore   CodexReceiptStorePortV0
 	TaskStore      orquestacionnucleoapp.WorkflowTaskStorePortV0
+	GoalStateStore orquestagoal.GoalWorkStateStorePortV0
 }
 
 func (source CodexStackExternalJobStatsSourceV0) ResolveDirectorExternalJobStatsV0(
@@ -101,10 +112,23 @@ func (source CodexStackExternalJobStatsSourceV0) externalJobStatsForRecordV0(
 		)),
 	}
 	if source.RunStore == nil {
+		if source.applyExternalJobGoalFirstStatsV0(ctx, &stats) {
+			return stats, true, nil
+		}
 		return stats, true, nil
 	}
 	run, err := source.RunStore.LoadRunV0(ctx, runRef)
 	if err != nil {
+		if source.applyExternalJobGoalFirstStatsV0(ctx, &stats) {
+			return stats, true, nil
+		}
+		return stats, true, nil
+	}
+	if source.applyExternalJobGoalFirstStatsV0(ctx, &stats) {
+		return stats, true, nil
+	}
+	if codexStackRunSupervisorGoalFirstContainerWithoutStateV0(run) {
+		source.markExternalJobGoalFirstStateMissingV0(run, &stats)
 		return stats, true, nil
 	}
 	stats.Status = externalJobStatusFromRunV0(run, taskRef, agentRef)
@@ -115,6 +139,158 @@ func (source CodexStackExternalJobStatsSourceV0) externalJobStatsForRecordV0(
 	source.enrichExternalJobTaskDiagnosticsV0(ctx, run, &stats)
 	stats.EvidenceRefs = compactCodexStackStringsV0(append(stats.EvidenceRefs, stats.DeliveryRefs...))
 	return stats, true, nil
+}
+
+func (source CodexStackExternalJobStatsSourceV0) applyExternalJobGoalFirstStatsV0(
+	ctx context.Context,
+	stats *orquestamcp.MCPDirectorExternalJobStatsV0,
+) bool {
+	if stats == nil || source.GoalStateStore == nil || strings.TrimSpace(stats.RunRef) == "" {
+		return false
+	}
+	state, err := source.GoalStateStore.LoadGoalWorkStateV0(ctx, strings.TrimSpace(stats.RunRef))
+	if err != nil {
+		return false
+	}
+	state, err = orquestagoal.NewGoalWorkStateV0(state)
+	if err != nil {
+		return false
+	}
+	source.markExternalJobGoalFirstV0(stats, state)
+	return true
+}
+
+func (source CodexStackExternalJobStatsSourceV0) markExternalJobGoalFirstV0(
+	stats *orquestamcp.MCPDirectorExternalJobStatsV0,
+	state orquestagoal.GoalWorkStateV0,
+) {
+	stats.TaskRef = ""
+	stats.AgentRef = ""
+	stats.DirectorExecutionMode = "goal_first"
+	stats.GoalRef = strings.TrimSpace(state.GoalRef)
+	stats.ExternalGoalRef = strings.TrimSpace(state.ExternalGoalRef)
+	stats.GoalStatus = strings.TrimSpace(state.Status)
+	stats.Status, stats.StatusReason = externalJobGoalFirstStatusV0(state)
+	stats.EvidenceRefs = compactCodexStackStringsV0(append(
+		stats.EvidenceRefs,
+		externalJobGoalFirstEvidenceRefsV0(state)...,
+	))
+	if state.LastResult != nil {
+		stats.DeliveryRefs = compactCodexStackStringsV0(append(
+			stats.DeliveryRefs,
+			state.LastResult.DomainReceiptRefs...,
+		))
+	}
+	if state.LastClosure != nil {
+		stats.ClosureStatus = strings.TrimSpace(state.LastClosure.Status)
+		stats.ClosureAccepted = state.LastClosure.Accepted
+		stats.ClosureNeedsRework = state.LastClosure.NeedsRework
+	}
+	if stats.Status == "blocked" || stats.Status == codexStackExternalJobStatusGoalCompletePendingClosureV0 {
+		stats.IssueRefs = compactCodexStackStringsV0(append(
+			stats.IssueRefs,
+			"issue-ref-external-job-goal-first-"+codexStackOperationalClosureSafeRefV0(state.RunRef),
+		))
+	}
+	stats.Diagnostics = append(stats.Diagnostics, orquestamcp.MCPDirectorExternalJobDiagnosticV0{
+		Code:         stats.StatusReason,
+		Scope:        strings.TrimSpace(stats.JobRef),
+		Message:      externalJobGoalFirstDiagnosticMessageV0(stats.Status, stats.StatusReason),
+		EvidenceRefs: compactCodexStackStringsV0([]string{state.RunRef, state.GoalRef}),
+	})
+}
+
+func (source CodexStackExternalJobStatsSourceV0) markExternalJobGoalFirstStateMissingV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	stats *orquestamcp.MCPDirectorExternalJobStatsV0,
+) {
+	if stats == nil {
+		return
+	}
+	stats.TaskRef = ""
+	stats.AgentRef = ""
+	stats.DirectorExecutionMode = "goal_first"
+	stats.Status = codexStackExternalJobStatusGoalStateMissingV0
+	stats.StatusReason = codexStackExternalJobStatusReasonGoalFirstStateMissingV0
+	stats.IssueRefs = compactCodexStackStringsV0(append(
+		stats.IssueRefs,
+		"issue-ref-external-job-goal-state-missing-"+codexStackOperationalClosureSafeRefV0(run.RunID),
+	))
+	stats.EvidenceRefs = compactCodexStackStringsV0(append(
+		stats.EvidenceRefs,
+		run.RunID,
+		"evidence-ref-external-job-goal-first-container",
+		"evidence-ref-external-job-goal-state-missing",
+	))
+	stats.Diagnostics = append(stats.Diagnostics, orquestamcp.MCPDirectorExternalJobDiagnosticV0{
+		Code:         codexStackExternalJobStatusReasonGoalFirstStateMissingV0,
+		Scope:        strings.TrimSpace(stats.JobRef),
+		Message:      "run external-work goal-first sin GoalWorkStateV0 observable; no se proyecta como tarea legacy registrada",
+		EvidenceRefs: compactCodexStackStringsV0([]string{run.RunID, run.AppSpecRef}),
+	})
+}
+
+func externalJobGoalFirstStatusV0(
+	state orquestagoal.GoalWorkStateV0,
+) (string, string) {
+	if state.LastClosure != nil {
+		if state.LastClosure.Accepted {
+			return "completed", codexStackExternalJobStatusReasonGoalFirstClosureAcceptedV0
+		}
+		if state.LastClosure.NeedsRework ||
+			strings.TrimSpace(state.LastClosure.Status) == orquestagoal.GoalStatusBlockedV0 {
+			return "blocked", codexStackExternalJobStatusReasonGoalFirstClosureBlockedV0
+		}
+	}
+	switch strings.TrimSpace(state.Status) {
+	case orquestagoal.GoalStatusRunningV0, orquestagoal.GoalStatusAcceptedV0:
+		return "running", codexStackExternalJobStatusReasonGoalFirstRunningV0
+	case orquestagoal.GoalStatusCompleteV0:
+		return codexStackExternalJobStatusGoalCompletePendingClosureV0, codexStackExternalJobStatusReasonGoalFirstCompletePendingClosureV0
+	case orquestagoal.GoalStatusBlockedV0:
+		return "blocked", codexStackExternalJobStatusReasonGoalFirstBlockedV0
+	case orquestagoal.GoalStatusInvalidV0:
+		return "blocked", codexStackExternalJobStatusReasonGoalFirstInvalidV0
+	default:
+		return "registered", "goal_first_state_loaded"
+	}
+}
+
+func externalJobGoalFirstEvidenceRefsV0(
+	state orquestagoal.GoalWorkStateV0,
+) []string {
+	out := []string{state.RunRef, state.GoalRef, state.ExternalGoalRef}
+	out = append(out, state.EvidenceRefs...)
+	out = append(out, state.LaunchReceipt.EvidenceRefs...)
+	if state.LastResult != nil {
+		out = append(out, state.LastResult.EvidenceRefs...)
+		out = append(out, state.LastResult.ArtifactRefs...)
+		out = append(out, state.LastResult.DomainReceiptRefs...)
+	}
+	if state.LastClosure != nil {
+		out = append(out, state.LastClosure.EvidenceRefs...)
+	}
+	return compactCodexStackStringsV0(out)
+}
+
+func externalJobGoalFirstDiagnosticMessageV0(
+	status string,
+	reason string,
+) string {
+	switch reason {
+	case codexStackExternalJobStatusReasonGoalFirstRunningV0:
+		return "external job gobernado por GoalWorkStateV0; el loop legacy no aplica"
+	case codexStackExternalJobStatusReasonGoalFirstClosureAcceptedV0:
+		return "external job cerrado por goal-first con cierre aceptado"
+	case codexStackExternalJobStatusReasonGoalFirstClosureBlockedV0,
+		codexStackExternalJobStatusReasonGoalFirstBlockedV0,
+		codexStackExternalJobStatusReasonGoalFirstInvalidV0:
+		return "external job goal-first bloqueado; observar goal/rework en vez de supervisor legacy"
+	case codexStackExternalJobStatusReasonGoalFirstCompletePendingClosureV0:
+		return "goal completo pendiente de cierre validado; observar goal antes de completar el job externo"
+	default:
+		return "external job goal-first proyectado desde GoalWorkStateV0: " + strings.TrimSpace(status)
+	}
 }
 
 func (source CodexStackExternalJobStatsSourceV0) enrichExternalJobTaskDiagnosticsV0(

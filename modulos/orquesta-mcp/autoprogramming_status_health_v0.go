@@ -3,6 +3,7 @@ package orquestamcp
 import (
 	"strings"
 
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
@@ -21,6 +22,7 @@ const (
 
 func buildMCPAutoprogrammingQueueHealthV0(
 	queue *MCPRunQueuePriorityToolResultV0,
+	goalStatesByRunRef map[string]orquestagoal.GoalWorkStateV0,
 	run *MCPDirectorStatsToolResultV0,
 	observedRuns ...*MCPDirectorStatsToolResultV0,
 ) *MCPAutoprogrammingQueueHealthV0 {
@@ -33,7 +35,12 @@ func buildMCPAutoprogrammingQueueHealthV0(
 	if queue != nil {
 		health.QueueRuns = len(queue.Ranked)
 		for _, item := range queue.Ranked {
-			seen[strings.TrimSpace(item.RunRef)] = true
+			runRef := strings.TrimSpace(item.RunRef)
+			seen[runRef] = true
+			if state, ok := goalStatesByRunRef[runRef]; ok {
+				applyMCPAutoprogrammingGoalHealthV0(&health, state)
+				continue
+			}
 			applyMCPAutoprogrammingHealthClassV0(
 				&health,
 				classifyMCPAutoprogrammingQueueStatusV0(item.Status),
@@ -50,12 +57,16 @@ func buildMCPAutoprogrammingQueueHealthV0(
 		if item, ok := queueCandidateForRunMCPAutoprogrammingHealthV0(queue, runRef); ok {
 			applyMCPAutoprogrammingHealthClassV0(
 				&health,
-				classifyMCPAutoprogrammingQueueStatusV0(item.Status),
+				classifyMCPAutoprogrammingQueuedRunHealthV0(item, goalStatesByRunRef),
 				-1,
 			)
 		}
-		health.AgentsLive += liveAgentsMCPAutoprogrammingRunStatsV0(*run.Stats)
-		applyMCPAutoprogrammingRunHealthV0(&health, *run.Stats)
+		if state, ok := goalStatesByRunRef[runRef]; ok {
+			applyMCPAutoprogrammingGoalHealthV0(&health, state)
+		} else {
+			health.AgentsLive += liveAgentsMCPAutoprogrammingRunStatsV0(*run.Stats)
+			applyMCPAutoprogrammingRunHealthV0(&health, *run.Stats)
+		}
 	}
 	for _, observed := range observedRuns {
 		if observed == nil || observed.Stats == nil {
@@ -70,9 +81,13 @@ func buildMCPAutoprogrammingQueueHealthV0(
 		if item, ok := queueCandidateForRunMCPAutoprogrammingHealthV0(queue, runRef); ok {
 			applyMCPAutoprogrammingHealthClassV0(
 				&health,
-				classifyMCPAutoprogrammingQueueStatusV0(item.Status),
+				classifyMCPAutoprogrammingQueuedRunHealthV0(item, goalStatesByRunRef),
 				-1,
 			)
+		}
+		if state, ok := goalStatesByRunRef[runRef]; ok {
+			applyMCPAutoprogrammingGoalHealthV0(&health, state)
+			continue
 		}
 		health.AgentsLive += liveAgentsMCPAutoprogrammingRunStatsV0(*observed.Stats)
 		applyMCPAutoprogrammingRunHealthV0(&health, *observed.Stats)
@@ -80,6 +95,16 @@ func buildMCPAutoprogrammingQueueHealthV0(
 	health.StatsRuns = countMCPAutoprogrammingSeenRunsV0(statsSeen)
 	health.ObservedRuns = countMCPAutoprogrammingSeenRunsV0(seen)
 	return &health
+}
+
+func classifyMCPAutoprogrammingQueuedRunHealthV0(
+	item MCPRunQueueRankedCandidateCompactV0,
+	goalStatesByRunRef map[string]orquestagoal.GoalWorkStateV0,
+) string {
+	if state, ok := goalStatesByRunRef[strings.TrimSpace(item.RunRef)]; ok {
+		return classifyMCPAutoprogrammingGoalStateV0(state)
+	}
+	return classifyMCPAutoprogrammingQueueStatusV0(item.Status)
 }
 
 func classifyMCPAutoprogrammingQueueStatusV0(status string) string {
@@ -98,6 +123,42 @@ func classifyMCPAutoprogrammingQueueStatusV0(status string) string {
 		return mcpAutoprogrammingHealthFailedV0
 	default:
 		return mcpAutoprogrammingHealthUnclassifiedV0
+	}
+}
+
+func applyMCPAutoprogrammingGoalHealthV0(
+	health *MCPAutoprogrammingQueueHealthV0,
+	state orquestagoal.GoalWorkStateV0,
+) {
+	applyMCPAutoprogrammingHealthClassV0(
+		health,
+		classifyMCPAutoprogrammingGoalStateV0(state),
+		1,
+	)
+}
+
+func classifyMCPAutoprogrammingGoalStateV0(
+	state orquestagoal.GoalWorkStateV0,
+) string {
+	status := strings.ToLower(strings.TrimSpace(state.Status))
+	if state.LastClosure != nil {
+		closureStatus := strings.ToLower(strings.TrimSpace(state.LastClosure.Status))
+		if state.LastClosure.Accepted || closureStatus == orquestagoal.GoalStatusAcceptedV0 {
+			return mcpAutoprogrammingHealthCompletedV0
+		}
+		if state.LastClosure.NeedsRework || closureStatus == orquestagoal.GoalStatusBlockedV0 {
+			return mcpAutoprogrammingHealthBlockedV0
+		}
+	}
+	switch status {
+	case orquestagoal.GoalStatusBlockedV0, orquestagoal.GoalStatusInvalidV0:
+		return mcpAutoprogrammingHealthBlockedV0
+	case orquestagoal.GoalStatusCompleteV0,
+		orquestagoal.GoalStatusRunningV0,
+		orquestagoal.GoalStatusAcceptedV0:
+		return mcpAutoprogrammingHealthRunningLiveV0
+	default:
+		return mcpAutoprogrammingHealthRunningLiveV0
 	}
 }
 

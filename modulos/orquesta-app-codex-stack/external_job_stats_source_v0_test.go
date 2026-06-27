@@ -7,6 +7,7 @@ import (
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestaappchangedirectorsource "orquesta/modulos/orquesta-app-change-director-source"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
@@ -145,6 +146,74 @@ func TestCodexStackExternalJobStatsSourceV0PriorizaLostSobreStarted(t *testing.T
 	}
 }
 
+func TestCodexStackExternalJobStatsSourceV0GoalFirstRunningNoQuedaRegistered(t *testing.T) {
+	fixture := newCodexStackExternalJobGoalFirstStatsFixtureV0(t, orquestagoal.GoalStatusRunningV0, false)
+
+	stats, ok, err := fixture.source.ResolveDirectorExternalJobStatsV0(
+		context.Background(),
+		fixture.request,
+	)
+
+	if err != nil {
+		t.Fatalf("ResolveDirectorExternalJobStatsV0: %v", err)
+	}
+	if !ok ||
+		stats.Status != "running" ||
+		stats.StatusReason != codexStackExternalJobStatusReasonGoalFirstRunningV0 ||
+		stats.DirectorExecutionMode != "goal_first" ||
+		stats.GoalRef != fixture.goalRef ||
+		stats.TaskRef != "" ||
+		stats.AgentRef != "" ||
+		!codexStackExternalJobDiagnosticForTestV0(stats.Diagnostics, codexStackExternalJobStatusReasonGoalFirstRunningV0) {
+		t.Fatalf("stats=%+v", stats)
+	}
+}
+
+func TestCodexStackExternalJobStatsSourceV0GoalFirstAceptadoCompletaJob(t *testing.T) {
+	fixture := newCodexStackExternalJobGoalFirstStatsFixtureV0(t, orquestagoal.GoalStatusCompleteV0, true)
+
+	stats, ok, err := fixture.source.ResolveDirectorExternalJobStatsV0(
+		context.Background(),
+		fixture.request,
+	)
+
+	if err != nil {
+		t.Fatalf("ResolveDirectorExternalJobStatsV0: %v", err)
+	}
+	if !ok ||
+		stats.Status != "completed" ||
+		stats.StatusReason != codexStackExternalJobStatusReasonGoalFirstClosureAcceptedV0 ||
+		!stats.ClosureAccepted ||
+		stats.ClosureStatus != orquestagoal.GoalStatusAcceptedV0 ||
+		!codexStackStringInSetForTestV0(stats.DeliveryRefs, "domain-receipt-ref-goal-first-external-job-001") ||
+		!codexStackExternalJobDiagnosticForTestV0(stats.Diagnostics, codexStackExternalJobStatusReasonGoalFirstClosureAcceptedV0) {
+		t.Fatalf("stats=%+v", stats)
+	}
+}
+
+func TestCodexStackExternalJobStatsSourceV0GoalFirstSinStateNoPareceLegacyRegistrado(t *testing.T) {
+	fixture := newCodexStackExternalJobGoalFirstStatsFixtureV0(t, orquestagoal.GoalStatusRunningV0, false)
+	fixture.source.GoalStateStore = newGoalFirstQueueStateStoreForTestV0()
+
+	stats, ok, err := fixture.source.ResolveDirectorExternalJobStatsV0(
+		context.Background(),
+		fixture.request,
+	)
+
+	if err != nil {
+		t.Fatalf("ResolveDirectorExternalJobStatsV0: %v", err)
+	}
+	if !ok ||
+		stats.Status != codexStackExternalJobStatusGoalStateMissingV0 ||
+		stats.StatusReason != codexStackExternalJobStatusReasonGoalFirstStateMissingV0 ||
+		stats.DirectorExecutionMode != "goal_first" ||
+		stats.TaskRef != "" ||
+		stats.AgentRef != "" ||
+		!codexStackExternalJobDiagnosticForTestV0(stats.Diagnostics, codexStackExternalJobStatusReasonGoalFirstStateMissingV0) {
+		t.Fatalf("stats=%+v", stats)
+	}
+}
+
 type codexStackExternalJobSubrolesStatsFixtureV0 struct {
 	source  CodexStackExternalJobStatsSourceV0
 	request orquestamcp.MCPDirectorExternalJobStatsRequestV0
@@ -226,6 +295,116 @@ func newCodexStackExternalJobSubrolesStatsFixtureV0(
 		},
 		parent: parent,
 		run:    run,
+	}
+}
+
+type codexStackExternalJobGoalFirstStatsFixtureV0 struct {
+	source  CodexStackExternalJobStatsSourceV0
+	request orquestamcp.MCPDirectorExternalJobStatsRequestV0
+	runRef  string
+	goalRef string
+}
+
+func newCodexStackExternalJobGoalFirstStatsFixtureV0(
+	t *testing.T,
+	status string,
+	closureAccepted bool,
+) codexStackExternalJobGoalFirstStatsFixtureV0 {
+	t.Helper()
+	const (
+		runRef    = "run-ref-external-job-goal-first-001"
+		changeRef = "opes-job-job-ref-external-job-goal-first-001"
+		jobRef    = "job-ref-external-job-goal-first-001"
+	)
+	goalRef := "goal-ref-external-job-goal-first-001"
+	run := orquestacoreworkflow.OrchestrationRunV0{
+		SchemaVersion: orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
+		RunID:         runRef,
+		ProjectRef:    "opes",
+		AppSpecRef:    "app-spec-external-work-opes",
+		Status:        orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+		CurrentPhase:  orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		Phases:        orquestacoreworkflow.OrchestrationPhaseCatalogV0(),
+	}
+	record := orquestaappchange.AppChangeRecordV0{
+		Request: orquestaappchange.AppChangeRequestV0{
+			RunRef:    runRef,
+			AppRef:    "opes",
+			ChangeRef: changeRef,
+			ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+				ProjectRef: "opes",
+				JobRef:     jobRef,
+				WorkKind:   "draft_content_block",
+			},
+		},
+	}
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	state := orquestagoal.GoalWorkStateV0{
+		SchemaVersion:   orquestagoal.GoalWorkStateSchemaV0,
+		RunRef:          runRef,
+		GoalRef:         goalRef,
+		ExternalGoalRef: "thread-ref-external-job-goal-first-001",
+		Status:          status,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			GoalRef:       goalRef,
+			RunRef:        runRef,
+			ProjectRef:    "opes",
+			DomainRef:     "opes",
+			WorkKind:      "draft_content_block",
+			Objective:     "Resolver trabajo externo OPES por goal-first.",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet: []orquestagoal.GoalWriteScopeV0{{
+				Path: "external/opes/draft_content_block/job-ref-external-job-goal-first-001",
+			}},
+			AcceptanceCriteria: []string{"entrega OPES trazable"},
+			ArtifactContracts: []orquestagoal.GoalArtifactContractV0{{
+				ArtifactRef:  "artifact-ref-goal-first-external-job-001",
+				ArtifactType: "content_block",
+				Required:     true,
+			}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         goalRef,
+			ExternalGoalRef: "thread-ref-external-job-goal-first-001",
+			EvidenceRefs:    []string{"evidence-ref-goal-first-external-job-launch"},
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-first-external-job-state"},
+	}
+	if closureAccepted {
+		state.LastResult = &orquestagoal.GoalWorkResultV0{
+			SchemaVersion:     orquestagoal.GoalWorkResultSchemaV0,
+			Status:            orquestagoal.GoalStatusCompleteV0,
+			GoalRef:           goalRef,
+			ArtifactRefs:      []string{"artifact-ref-goal-first-external-job-001"},
+			DomainReceiptRefs: []string{"domain-receipt-ref-goal-first-external-job-001"},
+			EvidenceRefs:      []string{"evidence-ref-goal-first-external-job-result"},
+		}
+		state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+			Status:       orquestagoal.GoalStatusAcceptedV0,
+			Accepted:     true,
+			EvidenceRefs: []string{"evidence-ref-goal-first-external-job-closure"},
+		}
+	}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	return codexStackExternalJobGoalFirstStatsFixtureV0{
+		source: CodexStackExternalJobStatsSourceV0{
+			RunStore:       orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+			AppChangeStore: orquestaappchange.NewInMemoryAppChangeStoreV0(record),
+			ReceiptStore:   orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(),
+			TaskStore:      orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(),
+			GoalStateStore: goalStates,
+		},
+		request: orquestamcp.MCPDirectorExternalJobStatsRequestV0{
+			AppRef:         "opes",
+			ExternalJobRef: jobRef,
+		},
+		runRef:  runRef,
+		goalRef: goalRef,
 	}
 }
 

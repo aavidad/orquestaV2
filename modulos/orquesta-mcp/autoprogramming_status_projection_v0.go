@@ -64,8 +64,12 @@ func queueAppRefForRunMCPAutoprogrammingV0(
 
 func buildMCPAutoprogrammingTasksV0(
 	run *MCPDirectorStatsToolResultV0,
+	goalFirstRunRefs map[string]bool,
 ) []MCPAutoprogrammingTaskV0 {
 	if run == nil || run.Stats == nil {
+		return []MCPAutoprogrammingTaskV0{}
+	}
+	if mcpAutoprogrammingRunIsGoalFirstV0(run, goalFirstRunRefs) {
 		return []MCPAutoprogrammingTaskV0{}
 	}
 	out := make([]MCPAutoprogrammingTaskV0, 0, len(run.Stats.Progress.Tasks))
@@ -96,8 +100,12 @@ func buildMCPAutoprogrammingTasksV0(
 
 func buildMCPAutoprogrammingAgentsV0(
 	run *MCPDirectorStatsToolResultV0,
+	goalFirstRunRefs map[string]bool,
 ) []MCPAutoprogrammingAgentV0 {
 	if run == nil || run.Stats == nil {
+		return []MCPAutoprogrammingAgentV0{}
+	}
+	if mcpAutoprogrammingRunIsGoalFirstV0(run, goalFirstRunRefs) {
 		return []MCPAutoprogrammingAgentV0{}
 	}
 	out := make([]MCPAutoprogrammingAgentV0, 0, len(run.Stats.Agents))
@@ -154,6 +162,22 @@ func buildMCPAutoprogrammingAgentsV0(
 		out = append(out, item)
 	}
 	return out
+}
+
+func mcpAutoprogrammingRunIsGoalFirstV0(
+	run *MCPDirectorStatsToolResultV0,
+	goalFirstRunRefs map[string]bool,
+) bool {
+	if run == nil {
+		return false
+	}
+	if run.Goal != nil && strings.TrimSpace(run.Goal.GoalRef) != "" {
+		return true
+	}
+	if run.Stats == nil || len(goalFirstRunRefs) == 0 {
+		return false
+	}
+	return goalFirstRunRefs[strings.TrimSpace(run.Stats.RunRef)]
 }
 
 func projectProjectionMCPAutoprogrammingV0(
