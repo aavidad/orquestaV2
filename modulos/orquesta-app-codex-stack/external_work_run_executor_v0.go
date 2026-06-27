@@ -25,18 +25,16 @@ func externalWorkRunExecutorV0(
 		},
 	)
 	ports := buildDirectorPortsV0(config)
-	if externalWorkGoalFirstBackendAvailableV0(ports) {
-		return NewCodexStackExternalWorkGoalFirstExecutorV0(
-			legacy,
-			ports,
-			orquestaexternalworkrun.StartExternalWorkRunConfigV0{
-				QueueRef:             queueConfig.QueueRef,
-				DefaultPriorityScore: queueConfig.DefaultPriorityScore,
-				OccurredAt:           config.Capacity.OccurredAt,
-				RequestedBy:          config.Capacity.RequestedBy,
-			},
-			config.Stores.AppChangeStore,
-		)
-	}
-	return legacy
+	return NewCodexStackExternalWorkGoalFirstExecutorV0(
+		legacy,
+		ports,
+		orquestaexternalworkrun.StartExternalWorkRunConfigV0{
+			QueueRef:             queueConfig.QueueRef,
+			DefaultPriorityScore: queueConfig.DefaultPriorityScore,
+			OccurredAt:           config.Capacity.OccurredAt,
+			RequestedBy:          config.Capacity.RequestedBy,
+		},
+		config.Stores.AppChangeStore,
+		config.AllowLegacyExternalWorkRun,
+	)
 }

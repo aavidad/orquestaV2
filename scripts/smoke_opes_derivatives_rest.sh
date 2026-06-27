@@ -573,6 +573,10 @@ PY
 post_supervise_run() {
   local run_ref="$1"
   local tick="$2"
+  smoke_require_confirm \
+    ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP \
+    1 \
+    "fallback legacy desactivado: exporta ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1 para supervisar runs no goal-first"
   local payload_file="$SMOKE_OUT_DIR/supervise_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}.json"
   local response_file="$SMOKE_OUT_DIR/supervise_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_response.json"
   write_supervise_payload "$run_ref" "$tick" "$payload_file"

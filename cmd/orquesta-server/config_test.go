@@ -156,6 +156,33 @@ func TestServerConfigFromEnvV0GoalFirstExplicitoFalseGanaABackendCodexGoalV0(t *
 	}
 }
 
+func TestServerConfigFromEnvV0ExternalWorkLegacyDirectorLoopPorDefectoFalseV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envExternalWorkLegacyDirectorLoopV0)
+	if setting.Value != "false" || setting.Source != "defaulted" {
+		t.Fatalf("setting external-work legacy=%+v", setting)
+	}
+}
+
+func TestServerConfigFromEnvV0ExternalWorkLegacyDirectorLoopOptInVisibleV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envExternalWorkLegacyDirectorLoopV0, "true")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envExternalWorkLegacyDirectorLoopV0)
+	if setting.Value != "true" || setting.Source != "explicit" {
+		t.Fatalf("setting external-work legacy=%+v", setting)
+	}
+}
+
 func TestServerConfigFromEnvV0PerfilAutonomiaActivaDirectorResidenteV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envServerAutonomyEnabledV0, "true")

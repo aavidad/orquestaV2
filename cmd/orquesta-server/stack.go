@@ -241,6 +241,10 @@ func buildStackFromEnvWithGoalBackendV0(
 		AutoprogrammingPromotion: autoprogrammingPromotionConfigFromEnvV0(serverConfig),
 		DomainWork:               domainWorkExecutor,
 		ExternalWorkRunGuard:     externalWorkRunProjectWorkDirGuardConfigFromEnvV0(serverConfig),
+		AllowLegacyExternalWorkRun: boolEnvOrDefaultV0(
+			envExternalWorkLegacyDirectorLoopV0,
+			false,
+		),
 		DomainDelivery: orquestaappcodexstack.DomainWorkDeliveryBridgeConfigV0{
 			Enabled: domainWorkDeliveryEnabledFromEnvV0(),
 			Ledger:  domainDeliveryLedger,

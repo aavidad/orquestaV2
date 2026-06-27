@@ -284,11 +284,11 @@ evidencia focal propia.
   idempotencia, snapshot file-based, `external-work/run`, ejecucion de
   `codex-fake` por runtime/servidor, artefacto, delivery durable sin OPES,
   recuperacion de delivery tardia tras wait expirado, review aceptada,
-  reentrada viva post-delivery por `/api/v0/runs/supervise`, runner fake de
-  required tests, evidencia durable y cierre operativo. Falta convertir ese
-  validador fake en politica productiva de tests de dominio no-OPES. Eso queda
-  fuera del hueco de cierre, porque el smoke temporal no-OPES ya cerro el ciclo
-  operativo por refs opacas.
+  reentrada viva post-delivery por `/api/v0/runs/supervise` en ruta legacy,
+  runner fake de required tests, evidencia durable y cierre operativo. Esa
+  evidencia queda clasificada como compatibilidad historica; falta equivalente
+  goal-first no-OPES sin empujar el loop antiguo y falta convertir ese validador
+  fake en politica productiva de tests de dominio no-OPES.
 - El expander neutral de `DomainDocumentPlanV0 -> DomainWorkJobRequestV0[]`
   tiene cobertura offline y ya se integra con un conector durable file-based;
   falta un smoke real de app externa no acoplada.

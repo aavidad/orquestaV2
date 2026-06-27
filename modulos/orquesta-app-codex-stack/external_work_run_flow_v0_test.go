@@ -48,6 +48,33 @@ func TestCodexStackV0ExternalWorkRunCreaRunSinDirectorInicial(t *testing.T) {
 	}
 }
 
+func TestCodexStackV0ExternalWorkRunSinBackendGoalNoDegradaLegacyPorDefecto(t *testing.T) {
+	config := codexStackBaseConfigForTestV0(t, newFakeCodexStackRuntimeV0(), nil, nil)
+	config.AllowLegacyExternalWorkRun = false
+	stack, err := BuildStackV0(config)
+	if err != nil {
+		t.Fatalf("BuildStackV0: %v", err)
+	}
+
+	result := postExternalWorkRunStackRawV0(t, stack, http.StatusBadRequest, defaultExternalWorkRunChangeForTestV0())
+	if result.Estado != orquestamcp.MCPExternalWorkRunEstadoErrorV0 ||
+		result.RoutePolicy != orquestamcp.MCPExternalWorkRunRoutePolicyGoalFirstV0 ||
+		result.DirectorExecutionMode != orquestamcp.MCPExternalWorkRunDirectorExecutionModeGoalFirstV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != orquestamcp.MCPExternalWorkRunGoalBackendRequiredV0 ||
+		!codexStackStringInSetForTestV0(result.NextActions, orquestamcp.MCPExternalWorkRunNextActionConfigureGoalBackendV0) ||
+		!codexStackStringInSetForTestV0(result.NextActions, orquestamcp.MCPExternalWorkRunNextActionDoNotFallbackLegacyV0) {
+		t.Fatalf("result sin backend goal inesperado=%+v", result)
+	}
+	ranking := postRunQueuePriorityStackV0(t, stack, orquestamcp.MCPRunQueuePriorityToolInputV0{
+		Action:   "rank",
+		QueueRef: DefaultRunQueueRefV0,
+	})
+	if len(ranking.Ranked) != 0 {
+		t.Fatalf("sin backend goal no debe encolar legacy: ranking=%+v", ranking)
+	}
+}
+
 func TestCodexStackV0ExternalWorkRunConBackendGoalArrancaGoalFirstSinColaLegacy(t *testing.T) {
 	launcher := &goalFirstQueueLauncherForTestV0{}
 	goalStates := newGoalFirstQueueStateStoreForTestV0()
@@ -661,7 +688,11 @@ func postExternalWorkRunStackV0(
 	stack StackV0,
 ) orquestamcp.MCPExternalWorkRunToolResultV0 {
 	t.Helper()
-	return postExternalWorkRunStackWithChangeV0(t, stack, orquestaappchange.AppChangeRequestV0{
+	return postExternalWorkRunStackWithChangeV0(t, stack, defaultExternalWorkRunChangeForTestV0())
+}
+
+func defaultExternalWorkRunChangeForTestV0() orquestaappchange.AppChangeRequestV0 {
+	return orquestaappchange.AppChangeRequestV0{
 		ChangeRef:  "opes-job-job-ref-001",
 		AppRef:     "opes",
 		UserIntent: "Resolver trabajo externo de OPES.",
@@ -677,12 +708,22 @@ func postExternalWorkRunStackV0(
 				Value: "topic-ref-001",
 			}},
 		},
-	})
+	}
 }
 
 func postExternalWorkRunStackWithChangeV0(
 	t *testing.T,
 	stack StackV0,
+	change orquestaappchange.AppChangeRequestV0,
+) orquestamcp.MCPExternalWorkRunToolResultV0 {
+	t.Helper()
+	return postExternalWorkRunStackRawV0(t, stack, http.StatusOK, change)
+}
+
+func postExternalWorkRunStackRawV0(
+	t *testing.T,
+	stack StackV0,
+	wantStatus int,
 	change orquestaappchange.AppChangeRequestV0,
 ) orquestamcp.MCPExternalWorkRunToolResultV0 {
 	t.Helper()
@@ -700,14 +741,14 @@ func postExternalWorkRunStackWithChangeV0(
 	req := httptest.NewRequest(http.MethodPost, "/api/v0/external-work/run", body)
 	req.Header.Set("Content-Type", "application/json")
 	stack.Handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
+	if rec.Code != wantStatus {
 		t.Fatalf("external work run status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	var result orquestamcp.MCPExternalWorkRunToolResultV0
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode external work run: %v", err)
 	}
-	if result.Estado != orquestamcp.MCPExternalWorkRunEstadoOKV0 {
+	if wantStatus == http.StatusOK && result.Estado != orquestamcp.MCPExternalWorkRunEstadoOKV0 {
 		t.Fatalf("result=%+v", result)
 	}
 	return result

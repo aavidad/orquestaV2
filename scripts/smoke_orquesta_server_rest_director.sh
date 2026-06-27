@@ -4,6 +4,12 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/lib/smoke_common.sh
 source "$repo_root/scripts/lib/smoke_common.sh"
+
+smoke_require_confirm \
+  ORQUESTA_LEGACY_DIRECTOR_LOOP_SMOKE_CONFIRM \
+  1 \
+  "smoke legacy desactivado: exporta ORQUESTA_LEGACY_DIRECTOR_LOOP_SMOKE_CONFIRM=1 para probar el loop historico"
+
 work_root="$(mktemp -d "${TMPDIR:-/tmp}/orquesta-server-rest-smoke.XXXXXX")"
 smoke_temp_root_prepare "$work_root" "generated"
 state_dir="$work_root/state"

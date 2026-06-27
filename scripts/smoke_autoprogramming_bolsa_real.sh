@@ -6,6 +6,11 @@ smoke_id="${SMOKE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 # shellcheck source=scripts/lib/smoke_common.sh
 source "$repo_root/scripts/lib/smoke_common.sh"
 
+smoke_require_confirm \
+  ORQUESTA_LEGACY_DIRECTOR_LOOP_SMOKE_CONFIRM \
+  1 \
+  "smoke legacy autoprogramacion desactivado: exporta ORQUESTA_LEGACY_DIRECTOR_LOOP_SMOKE_CONFIRM=1 para probar supervise historico"
+
 smoke_root_source="generated"
 if [[ -n "${ORQUESTA_SMOKE_ROOT:-}" ]]; then
   smoke_root_source="env:ORQUESTA_SMOKE_ROOT"

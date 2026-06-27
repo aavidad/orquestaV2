@@ -10,6 +10,11 @@ smoke_require_confirm \
   1 \
   "smoke real desactivado: exporta ORQUESTA_OPES_REVIEW_PROVIDER_SMOKE_CONFIRM=1"
 
+smoke_require_confirm \
+  ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP \
+  1 \
+  "smoke legacy external-work desactivado: exporta ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1 para probar revisiones por loop historico"
+
 PROJECT_DIR="${ORQUESTA_OPES_REVIEW_PROJECT_DIR:-}"
 if [[ -z "$PROJECT_DIR" || ! -d "$PROJECT_DIR" ]]; then
   echo "define ORQUESTA_OPES_REVIEW_PROJECT_DIR con el paquete OPES local a revisar" >&2

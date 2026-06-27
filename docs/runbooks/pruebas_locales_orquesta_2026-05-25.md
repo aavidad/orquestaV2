@@ -49,14 +49,18 @@ curl -sS -X POST http://127.0.0.1:8787/api/v0/autoprogramming/prepare-run \
   -H 'Content-Type: application/json' \
   --data @prepare-local-auth-probe.json
 
-curl -sS -X POST http://127.0.0.1:8787/api/v0/autoprogramming/supervise \
+curl -sS -X POST http://127.0.0.1:8787/api/v0/autoprogramming/goal/observe \
   -H 'Content-Type: application/json' \
-  --data '{"max_ticks":1}'
+  --data '{"run_ref":"RUN_REF"}'
 
 curl -sS -X POST http://127.0.0.1:8787/api/v0/autoprogramming/status \
   -H 'Content-Type: application/json' \
   --data '{"run_ref":"RUN_REF"}'
 ```
+
+Para runs legacy no migrados puede usarse `autoprogramming/supervise` como
+diagnostico/compatibilidad, pero no como avance normal cuando `prepare-run`
+devuelve `director_execution_mode=goal_first` o `goal_ref`.
 
 El payload `prepare-local-auth-probe.json` debe declarar:
 

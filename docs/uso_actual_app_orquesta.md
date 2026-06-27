@@ -69,7 +69,8 @@ API HTTP versionada:
 - `POST /api/v0/apps/{app_ref}/changes`
 - `POST /api/v0/director/stats`
 - `POST /api/v0/director/human-work/review-plan`
-- `POST /api/v0/runs/supervise`
+- `POST /api/v0/runs/supervise` (compatibilidad legacy/diagnostico; no usar
+  como avance normal de runs `goal_first`)
 - `POST /api/v0/runs/control`
 - `POST /api/v0/runs/queue/priority`
 - `POST /api/v0/autoprogramming/validate-request`

@@ -16,10 +16,11 @@ import (
 )
 
 type CodexStackExternalWorkGoalFirstExecutorV0 struct {
-	Legacy         orquestamcp.MCPTransportExternalWorkRunExecutorV0
-	Ports          orquestaappdirectorservice.StartAppDirectorPortsV0
-	Config         orquestaexternalworkrun.StartExternalWorkRunConfigV0
-	AppChangeStore orquestaappchange.AppChangeRecordStorePortV0
+	Legacy                  orquestamcp.MCPTransportExternalWorkRunExecutorV0
+	Ports                   orquestaappdirectorservice.StartAppDirectorPortsV0
+	Config                  orquestaexternalworkrun.StartExternalWorkRunConfigV0
+	AppChangeStore          orquestaappchange.AppChangeRecordStorePortV0
+	AllowLegacyDirectorLoop bool
 }
 
 var _ orquestamcp.MCPTransportExternalWorkRunExecutorV0 = CodexStackExternalWorkGoalFirstExecutorV0{}
@@ -29,12 +30,14 @@ func NewCodexStackExternalWorkGoalFirstExecutorV0(
 	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
 	config orquestaexternalworkrun.StartExternalWorkRunConfigV0,
 	appChangeStore orquestaappchange.AppChangeRecordStorePortV0,
+	allowLegacyDirectorLoop bool,
 ) CodexStackExternalWorkGoalFirstExecutorV0 {
 	return CodexStackExternalWorkGoalFirstExecutorV0{
-		Legacy:         legacy,
-		Ports:          ports,
-		Config:         config,
-		AppChangeStore: appChangeStore,
+		Legacy:                  legacy,
+		Ports:                   ports,
+		Config:                  config,
+		AppChangeStore:          appChangeStore,
+		AllowLegacyDirectorLoop: allowLegacyDirectorLoop,
 	}
 }
 
@@ -53,8 +56,11 @@ func (executor CodexStackExternalWorkGoalFirstExecutorV0) Execute(
 			Errores:       issues,
 		}, nil
 	}
-	if !externalWorkGoalFirstBackendAvailableV0(executor.Ports) {
+	if !externalWorkGoalFirstBackendAvailableV0(executor.Ports) && executor.AllowLegacyDirectorLoop {
 		return executor.Legacy.Execute(ctx, input)
+	}
+	if !externalWorkGoalFirstBackendAvailableV0(executor.Ports) {
+		return externalWorkGoalFirstBackendRequiredResultV0(input), nil
 	}
 	request := orquestaexternalworkrun.PrepareStartExternalWorkRunRequestV0(
 		externalWorkGoalFirstRequestFromMCPV0(input),
@@ -111,6 +117,9 @@ func (executor CodexStackExternalWorkGoalFirstExecutorV0) externalWorkGoalFirstE
 		return orquestamcp.MCPExternalWorkRunToolResultV0{}, true, err
 	}
 	if externalWorkGoalFirstRunLooksLegacyV0(existing) {
+		if !executor.AllowLegacyDirectorLoop {
+			return externalWorkGoalFirstExistingLegacyRunResultV0(request), true, nil
+		}
 		result, err := executor.Legacy.Execute(ctx, input)
 		return result, true, err
 	}
@@ -180,6 +189,30 @@ func externalWorkGoalFirstBackendAvailableV0(
 		ports.GoalStateStore != nil
 }
 
+func externalWorkGoalFirstBackendRequiredResultV0(
+	input orquestamcp.MCPExternalWorkRunToolInputV0,
+) orquestamcp.MCPExternalWorkRunToolResultV0 {
+	return orquestamcp.MCPExternalWorkRunToolResultV0{
+		Estado:                orquestamcp.MCPExternalWorkRunEstadoErrorV0,
+		RoutePolicy:           orquestamcp.MCPExternalWorkRunRoutePolicyGoalFirstV0,
+		DirectorExecutionMode: orquestamcp.MCPExternalWorkRunDirectorExecutionModeGoalFirstV0,
+		RequestID:             strings.TrimSpace(firstExternalWorkGoalFirstValueV0(input.RequestID, input.ExternalWorkRunRequest.RequestID)),
+		CorrelationID: strings.TrimSpace(firstExternalWorkGoalFirstValueV0(
+			input.CorrelationID,
+			input.ExternalWorkRunRequest.CorrelationID,
+			input.RequestID,
+		)),
+		NextActions: []string{
+			orquestamcp.MCPExternalWorkRunNextActionConfigureGoalBackendV0,
+			orquestamcp.MCPExternalWorkRunNextActionDoNotFallbackLegacyV0,
+		},
+		Errores: []orquestamcp.MCPExternalWorkRunIssueV0{{
+			Code:  orquestamcp.MCPExternalWorkRunGoalBackendRequiredV0,
+			Field: "codex_goal_backend",
+		}},
+	}
+}
+
 func externalWorkGoalFirstRunV0(
 	request orquestaexternalworkrun.StartExternalWorkRunRequestV0,
 	spec orquestagoal.GoalWorkSpecV0,
@@ -209,6 +242,31 @@ func externalWorkGoalFirstRunLooksLegacyV0(
 	return len(compactStringsV0(run.Tasks)) > 0 ||
 		len(compactStringsV0(run.FunctionContracts)) > 0 ||
 		len(compactStringsV0(run.DirectorQuestions)) > 0
+}
+
+func externalWorkGoalFirstExistingLegacyRunResultV0(
+	request orquestaexternalworkrun.StartExternalWorkRunRequestV0,
+) orquestamcp.MCPExternalWorkRunToolResultV0 {
+	return orquestamcp.MCPExternalWorkRunToolResultV0{
+		Estado:                orquestamcp.MCPExternalWorkRunEstadoErrorV0,
+		RoutePolicy:           orquestamcp.MCPExternalWorkRunRoutePolicyGoalFirstV0,
+		DirectorExecutionMode: orquestamcp.MCPExternalWorkRunDirectorExecutionModeGoalFirstV0,
+		RequestID:             strings.TrimSpace(request.RequestID),
+		CorrelationID:         strings.TrimSpace(request.CorrelationID),
+		RunRef:                strings.TrimSpace(request.RunRef),
+		ProjectRef:            strings.TrimSpace(request.ProjectRef),
+		AppRef:                strings.TrimSpace(request.AppChangeRequest.AppRef),
+		ChangeRef:             strings.TrimSpace(request.AppChangeRequest.ChangeRef),
+		NextActions: []string{
+			orquestamcp.MCPExternalWorkRunNextActionEnableLegacyOptInV0,
+			orquestamcp.MCPExternalWorkRunNextActionMigrateGoalFirstV0,
+			orquestamcp.MCPExternalWorkRunNextActionDoNotFallbackLegacyV0,
+		},
+		Errores: []orquestamcp.MCPExternalWorkRunIssueV0{{
+			Code:  orquestamcp.MCPExternalWorkRunExistingLegacyRunRequiresOptInV0,
+			Field: "run_ref",
+		}},
+	}
 }
 
 func externalWorkGoalFirstSaveAppChangeRecordV0(

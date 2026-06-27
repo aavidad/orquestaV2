@@ -42,9 +42,11 @@ func TestMCPExternalWorkRunDescriptorV0DeclaraLegacyExplicito(t *testing.T) {
 		t.Fatalf("output no declara politica legacy: %s", descriptor.Output)
 	}
 	for _, want := range []string{
-		"legacy explicito cuando no hay backend Goal completo",
+		"goal-first es la ruta normal para trabajo externo nuevo",
+		"sin backend Goal completo la composicion goal-first devuelve error operativo y no degrada a legacy",
+		"legacy solo en composicion de compatibilidad opt-in",
 		"con backend Goal completo la composicion puede devolver route_policy=goal_first y goal_ref",
-		"la ruta legacy crea run operativo y encola para loop historico por puertos inyectados",
+		"la ruta legacy opt-in crea run operativo y encola para loop historico por puertos inyectados",
 	} {
 		if !mcpExternalWorkRunStringInSetTestV0(descriptor.Invariantes, want) {
 			t.Fatalf("invariante %q no encontrada: %+v", want, descriptor.Invariantes)

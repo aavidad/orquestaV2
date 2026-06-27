@@ -139,8 +139,9 @@ func codexStackBaseConfigForTestV0(
 		ReviewGate: ReviewGateConfigV0{
 			FileEvidence: orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 		},
-		RequiredTests: requiredTests,
-		DomainWork:    domainWork,
+		RequiredTests:              requiredTests,
+		DomainWork:                 domainWork,
+		AllowLegacyExternalWorkRun: true,
 		DomainDelivery: DomainWorkDeliveryBridgeConfigV0{
 			Enabled: domainWork != nil,
 		},

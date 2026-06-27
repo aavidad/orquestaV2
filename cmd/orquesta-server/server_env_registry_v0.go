@@ -59,6 +59,7 @@ const (
 	envServerAutoprogrammingPromotionCommitMessageV0 = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_COMMIT_MESSAGE"
 	envStartupCleanupModeV0                          = "ORQUESTA_STARTUP_CLEANUP_MODE"
 	envStartupQueueLimitV0                           = "ORQUESTA_STARTUP_QUEUE_LIMIT"
+	envExternalWorkLegacyDirectorLoopV0              = "ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP"
 	envReviewGateStrictGoLineBudgetV0                = "ORQUESTA_REVIEW_GATE_STRICT_GO_LINE_BUDGET"
 	envDomainDeliveryLedgerPathV0                    = "ORQUESTA_DOMAIN_DELIVERY_LEDGER_PATH"
 	envDirectorMaxBurstsV0                           = "ORQUESTA_DIRECTOR_MAX_BURSTS"
@@ -321,6 +322,11 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "autoprogramming",
 		Label:       "Goal-first automejora",
 		Description: "Activa modo goal-first estricto para automejora residente; si no se define y hay backend Codex Goal, se deriva automaticamente.",
+	},
+	envExternalWorkLegacyDirectorLoopV0: {
+		Scope:       "external_work",
+		Label:       "External work legacy",
+		Description: "Breakglass opt-in para permitir que external_work.run use el loop historico si no hay backend Goal; por defecto false.",
 	},
 	envSecurityModeV0: {Scope: "rails", Label: "Modo seguridad", Description: "Modo historico de seguridad; no reactiva rails offline hasta nueva orden."},
 	envRailsModeV0:    {Scope: "rails", Label: "Modo rails", Description: "offline fijo hasta nueva orden; no reactiva politicas de bloqueo."},

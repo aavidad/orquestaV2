@@ -17,9 +17,14 @@ const (
 
 	MCPExternalWorkRunRoutePolicyLegacyDirectorLoopV0   = "legacy_director_loop"
 	MCPExternalWorkRunRoutePolicyGoalFirstV0            = "goal_first"
+	MCPExternalWorkRunGoalBackendRequiredV0             = "external_work_goal_backend_required"
+	MCPExternalWorkRunExistingLegacyRunRequiresOptInV0  = "external_work_existing_legacy_run_requires_opt_in"
 	MCPExternalWorkRunNextActionSuperviseLegacyRunV0    = "supervise_legacy_run_or_wait_resident"
 	MCPExternalWorkRunNextActionMigrateGoalFirstV0      = "migrate_external_work_to_goal_first"
 	MCPExternalWorkRunNextActionObserveGoalV0           = "observe_goal"
+	MCPExternalWorkRunNextActionConfigureGoalBackendV0  = "configure_codex_goal_backend"
+	MCPExternalWorkRunNextActionEnableLegacyOptInV0     = "enable_legacy_director_loop_opt_in"
+	MCPExternalWorkRunNextActionDoNotFallbackLegacyV0   = "do_not_fallback_to_legacy_director_loop"
 	MCPExternalWorkRunDirectorExecutionModeLegacyLoopV0 = "legacy_director_loop"
 	MCPExternalWorkRunDirectorExecutionModeGoalFirstV0  = "goal_first"
 )
@@ -72,9 +77,11 @@ func MCPExternalWorkRunDescriptorV0() MCPExternalWorkRunToolDescriptorV0 {
 		ResourceURI: MCPExternalWorkRunResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
-			"legacy explicito cuando no hay backend Goal completo",
+			"goal-first es la ruta normal para trabajo externo nuevo",
+			"sin backend Goal completo la composicion goal-first devuelve error operativo y no degrada a legacy",
+			"legacy solo en composicion de compatibilidad opt-in",
 			"con backend Goal completo la composicion puede devolver route_policy=goal_first y goal_ref",
-			"la ruta legacy crea run operativo y encola para loop historico por puertos inyectados",
+			"la ruta legacy opt-in crea run operativo y encola para loop historico por puertos inyectados",
 			"sin OPES, DB, runtime, filesystem ni proveedor hardcodeado",
 		},
 	}

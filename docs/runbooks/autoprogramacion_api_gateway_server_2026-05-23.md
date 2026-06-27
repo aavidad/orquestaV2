@@ -141,9 +141,12 @@ El borde servidor queda alineado con los clientes revisados:
   `run_ref` legacy ni cola.
 - `status` agrega cola, run, agentes, diagnosticos y acciones seguras para web
   y CLI sin exponer stores, runtime, proveedor, prompts ni filesystem.
-- `supervise`, `director/stats`, `runs/control` y `runs/queue/priority` son las
-  rutas operativas para avanzar, inspeccionar y controlar runs desde clientes
-  finos.
+- `apps/director/goal/observe` y `autoprogramming/goal/observe` son las rutas
+  normales para avanzar/cerrar trabajo `goal_first`; `director/stats`,
+  `runs/control` y `runs/queue/priority` inspeccionan y controlan runs desde
+  clientes finos.
+- `supervise` queda como compatibilidad legacy/diagnostico para runs no
+  migrados; no debe empujar el loop historico sobre runs `goal_first`.
 - Si el servidor no inyecta un puerto real para alguna ruta, debe devolver error
   publico del contrato; web/CLI no deben reconstruirlo con acceso local.
 - Revalidacion `task-autoprogramming-7447aef8a77d-g01`: web y CLI quedan como
