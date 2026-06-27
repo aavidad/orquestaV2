@@ -1234,10 +1234,8 @@ Tipo UI: select.
 Opciones visibles actuales:
 
 - `basica`
+- `normal`
 - `wcag_aa`
-
-Opcion soportada por factory via JSON:
-
 - `no_aplica`
 
 Contrato de opciones esperado para modo basico/experto:

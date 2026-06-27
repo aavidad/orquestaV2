@@ -11,6 +11,7 @@ import (
 
 func TestOPESDrainArtifactContractMapConsumeOwnerNeutralV0(t *testing.T) {
 	for _, workKind := range []string{
+		"update_topic_registry",
 		"draft_content_block",
 		"generate_visual_asset",
 		"review_legal",

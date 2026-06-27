@@ -1931,7 +1931,7 @@ func TestSmokeOPESDerivativesRESTWrapperFakeServerV0(t *testing.T) {
 	output := stdout.String()
 	if !strings.Contains(output, `"dry_run":true`) ||
 		!strings.Contains(output, `"selected_job_type":"assemble_topic"`) ||
-		!strings.Contains(output, `"empty_job_types":["research_exam_precedents","draft_content_block","generate_visual_asset","generate_question_bank","review_legal","review_pedagogical","review_quality","review_codex","review_gemini","review_claude","review_pair_codex_gemini","review_pair_codex_claude","review_pair_gemini_claude","review_director_consolidation","validate_topic"]`) ||
+		!strings.Contains(output, `"empty_job_types":["update_topic_registry","research_exam_precedents","draft_content_block","generate_visual_asset","generate_question_bank","review_legal","review_pedagogical","review_quality","review_codex","review_gemini","review_claude","review_pair_codex_gemini","review_pair_codex_claude","review_pair_gemini_claude","review_director_consolidation","validate_topic"]`) ||
 		!strings.Contains(output, `"job_ref":"job-ref-fake-assemble-topic-001"`) ||
 		!strings.Contains(output, `"status":"dry_run"`) {
 		t.Fatalf("stdout=%s stderr=%s", output, stderr.String())
@@ -1971,7 +1971,8 @@ func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilFinalizeV0(t *testing.
 		t.Fatalf("script err=%v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	output := stdout.String()
-	if !strings.Contains(output, `"selected_job_type":"research_exam_precedents"`) ||
+	if !strings.Contains(output, `"selected_job_type":"update_topic_registry"`) ||
+		!strings.Contains(output, `"selected_job_type":"research_exam_precedents"`) ||
 		!strings.Contains(output, `"selected_job_type":"draft_content_block"`) ||
 		!strings.Contains(output, `"selected_job_type":"generate_visual_asset"`) ||
 		!strings.Contains(output, `"selected_job_type":"generate_question_bank"`) ||

@@ -185,9 +185,26 @@ var nuevaAppHTMLHelpKeysV0 = []string{
 	"step.datos",
 	"step.calidad",
 	"step.revisar",
+	"guided.analyze",
+	"guided.review",
+	"guided.mobile_both",
+	"guided.mobile_ios",
+	"guided.mobile_android",
+	"guided.data_external",
+	"guided.data_management",
+	"guided.maps_generic",
+	"guided.maps_osm",
+	"guided.architecture_default",
+	"guided.architecture_event",
+	"guided.architecture_modular",
+	"guided.quality_public",
 	"preset.webapp",
 	"preset.api",
 	"preset.ops",
+	"action.preview",
+	"action.launch",
+	"nav.back",
+	"nav.next",
 	"nombre",
 	"tipo_app",
 	"objetivo",
@@ -279,10 +296,10 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
     .checks{display:flex;flex-wrap:wrap;gap:10px}
     .checks label{display:flex;align-items:center;gap:6px;margin:0;border:1px solid var(--line);border-radius:999px;padding:7px 10px;background:#f8fbf5}
     [data-help]{position:relative;cursor:help}
-    [data-help]::after{content:attr(data-help);position:absolute;left:0;bottom:calc(100% + 8px);z-index:50;width:300px;max-width:calc(100vw - 32px);padding:9px 10px;border-radius:8px;background:#102017;color:#f7fff2;box-shadow:0 12px 28px rgba(15,30,20,.24);font-size:.82rem;line-height:1.35;font-weight:600;white-space:normal;overflow-wrap:anywhere;opacity:0;visibility:hidden;pointer-events:none;transform:translateY(4px);transition:opacity .16s ease,transform .16s ease,visibility .16s ease}
-    [data-help]::before{content:"";position:absolute;left:12px;bottom:calc(100% + 2px);z-index:51;border:6px solid transparent;border-top-color:#102017;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .16s ease,visibility .16s ease}
-    [data-help]:hover::after,[data-help]:focus::after,[data-help]:focus-within::after{opacity:1;visibility:visible;transform:translateY(0)}
-    [data-help]:hover::before,[data-help]:focus::before,[data-help]:focus-within::before{opacity:1;visibility:visible}
+    [data-help]::after{content:attr(data-help);display:none;position:absolute;left:0;bottom:calc(100% + 8px);z-index:50;width:300px;max-width:calc(100vw - 32px);padding:9px 10px;border-radius:8px;background:#102017;color:#f7fff2;box-shadow:0 12px 28px rgba(15,30,20,.24);font-size:.82rem;line-height:1.35;font-weight:600;white-space:normal;overflow-wrap:anywhere;pointer-events:none}
+    [data-help]::before{content:"";display:none;position:absolute;left:12px;bottom:calc(100% + 2px);z-index:51;border:6px solid transparent;border-top-color:#102017;pointer-events:none}
+    [data-help]:hover::after,[data-help]:focus::after,[data-help]:focus-within::after{display:block}
+    [data-help]:hover::before,[data-help]:focus::before,[data-help]:focus-within::before{display:block}
     .help-text{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);border:0;white-space:nowrap}
     button{width:max-content;padding:10px 14px;border:0;border-radius:9px;background:var(--brand);color:#fff;font-weight:850;cursor:pointer}
     button.secondary{background:#e8efe8;color:var(--ink);border:1px solid var(--line)}
@@ -376,22 +393,22 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
           <div class="guided-assistant" id="guided-assistant">
             <p class="expert-row-title">{{index .HTML "nueva_app.wizard.guided_title"}}</p>
             <label data-help="{{index .Help "objetivo"}}">{{index .HTML "nueva_app.wizard.guided_need"}}<textarea id="guided-need" placeholder="{{index .HTML "nueva_app.wizard.placeholder.objetivo"}}"></textarea></label>
-            <div class="guided-actions"><button class="primary" type="button" data-guided-action="analyze">{{index .HTML "nueva_app.wizard.guided_analyze"}}</button><button type="button" data-guided-action="review">{{index .HTML "nueva_app.wizard.guided_review"}}</button></div>
+            <div class="guided-actions"><button class="primary" type="button" data-guided-action="analyze" data-help="{{index .Help "guided.analyze"}}">{{index .HTML "nueva_app.wizard.guided_analyze"}}</button><button type="button" data-guided-action="review" data-help="{{index .Help "guided.review"}}">{{index .HTML "nueva_app.wizard.guided_review"}}</button></div>
             <div class="guided-thread" id="guided-thread" aria-live="polite"></div>
             <div id="guided-followups" hidden>
               <p class="expert-row-title">{{index .HTML "nueva_app.wizard.guided_followups"}}</p>
               <div class="guided-actions">
-                <button type="button" data-guided-action="mobile_both">{{index .HTML "nueva_app.wizard.guided_mobile_both"}}</button>
-                <button type="button" data-guided-action="mobile_ios">{{index .HTML "nueva_app.wizard.guided_mobile_ios"}}</button>
-                <button type="button" data-guided-action="mobile_android">{{index .HTML "nueva_app.wizard.guided_mobile_android"}}</button>
-                <button type="button" data-guided-action="data_external">{{index .HTML "nueva_app.wizard.guided_data_external"}}</button>
-                <button type="button" data-guided-action="data_management">{{index .HTML "nueva_app.wizard.guided_data_management"}}</button>
-                <button type="button" data-guided-action="maps_generic">{{index .HTML "nueva_app.wizard.guided_maps_generic"}}</button>
-                <button type="button" data-guided-action="maps_osm">{{index .HTML "nueva_app.wizard.guided_maps_osm"}}</button>
-                <button type="button" data-guided-action="architecture_default">{{index .HTML "nueva_app.wizard.guided_architecture_default"}}</button>
-                <button type="button" data-guided-action="architecture_event">{{index .HTML "nueva_app.wizard.guided_architecture_event"}}</button>
-                <button type="button" data-guided-action="architecture_modular">{{index .HTML "nueva_app.wizard.guided_architecture_modular"}}</button>
-                <button type="button" data-guided-action="quality_public">{{index .HTML "nueva_app.wizard.guided_quality_public"}}</button>
+                <button type="button" data-guided-action="mobile_both" data-help="{{index .Help "guided.mobile_both"}}">{{index .HTML "nueva_app.wizard.guided_mobile_both"}}</button>
+                <button type="button" data-guided-action="mobile_ios" data-help="{{index .Help "guided.mobile_ios"}}">{{index .HTML "nueva_app.wizard.guided_mobile_ios"}}</button>
+                <button type="button" data-guided-action="mobile_android" data-help="{{index .Help "guided.mobile_android"}}">{{index .HTML "nueva_app.wizard.guided_mobile_android"}}</button>
+                <button type="button" data-guided-action="data_external" data-help="{{index .Help "guided.data_external"}}">{{index .HTML "nueva_app.wizard.guided_data_external"}}</button>
+                <button type="button" data-guided-action="data_management" data-help="{{index .Help "guided.data_management"}}">{{index .HTML "nueva_app.wizard.guided_data_management"}}</button>
+                <button type="button" data-guided-action="maps_generic" data-help="{{index .Help "guided.maps_generic"}}">{{index .HTML "nueva_app.wizard.guided_maps_generic"}}</button>
+                <button type="button" data-guided-action="maps_osm" data-help="{{index .Help "guided.maps_osm"}}">{{index .HTML "nueva_app.wizard.guided_maps_osm"}}</button>
+                <button type="button" data-guided-action="architecture_default" data-help="{{index .Help "guided.architecture_default"}}">{{index .HTML "nueva_app.wizard.guided_architecture_default"}}</button>
+                <button type="button" data-guided-action="architecture_event" data-help="{{index .Help "guided.architecture_event"}}">{{index .HTML "nueva_app.wizard.guided_architecture_event"}}</button>
+                <button type="button" data-guided-action="architecture_modular" data-help="{{index .Help "guided.architecture_modular"}}">{{index .HTML "nueva_app.wizard.guided_architecture_modular"}}</button>
+                <button type="button" data-guided-action="quality_public" data-help="{{index .Help "guided.quality_public"}}">{{index .HTML "nueva_app.wizard.guided_quality_public"}}</button>
               </div>
             </div>
           </div>
@@ -530,12 +547,12 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
           <label data-help="{{index .Help "agentes.preferencias"}}">{{index .Labels "agentes.preferencias"}}<input name="agentes.preferencias"></label>
           <label data-help="{{index .Help "restricciones"}}">{{index .Labels "restricciones"}}<input name="restricciones"></label>
         </div></fieldset>
-        <fieldset><legend>{{index .HTML "nueva_app.wizard.revision_final"}}</legend><div id="wizard-final-summary" class="summary-list"></div><div class="final-actions"><button class="secondary hidden-final" type="submit" name="nueva_app_action" value="preview_goal">{{.Page.Formulario.Acciones.Preview}}</button><button class="hidden-final" type="submit" name="nueva_app_action" value="launch">{{.Page.Formulario.Acciones.Submit}}</button></div></fieldset>
+        <fieldset><legend>{{index .HTML "nueva_app.wizard.revision_final"}}</legend><div id="wizard-final-summary" class="summary-list"></div><div class="final-actions"><button class="secondary hidden-final" type="submit" name="nueva_app_action" value="preview_goal" data-help="{{index .Help "action.preview"}}">{{.Page.Formulario.Acciones.Preview}}</button><button class="hidden-final" type="submit" name="nueva_app_action" value="launch" data-help="{{index .Help "action.launch"}}">{{.Page.Formulario.Acciones.Submit}}</button></div></fieldset>
       </div>
       <div id="wizard-errors" class="form-error-summary" role="alert" aria-live="polite" hidden></div>
       <div class="wizard-actions">
-        <button class="secondary" type="button" data-prev-step>{{index .HTML "nueva_app.wizard.back"}}</button>
-        <button type="button" data-next-step>{{index .HTML "nueva_app.wizard.next"}}</button>
+        <button class="secondary" type="button" data-prev-step data-help="{{index .Help "nav.back"}}">{{index .HTML "nueva_app.wizard.back"}}</button>
+        <button type="button" data-next-step data-help="{{index .Help "nav.next"}}">{{index .HTML "nueva_app.wizard.next"}}</button>
       </div>
     </section>
     <aside class="side">

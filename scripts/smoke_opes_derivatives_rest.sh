@@ -5,7 +5,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/lib/smoke_common.sh
 source "$repo_root/scripts/lib/smoke_common.sh"
 
-DEFAULT_SEQUENCE="research_exam_precedents,draft_content_block,generate_visual_asset,generate_question_bank,review_legal,review_pedagogical,review_quality,review_codex,review_gemini,review_claude,review_pair_codex_gemini,review_pair_codex_claude,review_pair_gemini_claude,review_director_consolidation,validate_topic,assemble_topic,generate_audio_asset,generate_tutor_assets,generate_learning_games,generate_html_site,generate_help_manual_assets,finalize_temario_package"
+DEFAULT_SEQUENCE="update_topic_registry,research_exam_precedents,draft_content_block,generate_visual_asset,generate_question_bank,review_legal,review_pedagogical,review_quality,review_codex,review_gemini,review_claude,review_pair_codex_gemini,review_pair_codex_claude,review_pair_gemini_claude,review_director_consolidation,validate_topic,assemble_topic,generate_audio_asset,generate_tutor_assets,generate_learning_games,generate_html_site,generate_help_manual_assets,finalize_temario_package"
 MODE="${ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE:-dry-run-once}"
 PREFLIGHT_TARGET_MODE="${ORQUESTA_OPES_DERIVATIVES_PREFLIGHT_TARGET_MODE:-run-until-finalize}"
 SMOKE_ID="${SMOKE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
@@ -89,6 +89,13 @@ if mode != "dry-run-once":
 runs = {}
 
 payload_by_type = {
+    "update_topic_registry": {
+        "program_id": "program-ref-fake-operario-001",
+        "course_id": "course-ref-fake-operario-001",
+        "topic_id": "topic-ref-fake-operario-001",
+        "topic_registry_ref": "topic-registry-ref-fake-operario-001",
+        "operation": "claim_or_update",
+    },
     "research_exam_precedents": {
         "program_id": "program-ref-fake-operario-001",
         "topic_id": "topic-ref-fake-operario-001",

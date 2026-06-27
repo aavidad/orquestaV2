@@ -51,6 +51,7 @@ La secuencia completa vigente es:
 
 ```text
 plan_temario
+update_topic_registry
 research_exam_precedents
 draft_content_block
 generate_visual_asset
@@ -109,6 +110,12 @@ al nuevo cuerpo/OPE. Solo se rehace un comun cuando haya obsolescencia, error
 grave, falta real de encaje o una orden expresa. Diferencias de titulo, alias,
 orden, metadatos o formato reparable se normalizan y no justifican tirar trabajo
 util.
+
+`update_topic_registry`: actualiza o prepara la actualizacion causal del
+registro global de temas OPES para el `course_id`/`topic_id` recibido. No
+produce contenido docente; entrega `topic_registry_update` con estado, bloqueo
+publico si falta conector y evidencias de lock/registro para que el tema no se
+marque listo sin asiento trazable.
 
 `research_exam_precedents`: busca por internet examenes, convocatorias,
 temarios, supuestos y pruebas de administraciones relacionadas. Prioriza

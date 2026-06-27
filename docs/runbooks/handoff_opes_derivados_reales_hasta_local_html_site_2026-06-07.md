@@ -30,6 +30,7 @@ Cadena principal de un temario completo:
 
 ```text
 plan_temario
+update_topic_registry
 research_exam_precedents
 draft_content_block
 generate_visual_asset
@@ -163,7 +164,7 @@ Si solo se quiere parar al HTML local para revision humana, sobrescribir la
 secuencia:
 
 ```bash
-ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=research_exam_precedents,draft_content_block,generate_visual_asset,generate_question_bank,review_legal,review_pedagogical,review_quality,review_codex,review_gemini,review_claude,review_pair_codex_gemini,review_pair_codex_claude,review_pair_gemini_claude,review_director_consolidation,validate_topic,assemble_topic,generate_audio_asset,generate_tutor_assets,generate_learning_games,generate_html_site
+ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=update_topic_registry,research_exam_precedents,draft_content_block,generate_visual_asset,generate_question_bank,review_legal,review_pedagogical,review_quality,review_codex,review_gemini,review_claude,review_pair_codex_gemini,review_pair_codex_claude,review_pair_gemini_claude,review_director_consolidation,validate_topic,assemble_topic,generate_audio_asset,generate_tutor_assets,generate_learning_games,generate_html_site
 ```
 
 ## Evidencia exigida

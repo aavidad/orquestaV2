@@ -10,6 +10,7 @@ import (
 
 func TestOPESBridgeArtifactContractMapConsumeOwnerNeutralV0(t *testing.T) {
 	for _, workKind := range []string{
+		"update_topic_registry",
 		"research_exam_precedents",
 		"draft_content_block",
 		"generate_visual_asset",

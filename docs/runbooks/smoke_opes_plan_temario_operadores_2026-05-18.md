@@ -335,7 +335,7 @@ Semantica:
 - cuando OPES deja de mostrar pendientes de una fase, el siguiente tick avanza
   a la siguiente;
 - la cobertura offline verifica la secuencia completa
-  `plan_temario -> research_exam_precedents -> draft_content_block ->
+  `plan_temario -> update_topic_registry -> research_exam_precedents -> draft_content_block ->
   generate_visual_asset -> generate_question_bank -> review_legal -> review_pedagogical ->
   review_quality -> review_codex -> review_gemini -> review_claude ->
   review_pair_codex_gemini -> review_pair_codex_claude ->
@@ -357,7 +357,7 @@ Semantica:
 Secuencia recomendada para temario Operario si se quiere fijar explicitamente:
 
 ```bash
-export ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=plan_temario,research_exam_precedents,draft_content_block,generate_visual_asset,generate_question_bank,review_legal,review_pedagogical,review_quality,review_codex,review_gemini,review_claude,review_pair_codex_gemini,review_pair_codex_claude,review_pair_gemini_claude,review_director_consolidation,validate_topic,assemble_topic,generate_audio_asset,generate_tutor_assets,generate_learning_games,generate_html_site,generate_help_manual_assets,finalize_temario_package
+export ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=plan_temario,update_topic_registry,research_exam_precedents,draft_content_block,generate_visual_asset,generate_question_bank,review_legal,review_pedagogical,review_quality,review_codex,review_gemini,review_claude,review_pair_codex_gemini,review_pair_codex_claude,review_pair_gemini_claude,review_director_consolidation,validate_topic,assemble_topic,generate_audio_asset,generate_tutor_assets,generate_learning_games,generate_html_site,generate_help_manual_assets,finalize_temario_package
 ```
 
 Arranque autonomo acotado hasta cierre:
@@ -383,7 +383,7 @@ ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
 ORQUESTA_OPES_BRIDGE_ENABLED=1 \
 ORQUESTA_OPES_BRIDGE_CONFIRM=1 \
 ORQUESTA_OPES_BRIDGE_LIMIT=10 \
-ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=research_exam_precedents,draft_content_block,generate_visual_asset,generate_question_bank,review_legal,review_pedagogical,review_quality,review_codex,review_gemini,review_claude,review_pair_codex_gemini,review_pair_codex_claude,review_pair_gemini_claude,review_director_consolidation,validate_topic,assemble_topic,generate_audio_asset,generate_tutor_assets,generate_learning_games,generate_html_site,generate_help_manual_assets,finalize_temario_package \
+ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=update_topic_registry,research_exam_precedents,draft_content_block,generate_visual_asset,generate_question_bank,review_legal,review_pedagogical,review_quality,review_codex,review_gemini,review_claude,review_pair_codex_gemini,review_pair_codex_claude,review_pair_gemini_claude,review_director_consolidation,validate_topic,assemble_topic,generate_audio_asset,generate_tutor_assets,generate_learning_games,generate_html_site,generate_help_manual_assets,finalize_temario_package \
 ORQUESTA_OPES_BRIDGE_INITIAL_DELAY_SECONDS=5 \
 ORQUESTA_OPES_BRIDGE_INTERVAL_SECONDS=60 \
 ORQUESTA_SERVER_MAX_RUNS_PER_TICK=10 \
