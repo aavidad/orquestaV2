@@ -237,12 +237,11 @@ func (stack StackV0) continueTerminalExternalProgressV0(
 	}
 	ports := stack.directorPortsWithClosureSourceV0(stack.Ports)
 	ports.DirectorDecisionSource = nil
-	reconciled, applied, err := stack.reconcileTerminalOpenTaskAgentsV0(ctx, request, run)
+	_, applied, err := stack.reconcileTerminalOpenTaskAgentsV0(ctx, request, run)
 	if err != nil {
 		return drainRunAttemptControlV0{}, false, err
 	}
 	if applied {
-		run = reconciled
 		control, continueErr := stack.continueDrainRunControlAfterExternalWithPortsV0(ctx, request, ports)
 		return control, true, continueErr
 	}

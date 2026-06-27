@@ -190,10 +190,6 @@ func codexWaveRuntimeDirPathV0(raw string, projectWorkDir string, waveRef string
 	return filepath.Abs(value)
 }
 
-func codexWavePurgeRuntimeDirV0(runtimeDir string, waveRef string) error {
-	return errors.New("runtime_purge_requires_confirmed_report")
-}
-
 func codexWaveCommandPathV0(raw string) (string, error) {
 	value := strings.TrimSpace(raw)
 	if value == "" {

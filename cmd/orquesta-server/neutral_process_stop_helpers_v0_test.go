@@ -24,40 +24,6 @@ func neutralProcessStopCleanupV0(
 	_, _ = runtime.StopV0(context.Background(), processRef)
 }
 
-func neutralProcessStopDispatchV0(
-	t *testing.T,
-	ctx context.Context,
-	stack orquestaappcodexstack.StackV0,
-	processRuntime *orquestaruntime.ProcessRuntimeConnectorV0,
-) orquestaoutboxdispatch.RunOutboxDispatchOnceResultV0 {
-	t.Helper()
-	result, err := orquestaoutboxdispatch.RunOutboxDispatchOnceV0(
-		orquestaoutboxdispatch.RunOutboxDispatchOnceInputV0{
-			RunID:       t66RunRef,
-			TargetPort:  orquestacoreworkflow.OutboxTargetAgentLauncherV0,
-			MessageType: orquestacoreworkflow.OutboxMessageStopRuntimeAgentV0,
-			Reader:      stack.Stores.OutboxLedger,
-			Claimer:     stack.Stores.OutboxLedger,
-			Executor: orquestacionnucleoapp.AgentStopperExecutorV0{
-				RunStore:    stack.Stores.RunStore,
-				EventSink:   stack.Stores.EventSink,
-				Stopper:     orquestacionnucleoapp.ProcessAgentStopperV0{Registry: stack.Stores.ProcessRegistry, Runtime: processRuntime},
-				ObservedAt:  t66OccurredAt,
-				RequestedBy: "director",
-				Summary:     "Stop neutral confirmado por runtime de proceso.",
-				EvidenceRefs: []string{
-					"evidence-ref-neutral-process-stop-dispatch",
-				},
-			},
-			Acker: stack.Stores.OutboxLedger,
-		},
-	)
-	if err != nil {
-		t.Fatalf("dispatch stop: %v result=%+v", err, result)
-	}
-	return result
-}
-
 func neutralProcessStopAssertStoppedV0(
 	t *testing.T,
 	runtime *orquestaruntime.ProcessRuntimeConnectorV0,

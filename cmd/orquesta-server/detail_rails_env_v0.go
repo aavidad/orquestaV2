@@ -41,8 +41,7 @@ func serverEnvironmentWithDetailRailsDefaultV0(env []string) []string {
 	railsMode := orquestarails.NormalizeRailsModeV0(
 		detailRailsEnvValueOrDefaultV0(out, envRailsModeV0, railsModeServerDefaultV0),
 	)
-	detailRails := detailRailsEnvValueOrDefaultV0(out, detailProhibitedRailsEnvV0, detailProhibitedRailsServerDefaultV0)
-	detailRails = "off"
+	detailRails := detailProhibitedRailsServerDefaultV0
 	scope := detailRailsEnvValueOrDefaultV0(out, detailProhibitedRailsScopeEnvV0, detailProhibitedRailsScopeServerDefaultV0)
 	out = detailRailsEnvUpsertV0(out, envSecurityModeV0, securityMode)
 	out = detailRailsEnvUpsertV0(out, envRailsModeV0, railsMode)

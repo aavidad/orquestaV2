@@ -50,16 +50,6 @@ type codexWaveCredentialProjectionItemV0 struct {
 	RequiredInStrict bool
 }
 
-func codexWaveCredentialProjectionPolicyV0FromFlags(strict bool, projectMemories bool) codexWaveCredentialProjectionPolicyV0 {
-	return codexWaveCredentialProjectionPolicyWithBoundsV0(
-		strict,
-		projectMemories,
-		codexWaveProjectionDefaultMaxFilesV0,
-		codexWaveProjectionDefaultMaxFileBytesV0,
-		codexWaveProjectionDefaultMaxTotalBytesV0,
-	)
-}
-
 func codexWaveCredentialProjectionPolicyWithBoundsV0(
 	strict bool,
 	projectMemories bool,

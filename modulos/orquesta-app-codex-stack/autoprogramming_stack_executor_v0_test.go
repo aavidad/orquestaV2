@@ -1432,13 +1432,6 @@ func legacyRunSupervisorInputForStackTestV0(
 	return input
 }
 
-func legacyRunSupervisorCommandForStackTestV0(
-	command orquestarunsupervisor.RunSupervisorCommandV0,
-) orquestarunsupervisor.RunSupervisorCommandV0 {
-	command.AllowLegacyDrain = true
-	return command
-}
-
 func autoprogrammingGoalRequiredTestResultsForTestV0(
 	spec orquestagoal.GoalWorkSpecV0,
 	evidenceRef string,

@@ -283,7 +283,7 @@ func TestReconcileOrphanCapacityOutboxForRunV0AckSupersededDecisionPersistente(t
 	if err != nil {
 		t.Fatalf("NewFileOutboxLedgerV0: %v", err)
 	}
-	run := codexStackStartOpenRunForOutboxRecoveryV0(t, ctx, runStore, eventSink, runRef)
+	codexStackStartOpenRunForOutboxRecoveryV0(t, ctx, runStore, eventSink, runRef)
 	capacityRef := "capacity-ref-capacity-outbox-superseded-file-001"
 	requestCommand, err := orquestacoreworkflow.NewRequestCapacityCommandV0(
 		launchOutboxRecoveryCommandMetaV0(runRef, "cmd-reconciled-capacity-superseded-file-001", "idem-reconciled-capacity-superseded-file-001"),
@@ -320,7 +320,7 @@ func TestReconcileOrphanCapacityOutboxForRunV0AckSupersededDecisionPersistente(t
 	if _, err := orquestacionnucleoapp.HandleStoredWorkflowCommandV0(ctx, runStore, eventSink, decisionCommand); err != nil {
 		t.Fatalf("HandleStoredWorkflowCommandV0 decision: %v", err)
 	}
-	run, err = runStore.LoadRunV0(ctx, runRef)
+	run, err := runStore.LoadRunV0(ctx, runRef)
 	if err != nil {
 		t.Fatalf("LoadRunV0: %v", err)
 	}
@@ -447,7 +447,7 @@ func TestReconcileClaimedLaunchOutboxForProcessRegistryV0RegistraStartedYAck(t *
 		t.Fatalf("NewFileOutboxLedgerV0: %v", err)
 	}
 	processRegistry := orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
-	run := codexStackStartOpenRunForOutboxRecoveryV0(t, ctx, runStore, eventSink, runRef)
+	codexStackStartOpenRunForOutboxRecoveryV0(t, ctx, runStore, eventSink, runRef)
 	capacityRef := "capacity-ref-launch-outbox-claimed-process-001"
 	capacityCommand, err := orquestacoreworkflow.NewRequestCapacityCommandV0(
 		launchOutboxRecoveryCommandMetaV0(runRef, "cmd-launch-claimed-capacity-001", "idem-launch-claimed-capacity-001"),
@@ -482,7 +482,7 @@ func TestReconcileClaimedLaunchOutboxForProcessRegistryV0RegistraStartedYAck(t *
 	if _, err := orquestacionnucleoapp.HandleStoredWorkflowCommandV0(ctx, runStore, eventSink, decisionCommand); err != nil {
 		t.Fatalf("HandleStoredWorkflowCommandV0 decision: %v", err)
 	}
-	run, err = runStore.LoadRunV0(ctx, runRef)
+	run, err := runStore.LoadRunV0(ctx, runRef)
 	if err != nil {
 		t.Fatalf("LoadRunV0: %v", err)
 	}

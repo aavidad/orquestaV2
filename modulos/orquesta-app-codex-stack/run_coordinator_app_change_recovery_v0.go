@@ -512,13 +512,6 @@ func codexStackHasRecoverableStaleOpenPlanAfterAcceptedReviewV0(
 	return false
 }
 
-func codexStackHasRecoverableAppChangeAutoPlanDecisionV0(
-	run orquestacoreworkflow.OrchestrationRunV0,
-	decisions []orquestadirectoragent.DirectorAgentDecisionV0,
-) bool {
-	return len(codexStackRecoverableAppChangeAutoPlanTaskRefsV0(run, decisions)) > 0
-}
-
 func codexStackRecoverableAppChangeAutoPlanTaskRefsV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	decisions []orquestadirectoragent.DirectorAgentDecisionV0,

@@ -135,7 +135,6 @@ func TestCodexStackV0DomainWorkSubmitAcceptedYRejectedFuncionalBloqueanReintento
 		t.Fatalf("rejected funcional submitted=%v err=%v", submitted, err)
 	}
 
-	ledger = NewInMemoryDomainWorkArtifactSubmissionLedgerV0()
 	rejectedTransient := domainWorkSubmissionRecordForRetryTestV0(DomainWorkArtifactSubmissionStatusRejectedV0)
 	for _, transientIssue := range []string{
 		"domain-work-submit-execute-error",

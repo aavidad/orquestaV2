@@ -306,15 +306,6 @@ func (runtime *pendingAckCodexStackRuntimeV0) LaunchV0(
 	return snapshot, nil
 }
 
-func firstConfirmedStoppedAgentV0(started []string, stopped []string) string {
-	for _, agentRef := range compactStringsV0(started) {
-		if codexStackHasRefV0(stopped, agentRef) {
-			return agentRef
-		}
-	}
-	return ""
-}
-
 func codexStackHasRefV0(values []string, want string) bool {
 	for _, value := range compactStringsV0(values) {
 		if value == want {

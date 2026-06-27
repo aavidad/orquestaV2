@@ -357,22 +357,6 @@ func codexStackRealSmokeProgrammingReceiptDescriptorsV0(
 	return programming
 }
 
-func codexStackRealSmokeWaitForDescriptorsAckV0(
-	ctx context.Context,
-	descriptors []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
-) error {
-	for _, descriptor := range descriptors {
-		if err := codexStackRealSmokeWaitForAckPathV0(
-			ctx,
-			descriptor.AckPath,
-			descriptor.Spec,
-		); err != nil {
-			return fmt.Errorf("%s: %w", descriptor.AgentRef, err)
-		}
-	}
-	return nil
-}
-
 func codexStackRealSmokeAllProgrammingDeliveriesRegisteredV0(
 	deliveries []string,
 	descriptors []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,

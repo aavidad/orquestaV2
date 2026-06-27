@@ -71,10 +71,6 @@ func decodeServerPublicHTTPJSONRawV0(
 	return raw, ""
 }
 
-func mcpJSONRPCContentTypeAllowsJSONV0(value string) bool {
-	return serverPublicHTTPContentTypeAllowsJSONV0(value)
-}
-
 func mcpJSONRPCAcceptAllowsJSONV0(value string) bool {
 	value = strings.TrimSpace(value)
 	if value == "" {

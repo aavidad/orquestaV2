@@ -22,9 +22,7 @@ func reviewReworkReplanEvidenceRefsV0(
 	if fallback {
 		refs = append(refs, "evidence-ref-review-rework-task-fallback")
 	}
-	for _, target := range reviewReworkTargetEvidenceRefsV0(missingTargets) {
-		refs = append(refs, target)
-	}
+	refs = append(refs, reviewReworkTargetEvidenceRefsV0(missingTargets)...)
 	return compactStringsV0(append(refs, reviewReworkReplanNeutralEvidenceRefsV0(request.EvidenceRefs)...))
 }
 

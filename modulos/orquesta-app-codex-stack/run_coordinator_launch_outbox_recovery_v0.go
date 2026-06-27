@@ -222,12 +222,11 @@ func (stack StackV0) reconcileClaimedLaunchOutboxForProcessRegistryV0(
 			continue
 		}
 		if event, ok := agentStartedEvents[agentRef]; ok {
-			next, applied, err := stack.projectDurableAgentStartedForLaunchRecoveryV0(ctx, current, event)
+			next, _, err := stack.projectDurableAgentStartedForLaunchRecoveryV0(ctx, current, event)
 			if err != nil {
 				return false, err
 			}
 			current = next
-			reconciled = reconciled || applied
 			if err := stack.ackSupersededLaunchOutboxEntryV0(entry, payload, nil); err != nil {
 				return false, err
 			}

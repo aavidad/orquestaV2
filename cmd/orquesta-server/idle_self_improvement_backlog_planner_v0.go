@@ -38,15 +38,9 @@ func (planner idleSelfImprovementBacklogPlannerV0) PlanV0(
 	planner.syncBacklogSectionStateV0(sections)
 	excluded := idleSelfImprovementExcludedRequestRefsV0(request)
 	knownAttempts := idleSelfImprovementKnownAttemptsByBaseRefV0(request)
-	canonicalCollisions := []orquestaserver.BacklogScanCollisionV0{}
-	blockedCanonicalRefs := map[string]bool{}
-	sections, canonicalCollisions, blockedCanonicalRefs = idleSelfImprovementCanonicalizeBacklogSectionsV0(sections, excluded)
-	preflightCollisions := []orquestaserver.BacklogScanCollisionV0{}
-	blockedPreflightRefs := map[string]bool{}
-	sections, preflightCollisions, blockedPreflightRefs = idleSelfImprovementCanonicalPreflightBacklogSectionsV0(sections, excluded)
-	proposalCollisions := []orquestaserver.BacklogScanCollisionV0{}
-	blockedProposalRefs := map[string]bool{}
-	sections, proposalCollisions, blockedProposalRefs = idleSelfImprovementDedupeBacklogProposalsV0(sections, excluded)
+	sections, canonicalCollisions, blockedCanonicalRefs := idleSelfImprovementCanonicalizeBacklogSectionsV0(sections, excluded)
+	sections, preflightCollisions, blockedPreflightRefs := idleSelfImprovementCanonicalPreflightBacklogSectionsV0(sections, excluded)
+	sections, proposalCollisions, blockedProposalRefs := idleSelfImprovementDedupeBacklogProposalsV0(sections, excluded)
 	canonicalPreflightBlocked := idleSelfImprovementBacklogCanonicalPreflightBlockedV0(preflightCollisions)
 	idleSelfImprovementPrioritizeBacklogSectionsV0(sections)
 	if len(sections) == 0 {

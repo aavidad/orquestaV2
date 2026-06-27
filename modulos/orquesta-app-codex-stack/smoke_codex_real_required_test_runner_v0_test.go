@@ -760,17 +760,6 @@ type codexStackRequiredTestCausalReviewRefsV0 struct {
 	AcceptedReviewRef string
 }
 
-func (refs codexStackRequiredTestRefsV0) planStateForCausalReviewV0(
-	causal codexStackRequiredTestCausalReviewRefsV0,
-) orquestacionnucleoapp.OperationalDirectorPlanStateV0 {
-	refs = refs.withDefaultsV0()
-	refs.DeliveryRef = causal.DeliveryRef
-	refs.ReviewRequestRef = causal.ReviewRequestRef
-	refs.ReviewResultRef = causal.ReviewResultRef
-	refs.AcceptedReviewRef = causal.AcceptedReviewRef
-	return refs.planStateV0()
-}
-
 func (refs codexStackRequiredTestRefsV0) planStateForDeliveryReviewV0(
 	deliveryRef string,
 ) orquestacionnucleoapp.OperationalDirectorPlanStateV0 {

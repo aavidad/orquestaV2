@@ -98,10 +98,6 @@ func opesDrainConfigFromEnvWithBaseURLV0(
 	}, nil
 }
 
-func orquestaBaseURLFromEnvOrStateV0(dryRun bool) (string, error) {
-	return orquestaBaseURLFromEnvOrStateOrFallbackV0(dryRun, "")
-}
-
 func orquestaBaseURLFromEnvOrStateOrFallbackV0(
 	dryRun bool,
 	fallback string,

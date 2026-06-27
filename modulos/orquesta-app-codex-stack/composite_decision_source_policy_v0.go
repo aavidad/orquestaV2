@@ -29,7 +29,7 @@ func validateCompositeDirectorDecisionBatchV0(
 		return nil
 	}
 	if !compositeTasksRequireGoTestAllV0(initialTasks) {
-		return fmt.Errorf("director_decisions invalidas: app Go sin required_tests go test ./...")
+		return fmt.Errorf("director_decisions invalidas: app Go sin required_tests go test ./... requerido")
 	}
 	if compositeGoPlanIsIncrementalV0(run, initialTasks) {
 		return nil

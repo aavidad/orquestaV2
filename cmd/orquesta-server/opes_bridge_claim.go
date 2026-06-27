@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"unicode"
 
@@ -195,11 +194,4 @@ func opesBridgeCompactRunPartV0(value string) string {
 		return "external-work"
 	}
 	return out
-}
-
-func opesBridgeResponseRunRefMatchesClaimV0(expected string, actual string) error {
-	if strings.TrimSpace(expected) == strings.TrimSpace(actual) {
-		return nil
-	}
-	return errors.New(externalBridgeRecoveryRequiredCodeV0)
 }

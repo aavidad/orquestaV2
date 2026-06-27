@@ -106,11 +106,7 @@ func idleSelfImprovementSplitPlainTestValueV0(value string) []string {
 		return nil
 	}
 	parts := strings.Split(value, " y ")
-	out := make([]string, 0, len(parts))
-	for _, part := range parts {
-		out = append(out, part)
-	}
-	return out
+	return append([]string(nil), parts...)
 }
 
 func idleSelfImprovementCleanTestPartV0(value string) string {

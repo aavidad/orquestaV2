@@ -183,11 +183,7 @@ func codexWaveOperatorInputReceiptsCopyV0(items []codexWaveOperatorInputReceiptV
 	if len(items) == 0 {
 		return nil
 	}
-	out := make([]codexWaveOperatorInputReceiptV0, 0, len(items))
-	for _, item := range items {
-		out = append(out, item)
-	}
-	return out
+	return append([]codexWaveOperatorInputReceiptV0(nil), items...)
 }
 
 func codexWaveOperatorInputHasKindV0(items []codexWaveOperatorInputReceiptV0, kind string) (codexWaveOperatorInputReceiptV0, bool) {

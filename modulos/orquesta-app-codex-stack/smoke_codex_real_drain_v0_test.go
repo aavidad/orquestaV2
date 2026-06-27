@@ -211,24 +211,6 @@ func codexStackRealSmokeDrainMaxCyclesV0(maxExternalWaits int) int {
 	return cycles
 }
 
-func codexStackRealSmokePendingProgrammingDescriptorsV0(
-	t *testing.T,
-	stack StackV0,
-	runRef string,
-	descriptors []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
-) []orquestaruntimecodexdelivery.CodexReceiptDescriptorV0 {
-	t.Helper()
-	run := mustLoadCodexStackRunForTestV0(t, stack, runRef)
-	pending := make([]orquestaruntimecodexdelivery.CodexReceiptDescriptorV0, 0, len(descriptors))
-	for _, descriptor := range codexStackRealSmokeProgrammingReceiptDescriptorsV0(descriptors) {
-		if codexStackRealSmokeContainsProjectionPartV0(run.Deliveries, descriptor.Spec.AgentPacket.DeliveryRefs.AckRef) {
-			continue
-		}
-		pending = append(pending, descriptor)
-	}
-	return pending
-}
-
 func codexStackRealSmokeAllRunTasksDeliveredV0(run orquestacoreworkflow.OrchestrationRunV0) bool {
 	tasks := compactStringsV0(run.Tasks)
 	if len(tasks) == 0 {

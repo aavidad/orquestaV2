@@ -78,16 +78,6 @@ func reviewReworkProjectGlobHasFileV0(projectDir string, pattern string) bool {
 	return result.Found
 }
 
-func reviewReworkDirHasFileV0(dir string) bool {
-	result := orquestaruntimeworktree.ProjectTreeScanHasFileV0(context.Background(), orquestaruntimeworktree.ProjectTreeScanRequestV0{
-		ProjectRoot:    dir,
-		Target:         ".",
-		Mode:           orquestaruntimeworktree.ProjectTreeScanModeDirV0,
-		IgnorePrefixes: orquestaruntimeworktree.DefaultWorktreeControlIgnorePrefixesV0(),
-	})
-	return result.Found
-}
-
 func reviewReworkRelTargetV0(value string) (string, bool) {
 	value = strings.TrimSpace(value)
 	if value == "" ||
@@ -107,13 +97,6 @@ func reviewReworkRelTargetV0(value string) (string, bool) {
 
 func reviewReworkTargetHasGlobV0(value string) bool {
 	return strings.ContainsAny(value, "*?[")
-}
-
-func reviewReworkSkipProjectDirV0(name string) bool {
-	if name == ".git" {
-		return true
-	}
-	return orquestaruntimeworktree.IsWorktreeControlPathV0(name)
 }
 
 func reviewReworkReplanSafeOpaqueTargetV0(value string) string {

@@ -14,7 +14,3 @@ const (
 func serverPublicErrorDescriptorV0(code string) (i18ndocs.PublicErrorDescriptorV0, bool) {
 	return i18ndocs.PublicErrorDescriptorByCodeV0(code)
 }
-
-func serverPublicErrorCodeKnownV0(code string) bool {
-	return i18ndocs.PublicErrorCodeKnownV0(code)
-}

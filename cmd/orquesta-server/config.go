@@ -259,18 +259,6 @@ func intEnvOrDefaultV0(key string, fallback int) int {
 	return parsed
 }
 
-func intEnvOrDefaultAllowZeroV0(key string, fallback int) int {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
-	}
-	parsed, err := strconv.Atoi(value)
-	if err != nil || parsed < 0 {
-		return fallback
-	}
-	return parsed
-}
-
 func idleSelfImprovementAfterSecondsFromEnvV0() int {
 	return intEnvOrDefaultAllowZeroFromKeysV0(
 		int(orquestaserver.DefaultIdleSelfImprovementAfterV0/time.Second),

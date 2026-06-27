@@ -71,7 +71,6 @@ func TestNuevaAppWebCodexStackRealMultiagentOptInV0(t *testing.T) {
 		maxExternalWaits,
 	)
 	run := programmingStart.Run
-	allDescriptors := programmingStart.Descriptors
 	programmingDrain := codexStackRealSmokeDrainUntilProgrammingDeliveredV0(
 		t,
 		ctx,
@@ -82,7 +81,7 @@ func TestNuevaAppWebCodexStackRealMultiagentOptInV0(t *testing.T) {
 		maxExternalWaits,
 	)
 	run = programmingDrain.Run
-	allDescriptors = programmingDrain.Descriptors
+	allDescriptors := programmingDrain.Descriptors
 	programmingDescriptors := codexStackRealSmokeProgrammingReceiptDescriptorsV0(allDescriptors)
 	if !codexStackRealSmokeAllProgrammingDeliveriesRegisteredV0(run.Deliveries, programmingDescriptors) {
 		t.Fatalf(
