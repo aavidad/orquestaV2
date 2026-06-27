@@ -27,19 +27,21 @@ type RunLivenessInputV0 struct {
 }
 
 type RunLivenessAgentV0 struct {
-	Status             string `json:"status,omitempty"`
-	InFlight           bool   `json:"in_flight,omitempty"`
-	NeedsAttention     bool   `json:"needs_attention,omitempty"`
-	Completed          bool   `json:"completed,omitempty"`
-	Failed             bool   `json:"failed,omitempty"`
-	Lost               bool   `json:"lost,omitempty"`
-	StopConfirmed      bool   `json:"stop_confirmed,omitempty"`
-	LastProgressStatus string `json:"last_progress_status,omitempty"`
-	ProcessRef         string `json:"process_ref,omitempty"`
-	SessionRef         string `json:"session_ref,omitempty"`
-	LaunchRef          string `json:"launch_ref,omitempty"`
-	ReadinessRef       string `json:"readiness_ref,omitempty"`
-	ProcessStatus      string `json:"process_status,omitempty"`
+	Status               string `json:"status,omitempty"`
+	InFlight             bool   `json:"in_flight,omitempty"`
+	NeedsAttention       bool   `json:"needs_attention,omitempty"`
+	Completed            bool   `json:"completed,omitempty"`
+	Failed               bool   `json:"failed,omitempty"`
+	Lost                 bool   `json:"lost,omitempty"`
+	StopConfirmed        bool   `json:"stop_confirmed,omitempty"`
+	ProcessLookupChecked bool   `json:"process_lookup_checked,omitempty"`
+	ProcessMissing       bool   `json:"process_missing,omitempty"`
+	LastProgressStatus   string `json:"last_progress_status,omitempty"`
+	ProcessRef           string `json:"process_ref,omitempty"`
+	SessionRef           string `json:"session_ref,omitempty"`
+	LaunchRef            string `json:"launch_ref,omitempty"`
+	ReadinessRef         string `json:"readiness_ref,omitempty"`
+	ProcessStatus        string `json:"process_status,omitempty"`
 }
 
 type RunLivenessClassificationV0 struct {
@@ -188,6 +190,9 @@ func runLivenessHasUnknownProcessSignalV0(agents []RunLivenessAgentV0) bool {
 		if runLivenessAgentTerminalV0(agent) || !runLivenessProcessObservedV0(agent) {
 			continue
 		}
+		if agent.ProcessMissing {
+			continue
+		}
 		switch strings.ToLower(strings.TrimSpace(agent.ProcessStatus)) {
 		case "", "unknown":
 			return true
@@ -204,6 +209,10 @@ func runLivenessHasConfirmedNoLiveProcessV0(agents []RunLivenessAgentV0) bool {
 		}
 		if !runLivenessProcessObservedV0(agent) {
 			return false
+		}
+		if agent.ProcessMissing {
+			confirmedStopped = true
+			continue
 		}
 		switch strings.ToLower(strings.TrimSpace(agent.ProcessStatus)) {
 		case "stopped":
@@ -227,7 +236,9 @@ func runLivenessHasProcessObservedV0(agents []RunLivenessAgentV0) bool {
 }
 
 func runLivenessProcessObservedV0(agent RunLivenessAgentV0) bool {
-	return strings.TrimSpace(agent.ProcessRef) != "" ||
+	return agent.ProcessLookupChecked ||
+		agent.ProcessMissing ||
+		strings.TrimSpace(agent.ProcessRef) != "" ||
 		strings.TrimSpace(agent.SessionRef) != "" ||
 		strings.TrimSpace(agent.LaunchRef) != "" ||
 		strings.TrimSpace(agent.ReadinessRef) != "" ||

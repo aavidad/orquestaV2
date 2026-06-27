@@ -50,6 +50,30 @@ func TestClassifyRunLivenessV0MarcaRunningStaleNoProcessConParadoConfirmado(t *t
 	}
 }
 
+func TestClassifyRunLivenessV0MarcaRunningStaleNoProcessConRegistrySinRecord(t *testing.T) {
+	got := ClassifyRunLivenessV0(RunLivenessInputV0{
+		AgentsInFlight: 1,
+		Agents: []RunLivenessAgentV0{{
+			Status:               "running",
+			InFlight:             true,
+			ProcessLookupChecked: true,
+			ProcessMissing:       true,
+		}},
+	})
+
+	if got.Class != RunLivenessClassRunningStaleNoProcessV0 ||
+		got.AgentsLive != 0 ||
+		!got.ProcessObserved ||
+		!got.ConfirmedNoLiveProcess ||
+		!got.Stale ||
+		!got.Verifiable ||
+		!got.SafeToReconcile ||
+		got.Ambiguous ||
+		got.UnknownProcess {
+		t.Fatalf("classification=%+v", got)
+	}
+}
+
 func TestClassifyRunLivenessV0NoReconciliaSinProcesoObservado(t *testing.T) {
 	got := ClassifyRunLivenessV0(RunLivenessInputV0{
 		AgentsInFlight: 1,
@@ -160,6 +184,34 @@ func TestClassifyRunLivenessV0MixtoVivoYParadoPrefiereLive(t *testing.T) {
 				Status:        "running",
 				InFlight:      true,
 				ProcessRef:    "process-ref-live-mixed-001",
+				ProcessStatus: "running",
+			},
+		},
+	})
+
+	if got.Class != RunLivenessClassRunningLiveV0 ||
+		got.AgentsLive != 1 ||
+		!got.Live ||
+		got.Stale ||
+		got.SafeToReconcile {
+		t.Fatalf("classification=%+v", got)
+	}
+}
+
+func TestClassifyRunLivenessV0MixtoVivoYRegistryMissingPrefiereLive(t *testing.T) {
+	got := ClassifyRunLivenessV0(RunLivenessInputV0{
+		AgentsInFlight: 2,
+		Agents: []RunLivenessAgentV0{
+			{
+				Status:               "running",
+				InFlight:             true,
+				ProcessLookupChecked: true,
+				ProcessMissing:       true,
+			},
+			{
+				Status:        "running",
+				InFlight:      true,
+				ProcessRef:    "process-ref-live-missing-mixed-001",
 				ProcessStatus: "running",
 			},
 		},

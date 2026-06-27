@@ -82,6 +82,31 @@ func TestBuildDirectorRunStatsWithProcessRegistryV0UsaProcesoComoSenalParcial(t 
 	}
 }
 
+func TestBuildDirectorRunStatsWithProcessRegistryV0MarcaMissingCuandoRegistryNoTieneProceso(t *testing.T) {
+	taskRef := "task-ref-missing-process-001"
+	agentRef := WorkflowTaskAgentRequestRefV0(taskRef)
+	run := mustActiveProgrammingRunV0(t, "run-nucleo-director-missing-process-001")
+	run.Tasks = []string{taskRef}
+	run.Agents = []string{agentRef}
+	run.StartedAgents = []string{agentRef}
+
+	stats := BuildDirectorRunStatsWithProcessRegistryV0(
+		context.Background(),
+		run,
+		NewInMemoryAgentProcessRegistryV0(),
+	)
+
+	agent := findDirectorAgentStatsForTestV0(t, stats, agentRef)
+	if agent.ControlState != DirectorAgentControlStateMissingV0 ||
+		agent.ControlRegistered ||
+		!agent.NeedsAttention ||
+		agent.CanStop ||
+		agent.Process != nil ||
+		stats.Counts.AgentsControlMissing != 1 {
+		t.Fatalf("agent=%+v counts=%+v", agent, stats.Counts)
+	}
+}
+
 func TestBuildDirectorRunStatsWithProcessSnapshotsV0PublicaStatusDeProceso(t *testing.T) {
 	taskRef := "task-ref-live-process-status-001"
 	agentRef := WorkflowTaskAgentRequestRefV0(taskRef)

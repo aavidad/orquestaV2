@@ -18,6 +18,8 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0GetProyectaEstadoCompacto(t *testing.T
 				QueuedNotDispatched:       1,
 				RunningLive:               1,
 				AgentsLive:                3,
+				RunningStale:              1,
+				RunningStaleNoProcess:     1,
 				RunningWithoutRecentStats: 1,
 				Blocked:                   1,
 			},
@@ -69,6 +71,9 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0GetProyectaEstadoCompacto(t *testing.T
 		result.Summary.QueuedNotDispatched != 1 ||
 		result.Summary.RunningLive != 1 ||
 		result.Summary.AgentsLive != 3 ||
+		result.Summary.RunningStale != 1 ||
+		result.Summary.RunningStaleNoProcess != 1 ||
+		result.Summary.RunningWithoutRecentStats != 1 ||
 		result.Summary.Blocked != 1 ||
 		!result.Summary.NeedsAttention ||
 		len(result.GoalRunRefs) != 1 ||

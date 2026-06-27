@@ -35,6 +35,7 @@ func mcpAutoprogrammingRunLivenessAgentsV0(
 func mcpAutoprogrammingRunLivenessAgentV0(
 	agent orquestacionnucleoapp.DirectorAgentStatsV0,
 ) orquestaruncoordinator.RunLivenessAgentV0 {
+	controlState := agent.ControlState
 	out := orquestaruncoordinator.RunLivenessAgentV0{
 		Status:         agent.Status,
 		InFlight:       agent.InFlight,
@@ -43,6 +44,9 @@ func mcpAutoprogrammingRunLivenessAgentV0(
 		Failed:         agent.Failed,
 		Lost:           agent.Lost,
 		StopConfirmed:  agent.StopConfirmed,
+		ProcessLookupChecked: controlState == orquestacionnucleoapp.DirectorAgentControlStateRegisteredV0 ||
+			controlState == orquestacionnucleoapp.DirectorAgentControlStateMissingV0,
+		ProcessMissing: controlState == orquestacionnucleoapp.DirectorAgentControlStateMissingV0,
 	}
 	if agent.LastProgress != nil {
 		out.LastProgressStatus = agent.LastProgress.Status

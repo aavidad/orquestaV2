@@ -603,6 +603,58 @@ func TestMCPAutoprogrammingStatusExecutorV0AgenteSinProcesoNoDeclaraNoProcessV0(
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0RegistrySinProcesoEsRunningStaleNoProcessV0(t *testing.T) {
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		statsByRun: map[string]*orquestacionnucleoapp.DirectorRunStatsV0{
+			"run-ref-running-registry-missing-process-001": {
+				RunRef: "run-ref-running-registry-missing-process-001",
+				Counts: orquestacionnucleoapp.DirectorRunStatsCountsV0{
+					AgentsInFlight:       1,
+					AgentsControlMissing: 1,
+				},
+				Progress: orquestacionnucleoapp.DirectorProgressStatsV0{
+					StalledAgents:     1,
+					ProgressingAgents: 0,
+				},
+				Agents: []orquestacionnucleoapp.DirectorAgentStatsV0{{
+					AgentRequestID: "agent-ref-running-registry-missing-process-001",
+					Status:         orquestacionnucleoapp.DirectorAgentStatusRunningV0,
+					InFlight:       true,
+					NeedsAttention: true,
+					ControlState:   orquestacionnucleoapp.DirectorAgentControlStateMissingV0,
+				}},
+			},
+		},
+	}
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			ranked: []MCPRunQueueRankedCandidateCompactV0{{
+				Rank:          1,
+				RunRef:        "run-ref-running-registry-missing-process-001",
+				AppRef:        "opes",
+				Status:        "running",
+				PriorityScore: 90,
+			}},
+		},
+		Stats: stats,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.QueueHealth == nil ||
+		result.QueueHealth.RunningLive != 0 ||
+		result.QueueHealth.AgentsLive != 0 ||
+		result.QueueHealth.RunningStale != 1 ||
+		result.QueueHealth.RunningStaleNoProcess != 1 ||
+		result.QueueHealth.RunningWithoutRecentStats != 0 ||
+		len(result.StaleRunning) != 1 ||
+		result.StaleRunning[0].Code != "running_stale_no_process" ||
+		result.StaleRunning[0].Severity != "warning" {
+		t.Fatalf("queue_health=%+v stale_running=%+v", result.QueueHealth, result.StaleRunning)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0ProcesoParadoEsRunningStaleNoProcessV0(t *testing.T) {
 	stats := &fakeMCPAutoprogrammingRunStatusV0{
 		statsByRun: map[string]*orquestacionnucleoapp.DirectorRunStatsV0{
