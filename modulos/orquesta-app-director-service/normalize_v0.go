@@ -26,6 +26,7 @@ func normalizeStartAppDirectorRequestV0(
 	request.OccurredAt = strings.TrimSpace(request.OccurredAt)
 	request.CorrelationID = strings.TrimSpace(request.CorrelationID)
 	request.RequestedBy = strings.TrimSpace(request.RequestedBy)
+	request.DirectorExecutionMode = normalizeStartAppDirectorExecutionModeV0(request.DirectorExecutionMode)
 	request.WaitAgentRefs = compactStartAppDirectorStringsV0(request.WaitAgentRefs)
 	request.WaitCohortRef = strings.TrimSpace(request.WaitCohortRef)
 	request.WaitWaveRef = strings.TrimSpace(request.WaitWaveRef)
@@ -74,6 +75,20 @@ func normalizeStartAppDirectorRequestV0(
 		request.MaxExternalWaits = defaultStartAppDirectorMaxExternalWaitsV0
 	}
 	return request
+}
+
+func normalizeStartAppDirectorExecutionModeV0(value string) string {
+	trimmed := strings.TrimSpace(value)
+	switch strings.ToLower(trimmed) {
+	case "":
+		return AppDirectorExecutionModeGoalFirstV0
+	case AppDirectorExecutionModeGoalFirstV0:
+		return AppDirectorExecutionModeGoalFirstV0
+	case AppDirectorExecutionModeLegacyDirectorLoopV0:
+		return AppDirectorExecutionModeLegacyDirectorLoopV0
+	default:
+		return trimmed
+	}
 }
 
 func boundedStartAppDirectorLimitV0(value int, max int) int {

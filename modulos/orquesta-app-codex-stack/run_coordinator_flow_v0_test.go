@@ -11,6 +11,7 @@ import (
 	"time"
 
 	orquestaappchangedirectorsource "orquesta/modulos/orquesta-app-change-director-source"
+	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoragent "orquesta/modulos/orquesta-director-agent"
 	orquestadirectoragentworkflow "orquesta/modulos/orquesta-director-agent-workflow"
@@ -1777,9 +1778,10 @@ func postDirectorAPIWithNameV0(
 	spec.Objetivo = "Gestionar " + name + " con API REST y web."
 	body := bytes.NewBuffer(nil)
 	err := json.NewEncoder(body).Encode(orquestamcp.MCPArrancarDirectorAppToolInputV0{
-		RequestID:      "request-ref-http-" + ref,
-		CorrelationID:  "corr-" + ref,
-		AppSpecRequest: spec,
+		RequestID:             "request-ref-http-" + ref,
+		CorrelationID:         "corr-" + ref,
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		AppSpecRequest:        spec,
 	})
 	if err != nil {
 		t.Fatalf("encode: %v", err)

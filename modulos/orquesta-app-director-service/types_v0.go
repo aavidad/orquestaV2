@@ -32,6 +32,7 @@ type StartAppDirectorRequestV0 struct {
 	OccurredAt                              string                                               `json:"occurred_at,omitempty"`
 	CorrelationID                           string                                               `json:"correlation_id,omitempty"`
 	RequestedBy                             string                                               `json:"requested_by,omitempty"`
+	DirectorExecutionMode                   string                                               `json:"director_execution_mode,omitempty"`
 	AppSpecRequest                          orquestafactory.AppSpecRequestV0                     `json:"app_spec_request"`
 	MaxBursts                               int                                                  `json:"max_bursts,omitempty"`
 	MaxStepsPerBurst                        int                                                  `json:"max_steps_per_burst,omitempty"`

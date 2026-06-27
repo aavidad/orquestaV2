@@ -11,6 +11,11 @@ func validateStartAppDirectorRequestV0(
 	if strings.TrimSpace(request.AppSpecRequest.RequestID) == "" {
 		return AppDirectorServiceIssueV0{Field: "app_spec_request.request_id"}
 	}
+	switch strings.TrimSpace(request.DirectorExecutionMode) {
+	case "", AppDirectorExecutionModeGoalFirstV0, AppDirectorExecutionModeLegacyDirectorLoopV0:
+	default:
+		return AppDirectorServiceIssueV0{Field: "director_execution_mode"}
+	}
 	if continueHasOperationalDirectorPlanV0(request.OperationalDirectorPlan) {
 		if strings.TrimSpace(request.OperationalDirectorPlan.RunRef) != "" &&
 			strings.TrimSpace(request.RunRef) != "" &&
@@ -25,6 +30,28 @@ func validateStartAppDirectorRequestV0(
 		}
 	}
 	return nil
+}
+
+func validateStartAppDirectorStartPortsV0(
+	request StartAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+) error {
+	if ports.RunStore == nil {
+		return AppDirectorServiceIssueV0{Field: "ports.run_store"}
+	}
+	if ports.EventSink == nil {
+		return AppDirectorServiceIssueV0{Field: "ports.event_sink"}
+	}
+	if startAppDirectorRequiresGoalFirstV0(request) {
+		if appDirectorGoalPortsReadyV0(ports) {
+			return nil
+		}
+		if appDirectorGoalPortsConfiguredForLaunchV0(ports) {
+			return AppDirectorServiceIssueV0{Field: appDirectorMissingGoalPortFieldV0(ports)}
+		}
+		return AppDirectorServiceIssueV0{Field: "goal_backend_unavailable"}
+	}
+	return validateStartAppDirectorPortsV0(ports)
 }
 
 func validateStartAppDirectorPortsV0(
@@ -42,10 +69,19 @@ func validateStartAppDirectorPortsV0(
 	if len(ports.Dispatchers) == 0 && len(ports.BatchDispatchers) == 0 {
 		return AppDirectorServiceIssueV0{Field: "ports.dispatchers"}
 	}
-	if appDirectorGoalPortsConfiguredForLaunchV0(ports) && !appDirectorGoalPortsReadyV0(ports) {
-		return AppDirectorServiceIssueV0{Field: appDirectorMissingGoalPortFieldV0(ports)}
-	}
 	return nil
+}
+
+func startAppDirectorRequiresGoalFirstV0(
+	request StartAppDirectorRequestV0,
+) bool {
+	return strings.TrimSpace(request.DirectorExecutionMode) == AppDirectorExecutionModeGoalFirstV0
+}
+
+func startAppDirectorForcesLegacyDirectorLoopV0(
+	request StartAppDirectorRequestV0,
+) bool {
+	return strings.TrimSpace(request.DirectorExecutionMode) == AppDirectorExecutionModeLegacyDirectorLoopV0
 }
 
 func appDirectorGoalPortsConfiguredForLaunchV0(

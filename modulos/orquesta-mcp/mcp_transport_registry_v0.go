@@ -178,7 +178,11 @@ func mcpArrancarDirectorAppTransportHandlerV0(
 		}
 		result, err := port.Execute(ctx, input)
 		if err != nil {
-			return nil, err
+			return json.Marshal(newMCPArrancarDirectorHTTPExecutorErrorV0(
+				err,
+				result.Errores,
+				firstNonEmptyMCPV0(input.CorrelationID, input.RequestID, input.AppSpecRequest.RequestID),
+			))
 		}
 		result = NormalizeMCPArrancarDirectorAppResultV0(
 			result,

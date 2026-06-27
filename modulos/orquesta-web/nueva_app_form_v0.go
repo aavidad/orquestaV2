@@ -12,26 +12,27 @@ const (
 )
 
 type WebNuevaAppFormV0 struct {
-	RequestID            string                         `json:"request_id"`
-	Locale               string                         `json:"locale"`
-	RequestKind          string                         `json:"request_kind,omitempty"`
-	ExecutionMode        string                         `json:"execution_mode,omitempty"`
-	Nombre               string                         `json:"nombre"`
-	Objetivo             string                         `json:"objetivo"`
-	Descripcion          string                         `json:"descripcion,omitempty"`
-	TipoApp              string                         `json:"tipo_app"`
-	ProjectSource        WebNuevaAppProjectSourceFormV0 `json:"project_source,omitempty"`
-	UsuariosObjetivo     []string                       `json:"usuarios_objetivo,omitempty"`
-	Plataformas          []string                       `json:"plataformas,omitempty"`
-	Integraciones        []WebNuevaAppConnectorFormV0   `json:"integraciones,omitempty"`
-	PreferenciasTecnicas WebNuevaAppPreferenciasFormV0  `json:"preferencias_tecnicas,omitempty"`
-	Datos                WebNuevaAppDatosFormV0         `json:"datos,omitempty"`
-	Deploy               WebNuevaAppDeployFormV0        `json:"deploy,omitempty"`
-	Calidad              WebNuevaAppCalidadFormV0       `json:"calidad,omitempty"`
-	Documentacion        WebNuevaAppDocumentacionFormV0 `json:"documentacion,omitempty"`
-	I18N                 WebNuevaAppI18NFormV0          `json:"i18n,omitempty"`
-	Agentes              WebNuevaAppAgentesFormV0       `json:"agentes,omitempty"`
-	Restricciones        []string                       `json:"restricciones,omitempty"`
+	RequestID             string                         `json:"request_id"`
+	Locale                string                         `json:"locale"`
+	RequestKind           string                         `json:"request_kind,omitempty"`
+	ExecutionMode         string                         `json:"execution_mode,omitempty"`
+	DirectorExecutionMode string                         `json:"director_execution_mode,omitempty"`
+	Nombre                string                         `json:"nombre"`
+	Objetivo              string                         `json:"objetivo"`
+	Descripcion           string                         `json:"descripcion,omitempty"`
+	TipoApp               string                         `json:"tipo_app"`
+	ProjectSource         WebNuevaAppProjectSourceFormV0 `json:"project_source,omitempty"`
+	UsuariosObjetivo      []string                       `json:"usuarios_objetivo,omitempty"`
+	Plataformas           []string                       `json:"plataformas,omitempty"`
+	Integraciones         []WebNuevaAppConnectorFormV0   `json:"integraciones,omitempty"`
+	PreferenciasTecnicas  WebNuevaAppPreferenciasFormV0  `json:"preferencias_tecnicas,omitempty"`
+	Datos                 WebNuevaAppDatosFormV0         `json:"datos,omitempty"`
+	Deploy                WebNuevaAppDeployFormV0        `json:"deploy,omitempty"`
+	Calidad               WebNuevaAppCalidadFormV0       `json:"calidad,omitempty"`
+	Documentacion         WebNuevaAppDocumentacionFormV0 `json:"documentacion,omitempty"`
+	I18N                  WebNuevaAppI18NFormV0          `json:"i18n,omitempty"`
+	Agentes               WebNuevaAppAgentesFormV0       `json:"agentes,omitempty"`
+	Restricciones         []string                       `json:"restricciones,omitempty"`
 }
 
 type WebNuevaAppProjectSourceFormV0 struct {

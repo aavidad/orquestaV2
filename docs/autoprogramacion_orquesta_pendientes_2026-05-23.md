@@ -304,11 +304,13 @@ Pendiente verificable:
   legacy hasta cerrar smokes equivalentes de OPES temporal, external-work,
   app-change y rutas residentes. No borrar codigo historico sin evidencia
   equivalente y commit especifico de retirada.
-- Pendiente de contrato para borrar mas legacy: transportar un modo estricto
-  `goal_first` desde MCP/REST hasta `StartAppDirectorV0` para que un entrypoint
-  goal-first sin backend Goal configurado falle como `goal_backend_unavailable`
-  en vez de caer al loop historico. Mantener fallback legacy solo con opt-in
-  legacy explicito.
+- Revalidacion adicional 2026-06-27: cerrado el contrato para borrar mas
+  legacy en `orquesta.apps.arrancar_director.v0` y `StartAppDirectorV0`.
+  `director_execution_mode` viaja por MCP/REST/web hasta el servicio; vacio se
+  normaliza a `goal_first`; sin backend Goal configurado falla como
+  `goal_backend_unavailable` y no cae al loop historico; `legacy_director_loop`
+  queda como opt-in explicito. Evidencia focal:
+  `go test -count=1 ./modulos/orquesta-app-director-service ./modulos/orquesta-mcp ./modulos/orquesta-web ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack`.
 - Pendiente de status: si falta `GoalWorkStateV0`, `autoprogramming/status`
   aun depende de la visibilidad del state store para publicar `observe_goal`.
   Para diagnostico perfecto debe recibir una fuente de run/forma goal-first o

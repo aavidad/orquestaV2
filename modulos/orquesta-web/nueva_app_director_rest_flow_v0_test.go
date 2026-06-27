@@ -31,11 +31,12 @@ func TestRESTArrancarDirectorAppClientV0FlujoVerticalMCP(t *testing.T) {
 
 	client := NewRESTArrancarDirectorAppClientV0(server.URL, time.Second)
 	vm, err := client.ArrancarDirectorApp(context.Background(), WebNuevaAppFormV0{
-		RequestID: "req-web-director-flow-001",
-		Locale:    "es-ES",
-		Nombre:    "Agenda",
-		Objetivo:  "Gestionar citas con API y web",
-		TipoApp:   "mixed",
+		RequestID:             "req-web-director-flow-001",
+		Locale:                "es-ES",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		Nombre:                "Agenda",
+		Objetivo:              "Gestionar citas con API y web",
+		TipoApp:               "mixed",
 		Agentes: WebNuevaAppAgentesFormV0{
 			Autonomia: "media",
 		},

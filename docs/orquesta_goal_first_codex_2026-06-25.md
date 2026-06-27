@@ -116,20 +116,22 @@ cuando el operador habia pedido goal-first y deja la accion pendiente clara.
 
 ## `/nueva-app` goal-first
 
-El 2026-06-25 `/api/v0/apps/director` queda conectado de forma opt-in a
-goal-first: `StartAppDirectorV0` persiste el intake/run, compila un
-`GoalWorkSpecV0` desde `AppSpecV0` y, si la composicion inyecta
-`GoalLauncher`, lanza el goal y devuelve `run_ref`, `goal_ref`,
-`external_goal_ref`, `goal_status`, `goal_launch_receipt` y
+El 2026-06-27 `/api/v0/apps/director` queda goal-first estricto por defecto:
+`StartAppDirectorV0` persiste el intake/run, compila un `GoalWorkSpecV0` desde
+`AppSpecV0` y exige bundle Goal completo para `director_execution_mode` vacio o
+`goal_first`. Si la composicion inyecta `GoalLauncher`, `GoalObserver`,
+`GoalClosureValidator` y `GoalStateStore`, lanza el goal y devuelve `run_ref`,
+`goal_ref`, `external_goal_ref`, `goal_status`, `goal_launch_receipt` y
 `director_execution_mode=goal_first`. En ese camino no ejecuta el loop legacy ni
-encola el run para el supervisor historico. Si la composicion no inyecta goal,
-el resultado declara `director_execution_mode=legacy_director_loop`.
+encola el run para el supervisor historico. Si no hay backend Goal configurado,
+la llamada falla como `goal_backend_unavailable` y conserva la evidencia publica
+del error; no cae al loop historico.
 
 La web `/nueva-app` acepta esa respuesta, muestra las refs dentro del bloque
 `director` y observa por `POST /api/v0/apps/director/goal/observe` con polling
-acotado. Sin `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o
-`app_server_stdio`, el puerto no se inyecta y se conserva el flujo legacy de
-Director/agentes.
+acotado. La compatibilidad de Director/agentes historica solo se activa si el
+caller transporta `director_execution_mode=legacy_director_loop`; sin ese opt-in
+explicito, la ausencia de backend Goal es un error operativo y no un fallback.
 
 Los backends `app_server_proxy` y `app_server_stdio` observan
 `thread/goal/get`; cuando el goal queda terminal leen `thread/read` con

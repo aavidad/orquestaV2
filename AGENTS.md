@@ -122,7 +122,11 @@ Tras los cortes del 2026-05-17, el estado real es:
   opt-in y valida cierre por evidencias. El loop historico
   `app-director-service`/`OperationalDirectorPlanStateV0` queda como
   compatibilidad para rutas no migradas y smokes existentes; no se borra sin
-  evidencia equivalente.
+  evidencia equivalente. Corte 2026-06-27: en `StartAppDirectorV0` y
+  `orquesta.apps.arrancar_director.v0`, modo vacio significa `goal_first`; si
+  falta backend Goal se devuelve `goal_backend_unavailable` y no se cae al loop
+  historico. El loop antiguo exige `director_execution_mode=legacy_director_loop`
+  explicito.
 
 Orden de autoridad documental:
 

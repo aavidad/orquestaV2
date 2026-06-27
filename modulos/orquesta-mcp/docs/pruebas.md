@@ -634,6 +634,22 @@ devuelve salida compacta con `run_ref`, `goal_ref`, `goal_status`,
 artefactos/evidencias y errores publicos. Sin executor devuelve
 `mcp_transport_tool_unbound` por transporte.
 
+## Prueba arranque app goal-first estricto 2026-06-27
+
+Comando:
+
+```bash
+go test -count=1 ./modulos/orquesta-mcp \
+  -run 'ArrancarDirectorApp.*GoalFirst|ToStartAppDirectorRequestV0TransportaDirectorExecutionMode|MCPTransportToolInputSchema'
+```
+
+Evidencia esperada: `orquesta.apps.arrancar_director.v0` transporta
+`director_execution_mode` hasta `StartAppDirectorV0`; `goal_first` sin backend
+Goal completo devuelve `errores_publicos.field=goal_backend_unavailable` por
+HTTP y transporte MCP sin filtrar un error Go crudo; `legacy_director_loop`
+queda como compatibilidad explicita y los resultados goal-first no arrancan
+agentes legacy.
+
 ## Prueba observacion goal-first de autoprogramacion 2026-06-26
 
 Comando:

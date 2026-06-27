@@ -7,6 +7,7 @@ import (
 
 	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
+	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestarunmemory "orquesta/modulos/orquesta-run-memory"
@@ -121,6 +122,7 @@ func codexStackRealSmokeFormValuesV0() url.Values {
 	values := url.Values{}
 	values.Set("request_id", "request-ref-app-stack-real-smoke-001")
 	values.Set("locale", "es-ES")
+	values.Set("director_execution_mode", orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0)
 	values.Set("request_kind", "crear_app_completa")
 	values.Set("execution_mode", "normal")
 	values.Set("nombre", "Agenda API Web")

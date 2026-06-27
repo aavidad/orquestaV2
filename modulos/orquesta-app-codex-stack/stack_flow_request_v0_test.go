@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"testing"
 
+	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestafactory "orquesta/modulos/orquesta-factory"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -22,13 +23,14 @@ func postDirectorAPIV0(
 	t.Helper()
 	body := bytes.NewBuffer(nil)
 	err := json.NewEncoder(body).Encode(orquestamcp.MCPArrancarDirectorAppToolInputV0{
-		RequestID:            "request-ref-app-stack-api-001",
-		CorrelationID:        "corr-app-stack-api-001",
-		AppSpecRequest:       codexStackAppSpecRequestV0(),
-		MaxBursts:            16,
-		MaxStepsPerBurst:     8,
-		MaxDispatchesPerWait: 8,
-		MaxExternalWaits:     4,
+		RequestID:             "request-ref-app-stack-api-001",
+		CorrelationID:         "corr-app-stack-api-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		AppSpecRequest:        codexStackAppSpecRequestV0(),
+		MaxBursts:             16,
+		MaxStepsPerBurst:      8,
+		MaxDispatchesPerWait:  8,
+		MaxExternalWaits:      4,
 	})
 	if err != nil {
 		t.Fatalf("encode: %v", err)
@@ -131,6 +133,7 @@ func codexStackFormValuesV0() url.Values {
 	values := url.Values{}
 	values.Set("request_id", "request-ref-app-stack-web-001")
 	values.Set("locale", "es-ES")
+	values.Set("director_execution_mode", orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0)
 	values.Set("request_kind", "crear_app_completa")
 	values.Set("execution_mode", "normal")
 	values.Set("nombre", "Agenda API Web")

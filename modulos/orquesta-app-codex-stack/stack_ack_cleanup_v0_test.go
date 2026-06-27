@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"testing"
 
+	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -70,13 +71,14 @@ func postDirectorAllowingErrorV0(t *testing.T, stack StackV0) {
 	t.Helper()
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(orquestamcp.MCPArrancarDirectorAppToolInputV0{
-		RequestID:            "request-ref-app-stack-invalid-ack-001",
-		CorrelationID:        "corr-app-stack-invalid-ack-001",
-		AppSpecRequest:       codexStackAppSpecRequestV0(),
-		MaxBursts:            16,
-		MaxStepsPerBurst:     8,
-		MaxDispatchesPerWait: 8,
-		MaxExternalWaits:     1,
+		RequestID:             "request-ref-app-stack-invalid-ack-001",
+		CorrelationID:         "corr-app-stack-invalid-ack-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		AppSpecRequest:        codexStackAppSpecRequestV0(),
+		MaxBursts:             16,
+		MaxStepsPerBurst:      8,
+		MaxDispatchesPerWait:  8,
+		MaxExternalWaits:      1,
 	}); err != nil {
 		t.Fatalf("encode: %v", err)
 	}

@@ -27,16 +27,17 @@ type MCPArrancarDirectorAppToolDescriptorV0 struct {
 }
 
 type MCPArrancarDirectorAppToolInputV0 struct {
-	RequestID            string                           `json:"request_id,omitempty"`
-	CorrelationID        string                           `json:"correlation_id,omitempty"`
-	Respuesta            string                           `json:"respuesta,omitempty"`
-	AppSpecRequest       orquestafactory.AppSpecRequestV0 `json:"app_spec_request"`
-	MaxBursts            int                              `json:"max_bursts,omitempty"`
-	MaxStepsPerBurst     int                              `json:"max_steps_per_burst,omitempty"`
-	MaxDispatchesPerWait int                              `json:"max_dispatches_per_wait,omitempty"`
-	MaxCommands          int                              `json:"max_commands,omitempty"`
-	MaxOutboxPerCycle    int                              `json:"max_outbox_per_cycle,omitempty"`
-	MaxExternalWaits     int                              `json:"max_external_waits,omitempty"`
+	RequestID             string                           `json:"request_id,omitempty"`
+	CorrelationID         string                           `json:"correlation_id,omitempty"`
+	Respuesta             string                           `json:"respuesta,omitempty"`
+	DirectorExecutionMode string                           `json:"director_execution_mode,omitempty"`
+	AppSpecRequest        orquestafactory.AppSpecRequestV0 `json:"app_spec_request"`
+	MaxBursts             int                              `json:"max_bursts,omitempty"`
+	MaxStepsPerBurst      int                              `json:"max_steps_per_burst,omitempty"`
+	MaxDispatchesPerWait  int                              `json:"max_dispatches_per_wait,omitempty"`
+	MaxCommands           int                              `json:"max_commands,omitempty"`
+	MaxOutboxPerCycle     int                              `json:"max_outbox_per_cycle,omitempty"`
+	MaxExternalWaits      int                              `json:"max_external_waits,omitempty"`
 }
 
 type MCPArrancarDirectorAppToolResultV0 struct {
@@ -71,7 +72,7 @@ func MCPArrancarDirectorAppDescriptorV0() MCPArrancarDirectorAppToolDescriptorV0
 	return MCPArrancarDirectorAppToolDescriptorV0{
 		Name:        MCPArrancarDirectorAppToolNameV0,
 		Version:     MCPArrancarDirectorAppToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,respuesta?,app_spec_request:AppSpecRequestV0(request_kind?,execution_mode?),max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,max_external_waits?}",
+		InputSchema: "envelope:{request_id?,correlation_id?,respuesta?,director_execution_mode?:goal_first|legacy_director_loop,app_spec_request:AppSpecRequestV0(request_kind?,execution_mode?),max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,max_external_waits?}",
 		Output:      "ok:{route_policy,app_spec,run_ref,director_execution_mode?,goal_ref?,goal_status?,phase_id?,loop_status?}|error:{route_policy,errores_publicos}",
 		ResourceURI: MCPArrancarDirectorAppResourceURIV0,
 		Invariantes: []string{
@@ -113,15 +114,16 @@ func ToStartAppDirectorRequestV0(
 	req.Source = MCPNuevaAppSourceV0
 	req.RequestID = neutralAppDirectorRequestRefV0("req", req.Nombre, externalRequestID)
 	return orquestaappdirectorservice.StartAppDirectorRequestV0{
-		CorrelationID:        neutralAppDirectorRequestRefV0("corr", req.Nombre, externalCorrelationID),
-		RequestedBy:          "orquesta-mcp",
-		AppSpecRequest:       req,
-		MaxBursts:            input.MaxBursts,
-		MaxStepsPerBurst:     input.MaxStepsPerBurst,
-		MaxDispatchesPerWait: input.MaxDispatchesPerWait,
-		MaxCommands:          input.MaxCommands,
-		MaxOutboxPerCycle:    input.MaxOutboxPerCycle,
-		MaxExternalWaits:     input.MaxExternalWaits,
+		CorrelationID:         neutralAppDirectorRequestRefV0("corr", req.Nombre, externalCorrelationID),
+		RequestedBy:           "orquesta-mcp",
+		DirectorExecutionMode: strings.TrimSpace(input.DirectorExecutionMode),
+		AppSpecRequest:        req,
+		MaxBursts:             input.MaxBursts,
+		MaxStepsPerBurst:      input.MaxStepsPerBurst,
+		MaxDispatchesPerWait:  input.MaxDispatchesPerWait,
+		MaxCommands:           input.MaxCommands,
+		MaxOutboxPerCycle:     input.MaxOutboxPerCycle,
+		MaxExternalWaits:      input.MaxExternalWaits,
 	}
 }
 

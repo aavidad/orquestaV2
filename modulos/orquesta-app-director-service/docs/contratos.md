@@ -6,6 +6,9 @@ Entrada: `StartAppDirectorRequestV0`.
 
 - `app_spec_request`: DTO canonico de factory;
 - refs opcionales: `run_ref`, `project_ref`, `correlation_id`, `requested_by`;
+- `director_execution_mode`: vacio o `goal_first` exige backend Goal y no cae
+  al loop historico; `legacy_director_loop` fuerza compatibilidad explicita con
+  Director/agentes historicos;
 - espera opcional: `wait_agent_refs` explicitas o filtros
   `wait_cohort_ref`, `wait_wave_ref`, `wait_parent_task_ref`;
 - plan operativo directo opcional: si llega `operational_director_plan`,
@@ -19,7 +22,10 @@ Entrada: `StartAppDirectorRequestV0`.
 Puertos requeridos:
 
 - `RunStorePortV0`;
-- `EventSinkPortV0`;
+- `EventSinkPortV0`.
+
+Puertos requeridos solo en `legacy_director_loop`:
+
 - `OutboxLedger`;
 - dispatchers de outbox ya configurados por la composicion externa.
 
@@ -41,12 +47,13 @@ Puertos opcionales:
   cuando `ContinueAppDirectorV0` reentra por `operational_director_plan_ref`;
 - `EventReader`, opcional pero necesario para que el plan state pueda avanzar
   `review_deliveries` desde el historial durable de eventos;
-- bundle goal-first completo, opcional para modo goal-first:
+- bundle goal-first completo, requerido para modo vacio/`goal_first`:
   `GoalLauncher`, `GoalObserver`, `GoalClosureValidator` y `GoalStateStore`.
-  Si se inyecta parcialmente con launcher u observer, el servicio falla de
-  forma explicita y no cae al loop legacy. Si se inyecta completo, persiste el
+  Si falta por completo, el servicio falla como `goal_backend_unavailable`; si
+  se inyecta parcialmente con launcher u observer, falla por el puerto concreto.
+  En ambos casos no cae al loop legacy. Si se inyecta completo, persiste el
   intake/run, compila un `GoalWorkSpecV0` neutral desde `AppSpecV0`, lanza el
-  goal por el puerto y no entra en el loop legacy de agentes. Para
+  goal por el puerto y no exige `OutboxLedger` ni dispatchers legacy. Para
   `/nueva-app`, el spec incluye `required_tests` ligados al write-set generado
   y `ClosurePolicy.RequireRequiredTests=true`; un goal `complete` sin
   `required_test_results` pasados queda bloqueado y pide rework. Un goal

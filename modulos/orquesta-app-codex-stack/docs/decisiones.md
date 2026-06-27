@@ -342,8 +342,10 @@ Motivo: Cuando el backend de Codex Goal esta configurado, pedir una app desde
 la web debe poder arrancar un Goal que haga de loop automatico sin reactivar el
 loop legacy de agentes.
 Impacto: `buildDirectorPortsV0` inyecta el launcher neutral; `QueuedArrancarDirectorExecutorV0`
-no encola el run legacy si el resultado MCP trae `goal_ref`. Sin launcher, el
-comportamiento anterior se conserva.
+no encola el run legacy si el resultado MCP trae `goal_ref`. Desde el
+2026-06-27, sin backend Goal un arranque `goal_first` falla como
+`goal_backend_unavailable` y no cae al loop antiguo; el comportamiento anterior
+solo se conserva con `director_execution_mode=legacy_director_loop` explicito.
 Contratos afectados: `ConfigV0`, `StartAppDirectorPortsV0`,
 `orquesta.apps.arrancar_director.v0`, `RunQueue`.
 Estado: aceptada localmente.

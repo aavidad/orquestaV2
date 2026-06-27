@@ -1,6 +1,21 @@
 # Decisiones: orquesta-app-director-service
 
 ```text
+Fecha: 2026-06-27
+Decision: `StartAppDirectorV0` normaliza `director_execution_mode` vacio a
+`goal_first` y exige backend Goal completo para arrancar apps nuevas.
+Motivo: con Codex Goal, el loop persistente vive dentro del runtime Goal; el
+servicio debe compilar, lanzar, observar y validar cierre, no reactivar el loop
+historico por ausencia silenciosa de backend.
+Impacto: `goal_first` no exige `OutboxLedger` ni dispatchers legacy; si faltan
+`GoalLauncher`, `GoalObserver`, `GoalClosureValidator` o `GoalStateStore`,
+devuelve `goal_backend_unavailable` o el puerto concreto y no crea agentes
+legacy. `legacy_director_loop` queda como opt-in explicito y salta el intento
+Goal aunque el bundle este presente.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-22
 Decision: Permitir plan operativo inicial en StartAppDirectorV0 solo con
 contratos funcionales explicitos.

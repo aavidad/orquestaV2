@@ -70,7 +70,7 @@ func (client *RESTArrancarDirectorAppClientV0) ArrancarDirectorApp(
 		ctx, cancel = context.WithTimeout(ctx, client.Timeout)
 		defer cancel()
 	}
-	payload, err := json.Marshal(client.payloadV0(request))
+	payload, err := json.Marshal(client.payloadV0(form, request))
 	if err != nil {
 		return WebNuevaAppViewModelV0{}, webNuevaAppClientErrorV0(WebNuevaAppErrRespuestaInvalidaV0, 0)
 	}
@@ -90,17 +90,21 @@ func (client *RESTArrancarDirectorAppClientV0) ArrancarDirectorApp(
 	return decodeArrancarDirectorAppResponseV0(resp, form)
 }
 
-func (client *RESTArrancarDirectorAppClientV0) payloadV0(request orquestafactory.AppSpecRequestV0) arrancarDirectorAppRequestEnvelopeV0 {
+func (client *RESTArrancarDirectorAppClientV0) payloadV0(
+	form WebNuevaAppFormV0,
+	request orquestafactory.AppSpecRequestV0,
+) arrancarDirectorAppRequestEnvelopeV0 {
 	return arrancarDirectorAppRequestEnvelopeV0{
-		RequestID:            request.RequestID,
-		CorrelationID:        request.RequestID,
-		AppSpecRequest:       request,
-		MaxBursts:            client.Limits.MaxBursts,
-		MaxStepsPerBurst:     client.Limits.MaxStepsPerBurst,
-		MaxDispatchesPerWait: client.Limits.MaxDispatchesPerWait,
-		MaxCommands:          client.Limits.MaxCommands,
-		MaxOutboxPerCycle:    client.Limits.MaxOutboxPerCycle,
-		MaxExternalWaits:     client.Limits.MaxExternalWaits,
+		RequestID:             request.RequestID,
+		CorrelationID:         request.RequestID,
+		DirectorExecutionMode: strings.TrimSpace(form.DirectorExecutionMode),
+		AppSpecRequest:        request,
+		MaxBursts:             client.Limits.MaxBursts,
+		MaxStepsPerBurst:      client.Limits.MaxStepsPerBurst,
+		MaxDispatchesPerWait:  client.Limits.MaxDispatchesPerWait,
+		MaxCommands:           client.Limits.MaxCommands,
+		MaxOutboxPerCycle:     client.Limits.MaxOutboxPerCycle,
+		MaxExternalWaits:      client.Limits.MaxExternalWaits,
 	}
 }
 
@@ -155,13 +159,14 @@ func IsWebArrancarDirectorClientErrorCodeV0(err error, code string) bool {
 }
 
 type arrancarDirectorAppRequestEnvelopeV0 struct {
-	RequestID            string                           `json:"request_id,omitempty"`
-	CorrelationID        string                           `json:"correlation_id,omitempty"`
-	AppSpecRequest       orquestafactory.AppSpecRequestV0 `json:"app_spec_request"`
-	MaxBursts            int                              `json:"max_bursts,omitempty"`
-	MaxStepsPerBurst     int                              `json:"max_steps_per_burst,omitempty"`
-	MaxDispatchesPerWait int                              `json:"max_dispatches_per_wait,omitempty"`
-	MaxCommands          int                              `json:"max_commands,omitempty"`
-	MaxOutboxPerCycle    int                              `json:"max_outbox_per_cycle,omitempty"`
-	MaxExternalWaits     int                              `json:"max_external_waits,omitempty"`
+	RequestID             string                           `json:"request_id,omitempty"`
+	CorrelationID         string                           `json:"correlation_id,omitempty"`
+	DirectorExecutionMode string                           `json:"director_execution_mode,omitempty"`
+	AppSpecRequest        orquestafactory.AppSpecRequestV0 `json:"app_spec_request"`
+	MaxBursts             int                              `json:"max_bursts,omitempty"`
+	MaxStepsPerBurst      int                              `json:"max_steps_per_burst,omitempty"`
+	MaxDispatchesPerWait  int                              `json:"max_dispatches_per_wait,omitempty"`
+	MaxCommands           int                              `json:"max_commands,omitempty"`
+	MaxOutboxPerCycle     int                              `json:"max_outbox_per_cycle,omitempty"`
+	MaxExternalWaits      int                              `json:"max_external_waits,omitempty"`
 }

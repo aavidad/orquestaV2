@@ -116,10 +116,12 @@ func TestStartAppDirectorV0GoalFirstLanzaGoalYNoEjecutaLoopLegacy(t *testing.T) 
 	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
 	launcher := &serviceGoalLauncherForTestV0{}
 	goalStates := newServiceGoalStateStoreForTestV0()
+	request := validStartAppDirectorRequestForTestV0()
+	request.DirectorExecutionMode = AppDirectorExecutionModeGoalFirstV0
 
 	result, err := StartAppDirectorV0(
 		context.Background(),
-		validStartAppDirectorRequestForTestV0(),
+		request,
 		StartAppDirectorPortsV0{
 			RunStore:             store,
 			EventSink:            sink,
@@ -176,16 +178,120 @@ func TestStartAppDirectorV0GoalFirstLanzaGoalYNoEjecutaLoopLegacy(t *testing.T) 
 	}
 }
 
+func TestStartAppDirectorV0GoalFirstPorDefectoNoExigeOutboxNiDispatchersLegacy(t *testing.T) {
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	launcher := &serviceGoalLauncherForTestV0{}
+	goalStates := newServiceGoalStateStoreForTestV0()
+	request := validStartAppDirectorRequestForTestV0()
+	request.DirectorExecutionMode = ""
+
+	result, err := StartAppDirectorV0(
+		context.Background(),
+		request,
+		StartAppDirectorPortsV0{
+			RunStore:             store,
+			EventSink:            sink,
+			GoalLauncher:         launcher,
+			GoalObserver:         serviceGoalObserverForTestV0{},
+			GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+			GoalStateStore:       goalStates,
+		},
+	)
+	if err != nil {
+		t.Fatalf("StartAppDirectorV0: %v", err)
+	}
+	if result.DirectorExecutionMode != AppDirectorExecutionModeGoalFirstV0 ||
+		result.GoalRef == "" ||
+		launcher.calls != 1 ||
+		len(result.StartedAgents) != 0 ||
+		result.LoopStatus != "" {
+		t.Fatalf("result=%+v calls=%d", result, launcher.calls)
+	}
+}
+
+func TestStartAppDirectorV0GoalFirstEstrictoSinBackendNoCaeALoopLegacy(t *testing.T) {
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	request := validStartAppDirectorRequestForTestV0()
+	request.DirectorExecutionMode = AppDirectorExecutionModeGoalFirstV0
+
+	result, err := StartAppDirectorV0(
+		context.Background(),
+		request,
+		StartAppDirectorPortsV0{
+			RunStore:     store,
+			EventSink:    sink,
+			OutboxLedger: ledger,
+			Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
+				serviceCapacityDispatcherForTestV0(store, sink, ledger),
+				serviceAgentLauncherDispatcherForTestV0(store, sink, ledger),
+			},
+		},
+	)
+
+	if err == nil || err.Error() != "app_director_service_invalido: goal_backend_unavailable" {
+		t.Fatalf("err=%v result=%+v", err, result)
+	}
+	if serviceHasEventTypeV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventAgentRequestedV0) ||
+		serviceHasEventTypeV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventAgentStartedV0) {
+		t.Fatalf("goal-first estricto no debe caer al loop legacy: %+v", sink.EventsV0())
+	}
+}
+
+func TestStartAppDirectorV0LegacyDirectorLoopExplicitoNoLanzaGoal(t *testing.T) {
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	launcher := &serviceGoalLauncherForTestV0{}
+	goalStates := newServiceGoalStateStoreForTestV0()
+	request := validStartAppDirectorRequestForTestV0()
+	request.DirectorExecutionMode = AppDirectorExecutionModeLegacyDirectorLoopV0
+
+	result, err := StartAppDirectorV0(
+		context.Background(),
+		request,
+		StartAppDirectorPortsV0{
+			RunStore:             store,
+			EventSink:            sink,
+			OutboxLedger:         ledger,
+			GoalLauncher:         launcher,
+			GoalObserver:         serviceGoalObserverForTestV0{},
+			GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+			GoalStateStore:       goalStates,
+			Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
+				serviceCapacityDispatcherForTestV0(store, sink, ledger),
+				serviceAgentLauncherDispatcherForTestV0(store, sink, ledger),
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("StartAppDirectorV0: %v", err)
+	}
+	if result.Status != StartAppDirectorStatusStartedV0 ||
+		result.DirectorExecutionMode != AppDirectorExecutionModeLegacyDirectorLoopV0 ||
+		len(result.StartedAgents) != 1 ||
+		result.GoalRef != "" {
+		t.Fatalf("result=%+v", result)
+	}
+	if launcher.calls != 0 || len(goalStates.states) != 0 {
+		t.Fatalf("legacy explicito no debe lanzar goal: calls=%d states=%+v", launcher.calls, goalStates.states)
+	}
+}
+
 func TestStartAppDirectorV0GoalFirstLauncherDegradadoNoCaeALoopLegacy(t *testing.T) {
 	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
 	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
 	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
 	launcher := &serviceGoalLauncherForTestV0{err: errors.New("goal_launcher_unavailable")}
 	goalStates := newServiceGoalStateStoreForTestV0()
+	request := validStartAppDirectorRequestForTestV0()
+	request.DirectorExecutionMode = AppDirectorExecutionModeGoalFirstV0
 
 	result, err := StartAppDirectorV0(
 		context.Background(),
-		validStartAppDirectorRequestForTestV0(),
+		request,
 		StartAppDirectorPortsV0{
 			RunStore:             store,
 			EventSink:            sink,
@@ -222,10 +328,12 @@ func TestStartAppDirectorV0GoalFirstBundleIncompletoNoCaeALoopLegacy(t *testing.
 	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
 	launcher := &serviceGoalLauncherForTestV0{}
 	goalStates := newServiceGoalStateStoreForTestV0()
+	request := validStartAppDirectorRequestForTestV0()
+	request.DirectorExecutionMode = AppDirectorExecutionModeGoalFirstV0
 
 	result, err := StartAppDirectorV0(
 		context.Background(),
-		validStartAppDirectorRequestForTestV0(),
+		request,
 		StartAppDirectorPortsV0{
 			RunStore:       store,
 			EventSink:      sink,
@@ -451,9 +559,11 @@ func serviceStartGoalFirstForObserveTestV0(t *testing.T) (
 	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
 	launcher := &serviceGoalLauncherForTestV0{}
 	goalStates := newServiceGoalStateStoreForTestV0()
+	request := validStartAppDirectorRequestForTestV0()
+	request.DirectorExecutionMode = AppDirectorExecutionModeGoalFirstV0
 	result, err := StartAppDirectorV0(
 		context.Background(),
-		validStartAppDirectorRequestForTestV0(),
+		request,
 		StartAppDirectorPortsV0{
 			RunStore:             store,
 			EventSink:            sink,
@@ -552,6 +662,17 @@ func TestStartAppDirectorV0RequiresInjectedPorts(t *testing.T) {
 	}
 }
 
+func TestStartAppDirectorV0RejectsDirectorExecutionModeInvalido(t *testing.T) {
+	request := validStartAppDirectorRequestForTestV0()
+	request.DirectorExecutionMode = "director-antiguo"
+
+	_, err := StartAppDirectorV0(context.Background(), request, StartAppDirectorPortsV0{})
+
+	if err == nil || err.Error() != "app_director_service_invalido: director_execution_mode" {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 type serviceGoalLauncherForTestV0 struct {
 	calls int
 	specs []orquestagoal.GoalWorkSpecV0
@@ -621,11 +742,12 @@ func (store *serviceGoalStateStoreForTestV0) LoadGoalWorkStateV0(
 func validStartAppDirectorRequestForTestV0() StartAppDirectorRequestV0 {
 	observability := true
 	return StartAppDirectorRequestV0{
-		RunRef:        "run-app-director-service-001",
-		ProjectRef:    "project-app-director-service-001",
-		OccurredAt:    "2026-05-09T22:30:00Z",
-		CorrelationID: "corr-app-director-service-001",
-		RequestedBy:   "orquesta-app-director-service-test",
+		RunRef:                "run-app-director-service-001",
+		ProjectRef:            "project-app-director-service-001",
+		OccurredAt:            "2026-05-09T22:30:00Z",
+		CorrelationID:         "corr-app-director-service-001",
+		RequestedBy:           "orquesta-app-director-service-test",
+		DirectorExecutionMode: AppDirectorExecutionModeLegacyDirectorLoopV0,
 		AppSpecRequest: orquestafactory.AppSpecRequestV0{
 			SchemaVersion: orquestafactory.AppSpecRequestSchemaV0,
 			RequestID:     "request-ref-app-director-service-001",

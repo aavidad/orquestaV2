@@ -72,8 +72,9 @@ func postAppGatewayDirectorAPIV0(
 	t.Helper()
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(orquestamcp.MCPArrancarDirectorAppToolInputV0{
-		RequestID:     "request-ref-app-gateway-real-flow-001",
-		CorrelationID: "corr-app-gateway-real-flow-001",
+		RequestID:             "request-ref-app-gateway-real-flow-001",
+		CorrelationID:         "corr-app-gateway-real-flow-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
 		AppSpecRequest: orquestafactory.AppSpecRequestV0{
 			SchemaVersion: orquestafactory.AppSpecRequestSchemaV0,
 			RequestID:     "request-ref-app-gateway-real-flow-001",

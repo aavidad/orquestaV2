@@ -31,7 +31,7 @@ func StartAppDirectorV0(
 	if len(issues) > 0 {
 		return invalidStartAppDirectorResultV0(request, issues), nil
 	}
-	if err := validateStartAppDirectorPortsV0(ports); err != nil {
+	if err := validateStartAppDirectorStartPortsV0(request, ports); err != nil {
 		return StartAppDirectorResultV0{}, err
 	}
 	prepared, err := orquestaappdirectorintake.PrepareAppDirectorIntakeV0(
@@ -43,12 +43,17 @@ func StartAppDirectorV0(
 	if err := persistPreparedDirectorIntakeV0(ctx, ports, prepared); err != nil {
 		return StartAppDirectorResultV0{}, err
 	}
-	goalResult, launchedGoal, err := startAppDirectorGoalFirstV0(ctx, request, spec, prepared, ports)
-	if err != nil {
-		return StartAppDirectorResultV0{}, err
-	}
-	if launchedGoal {
-		return goalResult, nil
+	if !startAppDirectorForcesLegacyDirectorLoopV0(request) {
+		goalResult, launchedGoal, err := startAppDirectorGoalFirstV0(ctx, request, spec, prepared, ports)
+		if err != nil {
+			return StartAppDirectorResultV0{}, err
+		}
+		if launchedGoal {
+			return goalResult, nil
+		}
+		if startAppDirectorRequiresGoalFirstV0(request) {
+			return StartAppDirectorResultV0{}, AppDirectorServiceIssueV0{Field: "goal_backend_unavailable"}
+		}
 	}
 	request, err = startAppDirectorWithOperationalDirectorPlanV0(ctx, request, ports, prepared)
 	if err != nil {

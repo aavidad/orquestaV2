@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
+	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
@@ -144,9 +145,10 @@ func codexStackStartRunForChangeTestV0(t *testing.T, stack StackV0) string {
 	t.Helper()
 	body := new(bytes.Buffer)
 	_ = json.NewEncoder(body).Encode(orquestamcp.MCPArrancarDirectorAppToolInputV0{
-		RequestID:      "req-stack-change-start-001",
-		CorrelationID:  "corr-stack-change-start-001",
-		AppSpecRequest: codexStackAppSpecRequestV0(),
+		RequestID:             "req-stack-change-start-001",
+		CorrelationID:         "corr-stack-change-start-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		AppSpecRequest:        codexStackAppSpecRequestV0(),
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v0/apps/director", body)
 	rec := httptest.NewRecorder()

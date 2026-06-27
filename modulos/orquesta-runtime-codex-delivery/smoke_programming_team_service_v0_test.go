@@ -15,19 +15,20 @@ func programmingTeamDirectorStartRequestV0(
 	cfg codexRealSmokeConfigV0,
 ) orquestaappdirectorservice.StartAppDirectorRequestV0 {
 	return orquestaappdirectorservice.StartAppDirectorRequestV0{
-		RunRef:               runRef,
-		ProjectRef:           "project-ref-programming-team-real-001",
-		OccurredAt:           "2026-05-10T00:00:00Z",
-		CorrelationID:        "corr-programming-team-001",
-		RequestedBy:          "orquesta-programming-team-smoke",
-		AppSpecRequest:       mcpFormDirectorSmokeFormV0().ToAppSpecRequestV0(),
-		MaxBursts:            10,
-		MaxStepsPerBurst:     8,
-		MaxDispatchesPerWait: 8,
-		MaxCommands:          18,
-		MaxOutboxPerCycle:    8,
-		MaxDecisionCycles:    4,
-		MaxExternalWaits:     programmingTeamMaxExternalWaitsV0(cfg.Timeout, 5*time.Second),
+		RunRef:                runRef,
+		ProjectRef:            "project-ref-programming-team-real-001",
+		OccurredAt:            "2026-05-10T00:00:00Z",
+		CorrelationID:         "corr-programming-team-001",
+		RequestedBy:           "orquesta-programming-team-smoke",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		AppSpecRequest:        mcpFormDirectorSmokeFormV0().ToAppSpecRequestV0(),
+		MaxBursts:             10,
+		MaxStepsPerBurst:      8,
+		MaxDispatchesPerWait:  8,
+		MaxCommands:           18,
+		MaxOutboxPerCycle:     8,
+		MaxDecisionCycles:     4,
+		MaxExternalWaits:      programmingTeamMaxExternalWaitsV0(cfg.Timeout, 5*time.Second),
 	}
 }
 

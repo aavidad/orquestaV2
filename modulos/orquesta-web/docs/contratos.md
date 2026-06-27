@@ -71,6 +71,10 @@ Transporte REST canonico local: `POST /api/v0/apps/director`.
 Responsabilidad:
 
 - Enviar `AppSpecRequestV0` desde el wizard/formulario al bridge REST del tool MCP.
+- Transportar `director_execution_mode` como campo de orquestacion separado de
+  `AppSpecRequestV0.execution_mode`: vacio usa `goal_first`, y
+  `legacy_director_loop` solo se manda cuando el operador quiere compatibilidad
+  historica explicita.
 - Recibir `run_ref`, fase, tareas del director y agentes arrancados.
 - Proyectar el resultado como bloque `director` dentro de `WebNuevaAppViewModelV0`.
 
@@ -424,6 +428,7 @@ Campos:
 - locale
 - request_kind
 - execution_mode
+- director_execution_mode
 - nombre
 - objetivo
 - descripcion

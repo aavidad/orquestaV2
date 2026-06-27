@@ -183,6 +183,8 @@ Campos:
   input:
     request_id: ref externa opcional; el adaptador la traduce a ref interna neutra
     correlation_id: ref externa opcional; el adaptador la traduce a ref interna neutra
+    director_execution_mode: vacio/`goal_first` exige backend Goal y
+      `legacy_director_loop` fuerza compatibilidad historica explicita
     app_spec_request: AppSpecRequestV0 validado por factory
     max_bursts, max_steps_per_burst, max_dispatches_per_wait: limites operativos
   output_ok:
@@ -205,6 +207,8 @@ Campos:
   output_error:
     estado: error
     errores_publicos: issues de factory o servicio de aplicacion
+    goal_backend_unavailable: error publico cuando el caller pide goal-first y
+      la composicion no inyecta backend Goal completo
 Invariantes:
   - Delegacion en `orquesta-app-director-service`.
   - No elige proveedor, modelo, HOME, OAuth, DB ni runtime.
@@ -214,6 +218,10 @@ Invariantes:
 	  - Ejecucion con puertos fake arranca director y devuelve `started_agents`.
 	  - Ejecucion con `GoalLauncher` devuelve `run_ref` y `goal_ref` sin
 	    arrancar agentes legacy.
+	  - `director_execution_mode=goal_first` sin backend devuelve error publico
+	    y no cae al loop historico.
+	  - `director_execution_mode=legacy_director_loop` conserva la rama legacy
+	    de forma explicita.
 	  - Autonomia alta devuelve `director_tasks` y arranca equipo por batch.
 	  - Request/correlation externos con `mcp` se traducen a refs internas neutras.
 	  - Request invalida devuelve errores publicos sin crear run.

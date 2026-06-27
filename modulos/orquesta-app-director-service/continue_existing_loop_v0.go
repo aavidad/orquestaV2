@@ -131,6 +131,7 @@ func continueAsStartRequestV0(request ContinueAppDirectorRequestV0) StartAppDire
 		OccurredAt:                              request.OccurredAt,
 		CorrelationID:                           request.CorrelationID,
 		RequestedBy:                             request.RequestedBy,
+		DirectorExecutionMode:                   AppDirectorExecutionModeLegacyDirectorLoopV0,
 		MaxBursts:                               request.MaxBursts,
 		MaxStepsPerBurst:                        request.MaxStepsPerBurst,
 		MaxDispatchesPerWait:                    request.MaxDispatchesPerWait,

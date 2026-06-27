@@ -81,7 +81,9 @@ func TestMCPArrancarDirectorAppToolExecutorV0ExponeGoalFirst(t *testing.T) {
 		},
 	)
 
-	result, err := executor.Execute(context.Background(), validMCPDirectorAppInputForTestV0())
+	input := validMCPDirectorAppInputForTestV0()
+	input.DirectorExecutionMode = orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0
+	result, err := executor.Execute(context.Background(), input)
 	if err != nil {
 		t.Fatalf("Execute: %v result=%+v", err, result)
 	}
@@ -98,6 +100,46 @@ func TestMCPArrancarDirectorAppToolExecutorV0ExponeGoalFirst(t *testing.T) {
 		result.GoalLaunchReceipt.GoalRef != result.GoalRef ||
 		launcher.calls != 1 {
 		t.Fatalf("receipt=%+v calls=%d", result.GoalLaunchReceipt, launcher.calls)
+	}
+}
+
+func TestToStartAppDirectorRequestV0TransportaDirectorExecutionMode(t *testing.T) {
+	input := validMCPDirectorAppInputForTestV0()
+	input.DirectorExecutionMode = orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0
+
+	request := ToStartAppDirectorRequestV0(input)
+
+	if request.DirectorExecutionMode != orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0 {
+		t.Fatalf("director_execution_mode=%q", request.DirectorExecutionMode)
+	}
+}
+
+func TestMCPArrancarDirectorAppToolExecutorV0GoalFirstEstrictoSinBackendDevuelveError(t *testing.T) {
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	executor := NewMCPArrancarDirectorAppToolExecutorV0(
+		orquestaappdirectorservice.StartAppDirectorPortsV0{
+			RunStore:     store,
+			EventSink:    sink,
+			OutboxLedger: ledger,
+			Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
+				mcpDirectorCapacityDispatcherForTestV0(store, sink, ledger),
+				mcpDirectorAgentLauncherDispatcherForTestV0(store, sink, ledger),
+			},
+		},
+	)
+	input := validMCPDirectorAppInputForTestV0()
+	input.DirectorExecutionMode = orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0
+
+	result, err := executor.Execute(context.Background(), input)
+
+	if err == nil || err.Error() != "app_director_service_invalido: goal_backend_unavailable" {
+		t.Fatalf("err=%v result=%+v", err, result)
+	}
+	if mcpHasEventTypeV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventAgentRequestedV0) ||
+		mcpHasEventTypeV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventAgentStartedV0) {
+		t.Fatalf("goal-first estricto no debe caer al loop legacy: %+v", sink.EventsV0())
 	}
 }
 
@@ -278,6 +320,44 @@ func TestMCPArrancarDirectorAppTransportV0NormalizaOKSinRunRef(t *testing.T) {
 	}
 }
 
+func TestMCPArrancarDirectorAppTransportV0GoalFirstEstrictoSinBackendDevuelveErrorPublico(t *testing.T) {
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	executor := NewMCPArrancarDirectorAppToolExecutorV0(
+		orquestaappdirectorservice.StartAppDirectorPortsV0{
+			RunStore:     store,
+			EventSink:    sink,
+			OutboxLedger: ledger,
+			Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
+				mcpDirectorCapacityDispatcherForTestV0(store, sink, ledger),
+				mcpDirectorAgentLauncherDispatcherForTestV0(store, sink, ledger),
+			},
+		},
+	)
+	input := validMCPDirectorAppInputForTestV0()
+	input.DirectorExecutionMode = orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0
+	raw, err := json.Marshal(input)
+	if err != nil {
+		t.Fatalf("marshal input: %v", err)
+	}
+
+	payload, err := mcpArrancarDirectorAppTransportHandlerV0(executor)(context.Background(), raw)
+
+	if err != nil {
+		t.Fatalf("handler no debe devolver error Go crudo: %v", err)
+	}
+	var result MCPArrancarDirectorAppToolResultV0
+	if err := json.Unmarshal(payload, &result); err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+	if result.Estado != MCPArrancarDirectorAppEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Field != "goal_backend_unavailable" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPArrancarDirectorAppHTTPHandlerV0ExecutorErrorExponeCampoPublico(t *testing.T) {
 	executor := &fakeMCPArrancarDirectorAppHTTPExecutorV0{
 		err: orquestaappdirectorservice.AppDirectorServiceIssueV0{Field: "ports.run_store"},
@@ -306,6 +386,54 @@ func TestMCPArrancarDirectorAppHTTPHandlerV0ExecutorErrorExponeCampoPublico(t *t
 		issue.Field != "ports.run_store" ||
 		!strings.Contains(issue.Message, "ports.run_store") {
 		t.Fatalf("issue=%+v", issue)
+	}
+}
+
+func TestMCPArrancarDirectorAppHTTPHandlerV0GoalFirstEstrictoSinBackendExponeErrorPublico(t *testing.T) {
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	executor := NewMCPArrancarDirectorAppToolExecutorV0(
+		orquestaappdirectorservice.StartAppDirectorPortsV0{
+			RunStore:     store,
+			EventSink:    sink,
+			OutboxLedger: ledger,
+			Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
+				mcpDirectorCapacityDispatcherForTestV0(store, sink, ledger),
+				mcpDirectorAgentLauncherDispatcherForTestV0(store, sink, ledger),
+			},
+		},
+	)
+	input := validMCPDirectorAppInputForTestV0()
+	input.DirectorExecutionMode = orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(input); err != nil {
+		t.Fatalf("encode input: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, MCPArrancarDirectorAppHTTPPathV0, body)
+
+	NewMCPArrancarDirectorAppHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPArrancarDirectorAppToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if result.Estado != MCPArrancarDirectorAppEstadoErrorV0 || len(result.Errores) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	issue := result.Errores[0]
+	if issue.Code != "arrancar_director_http_error" ||
+		issue.Field != "goal_backend_unavailable" ||
+		!strings.Contains(issue.Message, "goal_backend_unavailable") {
+		t.Fatalf("issue=%+v", issue)
+	}
+	if mcpHasEventTypeV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventAgentRequestedV0) ||
+		mcpHasEventTypeV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventAgentStartedV0) {
+		t.Fatalf("goal-first estricto no debe caer al loop legacy: %+v", sink.EventsV0())
 	}
 }
 
@@ -362,8 +490,9 @@ func (store *mcpGoalStateStoreForTestV0) LoadGoalWorkStateV0(
 func validMCPDirectorAppInputForTestV0() MCPArrancarDirectorAppToolInputV0 {
 	observability := true
 	return MCPArrancarDirectorAppToolInputV0{
-		RequestID:     "request-ref-mcp-director-001",
-		CorrelationID: "corr-mcp-director-001",
+		RequestID:             "request-ref-mcp-director-001",
+		CorrelationID:         "corr-mcp-director-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
 		AppSpecRequest: orquestafactory.AppSpecRequestV0{
 			SchemaVersion: orquestafactory.AppSpecRequestSchemaV0,
 			RequestID:     "request-ref-mcp-director-001",
@@ -470,4 +599,16 @@ func (executor *mcpDirectorBatchLauncherForTestV0) ExecuteOutboxDispatchBatchV0(
 		})
 	}
 	return acks, nil
+}
+
+func mcpHasEventTypeV0(
+	events []orquestacoreworkflow.OrchestrationEventV0,
+	eventType string,
+) bool {
+	for _, event := range events {
+		if event.EventType == eventType {
+			return true
+		}
+	}
+	return false
 }

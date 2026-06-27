@@ -121,7 +121,11 @@ Esto implica:
   valida cierre por evidencias. El status publico solo expone resumen compacto
   de spec/receipt/result/closure. El loop historico
   `app-director-service`/`PlanState` no se reabre para nuevas rutas goal-first
-  salvo compatibilidad o regresion.
+  salvo compatibilidad o regresion. Desde el 2026-06-27,
+  `orquesta.apps.arrancar_director.v0` y `StartAppDirectorV0` normalizan modo
+  vacio a `goal_first`: si falta backend Goal, devuelven
+  `goal_backend_unavailable` y no caen al loop historico; la compatibilidad
+  antigua exige `director_execution_mode=legacy_director_loop` explicito.
 - para `AppSpecV0`, la ruta publica operativa preferente es
   `orquesta.apps.arrancar_director.v0`, que delega en
   `orquesta-app-director-service`. `orquesta.apps.preparar_orquestacion.v0` y
