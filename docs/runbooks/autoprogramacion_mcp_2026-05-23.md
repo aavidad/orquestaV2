@@ -157,9 +157,12 @@ automejora dentro del write-set:
 
 - `POST /api/v0/autoprogramming/status` delega en cola y stats por puertos
   inyectados; si faltan puertos conserva diagnostico publico reparable.
-- `POST /api/v0/autoprogramming/supervise` delega en
-  `orquesta.runs.supervisor.v0`; sin `run_ref` deja al executor decidir cola
-  residente, sin abrir runtime desde MCP/HTTP.
+- `POST /api/v0/autoprogramming/goal/observe` es la ruta normal para observar y
+  cerrar trabajos `goal_first`.
+- `POST /api/v0/autoprogramming/supervise` queda como compatibilidad
+  legacy/resident cuando no exista `GoalWorkStateV0`; sin `run_ref` deja al
+  executor decidir cola residente, sin abrir runtime desde MCP/HTTP y sin
+  empujar runs `goal_first` al loop historico.
 - `orquesta.autoprogramming.self_improvement.propose.v0` conserva evidencia de
   fallo, genera automejora secundaria de baja prioridad y solo llama
   `prepare-run` cuando `auto_prepare_run=true` y el executor existe.

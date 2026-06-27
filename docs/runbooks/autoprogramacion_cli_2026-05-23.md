@@ -73,7 +73,8 @@ La CLI consume solo rutas publicas versionadas:
 - `POST /api/v0/autoprogramming/prepare-run`
 - `POST /api/v0/autoprogramming/status`
 - `POST /api/v0/autoprogramming/goal/observe`
-- `POST /api/v0/autoprogramming/supervise`
+- `POST /api/v0/autoprogramming/supervise` (compatibilidad legacy/diagnostico;
+  no avanzar runs `goal_first`)
 - `POST /api/v0/runs/queue/priority`
 - `POST /api/v0/director/stats`
 - `POST /api/v0/runs/control`

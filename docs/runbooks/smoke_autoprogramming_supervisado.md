@@ -37,12 +37,16 @@ ORQUESTA_SMOKE_REQUEST_TIMEOUT_SECONDS=15
 ORQUESTA_SERVER_TICK_INTERVAL_MS=250
 ORQUESTA_SMOKE_RESIDENT_POLLS=40
 ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK=1
+ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1
 SMOKE_ID=manual-001
 ```
 
 `ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK=1` es compatibilidad
-historica. Sin esa variable, el smoke no llama a `/api/v0/external-work/run` ni
-a `/api/v0/runs/supervise` y no ejecuta el test focal legacy asociado.
+historica y, desde el corte goal-first, exige tambien
+`ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1` para que el servidor permita
+ese fallback. Sin esas variables, el smoke no llama a
+`/api/v0/external-work/run` ni a `/api/v0/runs/supervise` y no ejecuta el test
+focal legacy asociado.
 
 ## Que comprueba
 
@@ -72,7 +76,8 @@ a `/api/v0/runs/supervise` y no ejecuta el test focal legacy asociado.
 - Por defecto no invoca `POST /api/v0/external-work/run` ni
   `POST /api/v0/runs/supervise`; esas rutas pertenecen al fallback legacy
   `ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK=1`.
-- Con `ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK=1`, intenta
+- Con `ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK=1` y
+  `ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1`, intenta
   `POST /api/v0/external-work/run` con un trabajo
   `autoprogramming_programmable_work`; si devuelve `run_ref`, llama a
   `POST /api/v0/runs/supervise` con limites bajos.

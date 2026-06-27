@@ -79,7 +79,8 @@ API HTTP versionada:
 - `POST /api/v0/apps/director/goal/observe`
 - `POST /api/v0/autoprogramming/goal/observe`
 - `POST /api/v0/autoprogramming/status`
-- `POST /api/v0/autoprogramming/supervise`
+- `POST /api/v0/autoprogramming/supervise` (compatibilidad legacy/diagnostico;
+  no usar como avance normal de runs `goal_first`)
 - `POST /api/v0/governance/catalog/query`
 - `POST /api/v0/core/function-contracts/list`
 - `POST /api/v0/core/function-contracts/view`

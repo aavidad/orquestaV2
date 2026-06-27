@@ -423,11 +423,15 @@ inferior no declarado, se considera regresion grave.
 
 ### Nota operativa 2026-06-04: supervision dirigida secuencial
 
-Cuando haya que recuperar runs concretos con `POST /api/v0/runs/supervise`, las
-llamadas dirigidas contra la misma instancia temporal deben hacerse
-secuencialmente salvo evidencia de que el ledger/dispatcher de esa composicion
-soporta esa concurrencia real. No es una regla para parar agentes: evita chocar
-dos ciclos de supervision sobre el mismo estado durable.
+Cuando haya que recuperar runs external-work legacy o no migrados con
+`POST /api/v0/runs/supervise`, debe existir opt-in operativo explicito
+(`ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1`) y las llamadas dirigidas
+contra la misma instancia temporal deben hacerse secuencialmente salvo evidencia
+de que el ledger/dispatcher de esa composicion soporta esa concurrencia real.
+Para runs `goal_first`, la ruta normal es observar/cerrar por
+`/api/v0/apps/director/goal/observe`, no empujar el loop historico. No es una
+regla para parar agentes: evita chocar dos ciclos de supervision sobre el mismo
+estado durable.
 
 El incidente Auxiliar Administrativo C2 de 2026-06-04 ya dejo este rastro: dos
 supervisiones dirigidas paralelas sobre recoveries 13/15 provocaron un error

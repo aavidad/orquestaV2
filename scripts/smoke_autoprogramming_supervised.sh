@@ -29,6 +29,13 @@ resident_polls="${ORQUESTA_SMOKE_RESIDENT_POLLS:-40}"
 resident_sleep="${ORQUESTA_SMOKE_RESIDENT_SLEEP_SECONDS:-0.25}"
 legacy_external_fallback="${ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK:-0}"
 
+if [[ "$legacy_external_fallback" == "1" ]]; then
+  smoke_require_confirm \
+    ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP \
+    1 \
+    "fallback legacy external-work requiere ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1"
+fi
+
 need_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "falta comando requerido: $1" >&2

@@ -22,7 +22,8 @@ Rutas REST estables expuestas por el gateway:
 - `POST /api/v0/autoprogramming/prepare-run`
 - `POST /api/v0/autoprogramming/goal/observe`
 - `POST /api/v0/autoprogramming/status`
-- `POST /api/v0/autoprogramming/supervise`
+- `POST /api/v0/autoprogramming/supervise` (compatibilidad legacy/diagnostico;
+  no avanzar runs `goal_first`)
 - `POST /api/v0/director/human-work/review-plan`
 - `POST /api/v0/apps/director`
 - `POST /api/v0/apps/{app_ref}/changes`

@@ -673,10 +673,12 @@ Seguimiento: `docs/duplicaciones_railes_pendientes_2026-05-24.md`.
   `TestCodexSupervisorSnapshotFromDrainV0NoCierraAutomejoraActivaConEntregaAbiertaV0`.
 - Revision `request-ref-automejora-web-cli-004`: web y CLI quedan cerrados como
   clientes finos de autoprogramacion para preparar runs, listar cola/runs, ver
-  detalle, supervisar y controlar. La cobertura operativa se mantiene por API
-  publica (`prepare-run`, `status`, `runs/queue/priority`, `director/stats`,
-  `autoprogramming/supervise` y `runs/control`), sin acceso a stores, runtime,
-  Git/worktrees, HOME, proveedor ni paths locales desde web/CLI. Las refs
+  detalle, observar goals y controlar. La cobertura operativa se mantiene por
+  API publica (`prepare-run`, `status`, `autoprogramming/goal/observe`,
+  `runs/queue/priority`, `director/stats`, `runs/control` y
+  `autoprogramming/supervise` solo como compatibilidad legacy/diagnostico), sin
+  acceso a stores, runtime, Git/worktrees, HOME, proveedor ni paths locales
+  desde web/CLI. Las refs
   `worktree-ref-orquesta-automejora-web-cli-004` y
   `trabajo-plataforma-agentes` se preservan solo como refs opacas.
 - El materializador del Director Operativo no deja colgada una run si el servidor
