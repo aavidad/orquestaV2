@@ -92,6 +92,11 @@ func buildMCPAutoprogrammingQueueHealthV0(
 		health.AgentsLive += liveAgentsMCPAutoprogrammingRunStatsV0(*observed.Stats)
 		applyMCPAutoprogrammingRunHealthV0(&health, *observed.Stats)
 	}
+	health.QueuedNotDispatched = countMCPAutoprogrammingQueuedNotDispatchedV0(
+		queue,
+		mcpAutoprogrammingGoalRunRefSetV0(goalStatesByRunRef),
+		append([]*MCPDirectorStatsToolResultV0{run}, observedRuns...)...,
+	)
 	health.StatsRuns = countMCPAutoprogrammingSeenRunsV0(statsSeen)
 	health.ObservedRuns = countMCPAutoprogrammingSeenRunsV0(seen)
 	return &health

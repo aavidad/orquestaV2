@@ -39,6 +39,37 @@ func TestAutoprogrammingStatusAPIRouteV0(t *testing.T) {
 	}
 }
 
+func TestAutoprogrammingStatusAPIRouteV0DevuelveTimeoutJSONSinColgar(t *testing.T) {
+	queue := &blockingAutoprogrammingStatusQueueExecutorV0{}
+	handler := NewHTTPHandlerV0(ConfigV0{
+		Timeout:          time.Second,
+		RunQueuePriority: queue,
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/autoprogramming/status",
+		strings.NewReader(`{}`),
+	)
+
+	started := time.Now()
+	handler.ServeHTTP(rec, req)
+	elapsed := time.Since(started)
+
+	if rec.Code != http.StatusGatewayTimeout || elapsed > 3*time.Second {
+		t.Fatalf("status=%d elapsed=%s body=%s", rec.Code, elapsed, rec.Body.String())
+	}
+	var result orquestamcp.MCPAutoprogrammingStatusToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v body=%s", err, rec.Body.String())
+	}
+	if result.Estado != orquestamcp.MCPAutoprogrammingStatusEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "autoprogramming_status_timeout" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestAutoprogrammingSuperviseAPIRouteV0(t *testing.T) {
 	supervisor := &recordingAutoprogrammingSuperviseExecutorV0{}
 	handler := NewHTTPHandlerV0(ConfigV0{
@@ -169,6 +200,19 @@ func (executor *recordingAutoprogrammingStatusQueueExecutorV0) Execute(
 		Action: orquestamcp.MCPRunQueuePriorityActionRankV0,
 		Count:  0,
 	}, nil
+}
+
+type blockingAutoprogrammingStatusQueueExecutorV0 struct{}
+
+func (executor *blockingAutoprogrammingStatusQueueExecutorV0) Execute(
+	ctx context.Context,
+	input orquestamcp.MCPRunQueuePriorityToolInputV0,
+) (orquestamcp.MCPRunQueuePriorityToolResultV0, error) {
+	<-ctx.Done()
+	return orquestamcp.MCPRunQueuePriorityToolResultV0{
+		Estado:        orquestamcp.MCPRunQueuePriorityEstadoErrorV0,
+		CorrelationID: input.CorrelationID,
+	}, ctx.Err()
 }
 
 type recordingAutoprogrammingStatusRunExecutorV0 struct {

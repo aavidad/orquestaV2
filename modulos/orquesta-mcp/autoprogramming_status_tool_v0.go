@@ -167,6 +167,14 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	}
 	goalStatesByRunRef := mcpAutoprogrammingGoalStatesByRunRefV0(goalStates)
 	goalFirstRunRefs := mcpAutoprogrammingGoalFirstRunRefSetFromStatesV0(goalStates)
+	result.Diagnostics = append(
+		result.Diagnostics,
+		diagnosticsFromQueuedNotDispatchedMCPAutoprogrammingV0(
+			result.Queue,
+			mcpAutoprogrammingGoalRunRefSetV0(goalStatesByRunRef),
+			append([]*MCPDirectorStatsToolResultV0{result.Run}, observedRuns...)...,
+		)...,
+	)
 	if okCount == 0 {
 		result.Estado = MCPAutoprogrammingStatusEstadoErrorV0
 		result.Errores = []MCPValidationIssueV0{{

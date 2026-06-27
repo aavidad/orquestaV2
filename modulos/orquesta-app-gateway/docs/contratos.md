@@ -122,7 +122,9 @@ Entrada de composicion:
   inyectado.
 - `/api/v0/autoprogramming/status` y `/api/v0/autoprogramming/supervise`
   delegan en `orquesta-mcp`; este modulo no interpreta cola, stats, procesos ni
-  scheduler.
+  scheduler. Las lecturas lentas de status se resuelven en el handler MCP con
+  JSON publico de timeout; el gateway no deja la conexion indefinida ni crea
+  un flujo paralelo.
 - `/api/v0/governance/catalog/query` delega en `orquesta-governance`; este
   modulo no activa historicos, no lee DB v1, no muta permisos y no inventa
   catalogos si falta provider.

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestMCPRunQueuePriorityHTTPHandlerV0DelegaEnExecutor(t *testing.T) {
@@ -49,15 +50,43 @@ func TestMCPRunQueuePriorityHTTPHandlerV0ExecutorNil(t *testing.T) {
 	}
 }
 
+func TestMCPRunQueuePriorityHTTPHandlerV0RankTimeoutDevuelveJSONPublico(t *testing.T) {
+	executor := &fakeMCPRunQueuePriorityHTTPExecutorV0{waitForCancel: true}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, MCPRunQueuePriorityHTTPPathV0, bytes.NewBufferString(`{"queue_ref":"global"}`))
+	req.Header.Set("X-Correlation-ID", "corr-run-queue-timeout-001")
+
+	newMCPRunQueuePriorityHTTPHandlerWithTimeoutV0(executor, time.Millisecond).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusGatewayTimeout ||
+		rec.Header().Get("X-Correlation-ID") != "corr-run-queue-timeout-001" {
+		t.Fatalf("status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
+	}
+	var result MCPRunQueuePriorityToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v body=%s", err, rec.Body.String())
+	}
+	if result.Estado != MCPRunQueuePriorityEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "run_queue_priority_timeout" ||
+		result.Errores[0].Field != "executor" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 type fakeMCPRunQueuePriorityHTTPExecutorV0 struct {
-	input  MCPRunQueuePriorityToolInputV0
-	result MCPRunQueuePriorityToolResultV0
+	input         MCPRunQueuePriorityToolInputV0
+	result        MCPRunQueuePriorityToolResultV0
+	waitForCancel bool
 }
 
 func (executor *fakeMCPRunQueuePriorityHTTPExecutorV0) Execute(
-	_ context.Context,
+	ctx context.Context,
 	input MCPRunQueuePriorityToolInputV0,
 ) (MCPRunQueuePriorityToolResultV0, error) {
 	executor.input = input
+	if executor.waitForCancel {
+		<-ctx.Done()
+	}
 	return executor.result, nil
 }

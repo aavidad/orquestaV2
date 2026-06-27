@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestMCPAutoprogrammingStatusHTTPHandlerV0DelegaEnExecutor(t *testing.T) {
@@ -42,6 +43,30 @@ func TestMCPAutoprogrammingStatusHTTPHandlerV0ExecutorNil(t *testing.T) {
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestMCPAutoprogrammingStatusHTTPHandlerV0TimeoutDevuelveJSONPublico(t *testing.T) {
+	executor := &fakeMCPAutoprogrammingStatusHTTPExecutorV0{waitForCancel: true}
+	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingStatusHTTPPathV0, bytes.NewBufferString(`{"queue_ref":"global"}`))
+	req.Header.Set("X-Correlation-ID", "corr-autop-status-timeout-001")
+	rec := httptest.NewRecorder()
+
+	newMCPAutoprogrammingStatusHTTPHandlerWithTimeoutV0(executor, time.Millisecond).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusGatewayTimeout ||
+		rec.Header().Get("X-Correlation-ID") != "corr-autop-status-timeout-001" {
+		t.Fatalf("status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
+	}
+	var result MCPAutoprogrammingStatusToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v body=%s", err, rec.Body.String())
+	}
+	if result.Estado != MCPAutoprogrammingStatusEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "autoprogramming_status_timeout" ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_status_timeout") {
+		t.Fatalf("result=%+v", result)
 	}
 }
 
@@ -220,16 +245,20 @@ func TestMCPAutoprogrammingStatusHTTPHandlerV0NoMarcaRunningStaleSiHayAgentesViv
 }
 
 type fakeMCPAutoprogrammingStatusHTTPExecutorV0 struct {
-	input  MCPAutoprogrammingStatusToolInputV0
-	result MCPAutoprogrammingStatusToolResultV0
-	err    error
+	input         MCPAutoprogrammingStatusToolInputV0
+	result        MCPAutoprogrammingStatusToolResultV0
+	err           error
+	waitForCancel bool
 }
 
 func (executor *fakeMCPAutoprogrammingStatusHTTPExecutorV0) Execute(
-	_ context.Context,
+	ctx context.Context,
 	input MCPAutoprogrammingStatusToolInputV0,
 ) (MCPAutoprogrammingStatusToolResultV0, error) {
 	executor.input = input
+	if executor.waitForCancel {
+		<-ctx.Done()
+	}
 	return executor.result, executor.err
 }
 

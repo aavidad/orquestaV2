@@ -606,6 +606,16 @@ valida que `autoprogramming/status` lo propaga como diagnostico y accion
 `relaunch_or_replan_external_work_with_causal_error`, sin aceptar el cierre
 silencioso como valido.
 
+Evidencia adicional 2026-06-27:
+`TestMCPAutoprogrammingStatusHTTPHandlerV0TimeoutDevuelveJSONPublico` y
+`TestMCPRunQueuePriorityHTTPHandlerV0RankTimeoutDevuelveJSONPublico` fijan que
+las lecturas HTTP de estado y cola devuelven `504` con JSON publico
+decodificable si el executor no responde; no cuelgan el cliente ni dejan una
+lectura opaca en background.
+`TestMCPAutoprogrammingStatusExecutorV0DiagnosticaQueuedNotDispatchedV0` fija
+`queued_not_dispatched` y `queue_health.queued_not_dispatched` para runs
+`ready`/`queued`/`pending` sin goal-first ni dispatch observado.
+
 ## Prueba snapshot operativo del Director 2026-06-08
 
 Comando:

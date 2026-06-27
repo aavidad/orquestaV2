@@ -31,6 +31,9 @@ git diff --check -- modulos/orquesta-app-gateway
 - `/api/v0/autoprogramming/supervise` responde `202 accepted_background` si el
   supervisor sigue vivo tras el timeout publico y no duplica una operacion
   activa con el mismo `idempotency_key`.
+- `/api/v0/autoprogramming/status` propaga el timeout JSON publico de MCP
+  (`504`, `autoprogramming_status_timeout`) cuando la lectura de cola/stats no
+  responde en la ventana acotada.
 - `/api/v0/autoprogramming/goals/observe-active` delega en el executor MCP
   inyectado para observar goals activos sin pasar por supervision legacy.
 - `/api/v0/director/stats` mantiene el contrato MCP/API completo de

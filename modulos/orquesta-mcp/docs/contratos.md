@@ -1174,6 +1174,10 @@ Invariantes:
   - Ranking por `RunQueueReaderPortV0`.
   - Cambio de puntuacion solo por `RunQueuePriorityWriterPortV0`.
   - No lee DB ni muta scheduler interno.
+  - El bridge HTTP de `rank` cancela la lectura y devuelve `504` JSON con
+    `run_queue_priority_timeout` si la cola no responde dentro de la ventana
+    publica; `set_priority` sigue sin ejecutarse en background para no dejar
+    escrituras tardias.
 Pruebas de contrato:
   - Ranking delega en `orquesta-run-queue`.
   - `set_priority` delega en writer fake.
@@ -1516,12 +1520,15 @@ Campos:
     estado: ok
     queue?: resultado compacto de orquesta.run_queue.priority.v0
     run?: resultado compacto de orquesta.director.stats.v0
-    queue_health?: separa `running_live`, `agents_live`,
+    queue_health?: separa `queued`, `queued_not_dispatched`, `running_live`, `agents_live`,
       `running_without_recent_stats` y `running_stale_no_process`;
       `running_live` cuenta runs con liveness probado, `agents_live` cuenta
       agentes vivos observados por progreso o por `process.status`
       `running`/`stopping`, y
-      `running_stale` agregado solo cuenta stale verificable sin proceso vivo
+      `running_stale` agregado solo cuenta stale verificable sin proceso vivo;
+      `queued_not_dispatched` cuenta candidatos `ready`/`queued`/`pending` sin
+      goal-first ni agente/proceso/entrega observados, como senal de supervision
+      o residente pendiente
     stale_running?: acciones publicas; una run `running` sin liveness probado se
       expone como `running_without_recent_stats`, no como stale terminal
       tambien incluye external-work terminal `stopped` sin agentes ni entregas
@@ -1537,7 +1544,9 @@ Campos:
       consumidores existentes, las refs `opes...`/`app-spec-opes...` se tratan
       como trabajo externo aunque no incluyan literalmente `external-work`, y
       una aceptacion terminal sin agentes se conserva como
-      `external_work_accepted_no_agent_materialized`
+      `external_work_accepted_no_agent_materialized`; candidatos de cola
+      `ready`/`queued`/`pending` sin dispatch observado se publican como
+      `queued_not_dispatched`
   output_error:
     estado: error
     errores_publicos reparables
@@ -1567,6 +1576,9 @@ Invariantes:
     publica `running_stale_no_process` cuando no hay proceso vivo verificado.
   - Si `director.stats` informa issues de progreso, los conserva como
     diagnosticos publicos accionables en vez de convertirlos en fallo terminal.
+  - El bridge HTTP cancela lecturas lentas y devuelve `504` JSON con
+    `autoprogramming_status_timeout`; no deja el cliente colgado ni lanza una
+    operacion de estado en background.
   - El bridge HTTP puede transportar consejo del operador como observacion no
     bloqueante sin tocar el caso de uso.
   - `ops_snapshot` es read-only, no decide runtime ni corta entregas; deriva de

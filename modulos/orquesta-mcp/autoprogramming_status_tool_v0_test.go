@@ -1165,6 +1165,45 @@ func TestMCPAutoprogrammingStatusExecutorV0DeclaraSuperviseColaLegacyConOptInV0(
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0DiagnosticaQueuedNotDispatchedV0(t *testing.T) {
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			ranked: []MCPRunQueueRankedCandidateCompactV0{{
+				Rank:          1,
+				RunRef:        "run-ref-queued-not-dispatched-001",
+				AppRef:        "app-ref-queued-not-dispatched-001",
+				Status:        "ready",
+				PriorityScore: 90,
+				EvidenceRefs:  []string{"evidence-ref-external-work-run-queued"},
+			}},
+		},
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	found := false
+	for _, diagnostic := range result.Diagnostics {
+		if diagnostic.Code != mcpAutoprogrammingQueuedNotDispatchedV0 {
+			continue
+		}
+		found = true
+		if diagnostic.Scope != "run:run-ref-queued-not-dispatched-001" ||
+			!hasStringMCPAutoprogrammingStatusTestV0(diagnostic.EvidenceRefs, "evidence-ref-run-queue-queued-not-dispatched") ||
+			!hasStringMCPAutoprogrammingStatusTestV0(diagnostic.EvidenceRefs, "evidence-ref-external-work-run-queued") {
+			t.Fatalf("diagnostic=%+v", diagnostic)
+		}
+	}
+	if !found {
+		t.Fatalf("diagnostics=%+v", result.Diagnostics)
+	}
+	if result.QueueHealth == nil ||
+		result.QueueHealth.Queued != 1 ||
+		result.QueueHealth.QueuedNotDispatched != 1 {
+		t.Fatalf("queue_health=%+v", result.QueueHealth)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0NoPublicaSuperviseLegacyPorDefectoV0(t *testing.T) {
 	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
 		Queue: &fakeMCPAutoprogrammingQueueStatusV0{},
