@@ -47,6 +47,10 @@ func autoprogrammingHTMLV0() string {
     .action-item.info { border-left-color:var(--accent); }
     .action-head { display:flex; justify-content:space-between; gap:10px; align-items:center; }
     .action-meta { display:flex; gap:6px; flex-wrap:wrap; color:var(--muted); font-size:12px; }
+    .goal-list { display:grid; gap:6px; }
+    .goal-item { display:flex; justify-content:space-between; align-items:center; gap:8px; width:100%; text-align:left; }
+    .goal-item.active { border-color:var(--accent); background:#10212b; }
+    .goal-item code { color:var(--muted); }
     pre { margin:0; max-height:420px; overflow:auto; padding:12px; border-radius:10px; background:#090d11; border:1px solid #24303a; white-space:pre-wrap; word-break:break-word; }
     .actions { display:flex; gap:8px; flex-wrap:wrap; }
     button:disabled { opacity:.55; cursor:not-allowed; }
@@ -108,6 +112,7 @@ El cambio queda cubierto por tests</textarea></label>
         </div>
         <section id="goal-panel" class="action-list" hidden>
           <h2>Goal</h2>
+          <div id="goal-list" class="goal-list" hidden></div>
           <dl class="status-grid">
             <dt>Goal ref</dt><dd><code id="goal-ref">-</code></dd>
             <dt>Externo</dt><dd><code id="external-goal-ref">-</code></dd>
@@ -148,9 +153,12 @@ El cambio queda cubierto por tests</textarea></label>
     const goalStatusNode = document.getElementById('goal-status');
     const closureStatusNode = document.getElementById('closure-status');
     const goalNote = document.getElementById('goal-note');
+    const goalListNode = document.getElementById('goal-list');
     let currentRunRef = '';
     let currentGoalRef = '';
     let currentExternalGoalRef = '';
+    let currentGoals = [];
+    let currentGoalIndex = 0;
     let goalPollTimer = 0;
     let goalPollCount = 0;
 
@@ -177,12 +185,12 @@ El cambio queda cubierto por tests</textarea></label>
       updateSuperviseState();
     }
     function resultRunRef(value) {
-      const goal = (value || {}).goal || {};
+      const goal = selectedGoal(value);
       const spec = (((value || {}).goal_specs || [])[0]) || {};
       return String(goal.run_ref || (value || {}).run_ref || spec.run_ref || '').trim();
     }
     function goalInfo(value) {
-      const goal = (value || {}).goal || {};
+      const goal = selectedGoal(value);
       const spec = (((value || {}).goal_specs || [])[0]) || {};
       return {
         run_ref: resultRunRef(value),
@@ -194,11 +202,37 @@ El cambio queda cubierto por tests</textarea></label>
         closure_needs_rework: Boolean((value || {}).closure_needs_rework)
       };
     }
+    function normalizedGoals(value) {
+      const sourceGoals = Array.isArray((value || {}).goals) ? (value || {}).goals : [];
+      if (sourceGoals.length) {
+        return sourceGoals.map((goal, index) => Object.assign({_index:index}, goal || {}));
+      }
+      const single = (value || {}).goal || {};
+      if (single.run_ref || single.goal_ref || single.external_goal_ref || single.goal_status) {
+        return [Object.assign({_index:0}, single)];
+      }
+      const specs = Array.isArray((value || {}).goal_specs) ? (value || {}).goal_specs : [];
+      return specs.map((spec, index) => ({
+        _index: index,
+        run_ref: spec.run_ref || '',
+        goal_ref: spec.goal_ref || '',
+        goal_status: 'preparado'
+      }));
+    }
+    function selectedGoal(value) {
+      const goals = normalizedGoals(value);
+      if (!goals.length) return {};
+      if (currentGoalIndex < 0 || currentGoalIndex >= goals.length) currentGoalIndex = 0;
+      return goals[currentGoalIndex] || goals[0] || {};
+    }
     function renderGoal(value) {
+      currentGoals = normalizedGoals(value);
       const info = goalInfo(value);
-      const hasGoal = Boolean(info.goal_ref || ((value || {}).goal_specs || []).length);
+      const hasGoal = Boolean(info.goal_ref || currentGoals.length);
       goalPanel.hidden = !hasGoal;
       if (!hasGoal) return;
+      renderGoalList(currentGoals);
+      currentRunRef = info.run_ref || currentRunRef;
       currentGoalRef = info.goal_ref || currentGoalRef;
       currentExternalGoalRef = info.external_goal_ref || currentExternalGoalRef;
       goalRefNode.textContent = currentGoalRef || '-';
@@ -214,6 +248,37 @@ El cambio queda cubierto por tests</textarea></label>
       } else {
         goalNote.textContent = 'Seguimiento goal-first activo por run_ref.';
       }
+    }
+    function renderGoalList(goals) {
+      goalListNode.textContent = '';
+      goalListNode.hidden = !goals || goals.length <= 1;
+      (goals || []).forEach((goal, index) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'goal-item' + (index === currentGoalIndex ? ' active' : '');
+        button.dataset.goalIndex = String(index);
+        const label = document.createElement('span');
+        label.textContent = 'Goal ' + String(index + 1);
+        const ref = document.createElement('code');
+        ref.textContent = goal.run_ref || goal.goal_ref || '-';
+        const status = document.createElement('span');
+        status.className = 'pill warn';
+        status.textContent = goal.goal_status || 'preparado';
+        button.append(label, ref, status);
+        button.addEventListener('click', () => {
+          currentGoalIndex = index;
+          currentRunRef = String(goal.run_ref || '').trim();
+          currentGoalRef = String(goal.goal_ref || '').trim();
+          currentExternalGoalRef = String(goal.external_goal_ref || '').trim();
+          renderGoal({goals: currentGoals});
+          runRefNode.textContent = currentRunRef || '-';
+          statsLink.href = currentRunRef
+            ? '/director-stats?include_agent_progress=true&run_ref=' + encodeURIComponent(currentRunRef)
+            : '/director-stats';
+          stopGoalPolling();
+        });
+        goalListNode.appendChild(button);
+      });
     }
     function setStatusPill(node, status) {
       const normalized = String(status || 'pendiente').trim();

@@ -59,6 +59,46 @@ func TestBuildAutoprogrammingProgrammableWorkV0GeneraGoalSpecsCuandoGoalListo(t 
 	}
 }
 
+func TestBuildAutoprogrammingProgrammableWorkV0GeneraGoalSpecsPorGrupo(t *testing.T) {
+	request := validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{
+			{
+				TaskRef:     "task-ref-goal-api-001",
+				Area:        "api",
+				ContextRefs: []string{"goal_migration:goal-first", "goal_capability:starter", "goal_capability:observer", "goal_capability:closure-validator"},
+			},
+			{
+				TaskRef:     "task-ref-goal-web-001",
+				Area:        "web",
+				ContextRefs: []string{"goal_migration:goal-first", "goal_capability:starter", "goal_capability:observer", "goal_capability:closure-validator"},
+			},
+		}
+		request.WriteSet = []string{
+			"modulos/orquesta-autoprogramming/api/goal.go",
+			"modulos/orquesta-autoprogramming/web/goal.go",
+		}
+		request.MaxTaskRefs = 2
+		request.MaxAreas = 2
+		request.MaxWriteSetEntries = 2
+	})
+
+	result := BuildAutoprogrammingProgrammableWorkV0(request)
+
+	if !result.Accepted ||
+		result.Work.GoalMigration.Status != AutoprogrammingGoalMigrationGoalReadyV0 ||
+		len(result.Work.GoalSpecs) != 2 {
+		t.Fatalf("result=%+v", result)
+	}
+	for _, spec := range result.Work.GoalSpecs {
+		if issues := orquestagoal.ValidateGoalWorkSpecV0(spec); len(issues) > 0 {
+			t.Fatalf("goal spec invalido: %+v spec=%+v", issues, spec)
+		}
+		if spec.RunRef != "" {
+			t.Fatalf("run_ref debe rellenarlo la composicion: %+v", spec)
+		}
+	}
+}
+
 func TestBuildAutoprogrammingProgrammableWorkV0NoGeneraGoalSpecsSinCapacidades(t *testing.T) {
 	result := BuildAutoprogrammingProgrammableWorkV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
 		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{{

@@ -48,9 +48,11 @@ La pantalla `/autoprogramming` consume los endpoints publicos
 `/api/v0/autoprogramming/supervise` desde navegador same-origin. La web prepara
 payloads compactos con refs opacas y no interpreta worktrees, ramas, runtime ni
 stores. Por defecto anade los marcadores de migracion Goal a la tarea; si
-`prepare-run` devuelve un `goal` lanzado, lo observa por run_ref con polling
-acotado. Si solo devuelve `goal_specs[]`, lo muestra como handoff goal-first
-preparado sin empujar al operador al supervisor legacy.
+`prepare-run` devuelve un `goal` lanzado o `goals[]` por lote, lo observa por
+el `run_ref` seleccionado con polling acotado. En batch muestra un selector de
+goals y no asume que el primer `run_ref` cubra todo el trabajo. Si solo devuelve
+`goal_specs[]`, lo muestra como handoff goal-first preparado sin empujar al
+operador al supervisor legacy.
 
 `/director-stats`, `/run-queue` y `/run-control` conservan respuesta JSON para
 clientes finos, pero cuando el navegador pide `text/html` devuelven una shell

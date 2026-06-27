@@ -221,6 +221,7 @@ func codexStackAutoprogrammingPrepareRunResultMCPV0(
 		WaitAgentRefs:    compactStringsV0(result.WaitAgentRefs),
 		GoalSpecs:        codexStackAutoprogrammingGoalSpecsMCPV0(result.Work.GoalSpecs, runRef),
 		Goal:             codexStackAutoprogrammingGoalRunMCPV0(result),
+		Goals:            codexStackAutoprogrammingGoalRunsMCPV0(result),
 		Errores:          []orquestamcp.MCPValidationIssueV0{},
 	}
 	if runRef != "" {
@@ -251,11 +252,39 @@ func autoprogrammingBridgeHasPreparedLegacyRunV0(result AutoprogrammingBridgeRes
 func codexStackAutoprogrammingGoalRunMCPV0(
 	result AutoprogrammingBridgeResultV0,
 ) *orquestamcp.MCPAutoprogrammingGoalRunV0 {
+	goals := codexStackAutoprogrammingGoalRunsMCPV0(result)
+	if len(goals) != 1 {
+		return nil
+	}
+	return &goals[0]
+}
+
+func codexStackAutoprogrammingGoalRunsMCPV0(
+	result AutoprogrammingBridgeResultV0,
+) []orquestamcp.MCPAutoprogrammingGoalRunV0 {
 	if !autoprogrammingBridgeResultIsGoalFirstV0(result) {
 		return nil
 	}
-	state := result.GoalState
-	receipt := result.GoalReceipt
+	if len(result.GoalStates) > 0 {
+		out := make([]orquestamcp.MCPAutoprogrammingGoalRunV0, 0, len(result.GoalStates))
+		for index, state := range result.GoalStates {
+			var receipt *orquestagoal.GoalLaunchReceiptV0
+			if index < len(result.GoalReceipts) {
+				receipt = &result.GoalReceipts[index]
+			}
+			out = append(out, codexStackAutoprogrammingGoalRunFromStateMCPV0(state, receipt))
+		}
+		return out
+	}
+	return []orquestamcp.MCPAutoprogrammingGoalRunV0{
+		codexStackAutoprogrammingGoalRunFromStateMCPV0(result.GoalState, result.GoalReceipt),
+	}
+}
+
+func codexStackAutoprogrammingGoalRunFromStateMCPV0(
+	state orquestagoal.GoalWorkStateV0,
+	receipt *orquestagoal.GoalLaunchReceiptV0,
+) orquestamcp.MCPAutoprogrammingGoalRunV0 {
 	goalRef := strings.TrimSpace(state.GoalRef)
 	externalGoalRef := strings.TrimSpace(state.ExternalGoalRef)
 	goalStatus := strings.TrimSpace(state.Status)
@@ -266,9 +295,9 @@ func codexStackAutoprogrammingGoalRunMCPV0(
 		goalStatus = firstNonEmptyAutoprogrammingStackV0(goalStatus, receipt.Status)
 		evidenceRefs = compactStringsV0(append(evidenceRefs, receipt.EvidenceRefs...))
 	}
-	return &orquestamcp.MCPAutoprogrammingGoalRunV0{
+	return orquestamcp.MCPAutoprogrammingGoalRunV0{
 		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0,
-		RunRef:                strings.TrimSpace(result.Run.RunID),
+		RunRef:                strings.TrimSpace(state.RunRef),
 		GoalRef:               goalRef,
 		ExternalGoalRef:       externalGoalRef,
 		GoalStatus:            goalStatus,

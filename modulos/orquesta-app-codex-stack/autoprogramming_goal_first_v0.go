@@ -3,6 +3,7 @@ package orquestaappcodexstack
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
@@ -18,59 +19,19 @@ func autoprogrammingBridgeStartGoalFirstV0(
 	result AutoprogrammingBridgeResultV0,
 	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
 ) (AutoprogrammingBridgeResultV0, error) {
-	run := autoprogrammingBridgeGoalRunV0(request, result.Work)
-	if issues := orquestacoreworkflow.ValidateOrchestrationRunV0(run); len(issues) > 0 {
-		return AutoprogrammingBridgeResultV0{}, fmt.Errorf("autoprogramming goal-first run invalido: %s", issues[0].Error())
-	}
-	spec := autoprogrammingBridgeGoalSpecForRunV0(result.Work, run)
-	if issues := orquestagoal.ValidateGoalWorkSpecV0(spec); len(issues) > 0 {
-		return AutoprogrammingBridgeResultV0{}, fmt.Errorf("autoprogramming goal spec invalido: %s", issues[0].Code)
-	}
-	result.Work.GoalSpecs = []orquestagoal.GoalWorkSpecV0{spec}
-
-	existing, err := ports.RunStore.LoadRunV0(ctx, run.RunID)
-	if err != nil && !orquestacionnucleoapp.IsRunNotFoundErrorV0(err) {
-		return AutoprogrammingBridgeResultV0{}, err
-	}
-	if err == nil {
-		if err := autoprogrammingBridgeValidateExistingGoalRunV0(existing, run); err != nil {
+	specs := autoprogrammingBridgeGoalSpecsForRunsV0(result.Work)
+	result.Work.GoalSpecs = specs
+	for _, spec := range specs {
+		var err error
+		result, err = autoprogrammingBridgeStartSingleGoalFirstV0(ctx, request, result, ports, spec)
+		if err != nil {
 			return AutoprogrammingBridgeResultV0{}, err
 		}
-		if state, loaded, err := autoprogrammingBridgeLoadExistingGoalStateV0(ctx, ports, run.RunID); err != nil {
-			result.Run = existing
-			result.Accepted = false
-			result.Issues = append(result.Issues, autoprogrammingBridgeExistingGoalStateIssueV0(run.RunID))
-			return result, nil
-		} else if loaded {
-			result.Run = existing
-			result.GoalState = state
-			receipt := state.LaunchReceipt
-			result.GoalReceipt = &receipt
+		if !result.Accepted {
 			return result, nil
 		}
-		result.Run = existing
-	} else {
-		if err := ports.RunStore.SaveRunV0(ctx, run); err != nil {
-			return AutoprogrammingBridgeResultV0{}, err
-		}
-		result.Run = run
 	}
-
-	receipt, err := ports.GoalLauncher.LaunchGoalWorkV0(ctx, spec)
-	if err != nil {
-		return AutoprogrammingBridgeResultV0{}, err
-	}
-	state, err := autoprogrammingBridgeNewGoalStateV0(run.RunID, spec, receipt, result.Work)
-	if err != nil {
-		return AutoprogrammingBridgeResultV0{}, err
-	}
-	if err := ports.GoalStateStore.SaveGoalWorkStateV0(ctx, state); err != nil {
-		return AutoprogrammingBridgeResultV0{}, err
-	}
-	result.GoalState = state
-	receipt = state.LaunchReceipt
-	result.GoalReceipt = &receipt
-	return result, nil
+	return autoprogrammingBridgeFinalizeGoalFirstResultV0(result), nil
 }
 
 func autoprogrammingBridgeGoalRunV0(
@@ -80,6 +41,17 @@ func autoprogrammingBridgeGoalRunV0(
 	run := autoprogrammingBridgeRunV0(request, work)
 	run.Tasks = nil
 	run.FunctionContracts = nil
+	return run
+}
+
+func autoprogrammingBridgeGoalRunForRefV0(
+	request AutoprogrammingBridgeRequestV0,
+	work orquestaautoprogramming.AutoprogrammingProgrammableWorkV0,
+	runRef string,
+) orquestacoreworkflow.OrchestrationRunV0 {
+	run := autoprogrammingBridgeGoalRunV0(request, work)
+	run.RunID = strings.TrimSpace(runRef)
+	run.AppSpecRef = "app-spec-ref-autoprogramming-" + autoprogrammingBridgeHashRefV0(run.RunID)
 	return run
 }
 
@@ -96,13 +68,28 @@ func autoprogrammingBridgeValidateExistingGoalRunV0(
 	return nil
 }
 
-func autoprogrammingBridgeGoalSpecForRunV0(
+func autoprogrammingBridgeGoalSpecsForRunsV0(
 	work orquestaautoprogramming.AutoprogrammingProgrammableWorkV0,
-	run orquestacoreworkflow.OrchestrationRunV0,
+) []orquestagoal.GoalWorkSpecV0 {
+	specs := make([]orquestagoal.GoalWorkSpecV0, 0, len(work.GoalSpecs))
+	for index, spec := range work.GoalSpecs {
+		spec = autoprogrammingBridgeGoalSpecForRunRefV0(work, spec, autoprogrammingBridgeGoalRunRefForSpecV0(work, index))
+		specs = append(specs, spec)
+	}
+	if specs == nil {
+		return []orquestagoal.GoalWorkSpecV0{}
+	}
+	return specs
+}
+
+func autoprogrammingBridgeGoalSpecForRunRefV0(
+	work orquestaautoprogramming.AutoprogrammingProgrammableWorkV0,
+	spec orquestagoal.GoalWorkSpecV0,
+	runRef string,
 ) orquestagoal.GoalWorkSpecV0 {
-	spec := orquestagoal.NormalizeGoalWorkSpecV0(work.GoalSpecs[0])
+	spec = orquestagoal.NormalizeGoalWorkSpecV0(spec)
 	if strings.TrimSpace(spec.RunRef) == "" {
-		spec.RunRef = strings.TrimSpace(run.RunID)
+		spec.RunRef = strings.TrimSpace(runRef)
 	}
 	if strings.TrimSpace(spec.RequestRef) == "" {
 		spec.RequestRef = strings.TrimSpace(work.RequestRef)
@@ -111,6 +98,123 @@ func autoprogrammingBridgeGoalSpecForRunV0(
 		spec.ProjectRef = strings.TrimSpace(work.ProjectRef)
 	}
 	return orquestagoal.NormalizeGoalWorkSpecV0(spec)
+}
+
+func autoprogrammingBridgeGoalRunRefForSpecV0(
+	work orquestaautoprogramming.AutoprogrammingProgrammableWorkV0,
+	index int,
+) string {
+	if len(work.GoalSpecs) <= 1 {
+		return strings.TrimSpace(work.RequestRef)
+	}
+	return fmt.Sprintf("%s-goal-%02d", strings.TrimSpace(work.RequestRef), index+1)
+}
+
+func autoprogrammingBridgeStartSingleGoalFirstV0(
+	ctx context.Context,
+	request AutoprogrammingBridgeRequestV0,
+	result AutoprogrammingBridgeResultV0,
+	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
+	spec orquestagoal.GoalWorkSpecV0,
+) (AutoprogrammingBridgeResultV0, error) {
+	if issues := orquestagoal.ValidateGoalWorkSpecV0(spec); len(issues) > 0 {
+		return AutoprogrammingBridgeResultV0{}, fmt.Errorf("autoprogramming goal spec invalido: %s", issues[0].Code)
+	}
+	run := autoprogrammingBridgeGoalRunForRefV0(request, result.Work, spec.RunRef)
+	if issues := orquestacoreworkflow.ValidateOrchestrationRunV0(run); len(issues) > 0 {
+		return AutoprogrammingBridgeResultV0{}, fmt.Errorf("autoprogramming goal-first run invalido: %s", issues[0].Error())
+	}
+
+	existing, err := ports.RunStore.LoadRunV0(ctx, run.RunID)
+	if err != nil && !orquestacionnucleoapp.IsRunNotFoundErrorV0(err) {
+		return AutoprogrammingBridgeResultV0{}, err
+	}
+	if err == nil {
+		if err := autoprogrammingBridgeValidateExistingGoalRunV0(existing, run); err != nil {
+			return AutoprogrammingBridgeResultV0{}, err
+		}
+		if state, loaded, err := autoprogrammingBridgeLoadExistingGoalStateV0(ctx, ports, run.RunID); err != nil {
+			if strings.TrimSpace(result.Run.RunID) == "" {
+				result.Run = existing
+			}
+			result.Accepted = false
+			result.Issues = append(result.Issues, autoprogrammingBridgeExistingGoalStateIssueV0(run.RunID))
+			return result, nil
+		} else if loaded {
+			if !autoprogrammingBridgeGoalSpecMatchesStateV0(state.Spec, spec) {
+				if strings.TrimSpace(result.Run.RunID) == "" {
+					result.Run = existing
+				}
+				result.Accepted = false
+				result.Issues = append(result.Issues, autoprogrammingBridgeExistingGoalSpecMismatchIssueV0(run.RunID))
+				return result, nil
+			}
+			result = autoprogrammingBridgeAppendGoalRunV0(result, existing, state)
+			return result, nil
+		}
+	} else {
+		if err := ports.RunStore.SaveRunV0(ctx, run); err != nil {
+			return AutoprogrammingBridgeResultV0{}, err
+		}
+	}
+
+	receipt, err := ports.GoalLauncher.LaunchGoalWorkV0(ctx, spec)
+	if err != nil {
+		if strings.TrimSpace(result.Run.RunID) == "" {
+			result.Run = run
+		}
+		result.Accepted = false
+		result.Issues = append(result.Issues, autoprogrammingBridgeGoalLaunchIssueV0(run.RunID))
+		return result, nil
+	}
+	state, err := autoprogrammingBridgeNewGoalStateV0(run.RunID, spec, receipt, result.Work)
+	if err != nil {
+		return AutoprogrammingBridgeResultV0{}, err
+	}
+	if err := ports.GoalStateStore.SaveGoalWorkStateV0(ctx, state); err != nil {
+		if strings.TrimSpace(result.Run.RunID) == "" {
+			result.Run = run
+		}
+		result.Accepted = false
+		result.Issues = append(result.Issues, autoprogrammingBridgeGoalStateSaveIssueV0(run.RunID))
+		return result, nil
+	}
+	return autoprogrammingBridgeAppendGoalRunV0(result, run, state), nil
+}
+
+func autoprogrammingBridgeGoalSpecMatchesStateV0(
+	persisted orquestagoal.GoalWorkSpecV0,
+	expected orquestagoal.GoalWorkSpecV0,
+) bool {
+	return reflect.DeepEqual(
+		orquestagoal.NormalizeGoalWorkSpecV0(persisted),
+		orquestagoal.NormalizeGoalWorkSpecV0(expected),
+	)
+}
+
+func autoprogrammingBridgeAppendGoalRunV0(
+	result AutoprogrammingBridgeResultV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	state orquestagoal.GoalWorkStateV0,
+) AutoprogrammingBridgeResultV0 {
+	if strings.TrimSpace(result.Run.RunID) == "" {
+		result.Run = run
+	}
+	receipt := state.LaunchReceipt
+	result.GoalStates = append(result.GoalStates, state)
+	result.GoalReceipts = append(result.GoalReceipts, receipt)
+	return result
+}
+
+func autoprogrammingBridgeFinalizeGoalFirstResultV0(
+	result AutoprogrammingBridgeResultV0,
+) AutoprogrammingBridgeResultV0 {
+	if len(result.GoalStates) == 1 {
+		result.GoalState = result.GoalStates[0]
+		receipt := result.GoalState.LaunchReceipt
+		result.GoalReceipt = &receipt
+	}
+	return result
 }
 
 func autoprogrammingBridgeLoadExistingGoalStateV0(
@@ -136,6 +240,36 @@ func autoprogrammingBridgeExistingGoalStateIssueV0(
 		Code:    "autoprogramming_goal_state_unavailable_for_existing_run",
 		Field:   "goal_state",
 		Message: "run goal-first existente sin estado goal cargable; no se relanza ni se cae al loop legacy: " + strings.TrimSpace(runRef),
+	}
+}
+
+func autoprogrammingBridgeExistingGoalSpecMismatchIssueV0(
+	runRef string,
+) orquestaautoprogramming.AutoprogrammingRequestIssueV0 {
+	return orquestaautoprogramming.AutoprogrammingRequestIssueV0{
+		Code:    "autoprogramming_goal_state_spec_mismatch",
+		Field:   "goal_state.spec",
+		Message: "run goal-first existente apunta a un GoalWorkSpec distinto; no se reutiliza ni se relanza: " + strings.TrimSpace(runRef),
+	}
+}
+
+func autoprogrammingBridgeGoalLaunchIssueV0(
+	runRef string,
+) orquestaautoprogramming.AutoprogrammingRequestIssueV0 {
+	return orquestaautoprogramming.AutoprogrammingRequestIssueV0{
+		Code:    "autoprogramming_goal_launch_failed",
+		Field:   "goal_launcher",
+		Message: "launcher goal-first no pudo lanzar el goal; no se cae al loop legacy: " + strings.TrimSpace(runRef),
+	}
+}
+
+func autoprogrammingBridgeGoalStateSaveIssueV0(
+	runRef string,
+) orquestaautoprogramming.AutoprogrammingRequestIssueV0 {
+	return orquestaautoprogramming.AutoprogrammingRequestIssueV0{
+		Code:    "autoprogramming_goal_state_save_failed",
+		Field:   "goal_state",
+		Message: "state goal-first no pudo persistirse; no se relanza automaticamente: " + strings.TrimSpace(runRef),
 	}
 }
 
@@ -173,5 +307,8 @@ func autoprogrammingBridgeNewGoalStateV0(
 }
 
 func autoprogrammingBridgeResultIsGoalFirstV0(result AutoprogrammingBridgeResultV0) bool {
-	return strings.TrimSpace(result.GoalState.GoalRef) != "" || result.GoalReceipt != nil
+	return strings.TrimSpace(result.GoalState.GoalRef) != "" ||
+		result.GoalReceipt != nil ||
+		len(result.GoalStates) > 0 ||
+		len(result.GoalReceipts) > 0
 }

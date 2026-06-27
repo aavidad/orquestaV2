@@ -368,6 +368,101 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaGoalFirstSinColaL
 	}
 }
 
+func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaBatchGoalsSinColaLegacy(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	launcher := &goalFirstQueueLauncherForTestV0{}
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	stack.Ports.GoalLauncher = launcher
+	stack.Ports.GoalObserver = &goalFirstQueueObserverForTestV0{}
+	stack.Ports.GoalClosureValidator = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
+	stack.Ports.GoalStateStore = goalStates
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.RequestRef = "run-autoprogramming-goal-first-batch-001"
+	request.Tasks[0].TaskRef = "source-task-ref-autoprogramming-goal-first-batch-api-001"
+	request.Tasks[0].Area = "api"
+	request.Tasks[0].ContextRefs = []string{
+		"goal_migration:goal-first",
+		"goal_capability:starter",
+		"goal_capability:observer",
+		"goal_capability:closure-validator",
+	}
+	second := request.Tasks[0]
+	second.TaskRef = "source-task-ref-autoprogramming-goal-first-batch-web-001"
+	second.Area = "web"
+	request.Tasks = append(request.Tasks, second)
+	request.WriteSet = []string{
+		"modulos/orquesta-app-codex-stack/api/batch_goal.go",
+		"modulos/orquesta-app-codex-stack/web/batch_goal.go",
+	}
+	request.MaxTaskRefs = 2
+	request.MaxAreas = 2
+	request.MaxWriteSetEntries = 2
+
+	prepared, err := NewCodexStackAutoprogrammingPrepareRunExecutorV0(
+		&stack,
+		"2026-06-27T10:30:00Z",
+		"orquesta-stack-api-test",
+		stack.Stores.RunQueue,
+		stack.RunQueue,
+		stack.Clock,
+		stack.Codex.RuntimeWorkDir,
+	).Execute(context.Background(), orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-autoprogramming-goal-first-batch-api-001",
+		CorrelationID:          "corr-autoprogramming-goal-first-batch-api-001",
+		OccurredAt:             "2026-06-27T10:30:00Z",
+		RequestedBy:            "orquesta-stack-api-test",
+		AutoprogrammingRequest: request,
+	})
+	if err != nil {
+		t.Fatalf("prepare.Execute: %v", err)
+	}
+
+	wantRunRefs := []string{
+		"run-autoprogramming-goal-first-batch-001-goal-01",
+		"run-autoprogramming-goal-first-batch-001-goal-02",
+	}
+	if !prepared.Accepted ||
+		prepared.RunRef != wantRunRefs[0] ||
+		prepared.Goal != nil ||
+		len(prepared.Goals) != 2 ||
+		len(prepared.GoalSpecs) != 2 ||
+		len(prepared.WorkflowTaskRefs) != 0 ||
+		len(prepared.WaitAgentRefs) != 0 ||
+		prepared.Continue != nil {
+		t.Fatalf("prepared=%+v", prepared)
+	}
+	for i, runRef := range wantRunRefs {
+		if prepared.Goals[i].RunRef != runRef ||
+			prepared.GoalSpecs[i].RunRef != runRef ||
+			prepared.Goals[i].GoalStatus != orquestagoal.GoalStatusRunningV0 {
+			t.Fatalf("goal %d prepared=%+v specs=%+v want_run=%s", i, prepared.Goals, prepared.GoalSpecs, runRef)
+		}
+		run, err := stack.Ports.RunStore.LoadRunV0(context.Background(), runRef)
+		if err != nil {
+			t.Fatalf("LoadRunV0 %s: %v", runRef, err)
+		}
+		if len(run.Tasks) != 0 || len(run.FunctionContracts) != 0 {
+			t.Fatalf("batch goal materializo loop legacy: %+v", run)
+		}
+		if _, err := goalStates.LoadGoalWorkStateV0(context.Background(), runRef); err != nil {
+			t.Fatalf("LoadGoalWorkStateV0 %s: %v", runRef, err)
+		}
+	}
+	if len(launcher.specs) != 2 ||
+		launcher.specs[0].RunRef != wantRunRefs[0] ||
+		launcher.specs[1].RunRef != wantRunRefs[1] {
+		t.Fatalf("launcher specs=%+v", launcher.specs)
+	}
+	ranking := postRunQueuePriorityStackV0(t, stack, orquestamcp.MCPRunQueuePriorityToolInputV0{
+		Action:   orquestamcp.MCPRunQueuePriorityActionRankV0,
+		QueueRef: DefaultRunQueueRefV0,
+		Limit:    1,
+	})
+	if len(ranking.Ranked) != 0 {
+		t.Fatalf("batch goal-first no debe encolar legacy: %+v", ranking)
+	}
+}
+
 func TestCodexStackAutoprogrammingPrepareRunAPIV0EncolaYSupervisorGlobalArranca(t *testing.T) {
 	runtime := newFakeCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)

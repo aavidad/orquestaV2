@@ -1436,6 +1436,20 @@ Cobertura:
   encola `ready`, impide que `runs.supervisor` drene ese contenedor como loop
   legacy, observa el goal por `run_ref`, valida cierre con tests requeridos y
   sincroniza la cola solo como terminal `closed`.
+- `TestPrepareAutoprogrammingRunV0GoalReadyMultiGoalLanzaBatchSinLegacy` y
+  `TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaBatchGoalsSinColaLegacy`
+  fijan el batch goal-first: dos `GoalWorkSpecV0` producen dos runs derivados
+  `request_ref-goal-XX`, dos estados persistidos, `goals[]` en la salida MCP,
+  sin `goal` singular, sin cola legacy y sin run agregado.
+- `TestPrepareAutoprogrammingRunV0GoalReadyMultiGoalStateStoreFallaSinRelanzar`
+  cubre fallo parcial tras lanzar un goal del batch: Orquesta devuelve issue
+  `autoprogramming_goal_state_save_failed`, conserva el primer state, no
+  materializa tareas legacy y el retry bloquea el run derivado sin state sin
+  relanzar.
+- `TestPrepareAutoprogrammingRunV0GoalReadyRunExistenteConSpecDistintoNoReutiliza`
+  fija idempotencia fuerte: un `GoalWorkStateV0` existente solo se reutiliza si
+  su `spec` coincide con el `GoalWorkSpecV0` esperado; si cambia el contrato,
+  devuelve `autoprogramming_goal_state_spec_mismatch`.
 - `TestObserveAppDirectorGoalV0ReanudaTrasRestartDesdeStateFile` prueba el
   replay integrado: arranca goal-first sobre `orquesta-state-file`, recrea el
   store como tras reinicio, observa el goal con un stack nuevo, cierra la run

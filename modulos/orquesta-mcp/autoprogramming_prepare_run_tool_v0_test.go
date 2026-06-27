@@ -27,11 +27,16 @@ func TestMCPAutoprogrammingPrepareRunDescriptorV0EsAdaptadorOptIn(t *testing.T) 
 	if !strings.Contains(descriptor.Output, "goal_specs?") {
 		t.Fatalf("descriptor debe publicar goal_specs opcional en prepare-run: %q", descriptor.Output)
 	}
+	if !strings.Contains(descriptor.Output, "goals?[]") ||
+		!strings.Contains(descriptor.Output, "external_goal_ref?") {
+		t.Fatalf("descriptor debe publicar goals[] tipado en prepare-run: %q", descriptor.Output)
+	}
 	if !strings.Contains(descriptor.Output, "run_ref?") || !strings.Contains(descriptor.Output, "continue?") {
 		t.Fatalf("descriptor debe publicar run_ref y continue como opcionales en goal-first: %q", descriptor.Output)
 	}
 	if !containsMCPStringPartForTestV0(descriptor.Invariantes, "goal-first es la ruta preferente") ||
-		!containsMCPStringPartForTestV0(descriptor.Invariantes, "compatibilidad legacy") {
+		!containsMCPStringPartForTestV0(descriptor.Invariantes, "compatibilidad legacy") ||
+		!containsMCPStringPartForTestV0(descriptor.Invariantes, "goals[] es canonico") {
 		t.Fatalf("descriptor debe demotar continue legacy frente a goal-first: %+v", descriptor.Invariantes)
 	}
 }

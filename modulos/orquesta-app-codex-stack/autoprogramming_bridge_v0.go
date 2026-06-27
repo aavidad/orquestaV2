@@ -36,6 +36,8 @@ type AutoprogrammingBridgeResultV0 struct {
 	Continue      orquestaappdirectorservice.ContinueAppDirectorRequestV0   `json:"continue,omitempty"`
 	GoalState     orquestagoal.GoalWorkStateV0                              `json:"goal_state,omitempty"`
 	GoalReceipt   *orquestagoal.GoalLaunchReceiptV0                         `json:"goal_receipt,omitempty"`
+	GoalStates    []orquestagoal.GoalWorkStateV0                            `json:"goal_states,omitempty"`
+	GoalReceipts  []orquestagoal.GoalLaunchReceiptV0                        `json:"goal_receipts,omitempty"`
 	Issues        []orquestaautoprogramming.AutoprogrammingRequestIssueV0   `json:"issues,omitempty"`
 }
 
@@ -125,7 +127,7 @@ func autoprogrammingBridgeShouldStartGoalFirstV0(
 ) bool {
 	return autoprogrammingBridgeGoalFirstBackendAvailableV0(ports) &&
 		strings.TrimSpace(work.GoalMigration.Status) == orquestaautoprogramming.AutoprogrammingGoalMigrationGoalReadyV0 &&
-		len(work.GoalSpecs) == 1
+		len(work.GoalSpecs) > 0
 }
 
 func autoprogrammingBridgeGoalFirstBackendAvailableV0(
@@ -162,14 +164,8 @@ func autoprogrammingBridgeGoalFirstLaunchIssueV0(
 			Field:   "goal_specs",
 			Message: "goal_specs requerido para lanzamiento goal-first",
 		}
-	case 1:
-		return orquestaautoprogramming.AutoprogrammingRequestIssueV0{}
 	default:
-		return orquestaautoprogramming.AutoprogrammingRequestIssueV0{
-			Code:    "autoprogramming_multi_goal_launch_unsupported",
-			Field:   "goal_specs",
-			Message: "lanzamiento goal-first soporta un goal por request; divide el trabajo antes de lanzar",
-		}
+		return orquestaautoprogramming.AutoprogrammingRequestIssueV0{}
 	}
 }
 

@@ -1325,10 +1325,13 @@ Campos:
     goal?: estado durable de lanzamiento Goal-first cuando la composicion tiene
       backend inyectado: director_execution_mode, run_ref, goal_ref,
       external_goal_ref?, goal_status?, evidence_refs?
+    goals?: lista canonica de estados Goal-first por lote; cuando hay mas de
+      un goal, `goal` se omite y `run_ref` superior identifica el primer
+      `goals[i].run_ref` solo por compatibilidad, no un run agregado
     goal_specs: contratos `GoalWorkSpecV0` opcionales cuando la composicion
       clasifica el trabajo como `goal_ready`; sin backend preparan el handoff a
       Goal sin materializar ni encolar un run legacy, y con backend quedan
-      devueltos con `run_ref` del run contenedor
+      devueltos con `run_ref` del run contenedor o de cada goal derivado
     continue: request compacta opcional para supervision legacy posterior con
       `run_ref` explicito
   output_error:
@@ -1348,6 +1351,7 @@ Pruebas de contrato:
   - Registro MCP publica el tool.
   - Transporte bound invoca executor fake y devuelve resultado `ok`.
   - Descriptor y transporte publican `goal_specs` como salida opcional.
+  - Descriptor y HTTP publican `goals[]` tipado para batch goal-first.
   - Transporte sin executor devuelve `mcp_transport_tool_unbound`.
   - HTTP `POST /api/v0/autoprogramming/prepare-run` delega en executor fake.
 ```
@@ -1363,7 +1367,8 @@ Campos:
     path: /api/v0/autoprogramming/goal/observe
   input:
     request_id, correlation_id: refs externas opcionales
-    run_ref: ref durable del run contenedor Goal-first
+    run_ref: ref durable de un run Goal-first; en batch usar
+      `goals[i].run_ref`
     occurred_at, requested_by: metadata opcional
   output_ok:
     estado: ok

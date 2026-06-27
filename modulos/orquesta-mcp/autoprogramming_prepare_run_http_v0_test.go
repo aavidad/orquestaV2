@@ -61,6 +61,38 @@ func TestMCPAutoprogrammingPrepareRunHTTPHandlerV0DelegaEnExecutor(t *testing.T)
 	}
 }
 
+func TestMCPAutoprogrammingPrepareRunHTTPHandlerV0SerializaGoalsBatch(t *testing.T) {
+	executor := &fakeMCPAutoprogrammingPrepareRunHTTPExecutorV0{
+		result: MCPAutoprogrammingPrepareRunToolResultV0{
+			Estado:   MCPAutoprogrammingPrepareRunEstadoOKV0,
+			Accepted: true,
+			RunRef:   "run-autoprogramming-batch-001-goal-01",
+			Goals: []MCPAutoprogrammingGoalRunV0{
+				{RunRef: "run-autoprogramming-batch-001-goal-01", GoalRef: "goal-ref-batch-001", GoalStatus: orquestagoal.GoalStatusRunningV0},
+				{RunRef: "run-autoprogramming-batch-001-goal-02", GoalRef: "goal-ref-batch-002", GoalStatus: orquestagoal.GoalStatusRunningV0},
+			},
+		},
+	}
+	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingPrepareRunHTTPPathV0, bytes.NewBufferString(`{"request_id":"request-autoprogramming-batch-001"}`))
+	rec := httptest.NewRecorder()
+
+	NewMCPAutoprogrammingPrepareRunHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPAutoprogrammingPrepareRunToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Goal != nil ||
+		len(result.Goals) != 2 ||
+		result.Goals[0].RunRef != "run-autoprogramming-batch-001-goal-01" ||
+		result.Goals[1].RunRef != "run-autoprogramming-batch-001-goal-02" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPAutoprogrammingPrepareRunHTTPHandlerV0ExecutorNil(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingPrepareRunHTTPPathV0, bytes.NewBufferString(`{}`))
 	rec := httptest.NewRecorder()

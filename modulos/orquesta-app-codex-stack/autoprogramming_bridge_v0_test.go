@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
@@ -221,6 +223,241 @@ func TestPrepareAutoprogrammingRunV0GoalReadyConBackendParcialNoLanzaNiCaeALegac
 	}
 }
 
+func TestPrepareAutoprogrammingRunV0GoalReadyMultiGoalLanzaBatchSinLegacy(t *testing.T) {
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0()
+	launcher := &goalFirstQueueLauncherForTestV0{}
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.RequestRef = "run-autoprogramming-goal-multi-001"
+	request.Tasks = []orquestaautoprogramming.AutoprogrammingTaskGroupCandidateV0{
+		{
+			TaskRef: "source-task-ref-autoprogramming-goal-multi-api-001",
+			Area:    "api",
+			ContextRefs: []string{
+				"goal_migration:goal-first",
+				"goal_capability:starter",
+				"goal_capability:observer",
+				"goal_capability:closure-validator",
+			},
+		},
+		{
+			TaskRef: "source-task-ref-autoprogramming-goal-multi-web-001",
+			Area:    "web",
+			ContextRefs: []string{
+				"goal_migration:goal-first",
+				"goal_capability:starter",
+				"goal_capability:observer",
+				"goal_capability:closure-validator",
+			},
+		},
+	}
+	request.WriteSet = []string{
+		"modulos/orquesta-app-codex-stack/api/goal_multi.go",
+		"modulos/orquesta-app-codex-stack/web/goal_multi.go",
+	}
+	request.MaxTaskRefs = 2
+	request.MaxAreas = 2
+	request.MaxWriteSetEntries = 2
+
+	bridged, err := PrepareAutoprogrammingRunV0(context.Background(), AutoprogrammingBridgeRequestV0{
+		Request: request,
+	}, orquestaappdirectorservice.StartAppDirectorPortsV0{
+		RunStore:             runStore,
+		DirectorTaskStore:    taskStore,
+		GoalLauncher:         launcher,
+		GoalObserver:         &goalFirstQueueObserverForTestV0{},
+		GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		GoalStateStore:       goalStates,
+	})
+	if err != nil {
+		t.Fatalf("PrepareAutoprogrammingRunV0: %v", err)
+	}
+	if !bridged.Accepted ||
+		len(bridged.Issues) != 0 ||
+		len(bridged.Work.GoalSpecs) != 2 ||
+		bridged.Run.RunID != "run-autoprogramming-goal-multi-001-goal-01" ||
+		len(bridged.Tasks) != 0 ||
+		len(bridged.WaitAgentRefs) != 0 ||
+		strings.TrimSpace(bridged.Continue.RunRef) != "" ||
+		len(bridged.GoalStates) != 2 ||
+		len(bridged.GoalReceipts) != 2 ||
+		bridged.GoalReceipt != nil ||
+		strings.TrimSpace(bridged.GoalState.GoalRef) != "" {
+		t.Fatalf("bridged=%+v", bridged)
+	}
+	wantRunRefs := []string{
+		"run-autoprogramming-goal-multi-001-goal-01",
+		"run-autoprogramming-goal-multi-001-goal-02",
+	}
+	for i, runRef := range wantRunRefs {
+		if bridged.Work.GoalSpecs[i].RunRef != runRef ||
+			bridged.GoalStates[i].RunRef != runRef {
+			t.Fatalf("goal %d spec/state run_ref=%s/%s want %s", i, bridged.Work.GoalSpecs[i].RunRef, bridged.GoalStates[i].RunRef, runRef)
+		}
+		run, err := runStore.LoadRunV0(context.Background(), runRef)
+		if err != nil {
+			t.Fatalf("LoadRunV0 %s: %v", runRef, err)
+		}
+		if len(run.Tasks) != 0 || len(run.FunctionContracts) != 0 {
+			t.Fatalf("run goal-first no debe materializar loop legacy: %+v", run)
+		}
+		if _, ok := goalStates.states[runRef]; !ok {
+			t.Fatalf("goal state %s no persistido: %+v", runRef, goalStates.states)
+		}
+	}
+	if len(launcher.specs) != 2 ||
+		launcher.specs[0].RunRef != wantRunRefs[0] ||
+		launcher.specs[1].RunRef != wantRunRefs[1] ||
+		len(goalStates.states) != 2 {
+		t.Fatalf("multi-goal no lanzo batch correcto: specs=%+v states=%+v", launcher.specs, goalStates.states)
+	}
+	if _, err := runStore.LoadRunV0(context.Background(), request.RequestRef); !orquestacionnucleoapp.IsRunNotFoundErrorV0(err) {
+		t.Fatalf("multi-goal no debe materializar run agregada legacy, err=%v", err)
+	}
+}
+
+func TestPrepareAutoprogrammingRunV0GoalReadyMultiGoalStateStoreFallaSinRelanzar(t *testing.T) {
+	ctx := context.Background()
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0()
+	launcher := &goalFirstQueueLauncherForTestV0{}
+	baseGoalStates := newGoalFirstQueueStateStoreForTestV0()
+	goalStates := &autoprogrammingBridgeFailingGoalStateStoreForTestV0{
+		delegate: baseGoalStates,
+		failOn:   2,
+	}
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.RequestRef = "run-autoprogramming-goal-state-fails-001"
+	request.Tasks[0].TaskRef = "source-task-ref-autoprogramming-goal-state-api-001"
+	request.Tasks[0].Area = "api"
+	request.Tasks[0].ContextRefs = []string{
+		"goal_migration:goal-first",
+		"goal_capability:starter",
+		"goal_capability:observer",
+		"goal_capability:closure-validator",
+	}
+	second := request.Tasks[0]
+	second.TaskRef = "source-task-ref-autoprogramming-goal-state-web-001"
+	second.Area = "web"
+	request.Tasks = append(request.Tasks, second)
+	request.WriteSet = []string{
+		"modulos/orquesta-app-codex-stack/api/state_fails.go",
+		"modulos/orquesta-app-codex-stack/web/state_fails.go",
+	}
+	request.MaxTaskRefs = 2
+	request.MaxAreas = 2
+	request.MaxWriteSetEntries = 2
+	ports := orquestaappdirectorservice.StartAppDirectorPortsV0{
+		RunStore:             runStore,
+		DirectorTaskStore:    taskStore,
+		GoalLauncher:         launcher,
+		GoalObserver:         &goalFirstQueueObserverForTestV0{},
+		GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		GoalStateStore:       goalStates,
+	}
+
+	bridged, err := PrepareAutoprogrammingRunV0(ctx, AutoprogrammingBridgeRequestV0{
+		Request: request,
+	}, ports)
+	if err != nil {
+		t.Fatalf("PrepareAutoprogrammingRunV0: %v", err)
+	}
+	wantRunRefs := []string{
+		"run-autoprogramming-goal-state-fails-001-goal-01",
+		"run-autoprogramming-goal-state-fails-001-goal-02",
+	}
+	if bridged.Accepted ||
+		len(bridged.Issues) != 1 ||
+		bridged.Issues[0].Code != "autoprogramming_goal_state_save_failed" ||
+		len(bridged.GoalStates) != 1 ||
+		bridged.GoalStates[0].RunRef != wantRunRefs[0] ||
+		len(launcher.specs) != 2 ||
+		len(baseGoalStates.states) != 1 {
+		t.Fatalf("bridged=%+v specs=%+v states=%+v", bridged, launcher.specs, baseGoalStates.states)
+	}
+	for _, runRef := range wantRunRefs {
+		run, err := runStore.LoadRunV0(ctx, runRef)
+		if err != nil {
+			t.Fatalf("LoadRunV0 %s: %v", runRef, err)
+		}
+		if len(run.Tasks) != 0 || len(run.FunctionContracts) != 0 {
+			t.Fatalf("state store failure no debe materializar legacy: %+v", run)
+		}
+	}
+
+	retry, err := PrepareAutoprogrammingRunV0(ctx, AutoprogrammingBridgeRequestV0{
+		Request: request,
+	}, ports)
+	if err != nil {
+		t.Fatalf("retry PrepareAutoprogrammingRunV0: %v", err)
+	}
+	if retry.Accepted ||
+		len(retry.Issues) != 1 ||
+		retry.Issues[0].Code != "autoprogramming_goal_state_unavailable_for_existing_run" ||
+		len(launcher.specs) != 2 {
+		t.Fatalf("retry=%+v specs=%+v", retry, launcher.specs)
+	}
+}
+
+func TestPrepareAutoprogrammingRunV0GoalReadyRunExistenteConSpecDistintoNoReutiliza(t *testing.T) {
+	ctx := context.Background()
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0()
+	launcher := &goalFirstQueueLauncherForTestV0{}
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.RequestRef = "run-autoprogramming-goal-spec-mismatch-001"
+	request.Tasks[0].TaskRef = "source-task-ref-autoprogramming-goal-spec-mismatch-001"
+	request.Tasks[0].ContextRefs = []string{
+		"goal_migration:goal-first",
+		"goal_capability:starter",
+		"goal_capability:observer",
+		"goal_capability:closure-validator",
+	}
+	ports := orquestaappdirectorservice.StartAppDirectorPortsV0{
+		RunStore:             runStore,
+		DirectorTaskStore:    taskStore,
+		GoalLauncher:         launcher,
+		GoalObserver:         &goalFirstQueueObserverForTestV0{},
+		GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		GoalStateStore:       goalStates,
+	}
+
+	first, err := PrepareAutoprogrammingRunV0(ctx, AutoprogrammingBridgeRequestV0{
+		Request: request,
+	}, ports)
+	if err != nil {
+		t.Fatalf("first PrepareAutoprogrammingRunV0: %v", err)
+	}
+	if !first.Accepted || len(first.GoalStates) != 1 || len(launcher.specs) != 1 {
+		t.Fatalf("first=%+v specs=%+v", first, launcher.specs)
+	}
+
+	changed := request
+	changed.WriteSet = []string{"modulos/orquesta-app-codex-stack/changed/spec_mismatch.go"}
+	second, err := PrepareAutoprogrammingRunV0(ctx, AutoprogrammingBridgeRequestV0{
+		Request: changed,
+	}, ports)
+	if err != nil {
+		t.Fatalf("second PrepareAutoprogrammingRunV0: %v", err)
+	}
+	if second.Accepted ||
+		len(second.Issues) != 1 ||
+		second.Issues[0].Code != "autoprogramming_goal_state_spec_mismatch" ||
+		second.Issues[0].Field != "goal_state.spec" ||
+		len(launcher.specs) != 1 {
+		t.Fatalf("second=%+v specs=%+v", second, launcher.specs)
+	}
+	stored, err := goalStates.LoadGoalWorkStateV0(ctx, first.Run.RunID)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if stored.Spec.WriteSet[0].Path == changed.WriteSet[0] {
+		t.Fatalf("state existente no debe mutar: %+v", stored.Spec.WriteSet)
+	}
+}
+
 func TestPrepareAutoprogrammingRunV0GoalReadyRunExistenteSinGoalStateNoRelanzaGoal(t *testing.T) {
 	ctx := context.Background()
 	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0()
@@ -278,6 +515,30 @@ func TestPrepareAutoprogrammingRunV0GoalReadyRunExistenteSinGoalStateNoRelanzaGo
 	if len(stored.Tasks) != 0 || len(stored.FunctionContracts) != 0 {
 		t.Fatalf("no debe materializar loop legacy: %+v", stored)
 	}
+}
+
+type autoprogrammingBridgeFailingGoalStateStoreForTestV0 struct {
+	delegate *goalFirstQueueStateStoreForTestV0
+	failOn   int
+	saves    int
+}
+
+func (store *autoprogrammingBridgeFailingGoalStateStoreForTestV0) SaveGoalWorkStateV0(
+	ctx context.Context,
+	state orquestagoal.GoalWorkStateV0,
+) error {
+	store.saves++
+	if store.failOn > 0 && store.saves == store.failOn {
+		return errors.New("goal state store unavailable")
+	}
+	return store.delegate.SaveGoalWorkStateV0(ctx, state)
+}
+
+func (store *autoprogrammingBridgeFailingGoalStateStoreForTestV0) LoadGoalWorkStateV0(
+	ctx context.Context,
+	runRef string,
+) (orquestagoal.GoalWorkStateV0, error) {
+	return store.delegate.LoadGoalWorkStateV0(ctx, runRef)
 }
 
 func TestPrepareAutoprogrammingRunV0EsIdempotenteYNoSobrescribeRunViva(t *testing.T) {

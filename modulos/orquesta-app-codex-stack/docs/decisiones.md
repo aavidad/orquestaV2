@@ -152,6 +152,27 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-06-27
+Decision: Autoprogramacion goal-first lanza batch como N runs derivados, no
+como loop legacy ni como run agregado.
+Motivo: con Codex Goal el loop lo hace el runtime Goal; Orquesta debe compilar
+contratos, lanzar/observar por adaptador opt-in y validar evidencias. Cuando
+la solicitud se particiona en varios grupos, un solo `goal` singular escondia
+trabajo paralelo y empujaba a operadores/clientes a observar solo el primer
+run.
+Impacto: `PrepareAutoprogrammingRunV0` completa cada `GoalWorkSpecV0.RunRef`
+como `request_ref-goal-XX`, persiste un run contenedor por goal sin
+`WorkflowTaskV0`, lanza todos los goals por `GoalLauncher` y devuelve
+`GoalStates`/`GoalReceipts` plurales. La superficie MCP publica `goals[]` como
+canonica en batch; `goal` singular se mantiene solo para el caso de un goal.
+`run_ref` superior apunta al primer goal por compatibilidad y no representa un
+run agregado. Si una reentrada encuentra `GoalWorkStateV0` con spec distinto,
+devuelve `autoprogramming_goal_state_spec_mismatch`; si falta state o falla su
+persistencia, no relanza silenciosamente ni cae al loop legacy.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-06-26
 Decision: `prepare-run` no relanza un Goal si la run goal-first ya existe pero
 el `GoalWorkStateV0` no se puede cargar.

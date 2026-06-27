@@ -56,6 +56,8 @@ type WebAutoprogrammingPrepareRunViewModelV0 struct {
 	WorkflowTaskRefs []string                                    `json:"workflow_task_refs,omitempty"`
 	WaitAgentRefs    []string                                    `json:"wait_agent_refs,omitempty"`
 	GoalSpecs        []orquestagoal.GoalWorkSpecV0               `json:"goal_specs,omitempty"`
+	Goal             *orquestamcp.MCPAutoprogrammingGoalRunV0    `json:"goal,omitempty"`
+	Goals            []orquestamcp.MCPAutoprogrammingGoalRunV0   `json:"goals,omitempty"`
 	Continue         *WebAutoprogrammingContinueRequestV0        `json:"continue,omitempty"`
 	ErroresPublicos  []WebAutoprogrammingPrepareRunPublicIssueV0 `json:"errores_publicos,omitempty"`
 }
@@ -79,6 +81,7 @@ type WebAutoprogrammingPrepareRunPublicIssueV0 struct {
 }
 
 func NewWebAutoprogrammingPrepareRunViewModelV0(locale string, result orquestamcp.MCPAutoprogrammingPrepareRunToolResultV0) WebAutoprogrammingPrepareRunViewModelV0 {
+	goal, goals := webAutoprogrammingPrepareRunGoalsV0(result)
 	vm := WebAutoprogrammingPrepareRunViewModelV0{
 		SchemaVersion:    "web_autoprogramming_prepare_run.v0",
 		Locale:           normalizeDirectorStatsLocaleV0(locale),
@@ -92,12 +95,32 @@ func NewWebAutoprogrammingPrepareRunViewModelV0(locale string, result orquestamc
 		WorkflowTaskRefs: compactStringsV0(result.WorkflowTaskRefs),
 		WaitAgentRefs:    compactStringsV0(result.WaitAgentRefs),
 		GoalSpecs:        append([]orquestagoal.GoalWorkSpecV0(nil), result.GoalSpecs...),
+		Goal:             goal,
+		Goals:            goals,
 		ErroresPublicos:  webAutoprogrammingPrepareRunIssuesV0(result.Errores),
 	}
 	if result.Continue != nil {
 		vm.Continue = webAutoprogrammingContinueRequestV0(*result.Continue)
 	}
 	return vm
+}
+
+func webAutoprogrammingPrepareRunGoalsV0(
+	result orquestamcp.MCPAutoprogrammingPrepareRunToolResultV0,
+) (*orquestamcp.MCPAutoprogrammingGoalRunV0, []orquestamcp.MCPAutoprogrammingGoalRunV0) {
+	goals := append([]orquestamcp.MCPAutoprogrammingGoalRunV0(nil), result.Goals...)
+	if len(goals) == 0 && result.Goal != nil {
+		goals = append(goals, *result.Goal)
+	}
+	var goal *orquestamcp.MCPAutoprogrammingGoalRunV0
+	if result.Goal != nil {
+		copyGoal := *result.Goal
+		goal = &copyGoal
+	} else if len(goals) == 1 {
+		copyGoal := goals[0]
+		goal = &copyGoal
+	}
+	return goal, goals
 }
 
 func webAutoprogrammingPrepareRunEstadoV0(value string) string {

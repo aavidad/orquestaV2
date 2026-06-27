@@ -45,6 +45,12 @@ func TestRESTAutoprogrammingPrepareRunClientV0PreservaWorktreeAisladaYRamaOpaca(
 				DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
 				WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "modulos/orquesta-web"}},
 			}},
+			Goals: []orquestamcp.MCPAutoprogrammingGoalRunV0{{
+				DirectorExecutionMode: "goal_first",
+				RunRef:                "run-autoprog-web-001",
+				GoalRef:               "goal-ref-web-autoprog-001",
+				GoalStatus:            orquestagoal.GoalStatusRunningV0,
+			}},
 			Continue: &orquestamcp.MCPAutoprogrammingContinueRequestV0{
 				RunRef:                     "run-autoprog-web-001",
 				OperationalDirectorPlanRef: "operational-director-plan-web-001",
@@ -92,10 +98,43 @@ func TestRESTAutoprogrammingPrepareRunClientV0PreservaWorktreeAisladaYRamaOpaca(
 		vm.BranchRef != "branch-ref-opaque-001" ||
 		len(vm.GoalSpecs) != 1 ||
 		vm.GoalSpecs[0].RunRef != "run-autoprog-web-001" ||
+		vm.Goal == nil ||
+		vm.Goal.RunRef != "run-autoprog-web-001" ||
+		len(vm.Goals) != 1 ||
+		vm.Goals[0].RunRef != "run-autoprog-web-001" ||
 		vm.GoalSpecs[0].DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 ||
 		vm.Continue == nil ||
 		vm.Continue.OperationalDirectorPlanRef != "operational-director-plan-web-001" ||
 		len(vm.Continue.WaitAgentRefs) != 1 {
+		t.Fatalf("viewmodel=%+v", vm)
+	}
+}
+
+func TestRESTAutoprogrammingPrepareRunClientV0ConservaGoalSingularLegacyComoGoals(t *testing.T) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(orquestamcp.MCPAutoprogrammingPrepareRunToolResultV0{
+			Estado:   orquestamcp.MCPAutoprogrammingPrepareRunEstadoOKV0,
+			Accepted: true,
+			RunRef:   "run-autoprog-web-legacy-goal-001",
+			Goal: &orquestamcp.MCPAutoprogrammingGoalRunV0{
+				DirectorExecutionMode: "goal_first",
+				RunRef:                "run-autoprog-web-legacy-goal-001",
+				GoalRef:               "goal-ref-web-legacy-001",
+				GoalStatus:            orquestagoal.GoalStatusRunningV0,
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := NewRESTAutoprogrammingPrepareRunClientV0(server.URL, time.Second)
+	vm, err := client.PrepararAutoprogrammingRun(context.Background(), validWebAutoprogrammingPrepareRunCommandV0())
+	if err != nil {
+		t.Fatalf("PrepararAutoprogrammingRun error: %v", err)
+	}
+	if vm.Goal == nil ||
+		vm.Goal.RunRef != "run-autoprog-web-legacy-goal-001" ||
+		len(vm.Goals) != 1 ||
+		vm.Goals[0].GoalRef != "goal-ref-web-legacy-001" {
 		t.Fatalf("viewmodel=%+v", vm)
 	}
 }
