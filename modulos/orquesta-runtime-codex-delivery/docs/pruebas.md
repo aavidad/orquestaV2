@@ -74,6 +74,9 @@ Cobertura:
   el scheduler pueda registrar resultado y pedir rework en ciclos posteriores;
 - sigue emitiendo la observacion de review gate si el agente ya esta parado y
   confirmado despues de registrar su entrega;
+- ingiere un ACK de padre cuyo `task_ref` apunta a `child_task_refs` como
+  delivery revisable del padre, con
+  `gate-issue:invalid_parent_ack_child_task_collision`, sin tumbar el tick;
 - clasifica un ACK del padre con `task_ref` de un `child_task_ref` como
   `invalid_parent_ack_child_task_collision` observable por review/rework, sin
   depender de que el nombre del hijo contenga `subrol`;

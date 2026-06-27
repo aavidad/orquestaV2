@@ -1,5 +1,22 @@
 # Decisiones: orquesta-runtime-codex
 
+## RTCODEX-DEC-015
+
+```text
+Fecha: 2026-06-27
+Decision: Una colision de ACK padre/subrol se proyecta como entrega revisable,
+no como fallo opaco de ingesta.
+Motivo: OPES documento ACKs escritos en la ruta del padre con `task_ref` de
+subrol o de `child_task_refs`. La colision es una incidencia causal real, pero
+tumbar `ReadCodexDeliveryObservationFileV0` impide que Orquesta registre una
+evidencia accionable y deja al supervisor en error de transporte.
+Impacto: el lector de delivery conserva la entrega esperada del padre y anade
+`gate-issue:invalid_parent_ack_subrole_collision` o
+`gate-issue:invalid_parent_ack_child_task_collision`. La review posterior debe
+pedir cambios; la correlacion generica no identificada sigue siendo corte duro.
+Estado: aceptada localmente.
+```
+
 ## RTCODEX-DEC-014
 
 ```text

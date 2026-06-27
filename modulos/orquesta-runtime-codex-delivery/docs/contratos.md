@@ -96,6 +96,10 @@ Invariantes:
 - Omite deliveries ya registradas en el run.
 - Omite artefactos de fase ya registrados en el run, aunque el store externo no
   los haya filtrado.
+- Si el ACK del padre contiene `task_ref` de subrol o de un `child_task_ref`,
+  registra una observacion revisable del padre con evidencia
+  `gate-issue:invalid_parent_ack_*`; no acepta cierre limpio y no tumba el tick
+  por una excepcion opaca.
 - Devuelve al nucleo solo `artifact_ref`, `delivery_ref`, `phase_id`,
   `task_id`, `agent_ref`, `summary` y `evidence_refs` compactas.
 - `artifact_ref` usa el ACK validado como ref estable para fases que no son

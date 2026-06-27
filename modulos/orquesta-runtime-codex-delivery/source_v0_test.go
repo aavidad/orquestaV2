@@ -116,6 +116,44 @@ func TestCodexDeliveryObservationSourceV0IngiereACKTardioDeAgenteMarcadoLost(t *
 	}
 }
 
+func TestCodexDeliveryObservationSourceV0ACKPadreConChildTaskRefNoTumbaTick(t *testing.T) {
+	spec := codexDeliverySpecWithRefsForTestV0(
+		"agent-ref-parent-child-collision-001",
+		"task-ref-parent-child-collision-001",
+		"ack-ref-parent-child-collision-001",
+	)
+	spec.AgentPacket.Task.ChildTaskRefs = []string{"task-ref-child-redaccion-collision-001"}
+	ack := codexDeliveryAckForTestV0(spec)
+	ack.TaskRef = "task-ref-child-redaccion-collision-001"
+	path := writeCodexDeliveryAckForTestV0(t, spec, ack)
+	store := &staticCodexReceiptStoreV0{
+		Descriptors: []CodexReceiptDescriptorV0{{
+			DescriptorRef: "receipt-ref-parent-child-collision-001",
+			Spec:          spec,
+			AckPath:       path,
+		}},
+	}
+
+	observations, err := (CodexDeliveryObservationSourceV0{Store: store}).
+		BuildAgentDeliveryObservationsV0(context.Background(), codexDeliveryRequestForTestV0(spec, nil))
+
+	if err != nil {
+		t.Fatalf("BuildAgentDeliveryObservationsV0 no debe tumbar el tick por child ACK collision: %v", err)
+	}
+	if len(observations) != 1 ||
+		observations[0].DeliveryRef != spec.AgentPacket.DeliveryRefs.AckRef ||
+		observations[0].TaskID != spec.AgentPacket.Task.TaskRef ||
+		observations[0].AgentRef != spec.RequestID {
+		t.Fatalf("observations=%+v", observations)
+	}
+	if !codexDeliveryEvidenceContainsForTestV0(
+		observations[0].EvidenceRefs,
+		"gate-issue:"+orquestaruntimecodex.CodexAgentAckInvalidParentChildTaskCollisionEvidenceV0,
+	) {
+		t.Fatalf("evidence_refs=%+v", observations[0].EvidenceRefs)
+	}
+}
+
 func TestCodexDeliveryObservationSourceV0IngiereACKTardioSinProcesoVivoConWaitAgentRefs(t *testing.T) {
 	scopedSpec := codexDeliverySpecWithRefsForTestV0(
 		"agent-ref-late-scoped-001",

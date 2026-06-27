@@ -27,11 +27,11 @@ func ReadCodexDeliveryObservationFileV0(
 	}
 	ack, issues := validateCodexDeliveryAckBytesForSpecV0(data, spec)
 	if len(issues) > 0 {
-		if codexDeliveryObservationIssuesOnlyFailedTestEvidenceV0(issues) {
+		if codexDeliveryObservationIssuesReviewableV0(issues) {
 			return BuildCodexDeliveryObservationWithReviewRailsV0(
 				ack,
 				spec,
-				[]string{"gate-issue:failed_test_evidence"},
+				codexDeliveryObservationIssueReviewRailsV0(issues),
 			)
 		}
 		return CodexDeliveryObservationV0{}, issues
@@ -90,6 +90,52 @@ func codexDeliveryObservationIssuesOnlyFailedTestEvidenceV0(
 	return true
 }
 
+func codexDeliveryObservationIssuesReviewableV0(
+	issues []orquestaruntime.ExternalAgentConnectorErrorV0,
+) bool {
+	return codexDeliveryObservationIssuesOnlyFailedTestEvidenceV0(issues) ||
+		codexDeliveryObservationIssuesOnlyParentAckCollisionV0(issues)
+}
+
+func codexDeliveryObservationIssuesOnlyParentAckCollisionV0(
+	issues []orquestaruntime.ExternalAgentConnectorErrorV0,
+) bool {
+	if len(issues) == 0 {
+		return false
+	}
+	for _, issue := range issues {
+		if issue.Code != orquestaruntime.ExternalAgentConnectorErrorCodeV0(CodexConnectorAckCorrelationV0) ||
+			strings.TrimSpace(issue.Field) != "agent_ack" ||
+			!codexAckIssueHasAnyEvidenceV0(issue,
+				CodexAgentAckInvalidParentSubroleCollisionEvidenceV0,
+				CodexAgentAckInvalidParentChildTaskCollisionEvidenceV0,
+			) {
+			return false
+		}
+	}
+	return true
+}
+
+func codexDeliveryObservationIssueReviewRailsV0(
+	issues []orquestaruntime.ExternalAgentConnectorErrorV0,
+) []string {
+	out := []string{}
+	for _, issue := range issues {
+		if codexAckIssueHasEvidenceV0(issue, "failed_test_evidence") {
+			out = append(out, "gate-issue:failed_test_evidence")
+		}
+		for _, evidence := range []string{
+			CodexAgentAckInvalidParentSubroleCollisionEvidenceV0,
+			CodexAgentAckInvalidParentChildTaskCollisionEvidenceV0,
+		} {
+			if codexAckIssueHasEvidenceV0(issue, evidence) {
+				out = append(out, "gate-issue:"+evidence)
+			}
+		}
+	}
+	return compactCodexDeliveryObservationRefsV0(out)
+}
+
 func codexAckIssueHasEvidenceV0(
 	issue orquestaruntime.ExternalAgentConnectorErrorV0,
 	want string,
@@ -122,7 +168,9 @@ func BuildCodexDeliveryObservationWithReviewRailsV0(
 	ack = codexAgentAckWithSpecDefaultsV0(ack, spec)
 	issues := ValidateCodexAgentAckForSpecV0(ack, spec)
 	if !codexDeliveryObservationIssuesOnlyFailedTestEvidenceV0(issues) {
-		return CodexDeliveryObservationV0{}, issues
+		if !codexDeliveryObservationIssuesOnlyParentAckCollisionV0(issues) {
+			return CodexDeliveryObservationV0{}, issues
+		}
 	}
 	if strings.TrimSpace(ack.Status) != codexAgentAckStatusCompletedV0 {
 		return CodexDeliveryObservationV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{
@@ -130,6 +178,10 @@ func BuildCodexDeliveryObservationWithReviewRailsV0(
 		}
 	}
 	observation := codexDeliveryObservationFromAckV0(ack, spec.AgentPacket)
+	if codexDeliveryObservationIssuesOnlyParentAckCollisionV0(issues) {
+		observation.DeliveryRef = strings.TrimSpace(spec.AgentPacket.DeliveryRefs.AckRef)
+		observation.TaskID = strings.TrimSpace(spec.AgentPacket.Task.TaskRef)
+	}
 	observation.EvidenceRefs = compactCodexDeliveryObservationRefsV0(append(observation.EvidenceRefs, reviewRails...))
 	return observation, nil
 }

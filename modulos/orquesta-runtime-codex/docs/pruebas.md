@@ -67,6 +67,9 @@ Cobertura:
 - rechaza valores sensibles efectivos como `access_token=...`,
   `client_secret: ...`, `authorization: bearer ...` o claves privadas;
 - lee `agent_ack.json` y construye `CodexDeliveryObservationV0` neutral;
+- conserva un ACK del padre con `task_ref` de subrol como entrega revisable del
+  padre con `gate-issue:invalid_parent_ack_subrole_collision`, sin aceptarlo
+  como cierre limpio ni tumbar el tick;
 - conserva refs operativas dudosas como evidencia blanda para review externa,
   sin aceptar archivos de control ni rutas inseguras.
 - reconciliacion T208 cubierta por la bateria cruzada requerida; no habilita

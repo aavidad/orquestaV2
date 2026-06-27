@@ -2,6 +2,20 @@
 
 ```text
 Fecha: 2026-06-27
+Decision: La fuente de delivery ingiere ACK padre/subrol como rail de review.
+Motivo: la mitigacion de review gate no servia si la entrega nunca se registraba
+por error de correlacion. OPES necesita ver
+`invalid_parent_ack_child_task_collision`/`invalid_parent_ack_subrole_collision`
+en la ruta normal de supervision, no como excepcion opaca del tick.
+Impacto: `CodexDeliveryObservationSourceV0` recibe de `orquesta-runtime-codex`
+una observacion del padre con `gate-issue:*`; el core puede registrar la entrega
+revisable y el review gate pide cambios. ACKs con correlacion generica siguen
+fallando en duro por causalidad.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-06-27
 Decision: El fallback `ACK.files` tambien proyecta ficheros declarados fuera
 del write-set como rail blando.
 Motivo: OPES reporto casos donde el modo sin baseline podia aceptar ACKs con

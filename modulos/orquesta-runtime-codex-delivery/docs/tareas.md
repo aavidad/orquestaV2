@@ -1,5 +1,29 @@
 # Tareas: orquesta-runtime-codex-delivery
 
+## RTDELIVERY-011 - ACK padre/subrol como entrega revisable
+
+Estado: hecho local 2026-06-27.
+
+Objetivo: que un `agent_ack.json` del padre con `task_ref` de subrol o
+`child_task_ref` no tumbe el tick de supervision y tampoco cierre como entrega
+limpia.
+
+Write-set:
+
+- `source_v0_test.go`;
+- `docs/*.md`;
+- soporte base en `modulos/orquesta-runtime-codex`.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-codex-delivery -run 'TestReadCodexDeliveryObservationFileV0ConservaACKPadreConTaskRefSubrolComoRail|TestCodexDeliveryObservationSourceV0ACKPadreConChildTaskRefNoTumbaTick|TestCodexReviewGateObservationSourceV0ParentAckCon'`
+
+Reglas cerradas:
+
+- la entrega se correlaciona al padre esperado y lleva `gate-issue`;
+- la review posterior debe pedir cambios/rework;
+- una correlacion generica no identificada sigue siendo corte duro.
+
 ## RTDELIVERY-001 - Receipts Codex como observaciones neutras
 
 Objetivo: leer ACKs Codex materializados por conectores externos y convertirlos

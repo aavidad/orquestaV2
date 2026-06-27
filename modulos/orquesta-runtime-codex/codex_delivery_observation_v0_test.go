@@ -122,6 +122,37 @@ func TestReadCodexDeliveryObservationFileV0NoAceptaTestReceiptsInvalidosComoLega
 	requireCodexIssueEvidenceV0(t, issues, "required_test_receipt_mismatch")
 }
 
+func TestReadCodexDeliveryObservationFileV0ConservaACKPadreConTaskRefSubrolComoRail(t *testing.T) {
+	spec := codexNeutralSpecForDeliveryObservationTestV0()
+	ack := codexNeutralAckForDeliveryObservationTestV0(spec)
+	ack.TaskRef = spec.AgentPacket.Task.TaskRef + "-subrole-tests-tutor"
+	data, err := json.Marshal(ack)
+	if err != nil {
+		t.Fatalf("marshal ack: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), CodexAgentAckFileNameV0)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write ack: %v", err)
+	}
+
+	observation, issues := ReadCodexDeliveryObservationFileV0(path, spec)
+
+	if len(issues) > 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if observation.DeliveryRef != spec.AgentPacket.DeliveryRefs.AckRef ||
+		observation.TaskID != spec.AgentPacket.Task.TaskRef ||
+		observation.AgentRef != spec.RequestID {
+		t.Fatalf("observation debe quedar correlada al padre esperado: %+v", observation)
+	}
+	if !evidenceContainsCodexDeliveryObservationTestV0(
+		observation.EvidenceRefs,
+		"gate-issue:"+CodexAgentAckInvalidParentSubroleCollisionEvidenceV0,
+	) {
+		t.Fatalf("evidence_refs=%v", observation.EvidenceRefs)
+	}
+}
+
 func TestReadCodexDeliveryObservationFileV0RechazaACKMinimoHidratableV0(t *testing.T) {
 	spec := codexNeutralSpecForDeliveryObservationTestV0()
 	spec.AgentPacket.Policies = append(spec.AgentPacket.Policies, "ack_terminal_strict")
