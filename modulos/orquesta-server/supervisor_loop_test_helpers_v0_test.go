@@ -2,6 +2,7 @@ package orquestaserver
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -117,13 +118,20 @@ func (fake *fakeSupervisorV0) RunGlobalSupervisorV0(
 	}, nil
 }
 
-type memoryStateStoreV0 struct{ last StateV0 }
+type memoryStateStoreV0 struct {
+	mu   sync.Mutex
+	last StateV0
+}
 
 func (store *memoryStateStoreV0) SaveServerStateV0(_ context.Context, state StateV0) error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
 	store.last = state
 	return nil
 }
 func (store *memoryStateStoreV0) LoadServerStateV0(context.Context) (StateV0, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
 	return store.last, nil
 }
 

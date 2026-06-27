@@ -1,0 +1,77 @@
+name: Go quality
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+      - trabajo/plataforma-agentes
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: go-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOTOOLCHAIN: local
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.11'
+          cache: true
+          cache-dependency-path: |
+            go.mod
+            go.sum
+
+      - run: go version
+      - run: git diff --check
+      - run: go mod download
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test -count=1 ./...
+
+      - name: Install analysis tools
+        run: |
+          mkdir -p "${RUNNER_TEMP}/go-tools"
+          echo "${RUNNER_TEMP}/go-tools" >> "${GITHUB_PATH}"
+          GOBIN="${RUNNER_TEMP}/go-tools" go install golang.org/x/vuln/cmd/govulncheck@latest
+          GOBIN="${RUNNER_TEMP}/go-tools" go install honnef.co/go/tools/cmd/staticcheck@latest
+
+      - run: govulncheck ./...
+
+      - name: Staticcheck advisory until PR7
+        run: |
+          set +e
+          staticcheck ./...
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "::warning::staticcheck debt remains until PR7; this step must become required when PR7 lands."
+          fi
+          exit 0
+
+  race:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.11'
+          cache: true
+          cache-dependency-path: |
+            go.mod
+            go.sum
+
+      - run: go test -race -count=1 -timeout=20m ./...
