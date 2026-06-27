@@ -205,6 +205,19 @@ Estado: aceptada.
 
 ```text
 Fecha: 2026-06-27
+Decision: El supervisor legacy bloquea contenedores goal-first sin
+`GoalWorkStateV0` cargable.
+Motivo: si una run goal-first se persiste pero falla el state store, no debe
+entrar al drain legacy por tener `run_ref`: eso reintroduce el loop antiguo y
+puede relanzar trabajo que corresponde observar/reparar por Goal.
+Impacto: `runs/supervise` detecta runs de autoprogramacion sin tareas ni
+contratos legacy y devuelve `goal_first_state_missing` con diagnostico
+`run_supervisor_goal_first_state_missing`, sin llamar a `SuperviseCodexV0`.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-06-27
 Decision: El executor real de `prepare-run` del stack aplica el default
 goal-first cuando el backend Goal esta completo.
 Motivo: con Codex Goal disponible, Orquesta debe adelgazar el loop y no caer a

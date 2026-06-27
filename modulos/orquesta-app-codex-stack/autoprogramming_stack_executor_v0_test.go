@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
@@ -433,6 +434,51 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaGoalFirstSinColaL
 		terminalQueue.Terminal[0].RunRef != prepared.RunRef ||
 		terminalQueue.Terminal[0].Status != "closed" {
 		t.Fatalf("terminalQueue=%+v", terminalQueue)
+	}
+}
+
+func TestCodexStackRunSupervisorV0NoDrenaLegacySiGoalFirstNoTieneState(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	stack.Ports.GoalStateStore = newGoalFirstQueueStateStoreForTestV0()
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.RequestRef = "run-autoprogramming-goal-missing-state-supervisor-001"
+	request.Tasks[0].TaskRef = "source-task-ref-autoprogramming-goal-missing-state-supervisor-001"
+	request.Tasks[0].ContextRefs = []string{
+		"goal_migration:goal-first",
+		"goal_capability:starter",
+		"goal_capability:observer",
+		"goal_capability:closure-validator",
+	}
+	work := orquestaautoprogramming.BuildAutoprogrammingProgrammableWorkV0(request)
+	if !work.Accepted || len(work.Work.GoalSpecs) != 1 {
+		t.Fatalf("work=%+v", work)
+	}
+	run := autoprogrammingBridgeGoalRunV0(
+		AutoprogrammingBridgeRequestV0{Request: request},
+		work.Work,
+	)
+	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+
+	supervisor, err := NewCodexStackRunSupervisorExecutorV0(&stack).Execute(context.Background(), orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:     "request-autoprogramming-goal-missing-state-supervisor-001",
+		CorrelationID: "corr-autoprogramming-goal-missing-state-supervisor-001",
+		RunRef:        run.RunID,
+		MaxTicks:      1,
+	})
+	if err != nil {
+		t.Fatalf("supervisor: %v", err)
+	}
+	if supervisor.Estado != orquestamcp.MCPRunSupervisorEstadoErrorV0 ||
+		supervisor.RunRef != run.RunID ||
+		supervisor.StopReason != "goal_first_state_missing" ||
+		supervisor.Last.Status != string(CodexSupervisorRuntimeStoppedV0) ||
+		!codexStackDiagnosticsContainCodeForTestV0(supervisor.Diagnostics, "run_supervisor_goal_first_state_missing") ||
+		!codexStackStringInSetForTestV0(supervisor.NextActions, "do_not_supervise_goal_first_with_legacy_loop") ||
+		runtime.launchCountV0() != 0 {
+		t.Fatalf("supervisor=%+v launches=%d", supervisor, runtime.launchCountV0())
 	}
 }
 

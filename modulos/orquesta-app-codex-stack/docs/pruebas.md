@@ -1540,3 +1540,7 @@ Cobertura:
   fija que un `ReviewResultErrorV0(payload_invalido)` queda como diagnostico
   publico `review_result_payload_invalid_after_delivery` con accion de retry
   compacto y sin recomendacion de relanzar el agente.
+- `TestCodexStackRunSupervisorV0NoDrenaLegacySiGoalFirstNoTieneState` fija que
+  una run contenedora goal-first sin `GoalWorkStateV0` cargable devuelve
+  `goal_first_state_missing`, no llama a `SuperviseCodexV0` y no arranca runtime
+  legacy.

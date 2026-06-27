@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
@@ -121,14 +122,19 @@ func (executor CodexStackRunSupervisorExecutorV0) goalFirstRunSupervisorResultV0
 ) (orquestamcp.MCPRunSupervisorToolResultV0, bool) {
 	runRef := strings.TrimSpace(input.RunRef)
 	if runRef == "" ||
-		executor.Stack == nil ||
-		executor.Stack.Ports.GoalStateStore == nil {
+		executor.Stack == nil {
 		return orquestamcp.MCPRunSupervisorToolResultV0{}, false
+	}
+	if executor.Stack.Ports.GoalStateStore == nil {
+		return executor.goalFirstMissingStateRunSupervisorResultV0(ctx, input, runRef)
 	}
 	state, err := executor.Stack.Ports.GoalStateStore.LoadGoalWorkStateV0(ctx, runRef)
 	if err != nil ||
 		strings.TrimSpace(state.RunRef) == "" ||
 		strings.TrimSpace(state.GoalRef) == "" {
+		if result, blocked := executor.goalFirstMissingStateRunSupervisorResultV0(ctx, input, runRef); blocked {
+			return result, true
+		}
 		return orquestamcp.MCPRunSupervisorToolResultV0{}, false
 	}
 	evidenceRefs := compactStringsV0(append(
@@ -159,6 +165,59 @@ func (executor CodexStackRunSupervisorExecutorV0) goalFirstRunSupervisorResultV0
 		EvidenceRefs: evidenceRefs,
 	}}
 	return result, true
+}
+
+func (executor CodexStackRunSupervisorExecutorV0) goalFirstMissingStateRunSupervisorResultV0(
+	ctx context.Context,
+	input orquestamcp.MCPRunSupervisorToolInputV0,
+	runRef string,
+) (orquestamcp.MCPRunSupervisorToolResultV0, bool) {
+	if executor.Stack == nil || executor.Stack.Ports.RunStore == nil {
+		return orquestamcp.MCPRunSupervisorToolResultV0{}, false
+	}
+	run, err := executor.Stack.Ports.RunStore.LoadRunV0(ctx, runRef)
+	if err != nil || !codexStackRunSupervisorGoalFirstContainerWithoutStateV0(run) {
+		return orquestamcp.MCPRunSupervisorToolResultV0{}, false
+	}
+	evidenceRefs := []string{
+		"evidence-ref-run-supervisor-goal-first-container",
+		"evidence-ref-run-supervisor-goal-first-state-missing",
+	}
+	result := orquestamcp.NewMCPRunSupervisorErrorResultV0(
+		input,
+		"goal_first_state_missing",
+		"goal_state",
+		"run goal-first sin GoalWorkStateV0 observable; reparar state o marcar bloqueo antes de supervisar",
+	)
+	result.RunRef = runRef
+	result.StopReason = "goal_first_state_missing"
+	result.Last = orquestamcp.MCPRunSupervisorSnapshotV0{
+		Status:       string(CodexSupervisorRuntimeStoppedV0),
+		SessionRef:   runRef,
+		EvidenceRefs: evidenceRefs,
+	}
+	result.EvidenceRefs = evidenceRefs
+	result.NextActions = []string{
+		"repair_goal_state_from_launcher_receipt_or_mark_blocked",
+		"do_not_supervise_goal_first_with_legacy_loop",
+		"inspect_autoprogramming_goal_state_store",
+	}
+	result.Diagnostics = []orquestamcp.MCPAutoprogrammingDiagnosticV0{{
+		Code:         "run_supervisor_goal_first_state_missing",
+		Scope:        "run:" + runRef,
+		Message:      "run_ref parece contenedor goal-first pero no hay GoalWorkStateV0 cargable; no se ejecuta drain legacy",
+		EvidenceRefs: evidenceRefs,
+	}}
+	return result, true
+}
+
+func codexStackRunSupervisorGoalFirstContainerWithoutStateV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) bool {
+	return strings.HasPrefix(strings.TrimSpace(run.AppSpecRef), "app-spec-ref-autoprogramming-") &&
+		run.CurrentPhase == orquestacoreworkflow.OrchestrationPhaseProgramacionV0 &&
+		len(compactStringsV0(run.Tasks)) == 0 &&
+		len(compactStringsV0(run.FunctionContracts)) == 0
 }
 
 func codexStackGoalFirstSupervisorStatusV0(
