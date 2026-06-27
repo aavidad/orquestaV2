@@ -65,7 +65,7 @@ func opesBridgeResidentDispatchObservedV0(
 	supervision opesExternalWorkRunSupervisionV0,
 ) bool {
 	switch strings.TrimSpace(supervision.Status) {
-	case "started", "running", "blocked", "closed", "completed", "done", "retry_pending":
+	case "started", "running", "blocked", "closed", "completed", "done", "retry_pending", "needs_reconcile":
 		return true
 	default:
 		return false
@@ -132,19 +132,25 @@ type opesBridgeDirectorStatsResponseV0 struct {
 	Stats  struct {
 		Status string `json:"status"`
 		Counts struct {
-			AgentsStarted  int `json:"agents_started"`
-			AgentsInFlight int `json:"agents_in_flight"`
-			AgentsFailed   int `json:"agents_failed"`
-			AgentsLost     int `json:"agents_lost"`
-			Blockers       int `json:"blockers"`
-			Closures       int `json:"closures"`
+			TasksDelivered  int `json:"tasks_delivered"`
+			AgentsStarted   int `json:"agents_started"`
+			AgentsInFlight  int `json:"agents_in_flight"`
+			AgentsFailed    int `json:"agents_failed"`
+			AgentsLost      int `json:"agents_lost"`
+			AgentsDelivered int `json:"agents_delivered"`
+			Deliveries      int `json:"deliveries"`
+			Blockers        int `json:"blockers"`
+			Closures        int `json:"closures"`
 		} `json:"counts"`
 		Refs struct {
-			AgentsStarted []string `json:"agents_started"`
-			AgentsFailed  []string `json:"agents_failed"`
-			AgentsLost    []string `json:"agents_lost"`
-			Blockers      []string `json:"blockers"`
-			Closures      []string `json:"closures"`
+			DeliveredTasks  []string `json:"delivered_tasks"`
+			AgentsStarted   []string `json:"agents_started"`
+			AgentsFailed    []string `json:"agents_failed"`
+			AgentsLost      []string `json:"agents_lost"`
+			AgentsDelivered []string `json:"agents_delivered"`
+			Deliveries      []string `json:"deliveries"`
+			Blockers        []string `json:"blockers"`
+			Closures        []string `json:"closures"`
 		} `json:"refs"`
 		Closure struct {
 			Status      string   `json:"status"`
@@ -198,6 +204,16 @@ func opesBridgeSupervisionFromDirectorStatsV0(
 			ProcessRef:  processRef,
 			EvidenceRef: firstNonEmptyEnvlessV0(opesBridgePrependStringV0(processEvidence, failedRefs)...),
 		}
+	case opesBridgeDirectorStatsHasDeliveryWithoutLiveProcessV0(decoded):
+		deliveryRefs := append([]string{}, stats.Refs.Deliveries...)
+		deliveryRefs = append(deliveryRefs, stats.Refs.DeliveredTasks...)
+		deliveryRefs = append(deliveryRefs, stats.Refs.AgentsDelivered...)
+		return opesExternalWorkRunSupervisionV0{
+			Status:      "needs_reconcile",
+			StopReason:  "stale_lock_no_process",
+			ProcessRef:  processRef,
+			EvidenceRef: firstNonEmptyEnvlessV0(opesBridgePrependStringV0(processEvidence, deliveryRefs)...),
+		}
 	case stats.Counts.AgentsStarted > 0 || stats.Counts.AgentsInFlight > 0 ||
 		len(stats.Refs.AgentsStarted) > 0 || opesBridgeDirectorStatsHasStartedAgentV0(decoded):
 		return opesExternalWorkRunSupervisionV0{
@@ -211,6 +227,24 @@ func opesBridgeSupervisionFromDirectorStatsV0(
 			StopReason: firstNonEmptyEnvlessV0(stats.Status, "waiting_resident_dispatch"),
 		}
 	}
+}
+
+func opesBridgeDirectorStatsHasDeliveryWithoutLiveProcessV0(
+	decoded opesBridgeDirectorStatsResponseV0,
+) bool {
+	stats := decoded.Stats
+	if stats.Counts.AgentsStarted > 0 ||
+		stats.Counts.AgentsInFlight > 0 ||
+		len(stats.Refs.AgentsStarted) > 0 ||
+		opesBridgeDirectorStatsHasStartedAgentV0(decoded) {
+		return false
+	}
+	return stats.Counts.TasksDelivered > 0 ||
+		stats.Counts.AgentsDelivered > 0 ||
+		stats.Counts.Deliveries > 0 ||
+		len(stats.Refs.DeliveredTasks) > 0 ||
+		len(stats.Refs.AgentsDelivered) > 0 ||
+		len(stats.Refs.Deliveries) > 0
 }
 
 func opesBridgePrependStringV0(value string, values []string) []string {

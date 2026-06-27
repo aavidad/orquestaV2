@@ -1519,4 +1519,7 @@ Cobertura:
   contadores y refs de `started`;
 - `TestOPESBridgeSupervisionFromDirectorStatsV0DetectaLostEnAgenteSinContador`
   cubre el caso de diagnostico donde el detalle del agente trae `lost=true`
-  aunque los contadores agregados aun no lo reflejen.
+  aunque los contadores agregados aun no lo reflejen;
+- `TestOPESBridgeSupervisionFromDirectorStatsV0DetectaDeliverySinProcesoVivo`
+  fija que una entrega durable sin started/in-flight se proyecta como
+  `needs_reconcile/stale_lock_no_process`, no como trabajo vivo.

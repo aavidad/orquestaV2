@@ -2,6 +2,22 @@
 
 ```text
 Fecha: 2026-06-27
+Decision: El bridge residente OPES trata entregas sin proceso vivo como lock
+obsoleto a reconciliar.
+Motivo: OPES documento jobs que quedaban `en_progreso` aunque Orquesta ya tenia
+ACK/entrega durable y no habia proceso vivo asociado. Esa proyeccion impide al
+operador distinguir trabajo en curso de estado externo pendiente de reconciliar.
+Impacto: `opesBridgeSupervisionFromDirectorStatsV0` lee contadores/refs de
+entrega del Director y, si no hay started/in-flight ni agente iniciado, devuelve
+`needs_reconcile` con `stop_reason=stale_lock_no_process`. No libera locks, no
+muta OPES productivo y no interpreta contenido; solo corrige la proyeccion del
+bridge residente para que el dominio externo decida la reconciliacion.
+Contratos afectados: bridge OPES opt-in de `cmd/orquesta-server`.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-06-27
 Decision: El supervisor Codex traduce evidencias runtime/cuota a diagnosticos
 publicos, no a rails.
 Motivo: OPES documento casos donde el operador ve refs como

@@ -324,6 +324,33 @@ func TestOPESBridgeSupervisionFromDirectorStatsV0DetectaLostEnAgenteSinContador(
 	}
 }
 
+func TestOPESBridgeSupervisionFromDirectorStatsV0DetectaDeliverySinProcesoVivo(t *testing.T) {
+	decoded := decodeOPESBridgeDirectorStatsForTestV0(t, `{
+		"estado": "ok",
+		"stats": {
+			"status": "running",
+			"counts": {
+				"tasks_delivered": 1,
+				"agents_delivered": 1,
+				"deliveries": 1
+			},
+			"refs": {
+				"delivered_tasks": ["task-ref-opes-stale-lock-001"],
+				"agents_delivered": ["agent-ref-opes-stale-lock-001"],
+				"deliveries": ["delivery-ref-opes-stale-lock-001"]
+			}
+		}
+	}`)
+
+	supervision := opesBridgeSupervisionFromDirectorStatsV0(decoded)
+
+	if supervision.Status != "needs_reconcile" ||
+		supervision.StopReason != "stale_lock_no_process" ||
+		supervision.EvidenceRef != "delivery-ref-opes-stale-lock-001" {
+		t.Fatalf("supervision=%+v", supervision)
+	}
+}
+
 func decodeOPESBridgeDirectorStatsForTestV0(
 	t *testing.T,
 	raw string,

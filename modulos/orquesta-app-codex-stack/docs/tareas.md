@@ -1,5 +1,27 @@
 # Tareas: orquesta-app-codex-stack
 
+## APP-CODEX-STACK-049
+
+Objetivo: que el bridge residente OPES no proyecte como trabajo vivo una entrega
+durable sin proceso vivo.
+
+Estado: hecho local.
+
+Write-set aplicado:
+
+- la lectura de stats del Director acepta contadores/refs de entregas
+  (`tasks_delivered`, `agents_delivered`, `deliveries`);
+- si no hay started/in-flight ni detalle de agente iniciado, pero si entrega
+  durable, el bridge devuelve `needs_reconcile` con
+  `stop_reason=stale_lock_no_process`;
+- `needs_reconcile` cuenta como observacion valida del dispatch para no crear
+  un bucle de reenvio;
+- la evidencia prioriza refs de delivery y despues tareas/agentes entregados.
+
+Validacion:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'TestOPESBridgeSupervisionFromDirectorStatsV0'`
+
 ## APP-CODEX-STACK-048
 
 Objetivo: que evidencias opacas del supervisor Codex salgan como diagnosticos
