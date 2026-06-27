@@ -114,6 +114,9 @@ func (drainer stackRunDrainerV0) DrainRunV0(
 ) (orquestaruncoordinator.RunDrainResultV0, error) {
 	stack := drainer.stack
 	stack.Ports.ExternalWaiter = nil
+	if disposition, ok := stack.goalFirstSupervisorDispositionV0(ctx, request.RunRef); ok {
+		return disposition.drainResultV0(request), nil
+	}
 	drainRequest, err := stack.stackDrainRequestFromCoordinatorV0(ctx, request)
 	if err != nil {
 		result := orquestacionnucleoapp.ManagedProgressiveLoopResultV0{}

@@ -148,6 +148,8 @@ const opsDashboardHTMLChunk3V0 = `          currently_visible: true,
         const detail = queueDetail(item);
         const stableID = item.stable_id || queueStableID(item);
         const selected = item.run_ref === selectedRunRef ? ' class="selected"' : '';
+        const advanceLabel = queueAdvanceActionLabel(item);
+        const advanceTitle = queueAdvanceActionTitle(item);
         return '<tr data-run-ref="' + esc(item.run_ref || '') + '" data-stable-id="' + esc(stableID) + '"' + selected + ' onclick="selectRun(\'' + jsArg(item.run_ref || '') + '\')">' +
           tableCell('#', esc(item.rank || '-')) +
           tableCell('Tarea', taskTitleCell(title, detail, taskIDFromRef(item.run_ref)), 'title="' + esc(detail) + '"') +
@@ -160,7 +162,7 @@ const opsDashboardHTMLChunk3V0 = `          currently_visible: true,
             '<button class="small" type="button" title="Bajar prioridad" onclick="event.stopPropagation(); setQueueRowPriority(\'' + jsArg(item.run_ref || '') + '\', -25)">↓</button>' +
             '<button class="small" type="button" title="Pausar run" onclick="event.stopPropagation(); controlQueueRow(\'' + jsArg(item.run_ref || '') + '\', \'pause\')">Ⅱ</button>' +
             '<button class="small" type="button" title="Reanudar run" onclick="event.stopPropagation(); controlQueueRow(\'' + jsArg(item.run_ref || '') + '\', \'resume\')">▶</button>' +
-            '<button class="small" type="button" title="Avanzar run desde fila" onclick="event.stopPropagation(); superviseQueueRow(\'' + jsArg(item.run_ref || '') + '\')">↪</button>' +
+            '<button class="small" type="button" title="' + esc(advanceTitle) + '" onclick="event.stopPropagation(); advanceQueueRow(\'' + jsArg(item.run_ref || '') + '\')">' + esc(advanceLabel) + '</button>' +
           '</div>') +
         '</tr>';
       }).join('');

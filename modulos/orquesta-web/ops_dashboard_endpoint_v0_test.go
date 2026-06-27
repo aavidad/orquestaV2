@@ -49,6 +49,8 @@ func TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto(t *testing.T) {
 		"stats_unavailable",
 		"completed_snapshot",
 		"usage_report_missing",
+		"goal: payload.goal",
+		"director_execution_mode",
 		"tableCell('Tokens'",
 		"tableCell('Atención'",
 		"Tareas completas",
@@ -81,6 +83,12 @@ func TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto(t *testing.T) {
 		"controlSelectedRun(\\'cancel\\')",
 		"reactivateSelectedRun()",
 		"superviseGlobalWave()",
+		"advanceSelectedRun()",
+		"advanceQueueRow",
+		"runIsGoalFirst",
+		"observeGoalOps",
+		"/api/v0/apps/director/goal/observe",
+		"Observar goal",
 		"superviseSelectedRun()",
 		"superviseQueueRow",
 		"function superviseOps",
@@ -148,6 +156,27 @@ func TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto(t *testing.T) {
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("html no contiene %q", want)
+		}
+	}
+}
+
+func TestOpsDashboardWebEndpointV0GoalFirstUsaObserveGoalEnAvance(t *testing.T) {
+	body := opsDashboardHTMLV0()
+	for _, want := range []string{
+		"function runIsGoalFirst",
+		"function selectedRunAdvanceActionLabel",
+		"function queueAdvanceActionTitle",
+		"async function advanceQueueRow",
+		"async function advanceSelectedRun",
+		"async function observeGoalOps",
+		"/api/v0/apps/director/goal/observe",
+		"if (runIsGoalFirst(run)) return observeGoalOps(run, 'goal seleccionado')",
+		"if (runIsGoalFirst(run)) return observeGoalOps(run, 'goal desde fila')",
+		"Observar goal",
+		"goalOpsResultText",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("html goal-first no contiene %q", want)
 		}
 	}
 }

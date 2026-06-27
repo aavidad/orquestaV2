@@ -24,7 +24,7 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
           '<button type="button" onclick="controlSelectedRun(\'pause\')">Pausar</button>' +
           '<button type="button" onclick="controlSelectedRun(\'resume\')">Reanudar</button>' +
           '<button type="button" onclick="reactivateSelectedRun()">Reactivar</button>' +
-          '<button type="button" onclick="superviseSelectedRun()">Avanzar run</button>' +
+          '<button type="button" onclick="advanceSelectedRun()">' + esc(selectedRunAdvanceActionLabel(run)) + '</button>' +
           '<button type="button" onclick="controlSelectedRun(\'stop\')">Parar</button>' +
           '<button type="button" onclick="controlSelectedRun(\'cancel\')">Cancelar</button>' +
           '<button type="button" onclick="deactivateSelectedRun()">Quitar de cola</button>' +
@@ -100,6 +100,26 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
 	        controlMessage = err.message || String(err);
 	      }
 	      await refreshAll();
+	    }
+	    function runIsGoalFirst(run) {
+	      const goal = (run || {}).goal || {};
+	      return String((run || {}).director_execution_mode || goal.director_execution_mode || '').toLowerCase() === 'goal_first' ||
+	        Boolean(goal.available || goal.goal_ref || goal.can_observe);
+	    }
+	    function selectedRunAdvanceActionLabel(run) {
+	      return runIsGoalFirst(run) ? 'Observar goal' : 'Avanzar run';
+	    }
+	    function queueAdvanceActionLabel(run) {
+	      return runIsGoalFirst(run) ? 'G' : '↪';
+	    }
+	    function queueAdvanceActionTitle(run) {
+	      return runIsGoalFirst(run) ? 'Observar goal desde fila' : 'Avanzar run desde fila';
+	    }
+	    async function advanceQueueRow(runRef) {
+	      const run = runByRef(runRef);
+	      if (!run) return;
+	      if (runIsGoalFirst(run)) return observeGoalOps(run, 'goal desde fila');
+	      return superviseQueueRow(runRef);
 	    }
 	    async function superviseQueueRow(runRef) {
 	      const run = runByRef(runRef);
@@ -219,6 +239,12 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
       text('director-supervisor-message', supervisorMessage);
       await refreshAll();
     }
+    async function advanceSelectedRun() {
+      const run = runByRef(selectedRunRef);
+      if (!run) return;
+      if (runIsGoalFirst(run)) return observeGoalOps(run, 'goal seleccionado');
+      return superviseSelectedRun();
+    }
     async function superviseSelectedRun() {
       const run = runByRef(selectedRunRef);
       if (!run) return;
@@ -227,6 +253,31 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
       try {
         const result = await superviseOps({run_ref: run.run_ref}, 'run seleccionado');
         controlMessage = supervisorResultText(result);
+      } catch (err) {
+        controlMessage = err.message || String(err);
+      }
+      await refreshAll();
+    }
+    async function observeGoalOps(run, label) {
+      if (!run || !run.run_ref) return;
+      selectedRunRef = run.run_ref || selectedRunRef || '';
+      selectedAgentRef = '';
+      controlMessage = 'Observando Goal...';
+      renderSelectedDetail();
+      const now = Date.now();
+      try {
+        const result = await fetchJSON('/api/v0/apps/director/goal/observe', {
+          method: 'POST',
+          headers: {'content-type': 'application/json'},
+          body: JSON.stringify({
+            request_id: 'ops-observe-goal-' + now,
+            correlation_id: 'corr-ops-observe-goal-' + now,
+            run_ref: run.run_ref,
+            requested_by: 'orquesta-ops-panel',
+            idempotency_key: 'ops-observe-goal-' + run.run_ref + '-' + now
+          })
+        });
+        controlMessage = goalOpsResultText(result, label);
       } catch (err) {
         controlMessage = err.message || String(err);
       }
@@ -258,6 +309,15 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
         headers: {'content-type': 'application/json'},
         body: JSON.stringify(payload)
       });
+    }
+    function goalOpsResultText(result, label) {
+      result = result || {};
+      return 'goal ' + (label || 'observado') +
+        ' · estado ' + (result.estado || '-') +
+        ' · run ' + shortRef(result.run_ref || '-') +
+        ' · goal_status ' + (result.goal_status || '-') +
+        ' · cierre ' + (result.closure_status || '-') +
+        (result.closure_accepted ? ' · aceptado' : '');
     }
     function supervisorResultText(result) {
       result = result || {};

@@ -53,6 +53,9 @@ func (lifecycle CodexSupervisorStackLifecycleV0) drainRunV0(
 	if strings.TrimSpace(request.RunRef) == "" {
 		request.RunRef = strings.TrimSpace(lifecycle.RunRef)
 	}
+	if disposition, ok := lifecycle.Stack.goalFirstSupervisorDispositionV0(ctx, request.RunRef); ok {
+		return disposition.snapshotV0(), nil
+	}
 	enriched, err := lifecycle.Stack.enrichQueuedOperationalDirectorDrainRequestV0(ctx, request)
 	if err != nil {
 		if codexSupervisorRecoverableOperationalPlanStateErrorV0(err) {
@@ -648,7 +651,12 @@ func (lifecycle CodexSupervisorStackLifecycleV0) codexSupervisorPlanStateEvidenc
 func codexSupervisorRuntimeStateFromOutcomeV0(
 	outcome string,
 ) CodexSupervisorRuntimeStateV0 {
-	if strings.TrimSpace(outcome) == codexSupervisorOperationalPlanStateNeedsReplanOutcomeV0 {
+	switch strings.TrimSpace(outcome) {
+	case codexStackGoalFirstObserveRequiredOutcomeV0:
+		return CodexSupervisorRuntimeRunningLiveV0
+	case codexStackGoalFirstStateMissingOutcomeV0:
+		return CodexSupervisorRuntimeStoppedV0
+	case codexSupervisorOperationalPlanStateNeedsReplanOutcomeV0:
 		return CodexSupervisorRuntimeNeedsReplanV0
 	}
 	return codexSupervisorRuntimeStateFromLoopV0(

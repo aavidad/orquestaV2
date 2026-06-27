@@ -248,6 +248,11 @@ Cobertura Go actual:
 - `TestCodexStackObserveAppDirectorGoalExecutorV0UsaWrapperYSincronizaCola`
   valida que el executor MCP/REST del stack observa por
   `StackV0.ObserveAppDirectorGoalV0` y deja la cola terminal al cerrar el goal.
+- `TestCodexStackSupervisorGlobalNoDrenaLegacySiGoalFirstEnCola` valida que un
+  run goal-first encolado accidentalmente no pasa por `DrainRunV0`, no arranca
+  runtime Codex, devuelve `goal_first_observe_required`, deja la cola
+  `delivered` no ejecutable y conserva el lifecycle directo como observacion de
+  Goal.
 - `TestCodexSupervisorStackLifecycleV0SupervisaRunExistenteSinCanalParaleloV0`
   prueba el adaptador real de stack sobre una run ya creada: `SuperviseCodexV0`
   hace `launch` y luego `continue`, ambos por `DrainRunV0`, sin relanzar agentes.

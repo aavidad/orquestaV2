@@ -18,6 +18,25 @@ Estado:
 
 ```text
 Fecha: 2026-06-27
+Decision: El avance manual en `/ops` observa Goal cuando el run es goal-first.
+Motivo: el panel operativo aun mostraba botones de avance conectados al
+supervisor legacy. Con Codex Goal, ese boton debe consultar el estado del Goal y
+no despertar el loop historico para runs que ya tienen `goal_ref`,
+`director_execution_mode=goal_first` o capacidad de observacion.
+Alternativas: ocultar el boton para goal-first; mantener el supervisor legacy y
+confiar en el backend; crear una segunda accion visible solo para Goal.
+Impacto: la proyeccion live conserva `goal` y `director_execution_mode`; los
+botones de detalle y cola enrutan a
+`POST /api/v0/apps/director/goal/observe` para goal-first, y mantienen
+`POST /api/v0/runs/supervise` solo para compatibilidad legacy. La web no lee
+stores ni runtime.
+Contratos afectados: `/ops`, `DirectorStatsClientV0`,
+`/api/v0/apps/director/goal/observe`, `/api/v0/runs/supervise`.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-06-27
 Decision: El wizard `/nueva-app` permite arquitectura sin preferencia y tabs
 operables por teclado.
 Motivo: `hexagonal` debe ser fallback conservador, no una imposicion visible del

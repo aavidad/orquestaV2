@@ -16,6 +16,7 @@ import (
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
+	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
 	orquestaservershutdown "orquesta/modulos/orquesta-server-shutdown"
 )
@@ -479,6 +480,118 @@ func TestCodexStackRunSupervisorV0NoDrenaLegacySiGoalFirstNoTieneState(t *testin
 		!codexStackStringInSetForTestV0(supervisor.NextActions, "do_not_supervise_goal_first_with_legacy_loop") ||
 		runtime.launchCountV0() != 0 {
 		t.Fatalf("supervisor=%+v launches=%d", supervisor, runtime.launchCountV0())
+	}
+}
+
+func TestCodexStackSupervisorGlobalNoDrenaLegacySiGoalFirstEnCola(t *testing.T) {
+	ctx := context.Background()
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	launcher := &goalFirstQueueLauncherForTestV0{}
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	stack.Ports.GoalLauncher = launcher
+	stack.Ports.GoalObserver = &goalFirstQueueObserverForTestV0{}
+	stack.Ports.GoalClosureValidator = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
+	stack.Ports.GoalStateStore = goalStates
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.RequestRef = "run-autoprogramming-goal-first-global-supervisor-001"
+	request.Tasks[0].TaskRef = "source-task-ref-autoprogramming-goal-first-global-supervisor-001"
+	request.Tasks[0].ContextRefs = []string{
+		"goal_migration:goal-first",
+		"goal_capability:starter",
+		"goal_capability:observer",
+		"goal_capability:closure-validator",
+	}
+	prepared, err := NewCodexStackAutoprogrammingPrepareRunExecutorV0(
+		&stack,
+		"2026-06-27T12:30:00Z",
+		"orquesta-stack-api-test",
+		stack.Stores.RunQueue,
+		stack.RunQueue,
+		stack.Clock,
+		stack.Codex.RuntimeWorkDir,
+	).Execute(ctx, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-autoprogramming-goal-first-global-supervisor-001",
+		CorrelationID:          "corr-autoprogramming-goal-first-global-supervisor-001",
+		OccurredAt:             "2026-06-27T12:30:00Z",
+		RequestedBy:            "orquesta-stack-api-test",
+		AutoprogrammingRequest: request,
+	})
+	if err != nil {
+		t.Fatalf("prepare.Execute: %v", err)
+	}
+	if !prepared.Accepted || prepared.Goal == nil || len(prepared.WorkflowTaskRefs) != 0 {
+		t.Fatalf("prepared=%+v", prepared)
+	}
+	if _, err := stack.Stores.RunQueue.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        prepared.RunRef,
+		QueueRef:      DefaultRunQueueRefV0,
+		AppRef:        prepared.ProjectRef,
+		Status:        orquestarunqueue.RunStatusReadyV0,
+		PriorityScore: DefaultRunQueuePriorityScoreV0,
+		UpdatedAt:     stackNowV0(stack.Clock),
+		RequestedBy:   "orquesta-goal-first-global-supervisor-test",
+		Reason:        "candidato accidental goal-first para probar guard",
+		EvidenceRefs:  []string{"evidence-ref-goal-first-global-supervisor-queued"},
+	}); err != nil {
+		t.Fatalf("SetRunPriorityV0: %v", err)
+	}
+
+	supervised, err := stack.RunGlobalSupervisorV0(ctx, orquestarunsupervisor.RunSupervisorCommandV0{
+		QueueRef:          DefaultRunQueueRefV0,
+		MaxTicks:          1,
+		MaxRunsPerTick:    1,
+		MaxExecutions:     1,
+		AllowRepeatedRuns: true,
+		CorrelationID:     "corr-autoprogramming-goal-first-global-supervisor-001",
+	})
+	if err != nil {
+		t.Fatalf("RunGlobalSupervisorV0: %v", err)
+	}
+	if supervised.TotalExecutions != 1 ||
+		len(supervised.Ticks) != 1 ||
+		len(supervised.Ticks[0].Result.Executions) != 1 {
+		t.Fatalf("supervised=%+v", supervised)
+	}
+	execution := supervised.Ticks[0].Result.Executions[0]
+	if execution.RunRef != prepared.RunRef ||
+		execution.Outcome != codexStackGoalFirstObserveRequiredOutcomeV0 ||
+		execution.QueueStatus != orquestarunqueue.RunStatusDeliveredV0 ||
+		!codexStackDrainDiagnosticsContainKindStatusForTestV0(execution.Diagnostics, "goal_first", "observe_required") ||
+		runtime.launchCountV0() != 0 {
+		t.Fatalf("execution=%+v launches=%d", execution, runtime.launchCountV0())
+	}
+	run, err := stack.Ports.RunStore.LoadRunV0(ctx, prepared.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if len(run.Tasks) != 0 || len(run.StartedAgents) != 0 {
+		t.Fatalf("guard global materializo legacy: %+v", run)
+	}
+	candidates, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(ctx, orquestarunqueue.RunQueueReadRequestV0{
+		QueueRef:             DefaultRunQueueRefV0,
+		IncludeNonExecutable: true,
+	})
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	if len(candidates) != 1 ||
+		candidates[0].RunRef != prepared.RunRef ||
+		candidates[0].Status != orquestarunqueue.RunStatusDeliveredV0 {
+		t.Fatalf("candidates=%+v", candidates)
+	}
+	snapshot, err := (CodexSupervisorStackLifecycleV0{
+		Stack:  stack,
+		RunRef: prepared.RunRef,
+	}).LaunchV0(ctx)
+	if err != nil {
+		t.Fatalf("LaunchV0 lifecycle directo: %v", err)
+	}
+	if snapshot.Status != CodexSupervisorRuntimeRunningLiveV0 ||
+		snapshot.SessionRef != prepared.RunRef ||
+		!codexStackDrainDiagnosticsContainKindStatusForTestV0(snapshot.Diagnostics, "goal_first", "observe_required") ||
+		runtime.launchCountV0() != 0 {
+		t.Fatalf("snapshot=%+v launches=%d", snapshot, runtime.launchCountV0())
 	}
 }
 
@@ -1058,6 +1171,19 @@ func autoprogrammingGoalRequiredTestResultsForTestV0(
 		})
 	}
 	return results
+}
+
+func codexStackDrainDiagnosticsContainKindStatusForTestV0(
+	diagnostics []orquestaruncoordinator.RunDrainDiagnosticV0,
+	kind string,
+	status string,
+) bool {
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Kind == kind && diagnostic.Status == status {
+			return true
+		}
+	}
+	return false
 }
 
 func postServerShutdownStackV0(

@@ -2,6 +2,25 @@
 
 ```text
 Fecha: 2026-06-27
+Decision: El supervisor global no drena legacy cuando el run es goal-first.
+Motivo: con Codex Goal, el goal actua como loop automatico del trabajo. Si un
+run goal-first entra por accidente en la cola global o por el lifecycle directo,
+pasarlo por `DrainRunV0` puede reactivar reparacion/materializacion del Director
+legacy y crear ticks sin progreso real.
+Impacto: `stackRunDrainerV0` y `CodexSupervisorStackLifecycleV0` consultan
+`GoalWorkStateV0` antes de enriquecer el drain. Si existe estado goal-first,
+devuelven `goal_first_observe_required`, evidencia durable y estado de cola
+`delivered` no ejecutable para que el operador use el observador de Goal. Si el
+run parece contenedor goal-first pero falta `GoalWorkStateV0`, devuelven
+`goal_first_state_missing` y cola `stopped` para reparacion explicita. No cambia
+core, no borra el loop historico y no afecta rutas legacy/no-goal.
+Contratos afectados: `RunGlobalSupervisorV0`, `RunCoordinator`,
+`CodexSupervisorStackLifecycleV0`, `GoalWorkStateV0`.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-06-27
 Decision: El bridge residente OPES trata entregas sin proceso vivo como lock
 obsoleto a reconciliar.
 Motivo: OPES documento jobs que quedaban `en_progreso` aunque Orquesta ya tenia
