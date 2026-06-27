@@ -102,6 +102,11 @@ func TestCodexDeliveryObservationSourceV0AckFilesNoCortaRailBlandoWriteSet(t *te
 	if len(observations) != 1 || observations[0].DeliveryRef != spec.AgentPacket.DeliveryRefs.AckRef {
 		t.Fatalf("observations=%+v", observations)
 	}
+	if !stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-issue:file_outside_write_set:docs/no-autorizado.md") ||
+		!stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-issue:write_set_escape_detected") ||
+		!stringInCodexDeliverySetV0(observations[0].EvidenceRefs, "gate-issue:write_set_escape_detected:ack_file_outside_write_set") {
+		t.Fatalf("write-set escape ACK no conservado como rail blando: %+v", observations[0].EvidenceRefs)
+	}
 }
 
 func TestCodexDeliveryObservationSourceV0RechazaAckFileInexistente(t *testing.T) {

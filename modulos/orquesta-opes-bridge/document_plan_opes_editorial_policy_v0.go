@@ -52,6 +52,8 @@ func opesTemarioAgentRulesV0() []string {
 		"leer_antes_de_temarios=ENTRADA_UNICA_SIGUIENTE_AGENTE_OPES.md|GUIA_ESTILO_TEMARIOS_OPES_GLOBAL_2026-05-18.md|USO_ORQUESTA_TEMARIOS_OPES_GUIA_AGENTES_2026-06-04.md",
 		"actuar_como_director_editorial: revisar mapa, dependencias, canones, estado y fuentes antes de redactar",
 		"no_rehacer_por_defecto: inventariar temas, comunes, tests, audios, visuales, HTML, tutor/RAG, manifests y paquetes; reutilizar o adaptar lo valido",
+		"alcance_busqueda: empezar por course_id/topic_id/programa/canon/materiales reutilizables y excluir por defecto backups, paquetes historicos, snapshots, runtime, orquesta_state, runtime_orquesta, bin y ficheros de control salvo auditoria global explicita",
+		"alcance_recuperable: hallazgos fuera de alcance se conservan como evidencia blanda o nota de revision; no bloquean ni descartan trabajo util por si solos",
 		"minimos_extension: informe_extension_temario.json/.md obligatorio; ampliado minimo A1 20250, A2 14400, B 10800, C1 7200, C2 4500, AP 3150 palabras",
 		"comunes_maestro: todo comun deriva de maestro A1/A1-A2 o superior validado; si no aplica, declararlo explicitamente",
 		"paralelismo_temario: un agente padre por tema independiente y hasta seis subagentes por padre salvo limite duro externo documentado",

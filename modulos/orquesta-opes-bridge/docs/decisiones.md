@@ -1,5 +1,26 @@
 # Decisiones
 
+## Alcance blando de busqueda OPES
+
+Fecha: 2026-06-27.
+
+Los jobs OPES de temario deben arrancar la busqueda por `course_id`,
+`topic_id`, programa oficial, canon OPES y materiales reutilizables del temario.
+Backups, paquetes historicos, snapshots, runtime, `orquesta_state`,
+`runtime_orquesta`, `bin` y ficheros de control quedan fuera del alcance por
+defecto salvo auditoria global explicita.
+
+Motivo: las incidencias OPES mostraron agentes investigando demasiado amplio y
+mezclando materiales historicos o de runtime con el contenido canonico del
+curso. Esa senal debe orientar al agente y al Director, no convertirse en rail
+duro.
+
+Impacto: el bridge inyecta la regla en `opes_temario_agent_rules_2026_06_04` y
+en los criterios de `research_exam_precedents`. Un hallazgo fuera de alcance se
+conserva como evidencia blanda, nota de revision o insumo recuperable; no
+bloquea ni descarta trabajo util por si solo. La regla vive en el adaptador OPES
+y no en el nucleo Orquesta.
+
 ## T12: bloqueo real por entorno, no por contrato
 
 Fecha: 2026-05-27.

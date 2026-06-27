@@ -1,6 +1,21 @@
 # Decisiones: orquesta-runtime-codex-delivery
 
 ```text
+Fecha: 2026-06-27
+Decision: El fallback `ACK.files` tambien proyecta ficheros declarados fuera
+del write-set como rail blando.
+Motivo: OPES reporto casos donde el modo sin baseline podia aceptar ACKs con
+ficheros existentes fuera del write-set sin senal publica. La entrega puede ser
+recuperable, pero el Director necesita ver el escape para review/rework.
+Impacto: `CodexReceiptWorktreeVerifierV0` conserva la entrega si hay fichero
+real, anade `gate-issue:file_outside_write_set` y
+`gate-issue:write_set_escape_detected`, y mantiene los cortes duros solo para
+rutas fuera del proyecto o entregas vacias. No cambia core ni introduce rails
+por palabras.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-06-26
 Decision: La colision de ACK del padre contra un hijo se detecta por
 `child_task_refs` cuando el packet los declara.

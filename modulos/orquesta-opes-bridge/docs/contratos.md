@@ -36,9 +36,13 @@ Reglas:
   `ENTRADA_UNICA_SIGUIENTE_AGENTE_OPES.md`,
   `GUIA_ESTILO_TEMARIOS_OPES_GLOBAL_2026-05-18.md` y
   `USO_ORQUESTA_TEMARIOS_OPES_GUIA_AGENTES_2026-06-04.md`, direccion editorial,
-  reutilizacion antes de rehacer, paralelismo por tema, visuales/audios/tests,
-  triple visto bueno e i18n/hexagonal. Es politica de la composicion OPES, no
-  contrato del nucleo Orquesta;
+  reutilizacion antes de rehacer, alcance de busqueda por curso/tema/programa,
+  exclusion por defecto de backups, paquetes historicos, snapshots, runtime y
+  ficheros de control salvo auditoria global explicita, paralelismo por tema,
+  visuales/audios/tests, triple visto bueno e i18n/hexagonal. Los hallazgos
+  fuera de alcance son evidencia blanda o nota de revision; no bloquean ni
+  descartan trabajo recuperable por si solos. Es politica de la composicion
+  OPES, no contrato del nucleo Orquesta;
 - todos los jobs OPES reciben tambien
   `opes_html_publication_policy_2026_05_19` para trabajos que generen HTML:
   patron web tipo Tema 11, barra lateral plegable, primera lectura activa por
@@ -71,7 +75,11 @@ Reglas:
 - para `research_exam_precedents`, el bridge exige
   `expected_artifact_type=exam_research_report` y el job debe buscar por
   internet examenes, convocatorias, temarios y pruebas de administraciones
-  relacionadas con fuentes publicas verificables;
+  relacionadas con fuentes publicas verificables. La investigacion empieza por
+  `course_id`, `topic_id`, programa oficial, canon OPES y materiales
+  reutilizables del temario antes de ampliar alcance; excluye por defecto
+  backups, paquetes historicos, snapshots y runtime salvo auditoria global
+  explicita;
 - para `generate_question_bank`, el bridge exige
   `expected_artifact_type=question_bank` y tests por tema con 4 opciones A-D,
   una correcta exacta, distractores plausibles, explicacion tutor, JSON por

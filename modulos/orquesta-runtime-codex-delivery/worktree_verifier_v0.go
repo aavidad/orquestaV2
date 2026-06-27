@@ -183,6 +183,14 @@ func verifyCodexReceiptAckFilesEvidenceV0(
 			// Ruta fuera del proyecto: corte duro legitimo (efecto/control).
 			return nil, fmt.Errorf("codex_worktree_verification: ack_file_invalid")
 		}
+		if codexReceiptHasWriteSetV0(request.Spec.AgentPacket.Task.WriteSet) &&
+			!codexReceiptPathAllowedByWriteSetV0(rel, request.Spec.AgentPacket.Task.WriteSet) {
+			gateRefs = append(gateRefs,
+				"gate-issue:file_outside_write_set:"+rel,
+				"gate-issue:write_set_escape_detected",
+				"gate-issue:write_set_escape_detected:ack_file_outside_write_set",
+			)
+		}
 		info, err := os.Stat(filepath.Join(projectDir, filepath.FromSlash(rel)))
 		if err != nil {
 			gateRefs = append(gateRefs, "gate-issue:ack_file_missing:"+rel)
@@ -200,6 +208,15 @@ func verifyCodexReceiptAckFilesEvidenceV0(
 		return nil, fmt.Errorf("codex_worktree_verification: ack_file_missing")
 	}
 	return compactCodexDeliveryRefsV0(gateRefs), nil
+}
+
+func codexReceiptHasWriteSetV0(writeSet []string) bool {
+	for _, raw := range writeSet {
+		if strings.TrimSpace(raw) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func cleanCodexReceiptAckFilePathV0(value string) (string, bool) {
@@ -256,8 +273,13 @@ func cleanCodexReceiptAckFilePathInProjectV0(value string, projectDir string) (s
 }
 
 func codexReceiptPathAllowedByWriteSetV0(path string, writeSet []string) bool {
+	path = strings.TrimSpace(path)
 	for _, raw := range writeSet {
-		if strings.TrimSpace(raw) == "." {
+		raw = strings.TrimSpace(raw)
+		if raw == "." {
+			return true
+		}
+		if codexReviewGateHasGlobV0(raw) && codexReviewGateGlobMatchV0(raw, path) {
 			return true
 		}
 		allowed, ok := cleanCodexReceiptAckFilePathV0(raw)

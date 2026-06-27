@@ -246,6 +246,12 @@ func TestBuildExternalWorkRunRequestV0MapeaPlanTemarioOperadoresComoDocumentPlan
 			"50 items",
 			"validacion obligatoria",
 		}) ||
+		!fieldValuesContainForTestV0(fields, "opes_temario_agent_rules_2026_06_04", []string{
+			"alcance_busqueda",
+			"course_id/topic_id/programa/canon",
+			"backups, paquetes historicos",
+			"hallazgos fuera de alcance",
+		}) ||
 		!fieldValuesForTestV0(fields, "allowed_document_plan_work_kinds", documentPlanAllowedWorkKindsV0()) ||
 		!fieldValuesForTestV0(fields, "opes_editorial_workflow", documentPlanOPESEditorialWorkflowV0()) ||
 		!fieldValuesForTestV0(fields, "opes_level_derivation_policy", documentPlanOPESLevelDerivationPolicyV0()) ||
@@ -378,6 +384,15 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 					!strings.Contains(criteriaText, opesTCAETestCreationGuideRefV0) ||
 					!strings.Contains(criteriaText, "validacion de dificultad/proximidad") ||
 					!strings.Contains(criteriaText, "backup previo") {
+					t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
+				}
+			}
+			if tc.artifactType == "exam_research_report" {
+				criteriaText := strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n")
+				if !strings.Contains(criteriaText, "empezar por course_id") ||
+					!strings.Contains(criteriaText, "excluir por defecto backups") ||
+					!strings.Contains(criteriaText, "runtime_orquesta") ||
+					!strings.Contains(criteriaText, "evidencia blanda") {
 					t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
 				}
 			}

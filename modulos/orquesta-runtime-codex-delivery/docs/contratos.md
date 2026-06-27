@@ -122,6 +122,12 @@ Invariantes:
   `gate-issue:write_set_escape_detected` o `gate-issue:removed_path` sin
   filtrar `project_work_dir`, `ack_path` ni rutas absolutas al nucleo. Requests
   invalidas siguen devolviendo error compacto.
+- Si no hay baseline y cae al modo `ACK.files`, valida que los ficheros
+  declarados existan y, cuando el task trae write-set, proyecta ficheros
+  declarados fuera de ese write-set como evidencia blanda
+  `gate-issue:file_outside_write_set` y
+  `gate-issue:write_set_escape_detected`; no convierte esa senal aislada en
+  rechazo de entrega recuperable.
 - Los limites de presupuesto de snapshot son observabilidad: si el snapshot
   verificable es parcial, se devuelven refs de evidencia compactas y no se
   fabrican borrados por paths omitidos.

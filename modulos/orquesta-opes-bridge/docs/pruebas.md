@@ -36,6 +36,13 @@
   -> agent_pair_review_report`, `review_director_consolidation ->
   director_review_matrix` y `finalize_temario_package ->
   completed_syllabus_package`.
+- Alcance blando de busqueda OPES: `plan_temario` transporta en
+  `opes_temario_agent_rules_2026_06_04` la regla de empezar por
+  curso/tema/programa/canon/material reutilizable y excluir por defecto backups,
+  paquetes historicos, snapshots y runtime salvo auditoria global explicita;
+  `research_exam_precedents` incluye los mismos criterios en sus acceptance
+  criteria. Los hallazgos fuera de alcance se conservan como evidencia blanda,
+  no como veto automatico.
 - Routing de proveedores en Orquesta:
   `go test -count=1 ./modulos/orquesta-runtime-claude ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server -run 'TestClaude|TestProviderLaunchSpecResolverV0RuteaReview|TestProviderAwareAckPathResolverV0UsaRuntimeClaude|TestGeminiRuntimeConfig|TestClaudeRuntimeConfig'`.
   Debe demostrar que `review_gemini` se materializa por Gemini cuando esta

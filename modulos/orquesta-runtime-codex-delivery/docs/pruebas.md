@@ -56,6 +56,10 @@ Cobertura:
 - conserva un ACK valido si el diff real solo contiene cambios fuera del
   write-set, marcandolo como `gate-issue:file_outside_write_set` y
   `gate-issue:write_set_escape_detected`;
+- conserva un ACK valido en modo fallback `ACK.files` cuando declara un fichero
+  existente fuera del write-set, marcandolo con
+  `gate-issue:file_outside_write_set` y
+  `gate-issue:write_set_escape_detected` sin cortar la entrega recuperable;
 - conserva un ACK valido si el diff real contiene borrados, marcandolo como
   `gate-issue:removed_path` para revision/rework sin filtrar rutas locales;
 - convierte una entrega registrada en observacion de revision;

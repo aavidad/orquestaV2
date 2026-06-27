@@ -211,11 +211,19 @@ func topicRegistryUpdateAcceptanceCriteriaV0() []string {
 }
 
 func examResearchAcceptanceCriteriaV0() []string {
-	return []string{
+	return append([]string{
 		"buscar examenes, convocatorias, temarios y pruebas publicas de administraciones relacionadas con la OPE",
 		"priorizar boletines oficiales, sedes administrativas, tribunales, institutos publicos y sindicatos con documentacion verificable",
 		"devolver informe con URLs publicas, fecha de consulta, administracion, anio, cuerpo/categoria, coincidencia de epigrafes y utilidad editorial",
 		"separar evidencia confirmada de inferencias; no inventar examenes ni preguntas",
+	}, opesSearchScopeAcceptanceCriteriaV0()...)
+}
+
+func opesSearchScopeAcceptanceCriteriaV0() []string {
+	return []string{
+		"empezar por course_id, topic_id, programa oficial, canon OPES y materiales reutilizables del temario antes de ampliar alcance",
+		"excluir por defecto backups, paquetes historicos, snapshots, runtime, orquesta_state, runtime_orquesta, bin y ficheros de control salvo auditoria global explicita",
+		"tratar los resultados fuera de alcance como evidencia blanda o nota de revision; no bloquear ni descartar trabajo recuperable por esa senal aislada",
 	}
 }
 
