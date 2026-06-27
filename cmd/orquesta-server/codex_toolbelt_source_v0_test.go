@@ -23,6 +23,7 @@ func TestCodexToolbeltSourceV0DerivaHTTPDeContratosMCPGateway(t *testing.T) {
 		orquestamcp.MCPQueueGlobalStatusHTTPPathV0,
 		orquestamcp.MCPDirectorStatsHTTPPathV0,
 		orquestamcp.MCPDomainWorkHTTPPathV0,
+		orquestamcp.MCPExternalWorkDryRunHTTPPathV0,
 		orquestamcp.MCPExternalWorkRunHTTPPathV0,
 	} {
 		if !paths[want] {

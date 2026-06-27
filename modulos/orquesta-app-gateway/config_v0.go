@@ -5,6 +5,7 @@ import (
 	"time"
 
 	orquestacore "orquesta/modulos/orquesta-core"
+	orquestaexternalworkrun "orquesta/modulos/orquesta-external-work-run"
 	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestagovernance "orquesta/modulos/orquesta-governance"
@@ -42,6 +43,8 @@ type ConfigV0 struct {
 	OperatorQuery                               operator.OperatorMCPDirectedQueryPortV0
 	ServerShutdown                              orquestamcp.MCPTransportServerShutdownExecutorV0
 	DomainWork                                  orquestamcp.MCPDomainWorkExecutorPortV0
+	ExternalWorkDryRun                          orquestamcp.MCPTransportExternalWorkDryRunExecutorV0
+	ExternalWorkDryRunConfig                    orquestaexternalworkrun.StartExternalWorkRunConfigV0
 	ExternalWorkRun                             orquestamcp.MCPTransportExternalWorkRunExecutorV0
 	AppVCS                                      orquestamcp.MCPAppVCSExecutorPortV0
 	WebHTMLRenderObserver                       orquestaobservability.WebHTMLRenderObserverV0

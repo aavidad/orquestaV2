@@ -69,6 +69,41 @@ Pruebas de contrato:
 ```
 
 ```text
+Nombre: mcp.tool.orquesta.external_work.dry_run.v0
+Tipo: puerto_entrada_preview
+Version: v0
+Propietario: orquesta-mcp
+Consumidores: bridges de app externa, OPES y operadores automatizados
+Campos:
+  descriptor:
+    name: orquesta.external_work.dry_run.v0
+    resource_uri: orquesta://contracts/external-work-dry-run/v0
+  rest:
+    method: POST
+    path: /api/v0/external-work/dry-run
+  input:
+    director_execution_mode?: goal_first
+    model?: modelo estimativo opcional
+    external_work_run_request?: StartExternalWorkRunRequestV0
+    app_change_request?: AppChangeRequestV0
+  output_ok:
+    estado: ok
+    route_policy: goal_first
+    director_execution_mode: goal_first
+    spec: GoalWorkSpecV0 con director_kind=codex_goal en composicion Codex
+    write_set, required_tests, est_model, est_tokens, est_cost_usd,
+    est_wall_clock, evidence_refs
+  output_error:
+    estado: error
+    errores_publicos: issues compactos
+Invariantes:
+  - Compila el mismo contrato GoalWorkSpecV0 que external_work.run goal-first.
+  - No lanza agentes, no crea run, no encola y no escribe en stores.
+  - Expone refs, write-set, pruebas y contratos sin copiar payloads de dominio.
+  - En el stack Codex aplica la misma guarda operativa que el lanzamiento.
+```
+
+```text
 Nombre: mcp.tool.orquesta.external_work.run.v0
 Tipo: puerto_entrada
 Version: v0

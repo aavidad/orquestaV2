@@ -17,25 +17,28 @@ func externalWorkRunExecutorV0(
 			RunQueue:  config.Stores.RunQueue,
 			AppChange: appChangePortsV0(config),
 		},
-		orquestaexternalworkrun.StartExternalWorkRunConfigV0{
-			QueueRef:             queueConfig.QueueRef,
-			DefaultPriorityScore: queueConfig.DefaultPriorityScore,
-			OccurredAt:           config.Capacity.OccurredAt,
-			RequestedBy:          config.Capacity.RequestedBy,
-		},
+		externalWorkRunStartConfigV0(config, queueConfig),
 	)
 	ports := buildDirectorPortsV0(config)
 	return NewCodexStackExternalWorkGoalFirstExecutorV0(
 		legacy,
 		ports,
-		orquestaexternalworkrun.StartExternalWorkRunConfigV0{
-			QueueRef:             queueConfig.QueueRef,
-			DefaultPriorityScore: queueConfig.DefaultPriorityScore,
-			OccurredAt:           config.Capacity.OccurredAt,
-			RequestedBy:          config.Capacity.RequestedBy,
-		},
+		externalWorkRunStartConfigV0(config, queueConfig),
 		config.Stores.AppChangeStore,
 		config.GoalObserverResidentEnabled,
 		config.AllowLegacyExternalWorkRun,
 	)
+}
+
+func externalWorkRunStartConfigV0(
+	config ConfigV0,
+	queueConfig RunQueueConfigV0,
+) orquestaexternalworkrun.StartExternalWorkRunConfigV0 {
+	queueConfig = normalizeRunQueueConfigV0(queueConfig)
+	return orquestaexternalworkrun.StartExternalWorkRunConfigV0{
+		QueueRef:             queueConfig.QueueRef,
+		DefaultPriorityScore: queueConfig.DefaultPriorityScore,
+		OccurredAt:           config.Capacity.OccurredAt,
+		RequestedBy:          config.Capacity.RequestedBy,
+	}
 }

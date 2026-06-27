@@ -38,6 +38,7 @@ const (
 	RouteAutoprogrammingSuperviseV0          = "/api/v0/autoprogramming/supervise"
 	RouteGovernanceCatalogQueryV0            = "/api/v0/governance/catalog/query"
 	RouteDomainWorkV0                        = "/api/v0/domain-work"
+	RouteExternalWorkDryRunV0                = "/api/v0/external-work/dry-run"
 	RouteExternalWorkRunV0                   = "/api/v0/external-work/run"
 )
 
@@ -77,6 +78,7 @@ type RouteHandlersV0 struct {
 	AutoprogrammingSupervise          http.Handler
 	GovernanceCatalogQuery            http.Handler
 	DomainWork                        http.Handler
+	ExternalWorkDryRun                http.Handler
 	ExternalWorkRun                   http.Handler
 }
 
@@ -147,6 +149,7 @@ func gatewayRouteRegistrationsV0(handlers RouteHandlersV0) []gatewayRouteRegistr
 		{ref: RouteRefAutoprogrammingSuperviseV0, route: RouteAutoprogrammingSuperviseV0, handler: handlers.AutoprogrammingSupervise},
 		{ref: RouteRefGovernanceCatalogQueryV0, route: RouteGovernanceCatalogQueryV0, handler: handlers.GovernanceCatalogQuery},
 		{ref: RouteRefDomainWorkV0, route: RouteDomainWorkV0, handler: handlers.DomainWork},
+		{ref: RouteRefExternalWorkDryRunV0, route: RouteExternalWorkDryRunV0, handler: handlers.ExternalWorkDryRun},
 		{ref: RouteRefExternalWorkRunV0, route: RouteExternalWorkRunV0, handler: handlers.ExternalWorkRun},
 	}
 }

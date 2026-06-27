@@ -34,6 +34,7 @@ Rutas v0:
 - `/api/v0/runs/supervise`
 - `/api/v0/server/shutdown`
 - `/api/v0/domain-work`
+- `/api/v0/external-work/dry-run`
 - `/api/v0/external-work/run`
 
 Fuera de alcance:

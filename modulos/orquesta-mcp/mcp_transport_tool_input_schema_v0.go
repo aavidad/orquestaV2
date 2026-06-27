@@ -83,6 +83,8 @@ func mcpTransportToolInputDTOByNameV0(name string) (any, bool) {
 		return MCPServerShutdownToolInputV0{}, true
 	case MCPDomainWorkToolNameV0:
 		return MCPDomainWorkToolInputV0{}, true
+	case MCPExternalWorkDryRunToolNameV0:
+		return MCPExternalWorkDryRunToolInputV0{}, true
 	case MCPExternalWorkRunToolNameV0:
 		return MCPExternalWorkRunToolInputV0{}, true
 	case MCPAppVCSToolNameV0:
@@ -192,6 +194,8 @@ func mcpTransportToolEnumsV0(name string) map[string][]string {
 		return map[string][]string{"action": []string{"create_job", "submit_artifact"}}
 	case MCPExternalWorkRunToolNameV0:
 		return map[string][]string{"director_execution_mode": []string{"goal_first", "legacy_director_loop"}}
+	case MCPExternalWorkDryRunToolNameV0:
+		return map[string][]string{"director_execution_mode": []string{"goal_first"}}
 	case MCPAppVCSToolNameV0:
 		return map[string][]string{"action": []string{"prepare_repo", "review_repo", "commit", "push"}}
 	default:

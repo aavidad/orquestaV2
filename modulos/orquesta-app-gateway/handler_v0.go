@@ -75,6 +75,7 @@ func NewRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 {
 		AutoprogrammingSupervise:          apiHandlers.AutoprogrammingSupervise,
 		GovernanceCatalogQuery:            apiHandlers.GovernanceCatalogQuery,
 		DomainWork:                        apiHandlers.DomainWork,
+		ExternalWorkDryRun:                apiHandlers.ExternalWorkDryRun,
 		ExternalWorkRun:                   apiHandlers.ExternalWorkRun,
 	}
 }
@@ -114,6 +115,14 @@ func NewAPIRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 
 		AutoprogrammingSupervise:          orquestamcp.NewMCPAutoprogrammingSuperviseHTTPHandlerV0(config.RunSupervisor),
 		GovernanceCatalogQuery:            orquestagovernance.GovernanceCatalogQueryHTTPHandlerV0(config.GovernanceCatalog),
 		DomainWork:                        orquestamcp.NewMCPDomainWorkHTTPHandlerV0(config.DomainWork),
+		ExternalWorkDryRun:                newExternalWorkDryRunHTTPHandlerV0(config),
 		ExternalWorkRun:                   orquestamcp.NewMCPExternalWorkRunHTTPHandlerV0(config.ExternalWorkRun),
 	}
+}
+
+func newExternalWorkDryRunHTTPHandlerV0(config ConfigV0) http.Handler {
+	if config.ExternalWorkDryRun != nil {
+		return orquestamcp.NewMCPExternalWorkDryRunHTTPHandlerV0(config.ExternalWorkDryRun)
+	}
+	return orquestamcp.NewMCPExternalWorkDryRunHTTPHandlerWithConfigV0(config.ExternalWorkDryRunConfig)
 }

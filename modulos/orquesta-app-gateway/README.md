@@ -26,6 +26,7 @@ Este modulo ensambla handlers ya existentes:
 - REST `/api/v0/director/human-work/review-plan`;
 - REST `/api/v0/server/shutdown`.
 - REST `/api/v0/domain-work`;
+- REST `/api/v0/external-work/dry-run`;
 - REST `/api/v0/external-work/run`.
 
 No es servidor real y no abre sockets. Devuelve un `http.Handler` listo para que

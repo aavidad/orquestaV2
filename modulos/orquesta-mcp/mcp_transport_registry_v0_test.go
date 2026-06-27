@@ -55,6 +55,7 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 		MCPWorkspaceTimelineToolNameV0,
 		MCPServerShutdownToolNameV0,
 		MCPDomainWorkToolNameV0,
+		MCPExternalWorkDryRunToolNameV0,
 		MCPExternalWorkRunToolNameV0,
 		MCPAppVCSToolNameV0,
 		operator.OperatorMCPStatusToolNameV0,
@@ -72,7 +73,7 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 		}
 	}
 	assertTransportPayloadSaneadoMCPTestV0(t, transport.resources, 9000)
-	assertTransportPayloadSaneadoMCPTestV0(t, transport.tools, 28000)
+	assertTransportPayloadSaneadoMCPTestV0(t, transport.tools, 29200)
 }
 
 func TestMCPTransportV0SirveResourceYToolConFakeEnMemoria(t *testing.T) {

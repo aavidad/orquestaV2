@@ -31,6 +31,7 @@ type MCPTransportBindingsV0 struct {
 	AllowLegacyAutoprogrammingSupervisorActions bool
 	ServerShutdown                              MCPTransportServerShutdownExecutorV0
 	DomainWork                                  MCPDomainWorkExecutorPortV0
+	ExternalWorkDryRun                          MCPTransportExternalWorkDryRunExecutorV0
 	ExternalWorkRun                             MCPTransportExternalWorkRunExecutorV0
 	AppVCS                                      MCPAppVCSExecutorPortV0
 	OperatorConnector                           operator.OperatorMCPConnectorV0
@@ -102,6 +103,10 @@ type MCPTransportServerShutdownExecutorV0 interface {
 
 type MCPTransportExternalWorkRunExecutorV0 interface {
 	Execute(context.Context, MCPExternalWorkRunToolInputV0) (MCPExternalWorkRunToolResultV0, error)
+}
+
+type MCPTransportExternalWorkDryRunExecutorV0 interface {
+	Execute(context.Context, MCPExternalWorkDryRunToolInputV0) (MCPExternalWorkDryRunToolResultV0, error)
 }
 
 type MCPTransportToolErrorV0 struct {

@@ -76,6 +76,7 @@ Campos:
 - `RouteHumanDirectorWorkReviewPlanV0`: `/api/v0/director/human-work/review-plan`;
 - `RouteServerShutdownV0`: `/api/v0/server/shutdown`.
 - `RouteDomainWorkV0`: `/api/v0/domain-work`.
+- `RouteExternalWorkDryRunV0`: `/api/v0/external-work/dry-run`.
 - `RouteExternalWorkRunV0`: `/api/v0/external-work/run`.
 
 ## Manifiesto de rutas

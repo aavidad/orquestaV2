@@ -190,6 +190,13 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 			},
 		},
 		{
+			name:  "external work dry run",
+			route: RouteExternalWorkDryRunV0,
+			handlers: RouteHandlersV0{
+				ExternalWorkDryRun: markerHandler("external-work-dry-run"),
+			},
+		},
+		{
 			name:  "external work run",
 			route: RouteExternalWorkRunV0,
 			handlers: RouteHandlersV0{

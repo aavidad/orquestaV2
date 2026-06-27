@@ -50,6 +50,7 @@ const (
 	RouteRefAutoprogrammingSuperviseV0          = "route-ref-autoprogramming-supervise-v0"
 	RouteRefGovernanceCatalogQueryV0            = "route-ref-governance-catalog-query-v0"
 	RouteRefDomainWorkV0                        = "route-ref-domain-work-v0"
+	RouteRefExternalWorkDryRunV0                = "route-ref-external-work-dry-run-v0"
 	RouteRefExternalWorkRunV0                   = "route-ref-external-work-run-v0"
 	RouteRefMCPJSONRPCV0                        = "route-ref-mcp-jsonrpc-v0"
 	RouteRefWorkspaceTimelineV0                 = "route-ref-workspace-timeline-v0"
