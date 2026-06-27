@@ -285,6 +285,7 @@ review_acceptance_note = os.environ["REVIEW_ACCEPTANCE_NOTE"]
 payload = {
     "request_id": f"req-opes-review-{provider}-{smoke_id}",
     "correlation_id": f"corr-opes-review-{smoke_id}",
+    "director_execution_mode": "legacy_director_loop",
     "external_work_run_request": {
         "schema_version": "external_work_run_request.v0",
         "request_id": f"req-opes-review-run-{provider}-{smoke_id}",

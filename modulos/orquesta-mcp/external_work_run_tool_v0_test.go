@@ -44,7 +44,7 @@ func TestMCPExternalWorkRunDescriptorV0DeclaraLegacyExplicito(t *testing.T) {
 	for _, want := range []string{
 		"goal-first es la ruta normal para trabajo externo nuevo",
 		"sin backend Goal completo la composicion goal-first devuelve error operativo y no degrada a legacy",
-		"legacy solo en composicion de compatibilidad opt-in",
+		"legacy solo con composicion opt-in y director_execution_mode=legacy_director_loop",
 		"con backend Goal completo la composicion puede devolver route_policy=goal_first y goal_ref",
 		"la ruta legacy opt-in crea run operativo y encola para loop historico por puertos inyectados",
 	} {

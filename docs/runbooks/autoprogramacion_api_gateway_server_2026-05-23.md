@@ -32,7 +32,8 @@ Rutas REST estables expuestas por el gateway:
 - `POST /api/v0/runs/queue/priority`
 - `POST /api/v0/server/shutdown`
 - `POST /api/v0/domain-work`
-- `POST /api/v0/external-work/run`
+- `POST /api/v0/external-work/run` (Goal-first normal; fallback legacy solo con
+  opt-in de composicion y `director_execution_mode=legacy_director_loop`)
 
 Rutas web compatibles:
 
@@ -130,7 +131,8 @@ Criterios de aceptacion manual:
 - `cmd/orquesta-server` queda como wiring fino del servidor real.
 - Las rutas web, CLI/MCP y REST usan los mismos contratos publicos.
 - `domain-work` y `external-work/run` aceptan refs opacas; el dominio externo
-  conserva validadores, persistencia y ensamblado.
+  conserva validadores, persistencia y ensamblado. `external-work/run` no cae al
+  loop historico sin modo legacy explicito.
 - No reaparecen el control-plane heredado ni helpers locales de DB.
 
 ## Revision web/CLI 004

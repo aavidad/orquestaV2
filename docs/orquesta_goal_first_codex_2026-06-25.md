@@ -178,6 +178,12 @@ una run legacy desde el stack Codex exige ahora
 bloqueo publico es `legacy_run_supervise_requires_director_execution_mode`. Las
 rutas goal-first se resuelven antes de ese bloqueo y siguen redirigiendo a
 `observe_goal`, de modo que la marca legacy no se usa para observar Codex Goal.
+Actualizacion adicional 2026-06-27 noche: `orquesta.external_work.run.v0` ya no
+degrada a `StartExternalWorkRunV0` legacy solo porque la composicion tenga
+`ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1`. La rama historica requiere
+tambien `director_execution_mode=legacy_director_loop`; sin backend Goal y sin
+esa marca devuelve `external_work_legacy_director_mode_required`, y con marca
+pero sin opt-in devuelve `external_work_legacy_director_loop_opt_in_required`.
 
 ## Migracion propuesta
 
@@ -206,7 +212,8 @@ rutas goal-first se resuelven antes de ese bloqueo y siguen redirigiendo a
 6. Marcar rutas antiguas como legacy cuando tengan equivalencia goal-first
    probada.
    Estado 2026-06-27: `StartAppDirectorV0`, MCP/REST, `/nueva-app`,
-   `runs/supervise`, `autoprogramming/supervise`, CLI, `/ops` y scripts exponen
+   `runs/supervise`, `autoprogramming/supervise`, `external-work/run`, CLI,
+   `/ops` y scripts exponen
    `director_execution_mode` para distinguir `goal_first` de
    `legacy_director_loop`. Las vias de supervision legacy requieren la marca
    explicita salvo opt-in de composicion; falta cerrar la matriz completa y

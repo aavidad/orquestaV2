@@ -19,7 +19,7 @@ func TestCodexStackV0OPESExternalWorkRecuperaEntregaSinACKConArtefactoValido(t *
 	runtime := newDomainWorkMissingACKRuntimeV0()
 	domainWork := &fakeCodexStackDomainWorkExecutorV0{}
 	stack := mustBuildCodexStackWithDomainWorkForTestV0(t, runtime, domainWork)
-	result := postExternalWorkRunStackV0(t, stack)
+	result := postExternalWorkRunStackLegacyV0(t, stack)
 
 	for attempt := 1; attempt <= 6; attempt++ {
 		if _, err := stack.DrainRunV0(context.Background(), DrainRunRequestV0{
@@ -198,7 +198,7 @@ func TestCodexStackV0RunGlobalTickRecuperaDomainWorkParadoAntesFiltroControl(t *
 	runtime := newDomainWorkRunningMissingACKRuntimeV0()
 	domainWork := &fakeCodexStackDomainWorkExecutorV0{}
 	stack := mustBuildCodexStackWithDomainWorkForTestV0(t, runtime, domainWork)
-	result := postExternalWorkRunStackV0(t, stack)
+	result := postExternalWorkRunStackLegacyV0(t, stack)
 
 	if _, err := stack.DrainRunV0(context.Background(), DrainRunRequestV0{
 		RunRef:               result.RunRef,
@@ -239,7 +239,7 @@ func TestCodexStackV0RunGlobalTickRecuperaDomainWorkPerdidoConArtefactoValidoV0(
 	runtime := newDomainWorkRunningMissingACKRuntimeV0()
 	domainWork := &fakeCodexStackDomainWorkExecutorV0{}
 	stack := mustBuildCodexStackWithDomainWorkForTestV0(t, runtime, domainWork)
-	result := postExternalWorkRunStackV0(t, stack)
+	result := postExternalWorkRunStackLegacyV0(t, stack)
 
 	if _, err := stack.DrainRunV0(context.Background(), DrainRunRequestV0{
 		RunRef:               result.RunRef,

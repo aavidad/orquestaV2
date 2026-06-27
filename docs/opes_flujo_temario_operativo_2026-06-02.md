@@ -425,7 +425,9 @@ inferior no declarado, se considera regresion grave.
 
 Cuando haya que recuperar runs external-work legacy o no migrados con
 `POST /api/v0/runs/supervise`, debe existir opt-in operativo explicito
-(`ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1`) y las llamadas dirigidas
+(`ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1` y
+`director_execution_mode=legacy_director_loop` en el payload que cree o empuje
+la run legacy) y las llamadas dirigidas
 contra la misma instancia temporal deben hacerse secuencialmente salvo evidencia
 de que el ledger/dispatcher de esa composicion soporta esa concurrencia real.
 Para runs `goal_first`, la ruta normal es observar/cerrar por

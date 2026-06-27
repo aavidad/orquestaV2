@@ -432,6 +432,7 @@ with open(summary_path, encoding="utf-8") as fh:
 payload = {
     "request_id": f"req-autoprogramming-external-work-{smoke_id}",
     "correlation_id": f"corr-autoprogramming-external-work-{smoke_id}",
+    "director_execution_mode": "legacy_director_loop",
     "app_change_request": {
         "schema_version": "app_change_request.v0",
         "request_id": f"req-autoprogramming-app-change-{smoke_id}",

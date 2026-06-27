@@ -90,8 +90,9 @@ API HTTP versionada:
 - `POST /api/v0/core/function-contracts/view`
 - `POST /api/v0/operational-status/query`
 - `POST /api/v0/domain-work`
-- `POST /api/v0/external-work/run` (compatibilidad legacy external-work/OPES;
-  devuelve `route_policy=legacy_director_loop` hasta migrar a Goal-first)
+- `POST /api/v0/external-work/run` (Goal-first para trabajo externo nuevo; el
+  fallback legacy exige composicion opt-in y
+  `director_execution_mode=legacy_director_loop`)
 - `POST /api/v0/ops/agent-runtime-detail`
 - `POST /api/v0/server/shutdown`
 - `GET /api/v0/server/resources`
@@ -127,7 +128,8 @@ MCP/toolbelt vigente para IA cuando el transporte esta disponible:
 - `orquesta.runs.control.v0`
 - `orquesta.run_queue.priority.v0`
 - `orquesta.domain_work.v0`
-- `orquesta.external_work.run.v0` (compatibilidad legacy external-work/OPES)
+- `orquesta.external_work.run.v0` (trabajo externo Goal-first; compatibilidad
+  legacy solo con opt-in y `director_execution_mode=legacy_director_loop`)
 
 No vigente como requisito operativo:
 

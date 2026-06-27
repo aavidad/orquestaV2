@@ -90,6 +90,7 @@ smoke_write_external_work_run_request() {
     '{
       request_id: ("req-opes-change-" + $safe_job),
       correlation_id: ("corr-opes-change-" + $safe_job),
+      director_execution_mode: "legacy_director_loop",
       app_change_request: {
         schema_version: "app_change_request.v0",
         request_id: ("req-opes-change-" + $safe_job),

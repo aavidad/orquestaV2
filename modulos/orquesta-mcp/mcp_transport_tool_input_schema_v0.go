@@ -187,6 +187,8 @@ func mcpTransportToolEnumsV0(name string) map[string][]string {
 		return map[string][]string{"action": []string{"rank", "set_priority"}}
 	case MCPDomainWorkToolNameV0:
 		return map[string][]string{"action": []string{"create_job", "submit_artifact"}}
+	case MCPExternalWorkRunToolNameV0:
+		return map[string][]string{"director_execution_mode": []string{"goal_first", "legacy_director_loop"}}
 	case MCPAppVCSToolNameV0:
 		return map[string][]string{"action": []string{"prepare_repo", "review_repo", "commit", "push"}}
 	default:

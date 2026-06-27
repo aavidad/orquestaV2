@@ -228,6 +228,11 @@ Corte anadido el 2026-05-18:
   operador fuerza supervision o espera residente, llama a
   `/api/v0/apps/director/goal/observe` en vez de `/api/v0/runs/supervise`.
   Los runs legacy sin metadata goal-first mantienen el comportamiento anterior.
+- Corte 2026-06-27 noche: el fallback legacy de `external-work/run` requiere
+  opt-in doble: composicion con `ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1`
+  y payload con `director_execution_mode=legacy_director_loop`. El bridge OPES
+  normal no debe mandar esa marca; debe esperar `route_policy=goal_first` cuando
+  el backend Goal este configurado o recibir error operativo si falta.
 
 Smoke real acotado del 2026-05-18:
 

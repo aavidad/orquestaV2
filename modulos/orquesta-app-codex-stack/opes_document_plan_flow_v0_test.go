@@ -216,6 +216,7 @@ func postExternalWorkRunRequestStackV0(
 	if err := json.NewEncoder(body).Encode(orquestamcp.MCPExternalWorkRunToolInputV0{
 		RequestID:              request.RequestID,
 		CorrelationID:          request.CorrelationID,
+		DirectorExecutionMode:  orquestamcp.MCPExternalWorkRunDirectorExecutionModeLegacyLoopV0,
 		ExternalWorkRunRequest: request,
 	}); err != nil {
 		t.Fatalf("encode external work run: %v", err)

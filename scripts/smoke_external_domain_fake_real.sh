@@ -359,6 +359,7 @@ output, smoke_id, job_ref = sys.argv[1:4]
 payload = {
     "request_id": f"request-ref-external-domain-fake-run-{smoke_id}",
     "correlation_id": f"corr-external-domain-fake-{smoke_id}",
+    "director_execution_mode": "legacy_director_loop",
     "external_work_run_request": {
         "schema_version": "external_work_run_request.v0",
         "request_id": f"request-ref-external-domain-fake-run-{smoke_id}",

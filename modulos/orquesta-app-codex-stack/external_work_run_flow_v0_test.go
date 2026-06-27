@@ -22,7 +22,7 @@ import (
 func TestCodexStackV0ExternalWorkRunCreaRunSinDirectorInicial(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 
-	result := postExternalWorkRunStackV0(t, stack)
+	result := postExternalWorkRunStackLegacyV0(t, stack)
 	if result.RoutePolicy != orquestamcp.MCPExternalWorkRunRoutePolicyLegacyDirectorLoopV0 ||
 		result.DirectorExecutionMode != orquestamcp.MCPExternalWorkRunDirectorExecutionModeLegacyLoopV0 {
 		t.Fatalf("external-work debe declararse legacy hasta migracion Goal-first: %+v", result)
@@ -45,6 +45,54 @@ func TestCodexStackV0ExternalWorkRunCreaRunSinDirectorInicial(t *testing.T) {
 		ranking.Ranked[0].RunRef != result.RunRef ||
 		ranking.Ranked[0].AppRef != "opes" {
 		t.Fatalf("ranking=%+v result=%+v", ranking, result)
+	}
+}
+
+func TestCodexStackV0ExternalWorkRunLegacyOptInRequiereModoExplicito(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+
+	result := postExternalWorkRunStackRawV0(t, stack, http.StatusBadRequest, defaultExternalWorkRunChangeForTestV0())
+	if result.Estado != orquestamcp.MCPExternalWorkRunEstadoErrorV0 ||
+		result.RoutePolicy != orquestamcp.MCPExternalWorkRunRoutePolicyGoalFirstV0 ||
+		result.DirectorExecutionMode != orquestamcp.MCPExternalWorkRunDirectorExecutionModeGoalFirstV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != orquestamcp.MCPExternalWorkRunLegacyDirectorModeRequiredV0 ||
+		result.Errores[0].Field != "director_execution_mode" ||
+		!codexStackStringInSetForTestV0(result.NextActions, orquestamcp.MCPExternalWorkRunNextActionDoNotFallbackLegacyV0) ||
+		!codexStackStringInSetForTestV0(result.NextActions, orquestamcp.MCPExternalWorkRunNextActionEnableLegacyOptInV0) {
+		t.Fatalf("result=%+v", result)
+	}
+	ranking := postRunQueuePriorityStackV0(t, stack, orquestamcp.MCPRunQueuePriorityToolInputV0{
+		Action:   "rank",
+		QueueRef: DefaultRunQueueRefV0,
+	})
+	if len(ranking.Ranked) != 0 {
+		t.Fatalf("sin modo legacy no debe encolar: ranking=%+v", ranking)
+	}
+}
+
+func TestCodexStackV0ExternalWorkRunModoLegacySinOptInNoDegrada(t *testing.T) {
+	config := codexStackBaseConfigForTestV0(t, newFakeCodexStackRuntimeV0(), nil, nil)
+	config.AllowLegacyExternalWorkRun = false
+	stack, err := BuildStackV0(config)
+	if err != nil {
+		t.Fatalf("BuildStackV0: %v", err)
+	}
+
+	result := postExternalWorkRunStackRawWithModeV0(
+		t,
+		stack,
+		http.StatusBadRequest,
+		defaultExternalWorkRunChangeForTestV0(),
+		orquestamcp.MCPExternalWorkRunDirectorExecutionModeLegacyLoopV0,
+	)
+	if result.Estado != orquestamcp.MCPExternalWorkRunEstadoErrorV0 ||
+		result.RoutePolicy != orquestamcp.MCPExternalWorkRunRoutePolicyGoalFirstV0 ||
+		result.DirectorExecutionMode != orquestamcp.MCPExternalWorkRunDirectorExecutionModeGoalFirstV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != orquestamcp.MCPExternalWorkRunLegacyDirectorLoopOptInRequiredV0 ||
+		result.Errores[0].Field != "legacy_director_loop_opt_in" {
+		t.Fatalf("result=%+v", result)
 	}
 }
 
@@ -191,8 +239,9 @@ func TestCodexStackV0ExternalWorkRunAceptaContratoAmplioV0(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	body := bytes.NewBuffer(nil)
 	err := json.NewEncoder(body).Encode(orquestamcp.MCPExternalWorkRunToolInputV0{
-		RequestID:     "req-external-work-wide-001",
-		CorrelationID: "corr-external-work-wide-001",
+		RequestID:             "req-external-work-wide-001",
+		CorrelationID:         "corr-external-work-wide-001",
+		DirectorExecutionMode: orquestamcp.MCPExternalWorkRunDirectorExecutionModeLegacyLoopV0,
 		AppChangeRequest: orquestaappchange.AppChangeRequestV0{
 			ChangeRef:  "opes-job-job-ref-wide-001",
 			AppRef:     "opes",
@@ -250,8 +299,9 @@ func TestCodexStackV0ExternalWorkRunSaneaPreguntaDirectorSinPerderContextoV0(t *
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	body := bytes.NewBuffer(nil)
 	err := json.NewEncoder(body).Encode(orquestamcp.MCPExternalWorkRunToolInputV0{
-		RequestID:     "req-external-work-safe-director-001",
-		CorrelationID: "corr-external-work-safe-director-001",
+		RequestID:             "req-external-work-safe-director-001",
+		CorrelationID:         "corr-external-work-safe-director-001",
+		DirectorExecutionMode: orquestamcp.MCPExternalWorkRunDirectorExecutionModeLegacyLoopV0,
 		AppChangeRequest: orquestaappchange.AppChangeRequestV0{
 			ChangeRef:  "self-review-rework-001",
 			AppRef:     "orquesta",
@@ -307,8 +357,9 @@ func TestCodexStackV0ExternalWorkRunSelfProgrammingSupervisaSinBloqueoGoBootstra
 	stack := mustBuildCodexStackForTestV0(t, runtime)
 	body := bytes.NewBuffer(nil)
 	err := json.NewEncoder(body).Encode(orquestamcp.MCPExternalWorkRunToolInputV0{
-		RequestID:     "req-self-programming-policy-001",
-		CorrelationID: "corr-self-programming-policy-001",
+		RequestID:             "req-self-programming-policy-001",
+		CorrelationID:         "corr-self-programming-policy-001",
+		DirectorExecutionMode: orquestamcp.MCPExternalWorkRunDirectorExecutionModeLegacyLoopV0,
 		AppChangeRequest: orquestaappchange.AppChangeRequestV0{
 			ChangeRef:  "self-programming-web-001",
 			AppRef:     "orquesta",
@@ -387,7 +438,7 @@ func TestCodexStackV0ExternalWorkRunSelfProgrammingSupervisaSinBloqueoGoBootstra
 func TestCodexStackV0ExternalWorkRunOPESSubrolesMaterializaPadreYSeisHijosV0(t *testing.T) {
 	runtime := newFakeCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)
-	result := postExternalWorkRunStackWithChangeV0(t, stack, orquestaappchange.AppChangeRequestV0{
+	result := postExternalWorkRunStackWithChangeLegacyV0(t, stack, orquestaappchange.AppChangeRequestV0{
 		ChangeRef:  "opes-job-tema-subroles-001",
 		AppRef:     "opes",
 		UserIntent: "Resolver tema OPES con padre y seis subroles reales.",
@@ -485,7 +536,7 @@ func TestCodexStackV0ExternalWorkRunOPESSubrolesMaterializaPadreYSeisHijosV0(t *
 func TestCodexStackV0ExternalWorkRunOPESSubrolesPadreConservaWriteSetProductoAutorizadoV0(t *testing.T) {
 	runtime := newFakeCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)
-	result := postExternalWorkRunStackWithChangeV0(t, stack, orquestaappchange.AppChangeRequestV0{
+	result := postExternalWorkRunStackWithChangeLegacyV0(t, stack, orquestaappchange.AppChangeRequestV0{
 		ChangeRef:       "opes-job-tema-subroles-producto-032",
 		AppRef:          "opes",
 		UserIntent:      "Resolver tema OPES con padre integrador y seis subroles reales.",
@@ -558,7 +609,7 @@ func TestCodexStackV0ExternalWorkRunOPESSubrolesPadreConservaWriteSetProductoAut
 func TestCodexStackV0ExternalWorkRunOPESSubrolesSupervisorDirectoSinLimitesLanzaSeisYDejaColaRunningV0(t *testing.T) {
 	runtime := newPendingAckCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)
-	result := postExternalWorkRunStackWithChangeV0(t, stack, orquestaappchange.AppChangeRequestV0{
+	result := postExternalWorkRunStackWithChangeLegacyV0(t, stack, orquestaappchange.AppChangeRequestV0{
 		ChangeRef:  "opes-job-tema-subroles-supervisor-001",
 		AppRef:     "opes",
 		UserIntent: "Resolver tema OPES con padre y seis subroles desde supervisor directo.",
@@ -637,7 +688,7 @@ func TestCodexStackV0ExternalWorkRunSupervisorConsumeDeliverySinExpirarWaitV0(t 
 	planStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0()
 	stack.Ports.OperationalPlanStateStore = planStore
 	stack.Ports.OperationalPlanStateWriter = planStore
-	result := postExternalWorkRunStackV0(t, stack)
+	result := postExternalWorkRunStackLegacyV0(t, stack)
 
 	drain, err := stack.DrainRunV0(context.Background(), DrainRunRequestV0{
 		RunRef:               result.RunRef,
@@ -691,6 +742,14 @@ func postExternalWorkRunStackV0(
 	return postExternalWorkRunStackWithChangeV0(t, stack, defaultExternalWorkRunChangeForTestV0())
 }
 
+func postExternalWorkRunStackLegacyV0(
+	t *testing.T,
+	stack StackV0,
+) orquestamcp.MCPExternalWorkRunToolResultV0 {
+	t.Helper()
+	return postExternalWorkRunStackWithChangeLegacyV0(t, stack, defaultExternalWorkRunChangeForTestV0())
+}
+
 func defaultExternalWorkRunChangeForTestV0() orquestaappchange.AppChangeRequestV0 {
 	return orquestaappchange.AppChangeRequestV0{
 		ChangeRef:  "opes-job-job-ref-001",
@@ -720,6 +779,21 @@ func postExternalWorkRunStackWithChangeV0(
 	return postExternalWorkRunStackRawV0(t, stack, http.StatusOK, change)
 }
 
+func postExternalWorkRunStackWithChangeLegacyV0(
+	t *testing.T,
+	stack StackV0,
+	change orquestaappchange.AppChangeRequestV0,
+) orquestamcp.MCPExternalWorkRunToolResultV0 {
+	t.Helper()
+	return postExternalWorkRunStackRawWithModeV0(
+		t,
+		stack,
+		http.StatusOK,
+		change,
+		orquestamcp.MCPExternalWorkRunDirectorExecutionModeLegacyLoopV0,
+	)
+}
+
 func postExternalWorkRunStackRawV0(
 	t *testing.T,
 	stack StackV0,
@@ -727,11 +801,23 @@ func postExternalWorkRunStackRawV0(
 	change orquestaappchange.AppChangeRequestV0,
 ) orquestamcp.MCPExternalWorkRunToolResultV0 {
 	t.Helper()
+	return postExternalWorkRunStackRawWithModeV0(t, stack, wantStatus, change, "")
+}
+
+func postExternalWorkRunStackRawWithModeV0(
+	t *testing.T,
+	stack StackV0,
+	wantStatus int,
+	change orquestaappchange.AppChangeRequestV0,
+	directorExecutionMode string,
+) orquestamcp.MCPExternalWorkRunToolResultV0 {
+	t.Helper()
 	body := bytes.NewBuffer(nil)
 	err := json.NewEncoder(body).Encode(orquestamcp.MCPExternalWorkRunToolInputV0{
-		RequestID:        "req-external-work-stack-001",
-		CorrelationID:    "corr-external-work-stack-001",
-		AppChangeRequest: change,
+		RequestID:             "req-external-work-stack-001",
+		CorrelationID:         "corr-external-work-stack-001",
+		DirectorExecutionMode: directorExecutionMode,
+		AppChangeRequest:      change,
 	})
 	if err != nil {
 		t.Fatalf("encode: %v", err)

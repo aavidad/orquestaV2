@@ -276,6 +276,14 @@ composicion no tiene opt-in global y el caller no manda
 goal-first ocurre antes de esa guarda y sigue devolviendo `observe_goal`, no
 drain legacy. `autoprogramming/status`, `/ops`, CLI, contratos MCP y scripts de
 smoke transportan ya la marca legacy en las vias historicas explicitas.
+Avance local adicional 2026-06-27 noche 2: `external-work/run` sigue siendo la
+entrada neutral para OPES/apps externas, pero la composicion Codex no degrada a
+loop historico solo por opt-in de entorno. Para crear una run legacy externa
+ahora se requieren dos marcas: `ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1`
+en la composicion y `director_execution_mode=legacy_director_loop` en el
+payload. Sin backend Goal y sin esa marca devuelve
+`external_work_legacy_director_mode_required`; con marca pero sin opt-in devuelve
+`external_work_legacy_director_loop_opt_in_required`.
 
 Pendiente verificable:
 
@@ -314,8 +322,9 @@ Pendiente verificable:
   real; no tocar OPES productivo ni drenar colas amplias.
 - Gate pendiente antes de declarar 100% global con OPES/external-work:
   `OPES-GOAL-FIRST-E2E` sobre instancia temporal de un tema. Debe entrar por
-  `external-work`/`domain-work`, compilar `GoalWorkSpecV0` o declarar legacy
-  explicito, materializar contrato OPES 1+6 cuando aplique, producir resultado
+  `external-work`/`domain-work`, compilar `GoalWorkSpecV0` como ruta normal o
+  declarar legacy explicito con `director_execution_mode=legacy_director_loop`,
+  materializar contrato OPES 1+6 cuando aplique, producir resultado
   durable, validar cierre por evidencias/validadores, lanzar rework goal si
   falla el cierre y sobrevivir a restart/observe/stop sin HTTP colgado.
 - Mantener el loop `app-director-service`/`PlanState` solo como compatibilidad

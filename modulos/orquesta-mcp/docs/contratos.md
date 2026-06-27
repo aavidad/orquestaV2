@@ -72,7 +72,7 @@ Nombre: mcp.tool.orquesta.external_work.run.v0
 Tipo: puerto_entrada
 Version: v0
 Propietario: orquesta-mcp
-Consumidores: bridges de app externa, OPES legacy y operadores automatizados
+Consumidores: bridges de app externa, OPES y operadores automatizados
 Campos:
   descriptor:
     name: orquesta.external_work.run.v0
@@ -81,18 +81,25 @@ Campos:
     method: POST
     path: /api/v0/external-work/run
   input:
+    director_execution_mode?: vacio/`goal_first` usa la ruta Goal-first;
+      `legacy_director_loop` solo se acepta con composicion opt-in
     external_work_run_request?: StartExternalWorkRunRequestV0
     app_change_request?: AppChangeRequestV0
   output_ok:
     estado: ok
-    route_policy: legacy_director_loop
-    director_execution_mode: legacy_director_loop
-    run_ref, change_ref, director_question_ref, evidence_refs?, next_actions?
+    route_policy: goal_first|legacy_director_loop
+    director_execution_mode: goal_first|legacy_director_loop
+    run_ref, change_ref, goal_ref?, director_question_ref?, evidence_refs?,
+    next_actions?
   output_error:
     estado: error
     errores_publicos: issues compactos
 Invariantes:
-  - Compatibilidad legacy explicita hasta migrar external-work a GoalWorkSpecV0.
+  - Goal-first es la ruta normal para trabajo externo nuevo.
+  - Sin backend Goal completo no degrada automaticamente a legacy.
+  - Legacy requiere composicion opt-in y
+    `director_execution_mode=legacy_director_loop`.
+  - No conoce OPES, DB, runtime, filesystem ni proveedor concreto.
   - No crea GoalWorkStateV0 ni arranca Codex Goal.
   - Crea run operativo y encola para el loop historico por puertos inyectados.
   - No conoce OPES, DB, runtime, filesystem, proveedor ni credenciales.

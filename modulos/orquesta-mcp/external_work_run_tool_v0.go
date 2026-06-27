@@ -19,6 +19,8 @@ const (
 	MCPExternalWorkRunRoutePolicyGoalFirstV0            = "goal_first"
 	MCPExternalWorkRunGoalBackendRequiredV0             = "external_work_goal_backend_required"
 	MCPExternalWorkRunExistingLegacyRunRequiresOptInV0  = "external_work_existing_legacy_run_requires_opt_in"
+	MCPExternalWorkRunLegacyDirectorModeRequiredV0      = "external_work_legacy_director_mode_required"
+	MCPExternalWorkRunLegacyDirectorLoopOptInRequiredV0 = "external_work_legacy_director_loop_opt_in_required"
 	MCPExternalWorkRunNextActionSuperviseLegacyRunV0    = "supervise_legacy_run_or_wait_resident"
 	MCPExternalWorkRunNextActionMigrateGoalFirstV0      = "migrate_external_work_to_goal_first"
 	MCPExternalWorkRunNextActionObserveGoalV0           = "observe_goal"
@@ -41,6 +43,7 @@ type MCPExternalWorkRunToolDescriptorV0 struct {
 type MCPExternalWorkRunToolInputV0 struct {
 	RequestID              string                                                `json:"request_id,omitempty"`
 	CorrelationID          string                                                `json:"correlation_id,omitempty"`
+	DirectorExecutionMode  string                                                `json:"director_execution_mode,omitempty"`
 	ExternalWorkRunRequest orquestaexternalworkrun.StartExternalWorkRunRequestV0 `json:"external_work_run_request,omitempty"`
 	AppChangeRequest       orquestaappchange.AppChangeRequestV0                  `json:"app_change_request,omitempty"`
 }
@@ -72,14 +75,14 @@ func MCPExternalWorkRunDescriptorV0() MCPExternalWorkRunToolDescriptorV0 {
 	return MCPExternalWorkRunToolDescriptorV0{
 		Name:        MCPExternalWorkRunToolNameV0,
 		Version:     MCPExternalWorkRunToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,external_work_run_request?:StartExternalWorkRunRequestV0,app_change_request?:AppChangeRequestV0}",
+		InputSchema: "envelope:{request_id?,correlation_id?,director_execution_mode?:goal_first|legacy_director_loop,external_work_run_request?:StartExternalWorkRunRequestV0,app_change_request?:AppChangeRequestV0}",
 		Output:      "ok:{route_policy,director_execution_mode,run_ref,change_ref,goal_ref?,next_actions?}|error:{errores_publicos}",
 		ResourceURI: MCPExternalWorkRunResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
 			"goal-first es la ruta normal para trabajo externo nuevo",
 			"sin backend Goal completo la composicion goal-first devuelve error operativo y no degrada a legacy",
-			"legacy solo en composicion de compatibilidad opt-in",
+			"legacy solo con composicion opt-in y director_execution_mode=legacy_director_loop",
 			"con backend Goal completo la composicion puede devolver route_policy=goal_first y goal_ref",
 			"la ruta legacy opt-in crea run operativo y encola para loop historico por puertos inyectados",
 			"sin OPES, DB, runtime, filesystem ni proveedor hardcodeado",

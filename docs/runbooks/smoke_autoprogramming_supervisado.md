@@ -52,9 +52,10 @@ smoke porque prueba deliberadamente `prepare-run` legacy. Sin ese opt-in,
 `ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK=1` es compatibilidad
 historica y, desde el corte goal-first, exige tambien
 `ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1` para que el servidor permita
-ese fallback. Sin esas variables, el smoke no llama a
-`/api/v0/external-work/run` ni a `/api/v0/runs/supervise` y no ejecuta el test
-focal legacy asociado.
+ese fallback; el payload de external-work transporta ademas
+`director_execution_mode=legacy_director_loop`. Sin esas variables, el smoke no
+llama a `/api/v0/external-work/run` ni a `/api/v0/runs/supervise` y no ejecuta
+el test focal legacy asociado.
 
 ## Que comprueba
 
@@ -87,9 +88,10 @@ focal legacy asociado.
   `ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK=1`.
 - Con `ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK=1` y
   `ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1`, intenta
-  `POST /api/v0/external-work/run` con un trabajo
+  `POST /api/v0/external-work/run` con
+  `director_execution_mode=legacy_director_loop` y un trabajo
   `autoprogramming_programmable_work`; si devuelve `run_ref`, llama a
-  `POST /api/v0/runs/supervise` con limites bajos.
+  `POST /api/v0/runs/supervise` con limites bajos y modo legacy explicito.
 - Ejecuta tests focales existentes cuando estan presentes:
   `OperationalClosureSourceV0` y cierre offline de `app-director-service`. Los
   focales de `external-work/run` con stack fake y supervisor con stack fake se
@@ -131,8 +133,9 @@ idempotente conserve el `run_ref` y siga devolviendo refs causales. El camino
 Goal-first queda fuera de este smoke legacy y no debe encolar run.
 `/api/v0/external-work/run` queda como fallback opcional de compatibilidad para
 otros trabajos externos y solo se prueba desde este smoke con
-`ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK=1`; no es el launcher de
-autoprogramacion.
+`ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK=1`,
+`ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1` y payload legacy explicito; no
+es el launcher de autoprogramacion.
 
 ## Alcance
 

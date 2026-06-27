@@ -16,7 +16,7 @@ func TestDomainWorkPendingArtifactsV0RespetaWaitAgentRefs(t *testing.T) {
 	}
 	domainWork := &fakeCodexStackDomainWorkExecutorV0{}
 	stack := mustBuildCodexStackWithDomainWorkForTestV0(t, runtime, domainWork)
-	result := postExternalWorkRunStackV0(t, stack)
+	result := postExternalWorkRunStackLegacyV0(t, stack)
 	drainDomainWorkRunToLaunchForWaitAgentRefsTestV0(t, stack, result.RunRef)
 	descriptor := domainWorkDescriptorForRunWaitAgentRefsTestV0(t, stack, result.RunRef)
 	writeDomainWorkAckForWaitAgentRefsTestV0(t, runtime.fakeCodexStackRuntimeV0, descriptor)
@@ -54,7 +54,7 @@ func TestDomainWorkRecoveryV0RespetaWaitAgentRefs(t *testing.T) {
 	runtime := newDomainWorkRunningMissingACKRuntimeV0()
 	domainWork := &fakeCodexStackDomainWorkExecutorV0{}
 	stack := mustBuildCodexStackWithDomainWorkForTestV0(t, runtime, domainWork)
-	result := postExternalWorkRunStackV0(t, stack)
+	result := postExternalWorkRunStackLegacyV0(t, stack)
 	drainDomainWorkRunToLaunchForWaitAgentRefsTestV0(t, stack, result.RunRef)
 	descriptor := domainWorkDescriptorForRunWaitAgentRefsTestV0(t, stack, result.RunRef)
 	writeDomainWorkAckFailureLastMessageForTestV0(t, stack, result.RunRef)
