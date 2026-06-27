@@ -56,11 +56,6 @@ func reviewResultProjectionForRefV0(current OrchestrationRunV0, reviewResultRef 
 	return "", false
 }
 
-func reviewResultAlreadyReflectedV0(current OrchestrationRunV0, reviewResultRef string) bool {
-	_, ok := reviewResultProjectionForRefV0(current, reviewResultRef)
-	return ok
-}
-
 func acceptedReviewResultAlreadyReflectedV0(current OrchestrationRunV0, reviewRequestID string, deliveryRef string) bool {
 	reviewRequestID = strings.TrimSpace(reviewRequestID)
 	deliveryRef = strings.TrimSpace(deliveryRef)

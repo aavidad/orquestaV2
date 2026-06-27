@@ -1,6 +1,7 @@
 package orquestaweb
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -27,7 +28,7 @@ func TestRESTAppChangeClientV0EnviaContratoYDecodificaResultado(t *testing.T) {
 	client := NewRESTAppChangeClientV0(webHTTPClientTestBaseURLV0, 0)
 	client.HTTPClient = newWebHTTPClientForHandlerV0(handler)
 
-	vm, err := client.RequestAppChange(nil, WebAppChangeFormV0{
+	vm, err := client.RequestAppChange(context.TODO(), WebAppChangeFormV0{
 		RunRef:     "run-ref-client-change-001",
 		ChangeRef:  "change-ref-client-001",
 		UserIntent: "Cambiar la web.",

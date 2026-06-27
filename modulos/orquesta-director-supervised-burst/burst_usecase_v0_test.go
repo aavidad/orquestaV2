@@ -1,6 +1,7 @@
 package orquestadirectorsupervisedburst
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -15,7 +16,7 @@ func TestRunDirectorSupervisedBurstV0ContinuaYParaEnOutbox(t *testing.T) {
 		orquestadirectorrunner.DirectorCycleStatusOutboxPendingV0,
 	}}
 
-	result, err := RunDirectorSupervisedBurstV0(nil, burstValidInputV0(builder, executor, 3))
+	result, err := RunDirectorSupervisedBurstV0(context.TODO(), burstValidInputV0(builder, executor, 3))
 	if err != nil {
 		t.Fatalf("run burst: %v", err)
 	}
@@ -55,7 +56,7 @@ func TestRunDirectorSupervisedBurstV0CortaEnMaxSteps(t *testing.T) {
 		orquestadirectorrunner.DirectorCycleStatusCommandsAppliedV0,
 	}}
 
-	result, err := RunDirectorSupervisedBurstV0(nil, burstValidInputV0(builder, executor, 2))
+	result, err := RunDirectorSupervisedBurstV0(context.TODO(), burstValidInputV0(builder, executor, 2))
 	if err != nil {
 		t.Fatalf("run burst: %v", err)
 	}
@@ -82,7 +83,7 @@ func TestRunDirectorSupervisedBurstV0PropagaErroresControlados(t *testing.T) {
 		orquestadirectorrunner.DirectorCycleStatusCommandsAppliedV0,
 	}}
 
-	result, err := RunDirectorSupervisedBurstV0(nil, burstValidInputV0(builder, executor, 2))
+	result, err := RunDirectorSupervisedBurstV0(context.TODO(), burstValidInputV0(builder, executor, 2))
 	assertBurstErrorV0(t, err, ErrDirectorSupervisedBurstStepInputV0, "step_input_builder")
 	if result.ExecutedSteps != 0 || executor.calls != 0 {
 		t.Fatalf("builder error should not execute steps: %+v calls=%d", result, executor.calls)
@@ -95,7 +96,7 @@ func TestRunDirectorSupervisedBurstV0RechazaStepInputDeOtroRun(t *testing.T) {
 		orquestadirectorrunner.DirectorCycleStatusCommandsAppliedV0,
 	}}
 
-	result, err := RunDirectorSupervisedBurstV0(nil, burstValidInputV0(builder, executor, 2))
+	result, err := RunDirectorSupervisedBurstV0(context.TODO(), burstValidInputV0(builder, executor, 2))
 
 	assertBurstErrorV0(t, err, ErrDirectorSupervisedBurstStepInputV0, "step_input.run_ref")
 	if result.ExecutedSteps != 0 || executor.calls != 0 {
@@ -112,7 +113,7 @@ func TestRunDirectorSupervisedBurstV0RechazaStepResultDeOtroRun(t *testing.T) {
 		resultRunRefOnce: "run-burst-externo",
 	}
 
-	result, err := RunDirectorSupervisedBurstV0(nil, burstValidInputV0(builder, executor, 2))
+	result, err := RunDirectorSupervisedBurstV0(context.TODO(), burstValidInputV0(builder, executor, 2))
 
 	assertBurstErrorV0(t, err, ErrDirectorSupervisedBurstStepV0, "step.run_ref")
 	if result.ExecutedSteps != 0 || executor.calls != 1 {
@@ -127,7 +128,7 @@ func TestRunDirectorSupervisedBurstV0StepErrorRegistraStopError(t *testing.T) {
 		errs:     []error{burstCycleStepErrorV0()},
 	}
 
-	result, err := RunDirectorSupervisedBurstV0(nil, burstValidInputV0(builder, executor, 2))
+	result, err := RunDirectorSupervisedBurstV0(context.TODO(), burstValidInputV0(builder, executor, 2))
 	assertBurstErrorV0(t, err, ErrDirectorSupervisedBurstStepV0, "step")
 	if result.ExecutedSteps != 1 || result.FinalAction != orquestadirectorsupervisor.DirectorSupervisorActionStopErrorV0 {
 		t.Fatalf("unexpected result: %+v", result)
@@ -145,7 +146,7 @@ func TestRunDirectorSupervisedBurstV0SupervisorError(t *testing.T) {
 	input := burstValidInputV0(builder, executor, 2)
 	input.Supervisor = burstSupervisorErrorPolicyV0()
 
-	result, err := RunDirectorSupervisedBurstV0(nil, input)
+	result, err := RunDirectorSupervisedBurstV0(context.TODO(), input)
 	assertBurstErrorV0(t, err, ErrDirectorSupervisedBurstSupervisorV0, "supervisor")
 	if result.ExecutedSteps != 0 {
 		t.Fatalf("supervisor error should not record step as complete: %+v", result)
@@ -153,10 +154,10 @@ func TestRunDirectorSupervisedBurstV0SupervisorError(t *testing.T) {
 }
 
 func TestRunDirectorSupervisedBurstV0RejectsInvalidInput(t *testing.T) {
-	_, err := RunDirectorSupervisedBurstV0(nil, DirectorSupervisedBurstInputV0{})
+	_, err := RunDirectorSupervisedBurstV0(context.TODO(), DirectorSupervisedBurstInputV0{})
 	assertBurstErrorV0(t, err, ErrDirectorSupervisedBurstInvalidoV0, "step_input_builder")
 
 	input := burstValidInputV0(&burstRecordingBuilderV0{}, &burstScriptedExecutorV0{}, 0)
-	_, err = RunDirectorSupervisedBurstV0(nil, input)
+	_, err = RunDirectorSupervisedBurstV0(context.TODO(), input)
 	assertBurstErrorV0(t, err, ErrDirectorSupervisedBurstInvalidoV0, "max_steps")
 }

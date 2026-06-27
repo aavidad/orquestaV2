@@ -97,10 +97,6 @@ func publicMCPExecutorErrorMessageV0(fallback string) string {
 	return fallback
 }
 
-func publicMCPExecutorErrorSanitizeV0(message string) string {
-	return publicMCPErrorMessageFromTextV0(MCPPublicErrExecutorV0, message)
-}
-
 func publicMCPExecutorErrorMessageFromErrorV0(fallback string, err error) string {
 	base := publicMCPExecutorErrorMessageV0(fallback)
 	if err == nil {

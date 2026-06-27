@@ -24,7 +24,7 @@ func TestAppPlanResolversConstruyenRuntimeLaunchValidoV0(t *testing.T) {
 			EvidenceRefs:      AppPlanLaunchEvidenceResolverV0{Plan: plan},
 			ContextBundles:    AppPlanContextBundleResolverV0{Plan: plan, CapacityDecisions: capacities},
 		},
-	}.ResolveAgentLauncherDependenciesV0(nil, inbound)
+	}.ResolveAgentLauncherDependenciesV0(context.TODO(), inbound)
 	if err != nil {
 		t.Fatalf("ResolveAgentLauncherDependenciesV0: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestAppPlanResolversConstruyenExternalAgentLaunchSpecV0(t *testing.T) {
 			ReadinessTimeoutSeconds: 120,
 			MaxStartupSeconds:       180,
 		},
-	}.ResolveExternalAgentLaunchSpecV0(nil, inbound)
+	}.ResolveExternalAgentLaunchSpecV0(context.TODO(), inbound)
 	if err != nil {
 		t.Fatalf("ResolveExternalAgentLaunchSpecV0: %v", err)
 	}

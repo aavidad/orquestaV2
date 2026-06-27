@@ -188,7 +188,7 @@ func (fake *fakeMCPServerShutdownControlV0) ReadRunControlStateV0(
 		return state, nil
 	}
 	return orquestaruncontrol.RunControlStateV0{},
-		orquestaruncontrol.RunControlStateNotFoundErrorV0{RunRef: request.RunRef}
+		orquestaruncontrol.RunControlStateNotFoundErrorV0(request)
 }
 
 func (fake *fakeMCPServerShutdownControlV0) StopRunV0(

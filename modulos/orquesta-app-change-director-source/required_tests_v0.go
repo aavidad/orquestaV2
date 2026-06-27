@@ -141,20 +141,6 @@ func appChangeRequiredTestLooksInlineCommandV0(value string) bool {
 		strings.Contains(lower, " | ")
 }
 
-func compactAppChangeDirectorStringsV0(values []string) []string {
-	seen := map[string]bool{}
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		trimmed := strings.TrimSpace(value)
-		if trimmed == "" || seen[trimmed] {
-			continue
-		}
-		seen[trimmed] = true
-		out = append(out, trimmed)
-	}
-	return out
-}
-
 func appChangeWriteSetLooksLikeGoV0(writeSet []string) bool {
 	for _, entry := range writeSet {
 		normalized := strings.Trim(strings.ToLower(strings.TrimSpace(entry)), "/")

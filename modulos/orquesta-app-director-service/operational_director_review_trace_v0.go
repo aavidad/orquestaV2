@@ -8,10 +8,6 @@ import (
 	"strings"
 )
 
-func operationalDirectorPlanReviewResultReflectedV0(reviewResultRef string, reviewResults []string) bool {
-	return operationalDirectorPlanProjectionReflectedV0(reviewResultRef, reviewResults)
-}
-
 func operationalDirectorPlanProjectionReflectedV0(ref string, values []string) bool {
 	ref = strings.TrimSpace(ref)
 	for _, existing := range values {

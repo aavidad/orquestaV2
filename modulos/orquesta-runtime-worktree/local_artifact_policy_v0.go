@@ -143,35 +143,3 @@ func mergeWorktreeLocalArtifactReceiptsV0(
 	})
 	return receipts
 }
-
-func mergeWorktreeLocalArtifactReceiptsDuplicateV0(
-	values ...[]WorktreeLocalArtifactExclusionReceiptV0,
-) []WorktreeLocalArtifactExclusionReceiptV0 {
-	counts := map[worktreeLocalArtifactMatchV0]int{}
-	for _, receipts := range values {
-		for _, receipt := range receipts {
-			if receipt.Category == "" || receipt.ReasonCode == "" || receipt.Count <= 0 {
-				continue
-			}
-			counts[worktreeLocalArtifactMatchV0{
-				Category:   receipt.Category,
-				ReasonCode: receipt.ReasonCode,
-			}] += receipt.Count
-		}
-	}
-	out := make([]WorktreeLocalArtifactExclusionReceiptV0, 0, len(counts))
-	for match, count := range counts {
-		out = append(out, WorktreeLocalArtifactExclusionReceiptV0{
-			Category:   match.Category,
-			ReasonCode: match.ReasonCode,
-			Count:      count,
-		})
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Category == out[j].Category {
-			return out[i].ReasonCode < out[j].ReasonCode
-		}
-		return out[i].Category < out[j].Category
-	})
-	return out
-}

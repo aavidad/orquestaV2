@@ -153,32 +153,32 @@ func (client *AutoprogrammingCliClientV0) postV0(
 
 func decodeAutoprogPrepareRunV0(resp *http.Response, inv CliInvocationContextV0, start time.Time) CliOutputEnvelopeV0 {
 	var result orquestamcp.MCPAutoprogrammingPrepareRunToolResultV0
-	return decodeAutoprogToolResponseV0(resp, inv, start, &result, result.Estado, result.Errores)
+	return decodeAutoprogToolResponseV0(resp, inv, start, &result)
 }
 
 func decodeAutoprogQueueV0(resp *http.Response, inv CliInvocationContextV0, start time.Time) CliOutputEnvelopeV0 {
 	var result orquestamcp.MCPRunQueuePriorityToolResultV0
-	return decodeAutoprogToolResponseV0(resp, inv, start, &result, result.Estado, result.Errores)
+	return decodeAutoprogToolResponseV0(resp, inv, start, &result)
 }
 
 func decodeAutoprogStatusV0(resp *http.Response, inv CliInvocationContextV0, start time.Time) CliOutputEnvelopeV0 {
 	var result orquestamcp.MCPAutoprogrammingStatusToolResultV0
-	return decodeAutoprogToolResponseV0(resp, inv, start, &result, result.Estado, result.Errores)
+	return decodeAutoprogToolResponseV0(resp, inv, start, &result)
 }
 
 func decodeAutoprogRunStatsV0(resp *http.Response, inv CliInvocationContextV0, start time.Time) CliOutputEnvelopeV0 {
 	var result orquestamcp.MCPDirectorStatsToolResultV0
-	return decodeAutoprogToolResponseV0(resp, inv, start, &result, result.Estado, result.Errores)
+	return decodeAutoprogToolResponseV0(resp, inv, start, &result)
 }
 
 func decodeAutoprogSuperviseV0(resp *http.Response, inv CliInvocationContextV0, start time.Time) CliOutputEnvelopeV0 {
 	var result orquestamcp.MCPRunSupervisorToolResultV0
-	return decodeAutoprogToolResponseV0(resp, inv, start, &result, result.Estado, result.Errores)
+	return decodeAutoprogToolResponseV0(resp, inv, start, &result)
 }
 
 func decodeAutoprogRunControlV0(resp *http.Response, inv CliInvocationContextV0, start time.Time) CliOutputEnvelopeV0 {
 	var result orquestamcp.MCPRunControlToolResultV0
-	return decodeAutoprogToolResponseV0(resp, inv, start, &result, result.Estado, result.Errores)
+	return decodeAutoprogToolResponseV0(resp, inv, start, &result)
 }
 
 func decodeAutoprogToolResponseV0(
@@ -186,8 +186,6 @@ func decodeAutoprogToolResponseV0(
 	inv CliInvocationContextV0,
 	start time.Time,
 	target any,
-	estado string,
-	issues []orquestamcp.MCPValidationIssueV0,
 ) CliOutputEnvelopeV0 {
 	if resp.StatusCode < http.StatusOK || resp.StatusCode > 299 {
 		if resp.StatusCode != http.StatusBadRequest {
@@ -197,7 +195,7 @@ func decodeAutoprogToolResponseV0(
 	if detail := decodeCLIRESTJSONBodyForCommandV0(resp, inv.Command, target); detail != "" {
 		return autoprogSingleErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "body", detail, resp.StatusCode, false, start)
 	}
-	estado, issues = autoprogEstadoAndIssuesV0(target)
+	estado, issues := autoprogEstadoAndIssuesV0(target)
 	if strings.TrimSpace(estado) == "" {
 		return autoprogSingleErrorEnvelopeV0(inv, CliErrRespuestaInvalidaV0, "data", "autoprogramming_result_invalido", resp.StatusCode, false, start)
 	}

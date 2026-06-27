@@ -192,7 +192,7 @@ func (missingRunControlForTestV0) ReadRunControlStateV0(
 	request orquestaruncontrol.RunControlReadRequestV0,
 ) (orquestaruncontrol.RunControlStateV0, error) {
 	return orquestaruncontrol.RunControlStateV0{},
-		orquestaruncontrol.RunControlStateNotFoundErrorV0{RunRef: request.RunRef}
+		orquestaruncontrol.RunControlStateNotFoundErrorV0(request)
 }
 
 type sequenceRunControlV0 struct {

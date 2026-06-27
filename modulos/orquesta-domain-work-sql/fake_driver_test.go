@@ -251,9 +251,7 @@ func (rows *domainWorkSQLFakeRowsV0) Next(dest []driver.Value) error {
 	if rows.index >= len(rows.values) {
 		return io.EOF
 	}
-	for index, value := range rows.values[rows.index] {
-		dest[index] = value
-	}
+	copy(dest, rows.values[rows.index])
 	rows.index++
 	return nil
 }

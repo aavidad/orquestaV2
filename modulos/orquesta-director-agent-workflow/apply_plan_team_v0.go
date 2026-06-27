@@ -24,12 +24,7 @@ func applyDirectorAgentPlanTeamDecisionV0(
 			},
 		}, nil
 	}
-	commandRequest := normalizeDirectorAgentWorkflowRequestV0(DirectorAgentWorkflowCommandRequestV0{
-		Decision:      request.Decision,
-		OccurredAt:    request.OccurredAt,
-		CorrelationID: request.CorrelationID,
-		RequestedBy:   request.RequestedBy,
-	})
+	commandRequest := normalizeDirectorAgentWorkflowRequestV0(DirectorAgentWorkflowCommandRequestV0(request))
 	if issues := validateDirectorAgentWorkflowRequestV0(commandRequest); len(issues) > 0 {
 		return ApplyDirectorAgentDecisionResultV0{Issues: issues}, nil
 	}

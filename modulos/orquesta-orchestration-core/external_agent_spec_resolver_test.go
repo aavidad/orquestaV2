@@ -190,17 +190,6 @@ func (staticContextBundleResolverForSpecTestV0) ResolveContextBundleV0(
 	return contextBundleForExternalProcessTestV0(), nil
 }
 
-type staticAgentLauncherDependenciesResolverV0 struct {
-	resolved orquestaruntime.AgentLauncherResolvedDependenciesV0
-}
-
-func (resolver staticAgentLauncherDependenciesResolverV0) ResolveAgentLauncherDependenciesV0(
-	context.Context,
-	orquestaruntime.AgentLauncherInboundV0,
-) (orquestaruntime.AgentLauncherResolvedDependenciesV0, error) {
-	return resolver.resolved, nil
-}
-
 type failingAgentLauncherDependenciesResolverV0 struct {
 	err error
 }

@@ -1,6 +1,7 @@
 package orquestacionnucleoapp
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -34,7 +35,7 @@ func TestComposedAgentLauncherDependenciesResolverV0ResuelveDependenciasPorPuert
 			EvidenceRefs:      evidence,
 			ContextBundles:    bundles,
 		},
-	}.ResolveAgentLauncherDependenciesV0(nil, inbound)
+	}.ResolveAgentLauncherDependenciesV0(context.TODO(), inbound)
 	if err != nil {
 		t.Fatalf("ResolveAgentLauncherDependenciesV0: %v", err)
 	}
@@ -59,7 +60,7 @@ func TestComposedAgentLauncherDependenciesResolverV0ResuelveDependenciasPorPuert
 
 func TestComposedAgentLauncherDependenciesResolverV0BloqueaPuertoFaltante(t *testing.T) {
 	_, err := ComposedAgentLauncherDependenciesResolverV0{}.
-		ResolveAgentLauncherDependenciesV0(nil, externalProcessLauncherInboundV0("run-deps-port-001", "agent-request-deps-port-001"))
+		ResolveAgentLauncherDependenciesV0(context.TODO(), externalProcessLauncherInboundV0("run-deps-port-001", "agent-request-deps-port-001"))
 
 	assertNucleoErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "function_contract_resolver")
 }
@@ -83,7 +84,7 @@ func TestComposedAgentLauncherDependenciesResolverV0BloqueaDependenciaNula(t *te
 				bundle: contextBundleForExternalProcessTestV0(),
 			},
 		},
-	}.ResolveAgentLauncherDependenciesV0(nil, inbound)
+	}.ResolveAgentLauncherDependenciesV0(context.TODO(), inbound)
 
 	assertNucleoErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "capacity_decision")
 }
@@ -109,7 +110,7 @@ func TestComposedAgentLauncherDependenciesResolverV0PropagaErrorDePuerto(t *test
 				bundle: contextBundleForExternalProcessTestV0(),
 			},
 		},
-	}.ResolveAgentLauncherDependenciesV0(nil, inbound)
+	}.ResolveAgentLauncherDependenciesV0(context.TODO(), inbound)
 
 	assertNucleoErrorV0(t, err, ErrNucleoOrquestacionInvalidoV0, "function_contract")
 }

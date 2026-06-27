@@ -745,7 +745,7 @@ func (fake *fakeControlReaderV0) ReadRunControlStateV0(
 ) (orquestaruncontrol.RunControlStateV0, error) {
 	if fake.missing[request.RunRef] {
 		return orquestaruncontrol.RunControlStateV0{},
-			orquestaruncontrol.RunControlStateNotFoundErrorV0{RunRef: request.RunRef}
+			orquestaruncontrol.RunControlStateNotFoundErrorV0(request)
 	}
 	if state, ok := fake.states[request.RunRef]; ok {
 		return state, nil

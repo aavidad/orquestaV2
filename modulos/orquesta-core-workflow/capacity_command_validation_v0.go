@@ -47,15 +47,7 @@ func normalizeRequestCapacityPayloadV0(payload RequestCapacityCommandPayloadV0) 
 }
 
 func normalizeCapacityRequestedPayloadV0(payload CapacityRequestedPayloadV0) CapacityRequestedPayloadV0 {
-	commandPayload := RequestCapacityCommandPayloadV0{
-		CapacityRequestID:          payload.CapacityRequestID,
-		PhaseID:                    payload.PhaseID,
-		TaskRef:                    payload.TaskRef,
-		ReasonCode:                 payload.ReasonCode,
-		Summary:                    payload.Summary,
-		MinimumRecommendedCapacity: payload.MinimumRecommendedCapacity,
-		EvidenceRefs:               payload.EvidenceRefs,
-	}
+	commandPayload := RequestCapacityCommandPayloadV0(payload)
 	normalized := normalizeRequestCapacityPayloadV0(commandPayload)
 	return capacityRequestedPayloadFromCommandV0(normalized)
 }

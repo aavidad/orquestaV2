@@ -93,17 +93,7 @@ func (provider DeliveryCandidateProviderV0) baseCandidatesV0(
 func agentDeliveryObservationRequestV0(
 	request SchedulerCandidateRequestV0,
 ) AgentDeliveryObservationRequestV0 {
-	return AgentDeliveryObservationRequestV0{
-		Run:              request.Run,
-		StepNumber:       request.StepNumber,
-		MaxSteps:         request.MaxSteps,
-		OccurredAt:       request.OccurredAt,
-		PreviousStep:     request.PreviousStep,
-		CorrelationID:    request.CorrelationID,
-		EvidenceRefs:     request.EvidenceRefs,
-		PreviousDecision: request.PreviousDecision,
-		WaitAgentRefs:    request.WaitAgentRefs,
-	}
+	return AgentDeliveryObservationRequestV0(request)
 }
 
 func (provider DeliveryCandidateProviderV0) deliveryCandidateV0(

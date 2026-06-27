@@ -36,16 +36,6 @@ func (v *directorAgentDecisionValidatorV0) requireEvidence(field string, values 
 	}
 }
 
-func (v *directorAgentDecisionValidatorV0) requireOptionalRefs(field string, values []string) {
-	if len(values) > maxDirectorAgentEvidenceRefsV0 {
-		v.add("director_agent_evidence_invalida", field)
-		return
-	}
-	for _, value := range values {
-		v.requireRef(field, value)
-	}
-}
-
 func (v *directorAgentDecisionValidatorV0) requireOptionalWorkRefs(field string, values []string) {
 	if len(values) > maxDirectorAgentRecursionLimitV0 {
 		v.add("director_agent_lista_invalida", field)

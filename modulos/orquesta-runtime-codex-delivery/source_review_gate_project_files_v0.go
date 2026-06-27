@@ -145,25 +145,6 @@ func codexReviewGateProjectGlobHasFileV0(ctx context.Context, root string, patte
 	return result.Found
 }
 
-func codexReviewGateDirHasFileV0(dir string) bool {
-	result := orquestaruntimeworktree.ProjectTreeScanHasFileV0(context.Background(), orquestaruntimeworktree.ProjectTreeScanRequestV0{
-		ProjectRoot:    dir,
-		Target:         ".",
-		Mode:           orquestaruntimeworktree.ProjectTreeScanModeDirV0,
-		IgnorePrefixes: orquestaruntimeworktree.DefaultWorktreeControlIgnorePrefixesV0(),
-	})
-	return result.Found
-}
-
-func codexReviewGateSkipProjectDirV0(name string) bool {
-	switch name {
-	case ".git", ".orquesta-runtime", ".orquesta-codex-runtime":
-		return true
-	default:
-		return false
-	}
-}
-
 func codexReviewGateHasGlobV0(value string) bool {
 	return strings.ContainsAny(value, "*?[")
 }

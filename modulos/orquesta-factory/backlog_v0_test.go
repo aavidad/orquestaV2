@@ -155,7 +155,7 @@ func assertCompleteMicrotaskV0(t *testing.T, task MicrotareaPropuestaV0) {
 			t.Fatalf("task %s missing %s: %+v", task.ID, field, task)
 		}
 	}
-	if task.WriteSetPrevisto == nil || len(task.WriteSetPrevisto) == 0 {
+	if len(task.WriteSetPrevisto) == 0 {
 		t.Fatalf("task %s missing write-set: %+v", task.ID, task)
 	}
 	if task.Bloqueos == nil {

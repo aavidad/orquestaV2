@@ -18,18 +18,6 @@ func operationalDirectorPlanStateHasReasonOrBlockerV0(
 		startAppDirectorStringInSetV0(step.BlockerRefs, reason)
 }
 
-func operationalDirectorPlanStateRefsWithoutV0(values []string, ignored string) []string {
-	ignored = strings.TrimSpace(ignored)
-	out := make([]string, 0, len(values))
-	for _, value := range compactServiceRefsV0(values) {
-		if strings.TrimSpace(value) == ignored {
-			continue
-		}
-		out = append(out, value)
-	}
-	return out
-}
-
 func operationalDirectorPlanStateSameRefsV0(left []string, right []string) bool {
 	left = compactServiceRefsV0(left)
 	right = compactServiceRefsV0(right)

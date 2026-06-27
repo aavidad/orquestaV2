@@ -160,7 +160,7 @@ func TestRESTArrancarDirectorAppClientV0AceptaContextNil(t *testing.T) {
 	defer server.Close()
 
 	client := NewRESTArrancarDirectorAppClientV0(server.URL, time.Second)
-	vm, err := client.ArrancarDirectorApp(nil, minimalFormForClientV0("req-director-context-nil"))
+	vm, err := client.ArrancarDirectorApp(context.TODO(), minimalFormForClientV0("req-director-context-nil"))
 	if err != nil {
 		t.Fatalf("ArrancarDirectorApp: %v", err)
 	}

@@ -291,17 +291,6 @@ func dispatchedProcessBatchResultV0(
 	return OutboxDispatchBatchRunResultV0{}
 }
 
-func failedProcessBatchResultV0(
-	results []OutboxDispatchBatchRunResultV0,
-) OutboxDispatchBatchRunResultV0 {
-	for _, result := range results {
-		if result.Status == OutboxDispatchBatchRunAckFailedV0 {
-			return result
-		}
-	}
-	return OutboxDispatchBatchRunResultV0{}
-}
-
 func requireBatchStartedAgentsV0(
 	t *testing.T,
 	started []string,

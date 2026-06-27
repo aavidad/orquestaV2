@@ -152,29 +152,6 @@ func contextBundleForExternalProcessTestV0() *orquestacontext.ContextBundleV0 {
 	return &bundle
 }
 
-func materializedContextForExternalProcessTestV0(
-	bundle orquestacontext.ContextBundleV0,
-) orquestacontext.ContextMaterializedBundleV0 {
-	entries := make([]orquestacontext.ContextMaterializedEntryV0, 0, len(bundle.Entries))
-	for _, entry := range bundle.Entries {
-		entries = append(entries, orquestacontext.ContextMaterializedEntryV0{
-			EntryRef:  entry.EntryRef,
-			Layer:     entry.Layer,
-			Kind:      entry.Kind,
-			SourceRef: entry.SourceRef,
-			Mode:      orquestacontext.ContextMaterializationModeRefOnlyV0,
-			Required:  entry.Required,
-		})
-	}
-	return orquestacontext.ContextMaterializedBundleV0{
-		SchemaVersion: orquestacontext.ContextMaterializedBundleSchemaVersionV0,
-		BundleRef:     bundle.BundleRef,
-		WorkOrderRef:  bundle.WorkOrderRef,
-		TargetModule:  bundle.TargetModule,
-		Entries:       entries,
-	}
-}
-
 func externalAgentConnectorProfileForProcessTestV0() orquestaruntime.ExternalAgentConnectorProfileV0 {
 	return orquestaruntime.BuildClosedExternalAgentConnectorProfileV0(orquestaruntime.ExternalAgentConnectorProfileRefsV0{
 		ProfileRef:    "ext-prof-process-001",

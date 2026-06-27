@@ -220,16 +220,6 @@ func codexProgressReportWithStreamFDWarningV0(
 	return report
 }
 
-func codexProgressTextHasCapacitySignalV0(text string) bool {
-	_ = text
-	return false
-}
-
-func codexProgressTextHasAuthInvalidSignalV0(text string) bool {
-	_ = text
-	return false
-}
-
 func codexProgressTextHasInterruptedNoACKSignalV0(text string) bool {
 	normalized := strings.ToLower(text)
 	return strings.Contains(normalized, "turn interrupted") ||

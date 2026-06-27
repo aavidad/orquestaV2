@@ -46,23 +46,6 @@ func processRuntimeEnvKeyAllowedV0(key string) bool {
 		strings.HasPrefix(upper, "ORQUESTA_")
 }
 
-func processRuntimeEnvKeySyntaxAllowedV0(key string) bool {
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return false
-	}
-	for _, ch := range key {
-		if ch == '_' ||
-			(ch >= '0' && ch <= '9') ||
-			(ch >= 'A' && ch <= 'Z') ||
-			(ch >= 'a' && ch <= 'z') {
-			continue
-		}
-		return false
-	}
-	return true
-}
-
 func processRuntimeEnvKeyForbiddenV0(key string) bool {
 	upper := strings.ToUpper(strings.TrimSpace(key))
 	for _, marker := range []string{

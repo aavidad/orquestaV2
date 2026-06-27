@@ -20,10 +20,6 @@ func textContainsForbiddenOperationalSensitiveDetailV0(value string) bool {
 	)
 }
 
-func detailProhibitedRailsEnabledV0() bool {
-	return orquestarails.DetailProhibitedRailsEnabledForFieldV0(coreWorkflowDetailRailBoundaryV0, "*")
-}
-
 func operationalSensitiveFragmentsForTestV0() []string {
 	return orquestarails.OperationalSensitiveFragmentsV0
 }

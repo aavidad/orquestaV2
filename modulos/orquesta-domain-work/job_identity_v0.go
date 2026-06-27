@@ -109,9 +109,6 @@ func cloneDomainWorkIdentityFieldsV0(
 		out[index].Values = append([]string(nil), field.Values...)
 		out[index].ValueJSON = append([]byte(nil), field.ValueJSON...)
 	}
-	if out == nil {
-		return []DomainWorkFieldV0{}
-	}
 	return out
 }
 
@@ -126,9 +123,6 @@ func cloneDomainWorkIdentityRequiredTestsV0(
 		out[index].InputRefs = append([]string(nil), test.InputRefs...)
 		out[index].ExternalRefs = append([]DomainWorkExternalRefV0(nil), test.ExternalRefs...)
 		out[index].EvidenceRefs = append([]string(nil), test.EvidenceRefs...)
-	}
-	if out == nil {
-		return []DomainWorkRequiredTestV0{}
 	}
 	return out
 }

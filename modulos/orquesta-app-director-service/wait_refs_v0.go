@@ -27,20 +27,6 @@ type appDirectorWaitResolutionV0 struct {
 	Snapshot     orquestacionnucleoapp.WorkflowTaskWaitSnapshotV0
 }
 
-func appDirectorResolvedWaitAgentRefsV0(
-	ctx context.Context,
-	runRef string,
-	explicitRefs []string,
-	filter appDirectorWaitFilterV0,
-	ports StartAppDirectorPortsV0,
-) ([]string, error) {
-	resolution, err := appDirectorResolvedWaitV0(ctx, runRef, explicitRefs, filter, ports, appDirectorWaitStateMetaV0{})
-	if err != nil {
-		return nil, err
-	}
-	return resolution.AgentRefs, nil
-}
-
 func appDirectorResolvedWaitV0(
 	ctx context.Context,
 	runRef string,

@@ -43,9 +43,6 @@ func cloneDomainWorkMemoryFieldsV0(
 		out[i].Values = append([]string(nil), field.Values...)
 		out[i].ValueJSON = append([]byte(nil), field.ValueJSON...)
 	}
-	if out == nil {
-		return []orquestadomainwork.DomainWorkFieldV0{}
-	}
 	return out
 }
 

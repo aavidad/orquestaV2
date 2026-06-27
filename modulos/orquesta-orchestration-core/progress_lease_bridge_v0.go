@@ -168,16 +168,7 @@ func progressLeasePolicyRequestV0(
 func progressObservationRequestFromLeaseV0(
 	request AgentLeaseAssessmentRequestV0,
 ) AgentProgressObservationRequestV0 {
-	return AgentProgressObservationRequestV0{
-		Run:              request.Run,
-		StepNumber:       request.StepNumber,
-		MaxSteps:         request.MaxSteps,
-		OccurredAt:       request.OccurredAt,
-		PreviousStep:     request.PreviousStep,
-		CorrelationID:    request.CorrelationID,
-		EvidenceRefs:     request.EvidenceRefs,
-		PreviousDecision: request.PreviousDecision,
-	}
+	return AgentProgressObservationRequestV0(request)
 }
 
 func progressLeaseSchedulerRequestV0(request AgentLeaseAssessmentRequestV0) SchedulerCandidateRequestV0 {

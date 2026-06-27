@@ -89,9 +89,7 @@ func (executor MCPAutoprogrammingValidateRequestToolExecutorV0) Execute(
 	ctx context.Context,
 	input MCPAutoprogrammingValidateRequestToolInputV0,
 ) (MCPAutoprogrammingValidateRequestToolResultV0, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	_ = ctx
 	request := autoprogrammingRequestFromMCPV0(input)
 	validation := orquestaautoprogramming.ValidateAutoprogrammingRequestV0(request)
 	work := orquestaautoprogramming.BuildAutoprogrammingProgrammableWorkV0(request)

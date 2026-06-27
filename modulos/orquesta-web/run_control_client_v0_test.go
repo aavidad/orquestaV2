@@ -1,6 +1,7 @@
 package orquestaweb
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -39,7 +40,7 @@ func TestRESTRunControlClientV0SerializaAccionesSoportadas(t *testing.T) {
 			defer server.Close()
 
 			client := NewRESTRunControlClientV0(server.URL, time.Second)
-			vm, err := client.EnviarRunControl(nil, WebRunControlCommandV0{
+			vm, err := client.EnviarRunControl(context.TODO(), WebRunControlCommandV0{
 				Action:       " " + action + " ",
 				RunRef:       " run-web-control-001 ",
 				Forced:       true,
@@ -73,7 +74,7 @@ func TestRESTRunControlClientV0ConservaErrorPublico400(t *testing.T) {
 	defer server.Close()
 
 	client := NewRESTRunControlClientV0(server.URL, time.Second)
-	vm, err := client.EnviarRunControl(nil, WebRunControlCommandV0{Action: "pause"})
+	vm, err := client.EnviarRunControl(context.TODO(), WebRunControlCommandV0{Action: "pause"})
 
 	if err != nil {
 		t.Fatalf("EnviarRunControl: %v", err)

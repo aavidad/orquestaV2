@@ -17,7 +17,7 @@ const (
 const (
 	// Tamano/lineas minimos para considerar un fichero "sustancial".
 	worktreeTruncateMinBytesV0 int64 = 64
-	worktreeTruncateMinLinesV0       = 10
+	worktreeTruncateMinLinesV0 int   = 10
 	// Un fichero se marca truncado si su tamano/lineas cae a la mitad o menos
 	// (current*Factor <= base). Untyped para servir a Size (int64) y LineCount (int).
 	worktreeTruncateShrinkFactorV0 = 2

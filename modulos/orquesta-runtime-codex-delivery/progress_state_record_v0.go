@@ -108,14 +108,6 @@ func (record codexProgressStateRecordV0) observationStateV0(
 	}
 }
 
-func (record codexProgressStateRecordV0) previousHeartbeatV0() *orquestaruntime.AgentProgressHeartbeatV0 {
-	if record.Current.HeartbeatRef == "" {
-		return nil
-	}
-	previous := record.Current
-	return &previous
-}
-
 func (record codexProgressStateRecordV0) progressBaselineHeartbeatV0() *orquestaruntime.AgentProgressHeartbeatV0 {
 	if record.Current.HeartbeatRef == "" || record.NoProgressCount <= 0 {
 		return nil

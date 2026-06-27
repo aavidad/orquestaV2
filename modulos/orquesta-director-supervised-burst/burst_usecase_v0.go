@@ -37,7 +37,7 @@ func runDirectorSupervisedBurstLoopV0(
 	var previousStep *orquestadirectorcycle.DirectorCycleStepResultV0
 	var previousDecision *orquestadirectorsupervisor.DirectorSupervisorDecisionV0
 	for stepNumber := 1; stepNumber <= input.MaxSteps; stepNumber++ {
-		stepResult, decision, stepErr, err := runDirectorSupervisedBurstStepV0(
+		stepResult, decision, err, stepErr := runDirectorSupervisedBurstStepV0(
 			ctx,
 			input,
 			stepNumber,
@@ -79,8 +79,8 @@ func runDirectorSupervisedBurstStepV0(
 ) (
 	orquestadirectorcycle.DirectorCycleStepResultV0,
 	orquestadirectorsupervisor.DirectorSupervisorDecisionV0,
-	error,
 	DirectorSupervisedBurstErrorV0,
+	error,
 ) {
 	stepInput, err := input.StepInputBuilder.BuildDirectorCycleStepInputV0(
 		ctx,
@@ -89,21 +89,21 @@ func runDirectorSupervisedBurstStepV0(
 	if err != nil {
 		return orquestadirectorcycle.DirectorCycleStepResultV0{},
 			orquestadirectorsupervisor.DirectorSupervisorDecisionV0{},
-			nil,
-			burstErrorV0(input, ErrDirectorSupervisedBurstStepInputV0, fmt.Sprintf("%T: %v", err, err), "step_input_builder", true)
+			burstErrorV0(input, ErrDirectorSupervisedBurstStepInputV0, fmt.Sprintf("%T: %v", err, err), "step_input_builder", true),
+			nil
 	}
 	if err := validateBurstStepInputForRunV0(input, stepInput); err.Code != "" {
 		return orquestadirectorcycle.DirectorCycleStepResultV0{},
 			orquestadirectorsupervisor.DirectorSupervisorDecisionV0{},
-			nil,
-			err
+			err,
+			nil
 	}
 	stepResult, stepErr := input.StepExecutor.ExecuteDirectorCycleStepV0(ctx, stepInput)
 	if err := validateBurstStepResultForRunV0(input, stepResult); err.Code != "" {
 		return stepResult,
 			orquestadirectorsupervisor.DirectorSupervisorDecisionV0{},
-			stepErr,
-			err
+			err,
+			stepErr
 	}
 	decision, decisionErr := input.Supervisor.DecideDirectorSupervisorNextActionV0(
 		burstSupervisorInputV0(input, stepNumber, stepResult, publicCycleStepErrorCodeV0(stepErr)),
@@ -111,10 +111,10 @@ func runDirectorSupervisedBurstStepV0(
 	if decisionErr != nil {
 		return stepResult,
 			decision,
-			stepErr,
-			burstErrorV0(input, ErrDirectorSupervisedBurstSupervisorV0, "supervisor fallo", "supervisor", false)
+			burstErrorV0(input, ErrDirectorSupervisedBurstSupervisorV0, "supervisor fallo", "supervisor", false),
+			stepErr
 	}
-	return stepResult, decision, stepErr, DirectorSupervisedBurstErrorV0{}
+	return stepResult, decision, DirectorSupervisedBurstErrorV0{}, stepErr
 }
 
 func validateBurstStepInputForRunV0(

@@ -62,11 +62,6 @@ func worktreeControlPathV0(value string) bool {
 	return ok
 }
 
-func worktreeControlPrefixPathV0(pathValue string) bool {
-	segment, _, _ := strings.Cut(pathValue, "/")
-	return worktreeRuntimeControlDirV0(segment) || worktreeControlPathV0(segment)
-}
-
 func splitWorktreeProductAndControlPathsV0(values []string) ([]string, []string) {
 	product := make([]string, 0, len(values))
 	control := make([]string, 0)

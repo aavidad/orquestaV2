@@ -111,7 +111,7 @@ func TestRESTConsultarDirectorStatsClientV0AceptaContextNil(t *testing.T) {
 
 	client := NewRESTConsultarDirectorStatsClientV0(webHTTPClientTestBaseURLV0, time.Second)
 	client.HTTPClient = newWebHTTPClientForHandlerV0(handler)
-	panel, err := client.ConsultarDirectorStats(nil, WebDirectorStatsQueryV0{
+	panel, err := client.ConsultarDirectorStats(context.TODO(), WebDirectorStatsQueryV0{
 		RunRef: "run-ref-web-stats-context-nil",
 	})
 	if err != nil {

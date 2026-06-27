@@ -91,14 +91,5 @@ func (l *cycleAcceptingLedgerV0) MarkDispatched(
 	ack OutboxDispatchAckV0,
 ) (OutboxDispatchSnapshotV0, []OutboxDispatchCycleIssueV0) {
 	l.pending = nil
-	return OutboxDispatchSnapshotV0{
-		MessageID:    ack.MessageID,
-		RunID:        ack.RunID,
-		TargetPort:   ack.TargetPort,
-		Status:       ack.Status,
-		DispatchRef:  ack.DispatchRef,
-		DispatchedAt: ack.DispatchedAt,
-		ErrorCode:    ack.ErrorCode,
-		EvidenceRefs: ack.EvidenceRefs,
-	}, nil
+	return OutboxDispatchSnapshotV0(ack), nil
 }

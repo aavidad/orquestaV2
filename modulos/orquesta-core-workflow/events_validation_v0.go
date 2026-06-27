@@ -229,12 +229,6 @@ func hasTokenBoundaryForFragmentV0(value string, fragment string, start int, end
 	return before && after
 }
 
-func hasTokenBoundaryV0(value string, start int, end int) bool {
-	before := start == 0 || !isAsciiLetterOrDigitV0(value[start-1])
-	after := end >= len(value) || !isAsciiLetterOrDigitV0(value[end])
-	return before && after
-}
-
 func isAsciiLetterOrDigitV0(ch byte) bool {
 	return (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')
 }

@@ -108,9 +108,7 @@ func idleSelfImprovementGoalRunRefV0(request IdleSelfImprovementRequestV0) strin
 
 func idleSelfImprovementGoalRefV0(request IdleSelfImprovementRequestV0) string {
 	base := strings.TrimSpace(request.RequestRef)
-	if strings.HasPrefix(base, "request-ref-") {
-		base = strings.TrimPrefix(base, "request-ref-")
-	}
+	base = strings.TrimPrefix(base, "request-ref-")
 	if base == "" {
 		base = idleSelfImprovementHashV0(request.FailureSummary)
 	}

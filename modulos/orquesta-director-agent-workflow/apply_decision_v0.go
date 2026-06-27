@@ -21,12 +21,7 @@ func ApplyDirectorAgentDecisionV0(
 	if issues := validateApplyDirectorAgentDecisionPortsV0(ports); len(issues) > 0 {
 		return ApplyDirectorAgentDecisionResultV0{Issues: issues}, nil
 	}
-	command, issues := BuildDirectorAgentWorkflowCommandV0(DirectorAgentWorkflowCommandRequestV0{
-		Decision:      request.Decision,
-		OccurredAt:    request.OccurredAt,
-		CorrelationID: request.CorrelationID,
-		RequestedBy:   request.RequestedBy,
-	})
+	command, issues := BuildDirectorAgentWorkflowCommandV0(DirectorAgentWorkflowCommandRequestV0(request))
 	if len(issues) > 0 {
 		return ApplyDirectorAgentDecisionResultV0{Issues: issues}, nil
 	}

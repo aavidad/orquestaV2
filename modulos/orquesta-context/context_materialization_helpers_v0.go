@@ -98,14 +98,6 @@ func contextMaterializedContentHasForbiddenDetailV0(content string) bool {
 	)
 }
 
-func contextMaterializedRefHasForbiddenDetailV0(ref string) bool {
-	return orquestarails.TextContainsOperationalRawDetailForFieldV0(
-		contextMaterializationRailBoundaryV0,
-		"ref",
-		ref,
-	)
-}
-
 func contextRefOnlyReasonForEntryV0(entry ContextBundleEntryV0) string {
 	switch entry.Kind {
 	case ContextEntryDocRefV0, ContextEntryReadRefV0:

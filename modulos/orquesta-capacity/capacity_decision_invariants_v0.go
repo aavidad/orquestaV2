@@ -7,7 +7,7 @@ func (v *capacityDecisionValidatorV0) validateCrossInvariants(req CapacityDecisi
 	if !res.Modelo.Enabled {
 		v.add(ErrModeloNoHabilitadoV0, "response.modelo.enabled")
 	}
-	if req.Restricciones.PaidAllowed == false && res.Pool.Paid {
+	if !req.Restricciones.PaidAllowed && res.Pool.Paid {
 		v.add(ErrProveedorRestringidoV0, "response.pool.paid")
 	}
 	if req.Restricciones.LocalOnly && (res.Pool.ProviderKind != "local" || res.Modelo.Locality != "local") {

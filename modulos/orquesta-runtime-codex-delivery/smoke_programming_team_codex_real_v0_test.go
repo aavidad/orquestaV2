@@ -154,71 +154,6 @@ func programmingTeamSeedProjectV0(projectDir string) error {
 	return os.WriteFile(filepath.Join(projectDir, "go.mod"), []byte("module agenda-smoke\n\ngo 1.22\n"), 0o600)
 }
 
-func programmingTeamRunLoopV0(
-	t *testing.T,
-	ctx context.Context,
-	service orquestacionnucleoapp.ServiceV0,
-	runRef string,
-	dispatchers []orquestacionnucleoapp.OutboxDispatcherBindingV0,
-	batchDispatchers []orquestacionnucleoapp.OutboxBatchDispatcherBindingV0,
-) orquestacionnucleoapp.ProgressiveLoopResultV0 {
-	t.Helper()
-	result, err := service.RunProgressiveLoopV0(ctx, orquestacionnucleoapp.ProgressiveLoopRequestV0{
-		RunRef:               runRef,
-		OccurredAt:           "2026-05-10T00:00:00Z",
-		MaxBursts:            8,
-		MaxStepsPerBurst:     6,
-		MaxDispatchesPerWait: 6,
-		CorrelationID:        "corr-programming-team-001",
-		EvidenceRefs:         []string{"evidence-ref-programming-team-loop"},
-		Dispatchers:          dispatchers,
-		BatchDispatchers:     batchDispatchers,
-	})
-	if err != nil {
-		t.Fatalf("programming team loop: %v", err)
-	}
-	return result
-}
-
-func programmingTeamRunManagedLoopV0(
-	t *testing.T,
-	ctx context.Context,
-	service orquestacionnucleoapp.ServiceV0,
-	runRef string,
-	cfg codexRealSmokeConfigV0,
-	dispatchers []orquestacionnucleoapp.OutboxDispatcherBindingV0,
-	batchDispatchers []orquestacionnucleoapp.OutboxBatchDispatcherBindingV0,
-) orquestacionnucleoapp.ManagedProgressiveLoopResultV0 {
-	t.Helper()
-	interval := 5 * time.Second
-	maxWaits := int(cfg.Timeout / interval)
-	if maxWaits < 1 {
-		maxWaits = 1
-	}
-	result, err := service.RunManagedProgressiveLoopV0(ctx, orquestacionnucleoapp.ManagedProgressiveLoopRequestV0{
-		Loop: orquestacionnucleoapp.ProgressiveLoopRequestV0{
-			RunRef:               runRef,
-			OccurredAt:           "2026-05-10T00:00:00Z",
-			MaxBursts:            8,
-			MaxStepsPerBurst:     6,
-			MaxDispatchesPerWait: 6,
-			CorrelationID:        "corr-programming-team-001",
-			EvidenceRefs:         []string{"evidence-ref-programming-team-loop"},
-			Dispatchers:          dispatchers,
-			BatchDispatchers:     batchDispatchers,
-		},
-		ExternalWaiter:   timedExternalProgressWaiterV0{Interval: interval},
-		MaxExternalWaits: maxWaits,
-	})
-	if err != nil {
-		t.Fatalf("programming team managed loop: %v", err)
-	}
-	if result.Status != orquestacionnucleoapp.ProgressiveLoopStatusQuiescentV0 {
-		t.Fatalf("managed loop status=%s result=%+v", result.Status, result)
-	}
-	return result
-}
-
 type timedExternalProgressWaiterV0 struct {
 	Interval time.Duration
 }
@@ -242,12 +177,4 @@ func (waiter timedExternalProgressWaiterV0) WaitExternalProgressV0(
 			EvidenceRefs: []string{"evidence-ref-external-wait-001"},
 		}, nil
 	}
-}
-
-func programmingTeamStartedAgentsV0(tasks []programmingTeamTaskV0) []string {
-	agents := make([]string, 0, len(tasks))
-	for _, task := range tasks {
-		agents = append(agents, task.AgentRef)
-	}
-	return agents
 }

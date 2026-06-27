@@ -119,10 +119,11 @@ func (source *serviceGatedDirectorDeliverySourceForTestV0) BuildAgentDeliveryObs
 	_ context.Context,
 	request orquestacionnucleoapp.AgentDeliveryObservationRequestV0,
 ) ([]orquestacionnucleoapp.AgentDeliveryObservationV0, error) {
+	if source == nil || !source.ready {
+		return nil, nil
+	}
 	agentRef := serviceDirectorDeliveryAgentRefForTestV0(request.Run.StartedAgents, source.AgentRef)
-	if source == nil ||
-		!source.ready ||
-		agentRef == "" ||
+	if agentRef == "" ||
 		serviceProjectionContainsV0(request.Run.PhaseArtifacts, serviceDirectorArtifactRefForTestV0) {
 		return nil, nil
 	}

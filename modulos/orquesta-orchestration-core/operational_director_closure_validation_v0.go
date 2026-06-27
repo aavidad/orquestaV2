@@ -103,19 +103,6 @@ func operationalDirectorClosureTaskLoadedV0(
 	return false
 }
 
-func operationalDirectorClosureTaskRequiresTestsV0(
-	tasks []orquestacoreworkflow.WorkflowTaskV0,
-	taskID string,
-) bool {
-	taskID = strings.TrimSpace(taskID)
-	for _, task := range tasks {
-		if strings.TrimSpace(task.TaskID) == taskID {
-			return len(compactStringsV0(task.RequiredTests)) > 0
-		}
-	}
-	return false
-}
-
 func operationalDirectorClosureOpenTasksV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 ) []string {

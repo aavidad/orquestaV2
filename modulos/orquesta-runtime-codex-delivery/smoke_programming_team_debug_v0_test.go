@@ -87,14 +87,6 @@ func programmingTeamTaskRefsV0(tasks []programmingTeamTaskV0) []string {
 	return refs
 }
 
-func programmingTeamDescriptorRefsV0(descriptors []CodexReceiptDescriptorV0) []string {
-	refs := make([]string, 0, len(descriptors))
-	for _, descriptor := range descriptors {
-		refs = append(refs, descriptor.AgentRef)
-	}
-	return refs
-}
-
 func programmingTeamDescriptorSummariesV0(descriptors []CodexReceiptDescriptorV0) []string {
 	summaries := make([]string, 0, len(descriptors))
 	for _, descriptor := range descriptors {

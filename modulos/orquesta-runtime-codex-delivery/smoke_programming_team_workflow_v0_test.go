@@ -15,55 +15,6 @@ import (
 	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
 )
 
-func programmingTeamServiceV0(
-	store orquestacionnucleoapp.RunStorePortV0,
-	sink orquestacionnucleoapp.EventSinkPortV0,
-	ledger *orquestacionnucleoapp.InMemoryOutboxLedgerV0,
-	receiptStore *InMemoryCodexReceiptDescriptorStoreV0,
-	taskStore orquestacionnucleoapp.WorkflowTaskStorePortV0,
-	processRegistry orquestacionnucleoapp.AgentProcessRegistryPortV0,
-	snapshotSource CodexProcessSnapshotSourcePortV0,
-	worktreeStore orquestaruntimeworktree.WorktreeSnapshotStorePortV0,
-) orquestacionnucleoapp.ServiceV0 {
-	worktreeIgnore := []string{".orquesta-codex-runtime"}
-	deliveryProvider := orquestacionnucleoapp.DeliveryCandidateProviderV0{
-		Base: orquestacionnucleoapp.WorkflowTaskCandidateProviderV0{
-			TaskStore:       taskStore,
-			RequestedBy:     "orquesta-programming-team-smoke",
-			DefaultCapacity: orquestacoreworkflow.OrchestrationCapacityHighV0,
-		},
-		DeliverySource: CodexDeliveryObservationSourceV0{
-			Store: receiptStore,
-			WorktreeVerifier: CodexReceiptWorktreeVerifierV0{
-				SnapshotStore:  worktreeStore,
-				IgnorePrefixes: worktreeIgnore,
-			},
-		},
-		RequestedBy: "orquesta-programming-team-smoke",
-	}
-	return orquestacionnucleoapp.ServiceV0{
-		RunStore:  store,
-		EventSink: sink,
-		CandidateProvider: orquestacionnucleoapp.ProgressSupervisionCandidateProviderV0{
-			Base: deliveryProvider,
-			ProgressSource: CodexProgressObservationSourceV0{
-				Store:           receiptStore,
-				ProcessRegistry: processRegistry,
-				SnapshotSource:  snapshotSource,
-				State:           NewInMemoryCodexProgressStateStoreV0(),
-				Policy: orquestaruntime.AgentProgressHeartbeatPolicyV0{
-					StalledAfterNoProgressTicks: 12,
-					LoopAfterRepeatedActions:    36,
-				},
-			},
-			RequestedBy: "orquesta-programming-team-smoke",
-		},
-		OutboxLedger:      ledger,
-		MaxCommands:       12,
-		MaxOutboxPerCycle: 6,
-	}
-}
-
 func programmingTeamBatchDispatchersV0(
 	store orquestacionnucleoapp.RunStorePortV0,
 	sink orquestacionnucleoapp.EventSinkPortV0,
@@ -110,49 +61,6 @@ func programmingTeamBatchDispatchersV0(
 		},
 		Acker: ledger,
 	}}
-}
-
-func programmingTeamRunForTestV0(
-	t *testing.T,
-	runRef string,
-	tasks []programmingTeamTaskV0,
-) orquestacoreworkflow.OrchestrationRunV0 {
-	t.Helper()
-	run := codexDeliveryLoopRunForTestV0(t, runRef, tasks[0].TaskRef)
-	for _, task := range tasks[1:] {
-		run.Tasks = append(run.Tasks, task.TaskRef)
-	}
-	if issues := orquestacoreworkflow.ValidateOrchestrationRunV0(run); len(issues) > 0 {
-		t.Fatalf("run programming team invalido: %+v", issues)
-	}
-	return run
-}
-
-func programmingTeamWorkflowTasksV0(
-	runRef string,
-	tasks []programmingTeamTaskV0,
-) []orquestacoreworkflow.WorkflowTaskV0 {
-	workflowTasks := make([]orquestacoreworkflow.WorkflowTaskV0, 0, len(tasks))
-	for _, task := range tasks {
-		workflowTasks = append(workflowTasks, orquestacoreworkflow.WorkflowTaskV0{
-			SchemaVersion: orquestacoreworkflow.WorkflowTaskSchemaVersionV0,
-			TaskID:        task.TaskRef,
-			RunID:         runRef,
-			PhaseID:       orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
-			Title:         task.Title,
-			Summary:       "Microtarea acotada para la app de agenda.",
-			WriteSet:      task.WriteSet,
-			AcceptanceCriteria: []string{
-				"El write-set declarado se usa como alcance primario y cualquier ampliacion queda justificada.",
-				"El resultado queda listo para revision.",
-				"Cada fichero queda por debajo de 300 lineas.",
-			},
-			FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{
-				{ContractRef: "contract:function:agenda-work:v0", FunctionName: "NewWorkflowTaskV0"},
-			},
-		})
-	}
-	return workflowTasks
 }
 
 func programmingTeamVerifyProjectV0(

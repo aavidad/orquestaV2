@@ -201,13 +201,6 @@ func isASCIIAlpha(b byte) bool {
 	return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z')
 }
 
-func containsParentTraversal(value string) bool {
-	return value == ".." ||
-		strings.HasPrefix(value, "../") ||
-		strings.HasSuffix(value, "/..") ||
-		strings.Contains(value, "/../")
-}
-
 func contextBundleMatchesContractModuleV0(bundleTarget string, contract RuntimeFunctionContractV0) bool {
 	module := moduleFromRuntimeContractPathV0(contract.ArchivoObjetivo)
 	return module == "" || module == bundleTarget

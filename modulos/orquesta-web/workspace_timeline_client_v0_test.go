@@ -43,7 +43,7 @@ func TestRESTWorkspaceTimelineClientV0AceptaContextNil(t *testing.T) {
 	defer server.Close()
 
 	client := NewRESTWorkspaceTimelineClientV0(server.URL, time.Second)
-	view, err := client.ConsultarWorkspaceTimeline(nil, validWebWorkspaceTimelineQueryForClientV0())
+	view, err := client.ConsultarWorkspaceTimeline(context.TODO(), validWebWorkspaceTimelineQueryForClientV0())
 	if err != nil {
 		t.Fatalf("client: %v", err)
 	}

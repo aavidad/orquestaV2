@@ -111,7 +111,7 @@ func TestRESTSolicitarNuevaAppClientV0AceptaContextNil(t *testing.T) {
 	defer server.Close()
 
 	client := NewRESTSolicitarNuevaAppClientV0(server.URL, time.Second)
-	vm, err := client.SolicitarNuevaApp(nil, minimalFormForClientV0("req-context-nil"))
+	vm, err := client.SolicitarNuevaApp(context.TODO(), minimalFormForClientV0("req-context-nil"))
 	if err != nil {
 		t.Fatalf("SolicitarNuevaApp: %v", err)
 	}

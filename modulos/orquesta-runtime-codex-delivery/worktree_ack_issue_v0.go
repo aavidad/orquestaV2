@@ -7,31 +7,6 @@ import (
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 )
 
-func codexReceiptAckIssuesOnlyReviewableFailedTestEvidenceV0(
-	issues []orquestaruntime.ExternalAgentConnectorErrorV0,
-) bool {
-	if len(issues) == 0 {
-		return false
-	}
-	for _, issue := range issues {
-		if issue.Code != orquestaruntime.ExternalAgentConnectorErrorCodeV0(orquestaruntimecodex.CodexConnectorAckArtifactV0) {
-			return false
-		}
-		field := strings.TrimSpace(issue.Field)
-		if field != "tests" && field != "test_receipts" {
-			return false
-		}
-		if !codexReceiptAckIssueHasEvidenceV0(issue,
-			"failed_test_evidence",
-			"required_test_receipt_not_passed",
-			"required_test_receipt_exit_code_invalid",
-		) {
-			return false
-		}
-	}
-	return true
-}
-
 // codexReceiptAckIssuesAllRecoverableV0 amplia el corte historico: conserva
 // como `gate-issue` las discrepancias recuperables de ACK (tests/receipts
 // incompletos, ruta normalizable y detalle sensible redactable) para que el
