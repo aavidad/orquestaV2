@@ -26,6 +26,57 @@ func normalizeAutoprogrammingBridgeRequestV0(
 	return request
 }
 
+func autoprogrammingBridgeRequestWithGoalFirstBackendMarkersV0(
+	request AutoprogrammingBridgeRequestV0,
+	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
+) AutoprogrammingBridgeRequestV0 {
+	if !autoprogrammingBridgeGoalFirstBackendAvailableV0(ports) ||
+		autoprogrammingBridgeRequestHasGoalMigrationMarkerV0(
+			request.Request,
+			"goal_migration:legacy-required",
+			"goal_migration:covered",
+		) {
+		return request
+	}
+	markers := []string{
+		"goal_migration:goal-first",
+		"goal_capability:starter",
+		"goal_capability:observer",
+		"goal_capability:closure-validator",
+	}
+	for i := range request.Request.Tasks {
+		request.Request.Tasks[i].ContextRefs = compactStringsV0(append(
+			request.Request.Tasks[i].ContextRefs,
+			markers...,
+		))
+	}
+	return request
+}
+
+func autoprogrammingBridgeRequestHasGoalMigrationMarkerV0(
+	request orquestaautoprogramming.AutoprogrammingRequestV0,
+	markers ...string,
+) bool {
+	wanted := map[string]struct{}{}
+	for _, marker := range markers {
+		marker = strings.TrimSpace(marker)
+		if marker != "" {
+			wanted[marker] = struct{}{}
+		}
+	}
+	if len(wanted) == 0 {
+		return false
+	}
+	for _, task := range request.Tasks {
+		for _, ref := range task.ContextRefs {
+			if _, ok := wanted[strings.TrimSpace(ref)]; ok {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func validateAutoprogrammingBridgePortsV0(
 	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
 ) error {

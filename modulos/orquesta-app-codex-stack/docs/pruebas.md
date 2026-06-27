@@ -1417,6 +1417,13 @@ go test -count=1 ./modulos/orquesta-app-codex-stack
 
 Cobertura:
 
+- `TestPrepareAutoprogrammingRunV0BackendGoalCompletoActivaGoalFirstPorComposicion`
+  fija el default nuevo: si la composicion tiene backend Goal completo, una
+  request sin marcadores explicitos se marca como `goal_ready`, lanza Goal y no
+  materializa `WorkflowTaskV0`, wait ni `continue` legacy.
+- `TestAutoprogrammingBridgeRequestWithGoalFirstBackendMarkersV0RespetaLegacyRequired`
+  fija que `goal_migration:legacy-required` conserva el loop historico aunque
+  exista backend Goal completo.
 - `TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveGoalSpecsCuandoGoalReady`
   conserva el fallback sin backend Goal: `goal_ready` devuelve `goal_specs[]`
   sin `run_ref`, sin tareas, sin wait y sin cola legacy.

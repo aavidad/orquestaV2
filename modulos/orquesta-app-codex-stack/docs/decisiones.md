@@ -1,6 +1,23 @@
 # Decisiones: orquesta-app-codex-stack
 
 ```text
+Fecha: 2026-06-27
+Decision: Con backend Goal completo, autoprogramacion del stack Codex usa
+goal-first por defecto.
+Motivo: la foto vigente dice que Codex Goal hace el loop automatico. Exigir que
+cada request traiga marcadores `goal_migration:goal-first` mantenia una friccion
+legacy en la composicion que ya sabe si tiene `GoalLauncher`, `GoalObserver`,
+`GoalClosureValidator` y `GoalStateStore`.
+Impacto: `PrepareAutoprogrammingRunV0` anade los marcadores goal-first y
+capacidades antes de compilar el trabajo cuando el backend Goal esta completo.
+Si la request declara `goal_migration:legacy-required` o
+`goal_migration:covered`, no se fuerza un nuevo goal. El modulo puro
+`orquesta-autoprogramming` conserva su contrato por refs opacas; la decision de
+default vive solo en la composicion Codex.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-06-26
 Decision: El modo residente de autoprogramacion usa capacidad operativa 70 por
 defecto para runs, ejecuciones, despachos y outbox.

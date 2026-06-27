@@ -183,6 +183,68 @@ func TestPrepareAutoprogrammingRunV0NoPersisteRequestInvalida(t *testing.T) {
 	}
 }
 
+func TestPrepareAutoprogrammingRunV0BackendGoalCompletoActivaGoalFirstPorComposicion(t *testing.T) {
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0()
+	launcher := &goalFirstQueueLauncherForTestV0{}
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.RequestRef = "run-autoprogramming-goal-default-001"
+	request.Tasks[0].TaskRef = "source-task-ref-autoprogramming-goal-default-001"
+	request.Tasks[0].ContextRefs = nil
+
+	bridged, err := PrepareAutoprogrammingRunV0(context.Background(), AutoprogrammingBridgeRequestV0{
+		Request: request,
+	}, orquestaappdirectorservice.StartAppDirectorPortsV0{
+		RunStore:             runStore,
+		DirectorTaskStore:    taskStore,
+		GoalLauncher:         launcher,
+		GoalObserver:         &goalFirstQueueObserverForTestV0{},
+		GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		GoalStateStore:       goalStates,
+	})
+	if err != nil {
+		t.Fatalf("PrepareAutoprogrammingRunV0: %v", err)
+	}
+	if !bridged.Accepted ||
+		bridged.Work.GoalMigration.Status != orquestaautoprogramming.AutoprogrammingGoalMigrationGoalReadyV0 ||
+		len(bridged.Work.GoalSpecs) != 1 ||
+		len(bridged.Tasks) != 0 ||
+		len(bridged.WaitAgentRefs) != 0 ||
+		strings.TrimSpace(bridged.Continue.RunRef) != "" ||
+		len(bridged.GoalStates) != 1 ||
+		len(bridged.GoalReceipts) != 1 ||
+		len(launcher.specs) != 1 {
+		t.Fatalf("bridged=%+v launcher=%+v", bridged, launcher.specs)
+	}
+	run, err := runStore.LoadRunV0(context.Background(), request.RequestRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if len(run.Tasks) != 0 || len(run.FunctionContracts) != 0 {
+		t.Fatalf("run goal-first contiene loop legacy: %+v", run)
+	}
+}
+
+func TestAutoprogrammingBridgeRequestWithGoalFirstBackendMarkersV0RespetaLegacyRequired(t *testing.T) {
+	request := AutoprogrammingBridgeRequestV0{Request: autoprogrammingBridgeRequestForTestV0()}
+	request.Request.Tasks[0].ContextRefs = []string{"goal_migration:legacy-required"}
+	got := autoprogrammingBridgeRequestWithGoalFirstBackendMarkersV0(
+		request,
+		orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalLauncher:         &goalFirstQueueLauncherForTestV0{},
+			GoalObserver:         &goalFirstQueueObserverForTestV0{},
+			GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+			GoalStateStore:       newGoalFirstQueueStateStoreForTestV0(),
+		},
+	)
+	refs := got.Request.Tasks[0].ContextRefs
+	if autoprogrammingBridgeStringInSetForTestV0(refs, "goal_migration:goal-first") ||
+		!autoprogrammingBridgeStringInSetForTestV0(refs, "goal_migration:legacy-required") {
+		t.Fatalf("context_refs=%v", refs)
+	}
+}
+
 func TestPrepareAutoprogrammingRunV0GoalReadyConBackendParcialNoLanzaNiCaeALegacy(t *testing.T) {
 	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0()
 	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0()

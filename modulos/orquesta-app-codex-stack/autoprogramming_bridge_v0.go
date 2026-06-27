@@ -53,6 +53,7 @@ func PrepareAutoprogrammingRunV0(
 	if err := validateAutoprogrammingBridgePortsV0(ports); err != nil {
 		return AutoprogrammingBridgeResultV0{}, err
 	}
+	request = autoprogrammingBridgeRequestWithGoalFirstBackendMarkersV0(request, ports)
 	work := orquestaautoprogramming.BuildAutoprogrammingProgrammableWorkV0(request.Request)
 	return prepareAutoprogrammingRunWithWorkV0(ctx, request, ports, work)
 }

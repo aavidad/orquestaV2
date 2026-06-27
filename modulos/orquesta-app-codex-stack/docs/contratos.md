@@ -163,11 +163,17 @@ POST /api/v0/runs/supervise
 `orquesta.autoprogramming.prepare_run.v0` a `PrepareAutoprogrammingRunV0`.
 En modo legacy guarda `WorkflowTaskV0`/run por los stores del stack y devuelve
 un `continue` acotado.
-Cuando `orquesta-autoprogramming` clasifica la request como `goal_ready`, el
-resultado depende de los puertos inyectados. Si no hay backend Goal disponible,
-incluye `goal_specs[]` normalizados sin materializar ni encolar un run legacy;
-`run_ref`, `workflow_task_refs`, `wait_agent_refs` y `continue` quedan vacios
-para que otra composicion haga handoff. Si existen `GoalLauncher` y
+Cuando el stack tiene backend Goal completo, marca la request con
+`goal_migration:goal-first` y las capacidades Goal antes de compilar el trabajo,
+salvo que la request declare `goal_migration:legacy-required` o
+`goal_migration:covered`. Si no hay backend Goal disponible, solo trata como
+goal-first las requests que ya llegan clasificadas por
+`orquesta-autoprogramming`. Cuando `orquesta-autoprogramming` clasifica la
+request como `goal_ready`, el resultado depende de los puertos inyectados. Si no
+hay backend Goal disponible, incluye `goal_specs[]` normalizados sin
+materializar ni encolar un run legacy; `run_ref`, `workflow_task_refs`,
+`wait_agent_refs` y `continue` quedan vacios para que otra composicion haga
+handoff. Si existen `GoalLauncher` y
 `GoalObserver`, `GoalClosureValidator` y `GoalStateStore`, el stack crea un run
 contenedor sin `WorkflowTaskV0` ni contratos legacy, completa
 `GoalWorkSpecV0.RunRef`, lanza el goal, persiste `GoalWorkStateV0` y devuelve
