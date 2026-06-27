@@ -20,6 +20,7 @@ const (
 	RouteRunControlV0                        = "/api/v0/runs/control"
 	RouteRuntimeModelsV0                     = "/api/v0/runtime/models"
 	RouteRunQueuePriorityV0                  = "/api/v0/runs/queue/priority"
+	RouteQueueGlobalStatusV0                 = "/api/v0/queue/global-status"
 	RouteRunSupervisorV0                     = "/api/v0/runs/supervise"
 	RouteOpsAgentRuntimeDetailV0             = "/api/v0/ops/agent-runtime-detail"
 	RouteOperationalStatusV0                 = "/api/v0/operational-status/query"
@@ -57,6 +58,7 @@ type RouteHandlersV0 struct {
 	RunControl                        http.Handler
 	RuntimeModels                     http.Handler
 	RunQueuePriority                  http.Handler
+	QueueGlobalStatus                 http.Handler
 	RunSupervisor                     http.Handler
 	OpsAgentRuntimeDetail             http.Handler
 	OperationalStatus                 http.Handler
@@ -125,6 +127,7 @@ func gatewayRouteRegistrationsV0(handlers RouteHandlersV0) []gatewayRouteRegistr
 		{ref: RouteRefRunControlV0, route: RouteRunControlV0, handler: handlers.RunControl},
 		{ref: RouteRefRuntimeModelsV0, route: RouteRuntimeModelsV0, handler: handlers.RuntimeModels},
 		{ref: RouteRefRunQueuePriorityV0, route: RouteRunQueuePriorityV0, handler: handlers.RunQueuePriority},
+		{ref: RouteRefQueueGlobalStatusV0, route: RouteQueueGlobalStatusV0, handler: handlers.QueueGlobalStatus},
 		{ref: RouteRefRunSupervisorV0, route: RouteRunSupervisorV0, handler: handlers.RunSupervisor},
 		{ref: RouteRefOpsAgentRuntimeDetailV0, route: RouteOpsAgentRuntimeDetailV0, handler: handlers.OpsAgentRuntimeDetail},
 		{ref: RouteRefOperationalStatusV0, route: RouteOperationalStatusV0, handler: handlers.OperationalStatus},

@@ -26,8 +26,13 @@ func TestPublicRouteMutabilityV0ClasificaMutacionesPublicas(t *testing.T) {
 }
 
 func TestPublicRouteMutabilityV0LecturaPorDefecto(t *testing.T) {
-	if got := PublicRouteMutabilityV0(RouteOperationalStatusV0); got != PublicRouteReadV0 {
-		t.Fatalf("mutability=%s", got)
+	for _, route := range []string{
+		RouteOperationalStatusV0,
+		RouteQueueGlobalStatusV0,
+	} {
+		if got := PublicRouteMutabilityV0(route); got != PublicRouteReadV0 {
+			t.Fatalf("route %s mutability=%s", route, got)
+		}
 	}
 }
 

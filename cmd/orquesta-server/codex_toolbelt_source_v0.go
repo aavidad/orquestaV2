@@ -46,6 +46,7 @@ func codexToolbeltHTTPEntriesV0() []codexToolbeltHTTPEntryV0 {
 		{Method: "POST", Path: orquestamcp.MCPRunSupervisorHTTPPathV0, Status: codexToolbeltStatusServerLiveV0},
 		{Method: "POST", Path: orquestamcp.MCPRunControlHTTPPathV0, Status: codexToolbeltStatusServerLiveV0},
 		{Method: "POST", Path: orquestamcp.MCPRunQueuePriorityHTTPPathV0, Status: codexToolbeltStatusServerLiveV0},
+		{Method: "GET", Path: orquestamcp.MCPQueueGlobalStatusHTTPPathV0, Status: codexToolbeltStatusServerLiveV0},
 		{Method: "POST", Path: orquestamcp.MCPDirectorStatsHTTPPathV0, Status: codexToolbeltStatusServerLiveV0},
 		{Method: "POST", Path: orquestamcp.MCPDomainWorkHTTPPathV0, Status: codexToolbeltStatusServerLiveV0},
 		{Method: "POST", Path: orquestamcp.MCPExternalWorkRunHTTPPathV0, Status: codexToolbeltStatusServerLiveV0},

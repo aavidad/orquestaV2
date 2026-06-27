@@ -71,6 +71,13 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 			},
 		},
 		{
+			name:  "queue global status",
+			route: RouteQueueGlobalStatusV0,
+			handlers: RouteHandlersV0{
+				QueueGlobalStatus: markerHandler("queue-global-status"),
+			},
+		},
+		{
 			name:  "run supervisor",
 			route: RouteRunSupervisorV0,
 			handlers: RouteHandlersV0{
