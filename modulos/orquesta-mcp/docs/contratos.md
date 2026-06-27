@@ -425,7 +425,7 @@ Nombre: mcp.tool.orquesta.apps.solicitar_nueva.v0
 Tipo: puerto_entrada
 Version: v0
 Propietario: orquesta-mcp
-Consumidores: clientes MCP con IA que quieran solicitar una app nueva sin usar CLI ni DB
+Consumidores: clientes MCP con IA que quieran validar/previsualizar una spec sin usar CLI ni DB
 Campos:
   tool_name: orquesta.apps.solicitar_nueva.v0
   input:
@@ -442,6 +442,8 @@ Campos:
     field: ruta logica del campo cuando exista
 Invariantes:
   - El tool es un adaptador inbound fino.
+  - Es compatibilidad de validacion/spec preview; la entrada operativa preferente
+    para crear o ejecutar apps nuevas es `orquesta.apps.arrancar_director.v0`.
   - Llama al puerto SolicitarNuevaApp v0 del modulo propietario orquesta-factory.
   - No valida reglas de negocio fuera del contrato publicado por orquesta-factory.
   - No persiste estado, no crea tareas en DB, no arranca runtime y no asigna agentes.

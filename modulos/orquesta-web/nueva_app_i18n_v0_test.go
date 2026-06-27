@@ -100,3 +100,17 @@ func TestNuevaAppI18nCatalogV0ClaveInexistenteDevuelveErrorPublico(t *testing.T)
 		t.Fatalf("key del error=%q", i18nErr.Key)
 	}
 }
+
+func TestNuevaAppI18nCatalogV0GoalBackendUnavailableTieneTextoDedicado(t *testing.T) {
+	catalog := NewNuevaAppI18nCatalogV0()
+
+	for _, locale := range []string{NuevaAppI18nDefaultLocaleV0, NuevaAppI18nEnglishLocaleV0} {
+		text, err := catalog.Lookup(locale, nuevaAppErrKeyGoalBackendUnavailableV0)
+		if err != nil {
+			t.Fatalf("lookup %s/%s: %v", locale, nuevaAppErrKeyGoalBackendUnavailableV0, err)
+		}
+		if text == "" || text == "Texto no disponible." || text == "Text unavailable." {
+			t.Fatalf("texto goal backend generico para %s: %q", locale, text)
+		}
+	}
+}

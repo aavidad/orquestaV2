@@ -53,8 +53,10 @@ Salud y readiness:
 
 Web vigente:
 
-- `/nueva-app`: pedir app por `SolicitarNuevaApp` o arrancar Director segun
-  wiring.
+- `/nueva-app`: pedir app por Director/Goal-first mediante
+  `POST /api/v0/apps/director` cuando el puerto esta inyectado. `SolicitarNuevaApp`
+  / `POST /api/v0/apps/spec` queda como fallback de spec/backlog preview sin
+  agentes.
 - `/director-stats`: estadisticas/progreso por `run_ref`.
 - `/run-queue`: cola multiapp y prioridad.
 - `/run-control`: pausa, reanudacion, parada o cancelacion por run.
@@ -62,7 +64,7 @@ Web vigente:
 
 API HTTP versionada:
 
-- `POST /api/v0/apps/spec`
+- `POST /api/v0/apps/spec` (validacion/spec preview; no entrada productiva)
 - `POST /api/v0/apps/director`
 - `POST /api/v0/apps/{app_ref}/changes`
 - `POST /api/v0/director/stats`

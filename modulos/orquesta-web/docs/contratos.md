@@ -2,6 +2,15 @@
 
 Registra puertos, DTOs y eventos que `orquesta-web` expone o consume.
 
+## Estado vigente Goal-first
+
+La entrada productiva de `/nueva-app` es `ArrancarDirectorAppClient` cuando esta
+inyectado: el submit viaja a `POST /api/v0/apps/director` y
+`director_execution_mode` vacio significa Goal-first. `SolicitarNuevaAppClient`
+queda como fallback de validacion/spec preview cuando la composicion web no
+tiene DirectorClient; no debe presentarse como flujo que lanza agentes ni como
+sustituto del Director Goal-first.
+
 ## Contrato de salida: `SolicitarNuevaAppClient`
 
 Tipo: puerto_salida
@@ -13,7 +22,8 @@ Transporte REST canonico: definido en `../../CONTRATOS.md` como `POST /api/v0/ap
 
 Responsabilidad:
 
-- Enviar `AppSpecRequestV0` desde la web sin que la UI conozca el transporte.
+- Enviar `AppSpecRequestV0` desde la web sin que la UI conozca el transporte,
+  solo como fallback de spec/backlog preview cuando no hay DirectorClient.
 - Recibir `AppSpecV0` y `BacklogInicialPropuestoV0`.
 - Mapear errores publicos a estado renderizable.
 
@@ -587,7 +597,7 @@ Pruebas de contrato:
 Implementacion actual:
 - `nueva_app_endpoint_v0.go` define `NuevaAppWebEndpointV0` como `net/http` handler puro.
 - `GET` devuelve JSON estructurado `NuevaAppWebPageV0` con estado inicial, textos i18n, opciones de locale y campos derivados por reflexion de `WebNuevaAppFormV0`.
-- `POST` acepta JSON `WebNuevaAppFormV0` y formulario `application/x-www-form-urlencoded`, delega en `SolicitarNuevaAppClientV0` y renderiza el `WebNuevaAppViewModelV0` devuelto.
+- `POST` acepta JSON `WebNuevaAppFormV0` y formulario `application/x-www-form-urlencoded`; si existe `DirectorClient`, delega en `ArrancarDirectorAppClientV0` y conserva `SolicitarNuevaAppClientV0` solo como fallback de preview sin Director.
 - Los errores locales de metodo, parseo, transporte y cliente no exponen cuerpos privados; se renderizan como errores publicos localizados.
 - No arranca servidor real, no usa templates, DB, runtime, filesystem productivo ni MCP.
 ```
@@ -604,7 +614,7 @@ Campos:
 - Respuesta: HTML renderizado desde `NuevaAppWebPageV0` y `WebNuevaAppViewModelV0`.
 Invariantes:
 - Es adaptador HTML fino sobre `NuevaAppWebEndpointV0`/`NuevaAppWebPageV0`.
-- Reutiliza `SolicitarNuevaAppClientV0`; no accede a DB, runtime, provider/model, HOME, OAuth ni endpoints heredados.
+- Reutiliza `NuevaAppWebEndpointV0`: prefiere `ArrancarDirectorAppClientV0` para Goal-first y conserva `SolicitarNuevaAppClientV0` solo como fallback de preview; no accede a DB, runtime, provider/model, HOME, OAuth ni endpoints heredados.
 - El formulario expone asistente guiado, request_id, locale, nombre, objetivo,
   descripcion, tipo_app, plataformas, arquitectura, i18n, datos, almacenamiento,
   deploy, calidad, agentes e integraciones multiples sin decidir negocio.
@@ -616,16 +626,16 @@ Invariantes:
   `docs/guia_nueva_app_opciones_2026-06-25.md` y distingue asistente guiado,
   modo basico y modo experto opcional para datos, almacenamiento, accesibilidad
   e integraciones multiples.
-- Renderiza estado, resumen, backlog preview y errores publicos sin materializar backlog.
+- Renderiza estado, resumen, datos Goal/Director, backlog preview y errores publicos sin materializar backlog.
 Errores:
 - metodo_no_soportado
 - form_incompleto
 - transporte_no_configurado
 - error_transporte
-- errores publicos de `SolicitarNuevaApp v0`
+- errores publicos de `ArrancarDirectorAppClientV0` o del fallback `SolicitarNuevaApp v0`
 Pruebas de contrato:
 - GET con `httptest` renderiza formulario HTML usable y no delega.
-- POST form-urlencoded valido delega en fake `SolicitarNuevaAppClientV0` y renderiza estado/resumen/backlog.
+- POST form-urlencoded valido delega en fake `ArrancarDirectorAppClientV0` cuando existe y renderiza estado/resumen/Director/Goal.
 - POST invalido renderiza error publico localizado sin ocultarlo.
 Implementacion actual:
 - `nueva_app_html_handler_v0.go` define `NuevaAppHTMLHandlerV0` como handler `net/http` puro.

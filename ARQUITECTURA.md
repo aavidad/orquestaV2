@@ -224,7 +224,7 @@ Regla práctica:
 
 ## Wizard de nueva app
 
-El wizard `/nueva-app` no es un formulario decorativo. Es una fase guiada de descubrimiento que debe traducir decisiones de producto y arquitectura a backlog base.
+El wizard `/nueva-app` no es un formulario decorativo. Es una fase guiada de descubrimiento que debe traducir decisiones de producto y arquitectura a `AppSpecRequestV0` y, en el flujo normal, a `GoalWorkSpecV0` mediante el Director Goal-first. El backlog base queda como preview/fallback cuando no hay DirectorClient.
 
 Reglas:
 

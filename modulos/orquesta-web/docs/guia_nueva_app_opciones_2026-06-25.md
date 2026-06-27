@@ -45,9 +45,10 @@ wizard `/nueva-app`. Es documentacion de uso y contrato de UI; no cambia codigo.
 
 ### Modo Basico
 
-El modo basico es el flujo actual. Pide lo minimo para que Orquesta genere una
-spec, proponga un backlog inicial o arranque el Director si el puerto esta
-inyectado.
+El modo basico es el flujo actual. Pide lo minimo para que Orquesta compile una
+solicitud de app y, con `DirectorClient` inyectado, arranque el Director
+Goal-first. La spec/backlog preview queda solo como fallback de compatibilidad
+cuando no hay DirectorClient.
 
 Usalo cuando:
 
@@ -69,7 +70,7 @@ Usalo cuando:
 - una app combina busqueda, objetos, historico, analitica o vectores;
 - hay varias integraciones externas con direcciones y criticidad distintas;
 - hay cumplimiento, retencion, auditoria, importacion/exportacion o offline;
-- el backlog inicial debe separar puertos, conectores y adaptadores desde el
+- el contrato Goal/plan debe separar puertos, conectores y adaptadores desde el
   primer corte.
 
 Regla de compatibilidad: mientras `AppSpecRequestV0` no tenga un DTO experto
@@ -228,7 +229,7 @@ Opciones soportadas por factory pero no visibles en el select actual:
 Que implica:
 
 - ayuda a inferir plataformas por defecto si el operador no marca ninguna;
-- condiciona backlog inicial, pruebas y documentacion esperada;
+- condiciona GoalWorkSpec/plan, pruebas y documentacion esperada;
 - no decide framework ni proveedor.
 
 Cuando usar cada opcion:

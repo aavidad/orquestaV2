@@ -1,6 +1,9 @@
 # orquesta-factory
 
-Responsabilidad: convertir una peticion de app en especificacion, arquitectura inicial, fases y backlog.
+Responsabilidad: convertir una peticion de app en especificacion, arquitectura
+inicial, fases y backlog preview. No es la entrada operativa para lanzar apps:
+`/nueva-app` debe preferir Director/Goal-first y usar factory como
+validacion/normalizacion o fallback sin agentes.
 
 Incluye:
 
