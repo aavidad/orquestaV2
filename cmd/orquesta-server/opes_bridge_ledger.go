@@ -47,6 +47,7 @@ func opesBridgeRecordSubmittedV0(
 	job orquestaopesconnector.ExternalJobV0,
 	runRef string,
 	changeRef string,
+	metadata ...externalBridgeInputRunMetadataV0,
 ) error {
 	return externalBridgeRecordSubmittedInputV0(
 		ctx,
@@ -55,6 +56,7 @@ func opesBridgeRecordSubmittedV0(
 		job.ID,
 		runRef,
 		changeRef,
+		metadata...,
 	)
 }
 

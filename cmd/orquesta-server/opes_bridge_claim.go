@@ -112,6 +112,7 @@ func opesBridgeRecordHitV0(
 ) bool {
 	result.RunRef = entry.RunRef
 	result.ChangeRef = entry.ChangeRef
+	opesBridgeApplyRunMetadataV0(result, externalBridgeInputRunMetadataFromEntryV0(entry))
 	switch entry.Status {
 	case externalBridgeInputStatusSubmittedV0:
 		summary.AlreadySubmitted++

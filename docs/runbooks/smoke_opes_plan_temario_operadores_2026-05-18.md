@@ -541,6 +541,14 @@ smoke real completo de derivados sigue exigiendo OPES temporal vivo,
 cuota/modelo confirmados y evidencia de que cada derivado fue aceptado por OPES
 con refs causales suficientes; no se declara cerrado desde dry-run.
 
+Nota goal-first 2026-06-27: si el submit a Orquesta devuelve
+`route_policy=goal_first`, el ledger de input externo conserva `goal_ref`,
+`external_goal_ref` y `next_actions`. En `already_submitted` el bridge no debe
+invocar `/api/v0/runs/supervise`; usa `/api/v0/apps/director/goal/observe`
+cuando `ORQUESTA_OPES_BRIDGE_SUPERVISE_SUBMITTED=1` o cuando se configure
+espera residente. Sin supervision forzada, el resultado queda como
+`goal_first_observe_pending` porque Codex Goal mantiene su propio loop.
+
 Bloqueo verificable T12 si no hay entorno temporal: ejecutar primero el smoke
 fake aislado y despues repetir el comando `run-until-finalize` anterior cuando
 existan OPES temporal, servidor Orquesta temporal y cuota/modelo confirmados.

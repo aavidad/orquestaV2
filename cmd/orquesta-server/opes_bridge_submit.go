@@ -17,13 +17,35 @@ func submitOPESExternalWorkRunV0(
 	baseURL string,
 	request any,
 ) (string, error) {
+	result, err := submitOPESExternalWorkRunResultV0(ctx, client, baseURL, request)
+	if err != nil {
+		return "", err
+	}
+	return result.RunRef, nil
+}
+
+type opesExternalWorkRunSubmitResultV0 struct {
+	RunRef                string
+	RoutePolicy           string
+	DirectorExecutionMode string
+	GoalRef               string
+	ExternalGoalRef       string
+	NextActions           []string
+}
+
+func submitOPESExternalWorkRunResultV0(
+	ctx context.Context,
+	client *http.Client,
+	baseURL string,
+	request any,
+) (opesExternalWorkRunSubmitResultV0, error) {
 	body, err := json.Marshal(map[string]any{"external_work_run_request": request})
 	if err != nil {
-		return "", fmt.Errorf("request_marshal_error")
+		return opesExternalWorkRunSubmitResultV0{}, fmt.Errorf("request_marshal_error")
 	}
 	target, err := commandRESTEndpointURLV0(baseURL, "/api/v0/external-work/run")
 	if err != nil {
-		return "", fmt.Errorf("request_build_error")
+		return opesExternalWorkRunSubmitResultV0{}, fmt.Errorf("request_build_error")
 	}
 	httpRequest, err := http.NewRequestWithContext(
 		ctx,
@@ -32,29 +54,41 @@ func submitOPESExternalWorkRunV0(
 		bytes.NewReader(body),
 	)
 	if err != nil {
-		return "", fmt.Errorf("request_build_error")
+		return opesExternalWorkRunSubmitResultV0{}, fmt.Errorf("request_build_error")
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
 	response, err := client.Do(httpRequest)
 	if err != nil {
-		return "", errors.New(commandEffectHTTPErrorCodeV0(ctx, err))
+		return opesExternalWorkRunSubmitResultV0{}, errors.New(commandEffectHTTPErrorCodeV0(ctx, err))
 	}
 	defer response.Body.Close()
 	responseBody, err := readOPESExternalWorkRunSubmitResponseBodyV0(response)
 	if err != nil {
-		return "", err
+		return opesExternalWorkRunSubmitResultV0{}, err
 	}
 	var decoded struct {
-		RunRef string `json:"run_ref"`
-		Estado string `json:"estado"`
+		RunRef                string   `json:"run_ref"`
+		Estado                string   `json:"estado"`
+		RoutePolicy           string   `json:"route_policy"`
+		DirectorExecutionMode string   `json:"director_execution_mode"`
+		GoalRef               string   `json:"goal_ref"`
+		ExternalGoalRef       string   `json:"external_goal_ref"`
+		NextActions           []string `json:"next_actions"`
 	}
 	if err := json.Unmarshal(responseBody, &decoded); err != nil {
-		return "", fmt.Errorf("response_decode_error")
+		return opesExternalWorkRunSubmitResultV0{}, fmt.Errorf("response_decode_error")
 	}
 	if strings.TrimSpace(decoded.RunRef) == "" || decoded.Estado == "error" {
-		return "", fmt.Errorf("response_invalid")
+		return opesExternalWorkRunSubmitResultV0{}, fmt.Errorf("response_invalid")
 	}
-	return decoded.RunRef, nil
+	return opesExternalWorkRunSubmitResultV0{
+		RunRef:                strings.TrimSpace(decoded.RunRef),
+		RoutePolicy:           strings.TrimSpace(decoded.RoutePolicy),
+		DirectorExecutionMode: strings.TrimSpace(decoded.DirectorExecutionMode),
+		GoalRef:               strings.TrimSpace(decoded.GoalRef),
+		ExternalGoalRef:       strings.TrimSpace(decoded.ExternalGoalRef),
+		NextActions:           compactStringsV0(decoded.NextActions),
+	}, nil
 }
 
 func readOPESExternalWorkRunSubmitResponseBodyV0(response *http.Response) ([]byte, error) {

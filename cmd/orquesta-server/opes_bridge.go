@@ -36,18 +36,23 @@ type opesDrainSummaryV0 struct {
 }
 
 type opesDrainJobResultV0 struct {
-	JobRef                 string `json:"job_ref"`
-	WorkKind               string `json:"work_kind"`
-	ContextBlocks          int    `json:"context_blocks,omitempty"`
-	RunRef                 string `json:"run_ref,omitempty"`
-	ChangeRef              string `json:"change_ref,omitempty"`
-	Status                 string `json:"status"`
-	SupervisionStatus      string `json:"supervision_status,omitempty"`
-	SupervisionStopReason  string `json:"supervision_stop_reason,omitempty"`
-	SupervisionProcessRef  string `json:"supervision_process_ref,omitempty"`
-	SupervisionEvidenceRef string `json:"supervision_evidence_ref,omitempty"`
-	RunRecoveryStatus      string `json:"run_recovery_status,omitempty"`
-	RunRecoveryEvidenceRef string `json:"run_recovery_evidence_ref,omitempty"`
+	JobRef                 string   `json:"job_ref"`
+	WorkKind               string   `json:"work_kind"`
+	ContextBlocks          int      `json:"context_blocks,omitempty"`
+	RunRef                 string   `json:"run_ref,omitempty"`
+	ChangeRef              string   `json:"change_ref,omitempty"`
+	RoutePolicy            string   `json:"route_policy,omitempty"`
+	DirectorExecutionMode  string   `json:"director_execution_mode,omitempty"`
+	GoalRef                string   `json:"goal_ref,omitempty"`
+	ExternalGoalRef        string   `json:"external_goal_ref,omitempty"`
+	NextActions            []string `json:"next_actions,omitempty"`
+	Status                 string   `json:"status"`
+	SupervisionStatus      string   `json:"supervision_status,omitempty"`
+	SupervisionStopReason  string   `json:"supervision_stop_reason,omitempty"`
+	SupervisionProcessRef  string   `json:"supervision_process_ref,omitempty"`
+	SupervisionEvidenceRef string   `json:"supervision_evidence_ref,omitempty"`
+	RunRecoveryStatus      string   `json:"run_recovery_status,omitempty"`
+	RunRecoveryEvidenceRef string   `json:"run_recovery_evidence_ref,omitempty"`
 }
 
 type opesDrainPublicErrorV0 struct {
@@ -224,7 +229,7 @@ func runOPESDrainSingleOnceV0(
 			}
 			continue
 		}
-		runRef, err := submitOPESExternalWorkRunV0(ctx, &orquestaHTTPClient, config.OrquestaBaseURL, request)
+		submitResult, err := submitOPESExternalWorkRunResultV0(ctx, &orquestaHTTPClient, config.OrquestaBaseURL, request)
 		if err != nil {
 			errorCode := err.Error()
 			if recordErr := opesBridgeRecordSubmitFailedV0(ctx, config.InputLedger, job, result, errorCode); recordErr != nil {
@@ -236,9 +241,16 @@ func runOPESDrainSingleOnceV0(
 			summary.Errors = append(summary.Errors, opesDrainPublicErrorV0{JobRef: job.ID, Code: errorCode})
 			continue
 		}
-		result.RunRef = runRef
+		opesBridgeApplySubmitResultV0(&result, submitResult)
 		result.Status = "submitted"
-		if err := opesBridgeRecordSubmittedV0(ctx, config.InputLedger, job, runRef, result.ChangeRef); err != nil {
+		if err := opesBridgeRecordSubmittedV0(
+			ctx,
+			config.InputLedger,
+			job,
+			result.RunRef,
+			result.ChangeRef,
+			opesBridgeRunMetadataFromDrainResultV0(result),
+		); err != nil {
 			result.Status = "recovery_required"
 			appendOPESDrainErrorV0(&summary, job.ID, externalBridgeRecoveryRequiredCodeV0)
 		}

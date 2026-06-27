@@ -23,6 +23,10 @@ func opesBridgeSuperviseSubmittedRunV0(
 			strings.TrimSpace(result.Status) != "recovery_required") {
 		return
 	}
+	if opesBridgeResultUsesGoalFirstV0(*result) {
+		opesBridgeObserveSubmittedGoalV0(ctx, client, config, result)
+		return
+	}
 	if !config.SuperviseSubmitted {
 		if config.ResidentDispatchWait > 0 {
 			supervision, err := observeOPESBridgeResidentDispatchUntilV0(
@@ -100,6 +104,38 @@ func opesBridgeSuperviseSubmittedRunV0(
 			result.SupervisionEvidenceRef = supervision.EvidenceRef
 			return
 		}
+	}
+	result.SupervisionStatus = supervision.Status
+	result.SupervisionStopReason = supervision.StopReason
+	result.SupervisionProcessRef = supervision.ProcessRef
+	result.SupervisionEvidenceRef = supervision.EvidenceRef
+}
+
+func opesBridgeObserveSubmittedGoalV0(
+	ctx context.Context,
+	client *http.Client,
+	config opesDrainConfigV0,
+	result *opesDrainJobResultV0,
+) {
+	if result == nil {
+		return
+	}
+	if !config.SuperviseSubmitted && config.ResidentDispatchWait <= 0 {
+		result.SupervisionStatus = "goal_first_observe_pending"
+		result.SupervisionStopReason = "observe_goal_required"
+		return
+	}
+	supervision, err := observeOPESExternalWorkGoalV0(
+		ctx,
+		client,
+		config.OrquestaBaseURL,
+		result.RunRef,
+		config.CorrelationID,
+	)
+	if err != nil {
+		result.SupervisionStatus = "retry_pending"
+		result.SupervisionStopReason = "goal_observation_unavailable"
+		return
 	}
 	result.SupervisionStatus = supervision.Status
 	result.SupervisionStopReason = supervision.StopReason

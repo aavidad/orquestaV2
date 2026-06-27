@@ -221,6 +221,13 @@ Corte anadido el 2026-05-18:
   temario queda fijado en `docs/opes_flujo_temario_operativo_2026-06-02.md`:
   investigacion externa, tests, audios por tema/apartado, tutor/bots e HTML
   local USO/TCAE son derivados obligatorios antes de produccion.
+- Corte 2026-06-27: cuando `/api/v0/external-work/run` devuelve
+  `route_policy=goal_first`, el bridge OPES conserva en su ledger `goal_ref`,
+  `external_goal_ref`, `director_execution_mode` y `next_actions`. En ticks
+  posteriores reconstruye esa metadata para `already_submitted` y, si el
+  operador fuerza supervision o espera residente, llama a
+  `/api/v0/apps/director/goal/observe` en vez de `/api/v0/runs/supervise`.
+  Los runs legacy sin metadata goal-first mantienen el comportamiento anterior.
 
 Smoke real acotado del 2026-05-18:
 

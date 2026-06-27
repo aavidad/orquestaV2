@@ -32,18 +32,31 @@ type externalBridgeInputLedgerV0 interface {
 }
 
 type externalBridgeInputLedgerEntryV0 struct {
-	Key            string    `json:"key"`
-	ExternalSystem string    `json:"external_system"`
-	ExternalJobRef string    `json:"external_job_ref"`
-	Status         string    `json:"status"`
-	ClaimRef       string    `json:"claim_ref,omitempty"`
-	CorrelationID  string    `json:"correlation_id,omitempty"`
-	IdempotencyKey string    `json:"idempotency_key,omitempty"`
-	RunRef         string    `json:"run_ref,omitempty"`
-	ChangeRef      string    `json:"change_ref,omitempty"`
-	LastError      string    `json:"last_error,omitempty"`
-	Attempts       int       `json:"attempts,omitempty"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	Key                   string    `json:"key"`
+	ExternalSystem        string    `json:"external_system"`
+	ExternalJobRef        string    `json:"external_job_ref"`
+	Status                string    `json:"status"`
+	ClaimRef              string    `json:"claim_ref,omitempty"`
+	CorrelationID         string    `json:"correlation_id,omitempty"`
+	IdempotencyKey        string    `json:"idempotency_key,omitempty"`
+	RunRef                string    `json:"run_ref,omitempty"`
+	ChangeRef             string    `json:"change_ref,omitempty"`
+	RoutePolicy           string    `json:"route_policy,omitempty"`
+	DirectorExecutionMode string    `json:"director_execution_mode,omitempty"`
+	GoalRef               string    `json:"goal_ref,omitempty"`
+	ExternalGoalRef       string    `json:"external_goal_ref,omitempty"`
+	NextActions           []string  `json:"next_actions,omitempty"`
+	LastError             string    `json:"last_error,omitempty"`
+	Attempts              int       `json:"attempts,omitempty"`
+	UpdatedAt             time.Time `json:"updated_at"`
+}
+
+type externalBridgeInputRunMetadataV0 struct {
+	RoutePolicy           string
+	DirectorExecutionMode string
+	GoalRef               string
+	ExternalGoalRef       string
+	NextActions           []string
 }
 
 const (
@@ -114,20 +127,55 @@ func externalBridgeRecordSubmittedInputV0(
 	externalJobRef string,
 	runRef string,
 	changeRef string,
+	metadata ...externalBridgeInputRunMetadataV0,
 ) error {
 	if ledger == nil {
 		return nil
 	}
 	cleanExternalSystem := strings.TrimSpace(externalSystem)
 	cleanExternalJobRef := strings.TrimSpace(externalJobRef)
+	runMetadata := externalBridgeFirstInputRunMetadataV0(metadata...)
 	return ledger.RecordExternalBridgeInputSubmittedV0(ctx, externalBridgeInputLedgerEntryV0{
-		Key:            externalBridgeInputLedgerKeyV0(cleanExternalSystem, cleanExternalJobRef),
-		ExternalSystem: cleanExternalSystem,
-		ExternalJobRef: cleanExternalJobRef,
-		Status:         externalBridgeInputStatusSubmittedV0,
-		RunRef:         strings.TrimSpace(runRef),
-		ChangeRef:      strings.TrimSpace(changeRef),
+		Key:                   externalBridgeInputLedgerKeyV0(cleanExternalSystem, cleanExternalJobRef),
+		ExternalSystem:        cleanExternalSystem,
+		ExternalJobRef:        cleanExternalJobRef,
+		Status:                externalBridgeInputStatusSubmittedV0,
+		RunRef:                strings.TrimSpace(runRef),
+		ChangeRef:             strings.TrimSpace(changeRef),
+		RoutePolicy:           runMetadata.RoutePolicy,
+		DirectorExecutionMode: runMetadata.DirectorExecutionMode,
+		GoalRef:               runMetadata.GoalRef,
+		ExternalGoalRef:       runMetadata.ExternalGoalRef,
+		NextActions:           runMetadata.NextActions,
 	})
+}
+
+func externalBridgeFirstInputRunMetadataV0(
+	values ...externalBridgeInputRunMetadataV0,
+) externalBridgeInputRunMetadataV0 {
+	if len(values) == 0 {
+		return externalBridgeInputRunMetadataV0{}
+	}
+	value := values[0]
+	return externalBridgeInputRunMetadataV0{
+		RoutePolicy:           strings.TrimSpace(value.RoutePolicy),
+		DirectorExecutionMode: strings.TrimSpace(value.DirectorExecutionMode),
+		GoalRef:               strings.TrimSpace(value.GoalRef),
+		ExternalGoalRef:       strings.TrimSpace(value.ExternalGoalRef),
+		NextActions:           compactStringsV0(value.NextActions),
+	}
+}
+
+func externalBridgeInputRunMetadataFromEntryV0(
+	entry externalBridgeInputLedgerEntryV0,
+) externalBridgeInputRunMetadataV0 {
+	return externalBridgeInputRunMetadataV0{
+		RoutePolicy:           strings.TrimSpace(entry.RoutePolicy),
+		DirectorExecutionMode: strings.TrimSpace(entry.DirectorExecutionMode),
+		GoalRef:               strings.TrimSpace(entry.GoalRef),
+		ExternalGoalRef:       strings.TrimSpace(entry.ExternalGoalRef),
+		NextActions:           compactStringsV0(entry.NextActions),
+	}
 }
 
 func (ledger *fileExternalBridgeInputLedgerV0) LookupExternalBridgeInputV0(

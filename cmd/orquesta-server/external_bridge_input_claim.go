@@ -113,6 +113,11 @@ func normalizeExternalBridgeClaimEntryV0(
 	entry.IdempotencyKey = strings.TrimSpace(entry.IdempotencyKey)
 	entry.RunRef = strings.TrimSpace(entry.RunRef)
 	entry.ChangeRef = strings.TrimSpace(entry.ChangeRef)
+	entry.RoutePolicy = strings.TrimSpace(entry.RoutePolicy)
+	entry.DirectorExecutionMode = strings.TrimSpace(entry.DirectorExecutionMode)
+	entry.GoalRef = strings.TrimSpace(entry.GoalRef)
+	entry.ExternalGoalRef = strings.TrimSpace(entry.ExternalGoalRef)
+	entry.NextActions = compactStringsV0(entry.NextActions)
 	entry.LastError = strings.TrimSpace(entry.LastError)
 	return entry
 }
@@ -148,6 +153,13 @@ func mergeExternalBridgeInputMetadataV0(
 	next.CorrelationID = firstExternalBridgeInputValueV0(next.CorrelationID, previous.CorrelationID)
 	next.IdempotencyKey = firstExternalBridgeInputValueV0(next.IdempotencyKey, previous.IdempotencyKey)
 	next.ChangeRef = firstExternalBridgeInputValueV0(next.ChangeRef, previous.ChangeRef)
+	next.RoutePolicy = firstExternalBridgeInputValueV0(next.RoutePolicy, previous.RoutePolicy)
+	next.DirectorExecutionMode = firstExternalBridgeInputValueV0(next.DirectorExecutionMode, previous.DirectorExecutionMode)
+	next.GoalRef = firstExternalBridgeInputValueV0(next.GoalRef, previous.GoalRef)
+	next.ExternalGoalRef = firstExternalBridgeInputValueV0(next.ExternalGoalRef, previous.ExternalGoalRef)
+	if len(next.NextActions) == 0 {
+		next.NextActions = compactStringsV0(previous.NextActions)
+	}
 	next.Attempts = previous.Attempts + 1
 	return next
 }
