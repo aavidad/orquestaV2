@@ -1496,6 +1496,11 @@ Cobertura:
   padre solo tenia write-set de coordinacion; el job queda como
   `integration_required` con razon
   `product_not_consolidated_due_write_set_narrowing`, no como completado.
+- `TestCodexStackExternalJobStatsSourceV0ExponeColisionAckPadreSubrol`
+  fija que una evidencia `invalid_parent_ack_subrole_collision` no queda
+  escondida como cohorte abierta generica: el job externo publica
+  `parent_running_with_child_ack_collision` hasta que exista ACK final valido
+  aceptado del padre.
 - `TestOperationalClosureSourceV0NoCierraPadreOPESSubrolesSinHijosMaterializados`
   reproduce un padre OPES `domain_work` con entrega, review y receipt aceptados,
   pero sin `child_task_refs` reales pese a declarar `subroles_required=6`; la

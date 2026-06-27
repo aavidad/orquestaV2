@@ -9,6 +9,7 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 )
 
@@ -91,6 +92,33 @@ func TestCodexStackExternalJobStatsSourceV0DistingueParentAckConCohorteAbierta(t
 		stats.Status != codexStackExternalJobStatusParentAckReceivedV0 ||
 		stats.StatusReason != codexStackExternalJobStatusReasonCohortOpenV0 ||
 		!codexStackExternalJobDiagnosticForTestV0(stats.Diagnostics, "external_job_parent_ack_received_cohort_open") {
+		t.Fatalf("stats=%+v", stats)
+	}
+}
+
+func TestCodexStackExternalJobStatsSourceV0ExponeColisionAckPadreSubrol(t *testing.T) {
+	fixture := newCodexStackExternalJobSubrolesStatsFixtureV0(false)
+	fixture.run.DeliveredTasks = []string{fixture.parent.TaskID}
+	fixture.run.ClosedTasks = []string{fixture.parent.ChildTaskRefs[0]}
+	fixture.run.ReviewResults = []string{
+		"review-result-ref-parent-subrole-collision-001#review_result:changes_requested#gate-issue:" +
+			orquestaruntimecodex.CodexAgentAckInvalidParentSubroleCollisionEvidenceV0,
+	}
+	fixture.source.RunStore = orquestacionnucleoapp.NewInMemoryRunStoreV0(fixture.run)
+
+	stats, ok, err := fixture.source.ResolveDirectorExternalJobStatsV0(
+		context.Background(),
+		fixture.request,
+	)
+
+	if err != nil {
+		t.Fatalf("ResolveDirectorExternalJobStatsV0: %v", err)
+	}
+	if !ok ||
+		stats.Status != codexStackExternalJobStatusParentRunningWithChildAckCollisionV0 ||
+		stats.StatusReason != codexStackExternalJobStatusReasonChildAckCollisionV0 ||
+		!codexStackStringInSetForTestV0(stats.IssueRefs, fixture.parent.TaskID) ||
+		!codexStackExternalJobDiagnosticForTestV0(stats.Diagnostics, codexStackExternalJobStatusParentRunningWithChildAckCollisionV0) {
 		t.Fatalf("stats=%+v", stats)
 	}
 }

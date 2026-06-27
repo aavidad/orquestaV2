@@ -10,15 +10,18 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 )
 
 const (
-	codexStackExternalJobStatusIntegrationRequiredV0 = "integration_required"
-	codexStackExternalJobStatusParentAckReceivedV0   = "parent_ack_received"
+	codexStackExternalJobStatusIntegrationRequiredV0                = "integration_required"
+	codexStackExternalJobStatusParentAckReceivedV0                  = "parent_ack_received"
+	codexStackExternalJobStatusParentRunningWithChildAckCollisionV0 = "parent_running_with_child_ack_collision"
 
 	codexStackExternalJobStatusReasonParentIntegrationPendingV0                   = "parent_integration_pending"
 	codexStackExternalJobStatusReasonCohortOpenV0                                 = "cohort_open"
+	codexStackExternalJobStatusReasonChildAckCollisionV0                          = "child_ack_collision"
 	codexStackExternalJobStatusReasonProductNotConsolidatedDueWriteSetNarrowingV0 = "product_not_consolidated_due_write_set_narrowing"
 )
 
@@ -133,6 +136,11 @@ func (source CodexStackExternalJobStatsSourceV0) enrichExternalJobTaskDiagnostic
 	}
 	parentResolved := externalJobTaskResolvedV0(run, parent.TaskID)
 	childrenResolved := externalJobAllTasksResolvedV0(run, childRefs)
+	if collisionRefs := externalJobActiveParentAckChildCollisionRefsV0(run, stats.DeliveryRefs); len(collisionRefs) > 0 &&
+		(!parentResolved || !childrenResolved) {
+		source.markExternalJobParentAckChildCollisionV0(run, stats, parent, childRefs, collisionRefs)
+		return
+	}
 	if parentResolved && !childrenResolved {
 		source.markExternalJobParentAckWithOpenCohortV0(run, stats, parent, childRefs)
 		return
@@ -216,6 +224,35 @@ func (source CodexStackExternalJobStatsSourceV0) markExternalJobParentAckWithOpe
 	})
 }
 
+func (source CodexStackExternalJobStatsSourceV0) markExternalJobParentAckChildCollisionV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	stats *orquestamcp.MCPDirectorExternalJobStatsV0,
+	parent orquestacoreworkflow.WorkflowTaskV0,
+	childRefs []string,
+	collisionRefs []string,
+) {
+	if stats == nil {
+		return
+	}
+	stats.Status = codexStackExternalJobStatusParentRunningWithChildAckCollisionV0
+	stats.StatusReason = codexStackExternalJobStatusReasonChildAckCollisionV0
+	stats.IssueRefs = compactCodexStackStringsV0(append(
+		stats.IssueRefs,
+		"issue-ref-external-job-parent-child-ack-collision-"+codexStackOperationalClosureSafeRefV0(parent.TaskID),
+		parent.TaskID,
+	))
+	stats.EvidenceRefs = compactCodexStackStringsV0(append(
+		append(stats.EvidenceRefs, parent.TaskID),
+		collisionRefs...,
+	))
+	stats.Diagnostics = append(stats.Diagnostics, orquestamcp.MCPDirectorExternalJobDiagnosticV0{
+		Code:         codexStackExternalJobStatusParentRunningWithChildAckCollisionV0,
+		Scope:        strings.TrimSpace(stats.JobRef),
+		Message:      "ack reservado al padre contiene task_ref de hijo o subrol; requiere ack final valido del padre o rework",
+		EvidenceRefs: compactCodexStackStringsV0(append(append([]string{run.RunID, parent.TaskID}, childRefs...), collisionRefs...)),
+	})
+}
+
 func externalJobAllTasksResolvedV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	taskRefs []string,
@@ -229,6 +266,68 @@ func externalJobAllTasksResolvedV0(
 		}
 	}
 	return true
+}
+
+func externalJobActiveParentAckChildCollisionRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	deliveryRefs []string,
+) []string {
+	collisionRefs := externalJobParentAckChildCollisionRefsV0(run)
+	if len(collisionRefs) == 0 ||
+		externalJobAcceptedReviewForDeliveryRefsV0(run, deliveryRefs) {
+		return []string{}
+	}
+	return collisionRefs
+}
+
+func externalJobParentAckChildCollisionRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) []string {
+	out := []string{}
+	groups := [][]string{
+		run.AgentAssessments,
+		run.QualityGates,
+		run.PhaseArtifacts,
+		run.Deliveries,
+		run.Reviews,
+		run.ReviewResults,
+		run.ReworkRequests,
+		run.ReplanDecisions,
+		run.Blockers,
+		run.CommandEffects,
+	}
+	for _, group := range groups {
+		for _, ref := range compactCodexStackStringsV0(group) {
+			if externalJobRefContainsAnyParentAckChildCollisionV0(ref) {
+				out = append(out, ref)
+			}
+		}
+	}
+	return compactCodexStackStringsV0(out)
+}
+
+func externalJobAcceptedReviewForDeliveryRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	deliveryRefs []string,
+) bool {
+	for _, deliveryRef := range compactCodexStackStringsV0(deliveryRefs) {
+		if codexStackStringInSetV0(run.AcceptedReviews, "accepted-review-ref-"+deliveryRef) {
+			return true
+		}
+		for _, resultRef := range compactCodexStackStringsV0(run.ReviewResults) {
+			if strings.Contains(resultRef, "#review_result:accepted") &&
+				strings.Contains(resultRef, "#delivery:"+deliveryRef) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func externalJobRefContainsAnyParentAckChildCollisionV0(ref string) bool {
+	ref = strings.TrimSpace(ref)
+	return strings.Contains(ref, orquestaruntimecodex.CodexAgentAckInvalidParentSubroleCollisionEvidenceV0) ||
+		strings.Contains(ref, orquestaruntimecodex.CodexAgentAckInvalidParentChildTaskCollisionEvidenceV0)
 }
 
 func externalJobTaskResolvedV0(
