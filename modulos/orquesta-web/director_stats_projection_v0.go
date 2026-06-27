@@ -1,17 +1,5 @@
 package orquestaweb
 
-func webDirectorStatsAgentsV0(
-	agents []WebDirectorAgentStatsContractV0,
-) []WebDirectorStatsAgentV0 {
-	return directorStatsAgentsV0(agents)
-}
-
-func webDirectorStatsTasksV0(
-	tasks []WebDirectorTaskProgressV0,
-) []WebDirectorStatsTaskV0 {
-	return directorStatsTasksV0(tasks)
-}
-
 func directorStatsAgentsV0(
 	agents []WebDirectorAgentStatsContractV0,
 ) []WebDirectorStatsAgentV0 {

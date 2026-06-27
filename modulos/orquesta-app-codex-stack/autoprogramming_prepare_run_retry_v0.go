@@ -72,10 +72,6 @@ func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) autoprogrammingPre
 		len(AutoprogrammingRunPendingAgentRefsV0(run)) == 0
 }
 
-func autoprogrammingPrepareRunNeedsFreshAttemptV0(run orquestacoreworkflow.OrchestrationRunV0) bool {
-	return AutoprogrammingRunNeedsFreshAttemptV0(run)
-}
-
 func autoprogrammingPrepareRunNeedsFreshAttemptWithRuntimeV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	runtimeWorkDir string,

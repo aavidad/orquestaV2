@@ -45,9 +45,6 @@ func TestCodexAgentAckPendingRailEvidenceRefsV0ConservaRailExplicitoSinCategoria
 	if len(issues) != 0 {
 		t.Fatalf("rail pendiente explicito no debe bloquear issues=%+v", issues)
 	}
-	if codexAckBytesContainForbiddenDetailV0(data) {
-		t.Fatalf("rail pendiente explicito no debe detectarse")
-	}
 
 	refs := CodexAgentAckPendingRailEvidenceRefsV0(ack)
 	if len(refs) != 0 {
@@ -70,13 +67,4 @@ func TestCodexAgentAckPendingRailEvidenceRefsV0ConservaAuthorizationYPrivateKeyR
 	if len(refs) != 0 {
 		t.Fatalf("rail redactado no debe generar refs: %v", refs)
 	}
-}
-
-func codexAckPendingRailRefsContainForTestV0(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
 }

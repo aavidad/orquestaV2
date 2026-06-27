@@ -46,13 +46,6 @@ func schedulerWaitingReasonsPlanV0(
 	}
 }
 
-func schedulerNeedsDirectorPlanV0(
-	input DirectorSchedulerTickInputV0,
-	reason SchedulerWaitingReasonV0,
-) DirectorSchedulerTickPlanV0 {
-	return schedulerNeedsDirectorReasonsPlanV0(input, []SchedulerWaitingReasonV0{reason})
-}
-
 func schedulerNeedsDirectorReasonsPlanV0(
 	input DirectorSchedulerTickInputV0,
 	reasons []SchedulerWaitingReasonV0,

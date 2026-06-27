@@ -57,12 +57,6 @@ func autoprogrammingBridgeContinueRequestWithPlanStateV0(
 	return continueRequest, nil
 }
 
-func autoprogrammingBridgeWaitAgentRefsV0(
-	tasks []orquestacoreworkflow.WorkflowTaskV0,
-) []string {
-	return autoprogrammingBridgeWaitAgentRefsForRunV0(tasks, orquestacoreworkflow.OrchestrationRunV0{})
-}
-
 func autoprogrammingBridgeWaitAgentRefsForRunV0(
 	tasks []orquestacoreworkflow.WorkflowTaskV0,
 	run orquestacoreworkflow.OrchestrationRunV0,

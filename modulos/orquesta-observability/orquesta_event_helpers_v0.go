@@ -50,15 +50,6 @@ func setV0(values ...string) map[string]bool {
 	return out
 }
 
-func containsAnyV0(value string, parts []string) bool {
-	for _, part := range parts {
-		if strings.Contains(value, part) {
-			return true
-		}
-	}
-	return false
-}
-
 func fieldV0(prefix, field string) string {
 	if prefix == "" {
 		return field

@@ -3,42 +3,7 @@ package orquestaserver
 import (
 	"context"
 	"strings"
-	"time"
 )
-
-func (runtime *RuntimeV0) idleSelfImprovementRequestFallbackV0(
-	decision idleSelfImprovementScheduleDecisionV0,
-	now time.Time,
-) IdleSelfImprovementRequestV0 {
-	idleFor := time.Duration(0)
-	if !decision.IdleSince.IsZero() {
-		idleFor = now.Sub(decision.IdleSince)
-	}
-	return IdleSelfImprovementRequestV0{
-		ProjectRef:         runtime.config.IdleSelfImprovementProjectRef,
-		WorktreeRef:        runtime.config.IdleSelfImprovementWorktreeRef,
-		BranchRef:          runtime.config.IdleSelfImprovementBranchRef,
-		RequestedBy:        "orquesta-server",
-		Source:             "idle_self_improvement",
-		FailureKind:        decision.Trigger,
-		FailureSummary:     "automejora tras " + idleFor.String() + " sin ejecuciones",
-		SuggestedArea:      runtime.config.IdleSelfImprovementSuggestedArea,
-		WriteSet:           append([]string(nil), runtime.config.IdleSelfImprovementWriteSet...),
-		RequiredTests:      append([]string(nil), runtime.config.IdleSelfImprovementRequiredTests...),
-		AcceptanceCriteria: append([]string(nil), runtime.config.IdleSelfImprovementAcceptance...),
-		CompactRules:       append([]string(nil), runtime.config.IdleSelfImprovementCompactRules...),
-		ContextRefs: compactConfigStringsV0(append(
-			append([]string(nil), runtime.config.IdleSelfImprovementContextRefs...),
-			"trigger:"+decision.Trigger,
-		)),
-		EvidenceRefs: compactConfigStringsV0(append(
-			append([]string(nil), runtime.config.IdleSelfImprovementEvidenceRefs...),
-			"evidence-ref-idle-no-execution",
-		)),
-		OccurredAt:    formatTimeV0(now),
-		PriorityScore: runtime.config.IdleSelfImprovementPriorityScore,
-	}
-}
 
 func (runtime *RuntimeV0) idleSelfImprovementRequestsV0(
 	ctx context.Context,

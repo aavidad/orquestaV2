@@ -12,14 +12,6 @@ type drainRunAttemptControlV0 struct {
 	Loop orquestacionnucleoapp.ProgressiveLoopResultV0
 }
 
-func (stack StackV0) drainRunAttemptV0(
-	ctx context.Context,
-	request DrainRunRequestV0,
-) (orquestacionnucleoapp.ProgressiveLoopResultV0, error) {
-	control, err := stack.drainRunAttemptControlV0(ctx, request)
-	return control.Loop, err
-}
-
 func (stack StackV0) drainRunAttemptControlV0(
 	ctx context.Context,
 	request DrainRunRequestV0,
@@ -293,14 +285,6 @@ func (stack StackV0) drainAvailableObservationsV0(
 		return nil, err
 	}
 	return drainObservationsForWaitAgentRefsV0(observations, request.WaitAgentRefs), nil
-}
-
-func (stack StackV0) continueDrainRunAfterExternalV0(
-	ctx context.Context,
-	request DrainRunRequestV0,
-) (orquestacionnucleoapp.ProgressiveLoopResultV0, error) {
-	control, err := stack.continueDrainRunControlAfterExternalV0(ctx, request)
-	return control.Loop, err
 }
 
 func (stack StackV0) continueDrainRunControlAfterExternalV0(

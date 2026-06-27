@@ -158,9 +158,6 @@ func TestCodexAgentAckReceiptV0AceptaMarcadoresDudososComoRailPendiente(t *testi
 		if len(issues) != 0 {
 			t.Fatalf("issues=%+v para %s", issues, fragment)
 		}
-		if codexAckBytesContainForbiddenDetailV0([]byte(data)) {
-			t.Fatalf("rail pendiente no debe detectarse %s", fragment)
-		}
 	}
 }
 

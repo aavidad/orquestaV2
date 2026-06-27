@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"strconv"
 	"strings"
 )
 
@@ -69,31 +68,11 @@ func writeGuardianRedactedLogV0(config guardianConfigV0, path string, content st
 	return writeGuardianTextFileV0(path, redactGuardianDiagnosticV0(config, content))
 }
 
-func guardianOutputMaxBytesFromEnvV0() int64 {
-	value := strings.TrimSpace(os.Getenv(envGuardianCommandOutputMaxBytesV0))
-	if value == "" {
-		return defaultGuardianCommandOutputMaxBytesV0
-	}
-	parsed, err := strconv.ParseInt(value, 10, 64)
-	if err != nil || parsed <= 0 {
-		return defaultGuardianCommandOutputMaxBytesV0
-	}
-	return parsed
-}
-
 func guardianOutputMaxBytesV0(config guardianConfigV0) int64 {
 	if config.CommandOutputMaxBytes > 0 {
 		return config.CommandOutputMaxBytes
 	}
 	return defaultGuardianCommandOutputMaxBytesV0
-}
-
-func guardianEnvAllowlistFromEnvV0() []string {
-	value := strings.TrimSpace(os.Getenv(envGuardianCommandEnvAllowlistV0))
-	if value == "" {
-		return defaultGuardianEnvAllowlistV0()
-	}
-	return compactStringsV0(strings.Split(value, ","))
 }
 
 func defaultGuardianEnvAllowlistV0() []string {

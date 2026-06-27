@@ -156,15 +156,6 @@ func (v *codexAckValidatorV0) validateStrictTests(
 	}
 }
 
-func codexAckPathAllowedByWriteSetV0(file string, writeSet []string) bool {
-	for _, entry := range writeSet {
-		if codexAckPathMatchesWriteSetEntryV0(file, entry) {
-			return true
-		}
-	}
-	return false
-}
-
 func codexAckStringInSetV0(values []string, want string) bool {
 	want = strings.TrimSpace(want)
 	for _, value := range values {

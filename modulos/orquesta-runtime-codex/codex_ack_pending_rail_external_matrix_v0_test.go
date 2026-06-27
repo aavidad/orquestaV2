@@ -25,9 +25,6 @@ func TestCodexAckPendingRailExternalMatrixV0(t *testing.T) {
 			if len(issues) != 0 {
 				t.Fatalf("rail pendiente no debe bloquear issues=%+v note=%q", issues, note)
 			}
-			if codexAckBytesContainForbiddenDetailV0(data) {
-				t.Fatalf("rail pendiente no debe detectarse con rails quitados note=%q", note)
-			}
 		})
 	}
 }
@@ -45,8 +42,7 @@ func TestCodexAckPendingRailExternalMatrixV0ConRailsDetalleOff(t *testing.T) {
 	if len(issues) != 0 {
 		t.Fatalf("rail pendiente no debe bloquear issues=%+v", issues)
 	}
-	if CodexAgentAckHasPendingRailV0(ack) ||
-		codexAckBytesContainForbiddenDetailV0(data) {
+	if CodexAgentAckHasPendingRailV0(ack) {
 		t.Fatalf("rail pendiente no debe conservarse con rails quitados ack=%+v", ack)
 	}
 }

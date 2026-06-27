@@ -1,13 +1,10 @@
 package orquestacli
 
 import (
-	"encoding/json"
-	"net/http"
 	"testing"
 	"time"
 
 	orquestacore "orquesta/modulos/orquesta-core"
-	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirector "orquesta/modulos/orquesta-director"
 	orquestafactory "orquesta/modulos/orquesta-factory"
 )
@@ -109,57 +106,4 @@ func registrarMicrotareasFromFactoryForBootstrapCliTestV0(tasks []orquestafactor
 		})
 	}
 	return result
-}
-
-func writeBootstrapAppSpecSuccessV0(t *testing.T, w http.ResponseWriter, cmd orquestadirector.BootstrapProyectoDesdeAppSpecCommandV0) {
-	t.Helper()
-	w.Header().Set("Content-Type", "application/json")
-	result := validBootstrapAppSpecResultForCliV0(cmd)
-	if err := json.NewEncoder(w).Encode(result); err != nil {
-		t.Fatalf("encode response: %v", err)
-	}
-}
-
-func validBootstrapAppSpecResultForCliV0(cmd orquestadirector.BootstrapProyectoDesdeAppSpecCommandV0) orquestadirector.BootstrapProyectoDesdeAppSpecResultV0 {
-	startRun := orquestacoreworkflow.OrchestrationCommandV0{
-		CommandID:      "cmd-start-run-001",
-		CommandType:    orquestacoreworkflow.OrchestrationCommandStartRunV0,
-		RunID:          "runref_0001",
-		IdempotencyKey: firstNonEmptyBootstrapAppSpecV0(cmd.IdempotencyKey, "idem-bootstrap-test"),
-		CorrelationID:  cmd.CorrelationID,
-		RequestedBy:    cmd.RequestedBy,
-		OccurredAt:     firstNonEmptyBootstrapAppSpecV0(cmd.OccurredAt, "2026-05-04T10:30:00Z"),
-		PayloadVersion: orquestacoreworkflow.OrchestrationCommandPayloadVersionV0,
-		Payload:        json.RawMessage(`{"project_ref":"projectref_0001","app_spec_ref":"appspecref_0001"}`),
-	}
-	event := orquestacoreworkflow.OrchestrationEventV0{
-		EventID:        "evt-run-started-001",
-		EventType:      orquestacoreworkflow.OrchestrationEventRunStartedV0,
-		RunID:          "runref_0001",
-		Sequence:       1,
-		IdempotencyKey: startRun.IdempotencyKey,
-		CorrelationID:  cmd.CorrelationID,
-		CausationID:    startRun.CommandID,
-		OccurredAt:     startRun.OccurredAt,
-		PayloadVersion: orquestacoreworkflow.OrchestrationEventPayloadVersionV0,
-		Payload:        json.RawMessage(`{"project_ref":"projectref_0001","app_spec_ref":"appspecref_0001","requested_by":"cli-test"}`),
-	}
-	return orquestadirector.BootstrapProyectoDesdeAppSpecResultV0{
-		RegistroAceptado: orquestadirector.BootstrapRegistroAceptadoV0{
-			RegistroID:       "registro_0001",
-			ProjectRef:       "projectref_0001",
-			AppSpecRef:       "appspecref_0001",
-			Estado:           "borrador",
-			BootstrapVersion: "v0",
-			RequestID:        cmd.RequestID,
-			CorrelationID:    cmd.CorrelationID,
-		},
-		ProjectRef:      "projectref_0001",
-		AppSpecRef:      "appspecref_0001",
-		StartRunCommand: startRun,
-		WorkflowResult: orquestacoreworkflow.OrchestrationCommandResultV0{
-			Events: []orquestacoreworkflow.OrchestrationEventV0{event},
-			Outbox: []orquestacoreworkflow.OutboxMessageV0{},
-		},
-	}
 }

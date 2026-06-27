@@ -34,13 +34,6 @@ func codexAckContainsNotePrefixV0(values []string, want string) bool {
 	return false
 }
 
-func codexAckBytesContainForbiddenDetailV0(data []byte) bool {
-	text := string(data)
-	return codexTextContainsOperationalDetailMarkerV0(text) ||
-		codexTextHasExplicitSoftRailMarkerV0(text) ||
-		codexTextHasPendingRailMarkerV0(text)
-}
-
 func codexTextContainsOperationalDetailMarkerV0(value string) bool {
 	if !orquestarails.RailsEnforcedV0() {
 		return false
@@ -83,32 +76,6 @@ func codexAckValuesContainSensitiveDetailV0(values []string) bool {
 }
 
 func CodexAgentAckHasPendingRailV0(ack CodexAgentAckV0) bool {
-	return false
-}
-
-func codexAckValuesHavePendingRailV0(values []string) bool {
-	for _, value := range values {
-		if codexAckValueHasPendingRailV0(value) {
-			return true
-		}
-	}
-	return false
-}
-
-func codexAckValueHasPendingRailV0(value string) bool {
-	return false
-}
-
-func codexAckValuesHaveFieldPendingRailV0(values []string) bool {
-	for _, value := range values {
-		if codexAckFieldValueHasPendingRailV0(value) {
-			return true
-		}
-	}
-	return false
-}
-
-func codexAckFieldValueHasPendingRailV0(value string) bool {
 	return false
 }
 
@@ -218,12 +185,4 @@ func codexAckSensitiveValueIsSoftRailV0(value string) bool {
 
 func isCodexAckASCIIAlnumV0(ch byte) bool {
 	return (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')
-}
-
-func codexTextHasLegacyPendingMarkerV0(value string) bool {
-	return false
-}
-
-func codexTextHasPendingRailMarkerV0(value string) bool {
-	return false
 }

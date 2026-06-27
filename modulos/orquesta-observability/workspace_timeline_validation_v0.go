@@ -84,13 +84,6 @@ func workspaceTimelineQueryLimitV0(query WorkspaceTimelineQueryV0) int {
 	return query.Limit
 }
 
-func workspaceTimelineTimeWindowPtrV0(value OperationalStatusTimeWindowV0) *OperationalStatusTimeWindowV0 {
-	if strings.TrimSpace(value.From) == "" && strings.TrimSpace(value.To) == "" && strings.TrimSpace(value.Preset) == "" {
-		return nil
-	}
-	return &value
-}
-
 func validateWorkspaceTimelineTimeWindowV0(
 	window OperationalStatusTimeWindowV0,
 	prefix string,

@@ -140,22 +140,6 @@ func (planner idleSelfImprovementBacklogPlannerV0) completedBacklogRequestRefsV0
 	return planner.completedBacklogRequestRefsFromRuntimeV0(projectDir)
 }
 
-func backlogRunRefFromRuntimeACKPathV0(runtimeDir string, ackPath string) string {
-	rel, err := filepath.Rel(runtimeDir, ackPath)
-	if err != nil {
-		return ""
-	}
-	parts := strings.Split(filepath.ToSlash(rel), "/")
-	if len(parts) < 3 {
-		return ""
-	}
-	runRef := strings.TrimSpace(parts[0])
-	if !strings.HasPrefix(runRef, "request-ref-autoprogramming-backlog-") {
-		return ""
-	}
-	return runRef
-}
-
 func idleSelfImprovementCompletedBacklogSectionsV0(
 	sections []idleSelfImprovementBacklogSectionV0,
 	completedRequestRefs map[string]bool,

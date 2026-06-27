@@ -64,14 +64,6 @@ func liveClaimRefsInConflictV0(
 	return compactSchedulerStringsV0(refs)
 }
 
-func liveAgentRefsForClaimsV0(claims []orquestacoreconcurrency.WorksetClaimV0) []string {
-	var refs []string
-	for _, claim := range claims {
-		refs = append(refs, claim.AgentRequestID)
-	}
-	return compactSchedulerStringsV0(refs)
-}
-
 func liveAgentRefsForClaimRefsV0(
 	claims []orquestacoreconcurrency.WorksetClaimV0,
 	claimRefs []string,

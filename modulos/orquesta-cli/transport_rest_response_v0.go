@@ -10,10 +10,6 @@ import (
 
 const cliRESTResponseMaxBytesV0 int64 = 1 << 20
 
-func readCLIRESTResponseBodyV0(resp *http.Response) ([]byte, string) {
-	return readCLIRESTResponseBodyForCommandV0(resp, "")
-}
-
 func readCLIRESTResponseBodyForCommandV0(resp *http.Response, command string) ([]byte, string) {
 	if resp == nil || resp.Body == nil {
 		return nil, "response_missing"

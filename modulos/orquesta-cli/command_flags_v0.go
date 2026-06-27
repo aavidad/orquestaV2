@@ -61,14 +61,6 @@ func invocationFromCLIFlagsV0(command string, common *cliCommonFlagsV0) CliInvoc
 	})
 }
 
-func readCLIJSONInputV0(runner OrquestaCLIRunnerV0, inputPath string, out any) error {
-	raw, err := readCLIInputBytesV0(runner, inputPath, CliDefaultJSONInputMaxBytesV0)
-	if err != nil {
-		return err
-	}
-	return decodeCLIJSONInputBytesV0(raw, out)
-}
-
 func readCLIJSONInputWithLimitV0(runner OrquestaCLIRunnerV0, inputPath string, maxBytes int64, out any) error {
 	raw, err := readCLIInputBytesV0(runner, inputPath, maxBytes)
 	if err != nil {

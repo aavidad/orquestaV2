@@ -68,33 +68,6 @@ func idleSelfImprovementHashV0(value string) string {
 	return hex.EncodeToString(sum[:])[:12]
 }
 
-func normalizeIdleSelfImprovementRequestsV0(
-	requests []IdleSelfImprovementRequestV0,
-	maxRequests int,
-) []IdleSelfImprovementRequestV0 {
-	if maxRequests <= 0 {
-		maxRequests = DefaultIdleSelfImprovementMaxRequestsV0
-	}
-	out := make([]IdleSelfImprovementRequestV0, 0, len(requests))
-	seen := map[string]bool{}
-	for _, request := range requests {
-		request.RequestRef = strings.TrimSpace(request.RequestRef)
-		if request.RequestRef == "" || seen[request.RequestRef] {
-			continue
-		}
-		request.CorrelationID = strings.TrimSpace(request.CorrelationID)
-		if request.CorrelationID == "" {
-			request.CorrelationID = "corr-" + request.RequestRef
-		}
-		seen[request.RequestRef] = true
-		out = append(out, request)
-		if len(out) >= maxRequests {
-			break
-		}
-	}
-	return out
-}
-
 func firstNonEmptyIdleSelfImprovementV0(values ...string) string {
 	for _, value := range values {
 		if trimmed := strings.TrimSpace(value); trimmed != "" {
@@ -102,20 +75,6 @@ func firstNonEmptyIdleSelfImprovementV0(values ...string) string {
 		}
 	}
 	return ""
-}
-
-func idleSelfImprovementCooldownBlocksV0(
-	lastAttempt time.Time,
-	now time.Time,
-	retryAfter time.Duration,
-) bool {
-	if lastAttempt.IsZero() {
-		return false
-	}
-	if retryAfter <= 0 {
-		retryAfter = DefaultIdleSelfImprovementAfterV0
-	}
-	return now.Sub(lastAttempt) < retryAfter
 }
 
 func idleSelfImprovementEvidenceRefsV0(config ConfigV0) []string {

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"strings"
 	"time"
 )
@@ -109,11 +108,4 @@ func externalBridgeLoopShutdownTimeoutV0(config externalBridgeLoopConfigV0) time
 		return config.EffectTimeout
 	}
 	return defaultExternalBridgeShutdownTimeoutV0
-}
-
-func externalBridgeLoopContextV0(ctx context.Context) context.Context {
-	if ctx == nil {
-		return context.Background()
-	}
-	return ctx
 }

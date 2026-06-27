@@ -48,13 +48,6 @@ func schedulerProgressBudgetNoActivityCanStopV0(
 		(input.Report.NoProgressTicks > 0 || input.Report.RepeatedActionCount > 0)
 }
 
-func schedulerProgressBudgetNeedsDirectorQuestionV0(
-	input orquestadirector.AgentProgressSupervisionInputV0,
-) bool {
-	return input.Report.Status == orquestaagentprogress.AgentStalledV0 ||
-		schedulerProgressBudgetForcesDirectorReviewV0(input)
-}
-
 func schedulerProgressWithStopAllowedV0(
 	input orquestadirector.AgentProgressSupervisionInputV0,
 	allowed bool,

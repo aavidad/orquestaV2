@@ -195,10 +195,6 @@ func (runtime *RuntimeV0) StateV0() StateV0 {
 	return runtime.tracker.SnapshotV0()
 }
 
-func (runtime *RuntimeV0) persistStateV0(ctx context.Context, state StateV0) {
-	runtime.persistStateTransitionV0(ctx, state, "state_update")
-}
-
 func (runtime *RuntimeV0) persistStateTransitionV0(ctx context.Context, state StateV0, transition string) {
 	if err := runtime.saveStateV0(ctx, state); err != nil && runtime.tracker != nil {
 		runtime.tracker.MarkStatePersistFailedV0(transition, runtime.clock.Now())

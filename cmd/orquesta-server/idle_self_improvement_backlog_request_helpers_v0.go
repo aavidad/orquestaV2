@@ -1,10 +1,6 @@
 package main
 
-import (
-	"strings"
-
-	orquestaserver "orquesta/modulos/orquesta-server"
-)
+import "strings"
 
 func idleSelfImprovementBacklogWriteSetEntriesV0(value string) []string {
 	value = strings.TrimSpace(value)
@@ -37,12 +33,4 @@ func idleSelfImprovementCleanWriteSetEntryV0(value string) string {
 		value = strings.TrimSpace(value[:len(value)-1])
 	}
 	return value
-}
-
-func idleSelfImprovementPlanEvidenceRefsV0(requests []orquestaserver.IdleSelfImprovementRequestV0) []string {
-	refs := []string{"evidence-ref-autoprogramming-backlog-doc"}
-	for _, request := range requests {
-		refs = append(refs, request.EvidenceRefs...)
-	}
-	return compactServerStackStringsV0(refs)
 }

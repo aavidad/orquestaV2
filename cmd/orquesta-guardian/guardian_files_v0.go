@@ -7,9 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"time"
 )
 
 func writeGuardianManifestV0(config guardianConfigV0, result guardianResultV0) guardianResultV0 {
@@ -84,16 +82,6 @@ func writeGuardianDurableFileV0(path string, data []byte, mode os.FileMode) erro
 	return nil
 }
 
-func copyFileAtomicV0(src string, dst string, mode os.FileMode) error {
-	_, err := copyGuardianArtifactAtomicV0(
-		guardianConfigV0{ProjectDir: filepath.Dir(dst), ArtifactMaxBytes: defaultGuardianArtifactMaxBytesV0},
-		src,
-		dst,
-		mode,
-	)
-	return err
-}
-
 func commandExitCodeV0(err error) int {
 	if err == nil {
 		return 0
@@ -132,57 +120,6 @@ func envOrDefaultV0(key string, fallback string) string {
 		return value
 	}
 	return fallback
-}
-
-func envBoolOrDefaultV0(key string, fallback bool) bool {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
-	}
-	switch strings.ToLower(value) {
-	case "1", "true", "yes", "on":
-		return true
-	case "0", "false", "no", "off":
-		return false
-	default:
-		return fallback
-	}
-}
-
-func envDurationOrDefaultV0(key string, fallback time.Duration) time.Duration {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
-	}
-	parsed, err := time.ParseDuration(value)
-	if err != nil {
-		return fallback
-	}
-	return parsed
-}
-
-func envIntOrDefaultV0(key string, fallback int) int {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
-	}
-	parsed, err := strconv.Atoi(value)
-	if err != nil {
-		return fallback
-	}
-	return parsed
-}
-
-func envInt64OrDefaultV0(key string, fallback int64) int64 {
-	value := strings.TrimSpace(os.Getenv(key))
-	if value == "" {
-		return fallback
-	}
-	parsed, err := strconv.ParseInt(value, 10, 64)
-	if err != nil {
-		return fallback
-	}
-	return parsed
 }
 
 func splitEnvCommandsV0(value string) []string {

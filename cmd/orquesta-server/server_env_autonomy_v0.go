@@ -31,11 +31,6 @@ func serverResidentDirectorEnabledFromEnvV0() bool {
 	return serverAutonomyEffectiveEnabledFromEnvV0()
 }
 
-func serverResidentDirectorDisabledExplicitlyFromEnvV0() bool {
-	return strings.TrimSpace(os.Getenv(envServerResidentDirectorEnabledV0)) != "" &&
-		!boolEnvOrDefaultV0(envServerResidentDirectorEnabledV0, false)
-}
-
 func serverOPESAutomationContextFromEnvV0() bool {
 	if firstNonEmptyEnvV0(envOPESBaseURLV0, envOPESBaseURLLegacyV0) != "" {
 		return true

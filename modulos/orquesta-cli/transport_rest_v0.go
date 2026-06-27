@@ -141,14 +141,6 @@ func buildCLIRESTEndpointURLV0(baseURL, endpoint string) (string, error) {
 	return parsed.String(), nil
 }
 
-func joinEndpointV0(baseURL, endpoint string) string {
-	target, err := buildCLIRESTEndpointURLV0(baseURL, endpoint)
-	if err != nil {
-		return ""
-	}
-	return target
-}
-
 func prepareCLIRESTGetRequestV0(ctx context.Context, baseURL string, endpoint string, correlationID string) (*http.Request, error) {
 	target, err := buildCLIRESTEndpointURLV0(baseURL, endpoint)
 	if err != nil {

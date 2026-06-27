@@ -11,29 +11,6 @@ import (
 
 const maxOutboxLedgerEvidenceRefsV0 = 20
 
-var forbiddenOutboxLedgerTermsV0 = []string{
-	"sqlite",
-	"postgres",
-	"mysql",
-	"mongo",
-	"database",
-	"db",
-	"dsn",
-	"sql",
-	"provider",
-	"proveedor",
-	"home",
-	"oauth",
-	"transcript",
-	"prompt",
-	"secret",
-	"secreto",
-	"token",
-	"password",
-	"credential",
-	"credencial",
-}
-
 func normalizeOutboxLedgerMessageV0(message orquestacoreworkflow.OutboxMessageV0) (orquestacoreworkflow.OutboxMessageV0, []byte, error) {
 	normalized := orquestacoreworkflow.OutboxMessageV0{
 		MessageID:        trimV0(message.MessageID),

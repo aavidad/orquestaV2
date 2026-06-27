@@ -19,16 +19,6 @@ func directorIssuesFromOutboxLedgerV0(
 	return out
 }
 
-func dispatchIssuesFromOutboxLedgerV0(
-	issues []OutboxLedgerIssueV0,
-) []orquestaoutboxdispatch.DispatchIssueV0 {
-	out := make([]orquestaoutboxdispatch.DispatchIssueV0, 0, len(issues))
-	for _, issue := range issues {
-		out = append(out, orquestaoutboxdispatch.DispatchIssueV0(issue))
-	}
-	return out
-}
-
 func normalizeFileOutboxDirectorFilterV0(
 	filter orquestadirectorcycleoutbox.DirectorCycleOutboxPendingFilterV0,
 ) (orquestadirectorcycleoutbox.DirectorCycleOutboxPendingFilterV0, []orquestadirectorcycleoutbox.DirectorCycleOutboxIssueV0) {

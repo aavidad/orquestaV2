@@ -291,39 +291,5 @@ func codexDeliveryObservationValueUnsafeForCoreV0(value string) bool {
 
 func codexDeliveryObservationValueHasPendingRailV0(value string) bool {
 	return !codexDeliveryObservationValueUnsafeForCoreV0(value) &&
-		(codexTextContainsOperationalDetailMarkerV0(value) ||
-			codexDeliveryObservationValueHasLegacyPendingMarkerV0(value))
-}
-
-func codexDeliveryObservationValueHasLegacyPendingMarkerV0(value string) bool {
-	return codexTextHasLegacyPendingMarkerV0(value)
-}
-
-func codexDeliveryObservationContainsFragmentV0(lowerValue string, fragment string) bool {
-	fragment = strings.ToLower(strings.TrimSpace(fragment))
-	if fragment == "" {
-		return false
-	}
-	start := 0
-	for {
-		index := strings.Index(lowerValue[start:], fragment)
-		if index < 0 {
-			return false
-		}
-		absolute := start + index
-		if codexDeliveryObservationHasTokenBoundaryV0(lowerValue, absolute, absolute+len(fragment)) {
-			return true
-		}
-		start = absolute + len(fragment)
-	}
-}
-
-func codexDeliveryObservationHasTokenBoundaryV0(value string, start int, end int) bool {
-	before := start == 0 || !codexDeliveryObservationIsAsciiLetterOrDigitV0(value[start-1])
-	after := end >= len(value) || !codexDeliveryObservationIsAsciiLetterOrDigitV0(value[end])
-	return before && after
-}
-
-func codexDeliveryObservationIsAsciiLetterOrDigitV0(ch byte) bool {
-	return (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')
+		codexTextContainsOperationalDetailMarkerV0(value)
 }

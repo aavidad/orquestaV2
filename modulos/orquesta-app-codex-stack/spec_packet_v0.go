@@ -38,10 +38,6 @@ func agentPacketV0(
 	}
 }
 
-func packetCapacityLevelV0(area string, task orquestaruntime.AgentStartTaskV0) string {
-	return packetCapacityPolicyV0(area, task).CapacityLevel
-}
-
 func packetCapacityPolicyV0(
 	area string,
 	task orquestaruntime.AgentStartTaskV0,

@@ -142,15 +142,3 @@ func idleSelfImprovementPacketMatchesBacklogRuntimeV0(
 		strings.Contains(packet.CorrelationID, normalizedRunRef) &&
 		(agentRef == "" || packet.RequestID == agentRef)
 }
-
-func backlogAgentRefFromRuntimeACKPathV0(runtimeDir string, ackPath string) string {
-	rel, err := filepath.Rel(runtimeDir, ackPath)
-	if err != nil {
-		return ""
-	}
-	parts := strings.Split(filepath.ToSlash(rel), "/")
-	if len(parts) < 3 {
-		return ""
-	}
-	return strings.TrimSpace(parts[1])
-}
