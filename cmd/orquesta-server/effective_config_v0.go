@@ -61,6 +61,7 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 			configuredRefValueV0(config.IdleSelfImprovementProjectWorkDir, "idle-self-improvement-project-workdir-configured"),
 		),
 		serverConfigSettingFromRegistryV0(envServerIdleSelfImprovementMaxRequestsV0, strconv.Itoa(config.IdleSelfImprovementMaxRequests)),
+		serverConfigSettingFromRegistryV0(envSelfAuditBacklogEnabledV0, strconv.FormatBool(config.SelfAuditBacklogEnabled)),
 		serverConfigSettingFromRegistryV0(envServerDaemonLogMaxBytesV0, strconv.FormatInt(config.DaemonLogPolicy.MaxBytes, 10)),
 		serverConfigSettingFromRegistryV0(envServerDaemonLogMaxRotatedV0, strconv.Itoa(config.DaemonLogPolicy.MaxRotatedFiles)),
 		serverConfigSettingFromRegistryV0(envServerDaemonLogRetentionDaysV0, strconv.Itoa(config.DaemonLogPolicy.RetentionDays)),

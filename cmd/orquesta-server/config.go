@@ -96,6 +96,7 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 		IdleSelfImprovementPriorityScore: intEnvOrDefaultV0(envServerIdleSelfImprovementPriorityScoreV0, orquestaserver.DefaultIdleSelfImprovementPriorityScoreV0),
 		IdleSelfImprovementMaxRequests:   intEnvOrDefaultV0(envServerIdleSelfImprovementMaxRequestsV0, orquestaserver.DefaultIdleSelfImprovementMaxRequestsV0),
 		IdleSelfImprovementTargetQueue:   intEnvOrDefaultV0(envServerIdleSelfImprovementTargetQueueV0, orquestaserver.DefaultIdleSelfImprovementTargetQueueV0),
+		SelfAuditBacklogEnabled:          boolEnvOrDefaultV0(envSelfAuditBacklogEnabledV0, false),
 		GoalObserverEnabled:              goalObserverEnabled,
 		GoalObserverEnabledConfigured:    goalObserverConfigured,
 		GoalObserverMaxItems:             intEnvOrDefaultV0(envServerGoalObserverMaxItemsV0, orquestaserver.DefaultGoalObserverMaxItemsV0),

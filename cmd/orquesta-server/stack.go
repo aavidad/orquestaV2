@@ -47,10 +47,11 @@ func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 		return nil, err
 	}
 	baseSupervisor := serverStackSupervisorV0{
-		stack:          &stack,
-		projectWorkDir: serverConfig.IdleSelfImprovementProjectWorkDir,
-		runtimeWorkDir: serverConfig.RuntimeWorkDir,
-		stateDir:       serverConfig.StateDir,
+		stack:                   &stack,
+		projectWorkDir:          serverConfig.IdleSelfImprovementProjectWorkDir,
+		runtimeWorkDir:          serverConfig.RuntimeWorkDir,
+		stateDir:                serverConfig.StateDir,
+		selfAuditBacklogEnabled: serverConfig.SelfAuditBacklogEnabled,
 	}
 	supervisor := serverSupervisorWithCodexGoalBackendV0(baseSupervisor, goalBackends.IdleGoal)
 	residentDirector := newServerResidentDirectorV0(&stack, serverConfig)

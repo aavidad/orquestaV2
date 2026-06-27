@@ -17,10 +17,11 @@ import (
 )
 
 type serverStackSupervisorV0 struct {
-	stack          *orquestaappcodexstack.StackV0
-	projectWorkDir string
-	runtimeWorkDir string
-	stateDir       string
+	stack                   *orquestaappcodexstack.StackV0
+	projectWorkDir          string
+	runtimeWorkDir          string
+	stateDir                string
+	selfAuditBacklogEnabled bool
 }
 
 func (supervisor serverStackSupervisorV0) RunGlobalSupervisorV0(

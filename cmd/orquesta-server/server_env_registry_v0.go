@@ -52,6 +52,7 @@ const (
 	envServerIdleSelfImprovementPriorityScoreV0      = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PRIORITY_SCORE"
 	envServerIdleSelfImprovementMaxRequestsV0        = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_MAX_REQUESTS"
 	envServerIdleSelfImprovementTargetQueueV0        = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_TARGET_QUEUE"
+	envSelfAuditBacklogEnabledV0                     = "ORQUESTA_SELF_AUDIT_BACKLOG_ENABLED"
 	envServerAutoprogrammingPromotionEnabledV0       = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_ENABLED"
 	envServerAutoprogrammingPromotionArchiveDirV0    = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_ARCHIVE_DIR"
 	envServerAutoprogrammingPromotionRepoRefV0       = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_REPO_REF"
@@ -380,6 +381,11 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "codex_goal",
 		Label:       "Preflight Codex Goal",
 		Description: "Timeout de comprobacion rapida del backend Codex Goal app-server al montar la composicion.",
+	},
+	envSelfAuditBacklogEnabledV0: {
+		Scope:       "autoprogramming",
+		Label:       "Backlog autoauditoria",
+		Description: "Activa una fuente opt-in que convierte hallazgos de auditoria local en backlog goal-first de automejora.",
 	},
 	envOPESBridgeWaitResidentSecondsV0: {
 		Scope:       "opes_bridge",

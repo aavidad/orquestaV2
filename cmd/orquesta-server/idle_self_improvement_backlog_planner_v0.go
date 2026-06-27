@@ -18,10 +18,16 @@ func (supervisor serverStackSupervisorV0) PlanIdleSelfImprovementV0(
 	}
 	request = supervisor.withClosedKnownIdleSelfImprovementRefsV0(ctx, request)
 	request = supervisor.withoutRetryableKnownIdleSelfImprovementRefsV0(ctx, request)
-	return (idleSelfImprovementBacklogPlannerV0{ProjectWorkDir: supervisor.projectWorkDir}).PlanV0(request)
+	return (idleSelfImprovementBacklogPlannerV0{
+		ProjectWorkDir:          supervisor.projectWorkDir,
+		SelfAuditBacklogEnabled: supervisor.selfAuditBacklogEnabled,
+	}).PlanV0(request)
 }
 
-type idleSelfImprovementBacklogPlannerV0 struct{ ProjectWorkDir string }
+type idleSelfImprovementBacklogPlannerV0 struct {
+	ProjectWorkDir          string
+	SelfAuditBacklogEnabled bool
+}
 
 func (planner idleSelfImprovementBacklogPlannerV0) PlanV0(
 	request orquestaserver.IdleSelfImprovementPlanRequestV0,

@@ -209,6 +209,35 @@ func TestServerConfigFromEnvV0PermiteApagarObservadorGoalFirstV0(t *testing.T) {
 	}
 }
 
+func TestServerConfigFromEnvV0SelfAuditBacklogOptInVisibleV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+
+	defaultConfig, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0 default: %v", err)
+	}
+	if defaultConfig.SelfAuditBacklogEnabled {
+		t.Fatalf("self audit backlog activo por defecto: %+v", defaultConfig)
+	}
+	defaultSetting := effectiveSettingForTestV0(defaultConfig.EffectiveConfig.Settings, envSelfAuditBacklogEnabledV0)
+	if defaultSetting.Value != "false" || defaultSetting.Source != "defaulted" {
+		t.Fatalf("default setting self audit=%+v", defaultSetting)
+	}
+
+	t.Setenv(envSelfAuditBacklogEnabledV0, "true")
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0 opt-in: %v", err)
+	}
+	if !config.SelfAuditBacklogEnabled {
+		t.Fatalf("self audit backlog no activo con opt-in: %+v", config)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envSelfAuditBacklogEnabledV0)
+	if setting.Value != "true" || setting.Source != "explicit" {
+		t.Fatalf("setting self audit=%+v", setting)
+	}
+}
+
 func TestServerConfigFromEnvV0AutoprogrammingLegacyDirectorLoopPorDefectoFalseV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -26,6 +27,9 @@ func (planner idleSelfImprovementBacklogPlannerV0) loadBacklogSectionsV0() (
 		sections = append(sections, parseIdleSelfImprovementBacklogSectionsFromDocumentV0(body, rel)...)
 	}
 	sections = append(sections, planner.loadFederatedBacklogSectionsV0()...)
+	if planner.SelfAuditBacklogEnabled {
+		sections = append(sections, selfAuditBacklogSectionsV0(context.Background(), planner.ProjectWorkDir)...)
+	}
 	idleSelfImprovementAnnotateBacklogTaskIDAliasIndexV0(sections)
 	return sections, nil
 }

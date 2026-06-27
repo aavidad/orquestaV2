@@ -85,6 +85,7 @@ type ConfigV0 struct {
 	IdleSelfImprovementPriorityScore  int
 	IdleSelfImprovementMaxRequests    int
 	IdleSelfImprovementTargetQueue    int
+	SelfAuditBacklogEnabled           bool
 	GoalObserverEnabled               bool
 	GoalObserverEnabledConfigured     bool
 	GoalObserverMaxItems              int
