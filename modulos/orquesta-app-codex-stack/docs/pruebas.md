@@ -62,6 +62,10 @@ Cobertura Go actual:
   pero mantiene candidatos ejecutables en cola expone el diagnostico
   `run_supervisor_queue_no_execution_with_ready_candidates` y la accion
   operativa `supervise_with_resident_mode_or_run_ref`.
+- `TestNormalizeAutoprogrammingResidentInputV0DespachaLoteAmplioSinEsperarAgentesLargos`
+  valida que `resident_mode` normaliza a capacidad operativa 70 para
+  `MaxRunsPerTick`, `MaxExecutions`, `MaxDispatchesPerWait` y
+  `MaxOutboxPerCycle` sin ampliar `MaxExternalWaits` ni `MaxCommands`.
 - `DrainRunV0` ejecuta `submitPendingDomainWorkArtifactsV0` tambien despues de
   `ContinueAppDirectorV0`; asi una entrega registrada dentro del mismo ciclo no
   queda como run `quiescent` antes de enviar el artefacto al conector de dominio.

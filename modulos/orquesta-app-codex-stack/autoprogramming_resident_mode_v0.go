@@ -9,12 +9,13 @@ import (
 
 const (
 	AutoprogrammingResidentDefaultMaxTicksV0          = 24
-	AutoprogrammingResidentDefaultMaxRunsPerTickV0    = 10
+	AutoprogrammingResidentDefaultMaxRunsPerTickV0    = 70
+	AutoprogrammingResidentDefaultMaxExecutionsV0     = 70
 	AutoprogrammingResidentDefaultMaxBurstsV0         = 4
 	AutoprogrammingResidentDefaultMaxStepsPerBurstV0  = 6
-	AutoprogrammingResidentDefaultMaxDispatchesV0     = 10
+	AutoprogrammingResidentDefaultMaxDispatchesV0     = 70
 	AutoprogrammingResidentDefaultMaxCommandsV0       = 20
-	AutoprogrammingResidentDefaultMaxOutboxV0         = 10
+	AutoprogrammingResidentDefaultMaxOutboxV0         = 70
 	AutoprogrammingResidentDefaultMaxDecisionCyclesV0 = 1
 	AutoprogrammingResidentDefaultMaxExternalWaitsV0  = 1
 	AutoprogrammingResidentMaxExternalWaitsV0         = 70
@@ -36,6 +37,9 @@ func normalizeAutoprogrammingResidentInputV0(
 	}
 	if input.MaxRunsPerTick <= 0 {
 		input.MaxRunsPerTick = AutoprogrammingResidentDefaultMaxRunsPerTickV0
+	}
+	if input.MaxExecutions <= 0 {
+		input.MaxExecutions = AutoprogrammingResidentDefaultMaxExecutionsV0
 	}
 	if input.MaxBursts <= 0 {
 		input.MaxBursts = AutoprogrammingResidentDefaultMaxBurstsV0

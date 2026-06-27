@@ -331,7 +331,7 @@ func TestAutoprogrammingResidentModeV0SinBloqueoNoCreaReparacionV0(t *testing.T)
 	}
 }
 
-func TestNormalizeAutoprogrammingResidentInputV0DespachaLoteSinEsperarAgentesLargos(t *testing.T) {
+func TestNormalizeAutoprogrammingResidentInputV0DespachaLoteAmplioSinEsperarAgentesLargos(t *testing.T) {
 	input := normalizeAutoprogrammingResidentInputV0(
 		orquestamcp.MCPRunSupervisorToolInputV0{
 			ResidentMode: true,
@@ -339,17 +339,23 @@ func TestNormalizeAutoprogrammingResidentInputV0DespachaLoteSinEsperarAgentesLar
 		StackV0{},
 	)
 
-	if input.MaxRunsPerTick != 10 {
-		t.Fatalf("max_runs_per_tick=%d want 10", input.MaxRunsPerTick)
+	if input.MaxRunsPerTick != 70 {
+		t.Fatalf("max_runs_per_tick=%d want 70", input.MaxRunsPerTick)
+	}
+	if input.MaxExecutions != 70 {
+		t.Fatalf("max_executions=%d want 70", input.MaxExecutions)
 	}
 	if input.MaxExternalWaits != 1 {
 		t.Fatalf("max_external_waits=%d want 1", input.MaxExternalWaits)
 	}
-	if input.MaxDispatchesPerWait != 10 {
-		t.Fatalf("max_dispatches_per_wait=%d want 10", input.MaxDispatchesPerWait)
+	if input.MaxDispatchesPerWait != 70 {
+		t.Fatalf("max_dispatches_per_wait=%d want 70", input.MaxDispatchesPerWait)
 	}
-	if input.MaxOutboxPerCycle != 10 {
-		t.Fatalf("max_outbox_per_cycle=%d want 10", input.MaxOutboxPerCycle)
+	if input.MaxCommands != 20 {
+		t.Fatalf("max_commands=%d want 20", input.MaxCommands)
+	}
+	if input.MaxOutboxPerCycle != 70 {
+		t.Fatalf("max_outbox_per_cycle=%d want 70", input.MaxOutboxPerCycle)
 	}
 	if !input.AllowRepeatedRuns {
 		t.Fatalf("allow_repeated_runs=false want true")
@@ -361,6 +367,7 @@ func TestNormalizeAutoprogrammingResidentInputV0RespetaCapacidadExplicita(t *tes
 		orquestamcp.MCPRunSupervisorToolInputV0{
 			ResidentMode:     true,
 			MaxRunsPerTick:   6,
+			MaxExecutions:    5,
 			MaxExternalWaits: 3,
 		},
 		StackV0{},
@@ -368,6 +375,9 @@ func TestNormalizeAutoprogrammingResidentInputV0RespetaCapacidadExplicita(t *tes
 
 	if input.MaxRunsPerTick != 6 {
 		t.Fatalf("max_runs_per_tick=%d want 6", input.MaxRunsPerTick)
+	}
+	if input.MaxExecutions != 5 {
+		t.Fatalf("max_executions=%d want 5", input.MaxExecutions)
 	}
 	if input.MaxExternalWaits != 3 {
 		t.Fatalf("max_external_waits=%d want 3", input.MaxExternalWaits)

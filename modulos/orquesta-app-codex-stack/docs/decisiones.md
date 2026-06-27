@@ -2,6 +2,23 @@
 
 ```text
 Fecha: 2026-06-26
+Decision: El modo residente de autoprogramacion usa capacidad operativa 70 por
+defecto para runs, ejecuciones, despachos y outbox.
+Motivo: El canon vigente exige que la composicion Codex no arranque con 10 como
+cuello de botella silencioso. Aunque el servidor ya publicaba defaults amplios,
+el normalizador MCP del modo residente seguia bajando runs, dispatch y outbox a
+10, y dejaba `MaxExecutions` caer al default bajo del supervisor si el operador
+no lo pasaba explicitamente.
+Impacto: `normalizeAutoprogrammingResidentInputV0` fija 70 para
+`MaxRunsPerTick`, `MaxExecutions`, `MaxDispatchesPerWait` y
+`MaxOutboxPerCycle`; conserva `MaxCommands=20` porque es presupuesto interno de
+ciclo y no limite de padres/agentes. Los overrides explicitos siguen mandando.
+Contratos afectados: `MCPRunSupervisorToolInputV0` en `resident_mode`.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-06-26
 Decision: El paquete OPES external-work incluye pauta de busqueda acotada.
 Motivo: OPES documento agentes que empezaban con busquedas demasiado amplias y
 alcanzaban backups, paquetes historicos o runtime antes de enfocar curso/tema.
