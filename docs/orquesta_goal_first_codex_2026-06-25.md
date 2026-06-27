@@ -164,6 +164,15 @@ compatibilidad para:
 Para trabajo nuevo con Codex Goal, el "Director Operativo" efectivo vive dentro
 del goal. Orquesta solo prepara y valida el contrato.
 
+Actualizacion 2026-06-27: en autoprogramacion, las acciones operativas tambien
+siguen esa frontera. `/api/v0/autoprogramming/status` publica `observe_goal`
+para runs con `GoalWorkStateV0` y no publica `supervise`/`retry`/`review`
+legacy salvo que la composicion habilite explicitamente compatibilidad legacy
+(`AllowLegacyAutoprogrammingRun` / `ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP`).
+El supervisor Codex bloquea ademas la supervision global sin `run_ref` cuando
+ese opt-in no esta activo, devolviendo `legacy_supervise_requires_explicit_opt_in`
+en vez de entrar al loop historico.
+
 ## Migracion propuesta
 
 1. Mantener el loop historico intacto.

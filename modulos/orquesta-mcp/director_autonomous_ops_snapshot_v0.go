@@ -159,7 +159,8 @@ func directorOpsDecisionFromAutoprogrammingSafeActionsMCPV0(
 	operator *MCPAutoprogrammingOperatorV0,
 	snapshot orquestaobservability.DirectorAutonomousOpsSnapshotV0,
 ) orquestaobservability.DirectorAutonomousOpsDecisionV0 {
-	for _, action := range directorOpsAutoprogrammingSafeActionsMCPV0(operator) {
+	safeActions := directorOpsAutoprogrammingSafeActionsMCPV0(operator)
+	for _, action := range safeActions {
 		if strings.TrimSpace(action.Action) != "observe_goal" {
 			continue
 		}
@@ -172,7 +173,28 @@ func directorOpsDecisionFromAutoprogrammingSafeActionsMCPV0(
 			SummaryKey: "director.ops.decision.observe_goal",
 		}
 	}
+	if operator != nil && len(safeActions) == 0 {
+		return directorOpsDecisionFromAutoprogrammingSnapshotWithoutQueueSuperviseMCPV0(snapshot)
+	}
 	return directorOpsDecisionFromSnapshotMCPV0(snapshot)
+}
+
+func directorOpsDecisionFromAutoprogrammingSnapshotWithoutQueueSuperviseMCPV0(
+	snapshot orquestaobservability.DirectorAutonomousOpsSnapshotV0,
+) orquestaobservability.DirectorAutonomousOpsDecisionV0 {
+	for _, run := range snapshot.Runs {
+		decision := directorOpsDecisionFromRunMCPV0(run, nil)
+		if decision.Action != orquestaobservability.DirectorAutonomousOpsActionIdleV0 &&
+			decision.Action != orquestaobservability.DirectorAutonomousOpsActionClosedV0 {
+			return decision
+		}
+	}
+	return orquestaobservability.DirectorAutonomousOpsDecisionV0{
+		Action:     orquestaobservability.DirectorAutonomousOpsActionIdleV0,
+		Scope:      "workspace",
+		ReasonCode: "no_safe_autoprogramming_action",
+		SummaryKey: "director.ops.decision.idle",
+	}
 }
 
 func directorOpsAutoprogrammingSafeActionsMCPV0(

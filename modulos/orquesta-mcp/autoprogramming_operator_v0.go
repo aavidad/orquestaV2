@@ -54,6 +54,7 @@ func newMCPAutoprogrammingOperatorV0(
 	queue *MCPRunQueuePriorityToolResultV0,
 	run *MCPDirectorStatsToolResultV0,
 	diagnostics []MCPAutoprogrammingDiagnosticV0,
+	allowLegacySupervisorActions bool,
 ) *MCPAutoprogrammingOperatorV0 {
 	operator := &MCPAutoprogrammingOperatorV0{
 		ActiveRuns:      mcpAutoprogrammingActiveRunsV0(queue),
@@ -64,7 +65,7 @@ func newMCPAutoprogrammingOperatorV0(
 		),
 	}
 	operator.QueueLive = queue != nil && queue.Estado == MCPRunQueuePriorityEstadoOKV0
-	operator.SafeActions = mcpAutoprogrammingSafeActionsV0(operator, run)
+	operator.SafeActions = mcpAutoprogrammingSafeActionsV0(operator, run, allowLegacySupervisorActions)
 	return operator
 }
 
@@ -154,9 +155,13 @@ func mcpAutoprogrammingSupervisorErrorsV0(
 func mcpAutoprogrammingSafeActionsV0(
 	operator *MCPAutoprogrammingOperatorV0,
 	run *MCPDirectorStatsToolResultV0,
+	allowLegacySupervisorActions bool,
 ) []MCPAutoprogrammingSafeActionV0 {
 	out := []MCPAutoprogrammingSafeActionV0{}
 	if operator == nil {
+		return out
+	}
+	if !allowLegacySupervisorActions {
 		return out
 	}
 	blockedByReplanAmplification := mcpAutoprogrammingReplanAmplificationBlockedV0(run)
@@ -290,6 +295,7 @@ func mcpAutoprogrammingObserveGoalSafeActionV0(runRef string) MCPAutoprogramming
 
 func mcpAutoprogrammingOperatorWithGoalFirstActionsV0(
 	operator *MCPAutoprogrammingOperatorV0,
+	allowLegacySupervisorActions bool,
 	runRefs ...string,
 ) *MCPAutoprogrammingOperatorV0 {
 	if operator == nil {
@@ -307,7 +313,9 @@ func mcpAutoprogrammingOperatorWithGoalFirstActionsV0(
 		}
 		next = append(next, mcpAutoprogrammingObserveGoalSafeActionV0(runRef))
 	}
-	next = append(next, mcpAutoprogrammingLegacyRunActionsForActiveRunsV0(operator, goalFirst)...)
+	if allowLegacySupervisorActions {
+		next = append(next, mcpAutoprogrammingLegacyRunActionsForActiveRunsV0(operator, goalFirst)...)
+	}
 	for _, action := range operator.SafeActions {
 		if mcpAutoprogrammingGoalFirstSuppressesLegacyActionV0(operator, action, goalFirst) {
 			continue
@@ -347,6 +355,44 @@ func mcpAutoprogrammingGoalFirstRunRefSetV0(
 		}
 	}
 	return out
+}
+
+func mcpAutoprogrammingLegacySupervisorActionCandidateV0(
+	operator *MCPAutoprogrammingOperatorV0,
+	run *MCPDirectorStatsToolResultV0,
+	goalFirst map[string]bool,
+) bool {
+	if operator == nil {
+		return false
+	}
+	blockedByReplanAmplification := mcpAutoprogrammingReplanAmplificationBlockedV0(run)
+	if blockedByReplanAmplification {
+		return false
+	}
+	queueNeedsRunStats := mcpAutoprogrammingOperatorHasDiagnosticV0(
+		operator.SupervisorErrors,
+		"run_stats_required_for_safe_supervision",
+	)
+	if !queueNeedsRunStats {
+		for _, active := range operator.ActiveRuns {
+			runRef := strings.TrimSpace(active.RunRef)
+			if runRef != "" && !goalFirst[runRef] {
+				return true
+			}
+		}
+	}
+	runRef := ""
+	if run != nil {
+		runRef = strings.TrimSpace(run.RunRef)
+	}
+	if runRef != "" && !goalFirst[runRef] {
+		return true
+	}
+	if len(operator.ClosureBlockers) > 0 && (runRef == "" || !goalFirst[runRef]) {
+		return true
+	}
+	return !queueNeedsRunStats &&
+		(len(operator.SupervisorErrors) > 0 || mcpAutoprogrammingNeedsRetryV0(operator))
 }
 
 func mcpAutoprogrammingQueueHasGoalFirstRunV0(

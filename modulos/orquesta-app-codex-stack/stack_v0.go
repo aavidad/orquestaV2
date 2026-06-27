@@ -123,10 +123,11 @@ func buildStackMCPTransportBindingsV0(
 		AutoprogrammingObserveGoal: NewCodexStackAutoprogrammingObserveGoalExecutorV0(
 			stack,
 		),
-		AutoprogrammingGoalStates: config.Stores.AppGoalStateStore,
-		ServerShutdown:            serverShutdownExecutorV0(config, stack),
-		DomainWork:                config.DomainWork,
-		ExternalWorkRun:           externalWorkRunGuardedExecutorV0(config, queueConfig),
+		AutoprogrammingGoalStates:                   config.Stores.AppGoalStateStore,
+		AllowLegacyAutoprogrammingSupervisorActions: config.AllowLegacyAutoprogrammingRun,
+		ServerShutdown:                              serverShutdownExecutorV0(config, stack),
+		DomainWork:                                  config.DomainWork,
+		ExternalWorkRun:                             externalWorkRunGuardedExecutorV0(config, queueConfig),
 	}
 }
 
@@ -165,9 +166,10 @@ func buildStackHTTPHandlerV0(
 		AutoprogrammingPrepareRun:  bindings.AutoprogrammingPrepareRun,
 		AutoprogrammingObserveGoal: bindings.AutoprogrammingObserveGoal,
 		AutoprogrammingGoalStates:  bindings.AutoprogrammingGoalStates,
-		ServerShutdown:             bindings.ServerShutdown,
-		DomainWork:                 bindings.DomainWork,
-		ExternalWorkRun:            bindings.ExternalWorkRun,
+		AllowLegacyAutoprogrammingSupervisorActions: bindings.AllowLegacyAutoprogrammingSupervisorActions,
+		ServerShutdown:  bindings.ServerShutdown,
+		DomainWork:      bindings.DomainWork,
+		ExternalWorkRun: bindings.ExternalWorkRun,
 		OpsAgentRuntimeDetail: NewCodexStackAgentRuntimeDetailHTTPHandlerV0(CodexStackAgentRuntimeDetailConfigV0{
 			ReceiptStore:   config.Stores.ReceiptStore,
 			RuntimeWorkDir: config.Codex.RuntimeWorkDir,

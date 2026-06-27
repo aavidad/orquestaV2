@@ -181,6 +181,51 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0BloqueaLegacySinOptInV0(t *test
 	}
 }
 
+func TestCodexStackRunSupervisorV0BloqueaSupervisorGlobalLegacySinOptInV0(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	config := codexStackBaseConfigForTestV0(t, runtime, nil, nil)
+	config.AllowLegacyAutoprogrammingRun = false
+	stack, err := BuildStackV0(config)
+	if err != nil {
+		t.Fatalf("BuildStackV0: %v", err)
+	}
+	executor := NewCodexStackRunSupervisorExecutorV0(&stack)
+	for _, input := range []orquestamcp.MCPRunSupervisorToolInputV0{
+		{
+			RequestID:     "request-autoprogramming-supervisor-legacy-resident-optin-required-001",
+			CorrelationID: "corr-autoprogramming-supervisor-legacy-optin-required-001",
+			ResidentMode:  true,
+			MaxTicks:      1,
+		},
+		{
+			RequestID:     "request-autoprogramming-supervisor-legacy-queue-optin-required-001",
+			CorrelationID: "corr-autoprogramming-supervisor-legacy-optin-required-001",
+			QueueRef:      DefaultRunQueueRefV0,
+			MaxTicks:      1,
+		},
+		{
+			RequestID:     "request-autoprogramming-supervisor-legacy-empty-optin-required-001",
+			CorrelationID: "corr-autoprogramming-supervisor-legacy-optin-required-001",
+			MaxTicks:      1,
+		},
+	} {
+		result, err := executor.Execute(context.Background(), input)
+		if err != nil {
+			t.Fatalf("Execute %s: %v", input.RequestID, err)
+		}
+		if result.Estado != orquestamcp.MCPRunSupervisorEstadoErrorV0 ||
+			result.StopReason != "legacy_supervise_requires_explicit_opt_in" ||
+			len(result.Errores) != 1 ||
+			result.Errores[0].Code != "legacy_supervise_requires_explicit_opt_in" ||
+			!autoprogrammingBridgeStringInSetForTestV0(result.NextActions, "use_goal_first_prepare_run_and_observe_goal") {
+			t.Fatalf("result %s=%+v", input.RequestID, result)
+		}
+	}
+	if runtime.launchCountV0() != 0 {
+		t.Fatalf("runtime no debe lanzarse sin opt-in, launches=%d", runtime.launchCountV0())
+	}
+}
+
 func TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveGoalSpecsCuandoGoalReady(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	request := autoprogrammingBridgeRequestForTestV0()

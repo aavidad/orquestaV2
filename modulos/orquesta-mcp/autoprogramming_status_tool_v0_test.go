@@ -50,8 +50,11 @@ func TestMCPAutoprogrammingStatusExecutorV0DelegaEnColaYRun(t *testing.T) {
 		len(result.Operator.ActiveRuns) != 1 ||
 		len(result.Operator.AgentsInFlight) != 1 ||
 		len(result.Operator.ClosureBlockers) != 1 ||
-		len(result.Operator.SafeActions) < 2 {
+		len(result.Operator.SafeActions) != 0 {
 		t.Fatalf("operator=%+v", result.Operator)
+	}
+	if !hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "legacy_supervisor_actions_disabled") {
+		t.Fatalf("diagnostics=%+v", result.Diagnostics)
 	}
 	if len(result.Projects) != 1 ||
 		result.Projects[0].QueueCount != 1 ||
@@ -235,8 +238,9 @@ func TestMCPAutoprogrammingStatusExecutorV0ColaMixtaGoalFirstNoSupervisaColaGlob
 				},
 			},
 		},
-		Stats:          &fakeMCPAutoprogrammingRunStatusV0{},
-		GoalStateStore: goalStates,
+		Stats:                        &fakeMCPAutoprogrammingRunStatusV0{},
+		GoalStateStore:               goalStates,
+		AllowLegacySupervisorActions: true,
 	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
 
 	if err != nil {
@@ -807,6 +811,7 @@ func TestMCPAutoprogrammingStatusExecutorV0PropagaDiagnosticoAgenteSolicitadoNoA
 				},
 			},
 		},
+		AllowLegacySupervisorActions: true,
 	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{
 		RunRef: "run-ref-autop-agent-not-started-001",
 	})
@@ -964,9 +969,10 @@ func TestMCPAutoprogrammingStatusExecutorV0DiagnosticaPuertosNoConfigurados(t *t
 	}
 }
 
-func TestMCPAutoprogrammingStatusExecutorV0DeclaraSuperviseColaAunqueFaltenStatsDeRunV0(t *testing.T) {
+func TestMCPAutoprogrammingStatusExecutorV0DeclaraSuperviseColaLegacyConOptInV0(t *testing.T) {
 	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
-		Queue: &fakeMCPAutoprogrammingQueueStatusV0{},
+		Queue:                        &fakeMCPAutoprogrammingQueueStatusV0{},
+		AllowLegacySupervisorActions: true,
 	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
 
 	if err != nil {
@@ -1010,6 +1016,34 @@ func TestMCPAutoprogrammingStatusExecutorV0DeclaraSuperviseColaAunqueFaltenStats
 		if item.Code == "run_stats_required_for_safe_supervision" {
 			t.Fatalf("el aviso informativo no debe bloquear como error de supervisor: %+v", result.Operator.SupervisorErrors)
 		}
+	}
+}
+
+func TestMCPAutoprogrammingStatusExecutorV0NoPublicaSuperviseLegacyPorDefectoV0(t *testing.T) {
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{},
+		Stats: &fakeMCPAutoprogrammingRunStatusV0{},
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{
+		RunRef: "run-ref-autop-status-001",
+	})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.Operator == nil {
+		t.Fatalf("operator nil: %+v", result)
+	}
+	for _, action := range result.Operator.SafeActions {
+		if action.Endpoint == MCPAutoprogrammingSuperviseHTTPPathV0 {
+			t.Fatalf("no debe publicar supervision legacy sin opt-in: %+v", result.Operator.SafeActions)
+		}
+	}
+	if !hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "legacy_supervisor_actions_disabled") {
+		t.Fatalf("falta diagnostico de opt-in legacy: %+v", result.Diagnostics)
+	}
+	if result.OpsSnapshot == nil ||
+		result.OpsSnapshot.Decision.Action == "supervise_queue" {
+		t.Fatalf("ops_snapshot=%+v", result.OpsSnapshot)
 	}
 }
 

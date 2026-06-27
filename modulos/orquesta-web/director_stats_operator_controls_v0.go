@@ -48,17 +48,7 @@ func directorStatsSafeActionsV0(
 		out = append(out, directorStatsRunControlActionsV0(vm, runRef)...)
 		return out
 	}
-	if vm.Counts.AgentsInFlight > 0 || len(vm.Agents) > 0 {
-		out = append(out, directorStatsSafeActionV0("supervise", runRef, "agents_in_flight"))
-	}
 	out = append(out, directorStatsRunControlActionsV0(vm, runRef)...)
-	if vm.Closure.Blocked {
-		out = append(out, directorStatsSafeActionV0("review", runRef, strings.Join(vm.Closure.BlockedBy, ",")))
-	}
-	if vm.Progress.StalledAgents > 0 || vm.Progress.LoopDetectedAgents > 0 ||
-		vm.Counts.AgentsNeedAttention > 0 {
-		out = append(out, directorStatsSafeActionV0("retry", runRef, "agent_attention"))
-	}
 	return out
 }
 
@@ -94,17 +84,6 @@ func directorStatsRunControlActionsV0(
 		}
 	default:
 		return nil
-	}
-}
-
-func directorStatsSafeActionV0(action string, runRef string, reason string) WebDirectorStatsSafeActionV0 {
-	return WebDirectorStatsSafeActionV0{
-		Action:       trimDirectorStatsV0(action),
-		RunRef:       trimDirectorStatsV0(runRef),
-		Method:       "POST",
-		Endpoint:     "/api/v0/autoprogramming/supervise",
-		Reason:       trimDirectorStatsV0(reason),
-		RequiresPost: true,
 	}
 }
 

@@ -253,6 +253,16 @@ Revalidacion adicional 2026-06-27: `/autoprogramming` desactiva `Supervisar`
 cuando `safe_actions` trae `observe_goal`, aunque aun no haya `currentGoalRef`;
 y la guarda de state faltante queda cubierta para `DrainRunV0` directo y
 Director residente, marcando la cola `stopped` sin lanzar agentes legacy.
+Avance local adicional 2026-06-27: `/autoprogramming/status` deja de publicar
+acciones `supervise`/`retry`/`review` legacy por defecto. Esas acciones solo
+aparecen si la composicion habilita `AllowLegacyAutoprogrammingRun`
+(`ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=true` en servidor). Si hay
+candidatos legacy pero no opt-in, el operador recibe
+`legacy_supervisor_actions_disabled`. El executor Codex de supervision bloquea
+ademas cualquier llamada global sin `run_ref` cuando el opt-in no esta activo,
+con error publico `legacy_supervise_requires_explicit_opt_in`, y la web no
+ejecuta el boton manual de supervision si la API no lo publica como
+`safe_action`.
 Revalidacion adicional 2026-06-27 tarde: `autoprogramming/status` alinea
 `ops_snapshot.decision` con `safe_actions.observe_goal` y el reconciler de cola
 mas idle self-improvement no reencolan contenedores goal-first como `ready`

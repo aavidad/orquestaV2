@@ -70,7 +70,8 @@ API HTTP versionada:
 - `POST /api/v0/director/stats`
 - `POST /api/v0/director/human-work/review-plan`
 - `POST /api/v0/runs/supervise` (compatibilidad legacy/diagnostico; no usar
-  como avance normal de runs `goal_first`)
+  como avance normal de runs `goal_first`; el supervisor global sin `run_ref`
+  exige opt-in legacy en la composicion Codex)
 - `POST /api/v0/runs/control`
 - `POST /api/v0/runs/queue/priority`
 - `POST /api/v0/autoprogramming/validate-request`
@@ -80,7 +81,8 @@ API HTTP versionada:
 - `POST /api/v0/autoprogramming/goal/observe`
 - `POST /api/v0/autoprogramming/status`
 - `POST /api/v0/autoprogramming/supervise` (compatibilidad legacy/diagnostico;
-  no usar como avance normal de runs `goal_first`)
+  no usar como avance normal de runs `goal_first`; `/autoprogramming/status`
+  solo publica acciones hacia este endpoint si la composicion habilita legacy)
 - `POST /api/v0/governance/catalog/query`
 - `POST /api/v0/core/function-contracts/list`
 - `POST /api/v0/core/function-contracts/view`

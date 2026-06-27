@@ -301,10 +301,13 @@ El cambio queda cubierto por tests</textarea></label>
     }
     function updateSuperviseState() {
       const goalActive = Boolean(currentGoalRef) || hasGoalFirstSafeActionForCurrentRun();
-      superviseRunButton.disabled = goalActive;
+      const legacyAvailable = Boolean(legacySuperviseSafeActionForCurrentRun());
+      superviseRunButton.disabled = goalActive || !legacyAvailable;
       superviseRunButton.title = goalActive
         ? 'Esta run usa Goal; usa Observar goal.'
-        : 'Solo para runs legacy de autoprogramacion.';
+        : (legacyAvailable
+          ? 'Solo para runs legacy de autoprogramacion con accion segura publicada.'
+          : 'La API no publica supervision legacy como accion segura.');
     }
     function hasGoalFirstSafeActionForCurrentRun() {
       return goalFirstSafeActions().some(item => {
@@ -318,6 +321,16 @@ El cambio queda cubierto por tests</textarea></label>
         item.action === 'observe_goal' &&
         item.endpoint === '/api/v0/autoprogramming/goal/observe'
       );
+    }
+    function legacySuperviseSafeActionForCurrentRun() {
+      return (currentSafeActions || []).find(item => {
+        if (!item || item.endpoint !== '/api/v0/autoprogramming/supervise') return false;
+        if (item.action !== 'supervise') return false;
+        const runRef = String(item.run_ref || '').trim();
+        const scope = String(item.scope || '').trim();
+        if (scope === 'queue') return !currentRunRef;
+        return !currentRunRef || !runRef || runRef === currentRunRef;
+      }) || null;
     }
     function renderStaleRunning(items) {
       staleList.textContent = '';
@@ -568,16 +581,14 @@ El cambio queda cubierto por tests</textarea></label>
         updateSuperviseState();
         return;
       }
-      const id = requestId('web-supervise');
-      const data = await postJSON('/api/v0/autoprogramming/supervise', {
-        request_id: id,
-        correlation_id: id,
-        run_ref: currentRunRef,
-        queue_ref: currentRunRef ? '' : 'global',
-        max_ticks: 20,
-        max_executions: 20,
-        allow_repeated_runs: true
-      });
+      const action = legacySuperviseSafeActionForCurrentRun();
+      if (!action) {
+        goalPanel.hidden = false;
+        goalNote.textContent = 'La API no publica supervision legacy como accion segura.';
+        updateSuperviseState();
+        return;
+      }
+      const data = await executeSafeAction(action);
       setResult('supervise', data);
     });
   </script>

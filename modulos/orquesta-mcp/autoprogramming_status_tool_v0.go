@@ -65,9 +65,10 @@ type MCPAutoprogrammingStatusToolResultV0 struct {
 }
 
 type MCPAutoprogrammingStatusToolExecutorV0 struct {
-	Queue          MCPTransportRunQueuePriorityExecutorV0
-	Stats          MCPTransportDirectorStatsExecutorV0
-	GoalStateStore orquestagoal.GoalWorkStateStorePortV0
+	Queue                        MCPTransportRunQueuePriorityExecutorV0
+	Stats                        MCPTransportDirectorStatsExecutorV0
+	GoalStateStore               orquestagoal.GoalWorkStateStorePortV0
+	AllowLegacySupervisorActions bool
 }
 
 func MCPAutoprogrammingStatusDescriptorV0() MCPAutoprogrammingStatusToolDescriptorV0 {
@@ -85,6 +86,7 @@ func MCPAutoprogrammingStatusDescriptorV0() MCPAutoprogrammingStatusToolDescript
 			"stale_running lista runs accionables que no deben competir silenciosamente con olas nuevas",
 			"proyecta proyectos tareas y agentes compactos para filtros externos",
 			"diagnostico solo resume puertos y errores publicos",
+			"acciones de supervision legacy solo aparecen si la composicion las habilita explicitamente",
 			"operator_advice se conserva como observacion no bloqueante",
 			"sin DB runtime filesystem Codex ni proveedor concreto",
 		},
@@ -176,13 +178,27 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	result.QueueHealth = buildMCPAutoprogrammingQueueHealthV0(result.Queue, goalStatesByRunRef, healthRun, healthObservedRuns...)
 	result.StaleRunning = buildMCPAutoprogrammingStaleRunningV0(result.Queue, goalStatesByRunRef, healthRun, healthObservedRuns...)
 	result.Diagnostics = append(result.Diagnostics, diagnosticsFromStaleRunningMCPAutoprogrammingV0(result.StaleRunning)...)
-	result.Operator = newMCPAutoprogrammingOperatorV0(result.Queue, result.Run, result.Diagnostics)
+	result.Operator = newMCPAutoprogrammingOperatorV0(
+		result.Queue,
+		result.Run,
+		result.Diagnostics,
+		executor.AllowLegacySupervisorActions,
+	)
+	if !executor.AllowLegacySupervisorActions &&
+		mcpAutoprogrammingLegacySupervisorActionCandidateV0(result.Operator, result.Run, goalFirstRunRefs) {
+		result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingDiagnosticV0(
+			"legacy_supervisor_actions_disabled",
+			"operator",
+			"supervision legacy no publicada como accion segura sin opt-in; usar goal-first/observe_goal o activar compatibilidad legacy",
+		))
+	}
 	for _, goalState := range goalStates {
 		result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingGoalFirstDiagnosticsV0(goalState)...)
 	}
 	if len(goalStates) > 0 {
 		result.Operator = mcpAutoprogrammingOperatorWithGoalFirstActionsV0(
 			result.Operator,
+			executor.AllowLegacySupervisorActions,
 			mcpAutoprogrammingGoalStateRunRefsV0(goalStates)...,
 		)
 	}

@@ -171,7 +171,7 @@ func TestWebDirectorStatsPanelV0ProyectaStopControlPendiente(t *testing.T) {
 	}
 }
 
-func TestWebDirectorStatsPanelV0ProyectaCierreBloqueadoYAccionesSeguras(t *testing.T) {
+func TestWebDirectorStatsPanelV0ProyectaCierreBloqueadoSinAccionesLegacy(t *testing.T) {
 	result := directorStatsResultForWebTestV0()
 	result.Stats.Closure = WebDirectorClosureStatsContractV0{
 		Status:      "blocked",
@@ -188,8 +188,9 @@ func TestWebDirectorStatsPanelV0ProyectaCierreBloqueadoYAccionesSeguras(t *testi
 		len(panel.SafeActions) < 2 {
 		t.Fatalf("closure=%+v actions=%+v panel=%+v", panel.Closure, panel.SafeActions, panel)
 	}
-	if !directorStatsHasSafeActionV0(panel.SafeActions, "review") ||
-		!directorStatsHasSafeActionV0(panel.SafeActions, "supervise") ||
+	if directorStatsHasSafeActionV0(panel.SafeActions, "review") ||
+		directorStatsHasSafeActionV0(panel.SafeActions, "supervise") ||
+		directorStatsHasSafeActionV0(panel.SafeActions, "retry") ||
 		!directorStatsHasSafeActionV0(panel.SafeActions, "pause") ||
 		!directorStatsHasSafeActionV0(panel.SafeActions, "stop") {
 		t.Fatalf("actions=%+v", panel.SafeActions)

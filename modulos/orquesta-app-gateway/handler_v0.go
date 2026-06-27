@@ -77,9 +77,10 @@ func NewRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 {
 
 func NewAPIRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 {
 	autoprogrammingStatus := orquestamcp.MCPAutoprogrammingStatusToolExecutorV0{
-		Queue:          config.RunQueuePriority,
-		Stats:          config.DirectorStats,
-		GoalStateStore: config.AutoprogrammingGoalStates,
+		Queue:                        config.RunQueuePriority,
+		Stats:                        config.DirectorStats,
+		GoalStateStore:               config.AutoprogrammingGoalStates,
+		AllowLegacySupervisorActions: config.AllowLegacyAutoprogrammingSupervisorActions,
 	}
 	return orquestahttpgateway.RouteHandlersV0{
 		AppSpec:                        orquestafactoryhttp.NewAppSpecHTTPHandlerV0(config.Clock),

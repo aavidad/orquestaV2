@@ -58,6 +58,9 @@ func (executor CodexStackRunSupervisorExecutorV0) Execute(
 	if result, blocked := rejectAutoprogrammingResidentWaitOverrideV0(input); blocked {
 		return result, nil
 	}
+	if result, blocked := executor.rejectGlobalLegacySupervisorWithoutOptInV0(input); blocked {
+		return result, nil
+	}
 	input = normalizeAutoprogrammingResidentInputV0(input, *executor.Stack)
 	input = executor.Stack.normalizeDirectOPESRunSupervisorInputV0(ctx, input)
 	if result, redirected := executor.goalFirstRunSupervisorResultV0(ctx, input); redirected {
@@ -114,6 +117,41 @@ func (executor CodexStackRunSupervisorExecutorV0) Execute(
 	output = addAutoprogrammingResidentEvidenceV0(input, output)
 	output = maybePrepareAutoprogrammingResidentSelfRepairV0(ctx, input, *executor.Stack, result, output)
 	return output, nil
+}
+
+func (executor CodexStackRunSupervisorExecutorV0) rejectGlobalLegacySupervisorWithoutOptInV0(
+	input orquestamcp.MCPRunSupervisorToolInputV0,
+) (orquestamcp.MCPRunSupervisorToolResultV0, bool) {
+	if executor.Stack == nil ||
+		executor.Stack.AllowLegacyAutoprogrammingRun ||
+		strings.TrimSpace(input.RunRef) != "" {
+		return orquestamcp.MCPRunSupervisorToolResultV0{}, false
+	}
+	result := orquestamcp.NewMCPRunSupervisorErrorResultV0(
+		input,
+		"legacy_supervise_requires_explicit_opt_in",
+		"legacy_supervisor",
+		"supervision global legacy requiere ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=true; usar goal-first y observe_goal para trabajo nuevo",
+	)
+	result.StopReason = "legacy_supervise_requires_explicit_opt_in"
+	result.Last = orquestamcp.MCPRunSupervisorSnapshotV0{
+		Status:       string(CodexSupervisorRuntimeStoppedV0),
+		SessionRef:   strings.TrimSpace(input.RunRef),
+		EvidenceRefs: []string{"evidence-ref-run-supervisor-legacy-global-opt-in-required"},
+	}
+	result.EvidenceRefs = []string{"evidence-ref-run-supervisor-legacy-global-opt-in-required"}
+	result.NextActions = []string{
+		"use_goal_first_prepare_run_and_observe_goal",
+		"provide_run_ref_for_diagnostics",
+		"set_ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP_for_legacy_compatibility",
+	}
+	result.Diagnostics = []orquestamcp.MCPAutoprogrammingDiagnosticV0{{
+		Code:         "legacy_supervise_requires_explicit_opt_in",
+		Scope:        "queue",
+		Message:      "no se ejecuta supervisor global legacy sin opt-in explicito",
+		EvidenceRefs: result.EvidenceRefs,
+	}}
+	return result, true
 }
 
 func (executor CodexStackRunSupervisorExecutorV0) goalFirstRunSupervisorResultV0(
