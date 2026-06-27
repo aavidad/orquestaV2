@@ -12,6 +12,7 @@ const (
 	WebNuevaAppEstadoEnviando      WebNuevaAppEstadoV0 = "enviando"
 	WebNuevaAppEstadoValida        WebNuevaAppEstadoV0 = "valida"
 	WebNuevaAppEstadoDirector      WebNuevaAppEstadoV0 = "director_arrancado"
+	WebNuevaAppEstadoGoalPreview   WebNuevaAppEstadoV0 = "goal_preview"
 	WebNuevaAppEstadoRequiereDatos WebNuevaAppEstadoV0 = "requiere_datos"
 	WebNuevaAppEstadoInvalida      WebNuevaAppEstadoV0 = "invalida"
 	WebNuevaAppEstadoError         WebNuevaAppEstadoV0 = "error"
@@ -36,6 +37,7 @@ type WebNuevaAppViewModelV0 struct {
 	SpecID                 string                      `json:"spec_id,omitempty"`
 	ValidationEstadoFuente string                      `json:"validation_estado_fuente,omitempty"`
 	Director               *WebNuevaAppDirectorV0      `json:"director,omitempty"`
+	GoalPreview            *WebNuevaAppGoalPreviewV0   `json:"goal_preview,omitempty"`
 }
 
 type WebNuevaAppResumenV0 struct {
@@ -102,6 +104,33 @@ type WebNuevaAppDirectorTaskV0 struct {
 	BrainstormRef  string `json:"brainstorm_ref,omitempty"`
 	AgentRequestID string `json:"agent_request_id,omitempty"`
 	Capacity       string `json:"capacity,omitempty"`
+}
+
+type WebNuevaAppGoalPreviewV0 struct {
+	RunRef                string                                `json:"run_ref,omitempty"`
+	GoalRef               string                                `json:"goal_ref,omitempty"`
+	DirectorExecutionMode string                                `json:"director_execution_mode,omitempty"`
+	WorkKind              string                                `json:"work_kind,omitempty"`
+	WorkProfileKind       string                                `json:"work_profile_kind,omitempty"`
+	DirectorKind          string                                `json:"director_kind,omitempty"`
+	Objective             string                                `json:"objective,omitempty"`
+	WriteSet              []orquestagoal.GoalWriteScopeV0       `json:"write_set,omitempty"`
+	RequiredTests         []orquestagoal.GoalRequiredTestV0     `json:"required_tests,omitempty"`
+	AcceptanceCriteria    []string                              `json:"acceptance_criteria,omitempty"`
+	ArtifactContracts     []orquestagoal.GoalArtifactContractV0 `json:"artifact_contracts,omitempty"`
+	Estimate              WebNuevaAppGoalPreviewEstimateV0      `json:"estimate,omitempty"`
+	EvidenceRefs          []string                              `json:"evidence_refs,omitempty"`
+}
+
+type WebNuevaAppGoalPreviewEstimateV0 struct {
+	TokenBudget       int    `json:"token_budget,omitempty"`
+	MaxRuntimeSeconds int    `json:"max_runtime_seconds,omitempty"`
+	MaxSubgoals       int    `json:"max_subgoals,omitempty"`
+	MaxReworkGoals    int    `json:"max_rework_goals,omitempty"`
+	WriteSetItems     int    `json:"write_set_items,omitempty"`
+	RequiredTests     int    `json:"required_tests,omitempty"`
+	ArtifactContracts int    `json:"artifact_contracts,omitempty"`
+	CostTier          string `json:"cost_tier,omitempty"`
 }
 
 func NewWebNuevaAppViewModelV0(spec orquestafactory.AppSpecV0, backlog orquestafactory.BacklogInicialPropuestoV0) WebNuevaAppViewModelV0 {

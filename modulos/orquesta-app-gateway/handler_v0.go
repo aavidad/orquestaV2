@@ -36,6 +36,7 @@ func NewRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 {
 		newSpecClientV0(config, client),
 	)
 	nuevaEndpoint.DirectorClient = newDirectorClientV0(config, client)
+	nuevaEndpoint.DirectorPreviewClient = newDirectorPreviewClientV0(config, client)
 	changeEndpoint := orquestaweb.NewAppChangeWebEndpointV0(newAppChangeClientV0(config, client))
 
 	return orquestahttpgateway.RouteHandlersV0{
@@ -49,6 +50,7 @@ func NewRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 {
 		RunQueuePage:                      orquestaweb.NewRunQueueWebEndpointV0(newRunQueueClientV0(config, client)),
 		AppSpec:                           apiHandlers.AppSpec,
 		AppDirector:                       apiHandlers.AppDirector,
+		AppDirectorPreview:                apiHandlers.AppDirectorPreview,
 		AppDirectorGoalObserve:            apiHandlers.AppDirectorGoalObserve,
 		AppIntakeGuidedTurn:               apiHandlers.AppIntakeGuidedTurn,
 		AppChange:                         apiHandlers.AppChange,
@@ -87,6 +89,7 @@ func NewAPIRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 
 	return orquestahttpgateway.RouteHandlersV0{
 		AppSpec:                           orquestafactoryhttp.NewAppSpecHTTPHandlerV0(config.Clock),
 		AppDirector:                       orquestamcp.NewMCPArrancarDirectorAppHTTPHandlerV0(config.ArrancarDirector),
+		AppDirectorPreview:                orquestamcp.NewMCPPreviewDirectorAppHTTPHandlerV0(config.PreviewDirector),
 		AppDirectorGoalObserve:            orquestamcp.NewMCPObserveAppDirectorGoalHTTPHandlerV0(config.ObserveDirectorGoal),
 		AppIntakeGuidedTurn:               orquestaweb.NewNuevaAppIntakeGuidedHTTPHandlerV0(),
 		AppChange:                         orquestamcp.NewMCPRequestAppChangeHTTPHandlerV0(config.RequestAppChange),

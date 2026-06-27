@@ -12,6 +12,7 @@ const (
 )
 
 type WebNuevaAppFormV0 struct {
+	Action                string                         `json:"nueva_app_action,omitempty"`
 	RequestID             string                         `json:"request_id"`
 	Locale                string                         `json:"locale"`
 	RequestKind           string                         `json:"request_kind,omitempty"`

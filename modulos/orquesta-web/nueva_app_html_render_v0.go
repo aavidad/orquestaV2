@@ -69,6 +69,16 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.goal.updating",
 		"nueva_app.goal.updated",
 		"nueva_app.goal.error",
+		"nueva_app.goal_preview.titulo",
+		"nueva_app.goal_preview.objective",
+		"nueva_app.goal_preview.write_set",
+		"nueva_app.goal_preview.required_tests",
+		"nueva_app.goal_preview.acceptance",
+		"nueva_app.goal_preview.artifacts",
+		"nueva_app.goal_preview.estimate",
+		"nueva_app.goal_preview.cost_tier",
+		"nueva_app.goal_preview.tokens",
+		"nueva_app.goal_preview.subgoals",
 		"nueva_app.wizard.nav.home",
 		"nueva_app.wizard.nav.ops",
 		"nueva_app.wizard.nav.autoprogramming",
@@ -301,6 +311,10 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
     .goal-grid strong{color:var(--ink)}
     .goal-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}
     .goal-feedback{color:var(--muted);font-size:.9rem}
+    .final-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}
+    .goal-preview-panel{border-left:4px solid #0f766e}
+    .goal-preview-panel ul{margin:6px 0 12px;padding-left:20px}
+    .goal-preview-panel li{margin-bottom:5px;overflow-wrap:anywhere}
     .issue{border-left:4px solid var(--bad)}
     .form-error-summary{margin:14px 18px 0;border:1px solid #f0b4ae;border-left:4px solid var(--bad);border-radius:10px;background:#fff7f5;padding:12px;color:#621b16}
     .form-error-summary strong{display:block;margin-bottom:4px}
@@ -516,7 +530,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
           <label data-help="{{index .Help "agentes.preferencias"}}">{{index .Labels "agentes.preferencias"}}<input name="agentes.preferencias"></label>
           <label data-help="{{index .Help "restricciones"}}">{{index .Labels "restricciones"}}<input name="restricciones"></label>
         </div></fieldset>
-        <fieldset><legend>{{index .HTML "nueva_app.wizard.revision_final"}}</legend><div id="wizard-final-summary" class="summary-list"></div><button class="hidden-final" type="submit">{{.Page.Formulario.Acciones.Submit}}</button></fieldset>
+        <fieldset><legend>{{index .HTML "nueva_app.wizard.revision_final"}}</legend><div id="wizard-final-summary" class="summary-list"></div><div class="final-actions"><button class="secondary hidden-final" type="submit" name="nueva_app_action" value="preview_goal">{{.Page.Formulario.Acciones.Preview}}</button><button class="hidden-final" type="submit" name="nueva_app_action" value="launch">{{.Page.Formulario.Acciones.Submit}}</button></div></fieldset>
       </div>
       <div id="wizard-errors" class="form-error-summary" role="alert" aria-live="polite" hidden></div>
       <div class="wizard-actions">
@@ -539,6 +553,20 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
           <div data-goal-closure-status-row hidden><strong>{{index $.HTML "nueva_app.goal.closure_status"}}:</strong> <code data-goal-closure-status></code></div>
         </div>
         {{if and .RunRef .GoalRef}}<div class="goal-actions"><button class="secondary" type="button" data-goal-observe>{{index $.HTML "nueva_app.goal.update"}}</button><span class="goal-feedback" data-goal-feedback aria-live="polite"></span></div>{{end}}
+      </section>{{end}}
+      {{with .Page.ViewModel.GoalPreview}}<section class="panel goal-preview-panel">
+        <h2>{{index $.HTML "nueva_app.goal_preview.titulo"}}</h2>
+        <div class="goal-grid">
+          {{if .RunRef}}<div><strong>{{index $.HTML "nueva_app.goal.run_ref"}}:</strong> <code>{{.RunRef}}</code></div>{{end}}
+          {{if .GoalRef}}<div><strong>{{index $.HTML "nueva_app.goal.goal_ref"}}:</strong> <code>{{.GoalRef}}</code></div>{{end}}
+          {{if .DirectorExecutionMode}}<div><strong>{{index $.HTML "nueva_app.goal.director_execution_mode"}}:</strong> <code>{{.DirectorExecutionMode}}</code></div>{{end}}
+          {{if .Objective}}<div><strong>{{index $.HTML "nueva_app.goal_preview.objective"}}:</strong> {{.Objective}}</div>{{end}}
+          <div><strong>{{index $.HTML "nueva_app.goal_preview.estimate"}}:</strong> {{.Estimate.TokenBudget}} {{index $.HTML "nueva_app.goal_preview.tokens"}} · {{.Estimate.MaxSubgoals}} {{index $.HTML "nueva_app.goal_preview.subgoals"}} · {{index $.HTML "nueva_app.goal_preview.cost_tier"}} <code>{{.Estimate.CostTier}}</code></div>
+        </div>
+        {{if .WriteSet}}<h3>{{index $.HTML "nueva_app.goal_preview.write_set"}}</h3><ul>{{range .WriteSet}}<li><code>{{.Path}}</code>{{if .Purpose}} · {{.Purpose}}{{end}}</li>{{end}}</ul>{{end}}
+        {{if .RequiredTests}}<h3>{{index $.HTML "nueva_app.goal_preview.required_tests"}}</h3><ul>{{range .RequiredTests}}<li>{{if .TestRef}}<code>{{.TestRef}}</code>{{end}} {{.Command}}</li>{{end}}</ul>{{end}}
+        {{if .AcceptanceCriteria}}<h3>{{index $.HTML "nueva_app.goal_preview.acceptance"}}</h3><ul>{{range .AcceptanceCriteria}}<li>{{.}}</li>{{end}}</ul>{{end}}
+        {{if .ArtifactContracts}}<h3>{{index $.HTML "nueva_app.goal_preview.artifacts"}}</h3><ul>{{range .ArtifactContracts}}<li><code>{{.ArtifactRef}}</code> {{.ArtifactType}}</li>{{end}}</ul>{{end}}
       </section>{{end}}
       {{if .Page.ViewModel.ErroresPublicos}}<section class="panel issue"><h2>{{index .HTML "nueva_app.html.errores_publicos"}}</h2><ul>{{range .Page.ViewModel.ErroresPublicos}}<li><code>{{.Code}}</code> {{index $.Page.Textos.ErroresPublicos .Code}}</li>{{end}}</ul></section>{{end}}
       {{if .Page.ViewModel.ResumenApp.Nombre}}<section class="panel"><h2>{{index .HTML "nueva_app.html.resumen"}}</h2><p>{{.Page.ViewModel.ResumenApp.Nombre}} · {{.Page.ViewModel.ResumenApp.TipoApp}}</p><p>{{.Page.ViewModel.ResumenApp.Objetivo}}</p></section>{{end}}

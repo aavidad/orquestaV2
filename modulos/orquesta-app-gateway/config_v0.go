@@ -21,6 +21,7 @@ const InternalBaseURLV0 = "http://orquesta.internal"
 type ConfigV0 struct {
 	Clock                                       orquestafactoryhttp.AppSpecHTTPClockV0
 	ArrancarDirector                            orquestamcp.MCPTransportArrancarDirectorAppExecutorV0
+	PreviewDirector                             orquestamcp.MCPTransportPreviewDirectorAppExecutorV0
 	ObserveDirectorGoal                         orquestamcp.MCPTransportObserveAppDirectorGoalExecutorV0
 	RequestAppChange                            orquestamcp.MCPTransportRequestAppChangeExecutorV0
 	DirectorLimits                              orquestaweb.WebArrancarDirectorAppLimitsV0

@@ -32,7 +32,8 @@ type NuevaAppWebCampoV0 struct {
 }
 
 type NuevaAppWebAccionesV0 struct {
-	Submit string `json:"submit"`
+	Submit  string `json:"submit"`
+	Preview string `json:"preview"`
 }
 
 type NuevaAppWebTextosV0 struct {

@@ -126,6 +126,63 @@ func TestNuevaAppWebEndpointV0POSTJSONArrancaDirectorSiEstaConfigurado(t *testin
 	}
 }
 
+func TestNuevaAppWebEndpointV0POSTJSONPreviewGoalNoArrancaDirector(t *testing.T) {
+	previewClient := &fakePreviewDirectorAppClientV0{
+		vm: WebNuevaAppViewModelV0{
+			RequestID:      "req-web-preview-001",
+			Locale:         "es",
+			Estado:         WebNuevaAppEstadoGoalPreview,
+			BacklogPreview: emptyBacklogPreviewV0(),
+			GoalPreview: &WebNuevaAppGoalPreviewV0{
+				RunRef:  "run-ref-web-preview-001",
+				GoalRef: "goal-ref-web-preview-001",
+				Estimate: WebNuevaAppGoalPreviewEstimateV0{
+					TokenBudget: 12000,
+					CostTier:    "low",
+				},
+			},
+		},
+	}
+	directorClient := &fakeArrancarDirectorAppClientV0{}
+	specClient := &fakeNuevaAppClientV0{}
+	endpoint := NuevaAppWebEndpointV0{
+		Client:                specClient,
+		DirectorClient:        directorClient,
+		DirectorPreviewClient: previewClient,
+		Catalog:               NewNuevaAppI18nCatalogV0(),
+	}
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(WebNuevaAppFormV0{
+		Action:    "preview_goal",
+		RequestID: "req-web-preview-001",
+		Locale:    "es",
+		Nombre:    "Agenda",
+		Objetivo:  "Coordinar ensayos",
+		TipoApp:   "mixed",
+	}); err != nil {
+		t.Fatalf("encode form: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/nueva-app", body)
+	req.Header.Set("Content-Type", "application/json")
+
+	endpoint.ServeHTTP(rec, req)
+
+	page := decodeNuevaAppWebPageTestV0(t, rec)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if previewClient.calls != 1 || directorClient.calls != 0 || specClient.calls != 0 {
+		t.Fatalf("calls preview=%d director=%d spec=%d", previewClient.calls, directorClient.calls, specClient.calls)
+	}
+	if previewClient.received.Action != "preview_goal" ||
+		page.ViewModel.Estado != WebNuevaAppEstadoGoalPreview ||
+		page.ViewModel.GoalPreview == nil ||
+		page.ViewModel.GoalPreview.GoalRef != "goal-ref-web-preview-001" {
+		t.Fatalf("page preview inesperada: page=%+v received=%+v", page, previewClient.received)
+	}
+}
+
 func TestNuevaAppWebEndpointV0POSTJSONRenderizaBacklogPreviewCompacto(t *testing.T) {
 	client := &fakeNuevaAppClientV0{
 		vm: NewWebNuevaAppViewModelV0(validSpecForViewModelV0(), backlogForViewModelV0()),

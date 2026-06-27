@@ -77,6 +77,78 @@ func NewWebNuevaAppDirectorErrorViewModelV0(
 	}
 }
 
+func NewWebNuevaAppGoalPreviewViewModelV0(
+	form WebNuevaAppFormV0,
+	result WebPreviewDirectorAppResultV0,
+) WebNuevaAppViewModelV0 {
+	request := form.ToAppSpecRequestV0()
+	goalSpec := result.GoalSpec
+	return WebNuevaAppViewModelV0{
+		RequestID:         firstNuevaAppValueV0(result.RequestID, request.RequestID),
+		Locale:            request.Locale,
+		Estado:            WebNuevaAppEstadoGoalPreview,
+		ResumenApp:        resumenFromAppSpecRequestV0(request),
+		BacklogPreview:    emptyBacklogPreviewV0(),
+		PreguntasAbiertas: []string{},
+		Fases:             []WebNuevaAppFaseV0{},
+		Microtareas:       []WebNuevaAppMicrotareaV0{},
+		GoalPreview: &WebNuevaAppGoalPreviewV0{
+			RunRef:                trimV0(firstNuevaAppValueV0(result.RunRef, goalSpec.RunRef)),
+			GoalRef:               trimV0(goalSpec.GoalRef),
+			DirectorExecutionMode: trimV0(result.DirectorExecutionMode),
+			WorkKind:              trimV0(goalSpec.WorkKind),
+			WorkProfileKind:       trimV0(goalSpec.WorkProfileKind),
+			DirectorKind:          trimV0(goalSpec.DirectorKind),
+			Objective:             trimV0(goalSpec.Objective),
+			WriteSet:              append([]orquestagoal.GoalWriteScopeV0(nil), goalSpec.WriteSet...),
+			RequiredTests:         append([]orquestagoal.GoalRequiredTestV0(nil), goalSpec.RequiredTests...),
+			AcceptanceCriteria:    compactStringsV0(goalSpec.AcceptanceCriteria),
+			ArtifactContracts:     append([]orquestagoal.GoalArtifactContractV0(nil), goalSpec.ArtifactContracts...),
+			Estimate:              result.Estimate,
+			EvidenceRefs:          compactStringsV0(result.EvidenceRefs),
+		},
+	}
+}
+
+func NewWebNuevaAppGoalPreviewErrorViewModelV0(
+	form WebNuevaAppFormV0,
+	result WebPreviewDirectorAppResultV0,
+) WebNuevaAppViewModelV0 {
+	request := form.ToAppSpecRequestV0()
+	return WebNuevaAppViewModelV0{
+		RequestID:           firstNuevaAppValueV0(result.RequestID, request.RequestID),
+		Locale:              request.Locale,
+		Estado:              WebNuevaAppEstadoInvalida,
+		ResumenApp:          resumenFromAppSpecRequestV0(request),
+		BacklogPreview:      emptyBacklogPreviewV0(),
+		ErroresPublicos:     compactNuevaAppIssuesV0(append(result.Errores, goalIssuesToNuevaAppIssuesV0(result.GoalSpecIssues)...)),
+		PreguntasAbiertas:   []string{},
+		Fases:               []WebNuevaAppFaseV0{},
+		Microtareas:         []WebNuevaAppMicrotareaV0{},
+		ContratosRequeridos: []string{},
+		Riesgos:             []string{},
+	}
+}
+
+func goalIssuesToNuevaAppIssuesV0(values []orquestagoal.GoalWorkIssueV0) []WebNuevaAppIssueV0 {
+	out := make([]WebNuevaAppIssueV0, 0, len(values))
+	for _, value := range values {
+		code := trimV0(value.Code)
+		if code == "" {
+			continue
+		}
+		out = append(out, WebNuevaAppIssueV0{
+			Code:    code,
+			Field:   trimV0(value.Field),
+			Message: code,
+		})
+	}
+	if out == nil {
+		return []WebNuevaAppIssueV0{}
+	}
+	return out
+}
+
 func resumenFromAppSpecRequestV0(request orquestafactory.AppSpecRequestV0) WebNuevaAppResumenV0 {
 	return WebNuevaAppResumenV0{
 		Nombre:        trimV0(request.Nombre),

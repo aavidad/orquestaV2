@@ -9,9 +9,10 @@ const (
 )
 
 type NuevaAppWebEndpointV0 struct {
-	Client         SolicitarNuevaAppClientV0
-	DirectorClient ArrancarDirectorAppClientV0
-	Catalog        NuevaAppI18nCatalogV0
+	Client                SolicitarNuevaAppClientV0
+	DirectorClient        ArrancarDirectorAppClientV0
+	DirectorPreviewClient PreviewDirectorAppClientV0
+	Catalog               NuevaAppI18nCatalogV0
 }
 
 func NewNuevaAppWebEndpointV0(client SolicitarNuevaAppClientV0) NuevaAppWebEndpointV0 {

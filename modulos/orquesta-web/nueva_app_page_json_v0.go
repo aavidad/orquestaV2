@@ -14,6 +14,7 @@ func (endpoint NuevaAppWebEndpointV0) page(locale string, vm WebNuevaAppViewMode
 	displayLocale := catalog.normalizeLocale(locale)
 	titulo, _ := catalog.Lookup(displayLocale, "nueva_app.titulo")
 	submit, _ := catalog.Lookup(displayLocale, "nueva_app.accion.submit")
+	preview, _ := catalog.Lookup(displayLocale, "nueva_app.accion.preview")
 	return NuevaAppWebPageV0{
 		SchemaVersion: NuevaAppWebEndpointSchemaV0,
 		Locale:        displayLocale,
@@ -21,7 +22,7 @@ func (endpoint NuevaAppWebEndpointV0) page(locale string, vm WebNuevaAppViewMode
 		Formulario: NuevaAppWebFormularioV0{
 			Contrato: "WebNuevaAppFormV0",
 			Campos:   NuevaAppWebCamposV0(displayLocale, catalog),
-			Acciones: NuevaAppWebAccionesV0{Submit: submit},
+			Acciones: NuevaAppWebAccionesV0{Submit: submit, Preview: preview},
 		},
 		ViewModel: vm,
 		Textos:    nuevaAppWebTextosV0(displayLocale, vm, catalog),
@@ -90,7 +91,7 @@ func nuevaAppWebCamposFromTypeV0(t reflect.Type, prefix, locale string, catalog 
 
 func nuevaAppWebCampoVisibleNormalV0(path string) bool {
 	switch strings.TrimSpace(path) {
-	case "director_execution_mode":
+	case "nueva_app_action", "director_execution_mode":
 		return false
 	default:
 		return true

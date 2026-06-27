@@ -21,7 +21,29 @@ type fakeArrancarDirectorAppClientV0 struct {
 	err      error
 }
 
+type fakePreviewDirectorAppClientV0 struct {
+	calls    int
+	received WebNuevaAppFormV0
+	vm       WebNuevaAppViewModelV0
+	err      error
+}
+
 func (client *fakeArrancarDirectorAppClientV0) ArrancarDirectorApp(
+	ctx context.Context,
+	form WebNuevaAppFormV0,
+) (WebNuevaAppViewModelV0, error) {
+	client.calls++
+	client.received = form
+	if client.vm.Locale == "" {
+		client.vm.Locale = form.Locale
+	}
+	if client.vm.RequestID == "" {
+		client.vm.RequestID = form.RequestID
+	}
+	return client.vm, client.err
+}
+
+func (client *fakePreviewDirectorAppClientV0) PreviewDirectorApp(
 	ctx context.Context,
 	form WebNuevaAppFormV0,
 ) (WebNuevaAppViewModelV0, error) {

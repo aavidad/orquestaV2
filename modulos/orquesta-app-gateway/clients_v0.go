@@ -39,6 +39,16 @@ func newDirectorClientV0(
 	return out
 }
 
+func newDirectorPreviewClientV0(
+	config ConfigV0,
+	client *http.Client,
+) *orquestaweb.RESTPreviewDirectorAppClientV0 {
+	out := orquestaweb.NewRESTPreviewDirectorAppClientV0(InternalBaseURLV0, config.Timeout)
+	out.HTTPClient = client
+	out.Limits = config.DirectorLimits
+	return out
+}
+
 func newStatsClientV0(
 	config ConfigV0,
 	client *http.Client,

@@ -16,9 +16,11 @@ import (
 
 const (
 	StartAppDirectorResultSchemaVersionV0 = "start_app_director_result.v0"
+	StartAppDirectorPreviewSchemaV0       = "start_app_director_goal_preview.v0"
 	StartAppDirectorStatusStartedV0       = "started"
 	StartAppDirectorStatusPendingV0       = "pending"
 	StartAppDirectorStatusInvalidV0       = "invalid"
+	StartAppDirectorStatusPreviewReadyV0  = "preview_ready"
 	AppDirectorGoalStateSchemaVersionV0   = orquestagoal.GoalWorkStateSchemaV0
 	ObserveAppDirectorGoalResultSchemaV0  = "observe_app_director_goal_result.v0"
 
@@ -152,6 +154,33 @@ type StartAppDirectorResultV0 struct {
 	GoalLaunchReceipt     *orquestagoal.GoalLaunchReceiptV0             `json:"goal_launch_receipt,omitempty"`
 	ValidationIssues      []orquestafactory.ValidationIssue             `json:"validation_issues,omitempty"`
 	EvidenceRefs          []string                                      `json:"evidence_refs,omitempty"`
+}
+
+type StartAppDirectorGoalPreviewV0 struct {
+	SchemaVersion         string                                  `json:"schema_version"`
+	Status                string                                  `json:"status"`
+	DirectorExecutionMode string                                  `json:"director_execution_mode,omitempty"`
+	CorrelationID         string                                  `json:"correlation_id,omitempty"`
+	AppSpec               orquestafactory.AppSpecV0               `json:"app_spec,omitempty"`
+	Run                   orquestacoreworkflow.OrchestrationRunV0 `json:"run,omitempty"`
+	GoalSpec              orquestagoal.GoalWorkSpecV0             `json:"goal_spec,omitempty"`
+	WriteSet              []string                                `json:"write_set,omitempty"`
+	RequiredTests         []string                                `json:"required_tests,omitempty"`
+	Estimate              AppDirectorGoalPreviewEstimateV0        `json:"estimate,omitempty"`
+	GoalSpecIssues        []orquestagoal.GoalWorkIssueV0          `json:"goal_spec_issues,omitempty"`
+	ValidationIssues      []orquestafactory.ValidationIssue       `json:"validation_issues,omitempty"`
+	EvidenceRefs          []string                                `json:"evidence_refs,omitempty"`
+}
+
+type AppDirectorGoalPreviewEstimateV0 struct {
+	TokenBudget       int    `json:"token_budget,omitempty"`
+	MaxRuntimeSeconds int    `json:"max_runtime_seconds,omitempty"`
+	MaxSubgoals       int    `json:"max_subgoals,omitempty"`
+	MaxReworkGoals    int    `json:"max_rework_goals,omitempty"`
+	WriteSetItems     int    `json:"write_set_items,omitempty"`
+	RequiredTests     int    `json:"required_tests,omitempty"`
+	ArtifactContracts int    `json:"artifact_contracts,omitempty"`
+	CostTier          string `json:"cost_tier,omitempty"`
 }
 
 type AppDirectorServiceIssueV0 struct {

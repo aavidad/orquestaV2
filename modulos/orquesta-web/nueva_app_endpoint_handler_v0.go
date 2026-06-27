@@ -56,6 +56,7 @@ func decodeNuevaAppWebFormV0(r *http.Request) (WebNuevaAppFormV0, error) {
 
 func nuevaAppFormFromValuesV0(values map[string][]string) WebNuevaAppFormV0 {
 	form := WebNuevaAppFormV0{
+		Action:                formValueV0(values, "nueva_app_action"),
 		RequestID:             formValueV0(values, "request_id"),
 		Locale:                formValueV0(values, "locale"),
 		RequestKind:           formValueV0(values, "request_kind"),

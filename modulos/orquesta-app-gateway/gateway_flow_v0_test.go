@@ -99,6 +99,31 @@ func TestAppDirectorGoalObserveAPIDelegaEnExecutorRESTV0(t *testing.T) {
 	}
 }
 
+func TestAppDirectorPreviewAPIDelegaEnExecutorRESTV0(t *testing.T) {
+	executor := &recordingPreviewDirectorExecutorV0{}
+	handler := NewHTTPHandlerV0(ConfigV0{
+		PreviewDirector: executor,
+		Timeout:         time.Second,
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		orquestamcp.MCPPreviewDirectorAppHTTPPathV0,
+		strings.NewReader(`{"request_id":"req-preview-app-gateway-001","app_spec_request":{"schema_version":"app_spec_request.v0","request_id":"req-preview-app-gateway-001","nombre":"Agenda","objetivo":"Coordinar ensayos","tipo_app":"web","locale":"es-ES"}}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if executor.Input.RequestID != "req-preview-app-gateway-001" ||
+		executor.Input.AppSpecRequest.Nombre != "Agenda" {
+		t.Fatalf("input=%+v", executor.Input)
+	}
+}
+
 func TestDirectorStatsPageDelegaEnDirectorStatsRESTSinCmdDBRuntimeV0(t *testing.T) {
 	run := orquestacoreworkflow.OrchestrationRunV0{
 		RunID:         "run-app-gateway-stats-001",
@@ -277,6 +302,10 @@ type recordingArrancarDirectorExecutorV0 struct {
 	Input orquestamcp.MCPArrancarDirectorAppToolInputV0
 }
 
+type recordingPreviewDirectorExecutorV0 struct {
+	Input orquestamcp.MCPArrancarDirectorAppToolInputV0
+}
+
 type recordingFunctionContractIndexV0 struct {
 	ListResult orquestacore.ListFunctionContractsResultV0
 	ListCalls  int
@@ -314,6 +343,18 @@ func (executor *recordingArrancarDirectorExecutorV0) Execute(
 			Capacity:       "high",
 		}},
 		StartedAgents: []string{"agent-app-gateway-director-001"},
+	}, nil
+}
+
+func (executor *recordingPreviewDirectorExecutorV0) Execute(
+	_ context.Context,
+	input orquestamcp.MCPArrancarDirectorAppToolInputV0,
+) (orquestamcp.MCPPreviewDirectorAppToolResultV0, error) {
+	executor.Input = input
+	return orquestamcp.MCPPreviewDirectorAppToolResultV0{
+		Estado:    orquestamcp.MCPArrancarDirectorAppEstadoOKV0,
+		RequestID: input.RequestID,
+		RunRef:    "run-app-gateway-preview-001",
 	}, nil
 }
 

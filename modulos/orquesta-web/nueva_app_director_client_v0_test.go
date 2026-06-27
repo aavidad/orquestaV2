@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
 func TestRESTArrancarDirectorAppClientV0EnviaPOSTJSONYProyectaDirector(t *testing.T) {
@@ -95,6 +97,63 @@ func TestRESTArrancarDirectorAppClientV0OmiteModoDirectorVacioYPreservaLegacyExp
 	}
 	if !strings.Contains(string(legacyPayload), `"director_execution_mode":"legacy_director_loop"`) {
 		t.Fatalf("payload legacy no conserva modo explicito: %s", legacyPayload)
+	}
+}
+
+func TestRESTPreviewDirectorAppClientV0EnviaPOSTJSONYProyectaGoalPreview(t *testing.T) {
+	var received arrancarDirectorAppRequestEnvelopeV0
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("method=%s", r.Method)
+		}
+		if r.URL.Path != PreviewDirectorAppEndpointV0 {
+			t.Fatalf("path=%s", r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(WebPreviewDirectorAppResultV0{
+			Estado:                ArrancarDirectorAppEstadoOKV0,
+			RequestID:             "req-director-preview-client-001",
+			RunRef:                "run-ref-director-preview-client-001",
+			DirectorExecutionMode: "goal_first",
+			GoalSpec: orquestagoal.GoalWorkSpecV0{
+				GoalRef:      "goal-ref-director-preview-client-001",
+				RunRef:       "run-ref-director-preview-client-001",
+				WorkKind:     "new_app",
+				DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+				Objective:    "Construir Agenda",
+				WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "generated-apps/agenda"}},
+				RequiredTests: []orquestagoal.GoalRequiredTestV0{{
+					TestRef: "test-ref-agenda",
+					Command: "verificar app",
+				}},
+			},
+			Estimate: WebNuevaAppGoalPreviewEstimateV0{
+				TokenBudget: 12000,
+				CostTier:    "low",
+			},
+			EvidenceRefs: []string{"evidence-ref-web-preview-client-001"},
+		})
+	}))
+	defer server.Close()
+
+	client := NewRESTPreviewDirectorAppClientV0(server.URL, time.Second)
+	client.Limits = WebArrancarDirectorAppLimitsV0{MaxCommands: 9}
+	vm, err := client.PreviewDirectorApp(context.Background(), minimalFormForClientV0("req-director-preview-client-001"))
+	if err != nil {
+		t.Fatalf("PreviewDirectorApp: %v", err)
+	}
+	if received.AppSpecRequest.RequestID != "req-director-preview-client-001" || received.MaxCommands != 9 {
+		t.Fatalf("payload inesperado: %+v", received)
+	}
+	if vm.Estado != WebNuevaAppEstadoGoalPreview ||
+		vm.GoalPreview == nil ||
+		vm.GoalPreview.GoalRef != "goal-ref-director-preview-client-001" ||
+		len(vm.GoalPreview.WriteSet) != 1 ||
+		vm.GoalPreview.Estimate.CostTier != "low" {
+		t.Fatalf("vm=%+v", vm)
 	}
 }
 

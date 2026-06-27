@@ -41,3 +41,9 @@ func TestPublicRouteMutabilityV0IntakeGuiadoEsLecturaAunqueEsteBajoAppsV0(t *tes
 		t.Fatalf("mutability=%s", got)
 	}
 }
+
+func TestPublicRouteMutabilityV0PreviewDirectorEsLecturaAunqueEsteBajoAppsV0(t *testing.T) {
+	if got := PublicRouteMutabilityV0(RouteAppDirectorPreviewV0); got != PublicRouteReadV0 {
+		t.Fatalf("mutability=%s", got)
+	}
+}
