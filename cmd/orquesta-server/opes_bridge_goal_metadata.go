@@ -65,3 +65,21 @@ func opesBridgeResultUsesGoalFirstV0(
 	}
 	return false
 }
+
+func opesBridgeGoalMetadataFromDirectorStatsV0(
+	decoded opesBridgeDirectorStatsResponseV0,
+) (externalBridgeInputRunMetadataV0, bool) {
+	goal := decoded.Goal
+	if strings.TrimSpace(goal.GoalRef) == "" &&
+		strings.TrimSpace(goal.ExternalGoalRef) == "" &&
+		strings.TrimSpace(goal.DirectorExecutionMode) != opesBridgeDirectorExecutionModeGoalFirstV0 {
+		return externalBridgeInputRunMetadataV0{}, false
+	}
+	return externalBridgeInputRunMetadataV0{
+		RoutePolicy:           opesBridgeRoutePolicyGoalFirstV0,
+		DirectorExecutionMode: firstNonEmptyEnvlessV0(goal.DirectorExecutionMode, opesBridgeDirectorExecutionModeGoalFirstV0),
+		GoalRef:               strings.TrimSpace(goal.GoalRef),
+		ExternalGoalRef:       strings.TrimSpace(goal.ExternalGoalRef),
+		NextActions:           []string{opesBridgeNextActionObserveGoalV0},
+	}, true
+}

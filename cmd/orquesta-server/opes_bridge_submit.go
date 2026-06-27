@@ -124,10 +124,15 @@ func opesExternalWorkRunSubmitHTTPErrorV0(status int, body []byte) error {
 }
 
 type opesExternalWorkRunSupervisionV0 struct {
-	Status      string
-	StopReason  string
-	ProcessRef  string
-	EvidenceRef string
+	Status                string
+	StopReason            string
+	ProcessRef            string
+	EvidenceRef           string
+	RoutePolicy           string
+	DirectorExecutionMode string
+	GoalRef               string
+	ExternalGoalRef       string
+	NextActions           []string
 }
 
 func superviseOPESExternalWorkRunV0(
@@ -181,9 +186,14 @@ func superviseOPESExternalWorkRunV0(
 		return opesExternalWorkRunSupervisionV0{}, err
 	}
 	var decoded struct {
-		Estado     string `json:"estado"`
-		StopReason string `json:"stop_reason"`
-		Last       struct {
+		Estado                string   `json:"estado"`
+		StopReason            string   `json:"stop_reason"`
+		RoutePolicy           string   `json:"route_policy"`
+		DirectorExecutionMode string   `json:"director_execution_mode"`
+		GoalRef               string   `json:"goal_ref"`
+		ExternalGoalRef       string   `json:"external_goal_ref"`
+		NextActions           []string `json:"next_actions"`
+		Last                  struct {
 			Status       string   `json:"status"`
 			ProcessRef   string   `json:"process_ref"`
 			EvidenceRefs []string `json:"evidence_refs"`
@@ -196,10 +206,15 @@ func superviseOPESExternalWorkRunV0(
 		return opesExternalWorkRunSupervisionV0{}, fmt.Errorf("response_invalid")
 	}
 	return opesExternalWorkRunSupervisionV0{
-		Status:      firstNonEmptyEnvlessV0(decoded.Last.Status, decoded.Estado),
-		StopReason:  strings.TrimSpace(decoded.StopReason),
-		ProcessRef:  strings.TrimSpace(decoded.Last.ProcessRef),
-		EvidenceRef: firstNonEmptyEnvlessV0(decoded.Last.EvidenceRefs...),
+		Status:                firstNonEmptyEnvlessV0(decoded.Last.Status, decoded.Estado),
+		StopReason:            strings.TrimSpace(decoded.StopReason),
+		ProcessRef:            strings.TrimSpace(decoded.Last.ProcessRef),
+		EvidenceRef:           firstNonEmptyEnvlessV0(decoded.Last.EvidenceRefs...),
+		RoutePolicy:           strings.TrimSpace(decoded.RoutePolicy),
+		DirectorExecutionMode: strings.TrimSpace(decoded.DirectorExecutionMode),
+		GoalRef:               strings.TrimSpace(decoded.GoalRef),
+		ExternalGoalRef:       strings.TrimSpace(decoded.ExternalGoalRef),
+		NextActions:           compactStringsV0(decoded.NextActions),
 	}, nil
 }
 

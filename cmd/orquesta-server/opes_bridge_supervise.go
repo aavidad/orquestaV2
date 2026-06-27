@@ -61,6 +61,12 @@ func opesBridgeSuperviseSubmittedRunV0(
 		result.SupervisionStopReason = "supervision_unavailable"
 		return
 	}
+	if opesBridgeSupervisionUsesGoalFirstV0(supervision) {
+		opesBridgeApplySupervisionGoalFirstMetadataV0(result, supervision)
+		opesBridgePersistSubmittedGoalFirstMetadataV0(ctx, config, result)
+		opesBridgeObserveSubmittedGoalV0(ctx, client, config, result)
+		return
+	}
 	if opesBridgePendingJobNeedsRunRecoveryV0(supervision) {
 		terminalPending := opesBridgePendingJobTerminalSupervisionV0(supervision)
 		recovery, err := recoverStoppedOPESExternalWorkRunV0(
@@ -141,6 +147,81 @@ func opesBridgeObserveSubmittedGoalV0(
 	result.SupervisionStopReason = supervision.StopReason
 	result.SupervisionProcessRef = supervision.ProcessRef
 	result.SupervisionEvidenceRef = supervision.EvidenceRef
+}
+
+func opesBridgePersistSubmittedGoalFirstMetadataV0(
+	ctx context.Context,
+	config opesDrainConfigV0,
+	result *opesDrainJobResultV0,
+) {
+	if result == nil ||
+		config.InputLedger == nil ||
+		strings.TrimSpace(result.JobRef) == "" ||
+		strings.TrimSpace(result.RunRef) == "" {
+		return
+	}
+	_ = externalBridgeRecordSubmittedInputV0(
+		ctx,
+		config.InputLedger,
+		opesBridgeExternalSystemV0,
+		result.JobRef,
+		result.RunRef,
+		result.ChangeRef,
+		opesBridgeRunMetadataFromDrainResultV0(*result),
+	)
+}
+
+func opesBridgeSupervisionUsesGoalFirstV0(
+	supervision opesExternalWorkRunSupervisionV0,
+) bool {
+	if strings.TrimSpace(supervision.RoutePolicy) == opesBridgeRoutePolicyGoalFirstV0 ||
+		strings.TrimSpace(supervision.DirectorExecutionMode) == opesBridgeDirectorExecutionModeGoalFirstV0 ||
+		strings.TrimSpace(supervision.GoalRef) != "" ||
+		strings.TrimSpace(supervision.ExternalGoalRef) != "" ||
+		strings.TrimSpace(supervision.StopReason) == "goal_first_observe_required" {
+		return true
+	}
+	for _, action := range supervision.NextActions {
+		if strings.TrimSpace(action) == opesBridgeNextActionObserveGoalV0 {
+			return true
+		}
+	}
+	return false
+}
+
+func opesBridgeApplySupervisionGoalFirstMetadataV0(
+	result *opesDrainJobResultV0,
+	supervision opesExternalWorkRunSupervisionV0,
+) {
+	if result == nil {
+		return
+	}
+	opesBridgeApplyRunMetadataV0(result, externalBridgeInputRunMetadataV0{
+		RoutePolicy:           opesBridgeRoutePolicyGoalFirstV0,
+		DirectorExecutionMode: firstNonEmptyEnvlessV0(supervision.DirectorExecutionMode, opesBridgeDirectorExecutionModeGoalFirstV0),
+		GoalRef:               strings.TrimSpace(supervision.GoalRef),
+		ExternalGoalRef:       strings.TrimSpace(supervision.ExternalGoalRef),
+		NextActions: uniqueOPESBridgeGoalFirstNextActionsV0(append(
+			[]string{opesBridgeNextActionObserveGoalV0},
+			supervision.NextActions...,
+		)),
+	})
+}
+
+func uniqueOPESBridgeGoalFirstNextActionsV0(
+	values []string,
+) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
 }
 
 func opesBridgePendingJobNeedsRunRecoveryV0(

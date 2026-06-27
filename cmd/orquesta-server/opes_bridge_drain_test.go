@@ -269,6 +269,129 @@ func TestRunOPESDrainOnceV0GoalFirstSupervisionObservaGoalSinSupervisorLegacyV0(
 	}
 }
 
+func TestRunOPESDrainOnceV0AlreadySubmittedGoalFirstLedgerAntiguoPivotaPorSupervisorV0(t *testing.T) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
+			"id":             "job-ref-goal-legacy-ledger-001",
+			"type":           "draft_content_block",
+			"status":         "pending",
+			"execution_mode": "external",
+			"payload_json":   `{"topic_id":"topic-ref-001","title":"Bloque goal ledger antiguo"}`,
+			"requested_by":   "opes",
+		}})
+	}))
+	defer opesServer.Close()
+
+	observes := 0
+	supervisions := 0
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v0/runs/supervise":
+			supervisions++
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatalf("decode supervise: %v", err)
+			}
+			if body["run_ref"] != "run-ref-goal-legacy-ledger-001" {
+				t.Fatalf("supervise body=%+v", body)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"estado":                  "ok",
+				"run_ref":                 "run-ref-goal-legacy-ledger-001",
+				"stop_reason":             "goal_first_observe_required",
+				"director_execution_mode": "goal_first",
+				"goal_ref":                "goal-ref-goal-legacy-ledger-001",
+				"external_goal_ref":       "thread-ref-goal-legacy-ledger-001",
+				"next_actions":            []string{"observe_goal", "do_not_supervise_goal_first_with_legacy_loop"},
+				"last": map[string]any{
+					"status":        "running",
+					"evidence_refs": []string{"evidence-ref-run-supervisor-goal-first-redirect"},
+				},
+			})
+		case "/api/v0/apps/director/goal/observe":
+			observes++
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatalf("decode observe: %v", err)
+			}
+			if body["run_ref"] != "run-ref-goal-legacy-ledger-001" {
+				t.Fatalf("observe body=%+v", body)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"estado":                  "ok",
+				"run_ref":                 "run-ref-goal-legacy-ledger-001",
+				"run_status":              "running",
+				"director_execution_mode": "goal_first",
+				"goal_ref":                "goal-ref-goal-legacy-ledger-001",
+				"external_goal_ref":       "thread-ref-goal-legacy-ledger-001",
+				"goal_status":             "running",
+				"evidence_refs":           []string{"evidence-ref-goal-legacy-ledger-observe"},
+			})
+		default:
+			t.Fatalf("orquesta request inesperada %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer orquestaServer.Close()
+
+	ledger, err := newFileExternalBridgeInputLedgerV0(
+		filepath.Join(t.TempDir(), "external-bridge-input-ledger.json"),
+	)
+	if err != nil {
+		t.Fatalf("ledger: %v", err)
+	}
+	if err := opesBridgeRecordSubmittedV0(
+		context.Background(),
+		ledger,
+		orquestaopesconnector.ExternalJobV0{ID: "job-ref-goal-legacy-ledger-001"},
+		"run-ref-goal-legacy-ledger-001",
+		"change-ref-goal-legacy-ledger-001",
+	); err != nil {
+		t.Fatalf("record ledger: %v", err)
+	}
+
+	summary, err := runOPESDrainOnceV0(context.Background(), opesDrainConfigV0{
+		OPESBaseURL:        opesServer.URL,
+		OrquestaBaseURL:    orquestaServer.URL,
+		Limit:              1,
+		JobType:            "draft_content_block",
+		HTTPTimeout:        time.Second,
+		SuperviseSubmitted: true,
+		RunConfig: orquestaopesbridge.JobRunConfigV0{
+			PriorityScore: 70,
+			RequestedBy:   "test",
+		},
+		InputLedger: ledger,
+	})
+	if err != nil ||
+		observes != 1 ||
+		supervisions != 1 ||
+		summary.AlreadySubmitted != 1 ||
+		summary.Results[0].Status != "already_submitted" ||
+		summary.Results[0].RoutePolicy != "goal_first" ||
+		summary.Results[0].GoalRef != "goal-ref-goal-legacy-ledger-001" ||
+		summary.Results[0].SupervisionStatus != "running" ||
+		summary.Results[0].SupervisionStopReason != "running" {
+		t.Fatalf("observes=%d supervisions=%d summary=%+v err=%v", observes, supervisions, summary, err)
+	}
+	entry, found, err := ledger.LookupExternalBridgeInputV0(
+		context.Background(),
+		opesBridgeInputLedgerKeyV0("job-ref-goal-legacy-ledger-001"),
+	)
+	if err != nil ||
+		!found ||
+		entry.RoutePolicy != "goal_first" ||
+		entry.GoalRef != "goal-ref-goal-legacy-ledger-001" ||
+		entry.ExternalGoalRef != "thread-ref-goal-legacy-ledger-001" ||
+		!containsStringForTestV0(entry.NextActions, "observe_goal") {
+		t.Fatalf("entry=%+v found=%v err=%v", entry, found, err)
+	}
+}
+
 func TestRunOPESDrainOnceV0NoSupervisaPorDefectoTrasEnviarV0(t *testing.T) {
 	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {

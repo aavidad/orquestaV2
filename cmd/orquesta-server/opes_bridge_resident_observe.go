@@ -79,9 +79,23 @@ func observeOPESExternalWorkRunStatsV0(
 	runRef string,
 	correlationID string,
 ) (opesExternalWorkRunSupervisionV0, error) {
+	decoded, err := loadOPESExternalWorkRunStatsResponseV0(ctx, client, baseURL, runRef, correlationID)
+	if err != nil {
+		return opesExternalWorkRunSupervisionV0{}, err
+	}
+	return opesBridgeSupervisionFromDirectorStatsV0(decoded), nil
+}
+
+func loadOPESExternalWorkRunStatsResponseV0(
+	ctx context.Context,
+	client *http.Client,
+	baseURL string,
+	runRef string,
+	correlationID string,
+) (opesBridgeDirectorStatsResponseV0, error) {
 	runRef = strings.TrimSpace(runRef)
 	if runRef == "" {
-		return opesExternalWorkRunSupervisionV0{}, fmt.Errorf("run_ref_required")
+		return opesBridgeDirectorStatsResponseV0{}, fmt.Errorf("run_ref_required")
 	}
 	body, err := json.Marshal(map[string]any{
 		"request_id":             "req-opes-bridge-resident-observe-" + opesBridgeCompactRunPartV0(runRef),
@@ -92,11 +106,11 @@ func observeOPESExternalWorkRunStatsV0(
 		"include_agent_progress": false,
 	})
 	if err != nil {
-		return opesExternalWorkRunSupervisionV0{}, fmt.Errorf("request_marshal_error")
+		return opesBridgeDirectorStatsResponseV0{}, fmt.Errorf("request_marshal_error")
 	}
 	target, err := commandRESTEndpointURLV0(baseURL, "/api/v0/director/stats")
 	if err != nil {
-		return opesExternalWorkRunSupervisionV0{}, fmt.Errorf("request_build_error")
+		return opesBridgeDirectorStatsResponseV0{}, fmt.Errorf("request_build_error")
 	}
 	httpRequest, err := http.NewRequestWithContext(
 		ctx,
@@ -105,31 +119,41 @@ func observeOPESExternalWorkRunStatsV0(
 		bytes.NewReader(body),
 	)
 	if err != nil {
-		return opesExternalWorkRunSupervisionV0{}, fmt.Errorf("request_build_error")
+		return opesBridgeDirectorStatsResponseV0{}, fmt.Errorf("request_build_error")
 	}
 	httpRequest.Header.Set("Content-Type", "application/json")
 	response, err := client.Do(httpRequest)
 	if err != nil {
-		return opesExternalWorkRunSupervisionV0{}, errors.New(commandEffectHTTPErrorCodeV0(ctx, err))
+		return opesBridgeDirectorStatsResponseV0{}, errors.New(commandEffectHTTPErrorCodeV0(ctx, err))
 	}
 	defer response.Body.Close()
 	responseBody, err := readCommandHTTPResponseBodyV0(response, "director_stats")
 	if err != nil {
-		return opesExternalWorkRunSupervisionV0{}, err
+		return opesBridgeDirectorStatsResponseV0{}, err
 	}
 	var decoded opesBridgeDirectorStatsResponseV0
 	if err := json.Unmarshal(responseBody, &decoded); err != nil {
-		return opesExternalWorkRunSupervisionV0{}, fmt.Errorf("response_decode_error")
+		return opesBridgeDirectorStatsResponseV0{}, fmt.Errorf("response_decode_error")
 	}
 	if strings.TrimSpace(decoded.Estado) == "error" {
-		return opesExternalWorkRunSupervisionV0{}, fmt.Errorf("director_stats_error")
+		return opesBridgeDirectorStatsResponseV0{}, fmt.Errorf("director_stats_error")
 	}
-	return opesBridgeSupervisionFromDirectorStatsV0(decoded), nil
+	return decoded, nil
 }
 
 type opesBridgeDirectorStatsResponseV0 struct {
 	Estado string `json:"estado"`
-	Stats  struct {
+	Goal   struct {
+		DirectorExecutionMode string   `json:"director_execution_mode"`
+		GoalRef               string   `json:"goal_ref"`
+		ExternalGoalRef       string   `json:"external_goal_ref"`
+		Status                string   `json:"status"`
+		ClosureStatus         string   `json:"closure_status"`
+		ClosureAccepted       bool     `json:"closure_accepted"`
+		ClosureNeedsRework    bool     `json:"closure_needs_rework"`
+		EvidenceRefs          []string `json:"evidence_refs"`
+	} `json:"goal"`
+	Stats struct {
 		Status string `json:"status"`
 		Counts struct {
 			TasksDelivered  int `json:"tasks_delivered"`
