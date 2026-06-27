@@ -32,6 +32,7 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		"usa literalmente los test_ref",
 		"usa literalmente los artifact_ref",
 		"Resultado estructurado obligatorio",
+		"Los command de Tests requeridos son parte del contrato neutral acotado",
 	} {
 		if !strings.Contains(packet.Prompt, expected) {
 			t.Fatalf("prompt no contiene %q:\n%s", expected, packet.Prompt)
@@ -52,8 +53,24 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		packet.EvidenceRefs[0] != "evidence-ref-input" ||
 		!packet.ClosurePolicy.RequireRequiredTests ||
 		!packet.ReworkPolicy.PreferNewGoal ||
-		packet.Budget.MaxSubgoals != 2 {
+		packet.Budget.MaxSubgoals != 2 ||
+		len(packet.RequiredTests) != 1 ||
+		packet.RequiredTests[0].Command != "go test -count=1 ./modulos/orquesta-goal" {
 		t.Fatalf("packet no conserva gobierno: %+v", packet)
+	}
+}
+
+func TestBuildCodexGoalStartPacketV0RechazaPromptDemasiadoGrande(t *testing.T) {
+	spec := validCodexGoalSpecV0()
+	spec.Objective = strings.Repeat("x", CodexGoalMaxPromptBytesV0)
+
+	packet, issues := BuildCodexGoalStartPacketV0(spec)
+
+	if len(issues) != 1 ||
+		issues[0].Code != ErrCodexGoalPromptTooLargeV0 ||
+		issues[0].Field != "prompt" ||
+		packet.SchemaVersion != "" {
+		t.Fatalf("packet=%+v issues=%+v", packet, issues)
 	}
 }
 

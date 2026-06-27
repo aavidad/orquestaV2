@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"strings"
 
-	orquestarails "orquesta/modulos/orquesta-rails"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
@@ -239,11 +238,10 @@ func codexAgentAckTaskRefLooksSubroleV0(taskRef string) bool {
 }
 
 func (v *codexAckValidatorV0) validateSensitiveDetails(ack CodexAgentAckV0) {
-	if !orquestarails.DetailProhibitedRailsEnabledV0() {
-		return
-	}
 	// Operational/local-detail markers are advisory. The director/orchestrator
 	// decides whether to ignore, remove or turn them into improvement work.
+	// Effective secrets are different: they are a hard security boundary even
+	// while legacy detail rails are offline.
 	if codexAckContainsSensitiveDetailV0(ack) {
 		v.add(CodexConnectorAckForbiddenV0, "agent_ack", "forbidden_sensitive_detail")
 	}

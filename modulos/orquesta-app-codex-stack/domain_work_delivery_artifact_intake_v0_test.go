@@ -167,6 +167,40 @@ func TestDomainWorkDeliveryArtifactIntakeV0SeleccionaFicheroPorTipoArtefacto(t *
 	}
 }
 
+func TestDomainWorkDeliveryArtifactIntakeV0ExigeTipoSiHayVariosFicheros(t *testing.T) {
+	projectDir := t.TempDir()
+	writeDomainWorkArtifactIntakeTestFileV0(
+		t,
+		projectDir,
+		"external/opes/notas_auxiliares.md",
+		[]byte("Contenido auxiliar que no debe ser el artefacto principal."),
+	)
+	writeDomainWorkArtifactIntakeTestFileV0(
+		t,
+		projectDir,
+		"external/opes/otra_nota.md",
+		[]byte("Segunda nota auxiliar."),
+	)
+
+	_, err := readDomainWorkDeliveryArtifactV0(
+		orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+			DescriptorRef:  "descriptor-ref-intake-multiple-no-match-001",
+			ProjectWorkDir: projectDir,
+		},
+		orquestaruntimecodex.CodexAgentAckV0{
+			Files: []string{
+				"external/opes/notas_auxiliares.md",
+				"external/opes/otra_nota.md",
+			},
+		},
+		orquestadomainwork.DomainWorkArtifactTypeContentBlockV0,
+	)
+
+	if err == nil || !strings.Contains(err.Error(), "artifact_type_match_required_for_multiple_files") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 func writeDomainWorkArtifactIntakeTestFileV0(
 	t *testing.T,
 	projectDir string,

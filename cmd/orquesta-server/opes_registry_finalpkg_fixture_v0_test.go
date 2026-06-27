@@ -152,6 +152,14 @@ func (fixture opesRegistryFinalPkgFixtureV0) writeActiveDeliveredRun(runRef stri
 }
 
 func (fixture opesRegistryFinalPkgFixtureV0) writeReconciliableRun(runRef string) {
+	fixture.writeReconciliableRunWithAcceptedReviews(runRef, []string{"accepted-review-ref-" + runRef})
+}
+
+func (fixture opesRegistryFinalPkgFixtureV0) writeReconciliableRunWithoutAcceptedReviews(runRef string) {
+	fixture.writeReconciliableRunWithAcceptedReviews(runRef, nil)
+}
+
+func (fixture opesRegistryFinalPkgFixtureV0) writeReconciliableRunWithAcceptedReviews(runRef string, acceptedReviews []string) {
 	phases := orquestacoreworkflow.OrchestrationPhaseCatalogV0()
 	for index := range phases {
 		if phases[index].ID == orquestacoreworkflow.OrchestrationPhaseRevisionV0 {
@@ -169,7 +177,7 @@ func (fixture opesRegistryFinalPkgFixtureV0) writeReconciliableRun(runRef string
 		Phases:          phases,
 		Tasks:           []string{"task-ref-" + runRef},
 		Deliveries:      []string{"delivery-ref-" + runRef},
-		AcceptedReviews: []string{"accepted-review-ref-" + runRef},
+		AcceptedReviews: acceptedReviews,
 		Blockers:        []string{"blocker-ref-finalpkg"},
 		LastEventID:     "event-ref-seed-" + runRef,
 		LastSequence:    10,

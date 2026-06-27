@@ -21,8 +21,17 @@ Contiene:
 - politica de cierre;
 - politica de rework.
 
-No contiene HOME, token, OAuth, proveedor, modelo, comando, ruta absoluta ni
-transcript.
+El prompt no debe superar 32 KiB y el paquete JSON completo no debe superar
+64 KiB. Si se excede ese limite, el launcher devuelve `invalid` con
+`codex_goal_prompt_too_large` o `codex_goal_start_packet_too_large` antes de
+llamar al puerto real.
+
+No contiene HOME, token, OAuth, proveedor, modelo, comando de runtime/local,
+ruta absoluta ni transcript. La excepcion deliberada son los comandos de tests
+requeridos que ya viajan en `required_tests[].command` dentro del contrato
+neutral `GoalWorkSpecV0`: el adaptador los preserva para que el goal pueda
+reportar evidencia acotada de esos tests. Esos comandos no definen como se
+arranca Codex Goal ni autorizan a meter un backend local en este modulo.
 
 ## CodexGoalStarterPortV0
 

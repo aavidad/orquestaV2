@@ -43,6 +43,7 @@ func selectDomainWorkDeliveryArtifactFileV0(
 ) (string, string, bool, error) {
 	fallbackPath := ""
 	fallbackRef := ""
+	scanned := 0
 	for _, file := range files {
 		fileRef := strings.TrimSpace(string(file))
 		path, ok := safeDomainWorkDeliveryFilePathV0(projectWorkDir, fileRef)
@@ -53,6 +54,7 @@ func selectDomainWorkDeliveryArtifactFileV0(
 				"invalid_declared_path",
 			)
 		}
+		scanned++
 		if fallbackPath == "" {
 			fallbackPath = path
 			fallbackRef = fileRef
@@ -63,6 +65,13 @@ func selectDomainWorkDeliveryArtifactFileV0(
 	}
 	if fallbackPath == "" {
 		return "", "", false, nil
+	}
+	if scanned > 1 {
+		return "", "", false, domainWorkArtifactIntakeErrorV0(
+			"domain_work_artifact_unreadable",
+			"files.artifact_type",
+			"artifact_type_match_required_for_multiple_files",
+		)
 	}
 	return fallbackPath, fallbackRef, true, nil
 }

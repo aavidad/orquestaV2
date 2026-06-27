@@ -31,8 +31,16 @@ const (
 	ErrGoalWriteSetInvalidV0   = "goal_write_set_invalid"
 	ErrGoalRefFieldInvalidV0   = "goal_ref_field_invalid"
 	ErrGoalRuleInvalidV0       = "goal_rule_invalid"
+	ErrGoalSpecLimitExceededV0 = "goal_spec_limit_exceeded"
 	ErrGoalStatusInvalidV0     = "goal_status_invalid"
 	ErrGoalClosureInvalidV0    = "goal_closure_invalid"
+)
+
+const (
+	GoalWorkSpecMaxStringBytesV0        = 32 * 1024
+	GoalWorkSpecMaxCommandBytesV0       = 16 * 1024
+	GoalWorkSpecMaxListItemsV0          = 512
+	GoalWorkSpecMaxProjectedJSONBytesV0 = 256 * 1024
 )
 
 type GoalWorkSpecV0 struct {

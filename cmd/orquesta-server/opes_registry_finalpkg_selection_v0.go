@@ -124,21 +124,20 @@ func opesRegistryFinalPkgTestsJSONHasPublishableQuestionsV0(data []byte) bool {
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		return false
 	}
-	return opesRegistryFinalPkgJSONHasQuestionsV0(decoded)
+	return opesRegistryFinalPkgJSONHasPublishableQuestionsV0(decoded)
 }
 
-func opesRegistryFinalPkgJSONHasQuestionsV0(value any) bool {
+func opesRegistryFinalPkgJSONHasPublishableQuestionsV0(value any) bool {
 	switch typed := value.(type) {
 	case []any:
-		return len(typed) > 0
-	case map[string]any:
-		for _, key := range []string{"questions", "preguntas", "items", "tests", "question_bank"} {
-			if opesRegistryFinalPkgJSONHasQuestionsV0(typed[key]) {
+		for _, item := range typed {
+			if opesRegistryFinalPkgJSONQuestionPublishableV0(item) {
 				return true
 			}
 		}
-		for _, key := range []string{"total_questions", "question_count", "questions_count", "total"} {
-			if opesRegistryFinalPkgPositiveJSONNumberV0(typed[key]) {
+	case map[string]any:
+		for _, key := range []string{"questions", "preguntas", "items", "tests", "question_bank"} {
+			if opesRegistryFinalPkgJSONHasPublishableQuestionsV0(typed[key]) {
 				return true
 			}
 		}
@@ -146,15 +145,38 @@ func opesRegistryFinalPkgJSONHasQuestionsV0(value any) bool {
 	return false
 }
 
-func opesRegistryFinalPkgPositiveJSONNumberV0(value any) bool {
-	switch typed := value.(type) {
-	case float64:
-		return typed > 0
-	case int:
-		return typed > 0
-	default:
+func opesRegistryFinalPkgJSONQuestionPublishableV0(value any) bool {
+	typed, ok := value.(map[string]any)
+	if !ok {
 		return false
 	}
+	return opesRegistryFinalPkgJSONStringAnyV0(typed, "prompt", "enunciado", "question", "pregunta", "text") != "" &&
+		opesRegistryFinalPkgJSONOptionsCountV0(typed) >= 2 &&
+		opesRegistryFinalPkgJSONStringAnyV0(typed, "answer", "respuesta", "correct_answer", "correcta", "correct_option") != ""
+}
+
+func opesRegistryFinalPkgJSONStringAnyV0(value map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if text, ok := value[key].(string); ok && strings.TrimSpace(text) != "" {
+			return strings.TrimSpace(text)
+		}
+	}
+	return ""
+}
+
+func opesRegistryFinalPkgJSONOptionsCountV0(value map[string]any) int {
+	for _, key := range []string{"options", "opciones", "answers", "respuestas", "choices"} {
+		if options, ok := value[key].([]any); ok {
+			count := 0
+			for _, option := range options {
+				if strings.TrimSpace(fmt.Sprint(option)) != "" {
+					count++
+				}
+			}
+			return count
+		}
+	}
+	return 0
 }
 
 func opesRegistryFinalPkgRunRefV0(config opesRegistryFinalPkgConfigV0, topicID string) string {

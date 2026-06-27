@@ -19,14 +19,14 @@ func TestCodexAgentAckPendingRailEvidenceRefsV0ClasificaSinValores(t *testing.T)
 	}
 }
 
-func TestCodexAgentAckPendingRailEvidenceRefsV0NoClasificaSecretoEfectivo(t *testing.T) {
+func TestCodexAgentAckPendingRailEvidenceRefsV0RechazaSecretoEfectivo(t *testing.T) {
 	enableCodexRailsModeEnforcedForTestV0(t)
 	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "on")
 	spec := codexSpecForTestV0()
 	data := []byte(codexAckJSONWithNoteForPendingRailTestV0("access_token=abc123"))
 	ack, issues := ValidateCodexAgentAckBytesForSpecV0(data, spec)
-	if len(issues) != 0 {
-		t.Fatalf("rails quitados no deben bloquear secreto efectivo: %+v", issues)
+	if !codexAckIssuesContainEvidenceV0(issues, "forbidden_sensitive_detail") {
+		t.Fatalf("secreto efectivo debe bloquear: %+v", issues)
 	}
 
 	refs := CodexAgentAckPendingRailEvidenceRefsV0(ack)

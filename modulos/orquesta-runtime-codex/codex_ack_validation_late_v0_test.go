@@ -1,6 +1,7 @@
 package orquestaruntimecodex
 
 import (
+	"strings"
 	"testing"
 
 	orquestacontext "orquesta/modulos/orquesta-context"
@@ -161,9 +162,9 @@ func TestCodexAgentAckReceiptV0AceptaMarcadoresDudososComoRailPendiente(t *testi
 	}
 }
 
-func TestCodexAgentAckReceiptV0NoRechazaValoresSensiblesEfectivos(t *testing.T) {
+func TestCodexAgentAckReceiptV0RechazaValoresSensiblesEfectivos(t *testing.T) {
 	enableCodexRailsModeEnforcedForTestV0(t)
-	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "on")
+	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "off")
 	spec := codexSpecForTestV0()
 	forbidden := []string{
 		`"notes":["access_token=abc123"]`,
@@ -174,9 +175,21 @@ func TestCodexAgentAckReceiptV0NoRechazaValoresSensiblesEfectivos(t *testing.T) 
 	for _, fragment := range forbidden {
 		data := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."],` + fragment + `}`
 		_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(data), spec)
-		if len(issues) != 0 {
-			t.Fatalf("rails quitados no deben bloquear fragment=%s issues=%+v", fragment, issues)
+		if !codexAckIssuesContainEvidenceV0(issues, "forbidden_sensitive_detail") {
+			t.Fatalf("secreto efectivo debe bloquear fragment=%s issues=%+v", fragment, issues)
 		}
+	}
+}
+
+func TestCodexAgentAckReceiptV0RechazaPromptBrutoExtenso(t *testing.T) {
+	spec := codexSpecForTestV0()
+	rawPrompt := "prompt=" + strings.Repeat("instruccion interna completa ", 8)
+	data := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."],"notes":["` + rawPrompt + `"]}`
+
+	_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(data), spec)
+
+	if !codexAckIssuesContainEvidenceV0(issues, "forbidden_sensitive_detail") {
+		t.Fatalf("prompt bruto extenso debe bloquear issues=%+v", issues)
 	}
 }
 

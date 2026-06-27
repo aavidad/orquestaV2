@@ -125,7 +125,7 @@ func codexAckSensitiveMarkerHasEffectiveValueV0(value string, marker string) boo
 		}
 		absolute := start + index
 		if codexAckSensitiveMarkerBoundaryV0(value, marker, absolute) &&
-			codexAckSensitiveTailHasEffectiveValueV0(value[absolute+len(marker):]) {
+			codexAckSensitiveTailHasEffectiveValueV0(marker, value[absolute+len(marker):]) {
 			return true
 		}
 		start = absolute + len(marker)
@@ -148,12 +148,35 @@ func codexAckSensitiveMarkerBoundaryV0(value string, marker string, start int) b
 	return before && after
 }
 
-func codexAckSensitiveTailHasEffectiveValueV0(tail string) bool {
+func codexAckSensitiveTailHasEffectiveValueV0(marker string, tail string) bool {
 	value := codexAckSensitiveTailValueV0(tail)
 	if strings.HasPrefix(value, "bearer ") {
 		value = codexAckSensitiveTailValueV0(strings.TrimPrefix(value, "bearer "))
 	}
+	if codexAckSensitiveValueIsSoftRailV0(value) {
+		return false
+	}
+	if codexAckSensitiveMarkerIsRawTextV0(marker) {
+		return codexAckSensitiveRawTextValueLooksEffectiveV0(value)
+	}
 	return value != "" && !codexAckSensitiveValueIsSoftRailV0(value)
+}
+
+func codexAckSensitiveMarkerIsRawTextV0(marker string) bool {
+	switch strings.TrimSpace(marker) {
+	case "prompt=", "completion=", "transcript=", "raw_prompt=", "raw_transcript=", "raw_text=", "full_text=":
+		return true
+	default:
+		return false
+	}
+}
+
+func codexAckSensitiveRawTextValueLooksEffectiveV0(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	return len([]rune(value)) >= 80 || strings.ContainsAny(value, "\n\r")
 }
 
 func codexAckSensitiveTailValueV0(tail string) string {

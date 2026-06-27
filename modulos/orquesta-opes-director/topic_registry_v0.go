@@ -28,13 +28,14 @@ func topicRegistryUpdateRequestV0(
 	expectedArtifactType := orquestadomainwork.DomainWorkArtifactTypeTopicRegistryUpdateV0
 	key := causalJobIdempotencyKeyV0("topic-registry", record, scopeRef, opesTopicRegistryUpdateWorkKindV0)
 	fields := provenanceFieldsV0(record, scopeRef, expectedArtifactType)
+	pendingRefs := topicRegistryPendingRefsForRecordV0(record)
 	fields = append(fields,
 		orquestadomainwork.DomainWorkFieldV0{Name: "registry_scope", Value: "topic"},
 		orquestadomainwork.DomainWorkFieldV0{Name: "registry_action", Value: topicRegistryActionForRecordV0(record)},
 		orquestadomainwork.DomainWorkFieldV0{Name: "registry_tool_ref", Value: "opes-registro-trabajo-temas"},
 		orquestadomainwork.DomainWorkFieldV0{Name: "proposed_status", Value: topicRegistryStatusForRecordV0(record)},
 		orquestadomainwork.DomainWorkFieldV0{Name: "done_refs", Values: compactStringsV0([]string{record.ArtifactRef, record.ReceiptRef})},
-		orquestadomainwork.DomainWorkFieldV0{Name: "pending_refs", Values: followupRefsForRecordV0(record)},
+		orquestadomainwork.DomainWorkFieldV0{Name: "pending_refs", Values: pendingRefs},
 	)
 	if sourceWorkKind := fieldStringV0(record.PayloadFields, "source_work_kind", "work_kind"); sourceWorkKind != "" {
 		fields = append(fields, orquestadomainwork.DomainWorkFieldV0{Name: "source_work_kind", Value: sourceWorkKind})
@@ -76,7 +77,8 @@ func topicRegistryUpdateRequestV0(
 func topicRegistryActionForRecordV0(record OPESCausalArtifactRecordV0) string {
 	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
 		record.CompleteJob &&
-		len(followupRefsForRecordV0(record)) == 0 {
+		len(topicRegistryPendingRefsForRecordV0(record)) == 0 &&
+		topicRegistryFinalPackageHasDeterministicEvidenceV0(record) {
 		return "release"
 	}
 	return "update"
@@ -98,10 +100,50 @@ func topicRegistryStatusForRecordV0(record OPESCausalArtifactRecordV0) string {
 	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 && !record.CompleteJob {
 		return "pendiente_continuar"
 	}
+	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
+		!topicRegistryFinalPackageHasDeterministicEvidenceV0(record) {
+		return "pendiente_validacion_paquete_final"
+	}
 	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 {
 		return "paquete_final_local_verificable"
 	}
 	return "en_progreso_orquesta"
+}
+
+func topicRegistryPendingRefsForRecordV0(record OPESCausalArtifactRecordV0) []string {
+	refs := followupRefsForRecordV0(record)
+	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
+		record.CompleteJob &&
+		len(refs) == 0 &&
+		!topicRegistryFinalPackageHasDeterministicEvidenceV0(record) {
+		refs = append(refs, "final-package-deterministic-validation-required")
+	}
+	return compactStringsV0(refs)
+}
+
+func topicRegistryFinalPackageHasDeterministicEvidenceV0(record OPESCausalArtifactRecordV0) bool {
+	refs := append([]string(nil), record.EvidenceRefs...)
+	refs = append(refs, fieldStringsV0(record.PayloadFields, "evidence_refs", "validation_refs", "required_test_evidence_refs")...)
+	refs = append(refs, record.PayloadRefs...)
+	return topicRegistryHasAnyEvidenceRefV0(refs,
+		"evidence-ref-opes-finalpkg-deterministic-package-contract",
+		"evidence-ref-opes-finalpkg-question-bank-present",
+		"opes-required-question-bank-publicable",
+		"opes-question-bank-publicable",
+		"opes-final-package-validated",
+		"opes_validate_topic_package_v1:passed",
+	)
+}
+
+func topicRegistryHasAnyEvidenceRefV0(refs []string, accepted ...string) bool {
+	for _, ref := range refs {
+		for _, want := range accepted {
+			if strings.TrimSpace(ref) == strings.TrimSpace(want) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func topicRegistryExplicitPartialStatusV0(status string) bool {

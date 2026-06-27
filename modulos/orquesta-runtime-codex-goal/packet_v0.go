@@ -2,6 +2,7 @@ package orquestaruntimecodexgoal
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -13,6 +14,8 @@ const (
 	CodexGoalObservationRequestSchemaV0 = "codex_goal_observation_request.v0"
 	CodexGoalResultMarkerV0             = "ORQUESTA_GOAL_RESULT_V0"
 	CodexGoalResultFileNameV0           = "orquesta_goal_result_v0.json"
+	CodexGoalMaxPromptBytesV0           = 32 * 1024
+	CodexGoalMaxStartPacketBytesV0      = 64 * 1024
 
 	ErrCodexGoalStarterMissingV0      = "codex_goal_starter_missing"
 	ErrCodexGoalObserverMissingV0     = "codex_goal_observer_missing"
@@ -20,6 +23,8 @@ const (
 	ErrCodexGoalObservationInvalidV0  = "codex_goal_observation_invalid"
 	ErrCodexGoalStartRejectedV0       = "codex_goal_start_rejected"
 	ErrCodexGoalObservationRejectedV0 = "codex_goal_observation_rejected"
+	ErrCodexGoalPromptTooLargeV0      = "codex_goal_prompt_too_large"
+	ErrCodexGoalStartPacketTooLargeV0 = "codex_goal_start_packet_too_large"
 )
 
 type CodexGoalStartPacketV0 struct {
@@ -92,7 +97,14 @@ func BuildCodexGoalStartPacketV0(spec orquestagoal.GoalWorkSpecV0) (CodexGoalSta
 	if issues := orquestagoal.ValidateGoalWorkSpecV0(spec); len(issues) > 0 {
 		return CodexGoalStartPacketV0{}, issues
 	}
-	return CodexGoalStartPacketV0{
+	prompt := BuildCodexGoalPromptV0(spec)
+	if len([]byte(prompt)) > CodexGoalMaxPromptBytesV0 {
+		return CodexGoalStartPacketV0{}, []orquestagoal.GoalWorkIssueV0{{
+			Code:  ErrCodexGoalPromptTooLargeV0,
+			Field: "prompt",
+		}}
+	}
+	packet := CodexGoalStartPacketV0{
 		SchemaVersion:      CodexGoalStartPacketSchemaV0,
 		GoalRef:            spec.GoalRef,
 		RequestRef:         spec.RequestRef,
@@ -100,7 +112,7 @@ func BuildCodexGoalStartPacketV0(spec orquestagoal.GoalWorkSpecV0) (CodexGoalSta
 		WorkKind:           spec.WorkKind,
 		WorkProfileKind:    spec.WorkProfileKind,
 		Objective:          spec.Objective,
-		Prompt:             BuildCodexGoalPromptV0(spec),
+		Prompt:             prompt,
 		ContextRefs:        append([]orquestagoal.GoalContextRefV0(nil), spec.ContextRefs...),
 		RuleRefs:           append([]orquestagoal.GoalRuleRefV0(nil), spec.RuleRefs...),
 		SkillRefs:          append([]string(nil), spec.SkillRefs...),
@@ -112,7 +124,21 @@ func BuildCodexGoalStartPacketV0(spec orquestagoal.GoalWorkSpecV0) (CodexGoalSta
 		Budget:             spec.Budget,
 		ClosurePolicy:      spec.ClosurePolicy,
 		ReworkPolicy:       spec.ReworkPolicy,
-	}, nil
+	}
+	packetBytes, err := json.Marshal(packet)
+	if err != nil {
+		return CodexGoalStartPacketV0{}, []orquestagoal.GoalWorkIssueV0{{
+			Code:  ErrCodexGoalSpecInvalidV0,
+			Field: "packet",
+		}}
+	}
+	if len(packetBytes) > CodexGoalMaxStartPacketBytesV0 {
+		return CodexGoalStartPacketV0{}, []orquestagoal.GoalWorkIssueV0{{
+			Code:  ErrCodexGoalStartPacketTooLargeV0,
+			Field: "packet",
+		}}
+	}
+	return packet, nil
 }
 
 func BuildCodexGoalObservationRequestV0(
@@ -253,7 +279,10 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 		b.WriteString("- Respeta el presupuesto operativo declarado en el paquete.\n")
 	}
 	b.WriteString("- Devuelve blocked si falta input externo, permiso, proveedor o cambio de estado externo.\n")
-	b.WriteString("- Conserva refs opacas y no publiques HOME, tokens, OAuth, comandos internos ni transcripts completos.\n")
+	b.WriteString("- Conserva refs opacas y no publiques HOME, tokens, OAuth, comandos internos de runtime/local ni transcripts completos.\n")
+	if len(spec.RequiredTests) > 0 {
+		b.WriteString("- Los command de Tests requeridos son parte del contrato neutral acotado; puedes usarlos solo para reportar evidencias de esos tests.\n")
+	}
 	b.WriteString("\nResultado estructurado obligatorio:\n")
 	b.WriteString("- Termina la respuesta final con una sola linea que empiece por ")
 	b.WriteString(CodexGoalResultMarkerV0)

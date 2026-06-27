@@ -88,15 +88,13 @@ func TestCodexAgentAckReceiptV0AceptaACKProgramacionResiGRXConContextoRefOnly(t 
 	}
 }
 
-func TestCodexAgentAckReceiptV0NoBloqueaDetalleConRailOffPorDefecto(t *testing.T) {
+func TestCodexAgentAckReceiptV0BloqueaSecretoEfectivoConRailOffPorDefecto(t *testing.T) {
 	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "")
 	spec := codexSpecForTestV0()
 	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."],"notes":["diagnostico conservado access_token=abc123 para auditoria local"]}`
 	_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
-	for _, issue := range issues {
-		if string(issue.Code) == string(CodexConnectorAckForbiddenV0) {
-			t.Fatalf("detalle_prohibido no debe bloquear con rail off por defecto: %+v", issues)
-		}
+	if !codexAckIssuesContainEvidenceV0(issues, "forbidden_sensitive_detail") {
+		t.Fatalf("secreto efectivo debe bloquear con rail off por defecto: %+v", issues)
 	}
 }
 
@@ -125,7 +123,7 @@ func TestCodexAgentAckReceiptV0RailEstrictoAceptaEvidenciaRefOnlyOPES(t *testing
 	}
 }
 
-func TestCodexAgentAckReceiptV0RailEstrictoRefOnlyNoCortaSecretoEfectivo(t *testing.T) {
+func TestCodexAgentAckReceiptV0RailEstrictoRefOnlyCortaSecretoEfectivo(t *testing.T) {
 	enableCodexRailsModeEnforcedForTestV0(t)
 	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "on")
 	spec := codexSpecForTestV0()
@@ -145,8 +143,8 @@ func TestCodexAgentAckReceiptV0RailEstrictoRefOnlyNoCortaSecretoEfectivo(t *test
 
 	_, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
 
-	if len(issues) != 0 {
-		t.Fatalf("rails quitados no deben bloquear secreto efectivo: %+v", issues)
+	if !codexAckIssuesContainEvidenceV0(issues, "forbidden_sensitive_detail") {
+		t.Fatalf("secreto efectivo debe bloquear aunque rails blandos esten quitados: %+v", issues)
 	}
 }
 

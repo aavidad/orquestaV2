@@ -54,8 +54,8 @@ func TestCodexAckPendingRailExternalMatrixV0ConRailsDetalleOffCortaSecretoEfecti
 
 	_, issues := ValidateCodexAgentAckBytesForSpecV0(data, spec)
 
-	if len(issues) != 0 {
-		t.Fatalf("rail detalle off no debe bloquear ACK: %+v", issues)
+	if !codexAckIssuesContainEvidenceV0(issues, "forbidden_sensitive_detail") {
+		t.Fatalf("secreto efectivo debe bloquear aunque el rail blando este off: %+v", issues)
 	}
 }
 
@@ -77,7 +77,7 @@ func TestCodexAckPendingRailExternalMatrixV0CamposNoCortanConValoresBlandos(t *t
 	}
 }
 
-func TestCodexAckPendingRailExternalMatrixV0CamposNoCortanConValoresEfectivos(t *testing.T) {
+func TestCodexAckPendingRailExternalMatrixV0CamposCortanConValoresEfectivos(t *testing.T) {
 	enableCodexRailsModeEnforcedForTestV0(t)
 	t.Setenv("ORQUESTA_DETAIL_PROHIBITED_RAILS", "on")
 	spec := codexSpecForTestV0()
@@ -88,8 +88,8 @@ func TestCodexAckPendingRailExternalMatrixV0CamposNoCortanConValoresEfectivos(t 
 	for _, fragment := range cases {
 		data := []byte(codexAckJSONWithFragmentForPendingRailTestV0(fragment))
 		_, issues := ValidateCodexAgentAckBytesForSpecV0(data, spec)
-		if len(issues) != 0 {
-			t.Fatalf("rails quitados no deben bloquear fragment=%s issues=%+v", fragment, issues)
+		if !codexAckIssuesContainEvidenceV0(issues, "forbidden_sensitive_detail") {
+			t.Fatalf("secreto efectivo debe bloquear fragment=%s issues=%+v", fragment, issues)
 		}
 	}
 }

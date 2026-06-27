@@ -96,9 +96,6 @@ func reconcileOPESRegistryFinalPkgRunV0(
 	if len(run.Deliveries) == 0 {
 		return result, errors.New("missing_delivery")
 	}
-	if len(run.AcceptedReviews) == 0 {
-		return result, errors.New("missing_accepted_review")
-	}
 	evidenceRefs := opesRegistryFinalPkgReconcileEvidenceRefsV0(run, topicID)
 	run, err = reconcileOPESRegistryFinalPkgBlockersV0(ctx, store, run, evidenceRefs)
 	if err != nil {
@@ -116,6 +113,11 @@ func reconcileOPESRegistryFinalPkgRunV0(
 		if err != nil {
 			return result, err
 		}
+		run, err = ensureOPESRegistryFinalPkgDeterministicReviewV0(ctx, store, run, topicID, evidenceRefs)
+		if err != nil {
+			return result, err
+		}
+		evidenceRefs = opesRegistryFinalPkgReconcileEvidenceRefsV0(run, topicID)
 		command, err := opesRegistryFinalPkgCloseTaskCommandV0(run, evidenceRefs)
 		if err != nil {
 			return result, err
@@ -171,6 +173,59 @@ func reconcileOPESRegistryFinalPkgRunV0(
 	return result, nil
 }
 
+func ensureOPESRegistryFinalPkgDeterministicReviewV0(
+	ctx context.Context,
+	store *orquestastatefile.StoreV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	topicID string,
+	evidenceRefs []string,
+) (orquestacoreworkflow.OrchestrationRunV0, error) {
+	if len(run.AcceptedReviews) > 0 {
+		return run, nil
+	}
+	deliveryRef := firstOPESRegistryFinalPkgStringV0(run.Deliveries)
+	if deliveryRef == "" {
+		return run, errors.New("missing_delivery")
+	}
+	reviewRequestRef := opesRegistryFinalPkgReviewRequestRefV0(run.RunID, topicID)
+	reviewResultRef := opesRegistryFinalPkgReviewResultRefV0(run.RunID, topicID)
+	acceptedReviewRef := opesRegistryFinalPkgAcceptedReviewRefV0(run.RunID, topicID)
+	command, err := opesRegistryFinalPkgRequestReviewCommandV0(run, reviewRequestRef, deliveryRef, evidenceRefs)
+	if err != nil {
+		return run, err
+	}
+	run, err = handleOPESRegistryFinalPkgWorkflowCommandV0(ctx, store, command)
+	if err != nil {
+		return run, err
+	}
+	command, err = opesRegistryFinalPkgRecordDeterministicReviewCommandV0(
+		run,
+		reviewRequestRef,
+		reviewResultRef,
+		deliveryRef,
+		topicID,
+		evidenceRefs,
+	)
+	if err != nil {
+		return run, err
+	}
+	run, err = handleOPESRegistryFinalPkgWorkflowCommandV0(ctx, store, command)
+	if err != nil {
+		return run, err
+	}
+	command, err = opesRegistryFinalPkgAcceptDeterministicReviewCommandV0(
+		run,
+		reviewRequestRef,
+		acceptedReviewRef,
+		deliveryRef,
+		evidenceRefs,
+	)
+	if err != nil {
+		return run, err
+	}
+	return handleOPESRegistryFinalPkgWorkflowCommandV0(ctx, store, command)
+}
+
 func reconcileOPESRegistryFinalPkgBlockersV0(
 	ctx context.Context,
 	store *orquestastatefile.StoreV0,
@@ -213,6 +268,66 @@ func ensureOPESRegistryFinalPkgPhaseV0(
 		return run, err
 	}
 	return handleOPESRegistryFinalPkgWorkflowCommandV0(ctx, store, command)
+}
+
+func opesRegistryFinalPkgRequestReviewCommandV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	reviewRequestRef string,
+	deliveryRef string,
+	evidenceRefs []string,
+) (orquestacoreworkflow.OrchestrationCommandV0, error) {
+	return orquestacoreworkflow.NewRequestReviewCommandV0(
+		opesRegistryFinalPkgCommandMetaV0(run.RunID, "request-deterministic-review", reviewRequestRef),
+		orquestacoreworkflow.RequestReviewCommandPayloadV0{
+			ReviewRequestID: reviewRequestRef,
+			PhaseID:         string(orquestacoreworkflow.OrchestrationPhaseRevisionV0),
+			DeliveryRef:     deliveryRef,
+			Summary:         "Revision determinista OPES finalpkg basada en contrato de paquete y banco de preguntas publicable.",
+			EvidenceRefs:    evidenceRefs,
+		},
+	)
+}
+
+func opesRegistryFinalPkgRecordDeterministicReviewCommandV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	reviewRequestRef string,
+	reviewResultRef string,
+	deliveryRef string,
+	topicID string,
+	evidenceRefs []string,
+) (orquestacoreworkflow.OrchestrationCommandV0, error) {
+	return orquestacoreworkflow.NewRecordReviewResultCommandV0(
+		opesRegistryFinalPkgCommandMetaV0(run.RunID, "record-deterministic-review", reviewResultRef),
+		orquestacoreworkflow.ReviewResultV0{
+			ReviewResultRef: reviewResultRef,
+			ReviewRequestID: reviewRequestRef,
+			DeliveryRef:     deliveryRef,
+			Status:          orquestacoreworkflow.ReviewResultStatusAcceptedV0,
+			Summary:         "Paquete OPES finalpkg aceptado por validacion determinista de artefactos requeridos y tests publicables.",
+			EvidenceRefs:    evidenceRefs,
+			QualityGateRef:  "quality-gate-ref-opes-finalpkg-" + opesRegistryFinalPkgSafeRefTokenV0(topicID),
+		},
+	)
+}
+
+func opesRegistryFinalPkgAcceptDeterministicReviewCommandV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	reviewRequestRef string,
+	acceptedReviewRef string,
+	deliveryRef string,
+	evidenceRefs []string,
+) (orquestacoreworkflow.OrchestrationCommandV0, error) {
+	return orquestacoreworkflow.NewAcceptReviewCommandV0(
+		opesRegistryFinalPkgCommandMetaV0(run.RunID, "accept-deterministic-review", acceptedReviewRef),
+		orquestacoreworkflow.AcceptReviewCommandPayloadV0{
+			AcceptedReviewRef: acceptedReviewRef,
+			PhaseID:           string(orquestacoreworkflow.OrchestrationPhaseRevisionV0),
+			ReviewRequestID:   reviewRequestRef,
+			DeliveryRef:       deliveryRef,
+			Summary:           "Review determinista aceptada para cierre OPES finalpkg; no depende de juicio subjetivo de agente.",
+			EvidenceRefs:      evidenceRefs,
+		},
+	)
 }
 
 func opesRegistryFinalPkgResolveBlockerCommandV0(
@@ -261,7 +376,7 @@ func opesRegistryFinalPkgRegisterValidationCommandV0(
 			ValidationRef: validationRef,
 			PhaseID:       string(orquestacoreworkflow.OrchestrationPhaseValidacionFinalV0),
 			ClosedTaskRef: closedTaskRef,
-			Summary:       "Validacion final OPES finalpkg basada en contrato determinista de paquete, tests y review aceptada.",
+			Summary:       "Validacion final OPES finalpkg basada en contrato determinista de paquete, tests y review causal aceptada.",
 			EvidenceRefs:  evidenceRefs,
 		},
 	)
@@ -326,6 +441,18 @@ func opesRegistryFinalPkgReconcileEvidenceRefsV0(
 		firstOPESRegistryFinalPkgStringV0(run.Deliveries),
 		firstOPESRegistryFinalPkgStringV0(run.AcceptedReviews),
 	})
+}
+
+func opesRegistryFinalPkgReviewRequestRefV0(runRef string, topicID string) string {
+	return "review-request-ref-opes-finalpkg-" + opesRegistryFinalPkgShortHashV0(runRef+"|"+topicID)
+}
+
+func opesRegistryFinalPkgReviewResultRefV0(runRef string, topicID string) string {
+	return "review-result-ref-opes-finalpkg-" + opesRegistryFinalPkgShortHashV0(runRef+"|"+topicID)
+}
+
+func opesRegistryFinalPkgAcceptedReviewRefV0(runRef string, topicID string) string {
+	return "accepted-review-ref-opes-finalpkg-" + opesRegistryFinalPkgShortHashV0(runRef+"|"+topicID)
 }
 
 func opesRegistryFinalPkgValidationRefV0(runRef string, topicID string) string {

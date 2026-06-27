@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -234,6 +235,42 @@ func TestOPESRegistryFinalPkgPackageCompleteRequiresDeterministicQuestionBankV0(
 	}
 }
 
+func TestOPESRegistryFinalPkgPackageCompleteRejectsQuestionCountersOnlyV0(t *testing.T) {
+	fixture := newOPESRegistryFinalPkgFixtureV0(t)
+	fixture.writeCompletePackage("002")
+	path := filepath.Join(fixture.courseRoot, "tema_002", "paquete_final", "tests.json")
+	if err := os.WriteFile(path, []byte(`{"total_questions":50}`), 0o644); err != nil {
+		t.Fatalf("write counter tests: %v", err)
+	}
+
+	validation := validateOPESRegistryFinalPkgPackageV0(
+		filepath.Join(fixture.courseRoot, "tema_002", "paquete_final"),
+	)
+
+	if validation.Complete ||
+		!containsStringForTestV0(validation.Issues, "tests_json_without_questions") {
+		t.Fatalf("validation=%+v", validation)
+	}
+}
+
+func TestOPESRegistryFinalPkgPackageCompleteRejectsQuestionArrayWithoutShapeV0(t *testing.T) {
+	fixture := newOPESRegistryFinalPkgFixtureV0(t)
+	fixture.writeCompletePackage("002")
+	path := filepath.Join(fixture.courseRoot, "tema_002", "paquete_final", "tests.json")
+	if err := os.WriteFile(path, []byte(`{"questions":["pregunta sin opciones ni respuesta"]}`), 0o644); err != nil {
+		t.Fatalf("write malformed tests: %v", err)
+	}
+
+	validation := validateOPESRegistryFinalPkgPackageV0(
+		filepath.Join(fixture.courseRoot, "tema_002", "paquete_final"),
+	)
+
+	if validation.Complete ||
+		!containsStringForTestV0(validation.Issues, "tests_json_without_questions") {
+		t.Fatalf("validation=%+v", validation)
+	}
+}
+
 func TestOPESRegistryFinalPkgReviewAcceptedDoesNotCompleteEmptyQuestionBankV0(t *testing.T) {
 	fixture := newOPESRegistryFinalPkgFixtureV0(t)
 	fixture.writeRegistry(map[string]any{
@@ -325,5 +362,69 @@ func TestOPESRegistryFinalPkgReconcilesCompletedRunV0(t *testing.T) {
 	counters := externalBridgeResultCountersV0(summary)
 	if counters["reconciled"] != 1 || counters["completed_nonterminal"] != 1 {
 		t.Fatalf("counters=%+v", counters)
+	}
+}
+
+func TestOPESRegistryFinalPkgReconcilesCompletedRunWithoutAcceptedReviewsV0(t *testing.T) {
+	fixture := newOPESRegistryFinalPkgFixtureV0(t)
+	runRef := "run-ref-opes-a1-t002-finalpkg-20260612"
+	topicID := "002"
+	fixture.writeRegistry(map[string]any{
+		"001": map[string]any{},
+		"002": map[string]any{},
+	})
+	fixture.writeTemplateState()
+	fixture.writeCompletePackage(topicID)
+	fixture.writeReconciliableRunWithoutAcceptedReviews(runRef)
+	config := fixture.config(false)
+	config.ReconcileCompleted = true
+	config.ReconcileLimit = 10
+	submits := 0
+
+	summary, err := runOPESRegistryFinalPkgOnceV0(
+		context.Background(),
+		config,
+		func(context.Context, *http.Client, string, orquestaexternalworkrun.StartExternalWorkRunRequestV0) (string, error) {
+			submits++
+			return "", nil
+		},
+	)
+
+	if err != nil {
+		t.Fatalf("run once: %v", err)
+	}
+	if submits != 0 ||
+		summary.Reconciled != 1 ||
+		summary.ReconcileSkipped != 0 ||
+		len(summary.Errors) != 0 ||
+		len(summary.Results) != 1 ||
+		summary.Results[0].Status != "reconciled" ||
+		summary.Results[0].RunRef != runRef {
+		t.Fatalf("submits=%d summary=%+v", submits, summary)
+	}
+	store, err := orquestastatefile.NewStoreV0(orquestastatefile.ConfigV0{RootDir: fixture.orchestrationStateRoot()})
+	if err != nil {
+		t.Fatalf("state store: %v", err)
+	}
+	run, err := store.LoadRunV0(context.Background(), runRef)
+	if err != nil {
+		t.Fatalf("load run: %v", err)
+	}
+	reviewRequestRef := opesRegistryFinalPkgReviewRequestRefV0(runRef, topicID)
+	reviewResultRef := opesRegistryFinalPkgReviewResultRefV0(runRef, topicID)
+	acceptedReviewRef := opesRegistryFinalPkgAcceptedReviewRefV0(runRef, topicID)
+	deliveryRef := "delivery-ref-" + runRef
+	wantReviewResult := reviewResultRef +
+		"#review_result:accepted#review_request:" + reviewRequestRef +
+		"#delivery:" + deliveryRef
+	if run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		len(run.Blockers) != 0 ||
+		len(run.ClosedTasks) != 1 ||
+		len(run.Validations) != 1 ||
+		len(run.Closures) != 1 ||
+		!containsStringForTestV0(run.Reviews, reviewRequestRef) ||
+		!containsStringForTestV0(run.ReviewResults, wantReviewResult) ||
+		!containsStringForTestV0(run.AcceptedReviews, acceptedReviewRef) {
+		t.Fatalf("run no reconciliado con review determinista: %+v", run)
 	}
 }

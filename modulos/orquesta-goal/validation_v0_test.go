@@ -2,6 +2,7 @@ package orquestagoal
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -44,6 +45,90 @@ func TestValidateGoalWorkSpecV0RechazaObjetivoVacio(t *testing.T) {
 		WriteSet:     []GoalWriteScopeV0{{Path: "docs"}},
 	})
 	if !hasGoalIssueV0(issues, ErrGoalObjectiveRequiredV0) {
+		t.Fatalf("issues=%v", issues)
+	}
+}
+
+func TestValidateGoalWorkSpecV0RechazaObjetivoEnorme(t *testing.T) {
+	issues := ValidateGoalWorkSpecV0(GoalWorkSpecV0{
+		GoalRef:      "goal-ref-001",
+		Objective:    strings.Repeat("x", GoalWorkSpecMaxStringBytesV0+1),
+		DirectorKind: GoalDirectorKindRuntimeGoalV0,
+		WriteSet:     []GoalWriteScopeV0{{Path: "docs"}},
+	})
+	if !hasGoalIssueFieldCodeV0(issues, "objective", ErrGoalSpecLimitExceededV0) {
+		t.Fatalf("issues=%v", issues)
+	}
+}
+
+func TestValidateGoalWorkSpecV0RechazaListaEnorme(t *testing.T) {
+	skillRefs := make([]string, GoalWorkSpecMaxListItemsV0+1)
+	for i := range skillRefs {
+		skillRefs[i] = "skill-ref-goal"
+	}
+	issues := ValidateGoalWorkSpecV0(GoalWorkSpecV0{
+		GoalRef:      "goal-ref-001",
+		Objective:    "Objetivo",
+		DirectorKind: GoalDirectorKindRuntimeGoalV0,
+		WriteSet:     []GoalWriteScopeV0{{Path: "docs"}},
+		SkillRefs:    skillRefs,
+	})
+	if !hasGoalIssueFieldCodeV0(issues, "skill_refs", ErrGoalSpecLimitExceededV0) {
+		t.Fatalf("issues=%v", issues)
+	}
+}
+
+func TestValidateGoalWorkSpecV0RechazaComandoDeTestEnorme(t *testing.T) {
+	issues := ValidateGoalWorkSpecV0(GoalWorkSpecV0{
+		GoalRef:      "goal-ref-001",
+		Objective:    "Objetivo",
+		DirectorKind: GoalDirectorKindRuntimeGoalV0,
+		WriteSet:     []GoalWriteScopeV0{{Path: "docs"}},
+		RequiredTests: []GoalRequiredTestV0{{
+			TestRef: "test-ref-001",
+			Command: strings.Repeat("x", GoalWorkSpecMaxCommandBytesV0+1),
+		}},
+	})
+	if !hasGoalIssueFieldCodeV0(issues, "required_tests.command", ErrGoalSpecLimitExceededV0) {
+		t.Fatalf("issues=%v", issues)
+	}
+}
+
+func TestValidateGoalWorkSpecV0RechazaTamanoProyectadoEnorme(t *testing.T) {
+	requiredTests := make([]GoalRequiredTestV0, GoalWorkSpecMaxListItemsV0)
+	for i := range requiredTests {
+		requiredTests[i] = GoalRequiredTestV0{
+			TestRef: "test-ref-projected",
+			Command: strings.Repeat("x", 600),
+		}
+	}
+	issues := ValidateGoalWorkSpecV0(GoalWorkSpecV0{
+		GoalRef:       "goal-ref-001",
+		Objective:     "Objetivo",
+		DirectorKind:  GoalDirectorKindRuntimeGoalV0,
+		WriteSet:      []GoalWriteScopeV0{{Path: "docs"}},
+		RequiredTests: requiredTests,
+	})
+	if !hasGoalIssueFieldCodeV0(issues, "goal_work_spec", ErrGoalSpecLimitExceededV0) {
+		t.Fatalf("issues=%v", issues)
+	}
+}
+
+func TestValidateGoalWorkSpecV0AceptaVocabularioOperativoRecuperable(t *testing.T) {
+	spec := GoalWorkSpecV0{
+		GoalRef:      "goal-ref-001",
+		Objective:    "Revisar entrega marcada como capacity_limited, garbage o failed y conservar lo recuperable sin rail de detalle_prohibido.",
+		DirectorKind: GoalDirectorKindRuntimeGoalV0,
+		WorkKind:     "web_application",
+		WriteSet:     []GoalWriteScopeV0{{Path: "modulos/orquesta-goal", Purpose: "normalizar alias y reparar formato recuperable"}},
+		RequiredTests: []GoalRequiredTestV0{{
+			TestRef:            "test-ref-goal",
+			Command:            "go test -count=1 ./modulos/orquesta-goal",
+			AcceptanceCriteria: []string{"No bloquear por vocabulario operativo recuperable ni por alias web_application."},
+		}},
+		AcceptanceCriteria: []string{"Los rails blandos quedan como evidencia o rework, no como veto automatico."},
+	}
+	if issues := ValidateGoalWorkSpecV0(spec); len(issues) != 0 {
 		t.Fatalf("issues=%v", issues)
 	}
 }
@@ -272,6 +357,15 @@ func hasGoalIssueV0(issues []GoalWorkIssueV0, code string) bool {
 func hasGoalIssueFieldV0(issues []GoalWorkIssueV0, field string) bool {
 	for _, issue := range issues {
 		if issue.Field == field {
+			return true
+		}
+	}
+	return false
+}
+
+func hasGoalIssueFieldCodeV0(issues []GoalWorkIssueV0, field, code string) bool {
+	for _, issue := range issues {
+		if issue.Field == field && issue.Code == code {
 			return true
 		}
 	}
