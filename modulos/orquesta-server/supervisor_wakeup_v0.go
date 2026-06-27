@@ -10,6 +10,10 @@ type ResidentDirectorWakeupV0 struct {
 	Cause string
 }
 
+type GoalObservationWakeupV0 struct {
+	Cause string
+}
+
 func (runtime *RuntimeV0) RequestSupervisorWakeupV0(cause string) bool {
 	if runtime == nil || runtime.supervisor == nil || runtime.supervisorWakeups == nil {
 		return false
@@ -46,6 +50,27 @@ func (runtime *RuntimeV0) RequestResidentDirectorWakeupV0(cause string) bool {
 	}
 	select {
 	case runtime.residentDirectorWakeups <- wakeup:
+		return true
+	default:
+		return false
+	}
+}
+
+func (runtime *RuntimeV0) RequestGoalObservationWakeupV0(cause string) bool {
+	if runtime == nil ||
+		!runtime.goalObservationAvailableV0() ||
+		runtime.goalObservationWakeups == nil {
+		return false
+	}
+	if runtime.supervisorFrozenForShutdownV0() {
+		return false
+	}
+	wakeup := GoalObservationWakeupV0{Cause: strings.TrimSpace(cause)}
+	if wakeup.Cause == "" {
+		wakeup.Cause = "goal_observation_wakeup"
+	}
+	select {
+	case runtime.goalObservationWakeups <- wakeup:
 		return true
 	default:
 		return false

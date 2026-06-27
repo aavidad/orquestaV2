@@ -172,6 +172,43 @@ func TestServerConfigFromEnvV0ExternalWorkLegacyDirectorLoopPorDefectoFalseV0(t 
 	}
 }
 
+func TestServerConfigFromEnvV0ObservadorGoalFirstResidentePorDefectoV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if !config.GoalObserverEnabled ||
+		config.GoalObserverMaxItems != orquestaserver.DefaultGoalObserverMaxItemsV0 {
+		t.Fatalf("goal observer config=%+v", config)
+	}
+	if got := effectiveSettingValueForTestV0(config.EffectiveConfig.Settings, envServerGoalObserverEnabledV0); got != "true" {
+		t.Fatalf("%s=%q want true", envServerGoalObserverEnabledV0, got)
+	}
+	if got := effectiveSettingValueForTestV0(config.EffectiveConfig.Settings, envServerGoalObserverMaxItemsV0); got != "70" {
+		t.Fatalf("%s=%q want 70", envServerGoalObserverMaxItemsV0, got)
+	}
+}
+
+func TestServerConfigFromEnvV0PermiteApagarObservadorGoalFirstV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envServerGoalObserverEnabledV0, "false")
+	t.Setenv(envServerGoalObserverMaxItemsV0, "11")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if config.GoalObserverEnabled || config.GoalObserverMaxItems != 11 {
+		t.Fatalf("goal observer config=%+v", config)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerGoalObserverEnabledV0)
+	if setting.Value != "false" || setting.Source != "explicit" {
+		t.Fatalf("setting goal observer=%+v", setting)
+	}
+}
+
 func TestServerConfigFromEnvV0AutoprogrammingLegacyDirectorLoopPorDefectoFalseV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 

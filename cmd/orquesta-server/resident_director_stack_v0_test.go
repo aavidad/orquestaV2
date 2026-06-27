@@ -24,6 +24,20 @@ func TestNewServerResidentDirectorV0EsOptInV0(t *testing.T) {
 	}
 }
 
+func TestServerStackSupervisorV0ExponeObservadorGoalActivoV0(t *testing.T) {
+	supervisor := serverStackSupervisorV0{stack: &orquestaappcodexstack.StackV0{}}
+	if _, ok := interface{}(supervisor).(orquestaserver.GoalActiveObservationPortV0); !ok {
+		t.Fatalf("serverStackSupervisorV0 no expone GoalActiveObservationPortV0")
+	}
+	goalSupervisor := serverSupervisorWithCodexGoalBackendV0(
+		supervisor,
+		serverCodexGoalBackendV0{},
+	)
+	if _, ok := goalSupervisor.(orquestaserver.GoalActiveObservationPortV0); !ok {
+		t.Fatalf("serverGoalSupervisorV0 no conserva GoalActiveObservationPortV0")
+	}
+}
+
 func TestServerConfigFromEnvV0ConfiguraResidentDirectorV0(t *testing.T) {
 	t.Setenv(envServerResidentDirectorEnabledV0, "true")
 	t.Setenv(envServerResidentDirectorMaxActionsV0, "9")

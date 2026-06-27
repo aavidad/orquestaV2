@@ -34,6 +34,12 @@ type fakeSupervisorV0 struct {
 	selfErrs              []error
 	selfStarted           chan struct{}
 	selfRelease           chan struct{}
+	goalObservationCalls  int
+	lastGoalObservation   orquestagoal.GoalWorkObserveActiveRequestV0
+	goalObservationResult []orquestagoal.GoalWorkObserveActiveResultV0
+	goalObservationErrs   []error
+	goalStarted           chan struct{}
+	goalRelease           chan struct{}
 }
 
 func (fake *fakeSupervisorV0) PrepareIdleSelfImprovementV0(
@@ -118,6 +124,28 @@ func (fake *fakeSupervisorV0) RunGlobalSupervisorV0(
 		TotalSkips:      2,
 		StopReason:      orquestarunsupervisor.RunSupervisorStopNoExecutionV0,
 	}, nil
+}
+
+func (fake *fakeSupervisorV0) ObserveActiveGoalWorksV0(
+	_ context.Context,
+	request orquestagoal.GoalWorkObserveActiveRequestV0,
+) (orquestagoal.GoalWorkObserveActiveResultV0, error) {
+	fake.goalObservationCalls++
+	index := fake.goalObservationCalls - 1
+	fake.lastGoalObservation = request
+	if fake.goalStarted != nil {
+		fake.goalStarted <- struct{}{}
+	}
+	if fake.goalRelease != nil {
+		<-fake.goalRelease
+	}
+	if index < len(fake.goalObservationErrs) && fake.goalObservationErrs[index] != nil {
+		return orquestagoal.GoalWorkObserveActiveResultV0{}, fake.goalObservationErrs[index]
+	}
+	if index < len(fake.goalObservationResult) {
+		return fake.goalObservationResult[index], nil
+	}
+	return orquestagoal.GoalWorkObserveActiveResultV0{}, nil
 }
 
 type memoryStateStoreV0 struct {

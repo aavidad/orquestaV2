@@ -28,6 +28,7 @@ const (
 	DefaultIdleSelfImprovementPriorityScoreV0 = 10
 	DefaultIdleSelfImprovementMaxRequestsV0   = 10
 	DefaultIdleSelfImprovementTargetQueueV0   = 10
+	DefaultGoalObserverMaxItemsV0             = 70
 	DefaultResidentDirectorMaxActionsV0       = 20
 	DefaultSelfWatchdogCPUHighPercentV0       = 75
 	DefaultSelfWatchdogSustainedForV0         = 2 * time.Minute
@@ -84,6 +85,9 @@ type ConfigV0 struct {
 	IdleSelfImprovementPriorityScore  int
 	IdleSelfImprovementMaxRequests    int
 	IdleSelfImprovementTargetQueue    int
+	GoalObserverEnabled               bool
+	GoalObserverEnabledConfigured     bool
+	GoalObserverMaxItems              int
 	ResidentDirectorEnabled           bool
 	ResidentDirectorMaxActions        int
 	SelfWatchdog                      SelfWatchdogConfigV0
@@ -192,6 +196,12 @@ func NormalizeConfigV0(config ConfigV0) ConfigV0 {
 	}
 	if config.IdleSelfImprovementTargetQueue < config.IdleSelfImprovementMaxRequests {
 		config.IdleSelfImprovementTargetQueue = config.IdleSelfImprovementMaxRequests
+	}
+	if !config.GoalObserverEnabledConfigured {
+		config.GoalObserverEnabled = true
+	}
+	if config.GoalObserverMaxItems <= 0 {
+		config.GoalObserverMaxItems = DefaultGoalObserverMaxItemsV0
 	}
 	if config.ResidentDirectorMaxActions <= 0 {
 		config.ResidentDirectorMaxActions = DefaultResidentDirectorMaxActionsV0

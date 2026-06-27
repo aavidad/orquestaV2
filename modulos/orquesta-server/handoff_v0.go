@@ -113,6 +113,7 @@ func (tracker *StatusTrackerV0) MarkHandoffRequestedV0(now time.Time) StateV0 {
 		state.ShutdownReady = false
 		state.SupervisorFrozen = true
 		state.SupervisorTickActive = false
+		state.GoalObserverTickActive = false
 	})
 }
 
@@ -127,6 +128,7 @@ func (tracker *StatusTrackerV0) MarkHandoffReadyV0(now time.Time) StateV0 {
 		state.ShutdownAsyncWorkActive = 0
 		state.SupervisorFrozen = false
 		state.SupervisorTickActive = false
+		state.GoalObserverTickActive = false
 	})
 }
 

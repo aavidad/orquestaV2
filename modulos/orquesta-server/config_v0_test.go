@@ -54,3 +54,24 @@ func TestNormalizeConfigV0AutomejoraDefaultDiezPadresV0(t *testing.T) {
 		)
 	}
 }
+
+func TestNormalizeConfigV0ObservadorGoalFirstActivoPorDefectoV0(t *testing.T) {
+	config := NormalizeConfigV0(ConfigV0{})
+
+	if !config.GoalObserverEnabled ||
+		config.GoalObserverMaxItems != DefaultGoalObserverMaxItemsV0 {
+		t.Fatalf("goal observer config=%+v", config)
+	}
+}
+
+func TestNormalizeConfigV0PermiteDesactivarObservadorGoalFirstV0(t *testing.T) {
+	config := NormalizeConfigV0(ConfigV0{
+		GoalObserverEnabledConfigured: true,
+		GoalObserverEnabled:           false,
+		GoalObserverMaxItems:          12,
+	})
+
+	if config.GoalObserverEnabled || config.GoalObserverMaxItems != 12 {
+		t.Fatalf("goal observer config=%+v", config)
+	}
+}

@@ -3,6 +3,8 @@ package orquestaappcodexstack
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -143,6 +145,45 @@ func TestCodexStackObserveAppDirectorGoalExecutorV0UsaWrapperYSincronizaCola(t *
 	all := listGoalFirstQueueCandidatesForTestV0(t, stack)
 	if len(all) != 1 || all[0].RunRef != runRef || all[0].Status != orquestarunqueue.RunStatusClosedV0 {
 		t.Fatalf("queue no sincronizada por executor: %+v", all)
+	}
+}
+
+func TestObserveActiveGoalWorksV0UsaWrapperYSincronizaCola(t *testing.T) {
+	ctx := context.Background()
+	stack, observer, launcher, started := startGoalFirstQueueSyncStackForTestV0(t)
+	runRef := started.Run.RunID
+	spec := launcher.specs[0]
+	observer.result = orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusCompleteV0,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: started.ExternalGoalRef,
+		ArtifactRefs:    goalFirstQueueRequiredArtifactRefsV0(spec),
+		RequiredTestResults: goalFirstQueueRequiredTestResultsV0(
+			spec,
+			"evidence-ref-goal-first-active-required-test",
+		),
+		EvidenceRefs: spec.ClosurePolicy.RequiredEvidenceRefs,
+	}
+
+	result, err := stack.ObserveActiveGoalWorksV0(ctx, orquestagoal.GoalWorkObserveActiveRequestV0{
+		List: orquestagoal.GoalWorkStateListRequestV0{MaxItems: 3},
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveActiveGoalWorksV0: %v", err)
+	}
+	if len(result.Observations) != 1 ||
+		result.Observations[0].State.RunRef != runRef ||
+		!result.Observations[0].Terminal ||
+		!result.Observations[0].Accepted {
+		t.Fatalf("result=%+v", result)
+	}
+	all := listGoalFirstQueueCandidatesForTestV0(t, stack)
+	if len(all) != 1 ||
+		all[0].RunRef != runRef ||
+		all[0].Status != orquestarunqueue.RunStatusClosedV0 {
+		t.Fatalf("queue no sincronizada por observacion activa: %+v", all)
 	}
 }
 
@@ -544,4 +585,39 @@ func (store *goalFirstQueueStateStoreForTestV0) LoadGoalWorkStateV0(
 		return orquestagoal.GoalWorkStateV0{}, fmt.Errorf("goal state no encontrado: %s", runRef)
 	}
 	return state, nil
+}
+
+func (store *goalFirstQueueStateStoreForTestV0) ListGoalWorkStatesV0(
+	_ context.Context,
+	request orquestagoal.GoalWorkStateListRequestV0,
+) ([]orquestagoal.GoalWorkStateV0, error) {
+	request = orquestagoal.NormalizeGoalWorkStateListRequestV0(request)
+	refs := make([]string, 0, len(store.states))
+	if len(request.RunRefs) > 0 {
+		refs = append(refs, request.RunRefs...)
+	} else {
+		for runRef := range store.states {
+			refs = append(refs, runRef)
+		}
+	}
+	sort.Strings(refs)
+	out := make([]orquestagoal.GoalWorkStateV0, 0, len(refs))
+	for _, ref := range refs {
+		state, ok := store.states[strings.TrimSpace(ref)]
+		if !ok {
+			continue
+		}
+		normalized, err := orquestagoal.NewGoalWorkStateV0(state)
+		if err != nil {
+			return nil, err
+		}
+		if !orquestagoal.GoalWorkStateMatchesListRequestV0(normalized, request) {
+			continue
+		}
+		out = append(out, normalized)
+		if request.MaxItems > 0 && len(out) >= request.MaxItems {
+			break
+		}
+	}
+	return out, nil
 }

@@ -56,6 +56,7 @@ func (tracker *StatusTrackerV0) MarkRuntimeStoppedV0(now time.Time) StateV0 {
 		state.ShutdownAsyncWorkActive = 0
 		state.SupervisorFrozen = false
 		state.SupervisorTickActive = false
+		state.GoalObserverTickActive = false
 		state.IdleSelfImprovementFlight = false
 		state.LastError = ""
 	})

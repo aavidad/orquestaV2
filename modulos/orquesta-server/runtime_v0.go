@@ -36,6 +36,9 @@ type RuntimeV0 struct {
 	residentDirectorTickActive  int32
 	residentDirectorTickPending int32
 	residentDirectorWakeups     chan ResidentDirectorWakeupV0
+	goalObservationTickActive   int32
+	goalObservationTickPending  int32
+	goalObservationWakeups      chan GoalObservationWakeupV0
 	shutdownInProgress          int32
 	stateStore                  StateStorePortV0
 	auditSink                   AuditSinkPortV0
@@ -90,7 +93,8 @@ func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
 			chan ResidentDirectorWakeupV0,
 			1,
 		),
-		handoffRequested: make(chan struct{}),
+		goalObservationWakeups: make(chan GoalObservationWakeupV0, 1),
+		handoffRequested:       make(chan struct{}),
 	}, nil
 }
 
@@ -136,6 +140,11 @@ func (runtime *RuntimeV0) RunWithShutdownCauseV0(
 	if runtime.residentDirector != nil && runtime.config.ResidentDirectorEnabled {
 		runtime.runAsyncWorkV0("resident_director_loop", func() {
 			runtime.runResidentDirectorLoopV0(runCtx)
+		})
+	}
+	if runtime.goalObservationAvailableV0() {
+		runtime.runAsyncWorkV0("goal_observation_loop", func() {
+			runtime.runGoalObservationLoopV0(runCtx)
 		})
 	}
 	if runtime.selfWatchdog != nil && !runtime.config.SelfWatchdog.Disabled {

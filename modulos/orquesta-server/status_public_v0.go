@@ -87,6 +87,18 @@ type ServerPublicStatusV0 struct {
 	ResidentDirectorErrorTicks            int                                         `json:"resident_director_error_ticks,omitempty"`
 	ResidentDirectorExecutedActions       int                                         `json:"resident_director_executed_actions,omitempty"`
 	ResidentDirectorOperationalMessage    *ServerOperationalMessageV0                 `json:"resident_director_operational_message,omitempty"`
+	GoalObserverStatus                    string                                      `json:"goal_observer_status,omitempty"`
+	GoalObserverTickActive                bool                                        `json:"goal_observer_tick_active,omitempty"`
+	GoalObserverLastTickAt                string                                      `json:"goal_observer_last_tick_at,omitempty"`
+	GoalObserverLastSuccessAt             string                                      `json:"goal_observer_last_success_at,omitempty"`
+	GoalObserverLastErrorAt               string                                      `json:"goal_observer_last_error_at,omitempty"`
+	GoalObserverLastError                 string                                      `json:"goal_observer_last_error,omitempty"`
+	GoalObserverTicks                     int                                         `json:"goal_observer_ticks,omitempty"`
+	GoalObserverErrorTicks                int                                         `json:"goal_observer_error_ticks,omitempty"`
+	GoalObserverObserved                  int                                         `json:"goal_observer_observed,omitempty"`
+	GoalObserverTerminal                  int                                         `json:"goal_observer_terminal,omitempty"`
+	GoalObserverIssues                    int                                         `json:"goal_observer_issues,omitempty"`
+	GoalObserverOperationalMessage        *ServerOperationalMessageV0                 `json:"goal_observer_operational_message,omitempty"`
 	ExternalBridgeComponent               string                                      `json:"external_bridge_component,omitempty"`
 	ExternalBridgeStatus                  string                                      `json:"external_bridge_status,omitempty"`
 	ExternalBridgeTickActive              bool                                        `json:"external_bridge_tick_active,omitempty"`
@@ -225,6 +237,18 @@ func NewServerPublicStatusV0(state StateV0) ServerPublicStatusV0 {
 		ResidentDirectorErrorTicks:            state.ResidentDirectorErrorTicks,
 		ResidentDirectorExecutedActions:       state.ResidentDirectorExecutedActions,
 		ResidentDirectorOperationalMessage:    residentDirectorOperationalMessage,
+		GoalObserverStatus:                    strings.TrimSpace(state.GoalObserverStatus),
+		GoalObserverTickActive:                state.GoalObserverTickActive,
+		GoalObserverLastTickAt:                state.GoalObserverLastTickAt,
+		GoalObserverLastSuccessAt:             state.GoalObserverLastSuccessAt,
+		GoalObserverLastErrorAt:               state.GoalObserverLastErrorAt,
+		GoalObserverLastError:                 state.GoalObserverLastError,
+		GoalObserverTicks:                     state.GoalObserverTicks,
+		GoalObserverErrorTicks:                state.GoalObserverErrorTicks,
+		GoalObserverObserved:                  state.GoalObserverObserved,
+		GoalObserverTerminal:                  state.GoalObserverTerminal,
+		GoalObserverIssues:                    state.GoalObserverIssues,
+		GoalObserverOperationalMessage:        copyServerOperationalMessageV0(state.GoalObserverOperationalMessage),
 		ExternalBridgeComponent:               state.ExternalBridgeComponent,
 		ExternalBridgeStatus:                  state.ExternalBridgeStatus,
 		ExternalBridgeTickActive:              state.ExternalBridgeTickActive,

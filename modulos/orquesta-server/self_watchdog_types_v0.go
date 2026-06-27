@@ -34,6 +34,7 @@ type SelfWatchdogObservationV0 struct {
 	RegisteredProcesses        int
 	SupervisorTickActive       bool
 	ResidentDirectorTickActive bool
+	GoalObserverTickActive     bool
 	ExternalBridgeTickActive   bool
 	AsyncWorkActive            int
 	ShutdownInProgress         bool

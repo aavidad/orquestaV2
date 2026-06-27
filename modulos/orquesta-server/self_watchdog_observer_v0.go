@@ -82,6 +82,7 @@ func (observer *ProcessSelfWatchdogObserverV0) ObserveSelfWatchdogV0(
 		ActiveAgents:               nonNegativeServerIntV0(request.State.ShutdownAgentsInFlight),
 		SupervisorTickActive:       request.State.SupervisorTickActive,
 		ResidentDirectorTickActive: request.State.ResidentDirectorTickActive,
+		GoalObserverTickActive:     request.State.GoalObserverTickActive,
 		ExternalBridgeTickActive:   request.State.ExternalBridgeTickActive,
 		AsyncWorkActive:            nonNegativeServerIntV0(request.State.ShutdownAsyncWorkActive),
 		ShutdownInProgress:         request.State.ShutdownInProgress,
@@ -136,6 +137,9 @@ func (observer *ProcessSelfWatchdogObserverV0) restoreProgressFromStateLockedV0(
 	if parsed := parseServerTimeV0(state.ResidentDirectorLastSuccessAt); parsed.After(observer.lastProgressAt) {
 		observer.lastProgressAt = parsed
 	}
+	if parsed := parseServerTimeV0(state.GoalObserverLastSuccessAt); parsed.After(observer.lastProgressAt) {
+		observer.lastProgressAt = parsed
+	}
 }
 
 type selfWatchdogProgressCountersV0 struct {
@@ -147,6 +151,8 @@ type selfWatchdogProgressCountersV0 struct {
 	ResidentDirectorTicks    int
 	ResidentDirectorErrors   int
 	ResidentDirectorActions  int
+	GoalObserverTicks        int
+	GoalObserverErrors       int
 }
 
 func selfWatchdogProgressCountersFromStateV0(state StateV0) selfWatchdogProgressCountersV0 {
@@ -159,6 +165,8 @@ func selfWatchdogProgressCountersFromStateV0(state StateV0) selfWatchdogProgress
 		ResidentDirectorTicks:    nonNegativeServerIntV0(state.ResidentDirectorTicks),
 		ResidentDirectorErrors:   nonNegativeServerIntV0(state.ResidentDirectorErrorTicks),
 		ResidentDirectorActions:  nonNegativeServerIntV0(state.ResidentDirectorExecutedActions),
+		GoalObserverTicks:        nonNegativeServerIntV0(state.GoalObserverTicks),
+		GoalObserverErrors:       nonNegativeServerIntV0(state.GoalObserverErrorTicks),
 	}
 }
 
@@ -170,7 +178,9 @@ func (counters selfWatchdogProgressCountersV0) progressedV0(next selfWatchdogPro
 		next.ExternalBridgeErrorTicks > counters.ExternalBridgeErrorTicks ||
 		next.ResidentDirectorTicks > counters.ResidentDirectorTicks ||
 		next.ResidentDirectorErrors > counters.ResidentDirectorErrors ||
-		next.ResidentDirectorActions > counters.ResidentDirectorActions
+		next.ResidentDirectorActions > counters.ResidentDirectorActions ||
+		next.GoalObserverTicks > counters.GoalObserverTicks ||
+		next.GoalObserverErrors > counters.GoalObserverErrors
 }
 
 func selfWatchdogObservationEvidenceRefsV0(state StateV0, cpuOK bool) []string {
@@ -188,6 +198,9 @@ func selfWatchdogObservationEvidenceRefsV0(state StateV0, cpuOK bool) []string {
 	}
 	if state.ResidentDirectorTickActive {
 		refs = append(refs, "evidence-ref-self-watchdog-resident-director-active")
+	}
+	if state.GoalObserverTickActive {
+		refs = append(refs, "evidence-ref-self-watchdog-goal-observer-active")
 	}
 	if state.ExternalBridgeTickActive {
 		refs = append(refs, "evidence-ref-self-watchdog-external-bridge-active")

@@ -52,6 +52,13 @@ type IdleSelfImprovementGoalObserverPortV0 interface {
 	ObserveGoalWorkV0(context.Context, orquestagoal.GoalObservationRequestV0) (orquestagoal.GoalWorkResultV0, error)
 }
 
+type GoalActiveObservationPortV0 interface {
+	ObserveActiveGoalWorksV0(
+		context.Context,
+		orquestagoal.GoalWorkObserveActiveRequestV0,
+	) (orquestagoal.GoalWorkObserveActiveResultV0, error)
+}
+
 type IdleSelfImprovementPlannerPortV0 interface {
 	PlanIdleSelfImprovementV0(
 		context.Context,

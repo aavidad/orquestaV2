@@ -48,6 +48,10 @@ func NewStatusTrackerFromDurableStateV0(config ConfigV0, durable StateV0, now ti
 	restored.StartupOperationalMessage = nil
 	restored.SupervisorTickActive = false
 	restored.ResidentDirectorTickActive = false
+	restored.GoalObserverTickActive = false
+	if strings.TrimSpace(restored.GoalObserverStatus) == "running" {
+		restored.GoalObserverStatus = ""
+	}
 	switch strings.TrimSpace(restored.ResidentDirectorStatus) {
 	case "running", "paused", "resumed":
 		restored.ResidentDirectorStatus = ""
