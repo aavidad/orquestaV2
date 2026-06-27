@@ -71,7 +71,8 @@ API HTTP versionada:
 - `POST /api/v0/director/human-work/review-plan`
 - `POST /api/v0/runs/supervise` (compatibilidad legacy/diagnostico; no usar
   como avance normal de runs `goal_first`; el supervisor global sin `run_ref`
-  exige opt-in legacy en la composicion Codex)
+  exige opt-in legacy en la composicion Codex; con `run_ref` legacy exige
+  `director_execution_mode=legacy_director_loop` salvo opt-in de composicion)
 - `POST /api/v0/runs/control`
 - `POST /api/v0/runs/queue/priority`
 - `POST /api/v0/autoprogramming/validate-request`
@@ -82,7 +83,8 @@ API HTTP versionada:
 - `POST /api/v0/autoprogramming/status`
 - `POST /api/v0/autoprogramming/supervise` (compatibilidad legacy/diagnostico;
   no usar como avance normal de runs `goal_first`; `/autoprogramming/status`
-  solo publica acciones hacia este endpoint si la composicion habilita legacy)
+  solo publica acciones hacia este endpoint si la composicion habilita legacy y
+  sus payloads seguros incluyen `director_execution_mode=legacy_director_loop`)
 - `POST /api/v0/governance/catalog/query`
 - `POST /api/v0/core/function-contracts/list`
 - `POST /api/v0/core/function-contracts/view`
@@ -107,7 +109,8 @@ CLI vigente:
 - Autoprogramacion: `prepare-run` y `status`; si la respuesta trae
   `goal_ref`/`run_ref` goal-first, continuar por `goal/observe`. `supervise`
   queda para runs legacy/resident sin `GoalWorkStateV0` o para diagnostico
-  controlado. En `/ops` y MCP, las acciones seguras publicadas por
+  controlado y requiere `director_execution_mode=legacy_director_loop` cuando se
+  empuja un `run_ref` legacy. En `/ops` y MCP, las acciones seguras publicadas por
   `autoprogramming/status` son la fuente de verdad: `observe_goal` gana a
   `supervise` cuando un run tiene estado Goal.
 

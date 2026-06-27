@@ -209,6 +209,7 @@ output, smoke_id, run_ref, ticks = sys.argv[1:5]
 payload = {
     "request_id": f"req-bolsa-real-supervise-{smoke_id}",
     "correlation_id": f"corr-bolsa-real-supervise-{smoke_id}",
+    "director_execution_mode": "legacy_director_loop",
     "run_ref": run_ref,
     "queue_ref": "global",
     "continue_message": "sigue hasta cierre causal",

@@ -249,6 +249,15 @@ func TestRunOrquestaCLIV0AutoprogramacionEstadoYSupervisarUsanAPI(t *testing.T) 
 				RunRef: "run-ref-cli-status-001",
 			})
 		case AutoprogrammingSuperviseCliEndpointV0:
+			var input orquestamcp.MCPRunSupervisorToolInputV0
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+				t.Fatalf("decode supervise: %v", err)
+			}
+			if input.RunRef != "run-ref-cli-status-001" ||
+				input.DirectorExecutionMode != "legacy_director_loop" ||
+				input.MaxTicks != 1 {
+				t.Fatalf("supervise input=%+v", input)
+			}
 			_ = json.NewEncoder(w).Encode(orquestamcp.MCPRunSupervisorToolResultV0{
 				Estado: orquestamcp.MCPRunSupervisorEstadoOKV0,
 				RunRef: "run-ref-cli-status-001",
@@ -270,6 +279,7 @@ func TestRunOrquestaCLIV0AutoprogramacionEstadoYSupervisarUsanAPI(t *testing.T) 
 		"autoprogramacion", "supervisar",
 		"--server-url", server.URL,
 		"--run-ref", "run-ref-cli-status-001",
+		"--director-execution-mode", "legacy_director_loop",
 		"--max-ticks", "1",
 		"--json",
 	}, nil)

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
@@ -64,6 +65,9 @@ func (executor CodexStackRunSupervisorExecutorV0) Execute(
 	input = normalizeAutoprogrammingResidentInputV0(input, *executor.Stack)
 	input = executor.Stack.normalizeDirectOPESRunSupervisorInputV0(ctx, input)
 	if result, redirected := executor.goalFirstRunSupervisorResultV0(ctx, input); redirected {
+		return result, nil
+	}
+	if result, blocked := executor.rejectRunRefLegacySupervisorWithoutExplicitModeV0(input); blocked {
 		return result, nil
 	}
 	lifecycle := CodexSupervisorStackLifecycleV0{
@@ -150,6 +154,45 @@ func (executor CodexStackRunSupervisorExecutorV0) rejectGlobalLegacySupervisorWi
 		Scope:        "queue",
 		Message:      "no se ejecuta supervisor global legacy sin opt-in explicito",
 		EvidenceRefs: result.EvidenceRefs,
+	}}
+	return result, true
+}
+
+func (executor CodexStackRunSupervisorExecutorV0) rejectRunRefLegacySupervisorWithoutExplicitModeV0(
+	input orquestamcp.MCPRunSupervisorToolInputV0,
+) (orquestamcp.MCPRunSupervisorToolResultV0, bool) {
+	runRef := strings.TrimSpace(input.RunRef)
+	if executor.Stack == nil ||
+		executor.Stack.AllowLegacyAutoprogrammingRun ||
+		runRef == "" ||
+		strings.TrimSpace(input.DirectorExecutionMode) == orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0 {
+		return orquestamcp.MCPRunSupervisorToolResultV0{}, false
+	}
+	evidenceRefs := []string{"evidence-ref-run-supervisor-legacy-run-opt-in-required"}
+	result := orquestamcp.NewMCPRunSupervisorErrorResultV0(
+		input,
+		"legacy_run_supervise_requires_director_execution_mode",
+		"director_execution_mode",
+		"supervision legacy por run_ref requiere director_execution_mode=legacy_director_loop; usar observe_goal para goal-first",
+	)
+	result.RunRef = runRef
+	result.StopReason = "legacy_run_supervise_requires_director_execution_mode"
+	result.Last = orquestamcp.MCPRunSupervisorSnapshotV0{
+		Status:       string(CodexSupervisorRuntimeStoppedV0),
+		SessionRef:   runRef,
+		EvidenceRefs: evidenceRefs,
+	}
+	result.EvidenceRefs = evidenceRefs
+	result.NextActions = []string{
+		"use_goal_first_prepare_run_and_observe_goal",
+		"set_director_execution_mode_legacy_director_loop_for_legacy_compatibility",
+		"set_ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP_for_global_legacy_compatibility",
+	}
+	result.Diagnostics = []orquestamcp.MCPAutoprogrammingDiagnosticV0{{
+		Code:         "legacy_run_supervise_requires_director_execution_mode",
+		Scope:        "run:" + runRef,
+		Message:      "no se ejecuta drain legacy por run_ref sin marca legacy explicita",
+		EvidenceRefs: evidenceRefs,
 	}}
 	return result, true
 }

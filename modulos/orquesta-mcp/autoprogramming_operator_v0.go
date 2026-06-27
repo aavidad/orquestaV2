@@ -259,6 +259,7 @@ func mcpAutoprogrammingSafeActionPayloadV0(
 	switch scope {
 	case "queue":
 		return map[string]any{
+			"director_execution_mode": "legacy_director_loop",
 			"resident_mode":           true,
 			"max_ticks":               24,
 			"max_runs_per_tick":       70,
@@ -271,6 +272,7 @@ func mcpAutoprogrammingSafeActionPayloadV0(
 			return nil
 		}
 		return map[string]any{
+			"director_execution_mode": "legacy_director_loop",
 			"run_ref":                 runRef,
 			"max_ticks":               4,
 			"max_dispatches_per_wait": 16,

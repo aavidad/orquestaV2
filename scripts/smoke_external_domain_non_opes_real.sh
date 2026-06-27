@@ -631,6 +631,7 @@ output, smoke_id, run_ref, request_suffix, occurred_at = sys.argv[1:6]
 payload = {
     "request_id": f"request-ref-external-domain-non-opes-{request_suffix}-{smoke_id}",
     "correlation_id": f"corr-external-domain-non-opes-{smoke_id}",
+    "director_execution_mode": "legacy_director_loop",
     "run_ref": run_ref,
     "queue_ref": "global",
     "continue_message": "sigue",

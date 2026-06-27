@@ -140,7 +140,9 @@ func TestAutoprogrammingCliClientV0ConsultaEstadoYSupervisaPorAPI(t *testing.T) 
 			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 				t.Fatalf("decode supervise: %v", err)
 			}
-			if input.RunRef != "run-ref-status-001" || input.MaxTicks != 1 {
+			if input.RunRef != "run-ref-status-001" ||
+				input.DirectorExecutionMode != "legacy_director_loop" ||
+				input.MaxTicks != 1 {
 				t.Fatalf("supervise input=%+v", input)
 			}
 			_ = json.NewEncoder(w).Encode(orquestamcp.MCPRunSupervisorToolResultV0{
@@ -160,8 +162,9 @@ func TestAutoprogrammingCliClientV0ConsultaEstadoYSupervisaPorAPI(t *testing.T) 
 		IncludeAgentProgress: true,
 	})
 	superviseEnv := client.Supervisar(context.Background(), autoprogInvocationV0(server.URL), orquestamcp.MCPRunSupervisorToolInputV0{
-		RunRef:   "run-ref-status-001",
-		MaxTicks: 1,
+		DirectorExecutionMode: "legacy_director_loop",
+		RunRef:                "run-ref-status-001",
+		MaxTicks:              1,
 	})
 
 	if !statusEnv.OK || !superviseEnv.OK ||

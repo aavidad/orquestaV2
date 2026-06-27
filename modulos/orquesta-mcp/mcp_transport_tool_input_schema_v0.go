@@ -177,6 +177,8 @@ func mcpTransportToolEnumsV0(name string) map[string][]string {
 	switch strings.TrimSpace(name) {
 	case MCPArrancarDirectorAppToolNameV0:
 		return map[string][]string{"director_execution_mode": []string{"goal_first", "legacy_director_loop"}}
+	case MCPRunSupervisorToolNameV0, MCPAutoprogrammingSuperviseToolNameV0:
+		return map[string][]string{"director_execution_mode": []string{"goal_first", "legacy_director_loop"}}
 	case MCPRunControlToolNameV0:
 		return map[string][]string{"action": []string{"pause", "resume", "stop", "cancel"}}
 	case MCPRuntimeModelsToolNameV0:

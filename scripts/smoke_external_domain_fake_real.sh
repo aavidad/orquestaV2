@@ -432,6 +432,7 @@ output, smoke_id, run_ref = sys.argv[1:4]
 payload = {
     "request_id": f"request-ref-external-domain-fake-supervise-{smoke_id}",
     "correlation_id": f"corr-external-domain-fake-{smoke_id}",
+    "director_execution_mode": "legacy_director_loop",
     "run_ref": run_ref,
     "queue_ref": "global",
     "continue_message": "sigue",

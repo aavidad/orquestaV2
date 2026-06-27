@@ -357,6 +357,7 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
       const payload = {
         request_id: 'ops-supervise-' + now,
         correlation_id: 'corr-ops-supervise-' + now,
+        director_execution_mode: 'legacy_director_loop',
         queue_ref: (scope || {}).queue_ref || '',
         run_ref: (scope || {}).run_ref || '',
         continue_message: 'supervision desde panel ops: ' + (label || 'tick'),

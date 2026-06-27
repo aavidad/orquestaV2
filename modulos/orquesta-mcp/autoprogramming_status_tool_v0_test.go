@@ -264,6 +264,16 @@ func TestMCPAutoprogrammingStatusExecutorV0ColaMixtaGoalFirstNoSupervisaColaGlob
 		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "supervise", "queue", "") {
 		t.Fatalf("operator=%+v", result.Operator)
 	}
+	if !hasMCPAutoprogrammingSafeActionPayloadForTestV0(
+		result.Operator.SafeActions,
+		"supervise",
+		"run",
+		legacyRunRef,
+		"director_execution_mode",
+		"legacy_director_loop",
+	) {
+		t.Fatalf("legacy supervise payload sin modo explicito: %+v", result.Operator.SafeActions)
+	}
 	if result.OpsSnapshot == nil ||
 		result.OpsSnapshot.Decision.Action != "observe_goal" ||
 		result.OpsSnapshot.Decision.RunRef != goalRunRef ||
@@ -1274,6 +1284,27 @@ func hasMCPAutoprogrammingSafeActionForTestV0(
 		if value.Action == action &&
 			value.Scope == scope &&
 			value.RunRef == runRef {
+			return true
+		}
+	}
+	return false
+}
+
+func hasMCPAutoprogrammingSafeActionPayloadForTestV0(
+	actions []MCPAutoprogrammingSafeActionV0,
+	action string,
+	scope string,
+	runRef string,
+	key string,
+	want string,
+) bool {
+	for _, value := range actions {
+		if value.Action != action ||
+			value.Scope != scope ||
+			value.RunRef != runRef {
+			continue
+		}
+		if got, ok := value.Payload[key].(string); ok && got == want {
 			return true
 		}
 	}

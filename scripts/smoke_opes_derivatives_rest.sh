@@ -557,6 +557,7 @@ import sys
 run_ref = sys.argv[1]
 tick = sys.argv[2]
 print(json.dumps({
+    "director_execution_mode": "legacy_director_loop",
     "run_ref": run_ref,
     "max_ticks": 8,
     "max_bursts": 16,

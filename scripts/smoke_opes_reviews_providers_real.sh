@@ -371,6 +371,7 @@ output, smoke_id, provider, run_ref, attempt, occurred_at = sys.argv[1:7]
 payload = {
     "request_id": f"req-supervise-opes-review-{provider}-{attempt}-{smoke_id}",
     "correlation_id": f"corr-opes-review-{smoke_id}",
+    "director_execution_mode": "legacy_director_loop",
     "run_ref": run_ref,
     "queue_ref": "global",
     "continue_message": "sigue",

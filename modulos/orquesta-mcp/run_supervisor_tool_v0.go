@@ -22,6 +22,7 @@ type MCPRunSupervisorToolDescriptorV0 struct {
 type MCPRunSupervisorToolInputV0 struct {
 	RequestID                  string `json:"request_id,omitempty"`
 	CorrelationID              string `json:"correlation_id,omitempty"`
+	DirectorExecutionMode      string `json:"director_execution_mode,omitempty"`
 	RunRef                     string `json:"run_ref,omitempty"`
 	OperationalDirectorPlanRef string `json:"operational_director_plan_ref,omitempty"`
 	QueueRef                   string `json:"queue_ref,omitempty"`
@@ -79,13 +80,14 @@ func MCPRunSupervisorDescriptorV0() MCPRunSupervisorToolDescriptorV0 {
 	return MCPRunSupervisorToolDescriptorV0{
 		Name:        MCPRunSupervisorToolNameV0,
 		Version:     MCPRunSupervisorToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,operational_director_plan_ref?,queue_ref?,continue_message?,occurred_at?,idempotency_key?,max_ticks?,max_runs_per_tick?,max_executions?,allow_repeated_runs?,max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,max_decision_cycles?,max_external_waits?,resident_mode?}",
+		InputSchema: "envelope:{request_id?,correlation_id?,director_execution_mode?:goal_first|legacy_director_loop,run_ref?,operational_director_plan_ref?,queue_ref?,continue_message?,occurred_at?,idempotency_key?,max_ticks?,max_runs_per_tick?,max_executions?,allow_repeated_runs?,max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,max_decision_cycles?,max_external_waits?,resident_mode?}",
 		Output:      "ok:{run_ref,stop_reason,ticks,last,history?,evidence_refs?,idempotency_key?,diagnostics?,next_actions?}|error:{errores_publicos,idempotency_key?,diagnostics?,next_actions?}",
 		ResourceURI: MCPRunSupervisorResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
 			"run_ref limita la accion a una run",
-			"sin run_ref avanza solo cola legacy/resident inyectada",
+			"sin run_ref avanza solo cola legacy/resident inyectada si la composicion lo habilita",
+			"run_ref legacy exige director_execution_mode=legacy_director_loop salvo opt-in de composicion",
 			"runs goal-first deben observarse por observe_goal y no por supervise",
 			"no usa stdin ni canal paralelo",
 			"los lanzamientos salen por outbox y dispatcher existentes",

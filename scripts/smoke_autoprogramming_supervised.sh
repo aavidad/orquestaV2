@@ -483,6 +483,7 @@ output, smoke_id, run_ref = sys.argv[1:4]
 payload = {
     "request_id": f"req-autoprogramming-supervisor-{smoke_id}",
     "correlation_id": f"corr-autoprogramming-supervisor-{smoke_id}",
+    "director_execution_mode": "legacy_director_loop",
     "run_ref": run_ref,
     "queue_ref": "global",
     "continue_message": "sigue",

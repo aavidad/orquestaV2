@@ -172,6 +172,12 @@ legacy salvo que la composicion habilite explicitamente compatibilidad legacy
 El supervisor Codex bloquea ademas la supervision global sin `run_ref` cuando
 ese opt-in no esta activo, devolviendo `legacy_supervise_requires_explicit_opt_in`
 en vez de entrar al loop historico.
+Actualizacion adicional 2026-06-27: incluso con `run_ref`, la supervision de
+una run legacy desde el stack Codex exige ahora
+`director_execution_mode=legacy_director_loop` salvo opt-in de composicion. El
+bloqueo publico es `legacy_run_supervise_requires_director_execution_mode`. Las
+rutas goal-first se resuelven antes de ese bloqueo y siguen redirigiendo a
+`observe_goal`, de modo que la marca legacy no se usa para observar Codex Goal.
 
 ## Migracion propuesta
 
@@ -199,10 +205,12 @@ en vez de entrar al loop historico.
 5. Ejecutar smoke OPES temporal acotado de un derivado.
 6. Marcar rutas antiguas como legacy cuando tengan equivalencia goal-first
    probada.
-   Estado 2026-06-25: `StartAppDirectorV0`, MCP/REST y `/nueva-app` ya exponen
+   Estado 2026-06-27: `StartAppDirectorV0`, MCP/REST, `/nueva-app`,
+   `runs/supervise`, `autoprogramming/supervise`, CLI, `/ops` y scripts exponen
    `director_execution_mode` para distinguir `goal_first` de
-   `legacy_director_loop`; falta cerrar la matriz completa y smokes reales
-   equivalentes antes de retirar rutas historicas.
+   `legacy_director_loop`. Las vias de supervision legacy requieren la marca
+   explicita salvo opt-in de composicion; falta cerrar la matriz completa y
+   smokes reales equivalentes antes de retirar rutas historicas.
 7. Conectar el contrato de `/nueva-app` a `GoalWorkSpecV0` y launcher
    goal-first.
    Estado 2026-06-25: hecho de forma opt-in para lanzamiento, refs publicas,

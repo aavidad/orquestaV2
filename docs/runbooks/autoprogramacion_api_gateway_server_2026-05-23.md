@@ -148,7 +148,9 @@ El borde servidor queda alineado con los clientes revisados:
   `runs/control` y `runs/queue/priority` inspeccionan y controlan runs desde
   clientes finos.
 - `supervise` queda como compatibilidad legacy/diagnostico para runs no
-  migrados; no debe empujar el loop historico sobre runs `goal_first`.
+  migrados; no debe empujar el loop historico sobre runs `goal_first` y debe
+  transportar `director_execution_mode=legacy_director_loop` para empujar un
+  `run_ref` legacy salvo opt-in de composicion.
 - Si el servidor no inyecta un puerto real para alguna ruta, debe devolver error
   publico del contrato; web/CLI no deben reconstruirlo con acceso local.
 - Revalidacion `task-autoprogramming-7447aef8a77d-g01`: web y CLI quedan como

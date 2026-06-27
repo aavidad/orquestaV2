@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
@@ -223,6 +224,71 @@ func TestCodexStackRunSupervisorV0BloqueaSupervisorGlobalLegacySinOptInV0(t *tes
 	}
 	if runtime.launchCountV0() != 0 {
 		t.Fatalf("runtime no debe lanzarse sin opt-in, launches=%d", runtime.launchCountV0())
+	}
+}
+
+func TestCodexStackRunSupervisorV0BloqueaRunRefLegacySinModoExplicitoV0(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	config := codexStackBaseConfigForTestV0(t, runtime, nil, nil)
+	config.AllowLegacyAutoprogrammingRun = false
+	stack, err := BuildStackV0(config)
+	if err != nil {
+		t.Fatalf("BuildStackV0: %v", err)
+	}
+	request := autoprogrammingBridgeRequestForTestV0()
+	prepared, err := PrepareAutoprogrammingRunV0(context.Background(), AutoprogrammingBridgeRequestV0{
+		Request:                 request,
+		AllowLegacyDirectorLoop: true,
+		MaxBursts:               1,
+		MaxStepsPerBurst:        1,
+		MaxDispatchesPerWait:    1,
+		MaxCommands:             1,
+		MaxOutboxPerCycle:       1,
+	}, stack.Ports)
+	if err != nil || !prepared.Accepted || strings.TrimSpace(prepared.Run.RunID) == "" {
+		t.Fatalf("prepared=%+v err=%v", prepared, err)
+	}
+	runRef := strings.TrimSpace(prepared.Run.RunID)
+
+	result, err := NewCodexStackRunSupervisorExecutorV0(&stack).Execute(
+		context.Background(),
+		orquestamcp.MCPRunSupervisorToolInputV0{
+			RequestID:     "request-autoprogramming-supervisor-runref-mode-required-001",
+			CorrelationID: "corr-autoprogramming-supervisor-runref-mode-required-001",
+			RunRef:        runRef,
+			MaxTicks:      1,
+		},
+	)
+	if err != nil {
+		t.Fatalf("Execute sin modo: %v", err)
+	}
+	if result.Estado != orquestamcp.MCPRunSupervisorEstadoErrorV0 ||
+		result.StopReason != "legacy_run_supervise_requires_director_execution_mode" ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "legacy_run_supervise_requires_director_execution_mode" {
+		t.Fatalf("result=%+v", result)
+	}
+	if runtime.launchCountV0() != 0 {
+		t.Fatalf("runtime no debe lanzarse sin marca legacy, launches=%d", runtime.launchCountV0())
+	}
+
+	allowed, err := NewCodexStackRunSupervisorExecutorV0(&stack).Execute(
+		context.Background(),
+		orquestamcp.MCPRunSupervisorToolInputV0{
+			RequestID:             "request-autoprogramming-supervisor-runref-mode-legacy-001",
+			CorrelationID:         "corr-autoprogramming-supervisor-runref-mode-required-001",
+			DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+			RunRef:                runRef,
+			MaxTicks:              1,
+		},
+	)
+	if err != nil {
+		t.Fatalf("Execute con modo legacy: %v", err)
+	}
+	if allowed.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
+		allowed.RunRef != runRef ||
+		allowed.StopReason == "legacy_run_supervise_requires_director_execution_mode" {
+		t.Fatalf("allowed=%+v launches=%d", allowed, runtime.launchCountV0())
 	}
 }
 

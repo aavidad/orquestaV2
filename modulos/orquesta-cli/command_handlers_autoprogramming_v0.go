@@ -178,6 +178,7 @@ func runCLIAutoprogrammingSuperviseV0(ctx context.Context, args []string) (CliOu
 	fs, common := newCLIFlagSetV0(CliDefaultCommandAutoprogSuperviseV0)
 	runRef := fs.String("run-ref", "", "ref opaca del run")
 	queueRef := fs.String("queue-ref", "", "ref opaca de cola")
+	directorExecutionMode := fs.String("director-execution-mode", "", "modo explicito: legacy_director_loop para compatibilidad historica")
 	maxTicks := fs.Int("max-ticks", 1, "ticks maximos")
 	if err := fs.Parse(args); err != nil {
 		return cliParseErrorEnvelopeV0(CliDefaultCommandAutoprogSuperviseV0, err)
@@ -187,9 +188,10 @@ func runCLIAutoprogrammingSuperviseV0(ctx context.Context, args []string) (CliOu
 	}
 	inv := invocationFromCLIFlagsV0(CliDefaultCommandAutoprogSuperviseV0, common)
 	input := orquestamcp.MCPRunSupervisorToolInputV0{
-		RunRef:   strings.TrimSpace(*runRef),
-		QueueRef: strings.TrimSpace(*queueRef),
-		MaxTicks: *maxTicks,
+		DirectorExecutionMode: strings.TrimSpace(*directorExecutionMode),
+		RunRef:                strings.TrimSpace(*runRef),
+		QueueRef:              strings.TrimSpace(*queueRef),
+		MaxTicks:              *maxTicks,
 	}
 	client, err := NewAutoprogrammingCliClientV0(common.ServerURL, common.Timeout)
 	if err != nil {

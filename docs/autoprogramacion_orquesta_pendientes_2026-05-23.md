@@ -268,6 +268,14 @@ Revalidacion adicional 2026-06-27 tarde: `autoprogramming/status` alinea
 mas idle self-improvement no reencolan contenedores goal-first como `ready`
 legacy; sincronizan `delivered` para observar goal o conservan `stopped` si
 falta `GoalWorkStateV0`.
+Avance local adicional 2026-06-27 noche: el executor Codex de
+`runs/supervise` tambien bloquea la supervision legacy por `run_ref` si la
+composicion no tiene opt-in global y el caller no manda
+`director_execution_mode=legacy_director_loop`. El bloqueo publico es
+`legacy_run_supervise_requires_director_execution_mode`. La deteccion de runs
+goal-first ocurre antes de esa guarda y sigue devolviendo `observe_goal`, no
+drain legacy. `autoprogramming/status`, `/ops`, CLI, contratos MCP y scripts de
+smoke transportan ya la marca legacy en las vias historicas explicitas.
 
 Pendiente verificable:
 

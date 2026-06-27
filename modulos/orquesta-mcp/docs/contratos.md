@@ -31,6 +31,9 @@ Campos:
     path: /api/v0/runs/supervise
   input:
     request_id, correlation_id: refs externas opcionales
+    director_execution_mode: opcional; `legacy_director_loop` requerido para
+      drenar una run legacy por `run_ref` salvo opt-in de composicion; `goal_first`
+      se observa por herramientas Goal y no por este supervisor
     run_ref: opcional; si existe limita la accion a esa run
     queue_ref: opcional; si no hay run_ref permite avanzar cola inyectada
     max_ticks, continue_message y limites acotados de drain/supervisor
@@ -1531,7 +1534,8 @@ Campos:
     method: POST
     path: /api/v0/autoprogramming/supervise
   input:
-    request_id, correlation_id, run_ref?, queue_ref?, max_ticks?, limits?,
+    request_id, correlation_id, director_execution_mode?, run_ref?, queue_ref?,
+    max_ticks?, limits?,
     operator_advice? por bridge HTTP con aliases reparables de refs, accion y
     mensaje humano
   output_ok:
@@ -1545,6 +1549,10 @@ Campos:
 Invariantes:
   - Adaptador inbound fino.
   - Delega la supervision puntual en `runs.supervisor` inyectado.
+  - Para empujar un `run_ref` legacy debe transportar
+    `director_execution_mode=legacy_director_loop`, salvo opt-in de composicion.
+  - Para runs goal-first no ejecuta el loop historico: el operador debe usar
+    `observe_goal`.
   - El HTTP no mantiene al cliente bloqueado indefinidamente si ya delego el
     trabajo; responde parcial y deja evidencia consultable por estado de run/cola.
   - El consejo del operador no detiene ni reemplaza la decision del supervisor.

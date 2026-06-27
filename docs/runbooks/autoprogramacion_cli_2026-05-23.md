@@ -52,8 +52,9 @@ nucleo ni en runtime local:
    Si la CLI aun no tiene comando dedicado, documentarlo como hueco de cliente y
    no recomendar `supervise` para esos runs.
 6. `autoprogramacion supervisar` ejecuta un pulso acotado del supervisor por
-   API solo para runs legacy/resident; `--max-ticks 1` es el valor seguro para
-   operacion manual.
+   API solo para runs legacy/resident; debe enviarse
+   `--director-execution-mode legacy_director_loop` cuando se empuja un
+   `run_ref` legacy y `--max-ticks 1` es el valor seguro para operacion manual.
 7. `autoprogramacion run ver` consulta detalle de una run por
    `orquesta.director.stats.v0`.
 8. `autoprogramacion run controlar` delega `pause|resume|stop|cancel` en
@@ -74,7 +75,8 @@ La CLI consume solo rutas publicas versionadas:
 - `POST /api/v0/autoprogramming/status`
 - `POST /api/v0/autoprogramming/goal/observe`
 - `POST /api/v0/autoprogramming/supervise` (compatibilidad legacy/diagnostico;
-  no avanzar runs `goal_first`)
+  no avanzar runs `goal_first`; para `run_ref` legacy exige
+  `director_execution_mode=legacy_director_loop` salvo opt-in de composicion)
 - `POST /api/v0/runs/queue/priority`
 - `POST /api/v0/director/stats`
 - `POST /api/v0/runs/control`

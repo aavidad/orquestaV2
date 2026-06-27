@@ -242,6 +242,7 @@ func webAutoprogrammingPublicEndpointV0(value string) string {
 func webAutoprogrammingSafeActionPayloadV0(value map[string]any) map[string]any {
 	out := map[string]any{}
 	for _, key := range []string{
+		"director_execution_mode",
 		"run_ref",
 		"resident_mode",
 		"max_ticks",
