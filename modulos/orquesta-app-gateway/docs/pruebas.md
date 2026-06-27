@@ -16,7 +16,8 @@ git diff --check -- modulos/orquesta-app-gateway
 - `/run-queue` usa `RESTRunQueueClientV0` contra el bridge MCP REST de cola
   multiapp; el gateway solo compone cliente in-process.
 - `/api/v0/apps/director` con executor real in-memory comparte RunStore con
-  `/director-stats`.
+  `/director-stats`; las pruebas de cohorte legacy declaran
+  `director_execution_mode=legacy_director_loop`.
 - `/api/v0/apps/director/goal/observe` delega en
   `ObserveDirectorGoal` inyectado y conserva `run_ref` sin interpretar cierre.
 - `/api/v0/apps/intake/guided-turn` devuelve una sesion guiada de nueva app con

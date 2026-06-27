@@ -63,6 +63,7 @@ cat >"$payload_file" <<JSON
 {
   "request_id": "$request_id",
   "correlation_id": "$request_id",
+  "director_execution_mode": "legacy_director_loop",
   "max_bursts": 4,
   "max_steps_per_burst": 4,
   "max_dispatches_per_wait": 2,

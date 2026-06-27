@@ -324,6 +324,7 @@ cat >"$payload_file" <<JSON
 {
   "request_id": "$request_id",
   "correlation_id": "$request_id",
+  "director_execution_mode": "goal_first",
   "app_spec_request": {
     "schema_version": "app_spec_request.v0",
     "request_id": "$request_id",

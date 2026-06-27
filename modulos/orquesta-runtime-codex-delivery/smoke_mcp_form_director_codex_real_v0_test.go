@@ -55,12 +55,13 @@ func TestMCPFormularioDirectorCodexRealOptInV0(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
 	defer cancel()
 	result, err := executor.Execute(ctx, orquestamcp.MCPArrancarDirectorAppToolInputV0{
-		RequestID:            form.RequestID,
-		CorrelationID:        "corr-form-director-001",
-		AppSpecRequest:       form.ToAppSpecRequestV0(),
-		MaxBursts:            4,
-		MaxStepsPerBurst:     4,
-		MaxDispatchesPerWait: 2,
+		RequestID:             form.RequestID,
+		CorrelationID:         "corr-form-director-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		AppSpecRequest:        form.ToAppSpecRequestV0(),
+		MaxBursts:             4,
+		MaxStepsPerBurst:      4,
+		MaxDispatchesPerWait:  2,
 	})
 	if err != nil {
 		t.Fatalf("mcp director launch: %#v\n%s", err, codexRealSmokeDiagnosticsV0(cfg.RuntimeWorkDir))

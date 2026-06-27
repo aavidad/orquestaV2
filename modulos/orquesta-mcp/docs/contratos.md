@@ -215,14 +215,16 @@ Invariantes:
   - No filtra nombres de adaptador como mcp/web/api a refs internas del core.
   - Permite que el formulario web invoque Orquesta sin conocer factory, workflow ni launcher.
 	Pruebas de contrato:
-	  - Ejecucion con puertos fake arranca director y devuelve `started_agents`.
+	  - Ejecucion legacy explicita con puertos fake arranca director y devuelve
+	    `started_agents`.
 	  - Ejecucion con `GoalLauncher` devuelve `run_ref` y `goal_ref` sin
 	    arrancar agentes legacy.
 	  - `director_execution_mode=goal_first` sin backend devuelve error publico
 	    y no cae al loop historico.
 	  - `director_execution_mode=legacy_director_loop` conserva la rama legacy
 	    de forma explicita.
-	  - Autonomia alta devuelve `director_tasks` y arranca equipo por batch.
+	  - Autonomia alta en `legacy_director_loop` devuelve `director_tasks` y
+	    arranca equipo por batch.
 	  - Request/correlation externos con `mcp` se traducen a refs internas neutras.
 	  - Request invalida devuelve errores publicos sin crear run.
 ```

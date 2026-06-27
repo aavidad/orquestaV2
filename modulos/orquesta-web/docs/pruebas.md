@@ -136,7 +136,7 @@ Riesgos: El bridge REST productivo debe inyectarse fuera de web; web no construy
 Caso: WEB-INT-014 POST nueva app arranca director por puerto opt-in
 Tipo: integration
 Comando: `go test -count=1 ./modulos/orquesta-web`
-Evidencia esperada: `NuevaAppWebEndpointV0` usa `DirectorClient` si esta configurado, no llama `SolicitarNuevaAppClientV0`, renderiza `run_ref`, `director_tasks`, `started_agents` y texto i18n `director_arrancado`.
+Evidencia esperada: `NuevaAppWebEndpointV0` usa `DirectorClient` si esta configurado, no llama `SolicitarNuevaAppClientV0`, transporta `director_execution_mode` al bridge REST y renderiza `run_ref`, datos goal-first o datos legacy (`director_tasks`/`started_agents`) y texto i18n `director_arrancado`.
 Ultima ejecucion: 2026-05-10; pasa.
 Riesgos: No sustituye aun la UI conversacional; solo cambia el destino del submit cuando el puerto existe.
 ```
@@ -145,7 +145,7 @@ Riesgos: No sustituye aun la UI conversacional; solo cambia el destino del submi
 Caso: WEB-INT-014A flujo vertical web -> REST -> MCP -> director
 Tipo: integration
 Comando: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-mcp`
-Evidencia esperada: Cliente web llama al bridge REST de `orquesta.apps.arrancar_director.v0`; el handler MCP invoca `StartAppDirectorV0` con stores/dispatchers fake y devuelve `run_ref` y agente director arrancado.
+Evidencia esperada: Cliente web llama al bridge REST de `orquesta.apps.arrancar_director.v0`; el handler MCP invoca `StartAppDirectorV0`. Cuando se prueba la rama legacy debe enviarse `director_execution_mode=legacy_director_loop` y entonces devuelve `run_ref` y agente director arrancado; sin modo explicito, el servicio aplica `goal_first`.
 Ultima ejecucion: 2026-05-10; pasa.
 Riesgos: Usa fake lifecycle launcher; la prueba real con Codex queda en `orquesta-runtime-codex-delivery`.
 ```

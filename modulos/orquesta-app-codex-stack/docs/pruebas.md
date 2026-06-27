@@ -12,9 +12,11 @@ Cobertura Go actual:
 
 - `BuildStackV0` exige opt-in y puertos explicitos;
 - el guard de arquitectura bloquea imports legacy `cmd` y DB hardcodeada;
-- `POST /api/v0/apps/director` arranca una cohorte directora por batch con
-  runtime fake inyectado;
-- `POST /nueva-app` usa el cliente REST interno y arranca otra cohorte
+- `POST /api/v0/apps/director` con
+  `director_execution_mode=legacy_director_loop` arranca una cohorte directora
+  por batch con runtime fake inyectado;
+- `POST /nueva-app` usa el cliente REST interno; sus pruebas legacy declaran
+  `director_execution_mode=legacy_director_loop` y arrancan otra cohorte
   independiente;
 - `POST /api/v0/domain-work` delega en el executor `DomainWork` inyectado sin
   que el stack importe OPES ni conectores reales;
