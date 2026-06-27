@@ -137,12 +137,13 @@ necesita una accion visible que avance la cola/run sin usar CLI ni tocar stores.
 Alternativas: seguir usando solo llamadas externas a API; crear backend web
 nuevo; hacer que la web abra agentes directamente. Se elige consumir el
 endpoint publico existente.
-Impacto: se anaden botones `Lanzar ola` y `Avanzar run` que llaman
-`POST /api/v0/runs/supervise` con un tick y limites acotados de prueba. La web
-solo muestra la respuesta (`estado`, `stop_reason`, `ticks`, `last.status`,
-`history`, diagnosticos y siguientes acciones). No cambia core, runtime, DB,
-stores, OPES ni proveedor.
-Contratos afectados: consume `orquesta.runs.supervisor.v0` por REST interno.
+Impacto: se anaden botones `Acción segura` y `Avanzar run`. Para runs
+Goal-first observan Goal; para runs legacy llaman `POST /api/v0/runs/supervise`
+con un tick y limites acotados de prueba. La web solo muestra la respuesta
+(`estado`, `stop_reason`, `ticks`, `last.status`, `history`, diagnosticos y
+siguientes acciones). No cambia core, runtime, DB, stores, OPES ni proveedor.
+Contratos afectados: consume `orquesta.runs.supervisor.v0` y observacion Goal
+por REST interno.
 Estado: aceptada localmente.
 ```
 

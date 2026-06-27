@@ -85,7 +85,8 @@ func MCPRunSupervisorDescriptorV0() MCPRunSupervisorToolDescriptorV0 {
 		Invariantes: []string{
 			"adaptador inbound fino",
 			"run_ref limita la accion a una run",
-			"sin run_ref avanza la cola inyectada",
+			"sin run_ref avanza solo cola legacy/resident inyectada",
+			"runs goal-first deben observarse por observe_goal y no por supervise",
 			"no usa stdin ni canal paralelo",
 			"los lanzamientos salen por outbox y dispatcher existentes",
 		},

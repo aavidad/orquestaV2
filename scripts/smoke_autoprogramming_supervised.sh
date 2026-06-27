@@ -27,6 +27,7 @@ keep_dir="${ORQUESTA_KEEP_SMOKE_DIR:-0}"
 request_timeout="${ORQUESTA_SMOKE_REQUEST_TIMEOUT_SECONDS:-15}"
 resident_polls="${ORQUESTA_SMOKE_RESIDENT_POLLS:-40}"
 resident_sleep="${ORQUESTA_SMOKE_RESIDENT_SLEEP_SECONDS:-0.25}"
+legacy_external_fallback="${ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK:-0}"
 
 need_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -622,14 +623,15 @@ main() {
   post_json_required "/api/v0/autoprogramming/prepare-run" "$prepare_payload" "$prepare_replay_response"
   verify_prepare_run_replay_accepted "$prepare_response" "$prepare_replay_response"
 
-  write_external_work_payload "$external_payload" "$programmable_summary"
-  if post_json_optional "/api/v0/external-work/run" "$external_payload" "$external_response"; then
-    run_ref="$(extract_run_ref "$external_response")"
-    if [[ -n "$run_ref" ]]; then
-      echo "external_work_run_ref=$run_ref"
-      write_supervisor_payload "$supervisor_payload" "$run_ref"
-      if post_json_optional "/api/v0/runs/supervise" "$supervisor_payload" "$supervisor_response"; then
-        python3 - "$supervisor_response" <<'PY'
+  if [[ "$legacy_external_fallback" == "1" ]]; then
+    write_external_work_payload "$external_payload" "$programmable_summary"
+    if post_json_optional "/api/v0/external-work/run" "$external_payload" "$external_response"; then
+      run_ref="$(extract_run_ref "$external_response")"
+      if [[ -n "$run_ref" ]]; then
+        echo "external_work_run_ref=$run_ref"
+        write_supervisor_payload "$supervisor_payload" "$run_ref"
+        if post_json_optional "/api/v0/runs/supervise" "$supervisor_payload" "$supervisor_response"; then
+          python3 - "$supervisor_response" <<'PY'
 import json
 import sys
 
@@ -638,18 +640,25 @@ with open(sys.argv[1], encoding="utf-8") as fh:
 print("supervisor_estado=" + str(data.get("estado", "")))
 print("supervisor_stop_reason=" + str(data.get("stop_reason", "")))
 PY
+        fi
+      else
+        echo "skip: external-work no devolvio run_ref; no se invoca supervisor"
       fi
-    else
-      echo "skip: external-work no devolvio run_ref; no se invoca supervisor"
     fi
+  else
+    echo "skip: fallback legacy external-work/supervise desactivado; exporta ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK=1 para compatibilidad"
   fi
 
   run_go_test_if_present ./modulos/orquesta-app-codex-stack \
     'TestPrepareAutoprogrammingRunV0PersisteWorkflowTasksYRunContinuable|TestCodexStackAutoprogrammingExecutorV0UsaPuertosDelStackYDevuelveContinue|TestCodexStackAutoprogrammingPrepareRunAPIV0' \
     "stack_autoprogramming_bridge"
-  run_go_test_if_present ./modulos/orquesta-app-codex-stack \
-    'TestCodexStackV0ExternalWorkRunAceptaContratoAmplioV0|TestCodexStackRunSupervisorAPIV0ConsumeDecisionFileYArrancaProgramacion' \
-    "stack_fake_external_work_supervisor"
+  if [[ "$legacy_external_fallback" == "1" ]]; then
+    run_go_test_if_present ./modulos/orquesta-app-codex-stack \
+      'TestCodexStackV0ExternalWorkRunAceptaContratoAmplioV0|TestCodexStackRunSupervisorAPIV0ConsumeDecisionFileYArrancaProgramacion' \
+      "stack_fake_external_work_supervisor"
+  else
+    echo "skip: stack_fake_external_work_supervisor legacy desactivado por defecto"
+  fi
   run_go_test_if_present ./modulos/orquesta-app-codex-stack \
     'TestOperationalClosureSourceV0' \
     "stack_fake_closure_source"

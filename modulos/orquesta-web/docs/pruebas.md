@@ -496,12 +496,13 @@ duplique el rail blando en la decision visible del Director.
 Caso: WEB-UT-031 panel ops invoca run supervisor
 Tipo: unit/html contract
 Comando: `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0`
-Evidencia esperada: `/ops` contiene botones `Lanzar ola`, `Avanzar run` y
-`Avanzar run desde fila`; para runs legacy usa `superviseSelectedRun`,
-`superviseQueueRow` y `superviseOps` contra `POST /api/v0/runs/supervise`;
-para runs goal-first usa `advanceSelectedRun`, `advanceQueueRow` y
-`observeGoalOps` contra `POST /api/v0/apps/director/goal/observe`, mostrando
-`stop_reason`, `ticks`, `last.status` o estado de Goal segun corresponda.
+Evidencia esperada: `/ops` contiene boton global `Acción segura`, `Avanzar run`
+y `Avanzar run desde fila`; para runs legacy usa `superviseSelectedRun`,
+`superviseQueueRow` y `superviseOps` contra `POST /api/v0/runs/supervise` solo
+cuando no hay accion Goal; para runs goal-first usa `advanceSelectedRun`,
+`advanceQueueRow` y `observeGoalOps` contra
+`POST /api/v0/apps/director/goal/observe`, mostrando `stop_reason`, `ticks`,
+`last.status` o estado de Goal segun corresponda.
 Ultima ejecucion: 2026-06-27, pasa con `go test -count=1 ./modulos/orquesta-web -run 'TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto|TestOpsDashboardWebEndpointV0GoalFirstUsaObserveGoalEnAvance|TestOpsDashboardWebEndpointV0SupervisorPayloadAcotado'`.
 Riesgos: La prueba HTML fija el contrato de UI; una prueba local con servidor
 temporal debe validar que el executor real/fake responde.

@@ -221,6 +221,8 @@ const opsDashboardHTMLChunk2V0 = `    }
           return 'Esperar entregas acotadas';
         case 'supervise_queue':
           return 'Lanzar siguiente ola';
+        case 'observe_goal':
+          return 'Observar goal';
         case 'close_or_validate':
           return 'Cerrar o validar';
         case 'closed':
@@ -237,6 +239,7 @@ const opsDashboardHTMLChunk2V0 = `    }
       const run = runs.find(function(item) { return item.run_ref === decision.run_ref; }) || runs[0] || {};
       const reason = decision.reason_code || 'ops_snapshot';
       if (decision.action === 'supervise_queue') return (queue.count || 0) + ' trabajos preparados en cola; decision del snapshot operativo (' + reason + ').';
+      if (decision.action === 'observe_goal') return 'Run goal-first ' + (decision.run_ref || run.run_ref || 'seleccionada') + '; observar Goal en vez de supervision legacy (' + reason + ').';
       if (decision.action === 'wait_deliveries') return (run.agents_in_flight || 0) + ' agentes en vuelo; mantener waits por refs (' + reason + ').';
       if (decision.action === 'review_replan') return 'Atencion requerida en ' + (decision.run_ref || run.run_ref || 'run') + '; revisar evidencia y replan si procede (' + reason + ').';
       if (decision.action === 'continue_run') return (run.tasks_open || 0) + ' tareas abiertas; continuar supervision causal (' + reason + ').';

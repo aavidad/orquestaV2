@@ -271,6 +271,13 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
         await refreshAll();
         return;
       }
+      const goalRun = (lastSnapshot.runs || []).find(function(run) { return runIsGoalFirst(run); });
+      if (goalRun) {
+        await observeGoalOps(goalRun, 'goal desde cola');
+        supervisorMessage = controlMessage;
+        text('director-supervisor-message', supervisorMessage);
+        return;
+      }
       const superviseAction = firstAutoprogrammingSafeAction('supervise', 'queue');
       if (allAutoprogrammingSafeActions().length && !superviseAction) {
         supervisorMessage = 'Sin accion segura de cola; revisa la accion por run publicada.';

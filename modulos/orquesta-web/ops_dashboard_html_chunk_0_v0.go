@@ -182,7 +182,7 @@ const opsDashboardHTMLChunk0V0 = `<!doctype html>
           <div id="director-decision" class="decision">Esperando datos</div>
           <div id="director-reason" class="reason">Aún no hay snapshot operativo.</div>
           <div class="button-row">
-            <button type="button" onclick="superviseGlobalWave()">Lanzar ola</button>
+            <button id="director-primary-action" type="button" onclick="superviseGlobalWave()">Acción segura</button>
             <span id="director-supervisor-message" class="sub"></span>
           </div>
         </div>

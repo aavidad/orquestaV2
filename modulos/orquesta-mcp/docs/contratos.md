@@ -21,7 +21,7 @@ Nombre: mcp.tool.orquesta.runs.supervisor.v0
 Tipo: puerto_entrada
 Version: v0
 Propietario: orquesta-mcp
-Consumidores: gateway HTTP, servidor residente y operadores automatizados
+Consumidores: gateway HTTP, servidor residente, compatibilidad legacy y operadores automatizados
 Campos:
   descriptor:
     name: orquesta.runs.supervisor.v0
@@ -47,6 +47,8 @@ Campos:
     errores_publicos: issues compactos
 Invariantes:
   - Adaptador inbound fino y opt-in por executor inyectado.
+  - Compatibilidad legacy/resident: si la run tiene `GoalWorkStateV0`, el caller
+    debe usar `observe_goal` y este tool no debe drenar el loop historico.
   - No usa stdin ni canal paralelo de agentes.
   - No conoce Codex, OPES, DB ni runtime concreto.
   - La composicion decide si el executor reentra por drain, cola global o

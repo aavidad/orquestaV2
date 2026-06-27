@@ -67,7 +67,7 @@ func MCPEjecutarOrquestacionAppDescriptorV0() MCPEjecutarOrquestacionAppToolDesc
 	return MCPEjecutarOrquestacionAppToolDescriptorV0{
 		Name:        MCPEjecutarOrquestacionAppToolNameV0,
 		Version:     MCPEjecutarOrquestacionAppToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,respuesta?,director_execution_mode?:legacy_director_loop,require_director_v2?,run_ref?,project_ref?,occurred_at?,requested_by?,max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,max_external_waits?,use_autonomous_director_loop?,app_spec:AppSpecV0}",
+		InputSchema: "envelope:{request_id?,correlation_id?,respuesta?,director_execution_mode:legacy_director_loop,require_director_v2?,run_ref?,project_ref?,occurred_at?,requested_by?,max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,max_external_waits?,use_autonomous_director_loop?,app_spec:AppSpecV0}",
 		Output:      "ok:{route_policy,app_spec,run_ref,phase_id,plan,progress,loop_status,started_agents,director_stats,director_loop_stats}|error:{route_policy,errores_publicos}",
 		ResourceURI: MCPEjecutarOrquestacionAppResourceURIV0,
 		Invariantes: []string{

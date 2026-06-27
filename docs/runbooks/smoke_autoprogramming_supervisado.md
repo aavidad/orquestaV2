@@ -12,7 +12,7 @@ request valida
   -> cola global del stack Codex
   -> supervisor residente del servidor con Codex fake
   -> POST /api/v0/autoprogramming/prepare-run con el mismo payload para replay
-  -> external-work/run + supervisor si la composicion lo expone
+  -> external-work/run + supervisor solo con fallback legacy explicito
   -> pruebas focales de stack fake y cierre offline segun disponibilidad
 ```
 
@@ -36,8 +36,13 @@ ORQUESTA_SMOKE_ROOT=/tmp/orquesta-autoprogramming-supervised
 ORQUESTA_SMOKE_REQUEST_TIMEOUT_SECONDS=15
 ORQUESTA_SERVER_TICK_INTERVAL_MS=250
 ORQUESTA_SMOKE_RESIDENT_POLLS=40
+ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK=1
 SMOKE_ID=manual-001
 ```
+
+`ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK=1` es compatibilidad
+historica. Sin esa variable, el smoke no llama a `/api/v0/external-work/run` ni
+a `/api/v0/runs/supervise` y no ejecuta el test focal legacy asociado.
 
 ## Que comprueba
 
@@ -64,15 +69,17 @@ SMOKE_ID=manual-001
   payload despues del arranque residente; exige respuesta aceptada,
   `run_ref` estable, `wait_agent_refs` no vacio y `continue`, para cubrir
   idempotencia cuando el patch del stack este disponible.
-- Intenta `POST /api/v0/external-work/run` con un trabajo
-  `autoprogramming_programmable_work`; si falta la ruta o el executor, lo marca
-  como `skip` y no falla.
-- Si `external-work/run` devuelve `run_ref`, llama a
-  `POST /api/v0/runs/supervise` con limites bajos; si la ruta no esta
-  disponible, lo marca como `skip`.
+- Por defecto no invoca `POST /api/v0/external-work/run` ni
+  `POST /api/v0/runs/supervise`; esas rutas pertenecen al fallback legacy
+  `ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK=1`.
+- Con `ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK=1`, intenta
+  `POST /api/v0/external-work/run` con un trabajo
+  `autoprogramming_programmable_work`; si devuelve `run_ref`, llama a
+  `POST /api/v0/runs/supervise` con limites bajos.
 - Ejecuta tests focales existentes cuando estan presentes:
-  `external-work/run` con stack fake, supervisor con stack fake,
-  `OperationalClosureSourceV0` y cierre offline de `app-director-service`.
+  `OperationalClosureSourceV0` y cierre offline de `app-director-service`. Los
+  focales de `external-work/run` con stack fake y supervisor con stack fake se
+  ejecutan solo con `ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK=1`.
 
 ## Criterio de exito
 
@@ -109,7 +116,9 @@ por stats, repite `prepare-run` con el mismo payload y exige que el replay
 idempotente conserve el `run_ref` y siga devolviendo refs causales. El camino
 Goal-first queda fuera de este smoke legacy y no debe encolar run.
 `/api/v0/external-work/run` queda como fallback opcional de compatibilidad para
-otros trabajos externos; no es el launcher de autoprogramacion.
+otros trabajos externos y solo se prueba desde este smoke con
+`ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK=1`; no es el launcher de
+autoprogramacion.
 
 ## Alcance
 
