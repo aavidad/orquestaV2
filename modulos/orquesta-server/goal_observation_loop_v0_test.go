@@ -65,6 +65,64 @@ func TestRuntimeV0GoalObservationTickCorreSinDirectorResidenteV0(t *testing.T) {
 	}
 }
 
+func TestRuntimeV0GoalObservationFingerprintSaltaRunSinCambiosV0(t *testing.T) {
+	store := &memoryStateStoreV0{}
+	goalStore := newMemoryGoalStateStoreV0()
+	state := mustServerGoalStateForTestV0(
+		t,
+		"run-ref-goal-observer-fingerprint-001",
+		"goal-ref-goal-observer-fingerprint-001",
+		orquestagoal.GoalStatusRunningV0,
+	)
+	if err := goalStore.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	supervisor := &fakeSupervisorV0{
+		goalObservationResult: []orquestagoal.GoalWorkObserveActiveResultV0{{
+			Observations: []orquestagoal.GoalWorkObserveResultV0{{
+				State: state,
+				Result: orquestagoal.GoalWorkResultV0{
+					Status:       orquestagoal.GoalStatusRunningV0,
+					GoalRef:      state.GoalRef,
+					EvidenceRefs: []string{"evidence-ref-goal-observer-fingerprint-001"},
+				},
+				EvidenceRefs: []string{"evidence-ref-goal-observer-fingerprint-001"},
+			}},
+			EvidenceRefs: []string{"evidence-ref-goal-observer-fingerprint-001"},
+		}},
+	}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                      t.TempDir(),
+		TickInterval:                  time.Hour,
+		GoalObserverEnabledConfigured: true,
+		GoalObserverEnabled:           true,
+		GoalObserverMaxItems:          5,
+		ResidentDirectorEnabled:       false,
+		AuditDisabled:                 true,
+	}, RuntimeDepsV0{
+		Supervisor:      supervisor,
+		GoalStateStore:  goalStore,
+		GoalFingerprint: fakeGoalObservationFingerprintForTestV0{},
+		StateStore:      store,
+		Clock:           fixedClockV0{now: time.Date(2026, 6, 27, 10, 2, 0, 0, time.UTC)},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	runtime.runGoalObservationTickV0(context.Background())
+	runtime.runGoalObservationTickV0(context.Background())
+
+	if supervisor.goalObservationCalls != 1 {
+		t.Fatalf("fingerprint estable no debe re-observar: calls=%d", supervisor.goalObservationCalls)
+	}
+	if store.last.GoalObserverStatus != "skipped" ||
+		store.last.GoalObserverTicks != 1 ||
+		store.last.GoalObserverObserved != 1 {
+		t.Fatalf("state=%+v", store.last)
+	}
+}
+
 func TestRuntimeV0GoalObservationDisabledNoArrancaV0(t *testing.T) {
 	supervisor := &fakeSupervisorV0{}
 	runtime, err := NewRuntimeV0(ConfigV0{
@@ -90,6 +148,54 @@ func TestRuntimeV0GoalObservationDisabledNoArrancaV0(t *testing.T) {
 		runtime.RequestGoalObservationWakeupV0("test_disabled") {
 		t.Fatalf("goal observer activo calls=%d", supervisor.goalObservationCalls)
 	}
+}
+
+func mustServerGoalStateForTestV0(
+	t *testing.T,
+	runRef string,
+	goalRef string,
+	status string,
+) orquestagoal.GoalWorkStateV0 {
+	t.Helper()
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: runRef,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			GoalRef:      goalRef,
+			Objective:    "Implementar una tarea acotada con evidencias.",
+			DirectorKind: orquestagoal.GoalDirectorKindRuntimeGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			Status:          orquestagoal.GoalStatusRunningV0,
+			ExternalGoalRef: "external-" + goalRef,
+		},
+		EvidenceRefs: []string{"evidence-ref-" + goalRef},
+	})
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateFromLaunchV0: %v", err)
+	}
+	state.Status = status
+	state, err = orquestagoal.NewGoalWorkStateV0(state)
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateV0: %v", err)
+	}
+	return state
+}
+
+type fakeGoalObservationFingerprintForTestV0 struct{}
+
+func (fakeGoalObservationFingerprintForTestV0) FingerprintGoalObservationV0(
+	_ context.Context,
+	state orquestagoal.GoalWorkStateV0,
+) (orquestagoal.GoalObservationFingerprintV0, bool, error) {
+	return orquestagoal.GoalObservationFingerprintV0{
+		RunRef:       state.RunRef,
+		GoalRef:      state.GoalRef,
+		AckFilesHash: "ack-hash-stable",
+		ProcessAlive: true,
+		LastStatus:   state.Status,
+		EvidenceHash: "evidence-hash-stable",
+	}, true, nil
 }
 
 func TestRuntimeV0GoalObservationErrorVisibleYRecuperaV0(t *testing.T) {

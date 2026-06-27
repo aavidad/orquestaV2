@@ -39,6 +39,79 @@ func TestServerSupervisorWithCodexGoalBackendV0ExponePuertosSoloConBackendV0(t *
 	}
 }
 
+func TestServerGoalObservationFingerprintFromBackendV0EsOptInV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol}
+	if serverGoalObservationFingerprintFromBackendV0(serverCodexGoalBackendV0{
+		Observer: backend,
+	}, false) != nil {
+		t.Fatalf("fingerprint no debe exponerse sin opt-in")
+	}
+	fingerprint := serverGoalObservationFingerprintFromBackendV0(serverCodexGoalBackendV0{
+		Observer: backend,
+	}, true)
+	if fingerprint == nil {
+		t.Fatalf("backend Codex app-server debe exponer fingerprint con opt-in")
+	}
+}
+
+func TestCodexAppServerGoalBackendFingerprintDetectaCambioDeEstadoV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID:        "thread-ref-fingerprint-001",
+			Status:          "active",
+			TokensUsed:      11,
+			TimeUsedSeconds: 7,
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol}
+	state := orquestagoal.GoalWorkStateV0{
+		SchemaVersion:   orquestagoal.GoalWorkStateSchemaV0,
+		RunRef:          "run-ref-fingerprint-001",
+		GoalRef:         "goal-ref-fingerprint-001",
+		ExternalGoalRef: "thread-ref-fingerprint-001",
+		Status:          orquestagoal.GoalStatusRunningV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			GoalRef:       "goal-ref-fingerprint-001",
+			Objective:     "probar fingerprint",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			WorkKind:      "app_change",
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         "goal-ref-fingerprint-001",
+			ExternalGoalRef: "thread-ref-fingerprint-001",
+		},
+	}
+	first, ok, err := backend.FingerprintGoalObservationV0(context.Background(), state)
+	if err != nil || !ok {
+		t.Fatalf("FingerprintGoalObservationV0 first ok=%v err=%v", ok, err)
+	}
+	if first.LastStatus != orquestagoal.GoalStatusRunningV0 || first.ProcessAlive {
+		t.Fatalf("first fingerprint=%+v", first)
+	}
+	second, ok, err := backend.FingerprintGoalObservationV0(context.Background(), state)
+	if err != nil || !ok {
+		t.Fatalf("FingerprintGoalObservationV0 second ok=%v err=%v", ok, err)
+	}
+	if !orquestagoal.GoalObservationUnchangedV0(first, second) {
+		t.Fatalf("fingerprint estable debe comparar sin cambios: first=%+v second=%+v", first, second)
+	}
+	protocol.observedGoal.Status = "complete"
+	changed, ok, err := backend.FingerprintGoalObservationV0(context.Background(), state)
+	if err != nil || !ok {
+		t.Fatalf("FingerprintGoalObservationV0 changed ok=%v err=%v", ok, err)
+	}
+	if orquestagoal.GoalObservationUnchangedV0(first, changed) {
+		t.Fatalf("fingerprint debe cambiar al cerrar: first=%+v changed=%+v", first, changed)
+	}
+	if changed.LastStatus != orquestagoal.GoalStatusCompleteV0 || changed.ProcessAlive {
+		t.Fatalf("changed fingerprint=%+v", changed)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0LanzaThreadGoalYTurnV0(t *testing.T) {
 	protocol := &fakeCodexAppServerProtocolV0{
 		thread: serverCodexAppServerThreadV0{ID: "thread-ref-goal-001"},

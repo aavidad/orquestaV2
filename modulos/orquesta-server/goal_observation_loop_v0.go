@@ -90,10 +90,21 @@ func (runtime *RuntimeV0) runGoalObservationTickV0(ctx context.Context) {
 			MaxItems:   runtime.config.GoalObserverMaxItems,
 		},
 	}
+	fingerprintPlan := runtime.goalObservationFingerprintPlanV0(ctx, request)
+	request = fingerprintPlan.Request
+	if fingerprintPlan.FilterActive && len(request.List.RunRefs) == 0 {
+		runtime.auditEventV0(ctx, "goal_observer_tick_skipped", "skipped", "unchanged_fingerprint", map[string]interface{}{
+			"skipped": fingerprintPlan.Skipped,
+		})
+		runtime.markGoalObservationSkippedV0(ctx, "unchanged_fingerprint")
+		return
+	}
 	correlationID := "goal-observer-" + strconv.Itoa(runtime.tracker.SnapshotV0().GoalObserverTicks+1)
 	runtime.auditEventV0(ctx, "goal_observer_tick_start", "running", "", map[string]interface{}{
 		"correlation_id": correlationID,
 		"max_items":      request.List.MaxItems,
+		"run_refs":       compactServerDiagnosticStringsV0(request.List.RunRefs),
+		"skipped":        fingerprintPlan.Skipped,
 	})
 	result, err := observer.ObserveActiveGoalWorksV0(ctx, request)
 	now := runtime.clock.Now()
@@ -109,6 +120,7 @@ func (runtime *RuntimeV0) runGoalObservationTickV0(ctx context.Context) {
 		)
 		return
 	}
+	runtime.rememberGoalObservationFingerprintsV0(ctx, result, fingerprintPlan.Pending)
 	runtime.auditEventV0(ctx, "goal_observer_tick_result", "ok", "", map[string]interface{}{
 		"result_summary": goalObservationResultAuditSummaryV0(result),
 		"correlation_id": correlationID,

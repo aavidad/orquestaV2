@@ -59,6 +59,13 @@ type GoalActiveObservationPortV0 interface {
 	) (orquestagoal.GoalWorkObserveActiveResultV0, error)
 }
 
+type GoalObservationFingerprintPortV0 interface {
+	FingerprintGoalObservationV0(
+		context.Context,
+		orquestagoal.GoalWorkStateV0,
+	) (orquestagoal.GoalObservationFingerprintV0, bool, error)
+}
+
 type IdleSelfImprovementPlannerPortV0 interface {
 	PlanIdleSelfImprovementV0(
 		context.Context,

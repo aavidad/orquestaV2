@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -72,6 +73,23 @@ func serverGoalWorkObserverFromBackendV0(
 	return orquestaruntimecodexgoal.CodexGoalObserverV0{
 		Observer: backend.Observer,
 	}
+}
+
+func serverGoalObservationFingerprintFromBackendV0(
+	backend serverCodexGoalBackendV0,
+	enabled bool,
+) orquestaserver.GoalObservationFingerprintPortV0 {
+	if !enabled {
+		return nil
+	}
+	if backend.Observer == nil {
+		return nil
+	}
+	fingerprint, ok := backend.Observer.(orquestaserver.GoalObservationFingerprintPortV0)
+	if !ok {
+		return nil
+	}
+	return fingerprint
 }
 
 func (supervisor serverGoalSupervisorV0) LaunchGoalWorkV0(
@@ -279,6 +297,55 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 		}
 	}
 	return receipt, nil
+}
+
+func (backend serverCodexAppServerGoalBackendV0) FingerprintGoalObservationV0(
+	ctx context.Context,
+	state orquestagoal.GoalWorkStateV0,
+) (orquestagoal.GoalObservationFingerprintV0, bool, error) {
+	if backend.Protocol == nil {
+		return orquestagoal.GoalObservationFingerprintV0{}, false, nil
+	}
+	state = orquestagoal.NormalizeGoalWorkStateV0(state)
+	threadID := firstNonEmptyServerStackV0(
+		state.ExternalGoalRef,
+		state.LaunchReceipt.ExternalGoalRef,
+	)
+	if strings.TrimSpace(threadID) == "" && state.LastResult != nil {
+		threadID = strings.TrimSpace(state.LastResult.ExternalGoalRef)
+	}
+	if strings.TrimSpace(threadID) == "" {
+		return orquestagoal.GoalObservationFingerprintV0{}, false, nil
+	}
+	goal, err := backend.Protocol.GetGoalV0(ctx, threadID)
+	if err != nil {
+		return orquestagoal.GoalObservationFingerprintV0{}, true, err
+	}
+	if goal == nil {
+		return orquestagoal.GoalObservationFingerprintV0{}, true, errors.New("codex_app_server_goal_missing")
+	}
+	status := codexAppServerGoalStatusToGoalWorkStatusV0(goal.Status)
+	return orquestagoal.NormalizeGoalObservationFingerprintV0(orquestagoal.GoalObservationFingerprintV0{
+		RunRef:       state.RunRef,
+		GoalRef:      state.GoalRef,
+		LastStatus:   status,
+		EvidenceHash: codexAppServerGoalFingerprintHashV0(*goal),
+	}), true, nil
+}
+
+func codexAppServerGoalFingerprintHashV0(goal serverCodexAppServerThreadGoalV0) string {
+	var tokenBudget int
+	if goal.TokenBudget != nil {
+		tokenBudget = *goal.TokenBudget
+	}
+	sum := sha256.Sum256([]byte(strings.Join([]string{
+		strings.TrimSpace(goal.ThreadID),
+		strings.TrimSpace(goal.Status),
+		fmt.Sprintf("%d", goal.TokensUsed),
+		fmt.Sprintf("%d", goal.TimeUsedSeconds),
+		fmt.Sprintf("%d", tokenBudget),
+	}, "\x00")))
+	return fmt.Sprintf("%x", sum[:])
 }
 
 func (backend serverCodexAppServerGoalBackendV0) threadStartParamsV0() serverCodexAppServerThreadStartParamsV0 {
