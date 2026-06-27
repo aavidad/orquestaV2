@@ -58,6 +58,9 @@ func TestNuevaAppWebEndpointV0GETRenderInicialLocalizadoYOpcionesDelForm(t *test
 		t.Fatalf("campo project_source.git_url inesperado: %+v", projectGitURL)
 	}
 	for _, field := range page.Formulario.Campos {
+		if field.Path == "director_execution_mode" {
+			t.Fatalf("director_execution_mode no debe aparecer como campo normal: %+v", field)
+		}
 		if field.Label == "" {
 			t.Fatalf("campo sin label i18n: %+v", field)
 		}

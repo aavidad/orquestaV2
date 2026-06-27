@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -69,6 +70,31 @@ func TestRESTArrancarDirectorAppClientV0EnviaPOSTJSONYProyectaDirector(t *testin
 		len(vm.Director.DirectorTasks) != 1 ||
 		vm.Director.DirectorTasks[0].Capacity != "high" {
 		t.Fatalf("vm=%+v", vm)
+	}
+}
+
+func TestRESTArrancarDirectorAppClientV0OmiteModoDirectorVacioYPreservaLegacyExplicitoV0(t *testing.T) {
+	client := NewRESTArrancarDirectorAppClientV0("http://example.test", time.Second)
+	normalForm := minimalFormForClientV0("req-director-normal-mode")
+	normalRequest := normalForm.ToAppSpecRequestV0()
+
+	normalPayload, err := json.Marshal(client.payloadV0(normalForm, normalRequest))
+	if err != nil {
+		t.Fatalf("marshal normal: %v", err)
+	}
+	if strings.Contains(string(normalPayload), "director_execution_mode") {
+		t.Fatalf("payload normal no debe serializar director_execution_mode: %s", normalPayload)
+	}
+
+	legacyForm := minimalFormForClientV0("req-director-legacy-mode")
+	legacyForm.DirectorExecutionMode = "legacy_director_loop"
+	legacyRequest := legacyForm.ToAppSpecRequestV0()
+	legacyPayload, err := json.Marshal(client.payloadV0(legacyForm, legacyRequest))
+	if err != nil {
+		t.Fatalf("marshal legacy: %v", err)
+	}
+	if !strings.Contains(string(legacyPayload), `"director_execution_mode":"legacy_director_loop"`) {
+		t.Fatalf("payload legacy no conserva modo explicito: %s", legacyPayload)
 	}
 }
 

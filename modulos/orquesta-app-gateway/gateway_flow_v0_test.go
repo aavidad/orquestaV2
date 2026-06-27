@@ -47,6 +47,9 @@ func TestNuevaAppPOSTDelegaEnAppDirectorRESTSinCmdDBRuntimeV0(t *testing.T) {
 		executor.Input.AppSpecRequest.PreferenciasTecnicas.Arquitectura != "hexagonal" {
 		t.Fatalf("input=%+v", executor.Input.AppSpecRequest)
 	}
+	if executor.Input.DirectorExecutionMode != "" {
+		t.Fatalf("director_execution_mode normal debe quedar vacio para goal-first automatico: %q", executor.Input.DirectorExecutionMode)
+	}
 	if executor.Input.MaxBursts != 4 ||
 		executor.Input.MaxStepsPerBurst != 3 ||
 		executor.Input.MaxDispatchesPerWait != 2 ||

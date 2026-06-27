@@ -58,6 +58,11 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		`data-help="Opciones: crear app completa`,
 		`data-help="Interfaz web para navegador."`,
 		`data-help="Opciones: sin_preferencia`,
+		`Alcance de validacion`,
+		`Compatibilidad historica`,
+		`Forzar loop historico del Director`,
+		`<input type="checkbox" name="director_execution_mode" value="legacy_director_loop">`,
+		`<input type="hidden" name="director_execution_mode" value="">`,
 		`data-validation-required="Completa este campo."`,
 		`id="wizard-errors"`,
 		`role="alert"`,
@@ -112,6 +117,8 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		`<select name="tipo_app" required`,
 		`<textarea name="objetivo" required`,
 		`Please fill out this field`,
+		`<select name="director_execution_mode"`,
+		`<option value="goal_first">goal_first</option>`,
 	} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("GET HTML conserva validacion nativa del navegador %q\n%s", forbidden, body)
@@ -124,6 +131,18 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		!strings.Contains(body, `applyServerGuided`) ||
 		!strings.Contains(body, `function configureRentalData()`) {
 		t.Fatalf("GET HTML conserva validacion nativa del navegador\n%s", body)
+	}
+}
+
+func TestNuevaAppFormFromValuesV0PriorizaLegacyExplicitoAunqueHiddenVacioV0(t *testing.T) {
+	values := url.Values{}
+	values.Add("director_execution_mode", "")
+	values.Add("director_execution_mode", "legacy_director_loop")
+
+	form := nuevaAppFormFromValuesV0(values)
+
+	if form.DirectorExecutionMode != "legacy_director_loop" {
+		t.Fatalf("director_execution_mode=%q", form.DirectorExecutionMode)
 	}
 }
 

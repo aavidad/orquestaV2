@@ -109,6 +109,9 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.wizard.preset.api",
 		"nueva_app.wizard.preset.ops",
 		"nueva_app.wizard.identidad_avanzada",
+		"nueva_app.wizard.compatibilidad_historica",
+		"nueva_app.wizard.compatibilidad_legacy_intro",
+		"nueva_app.wizard.force_legacy_director_loop",
 		"nueva_app.wizard.plataformas_origen",
 		"nueva_app.wizard.origen_proyecto",
 		"nueva_app.wizard.datos_experto",
@@ -394,8 +397,13 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
             <label data-help="{{index .Help "locale"}}">{{index .Labels "locale"}}<select name="locale">{{range .Page.Opciones.Locales}}<option value="{{.Valor}}">{{.Label}}</option>{{end}}</select></label>
             <label data-help="{{index .Help "request_kind"}}">{{index .Labels "request_kind"}}<select name="request_kind"><option value="crear_app_completa">crear_app_completa</option><option value="documentar_app">documentar_app</option><option value="analizar_app">analizar_app</option><option value="brainstorming_arquitectura">brainstorming_arquitectura</option><option value="planificar_app">planificar_app</option><option value="programar_modulo">programar_modulo</option><option value="modificar_app_existente">modificar_app_existente</option><option value="revisar_codigo">revisar_codigo</option><option value="pruebas_y_validacion">pruebas_y_validacion</option><option value="seguridad">seguridad</option><option value="deploy">deploy</option><option value="operacion_soporte">operacion_soporte</option><option value="integracion_externa">integracion_externa</option><option value="i18n_l10n">i18n_l10n</option><option value="migracion_refactor">migracion_refactor</option><option value="investigacion_tecnica">investigacion_tecnica</option></select></label>
             <label data-help="{{index .Help "execution_mode"}}">{{index .Labels "execution_mode"}}<select name="execution_mode"><option value="normal">normal</option><option value="debug">debug</option></select></label>
-            <label data-help="{{index .Help "director_execution_mode"}}">{{index .Labels "director_execution_mode"}}<select name="director_execution_mode"><option value="">goal_first</option><option value="goal_first">goal_first</option><option value="legacy_director_loop">legacy_director_loop</option></select></label>
-          </div></details>
+          </div>
+          <details><summary>{{index .HTML "nueva_app.wizard.compatibilidad_historica"}}</summary>
+            <p class="expert-row-title">{{index .HTML "nueva_app.wizard.compatibilidad_legacy_intro"}}</p>
+            <div class="checks"><label data-help="{{index .Help "director_execution_mode"}}"><input type="checkbox" name="director_execution_mode" value="legacy_director_loop">{{index .HTML "nueva_app.wizard.force_legacy_director_loop"}}</label></div>
+          </details>
+          <input type="hidden" name="director_execution_mode" value="">
+          </details>
         </fieldset>
       </div>
       <div class="step" data-step="1" role="tabpanel" id="nueva-app-step-panel-1" aria-labelledby="nueva-app-step-tab-1" tabindex="-1">

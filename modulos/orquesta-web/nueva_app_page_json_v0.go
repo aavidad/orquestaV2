@@ -51,6 +51,9 @@ func nuevaAppWebCamposFromTypeV0(t reflect.Type, prefix, locale string, catalog 
 		if prefix != "" {
 			path = prefix + "." + name
 		}
+		if !nuevaAppWebCampoVisibleNormalV0(path) {
+			continue
+		}
 		fieldType := field.Type
 		repeated := false
 		for fieldType.Kind() == reflect.Pointer {
@@ -83,6 +86,15 @@ func nuevaAppWebCamposFromTypeV0(t reflect.Type, prefix, locale string, catalog 
 		return []NuevaAppWebCampoV0{}
 	}
 	return out
+}
+
+func nuevaAppWebCampoVisibleNormalV0(path string) bool {
+	switch strings.TrimSpace(path) {
+	case "director_execution_mode":
+		return false
+	default:
+		return true
+	}
 }
 
 func nuevaAppWebFieldKindV0(t reflect.Type, repeated bool) string {

@@ -8,13 +8,21 @@ wizard `/nueva-app`. Es documentacion de uso y contrato de UI; no cambia codigo.
 - `/nueva-app` pertenece a `orquesta-web`, que es un adaptador inbound fino.
 - La web captura intencion, preferencias y restricciones. No decide negocio, no
   elige proveedor real, no toca DB, no arranca runtime y no materializa backlog.
-- El submit delega en `SolicitarNuevaAppClientV0`, que consume
-  `SolicitarNuevaApp v0` por el transporte configurado.
+- El submit delega primero en `ArrancarDirectorAppClientV0` cuando esta
+  inyectado: `POST /nueva-app -> /api/v0/apps/director -> goal_first`. El modo
+  vacio de `director_execution_mode` arranca Codex Goal como loop interno; si
+  falta backend Goal, el error publico es `goal_backend_unavailable` o el
+  degradado `codex_app_server_*` correspondiente.
+- `SolicitarNuevaAppClientV0` queda como fallback de compatibilidad cuando la
+  web se ejecuta sin DirectorClient; en ese caso consume `SolicitarNuevaApp v0`
+  y solo produce spec/backlog inicial, sin arrancar agentes.
 - El contrato de captura local es `WebNuevaAppFormV0`; el contrato de dominio
   consumido es `AppSpecRequestV0`.
-- El HTML actual implementa un modo basico guiado y un bloque experto opcional
-  para detallar datos, almacenamiento e integraciones. El DTO y el POST JSON
-  siguen soportando mas campos que los visibles en HTML.
+- El HTML actual implementa un modo basico guiado, un bloque experto opcional
+  para detallar datos, almacenamiento e integraciones, y un bloque plegado de
+  compatibilidad historica para forzar `legacy_director_loop` solo en smokes o
+  rutas no migradas. El DTO y el POST JSON siguen soportando mas campos que los
+  visibles en HTML.
 - El bloque experto de datos e integraciones debe mantenerse opcional y plegarse
   sobre contratos publicos, sin meter DB concreta ni proveedor en web.
 
@@ -80,10 +88,33 @@ No debe inventar campos privados ni acoplarse a tablas.
    seguir siendo usable sin JS.
 3. `POST /nueva-app` acepta form-urlencoded o JSON local, construye
    `WebNuevaAppFormV0` y lo transforma a `AppSpecRequestV0`.
-4. `orquesta-factory` valida, normaliza, aplica defaults y devuelve `AppSpecV0`
-   mas `BacklogInicialPropuestoV0` o errores publicos.
-5. La web renderiza estado, resumen, errores, defaults y preview de backlog sin
-   materializar tareas.
+4. Si existe `ArrancarDirectorAppClientV0`, la web llama al bridge del Director.
+   Con `director_execution_mode` vacio, `StartAppDirectorV0` normaliza a
+   `goal_first`, compila/lanzar `GoalWorkSpecV0`, persiste `GoalWorkStateV0` y
+   la pantalla observa por `/api/v0/apps/director/goal/observe`.
+5. Si no existe DirectorClient, la web conserva el fallback legacy de
+   `SolicitarNuevaAppClientV0`: `orquesta-factory` valida, normaliza, aplica
+   defaults y devuelve `AppSpecV0` mas `BacklogInicialPropuestoV0` o errores
+   publicos.
+6. La web renderiza estado, resumen, errores, defaults, datos Goal/Director y
+   preview de backlog sin materializar tareas por su cuenta.
+
+## Compatibilidad Historica
+
+`legacy_director_loop` ya no es el camino normal de `/nueva-app`. En la pantalla
+queda dentro del bloque plegado "Compatibilidad historica" y debe usarse solo
+para reproducir smokes antiguos, diagnosticar una ruta no migrada o comparar
+comportamiento con evidencias previas.
+
+Reglas:
+
+- dejar `director_execution_mode` vacio significa automatico Goal-first;
+- marcar "Forzar loop historico del Director" envia
+  `director_execution_mode=legacy_director_loop`;
+- no usar `legacy_director_loop` para nuevos trabajos productivos salvo orden
+  explicita o ausencia documentada de backend Goal;
+- el campo `execution_mode` es solo alcance de validacion (`normal` o `debug`),
+  no cambia el loop del Director.
 
 ## Presets Rapidos
 
