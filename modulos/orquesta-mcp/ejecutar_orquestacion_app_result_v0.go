@@ -48,3 +48,21 @@ func NewMCPEjecutarOrquestacionAppErrorResultV0(
 		Errores: []MCPValidationIssueV0{publicPrepareOrchestrationIssueMCPV0(err)},
 	}
 }
+
+func NewMCPEjecutarOrquestacionAppLegacyModeRequiredResultV0(
+	input MCPEjecutarOrquestacionAppToolInputV0,
+) MCPEjecutarOrquestacionAppToolResultV0 {
+	return MCPEjecutarOrquestacionAppToolResultV0{
+		Estado:        MCPEjecutarOrquestacionAppEstadoErrorV0,
+		RequestID:     firstNonEmptyMCPV0(input.RequestID, input.AppSpec.RequestID),
+		CorrelationID: firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
+		RoutePolicy: mcpRoutePolicyFromAppRunnerV0(
+			orquestaapprunner.AppRunnerPreviewRoutePolicyV0(orquestaapprunner.AppRunnerLegacyEntrypointExecuteV0),
+		),
+		Errores: []MCPValidationIssueV0{{
+			Code:    "legacy_director_loop_required",
+			Field:   "director_execution_mode",
+			Message: "orquesta.apps.ejecutar_orquestacion.v0 es compatibilidad legacy: usa orquesta.apps.arrancar_director.v0 para goal-first o envia director_execution_mode=legacy_director_loop",
+		}},
+	}
+}

@@ -458,9 +458,9 @@ Riesgos: No arranca agentes reales ni persiste runtime; es el contrato MCP seco 
 Caso: MCP-CT-025 tool ejecutar orquestacion de app
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-runner ./modulos/orquesta-app-planner
-Evidencia esperada: `orquesta.apps.ejecutar_orquestacion.v0` conserva compatibilidad legacy por puertos inyectados y bloquea con `director_v2_required` cuando el caller declara que necesita Director V2.
-Evidencia esperada: `orquesta.apps.ejecutar_orquestacion.v0` prepara el run, guarda estado inicial, ejecuta el loop progresivo por puertos fake, arranca `agent-agenda-bootstrap`, devuelve `wait_external` y no filtra refs externas con detalle de adaptador al core/outbox.
-Ultima ejecucion: 2026-05-09; pasa.
+Evidencia esperada: `orquesta.apps.ejecutar_orquestacion.v0` conserva compatibilidad legacy por puertos inyectados solo cuando el caller envia `director_execution_mode=legacy_director_loop`; con modo vacio o `goal_first` devuelve `legacy_director_loop_required` y `preferred_entrypoint=orquesta.apps.arrancar_director.v0` sin ejecutar el loop.
+Evidencia esperada: en legacy explicito prepara el run, guarda estado inicial, ejecuta el loop progresivo por puertos fake, arranca `agent-agenda-bootstrap`, devuelve `wait_external`, no filtra refs externas con detalle de adaptador al core/outbox y bloquea con `director_v2_required` cuando el caller declara que necesita Director V2.
+Ultima ejecucion: 2026-06-27; pasa.
 Riesgos: No valida proveedor Codex/Claude/Gemini real; el conector productivo debe enchufarse por puertos y mantener las mismas reglas de neutralizacion.
 ```
 

@@ -234,7 +234,7 @@ Estado: aceptada localmente
 Fecha: 2026-05-25
 Decision: La ruta publica preferente de AppSpec es `orquesta.apps.arrancar_director.v0`.
 Motivo: la foto vigente exige juicio del Director V2 para apps nuevas; el plan fijo de `orquesta-app-runner` no demuestra plan-state, waits por ola/cohorte, review/tests/cierre ni recursion.
-Impacto: `preparar_orquestacion` y `ejecutar_orquestacion` publican `route_policy` de preview/compatibilidad; `ejecutar_orquestacion` bloquea con `director_v2_required` si el caller declara esa necesidad.
+Impacto: `preparar_orquestacion` y `ejecutar_orquestacion` publican `route_policy` de preview/compatibilidad; desde el corte Goal de 2026-06-27, `ejecutar_orquestacion` exige `director_execution_mode=legacy_director_loop` y con vacio/`goal_first` devuelve `legacy_director_loop_required` apuntando a `orquesta.apps.arrancar_director.v0`. En legacy explicito sigue bloqueando con `director_v2_required` si el caller declara esa necesidad.
 Contratos afectados: mcp.tool.orquesta.apps.arrancar_director.v0; mcp.tool.orquesta.apps.preparar_orquestacion.v0; mcp.tool.orquesta.apps.ejecutar_orquestacion.v0; RunPreparedAppOrchestrationV0.
 Estado: aceptada localmente
 ```
@@ -244,7 +244,7 @@ Fecha: 2026-05-09
 Decision: Ejecutar orquestacion de app por MCP es opt-in y neutraliza refs externas antes de tocar core/outbox.
 Motivo: el wizard necesita una orden unica para que Orquesta arranque el loop, pero el core prohibe detalles de transporte como mcp, web, cli, provider, HOME o runtime en referencias internas y outbox.
 Alternativas: relajar validaciones del core; cambiar tests para evitar refs con mcp; acoplar MCP directamente a outbox. Se descartan porque reintroducen los fallos de v1/v2 y rompen la frontera hexagonal.
-Impacto: `orquesta.apps.ejecutar_orquestacion.v0` exige executor/puertos inyectados, usa refs internas neutras con hash de refs externas y delega en `RunPreparedAppOrchestrationV0`.
+Impacto: decision historica supersedida para el flujo normal: `orquesta.apps.ejecutar_orquestacion.v0` queda como compatibilidad legacy explicita. Cuando se fuerza legacy exige executor/puertos inyectados, usa refs internas neutras con hash de refs externas y delega en `RunPreparedAppOrchestrationV0`; si no se fuerza legacy, no prepara ni ejecuta el loop.
 Contratos afectados: mcp.tool.orquesta.apps.ejecutar_orquestacion.v0; PrepareAppOrchestrationV0; RunPreparedAppOrchestrationV0; mcp.transport.registry.v0.
 Estado: aceptada localmente
 ```

@@ -25,10 +25,11 @@ func TestMCPEjecutarOrquestacionAppToolExecutorV0BloqueaDirectorV2Requerido(t *t
 	result, err := NewMCPEjecutarOrquestacionAppToolExecutorV0(
 		orquestaapprunner.RunPreparedAppOrchestrationPortsV0{},
 	).Execute(context.Background(), MCPEjecutarOrquestacionAppToolInputV0{
-		RequestID:         "request-ref-mcp-run-app-director-v2-required-001",
-		OccurredAt:        "2026-05-25T16:20:00Z",
-		RequireDirectorV2: true,
-		AppSpec:           validMCPPrepareLargeAppSpecForTestV0(t),
+		RequestID:             "request-ref-mcp-run-app-director-v2-required-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		OccurredAt:            "2026-05-25T16:20:00Z",
+		RequireDirectorV2:     true,
+		AppSpec:               validMCPPrepareLargeAppSpecForTestV0(t),
 	})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)

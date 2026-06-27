@@ -2,7 +2,9 @@ package orquestamcp
 
 import (
 	"context"
+	"strings"
 
+	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestaapprunner "orquesta/modulos/orquesta-app-runner"
 )
 
@@ -20,6 +22,9 @@ func (executor MCPEjecutarOrquestacionAppToolExecutorV0) Execute(
 	ctx context.Context,
 	input MCPEjecutarOrquestacionAppToolInputV0,
 ) (MCPEjecutarOrquestacionAppToolResultV0, error) {
+	if strings.TrimSpace(input.DirectorExecutionMode) != orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0 {
+		return NewMCPEjecutarOrquestacionAppLegacyModeRequiredResultV0(input), nil
+	}
 	prepared, err := orquestaapprunner.PrepareAppOrchestrationV0(
 		ToPrepareAppOrchestrationRequestMCPV0(prepareInputFromRunInputMCPV0(input)),
 	)

@@ -5,10 +5,53 @@ import (
 	"strings"
 	"testing"
 
+	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestaapprunner "orquesta/modulos/orquesta-app-runner"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
+
+func TestMCPEjecutarOrquestacionAppToolExecutorV0ModoVacioNoEjecutaLoopLegacy(t *testing.T) {
+	result, err := NewMCPEjecutarOrquestacionAppToolExecutorV0(
+		orquestaapprunner.RunPreparedAppOrchestrationPortsV0{},
+	).Execute(context.Background(), MCPEjecutarOrquestacionAppToolInputV0{
+		RequestID:  "request-ref-mcp-run-app-empty-mode-001",
+		OccurredAt: "2026-05-09T23:59:00Z",
+		AppSpec:    validMCPPrepareLargeAppSpecForTestV0(t),
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPEjecutarOrquestacionAppEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Field != "director_execution_mode" ||
+		result.Errores[0].Code != "legacy_director_loop_required" {
+		t.Fatalf("result=%+v", result)
+	}
+	if result.RoutePolicy.PreferredEntrypoint != MCPArrancarDirectorAppToolNameV0 ||
+		result.RoutePolicy.LegacyEntrypoint != MCPEjecutarOrquestacionAppToolNameV0 {
+		t.Fatalf("route_policy=%+v", result.RoutePolicy)
+	}
+}
+
+func TestMCPEjecutarOrquestacionAppToolExecutorV0GoalFirstNoEjecutaLoopLegacy(t *testing.T) {
+	result, err := NewMCPEjecutarOrquestacionAppToolExecutorV0(
+		orquestaapprunner.RunPreparedAppOrchestrationPortsV0{},
+	).Execute(context.Background(), MCPEjecutarOrquestacionAppToolInputV0{
+		RequestID:             "request-ref-mcp-run-app-goal-first-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0,
+		OccurredAt:            "2026-05-09T23:59:00Z",
+		AppSpec:               validMCPPrepareLargeAppSpecForTestV0(t),
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPEjecutarOrquestacionAppEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "legacy_director_loop_required" {
+		t.Fatalf("result=%+v", result)
+	}
+}
 
 func TestMCPEjecutarOrquestacionAppToolExecutorV0ArrancaBootstrap(t *testing.T) {
 	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
@@ -27,17 +70,18 @@ func TestMCPEjecutarOrquestacionAppToolExecutorV0ArrancaBootstrap(t *testing.T) 
 	)
 
 	result, err := executor.Execute(context.Background(), MCPEjecutarOrquestacionAppToolInputV0{
-		RequestID:            "request-ref-mcp-run-app-001",
-		CorrelationID:        "corr-mcp-run-app-001",
-		RunRef:               "run-mcp-run-app-001",
-		ProjectRef:           "project-mcp-run-app-001",
-		OccurredAt:           "2026-05-09T23:59:00Z",
-		AppSpec:              validMCPPrepareLargeAppSpecForTestV0(t),
-		MaxBursts:            10,
-		MaxStepsPerBurst:     6,
-		MaxDispatchesPerWait: 4,
-		MaxCommands:          12,
-		MaxOutboxPerCycle:    4,
+		RequestID:             "request-ref-mcp-run-app-001",
+		CorrelationID:         "corr-mcp-run-app-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		RunRef:                "run-mcp-run-app-001",
+		ProjectRef:            "project-mcp-run-app-001",
+		OccurredAt:            "2026-05-09T23:59:00Z",
+		AppSpec:               validMCPPrepareLargeAppSpecForTestV0(t),
+		MaxBursts:             10,
+		MaxStepsPerBurst:      6,
+		MaxDispatchesPerWait:  4,
+		MaxCommands:           12,
+		MaxOutboxPerCycle:     4,
 	})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -79,17 +123,18 @@ func TestMCPEjecutarOrquestacionAppToolExecutorV0CompletaAppConReceiptsExternos(
 	)
 
 	result, err := executor.Execute(context.Background(), MCPEjecutarOrquestacionAppToolInputV0{
-		RequestID:            "request-ref-mcp-run-app-complete-001",
-		CorrelationID:        "corr-mcp-run-app-complete-001",
-		RunRef:               "run-mcp-run-app-complete-001",
-		ProjectRef:           "project-mcp-run-app-complete-001",
-		OccurredAt:           "2026-05-09T23:59:00Z",
-		AppSpec:              validMCPPrepareLargeAppSpecForTestV0(t),
-		MaxBursts:            120,
-		MaxStepsPerBurst:     8,
-		MaxDispatchesPerWait: 8,
-		MaxCommands:          24,
-		MaxOutboxPerCycle:    24,
+		RequestID:             "request-ref-mcp-run-app-complete-001",
+		CorrelationID:         "corr-mcp-run-app-complete-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		RunRef:                "run-mcp-run-app-complete-001",
+		ProjectRef:            "project-mcp-run-app-complete-001",
+		OccurredAt:            "2026-05-09T23:59:00Z",
+		AppSpec:               validMCPPrepareLargeAppSpecForTestV0(t),
+		MaxBursts:             120,
+		MaxStepsPerBurst:      8,
+		MaxDispatchesPerWait:  8,
+		MaxCommands:           24,
+		MaxOutboxPerCycle:     24,
 	})
 	if err != nil {
 		t.Fatalf("Execute complete: %v", err)
@@ -125,6 +170,7 @@ func TestMCPEjecutarOrquestacionAppToolExecutorV0ActivaDirectorAutonomo(t *testi
 	result, err := executor.Execute(context.Background(), MCPEjecutarOrquestacionAppToolInputV0{
 		RequestID:                 "request-ref-mcp-run-app-autonomous-001",
 		CorrelationID:             "corr-mcp-run-app-autonomous-001",
+		DirectorExecutionMode:     orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
 		RunRef:                    "run-mcp-run-app-autonomous-001",
 		ProjectRef:                "project-mcp-run-app-autonomous-001",
 		OccurredAt:                "2026-05-10T10:00:00Z",
@@ -155,8 +201,9 @@ func TestMCPEjecutarOrquestacionAppToolExecutorV0DevuelveErrorPublico(t *testing
 	result, err := NewMCPEjecutarOrquestacionAppToolExecutorV0(
 		orquestaapprunner.RunPreparedAppOrchestrationPortsV0{},
 	).Execute(context.Background(), MCPEjecutarOrquestacionAppToolInputV0{
-		RequestID: "request-ref-mcp-run-app-invalid-001",
-		AppSpec:   validMCPPrepareLargeAppSpecForTestV0(t),
+		RequestID:             "request-ref-mcp-run-app-invalid-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		AppSpec:               validMCPPrepareLargeAppSpecForTestV0(t),
 	})
 	if err != nil {
 		t.Fatalf("Execute invalid: %v", err)

@@ -1028,15 +1028,16 @@ Nombre: mcp.tool.orquesta.apps.ejecutar_orquestacion.v0
 Tipo: puerto_entrada
 Version: v0
 Propietario: orquesta-mcp
-Consumidores: wizard web, servidor MCP futuro e IA directora
+Consumidores: compatibilidad historica, smokes legacy y diagnostico operador
 Campos:
   descriptor:
     name: orquesta.apps.ejecutar_orquestacion.v0
     version: v0
-    input_schema: envelope compacto con AppSpecV0 validada y limites de loop
+    input_schema: envelope compacto con `director_execution_mode=legacy_director_loop`, AppSpecV0 validada y limites de loop
     resource_uri: orquesta://contracts/ejecutar-orquestacion-app/v0
   input:
     request_id, correlation_id: refs externas opcionales; se traducen a refs internas neutras
+    director_execution_mode: obligatorio como `legacy_director_loop`; vacio o `goal_first` no ejecutan el loop
     run_ref, project_ref: refs externas opcionales; no se propagan literalmente al core
     occurred_at: obligatorio
     app_spec: AppSpecV0 ya validada por orquesta-factory
@@ -1054,13 +1055,16 @@ Campos:
     estado: error
     errores_publicos: code, field y message saneados
 Invariantes:
-  - Adaptador fino: prepara mediante `PrepareAppOrchestrationV0` y ejecuta mediante `RunPreparedAppOrchestrationV0`.
+  - Adaptador fino de compatibilidad: prepara mediante `PrepareAppOrchestrationV0` y ejecuta mediante `RunPreparedAppOrchestrationV0` solo con `director_execution_mode=legacy_director_loop`.
+  - La entrada normal para apps nuevas, goal-first y trabajo productivo es `orquesta.apps.arrancar_director.v0`.
+  - Vacio o `goal_first` devuelve `legacy_director_loop_required` con `preferred_entrypoint=orquesta.apps.arrancar_director.v0`, sin preparar ni ejecutar el loop antiguo.
   - Requiere puertos inyectados para run store, event sink, outbox ledger y dispatchers; sin binding queda `mcp_transport_tool_unbound`.
   - No elige DB, runtime, proveedor, modelo, HOME, OAuth ni credenciales.
   - No relaja validaciones del core; neutraliza detalles de transporte antes de crear run/outbox.
   - Los efectos salen solo por puertos hexagonales inyectados.
 Pruebas de contrato:
-  - Con puertos fake arranca la ola bootstrap desde AppSpec grande y queda esperando entrega externa.
+  - Sin `director_execution_mode=legacy_director_loop` devuelve `legacy_director_loop_required`.
+  - Con puertos fake y legacy explicito arranca la ola bootstrap desde AppSpec grande y queda esperando entrega externa.
   - Sin campos requeridos devuelve error publico.
   - El registro MCP publica el tool como opt-in y falla de forma compacta si no hay executor.
 ```
