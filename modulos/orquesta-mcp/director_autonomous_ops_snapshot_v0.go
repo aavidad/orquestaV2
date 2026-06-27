@@ -28,6 +28,7 @@ func buildMCPDirectorStatsOpsSnapshotV0(
 func buildMCPAutoprogrammingOpsSnapshotV0(
 	queue *MCPRunQueuePriorityToolResultV0,
 	run *MCPDirectorStatsToolResultV0,
+	operator *MCPAutoprogrammingOperatorV0,
 	observedAt string,
 ) *orquestaobservability.DirectorAutonomousOpsSnapshotV0 {
 	snapshot := orquestaobservability.DirectorAutonomousOpsSnapshotV0{
@@ -43,7 +44,7 @@ func buildMCPAutoprogrammingOpsSnapshotV0(
 		}
 		snapshot.Agents = directorOpsAgentsFromStatsMCPV0(*run.Stats)
 	}
-	snapshot.Decision = directorOpsDecisionFromSnapshotMCPV0(snapshot)
+	snapshot.Decision = directorOpsDecisionFromAutoprogrammingSafeActionsMCPV0(operator, snapshot)
 	return &snapshot
 }
 
@@ -152,6 +153,35 @@ func directorOpsDecisionFromSnapshotMCPV0(
 		ReasonCode: "no_active_work",
 		SummaryKey: "director.ops.decision.idle",
 	}
+}
+
+func directorOpsDecisionFromAutoprogrammingSafeActionsMCPV0(
+	operator *MCPAutoprogrammingOperatorV0,
+	snapshot orquestaobservability.DirectorAutonomousOpsSnapshotV0,
+) orquestaobservability.DirectorAutonomousOpsDecisionV0 {
+	for _, action := range directorOpsAutoprogrammingSafeActionsMCPV0(operator) {
+		if strings.TrimSpace(action.Action) != "observe_goal" {
+			continue
+		}
+		runRef := strings.TrimSpace(action.RunRef)
+		return orquestaobservability.DirectorAutonomousOpsDecisionV0{
+			Action:     orquestaobservability.DirectorAutonomousOpsActionObserveGoalV0,
+			Scope:      firstNonEmptyMCPV0(strings.TrimSpace(action.Scope), "run"),
+			RunRef:     runRef,
+			ReasonCode: "goal_first_observe_required",
+			SummaryKey: "director.ops.decision.observe_goal",
+		}
+	}
+	return directorOpsDecisionFromSnapshotMCPV0(snapshot)
+}
+
+func directorOpsAutoprogrammingSafeActionsMCPV0(
+	operator *MCPAutoprogrammingOperatorV0,
+) []MCPAutoprogrammingSafeActionV0 {
+	if operator == nil {
+		return nil
+	}
+	return operator.SafeActions
 }
 
 func directorOpsDecisionFromRunMCPV0(

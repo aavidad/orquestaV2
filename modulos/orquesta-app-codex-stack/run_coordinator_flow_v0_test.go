@@ -14,6 +14,7 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoragent "orquesta/modulos/orquesta-director-agent"
 	orquestadirectoragentworkflow "orquesta/modulos/orquesta-director-agent-workflow"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
@@ -293,6 +294,61 @@ func TestCodexStackV0RecoverNoReanudaStoppedSiRetryCerradoExisteV0(t *testing.T)
 	}
 	if len(visible) != 0 {
 		t.Fatalf("no debe reactivar stopped con retry cerrado: %+v", visible)
+	}
+}
+
+func TestCodexStackV0RecoverNoReencolaGoalFirstStoppedComoLegacyV0(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	stack.Ports.GoalStateStore = goalStates
+	runRef := "run-ref-recover-goal-first-stopped-001"
+	goalRef := "goal-ref-recover-goal-first-stopped-001"
+	if err := stack.Ports.RunStore.SaveRunV0(ctx, orquestacoreworkflow.OrchestrationRunV0{
+		SchemaVersion: orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
+		RunID:         runRef,
+		ProjectRef:    "project-ref-recover-goal-first-stopped",
+		AppSpecRef:    "app-spec-ref-autoprogramming-recover-goal-first-stopped",
+		Status:        orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+		CurrentPhase:  orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+	}); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	if err := goalStates.SaveGoalWorkStateV0(ctx, orquestagoal.GoalWorkStateV0{
+		RunRef:  runRef,
+		GoalRef: goalRef,
+		Status:  orquestagoal.GoalStatusRunningV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "No reencolar goal-first stopped como legacy.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "generated-apps/goal-first"}},
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-first-stopped-recover-test"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	setRunQueueCandidateForTestV0(t, stack, runRef, orquestarunqueue.RunStatusStoppedV0, 60, time.Date(2026, 6, 27, 14, 0, 0, 0, time.UTC))
+
+	if err := stack.recoverQueuedStoppedActiveRunsV0(ctx, globalTickCommandForTestV0()); err != nil {
+		t.Fatalf("recoverQueuedStoppedActiveRunsV0: %v", err)
+	}
+	all, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		ctx,
+		orquestarunqueue.RunQueueReadRequestV0{
+			QueueRef:             DefaultRunQueueRefV0,
+			IncludeNonExecutable: true,
+		},
+	)
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	if len(all) != 1 ||
+		all[0].RunRef != runRef ||
+		all[0].Status != orquestarunqueue.RunStatusDeliveredV0 ||
+		!codexStackStringInSetV0(all[0].EvidenceRefs, "evidence-ref-run-queue-goal-first-disposition-reconciled") {
+		t.Fatalf("goal-first reencolado como legacy: %+v", all)
 	}
 }
 

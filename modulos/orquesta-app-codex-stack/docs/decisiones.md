@@ -21,6 +21,22 @@ Estado: aceptada localmente.
 
 ```text
 Fecha: 2026-06-27
+Decision: La recuperacion de cola y el idle self-improvement no reencolan
+goal-first como `ready` legacy.
+Motivo: las guardas de supervisor ya evitaban lanzar agentes legacy, pero un
+candidato goal-first `stopped`/`delivered` podia reactivarse a `ready` antes del
+drain y generar churn operativo o acciones ambiguas de supervision.
+Impacto: el reconciler de cola consulta la disposicion goal-first antes de
+recuperar agentes/control; sincroniza `delivered` cuando hay que observar goal y
+`stopped` cuando falta `GoalWorkStateV0`. El idle self-improvement reutiliza la
+misma disposicion y recomienda observar/reparar state, no reencolar.
+Contratos afectados: `RunCoordinator`, `GoalWorkStateV0`,
+`serverStackSupervisorV0.ensureIdleSelfImprovementQueueVisibleV0`.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-06-27
 Decision: El bridge residente OPES trata entregas sin proceso vivo como lock
 obsoleto a reconciliar.
 Motivo: OPES documento jobs que quedaban `en_progreso` aunque Orquesta ya tenia

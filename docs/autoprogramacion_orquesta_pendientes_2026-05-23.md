@@ -253,6 +253,11 @@ Revalidacion adicional 2026-06-27: `/autoprogramming` desactiva `Supervisar`
 cuando `safe_actions` trae `observe_goal`, aunque aun no haya `currentGoalRef`;
 y la guarda de state faltante queda cubierta para `DrainRunV0` directo y
 Director residente, marcando la cola `stopped` sin lanzar agentes legacy.
+Revalidacion adicional 2026-06-27 tarde: `autoprogramming/status` alinea
+`ops_snapshot.decision` con `safe_actions.observe_goal` y el reconciler de cola
+mas idle self-improvement no reencolan contenedores goal-first como `ready`
+legacy; sincronizan `delivered` para observar goal o conservan `stopped` si
+falta `GoalWorkStateV0`.
 
 Pendiente verificable:
 
@@ -289,10 +294,26 @@ Pendiente verificable:
   literal y Orquesta acepto el cierre sin caer al loop legacy.
 - Revalidar OPES temporal con derivados/cierre cuando exista la ruta goal-first
   real; no tocar OPES productivo ni drenar colas amplias.
+- Gate pendiente antes de declarar 100% global con OPES/external-work:
+  `OPES-GOAL-FIRST-E2E` sobre instancia temporal de un tema. Debe entrar por
+  `external-work`/`domain-work`, compilar `GoalWorkSpecV0` o declarar legacy
+  explicito, materializar contrato OPES 1+6 cuando aplique, producir resultado
+  durable, validar cierre por evidencias/validadores, lanzar rework goal si
+  falla el cierre y sobrevivir a restart/observe/stop sin HTTP colgado.
 - Mantener el loop `app-director-service`/`PlanState` solo como compatibilidad
   legacy hasta cerrar smokes equivalentes de OPES temporal, external-work,
   app-change y rutas residentes. No borrar codigo historico sin evidencia
   equivalente y commit especifico de retirada.
+- Pendiente de contrato para borrar mas legacy: transportar un modo estricto
+  `goal_first` desde MCP/REST hasta `StartAppDirectorV0` para que un entrypoint
+  goal-first sin backend Goal configurado falle como `goal_backend_unavailable`
+  en vez de caer al loop historico. Mantener fallback legacy solo con opt-in
+  legacy explicito.
+- Pendiente de status: si falta `GoalWorkStateV0`, `autoprogramming/status`
+  aun depende de la visibilidad del state store para publicar `observe_goal`.
+  Para diagnostico perfecto debe recibir una fuente de run/forma goal-first o
+  consumir la disposicion de la composicion, y publicar reparacion de state en
+  vez de acciones genericas.
 
 Validacion focal:
 

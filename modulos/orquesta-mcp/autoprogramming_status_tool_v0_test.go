@@ -158,6 +158,12 @@ func TestMCPAutoprogrammingStatusExecutorV0RecomiendaObserveGoalParaRunGoalFirst
 		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "supervise", "queue", "") {
 		t.Fatalf("operator=%+v", result.Operator)
 	}
+	if result.OpsSnapshot == nil ||
+		result.OpsSnapshot.Decision.Action != "observe_goal" ||
+		result.OpsSnapshot.Decision.RunRef != runRef ||
+		result.OpsSnapshot.Decision.ReasonCode != "goal_first_observe_required" {
+		t.Fatalf("ops_snapshot=%+v", result.OpsSnapshot)
+	}
 }
 
 func TestMCPAutoprogrammingStatusExecutorV0ColaMixtaGoalFirstNoSupervisaColaGlobal(t *testing.T) {
@@ -220,6 +226,12 @@ func TestMCPAutoprogrammingStatusExecutorV0ColaMixtaGoalFirstNoSupervisaColaGlob
 		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "supervise", "run", goalRunRef) ||
 		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "supervise", "queue", "") {
 		t.Fatalf("operator=%+v", result.Operator)
+	}
+	if result.OpsSnapshot == nil ||
+		result.OpsSnapshot.Decision.Action != "observe_goal" ||
+		result.OpsSnapshot.Decision.RunRef != goalRunRef ||
+		result.OpsSnapshot.Decision.ReasonCode != "goal_first_observe_required" {
+		t.Fatalf("ops_snapshot=%+v", result.OpsSnapshot)
 	}
 }
 

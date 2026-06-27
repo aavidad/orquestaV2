@@ -253,6 +253,12 @@ Cobertura Go actual:
   runtime Codex, devuelve `goal_first_observe_required`, deja la cola
   `delivered` no ejecutable y conserva el lifecycle directo como observacion de
   Goal.
+- `TestCodexStackV0RecoverNoReencolaGoalFirstStoppedComoLegacyV0` valida que el
+  reconciler de cola no reactive un goal-first `stopped` como `ready` legacy:
+  lo sincroniza a `delivered` con evidencia de disposicion goal-first.
+- `TestIdleSelfImprovementStackV0NoReencolaGoalFirstSinStateV0` valida que idle
+  self-improvement no reencola un contenedor goal-first sin `GoalWorkStateV0`;
+  recomienda reparar state o bloquear y no publica `ready` legacy.
 - `TestCodexSupervisorStackLifecycleV0SupervisaRunExistenteSinCanalParaleloV0`
   prueba el adaptador real de stack sobre una run ya creada: `SuperviseCodexV0`
   hace `launch` y luego `continue`, ambos por `DrainRunV0`, sin relanzar agentes.

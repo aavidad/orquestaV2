@@ -187,6 +187,11 @@ func (stack StackV0) recoverQueuedStoppedCandidateV0(
 		}
 		run = recovered
 	}
+	if !orquestarunqueue.IsExecutableRunStatusV0(candidate.Status) {
+		if disposition, ok := stack.goalFirstSupervisorDispositionV0(ctx, candidate.RunRef); ok {
+			return stack.syncQueuedGoalFirstDispositionV0(ctx, command, candidate, disposition)
+		}
+	}
 	if err := stack.recoverQueuedStoppedAgentProgressV0(ctx, command, run); err != nil {
 		if codexStackQueuedRecoveryAdvisoryErrorV0(err) {
 			return stack.recoverQueuedRunControlV0(ctx, command, candidate, state)
@@ -198,6 +203,33 @@ func (stack StackV0) recoverQueuedStoppedCandidateV0(
 		return err
 	}
 	return stack.recoverQueuedRunControlV0(ctx, command, candidate, state)
+}
+
+func (stack StackV0) syncQueuedGoalFirstDispositionV0(
+	ctx context.Context,
+	command orquestaruncoordinator.RunCoordinatorTickCommandV0,
+	candidate orquestarunqueue.RunSchedulingCandidateV0,
+	disposition codexStackGoalFirstSupervisorDispositionV0,
+) error {
+	status := strings.TrimSpace(disposition.QueueStatus)
+	if status == "" || strings.TrimSpace(candidate.Status) == status {
+		return nil
+	}
+	_, err := stack.Stores.RunQueue.SetRunPriorityV0(ctx, stackRunQueueCommandFromCandidateV0(
+		command,
+		candidate,
+		status,
+		"orquesta-app-codex-stack-goal-first-reconciler",
+		"queued_goal_first_not_requeued_to_legacy",
+		"idem-run-queue-goal-first-"+codexStackOperationalClosureSafeRefV0(candidate.RunRef),
+		compactStringsV0(append(
+			append([]string(nil), candidate.EvidenceRefs...),
+			append(disposition.EvidenceRefs,
+				"evidence-ref-run-queue-goal-first-disposition-reconciled",
+			)...,
+		)),
+	))
+	return err
 }
 
 func codexStackQueuedRecoveryAdvisoryErrorV0(err error) bool {

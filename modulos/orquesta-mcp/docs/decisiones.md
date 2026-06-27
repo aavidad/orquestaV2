@@ -550,6 +550,22 @@ Estado: aceptada localmente.
 ```
 
 ```text
+Fecha: 2026-06-27
+Decision: `autoprogramming/status` alinea `ops_snapshot.decision` con las
+acciones seguras goal-first.
+Motivo: el snapshot autonomo seguia pudiendo resumir una cola viva como
+`supervise_queue` aunque `safe_actions` ya hubiese sustituido esa actuacion por
+`observe_goal`. Eso no lanzaba runtime por si mismo, pero dejaba un contrato de
+cockpit ambiguo y podia inducir a consumidores a reabrir compatibilidad legacy.
+Impacto: cuando existe una accion segura `observe_goal`, el snapshot publica
+`decision.action=observe_goal` y `reason_code=goal_first_observe_required`.
+Sin `observe_goal`, conserva la decision historica derivada de stats/cola.
+Contratos afectados: mcp.tool.orquesta.autoprogramming.status.v0,
+DirectorAutonomousOpsSnapshotV0.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-05-13
 Decision: El apagado de servidor se expone como tool MCP/REST propio y no como
 senal directa desde MCP.

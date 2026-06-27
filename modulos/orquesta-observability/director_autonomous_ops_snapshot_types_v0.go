@@ -5,6 +5,7 @@ const (
 
 	DirectorAutonomousOpsActionReviewReplanV0    = "review_replan"
 	DirectorAutonomousOpsActionWaitDeliveriesV0  = "wait_deliveries"
+	DirectorAutonomousOpsActionObserveGoalV0     = "observe_goal"
 	DirectorAutonomousOpsActionSuperviseQueueV0  = "supervise_queue"
 	DirectorAutonomousOpsActionCloseOrValidateV0 = "close_or_validate"
 	DirectorAutonomousOpsActionClosedV0          = "closed"

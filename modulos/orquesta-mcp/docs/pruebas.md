@@ -577,6 +577,10 @@ Evidencia adicional 2026-06-27:
 valida que, sin `run_ref` explicito, una cola mixta con candidato goal-first y
 legacy no recomienda `supervise queue`; recomienda `observe_goal` para el
 goal-first y `supervise run` para el candidato legacy concreto.
+Revalidacion adicional 2026-06-27: el mismo camino alinea
+`ops_snapshot.decision` con la accion segura goal-first. Si hay `observe_goal`,
+el snapshot publica `decision.action=observe_goal` y `reason_code=
+goal_first_observe_required`, no `supervise_queue`.
 
 Evidencia adicional 2026-06-26: `autoprogramming/status` diagnostica
 `external_work_accepted_stopped_without_delivery` cuando una run external-work

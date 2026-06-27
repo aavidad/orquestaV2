@@ -441,6 +441,9 @@ Invariantes:
 - No filtra, corta ni descarta entregas; solo resume estado observable para
   cockpit/UI/director.
 - No conoce Codex, Gemini, Claude, OPES, DB, HOME, OAuth, proveedor ni modelo.
+- `decision.action=observe_goal` es una senal neutral de cockpit para observar
+  un goal ya publicado por puertos externos; no implica que observabilidad
+  conozca ni ejecute el backend de Goal.
 - Las formas no disponibles se dejan vacias; waits, olas, cohortes y modelos se
   rellenaran cuando entren por puertos publicos.
 

@@ -25,6 +25,29 @@ type codexStackGoalFirstSupervisorDispositionV0 struct {
 	Diagnostics  []orquestaruncoordinator.RunDrainDiagnosticV0
 }
 
+type GoalFirstQueueDispositionV0 struct {
+	RunRef       string
+	Outcome      string
+	QueueStatus  string
+	EvidenceRefs []string
+}
+
+func (stack StackV0) GoalFirstQueueDispositionV0(
+	ctx context.Context,
+	runRef string,
+) (GoalFirstQueueDispositionV0, bool) {
+	disposition, ok := stack.goalFirstSupervisorDispositionV0(ctx, runRef)
+	if !ok {
+		return GoalFirstQueueDispositionV0{}, false
+	}
+	return GoalFirstQueueDispositionV0{
+		RunRef:       disposition.RunRef,
+		Outcome:      disposition.Outcome,
+		QueueStatus:  disposition.QueueStatus,
+		EvidenceRefs: compactStringsV0(disposition.EvidenceRefs),
+	}, true
+}
+
 func (stack StackV0) goalFirstSupervisorDispositionV0(
 	ctx context.Context,
 	runRef string,

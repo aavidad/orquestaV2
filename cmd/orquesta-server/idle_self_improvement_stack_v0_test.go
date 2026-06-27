@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
+	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
@@ -144,6 +145,46 @@ func TestIdleSelfImprovementStackV0ReencolaActivoStoppedV0(t *testing.T) {
 		len(queue.priorityCommands) != 1 ||
 		queue.priorityCommands[0].Status != orquestarunqueue.RunStatusReadyV0 ||
 		queue.priorityCommands[0].PriorityScore != 7 {
+		t.Fatalf("result=%+v commands=%+v", result, queue.priorityCommands)
+	}
+}
+
+func TestIdleSelfImprovementStackV0NoReencolaGoalFirstSinStateV0(t *testing.T) {
+	ctx := context.Background()
+	runRef := "request-ref-autoprogramming-backlog-t47-goal-first-missing-state"
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	if err := runStore.SaveRunV0(ctx, orquestacoreworkflow.OrchestrationRunV0{
+		SchemaVersion: orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
+		RunID:         runRef,
+		ProjectRef:    "project-ref-orquesta",
+		AppSpecRef:    "app-spec-ref-autoprogramming-goal-first-missing-state",
+		Status:        orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+		CurrentPhase:  orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+	}); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	queue := &fakeIdleSelfRunQueueV0{candidates: []orquestarunqueue.RunSchedulingCandidateV0{{
+		RunRef: runRef, Status: orquestarunqueue.RunStatusStoppedV0, PriorityScore: 7,
+	}}}
+	stack := &orquestaappcodexstack.StackV0{
+		Stores: orquestaappcodexstack.StoresV0{
+			RunQueue: queue,
+			RunStore: runStore,
+		},
+		RunQueue: orquestaappcodexstack.RunQueueConfigV0{QueueRef: "queue-main"},
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			RunStore: runStore,
+		},
+	}
+	result := (serverStackSupervisorV0{stack: stack}).ensureIdleSelfImprovementQueueVisibleV0(
+		ctx,
+		orquestaserver.IdleSelfImprovementResultV0{Accepted: true, RunRef: runRef},
+	)
+	if !result.Accepted ||
+		result.Message != "idle_self_improvement_goal_first_state_missing" ||
+		!containsStringForTestV0(result.NextActions, "repair_goal_state_from_launcher_receipt_or_mark_blocked") ||
+		!containsStringForTestV0(result.NextActions, "do_not_requeue_goal_first_to_legacy") ||
+		len(queue.priorityCommands) != 0 {
 		t.Fatalf("result=%+v commands=%+v", result, queue.priorityCommands)
 	}
 }

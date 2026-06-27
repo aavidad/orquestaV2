@@ -240,6 +240,47 @@ func (supervisor serverStackSupervisorV0) ensureIdleSelfImprovementQueueVisibleV
 			))
 			return result
 		}
+		if disposition, goalFirst := supervisor.stack.GoalFirstQueueDispositionV0(ctx, runRef); goalFirst {
+			if queueStatus := strings.TrimSpace(disposition.QueueStatus); queueStatus != "" && queueStatus != status {
+				if _, err := supervisor.stack.Stores.RunQueue.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+					RunRef:         runRef,
+					QueueRef:       queueRef,
+					Status:         queueStatus,
+					PriorityScore:  idleSelfImprovementCandidatePriorityScoreV0(candidates, runRef),
+					UpdatedAt:      time.Now().UTC(),
+					RequestedBy:    "orquesta-server-idle-self-improvement",
+					Reason:         "prepared_goal_first_non_executable_synced",
+					IdempotencyKey: "idem-idle-self-improvement-goal-first-" + runRef,
+					EvidenceRefs: compactServerStackStringsV0(append(
+						append([]string(nil), disposition.EvidenceRefs...),
+						"evidence-ref-idle-self-improvement-goal-first-not-requeued",
+					)),
+				}); err != nil {
+					result.Accepted = false
+					result.Message = "idle_self_improvement_goal_first_queue_sync_failed"
+					return result
+				}
+			}
+			result.Message = firstNonEmptyServerStackV0(
+				result.Message,
+				"idle_self_improvement_goal_first_observe_required",
+			)
+			nextGoalAction := "observe_autoprogramming_goal"
+			if strings.TrimSpace(disposition.Outcome) == "goal_first_state_missing" {
+				nextGoalAction = "repair_goal_state_from_launcher_receipt_or_mark_blocked"
+				result.Message = "idle_self_improvement_goal_first_state_missing"
+			}
+			result.NextActions = compactServerStackStringsV0(append(result.NextActions,
+				nextGoalAction,
+				"do_not_requeue_goal_first_to_legacy",
+				"goal_first_outcome="+strings.TrimSpace(disposition.Outcome),
+			))
+			result.EvidenceRefs = compactServerStackStringsV0(append(
+				append(result.EvidenceRefs, disposition.EvidenceRefs...),
+				"evidence-ref-idle-self-improvement-goal-first-not-requeued",
+			))
+			return result
+		}
 		if runOK && runStatus == orquestacoreworkflow.OrchestrationRunStatusActiveV0 &&
 			idleSelfImprovementCanRequeueNonExecutableStatusV0(status) {
 			if _, err := supervisor.stack.Stores.RunQueue.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
