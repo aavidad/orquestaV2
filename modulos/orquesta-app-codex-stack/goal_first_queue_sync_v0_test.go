@@ -525,7 +525,9 @@ func listGoalFirstQueueCandidatesForTestV0(
 }
 
 type goalFirstQueueLauncherForTestV0 struct {
-	specs []orquestagoal.GoalWorkSpecV0
+	specs   []orquestagoal.GoalWorkSpecV0
+	receipt orquestagoal.GoalLaunchReceiptV0
+	err     error
 }
 
 func (launcher *goalFirstQueueLauncherForTestV0) LaunchGoalWorkV0(
@@ -533,6 +535,9 @@ func (launcher *goalFirstQueueLauncherForTestV0) LaunchGoalWorkV0(
 	spec orquestagoal.GoalWorkSpecV0,
 ) (orquestagoal.GoalLaunchReceiptV0, error) {
 	launcher.specs = append(launcher.specs, spec)
+	if launcher.err != nil || launcher.receipt.Status != "" || launcher.receipt.GoalRef != "" {
+		return launcher.receipt, launcher.err
+	}
 	return orquestagoal.GoalLaunchReceiptV0{
 		SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
 		Status:          orquestagoal.GoalStatusRunningV0,

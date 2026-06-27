@@ -50,15 +50,7 @@ jobs:
 
       - run: govulncheck ./...
 
-      - name: Staticcheck advisory until PR7
-        run: |
-          set +e
-          staticcheck ./...
-          status=$?
-          if [ "$status" -ne 0 ]; then
-            echo "::warning::staticcheck debt remains until PR7; this step must become required when PR7 lands."
-          fi
-          exit 0
+      - run: staticcheck ./...
 
   race:
     runs-on: ubuntu-latest

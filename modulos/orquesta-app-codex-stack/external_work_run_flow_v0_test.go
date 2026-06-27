@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -227,6 +228,67 @@ func TestCodexStackV0ExternalWorkRunConObservadorResidenteNoMarcaObserverRequire
 		codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-external-work-goal-first-observer-required") ||
 		!codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-external-work-goal-first-resident-observer") {
 		t.Fatalf("result goal-first residente inesperado=%+v", result)
+	}
+}
+
+func TestCodexStackV0ExternalWorkRunGoalFirstLaunchFailedPublicaReasonCode(t *testing.T) {
+	launcher := &goalFirstQueueLauncherForTestV0{
+		receipt: orquestagoal.GoalLaunchReceiptV0{
+			SchemaVersion: orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+			Status:        orquestagoal.GoalStatusInvalidV0,
+			EvidenceRefs:  []string{"evidence-ref-goal-launch-socket-missing"},
+			Issues: []orquestagoal.GoalWorkIssueV0{{
+				Code: "codex_app_server_control_socket_missing",
+			}},
+		},
+		err: errors.New("failed to connect to socket at /home/user/.codex/app-server-control/app-server-control.sock"),
+	}
+	config := codexStackBaseConfigForTestV0(t, newFakeCodexStackRuntimeV0(), nil, nil)
+	config.AppGoalLauncher = launcher
+	config.AppGoalObserver = &goalFirstQueueObserverForTestV0{}
+	config.AppGoalClosureValidator = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
+	config.Stores.AppGoalStateStore = newGoalFirstQueueStateStoreForTestV0()
+	config.GoalObserverResidentEnabled = true
+	stack, err := BuildStackV0(config)
+	if err != nil {
+		t.Fatalf("BuildStackV0: %v", err)
+	}
+
+	result := postExternalWorkRunStackRawV0(t, stack, http.StatusBadRequest, defaultExternalWorkRunChangeForTestV0())
+
+	if result.Estado != orquestamcp.MCPExternalWorkRunEstadoErrorV0 ||
+		result.RoutePolicy != orquestamcp.MCPExternalWorkRunRoutePolicyGoalFirstV0 ||
+		result.DirectorExecutionMode != orquestamcp.MCPExternalWorkRunDirectorExecutionModeGoalFirstV0 ||
+		result.GoalRef == "" ||
+		!codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-external-work-goal-launch-failed") ||
+		!codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-goal-launch-socket-missing") ||
+		!codexStackStringInSetForTestV0(result.NextActions, orquestamcp.MCPExternalWorkRunNextActionConfigureGoalBackendV0) ||
+		!codexStackStringInSetForTestV0(result.NextActions, orquestamcp.MCPExternalWorkRunNextActionDoNotFallbackLegacyV0) ||
+		!codexStackStringInSetForTestV0(result.NextActions, orquestamcp.MCPExternalWorkRunNextActionObserveGoalV0) ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "external_work_goal_launch_failed" ||
+		result.Errores[0].Field != "goal_launcher" ||
+		result.Errores[0].Message != "codex_app_server_control_socket_missing" {
+		t.Fatalf("result=%+v", result)
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("Marshal result: %v", err)
+	}
+	if strings.Contains(string(encoded), "/home/user") ||
+		strings.Contains(string(encoded), "app-server-control.sock") {
+		t.Fatalf("diagnostico publico filtro ruta local: %s", string(encoded))
+	}
+	state, err := config.Stores.AppGoalStateStore.LoadGoalWorkStateV0(context.Background(), result.RunRef)
+	if err != nil {
+		t.Fatalf("fallo de launch debe dejar GoalWorkStateV0 reparable: %v", err)
+	}
+	if state.Status != orquestagoal.GoalStatusInvalidV0 ||
+		state.GoalRef != result.GoalRef ||
+		len(state.LaunchReceipt.Issues) != 1 ||
+		state.LaunchReceipt.Issues[0].Code != "codex_app_server_control_socket_missing" ||
+		!codexStackStringInSetForTestV0(state.EvidenceRefs, "evidence-ref-external-work-goal-first-launch-failed-state-v0") {
+		t.Fatalf("state reparable inesperado=%+v result=%+v", state, result)
 	}
 }
 

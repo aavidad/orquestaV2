@@ -99,7 +99,11 @@ func (executor CodexStackExternalWorkGoalFirstExecutorV0) Execute(
 	}
 	receipt, err := executor.Ports.GoalLauncher.LaunchGoalWorkV0(ctx, spec)
 	if err != nil {
-		return externalWorkGoalFirstIssueResultV0(request, "external_work_goal_launch_failed", "goal_launcher"), nil
+		state, stateErr := externalWorkGoalFirstBlockedGoalStateV0(run.RunID, spec, receipt, err)
+		if stateErr == nil {
+			stateErr = executor.Ports.GoalStateStore.SaveGoalWorkStateV0(ctx, state)
+		}
+		return externalWorkGoalFirstGoalLaunchFailedResultV0(request, state, receipt, err, stateErr), nil
 	}
 	state, err := externalWorkGoalFirstNewGoalStateV0(run.RunID, spec, receipt)
 	if err != nil {
@@ -462,6 +466,123 @@ func externalWorkGoalFirstIssueResultV0(
 			Code:  strings.TrimSpace(code),
 			Field: strings.TrimSpace(field),
 		}},
+	}
+}
+
+func externalWorkGoalFirstGoalLaunchFailedResultV0(
+	request orquestaexternalworkrun.StartExternalWorkRunRequestV0,
+	state orquestagoal.GoalWorkStateV0,
+	receipt orquestagoal.GoalLaunchReceiptV0,
+	err error,
+	stateErr error,
+) orquestamcp.MCPExternalWorkRunToolResultV0 {
+	reason := externalWorkGoalFirstLaunchFailureReasonV0(receipt, err)
+	result := externalWorkGoalFirstIssueResultV0(request, "external_work_goal_launch_failed", "goal_launcher")
+	result.RoutePolicy = orquestamcp.MCPExternalWorkRunRoutePolicyGoalFirstV0
+	result.DirectorExecutionMode = orquestamcp.MCPExternalWorkRunDirectorExecutionModeGoalFirstV0
+	result.GoalRef = strings.TrimSpace(firstExternalWorkGoalFirstValueV0(state.GoalRef, receipt.GoalRef, request.RunRef))
+	result.ExternalGoalRef = strings.TrimSpace(firstExternalWorkGoalFirstValueV0(state.ExternalGoalRef, receipt.ExternalGoalRef))
+	result.EvidenceRefs = compactStringsV0(append(
+		[]string{"evidence-ref-external-work-goal-launch-failed"},
+		append(receipt.EvidenceRefs, state.EvidenceRefs...)...,
+	))
+	result.NextActions = []string{
+		orquestamcp.MCPExternalWorkRunNextActionConfigureGoalBackendV0,
+		orquestamcp.MCPExternalWorkRunNextActionDoNotFallbackLegacyV0,
+		orquestamcp.MCPExternalWorkRunNextActionObserveGoalV0,
+	}
+	if len(result.Errores) > 0 {
+		result.Errores[0].Message = reason
+	}
+	if stateErr != nil {
+		result.Errores = append(result.Errores, orquestamcp.MCPExternalWorkRunIssueV0{
+			Code:    "external_work_goal_failed_state_save_failed",
+			Field:   "goal_state",
+			Message: "goal_failed_state_not_persisted",
+		})
+	}
+	return result
+}
+
+func externalWorkGoalFirstBlockedGoalStateV0(
+	runRef string,
+	spec orquestagoal.GoalWorkSpecV0,
+	receipt orquestagoal.GoalLaunchReceiptV0,
+	err error,
+) (orquestagoal.GoalWorkStateV0, error) {
+	reason := externalWorkGoalFirstLaunchFailureReasonV0(receipt, err)
+	receipt = orquestagoal.NormalizeGoalLaunchReceiptV0(receipt)
+	receipt.Status = orquestagoal.GoalStatusInvalidV0
+	if len(receipt.Issues) == 0 {
+		receipt.Issues = []orquestagoal.GoalWorkIssueV0{{
+			Code:  reason,
+			Field: "goal_launcher",
+		}}
+	}
+	receipt.EvidenceRefs = compactStringsV0(append(
+		[]string{"evidence-ref-external-work-goal-launch-failed"},
+		receipt.EvidenceRefs...,
+	))
+	return orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef:        runRef,
+		Spec:          spec,
+		LaunchReceipt: receipt,
+		EvidenceRefs: []string{
+			"evidence-ref-external-work-goal-first-launch-failed-state-v0",
+		},
+	})
+}
+
+func externalWorkGoalFirstLaunchFailureReasonV0(
+	receipt orquestagoal.GoalLaunchReceiptV0,
+	err error,
+) string {
+	for _, issue := range receipt.Issues {
+		if code := strings.TrimSpace(issue.Code); code != "" {
+			return code
+		}
+	}
+	message := ""
+	if err != nil {
+		message = strings.TrimSpace(err.Error())
+	}
+	if code := externalWorkGoalFirstKnownLaunchFailureReasonV0(message); code != "" {
+		return code
+	}
+	return "goal_launcher_error"
+}
+
+func externalWorkGoalFirstKnownLaunchFailureReasonV0(message string) string {
+	normalized := strings.ToLower(strings.TrimSpace(message))
+	switch {
+	case normalized == "":
+		return ""
+	case strings.Contains(normalized, "codex_app_server_control_socket_missing"):
+		return "codex_app_server_control_socket_missing"
+	case strings.Contains(normalized, "codex_app_server_standalone_missing"):
+		return "codex_app_server_standalone_missing"
+	case strings.Contains(normalized, "codex_app_server_command_missing"):
+		return "codex_app_server_command_missing"
+	case strings.Contains(normalized, "codex_app_server_permission_denied"):
+		return "codex_app_server_permission_denied"
+	case strings.Contains(normalized, "codex_app_server_timeout"):
+		return "codex_app_server_timeout"
+	case strings.Contains(normalized, "codex_app_server_protocol_missing"):
+		return "codex_app_server_protocol_missing"
+	case strings.Contains(normalized, "codex_app_server_thread_start_failed"):
+		return "codex_app_server_thread_start_failed"
+	case strings.Contains(normalized, "codex_app_server_goal_set_failed"):
+		return "codex_app_server_goal_set_failed"
+	case strings.Contains(normalized, "codex_app_server_turn_start_failed"):
+		return "codex_app_server_turn_start_failed"
+	case strings.Contains(normalized, "codex_app_server_call_failed"):
+		return "codex_app_server_call_failed"
+	case strings.Contains(normalized, "codex_goal_starter_missing"):
+		return "codex_goal_starter_missing"
+	case strings.Contains(normalized, "codex_goal_start_rejected"):
+		return "codex_goal_start_rejected"
+	default:
+		return ""
 	}
 }
 

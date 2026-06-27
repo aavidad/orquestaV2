@@ -69,8 +69,9 @@ type MCPExternalWorkRunToolResultV0 struct {
 }
 
 type MCPExternalWorkRunIssueV0 struct {
-	Code  string `json:"code"`
-	Field string `json:"field,omitempty"`
+	Code    string `json:"code"`
+	Field   string `json:"field,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 func MCPExternalWorkRunDescriptorV0() MCPExternalWorkRunToolDescriptorV0 {
