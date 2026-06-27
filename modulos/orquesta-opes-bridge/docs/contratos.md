@@ -168,6 +168,14 @@ Reglas:
   `product_write_set` o `topic_dir` como ruta relativa segura, el bridge
   preserva ese write-set de producto para que el agente pueda consolidar el
   artefacto canonico;
+- cuando el payload declara `subroles_required=6` o el contrato
+  `opes.padre-tema-6-subroles.v1` y no hay `allowed_write_set`,
+  `product_write_set` ni `topic_dir` seguro, el bridge conserva el fallback
+  estrecho de coordinacion pero anade `product_write_set_status=
+  missing_for_canonical_consolidation` y criterio de aceptacion de rework. En
+  esa situacion el goal puede producir borradores/subentregas, pero no debe
+  cerrar como producto canonico consolidado hasta que OPES aporte un write-set
+  de producto seguro;
 - si OPES aporta `worktree_ref` o `branch_ref` en `external_refs`, el bridge los
   conserva como refs opacas en `input_fields`/`work_refs` y rechaza valores con
   forma de ruta; no los interpreta como paths, nombres Git ni write-set;

@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
+	orquestaexternalworkrun "orquesta/modulos/orquesta-external-work-run"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaopesconnector "orquesta/modulos/orquesta-opes-connector"
 )
 
@@ -51,6 +53,18 @@ func TestBuildExternalWorkRunRequestV0MapeaSummarizeTopic(t *testing.T) {
 		!containsStringForTestV0(work.WorkRefs, "opes-topic_id-topic-ref-001") {
 		t.Fatalf("request=%+v work=%+v", req, work)
 	}
+}
+
+func goalContextPurposeContainsForTestV0(
+	refs []orquestagoal.GoalContextRefV0,
+	fragment string,
+) bool {
+	for _, ref := range refs {
+		if strings.Contains(ref.Purpose, fragment) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestBuildExternalWorkRunRequestV0MapeaExpansionComoLarge(t *testing.T) {
@@ -124,8 +138,47 @@ func TestBuildExternalWorkRunRequestV0MarcaContratoSeisSubrolesOPES(t *testing.T
 	if work == nil ||
 		!containsStringForTestV0(work.InterfaceRefs, "opes-rest-v0") ||
 		!containsStringForTestV0(work.InterfaceRefs, "opes-mcp-v0") ||
-		!containsStringForTestV0(work.InterfaceRefs, "opes.padre-tema-6-subroles.v1") {
+		!containsStringForTestV0(work.InterfaceRefs, "opes.padre-tema-6-subroles.v1") ||
+		!containsStringForTestV0(work.InterfaceRefs, "opes.product-write-set-required.v1") ||
+		!fieldValueForTestV0(work.InputFields, "product_write_set_status", "missing_for_canonical_consolidation") ||
+		!fieldValueForTestV0(work.InputFields, "product_write_set_rework_action", "request_safe_topic_dir_or_product_write_set") ||
+		!containsStringForTestV0(
+			req.AppChangeRequest.AcceptanceCriteria,
+			"si subroles_required exige seis subroles y falta topic_dir/product_write_set/allowed_write_set seguro, no cerrar como producto canonico consolidado; devolver pendiente_continuar o rework solicitando write-set de producto",
+		) {
 		t.Fatalf("external_work=%+v", work)
+	}
+}
+
+func TestBuildExternalWorkGoalWorkSpecV0MarcaReworkSiSeisSubrolesSinWriteSetProducto(t *testing.T) {
+	req, ok := BuildExternalWorkRunRequestV0(orquestaopesconnector.ExternalJobV0{
+		ID:   "job-tema-goal-sin-product-writeset-001",
+		Type: "draft_content_block",
+		PayloadJSON: `{
+			"topic_id":"tema-goal-001",
+			"subroles_required":6
+		}`,
+	}, JobRunConfigV0{})
+	if !ok {
+		t.Fatalf("BuildExternalWorkRunRequestV0 ok=false")
+	}
+
+	spec, issues := orquestaexternalworkrun.BuildExternalWorkGoalWorkSpecV0(
+		req,
+		orquestaexternalworkrun.StartExternalWorkRunConfigV0{OccurredAt: "2026-06-27T10:00:00Z"},
+	)
+	if len(issues) > 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if len(spec.WriteSet) != 1 ||
+		spec.WriteSet[0].Path != "external/opes/draft_content_block/job-tema-goal-sin-product-writeset-001" ||
+		!containsStringForTestV0(
+			spec.AcceptanceCriteria,
+			"si subroles_required exige seis subroles y falta topic_dir/product_write_set/allowed_write_set seguro, no cerrar como producto canonico consolidado; devolver pendiente_continuar o rework solicitando write-set de producto",
+		) ||
+		!goalContextPurposeContainsForTestV0(spec.ContextRefs, `"product_write_set_status","value":"missing_for_canonical_consolidation"`) ||
+		!goalContextPurposeContainsForTestV0(spec.ContextRefs, `"product_write_set_rework_action","value":"request_safe_topic_dir_or_product_write_set"`) {
+		t.Fatalf("spec=%+v", spec)
 	}
 }
 
@@ -145,6 +198,12 @@ func TestBuildExternalWorkRunRequestV0UsaTopicDirSeguroComoWriteSetProducto(t *t
 	if len(req.AppChangeRequest.AllowedWriteSet) != 1 ||
 		req.AppChangeRequest.AllowedWriteSet[0] != "temas/tema_032" {
 		t.Fatalf("allowed_write_set=%+v", req.AppChangeRequest.AllowedWriteSet)
+	}
+	work := req.AppChangeRequest.ExternalWork
+	if work == nil ||
+		containsStringForTestV0(work.InterfaceRefs, "opes.product-write-set-required.v1") ||
+		fieldValueForTestV0(work.InputFields, "product_write_set_status", "missing_for_canonical_consolidation") {
+		t.Fatalf("external_work=%+v", work)
 	}
 }
 

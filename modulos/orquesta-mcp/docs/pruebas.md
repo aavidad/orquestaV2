@@ -58,6 +58,10 @@ Tambien cubre body `{}` para cola global, observado en OPES, con
 Ultima ejecucion: 2026-06-27; pasa con `go test -count=1 ./modulos/orquesta-mcp`.
 Riesgos: el ledger es memoria del handler HTTP; tras restart la fuente de verdad
 para progreso sigue siendo `director.stats`, `autoprogramming.status` y cola.
+Cobertura servidor 2026-06-28: `go test -count=1 ./cmd/orquesta-server -run
+'TestServerAutoprogrammingSuperviseHTTP.*SinColgarV0'` monta
+`httptest.Server`, usa `http.Client` real y valida que el cliente recibe cuerpo
+JSON `accepted_background` sin quedarse bloqueado.
 ```
 
 ```text

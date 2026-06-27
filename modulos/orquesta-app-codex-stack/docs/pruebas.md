@@ -1541,6 +1541,10 @@ Cobertura:
   pero sin `child_task_refs` reales pese a declarar `subroles_required=6`; la
   fuente de cierre no emite closure hasta que el contrato 1+6 este
   materializado causalmente.
+- `TestCodexStackV0NoReconciliaOPESRunningConProcessRefNoEncontradoV0` fija que
+  una run OPES `running` con registro de proceso pero snapshot no adoptado tras
+  reinicio no se degrada como `running_stale` confirmado; queda pendiente de
+  observacion/adopcion, ACK, `stopped` real o evidencia terminal.
 
 Validacion stats OPES/residente 2026-06-26:
 

@@ -75,6 +75,71 @@ func TestServerAutoprogrammingSuperviseHTTPDevuelveAcceptedBackgroundSinColgarV0
 	}
 }
 
+func TestServerAutoprogrammingSuperviseHTTPClienteRealRecibeCuerpoSinColgarV0(t *testing.T) {
+	supervisor := newBlockingServerAutoprogrammingSuperviseExecutorV0()
+	gateway := orquestaappgateway.NewHTTPHandlerV0(orquestaappgateway.ConfigV0{
+		Timeout:       time.Second,
+		RunSupervisor: supervisor,
+	})
+	handler, err := buildServerAppHandlerV0(orquestaappcodexstack.StackV0{
+		Handler: gateway,
+	})
+	if err != nil {
+		t.Fatalf("buildServerAppHandlerV0: %v", err)
+	}
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	body := []byte(`{
+		"request_id":"request-ref-server-autop-supervise-real-client-001",
+		"correlation_id":"corr-server-autop-supervise-real-client-001",
+		"queue_ref":"global",
+		"idempotency_key":"idem-server-autop-supervise-real-client-001",
+		"max_dispatches":6,
+		"max_outbox":12
+	}`)
+	client := &http.Client{Timeout: 3 * time.Second}
+	req, err := http.NewRequest(
+		http.MethodPost,
+		server.URL+orquestamcp.MCPAutoprogrammingSuperviseHTTPPathV0,
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Correlation-ID", "corr-server-autop-supervise-real-client-001")
+
+	started := time.Now()
+	resp, err := client.Do(req)
+	elapsed := time.Since(started)
+	if err != nil {
+		t.Fatalf("client.Do elapsed=%s err=%v", elapsed, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted || elapsed > 3*time.Second {
+		t.Fatalf("status=%d elapsed=%s", resp.StatusCode, elapsed)
+	}
+	var result orquestamcp.MCPRunSupervisorToolResultV0
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.StopReason != "accepted_background" ||
+		result.Last.Status != "accepted_background" ||
+		result.OperationRef == "" ||
+		!serverAutoprogrammingSuperviseHasDiagnosticV0(result.Diagnostics, "autoprogramming_supervise_background_accepted") {
+		t.Fatalf("result=%+v", result)
+	}
+
+	supervisor.releaseV0()
+	select {
+	case <-supervisor.done:
+	case <-time.After(time.Second):
+		t.Fatalf("executor bloqueante no finalizo tras release")
+	}
+}
+
 func postServerAutoprogrammingSuperviseForTestV0(
 	t *testing.T,
 	handler http.Handler,

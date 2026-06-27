@@ -69,7 +69,14 @@ func BuildExternalWorkRunRequestWithContextV0(
 	fields = appendFieldIfMissingV0(fields, "context_budget_profile", contextProfileForJobTypeV0(job.Type))
 	fields = appendExpansionDocumentContractFieldsV0(fields, job.Type)
 	fields = appendDocumentPlanContractFieldsV0(fields, job.Type)
+	productWriteSet := productWriteSetFromPayloadFieldsV0(fields)
+	fields = appendProductWriteSetContractFieldsV0(fields, productWriteSet)
 	workRefs := workRefsForPayloadV0(job, fields)
+	acceptanceCriteria := appendProductWriteSetAcceptanceCriteriaV0(
+		acceptanceCriteriaForJobV0(job.Type),
+		fields,
+		productWriteSet,
+	)
 	change := orquestaappchange.AppChangeRequestV0{
 		SchemaVersion:      orquestaappchange.AppChangeRequestSchemaV0,
 		RequestID:          "req-opes-external-" + safeJob,
@@ -81,9 +88,9 @@ func BuildExternalWorkRunRequestWithContextV0(
 		UserIntent:         userIntentForJobV0(job.Type),
 		TargetArea:         "domain_work",
 		CurrentStateRefs:   currentStateRefsForJobV0(safeJob, workRefs),
-		AcceptanceCriteria: acceptanceCriteriaForJobV0(job.Type),
+		AcceptanceCriteria: acceptanceCriteria,
 		Constraints:        constraintsForJobV0(),
-		AllowedWriteSet:    allowedWriteSetForJobV0(fields, workKind, safeJob),
+		AllowedWriteSet:    allowedWriteSetForJobV0(productWriteSet, workKind, safeJob),
 		ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
 			ProjectRef:    config.ProjectRef,
 			JobRef:        job.ID,
@@ -114,6 +121,9 @@ func interfaceRefsForJobFieldsV0(
 	refs := []string{"opes-rest-v0", "opes-mcp-v0"}
 	if fieldDeclaresSixSubrolesV0(fields) {
 		refs = append(refs, "opes.padre-tema-6-subroles.v1")
+	}
+	if fieldValueV0(fields, "product_write_set_status") == "missing_for_canonical_consolidation" {
+		refs = append(refs, "opes.product-write-set-required.v1")
 	}
 	return compactStringsV0(refs)
 }
@@ -265,15 +275,48 @@ func fieldValueV0(fields []orquestadomainwork.DomainWorkFieldV0, name string) st
 }
 
 func allowedWriteSetForJobV0(
-	fields []orquestadomainwork.DomainWorkFieldV0,
+	productWriteSet []string,
 	workKind string,
 	safeJob string,
 ) []string {
-	writeSet := productWriteSetFromPayloadFieldsV0(fields)
-	if len(writeSet) > 0 {
-		return writeSet
+	if len(productWriteSet) > 0 {
+		return productWriteSet
 	}
 	return []string{opesJobWriteSetV0(workKind, safeJob)}
+}
+
+func appendProductWriteSetContractFieldsV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	productWriteSet []string,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	if !fieldDeclaresSixSubrolesV0(fields) || len(productWriteSet) > 0 {
+		return fields
+	}
+	fields = appendFieldIfMissingV0(
+		fields,
+		"product_write_set_status",
+		"missing_for_canonical_consolidation",
+	)
+	fields = appendFieldIfMissingV0(
+		fields,
+		"product_write_set_rework_action",
+		"request_safe_topic_dir_or_product_write_set",
+	)
+	return fields
+}
+
+func appendProductWriteSetAcceptanceCriteriaV0(
+	criteria []string,
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	productWriteSet []string,
+) []string {
+	if !fieldDeclaresSixSubrolesV0(fields) || len(productWriteSet) > 0 {
+		return compactStringsV0(criteria)
+	}
+	criteria = append(criteria,
+		"si subroles_required exige seis subroles y falta topic_dir/product_write_set/allowed_write_set seguro, no cerrar como producto canonico consolidado; devolver pendiente_continuar o rework solicitando write-set de producto",
+	)
+	return compactStringsV0(criteria)
 }
 
 func productWriteSetFromPayloadFieldsV0(

@@ -258,10 +258,12 @@ func (stack StackV0) queuedRunningStaleProcessLivenessV0(
 		Verifiable:  true,
 		RecordCount: len(records),
 	}
+	missingSnapshot := false
 	for _, record := range records {
 		snapshot, err := stack.CodexSnapshotSource.SnapshotV0(strings.TrimSpace(record.ProcessRef))
 		if err != nil {
 			if codexStackProcessRuntimeMissingV0(err) {
+				missingSnapshot = true
 				continue
 			}
 			return queuedRunningStaleProcessLivenessV0{}, err
@@ -272,6 +274,9 @@ func (stack StackV0) queuedRunningStaleProcessLivenessV0(
 			result.Live = true
 			return result, nil
 		}
+	}
+	if missingSnapshot {
+		result.Verifiable = false
 	}
 	return result, nil
 }

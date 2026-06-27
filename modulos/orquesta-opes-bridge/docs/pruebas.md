@@ -57,6 +57,10 @@
   `allowed_write_set`, `product_write_set` o `topic_dir` con ruta relativa
   segura; rutas absolutas, con `..`, drive o separadores inseguros caen al
   fallback `external/opes/<work_kind>/<job_id>`.
+- Contrato goal-first para padres OPES con seis subroles sin write-set de
+  producto: el `GoalWorkSpec` conserva el fallback estrecho, transporta
+  `product_write_set_status=missing_for_canonical_consolidation` y exige rework
+  o `pendiente_continuar` en vez de cierre como Markdown canonico consolidado.
 
 Comando:
 
