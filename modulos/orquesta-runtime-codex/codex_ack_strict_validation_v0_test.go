@@ -122,6 +122,36 @@ func TestStrictCompletedCodexAgentAckV0AceptaACKCompletoSinIssuesV0(t *testing.T
 	}
 }
 
+func TestStrictCompletedCodexAgentAckV0AceptaSchemaCompatibleYComandoCanonicoV0(t *testing.T) {
+	spec := codexSpecForTestV0()
+	spec.AgentPacket.Task.RequiredTests = []string{"go test -count=1 ./..."}
+	ack := `{"schema_version":"codex_agent_ack.v0.1","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go   test   ./...   -count=1"],"test_receipts":[{"schema_version":"codex_required_test_receipt.v0.1","command":"go test ./... -count=1","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-001"],"occurred_at":"2026-05-24T10:00:00Z","sequence":1,"output_redacted":true}]}`
+
+	_, issues := ValidateStrictCompletedCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	if len(issues) != 0 {
+		t.Fatalf("schema compatible y comando canonico no deben bloquear: %+v", issues)
+	}
+}
+
+func TestStrictCompletedCodexAgentAckV0RechazaSchemaMayorNoSoportadoV0(t *testing.T) {
+	spec := codexSpecForTestV0()
+	ack := `{"schema_version":"codex_agent_ack.v1","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."],"test_receipts":[{"schema_version":"codex_required_test_receipt.v0","command":"go test ./...","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-001"],"occurred_at":"2026-05-24T10:00:00Z","sequence":1,"output_redacted":true}]}`
+
+	_, issues := ValidateStrictCompletedCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	requireCodexIssueV0(t, issues, CodexConnectorAckInvalidV0)
+}
+
+func TestStrictCompletedCodexAgentAckV0RechazaSchemaCompatibleMalFormadoV0(t *testing.T) {
+	spec := codexSpecForTestV0()
+	ack := `{"schema_version":"codex_agent_ack.v0.","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."],"test_receipts":[{"schema_version":"codex_required_test_receipt.v0","command":"go test ./...","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-001"],"occurred_at":"2026-05-24T10:00:00Z","sequence":1,"output_redacted":true}]}`
+
+	_, issues := ValidateStrictCompletedCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	requireCodexIssueV0(t, issues, CodexConnectorAckInvalidV0)
+}
+
 func TestStrictCompletedCodexAgentAckV0AceptaFileFueraDeWriteSetSeguroV0(t *testing.T) {
 	spec := codexSpecForTestV0()
 	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["docs/no-autorizado.md"],"tests":["go test ./..."],"test_receipts":[{"schema_version":"codex_required_test_receipt.v0","command":"go test ./...","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-001"],"occurred_at":"2026-05-24T10:00:00Z","sequence":1,"output_redacted":true}]}`

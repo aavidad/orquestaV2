@@ -30,12 +30,13 @@ func (v *codexAckValidatorV0) validateStrictTestReceipts(
 			v.add(CodexConnectorAckArtifactV0, "test_receipts", issue)
 			return
 		}
-		if _, exists := receiptsByCommand[receipt.Command]; !exists {
-			receiptsByCommand[receipt.Command] = receipt
+		commandKey := canonicalTestCommandV0(receipt.Command)
+		if _, exists := receiptsByCommand[commandKey]; !exists {
+			receiptsByCommand[commandKey] = receipt
 		}
 	}
 	for _, command := range required {
-		if _, exists := receiptsByCommand[command]; !exists {
+		if _, exists := receiptsByCommand[canonicalTestCommandV0(command)]; !exists {
 			v.add(CodexConnectorAckArtifactV0, "test_receipts", "missing_required_test_receipt")
 			return
 		}
@@ -77,10 +78,10 @@ func codexRequiredTestReceiptsCoverRequiredCommandsV0(
 ) bool {
 	seen := map[string]bool{}
 	for _, receipt := range receipts {
-		seen[strings.TrimSpace(receipt.Command)] = true
+		seen[canonicalTestCommandV0(receipt.Command)] = true
 	}
 	for _, command := range required {
-		if !seen[strings.TrimSpace(command)] {
+		if !seen[canonicalTestCommandV0(command)] {
 			return false
 		}
 	}
@@ -107,7 +108,7 @@ func normalizeCodexRequiredTestReceiptsV0(
 }
 
 func codexRequiredTestReceiptIssueV0(receipt CodexRequiredTestReceiptV0) string {
-	if receipt.SchemaVersion != CodexRequiredTestReceiptSchemaVersionV0 {
+	if !codexSchemaVersionCompatibleV0(receipt.SchemaVersion, CodexRequiredTestReceiptSchemaVersionV0) {
 		return "required_test_receipt_schema_invalid"
 	}
 	if receipt.Command == "" {

@@ -51,7 +51,7 @@ func codexStrictCompletedAckIssuesV0(
 	spec orquestaruntime.ExternalAgentLaunchSpecV0,
 ) []orquestaruntime.ExternalAgentConnectorErrorV0 {
 	v := codexAckValidatorV0{correlationID: spec.CorrelationID}
-	if strings.TrimSpace(ack.SchemaVersion) != CodexAgentAckSchemaVersionV0 {
+	if !codexSchemaVersionCompatibleV0(ack.SchemaVersion, CodexAgentAckSchemaVersionV0) {
 		v.add(CodexConnectorAckInvalidV0, "schema_version", "schema_version_invalid")
 	}
 	for field, value := range map[string]string{
@@ -149,7 +149,7 @@ func (v *codexAckValidatorV0) validateStrictTests(
 	}
 	tests := compactCodexAckStringsV0(ack.Tests)
 	for _, command := range required {
-		if !codexAckStringInSetV0(tests, command) {
+		if !codexTestCommandInSetV0(tests, command) {
 			v.add(CodexConnectorAckArtifactV0, "tests", "required_tests_mismatch")
 			return
 		}
