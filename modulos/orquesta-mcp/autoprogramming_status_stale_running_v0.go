@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
+	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 )
 
 const (
@@ -104,31 +105,33 @@ func mcpAutoprogrammingStaleRunningActionForCandidateV0(
 			return MCPAutoprogrammingActionableRunV0{}, false
 		}
 		if observed != nil && observed.Stats != nil {
-			if mcpAutoprogrammingRunStatsHasUnknownProcessSignalV0(*observed.Stats) {
+			liveness := mcpAutoprogrammingRunLivenessV0(*observed.Stats)
+			switch liveness.Class {
+			case orquestaruncoordinator.RunLivenessClassRunningWithoutRecentStatsV0:
 				return mcpAutoprogrammingActionableRunFromCandidateV0(
 					candidate,
 					mcpAutoprogrammingActionRunningWithoutRecentStatsV0,
 					"info",
-					"queue_candidate_running_requires_liveness_confirmation",
-					"observe_run_ref_with_process_refs_before_reconcile",
+					firstNonEmptyMCPV0(liveness.Reason, "queue_candidate_running_requires_liveness_confirmation"),
+					firstNonEmptyMCPV0(liveness.RecommendedAction, "observe_run_ref_with_process_refs_before_reconcile"),
 				), true
-			}
-			if !mcpAutoprogrammingRunStatsHasConfirmedNoLiveProcessV0(*observed.Stats) {
+			case orquestaruncoordinator.RunLivenessClassRunningStaleNoProcessV0:
+				return mcpAutoprogrammingActionableRunFromCandidateV0(
+					candidate,
+					mcpAutoprogrammingActionRunningStaleNoProcessV0,
+					"warning",
+					firstNonEmptyMCPV0(liveness.Reason, "running_stale_no_live_process_detected"),
+					firstNonEmptyMCPV0(liveness.RecommendedAction, "reconcile_if_no_live_process_or_wait_for_late_ack"),
+				), true
+			default:
 				return mcpAutoprogrammingActionableRunFromCandidateV0(
 					candidate,
 					mcpAutoprogrammingActionRunningWithoutRecentStatsV0,
 					"info",
-					"queue_candidate_running_requires_liveness_confirmation",
-					"observe_run_ref_with_process_refs_before_reconcile",
+					firstNonEmptyMCPV0(liveness.Reason, "queue_candidate_running_requires_liveness_confirmation"),
+					firstNonEmptyMCPV0(liveness.RecommendedAction, "observe_run_ref_with_process_refs_before_reconcile"),
 				), true
 			}
-			return mcpAutoprogrammingActionableRunFromCandidateV0(
-				candidate,
-				mcpAutoprogrammingActionRunningStaleNoProcessV0,
-				"warning",
-				"running_stale_no_live_process_detected",
-				"reconcile_if_no_live_process_or_wait_for_late_ack",
-			), true
 		}
 		return mcpAutoprogrammingActionableRunFromCandidateV0(
 			candidate,

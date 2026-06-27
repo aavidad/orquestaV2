@@ -5,6 +5,7 @@ import (
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 )
 
 const (
@@ -171,6 +172,7 @@ func applyMCPAutoprogrammingRunHealthV0(
 	health *MCPAutoprogrammingQueueHealthV0,
 	stats orquestacionnucleoapp.DirectorRunStatsV0,
 ) {
+	liveness := mcpAutoprogrammingRunLivenessV0(stats)
 	if stats.Counts.AgentsFailed > 0 {
 		applyMCPAutoprogrammingHealthClassV0(health, mcpAutoprogrammingHealthFailedV0, 1)
 	}
@@ -180,16 +182,16 @@ func applyMCPAutoprogrammingRunHealthV0(
 	if stats.Closure.Blocked {
 		applyMCPAutoprogrammingHealthClassV0(health, mcpAutoprogrammingHealthBlockedV0, 1)
 	}
-	if mcpAutoprogrammingRunStatsHasLiveSignalV0(stats) {
+	if liveness.Class == orquestaruncoordinator.RunLivenessClassRunningLiveV0 {
 		applyMCPAutoprogrammingHealthClassV0(health, mcpAutoprogrammingHealthRunningLiveV0, 1)
 		return
 	}
 	if stats.Counts.AgentsInFlight > 0 {
-		if mcpAutoprogrammingRunStatsHasUnknownProcessSignalV0(stats) {
+		if liveness.Class == orquestaruncoordinator.RunLivenessClassRunningWithoutRecentStatsV0 {
 			applyMCPAutoprogrammingHealthClassV0(health, mcpAutoprogrammingHealthRunningWithoutRecentStatsV0, 1)
 			return
 		}
-		if mcpAutoprogrammingRunStatsHasConfirmedNoLiveProcessV0(stats) {
+		if liveness.Class == orquestaruncoordinator.RunLivenessClassRunningStaleNoProcessV0 {
 			applyMCPAutoprogrammingHealthClassV0(health, mcpAutoprogrammingHealthRunningStaleNoProcessV0, 1)
 			return
 		}
@@ -208,149 +210,30 @@ func applyMCPAutoprogrammingRunHealthV0(
 func mcpAutoprogrammingRunStatsHasLiveSignalV0(
 	stats orquestacionnucleoapp.DirectorRunStatsV0,
 ) bool {
-	return liveAgentsMCPAutoprogrammingRunStatsV0(stats) > 0
+	return mcpAutoprogrammingRunLivenessV0(stats).Class == orquestaruncoordinator.RunLivenessClassRunningLiveV0
 }
 
 func liveAgentsMCPAutoprogrammingRunStatsV0(
 	stats orquestacionnucleoapp.DirectorRunStatsV0,
 ) int {
-	liveAgents := 0
-	for _, agent := range stats.Agents {
-		if hasMCPAutoprogrammingLiveAgentStatsSignalV0(agent) ||
-			hasMCPAutoprogrammingLiveProcessStatsSignalV0(agent) {
-			liveAgents++
-		}
-	}
-	if stats.Progress.ProgressingAgents > liveAgents {
-		liveAgents = stats.Progress.ProgressingAgents
-	}
-	return liveAgents
-}
-
-func hasMCPAutoprogrammingLiveProcessSignalV0(
-	agents []orquestacionnucleoapp.DirectorAgentStatsV0,
-) bool {
-	for _, agent := range agents {
-		if hasMCPAutoprogrammingLiveProcessStatsSignalV0(agent) {
-			return true
-		}
-	}
-	return false
-}
-
-func mcpAutoprogrammingAgentStatsTerminalV0(
-	agent orquestacionnucleoapp.DirectorAgentStatsV0,
-) bool {
-	if agent.Failed || agent.Lost || agent.Completed || agent.StopConfirmed {
-		return true
-	}
-	switch strings.ToLower(strings.TrimSpace(agent.Status)) {
-	case orquestacionnucleoapp.DirectorAgentStatusCompletedV0,
-		orquestacionnucleoapp.DirectorAgentStatusFailedV0,
-		orquestacionnucleoapp.DirectorAgentStatusLostV0,
-		orquestacionnucleoapp.DirectorAgentStatusStoppedV0:
-		return true
-	default:
-		return false
-	}
-}
-
-func hasMCPAutoprogrammingLiveAgentSignalV0(
-	agents []orquestacionnucleoapp.DirectorAgentStatsV0,
-) bool {
-	for _, agent := range agents {
-		if hasMCPAutoprogrammingLiveAgentStatsSignalV0(agent) {
-			return true
-		}
-	}
-	return false
-}
-
-func hasMCPAutoprogrammingLiveAgentStatsSignalV0(
-	agent orquestacionnucleoapp.DirectorAgentStatsV0,
-) bool {
-	if !agent.InFlight || agent.NeedsAttention || agent.LastProgress == nil ||
-		mcpAutoprogrammingAgentStatsTerminalV0(agent) {
-		return false
-	}
-	switch strings.ToLower(strings.TrimSpace(agent.LastProgress.Status)) {
-	case "progressing", "working", "running":
-		return true
-	default:
-		return false
-	}
-}
-
-func hasMCPAutoprogrammingLiveProcessStatsSignalV0(
-	agent orquestacionnucleoapp.DirectorAgentStatsV0,
-) bool {
-	if agent.NeedsAttention || agent.Process == nil ||
-		mcpAutoprogrammingAgentStatsTerminalV0(agent) {
-		return false
-	}
-	switch strings.ToLower(strings.TrimSpace(agent.Process.Status)) {
-	case orquestacionnucleoapp.DirectorAgentProcessStatusRunningV0,
-		orquestacionnucleoapp.DirectorAgentProcessStatusStoppingV0:
-		return true
-	default:
-		return false
-	}
+	return mcpAutoprogrammingRunLivenessV0(stats).AgentsLive
 }
 
 func mcpAutoprogrammingRunStatsHasUnknownProcessSignalV0(
 	stats orquestacionnucleoapp.DirectorRunStatsV0,
 ) bool {
-	for _, agent := range stats.Agents {
-		if agent.Process == nil || mcpAutoprogrammingAgentStatsTerminalV0(agent) {
-			continue
-		}
-		if strings.TrimSpace(agent.Process.ProcessRef) == "" &&
-			strings.TrimSpace(agent.Process.SessionRef) == "" &&
-			strings.TrimSpace(agent.Process.LaunchRef) == "" &&
-			strings.TrimSpace(agent.Process.ReadinessRef) == "" {
-			continue
-		}
-		switch strings.ToLower(strings.TrimSpace(agent.Process.Status)) {
-		case "",
-			orquestacionnucleoapp.DirectorAgentProcessStatusUnknownV0:
-			return true
-		}
-	}
-	return false
+	return mcpAutoprogrammingRunLivenessV0(stats).UnknownProcess
 }
 
 func mcpAutoprogrammingRunStatsHasConfirmedNoLiveProcessV0(
 	stats orquestacionnucleoapp.DirectorRunStatsV0,
 ) bool {
-	confirmedStopped := false
-	for _, agent := range stats.Agents {
-		if !agent.InFlight || agent.Process == nil || mcpAutoprogrammingAgentStatsTerminalV0(agent) {
-			continue
-		}
-		if strings.TrimSpace(agent.Process.ProcessRef) == "" &&
-			strings.TrimSpace(agent.Process.SessionRef) == "" &&
-			strings.TrimSpace(agent.Process.LaunchRef) == "" &&
-			strings.TrimSpace(agent.Process.ReadinessRef) == "" {
-			return false
-		}
-		switch strings.ToLower(strings.TrimSpace(agent.Process.Status)) {
-		case orquestacionnucleoapp.DirectorAgentProcessStatusStoppedV0:
-			confirmedStopped = true
-		case orquestacionnucleoapp.DirectorAgentProcessStatusRunningV0,
-			orquestacionnucleoapp.DirectorAgentProcessStatusStoppingV0,
-			orquestacionnucleoapp.DirectorAgentProcessStatusUnknownV0,
-			"":
-			return false
-		default:
-			return false
-		}
-	}
-	return confirmedStopped
+	return mcpAutoprogrammingRunLivenessV0(stats).ConfirmedNoLiveProcess
 }
 
 func mcpAutoprogrammingRunStatusCompletedV0(status string) bool {
 	switch strings.ToLower(strings.TrimSpace(status)) {
-	case "closed", "cerrada", "completed", "delivered":
+	case "closed", "cerrada", "completed", "complete", "delivered":
 		return true
 	default:
 		return false
