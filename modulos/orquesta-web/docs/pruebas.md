@@ -528,6 +528,10 @@ existe clave observable para `POST /api/v0/apps/director/goal/observe`; la
 frontera REST/MCP debe rechazar esa respuesta como `run_ref_requerido`.
 Ultima ejecucion: 2026-06-25; pasa con el comando indicado tras anadir polling
 automatico goal-first.
+Evidencia de servidor 2026-06-28: `go test -count=1 ./cmd/orquesta-server -run TestServerNuevaAppHTMLGoalFirstPOSTRenderizaYObservaV0`
+monta el stack real con backend Goal fake, valida `GET /nueva-app`, `POST
+/nueva-app` por formulario, render de panel goal-first con autopoll y observacion
+manual por `POST /api/v0/apps/director/goal/observe` hasta cierre aceptado.
 Riesgos: El test cubre contrato HTML/JS server-rendered; la respuesta real del
 endpoint queda cubierta en `orquesta-mcp`, `orquesta-app-gateway` y stack Codex.
 ```

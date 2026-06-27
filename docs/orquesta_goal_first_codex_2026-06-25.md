@@ -143,6 +143,14 @@ caller transporta `director_execution_mode=legacy_director_loop` y la
 composicion ha habilitado el opt-in legacy correspondiente; sin esa doble llave,
 la ausencia de backend Goal es un error operativo y no un fallback.
 
+Evidencia 2026-06-28: `TestServerNuevaAppHTMLGoalFirstPOSTRenderizaYObservaV0`
+monta `cmd/orquesta-server` con backend Goal fake, hace `GET /nueva-app`,
+`POST /nueva-app` con formulario `x-www-form-urlencoded`, verifica HTML con
+panel `Director y goal`, `data-goal-auto-poll=true`, refs de goal y endpoint de
+observacion, y finalmente llama a `POST /api/v0/apps/director/goal/observe`
+hasta cierre aceptado. Comando:
+`go test -count=1 ./cmd/orquesta-server -run TestServerNuevaAppHTMLGoalFirstPOSTRenderizaYObservaV0`.
+
 Los backends `app_server_proxy` y `app_server_stdio` observan
 `thread/goal/get`; cuando el goal queda terminal leen `thread/read` con
 `includeTurns=true` y extraen de la respuesta final un marcador estructurado o,
