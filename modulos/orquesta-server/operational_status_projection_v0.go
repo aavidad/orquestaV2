@@ -18,6 +18,7 @@ func residentOperationalEstadoV0(state StateV0) string {
 		strings.TrimSpace(state.ExternalBridgeStatus) == "timeout" ||
 		strings.TrimSpace(state.StatePersistStatus) == "degraded" ||
 		strings.TrimSpace(state.AuditStatus) == "degraded" ||
+		residentOperationalDirectorDisabledWaitingOutboxV0(state) ||
 		residentOperationalGoalFirstCapabilityMissingV0(state) {
 		return orquestaobservability.DiagnosticoEstadoDegradedV0
 	}
@@ -95,6 +96,11 @@ func residentPendingReasonCounterV0(reason string) int {
 		return 1
 	}
 	return 0
+}
+
+func residentOperationalDirectorDisabledWaitingOutboxV0(state StateV0) bool {
+	return !serverPublicResidentDirectorEnabledV0(state.EffectiveConfig) &&
+		strings.TrimSpace(state.LastSupervisorStatus) == SupervisorPublicStatusWaitingOutboxV0
 }
 
 func residentOperationalAgeSecondsV0(lastHeartbeat string, now time.Time) int {

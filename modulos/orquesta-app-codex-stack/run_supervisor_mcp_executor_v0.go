@@ -118,6 +118,9 @@ func (executor CodexStackRunSupervisorExecutorV0) Execute(
 	stoppedNoDeliveryDiagnostics := executor.Stack.codexStackRunSupervisorStoppedNoDeliveryDiagnosticsMCPV0(ctx, input, result)
 	output.Diagnostics = append(output.Diagnostics, stoppedNoDeliveryDiagnostics...)
 	output = codexStackRunSupervisorWithStoppedNoDeliveryActionsMCPV0(output, stoppedNoDeliveryDiagnostics)
+	noAgentMaterializedDiagnostics := executor.Stack.codexStackRunSupervisorNoAgentMaterializedDiagnosticsMCPV0(ctx, input, result)
+	output.Diagnostics = append(output.Diagnostics, noAgentMaterializedDiagnostics...)
+	output = codexStackRunSupervisorWithNoAgentMaterializedActionsMCPV0(output, noAgentMaterializedDiagnostics)
 	output = addAutoprogrammingResidentEvidenceV0(input, output)
 	output = maybePrepareAutoprogrammingResidentSelfRepairV0(ctx, input, *executor.Stack, result, output)
 	return output, nil

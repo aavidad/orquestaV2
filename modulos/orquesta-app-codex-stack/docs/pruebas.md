@@ -292,6 +292,11 @@ Cobertura Go actual:
   `external_work_agent_requested_not_started` para una QA visual OPES aceptada
   con `agents_requested>0`, `agents_started=0`, `agents_in_flight=0` y trabajo
   abierto, en vez de dejar solo `wait-subagents-terminal-without-delivery`.
+- `TestCodexStackRunSupervisorNoAgentMaterializedDiagnosticsMCPV0ExponeExternalWorkDoneSinAgentes`
+  valida que `runs/supervise` expone
+  `external_work_accepted_no_agent_materialized` para una run external-work
+  `done` sin agentes pedidos, arrancados, en vuelo ni entregas, y recomienda
+  relanzar o replantear con error causal en vez de aceptar el cierre silencioso.
 - `TestCodexStackRealRequiredTestRunnerEndToEndOptInV0` queda desactivado por
   defecto y valida con un agente Codex real acotado el ciclo del Director
   Operativo: task con `RequiredTests`, `WaitAgentRefs`, ACK/entrega, review

@@ -334,6 +334,10 @@ Cobertura de stats publicas:
   - replan: counts.replan_decisions y refs.replan_decisions;
   - cierre: closure.status, blocked, ready, closed, blocked_by y blocker_refs;
   - progreso: progress.percent_complete, tasks, agents observados y issues;
+  - diagnostico external-work: una run terminal `done`/`completed`/`complete`/
+    `closed` con pinta de trabajo externo, cero agentes pedidos/materializados
+    y cero entregas publica `external_work_accepted_no_agent_materialized` para
+    relanzar o replantear con error causal explicito;
   - goal-first: bloque `goal` opcional solo si existe estado persistido.
 Cobertura de decision_context:
   - progreso por fase/tarea/agente;
@@ -1521,7 +1525,9 @@ Campos:
     stale_running?: acciones publicas; una run `running` sin liveness probado se
       expone como `running_without_recent_stats`, no como stale terminal
       tambien incluye external-work terminal `stopped` sin agentes ni entregas
-      como `external_work_accepted_stopped_without_delivery`
+      como `external_work_accepted_stopped_without_delivery`, y external-work
+      `done`/`completed` sin ningun agente materializado ni entrega como
+      `external_work_accepted_no_agent_materialized`
     ops_snapshot?: DirectorAutonomousOpsSnapshotV0 agregado de cola/run para
       `/ops` y cockpit operativo
     diagnostics?: diagnostico publico de puertos/errores y consejo no bloqueante
@@ -1529,7 +1535,9 @@ Campos:
       `external_work_agent_requested_not_started` cuando hay agentes pedidos,
       ninguno arrancado y ninguna senal viva; para compatibilidad con
       consumidores existentes, las refs `opes...`/`app-spec-opes...` se tratan
-      como trabajo externo aunque no incluyan literalmente `external-work`
+      como trabajo externo aunque no incluyan literalmente `external-work`, y
+      una aceptacion terminal sin agentes se conserva como
+      `external_work_accepted_no_agent_materialized`
   output_error:
     estado: error
     errores_publicos reparables

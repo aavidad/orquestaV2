@@ -7,17 +7,18 @@ import (
 )
 
 const (
-	mcpAutoprogrammingActionStaleRunningV0                  = "stale_running"
-	mcpAutoprogrammingActionRunningStaleNoProcessV0         = "running_stale_no_process"
-	mcpAutoprogrammingActionRunningWithoutRecentStatsV0     = "running_without_recent_stats"
-	mcpAutoprogrammingActionStaleRunningReconciledV0        = "stale_running_reconciled"
-	mcpAutoprogrammingActionProviderUsageLimitRetryV0       = "provider_usage_limit_retry_after"
-	mcpAutoprogrammingActionExternalWorkStoppedNoDeliveryV0 = "external_work_accepted_stopped_without_delivery"
-	mcpAutoprogrammingEvidenceRunningStaleReconciledV0      = "evidence-ref-run-queue-running-stale-no-live-process-reconciled"
-	mcpAutoprogrammingEvidenceProviderUsageLimitRetryV0     = "evidence-ref-provider-usage-limit-retry-after"
-	mcpAutoprogrammingEvidenceExternalWorkRunStartedV0      = "evidence-ref-external-work-run-started"
-	mcpAutoprogrammingEvidenceExternalWorkRunQueuedV0       = "evidence-ref-external-work-run-queued"
-	mcpAutoprogrammingEvidenceRunCoordinatorExecutedV0      = "evidence-ref-run-coordinator-executed"
+	mcpAutoprogrammingActionStaleRunningV0                    = "stale_running"
+	mcpAutoprogrammingActionRunningStaleNoProcessV0           = "running_stale_no_process"
+	mcpAutoprogrammingActionRunningWithoutRecentStatsV0       = "running_without_recent_stats"
+	mcpAutoprogrammingActionStaleRunningReconciledV0          = "stale_running_reconciled"
+	mcpAutoprogrammingActionProviderUsageLimitRetryV0         = "provider_usage_limit_retry_after"
+	mcpAutoprogrammingActionExternalWorkStoppedNoDeliveryV0   = "external_work_accepted_stopped_without_delivery"
+	mcpAutoprogrammingActionExternalWorkNoAgentMaterializedV0 = "external_work_accepted_no_agent_materialized"
+	mcpAutoprogrammingEvidenceRunningStaleReconciledV0        = "evidence-ref-run-queue-running-stale-no-live-process-reconciled"
+	mcpAutoprogrammingEvidenceProviderUsageLimitRetryV0       = "evidence-ref-provider-usage-limit-retry-after"
+	mcpAutoprogrammingEvidenceExternalWorkRunStartedV0        = "evidence-ref-external-work-run-started"
+	mcpAutoprogrammingEvidenceExternalWorkRunQueuedV0         = "evidence-ref-external-work-run-queued"
+	mcpAutoprogrammingEvidenceRunCoordinatorExecutedV0        = "evidence-ref-run-coordinator-executed"
 )
 
 func buildMCPAutoprogrammingStaleRunningV0(
@@ -84,6 +85,16 @@ func mcpAutoprogrammingStaleRunningActionForCandidateV0(
 			"relaunch_or_replan_external_work_with_causal_error",
 		), true
 	}
+	if mcpAutoprogrammingTerminalDoneNoAgentStatusV0(status) &&
+		mcpAutoprogrammingExternalWorkAcceptedNoAgentMaterializedV0(candidate, observedByRunRef[runRef]) {
+		return mcpAutoprogrammingActionableRunFromCandidateV0(
+			candidate,
+			mcpAutoprogrammingActionExternalWorkNoAgentMaterializedV0,
+			"blocked",
+			"external_work accepted as terminal without agents or delivery",
+			"relaunch_or_replan_external_work_with_causal_error",
+		), true
+	}
 	if status == "running" {
 		observed := observedByRunRef[runRef]
 		if mcpAutoprogrammingGoalStatsSuppressesStaleRunningV0(observed) {
@@ -137,11 +148,7 @@ func mcpAutoprogrammingStoppedExternalWorkAcceptedWithoutDeliveryV0(
 	if observed == nil || observed.Stats == nil {
 		return false
 	}
-	if !mcpAutoprogrammingCandidateHasEvidenceV0(candidate, mcpAutoprogrammingEvidenceRunCoordinatorExecutedV0) {
-		return false
-	}
-	if !mcpAutoprogrammingCandidateHasEvidenceV0(candidate, mcpAutoprogrammingEvidenceExternalWorkRunStartedV0) &&
-		!mcpAutoprogrammingCandidateHasEvidenceV0(candidate, mcpAutoprogrammingEvidenceExternalWorkRunQueuedV0) {
+	if !mcpAutoprogrammingExternalWorkAcceptedCandidateV0(candidate) {
 		return false
 	}
 	counts := observed.Stats.Counts
@@ -150,6 +157,47 @@ func mcpAutoprogrammingStoppedExternalWorkAcceptedWithoutDeliveryV0(
 		counts.AgentsInFlight == 0 &&
 		counts.Deliveries == 0 &&
 		counts.AgentsDelivered == 0
+}
+
+func mcpAutoprogrammingExternalWorkAcceptedNoAgentMaterializedV0(
+	candidate MCPRunQueueRankedCandidateCompactV0,
+	observed *MCPDirectorStatsToolResultV0,
+) bool {
+	if observed == nil || observed.Stats == nil {
+		return false
+	}
+	if !mcpAutoprogrammingExternalWorkAcceptedCandidateV0(candidate) {
+		return false
+	}
+	if !mcpAutoprogrammingTerminalDoneNoAgentStatusV0(observed.Stats.Status) &&
+		!mcpAutoprogrammingTerminalDoneNoAgentStatusV0(candidate.Status) {
+		return false
+	}
+	counts := observed.Stats.Counts
+	return counts.AgentsRequested == 0 &&
+		counts.AgentsStarted == 0 &&
+		counts.AgentsInFlight == 0 &&
+		counts.Deliveries == 0 &&
+		counts.AgentsDelivered == 0
+}
+
+func mcpAutoprogrammingExternalWorkAcceptedCandidateV0(
+	candidate MCPRunQueueRankedCandidateCompactV0,
+) bool {
+	if !mcpAutoprogrammingCandidateHasEvidenceV0(candidate, mcpAutoprogrammingEvidenceRunCoordinatorExecutedV0) {
+		return false
+	}
+	return mcpAutoprogrammingCandidateHasEvidenceV0(candidate, mcpAutoprogrammingEvidenceExternalWorkRunStartedV0) ||
+		mcpAutoprogrammingCandidateHasEvidenceV0(candidate, mcpAutoprogrammingEvidenceExternalWorkRunQueuedV0)
+}
+
+func mcpAutoprogrammingTerminalDoneNoAgentStatusV0(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "done", "completed", "complete", "closed":
+		return true
+	default:
+		return false
+	}
 }
 
 func mcpAutoprogrammingObservedRunsByRefV0(

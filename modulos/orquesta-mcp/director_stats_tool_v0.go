@@ -225,6 +225,7 @@ func (executor MCPDirectorStatsToolExecutorV0) Execute(
 	executor.applyRunControlProjectionV0(ctx, runRef, &stats)
 	enrichMCPDirectorStatsRequestedAgentNotStartedV0(&stats)
 	enrichMCPDirectorStatsExternalWorkStoppedNoDeliveryV0(&stats)
+	enrichMCPDirectorStatsExternalWorkNoAgentMaterializedV0(&stats)
 	goal := executor.resolveGoalStatsV0(ctx, stats.RunRef)
 	applyMCPDirectorGoalRunProjectionV0(goal, &stats)
 	decisionContext := buildMCPDirectorDecisionContextV0(run, stats, input.OccurredAt)

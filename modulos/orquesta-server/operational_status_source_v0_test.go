@@ -117,6 +117,29 @@ func TestResidentOperationalStatusV0NoBloqueaPorContadoresHistoricosRecuperadosV
 	}
 }
 
+func TestResidentOperationalStatusV0BloqueaSiResidenteDisabledConWaitingOutboxV0(t *testing.T) {
+	state := StateV0{
+		Status:               "running",
+		LastSupervisorStatus: SupervisorPublicStatusWaitingOutboxV0,
+		EffectiveConfig: ServerEffectiveConfigV0{
+			Settings: []ServerConfigSettingV0{{
+				Key:   "ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED",
+				Value: "false",
+			}},
+		},
+	}
+
+	if got := residentOperationalEstadoV0(state); got != orquestaobservability.DiagnosticoEstadoDegradedV0 {
+		t.Fatalf("estado=%s", got)
+	}
+	if blockers := residentOperationalBlockersV0(state); !blockersContainRefForTestV0(
+		blockers,
+		"blocker-ref-server-resident-director-disabled-waiting-outbox",
+	) {
+		t.Fatalf("missing resident disabled blocker: %+v", blockers)
+	}
+}
+
 func TestResidentOperationalStatusV0BloqueaPorErrorVigenteAunqueContadoresSeanCeroV0(t *testing.T) {
 	state := StateV0{
 		Status:               "running",

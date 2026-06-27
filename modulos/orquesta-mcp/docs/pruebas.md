@@ -596,6 +596,16 @@ queda terminal `stopped` con evidencias de arranque/cola/coordinador, pero los
 stats de la run muestran cero agentes arrancados, cero agentes en vuelo y cero
 entregas.
 
+Evidencia adicional 2026-06-27:
+`TestMCPDirectorStatsToolExecutorV0DiagnosticaExternalWorkDoneSinAgenteMaterializado`
+fija que `director.stats` publica
+`external_work_accepted_no_agent_materialized` cuando una run external-work
+queda terminal `done` sin agentes pedidos, arrancados, en vuelo ni entregas.
+`TestMCPAutoprogrammingStatusExecutorV0DiagnosticaExternalWorkDoneSinAgenteMaterializadoV0`
+valida que `autoprogramming/status` lo propaga como diagnostico y accion
+`relaunch_or_replan_external_work_with_causal_error`, sin aceptar el cierre
+silencioso como valido.
+
 ## Prueba snapshot operativo del Director 2026-06-08
 
 Comando:

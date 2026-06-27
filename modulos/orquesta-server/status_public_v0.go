@@ -143,9 +143,11 @@ func NewServerPublicStatusV0(state StateV0) ServerPublicStatusV0 {
 	hidden = append(hidden, configHidden...)
 	residentDirectorStatus := state.ResidentDirectorStatus
 	residentDirectorTickActive := state.ResidentDirectorTickActive
+	residentDirectorOperationalMessage := copyServerOperationalMessageV0(state.ResidentDirectorOperationalMessage)
 	if !serverPublicResidentDirectorEnabledV0(config) {
 		residentDirectorStatus = "disabled"
 		residentDirectorTickActive = false
+		residentDirectorOperationalMessage = serverPublicResidentDirectorDisabledOperationalMessageV0(state)
 	}
 	return ServerPublicStatusV0{
 		SchemaVersion:                         StateSchemaVersionV0,
@@ -222,7 +224,7 @@ func NewServerPublicStatusV0(state StateV0) ServerPublicStatusV0 {
 		ResidentDirectorTicks:                 state.ResidentDirectorTicks,
 		ResidentDirectorErrorTicks:            state.ResidentDirectorErrorTicks,
 		ResidentDirectorExecutedActions:       state.ResidentDirectorExecutedActions,
-		ResidentDirectorOperationalMessage:    copyServerOperationalMessageV0(state.ResidentDirectorOperationalMessage),
+		ResidentDirectorOperationalMessage:    residentDirectorOperationalMessage,
 		ExternalBridgeComponent:               state.ExternalBridgeComponent,
 		ExternalBridgeStatus:                  state.ExternalBridgeStatus,
 		ExternalBridgeTickActive:              state.ExternalBridgeTickActive,
@@ -266,6 +268,30 @@ func NewServerPublicStatusV0(state StateV0) ServerPublicStatusV0 {
 		ResponseWriteLastStage:                state.ResponseWriteLastStage,
 		RecentErrors:                          append([]ServerDiagnosticV0(nil), state.RecentErrors...),
 	}
+}
+
+func serverPublicResidentDirectorDisabledOperationalMessageV0(
+	state StateV0,
+) *ServerOperationalMessageV0 {
+	counters := map[string]int{
+		"resident_enabled": 0,
+	}
+	if strings.TrimSpace(state.LastSupervisorStatus) == SupervisorPublicStatusWaitingOutboxV0 {
+		counters["waiting_outbox"] = 1
+	}
+	if state.LastSupervisorQueueSize > 0 {
+		counters["queue_size"] = state.LastSupervisorQueueSize
+	}
+	return projectServerOperationalMessageRecordV0(serverOperationalMessageInputV0{
+		Scope:      "resident_director",
+		ReasonCode: "resident_director_disabled",
+		Status:     "disabled",
+		Message:    "activar ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=true y reiniciar; supervise legacy solo para intervencion puntual",
+		EvidenceRefs: []string{
+			"evidence-ref-resident-director-disabled-config",
+		},
+		Counters: counters,
+	})
 }
 
 func serverPublicResidentDirectorEnabledV0(config ServerEffectiveConfigV0) bool {

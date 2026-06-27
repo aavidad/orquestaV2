@@ -10,6 +10,7 @@ const (
 	mcpDirectorStatsAgentRequestedNotStartedV0             = "agent_requested_not_started"
 	mcpDirectorStatsExternalWorkAgentRequestedNotStartedV0 = "external_work_agent_requested_not_started"
 	mcpDirectorStatsExternalWorkStoppedNoDeliveryV0        = "external_work_accepted_stopped_without_delivery"
+	mcpDirectorStatsExternalWorkNoAgentMaterializedV0      = "external_work_accepted_no_agent_materialized"
 )
 
 func enrichMCPDirectorStatsRequestedAgentNotStartedV0(
@@ -59,6 +60,29 @@ func enrichMCPDirectorStatsExternalWorkStoppedNoDeliveryV0(
 	})
 }
 
+func enrichMCPDirectorStatsExternalWorkNoAgentMaterializedV0(
+	stats *orquestacionnucleoapp.DirectorRunStatsV0,
+) {
+	if stats == nil ||
+		!mcpDirectorStatsLooksExternalWorkV0(*stats) ||
+		!mcpDirectorStatsTerminalDoneNoAgentStatusV0(stats.Status) ||
+		stats.Counts.AgentsRequested > 0 ||
+		stats.Counts.AgentsStarted > 0 ||
+		stats.Counts.AgentsInFlight > 0 ||
+		stats.Counts.Deliveries > 0 ||
+		stats.Counts.AgentsDelivered > 0 {
+		return
+	}
+	if mcpDirectorStatsProgressIssueExistsV0(stats.Progress.Issues, mcpDirectorStatsExternalWorkNoAgentMaterializedV0) {
+		return
+	}
+	stats.Progress.Issues = append(stats.Progress.Issues, orquestacionnucleoapp.DirectorProgressIssueV0{
+		Code:    mcpDirectorStatsExternalWorkNoAgentMaterializedV0,
+		Field:   "run",
+		Message: "external_work accepted as terminal without agents or delivery action=relaunch_or_replan_external_work_with_causal_error",
+	})
+}
+
 func mcpDirectorStatsLooksExternalWorkV0(
 	stats orquestacionnucleoapp.DirectorRunStatsV0,
 ) bool {
@@ -88,6 +112,15 @@ func mcpDirectorStatsHasProcessRefV0(
 		}
 	}
 	return false
+}
+
+func mcpDirectorStatsTerminalDoneNoAgentStatusV0(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "done", "completed", "complete", "closed":
+		return true
+	default:
+		return false
+	}
 }
 
 func mcpDirectorStatsProgressIssueExistsV0(

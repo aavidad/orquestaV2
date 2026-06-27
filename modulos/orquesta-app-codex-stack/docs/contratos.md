@@ -202,6 +202,12 @@ Codex; este stack inyecta
 `CodexStackAutoprogrammingPrepareRunExecutorV0` y
 `CodexStackAutoprogrammingObserveGoalExecutorV0` junto a
 `CodexStackRunSupervisorExecutorV0`.
+En la ruta legacy de `runs/supervise`, si una run external-work vuelve terminal
+`done` sin agentes pedidos, agentes arrancados, agentes en vuelo ni entregas,
+el stack expone el diagnostico
+`external_work_accepted_no_agent_materialized` y acciones para relanzar o
+replantear el trabajo con error causal explicito, en vez de presentar el cierre
+como correcto.
 
 Cuando `RunGlobalTickV0` drena una run y el loop del nucleo devuelve la run
 cerrada, el stack informa `queue_status=closed` al coordinador. La cola global

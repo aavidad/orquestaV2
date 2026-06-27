@@ -215,6 +215,7 @@ func (ledger serverWakeupDirectorCycleOutboxLedgerV0) SavePending(
 	saved, issues := ledger.inner.SavePending(ctx, messages)
 	if len(saved) > 0 {
 		ledger.wakeup.requestV0("director_cycle_outbox_saved")
+		ledger.wakeup.requestResidentDirectorV0("director_cycle_outbox_saved")
 	}
 	return saved, issues
 }

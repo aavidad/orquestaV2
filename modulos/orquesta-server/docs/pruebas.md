@@ -35,6 +35,16 @@
   tick pendiente, persiste OK/error, recupera panic como error durable, aparece
   en status/operational status y cuenta como causa operativa para el
   self-watchdog.
+- `cmd/orquesta-server` prueba que guardar outbox pendiente de ciclo del
+  Director despierta tambien al Director residente opt-in con causa
+  `director_cycle_outbox_saved`, ademas del supervisor legacy.
+- `modulos/orquesta-server` prueba que `GET /api/v0/server/status` no reutiliza
+  un OK historico si el Director residente esta desactivado y hay
+  `waiting_outbox`: publica `resident_director_disabled` con contador
+  `waiting_outbox`.
+- `modulos/orquesta-server` prueba que `/api/v0/operational-status/query`
+  degrada el estado y crea blocker publico cuando el residente esta desactivado
+  con outbox pendiente.
 - `cmd/orquesta-server` prueba que `ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED`
   y `ORQUESTA_SERVER_RESIDENT_DIRECTOR_MAX_ACTIONS` se publican en
   `effective_config`, y que el adaptador del Director residente solo se inyecta

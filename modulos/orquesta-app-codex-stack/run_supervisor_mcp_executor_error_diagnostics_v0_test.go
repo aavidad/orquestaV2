@@ -413,6 +413,63 @@ func TestCodexStackRunSupervisorStoppedNoDeliveryDiagnosticsMCPV0ExponeExternalW
 	}
 }
 
+func TestCodexStackRunSupervisorNoAgentMaterializedDiagnosticsMCPV0ExponeExternalWorkDoneSinAgentes(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	runRef := "run-opes-tractorista-tema-001-done-sin-agentes"
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, orquestacoreworkflow.OrchestrationRunV0{
+		RunID:      runRef,
+		ProjectRef: "opes",
+		AppSpecRef: "app-spec-external-work-opes-tractorista",
+		Status:     "done",
+		Tasks:      []string{"task-ref-tractorista-001"},
+	}); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	result := CodexSupervisorResultV0{
+		StopReason: CodexSupervisorStopDoneV0,
+		Last: CodexSupervisorRuntimeSnapshotV0{
+			Status:     CodexSupervisorRuntimeDoneV0,
+			SessionRef: runRef,
+			EvidenceRefs: []string{
+				"evidence-ref-external-work-run-started",
+				"evidence-ref-external-work-run-queued",
+				"evidence-ref-run-coordinator-executed",
+			},
+		},
+	}
+
+	diagnostics := stack.codexStackRunSupervisorNoAgentMaterializedDiagnosticsMCPV0(
+		ctx,
+		orquestamcp.MCPRunSupervisorToolInputV0{RunRef: runRef},
+		result,
+	)
+	output := codexStackRunSupervisorWithNoAgentMaterializedActionsMCPV0(
+		orquestamcp.NewMCPRunSupervisorOKResultV0(
+			orquestamcp.MCPRunSupervisorToolInputV0{RunRef: runRef},
+			runRef,
+			string(CodexSupervisorStopDoneV0),
+			1,
+			codexStackRunSupervisorSnapshotMCPV0(result.Last),
+			nil,
+		),
+		diagnostics,
+	)
+
+	if len(diagnostics) != 1 ||
+		diagnostics[0].Code != codexStackExternalWorkNoAgentMaterializedDiagnosticV0 ||
+		!strings.Contains(diagnostics[0].Message, "terminal_status=done") ||
+		!strings.Contains(diagnostics[0].Message, "deliveries=0") ||
+		!strings.Contains(diagnostics[0].Message, "relaunch_or_replan_external_work_with_causal_error") {
+		t.Fatalf("diagnostics=%+v", diagnostics)
+	}
+	if !codexStackStringInSetForTestV0(output.NextActions, "relaunch_or_replan_external_work_with_causal_error") ||
+		!codexStackStringInSetForTestV0(output.NextActions, "inspect_external_work_payload_and_runtime_binding") ||
+		!codexStackStringInSetForTestV0(output.NextActions, "do_not_mark_completed_without_agent_start_or_delivery") {
+		t.Fatalf("next_actions=%+v", output.NextActions)
+	}
+}
+
 func TestCodexStackRunSupervisorQueueDiagnosticsMCPV0ExponePresionWaitingOutbox(t *testing.T) {
 	ctx := context.Background()
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())

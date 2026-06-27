@@ -299,7 +299,10 @@ func TestResidentDirectorV0StatusPublicoNoReusaOkHistoricoSiEstaDesactivado(t *t
 	})
 
 	if status.ResidentDirectorStatus != "disabled" ||
-		status.ResidentDirectorTickActive {
+		status.ResidentDirectorTickActive ||
+		status.ResidentDirectorOperationalMessage == nil ||
+		status.ResidentDirectorOperationalMessage.ReasonCode != "resident_director_disabled" ||
+		status.ResidentDirectorOperationalMessage.Counters["resident_enabled"] != 0 {
 		t.Fatalf("status=%+v", status)
 	}
 }

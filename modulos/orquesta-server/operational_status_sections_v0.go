@@ -68,6 +68,15 @@ func residentOperationalBlockersV0(state StateV0) []orquestaobservability.Diagno
 			Summary:    "director residente degradado",
 		})
 	}
+	if residentOperationalDirectorDisabledWaitingOutboxV0(state) {
+		blockers = append(blockers, orquestaobservability.DiagnosticoBloqueoV0{
+			BlockerRef:   "blocker-ref-server-resident-director-disabled-waiting-outbox",
+			Severity:     "warning",
+			OwnerArea:    "runtime",
+			Summary:      "director residente desactivado con outbox pendiente",
+			EvidenceRefs: []string{"evidence-ref-resident-director-disabled-config"},
+		})
+	}
 	if strings.TrimSpace(state.StatePersistStatus) == "degraded" {
 		blockers = append(blockers, orquestaobservability.DiagnosticoBloqueoV0{
 			BlockerRef: "blocker-ref-server-state-persist",

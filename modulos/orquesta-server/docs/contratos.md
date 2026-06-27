@@ -47,6 +47,11 @@ Salida:
   `idle_self_improvement_goal` como resumen publico redactado: refs, presencia
   de spec/receipt/result/closure, estados y contadores. No publica objetivo,
   paths, comandos, payloads completos ni errores crudos del runtime.
+  Si el Director residente esta desactivado por configuracion y el ultimo
+  supervisor queda en `waiting_outbox`, publica mensaje operativo
+  `resident_director_disabled` con accion de activar
+  `ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=true` y reiniciar la composicion,
+  sin ocultarlo como OK historico.
   Los mensajes operativos pueden transportar `run_refs`, `goal_refs`,
   `request_refs` y `evidence_refs` estructurados; clientes nuevos no deben
   parsear esos refs desde strings de razon cuando exista el campo dedicado.
@@ -100,6 +105,11 @@ Configuracion externa relacionada:
   inyectado, no esta habilitado, esta pausado, el runtime esta congelado por
   shutdown o el canal ya tiene un pulso pendiente, devuelve `false` sin
   bloquear.
+- Los decoradores de composition root que guardan outbox de ciclo del Director
+  despiertan el supervisor y tambien el Director residente opt-in con causa
+  `director_cycle_outbox_saved` cuando hay mensajes pendientes nuevos; si el
+  residente esta desactivado, el wakeup no fuerza politica y el estado publico
+  debe mostrar la configuracion bloqueante.
 - `ORQUESTA_SERVER_SUPERVISOR_MAX_TICKS`: numero maximo de ticks internos por
   pulso del supervisor residente. Por defecto se conserva acotado a `1`.
 - `ORQUESTA_SERVER_ALLOW_REPEATED_RUNS=true`: permite que un mismo pulso del
@@ -196,6 +206,10 @@ Configuracion externa relacionada:
   el bridge llama a `/api/v0/runs/supervise` tras enviar o reencontrar un run.
   Por defecto esta llamada queda desactivada: el bridge solo encola trabajo y el
   Director residente lo materializa por wakeup/ticker.
+  Si el servidor esta en `waiting_outbox` y el Director residente esta
+  desactivado, `/api/v0/server/status` y
+  `/api/v0/operational-status/query` deben exponer el bloqueo operativo en vez
+  de esperar una llamada manual indefinida a `runs/supervise`.
 
 Invariantes:
 - no conoce Codex, DB, web, MCP ni modelos;

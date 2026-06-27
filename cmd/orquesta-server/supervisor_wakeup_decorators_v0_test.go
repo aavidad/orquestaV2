@@ -133,9 +133,14 @@ func TestServerWakeupAppChangeStoreV0DisparaAlGuardarSolicitud(t *testing.T) {
 func TestServerWakeupDirectorCycleOutboxLedgerV0DisparaAlGuardarPendientes(t *testing.T) {
 	ctx := context.Background()
 	var causes []string
+	var residentCauses []string
 	relay := &serverSupervisorWakeupRelayV0{
 		request: func(cause string) bool {
 			causes = append(causes, cause)
+			return true
+		},
+		requestResidentDirector: func(cause string) bool {
+			residentCauses = append(residentCauses, cause)
 			return true
 		},
 	}
@@ -159,6 +164,9 @@ func TestServerWakeupDirectorCycleOutboxLedgerV0DisparaAlGuardarPendientes(t *te
 	if !stringSlicesEqualV0(causes, []string{"director_cycle_outbox_saved"}) {
 		t.Fatalf("causes=%v", causes)
 	}
+	if !stringSlicesEqualV0(residentCauses, []string{"director_cycle_outbox_saved"}) {
+		t.Fatalf("residentCauses=%v", residentCauses)
+	}
 
 	if _, issues := ledger.ListPending(ctx, orquestadirectorcycleoutbox.DirectorCycleOutboxPendingFilterV0{
 		RunRef: "run-ref-wakeup-outbox-001",
@@ -167,6 +175,9 @@ func TestServerWakeupDirectorCycleOutboxLedgerV0DisparaAlGuardarPendientes(t *te
 	}
 	if !stringSlicesEqualV0(causes, []string{"director_cycle_outbox_saved"}) {
 		t.Fatalf("ListPending no debe disparar wakeup: causes=%v", causes)
+	}
+	if !stringSlicesEqualV0(residentCauses, []string{"director_cycle_outbox_saved"}) {
+		t.Fatalf("ListPending no debe disparar wakeup residente: residentCauses=%v", residentCauses)
 	}
 }
 

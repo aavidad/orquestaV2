@@ -16,6 +16,7 @@ import (
 const (
 	codexStackExternalWorkAgentRequestedNotStartedDiagnosticV0 = "external_work_agent_requested_not_started"
 	codexStackExternalWorkStoppedNoDeliveryDiagnosticV0        = "external_work_accepted_stopped_without_delivery"
+	codexStackExternalWorkNoAgentMaterializedDiagnosticV0      = "external_work_accepted_no_agent_materialized"
 	codexStackCodexRuntimeStreamFDWarningDiagnosticV0          = "codex_runtime_stream_fd_warning"
 	codexStackCodexProviderQuotaExhaustedDiagnosticV0          = "codex_provider_quota_exhausted"
 	codexStackCodexProviderCapacityLimitedDiagnosticV0         = "codex_provider_capacity_limited"
@@ -377,6 +378,52 @@ func (stack *StackV0) codexStackRunSupervisorStoppedNoDeliveryDiagnosticsMCPV0(
 	}}
 }
 
+func (stack *StackV0) codexStackRunSupervisorNoAgentMaterializedDiagnosticsMCPV0(
+	ctx context.Context,
+	input orquestamcp.MCPRunSupervisorToolInputV0,
+	result CodexSupervisorResultV0,
+) []orquestamcp.MCPAutoprogrammingDiagnosticV0 {
+	if stack == nil || stack.Stores.RunStore == nil {
+		return nil
+	}
+	if result.StopReason != CodexSupervisorStopDoneV0 &&
+		result.Last.Status != CodexSupervisorRuntimeDoneV0 {
+		return nil
+	}
+	runRef := strings.TrimSpace(firstNonEmptyQueuedSourceV0(input.RunRef, result.Last.SessionRef))
+	if runRef == "" {
+		return nil
+	}
+	run, err := stack.Stores.RunStore.LoadRunV0(ctx, runRef)
+	if err != nil || !codexStackRunLooksExternalWorkV0(run.ProjectRef, run.AppSpecRef) {
+		return nil
+	}
+	if len(compactStringsV0(run.Agents)) > 0 ||
+		len(compactStringsV0(run.StartedAgents)) > 0 ||
+		len(stackDrainPendingStartedAgentRefsV0(run)) > 0 ||
+		len(compactStringsV0(run.Deliveries)) > 0 ||
+		len(compactStringsV0(run.DeliveredAgents)) > 0 {
+		return nil
+	}
+	message := strings.Join(compactStringsV0([]string{
+		"agents_requested=0",
+		"started_agents=0",
+		"in_flight=0",
+		"deliveries=0",
+		"terminal_status=done",
+		"action=relaunch_or_replan_external_work_with_causal_error",
+	}), " ")
+	return []orquestamcp.MCPAutoprogrammingDiagnosticV0{{
+		Code:    codexStackExternalWorkNoAgentMaterializedDiagnosticV0,
+		Scope:   "run:" + runRef,
+		Message: message,
+		EvidenceRefs: compactStringsV0(append(
+			result.Last.EvidenceRefs,
+			"evidence-ref-external-work-accepted-no-agent-materialized",
+		)),
+	}}
+}
+
 func codexStackRunSupervisorWithRequestedNotStartedActionsMCPV0(
 	output orquestamcp.MCPRunSupervisorToolResultV0,
 	diagnostics []orquestamcp.MCPAutoprogrammingDiagnosticV0,
@@ -411,6 +458,28 @@ func codexStackRunSupervisorWithStoppedNoDeliveryActionsMCPV0(
 		}
 	}
 	if !hasStoppedNoDelivery {
+		return output
+	}
+	output.NextActions = compactStringsV0(append(output.NextActions,
+		"relaunch_or_replan_external_work_with_causal_error",
+		"inspect_external_work_payload_and_runtime_binding",
+		"do_not_mark_completed_without_agent_start_or_delivery",
+	))
+	return output
+}
+
+func codexStackRunSupervisorWithNoAgentMaterializedActionsMCPV0(
+	output orquestamcp.MCPRunSupervisorToolResultV0,
+	diagnostics []orquestamcp.MCPAutoprogrammingDiagnosticV0,
+) orquestamcp.MCPRunSupervisorToolResultV0 {
+	hasNoAgentMaterialized := false
+	for _, diagnostic := range diagnostics {
+		if strings.TrimSpace(diagnostic.Code) == codexStackExternalWorkNoAgentMaterializedDiagnosticV0 {
+			hasNoAgentMaterialized = true
+			break
+		}
+	}
+	if !hasNoAgentMaterialized {
 		return output
 	}
 	output.NextActions = compactStringsV0(append(output.NextActions,
