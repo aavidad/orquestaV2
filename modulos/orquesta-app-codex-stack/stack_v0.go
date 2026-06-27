@@ -233,10 +233,20 @@ func buildDirectorPortsV0(
 func appGoalClosureValidatorV0(
 	config ConfigV0,
 ) orquestagoal.GoalWorkClosureValidatorPortV0 {
-	if config.AppGoalClosureValidator != nil {
-		return config.AppGoalClosureValidator
+	base := config.AppGoalClosureValidator
+	if base == nil {
+		base = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
 	}
-	return orquestagoal.DefaultGoalWorkClosureValidatorV0{}
+	if !config.DomainDelivery.Enabled {
+		return base
+	}
+	if reader := domainWorkSubmissionRecordReaderV0(config.DomainDelivery.Ledger); reader != nil {
+		return domainWorkGoalReceiptClosureValidatorV0{
+			Base:   base,
+			Ledger: reader,
+		}
+	}
+	return base
 }
 
 func requiredTestEvidenceStoreV0(

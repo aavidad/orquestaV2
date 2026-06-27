@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
+	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoroperativo "orquesta/modulos/orquesta-director-operativo"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
@@ -226,6 +227,70 @@ func TestCodexStackV0ExternalWorkRunConObservadorResidenteNoMarcaObserverRequire
 		codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-external-work-goal-first-observer-required") ||
 		!codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-external-work-goal-first-resident-observer") {
 		t.Fatalf("result goal-first residente inesperado=%+v", result)
+	}
+}
+
+func TestCodexStackV0ExternalWorkGoalFirstBloqueaReceiptInventadoSinLedger(t *testing.T) {
+	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
+	started := postExternalWorkRunStackV0(t, stack)
+	spec := launcher.specs[0]
+	observer.result = externalWorkGoalFirstCompleteResultForTestV0(
+		spec,
+		started.ExternalGoalRef,
+		"receipt-ref-goal-first-inventado-001",
+	)
+
+	result, err := stack.ObserveAppDirectorGoalV0(
+		context.Background(),
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-external-work-goal-first-fake-receipt-001",
+			RequestedBy:   "orquesta-app-codex-stack-test",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 ||
+		result.Closure.Accepted ||
+		!result.Closure.NeedsRework ||
+		!goalClosureHasIssueForTestV0(result.Closure, goalDomainReceiptLedgerAcceptedMissingIssueV0) {
+		t.Fatalf("receipt inventado no bloqueo cierre: result=%+v", result)
+	}
+}
+
+func TestCodexStackV0ExternalWorkGoalFirstCierraConReceiptAceptadoEnLedger(t *testing.T) {
+	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
+	started := postExternalWorkRunStackV0(t, stack)
+	spec := launcher.specs[0]
+	receiptRef := "receipt-ref-goal-first-domain-accepted-001"
+	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
+		context.Background(),
+		externalWorkGoalFirstAcceptedReceiptRecordForTestV0(started.RunRef, spec, receiptRef),
+	); err != nil {
+		t.Fatalf("RecordDomainWorkArtifactSubmissionV0: %v", err)
+	}
+	observer.result = externalWorkGoalFirstCompleteResultForTestV0(
+		spec,
+		started.ExternalGoalRef,
+		receiptRef,
+	)
+
+	result, err := stack.ObserveAppDirectorGoalV0(
+		context.Background(),
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-external-work-goal-first-ledger-receipt-001",
+			RequestedBy:   "orquesta-app-codex-stack-test",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		!result.Closure.Accepted ||
+		!codexStackStringInSetForTestV0(result.Closure.EvidenceRefs, goalDomainReceiptLedgerAcceptedEvidenceRefV0) {
+		t.Fatalf("receipt aceptado en ledger no cerro goal-first: result=%+v", result)
 	}
 }
 
@@ -798,6 +863,86 @@ func defaultExternalWorkRunChangeForTestV0() orquestaappchange.AppChangeRequestV
 			}},
 		},
 	}
+}
+
+func buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(
+	t *testing.T,
+) (StackV0, *goalFirstQueueObserverForTestV0, *goalFirstQueueLauncherForTestV0) {
+	t.Helper()
+	launcher := &goalFirstQueueLauncherForTestV0{}
+	observer := &goalFirstQueueObserverForTestV0{}
+	config := codexStackBaseConfigForTestV0(
+		t,
+		newFakeCodexStackRuntimeV0(),
+		&fakeCodexStackDomainWorkExecutorV0{},
+		nil,
+	)
+	config.AppGoalLauncher = launcher
+	config.AppGoalObserver = observer
+	config.AppGoalClosureValidator = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
+	config.Stores.AppGoalStateStore = newGoalFirstQueueStateStoreForTestV0()
+	stack, err := BuildStackV0(config)
+	if err != nil {
+		t.Fatalf("BuildStackV0: %v", err)
+	}
+	return stack, observer, launcher
+}
+
+func externalWorkGoalFirstCompleteResultForTestV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	externalGoalRef string,
+	receiptRefs ...string,
+) orquestagoal.GoalWorkResultV0 {
+	return orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusCompleteV0,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: externalGoalRef,
+		ArtifactRefs:    goalFirstQueueRequiredArtifactRefsV0(spec),
+		RequiredTestResults: goalFirstQueueRequiredTestResultsV0(
+			spec,
+			"evidence-ref-external-work-goal-first-required-test",
+		),
+		DomainReceiptRefs: compactStringsV0(receiptRefs),
+		EvidenceRefs:      append([]string(nil), spec.ClosurePolicy.RequiredEvidenceRefs...),
+	}
+}
+
+func externalWorkGoalFirstAcceptedReceiptRecordForTestV0(
+	runRef string,
+	spec orquestagoal.GoalWorkSpecV0,
+	receiptRef string,
+) DomainWorkArtifactSubmissionRecordV0 {
+	contract := orquestagoal.GoalArtifactContractV0{}
+	if len(spec.ArtifactContracts) > 0 {
+		contract = spec.ArtifactContracts[0]
+	}
+	return DomainWorkArtifactSubmissionRecordV0{
+		IdempotencyKey: "idem-" + receiptRef,
+		Status:         DomainWorkArtifactSubmissionStatusAcceptedV0,
+		RunRef:         runRef,
+		DeliveryRef:    contract.ArtifactRef,
+		CorrelationID:  "corr-external-work-stack-001",
+		DomainRef:      spec.DomainRef,
+		JobRef:         "job-ref-001",
+		ArtifactRef:    contract.ArtifactRef,
+		ArtifactType:   contract.ArtifactType,
+		Summary:        "Artefacto external-work aceptado por conector DomainWork.",
+		ReceiptRef:     receiptRef,
+		EvidenceRefs:   []string{"evidence-ref-" + receiptRef},
+	}
+}
+
+func goalClosureHasIssueForTestV0(
+	closure orquestagoal.GoalClosureValidationV0,
+	code string,
+) bool {
+	for _, issue := range closure.Issues {
+		if issue.Code == code {
+			return true
+		}
+	}
+	return false
 }
 
 func postExternalWorkRunStackWithChangeV0(
