@@ -240,6 +240,9 @@ func TestRunOPESDrainOnceV0ClaimRaceSubmittedSupervisaSinReenviarV0(t *testing.T
 	defer opesServer.Close()
 	supervisions := 0
 	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if writeOrquestaDirectorStatsNoGoalForDrainTestV0(t, w, r) {
+			return
+		}
 		if writeOrquestaRunSuperviseOKForDrainTestV0(t, w, r) {
 			supervisions++
 			return
@@ -269,6 +272,9 @@ func TestRunOPESDrainOnceV0FalloFinalLedgerExigeRecoveryV0(t *testing.T) {
 	externalPosts := 0
 	supervisions := 0
 	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if writeOrquestaDirectorStatsNoGoalForDrainTestV0(t, w, r) {
+			return
+		}
 		if writeOrquestaRunSuperviseOKForDrainTestV0(t, w, r) {
 			supervisions++
 			return

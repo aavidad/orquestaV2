@@ -200,6 +200,18 @@ type opesBridgeDirectorStatsResponseV0 struct {
 func opesBridgeSupervisionFromDirectorStatsV0(
 	decoded opesBridgeDirectorStatsResponseV0,
 ) opesExternalWorkRunSupervisionV0 {
+	if metadata, ok := opesBridgeGoalMetadataFromDirectorStatsV0(decoded); ok {
+		return opesExternalWorkRunSupervisionV0{
+			Status:                opesBridgeGoalStatsSupervisionStatusV0(decoded),
+			StopReason:            firstNonEmptyEnvlessV0(decoded.Goal.ClosureStatus, decoded.Goal.Status, "goal_first_observe_required"),
+			EvidenceRef:           firstNonEmptyEnvlessV0(decoded.Goal.EvidenceRefs...),
+			RoutePolicy:           metadata.RoutePolicy,
+			DirectorExecutionMode: metadata.DirectorExecutionMode,
+			GoalRef:               metadata.GoalRef,
+			ExternalGoalRef:       metadata.ExternalGoalRef,
+			NextActions:           compactStringsV0(metadata.NextActions),
+		}
+	}
 	stats := decoded.Stats
 	processRef, processEvidence := opesBridgeFirstProcessFromDirectorStatsV0(decoded)
 	switch {
@@ -250,6 +262,29 @@ func opesBridgeSupervisionFromDirectorStatsV0(
 			Status:     "resident_director_pending",
 			StopReason: firstNonEmptyEnvlessV0(stats.Status, "waiting_resident_dispatch"),
 		}
+	}
+}
+
+func opesBridgeGoalStatsSupervisionStatusV0(
+	decoded opesBridgeDirectorStatsResponseV0,
+) string {
+	closureStatus := strings.ToLower(strings.TrimSpace(decoded.Goal.ClosureStatus))
+	goalStatus := strings.ToLower(strings.TrimSpace(decoded.Goal.Status))
+	switch {
+	case decoded.Goal.ClosureAccepted || closureStatus == "accepted" || closureStatus == "closed":
+		return "closed"
+	case decoded.Goal.ClosureNeedsRework ||
+		closureStatus == "needs_rework" ||
+		closureStatus == "blocked" ||
+		goalStatus == "blocked" ||
+		goalStatus == "invalid":
+		return "blocked"
+	case goalStatus == "complete":
+		return "completed"
+	case goalStatus != "":
+		return goalStatus
+	default:
+		return "running"
 	}
 }
 

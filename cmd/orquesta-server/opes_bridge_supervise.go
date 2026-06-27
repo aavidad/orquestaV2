@@ -27,6 +27,11 @@ func opesBridgeSuperviseSubmittedRunV0(
 		opesBridgeObserveSubmittedGoalV0(ctx, client, config, result)
 		return
 	}
+	if config.SuperviseSubmitted &&
+		opesBridgeHydrateAlreadySubmittedGoalFirstFromStatsV0(ctx, client, config, result) {
+		opesBridgeObserveSubmittedGoalV0(ctx, client, config, result)
+		return
+	}
 	if !config.SuperviseSubmitted {
 		if config.ResidentDispatchWait > 0 {
 			supervision, err := observeOPESBridgeResidentDispatchUntilV0(
@@ -38,6 +43,12 @@ func opesBridgeSuperviseSubmittedRunV0(
 			if err != nil {
 				result.SupervisionStatus = "retry_pending"
 				result.SupervisionStopReason = "resident_dispatch_observation_unavailable"
+				return
+			}
+			if opesBridgeSupervisionUsesGoalFirstV0(supervision) {
+				opesBridgeApplySupervisionGoalFirstMetadataV0(result, supervision)
+				opesBridgePersistSubmittedGoalFirstMetadataV0(ctx, config, result)
+				opesBridgeObserveSubmittedGoalV0(ctx, client, config, result)
 				return
 			}
 			result.SupervisionStatus = supervision.Status
@@ -115,6 +126,40 @@ func opesBridgeSuperviseSubmittedRunV0(
 	result.SupervisionStopReason = supervision.StopReason
 	result.SupervisionProcessRef = supervision.ProcessRef
 	result.SupervisionEvidenceRef = supervision.EvidenceRef
+}
+
+func opesBridgeHydrateAlreadySubmittedGoalFirstFromStatsV0(
+	ctx context.Context,
+	client *http.Client,
+	config opesDrainConfigV0,
+	result *opesDrainJobResultV0,
+) bool {
+	if result == nil ||
+		client == nil ||
+		strings.TrimSpace(result.RunRef) == "" {
+		return false
+	}
+	status := strings.TrimSpace(result.Status)
+	if status != "already_submitted" && status != "recovery_required" {
+		return false
+	}
+	decoded, err := loadOPESExternalWorkRunStatsResponseV0(
+		ctx,
+		client,
+		config.OrquestaBaseURL,
+		result.RunRef,
+		config.CorrelationID,
+	)
+	if err != nil {
+		return false
+	}
+	metadata, ok := opesBridgeGoalMetadataFromDirectorStatsV0(decoded)
+	if !ok {
+		return false
+	}
+	opesBridgeApplyRunMetadataV0(result, metadata)
+	opesBridgePersistSubmittedGoalFirstMetadataV0(ctx, config, result)
+	return true
 }
 
 func opesBridgeObserveSubmittedGoalV0(

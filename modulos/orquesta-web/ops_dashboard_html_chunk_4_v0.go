@@ -117,6 +117,11 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
 	          String((action || {}).endpoint || '') === '/api/v0/autoprogramming/goal/observe';
 	      });
 	    }
+	    function autoprogrammingObserveGoalDecision(runRef) {
+	      const decision = ((lastSnapshot.opsSnapshot || {}).decision || {});
+	      return String(decision.action || '') === 'observe_goal' &&
+	        (!runRef || String(decision.run_ref || '') === String(runRef || ''));
+	    }
 	    function firstAutoprogrammingSafeAction(actionName, scope) {
 	      return allAutoprogrammingSafeActions().find(function(action) {
 	        return String((action || {}).action || '') === actionName &&
@@ -133,6 +138,7 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
 	    function runIsGoalFirst(run) {
 	      const goal = (run || {}).goal || {};
 	      return Boolean(autoprogrammingObserveGoalSafeAction((run || {}).run_ref)) ||
+	        autoprogrammingObserveGoalDecision((run || {}).run_ref) ||
 	        String((run || {}).director_execution_mode || goal.director_execution_mode || '').toLowerCase() === 'goal_first' ||
 	        Boolean(goal.available || goal.goal_ref || goal.can_observe);
 	    }

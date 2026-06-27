@@ -113,7 +113,7 @@ const opsDashboardHTMLChunk2V0 = `    }
       renderFlowSummary(ranked, runs, agents, queueCount, activeAgentCount);
       renderDirectorDecision((data.auto || {}).ops_snapshot, ranked, runs, agents, queueCount, activeAgentCount);
       updateCompletedHistory(runs, ranked);
-      lastSnapshot = {runs: runs, agents: agents, ranked: ranked, tasks: tasks, safeActions: safeActions};
+      lastSnapshot = {runs: runs, agents: agents, ranked: ranked, tasks: tasks, safeActions: safeActions, opsSnapshot: (data.auto || {}).ops_snapshot || null};
       if (!selectedRunRef && runs.length) selectedRunRef = runs[0].run_ref;
       renderProjects(runs);
       renderPhaseMatrix(runs);
