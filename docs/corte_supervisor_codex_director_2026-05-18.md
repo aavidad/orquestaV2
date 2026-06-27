@@ -1,10 +1,17 @@
 # Corte supervisor Codex director - 2026-05-18
 
+Nota de vigencia 2026-06-27: este corte queda vigente solo para rutas
+`legacy_director_loop`, supervisor residente sin Goal o composiciones no
+migradas. En composiciones con `GoalWorkStateV0`, Codex Goal actua como director
+operativo interno y Orquesta debe observar/cerrar por `observe_goal`; no debe
+empujar `/api/v0/runs/supervise` como loop normal.
+
 ## Objetivo
 
-El objetivo de este corte es acotar la pieza que falta para que Orquesta pueda
-hacer lo que hasta ahora hacia el operador manualmente: arrancar un agente Codex
-por el flujo normal y empujar el ciclo con `sigue` hasta que termine.
+El objetivo de este corte fue acotar la pieza que faltaba para que Orquesta
+pudiera hacer lo que hasta entonces hacia el operador manualmente: arrancar un
+agente Codex por el flujo legacy/resident sin Goal y empujar el ciclo con
+`sigue` hasta que termine.
 
 Este corte no reabre OPES ni mueve reglas al core. Es generico para programacion,
 trabajo de dominio y cualquier composicion que use Codex como runtime exterior.
@@ -66,9 +73,10 @@ sin crear un canal paralelo.
 
 - No existe todavia smoke real de recursion padre/hijo/nieto con parent refs,
   presupuesto global, profundidad/fanout y review causal completa.
-- El supervisor global del servidor ya reentra runs por intervalo. La API
-  `POST /api/v0/runs/supervise` permite pedir una pasada acotada desde la app sin
-  cambiar el nucleo ni crear canal paralelo.
+- El supervisor global del servidor ya reentra runs legacy/resident por
+  intervalo. La API `POST /api/v0/runs/supervise` permite pedir una pasada
+  acotada desde la app sin cambiar el nucleo ni crear canal paralelo, pero solo
+  para runs sin `GoalWorkStateV0`.
 - Desde el 2026-05-22, `POST /api/v0/autoprogramming/prepare-run` encola la run
   preparada en la cola global del stack Codex. Por tanto, el supervisor
   residente o una pasada de `/api/v0/runs/supervise` sin `run_ref` ya cubren el
@@ -85,9 +93,10 @@ go test -count=1 ./modulos/orquesta-app-codex-stack
 
 ## Siguiente corte recomendado
 
-El siguiente corte no debe reimplementar agentes. Debe usar
-`POST /api/v0/runs/supervise` / `CodexSupervisorStackLifecycleV0` y cerrar el
-smoke real:
+El siguiente corte legacy no debe reimplementar agentes. Debe usar
+`POST /api/v0/runs/supervise` / `CodexSupervisorStackLifecycleV0` solo con
+`director_execution_mode=legacy_director_loop` y cerrar el smoke real. Para
+runs `goal_first`, la continuacion es `observe_goal`.
 
 1. `LaunchV0` crea/encola la run por el flujo existente o recibe `RunRef`.
 2. `ContinueV0("sigue")` ejecuta el adaptador de stack.

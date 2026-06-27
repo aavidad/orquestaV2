@@ -244,9 +244,12 @@ consultar estado y pedir supervision acotada desde la web.
 Write-set: autoprogramming_endpoint_v0.go, autoprogramming_html_v0.go,
 autoprogramming_endpoint_v0_test.go, wiring gateway y docs locales.
 Simbolo foco: AutoprogrammingWebEndpointV0
-Contrato: Consume solo `/api/v0/autoprogramming/prepare-run`,
-`/api/v0/autoprogramming/status` y `/api/v0/runs/supervise` por navegador
-same-origin; conserva refs opacas y no lee stores/runtime/proveedor.
+Contrato: Consume `/api/v0/autoprogramming/prepare-run`,
+`/api/v0/autoprogramming/status`, `/api/v0/autoprogramming/goal/observe` y,
+solo para compatibilidad legacy explicita, `/api/v0/runs/supervise` por
+navegador same-origin. `status.safe_actions` decide la accion: `observe_goal`
+para runs goal-first y `runs/supervise` solo para legacy/resident sin
+`GoalWorkStateV0`; conserva refs opacas y no lee stores/runtime/proveedor.
 Validacion: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway`.
 Bloqueos: La planificacion real sigue en la composicion/director; la pantalla
 solo construye payloads compactos y muestra respuestas publicas.

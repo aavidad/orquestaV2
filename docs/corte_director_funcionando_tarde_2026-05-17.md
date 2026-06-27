@@ -92,15 +92,23 @@ actual, pero no debe definir el nucleo.
   en el store o siguen abiertos.
 - No hay runtime real distinto de Codex probado end-to-end.
 
-## Ruta para tener Orquesta usable hoy
+## Ruta legacy explicita para tener Orquesta usable hoy
 
-Usar el camino ya integrado:
+Desde el 2026-06-27, en composiciones con backend Goal, el modo vacio de
+`StartAppDirectorV0` y `orquesta.apps.arrancar_director.v0` es `goal_first`.
+El camino siguiente queda como compatibilidad legacy explicita: usarlo solo con
+`director_execution_mode=legacy_director_loop` o en composiciones sin backend
+Goal equivalente.
 
-1. Arrancar por `/api/v0/apps/director` o por el servicio
-   `StartAppDirectorV0`.
+Usar el camino legacy ya integrado:
+
+1. Arrancar por `/api/v0/apps/director` o por el servicio `StartAppDirectorV0`
+   con `director_execution_mode=legacy_director_loop`.
 2. Dejar que el stack Codex lance tareas normales.
 3. Reentrar por `ContinueAppDirectorV0` o por el drain del stack para consumir
-   ACKs, entregas, review gates, rework y decisiones tardias.
+   ACKs, entregas, review gates, rework y decisiones tardias. En goal-first, la
+   continuacion operativa es observar el goal por el endpoint de `observe_goal`,
+   no empujar este loop.
 4. Para esperar solo una cohorte/ola, pasar `wait_cohort_ref`, `wait_wave_ref` o
    `wait_parent_task_ref`. No esperar todos los agentes vivos del run.
 5. Consultar `/api/v0/director/stats` para ver proceso, progreso y uso.

@@ -33,7 +33,9 @@ Rutas montadas:
 - `/api/v0/runs/queue/priority`: bridge REST de MCP para ranking de cola global
   y cambio de prioridad.
 - `/api/v0/runs/supervise`: bridge REST de MCP para pedir una pasada acotada
-  de supervision sobre una run concreta o sobre la cola inyectada.
+  de supervision sobre una run concreta o sobre la cola inyectada. Solo aplica
+  a runs legacy/resident sin `GoalWorkStateV0`; si existe estado Goal, la accion
+  segura es `observe_goal`.
 - `/api/v0/autoprogramming/validate-request`: bridge REST de validacion de
   peticiones de autoprogramacion.
 - `/api/v0/autoprogramming/self-improvement`: bridge REST de automejora de baja

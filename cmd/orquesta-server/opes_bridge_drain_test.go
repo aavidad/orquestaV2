@@ -1826,18 +1826,14 @@ func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilFinalizeV0(t *testing.
 		!strings.Contains(output, `"selected_job_type":"generate_html_site"`) ||
 		!strings.Contains(output, `"selected_job_type":"generate_help_manual_assets"`) ||
 		!strings.Contains(output, `"selected_job_type":"finalize_temario_package"`) ||
-		!strings.Contains(output, `"artifact_type": "exam_research_report"`) ||
-		!strings.Contains(output, `"artifact_type": "visual_asset"`) ||
-		!strings.Contains(output, `"artifact_type": "question_bank"`) ||
-		!strings.Contains(output, `"artifact_type": "agent_pair_review_report"`) ||
-		!strings.Contains(output, `"artifact_type": "director_review_matrix"`) ||
-		!strings.Contains(output, `"artifact_type": "assembled_topic"`) ||
-		!strings.Contains(output, `"artifact_type": "audio_asset"`) ||
-		!strings.Contains(output, `"artifact_type": "tutor_bot_package"`) ||
-		!strings.Contains(output, `"artifact_type": "learning_games_package"`) ||
-		!strings.Contains(output, `"artifact_type": "local_html_site"`) ||
-		!strings.Contains(output, `"artifact_type": "help_manual_package"`) ||
-		!strings.Contains(output, `"artifact_type": "completed_syllabus_package"`) ||
+		!strings.Contains(output, `"route_policy":"goal_first"`) ||
+		!strings.Contains(output, `"director_execution_mode":"goal_first"`) ||
+		!strings.Contains(output, `"next_actions":["observe_goal"]`) ||
+		!strings.Contains(output, `"supervision_status":"goal_first_observe_pending"`) ||
+		!strings.Contains(output, `"goal_status": "complete"`) ||
+		!strings.Contains(output, `"closure_status": "accepted"`) ||
+		!strings.Contains(output, `"closure_accepted": true`) ||
+		!strings.Contains(output, `"artifact_refs": ["artifact-ref-fake-finalize_temario_package"]`) ||
 		!strings.Contains(output, `run_until_status=completed`) ||
 		!strings.Contains(output, `run_until_mode=run-until-finalize`) ||
 		!strings.Contains(output, `final_job_type=finalize_temario_package`) {

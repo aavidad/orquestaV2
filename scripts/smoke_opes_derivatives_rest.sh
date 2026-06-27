@@ -14,10 +14,11 @@ ORQUESTA_BASE_URL_EFFECTIVE="${ORQUESTA_BASE_URL:-}"
 SEQUENCE="${ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE:-$DEFAULT_SEQUENCE}"
 LIMIT="${ORQUESTA_OPES_BRIDGE_LIMIT:-1}"
 INPUT_LEDGER_PATH="${ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH:-$SMOKE_OUT_DIR/external-bridge-input-ledger.json}"
-MAX_TICKS="${ORQUESTA_OPES_BRIDGE_MAX_TICKS:-20}"
+MAX_TICKS="${ORQUESTA_OPES_BRIDGE_MAX_TICKS:-40}"
 TICK_SLEEP_SECONDS="${ORQUESTA_OPES_DERIVATIVES_TICK_SLEEP_SECONDS:-5}"
 FAKE_SERVER="${ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER:-0}"
 FAKE_PENDING_TYPE="${ORQUESTA_OPES_DERIVATIVES_FAKE_PENDING_TYPE:-assemble_topic}"
+FAKE_GOAL_FIRST="${ORQUESTA_OPES_DERIVATIVES_FAKE_GOAL_FIRST:-1}"
 FAKE_DIR=""
 FAKE_PID=""
 
@@ -68,6 +69,7 @@ sequence = [item.strip() for item in sys.argv[2].split(",") if item.strip()]
 limit = sys.argv[3]
 pending_type = sys.argv[4]
 mode = sys.argv[5]
+goal_first = sys.argv[6] == "1"
 active_index = sequence.index(pending_type) if mode == "dry-run-once" else 0
 expected_scan_limit = limit
 if mode != "dry-run-once":
@@ -270,7 +272,30 @@ class Handler(BaseHTTPRequestHandler):
                 send_json(self, 400, {"error": "unexpected_external_work", "work_kind": work_kind, "active_index": active_index})
                 return
             run_ref = "run-ref-fake-" + job_ref
-            runs[run_ref] = {"job_ref": job_ref, "work_kind": work_kind, "artifact_type": artifact_type, "stage": active_index, "supervised": False}
+            goal_ref = "goal-ref-fake-" + job_ref
+            external_goal_ref = "thread-ref-fake-" + job_ref
+            runs[run_ref] = {
+                "job_ref": job_ref,
+                "work_kind": work_kind,
+                "artifact_type": artifact_type,
+                "stage": active_index,
+                "supervised": False,
+                "observed": False,
+                "goal_first": goal_first,
+                "goal_ref": goal_ref,
+                "external_goal_ref": external_goal_ref,
+            }
+            if goal_first:
+                send_json(self, 200, {
+                    "run_ref": run_ref,
+                    "estado": "ok",
+                    "route_policy": "goal_first",
+                    "director_execution_mode": "goal_first",
+                    "goal_ref": goal_ref,
+                    "external_goal_ref": external_goal_ref,
+                    "next_actions": ["observe_goal"],
+                })
+                return
             send_json(self, 200, {"run_ref": run_ref, "estado": "accepted"})
             return
         if parsed.path == "/api/v0/runs/supervise":
@@ -279,11 +304,54 @@ class Handler(BaseHTTPRequestHandler):
             if not run:
                 send_json(self, 404, {"error": "run_not_found", "run_ref": run_ref})
                 return
+            if run.get("goal_first"):
+                send_json(self, 200, {
+                    "run_ref": run_ref,
+                    "estado": "ok",
+                    "stop_reason": "goal_first_observe_required",
+                    "director_execution_mode": "goal_first",
+                    "goal_ref": run["goal_ref"],
+                    "external_goal_ref": run["external_goal_ref"],
+                    "next_actions": ["observe_goal", "do_not_supervise_goal_first_with_legacy_loop"],
+                    "last": {
+                        "status": "running",
+                        "evidence_refs": ["evidence-ref-fake-goal-first-supervisor"],
+                    },
+                })
+                return
             if not run["supervised"]:
                 run["supervised"] = True
                 if run["stage"] == active_index:
                     active_index += 1
             send_json(self, 200, {"run_ref": run_ref, "status": "supervised", "work_kind": run["work_kind"], "artifact_type": run["artifact_type"], "next_stage_index": active_index})
+            return
+        if parsed.path == "/api/v0/apps/director/goal/observe":
+            run_ref = payload.get("run_ref") or ""
+            run = runs.get(run_ref)
+            if not run:
+                send_json(self, 404, {"error": "run_not_found", "run_ref": run_ref})
+                return
+            if not run.get("goal_first"):
+                send_json(self, 400, {"error": "run_not_goal_first", "run_ref": run_ref})
+                return
+            if not run["observed"]:
+                run["observed"] = True
+                if run["stage"] == active_index:
+                    active_index += 1
+            send_json(self, 200, {
+                "estado": "ok",
+                "run_ref": run_ref,
+                "run_status": "closed",
+                "director_execution_mode": "goal_first",
+                "goal_ref": run["goal_ref"],
+                "external_goal_ref": run["external_goal_ref"],
+                "goal_status": "complete",
+                "closure_status": "accepted",
+                "closure_accepted": True,
+                "artifact_refs": ["artifact-ref-fake-" + run["work_kind"]],
+                "domain_receipt_refs": ["domain-receipt-ref-fake-" + run["job_ref"]],
+                "evidence_refs": ["evidence-ref-fake-goal-observed"],
+            })
             return
         send_json(self, 404, {"error": "unexpected_path", "path": parsed.path})
 
@@ -295,7 +363,7 @@ with open(url_file, "w", encoding="utf-8") as fh:
     fh.write(f"http://127.0.0.1:{server.server_port}\n")
 server.serve_forever()
 PY
-  python3 "$server_py" "$url_file" "$SEQUENCE" "$LIMIT" "$FAKE_PENDING_TYPE" "$MODE" &
+  python3 "$server_py" "$url_file" "$SEQUENCE" "$LIMIT" "$FAKE_PENDING_TYPE" "$MODE" "$FAKE_GOAL_FIRST" &
   FAKE_PID="$!"
   for _ in $(seq 1 50); do
     if [[ -s "$url_file" ]]; then
@@ -303,6 +371,9 @@ PY
       if is_run_until_mode "$MODE"; then
         ORQUESTA_BASE_URL_EFFECTIVE="$OPES_BASE_URL_EFFECTIVE"
       fi
+      export ORQUESTA_OPES_TEMPORAL_CONFIRM="${ORQUESTA_OPES_TEMPORAL_CONFIRM:-1}"
+      export ORQUESTA_OPES_BRIDGE_DESTINATION_EVIDENCE_REF="${ORQUESTA_OPES_BRIDGE_DESTINATION_EVIDENCE_REF:-evidence-ref-opes-derivatives-fake-goal-first}"
+      export ORQUESTA_OPES_BRIDGE_PROGRAM_ID="${ORQUESTA_OPES_BRIDGE_PROGRAM_ID:-program-ref-fake-operario-001}"
       return
     fi
     sleep 0.1
@@ -358,6 +429,7 @@ write_metadata() {
     echo "mode=$MODE"
     echo "fake_server=$FAKE_SERVER"
     echo "fake_pending_type=$FAKE_PENDING_TYPE"
+    echo "fake_goal_first=$FAKE_GOAL_FIRST"
     echo "opes_base_url=$OPES_BASE_URL_EFFECTIVE"
     echo "orquesta_base_url=$ORQUESTA_BASE_URL_EFFECTIVE"
     echo "sequence=$SEQUENCE"
@@ -450,6 +522,31 @@ for result in data.get("results") or []:
 PY
 }
 
+json_summary_run_records() {
+  local file="$1"
+  python3 - "$file" <<'PY'
+import json
+import sys
+with open(sys.argv[1], "r", encoding="utf-8") as fh:
+    data = json.load(fh)
+seen = set()
+for result in data.get("results") or []:
+    ref = (result.get("run_ref") or "").strip()
+    if not ref or ref in seen:
+        continue
+    seen.add(ref)
+    actions = [str(item).strip() for item in (result.get("next_actions") or [])]
+    goal_first = (
+        (result.get("route_policy") or "").strip() == "goal_first"
+        or (result.get("director_execution_mode") or "").strip() == "goal_first"
+        or bool((result.get("goal_ref") or "").strip())
+        or bool((result.get("external_goal_ref") or "").strip())
+        or "observe_goal" in actions
+    )
+    print(ref + "\t" + ("1" if goal_first else "0"))
+PY
+}
+
 write_supervise_payload() {
   local run_ref="$1"
   local tick="$2"
@@ -492,10 +589,76 @@ post_supervise_run() {
   cat "$response_file"
 }
 
+write_observe_goal_payload() {
+  local run_ref="$1"
+  local tick="$2"
+  local output_file="$3"
+  python3 - "$run_ref" "$tick" >"$output_file" <<'PY'
+import json
+import sys
+run_ref = sys.argv[1]
+tick = sys.argv[2]
+print(json.dumps({
+    "request_id": "req-smoke-opes-derivatives-observe-goal-" + tick,
+    "correlation_id": "corr-smoke-opes-derivatives-observe-goal-" + tick,
+    "run_ref": run_ref,
+    "requested_by": "smoke-opes-derivatives-rest"
+}))
+PY
+}
+
+post_observe_goal() {
+  local run_ref="$1"
+  local tick="$2"
+  local payload_file="$SMOKE_OUT_DIR/observe_goal_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}.json"
+  local response_file="$SMOKE_OUT_DIR/observe_goal_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_response.json"
+  write_observe_goal_payload "$run_ref" "$tick" "$payload_file"
+  local status
+  status="$(curl -sS -m 120 -o "$response_file" -w "%{http_code}" \
+    -X POST "$ORQUESTA_BASE_URL_EFFECTIVE/api/v0/apps/director/goal/observe" \
+    -H "Content-Type: application/json" \
+    --data-binary "@$payload_file")"
+  if [[ "$status" -lt 200 || "$status" -ge 300 ]]; then
+    echo "observe goal fallo run_ref=$run_ref status=$status response=$response_file" >&2
+    cat "$response_file" >&2 || true
+    exit 1
+  fi
+  cat "$response_file"
+}
+
+supervise_response_requires_goal_observe() {
+  local file="$1"
+  python3 - "$file" <<'PY'
+import json
+import sys
+with open(sys.argv[1], "r", encoding="utf-8") as fh:
+    data = json.load(fh)
+actions = [str(item).strip() for item in (data.get("next_actions") or [])]
+if (
+    (data.get("stop_reason") or "").strip() == "goal_first_observe_required"
+    or (data.get("director_execution_mode") or "").strip() == "goal_first"
+    or "observe_goal" in actions
+):
+    raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
 run_until_final_type() {
   smoke_require_tools python3 curl
   local final_type
-  final_type="${SEQUENCE##*,}"
+  case "$MODE" in
+    run-until-assemble)
+      final_type="assemble_topic"
+      ;;
+    run-until-finalize | run-until-final)
+      final_type="${SEQUENCE##*,}"
+      ;;
+    *)
+      echo "modo run-until no soportado: $MODE" >&2
+      exit 2
+      ;;
+  esac
   local final_seen=0
   local final_summary=""
   for tick in $(seq 1 "$MAX_TICKS"); do
@@ -519,18 +682,30 @@ run_until_final_type() {
     if [[ "$selected" == "$final_type" ]]; then
       final_seen=1
     fi
-    local run_refs=()
-    while IFS= read -r run_ref; do
-      [[ -n "$run_ref" ]] && run_refs+=("$run_ref")
-    done < <(json_summary_run_refs "$summary_file")
-    if [[ "${#run_refs[@]}" -eq 0 ]]; then
+    local run_records=()
+    while IFS= read -r record; do
+      [[ -n "$record" ]] && run_records+=("$record")
+    done < <(json_summary_run_records "$summary_file")
+    if [[ "${#run_records[@]}" -eq 0 ]]; then
       echo "tick $tick no produjo run_ref supervisable: $summary_file" >&2
       exit 1
     fi
-    local run_ref
-    for run_ref in "${run_refs[@]}"; do
-      post_supervise_run "$run_ref" "$tick" |
-        tee "$SMOKE_OUT_DIR/supervise_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_stdout.json"
+    local record
+    for record in "${run_records[@]}"; do
+      local run_ref=""
+      local goal_first=""
+      IFS=$'\t' read -r run_ref goal_first <<<"$record"
+      if [[ "$goal_first" == "1" ]]; then
+        post_observe_goal "$run_ref" "$tick" |
+          tee "$SMOKE_OUT_DIR/observe_goal_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_stdout.json"
+        continue
+      fi
+      local supervise_stdout="$SMOKE_OUT_DIR/supervise_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_stdout.json"
+      post_supervise_run "$run_ref" "$tick" | tee "$supervise_stdout"
+      if supervise_response_requires_goal_observe "$supervise_stdout"; then
+        post_observe_goal "$run_ref" "$tick" |
+          tee "$SMOKE_OUT_DIR/observe_goal_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_stdout.json"
+      fi
     done
     if [[ "$selected" == "$final_type" ]]; then
       final_summary="$summary_file"

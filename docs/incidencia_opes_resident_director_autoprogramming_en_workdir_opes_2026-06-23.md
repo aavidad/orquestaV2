@@ -55,7 +55,13 @@ residente por esta guarda.
 ## Workaround Operativo Usado
 
 Para continuar el curso sin contaminarlo, se reinicia Orquesta con estado limpio
-y `ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=0`; los padres OPES se lanzan por
-`POST /api/v0/external-work/run` y se supervisan por `POST /api/v0/runs/supervise`.
+y `ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=0`.
+
+Nota de vigencia 2026-06-27: el workaround original era pre-goal-first. Si
+`POST /api/v0/external-work/run` devuelve `route_policy=goal_first` o
+`director_execution_mode=goal_first`, la continuacion correcta es observar por
+`/api/v0/apps/director/goal/observe`. `POST /api/v0/runs/supervise` queda solo
+como empuje acotado para `legacy_director_loop` explicito o runs sin
+`GoalWorkStateV0`.
 
 Este workaround no sustituye la corrección de la app.
