@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
 func TestMCPAutoprogrammingSelfImprovementDescriptorV0EsAdaptadorFino(t *testing.T) {
@@ -71,6 +72,57 @@ func TestMCPAutoprogrammingSelfImprovementExecutorV0AutoPrepareRunOptIn(t *testi
 		result.PreparedRun == nil ||
 		!result.PreparedRun.Accepted ||
 		result.PreparedRun.RunRef == "" {
+		t.Fatalf("result=%+v", result)
+	}
+	if !stringsSliceContainsMCPHumanWorkV0(result.NextActions, "supervise_prepared_run_by_run_ref") {
+		t.Fatalf("next_actions=%v", result.NextActions)
+	}
+}
+
+func TestMCPAutoprogrammingSelfImprovementExecutorV0AutoPrepareRunGoalFirstObservaGoal(t *testing.T) {
+	executor := NewMCPAutoprogrammingSelfImprovementToolExecutorV0(
+		goalSelfImprovementPrepareRunExecutorV0{},
+	)
+	result, err := executor.Execute(
+		context.Background(),
+		MCPAutoprogrammingSelfImprovementToolInputV0{
+			RequestID:      "request-ref-self-improvement-goal-001",
+			AutoPrepareRun: true,
+			Proposal:       validMCPSelfImprovementProposalV0(),
+		},
+	)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPAutoprogrammingSelfImprovementEstadoOKV0 ||
+		result.PreparedRun == nil ||
+		result.PreparedRun.Goal == nil ||
+		!stringsSliceContainsMCPHumanWorkV0(result.NextActions, "observe_autoprogramming_goal") ||
+		stringsSliceContainsMCPHumanWorkV0(result.NextActions, "supervise_prepared_run_by_run_ref") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestMCPAutoprogrammingSelfImprovementExecutorV0AutoPrepareRunGoalSpecsHaceHandoff(t *testing.T) {
+	executor := NewMCPAutoprogrammingSelfImprovementToolExecutorV0(
+		goalSpecsSelfImprovementPrepareRunExecutorV0{},
+	)
+	result, err := executor.Execute(
+		context.Background(),
+		MCPAutoprogrammingSelfImprovementToolInputV0{
+			RequestID:      "request-ref-self-improvement-goal-specs-001",
+			AutoPrepareRun: true,
+			Proposal:       validMCPSelfImprovementProposalV0(),
+		},
+	)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPAutoprogrammingSelfImprovementEstadoOKV0 ||
+		result.PreparedRun == nil ||
+		len(result.PreparedRun.GoalSpecs) != 1 ||
+		!stringsSliceContainsMCPHumanWorkV0(result.NextActions, "handoff_goal_specs_to_goal_backend") ||
+		stringsSliceContainsMCPHumanWorkV0(result.NextActions, "supervise_prepared_run_by_run_ref") {
 		t.Fatalf("result=%+v", result)
 	}
 }
@@ -175,6 +227,49 @@ func (recordingSelfImprovementPrepareRunExecutorV0) Execute(
 		ProjectRef:    input.AutoprogrammingRequest.ProjectRef,
 		WorktreeRef:   input.AutoprogrammingRequest.WorktreeRef,
 		BranchRef:     input.AutoprogrammingRequest.BranchRef,
+	}, nil
+}
+
+type goalSelfImprovementPrepareRunExecutorV0 struct{}
+
+func (goalSelfImprovementPrepareRunExecutorV0) Execute(
+	_ context.Context,
+	input MCPAutoprogrammingPrepareRunToolInputV0,
+) (MCPAutoprogrammingPrepareRunToolResultV0, error) {
+	return MCPAutoprogrammingPrepareRunToolResultV0{
+		Estado:        MCPAutoprogrammingPrepareRunEstadoOKV0,
+		RequestID:     input.RequestID,
+		CorrelationID: input.CorrelationID,
+		Accepted:      true,
+		RunRef:        "run-ref-goal-" + input.AutoprogrammingRequest.RequestRef,
+		Goal: &MCPAutoprogrammingGoalRunV0{
+			RunRef:     "run-ref-goal-" + input.AutoprogrammingRequest.RequestRef,
+			GoalRef:    "goal-ref-" + input.AutoprogrammingRequest.RequestRef,
+			GoalStatus: orquestagoal.GoalStatusRunningV0,
+		},
+	}, nil
+}
+
+type goalSpecsSelfImprovementPrepareRunExecutorV0 struct{}
+
+func (goalSpecsSelfImprovementPrepareRunExecutorV0) Execute(
+	_ context.Context,
+	input MCPAutoprogrammingPrepareRunToolInputV0,
+) (MCPAutoprogrammingPrepareRunToolResultV0, error) {
+	return MCPAutoprogrammingPrepareRunToolResultV0{
+		Estado:        MCPAutoprogrammingPrepareRunEstadoOKV0,
+		RequestID:     input.RequestID,
+		CorrelationID: input.CorrelationID,
+		Accepted:      true,
+		GoalSpecs: []orquestagoal.GoalWorkSpecV0{{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			RequestRef:    input.AutoprogrammingRequest.RequestRef,
+			ProjectRef:    input.AutoprogrammingRequest.ProjectRef,
+			GoalRef:       "goal-spec-ref-" + input.AutoprogrammingRequest.RequestRef,
+			Objective:     "automejora goal-first preparada",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			WorkKind:      "autoprogramming",
+		}},
 	}, nil
 }
 

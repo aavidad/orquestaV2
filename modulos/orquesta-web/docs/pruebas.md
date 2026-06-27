@@ -571,3 +571,16 @@ Ultima ejecucion: 2026-05-26; pasa.
 Riesgos: El slice cubre renderers HTML locales; T183 transversal aun requiere
 observability/gateway/cmd para auditoria y contadores compactos.
 ```
+
+```text
+Caso: WEB-UT-034 autoprogramming muestra acciones seguras
+Tipo: unit/html+viewmodel
+Comando: `go test -count=1 ./modulos/orquesta-web`
+Evidencia esperada: `/autoprogramming` contiene `safe-actions-panel`,
+`safe_actions` y "Acciones seguras"; el view-model conserva `observe_goal`
+con endpoint permitido y payload compacto, descartando claves locales o de
+proveedor como `local_path`/`provider_id`.
+Ultima ejecucion: 2026-06-27; pasa con el comando indicado.
+Riesgos: La web solo proyecta y dispara acciones publicadas por la API; no
+calcula politicas nuevas ni recupera trabajos OPES automaticamente.
+```

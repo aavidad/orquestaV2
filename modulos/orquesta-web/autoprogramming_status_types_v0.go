@@ -32,6 +32,7 @@ type WebAutoprogrammingStatusViewModelV0 struct {
 	RunRef          string                                      `json:"run_ref,omitempty"`
 	QueueHealth     *WebAutoprogrammingQueueHealthV0            `json:"queue_health,omitempty"`
 	StaleRunning    []WebAutoprogrammingActionableRunV0         `json:"stale_running,omitempty"`
+	SafeActions     []WebAutoprogrammingSafeActionV0            `json:"safe_actions,omitempty"`
 	Runs            []WebAutoprogrammingRunProgressV0           `json:"runs,omitempty"`
 	Agents          []WebAutoprogrammingAgentProgressV0         `json:"agents,omitempty"`
 	Diagnostics     []WebAutoprogrammingDiagnosticV0            `json:"diagnostics,omitempty"`
@@ -64,6 +65,17 @@ type WebAutoprogrammingActionableRunV0 struct {
 	Reason            string   `json:"reason,omitempty"`
 	RecommendedAction string   `json:"recommended_action,omitempty"`
 	EvidenceRefs      []string `json:"evidence_refs,omitempty"`
+}
+
+type WebAutoprogrammingSafeActionV0 struct {
+	Action       string         `json:"action"`
+	Scope        string         `json:"scope,omitempty"`
+	RunRef       string         `json:"run_ref,omitempty"`
+	Method       string         `json:"method,omitempty"`
+	Endpoint     string         `json:"endpoint,omitempty"`
+	Reason       string         `json:"reason,omitempty"`
+	RequiresPost bool           `json:"requires_post,omitempty"`
+	Payload      map[string]any `json:"payload,omitempty"`
 }
 
 type WebAutoprogrammingRunProgressV0 struct {
@@ -118,6 +130,9 @@ func NewWebAutoprogrammingStatusViewModelV0(locale string, result orquestamcp.MC
 		StaleRunning:    webAutoprogrammingActionableRunsV0(result.StaleRunning),
 		Diagnostics:     webAutoprogrammingDiagnosticsV0(result.Diagnostics),
 		ErroresPublicos: webAutoprogrammingPrepareRunIssuesV0(result.Errores),
+	}
+	if result.Operator != nil {
+		vm.SafeActions = webAutoprogrammingSafeActionsV0(result.Operator.SafeActions)
 	}
 	if result.Queue != nil {
 		vm.QueueLive = result.Queue.Estado == WebAutoprogrammingPrepareRunEstadoOKV0
@@ -188,6 +203,101 @@ func webAutoprogrammingPublicEvidenceRefsV0(values []string) []string {
 		out = append(out, webAutoprogrammingPublicActionTextV0(value))
 	}
 	return compactStringsV0(out)
+}
+
+func webAutoprogrammingSafeActionsV0(
+	values []orquestamcp.MCPAutoprogrammingSafeActionV0,
+) []WebAutoprogrammingSafeActionV0 {
+	out := make([]WebAutoprogrammingSafeActionV0, 0, len(values))
+	for _, value := range values {
+		action := WebAutoprogrammingSafeActionV0{
+			Action:       webAutoprogrammingPublicActionTextV0(value.Action),
+			Scope:        webAutoprogrammingPublicActionTextV0(value.Scope),
+			RunRef:       trimV0(value.RunRef),
+			Method:       webAutoprogrammingPublicActionTextV0(value.Method),
+			Endpoint:     webAutoprogrammingPublicEndpointV0(value.Endpoint),
+			Reason:       webAutoprogrammingPublicActionTextV0(value.Reason),
+			RequiresPost: value.RequiresPost,
+			Payload:      webAutoprogrammingSafeActionPayloadV0(value.Payload),
+		}
+		if action.Action == "" && action.Endpoint == "" {
+			continue
+		}
+		out = append(out, action)
+	}
+	return out
+}
+
+func webAutoprogrammingPublicEndpointV0(value string) string {
+	value = trimV0(value)
+	switch value {
+	case orquestamcp.MCPAutoprogrammingSuperviseHTTPPathV0,
+		orquestamcp.MCPAutoprogrammingObserveGoalHTTPPathV0:
+		return value
+	default:
+		return ""
+	}
+}
+
+func webAutoprogrammingSafeActionPayloadV0(value map[string]any) map[string]any {
+	out := map[string]any{}
+	for _, key := range []string{
+		"run_ref",
+		"resident_mode",
+		"max_ticks",
+		"max_runs_per_tick",
+		"max_executions",
+		"max_dispatches_per_wait",
+		"max_outbox_per_cycle",
+	} {
+		raw, ok := value[key]
+		if !ok {
+			continue
+		}
+		if normalized, ok := webAutoprogrammingPublicPayloadScalarV0(raw); ok {
+			out[key] = normalized
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func webAutoprogrammingPublicPayloadScalarV0(value any) (any, bool) {
+	switch typed := value.(type) {
+	case string:
+		trimmed := trimV0(typed)
+		return trimmed, trimmed != ""
+	case bool:
+		return typed, true
+	case int:
+		return typed, true
+	case int8:
+		return int(typed), true
+	case int16:
+		return int(typed), true
+	case int32:
+		return int(typed), true
+	case int64:
+		return typed, true
+	case uint:
+		return typed, true
+	case uint8:
+		return int(typed), true
+	case uint16:
+		return int(typed), true
+	case uint32:
+		return typed, true
+	case uint64:
+		return typed, true
+	case float32:
+		return typed, true
+	case float64:
+		return typed, true
+	default:
+		return nil, false
+	}
 }
 
 func webAutoprogrammingQueueRunsV0(values []orquestamcp.MCPRunQueueRankedCandidateCompactV0) []WebAutoprogrammingRunProgressV0 {

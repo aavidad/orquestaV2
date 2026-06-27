@@ -1523,3 +1523,20 @@ Cobertura:
 - `TestOPESBridgeSupervisionFromDirectorStatsV0DetectaDeliverySinProcesoVivo`
   fija que una entrega durable sin started/in-flight se proyecta como
   `needs_reconcile/stale_lock_no_process`, no como trabajo vivo.
+
+Goal-first por defecto y diagnostico review payload 2026-06-27:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack
+```
+
+Cobertura:
+
+- `TestCodexStackAutoprogrammingPrepareRunAPIV0BackendGoalCompletoMarcaGoalFirstPorDefecto`
+  fija que una request publica sin marcadores cae a goal-first cuando el
+  backend Goal esta completo: devuelve `goal`, persiste `GoalWorkStateV0`, no
+  crea tareas legacy y no encola la run.
+- `TestCodexStackRunSupervisorErrorResultMCPV0ExponeReviewPayloadInvalidoTrasEntrega`
+  fija que un `ReviewResultErrorV0(payload_invalido)` queda como diagnostico
+  publico `review_result_payload_invalid_after_delivery` con accion de retry
+  compacto y sin recomendacion de relanzar el agente.

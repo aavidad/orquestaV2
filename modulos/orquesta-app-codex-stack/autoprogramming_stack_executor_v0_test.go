@@ -213,6 +213,74 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveGoalSpecsCuandoGoalRead
 	}
 }
 
+func TestCodexStackAutoprogrammingPrepareRunAPIV0BackendGoalCompletoMarcaGoalFirstPorDefecto(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	launcher := &goalFirstQueueLauncherForTestV0{}
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	stack.Ports.GoalLauncher = launcher
+	stack.Ports.GoalObserver = &goalFirstQueueObserverForTestV0{}
+	stack.Ports.GoalClosureValidator = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
+	stack.Ports.GoalStateStore = goalStates
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.RequestRef = "run-autoprogramming-goal-default-001"
+	request.Tasks[0].TaskRef = "source-task-ref-autoprogramming-goal-default-001"
+	request.Tasks[0].ContextRefs = nil
+
+	prepared, err := NewCodexStackAutoprogrammingPrepareRunExecutorV0(
+		&stack,
+		"2026-06-27T12:00:00Z",
+		"orquesta-stack-api-test",
+		stack.Stores.RunQueue,
+		stack.RunQueue,
+		stack.Clock,
+		stack.Codex.RuntimeWorkDir,
+	).Execute(context.Background(), orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-autoprogramming-goal-default-api-001",
+		CorrelationID:          "corr-autoprogramming-goal-default-api-001",
+		OccurredAt:             "2026-06-27T12:00:00Z",
+		RequestedBy:            "orquesta-stack-api-test",
+		AutoprogrammingRequest: request,
+	})
+	if err != nil {
+		t.Fatalf("prepare.Execute: %v", err)
+	}
+
+	if !prepared.Accepted ||
+		prepared.RunRef != request.RequestRef ||
+		prepared.Goal == nil ||
+		prepared.Goal.RunRef != prepared.RunRef ||
+		prepared.Goal.GoalStatus != orquestagoal.GoalStatusRunningV0 ||
+		len(prepared.GoalSpecs) != 1 ||
+		len(prepared.WorkflowTaskRefs) != 0 ||
+		len(prepared.WaitAgentRefs) != 0 ||
+		prepared.Continue != nil ||
+		runtime.launchCountV0() != 0 {
+		t.Fatalf("prepared=%+v runtime_launches=%d", prepared, runtime.launchCountV0())
+	}
+	if len(launcher.specs) != 1 || launcher.specs[0].RunRef != prepared.RunRef {
+		t.Fatalf("launcher specs=%+v prepared=%+v", launcher.specs, prepared)
+	}
+	run, err := stack.Ports.RunStore.LoadRunV0(context.Background(), prepared.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if len(run.Tasks) != 0 || len(run.FunctionContracts) != 0 {
+		t.Fatalf("goal-first por defecto materializo loop legacy: %+v", run)
+	}
+	if _, err := goalStates.LoadGoalWorkStateV0(context.Background(), prepared.RunRef); err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	ranking := postRunQueuePriorityStackV0(t, stack, orquestamcp.MCPRunQueuePriorityToolInputV0{
+		Action:   orquestamcp.MCPRunQueuePriorityActionRankV0,
+		QueueRef: DefaultRunQueueRefV0,
+		Limit:    1,
+	})
+	if len(ranking.Ranked) != 0 {
+		t.Fatalf("goal-first por defecto no debe encolar legacy: %+v", ranking)
+	}
+}
+
 func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaGoalFirstSinColaLegacy(t *testing.T) {
 	runtime := newFakeCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)

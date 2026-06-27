@@ -183,6 +183,46 @@ func TestCodexStackRunSupervisorErrorResultMCPV0DistingueErrorConAgenteVivo(t *t
 	}
 }
 
+func TestCodexStackRunSupervisorErrorResultMCPV0ExponeReviewPayloadInvalidoTrasEntrega(t *testing.T) {
+	partial := CodexSupervisorResultV0{
+		StopReason: CodexSupervisorStopRuntimeErrorV0,
+		Ticks:      1,
+		Last: CodexSupervisorRuntimeSnapshotV0{
+			Status:     CodexSupervisorRuntimeFailedV0,
+			SessionRef: "run-ref-review-payload-invalid-001",
+			AgentRef:   "agent-ref-review-payload-invalid-001",
+			EvidenceRefs: []string{
+				"delivery-ref-review-payload-invalid-001",
+				"evidence-ref-review-gate-payload-compacted",
+			},
+		},
+	}
+
+	result := codexStackRunSupervisorErrorResultMCPV0(
+		orquestamcp.MCPRunSupervisorToolInputV0{RunRef: "run-ref-review-payload-invalid-001"},
+		partial,
+		orquestacoreworkflow.ReviewResultErrorV0{
+			Code:  orquestacoreworkflow.ErrReviewResultPayloadInvalidoV0,
+			Field: "review_result_ref",
+		},
+	)
+
+	if result.Estado != orquestamcp.MCPRunSupervisorEstadoErrorV0 ||
+		result.RunRef != "run-ref-review-payload-invalid-001" ||
+		len(result.Diagnostics) != 1 ||
+		result.Diagnostics[0].Code != "review_result_payload_invalid_after_delivery" ||
+		!strings.Contains(result.Diagnostics[0].Message, "retry_review_with_compact_payload") ||
+		!codexStackStringInSetForTestV0(result.Diagnostics[0].EvidenceRefs, "delivery-ref-review-payload-invalid-001") ||
+		!codexStackStringInSetForTestV0(result.Diagnostics[0].EvidenceRefs, "evidence-ref-review-result-payload-invalid") {
+		t.Fatalf("result=%+v", result)
+	}
+	if !codexStackStringInSetForTestV0(result.NextActions, "preserve_delivery_evidence") ||
+		!codexStackStringInSetForTestV0(result.NextActions, "retry_review_with_compact_payload") ||
+		!codexStackStringInSetForTestV0(result.NextActions, "do_not_relaunch_agent_for_review_payload_error") {
+		t.Fatalf("next_actions=%+v", result.NextActions)
+	}
+}
+
 func TestCodexStackRunSupervisorEvidenceDiagnosticsMCPV0ExponeStreamFDWarning(t *testing.T) {
 	diagnostics := codexStackRunSupervisorEvidenceDiagnosticsMCPV0(
 		CodexSupervisorRuntimeSnapshotV0{

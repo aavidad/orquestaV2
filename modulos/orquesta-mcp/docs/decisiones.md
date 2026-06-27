@@ -477,6 +477,22 @@ Estado: aceptada localmente.
 ```
 
 ```text
+Fecha: 2026-06-27
+Decision: La automejora de autoprogramacion ramifica sus `next_actions` segun
+la salida real de `prepare-run`.
+Motivo: si `prepare-run` devuelve `goal`/`goals` o `goal_specs[]`, recomendar
+`supervise_prepared_run_by_run_ref` reintroduce el loop legacy que Codex Goal
+debe sustituir.
+Impacto: con `goal` o `goals` recomienda `observe_autoprogramming_goal`; con
+`goal_specs[]` sin run lanzada recomienda `handoff_goal_specs_to_goal_backend`;
+solo mantiene `supervise_prepared_run_by_run_ref` para la rama legacy con
+`run_ref`.
+Contratos afectados: `orquesta.autoprogramming.self_improvement.propose.v0`,
+`orquesta.autoprogramming.prepare_run.v0`.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-06-25
 Decision: La observacion de goal-first de nueva app se expone como tool MCP y
 bridge REST propio: `orquesta.apps.observe_director_goal.v0` y

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestarails "orquesta/modulos/orquesta-rails"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
@@ -56,14 +57,18 @@ func codexStackRunSupervisorErrorResultMCPV0(
 	result.EvidenceRefs = compactStringsV0(partial.Last.EvidenceRefs)
 	liveDiagnostics := codexStackRunSupervisorLiveErrorDiagnosticsMCPV0(result.RunRef, partial, err)
 	evidenceDiagnostics := codexStackRunSupervisorEvidenceDiagnosticsMCPV0(partial.Last)
-	result.NextActions = codexStackRunSupervisorLiveErrorNextActionsMCPV0(partial)
+	reviewDiagnostics := codexStackRunSupervisorReviewResultErrorDiagnosticsMCPV0(result.RunRef, partial.Last, err)
+	result.NextActions = compactStringsV0(append(
+		codexStackRunSupervisorLiveErrorNextActionsMCPV0(partial),
+		codexStackRunSupervisorReviewResultErrorNextActionsMCPV0(err)...,
+	))
 	if diagnostics := codexStackRunSupervisorDiagnosticsMCPV0(partial.Last.Diagnostics); len(diagnostics) > 0 {
 		diagnostics = codexStackRunSupervisorDiagnosticsWithFallbackErrorV0(diagnostics, err)
-		result.Diagnostics = append(append(liveDiagnostics, evidenceDiagnostics...), diagnostics...)
+		result.Diagnostics = append(append(append(liveDiagnostics, evidenceDiagnostics...), reviewDiagnostics...), diagnostics...)
 		return result
 	}
-	if len(liveDiagnostics) > 0 || len(evidenceDiagnostics) > 0 {
-		result.Diagnostics = append(liveDiagnostics, evidenceDiagnostics...)
+	if len(liveDiagnostics) > 0 || len(evidenceDiagnostics) > 0 || len(reviewDiagnostics) > 0 {
+		result.Diagnostics = append(append(liveDiagnostics, evidenceDiagnostics...), reviewDiagnostics...)
 		return result
 	}
 	if len(result.EvidenceRefs) > 0 {
@@ -226,6 +231,55 @@ func codexStackRunSupervisorLiveErrorNextActionsMCPV0(
 		"wait_agents",
 		"retry_supervise",
 		"do_not_relaunch_same_run_ref_while_process_live",
+	}
+}
+
+func codexStackRunSupervisorReviewResultErrorDiagnosticsMCPV0(
+	runRef string,
+	snapshot CodexSupervisorRuntimeSnapshotV0,
+	err error,
+) []orquestamcp.MCPAutoprogrammingDiagnosticV0 {
+	var reviewErr orquestacoreworkflow.ReviewResultErrorV0
+	if !errors.As(err, &reviewErr) {
+		return nil
+	}
+	code := strings.TrimSpace(reviewErr.Code)
+	if code == "" {
+		code = orquestacoreworkflow.ErrReviewResultPayloadInvalidoV0
+	}
+	message := strings.Join(compactStringsV0([]string{
+		"review_result_error=" + codexStackRunSupervisorPublicDiagnosticErrorV0(code),
+		"field=" + codexStackRunSupervisorPublicDiagnosticErrorV0(reviewErr.Field),
+		"action=retry_review_with_compact_payload",
+	}), " ")
+	return []orquestamcp.MCPAutoprogrammingDiagnosticV0{{
+		Code:         "review_result_payload_invalid_after_delivery",
+		Scope:        codexStackRunSupervisorReviewResultErrorScopeMCPV0(runRef, snapshot),
+		Message:      message,
+		EvidenceRefs: compactStringsV0(append(snapshot.EvidenceRefs, "evidence-ref-review-result-payload-invalid")),
+	}}
+}
+
+func codexStackRunSupervisorReviewResultErrorScopeMCPV0(
+	runRef string,
+	snapshot CodexSupervisorRuntimeSnapshotV0,
+) string {
+	return strings.Join(compactStringsV0([]string{
+		"run:" + firstNonEmptyQueuedSourceV0(runRef, snapshot.SessionRef),
+		"agent:" + strings.TrimSpace(snapshot.AgentRef),
+		"process:" + strings.TrimSpace(snapshot.ProcessRef),
+	}), " ")
+}
+
+func codexStackRunSupervisorReviewResultErrorNextActionsMCPV0(err error) []string {
+	var reviewErr orquestacoreworkflow.ReviewResultErrorV0
+	if !errors.As(err, &reviewErr) {
+		return nil
+	}
+	return []string{
+		"preserve_delivery_evidence",
+		"retry_review_with_compact_payload",
+		"do_not_relaunch_agent_for_review_payload_error",
 	}
 }
 

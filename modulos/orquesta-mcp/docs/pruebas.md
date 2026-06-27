@@ -638,3 +638,18 @@ como tool opt-in, `POST /api/v0/autoprogramming/goal/observe` acepta solo POST,
 exige `run_ref`, delega en executor inyectado y devuelve la misma proyeccion
 compacta de goal/cierre que la ruta de app-director. Sin executor devuelve
 `mcp_transport_tool_unbound` por transporte.
+
+## Prueba automejora goal-first 2026-06-27
+
+Comando:
+
+```bash
+go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPAutoprogrammingSelfImprovement'
+```
+
+Evidencia esperada: automejora con `auto_prepare_run` conserva
+`supervise_prepared_run_by_run_ref` solo cuando `prepare-run` devuelve rama
+legacy con `run_ref`; si devuelve `goal`, recomienda
+`observe_autoprogramming_goal`; si devuelve `goal_specs[]`, recomienda
+`handoff_goal_specs_to_goal_backend`. No relanza supervisor legacy para
+goal-first.

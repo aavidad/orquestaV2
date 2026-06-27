@@ -52,6 +52,23 @@ func TestWebAutoprogrammingStatusViewModelV0AgregaColaYRunVivos(t *testing.T) {
 			RecommendedAction: " wait_for_quota_and_relaunch_idempotently ",
 			EvidenceRefs:      []string{" evidence-ref-provider-usage-limit-retry-after ", "evidence-ref-provider-usage-limit-retry-after"},
 		}},
+		Operator: &orquestamcp.MCPAutoprogrammingOperatorV0{
+			SafeActions: []orquestamcp.MCPAutoprogrammingSafeActionV0{{
+				Action:       " observe_goal ",
+				Scope:        " run ",
+				RunRef:       " run-ref-autop-status-web-001 ",
+				Method:       "POST",
+				Endpoint:     orquestamcp.MCPAutoprogrammingObserveGoalHTTPPathV0,
+				Reason:       " goal_first ",
+				RequiresPost: true,
+				Payload: map[string]any{
+					"run_ref":     " run-ref-autop-status-web-001 ",
+					"max_ticks":   4,
+					"local_path":  "/home/alberto/no-publicar",
+					"provider_id": "runtime-provider-no-publicar",
+				},
+			}},
+		},
 		Run: &orquestamcp.MCPDirectorStatsToolResultV0{
 			Estado: orquestamcp.MCPDirectorStatsEstadoOKV0,
 			RunRef: "run-ref-autop-status-web-001",
@@ -133,6 +150,18 @@ func TestWebAutoprogrammingStatusViewModelV0AgregaColaYRunVivos(t *testing.T) {
 		len(vm.StaleRunning[0].EvidenceRefs) != 1 ||
 		vm.StaleRunning[0].EvidenceRefs[0] != "evidence-ref-usage-limit-retry-after" {
 		t.Fatalf("stale_running=%+v", vm.StaleRunning)
+	}
+	if len(vm.SafeActions) != 1 ||
+		vm.SafeActions[0].Action != "observe_goal" ||
+		vm.SafeActions[0].Scope != "run" ||
+		vm.SafeActions[0].RunRef != "run-ref-autop-status-web-001" ||
+		vm.SafeActions[0].Endpoint != orquestamcp.MCPAutoprogrammingObserveGoalHTTPPathV0 ||
+		!vm.SafeActions[0].RequiresPost ||
+		vm.SafeActions[0].Payload["run_ref"] != "run-ref-autop-status-web-001" ||
+		vm.SafeActions[0].Payload["max_ticks"] != 4 ||
+		vm.SafeActions[0].Payload["local_path"] != nil ||
+		vm.SafeActions[0].Payload["provider_id"] != nil {
+		t.Fatalf("safe_actions=%+v", vm.SafeActions)
 	}
 	if len(vm.Runs) != 2 ||
 		vm.Runs[0].RunRef != "run-ref-autop-status-web-queued" ||

@@ -47,6 +47,7 @@ func autoprogrammingHTMLV0() string {
     .action-item.info { border-left-color:var(--accent); }
     .action-head { display:flex; justify-content:space-between; gap:10px; align-items:center; }
     .action-meta { display:flex; gap:6px; flex-wrap:wrap; color:var(--muted); font-size:12px; }
+    .action-payload { display:block; overflow:auto; padding:6px 8px; border:1px solid #2b3742; border-radius:6px; background:#090d11; color:var(--muted); font-size:12px; }
     .goal-list { display:grid; gap:6px; }
     .goal-item { display:flex; justify-content:space-between; align-items:center; gap:8px; width:100%; text-align:left; }
     .goal-item.active { border-color:var(--accent); background:#10212b; }
@@ -133,6 +134,10 @@ El cambio queda cubierto por tests</textarea></label>
           <h2>Acciones requeridas</h2>
           <div id="stale-running-list" class="action-list"></div>
         </section>
+        <section id="safe-actions-panel" class="action-list" hidden>
+          <h2>Acciones seguras</h2>
+          <div id="safe-actions-list" class="action-list"></div>
+        </section>
         <pre id="output">{}</pre>
       </aside>
     </section>
@@ -144,6 +149,8 @@ El cambio queda cubierto por tests</textarea></label>
     const statsLink = document.getElementById('stats-link');
     const stalePanel = document.getElementById('stale-running-panel');
     const staleList = document.getElementById('stale-running-list');
+    const safeActionsPanel = document.getElementById('safe-actions-panel');
+    const safeActionsList = document.getElementById('safe-actions-list');
     const queueHealthPanel = document.getElementById('queue-health-panel');
     const queueHealthGrid = document.getElementById('queue-health-grid');
     const superviseRunButton = document.getElementById('supervise-run');
@@ -182,6 +189,7 @@ El cambio queda cubierto por tests</textarea></label>
       renderGoal(value || {});
       renderQueueHealth((value || {}).queue_health || null);
       renderStaleRunning((value || {}).stale_running || []);
+      renderSafeActions((value || {}).safe_actions || (((value || {}).operator || {}).safe_actions) || []);
       updateSuperviseState();
     }
     function resultRunRef(value) {
@@ -325,6 +333,74 @@ El cambio queda cubierto por tests</textarea></label>
         row.append(head, meta, action);
         staleList.appendChild(row);
       });
+    }
+    function renderSafeActions(items) {
+      safeActionsList.textContent = '';
+      safeActionsPanel.hidden = !items || !items.length;
+      (items || []).slice(0, 8).forEach(item => {
+        const row = document.createElement('article');
+        row.className = 'action-item info';
+        const head = document.createElement('div');
+        head.className = 'action-head';
+        const code = document.createElement('strong');
+        code.textContent = item.action || 'accion';
+        const status = document.createElement('span');
+        status.className = 'pill warn';
+        status.textContent = [item.method || 'POST', item.scope || 'run'].filter(Boolean).join(' ');
+        head.append(code, status);
+        const meta = document.createElement('div');
+        meta.className = 'action-meta';
+        [item.endpoint, item.run_ref, item.reason].filter(Boolean).forEach(value => {
+          const span = document.createElement('span');
+          span.textContent = value;
+          meta.appendChild(span);
+        });
+        const payload = document.createElement('code');
+        payload.className = 'action-payload';
+        payload.textContent = compactActionPayload(item);
+        const controls = document.createElement('div');
+        controls.className = 'actions';
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = 'Ejecutar';
+        button.disabled = !safeActionExecutable(item);
+        button.title = button.disabled
+          ? 'Accion informativa o sin payload suficiente.'
+          : 'Ejecuta la accion segura indicada por la API.';
+        button.addEventListener('click', async () => {
+          const data = await executeSafeAction(item);
+          setResult('safe-action', data);
+        });
+        controls.appendChild(button);
+        row.append(head, meta, payload, controls);
+        safeActionsList.appendChild(row);
+      });
+    }
+    function compactActionPayload(item) {
+      const payload = Object.assign({}, item && item.payload ? item.payload : {});
+      if (item && item.action === 'observe_goal' && item.run_ref && !payload.run_ref) {
+        payload.run_ref = item.run_ref;
+      }
+      if (item && item.endpoint === '/api/v0/autoprogramming/goal/observe') {
+        payload.requested_by = payload.requested_by || 'orquesta-web';
+      }
+      return Object.keys(payload).length ? JSON.stringify(payload) : '{}';
+    }
+    function safeActionExecutable(item) {
+      if (!item || item.method !== 'POST' || !item.endpoint) return false;
+      if (item.action === 'observe_goal') return Boolean(item.run_ref || currentRunRef);
+      return Boolean(item.payload && Object.keys(item.payload).length);
+    }
+    async function executeSafeAction(item) {
+      const id = requestId('web-safe-action');
+      const payload = Object.assign({}, item.payload || {});
+      if (item.action === 'observe_goal') {
+        payload.run_ref = payload.run_ref || item.run_ref || currentRunRef;
+        payload.requested_by = payload.requested_by || 'orquesta-web';
+      }
+      payload.request_id = payload.request_id || id;
+      payload.correlation_id = payload.correlation_id || id;
+      return postJSON(item.endpoint, payload);
     }
     function renderQueueHealth(health) {
       queueHealthGrid.textContent = '';

@@ -34,6 +34,23 @@ Estado: aceptada localmente.
 ```
 
 ```text
+Fecha: 2026-06-27
+Decision: `/autoprogramming` muestra `safe_actions` como panel operativo
+dedicado.
+Motivo: `orquesta.autoprogramming.status.v0` ya calcula acciones seguras
+segun cola, run y modo goal-first, pero la web obligaba al operador a leer el
+JSON crudo. Eso ocultaba acciones como `observe_goal` y `supervise` acotado.
+Impacto: el view-model conserva `safe_actions` saneadas y el HTML renderiza
+metodo, endpoint, scope, run y payload compacto. La ejecucion solo se habilita
+para POST con endpoint permitido y payload suficiente, sin inventar acciones ni
+leer stores/runtime desde la web.
+Contratos afectados: `/autoprogramming`,
+`WebAutoprogrammingStatusViewModelV0`,
+`orquesta.autoprogramming.status.v0`.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-06-25
 Decision: El panel goal-first de `/nueva-app` observa automaticamente el goal
 con polling acotado, manteniendo el refresco manual.

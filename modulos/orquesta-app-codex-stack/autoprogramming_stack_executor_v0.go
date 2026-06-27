@@ -39,6 +39,7 @@ func PrepareAutoprogrammingRunFromStackV0(
 	if err := validateAutoprogrammingBridgePortsV0(stack.Ports); err != nil {
 		return AutoprogrammingBridgeResultV0{}, err
 	}
+	request = autoprogrammingBridgeRequestWithGoalFirstBackendMarkersV0(request, stack.Ports)
 	work := orquestaautoprogramming.BuildAutoprogrammingProgrammableWorkV0(request.Request)
 	if work.Accepted {
 		prepared, issues := autoprogrammingPrepareWorktreeIsolationV0(ctx, stack.Codex.ProjectWorkDir, work.Work)

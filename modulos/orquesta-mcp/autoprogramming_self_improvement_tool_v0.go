@@ -157,7 +157,23 @@ func (executor MCPAutoprogrammingSelfImprovementToolExecutorV0) maybePrepareSelf
 		))
 		return
 	}
-	out.NextActions = compactStringsMCPV0(append(out.NextActions,
-		"supervise_prepared_run_by_run_ref",
+	out.NextActions = compactStringsMCPV0(append(
+		out.NextActions,
+		selfImprovementPreparedRunNextActionsMCPV0(prepared)...,
 	))
+}
+
+func selfImprovementPreparedRunNextActionsMCPV0(
+	prepared MCPAutoprogrammingPrepareRunToolResultV0,
+) []string {
+	if prepared.Goal != nil || len(prepared.Goals) > 0 {
+		return []string{"observe_autoprogramming_goal"}
+	}
+	if len(prepared.GoalSpecs) > 0 {
+		return []string{"handoff_goal_specs_to_goal_backend"}
+	}
+	if strings.TrimSpace(prepared.RunRef) != "" {
+		return []string{"supervise_prepared_run_by_run_ref"}
+	}
+	return []string{"inspect_autoprogramming_prepare_run_result"}
 }

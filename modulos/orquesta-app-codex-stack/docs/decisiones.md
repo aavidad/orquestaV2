@@ -205,6 +205,36 @@ Estado: aceptada.
 
 ```text
 Fecha: 2026-06-27
+Decision: El executor real de `prepare-run` del stack aplica el default
+goal-first cuando el backend Goal esta completo.
+Motivo: con Codex Goal disponible, Orquesta debe adelgazar el loop y no caer a
+`legacy_loop_compatible` solo porque la request publica no traiga marcadores.
+El helper historico ya anadia esos marcadores, pero la ruta `FromStack` los
+compilaba sin aplicarlos.
+Impacto: `PrepareAutoprogrammingRunFromStackV0` llama a
+`autoprogrammingBridgeRequestWithGoalFirstBackendMarkersV0` antes de
+`BuildAutoprogrammingProgrammableWorkV0`. Con backend completo lanza Goal,
+persiste `GoalWorkStateV0`, no materializa `WorkflowTaskV0` legacy y no encola
+la run en la cola legacy.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-06-27
+Decision: Un error de `ReviewResultV0` por `payload_invalido` se proyecta como
+diagnostico publico recuperable.
+Motivo: una entrega valida no debe quedar opaca como `runtime_error` si el
+fallo ocurre al registrar la review. La accion correcta es conservar evidencia
+de entrega y repetir la review con payload compacto, no relanzar el agente.
+Impacto: `runs/supervise` expone
+`review_result_payload_invalid_after_delivery` con evidencia y next actions
+`preserve_delivery_evidence`, `retry_review_with_compact_payload` y
+`do_not_relaunch_agent_for_review_payload_error`.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-06-27
 Decision: Autoprogramacion goal-first lanza batch como N runs derivados, no
 como loop legacy ni como run agregado.
 Motivo: con Codex Goal el loop lo hace el runtime Goal; Orquesta debe compilar
