@@ -1,6 +1,20 @@
 # Decisiones: orquesta-orchestration-core
 
 ```text
+Fecha: 2026-06-27
+Decision: `DirectorAgentProcessStatsV0` puede publicar `process.status`
+neutral cuando la composicion inyecta snapshot de proceso.
+Motivo: `autoprogramming/status` no debe confundir un `process_ref` durable con
+un proceso vivo. El registro es identidad/control; la liveness real viene de
+`ProcessRuntimeIdentitySnapshotPortV0`.
+Impacto: `BuildDirectorRunStatsWithProcessSnapshotsV0` rellena `running`,
+`stopping`, `stopped` o `unknown` sin exponer PID, comando, rutas, HOME,
+provider, modelo ni logs. El builder historico con solo registry conserva
+compatibilidad; los adaptadores pueden decidir si necesitan liveness verificada.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-27
 Decision: El core distingue fuente de uso no configurada de cuota no observable.
 Motivo: T209 necesitaba que stats/web no mostrasen `not_configured` cuando una

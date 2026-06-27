@@ -16,6 +16,9 @@ Cobertura:
   `agent_usage_source_not_configured`;
 - con observaciones saneadas, aplica uso por agente y `UsageSummary`;
 - ignora observaciones de agentes fuera del run;
+- `BuildDirectorRunStatsWithProcessSnapshotsV0` publica `process.status`
+  neutral desde un snapshot inyectado;
+- un snapshot `stopped` no se usa como progreso vivo por registro de proceso;
 - el core no importa runtime Codex, web, MCP, DB, HOME ni proveedor.
 
 ## ORCH-CORE-DIR-014

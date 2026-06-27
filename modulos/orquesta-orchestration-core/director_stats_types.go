@@ -26,6 +26,13 @@ const (
 )
 
 const (
+	DirectorAgentProcessStatusRunningV0  = "running"
+	DirectorAgentProcessStatusStoppingV0 = "stopping"
+	DirectorAgentProcessStatusStoppedV0  = "stopped"
+	DirectorAgentProcessStatusUnknownV0  = "unknown"
+)
+
+const (
 	DirectorAgentStopReasonSourceStopRequestV0 = "agent_stop_request"
 	DirectorAgentStopReasonSourceAssessmentV0  = "agent_assessment"
 )
@@ -212,6 +219,7 @@ type DirectorAgentProcessStatsV0 struct {
 	SessionRef   string   `json:"session_ref,omitempty"`
 	LaunchRef    string   `json:"launch_ref,omitempty"`
 	ReadinessRef string   `json:"readiness_ref,omitempty"`
+	Status       string   `json:"status,omitempty"`
 	EvidenceRefs []string `json:"evidence_refs,omitempty"`
 }
 

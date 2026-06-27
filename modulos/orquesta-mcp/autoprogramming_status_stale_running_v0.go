@@ -81,6 +81,15 @@ func mcpAutoprogrammingStaleRunningActionForCandidateV0(
 			return MCPAutoprogrammingActionableRunV0{}, false
 		}
 		if observed != nil && observed.Stats != nil {
+			if mcpAutoprogrammingRunStatsHasUnknownProcessSignalV0(*observed.Stats) {
+				return mcpAutoprogrammingActionableRunFromCandidateV0(
+					candidate,
+					mcpAutoprogrammingActionRunningWithoutRecentStatsV0,
+					"info",
+					"queue_candidate_running_requires_liveness_confirmation",
+					"observe_run_ref_with_process_refs_before_reconcile",
+				), true
+			}
 			return mcpAutoprogrammingActionableRunFromCandidateV0(
 				candidate,
 				mcpAutoprogrammingActionRunningStaleNoProcessV0,

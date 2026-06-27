@@ -100,6 +100,47 @@ func TestMCPDirectorStatsToolExecutorV0DevuelveStatsDeRunStore(t *testing.T) {
 	assertTransportPayloadSaneadoMCPTestV0(t, result, 13000)
 }
 
+func TestMCPDirectorStatsToolExecutorV0PublicaStatusDeProcesoDesdeSnapshot(t *testing.T) {
+	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-process-status-001")
+	processRef := "process-ref-mcp-stats-process-status-001"
+	registry := orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
+	if err := registry.RecordAgentProcessV0(context.Background(), orquestacionnucleoapp.AgentProcessRecordV0{
+		RunID:          run.RunID,
+		AgentRequestID: "agent-ref-stats-001",
+		ProcessRef:     processRef,
+		SessionRef:     "session-ref-mcp-stats-process-status-001",
+		LaunchRef:      "launch-ref-mcp-stats-process-status-001",
+		ReadinessRef:   "readiness-ref-mcp-stats-process-status-001",
+	}); err != nil {
+		t.Fatalf("record process: %v", err)
+	}
+
+	result, err := (MCPDirectorStatsToolExecutorV0{
+		RunStore:        orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+		ProcessRegistry: registry,
+		ProcessSnapshot: mcpDirectorStatsSnapshotSourceForTestV0{
+			snapshots: map[string]orquestaruntime.ProcessRuntimeSnapshotV0{
+				processRef: {
+					ProcessRef: processRef,
+					Status:     orquestaruntime.ProcessRuntimeRunningV0,
+				},
+			},
+		},
+	}).Execute(context.Background(), MCPDirectorStatsToolInputV0{
+		RunRef:             run.RunID,
+		IncludeProcessRefs: true,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	agent := mcpDirectorStatsAgentForTestV0(t, *result.Stats, "agent-ref-stats-001")
+	if agent.Process == nil ||
+		agent.Process.Status != orquestacionnucleoapp.DirectorAgentProcessStatusRunningV0 ||
+		agent.Process.ProcessRef != processRef {
+		t.Fatalf("agent=%+v", agent)
+	}
+}
+
 func TestMCPDirectorStatsToolExecutorV0ExponeGoalFirstSiExisteEstado(t *testing.T) {
 	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-goal-001")
 
@@ -522,4 +563,14 @@ func TestMCPDirectorStatsToolExecutorV0DecisionContextCompletoParaDirector(t *te
 		contextAgent.StopReasonSource != orquestacionnucleoapp.DirectorAgentStopReasonSourceStopRequestV0 {
 		t.Fatalf("context agent stop reason=%+v", contextAgent)
 	}
+}
+
+type mcpDirectorStatsSnapshotSourceForTestV0 struct {
+	snapshots map[string]orquestaruntime.ProcessRuntimeSnapshotV0
+}
+
+func (source mcpDirectorStatsSnapshotSourceForTestV0) SnapshotV0(
+	processRef string,
+) (orquestaruntime.ProcessRuntimeSnapshotV0, error) {
+	return source.snapshots[strings.TrimSpace(processRef)], nil
 }

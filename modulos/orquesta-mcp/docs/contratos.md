@@ -1417,7 +1417,8 @@ Campos:
     queue_health?: separa `running_live`, `agents_live`,
       `running_without_recent_stats` y `running_stale_no_process`;
       `running_live` cuenta runs con liveness probado, `agents_live` cuenta
-      agentes vivos observados por progreso o refs de proceso, y
+      agentes vivos observados por progreso o por `process.status`
+      `running`/`stopping`, y
       `running_stale` agregado solo cuenta stale verificable sin proceso vivo
     stale_running?: acciones publicas; una run `running` sin liveness probado se
       expone como `running_without_recent_stats`, no como stale terminal
@@ -1444,8 +1445,9 @@ Invariantes:
     `/api/v0/autoprogramming/goal/observe` en vez de empujar supervision legacy
     de esa run.
   - Para runs `running` visibles en cola puede consultar `director.stats` de
-    forma acotada y con `include_process_refs`; si no hay liveness verificable,
-    no inventa `running_stale_no_process`.
+    forma acotada y con `include_process_refs`; si solo hay refs de proceso sin
+    `process.status` verificado, publica `running_without_recent_stats`; solo
+    publica `running_stale_no_process` cuando no hay proceso vivo verificado.
   - Si `director.stats` informa issues de progreso, los conserva como
     diagnosticos publicos accionables en vez de convertirlos en fallo terminal.
   - El bridge HTTP puede transportar consejo del operador como observacion no

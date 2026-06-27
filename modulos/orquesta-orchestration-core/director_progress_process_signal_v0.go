@@ -41,7 +41,7 @@ func directorRegisteredProcessLiveAgentsV0(
 	for _, agent := range agents {
 		agentRef := strings.TrimSpace(agent.AgentRequestID)
 		if agentRef == "" || !agent.ControlRegistered ||
-			!directorRegisteredProcessAgentIsLiveV0(agent.Status) {
+			!directorRegisteredProcessAgentIsLiveV0(agent) {
 			continue
 		}
 		live[agentRef] = true
@@ -49,16 +49,19 @@ func directorRegisteredProcessLiveAgentsV0(
 	return live
 }
 
-func directorRegisteredProcessAgentIsLiveV0(status string) bool {
-	switch strings.TrimSpace(status) {
+func directorRegisteredProcessAgentIsLiveV0(agent DirectorAgentStatsV0) bool {
+	switch strings.TrimSpace(agent.Status) {
 	case DirectorAgentStatusCompletedV0,
 		DirectorAgentStatusFailedV0,
 		DirectorAgentStatusLostV0,
 		DirectorAgentStatusStoppedV0:
 		return false
-	default:
-		return true
 	}
+	if agent.Process != nil &&
+		strings.TrimSpace(agent.Process.Status) == DirectorAgentProcessStatusStoppedV0 {
+		return false
+	}
+	return true
 }
 
 func directorProgressTaskIndexByAgentV0(

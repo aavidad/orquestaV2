@@ -542,7 +542,10 @@ Evidencia adicional 2026-06-26: `autoprogramming/status` separa una run
 stale sin proceso vivo (`running_stale_no_process`) y consulta
 `director.stats` de forma acotada para detectar procesos vivos antes de
 publicar `running_stale`. `queue_health.agents_live` publica ademas cuantos
-agentes vivos se han observado por progreso o refs de proceso.
+agentes vivos se han observado por progreso o por `process.status`
+`running`/`stopping`. Desde 2026-06-27, un `process_ref` sin status verificado
+queda como `running_without_recent_stats`, no como vivo ni como stale terminal;
+un `process.status=stopped` si permite publicar `running_stale_no_process`.
 `autoprogramming/supervise` devuelve `202 accepted` con `operation_ref` y
 diagnostico si el executor sigue vivo mas alla de la ventana HTTP, en vez de
 dejar al cliente colgado.

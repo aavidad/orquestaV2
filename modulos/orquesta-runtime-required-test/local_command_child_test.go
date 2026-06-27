@@ -21,6 +21,10 @@ func TestMain(m *testing.M) {
 		recordRequiredTestChildInvocationV0()
 		fmt.Fprintln(os.Stderr, "required test failed")
 		os.Exit(7)
+	case "empty_scan":
+		recordRequiredTestChildInvocationV0()
+		fmt.Fprintln(os.Stdout, `{"status":"pass","files_scanned":0,"finding_count":0}`)
+		os.Exit(0)
 	case "sensitive":
 		recordRequiredTestChildInvocationV0()
 		fmt.Fprintln(os.Stdout, `access_token=token-real Authorization: Bearer token-real /home/alberto/proyecto`)

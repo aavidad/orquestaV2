@@ -497,6 +497,12 @@ progreso.
   `closed`, mas causas compactas (`contratos`, `programacion_entregas`,
   `revision_final`, `validacion_final`, `fase_cierre`, `run_blockers`). Es una
   proyeccion generica derivada solo del run; no importa factory, DB ni runtime.
+- `BuildDirectorRunStatsWithProcessSnapshotsV0` conserva el registro neutral de
+  procesos por `AgentProcessRegistryPortV0` y, si la composicion inyecta
+  `ProcessRuntimeIdentitySnapshotPortV0`, publica `process.status` compacto
+  (`running`, `stopping`, `stopped` o `unknown`). No expone PID, comandos,
+  rutas, HOME, proveedor ni logs. Un proceso con snapshot `stopped` no se usa
+  como progreso vivo por registro.
 
 Adaptador exterior disponible fuera del nucleo:
 

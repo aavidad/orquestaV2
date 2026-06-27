@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func BuildDirectorRunStatsV0(
@@ -37,6 +38,15 @@ func BuildDirectorRunStatsWithProcessRegistryV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 	registry AgentProcessRegistryPortV0,
 ) DirectorRunStatsV0 {
+	return BuildDirectorRunStatsWithProcessSnapshotsV0(ctx, run, registry, nil)
+}
+
+func BuildDirectorRunStatsWithProcessSnapshotsV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	registry AgentProcessRegistryPortV0,
+	snapshotSource ProcessRuntimeIdentitySnapshotPortV0,
+) DirectorRunStatsV0 {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -57,10 +67,11 @@ func BuildDirectorRunStatsWithProcessRegistryV0(
 			continue
 		}
 		process := directorProcessStatsFromRecordV0(record)
+		enrichDirectorProcessStatsWithSnapshotV0(ctx, &process, snapshotSource)
 		stats.Agents[index].Process = &process
 		stats.Agents[index].ControlRegistered = true
 	}
-	appendDirectorUnreflectedProcessAgentsV0(ctx, &stats, registry)
+	appendDirectorUnreflectedProcessAgentsV0(ctx, &stats, registry, snapshotSource)
 	refreshDirectorControlCountsV0(&stats, true)
 	applyDirectorRegisteredProcessProgressV0(&stats)
 	return stats
@@ -70,6 +81,7 @@ func appendDirectorUnreflectedProcessAgentsV0(
 	ctx context.Context,
 	stats *DirectorRunStatsV0,
 	registry AgentProcessRegistryPortV0,
+	snapshotSource ProcessRuntimeIdentitySnapshotPortV0,
 ) {
 	if stats == nil || registry == nil {
 		return
@@ -97,6 +109,7 @@ func appendDirectorUnreflectedProcessAgentsV0(
 			continue
 		}
 		process := directorProcessStatsFromRecordV0(record)
+		enrichDirectorProcessStatsWithSnapshotV0(ctx, &process, snapshotSource)
 		stats.Agents = append(stats.Agents, DirectorAgentStatsV0{
 			AgentRequestID:    agentRef,
 			Status:            DirectorAgentStatusRunningV0,
@@ -109,6 +122,39 @@ func appendDirectorUnreflectedProcessAgentsV0(
 			Process:           &process,
 		})
 		known[agentRef] = true
+	}
+}
+
+func enrichDirectorProcessStatsWithSnapshotV0(
+	ctx context.Context,
+	process *DirectorAgentProcessStatsV0,
+	snapshotSource ProcessRuntimeIdentitySnapshotPortV0,
+) {
+	if process == nil || snapshotSource == nil {
+		return
+	}
+	if err := ctx.Err(); err != nil {
+		process.Status = DirectorAgentProcessStatusUnknownV0
+		return
+	}
+	processRef := strings.TrimSpace(process.ProcessRef)
+	if processRef == "" {
+		return
+	}
+	snapshot, err := snapshotSource.SnapshotV0(processRef)
+	if err != nil || strings.TrimSpace(snapshot.ProcessRef) != processRef {
+		process.Status = DirectorAgentProcessStatusUnknownV0
+		return
+	}
+	switch snapshot.Status {
+	case orquestaruntime.ProcessRuntimeRunningV0:
+		process.Status = DirectorAgentProcessStatusRunningV0
+	case orquestaruntime.ProcessRuntimeStoppingV0:
+		process.Status = DirectorAgentProcessStatusStoppingV0
+	case orquestaruntime.ProcessRuntimeStoppedV0:
+		process.Status = DirectorAgentProcessStatusStoppedV0
+	default:
+		process.Status = DirectorAgentProcessStatusUnknownV0
 	}
 }
 
@@ -149,8 +195,41 @@ func BuildDirectorRunStatsWithTelemetryPortsV0(
 	request DirectorProgressSourceRequestV0,
 ) DirectorRunStatsV0 {
 	stats := BuildDirectorRunStatsWithPortsV0(ctx, run, registry, progressSource, request)
+	return applyDirectorRunStatsUsageSourceV0(ctx, run, &stats, usageSource, request)
+}
+
+func BuildDirectorRunStatsWithTelemetryPortsAndProcessSnapshotsV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	registry AgentProcessRegistryPortV0,
+	snapshotSource ProcessRuntimeIdentitySnapshotPortV0,
+	progressSource AgentProgressObservationProviderPortV0,
+	usageSource AgentUsageStatsProviderPortV0,
+	request DirectorProgressSourceRequestV0,
+) DirectorRunStatsV0 {
+	stats := BuildDirectorRunStatsWithProcessSnapshotsV0(ctx, run, registry, snapshotSource)
+	observations, issues := loadDirectorProgressObservationsV0(
+		ctx,
+		run,
+		progressSource,
+		request,
+	)
+	ApplyDirectorProgressObservationsV0(&stats, observations, issues)
+	return applyDirectorRunStatsUsageSourceV0(ctx, run, &stats, usageSource, request)
+}
+
+func applyDirectorRunStatsUsageSourceV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	stats *DirectorRunStatsV0,
+	usageSource AgentUsageStatsProviderPortV0,
+	request DirectorProgressSourceRequestV0,
+) DirectorRunStatsV0 {
+	if stats == nil {
+		return DirectorRunStatsV0{}
+	}
 	if !request.IncludeAgentUsage {
-		return stats
+		return *stats
 	}
 	if usageSource == nil {
 		stats.Progress.Issues = append(stats.Progress.Issues, DirectorProgressIssueV0{
@@ -158,7 +237,7 @@ func BuildDirectorRunStatsWithTelemetryPortsV0(
 			Field:   "agent_usage_source",
 			Message: "agent_usage_source_not_configured",
 		})
-		return stats
+		return *stats
 	}
 	usage, err := usageSource.BuildAgentUsageStatsV0(ctx, AgentUsageStatsRequestV0{
 		Run:           run,
@@ -171,10 +250,10 @@ func BuildDirectorRunStatsWithTelemetryPortsV0(
 			Field:   "agent_usage_source",
 			Message: "agent_usage_source_error",
 		})
-		return stats
+		return *stats
 	}
-	ApplyDirectorAgentUsageStatsV0(&stats, usage)
-	return stats
+	ApplyDirectorAgentUsageStatsV0(stats, usage)
+	return *stats
 }
 
 func BuildAutonomousDirectorLoopStatsV0(

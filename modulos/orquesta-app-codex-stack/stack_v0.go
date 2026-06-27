@@ -92,6 +92,7 @@ func buildStackMCPTransportBindingsV0(
 			RunStore:          config.Stores.RunStore,
 			RunControl:        config.Stores.RunControl,
 			ProcessRegistry:   config.Stores.ProcessRegistry,
+			ProcessSnapshot:   config.Codex.SnapshotSource,
 			ProgressSource:    statsProgressSourceV0(config),
 			AgentUsageSource:  agentUsageSourceV0(config),
 			ExternalJobSource: externalJobStatsSourceV0(config),

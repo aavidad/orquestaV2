@@ -110,6 +110,7 @@ type MCPDirectorStatsToolExecutorV0 struct {
 	RunStore          orquestacionnucleoapp.RunStorePortV0
 	RunControl        orquestaruncontrol.RunControlReaderPortV0
 	ProcessRegistry   orquestacionnucleoapp.AgentProcessRegistryPortV0
+	ProcessSnapshot   orquestacionnucleoapp.ProcessRuntimeIdentitySnapshotPortV0
 	ProgressSource    orquestacionnucleoapp.AgentProgressObservationProviderPortV0
 	AgentUsageSource  orquestacionnucleoapp.AgentUsageStatsProviderPortV0
 	ExternalJobSource MCPDirectorExternalJobStatsSourcePortV0
@@ -197,10 +198,11 @@ func (executor MCPDirectorStatsToolExecutorV0) Execute(
 		if input.IncludeAgentUsage {
 			usageSource = executor.AgentUsageSource
 		}
-		stats = orquestacionnucleoapp.BuildDirectorRunStatsWithTelemetryPortsV0(
+		stats = orquestacionnucleoapp.BuildDirectorRunStatsWithTelemetryPortsAndProcessSnapshotsV0(
 			ctx,
 			run,
 			executor.ProcessRegistry,
+			executor.ProcessSnapshot,
 			progressSource,
 			usageSource,
 			orquestacionnucleoapp.DirectorProgressSourceRequestV0{

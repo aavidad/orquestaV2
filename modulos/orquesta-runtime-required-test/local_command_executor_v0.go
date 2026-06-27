@@ -76,6 +76,11 @@ func (executor LocalCommandExecutorV0) RunRequiredTestCommandV0(
 		status = orquestacionnucleoapp.RequiredTestEvidenceStatusFailedV0
 		output = localCommandOutputWithDiagnosticV0(output, "required_test_go_no_tests_executed")
 	}
+	if status == orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0 &&
+		localCommandValidationPassedWithoutScannedFilesV0(output.String()) {
+		status = orquestacionnucleoapp.RequiredTestEvidenceStatusFailedV0
+		output = localCommandOutputWithDiagnosticV0(output, "required_test_validation_empty_scan")
+	}
 	ref, status, err := writeOutputArtifactV0(normalized, request, status, output)
 	if err != nil {
 		return orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}, err
@@ -218,6 +223,23 @@ func localCommandGoTestWithoutExecutedTestsV0(tokens []string, output string) bo
 		}
 	}
 	return seenNoTests && !seenExecutedTests
+}
+
+func localCommandValidationPassedWithoutScannedFilesV0(output string) bool {
+	compact := strings.NewReplacer(" ", "", "\t", "", "\r", "").Replace(strings.ToLower(output))
+	if compact == "" {
+		return false
+	}
+	hasPassingValidation := strings.Contains(compact, `"status":"pass"`) ||
+		strings.Contains(compact, `"status":"passed"`) ||
+		strings.Contains(compact, "status:pass") ||
+		strings.Contains(compact, "status:passed") ||
+		strings.Contains(compact, "status=pass") ||
+		strings.Contains(compact, "status=passed")
+	hasEmptyScan := strings.Contains(compact, `"files_scanned":0`) ||
+		strings.Contains(compact, "files_scanned:0") ||
+		strings.Contains(compact, "files_scanned=0")
+	return hasPassingValidation && hasEmptyScan
 }
 
 func localCommandOutputWithDiagnosticV0(output outputBufferV0, message string) outputBufferV0 {

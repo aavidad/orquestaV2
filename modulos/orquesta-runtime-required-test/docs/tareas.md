@@ -25,6 +25,9 @@ Prueba integrada local:
   guarda `RequiredTestEvidenceV0` causal con artefacto relativo.
 - `TestLocalCommandExecutorV0NoHeredaEntornoPadre` prueba que el proceso de test
   requerido no recibe variables del entorno padre cuando `Env` esta vacio.
+- `TestLocalCommandExecutorV0ValidacionSinFicherosEscaneadosEsFailed` prueba que
+  un validador que sale con codigo cero pero reporta `status=pass` y
+  `files_scanned=0` no se acepta como evidencia de cierre.
 
 Pendiente:
 

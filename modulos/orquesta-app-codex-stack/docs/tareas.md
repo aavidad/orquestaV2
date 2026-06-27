@@ -1,5 +1,28 @@
 # Tareas: orquesta-app-codex-stack
 
+## APP-CODEX-STACK-046
+
+Objetivo: que `autoprogramming/status` no marque `running_stale` cuando hay
+procesos Codex vivos ni marque vivo un `process_ref` antiguo.
+
+Estado: hecho local.
+
+Write-set aplicado:
+
+- `orquesta.director.stats.v0` recibe `ProcessSnapshot` desde
+  `config.Codex.SnapshotSource`;
+- el contrato neutral `DirectorAgentProcessStatsV0` publica `process.status`
+  cuando el snapshot existe;
+- `autoprogramming/status` solo cuenta liveness por progreso reciente o por
+  `process.status=running|stopping`;
+- refs de proceso sin status verificado quedan como
+  `running_without_recent_stats`;
+- `process.status=stopped` queda disponible para `running_stale_no_process`.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack`
+
 ## APP-CODEX-STACK-045
 
 Objetivo: no declarar una run parada mientras queden procesos Codex sin

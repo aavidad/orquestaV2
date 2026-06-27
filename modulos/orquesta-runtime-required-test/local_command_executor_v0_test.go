@@ -51,6 +51,25 @@ func TestLocalCommandExecutorV0NonZeroEsEvidenciaFailed(t *testing.T) {
 	}
 }
 
+func TestLocalCommandExecutorV0ValidacionSinFicherosEscaneadosEsFailed(t *testing.T) {
+	outputDir := t.TempDir()
+	executor := localCommandExecutorForTestV0(t, outputDir, "empty_scan")
+
+	result, err := executor.RunRequiredTestCommandV0(context.Background(), commandRequestForTestV0("orquesta-test-bin"))
+	if err != nil {
+		t.Fatalf("RunRequiredTestCommandV0: %v", err)
+	}
+	if result.Status != orquestacionnucleoapp.RequiredTestEvidenceStatusFailedV0 || len(result.EvidenceRefs) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	content := outputArtifactForTestV0(t, outputDir, result.EvidenceRefs[0])
+	if !strings.Contains(content, `"files_scanned":0`) ||
+		!strings.Contains(content, "required_test_validation_empty_scan") ||
+		!strings.Contains(content, "status=failed") {
+		t.Fatalf("artifact content=%q", content)
+	}
+}
+
 func TestLocalCommandExecutorV0RechazaShellYSintaxisDeShell(t *testing.T) {
 	outputDir := t.TempDir()
 	executor := localCommandExecutorForTestV0(t, outputDir, "pass")

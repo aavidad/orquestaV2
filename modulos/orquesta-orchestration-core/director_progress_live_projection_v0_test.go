@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func TestBuildDirectorRunStatsV0CuentaTrabajoVivoComoProgresoMinimo(t *testing.T) {
@@ -78,6 +79,92 @@ func TestBuildDirectorRunStatsWithProcessRegistryV0UsaProcesoComoSenalParcial(t 
 		task.ProgressStatus != DirectorTaskProgressProcessRegisteredV0 ||
 		task.AgentRequestID != agentRef {
 		t.Fatalf("task=%+v", task)
+	}
+}
+
+func TestBuildDirectorRunStatsWithProcessSnapshotsV0PublicaStatusDeProceso(t *testing.T) {
+	taskRef := "task-ref-live-process-status-001"
+	agentRef := WorkflowTaskAgentRequestRefV0(taskRef)
+	processRef := "process-ref-live-process-status-001"
+	run := mustActiveProgrammingRunV0(t, "run-nucleo-director-live-process-status-001")
+	run.Tasks = []string{taskRef}
+	run.Agents = []string{agentRef}
+	run.StartedAgents = []string{agentRef}
+	registry := NewInMemoryAgentProcessRegistryV0()
+	if err := registry.RecordAgentProcessV0(context.Background(), AgentProcessRecordV0{
+		RunID:          run.RunID,
+		AgentRequestID: agentRef,
+		ProcessRef:     processRef,
+		SessionRef:     "session-ref-live-process-status-001",
+		LaunchRef:      "launch-ref-live-process-status-001",
+		ReadinessRef:   "readiness-ref-live-process-status-001",
+	}); err != nil {
+		t.Fatalf("record process: %v", err)
+	}
+
+	stats := BuildDirectorRunStatsWithProcessSnapshotsV0(
+		context.Background(),
+		run,
+		registry,
+		liveProcessSnapshotSourceForTestV0{
+			snapshots: map[string]orquestaruntime.ProcessRuntimeSnapshotV0{
+				processRef: {
+					ProcessRef: processRef,
+					Status:     orquestaruntime.ProcessRuntimeRunningV0,
+				},
+			},
+		},
+	)
+
+	agent := findDirectorAgentStatsForTestV0(t, stats, agentRef)
+	if agent.Process == nil ||
+		agent.Process.Status != DirectorAgentProcessStatusRunningV0 ||
+		agent.Process.ProcessRef != processRef {
+		t.Fatalf("agent=%+v", agent)
+	}
+}
+
+func TestBuildDirectorRunStatsWithProcessSnapshotsV0NoUsaProcesoParadoComoProgreso(t *testing.T) {
+	taskRef := "task-ref-stopped-process-status-001"
+	agentRef := WorkflowTaskAgentRequestRefV0(taskRef)
+	processRef := "process-ref-stopped-process-status-001"
+	run := mustActiveProgrammingRunV0(t, "run-nucleo-director-stopped-process-status-001")
+	run.Tasks = []string{taskRef}
+	run.Agents = []string{agentRef}
+	run.StartedAgents = []string{agentRef}
+	registry := NewInMemoryAgentProcessRegistryV0()
+	if err := registry.RecordAgentProcessV0(context.Background(), AgentProcessRecordV0{
+		RunID:          run.RunID,
+		AgentRequestID: agentRef,
+		ProcessRef:     processRef,
+		SessionRef:     "session-ref-stopped-process-status-001",
+		LaunchRef:      "launch-ref-stopped-process-status-001",
+		ReadinessRef:   "readiness-ref-stopped-process-status-001",
+	}); err != nil {
+		t.Fatalf("record process: %v", err)
+	}
+
+	stats := BuildDirectorRunStatsWithProcessSnapshotsV0(
+		context.Background(),
+		run,
+		registry,
+		liveProcessSnapshotSourceForTestV0{
+			snapshots: map[string]orquestaruntime.ProcessRuntimeSnapshotV0{
+				processRef: {
+					ProcessRef: processRef,
+					Status:     orquestaruntime.ProcessRuntimeStoppedV0,
+				},
+			},
+		},
+	)
+
+	agent := findDirectorAgentStatsForTestV0(t, stats, agentRef)
+	task := findDirectorTaskProgressForTestV0(t, stats.Progress, taskRef)
+	if agent.Process == nil ||
+		agent.Process.Status != DirectorAgentProcessStatusStoppedV0 ||
+		task.ProgressStatus == DirectorTaskProgressProcessRegisteredV0 ||
+		stats.Progress.TasksObserved != 0 {
+		t.Fatalf("agent=%+v task=%+v progress=%+v", agent, task, stats.Progress)
 	}
 }
 

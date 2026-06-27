@@ -68,6 +68,24 @@ func TestCodexStackV0DirectorStatsIncluyeProcesoYProgresoPorPuertos(t *testing.T
 	}
 }
 
+func TestCodexStackV0DirectorStatsIncluyeStatusDeProcesoPorSnapshot(t *testing.T) {
+	runtime := newPendingAckCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	director := postDirectorAPIV0(t, stack)
+	agentRef := strings.TrimSpace(director.DirectorTask.AgentRequestID)
+	if agentRef == "" {
+		t.Fatalf("director inicial sin agent_request_id: %+v", director.DirectorTask)
+	}
+
+	stats := postDirectorStatsStackV0(t, stack, director.RunRef)
+	agent := findStackDirectorAgentStatsForTestV0(t, *stats.Stats, agentRef)
+	if agent.Process == nil ||
+		agent.Process.ProcessRef == "" ||
+		agent.Process.Status != orquestacionnucleoapp.DirectorAgentProcessStatusRunningV0 {
+		t.Fatalf("agent=%+v", agent)
+	}
+}
+
 func TestCodexStackAgentUsageSourceV0UneMetricasInyectadas(t *testing.T) {
 	ctx := context.Background()
 	runtime := newPendingAckCodexStackRuntimeV0()
