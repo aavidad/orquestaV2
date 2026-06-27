@@ -35,6 +35,7 @@ const (
 	ErrExternalWorkRunAppChangeResultInvalidV0 = "external_work_app_change_result_invalid"
 	ErrExternalWorkRunMissingContextV0         = "external_work_missing_context"
 	ErrExternalWorkRunRequiredInputMissingV0   = "external_work_required_input_missing"
+	ErrExternalWorkRunGoalSpecInvalidV0        = "external_work_goal_spec_invalid"
 )
 
 type StartExternalWorkRunRequestV0 struct {

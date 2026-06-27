@@ -20,6 +20,23 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-06-27
+Decision: Anadir compilacion neutral external-work -> GoalWorkSpecV0 sin
+arrancar runtime.
+Motivo: con Codex Goal, Orquesta no debe forzar el loop historico para trabajos
+externos ya definidos. La composicion necesita un contrato Goal-first que
+mantenga reglas, write-set, tests, artefactos y cierre por evidencias sin meter
+OPES ni proveedor en este modulo.
+Alternativas: lanzar /runs/supervise como camino normal; meter OPES directo en
+external-work-run; crear otro DTO paralelo a DomainWork. Se descartan porque
+preservan el loop viejo, acoplan dominio o duplican semantica.
+Impacto: `BuildExternalWorkGoalWorkSpecV0` reutiliza AppChange/DomainWork,
+produce `GoalWorkSpecV0` validable con `director_kind=runtime_goal` y deja el
+lanzamiento/observacion del Goal a una composicion opt-in posterior.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-13
 Decision: La cola forma parte del caso de uso.
 Motivo: en servidor residente, guardar el run no basta; el supervisor global
