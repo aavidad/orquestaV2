@@ -194,9 +194,13 @@ Cobertura Go actual:
   esta cerrada o si hay entrega registrada; sin delivery, el recovery sigue
   siendo elegible, y con delivery la ruta correcta pasa por review/rework.
 - `TestExternalJobIntegrationDecisionSourceV0CreaIntegradorParaPadreLegacyEstrecho`
-  valida que un job OPES 1+6 legacy con padre limitado a `/coordinacion` crea
-  una microtarea integradora dependiente del padre y de los seis subroles, con
+  valida que un job externo legacy con padre limitado a `/coordinacion` crea
+  una microtarea integradora dependiente del padre y de sus hijos causales, con
   write-set de producto autorizado y contrato `ApplyExternalDomainWorkV0`.
+- `TestExternalJobIntegrationDecisionSourceV0CreaIntegradorGenericoSinOPES`
+  valida que esa recuperacion no depende de `app_ref=opes`, interfaces OPES ni
+  `subroles_required=6`: aplica a cualquier trabajo externo con producto
+  autorizado, hijos causales y padre estrechado a coordinacion.
 - `TestDrainRunV0CreaYLanzaIntegradorProductoParaPadreLegacyEstrecho` valida el
   flujo vertical: `DrainRunV0` materializa el integrador desde metadata durable,
   lo agenda, lo lanza con runtime fake y el paquete de agente conserva el

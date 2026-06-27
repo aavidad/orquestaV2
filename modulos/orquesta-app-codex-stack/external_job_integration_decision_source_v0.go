@@ -86,7 +86,9 @@ func (source ExternalJobIntegrationDecisionSourceV0) integrationDecisionForRecor
 	}
 	parent := tasks[0]
 	childRefs := compactCodexStackStringsV0(parent.ChildTaskRefs)
-	if len(childRefs) == 0 || !externalJobParentWriteSetOnlyCoordinationV0(parent.WriteSet) {
+	if len(childRefs) == 0 ||
+		!workflowTaskHasDomainWorkContractV0(parent) ||
+		!externalJobParentWriteSetOnlyCoordinationV0(parent.WriteSet) {
 		return orquestadirectoragent.DirectorAgentDecisionV0{}, false, nil
 	}
 	contractRef := externalJobIntegrationContractRefV0(run)
@@ -103,19 +105,7 @@ func (source ExternalJobIntegrationDecisionSourceV0) integrationDecisionForRecor
 
 func externalJobIntegrationRecordEligibleV0(record orquestaappchange.AppChangeRecordV0) bool {
 	request := record.Request
-	if request.ExternalWork == nil || len(request.AllowedWriteSet) == 0 {
-		return false
-	}
-	work := request.ExternalWork
-	if !externalJobIntegrationExternalWorkLooksOPESV0(request.AppRef, work) {
-		return false
-	}
-	for _, ref := range work.InterfaceRefs {
-		if strings.TrimSpace(ref) == "opes.padre-tema-6-subroles.v1" {
-			return true
-		}
-	}
-	return externalJobIntegrationSubrolesRequiredCountV0(work.InputFields) >= 6
+	return request.ExternalWork != nil && len(request.AllowedWriteSet) > 0
 }
 
 func externalJobIntegrationExternalWorkLooksOPESV0(
@@ -225,19 +215,19 @@ func externalJobIntegrationMicrotaskV0(
 		RunID:           run.RunID,
 		PhaseID:         string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
 		WorkProfileKind: string(orquestacoreworkflow.WorkProfileDomainWorkV0),
-		Title:           "Integrar producto OPES canonico",
-		Summary: "Consolidar los artefactos utiles de subroles OPES en el producto canonico autorizado; " +
+		Title:           "Integrar producto externo canonico",
+		Summary: "Consolidar los artefactos utiles de subtrabajos externos en el producto canonico autorizado; " +
 			"no rehacer material valido y dejar bloqueo causal si falta evidencia.",
 		WriteSet: writeSet,
 		AcceptanceCriteria: []string{
 			"Consolidar Markdown canonico, informe de extension o checkpoint bajo el write-set de producto autorizado.",
-			"Usar entregas de subroles como insumo y conservar evidencia de reutilizacion, rework o bloqueo.",
-			"No marcar el job externo como publicable si faltan assets, HTML, tests, RAG, audio o QA exigidos por OPES.",
+			"Usar entregas de subtrabajos como insumo y conservar evidencia de reutilizacion, rework o bloqueo.",
+			"No marcar el job externo como cerrado si faltan artefactos, pruebas o validaciones exigidas por el contrato externo.",
 		},
-		RequiredTests: []string{"validar integracion canonica de producto OPES"},
+		RequiredTests: []string{"validar integracion canonica de producto externo"},
 		DependsOn:     dependsOn,
 		ContextRefs: compactCodexStackStringsV0([]string{
-			"opes-integration-required",
+			"external-job-integration-required",
 			externalJobIntegrationReasonV0,
 			strings.TrimSpace(record.Request.ExternalWork.JobRef),
 		}),

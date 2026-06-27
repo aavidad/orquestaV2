@@ -42,6 +42,7 @@ func TestExternalJobIntegrationDecisionSourceV0CreaIntegradorParaPadreLegacyEstr
 		!codexStackStringInSetForTestV0(task.WriteSet, "temas/tema_032/coordinacion") ||
 		!codexStackStringInSetForTestV0(task.DependsOn, fixture.parent.TaskID) ||
 		!codexStackStringInSetForTestV0(task.DependsOn, fixture.parent.ChildTaskRefs[0]) ||
+		!codexStackStringInSetForTestV0(task.ContextRefs, "external-job-integration-required") ||
 		!codexStackStringInSetForTestV0(task.ContextRefs, externalJobIntegrationReasonV0) {
 		t.Fatalf("task=%+v parent=%+v", task, fixture.parent)
 	}
@@ -49,6 +50,34 @@ func TestExternalJobIntegrationDecisionSourceV0CreaIntegradorParaPadreLegacyEstr
 		task.FunctionContractRefs[0].ContractRef != fixture.contractRef ||
 		task.FunctionContractRefs[0].FunctionName != "ApplyExternalDomainWorkV0" {
 		t.Fatalf("function_contract_refs=%+v", task.FunctionContractRefs)
+	}
+}
+
+func TestExternalJobIntegrationDecisionSourceV0CreaIntegradorGenericoSinOPES(t *testing.T) {
+	fixture := newExternalJobIntegrationDecisionSourceFixtureV0(true)
+	fixture.record.Request.AppRef = "crm"
+	fixture.record.Request.ExternalWork.ProjectRef = "project-ref-crm"
+	fixture.record.Request.ExternalWork.InterfaceRefs = []string{"crm.document-bundle.v1"}
+	fixture.record.Request.ExternalWork.InputFields = nil
+	fixture.source.AppChangeStore = orquestaappchange.NewInMemoryAppChangeStoreV0(fixture.record)
+
+	decisions, err := fixture.source.ListDirectorAgentDecisionsV0(
+		context.Background(),
+		orquestadirectoragentworkflow.DirectorAgentDecisionSourceRequestV0{Run: fixture.run},
+	)
+
+	if err != nil {
+		t.Fatalf("ListDirectorAgentDecisionsV0: %v", err)
+	}
+	if len(decisions) != 1 || decisions[0].CreateMicrotask == nil {
+		t.Fatalf("decisions=%+v", decisions)
+	}
+	task := decisions[0].CreateMicrotask.Task
+	if task.Title != "Integrar producto externo canonico" ||
+		!codexStackStringInSetForTestV0(task.WriteSet, "temas/tema_032") ||
+		!codexStackStringInSetForTestV0(task.ContextRefs, "external-job-integration-required") ||
+		codexStackStringInSetForTestV0(task.ContextRefs, "opes-integration-required") {
+		t.Fatalf("task=%+v", task)
 	}
 }
 

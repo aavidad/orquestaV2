@@ -280,6 +280,22 @@ Invariantes:
   el fichero del ACK se proyecta como `body` y `format=svg` usa
   `content_type=image/svg+xml`.
 
+## Integracion de producto externo
+
+Si un trabajo externo legacy materializa un padre con contrato
+`ApplyExternalDomainWorkV0`, hijos causales y `AllowedWriteSet` de producto,
+pero el padre durable queda estrechado solo a rutas de coordinacion, el stack
+puede crear una microtarea integradora generica:
+
+- no depende de OPES, nombres de interfaz ni `subroles_required`;
+- exige `ExternalWork`, write-set autorizado, hijos causales y contrato de
+  dominio externo en el padre;
+- usa `AllowedWriteSet` mas `/<coordinacion>` como write-set del integrador;
+- conserva `parent_task_ref`, cohortes/olas si existen y dependencias del padre
+  y de los hijos;
+- no cierra el job externo como producto consolidado hasta que esa integracion
+  entregue evidencia o bloqueo causal.
+
 ## Shutdown cooperativo de agentes Codex
 
 Contrato interno del stack:
