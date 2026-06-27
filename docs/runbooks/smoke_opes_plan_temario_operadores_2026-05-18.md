@@ -478,9 +478,23 @@ ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
 ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=drain-once \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
+ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 \
+ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 scripts/smoke_opes_derivatives_rest.sh
 ```
+
+Antes de crear runs reales, usar el mismo entorno con
+`ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=preflight-only`. Ese modo no consulta
+OPES ni Orquesta; valida que no se ha confirmado productivo, que no hay
+`ORQUESTA_OPES_BRIDGE_ALLOW_UNFILTERED`, que `LIMIT=1`, que el scope operativo
+esta acotado y que la Orquesta temporal trabaja en modo goal-first. Si solo se
+declara `ORQUESTA_OPES_BRIDGE_PROGRAM_ID`, anadir
+`ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1` solo despues de comprobar que
+el OPES temporal filtra realmente por `program_id`; como alternativa usar
+`ORQUESTA_OPES_BRIDGE_CORRELATION_ID`,
+`ORQUESTA_OPES_BRIDGE_TOPIC_ID` o
+`ORQUESTA_OPES_BRIDGE_DEDICATED_TEMPORAL_QUEUE=1`.
 
 Para dejar avanzar la secuencia completa hasta que OPES deje de exponer el
 ultimo tipo configurado pendiente despues de supervisar su run, usar el modo
@@ -499,6 +513,8 @@ ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
 ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-finalize \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
+ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 \
+ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 ORQUESTA_OPES_BRIDGE_MAX_TICKS=20 \
 scripts/smoke_opes_derivatives_rest.sh
@@ -514,6 +530,8 @@ ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
 ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-finalize \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
+ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 \
+ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 ORQUESTA_OPES_BRIDGE_MAX_TICKS=20 \
 scripts/smoke_opes_derivatives_real.sh

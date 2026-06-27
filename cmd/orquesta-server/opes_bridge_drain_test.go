@@ -2004,6 +2004,58 @@ func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilFinalizeV0(t *testing.
 	}
 }
 
+func TestSmokeOPESDerivativesRESTWrapperPreflightRealAceptaScopeYGoalFirstV0(t *testing.T) {
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
+		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
+		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio",
+	)
+	if err != nil {
+		t.Fatalf("preflight err=%v stdout=%s stderr=%s", err, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "preflight_status=ok") ||
+		!strings.Contains(stdout, "preflight_target_mode=run-until-finalize") ||
+		!strings.Contains(stdout, "preflight_scope=program_id") {
+		t.Fatalf("stdout=%s stderr=%s", stdout, stderr)
+	}
+}
+
+func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaProgramIDSinFiltroConfirmadoV0(t *testing.T) {
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
+		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio",
+	)
+	if err == nil ||
+		!strings.Contains(stderr, "program_id documental no basta") {
+		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
+	}
+}
+
+func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaProductivoV0(t *testing.T) {
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
+		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
+		"ORQUESTA_OPES_BRIDGE_PRODUCTIVE_CONFIRM=1",
+		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio",
+	)
+	if err == nil ||
+		!strings.Contains(stderr, "no ejecutar esta cadena contra OPES productivo") {
+		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
+	}
+}
+
+func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinGoalFirstV0(t *testing.T) {
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
+		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
+		"ORQUESTA_CODEX_GOAL_BACKEND=",
+	)
+	if err == nil ||
+		!strings.Contains(stderr, "falta Orquesta temporal goal-first") {
+		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
+	}
+}
+
 func TestSmokeOPESPlanTemarioWrapperFakeServerV0(t *testing.T) {
 	requireLocalTCPForTestV0(t)
 	if _, err := exec.LookPath("python3"); err != nil {
@@ -2073,10 +2125,41 @@ func TestSmokeOPESPlanTemarioWrapperFakeServerDrainOnceV0(t *testing.T) {
 	}
 }
 
+func runSmokeOPESDerivativesPreflightForTestV0(
+	t *testing.T,
+	extraEnv ...string,
+) (string, string, error) {
+	t.Helper()
+	repoRoot := filepath.Clean("../..")
+	cmd := exec.Command("bash", "scripts/smoke_opes_derivatives_rest.sh")
+	cmd.Dir = repoRoot
+	cmd.Env = cleanOPESSmokeEnvForDrainTestV0(os.Environ())
+	cmd.Env = append(cmd.Env,
+		"ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=preflight-only",
+		"ORQUESTA_OPES_DERIVATIVES_PREFLIGHT_TARGET_MODE=run-until-finalize",
+		"ORQUESTA_OPES_DERIVATIVES_REST_CONFIRM=1",
+		"ORQUESTA_OPES_TEMPORAL_CONFIRM=1",
+		"ORQUESTA_OPES_DERIVATIVES_EXECUTE=1",
+		"ORQUESTA_OPES_BASE_URL=http://127.0.0.1:19090",
+		"ORQUESTA_BASE_URL=http://127.0.0.1:19091",
+		"ORQUESTA_OPES_BRIDGE_LIMIT=1",
+		"SMOKE_ID=test-derivatives-rest-preflight",
+		"SMOKE_OUT_DIR="+filepath.Join(t.TempDir(), "out"),
+	)
+	cmd.Env = append(cmd.Env, extraEnv...)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	return stdout.String(), stderr.String(), err
+}
+
 func cleanOPESSmokeEnvForDrainTestV0(env []string) []string {
 	out := make([]string, 0, len(env))
 	for _, item := range env {
 		if strings.HasPrefix(item, "ORQUESTA_OPES") ||
+			strings.HasPrefix(item, "ORQUESTA_CODEX_GOAL_BACKEND=") ||
 			strings.HasPrefix(item, "OPES_BASE_URL=") ||
 			strings.HasPrefix(item, "ORQUESTA_BASE_URL=") ||
 			strings.HasPrefix(item, "SMOKE_ID=") ||

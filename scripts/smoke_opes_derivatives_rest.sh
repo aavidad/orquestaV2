@@ -7,6 +7,7 @@ source "$repo_root/scripts/lib/smoke_common.sh"
 
 DEFAULT_SEQUENCE="research_exam_precedents,draft_content_block,generate_visual_asset,generate_question_bank,review_legal,review_pedagogical,review_quality,review_codex,review_gemini,review_claude,review_pair_codex_gemini,review_pair_codex_claude,review_pair_gemini_claude,review_director_consolidation,validate_topic,assemble_topic,generate_audio_asset,generate_tutor_assets,generate_learning_games,generate_html_site,generate_help_manual_assets,finalize_temario_package"
 MODE="${ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE:-dry-run-once}"
+PREFLIGHT_TARGET_MODE="${ORQUESTA_OPES_DERIVATIVES_PREFLIGHT_TARGET_MODE:-run-until-finalize}"
 SMOKE_ID="${SMOKE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 SMOKE_OUT_DIR="${SMOKE_OUT_DIR:-/tmp/opes-salidas/derivatives-rest-$SMOKE_ID}"
 OPES_BASE_URL_EFFECTIVE="${ORQUESTA_OPES_BASE_URL:-${OPES_BASE_URL:-}}"
@@ -21,6 +22,17 @@ FAKE_PENDING_TYPE="${ORQUESTA_OPES_DERIVATIVES_FAKE_PENDING_TYPE:-assemble_topic
 FAKE_GOAL_FIRST="${ORQUESTA_OPES_DERIVATIVES_FAKE_GOAL_FIRST:-1}"
 FAKE_DIR=""
 FAKE_PID=""
+
+is_effectful_mode() {
+  case "$1" in
+    drain-once | run-until-assemble | run-until-finalize | run-until-final)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
 
 is_run_until_mode() {
   case "$1" in
@@ -384,6 +396,10 @@ PY
 
 require_temporal_opes() {
   if [[ "$FAKE_SERVER" == "1" ]]; then
+    if [[ "$MODE" == "preflight-only" ]]; then
+      OPES_BASE_URL_EFFECTIVE="${OPES_BASE_URL_EFFECTIVE:-http://127.0.0.1:0}"
+      return
+    fi
     start_fake_opes
     return
   fi
@@ -403,6 +419,94 @@ require_temporal_opes() {
     [[ "${ORQUESTA_OPES_ALLOW_NONLOCAL_TEMPORAL:-0}" != "1" ]]; then
     echo "OPES_BASE_URL no parece local: $OPES_BASE_URL_EFFECTIVE" >&2
     echo "si es temporal no local, exporta ORQUESTA_OPES_ALLOW_NONLOCAL_TEMPORAL=1" >&2
+    exit 2
+  fi
+}
+
+preflight_target_mode() {
+  if [[ "$MODE" == "preflight-only" ]]; then
+    printf '%s\n' "$PREFLIGHT_TARGET_MODE"
+    return
+  fi
+  printf '%s\n' "$MODE"
+}
+
+preflight_scope_summary() {
+  local scopes=()
+  if [[ "${ORQUESTA_OPES_BRIDGE_DEDICATED_TEMPORAL_QUEUE:-0}" == "1" ]]; then
+    scopes+=("dedicated_temporal_queue")
+  fi
+  if [[ -n "${ORQUESTA_OPES_BRIDGE_CORRELATION_ID:-}" ]]; then
+    scopes+=("correlation_id")
+  fi
+  if [[ -n "${ORQUESTA_OPES_BRIDGE_TOPIC_ID:-}" ]]; then
+    scopes+=("topic_id")
+  fi
+  if [[ -n "${ORQUESTA_OPES_BRIDGE_PROGRAM_ID:-}" ]]; then
+    scopes+=("program_id")
+  fi
+  if [[ "${#scopes[@]}" -eq 0 ]]; then
+    printf 'none\n'
+    return
+  fi
+  local old_ifs="$IFS"
+  IFS=,
+  printf '%s\n' "${scopes[*]}"
+  IFS="$old_ifs"
+}
+
+require_derivatives_real_preflight() {
+  if [[ "$FAKE_SERVER" == "1" ]]; then
+    return
+  fi
+  local target_mode
+  target_mode="$(preflight_target_mode)"
+  if [[ "$MODE" == "preflight-only" ]] && ! is_effectful_mode "$target_mode"; then
+    echo "ORQUESTA_OPES_DERIVATIVES_PREFLIGHT_TARGET_MODE debe ser un modo con efectos: drain-once, run-until-assemble, run-until-finalize o run-until-final" >&2
+    exit 2
+  fi
+  if ! is_effectful_mode "$target_mode"; then
+    return
+  fi
+  if [[ "${ORQUESTA_OPES_DERIVATIVES_EXECUTE:-0}" != "1" ]]; then
+    echo "smoke derivados real bloqueado: falta confirmacion de efectos ORQUESTA_OPES_DERIVATIVES_EXECUTE=1" >&2
+    exit 2
+  fi
+  if [[ "${ORQUESTA_OPES_BRIDGE_PRODUCTIVE_CONFIRM:-0}" == "1" ]]; then
+    echo "smoke derivados real bloqueado: no ejecutar esta cadena contra OPES productivo" >&2
+    exit 2
+  fi
+  if [[ "${ORQUESTA_OPES_BRIDGE_ALLOW_UNFILTERED:-0}" == "1" ]]; then
+    echo "smoke derivados real bloqueado: ORQUESTA_OPES_BRIDGE_ALLOW_UNFILTERED no es valido para la secuencia OPES temporal" >&2
+    exit 2
+  fi
+  if [[ "${ORQUESTA_OPES_REGISTRY_FINALPKG_ENABLED:-0}" == "1" ]]; then
+    echo "smoke derivados real bloqueado: no mezclar ORQUESTA_OPES_REGISTRY_FINALPKG_ENABLED con finalize_temario_package del bridge" >&2
+    exit 2
+  fi
+  if [[ "$LIMIT" != "1" && "${ORQUESTA_OPES_DERIVATIVES_ALLOW_LIMIT_GT_1:-0}" != "1" ]]; then
+    echo "smoke derivados real bloqueado: usa ORQUESTA_OPES_BRIDGE_LIMIT=1 en el primer pase real" >&2
+    echo "si la cola temporal ya esta aislada y revisada, exporta ORQUESTA_OPES_DERIVATIVES_ALLOW_LIMIT_GT_1=1" >&2
+    exit 2
+  fi
+  if [[ -n "${ORQUESTA_OPES_BRIDGE_PROGRAM_ID:-}" &&
+    -z "${ORQUESTA_OPES_BRIDGE_TOPIC_ID:-}" &&
+    -z "${ORQUESTA_OPES_BRIDGE_CORRELATION_ID:-}" &&
+    "${ORQUESTA_OPES_BRIDGE_DEDICATED_TEMPORAL_QUEUE:-0}" != "1" &&
+    "${ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED:-0}" != "1" ]]; then
+    echo "smoke derivados real bloqueado: program_id documental no basta; confirma filtro real con ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 o usa cola temporal dedicada/correlation_id/topic_id" >&2
+    exit 2
+  fi
+  if [[ -z "${ORQUESTA_OPES_BRIDGE_PROGRAM_ID:-}" &&
+    -z "${ORQUESTA_OPES_BRIDGE_TOPIC_ID:-}" &&
+    -z "${ORQUESTA_OPES_BRIDGE_CORRELATION_ID:-}" &&
+    "${ORQUESTA_OPES_BRIDGE_DEDICATED_TEMPORAL_QUEUE:-0}" != "1" ]]; then
+    echo "smoke derivados real bloqueado: falta scope operativo; usa cola temporal dedicada, correlation_id, topic_id o program_id con filtro confirmado" >&2
+    exit 2
+  fi
+  if [[ -z "${ORQUESTA_CODEX_GOAL_BACKEND:-}" &&
+    "${ORQUESTA_OPES_DERIVATIVES_ORQUESTA_GOAL_FIRST_CONFIRMED:-0}" != "1" ]]; then
+    echo "smoke derivados real bloqueado: falta Orquesta temporal goal-first; exporta ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio al arrancar servidor o confirma ORQUESTA_OPES_DERIVATIVES_ORQUESTA_GOAL_FIRST_CONFIRMED=1" >&2
     exit 2
   fi
 }
@@ -427,6 +531,7 @@ write_metadata() {
   {
     echo "smoke_id=$SMOKE_ID"
     echo "mode=$MODE"
+    echo "preflight_target_mode=$PREFLIGHT_TARGET_MODE"
     echo "fake_server=$FAKE_SERVER"
     echo "fake_pending_type=$FAKE_PENDING_TYPE"
     echo "fake_goal_first=$FAKE_GOAL_FIRST"
@@ -437,8 +542,20 @@ write_metadata() {
     echo "input_ledger_path=$INPUT_LEDGER_PATH"
     echo "max_ticks=$MAX_TICKS"
     echo "tick_sleep_seconds=$TICK_SLEEP_SECONDS"
+    echo "scope_summary=$(preflight_scope_summary)"
+    echo "scope_filter_confirmed=${ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED:-0}"
+    echo "dedicated_temporal_queue=${ORQUESTA_OPES_BRIDGE_DEDICATED_TEMPORAL_QUEUE:-0}"
+    echo "goal_backend=${ORQUESTA_CODEX_GOAL_BACKEND:-}"
+    echo "goal_first_confirmed=${ORQUESTA_OPES_DERIVATIVES_ORQUESTA_GOAL_FIRST_CONFIRMED:-0}"
     echo "output_dir=$SMOKE_OUT_DIR"
   } >"$SMOKE_OUT_DIR/metadata.txt"
+}
+
+run_preflight_only() {
+  echo "preflight_status=ok"
+  echo "preflight_target_mode=$(preflight_target_mode)"
+  echo "preflight_scope=$(preflight_scope_summary)"
+  echo "preflight_output_dir=$SMOKE_OUT_DIR"
 }
 
 run_dry_run_once() {
@@ -729,24 +846,31 @@ run_until_final_type() {
 }
 
 main() {
-  smoke_require_tools go tee
+  smoke_require_tool tee
   require_temporal_opes
   require_sequence_only
   write_metadata
+  require_derivatives_real_preflight
   cd "$repo_root"
 
   case "$MODE" in
+    preflight-only)
+      run_preflight_only
+      ;;
     dry-run-once)
+      smoke_require_tool go
       run_dry_run_once
       ;;
     drain-once)
+      smoke_require_tool go
       run_execute_drain_once
       ;;
     run-until-assemble | run-until-finalize | run-until-final)
+      smoke_require_tool go
       run_until_final_type
       ;;
     *)
-      echo "modo no soportado: $MODE (usa dry-run-once, drain-once, run-until-finalize o run-until-assemble)" >&2
+      echo "modo no soportado: $MODE (usa preflight-only, dry-run-once, drain-once, run-until-finalize, run-until-final o run-until-assemble)" >&2
       exit 2
       ;;
   esac

@@ -61,6 +61,10 @@
   producto: el `GoalWorkSpec` conserva el fallback estrecho, transporta
   `product_write_set_status=missing_for_canonical_consolidation` y exige rework
   o `pendiente_continuar` en vez de cierre como Markdown canonico consolidado.
+- Wrapper real de derivados OPES: `preflight-only` bloquea ejecuciones con
+  OPES productivo, `ALLOW_UNFILTERED`, `LIMIT` amplio sin override, `program_id`
+  sin filtro real confirmado o cola/scope alternativo, Orquesta sin Goal
+  confirmado y mezcla con el reconciliador independiente de paquetes finales.
 
 Comando:
 

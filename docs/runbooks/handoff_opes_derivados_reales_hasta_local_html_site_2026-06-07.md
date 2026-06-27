@@ -67,11 +67,45 @@ causales. No deben ralentizar todos los temarios como pasos fijos.
 - Para efectos reales, declarar `ORQUESTA_OPES_DERIVATIVES_REST_CONFIRM=1` y
   `ORQUESTA_OPES_DERIVATIVES_EXECUTE=1`.
 - Usar `ORQUESTA_OPES_BRIDGE_LIMIT=1` al primer pase real.
-- Usar scope por `program_id`, `correlation_id` o cola temporal dedicada.
+- Usar scope operativo por `correlation_id`, `topic_id` o cola temporal
+  dedicada. Si solo se usa `program_id`, declarar
+  `ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1` despues de comprobar que el
+  OPES temporal filtra realmente por `program_id`; el valor documental del
+  payload no basta para no tocar jobs ajenos.
+- No declarar `ORQUESTA_OPES_BRIDGE_ALLOW_UNFILTERED=1` ni
+  `ORQUESTA_OPES_BRIDGE_PRODUCTIVE_CONFIRM=1` en este smoke.
+- Arrancar Orquesta temporal con Codex Goal
+  (`ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio` o `app_server_proxy`) o, si
+  ya esta levantada fuera del entorno del wrapper, confirmar
+  `ORQUESTA_OPES_DERIVATIVES_ORQUESTA_GOAL_FIRST_CONFIRMED=1`.
+- No mezclar el reconciliador independiente de paquetes finales:
+  `ORQUESTA_OPES_REGISTRY_FINALPKG_ENABLED` debe quedar desactivado.
 - No mezclar `ORQUESTA_OPES_BRIDGE_JOB_TYPE` ni
   `ORQUESTA_OPES_BRIDGE_JOB_REF` con `ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE`.
 - Guardar ledger en una ruta del smoke:
   `ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH=<salida>/external-bridge-input-ledger.json`.
+
+Preflight ejecutable sin OPES/Codex:
+
+```bash
+ORQUESTA_OPES_BASE_URL=http://127.0.0.1:<puerto-opes-temporal> \
+ORQUESTA_BASE_URL=http://127.0.0.1:<puerto-orquesta-temporal> \
+ORQUESTA_OPES_DERIVATIVES_REST_CONFIRM=1 \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
+ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
+ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=preflight-only \
+ORQUESTA_OPES_DERIVATIVES_PREFLIGHT_TARGET_MODE=run-until-finalize \
+ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
+ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 \
+ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio \
+ORQUESTA_OPES_BRIDGE_LIMIT=1 \
+scripts/smoke_opes_derivatives_rest.sh
+```
+
+Tambien es valido sustituir `program_id` por
+`ORQUESTA_OPES_BRIDGE_CORRELATION_ID`, `ORQUESTA_OPES_BRIDGE_TOPIC_ID` o
+`ORQUESTA_OPES_BRIDGE_DEDICATED_TEMPORAL_QUEUE=1`. El preflight solo valida
+guardas locales y no consulta OPES.
 
 ## Pruebas offline/fake
 
@@ -115,6 +149,8 @@ ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
 ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-finalize \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
+ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 \
+ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 ORQUESTA_OPES_BRIDGE_MAX_TICKS=30 \
 ORQUESTA_OPES_DERIVATIVES_TICK_SLEEP_SECONDS=5 \
