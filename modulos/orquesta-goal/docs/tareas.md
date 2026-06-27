@@ -50,3 +50,26 @@ historica de Director/agentes. `ObserveAppDirectorGoalV0` y
 `orquesta.apps.observe_director_goal.v0` exponen tambien `goal_first` para la
 observacion/cierre. Queda pendiente la matriz completa de migracion y los
 smokes reales equivalentes antes de declarar legacy las rutas historicas.
+
+## GOAL-004 lifecycle neutral reutilizable
+
+Estado: cerrado localmente 2026-06-27.
+
+Criterio:
+
+- `StartGoalWorkV0` lanza por puerto, normaliza receipt y guarda
+  `GoalWorkStateV0`.
+- `ObserveGoalWorkV0` carga estado, observa por puerto, persiste
+  `LastResult`/evidencias y valida closure solo para resultados terminales.
+- El modulo sigue sin importar Codex, OPES, HTTP, filesystem, colas,
+  `core-workflow` ni `app-director-service`.
+- `/nueva-app`, autoprogramacion goal-first y external-work goal-first reutilizan
+  el lifecycle o el constructor neutral de estado sin cambiar sus contratos
+  publicos.
+
+Evidencia local:
+
+```bash
+go test -count=1 ./modulos/orquesta-goal ./modulos/orquesta-app-director-service
+go test -count=1 ./modulos/orquesta-app-codex-stack -run 'GoalFirst|Autoprogramming|ExternalWork'
+```

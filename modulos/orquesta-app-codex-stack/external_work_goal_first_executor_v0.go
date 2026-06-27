@@ -356,28 +356,12 @@ func externalWorkGoalFirstNewGoalStateV0(
 	spec orquestagoal.GoalWorkSpecV0,
 	receipt orquestagoal.GoalLaunchReceiptV0,
 ) (orquestagoal.GoalWorkStateV0, error) {
-	receipt = orquestagoal.GoalLaunchReceiptV0{
-		SchemaVersion:   firstExternalWorkGoalFirstValueV0(receipt.SchemaVersion, orquestagoal.GoalWorkLaunchReceiptSchemaV0),
-		Status:          firstExternalWorkGoalFirstValueV0(receipt.Status, orquestagoal.GoalStatusRunningV0),
-		GoalRef:         firstExternalWorkGoalFirstValueV0(receipt.GoalRef, spec.GoalRef),
-		ExternalGoalRef: firstExternalWorkGoalFirstValueV0(receipt.ExternalGoalRef, spec.GoalRef),
-		EvidenceRefs:    compactStringsV0(receipt.EvidenceRefs),
-		Issues:          append([]orquestagoal.GoalWorkIssueV0(nil), receipt.Issues...),
-	}
-	state := orquestagoal.GoalWorkStateV0{
-		SchemaVersion:   orquestagoal.GoalWorkStateSchemaV0,
-		RunRef:          strings.TrimSpace(runRef),
-		GoalRef:         strings.TrimSpace(receipt.GoalRef),
-		ExternalGoalRef: strings.TrimSpace(receipt.ExternalGoalRef),
-		Status:          strings.TrimSpace(receipt.Status),
-		Spec:            orquestagoal.NormalizeGoalWorkSpecV0(spec),
-		LaunchReceipt:   receipt,
-		EvidenceRefs: compactStringsV0(append(
-			append([]string{"evidence-ref-external-work-goal-first-state-v0"}, spec.EvidenceRefs...),
-			receipt.EvidenceRefs...,
-		)),
-	}
-	return orquestagoal.NewGoalWorkStateV0(state)
+	return orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef:        runRef,
+		Spec:          spec,
+		LaunchReceipt: receipt,
+		EvidenceRefs:  []string{"evidence-ref-external-work-goal-first-state-v0"},
+	})
 }
 
 func externalWorkGoalFirstResultV0(

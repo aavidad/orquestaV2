@@ -17,6 +17,9 @@ Incluye:
   Orquesta.
 - `GoalWorkResultV0`: resultado observable de un goal.
 - Puertos de lanzamiento, observacion y validacion.
+- Lifecycle neutral `StartGoalWorkV0`/`ObserveGoalWorkV0` sobre puertos:
+  lanza, persiste estado, observa y valida cierre sin tocar runs, HTTP,
+  filesystem, Codex ni OPES.
 - Validacion estructural de refs, write-set relativo, observaciones, resultados
   y evidencias requeridas.
 

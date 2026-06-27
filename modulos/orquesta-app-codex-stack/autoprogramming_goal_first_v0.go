@@ -279,31 +279,15 @@ func autoprogrammingBridgeNewGoalStateV0(
 	receipt orquestagoal.GoalLaunchReceiptV0,
 	work orquestaautoprogramming.AutoprogrammingProgrammableWorkV0,
 ) (orquestagoal.GoalWorkStateV0, error) {
-	receipt = orquestagoal.GoalLaunchReceiptV0{
-		SchemaVersion:   firstNonEmptyAutoprogrammingStackV0(receipt.SchemaVersion, orquestagoal.GoalWorkLaunchReceiptSchemaV0),
-		Status:          firstNonEmptyAutoprogrammingStackV0(receipt.Status, orquestagoal.GoalStatusRunningV0),
-		GoalRef:         firstNonEmptyAutoprogrammingStackV0(receipt.GoalRef, spec.GoalRef),
-		ExternalGoalRef: firstNonEmptyAutoprogrammingStackV0(receipt.ExternalGoalRef, spec.GoalRef),
-		EvidenceRefs:    compactStringsV0(receipt.EvidenceRefs),
-		Issues:          append([]orquestagoal.GoalWorkIssueV0(nil), receipt.Issues...),
-	}
-	state := orquestagoal.GoalWorkStateV0{
-		SchemaVersion:   orquestagoal.GoalWorkStateSchemaV0,
-		RunRef:          strings.TrimSpace(runRef),
-		GoalRef:         strings.TrimSpace(receipt.GoalRef),
-		ExternalGoalRef: strings.TrimSpace(receipt.ExternalGoalRef),
-		Status:          strings.TrimSpace(receipt.Status),
-		Spec:            orquestagoal.NormalizeGoalWorkSpecV0(spec),
-		LaunchReceipt:   receipt,
-		EvidenceRefs: compactStringsV0(append(
-			append([]string{
-				"evidence-ref-autoprogramming-goal-first-state-v0",
-				"evidence-ref-autoprogramming-goal-migration-" + strings.TrimSpace(work.GoalMigration.Status),
-			}, spec.EvidenceRefs...),
-			receipt.EvidenceRefs...,
-		)),
-	}
-	return orquestagoal.NewGoalWorkStateV0(state)
+	return orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef:        runRef,
+		Spec:          spec,
+		LaunchReceipt: receipt,
+		EvidenceRefs: compactStringsV0([]string{
+			"evidence-ref-autoprogramming-goal-first-state-v0",
+			"evidence-ref-autoprogramming-goal-migration-" + strings.TrimSpace(work.GoalMigration.Status),
+		}),
+	})
 }
 
 func autoprogrammingBridgeResultIsGoalFirstV0(result AutoprogrammingBridgeResultV0) bool {

@@ -62,6 +62,9 @@ Orquesta decide si el resultado cierra:
 - `GoalWorkLauncherPortV0`: puerto para lanzar un goal.
 - `GoalWorkObservationPortV0`: puerto para observarlo.
 - `GoalWorkClosureValidatorPortV0`: puerto para validar cierre.
+- `StartGoalWorkV0`/`ObserveGoalWorkV0`: lifecycle neutral por puertos para
+  lanzar, persistir estado, observar y validar closure sin importar runtime,
+  servidor, filesystem, colas ni dominio.
 
 `modulos/orquesta-runtime-codex-goal` define el adaptador Codex:
 
@@ -242,6 +245,10 @@ Goal.
    `run_ref`, reutilizan el cierre neutral de `orquesta-app-director-service` y
    solo sincronizan cola como terminal no ejecutable si el goal cierra o bloquea
    el run.
+   Estado 2026-06-27 noche: `orquesta-goal` centraliza el lifecycle neutral
+   `StartGoalWorkV0`/`ObserveGoalWorkV0`; `/nueva-app` delega launch/observe en
+   ese ciclo y `autoprogramming`/`external-work` reutilizan el constructor
+   neutral de `GoalWorkStateV0`.
 
 ## No hacer
 

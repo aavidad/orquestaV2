@@ -31,19 +31,22 @@ func startAppDirectorGoalFirstV0(
 	if issues := orquestagoal.ValidateGoalWorkSpecV0(goalSpec); len(issues) > 0 {
 		return StartAppDirectorResultV0{}, false, AppDirectorServiceIssueV0{Field: "goal_spec"}
 	}
-	receipt, err := ports.GoalLauncher.LaunchGoalWorkV0(ctx, goalSpec)
+	goalStarted, err := orquestagoal.StartGoalWorkV0(
+		ctx,
+		orquestagoal.GoalWorkStartRequestV0{
+			RunRef:       prepared.Run.RunID,
+			Spec:         goalSpec,
+			EvidenceRefs: compactStartAppDirectorStringsV0(append([]string{"evidence-ref-app-director-goal-state-v0"}, prepared.EvidenceRefs...)),
+		},
+		orquestagoal.GoalWorkLifecyclePortsV0{
+			Launcher:   ports.GoalLauncher,
+			StateStore: ports.GoalStateStore,
+		},
+	)
 	if err != nil {
 		return StartAppDirectorResultV0{}, false, err
 	}
-	if ports.GoalStateStore != nil {
-		if err := ports.GoalStateStore.SaveGoalWorkStateV0(
-			ctx,
-			newStartAppDirectorGoalStateV0(prepared.Run.RunID, goalSpec, receipt, prepared.EvidenceRefs),
-		); err != nil {
-			return StartAppDirectorResultV0{}, false, err
-		}
-	}
-	return startAppDirectorGoalFirstResultV0(request, spec, prepared, receipt), true, nil
+	return startAppDirectorGoalFirstResultV0(request, spec, prepared, goalStarted.Receipt), true, nil
 }
 
 func ObserveAppDirectorGoalV0(
@@ -64,51 +67,27 @@ func ObserveAppDirectorGoalV0(
 	if ports.GoalObserver == nil {
 		return ObserveAppDirectorGoalResultV0{}, AppDirectorServiceIssueV0{Field: "ports.goal_observer"}
 	}
-	state, err := ports.GoalStateStore.LoadGoalWorkStateV0(ctx, request.RunRef)
-	if err != nil {
-		return ObserveAppDirectorGoalResultV0{}, err
-	}
-	state, err = NewAppDirectorGoalStateV0(state)
-	if err != nil {
-		return ObserveAppDirectorGoalResultV0{}, err
-	}
-	result, err := ports.GoalObserver.ObserveGoalWorkV0(ctx, orquestagoal.GoalObservationRequestV0{
-		GoalRef:         state.GoalRef,
-		ExternalGoalRef: state.ExternalGoalRef,
-	})
-	if err != nil {
-		return ObserveAppDirectorGoalResultV0{}, err
-	}
-	result = orquestagoal.NormalizeGoalWorkResultV0(result)
-	if issues := orquestagoal.ValidateGoalWorkResultV0(result); len(issues) > 0 {
-		return ObserveAppDirectorGoalResultV0{}, AppDirectorServiceIssueV0{Field: "goal_result"}
-	}
-	state.LastResult = &result
-	state.Status = result.Status
-	state.EvidenceRefs = compactStartAppDirectorStringsV0(append(state.EvidenceRefs, result.EvidenceRefs...))
-	closure := orquestagoal.GoalClosureValidationV0{}
 	run := orquestacoreworkflow.OrchestrationRunV0{}
-	if startAppDirectorGoalResultTerminalV0(result.Status) {
-		if ports.GoalClosureValidator == nil {
-			return ObserveAppDirectorGoalResultV0{}, AppDirectorServiceIssueV0{Field: "ports.goal_closure_validator"}
-		}
-		closure, err = ports.GoalClosureValidator.ValidateGoalWorkClosureV0(ctx, state.Spec, result)
-		if err != nil {
-			return ObserveAppDirectorGoalResultV0{}, err
-		}
-		state.LastClosure = &closure
-		state.EvidenceRefs = compactStartAppDirectorStringsV0(append(state.EvidenceRefs, closure.EvidenceRefs...))
+	goalObserved, err := orquestagoal.ObserveGoalWorkV0(
+		ctx,
+		orquestagoal.GoalWorkObserveRequestV0{RunRef: request.RunRef},
+		orquestagoal.GoalWorkLifecyclePortsV0{
+			Observer:         ports.GoalObserver,
+			ClosureValidator: ports.GoalClosureValidator,
+			StateStore:       ports.GoalStateStore,
+		},
+	)
+	if err != nil {
+		return ObserveAppDirectorGoalResultV0{}, err
+	}
+	state := goalObserved.State
+	result := goalObserved.Result
+	closure := goalObserved.Closure
+	if goalObserved.Terminal {
 		run, err = reflectAppDirectorGoalClosureInRunV0(ctx, request, state, result, closure, ports)
 		if err != nil {
 			return ObserveAppDirectorGoalResultV0{}, err
 		}
-	}
-	state, err = NewAppDirectorGoalStateV0(state)
-	if err != nil {
-		return ObserveAppDirectorGoalResultV0{}, err
-	}
-	if err := ports.GoalStateStore.SaveGoalWorkStateV0(ctx, state); err != nil {
-		return ObserveAppDirectorGoalResultV0{}, err
 	}
 	return ObserveAppDirectorGoalResultV0{
 		SchemaVersion:         ObserveAppDirectorGoalResultSchemaV0,
@@ -408,46 +387,8 @@ func appDirectorGoalStringInSetV0(values []string, want string) bool {
 	return false
 }
 
-func newStartAppDirectorGoalStateV0(
-	runRef string,
-	spec orquestagoal.GoalWorkSpecV0,
-	receipt orquestagoal.GoalLaunchReceiptV0,
-	evidenceRefs []string,
-) AppDirectorGoalStateV0 {
-	goalRef := strings.TrimSpace(receipt.GoalRef)
-	if goalRef == "" {
-		goalRef = strings.TrimSpace(spec.GoalRef)
-	}
-	externalGoalRef := strings.TrimSpace(receipt.ExternalGoalRef)
-	if externalGoalRef == "" {
-		externalGoalRef = strings.TrimSpace(spec.GoalRef)
-	}
-	return AppDirectorGoalStateV0{
-		SchemaVersion:   AppDirectorGoalStateSchemaVersionV0,
-		RunRef:          strings.TrimSpace(runRef),
-		GoalRef:         goalRef,
-		ExternalGoalRef: externalGoalRef,
-		Status:          strings.TrimSpace(receipt.Status),
-		Spec:            orquestagoal.NormalizeGoalWorkSpecV0(spec),
-		LaunchReceipt:   receipt,
-		EvidenceRefs: compactStartAppDirectorStringsV0(append(
-			append([]string{"evidence-ref-app-director-goal-state-v0"}, evidenceRefs...),
-			receipt.EvidenceRefs...,
-		)),
-	}
-}
-
 func NewAppDirectorGoalStateV0(state AppDirectorGoalStateV0) (AppDirectorGoalStateV0, error) {
 	return orquestagoal.NewGoalWorkStateV0(state)
-}
-
-func startAppDirectorGoalResultTerminalV0(status string) bool {
-	switch strings.TrimSpace(status) {
-	case orquestagoal.GoalStatusCompleteV0, orquestagoal.GoalStatusBlockedV0, orquestagoal.GoalStatusInvalidV0:
-		return true
-	default:
-		return false
-	}
 }
 
 func buildStartAppDirectorGoalWorkSpecV0(

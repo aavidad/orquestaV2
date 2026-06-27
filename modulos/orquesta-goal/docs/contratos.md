@@ -39,10 +39,30 @@ tests y receipts) pasan por validacion estructural antes de aceptar cierre.
 observar. `goal_ref` es obligatorio y `external_goal_ref` es opcional; ambos se
 validan como refs opacas, no como rutas locales absolutas.
 
+## Lifecycle neutral
+
+`StartGoalWorkV0` y `ObserveGoalWorkV0` son el caso de uso neutral del contrato
+goal-first:
+
+- `StartGoalWorkV0` recibe un `GoalWorkSpecV0`, lanza por
+  `GoalWorkLauncherPortV0`, normaliza `GoalLaunchReceiptV0`, construye
+  `GoalWorkStateV0` y lo guarda por `GoalWorkStateStorePortV0`.
+- `ObserveGoalWorkV0` carga `GoalWorkStateV0` por `run_ref`, construye la
+  `GoalObservationRequestV0`, observa por `GoalWorkObservationPortV0`, actualiza
+  `LastResult`/estado/evidencias y, si el resultado es terminal, valida cierre
+  con `GoalWorkClosureValidatorPortV0`.
+
+El lifecycle no abre fases, no emite eventos de run, no decide colas y no cierra
+producto externo. Devuelve si el goal esta terminal, si la closure fue aceptada
+o si necesita rework; cada composicion proyecta eso a su propio `RunStore`,
+cola, API o dominio.
+
 ## Puertos
 
 - `GoalWorkLauncherPortV0`: lanza un goal desde un spec.
 - `GoalWorkObservationPortV0`: observa estado/evidencias de un goal.
 - `GoalWorkClosureValidatorPortV0`: valida si el resultado cierra el contrato.
+- `GoalWorkStateStorePortV0`: guarda y carga el estado durable del goal por
+  `run_ref`.
 
 Los adaptadores concretos implementan esos puertos fuera del nucleo.
