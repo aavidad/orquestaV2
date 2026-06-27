@@ -546,6 +546,64 @@ func TestObserveAppDirectorGoalV0BloqueaRunSiGoalTerminaInvalid(t *testing.T) {
 	}
 }
 
+func TestContinueAppDirectorV0GoalFirstContainerNoEjecutaLoopLegacySinPuertosLegacy(t *testing.T) {
+	store, _, goalStates, _, started := serviceStartGoalFirstForObserveTestV0(t)
+
+	result, err := ContinueAppDirectorV0(
+		context.Background(),
+		ContinueAppDirectorRequestV0{
+			RunRef:        started.Run.RunID,
+			OccurredAt:    "2026-05-09T22:31:00Z",
+			CorrelationID: "corr-service-goal-first-continue",
+		},
+		StartAppDirectorPortsV0{
+			RunStore:       store,
+			GoalStateStore: goalStates,
+		},
+	)
+	if err != nil {
+		t.Fatalf("ContinueAppDirectorV0: %v", err)
+	}
+	if result.Status != ContinueAppDirectorStatusPendingV0 ||
+		result.LoopStatus != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 ||
+		result.Run.RunID != started.Run.RunID ||
+		len(result.StartedAgents) != 0 ||
+		!serviceStringInSetV0(result.EvidenceRefs, continueAppDirectorGoalFirstObserveEvidenceV0) {
+		t.Fatalf("result=%+v", result)
+	}
+	if len(result.OperationalClosureIssues) != 1 ||
+		result.OperationalClosureIssues[0].Code != continueAppDirectorGoalFirstObserveCodeV0 {
+		t.Fatalf("operational_closure_issues=%+v", result.OperationalClosureIssues)
+	}
+}
+
+func TestBuildContinueAppDirectorLoopRuntimeV0GoalFirstContainerCierraSinLoopLegacy(t *testing.T) {
+	store, _, goalStates, _, started := serviceStartGoalFirstForObserveTestV0(t)
+
+	runtime, err := BuildContinueAppDirectorLoopRuntimeV0(
+		context.Background(),
+		ContinueAppDirectorRequestV0{
+			RunRef:        started.Run.RunID,
+			OccurredAt:    "2026-05-09T22:32:00Z",
+			CorrelationID: "corr-service-goal-first-runtime",
+		},
+		StartAppDirectorPortsV0{
+			RunStore:       store,
+			GoalStateStore: goalStates,
+		},
+	)
+	if err != nil {
+		t.Fatalf("BuildContinueAppDirectorLoopRuntimeV0: %v", err)
+	}
+	if !runtime.Closed ||
+		runtime.ClosedResult.Status != ContinueAppDirectorStatusPendingV0 ||
+		runtime.ClosedResult.LoopStatus != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 ||
+		runtime.ClosedResult.Run.RunID != started.Run.RunID ||
+		!serviceStringInSetV0(runtime.ClosedResult.EvidenceRefs, continueAppDirectorGoalFirstContainerEvidenceV0) {
+		t.Fatalf("runtime=%+v", runtime)
+	}
+}
+
 func serviceStartGoalFirstForObserveTestV0(t *testing.T) (
 	*orquestacionnucleoapp.InMemoryRunStoreV0,
 	*orquestacionnucleoapp.InMemoryEventSinkV0,

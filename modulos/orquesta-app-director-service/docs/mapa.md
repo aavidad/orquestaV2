@@ -14,6 +14,8 @@ No decide runtime, proveedor, HOME, DB, REST, MCP, web, Codex ni OPES.
 - `ContinueAppDirectorV0`: reentra sobre un run existente, materializa un plan
   operativo si llega, recupera `OperationalDirectorPlanStateV0`, resuelve waits
   acotados y avanza review/tests/replan/cierre cuando hay causalidad suficiente.
+  Si el run tiene `GoalWorkStateV0` persistido, no entra al loop legacy y
+  redirige a observacion goal-first.
 
 ## Ciclo Conceptual
 

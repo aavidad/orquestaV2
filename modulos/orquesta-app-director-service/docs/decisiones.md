@@ -16,6 +16,14 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-06-28
+Decision: `ContinueAppDirectorV0` no drena loop legacy sobre runs goal-first con `GoalWorkStateV0` persistido.
+Motivo: con Codex Goal, el director operativo interno del trabajo vive en el goal; reentrar por el loop historico puede pedir puertos legacy o reactivar un ciclo que ya no es la fuente de verdad.
+Impacto: el servicio comprueba `GoalStateStore` antes de validar puertos legacy. Si encuentra estado goal-first valido, devuelve `wait_external`, evidencia de observacion requerida y codigo `app_director_goal_first_observe_required`. Si el estado falta, mantiene compatibilidad legacy. Si el estado existe pero no es valido/cargable, no cae al loop antiguo.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-22
 Decision: Permitir plan operativo inicial en StartAppDirectorV0 solo con
 contratos funcionales explicitos.

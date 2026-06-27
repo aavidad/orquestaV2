@@ -124,6 +124,15 @@ Regla: si se usa un filtro de espera, la composicion debe inyectar
 `RunStore` y `DirectorTaskStore`; si no hay filtros, las refs explicitas no
 requieren leer tasks.
 
+Regla goal-first: si existe `GoalWorkStateV0` cargable para `run_ref`,
+`ContinueAppDirectorV0` y `BuildContinueAppDirectorLoopRuntimeV0` no ejecutan el
+loop legacy. Devuelven `wait_external`, evidencia
+`evidence-ref-app-director-goal-observe-required-v0` y el codigo
+`app_director_goal_first_observe_required` para que la composicion avance por
+`ObserveAppDirectorGoalV0`. Si el estado goal-first no existe, se conserva la
+compatibilidad legacy; si existe pero es invalido o no puede cargarse, se
+devuelve error y no se drena el director antiguo sobre ese contenedor.
+
 Regla de reentrada por plan state: si no hay wait explicito y llega
 `operational_director_plan_ref`, el servicio exige `OperationalPlanStateStore`,
 carga `OperationalDirectorPlanStateV0` por `run_ref + plan_ref` y solo proyecta

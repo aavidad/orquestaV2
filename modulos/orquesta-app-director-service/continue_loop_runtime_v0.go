@@ -30,6 +30,13 @@ func BuildContinueAppDirectorLoopRuntimeV0(
 	if request.OccurredAt == "" {
 		request.OccurredAt = now.Format("2006-01-02T15:04:05Z07:00")
 	}
+	if result, handled, err := continueAppDirectorGoalFirstContainerResultV0(ctx, request, ports); err != nil || handled {
+		return ContinueAppDirectorLoopRuntimeV0{
+			Request:      request,
+			Closed:       handled,
+			ClosedResult: result,
+		}, err
+	}
 	if err := validateContinueAppDirectorRequestV0(request, ports); err != nil {
 		return ContinueAppDirectorLoopRuntimeV0{}, err
 	}
